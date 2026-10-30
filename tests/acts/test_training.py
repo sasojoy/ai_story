@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import random
 
+import pytest
+
 from conftest import real_content
 from jianfa_kit import classic_explore
 
@@ -89,6 +91,7 @@ def test_move_list_no_longer_names_tiers_and_the_map_card_says_how_fierce():
     assert game.place_detail("yingshui").endswith("此地宵小出沒。")
 
 
+@pytest.mark.smoke
 def test_practice_battle_is_labelled_and_higher_tiers_pay_more():
     game = _game(at="songshan_foot", level=30)
     game.choose("explore:practice")

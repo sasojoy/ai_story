@@ -108,6 +108,7 @@ def test_content_without_figures_loads(content):
     assert content.figures == {}
 
 
+@pytest.mark.smoke
 def test_figure_settings_defaults():
     cfg = Config()
     assert (cfg.figure_reaction_lean, cfg.figure_reaction_mult, cfg.figure_defeat_prestige, cfg.figure_defeat_affinity,

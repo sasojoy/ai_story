@@ -84,6 +84,7 @@ def test_the_set_secret_needs_the_named_insight_and_the_attribute(ready, secret_
     assert secret_recipes.match_slots(ready, secret_content, world, "basic_fist", art, slots) is None
 
 
+@pytest.mark.smoke
 def test_hitting_a_merge_secret_registers_the_named_insight_with_a_special_and_tells_the_world(ready, secret_content, world):
     """合中意境＋意境的秘方：名字照內容、不叫模型，帶一條特別功效（裝進槽就是那一招），傳一句、寫進江湖史、記進武學譜；
     照著合的別人不再傳。"""

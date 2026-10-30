@@ -72,6 +72,7 @@ def test_the_recruit_button_follows_the_side(real, world):
     assert _opts(drifter)["act:recruit:xunyu"].enabled  # 沒寫 side 的誰都招得到（含散人）
 
 
+@pytest.mark.smoke
 def test_a_recruit_lands_him_in_your_name_and_team(real, world):
     guan = _player(real, world, "官甲", "guan", "zhuo_county", warm=True)
     guan.rng = mock.Mock(random=mock.Mock(return_value=0.0))

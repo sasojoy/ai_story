@@ -72,6 +72,7 @@ def test_off_list_asks_and_plain_chat_are_handled(content):
 # ── 開關關著 ────────────
 
 
+@pytest.mark.smoke
 def test_off_switch_changes_nothing(content, game):
     assert not content.config.parley.enabled
     assert game.say_max() == SAY_MAX

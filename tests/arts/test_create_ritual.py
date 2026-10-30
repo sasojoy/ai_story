@@ -82,6 +82,7 @@ def test_pose_is_read_from_geometry_and_cleaned(content):
     assert pose["t"] == create.TORSO_LIMIT and pose["lS"] == 40.0 and set(pose) == set(create.POSE_KEYS)
 
 
+@pytest.mark.smoke
 def test_the_model_reading_is_rechecked(content):
     r = create.clean_reading(create.IntentReading(score=999, attributes=["快", "雷", "快", "陰", "陽"], lean="魔"))
     assert (r.score, r.attributes, r.lean) == (create.SCORE_CAP, ["快", "陰"], "無")

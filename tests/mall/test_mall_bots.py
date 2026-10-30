@@ -76,6 +76,7 @@ def test_online_bots_take_the_grant_but_never_buy(on, monkeypatch):
     assert rows == sorted((name_key(s.player.name), "grant", 5000) for s in bots)
 
 
+@pytest.mark.smoke
 def test_what_others_see_says_nothing_about_the_mall(on):
     """真人買了月卡與回體丹、假人只拿了發放：第三個人看得到的東西都沒有商城的字樣，兩張玩家卡長得一樣。"""
     buyer = _player(on, "沈浪", save=False)

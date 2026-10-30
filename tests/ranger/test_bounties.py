@@ -158,6 +158,7 @@ def test_no_board_when_switched_off_or_without_factions(setup):
     assert "act:bounties" not in _ids(content, world, "丙")
 
 
+@pytest.mark.smoke
 def test_scouting_pays_silver_exp_and_deeds_to_a_loner(setup):
     content, world = setup
     b = _post(world, kind="scout", faction="huang", silver=10, deeds=2, location="lake")

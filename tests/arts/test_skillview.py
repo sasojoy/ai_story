@@ -1,9 +1,12 @@
+import pytest
+
 from tianxia import arts as arts_mod, cultivation, library, rules, skillview, team, traits
 from tianxia.martial_arts import Insight, MartialArt, generate_from_name, historical_art, power_at
 from tianxia.state import InsightFx
 from test_cultivation import STRONG
 
 
+@pytest.mark.smoke
 def test_rules_line():
     # 武學重構：意境就是技能、裝進槽；煉製頁只剩武學＋武學、意境揣摩與自創
     assert skillview.rules_line(None) == (

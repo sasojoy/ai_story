@@ -6,6 +6,8 @@ import random
 from decimal import ROUND_HALF_UP, Decimal
 from types import SimpleNamespace
 
+import pytest
+
 from test_sortie import _fight, _game
 
 from conftest import real_content
@@ -43,6 +45,7 @@ def test_gather_cut_off_draws_the_same_dice():
     assert a.random() == b.random()
 
 
+@pytest.mark.smoke
 def test_winning_an_attack_pays_a_third_of_the_silver():
     game = _game(faction="guan")
     p = game.state.player

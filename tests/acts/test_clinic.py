@@ -51,6 +51,7 @@ def test_no_injury_says_so_before_the_clinic(real):
     assert game.heal() == ["氣血無恙，不用療傷。"]
 
 
+@pytest.mark.smoke
 def test_on_the_road_there_is_no_clinic(real):
     game = _game(real)
     game.choose("move:yingshui")

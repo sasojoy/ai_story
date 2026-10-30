@@ -8,6 +8,7 @@ from tianxia.mapart import (
 )
 
 
+@pytest.mark.smoke
 def test_coordinates_are_written_short():
     assert (fmt(150.0), fmt(96.54), fmt(133.333), fmt(-0.04)) == ("150", "96.5", "133.3", "0")
 

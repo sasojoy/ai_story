@@ -2,6 +2,8 @@
 叫不動、太慢、回得不合格式一律回 None（呼叫端照平常的回合演出）。"""
 from unittest import mock
 
+import pytest
+
 from tianxia import fight_llm, naming
 from tianxia.ollama_client import OllamaClient
 
@@ -22,6 +24,7 @@ def _client(reply=None, error=None):
     return client
 
 
+@pytest.mark.smoke
 def test_the_advantage_is_clamped_to_the_swing():
     got = fight_llm.judge(_client(fight_llm.Judgment(advantage=40, winning="贏", losing="輸")), REQUEST, 15)
     assert got.advantage == 15 and (got.winning, got.losing) == ("贏", "輸")

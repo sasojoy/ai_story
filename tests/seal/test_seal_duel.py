@@ -93,6 +93,7 @@ def test_a_story_that_takes_the_shard_falls_back_to_the_plain_line(content):
 
 
 
+@pytest.mark.smoke
 def test_a_shard_word_and_a_seizing_word_in_one_sentence_are_enough_fb188():
     """FB-188（fb-cleanup-2 的 FB-185 真模型實測）：「碎片／印／璽」跟「奪／搶／收入懷中／到手」這類字同一句就算寫了碎片到手，
     前後順序不拘（以前只認動詞在前，「將…玉璽碎片奪入懷中」擋不到）；「沒奪到」「未能奪下」這類否定的照樣擋（寧可多擋，代價只是

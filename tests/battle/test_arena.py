@@ -81,6 +81,7 @@ def _ladder(world, *names, bouts=0):
     return w
 
 
+@pytest.mark.smoke
 def test_the_ring_is_anywhere_and_opening_it_costs_nothing(ring):
     content, world = ring
     _, game = _do(content, world, "甲", lambda g: [])

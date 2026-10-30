@@ -119,6 +119,7 @@ def test_fragment_chance_is_rolled_and_can_miss(fs, world):
     assert foreshadow.hear_after_action(guan.state, fs, "north", FixedRandom(chance - 0.001), world) != []
 
 
+@pytest.mark.smoke
 def test_fragment_never_repeats_and_writes_journal_not_rumor(fs, world):
     """渡口（南區）探索：官軍在南區有兩則行動片段，兩次各聽一則、不重複，第三次什麼都沒有；寫進江湖紀錄、不發傳聞。"""
     game = player(fs, world, "甲", "guan", "port", rng=FixedRandom(0.0))

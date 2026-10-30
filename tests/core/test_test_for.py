@@ -172,6 +172,16 @@ def test_slow_is_opt_in_and_three_files_run_on_four_workers():
     assert "-n" not in one
 
 
+def test_the_smoke_set_covers_every_block():
+    """手冊 4.3：過渡期每個區塊（CLAUDE.md 區塊表十二塊）在現有測試裡挑約 10 條標 smoke；測試資料夾大致照區塊分。"""
+    ids = test_for.smoke_ids()
+    assert 100 <= len(ids) <= 150 and len(set(ids)) == len(ids)
+    folders = {i.split("/")[1] for i in ids}
+    assert {"core", "acts", "battle", "arts", "gear", "figures", "ranger", "seal", "mall", "map", "bots", "season"} <= folders
+    goal = test_for.targets(test_for.Pick(files={ROOT / "tests/core/test_engine.py"}, smoke=True))
+    assert "tests/core/test_engine.py" in goal and not any(g.startswith("tests/core/test_engine.py::") for g in goal)
+
+
 def test_core_targets_are_the_core_folder():
     goal = test_for.targets(test_for.Pick(core=True))
     assert "tests/core/test_engine.py" in goal and all(g.startswith("tests/core/") for g in goal)

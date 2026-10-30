@@ -87,6 +87,7 @@ def test_a_version_one_file_is_upgraded_in_place(tmp_path):
     db.close()
 
 
+@pytest.mark.smoke
 def test_upgrading_a_populated_version_one_file_loses_nothing(tmp_path, content):
     """試玩伺服器的檔是第 1 版、裡面有帳號、角色、江湖史：換版時就地一版一版升到現在這一版，
     每張舊表的每一列都原封不動，帳號還登入得進去、角色還讀得回來、江湖史還看得到，新表在而且是空的。"""

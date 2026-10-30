@@ -28,6 +28,7 @@ def _game(content, world, name="沈浪"):
     return game
 
 
+@pytest.mark.smoke
 def test_the_switch_is_on_in_the_real_config_and_off_in_the_test_content(content):
     from conftest import real_content
 

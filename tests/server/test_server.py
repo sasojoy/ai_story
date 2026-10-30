@@ -214,6 +214,7 @@ def test_season_one_off_changes_nothing(game, monkeypatch):
     assert view["bulletin"] == []
 
 
+@pytest.mark.smoke
 def test_main_view_has_everything_the_page_draws(game):
     view = server.look(game, server.main_view)
     assert view["status"]["name"] == "測試"

@@ -1,6 +1,8 @@
 """陣營通緝（名聲 4.6）與官府通緝（5.4）。"""
 import random
 
+import pytest
+
 from conftest import real_content, renown_unscaled
 
 from tianxia import bounties, calendar, renown
@@ -29,6 +31,7 @@ def test_faction_wanted_posts_once_a_week():
     assert bounties.issuer(g.content, posted[0]) == "黃巾軍"
 
 
+@pytest.mark.smoke
 def test_who_is_not_posted():
     assert bounties.post_auto(_game("散", fame=90).state, renown_unscaled(real_content("week7"))) == []  # 散人沒有對面
     g = _game("豪", faction="haoqiang", fame=90)

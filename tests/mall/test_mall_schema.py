@@ -43,6 +43,7 @@ def _version_5_file(path) -> None:
         conn.close()
 
 
+@pytest.mark.smoke
 def test_new_file_is_version_6(tmp_path):
     path = tmp_path / "new.db"
     db = Database(path)
