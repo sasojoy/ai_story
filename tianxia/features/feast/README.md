@@ -2,7 +2,7 @@
 
 - **做什麼**：大勢人物設宴（季的事）、玩家入席敬酒（固定的三句或自己寫一句、模型鎖外評分）、情誼照分數漲、散席時席間最佳那一句上天下大事、那個人補名望。第 1 階多搬的「有按鈕的小包」（開發規範手冊 3.10），驗 `options`、接管選單（`menu`）、`choose`、`on_sync`、`bot_pick` 這幾個商城用不到的掛鉤。
 - **導覽**：`docs/guide/大勢人物與賽季.md` 的「宴客（功能包）」那一節；核心與功能包的關係見 `docs/guide/核心與存檔.md` 的「核心、功能包、FEATURES、掛鉤、服務清單」。
-- **設計稿**：大勢人物擴充第三批「多人同服的玩法」（https://claude.ai/code/artifact/03df3760-b4bd-417c-935f-96dda0f500c2），數字在 `Config.figure_life` 的 `feast_*`。
+- **設計稿**：大勢人物擴充第三批「多人同服的玩法」（https://claude.ai/code/artifact/03df3760-b4bd-417c-935f-96dda0f500c2）第 1 版（手冊之前的稿，沒有版本號），數字在 `Config.figure_life` 的 `feast_*`。
 
 | 檔 | 是什麼 |
 |---|---|
