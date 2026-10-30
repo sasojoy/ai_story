@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import importlib.util
 import random
+import re
 import types
 import typing
 from pathlib import Path
@@ -70,6 +71,30 @@ def test_each_folder_is_one_registered_package_with_a_readme():
         assert (FEATURE_DIR / f.name / "README.md").exists(), f.name
     prefixes = [f.prefix for f in FEATURES if f.prefix is not None]
     assert len(prefixes) == len(set(prefixes))
+
+
+def test_every_package_web_file_is_loaded_by_the_page_and_the_web_harness():
+    """一包登記的網頁檔（Feature.web；手冊 3.3、3.7）現在還記在三個地方：登記、index.html、tests/kit/webharness.APP_FILES（第 3 階才由伺服器
+    照 FEATURES 生成）。三份要對得上：漏寫進 index.html 頁面上就沒有它，漏寫進 APP_FILES 網頁測試的假瀏覽器裡就沒有它，兩種都不會讓別的測試紅。
+    js 排在殼的 app.js 前面（頂層的名字同在一個全域裡，app.js 一載入就用得到），css 排在 style.css 後面（同權重的它說了算）。"""
+    import webharness
+
+    web = ROOT / "web"
+    page = (web / "index.html").read_text(encoding="utf-8")
+    files = features_core.web_files()
+    assert files == [name for f in FEATURES for name in f.web] and len(files) == len(set(files))
+    for name in files:
+        assert (web / name).exists(), name
+        if name.endswith(".js"):
+            assert page.count(f'<script src="/static/{name}"></script>') == 1, name
+            assert page.index(f'src="/static/{name}"') < page.index('src="/static/app.js"'), name
+            assert name in webharness.APP_FILES and webharness.APP_FILES.index(name) < webharness.APP_FILES.index("app.js"), name
+        else:
+            assert name.endswith(".css"), name
+            assert page.count(f'<link rel="stylesheet" href="/static/{name}">') == 1, name
+            assert page.index('href="/static/style.css"') < page.index(f'href="/static/{name}"'), name
+    scripts = re.findall(r'<script src="/static/([^"]+)"></script>', page)
+    assert scripts == list(webharness.APP_FILES)  # 頁面載入的 js 就是假瀏覽器接起來的那幾個、同一個順序
 
 
 @pytest.mark.parametrize("feature", FEATURES, ids=lambda f: f.name)

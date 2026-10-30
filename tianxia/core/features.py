@@ -246,4 +246,6 @@ def check_content(content: Content, need: Callable[[bool, str], None]) -> None:
 
 
 def web_files() -> list[str]:
+    """各包登記的網頁檔（web/ 底下，照 FEATURES 的順序）。第 3 階才由伺服器照它生成 index.html；在那之前 index.html 與
+    tests/kit/webharness.APP_FILES 是手寫的，tests/core/test_contract_features.py 照這一份對它們，店面的 CSS 測試照它讀包的樣式。"""
     return [name for f in registered() for name in f.web]
