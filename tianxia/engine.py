@@ -5523,6 +5523,7 @@ class Game:
             elif plan.foe is not None:
                 msgs, key, won = self._outing_fight(loc, plan)
                 self._beat["won"], self._beat["lost"] = won, key in ("lose", "town_lose")
+                self._beat["foe"] = outing_rules.foe_look(plan.foe)  # 畫面照它挑對手的圖（黃巾、官兵、家丁、盜匪、猛獸）
                 if won and self._outing_upset:  # 開打前勝算凶險以下還打贏：以弱勝強，這一趟收的時候記一則行狀
                     self._beat["feat"], self._beat["feat_kind"] = plan.foe.name, outing_rules.FEAT_UPSET
                 story.append(explore_one.line(lines, "encounter", key, say, place=loc.name, foe=plan.foe.name))
@@ -5727,7 +5728,8 @@ class Game:
             stop = IDLE_MARK not in {o.id for o in self.options(odds=False, tick=False)}
             trip.done += 1
             trip.beats.append(OutingBeat(kind=beat["kind"], text=lines[0] if lines else "", ledger=ledger, rare=bool(beat["rare"]),
-                                         won=beat["won"], stop=stop, feat=beat.get("feat", ""), feat_kind=beat.get("feat_kind", "")))
+                                         won=beat["won"], stop=stop, feat=beat.get("feat", ""), feat_kind=beat.get("feat_kind", ""),
+                                         foe=beat.get("foe", "")))
             now, cap = team.member_neili(c, p.member, team.con_of(s, c, self.world, PLAYER), season=s.world)
             if beat.get("lost"):
                 trip.end = outing_rules.LOST

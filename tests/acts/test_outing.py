@@ -337,3 +337,18 @@ def test_the_stele_shows_the_last_ink_or_the_most_left_preset():
     w.inscriptions.append(Inscription(id=5, place=here, text="橋下有魚", author="戊", preset=False, time=0))
     st = outing.stele(game.state, here)
     assert (st["text"], st["author"]) == ("橋下有魚", "戊") and st["all"][0]["ink"]
+
+
+def test_a_foe_is_drawn_as_its_own_side():
+    """Joy 10/30「現在敵人只有黃巾軍，如果我本身就是黃巾不是很奇怪嗎」：遭遇那一段帶對手的樣子，畫面照它挑圖。"""
+    sq = lambda name, faction=None: SimpleNamespace(name=name, faction=faction)
+    assert outing.foe_look(sq("郡國兵", "guan")) == outing.LOOK_GUAN
+    assert outing.foe_look(sq("黃巾散兵")) == outing.LOOK_HUANG
+    assert outing.foe_look(sq("蘇家家丁")) == outing.LOOK_RETAINER
+    assert outing.foe_look(sq("吊睛白額虎")) == outing.LOOK_BEAST
+    assert outing.foe_look(sq("流寇散兵")) == outing.LOOK_BANDIT
+    game = _game()
+    with _draws(ENC):
+        game.outing_go(1)
+    beat = game.state.player.outing.beats[0]
+    assert beat.kind == ENC and beat.foe in {outing.LOOK_HUANG, outing.LOOK_GUAN, outing.LOOK_RETAINER, outing.LOOK_BANDIT, outing.LOOK_BEAST}

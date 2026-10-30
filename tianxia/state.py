@@ -132,6 +132,7 @@ class OutingBeat(BaseModel):
     # 撿到四階素材是那一樣的名字、勝算凶險以下打贏是對手的名字（outing.FEAT_*）；其餘是空字串
     feat: str = ""
     feat_kind: str = ""
+    foe: str = ""  # 遭遇：對手長什麼樣（outing.foe_look：huang 黃巾、guan 官兵、retainer 豪強家丁、bandit 綠林盜匪、beast 猛獸）；別的類是空字串
 
 
 class Outing(BaseModel):
