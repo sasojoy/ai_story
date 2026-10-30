@@ -35,8 +35,9 @@
   const OUTING_SAY_BUY = "去萬寶閣買題壁墨";
   const OUTING_SAID = "你留下：「{text}」";
   const OUTING_HERE = "此地還有";
-  const OUTING_KEEP = "收進行狀";
-  const OUTING_KEPT = "已收進行狀";
+  const OUTING_STELE = "路碑";
+  const OUTING_STELE_N = "{n} 人留過";
+  const OUTING_STELE_ALL = "此處留過的話";
 
   // 這一層自己的狀態（不放進 S：每一格動畫都會改，不該讓整頁重畫）
   const OW = { imgs: null, open: false, away: false, shown: 0, played: 0, tasks: [], cur: null, raf: 0, last: 0, scroll: 0, props: [], parts: [],
@@ -152,7 +153,8 @@
       box.className = "outing-wrap";
       box.innerHTML = `<div class="outing-card" role="dialog" aria-label="走一趟">
         <p class="outing-head"><b class="outing-place"></b><span class="outing-step"></span></p>
-        <div class="outing-scene"><canvas class="outing-cv" width="${OUTING_W}" height="${OUTING_H}" aria-label="走一趟"></canvas></div>
+        <div class="outing-scene"><canvas class="outing-cv" width="${OUTING_W}" height="${OUTING_H}" aria-label="走一趟"></canvas>
+          <button class="outing-stele" data-act="outing-stele" hidden></button><div class="outing-stele-all" hidden></div></div>
         <div class="outing-foot"></div>
         <div class="outing-log" aria-live="polite"></div></div>`;
       document.body.appendChild(box);
@@ -190,6 +192,7 @@
 
   function outingShut() {
     OW.open = false;
+    OW.steleOpen = false;
     OW.tasks = [];
     OW.cur = null;
     OW.turbo = false;
@@ -197,6 +200,30 @@
     if (box) box.remove();
     if (OW.raf) cancelAnimationFrame(OW.raf);
     OW.raf = 0;
+  }
+
+  // 畫面右上那塊路碑（Joy 10/30）：碑上一句（最後一則題壁墨寫的，沒有就是最多人留的預設句），點開看這一處全部的留言
+  function outingSteleHtml(st) {
+    const by = st.author ? `——${esc(st.author)}` : st.n > 1 ? esc(OUTING_STELE_N.replace("{n}", st.n)) : "";
+    return `<small>${OUTING_STELE}</small><b>「${esc(st.text)}」</b>${by ? `<i>${by}</i>` : ""}`;
+  }
+  function outingSteleAllHtml(st) {
+    return `<p class="outing-stele-head"><b>${OUTING_STELE_ALL}</b><button data-act="outing-stele" aria-label="收起">×</button></p>${st.all.map((x) =>
+      `<p class="${x.ink ? "ink" : ""}">「${esc(x.text)}」<small>——${esc(x.author)}</small></p>`).join("")}`;
+  }
+  function outingStele() {
+    const box = document.getElementById("outing-pop");
+    const trip = outingTrip();
+    if (!box || !trip) return;
+    const st = trip.stele;
+    const sign = box.querySelector(".outing-stele"), all = box.querySelector(".outing-stele-all");
+    sign.hidden = !st;
+    all.hidden = !st || !OW.steleOpen;
+    if (!st) { OW.steleOpen = false; return; }
+    const html = outingSteleHtml(st);
+    if (sign.innerHTML !== html) sign.innerHTML = html;
+    sign.setAttribute("aria-expanded", String(!!OW.steleOpen));
+    if (OW.steleOpen) all.innerHTML = outingSteleAllHtml(st);
   }
 
   // 底下那一排：走著是速度與略過；停在要選的事上是那件事與選項（outingChoiceHtml）；走完是結算卡
@@ -210,6 +237,8 @@
     const walking = OW.cur || OW.tasks.length;
     const card = box.querySelector(".outing-card");
     card.classList.toggle("choosing", !walking && !trip.end);
+    card.classList.toggle("done", !walking && !!trip.end); // 結算卡長（留一句展開、遊記長）：卡片底下那一塊自己捲
+    outingStele();
     if (!walking && trip.end) foot.dataset.key = "";
     if (walking) {
       foot.dataset.key = "";
@@ -276,7 +305,7 @@
       ${trip.end_line ? `<p class="muted small">${esc(trip.end_line)}</p>` : ""}
       ${chips ? `<p class="outing-chips">${chips}</p>` : ""}${lost ? `<p class="outing-chips">${lost}</p>` : ""}
       ${trip.diary ? `<p class="outing-diary">${esc(trip.diary)}</p>` : ""}
-      <p class="outing-keep">${trip.kept ? `<small>${OUTING_KEPT}</small>` : `<button class="btn small ghost" data-act="outing-keep">${OUTING_KEEP}</button>`}</p>
+      ${trip.feat_note ? `<p class="outing-feat">${esc(trip.feat_note)}</p>` : ""}
       ${outingSayHtml(trip)}${outingPeopleHtml(trip)}
       <div class="outing-ctl"><button class="btn" data-act="outing-close">${OUTING_CLOSE}</button>
       <button class="btn primary" data-act="outing-again">${OUTING_AGAIN}</button></div></div>`;
@@ -593,9 +622,7 @@
       case "outing-close": outingShut(); OW.shown = 0; return true;
       case "outing-again": outingShut(); OW.shown = 0; S.wheelSel = "explore"; renderPage(); revealMoveCard(); return true;
       case "outing-say": await outingSay({ preset: Number(el.dataset.i) }); return true;
-      case "outing-keep":
-        await busy(async () => { const r = await api("/api/do/outing_keep", {}); applyMain(r.main); outingFoot(); });
-        return true;
+      case "outing-stele": OW.steleOpen = !OW.steleOpen; outingStele(); return true;
       case "outing-say-own": {
         const box = document.getElementById("outing-own");
         const text = box ? box.value.trim() : "";

@@ -128,6 +128,10 @@ class OutingBeat(BaseModel):
     won: bool | None = None  # 遭遇：打贏 True、打輸或平手 False；別的類是 None
     stop: bool = False  # 這一段端出了要選的事（事件、有所感、頭目），走一趟停在這裡等玩家選
     ref: int | None = None  # kind trace（路上看到的留言）：那一則留言的 id（管理者照它刪）；其餘是 None
+    # 值得記下來的一段（Joy 10/30「真的出現超級稀有的物品或是奇蹟逆轉的戰役這種類型的才有價值被記錄」）：
+    # 撿到四階素材是那一樣的名字、勝算凶險以下打贏是對手的名字（outing.FEAT_*）；其餘是空字串
+    feat: str = ""
+    feat_kind: str = ""
 
 
 class Outing(BaseModel):
@@ -144,7 +148,6 @@ class Outing(BaseModel):
     waved: bool = False  # 路上已經寫過「遠處有人揮手」那一行（一趟一次）
     tale: str = ""  # 這一趟的遊記（模型寫的，鎖外三段式；叫不動或不合用是空字串，畫面用 outing.template_tale）
     tale_done: bool = False  # 遊記請過模型了（成不成都算，不再請）
-    kept: bool = False  # 遊記收進行狀了
 
 
 class Inscription(BaseModel):

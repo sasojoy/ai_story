@@ -495,6 +495,7 @@ class Game:
         self._gate_scale = 1.0  # 減法季三道閘（批 2）：遭遇拍那一場的經驗、心得、銀兩乘疲勞與對手兩道閘（_fight_gate）；其餘是 1
         self._outing_close: set[str] = set()  # 這一趟出門打了折的那幾道閘（_fight_gate 記、_explore_one 寫段落結尾那一句）
         self._beat: dict | None = None  # 走一趟：剛剛那一次探索抽到什麼（_explore_one 寫、_outing_walk 讀）
+        self._outing_upset = False  # 走一趟這一場遭遇開打前勝算凶險以下（_outing_fight 寫、_explore_one 讀）
         self._affinity_before: dict[str, int] | None = None  # choose()、隨口應對進行中：這一下之前的情誼（_people_here 認這一下加了誰的情誼）
         # 歷史武將同行：挑好了隨你上陣的那一位、正在照它加入（_escort_step 開著、_escort_carry 讀）
         self._escort_picked = False
@@ -5504,6 +5505,9 @@ class Game:
         if beat == explore_one.MATERIAL:  # 素材：找素材一定給的那一套（不展開分支；屬性照這裡的素材）
             mids = explore_modes.gather_finds(c, loc, rng, sure=True, boost=boost)
             self._beat["rare"] = any(c.materials[m].tier >= 2 for m in mids if m in c.materials)
+            top = next((c.materials[m].name for m in mids if m in c.materials and c.materials[m].tier >= outing_rules.FEAT_TIER), "")
+            if top:  # 稀世的素材：這一趟收的時候記一則行狀（outing.FEAT_ANNAL）
+                self._beat["feat"], self._beat["feat_kind"] = top, outing_rules.FEAT_TREASURE
             found = [granted for mid in mids if (granted := materials.grant(s, c, mid))]
             found += self._home_gather(loc, mids)  # 領地爭奪：站在自家領地多給的那一個
             items = explore_one.items_of(found, materials.GRANT_PREFIX)
@@ -5519,6 +5523,8 @@ class Game:
             elif plan.foe is not None:
                 msgs, key, won = self._outing_fight(loc, plan)
                 self._beat["won"], self._beat["lost"] = won, key in ("lose", "town_lose")
+                if won and self._outing_upset:  # 開打前勝算凶險以下還打贏：以弱勝強，這一趟收的時候記一則行狀
+                    self._beat["feat"], self._beat["feat_kind"] = plan.foe.name, outing_rules.FEAT_UPSET
                 story.append(explore_one.line(lines, "encounter", key, say, place=loc.name, foe=plan.foe.name))
                 out += msgs
                 got_any = won
@@ -5560,6 +5566,7 @@ class Game:
         「出門一趟・遭遇」；城裡的地痞戰利（銀兩、心得、掉的素材）乘 town_loot_scale、不算討伐；其餘打贏算討伐懸賞的交差。"""
         s, c = self.state, self.content
         cfg, foe = c.config.jianfa, plan.foe
+        self._outing_upset = False
         gate = self._fight_gate(foe)  # 三道閘的前兩道（疲勞、對手配不配得上你）：這一場的經驗、心得、銀兩、掉的素材一起乘
         if plan.how == "spar":  # 對手那一路心得、經驗的 camp_spar_share（三成）乘三道閘的倍數（PM 2026-10-26：以前全額）
             return self._drill_gains(foe, cfg.camp_spar_share * gate, "camp_spar", echo=False), "spar", True  # 心得只由草稿記（FB-830）
@@ -5568,6 +5575,7 @@ class Game:
         self._gate_scale = gate
         self._drop_scale = gate * self._loot_scale
         card = s.battle_card
+        self._outing_upset = self.odds(foe.id) in outing_rules.FEAT_ODDS  # 開打前的勝算（同探索鈕上寫的那個字）
         try:
             msgs = self._squad_encounter(foe.id, wild=True)
         finally:
@@ -5719,7 +5727,7 @@ class Game:
             stop = IDLE_MARK not in {o.id for o in self.options(odds=False, tick=False)}
             trip.done += 1
             trip.beats.append(OutingBeat(kind=beat["kind"], text=lines[0] if lines else "", ledger=ledger, rare=bool(beat["rare"]),
-                                         won=beat["won"], stop=stop))
+                                         won=beat["won"], stop=stop, feat=beat.get("feat", ""), feat_kind=beat.get("feat_kind", "")))
             now, cap = team.member_neili(c, p.member, team.con_of(s, c, self.world, PLAYER), season=s.world)
             if beat.get("lost"):
                 trip.end = outing_rules.LOST
@@ -5731,10 +5739,13 @@ class Game:
                 self._outing_trace(trip)
         if not trip.end and trip.done >= trip.total and IDLE_MARK in {o.id for o in self.options(odds=False, tick=False)}:
             trip.end = outing_rules.DONE  # 最後一段端出要選的事時先不收：選完、接著走那一下才收
-        if trip.end and any(b.rare for b in trip.beats):  # 碰上稀罕的東西：世界記事記一筆（此地舊事、人物對話讀得到）
+        if trip.end:  # 撿到稀世的東西、以弱勝強（Joy 10/30：只有這種才值得記）：一段一則行狀、世界記事一筆（此地舊事、人物對話讀得到）
             place = c.locations[trip.place].name if trip.place in c.locations else trip.place
-            deeds.record(s, c, outing_rules.DEED_KIND, outing_rules.DEED_LINE.format(name=p.name, place=place),
-                         place=trip.place, actors=[p.name])
+            for b in trip.beats:
+                if b.feat:
+                    annals.note(s, c, annals.DEED, outing_rules.FEAT_ANNAL[b.feat_kind].format(place=place, what=b.feat), 3, place=place)
+                    deeds.record(s, c, outing_rules.DEED_KIND, outing_rules.FEAT_DEED[b.feat_kind].format(name=p.name, place=place, what=b.feat),
+                                 place=trip.place, actors=[p.name])
         return []
 
     def _outing_trace(self, trip: Outing) -> None:
@@ -5804,17 +5815,6 @@ class Game:
             return []
         trip.tale, trip.tale_done = text or "", True
         return []
-
-    def outing_keep(self) -> list[str]:
-        """把這一趟的遊記收進行狀（annals DEED；沒有模型寫的就收模板那一段）。一趟一次。"""
-        s, c = self.state, self.content
-        trip = s.player.outing
-        if not outing_rules.on(c, s) or trip is None or not trip.end or trip.kept:
-            return ["（此刻無法這麼做。）"]
-        place = c.locations[trip.place].name if trip.place in c.locations else trip.place
-        annals.note(s, c, annals.DEED, trip.tale or outing_rules.template_tale(trip, c), 2, place=place)
-        trip.kept = True
-        return self._log([outing_rules.KEPT])
 
     def outing_ink_left(self) -> int:
         """手上還沒用掉的題壁墨幾張；商城關著是 0。"""
