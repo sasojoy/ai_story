@@ -1179,16 +1179,15 @@ def test_the_furnace_page_sends_only_insights():
 
 def test_the_new_map_has_no_legend_box_and_the_chips_carry_the_colors():
     """輿圖升級（設計第一節）：圖例拿掉；地圖框是夾在狀態列與分頁列之間的整頁一層，寬 900 以上抽屜變右欄。輿圖第三版第 4 批起濾鏡那一排
-    也拿掉了（輿圖簡化設計 5.4：誰的領地看區圖的印章框，其他收進卡）。網頁的版面與樣式對得上，就靠這一條。"""
+    也拿掉了（輿圖簡化設計 5.4）；一張到底（2026-10-30）篩選改成浮在搜尋列底下的一排。網頁的版面與樣式對得上，就靠這一條。"""
     js = webharness.app_source()
     css = re.sub(r"/\*.*?\*/", "", (server.WEB / "style.css").read_text(encoding="utf-8"), flags=re.S)
     assert "function legendHtml(" not in js and ".map-legend" not in css and "legend-toggle" not in js
-    # 輿圖第三版第 4 批（輿圖簡化設計 5.4）：濾鏡那一排、右上角那一欄（我在哪、放大、縮小）都拿掉了，兩張圖都是固定取景；
-    # 手勢（拖、捏合、滾輪）企劃者 2026-10-22 改回來了（tests/test_map_pan_web.py），右上角那一欄照舊沒有
-    assert "MAP_CHIPS" not in js and "function chipsHtml(" not in js and "map-ctl" not in js and ".map-ctl" not in css
+    # 一張到底（企劃者 2026-10-30）：右上角那一欄（我在哪、放大、縮小）沒有了，改成右下兩顆圓鈕（回到我、看整張）；篩選回來了，浮在搜尋列底下
+    assert "map-ctl" not in js and ".map-ctl" not in css and 'data-act="map-home"' in js and 'data-act="map-fit"' in js
     assert re.search(r"\n\.mapx \{[^}]*position: fixed", css) and "var(--map-top, 0px)" in css and "var(--map-bottom, 0px)" in css
     assert "@media (min-width: 900px)" in css and "grid-template-columns: 1fr 360px" in css
-    assert re.search(r"\n\.w-here, \.w-tl, \.w-back \{[^}]*height: 40px;", css)  # 上面那一排的鈕：觸控目標 40px
+    assert re.search(r"\n\.mv-fab button \{[^}]*height: 46px;", css) and re.search(r"\n\.mv-q \{[^}]*height: 46px;", css)  # 浮著的鈕與搜尋列：觸控目標夠大
     assert "overflow: clip" in css  # 地圖框不能被 scrollIntoView 捲走（overflow: hidden 的框可以）
 
 

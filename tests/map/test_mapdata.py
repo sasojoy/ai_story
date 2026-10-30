@@ -45,7 +45,7 @@ def test_the_base_lists_open_places_roads_and_regions():
 
 # ── 輿圖表現 S1：底圖多 terrain 與 view 兩個鍵（給 W1 以後的新圖用；舊圖照舊畫 svg）─────────────
 
-OLD_BASE_KEYS = {"key", "w", "h", "svg", "places", "edges", "roads", "regions", "insight_kinds", "insight_layer", "world"}
+OLD_BASE_KEYS = {"key", "w", "h", "svg", "places", "edges", "roads", "regions", "insight_kinds", "insight_layer", "world", "paint"}
 FORMAL_VIEW = {  # content/config.json 的 map_view（設計 4：八個鍵；W1 以後的畫面照這幾個數字取景）
     "open_units": 250, "zoom_max": 1.6, "near_from": 0.8, "mid_from": 0.45,
     "named_hops_near": 2, "named_hops_mid": 1, "switch_zoom": 0.6, "patch_radius": 60,

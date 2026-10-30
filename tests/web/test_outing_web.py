@@ -74,21 +74,23 @@ def test_the_result_card_shows_the_tale_without_a_keep_button():
 
 STELE_DRIVER = r"""
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const code = ["OUTING_STELE", "OUTING_STELE_N", "OUTING_STELE_ALL"].map(konst).join("\n") + fn("outingSteleHtml") + fn("outingSteleAllHtml");
+const code = ["OUTING_STELE", "OUTING_STELE_N", "OUTING_STELE_ALL", "OUTING_INK_SEAL", "OUTING_INK_SEAL_LABEL"].map(konst).join("\n") + fn("outingSteleHtml") + fn("outingSteleAllHtml");
 const H = new Function("esc", code + "\nreturn { outingSteleHtml, outingSteleAllHtml };")(esc);
 finish({ signs: input.st.map((x) => H.outingSteleHtml(x)), all: H.outingSteleAllHtml(input.st[0]) });
 """
 
 
 def test_the_stele_reads_the_ink_line_or_how_many_left_the_preset():
-    """畫面上方那塊路碑（Joy 10/30）：題壁墨寫的掛名號；預設句寫幾人留過；點開全部列出，題壁墨的另一個顏色。"""
-    every = [{"text": "橋下有魚", "author": "戊", "ink": True}, {"text": "溪水可飲。", "author": "甲", "ink": False}]
-    out = webharness.run(STELE_DRIVER, {"st": [{"text": "橋下有魚", "author": "戊", "n": 0, "all": every},
-                                              {"text": "溪水可飲。", "author": "", "n": 3, "all": every}]})
+    """畫面上方那塊路碑（Joy 10/30）：題壁墨寫的掛名號、蓋一枚「墨」字印（要更顯眼）；預設句寫幾人留過；
+    點開全部列出，題壁墨的排在最前面、蓋印。"""
+    every = [{"text": "溪水可飲。", "author": "甲", "ink": False}, {"text": "橋下有魚", "author": "戊", "ink": True}]
+    out = webharness.run(STELE_DRIVER, {"st": [{"text": "橋下有魚", "author": "戊", "n": 0, "ink": True, "all": every},
+                                              {"text": "溪水可飲。", "author": "", "n": 3, "ink": False, "all": every}]})
     ink, preset = out["signs"]
-    assert "「橋下有魚」" in ink and "——戊" in ink
-    assert "「溪水可飲。」" in preset and "3 人留過" in preset
-    assert '<p class="ink">「橋下有魚」<small>——戊</small></p>' in out["all"] and "此處留過的話" in out["all"]
+    assert "「橋下有魚」" in ink and "——戊" in ink and 'class="ink-seal"' in ink
+    assert "「溪水可飲。」" in preset and "3 人留過" in preset and "ink-seal" not in preset
+    assert "此處留過的話" in out["all"]
+    assert out["all"].index("橋下有魚") < out["all"].index("溪水可飲。") and '<p class="ink"><em class="ink-seal"' in out["all"]
 
 
 CHOICE_DRIVER = r"""
