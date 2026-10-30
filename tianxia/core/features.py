@@ -12,7 +12,7 @@
 |---|---|
 | enabled(ctx) | 每一個彙整之前 |
 | options(ctx) | Game._stamina_play_options（「此地還能做」裡，體力玩法、護衛之後、盤算之前；序章裡、休季不問） |
-| menu(ctx) | Game._everyday_options：這一包此刻接管整個選單（坐在宴席上、店開著那一類）；第一個不是 None 的算 |
+| menu(ctx) | Game._everyday_options：這一包此刻接管整個選單（坐在宴席上、店開著那一類）；第一個不是 None 的算。**手冊 3.3 表外**（見下） |
 | choose(ctx, kind, arg) | Game.choose 建這一下的紀錄（Draft）之前：只吃自己前綴的 id，吃不到回 None，核心問下一包 |
 | status(ctx) | Game.feature_status → server.main_view（合進江湖畫面的頂層，例：商城的入口 main.mall） |
 | on_sync(ctx, elapsed)、on_day(ctx) | Game.sync（elapsed 是這一次補算的自己的秒數；on_day 是回體丹那一天換了：照 _pill_day，含快轉推過的 advanced_real，所以 Game.advance 跨過 00:00 也叫） |
@@ -20,7 +20,13 @@
 | on_drop_stale(ctx) | Game._drop_stale_references 最後 |
 | bot_pick(ctx, option)、bot_always | bot_policy.score（假人看到這一顆的分數，None 是不按）；bot.pick 排除的前綴（永遠按得下去的） |
 | admin_tools(shell)、routes(shell) | server：/api/do/{op} 的管理者工具、掛路由（shell 是 server 模組） |
-| check_content(content, need)、web、content | content.validate（關著的包照驗）；index.html 的檔；content.py 讀的檔 |
+| check_content(content, need)、web、content | content.validate（關著的包照驗）；index.html 的檔；content.py 讀的檔。check_content **手冊 3.3 表外**（見下） |
+
+比手冊 3.3「就這幾個，不多開」那張表多開了兩個（第 1 階開的，待 PM 認可、請 Fable 回寫 3.3；之後再要加先過 PM）：
+- menu：現行的 _everyday_options 裡一包有兩個位置——接管整個選單（坐在席上、店開著……十幾樣都是）與接在「此地還能做」裡（options），
+  一個 options 擺不下兩個位置。
+- check_content：取代原本的 content.check_mall（載入時驗商品）。核心的 content.py 不能 import 包，3.3 的 content 那一列只宣告
+  content.py 讀哪些檔、沒有「驗」，所以開一個讓包自己驗。
 
 ctx 第一階就是 Game；功能包只准叫 services.py 那張清單上的方法。
 """
@@ -57,7 +63,8 @@ class AdminTool:
 
 
 class FeatureHooks(Protocol):
-    """一包要回答的（手冊 3.3）。簽名第一階定的；之後要加先看這一張表，不多開。"""
+    """一包要回答的（手冊 3.3）。簽名第一階定的；比 3.3 的表多兩個（menu、check_content，見模組的說明，待 PM 認可）。
+    之後要加先看這一張表，不多開；真的要加先過 PM。"""
 
     name: str  # 包名（資料夾名）
     prefix: str | None  # 選項 id 的前綴（「feast」→ feast:join:3）；沒有選項的包是 None
