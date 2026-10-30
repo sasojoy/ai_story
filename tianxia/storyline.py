@@ -205,9 +205,9 @@ def vary(text: str, state: GameState, marks: dict[str, dict[str, int]] | None = 
 
 # ── 開頭 ──────────────────────────────────────────────
 
-def roll_start(state: GameState, content: Content, rng) -> StoryDef | None:
+def roll_start(state: GameState, content: Content, rng, boost: float = 1.0) -> StoryDef | None:
     """探索那一下擲內容寫的線（Game._explore_one）：這一季還沒開過、站在開頭的地方、條件成立、這一種還有空位，照檔案順序各擲一次，
-    第一個擲中的就是這一趟。關著、一條都沒有是 None（不動 rng）。"""
+    第一個擲中的就是這一趟。關著、一條都沒有是 None（不動 rng）。boost：走一趟的稀有倍數（outing.rare_boost），乘在每一條的 chance 上。"""
     if not on(content, state) or not content.storylines:
         return None
     for line in content.storylines.values():
@@ -216,7 +216,7 @@ def roll_start(state: GameState, content: Content, rng) -> StoryDef | None:
             continue
         if not here(state, content, start.where) or not check_condition(start.condition, state, content):
             continue
-        if rng.random() < start.chance:
+        if rng.random() < start.chance * boost:
             return line
     return None
 

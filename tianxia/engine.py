@@ -33,6 +33,7 @@ from . import tavern_ask  # 問酒家照問題找事實（企劃者 2026-10-27�
 from . import storyline  # 一條線：特殊事件與特殊頓悟的底座（企劃者 2026-10-26）
 from . import epiphany  # 特殊頓悟（登記一條線的鉤子；企劃者 2026-10-26）
 from . import tiers  # 事件分級：場景卡上那一行「州郡大事」「天下大事」
+from . import outing as outing_rules  # 走一趟（企劃者 2026-10-29～30）：探索一次走一、三、五段
 from . import explore_one, growth  # 減法季批 2：探索一顆、三道閘、屬性五段的純規則（開關走 rules.jianfa）
 from . import zhuan_end  # 減法季批 7b：列傳為終點（票、深交上限、人物評曰）
 from . import ambush as ambush_rules  # 設伏劫道（後期體力玩法第一批）；叫 ambush_rules：這個檔裡有區域變數叫 ambush
@@ -94,7 +95,7 @@ from .sqlite_world import open_world
 from .wallet import Wallet
 from .state import (
     ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, Fighter, FrontReport, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
-    StoryCard, StoryProgress, TierResult, Whisper, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
+    Outing, OutingBeat, StoryCard, StoryProgress, TierResult, Whisper, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
     new_game_state,
 )
 from .world import (
@@ -480,6 +481,7 @@ class Game:
         self._drop_scale = 1.0
         self._gate_scale = 1.0  # 減法季三道閘（批 2）：遭遇拍那一場的經驗、心得、銀兩乘疲勞與對手兩道閘（_fight_gate）；其餘是 1
         self._outing_close: set[str] = set()  # 這一趟出門打了折的那幾道閘（_fight_gate 記、_explore_one 寫段落結尾那一句）
+        self._beat: dict | None = None  # 走一趟：剛剛那一次探索抽到什麼（_explore_one 寫、_outing_walk 讀）
         self._affinity_before: dict[str, int] | None = None  # choose()、隨口應對進行中：這一下之前的情誼（_people_here 認這一下加了誰的情誼）
         # 歷史武將同行：挑好了隨你上陣的那一位、正在照它加入（_escort_step 開著、_escort_carry 讀）
         self._escort_picked = False
@@ -4081,7 +4083,7 @@ class Game:
             return ["（此刻無法這麼做。）"]
         msgs = sensing.choose(s, c, int(arg), rng)
         sense = s.player.sensing
-        if not prologue and sense is not None and sense.stage == "draw" and epiphany.roll(s, c, self.rng):  # 特殊頓悟：不畫那一筆，開一條頓悟的線
+        if not prologue and sense is not None and sense.stage == "draw" and epiphany.roll(s, c, self.rng, boost=outing_rules.rare_boost(s, c)):  # 特殊頓悟：不畫那一筆，開一條頓悟的線
             msgs += self._epiphany_begin(sense.method or "", c.locations[sense.location].name)
         return msgs
 
@@ -5472,7 +5474,8 @@ class Game:
                 weights = explore_one.encounter_only()
         beat = explore_one.draw(roll("拍"), weights, last_choice=last_kind if last_loc == loc.id else None)
         # 一條線（特殊事件）：在開頭的地方擲中了，這一趟就是那條線的第一段（關著、沒有線不擲；用自己的亂數，不動拍子）
-        strand = storyline.roll_start(s, c, roll("奇事"))
+        boost = outing_rules.rare_boost(s, c)  # 走一趟：段數越多，稀有的越容易來（不在路上是 1）
+        strand = storyline.roll_start(s, c, roll("奇事"), boost=boost)
         if strand is not None:
             beat = explore_one.EVENT
         say, lines = roll("段落"), c.outing_lines
@@ -5483,9 +5486,11 @@ class Game:
         out: list[str] = []
         got_any, boss, choice = False, None, ""
         self._outing_close = set()
+        self._beat = {"kind": beat, "rare": strand is not None, "won": None}  # 走一趟讀這一段是什麼（_outing_walk）
         rng = roll("結算")
         if beat == explore_one.MATERIAL:  # 素材：找素材一定給的那一套（不展開分支；屬性照這裡的素材）
-            mids = explore_modes.gather_finds(c, loc, rng, sure=True)
+            mids = explore_modes.gather_finds(c, loc, rng, sure=True, boost=boost)
+            self._beat["rare"] = any(c.materials[m].tier >= 2 for m in mids if m in c.materials)
             found = [granted for mid in mids if (granted := materials.grant(s, c, mid))]
             found += self._home_gather(loc, mids)  # 領地爭奪：站在自家領地多給的那一個
             items = explore_one.items_of(found, materials.GRANT_PREFIX)
@@ -5500,11 +5505,12 @@ class Game:
                 got_any = True
             elif plan.foe is not None:
                 msgs, key, won = self._outing_fight(loc, plan)
+                self._beat["won"], self._beat["lost"] = won, key in ("lose", "town_lose")
                 story.append(explore_one.line(lines, "encounter", key, say, place=loc.name, foe=plan.foe.name))
                 out += msgs
                 got_any = won
         elif beat == explore_one.EVENT:  # 要選的：事件（野類偏旅人那一類）；擲中了一條線就是那條線的第一段
-            msgs = self._story_begin(strand) if strand is not None else self._outing_event(loc, plan.kind, rng)
+            msgs = self._story_begin(strand) if strand is not None else self._outing_event(loc, plan.kind, rng, boost)
             if msgs:
                 story.append(explore_one.line(lines, "event", "lead", say, place=loc.name))
                 out += msgs
@@ -5602,12 +5608,14 @@ class Game:
         n = growth.nth_fight(fight_day=p.fight_day, fights_today=p.fights_today, today=self._pill_day())
         return growth.fatigue_factor(c.config.jianfa, n)
 
-    def _outing_event(self, loc: Location, kind: str, rng: random.Random) -> list[str]:
+    def _outing_event(self, loc: Location, kind: str, rng: random.Random, boost: float = 1.0) -> list[str]:
         """事件拍（設計 4.1）：一次性奇遇先擲 rare_explore_chance（可重複的一則都沒有時直接是它）；沒中照防重複輪替抽這裡可重複的事件，
         野類的地點有標了「旅人」的就在那幾則裡抽（救助旅人那一類）。抽到就端出來（pending_event），一則都沒有是空的。"""
         s, c = self.state, self.content
         common = event_candidates(s, c, "explore", "common")
-        if event_candidates(s, c, "explore", "rare") and (rng.random() < c.config.rare_explore_chance or not common):
+        if event_candidates(s, c, "explore", "rare") and (rng.random() < c.config.rare_explore_chance * boost or not common):
+            if self._beat is not None:
+                self._beat["rare"] = True
             return self._present(pick_event(s, c, "explore", rng, "rare"), "explore")
         travelers = [e for e in common if explore_one.TRAVELER in e.tags] if kind == explore_one.WILD else []
         event = event_rules.pick_from(s, c, travelers, "explore", rng) if travelers else None
@@ -5626,6 +5634,83 @@ class Game:
         gains = items + [ch for ch in totals if journal.change_class(ch) == "tx-up"]
         losses = [ch for ch in totals if journal.change_class(ch) == "tx-down"]
         return explore_one.ledger(gains, losses)
+
+    # ── 走一趟（tianxia/outing.py；企劃者 2026-10-29～30）──
+
+    def outing_go(self, total: int = 0) -> list[str]:
+        """走一趟：total 是段數（Config.jianfa.outing_segments）就出發；0 是停在要選的事上、選完之後接著走。
+        出發要閒著（選單上的探索按得下去）、體力夠走完這麼多段；每一段照舊扣一次探索的體力，沒走的段不扣。
+        回的訊息只有拒絕的那一句：沿路發生的事都在 PlayerState.outing（outing.view）與每一段自己的江湖紀錄裡。"""
+        s, c = self.state, self.content
+        p = s.player
+        if not outing_rules.on(c, s) or prologue_rules.active(s, c) or p.journey is not None:
+            return ["（此刻無法這麼做。）"]
+        if total:
+            if total not in outing_rules.segments(c):
+                return ["（此刻無法這麼做。）"]
+            if self._explore_ready() is None:
+                return ["（此刻無法這麼做。）"]
+            if p.stamina < outing_rules.cost(c, total):
+                return ["（體力不夠走這麼多段。）"]
+            p.outing = Outing(place=p.location, total=total)
+        else:
+            trip = p.outing
+            if trip is None or trip.end:
+                return ["（此刻無法這麼做。）"]
+            if trip.place != p.location:
+                trip.end = outing_rules.LEFT
+                return [outing_rules.END_LINES[outing_rules.LEFT]]
+        return self._outing_walk()
+
+    def _explore_ready(self) -> Option | None:
+        """選單上的探索此刻按得下去就回那一顆（閒著、體力夠一段）；不然是 None。"""
+        option = {o.id: o for o in self.options(odds=False, tick=False)}.get(IDLE_MARK)
+        return option if option is not None and option.enabled else None
+
+    def outing_view(self) -> dict | None:
+        """/api/main 的 outing（outing.view）加 can_go：停在要選的事上的那一趟，事情選完了、可以接著走（網頁照它自己送「接著走」；
+        最後一段是要選的事時，接著走只是把這一趟收成「走完」）。關著是 None。"""
+        view = outing_rules.view(self.state, self.content)
+        if view is not None and view["trip"] is not None:
+            view["trip"]["can_go"] = self.outing_can_go()
+        return view
+
+    def outing_can_go(self) -> bool:
+        """停下來的那一趟可以接著走了：事情選完了（探索回到選單上；體力不夠一段也算，接著走會把它收成「累了」）。"""
+        if outing_rules.active(self.state) is None:
+            return False
+        return IDLE_MARK in {o.id for o in self.options(odds=False, tick=False)}
+
+    def _outing_walk(self) -> list[str]:
+        """一段一段走（每一段是一次 choose(act:explore)，各寫各的江湖紀錄）：端出要選的事就停；打輸、氣血低於 outing_turn_back
+        回頭；體力不夠一段也回頭。走完了寫 end。"""
+        s, c = self.state, self.content
+        p, cfg = s.player, c.config.jianfa
+        trip = p.outing
+        while trip.done < trip.total and not trip.end:
+            if self._explore_ready() is None:
+                if IDLE_MARK in {o.id for o in self.options(odds=False, tick=False)}:
+                    trip.end = outing_rules.TIRED  # 探索在選單上但灰了：體力不夠一段
+                break  # 不在選單上：還有事要選（不該走到這裡；保險）
+            self._beat = None
+            msgs = self.choose(IDLE_MARK)
+            beat, self._beat = self._beat or {"kind": explore_one.MATERIAL, "rare": False, "won": None}, None
+            lines = [m for m in msgs if isinstance(m, str)]
+            ledger = lines[1] if len(lines) > 1 and lines[1].startswith(("得：", "失：")) else ""
+            stop = IDLE_MARK not in {o.id for o in self.options(odds=False, tick=False)}
+            trip.done += 1
+            trip.beats.append(OutingBeat(kind=beat["kind"], text=lines[0] if lines else "", ledger=ledger, rare=bool(beat["rare"]),
+                                         won=beat["won"], stop=stop))
+            now, cap = team.member_neili(c, p.member, team.con_of(s, c, self.world, PLAYER), season=s.world)
+            if beat.get("lost"):
+                trip.end = outing_rules.LOST
+            elif cap > 0 and now < cap * cfg.outing_turn_back:
+                trip.end = outing_rules.HURT
+            if stop:
+                break
+        if not trip.end and trip.done >= trip.total and IDLE_MARK in {o.id for o in self.options(odds=False, tick=False)}:
+            trip.end = outing_rules.DONE  # 最後一段端出要選的事時先不收：選完、接著走那一下才收
+        return []
 
     def is_idle(self) -> bool:
         """此刻閒著（切磋、論武、假人答論武都問它）：選單上有探索（IDLE_MARK）——不在路上、沒有事件、對話、店面的選單擋著、不在開打的決戰裡。

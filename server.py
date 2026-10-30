@@ -1828,6 +1828,8 @@ def _main_view_body(game: Game) -> dict:
         "scene": scene,
         "art": scene_art(game, status),  # 場景卡上面那張圖（減法季批 8）：事件插圖、人物像或地點的圖；沒有圖檔是 None、網頁一字不變
         "options": [o.model_dump() for o in options],
+        # 走一趟（tianxia/outing.py）：探索鈕的段數選單（picker）與這一趟（trip）；關著是 None、網頁照舊一顆探索
+        "outing": game.outing_view(),
         "say_max": game.say_max(),  # 「自己說」最多幾個字（NPC 智能 2.0開著時比較長，網頁的輸入框照它）
         # 出陣開著（出陣探索與地盤設計第二節）：行動列那一格叫「出陣」、等候的話換一句；關著時照舊「遊歷」
         "sortie": sortie.on(game.content),
@@ -2519,6 +2521,8 @@ MAIN_ACTIONS = {
     "sortie_go": lambda g, b: g.sortie_go(_moves(b.get("moves"))),
     "sortie_answer": lambda g, b: g.sortie_answer(str(b.get("id", ""))[:80], _moves(b.get("moves"))),
     "sortie_join": lambda g, b: g.sortie_join(str(b.get("id", ""))[:80]),
+    # 走一趟（tianxia/outing.py）：n 是段數（1／3／5）就出發；0 或沒帶是停在要選的事上、選完接著走。沿路的事在 main.outing.trip
+    "outing": lambda g, b: g.outing_go(_int(b.get("n"), 0)),
 }
 # 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、不再提示、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」

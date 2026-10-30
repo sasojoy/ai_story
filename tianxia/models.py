@@ -3363,6 +3363,7 @@ class JianfaRules(JianfaNumbers):
     # 子開關（整合設計第十二章）：總開關開著、這一季有章時，各批的規則再看自己的那一個（rules.jianfa(content, world, "explore_one")）；
     # 預設全開，哪一批出了事主機可以單獨關掉那一批。總開關關著時子開關一律不算。
     explore_one: bool = True  # 4.1 探索一顆照地點抽（批 2）
+    outing: bool = True  # 走一趟：探索一次走一、三、五段（tianxia/outing.py；要 explore_one 也開著）
     drill_gates: bool = True  # 4.2 三道閘、45 級後只收仗的經驗（批 2）
     sortie_duel: bool = True  # 4.3 出陣改約戰（批 3b）
     four_wins: bool = True  # 第三章 三陣營四勝利、豪強兩本帳（批 3c）

@@ -118,6 +118,28 @@ ONBOARDING_VERSION = 5  # 新手引導的版本：2＝有序章的新引導（�
 # 比 3 小而且已經有陣營的，是入伍段上線之前就投靠的老手，讀檔時蓋成入伍段走完（enlist.mark_veteran，設計 7.2）
 
 
+class OutingBeat(BaseModel):
+    """走一趟的一段（tianxia/outing.py）：一段就是一次探索（Game._explore_one）抽到的那一件事。畫面照 kind 挑動作、照 text 寫那一行。"""
+
+    kind: str  # explore_one 的四類：event／encounter／material／insight
+    text: str = ""  # 那一段的段落（_explore_one 的第一行）
+    ledger: str = ""  # 「得：…　失：…」那一行；沒有是空字串
+    rare: bool = False  # 稀有的：二階以上的素材、奇遇事件、一條線的開頭（畫面亮金光）
+    won: bool | None = None  # 遭遇：打贏 True、打輸或平手 False；別的類是 None
+    stop: bool = False  # 這一段端出了要選的事（事件、有所感、頭目），走一趟停在這裡等玩家選
+
+
+class Outing(BaseModel):
+    """走一趟（企劃者 2026-10-29～30）：探索一次走 total 段。end 是空字串時還在路上（停著等選或還沒走完）；走完寫原因，
+    留著給結算卡，下一趟出發才換掉。"""
+
+    place: str  # 出發的地點 id；人不在這裡了，這一趟就收
+    total: int
+    done: int = 0
+    beats: list[OutingBeat] = Field(default_factory=list)
+    end: str = ""  # ""、done（走完）、lost（打輸）、hurt（氣血見底回頭）、tired（體力不夠）、left（離開了）
+
+
 class Sensing(BaseModel):
     """有所感（悟意境設計第零節）：探索落在悟意境那一支、這一處有場景時，存一份待決的感悟，直到悟成或落空。
     stage 是 "choose"（卡上三四個做法、還沒選）或 "draw"（選對又擲中，進了感悟狀態、等著畫那一筆）。"""
@@ -822,6 +844,7 @@ class PlayerState(BaseModel):
     fights_today: int = 0  # 遭遇的疲勞（drill_gates，growth.nth_fight）：fight_day 那一天打了幾場遭遇（含城裡的地痞、自家營寨的比劃）
     fight_day: int = 0  # fights_today 記在哪一天（Game._pill_day，台灣 00:00 換日）；不是今天就從頭算
     milestone_due: int = 0  # 升到境界那一級、還沒配完點時記那一級（stat_milestones；境界卡 main.milestone）；配完清成 0
+    outing: Outing | None = None  # 走一趟（tianxia/outing.py）：這一趟走到哪、沿路發生了什麼；走完留著給結算卡，下一趟出發才換掉
     outing_last: str = ""  # 探索一顆（explore_one）上一趟要選的那件事（事件或感悟）：「地點 id:類」（感悟不連兩趟，explore_one.draw 的 last_choice）
     anonymous: bool = False
     # 性別（PM 2026-10-12，企劃者「創建角色時可以選擇性別」）：「男」／「女」，不影響任何數值；稱呼換字一律走 tianxia/gender.py。
@@ -1033,7 +1056,7 @@ class PlayerState(BaseModel):
 # PlayerState 裡「沒用到就不寫進存檔」的欄位（_drop_quiet_defaults）：新規則掛開關、關著的季存檔一個鍵都不多的，加在這裡
 QUIET_DEFAULTS = (
     "ledgers", "lean_changed", "season_title", "step_day", "step_skip", "deed_day", "deed_today",  # 批 3c、批 4
-    "fights_today", "fight_day", "milestone_due", "outing_last",  # 批 2
+    "fights_today", "fight_day", "milestone_due", "outing_last", "outing",  # 批 2、走一趟
     "stance_notes", "errands",  # 批 6
     "xingshi_seen", "deep_order",  # 批 7b
     # 出陣約戰（減法季批 3b）

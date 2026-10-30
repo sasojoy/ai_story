@@ -3280,6 +3280,45 @@ svg.fig .blade.bow { stroke-width: 3; }
 .card.scene.tier-3 { border: 1.5px solid var(--gold); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 18%, transparent); }
 .card.scene.tier-3 .tier-tag { color: var(--gold); }
 .card.scene.has-art .tier-tag { margin-top: .5em; }
+/* 走一趟（outing.js；企劃者 2026-10-29～30）：蓋在畫面上的一層，上面一塊畫布（720×360，斗笠小童在野地四層上跑），
+   底下沿路的幾行與一排鈕；停在要選的事上按「去看看」藏起來，選完接著走再打開。探索那一格點開的段數選單在行動列底下 */
+.outing-pick .outing-segs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.outing-pick .outing-segs .btn { justify-content: center; text-align: center; }
+.outing-pick .outing-segs .btn span { display: flex; flex-direction: column; align-items: center; }
+.outing-pick .outing-segs small { font-size: 11px; color: var(--ink-2); font-weight: 500; }
+.outing-pick .outing-note { margin: 8px 2px 0; }
+.outing-wrap { position: fixed; inset: 0; z-index: 58; display: flex; align-items: center; justify-content: center;
+  padding: max(12px, var(--top)) 10px max(12px, var(--bottom)); background: rgba(20, 16, 12, .55); }
+.outing-card { background: var(--card); color: var(--ink); border: 1px solid var(--gold); border-radius: 20px; width: 100%; max-width: 24rem;
+  max-height: 100%; display: flex; flex-direction: column; padding: 12px 12px 14px; overflow: hidden; box-shadow: 0 10px 40px rgba(0, 0, 0, .35); animation: asc-in .4s ease-out; }
+.outing-head { display: flex; justify-content: space-between; align-items: baseline; margin: 0 4px 6px; font-family: var(--serif); }
+.outing-head b { color: var(--gold); font-size: 18px; }
+.outing-step { font: 500 12px var(--sans); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.outing-step .d { display: inline-block; width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--gold); margin-left: 3px; vertical-align: 1px; }
+.outing-step .d.on { background: var(--gold); }
+.outing-scene { flex: none; border-radius: 12px; overflow: hidden; background: #efe6d2; }
+.outing-cv { display: block; width: 100%; aspect-ratio: 2 / 1; max-width: 100%; }
+.outing-foot { flex: none; padding: 10px 0 8px; }
+.outing-log { flex: 1 1 auto; min-height: 120px; max-height: 170px; overflow-y: auto; padding: 8px 4px 0; border-top: 1px solid var(--line); }
+.outing-log:empty::before { content: "上路了……"; color: var(--ink-2); font: 500 13px var(--serif); }
+.outing-line { display: flex; gap: 8px; margin: 0 0 6px; font-size: 13.5px; line-height: 1.6; animation: asc-in .3s ease-out; }
+.outing-line .k { flex: none; font: 600 11px/1.5 var(--serif); color: var(--gold); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-top: 2px; }
+.outing-line small { display: block; font-size: 12px; }
+.outing-line small.up { color: var(--ok); }
+.outing-line small.down { color: var(--bad); }
+.outing-line.rare .k { background: var(--gold); color: var(--card); border-color: var(--gold); }
+.outing-line.bad .k { color: var(--bad); }
+.outing-ctl { display: flex; gap: 8px; }
+.outing-ctl .btn { flex: 1; justify-content: center; }
+.outing-wait p { margin: 0 0 8px; font-size: 13.5px; }
+.outing-wait .btn { width: 100%; justify-content: center; }
+.outing-title { margin: 0 0 4px; font-family: var(--serif); }
+.outing-title b { color: var(--gold); }
+.outing-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.outing-chips .oc { font-size: 12.5px; line-height: 1.6; padding: 1px 8px; border-radius: 10px; background: var(--card-2); color: var(--ok); }
+.outing-chips .oc.rare { background: var(--gold); color: var(--card); font-weight: 700; }
+.outing-chips .oc.down { color: var(--bad); }
+@media (prefers-reduced-motion: reduce) { .outing-card, .outing-line { animation: none; } }
 /* 特殊事件的跳顯框（特殊事件設計稿）：蓋在畫面上，看完才收；破境卡在它上面 */
 .story-wrap { position: fixed; inset: 0; z-index: 59; display: flex; align-items: center; justify-content: center;
   padding: 16px; background: rgba(20, 16, 12, .55); }

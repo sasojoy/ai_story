@@ -156,9 +156,10 @@ def chance(state: GameState, content: Content) -> float:
     return min(1.0, r.chances[n] * min(r.wis_cap, (1 + r.wis_step) ** max(0, wis - r.wis_from)))
 
 
-def roll(state: GameState, content: Content, rng) -> bool:
+def roll(state: GameState, content: Content, rng, boost: float = 1.0) -> bool:
     """擲中感悟（sensing.choose 進了感悟狀態）之後擲一次：中了回真（呼叫端收掉那一份感悟、開線）。關著、序章（呼叫端不叫）、
-    還有一條沒收、這一季次數用完都不擲（不動 rng）。第一次有保底：這一季擲中感悟 pity 次都沒中，下一次必中。"""
+    還有一條沒收、這一季次數用完都不擲（不動 rng）。第一次有保底：這一季擲中感悟 pity 次都沒中，下一次必中。
+    boost：走一趟的稀有倍數（outing.rare_boost），乘在機率上。"""
     if not on(content, state) or busy(state, content):
         return False
     p = state.player
@@ -168,7 +169,7 @@ def roll(state: GameState, content: Content, rng) -> bool:
     pity = rules(content).pity
     if p.epiphanies == 0 and pity and p.epiphany_dry >= pity:
         return True
-    if rng.random() < odds:
+    if rng.random() < odds * boost:
         return True
     p.epiphany_dry += 1
     return False
