@@ -2539,7 +2539,6 @@ MAIN_ACTIONS = {
     "sortie_join": lambda g, b: g.sortie_join(str(b.get("id", ""))[:80]),
     # 走一趟（tianxia/outing.py）：n 是段數（1／3／5）就出發；0 或沒帶是停在要選的事上、選完接著走。沿路的事在 main.outing.trip
     "outing": lambda g, b: g.outing_go(_int(b.get("n"), 0)),
-    "outing_keep": lambda g, b: g.outing_keep(),  # 走一趟的遊記收進行狀
 }
 # 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、不再提示、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」

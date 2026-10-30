@@ -292,25 +292,48 @@ def test_the_model_tale_is_checked_and_kept_for_the_same_trip():
     assert game.state.player.outing.tale == ""
 
 
-def test_keeping_the_tale_writes_the_annals_once():
+def _outing_annals(game):
     from tianxia import annals
-    game = _game()
-    _walked(game)
-    before = len(game.state.player.annals)
-    assert game.outing_keep() == [outing.KEPT]
-    assert len(game.state.player.annals) == before + 1 and game.state.player.annals[-1].kind == annals.DEED
-    assert game.outing_keep() == ["（此刻無法這麼做。）"]
+    return [a for a in game.state.player.annals if a.kind == annals.DEED and ("走了一趟" in a.text or "必輸的一仗" in a.text)]
 
 
-def test_a_rare_find_is_remembered_by_the_world():
+def test_only_a_rare_treasure_or_an_upset_goes_into_the_annals():
+    """Joy 10/30：每一趟都收進行狀太多、沒價值；「真的出現超級稀有的物品或是奇蹟逆轉的戰役這種類型的才有價值被記錄」。
+    結算卡的「收進行狀」鈕拿掉；撿到四階素材、勝算凶險以下打贏才自動記一則行狀（世界記事一筆）。"""
     from tianxia import deeds
     game = _game()
-    if not deeds.on(game.content):
-        pytest.skip("世界記事關著")
-    trip = _walked(game)
-    assert not any(d.kind == outing.DEED_KIND for d in game.state.world.deeds)  # 平常的一趟不記
-    trip.beats[0].rare = True  # 前一段撿到稀有的：這一趟收的時候記一筆
-    trip.end, trip.done, trip.total = "", 0, 1
-    with _draws(MAT):
-        game._outing_walk()
-    assert any(d.kind == outing.DEED_KIND and game.state.player.name in d.actors for d in game.state.world.deeds)
+    c = game.content
+    low = next(m.id for m in c.materials.values() if m.tier == 1)
+    top = next(m for m in c.materials.values() if m.tier >= outing.FEAT_TIER)
+    with _draws(MAT, ENC, MAT), mock.patch.object(explore_modes, "gather_finds", return_value=[low]), \
+         mock.patch.object(type(game), "odds", return_value="有把握"):
+        game.outing_go(3)
+    assert _outing_annals(game) == [] and game.outing_view()["trip"]["feat_note"] == ""
+    assert "outing_keep" not in dir(game)
+    with _draws(MAT), mock.patch.object(explore_modes, "gather_finds", return_value=[top.id]):
+        game.outing_go(1)
+    got = _outing_annals(game)
+    assert len(got) == 1 and top.name in got[0].text and game.outing_view()["trip"]["feat_note"] == outing.FEAT_NOTE
+    with _draws(ENC), mock.patch.object(type(game), "odds", return_value="凶險"):
+        game.outing_go(1)
+    got = _outing_annals(game)
+    assert len(got) == 2 and "必輸的一仗" in got[-1].text
+    if deeds.on(c):
+        assert sum(1 for d in game.state.world.deeds if d.kind == outing.DEED_KIND) == 2
+
+
+def test_the_stele_shows_the_last_ink_or_the_most_left_preset():
+    """畫面上方的路碑（Joy 10/30）：最後一則題壁墨寫的；沒有就是最多人留的預設句；點開看全部，新的在前。"""
+    game = _game()
+    w = game.state.world
+    here = game.state.player.location
+    assert outing.stele(game.state, here) is None
+    w.inscriptions = [Inscription(id=1, place=here, text="溪水可飲。", author="甲", preset=True, time=0),
+                      Inscription(id=2, place=here, text="後來者保重。", author="乙", preset=True, time=0),
+                      Inscription(id=3, place=here, text="溪水可飲。", author="丙", preset=True, time=0),
+                      Inscription(id=4, place="elsewhere", text="別處", author="丁", preset=False, time=0)]
+    st = outing.stele(game.state, here)
+    assert (st["text"], st["author"], st["n"]) == ("溪水可飲。", "", 2) and [x["author"] for x in st["all"]] == ["丙", "乙", "甲"]
+    w.inscriptions.append(Inscription(id=5, place=here, text="橋下有魚", author="戊", preset=False, time=0))
+    st = outing.stele(game.state, here)
+    assert (st["text"], st["author"]) == ("橋下有魚", "戊") and st["all"][0]["ink"]
