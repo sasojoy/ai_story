@@ -14,6 +14,7 @@ from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cu
 from . import sortie_duel  # 出陣約戰（減法季批 3b）
 from . import tavern as tavern_rules  # 酒肆殺手：失手加價
 from .bot import allocate_points, can_practise, wants_heal
+from .core import features as features_core
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import MOVES, Content, Effect, SkillDef
 from .state import BotProfile, Invite
@@ -816,6 +817,9 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return None  # 假人不叛投（計畫甲）
     if kind in ("ambush", "works", "aid"):
         return None  # 設伏、工事、屯糧、護衛、犒軍、探望由 take_turn 的 _stamina_play 做，不交給打分數
+    owned, value = features_core.bot_pick(game, option)  # 搬成包的功能：假人看到這一顆怎麼按問那一包（開發規範手冊 3.8）
+    if owned:
+        return value
     if kind == "feast":  # 宴客（大勢人物擴充第三批）：路過擺著宴的地方就入席，入了席挑一句固定的敬酒詞（不寫自己的，同放手一搏）
         return None if arg == "leave" else FEAST_TOAST_SCORE if arg.startswith("toast:") else FEAST_SCORE
     if kind == "opp":

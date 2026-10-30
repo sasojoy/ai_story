@@ -73,6 +73,7 @@ from tianxia.content import env_profile, load_content, profile_line
 from tianxia.characters import name_key, open_characters
 from tianxia.database import default_path, open_database
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, TEXT_TALKS, Game, Refused
+from tianxia.core import features as features_core  # 功能包：殼照 FEATURES 掛管理者工具與路由（開發規範手冊 3.1）
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.notices import KINDS as NOTICE_KINDS
 from tianxia.notices import current as current_notices
@@ -1921,6 +1922,7 @@ def _main_view_body(game: Game) -> dict:
     entry = game.mall_entry()  # 商城的入口（商城第二批：齒輪旁的錠子鈕＋餘額、底部第六格）；商城關著沒有這個鍵
     if entry is not None:
         view["mall"] = entry
+    view.update(game.feature_status())  # 功能包的狀態（FEATURES 的 status，照清單的順序；開發規範手冊 3.3）
     if view["guide"] is not None:  # 入伍段「出一次力」：選單上能完成它的那幾顆（FB-093）；網頁讓它們發光，「此地還能做」攤開
         view["guide"]["glow"] = game.enlist_glow([o.id for o in options if o.enabled])
     if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
@@ -2623,6 +2625,12 @@ MALL_ADMIN_ACTIONS = {
 }
 
 
+# 功能包的管理者工具與路由（FEATURES；開發規範手冊 3.3）：殼照清單掛，位置就是原本商城那一段（路由的先後不變）
+FEATURE_ADMIN_ACTIONS = features_core.admin_tools(sys.modules[__name__])
+for _router in features_core.routers(sys.modules[__name__]):
+    app.include_router(_router)
+
+
 @app.get("/api/mall")
 def api_mall(request: Request):
     """商城那一頁（Game.mall_view）：同步之後的餘額、月卡、上架的商品。"""
@@ -2745,10 +2753,17 @@ def api_say(request: Request, body: dict = Body(...)):
 
 @app.post("/api/do/{op}")
 def api_do(op: str, request: Request, body: dict = Body(default={})):
+    tool = FEATURE_ADMIN_ACTIONS.get(op)  # 功能包的管理者工具
+    if tool is not None:
+        tool.gate()  # 那一包關著：沒有這個東西（先於登入的檢查）
     if op in MALL_ADMIN_ACTIONS:
         _mall_on()  # 商城關著：沒有這個東西（先於登入的檢查，跟 /api/mall 一樣）
     game = _game(request)
-    if op in MALL_ADMIN_ACTIONS:
+    if tool is not None:
+        if not game.is_admin():
+            raise GameError("只有管理者能這麼做。")
+        msgs = act(game, lambda g: tool.run(g, body), paused_ok=tool.paused_ok)
+    elif op in MALL_ADMIN_ACTIONS:
         if not game.is_admin():
             raise GameError("只有管理者能這麼做。")
         msgs = act(game, lambda g: MALL_ADMIN_ACTIONS[op](g, body), paused_ok=True)  # 帳跟季無關：暫停中也做得了

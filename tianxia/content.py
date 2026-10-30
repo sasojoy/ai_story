@@ -978,6 +978,13 @@ def check_mall(c: Content, need) -> None:
         seen.setdefault(item.name, item.id)
 
 
+def check_features(c: Content, need) -> None:
+    """功能包自己的內容驗證（FEATURES 的 check_content，照清單的順序；開發規範手冊 3.6）：關著的包照驗（檔案寫壞了早點知道）。"""
+    from .core import features  # noqa: PLC0415  登記的包延後載入（包會 import 核心）
+
+    features.check_content(c, need)
+
+
 def check_shop_lines(c: Content, need) -> None:
     """店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4；Joy 直接改字）：寫了的只能是認得的店與情況，每一句不能空、
     只用繁體中文、不寫數字；店面開關開著時，開門的店那一組每一種情況都要有句子：鐵匠鋪（兵器或防具開著）、馬市（坐騎開著）、
@@ -2690,6 +2697,7 @@ def validate(c: Content) -> None:
     check_combat_lines(c, need)
     check_shop_lines(c, need)
     check_mall(c, need)
+    check_features(c, need)
     check_art(c, need)
     check_arena_crowd(c, need)
     check_xingshi_lines(c, need)

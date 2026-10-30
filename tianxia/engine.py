@@ -734,6 +734,7 @@ class Game:
                 old.player.season_number, old.player.name, [e.model_dump() for e in old.player.annals],
                 annals.profile(old, self.content, season=past),
             )
+        features_core.on_season_end(self)  # 功能包：舊的那一季要丟之前（self.state 還是舊的；開發規範手冊 3.3）
         fresh = new_game_state(self.content, old.player.name)
         fresh.last_real = old.last_real
         # 做完或略過（skip_tutorial 也是設成步數）：看不分季的那幾步；第一季多的兩步排在後面，回鍋的人接著做（計畫 T6）。
@@ -813,6 +814,7 @@ class Game:
         self.state = fresh
         self.state.world = self.world.get_season()  # 開場那一則記此刻的季時間（FB-052：以前記成新存檔的 0）
         self.state.player.visited.add(self.state.player.location)
+        features_core.on_season_start(self, old)  # 功能包：新的存檔接上了、開場那一則之前（old 是上一季的）
         self._write(
             self.content.scenario.name, [self.content.scenario.intro], tag=journal.SEASON_START, guide=tutorial_intro(self.content),
         )
@@ -1001,6 +1003,7 @@ class Game:
             s.battle_card = None
         if not s.journal and s.log:
             s.journal = journal.from_legacy_log(s.log)
+        features_core.on_drop_stale(self)  # 功能包自己的失效參照（開發規範手冊 3.3）
 
     # ── 時間 ──────────────────────────────────────────────
 
@@ -1049,6 +1052,7 @@ class Game:
         self._week_unlock_tick()  # 減法季 6.6：第 2 週的功能對這個人開了的那一刻，寫一則紀錄
         self._record_faction()
         self._copy_heirloom()  # 排在 _advance_player_local 之前：承露照整段離線時間算體力回復（7.4）
+        elapsed = 0.0  # 這一次補算的自己的秒數（功能包的 on_sync 拿它）
         if self.state.last_real is None:
             self.state.last_real = now
         else:
@@ -1107,6 +1111,9 @@ class Game:
             self._write(feasts.TITLE, cheered)
         if self.state.player.feasting is not None and self._feast_seat() is None:
             self.state.player.feasting = None  # 宴散了、人走了：收起敬酒的選單
+        if away_from is None or self._day_of(away_from) != self._day_of(now):
+            features_core.on_day(self)  # 功能包：回體丹那一天換了（台灣 00:00；上一次同步之後第一次）
+        features_core.on_sync(self, elapsed)  # 功能包的補算（開發規範手冊 3.3）
         self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
         self._auto_checkin()  # 每日簽到自動領（Joy 2026-10-24 挑江湖頁乙案：簽到不放鈕）；要挑四階的日子留給玩家挑
         self._settle_partings()  # 歷史武將同行：從你身邊回江湖的人，情誼減半（9.6；補戰報時已經算過的不再算）
@@ -1352,6 +1359,9 @@ class Game:
                            enabled=move not in held) for move in MOVES] + [
                 Option(id=DUEL_FLEE, label="抽身退走（不分勝負，掉的氣血不回）"),
             ]
+        taken = features_core.menu(self)  # 功能包此刻接管整個選單（坐在宴席上、店開著那一類；開發規範手冊 3.3）
+        if taken is not None:
+            return taken
         if s.player.feasting is not None and self._feast_seat() is not None:  # 赴宴（第三批）：固定的敬酒詞與離席；自己寫的走輸入框
             return self._feast_menu()
         if s.player.arena is not None:  # 擂台（tianxia/arena.py）：三招與認輸；放手一搏同頭目戰走輸入框
@@ -3483,11 +3493,15 @@ class Game:
         prepared = self._checked_prepared(option_id, prepared, text) if kind in ("act", "talk", "call", "parley") else None
         self._fight = self._checked_fight(option_id, fight)
         was_opening = kind == "choice" and opening_rules.pending(self.state, self.content)  # 開局三選一（減法季批 7）：選完人物的信到
-        self._draft = Draft(self._action_title(kind, arg))
+        # 搬成包的功能：那一包接走（只吃自己前綴的 id；這一下江湖紀錄的標題在動作之前先拿，同 _action_title；開發規範手冊 3.3）
+        taken = features_core.choose(self, kind, arg)
+        self._draft = Draft(taken.title if taken is not None else self._action_title(kind, arg))
         self._affinity_before = dict(self.state.player.affinities)
         stamina = self.state.player.stamina
         try:
-            if kind == "act":
+            if taken is not None:
+                msgs = taken.run()
+            elif kind == "act":
                 msgs = self._act(arg, prepared)
             elif kind == "move":
                 msgs = self._move(arg)
@@ -13206,7 +13220,11 @@ class Game:
 
     def _pill_day(self) -> int:
         """現在是第幾天（Config.pill_day_utc_offset_hours 的時區、00:00 換日；從 1970-01-01 起算）。"""
-        return int((self.pill_now() + self.content.config.pill_day_utc_offset_hours * HOUR) // (24 * HOUR))
+        return self._day_of(self.pill_now())
+
+    def _day_of(self, t: float) -> int:
+        """現實時間 t 是回體丹那一套的第幾天（_pill_day 照它算；sync 拿它比上一次同步是不是換了一天）。"""
+        return int((t + self.content.config.pill_day_utc_offset_hours * HOUR) // (24 * HOUR))
 
     def pill_cap(self) -> int:
         """一天最多服幾顆：新手期照 newbie_pills_per_day（有寫才算），其餘照 stamina_pills_per_day；0 是不限。
@@ -14226,7 +14244,8 @@ class Game:
             name = c.scenario.faction_name(stock, stock)
             label = works.STOCK_LABEL.format(side=name, n=s.world.supply.get(stock, 0))
             opts.append(self._cost_option("works:stockpile", label, c.config.stockpile.stamina))
-        return opts + self._aid_options() + self._feast_options() + self._plan_options()
+        # 功能包的選項（FEATURES 照順序）接在護衛那一串之後、盤算之前；序章裡、休季不問（同上面的體力玩法）
+        return opts + self._aid_options() + self._feast_options() + features_core.options(self) + self._plan_options()
 
     def _aid_options(self) -> list[Option]:
         """護著同陣營的大勢人物（figure_aid）：這裡在場的同陣營人物各一顆護衛、一顆犒軍；在自己陣營的大本營，被挑戰打退、
@@ -17331,6 +17350,10 @@ class Game:
                 "到下一站之前各能做一次。可以先下線，到了會自己抵達。"
             )
         return self.location_text()
+
+    def feature_status(self) -> dict:
+        """功能包合進江湖畫面頂層的資料（FEATURES 的 status，照清單的順序；例：商城的入口 main.mall）。server.main_view 放在原本商城那一格。"""
+        return features_core.status(self)
 
     def status_data(self) -> dict:
         """狀態列的資料（數字與短字串），網頁前端照這份自己排版；status_text 是同一份資料的文字版。"""
