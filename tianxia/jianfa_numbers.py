@@ -120,6 +120,7 @@ class JianfaNumbers(_Strict):
     outing_trace_cap: int = Field(default=2, ge=0)
     outing_trace_chance: float = Field(default=0.4, ge=0, le=1)
     outing_trace_custom: float = Field(default=2.0, ge=1)
+    outing_tale_seconds: float = Field(default=20.0, ge=0)  # 遊記：請模型寫最多等幾秒（鎖外）；叫不動就用模板【預設】
     town_foes: list[str] = Field(default_factory=lambda: ["dipi"], min_length=1)
     town_loot_scale: float = Field(default=0.5, ge=0, le=1)
     # 自家營寨的遭遇是跟同袍比劃（不打、不掉東西）：給 _sortie_host 那一路心得、經驗的幾成（再乘三道閘的倍數）【暫】

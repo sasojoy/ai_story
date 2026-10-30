@@ -139,8 +139,12 @@ class Outing(BaseModel):
     done: int = 0
     beats: list[OutingBeat] = Field(default_factory=list)
     end: str = ""  # ""、done（走完）、lost（打輸）、hurt（氣血見底回頭）、tired（體力不夠）、left（離開了）
+    n: int = 0  # 第幾趟（上一趟加一；遊記的單子照它認是不是同一趟）
     said: str = ""  # 走完在這一處留的那一句（一趟一句）；空的是還沒留
     waved: bool = False  # 路上已經寫過「遠處有人揮手」那一行（一趟一次）
+    tale: str = ""  # 這一趟的遊記（模型寫的，鎖外三段式；叫不動或不合用是空字串，畫面用 outing.template_tale）
+    tale_done: bool = False  # 遊記請過模型了（成不成都算，不再請）
+    kept: bool = False  # 遊記收進行狀了
 
 
 class Inscription(BaseModel):

@@ -33,6 +33,8 @@
   const OUTING_SAY_BUY = "去萬寶閣買題壁墨";
   const OUTING_SAID = "你留下：「{text}」";
   const OUTING_HERE = "此地還有";
+  const OUTING_KEEP = "收進行狀";
+  const OUTING_KEPT = "已收進行狀";
 
   // 這一層自己的狀態（不放進 S：每一格動畫都會改，不該讓整頁重畫）
   const OW = { imgs: null, open: false, away: false, shown: 0, played: 0, tasks: [], cur: null, raf: 0, last: 0, scroll: 0, props: [], parts: [],
@@ -154,7 +156,24 @@
       foot.innerHTML = `<div class="outing-wait"><p>${OUTING_WAIT}</p><button class="btn primary" data-act="outing-away">${OUTING_AWAY}</button></div>`;
     } else {
       foot.innerHTML = outingResultHtml(trip);
+      outingTale(trip);
     }
+  }
+
+  // 遊記：結算卡先放模板那一段，請模型寫（鎖外，伺服器 outing_tale）；寫到了淡入換掉。一趟只請一次
+  async function outingTale(trip) {
+    const key = `${trip.place}|${trip.beats.length}|${trip.done}`;
+    if (trip.tale_done || OW.taleAsked === key) return;
+    OW.taleAsked = key;
+    try {
+      const r = await api("/api/do/outing_tale", {});
+      if (r && r.main) {
+        applyMain(r.main);
+        const now = outingTrip();
+        const p = document.querySelector("#outing-pop .outing-tale");
+        if (now && p && now.tale && now.tale !== p.textContent) { p.textContent = now.tale; p.classList.add("fresh"); }
+      }
+    } catch (e) { /* 叫不動就留著模板那一段 */ }
   }
 
   // 結算卡：每一段的「得：…　失：…」併起來，同一樣東西加總（「驚羽 ×1」兩次寫「驚羽 ×2」、「氣血 -6」兩次寫「氣血 -12」）
@@ -188,6 +207,8 @@
     return `<div class="outing-result"><p class="outing-title"><b>${esc(trip.title)}</b>・${trip.done} 段</p>
       ${trip.end_line ? `<p class="muted small">${esc(trip.end_line)}</p>` : ""}
       ${chips ? `<p class="outing-chips">${chips}</p>` : ""}${lost ? `<p class="outing-chips">${lost}</p>` : ""}
+      ${trip.tale ? `<p class="outing-tale">${esc(trip.tale)}</p>` : ""}
+      <p class="outing-keep">${trip.kept ? `<small>${OUTING_KEPT}</small>` : `<button class="btn small ghost" data-act="outing-keep">${OUTING_KEEP}</button>`}</p>
       ${outingSayHtml(trip)}${outingPeopleHtml(trip)}
       <div class="outing-ctl"><button class="btn" data-act="outing-close">${OUTING_CLOSE}</button>
       <button class="btn primary" data-act="outing-again">${OUTING_AGAIN}</button></div></div>`;
@@ -492,6 +513,9 @@
       case "outing-close": outingShut(); OW.shown = 0; return true;
       case "outing-again": outingShut(); OW.shown = 0; S.wheelSel = "explore"; renderPage(); revealMoveCard(); return true;
       case "outing-say": await outingSay({ preset: Number(el.dataset.i) }); return true;
+      case "outing-keep":
+        await busy(async () => { const r = await api("/api/do/outing_keep", {}); applyMain(r.main); outingFoot(); });
+        return true;
       case "outing-say-own": {
         const box = document.getElementById("outing-own");
         const text = box ? box.value.trim() : "";

@@ -15,6 +15,10 @@
 from __future__ import annotations
 
 import random
+import re
+from dataclasses import dataclass
+
+from pydantic import BaseModel
 
 from .models import Content
 from .rules import jianfa
@@ -42,12 +46,20 @@ SURFACES = ("路邊的石頭", "一棵老樹的樹幹", "半截斷碑", "破廟�
 SEEN_LINE = "{surface}上刻著一行字：「{text}」——{author}"
 WAVE_LINE = "遠處山坡上，{name}朝你揮了揮手。"
 # 留言那一格（待 joy 潤）
+SAY_TITLE = "路上留字"  # 江湖紀錄的標題（酒肆另有「題壁」，分開）
 SAY_DONE = "你在{place}留下一句：「{text}」"
 SAY_AGAIN = "這一趟已經留過一句了。"
 SAY_NOT_HERE = "要人在這一處，走完一趟才能留言。"
 SAY_EMPTY = "寫點什麼再留。"
 NO_INK = "自己寫的要用一張題壁墨，你手上沒有，先到萬寶閣買。"
 ERASED = "那一句已經抹掉了。"
+KEPT = "這一趟收進了行狀。"
+TALE_MAX = 80  # 遊記最多幾個字（收進行狀那一則的上限，annals.TEXT_MAX）
+DEED_KIND = "outing"  # 世界記事（deeds.record）的種類：走一趟碰上稀罕的東西
+DEED_LINE = "{name}在{place}一帶走了一趟，碰上了稀罕的東西。"  # 待 joy 潤
+_ZH = "零一二三四五六七八九十"
+_DIGITS = re.compile(r"[0-9０-９]|[一二三四五六七八九十兩]+(?=[段場顆次件])")  # 遊記不准有數字：阿拉伯數字，與「三段」「兩場」這種數量
+_BANNED = ("假人", "機器人", "外掛", "遊戲", "系統", "玩家")
 
 
 def on(content: Content, state: GameState) -> bool:
@@ -97,6 +109,8 @@ def view(state: GameState, content: Content) -> dict | None:
             "beats": [b.model_dump() for b in trip.beats],
             "said": trip.said, "can_say": say_ok(state) is not None, "presets": list(PRESETS),
             "say_max": content.config.jianfa.outing_say_max,
+            "tale": trip.tale or (template_tale(trip, content) if trip.end else ""), "tale_done": trip.tale_done,
+            "kept": trip.kept,
         }
     return out
 
@@ -155,3 +169,104 @@ def wave_beat(names: list[str], rng: random.Random) -> OutingBeat | None:
     if not names:
         return None
     return OutingBeat(kind=TRACE, text=WAVE_LINE.format(name=rng.choice(sorted(names))))
+
+
+# ── 遊記（設計稿第七節）：結算卡上的帳一個字都不靠模型；底下三四句遊記是模型寫的，鎖外三段式（server.outing_tale），
+# 不准有數字、不准提遊戲；叫不動、不合用就留空，畫面用照每一段拼的模板（template_tale）。只有自己看得到，可以收進行狀 ──
+
+def zh_count(n: int) -> str:
+    """數量的中文（「兩樣」不寫「二樣」）；十以上寫「好幾」。"""
+    return "兩" if n == 2 else _ZH[n] if 0 <= n <= 10 else "好幾"
+
+
+def template_tale(trip: Outing, content: Content) -> str:
+    """模型不在時的遊記：照每一段的類別拼兩三句（不寫數字以外的細節，數字用中文）。"""
+    place = content.locations[trip.place].name if trip.place in content.locations else trip.place
+    walked = [b for b in trip.beats if b.kind != TRACE]
+    parts: list[str] = []
+    mats = sum(1 for b in walked if b.kind == "material")
+    fights = [b for b in walked if b.kind == "encounter"]
+    if mats:
+        parts.append(f"沿路撿了{zh_count(mats)}樣東西")
+    if fights:
+        won = sum(1 for b in fights if b.won)
+        parts.append(f"跟人動了{zh_count(len(fights))}回手" + ("，都占了上風" if won == len(fights) else ""))
+    if any(b.kind == "insight" for b in walked):
+        parts.append("走著走著心頭一動")
+    if any(b.kind == "event" for b in walked):
+        parts.append("還碰上一樁事")
+    if any(b.kind == TRACE and b.ref for b in trip.beats):
+        parts.append("在路邊看見前人留的字")
+    if any(b.kind == TRACE and not b.ref for b in trip.beats):
+        parts.append("遠遠有人朝你揮手")
+    head = f"這一趟在{place}走了{zh_count(len(walked))}段。"
+    body = "，".join(parts) + "。" if parts else ""
+    tail = END_LINES.get(trip.end, "天色將晚，收拾回程。")
+    return head + body + tail
+
+
+@dataclass(frozen=True)
+class TaleRequest:
+    """遊記的單子（A 段開、B 段送模型、C 段照 place、beats、time 認是不是同一趟）。"""
+
+    name: str
+    place: str
+    beats: int
+    n: int  # 第幾趟（Outing.n）
+    facts: tuple[str, ...]
+
+
+class TaleReply(BaseModel):
+    tale: str
+
+
+def tale_request(state: GameState, content: Content) -> TaleRequest | None:
+    """這一趟收了、還沒請過模型：開單（每一段那一行、路上看到的、怎麼收尾）。不行是 None。"""
+    trip = state.player.outing
+    if trip is None or not trip.end or trip.tale_done:
+        return None
+    place = content.locations[trip.place].name if trip.place in content.locations else trip.place
+    facts = [b.text for b in trip.beats if b.text] + [END_LINES.get(trip.end, "走完了這一趟，平安回來。")]
+    return TaleRequest(name=state.player.name, place=place, beats=len(trip.beats), n=trip.n, facts=tuple(facts))
+
+
+def same_trip(state: GameState, req: TaleRequest) -> Outing | None:
+    trip = state.player.outing
+    if trip is None or not trip.end or trip.tale_done or len(trip.beats) != req.beats or trip.n != req.n:
+        return None
+    return trip
+
+
+def tale_messages(req: TaleRequest) -> list[dict[str, str]]:
+    facts = "\n".join(f"- {f}" for f in req.facts)
+    return [
+        {"role": "system", "content": (
+            "你替東漢末年一個江湖人寫遊記。下面是他這一趟在某地沿路發生的事，照先後寫成一段遊記，"
+            "三四句、八十字以內、繁體中文、半文半白、用「你」稱他。只寫清單裡有的事，不要編造清單裡沒有的人名、地名、物名；"
+            "不要寫任何數字（也不要寫「三段」「兩場」這種數量），不要寫標題或列點，不要提到遊戲、系統、玩家。"
+        )},
+        {"role": "user", "content": f"地點：{req.place}\n這一趟的事：\n{facts}\n請給 tale。"},
+    ]
+
+
+def tale_clean(raw: str, req: TaleRequest) -> str | None:
+    """模型寫的遊記驗過才用：轉繁體、去掉標記與換行；有數字、太長、提到遊戲的丟掉（回 None）。"""
+    from . import zh  # noqa: PLC0415
+
+    text = zh.to_traditional(str(raw or ""))
+    text = re.sub(r"[*#>`_]+", "", text)
+    text = re.sub(r"\s+", "", text).strip("「」『』\"'“”")
+    if not text or len(text) > TALE_MAX or _DIGITS.search(text) or any(w in text for w in _BANNED):
+        return None
+    return text if text[-1] in "。！？…」" else text + "。"
+
+
+def tale_write(client, req: TaleRequest) -> str | None:
+    """B 段（鎖外）：請模型寫遊記；叫不動、不合用回 None。"""
+    if client is None:
+        return None
+    try:
+        result = client.chat_structured(tale_messages(req), TaleReply, temperature=0.8, num_predict=320, required_fields=["tale"])
+    except Exception:  # noqa: BLE001 — 叫不動就用模板
+        return None
+    return tale_clean(result.tale, req)

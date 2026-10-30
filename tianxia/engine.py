@@ -5652,7 +5652,7 @@ class Game:
                 return ["（此刻無法這麼做。）"]
             if p.stamina < outing_rules.cost(c, total):
                 return ["（體力不夠走這麼多段。）"]
-            p.outing = Outing(place=p.location, total=total)
+            p.outing = Outing(place=p.location, total=total, n=(p.outing.n + 1) if p.outing is not None else 1)
         else:
             trip = p.outing
             if trip is None or trip.end:
@@ -5718,6 +5718,10 @@ class Game:
                 self._outing_trace(trip)
         if not trip.end and trip.done >= trip.total and IDLE_MARK in {o.id for o in self.options(odds=False, tick=False)}:
             trip.end = outing_rules.DONE  # 最後一段端出要選的事時先不收：選完、接著走那一下才收
+        if trip.end and any(b.rare for b in trip.beats):  # 碰上稀罕的東西：世界記事記一筆（此地舊事、人物對話讀得到）
+            place = c.locations[trip.place].name if trip.place in c.locations else trip.place
+            deeds.record(s, c, outing_rules.DEED_KIND, outing_rules.DEED_LINE.format(name=p.name, place=place),
+                         place=trip.place, actors=[p.name])
         return []
 
     def _outing_trace(self, trip: Outing) -> None:
@@ -5757,6 +5761,8 @@ class Game:
             if not line:
                 return [outing_rules.SAY_EMPTY]
             problem = speech.problem(line, c, speech.MOTTO, c.config.jianfa.outing_say_max, verdict)
+            if problem is None and any(word in line for word in tavern_rules.BANNED_WORDS):
+                problem = speech.BLOCKED  # 同酒肆題壁：牆上不寫這幾個字
             if problem:
                 return [problem]
             wallet = self._wallet()
@@ -5769,9 +5775,33 @@ class Game:
         if token is not None:
             self._wallet().mark_used(token, self.pill_now(), place=trip.place, inscription=item.id)
         said = outing_rules.SAY_DONE.format(place=place, text=line)
-        journal.add_entry(s, JournalEntry(time=s.world.time, title="題壁", lines=[said],
+        journal.add_entry(s, JournalEntry(time=s.world.time, title=outing_rules.SAY_TITLE, lines=[said],
                                           changes=[] if token is None else ["題壁墨 -1"]))
         return self._log([said])
+
+    def outing_tale_request(self) -> outing_rules.TaleRequest | list[str]:
+        """遊記的 A 段（只讀）：這一趟收了、還沒請過模型就開單；不然回一句（不叫模型）。"""
+        req = outing_rules.tale_request(self.state, self.content)
+        return ["（此刻無法這麼做。）"] if req is None or not outing_rules.on(self.content, self.state) else req
+
+    def outing_set_tale(self, text: str | None, request: outing_rules.TaleRequest) -> list[str]:
+        """遊記的 C 段：還是同一趟（outing.same_trip）才收；text 是 None（叫不動、不合用）就記成請過了、畫面照用模板。"""
+        trip = outing_rules.same_trip(self.state, request)
+        if trip is None:
+            return []
+        trip.tale, trip.tale_done = text or "", True
+        return []
+
+    def outing_keep(self) -> list[str]:
+        """把這一趟的遊記收進行狀（annals DEED；沒有模型寫的就收模板那一段）。一趟一次。"""
+        s, c = self.state, self.content
+        trip = s.player.outing
+        if not outing_rules.on(c, s) or trip is None or not trip.end or trip.kept:
+            return ["（此刻無法這麼做。）"]
+        place = c.locations[trip.place].name if trip.place in c.locations else trip.place
+        annals.note(s, c, annals.DEED, trip.tale or outing_rules.template_tale(trip, c), 2, place=place)
+        trip.kept = True
+        return self._log([outing_rules.KEPT])
 
     def outing_ink_left(self) -> int:
         """手上還沒用掉的題壁墨幾張；商城關著是 0。"""

@@ -3327,6 +3327,10 @@ svg.fig .blade.bow { stroke-width: 3; }
 .outing-own { display: flex; gap: 6px; margin: 4px 0; }
 .outing-own input { flex: 1 1 auto; min-width: 0; font: inherit; font-size: 13.5px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); }
 .outing-said { margin: 4px 0; font-size: 13px; color: var(--ink-2); }
+.outing-tale { margin: 6px 0 2px; font: 400 13.5px/1.75 var(--serif); color: var(--ink); }
+.outing-tale.fresh { animation: asc-in .6s ease-out; }
+.outing-keep { margin: 0 0 4px; text-align: right; }
+.outing-keep small { color: var(--ink-2); }
 .outing-here { margin: 4px 0 8px; font-size: 13px; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
 @media (prefers-reduced-motion: reduce) { .outing-card, .outing-line { animation: none; } }
 /* 特殊事件的跳顯框（特殊事件設計稿）：蓋在畫面上，看完才收；破境卡在它上面 */

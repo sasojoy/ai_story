@@ -261,3 +261,56 @@ def test_bots_leave_only_preset_lines():
             return 0.0
     bot.outing_say(game, Always(3))
     assert game.state.world.inscriptions[0].preset and game.state.world.inscriptions[0].text in outing.PRESETS
+
+
+# ── 遊記、世界記事 ──
+
+def test_the_tale_falls_back_to_a_template_without_digits():
+    game = _game()
+    with _draws(MAT, ENC, MAT):
+        game.outing_go(3)
+    view = game.outing_view()["trip"]
+    assert view["tale"].startswith("這一趟在") and "兩樣東西" in view["tale"] and not any(ch.isdigit() for ch in view["tale"])
+    assert view["tale_done"] is False
+
+
+def test_the_model_tale_is_checked_and_kept_for_the_same_trip():
+    game = _game()
+    _walked(game)
+    req = game.outing_tale_request()
+    assert isinstance(req, outing.TaleRequest) and req.facts
+    assert outing.tale_clean("你走了3段路。", req) is None  # 有數字
+    assert outing.tale_clean("你跟人過了兩場招。", req) is None  # 數量
+    assert outing.tale_clean("這遊戲真好玩。", req) is None
+    assert outing.tale_clean("你在溪邊拾得一根羽毛，風很涼", req) == "你在溪邊拾得一根羽毛，風很涼。"
+    game.outing_set_tale("你在溪邊拾得一根羽毛。", req)
+    trip = game.state.player.outing
+    assert trip.tale == "你在溪邊拾得一根羽毛。" and trip.tale_done
+    assert game.outing_tale_request() == ["（此刻無法這麼做。）"]  # 請過了不再請
+    _walked(game)
+    game.outing_set_tale("舊的那一趟", req)  # 不是同一趟：不收
+    assert game.state.player.outing.tale == ""
+
+
+def test_keeping_the_tale_writes_the_annals_once():
+    from tianxia import annals
+    game = _game()
+    _walked(game)
+    before = len(game.state.player.annals)
+    assert game.outing_keep() == [outing.KEPT]
+    assert len(game.state.player.annals) == before + 1 and game.state.player.annals[-1].kind == annals.DEED
+    assert game.outing_keep() == ["（此刻無法這麼做。）"]
+
+
+def test_a_rare_find_is_remembered_by_the_world():
+    from tianxia import deeds
+    game = _game()
+    if not deeds.on(game.content):
+        pytest.skip("世界記事關著")
+    trip = _walked(game)
+    assert not any(d.kind == outing.DEED_KIND for d in game.state.world.deeds)  # 平常的一趟不記
+    trip.beats[0].rare = True  # 前一段撿到稀有的：這一趟收的時候記一筆
+    trip.end, trip.done, trip.total = "", 0, 1
+    with _draws(MAT):
+        game._outing_walk()
+    assert any(d.kind == outing.DEED_KIND and game.state.player.name in d.actors for d in game.state.world.deeds)

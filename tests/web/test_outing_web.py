@@ -9,7 +9,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node")
 
 DRIVER = r"""
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const code = ["OUTING_CLOSE", "OUTING_AGAIN", "OUTING_SAY_HEAD", "OUTING_SAY_OWN", "OUTING_SAY_INK", "OUTING_SAY_BUY", "OUTING_SAID", "OUTING_HERE"].map(konst).join("\n")
+const code = ["OUTING_CLOSE", "OUTING_AGAIN", "OUTING_SAY_HEAD", "OUTING_SAY_OWN", "OUTING_SAY_INK", "OUTING_SAY_BUY", "OUTING_SAID", "OUTING_HERE", "OUTING_KEEP", "OUTING_KEPT"].map(konst).join("\n")
   + fn("outingPickerHtml") + fn("outingSum") + fn("outingResultHtml") + fn("outingLedgerHtml") + fn("outingSayHtml") + fn("outingPeopleHtml");
 const H = new Function("esc", code + "\nreturn { outingPickerHtml, outingSum, outingResultHtml, outingLedgerHtml };")(esc);
 finish({ picker: H.outingPickerHtml(input.m), result: H.outingResultHtml(input.trip), ledger: H.outingLedgerHtml(input.ledger),
@@ -62,3 +62,9 @@ def test_the_result_card_offers_free_lines_and_ink():
     assert 'id="outing-own" maxlength="20"' in ink and "手上 2 張" in ink
     assert 'data-act="outing-peer" data-name="遠方客"' in no_ink
     assert "你留下：「溪水可飲。」" in said and 'data-act="outing-say"' not in said
+
+
+def test_the_result_card_shows_the_tale_and_keeps_it():
+    tale, kept = _run(more=[{**TRIP, "tale": "你在潁川郊野走了一程。", "kept": False}, {**TRIP, "tale": "你在潁川郊野走了一程。", "kept": True}])["extra"]
+    assert '<p class="outing-tale">你在潁川郊野走了一程。</p>' in tale and 'data-act="outing-keep"' in tale
+    assert "已收進行狀" in kept and 'data-act="outing-keep"' not in kept
