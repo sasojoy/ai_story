@@ -33,6 +33,7 @@
   const OUTING_AFTER = "果";
   const OUTING_CLOSE = "收起";
   const OUTING_AGAIN = "再走一趟";
+  const OUTING_TIRED = "體力不夠再走 {n} 段，挑短一點的。";
   const OUTING_SKIP = "略過";
   const OUTING_SET_OFF = "出發";
   const OUTING_SAY_HEAD = "在這裡留一句";
@@ -629,7 +630,16 @@
         return true;
       }
       case "outing-close": outingShut(); OW.shown = 0; return true;
-      case "outing-again": outingShut(); OW.shown = 0; S.wheelSel = "explore"; renderPage(); revealMoveCard(); return true;
+      case "outing-again": { // 照這一趟的段數直接再走一趟（Joy 10/30）；體力不夠才回到段數選單
+        const trip = outingTrip(), o = S.main.outing;
+        const n = trip ? trip.total : 0, pick = o && o.picker.find((x) => x.n === n);
+        outingShut();
+        OW.shown = 0;
+        if (pick && pick.ok) { await outingGo(n); return true; }
+        if (n) toast(OUTING_TIRED.replace("{n}", n));
+        S.wheelSel = "explore"; renderPage(); revealMoveCard();
+        return true;
+      }
       case "outing-say": await outingSay({ preset: Number(el.dataset.i) }); return true;
       case "outing-stele": OW.steleOpen = !OW.steleOpen; outingStele(); return true;
       case "outing-say-own": {
