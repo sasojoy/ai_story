@@ -196,20 +196,14 @@
     mapState: null, // 疊層（/api/map/state）
     mapStateAt: 0, // 上次抓疊層的時間（輪詢每 MAP_STATE_EVERY 毫秒重抓一次）
     mapSel: null, // 選了的地點
-    mapMode: "overview", // 抽屜在畫什麼："overview"（天下圖收著那一行、區圖沒點地點）、"place"（一處的卡）、"search"、"timeline"
-    mapDrawer: "min", // 抽屜的高度："min"（收著那一行）、"peek"（卡半開）、"half"、"full"、"tl"（版圖變化）
+    mapMode: "overview", // 在看什麼："overview"（抽屜是附近那一排）、"place"（一處的卡）、"search"（找地點那一整頁）、"timeline"（版圖變化）
+    mapDrawer: "peek", // 抽屜的高度："peek"（半開：附近那一排、卡的第一屏）、"half"、"full"、"tl"（版圖變化）
     mapWeek: null, // 版圖變化看的週次；null＝現在
     mapQuery: "", // 找地點的字
-    // 輿圖的哪一層（輿圖第三版）："world" 天下圖（打開輿圖第一眼）、"region" 區圖（第 4 批）；兩張都是固定取景，
-    // 上面再疊一層拖與縮放（企劃者 2026-10-22，mapPan）
-    mapLayer: "near", // 輿圖哪一層：near 第一、二層（以你為中心）、region 全區、world 天下（減法季整合設計第七章）
-    mapRegion: null, // 區圖畫哪一區（大區 id）
-    worldView: null, // 天下圖此刻的取景（applyMapView 照 worldFit 算）
-    regionView: null, // 區圖此刻的取景（applyMapView 照 regionFit 算：{ s, cx, cy, frame, bottom }）
-    marksKey: "", // 記號照哪一個取景畫的（viewKey）：一樣就不必重畫
-    mapPan: null, // 取景上面的拖與縮放 { z 倍率 1～PAN_MAX, x, y 螢幕上的位移 }；null＝1 倍（企劃者 2026-10-22）
-    panKey: "", // 拖縮是照哪一個取景（viewKey）疊上去的：取景換了（換區、換層、地圖框換寬）回 1 倍；同一層同一區只換框高帶過去（FB-710）
-    panFrom: null, // 上一次套上去的取景與地圖框 { layer, region, vw, vh, s, cx, cy }（panCarry 照它換算）；明講回 1 倍時清掉
+    // 一張到底（企劃者 2026-10-30）：看哪裡 { z 倍率, x, y }（地圖上 (mx, my) 在地圖框裡的 (x + mx·z, y + my·z)）；null＝還沒定，打開時以你為中心
+    mapCam: null,
+    mapFilter: "all", // 上面那一排標籤篩的是哪一種（all、most:多敵、rich、people、ins:<意境>）
+    mapPreview: null, // 附近那一排滑到的那一處（地圖飛過去、畫路線，還沒開卡）
     news: "reports",
     reports: null,
     reportOpen: false,
@@ -5215,6 +5209,7 @@
     if (S.tab !== "map") return;
     if (fresh || !document.getElementById("mk")) { renderPage(); return; }
     drawMarks();
+    drawRoute();
     if (!typing()) redrawDrawer();
   }
 
@@ -6068,10 +6063,12 @@
       const r = await api("/api/travel", { place: S.mapSel, mode });
       setMain(r.main);
       renderTop();
-      if (r.arrived) { S.mapMode = "overview"; S.mapSel = null; S.mapDrawer = "min"; } // 出發了：留在輿圖，抽屜收回那一行（在路上寫往哪裡）
+      if (r.arrived) { S.mapMode = "overview"; S.mapSel = null; S.mapPreview = null; S.mapDrawer = "peek"; } // 出發了：留在輿圖，抽屜回附近那一排（在路上寫往哪裡）
       else toast(`沒能出發：${r.reason}`);
       await loadMap();
       setMapDrawer(S.mapDrawer);
+      drawRoute();
+      if (r.arrived) mapHome();
     }, WAIT_LINES.move);
   }
 
@@ -6140,42 +6137,17 @@
           if (S.tab === "map") await loadMap(); // 在輿圖上按的（抽屜裡的喊停）：疊層跟著換
           break;
         case "map-report": S.news = "reports"; await goTab("news"); break; // 卡上「攻城戰果」那一段的「看戰報」：開見聞的戰報
-        case "world-region": enterRegion(el.dataset.id); break; // 天下圖點一州
-        case "world-enter": toNear(); break; // 天下圖抽屜的「進入此區」：回第一層（你在的那一區、以你為中心）
-        case "map-full": // 「全區」：第三層（點了的那一處照舊開著）；再按一次回第一層
-          if (S.mapLayer === "region") toNear();
-          else enterRegion(S.mapRegion || hereRegion(), S.mapMode === "place" ? S.mapSel : null, false);
-          break; // 「全區」：第三層；再按一次回第一層
-        case "map-home": toNear(); break; // 拖遠了的「回到我這」
-        case "map-more": setMapDrawer("half"); break; // 卡上「往上拉：能悟、對手……」
-        case "map-world": // 「‹ 天下」、天下圖的「天下」（已經在天下圖、放大了：滑回 1 倍）
-          if (S.mapLayer !== "world" || S.mapMode !== "overview") toWorld();
-          else if (S.mapPan) panReset();
-          break;
-        case "region-place": regionPick(el.dataset.id); break; // 區圖點了一處（小圖或名字框）：抽屜半開它的卡，地圖不動
-        case "region-blank": regionPick(null); break; // 區圖點空白：收回那一行
-        case "region-go": enterRegion(el.dataset.id); break; // 區圖的鄰區出口「→ 南陽」
-        case "map-wash": washToggle(); break; // 區圖的「塗層」
-        case "map-pick": { // 找地點、今天去哪裡出陣挑了一處：在別區（或在天下圖）就進那一區，抽屜半開它的卡
-          const id = el.dataset.id, rid = regionOfPlace(id);
-          if (S.mapLayer === "world" || rid !== S.mapRegion) { enterRegion(rid, id); break; }
-          regionPick(id);
-          break;
-        }
-        case "map-search":
-          S.mapMode = "search"; S.mapSel = null;
-          setMapDrawer("full");
-          redrawDrawer();
-          drawSel();
-          setTimeout(() => { const q = document.getElementById("map-q"); if (q) q.focus(); }, 230);
-          break;
-        case "map-open": mapOpen(); break; // 收著的那一行點了：天下圖拉開你腳下的卡；區圖你在這一區時開你腳下這一處的卡
-        case "map-back":
-          S.mapMode = "overview"; S.mapSel = null; S.mapQuery = "";
-          setMapDrawer("min");
-          redrawDrawer();
-          drawSel();
-          break;
+        case "map-home": mapHome(); break; // 右下「◎」：回到我
+        case "map-fit": mapFit(); break; // 右下「全」：看整張天下
+        case "map-more": mapOpen(); break; // 卡上「往上拉：能悟、對手……」
+        case "map-place": mapPick(el.dataset.id); break; // 地圖上點了一處（小圖、名字）、附近那一排點了一張：抽屜開它的卡
+        case "map-pick": mapPick(el.dataset.id, true); break; // 找地點、今天去哪裡出陣挑了一處：飛過去、開它的卡
+        case "map-region": mapBack(); mapRegionFly(el.dataset.id); break; // 找地點的「跳到大區」：收起那一頁，飛過去
+        case "map-filter": mapFilter(el.dataset.id); break; // 上面那一排標籤（再按一次回全部）
+        case "map-wash": washToggle(); break; // 「塗層」
+        case "map-search": mapFind(); break;
+        case "map-open": mapOpen(); break;
+        case "map-back": mapBack(); break;
         case "map-letter": { // 卡上的「下戰書」（設計 4.4）：先問一次，再照伺服器的入口條件下（Game.conquest_letter）
           const loc = el.dataset.id, place = (placeOf(S.mapBase, loc) || { name: loc }).name;
           ask(LETTER_ASK.replace("{place}", place), LETTER_WORD, async () => { await doMain("conquest_letter", { loc }); if (S.tab === "map") await loadMap(); });
@@ -6186,11 +6158,7 @@
         case "map-week": stopPlay(); mapWeekTo(Number(el.dataset.week)); break;
         case "map-graph": stopPlay(); graphPick(el, ev); break;
         case "map-now": stopPlay(); mapWeekTo(S.mapState.now_week); break;
-        case "map-mark": // 年表上點一個地點的名字：地圖上圈出它（再點一次取消）
-          S.mapSel = S.mapSel === el.dataset.id ? null : el.dataset.id;
-          redrawDrawer();
-          drawMarks();
-          break;
+        case "map-mark": mapPick(el.dataset.id); break; // 年表上點一個地點的名字：地圖上圈出它（再點一次取消）
         case "map-play": { // 從第 1 週一週一週放到現在
           stopPlay();
           let w = 1;
@@ -6720,7 +6688,6 @@
     if (ev.target.id === "push-on") await (ev.target.checked ? pushEnable() : pushDisable()); // 手機通知（減法季批 9）
     if (ev.target.classList && ev.target.classList.contains("push-kind")) await pushKind(ev.target.dataset.kind, ev.target.checked); // 五種各一個開關
     if (ev.target.id === "hints-off") await doMain("hints_off", { value: ev.target.checked }); // 碰到才說的小提醒（新手引導計畫三）；打開時排著的清掉
-    if (ev.target.dataset && ev.target.dataset.act === "region-pick") enterRegion(ev.target.value); // 區圖上面那一排換一區
     if (ev.target.id === "mt-preset" && S.mtEdit && ev.target.value) { // 名帖：換成一張現成的畫（之後照樣能再畫幾筆）
       const art = (S.mingtie.presets || []).find((p) => p.id === ev.target.value);
       if (art) { S.mtEdit.strokes = art.strokes.map((x) => x.slice()); S.mtEdit.note = ""; mtEditRedraw(); }

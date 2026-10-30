@@ -2,11 +2,9 @@
 "use strict";
 
   // ── 輿圖 ──
-  // 輿圖第三版（輿圖簡化設計第五章）：兩張固定取景、能拖能捏合縮放（企劃者 2026-10-22）的圖——天下圖（打開輿圖第一眼，S.mapLayer "world"）與區圖（點一區，"region"）——
-  // 加一張卡（抽屜，設計 5.3）。底圖（/api/map/base：紙、大區、山河、路的 SVG）一次載入只抓一次，疊層的 key 換了（劇情開放了新地點）才重抓；
-  // 疊層（/api/map/state：誰佔著、勝算、分鐘……）打開輿圖、輪詢（MAP_STATE_EVERY）、做了動作之後重抓。記號照疊層畫在底圖的 <g id="mk">
-  // 與疊在上面的 #mkt（drawMarks）；兩張圖都是固定取景（worldFit、regionFit），字與記號照倍率反算、螢幕上大小固定。
-  // 輿圖升級（10/15）那一張可以拖縮的地圖、濾鏡、名字底下的小牌子、⚔、看大局都拿掉了（設計 5.4，輿圖第三版第 4 批）：資訊都收進卡
+  // 一張到底（企劃者 2026-10-30）：整個天下一張能自由拖、縮的圖，加一張抽屜。底圖的資料（/api/map/base：地點、路、大區、天下圖的地面、
+  // 畫底圖用的 paint）一次載入只抓一次，疊層的 key 換了（劇情開放了新地點）才重抓；疊層（/api/map/state：誰佔著、勝算、分鐘……）
+  // 打開輿圖、輪詢（MAP_STATE_EVERY）、做了動作之後重抓。底圖網頁自己畫成淡彩水墨、烤成一張圖（bakeBase）；字與小圖照螢幕大小寫在上面那一層（drawMarks）
   const MAP_SIDES = {
     guan: { name: "官軍", short: "官", color: "#3D5F8F", soft: "#9DB4D3", tint: "#DCE5F0" },
     huang: { name: "黃巾", short: "巾", color: "#B9821A", soft: "#E7C778", tint: "#F4E7C2" },
@@ -106,33 +104,36 @@
     return first && first.week < week ? { label: `比${wkName(first.week, `第 ${first.week} 週`)}`, n: tally(base, first.control) } : null;
   }
   const signed = (d) => (d > 0 ? `+${d}` : d < 0 ? `${d}` : "±0");
-  // 整頁一層（設計第一節）：夾在頂上的狀態列與底部分頁列之間；上面一排（天下圖：天下・找地點・版圖；區圖：‹ 天下・大區・版圖、塗層），
-  // 底下是抽屜（寬 900 以上是右欄）。data-key 是底圖的 key：輿圖那一層常駐在 #map-host 時（showMapHost），同一張底圖只換外圍、底圖那一塊原地留著（FB-324）
+  // 整頁一層（設計第一節）：夾在頂上的狀態列與底部分頁列之間。一張到底（企劃者 2026-10-30）：地圖框裡是一張能自由拖、縮的天下
+  // （#mvw：畫好的底圖、地面、路線，照 S.mapCam 一起移動縮放）與疊在上面、照螢幕大小寫的字與小圖（#mkt，drawMarks）；
+  // 外面浮著搜尋列與篩選、右下兩顆圓鈕、底下一張抽屜（寬 900 以上是右欄）。data-key 是底圖的 key：輿圖那一層常駐在 #map-host 時
+  // （showMapHost），同一張底圖只換外圍、地圖那一塊原地留著（FB-324）
   function pageMap() {
     if (!S.mapBase || !S.mapState) return '<p class="muted">展開輿圖…</p>';
-    const svg = S.mapBase.svg.replace(/<\/svg>\s*$/, '<g id="mk"></g></svg>');
-    // 疊在底圖上面的那一張（FB-323）：跟底圖同一個根（viewBox、大小、字型），位移與倍率由 applyMapView 一起套
-    const top = `<svg${(S.mapBase.svg.match(/^<svg\b([^>]*)>/) || ["", ""])[1]} class="mk-top" id="mkt"></svg>`;
-    return `<div class="${mapxClass()}" id="mapx" data-key="${esc(S.mapBase.key)}">
-      <div class="map-wrap" id="map"><div class="tx-world-map">${svg}${top}</div></div>${mapChrome()}
+    const b = S.mapBase;
+    return `<div class="${mapxClass()}" id="mapx" data-key="${esc(b.key)}">
+      <div class="map-wrap" id="map"><div class="mv-world" id="mvw" style="width:${Number(b.w)}px;height:${Number(b.h)}px">`
+      + `<svg class="mv-ground" id="mk" width="${Number(b.w)}" height="${Number(b.h)}" viewBox="0 0 ${Number(b.w)} ${Number(b.h)}"></svg>`
+      + `<svg class="mv-route" id="mkr" width="${Number(b.w)}" height="${Number(b.h)}" viewBox="0 0 ${Number(b.w)} ${Number(b.h)}"></svg></div>`
+      + `<div class="mv-marks" id="mkt"></div></div>${mapChrome()}
     </div>`;
   }
-  function mapxClass() { return `mapx ${S.mapLayer === "world" ? "world" : S.mapLayer === "near" ? "region near" : "region"}${S.mapMode === "timeline" ? " tl-mode" : ""}`; }
-  // 地圖框以外的那幾樣：天下圖上面那一排（天下・找地點・版圖）、區圖上面那一排（regionTopHtml）、「正在看第幾週」、抽屜。
-  // 兩層的都畫，照 .mapx.world／.mapx.region 藏另一層的（style.css）
+  function mapxClass() { return `mapx${S.mapMode === "timeline" ? " tl-mode" : ""}${S.mapMode === "search" ? " find-mode" : ""}`; }
+  // 地圖框以外的那幾樣：上面的搜尋列與篩選、「正在看第幾週」、右下兩顆圓鈕（回到我、看整張）、抽屜、找地點那一整頁（開著才畫）
   function mapChrome() {
     const seeing = S.mapMode === "timeline" && S.mapWeek && S.mapWeek !== S.mapState.now_week;
     const banner = `<div class="map-banner" id="map-banner"${seeing ? "" : " hidden"}>${seeing ? `正在看${wkName(S.mapWeek, `第 ${S.mapWeek} 週`)}` : ""}</div>`;
-    const tl = S.mapMode === "timeline";
-    const wtop = `<div class="w-top"><button type="button" class="w-here" data-act="map-world" aria-current="page">${WORLD_WORD}</button><button type="button" class="map-search" data-act="map-search">🔍 找地點、找人物</button><button type="button" class="w-tl${tl ? " on" : ""}" data-act="map-timeline" aria-pressed="${tl}">⏱ 版圖</button></div>`;
+    const top = `<div class="mv-top"><button type="button" class="mv-q map-search" data-act="map-search"><span aria-hidden="true">🔍</span><span>${MV_WORDS.search}</span></button>`
+      + `<div class="mv-chips" id="mv-chips">${chipsHtml(S.mapBase, S.mapState)}</div></div>`;
+    const fab = `<div class="mv-fab" id="mv-fab"><button type="button" class="mv-me" data-act="map-home" aria-label="${MV_WORDS.me}">◎</button><button type="button" data-act="map-fit" aria-label="${MV_WORDS.fit}">全</button></div>`;
+    const find = S.mapMode === "search" ? `<div class="mv-find" id="mv-find">${searchHtml(S.mapBase, S.mapState, S.mapQuery)}</div>` : "";
     return `
-      ${wtop}${regionTopHtml()}${banner}<button type="button" class="map-home" id="map-home" data-act="map-home" hidden>${NEAR_WORDS.home}</button>
-      <section class="mdrawer${S.mapDrawer === "min" && !deskMap() ? " min" : ""}" id="mdrawer" aria-label="輿圖抽屜"><div class="mgrab" id="mgrab" role="button" aria-label="拉高拉低"><i></i></div><div class="mbody" id="mbody">${drawerHtml()}</div></section>`;
+      ${top}${banner}${fab}
+      <section class="mdrawer" id="mdrawer" aria-label="輿圖抽屜"><div class="mgrab" id="mgrab" role="button" aria-label="拉高拉低"><i></i></div><div class="mbody" id="mbody">${drawerHtml()}</div></section>${find}`;
   }
   // ── 輿圖那一層常駐（FB-324）：切到別的分頁、整頁重畫（render 換掉 #app 的 innerHTML）時，地圖不拆掉，只在 #map-host 藏起來
-  // （visibility: hidden：樣式、排版、點陣化都留著）。以前每次回到輿圖都把 114 KB 的底圖字串塞回去、重新解析、重算樣式、重新排版、
-  // 重畫（暖開那一下約 90 ms 的長任務）。#map-host 在 #app 外面、body 底下（點擊照舊由 document 收）；.mapx 本來就是 position: fixed
-  // 的整頁一層，搬出 #page 位置一樣。沒有 #map-host（node 的假瀏覽器）時照舊畫在 #page
+  // （visibility: hidden：樣式、排版、點陣化都留著）。#map-host 在 #app 外面、body 底下（點擊照舊由 document 收）；.mapx 本來就是
+  // position: fixed 的整頁一層，搬出 #page 位置一樣。沒有 #map-host（node 的假瀏覽器）時照舊畫在 #page
   function mapHost() {
     let host = document.getElementById("map-host");
     if (!host && document.body && document.body.insertAdjacentHTML) {
@@ -141,14 +142,14 @@
     }
     return host;
   }
-  // 輿圖畫在常駐的那一層：同一張底圖（data-key 一樣）就只換外圍與 .mapx 的 class，底圖那一塊（底圖、記號、上面那一張）原地不動；
+  // 輿圖畫在常駐的那一層：同一張底圖（data-key 一樣）就只換外圍與 .mapx 的 class，地圖那一塊（底圖、地面、字）原地不動；
   // 底圖換了（劇情開了新地點）、第一次，整層重畫。畫不了（還沒有底圖、沒有 #map-host）回 false，照舊畫在 #page
   function showMapHost() {
     if (!S.mapBase || !S.mapState) return false;
     const host = mapHost();
     if (!host) return false;
     const box = document.getElementById("mapx");
-    if (box && box.parentNode === host && box.dataset.key === String(S.mapBase.key) && box.querySelector(".tx-world-map")) {
+    if (box && box.parentNode === host && box.dataset.key === String(S.mapBase.key) && box.querySelector(".mv-world")) {
       box.className = mapxClass();
       for (const el of [...box.children]) if (el.id !== "map") el.remove();
       box.insertAdjacentHTML("beforeend", mapChrome());
@@ -163,13 +164,14 @@
     host.classList.add("away");
     if (clear) host.innerHTML = "";
   }
-  // 登出、登入（換帳號不重新整理、登入失效之後重新登入）：上一個人的輿圖全部清回開頭——底圖、疊層、哪一層哪一區、選的地點、抽屜、
-  // 版圖變化、找地點的字——常駐那一層整個清掉（FB-329：不清的話換人登入之後輿圖照舊畫上一個人的疊層、位置與勝算）
+  // 登出、登入（換帳號不重新整理、登入失效之後重新登入）：上一個人的輿圖全部清回開頭——底圖、疊層、看哪裡、選的地點、抽屜、
+  // 版圖變化、找地點的字、篩選——常駐那一層整個清掉（FB-329）
   function forgetMap() {
     stopPlay();
+    mvStop();
     Object.assign(S, {
-      mapBase: null, mapState: null, mapStateAt: 0, mapSel: null, mapMode: "overview", mapDrawer: "min",
-      mapWeek: null, mapQuery: "", mapLayer: "near", mapRegion: null, worldView: null, regionView: null, nearView: null, marksKey: "", mapPan: null, panKey: "", panFrom: null,
+      mapBase: null, mapState: null, mapStateAt: 0, mapSel: null, mapMode: "overview", mapDrawer: "peek",
+      mapWeek: null, mapQuery: "", mapCam: null, mapFilter: "all", mapPreview: null,
     });
     hideMapHost(true);
   }
@@ -179,13 +181,12 @@
   const ODDS_TONE_WEB = { 穩勝: "safe", 有把握: "safe", 五五波: "ok", 難分勝負: "ok", 凶險: "risk", 必敗: "risk", 操練: "safe" };
   const placeOf = (base, id) => base.places.find((p) => p.id === id);
   const ctrlSeal = (c) => (c ? `<span class="m-seal" style="background:${sideInk(c).color}">${esc(sideInk(c).short)}</span>` : '<span class="m-seal none">—</span>');
+  // 抽屜裡畫什麼：版圖變化；點了一處是那一處的卡；平常（找地點那一整頁開著時也是）是「附近能去」一排卡片，往上拉是你腳下這一處的卡
   function drawerHtml() {
     const base = S.mapBase, st = S.mapState;
-    if (S.mapMode === "search") return searchHtml(base, st, S.mapQuery);
     if (S.mapMode === "timeline") return timelineHtml(base, st, mapWeek());
-    if (S.mapLayer === "world" && base.world) return worldDrawerHtml(base, st);
     if (S.mapMode === "place" && S.mapSel && st.places[S.mapSel]) return placeCard(base, st, S.mapSel);
-    return S.mapLayer === "near" ? nearLineHtml(base, st) : regionLineHtml(base, st);
+    return nearHtml(base, st);
   }
   // 抽屜第一行：在路上寫往哪裡、還有幾分鐘、喊停（喊停就是江湖頁那一顆，選單上有才畫）；有事擋著路時寫是哪一則、給「回江湖」
   // （withBlock 是 false 時不寫擋路那一行：卡的動作那一排自己會寫）
@@ -195,14 +196,6 @@
     const road = j ? `<div class="m-journey"><span>往 <b>${esc(j.to_name)}</b>・還有 ${Number(j.minutes)} 分鐘${j.next_name ? `・下一站${esc(j.next_name)}` : ""}</span>${halt ? '<button type="button" data-act="choose" data-id="act:halt">喊停</button>' : ""}</div>` : "";
     const held = block && block.to_jianghu ? `<div class="m-journey"><span>${esc(block.reason)}</span><button type="button" data-act="tab" data-tab="jianghu">回江湖</button></div>` : "";
     return road + held;
-  }
-  // 區圖沒點地點時抽屜收著的那一行：在路上照 journeyHtml；你在這一區寫你在哪（點了攤開你腳下這一處的卡）；不然一句提示
-  const REGION_HINT = "點一處地點，看那裡的詳情"; // 待 joy 潤
-  function regionLineHtml(base, st) {
-    if (st.journey) return journeyHtml(st);
-    const here = placeOf(base, st.here), mine = !!here && here.region === S.mapRegion;
-    const text = mine ? `你在 <b>${esc(here.name)}</b>` : esc(REGION_HINT);
-    return `<div class="m-wline"><button type="button" class="m-mini" data-act="map-open" aria-label="攤開抽屜"><span>${text}</span>${mine ? "<i>▴</i>" : ""}</button></div>`;
   }
   // 一根戰線（拔河）：左官軍、右黃巾，斜線是亂局（35～65），黑線是此刻的戰況；繩上的可易手地點是小方印（照誰佔著上色，
   // 擺在它易手的門檻上）；繩名旁寫比上一週往哪邊推了多少
@@ -387,7 +380,7 @@
     // 在路上：第一行照舊是往哪裡、還有幾分鐘、喊停（計畫 1.2、設計 5.3；FB-649）。擋路的那一則寫在動作那一排，這裡不重複
     return `${st.journey ? journeyHtml(st, false) : ""}<div class="m-h1">${ctrlSeal(p.control)}<span class="nm">${esc(b.name)}${here ? "（你）" : ""}</span>${week}<span class="meta">${p.rich ? `<b class="m-rich">${CARD_RICH}</b>` : ""}${far ? `<span>${far}</span>` : ""}</span><button type="button" class="m-x" data-act="map-back" aria-label="收起">✕</button></div>
       <div class="m-line"${lineInk}>${esc(placeLine(st, id))}</div>
-      <div class="m-acts">${acts}${letter.button}</div>${letter.why}
+      <div class="m-acts">${acts}${letter.button}</div>${letter.why}<i class="m-peek-end"></i>
       ${deskMap() ? "" : `<button type="button" class="m-pull" data-act="map-more">${NEAR_PULL}</button>`}
       ${siegeSection(id)}${flipSection(id)}${insightRow(base, b)}
       <div class="m-foes"><small>此地的對手</small><span>${foes}</span>${p.fierce ? `<div class="m-sub">${esc(p.fierce)}</div>` : ""}${p.people.length ? `<div class="m-sub">人物：${p.people.map(esc).join("、")}</div>` : ""}</div>
@@ -398,28 +391,55 @@
       <div class="m-sec"><h4>劇情</h4>${p.goal ? "★ 這一幕主線的目標　" : ""}${p.news ? "✦ 最近有大事與傳聞" : p.goal ? "" : "最近沒有大事"}</div>
       ${cardExtras(base, st)}`;
   }
-  // 找地點、找人物（設計第五節）：照大區分組，組裡近的在前；打地名、大區名、人物名都找得到。打字時只換結果那一塊（searchResults）
+  // 找地點（一張到底，企劃者 2026-10-30）：整頁一張清單。沒打字是捷徑——本週要事、附近的人物、跳到大區；打字找地點（地名、大區名、
+  // 多半什麼、店面）與人物，近的在前。挑了一處：地圖飛過去、抽屜開那一處的卡（map-pick）。打字時只換結果那一塊（searchResults）
+  const SEARCH_ROWS = 12; // 地點最多列幾處
+  function searchRow(id, icon, title, small, right) {
+    return `<button type="button" class="m-sr" data-act="map-pick" data-id="${esc(id)}"><span class="ic">${icon}</span><span class="tx"><b>${title}</b>${small ? `<small>${small}</small>` : ""}</span><span class="r">${right}</span></button>`;
+  }
+  function searchFar(st, id) {
+    const p = st.places[id];
+    if (id === st.here && !st.journey) return MV_WORDS.here;
+    return p && p.minutes !== null && p.minutes !== undefined ? `${Number(p.minutes)} 分` : "";
+  }
+  const byMinutes = (st) => (a, z) => (st.places[a.id].minutes ?? 1e9) - (st.places[z.id].minutes ?? 1e9);
   function searchResults(base, st, q) {
     const want = (q || "").trim();
     const regions = Object.fromEntries(base.regions.map((r) => [r.id, r.name]));
-    const hit = (b) => !want || b.name.includes(want) || (regions[b.region] || "").includes(want) || st.places[b.id].people.some((n) => n.includes(want));
-    const html = base.regions.map((r) => {
-      const items = base.places.filter((b) => b.region === r.id && hit(b)).sort((a, z) => (st.places[a.id].minutes || 0) - (st.places[z.id].minutes || 0));
-      return items.length ? `<div class="m-grp">${esc(r.name)}</div>` + items.map((b) => {
+    const shown = base.places.filter((b) => st.places[b.id]);
+    const who = (filter) => shown.flatMap((b) => st.places[b.id].people.filter(filter).map((n) => [n, b])).sort((a, z) => byMinutes(st)(a[1], z[1]));
+    const person = ([n, b]) => searchRow(b.id, `<i class="m-who1">${esc(n.slice(0, 1))}</i>`, esc(n), `在${esc(b.name)}`, searchFar(st, b.id));
+    if (!want) {
+      const wk = st.week && placeOf(base, st.week.id) && st.places[st.week.id] ? st.week : null;
+      const week = wk ? `<h4>${MV_WORDS.weekHead}</h4>${searchRow(wk.id, "★", esc(placeOf(base, wk.id).name), esc(wk.why || ""), searchFar(st, wk.id))}` : "";
+      const figs = who(() => true).slice(0, 8);
+      return `${week}${figs.length ? `<h4>${MV_WORDS.figures}</h4>${figs.map(person).join("")}` : ""}`
+        + `<h4>${MV_WORDS.jump}</h4><div class="m-regs">${base.regions.map((r) => `<button type="button" class="mv-chip" data-act="map-region" data-id="${esc(r.id)}">${esc(r.name)}</button>`).join("")}</div>`;
+    }
+    const hit = (b) => {
+      const p = st.places[b.id];
+      return b.name.includes(want) || (regions[b.region] || "").includes(want) || (b.mostly || "").includes(want) || p.services.some((s) => s.includes(want));
+    };
+    const places = shown.filter(hit).sort(byMinutes(st)).slice(0, SEARCH_ROWS);
+    const people = who((n) => n.includes(want));
+    let html = "";
+    if (places.length) {
+      html += `<h4>${MV_WORDS.places}</h4>` + places.map((b) => {
         const p = st.places[b.id];
-        const far = b.id === st.here && !st.journey ? "你在這裡" : p.minutes === null ? "" : `${Number(p.minutes)} 分`;
-        return `<div class="m-item" data-act="map-pick" data-id="${esc(b.id)}" role="button">${ctrlSeal(p.control)}<span class="nm">${esc(b.name)}${p.people.length ? ` <small>${p.people.map(esc).join("、")}</small>` : ""}</span><span class="mn">${far}</span></div>`;
-      }).join("") : "";
-    }).join("");
-    return html || '<div class="m-sub">找不到。</div>';
+        const small = [regions[b.region], b.mostly, ...p.services].filter(Boolean).map(esc).join("・");
+        return searchRow(b.id, iconHtml(b, 26), esc(b.name), small, searchFar(st, b.id));
+      }).join("");
+    }
+    if (people.length) html += `<h4>${MV_WORDS.people}</h4>` + people.map(person).join("");
+    return html || `<p class="m-sub m-none">${esc(MV_WORDS.notFound.replace("{q}", want))}</p>`;
   }
   function searchHtml(base, st, q) {
-    return `<div class="m-search"><input class="m-q" id="map-q" type="search" placeholder="地名、人物、大區…" value="${esc(q || "")}" autocomplete="off" aria-label="找地點、找人物"><button type="button" class="m-x" data-act="map-back" aria-label="收起">✕</button></div>
+    return `<div class="m-search"><button type="button" class="m-x" data-act="map-back" aria-label="返回">←</button><input class="m-q" id="map-q" type="search" placeholder="${MV_WORDS.search}" value="${esc(q || "")}" autocomplete="off" aria-label="找地點、找人物"></div>
       <div class="m-results" id="map-results">${searchResults(base, st, q)}</div>`;
   }
   // ── 天下怎麼變（設計第六節）：上面一張曲線（三條戰線、割據、大事 📜、你在看的那一週），三方各佔幾處、比開季多少，
   // 年表（B 的：一列一個可易手的地點、一格一週，顏色是那一週誰佔著、白點是那一週易手），那一週的大事與易手。
-  // 地圖同時照那一週畫：輿圖第三版第 3 批起在天下圖上播（worldParts 的 week；mapTimeline 換到天下圖、地圖框縮到抽屜上面）
+  // 地圖同時照那一週畫（地面照那一週上色、易手的地點閃一圈；mapTimeline 把地圖框縮到抽屜上面、整張放進來）
   const ROPE_INK = ["#5A3E28", "#2E5E6B", "#7A2E52"]; // 曲線上三條戰線各自的顏色與虛線
   const ROPE_DASH = ["", "5 3", "1.5 3"];
   const GX0 = 30, GW = 300, GY0 = 12, GH = 92; // 曲線的左邊、寬、上邊、高（viewBox 單位）
@@ -497,15 +517,17 @@
       banner.textContent = `正在看${wkName(S.mapWeek, `第 ${S.mapWeek} 週`)}`;
     }
   }
-  // 打開、收起版圖變化（設計 5.1：在天下圖上播）：打開時換到天下圖（地圖框縮到抽屜上面，天下圖照那一塊重新取景）；收起時留在天下圖。
-  // 開、收都回 1 倍（地圖框換了大小）；看的時候與播放中照樣能拖縮（播放只換記號，企劃者 2026-10-22 的拖縮計畫 3.1）
+  // 打開、收起版圖變化：打開時地圖框縮到抽屜上面、整張天下放進那一塊（字退到最遠那一段：大區、各方幾處、地面照那一週上色）；
+  // 收起時回附近那一排、看整張。看的時候與播放中照樣能拖縮（播放只換記號）
   function mapTimeline(open) {
     stopPlay();
     if (!document.getElementById("mapx")) return;
-    if (open) Object.assign(S, { mapLayer: "world", mapMode: "timeline", mapSel: null, mapWeek: S.mapState.now_week, mapDrawer: "tl", mapPan: null, panFrom: null });
-    else Object.assign(S, { mapMode: "overview", mapSel: null, mapWeek: null, mapDrawer: "min", mapPan: null, panFrom: null });
+    if (open) Object.assign(S, { mapMode: "timeline", mapSel: null, mapPreview: null, mapWeek: S.mapState.now_week, mapDrawer: "tl" });
+    else Object.assign(S, { mapMode: "overview", mapSel: null, mapPreview: null, mapWeek: null, mapDrawer: "peek" });
     remapChrome();
-    applyMapView(true);
+    const g = mapGeom(document.getElementById("map"));
+    if (g) camFly(camFit(g));
+    drawRoute();
     drawMarks();
   }
   // 曲線上點一下：照點的位置換那一週
@@ -523,11 +545,10 @@
     const box = document.getElementById("map-results");
     if (box) box.innerHTML = searchResults(S.mapBase, S.mapState, S.mapQuery);
   }
-  // 抽屜的把手：拖上拖下（放開時靠到最近的一格），點一下在兩格之間換：卡在半開、全開之間；天下圖收著那一行與拉開的卡之間；
-  // 區圖收著那一行點了照「攤開」（map-open）
+  // 抽屜的把手：拖上拖下（放開時靠到最近的一格），點一下在第一格與最後一格之間換
   function drawerGrab() {
     const grab = document.getElementById("mgrab"), drawer = document.getElementById("mdrawer");
-    if (!grab || !drawer || (grab.dataset && grab.dataset.wired)) return; // 同一個把手只掛一次（換層時 remapChrome 換了新的把手才再掛）
+    if (!grab || !drawer || (grab.dataset && grab.dataset.wired)) return; // 同一個把手只掛一次（remapChrome 換了新的把手才再掛）
     if (grab.dataset) grab.dataset.wired = "1";
     let drag = null;
     grab.addEventListener("pointerdown", (ev) => {
@@ -539,16 +560,14 @@
       if (!drag) return;
       const dy = drag.y - ev.clientY;
       if (Math.abs(dy) > 5) drag.moved = true;
-      if (drag.moved) drawer.style.height = `${Math.max(mapDrawerPx("min"), Math.min(mapDrawerPx("full"), drag.h + dy))}px`;
+      if (drag.moved) drawer.style.height = `${Math.max(MV_PEEK_MIN, Math.min(mapDrawerPx("full"), drag.h + dy))}px`;
     });
     const end = () => {
       if (!drag) return;
       drawer.classList.remove("dragging");
       const stops = drawerStops();
-      if (!drag.moved) {
-        if (S.mapLayer !== "world" && S.mapMode === "overview") mapOpen();
-        else setMapDrawer(S.mapDrawer === stops[0] ? stops[stops.length - 1] : stops[0]);
-      } else {
+      if (!drag.moved) setMapDrawer(S.mapDrawer === stops[0] ? stops[stops.length - 1] : stops[0]);
+      else {
         const h = drawer.offsetHeight;
         setMapDrawer(stops.slice().sort((a, z) => Math.abs(mapDrawerPx(a) - h) - Math.abs(mapDrawerPx(z) - h))[0]);
       }
@@ -561,42 +580,40 @@
   function drawerStops() {
     if (S.mapMode === "place") return ["peek", "half", "full"];
     if (S.mapMode === "timeline") return ["tl", "half", "full"];
-    if (S.mapMode === "search") return ["half", "full"];
-    return S.mapLayer === "world" ? ["min", "half", "full"] : ["min"]; // 第一層、全區沒點地點：只有收著那一行
+    return ["peek", "full"];
   }
-  // 收著那一行點了（或區圖點了把手）：天下圖拉開你腳下這一處的卡；區圖你在這一區時開你腳下這一處的卡
-  function mapOpen() {
-    if (S.mapLayer === "world") { setMapDrawer("half"); return; }
-    const st = S.mapState, here = st && !st.journey && placeOf(S.mapBase, st.here);
-    if (!here || here.region !== S.mapRegion) return;
-    S.mapSel = here.id;
-    S.mapMode = "place";
-    setMapDrawer("peek");
-    redrawDrawer();
-    if (S.mapLayer === "near") drawMarks(); // 第二層：其餘退成四成
-    else drawSel();
-  }
+  // 卡上「往上拉：能悟、對手……」、附近那一排往上拉
+  function mapOpen() { setMapDrawer(S.mapMode === "place" ? "half" : "full"); }
 
+  // 重畫抽屜（輪詢換了疊層、篩選、版圖換週）：附近那一排滑到哪、抽屜捲到哪照留
   function redrawDrawer() {
     const body = document.getElementById("mbody");
-    if (body) body.innerHTML = drawerHtml();
+    if (!body) return;
+    const what = `${S.mapMode}|${S.mapSel || ""}`, same = !!body.dataset && body.dataset.what === what;
+    const row = same && body.querySelector && body.querySelector(".m-cards"), left = row ? row.scrollLeft : 0, top = same ? body.scrollTop || 0 : 0;
+    body.innerHTML = drawerHtml();
+    if (body.dataset) body.dataset.what = what;
+    const row2 = body.querySelector && body.querySelector(".m-cards");
+    if (row2 && left) row2.scrollLeft = left;
+    if (top) body.scrollTop = top;
+    cardsWire();
   }
   // 桌機（寬 900 以上）抽屜是右欄、整欄攤開，沒有收起這回事
   const deskMap = () => !!(window.matchMedia && window.matchMedia("(min-width: 900px)").matches);
-  // 抽屜的高度：收著 54（把手 22＋一行 32）、卡半開（區圖照取景框底下還空著多少，peekPx）、拉高六成、全開九成四、版圖變化 320；
-  // 桌機是右欄（CSS 蓋掉高度）
+  // 抽屜的高度：半開（量到內容裡 .m-peek-end 那一點：附近那一排卡片底下、卡的動作那一排底下）、拉高六成、全開九成四、版圖變化 320；
+  // 量不到（還沒排版）照預設。桌機是右欄（CSS 蓋掉高度）
+  const MV_PEEK_MIN = 120, MV_PEEK_NEAR = 196, MV_PEEK_PLACE = 200;
   function mapDrawerPx(h) {
     const box = document.getElementById("mapx");
     const avail = (box && box.clientHeight) || 600;
     // 版圖變化 320 高（企劃者 10/15 從對比圖選乙）：地圖大一截，曲線與處數在一屏，年表往下捲
-    return { min: 54, peek: peekPx(avail), half: Math.round(avail * 0.6), full: Math.round(avail * 0.94), tl: Math.min(320, Math.round(avail * 0.55)) }[h] || 54;
+    return { half: Math.round(avail * 0.6), full: Math.round(avail * 0.94), tl: Math.min(320, Math.round(avail * 0.55)) }[h] || peekPx(avail);
   }
-  // 卡半開多高：區圖照取景框底下還空著多少（卡不蓋到地點，地圖不動；設計 5.2），最矮 REGION_PEEK_MIN、最高六成；沒有區圖的取景照 240
   function peekPx(avail) {
-    if (S.mapLayer === "near") return Math.max(NEAR_PEEK_MIN, Math.round(avail / 3)); // 第二層：卡只佔三分之一（減法季整合設計第七章）
-    const v = S.mapLayer !== "world" ? S.regionView : null;
-    const room = v && v.bottom ? Math.round(avail - v.bottom - 4) : 240;
-    return Math.max(REGION_PEEK_MIN, Math.min(Math.round(avail * 0.6), room));
+    const end = document.querySelector("#mbody .m-peek-end");
+    const at = end && end.offsetTop ? end.offsetTop + 10 : 0;
+    const fall = S.mapMode === "place" ? Math.max(MV_PEEK_PLACE, Math.round(avail / 3)) : MV_PEEK_NEAR;
+    return Math.round(Math.min(avail * 0.6, Math.max(MV_PEEK_MIN, at || fall)));
   }
   function setMapDrawer(h) {
     S.mapDrawer = h;
@@ -604,20 +621,13 @@
     if (!d || !box) return;
     const px = mapDrawerPx(h);
     d.style.height = `${px}px`;
-    // 收著換成那一行（或從那一行攤開）：抽屜裡的內容跟著換
-    const min = h === "min" && !deskMap();
-    if (d.classList && d.classList.contains("min") !== min) {
-      d.classList.toggle("min", min);
-      const body = document.getElementById("mbody");
-      if (body && S.mapBase && S.mapState) body.innerHTML = drawerHtml();
-    }
-    const grab = document.getElementById("mgrab");
-    if (grab && grab.setAttribute) grab.setAttribute("aria-label", min ? "攤開" : "拉高拉低");
-    // --md-h 只有版圖變化用得到（地圖框縮到抽屜上面，style.css 的 .mapx.tl-mode）：自訂屬性會一路繼承下去，平常點地點換抽屜高度時
-    // 寫它會逼整棵地圖重算樣式（FB-322）
+    // 右下兩顆圓鈕跟著抽屜上下（直接寫在那一塊上：寫在框上的自訂屬性會一路繼承，整棵地圖重算樣式，FB-322）
+    const fab = document.getElementById("mv-fab");
+    if (fab && fab.style) fab.style.bottom = deskMap() ? "" : `${px + 12}px`;
+    // --md-h 只有版圖變化用得到（地圖框縮到抽屜上面，style.css 的 .mapx.tl-mode）
     if (S.mapMode === "timeline") box.style.setProperty("--md-h", `${px}px`);
   }
-  // 整頁那一層夾在狀態列與分頁列之間：狀態列展開收起、視窗換大小時重量。回傳兩條邊有沒有變（變了地圖框就換了高，取景要重套：FB-710）
+  // 整頁那一層夾在狀態列與分頁列之間：狀態列展開收起、視窗換大小時重量。回傳兩條邊有沒有變（變了地圖框就換了高，要重夾：FB-710）
   function mapFrame() {
     const box = document.getElementById("mapx");
     if (!box) return false;
@@ -625,815 +635,63 @@
     const t = `${top && !top.hidden ? Math.round(top.getBoundingClientRect().bottom) : 0}px`;
     const b = `${tabs ? Math.round(window.innerHeight - tabs.getBoundingClientRect().top) : 0}px`;
     const was = typeof box.style.getPropertyValue === "function" ? [box.style.getPropertyValue("--map-top"), box.style.getPropertyValue("--map-bottom")] : null;
-    // 變了才寫：自訂屬性會繼承到整張地圖，寫一次整棵約 1,600 個元素重算樣式（狀態列每次重畫都叫這裡，Joy 2026-10-17）
+    // 變了才寫：自訂屬性會繼承到整張地圖，寫一次整棵重算樣式（狀態列每次重畫都叫這裡，Joy 2026-10-17）
     setVar(box, "--map-top", t);
     setVar(box, "--map-bottom", b);
     return !was || was[0] !== t || was[1] !== b;
   }
-  let marksFrame = 0;
-  // 這一層此刻的取景：天下圖 S.worldView（worldFit）、區圖 S.regionView（regionFit）；都由 applyMapView 照地圖框現在的大小算
-  const curView = () => (S.mapLayer === "world" && S.mapBase && S.mapBase.world ? S.worldView : S.mapLayer === "near" ? S.nearView : S.regionView);
-  // 記號照哪一個取景畫的（層、區、倍率、地圖框大小）：一樣就不必重畫
-  const viewKey = (v, g) => (v && g ? `${S.mapLayer}|${S.mapRegion}|${f2(v.s)}|${g.vw}x${g.vh}` : "");
-  // 照現在的取景、週次重畫記號（天下圖 worldParts、區圖 regionParts），底圖的州界與大區名照這一層收
-  function drawMarks() {
-    marksFrame = 0;
-    const g = document.getElementById("mk"), v = curView(), geo = mapGeom(document.getElementById("map"));
-    if (!g || !S.mapBase || !S.mapState || !v) return;
-    const world = S.mapLayer === "world" && !!S.mapBase.world;
-    S.marksKey = viewKey(v, geo);
-    // 兩張圖都自己寫大區名：底圖寫的那一份藏起來（直接改那幾個字的 display，不在框上加 class：框上的 class 一變，整棵地圖都要重算樣式）
-    const wrap = document.getElementById("map");
-    if (wrap && !wrap.dataset.names) {
-      wrap.dataset.names = "1";
-      wrap.querySelectorAll(".tx-region-name").forEach((el) => { el.style.display = "none"; });
-    }
-    // 天下圖：底圖的大區底色與點劃線州界讓位給地面與州的輪廓；區圖：州界的點劃線收掉、大區的淡色留著（設計 5.2）
-    document.querySelectorAll("#map path[data-region]").forEach((el) => {
-      el.style.stroke = "none";
-      if (world) el.style.fill = "none"; else el.style.removeProperty("fill");
-    });
-    const [low, high] = world ? worldParts(S.mapBase, S.mapState, { k: 1 / v.s, week: mapWeek(), tl: S.mapMode === "timeline", sel: null, area: v.area || null })
-      : S.mapLayer === "near" ? nearParts(S.mapBase, S.mapState, { v, vw: geo ? geo.vw : 375, vh: geo ? geo.vh : 600, sel: S.mapMode === "place" ? S.mapSel : null })
-      : regionParts(S.mapBase, S.mapState, { v, vw: geo ? geo.vw : 375, vh: geo ? geo.vh : 600, rid: S.mapRegion, wash: washOn() });
-    g.innerHTML = low;
-    const top = document.getElementById("mkt"); // 會跳的圈、你、旗子（FB-323）
-    if (top) top.innerHTML = `${high}<g id="msel" pointer-events="none"></g>`;
-    drawSel();
-  }
-  // 選了的地點那一圈（畫在上面那一張最後）：點一處只換那一圈，不必整批重建記號。天下圖是年表上圈起來的地點（map-mark）
-  function drawSel() {
-    const box = document.getElementById("msel"), v = curView();
-    if (!box || !v) return;
-    const p = S.mapSel && placeXY(S.mapSel);
-    if (!p) { if (box.firstChild) box.innerHTML = ""; return; }
-    const k = 1 / v.s, world = S.mapLayer === "world";
-    // 第二層、全區點了一處：從你到那一處的路變金（減法季整合設計第七章第 2、3 條：點遠處看路線與幾分）
-    const d = !world && S.mapMode === "place" && S.mapState ? routeD(S.mapBase, S.mapState, S.mapSel) : "";
-    const gold = d ? `<path class="m-route" d="${d}" fill="none" stroke="${NEAR_GOLD}" stroke-width="${f1(4 * k)}" stroke-linecap="round" stroke-opacity=".95"/>` : "";
-    box.innerHTML = `${gold}<circle cx="${p[0]}" cy="${p[1]}" r="${f1((world ? 11 : S.mapLayer === "near" ? NEAR_RING : 21) * k)}" fill="none" stroke="${MAP_INK}" stroke-width="${f1((world ? 2.5 : 2.8) * k)}"/>`;
-  }
-  const scheduleMarks = () => { if (!marksFrame) marksFrame = requestAnimationFrame(drawMarks); };
 
-  // ── 天下圖（輿圖簡化設計 5.1、3.3、5.6；環形版 dev/map-2 寫的，輿圖第三版第 3 批搬回真實地形）──
-  // 打開輿圖第一眼。不另開一張圖：同一張底圖（山水已經烤成點陣）換一個固定的取景（worldFit：取景框整張放進地圖框露出來的那一塊），
-  // 上面疊一層拖與縮放（企劃者 2026-10-22，「輿圖的拖與縮放」那一段：整張連字一起動，不重畫）；記號那一層（#mk、#mkt）畫大區地面——每一區（程式裡叫「州」）的地面照「離哪個地點最近」分給那個地點此刻的控制方
-  // （底圖的 world.cells，照那一區的輪廓裁），一方一色、沒人佔一色（顏色照劇本，sideInk）——、正在翻（攻方的斜紋照進度泛進來）、
-  // 剛易手還在冷卻（新主人的淡色、一圈虛線）、
-  // 紅線（任兩方的地面相接；真實地形的大區互不相接，前線都在同一區裡）、細墨線（有主與沒人佔相接）、激戰（那一格一圈紅光閃）、
-  // 大區的輪廓、金點（高級資源地：實心＝有人佔）、大區名與各方幾處、你。點一區進那一區的區圖（enterRegion）。字待 joy 潤
-  const WORLD_WORD = "天下", WORLD_ENTER = "進入此區", RICH_WORD = "寶";
-  const WORLD_TOP = 58; // 上面那一排（天下・找地點・版圖）讓開多高（px）
-  const WORLD_TL_TOP = 36; // 版圖變化時那一排收起，只讓開「正在看第 N 週」
-  const WORLD_PAD = 54; // 抽屜收著時的高度：天下圖照它讓開底下（拉開的卡蓋在圖上，圖不跟著縮）
-  const WORLD_EDGE = 8; // 取景框離地圖框的邊至少多少（px）
-  const WORLD_GROUND = 0.8; // 地面的濃淡：底下的山水淡淡地透上來（設計 4.5）
-  const WORLD_INK = "#3A3127", WORLD_RIM = "#5B4A38", WORLD_GOLD = "#C8961E";
-  const WORLD_NAME_PX = 16, WORLD_LINE_PX = 11; // 大區名、大區名底下那一行，螢幕上的大小
-  const WORLD_FULL_PX = 330, WORLD_SHRINK = 0.82; // 取景框在螢幕上不到這麼寬時字照比例縮，最多縮到這麼多（11px 的那一行縮到 9px）
-  const WORLD_DOT_PX = 13; // 大區名讓開金點的框（px；金點半徑 4.2、線寬 1.6，四周再留一點，FB-630）
-  // 大區名的位置都會壓到時往哪裡挪（照框的寬、高的倍數）：左右最多三個框、上下最多五格，近的先（框是橫的：左右挪一個框算兩格遠）。
-  // 版圖變化、320 寬、橫放的天下圖在螢幕上很小（FB-631），名字要能挪到取景框外面露出來的那一塊（worldLabels 的 area）
-  const WORLD_NUDGE = worldNudge();
-  function worldNudge() {
-    const out = [];
-    for (let dx = -3; dx <= 3; dx += 0.5) for (let dy = -5; dy <= 5; dy += 0.5) if (dx || dy) out.push([dx, dy]);
-    return out.sort((a, z) => Math.hypot(2 * a[0], a[1]) - Math.hypot(2 * z[0], z[1]) || a[1] - z[1] || a[0] - z[0]);
-  }
-  // 正在翻（設計 4.1）：攻方的斜紋照進度泛進那一格，進度 100 時多濃（底下守方的地面照樣看得到）；斜紋的間距與線寬照螢幕（px）。
-  // 資料是疊層的 places[id].tug（{攻方: 進度}，mapdata.flip_marks 照翻地那一份 conquest.block_view 的 bars 換的名字），沒有就不畫
-  const WORLD_TUG_MAX = 0.75, WORLD_TUG_GAP = 5, WORLD_TUG_LINE = 2.2;
-  // 剛易手、還在冷卻（疊層的 places[id].cool：還要幾分鐘；設計 4.1 兩邊都推不動、加成暫停）【開發定】：地面換成新主人那一方的淡色（tint）、
-  // 那一格一圈新主人顏色的虛線（還沒站穩），不閃。虛線的長短照螢幕（px）
-  const WORLD_COOL_DASH = 4, WORLD_COOL_GAP = 3, WORLD_COOL_LINE = 1.4;
-  // 下了戰書、還沒開集結（疊層的 siege 是 letter）：那一格一圈朱紅虛線框（輿圖第三版第 5 批，企劃者 2026-10-22 挑 A 乙）；比冷卻那一圈粗、
-  // 線段長，顏色是前線那一種朱紅（不是哪一方的顏色），不閃
-  const WORLD_LETTER_DASH = 6, WORLD_LETTER_GAP = 3.5, WORLD_LETTER_LINE = 2.6;
-  // 估一段字在螢幕上多寬（px）：中日韓的字一個字寬、數字與英文約六成、空白約三成
-  function textW(text, px) {
-    let w = 0;
-    for (const ch of String(text)) w += ch === " " ? 0.3 : ch.charCodeAt(0) < 0x2e80 ? 0.6 : 1;
-    return w * px;
-  }
-  // 取景：frame [x, y, w, h] 放進地圖框（vw × vh）上面讓開 top、底下讓開 pad、四邊留 WORLD_EDGE 的那一塊，置中；給了地圖的大小
-  // （W × H）時再夾住：露出來的那一塊不超出地圖（不然上面留一條空白的紙），地圖比那一塊小就置中——取景框照樣整個看得到
-  function worldFit(vw, vh, frame, pad, top, W = 0, H = 0) {
-    const [fx, fy, fw, fh] = frame;
-    const aw = Math.max(1, vw - 2 * WORLD_EDGE), ah = Math.max(1, vh - pad - top - 2 * WORLD_EDGE);
-    const s = Math.min(aw / fw, ah / fh);
-    let cx = fx + fw / 2, cy = fy + fh / 2 - (top - pad) / 2 / s;
-    const clamp = (c, size, lo, hi) => { // 露出來的是 [c − lo, c + hi]（地圖單位）
-      if (lo + hi >= size) return size / 2 - (hi - lo) / 2;
-      return Math.min(size - hi, Math.max(lo, c));
-    };
-    if (W > 0 && H > 0) {
-      cx = clamp(cx, W, vw / 2 / s, vw / 2 / s);
-      cy = clamp(cy, H, (vh / 2 - top) / s, (vh / 2 - pad) / s);
-    }
-    return { s, cx, cy };
-  }
-  // 地圖框露出來的那一塊（上面讓開 top、底下讓開 pad、四邊留 WORLD_EDGE），換成地圖單位 [x0, y0, x1, y1]：大區名可以擺到這裡（FB-631）
-  function worldArea(v, vw, vh, top, pad) {
-    const k = 1 / v.s;
-    return [v.cx + (WORLD_EDGE - vw / 2) * k, v.cy + (top + WORLD_EDGE - vh / 2) * k, v.cx + (vw / 2 - WORLD_EDGE) * k, v.cy + (vh / 2 - pad - WORLD_EDGE) * k];
-  }
-  // 每一州的地面各方幾處、高級資源地幾處（只算分地面的地點：底圖的 world.cells）
-  function worldCounts(base, st, ctrl) {
-    const out = {};
-    for (const c of base.world.cells) {
-      const n = out[c.region] || (out[c.region] = { rich: 0 });
-      if (ctrl[c.id]) n[ctrl[c.id]] = (n[ctrl[c.id]] || 0) + 1;
-      if (st.places[c.id] && st.places[c.id].rich) n.rich += 1;
-    }
-    return out;
-  }
-  // 大區名與底下那一行「官 N・巾 N・寶 N」（照疊層的 sides：會佔地的幾方；只寫不是 0 的，全是 0 就沒有那一行）：每一區一個框（地圖單位，k＝1／倍率）。
-  // 底圖給每一區幾個可以擺的位置（好的在前），每一個位置附近再挪一挪（WORLD_NUDGE）；小的大區先挑（底圖的 area）。
-  // 挑的先後：不壓別的大區名、你（紅點、紅旗；畫在上面那一張，會蓋住字）、高級資源地的金點（FB-630）的第一個；不行就只讓別的大區名與你；
-  // 都不行就收掉底下那一行再找一次（FB-631：版圖變化、320 寬、橫放、四方劇本的天下圖在螢幕上很小，大區名彼此不壓是硬規矩，數字在年表看得到）；
-  // 再不行（只讓別的大區名）用第一個位置。夾在 area 裡（地圖單位 [x0, y0, x1, y1]：地圖框露出來的那一塊，applyMapView 照取景算；
-  // 沒給照取景框）——取景框在螢幕上很窄時（橫放、版圖變化）名字可以擺到框外面的空處
-  function worldLabels(base, st, ctrl, k, area = null) {
-    const wd = base.world, n = worldCounts(base, st, ctrl), sides = st.sides || sideOrder(base);
-    const [fx, fy, fw, fh] = wd.frame, placed = {};
-    const [ax0, ay0, ax1, ay1] = area || [fx, fy, fx + fw, fy + fh];
-    // 天下圖在螢幕上很小時（320 寬、版圖變化把框縮到抽屜上面）字跟著縮一點，最多縮到 WORLD_SHRINK
-    const shrink = Math.max(WORLD_SHRINK, Math.min(1, fw / k / WORLD_FULL_PX));
-    const np = WORLD_NAME_PX * shrink, lp = WORLD_LINE_PX * shrink;
-    const order = [...wd.regions].sort((a, z) => (a.area || 0) - (z.area || 0));
-    const me = st.journey || placeOf(base, st.here);
-    const you = me && me.x !== undefined ? [{ x: me.x + 2 * k, y: me.y - 7 * k, w: 24 * k, h: 34 * k }] : [];
-    const dots = base.places.filter((p) => st.places[p.id] && st.places[p.id].rich).map((p) => ({ x: p.x, y: p.y, w: WORLD_DOT_PX * k, h: WORLD_DOT_PX * k }));
-    const hits = (b, x, y, w, h) => Math.abs(b.x - x) * 2 < b.w + w && Math.abs(b.y - y) * 2 < b.h + h;
-    for (const r of order) {
-      const c = n[r.id] || { rich: 0 };
-      // 只寫有的：是 0 的那一方、寶 0 都不寫；全是 0 那一行就不畫（企劃者 2026-10-20 從對比圖選乙）
-      const full = [...sides.filter((sd) => c[sd]).map((sd) => `${sideInk(sd).short} ${c[sd]}`), ...(c.rich ? [`${RICH_WORD} ${c.rich}`] : [])].join("・");
-      const box = (line) => {
-        const w = Math.max(textW(r.name, np), textW(line, lp)) * k + 6 * k, h = (line ? np + 3 + lp : np) * k + 4 * k;
-        const fit = ([x, y]) => [Math.min(ax1 - w / 2, Math.max(ax0 + w / 2, x)), Math.min(ay1 - h / 2, Math.max(ay0 + h / 2, y))];
-        const spots = (r.spots && r.spots.length ? r.spots : [[r.lx, r.ly]]).map(fit);
-        const cands = [...spots, ...spots.flatMap(([sx, sy]) => WORLD_NUDGE.map(([dx, dy]) => fit([sx + dx * w, sy + dy * h])))];
-        return { line, w, h, cands };
-      };
-      const tries = full ? [box(full), box("")] : [box("")];
-      const free = (b, avoid) => b.cands.find(([x, y]) => !Object.values(placed).some((o) => hits(o, x, y, b.w, b.h)) && !avoid.some((o) => hits(o, x, y, b.w, b.h)));
-      let got = null;
-      for (const [b, avoid] of [[tries[0], [...you, ...dots]], [tries[0], you], ...(tries[1] ? [[tries[1], [...you, ...dots]], [tries[1], you]] : []), [tries[0], []], ...(tries[1] ? [[tries[1], []]] : [])]) {
-        const at = free(b, avoid);
-        if (at) { got = { ...b, x: at[0], y: at[1] }; break; }
-      }
-      if (!got) got = { ...tries[0], x: tries[0].cands[0][0], y: tries[0].cands[0][1] };
-      placed[r.id] = { id: r.id, x: got.x, y: got.y, w: got.w, h: got.h, name: r.name, line: got.line, np, lp };
-    }
-    return wd.regions.map((r) => placed[r.id]);
-  }
-  // 正在翻那一層的斜紋（每一個出現在 tug 裡的攻方一個 <pattern>，顏色照 sideInk；地圖單位，k＝1／倍率）
-  function tugPattern(side, k) {
-    const ink = sideInk(side), gap = f1(WORLD_TUG_GAP * k);
-    return `<pattern id="wt-${esc(side)}" patternUnits="userSpaceOnUse" width="${gap}" height="${gap}" patternTransform="rotate(45)">`
-      + `<rect width="${gap}" height="${gap}" fill="${ink.soft}" fill-opacity=".55"/><line x1="0" y1="0" x2="0" y2="${gap}" stroke="${ink.color}" stroke-width="${f1(WORLD_TUG_LINE * k)}"/></pattern>`;
-  }
-  // 這一格正在被誰翻、翻到幾成（疊層的 tug 裡進度最高的那一方；守方自己、進度 0 不算）；沒有是 null。區圖的進度條也照它
-  function tugOf(st, id, holder) {
-    const t = st.places[id] && st.places[id].tug;
-    if (!t) return null;
-    const best = Object.entries(t).filter(([sd, v]) => sd !== holder && Number(v) > 0).sort((a, z) => Number(z[1]) - Number(a[1]))[0];
-    return best ? { side: best[0], pct: Math.min(100, Number(best[1])) } : null;
-  }
-  // 天下圖的記號（純函式）：o = { k: 1／倍率, week: 看哪一週, tl: 正在看版圖變化, sel: 年表上圈起來的地點, area: 露出來的那一塊（地圖單位，
-  // 大區名可以擺到哪；沒給照取景框） }。回 [底下那一張, 上面那一張]
-  // （同區圖 regionParts：會跳的圈與你畫在上面那一張 #mkt）
-  function worldParts(base, st, o) {
-    const wd = base.world, k = o.k, ctrl = controlAt(st, o.week), pos = Object.fromEntries(base.places.map((p) => [p.id, p]));
-    // 正在翻、激戰、冷卻是「此刻」的事：版圖變化看以前的週時不畫
-    const live = o.week === st.now_week;
-    const cooling = (id) => live && !!ctrl[id] && !!(st.places[id] && st.places[id].cool);
-    const ground = (id) => (ctrl[id] ? sideInk(ctrl[id])[cooling(id) ? "tint" : "soft"] : wd.unheld);
-    const tugs = live ? wd.cells.map((c) => [c, tugOf(st, c.id, ctrl[c.id] || null)]).filter(([, t]) => t) : [];
-    // 激戰：兩邊都有人在推（melee）；攻城集結・交戰中（siege 是 fight）借同一種紅光（輿圖第三版第 5 批，企劃者 2026-10-22 挑 B 甲）
-    const melee = live ? wd.cells.filter((c) => st.places[c.id] && (st.places[c.id].melee || st.places[c.id].siege === "fight")) : [];
-    // 下了戰書、還沒開集結：那一格一圈朱紅虛線框（企劃者挑 A 乙）
-    const letters = live ? wd.cells.filter((c) => st.places[c.id] && st.places[c.id].siege === "letter") : [];
-    const cools = wd.cells.filter((c) => cooling(c.id));
-    const patterns = [...new Set(tugs.map(([, t]) => t.side))].map((sd) => tugPattern(sd, k)).join("");
-    const out = [`<defs>${wd.regions.map((r) => `<clipPath id="wc-${esc(r.id)}"><path d="${r.d}"/></clipPath>`).join("")}${patterns}</defs>`];
-    // 地面：整區先塗沒人佔（一區沒有分地面的地點就是一整片沒人佔），再一格一格塗誰佔著，照那一區的輪廓裁
-    out.push(`<g class="w-ground" opacity="${WORLD_GROUND}" pointer-events="none">`);
-    for (const r of wd.regions) {
-      out.push(`<path d="${r.d}" fill="${wd.unheld}"/><g clip-path="url(#wc-${esc(r.id)})">`);
-      for (const c of wd.cells) if (c.region === r.id) out.push(`<path data-cell="${esc(c.id)}" d="${c.d}" fill="${ground(c.id)}"/>`);
-      out.push("</g>");
-    }
-    out.push("</g>");
-    // 正在翻（兩色拔河）：守方的地面上疊攻方的斜紋，濃淡照進度（設計 4.1）
-    for (const r of wd.regions) {
-      const mine = tugs.filter(([c]) => c.region === r.id);
-      if (mine.length) out.push(`<g clip-path="url(#wc-${esc(r.id)})">${mine.map(([c, t]) => `<path class="w-tug" data-cell="${esc(c.id)}" d="${c.d}" fill="url(#wt-${esc(t.side)})" opacity="${f2((t.pct / 100) * WORLD_TUG_MAX)}" pointer-events="none"/>`).join("")}</g>`);
-    }
-    out.push(`<g class="w-outline" fill="none" stroke="${WORLD_INK}" stroke-width="${f1(1.4 * k)}" stroke-linejoin="round" pointer-events="none">${wd.regions.map((r) => `<path d="${r.d}"/>`).join("")}</g>`);
-    // 冷卻：那一格一圈新主人顏色的虛線（畫在紅線、細墨線底下：前線照樣看得清楚）
-    for (const c of cools) out.push(`<path class="w-cool" data-cell="${esc(c.id)}" d="${c.d}" fill="none" stroke="${sideInk(ctrl[c.id]).color}" stroke-width="${f1(WORLD_COOL_LINE * k)}" stroke-dasharray="${f1(WORLD_COOL_DASH * k)} ${f1(WORLD_COOL_GAP * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})" pointer-events="none"/>`);
-    // 邊：兩邊是不同的兩方＝紅線（前線）、一邊有主一邊沒人佔＝細墨線、同一方或都沒人＝不畫（同一區裡的邊照那一區的輪廓裁）
-    const front = [], rim = [];
-    for (const e of wd.edges) {
-      const a = (e.a && ctrl[e.a]) || null, b = (e.b && ctrl[e.b]) || null;
-      if (a === b) continue;
-      (a && b ? front : rim).push(`<path d="${e.d}"${e.clip ? ` clip-path="url(#wc-${esc(e.clip)})"` : ""}/>`);
-    }
-    out.push(`<g class="w-rim" fill="none" stroke="${WORLD_RIM}" stroke-width="${f1(1.1 * k)}" pointer-events="none">${rim.join("")}</g>`);
-    out.push(`<g class="w-front" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(3 * k)}" stroke-linecap="round" pointer-events="none">${front.join("")}</g>`);
-    // 激戰：兩邊都有人正在推的那一格一圈紅光，一閃一閃（style.css 的 .w-melee；減少動態效果的人不閃）
-    for (const c of melee) out.push(`<path class="w-melee" data-cell="${esc(c.id)}" d="${c.d}" fill="${FRONT_RED}" fill-opacity=".16" stroke="${FRONT_RED}" stroke-width="${f1(3.2 * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})" pointer-events="none"/>`);
-    for (const c of letters) out.push(`<path class="w-letter" data-cell="${esc(c.id)}" d="${c.d}" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(WORLD_LETTER_LINE * k)}" stroke-dasharray="${f1(WORLD_LETTER_DASH * k)} ${f1(WORLD_LETTER_GAP * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})" pointer-events="none"/>`);
-    // 點一區：整區一塊透明的點擊區
-    for (const r of wd.regions) out.push(`<path data-act="world-region" data-id="${esc(r.id)}" d="${r.d}" fill="#000000" fill-opacity="0" style="cursor:pointer"><title>${esc(r.name)}</title></path>`);
-    // 金點：高級資源地（開季中立的），實心＝此刻有人佔、空心＝沒人佔
-    for (const p of base.places) {
-      if (!st.places[p.id] || !st.places[p.id].rich) continue;
-      const held = !!ctrl[p.id];
-      out.push(`<circle class="w-rich${held ? " held" : ""}" cx="${p.x}" cy="${p.y}" r="${f1(4.2 * k)}" fill="${held ? WORLD_GOLD : MAP_HALO}" stroke="${WORLD_GOLD}" stroke-width="${f1(1.6 * k)}" pointer-events="none"/>`);
-    }
-    // 大區名、底下那一行
-    for (const l of worldLabels(base, st, ctrl, k, o.area || null)) {
-      const top = l.y - l.h / 2, nameY = f1(top + (2 + l.np * 0.88) * k), lineY = f1(top + (2 + l.np + 3 + l.lp * 0.88) * k);
-      out.push(`<g class="w-label" pointer-events="none" style="font-family:serif"><text x="${f1(l.x)}" y="${nameY}" text-anchor="middle" font-size="${f1(l.np * k)}" font-weight="700" letter-spacing="${f1(2 * k)}" fill="${MAP_INK}" stroke="${MAP_HALO}" stroke-width="${f1(3.4 * k)}" paint-order="stroke">${esc(l.name)}</text>`
-        + (l.line ? `<text x="${f1(l.x)}" y="${lineY}" text-anchor="middle" font-size="${f1(l.lp * k)}" font-weight="600" fill="#3A332A" stroke="${MAP_HALO}" stroke-width="${f1(3 * k)}" paint-order="stroke">${esc(l.line)}</text>` : "") + "</g>");
-    }
-    // 上面那一張：版圖變化看以前的週時易手的地點閃一圈、年表圈起來的地點、你（在路上畫在路上；紅點、一面紅旗、外面一圈慢慢擴散）
-    const high = [];
-    const wk = (st.weeks || []).find((x) => x.week === o.week);
-    if ((o.tl || o.week !== st.now_week) && wk) for (const e of wk.changed) if (pos[e.id]) high.push(`<circle class="pulse" cx="${pos[e.id].x}" cy="${pos[e.id].y}" r="${f1(10 * k)}" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(2.5 * k)}" pointer-events="none"/>`);
-    if (o.sel && pos[o.sel]) high.push(`<circle cx="${pos[o.sel].x}" cy="${pos[o.sel].y}" r="${f1(11 * k)}" fill="none" stroke="${MAP_INK}" stroke-width="${f1(2.5 * k)}" pointer-events="none"/>`);
-    const j = st.journey, h = pos[st.here];
-    const hx = j ? j.x : h && h.x, hy = j ? j.y : h && h.y;
-    if (hx !== undefined) {
-      high.push(`<circle class="pulse" cx="${hx}" cy="${hy}" r="${f1(10 * k)}" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(2.2 * k)}" pointer-events="none"/>`);
-      high.push(`<circle class="w-you" cx="${hx}" cy="${hy}" r="${f1(5 * k)}" fill="${FRONT_RED}" stroke="#FFFFFF" stroke-width="${f1(1.6 * k)}" pointer-events="none"/>`);
-      high.push(`<path d="M${f1(hx + 2 * k)} ${f1(hy - 5 * k)}V${f1(hy - 24 * k)}L${f1(hx + 14 * k)} ${f1(hy - 19.5 * k)}L${f1(hx + 2 * k)} ${f1(hy - 15 * k)}" fill="${FRONT_RED}" stroke="#7A1F18" stroke-width="${f1(1.2 * k)}" pointer-events="none"/>`);
-    }
-    return [out.join(""), high.join("")];
-  }
-  // 天下圖的抽屜：收著時一行「你在 大區・地點」（在路上「往 X・還有 N 分鐘」）＋「進入此區 ›」；拉開（或桌機的右欄）是你腳下這一處的卡
-  // （設計 5.1、5.3：placeCard）。點那一行攤開
-  function worldDrawerHtml(base, st) {
-    const j = st.journey, here = placeOf(base, st.here);
-    const region = here && base.regions.find((r) => r.id === here.region);
-    const where = j ? `往 <b>${esc(j.to_name)}</b>・還有 ${Number(j.minutes)} 分鐘` : `你在 <b>${esc(region ? region.name : "")}</b>・${esc(here ? here.name : "")}`;
-    const enter = `<button type="button" class="m-enter" data-act="world-enter">${WORLD_ENTER} ›</button>`;
-    if (S.mapDrawer === "min" && !deskMap()) return `<div class="m-wline"><button type="button" class="m-mini" data-act="map-open" aria-label="攤開抽屜"><span>${where}</span></button>${enter}</div>`;
-    if (j) return `${journeyHtml(st)}<div class="m-wline"><span></span>${enter}</div>`;
-    // 第 3 週「離贏還差多少」（減法季整合設計 6.8：天下層的戰線上也寫同一句；批 5。批 3c 的數字接上之前是結局門檻那一句）
-    const gap = st.gap ? `<p class="m-gap">${esc(st.gap)}</p>` : "";
-    return `<div class="m-wline"><span class="m-where">${where}</span>${enter}</div>${gap}${here ? placeCard(base, st, st.here) : ""}`;
-  }
-
-  // ── 區圖（輿圖簡化設計 5.2、5.5、5.6；輿圖第三版第 4 批）──
-  // 點一區（或「進入此區」、找地點挑一處）：同一張底圖換一個固定的取景（regionFit：這一區地點的外框加邊），上面疊一層拖與縮放
-  // （企劃者 2026-10-22：整張連字一起動，擺法不重算）。只畫這一區的地點：
-  // 墨筆小圖（線色＝誰佔著）、名字裝在印章框裡（框色＝誰的，顏色照劇本 sideInk、沒人佔照底圖的 unheld；大城框粗）、框裡的下緣一條細進度條
-  // （攻方的顏色；剛易手整條灰、不寫字，FB-648 第二段乙）、朱印「寶」、名字底下最多兩個意境字（最濃的在前）、你的朱圈與旗、通到鄰區的路在取景框邊寫「→ 南陽」
-  // （點了換到那一區）；別區的地點只畫淡墨小圖（點得到、不寫名；拖得過區界，FB-876 企劃者選甲，以前取景框外蓋一層半透明的紙）。
-  // 底圖的州界點劃線收掉、大區名藏起來，路照 CSS 換成一種淡實線（style.css 的
-  // .mapx.region .tx-roads）。「塗層」開了多一層照歸屬融成一片的淡彩（草圖清甲）。名字框的位置照螢幕大小挑（regionLabels）：不壓別的名字框、
-  // 小圖、你的旗、鄰區出口；擠不下時這一區的名字縮一號。點一處：抽屜半開那一處的卡，地圖不動（取景先替半開的卡留位子，peekPx）。字待 joy 潤
-  const REGION_TOP = 58; // 上面那一排（‹ 天下・大區・版圖）讓開多高（px）
-  const REGION_PAD = 54; // 抽屜收著那一行
-  // 取景框四邊留多少（px）：旗在上面、意境字在下面；左右只留一點（名字框靠邊的往裡擺），寬的大區（潁川汝南）倍率才拉得上去
-  const REGION_EDGE = { l: 8, r: 8, t: 40, b: 30 };
-  // 優先替半開的卡留多高（px）：留了倍率還不低於 REGION_READ 才照留，不然整塊照放（短的螢幕：卡拉開時會蓋到下緣）
-  const REGION_CARD = 270, REGION_READ = 0.9, REGION_MAX = 2, REGION_PEEK_MIN = 200;
-  const R_PADX = 5, R_PADY = 3.5, R_GAP = 3; // 印章框的內距、框離小圖多遠（px）
-  // 進度條收在印章框裡的下緣（FB-648 第二段，企劃者 2026-10-22 選乙）：高 R_BAR、貼著框線內側（框線一般 R_LINE、大城 R_LINE_BIG），
-  // 名字的字腳碰不到（框底的內距 R_PADY 夠放）
-  const R_BAR = 2.5, R_LINE = 1, R_LINE_BIG = 1.7, R_INS_GAP = 1, R_SEAL = 15, R_SEAL_GAP = 3, R_EXIT = 11.5;
-  // 攻城戰（輿圖第三版第 5 批，企劃者 2026-10-22 挑 A 乙、B 甲）：「戰」字印紙底朱框朱字（字待 joy 潤），找位置時四周多留 R_LETTER_PAD；
-  // 交戰中名字框外那一圈紅離框多遠、多粗
-  const LETTER_SEAL_WORD = "戰", LETTER_SEAL_PAPER = "#FFF8EC", R_LETTER_PAD = 1, R_FIGHT_OUT = 2, R_FIGHT_LINE = 1.6;
-  // 不同地點的兩列（印章框＋寶那一列、意境字那一列）之間至少隔多少 px（FB-651：南陽官道的意境字貼著南陽郊野的「寶」只隔 1.3px，
-  // 意境字的紙色描邊再往外 1.3px，讀起來像「南陽郊野 寶 風火」）：x、y 兩個方向都不到這麼遠就算貼著。照不相交擺好之後再試著讓開
-  // （regionLabelsAt 的 spaced：名字不准因此離自己的小圖更遠 R_NEAR 以上），讓不開照原本的；擠不下（縮一號）照舊只看相交，不為了留空縮字
-  const R_ROW_GAP = 3;
-  const rowGrow = (r) => [r[0] - R_ROW_GAP, r[1] - R_ROW_GAP, r[2] + R_ROW_GAP, r[3] + R_ROW_GAP];
-  // 區圖記號在螢幕上多大（px）：放得大的區（倍率 1 以上）小圖與字大一號；擠的區（潁川汝南在手機上約 0.68 倍）照小的那一號才擺得開
-  // （設計第十二章：375 寬互相不壓）。icon 是墨筆小圖照草圖（20px 見方）放大幾倍，hw、hh 是小圖在螢幕上佔的半寬、半高
-  function regionSizes(s) {
-    return s >= 1 ? { icon: 1.2, hw: 12.5, hh: 11.5, name: 14, nameBig: 15, ins: 11.5 } : { icon: 1, hw: 10.5, hh: 10, name: 12, nameBig: 13, ins: 10 };
-  }
-  // 擠不下時這一區的名字縮一號（FB-648 第二段乙，企劃者 2026-10-22）：小圖不變，名字與底下的意境字換小一號——大一號的那一區（倍率 1 以上：
-  // 14／15、意境字 11.5）換回平常那一號（12／13、10），平常那一號再小一點（R_SMALL：11／12、9）。只縮名字、意境字不縮的話，360 寬你站嵩山深處、
-  // 南陽 375×624 你站宛城等幾處還是擠不下（量過）
-  const R_SMALL = { name: 11, nameBig: 12, ins: 9 };
-  function regionSmaller(z) {
-    const plain = regionSizes(0);
-    return z.name > plain.name ? { ...z, name: plain.name, nameBig: plain.nameBig, ins: plain.ins } : { ...z, ...R_SMALL };
-  }
-  const RICH_SEAL = "#B03A2E", BAR_TRACK = "#D8CDB4", COOL_GREY = "#B3AA98";
-  const R_WASH = { r: 64, blur: 8, warp: 20, freq: 0.024, op: 0.42 }; // 塗層（草圖清甲）：每一處一團多大、暈開、邊緣扭幾分（px）、整層多濃
-  const WASH_WORD = "塗層"; // 待 joy 潤
-  const WASH_KEY = "tx-map-wash"; // 塗層開關記在這個瀏覽器（平常關著）
-  function washOn() {
-    if (S.mapWash === undefined) { try { S.mapWash = localStorage.getItem(WASH_KEY) === "1"; } catch (e) { S.mapWash = false; } }
-    return !!S.mapWash;
-  }
-  function washToggle() {
-    S.mapWash = !washOn();
-    try { localStorage.setItem(WASH_KEY, S.mapWash ? "1" : "0"); } catch (e) { /* 記不住就只管這一次 */ }
-    const btn = document.querySelector(".r-wash");
-    if (btn) { btn.classList.toggle("on", S.mapWash); btn.setAttribute("aria-pressed", String(S.mapWash)); }
-    drawMarks();
-  }
-  // 左下角的羅盤（裝飾，企劃者挑的「一乙」）：螢幕上固定，不跟地圖
-  function compassSvg() {
-    const pts = [];
-    for (let a = 0; a < 360; a += 45) { const r = a % 90 ? 4.5 : 15, t = ((a - 90) * Math.PI) / 180; pts.push(`${f1(22 + r * Math.cos(t))},${f1(30 + r * Math.sin(t))}`); }
-    return `<svg viewBox="0 0 44 54" width="40" height="49" aria-hidden="true"><circle cx="22" cy="30" r="19" fill="${MAP_HALO}" fill-opacity=".85" stroke="${MAP_INK}" stroke-width="1"/>`
-      + `<polygon points="${pts.join(" ")}" fill="${MAP_INK}" opacity=".75"/><path d="M22 15L25.5 30H18.5Z" fill="${FRONT_RED}"/>`
-      + `<text x="22" y="9" font-size="9" text-anchor="middle" fill="${FRONT_RED}" style="font-family:serif">北</text></svg>`;
-  }
-  // 第一層與全區上面那一排（減法季整合設計第七章：只剩大區名、「全區」、「天下」）：大區名（下拉，換一區就是那一區的全區）、
-  // 全區（按著＝第三層；再按一次回第一層）、天下；塗層只在全區那一排（照歸屬融成一片的淡彩是全區的畫法【開發定】），⏱ 版圖在天下圖那一排。左下角羅盤
-  function regionTopHtml() {
-    const base = S.mapBase, regions = base ? base.regions : [];
-    const rid = S.mapRegion || hereRegion();
-    const opts = regions.map((r) => `<option value="${esc(r.id)}"${r.id === rid ? " selected" : ""}>${esc(r.name)}</option>`).join("");
-    const full = S.mapLayer === "region", wash = washOn();
-    return `<div class="r-top"><label class="r-pick-box"><select class="r-pick" data-act="region-pick" aria-label="換一區">${opts}</select></label>`
-      + (full ? `<button type="button" class="r-wash${wash ? " on" : ""}" data-act="map-wash" aria-pressed="${wash}">${WASH_WORD}</button>` : "")
-      + `<button type="button" class="r-full${full ? " on" : ""}" data-act="map-full" aria-pressed="${full}">${NEAR_WORDS.full}</button>`
-      + `<button type="button" class="w-back" data-act="map-world">${WORLD_WORD}</button></div>`
-      + `<div class="r-compass">${compassSvg()}</div>`;
-  }
-  const regionPlaces = (base, rid) => base.places.filter((p) => p.region === rid);
-  // 一區的取景（螢幕 vw × vh；上面讓開 top、底下讓開收著的抽屜 pad，card＞0 時優先替半開的卡留位子）：這一區地點的外框四邊照螢幕留邊，
-  // 手機靠上（底下給卡）、桌機（card 0）置中。回 { s, cx, cy, frame: 取景框（地圖單位：外框加邊）, bottom: 取景框下緣在螢幕上的 y }
-  function regionFit(base, rid, vw, vh, top = REGION_TOP, pad = REGION_PAD, card = REGION_CARD) {
-    const pts = regionPlaces(base, rid);
-    if (!pts.length) return null;
-    const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
-    const x0 = Math.min(...xs), y0 = Math.min(...ys), x1 = Math.max(...xs), y1 = Math.max(...ys);
-    const E = REGION_EDGE, bw = Math.max(1, x1 - x0), bh = Math.max(1, y1 - y0);
-    const aw = Math.max(1, vw - E.l - E.r), ah = Math.max(1, vh - top - pad - E.t - E.b);
-    let s = Math.min(aw / bw, ah / bh, REGION_MAX);
-    const leave = Math.max(0, ah - card) / bh; // 替半開的卡留了位子還能多大
-    if (card > 0 && leave < s && leave >= REGION_READ) s = leave;
-    const left = E.l + (aw - bw * s) / 2, upper = top + E.t + (card > 0 ? 0 : (ah - bh * s) / 2);
-    const k = 1 / s;
-    return { s, cx: x0 + (vw / 2 - left) * k, cy: y0 + (vh / 2 - upper) * k, frame: [x0 - E.l * k, y0 - E.t * k, x1 + E.r * k, y1 + E.b * k], bottom: upper + bh * s + E.b };
-  }
-  // 通到鄰區的路（一頭在這一區、一頭在別區）：從這一頭往那一頭的直線碰到取景框邊的那一點（螢幕 px）、貼著哪一邊、寫什麼
-  // （「→ 南陽」，箭頭照出去的方向）；那一頭的地點就在框裡（碰不到框邊）時是那一點、edge 是 null
-  function regionExitAnchors(base, rid, v, vw, vh) {
-    const pos = Object.fromEntries(base.places.map((p) => [p.id, p])), names = Object.fromEntries(base.regions.map((r) => [r.id, r.name]));
-    const [fx0, fy0, fx1, fy1] = v.frame, scr = (x, y) => [vw / 2 + (x - v.cx) * v.s, vh / 2 + (y - v.cy) * v.s];
-    const out = [];
-    for (const [a, b] of base.edges) {
-      const A = pos[a], B = pos[b];
-      if (!A || !B || (A.region === rid) === (B.region === rid)) continue;
-      const [P, Q] = A.region === rid ? [A, B] : [B, A];
-      const dx = Q.x - P.x, dy = Q.y - P.y;
-      let t = 1, edge = null;
-      if (dx && ((dx > 0 ? fx1 : fx0) - P.x) / dx < t) { t = ((dx > 0 ? fx1 : fx0) - P.x) / dx; edge = dx > 0 ? "r" : "l"; }
-      if (dy && ((dy > 0 ? fy1 : fy0) - P.y) / dy < t) { t = ((dy > 0 ? fy1 : fy0) - P.y) / dy; edge = dy > 0 ? "b" : "t"; }
-      const [X, Y] = scr(P.x + dx * t, P.y + dy * t);
-      const arrow = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? "→" : "←") : dy > 0 ? "↓" : "↑";
-      const text = `${arrow} ${names[Q.region] || Q.region}`;
-      if (out.some((e) => e.to === Q.region && Math.hypot(e.X - X, e.Y - Y) < 36)) continue; // 同一區、相距很近的只寫一個
-      out.push({ to: Q.region, from: P.id, text, w: textW(text, R_EXIT) + 6, h: R_EXIT + 5, X, Y, edge });
-    }
-    return out;
-  }
-  // 鄰區出口的字擺哪（名字框擺好之後）：貼著出去的那一邊、往框裡收 3px，壓到名字框或小圖就沿著那一邊滑開（近的先，最多 120px），
-  // 都不行挑壓得最少的。回 [{ to, text, box: [左, 上, 右, 下]（螢幕 px） }]
-  const R_EXIT_SLIDE = [0, ...Array.from({ length: 20 }, (_, i) => (i % 2 ? -1 : 1) * 6 * (Math.floor(i / 2) + 1) * 2)];
-  // 鄰區出口的字能擺的那一塊（螢幕 px：取景框與上面那一排、地圖框的交集）與沿著邊滑 d px 的那一格
-  function regionExitRoom(v, vw, vh) {
-    const scr = (x, y) => [vw / 2 + (x - v.cx) * v.s, vh / 2 + (y - v.cy) * v.s];
-    const [bx0, by0] = scr(v.frame[0], v.frame[1]), [bx1, by1] = scr(v.frame[2], v.frame[3]);
-    return { top: Math.max(REGION_TOP + 2, by0), bottom: Math.min(vh - 2, by1), left: Math.max(2, bx0), right: Math.min(vw - 2, bx1) };
-  }
-  function regionExitBox(e, d, room) {
-    const along = e.edge === "l" || e.edge === "r" ? [0, 1] : [1, 0]; // 沿著那一邊滑：左右兩邊上下滑、上下兩邊左右滑
-    let l = e.edge === "r" ? e.X - e.w - 3 : e.edge === "l" ? e.X + 3 : e.X - e.w / 2;
-    let t = e.edge === "b" ? e.Y - e.h - 3 : e.edge === "t" ? e.Y + 3 : e.Y - e.h / 2;
-    l = Math.max(room.left, Math.min(room.right - e.w, l + along[0] * d));
-    t = Math.max(room.top, Math.min(room.bottom - e.h, t + along[1] * d));
-    return [l, t, l + e.w, t + e.h];
-  }
-  function regionExits(base, rid, v, vw, vh, labels = []) {
-    const room = regionExitRoom(v, vw, vh);
-    const z = regionSizes(v.s);
-    const taken = [...labels.flatMap((l) => l.rows), ...labels.map((l) => [l.X - z.hw, l.Y - z.hh, l.X + z.hw, l.Y + z.hh])];
-    const inter = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
-    const out = [];
-    for (const e of regionExitAnchors(base, rid, v, vw, vh)) {
-      let best = null;
-      for (const d of R_EXIT_SLIDE) {
-        const box = regionExitBox(e, d, room), cost = [...taken, ...out.map((x) => x.box)].reduce((n, b) => n + inter(box, b), 0);
-        if (!best || cost < best.cost - 1e-6) best = { cost, box };
-        if (cost <= 0) break;
-      }
-      out.push({ to: e.to, from: e.from, text: e.text, box: best.box, cost: best.cost });
-    }
-    return out;
-  }
-  // 一處的名字框有多大（px）：上一列是印章框（＋朱印寶），下一列是意境字。進度條收在印章框裡、剛易手不寫「冷卻幾分」（幾分鐘寫在卡上，
-  // placeLine）——FB-648 第二段乙（企劃者 2026-10-22）：框的大小翻不翻地都一樣，名字擺的位置跟沒翻地時一樣，翻地的那一刻名字不跳
-  function regionLabelSize(base, st, p, z) {
-    const q = st.places[p.id] || {};
-    const fs = p.big ? z.nameBig : z.name, fw = textW(p.name, fs) + 2 * R_PADX, fh = fs + 2 * R_PADY;
-    const tug = tugOf(st, p.id, q.control || null), cool = !!q.control && !!q.cool;
-    const ins = (p.insights || []).map((id) => insightInk(base, id)).filter(Boolean).slice(0, 2);
-    // 下了戰書、還沒開集結（疊層的 siege 是 letter）：名字框旁一枚「戰」字印（輿圖第三版第 5 批，企劃者 2026-10-22 挑 A 乙）。字印不算進名字框
-    // （框的大小下不下戰書都一樣，名字不跳：同 FB-648 第二段乙），名字擺好之後才找空位（regionLetterSeals）
-    const letter = q.siege === "letter";
-    const w1 = fw + (q.rich ? R_SEAL_GAP + R_SEAL : 0), w2 = ins.length * (z.ins + 2);
-    const low = ins.length ? R_INS_GAP + z.ins + 2 : 0;
-    return { fs, fw, fh, w1, w2, low, W: Math.max(w1, w2), H: fh + low, tug, cool, ins, insPx: z.ins, bar: !!(tug || cool), rich: !!q.rich, big: !!p.big,
-      letter, fight: q.siege === "fight" };
-  }
-  // 名字框可以擺的位置（框左上角離地點中心多遠，px），好的在前：右、左、下、上，再往上下（左右）錯開，再隔一層。
-  // 只貼著小圖擺、不拉線（企劃者 2026-10-21 從對比圖選乙：潁川汝南擠的地方不拉細點線回小圖）
-  function regionLabelSpots(L, z) {
-    const hw = z.hw + R_GAP, hh = z.hh + R_GAP, mid = -L.fh / 2, W = L.W, H = L.H;
-    const out = [[hw, mid], [-hw - W, mid], [-W / 2, hh], [-W / 2, -hh - H]];
-    for (const f of [0.35, 0.7, 1.05, 1.4, 1.8]) out.push([hw, mid - H * f], [hw, mid + H * f], [-hw - W, mid - H * f], [-hw - W, mid + H * f]);
-    for (const f of [0.25, 0.5, 0.75, 1]) out.push([-W / 2 + W * f, hh], [-W / 2 - W * f, hh], [-W / 2 + W * f, -hh - H], [-W / 2 - W * f, -hh - H]);
-    for (const f of [0, 0.5, -0.5]) out.push([-W / 2 + W * f, hh + H * 0.9], [-W / 2 + W * f, -hh - H * 1.9]);
-    return out;
-  }
-  const REGION_SEARCH = 20000; // 第一輪一起找名字框的位置最多試幾次，再多就換第二輪
-  // 第二輪（FB-648）：位置每 R_SLIDE px 一格；一起找最多試 R_SEARCH_WIDE 次；還找不到（真的放不下）時反覆換位置最多 R_SETTLE 次
-  const R_SLIDE = 3, R_SEARCH_WIDE = 3000, R_SETTLE = 400;
-  const R_RING = [[19, 8], [17, 11], [14, 14], [11, 17], [8, 19]]; // 你的朱圈在第二輪照圓的算：五塊框的半寬、半高疊成一個半徑約 19 的圓
-  const R_YOU = 18; // 你的朱圈的外緣（半徑 17、線寬 2.4 的一半，少一點點）：「擠不下」照真的那一圈量
-  // 第二輪的名字框位置：第一輪那幾個在前，再補沿著小圖四邊滑的（離小圖由近到遠），範圍不比第一輪遠（照樣貼著小圖、不拉線，企劃者選的乙）。
-  // 每一個位置的第三格是「往前挪」時的先後：照離小圖多遠（每 R_NEAR px 一級，同一級照上面的先後），擺好之後名字才挪得回自己的小圖旁邊、
-  // 不會留在別處的小圖旁邊（一起找與擺不開時的換位置照上面的先後）
-  const R_NEAR = 8;
-  function regionLabelSpotsWide(L, z) {
-    const hw = z.hw + R_GAP, hh = z.hh + R_GAP, mid = -L.fh / 2, W = L.W, H = L.H, extra = [];
-    for (let d = R_SLIDE; d <= 1.8 * H; d += R_SLIDE) for (const s of [1, -1]) extra.push([hw, mid + s * d], [-hw - W, mid + s * d]);
-    for (let d = R_SLIDE; d <= W; d += R_SLIDE) for (const s of [1, -1]) extra.push([-W / 2 + s * d, hh], [-W / 2 + s * d, -hh - H]);
-    for (let d = 0; d <= W / 2; d += R_SLIDE) for (const s of d ? [1, -1] : [1]) extra.push([-W / 2 + s * d, hh + H * 0.9], [-W / 2 + s * d, -hh - H * 1.9]);
-    const gap = ([dx, dy]) => Math.hypot(Math.max(dx, 0, -(dx + W)), Math.max(dy, 0, -(dy + H))); // 小圖中心到名字框最近那一點
-    const all = [...regionLabelSpots(L, z), ...extra.sort((a, b) => gap(a) - gap(b))];
-    return all.map((o, i) => [o[0], o[1], Math.floor(gap(o) / R_NEAR) * all.length + i]);
-  }
-  // 名字框擺哪（設計第十二章：375 寬互相不壓）。每一處先列出不壓小圖（每一處的）、你的旗與朱圈、也不出取景框的位置；
-  // 再一起找「彼此也不壓」的擺法（同 mapview._place_labels：每次挑剩下位置最少的先擺，擺不下回頭改前面的），找到之後再一處一處往前挪
-  // （離小圖近的位置）。第一輪只用 regionLabelSpots 那幾個位置；找不到、或擺好之後鄰區出口沿著邊滑也讓不開名字框（FB-648：翻地中
-  // 名字框多了進度條、「冷卻 N 分」，你站的那一處多朱圈與旗），第二輪換 regionLabelSpotsWide、鄰區出口原本的位置也讓開，再找一次。
-  // 第一輪擺得下（出口也讓得開）的畫面跟以前一樣。第二輪也找不到（照這種畫法真的放不下）：先一個一個擺，再反覆把壓到東西的那幾處換位置
-  // （settle），壓到的只留在擠的那一角。擺好了還互壓（名字框兩兩相交、壓到別處的小圖、你的旗與朱圈、鄰區出口，或出了取景框）＝擠不下：
-  // 這一區的名字縮一號（regionSmaller）重擺一次（FB-648 第二段乙，企劃者 2026-10-22）。名字框的大小不看翻地（regionLabelSize），
-  // 擺法與縮不縮只看這一區、你站哪、地圖框多大：翻地的那一刻名字不跳。
-  // 回每一處（照這一區的地點順序）：大小、框左上角（螢幕 px）、佔的兩列、壓到多少（0＝不壓）
-  function regionLabels(base, st, rid, v, vw, vh) {
-    const z = regionSizes(v.s), [out, tight] = regionLabelsAt(base, st, rid, v, vw, vh, z);
-    return tight ? regionLabelsAt(base, st, rid, v, vw, vh, regionSmaller(z))[0] : out;
-  }
-  // 照名字的字級 z 擺一次：回 [每一處, 擠不下（還互壓）]
-  function regionLabelsAt(base, st, rid, v, vw, vh, z) {
-    const pts = regionPlaces(base, rid), scr = (x, y) => [vw / 2 + (x - v.cx) * v.s, vh / 2 + (y - v.cy) * v.s];
-    const [bx0, by0] = scr(v.frame[0], v.frame[1]), [bx1, by1] = scr(v.frame[2], v.frame[3]);
-    const bounds = [Math.max(2, bx0), Math.max(REGION_TOP + 2, by0), Math.min(vw - 2, bx1), Math.min(vh - 2, by1)];
-    const at = Object.fromEntries(pts.map((p) => [p.id, scr(p.x, p.y)]));
-    const fixed = pts.map((p) => [at[p.id][0] - z.hw, at[p.id][1] - z.hh, at[p.id][0] + z.hw, at[p.id][1] + z.hh]);
-    const me = !st.journey && pts.find((p) => p.id === st.here);
-    if (me) { const [X, Y] = at[me.id]; fixed.push([X + 10, Y - 40, X + 34, Y - 12], [X - 19, Y - 19, X + 19, Y + 19]); }
-    // 你的朱圈（半徑 17、線寬 2.4）照圓的算：五塊疊成一個圓（第二輪的牆與「擠不下」都照它）
-    const ring = me ? R_RING.map(([a, b]) => [at[me.id][0] - a, at[me.id][1] - b, at[me.id][0] + a, at[me.id][1] + b]) : [];
-    const inter = (a, b) => { // 兩個框相交的面積（第二輪的位置多，這一段最常跑：不碰 Math）
-      const w = (a[2] < b[2] ? a[2] : b[2]) - (a[0] > b[0] ? a[0] : b[0]);
-      if (w <= 0) return 0;
-      const h = (a[3] < b[3] ? a[3] : b[3]) - (a[1] > b[1] ? a[1] : b[1]);
-      return h > 0 ? w * h : 0;
-    };
-    const outside = (r) => (r[2] - r[0]) * (r[3] - r[1]) - inter(r, bounds);
-    const against = (rows, boxes) => rows.reduce((n, r) => n + boxes.reduce((m, b) => m + inter(r, b), 0) + 4 * outside(r), 0);
-    const sizes = pts.map((p) => regionLabelSize(base, st, p, z));
-    const lay = (spots, walls) => pts.map((p, i) => {
-      const L = sizes[i], [X, Y] = at[p.id];
-      const opts = spots(L, z).map(([dx, dy, rank], j) => {
-        const l = X + dx, t = Y + dy, rows = [[l, t, l + L.w1, t + L.fh]];
-        if (L.low) rows.push([l, t + L.fh, l + L.w2, t + L.H]);
-        const bb = [l, t, l + L.W, t + L.H];
-        // pad、bp：每一列、外框各往外撐 R_ROW_GAP（FB-651：跟別處的列比的時候用，兩列之間不到 R_ROW_GAP 就算壓到）
-        return { l, t, rows, bb, pad: rows.map(rowGrow), bp: rowGrow(bb), cost: against(rows, walls), rank: rank === undefined ? j : rank };
-      });
-      return { p, i, L, X, Y, opts };
-    });
-    const meet = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]; // 兩個框的外框碰不碰得到（先擋掉遠的，省時間）
-    // 兩處的名字框壓不壓：gapOn 時不同地點的兩列之間不到 R_ROW_GAP 也算（FB-651，spaced 那一下）
-    let gapOn = false;
-    const clash = (a, b) => (gapOn ? meet(a.bp, b.bb) && a.pad.some((r) => b.rows.some((q) => inter(r, q) > 0))
-      : meet(a.bb, b.bb) && a.rows.some((r) => b.rows.some((q) => inter(r, q) > 0)));
-    // 再一處一處往前挪——換成更前面（rank 小：離小圖更近）、不壓牆也不壓別人的位置，挪到挪不動為止
-    const forward = (items, pick) => {
-      for (let round = 0, moved = true; moved && round < 6; round++) {
-        moved = false;
-        for (const it of items) {
-          const now = pick[it.i].rank;
-          const better = it.opts.reduce((b, o) => (o.rank < now && (!b || o.rank < b.rank) && o.cost <= 0 && items.every((x) => x === it || !clash(o, pick[x.i])) ? o : b), null);
-          if (better) { pick[it.i] = better; moved = true; }
-        }
-      }
-      return pick;
-    };
-    // 一起找：每次挑剩下位置最少的先擺，擺不下回頭改前面的；試了 budget 次還沒找到回 null
-    const solve = (items, budget) => {
-      const free = items.map((it) => it.opts.filter((o) => o.cost <= 0));
-      // 每一處所有位置合起來的外框：碰不到的那幾處不必一個一個比
-      const reach = free.map((r) => r.reduce((b, o) => [Math.min(b[0], o.bb[0]), Math.min(b[1], o.bb[1]), Math.max(b[2], o.bb[2]), Math.max(b[3], o.bb[3])], [Infinity, Infinity, -Infinity, -Infinity]));
-      const search = (todo, room) => {
-        if (!todo.length) return {};
-        const i = todo.reduce((a, z) => (room[z].length < room[a].length ? z : a));
-        const rest = todo.filter((x) => x !== i);
-        for (const o of room[i]) {
-          if (--budget < 0) return null;
-          const after = room.slice();
-          if (rest.some((j) => meet(gapOn ? o.bp : o.bb, reach[j]) && !(after[j] = room[j].filter((q) => !clash(o, q))).length)) continue;
-          const found = search(rest, after);
-          if (found) return { ...found, [i]: o };
-          if (budget < 0) return null;
-        }
-        return null;
-      };
-      const pick = free.every((r) => r.length) ? search(items.map((it) => it.i), free) : null;
-      return pick && forward(items, pick);
-    };
-    // 一個一個擺（你那一處先、附近地點多的先），每一個挑壓得最少的；再反覆把壓到東西的那幾處之一換到壓得最少的位置（同分挑前面的；
-    // 偶爾隨便換一格，免得來回打轉；種子固定，同樣的畫面擺出來一樣），記住壓得最少的那一次
-    const settle = (items, steps) => {
-      const pick = {};
-      const over = (o, i) => items.reduce((n, x) => (x.i === i || !pick[x.i] || !meet(o.bb, pick[x.i].bb) ? n : n + o.rows.reduce((m, r) => m + pick[x.i].rows.reduce((k, q) => k + inter(r, q), 0), 0)), o.cost);
-      const best = (it) => it.opts.reduce((b, o) => { const c = over(o, it.i); return c < b.c - 1e-6 ? { o, c } : b; }, { o: null, c: Infinity }).o;
-      const crowd = (it) => items.filter((o) => o !== it && Math.hypot(o.X - it.X, o.Y - it.Y) < 110).length;
-      const order = items.slice().sort((a, z) => (z.p === me) - (a.p === me) || crowd(z) - crowd(a) || (z.p.big ? 1 : 0) - (a.p.big ? 1 : 0) || a.i - z.i);
-      for (const it of order) pick[it.i] = best(it);
-      let seed = 20261021, keep = { ...pick }, low = Infinity;
-      const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-      for (let step = 0; step <= steps; step++) {
-        const hurt = items.filter((it) => over(pick[it.i], it.i) > 0);
-        const total = hurt.reduce((n, it) => n + over(pick[it.i], it.i), 0);
-        if (total < low - 1e-6) { low = total; keep = { ...pick }; }
-        if (!hurt.length || step === steps) break;
-        const it = hurt[Math.floor(rnd() * hurt.length)];
-        pick[it.i] = rnd() < 0.1 ? it.opts[Math.floor(rnd() * it.opts.length)] : best(it);
-      }
-      return forward(items, keep);
-    };
-    // 鄰區出口（regionExits 在名字框擺好之後沿著邊滑開）：第一輪擺好之後還壓到名字框，就當作沒找到
-    const exits = regionExitAnchors(base, rid, v, vw, vh), room = regionExitRoom(v, vw, vh);
-    const exitHit = (items, pick) => regionExits(base, rid, v, vw, vh, items.map((it) => ({ X: it.X, Y: it.Y, rows: pick[it.i].rows })))
-      .some((e) => items.some((it) => pick[it.i].rows.some((r) => inter(r, e.box) > 0.5)));
-    // 名字框離自己的小圖多遠（小圖中心到印章框最近那一點）
-    const hugOf = (it, o) => { const f = o.rows[0]; return Math.hypot(Math.max(f[0] - it.X, 0, it.X - f[2]), Math.max(f[1] - it.Y, 0, it.Y - f[3])); };
-    // FB-651：照不相交擺好之後，再找一次「不同地點的兩列都隔得開 R_ROW_GAP」的擺法——每一處只准用離自己的小圖不比剛才遠 R_NEAR 的位置
-    // （留空是寧可：不為了它把名字擺得離小圖更遠、不為了它縮字），找不到照剛才的
-    const spaced = (items, pick, budget) => {
-      gapOn = true;
-      const lim = items.map((it) => ({ ...it, opts: it.opts.filter((o) => hugOf(it, o) <= hugOf(it, pick[it.i]) + R_NEAR) }));
-      const got = solve(lim, budget);
-      gapOn = false;
-      return got && !(exits.length && exitHit(items, got)) ? got : pick;
-    };
-    gapOn = false;
-    let items = lay(regionLabelSpots, fixed);
-    let pick = solve(items, REGION_SEARCH);
-    if (pick && exits.length && exitHit(items, pick)) pick = null;
-    if (pick) pick = spaced(items, pick, REGION_SEARCH);
-    else {
-      // 第二輪：你的朱圈照圓的算（圓外那四個角讓名字框擺得進去），鄰區出口原本的位置也讓開
-      items = lay(regionLabelSpotsWide, [...(me ? fixed.slice(0, -1) : fixed), ...ring, ...exits.map((e) => regionExitBox(e, 0, room))]);
-      // 先照「離自己的小圖多近」的先後一起找（找得到名字就都在自己的小圖旁邊），找不到再照原本的先後找一次，再找不到才換位置
-      const near = items.map((it) => ({ ...it, opts: it.opts.slice().sort((a, b) => a.rank - b.rank) }));
-      pick = solve(near, R_SEARCH_WIDE) || solve(items, R_SEARCH_WIDE);
-      pick = pick ? spaced(near, pick, R_SEARCH_WIDE) : settle(items, R_SETTLE);
-    }
-    const out = items.map((it) => {
-      const o = pick[it.i], others = items.filter((x) => x !== it).map((x) => pick[x.i]);
-      return { ...it.L, id: it.p.id, X: it.X, Y: it.Y, l: o.l, t: o.t, rows: o.rows,
-        cost: against(o.rows, fixed) + others.reduce((n, q) => n + (clash(o, q) ? 1 : 0), 0) };
-    });
-    const exitBoxes = regionExits(base, rid, v, vw, vh, out).map((e) => e.box);
-    regionLetterSeals(out, fixed.slice(0, pts.length), me ? fixed[pts.length] : null, me ? at[me.id] : null, exitBoxes, bounds);
-    return [out, regionCrowded(out, fixed.slice(0, pts.length), me ? fixed[pts.length] : null, me ? at[me.id] : null, exitBoxes, bounds)];
-  }
-  // 「戰」字印擺在哪（輿圖第三版第 5 批，企劃者 2026-10-22 挑 A 乙：名字框旁一枚）：名字都擺好之後才找，不挪任何名字、不讓這一區縮字。
-  // 照先後試：寶（或名字框）的右邊、左邊、框上面靠右、框上面靠左、意境字那一列的右邊、下面，再往上下錯開、四個斜角——第一個不碰任何一處的名字框與意境字、
-  // 小圖、你的旗與朱圈、鄰區出口、別的「戰」字印，也沒出取景框的：先要四周留 R_ROW_GAP（同 FB-651 兩列之間），找不到再只留 R_LETTER_PAD，
-  // 再找不到准碰自己的小圖；而且每一個空位都要離自己的名字框（印章框與意境字）比離任何別處的名字框近（FB-691：不然讀起來像別處下了戰書）。
-  // 都不行才蓋在自己名字框的一角（fit 是假）。寫進那一處的 seal（螢幕上的 [左, 上, 右, 下]）與 sealFit
-  function regionLetterSeals(labels, icons, flag, you, exits, bounds) {
-    const inter = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
-    const s = R_SEAL, g = R_SEAL_GAP, placed = [];
-    const clean = (b, pad, own = null) => {
-      const p = [b[0] - pad, b[1] - pad, b[2] + pad, b[3] + pad];
-      if (p[0] < bounds[0] || p[1] < bounds[1] || p[2] > bounds[2] || p[3] > bounds[3]) return false;
-      if (you && Math.hypot(Math.max(p[0] - you[0], 0, you[0] - p[2]), Math.max(p[1] - you[1], 0, you[1] - p[3])) < R_YOU) return false;
-      return ![...labels.flatMap((l) => l.rows), ...icons.filter((q) => q !== own), ...(flag ? [flag] : []), ...exits, ...placed].some((q) => inter(p, q) > 0);
-    };
-    const dist = (a, b) => Math.hypot(Math.max(0, b[0] - a[2], a[0] - b[2]), Math.max(0, b[1] - a[3], a[1] - b[3]));
-    const nearest = (b, rows) => rows.reduce((m, r) => Math.min(m, dist(b, r)), Infinity);
-    labels.forEach((l, i) => {
-      if (!l.letter) return;
-      const others = labels.filter((m) => m !== l).flatMap((m) => m.rows);
-      const mine = (b) => nearest(b, l.rows) < nearest(b, others); // FB-691：離自己比離別處近
-      const [a0, a1, a2, a3] = l.rows[0], my = a1 + (l.fh - s) / 2, under = l.rows[1] ? l.rows[1][3] : a3, up = a1 - g - s;
-      const spots = [[a2 + g, my], [a0 - g - s, my], [a2 - s, up], [a0, up], ...(l.rows[1] ? [[l.rows[1][2] + g, l.rows[1][1]]] : []),
-        [a2 - s, under + g], [a0, under + g], [a2 + g, a1 - s / 2], [a2 + g, a3 - s / 2], [a0 - g - s, a1 - s / 2], [a0 - g - s, a3 - s / 2],
-        [(a0 + a2 - s) / 2, up], [(a0 + a2 - s) / 2, under + g], [a2 + g, up], [a0 - g - s, up], [a2 + g, under + g], [a0 - g - s, under + g]];
-      const boxes = spots.map(([x, y]) => [x, y, x + s, y + s]);
-      // 第三輪：可以碰到自己的小圖（字印貼著自己那一處，還是「旁」）
-      const hit = boxes.find((b) => mine(b) && clean(b, R_ROW_GAP)) || boxes.find((b) => mine(b) && clean(b, R_LETTER_PAD))
-        || boxes.find((b) => mine(b) && clean(b, R_LETTER_PAD, icons[i]));
-      // 都不行：蓋在自己名字框的一角（右上、左上、右下、左下），挑第一個離自己比離別處近的（蓋在框上，離自己是 0；別處的框也碰到就換一角）
-      const corners = [[a2 - s * 0.55, a1 - s * 0.55], [a0 - s * 0.45, a1 - s * 0.55], [a2 - s * 0.55, a3 - s * 0.45], [a0 - s * 0.45, a3 - s * 0.45]]
-        .map(([x, y]) => [x, y, x + s, y + s]);
-      l.seal = hit || corners.find(mine) || corners[0];
-      l.sealFit = !!hit;
-      placed.push(l.seal);
-    });
-  }
-  // 擠不下（FB-648 第二段乙）＝擺好的名字框 labels 還互壓：兩兩相交、壓到別處的小圖 icons（照地點順序）或你的旗 flag、碰到你的朱圈
-  // （圓心 you；真的那一圈：圓心到框最近那一點不到外緣 R_YOU）、鄰區出口 exits（照 regionExits 滑好的位置；出口的框四周有留白，
-  // 同測試的量法多過 2px² 才算），或出了 bounds（取景框與上面那一排底下）。沒有旗、朱圈（不在這一區、在路上）給 null
-  function regionCrowded(labels, icons, flag, you, exits, bounds) {
-    const inter = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
-    const outside = (r) => (r[2] - r[0]) * (r[3] - r[1]) - inter(r, bounds);
-    const ring = (r) => !!you && Math.hypot(Math.max(r[0] - you[0], 0, you[0] - r[2]), Math.max(r[1] - you[1], 0, you[1] - r[3])) < R_YOU;
-    return labels.some((l, i) => l.rows.some((r) => outside(r) > 0.5 || ring(r) || (!!flag && inter(r, flag) > 0.5)
-      || icons.some((b, j) => j !== i && inter(r, b) > 0.5) || exits.some((b) => inter(r, b) > 2)
-      || labels.some((m, j) => j !== i && m.rows.some((q) => inter(r, q) > 0.5))));
-  }
-  // 墨筆小圖（草圖「一乙」的城、營、寺、渡、山、野；底圖給的 glyph）：線色＝誰佔著，底是紙色；20×20、中心在 (0, 0)
-  function inkIcon(glyph, ink, paper) {
-    const sw = `stroke="${ink}" stroke-width="1.5" fill="${paper}" stroke-linejoin="round"`;
-    if (glyph === "城") return `<rect x="-10" y="-5" width="20" height="11" ${sw}/><path d="M-10 -5V-9H-6V-5M-3 -5V-9H3V-5M6 -5V-9H10V-5" ${sw}/><path d="M-3 6V1A3 3 0 0 1 3 1V6" fill="${ink}"/>`;
-    if (glyph === "營") return `<path d="M-10 8L0 -8L10 8Z" ${sw}/><path d="M-3 8L0 2L3 8" fill="${ink}"/><path d="M0 -8V-15L7 -13L0 -10" fill="${ink}" stroke="${ink}" stroke-width="1"/>`;
-    if (glyph === "寺") return `<path d="M-11 -1L0 -11L11 -1Z" ${sw}/><path d="M-7 -11L0 -17L7 -11Z" ${sw}/><rect x="-5" y="-1" width="10" height="8" ${sw}/>`;
-    if (glyph === "渡") return `<path d="M-11 2Q0 11 11 2Z" ${sw}/><line x1="0" y1="2" x2="0" y2="-11" stroke="${ink}" stroke-width="1.4"/><path d="M0 -11L9 -5L0 -1Z" ${sw}/>`;
-    if (glyph === "山") return `<path d="M-12 7L-5 -5L-1 1L4 -9L12 7Z" ${sw}/><path d="M4 -9l3 7" stroke="${ink}" stroke-width=".9"/>`;
-    return `<path d="M-9 6V-1M-5 6V-5M-1 6V0M3 6V-5M7 6V-1" stroke="${ink}" stroke-width="1.5" fill="none" stroke-linecap="round"/><circle cx="-7" cy="-3" r="1.2" fill="${ink}"/>`;
-  }
-  // 沒人佔的框與小圖：照底圖的 unheld（劇本的沒人佔一色）往墨色、紙色調
-  function noneInk(base) {
-    const u = (base.world && base.world.unheld) || SIDE_UNKNOWN.soft;
-    return { color: mixHex(u, MAP_INK, 0.42), tint: mixHex(u, MAP_HALO, 0.6) };
-  }
-  // 區圖的記號（純函式）：o = { v: regionFit 的取景, vw, vh: 地圖框, rid: 哪一區, wash: 塗層開著 }。回 [底下那一張, 上面那一張]
-  // （同天下圖：會跳的圈、你、旗子畫在上面那一張 #mkt）
-  function regionParts(base, st, o) {
-    const v = o.v, k = 1 / v.s, rid = o.rid, pts = regionPlaces(base, rid), pos = Object.fromEntries(pts.map((p) => [p.id, p])), z = regionSizes(v.s);
-    const mp = (X, Y) => [v.cx + (X - o.vw / 2) * k, v.cy + (Y - o.vh / 2) * k]; // 螢幕 → 地圖
-    const [fx0, fy0, fx1, fy1] = v.frame;
-    const labels = regionLabels(base, st, rid, v, o.vw, o.vh), exits = regionExits(base, rid, v, o.vw, o.vh, labels);
-    const none = noneInk(base), inkOf = (id) => (st.places[id] && st.places[id].control ? sideInk(st.places[id].control) : none);
-    const out = [];
-    if (o.wash) {
-      out.push(`<defs><filter id="r-wash" x="-30%" y="-30%" width="160%" height="160%"><feTurbulence type="fractalNoise" baseFrequency="${f2(R_WASH.freq / k)}" numOctaves="2" seed="3" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="${f1(R_WASH.warp * k)}"/><feGaussianBlur stdDeviation="${f1(R_WASH.blur * k)}"/></filter></defs>`);
-      const dots = pts.filter((p) => st.places[p.id] && st.places[p.id].control).map((p) => `<circle cx="${p.x}" cy="${p.y}" r="${f1(R_WASH.r * k)}" fill="${sideInk(st.places[p.id].control).soft}"/>`).join("");
-      out.push(`<g class="r-wash-layer" filter="url(#r-wash)" opacity="${R_WASH.op}" pointer-events="none">${dots}</g>`);
-    }
-    // 點空白：收起卡（取景框一塊透明的點擊區，畫在記號最底下）
-    out.push(`<rect data-act="region-blank" x="${f1(fx0)}" y="${f1(fy0)}" width="${f1(fx1 - fx0)}" height="${f1(fy1 - fy0)}" fill="#000000" fill-opacity="0"/>`);
-    // 別區的地點（FB-876，企劃者 2026-10-26 選甲）：全區也拖得過區界（panBox 照整張圖夾），取景框外不再蓋紙；別區的地點畫成第一層那種
-    // 淡墨小圖（點得到、不寫名，點了開那一處的卡），畫在本區的記號底下。本區的畫法、名字、點擊不變。
-    // 你站的那一處在別區（FB-884，企劃者 2026-10-26「全區看別區時也畫出你站的位置（朱圈），跟本區一樣」）：不畫成淡的，照本區的小圖畫（控制方的顏色，
-    // g.r-here）、朱圈與旗在上面那一張（跟本區同一份）；朱圈的點擊區在 g.r-hits 裡，所以淡墨小圖不跟朱圈疊成兩個
-    const hp = st.journey ? null : placeOf(base, st.here), away = hp && hp.region !== rid ? hp : null;
-    const others = base.places.filter((p) => p.region !== rid && st.places[p.id] && !(away && p.id === away.id)), oz = z.icon * k;
-    if (others.length) {
-      out.push(`<g class="r-faints">${others.map((p) => `<g class="r-faint" data-act="region-place" data-id="${esc(p.id)}" transform="translate(${p.x},${p.y}) scale(${f2(oz)})" opacity="${NEAR_FAINT}" style="cursor:pointer">`
-        + `<rect x="-14" y="-14" width="28" height="28" fill="#000000" fill-opacity="0"/>${inkIcon(p.glyph, MAP_INK, MAP_HALO)}</g>`).join("")}</g>`);
-    }
-    if (away) {
-      out.push(`<g class="r-here" data-act="region-place" data-id="${esc(away.id)}" transform="translate(${away.x},${away.y}) scale(${f2(z.icon * k)})" style="cursor:pointer">`
-        + `<rect x="-14" y="-14" width="28" height="28" fill="#000000" fill-opacity="0"/>${inkIcon(away.glyph, inkOf(away.id).color, MAP_HALO)}</g>`);
-    }
-    // 鄰區出口
-    for (const e of exits) {
-      const [x, y] = mp(e.box[0], e.box[1]), w = (e.box[2] - e.box[0]) * k, h = (e.box[3] - e.box[1]) * k;
-      out.push(`<g class="r-exit" data-act="region-go" data-id="${esc(e.to)}" style="cursor:pointer"><rect x="${f1(x)}" y="${f1(y)}" width="${f1(w)}" height="${f1(h)}" fill="#000000" fill-opacity="0"/>`
-        + `<text x="${f1(x + 3 * k)}" y="${f1(y + (R_EXIT + 0.5) * k)}" font-size="${f1(R_EXIT * k)}" fill="#6B5A44" stroke="${MAP_HALO}" stroke-width="${f1(3 * k)}" paint-order="stroke" style="font-family:serif">${esc(e.text)}</text></g>`);
-    }
-    // 墨筆小圖（點擊區跟著小圖）
-    for (const p of pts) {
-      out.push(`<g class="r-icon" data-act="region-place" data-id="${esc(p.id)}" transform="translate(${p.x},${p.y}) scale(${f2(z.icon * k)})" style="cursor:pointer">`
-        + `<rect x="-14" y="-14" width="28" height="28" fill="#000000" fill-opacity="0"/>${inkIcon(p.glyph, inkOf(p.id).color, MAP_HALO)}</g>`);
-    }
-    // 名字框：印章框（框色＝誰的）、框裡下緣的進度條（冷卻整條灰、不寫字）、名字、朱印寶、意境字
-    for (const L of labels) {
-      const p = pos[L.id], ink = inkOf(L.id), [x, y] = mp(L.l, L.t), fw = L.fw * k, fh = L.fh * k, line = L.big ? R_LINE_BIG : R_LINE;
-      const parts = [`<g class="r-label" data-act="region-place" data-id="${esc(L.id)}" style="cursor:pointer;font-family:serif">`,
-        `<rect class="r-frame" x="${f1(x)}" y="${f1(y)}" width="${f1(fw)}" height="${f1(fh)}" fill="${ink.tint}" fill-opacity=".95" stroke="${ink.color}" stroke-width="${f2(line * k)}"/>`];
-      if (L.bar) { // 貼著框線內側：左右下各讓半條框線
-        const i = (line / 2) * k, bx = x + i, bw = fw - 2 * i, bh = R_BAR * k, by = y + fh - i - bh;
-        parts.push(`<rect class="r-bar" x="${f1(bx)}" y="${f1(by)}" width="${f1(bw)}" height="${f1(bh)}" fill="${L.cool ? COOL_GREY : BAR_TRACK}"/>`);
-        if (!L.cool && L.tug) parts.push(`<rect class="r-bar-fill" data-side="${esc(L.tug.side)}" x="${f1(bx)}" y="${f1(by)}" width="${f1((bw * L.tug.pct) / 100)}" height="${f1(bh)}" fill="${sideInk(L.tug.side).color}"/>`);
-      }
-      parts.push(`<text x="${f1(x + R_PADX * k)}" y="${f1(y + (R_PADY + L.fs * 0.86) * k)}" font-size="${f1(L.fs * k)}" font-weight="${L.big ? 700 : 500}" fill="${MAP_INK}">${esc(p.name)}</text>`);
-      if (L.rich) {
-        const sx = x + fw + R_SEAL_GAP * k, sy = y + ((L.fh - R_SEAL) / 2) * k;
-        parts.push(`<g class="r-seal"><rect x="${f1(sx)}" y="${f1(sy)}" width="${f1(R_SEAL * k)}" height="${f1(R_SEAL * k)}" rx="${f1(2 * k)}" fill="${RICH_SEAL}"/><text x="${f1(sx + (R_SEAL / 2) * k)}" y="${f1(sy + 11.3 * k)}" font-size="${f1(11 * k)}" text-anchor="middle" fill="#FFFFFF">${RICH_WORD}</text></g>`);
-      }
-      if (L.letter && L.seal) { // 戰書下了、還沒開集結：名字框旁一枚「戰」字印——紙底朱框朱字，跟實心的「寶」分得開（企劃者挑 A 乙）；
-        // 位置是 regionLetterSeals 找的空位（多半在寶或名字框的右邊）
-        const [sx, sy] = mp(L.seal[0], L.seal[1]);
-        parts.push(`<g class="r-letter"><rect x="${f1(sx)}" y="${f1(sy)}" width="${f1(R_SEAL * k)}" height="${f1(R_SEAL * k)}" rx="${f1(2 * k)}" fill="${LETTER_SEAL_PAPER}" stroke="${FRONT_RED}" stroke-width="${f1(1.5 * k)}"/><text x="${f1(sx + (R_SEAL / 2) * k)}" y="${f1(sy + 11.3 * k)}" font-size="${f1(11 * k)}" text-anchor="middle" font-weight="700" fill="${FRONT_RED}">${LETTER_SEAL_WORD}</text></g>`);
-      }
-      if (L.fight) { // 攻城集結・交戰中：名字框外一圈紅、一閃一閃（借天下圖激戰的 .w-melee；企劃者挑 B 甲）。畫在印章框底下（框與字照舊清楚），
-        // 圈的外緣離框 R_FIGHT_OUT＋半條線，落在 FB-651 那一圈 R_ROW_GAP 的留白裡
-        const d = R_FIGHT_OUT * k;
-        parts.splice(1, 0, `<rect class="r-fight w-melee" x="${f1(x - d)}" y="${f1(y - d)}" width="${f1(fw + 2 * d)}" height="${f1(fh + 2 * d)}" rx="${f1(2 * k)}" fill="${FRONT_RED}" fill-opacity=".16" stroke="${FRONT_RED}" stroke-width="${f1(R_FIGHT_LINE * k)}"/>`);
-      }
-      const base0 = y + fh + (R_INS_GAP + L.insPx * 0.9) * k;
-      L.ins.forEach((ins, i) => parts.push(`<text class="r-ins" x="${f1(x + i * (L.insPx + 2) * k)}" y="${f1(base0)}" font-size="${f1(L.insPx * k)}" font-weight="700" fill="${ins.c}" stroke="${MAP_HALO}" stroke-width="${f1(2.6 * k)}" paint-order="stroke">${esc(ins.name)}</text>`));
-      out.push(parts.join("") + "</g>");
-    }
-    // 別區小圖的點擊區疊在本區的名字框、出口上面（同 FB-877 第一層的規則：名字不吃別處小圖的點擊）；透明的，畫面不變
-    // 你腳下那一處不在這一區時，朱圈的點擊區（36 見方，同第一層 FB-877 的朱圈）疊在最上面，不准被名字或出口吃掉
-    if (others.length || away) {
-      const r = 14 * oz, ring = away ? 18 * k : 0;
-      out.push(`<g class="r-hits">${others.map((p) => `<rect class="r-hit" data-act="region-place" data-id="${esc(p.id)}" x="${f1(p.x - r)}" y="${f1(p.y - r)}" width="${f1(2 * r)}" height="${f1(2 * r)}" fill="#000000" fill-opacity="0"/>`).join("")}`
-        + (away ? `<rect class="r-hit-you" data-act="region-place" data-id="${esc(away.id)}" x="${f1(away.x - ring)}" y="${f1(away.y - ring)}" width="${f1(2 * ring)}" height="${f1(2 * ring)}" fill="#000000" fill-opacity="0"/>` : "") + "</g>");
-    }
-    // 上面那一張：你（朱圈與旗；在路上畫在路上）。以前只在取景框裡才畫（框外蓋著紙、拖不出去）；選甲之後框外看得到、拖得到，你在哪裡都畫（FB-884）
-    const high = [], j = st.journey, h = pos[st.here] || away;
-    const hx = j ? j.x : h && h.x, hy = j ? j.y : h && h.y;
-    if (hx !== undefined) {
-      high.push(`<circle class="pulse" cx="${hx}" cy="${hy}" r="${f1(14 * k)}" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(2.2 * k)}" pointer-events="none"/>`);
-      high.push(j ? `<circle class="r-you" cx="${hx}" cy="${hy}" r="${f1(6 * k)}" fill="${FRONT_RED}" stroke="#FFFFFF" stroke-width="${f1(1.6 * k)}" pointer-events="none"/>`
-        : `<circle class="r-you" cx="${hx}" cy="${hy}" r="${f1(17 * k)}" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(2.4 * k)}" pointer-events="none"/>`);
-      high.push(`<path d="M${f1(hx + 13 * k)} ${f1(hy - 13 * k)}V${f1(hy - 38 * k)}L${f1(hx + 31 * k)} ${f1(hy - 32 * k)}L${f1(hx + 13 * k)} ${f1(hy - 26 * k)}" fill="${FRONT_RED}" stroke="#7A1F18" stroke-width="${f1(1.2 * k)}" pointer-events="none"/>`);
-    }
-    return [out.join(""), high.join("")];
-  }
-
-  // ── 輿圖第一層、第二層（減法季整合設計第七章，企劃者 2026-10-24「滿意」；S.mapLayer "near"）──
-  // 打開輿圖第一眼：落在你所在的區、以你為中心（nearFit）。同一張底圖（設色山水照舊），記號只畫你（朱圈＋墨筆小圖）、走得到的地方
-  // （跟你腳下這一處有路相連的：墨筆小圖＋地名＋分鐘數＋「多半」兩字，接了討伐懸賞寫「有賞」）、到它們的路、本週要去的那一處（金路、紅旗、
-  // 「本週」朱印、一句為什麼：疊層的 week，mapdata._week_place）、有約戰的塊一面小旗；其餘地點只剩淡淡的墨筆小圖（點得到），
-  // 不寫名、不畫框、悟字、寶印、鄰區箭頭、戰線、歸屬色。上面一排只剩大區名、「全區」、「天下」（regionTopHtml）。
-  // 點一處（第二層）：那一處放大、路變金（drawSel）、其餘退成四成，卡只佔三分之一（peekPx），地圖輕推一下讓那一處露在卡上方（nearNudge）。
-  // 「全區」是舊的區圖（"region"，第三層），「天下」是天下圖（"world"，第四層）；每一次打開輿圖都從這一層開始（goTab）。拖與縮放照舊疊在取景上
-  const NEAR_EDGE = { x: 84, t: 44, b: 34 }; // 取景：走得到的地方離地圖框左右、上（旗）、下（字）至少多少（px）
-  const NEAR_MAX = 2.4, NEAR_MIN = 0.6; // 第一層的倍率夾在這中間（相連的地點很近時不放到太大、很遠時不縮到看不清）
-  const NEAR_NAME = 15, NEAR_SUB = 12, NEAR_GAP = 3; // 名字、底下那一行（分鐘・多半）的字級、兩行之間（px）
-  const NEAR_FAINT = 0.34, NEAR_DIM = 0.4, NEAR_PICK = 1.35; // 其餘地點多淡；點了一處時其餘退成幾成；點的那一處放大幾倍
-  const NEAR_RING = 22; // 點了的那一處 drawSel 那一圈的半徑（px）
-  const NEAR_ROAD = "#8B6B43", NEAR_GOLD = "#C8961E", NEAR_GOLD_TEXT = "#9A6E12", NEAR_SUB_INK = "#5E4E3A";
-  const NEAR_HOME_PX = 80; // 第一層拖得離原本的位置多遠（px）才出「回到我這」
-  const NEAR_PEEK_MIN = 170; // 卡只佔三分之一（第二層），最矮多高
-  const NEAR_WORDS = { you: "你", week: "本週", weekGo: "本週要去", bounty: "有賞", more: "其餘地點按「全區」", none: "這裡沒有路通出去。", home: "回到我這", full: "全區" }; // 待 joy 潤
+  // ── 一張到底（企劃者 2026-10-30「可以 這樣改」，示意稿第四版：讓地圖能自由滑動縮放、搜尋）──
+  // 以前是三張固定取景的圖（第一層、全區、天下），從 A 到 B 要切好幾次地區。現在整個天下一張：一指拖（放手會順著滑）、兩指捏、滾輪、
+  // 雙擊放大，從看得到整張天下縮到約 3 倍。字照倍率分三段（drawMarks）：遠看大區名與各方幾處、地點是一顆照誰佔著上色的點、地面照歸屬上色
+  // （以前的天下圖）；中間每一處的小圖與名字、誰佔著的小印、寶；近看再加此地能悟、幾分・多什麼・勝算。名字撞在一起時讓開，讓不開的先收
+  // （選的、你在的、本週要去的、篩到的、要地、近的先畫）。
+  // 底圖不再用伺服器畫好的那一張：主機畫的淡彩水墨（web/img/map/base.webp）疊上州界與路，烤成一張圖（bakeBase）；抓不到那一張時
+  // 網頁照內容（底圖的 paint：大區、河、山、林）自己畫。山河名照 paint 寫在字那一層；
+  // 城與營用畫的小圖（web/img/map）。拖縮的每一幀只換兩層的 transform（底圖那一層、字那一層照上一次排字的倍率先跟著縮放），
+  // 縮放差過一截、跨了一段、停下來才重排字（地點多也不卡）。字待 joy 潤
+  const MV_WORDS = {
+    search: "要去哪？地點、人物、店面", all: "全部", sense: "能悟", tl: "⏱ 版圖", me: "回到我", fit: "看整張天下",
+    from: "從{place}出發", road: "沿路能去", swipe: "由近到遠，左右滑", none: "附近沒有。拉遠一點看看，或換個標籤。", week: "本週", here: "你在這裡",
+    weekHead: "本週要事", figures: "附近的人物", jump: "跳到大區", places: "地點", people: "人物",
+    notFound: "找不到「{q}」。地名、大區、人物、店面（醫館、鐵匠鋪、馬市）都找得到。",
+  };
+  const MV_CHIP_PEOPLE = "有人物";
+  const NEAR_WORDS = { weekGo: "本週要去", bounty: "有賞" }; // 待 joy 潤
   const NEAR_PULL = "往上拉：能悟、對手、人物、今日產出"; // 待 joy 潤
-  const ZH_NUM = ["零", "一", "兩", "三", "四", "五", "六", "七", "八", "九", "十"];
-  function nearRoadsLine(n) {
-    return n <= 10 ? `${ZH_NUM[n]}條路，點一處出發。` : `${n} 條路，點一處出發。`; // 待 joy 潤
-  }
+  const RICH_WORD = "寶", LETTER_SEAL_WORD = "戰";
+  const MV_ZMAX = 3.2; // 最多放大幾倍（地圖 1 單位＝螢幕 1px 是 1 倍）；最小是整張天下放得下
+  const MV_LV1 = 0.72, MV_LV2 = 1.35; // 字分三段的倍率
+  const MV_TOP = 100, MV_TL_TOP = 36; // 上面浮著的搜尋列與篩選讓開多高（px）；版圖變化時只讓開「正在看第 N 週」
+  const MV_OPEN_Z = 1.15, MV_PICK_Z = 1.4, MV_HOME_Z = 1.2, MV_PREVIEW_Z = 1.1; // 打開輿圖、搜到一處、回到我、滑卡片時至少放到多大
+  const MV_SLOP = 6; // 按下之後移過幾 px 才算拖
+  const MV_CLICK = 400; // 拖完放開之後，多久內落在地圖上的 click 吃掉（ms）
+  const MV_WHEEL = 0.0015; // 滾輪每 1px 的 deltaY 縮放多少（exp）
+  const MV_TAP2 = 300; // 兩下點在多久之內算雙擊（ms）
+  const MV_FRICTION = 0.92, MV_COAST = 0.15; // 放手後每 16ms 剩幾成速度；放手時至少多快（px/ms）才順著滑
+  const MV_RELAYOUT = 0.18; // 拖縮中字那一層先跟著縮放，倍率差過這麼多（log）才重排
+  const MV_FLY = 520, MV_FLY_FAR = 800; // 飛過去多久（ms）；遠的先拉遠一點再拉近
+  const MV_PAINT = { city: 62, city2: 62, outpost: 40, tents: 46, camp: 46 }; // 畫的小圖多寬（px，近看那一段；中間那一段八成）
+  const MV_MOUNTS = ["m2", "m3", "m4", "m5", "m6"]; // 底圖上一座一座蓋上去的山
+  const MV_INK = "#2F2821", MV_SUB_INK = "#6E5E49", MV_UNHELD = "#8C7F68";
+  const MV_NEAR_MAX = 24; // 附近那一排最多幾張
+  const mvImg = (k) => `/static/img/map/${k}.webp`;
+  const mvLevel = (z) => (z < MV_LV1 ? 0 : z < MV_LV2 ? 1 : 2);
+
+  // ── 小工具：位置、路、名字旁那一行 ──
+  const placeXY = (id) => {
+    const p = id && S.mapBase && S.mapBase.places.find((x) => x.id === id);
+    return p ? [p.x, p.y] : null;
+  };
   // 你此刻在哪（在路上是路上那一點）
   function youXY(base, st) {
     if (st.journey) return [st.journey.x, st.journey.y];
     const h = placeOf(base, st.here);
     return h ? [h.x, h.y] : null;
   }
-  // 走得到的地方：跟你腳下這一處有路相連的（底圖的 edges，都是開放的）；在路上再加上要去的那一站
-  function nearIds(base, st) {
-    const out = [];
-    for (const [a, b] of base.edges || []) {
-      if (a === st.here && st.places[b]) out.push(b);
-      else if (b === st.here && st.places[a]) out.push(a);
-    }
-    if (st.journey && st.journey.to !== st.here && !out.includes(st.journey.to) && st.places[st.journey.to]) out.push(st.journey.to);
-    return out;
-  }
-  // 本週要去的那一處（疊層的 week；那一處不在疊層裡就不畫）
+  // 本週要去的那一處（疊層的 week；那一處不在疊層裡就不算）
   function nearWeek(st) {
     return st.week && st.places[st.week.id] ? st.week : null;
-  }
-  // 第一層的取景：以你為中心（露出來的那一塊的正中），倍率讓走得到的地方都在框裡（左右留 NEAR_EDGE.x 給名字）；拖的範圍是整張圖
-  // （FB-876）。回 { s, cx, cy, frame, bottom }（同 regionFit）
-  function nearFit(base, st, vw, vh, top = REGION_TOP, pad = REGION_PAD) {
-    const me = youXY(base, st);
-    if (!me) return null;
-    const ids = nearIds(base, st), y0s = top + NEAR_EDGE.t, y1s = Math.max(y0s + 40, vh - pad - NEAR_EDGE.b);
-    const midY = (y0s + y1s) / 2, halfW = Math.max(40, vw / 2 - NEAR_EDGE.x), halfH = Math.max(30, (y1s - y0s) / 2);
-    let s = NEAR_MAX;
-    for (const id of ids) {
-      const p = placeOf(base, id);
-      if (!p) continue;
-      const dx = Math.abs(p.x - me[0]), dy = Math.abs(p.y - me[1]);
-      if (dx > 0.5) s = Math.min(s, halfW / dx);
-      if (dy > 0.5) s = Math.min(s, halfH / dy);
-    }
-    s = Math.max(NEAR_MIN, s);
-    // 拖的範圍是整張圖（FB-876，企劃者 2026-10-26「輿圖拖曳的時候沒辦法跨區」）：其餘地點（別區的也是）本來就畫成淡墨小圖、點得到，
-    // 以前夾在這一區的地點與走得到的地方外框加 60，拖不過區界
-    const wf = base.world && base.world.frame, W = base.w || 900, H = base.h || 1340;
-    const frame = wf ? [wf[0], wf[1], wf[0] + wf[2], wf[1] + wf[3]] : [0, 0, W, H];
-    return { s, cx: me[0], cy: me[1] + (vh / 2 - midY) / s, frame, bottom: y1s };
   }
   // 一條路畫成哪一條曲線（底圖的 roads：跟底圖同一條二次曲線）；沒有那一份（舊的底圖）照直線
   const roadMemo = new WeakMap();
@@ -1461,8 +719,8 @@
     return d;
   }
   // 名字旁那一行：分鐘數＋多半（城多事、野多敵……；接了討伐懸賞寫「有賞」）；本週那一處寫分鐘數＋一句為什麼
-  // 底圖帶 viewer_mostly（減法季探索一顆開著，伺服器照你站過去之後鈕上的小字給）時，兩個字整個照底圖：「有賞」也是伺服器給的
-  // （接了、而且對那一路不是必敗才寫，必敗放開時照表），這裡不另判討伐；沒帶（關著的季、序章）照舊，疊層的 bounty 含「討伐」就寫「有賞」
+  // 底圖帶 viewer_mostly（減法季探索一顆開著，伺服器照你站過去之後鈕上的小字給）時，兩個字整個照底圖：「有賞」也是伺服器給的；
+  // 沒帶（關著的季、序章）照舊，疊層的 bounty 含「討伐」就寫「有賞」
   function nearSub(base, st, id, week) {
     const q = st.places[id], b = placeOf(base, id);
     const far = q.minutes !== null && q.minutes !== undefined ? `${Number(q.minutes)} 分` : "";
@@ -1470,192 +728,840 @@
     const tag = !base.viewer_mostly && q.bounty && q.bounty.includes("討伐") ? NEAR_WORDS.bounty : b.mostly || "";
     return [far, tag].filter(Boolean).join("・");
   }
-  // 第一層的記號（純函式）：o = { v: nearFit 的取景, vw, vh, sel: 點了哪一處 }。回 [底下那一張, 上面那一張]
-  function nearParts(base, st, o) {
-    const v = o.v, k = 1 / v.s, z = regionSizes(v.s), me = youXY(base, st), sel = o.sel || null;
-    const W = base.w || 900, H = base.h || 1340;
-    const scr = (x, y) => [o.vw / 2 + (x - v.cx) * v.s, o.vh / 2 + (y - v.cy) * v.s], mp = (X, Y) => [v.cx + (X - o.vw / 2) * k, v.cy + (Y - o.vh / 2) * k];
-    const week = nearWeek(st), ids = nearIds(base, st), here = st.journey ? null : st.here;
-    const shown = [...ids];
-    if (week && week.id !== here && !shown.includes(week.id)) shown.push(week.id);
-    const dim = (id) => (sel && id !== sel ? ` opacity="${NEAR_DIM}"` : "");
-    const out = [`<rect data-act="region-blank" x="${-W}" y="${-H}" width="${3 * W}" height="${3 * H}" fill="#000000" fill-opacity="0"/>`];
-    // 其餘地點：淡淡的墨筆小圖（點得到：第二層照樣開它的卡）
-    for (const p of base.places) {
-      if (p.id === here || shown.includes(p.id) || !st.places[p.id]) continue;
-      out.push(`<g class="n-faint" data-act="region-place" data-id="${esc(p.id)}" transform="translate(${p.x},${p.y}) scale(${f2(z.icon * k)})" opacity="${NEAR_FAINT}" style="cursor:pointer">`
-        + `<rect x="-14" y="-14" width="28" height="28" fill="#000000" fill-opacity="0"/>${inkIcon(p.glyph, MAP_INK, MAP_HALO)}</g>`);
-    }
-    // 到走得到的地方的路（照底圖那一條曲線描深一點）
-    if (!st.journey) {
-      for (const id of ids) {
-        const c = roadBend(base, here, id), a = placeOf(base, here), b = placeOf(base, id);
-        if (!a || !b) continue;
-        out.push(`<path class="n-road" d="M${a.x},${a.y}${c ? `Q${c[0]},${c[1]} ` : "L"}${b.x},${b.y}" fill="none" stroke="${NEAR_ROAD}" stroke-width="${f2(2.6 * k)}" stroke-linecap="round" pointer-events="none"${dim(id)}/>`);
-      }
-    }
-    // 本週那一處：金路、一圈淡金
-    if (week && week.id !== here) {
-      const d = routeD(base, st, week.id), w = placeOf(base, week.id);
-      if (d) out.push(`<path class="n-gold" d="${d}" fill="none" stroke="${NEAR_GOLD}" stroke-width="${f2(4 * k)}" stroke-linecap="round" stroke-opacity=".9" pointer-events="none"${dim(week.id)}/>`);
-      out.push(`<circle class="n-week-halo" cx="${w.x}" cy="${w.y}" r="${f1(19 * k)}" fill="${NEAR_GOLD}" fill-opacity=".22" pointer-events="none"${dim(week.id)}/>`);
-    }
-    // 走得到的地方與本週那一處：墨筆小圖（墨色，不畫歸屬色）
-    const boxes = [];
-    const ring = me ? scr(me[0], me[1]) : null;
-    if (ring) boxes.push([ring[0] - 20, ring[1] - 20, ring[0] + 20, ring[1] + 34 + NEAR_SUB]);
-    for (const id of shown) {
-      const p = placeOf(base, id), f = id === sel ? NEAR_PICK : 1;
-      out.push(`<g class="n-icon" data-act="region-place" data-id="${esc(id)}" transform="translate(${p.x},${p.y}) scale(${f2(z.icon * f * k)})" style="cursor:pointer"${dim(id)}>`
-        + `<rect x="-14" y="-14" width="28" height="28" fill="#000000" fill-opacity="0"/>${inkIcon(p.glyph, MAP_INK, MAP_HALO)}</g>`);
-      const [X, Y] = scr(p.x, p.y);
-      const rx = id === sel ? NEAR_RING : z.hw, ry = id === sel ? NEAR_RING : z.hh;
-      boxes.push([X - rx, Y - ry, X + rx, Y + ry]);
-      if (week && week.id === id) boxes.push([X + 6, Y - 40, X + 30, Y - 8]); // 紅旗
-    }
-    // 名字：每一處先試離你遠的那一邊，再試另一邊、下面、上面；挑第一個不壓別的名字、小圖、你的朱圈的（都壓就照第一個）
-    const inter = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
-    const sealW = textW(NEAR_WORDS.week, 11) + 8;
-    for (const id of shown) {
-      const p = placeOf(base, id), [X, Y] = scr(p.x, p.y), f = id === sel ? NEAR_PICK : 1, isWeek = !!week && week.id === id;
-      const sub = nearSub(base, st, id, week), nameW = textW(p.name, NEAR_NAME) + (isWeek ? sealW + 4 : 0);
-      // 點了的那一處：名字讓開 drawSel 那一圈（半徑 NEAR_RING）
-      const Wd = Math.max(nameW, textW(sub, NEAR_SUB)), Hd = NEAR_NAME + NEAR_GAP + NEAR_SUB;
-      const hw = id === sel ? NEAR_RING + 3 : z.hw + 4, hh = id === sel ? NEAR_RING + 2 : z.hh + 3;
-      const right = !me || p.x >= me[0];
-      const spots = [right ? [hw, -Hd / 2] : [-hw - Wd, -Hd / 2], right ? [-hw - Wd, -Hd / 2] : [hw, -Hd / 2], [-Wd / 2, hh], [-Wd / 2, -hh - Hd]];
-      let at = spots[0];
-      for (const sp of spots) {
-        const bb = [X + sp[0], Y + sp[1], X + sp[0] + Wd, Y + sp[1] + Hd];
-        const inside = bb[0] >= 2 && bb[2] <= o.vw - 2 && bb[1] >= REGION_TOP + 2;
-        if (inside && !boxes.some((b) => inter(bb, b) > 0.5)) { at = sp; break; }
-      }
-      const L = X + at[0], T = Y + at[1];
-      boxes.push([L, T, L + Wd, T + Hd]);
-      const [x, y] = mp(L, T), ty = y + NEAR_NAME * 0.88 * k, sy = y + (NEAR_NAME + NEAR_GAP + NEAR_SUB * 0.88) * k;
-      const halo = `stroke="${MAP_HALO}" stroke-width="${f1(3 * k)}" paint-order="stroke"`;
-      // 點擊區照字：名字那一行、底下那一行各一塊（FB-877：整個名字框一塊的話，框裡沒有字的角會蓋住別處看得到的字）
-      const subW = sub ? textW(sub, NEAR_SUB) : 0;
-      const parts = [`<g class="n-label" data-act="region-place" data-id="${esc(id)}" style="cursor:pointer;font-family:serif"${dim(id)}>`,
-        `<rect x="${f1(x)}" y="${f1(y)}" width="${f1(nameW * k)}" height="${f1((NEAR_NAME + NEAR_GAP) * k)}" fill="#000000" fill-opacity="0"/>`,
-        subW ? `<rect x="${f1(x)}" y="${f1(y + (NEAR_NAME + NEAR_GAP) * k)}" width="${f1(subW * k)}" height="${f1(NEAR_SUB * k)}" fill="#000000" fill-opacity="0"/>` : "",
-        `<text x="${f1(x)}" y="${f1(ty)}" font-size="${f1(NEAR_NAME * k)}" font-weight="700" fill="${MAP_INK}" ${halo}>${esc(p.name)}</text>`];
-      if (isWeek) { // 「本週」朱印：名字後面
-        const sx = x + (textW(p.name, NEAR_NAME) + 4) * k, sh = 15;
-        parts.push(`<g class="n-week"><rect x="${f1(sx)}" y="${f1(y + ((NEAR_NAME - sh) / 2 + 0.5) * k)}" width="${f1(sealW * k)}" height="${f1(sh * k)}" rx="${f1(2.5 * k)}" fill="${FRONT_RED}"/>`
-          + `<text x="${f1(sx + (sealW / 2) * k)}" y="${f1(y + ((NEAR_NAME - sh) / 2 + 12) * k)}" font-size="${f1(11 * k)}" text-anchor="middle" fill="#FFFFFF">${NEAR_WORDS.week}</text></g>`);
-      }
-      if (sub) parts.push(`<text class="n-sub" x="${f1(x)}" y="${f1(sy)}" font-size="${f1(NEAR_SUB * k)}" font-weight="${isWeek ? 700 : 500}" fill="${isWeek ? NEAR_GOLD_TEXT : NEAR_SUB_INK}" ${halo}>${esc(sub)}</text>`);
-      out.push(parts.join("") + "</g>");
-    }
-    // 小圖與你的點擊區疊在名字上面（FB-877，企劃者 2026-10-26「文字甚至會直接擋到地點的選取」）：名字挑位子只讓開走得到的那幾處，擠的時候
-    // 會壓到別處的淡墨小圖（例：站潁川郡，潁水河畔的名字蓋著長社），你（上面那一張）不收點擊、底下是別處的名字就點到別處。透明的一層，畫面不變：
-    // 由下往上是「你・地名」、每一處的小圖、你的朱圈——點到小圖選那一處、點你與「你・地名」選你腳下（字壓著別處的小圖時小圖優先），
-    // 點名字的其餘地方照舊是它自己那一處
-    const hit = (id, x, y, w, h) => `<rect class="n-hit" data-act="region-place" data-id="${esc(id)}" x="${f1(x)}" y="${f1(y)}" width="${f1(w)}" height="${f1(h)}" fill="#000000" fill-opacity="0"/>`;
-    const hp0 = me && here ? placeOf(base, here) : null;
-    if (hp0) {
-      const fs = NEAR_SUB + 1, tw = textW(`${NEAR_WORDS.you}・${hp0.name}`, fs), seal = week && week.id === here ? sealW + 4 : 0;
-      out.push(hit(here, me[0] - ((tw + seal) / 2) * k, me[1] + 20 * k, (tw + seal) * k, (fs + 4) * k)); // 「你・地名」（與朱印）
-    }
-    for (const p of base.places) {
-      if (p.id === here || !st.places[p.id]) continue;
-      const r = 14 * z.icon * (p.id === sel && shown.includes(p.id) ? NEAR_PICK : 1) * k; // 同小圖那一組的透明框（28 見方照小圖的倍率）
-      out.push(hit(p.id, p.x - r, p.y - r, 2 * r, 2 * r));
-    }
-    if (hp0) out.push(hit(here, me[0] - 18 * k, me[1] - 18 * k, 36 * k, 36 * k)); // 朱圈（半徑 17、線寬 2.4）
-    // 上面那一張：有約戰的塊一面小旗、本週那一處的紅旗、你（朱圈＋墨筆小圖＋「你・地名」；在路上是路上那一點）
-    const high = [];
-    for (const p of base.places) {
-      const q = st.places[p.id];
-      if (!q || !(q.siege || q.duel)) continue;
-      const s2 = (p.id === sel ? NEAR_PICK : 1) * z.icon;
-      high.push(`<path class="n-duel" d="M${f1(p.x - 12 * s2 * k)} ${f1(p.y - 8 * s2 * k)}V${f1(p.y - 24 * s2 * k)}L${f1(p.x - 3 * s2 * k)} ${f1(p.y - 20.5 * s2 * k)}L${f1(p.x - 12 * s2 * k)} ${f1(p.y - 17 * s2 * k)}" fill="#4A4038" stroke="#4A4038" stroke-width="${f1(1 * k)}" pointer-events="none"${p.id === here || shown.includes(p.id) ? dim(p.id) : ` opacity="${NEAR_FAINT + 0.3}"`}/>`);
-    }
-    if (week && week.id !== here) {
-      const w = placeOf(base, week.id), fx = w.x + 8 * k, fy = w.y - 8 * k;
-      high.push(`<path class="n-flag" d="M${f1(fx)} ${f1(fy)}V${f1(fy - 30 * k)}L${f1(fx + 20 * k)} ${f1(fy - 23 * k)}L${f1(fx)} ${f1(fy - 16 * k)}" fill="${FRONT_RED}" stroke="#7A1F18" stroke-width="${f1(1.2 * k)}" pointer-events="none"${dim(week.id)}/>`);
-    }
-    if (me) {
-      const [hx, hy] = me, hp = here && placeOf(base, here);
-      high.push(`<circle class="pulse" cx="${hx}" cy="${hy}" r="${f1(14 * k)}" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(2.2 * k)}" pointer-events="none"/>`);
-      if (hp) {
-        high.push(`<circle class="r-you" cx="${hx}" cy="${hy}" r="${f1(17 * k)}" fill="${MAP_HALO}" fill-opacity=".9" stroke="${FRONT_RED}" stroke-width="${f1(2.4 * k)}"/>`);
-        high.push(`<g class="n-you" data-act="region-place" data-id="${esc(here)}" transform="translate(${hx},${hy}) scale(${f2(0.95 * k)})" style="cursor:pointer">${inkIcon(hp.glyph, FRONT_RED, MAP_HALO)}</g>`);
-      } else high.push(`<circle class="r-you" cx="${hx}" cy="${hy}" r="${f1(6 * k)}" fill="${FRONT_RED}" stroke="#FFFFFF" stroke-width="${f1(1.6 * k)}" pointer-events="none"/>`);
-      const tag = hp ? `${NEAR_WORDS.you}・${hp.name}` : NEAR_WORDS.you, fs = NEAR_SUB + 1, ty = hy + (20 + fs) * k;
-      // 本週要去的就是腳下這一處：「本週」朱印接在「你・地名」後面
-      const seal = week && week.id === here ? sealW : 0, tx = hx - (seal ? (seal + 4) / 2 : 0) * k;
-      high.push(`<text class="n-you-name" x="${f1(tx)}" y="${f1(ty)}" font-size="${f1(fs * k)}" font-weight="700" text-anchor="middle" fill="${FRONT_RED}" stroke="${MAP_HALO}" stroke-width="${f1(3 * k)}" paint-order="stroke" style="font-family:serif" pointer-events="none">${esc(tag)}</text>`);
-      if (seal) {
-        const sx = tx + (textW(tag, fs) / 2 + 4) * k;
-        high.push(`<g class="n-week" pointer-events="none"><rect x="${f1(sx)}" y="${f1(ty - 12.5 * k)}" width="${f1(seal * k)}" height="${f1(15 * k)}" rx="${f1(2.5 * k)}" fill="${FRONT_RED}"/>`
-          + `<text x="${f1(sx + (seal / 2) * k)}" y="${f1(ty - 1 * k)}" font-size="${f1(11 * k)}" text-anchor="middle" fill="#FFFFFF" style="font-family:serif">${NEAR_WORDS.week}</text></g>`);
-      }
-    }
-    return [out.join(""), high.join("")];
+  // 估一段字在螢幕上多寬（px）：中日韓的字一個字寬、數字與英文約六成、空白約三成
+  function textW(text, px) {
+    let w = 0;
+    for (const ch of String(text)) w += ch === " " ? 0.3 : ch.charCodeAt(0) < 0x2e80 ? 0.6 : 1;
+    return w * px;
   }
-  // 第一層沒點地點時抽屜收著的那一行：在路上照 journeyHtml；不然「四條路，點一處出發。」（點了攤開你腳下這一處的卡）＋「其餘地點按「全區」」
-  function nearLineHtml(base, st) {
-    if (st.journey) return journeyHtml(st);
-    const n = nearIds(base, st).length;
-    return `<div class="m-wline"><button type="button" class="m-mini" data-act="map-open" aria-label="攤開你腳下這一處"><span>${esc(n ? nearRoadsLine(n) : NEAR_WORDS.none)}</span></button><small class="m-more">${esc(NEAR_WORDS.more)}</small></div>`;
+  // 墨筆小圖（城、營、寺、渡、山、野；底圖給的 glyph）：20×20、中心在 (0, 0)
+  function inkIcon(glyph, ink, paper) {
+    const sw = `stroke="${ink}" stroke-width="1.3" fill="${paper}" stroke-linejoin="round" stroke-linecap="round"`;
+    if (glyph === "城") return `<rect x="-10" y="-5" width="20" height="11" ${sw}/><path d="M-10 -5V-9H-6V-5M-3 -5V-9H3V-5M6 -5V-9H10V-5" ${sw}/><path d="M-3 6V1A3 3 0 0 1 3 1V6" fill="${ink}"/>`;
+    if (glyph === "營") return `<path d="M-10 8L0 -8L10 8Z" ${sw}/><path d="M-3 8L0 2L3 8" fill="${ink}"/><path d="M0 -8V-15L7 -13L0 -10" fill="${ink}" stroke="${ink}" stroke-width="1"/>`;
+    if (glyph === "寺") return `<path d="M-11 -1L0 -11L11 -1Z" ${sw}/><path d="M-7 -11L0 -17L7 -11Z" ${sw}/><rect x="-5" y="-1" width="10" height="8" ${sw}/>`;
+    if (glyph === "渡") return `<path d="M-11 2Q0 11 11 2Z" ${sw}/><line x1="0" y1="2" x2="0" y2="-11" stroke="${ink}" stroke-width="1.4"/><path d="M0 -11L9 -5L0 -1Z" ${sw}/>`;
+    if (glyph === "山") return `<path d="M-12 7L-5 -5L-1 1L4 -9L12 7Z" ${sw}/><path d="M4 -9l3 7" stroke="${ink}" stroke-width=".9"/>`;
+    return `<path d="M-9 6V-1M-5 6V-5M-1 6V0M3 6V-5M7 6V-1" stroke="${ink}" stroke-width="1.5" fill="none" stroke-linecap="round"/><circle cx="-7" cy="-3" r="1.2" fill="${ink}"/>`;
   }
-  // 第二層：點的那一處要露在卡的上方（企劃者 2026-10-24 圖解版第七章【PM】：地圖輕推一下）。卡此刻多高照 peekPx；已經露著就不動
-  function nearNudge() {
-    if (S.mapLayer !== "near" || !S.mapSel) return;
-    const g = mapGeom(document.getElementById("map")), v = S.nearView, p = placeXY(S.mapSel);
-    if (!g || !v || !p) return;
-    const q = panOf(), sx = q.z * (g.vw / 2 + (p[0] - v.cx) * v.s) + q.x, sy = q.z * (g.vh / 2 + (p[1] - v.cy) * v.s) + q.y;
-    const top = REGION_TOP + 46, bottom = g.vh - mapDrawerPx(S.mapDrawer) - 40;
-    let dx = 0, dy = 0;
-    if (sy > bottom) dy = Math.max(top, bottom - 20) - sy;
-    else if (sy < top) dy = top - sy;
-    if (sx < 30) dx = 30 - sx;
-    else if (sx > g.vw - 30) dx = g.vw - 30 - sx;
-    if (!dx && !dy) return;
-    clearTimeout(glideTimer);
-    g.wrap.classList.add("glide");
-    glideTimer = setTimeout(() => g.wrap.classList.remove("glide"), 200);
-    panSet({ z: q.z, x: q.x + dx, y: q.y + dy });
+  // 城與營用畫的小圖（大城、小城、大營、小營）；其餘是 null（用墨筆小圖）。兩張大城照 id 錯開
+  function paintKey(b) {
+    if (b.glyph === "城") return b.big ? ([...String(b.id)].reduce((n, ch) => n + ch.charCodeAt(0), 0) % 2 ? "city2" : "city") : "outpost";
+    if (b.glyph === "營") return b.big ? "tents" : "camp";
+    return null;
   }
-  // 「回到我這」那一顆（企劃者 2026-10-24「輿圖都要可以拖」，拖遠了才出來【PM】）：第一層拖得離原本的位置超過 NEAR_HOME_PX、
-  // 全區與天下把你拖出了框才出；點了回第一層、以你為中心（homeFar 只看此刻的取景與拖縮，不量排版）
-  function homeFar() {
-    const v = curView(), f = S.panFrom, me = S.mapBase && S.mapState && youXY(S.mapBase, S.mapState);
-    if (!v || !f || !me) return false;
-    if (S.mapLayer !== "near" && S.mapLayer !== "world" && S.mapRegion !== hereRegion()) return true;
-    const q = panOf(), x1 = f.vw / 2 + (me[0] - v.cx) * v.s, y1 = f.vh / 2 + (me[1] - v.cy) * v.s;
-    const x = q.z * x1 + q.x, y = q.z * y1 + q.y;
-    if (S.mapLayer === "near") return Math.hypot(x - x1, y - y1) > NEAR_HOME_PX;
-    return x < 0 || x > f.vw || y < REGION_TOP || y > f.vh - 54;
+  // 卡片、搜尋結果裡的小圖
+  function iconHtml(b, s = 30) {
+    const k = paintKey(b);
+    return k ? `<img src="${mvImg(k)}" width="${s + 6}" alt="" draggable="false">`
+      : `<svg width="${s}" height="${s}" viewBox="-15 -17 30 30" aria-hidden="true">${inkIcon(b.glyph, MV_INK, "none")}</svg>`;
   }
-  function homeCheck() {
-    const btn = document.getElementById("map-home");
-    if (!btn) return;
-    const show = S.mapMode !== "timeline" && homeFar();
-    if (btn.hidden === show) btn.hidden = !show;
+  // 正在翻那一層的斜紋（每一個出現在 tug 裡的攻方一個 <pattern>，顏色照 sideInk；地圖單位，k＝1／倍率）
+  const WORLD_TUG_MAX = 0.75, WORLD_TUG_GAP = 5, WORLD_TUG_LINE = 2.2;
+  const WORLD_COOL_DASH = 4, WORLD_COOL_GAP = 3, WORLD_COOL_LINE = 1.4;
+  const WORLD_LETTER_DASH = 6, WORLD_LETTER_GAP = 3.5, WORLD_LETTER_LINE = 2.6;
+  const WORLD_INK = "#3A3127", WORLD_RIM = "#5B4A38", WORLD_GROUND = 0.8;
+  function tugPattern(side, k) {
+    const ink = sideInk(side), gap = f1(WORLD_TUG_GAP * k);
+    return `<pattern id="wt-${esc(side)}" patternUnits="userSpaceOnUse" width="${gap}" height="${gap}" patternTransform="rotate(45)">`
+      + `<rect width="${gap}" height="${gap}" fill="${ink.soft}" fill-opacity=".55"/><line x1="0" y1="0" x2="0" y2="${gap}" stroke="${ink.color}" stroke-width="${f1(WORLD_TUG_LINE * k)}"/></pattern>`;
   }
-  // 回第一層（打開輿圖、「回到我這」、第三層再按一次「全區」、天下圖的「進入此區」）：你在的那一區、以你為中心、1 倍；sel 給了開那一處的卡
-  function toNear(sel = null) {
-    stopPlay();
-    Object.assign(S, { mapLayer: "near", mapRegion: hereRegion() || S.mapRegion, mapMode: sel ? "place" : "overview", mapSel: sel, mapWeek: null, mapQuery: "",
-      mapDrawer: sel ? "peek" : "min", mapPan: null, panFrom: null });
-    applyMapView(true);
-    remapChrome();
+  // 這一格正在被誰翻、翻到幾成（疊層的 tug 裡進度最高的那一方；守方自己、進度 0 不算）；沒有是 null。名字底下的進度條也照它
+  function tugOf(st, id, holder) {
+    const t = st.places[id] && st.places[id].tug;
+    if (!t) return null;
+    const best = Object.entries(t).filter(([sd, v]) => sd !== holder && Number(v) > 0).sort((a, z) => Number(z[1]) - Number(a[1]))[0];
+    return best ? { side: best[0], pct: Math.min(100, Number(best[1])) } : null;
+  }
+  // 塗層（地面照歸屬上色）：遠看那一段本來就有；開著時近看也有。記在這個瀏覽器（平常關著）
+  const WASH_WORD = "塗層"; // 待 joy 潤
+  const WASH_KEY = "tx-map-wash";
+  function washOn() {
+    if (S.mapWash === undefined) { try { S.mapWash = localStorage.getItem(WASH_KEY) === "1"; } catch (e) { S.mapWash = false; } }
+    return !!S.mapWash;
+  }
+  function washToggle() {
+    S.mapWash = !washOn();
+    try { localStorage.setItem(WASH_KEY, S.mapWash ? "1" : "0"); } catch (e) { /* 記不住就只管這一次 */ }
+    chipsRedraw();
     drawMarks();
-    nearNudge();
-  }
-  // 每一次打開輿圖（goTab）：回第一層（「全區」按過只這一次有效，企劃者 2026-10-24【PM 預設】）。江湖頁的小地圖點了某一處：
-  // 那一處是你腳下或走得到的，第一層開它的卡；不然開它所在那一區的全區
-  function mapFirst(sel = null) {
-    const st = S.mapState, base = S.mapBase;
-    const near = !sel || !base || !st || sel === st.here || nearIds(base, st).includes(sel) || (nearWeek(st) && nearWeek(st).id === sel);
-    Object.assign(S, { mapLayer: near ? "near" : "region", mapRegion: near ? hereRegion() : regionOfPlace(sel), mapMode: sel ? "place" : "overview", mapSel: sel,
-      mapDrawer: sel ? "peek" : "min", mapWeek: null, mapQuery: "", mapPan: null, panFrom: null });
   }
 
-  // 換層：天下圖 ↔ 區圖。外圍的鈕與抽屜整個換掉（同 showMapHost 的做法），地圖本身留著
+  // ── 篩選（上面那一排標籤）：全部、多半什麼（照底圖的 mostly，多的在前）、寶、有人物、能悟哪一種；再加塗層、版圖。
+  // 篩到的照舊畫、名字先畫，其餘淡掉；附近那一排只列篩到的 ──
+  const MV_KINDS_MAX = 6;
+  function chipList(base, st) {
+    const shown = base.places.filter((b) => st.places[b.id]);
+    const most = {}, kinds = {};
+    for (const b of shown) {
+      if (b.mostly) most[b.mostly] = (most[b.mostly] || 0) + 1;
+      for (const id of b.insights || []) kinds[id] = (kinds[id] || 0) + 1;
+    }
+    const out = [["all", MV_WORDS.all]];
+    for (const [m] of Object.entries(most).sort((a, z) => z[1] - a[1]).slice(0, 4)) out.push([`most:${m}`, esc(m)]);
+    if (shown.some((b) => st.places[b.id].rich)) out.push(["rich", `<i class="mv-red">${RICH_WORD}</i>`]);
+    if (shown.some((b) => st.places[b.id].people.length)) out.push(["people", MV_CHIP_PEOPLE]);
+    for (const [id] of Object.entries(kinds).sort((a, z) => z[1] - a[1]).slice(0, MV_KINDS_MAX)) {
+      const ink = insightInk(base, id);
+      if (ink) out.push([`ins:${id}`, `${MV_WORDS.sense}<i style="color:${ink.c}">${esc(ink.name)}</i>`]);
+    }
+    return out;
+  }
+  function chipsHtml(base, st) {
+    if (!base || !st) return "";
+    const f = S.mapFilter || "all", wash = washOn();
+    return chipList(base, st).map(([k, t]) => `<button type="button" class="mv-chip${f === k ? " on" : ""}" data-act="map-filter" data-id="${esc(k)}" aria-pressed="${f === k}">${t}</button>`).join("")
+      + `<button type="button" class="mv-chip${wash ? " on" : ""}" data-act="map-wash" aria-pressed="${wash}">${WASH_WORD}</button>`
+      + `<button type="button" class="mv-chip w-tl" data-act="map-timeline" aria-pressed="false">${MV_WORDS.tl}</button>`;
+  }
+  function chipsRedraw() {
+    const box = document.getElementById("mv-chips");
+    if (box) box.innerHTML = chipsHtml(S.mapBase, S.mapState);
+  }
+  const chipName = (base, st, f) => ((chipList(base, st).find(([k]) => k === f) || ["", ""])[1]).replace(/<[^>]+>/g, "");
+  function mvMatch(st, b) {
+    const f = S.mapFilter || "all", q = st.places[b.id];
+    if (f === "all" || !q) return true;
+    if (f === "rich") return !!q.rich;
+    if (f === "people") return q.people.length > 0;
+    if (f.startsWith("most:")) return b.mostly === f.slice(5);
+    if (f.startsWith("ins:")) return (b.insights || []).includes(f.slice(4));
+    return true;
+  }
+  function mapFilter(f) {
+    S.mapFilter = !f || S.mapFilter === f ? "all" : f;
+    chipsRedraw();
+    if (S.mapMode === "overview" || S.mapMode === "search") { redrawDrawer(); setMapDrawer(S.mapDrawer); }
+    drawMarks();
+  }
+
+  // ── 抽屜平常那一張：「從某處出發」一排卡片（近的在前、本週要去的排第一，左右滑；滑停在哪一張地圖就飛過去、畫出路線），
+  // 往上拉是你腳下這一處的卡（出陣、探索、今天去哪裡出陣、戰線、本週大事）；在路上是往哪裡、喊停，往上拉是那三段 ──
+  function nearList(base, st) {
+    const here = st.journey ? null : st.here, wk = nearWeek(st);
+    const list = base.places.filter((b) => {
+      const q = st.places[b.id];
+      return b.id !== here && q && q.minutes !== null && q.minutes !== undefined && mvMatch(st, b);
+    }).sort(byMinutes(st));
+    const i = wk ? list.findIndex((b) => b.id === wk.id) : -1;
+    if (i > 0) list.unshift(list.splice(i, 1)[0]);
+    return list.slice(0, MV_NEAR_MAX);
+  }
+  function nearCard(base, st, b) {
+    const q = st.places[b.id], wk = nearWeek(st), isWk = !!wk && wk.id === b.id;
+    const odds = q.odds ? `・<b style="color:${TONE_COLOR[q.odds.tone] || MAP_INK}">${esc(q.odds.word)}</b>` : "";
+    const ins = (b.insights || []).map((id) => insightInk(base, id)).filter(Boolean).slice(0, 2).map((k) => `<i style="color:${k.c}">${esc(k.name)}</i>`).join("");
+    return `<button type="button" class="m-pc${S.mapPreview === b.id ? " on" : ""}" data-act="map-place" data-id="${esc(b.id)}">${iconHtml(b, 30)}`
+      + `<b>${esc(b.name)}${q.rich ? `<em>${RICH_WORD}</em>` : ""}${isWk ? `<em class="wk">${MV_WORDS.week}</em>` : ""}</b>`
+      + `<span>${esc(nearSub(base, st, b.id, wk))}${odds}${ins ? `・${ins}` : ""}</span></button>`;
+  }
+  function nearHtml(base, st) {
+    const here = placeOf(base, st.here), list = nearList(base, st), f = S.mapFilter || "all";
+    const from = st.journey ? MV_WORDS.road : MV_WORDS.from.replace("{place}", here ? here.name : "");
+    const label = f === "all" ? from : `${chipName(base, st, f)}・${list.length} 處`;
+    const head = `<div class="m-nhead"><b>${esc(label)}</b><small>${MV_WORDS.swipe}</small></div>`;
+    const cards = list.length ? `<div class="m-cards">${list.map((b) => nearCard(base, st, b)).join("")}</div>` : `<p class="m-sub m-none">${MV_WORDS.none}</p>`;
+    // 第 3 週「離贏還差多少」（減法季整合設計 6.8）
+    const gap = st.gap ? `<p class="m-gap">${esc(st.gap)}</p>` : "";
+    const mine = here && !st.journey ? `<div class="m-mine">${placeCard(base, st, st.here)}</div>` : cardExtras(base, st);
+    return `${st.journey ? journeyHtml(st) : ""}${head}${cards}<i class="m-peek-end"></i>${gap}${mine}`;
+  }
+  // 附近那一排左右滑：停在哪一張（照中線最近的那一張），地圖就飛過去、畫出路線（不開卡；點一下才開）
+  let cardsTimer = 0;
+  function cardsWire() {
+    const row = document.querySelector("#mbody .m-cards");
+    if (!row || !row.addEventListener || (row.dataset && row.dataset.wired)) return;
+    if (row.dataset) row.dataset.wired = "1";
+    row.addEventListener("scroll", () => {
+      clearTimeout(cardsTimer);
+      cardsTimer = setTimeout(() => {
+        const mid = row.scrollLeft + row.clientWidth / 2;
+        let best = null, d = 1e9;
+        for (const el of row.children) {
+          const c = el.offsetLeft + el.offsetWidth / 2;
+          if (Math.abs(c - mid) < d) { d = Math.abs(c - mid); best = el; }
+        }
+        if (!best || !best.dataset.id || best.dataset.id === S.mapPreview) return;
+        for (const el of row.children) el.classList.toggle("on", el === best);
+        mapPreviewTo(best.dataset.id);
+      }, 120);
+    }, { passive: true });
+  }
+  function mapPreviewTo(id) {
+    S.mapPreview = id;
+    drawRoute();
+    const p = placeXY(id), c = S.mapCam;
+    if (p && c) mapFlyTo(p, Math.max(c.z, MV_PREVIEW_Z));
+    else drawMarks();
+  }
+
+  // ── 地面（以前的天下圖，輿圖簡化設計 5.1、4.1～4.4）：每一區的地面照「離哪個地點最近」分給那個地點此刻（或版圖變化看的那一週）的控制方
+  // （底圖的 world.cells，照那一區的輪廓裁），一方一色、沒人佔一色（顏色照劇本）；正在翻（攻方的斜紋照進度泛進來）、剛易手還在冷卻
+  // （新主人的淡色、一圈虛線）、紅線（兩方的地面相接）、細墨線（有主與沒人佔相接）、激戰（那一格一圈紅光閃）、下了戰書（朱紅虛線框）。
+  // 遠看那一段、塗層開著、版圖變化時才畫（#mk；底下的山水淡淡透上來）。純函式：k＝1／倍率（線寬照螢幕）、week 看哪一週
+  function groundSvg(base, st, k, week) {
+    const wd = base.world;
+    if (!wd) return "";
+    const ctrl = controlAt(st, week), live = week === st.now_week;
+    const cooling = (id) => live && !!ctrl[id] && !!(st.places[id] && st.places[id].cool);
+    const ground = (id) => (ctrl[id] ? sideInk(ctrl[id])[cooling(id) ? "tint" : "soft"] : wd.unheld);
+    const tugs = live ? wd.cells.map((c) => [c, tugOf(st, c.id, ctrl[c.id] || null)]).filter(([, t]) => t) : [];
+    const melee = live ? wd.cells.filter((c) => st.places[c.id] && (st.places[c.id].melee || st.places[c.id].siege === "fight")) : [];
+    const letters = live ? wd.cells.filter((c) => st.places[c.id] && st.places[c.id].siege === "letter") : [];
+    const cools = wd.cells.filter((c) => cooling(c.id));
+    const patterns = [...new Set(tugs.map(([, t]) => t.side))].map((sd) => tugPattern(sd, k)).join("");
+    const out = [`<defs>${wd.regions.map((r) => `<clipPath id="wc-${esc(r.id)}"><path d="${r.d}"/></clipPath>`).join("")}${patterns}`
+      + '<filter id="mv-edge" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency=".05" numOctaves="2" seed="11"/><feDisplacementMap in="SourceGraphic" scale="10"/><feGaussianBlur stdDeviation="1.6"/></filter></defs>'];
+    out.push(`<g class="w-ground" opacity="${WORLD_GROUND}" filter="url(#mv-edge)">`);
+    for (const r of wd.regions) {
+      out.push(`<path d="${r.d}" fill="${wd.unheld}"/><g clip-path="url(#wc-${esc(r.id)})">`);
+      for (const c of wd.cells) if (c.region === r.id) out.push(`<path data-cell="${esc(c.id)}" d="${c.d}" fill="${ground(c.id)}"/>`);
+      out.push("</g>");
+    }
+    out.push("</g>");
+    for (const r of wd.regions) {
+      const mine = tugs.filter(([c]) => c.region === r.id);
+      if (mine.length) out.push(`<g clip-path="url(#wc-${esc(r.id)})">${mine.map(([c, t]) => `<path class="w-tug" data-cell="${esc(c.id)}" d="${c.d}" fill="url(#wt-${esc(t.side)})" opacity="${f2((t.pct / 100) * WORLD_TUG_MAX)}"/>`).join("")}</g>`);
+    }
+    out.push(`<g class="w-outline" fill="none" stroke="${WORLD_INK}" stroke-width="${f1(1.2 * k)}" stroke-linejoin="round" opacity=".6">${wd.regions.map((r) => `<path d="${r.d}"/>`).join("")}</g>`);
+    for (const c of cools) out.push(`<path class="w-cool" data-cell="${esc(c.id)}" d="${c.d}" fill="none" stroke="${sideInk(ctrl[c.id]).color}" stroke-width="${f1(WORLD_COOL_LINE * k)}" stroke-dasharray="${f1(WORLD_COOL_DASH * k)} ${f1(WORLD_COOL_GAP * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})"/>`);
+    const front = [], rim = [];
+    for (const e of wd.edges) {
+      const a = (e.a && ctrl[e.a]) || null, b = (e.b && ctrl[e.b]) || null;
+      if (a === b) continue;
+      (a && b ? front : rim).push(`<path d="${e.d}"${e.clip ? ` clip-path="url(#wc-${esc(e.clip)})"` : ""}/>`);
+    }
+    out.push(`<g class="w-rim" fill="none" stroke="${WORLD_RIM}" stroke-width="${f1(1.1 * k)}">${rim.join("")}</g>`);
+    out.push(`<g class="w-front" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(3 * k)}" stroke-linecap="round">${front.join("")}</g>`);
+    for (const c of melee) out.push(`<path class="w-melee" data-cell="${esc(c.id)}" d="${c.d}" fill="${FRONT_RED}" fill-opacity=".16" stroke="${FRONT_RED}" stroke-width="${f1(3.2 * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})"/>`);
+    for (const c of letters) out.push(`<path class="w-letter" data-cell="${esc(c.id)}" d="${c.d}" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(WORLD_LETTER_LINE * k)}" stroke-dasharray="${f1(WORLD_LETTER_DASH * k)} ${f1(WORLD_LETTER_GAP * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})"/>`);
+    return out.join("");
+  }
+  // 地面要不要畫、照哪一個倍率與週次畫（一樣就不重畫）
+  const ground = { key: "" };
+  function groundShow(c) {
+    const svg = document.getElementById("mk");
+    if (!svg || !S.mapBase || !S.mapState) return;
+    const on = S.mapMode === "timeline" || mvLevel(c.z) === 0 || washOn();
+    if (svg.style) svg.style.opacity = on ? "1" : "0";
+    if (!on) return;
+    const week = mapWeek(), key = `${S.mapBase.key}|${S.mapStateAt}|${week}|${Math.round(Math.log2(c.z) * 3)}`;
+    if (ground.key === key && svg.firstChild) return;
+    ground.key = key;
+    svg.innerHTML = groundSvg(S.mapBase, S.mapState, 1 / c.z, week);
+  }
+
+  // ── 字與小圖（#mkt：照螢幕大小寫，位置照此刻的倍率算）──
+  // 每一處各方幾處、寶幾處（遠看那一段大區名底下那一行：照疊層的 sides，只寫不是 0 的）
+  function regionCounts(base, st, ctrl) {
+    const out = {};
+    for (const b of base.places) {
+      if (!st.places[b.id] || !b.region) continue;
+      const n = out[b.region] || (out[b.region] = { rich: 0 });
+      if (ctrl[b.id]) n[ctrl[b.id]] = (n[ctrl[b.id]] || 0) + 1;
+      if (st.places[b.id].rich) n.rich += 1;
+    }
+    return out;
+  }
+  // 大區名擺哪：天下圖給的第一個位置（底圖的 world.regions[].spots），沒有照大區的中心
+  function regionSpot(base, r) {
+    const w = base.world && base.world.regions.find((x) => x.id === r.id);
+    return w && w.spots && w.spots.length ? w.spots[0] : [r.cx, r.cy];
+  }
+  // 山河名（底圖的 paint：河名照 labels，山名照地形的 name、直寫在山脊中間旁邊）
+  function paintLabels(base) {
+    const p = base.paint;
+    if (!p) return [];
+    const mounts = (p.terrain || []).filter((t) => t.name && t.spine && t.spine.length).map((t) => {
+      const m = t.spine[Math.floor(t.spine.length / 2)];
+      return { text: t.name, x: m[0] + (t.size || 20) * 1.6, y: m[1], v: true };
+    });
+    return [...(p.labels || []), ...mounts];
+  }
+  function pinHtml(b, x, y, dim, z) {
+    const k = paintKey(b), at = `left:${f1(x)}px;top:${f1(y)}px`, id = esc(b.id), name = esc(b.name);
+    if (k) {
+      const w = Math.round(MV_PAINT[k] * (z < MV_LV2 ? 0.8 : 1));
+      return `<button type="button" class="mv-pin paint${dim}" style="${at};width:${w}px" data-act="map-place" data-id="${id}" aria-label="${name}"><img src="${mvImg(k)}" width="${w}" alt="" draggable="false"></button>`;
+    }
+    return `<button type="button" class="mv-pin ink${dim}" style="${at}" data-act="map-place" data-id="${id}" aria-label="${name}"><svg width="30" height="30" viewBox="-15 -17 30 30" aria-hidden="true"><circle r="9" cy="-2" fill="${MAP_HALO}" opacity=".7"/>${inkIcon(b.glyph, MV_INK, "none")}</svg></button>`;
+  }
+  const mvSeal = (c) => (c ? `<span class="mv-side" style="background:${sideInk(c).color}">${esc(sideInk(c).short)}</span>` : "");
+  // 照此刻的倍率排好一整層（純函式：c 是 { z, x, y }，g 是地圖框）。只排畫面附近（一個畫面寬的邊）的；名字撞在一起時優先序：
+  // 選的、滑到的、你在的、本週要去的、篩到的、要地、近的。名字的位置試四個（下、右、左、上），都壓到就不寫（選的、你在的照寫）
+  function marksHtml(base, st, c, g) {
+    const z = c.z, tl = S.mapMode === "timeline", lvl = tl ? 0 : mvLevel(z), out = [], boxes = [];
+    const week = mapWeek(), ctrl = controlAt(st, week), live = week === st.now_week;
+    const sel = S.mapSel, prev = S.mapMode === "overview" ? S.mapPreview : null, wk = nearWeek(st), here = st.journey ? null : st.here;
+    const filt = (S.mapFilter || "all") !== "all";
+    const scr = (x, y) => [c.x + x * z, c.y + y * z];
+    const padX = g.vw * 0.8, padY = g.vh * 0.8;
+    const near = ([x, y]) => x > -padX && y > -padY && x < g.vw + padX && y < g.vh + padY;
+    const shown = base.places.filter((b) => st.places[b.id]);
+    const rank = (b) => (b.id === sel || b.id === prev ? 0 : b.id === here ? 1 : wk && wk.id === b.id ? 1.5
+      : (mvMatch(st, b) ? 2 : 6) + (b.big ? 0 : 1) + (st.places[b.id].minutes ?? 500) / 1000);
+    const order = shown.slice().sort((a, b) => rank(a) - rank(b));
+    const hit = (bx) => boxes.some((o) => bx[0] < o[2] && bx[2] > o[0] && bx[1] < o[3] && bx[3] > o[1]);
+    for (const b of order) { const [x, y] = scr(b.x, b.y), r = lvl ? 13 : 6; boxes.push([x - r, y - r, x + r, y + r]); }
+    // 遠看：大區名＋各方幾處（地面已經照歸屬上色）
+    if (lvl === 0) {
+      const n = regionCounts(base, st, ctrl), sides = st.sides || sideOrder(base);
+      for (const r of base.regions) {
+        const [sx, sy] = regionSpot(base, r), [x, y0] = scr(sx, sy), y = y0 - 18, cnt = n[r.id] || { rich: 0 };
+        const line = [...sides.filter((sd) => cnt[sd]).map((sd) => `${sideInk(sd).short} ${cnt[sd]}`), ...(cnt.rich ? [`${RICH_WORD} ${cnt.rich}`] : [])].join("・");
+        const w = textW(r.name, 24) * 1.35;
+        boxes.push([x - w / 2, y - 14, x + w / 2, y + (line ? 32 : 14)]);
+        out.push(`<div class="mv-reg" style="left:${f1(x)}px;top:${f1(y)}px">${esc(r.name)}</div>`);
+        if (line) out.push(`<div class="mv-cnt" style="left:${f1(x)}px;top:${f1(y + 15)}px">${esc(line)}</div>`);
+      }
+    } else {
+      for (const l of paintLabels(base)) {
+        const xy = scr(l.x, l.y);
+        if (near(xy)) out.push(`<div class="mv-geo${l.v ? " v" : ""}" style="left:${f1(xy[0])}px;top:${f1(xy[1])}px">${esc(l.text)}</div>`);
+      }
+    }
+    for (const b of order) {
+      const q = st.places[b.id], xy = scr(b.x, b.y);
+      if (!near(xy)) continue;
+      const [x, y] = xy, isHere = b.id === here, isSel = b.id === sel || b.id === prev, isWk = !!wk && wk.id === b.id;
+      const on = isSel || isHere || mvMatch(st, b), dim = on ? "" : " dim", ctl = ctrl[b.id] || null;
+      if (lvl === 0) {
+        out.push(`<button type="button" class="mv-dot${dim}${q.rich ? " rich" : ""}" style="left:${f1(x)}px;top:${f1(y)}px;--c:${ctl ? sideInk(ctl).color : MV_UNHELD}" data-act="map-place" data-id="${esc(b.id)}" aria-label="${esc(b.name)}"></button>`);
+      } else out.push(pinHtml(b, x, y, dim, z));
+      if (isSel) out.push(`<i class="mv-ring" style="left:${f1(x)}px;top:${f1(y)}px;--r:${lvl ? 22 : 12}px"></i>`);
+      if (live && lvl > 0 && (q.melee || q.siege === "fight")) out.push(`<i class="mv-fight" style="left:${f1(x)}px;top:${f1(y)}px"></i>`);
+      if (!on || (lvl === 0 && !isSel && !isHere && !isWk && !filt)) continue;
+      const sub = isHere ? MV_WORDS.here : (lvl === 2 || isSel || isWk) ? nearSub(base, st, b.id, wk) : "";
+      const odds = !isHere && (lvl === 2 || isSel) && q.odds ? `・<b style="color:${TONE_COLOR[q.odds.tone] || MAP_INK}">${esc(q.odds.word)}</b>` : "";
+      const inks = lvl > 1 ? (b.insights || []).map((id) => insightInk(base, id)).filter(Boolean).slice(0, 3) : [];
+      const ins = inks.length ? `<span class="ins">${inks.map((k) => `<i style="color:${k.c}">${esc(k.name)}</i>`).join("")}</span>` : "";
+      const t = lvl > 0 && live ? tugOf(st, b.id, ctl) : null;
+      const bar = t ? `<span class="mv-bar"><i style="width:${t.pct}%;background:${sideInk(t.side).color}"></i></span>` : "";
+      const seals = (lvl > 0 && q.rich ? `<span class="mv-rich">${RICH_WORD}</span>` : "")
+        + (live && q.siege === "letter" ? `<span class="mv-rich">${LETTER_SEAL_WORD}</span>` : "")
+        + (isWk ? `<span class="mv-wk">${MV_WORDS.week}</span>` : "");
+      const fs = b.big ? 16 : 14, side = lvl > 0 && ctl ? 21 : 0;
+      const w = side + textW(b.name, fs) + inks.length * 13 + (sub ? 0 : 0) + (lvl > 0 && q.rich ? 21 : 0) + (q.siege === "letter" ? 21 : 0) + (isWk ? 34 : 0) + 8;
+      const wsub = sub ? side + textW(sub, 11) + (odds ? 40 : 0) + 8 : 0;
+      const W = Math.max(w, wsub), H = fs * 1.2 + 4 + (sub ? 15 : 0) + (bar ? 5 : 0);
+      const tries = lvl === 0 ? [[-W / 2, 9], [12, -H / 2], [-12 - W, -H / 2], [-W / 2, -9 - H]] : [[-W / 2, 15], [20, -10], [-20 - W, -10], [-W / 2, -30 - H]];
+      for (const [i, [dx, dy]] of tries.entries()) {
+        const bx = [x + dx, y + dy, x + dx + W, y + dy + H];
+        if (hit(bx) && !((isSel || isHere) && i === tries.length - 1)) continue;
+        boxes.push(bx);
+        out.push(`<button type="button" class="mv-lab${b.big ? " big" : ""}${isHere ? " here" : ""}${isSel ? " sel" : ""}" style="left:${f1(bx[0])}px;top:${f1(bx[1])}px" data-act="map-place" data-id="${esc(b.id)}">`
+          + `${lvl > 0 ? mvSeal(ctl) : ""}<span class="t"><span class="nm">${esc(b.name)}${ins}${seals}</span>${sub ? `<small>${esc(sub)}${odds}</small>` : ""}${bar}</span></button>`);
+        break;
+      }
+    }
+    // 版圖變化：那一週易手的地點閃一圈
+    const row = (st.weeks || []).find((x) => x.week === week);
+    if ((tl || !live) && row) for (const e of row.changed || []) {
+      const b = placeOf(base, e.id);
+      if (b) { const [x, y] = scr(b.x, b.y); out.push(`<i class="mv-pulse" style="left:${f1(x)}px;top:${f1(y)}px"></i>`); }
+    }
+    // 你：紅點（在路上畫在路上那一點）；選了一處：路線中間掛一顆「幾分」
+    const me = youXY(base, st);
+    if (me) { const [x, y] = scr(me[0], me[1]); out.push(`<i class="mv-you" style="left:${f1(x)}px;top:${f1(y)}px"></i>`); }
+    const tgt = !tl && (sel || prev);
+    const tq = tgt && st.places[tgt];
+    if (tq && me && tq.path && tq.path.length && tq.minutes) {
+      const pts = [me, ...tq.path.map((id) => placeXY(id)).filter(Boolean)], i = Math.floor(pts.length / 2);
+      const a = pts[i - 1] || pts[0], bb = pts[i] || pts[0], [x, y] = scr((a[0] + bb[0]) / 2, (a[1] + bb[1]) / 2);
+      out.push(`<i class="mv-eta" style="left:${f1(x)}px;top:${f1(y)}px">${Number(tq.minutes)} 分</i>`);
+    }
+    return out.join("");
+  }
+  let marksFrame = 0;
+  const marksSoon = () => { if (!marksFrame) marksFrame = requestAnimationFrame(drawMarks); };
+  // 照此刻的倍率重排字與小圖、地面（loadMap 換了疊層、篩選、選了一處、拖縮停下來、跨了一段倍率都叫這裡）
+  function drawMarks() {
+    if (marksFrame) { cancelAnimationFrame(marksFrame); marksFrame = 0; }
+    const box = document.getElementById("mkt"), g = mapGeom(document.getElementById("map")), c = S.mapCam;
+    if (!box || !S.mapBase || !S.mapState || !c || !g) return;
+    box.innerHTML = marksHtml(S.mapBase, S.mapState, c, g);
+    box.style.transform = "";
+    mv.laid = { ...c, vw: g.vw, vh: g.vh };
+    groundShow(c);
+  }
+  // 選了的（或附近那一排滑到的）那一處：從你到那裡的路（朱紅，底下墊一道紙色）。畫在地圖那一層（跟著拖縮，線寬不變）
+  function drawRoute() {
+    const svg = document.getElementById("mkr"), st = S.mapState;
+    if (!svg || !st || !S.mapBase) return;
+    const id = S.mapMode === "timeline" ? null : S.mapSel || (S.mapMode === "overview" ? S.mapPreview : null);
+    const d = id ? routeD(S.mapBase, st, id) : "";
+    const line = (ink, w) => `<path d="${d}" fill="none" stroke="${ink}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
+    svg.innerHTML = d ? line(MAP_HALO, 9) + line(FRONT_RED, 4.5) : "";
+  }
+
+  // ── 看哪裡：S.mapCam = { z 倍率, x, y }，地圖上 (mx, my) 在地圖框裡的 (x + mx·z, y + my·z) ──
+  const mv = { pts: new Map(), start: null, moved: false, frame: 0, g: null, anim: 0, vel: [0, 0], last: null, lastTap: 0, eatUntil: 0, wheelTimer: 0, laid: null };
+  // 地圖框與它的內緣在畫面上的位置；框還沒有大小回 null
+  function mapGeom(wrap) {
+    if (!wrap || !wrap.clientWidth || !wrap.clientHeight) return null;
+    const r = wrap.getBoundingClientRect();
+    return { wrap, vw: wrap.clientWidth, vh: wrap.clientHeight, x0: r.left + wrap.clientLeft, y0: r.top + wrap.clientTop };
+  }
+  // 露出來的那一塊（上面讓開搜尋列與篩選、底下讓開抽屜；桌機右欄、版圖變化時地圖框本來就在抽屜外）：{ top, bottom }（px）
+  function mapRoom(g) {
+    const top = S.mapMode === "timeline" ? MV_TL_TOP : MV_TOP;
+    const sheet = deskMap() || S.mapMode === "timeline" ? 0 : mapDrawerPx(S.mapDrawer);
+    return { top, bottom: Math.max(top + 60, g.vh - sheet) };
+  }
+  // 整張天下的框：底圖的 world.frame（開放的地點外框加邊），沒有照整張圖
+  const mapBox = (base) => (base.world && base.world.frame) || [0, 0, base.w, base.h];
+  function zMin(g) {
+    const [, , fw, fh] = mapBox(S.mapBase), room = mapRoom(g);
+    return Math.min(MV_ZMAX, Math.max(0.05, Math.min((g.vw - 16) / fw, (room.bottom - room.top - 16) / fh)));
+  }
+  // 夾住：倍率在整張放得下到 MV_ZMAX 之間；整張天下的框最多拖到邊碰到露出來那一塊的中線（拖得到最邊上的地點，拖不走整張）
+  function camClamp(c, g) {
+    const [fx, fy, fw, fh] = mapBox(S.mapBase), room = mapRoom(g);
+    const z = Math.min(MV_ZMAX, Math.max(zMin(g), c.z)), mx = g.vw / 2, my = (room.top + room.bottom) / 2;
+    const L = Math.min(mx, Math.max(mx - fw * z, c.x + fx * z)), T = Math.min(my, Math.max(my - fh * z, c.y + fy * z));
+    return { z, x: L - fx * z, y: T - fy * z };
+  }
+  // 整張天下放進露出來的那一塊、置中
+  function camFit(g) {
+    const [fx, fy, fw, fh] = mapBox(S.mapBase), room = mapRoom(g), z = zMin(g);
+    return { z, x: (g.vw - fw * z) / 2 - fx * z, y: room.top + (room.bottom - room.top - fh * z) / 2 - fy * z };
+  }
+  // 地圖上 (mx, my) 放在露出來那一塊的正中、倍率 z
+  function camAt(g, mx, my, z) {
+    const room = mapRoom(g);
+    return camClamp({ z, x: g.vw / 2 - mx * z, y: (room.top + room.bottom) / 2 - my * z }, g);
+  }
+  // 套上：底圖那一層照新的倍率與位置；字那一層照上一次排字的倍率先跟著縮放（同一個仿射），差過一截、跨了一段、拖出一個畫面才重排
+  function camSet(c, g = mv.g || mapGeom(document.getElementById("map"))) {
+    if (!g || !S.mapBase || !c) return;
+    const q = camClamp(c, g);
+    S.mapCam = q;
+    const w = document.getElementById("mvw");
+    if (w) w.style.transform = `translate(${f2(q.x)}px, ${f2(q.y)}px) scale(${q.z})`;
+    const m = document.getElementById("mkt"), L = mv.laid;
+    if (!m || !L) return;
+    const r = q.z / L.z, dx = q.x - L.x * r, dy = q.y - L.y * r;
+    m.style.transform = Math.abs(r - 1) < 1e-4 && Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01 ? "" : `translate(${f2(dx)}px, ${f2(dy)}px) scale(${r})`;
+    if (Math.abs(Math.log(r)) > MV_RELAYOUT || mvLevel(q.z) !== mvLevel(L.z) || Math.abs(dx) > g.vw * 0.6 || Math.abs(dy) > g.vh * 0.6) marksSoon();
+  }
+  function mvStop() {
+    if (mv.anim) { cancelAnimationFrame(mv.anim); mv.anim = 0; }
+  }
+  // 飛過去：遠的先拉遠一點再拉近（像從天上掠過去）；地圖上的中心點線性移、倍率照拋物線。飛完重排字
+  function camFly(t, dur = MV_FLY) {
+    mvStop();
+    const g = mapGeom(document.getElementById("map"));
+    if (!g || !S.mapCam) { if (g) { camSet(t, g); drawMarks(); } return; }
+    mv.g = null;
+    const s = { ...S.mapCam }, room = mapRoom(g), cy = (room.top + room.bottom) / 2;
+    t = camClamp(t, g);
+    const far = Math.hypot((t.x - s.x) / s.z, (t.y - s.y) / s.z) > 400 / Math.min(s.z, t.z);
+    const dip = far ? Math.max(zMin(g), Math.min(s.z, t.z) * 0.6) : null;
+    if (far) dur = MV_FLY_FAR;
+    if (reduceMotion() || typeof requestAnimationFrame !== "function") { camSet(t, g); drawMarks(); return; }
+    const cx0 = (g.vw / 2 - s.x) / s.z, cy0 = (cy - s.y) / s.z, cx1 = (g.vw / 2 - t.x) / t.z, cy1 = (cy - t.y) / t.z, t0 = performance.now();
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / dur), e = k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2;
+      let zz = s.z + (t.z - s.z) * e;
+      if (dip) zz = Math.min(zz, dip + (Math.max(s.z, t.z) - dip) * (2 * e - 1) ** 2);
+      const mx = cx0 + (cx1 - cx0) * e, my = cy0 + (cy1 - cy0) * e;
+      camSet({ z: zz, x: g.vw / 2 - mx * zz, y: cy - my * zz }, g);
+      if (k < 1) mv.anim = requestAnimationFrame(step);
+      else { mv.anim = 0; drawMarks(); }
+    };
+    mv.anim = requestAnimationFrame(step);
+  }
+  function mapFlyTo(p, z) {
+    const g = mapGeom(document.getElementById("map"));
+    if (g && p) camFly(camAt(g, p[0], p[1], Math.min(MV_ZMAX, z)));
+  }
+  // 以地圖框裡 (px, py) 為中心縮放到 nz
+  function zoomAt(nz, px, py, glide = false) {
+    const g = mapGeom(document.getElementById("map")), c = S.mapCam;
+    if (!g || !c) return;
+    nz = Math.min(MV_ZMAX, Math.max(zMin(g), nz));
+    const t = { z: nz, x: px - ((px - c.x) / c.z) * nz, y: py - ((py - c.y) / c.z) * nz };
+    if (glide) camFly(t);
+    else camSet(t, g);
+  }
+  // 右下兩顆：回到我（以你為中心，至少放到 MV_HOME_Z）、看整張天下
+  function mapHome() {
+    const me = S.mapBase && S.mapState && youXY(S.mapBase, S.mapState);
+    if (me) mapFlyTo(me, Math.max(S.mapCam ? S.mapCam.z : 0, MV_HOME_Z));
+  }
+  function mapFit() {
+    const g = mapGeom(document.getElementById("map"));
+    if (g) camFly(camFit(g));
+  }
+  // 找地點那一頁的「跳到大區」：那一區的地點整個放進來（最多兩倍）
+  function mapRegionFly(rid) {
+    const g = mapGeom(document.getElementById("map")), pts = S.mapBase ? S.mapBase.places.filter((p) => p.region === rid) : [];
+    if (!g || !pts.length) return;
+    const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y), room = mapRoom(g);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const z = Math.min(2, (g.vw - 120) / Math.max(1, x1 - x0), (room.bottom - room.top - 90) / Math.max(1, y1 - y0));
+    camFly(camAt(g, (x0 + x1) / 2, (y0 + y1) / 2, z));
+  }
+  // 點了的那一處要露在抽屜上面、搜尋列底下：露著就不動，不然滑過去（倍率不變）
+  function mvNudge(id) {
+    const g = mapGeom(document.getElementById("map")), p = placeXY(id), c = S.mapCam;
+    if (!g || !p || !c) return;
+    const room = mapRoom(g), x = c.x + p[0] * c.z, y = c.y + p[1] * c.z;
+    if (x > 30 && x < g.vw - 30 && y > room.top + 30 && y < room.bottom - 40) return;
+    camFly(camAt(g, p[0], p[1], c.z));
+  }
+
+  // ── 點一處、收回 ──
+  // 點了一處（地圖上的小圖或名字、附近那一排的卡、找地點的結果、今天去哪裡出陣）：抽屜開那一處的卡、畫路線；fly：飛過去（找地點、出陣建議），
+  // 不然只在被擋住時挪一下。版圖變化時：年表上圈起來（同 map-mark）
+  function mapPick(id, fly = false) {
+    const st = S.mapState;
+    if (!id || !st || !st.places[id]) return;
+    if (S.mapMode === "timeline") {
+      S.mapSel = S.mapSel === id ? null : id;
+      redrawDrawer();
+      drawMarks();
+      return;
+    }
+    const wasFind = S.mapMode === "search";
+    Object.assign(S, { mapSel: id, mapMode: "place", mapPreview: null, mapQuery: "", mapDrawer: "peek" });
+    if (wasFind) remapChrome();
+    else { redrawDrawer(); setMapDrawer("peek"); }
+    drawRoute();
+    const p = placeXY(id);
+    if (fly && p) mapFlyTo(p, Math.max(S.mapCam ? S.mapCam.z : 0, MV_PICK_Z));
+    else { drawMarks(); mvNudge(id); }
+  }
+  // 收回（卡上的 ✕、找地點的 ←、點地圖的空白）：回附近那一排
+  function mapBack() {
+    const wasFind = S.mapMode === "search";
+    Object.assign(S, { mapMode: "overview", mapSel: null, mapPreview: null, mapQuery: "", mapDrawer: "peek" });
+    if (wasFind) remapChrome();
+    else { redrawDrawer(); setMapDrawer("peek"); }
+    drawRoute();
+    drawMarks();
+  }
+  // 找地點：整頁一張清單，蓋在地圖上
+  function mapFind() {
+    Object.assign(S, { mapMode: "search", mapQuery: "" });
+    remapChrome();
+    setTimeout(() => { const q = document.getElementById("map-q"); if (q) q.focus(); }, 60);
+  }
+  function mapBlank() {
+    if (S.mapMode === "place" || (S.mapMode === "overview" && S.mapPreview)) mapBack();
+    else if (S.mapMode === "timeline" && S.mapSel) { S.mapSel = null; redrawDrawer(); drawMarks(); }
+  }
+
+  // ── 底圖：照底圖的 paint（content/map.json）畫成淡彩水墨——紙紋、赭黃暈染、毛筆畫的河（一道淡青的暈＋一筆濃淡的墨線）、州界墨點線、
+  // 細赭墨的路、一座一座蓋上去的山（web/img/map 的 m2～m6，照山脊從後往前、大小錯落）、墨綠點的林、四角暗一點——烤成一張圖
+  // （Joy 2026-10-18「輿圖滑動的時候還是很卡」：拖縮時只動這張圖）。同一張底圖整層重畫時不必再烤 ──
+  function mvRand(seed) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+  // Catmull-Rom → 貝茲（河、州界畫成順的曲線）
+  function smoothD(pts) {
+    let d = `M${pts[0][0]},${pts[0][1]}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+      d += ` C${f1(p1[0] + (p2[0] - p0[0]) / 6)},${f1(p1[1] + (p2[1] - p0[1]) / 6)} ${f1(p2[0] - (p3[0] - p1[0]) / 6)},${f1(p2[1] - (p3[1] - p1[1]) / 6)} ${p2[0]},${p2[1]}`;
+    }
+    return d;
+  }
+  // art：主機畫好的那一張（{ url }，data:）。有它就鋪它當底，上面只疊州界與路（那一張不畫路、不畫州界），紙、暈染、河、山、林都在圖裡
+  function paintSvg(base, mounts, PW, PH, art = null) {
+    const M = base.paint, R = mvRand(7), W = base.w, H = base.h, out = [];
+    const pos = Object.fromEntries(base.places.map((p) => [p.id, p]));
+    const borders = `<g fill="none" stroke="#5E4E3A" stroke-width="1.2" stroke-dasharray="1 7" stroke-linecap="round" opacity=".55">${(M.regions || []).map((r) => `<path d="${smoothD([...r.points, r.points[0]])}"/>`).join("")}</g>`;
+    const roads = (o) => `<g fill="none" stroke="#7B6247" stroke-width="1.1" stroke-linecap="round" opacity="${o}" filter="url(#brush)">${(base.roads || []).map(([a, b, cx, cy]) => (pos[a] && pos[b] ? `<path d="M${pos[a].x},${pos[a].y} Q${cx},${cy} ${pos[b].x},${pos[b].y}"/>` : "")).join("")}</g>`;
+    if (art) {
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${PW}" height="${PH}" viewBox="0 0 ${W} ${H}"><defs>`
+        + '<filter id="brush" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency=".25" numOctaves="2" seed="2"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter></defs>'
+        + `<image href="${art.url}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="none"/>${borders}${roads(".7")}</svg>`;
+    }
+    out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${PW}" height="${PH}" viewBox="0 0 ${W} ${H}"><defs>`
+      + '<filter id="grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="3"/><feColorMatrix values="0 0 0 0 .45  0 0 0 0 .36  0 0 0 0 .25  0 0 0 .09 0"/></filter>'
+      + '<filter id="fiber" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".012 .2" numOctaves="2" seed="9"/><feColorMatrix values="0 0 0 0 .5  0 0 0 0 .42  0 0 0 0 .3  0 0 0 .06 0"/></filter>'
+      + '<filter id="bleed" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency=".035" numOctaves="3" seed="5"/><feDisplacementMap in="SourceGraphic" scale="26"/><feGaussianBlur stdDeviation="7"/></filter>'
+      + '<filter id="edge" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency=".05" numOctaves="2" seed="11"/><feDisplacementMap in="SourceGraphic" scale="14"/><feGaussianBlur stdDeviation="2.2"/></filter>'
+      + '<filter id="brush" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency=".25" numOctaves="2" seed="2"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>'
+      + '<radialGradient id="vig" cx=".5" cy=".5" r=".72"><stop offset=".6" stop-color="#6B5236" stop-opacity="0"/><stop offset="1" stop-color="#6B5236" stop-opacity=".28"/></radialGradient></defs>');
+    out.push(`<rect width="${W}" height="${H}" fill="#F1E8D6"/>`);
+    out.push('<g filter="url(#bleed)" opacity=".55">');
+    for (const r of M.regions || []) {
+      const n = r.points.length, c = r.points.reduce((a, p) => [a[0] + p[0] / n, a[1] + p[1] / n], [0, 0]);
+      out.push(`<ellipse cx="${f1(c[0])}" cy="${f1(c[1])}" rx="${f1(140 + R() * 60)}" ry="${f1(90 + R() * 50)}" fill="#E7C996"/>`);
+      out.push(`<ellipse cx="${f1(c[0] + (R() - 0.5) * 120)}" cy="${f1(c[1] + (R() - 0.5) * 90)}" rx="${f1(60 + R() * 40)}" ry="${f1(40 + R() * 30)}" fill="#E6AE92" opacity=".5"/>`);
+    }
+    out.push("</g>");
+    for (const f of (M.terrain || []).filter((t) => t.kind === "forest" && t.points && t.points.length)) {
+      const xs = f.points.map((p) => p[0]), ys = f.points.map((p) => p[1]);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+      out.push('<g opacity=".55">');
+      for (let i = 0; i < 26; i++) {
+        const x = x0 + R() * (x1 - x0), y = y0 + R() * (y1 - y0), r = 3 + R() * 4;
+        out.push(`<ellipse cx="${f1(x)}" cy="${f1(y)}" rx="${f1(r)}" ry="${f1(r * 0.8)}" fill="#6E8466" opacity="${f2(0.35 + R() * 0.4)}"/><path d="M${f1(x)},${f1(y + r)} v${f1(r * 0.9)}" stroke="#3E4A38" stroke-width=".8"/>`);
+      }
+      out.push("</g>");
+    }
+    for (const r of M.rivers || []) {
+      if (!r.points || r.points.length < 2) continue;
+      const d = smoothD(r.points), yel = r.color === "yellow", w = r.width || [4, 8];
+      out.push(`<path d="${d}" fill="none" stroke="${yel ? "#D8B47A" : "#A9C0CF"}" stroke-width="${f1(w[1] * 1.6)}" stroke-linecap="round" opacity=".55" filter="url(#edge)"/>`);
+      out.push(`<path d="${d}" fill="none" stroke="#3B3530" stroke-width="${yel ? 2.4 : 1.5}" stroke-linecap="round" opacity=".85" filter="url(#brush)"/>`);
+      out.push(`<path d="${d}" fill="none" stroke="#3B3530" stroke-width=".7" stroke-linecap="round" opacity=".5" transform="translate(${f1(w[0] * 0.5)},${f1(w[0] * 0.4)})" filter="url(#brush)"/>`);
+    }
+    out.push(borders, roads(".6"));
+    const stamps = [];
+    for (const t of (M.terrain || []).filter((x) => x.kind !== "forest" && x.spine && x.spine.length > 1)) {
+      const hills = t.kind === "hills", sp = t.spine, size = t.size || 20;
+      for (let i = 0; i < sp.length - 1; i++) {
+        const [ax, ay] = sp[i], [bx, by] = sp[i + 1], L = Math.hypot(bx - ax, by - ay), n = Math.max(2, Math.round(L / (size * 1.15)));
+        for (let j = 0; j < n; j++) {
+          const f = (j + R() * 0.6) / n, w = size * (hills ? 2.2 : 3.1) * (0.75 + R() * 0.5);
+          stamps.push([ax + (bx - ax) * f + (R() - 0.5) * size * 0.8, ay + (by - ay) * f + (R() - 0.5) * size * 0.6, w, MV_MOUNTS[Math.floor(R() * MV_MOUNTS.length)], hills ? 0.6 : 0.95]);
+        }
+      }
+    }
+    stamps.sort((a, b) => a[1] - b[1]);
+    for (const [x, y, w, k, o] of stamps) {
+      const im = mounts[k];
+      if (im) out.push(`<image href="${im.url}" x="${f1(x - w / 2)}" y="${f1(y - w * im.r / 2)}" width="${f1(w)}" height="${f1(w * im.r)}" opacity="${o}"/>`);
+    }
+    out.push(`<rect width="${W}" height="${H}" filter="url(#fiber)"/><rect width="${W}" height="${H}" filter="url(#grain)"/><rect width="${W}" height="${H}" fill="url(#vig)"/></svg>`);
+    return out.join("");
+  }
+  // 主機畫的底圖（design/輿圖底圖，2026-10-30；照 content/map.json 的山河位置畫、900×1340 的三倍）：照 data: 塞進底圖；抓不到照網頁自己畫
+  const MV_ART = "/static/img/map/base.webp";
+  async function dataUrl(path) {
+    const blob = await (await fetch(path)).blob();
+    return new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = no; fr.readAsDataURL(blob); });
+  }
+  let artMemo = null;
+  function artImg() {
+    if (!artMemo) artMemo = dataUrl(MV_ART).then((url) => (url.startsWith("data:image/") ? { url } : null)).catch(() => null);
+    return artMemo;
+  }
+  // 山的小圖（照 data: 塞進底圖：烤的時候 SVG 當圖片畫，外連的圖不會載）與高寬比；一次載入只抓一次
+  let mountMemo = null;
+  function mountImgs() {
+    if (!mountMemo) {
+      mountMemo = Promise.all(MV_MOUNTS.map(async (k) => {
+        const url = await dataUrl(mvImg(k));
+        const im = new Image();
+        im.src = url;
+        await im.decode();
+        return [k, { url, r: im.height / im.width }];
+      })).then(Object.fromEntries).catch((e) => { mountMemo = null; throw e; });
+    }
+    return mountMemo;
+  }
+  const BAKE_PX = 5e6; // 烤成的圖最多幾個像素（約 2 倍）
+  const baked = { key: null, url: null };
+  let bakeTimer = 0;
+  function bakeLater() {
+    clearTimeout(bakeTimer);
+    bakeTimer = setTimeout(bakeBase, 60);
+  }
+  // 烤好的圖記在這個瀏覽器（Cache Storage，照底圖的 key）：下一次打開輿圖不必再烤（烤一次在手機上要一兩秒）。記不住、讀不到照烤
+  const BAKE_CACHE = "tx-map-bake", BAKE_VER = 2; // 2：換成主機畫的底圖
+  const bakeReq = (key) => `/__map-bake/${BAKE_VER}/${encodeURIComponent(key)}`;
+  async function bakeCached(key) {
+    try {
+      if (!window.caches) return null;
+      const hit = await (await caches.open(BAKE_CACHE)).match(bakeReq(key));
+      return hit ? URL.createObjectURL(await hit.blob()) : null;
+    } catch (e) { return null; }
+  }
+  async function bakeKeep(key, blob) {
+    try {
+      if (!window.caches) return;
+      const box = await caches.open(BAKE_CACHE);
+      for (const r of await box.keys()) await box.delete(r); // 只留這一張（劇情開了新地點換一張）
+      await box.put(bakeReq(key), new Response(blob, { headers: { "Content-Type": "image/jpeg" } }));
+    } catch (e) { /* 記不住就下次再烤 */ }
+  }
+  async function bakeBase() {
+    const base = S.mapBase, w0 = document.getElementById("mvw");
+    if (!base || !base.paint || !w0 || w0.querySelector(".mv-base") || typeof Image === "undefined" || typeof Blob === "undefined" || !window.URL || !URL.createObjectURL) return;
+    const key = base.key;
+    try {
+      let url = baked.key === key ? baked.url : null;
+      if (!url) url = await bakeCached(key);
+      if (!url) {
+        const art = await artImg(), mounts = art ? {} : await mountImgs();
+        const f = Math.max(1, Math.min(2, Math.sqrt(BAKE_PX / (base.w * base.h))));
+        const PW = Math.round(base.w * f), PH = Math.round(base.h * f);
+        const vec = URL.createObjectURL(new Blob([paintSvg(base, mounts, PW, PH, art)], { type: "image/svg+xml" }));
+        const img = new Image();
+        img.src = vec;
+        await img.decode();
+        try {
+          const cv = document.createElement("canvas");
+          cv.width = PW; cv.height = PH;
+          cv.getContext("2d").drawImage(img, 0, 0, PW, PH);
+          const blob = await new Promise((ok) => cv.toBlob(ok, "image/jpeg", 0.9));
+          cv.width = cv.height = 0;
+          if (!blob) throw new Error("toBlob");
+          url = URL.createObjectURL(blob);
+          bakeKeep(key, blob);
+          URL.revokeObjectURL(vec);
+        } catch (e) {
+          url = vec; // 畫不進畫布（舊瀏覽器）：直接用那一張 SVG
+        }
+        if (baked.url && baked.key !== key) URL.revokeObjectURL(baked.url);
+        Object.assign(baked, { key, url });
+      }
+      const pic = new Image();
+      pic.src = url;
+      await pic.decode().catch(() => {});
+      // 等的時候底圖可能換掉了（劇情開了新地點、登出）
+      const w = document.getElementById("mvw");
+      if (!w || !w.isConnected || (S.mapBase && S.mapBase.key) !== key || w.querySelector(".mv-base")) return;
+      Object.assign(pic, { className: "mv-base", alt: "", draggable: false });
+      pic.width = base.w; pic.height = base.h;
+      w.prepend(pic);
+      requestAnimationFrame(() => pic.classList.add("on"));
+    } catch (e) {
+      /* 畫不出來（記憶體不夠、圖抓不到）：照舊是一張紙色 */
+    }
+  }
+
+  // ── 手勢：一指拖（放手會順著滑）、兩指捏、滾輪（觸控板捏合同）、雙擊放大；按下之後不到 MV_SLOP 放開是點一下（點地點照舊由 click 開卡，
+  // 點空白收回），拖過、捏過放開的那一下 click 吃掉。拖的指標動了才抓住（按下就抓的話，Chrome 會把 click 送到抓住的地圖框）──
+  function mvBase() {
+    const a = [...mv.pts.values()];
+    mv.start = {
+      mx: a.reduce((s, p) => s + p[0], 0) / a.length, my: a.reduce((s, p) => s + p[1], 0) / a.length, cam: { ...S.mapCam },
+      d: a.length > 1 ? Math.max(1, Math.hypot(a[1][0] - a[0][0], a[1][1] - a[0][1])) : 1,
+    };
+  }
+  function mvBegin() {
+    mv.moved = true;
+    const g = mv.g;
+    if (!g) return;
+    for (const id of mv.pts.keys()) { try { g.wrap.setPointerCapture(id); } catch (e) { /* 合成的事件、已經放開的指標抓不住 */ } }
+  }
+  function mvFrame() {
+    mv.frame = 0;
+    const a = [...mv.pts.values()], s = mv.start, g = mv.g;
+    if (!s || !g || !mv.moved) return;
+    if (a.length === 1) camSet({ z: s.cam.z, x: s.cam.x + a[0][0] - s.mx, y: s.cam.y + a[0][1] - s.my }, g);
+    else if (a.length >= 2) {
+      const mx = (a[0][0] + a[1][0]) / 2, my = (a[0][1] + a[1][1]) / 2, d = Math.hypot(a[1][0] - a[0][0], a[1][1] - a[0][1]);
+      const wx = (s.mx - g.x0 - s.cam.x) / s.cam.z, wy = (s.my - g.y0 - s.cam.y) / s.cam.z;
+      const z = Math.min(MV_ZMAX, Math.max(zMin(g), (s.cam.z * d) / s.d));
+      camSet({ z, x: mx - g.x0 - wx * z, y: my - g.y0 - wy * z }, g);
+    }
+  }
+  const mvSoon = () => { if (!mv.frame) mv.frame = requestAnimationFrame(mvFrame); };
+  function mvDown(ev) {
+    if ((ev.pointerType === "mouse" && ev.button !== 0) || !S.mapBase || !S.mapCam) return;
+    if (mv.pts.has(ev.pointerId)) mv.pts.clear(); // 同一個指標又按下：上一次沒收到放開（在視窗外放開），重新來過
+    if (mv.pts.size >= 2) return;
+    mv.eatUntil = 0;
+    mvStop();
+    if (!mv.pts.size) { mv.moved = false; mv.g = mapGeom(document.getElementById("map")); mv.vel = [0, 0]; }
+    mv.pts.set(ev.pointerId, [ev.clientX, ev.clientY]);
+    mv.last = [ev.clientX, ev.clientY, performance.now()];
+    mvBase();
+    if (mv.pts.size === 2) mvBegin(); // 第二指按下就是捏合：不再算點一下
+  }
+  function mvMove(ev) {
+    if (!mv.pts.has(ev.pointerId)) return;
+    mv.pts.set(ev.pointerId, [ev.clientX, ev.clientY]);
+    if (!mv.moved) {
+      if (Math.hypot(ev.clientX - mv.start.mx, ev.clientY - mv.start.my) <= MV_SLOP) return; // 還不到：可能是點一下
+      mvBegin();
+    }
+    if (mv.pts.size === 1 && mv.last) {
+      const now = performance.now(), dt = Math.max(1, now - mv.last[2]);
+      mv.vel = [0.8 * (ev.clientX - mv.last[0]) / dt + 0.2 * mv.vel[0], 0.8 * (ev.clientY - mv.last[1]) / dt + 0.2 * mv.vel[1]];
+      mv.last = [ev.clientX, ev.clientY, now];
+    }
+    mvSoon();
+  }
+  // 放手之後順著滑一段、慢慢停
+  function mvCoast() {
+    let v = mv.vel.map((x) => x * 16), last = performance.now();
+    const g = mv.g;
+    const step = (now) => {
+      const k = Math.min(3, (now - last) / 16);
+      last = now;
+      const c = S.mapCam;
+      camSet({ z: c.z, x: c.x + v[0] * k, y: c.y + v[1] * k }, g);
+      v = v.map((x) => x * MV_FRICTION ** k);
+      if (Math.hypot(...v) > 0.3) mv.anim = requestAnimationFrame(step);
+      else { mv.anim = 0; mv.g = null; drawMarks(); }
+    };
+    mv.anim = requestAnimationFrame(step);
+  }
+  function mvUp(ev) {
+    if (!mv.pts.has(ev.pointerId)) return;
+    if (mv.frame) { cancelAnimationFrame(mv.frame); mvFrame(); }
+    mv.pts.delete(ev.pointerId);
+    if (mv.pts.size) { mvBase(); mv.vel = [0, 0]; mv.last = null; return; } // 雙指放開一指：剩下那一指接著拖
+    if (mv.moved) {
+      if (ev.type === "pointerup") mv.eatUntil = Date.now() + MV_CLICK;
+      if (mv.last && performance.now() - mv.last[2] < 80 && Math.hypot(...mv.vel) > MV_COAST && !reduceMotion()) { mvCoast(); return; }
+      mv.g = null;
+      drawMarks();
+      return;
+    }
+    mv.g = null;
+    if (ev.type !== "pointerup" || (ev.target && ev.target.closest && ev.target.closest("[data-act]"))) return; // 點到地點：click 開卡
+    const now = Date.now(), g = mapGeom(document.getElementById("map"));
+    if (g && now - mv.lastTap < MV_TAP2) { mv.lastTap = 0; zoomAt(S.mapCam.z * 2, ev.clientX - g.x0, ev.clientY - g.y0, true); return; }
+    mv.lastTap = now;
+    mapBlank();
+  }
+  function mvWheel(ev) {
+    if (ev.preventDefault) ev.preventDefault();
+    if (mv.pts.size || !S.mapCam) return;
+    mvStop();
+    const g = mv.g || (mv.g = mapGeom(document.getElementById("map")));
+    if (!g) return;
+    const dy = ev.deltaY * (ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? g.vh : 1);
+    zoomAt(S.mapCam.z * Math.exp(-dy * MV_WHEEL), ev.clientX - g.x0, ev.clientY - g.y0);
+    clearTimeout(mv.wheelTimer);
+    mv.wheelTimer = setTimeout(() => { mv.g = null; drawMarks(); }, 160);
+  }
+  // 拖過、捏過放開的那一下 click（捕獲階段、在 document 分派之前）吃掉：不誤開卡
+  function mvEat(ev) {
+    if (!mv.eatUntil) return;
+    const late = Date.now() > mv.eatUntil;
+    mv.eatUntil = 0;
+    if (late) return;
+    ev.stopPropagation();
+    if (ev.preventDefault) ev.preventDefault();
+  }
+  // 地圖框的監聽：掛一次（地圖框常駐 FB-324；底圖換了整層重畫才是新的框）
+  const mvWired = new WeakSet();
+  function mvWire(wrap) {
+    if (!wrap || !wrap.addEventListener || mvWired.has(wrap)) return;
+    mvWired.add(wrap);
+    wrap.addEventListener("pointerdown", mvDown);
+    wrap.addEventListener("pointermove", mvMove);
+    wrap.addEventListener("pointerup", mvUp);
+    wrap.addEventListener("pointercancel", mvUp);
+    wrap.addEventListener("wheel", mvWheel, { passive: false });
+    wrap.addEventListener("click", mvEat, true);
+    // 舊版 iOS Safari 的捏合（新的瀏覽器由 touch-action: none 擋）、拖到地圖上的字開始原生拖曳，都擋掉
+    for (const t of ["gesturestart", "gesturechange", "dragstart"]) wrap.addEventListener(t, (ev) => ev.preventDefault());
+  }
+
+  // ── 打開、換外圍 ──
+  // 第一次（每一次打開輿圖）看哪裡：選了一處以它為中心、放到 MV_PICK_Z；不然以你為中心、MV_OPEN_Z
+  function camFirst(g) {
+    const st = S.mapState, base = S.mapBase;
+    const p = (S.mapSel && placeXY(S.mapSel)) || (st && youXY(base, st));
+    return p ? camAt(g, p[0], p[1], S.mapSel ? MV_PICK_Z : MV_OPEN_Z) : camFit(g);
+  }
+  // 視窗換了大小、地圖框換了高（狀態列變高變矮，FB-710）：照新的框重夾、重排
+  function applyMapView() {
+    const g = mapGeom(document.getElementById("map"));
+    if (!g || !S.mapBase) return;
+    camSet(S.mapCam || camFirst(g), g);
+    drawMarks();
+  }
+  // 換外圍（找地點開關、版圖變化開關）：外圍的鈕與抽屜整個換掉（同 showMapHost 的做法），地圖本身留著
   function remapChrome() {
     const box = document.getElementById("mapx");
     if (!box) return;
@@ -1663,402 +1569,27 @@
     for (const el of [...box.children]) if (el.id !== "map") el.remove();
     box.insertAdjacentHTML("beforeend", mapChrome());
     drawerGrab();
+    cardsWire();
     setMapDrawer(S.mapDrawer);
   }
-  // 從天下圖點一區、「進入此區」、找地點挑了一處、鄰區出口、上面那一排換一區：換到那一區的區圖。focus：挑的那一處（抽屜半開它的卡）；
-  // 沒給而且你就在這一區：開你腳下這一處的卡（設計 5.1：拉開是你腳下這一處的卡）。進區圖回 1 倍（企劃者 2026-10-22）
-  // 第一層按「全區」（mine 假）：點了的那一處照舊開著，沒點就不開卡（點遠處看路線與幾分）
-  function enterRegion(rid, focus = null, mine0 = true) {
-    stopPlay();
-    if (!rid || !S.mapBase || !regionPlaces(S.mapBase, rid).length) return;
-    const st = S.mapState, mine = mine0 && !focus && st && !st.journey && hereRegion() === rid ? st.here : null, sel = focus || mine;
-    Object.assign(S, { mapLayer: "region", mapRegion: rid, mapMode: sel ? "place" : "overview", mapSel: sel, mapWeek: null, mapQuery: "", mapDrawer: sel ? "peek" : "min", mapPan: null, panFrom: null });
-    applyMapView(true);
-    remapChrome();
-    drawMarks();
+  // 每一次打開輿圖（goTab）：以你為中心、附近那一排。江湖頁的小地圖點了某一處、別區那一張的「前往」：以那一處為中心、開它的卡
+  function mapFirst(sel = null) {
+    mvStop();
+    Object.assign(S, { mapMode: sel ? "place" : "overview", mapSel: sel, mapPreview: null, mapDrawer: "peek", mapWeek: null, mapQuery: "", mapCam: null });
   }
-  // 回天下圖（區圖上面那一排的「‹ 天下」、天下圖的「天下」）：回 1 倍（企劃者 2026-10-22）
-  function toWorld() {
-    stopPlay();
-    Object.assign(S, { mapLayer: "world", mapMode: "overview", mapSel: null, mapWeek: null, mapQuery: "", mapDrawer: "min", mapPan: null, panFrom: null });
-    remapChrome();
-    applyMapView();
-    drawMarks();
-  }
-  // 區圖上點了一處（小圖或名字框）：抽屜半開那一處的卡，地圖不動（設計 5.2）；點空白收回那一行
-  function regionPick(id) {
-    if (!id) {
-      if (S.mapMode !== "place") return;
-      Object.assign(S, { mapSel: null, mapMode: "overview" });
-      setMapDrawer("min");
-    } else {
-      Object.assign(S, { mapSel: id, mapMode: "place", mapQuery: "" });
-      if (S.mapDrawer === "min" || S.mapDrawer === "tl") setMapDrawer("peek");
-    }
-    redrawDrawer();
-    if (S.mapLayer === "near") { drawMarks(); nearNudge(); } // 第二層：那一處放大、其餘退成四成，地圖輕推一下讓它露在卡上方
-    else drawSel();
-  }
-  const hereRegion = () => {
-    const p = S.mapBase && S.mapState && placeOf(S.mapBase, S.mapState.here);
-    return p ? p.region : null;
-  };
-  const regionOfPlace = (id) => {
-    const p = id && S.mapBase && placeOf(S.mapBase, id);
-    return p ? p.region : null;
-  };
-
-  // ── 底圖烤成一張圖（Joy 2026-10-18「輿圖滑動的時候還是很卡」）──
-  // 底圖約 1,200 個 SVG 元素（山頭、樹、河）加一層絹紋雜訊濾鏡（feTurbulence）：打開輿圖之後把不會變的那些畫成一張點陣圖（<image>），
-  // 只留會變的：底色那一塊（最前面的 rect）、大區（path[data-region]，drawMarks 照這一層換 fill、收州界）、字、路（.tx-roads：區圖照 CSS
-  // 換成一種淡實線，輿圖第三版第 4 批）、記號。圖的解析度照螢幕（最多 3 倍、一千兩百萬像素）
-  const BAKE_PX = 12e6;
-  const baked = { key: null, url: null }; // 這一張底圖烤好的圖（同一張底圖整層重畫時不必再烤）
-  let bakeTimer = 0;
-  function bakeLater() {
-    clearTimeout(bakeTimer);
-    bakeTimer = setTimeout(bakeBase, 250);
-  }
-  // 要烤進圖裡的：最前面那一塊底色、大區、字、路、記號、defs 以外的
-  function bakeable(svg) {
-    const first = svg.querySelector(":scope > rect");
-    return [...svg.children].filter((el) => {
-      const t = el.tagName.toLowerCase(), cls = (el.getAttribute && el.getAttribute("class")) || "";
-      return el !== first && t !== "defs" && t !== "text" && t !== "image" && el.id !== "mk" && !cls.includes("tx-roads") && !el.hasAttribute("data-region") && !(el.querySelector && el.querySelector("text"));
-    });
-  }
-  async function bakeBase() {
-    const wrap = document.getElementById("map");
-    const svg = wrap && wrap.querySelector(".tx-world-map > svg");
-    if (!svg || svg.dataset.baked || typeof Image === "undefined" || typeof Blob === "undefined" || !window.URL || !URL.createObjectURL) return;
-    const vb = svg.viewBox && svg.viewBox.baseVal;
-    const parts = bakeable(svg);
-    if (!vb || !vb.width || !parts.length) return;
-    const key = S.mapBase && S.mapBase.key;
-    svg.dataset.baked = "1";
-    try {
-      let url = baked.key === key ? baked.url : null;
-      if (!url) {
-        const f = Math.max(1, Math.min(3, window.devicePixelRatio || 1, Math.sqrt(BAKE_PX / (vb.width * vb.height))));
-        const w = Math.round(vb.width * f), h = Math.round(vb.height * f);
-        const defs = svg.querySelector(":scope > defs");
-        const src = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vb.width} ${vb.height}" width="${w}" height="${h}">${defs ? defs.outerHTML : ""}${parts.map((el) => el.outerHTML).join("")}</svg>`;
-        const vec = URL.createObjectURL(new Blob([src], { type: "image/svg+xml" }));
-        const img = new Image();
-        img.src = vec;
-        await img.decode();
-        const cv = document.createElement("canvas");
-        cv.width = w; cv.height = h;
-        cv.getContext("2d").drawImage(img, 0, 0, w, h);
-        URL.revokeObjectURL(vec);
-        const blob = await new Promise((ok) => cv.toBlob(ok, "image/png"));
-        cv.width = cv.height = 0;
-        if (!blob) throw new Error("toBlob");
-        url = URL.createObjectURL(blob);
-        if (baked.url && baked.key !== key) URL.revokeObjectURL(baked.url);
-        Object.assign(baked, { key, url });
-        const pic = new Image();
-        pic.src = url;
-        await pic.decode(); // 先解好碼再換上，換的那一下不閃
-      }
-      // 等的時候底圖可能換掉了（劇情開了新地點、登出）
-      if (!svg.isConnected || (S.mapBase && S.mapBase.key) !== key) return;
-      const now = bakeable(svg);
-      const im = document.createElementNS("http://www.w3.org/2000/svg", "image");
-      for (const [k, v] of [["x", 0], ["y", 0], ["width", vb.width], ["height", vb.height], ["preserveAspectRatio", "none"], ["href", url]]) im.setAttribute(k, v);
-      im.setAttribute("class", "map-baked");
-      im.setAttribute("pointer-events", "none");
-      // 圖放在最後一塊大區後面（絹紋本來在大區底下，現在疊在大區上面：只有一成的淡褐雜訊，看不出差別）
-      const regions = svg.querySelectorAll(":scope > [data-region]");
-      const after = regions.length ? regions[regions.length - 1] : svg.querySelector(":scope > rect");
-      svg.insertBefore(im, after ? after.nextSibling : now[0]);
-      now.forEach((el) => el.remove());
-    } catch (e) {
-      /* 畫不出來（舊瀏覽器、記憶體不夠）：照舊用向量的底圖 */
-    }
-  }
-
-  // ── 輿圖的取景：兩張圖的取景是固定的（設計第五章），每次照地圖框現在的大小重算（轉向、拉視窗、版圖變化把框縮到抽屜上面都跟著）；
-  // 取景上面再疊一層拖與縮放（企劃者 2026-10-22，下面「輿圖的拖與縮放」那一段）──
-  // 視圖 v = { s 倍率, cx, cy 視窗中心對著的地圖座標 }；地圖照原本的像素大小放在框裡，位移與倍率套在兩張 svg 的外框（.tx-world-map）上
-  // （svg 根元素的 transform 一變，Chrome 要照新的倍率重排每一個 <text>）
-  let glideTimer = 0;
-  // 地圖框與地圖的大小、框的內緣在畫面上的位置；地圖還沒畫出來（或框沒有大小）回 null
-  function mapGeom(wrap) {
-    const svg = wrap && wrap.querySelector(".tx-world-map > svg");
-    const vb = svg && svg.viewBox && svg.viewBox.baseVal;
-    if (!vb || !vb.width || !vb.height || !wrap.clientWidth || !wrap.clientHeight) return null;
-    const r = wrap.getBoundingClientRect();
-    return { wrap, svg, world: svg.parentNode && svg.parentNode.style ? svg.parentNode : svg, vw: wrap.clientWidth, vh: wrap.clientHeight, W: vb.width, H: vb.height,
-      x0: r.left + wrap.clientLeft, y0: r.top + wrap.clientTop };
-  }
-  // 地點的中心：照底圖的清單（記號還沒畫出來也找得到）
-  const placeXY = (id) => {
-    const p = id && S.mapBase && S.mapBase.places.find((x) => x.id === id);
-    return p ? [p.x, p.y] : null;
-  };
-  // 照這一層算取景、套到地圖上（連同拖縮）；glide：換層、換區時滑一下（≤150ms）。取景或地圖框變了才重畫記號（viewKey）。
-  // 拖縮：同一個取景再套一次（切分頁回來、輿圖頁重畫）照留；同一層、同一區只換了地圖框的高（狀態列變高變矮，FB-710）帶過去
-  // （panCarry：畫面上一個像素不動，照新的可見區夾一次；soft：手勢一開始才發現框換了，只准不再往外、不挪）；換層、換區、換寬回 1 倍
-  function applyMapView(glide = false, g = mapGeom(document.getElementById("map")), soft = false) {
-    if (!g || !S.mapBase) return;
-    let v = null;
-    if (S.mapLayer === "near" && S.mapState) { // 第一層：你在的那一區、以你為中心（nearFit）
-      S.mapRegion = hereRegion() || S.mapRegion;
-      v = S.nearView = nearFit(S.mapBase, S.mapState, g.vw, g.vh, REGION_TOP, deskMap() ? 0 : REGION_PAD);
-    }
-    if (!v && S.mapLayer === "near") S.mapLayer = "region"; // 還沒有疊層、找不到你：照全區
-    if (!v && (S.mapLayer !== "world" || !S.mapBase.world)) {
-      if (!S.mapRegion || !regionPlaces(S.mapBase, S.mapRegion).length) S.mapRegion = hereRegion() || ((S.mapBase.regions || [])[0] || {}).id || null;
-      const desk = deskMap();
-      v = S.regionView = S.mapRegion ? regionFit(S.mapBase, S.mapRegion, g.vw, g.vh, REGION_TOP, desk ? 0 : REGION_PAD, desk ? 0 : REGION_CARD) : null;
-    }
-    if (!v && S.mapBase.world) {
-      const tl = S.mapMode === "timeline", pad = deskMap() || tl ? 0 : WORLD_PAD, top = tl ? WORLD_TL_TOP : WORLD_TOP;
-      v = S.worldView = worldFit(g.vw, g.vh, S.mapBase.world.frame, pad, top, g.W, g.H);
-      v.area = worldArea(v, g.vw, g.vh, top, pad); // 大區名可以擺到哪（FB-631）
-    }
-    if (!v) return;
-    clearTimeout(glideTimer);
-    g.wrap.classList.toggle("glide", glide);
-    if (glide) glideTimer = setTimeout(() => g.wrap.classList.remove("glide"), 200);
-    const key = viewKey(v, g), was = S.panFrom;
-    if (key !== S.panKey) {
-      const same = !!was && was.layer === S.mapLayer && was.region === S.mapRegion && was.vw === g.vw && was.vh !== g.vh;
-      Object.assign(S, { mapPan: same ? panCarry(panOf(), was, v, g.vw, g.vh, soft) : null, panKey: key });
-    }
-    S.panFrom = { layer: S.mapLayer, region: S.mapRegion, vw: g.vw, vh: g.vh, s: v.s, cx: v.cx, cy: v.cy };
-    g.world.style.transform = mapTransform(v, g.vw, g.vh, panOf());
-    if (key !== S.marksKey) scheduleMarks();
-    homeCheck();
-  }
-
-  // ── 輿圖的拖與縮放（企劃者 2026-10-22「輿圖沒辦法拖曳移動了」「不順手」，選「兩張都能拖、能捏合縮放」；
-  // 推翻設計第五章「不自由縮放」那一半，兩層照舊；計畫 docs/superpowers/plans/2026-10-22-輿圖拖曳縮放.md）──
-  // 取景 v 上面疊一層螢幕座標的仿射 S.mapPan = { z, x, y }：螢幕上的點＝z ×（取景的螢幕座標）＋(x, y)。整張圖連字一起放大、移動：
-  // 記號都畫在地圖座標裡、大小照取景的倍率反算（regionParts、worldParts），所以名字框、印章、進度條、戰字印、你的旗、出口的擺法
-  // 不重算、記號不重畫（viewKey 不含 z）；拖縮中每一幀只換 .tx-world-map 的 transform，那一層掛著 will-change（合成層，不重畫），
-  // 收尾才拿掉（照最後的倍率重畫一次，字是清楚的）。拖的時候不換游標、不在框上加 class（FB-322：游標會一路繼承、整棵重算樣式）。
-  // 手機一指拖、兩指捏合；電腦滑鼠拖、滾輪（ctrl＋滾輪、觸控板捏合同）以游標為中心縮放；按下之後不到 PAN_SLOP 放開是點一下（照舊開卡），
-  // 拖過、捏過放開的那一下 click 吃掉（不誤開卡）。1 倍（現在的取景）到 PAN_MAX，不准更小；夾邊（panBox、panClamp）
-  const PAN_SLOP = 6; // 按下之後移過幾 px 才算拖
-  const PAN_MAX = { world: 4, region: 3 }; // 最多放大幾倍（企劃者 2026-10-22：區圖約 3 倍、天下圖約 4 倍）
-  const PAN_WHEEL = 0.0015; // 滾輪每 1px 的 deltaY 縮放多少（exp；一格約 100px 是 0.86 倍）
-  const PAN_IDLE = 200; // 滾輪停多久算收尾（ms）
-  const PAN_CLICK = 400; // 拖完放開之後，多久內落在地圖上的 click 吃掉（ms；下一次按下就作廢）
-  const PAN_ONE = { z: 1, x: 0, y: 0 };
-  const panOf = () => S.mapPan || PAN_ONE;
-  const panMax = () => (S.mapLayer === "world" && S.mapBase && S.mapBase.world ? PAN_MAX.world : PAN_MAX.region);
-  // 取景加上拖縮，寫成 .tx-world-map 的 transform（1 倍時跟固定取景的寫法一字不差）
-  function mapTransform(v, vw, vh, p = PAN_ONE) {
-    return `translate(${p.z * (vw / 2 - v.cx * v.s) + p.x}px, ${p.z * (vh / 2 - v.cy * v.s) + p.y}px) scale(${p.z * v.s})`;
-  }
-  // 夾邊用的兩個框（取景的螢幕座標 [x0, y0, x1, y1]）：b＝內容框（天下圖與全區：底圖的 world.frame，整張圖——全區拖得過區界是 FB-876
-  // 企劃者 2026-10-26 選的甲，以前是這一區的取景框；第一層：nearFit 的 frame，也是整張圖），a＝露出來的那一塊（左右整個地圖框，上面讓開那一排，
-  // 底下讓開抽屜此刻的高度；桌機右欄、版圖變化時地圖框本來就在抽屜外）
-  function panBox(v, vw, vh) {
-    const world = S.mapLayer === "world" && S.mapBase && S.mapBase.world;
-    const whole = (world || S.mapLayer === "region") && S.mapBase && S.mapBase.world, f = whole ? S.mapBase.world.frame : v.frame;
-    if (!f) return null;
-    const [x0, y0, x1, y1] = whole ? [f[0], f[1], f[0] + f[2], f[1] + f[3]] : f;
-    const scr = (x, y) => [vw / 2 + (x - v.cx) * v.s, vh / 2 + (y - v.cy) * v.s];
-    const tl = S.mapMode === "timeline", top = world ? (tl ? WORLD_TL_TOP : WORLD_TOP) : REGION_TOP;
-    const bottom = deskMap() || tl ? 0 : mapDrawerPx(S.mapDrawer);
-    return { b: [...scr(x0, y0), ...scr(x1, y1)], a: [0, top, vw, Math.max(top + 1, vh - bottom)] };
-  }
-  // 夾邊（企劃者「圖不能完全拖出框外」）：每一軸，內容框比露出來的那一塊大就要蓋滿它（拖到底，最邊上的地點剛好露在那一排底下、抽屜上面），
-  // 比它小就不能出它——兩種都是位移夾在 a0 − z·b0 與 a1 − z·b1 之間。軟夾：from（上一幀）在它自己的倍率已經超出多少（例：天下圖 1 倍時
-  // 取景框離上面那一排多留 8px，卡拉高之後照規則要貼齊）就照樣准超出多少，不硬跳回來、也不准再往外；縮回 1 倍時照新的倍率夾回框裡
-  function panClamp(p, box, from = p) {
-    if (!box || (p.z === 1 && !p.x && !p.y)) return p; // 1 倍的取景本身一定可以
-    const lim = (t, t0, b0, b1, a0, a1) => {
-      const lo = (z) => Math.min(a0 - z * b0, a1 - z * b1), hi = (z) => Math.max(a0 - z * b0, a1 - z * b1);
-      const under = Math.max(0, lo(from.z) - t0), over = Math.max(0, t0 - hi(from.z));
-      return Math.min(hi(p.z) + over, Math.max(lo(p.z) - under, t));
-    };
-    return { z: p.z, x: lim(p.x, from.x, box.b[0], box.b[2], box.a[0], box.a[2]), y: lim(p.y, from.y, box.b[1], box.b[3], box.a[1], box.a[3]) };
-  }
-  // 縮小時位移照倍率收回去（從 z0 縮到 z：位移乘 (z − 1)／(z0 − 1)），縮到 1 倍剛好回到現在的取景（像看照片：縮回最小就置中）；
-  // 放大不收（手指、游標底下那一點不動）
-  const panShrink = (q, z0) => (q.z < z0 && z0 > 1 ? { z: q.z, x: (q.x * (q.z - 1)) / (z0 - 1), y: (q.y * (q.z - 1)) / (z0 - 1) } : q);
-  // 以地圖框裡 (px, py) 為中心縮放到 z（夾在 1～max）：那一點底下的地圖不動；縮到 1 倍（或更小）就是 1 倍的取景
-  // （panCarry 帶過去的倍率可能比 max 多一點點：放大時不把它往下拉，免得一放大反而縮一下）
-  function panZoom(p, z, px, py, max) {
-    if (z <= 1) return PAN_ONE;
-    const nz = Math.min(Math.max(max, p.z), z), f = nz / p.z;
-    return panShrink({ z: nz, x: px - f * (px - p.x), y: py - f * (py - p.y) }, p.z);
-  }
-  // 地圖框換了高、取景照新的框重算（FB-710：狀態列變高變矮）：把拖縮帶過去——合起來的倍率與位移（畫面上的地圖）照舊，換算成新取景上的
-  // z、x、y；新的取景比畫面上的還大（z 不到 1）就照新的框回 1 倍。再照新的可見區夾一次（soft：只准不再往外）。1 倍的取景本身
-  // （寬度定倍率的區，取景不看框高）換算完還是 1 倍
-  function panCarry(p, was, v, vw, vh, soft = false) {
-    const Z = p.z * was.s, tx = p.z * (was.vw / 2 - was.cx * was.s) + p.x, ty = p.z * (was.vh / 2 - was.cy * was.s) + p.y;
-    const z = Z / v.s;
-    if (z < 1 - 1e-6) return null;
-    let q = { z: Math.max(1, z), x: tx - z * (vw / 2 - v.cx * v.s), y: ty - z * (vh / 2 - v.cy * v.s) };
-    q = panClamp(q, panBox(v, vw, vh), soft ? q : PAN_ONE);
-    return Math.abs(q.z - 1) < 1e-6 && Math.abs(q.x) < 0.01 && Math.abs(q.y) < 0.01 ? null : q;
-  }
-  // 兩指：開始時（start：拖縮、中點、兩指距離）中點底下的那一點，跟著現在的中點走；倍率照兩指距離的比
-  function panPinch(start, mx, my, d, max) {
-    const p = start.p, z = Math.min(Math.max(max, p.z), (p.z * d) / start.d);
-    if (z <= 1) return PAN_ONE;
-    return panShrink({ z, x: mx - (z * (start.mx - p.x)) / p.z, y: my - (z * (start.my - p.y)) / p.z }, p.z);
-  }
-  // 手勢的狀態：按著的指標（id → [clientX, clientY]）、起點、拖過了沒、排好的那一幀、這一次手勢量好的地圖框與夾邊的框、滾輪、吃掉 click 的期限
-  const pan = { pts: new Map(), start: null, moved: false, frame: 0, next: null, g: null, box: null, wheel: false, wheelTimer: 0, eatUntil: 0 };
-  // 量好這一次手勢要用的地圖框（按下、滾輪第一下量一次：每一幀量會逼瀏覽器先排版）
-  function panMeasure() {
-    const g = mapGeom(document.getElementById("map")), f = S.panFrom;
-    // 地圖框換了大小、取景還沒重套（FB-710 的保險：不經 renderTop 的路也一樣）：先照新的框帶過去，這一次手勢不跳、也不挪
-    if (g && f && (f.vw !== g.vw || f.vh !== g.vh)) applyMapView(false, g, true);
-    const v = curView();
-    pan.g = g && v ? g : null;
-    pan.box = g && v ? panBox(v, g.vw, g.vh) : null;
-    return pan.g;
-  }
-  // 指標數變了（按下、放開一指）：從現在的位置與拖縮重新記起點。一指記上一幀的位置；兩指記開始時的拖縮、中點、兩指距離
-  function panBase() {
-    const pts = [...pan.pts.values()], g = pan.g;
-    pan.start = null;
-    if (!g || !pts.length) return;
-    if (pts.length === 1) { pan.start = { at: pts[0] }; return; }
-    const [[ax, ay], [bx, by]] = pts;
-    pan.start = { p: panOf(), mx: (ax + bx) / 2 - g.x0, my: (ay + by) / 2 - g.y0, d: Math.max(1, Math.hypot(bx - ax, by - ay)) };
-  }
-  // 開始動了（拖過 PAN_SLOP、第二指按下、滾輪第一下）：那一層掛 will-change（之後每一幀只動合成層）、換層的滑動停掉；
-  // 拖的指標這時才抓住（按下就抓的話，Chrome 會把 click 送到抓住的地圖框，點一下就點不到地點）
-  function panBegin() {
-    pan.moved = true;
-    const g = pan.g;
-    if (!g) return;
-    for (const id of pan.pts.keys()) { try { g.wrap.setPointerCapture(id); } catch (e) { /* 合成的事件、已經放開的指標抓不住 */ } }
-    clearTimeout(glideTimer);
-    if (g.wrap.classList.contains("glide")) g.wrap.classList.remove("glide");
-    g.world.style.willChange = "transform";
-  }
-  // 收尾：拿掉 will-change（照最後的倍率重畫一次）
-  function panFinish() {
-    if (pan.frame) { cancelAnimationFrame(pan.frame); panFrame(); }
-    if (pan.g) pan.g.world.style.willChange = "";
-    Object.assign(pan, { start: null, g: null, box: null, next: null, wheel: false });
-  }
-  // 一幀套一次（同一幀的多次移動合併）：滾輪給的是算好的拖縮（pan.next），指標照最新的位置算
-  function panFrame() {
-    pan.frame = 0;
-    let p = pan.next;
-    pan.next = null;
-    const pts = [...pan.pts.values()], st = pan.start, cur = panOf();
-    if (!p && st && pan.moved && pan.g) {
-      if (pts.length === 1 && st.at) {
-        p = { z: cur.z, x: cur.x + pts[0][0] - st.at[0], y: cur.y + pts[0][1] - st.at[1] };
-        st.at = pts[0];
-      } else if (pts.length === 2 && st.d) {
-        const [[ax, ay], [bx, by]] = pts;
-        p = panPinch(st, (ax + bx) / 2 - pan.g.x0, (ay + by) / 2 - pan.g.y0, Math.hypot(bx - ax, by - ay), panMax());
-      }
-      if (p) p = panClamp(p, pan.box, cur);
-    }
-    if (p) panSet(p);
-  }
-  const panSoon = () => { if (!pan.frame) pan.frame = requestAnimationFrame(panFrame); };
-  // 套上一個拖縮：只寫 transform（記號、擺字都不動）
-  function panSet(p) {
-    S.mapPan = p.z === 1 && !p.x && !p.y ? null : p;
-    const g = pan.g || mapGeom(document.getElementById("map")), v = curView();
-    if (g && v) g.world.style.transform = mapTransform(v, g.vw, g.vh, panOf());
-    homeCheck();
-  }
-  // 回 1 倍（天下圖已經在總覽時再按「天下」）：滑一下
-  function panReset() {
-    Object.assign(S, { mapPan: null, panFrom: null });
-    applyMapView(true);
-  }
-  function panDown(ev) {
-    if ((ev.pointerType === "mouse" && ev.button !== 0) || !S.mapBase || !curView()) return; // 滑鼠只收左鍵
-    if (pan.pts.has(ev.pointerId)) { pan.pts.clear(); panFinish(); } // 同一個指標又按下：上一次沒收到放開（在視窗外放開），重新來過
-    if (pan.pts.size >= 2) return; // 第三指不管
-    pan.eatUntil = 0; // 新的一次按下：上一次拖完沒送出的 click 不再等
-    if (pan.wheel) { clearTimeout(pan.wheelTimer); panFinish(); }
-    if (!pan.pts.size) { pan.moved = false; panMeasure(); }
-    if (pan.frame) { cancelAnimationFrame(pan.frame); panFrame(); }
-    pan.pts.set(ev.pointerId, [ev.clientX, ev.clientY]);
-    panBase();
-    if (pan.pts.size === 2 && !pan.moved) panBegin(); // 第二指按下就是捏合：不再算點一下
-    else if (pan.pts.size === 2) { try { pan.g && pan.g.wrap.setPointerCapture(ev.pointerId); } catch (e) { /* 抓不住照樣收得到 */ } }
-  }
-  function panMove(ev) {
-    if (!pan.pts.has(ev.pointerId)) return;
-    pan.pts.set(ev.pointerId, [ev.clientX, ev.clientY]);
-    if (!pan.moved) {
-      const at = pan.start && pan.start.at;
-      if (!at || Math.hypot(ev.clientX - at[0], ev.clientY - at[1]) <= PAN_SLOP) return; // 還不到：可能是點一下
-      panBegin();
-    }
-    panSoon();
-  }
-  function panUp(ev) {
-    if (!pan.pts.has(ev.pointerId)) return;
-    if (pan.frame) { cancelAnimationFrame(pan.frame); panFrame(); } // 還沒套的那一幀先套上
-    pan.pts.delete(ev.pointerId);
-    if (pan.pts.size) { panBase(); return; } // 雙指放開一指：剩下那一指接著拖
-    if (pan.moved && ev.type === "pointerup") pan.eatUntil = Date.now() + PAN_CLICK; // 拖過、捏過：放開那一下的 click 不開卡
-    panFinish();
-  }
-  // 滾輪以游標為中心縮放；觸控板雙指捏合在 Chrome／Edge 是帶 ctrlKey 的 wheel，一樣處理（也因此擋掉瀏覽器自己的整頁放大）
-  function panWheel(ev) {
-    if (ev.preventDefault) ev.preventDefault();
-    if (pan.pts.size || !S.mapBase || !curView()) return; // 手指按著時不收
-    if (!pan.wheel) {
-      if (!panMeasure()) return;
-      pan.wheel = true;
-      panBegin();
-    }
-    clearTimeout(pan.wheelTimer);
-    pan.wheelTimer = setTimeout(() => { pan.moved = false; panFinish(); }, PAN_IDLE);
-    const g = pan.g, cur = pan.next || panOf();
-    const dy = ev.deltaY * (ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? g.vh : 1);
-    pan.next = panClamp(panZoom(cur, cur.z * Math.exp(-dy * PAN_WHEEL), ev.clientX - g.x0, ev.clientY - g.y0, panMax()), pan.box, cur);
-    panSoon();
-  }
-  // 拖過、捏過放開的那一下 click（捕獲階段、在 document 分派之前）吃掉：不誤開卡、不誤進一區
-  function panEat(ev) {
-    if (!pan.eatUntil) return;
-    const late = Date.now() > pan.eatUntil;
-    pan.eatUntil = 0;
-    if (late) return;
-    ev.stopPropagation();
-    if (ev.preventDefault) ev.preventDefault();
-  }
-  // 地圖框的監聽：掛一次（地圖框常駐 FB-324；底圖換了整層重畫才是新的框）
-  const panWired = new WeakSet();
-  function panWire(wrap) {
-    if (!wrap || !wrap.addEventListener || panWired.has(wrap)) return;
-    panWired.add(wrap);
-    wrap.addEventListener("pointerdown", panDown);
-    wrap.addEventListener("pointermove", panMove);
-    wrap.addEventListener("pointerup", panUp);
-    wrap.addEventListener("pointercancel", panUp);
-    wrap.addEventListener("wheel", panWheel, { passive: false });
-    wrap.addEventListener("click", panEat, true);
-    // 舊版 iOS Safari 的捏合（新的瀏覽器由 touch-action: none 擋）、拖到地圖上的字開始原生拖曳，都擋掉
-    for (const t of ["gesturestart", "gesturechange", "dragstart"]) wrap.addEventListener(t, (ev) => ev.preventDefault());
-  }
-
-  // 輿圖頁每次畫好（afterPage）：區圖的那一區（江湖頁小地圖點進來的、上次停的）、取景、抽屜、記號
+  // 輿圖頁每次畫好（afterPage）：量框、抽屜、看哪裡、字、路線、底圖、手勢
   function mapReady() {
     const wrap = document.getElementById("map");
     if (!wrap) return;
     mapFrame();
-    // 天下圖的總覽只有收著那一行與拉開的卡
-    if (S.mapLayer === "world" && S.mapMode === "overview" && !["min", "half", "full"].includes(S.mapDrawer)) S.mapDrawer = "min";
-    if (S.mapLayer === "region" && S.mapSel && regionOfPlace(S.mapSel)) S.mapRegion = regionOfPlace(S.mapSel); // 江湖頁的小地圖點了某一處（設計第八節）
-    applyMapView(false); // 先算區圖的取景：卡半開多高照它（peekPx）
+    if (!drawerStops().includes(S.mapDrawer)) S.mapDrawer = drawerStops()[0];
     setMapDrawer(S.mapDrawer);
+    const g = mapGeom(wrap);
+    if (g && S.mapBase) camSet(S.mapCam || camFirst(g), g);
     drawMarks();
-    nearNudge();
+    drawRoute();
     bakeLater();
     drawerGrab();
-    panWire(wrap); // 拖與縮放（企劃者 2026-10-22）
+    cardsWire();
+    mvWire(wrap);
   }
-
