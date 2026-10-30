@@ -1213,6 +1213,20 @@ def forge_lines(content: Content, season: WorldState) -> list[str]:
     return lines
 
 
+def ambush_lines(content: Content) -> list[str]:
+    """設伏劫道（Config.ambush，Joy 2026-10-30 打開）：開著才寫一行；數字讀設定。待 joy 潤"""
+    from . import ambush  # noqa: PLC0415
+
+    if not ambush.on(content):
+        return []
+    a = content.config.ambush
+    return [
+        f"- **設伏**（體力 {a.stamina}）：投靠了陣營、過了新手期，在兩頭都不是城鎮的路上守 {a.hours:g} 小時，敵對的人走過那一段"
+        f"（步行、疾行都算，下線也照守）就打一場：贏的搶走輸的{_tenth(a.silver_share)}銀兩（最多 {a.silver_cap} 兩）與 {a.materials} 個素材，"
+        "輸的扣氣血；伏兵輸了，埋伏就散了。守著的時候不能移動，可以隨時收伏。散人只劫得了自己揭了通緝的人。",
+    ]
+
+
 def page(content: Content, season: WorldState, *, recruitable: bool, rule: str = "") -> str:
     """設定抽屜的「玩法說明」（Markdown）：這一季在打什麼（第一季）、四個行動、體力、名望、投靠與軍令、三方有什麼不同（第一季）、
     情誼、心得、修練與煉製、意境、背包，各一兩句。數字全讀 Config（名望的範圍讀內容），句子不寫死。
@@ -1257,6 +1271,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
            if precise.on(content, season) else f"{cfg.talk_turns_per_day} 輪），或碰上交友的事。名望不夠的人物會打發你。"),
         "- **移動**：步行不花體力、只花時間；疾行立刻到、要花體力。步行時，每一段路可以邊走邊想、"
         + "沿途打聽、路邊採集各一次。",  # 全圖開放拿掉了留意地形
+        *ambush_lines(content),
         "",
         "#### 體力",
         *[f"- {line}" for line in stamina_lines(content, season)],
