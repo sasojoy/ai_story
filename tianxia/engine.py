@@ -5672,8 +5672,14 @@ class Game:
         最後一段是要選的事時，接著走只是把這一趟收成「走完」）。關著是 None。"""
         view = outing_rules.view(self.state, self.content)
         if view is not None and view["trip"] is not None:
-            view["trip"]["can_go"] = outing_rules.active(self.state) is not None and self._explore_ready() is not None
+            view["trip"]["can_go"] = self.outing_can_go()
         return view
+
+    def outing_can_go(self) -> bool:
+        """停下來的那一趟可以接著走了：事情選完了（探索回到選單上；體力不夠一段也算，接著走會把它收成「累了」）。"""
+        if outing_rules.active(self.state) is None:
+            return False
+        return IDLE_MARK in {o.id for o in self.options(odds=False, tick=False)}
 
     def _outing_walk(self) -> list[str]:
         """一段一段走（每一段是一次 choose(act:explore)，各寫各的江湖紀錄）：端出要選的事就停；打輸、氣血低於 outing_turn_back

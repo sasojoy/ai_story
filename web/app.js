@@ -388,6 +388,7 @@
     // 破境卡：動作回來的與輪詢拿到的都走這裡（S.main 換好之後才畫）。測試只抽 setMain 出來跑，沒有 ascendCard 就不畫
     if (typeof ascendCard === "function") setTimeout(ascendCard, 0);
     if (typeof storyCard === "function") setTimeout(storyCard, 0); // 特殊事件的跳顯框：同上
+    if (typeof outingSync === "function") setTimeout(outingSync, 0); // 走一趟停在要選的事上、選完了：接著走（outing.js）
     if (main.event_free_text == null) S.answering = false; // 事件過去了，輸入框跟著收起
     if (!(main.options || []).some((o) => o.id === sayingId())) S.saying = false; // 交談結束了（或那一顆沒了），輸入框跟著收起
     if (S.persuading && !(main.options || []).some((o) => o.id === S.persuading)) S.persuading = false; // 走開了、那一件辦完了：勸降的輸入框收起
@@ -6121,6 +6122,7 @@
       else inkRipple(key, x, y);
     }
     try {
+      if (act.startsWith("outing-") && typeof outingClick === "function" && await outingClick(act, el)) return; // 走一趟那一層（outing.js）
       switch (act) {
         case "gate": S.gateMode = el.dataset.mode; renderGate(); break;
         case "promo-sound": promoSound(el); break;

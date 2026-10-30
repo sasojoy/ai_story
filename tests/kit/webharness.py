@@ -47,7 +47,7 @@ from pathlib import Path
 ROOT = Path(__file__).parents[2]
 WEB = ROOT / "web"
 # 網頁分三個檔（減法季批 0）：index.html 照這個順序載入，頂層的名字同在一個全域裡
-APP_FILES = ("main.js", "map.js", "app.js")
+APP_FILES = ("main.js", "map.js", "outing.js", "app.js")
 
 
 def app_source() -> str:

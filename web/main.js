@@ -250,6 +250,7 @@
   const SORTIE_FULL_SUB = "今日已滿"; // 用完了：整句（什麼時候再來）在行動列底下那一行（待 joy 潤）
   const EXPLORE_PREFIX = "explore:"; // 探索三選一（出陣探索與地盤設計第三節）：探索那一格點了展開這三顆
   const EXPLORE_SUB = "三選一"; // 探索那一格是展開鈕時的小字（待 joy 潤）
+  const OUTING_SUB = "走一趟"; // 走一趟開著、伺服器沒給「多半給什麼」時探索那一格的小字（待 joy 潤）
   const TIER_WORDS = ["宵小出沒", "匪寇橫行", "兇徒盤據"]; // training.TIER_WORDS：尋敵那一格的小字寫這一帶多兇（不寫幾級，Joy 2026-10-22）
   const DRILL_FULL = "今日已練滿", DRILL_FULL_SUB = "今日已滿"; // training.DRILL_FULL：用完了，格子寫短的、整句在底下那一行，點了打開移動
   // 找素材分支（第 32 項，計畫 2.1 甲）：選單上有 explore:gather:<分支> 時「找素材」是展開鈕，點了在它底下再攤一排分支（S.gatherOpen）；
@@ -496,7 +497,9 @@
     modes.forEach((o) => used.add(o.id));
     branches.forEach((o) => used.add(o.id));
     // 入口灰著（體力不夠，三顆都按不下去）時就算記著展開也不畫：那一格是灰格子，不是展開鈕
-    const exploreOpen = S.wheelSel === "explore" && modes.length > 0 && !!(byId["act:explore"] && byId["act:explore"].enabled);
+    // 走一趟（outing.js；企劃者 2026-10-29～30）：探索那一格點了在底下展開一、三、五段，挑了才出發；關著（m.outing 是 null）照舊一按就探索
+    const outingOn = !!m.outing && !m.prologue;
+    const exploreOpen = S.wheelSel === "explore" && (modes.length > 0 || outingOn) && !!(byId["act:explore"] && byId["act:explore"].enabled);
     // 序章（新手引導計畫一）：還沒亮的格子不畫（act:explore、act:practice、act:train、act:rest、act:social、act:move）；
     // 不畫的格子對到的選項照樣記成用過，不會掉進「此地還能做」那個摺疊裡。練功的鍵教學內容還沒寫：草廬與初入江湖那四步都不畫（FB-670）
     // 四格（減法季批 1，整合設計 6.3）：探索、出陣、交友、移動。尋敵、操練那一格只在新手引導（序章、初入江湖）時還在——引導的話叫你按它
@@ -526,7 +529,7 @@
       // 出陣：小字寫今天還剩幾次（「今日 5 次」，體力在鈕上、說明那一行也有）；用完了寫「今日已滿」，什麼時候再來在底下那一行
       const left = SORTIE_LEFT.exec(detail);
       // 探索三選一開著：探索那一格是展開鈕（同移動），點了在下面就地展開三顆；入口灰著（三顆都按不下去）時照一般的灰格子
-      const wheel = d.key === "explore" && modes.length > 0 && o.enabled;
+      const wheel = d.key === "explore" && (modes.length > 0 || outingOn) && o.enabled;
       // 練功（FB-670）：亮著「不限次數」（只有頭目時「對上頭目」）；灰著沒有對手照鈕的 note（城外才有／這裡沒有）、頭目不在「頭目不在」，體力不夠照別格。
       // 城外練功分級（Config.training）：亮著寫級數（一級／二級／三級）；城裡的操練照出陣寫「今日 N 次」，用完了「今日已滿」
       const practice = d.key === "practice" && o.id === PRACTICE_ID && (o.enabled || !detail.startsWith("體力"))
@@ -537,7 +540,7 @@
       // 探索那一格亮著時小字寫這裡多半給什麼（「城裡多事」「野外多敵」，整合設計 6.3；伺服器的 m.mostly，在路上沒有）
       const mostly = d.key === "explore" && o.enabled && m.mostly ? m.mostly : "";
       const sub = mostly ? mostly
-        : wheel ? EXPLORE_SUB
+        : wheel ? (outingOn ? OUTING_SUB : EXPLORE_SUB)
         : tier ? tier
         : drillFull ? DRILL_FULL_SUB
         : practice ? practice
@@ -588,7 +591,7 @@
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}</div>
         <div class="options">${moves.map((o) => `<button class="btn go${routeGlowOn(m, o.id) ? " glow" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">→</span><span>${esc(o.label)}${o.note ? `<small class="opt-note">${esc(o.note)}</small>` : ""}</span></button>`).join("")}</div></div>`;
-    const exploreCard = !exploreOpen ? "" : `<div class="card act-explore"><div class="options">${modes.map((o) => o.id === GATHER_ID && branches.length
+    const exploreCard = !exploreOpen ? "" : outingOn ? outingPickerHtml(m) : `<div class="card act-explore"><div class="options">${modes.map((o) => o.id === GATHER_ID && branches.length
       ? gatherWheel(o, branches) : `
           <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
     // 其他只在此地才有的行動（招募、投靠、多出來的求見）收在摺疊裡，不佔行動列的高度。
