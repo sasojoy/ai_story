@@ -28,10 +28,17 @@ from pathlib import Path
 
 MAX_COMMITS = 80  # 摘要裡最多列幾筆提交（再多就寫「還有幾筆」）
 KEEP_DAYS = 30  # <日期>.log、<日期>.xml 留幾天
+FETCH_TIMEOUT = 300  # 秒：fetch 卡住（網路、憑證要跳視窗）就放棄，照本機上一次抓到的 origin/develop 跑，寫進備註
 
 
-def git(cwd: Path, *args: str, check: bool = False) -> subprocess.CompletedProcess:
-    out = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+def git(cwd: Path, *args: str, check: bool = False, timeout: float | None = None) -> subprocess.CompletedProcess:
+    """排程在背景跑、沒有人看著：git 一律不跳提示（憑證過期要登入就失敗，不是一直等）；給了 timeout 的逾時當失敗（結束碼 124）。"""
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"}
+    try:
+        out = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                             env=env, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        out = subprocess.CompletedProcess(["git", *args], 124, "", f"逾時（{timeout} 秒）")
     if check and out.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} 失敗：{out.stderr.strip()}")
     return out
@@ -46,7 +53,7 @@ def find_repo(start: Path) -> Path:
 def prepare_checkout(repo: Path, checkout: Path, branch: str) -> tuple[str, list[str]]:
     """明確 fetch origin/<branch>，把 checkout 重設成它的乾淨一份；回（SHA, 備註）。"""
     notes: list[str] = []
-    fetched = git(repo, "fetch", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}")
+    fetched = git(repo, "fetch", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}", timeout=FETCH_TIMEOUT)
     if fetched.returncode != 0:
         notes.append(f"fetch 失敗，用的是本機上一次抓到的 origin/{branch}：{fetched.stderr.strip()[:200]}")
     target = f"origin/{branch}"

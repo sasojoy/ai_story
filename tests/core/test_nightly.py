@@ -153,6 +153,43 @@ def test_the_more_commits_line_is_a_command_that_runs():
     assert '還有 14 筆（git log --since="1 day ago" 455664ac）' in text
 
 
+def test_git_never_waits_for_a_prompt_and_gives_up_after_its_time_limit(monkeypatch, tmp_path):
+    """排程在背景跑、沒有人看著：憑證過期要跳視窗、網路卡住都不能一直等（等到排程兩小時上限被砍，latest.txt 就停在前一天）。"""
+    seen = {}
+
+    def stuck(cmd, **kw):
+        seen.update(kw)
+        raise nightly.subprocess.TimeoutExpired(cmd, kw.get("timeout"))
+
+    monkeypatch.setattr(nightly.subprocess, "run", stuck)
+    out = nightly.git(tmp_path, "fetch", "origin", timeout=5)
+    assert out.returncode != 0 and "逾時" in out.stderr
+    assert seen["timeout"] == 5
+    assert seen["env"]["GIT_TERMINAL_PROMPT"] == "0" and seen["env"]["GCM_INTERACTIVE"] == "never"
+
+
+def test_a_stuck_fetch_runs_on_the_last_fetched_develop_with_a_note(monkeypatch, tmp_path):
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    calls = []
+
+    def fake_git(cwd, *args, check=False, timeout=None):
+        calls.append((args[0], timeout))
+        stdout = {"rev-parse": "true\n"}.get(args[0], "")
+        if args[:2] == ("rev-parse", "--show-toplevel"):
+            stdout = str(checkout)
+        if args[:2] == ("rev-parse", "HEAD"):
+            stdout = "455664ac0000\n"
+        if args[0] == "fetch":
+            return nightly.subprocess.CompletedProcess(args, 124, "", f"逾時（{timeout} 秒）")
+        return nightly.subprocess.CompletedProcess(args, 0, stdout, "")
+
+    monkeypatch.setattr(nightly, "git", fake_git)
+    sha, notes = nightly.prepare_checkout(tmp_path, checkout, "develop")
+    assert sha == "455664ac0000" and ("fetch", nightly.FETCH_TIMEOUT) in calls
+    assert any("逾時" in n for n in notes)
+
+
 def test_latest_and_the_ps1_carry_a_bom(place):
     """Windows PowerShell 5.1 沒有 BOM 會照 ANSI 讀：nightly.ps1 的中文全變亂碼、Get-Content latest.txt 讀錯。"""
     out, checkout = place
