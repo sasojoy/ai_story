@@ -113,7 +113,7 @@
     "big_tier3": 0.25,
     "rotation": true
   },
-  "ambush": {"enabled": false},
+  "ambush": {"enabled": true},
   "stockpile": {"enabled": false},
   "parley": {"enabled": true},
   "renown": {
