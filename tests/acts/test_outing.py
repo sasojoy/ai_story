@@ -336,7 +336,7 @@ def test_the_stele_shows_the_last_ink_or_the_most_left_preset():
     assert (st["text"], st["author"], st["n"]) == ("溪水可飲。", "", 2) and [x["author"] for x in st["all"]] == ["丙", "乙", "甲"]
     w.inscriptions.append(Inscription(id=5, place=here, text="橋下有魚", author="戊", preset=False, time=0))
     st = outing.stele(game.state, here)
-    assert (st["text"], st["author"]) == ("橋下有魚", "戊") and st["all"][0]["ink"]
+    assert (st["text"], st["author"]) == ("橋下有魚", "戊") and st["all"][0]["ink"] and st["ink"]
 
 
 def test_my_own_line_shows_on_the_stele_right_after_i_leave_it():
