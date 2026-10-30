@@ -5523,6 +5523,7 @@ class Game:
             elif plan.foe is not None:
                 msgs, key, won = self._outing_fight(loc, plan)
                 self._beat["won"], self._beat["lost"] = won, key in ("lose", "town_lose")
+                self._beat["foe"] = outing_rules.foe_look(plan.foe)  # 畫面照它挑對手的圖（黃巾、官兵、家丁、盜匪、猛獸）
                 if won and self._outing_upset:  # 開打前勝算凶險以下還打贏：以弱勝強，這一趟收的時候記一則行狀
                     self._beat["feat"], self._beat["feat_kind"] = plan.foe.name, outing_rules.FEAT_UPSET
                 story.append(explore_one.line(lines, "encounter", key, say, place=loc.name, foe=plan.foe.name))
@@ -5575,13 +5576,14 @@ class Game:
         self._gate_scale = gate
         self._drop_scale = gate * self._loot_scale
         card = s.battle_card
-        self._outing_upset = self.odds(foe.id) in outing_rules.FEAT_ODDS  # 開打前的勝算（同探索鈕上寫的那個字）
         try:
             msgs = self._squad_encounter(foe.id, wild=True)
         finally:
             self._loot_scale = self._drop_scale = self._gate_scale = 1.0
         record = next((r for r in s.battles if r.id == s.battle_card), None) if s.battle_card != card else None
         won = record is not None and record.tier in team.WIN_TIERS
+        # 以弱勝強：打贏了才回頭看開打那一刻的威力對這一路的勝算（team.odds_word，固定種子、不碰 Game.rng；沒打贏、沒懸賞的趟都不算勝算，2e）
+        self._outing_upset = won and team.odds_word(record.our_power, foe) in outing_rules.FEAT_ODDS
         if not won:
             self._outing_close.discard("outlevel")  # FB-881：「對手配不上你，所得有限」只在打贏、真的因為對手檔打了折才寫；輸了、平手不寫
         if record is not None:
@@ -5727,7 +5729,8 @@ class Game:
             stop = IDLE_MARK not in {o.id for o in self.options(odds=False, tick=False)}
             trip.done += 1
             trip.beats.append(OutingBeat(kind=beat["kind"], text=lines[0] if lines else "", ledger=ledger, rare=bool(beat["rare"]),
-                                         won=beat["won"], stop=stop, feat=beat.get("feat", ""), feat_kind=beat.get("feat_kind", "")))
+                                         won=beat["won"], stop=stop, feat=beat.get("feat", ""), feat_kind=beat.get("feat_kind", ""),
+                                         foe=beat.get("foe", "")))
             now, cap = team.member_neili(c, p.member, team.con_of(s, c, self.world, PLAYER), season=s.world)
             if beat.get("lost"):
                 trip.end = outing_rules.LOST
@@ -5796,6 +5799,7 @@ class Game:
             token = left[0]
         place = c.locations[trip.place].name if trip.place in c.locations else trip.place
         item = outing_rules.inscribe(s, c, line, preset=is_preset)
+        self._save_season()  # 留言刻在全服這一季（WorldState.inscriptions），不寫回共用賽季的話下一次重讀就沒了
         if token is not None:
             self._wallet().mark_used(token, self.pill_now(), place=trip.place, inscription=item.id)
         said = outing_rules.SAY_DONE.format(place=place, text=line)
@@ -5825,6 +5829,7 @@ class Game:
         """管理者抹掉一則留言（路上那一行的 ref）。不是管理者、沒有這一則都回同一句「此刻無法」。"""
         if not self.is_admin() or not outing_rules.erase(self.state, ins_id):
             return ["（此刻無法這麼做。）"]
+        self._save_season()
         return self._log([outing_rules.ERASED])
 
     def is_idle(self) -> bool:

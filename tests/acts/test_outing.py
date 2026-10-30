@@ -306,7 +306,7 @@ def test_only_a_rare_treasure_or_an_upset_goes_into_the_annals():
     low = next(m.id for m in c.materials.values() if m.tier == 1)
     top = next(m for m in c.materials.values() if m.tier >= outing.FEAT_TIER)
     with _draws(MAT, ENC, MAT), mock.patch.object(explore_modes, "gather_finds", return_value=[low]), \
-         mock.patch.object(type(game), "odds", return_value="有把握"):
+         mock.patch.object(team, "odds_word", return_value="有把握"):
         game.outing_go(3)
     assert _outing_annals(game) == [] and game.outing_view()["trip"]["feat_note"] == ""
     assert "outing_keep" not in dir(game)
@@ -314,7 +314,7 @@ def test_only_a_rare_treasure_or_an_upset_goes_into_the_annals():
         game.outing_go(1)
     got = _outing_annals(game)
     assert len(got) == 1 and top.name in got[0].text and game.outing_view()["trip"]["feat_note"] == outing.FEAT_NOTE
-    with _draws(ENC), mock.patch.object(type(game), "odds", return_value="凶險"):
+    with _draws(ENC), mock.patch.object(team, "odds_word", return_value="凶險"):
         game.outing_go(1)
     got = _outing_annals(game)
     assert len(got) == 2 and "必輸的一仗" in got[-1].text
@@ -336,4 +336,57 @@ def test_the_stele_shows_the_last_ink_or_the_most_left_preset():
     assert (st["text"], st["author"], st["n"]) == ("溪水可飲。", "", 2) and [x["author"] for x in st["all"]] == ["丙", "乙", "甲"]
     w.inscriptions.append(Inscription(id=5, place=here, text="橋下有魚", author="戊", preset=False, time=0))
     st = outing.stele(game.state, here)
-    assert (st["text"], st["author"]) == ("橋下有魚", "戊") and st["all"][0]["ink"]
+    assert (st["text"], st["author"]) == ("橋下有魚", "戊") and st["all"][0]["ink"] and st["ink"]
+
+
+def test_my_own_line_shows_on_the_stele_right_after_i_leave_it():
+    """Joy 10/30「自己留的路牌看不到嗎」→「要」：這一趟自己留了一句，碑上先是自己那一句（題壁墨、預設句都算）。"""
+    game = _game()
+    w = game.state.world
+    w.inscription_seq = 1
+    w.inscriptions = [Inscription(id=1, place="yingshui", text="橋下有魚", author="戊", preset=False, time=0)]
+    _walked(game)
+    assert game.outing_view()["trip"]["stele"]["text"] == "橋下有魚"
+    game.outing_say(0)
+    st = game.outing_view()["trip"]["stele"]
+    assert st["mine"] and (st["text"], st["author"]) == (outing.PRESETS[0], game.state.player.name)
+    assert not outing.stele(game.state, "yingshui").get("mine")  # 別的時候照舊是最後一則題壁墨
+
+
+def test_a_line_and_its_erasing_are_saved_to_the_season():
+    """留言刻在全服這一季：伺服器每一步都從資料庫重讀，沒寫回共用賽季的話，留下的那一句下一步就不見了（路牌上看不到自己那一句）。"""
+    game = _game()
+    _walked(game)
+    game.outing_say(0)
+    assert [i.text for i in game.world.get_season().inscriptions if i.place == "yingshui"] == [outing.PRESETS[0]]
+    game.content.config.admins = [game.state.player.name]
+    game.admin_erase_inscription(game.state.world.inscriptions[0].id)
+    assert not [i for i in game.world.get_season().inscriptions if i.place == "yingshui"]
+
+
+def test_the_scene_follows_the_place_kind():
+    """背景照這一處的地點種類畫（Joy 10/30 六套背景）：潁水河畔是渡。"""
+    game = _game()
+    _walked(game)
+    assert game.outing_view()["trip"]["scene"] == "ford"
+
+
+def test_road_lines_are_rare():
+    """Joy 10/30「（見）不用（拿掉），但是不用出現太頻繁」：一趟最多一行，每段兩成。"""
+    cfg = _game().content.config.jianfa
+    assert (cfg.outing_trace_cap, cfg.outing_trace_chance) == (1, 0.2)
+
+
+def test_a_foe_is_drawn_as_its_own_side():
+    """Joy 10/30「現在敵人只有黃巾軍，如果我本身就是黃巾不是很奇怪嗎」：遭遇那一段帶對手的樣子，畫面照它挑圖。"""
+    sq = lambda name, faction=None: SimpleNamespace(name=name, faction=faction)
+    assert outing.foe_look(sq("郡國兵", "guan")) == outing.LOOK_GUAN
+    assert outing.foe_look(sq("黃巾散兵")) == outing.LOOK_HUANG
+    assert outing.foe_look(sq("蘇家家丁")) == outing.LOOK_RETAINER
+    assert outing.foe_look(sq("吊睛白額虎")) == outing.LOOK_BEAST
+    assert outing.foe_look(sq("流寇散兵")) == outing.LOOK_BANDIT
+    game = _game()
+    with _draws(ENC):
+        game.outing_go(1)
+    beat = game.state.player.outing.beats[0]
+    assert beat.kind == ENC and beat.foe in {outing.LOOK_HUANG, outing.LOOK_GUAN, outing.LOOK_RETAINER, outing.LOOK_BANDIT, outing.LOOK_BEAST}

@@ -23,6 +23,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
+from . import explore_one
 from .models import Content
 from .rules import jianfa
 from .state import GameState, Inscription, Outing, OutingBeat
@@ -61,6 +62,11 @@ FEAT_TREASURE, FEAT_UPSET = "treasure", "upset"
 FEAT_ANNAL = {FEAT_TREASURE: "在{place}一帶走了一趟，撿到了世間少見的{what}。", FEAT_UPSET: "在{place}一帶撞上{what}，看著必輸的一仗，硬是打贏了。"}
 FEAT_DEED = {FEAT_TREASURE: "{name}在{place}一帶撿到了世間少見的{what}。", FEAT_UPSET: "{name}在{place}一帶以弱勝強，打退了{what}。"}
 FEAT_NOTE = "這一趟記進了行狀。"
+# 遭遇的對手畫成哪一種人（Joy 10/30「現在敵人只有黃巾軍，如果我本身就是黃巾不是很奇怪嗎」）：先看隊伍的陣營，沒有陣營的照名字認
+LOOK_HUANG, LOOK_GUAN, LOOK_RETAINER, LOOK_BANDIT, LOOK_BEAST = "huang", "guan", "retainer", "bandit", "beast"
+_FACTION_LOOK = {"huang": LOOK_HUANG, "guan": LOOK_GUAN, "haoqiang": LOOK_RETAINER}
+_NAME_LOOK = (("黃巾", LOOK_HUANG), ("官軍", LOOK_GUAN), ("門卒", LOOK_GUAN), ("家丁", LOOK_RETAINER), ("護院", LOOK_RETAINER),
+              ("部曲", LOOK_RETAINER), ("虎", LOOK_BEAST))
 TALE_MAX = 80  # 遊記最多幾個字
 DEED_KIND = "outing"  # 世界記事（deeds.record）的種類：走一趟撿到稀世的東西、以弱勝強（FEAT_DEED）
 _ZH = "零一二三四五六七八九十"
@@ -109,6 +115,8 @@ def view(state: GameState, content: Content) -> dict | None:
     if trip is not None:
         out["trip"] = {
             "place": content.locations[trip.place].name if trip.place in content.locations else trip.place,
+            # 背景畫哪一套：這一處的地點種類（探索那六張表，explore_one.kind_of）
+            "scene": explore_one.kind_of(content.config.jianfa, content.locations[trip.place]).kind if trip.place in content.locations else explore_one.WILD,
             "total": trip.total, "done": trip.done, "end": trip.end,
             "waiting": not trip.end and bool(trip.beats) and trip.beats[-1].stop,
             "title": END_TITLES.get(trip.end, ""), "end_line": END_LINES.get(trip.end, ""),
@@ -117,25 +125,39 @@ def view(state: GameState, content: Content) -> dict | None:
             "say_max": content.config.jianfa.outing_say_max,
             "diary": trip.tale or (template_tale(trip, content) if trip.end else ""), "diary_done": trip.tale_done,
             "feat_note": FEAT_NOTE if trip.end and any(b.feat for b in trip.beats) else "",
-            "stele": stele(state, trip.place),
+            "stele": stele(state, trip.place, own=bool(trip.said)),
         }
     return out
 
 
-def stele(state: GameState, place: str) -> dict | None:
+def foe_look(squad) -> str:
+    """這一路對手畫成哪一種人（LOOK_*）：有陣營照陣營，沒有照名字裡的字，都不是就是綠林盜匪。"""
+    look = _FACTION_LOOK.get(squad.faction or "")
+    if look:
+        return look
+    return next((v for k, v in _NAME_LOOK if k in squad.name), LOOK_BANDIT)
+
+
+def stele(state: GameState, place: str, *, own: bool = False) -> dict | None:
     """畫面上方那塊路碑（Joy 10/30）：這一處留過的話。碑上那一句是最後一則用題壁墨寫的；沒有人用過題壁墨，是最多人留的那一句預設句
-    （一樣多取最近留的）。all 是點開看到的全部，新的在前。這一處沒人留過是 None。"""
+    （一樣多取最近留的）；ink 是碑上那一句是題壁墨寫的（畫面要畫得更顯眼，Joy 10/30）。own（這一趟自己剛留過一句）：碑上先是自己那一句（Joy 10/30「要」），mine 標出來。
+    all 是點開看到的全部，新的在前。這一處沒人留過是 None。"""
     here = [i for i in state.world.inscriptions if i.place == place]
     if not here:
         return None
+    mine = [i for i in here if i.author == state.player.name] if own else []
     inked = [i for i in here if not i.preset]
+    if mine:
+        top = max(mine, key=lambda i: i.id)
+        return {"text": top.text, "author": top.author, "n": 0, "mine": True, "ink": not top.preset,
+                "all": [{"text": i.text, "author": i.author, "ink": not i.preset} for i in sorted(here, key=lambda i: -i.id)]}
     if inked:
         top, n = max(inked, key=lambda i: i.id), 0
     else:
         counts = Counter(i.text for i in here)
         top = max(here, key=lambda i: (counts[i.text], i.id))
         n = counts[top.text]
-    return {"text": top.text, "author": top.author if not top.preset else "", "n": n,
+    return {"text": top.text, "author": top.author if not top.preset else "", "n": n, "ink": not top.preset,
             "all": [{"text": i.text, "author": i.author, "ink": not i.preset} for i in sorted(here, key=lambda i: -i.id)]}
 
 
