@@ -1,6 +1,7 @@
 """輿圖的畫法零件（純字串與幾何，不依賴介面框架，也不看視野）：設色山水的配色與座標寫法、路的二次曲線、
 穿過每一點的平滑線（河、山脊）、大區邊的削角、河帶、地形（山頭、圓丘與樹，讓開地點、路與河；算一次就照內容
 快取）、依標籤挑的地點圖示與所在地的紅旗、紙的雙線外框與指北針（輿圖美術設計）。
+地形的位置也單獨給成數字（terrain_data：山頭、樹、河、山河名字，輿圖表現 S1，`/api/map/base` 的 `terrain`），跟畫成 SVG 的是同一份。
 要畫什麼、畫成哪種狀態、各層怎麼疊由 mapview 決定。
 """
 from __future__ import annotations
@@ -205,12 +206,16 @@ Segment = tuple[Point, Point, float]  # 要讓開的一段直線，與要讓開�
 
 @dataclass(frozen=True)
 class Piece:
-    """一個山頭、一座丘或一棵樹。"""
+    """一個山頭、一座丘或一棵樹。svg 是畫出來的樣子；kind、x、size、back 是同一個東西的位置與大小（terrain_peaks、terrain_trees 送給新圖）。"""
 
     base_y: float  # 山腳（樹根）的 y：照它由遠到近排，近的蓋住遠的
     box: Box  # 山體佔的範圍（山頭取中間七成寬）：讓開地點、路與河時拿它比
     extent: Box  # 整個畫出來的範圍：小地圖拿它挑視窗裡的
     svg: str
+    kind: str = ""  # "peak" 山頭、"hill" 丘、"tree" 樹
+    x: float = 0.0  # 山頭與丘的中線 x、樹的 x
+    size: float = 0.0  # 山頭與丘：畫出來的高度（山尖在 base_y − size）；樹：樹冠半徑
+    back: bool = False  # 山脈後排（小一點、淡一點）的山頭
 
 
 _terrain_cache: dict[str, tuple[Piece, ...]] = {}
@@ -233,6 +238,58 @@ def terrain_name_spot(piece: Terrain) -> Point:
     points = piece.spine or piece.points
     y = min(p[1] for p in points) - piece.size - 4
     return sum(p[0] for p in points) / len(points), max(y, FRAME_INSIDE + TERRAIN_NAME_SIZE)
+
+
+def _num(value: float) -> float | int:
+    """送給畫面的數字：跟 fmt 一樣取到小數一位（svg 寫的就是這個數），整數不帶小數點。"""
+    rounded = round(value, 1) + 0
+    return int(rounded) if rounded == int(rounded) else rounded
+
+
+def terrain_peaks(content: Content) -> list[dict]:
+    """山頭的位置，由遠到近（跟 terrain 同一個順序，畫的時候近的蓋住遠的）：丘當山頭送。x 是山的中線，y 是山腳，size 是畫出來的
+    高度（山尖在 y − size；svg 畫的山頭寬是 size 的 1.55 倍、丘寬是 size 的 3 倍），back 是山脈的後排。只跟內容有關，跟 svg 畫的是同一個山頭。"""
+    return [
+        {"x": _num(p.x), "y": _num(p.base_y), "size": _num(p.size), "back": p.back}
+        for p in terrain(content) if p.kind in ("peak", "hill")
+    ]
+
+
+def terrain_trees(content: Content) -> list[dict]:
+    """樹的位置，由遠到近：x、y 是樹的位置（y 是 terrain 排序用的樹根，樹幹再往下 4，樹冠圓心在 y − 0.6 r），r 是樹冠半徑。
+    161 棵全部照送，畫面自己決定畫幾棵。"""
+    return [{"x": _num(p.x), "y": _num(p.base_y), "r": _num(p.size)} for p in terrain(content) if p.kind == "tree"]
+
+
+def terrain_rivers(content: Content) -> list[dict]:
+    """河：points 是中線（上游到下游，平滑線 river_line，穿過內容寫的每一個點），width 是 [上游寬, 下游寬]，color 是 blue 或 yellow（黃河）。"""
+    return [
+        {
+            "points": [[_num(x), _num(y)] for x, y in river_line(river)],
+            "width": [_num(river.width[0]), _num(river.width[1])], "color": river.color,
+        }
+        for river in content.map.rivers
+    ]
+
+
+def terrain_labels(content: Content) -> list[dict]:
+    """山河的名字：先是河名（內容寫的 labels，x、y 是字開頭的位置，anchor "start"），再是有名字的山與林（terrain_name_spot：x 是
+    字的中央，anchor "middle"；y 都是字的基線）。anchor 是 SVG 的 text-anchor：新圖照它擺，字才會落在 svg 現在寫的地方。"""
+    m = content.map
+    out = [{"text": label.text, "x": _num(label.x), "y": _num(label.y), "anchor": "start"} for label in m.labels]
+    for piece in m.terrain:
+        if piece.name:
+            x, y = terrain_name_spot(piece)
+            out.append({"text": piece.name, "x": _num(x), "y": _num(y), "anchor": "middle"})
+    return out
+
+
+def terrain_data(content: Content) -> dict:
+    """`/api/map/base` 的 `terrain`（輿圖表現 S1）：山頭、樹、河、山河名字的位置與大小。只看內容，跟誰在看、開放了哪些地點無關。"""
+    return {
+        "peaks": terrain_peaks(content), "trees": terrain_trees(content),
+        "rivers": terrain_rivers(content), "labels": terrain_labels(content),
+    }
 
 
 def _places(content: Content) -> dict[str, Location]:
@@ -341,7 +398,7 @@ def _forest(piece: Terrain, key: str, places: list[Point], segments: list[Segmen
                 f'<circle cx="{fmt(x)}" cy="{fmt(y - r * 0.6)}" r="{fmt(r)}" fill="{crown}"/>'
                 f'<circle cx="{fmt(x + r * 0.35)}" cy="{fmt(y - r * 0.4)}" r="{fmt(r * 0.55)}" fill="{shade}"/>'
             )
-            out.append(Piece(y, box, (x - r, y - r * 1.6, x + r, y + 4), svg))
+            out.append(Piece(y, box, (x - r, y - r * 1.6, x + r, y + 4), svg, "tree", x, r))
     return out
 
 
@@ -373,7 +430,7 @@ def _ridge(piece: Terrain, key: str, places: list[Point], segments: list[Segment
         if not mountains:
             box = (x - w * 0.35, y - h * 0.8, x + w * 0.35, y)
             if _clear(box, places, segments):
-                out.append(Piece(y, box, (x - w / 2, y - h * 0.8, x + w / 2, y), _hill(x, y, w, h)))
+                out.append(Piece(y, box, (x - w / 2, y - h * 0.8, x + w / 2, y), _hill(x, y, w, h), "hill", x, h * 0.8))
             continue
         if not _clear((x - w * 0.35, y - h, x + w * 0.35, y), places, segments):
             continue
@@ -387,7 +444,7 @@ def _ridge(piece: Terrain, key: str, places: list[Point], segments: list[Segment
             if back and not _clear(box, places, segments):
                 continue
             svg = _peak(hx, hy, hw, hh, _jitter(f"{key}{count}{row}s", 0.6, 0.85), fill, dark)
-            out.append(Piece(hy, box, (hx - hw / 2, hy - hh, hx + hw / 2, hy), svg))
+            out.append(Piece(hy, box, (hx - hw / 2, hy - hh, hx + hw / 2, hy), svg, "peak", hx, hh, back))
     return out
 
 

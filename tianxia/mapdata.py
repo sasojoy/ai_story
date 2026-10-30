@@ -111,7 +111,8 @@ def base(state: GameState, content: Content, mostly: dict[str, str] | None = Non
     """底圖與清單（這裡不快取：伺服器 server.map_base_view 照 base_key 快取）。每個地點帶悟得到什麼、最濃、地形（意境提示設計第六節：
     內容的事實，不是這一刻的狀態，所以放底圖不放疊層），與地利那一行（terrain.place_line，同一個道理）。
     mostly：看的人的名字旁（Game.map_mostly，減法季探索一顆開著才有）；給了 key 也帶著它（base_key），沒給是跟人無關的那一份（伺服器快取這一份、
-    每個人再換上自己的名字旁，with_mostly）。"""
+    每個人再換上自己的名字旁，with_mostly）。
+    輿圖表現 S1 多兩個鍵：view（Config.map_view 的八個數字）與 terrain（mapart.terrain_data：peaks、trees、rivers、labels）；svg 與其他鍵不變。"""
     shown = mapview.open_places(state, content)
     keep = set(shown)
     places = []
@@ -139,6 +140,9 @@ def base(state: GameState, content: Content, mostly: dict[str, str] | None = Non
         "insight_kinds": {d.id: {"name": d.name, "attribute": d.attribute} for d in content.insights.values() if d.grant is None},
         "insight_layer": content.config.insight_strong.enabled and any(p["strong"] for p in places),
         "world": world(state, content),
+        # 輿圖表現 S1（給 W1 以後的新圖用，舊的圖照舊畫 svg）：取景與密度的八個數字、山頭樹河與山河名字的位置。都只看內容，跟誰在看無關
+        "view": content.config.map_view.model_dump(),
+        "terrain": mapart.terrain_data(content),
     }
     if mostly is not None:
         out[VIEWER_MOSTLY] = True  # 名字旁整個是看的人的（含「有賞」）：網頁不再另判討伐；沒給的季這個鍵不存在，底圖一個字不變
