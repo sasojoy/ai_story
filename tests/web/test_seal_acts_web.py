@@ -17,7 +17,7 @@ from test_seal_acts import _do, _holder, _person, _use
 import server
 import webharness
 from conftest import real_content
-from tianxia import seal
+from tianxia import seal, seal_acts
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -113,7 +113,8 @@ def test_the_layer_lists_every_figure_with_where_he_is_and_greys_the_ones_here()
     html = _layer(m)
     assert '<span class="shop-sign">引將</span>' in html and "剩 2 次" in html and 'data-act="seal-act-close"' in html
     rows = {name: (tid, off, why) for name, tid, off, why in _rows(html)}
-    assert rows["波才"] == ("bocai", False, "") and "此刻在黃巾別部營寨" in html
+    assert rows["秦頡"] == ("qinjie", False, "") and "此刻在宛城" in html  # 沒有行程的人照舊按得下去
+    assert rows["波才"] == ("bocai", True, seal_acts.CLASH_PLAN) and "此刻在黃巾別部營寨" in html  # FB-9038：他的盤算公告就在第一天之內，灰掉寫原因
     assert rows["皇甫嵩"] == ("huangfusong", True, "已經在這裡") and rows["朱儁"][1:] == (True, "已經在這裡")
     assert "彭脫" not in rows
     assert html.count("<b>") == len(m["status"]["seal"]["act"]["targets"])
@@ -122,11 +123,11 @@ def test_the_layer_lists_every_figure_with_where_he_is_and_greys_the_ones_here()
 def test_a_pick_asks_first_then_posts_seal_use():
     """點一列：先問（伺服器的問句，{target} 換成名字），按「起用」才送 /api/do/seal_use {target, side}；送出時那一層收起。"""
     c, w, m = _view(at="changshe")
-    out = click(m, [{"act": "seal-act"}, {"act": "seal-pick", "id": "bocai"}, {"act": "ask-yes"}])
+    out = click(m, [{"act": "seal-act"}, {"act": "seal-pick", "id": "qinjie"}, {"act": "ask-yes"}])  # 挑沒有行程的人（波才的盤算公告在第一天之內，FB-9038 灰掉）
     opened, asked, sent = out["out"]
     assert 'class="shop-layer shop-seal"' in opened["app"] and opened["open"] is True
-    assert "起用『玄紐』，把波才引到長社坐鎮一日？" in asked["asked"] and "還剩 1 次" in asked["asked"]
-    assert out["calls"] == [["/api/do/seal_use", {"target": "bocai", "side": ""}]]
+    assert "起用『玄紐』，把秦頡引到長社坐鎮一日？" in asked["asked"] and "還剩 1 次" in asked["asked"]
+    assert out["calls"] == [["/api/do/seal_use", {"target": "qinjie", "side": ""}]]
     assert sent["open"] is False and "shop-seal" not in sent["app"]
 
 

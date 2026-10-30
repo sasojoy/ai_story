@@ -256,6 +256,19 @@ SIDE_TAG = "〔{side}〕"  # 戰況每一條是哪一軍的（Joy 2026-10-14）�
 ROUND_HEAD = "##### 第 {n} 回合"  # 一回合一段的標題（Joy 2026-10-14）；網頁 app.js 的 ROUND_HEAD 認這個寫法
 RESTORED_NOTE = "（這份戰報是後來補回來的；軍餉與名望當時已經發過。）"  # Game._restore_showdowns
 RESULT_LOOKBACK = 50  # 補戰報往回讓幾場流水號（攻城戰同時打，先開的可能晚收場；一天最多四場，五十場是十來天）
+# 決戰戰況裡一軍這一回合發動戰法的那幾句摺成一行（Joy 2026-10-30「一堆好像是武學的技能，有什麼實質的作用」）：照 kind 歸成看得懂的幾類，
+# 點開才是逐人那幾句（網頁 roundBlocks 把巢狀的那一層畫成摺疊）；自己的那一句不摺。沒列到的 kind 歸「其他」
+WAR_FOLD = "{side}本回合 {n} 人發動武學"
+WAR_FOLD_KINDS = {
+    "回氣血": ("mend", "drain", "rally", "cleanse"),
+    "加重": ("heavy_blow", "tiger", "waver", "bloodrage", "marshal", "tide", "night_raid", "reinforce", "sacrifice", "momentum", "assault", "zhaoyi"),
+    "連環": ("chase_disarm", "vanguard", "surge", "cavalry", "swift", "last_rally", "oath"),
+    "化影": ("veil", "shadow"),
+    "無隙": ("unbroken", "flawless", "streak"),
+    "固守": ("steady", "hold_city"),
+    "號令": ("order",),
+}
+WAR_FOLD_MIN = 2  # 一軍這一回合至少幾句才摺（只有一句照舊一行）
 MY_MOVE = "**你**　{move}"  # 決戰戰報的完整戰況：每一回合最後一條，自己這一回合出了什麼（BattleParticipant.moves）
 SLAY_LINE = "你陣前擊退了{name}，這一戰的頭功傳遍兩軍。"  # 待 joy 潤：龍頭上陣，最後一擊的人（戰報與紀錄）
 # 歷史武將同行第五節（待 joy 潤）：加入決戰時挑一位隨你上陣、決戰畫面上自己的那一位
@@ -9350,8 +9363,52 @@ class Game:
                 else:
                     items.append(line)
             mine = [MY_MOVE.format(move=me.moves[n])] if me is not None and n in me.moves else []
-            out.append(f"{ROUND_HEAD.format(n=n)}\n\n" + "\n".join([*(f"- {side_of(item)}{item}" for item in items), *(f"- {m}" for m in mine)]))
+            rows_md = self._fold_war_lines(battle, items, sides, owner, names, side_of)
+            out.append(f"{ROUND_HEAD.format(n=n)}\n\n" + "\n".join([*rows_md, *(f"- {m}" for m in mine)]))
         return out[::-1] if oldest_first else out
+
+    def _fold_war_lines(self, battle: battle_instance.BattleInstance, items: list[str], sides: dict[str, str],
+                        owner: dict[str, str], names: list[str], side_of) -> list[str]:
+        """一回合的每一條寫成清單的一列（「- 〔官軍〕……」）；一軍發動戰法的那幾句（〔招名〕開頭，自己的不算）有 WAR_FOLD_MIN 句以上就在
+        第一句的位置換成一列摘要「官軍本回合 9 人發動武學：回氣血 4、加重 2」，那幾句縮排成它底下的一層（網頁畫成點開才看）。"""
+        me = self.state.player.name
+        label = {kind: name for name, kinds in WAR_FOLD_KINDS.items() for kind in kinds}
+        # 這一場記下的（tactic_kinds）為準；這一版以前打的場沒記，照內容武學的戰法與功效補（玩家取了名的招認不出來，歸「其他」）
+        book = self.content.traits
+        known = {sk.tactic.name: sk.tactic.kind for sk in self.content.skills.values() if sk.tactic is not None}
+        known |= {t.name: t.tactic.kind for t in [*book.general, *book.special, *book.high] if t.tactic is not None}
+        known |= battle.tactic_kinds
+        groups: dict[str, list[tuple[str, str]]] = {}  # 陣營 → [(誰, 那一句)]
+        for item in items:
+            if not item.startswith(tactics.LEAD) or "〕" not in item:
+                continue
+            body = item.split("〕", 1)[1]
+            who = next((x for x in names if body.startswith(x)), None)
+            if who is None or who == me or owner.get(who) not in sides:
+                continue
+            groups.setdefault(owner[who], []).append((who, item))
+        folded = {fid: rows for fid, rows in groups.items() if len(rows) >= WAR_FOLD_MIN}
+        taken = {item: fid for fid, rows in folded.items() for _, item in rows}
+        out: list[str] = []
+        for item in items:
+            if item not in taken:
+                out.append(f"- {side_of(item)}{item}")
+                continue
+            rows = folded.pop(taken[item], None)
+            if rows is None:  # 這一軍的摘要已經寫過了
+                continue
+            kinds = [known.get(line[len(tactics.LEAD):].split("〕", 1)[0]) for _, line in rows]
+            counts: dict[str, int] = {}
+            for kind in kinds if any(kinds) else []:  # 一句都認不出來（舊的場、全是自創的招）：只寫幾個人，不分類
+                name = label.get(kind or "", "其他")
+                counts[name] = counts.get(name, 0) + 1
+            order = [*WAR_FOLD_KINDS, "其他"]
+            parts = "、".join(f"{k} {counts[k]}" for k in order if k in counts)
+            fid = taken[item]
+            head = WAR_FOLD.format(side=sides[fid], n=len({who for who, _ in rows})) + (f"：{parts}" if parts else "")
+            out.append(f"- {SIDE_TAG.format(side=sides[fid])}{head}")
+            out.extend(f"    - {line}" for _, line in rows)
+        return out
 
     def _idle_note(self, battle: battle_instance.BattleInstance) -> list[str]:
         """掛機的人自己看到的那一句（Joy 2026-10-10 掛機懲罰），放在戰場名字底下第一行。"""

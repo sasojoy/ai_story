@@ -323,7 +323,8 @@ def test_the_card_carries_the_act_for_the_holder_only():
     assert (act["kind"], act["name"], act["left"], act["ok"], act["why"]) == ("yinjiang", "引將", 2, True, "")
     ids = {t["id"]: t for t in act["targets"]}
     assert ids["huangfusong"]["why"] == seal_acts.HERE  # 皇甫嵩就在長社
-    assert ids["bocai"]["why"] == "" and "波才" in ids["bocai"]["name"]
+    assert ids["qinjie"]["why"] == "" and "秦頡" in ids["qinjie"]["name"]  # 沒有行程的人照舊按得下去
+    assert ids["bocai"]["why"] == seal_acts.CLASH_PLAN  # 波才的盤算公告（長社那一件）就在第一天之內：FB-9038，行程要動他
     assert "pengtuo" not in ids  # 還沒出場
     assert "{target}" in act["confirm"] and "長社" in act["confirm"]
     other = _person(c, w, "旁人", side="huang")
@@ -378,21 +379,26 @@ def test_the_admin_sees_who_used_what():
 
 @pytest.mark.slow
 def test_yinjiang_pulls_a_figure_to_you_and_sends_him_back_on_time():
-    from tianxia import figures
+    from tianxia import figures, plans
 
-    c, w, g = _holder("xuanniu", at="changshe", plans=False)  # 行程開著時波才一開季就先被帶到長社（盤算公告），沒東西可引
-    _use(c, w, target="bocai")
+    # 盤算開著（FB-9039：主流程要在行程開著時有人守）：挑一位沒有行程的人（秦頡），行程不會把他帶走；
+    # 行程開著時波才一開季就先被帶到長社（盤算公告），沒東西可引，所以不挑他
+    c, w, g = _holder("xuanniu", at="changshe")
+    assert plans.on(c) and not plans.holds(c, "qinjie")
+    origin = figures.state_of(_vehicle(c, w.get_season()), c, "qinjie").location
+    assert origin != "changshe"
+    _use(c, w, target="qinjie")
     season = w.get_season()
-    assert season.figures["bocai"].location == "changshe"
+    assert season.figures["qinjie"].location == "changshe"
     [act] = season.seal_acts
-    assert (act.target, act.place, act.origin) == ("bocai", "changshe", "huangjin_camp")
-    assert any("波才應召移駐長社" in r.text for r in season.rumors)
+    assert (act.target, act.place, act.origin) == ("qinjie", "changshe", origin)
+    assert any("秦頡應召移駐長社" in r.text for r in season.rumors)
     assert seal_acts.next_end(season) == pytest.approx(act.until)
     late = _do(c, w, "懷璽", lambda game: game.state.world, now=10.0 + DAY + 5)
-    assert figures.state_of(_vehicle(c, late), c, "bocai").location == "huangjin_camp"
+    assert figures.state_of(_vehicle(c, late), c, "qinjie").location == origin
     back = w.get_season()
     assert back.seal_acts[0].ended == pytest.approx(act.until)
-    assert any(seal_acts.BACK.format(figure="波才", place="黃巾別部營寨") == r.text for r in back.rumors)
+    assert any(seal_acts.BACK.format(figure="秦頡", place=c.locations[origin].name) == r.text for r in back.rumors)
 
 
 def _vehicle(c, season):
@@ -442,10 +448,12 @@ def test_a_figure_staying_put_ends_nothing():
 @pytest.mark.slow
 def test_a_pinned_figure_does_not_wander():
     """14 天的季人物會自己走動：被引將釘著的不走、不跟、不趕（亂數照擲，別人的序列不位移）。"""
-    from tianxia import figure_life, figures
+    from tianxia import figure_life, figures, plans
 
-    c, w, g = _holder("xuanniu", profile=None, at="yingchuan_wilds", plans=False)  # 有行程的人本來就不亂晃（plans.holds），挑到他就測不到引將
-    fid = next(f for f, d in c.figures.items() if d.character and len(c.characters[d.character].haunts) > 1
+    # 盤算開著（FB-9039）：有行程的人本來就不亂晃（plans.holds），挑到他就測不到引將，所以只挑沒有行程的人
+    c, w, g = _holder("xuanniu", profile=None, at="yingchuan_wilds")
+    assert plans.on(c)
+    fid = next(f for f, d in c.figures.items() if d.character and not plans.holds(c, d.character) and len(c.characters[d.character].haunts) > 1
                and figures.state_of(_vehicle(c, w.get_season()), c, f).location in c.characters[d.character].haunts
                and figures.state_of(_vehicle(c, w.get_season()), c, f).location != "yingchuan_wilds")
     cid = c.figures[fid].character
@@ -488,6 +496,40 @@ def test_yinjiang_greys_out_a_figure_the_timetable_will_move_within_the_day():
     assert not seal_acts.clash(v, c, fid, first - 1)
     rows = {t["id"]: t["why"] for t in seal_acts.figure_targets(v, c, first + 1)}
     assert rows[fid] == seal_acts.CLASH
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(("day", "place", "plans_on", "usable"), [
+    (1.2, "nanyang_road", True, False),  # 一日之內行程要把他帶去南陽道上：灰掉，按下去被拒
+    (1.9, "nanyang_road", True, True),  # 那一站在窗口外：照舊按得下去
+    (1.2, "wan_city", True, True),  # 要去的地方就是他此刻站的地方：不灰
+    (1.2, "nanyang_road", False, True),  # 盤算關著：行程不算，跟以前一樣
+])
+def test_yinjiang_refuses_a_figure_whose_itinerary_moves_him_within_the_day(day, place, plans_on, usable):
+    """FB-9038：行程比照時刻表，窗口（一日）內會把人搬離他此刻所在的地方，目標灰掉、起用按下去被拒、不記次數、人不動；
+    起用那一下的檢查跟目標清單是同一條（seal_acts.figure_targets）。7 天季第 1.7 天孫堅動身那種情形（QA develop-red7）。"""
+    from tianxia import figures
+    from tianxia.models import Itinerary, ItineraryStop
+
+    c, w, g = _holder("xuanniu", at="changshe", plans=plans_on)
+    c.itineraries = [Itinerary(who="qinjie", stops=[ItineraryStop(id="t_march", day=day, place=place, text="{name}拔營了。")])]
+    origin = figures.state_of(_vehicle(c, w.get_season()), c, "qinjie").location
+    assert origin == "wan_city"
+    shard_id = "xuanniu"
+    msgs = _use(c, w, target="qinjie")
+    season = w.get_season()
+    shard = w.seal_state().registry.shards[shard_id]
+    number = w.get_season_number()
+    if usable:
+        [act] = season.seal_acts
+        assert (act.target, act.origin) == ("qinjie", origin) and seal_acts.used(shard, number) == 1
+        assert figures.state_of(_vehicle(c, season), c, "qinjie").location == "changshe"
+    else:
+        assert msgs == [f"（秦頡{seal_acts.CLASH_PLAN}。）"]  # 灰掉的原因就是按下去被拒的那一句
+        assert season.seal_acts == [] and _uses(w) == [] and seal_acts.used(shard, number) == 0  # 不扣次數
+        assert figures.state_of(_vehicle(c, season), c, "qinjie").location == origin  # 人不動
+        view = _do(c, w, "懷璽", lambda game: game.seal_view()["act"])  # 碎片卡的目標清單也灰著
+        assert {t["id"]: t["why"] for t in view["targets"]}["qinjie"] == seal_acts.CLASH_PLAN
 
 
 # ── Task 5：頒詔、承露、收心 ──

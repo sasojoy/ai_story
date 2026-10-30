@@ -437,6 +437,8 @@ class BattleInstance(BaseModel):
     last_mix: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 → 上一回合各招的比例（只算出固定招的人；
     # 那一邊沒人出固定招是空的），畫面寫「對面上一回合」（戰鬥系統 3.4）；舊資料沒有就是空的
     narrative_log: list[str] = Field(default_factory=list)
+    # 戰況裡發動過的戰法名 → kind（tactics.War.kinds；名將本命兵器的〔號令〕記 "order"）：場景與戰報把一軍的那幾句摺成一行時分類（Joy 2026-10-30）；舊資料是空的
+    tactic_kinds: dict[str, str] = Field(default_factory=dict)
     outcome_title: str | None = None
     outcome_text: str | None = None
     tales: list[GambleTale] = Field(default_factory=list)  # 等著補劇情的放手一搏（伺服器一回合批一次給模型寫，apply_tales 補完拿掉）
@@ -992,6 +994,7 @@ def resolve_round(
     for side, move_, who, _pct in sorted({(k[0], k[1], w, pc) for k, rows in rally.items() for w, pc in rows}):
         if any(n != who and q.faction == side and moves.get(n) == move_ for n, q in instance.participants.items() if not q.eliminated):
             fired.setdefault(side, []).append(f"{tactics.LEAD}號令〕{who}號令一下，同出{move_}的友軍份量加重")
+            instance.tactic_kinds["號令"] = "order"
 
     def war(name: str, p: BattleParticipant, move: str | None, coef: float) -> tactics.War:
         """本命戰法（本命戰法第二批）：只算自己身上的（tactics.WAR_KINDS）；沒帶著或沒開是中性值。"""
@@ -1002,6 +1005,7 @@ def resolve_round(
         out = tactics.war_round(p.kit, move, 1 if coef > 1 else 0, rnd_no, edge, ratio, tactic, _war_rng(instance, name, rnd_no))
         if out.lines:  # 招一句一行（「〔名〕某某……」），哪一軍的由場景照名號標（Game._battle_rounds 的 side_of），不另寫標頭
             fired.setdefault(p.faction, []).extend(out.lines)
+            instance.tactic_kinds.update(out.kinds)
         if out.hp:
             p.neili = max(0.0, min(p.neili_cap, p.neili + p.neili_cap * out.hp))
         return out
@@ -1015,6 +1019,7 @@ def resolve_round(
         out = tactics.war_round(e.kit, move, 1 if coef > 1 else 0, rnd_no, edge, ratio, tactic, _war_rng(instance, escort_key(p.name), rnd_no))
         if out.lines:
             fired.setdefault(p.faction, []).extend(out.lines)
+            instance.tactic_kinds.update(out.kinds)
         if out.hp:
             e.neili = max(0.0, min(e.neili_cap, e.neili + e.neili_cap * out.hp))
         return out

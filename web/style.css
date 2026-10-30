@@ -3638,3 +3638,12 @@ svg.fig .blade.bow { stroke-width: 3; }
   .huaben-cast .say { grid-column: 1; grid-row: auto; }
 }
 .huaben-index button { display: flex; justify-content: space-between; gap: 8px; }
+
+/* 決戰一軍這一回合發動武學摺成的那一列（main.js 的 warFolds，Joy 2026-10-30）：摘要一行像一般的一條，右邊一個小三角；點開是逐人那幾句（字小一號、淡一點） */
+.b-fold { display: inline; }
+.b-fold > summary { display: inline; cursor: pointer; list-style: none; }
+.b-fold > summary::-webkit-details-marker { display: none; }
+.b-fold > summary::after { content: " ▾"; color: var(--ink-2); font-size: 12px; }
+.b-fold[open] > summary::after { content: " ▴"; }
+:is(.scene, .report-detail) .b-fold-lines { list-style: none; margin: 4px 0 0; padding: 0 0 0 10px; border-left: 2px solid var(--line); }
+:is(.scene, .report-detail) .b-lines .b-fold-lines li { font-weight: 400; font-size: 13.5px; color: var(--ink-2); padding: 2px 0; border-top: 0; }
