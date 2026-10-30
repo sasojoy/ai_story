@@ -16,7 +16,7 @@
   // 野地四層（由遠到近）與各自捲的速度：遠景最慢、前景比角色快、蓋在角色前面。別的地點類型的四層還沒畫，先都用野地
   const OUTING_LAYERS = [["bg_wild_far", 0.1, -30, 400], ["bg_wild_mid", 0.4, 50, 260], ["bg_wild_ground", 1, 210, 150]];
   const OUTING_FRONT = ["bg_wild_front", 1.6, 240, 150];
-  const OUTING_W = 480, OUTING_H = 360, OUTING_GY = 300, OUTING_HX = 140; // 4:3，手機上畫面占上半、人物夠大
+  const OUTING_W = 720, OUTING_H = 360, OUTING_GY = 300, OUTING_HX = 190;
   const OUTING_CELL = 220, OUTING_AX = 100, OUTING_BY = 212;
   const OUTING_KIND = { material: "料", encounter: "戰", event: "事", insight: "悟" };
   const OUTING_SPEED_KEY = "outing-speed";
@@ -92,10 +92,10 @@
       box.id = "outing-pop";
       box.className = "outing-wrap";
       box.innerHTML = `<div class="outing-card" role="dialog" aria-label="走一趟">
-        <div class="outing-stage"><canvas class="outing-cv" width="${OUTING_W}" height="${OUTING_H}" aria-label="走一趟"></canvas>
-        <p class="outing-head"><b class="outing-place"></b><span class="outing-step"></span></p></div>
-        <div class="outing-log" aria-live="polite"></div>
-        <div class="outing-foot"></div></div>`;
+        <p class="outing-head"><b class="outing-place"></b><span class="outing-step"></span></p>
+        <div class="outing-scene"><canvas class="outing-cv" width="${OUTING_W}" height="${OUTING_H}" aria-label="走一趟"></canvas></div>
+        <div class="outing-foot"></div>
+        <div class="outing-log" aria-live="polite"></div></div>`;
       document.body.appendChild(box);
     }
     if (!OW.raf) { OW.last = performance.now(); OW.raf = requestAnimationFrame(outingFrame); }
@@ -137,7 +137,8 @@
     const box = document.getElementById("outing-pop");
     const trip = outingTrip();
     if (!box || !trip) return;
-    box.querySelector(".outing-step").textContent = `第 ${Math.min(Math.max(OW.played, 1), trip.total)}／${trip.total} 段`;
+    const at = Math.min(Math.max(OW.played, 1), trip.total);
+    box.querySelector(".outing-step").innerHTML = `第 ${at}／${trip.total} 段${Array.from({ length: trip.total }, (_, j) => `<i class="d${j < OW.played ? " on" : ""}"></i>`).join("")}`;
     const foot = box.querySelector(".outing-foot");
     const walking = OW.cur || OW.tasks.length;
     if (walking) {
