@@ -2,7 +2,9 @@
  *
  * 伺服器一次算到「下一件要選的事」為止，沿路每一段放在 main.outing.trip.beats；這裡只把已經算好的結果演出來：
  * 斗笠小童在野地四層背景上跑（越近的層捲得越快），到了那一段照類別演動作（撿、打、停步），演完寫一行。
- * 要選的事（事件、有所感、頭目）：畫面停住，按「去看看」收起這一層，玩家在江湖頁照平常選；選完了（trip.can_go）自動接著走、重新打開。
+ * 要選的事（事件、有所感、頭目）：畫面停住，事情與選項直接畫在這張卡底下，就在這裡選（Joy 10/30：不要「去看看」那一步）；
+ * 選完了（trip.can_go）寫一行結果、自動接著走。要寫字或畫圖的選項（隨口應對、有所感畫形、取名……）那個框在江湖頁：
+ * 按了這一層先收起、捲到那個框，送出後再打開。
  * 演完一整趟給結算卡。動畫可以 2×、可以略過；系統設定「減少動態」的人直接快轉。圖是 Joy 10/30 生的（web/img/outing/）。
  */
 "use strict";
@@ -22,7 +24,7 @@
   const OUTING_SPEED_KEY = "outing-speed";
   // 畫面上的字（待 joy 潤）
   const OUTING_WAIT = "路上碰到要選的事。";
-  const OUTING_AWAY = "去看看";
+  const OUTING_AFTER = "果";
   const OUTING_CLOSE = "收起";
   const OUTING_AGAIN = "再走一趟";
   const OUTING_SKIP = "略過";
@@ -75,17 +77,66 @@
     });
   }
 
-  // 每次拿到新的畫面（setMain 之後）：停在要選的事上、玩家去選了、選完了（can_go）就自己接著走
+  // 每次拿到新的畫面（setMain 之後）：停在要選的事上時刷新卡上的選項；選完了（can_go）寫一行結果、自己接著走
   function outingSync() {
     const trip = S.main && S.main.outing && S.main.outing.trip;
-    // 重新整理頁面（或換了分頁）時那一趟還停在要選的事上：當作已經按過「去看看」，選完照樣接著走（沿路那幾行不重演）
-    if (trip && !trip.end && !OW.open && !OW.away && OW.shown === 0) { OW.away = true; OW.shown = trip.beats.length; OW.played = trip.done; }
-    if (!trip || !OW.away || OW.going || S.busy) return;
+    if (!trip) return;
+    // 重新整理頁面（或換了分頁）時那一趟還停在要選的事上：直接打開這一層、選項畫在卡上（沿路那幾行不重演）
+    if (!trip.end && !OW.open && !OW.away && OW.shown === 0) {
+      OW.shown = trip.beats.length; OW.played = trip.done;
+      if (outingInputOpen()) OW.away = true; else outingOpen();
+      return;
+    }
+    if (OW.going || S.busy) return;
+    // 為了寫字、畫圖收起來的：框還開著就等；送出了又停在下一件要選的事上（有所感之後取名……）就打開、畫在卡上
+    if (OW.away && !trip.end && !trip.can_go) {
+      if (!outingInputOpen()) { OW.away = false; outingOpen(); }
+      return;
+    }
+    if (!OW.away && !OW.open) return;
+    if (OW.open && (OW.cur || OW.tasks.length)) return; // 還在演
+    if (OW.waitKey && (trip.end || trip.can_go)) outingAfter();
     if (trip.end) { OW.away = false; outingOpen(); return; }
-    if (!trip.can_go) return;
+    if (!trip.can_go) { outingFoot(); return; }
     OW.going = true;
     OW.away = false;
     outingGo(0).finally(() => { OW.going = false; });
+  }
+
+  // 要在江湖頁寫字或畫圖的選項（那個框只畫在江湖頁上）。隨口應對不在裡面：輸入框直接畫在這張卡上（outingChoiceHtml）
+  function outingNeedsPage(id) {
+    return id === SENSE_DRAW || SAY_OPTIONS.includes(id) || id.startsWith(PERSUADE_PREFIX) || id === OWN_NAME_ID || id === GATHER_SAY_ID;
+  }
+  function outingInputOpen() { return !!(S.sensing || S.answering || S.saying || S.persuading || S.godNaming || S.gatherSaying); }
+  const OUTING_INPUTS = "#sense-pad, #answer-form, #say-form, #persuade-form, #own-name-form, #gather-say-form";
+
+  // 選完了：「剛剛」那一則（事件的結果）的頭一句寫進沿路紀錄，接著走
+  function outingAfter() {
+    OW.waitKey = null;
+    // 「剛剛」那一則的每一行（.tx-line），時刻與小標不要；跟沿路已經寫過的那一行一樣的不再寫
+    const tmp = document.createElement("div");
+    tmp.innerHTML = S.main.now || "";
+    const seen = new Set([...document.querySelectorAll("#outing-pop .outing-line")].map((x) => x.textContent));
+    const lines = [...tmp.querySelectorAll(".tx-line")].map((x) => x.textContent.trim()).filter((t) => t && ![...seen].some((x) => x.includes(t)));
+    const now = (lines.length ? lines.join(" ") : tmp.textContent).replace(/\s+/g, " ").trim();
+    const text = now.length > 80 ? `${now.slice(0, 80)}……` : now;
+    const box = document.getElementById("outing-pop");
+    if (!text || !box) return;
+    const row = document.createElement("p");
+    row.className = "outing-line after";
+    row.innerHTML = `<span class="k">${OUTING_AFTER}</span><span>${esc(text)}</span>`;
+    const log = box.querySelector(".outing-log");
+    log.appendChild(row);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // 停下來要選的事：江湖頁場景卡上的那段話（伺服器的 m.scene）＋選項，畫在走一趟這張卡上
+  function outingChoiceHtml(m, answering) {
+    const label = (o) => (typeof optLabelHtml === "function" ? optLabelHtml(o) : `<span>${esc(o.label)}</span>`);
+    const opts = (m.options || []).filter((o) => o.id !== "act:on_road");
+    return `<div class="outing-choice">${m.scene ? `<div class="outing-ev">${m.scene}</div>` : `<p>${OUTING_WAIT}</p>`}
+      <div class="options">${opts.map((o, i) => answering && o.id === FREE_TEXT_OPTION && o.enabled ? `
+        <form class="free answer" id="outing-answer"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : `<button class="btn" data-act="outing-choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span class="k">${i + 1}</span>${label(o)}</button>`).join("")}</div></div>`;
   }
 
   function outingTrip() { return S.main && S.main.outing && S.main.outing.trip; }
@@ -120,7 +171,7 @@
     outingFoot();
   }
 
-  // 停在要選的事上按「去看看」：這一層先藏起來（沿路那幾行留著），選完接著走時再打開；動畫停掉省電
+  // 要寫字、畫圖的選項：這一層先藏起來（沿路那幾行留著），送出後再打開；動畫停掉省電
   function outingHide() {
     OW.open = false;
     const box = document.getElementById("outing-pop");
@@ -129,13 +180,12 @@
     OW.raf = 0;
   }
 
-  // 「去看看」之後把要選的那一張卡捲到眼前（事件、有所感、頭目的選項都是 data-act="choose"）
-  function outingRevealChoice() {
-    const btn = document.querySelector('#page [data-act="choose"]');
-    const card = btn && (btn.closest(".card") || btn);
-    if (!card) return;
+  // 要寫字、畫圖的選項：這一層收起之後把那個框捲到眼前
+  function outingRevealInput() {
+    const el = document.querySelector(OUTING_INPUTS);
+    if (!el) return;
     const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    card.scrollIntoView({ block: "center", behavior: calm ? "auto" : "smooth" });
+    el.scrollIntoView({ block: "center", behavior: calm ? "auto" : "smooth" });
   }
 
   function outingShut() {
@@ -149,7 +199,7 @@
     OW.raf = 0;
   }
 
-  // 底下那一排：走著是速度與略過；停在要選的事上是「去看看」；走完是結算卡
+  // 底下那一排：走著是速度與略過；停在要選的事上是那件事與選項（outingChoiceHtml）；走完是結算卡
   function outingFoot() {
     const box = document.getElementById("outing-pop");
     const trip = outingTrip();
@@ -158,11 +208,20 @@
     box.querySelector(".outing-step").innerHTML = `第 ${at}／${trip.total} 段${Array.from({ length: trip.total }, (_, j) => `<i class="d${j < OW.played ? " on" : ""}"></i>`).join("")}`;
     const foot = box.querySelector(".outing-foot");
     const walking = OW.cur || OW.tasks.length;
+    const card = box.querySelector(".outing-card");
+    card.classList.toggle("choosing", !walking && !trip.end);
+    if (!walking && trip.end) foot.dataset.key = "";
     if (walking) {
+      foot.dataset.key = "";
       foot.innerHTML = `<div class="outing-ctl"><button class="btn" data-act="outing-speed">速度 ${OW.speed}×</button>
         <button class="btn" data-act="outing-skip">${OUTING_SKIP}</button></div>`;
     } else if (!trip.end) {
-      foot.innerHTML = `<div class="outing-wait"><p>${OUTING_WAIT}</p><button class="btn primary" data-act="outing-away">${OUTING_AWAY}</button></div>`;
+      // 輪詢每幾秒重畫一次：選項沒變就不動（捲到一半、按到一半的不被打斷）
+      const key = JSON.stringify([S.main.scene, (S.main.options || []).map((o) => [o.id, o.label, o.enabled])]);
+      if (OW.waitKey !== key) OW.answering = false; // 換了一件事：輸入框收起
+      OW.waitKey = key;
+      const drawn = `${key}|${OW.answering ? 1 : 0}`;
+      if (foot.dataset.key !== drawn) { foot.dataset.key = drawn; foot.innerHTML = outingChoiceHtml(S.main, OW.answering); foot.scrollTop = 0; }
     } else {
       foot.innerHTML = outingResultHtml(trip);
       outingDiary(trip);
@@ -518,7 +577,19 @@
       case "outing-go": await outingGo(Number(el.dataset.n)); return true;
       case "outing-speed": OW.speed = OW.speed === 2 ? 1 : 2; outingSaveSpeed(OW.speed); outingFoot(); return true;
       case "outing-skip": OW.turbo = true; return true;
-      case "outing-away": OW.away = true; outingHide(); outingRevealChoice(); return true;
+      case "outing-choose": {
+        const id = el.dataset.id;
+        if (id === FREE_TEXT_OPTION) {
+          OW.answering = true;
+          outingFoot();
+          const input = document.querySelector("#outing-answer .input");
+          if (input) input.focus();
+          return true;
+        }
+        if (outingNeedsPage(id)) { OW.away = true; outingHide(); await choose(el, id); outingRevealInput(); return true; }
+        await choose(el, id);
+        return true;
+      }
       case "outing-close": outingShut(); OW.shown = 0; return true;
       case "outing-again": outingShut(); OW.shown = 0; S.wheelSel = "explore"; renderPage(); revealMoveCard(); return true;
       case "outing-say": await outingSay({ preset: Number(el.dataset.i) }); return true;

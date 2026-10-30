@@ -68,3 +68,22 @@ def test_the_result_card_shows_the_tale_and_keeps_it():
     tale, kept = _run(more=[{**TRIP, "diary": "你在潁川郊野走了一程。", "kept": False}, {**TRIP, "diary": "你在潁川郊野走了一程。", "kept": True}])["extra"]
     assert '<p class="outing-diary">你在潁川郊野走了一程。</p>' in tale and 'data-act="outing-keep"' in tale
     assert "已收進行狀" in kept and 'data-act="outing-keep"' not in kept
+
+
+CHOICE_DRIVER = r"""
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const code = konst("OUTING_WAIT") + fn("outingChoiceHtml");
+const H = new Function("esc", code + "\nreturn { outingChoiceHtml };")(esc);
+finish({ html: H.outingChoiceHtml(input.m) });
+"""
+
+
+def test_a_stop_puts_the_choice_on_the_card():
+    """Joy 10/30「選項應該就要在浮起來那邊吧，幹嘛多此一舉弄什麼去看看」：停下來要選的事與選項畫在走一趟的卡上，沒有「去看看」。"""
+    m = {"scene": "<p><strong>狼群</strong></p><p>林中傳來一聲狼嚎。</p>", "options": [
+        {"id": "choice:0", "label": "拔出兵器迎戰", "enabled": True},
+        {"id": "choice:1", "label": "爬上大樹躲避", "enabled": False}]}
+    html = webharness.run(CHOICE_DRIVER, {"m": m})["html"]
+    assert "林中傳來一聲狼嚎。" in html
+    assert 'data-act="outing-choose" data-id="choice:0" >' in html and 'data-id="choice:1" disabled' in html
+    assert "去看看" not in html and 'data-act="choose"' not in html

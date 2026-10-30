@@ -1462,7 +1462,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* 確認鈕固定用深一點的朱紅：深色模式的 --bad（#e06a5c）配白字只有 3.3:1，這個顏色兩種模式都是 5.9:1 */
 .btn.danger { background: #b23a2b; border-color: #b23a2b; color: #fff; font-weight: 600; }
 /* 管理者動作的確認框：疊在設定抽屜上面的小抽屜（app.js 的 ask） */
-.ask-layer { position: fixed; inset: 0; z-index: 45; }
+.ask-layer { position: fixed; inset: 0; z-index: 75; } /* 永遠在最上面：走一趟那一層（58）上按的選項也會問一次 */
 .ask-bg { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.35); animation: fade 0.2s; }
 .ask {
   position: absolute; left: 0; right: 0; bottom: 0; max-width: 640px; margin: 0 auto;
@@ -3311,8 +3311,18 @@ svg.fig .blade.bow { stroke-width: 3; }
 .outing-line.bad .k { color: var(--bad); }
 .outing-ctl { display: flex; gap: 8px; }
 .outing-ctl .btn { flex: 1; justify-content: center; }
-.outing-wait p { margin: 0 0 8px; font-size: 13.5px; }
-.outing-wait .btn { width: 100%; justify-content: center; }
+.outing-card.choosing .outing-foot { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.outing-card.choosing .outing-log { min-height: 56px; max-height: 96px; }
+.outing-choice > p { margin: 0 0 8px; font-size: 13.5px; }
+.outing-ev { font-size: 13.5px; line-height: 1.7; margin: 0 2px 8px; }
+.outing-ev p { margin: 0 0 6px; }
+.outing-ev img { display: none; }
+.outing-choice .options { display: grid; gap: 6px; }
+.outing-choice .options > .btn { width: 100%; justify-content: flex-start; text-align: left; }
+.outing-choice .free { display: flex; gap: 6px; }
+.outing-choice .free .input { flex: 1 1 auto; min-width: 0; }
+.outing-choice .free .btn { flex: none; }
+.outing-line.after .k { color: var(--ink-2); }
 .outing-title { margin: 0 0 4px; font-family: var(--serif); }
 .outing-title b { color: var(--gold); }
 .outing-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }

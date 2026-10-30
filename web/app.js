@@ -6813,7 +6813,7 @@
       } else if (form.id === "create-form") {
         submit.disabled = true;
         enter(await api("/api/character", data));
-      } else if (form.id === "answer-form") {
+      } else if (form.id === "answer-form" || form.id === "outing-answer") { // outing-answer：走一趟那張卡上的隨口應對（outing.js）
         if (!data.text.trim()) return;
         await answer(form, data.text.trim());
       } else if (form.id === "say-form") {
