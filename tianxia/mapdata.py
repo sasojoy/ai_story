@@ -139,10 +139,23 @@ def base(state: GameState, content: Content, mostly: dict[str, str] | None = Non
         "insight_kinds": {d.id: {"name": d.name, "attribute": d.attribute} for d in content.insights.values() if d.grant is None},
         "insight_layer": content.config.insight_strong.enabled and any(p["strong"] for p in places),
         "world": world(state, content),
+        "paint": paint(content),
     }
     if mostly is not None:
         out[VIEWER_MOSTLY] = True  # 名字旁整個是看的人的（含「有賞」）：網頁不再另判討伐；沒給的季這個鍵不存在，底圖一個字不變
     return out
+
+
+def paint(content: Content) -> dict:
+    """輿圖一張到底（企劃者 2026-10-30「可以 這樣改」）：網頁照這一份自己畫淡彩水墨的底圖（大區、河、山、林、山河名），烤成一張圖。
+    只是內容（content/map.json），跟人無關、跟底圖一起快取。"""
+    m = content.map
+    return {
+        "regions": [{"id": r.id, "points": r.points} for r in m.regions],
+        "rivers": [{"points": r.points, "width": list(r.width), "color": r.color} for r in m.rivers],
+        "terrain": [t.model_dump(exclude_none=True) for t in m.terrain],
+        "labels": [{"text": x.text, "x": x.x, "y": x.y} for x in m.labels],
+    }
 
 
 def ground_places(state: GameState, content: Content) -> list[str]:
