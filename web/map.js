@@ -968,15 +968,16 @@
     return `<defs>${defs.join("")}</defs>${body.join("")}<g fill="none" stroke="${LAND_FRONT}" stroke-width="${w(LAND_FRONT_W)}" stroke-linecap="round">${front.join("")}</g>${frames.join("")}`;
   }
   // 地常駐（不看倍率、沒有塗層開關）。#mk 是一張向量的 SVG：Joy 10/30 把它畫成點陣是為了水暈的濾鏡與混色（拖縮每一幀重算、Safari 破圖），
-  // 第二版兩樣都拿掉了；向量近看線才不糊。拖縮只換 #mvw 的 transform；換了疊層、週次、倍率差過三分之一級（log2 的 1/3，線寬差不到一成二）
-  // 才重寫一次（設計 2.2「key 含 log2(z)×3」）
+  // 第二版兩樣都拿掉了；向量近看線才不糊。拖縮只換 #mvw 的 transform：手勢、慣性滑、滾輪、飛過去的途中（mvBusy）一次都不重寫，地跟著
+  // transform 縮放（線寬暫時跟著粗細）；停下來的那一次 drawMarks，換了疊層、週次、倍率差過三分之一級（log2 的 1/3，線寬差不到一成二）
+  // 才重寫一次（設計 2.2「key 含 log2(z)×3」、第七章「拖縮中只換 transform」；W1 審查 2026-10-30：以前捏、滾輪、飛的途中會整張重寫好幾次）
   const ground = { key: "", el: null };
   function groundK(z) {
     return Math.min(4, Math.max(0.25, 2 ** (-Math.round(Math.log2(z) * 3) / 3)));
   }
   function groundShow(c) {
     const svg = document.getElementById("mk");
-    if (!svg || !S.mapBase || !S.mapState || !c) return;
+    if (!svg || !S.mapBase || !S.mapState || !c || mvBusy()) return;
     const k = groundK(c.z), week = mapWeek(), key = `${S.mapBase.key}|${S.mapStateAt}|${week}|${f2(k)}`;
     if (ground.el === svg && ground.key === key) return;
     Object.assign(ground, { el: svg, key });
@@ -1144,6 +1145,9 @@
 
   // ── 看哪裡：S.mapCam = { z 倍率, x, y }，地圖上 (mx, my) 在地圖框裡的 (x + mx·z, y + my·z) ──
   const mv = { pts: new Map(), start: null, moved: false, frame: 0, g: null, anim: 0, vel: [0, 0], last: null, lastTap: 0, eatUntil: 0, wheelTimer: 0, laid: null };
+  // 鏡頭還在動：手指按著又動過（拖、捏）、慣性滑或飛過去（mv.anim）、滾輪還沒停（mv.g 留著、沒有手指）。放手、滑停、飛完、滾輪停都會把它們
+  // 清掉再叫一次 drawMarks（地在那一次才換級距，groundShow）
+  const mvBusy = () => (mv.moved && mv.pts.size > 0) || !!mv.anim || (!!mv.g && !mv.pts.size);
   // 地圖框與它的內緣在畫面上的位置；框還沒有大小回 null
   function mapGeom(wrap) {
     if (!wrap || !wrap.clientWidth || !wrap.clientHeight) return null;

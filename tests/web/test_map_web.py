@@ -16,13 +16,14 @@ from conftest import real_content, third_party_gentry
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 import html as htmllib
+import math
 from tianxia import terrain
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NAMES = ["S", "pageMap", "controlAt", "drawerHtml", "placeCard", "cardExtras", "searchHtml", "searchResults", "timelineHtml", "graphSvg",
          "chartHtml", "mapDrawerPx", "setMapDrawer", "insightRow", "redrawDrawer", "journeyHtml", "nearHtml", "nearList", "chipList", "chipsHtml",
          "mapFilter", "marksHtml", "groundSvg", "camClamp", "camFit", "zMin", "mapPick", "mapBack", "mapFind", "routeD", "camSet", "mapFirst",
-         "groundShow", "landAt", "mapLand", "mvDown", "mvUp"]
+         "groundShow", "landAt", "mapLand", "mvDown", "mvUp", "mvMove", "mvWheel", "camFly", "drawMarks", "mv"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 APP = webharness.APP  # 三個檔（main.js、map.js、app.js）接起來的那一份
 # 一個夠大的地圖框：整張天下都在「畫面附近」，字一處都不會因為在畫面外被略過
@@ -491,7 +492,7 @@ def test_w1_no_stylesheet_rule_overrides_the_lands_own_colours_and_widths():
 
 
 def test_w1_the_land_is_always_drawn_and_only_redrawn_per_third_of_a_zoom_octave():
-    """地常駐（不再只在遠看、塗層、版圖時畫）：近看也畫；拖縮不重畫（camSet 只換 transform，上面那一條），停下來照倍率的三分之一級
+    """地常駐（不再只在遠看、塗層、版圖時畫）：近看也畫；拖縮的途中不重寫（下一條），停下來照倍率的三分之一級
     （log2(z)×3 取整）換線寬，同一級不重寫；換了週次（版圖變化）重寫。線寬照螢幕（k＝1／倍率）。"""
     out = run(_game(profile="season21"), """
 const writes = [], mk = {};
@@ -506,6 +507,58 @@ return { before, after: writes.length, land: writes.map((w) => (w.match(/class="
     assert out["before"] == 4 and out["after"] == 5
     assert len(set(out["land"])) == 1 and out["land"][0] > 30
     assert out["front"][:4] == ["8.06", "3.2", "2.54", "1.27"]  # 3.2 × 2^(4/3)、×1、×2^(-1/3)、×2^(-4/3)
+
+
+# 拖縮的途中地不重寫（設計第七章「不能變卡：地塊常駐、每一級距重畫一次，拖縮中只換 transform」、2.2「手勢中凍住、放手重排」）。
+# W1 審查（2026-10-30）抓到的：camSet 在捏、滾輪、飛過去的途中照 MV_RELAYOUT 排 drawMarks，drawMarks 又叫 groundShow，跨了三分之一級就把
+# #mk 整張重寫（每次約 31KB、47 個 clipPath）。照真的路走：mvDown／mvMove／mvUp、mvWheel、camFly，每一幀跑完排進來的 rAF（接在 DRAWER_DOM 後面）
+GESTURE_DOM = """
+let seq = 0, extra = 0;
+const q = new Map();
+T.ctx.requestAnimationFrame = (f) => { q.set(++seq, f); return seq; };
+T.ctx.cancelAnimationFrame = (id) => { q.delete(id); };
+const frame = () => { extra += 16; const fs = [...q.values()]; q.clear(); for (const f of fs) f(T.ctx.performance.now() + extra); };
+const writes = [], mk = {};
+Object.defineProperty(mk, 'innerHTML', { set: (v) => { writes.push(v); }, get: () => writes[writes.length - 1] || '' });
+const map = { clientWidth: 375, clientHeight: 700, clientLeft: 0, clientTop: 0, getBoundingClientRect: () => ({ left: 0, top: 0 }), setPointerCapture() {} };
+Object.assign(els, { map, mk, mkt: { style: {}, innerHTML: '' }, mvw: { style: {} }, mkr: { innerHTML: '' } });
+const pt = (type, id, x, y) => ({ type, pointerType: 'touch', button: 0, pointerId: id, clientX: x, clientY: y, target: { closest: () => null } });
+const front = (w) => (String(w || '').match(/stroke="#FFF6E0" stroke-width="([\\d.]+)"/) || [])[1];
+"""
+
+
+@pytest.mark.slow  # 單一條超過一秒（三種手勢各走一遍）
+def test_w1_the_land_is_not_rewritten_while_pinching_wheeling_or_flying():
+    """捏（1 → 3.2）、滾輪（拉遠）、飛過去（拉近）的途中都跨了好幾個三分之一級，#mk 一次都不重寫：地是向量的、本來就跟著 #mvw 的
+    transform 縮放（線寬暫時跟著粗細）；放手、滾輪停、飛完的那一次 drawMarks 才照新的倍率重寫一次，線寬回到照螢幕。"""
+    out = run(_game(profile="season21"), DRAWER_DOM + GESTURE_DOM + """
+return (async () => {
+  H.camSet({ z: 1, x: -400, y: -400 }); H.drawMarks(); frame();
+  const res = {}, z = () => H.S.mapCam.z;
+  let n = writes.length;
+  H.mvDown(pt('pointerdown', 1, 150, 350)); H.mvDown(pt('pointerdown', 2, 220, 350));
+  for (let i = 1; i <= 40; i++) { H.mvMove(pt('pointermove', 1, 150 - i * 4, 350)); H.mvMove(pt('pointermove', 2, 220 + i * 4, 350)); frame(); }
+  res.pinch = { during: writes.length - n, z: z() };
+  H.mvUp(pt('pointerup', 1, -10, 350)); H.mvUp(pt('pointerup', 2, 380, 350)); frame();
+  Object.assign(res.pinch, { after: writes.length - n, front: front(writes[writes.length - 1]) });
+  n = writes.length;
+  for (let i = 0; i < 20; i++) { H.mvWheel({ deltaY: 60, deltaMode: 0, clientX: 180, clientY: 350, preventDefault() {} }); frame(); }
+  res.wheel = { during: writes.length - n, z: z() };
+  await new Promise((r) => setTimeout(r, 240)); frame();
+  Object.assign(res.wheel, { after: writes.length - n, front: front(writes[writes.length - 1]) });
+  n = writes.length; extra = 0;
+  H.camFly({ z: 3, x: -1500, y: -1500 });
+  let during = 0, frames = 0;
+  while (q.size && frames < 300) { frame(); frames++; if (H.mv.anim) during = writes.length - n; }
+  res.fly = { during, frames, z: z(), after: writes.length - n, front: front(writes[writes.length - 1]) };
+  return res;
+})();""")
+    for name, start in (("pinch", 1), ("wheel", out["pinch"]["z"]), ("fly", out["wheel"]["z"])):
+        g = out[name]
+        assert g["during"] == 0 and g["after"] == 1, (name, g)
+        assert abs(math.log2(g["z"] / start)) > 1, (name, g)  # 真的跨了好幾個三分之一級
+        assert abs(float(g["front"]) * g["z"] / 3.2 - 1) < 0.13, (name, g)  # 放手那一次照新的倍率：白邊 3.2 照螢幕（差不到三分之一級）
+    assert out["fly"]["frames"] > 5
 
 
 # ── 看哪裡 ──
