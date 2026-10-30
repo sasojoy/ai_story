@@ -5799,6 +5799,7 @@ class Game:
             token = left[0]
         place = c.locations[trip.place].name if trip.place in c.locations else trip.place
         item = outing_rules.inscribe(s, c, line, preset=is_preset)
+        self._save_season()  # 留言刻在全服這一季（WorldState.inscriptions），不寫回共用賽季的話下一次重讀就沒了
         if token is not None:
             self._wallet().mark_used(token, self.pill_now(), place=trip.place, inscription=item.id)
         said = outing_rules.SAY_DONE.format(place=place, text=line)
@@ -5828,6 +5829,7 @@ class Game:
         """管理者抹掉一則留言（路上那一行的 ref）。不是管理者、沒有這一則都回同一句「此刻無法」。"""
         if not self.is_admin() or not outing_rules.erase(self.state, ins_id):
             return ["（此刻無法這麼做。）"]
+        self._save_season()
         return self._log([outing_rules.ERASED])
 
     def is_idle(self) -> bool:

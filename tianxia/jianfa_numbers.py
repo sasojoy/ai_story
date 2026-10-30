@@ -131,8 +131,8 @@ class JianfaNumbers(_Strict):
     outing_say_max: int = Field(default=20, ge=1)
     outing_keep: int = Field(default=20, ge=1)
     # 路上看到別人的留言、遠處有人揮手：一趟最多幾行（不佔段數）、每段走完擲中的機率、自己寫的比預設句容易抽到幾倍【預設】
-    outing_trace_cap: int = Field(default=2, ge=0)
-    outing_trace_chance: float = Field(default=0.4, ge=0, le=1)
+    outing_trace_cap: int = Field(default=1, ge=0)
+    outing_trace_chance: float = Field(default=0.2, ge=0, le=1)
     outing_trace_custom: float = Field(default=2.0, ge=1)
     outing_tale_seconds: float = Field(default=20.0, ge=0)  # 遊記：請模型寫最多等幾秒（鎖外）；叫不動就用模板【預設】
     town_foes: list[str] = Field(default_factory=lambda: ["dipi"], min_length=1)

@@ -122,7 +122,7 @@ def view(state: GameState, content: Content) -> dict | None:
             "say_max": content.config.jianfa.outing_say_max,
             "diary": trip.tale or (template_tale(trip, content) if trip.end else ""), "diary_done": trip.tale_done,
             "feat_note": FEAT_NOTE if trip.end and any(b.feat for b in trip.beats) else "",
-            "stele": stele(state, trip.place),
+            "stele": stele(state, trip.place, own=bool(trip.said)),
         }
     return out
 
@@ -135,13 +135,19 @@ def foe_look(squad) -> str:
     return next((v for k, v in _NAME_LOOK if k in squad.name), LOOK_BANDIT)
 
 
-def stele(state: GameState, place: str) -> dict | None:
+def stele(state: GameState, place: str, *, own: bool = False) -> dict | None:
     """畫面上方那塊路碑（Joy 10/30）：這一處留過的話。碑上那一句是最後一則用題壁墨寫的；沒有人用過題壁墨，是最多人留的那一句預設句
-    （一樣多取最近留的）。all 是點開看到的全部，新的在前。這一處沒人留過是 None。"""
+    （一樣多取最近留的）。own（這一趟自己剛留過一句）：碑上先是自己那一句（Joy 10/30「要」），mine 標出來。
+    all 是點開看到的全部，新的在前。這一處沒人留過是 None。"""
     here = [i for i in state.world.inscriptions if i.place == place]
     if not here:
         return None
+    mine = [i for i in here if i.author == state.player.name] if own else []
     inked = [i for i in here if not i.preset]
+    if mine:
+        top = max(mine, key=lambda i: i.id)
+        return {"text": top.text, "author": top.author, "n": 0, "mine": True,
+                "all": [{"text": i.text, "author": i.author, "ink": not i.preset} for i in sorted(here, key=lambda i: -i.id)]}
     if inked:
         top, n = max(inked, key=lambda i: i.id), 0
     else:

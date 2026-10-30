@@ -339,6 +339,37 @@ def test_the_stele_shows_the_last_ink_or_the_most_left_preset():
     assert (st["text"], st["author"]) == ("橋下有魚", "戊") and st["all"][0]["ink"]
 
 
+def test_my_own_line_shows_on_the_stele_right_after_i_leave_it():
+    """Joy 10/30「自己留的路牌看不到嗎」→「要」：這一趟自己留了一句，碑上先是自己那一句（題壁墨、預設句都算）。"""
+    game = _game()
+    w = game.state.world
+    w.inscription_seq = 1
+    w.inscriptions = [Inscription(id=1, place="yingshui", text="橋下有魚", author="戊", preset=False, time=0)]
+    _walked(game)
+    assert game.outing_view()["trip"]["stele"]["text"] == "橋下有魚"
+    game.outing_say(0)
+    st = game.outing_view()["trip"]["stele"]
+    assert st["mine"] and (st["text"], st["author"]) == (outing.PRESETS[0], game.state.player.name)
+    assert not outing.stele(game.state, "yingshui").get("mine")  # 別的時候照舊是最後一則題壁墨
+
+
+def test_a_line_and_its_erasing_are_saved_to_the_season():
+    """留言刻在全服這一季：伺服器每一步都從資料庫重讀，沒寫回共用賽季的話，留下的那一句下一步就不見了（路牌上看不到自己那一句）。"""
+    game = _game()
+    _walked(game)
+    game.outing_say(0)
+    assert [i.text for i in game.world.get_season().inscriptions if i.place == "yingshui"] == [outing.PRESETS[0]]
+    game.content.config.admins = [game.state.player.name]
+    game.admin_erase_inscription(game.state.world.inscriptions[0].id)
+    assert not [i for i in game.world.get_season().inscriptions if i.place == "yingshui"]
+
+
+def test_road_lines_are_rare():
+    """Joy 10/30「（見）不用（拿掉），但是不用出現太頻繁」：一趟最多一行，每段兩成。"""
+    cfg = _game().content.config.jianfa
+    assert (cfg.outing_trace_cap, cfg.outing_trace_chance) == (1, 0.2)
+
+
 def test_a_foe_is_drawn_as_its_own_side():
     """Joy 10/30「現在敵人只有黃巾軍，如果我本身就是黃巾不是很奇怪嗎」：遭遇那一段帶對手的樣子，畫面照它挑圖。"""
     sq = lambda name, faction=None: SimpleNamespace(name=name, faction=faction)
