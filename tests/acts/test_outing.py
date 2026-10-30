@@ -270,8 +270,8 @@ def test_the_tale_falls_back_to_a_template_without_digits():
     with _draws(MAT, ENC, MAT):
         game.outing_go(3)
     view = game.outing_view()["trip"]
-    assert view["tale"].startswith("這一趟在") and "兩樣東西" in view["tale"] and not any(ch.isdigit() for ch in view["tale"])
-    assert view["tale_done"] is False
+    assert view["diary"].startswith("這一趟在") and "兩樣東西" in view["diary"] and not any(ch.isdigit() for ch in view["diary"])
+    assert view["diary_done"] is False
 
 
 def test_the_model_tale_is_checked_and_kept_for_the_same_trip():

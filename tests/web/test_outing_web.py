@@ -65,6 +65,6 @@ def test_the_result_card_offers_free_lines_and_ink():
 
 
 def test_the_result_card_shows_the_tale_and_keeps_it():
-    tale, kept = _run(more=[{**TRIP, "tale": "你在潁川郊野走了一程。", "kept": False}, {**TRIP, "tale": "你在潁川郊野走了一程。", "kept": True}])["extra"]
-    assert '<p class="outing-tale">你在潁川郊野走了一程。</p>' in tale and 'data-act="outing-keep"' in tale
+    tale, kept = _run(more=[{**TRIP, "diary": "你在潁川郊野走了一程。", "kept": False}, {**TRIP, "diary": "你在潁川郊野走了一程。", "kept": True}])["extra"]
+    assert '<p class="outing-diary">你在潁川郊野走了一程。</p>' in tale and 'data-act="outing-keep"' in tale
     assert "已收進行狀" in kept and 'data-act="outing-keep"' not in kept

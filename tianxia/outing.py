@@ -109,7 +109,7 @@ def view(state: GameState, content: Content) -> dict | None:
             "beats": [b.model_dump() for b in trip.beats],
             "said": trip.said, "can_say": say_ok(state) is not None, "presets": list(PRESETS),
             "say_max": content.config.jianfa.outing_say_max,
-            "tale": trip.tale or (template_tale(trip, content) if trip.end else ""), "tale_done": trip.tale_done,
+            "diary": trip.tale or (template_tale(trip, content) if trip.end else ""), "diary_done": trip.tale_done,
             "kept": trip.kept,
         }
     return out

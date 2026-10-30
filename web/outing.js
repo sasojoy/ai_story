@@ -156,22 +156,22 @@
       foot.innerHTML = `<div class="outing-wait"><p>${OUTING_WAIT}</p><button class="btn primary" data-act="outing-away">${OUTING_AWAY}</button></div>`;
     } else {
       foot.innerHTML = outingResultHtml(trip);
-      outingTale(trip);
+      outingDiary(trip);
     }
   }
 
   // 遊記：結算卡先放模板那一段，請模型寫（鎖外，伺服器 outing_tale）；寫到了淡入換掉。一趟只請一次
-  async function outingTale(trip) {
+  async function outingDiary(trip) {
     const key = `${trip.place}|${trip.beats.length}|${trip.done}`;
-    if (trip.tale_done || OW.taleAsked === key) return;
-    OW.taleAsked = key;
+    if (trip.diary_done || OW.diaryAsked === key) return;
+    OW.diaryAsked = key;
     try {
       const r = await api("/api/do/outing_tale", {});
       if (r && r.main) {
         applyMain(r.main);
         const now = outingTrip();
-        const p = document.querySelector("#outing-pop .outing-tale");
-        if (now && p && now.tale && now.tale !== p.textContent) { p.textContent = now.tale; p.classList.add("fresh"); }
+        const p = document.querySelector("#outing-pop .outing-diary");
+        if (now && p && now.diary && now.diary !== p.textContent) { p.textContent = now.diary; p.classList.add("fresh"); }
       }
     } catch (e) { /* 叫不動就留著模板那一段 */ }
   }
@@ -207,7 +207,7 @@
     return `<div class="outing-result"><p class="outing-title"><b>${esc(trip.title)}</b>・${trip.done} 段</p>
       ${trip.end_line ? `<p class="muted small">${esc(trip.end_line)}</p>` : ""}
       ${chips ? `<p class="outing-chips">${chips}</p>` : ""}${lost ? `<p class="outing-chips">${lost}</p>` : ""}
-      ${trip.tale ? `<p class="outing-tale">${esc(trip.tale)}</p>` : ""}
+      ${trip.diary ? `<p class="outing-diary">${esc(trip.diary)}</p>` : ""}
       <p class="outing-keep">${trip.kept ? `<small>${OUTING_KEPT}</small>` : `<button class="btn small ghost" data-act="outing-keep">${OUTING_KEEP}</button>`}</p>
       ${outingSayHtml(trip)}${outingPeopleHtml(trip)}
       <div class="outing-ctl"><button class="btn" data-act="outing-close">${OUTING_CLOSE}</button>
