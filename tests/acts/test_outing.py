@@ -5,13 +5,15 @@ from __future__ import annotations
 
 import random
 from contextlib import contextmanager
+from types import SimpleNamespace
 from unittest import mock
 
 import pytest
 from jianfa_kit import jianfa_game, ready
 
-from tianxia import explore_modes, explore_one, outing, team
+from tianxia import explore_modes, explore_one, outing, social, speech, team
 from tianxia.encounter import EncounterResult
+from tianxia.state import Inscription
 
 pytestmark = pytest.mark.slow
 
@@ -155,3 +157,107 @@ def test_bots_walk_the_same_trip():
     assert bot.outing_segments(game, rng) in (1, 3, 5)
     game.state.player.stamina = 5.0
     assert bot.outing_segments(game, rng) == 0
+
+
+# ── 留言（題壁墨）、路上看到的那幾行（企劃者 2026-10-29～30）──
+
+def _walked(game, n: int = 1):
+    with _draws(*([MAT] * n)):
+        game.outing_go(n)
+    return game.state.player.outing
+
+
+def _with_ink(game, n: int = 1) -> None:
+    from tianxia.characters import name_key
+    from tianxia.wallet import Wallet
+    game.now = game.now or 1_800_000_000.0  # 用掉的那一張記用掉的時刻（0 會被當成沒用）
+    Wallet(game.world.db).post(name_key(game.state.player.name), 1000, "grant", "test:ink", time=game.now)
+    for i in range(n):
+        assert game.mall_buy("inscribe_ink", f"ink-{i}") and game.mall_bought == "inscribe_ink"
+
+
+def test_a_preset_line_is_free_and_one_per_trip():
+    game = _game()
+    assert game.outing_say(0) == [outing.SAY_NOT_HERE]  # 還沒走
+    trip = _walked(game)
+    assert game.outing_view()["trip"]["can_say"] is True
+    game.outing_say(1)
+    w = game.state.world
+    assert trip.said == outing.PRESETS[1] and [(i.text, i.preset, i.author) for i in w.inscriptions] == [
+        (outing.PRESETS[1], True, game.state.player.name)]
+    assert game.outing_say(2) == [outing.SAY_AGAIN]
+    assert game.outing_view()["trip"]["can_say"] is False
+
+
+def test_own_words_need_ink_and_pass_the_word_list():
+    game = _game()
+    _walked(game)
+    assert game.outing_say(text="此處風大") == [outing.NO_INK]
+    _with_ink(game)
+    assert game.outing_view()["trip"]["ink"] == 1
+    game.content.banned_words = ["王八"]
+    assert game.outing_say(text="你個王八") == [speech.BLOCKED]
+    assert game.outing_say(text="字" * 21) == [speech.TOO_LONG.format(n=20)]
+    assert game.outing_say(text="此處風大", verdict="bad") == [speech.BLOCKED]  # 模型擋下
+    assert game.outing_view()["trip"]["ink"] == 1  # 擋下的不用墨
+    game.outing_say(text="此處風大")
+    assert game.state.world.inscriptions[-1].text == "此處風大" and not game.state.world.inscriptions[-1].preset
+    assert game.outing_ink_left() == 0
+
+
+def test_a_place_keeps_the_latest_lines():
+    game = _game()
+    keep = game.content.config.jianfa.outing_keep
+    for _ in range(keep + 3):
+        game.state.player.stamina = 100.0
+        _walked(game)
+        game.outing_say(0)
+    here = [i for i in game.state.world.inscriptions if i.place == "yingshui"]
+    assert len(here) == keep and here[0].id == 4  # 最舊的三則丟了
+
+
+def test_others_lines_show_on_the_road_without_taking_a_segment():
+    game = _game()
+    w = game.state.world
+    w.inscription_seq = 2
+    w.inscriptions = [Inscription(id=1, place="yingshui", text="溪水可飲。", author="別人", preset=True),
+                      Inscription(id=2, place="yingshui", text="自己的", author=game.state.player.name)]
+    game.content.config.jianfa.outing_trace_chance = 1.0
+    trip = _walked(game, 3)
+    traces = [b for b in trip.beats if b.kind == outing.TRACE]
+    assert trip.done == 3 and trip.end == outing.DONE
+    assert len(traces) == 1 and "溪水可飲。" in traces[0].text and "別人" in traces[0].text and traces[0].ref == 1  # 自己的不看、同一則不看兩次
+    assert len([b for b in trip.beats if b.kind != outing.TRACE]) == 3
+
+
+def test_someone_here_waves_once():
+    game = _game()
+    game.content.config.jianfa.outing_trace_chance = 1.0
+    other = SimpleNamespace(player=SimpleNamespace(name="遠方客"))
+    with mock.patch.object(social, "here", return_value=[other]):
+        trip = _walked(game, 5)
+        assert game.outing_view()["trip"]["people"] == ["遠方客"]
+    waves = [b for b in trip.beats if b.kind == outing.TRACE]
+    assert [b.text for b in waves] == [outing.WAVE_LINE.format(name="遠方客")]  # 一趟揮一次，沒有留言就只有這一行
+
+
+def test_admin_erases_a_line():
+    game = _game()
+    _walked(game)
+    game.outing_say(0)
+    ins = game.state.world.inscriptions[0].id
+    assert game.admin_erase_inscription(ins) == ["（此刻無法這麼做。）"]  # 不是管理者
+    game.content.config.admins = [game.state.player.name]
+    assert game.admin_erase_inscription(ins) == [outing.ERASED] and game.state.world.inscriptions == []
+
+
+def test_bots_leave_only_preset_lines():
+    from tianxia import bot
+    game = _game()
+    _walked(game)
+
+    class Always(random.Random):
+        def random(self):
+            return 0.0
+    bot.outing_say(game, Always(3))
+    assert game.state.world.inscriptions[0].preset and game.state.world.inscriptions[0].text in outing.PRESETS

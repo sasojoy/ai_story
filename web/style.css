@@ -3318,6 +3318,16 @@ svg.fig .blade.bow { stroke-width: 3; }
 .outing-chips .oc { font-size: 12.5px; line-height: 1.6; padding: 1px 8px; border-radius: 10px; background: var(--card-2); color: var(--ok); }
 .outing-chips .oc.rare { background: var(--gold); color: var(--card); font-weight: 700; }
 .outing-chips .oc.down { color: var(--bad); }
+.outing-line.trace { color: var(--rn-xia); }
+.outing-line.trace .k { color: var(--rn-xia); border-color: currentColor; }
+.outing-erase { margin-left: auto; flex: none; border: 0; background: none; color: var(--bad); font-size: 16px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.outing-say { margin: 6px 0; }
+.outing-say summary { cursor: pointer; font: 600 13.5px var(--serif); color: var(--gold); }
+.outing-chips .oc.say { border: 1px solid var(--line); color: var(--ink); background: var(--card-2); cursor: pointer; font: inherit; font-size: 12.5px; }
+.outing-own { display: flex; gap: 6px; margin: 4px 0; }
+.outing-own input { flex: 1 1 auto; min-width: 0; font: inherit; font-size: 13.5px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); }
+.outing-said { margin: 4px 0; font-size: 13px; color: var(--ink-2); }
+.outing-here { margin: 4px 0 8px; font-size: 13px; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
 @media (prefers-reduced-motion: reduce) { .outing-card, .outing-line { animation: none; } }
 /* 特殊事件的跳顯框（特殊事件設計稿）：蓋在畫面上，看完才收；破境卡在它上面 */
 .story-wrap { position: fixed; inset: 0; z-index: 59; display: flex; align-items: center; justify-content: center;

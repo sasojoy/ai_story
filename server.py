@@ -2528,6 +2528,7 @@ MAIN_ACTIONS = {
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」
 PAUSE_OK_ACTIONS = frozenset({"anonymous", "gender", "hints_off", "story_seen", "skip_tutorial", "view_map", "view_orders", "guide_ack"})
 ADMIN_ACTIONS = {
+    "outing_erase": lambda g, b: g.admin_erase_inscription(_int(b.get("id"), 0)),  # 走一趟的留言：管理者抹掉一則
     "open_season": lambda g, b: g.admin_open_season(time.time()),
     "end_season": lambda g, b: g.admin_end_season(time.time()),
     "next_season": lambda g, b: g.admin_next_season(time.time()),
@@ -2739,6 +2740,11 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         if not game.is_admin():
             raise GameError("只有管理者能這麼做。")
         msgs = act(game, lambda g: ADMIN_ACTIONS[op](g, body), paused_ok=True)  # 暫停中要按得到「繼續」；其他的引擎自己擋
+    elif op == "outing_say":  # 走一趟留言：自己寫的那一句先在行動鎖外審（speech.judge），預設句不必審
+        text = speech.clean(str(body.get("text", ""))[:200])
+        preset = _int(body.get("preset"), -1)
+        verdict = screen_text(game, text, speech.MOTTO) if preset < 0 and text else ""
+        msgs = act(game, lambda g: g.outing_say(preset, text, verdict))
     elif op == "battle_text":  # 放手一搏：成功率在行動鎖外評（見 battle_text）
         msgs = battle_text(game, str(body.get("text", "")))
     elif op == "seal_text":  # 奪璽單挑的放手一搏：同上（見 seal_text）
