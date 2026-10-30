@@ -12,7 +12,7 @@ from conftest import real_content
 from tianxia import mall
 from tianxia.content import ContentError, load_content
 
-FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "content"
+FIXTURE = Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "content"  # 搬進功能包（開發規範手冊 4.6）：測試內容照舊在 tests/fixtures
 
 
 def _item(**over) -> dict:

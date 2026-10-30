@@ -19,7 +19,7 @@ from tianxia.wallet import Wallet
 
 pytestmark = pytest.mark.slow  # 每一條都用真實內容建角色（超過一秒）
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[4]  # repo 的根（搬進功能包 tianxia/features/mall/tests/，開發規範手冊 4.6）
 
 
 @pytest.fixture(autouse=True)

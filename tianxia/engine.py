@@ -23,7 +23,7 @@ from . import chapters  # 章回主線（企劃者 2026-10-29）
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, create, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
     deeds, fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, feasts, plans,
-    mall, materials, mounts, naming, newbie, rename, server_bots, opportunities, orders, parley, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
+    materials, mounts, naming, newbie, server_bots, opportunities, orders, parley, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, siege, signature, signature_arms, silver, skillview, smithing,
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, xingshi, zh, yuedan,
 )
@@ -61,7 +61,6 @@ from .rules import jianfa
 from . import step as step_rules  # 本週卡「你這一步」（減法季批 3c）；叫 step_rules：這個檔裡有區域變數叫 step
 from . import wins  # 三陣營四勝利（減法季批 3c）：豪強兩本帳、傾向、季末四階
 from .accounts import AccountStore
-from .accounts import NAME_TAKEN as NAME_IN_USE  # 易名帖撞名：跟建角色同一句（不洩漏誰是假人）
 from .characters import CharacterStore, name_key
 from .events import (
     choice_label, event_candidates, free_text_note, has_events_here, pick_event, stamina_note, visible_choices,
@@ -94,7 +93,8 @@ from .sqlite_world import open_world
 from .wallet import Wallet
 from .core import features as features_core  # 核心照 FEATURES 問每一包（開發規範手冊 3.3）
 from .core.option import Option  # 選單上的一顆（搬進核心：功能包要做選項）
-from .core.services import NO_SUCH_PLAYER, PAUSED_TEXT, WalletService  # 共用的字、錢包服務（3.10）
+from .core.services import NO_SUCH_PLAYER, PAUSED_TEXT, WalletService, wallet_on  # 共用的字、錢包服務（3.10）
+from .features.mall import actions as mall_actions  # 過渡：Game.mall_* 留一行委派（開發規範手冊 3.10）
 from .state import (
     ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, Fighter, FrontReport, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
     Outing, OutingBeat, StoryCard, StoryProgress, TierResult, Whisper, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
@@ -13228,7 +13228,7 @@ class Game:
 
     def pill_cap(self) -> int:
         """一天最多服幾顆：新手期照 newbie_pills_per_day（有寫才算），其餘照 stamina_pills_per_day；0 是不限。
-        商城的月卡（mall.card_bonus）讓有上限的那一個多 Config.mall.card_pill_bonus 顆（平常 2→3、新手期 5→6）；不限照舊不限。"""
+        商城的月卡（錢包服務的 card_bonus）讓有上限的那一個多 Config.mall.card_pill_bonus 顆（平常 2→3、新手期 5→6）；不限照舊不限。"""
         cfg = self.content.config
         if cfg.stamina_pills_per_day > 0 and cfg.newbie_pills_per_day > 0 and roster.newbie(self.state, self.content):
             cap = cfg.newbie_pills_per_day
@@ -13237,11 +13237,11 @@ class Game:
         return cap if cap <= 0 else cap + self._pill_card_bonus()
 
     def _pill_card_bonus(self) -> int:
-        """今天月卡讓回體丹上限多幾顆（mall.card_bonus）；商城關著、沒有卡、今天不在卡的期間裡是 0。
+        """今天月卡讓回體丹上限多幾顆（ctx.wallet.card_bonus，開發規範手冊 3.10）；商城關著、沒有卡、今天不在卡的期間裡是 0。
         pill_cap 與體力條的說明（howto.stamina_lines 的 card，FB-480）都讀這一份，兩邊寫的上限才對得上。"""
         return self.wallet.card_bonus()
 
-    # ── 商城（docs/superpowers/specs/2026-10-20-商城架構-design.md；規則在 mall.py、錢包在 wallet.py）──
+    # ── 錢包（核心；開發規範手冊 3.10）與商城的一行委派（商城搬進功能包 tianxia/features/mall/：規則 rules.py、動作 actions.py）──
 
     @property
     def wallet(self) -> WalletService:
@@ -13251,235 +13251,48 @@ class Game:
     def _wallet(self) -> Wallet | None:
         """商城開著時這個資料庫的錢包；關著（或這個 world 沒有資料庫）是 None，呼叫端什麼都不讀不寫。"""
         db = getattr(self.world, "db", None)
-        return Wallet(db) if mall.on(self.content) and db is not None else None
+        return Wallet(db) if wallet_on(self.content) and db is not None else None
 
     def _mall_owner(self) -> str:
         """錢包的主人：角色名號的 casefold（同 characters.key、真人的 accounts.character_key；假人沒有帳號也有錢包）。"""
         return name_key(self.state.player.name)
 
+    # 過渡：server 與測試照舊叫 Game 的這幾個；第 2 階那一包的線再碰到時呼叫端改成直接叫包、委派拿掉（手冊 3.10）
     def _mall_grant(self) -> None:
-        """封測發放（mall.grant_beta）：這個錢包還沒發過就發，寫一則「商城」江湖紀錄。own_turn_checks 叫。"""
-        wallet = self._wallet()
-        if wallet is None:
-            return
-        amount = mall.grant_beta(self.content, wallet, self._mall_owner(), self.now)
-        if amount:
-            journal.add_entry(self.state, JournalEntry(
-                time=self.state.world.time, title=mall.TITLE, lines=[mall.GRANT_LINE.format(n=amount)], changes=[f"元寶 +{amount}"],
-            ))
+        mall_actions.grant(self)
 
     def mall_buy(self, item_id: str, ref: str, qty: int = 1) -> list[str]:
-        """買一件商品（mall.buy）：ref 是這一次購買的編號（網頁按下確認那一刻產，重送同一個不會買兩次）。成了寫一則「商城」
-        江湖紀錄（變化寫元寶與拿到的東西）；不成、或這個編號已經買過了只回一句、不寫紀錄。伺服器在行動鎖裡叫：扣元寶、
-        寫購買紀錄、發貨同一筆交易。時間照回體丹那一套（pill_now、_pill_day），不讀時鐘。買成了 self.mall_bought 記那件的 id，
-        不成（含這個編號已經買過了）是 None；這個編號已經買過了 self.mall_already 記那一筆的商品 id（FB-491），其餘是 None。
-        qty 是一次買幾件（Joy 2026-10-22），照 mall.buy 夾在限購剩的件數裡。"""
-        self.mall_bought = self.mall_already = None
-        wallet = self._wallet()
-        if wallet is None:
-            return self._log([mall.OFF])
-        result = mall.buy(
-            self.state, self.content, wallet, item_id, ref,
-            now=self.pill_now(), day=self._pill_day(), season=self.world.get_season_number(), qty=qty, moment=self._mall_moment(),
-        )
-        if isinstance(result, str):
-            done = wallet.purchase_by_ref(mall.buy_ref(self._mall_owner(), ref))
-            self.mall_already = done.item if done is not None else None
-            return self._log([result])
-        journal.add_entry(self.state, JournalEntry(
-            time=self.state.world.time, title=mall.TITLE, lines=result.lines, changes=result.changes,
-        ))
-        self.mall_bought = result.item.id
-        return self._log(result.lines)
-
-    def _mall_moment(self) -> mall.Moment:
-        """上架看的「此刻」（減法季批 7b：MallWindow 的 rule、phases、from_week）：休季或季中、開打的季是季曆第幾週、這一季（開季的章）
-        開著哪幾個商品寫到的子開關；segments 是這一季的季曆照不照段（7 天濃縮季），商品說明的上架時機（{上架}）照它寫（FB-849）；
-        blocked 是這個人這一季用不上的商品 → 原因（現在只有列傳插畫票，zhuan_end.art_problem；FB-845）：貨架灰掉、買不了。
-        沒寫這三樣的商品不看它，一個字都不變。"""
-        c, w = self.content, self.state.world
-        phase = self.world.season_phase()
-        rules_named = {item.on_sale.rule for item in c.mall.values() if item.on_sale.rule}
-        rules = frozenset(part for part in rules_named if jianfa(c, w, part))
-        blocked: dict[str, str] = {}
-        if "zhuan_end" in rules and (unfit := zhuan_end.art_problem(self.state, c, w)):  # 這一季用不上的插畫票不賣（FB-845）
-            blocked.update({item.id: unfit for item in c.mall.values() if item.effects.get(zhuan_end.ART)})
-        return mall.Moment(
-            phase="resting" if phase == "resting" else "season",
-            week=calendar.point(w.time, c, w).week if phase == "running" and not w.ended else None,
-            rules=rules, segments=calendar.week7_on(w, c), blocked=blocked,
-        )
+        return mall_actions.buy(self, item_id, ref, qty)
 
     def mall_entry(self) -> dict | None:
-        """狀態列的商城入口（齒輪旁的錠子鈕、底部第六格；商城第二批）：{balance}；商城關著是 None（沒有入口）。
-        江湖畫面每次都送，所以只讀餘額（帳的加總），不排商品。"""
-        wallet = self._wallet()
-        if wallet is None:
-            return None
-        owner = self._mall_owner()
-        card = mall.card_view(self.content, wallet, owner, self._pill_day())
-        # 月卡今天的份（定案甲）：卡有效、有每天領的份才有這個鍵；江湖頁照它畫「月卡・今日份」小卡（領過了收起）
-        daily = card["daily"] if card is not None else None
-        names = len(mall.rename_tokens(wallet, owner))  # 手上的易名帖：設定頁照它畫改名那一格（沒有不送這個鍵）
-        return {"balance": wallet.balance(owner), **({"daily": daily} if daily is not None else {}), **({"rename": names} if names else {})}
+        return mall_actions.entry(self)
 
     def mall_rename_left(self) -> int:
-        """手上還沒用掉的易名帖幾張（設定頁照它畫改名那一格）；商城關著是 0。"""
-        wallet = self._wallet()
-        return 0 if wallet is None else len(mall.rename_tokens(wallet, self._mall_owner()))
+        return mall_actions.rename_left(self)
 
     def mall_rename(self, new: str, taken: Callable[[str], bool] | None = None) -> list[str]:
-        """易名帖：改自己的名號，當場生效（Joy 2026-10-21 決策卡「當場生效」；rename.py）。new 是伺服器量過長度、去過看不見的字元的；
-        taken 是伺服器的「名號有人用」（角色、帳號、保留的名號同一句話，不洩漏誰是假人），沒給（測試、腳本）照角色表與保留名號查。
-        成了：資料庫裡名號當身分的地方一起換（world.rename_character）、自己的存檔照新名號存、用掉一張帖、江湖史一行、一則「商城」紀錄。
-        不成只回一句、什麼都不動。呼叫端要拿著行動鎖（server 的 act）。"""
-        wallet = self._wallet()
-        if wallet is None:
-            return [mall.OFF]
-        p = self.state.player
-        old = p.name
-        left = mall.rename_tokens(wallet, self._mall_owner())
-        if not left:
-            return [mall.NO_RENAME]
-        if p.bot is not None or self.is_admin():
-            return [mall.RENAME_ADMIN]
-        if new == old:
-            return [mall.RENAME_SAME]
-        if taken is None:
-            store = CharacterStore(self.world.db)
-            reserved = {n.casefold() for n in server_bots.reserved_names(self.content)}
-            taken = lambda n: store.exists(n) or n.casefold() in reserved  # noqa: E731
-        if name_key(new) != name_key(old) and taken(new):
-            return [NAME_IN_USE]
-        if rename.clash(old, name_key(old), self.content) or rename.clash(new, name_key(new), self.content):
-            return [rename.CLASHED]
-        shared = self.world.read()
-        live = shared.model_dump_json(include={"seal_duels"}) + (shared.active_battle.model_dump_json() if shared.active_battle else "")
-        if f'"{old}"' in live or f'"{name_key(old)}"' in live:
-            return [mall.RENAME_BUSY]
-        self._save_season()  # 先把這一次同步動到的季寫回去，改名照資料庫那一份換
-        self.world.rename_character(old, new)
-        mapping = {old: new, name_key(old): name_key(new)}
-        self.state = GameState.model_validate(rename.swap(self.state.model_dump(mode="json"), mapping))
-        self._reconcile_season()
-        wallet.mark_used(left[0], self.pill_now())
-        self.state.world.chronicle.append(Rumor(time=self.state.world.time, text=mall.RENAMED_CHRONICLE.format(old=old, new=new)))
-        line = mall.RENAMED.format(new=new)
-        journal.add_entry(self.state, JournalEntry(
-            time=self.state.world.time, title=mall.TITLE, lines=[line], changes=[f"名號 {old} → {new}"],
-        ))
-        self._save_season()
-        CharacterStore(self.world.db).save(self.state)
-        self.touched.update(n for n in CharacterStore(self.world.db).names() if n != new)  # 別人的分頁也重抓（他們存檔裡的名字換了）
-        return self._log([line])
+        return mall_actions.rename_self(self, new, taken)
 
     def mall_claim(self) -> list[str]:
-        """領月卡今天的份（mall.claim_daily；Joy 2026-10-21 定案甲・每日領）：成了寫一則「商城」江湖紀錄，不成只回一句。
-        一天照回體丹那一套（_pill_day，台灣 00:00 換日）；沒上線那一天不補（編號一天一個，過了那天就領不到）。"""
-        wallet = self._wallet()
-        if wallet is None:
-            return self._log([mall.OFF])
-        result = mall.claim_daily(self.state, self.content, wallet, now=self.pill_now(), day=self._pill_day())
-        if isinstance(result, str):
-            return self._log([result])
-        journal.add_entry(self.state, JournalEntry(
-            time=self.state.world.time, title=mall.TITLE, lines=result.lines, changes=result.changes,
-        ))
-        return self._log(result.lines)
+        return mall_actions.claim(self)
 
     def mall_view(self) -> dict | None:
-        """商城那一頁的資料（mall.view）；商城關著是 None。另附貨架上面兩張小卡與購買確認要的回體丹（pills：名字、手上幾顆、
-        今天還能服幾顆〔不限是 None〕、一天上限〔含月卡；0 是不限〕、一顆回多少、月卡多幾顆）與封測發了多少（grant，商城第二批）。"""
-        wallet = self._wallet()
-        if wallet is None:
-            return None
-        view = mall.view(self.content, wallet, self._mall_owner(), self._pill_day(), self.world.get_season_number(), self._mall_moment())
-        cfg = self.content.config
-        view["pills"] = {
-            "name": cfg.stamina_pill_name, "count": self.state.player.stamina_pills, "today": self.pills_left_today(),
-            "cap": self.pill_cap(), "restore": cfg.stamina_pill_restore, "bonus": cfg.mall.card_pill_bonus,
-        }
-        view["grant"] = cfg.mall.beta_grant
-        return view
+        return mall_actions.view(self)
 
     def mall_records(self) -> dict | None:
-        """自己的購買紀錄與帳（mall.records，不寫經手的管理者）；商城關著是 None。"""
-        wallet = self._wallet()
-        return None if wallet is None else mall.records(self.content, wallet, self._mall_owner())
-
-    def _mall_admin(self, action: str) -> tuple[Wallet | None, str | None]:
-        """管理者商城工具的共同檢查：(錢包, None)，或 (None, 拒絕的那一句)。帳跟季無關：籌備中、休季、暫停中都做得了。"""
-        if not self.is_admin():
-            return None, f"（只有管理者能{action}。）"
-        wallet = self._wallet()
-        return (None, mall.OFF) if wallet is None else (wallet, None)
-
-    def _mall_target(self, wallet: Wallet, text: str) -> tuple[str, str] | None:
-        """管理者填的名號或帳號 → (錢包的主人, 名號)。先照角色找（真人假人一樣），再照帳號找它綁的角色；都沒有是 None。"""
-        text = (text or "").strip()
-        if not text:
-            return None
-        shown = wallet.character_name(name_key(text))
-        if shown is not None:
-            return name_key(text), shown
-        account = AccountStore(self.world.db).get(text)
-        if account is None or account.character is None:
-            return None
-        shown = wallet.character_name(name_key(account.character))
-        return None if shown is None else (name_key(account.character), shown)
-
-    def _mall_adjust(self, name: str, amount: int, note: str, ref: str, reason: str) -> list[str]:
-        wallet, refusal = self._mall_admin("補發元寶" if reason == "reissue" else "扣回元寶")
-        if refusal:
-            return self._log([refusal])
-        target = self._mall_target(wallet, name)
-        if target is None:
-            return self._log([NO_SUCH_PLAYER.format(name=(name or "").strip())])
-        owner, shown = target
-        msg = mall.adjust(wallet, owner, shown, amount, reason, ref, now=self.now, admin=self.state.player.name, note=note)
-        if not msg.startswith("（"):
-            self._write("商城", [msg], tag="管理者")
-        return self._log([msg])
+        return mall_actions.records(self)
 
     def admin_mall_reissue(self, name: str, amount: int, note: str, ref: str) -> list[str]:
-        """管理者替某個名號（或帳號）補發元寶（4.7）：原因必填、寫進帳（誰、何時、為什麼）；ref 是這一筆的編號（伺服器產）。"""
-        return self._mall_adjust(name, amount, note, ref, "reissue")
+        return mall_actions.admin_reissue(self, name, amount, note, ref)
 
     def admin_mall_revoke(self, name: str, amount: int, note: str, ref: str) -> list[str]:
-        """管理者從某個名號（或帳號）扣回元寶（4.7）：餘額不能是負的。"""
-        return self._mall_adjust(name, amount, note, ref, "revoke")
+        return mall_actions.admin_revoke(self, name, amount, note, ref)
 
     def admin_mall_refund(self, name: str, purchase_id: int, note: str) -> list[str]:
-        """管理者退一筆購買（mall.refund）：元寶全退、收回手上還有的回體丹、月卡扣回天數；改到的存檔存回去（_save_target）。"""
-        wallet, refusal = self._mall_admin("退購買")
-        if refusal:
-            return self._log([refusal])
-        target = self._mall_target(wallet, name)
-        game = None if target is None else self._admin_target(target[1])
-        if game is None:
-            return self._log([NO_SUCH_PLAYER.format(name=(name or "").strip())])
-        msg = mall.refund(
-            game.state, self.content, wallet, purchase_id, now=self.now, admin=self.state.player.name, note=note,
-            season=self.world.get_season_number(),
-        )
-        self._save_target(game)
-        if not msg.startswith("（"):
-            self._write("商城", [msg], tag="管理者")
-        return self._log([msg])
+        return mall_actions.admin_refund(self, name, purchase_id, note)
 
     def admin_mall_ledger(self, name: str) -> dict:
-        """管理者查某個名號（或帳號）的帳（4.7）：{name, balance, card, ledger, purchases}，帳多寫編號與經手的管理者；
-        不是管理者、商城關著、查不到回 {refusal}。真人假人回的一模一樣（不寫帳號）。只讀。"""
-        wallet, refusal = self._mall_admin("查帳")
-        if refusal:
-            return {"refusal": refusal}
-        target = self._mall_target(wallet, name)
-        if target is None:
-            return {"refusal": NO_SUCH_PLAYER.format(name=(name or "").strip())}
-        owner, shown = target
-        data = mall.records(self.content, wallet, owner, admin=True)
-        return {"name": shown, "balance": data["balance"], "card": mall.card_view(self.content, wallet, owner, self._pill_day()),
-                "ledger": data["ledger"], "purchases": data["purchases"]}
+        return mall_actions.admin_ledger(self, name)
 
     def pills_left_today(self) -> int | None:
         """今天還能服幾顆回體丹（pill_cap）；不限是 None。不看手上有幾顆。"""

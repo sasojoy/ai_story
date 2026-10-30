@@ -96,7 +96,8 @@ def problems_of(source: str, module: str) -> list[str]:
 
 
 def _modname(path: Path) -> str:
-    return ".".join(path.relative_to(ROOT).with_suffix("").parts).removesuffix(".__init__")
+    """tianxia/features/mall/actions.py → tianxia.features.mall.actions；__init__.py 留著「.__init__」，相對 import 才照那一包算。"""
+    return ".".join(path.relative_to(ROOT).with_suffix("").parts)
 
 
 def test_feature_packages_only_import_the_core_their_own_package_or_marked_old_modules():

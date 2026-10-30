@@ -612,7 +612,7 @@ def test_fb493_the_fold_is_a_line_each_and_drops_the_gap():
 def test_the_mall_layer_follows_the_640_column_on_desktop():
     from pathlib import Path
 
-    css = (Path(__file__).resolve().parents[2] / "web" / "style.css").read_text(encoding="utf-8")
+    css = (Path(__file__).resolve().parents[4] / "web" / "style.css").read_text(encoding="utf-8")  # repo 的根（搬進功能包）
     wide = css[css.index("/* ── 電腦上的店面與武學譜那本書（FB-225"):]
     head = wide[wide.index("@media (min-width: 641px) {"):]
     assert ".shop-layer.shop-mall" in head[:head.index("{", head.index(".shop-layer.shop-smith"))]
