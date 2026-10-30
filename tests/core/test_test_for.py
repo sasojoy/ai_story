@@ -182,6 +182,16 @@ def test_the_smoke_set_covers_every_block():
     assert "tests/core/test_engine.py" in goal and not any(g.startswith("tests/core/test_engine.py::") for g in goal)
 
 
+def test_the_web_scripts_are_the_ones_every_web_test_loads():
+    """網頁測試每一條都載入 webharness.APP_FILES 那幾個檔：改其中哪一個都照 app.js 挑（outing.js 10/30 加進去時漏了）。"""
+    import re
+    harness = (ROOT / "tests" / "kit" / "webharness.py").read_text(encoding="utf-8")
+    app_files = set(re.findall(r'"([\w.]+\.js)"', re.search(r"^APP_FILES = \(([^)]*)\)", harness, re.M).group(1)))
+    assert test_for.WEB_SCRIPTS == app_files
+    outing = _names(["web/outing.js"])
+    assert {"test_server.py", "test_outing_web.py"} < outing and _names(["web/app.js"]) <= outing
+
+
 def test_core_targets_are_the_core_folder():
     goal = test_for.targets(test_for.Pick(core=True))
     assert "tests/core/test_engine.py" in goal and all(g.startswith("tests/core/") for g in goal)

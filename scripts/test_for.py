@@ -26,7 +26,7 @@
 - 其他 tianxia/<模組>.py、run_bots.py、scripts/<腳本>.py：直接 import 它的測試檔，加上檔名是 test_<模組>… 的
   （「import 了 engine」不再算相關：engine.py 照上面那一條）。
 - content/：test_content.py ＋ 寫到那個檔名的測試檔；test_real_content.py 不自動跟（每日整套會跑），--slow 才加。
-- web/：寫到那個檔名的測試檔（main.js、map.js 照 app.js 挑），加上 test_server.py。
+- web/：寫到那個檔名的測試檔（main.js、map.js、outing.js 照 app.js 挑），加上 test_server.py。
 - tests/ 裡的測試檔：跑它自己；tests/kit/ 這類共用工具：import 它的測試檔；tests/fixtures/：寫到那個檔名的測試檔。
 - tests/conftest.py、pyproject.toml、requirements*.txt：不加任何東西（整套留給每日整套）。
 - docs/、CLAUDE.md 這類文件：不跑。
@@ -54,7 +54,7 @@ CORE_TESTS = TESTS / "core"
 FEATURES = ROOT / "tianxia" / "features"
 PARALLEL_FROM = 3  # 挑到這麼多個檔以上才開 xdist（開工作行程本身要幾秒）
 WORKERS = "4"  # 開發規範手冊 4.5：同一台同時最多兩份測試在跑，各自 -n 4
-WEB_SCRIPTS = {"app.js", "main.js", "map.js"}  # 網頁的三個檔（tests/webharness.APP_FILES），index.html 照 main、map、app 的順序載入
+WEB_SCRIPTS = {"main.js", "map.js", "outing.js", "app.js"}  # 網頁測試每一條都載入的檔（tests/kit/webharness.py 的 APP_FILES；test_test_for 守兩邊一樣）
 SETUP_FILES = {"tests/conftest.py", "pyproject.toml", "requirements.txt", "requirements-dev.txt"}
 # 跟哪一條分支比（企劃者 2026-10-18 起功能在功能分支上做：批的工作樹要跟功能分支比，不然越做越多）
 DEFAULT_BASE = os.environ.get("TIANXIA_TEST_BASE", "origin/main")
@@ -602,7 +602,7 @@ def pick(files: list[str], base: str = DEFAULT_BASE, slow: bool = False,
         if f.startswith("web/"):
             if SERVER_TEST in named:
                 result.files.add(named[SERVER_TEST])
-            # 江湖頁（main.js）、輿圖（map.js）是從 app.js 切出來的（減法季批 0）：測試照舊寫「app.js」，也算寫到它們
+            # 江湖頁（main.js）、輿圖（map.js）、走一趟（outing.js）是從 app.js 切出來的：測試照舊寫「app.js」，也算寫到它們
             names = {path.name, "app.js"} if path.name in WEB_SCRIPTS else {path.name}
             result.files |= {t for t in tests if any(n in _text(t) for n in names)}
     return result
