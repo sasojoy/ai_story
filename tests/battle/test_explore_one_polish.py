@@ -171,17 +171,18 @@ def test_a_bounty_and_the_camp_keep_their_own_words():
     assert explore_one.hint_of(explore_one.WILD, "bounty", w) == "野外有賞" and explore_one.hint_of(explore_one.CAMP, "spar", w) == "同袍比劃"
 
 
-@pytest.mark.parametrize("side, loc", [("guan", "changshe"), ("huang", "luoyang_road")])
-def test_a_place_with_only_a_boss_no_longer_says_many_enemies(side, loc):
-    """官軍在長社、黃巾在洛陽官道：遭遇的比重是 0（頭目另外擲、不算一般對手），鈕與四格那一格寫「野外多料」，兩處一樣。"""
+@pytest.mark.parametrize("side, loc, word", [("guan", "changshe", "野外多料"), ("huang", "luoyang_road", "野外多事")])
+def test_a_place_with_only_a_boss_no_longer_says_many_enemies(side, loc, word):
+    """官軍在長社、黃巾在洛陽官道：遭遇的比重是 0（頭目另外擲、不算一般對手），鈕與四格那一格照剩下的寫，不寫「野外多敵」
+    （長社是古戰場 10／0／20／15 多料；官道 25／0／15／10 多事，企劃者 2026-10-30 細分之後）。"""
     import server
 
     game = ready(jianfa_game(), side=side, loc=loc)
     plan = game.outing_plan()
-    assert plan.weights[explore_one.ENCOUNTER] == 0 and plan.hint == "野外多料"
+    assert plan.weights[explore_one.ENCOUNTER] == 0 and plan.hint == word
     assert plan.hint == explore_one.hint_of(plan.kind, plan.how, plan.weights)
     label = next(o for o in game.options(odds=False) if o.id == "act:explore").label
-    assert label.endswith("・野外多料）") and server.main_view(game)["mostly"] == "野外多料" and game.mostly_here() == "野外多料"
+    assert label.endswith(f"・{word}）") and server.main_view(game)["mostly"] == word and game.mostly_here() == word
 
 
 def test_the_map_name_beside_a_boss_only_place_follows_the_button():

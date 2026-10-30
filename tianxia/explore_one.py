@@ -141,6 +141,11 @@ def hint_in(table: ExploreOneTable) -> str:
     return PLACE_WORDS[table.kind] + mostly_in(table)
 
 
+def named_hint(table: ExploreOneTable) -> str:
+    """玩法說明列表時一張表的寫法：表的名字加「多半」兩個字（「官署多事」「河畔多料」）；表沒寫名字照 `hint_in`。"""
+    return table.name + mostly_in(table) if table.name else hint_in(table)
+
+
 def tail_of(how: str | None, weights: Mapping[str, float]) -> str:
     """小字的最後兩個字（輿圖第一層名字旁就是它，2f，FB-886）：接了這裡的討伐懸賞「有賞」、自家營寨「比劃」，其餘是這一處此刻比重最大的
     那一類（`mostly_of`）。`hint_of` 就是在它前面接地點種類的字，所以名字旁永遠是鈕上小字的最後兩個字。"""

@@ -469,7 +469,7 @@ def outing_lines(content: Content, season: WorldState | None = None) -> list[str
     """減法季探索一顆（整合設計 4.1，批 2；2d 企劃者 2026-10-26 改成一趟一件事；待 joy 潤）的玩法說明：一顆、出門一趟碰上一件事、
     地點決定多半給什麼、地痞與比劃、懸賞。數字讀 Config.jianfa。"""
     jf = content.config.jianfa
-    tables = "，".join(explore_one.hint_in(t) for t in jf.explore_tables)
+    tables = "，".join(explore_one.named_hint(t) for t in jf.explore_tables)
     legend = f"偶爾撿到{content.config.legend_item_name}。" if content.config.explore_legend_chance > 0 else ""
     return [
         f"- **探索**（體力 {jf.explore_stamina}）：只有一顆，按一下是出門一趟，一趟只碰上一件事，"
