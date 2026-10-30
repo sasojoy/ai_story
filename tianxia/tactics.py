@@ -1550,6 +1550,7 @@ class War(BaseModel):
     damage: float = 1.0
     hp: float = 0.0
     lines: list[str] = Field(default_factory=list)
+    kinds: dict[str, str] = Field(default_factory=dict)  # 戰法名 → kind（決戰戰況把一軍的那幾句摺成一行時分類用，Game._fold_war_lines）
 
 
 def war_round(side: BoutSide, move: str | None, beat: int, round_: int, edge: float, hp_ratio: float,
@@ -1569,7 +1570,7 @@ def war_round(side: BoutSide, move: str | None, beat: int, round_: int, edge: fl
         f.mine = move
         _follow(f, beat)
         _countered(f, beat < 0)
-    out = War(lines=lines, unbeaten=f.flawless)
+    out = War(lines=lines, unbeaten=f.flawless, kinds={h.tactic.name: h.tactic.kind for h in f.holders} if lines else {})
     if move is not None:
         more = f.push_mod + (f.guard_mod if move == "固守" else 0.0) + (1.0 if f.chain or chained else 0.0) + f.extra
         for h in f.holders:  # 斬將、墜星：出強攻推力加重（決戰裡沒有單一的對手可以定身）

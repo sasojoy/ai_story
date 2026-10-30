@@ -383,6 +383,16 @@
   // 小標籤、整條左邊一道那一軍的顏色（同戰局條的 side-<陣營 id>）；自己那一軍多標「我方」。認不出的名字照字留著。
   // 兩個式子寫在函式裡：測試的假瀏覽器照名字只抽函式出來
   // report：戰報頁那一場的流水號（決戰的完整戰況，Joy 2026-10-14）：每一回合都收成一行、照先後，展開了哪幾回合跟場景分開記（「r<流水號>:<回合>」）
+  // 一軍這一回合發動武學的那幾句，引擎摺成一列摘要、逐人那幾句縮在它底下一層（engine._fold_war_lines，Joy 2026-10-30）：
+  // 那一層畫成點開才看的 <details class="b-fold">；裡面換成 <ol>，底下 ROUND_HEAD 認回合結尾的 </ul> 才不會停在裡面那一層。開合記在 S.foldOpen
+  const WAR_FOLD = /<li>(〔[^〕<]+〕)?([^\n<]*)\n<ul>\n([\s\S]*?)<\/ul>\n<\/li>/g;
+  function warFolds(html, roundKey) {
+    const open = S.foldOpen || (S.foldOpen = new Set());
+    return html.replace(WAR_FOLD, (all, tag, head, rows) => {
+      const key = `${roundKey}:${tag || head}`;
+      return `<li>${tag || ""}<details class="b-fold" data-fold="${esc(key)}"${open.has(key) ? " open" : ""}><summary>${head}</summary><ol class="b-fold-lines">\n${rows}</ol></details></li>`;
+    });
+  }
   function roundBlocks(html, g, report) {
     const ROUND_HEAD = /<h5>第 (\d+) 回合<\/h5>\n<ul>\n([\s\S]*?)<\/ul>\n?/g;
     const SIDE_TAG = /<li>〔([^〕<]+)〕/g;
@@ -390,6 +400,7 @@
     const open = S.roundsOpen || (S.roundsOpen = new Set());
     const sides = {};
     if (g) for (const w of [g.left, g.right]) if (w) sides[w.name] = w;
+    html = html.replace(/<h5>第 (\d+) 回合<\/h5>\n<ul>\n[\s\S]*?(?=<h5>|$)/g, (block, n) => warFolds(block, report == null ? n : `r${report}:${n}`));
     return html.replace(ROUND_HEAD, (all, n, rows) => {
       const items = rows.replace(SIDE_TAG, (tag, name) => {
         const w = sides[name];
