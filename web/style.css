@@ -1163,7 +1163,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 #map-host.away { visibility: hidden; }
 /* 藏起來時：整層一律不收點擊（.mapx 是 fixed、蓋在另外四頁上，FB-326）；紅圈不跳（不然閒著也每一幀在算，FB-327）；地面的 filter 關掉（FB-328） */
 #map-host.away * { pointer-events: none !important; }
-#map-host.away .mv-you::after, #map-host.away .mv-pulse, #map-host.away .mv-fight, #map-host.away .w-melee { animation: none; }
+#map-host.away .mv-you::after, #map-host.away .mv-pulse, #map-host.away .mv-fight { animation: none; }
 #map-host.away [filter] { filter: none; }
 /* 地圖框：框裡的手勢不捲頁面、不放大整頁（touch-action: none）；長按不跳選字、不跳 iOS 的選單；游標一直是 grab（FB-322）。clip 一樣裁切、
    而且不能被 scrollIntoView 捲走 */
@@ -1225,7 +1225,6 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 @keyframes mk-pulse { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(2.25); opacity: 0; } }
 @keyframes mv-pulse { 0% { transform: translate(-50%, -50%) scale(1); opacity: 0.9; } 100% { transform: translate(-50%, -50%) scale(2.25); opacity: 0; } }
 @keyframes w-melee { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
-.w-melee { animation: w-melee 1.1s ease-in-out infinite; }
 
 /* 上面：搜尋列、篩選一排（左右滑） */
 .mv-top { position: absolute; top: 0; left: 0; right: 0; z-index: 3; padding-top: 10px; pointer-events: none; }
@@ -1300,7 +1299,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .m-mine { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 10px; }
 .m-mine .m-x { display: none; }
 @media (prefers-reduced-motion: reduce) {
-  .mv-you::after, .mv-pulse, .mv-fight, .w-melee { animation: none; }
+  .mv-you::after, .mv-pulse, .mv-fight { animation: none; }
   .mdrawer, .mv-fab, .mv-world > .mv-base { transition: none; }
 }
 /* 桌機（寬 900 以上）：地圖佔滿左邊、抽屜是右邊 360px 一欄 */

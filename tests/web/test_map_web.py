@@ -495,6 +495,18 @@ def test_w1_no_stylesheet_rule_overrides_the_lands_own_colours_and_widths():
         assert not re.search(rf"\.{re.escape(cls)}(?![\w-])", selectors), cls
 
 
+def test_w1_the_melee_ground_is_gone_from_the_stylesheet_too():
+    """激戰的紅底（.w-melee）W1 拿掉了（設計 2.1「激戰」）：網頁不再畫這個 class，樣式表也不留它的規則（藏起來停動畫、減少動態那兩條一起拿掉，
+    W1 審查 2026-10-30）；動畫的名字 w-melee 還是激戰那一圈（.mv-fight）在用。"""
+    from pathlib import Path
+
+    css = re.sub(r"/\*.*?\*/", "", (Path(server.WEB) / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    selectors = " ".join(sel for sel, _ in re.findall(r"([^{}]+)\{([^{}]*)\}", css))
+    assert not re.search(r"\.w-melee(?![\w-])", selectors)
+    assert "@keyframes w-melee" in css and re.search(r"\.mv-fight \{[^}]*animation: w-melee ", css)
+    assert 'class="w-melee' not in webharness.app_source()
+
+
 def test_w1_the_land_is_always_drawn_and_only_redrawn_per_third_of_a_zoom_octave():
     """地常駐（不再只在遠看、塗層、版圖時畫）：近看也畫；拖縮的途中不重寫（下一條），停下來照倍率的三分之一級
     （log2(z)×3 取整）換線寬，同一級不重寫；換了週次（版圖變化）重寫。線寬照螢幕（k＝1／倍率）。"""
