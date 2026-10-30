@@ -614,6 +614,32 @@ return (async () => {{
     assert out["single"][:2] == ["place", "changshe"] and not out["single"][3] and out["single"][4]
 
 
+@pytest.mark.slow  # 單一條超過一秒（每一下之間要隔開）
+def test_w1_tapping_the_same_place_again_by_its_icon_or_name_closes_the_card_too():
+    """再點同一處收回（設計 2.3「點小圖、名字、或那一塊地……點空地、✕、再點同一處：收卡回底條」）：點小圖、名字、遠看的小點
+    （data-act="map-place"）跟點那一塊地同一條——第一下開卡、過一會兒再點同一處收回；開著時點別處換那一處的卡。雙擊小圖（兩下在 MV_TAP2
+    之內）照 Joy 的只開卡、第二下不收回。附近那一排的卡（同一個 data-act）照舊開卡。（W1 審查 2026-10-30：以前點地會收、點小圖名字只重開卡。）"""
+    out = run(_game(profile="season21"), DRAWER_DOM + """
+const target = (id) => ({ dataset: { act: 'map-place', id }, classList: { contains: () => false, add() {}, remove() {} } });
+const click = (id) => T.docListeners.click[0]({ target: { closest: () => target(id) } });
+const wait = (ms = 360) => new Promise((r) => setTimeout(r, ms));
+const look = () => [H.S.mapMode, H.S.mapSel, body.innerHTML.includes('m-cards')];
+return (async () => {
+  H.mapBack();
+  await click('changshe'); const open = look(); await wait();
+  await click('changshe'); const shut = look(); await wait();
+  await click('changshe'); await wait(); await click('yingshui'); const other = look(); await wait();
+  await click('yingshui'); const shut2 = look(); await wait();
+  await click('changshe'); await wait(60); await click('changshe'); const dbl = look(); await wait();
+  H.mapBack(); await click('changshe'); const card = look();
+  return { open, shut, other, shut2, dbl, card };
+})();""")
+    assert out["open"] == ["place", "changshe", False] and out["shut"] == ["overview", None, True]
+    assert out["other"] == ["place", "yingshui", False] and out["shut2"] == ["overview", None, True]
+    assert out["dbl"] == ["place", "changshe", False]  # 雙擊小圖：第二下不收回
+    assert out["card"] == ["place", "changshe", False]
+
+
 # ── 看哪裡 ──
 def test_the_camera_is_clamped_between_the_whole_world_and_three_times():
     """倍率在「整張天下放得下」到 3.2 倍之間；圖比畫面大時拖到最遠，圖的邊貼著畫面的邊（不露出圖外，Joy 10/30「滑到邊邊會破圖」）。"""

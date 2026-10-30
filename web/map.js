@@ -1144,7 +1144,7 @@
   }
 
   // ── 看哪裡：S.mapCam = { z 倍率, x, y }，地圖上 (mx, my) 在地圖框裡的 (x + mx·z, y + my·z) ──
-  const mv = { pts: new Map(), start: null, moved: false, frame: 0, g: null, anim: 0, vel: [0, 0], last: null, lastTap: 0, tapTimer: 0, eatUntil: 0, wheelTimer: 0, laid: null };
+  const mv = { pts: new Map(), start: null, moved: false, frame: 0, g: null, anim: 0, vel: [0, 0], last: null, lastTap: 0, tapTimer: 0, pickAt: 0, eatUntil: 0, wheelTimer: 0, laid: null };
   // 鏡頭還在動：手指按著又動過（拖、捏）、慣性滑或飛過去（mv.anim）、滾輪還沒停（mv.g 留著、沒有手指）。放手、滑停、飛完、滾輪停都會把它們
   // 清掉再叫一次 drawMarks（地在那一次才換級距，groundShow）
   const mvBusy = () => (mv.moved && mv.pts.size > 0) || !!mv.anim || (!!mv.g && !mv.pts.size);
@@ -1304,10 +1304,15 @@
     if (S.mapMode === "place" || (S.mapMode === "overview" && S.mapPreview)) mapBack();
     else if (S.mapMode === "timeline" && S.mapSel) { S.mapSel = null; redrawDrawer(); drawMarks(); }
   }
-  // 點了一塊地（輿圖表現第二版 2.3）：開那一處的卡（同點小圖、名字）；再點已經開著的那一塊收回（地鋪滿了，空地幾乎沒有了）
+  // 地圖上點了一處（輿圖表現第二版 2.3：小圖、名字、遠看的小點、那一塊地都是這一條；附近那一排的卡也走這裡）：開那一處的卡；再點同一處收回
+  // （地鋪滿了，空地幾乎沒有了）。小圖、名字的雙擊照 Joy 的只開卡（那裡不放大）：第二下落在 MV_TAP2 之內，不算再點一次（W1 審查 2026-10-30）
   function mapLand(id) {
-    if (S.mapMode === "place" && S.mapSel === id) mapBack();
-    else mapPick(id);
+    if (S.mapMode === "place" && S.mapSel === id) {
+      if (Date.now() - mv.pickAt >= MV_TAP2) mapBack();
+      return;
+    }
+    mapPick(id);
+    mv.pickAt = Date.now();
   }
 
   // ── 底圖：照底圖的 paint（content/map.json）畫成淡彩水墨——紙紋、赭黃暈染、毛筆畫的河（一道淡青的暈＋一筆濃淡的墨線）、州界墨點線、
