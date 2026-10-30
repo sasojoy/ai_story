@@ -1,6 +1,7 @@
 [tool.pytest.ini_options]
 pythonpath = ["."]
-testpaths = ["tests"]
+# 功能包的測試跟著包走（開發規範手冊 4.6）：tianxia/features/<包>/tests/
+testpaths = ["tests", "tianxia/features"]
 # 平常的 pytest 不跑標了 slow 的（整季模擬、量表腳本）；合併前的整套用 pytest -m "slow or not slow"（見 CLAUDE.md「指令」）
 addopts = "-m 'not slow'"
 markers = [
