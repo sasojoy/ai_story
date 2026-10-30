@@ -99,3 +99,67 @@ def test_the_side_shows_as_a_coloured_tag(battle):
     assert '<li class="b-side side-guan mine"><span class="b-tag">官軍・我方</span>參戰乙放手一搏' in out
     assert '<li class="b-side side-huang"><span class="b-tag">黃巾軍</span>黃巾軍的強攻' in out
     assert "〔" not in out.split('class="b-round latest"', 1)[1].split("</div>", 1)[0]
+
+
+def _war_moves(fighter, kinds=True):
+    """官軍另外三個人（丙、丁、戊）這一回合各發動了武學，黃巾那邊一個人一句、自己（參戰乙）一句（Joy 2026-10-30）。"""
+    def put(b):
+        me = b.participants["參戰乙"]
+        for name, side in (("參戰丙", "guan"), ("參戰丁", "guan"), ("參戰戊", "guan"), ("參戰己", "huang")):
+            b.participants[name] = me.model_copy(update={"faction": side})
+        b.narrative_log[-1] = "\n".join(["這一回合官軍佔了上風（戰局 50→58）：參戰乙帶頭強攻。",
+                                         "〔吐故納新〕參戰丙一吐一納，氣血一回合一回合慢慢回了過來",
+                                         "〔沉勁〕參戰丁勁力沉到了底，這一回合出手極重",
+                                         "〔吐故納新〕參戰戊一吐一納，氣血一回合一回合慢慢回了過來",
+                                         "〔掠影〕參戰丙身形一掠，這一回合化影",
+                                         "〔沉勁〕參戰乙勁力沉到了底，這一回合出手極重",
+                                         "〔掠影〕參戰己身形一掠，這一回合化影"])
+        b.tactic_kinds = {"吐故納新": "mend", "沉勁": "waver", "掠影": "shadow"} if kinds else {}
+    fighter.world.mutate_battle(put)
+
+
+def test_a_sides_war_moves_fold_into_one_summary_row(battle):
+    """一軍這一回合發動武學的那幾句摺成一列「官軍本回合 3 人發動武學：回氣血 2、加重 1、化影 1」，逐人那幾句縮在底下；
+    自己那一句不摺；另一軍只有一句也不摺。"""
+    _, fighter = battle
+    _war_moves(fighter)
+    block = fighter.scene_text().split("##### 第 1 回合", 1)[1]
+    rows = block.split("\n\n", 2)[1].split("\n")
+    assert rows == ["- 這一回合官軍佔了上風（戰局 50→58）：參戰乙帶頭強攻。",
+                    "- 〔官軍〕官軍本回合 3 人發動武學：回氣血 2、加重 1、化影 1",
+                    "    - 〔吐故納新〕參戰丙一吐一納，氣血一回合一回合慢慢回了過來",
+                    "    - 〔沉勁〕參戰丁勁力沉到了底，這一回合出手極重",
+                    "    - 〔吐故納新〕參戰戊一吐一納，氣血一回合一回合慢慢回了過來",
+                    "    - 〔掠影〕參戰丙身形一掠，這一回合化影",
+                    "- 〔官軍〕〔沉勁〕參戰乙勁力沉到了底，這一回合出手極重",
+                    "- 〔黃巾軍〕〔掠影〕參戰己身形一掠，這一回合化影"]
+
+
+def test_an_old_battle_without_kinds_reads_them_from_the_content(battle):
+    """這一版以前打的場沒記 kind：照內容的武學戰法與功效補（吐故納新是內容武學的、掠影與沉勁是功效）；一句都認不出來就只寫幾個人。"""
+    _, fighter = battle
+    _war_moves(fighter, kinds=False)
+    assert "- 〔官軍〕官軍本回合 3 人發動武學：回氣血 2、加重 1、化影 1\n" in fighter.scene_text()
+
+    def rename(b):
+        b.narrative_log[-1] = b.narrative_log[-1].replace("吐故納新", "某甲").replace("沉勁", "某乙").replace("掠影", "某丙")
+    fighter.world.mutate_battle(rename)
+    assert "- 〔官軍〕官軍本回合 3 人發動武學\n    - 〔某甲〕" in fighter.scene_text()
+
+
+@node
+def test_the_fold_opens_on_tap_and_stays_open_on_redraw(battle):
+    """網頁：摘要一列（帶那一軍的小標籤），逐人那幾句收在 <details class="b-fold"> 裡（招名照舊移到句尾）；開過的輪詢重畫照樣開著；
+    回合結尾的 </ul> 認得對（自己那一句、黃巾那一句還在同一回合的清單裡）。"""
+    _, fighter = battle
+    _war_moves(fighter)
+    m = server.main_view(fighter)
+    out = run(m, 'H.S.tab = "jianghu"; H.renderPage(); return T.els.page.innerHTML;')
+    latest = out.split('class="b-round latest"', 1)[1].split("</div>", 1)[0]
+    assert ('<li class="b-side side-guan mine"><span class="b-tag">官軍・我方</span><details class="b-fold" data-fold="1:〔官軍〕">'
+            '<summary>官軍本回合 3 人發動武學：回氣血 2、加重 1、化影 1</summary><ol class="b-fold-lines">') in latest
+    assert '<li>參戰丙一吐一納，氣血一回合一回合慢慢回了過來<span class="t-move">〔吐故納新〕</span></li>' in latest
+    assert latest.index("</ol></details></li>") < latest.index("參戰乙勁力沉到了底") < latest.index("參戰己身形一掠")
+    assert "<h5>" not in out and "<ul>" not in latest
+    again = run(m, 'H.S.tab = "jianghu"; H.S.foldOpen = new Set(["1:〔官軍〕"]); H.renderPage(); return T.els.page.innerHTML;')
+    assert '<details class="b-fold" data-fold="1:〔官軍〕" open>' in again

@@ -7215,6 +7215,11 @@
       const open = S.roundsOpen || (S.roundsOpen = new Set());
       if (box.open) open.add(box.dataset.round); else open.delete(box.dataset.round);
     }
+    // 決戰一軍發動武學那一列攤開、收起（main.js 的 warFolds）：記下來，輪詢重畫照樣
+    else if (box instanceof Element && box.matches("details.b-fold")) {
+      const open = S.foldOpen || (S.foldOpen = new Set());
+      if (box.open) open.add(box.dataset.fold); else open.delete(box.dataset.fold);
+    }
     // 見聞「形勢」攤開、收起哪一篇（xingshiHtml）：記篇次，重畫照樣（最新那一篇收起來也記得）
     else if (box instanceof Element && box.matches("details.xs-essay")) {
       (S.xingshiOpen || (S.xingshiOpen = new Map())).set(Number(box.dataset.n), box.open);
