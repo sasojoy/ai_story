@@ -560,7 +560,11 @@ def _claim_showdown(state: GameState, content: Content, event_id: str) -> tuple[
         return None
     w.showdowns_opened[event_id] = definition.id
     w.showdown_opened_at[event_id] = w.time  # 開的那一刻：輿圖歸週、判斷到了沒照它（FB-563）
-    return definition, showdown_start(state, content, definition)
+    from . import chapters  # noqa: PLC0415
+
+    # 章回主線：做成那一回的份量挪開打的起點（以官軍為正向，夾在 0～100）；沒人做成是 0，一個字都不變
+    start = showdown_start(state, content, definition) + chapters.showdown_edge(w, content, event_id)
+    return definition, max(0, min(100, start))
 
 
 def open_showdown(world: WorldStateStore, content: Content, event_id: str, now: float) -> list[str]:

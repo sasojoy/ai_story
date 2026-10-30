@@ -1728,5 +1728,1566 @@
         ]
       }
     ]
+  },
+  {
+    "id": "ch_guan_1",
+    "title": "投軍長社",
+    "kind": "章回",
+    "intro": "長社城下，募兵的榜貼出來了。",
+    "chapter": {
+      "side": "guan",
+      "no": 1,
+      "beat": "bocai_routs_zhujun",
+      "sway": "guan",
+      "sway_marks": {
+        "勸朱": 1,
+        "晚到": -0.5
+      }
+    },
+    "stages": [
+      {
+        "id": "gate",
+        "event": "chg1_gate",
+        "where": {
+          "locations": [
+            "changshe"
+          ]
+        },
+        "hint": "到長社北門",
+        "immediate": false
+      },
+      {
+        "id": "letter",
+        "event": "chg1_road",
+        "where": {
+          "locations": [
+            "yingchuan_wilds"
+          ]
+        },
+        "hint": "替皇甫嵩把軍書送到潁川郊野的朱儁前營",
+        "immediate": false
+      },
+      {
+        "id": "back",
+        "event": "chg1_back",
+        "where": {
+          "locations": [
+            "changshe"
+          ]
+        },
+        "hint": "回長社",
+        "immediate": false
+      },
+      {
+        "id": "wait",
+        "kind": "task",
+        "task": "chapter_beat",
+        "hint": "等「波才大敗朱儁」的消息",
+        "routes": [
+          {
+            "when": {
+              "果成": 1
+            },
+            "go": "hist"
+          }
+        ],
+        "next": "alt"
+      }
+    ],
+    "endings": [
+      {
+        "id": "hist",
+        "title": "潰兵",
+        "text": "晌午剛過，西邊的天先是黃了，然後黑了。是煙。朱儁的兵從那片開闊地上潰下來，一路丟盔棄甲，有的跑到城下才發現自己手裡還攥著半塊餅。\n\n{?ch_guan_1.勸朱:後營那三百步救了不少人。坡上的兵是整隊退回來的。}\n\n雷七在你旁邊，一句話也沒說，只是把城下每一張臉都看了一遍。",
+        "annal": "中平元年，{name}投軍長社，隸傅燮。{?ch_guan_1.勸朱:嘗說朱儁移營，潰時全其後隊。}",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "alt",
+        "title": "對峙",
+        "text": "晌午剛過，西邊來了一騎。朱儁跟波才在野地裡對峙了一個上午，誰也沒動。\n\n傳令的人說，朱將軍說了，是長社來的人讓他挪了營。傅燮聽完，看了你一眼。",
+        "annal": "中平元年，{name}投軍長社，隸傅燮。嘗說朱儁移營，波才不能破。",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "missed",
+        "title": "沒趕上",
+        "text": "朱儁那一仗打完的時候，你不在長社。",
+        "annal": "中平元年，{name}投軍，未及長社之役。",
+        "effect": {},
+        "failed": true
+      }
+    ],
+    "unfinished": "{name}手上的「投軍長社」到季末還沒有了結。"
+  },
+  {
+    "id": "ch_guan_2",
+    "title": "長社火攻",
+    "kind": "章回",
+    "intro": "長社被圍了。城外的草澤裡，黃巾連營十里。",
+    "chapter": {
+      "side": "guan",
+      "no": 2,
+      "beat": "changshe_fire",
+      "after": [
+        "ch_guan_1"
+      ],
+      "sway": "guan",
+      "sway_marks": {
+        "獻策": 0.5,
+        "帶路": 0.5,
+        "傳話": -0.5
+      }
+    },
+    "stages": [
+      {
+        "id": "tower",
+        "event": "chg2_tower",
+        "where": {
+          "locations": [
+            "changshe"
+          ]
+        },
+        "hint": "到長社城樓見皇甫嵩",
+        "immediate": false
+      },
+      {
+        "id": "lei",
+        "event": "chg2_lei",
+        "where": {
+          "locations": [
+            "changshe"
+          ]
+        },
+        "hint": "北門雷七找你",
+        "immediate": false
+      },
+      {
+        "id": "scout",
+        "event": "chg2_marsh",
+        "where": {
+          "locations": [
+            "yingchuan_wilds"
+          ]
+        },
+        "hint": "出城看風（潁川郊野的草澤）",
+        "immediate": false
+      },
+      {
+        "id": "straw",
+        "event": "chg2_straw",
+        "where": {
+          "locations": [
+            "changshe"
+          ]
+        },
+        "hint": "回長社備火",
+        "immediate": false
+      },
+      {
+        "id": "wait",
+        "kind": "task",
+        "task": "chapter_beat",
+        "hint": "等長社火攻",
+        "routes": [
+          {
+            "when": {
+              "果guan": 1
+            },
+            "go": "win"
+          }
+        ],
+        "next": "lose"
+      }
+    ],
+    "endings": [
+      {
+        "id": "win",
+        "title": "破圍",
+        "text": "風從東北來。{?ch_guan_2.帶路:風口跟那個孩子指給你的一模一樣。}\n\n皇甫嵩舉起火把的時候，看了你一眼。{?ch_guan_2.獻策:他把火把遞給了你。}\n\n草澤燒了一夜。天亮的時候，城外十里是黑的，黑裡還冒著白煙。波才的人往陽翟逃了，路上丟下的東西比人還多。\n\n你回到北門。雷七站在門樓上，一直看著那片黑。\n\n{?ch_guan_2.傳話:{?世.ch_xiaoyi_west:雷七等到中午。他沒有問你。他下了門樓，跟收屍的人一起出城了。傍晚他回來，手裡什麼也沒有。他說：「沒找到。」他說：「沒找到就是好事。」|門洞裡蹲著一個人，臉是黑的，衣服燒了一半。他的左耳缺了一角。雷七從門樓上下來，那條跛腿走得比誰都快。他走到兒子面前，站住了，抬起手。你以為他要打。他只是把兒子頭上那條燒焦的黃巾解下來，塞進自己懷裡。}|{?世.ch_xiaoyi_north:門洞裡蹲著一個人，臉是黑的，衣服燒了一半。他的左耳缺了一角。雷七看了他很久，一句話也沒說，轉身去提了一桶水。|雷七等到中午。傍晚收屍的人回來，他在擔架邊上一個一個看。走到最後一副，他停住了，蹲下來，看了很久。然後他站起來，對收屍的人說：「不是。」他回到門樓上，那一夜沒有點燈。}}",
+        "annal": "長社之夜，{name}隨皇甫嵩縱火破圍。{?ch_guan_2.獻策:火攻之策，{name}與焉。}{?ch_guan_2.傳話:嘗夜入賊營，以父言告一賊。}",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "lose",
+        "title": "空營",
+        "text": "火放起來了，可是黃巾的營是空的。風轉了。火燒的是城外的草，煙往城裡灌。\n\n皇甫嵩站在城頭上，一整夜沒有下來。天亮以後，他對傅燮說：「波才身邊有懂打仗的人。」\n\n雷七在門樓上咳了一夜。他說他不是被煙嗆的。",
+        "annal": "長社之夜，{name}隨皇甫嵩出城縱火。賊先移營，火不能及。",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "missed",
+        "title": "沒趕上",
+        "text": "長社那一夜，你不在城裡。",
+        "annal": "長社之夜，{name}不在城中。",
+        "effect": {},
+        "failed": true
+      }
+    ],
+    "unfinished": "{name}手上的「長社火攻」到季末還沒有了結。"
+  },
+  {
+    "id": "ch_guan_3",
+    "title": "宛城城下",
+    "kind": "章回",
+    "intro": "長社的火熄了，南陽還在黃巾手裡。",
+    "chapter": {
+      "side": "guan",
+      "no": 3,
+      "beat": "wancheng",
+      "after": [
+        "ch_guan_2"
+      ],
+      "sway": "guan",
+      "sway_marks": {
+        "水門": 0.5
+      }
+    },
+    "stages": [
+      {
+        "id": "qinjie",
+        "event": "chg3_qinjie",
+        "where": {
+          "locations": [
+            "nanyang_wilds"
+          ]
+        },
+        "hint": "到南陽郊野見秦頡",
+        "immediate": false
+      },
+      {
+        "id": "city",
+        "event": "chg3_shop",
+        "where": {
+          "locations": [
+            "wan_city"
+          ]
+        },
+        "hint": "混進宛城城南",
+        "immediate": false
+      },
+      {
+        "id": "ladder",
+        "event": "chg3_ladder",
+        "where": {
+          "locations": [
+            "nanyang_wilds"
+          ]
+        },
+        "hint": "回城外備梯",
+        "immediate": false
+      },
+      {
+        "id": "wait",
+        "kind": "task",
+        "task": "chapter_beat",
+        "hint": "等宛城之戰",
+        "routes": [
+          {
+            "when": {
+              "果guan": 1
+            },
+            "go": "win"
+          }
+        ],
+        "next": "lose"
+      }
+    ],
+    "endings": [
+      {
+        "id": "win",
+        "title": "先登",
+        "text": "孫堅第一個上了城。{?ch_guan_3.水門:他是從城南進去的，渾身是泥。}城頭的黃旗一面一面倒下來。\n\n{?ch_guan_3.應三娘:天亮以後你跑到城南。街口站著官軍，刀還在滴。你擠過去，說這條街是答應過的。帶兵的校尉看你一眼，說：「誰答應的？」校尉把刀收了，只收了一半。餅鋪的門板倒在地上，爐子還熱著。韋三娘坐在爐邊，一手摟一個女兒。她沒有看你。她說：「後頭那條街沒有人替它說話。」|{?ch_guan_3.盡力:天亮以後你跑到城南。你說不出是誰答應的，只說「我求你」。帶兵的校尉把刀收了，只收了一半。韋三娘坐在爐邊，一手摟一個女兒。|你從東門進城。城南的火燒到中午才熄。你沒有去看那間餅鋪。}}",
+        "annal": "宛城之戰，{name}從孫堅攻城。{?ch_guan_3.水門:嘗潛入城南，得故水門，堅由是先登。}{?ch_guan_3.應三娘:城破，為城南一街請命。}",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "lose",
+        "title": "墮城",
+        "text": "孫堅爬到一半，梯子被推倒了。他摔在城下，被人拖了回來，嘴裡還在罵。\n\n秦頡在帳裡寫奏報，寫了三遍都撕了。\n\n{?ch_guan_3.應三娘:夜裡你看著宛城的城南。那一片沒有燈，只有一個爐子的火光，在牆根底下，一閃一閃。}",
+        "annal": "宛城之戰，官軍不克，孫堅墮城幾死。{name}在軍中。",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "missed",
+        "title": "沒趕上",
+        "text": "宛城那一仗，你不在城下。",
+        "annal": "宛城之戰，{name}未及。",
+        "effect": {},
+        "failed": true
+      }
+    ],
+    "unfinished": "{name}手上的「宛城城下」到季末還沒有了結。"
+  },
+  {
+    "id": "ch_guan_4",
+    "title": "為盧植鳴冤",
+    "kind": "章回",
+    "intro": "宦官左豐到了盧植營。",
+    "chapter": {
+      "side": "guan",
+      "no": 4,
+      "beat": "luzhi_jailed",
+      "after": [
+        "ch_guan_2"
+      ],
+      "sway": "guan",
+      "sway_marks": {
+        "行賄": 1,
+        "說左豐": 1,
+        "不做": -0.5
+      }
+    },
+    "stages": [
+      {
+        "id": "camp",
+        "event": "chg4_luzhi",
+        "where": {
+          "locations": [
+            "luzhi_camp"
+          ]
+        },
+        "hint": "到盧植營",
+        "immediate": false
+      },
+      {
+        "id": "night",
+        "event": "chg4_liubei",
+        "where": {
+          "locations": [
+            "luzhi_camp"
+          ]
+        },
+        "hint": "夜裡在營門口",
+        "immediate": false
+      },
+      {
+        "id": "wait",
+        "kind": "task",
+        "task": "chapter_beat",
+        "hint": "等「盧植下獄」的消息",
+        "routes": [
+          {
+            "when": {
+              "果成": 1
+            },
+            "go": "hist"
+          }
+        ],
+        "next": "alt"
+      }
+    ],
+    "endings": [
+      {
+        "id": "hist",
+        "title": "檻車",
+        "text": "洛陽的檻車來了。盧植自己走進去，坐好，把那一卷沒讀完的書放在膝上。劉備跟在車後走了很遠，最後站在路邊，一直站到看不見。\n\n{?ch_guan_4.行賄:左豐收了你的錢，還是說了那一句。你這才知道，他兩邊都收。}",
+        "annal": "盧植圍廣宗，左豐來監軍。{?ch_guan_4.行賄:{name}私以財賂豐，不能救。|{?ch_guan_4.說左豐:{name}說豐以實，不能救。|{name}在營中。}}植坐檻車徵。",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "alt",
+        "title": "沒走",
+        "text": "左豐回洛陽了，盧植沒走。\n\n{?ch_guan_4.行賄:盧植知道了。他把你叫進帳裡，一句話也沒說，只是把你那天交上來的名冊撕了，丟進火裡。「你救了我，」他說，「我寧可你沒救。」劉備在帳外等你，拍拍你的肩：「先生是這樣的人。」|{?ch_guan_4.說左豐:盧植聽說是你去說的，給你倒了一碗酒，酒很淡。「說實話的人不多。」他說。你想起傅燮也說過這句話。|盧植照舊在帳裡讀書。}}",
+        "annal": "盧植圍廣宗，左豐來監軍。{?ch_guan_4.行賄:{name}私以財賂豐，植知之，恨焉。|{?ch_guan_4.說左豐:{name}說豐以實，植得不徵。|植得不徵。}}",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "missed",
+        "title": "沒趕上",
+        "text": "左豐回洛陽的時候，你不在盧植營。",
+        "annal": "盧植圍廣宗，{name}未至。",
+        "effect": {},
+        "failed": true
+      }
+    ],
+    "unfinished": "{name}手上的「為盧植鳴冤」到季末還沒有了結。"
+  },
+  {
+    "id": "ch_guan_5",
+    "title": "廣宗城下",
+    "kind": "章回",
+    "intro": "大軍圍住了廣宗。決戰在即。",
+    "chapter": {
+      "side": "guan",
+      "no": 5,
+      "beat": "guangzong",
+      "after": [
+        "ch_guan_3",
+        "ch_guan_4"
+      ],
+      "after_beat": "luzhi_jailed",
+      "sway": "guan",
+      "sway_marks": {
+        "前鋒": 0.5
+      }
+    },
+    "stages": [
+      {
+        "id": "muster",
+        "event": "chg5_muster",
+        "where": {
+          "locations": [
+            "luzhi_camp"
+          ]
+        },
+        "hint": "到廣宗城外的大營聽點名",
+        "immediate": false
+      },
+      {
+        "id": "prisoners",
+        "event": "chg5_prisoners",
+        "where": {
+          "locations": [
+            "luzhi_camp"
+          ]
+        },
+        "hint": "後營的柵欄",
+        "immediate": false
+      },
+      {
+        "id": "eve",
+        "event": "chg5_eve",
+        "where": {
+          "locations": [
+            "luzhi_camp"
+          ]
+        },
+        "hint": "決戰前夜",
+        "immediate": false
+      },
+      {
+        "id": "wait",
+        "kind": "task",
+        "task": "chapter_beat",
+        "hint": "等廣宗決戰",
+        "routes": [
+          {
+            "when": {
+              "果guan": 1
+            },
+            "go": "win"
+          }
+        ],
+        "next": "lose"
+      }
+    ],
+    "endings": [
+      {
+        "id": "win",
+        "title": "黃巾平",
+        "text": "廣宗破了。城裡的人比城外的人以為的少，也比以為的瘦。\n\n{?ch_guan_5.前鋒:你是第一批進城的。你不記得你殺了幾個人，你只記得城門口有一雙小孩的草鞋，擺得很整齊，像有人要回來穿。}\n\n{?ch_guan_5.後營:天亮以後擔架一副一副抬回來。你替每一個人蓋上臉，蓋到後來，布不夠了。}\n\n{?ch_guan_5.准:半個月以後，長社來了一封信，還是那個歪歪扭扭的字：「北門兩個人站崗。　雷七、雷小乙」|{?ch_guan_5.保小乙:主將說，俘虜一律送洛陽。你看著那一隊人走遠，最後一個人回頭看了一眼。你沒有寫信去長社。你不知道要怎麼寫。}}\n\n{?ch_guan_2.小穀入城:伙房的孩子說他想回潁川。你問他回去做什麼。他說：「種地。我娘說，種地的人不用信誰。」}",
+        "annal": "廣宗之役，{name}{?ch_guan_5.前鋒:為前鋒，先入城。|{?ch_guan_5.後營:主後營傷俘。|護中軍之旗。}}{?ch_guan_5.保小乙:嘗為一俘請命，{?ch_guan_5.准:得全。|不許。}}黃巾遂平。",
+        "effect": {
+          "stats": {
+            "xinde": 40,
+            "fame": 2
+          }
+        }
+      },
+      {
+        "id": "lose",
+        "title": "退保下曲陽",
+        "text": "廣宗沒有破。官軍退到下曲陽，一路上燒了自己帶不走的糧車。\n\n{?史.luzhi_jailed=不成:盧植走在最後面。他把那一卷書交給你，說：「替我收著。」|主將一路上沒有說話。長社那一把火，在這裡沒有放起來。}\n\n你回頭看廣宗。城頭上有很多人在唱歌，唱的是「蒼天已死」。",
+        "annal": "廣宗之役，官軍不克，退保下曲陽。{name}在軍中。",
+        "effect": {
+          "stats": {
+            "xinde": 40,
+            "fame": 2
+          }
+        }
+      },
+      {
+        "id": "missed",
+        "title": "沒趕上",
+        "text": "廣宗那一仗，你不在城下。",
+        "annal": "廣宗之役，{name}未及。",
+        "effect": {},
+        "failed": true
+      }
+    ],
+    "unfinished": "{name}手上的「廣宗城下」到季末還沒有了結。"
+  },
+  {
+    "id": "ch_huang_1",
+    "title": "頭裹黃巾",
+    "kind": "章回",
+    "intro": "蒼天已死。潁川的黃巾營門口，一口大鍋燒得正旺。",
+    "chapter": {
+      "side": "huang",
+      "no": 1,
+      "beat": "bocai_routs_zhujun",
+      "sway": "huang",
+      "sway_marks": {
+        "波才記名": 0.5
+      }
+    },
+    "stages": [
+      {
+        "id": "gate",
+        "event": "chh1_gate",
+        "where": {
+          "locations": [
+            "huangjin_camp"
+          ]
+        },
+        "hint": "到黃巾別部營寨",
+        "immediate": false
+      },
+      {
+        "id": "water",
+        "event": "chh1_village",
+        "where": {
+          "locations": [
+            "yingchuan_wilds"
+          ]
+        },
+        "hint": "把兩罈符水送到潁川郊野的里",
+        "immediate": false
+      },
+      {
+        "id": "fire",
+        "event": "chh1_fire",
+        "where": {
+          "locations": [
+            "huangjin_camp"
+          ]
+        },
+        "hint": "回營",
+        "immediate": false
+      },
+      {
+        "id": "wait",
+        "kind": "task",
+        "task": "chapter_beat",
+        "hint": "等「波才大敗朱儁」的消息",
+        "routes": [
+          {
+            "when": {
+              "果成": 1
+            },
+            "go": "hist"
+          }
+        ],
+        "next": "alt"
+      }
+    ],
+    "endings": [
+      {
+        "id": "hist",
+        "title": "肉",
+        "text": "晌午，營裡的人像水一樣從三面湧出去。你站在坡上，看見朱儁的旗倒了。\n\n回來的人扛著官軍的糧、官軍的刀、官軍的鍋。那天晚上，營裡每個人都吃到了肉。小穀吃了兩碗，吃到吐，吐完了又吃。",
+        "annal": "中平元年，{name}裹黃巾，從波才於潁川。{?ch_huang_1.開倉:嘗開里正之倉，以糧分飢者。}",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "alt",
+        "title": "粥",
+        "text": "晌午，營裡的人衝出去，又退回來。朱儁的後營在坡上，壓得住。\n\n波才回營的時候一句話也沒說。那天晚上，粥比昨天更稀。",
+        "annal": "中平元年，{name}裹黃巾，從波才於潁川。朱儁移營，不能破。",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "missed",
+        "title": "沒趕上",
+        "text": "朱儁那一仗打完的時候，你不在波才營裡。",
+        "annal": "中平元年，{name}裹黃巾，未及潁川之役。",
+        "effect": {},
+        "failed": true
+      }
+    ],
+    "unfinished": "{name}手上的「頭裹黃巾」到季末還沒有了結。"
+  },
+  {
+    "id": "ch_huang_2",
+    "title": "依草結營",
+    "kind": "章回",
+    "intro": "波才的營推到了長社城下。城外是一大片草澤。",
+    "chapter": {
+      "side": "huang",
+      "no": 2,
+      "beat": "changshe_fire",
+      "after": [
+        "ch_huang_1"
+      ],
+      "sway": "huang",
+      "sway_marks": {
+        "移營": 1
+      }
+    },
+    "stages": [
+      {
+        "id": "siege",
+        "event": "chh2_siege",
+        "where": {
+          "locations": [
+            "yingchuan_wilds"
+          ]
+        },
+        "hint": "到長社城外的草澤（潁川郊野）",
+        "immediate": false
+      },
+      {
+        "id": "tent",
+        "event": "chh2_tent",
+        "where": {
+          "locations": [
+            "yingchuan_wilds"
+          ]
+        },
+        "hint": "回帳篷",
+        "immediate": false
+      },
+      {
+        "id": "guard",
+        "event": "chh2_guard",
+        "where": {
+          "locations": [
+            "yingchuan_wilds"
+          ]
+        },
+        "hint": "守營",
+        "immediate": false
+      },
+      {
+        "id": "flee",
+        "event": "chh2_flee",
+        "where": {
+          "locations": [
+            "yingchuan_wilds"
+          ]
+        },
+        "hint": "今夜睡在營裡",
+        "immediate": false
+      },
+      {
+        "id": "wait",
+        "kind": "task",
+        "task": "chapter_beat",
+        "hint": "等長社火攻",
+        "routes": [
+          {
+            "when": {
+              "果guan": 1
+            },
+            "go": "lose"
+          }
+        ],
+        "next": "win"
+      }
+    ],
+    "endings": [
+      {
+        "id": "lose",
+        "title": "陽翟路上",
+        "text": "天亮的時候，你們在陽翟的路上。波才騎在一匹燒焦了鬃毛的馬上，一句話也不說。\n\n{?ch_huang_2.揹小穀:小穀趴在你背上睡著了。他的頭髮燒掉了一半，手裡那條黃布還在。|{?ch_huang_2.指北門:小穀一個人坐在路邊。他說小乙哥往北邊跑了，叫他跟上，他不敢。|你在人群裡找小穀，找了很久，找到了，他跟著雷小乙。}}\n\n{?ch_huang_2.同去西:雷小乙走在你旁邊。他回頭看了一次長社，北門那裡亮著一盞燈。他沒有再回頭。}",
+        "annal": "長社之夜，官軍縱火，賊營盡焚。{name}{?ch_huang_2.揹小穀:負一童子出火中。|{?ch_huang_2.斷後:為營中斷後。|從波才走陽翟。}}{?ch_huang_2.移營:先是，{name}嘗勸波才移營，不盡用。}",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "win",
+        "title": "高地",
+        "text": "火燒起來的時候，後營已經在西邊的高地上了。你站在高地上，看著空了一半的前營在火裡塌下去，看著風轉了向，把煙往長社城裡灌。\n\n波才站在你旁邊。他看了很久，說：{?ch_huang_2.移營:「你救了很多人。」|「有人勸過我。」}\n\n彭脫在後面，什麼也沒說。\n\n小穀在你腳邊數著逃出來的人，數到後來數亂了，又從頭數。",
+        "annal": "{?ch_huang_2.移營:長社之夜，官軍縱火。{name}先勸波才移營，賊眾得全。史書所記「嵩縱火破賊」，是歲不驗。|長社之夜，官軍縱火，賊先移營，火不能及。{name}在營中。}",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "missed",
+        "title": "沒趕上",
+        "text": "長社那一夜，你不在波才營裡。",
+        "annal": "長社之夜，{name}不在營中。",
+        "effect": {},
+        "failed": true
+      }
+    ],
+    "unfinished": "{name}手上的「依草結營」到季末還沒有了結。"
+  },
+  {
+    "id": "ch_huang_3",
+    "title": "據守宛城",
+    "kind": "章回",
+    "intro": "長社的消息傳到南陽。宛城要守住。",
+    "chapter": {
+      "side": "huang",
+      "no": 3,
+      "beat": "wancheng",
+      "after": [
+        "ch_huang_2"
+      ],
+      "sway": "huang",
+      "sway_marks": {
+        "報": 0.5,
+        "封門": 0.5
+      }
+    },
+    "stages": [
+      {
+        "id": "zhang",
+        "event": "chh3_zhang",
+        "where": {
+          "locations": [
+            "wan_city"
+          ]
+        },
+        "hint": "到宛城見張曼成",
+        "immediate": false
+      },
+      {
+        "id": "shop",
+        "event": "chh3_shop",
+        "where": {
+          "locations": [
+            "wan_city"
+          ]
+        },
+        "hint": "在城南找想開門的人",
+        "immediate": false
+      },
+      {
+        "id": "hold",
+        "event": "chh3_hold",
+        "where": {
+          "locations": [
+            "wan_city"
+          ]
+        },
+        "hint": "守城",
+        "immediate": false
+      },
+      {
+        "id": "wait",
+        "kind": "task",
+        "task": "chapter_beat",
+        "hint": "等宛城之戰",
+        "routes": [
+          {
+            "when": {
+              "果guan": 1
+            },
+            "go": "lose"
+          }
+        ],
+        "next": "win"
+      }
+    ],
+    "endings": [
+      {
+        "id": "lose",
+        "title": "城陷",
+        "text": "{?史.qinjie_slays_zhangmancheng=成:張曼成在城外被秦頡斬了，袍子沾滿了泥。趙弘接了他的位置，守了不到一天。}\n\n城破的時候，你在城南。{?ch_huang_3.封門:那道水門沒有開。孫堅是從東門爬上來的。|{?ch_huang_3.放她:那道水門開了。進來的第一個人渾身是泥。}}\n\n{?ch_huang_3.報:你經過那間餅鋪。門板是張曼成的人拆的，比官軍來得早。}\n\n{?ch_huang_2.揹小穀:你拉著小穀從北門出城。他一路回頭，問那兩個小姑娘會不會跑。你說會。}",
+        "annal": "宛城之戰，{name}為張曼成守城。{?ch_huang_3.封門:嘗與城南一婦封故水門。|{?ch_huang_3.報:告城南故水門於曼成。}}城陷，脫身北走。",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "win",
+        "title": "餅",
+        "text": "孫堅的梯子是被你們推倒的。他摔下去的時候還在罵，罵的是江東話，城頭上沒人聽得懂，都笑了。\n\n那天晚上張曼成請全城吃餅。餅是城南那一間烙的。\n\n{?ch_huang_3.報:|韋三娘烙了一整夜。天亮的時候，她托人給你送來一張，用荷葉包著，還是熱的。}",
+        "annal": "宛城之戰，孫堅攻城，{name}拒之，城得全。",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "missed",
+        "title": "沒趕上",
+        "text": "宛城那一仗，你不在城裡。",
+        "annal": "宛城之戰，{name}未及。",
+        "effect": {},
+        "failed": true
+      }
+    ],
+    "unfinished": "{name}手上的「據守宛城」到季末還沒有了結。"
+  },
+  {
+    "id": "ch_huang_4",
+    "title": "洛陽流言",
+    "kind": "章回",
+    "intro": "張梁來了一封密信。",
+    "chapter": {
+      "side": "huang",
+      "no": 4,
+      "beat": "luzhi_jailed",
+      "after": [
+        "ch_huang_2"
+      ],
+      "sway": "huang",
+      "sway_marks": {
+        "流言": 1
+      }
+    },
+    "stages": [
+      {
+        "id": "liu",
+        "event": "chh4_liu",
+        "where": {
+          "locations": [
+            "luoyang_palace"
+          ]
+        },
+        "hint": "到洛陽宮城的浣衣局找柳嫗",
+        "immediate": false
+      },
+      {
+        "id": "price",
+        "event": "chh4_price",
+        "where": {
+          "locations": [
+            "luoyang_palace"
+          ]
+        },
+        "hint": "第二天再去浣衣局",
+        "immediate": false
+      },
+      {
+        "id": "wait",
+        "kind": "task",
+        "task": "chapter_beat",
+        "hint": "等「盧植下獄」的消息",
+        "routes": [
+          {
+            "when": {
+              "果成": 1
+            },
+            "go": "hist"
+          }
+        ],
+        "next": "alt"
+      }
+    ],
+    "endings": [
+      {
+        "id": "hist",
+        "title": "檻車",
+        "text": "消息從冀州傳回來：盧植被檻車押回洛陽。換來的是董卓。董卓不挖溝，他要打。\n\n{?ch_huang_4.走:你又去了一次浣衣局。柳嫗的位置上坐著一個新來的小宮女，在搓一件繡金線的袍子。|柳嫗看見你，沒有說話，只是把一件洗好的衣裳疊好，放在你手裡。是一條黃巾，洗得很乾淨。}",
+        "annal": "盧植圍廣宗，{name}入洛陽，因宮人傳言於左豐。植坐檻車徵。{?ch_huang_4.認:事泄，{name}自承，宮人得免。}",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "alt",
+        "title": "三道溝",
+        "text": "左豐回去了，盧植沒動。溝還是三道。\n\n張梁來信，只有一句：「知道了。」",
+        "annal": "盧植圍廣宗，{name}入洛陽，因宮人傳言於左豐，不能動。{?ch_huang_4.認:事泄，{name}自承，宮人得免。}",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "missed",
+        "title": "沒趕上",
+        "text": "左豐回洛陽的時候，你不在洛陽。",
+        "annal": "盧植圍廣宗，{name}未入洛陽。",
+        "effect": {},
+        "failed": true
+      }
+    ],
+    "unfinished": "{name}手上的「洛陽流言」到季末還沒有了結。"
+  },
+  {
+    "id": "ch_huang_5",
+    "title": "大賢良師",
+    "kind": "章回",
+    "intro": "大賢良師病了。廣宗被圍。",
+    "chapter": {
+      "side": "huang",
+      "no": 5,
+      "beat": "guangzong",
+      "after": [
+        "ch_huang_3",
+        "ch_huang_4"
+      ],
+      "after_beat": "luzhi_jailed",
+      "sway": "huang"
+    },
+    "stages": [
+      {
+        "id": "bed",
+        "event": "chh5_bed",
+        "where": {
+          "locations": [
+            "guangzong"
+          ]
+        },
+        "hint": "到廣宗道壇後殿",
+        "immediate": false
+      },
+      {
+        "id": "drug",
+        "event": "chh5_drug",
+        "where": {
+          "locations": [
+            "guangzong"
+          ]
+        },
+        "hint": "張梁在殿外等你",
+        "immediate": false
+      },
+      {
+        "id": "eve",
+        "event": "chh5_eve",
+        "where": {
+          "locations": [
+            "guangzong"
+          ]
+        },
+        "hint": "決戰前夜",
+        "immediate": false
+      },
+      {
+        "id": "wait",
+        "kind": "task",
+        "task": "chapter_beat",
+        "hint": "等廣宗決戰",
+        "routes": [
+          {
+            "when": {
+              "果guan": 1
+            },
+            "go": "lose"
+          }
+        ],
+        "next": "win"
+      }
+    ],
+    "endings": [
+      {
+        "id": "lose",
+        "title": "城北",
+        "text": "{?史.zhangjiao_dies=成:張角死在第六天的中午。他死的時候，殿裡念經的人沒有停。張梁出來的時候，手裡拿著一塊布，是張角最後寫的：「蒼天已死，黃天當立。」\n\n他把布折起來，走到你面前，小聲說：「後面還有一句。他說是給你的。」{?ch_huang_5.實話:「他說：謝謝你說實話。」|{?ch_huang_5.寬他:「他說：不要恨他們。」|「他說：回去種地。」}}}\n\n廣宗破的那一夜，你在城北。\n\n{?ch_huang_2.同去西:雷小乙跟你守同一段牆。快天亮的時候，他忽然說：「我爹守門守了三十年，從來沒有開過一次不該開的門。」他把頭上的黃巾解下來，看了一會兒，又纏回去。他跟著你一起往外殺。}\n\n{?ch_huang_2.揹小穀:你找到小穀的時候，他躲在道壇的供桌底下，手裡攥著那條黃布。你把他抱出來，他沒有哭。他說：「大賢良師說符水治不了病。他早就知道了。」}\n\n城外是官軍的火把，一層一層，像長社那一夜的草。",
+        "annal": "廣宗之役，{name}{?ch_huang_5.求藥:嘗為張角求藥。}從張梁守城。城陷，{?ch_huang_2.揹小穀:負一童子出走。|走。}",
+        "effect": {
+          "stats": {
+            "xinde": 40,
+            "fame": 2
+          }
+        }
+      },
+      {
+        "id": "win",
+        "title": "黃天",
+        "text": "官軍退了。廣宗城頭上的人唱了一整夜，唱到嗓子啞了，還在唱。\n\n{?史.zhangjiao_dies=不成:張角被人扶上城樓。他看著官軍的火把一點一點往南退，看了很久。他對你說：「接下來，比打仗難。」|張梁站在城樓上，懷裡揣著那塊寫了字的布。}\n\n{?ch_huang_2.揹小穀:小穀說他想回潁川種地。你說現在天下是黃天的了，種地也不用交租了。他想了想，說：「那我要種兩畝。」}",
+        "annal": "廣宗之役，官軍不克。{name}從張梁守城有功。是歲黃天當立。",
+        "effect": {
+          "stats": {
+            "xinde": 40,
+            "fame": 2
+          }
+        }
+      },
+      {
+        "id": "missed",
+        "title": "沒趕上",
+        "text": "廣宗那一仗，你不在城裡。",
+        "annal": "廣宗之役，{name}未及。",
+        "effect": {},
+        "failed": true
+      }
+    ],
+    "unfinished": "{name}手上的「大賢良師」到季末還沒有了結。"
+  },
+  {
+    "id": "ch_hao_1",
+    "title": "結社自保",
+    "kind": "章回",
+    "intro": "黃巾起了。曹家的莊院在坡上，牆頭新插了竹籤。",
+    "chapter": {
+      "side": "haoqiang",
+      "no": 1,
+      "beat": "bocai_routs_zhujun",
+      "side_marks": {
+        "替官軍": "guan",
+        "替黃巾": "huang"
+      }
+    },
+    "stages": [
+      {
+        "id": "manor",
+        "event": "chq1_manor",
+        "where": {
+          "locations": [
+            "cao_manor"
+          ]
+        },
+        "hint": "到曹氏莊院",
+        "immediate": false
+      },
+      {
+        "id": "guests",
+        "event": "chq1_guests",
+        "where": {
+          "locations": [
+            "cao_manor"
+          ]
+        },
+        "hint": "莊院門口來了人",
+        "immediate": false
+      },
+      {
+        "id": "night",
+        "event": "chq1_night",
+        "where": {
+          "locations": [
+            "cao_manor"
+          ]
+        },
+        "hint": "回莊院歇下",
+        "immediate": false
+      },
+      {
+        "id": "wait",
+        "kind": "task",
+        "task": "chapter_beat",
+        "hint": "等「波才大敗朱儁」的消息",
+        "routes": [
+          {
+            "when": {
+              "果成": 1
+            },
+            "go": "hist"
+          }
+        ],
+        "next": "alt"
+      }
+    ],
+    "endings": [
+      {
+        "id": "hist",
+        "title": "糧比刀值錢",
+        "text": "消息傳到莊院的時候，莊客都停下了手裡的活。丁伯說，長社要被圍了。他說：「圍城的時候，糧比刀值錢。」",
+        "annal": "中平元年，黃巾起，{name}為曹氏守莊。{?ch_hao_1.問丁伯:知其管事私窖，不發。}",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "alt",
+        "title": "還有得談",
+        "text": "消息說兩軍在潁川野地對峙。丁伯說：「那就還有得談。」",
+        "annal": "中平元年，黃巾起，{name}為曹氏守莊。{?ch_hao_1.問丁伯:知其管事私窖，不發。}",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "missed",
+        "title": "沒趕上",
+        "text": "朱儁那一仗打完的時候，莊院的事你還沒料理完。",
+        "annal": "中平元年，黃巾起，{name}未及守莊。",
+        "effect": {},
+        "failed": true
+      }
+    ],
+    "unfinished": "{name}手上的「結社自保」到季末還沒有了結。"
+  },
+  {
+    "id": "ch_hao_2",
+    "title": "兩路買家",
+    "kind": "章回",
+    "intro": "長社被圍了。官軍要草，黃巾要糧。",
+    "chapter": {
+      "side": "haoqiang",
+      "no": 2,
+      "beat": "changshe_fire",
+      "after": [
+        "ch_hao_1"
+      ],
+      "sway_marks": {
+        "開窖": -1
+      },
+      "side_marks": {
+        "替官軍": "guan",
+        "替黃巾": "huang"
+      }
+    },
+    "stages": [
+      {
+        "id": "letters",
+        "event": "chq2_letters",
+        "where": {
+          "locations": [
+            "cao_manor"
+          ]
+        },
+        "hint": "莊院來了兩封信",
+        "immediate": false
+      },
+      {
+        "id": "cao",
+        "event": "chq2_cao",
+        "where": {
+          "locations": [
+            "changshe"
+          ]
+        },
+        "hint": "到長社見曹操",
+        "immediate": false
+      },
+      {
+        "id": "marsh",
+        "event": "chq2_marsh",
+        "where": {
+          "locations": [
+            "yingchuan_wilds"
+          ]
+        },
+        "hint": "回莊院的路上（潁川郊野的草澤）",
+        "immediate": false
+      },
+      {
+        "id": "sell",
+        "event": "chq2_sell",
+        "where": {
+          "locations": [
+            "cao_manor"
+          ]
+        },
+        "hint": "回莊院定賣給誰",
+        "immediate": false
+      },
+      {
+        "id": "wait",
+        "kind": "task",
+        "task": "chapter_beat",
+        "hint": "等長社火攻",
+        "routes": [
+          {
+            "when": {
+              "果guan": 1
+            },
+            "go": "gwin"
+          }
+        ],
+        "next": "hwin"
+      }
+    ],
+    "endings": [
+      {
+        "id": "gwin",
+        "title": "一匹絹",
+        "text": "莊院在坡上。天黑以後，西北邊的天亮了。莊客都爬上牆頭看。沒有人說話。\n\n丁伯站在你旁邊。{?ch_hao_1.問丁伯:他說：「那是我們的草。」|{?ch_hao_1.告主:|他什麼也沒說。}}\n\n第二天曹操派人送來一匹絹，說是皇甫將軍賞的。送絹的人順口說，草澤裡燒死的人數不清。{?ch_hao_2.示警:他說，有個孩子跑出來的時候，一直喊有人跟他說過。}\n\n{?ch_hao_2.開窖:那一夜，莊客家裡的灶都是熱的。丁伯在後山的窖口坐了很久，把窖門重新蓋好，壓上一塊石頭。}\n\n{?ch_hao_2.給乾糧:過了幾天，莊院門口的石階上放著半塊乾糧，用一片草葉包著。}",
+        "annal": "長社之夜，{name}{?ch_hao_2.替官軍:以草油資皇甫嵩，火攻用之。|{?ch_hao_2.替黃巾:以糧資波才。|{?ch_hao_2.開窖:發私窖以食莊客，兩不相與。|兩資之。}}}{?ch_hao_2.曹操賞識:曹操嘗問以勝負，異之。}",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "hwin",
+        "title": "空營",
+        "text": "莊院在坡上。天黑以後，西北邊的天亮了。莊客都爬上牆頭看。沒有人說話。\n\n第二天傳來消息，火燒空了。官軍的人說，賊營早挪了。{?ch_hao_2.示警:送信的黃巾說，是一個孩子先喊起來的。}\n\n{?ch_hao_2.開窖:那一夜，莊客家裡的灶都是熱的。丁伯在後山的窖口坐了很久，把窖門重新蓋好，壓上一塊石頭。}\n\n{?ch_hao_2.給乾糧:過了幾天，莊院門口的石階上放著半塊乾糧，用一片草葉包著。}",
+        "annal": "長社之夜，{name}{?ch_hao_2.替官軍:以草油資皇甫嵩，火攻不驗。|{?ch_hao_2.替黃巾:以糧資波才。|{?ch_hao_2.開窖:發私窖以食莊客，兩不相與。|兩資之。}}}{?ch_hao_2.曹操賞識:曹操嘗問以勝負，異之。}",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "missed",
+        "title": "沒趕上",
+        "text": "長社那一夜的草和糧，你沒有趕上賣。",
+        "annal": "長社之夜，{name}未及。",
+        "effect": {},
+        "failed": true
+      }
+    ],
+    "unfinished": "{name}手上的「兩路買家」到季末還沒有了結。"
+  },
+  {
+    "id": "ch_hao_3",
+    "title": "城中豪族",
+    "kind": "章回",
+    "intro": "宛城被圍了。城裡的大族想出來。",
+    "chapter": {
+      "side": "haoqiang",
+      "no": 3,
+      "beat": "wancheng",
+      "after": [
+        "ch_hao_2"
+      ],
+      "sway_marks": {
+        "帶三娘": -1
+      },
+      "side_marks": {
+        "替官軍": "guan",
+        "替黃巾": "huang"
+      }
+    },
+    "stages": [
+      {
+        "id": "letter",
+        "event": "chq3_letter",
+        "where": {
+          "locations": [
+            "cao_manor"
+          ]
+        },
+        "hint": "莊院收到宛城鋪子的信",
+        "immediate": false
+      },
+      {
+        "id": "city",
+        "event": "chq3_house",
+        "where": {
+          "locations": [
+            "wan_city"
+          ]
+        },
+        "hint": "到宛城見豪族的家主",
+        "immediate": false
+      },
+      {
+        "id": "gate",
+        "event": "chq3_gate",
+        "where": {
+          "locations": [
+            "wan_city"
+          ]
+        },
+        "hint": "在城南找出城的路",
+        "immediate": false
+      },
+      {
+        "id": "wait",
+        "kind": "task",
+        "task": "chapter_beat",
+        "hint": "等宛城之戰",
+        "routes": [
+          {
+            "when": {
+              "果guan": 1
+            },
+            "go": "gwin"
+          }
+        ],
+        "next": "hwin"
+      }
+    ],
+    "endings": [
+      {
+        "id": "gwin",
+        "title": "營門口",
+        "text": "{?ch_hao_3.帶三娘:|{?ch_hao_3.替官軍:宛城破了。你帶出來的那一家人站在秦頡的營門口，對每一個進出的人都鞠躬。|宛城破了。}}\n\n{?ch_hao_3.帶三娘:三娘和兩個女兒在曹氏莊院住下了。第二天一早，莊院的灶房裡有餅的味道。丁伯說，這是他四十年來在莊院吃過最好的餅。}",
+        "annal": "宛城之戰，{name}{?ch_hao_3.帶三娘:自城南故水門，攜一婦及二女出，不取一錢。|潛引城中大族出城，歸於{?ch_hao_3.替官軍:官軍。|黃巾。}}",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "hwin",
+        "title": "一頂帳篷",
+        "text": "{?ch_hao_3.帶三娘:|{?ch_hao_3.替黃巾:黃巾守住了宛城。你帶出來的那一家人在南陽黃巾營裡分到一頂帳篷，家主坐在帳篷口，一整天沒說話。|黃巾守住了宛城。}}\n\n{?ch_hao_3.帶三娘:三娘和兩個女兒在曹氏莊院住下了。第二天一早，莊院的灶房裡有餅的味道。丁伯說，這是他四十年來在莊院吃過最好的餅。}",
+        "annal": "宛城之戰，{name}{?ch_hao_3.帶三娘:自城南故水門，攜一婦及二女出，不取一錢。|潛引城中大族出城，歸於{?ch_hao_3.替官軍:官軍。|黃巾。}}",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "missed",
+        "title": "沒趕上",
+        "text": "宛城那一仗打完的時候，你還沒把人帶出來。",
+        "annal": "宛城之戰，{name}未及。",
+        "effect": {},
+        "failed": true
+      }
+    ],
+    "unfinished": "{name}手上的「城中豪族」到季末還沒有了結。"
+  },
+  {
+    "id": "ch_hao_4",
+    "title": "押一邊",
+    "kind": "章回",
+    "intro": "朝廷的使者帶著詔書來了。",
+    "chapter": {
+      "side": "haoqiang",
+      "no": 4,
+      "beat": "luzhi_jailed",
+      "after": [
+        "ch_hao_2"
+      ],
+      "sway_marks": {
+        "送阿樁": 0.5,
+        "代阿樁": 0.5,
+        "輸糧": -0.5
+      },
+      "side_marks": {
+        "替官軍": "guan",
+        "替黃巾": "huang"
+      }
+    },
+    "stages": [
+      {
+        "id": "envoy",
+        "event": "chq4_envoy",
+        "where": {
+          "locations": [
+            "cao_manor"
+          ]
+        },
+        "hint": "回莊院接詔",
+        "immediate": false
+      },
+      {
+        "id": "night",
+        "event": "chq4_azhuang",
+        "where": {
+          "locations": [
+            "cao_manor"
+          ]
+        },
+        "hint": "夜裡在莊院",
+        "immediate": false
+      },
+      {
+        "id": "wait",
+        "kind": "task",
+        "task": "chapter_beat",
+        "hint": "等「盧植下獄」的消息",
+        "routes": [
+          {
+            "when": {
+              "果成": 1
+            },
+            "go": "hist"
+          }
+        ],
+        "next": "alt"
+      }
+    ],
+    "endings": [
+      {
+        "id": "hist",
+        "title": "換了一個人",
+        "text": "消息說盧植被押回洛陽了，來的是董卓。丁伯說：「換了一個不怕死人的。」\n\n{?ch_hao_4.送阿樁:阿樁寫了一封信回來，字是別人代寫的：「到了。曹公給我一把刀。刀很重。」丁伯把信看了很多遍，看到後來字都花了。}\n\n{?ch_hao_4.通賊:使者沒有等十天。第五天他就來了，帶著兵。莊院的牆頭上，竹籤被拔掉了一排。}",
+        "annal": "朝廷徵豪強子弟，{name}{?ch_hao_4.送阿樁:遣莊中少年從軍。|{?ch_hao_4.代阿樁:自請從軍，以代莊中少年。|{?ch_hao_4.通賊:陰輸糧於廣宗。|輸粟助餉。}}}",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "alt",
+        "title": "溝還是三道",
+        "text": "消息說盧植還在廣宗城外，溝還是三道。丁伯說：「那就還要等。」\n\n{?ch_hao_4.送阿樁:阿樁寫了一封信回來，字是別人代寫的：「到了。曹公給我一把刀。刀很重。」丁伯把信看了很多遍，看到後來字都花了。}\n\n{?ch_hao_4.通賊:使者沒有等十天。第五天他就來了，帶著兵。莊院的牆頭上，竹籤被拔掉了一排。}",
+        "annal": "朝廷徵豪強子弟，{name}{?ch_hao_4.送阿樁:遣莊中少年從軍。|{?ch_hao_4.代阿樁:自請從軍，以代莊中少年。|{?ch_hao_4.通賊:陰輸糧於廣宗。|輸粟助餉。}}}",
+        "effect": {
+          "stats": {
+            "xinde": 20,
+            "fame": 1
+          }
+        }
+      },
+      {
+        "id": "missed",
+        "title": "沒趕上",
+        "text": "使者再來的時候，你不在莊院。",
+        "annal": "朝廷徵豪強子弟，{name}未應。",
+        "effect": {},
+        "failed": true
+      }
+    ],
+    "unfinished": "{name}手上的「押一邊」到季末還沒有了結。"
+  },
+  {
+    "id": "ch_hao_5",
+    "title": "誰的天下",
+    "kind": "章回",
+    "intro": "廣宗要決戰了。曹操來了信。",
+    "chapter": {
+      "side": "haoqiang",
+      "no": 5,
+      "beat": "guangzong",
+      "after": [
+        "ch_hao_3",
+        "ch_hao_4"
+      ],
+      "after_beat": "luzhi_jailed",
+      "sway_marks": {
+        "守莊": -1
+      },
+      "side_marks": {
+        "替官軍": "guan",
+        "替黃巾": "huang"
+      }
+    },
+    "stages": [
+      {
+        "id": "letter",
+        "event": "chq5_letter",
+        "where": {
+          "locations": [
+            "cao_manor"
+          ]
+        },
+        "hint": "回莊院看曹操的信",
+        "immediate": false
+      },
+      {
+        "id": "field",
+        "event": "chq5_field",
+        "where": {
+          "locations": [
+            "luzhi_camp",
+            "guangzong"
+          ]
+        },
+        "hint": "到廣宗城外",
+        "immediate": false
+      },
+      {
+        "id": "side",
+        "event": "chq5_side",
+        "where": {
+          "locations": [
+            "luzhi_camp",
+            "guangzong"
+          ]
+        },
+        "hint": "決定這一場站在哪裡",
+        "immediate": false
+      },
+      {
+        "id": "wait",
+        "kind": "task",
+        "task": "chapter_beat",
+        "hint": "等廣宗決戰",
+        "routes": [
+          {
+            "when": {
+              "果guan": 1
+            },
+            "go": "gwin"
+          }
+        ],
+        "next": "hwin"
+      }
+    ],
+    "endings": [
+      {
+        "id": "gwin",
+        "title": "爆竹",
+        "text": "天下平定的消息傳到莊院，莊客放了一夜的爆竹。\n\n{?ch_hao_4.送阿樁:阿樁回來的那一天，丁伯在門口站了一個早上。阿樁走到他面前，個子比他高了一個頭。丁伯伸手摸了摸他的臉，說：「黑了。」}\n\n{?ch_hao_5.守莊:你回到莊院的時候，丁伯真的在門口。他手裡拿著那兩本冊子，一本糧，一本人。「人一個都沒少。」他說。}\n\n{?ch_hao_2.開窖:後山那個窖，丁伯說，明年還要再挖深一點。}",
+        "annal": "廣宗之役，{name}{?ch_hao_5.替官軍:以鄉兵從官軍。|{?ch_hao_5.替黃巾:以鄉兵從黃巾。|閉莊自守，一莊得全。}}{?ch_hao_5.回曹操:曹操嘗問以去就，{name}答曰：「{said:ch_hao_5}」}",
+        "effect": {
+          "stats": {
+            "xinde": 40,
+            "fame": 2
+          }
+        }
+      },
+      {
+        "id": "hwin",
+        "title": "竹籤",
+        "text": "黃天當立的消息傳到莊院，莊客把牆頭上的竹籤一根一根拔了，拔完了不知道該插什麼。\n\n{?ch_hao_4.送阿樁:阿樁沒有回來。曹操派人送來一把刀，說是他的。丁伯把刀掛在倉房的牆上，就掛在那本糧冊旁邊。}\n\n{?ch_hao_5.守莊:你回到莊院的時候，丁伯真的在門口。他手裡拿著那兩本冊子，一本糧，一本人。「人一個都沒少。」他說。}\n\n{?ch_hao_2.開窖:後山那個窖，丁伯說，明年還要再挖深一點。}",
+        "annal": "廣宗之役，{name}{?ch_hao_5.替官軍:以鄉兵從官軍。|{?ch_hao_5.替黃巾:以鄉兵從黃巾。|閉莊自守，一莊得全。}}{?ch_hao_5.回曹操:曹操嘗問以去就，{name}答曰：「{said:ch_hao_5}」}",
+        "effect": {
+          "stats": {
+            "xinde": 40,
+            "fame": 2
+          }
+        }
+      },
+      {
+        "id": "missed",
+        "title": "沒趕上",
+        "text": "廣宗那一仗打完的時候，你還沒有定下站在哪裡。",
+        "annal": "廣宗之役，{name}未及。",
+        "effect": {},
+        "failed": true
+      }
+    ],
+    "unfinished": "{name}手上的「誰的天下」到季末還沒有了結。"
   }
 ]

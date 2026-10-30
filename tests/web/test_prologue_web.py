@@ -30,7 +30,7 @@ DRIVER = r"""
 const vm = require("vm");
 // 整支 app.js（webharness 的 wholeApp）：最後一行啟動的呼叫前面把要測的名字交給 globalThis.__H
 const app = wholeApp(["S", "pro", "shown", "prologueKey", "topHtml", "tabsHtml", "idleMenu", "actionBar", "guideHtml", "nextGuidePage",
-  "guideCue", "scrollToGuideTarget", "setMain", "pageJianghu", "pagePractice", "pageCraft", "weekCardHtml", "trendsTopHtml", "sheetHtml", "applyGlow",
+  "guideCue", "scrollToGuideTarget", "setMain", "pageJianghu", "pagePractice", "pageCraft", "weekCardHtml", "chapterCardHtml", "trendsTopHtml", "sheetHtml", "applyGlow",
   "renderTop", "render", "goTab", "renderPage", "refreshPage", "enter", "sayLine", "pick", "forge", "updateForgeLine",
   "toggleLock", "trimForgeSel", "bookHtml", "peerHtml"]);
 

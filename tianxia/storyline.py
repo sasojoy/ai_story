@@ -36,6 +36,8 @@ from .rules import apply_effect, check_condition, day_seconds, fill_marks, jianf
 from .state import GameState, StoryCard, StoryProgress
 from .world_state import WorldStateStore
 
+WORLD = "世"  # vary 的虛擬線名：{?世.<世界旗標>:有|沒有}
+HISTORY = "史"  # vary 的虛擬線名：{?史.<大事 id>=<結果>:…}（結果：成、不成、guan、huang）
 UNFINISHED = "未了"  # StoryProgress.ending：季末還沒收
 OPTION = "story"  # 選單的 id 開頭：story:<線>、story:<線>:a<答案>、story:<線>:later
 LATER = "later"
@@ -158,9 +160,17 @@ def _split_else(body: str) -> tuple[str, str]:
 
 
 def vary(text: str, state: GameState, marks: dict[str, dict[str, int]] | None = None) -> str:
-    """{?線.記號:A|B}、{!線.記號:A}、{said:線}（模組說明）。marks 給了就用它（線 id → 記號），否則讀這個人的進度；
+    """{?線.記號:A|B}、{!線.記號:A}、{said:線}（模組說明）；線名寫「世」讀全服的世界旗標、寫「史」讀時刻表大事的結果。marks 給了就用它（線 id → 記號），否則讀這個人的進度；
     「說」是虛擬的記號：這條線裡寫過話就算有。寫壞的（沒有收尾的 }）原樣留著。"""
     def has(line: str, mark: str) -> bool:
+        if line == WORLD:  # {?世.旗標:…}：全服的世界旗標（章回主線：別的陣營的人做了什麼，改這裡怎麼寫）
+            return mark in state.world.flags
+        if line == HISTORY:  # {?史.大事id=結果:…}：時刻表那一件大事結算成這樣（章回主線；結果照 chapters.outcome_mark 去掉「果」）
+            from .chapters import outcome_mark  # noqa: PLC0415  chapters → storyline
+
+            event_id, _, want = mark.partition("=")
+            result = state.world.timeline.get(event_id)
+            return result is not None and outcome_mark(result.key) == f"果{want}"
         if marks is not None and line in marks:
             got = marks[line]
         else:
@@ -211,15 +221,17 @@ def roll_start(state: GameState, content: Content, rng) -> StoryDef | None:
     return None
 
 
-def start(state: GameState, content: Content, line: StoryDef, custom: bool = True) -> StoryProgress | None:
-    """開一條線：進第一段、排一張開頭的卡。custom 是程式組的線（整份 StoryDef 存進進度；內容寫的線由 roll_start 擲中後給 False）。
+def start(state: GameState, content: Content, line: StoryDef, custom: bool = True, card: bool = True) -> StoryProgress | None:
+    """開一條線：進第一段、排一張開頭的卡（card 關著不排：章回主線開在江湖頁最上面的章回卡上，不另跳一張）。
+    custom 是程式組的線（整份 StoryDef 存進進度；內容寫的線由 roll_start 擲中後給 False）。
     關著、這一季開過同一條、這一種沒有空位都是 None。第一段是事件而且人就在那裡時，由呼叫端端出來（ready_event）。"""
     p = state.player
     if not on(content, state) or line.id in p.storylines or not room(state, content, line.kind):
         return None
     progress = StoryProgress(line=line.id, started=state.world.time, custom=line if custom else None)
     p.storylines[line.id] = progress
-    p.story_cards.append(StoryCard(line=line.id, kind="start", title=line.title, text=fill_marks(line.intro, state), image=line.image))
+    if card:
+        p.story_cards.append(StoryCard(line=line.id, kind="start", title=line.title, text=fill_marks(line.intro, state), image=line.image))
     _enter(state, content, progress, line, line.stages[0].id)  # 第一段若有段落卡，排在開頭那張後面
     return progress
 
@@ -452,7 +464,7 @@ def tick(state: GameState, content: Content, world: WorldStateStore) -> tuple[li
         line = definition(content, progress)
         if line is None:
             continue
-        if state.world.ended:
+        if state.world.ended and not _settles_at_end(state, content, world, progress, line):
             msgs += close(state, content, world, progress, line)
             continue
         for _ in range(len(line.stages) + 1):  # 一下最多走過每一段一次（task 接 task 都成立時不會無限走）
@@ -463,6 +475,15 @@ def tick(state: GameState, content: Content, world: WorldStateStore) -> tuple[li
             if progress.ending is not None:
                 break
     return msgs, ready_event(state, content) if state.pending_event is None else None
+
+
+def _settles_at_end(state: GameState, content: Content, world: WorldStateStore, progress: StoryProgress, line: StoryDef) -> bool:
+    """休季那一刻還能收的章回：最後一段等的大事在收季之前結算了（例：廣宗決戰跟季末同一刻收），照結果走結局，不寫此事未了。"""
+    stage = line.stage(progress.stage)
+    if line.chapter is None or stage is None or stage.kind != "task" or progress.go is not None:
+        return False
+    check = TASKS.get(stage.task or "")
+    return check is not None and check(state, content, world, progress, stage)
 
 
 def _next_step(state: GameState, content: Content, world: WorldStateStore, progress: StoryProgress, line: StoryDef) -> str | None:

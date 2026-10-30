@@ -20,6 +20,7 @@ from pydantic import model_serializer  # Option 的 outcomes 空著不寫（減�
 from . import arts as arts_mod
 from . import ascend  # 破境卡（招式與絕學稿案第三節）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
+from . import chapters  # 章回主線（企劃者 2026-10-29）
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, create, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
     deeds, fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, feasts, plans,
@@ -9981,8 +9982,14 @@ class Game:
         return [head] + intro + self._story_tick()
 
     def _story_tick(self) -> list[str]:
-        """一條線往前走（storyline.tick）；剛進的那一段是事件、人就在那裡時直接端出來。關著是空的。"""
+        """一條線往前走（storyline.tick）；剛進的那一段是事件、人就在那裡時直接端出來。關著是空的。
+        章回主線（chapters）排在前後：先開該開的回、收錯過的回，走完之後把剛走進最後一段的回記成做成（世界的帳改了就存共用的季）。"""
+        before = (dict(self.state.world.chapter_done), {k: dict(v) for k, v in self.state.world.chapter_weights.items()})
+        head = chapters.tick(self.state, self.content, self.world)
         msgs, event_id = storyline.tick(self.state, self.content, self.world)
+        msgs = head + msgs + chapters.after(self.state, self.content)
+        if (self.state.world.chapter_done, self.state.world.chapter_weights) != before:
+            self._save_season()
         if event_id is not None:
             msgs += self._present(self.content.events[event_id])
         return msgs

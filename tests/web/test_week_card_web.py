@@ -227,3 +227,33 @@ def test_a_greyed_cell_says_why_when_tapped():
     page = run(m, "return H.actionBar(H.S.main);")
     for cell in re.findall(r'<button class="act-ink off"[^>]*>', page):
         assert 'data-act="opt-why"' in cell and re.search(r'data-why="[^"]+"', cell) and 'aria-disabled="true"' in cell
+
+
+def _chapter_main(loc: str):
+    """章回主線（chapters.card）：投靠官軍、站在 loc，同步過一次（第一回開了）的 /api/main。"""
+    from jianfa_kit import ready
+
+    content = real_content("week7")
+    content.config.auto_open_first_season = True
+    game = Game.new(content, "沈浪", rng=random.Random(0))
+    game.client = None
+    ready(game, side="guan", loc=loc, level=20)
+    game._story_tick()  # noqa: SLF001
+    return server.main_view(game)
+
+
+def test_the_chapter_card_says_which_chapter_what_next_and_where_to_go():
+    m = _chapter_main("luoyang_palace")
+    c = m["week_card"]["chapter"]
+    html = run(m, "return H.chapterCardHtml(H.S.main);")
+    assert '<span class="ch-no">第一回</span><b class="ch-title">投軍長社</b>' in html
+    assert f"波才大敗朱儁・{c['at']}" in html and "下一步：到長社北門</p>" in html  # 說明裡已經有地名：不再補（長社・幾分）
+    assert 'data-act="tab" data-tab="map"' in html and "官軍已有 0 人做完這一回" in html
+    m = _chapter_main("changshe")  # 人就在長社：卡上一顆「去做」（按未了之事那一顆），不叫人去輿圖
+    html = run(m, "return H.chapterCardHtml(H.S.main);")
+    assert 'data-act="choose" data-id="story:ch_guan_1">去做 ›' in html and 'data-tab="map"' not in html
+    m["week_card"]["chapter"].update(scene=True, here=False, hint="眼前這一幕：北門")  # 那一幕端出來了：沒有按鈕
+    html = run(m, "return H.chapterCardHtml(H.S.main);")
+    assert "眼前這一幕：北門" in html and "下一步" not in html and "ch-go" not in html
+    m["week_card"].pop("chapter")
+    assert run(m, "return H.chapterCardHtml(H.S.main);") == ""
