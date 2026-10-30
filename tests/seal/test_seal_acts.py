@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 import server
-from conftest import real_content
+from conftest import no_plans, real_content
 from test_seal import put_shards, seal_problems, sealed  # noqa: F401  sealed 是夾具
 from test_seal_revamp import revamp
 from tianxia import calendar, seal, seal_acts
@@ -182,8 +182,10 @@ def test_the_public_line_names_nobody(sealed):
 
 # ── Task 3～6：正式內容 ──
 
-def _world(profile="season21", *, on=True, conquest_on=True):
+def _world(profile="season21", *, on=True, conquest_on=True, plans=True):
     c = real_content(profile) if conquest_on else real_content(profile)  # 正式內容 PM 2026-10-22 起打開
+    if not plans:
+        no_plans(c)  # 引將測的是「人物原本站在原處」：行程（世界活起來）會先把有行程的人（波才）帶走，要寫死他在哪的測試關掉
     c.config.auto_open_first_season = True
     c.config.seal.revamp.enabled = on
     c.config.newbie_days, c.config.newbie_real_hours = -1, 0  # 新手期的體力回復加快不混進承露的帳
@@ -222,8 +224,8 @@ def _do(c, w, name, fn, now=10.0):
     return out
 
 
-def _holder(shard, *, profile="season21", side="huang", at="yingchuan_wilds", on=True, name="懷璽", conquest_on=True):
-    c, w = _world(profile, on=on, conquest_on=conquest_on)
+def _holder(shard, *, profile="season21", side="huang", at="yingchuan_wilds", on=True, name="懷璽", conquest_on=True, plans=True):
+    c, w = _world(profile, on=on, conquest_on=conquest_on, plans=plans)
     _give(c, w, shard, name)
     return c, w, _person(c, w, name, side=side, at=at)
 
@@ -378,7 +380,7 @@ def test_the_admin_sees_who_used_what():
 def test_yinjiang_pulls_a_figure_to_you_and_sends_him_back_on_time():
     from tianxia import figures
 
-    c, w, g = _holder("xuanniu", at="changshe")
+    c, w, g = _holder("xuanniu", at="changshe", plans=False)  # 行程開著時波才一開季就先被帶到長社（盤算公告），沒東西可引
     _use(c, w, target="bocai")
     season = w.get_season()
     assert season.figures["bocai"].location == "changshe"
@@ -405,7 +407,7 @@ def test_yinjiang_releases_early_when_the_timetable_moves_him():
     from tianxia import figures
     from tianxia.models import FigureChange
 
-    c, w, g = _holder("xuanniu", at="changshe")
+    c, w, g = _holder("xuanniu", at="changshe", plans=False)
     _use(c, w, target="bocai")
     season = w.get_season()
     v = _vehicle(c, season)
@@ -414,7 +416,7 @@ def test_yinjiang_releases_early_when_the_timetable_moves_him():
     assert season.seal_acts[0].ended == pytest.approx(season.time)
     assert seal_acts.pinned(season, "bocai") is None
 
-    c, w, g = _holder("xuanniu", at="changshe")
+    c, w, g = _holder("xuanniu", at="changshe", plans=False)
     _use(c, w, target="bocai")
     season = w.get_season()
     v = _vehicle(c, season)
@@ -430,7 +432,7 @@ def test_a_figure_staying_put_ends_nothing():
     from tianxia import figures
     from tianxia.models import FigureChange
 
-    c, w, g = _holder("xuanniu", at="changshe")
+    c, w, g = _holder("xuanniu", at="changshe", plans=False)
     _use(c, w, target="bocai")
     season = w.get_season()
     figures.apply(_vehicle(c, season), c, "bocai", FigureChange(fate="受挫"))
@@ -442,7 +444,7 @@ def test_a_pinned_figure_does_not_wander():
     """14 天的季人物會自己走動：被引將釘著的不走、不跟、不趕（亂數照擲，別人的序列不位移）。"""
     from tianxia import figure_life, figures
 
-    c, w, g = _holder("xuanniu", profile=None, at="yingchuan_wilds")
+    c, w, g = _holder("xuanniu", profile=None, at="yingchuan_wilds", plans=False)  # 有行程的人本來就不亂晃（plans.holds），挑到他就測不到引將
     fid = next(f for f, d in c.figures.items() if d.character and len(c.characters[d.character].haunts) > 1
                and figures.state_of(_vehicle(c, w.get_season()), c, f).location in c.characters[d.character].haunts
                and figures.state_of(_vehicle(c, w.get_season()), c, f).location != "yingchuan_wilds")

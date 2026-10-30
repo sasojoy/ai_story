@@ -189,9 +189,12 @@ def test_after_all_seven_acts_the_old_model_still_reads_the_world_row():
     from test_seal_acts import _do, _give, _person
     from test_seal_acts3 import _season, _world
 
+    from conftest import no_plans
+
     from tianxia import conquest
 
     c, w = _world()  # 21 天季＋領地爭奪打開：鎮地、補缺才起用得了
+    no_plans(c)  # 引將要引的波才，行程開著時一開季就先被帶到長社（盤算公告）：「已經在這裡」，起用不成
     c.config.admins = ["管理"]
     cases = [  # 碎片、持有者、站哪、目標
         ("xuanniu", "甲客", "changshe", "bocai"), ("yunzhuan", "乙客", "yingchuan_wilds", ""),
