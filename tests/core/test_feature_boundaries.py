@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
@@ -140,7 +141,45 @@ def test_every_transitional_import_points_at_an_old_module_not_the_core_or_a_pac
         assert mod[1] not in CORE and mod[1] not in ("core", "features"), entry
 
 
+SERVICES = TIANXIA / "core" / "services.py"
+CTX_NAMES = ("ctx", "g", "game")  # 功能包裡拿 Game 的變數名（掛鉤的 ctx、路由 lambda 的 g、路由裡的 game）
+
+
+def service_list() -> set[str]:
+    """tianxia/core/services.py docstring 那張服務清單上的名字（寫成 `ctx.<名字>` 的）。"""
+    return set(re.findall(r"`ctx\.(\w+)", ast.get_docstring(ast.parse(SERVICES.read_text(encoding="utf-8"))) or ""))
+
+
+def off_list_calls(source: str, module: str, allowed: set[str]) -> list[str]:
+    """功能包的模組碰了 Game 上不在服務清單的東西（ctx.x、g.x、game.x；手冊 3.3「只准叫服務清單上的方法」）。
+    只認那三個變數名：拿別的名字接 Game 的（管理者動到的別人的存檔）看不到，第一版先這樣。"""
+    out = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in CTX_NAMES \
+                and node.attr not in allowed:
+            out.append(f"{module}:{node.lineno} {node.value.id}.{node.attr}")
+    return out
+
+
+def test_feature_packages_only_touch_the_service_list_on_the_game():
+    """功能包經過 Game 只碰服務清單上的（手冊 3.3）：Game.mall_* 這一類委派是給還沒改的呼叫端過渡用的（3.10），包自己直接叫自己的 actions。"""
+    allowed = service_list()
+    assert {"state", "content", "_log", "_wallet", "wallet"} <= allowed  # 清單讀得到
+    found = []
+    for name in _packages():
+        for path in _package_files(name):
+            found += off_list_calls(path.read_text(encoding="utf-8"), _modname(path), allowed)
+    assert found == []
+
+
 # ── 掃描本身抓得到（不然上面幾條永遠綠）──
+
+
+def test_the_service_scanner_catches_a_game_method_off_the_list():
+    allowed = service_list()
+    assert off_list_calls("def f(ctx):\n    return ctx._tavern_price(1)\n", "m", allowed) == ["m:2 ctx._tavern_price"]
+    assert off_list_calls("route = lambda g: g.mall_view()\n", "m", allowed) == ["m:1 g.mall_view"]
+    assert off_list_calls("def f(ctx):\n    ctx._log(['x'])\n    return ctx.state.player\n", "m", allowed) == []
 
 
 @pytest.mark.parametrize("source, expected", [

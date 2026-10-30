@@ -23,6 +23,9 @@
 - `ctx._wallet()`：商城開著時的 Wallet（資料庫那一側）；關著是 None。`ctx._mall_owner()`：錢包的主人（名號的 casefold）
 - `ctx.pill_cap()`、`ctx.pills_left_today()`：回體丹一天的上限（含月卡）與今天還能服幾顆
 
+包寄放在 Game 上的屬性（過渡，同 3.10 的委派：包外的呼叫端與測試還在 Game 上讀；第 2 階那一包的線再碰到時搬走）
+- `ctx.mall_bought`、`ctx.mall_already`：商城上一次 actions.buy 的結果（買成的商品 id；同一個編號早就買好的那一件），伺服器在鎖裡讀
+
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """
 from __future__ import annotations
