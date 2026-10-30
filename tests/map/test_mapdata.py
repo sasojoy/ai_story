@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import random
-import re
 
 from conftest import classic_rules, real_content, third_party_gentry
 from tianxia import calendar, mapdata, mapview, territory
@@ -43,7 +42,7 @@ def test_the_base_lists_open_places_roads_and_regions():
     assert b["key"] == mapdata.base_key(game.state, game.content) and b["svg"].startswith("<svg")
 
 
-# ── 輿圖表現 S1：底圖多 terrain 與 view 兩個鍵（給 W1 以後的新圖用；舊圖照舊畫 svg）─────────────
+# ── 輿圖表現 S1：底圖多 view 一個鍵（給 W1 以後的新圖用；舊圖照舊畫 svg；S1 原本另送的 terrain 作廢，山河林與名字走 paint）──
 
 OLD_BASE_KEYS = {"key", "w", "h", "svg", "places", "edges", "roads", "regions", "insight_kinds", "insight_layer", "world", "paint"}
 FORMAL_VIEW = {  # content/config.json 的 map_view（設計 4：九個鍵；W1 以後的畫面照這幾個數字取景）
@@ -53,13 +52,13 @@ FORMAL_VIEW = {  # content/config.json 的 map_view（設計 4：九個鍵；W1 
 
 
 @pytest.mark.parametrize("profile", [None, "weekend", "season21", "week7"])
-def test_the_base_adds_only_the_view_and_the_terrain(profile):
+def test_the_base_adds_only_the_view(profile):
     game = _game(profile=profile)
     b = game.map_base()
-    assert set(b) - {mapdata.VIEWER_MOSTLY} == OLD_BASE_KEYS | {"view", "terrain"}
-    assert b["svg"] == mapview.render_base(game.state, game.content)  # 舊圖照舊畫：位元組不變（W5 才拿掉）
+    assert set(b) - {mapdata.VIEWER_MOSTLY} == OLD_BASE_KEYS | {"view"}  # 沒有 terrain：山河林與名字是 Joy 的 paint
+    assert b["svg"] == mapview.render_base(game.state, game.content)  # 舊圖照舊畫：位元組不變（W4 才拿掉）
     assert b["view"] == game.content.config.map_view.model_dump() == FORMAL_VIEW
-    assert json.loads(json.dumps(b))["view"] == FORMAL_VIEW and json.loads(json.dumps(b))["terrain"] == b["terrain"]  # 送得出去
+    assert json.loads(json.dumps(b))["view"] == FORMAL_VIEW  # 送得出去
 
 
 def test_the_view_is_whatever_the_config_says():
@@ -71,45 +70,22 @@ def test_the_view_is_whatever_the_config_says():
     assert (view["open_units"], view["open_width_max"], view["patch_radius"]) == (320, 520, 45.5) and view["zoom_max"] == 1.6
 
 
-def test_the_terrain_has_every_peak_hill_tree_river_and_name_of_the_map():
-    game = _game()
-    t = game.map_base()["terrain"]
-    assert set(t) == {"peaks", "trees", "rivers", "labels"}
-    # 正式內容現在的數目：山頭 213＝山脈 101 座（前後排各 101，共 202）＋丘 11 座（設計稿寫 202，沒算丘）；樹 161；河 4；
-    # 名字 11＝河名 4＋有名字的山 7。內容搬了地點、加了山河時照新的數目改
-    assert (len(t["peaks"]), len(t["trees"]), len(t["rivers"]), len(t["labels"])) == (213, 161, 4, 11)
-    assert sum(p["back"] for p in t["peaks"]) == 101
-    assert all(set(p) == {"x", "y", "size", "back"} for p in t["peaks"]) and all(set(p) == {"x", "y", "r"} for p in t["trees"])
-    assert all(set(r) == {"points", "width", "color"} and r["color"] in ("blue", "yellow") for r in t["rivers"])
-    assert all(set(l) == {"text", "x", "y", "anchor"} and l["anchor"] in ("start", "middle") for l in t["labels"])
-    w, h = game.content.map.width, game.content.map.height
-    assert all(0 <= p["x"] <= w and 0 <= p["y"] <= h and p["size"] > 0 for p in t["peaks"])
-
-
-def test_the_names_sit_where_the_svg_writes_them():
-    b = _game().map_base()
-    for label in b["terrain"]["labels"]:
-        tag = re.search(rf'<text x="{label["x"]:g}" y="{label["y"]:g}"([^>]*)>{label["text"]}</text>', b["svg"])
-        assert tag, label
-        assert ('text-anchor="middle"' in tag.group(1)) == (label["anchor"] == "middle"), label
-
-
-def test_opening_a_place_changes_the_svg_but_not_the_terrain():
+def test_opening_a_place_changes_the_svg_but_not_the_view():
     game = _game(profile=None)  # 14 天的季：南華觀要等 xi_open
     before = game.map_base()
     game.state.world.flags.add("xi_open")
     after = game.map_base()
     assert after["key"] != before["key"] and after["svg"] != before["svg"]
-    assert after["terrain"] == before["terrain"] and after["view"] == before["view"]  # 只跟內容有關，跟開放了哪些地點無關
+    assert after["view"] == before["view"]  # 只跟設定有關，跟開放了哪些地點無關
 
 
-def test_each_viewer_shares_the_one_terrain_and_view():
+def test_each_viewer_shares_the_one_view():
     core = _game().map_base(viewer=False)
     mine = mapdata.with_mostly(core, "k", {})
-    assert mine["terrain"] is core["terrain"] and mine["view"] is core["view"]  # 換上看的人的名字旁，重的部分不重複存
+    assert mine["view"] is core["view"]  # 換上看的人的名字旁，不重複存
 
 
-def test_the_state_does_not_carry_the_terrain_or_the_view():
+def test_the_state_does_not_carry_the_view():
     st = _game().map_state()
     assert "terrain" not in st and "view" not in st
 
