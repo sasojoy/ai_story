@@ -73,8 +73,10 @@ def run_suite(checkout: Path, out: Path, date: str, workers: int) -> tuple[int, 
     shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, "TIANXIA_DB": str(tmp / "nightly.db"), "PYTHONIOENCODING": "utf-8"}
+    junit = out / f"{date}.xml"
+    junit.unlink(missing_ok=True)  # 同一天重跑：pytest 沒寫出新的（結束碼 3、4、被砍），不能拿早上那一份當這一次的
     cmd = [sys.executable, "-m", "pytest", "-q", "-n", str(workers), "-m", "slow or not slow",
-           "-p", "no:cacheprovider", "-rfE", f"--junitxml={out / f'{date}.xml'}"]
+           "-p", "no:cacheprovider", "-rfE", f"--junitxml={junit}"]
     flags = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
     start = time.time()
     with open(out / f"{date}.log", "wb") as log:
@@ -148,7 +150,8 @@ def render(summary: dict, previous: dict | None, new: list[str], old: list[str],
            span: str, commits: list[str]) -> str:
     lines = [f"每日整套 {summary['date']}（develop {summary['sha'][:8]}，{summary.get('started', '')}開始）"]
     if summary.get("result") is None:
-        lines.append(f"結果：沒跑完（pytest 結束碼 {summary.get('exit')}，沒有 junit 結果；看 {summary['date']}.log 最後幾行）")
+        lines.append(f"結果：沒跑完（pytest 結束碼 {summary.get('exit')}，不是 0、1 或沒有 junit 結果；不比、不留 .json；"
+                     f"看 {summary['date']}.log 最後幾行）")
     else:
         r = summary["result"]
         lines.append(f"結果：{r['passed']} passed，{r['failures']} failed，{r['errors']} error，{r['skipped']} skipped"
@@ -174,9 +177,15 @@ def render(summary: dict, previous: dict | None, new: list[str], old: list[str],
     return "\n".join(lines) + "\n"
 
 
+def finished(code: int | None) -> bool:
+    """pytest 的結束碼算不算跑完整套：0 全綠、1 有紅。2 是中斷（junit 只有跑到的那一半）、3 內部錯誤、4 用法錯誤、5 一條都沒收到；
+    None 是只重寫摘要、不知道結束碼（--summarize-only 又沒有那一天的 json），照 junit 算。"""
+    return code is None or code in (0, 1)
+
+
 def summarize(repo: Path, out: Path, checkout: Path, date: str, sha: str, extra: dict) -> str:
-    """讀這一次的 junit、跟前一次比、寫 <日期>.json 與 latest.txt；回摘要文字。"""
-    result = parse_junit(out / f"{date}.xml", checkout)
+    """讀這一次的 junit、跟前一次比、寫 <日期>.json 與 latest.txt；回摘要文字。結束碼不是 0、1 的當成沒跑完。"""
+    result = parse_junit(out / f"{date}.xml", checkout) if finished(extra.get("exit")) else None
     summary = {"date": date, "sha": sha, **extra, "result": None if result is None else
                {k: v for k, v in result.items() if k != "failed"},
                "failed": [] if result is None else result["failed"]}

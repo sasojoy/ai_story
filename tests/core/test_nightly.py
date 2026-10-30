@@ -100,6 +100,28 @@ def test_an_unfinished_run_keeps_no_json_and_the_next_compares_with_the_last_fin
     assert "前一次：2026-10-29" in text and "舊紅（前一次就紅）：1 條" in text
 
 
+def test_a_rerun_does_not_pick_up_the_morning_junit(place, monkeypatch, tmp_path):
+    """同一天重跑時 pytest 沒寫出新的 junit（結束碼 3、4，或被排程的時限砍掉）：不能把早上那一份當成這一次的結果、
+    掛在新的 SHA 上存成下一次的比較基準。開跑前先刪掉同一天的 junit。"""
+    out, checkout = place
+    _junit(out / "2026-10-31.xml", [("tests.core.test_a", "test_one", "pass")])  # 早上那一次，全綠
+    monkeypatch.setattr(nightly.tempfile, "gettempdir", lambda: str(tmp_path / "temp"))
+    monkeypatch.setattr(nightly.subprocess, "call", lambda *a, **k: 3)  # 內部錯誤：沒寫 junit
+    code, _ = nightly.run_suite(checkout, out, "2026-10-31", 4)
+    assert code == 3 and not (out / "2026-10-31.xml").exists()
+    text = _summarize(out, checkout, "2026-10-31", sha="455664ac0000", exit=code)
+    assert "沒跑完" in text and not (out / "2026-10-31.json").exists()
+
+
+@pytest.mark.parametrize("code", [2, 3, 4, 5])
+def test_only_exit_codes_0_and_1_count_as_a_finished_run(place, code):
+    """結束碼 2（中斷）時 pytest 會寫出只跑了一半的 junit；3、4、5 也不是跑完整套。只有 0（全綠）、1（有紅）算跑完。"""
+    out, checkout = place
+    text = _summarize(out, checkout, "2026-10-31", exit=code, cases=[("tests.core.test_a", "test_one", "pass")])
+    assert "沒跑完" in text and f"結束碼 {code}" in text and "passed" not in text
+    assert not (out / "2026-10-31.json").exists()
+
+
 def test_latest_and_the_ps1_carry_a_bom(place):
     """Windows PowerShell 5.1 沒有 BOM 會照 ANSI 讀：nightly.ps1 的中文全變亂碼、Get-Content latest.txt 讀錯。"""
     out, checkout = place
