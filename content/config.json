@@ -63,6 +63,10 @@
   "bot_tick_seconds": 20,
   "world_tick_seconds": 10,
   "web_push": {"enabled": true},
+  "map_view": {
+    "open_units": 250, "zoom_max": 1.6, "near_from": 0.8, "mid_from": 0.45,
+    "named_hops_near": 2, "named_hops_mid": 1, "switch_zoom": 0.6, "patch_radius": 60
+  },
   "bot_fill_seconds": 3600,
   "battle": {"push_max": 20},
   "fuse_quality": {
