@@ -364,6 +364,13 @@ def test_a_line_and_its_erasing_are_saved_to_the_season():
     assert not [i for i in game.world.get_season().inscriptions if i.place == "yingshui"]
 
 
+def test_the_scene_follows_the_place_kind():
+    """背景照這一處的地點種類畫（Joy 10/30 六套背景）：潁水河畔是渡。"""
+    game = _game()
+    _walked(game)
+    assert game.outing_view()["trip"]["scene"] == "ford"
+
+
 def test_road_lines_are_rare():
     """Joy 10/30「（見）不用（拿掉），但是不用出現太頻繁」：一趟最多一行，每段兩成。"""
     cfg = _game().content.config.jianfa

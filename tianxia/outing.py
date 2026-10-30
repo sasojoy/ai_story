@@ -23,6 +23,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
+from . import explore_one
 from .models import Content
 from .rules import jianfa
 from .state import GameState, Inscription, Outing, OutingBeat
@@ -114,6 +115,8 @@ def view(state: GameState, content: Content) -> dict | None:
     if trip is not None:
         out["trip"] = {
             "place": content.locations[trip.place].name if trip.place in content.locations else trip.place,
+            # 背景畫哪一套：這一處的地點種類（探索那六張表，explore_one.kind_of）
+            "scene": explore_one.kind_of(content.config.jianfa, content.locations[trip.place]).kind if trip.place in content.locations else explore_one.WILD,
             "total": trip.total, "done": trip.done, "end": trip.end,
             "waiting": not trip.end and bool(trip.beats) and trip.beats[-1].stop,
             "title": END_TITLES.get(trip.end, ""), "end_line": END_LINES.get(trip.end, ""),
