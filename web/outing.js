@@ -21,9 +21,15 @@
   const OUTING_FOE_ART = ["guan", "bandit", "retainer", "beast"];
   for (const look of OUTING_FOE_ART) { OUTING_SHEETS[`foe_${look}_idle_attack`] = 8; OUTING_SHEETS[`foe_${look}_hit_fall`] = 6; }
   const outingFoeSheet = (look, base) => (OUTING_FOE_ART.includes(look) ? `foe_${look}_${base}` : `foe_${base}`);
-  // 野地四層（由遠到近）與各自捲的速度：遠景最慢、前景比角色快、蓋在角色前面。別的地點類型的四層還沒畫，先都用野地
-  const OUTING_LAYERS = [["bg_wild_far", 0.1, -30, 400], ["bg_wild_mid", 0.4, 50, 260], ["bg_wild_ground", 1, 210, 150]];
-  const OUTING_FRONT = ["bg_wild_front", 1.6, 240, 150];
+  // 背景四層（由遠到近）與各自捲的速度：遠景最慢、前景比角色快、蓋在角色前面。檔名 bg_<地點種類>_<層>，
+  // 地點種類是伺服器的 trip.scene（探索那六張表：town 城、temple 寺、ford 渡、wild 野、hill 山、camp 營；Joy 10/30 六套都畫了），認不得的用野
+  const OUTING_SCENES = ["town", "temple", "ford", "wild", "hill", "camp"];
+  const OUTING_LAYERS = [["far", 0.1, -30, 400], ["mid", 0.4, 50, 260], ["ground", 1, 210, 150]];
+  const OUTING_FRONT = ["front", 1.6, 240, 150];
+  const outingBg = (layer) => {
+    const t = outingTrip(), scene = t && OUTING_SCENES.includes(t.scene) ? t.scene : "wild";
+    return outingImg(`bg_${scene}_${layer}`);
+  };
   const OUTING_W = 720, OUTING_H = 360, OUTING_GY = 300, OUTING_HX = 190;
   const OUTING_CELL = 220, OUTING_AX = 100, OUTING_BY = 212;
   const OUTING_KIND = { material: "料", encounter: "戰", event: "事", insight: "悟", trace: "見" };
@@ -53,14 +59,19 @@
   function outingSpeed() { try { return Number(localStorage.getItem(OUTING_SPEED_KEY)) === 2 ? 2 : 1; } catch (e) { return 1; } }
   function outingSaveSpeed(v) { try { localStorage.setItem(OUTING_SPEED_KEY, String(v)); } catch (e) { /* 存不了就這一頁有效 */ } }
 
-  function outingImages() {
-    if (OW.imgs) return OW.imgs;
-    OW.imgs = {};
-    for (const name of [...Object.keys(OUTING_SHEETS), ...OUTING_LAYERS.map((x) => x[0]), OUTING_FRONT[0]]) {
+  function outingImg(name) {
+    OW.imgs = OW.imgs || {};
+    if (!OW.imgs[name]) {
       const img = new Image();
       img.src = `${OUTING_IMG}${name}.webp`;
       OW.imgs[name] = img;
     }
+    return OW.imgs[name];
+  }
+  // 動作圖一開就全載；背景只載這一處那一套（outingBg 第一次畫到時才載）
+  function outingImages() {
+    for (const name of Object.keys(OUTING_SHEETS)) outingImg(name);
+    for (const [layer] of [...OUTING_LAYERS, OUTING_FRONT]) outingBg(layer);
     return OW.imgs;
   }
 
@@ -511,7 +522,7 @@
     const cx = cv.getContext("2d"), I = OW.imgs, H = OW.hero, now = performance.now();
     cx.fillStyle = "#efe6d2";
     cx.fillRect(0, 0, OUTING_W, OUTING_H);
-    for (const [name, par, y, h] of OUTING_LAYERS) outingTile(cx, I[name], par, y, h);
+    for (const [layer, par, y, h] of OUTING_LAYERS) outingTile(cx, outingBg(layer), par, y, h);
     for (const p of OW.props) {
       if (p.kind === "glint" && !p.taken) {
         cx.fillStyle = p.rare ? `rgba(255,200,80,${0.5 + 0.5 * Math.sin(now / 120)})` : `rgba(255,255,240,${0.5 + 0.5 * Math.sin(now / 120)})`;
@@ -570,9 +581,9 @@
       cx.textAlign = "center";
       cx.fillText(H.bubble, x, y + 9);
     }
-    const [fname, par, y, h] = OUTING_FRONT;
+    const [flayer, par, y, h] = OUTING_FRONT;
     cx.globalAlpha = 0.95;
-    outingTile(cx, I[fname], par, y, h);
+    outingTile(cx, outingBg(flayer), par, y, h);
     cx.globalAlpha = 1;
     for (const p of OW.parts) {
       p.life += d; p.x += p.vx * d; p.y += p.vy * d;
