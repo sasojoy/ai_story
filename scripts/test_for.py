@@ -30,10 +30,12 @@
   （「import 了 engine」不再算相關：engine.py 照上面那一條）。
 - content/：test_content.py ＋ 寫到那個檔名的測試檔；test_real_content.py 不自動跟（每日整套會跑），--slow 才加。
 - web/：寫到那個檔名的測試檔（main.js、map.js、outing.js 照 app.js 挑），加上 test_server.py。
-- tests/ 裡的測試檔：跑它自己；tests/kit/ 這類共用工具：import 它的測試檔；tests/fixtures/：寫到那個檔名的測試檔。
+- tests/ 裡的測試檔：跑它自己，連 slow 一起（改了就是要跑它；挑到的其他檔照舊不含 slow，所以分兩次跑）；
+  tests/kit/ 這類共用工具：import 它的測試檔；tests/fixtures/：寫到那個檔名的測試檔。
 - tests/conftest.py、pyproject.toml、requirements*.txt：不加任何東西（整套留給每日整套）。
 - docs/、CLAUDE.md 這類文件：不跑。
-slow 不自動跟（--slow 才加，連核心測試的 slow 一起）。挑到三個檔以上預設 -n 4（不寫 auto：同一台常有別的代理在跑），
+slow 不自動跟（--slow 才加，連核心測試的 slow 一起）：挑到的檔整個標 slow 的，開跑前列出來；全被 slow 濾光、一條都沒跑時
+說要 --slow、結束碼 0（不是 pytest 的 5）。挑到三個檔以上預設 -n 4（不寫 auto：同一台常有別的代理在跑），
 -- 之後給了 -n 就照給的。"""
 from __future__ import annotations
 
@@ -119,8 +121,10 @@ DOMINANT_MIN = 3
 
 @dataclass
 class Pick:
-    """挑到的東西。files 整個檔跑（不含 slow，--slow 才含）；core 加核心測試；smoke 加煙霧；everything 是整套。"""
+    """挑到的東西。files 整個檔跑（不含 slow，--slow 才含）；own 是改到的測試檔本身（也在 files 裡，連 slow 一起跑）；
+    core 加核心測試；smoke 加煙霧；everything 是整套。"""
     files: set[Path] = field(default_factory=set)
+    own: set[Path] = field(default_factory=set)
     core: bool = False
     smoke: bool = False
     everything: bool = False
@@ -410,6 +414,16 @@ def core_tests() -> list[Path]:
     return sorted(CORE_TESTS.glob("test_*.py"))
 
 
+def has_slow(test: Path) -> bool:
+    """這個測試檔有沒有標 slow 的（整個檔或其中幾條）。"""
+    return re.search(r"\bmark\.slow\b", _text(test)) is not None
+
+
+def whole_slow(test: Path) -> bool:
+    """整個檔都標 slow（pytestmark）：不加 --slow 一條都不跑。"""
+    return re.search(r"^pytestmark[ \t]*=.*\bslow\b", _text(test), re.M) is not None
+
+
 # ── 原始碼裡的位置 ───────────────────────────────────────────────────
 
 def _span(node) -> tuple[int, int]:
@@ -600,6 +614,7 @@ def pick(files: list[str], base: str = DEFAULT_BASE, slow: bool = False,
             if path.name.startswith("test_") and path.suffix == ".py":
                 if (ROOT / f).exists():
                     result.files.add(ROOT / f)
+                    result.own.add(ROOT / f)
             elif path.suffix == ".py":  # 測試共用的小工具：import 它的測試檔
                 result.files |= {t for t in tests if path.stem in imported(t)}
             continue
@@ -669,22 +684,35 @@ def pick(files: list[str], base: str = DEFAULT_BASE, slow: bool = False,
     return result
 
 
-def targets(chosen: Pick) -> list[str]:
-    """交給 pytest 的路徑與測試 id（相對 ROOT），重複的拿掉。"""
+def _rel(p: Path) -> str:
+    return p.relative_to(ROOT).as_posix()
+
+
+def targets(chosen: Pick, leave_out: frozenset[Path] = frozenset()) -> list[str]:
+    """交給 pytest 的路徑與測試 id（相對 ROOT），重複的拿掉；leave_out 的檔（另外一次跑）連核心測試、煙霧裡的都拿掉。"""
     if chosen.everything:
         return ["tests", *(["tianxia/features"] if FEATURES.is_dir() else [])]
-    files = set(chosen.files) | (set(core_tests()) if chosen.core else set())
-    out = sorted(p.relative_to(ROOT).as_posix() for p in files)
+    files = (set(chosen.files) | (set(core_tests()) if chosen.core else set())) - set(leave_out)
+    out = sorted(_rel(p) for p in files)
     if chosen.smoke:
-        have = set(out)
+        have = set(out) | {_rel(p) for p in leave_out}
         out += [i for i in smoke_ids() if i.split("::")[0] not in have]
     return out
 
 
-def pytest_command(chosen: Pick, slow: bool, extra: list[str], args_file: Path | None = None) -> list[str]:
-    """跑 pytest 的指令。目標太多（Windows 一行最多三萬多字）時寫進 args_file，用 pytest 的 @檔名。"""
-    goal = targets(chosen)
-    marker = "slow or not slow" if (slow or chosen.everything) else "not slow"
+def _slow_split(chosen: Pick, slow: bool) -> list[tuple[list[str], str]]:
+    """（目標, -m 的式子）一次或兩次。改到的測試檔本身（own）連 slow 一起跑——改了就是要跑它（手冊 4.3「只跑改到的
+    那幾個測試檔」）；其他挑到的照舊不含 slow（--slow 才含）。改到的檔裡沒有 slow 的就一次跑完。"""
+    if chosen.everything or slow:
+        return [(targets(chosen), "slow or not slow")]
+    if not any(has_slow(p) for p in chosen.own):
+        return [(targets(chosen), "not slow")]
+    rest = targets(chosen, leave_out=frozenset(chosen.own))
+    runs = [(rest, "not slow")] if rest else []
+    return runs + [(sorted(_rel(p) for p in chosen.own), "slow or not slow")]
+
+
+def _command(goal: list[str], marker: str, extra: list[str], everything: bool, args_file: Path | None) -> list[str]:
     cmd = [sys.executable, "-m", "pytest", "-q", "-m", marker]
     if args_file is not None and sum(len(g) + 1 for g in goal) > 8000:
         args_file.write_text("\n".join(goal) + "\n", encoding="utf-8")
@@ -692,12 +720,38 @@ def pytest_command(chosen: Pick, slow: bool, extra: list[str], args_file: Path |
     else:
         cmd += goal
     cmd += extra
-    many = chosen.everything or len({g.split("::")[0] for g in goal}) >= PARALLEL_FROM
+    many = everything or len({g.split("::")[0] for g in goal}) >= PARALLEL_FROM
     asked = any(a in ("-n", "--numprocesses", "no:xdist") or a.startswith(("--numprocesses=", "-pno:xdist"))
                 or (a.startswith("-n") and not a.startswith("--") and a[2:].isalnum()) for a in extra)
     if many and not asked and importlib.util.find_spec("xdist") is not None:
         cmd += ["-n", WORKERS]
     return cmd
+
+
+def pytest_commands(chosen: Pick, slow: bool, extra: list[str], tmp: Path | None = None) -> list[list[str]]:
+    """跑 pytest 的指令（一個；改到的測試檔有 slow 時兩個，見 _slow_split）。目標太多（Windows 一行最多三萬多字）時
+    寫進 tmp 底下的檔，用 pytest 的 @檔名。"""
+    return [_command(goal, marker, extra, chosen.everything, None if tmp is None else tmp / f"targets-{i}.txt")
+            for i, (goal, marker) in enumerate(_slow_split(chosen, slow))]
+
+
+def _slow_only(chosen: Pick) -> list[str]:
+    """挑到的（改到的測試檔以外）整個檔標 slow 的：不加 --slow 一條都不跑。"""
+    return sorted(_rel(p).removeprefix("tests/") for p in chosen.files - chosen.own if whole_slow(p))
+
+
+def finish(codes: list[int], chosen: Pick, slow: bool) -> int:
+    """幾次 pytest 的結束碼合成一個。一次都沒跑到（5）而且是 slow 濾掉的：說要 --slow，回 0（沒有東西壞）。"""
+    bad = [c for c in codes if c not in (0, 5)]
+    if bad:
+        return bad[0]
+    if codes and all(c == 5 for c in codes):
+        if not slow and any(has_slow(p) for p in chosen.files):
+            print("挑到的測試全在標了 slow 的地方，這一次一條都沒跑。要跑加 --slow"
+                  + (f"（整個檔標 slow 的：{' '.join(_slow_only(chosen))}）" if _slow_only(chosen) else "") + "。")
+            return 0
+        return 5
+    return 0
 
 
 def count(cmd: list[str]) -> str:
@@ -713,13 +767,18 @@ def count(cmd: list[str]) -> str:
     return lines[-1].strip() if lines else (out.stdout.strip().splitlines() or ["（數不出來）"])[-1]
 
 
-def describe(chosen: Pick) -> list[str]:
+def describe(chosen: Pick, slow: bool = False) -> list[str]:
     if chosen.everything:
         return ["整套（含 slow）"]
     lines = []
-    files = sorted(p.relative_to(ROOT).as_posix() for p in chosen.files)
+    files = sorted(_rel(p) for p in chosen.files)
     if files:
         lines.append(f"要跑（{len(files)} 個檔）：" + " ".join(f.removeprefix("tests/") for f in files))
+    mine = sorted(_rel(p).removeprefix("tests/") for p in chosen.own if has_slow(p))
+    if mine and not slow:
+        lines.append("改到的測試檔連 slow 一起跑：" + " ".join(mine))
+    if _slow_only(chosen) and not slow:
+        lines.append("整個檔標 slow、這一次不跑（要跑加 --slow）：" + " ".join(_slow_only(chosen)))
     if chosen.core:
         lines.append(f"核心測試：tests/core/ 不含 slow 的（{len(core_tests())} 個檔）")
     if chosen.smoke:
@@ -751,14 +810,16 @@ def main(argv: list[str] | None = None) -> int:
         for w in chosen.why:
             print(f"  {w}")
         return 0
-    print("\n".join(describe(chosen)), flush=True)
+    print("\n".join(describe(chosen, args.slow)), flush=True)
     with tempfile.TemporaryDirectory() as tmp:
-        cmd = pytest_command(chosen, args.slow, extra, Path(tmp) / "targets.txt")
+        cmds = pytest_commands(chosen, args.slow, extra, Path(tmp))
         if args.count:
-            print("一共：" + count(cmd), flush=True)
+            for cmd in cmds:
+                label = "改到的測試檔（連 slow）" if len(cmds) > 1 and cmd is cmds[-1] else "一共"
+                print(f"{label}：" + count(cmd), flush=True)
         if args.list or args.count:
             return 0
-        return subprocess.call(cmd, cwd=ROOT)
+        return finish([subprocess.call(cmd, cwd=ROOT) for cmd in cmds], chosen, args.slow)
 
 
 if __name__ == "__main__":

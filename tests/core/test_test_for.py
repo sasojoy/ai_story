@@ -199,18 +199,55 @@ def test_a_feature_package_picks_its_own_tests_and_the_contract(tmp_path, monkey
 def test_slow_is_opt_in_and_three_files_run_on_four_workers():
     three = test_for.Pick(files={ROOT / "tests/arts/test_fusion.py", ROOT / "tests/arts/test_naming.py",
                                  ROOT / "tests/arts/test_library.py"})
-    def marker(cmd):  # python -m pytest 後面那一個 -m
-        return cmd[cmd.index("-m", cmd.index("pytest")) + 1]
-
-    cmd = test_for.pytest_command(three, slow=False, extra=[])
-    assert marker(cmd) == "not slow"
+    (cmd,) = test_for.pytest_commands(three, slow=False, extra=[])
+    assert _marker(cmd) == "not slow"
     if importlib.util.find_spec("xdist") is not None:
         assert cmd[cmd.index("-n") + 1] == "4"
-    assert marker(test_for.pytest_command(three, slow=True, extra=[])) == "slow or not slow"
-    mine = test_for.pytest_command(three, slow=False, extra=["-n", "2"])
+    (both,) = test_for.pytest_commands(three, slow=True, extra=[])
+    assert _marker(both) == "slow or not slow"
+    (mine,) = test_for.pytest_commands(three, slow=False, extra=["-n", "2"])
     assert mine.count("-n") == 1 and mine[mine.index("-n") + 1] == "2"
-    one = test_for.pytest_command(test_for.Pick(files={ROOT / "tests/arts/test_fusion.py"}), slow=False, extra=[])
+    (one,) = test_for.pytest_commands(test_for.Pick(files={ROOT / "tests/arts/test_fusion.py"}), slow=False, extra=[])
     assert "-n" not in one
+
+
+def _marker(cmd):
+    """python -m pytest 後面那一個 -m 的式子。"""
+    return cmd[cmd.index("-m", cmd.index("pytest")) + 1]
+
+
+def test_a_changed_test_file_runs_with_its_slow_tests():
+    """手冊 4.3「只跑改到的那幾個測試檔」：改了一個整個檔標 slow 的測試檔，就是要跑它，連 slow 一起
+    （以前 -m "not slow" 把它整個濾掉，39 deselected、結束碼 5）。"""
+    own = test_for.pick(["tests/arts/test_epiphany.py", "tests/core/test_errands.py"])
+    (cmd,) = test_for.pytest_commands(own, slow=False, extra=[])
+    assert _marker(cmd) == "slow or not slow"
+    assert {"tests/arts/test_epiphany.py", "tests/core/test_errands.py"} <= set(cmd)
+
+
+def test_changed_slow_test_files_run_apart_from_the_rest_of_the_pick():
+    """改到的測試檔連 slow 一起跑，其他挑到的照舊不含 slow：分兩次，改到的那幾個不在第一次裡重複跑。"""
+    mixed = test_for.pick(["tests/arts/test_epiphany.py"])
+    mixed.files.add(ROOT / "tests/arts/test_fusion.py")
+    mixed.core = True
+    first, second = test_for.pytest_commands(mixed, slow=False, extra=[])
+    assert _marker(first) == "not slow" and "tests/arts/test_fusion.py" in first
+    assert "tests/arts/test_epiphany.py" not in first and "tests/core/test_errands.py" in first
+    assert _marker(second) == "slow or not slow" and second[-1] == "tests/arts/test_epiphany.py"
+    plain = test_for.pick(["tests/arts/test_fusion.py"])  # 沒有 slow 的測試檔：一次就好
+    assert len(test_for.pytest_commands(plain, slow=False, extra=[])) == 1
+
+
+def test_a_pick_that_is_all_slow_says_so_and_does_not_fail(capsys):
+    """挑到的全在整個檔標 slow 的檔裡：先列出來；一條都沒跑（pytest 結束碼 5）時說要 --slow，結束碼 0。"""
+    picked = test_for.Pick(files={ROOT / "tests/arts/test_epiphany.py"})
+    assert any("--slow" in line and "test_epiphany.py" in line for line in test_for.describe(picked))
+    assert test_for.finish([5], picked, slow=False) == 0
+    assert "--slow" in capsys.readouterr().out
+    assert test_for.finish([0, 5], picked, slow=False) == 0
+    assert test_for.finish([1, 0], picked, slow=False) == 1
+    plain = test_for.Pick(files={ROOT / "tests/arts/test_fusion.py"})  # 不是 slow 濾掉的（例如 -- -k 濾光了）照 pytest 的
+    assert test_for.finish([5], plain, slow=False) == 5
 
 
 def test_the_smoke_set_covers_every_block():
