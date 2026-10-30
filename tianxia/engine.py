@@ -15,7 +15,6 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from pydantic import BaseModel
-from pydantic import model_serializer  # Option 的 outcomes 空著不寫（減法季批 4）
 
 from . import arts as arts_mod
 from . import ascend  # 破境卡（招式與絕學稿案第三節）
@@ -93,6 +92,9 @@ from .rules import (
 from .rules import jianfa  # 減法季（Config.jianfa＋開季的章；子開關照名字問）
 from .sqlite_world import open_world
 from .wallet import Wallet
+from .core import features as features_core  # 核心照 FEATURES 問每一包（開發規範手冊 3.3）
+from .core.option import Option  # 選單上的一顆（搬進核心：功能包要做選項）
+from .core.services import NO_SUCH_PLAYER, PAUSED_TEXT, WalletService  # 共用的字、錢包服務（3.10）
 from .state import (
     ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, Fighter, FrontReport, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
     Outing, OutingBeat, StoryCard, StoryProgress, TierResult, Whisper, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
@@ -154,27 +156,6 @@ def drill_share(amount: int, share: float) -> int:
     """跟自己人操練拿對手那一項獎勵的幾成（Config.drill_reward_share），四捨五入（round 是銀行家進位）。
     操練真的給的（Game._drill）與行動列底下說會給什麼（Game._train_line）都算這一個。"""
     return int(amount * share + 0.5)
-
-
-class Option(BaseModel):
-    id: str
-    label: str
-    enabled: bool = True
-    wait: str = ""  # 按下去要等模型時，按鈕上換上的字（大場面「兩人對峙……」，武學與成長設計 8.3）；不必等是空的
-    confirm: str = ""  # 按下去之前先問一次的話（FB-095：必敗的遊歷）；網頁照它跳確認層，空的直接送
-    confirm_yes: str = ""  # 確認層上「做」那一顆寫什麼；空的照舊寫「照打」（FB-125：拆解寫「拆掉」）
-    tag: str = ""  # 名聲 5B：俠寇選項的「俠」「寇」（網頁畫在編號那一格）；空的照舊寫編號
-    note: str = ""  # 名聲 5B：標籤底下第二行小字（俠寇選項寫為什麼合你的路數）；空的不畫
-    # 減法季批 4（主機側計畫 1.3 欄位表 options[].outcomes）：分岔開著時「隨口應對」那一顆的可能走向 [{id, tag}]（outcomes.tags，不給數字）；
-    # 其餘是 None，不寫進 model_dump（關著的季選單一個鍵都不多）
-    outcomes: list[dict[str, str]] | None = None
-
-    @model_serializer(mode="wrap")
-    def _drop_no_outcomes(self, handler):
-        data = handler(self)
-        if isinstance(data, dict) and data.get("outcomes") is None:
-            data.pop("outcomes", None)
-        return data
 
 
 @dataclass(frozen=True)
@@ -325,8 +306,7 @@ def siege_status_text(content: Content, slot) -> str:
     return SIEGE_STATUS.get(slot.status, "")
 
 
-# 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
-PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，畫面照常可看"
+# 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）；PAUSED_TEXT 在核心（core/services.py）。待 S1／joy 潤
 PAUSE_LINE = (  # 待 S1／joy 潤
     "賽季時鐘停了：季的時間不走、決戰不推，全服暫時不能行動，畫面照常可看；"
     "排好的決戰繼續之後照原本的時間開。做完記得按「繼續」。"
@@ -336,7 +316,6 @@ RESUME_LINE = (  # 待 S1／joy 潤；{skip} 是實際扣了多少（world.resum
     "排好的決戰照原本的時間開，時間在暫停裡過了的現在就開始集結。"
 )
 PAUSED_REFUSAL = "（賽季時鐘暫停中，先按「繼續」。）"  # 暫停中的管理者動作；待 S1／joy 潤
-NO_SUCH_PLAYER = "（江湖上沒有「{name}」這個人。）"  # 管理者的「玩家個人劇情」查不到名號（管理者觸發鈕第 2 組；只有管理者看得到）
 # 管理者「立刻發軍令」的回話照軍令多久一道（orders.daily：照週一發、每天 00:00 發；FB-502，待 joy 潤）
 ADMIN_REISSUE_HOW = {False: "週一", True: " 00:00 "}  # 「已照週一的做法重發」「已照 00:00 的做法重發」
 ADMIN_REISSUE_NONE = {False: "這一週沒有要重挑的軍令", True: "今天沒有要重挑的軍令"}
@@ -5699,7 +5678,7 @@ class Game:
             trip["can_go"] = self.outing_can_go()
             if trip["can_say"]:
                 trip["ink"] = self.outing_ink_left()
-                trip["ink_item"] = mall.item_for(self.content, outing_rules.INK)
+                trip["ink_item"] = self.wallet.item_for(outing_rules.INK)
                 trip["people"] = [o.player.name for o in social.here(self)]  # 結算卡的「此地還有」：點名字開玩家卡打招呼、邀結伴
             trip["admin"] = self.is_admin()
         return view
@@ -5792,8 +5771,7 @@ class Game:
                 problem = speech.BLOCKED  # 同酒肆題壁：牆上不寫這幾個字
             if problem:
                 return [problem]
-            wallet = self._wallet()
-            left = [] if wallet is None else mall.tokens(wallet, self._mall_owner(), outing_rules.INK)
+            left = self.wallet.tokens(outing_rules.INK)
             if not left:
                 return [outing_rules.NO_INK]
             token = left[0]
@@ -5801,7 +5779,7 @@ class Game:
         item = outing_rules.inscribe(s, c, line, preset=is_preset)
         self._save_season()  # 留言刻在全服這一季（WorldState.inscriptions），不寫回共用賽季的話下一次重讀就沒了
         if token is not None:
-            self._wallet().mark_used(token, self.pill_now(), place=trip.place, inscription=item.id)
+            self.wallet.consume(outing_rules.INK, place=trip.place, inscription=item.id)  # 用掉的就是上面查到的那一張（最舊的）
         said = outing_rules.SAY_DONE.format(place=place, text=line)
         journal.add_entry(s, JournalEntry(time=s.world.time, title=outing_rules.SAY_TITLE, lines=[said],
                                           changes=[] if token is None else ["題壁墨 -1"]))
@@ -5822,8 +5800,7 @@ class Game:
 
     def outing_ink_left(self) -> int:
         """手上還沒用掉的題壁墨幾張；商城關著是 0。"""
-        wallet = self._wallet()
-        return 0 if wallet is None else len(mall.tokens(wallet, self._mall_owner(), outing_rules.INK))
+        return len(self.wallet.tokens(outing_rules.INK))
 
     def admin_erase_inscription(self, ins_id: int) -> list[str]:
         """管理者抹掉一則留言（路上那一行的 ref）。不是管理者、沒有這一則都回同一句「此刻無法」。"""
@@ -13244,10 +13221,14 @@ class Game:
     def _pill_card_bonus(self) -> int:
         """今天月卡讓回體丹上限多幾顆（mall.card_bonus）；商城關著、沒有卡、今天不在卡的期間裡是 0。
         pill_cap 與體力條的說明（howto.stamina_lines 的 card，FB-480）都讀這一份，兩邊寫的上限才對得上。"""
-        wallet = self._wallet()
-        return 0 if wallet is None else mall.card_bonus(self.content, wallet, self._mall_owner(), self._pill_day())
+        return self.wallet.card_bonus()
 
     # ── 商城（docs/superpowers/specs/2026-10-20-商城架構-design.md；規則在 mall.py、錢包在 wallet.py）──
+
+    @property
+    def wallet(self) -> WalletService:
+        """核心的錢包服務（開發規範手冊 3.10）：票的庫存與消耗、月卡加的上限、哪一件商品賣這種效果。走一趟、列傳、自創要用票的地方叫它，不叫商城。"""
+        return WalletService(self)
 
     def _wallet(self) -> Wallet | None:
         """商城開著時這個資料庫的錢包；關著（或這個 world 沒有資料庫）是 None，呼叫端什麼都不讀不寫。"""
@@ -17716,8 +17697,7 @@ class Game:
         return self.state.world if season == p.season_number else self.world.past_season(season)
 
     def _zhuan_purchases(self) -> list:
-        wallet = self._wallet()
-        return [] if wallet is None else wallet.purchases(self._mall_owner())
+        return self.wallet.purchases()
 
     def _zhuan_extra(self, season: int) -> dict:
         """列傳多畫的那幾樣（zhuan_end.extras：季末論功、插畫的圖庫鍵、紀念印的字）；那一季沒開列傳為終點是空的（一個鍵都不多）。
@@ -17766,17 +17746,17 @@ class Game:
     def _zhuan_act(self, option_id: str) -> list[str]:
         """用掉一張列傳的票（_zhuan_options 驗過有票、按得下去）：那一列購買記 used、season（親筆評曰另記 fid），寫一則「列傳」紀錄。"""
         s, c = self.state, self.content
-        wallet, owner, n = self._wallet(), self._mall_owner(), s.player.season_number
+        n = s.player.season_number
         now = self.pill_now()
         if option_id == zhuan_end.PICK_ART:
-            wallet.mark_used(mall.tokens(wallet, owner, zhuan_end.ART, season=n)[0], now, season=n, art=zhuan_end.illustration_for(s, c, s.world))
+            self.wallet.consume(zhuan_end.ART, bought_in=n, at=now, season=n, art=zhuan_end.illustration_for(s, c, s.world))
             lines = [zhuan_end.ART_DONE]
         elif option_id == zhuan_end.SEAL:
-            wallet.mark_used(mall.tokens(wallet, owner, zhuan_end.SEAL_TICKET, season=n)[0], now, season=n)
+            self.wallet.consume(zhuan_end.SEAL_TICKET, bought_in=n, at=now, season=n)
             lines = [zhuan_end.SEAL_DONE.format(seal=zhuan_end.seal_text(c, n, annals.standing(s, c, s.world)))]
         else:
             cid = option_id.removeprefix(zhuan_end.QUOTE)
-            wallet.mark_used(mall.tokens(wallet, owner, zhuan_end.QUOTE_TICKET, season=n)[0], now, season=n, fid=cid)
+            self.wallet.consume(zhuan_end.QUOTE_TICKET, bought_in=n, at=now, season=n, fid=cid)
             lines = [zhuan_end.QUOTE_DONE.format(name=c.characters[cid].name)]
             row = self.world.biography(n, s.player.name)
             if row is not None and row["text"] is not None:
@@ -17866,19 +17846,15 @@ class Game:
         return stored
 
     def _rewrite_tokens(self) -> list[int]:
-        """萬寶閣「重修列傳」還沒用掉的那幾筆購買（mall.rewrite_tokens）；商城關著是空的。"""
-        wallet = self._wallet()
-        return [] if wallet is None else mall.rewrite_tokens(wallet, self._mall_owner())
+        """萬寶閣「重修列傳」還沒用掉的那幾筆購買（錢包服務的 zhuan_rewrite 票）；商城關著是空的。"""
+        return self.wallet.tokens("zhuan_rewrite")
 
     def _rewrites_allowed(self) -> int:
         """一篇傳能重寫幾次：Config.biography.rewrites 加上手上還沒用掉的「重修列傳」（Joy 2026-10-21 定案：200 元寶、一季兩次）。"""
         return self.content.config.biography.rewrites + len(self._rewrite_tokens())
 
     def _use_rewrite_token(self, now: float) -> None:
-        tokens = self._rewrite_tokens()
-        wallet = self._wallet()
-        if tokens and wallet is not None:
-            wallet.mark_used(tokens[0], now)
+        self.wallet.consume("zhuan_rewrite", at=now)
 
     def biography_view(self, season: int) -> dict | None:
         """修練之外的一本書（網頁的「讀你的傳」）：篇名、段落、誰寫的、公開了沒、分享代碼、還能不能重寫、還沒寫成時寫不寫得了。

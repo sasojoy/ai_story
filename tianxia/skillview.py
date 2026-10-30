@@ -4,7 +4,8 @@
 """
 from __future__ import annotations
 
-from . import armor, arts as arts_mod, atlas, clinic, roster, create as create_mod, cultivation, encounter, equipment, forge_secrets, fusion, insight_fx, insights, mall as mall_mod, martial_arts, materials, might, mounts, moves, prologue, renown, seal, smithing, tactics as tactics_mod, team, traits, treasures, weapons
+from . import armor, arts as arts_mod, atlas, clinic, roster, create as create_mod, cultivation, encounter, equipment, forge_secrets, fusion, insight_fx, insights, martial_arts, materials, might, mounts, moves, prologue, renown, seal, smithing, tactics as tactics_mod, team, traits, treasures, weapons
+from .core.services import item_for  # 「去萬寶閣」停在哪一件（核心的錢包服務，3.10）
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import (
     MAX_LEVEL, QUALITIES, MartialArt, power_at, shown_creator,
@@ -475,7 +476,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
                 "ok": problem is None, "note": note, "legend": legend,  # 服丹衝關（心得換丹、心得衝關都拿掉了，Joy 2026-10-21）
                 "xinde": None,  # 網頁與舊測試還讀這個鍵：一律沒有
                 # 到了極處、手上沒丹：引去萬寶閣買破境丹（那一件商品的 id；商城關著、沒賣、或不缺丹是 None）
-                "shop": mall_mod.item_for(content, "legend") if cultivation.needs_pill(state, content, world, art_id) else None,
+                "shop": item_for(content, "legend") if cultivation.needs_pill(state, content, world, art_id) else None,
             },
             "melt": {
                 "ok": stuck is None,

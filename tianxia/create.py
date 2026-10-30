@@ -824,9 +824,9 @@ def prune(state: GameState, content: Content) -> None:
 
 
 def _reroll_shop(content: Content) -> str | None:
-    from . import mall  # mall 牽著錢包與角色表：用到才 import
+    from .core.services import item_for  # 「去萬寶閣」停在哪一件：核心的錢包服務（開發規範手冊 3.10），不叫商城
 
-    return mall.item_for(content, "create_reroll")
+    return item_for(content, "create_reroll")
 
 
 def _every_cell_rare(content: Content) -> bool:

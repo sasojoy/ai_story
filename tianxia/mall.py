@@ -20,6 +20,8 @@ from .characters import name_key
 from .models import Content, MallItem
 from .state import GameState
 from .wallet import Wallet
+# 票的庫存、月卡加的上限、哪一件賣這種效果搬進核心的錢包服務（開發規範手冊 3.10）；這裡照舊叫得到（mall.tokens……）
+from .core.services import CARD_KEY, card_bonus, item_for, tokens  # noqa: F401
 
 
 @dataclass(frozen=True)
@@ -59,7 +61,6 @@ REASONS = {"grant": "封測發放", "buy": "購買", "refund": "退款", "reissu
 # 月卡的元寶照舊記成 grant（帳本的原因有 CHECK，加原因要改結構；不改結構版本），照編號的開頭認是月卡的哪一份：
 # 當場回的 card:rebate:<購買 id>、每天領的 card:daily:<主人>:<日>；退款時扣回當場回的那一份 refund:rebate:<購買 id>（revoke）
 CARD_REFS = {"card:rebate:": "月卡回饋", "card:daily:": "月卡每日", "refund:rebate:": "扣回月卡回饋"}
-CARD_KEY = "pill_cap"  # 月卡記在 mall_entitlements 的哪一格（回體丹每天的上限）
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _EPOCH = date(1970, 1, 1)
 
@@ -124,13 +125,6 @@ def on(content: Content) -> bool:
     return content.config.mall.enabled
 
 
-def item_for(content: Content, effect: str) -> str | None:
-    """賣這一種效果的第一件商品（照 content/mall.json 的順序）；商城關著或沒賣是 None。"""
-    if not on(content):
-        return None
-    return next((item.id for item in content.mall.values() if item.effects.get(effect)), None)
-
-
 def grant_ref(owner: str) -> str:
     return f"grant:beta:{owner}"
 
@@ -142,14 +136,6 @@ def grant_beta(content: Content, wallet: Wallet, owner: str, now: float) -> int:
     if not on(content) or amount <= 0:
         return 0
     return amount if wallet.post(owner, amount, "grant", grant_ref(owner), time=now) else 0
-
-
-def card_bonus(content: Content, wallet: Wallet, owner: str, day: int) -> int:
-    """月卡（4.5）：day 這一天在卡的期間裡（開始日～到期日，不含到期日）就回 Config.mall.card_pill_bonus，其餘 0。"""
-    if not on(content):
-        return 0
-    span = wallet.card(owner, CARD_KEY)
-    return content.config.mall.card_pill_bonus if span is not None and span[0] <= day < span[1] else 0
 
 
 def date_day(text: str) -> int:
@@ -441,13 +427,6 @@ def claim_daily(state: GameState, content: Content, wallet: Wallet, *, now: floa
     pill = content.config.stamina_pill_name
     changes = ([f"元寶 +{ingots}"] if ingots else []) + ([f"{pill} +{pills}"] if pills else [])
     return Claimed(lines=[CLAIMED.format(ingots=ingots, pills=pills, pill=pill, left=left)], changes=changes)
-
-
-def tokens(wallet: Wallet, owner: str, effect: str, season: int | None = None) -> list[int]:
-    """帶著 effect（zhuan_rewrite、rename、列傳的四件）還沒用掉的那幾筆購買（id，舊的在前）：沒退、data 裡沒有 used。每一筆是一次。
-    season 給了只算那一季買的（深交名額只這一季有效，減法季批 7b）。"""
-    return [b.id for b in reversed(wallet.purchases(owner)) if b.refunded is None and b.data.get(effect) and not b.data.get("used")
-            and (season is None or b.season == season)]
 
 
 def rewrite_tokens(wallet: Wallet, owner: str) -> list[int]:
