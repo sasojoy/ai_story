@@ -237,14 +237,14 @@ return [...html.matchAll(/class="mv-lab[^"]*" style="left:([-\\d.]+)px;top:([-\\
 
 # ── 看哪裡 ──
 def test_the_camera_is_clamped_between_the_whole_world_and_three_times():
-    """倍率在「整張天下放得下」到 3.2 倍之間；拖到最遠，整張天下的框最多碰到露出來那一塊的中線（拖不走整張）。"""
+    """倍率在「整張天下放得下」到 3.2 倍之間；圖比畫面大時拖到最遠，圖的邊貼著畫面的邊（不露出圖外，Joy 10/30「滑到邊邊會破圖」）。"""
     out = run(_game(), f"""const g = {{ vw: 390, vh: 700 }};
 const lo = H.zMin(g), small = H.camClamp({{ z: 0.01, x: 0, y: 0 }}, g), big = H.camClamp({{ z: 99, x: 0, y: 0 }}, g);
 const far = H.camClamp({{ z: 1, x: 99999, y: 99999 }}, g), fit = H.camFit(g);
-const f = (H.S.mapBase.world && H.S.mapBase.world.frame) || [0, 0, H.S.mapBase.w, H.S.mapBase.h];
-return {{ lo, small: small.z, big: big.z, farLeft: far.x + f[0] * far.z, fitZ: fit.z }};""")
+const back = H.camClamp({{ z: 1, x: -99999, y: -99999 }}, g);
+return {{ lo, small: small.z, big: big.z, farLeft: far.x, farRight: back.x + H.S.mapBase.w * back.z, fitZ: fit.z }};""")
     assert out["small"] == out["lo"] == out["fitZ"] and out["big"] == 3.2 and 0 < out["lo"] < 1
-    assert out["farLeft"] == 195  # 框的左邊最多拖到中線
+    assert out["farLeft"] == 0 and out["farRight"] == 390  # 左邊、右邊都貼著畫面的邊
 
 
 def test_the_view_moves_the_world_layer_not_the_marks_root():

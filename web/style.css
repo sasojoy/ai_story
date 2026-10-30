@@ -1137,7 +1137,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* ── 輿圖：一張到底（企劃者 2026-10-30「可以 這樣改」，示意稿第四版：淡彩水墨的底圖、楷書與宋體的字、誰佔著是一顆小印）── */
 /* 整頁一層：夾在頂上的狀態列與底部分頁列之間（--map-top、--map-bottom 由 map.js 的 mapFrame 量）。地圖框佔滿整層，
    上面浮著搜尋列與篩選、右下兩顆圓鈕，抽屜從底下拉上來；寬 900 以上抽屜變右邊 360px 一欄。地圖本身只有紙墨一種顏色（深色主題也一樣） */
-.mapx { position: fixed; left: 0; right: 0; top: var(--map-top, 0px); bottom: var(--map-bottom, 0px); z-index: 5; background: #d9cfb5; overflow: hidden;
+.mapx { position: fixed; left: 0; right: 0; top: var(--map-top, 0px); bottom: var(--map-bottom, 0px); z-index: 5; background: #efe5d0; overflow: hidden;
   --mv-paper: #f4ecdc; --mv-paper2: #ebe1cc; --mv-ink: #2a231c; --mv-ink2: #6e5e49; --mv-line: #c9b994; --mv-red: #9e2b22; --mv-halo: #f7f1e3; }
 /* 輿圖那一層常駐在 #map-host（FB-324，map.js 的 showMapHost）：在別的分頁時只是看不見、點不到，樣式、排版、點陣化都留著，回來不必重畫 */
 #map-host.away { visibility: hidden; }
@@ -1158,7 +1158,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mv-world > .mv-base { position: absolute; left: 0; top: 0; display: block; opacity: 0; transition: opacity 0.4s; }
 .mv-world > .mv-base.on { opacity: 1; }
 .mv-world > svg { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
-.mv-ground { transition: opacity 0.25s; mix-blend-mode: multiply; }
+.mv-world > canvas.mv-ground { position: absolute; left: 0; top: 0; pointer-events: none; transition: opacity 0.25s; }
+/* 手機 Safari：大圖層上的 mix-blend-mode 與 SVG 濾鏡會讓拖縮時整塊沒畫出來（Joy 2026-10-30 截圖「破圖」）；地面改成點陣、不混色 */
 .mv-marks { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
 .mv-marks > * { position: absolute; }
 .mv-marks button { pointer-events: auto; cursor: pointer; border: 0; background: none; padding: 0; margin: 0; font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }

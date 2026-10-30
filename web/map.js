@@ -113,7 +113,7 @@
     const b = S.mapBase;
     return `<div class="${mapxClass()}" id="mapx" data-key="${esc(b.key)}">
       <div class="map-wrap" id="map"><div class="mv-world" id="mvw" style="width:${Number(b.w)}px;height:${Number(b.h)}px">`
-      + `<svg class="mv-ground" id="mk" width="${Number(b.w)}" height="${Number(b.h)}" viewBox="0 0 ${Number(b.w)} ${Number(b.h)}"></svg>`
+      + `<canvas class="mv-ground" id="mk" style="width:${Number(b.w)}px;height:${Number(b.h)}px"></canvas>`
       + `<svg class="mv-route" id="mkr" width="${Number(b.w)}" height="${Number(b.h)}" viewBox="0 0 ${Number(b.w)} ${Number(b.h)}"></svg></div>`
       + `<div class="mv-marks" id="mkt"></div></div>${mapChrome()}
     </div>`;
@@ -943,16 +943,32 @@
   }
   // 地面要不要畫、照哪一個倍率與週次畫（一樣就不重畫）
   const ground = { key: "" };
+  // 畫成點陣（#mk 是一張 canvas）：水暈的濾鏡很重，留成向量的話拖縮的每一幀手機都要重算一次（Joy 2026-10-30「效能有點太差」）；
+  // 點陣只在換了疊層、週次、倍率差一大段時重畫一次，拖縮只是移動一張圖
+  const GROUND_SCALE = 2; // 點陣是地圖的幾倍大（遠看那一段倍率在 0.72 以下，2 倍夠清楚）
   function groundShow(c) {
-    const svg = document.getElementById("mk");
-    if (!svg || !S.mapBase || !S.mapState) return;
+    const cv = document.getElementById("mk");
+    if (!cv || !S.mapBase || !S.mapState) return;
     const on = S.mapMode === "timeline" || mvLevel(c.z) === 0 || washOn();
-    if (svg.style) svg.style.opacity = on ? "1" : "0";
-    if (!on) return;
-    const week = mapWeek(), key = `${S.mapBase.key}|${S.mapStateAt}|${week}|${Math.round(Math.log2(c.z) * 3)}`;
-    if (ground.key === key && svg.firstChild) return;
+    if (cv.style) cv.style.opacity = on ? "1" : "0";
+    if (!on || !cv.getContext || typeof Image === "undefined" || !window.URL || !URL.createObjectURL) return;
+    const k = Math.min(2, Math.max(0.5, 2 ** Math.round(Math.log2(1 / c.z))));
+    const week = mapWeek(), key = `${S.mapBase.key}|${S.mapStateAt}|${week}|${k}`;
+    if (ground.key === key) return;
     ground.key = key;
-    svg.innerHTML = groundSvg(S.mapBase, S.mapState, 1 / c.z, week);
+    const b = S.mapBase, W = Math.round(b.w * GROUND_SCALE), H = Math.round(b.h * GROUND_SCALE);
+    const url = URL.createObjectURL(new Blob([`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${b.w} ${b.h}">${groundSvg(b, S.mapState, k, week)}</svg>`], { type: "image/svg+xml" }));
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      if (ground.key !== key) return; // 等的時候又換了
+      if (cv.width !== W) { cv.width = W; cv.height = H; }
+      const g = cv.getContext("2d");
+      g.clearRect(0, 0, W, H);
+      g.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); ground.key = ""; };
+    img.src = url;
   }
 
   // ── 字與小圖（#mkt：照螢幕大小寫，位置照此刻的倍率算）──
@@ -1033,7 +1049,7 @@
         out.push(`<button type="button" class="mv-dot${dim}${q.rich ? " rich" : ""}" style="left:${f1(x)}px;top:${f1(y)}px;--c:${ctl ? sideInk(ctl).color : MV_UNHELD}" data-act="map-place" data-id="${esc(b.id)}" aria-label="${esc(b.name)}"></button>`);
       } else out.push(pinHtml(b, x, y, dim, z));
       if (isSel) out.push(`<i class="mv-ring" style="left:${f1(x)}px;top:${f1(y)}px;--r:${lvl ? 22 : 12}px"></i>`);
-      if (live && lvl > 0 && (q.melee || q.siege === "fight")) out.push(`<i class="mv-fight" style="left:${f1(x)}px;top:${f1(y)}px"></i>`);
+      if (live && (q.melee || q.siege === "fight")) out.push(`<i class="mv-fight" style="left:${f1(x)}px;top:${f1(y)}px"></i>`);
       if (!on || (lvl === 0 && !isSel && !isHere && !isWk && !filt)) continue;
       const sub = isHere ? MV_WORDS.here : (lvl === 2 || isSel || isWk) ? nearSub(base, st, b.id, wk) : "";
       const odds = !isHere && (lvl === 2 || isSel) && q.odds ? `・<b style="color:${TONE_COLOR[q.odds.tone] || MAP_INK}">${esc(q.odds.word)}</b>` : "";
@@ -1112,17 +1128,18 @@
     const sheet = deskMap() || S.mapMode === "timeline" ? 0 : mapDrawerPx(S.mapDrawer);
     return { top, bottom: Math.max(top + 60, g.vh - sheet) };
   }
-  // 整張天下的框：底圖的 world.frame（開放的地點外框加邊），沒有照整張圖
-  const mapBox = (base) => (base.world && base.world.frame) || [0, 0, base.w, base.h];
+  // 整張天下的框：整張底圖（主機畫的那一張畫滿整張；拖到邊不露出圖外，Joy 2026-10-30「滑到邊邊會破圖」）
+  const mapBox = (base) => [0, 0, base.w, base.h];
   function zMin(g) {
     const [, , fw, fh] = mapBox(S.mapBase), room = mapRoom(g);
     return Math.min(MV_ZMAX, Math.max(0.05, Math.min((g.vw - 16) / fw, (room.bottom - room.top - 16) / fh)));
   }
-  // 夾住：倍率在整張放得下到 MV_ZMAX 之間；整張天下的框最多拖到邊碰到露出來那一塊的中線（拖得到最邊上的地點，拖不走整張）
+  // 夾住：倍率在整張放得下到 MV_ZMAX 之間；圖比畫面大時邊不准拖進畫面（左右貼著框、上下貼著露出來那一塊），比畫面小時置中
   function camClamp(c, g) {
     const [fx, fy, fw, fh] = mapBox(S.mapBase), room = mapRoom(g);
-    const z = Math.min(MV_ZMAX, Math.max(zMin(g), c.z)), mx = g.vw / 2, my = (room.top + room.bottom) / 2;
-    const L = Math.min(mx, Math.max(mx - fw * z, c.x + fx * z)), T = Math.min(my, Math.max(my - fh * z, c.y + fy * z));
+    const z = Math.min(MV_ZMAX, Math.max(zMin(g), c.z)), rh = room.bottom - room.top;
+    const L = fw * z <= g.vw ? (g.vw - fw * z) / 2 : Math.min(0, Math.max(g.vw - fw * z, c.x + fx * z));
+    const T = fh * z <= rh ? room.top + (rh - fh * z) / 2 : Math.min(room.top, Math.max(room.bottom - fh * z, c.y + fy * z));
     return { z, x: L - fx * z, y: T - fy * z };
   }
   // 整張天下放進露出來的那一塊、置中
@@ -1269,17 +1286,18 @@
     }
     return d;
   }
-  // art：主機畫好的那一張（{ url }，data:）。有它就鋪它當底，上面只疊州界與路（那一張不畫路、不畫州界），紙、暈染、河、山、林都在圖裡
-  function paintSvg(base, mounts, PW, PH, art = null) {
+  // 州界（墨點線）與路（二次曲線）的 path；extra 是每一條 path 多掛的屬性
+  function lineworkSvg(base, extra = "") {
+    const pos = Object.fromEntries(base.places.map((p) => [p.id, p]));
+    const borders = `<g fill="none" stroke="#5E4E3A" stroke-width="1.2" stroke-dasharray="1 7" stroke-linecap="round" opacity=".55">${((base.paint && base.paint.regions) || []).map((r) => `<path d="${smoothD([...r.points, r.points[0]])}"${extra}/>`).join("")}</g>`;
+    const roads = `<g fill="none" stroke="#7B6247" stroke-width="1.1" stroke-linecap="round" opacity=".7">${(base.roads || []).map(([a, b, cx, cy]) => (pos[a] && pos[b] ? `<path d="M${pos[a].x},${pos[a].y} Q${cx},${cy} ${pos[b].x},${pos[b].y}"${extra}/>` : "")).join("")}</g>`;
+    return borders + roads;
+  }
+  function paintSvg(base, mounts, PW, PH) {
     const M = base.paint, R = mvRand(7), W = base.w, H = base.h, out = [];
     const pos = Object.fromEntries(base.places.map((p) => [p.id, p]));
     const borders = `<g fill="none" stroke="#5E4E3A" stroke-width="1.2" stroke-dasharray="1 7" stroke-linecap="round" opacity=".55">${(M.regions || []).map((r) => `<path d="${smoothD([...r.points, r.points[0]])}"/>`).join("")}</g>`;
     const roads = (o) => `<g fill="none" stroke="#7B6247" stroke-width="1.1" stroke-linecap="round" opacity="${o}" filter="url(#brush)">${(base.roads || []).map(([a, b, cx, cy]) => (pos[a] && pos[b] ? `<path d="M${pos[a].x},${pos[a].y} Q${cx},${cy} ${pos[b].x},${pos[b].y}"/>` : "")).join("")}</g>`;
-    if (art) {
-      return `<svg xmlns="http://www.w3.org/2000/svg" width="${PW}" height="${PH}" viewBox="0 0 ${W} ${H}"><defs>`
-        + '<filter id="brush" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency=".25" numOctaves="2" seed="2"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter></defs>'
-        + `<image href="${art.url}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="none"/>${borders}${roads(".7")}</svg>`;
-    }
     out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${PW}" height="${PH}" viewBox="0 0 ${W} ${H}"><defs>`
       + '<filter id="grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="3"/><feColorMatrix values="0 0 0 0 .45  0 0 0 0 .36  0 0 0 0 .25  0 0 0 .09 0"/></filter>'
       + '<filter id="fiber" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".012 .2" numOctaves="2" seed="9"/><feColorMatrix values="0 0 0 0 .5  0 0 0 0 .42  0 0 0 0 .3  0 0 0 .06 0"/></filter>'
@@ -1332,16 +1350,12 @@
     out.push(`<rect width="${W}" height="${H}" filter="url(#fiber)"/><rect width="${W}" height="${H}" filter="url(#grain)"/><rect width="${W}" height="${H}" fill="url(#vig)"/></svg>`);
     return out.join("");
   }
-  // 主機畫的底圖（design/輿圖底圖，2026-10-30；照 content/map.json 的山河位置畫、900×1340 的三倍）：照 data: 塞進底圖；抓不到照網頁自己畫
+  // 主機畫的底圖（design/輿圖底圖，2026-10-30；照 content/map.json 的山河位置畫、900×1340 的三倍）：直接當一張圖鋪著，
+  // 州界與路是一張很輕的向量（線寬照螢幕）疊在上面；抓不到才照內容自己畫、烤成一張
   const MV_ART = "/static/img/map/base.webp";
   async function dataUrl(path) {
     const blob = await (await fetch(path)).blob();
     return new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = no; fr.readAsDataURL(blob); });
-  }
-  let artMemo = null;
-  function artImg() {
-    if (!artMemo) artMemo = dataUrl(MV_ART).then((url) => (url.startsWith("data:image/") ? { url } : null)).catch(() => null);
-    return artMemo;
   }
   // 山的小圖（照 data: 塞進底圖：烤的時候 SVG 當圖片畫，外連的圖不會載）與高寬比；一次載入只抓一次
   let mountMemo = null;
@@ -1365,7 +1379,7 @@
     bakeTimer = setTimeout(bakeBase, 60);
   }
   // 烤好的圖記在這個瀏覽器（Cache Storage，照底圖的 key）：下一次打開輿圖不必再烤（烤一次在手機上要一兩秒）。記不住、讀不到照烤
-  const BAKE_CACHE = "tx-map-bake", BAKE_VER = 2; // 2：換成主機畫的底圖
+  const BAKE_CACHE = "tx-map-bake", BAKE_VER = 1;
   const bakeReq = (key) => `/__map-bake/${BAKE_VER}/${encodeURIComponent(key)}`;
   async function bakeCached(key) {
     try {
@@ -1387,13 +1401,26 @@
     if (!base || !base.paint || !w0 || w0.querySelector(".mv-base") || typeof Image === "undefined" || typeof Blob === "undefined" || !window.URL || !URL.createObjectURL) return;
     const key = base.key;
     try {
+      const art = new Image();
+      art.src = MV_ART;
+      const ok = await art.decode().then(() => true, () => false);
+      if (ok) {
+        const w = document.getElementById("mvw");
+        if (!w || !w.isConnected || (S.mapBase && S.mapBase.key) !== key || w.querySelector(".mv-base")) return;
+        Object.assign(art, { className: "mv-base", alt: "", draggable: false });
+        art.width = base.w; art.height = base.h;
+        w.insertAdjacentHTML("afterbegin", `<svg class="mv-lines" width="${base.w}" height="${base.h}" viewBox="0 0 ${base.w} ${base.h}" aria-hidden="true">${lineworkSvg(base, ' vector-effect="non-scaling-stroke"')}</svg>`);
+        w.prepend(art);
+        requestAnimationFrame(() => art.classList.add("on"));
+        return;
+      }
       let url = baked.key === key ? baked.url : null;
       if (!url) url = await bakeCached(key);
       if (!url) {
-        const art = await artImg(), mounts = art ? {} : await mountImgs();
+        const mounts = await mountImgs();
         const f = Math.max(1, Math.min(2, Math.sqrt(BAKE_PX / (base.w * base.h))));
         const PW = Math.round(base.w * f), PH = Math.round(base.h * f);
-        const vec = URL.createObjectURL(new Blob([paintSvg(base, mounts, PW, PH, art)], { type: "image/svg+xml" }));
+        const vec = URL.createObjectURL(new Blob([paintSvg(base, mounts, PW, PH)], { type: "image/svg+xml" }));
         const img = new Image();
         img.src = vec;
         await img.decode();
