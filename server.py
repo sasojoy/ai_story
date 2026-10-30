@@ -65,7 +65,7 @@ from tianxia import (
     arena_crowd, ascend, battle_instance, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata, might,
     naming, narration, outing,
     ollama_client, power_save, rules,
-    precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
+    precise, seal, seal_duel, server_bots, social, sortie, speech, tale, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
     zhuan_end,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
@@ -3024,9 +3024,24 @@ def api_reports(request: Request, id: int | None = None):
 # ── 戰記（Joy 2026-10-29，原稱戰役話本）：決戰收場那一刻在背景寫、全服一份，戰報頁「戰記 ›」與戰記頁讀它 ──
 # 介面（主機那邊照同一份寫）：{status: "ready"|"pending"|"none", title, season, battle_name, result,
 #   acts: [{title, banner?, scenes: [{head, text, said?: {who, side, line}}]}], cast: [{name, side?, line}], made_at}
-# 寫法、產生、存放歸主機；接上之前一律回 none（網頁就不畫那一顆）。
+# 寫法、產生、存放在 tianxia/tale.py 與下面這一段：收場之後由背景執行緒（tale_round）一篇一篇寫，
+# 存進資料庫旁邊的小檔 <db>-tale.sqlite（不動 SCHEMA_VERSION）。模型叫不動就存引擎自己拼的那一版（tale.plain），
+# 所以「史官還在落筆」只會是「還沒輪到它寫」，不會永遠卡著。
 def tale_view(battle_id: int) -> dict:
-    return {"status": "none"}
+    """一場的戰記：寫好了回整篇（ready）；是決戰、收場了、還沒寫好回 pending；其餘（不是決戰、沒這場、還沒接上）回 none。"""
+    store = TALES
+    if store is None:
+        return {"status": "none"}
+    written = store.get(battle_id)
+    if written is not None:
+        return written.model_dump()
+    return {"status": "pending"} if _tale_due(battle_id) else {"status": "none"}
+
+
+def _tale_due(record_id: int) -> bool:
+    """這一場該有戰記：收場的決戰，有結果（季終沒打完的 unfinished 沒有結果，不寫）。"""
+    battle = open_world().ended_battle(record_id)
+    return battle is not None and not battle.unfinished and bool(battle.outcome_title)
 
 
 # 江湖史也點得進戰記：誰看得到（只有參戰的人，還是全服）等 Joy 定，先關著
@@ -3035,15 +3050,107 @@ TALES_IN_CHRONICLE = False
 
 def tale_index(game: Game) -> list[dict]:
     """江湖史的戰記目錄（新的在前）：開關關著、或主機還沒接上都是空的。"""
-    if not TALES_IN_CHRONICLE:
+    if not TALES_IN_CHRONICLE or TALES is None:
         return []
-    return []
+    return [{"battle_id": record_id, "title": written.battle_name, "season": written.season, "result": written.result}
+            for record_id, written in TALES.listing(game.world.get_season_number())]
 
 
 @app.get("/api/tale/{battle_id}")
 def api_tale(request: Request, battle_id: int):
     _game(request)  # 要登入，跟戰報一樣
     return tale_view(battle_id)
+
+
+# ── 戰記怎麼寫出來：全服一條背景執行緒（start_tales，main() 開），每 TALE_ROUND_SECONDS 秒看一次這一季有沒有收場了
+# 卻還沒有戰記的決戰，有就寫一篇。不拿行動鎖（只讀收場的那一場與它的回合、寫旁邊的小檔），模型呼叫排在真人後面
+# （佇列開著時當假人排）；省電模式下沒有真人來過就不叫，不把模型載回 VRAM（同旁白改寫）。
+TALES: tale.TaleStore | None = None
+TALES_CLIENT = None  # 寫戰記用的 client（main() 照設定建；測試塞假的）
+TALES_STOP = threading.Event()
+TALES_THREAD: threading.Thread | None = None
+TALE_ROUND_SECONDS = 30.0  # 看一次的間隔（一季頂多十來場，寫完就閒著）
+TALE_BUDGET_SECONDS = 180.0  # 一篇的模型預算
+TALE_OWNER_KEY = "戰記"  # 佇列裡的名號（不是任何角色）
+
+
+def tale_store_path() -> Path:
+    db = default_path()
+    return db.with_name(f"{db.stem}-tale.sqlite")
+
+
+def start_tales(config, client=None) -> threading.Thread | None:
+    """建 TALES（小檔不管叫不叫得動模型都建：讀的一邊才有東西可查）、開背景執行緒（daemon）。只有 main() 與測試呼叫。"""
+    global TALES, TALES_CLIENT, TALES_THREAD
+    TALES = tale.TaleStore(tale_store_path())
+    if client is None:
+        try:
+            client = OllamaClient.from_config(config)
+        except Exception:  # noqa: BLE001  建不起 client：照模板寫，不擋伺服器
+            client = None
+    TALES_CLIENT = client
+    failures = _StepFailures(time.monotonic, "戰記")
+
+    def loop() -> None:
+        while not TALES_STOP.wait(TALE_ROUND_SECONDS):
+            try:
+                tale_round()
+            except Exception as e:  # noqa: BLE001  一篇出錯不能讓整條停下來
+                failures.failed(e)
+            failures.tick()
+
+    TALES_THREAD = threading.Thread(target=loop, daemon=True, name="tales")
+    TALES_THREAD.start()
+    return TALES_THREAD
+
+
+def tale_material(world, battle) -> tale.Material | None:
+    """把收場的一場決戰整理成寫戰記的料（只讀）。內容裡沒有這一場（換過內容的舊季）是 None。"""
+    definition = CONTENT.battles.get(battle.battle_id)
+    if definition is None or battle.record_id is None:
+        return None
+    return tale.gather(
+        definition, battle, world.battle_rounds(battle.record_id),
+        season=world.get_season_number(), side_names=battle_instance.side_names(battle, definition),
+    )
+
+
+def tale_round(clock: Callable[[], float] = time.time) -> int | None:
+    """寫一篇（背景執行緒的一輪；測試直接叫）：這一季收場了、還沒有戰記的決戰挑最新的一場寫。回傳寫好的流水號，
+    沒做事是 None。模型叫不動、寫壞就存模板版（照引擎自己那幾句），不留著讓玩家一直看「史官還在落筆」。
+    呼叫端不能握著行動鎖。"""
+    store = TALES
+    if store is None:
+        return None
+    if power_save.on() and clock() - LAST_HUMAN > ONLINE_SECONDS:
+        return None  # 省電模式、沒人在線：等有人來再寫
+    world = open_world()
+    if world.season_phase() != "running":
+        return None
+    season = world.get_season_number()
+    done = store.done(season)
+    todo = [b for b in world.season_ended_battles(season)
+            if b.record_id is not None and b.record_id not in done and not b.unfinished and b.outcome_title]
+    if not todo:
+        return None
+    battle = todo[-1]  # 最新的那一場先（玩家剛打完就在等它）
+    material = tale_material(world, battle)
+    if material is None:
+        return None
+    budget, started = TALE_BUDGET_SECONDS, _monotonic()
+
+    def ask() -> tuple[dict, dict]:
+        return tale.write(within_budget(TALES_CLIENT, budget - (_monotonic() - started)), material)
+
+    if QUEUE is None:
+        scenes, cast = ask()
+    else:
+        try:  # 排在真人後面（當成假人排）；排不到這一輪就算了，下一輪再寫
+            scenes, cast = QUEUE.run(TALE_OWNER_KEY, ask, fallback=({}, {}), bot=True, wait=min(budget, 120))
+        except Busy:
+            return None
+    store.put(material.record_id, tale.compose(material, scenes, cast, made_at=clock()))
+    return material.record_id
 
 
 # ── 見聞的「榜單」（企劃者 2026-10-14：善人、惡人、名人、宗師榜，連同武學榜、內功榜）──
@@ -3577,6 +3684,7 @@ def main(argv: list[str] | None = None) -> None:
     start_web_push(CONTENT.config)  # 開關關著、沒裝 cryptography 什麼都不做：WEB_PUSH 是 None
     print(narration_line(CONTENT.config), flush=True)
     start_narration(CONTENT.config)  # 減法季的開關關著只建小檔、不開執行緒
+    start_tales(CONTENT.config)  # 戰記：小檔一定建，執行緒照樣開（叫不動模型就寫模板版）
     if args.lan:
         print("已開放區網連線：同一個網路裡的裝置都連得到。", flush=True)
     # timeout_graceful_shutdown：uvicorn 關機時會等進行中的回應收完，而 SSE 串流永遠不會自己收完，Ctrl+C 一下就卡住
