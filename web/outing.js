@@ -16,7 +16,7 @@
   // 野地四層（由遠到近）與各自捲的速度：遠景最慢、前景比角色快、蓋在角色前面。別的地點類型的四層還沒畫，先都用野地
   const OUTING_LAYERS = [["bg_wild_far", 0.1, -30, 400], ["bg_wild_mid", 0.4, 50, 260], ["bg_wild_ground", 1, 210, 150]];
   const OUTING_FRONT = ["bg_wild_front", 1.6, 240, 150];
-  const OUTING_W = 720, OUTING_H = 360, OUTING_GY = 300, OUTING_HX = 190;
+  const OUTING_W = 480, OUTING_H = 360, OUTING_GY = 300, OUTING_HX = 140; // 4:3，手機上畫面占上半、人物夠大
   const OUTING_CELL = 220, OUTING_AX = 100, OUTING_BY = 212;
   const OUTING_KIND = { material: "料", encounter: "戰", event: "事", insight: "悟" };
   const OUTING_SPEED_KEY = "outing-speed";
@@ -29,7 +29,7 @@
   const OUTING_SET_OFF = "出發";
 
   // 這一層自己的狀態（不放進 S：每一格動畫都會改，不該讓整頁重畫）
-  const OW = { imgs: null, open: false, away: false, shown: 0, tasks: [], cur: null, raf: 0, last: 0, scroll: 0, props: [], parts: [],
+  const OW = { imgs: null, open: false, away: false, shown: 0, played: 0, tasks: [], cur: null, raf: 0, last: 0, scroll: 0, props: [], parts: [],
     hero: { pose: "idle", k: 0, t: 0, runP: 0, kx: 0, red: 0, bubble: "", glow: 0, gold: false }, turbo: false, speed: 1, going: false };
 
   function outingSpeed() { try { return Number(localStorage.getItem(OUTING_SPEED_KEY)) === 2 ? 2 : 1; } catch (e) { return 1; } }
@@ -71,7 +71,7 @@
   function outingSync() {
     const trip = S.main && S.main.outing && S.main.outing.trip;
     // 重新整理頁面（或換了分頁）時那一趟還停在要選的事上：當作已經按過「去看看」，選完照樣接著走（沿路那幾行不重演）
-    if (trip && !trip.end && !OW.open && !OW.away && OW.shown === 0) { OW.away = true; OW.shown = trip.beats.length; }
+    if (trip && !trip.end && !OW.open && !OW.away && OW.shown === 0) { OW.away = true; OW.shown = OW.played = trip.beats.length; }
     if (!trip || !OW.away || OW.going || S.busy) return;
     if (trip.end) { OW.away = false; outingOpen(); return; }
     if (!trip.can_go) return;
@@ -92,8 +92,8 @@
       box.id = "outing-pop";
       box.className = "outing-wrap";
       box.innerHTML = `<div class="outing-card" role="dialog" aria-label="走一趟">
-        <p class="outing-head"><b class="outing-place"></b><span class="outing-step"></span></p>
-        <canvas class="outing-cv" width="${OUTING_W}" height="${OUTING_H}" aria-label="走一趟"></canvas>
+        <div class="outing-stage"><canvas class="outing-cv" width="${OUTING_W}" height="${OUTING_H}" aria-label="走一趟"></canvas>
+        <p class="outing-head"><b class="outing-place"></b><span class="outing-step"></span></p></div>
         <div class="outing-log" aria-live="polite"></div>
         <div class="outing-foot"></div></div>`;
       document.body.appendChild(box);
@@ -102,8 +102,10 @@
     if (!OW.open) {
       OW.open = true;
       OW.speed = outingSpeed();
-      if (OW.shown === 0) { box.querySelector(".outing-log").innerHTML = ""; OW.props = []; OW.parts = []; OW.hero.pose = "idle"; OW.hero.kx = 0; OW.hero.glow = 0; }
+      if (OW.shown === 0) { OW.played = 0; box.querySelector(".outing-log").innerHTML = ""; OW.props = []; OW.parts = []; OW.hero.pose = "idle"; OW.hero.kx = 0; OW.hero.glow = 0; }
     }
+    // 重新整理頁面之後接著走：已經演過的那幾段直接寫回去，不重演
+    if (OW.shown && !box.querySelector(".outing-line")) trip.beats.slice(0, OW.shown).forEach((b) => outingLine(b, false));
     box.hidden = false;
     box.querySelector(".outing-place").textContent = trip.place;
     outingQueue(trip);
@@ -135,7 +137,7 @@
     const box = document.getElementById("outing-pop");
     const trip = outingTrip();
     if (!box || !trip) return;
-    box.querySelector(".outing-step").textContent = `第 ${Math.min(Math.max(OW.shown, 1), trip.total)}／${trip.total} 段`;
+    box.querySelector(".outing-step").textContent = `第 ${Math.min(Math.max(OW.played, 1), trip.total)}／${trip.total} 段`;
     const foot = box.querySelector(".outing-foot");
     const walking = OW.cur || OW.tasks.length;
     if (walking) {
@@ -204,10 +206,10 @@
     while (OW.shown < trip.beats.length) {
       const i = OW.shown, b = trip.beats[i];
       const lost = trip.end === "lost" && i === trip.beats.length - 1;
-      OW.tasks.push(...outingBeatTasks(b, lost), { dur: 0, end: () => { outingLine(b, lost); outingFoot(); } });
+      OW.tasks.push(outingCall(() => { OW.played = i + 1; OW.hero.bubble = ""; outingFoot(); }), ...outingBeatTasks(b, lost), { dur: 0, end: () => { outingLine(b, lost); outingFoot(); } });
       OW.shown += 1;
     }
-    OW.tasks.push({ dur: 0, end: () => { OW.turbo = false; outingFoot(); } }); // end：OW.cur 清掉之後才畫底下那一排（不然還當作在走）
+    OW.tasks.push({ dur: 0, end: () => { OW.turbo = false; if (trip.end) OW.hero.bubble = ""; outingFoot(); } }); // end：OW.cur 清掉之後才畫底下那一排（不然還當作在走）
   }
 
   function outingRun(target, gap) {
@@ -368,7 +370,7 @@
       }
     }
     const [name, i] = outingHeroFrame();
-    outingSprite(cx, name, i, OUTING_HX + H.kx, { tint: "#e0503f", tintA: H.red * 0.55 });
+    outingSprite(cx, name, i, OUTING_HX + H.kx, { tint: "#ffe9e0", tintA: H.red * 0.6 }); // 挨打閃一下淡色，不把整個人塗紅
     if (H.bubble) {
       const x = OUTING_HX + H.kx + 38, y = OUTING_GY - 204;
       cx.fillStyle = "#fffaf0";
