@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import ast
+import functools
 import re
 from pathlib import Path
 
@@ -150,18 +151,113 @@ def test_feature_packages_only_import_the_core_their_own_package_or_marked_old_m
     assert found == []
 
 
+def feature_target(mod: str) -> str | None:
+    """import 的這個模組是哪一包（tianxia.features.<包>…，或舊名的別名）；不是包是 None。"""
+    parts = mod.split(".")
+    if len(parts) > 2 and parts[:2] == ["tianxia", "features"]:
+        return parts[2]
+    return aliases().get(parts[1]) if len(parts) > 1 and parts[0] == "tianxia" else None
+
+
+def _feature_imports(path: Path) -> list[tuple[int, str]]:
+    """這個檔 import 了哪幾個功能包的模組：[(行, 模組)]，同一行同一包只記一次（記最長的那個模組名：from .features.mall import actions
+    記 tianxia.features.mall.actions；from tianxia.features.mall.rules import reason_text 記 tianxia.features.mall.rules）。"""
+    return list(_feature_imports_cached(path))
+
+
+@functools.lru_cache(maxsize=None)
+def _feature_imports_cached(path: Path) -> tuple[tuple[int, str], ...]:
+    text = path.read_text(encoding="utf-8")
+    if "features" not in text and not any(re.search(rf"\b{re.escape(a)}\b", text) for a in aliases()):
+        return ()  # 寫不到 features 也寫不到別名的檔不可能 import 包：不必 parse（engine.py 一萬七千行，parse 一次一秒多）
+    seen: dict[tuple[int, str], str] = {}
+    for line, mod, _ in imports_of(text, _modname(path)):
+        target = feature_target(mod)
+        if target is not None:
+            best = seen.get((line, target))
+            if best is None or (_module_exists(mod), len(mod)) > (_module_exists(best), len(best)):
+                seen[(line, target)] = mod
+    return tuple(sorted((line, mod) for (line, _), mod in seen.items()))
+
+
+# 瘦下來的 Game（engine.py）也是核心（手冊 3.1）。3.10 准它留一行的委派，所以它是核心裡唯一另外 import 包的地方：只准下面這幾樣，
+# 多一處就紅（要接一包先想掛鉤；真的要過渡就加進這裡、回報寫明）。第 2 階呼叫端改叫包、委派拿掉時從這裡刪。
+GAME_IMPORTS = {"tianxia.features.mall.actions", "tianxia.features.feast.actions"}
+GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
+    "mall_buy", "mall_entry", "mall_rename_left", "mall_rename", "mall_claim", "mall_view", "mall_records",
+    "admin_mall_reissue", "admin_mall_revoke", "admin_mall_refund", "admin_mall_ledger", "_mall_grant",
+    "feast_free_text_prompt", "feast_text_request", "feast_toast",
+}
+GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；過渡）
+    "_own_scene_text": "坐在宴席上的場景卡（feast_actions.scene）：場景卡還沒有掛鉤；搬包之前也不看宴客開關",
+}
+GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）
+    ("own_turn_checks", "_mall_grant"): "封測元寶每一輪發（本人這一輪沒有掛鉤；on_sync 不夠：假人程式的那一輪不 sync）",
+}
+
+
+@functools.lru_cache(maxsize=None)
+def game_links() -> tuple[set[str], set[str], set[tuple[str, str]]]:
+    """engine.py：(模組頂層 import 的包的模組, Game 裡直接叫到包的方法, Game 裡叫委派的 (方法, 委派))。Game 以外碰到包也算直接叫。"""
+    tree = ast.parse((TIANXIA / "engine.py").read_text(encoding="utf-8"))
+    local: dict[str, str] = {}  # 模組頂層 import 進來的包的模組：本地名字 → 模組
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            head = ".".join((["tianxia"] if node.level else []) + ([node.module] if node.module else []))
+            local.update({a.asname or a.name: f"{head}.{a.name}" for a in node.names if feature_target(f"{head}.{a.name}") is not None})
+        elif isinstance(node, ast.Import):
+            local.update({a.asname or a.name.split(".")[0]: a.name for a in node.names if feature_target(a.name) is not None})
+    imports = set(local.values())
+    game = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Game")
+    methods = [f for f in game.body if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    direct = {f.name for f in methods if any(isinstance(n, ast.Name) and n.id in local for n in ast.walk(f))}
+    outside = [n for top in tree.body if top is not game and not isinstance(top, (ast.Import, ast.ImportFrom))
+               for n in ast.walk(top) if isinstance(n, ast.Name) and n.id in local]
+    direct |= {f"<engine 模組層:{n.lineno}>" for n in outside}
+    callers = {(f.name, n.attr) for f in methods for n in ast.walk(f)
+               if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == "self"
+               and n.attr in direct and f.name not in direct}
+    return imports, direct, callers
+
+
 def test_the_core_never_imports_a_feature_package_except_the_registry():
     found = []
     for path in sorted((TIANXIA / "core").glob("*.py")):
         if path.name == "registry.py":
             continue
-        found += [f"{path.name}:{line} {name}" for line, name, _ in imports_of(path.read_text(encoding="utf-8"), _modname(path))
-                  if name.startswith("tianxia.features")]
+        found += [f"{path.name}:{line} {mod}" for line, mod in _feature_imports(path)]
     for name in sorted(CORE):
-        path = TIANXIA / f"{name}.py"
-        found += [f"{path.name}:{line} {mod}" for line, mod, _ in imports_of(path.read_text(encoding="utf-8"), _modname(path))
-                  if mod.startswith("tianxia.features")]
+        found += [f"{name}.py:{line} {mod}" for line, mod in _feature_imports(TIANXIA / f"{name}.py")]
+    found += [f"engine.py:{line} {mod}" for line, mod in _feature_imports(TIANXIA / "engine.py") if mod not in GAME_IMPORTS]
     assert found == []
+
+
+def test_the_game_reaches_the_packages_only_through_the_listed_methods():
+    """Game 碰包的地方只有：一行的委派（3.10）、寫明了的過渡直連（GAME_DIRECT、GAME_DELEGATE_CALLERS）。其餘一律走 FEATURES 的掛鉤。"""
+    imports, direct, callers = game_links()
+    assert imports == GAME_IMPORTS
+    assert direct == GAME_DELEGATES | set(GAME_DIRECT)
+    assert {(caller, callee) for caller, callee in callers if callee in GAME_DELEGATES} == set(GAME_DELEGATE_CALLERS)
+
+
+def reverse_imports() -> list[str]:
+    """另一個方向的過渡（3.11）：還沒搬的舊模組、伺服器、腳本 import 功能包（含經過舊名的別名、Game 的委派那兩行）。
+    PM 每搬一包在交接記還剩幾處，跟 transitional_imports()（包 import 舊模組）兩個方向都記；核心的 registry.py 不算。"""
+    files = [p for p in sorted(TIANXIA.glob("*.py"))] + [ROOT / "server.py", ROOT / "run_bots.py"] + sorted((ROOT / "scripts").rglob("*.py"))
+    out = []
+    for path in files:
+        if path.exists():
+            out += [f"{path.relative_to(ROOT).as_posix()}:{line} {mod}" for line, mod in _feature_imports(path)]
+    return out
+
+
+def test_the_reverse_transitional_imports_come_from_old_modules():
+    """舊模組 → 包那一向：都在還沒搬的舊模組、殼與腳本裡（核心的只有 engine.py 准的那兩行），而且數得到（不然交接記的數是空的）。"""
+    found = reverse_imports()
+    assert any(e.startswith("tianxia/engine.py:") for e in found) and any(e.startswith("server.py:") for e in found)
+    for entry in found:
+        stem = entry.split(":", 1)[0].removeprefix("tianxia/").removesuffix(".py")
+        assert stem not in CORE or entry.rsplit(" ", 1)[1] in GAME_IMPORTS, entry
 
 
 def transitional_imports() -> list[str]:
@@ -260,3 +356,14 @@ def test_the_old_names_left_as_aliases_are_known():
 ])
 def test_the_scanner_lets_the_allowed_ones_through(source):
     assert problems_of(source, "tianxia.features.mall.actions") == []
+
+
+if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py
+    import io
+    import sys
+
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    for title, rows in (("包 → 舊模組（transitional_imports）", transitional_imports()), ("舊模組 → 包（reverse_imports）", reverse_imports())):
+        print(f"{title}：{len(rows)} 處")
+        print("\n".join(f"  {r}" for r in rows))
+    print(f"Game 碰包：委派 {len(GAME_DELEGATES)} 個、直連 {len(GAME_DIRECT) + len(GAME_DELEGATE_CALLERS)} 處")
