@@ -190,6 +190,38 @@ def test_a_stuck_fetch_runs_on_the_last_fetched_develop_with_a_note(monkeypatch,
     assert any("逾時" in n for n in notes)
 
 
+def test_only_one_run_at_a_time_and_a_killed_run_does_not_block_forever(tmp_path):
+    """手冊 4.2「一次只跑一份」：手動跑撞上排程（或反過來），第二份會重設第一份正在用的 checkout、刪它的暫存資料夾、
+    蓋掉同一天的 log 與 junit。鎖放在 .local/nightly；排程時限兩小時，被砍掉留下的鎖超過 LOCK_STALE 就不算數。"""
+    assert nightly.take_lock(tmp_path, now=1000.0)
+    assert not nightly.take_lock(tmp_path, now=1060.0)
+    assert "pid" in nightly.lock_holder(tmp_path)
+    nightly.release_lock(tmp_path)
+    assert nightly.take_lock(tmp_path, now=2000.0)
+    assert nightly.take_lock(tmp_path, now=2000.0 + nightly.LOCK_STALE + 1)  # 前一份被砍了
+    (tmp_path / "running.lock").write_text("壞掉", encoding="utf-8")  # 剛建好還沒寫進內容：照檔案時間算，還新
+    assert not nightly.take_lock(tmp_path)
+
+
+def test_a_second_run_backs_off_without_touching_the_checkout(tmp_path, monkeypatch, capsys):
+    out = tmp_path / ".local" / "nightly"
+    out.mkdir(parents=True)
+    assert nightly.take_lock(out)
+    monkeypatch.setattr(nightly, "prepare_checkout", lambda *a: pytest.fail("另一份在跑，不能重設 checkout"))
+    monkeypatch.setattr(nightly, "run_suite", lambda *a: pytest.fail("另一份在跑，不能跑"))
+    assert nightly.main(["--repo", str(tmp_path)]) != 0
+    assert "另一份" in capsys.readouterr().out
+    assert (out / "running.lock").exists()  # 別人的鎖不刪
+    nightly.release_lock(out)
+
+    def broken(*a):
+        raise RuntimeError("抓不到")
+
+    monkeypatch.setattr(nightly, "prepare_checkout", broken)  # 自己跑：失敗了也要把鎖還掉
+    assert nightly.main(["--repo", str(tmp_path)]) == 1
+    assert not (out / "running.lock").exists() and "抓不到" in (out / "latest.txt").read_text(encoding="utf-8-sig")
+
+
 def test_latest_and_the_ps1_carry_a_bom(place):
     """Windows PowerShell 5.1 沒有 BOM 會照 ANSI 讀：nightly.ps1 的中文全變亂碼、Get-Content latest.txt 讀錯。"""
     out, checkout = place

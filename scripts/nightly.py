@@ -29,6 +29,47 @@ from pathlib import Path
 MAX_COMMITS = 80  # 摘要裡最多列幾筆提交（再多就寫「還有幾筆」）
 KEEP_DAYS = 30  # <日期>.log、<日期>.xml 留幾天
 FETCH_TIMEOUT = 300  # 秒：fetch 卡住（網路、憑證要跳視窗）就放棄，照本機上一次抓到的 origin/develop 跑，寫進備註
+LOCK_STALE = 3 * 3600  # 秒：排程的時限是兩小時，鎖比這還舊就是被砍掉的那一次留下的，不算數
+LOCK_NAME = "running.lock"
+
+
+def take_lock(out: Path, now: float | None = None) -> bool:
+    """一次只跑一份（手冊 4.2）：在 .local/nightly 建 running.lock（O_EXCL，誰先建到算誰的）。拿不到回 False。
+    鎖裡記 pid 與開始的時間；超過 LOCK_STALE 的是被砍掉的那一次留下的，清掉重拿。內容讀不了（剛建好還沒寫）照檔案時間算。"""
+    now = time.time() if now is None else now
+    lock = out / LOCK_NAME
+    for _ in range(2):
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            try:
+                started = float(json.loads(lock.read_text(encoding="utf-8"))["started"])
+            except (OSError, ValueError, KeyError, TypeError):
+                try:
+                    started = lock.stat().st_mtime
+                except OSError:  # 剛好被對方收掉了：再搶一次
+                    continue
+            if now - started <= LOCK_STALE:
+                return False
+            lock.unlink(missing_ok=True)
+            continue
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump({"pid": os.getpid(), "started": now}, f)
+        return True
+    return False
+
+
+def lock_holder(out: Path) -> str:
+    try:
+        held = json.loads((out / LOCK_NAME).read_text(encoding="utf-8"))
+        when = dt.datetime.fromtimestamp(float(held["started"])).strftime("%Y-%m-%d %H:%M")
+        return f"pid {held.get('pid')}，{when} 開始"
+    except (OSError, ValueError, KeyError, TypeError):
+        return f"鎖 {out / LOCK_NAME}"
+
+
+def release_lock(out: Path) -> None:
+    (out / LOCK_NAME).unlink(missing_ok=True)
 
 
 def git(cwd: Path, *args: str, check: bool = False, timeout: float | None = None) -> subprocess.CompletedProcess:
@@ -247,16 +288,26 @@ def main(argv: list[str] | None = None) -> int:
             extra = {"started": started, "exit": None, "workers": args.workers, "notes": ["只重寫摘要（--summarize-only）"]}
         print(summarize(repo, out, checkout, date, sha, extra))
         return 0
+    if not take_lock(out):  # 另一份（排程或手動）正在用 checkout 與暫存資料夾：不動它，它跑完會寫 latest.txt
+        print(f"另一份每日整套正在跑（{lock_holder(out)}）：這一次不跑。")
+        return 1
     try:
-        sha, notes = prepare_checkout(repo, checkout, args.branch)
+        return _run(repo, out, checkout, args.branch, args.workers, date, started)
+    finally:
+        release_lock(out)
+
+
+def _run(repo: Path, out: Path, checkout: Path, branch: str, workers: int, date: str, started: str) -> int:
+    try:
+        sha, notes = prepare_checkout(repo, checkout, branch)
     except (RuntimeError, OSError) as exc:  # 抓不到、重設不了：寫進 latest.txt，免得早上看到的是前一天的
         text = f"每日整套 {date}（{started}開始）\n結果：沒跑——準備 checkout 失敗：{exc}\n"
         (out / "latest.txt").write_text(text, encoding="utf-8-sig")
         print(text)
         return 1
     print(f"每日整套：develop {sha[:8]}，跑在 {checkout}", flush=True)
-    code, seconds = run_suite(checkout, out, date, args.workers)
-    extra = {"started": started, "exit": code, "minutes": round(seconds / 60, 1), "workers": args.workers, "notes": notes}
+    code, seconds = run_suite(checkout, out, date, workers)
+    extra = {"started": started, "exit": code, "minutes": round(seconds / 60, 1), "workers": workers, "notes": notes}
     print(summarize(repo, out, checkout, date, sha, extra))
     prune(out, date)
     return 0
