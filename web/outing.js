@@ -51,6 +51,8 @@
   const OUTING_STELE = "路碑";
   const OUTING_STELE_N = "{n} 人留過";
   const OUTING_STELE_ALL = "此處留過的話";
+  const OUTING_INK_SEAL = "墨";
+  const OUTING_INK_SEAL_LABEL = "題壁墨";
 
   // 這一層自己的狀態（不放進 S：每一格動畫都會改，不該讓整頁重畫）
   const OW = { imgs: null, open: false, away: false, shown: 0, played: 0, tasks: [], cur: null, raf: 0, last: 0, scroll: 0, props: [], parts: [],
@@ -221,20 +223,26 @@
   }
 
   // 畫面右上那塊路碑（Joy 10/30）：碑上一句（最後一則題壁墨寫的，沒有就是最多人留的預設句），點開看這一處全部的留言
+  // 題壁墨寫的那一句要一眼看得出來（Joy 10/30）：碑換成朱漆描金、角上一枚「墨」字印；點開的清單裡題壁墨的排前面、整條描金
   function outingSteleHtml(st) {
     const by = st.author ? `——${esc(st.author)}` : st.n > 1 ? esc(OUTING_STELE_N.replace("{n}", st.n)) : "";
-    return `<small>${OUTING_STELE}</small><b>「${esc(st.text)}」</b>${by ? `<i>${by}</i>` : ""}`;
+    const seal = st.ink ? `<em class="ink-seal" aria-label="${OUTING_INK_SEAL_LABEL}">${OUTING_INK_SEAL}</em>` : "";
+    return `${seal}<small>${OUTING_STELE}</small><b>「${esc(st.text)}」</b>${by ? `<i>${by}</i>` : ""}`;
   }
   function outingSteleAllHtml(st) {
-    return `<p class="outing-stele-head"><b>${OUTING_STELE_ALL}</b><button data-act="outing-stele" aria-label="收起">×</button></p>${st.all.map((x) =>
-      `<p class="${x.ink ? "ink" : ""}">「${esc(x.text)}」<small>——${esc(x.author)}</small></p>`).join("")}`;
+    const rows = [...st.all.filter((x) => x.ink), ...st.all.filter((x) => !x.ink)];
+    return `<p class="outing-stele-head"><b>${OUTING_STELE_ALL}</b><button data-act="outing-stele" aria-label="收起">×</button></p>${rows.map((x) => x.ink
+      ? `<p class="ink"><em class="ink-seal" aria-label="${OUTING_INK_SEAL_LABEL}">${OUTING_INK_SEAL}</em><span>「${esc(x.text)}」<small>——${esc(x.author)}</small></span></p>`
+      : `<p>「${esc(x.text)}」<small>——${esc(x.author)}</small></p>`).join("")}`;
   }
   function outingStele() {
     const box = document.getElementById("outing-pop");
     const trip = outingTrip();
     if (!box || !trip) return;
-    const st = trip.stele;
+    // 路牌走到最後（結算卡出來，卡片的 done）才看得到，一路上不掛著（Joy 10/30）；伺服器一次算完整趟，trip.end 在動畫還在演時就有了
+    const st = box.querySelector(".outing-card").classList.contains("done") ? trip.stele : null;
     const sign = box.querySelector(".outing-stele"), all = box.querySelector(".outing-stele-all");
+    sign.classList.toggle("inked", !!(st && st.ink));
     sign.hidden = !st;
     all.hidden = !st || !OW.steleOpen;
     if (!st) { OW.steleOpen = false; return; }

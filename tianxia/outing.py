@@ -140,7 +140,7 @@ def foe_look(squad) -> str:
 
 def stele(state: GameState, place: str, *, own: bool = False) -> dict | None:
     """畫面上方那塊路碑（Joy 10/30）：這一處留過的話。碑上那一句是最後一則用題壁墨寫的；沒有人用過題壁墨，是最多人留的那一句預設句
-    （一樣多取最近留的）。own（這一趟自己剛留過一句）：碑上先是自己那一句（Joy 10/30「要」），mine 標出來。
+    （一樣多取最近留的）；ink 是碑上那一句是題壁墨寫的（畫面要畫得更顯眼，Joy 10/30）。own（這一趟自己剛留過一句）：碑上先是自己那一句（Joy 10/30「要」），mine 標出來。
     all 是點開看到的全部，新的在前。這一處沒人留過是 None。"""
     here = [i for i in state.world.inscriptions if i.place == place]
     if not here:
@@ -149,7 +149,7 @@ def stele(state: GameState, place: str, *, own: bool = False) -> dict | None:
     inked = [i for i in here if not i.preset]
     if mine:
         top = max(mine, key=lambda i: i.id)
-        return {"text": top.text, "author": top.author, "n": 0, "mine": True,
+        return {"text": top.text, "author": top.author, "n": 0, "mine": True, "ink": not top.preset,
                 "all": [{"text": i.text, "author": i.author, "ink": not i.preset} for i in sorted(here, key=lambda i: -i.id)]}
     if inked:
         top, n = max(inked, key=lambda i: i.id), 0
@@ -157,7 +157,7 @@ def stele(state: GameState, place: str, *, own: bool = False) -> dict | None:
         counts = Counter(i.text for i in here)
         top = max(here, key=lambda i: (counts[i.text], i.id))
         n = counts[top.text]
-    return {"text": top.text, "author": top.author if not top.preset else "", "n": n,
+    return {"text": top.text, "author": top.author if not top.preset else "", "n": n, "ink": not top.preset,
             "all": [{"text": i.text, "author": i.author, "ink": not i.preset} for i in sorted(here, key=lambda i: -i.id)]}
 
 
