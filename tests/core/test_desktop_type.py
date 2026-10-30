@@ -1,6 +1,9 @@
 """電腦寬的店面字級（FB-305，企劃者 10/16 從對照圖選甲）：web/style.css 店面那一段（三間店、擂台、素材頁與軍需帳）每一條寫了字級的
 規則，在 @media (min-width: 641px) 裡都有一條同一個選擇器（不是掛在 .shop-layer／.shop-board 底下的前面加 :where(.shop-layer)，
 權重不變）、字級 ×1.3（四捨五入到 0.5px）的，而且先後跟店面那一段一樣；手機（沒有 media 的那一條）的值不動。
+功能包切出去的樣式（開發規範手冊 3.7；FEATURES 登記的 web 裡的 .css，現在是商城的 web/mall.css）一起管：那個檔裡掛在店面那一層
+（.shop-layer／.shop-board）底下、不在 media 裡的規則算店面那一段，接在 style.css 那一段後面（index.html 照這個順序載入）；
+電腦寬那一段同樣接在 style.css 的後面。
 讀的是 CSS 原文：webharness 沒有排版，量不到 computed style（實機比對在 docs/superpowers/feedback/ 的 FB-305 那一筆）。"""
 from __future__ import annotations
 
@@ -11,7 +14,12 @@ from urllib.parse import unquote_plus, urlparse
 import pytest
 import zhuan_html
 
+from tianxia.core import features as features_core
+
 CSS = (Path(__file__).resolve().parents[2] / "web" / "style.css").read_text(encoding="utf-8")
+# 功能包的樣式（index.html 排在 style.css 後面；第 3 階才由伺服器照 FEATURES 生成，這裡照登記的順序讀）
+FEATURE_CSS = [(Path(__file__).resolve().parents[2] / "web" / name).read_text(encoding="utf-8")
+               for name in features_core.web_files() if name.endswith(".css")]
 SHOP_START = "/* ── 店面（店面獨立介面設計第五節）"
 SHOP_END = "/* ── 電腦上的店面與武學譜那本書（FB-225"
 K = 1.3
@@ -66,23 +74,33 @@ def _scaled(val: str) -> str:
     return re.sub(r"(\d+(?:\.\d+)?)px", lambda m: f"{round(float(m.group(1)) * K * 2) / 2:g}px", val)
 
 
+def _in_shop(sel: str) -> bool:
+    """功能包的 CSS 裡算店面那一段的規則：每一個選擇器都掛在店面那一層底下。"""
+    return all(part.strip().startswith((".shop-layer", ".shop-board")) for part in sel.split(","))
+
+
 def _shop_base() -> dict[str, dict[str, str]]:
     section = _strip(CSS[CSS.index(SHOP_START): CSS.index(SHOP_END)])
-    return {sel: _sizes(body) for sel, body in _blocks(section) if not sel.startswith("@") and _sizes(body)}
+    base = {sel: _sizes(body) for sel, body in _blocks(section) if not sel.startswith("@") and _sizes(body)}
+    for css in FEATURE_CSS:  # 功能包切出去的店面（商城那一層）接在後面
+        base.update({sel: _sizes(body) for sel, body in _blocks(_strip(css)) if not sel.startswith("@") and _in_shop(sel) and _sizes(body)})
+    return base
 
 
 def _desktop() -> dict[str, dict[str, str]]:
     rules: dict[str, dict[str, str]] = {}
-    for head, body in _blocks(_strip(CSS)):
-        if head.replace(" ", "") == "@media(min-width:641px)":
-            for sel, inner in _blocks(body):
-                rules.setdefault(sel, {}).update(_sizes(inner))
+    for css in [CSS, *FEATURE_CSS]:
+        for head, body in _blocks(_strip(css)):
+            if head.replace(" ", "") == "@media(min-width:641px)":
+                for sel, inner in _blocks(body):
+                    rules.setdefault(sel, {}).update(_sizes(inner))
     return rules
 
 
 def test_every_shop_size_has_a_desktop_rule_one_point_three_times_bigger():
     base, desk = _shop_base(), _desktop()
     assert len(base) > 100  # 三間店、擂台、素材頁與軍需帳都在這一段
+    assert sum(sel.startswith(".shop-layer.shop-mall") for sel in base) >= 20  # 商城那一層（web/mall.css）也在：讀漏了這一條就空轉
     missing = {sel: (sizes, desk.get(_scoped(sel))) for sel, sizes in base.items()
                if {prop: _scaled(val) for prop, val in sizes.items()} != {prop: desk.get(_scoped(sel), {}).get(prop) for prop in sizes}}
     assert not missing, missing
@@ -242,17 +260,31 @@ def test_the_google_font_urls_are_read_the_way_the_browser_reads_them():
     assert families('<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400..700&amp;display=swap">') == {NOTO: {400, 500, 600, 700}}
 
 
+def _game_css(page: str) -> list[str]:
+    """遊戲頁載入的 /static/*.css（照 index.html 的順序；含功能包切出去的 mall.css）。"""
+    return re.findall(r"""<link[^>]*rel=["']stylesheet["'][^>]*href=["']/static/([^"'?]+\.css)""", page)
+
+
+def test_the_game_page_css_includes_the_feature_packages():
+    """字重的檢查照頁面真的載入的那幾份讀：功能包切出去的樣式（FEATURES 的 web）也在裡面，不然它寫的字重沒人管。"""
+    css = _game_css((WEB / "index.html").read_text(encoding="utf-8"))
+    assert css[0] == "style.css" and "zhuan.css" in css
+    assert [n for n in features_core.web_files() if n.endswith(".css")] and all(n in css for n in features_core.web_files() if n.endswith(".css"))
+
+
 def test_the_game_asks_for_serif_at_400_and_700_so_both_have_to_be_loaded():
     """尺的另一頭：遊戲的 CSS 真的有寫 400 與 700 的襯線字（不是只有繼承），這一條沒了、下面幾條就空轉。"""
-    _, wanted = _check((WEB / "index.html").read_text(encoding="utf-8"), ["style.css", "zhuan.css"], NOTO)
+    page = (WEB / "index.html").read_text(encoding="utf-8")
+    _, wanted = _check(page, _game_css(page), NOTO)
     assert 400 in wanted and 700 in wanted
+    assert any(s.startswith(".mall-ask") for s in wanted[700])  # 商城購買確認的標題（web/mall.css）也讀到了
     assert any("leaf-sign" in s for s in wanted[400]) and any("shop-line" in s for s in wanted[400])  # 武學譜的簽、店面掌櫃的話
 
 
 @pytest.mark.parametrize("family", [NOTO, LXGW])
 def test_the_game_page_loads_every_weight_it_asks_for_and_no_more(family):
     page = (WEB / "index.html").read_text(encoding="utf-8")
-    loaded, wanted = _check(page, ["style.css", "zhuan.css"], family)
+    loaded, wanted = _check(page, _game_css(page), family)
     assert loaded, f"遊戲頁沒載 {family}"
     for weight in wanted:  # 沒有一個字重被配到別的粗細：400 就是 400（FB-575），700 就是 700
         landed = snap(weight, loaded)
