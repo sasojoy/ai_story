@@ -435,7 +435,7 @@ def test_w1_corner_badges_for_a_fight_a_treasure_and_this_week():
 @pytest.mark.slow  # 單一條超過一秒（兩下之間要隔開，免得算成雙擊）
 def test_w1_tapping_the_land_opens_that_place_and_tapping_it_again_closes_the_card():
     """整塊地都是那一處的熱區（設計 2.3）：點長社那一塊地（不是小圖）開長社的卡、再點一次收回；點圓（曹氏莊院）開它的卡；點區外是空地。
-    照畫出來的那一塊算（landAt：圓先、地塊要在區界裡）。雙擊照舊放大，所以兩下之間隔開。"""
+    照畫出來的那一塊算（landAt：圓先、地塊要在區界裡）。點地要等 MV_TAP2 過了才開卡（雙擊只放大，下面那一條），所以每一下之後等一下再看。"""
     game = _game(profile="season21")
     base = game.map_base()
     cell = next(c for c in base["world"]["cells"] if c["id"] == "changshe")
@@ -456,18 +456,19 @@ const map = {{ clientWidth: 375, clientHeight: 700, clientLeft: 0, clientTop: 0,
 els.map = map;
 H.S.mapCam = {{ z: 1, x: 0, y: 0 }};
 const wait = () => new Promise((r) => setTimeout(r, 360));
-const tap = (x, y, id) => {{
+const tap = async (x, y, id) => {{
   const ev = {{ pointerType: 'touch', button: 0, pointerId: id, clientX: x, clientY: y, target: {{ closest: () => null }} }};
   H.mvDown({{ ...ev, type: 'pointerdown' }}); H.mvUp({{ ...ev, type: 'pointerup' }});
+  await wait();
   return [H.S.mapMode, H.S.mapSel, body.innerHTML.includes('data-act="map-back"') && !body.innerHTML.includes('m-cards')];  // 抽屜是那一處的卡
 }};
 return (async () => {{
   const look = [H.landAt(H.S.mapBase, H.S.mapState, {spot[0]}, {spot[1]}), H.landAt(H.S.mapBase, H.S.mapState, {manor['x']}, {manor['y']}),
     H.landAt(H.S.mapBase, H.S.mapState, -50, -50), H.landAt(H.S.mapBase, H.S.mapState, {cut[0]}, {cut[1]})];
-  const open = tap({spot[0]}, {spot[1]}, 1); await wait();
-  const shut = tap({spot[0]}, {spot[1]}, 2); await wait();
-  const round = tap({manor['x'] + 20}, {manor['y']}, 3); await wait();
-  const blank = tap(-50, -50, 4);
+  const open = await tap({spot[0]}, {spot[1]}, 1);
+  const shut = await tap({spot[0]}, {spot[1]}, 2);
+  const round = await tap({manor['x'] + 20}, {manor['y']}, 3);
+  const blank = await tap(-50, -50, 4);
   return {{ look, open, shut, round, blank }};
 }})();""")
     assert out["look"] == ["changshe", "cao_manor", None, None]
@@ -559,6 +560,58 @@ return (async () => {
         assert abs(math.log2(g["z"] / start)) > 1, (name, g)  # 真的跨了好幾個三分之一級
         assert abs(float(g["front"]) * g["z"] / 3.2 - 1) < 0.13, (name, g)  # 放手那一次照新的倍率：白邊 3.2 照螢幕（差不到三分之一級）
     assert out["fly"]["frames"] > 5
+
+
+def _land_spot(base, loc, dxs, dys):
+    """那一處的地上（地塊裡、區界裡、不在任何圓上）離小圖 (dx, dy) 的第一個點（地圖座標）。"""
+    cell = next(c for c in base["world"]["cells"] if c["id"] == loc)
+    region = next(r for r in base["world"]["regions"] if r["id"] == cell["region"])
+    p = next(b for b in base["places"] if b["id"] == loc)
+    patches = [b for b in base["places"] if b["id"] in _patches(base)]
+    r = base["view"]["patch_radius"]
+    return p, next((p["x"] + dx, p["y"] + dy) for dx in dxs for dy in dys
+                   if _inside(p["x"] + dx, p["y"] + dy, _poly(cell["d"])) and _inside(p["x"] + dx, p["y"] + dy, _poly(region["d"]))
+                   and all((p["x"] + dx - q["x"]) ** 2 + (p["y"] + dy - q["y"]) ** 2 > r * r for q in patches))
+
+
+@pytest.mark.slow  # 單一條超過一秒（要等 MV_TAP2 過去）
+def test_w1_a_double_tap_on_the_land_only_zooms():
+    """雙擊（Joy 的：以手指為中心放大兩倍）落在地上只放大：不開卡、不換抽屜、不畫路線，也不先為了露出小圖把鏡頭挪走（mvNudge）——
+    放大完手指底下還是同一點。卡開著時雙擊別處的地也一樣，開著的那一張不換。點一下的地等 MV_TAP2 過了、確定沒有第二下才開卡。
+    （W1 審查 2026-10-30：地鋪滿之後，雙擊的第一下就開了那一處的卡、畫了路線；小圖在畫面邊上時還先飛一下，放大的中心偏了約 25px。）"""
+    game = _game(profile="season21")
+    p, spot = _land_spot(game.map_base(), "changshe", range(30, 46, 3), (0, -6, 6, -12, 12))
+    out = run(game, DRAWER_DOM + GESTURE_DOM + f"""
+const tapAt = (id, mx, my) => {{ const c = H.S.mapCam, x = c.x + mx * c.z, y = c.y + my * c.z;
+  H.mvDown(pt('pointerdown', id, x, y)); H.mvUp(pt('pointerup', id, x, y)); return [x, y]; }};
+const settle = () => {{ let i = 0; extra = 0; while (q.size && i++ < 300) frame(); }};
+// 兩下之間：跑八幀（約 130ms 的動畫），也真的讓出去 60ms（計時器在這時候到的話就會開卡）——還在 MV_TAP2 之內
+const gap = async () => {{ extra = 0; for (let i = 0; i < 8; i++) frame(); await new Promise((r) => setTimeout(r, 60)); }};
+const wait = () => new Promise((r) => setTimeout(r, 360));
+const look = () => [H.S.mapMode, H.S.mapSel, H.S.mapDrawer, body.innerHTML.includes('m-cards'), els.mkr.innerHTML];
+const under = ([x, y]) => [(x - H.S.mapCam.x) / H.S.mapCam.z, (y - H.S.mapCam.y) / H.S.mapCam.z];
+return (async () => {{
+  H.camSet({{ z: 1.6, x: 10 - {p['x']} * 1.6, y: 400 - {p['y']} * 1.6 }}); H.mapBack(); settle();
+  const pinX = H.S.mapCam.x + {p['x']} * H.S.mapCam.z, z0 = H.S.mapCam.z, before = look();
+  const finger = tapAt(1, {spot[0]}, {spot[1]}); await gap(); tapAt(2, {spot[0]}, {spot[1]}); settle(); await wait(); settle();
+  const zoomed = {{ look: look(), z: H.S.mapCam.z, under: under(finger) }};
+  Object.assign(H.S, {{ mapMode: 'place', mapSel: 'yingchuan' }}); H.redrawDrawer();
+  const open = look();
+  tapAt(3, {spot[0]}, {spot[1]}); await gap(); tapAt(4, {spot[0]}, {spot[1]}); settle(); await wait(); settle();
+  const kept = look();
+  H.mapBack(); settle();
+  tapAt(5, {spot[0]}, {spot[1]});
+  const pending = look();
+  await wait(); settle();
+  return {{ pinX, z0, before, zoomed, open, kept, pending, single: look() }};
+}})();""")
+    assert out["pinX"] < 30 and out["z0"] == 1.6  # 長社的小圖在畫面左緣（以前第一下會 mvNudge 飛一下）
+    assert out["before"] == ["overview", None, "peek", True, ""]
+    assert out["zoomed"]["look"] == out["before"] and out["zoomed"]["z"] == 3.2
+    assert out["zoomed"]["under"] == pytest.approx(list(spot), abs=0.5)
+    assert out["kept"] == out["open"] and out["open"][:2] == ["place", "yingchuan"]
+    assert out["pending"] == out["before"]  # 點一下：還在等第二下
+    assert out["single"][:2] == ["place", "changshe"] and not out["single"][3] and out["single"][4]
 
 
 # ── 看哪裡 ──

@@ -1144,7 +1144,7 @@
   }
 
   // ── 看哪裡：S.mapCam = { z 倍率, x, y }，地圖上 (mx, my) 在地圖框裡的 (x + mx·z, y + my·z) ──
-  const mv = { pts: new Map(), start: null, moved: false, frame: 0, g: null, anim: 0, vel: [0, 0], last: null, lastTap: 0, eatUntil: 0, wheelTimer: 0, laid: null };
+  const mv = { pts: new Map(), start: null, moved: false, frame: 0, g: null, anim: 0, vel: [0, 0], last: null, lastTap: 0, tapTimer: 0, eatUntil: 0, wheelTimer: 0, laid: null };
   // 鏡頭還在動：手指按著又動過（拖、捏）、慣性滑或飛過去（mv.anim）、滾輪還沒停（mv.g 留著、沒有手指）。放手、滑停、飛完、滾輪停都會把它們
   // 清掉再叫一次 drawMarks（地在那一次才換級距，groundShow）
   const mvBusy = () => (mv.moved && mv.pts.size > 0) || !!mv.anim || (!!mv.g && !mv.pts.size);
@@ -1493,7 +1493,8 @@
   }
 
   // ── 手勢：一指拖（放手會順著滑）、兩指捏、滾輪（觸控板捏合同）、雙擊放大；按下之後不到 MV_SLOP 放開是點一下（點地點照舊由 click 開卡，
-  // 點空白收回），拖過、捏過放開的那一下 click 吃掉。拖的指標動了才抓住（按下就抓的話，Chrome 會把 click 送到抓住的地圖框）──
+  // 點到地等 MV_TAP2 確定不是雙擊才開那一處的卡，點空白收回），拖過、捏過放開的那一下 click 吃掉。拖的指標動了才抓住（按下就抓的話，
+  // Chrome 會把 click 送到抓住的地圖框）──
   function mvBase() {
     const a = [...mv.pts.values()];
     mv.start = {
@@ -1520,8 +1521,13 @@
     }
   }
   const mvSoon = () => { if (!mv.frame) mv.frame = requestAnimationFrame(mvFrame); };
+  // 點了地、還在等 MV_TAP2 看有沒有第二下的那一下（mvUp）：又按下去了（雙擊的第二下、拖、捏）就作罷
+  function mvTapDrop() {
+    if (mv.tapTimer) { clearTimeout(mv.tapTimer); mv.tapTimer = 0; }
+  }
   function mvDown(ev) {
     if ((ev.pointerType === "mouse" && ev.button !== 0) || !S.mapBase || !S.mapCam) return;
+    mvTapDrop();
     if (mv.pts.has(ev.pointerId)) mv.pts.clear(); // 同一個指標又按下：上一次沒收到放開（在視窗外放開），重新來過
     if (mv.pts.size >= 2) return;
     mv.eatUntil = 0;
@@ -1578,10 +1584,10 @@
     const now = Date.now(), g = mapGeom(document.getElementById("map")), c = S.mapCam;
     if (g && now - mv.lastTap < MV_TAP2) { mv.lastTap = 0; zoomAt(S.mapCam.z * 2, ev.clientX - g.x0, ev.clientY - g.y0, true); return; }
     mv.lastTap = now;
-    // 點到地（輿圖表現第二版 2.3：整塊地都是那一處的熱區）：照畫出來的那一塊算是哪一處（landAt），地圖上的字與小圖照舊由 click 開卡；
-    // 雙擊照舊放大（地沒有 data-act，第二下照樣走上面那一行）
+    // 點到地（輿圖表現第二版 2.3：整塊地都是那一處的熱區）：照畫出來的那一塊算是哪一處（landAt），地圖上的字與小圖照舊由 click 開卡。
+    // 等 MV_TAP2 過了、確定沒有第二下才開卡：雙擊照 Joy 的只放大（上面那一行），不開卡、不畫路線、不先為了露出小圖挪鏡頭（W1 審查 2026-10-30）
     const land = g && c && S.mapBase && S.mapState ? landAt(S.mapBase, S.mapState, (ev.clientX - g.x0 - c.x) / c.z, (ev.clientY - g.y0 - c.y) / c.z) : null;
-    if (land) mapLand(land);
+    if (land) mv.tapTimer = setTimeout(() => { mv.tapTimer = 0; mapLand(land); }, MV_TAP2);
     else mapBlank();
   }
   function mvWheel(ev) {
