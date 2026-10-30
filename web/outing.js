@@ -16,8 +16,9 @@
     foe_idle_attack: 8, foe_hit_fall: 6,
   };
   // 對手的樣子（伺服器的 beat.foe：huang 黃巾、guan 官兵、retainer 豪強家丁、bandit 綠林盜匪、beast 猛獸）。
-  // 圖到了的那幾種寫進這裡（檔名 foe_<樣子>_idle_attack、foe_<樣子>_hit_fall，格數同黃巾）；沒圖的、黃巾都用 foe_idle_attack 那一套
-  const OUTING_FOE_ART = [];
+  // 有圖的那幾種寫進這裡（檔名 foe_<樣子>_idle_attack、foe_<樣子>_hit_fall，格數同黃巾；Joy 10/30 生的）；沒圖的、黃巾都用 foe_idle_attack 那一套。
+  // 黃巾那一套畫的是臉朝右（畫的時候翻過來），這四套畫的是臉朝左（不用翻）；猛獸一次只出一隻
+  const OUTING_FOE_ART = ["guan", "bandit", "retainer", "beast"];
   for (const look of OUTING_FOE_ART) { OUTING_SHEETS[`foe_${look}_idle_attack`] = 8; OUTING_SHEETS[`foe_${look}_hit_fall`] = 6; }
   const outingFoeSheet = (look, base) => (OUTING_FOE_ART.includes(look) ? `foe_${look}_${base}` : `foe_${base}`);
   // 野地四層（由遠到近）與各自捲的速度：遠景最慢、前景比角色快、蓋在角色前面。別的地點類型的四層還沒畫，先都用野地
@@ -399,18 +400,20 @@
         outingPose("raise", 0.9), { dur: 0.3 }];
     }
     if (b.kind === "encounter") {
-      const foes = [0, 1].map((i) => ({ kind: "foe", look: b.foe || "", x: OUTING_W + 40 + i * 80, flash: 0, fall: 0, fade: 0, dying: false, atk: 0 }));
+      const look = b.foe || "";
+      const foes = (look === "beast" ? [0] : [0, 1]).map((i) => ({ kind: "foe", look, x: OUTING_W + 40 + i * 80, flash: 0, fall: 0, fade: 0, dying: false, atk: 0 }));
+      const two = foes[1] || foes[0]; // 只有一隻時，第二個出手的就是牠自己
       const hit = (f) => outingCall(() => { f.flash = 1; outingBurst(f.x, OUTING_GY - 100, 10, "#8a6a48", 140); });
       const atk = (f) => [{ dur: 0.4, update(t) { f.atk = Math.min(1, t / 0.4); f.lunge = -30 * Math.sin(f.atk * Math.PI); }, end() { f.atk = 0; f.lunge = 0; } },
         outingCall(() => { H.red = 1; H.kx = -26; outingBurst(OUTING_HX + 10, OUTING_GY - 100, 10, "#e0665a", 120); }), outingPose("hurt", 0.45)];
       const out = [outingCall(() => OW.props.push(...foes)), outingRun(foes[0], 150), outingPose("stance", 0.3)];
       if (b.won) {
-        out.push(outingPose("slash", 0.5), hit(foes[0]), outingCall(() => { foes[0].dying = true; }), { dur: 0.15 }, ...atk(foes[1]),
-          outingPose("stance", 0.2), outingPose("slash", 0.5), hit(foes[1]), outingCall(() => { foes[1].dying = true; }), { dur: 0.6 }, outingPose("idle", 0.2));
+        out.push(outingPose("slash", 0.5), hit(foes[0]), outingCall(() => { if (two !== foes[0]) foes[0].dying = true; }), { dur: 0.15 }, ...atk(two),
+          outingPose("stance", 0.2), outingPose("slash", 0.5), hit(two), outingCall(() => { two.dying = true; }), { dur: 0.6 }, outingPose("idle", 0.2));
       } else if (lost) {
-        out.push(outingPose("slash", 0.5), hit(foes[0]), ...atk(foes[1]), ...atk(foes[0]), outingPose("kneel", 0.8), { dur: 0.4, start() { H.pose = "kneel"; H.k = 1; } });
+        out.push(outingPose("slash", 0.5), hit(foes[0]), ...atk(two), ...atk(foes[0]), outingPose("kneel", 0.8), { dur: 0.4, start() { H.pose = "kneel"; H.k = 1; } });
       } else { // 平手：互換一招，對手退走
-        out.push(outingPose("slash", 0.5), hit(foes[0]), ...atk(foes[1]), { dur: 0.6, update(t, d) { foes.forEach((f) => { f.x += 260 * d; }); } });
+        out.push(outingPose("slash", 0.5), hit(foes[0]), ...atk(two), { dur: 0.6, update(t, d) { foes.forEach((f) => { f.x += 260 * d; }); } });
       }
       out.push(outingCall(() => { OW.props = OW.props.filter((p) => !foes.includes(p)); }));
       return out;
@@ -531,7 +534,7 @@
         const a = Math.min(1, (now - p.t0) / 400);
         outingSprite(cx, "hero_idle", Math.floor(now / 220), p.x, { scale: 0.32, alpha: 0.85 * a, y: OUTING_GY - 120, flip: true });
       } else if (p.kind === "foe") {
-        const x = p.x + (p.lunge || 0), opt = { flip: true, scale: 0.85 };
+        const x = p.x + (p.lunge || 0), opt = { flip: !OUTING_FOE_ART.includes(p.look), scale: 0.85 };
         const fall = outingFoeSheet(p.look, "hit_fall"), idle = outingFoeSheet(p.look, "idle_attack");
         if (p.dying) outingSprite(cx, fall, 1 + Math.min(4, Math.floor(p.fall * 5)), x, { ...opt, alpha: 1 - p.fade });
         else if (p.flash > 0) outingSprite(cx, fall, 0, x, { ...opt, tint: "#fff", tintA: p.flash * 0.8 });
