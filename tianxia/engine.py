@@ -5576,13 +5576,14 @@ class Game:
         self._gate_scale = gate
         self._drop_scale = gate * self._loot_scale
         card = s.battle_card
-        self._outing_upset = self.odds(foe.id) in outing_rules.FEAT_ODDS  # 開打前的勝算（同探索鈕上寫的那個字）
         try:
             msgs = self._squad_encounter(foe.id, wild=True)
         finally:
             self._loot_scale = self._drop_scale = self._gate_scale = 1.0
         record = next((r for r in s.battles if r.id == s.battle_card), None) if s.battle_card != card else None
         won = record is not None and record.tier in team.WIN_TIERS
+        # 以弱勝強：打贏了才回頭看開打那一刻的威力對這一路的勝算（team.odds_word，固定種子、不碰 Game.rng；沒打贏、沒懸賞的趟都不算勝算，2e）
+        self._outing_upset = won and team.odds_word(record.our_power, foe) in outing_rules.FEAT_ODDS
         if not won:
             self._outing_close.discard("outlevel")  # FB-881：「對手配不上你，所得有限」只在打贏、真的因為對手檔打了折才寫；輸了、平手不寫
         if record is not None:

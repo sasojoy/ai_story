@@ -306,7 +306,7 @@ def test_only_a_rare_treasure_or_an_upset_goes_into_the_annals():
     low = next(m.id for m in c.materials.values() if m.tier == 1)
     top = next(m for m in c.materials.values() if m.tier >= outing.FEAT_TIER)
     with _draws(MAT, ENC, MAT), mock.patch.object(explore_modes, "gather_finds", return_value=[low]), \
-         mock.patch.object(type(game), "odds", return_value="有把握"):
+         mock.patch.object(team, "odds_word", return_value="有把握"):
         game.outing_go(3)
     assert _outing_annals(game) == [] and game.outing_view()["trip"]["feat_note"] == ""
     assert "outing_keep" not in dir(game)
@@ -314,7 +314,7 @@ def test_only_a_rare_treasure_or_an_upset_goes_into_the_annals():
         game.outing_go(1)
     got = _outing_annals(game)
     assert len(got) == 1 and top.name in got[0].text and game.outing_view()["trip"]["feat_note"] == outing.FEAT_NOTE
-    with _draws(ENC), mock.patch.object(type(game), "odds", return_value="凶險"):
+    with _draws(ENC), mock.patch.object(team, "odds_word", return_value="凶險"):
         game.outing_go(1)
     got = _outing_annals(game)
     assert len(got) == 2 and "必輸的一仗" in got[-1].text
