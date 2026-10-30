@@ -5523,6 +5523,7 @@ class Game:
             elif plan.foe is not None:
                 msgs, key, won = self._outing_fight(loc, plan)
                 self._beat["won"], self._beat["lost"] = won, key in ("lose", "town_lose")
+                self._beat["foe"] = outing_rules.foe_look(plan.foe)  # 畫面照它挑對手的圖（黃巾、官兵、家丁、盜匪、猛獸）
                 if won and self._outing_upset:  # 開打前勝算凶險以下還打贏：以弱勝強，這一趟收的時候記一則行狀
                     self._beat["feat"], self._beat["feat_kind"] = plan.foe.name, outing_rules.FEAT_UPSET
                 story.append(explore_one.line(lines, "encounter", key, say, place=loc.name, foe=plan.foe.name))
@@ -5575,13 +5576,14 @@ class Game:
         self._gate_scale = gate
         self._drop_scale = gate * self._loot_scale
         card = s.battle_card
-        self._outing_upset = self.odds(foe.id) in outing_rules.FEAT_ODDS  # 開打前的勝算（同探索鈕上寫的那個字）
         try:
             msgs = self._squad_encounter(foe.id, wild=True)
         finally:
             self._loot_scale = self._drop_scale = self._gate_scale = 1.0
         record = next((r for r in s.battles if r.id == s.battle_card), None) if s.battle_card != card else None
         won = record is not None and record.tier in team.WIN_TIERS
+        # 以弱勝強：打贏了才回頭看開打那一刻的威力對這一路的勝算（team.odds_word，固定種子、不碰 Game.rng；沒打贏、沒懸賞的趟都不算勝算，2e）
+        self._outing_upset = won and team.odds_word(record.our_power, foe) in outing_rules.FEAT_ODDS
         if not won:
             self._outing_close.discard("outlevel")  # FB-881：「對手配不上你，所得有限」只在打贏、真的因為對手檔打了折才寫；輸了、平手不寫
         if record is not None:
@@ -5727,7 +5729,8 @@ class Game:
             stop = IDLE_MARK not in {o.id for o in self.options(odds=False, tick=False)}
             trip.done += 1
             trip.beats.append(OutingBeat(kind=beat["kind"], text=lines[0] if lines else "", ledger=ledger, rare=bool(beat["rare"]),
-                                         won=beat["won"], stop=stop, feat=beat.get("feat", ""), feat_kind=beat.get("feat_kind", "")))
+                                         won=beat["won"], stop=stop, feat=beat.get("feat", ""), feat_kind=beat.get("feat_kind", ""),
+                                         foe=beat.get("foe", "")))
             now, cap = team.member_neili(c, p.member, team.con_of(s, c, self.world, PLAYER), season=s.world)
             if beat.get("lost"):
                 trip.end = outing_rules.LOST

@@ -3319,6 +3319,7 @@ svg.fig .blade.bow { stroke-width: 3; }
 .outing-stele small { font-size: 9.5px; letter-spacing: .2em; color: #e6c98c; }
 .outing-stele b { font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .outing-stele i { font-style: normal; font-size: 10px; color: #e9d9b8; justify-self: end; }
+.outing-stele[hidden], .outing-stele-all[hidden] { display: none; } /* display:grid 會蓋過 hidden：這一處沒人留過時不畫空的碑 */
 .outing-stele-all { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px 12px; background: var(--card); color: var(--ink); font-size: 13px; line-height: 1.6; }
 .outing-stele-all p { margin: 0 0 6px; }
 .outing-stele-all p.ink { color: var(--gold); }

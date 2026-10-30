@@ -306,7 +306,7 @@ def test_only_a_rare_treasure_or_an_upset_goes_into_the_annals():
     low = next(m.id for m in c.materials.values() if m.tier == 1)
     top = next(m for m in c.materials.values() if m.tier >= outing.FEAT_TIER)
     with _draws(MAT, ENC, MAT), mock.patch.object(explore_modes, "gather_finds", return_value=[low]), \
-         mock.patch.object(type(game), "odds", return_value="有把握"):
+         mock.patch.object(team, "odds_word", return_value="有把握"):
         game.outing_go(3)
     assert _outing_annals(game) == [] and game.outing_view()["trip"]["feat_note"] == ""
     assert "outing_keep" not in dir(game)
@@ -314,7 +314,7 @@ def test_only_a_rare_treasure_or_an_upset_goes_into_the_annals():
         game.outing_go(1)
     got = _outing_annals(game)
     assert len(got) == 1 and top.name in got[0].text and game.outing_view()["trip"]["feat_note"] == outing.FEAT_NOTE
-    with _draws(ENC), mock.patch.object(type(game), "odds", return_value="凶險"):
+    with _draws(ENC), mock.patch.object(team, "odds_word", return_value="凶險"):
         game.outing_go(1)
     got = _outing_annals(game)
     assert len(got) == 2 and "必輸的一仗" in got[-1].text
@@ -337,3 +337,18 @@ def test_the_stele_shows_the_last_ink_or_the_most_left_preset():
     w.inscriptions.append(Inscription(id=5, place=here, text="橋下有魚", author="戊", preset=False, time=0))
     st = outing.stele(game.state, here)
     assert (st["text"], st["author"]) == ("橋下有魚", "戊") and st["all"][0]["ink"]
+
+
+def test_a_foe_is_drawn_as_its_own_side():
+    """Joy 10/30「現在敵人只有黃巾軍，如果我本身就是黃巾不是很奇怪嗎」：遭遇那一段帶對手的樣子，畫面照它挑圖。"""
+    sq = lambda name, faction=None: SimpleNamespace(name=name, faction=faction)
+    assert outing.foe_look(sq("郡國兵", "guan")) == outing.LOOK_GUAN
+    assert outing.foe_look(sq("黃巾散兵")) == outing.LOOK_HUANG
+    assert outing.foe_look(sq("蘇家家丁")) == outing.LOOK_RETAINER
+    assert outing.foe_look(sq("吊睛白額虎")) == outing.LOOK_BEAST
+    assert outing.foe_look(sq("流寇散兵")) == outing.LOOK_BANDIT
+    game = _game()
+    with _draws(ENC):
+        game.outing_go(1)
+    beat = game.state.player.outing.beats[0]
+    assert beat.kind == ENC and beat.foe in {outing.LOOK_HUANG, outing.LOOK_GUAN, outing.LOOK_RETAINER, outing.LOOK_BANDIT, outing.LOOK_BEAST}

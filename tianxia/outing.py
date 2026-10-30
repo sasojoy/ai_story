@@ -61,6 +61,11 @@ FEAT_TREASURE, FEAT_UPSET = "treasure", "upset"
 FEAT_ANNAL = {FEAT_TREASURE: "在{place}一帶走了一趟，撿到了世間少見的{what}。", FEAT_UPSET: "在{place}一帶撞上{what}，看著必輸的一仗，硬是打贏了。"}
 FEAT_DEED = {FEAT_TREASURE: "{name}在{place}一帶撿到了世間少見的{what}。", FEAT_UPSET: "{name}在{place}一帶以弱勝強，打退了{what}。"}
 FEAT_NOTE = "這一趟記進了行狀。"
+# 遭遇的對手畫成哪一種人（Joy 10/30「現在敵人只有黃巾軍，如果我本身就是黃巾不是很奇怪嗎」）：先看隊伍的陣營，沒有陣營的照名字認
+LOOK_HUANG, LOOK_GUAN, LOOK_RETAINER, LOOK_BANDIT, LOOK_BEAST = "huang", "guan", "retainer", "bandit", "beast"
+_FACTION_LOOK = {"huang": LOOK_HUANG, "guan": LOOK_GUAN, "haoqiang": LOOK_RETAINER}
+_NAME_LOOK = (("黃巾", LOOK_HUANG), ("官軍", LOOK_GUAN), ("門卒", LOOK_GUAN), ("家丁", LOOK_RETAINER), ("護院", LOOK_RETAINER),
+              ("部曲", LOOK_RETAINER), ("虎", LOOK_BEAST))
 TALE_MAX = 80  # 遊記最多幾個字
 DEED_KIND = "outing"  # 世界記事（deeds.record）的種類：走一趟撿到稀世的東西、以弱勝強（FEAT_DEED）
 _ZH = "零一二三四五六七八九十"
@@ -120,6 +125,14 @@ def view(state: GameState, content: Content) -> dict | None:
             "stele": stele(state, trip.place),
         }
     return out
+
+
+def foe_look(squad) -> str:
+    """這一路對手畫成哪一種人（LOOK_*）：有陣營照陣營，沒有照名字裡的字，都不是就是綠林盜匪。"""
+    look = _FACTION_LOOK.get(squad.faction or "")
+    if look:
+        return look
+    return next((v for k, v in _NAME_LOOK if k in squad.name), LOOK_BANDIT)
 
 
 def stele(state: GameState, place: str) -> dict | None:
