@@ -37,6 +37,7 @@ class ExploreOneTable(_Strict):
 
     kind: ExploreKind
     tags: list[str] = Field(min_length=1)
+    name: str = ""  # 這一張表叫什麼（玩法說明列表時寫它，例「官署」）；沒寫照地點種類的字（PLACE_WORDS）
     event: int = Field(ge=0)
     encounter: int = Field(ge=0)
     material: int = Field(ge=0)
@@ -65,20 +66,33 @@ class ExploreMix(_Strict):
 
 
 def _default_tables() -> list[ExploreOneTable]:
-    """設計 4.1 的六張表（事件／遭遇／素材／感悟）。
+    """十八張表（事件／遭遇／素材／感悟；企劃者 2026-10-30「城內多事件、少材料、少敵人，地點要做出差異化」，以前是設計 4.1 的六張）。
 
-    順序就是比對的順序：營排第一（鉅鹿道壇「祭壇、營寨」、廣宗「城池、營寨」兩張都對得上，設計寫「營（營寨、道壇）」，
-    同現行 `Config.explore_mix` 營在前）；標籤一個都對不上的歸最後一張（野，同 `explore_mix` 最後那筆「其餘」是野外的比例）。
-    酒肆、醫館、馬市是店面標籤，不歸表。跟現行 `explore_mix` 的差：塢堡從營搬到城，寺院、書院、莊院、里巷、結社從城搬到寺與城。"""
+    每一張仍掛在六種地點（kind）之一：鈕上的「城裡…」、出門那一句、走一趟的背景、城裡的地痞、自家營寨都照 kind，不照是哪一張表。
+    順序就是比對的順序：營排第一（鉅鹿道壇「祭壇、營寨」、廣宗「城池、營寨」都算營）；市集排在城鎮前（汝南集市、集市小鎮也標了城鎮）、
+    山寨排在山林前（綠林山寨）、官道排在野外前（南陽官道）；標籤一個都對不上的歸最後一張（野外）。酒肆、醫館、馬市是店面標籤，不歸表。"""
+    def t(name: str, kind: ExploreKind, tags: list[str], event: int, encounter: int, material: int, insight: int) -> ExploreOneTable:
+        return ExploreOneTable(name=name, kind=kind, tags=tags, event=event, encounter=encounter, material=material, insight=insight)
+
     return [
-        ExploreOneTable(kind="camp", tags=["營寨"], event=15, encounter=60, material=15, insight=10),
-        ExploreOneTable(kind="town", tags=["城鎮", "官署", "塢堡", "城池", "里巷"], event=60, encounter=15, material=15, insight=10),
-        ExploreOneTable(
-            kind="temple", tags=["寺院", "書院", "莊院", "結社", "草廬", "祭壇"], event=50, encounter=5, material=15, insight=30,
-        ),
-        ExploreOneTable(kind="ford", tags=["河畔", "渡口"], event=30, encounter=30, material=30, insight=10),
-        ExploreOneTable(kind="hill", tags=["山林", "洞窟", "山寨"], event=10, encounter=30, material=40, insight=20),
-        ExploreOneTable(kind="wild", tags=["野外", "官道", "古戰場"], event=15, encounter=55, material=20, insight=10),
+        t("營寨", "camp", ["營寨"], 15, 60, 15, 10),
+        t("官署", "town", ["官署"], 80, 5, 5, 10),  # 朝堂與權門：差事、請託，幾乎不動手
+        t("市集", "town", ["市集"], 65, 5, 25, 5),  # 城裡唯一多料的地方
+        t("塢堡", "town", ["塢堡"], 45, 35, 10, 10),  # 豪族的部曲巡守
+        t("里巷", "town", ["里巷"], 70, 5, 15, 10),
+        t("城鎮", "town", ["城鎮", "城池"], 75, 5, 10, 10),
+        t("寺觀", "temple", ["寺院", "草廬", "祭壇"], 40, 0, 10, 50),  # 清修之地，最容易有所感
+        t("書院", "temple", ["書院"], 55, 0, 5, 40),
+        t("莊院", "temple", ["莊院"], 65, 10, 15, 10),
+        t("結社", "temple", ["結社"], 50, 25, 5, 20),  # 鄉勇聚會，常有人要比劃
+        t("渡口", "ford", ["渡口"], 45, 30, 15, 10),  # 南來北往，事比河畔多
+        t("河畔", "ford", ["河畔"], 20, 25, 45, 10),  # 沿河撿料最多
+        t("山寨", "hill", ["山寨"], 10, 60, 20, 10),
+        t("洞窟", "hill", ["洞窟"], 10, 10, 40, 40),
+        t("山林", "hill", ["山林"], 10, 30, 45, 15),
+        t("官道", "wild", ["官道"], 25, 50, 15, 10),  # 路上旅人多，劫道的也多
+        t("古戰場", "wild", ["古戰場"], 10, 55, 20, 15),
+        t("野外", "wild", ["野外"], 10, 50, 30, 10),
     ]
 
 
@@ -103,7 +117,7 @@ class JianfaNumbers(_Strict):
     danger_shift: int = Field(default=10, ge=0)  # 危險度每多一星（一星是表上的數字）：遭遇 +N、事件 −N【預設】
     beat_floor: int = Field(default=5, ge=0)  # 危險度移過的那兩欄夾在 beat_floor～beat_cap【預設】
     beat_cap: int = Field(default=80, ge=1)
-    explore_tables: list[ExploreOneTable] = Field(default_factory=_default_tables, min_length=1)  # 六張表，照順序比對
+    explore_tables: list[ExploreOneTable] = Field(default_factory=_default_tables, min_length=1)  # 十八張表（每張掛在六種地點之一），照順序比對
     # 城類地點自己沒有對手（此刻站的、不是自家的隊伍）時，遭遇那一拍換成這幾路（第一路；PM 2026-10-25 第 3 件：自己有隊伍的城照原本的隊伍）：
     # 不推線、不算討伐、戰利（銀兩、心得、掉的素材）乘 town_loot_scale【PM】
     # ── 走一趟（企劃者 2026-10-29～30；tianxia/outing.py）──
@@ -147,11 +161,11 @@ class JianfaNumbers(_Strict):
 
     @field_validator("explore_tables")
     @classmethod
-    def _one_table_per_kind_and_tag(cls, tables: list[ExploreOneTable]) -> list[ExploreOneTable]:
-        """每一種地點只有一張表、每一個標籤只落在一張表（設計 4.1；計畫 Task 2-1 的驗證）。"""
-        kinds = [t.kind for t in tables]
-        if twice := sorted({k for k in kinds if kinds.count(k) > 1}):
-            raise ValueError(f"探索表的種類重複：{'、'.join(twice)}")
+    def _one_table_per_name_and_tag(cls, tables: list[ExploreOneTable]) -> list[ExploreOneTable]:
+        """每一個標籤只落在一張表、寫了名字的表不同名（一種地點可以有好幾張表，企劃者 2026-10-30 細分）。"""
+        names = [t.name for t in tables if t.name]
+        if twice := sorted({n for n in names if names.count(n) > 1}):
+            raise ValueError(f"探索表的名字重複：{'、'.join(twice)}")
         tags = [tag for t in tables for tag in t.tags]
         if twice := sorted({tag for tag in tags if tags.count(tag) > 1}):
             raise ValueError(f"標籤落在兩張探索表：{'、'.join(twice)}")

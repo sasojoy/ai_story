@@ -21,8 +21,13 @@ from tianxia.state import Bounty
 pytestmark = pytest.mark.slow
 
 SIDES = ["guan", "huang", "haoqiang", None]
-DANGEROUS_FORDS = ["baima_ford", "juma_river", "mengjin_ford"]  # 渡口 2★：表是 30／30／30／10，每星遭遇 +10、事件 −10 → 20／40／30／10
-DANGEROUS_HILLS = ["beimang_hill", "deep_mountain", "lulin_zhai", "yanshan_foot"]  # 山 2★：10／30／40／20 → 5／40／40／20
+# 2★ 的渡與山（每星遭遇 +10、事件 −10；企劃者 2026-10-30 細分成十八張表之後各照自己的表）：
+# 渡口 45／30／15／10 → 35／40／15／10 多敵；河畔 20／25／45／10 → 10／35／45／10 多料；
+# 山林 10／30／45／15 → 5／40／45／15 多料；山寨 10／60／20／10 → 5／70／20／10 多敵
+DANGEROUS_FORDS = ["baima_ford", "juma_river", "mengjin_ford"]
+DANGEROUS_HILLS = ["beimang_hill", "deep_mountain", "lulin_zhai", "yanshan_foot"]
+DANGEROUS_WORDS = {"baima_ford": "多敵", "mengjin_ford": "多敵", "juma_river": "多料",
+                   "beimang_hill": "多料", "deep_mountain": "多料", "yanshan_foot": "多料", "lulin_zhai": "多敵"}
 
 
 def _game(side, profile="week7", loc="yingshui"):
@@ -147,17 +152,17 @@ def test_where_the_viewer_stands_does_not_change_the_names(side):
 
 @pytest.mark.parametrize("side", SIDES)
 def test_dangerous_fords_and_hills_read_like_their_buttons(side):
-    """FB-886 原例：渡口 2★ 鈕上寫「渡口多敵」、山 2★ 寫「山裡參半」，名字旁修前寫「參半」「多料」（種類的表本身）。"""
+    """FB-886 原例：危險的渡口、山，名字旁跟鈕上一樣照危險度加減過的比重寫（不是種類的表本身）。"""
     game = _game(side)
     names = _names(game)
-    for loc_id in DANGEROUS_FORDS:
-        assert game.content.locations[loc_id].danger == 2 and names[loc_id] == "多敵", (side, loc_id, names[loc_id])
-    for loc_id in DANGEROUS_HILLS:
-        assert game.content.locations[loc_id].danger == 2 and names[loc_id] == "參半", (side, loc_id, names[loc_id])
+    for loc_id in DANGEROUS_FORDS + DANGEROUS_HILLS:
+        assert game.content.locations[loc_id].danger == 2 and names[loc_id] == DANGEROUS_WORDS[loc_id], (side, loc_id, names[loc_id])
     ready(game, loc="mengjin_ford")
     assert game.outing_plan().hint == "渡口多敵"
     ready(game, loc="lulin_zhai")
-    assert game.outing_plan().hint == "山裡參半"
+    assert game.outing_plan().hint == "山裡多敵"
+    ready(game, loc="juma_river")
+    assert game.outing_plan().hint == "渡口多料"
 
 
 def test_the_easy_places_keep_the_words_of_their_kind():
@@ -178,10 +183,10 @@ def test_the_easy_places_keep_the_words_of_their_kind():
 
 def test_a_place_without_foes_reads_by_what_is_left_for_the_one_looking():
     """官軍在長社沒有一般對手（只有頭目），遭遇那一格是 0：名字旁跟鈕一樣寫「多料」；黃巾站長社有對手，寫「多敵」。
-    反過來黃巾在洛陽官道沒有對手。"""
+    反過來黃巾在洛陽官道沒有對手：官道的表事件比素材多（25／0／15／10），寫「多事」。"""
     guan, huang = _names(_game("guan")), _names(_game("huang"))
     assert guan["changshe"] == "多料" and huang["changshe"] == "多敵"
-    assert huang["luoyang_road"] == "多料" and guan["luoyang_road"] == "多敵"
+    assert huang["luoyang_road"] == "多事" and guan["luoyang_road"] == "多敵"
 
 
 def test_your_own_camp_reads_as_a_friendly_bout_and_the_other_sides_as_enemies():
@@ -258,7 +263,7 @@ def test_the_base_and_the_overlay_differ_from_the_old_ones_only_by_the_words_and
         old_base, old_state = game.map_base(), game.map_state()
     assert base["key"] != old_base["key"] and state["key"] != old_state["key"] and base["key"] == state["key"]
     changed = {p["id"] for p, q in zip(base["places"], old_base["places"], strict=True) if p["mostly"] != q["mostly"]}
-    assert {"changshe", "guan_camp", "luzhi_camp", *DANGEROUS_FORDS, *DANGEROUS_HILLS} <= changed
+    assert {"changshe", "guan_camp", "luzhi_camp", "baima_ford", "mengjin_ford"} <= changed  # 危險的河畔、山林照比重也是「多料」，跟舊字一樣
     for p, q in zip(base["places"], old_base["places"], strict=True):
         assert {k: v for k, v in p.items() if k != "mostly"} == {k: v for k, v in q.items() if k != "mostly"}
     assert base[mapdata.VIEWER_MOSTLY] is True and mapdata.VIEWER_MOSTLY not in old_base  # 旗子：網頁看到它，名字旁整個照底圖（含「有賞」）
@@ -305,13 +310,13 @@ def test_when_the_small_words_are_off_the_names_and_keys_are_the_old_ones(make):
     assert server.map_base_view(game) is server.map_base_view(game)  # 同一把鍵：同一份物件，不重畫（沒有人別的版本）
 
 
-# ── 5. 玩法說明列六張表：危險度的交代在表後面 ──
+# ── 5. 玩法說明列十八張表：危險度的交代在表後面 ──
 
 
-def test_the_howto_says_dangerous_places_give_more_fights_right_after_the_six_tables():
+def test_the_howto_says_dangerous_places_give_more_fights_right_after_the_tables():
     game = _game("guan")
     text = game.howto_text().split("**探索**")[1].split("\n")[0]
-    assert "渡口參半" in text and "山裡多料" in text and "寺裡多事" in text  # 六張表本身不改
+    assert "官署多事" in text and "河畔多料" in text and "寺觀多悟" in text and "山林多料" in text  # 十八張表照名字列
     assert text.count("危險的地方") == 1
     tail = text.split("野外多敵", 1)[1]
     assert tail.startswith("），危險的地方遇敵多些"), tail[:30]

@@ -62,13 +62,13 @@ def test_the_first_layer_names_only_you_and_the_places_you_can_walk_to():
 
 
 def test_each_walkable_place_says_minutes_and_what_it_mostly_holds():
-    """名字底下一行：分鐘數＋「多半」兩字（城多事、野多敵、山多料、渡參半、營多敵、寺多悟）；接了討伐懸賞寫「有賞」。
+    """名字底下一行：分鐘數＋「多半」兩字（城多事、野多敵、山多料、河畔多料、營多敵、寺多悟）；接了討伐懸賞寫「有賞」。
     減法季探索一顆開著的季（這一局的正式內容 season21）2f 起兩個字是看的人站過去之後鈕上小字的最後兩個字：官軍自己的營寨是跟同袍比劃，寫「比劃」
     （以前這一句鎖「多敵」；逐處逐身分的對照在 tests/test_explore_one_2f.py）。"""
     game = _game()
     low = near_parts(game)["parts"][0]
     subs = dict(re.findall(r'data-id="([^"]+)"[^>]*>(?:(?!</g>).)*?<text class="n-sub"[^>]*>([^<]+)</text>', low))
-    assert subs["yingchuan"].endswith("分・多事") and subs["yingshui"].endswith("分・參半") and subs["guan_camp"].endswith("分・比劃")
+    assert subs["yingchuan"].endswith("分・多事") and subs["yingshui"].endswith("分・多料") and subs["guan_camp"].endswith("分・比劃")
     st = game.map_state()
     st["week"] = None
     st["places"]["guan_camp"]["bounty"] = "討伐"  # 疊層寫了討伐也不另寫「有賞」：底圖帶 viewer_mostly，兩個字整個照伺服器給的（下面真的接了懸賞的兩條測）
@@ -117,14 +117,14 @@ def test_a_held_bounty_that_is_not_hopeless_reads_has_reward_beside_the_name():
 
 
 def test_a_held_bounty_that_is_hopeless_reads_the_table_not_has_reward():
-    """接了討伐、必敗放開（2e）：鈕上照表寫「渡口參半」，名字旁網頁以前自己因為疊層有討伐就寫「有賞」，現在照伺服器給的、跟鈕一致。"""
+    """接了討伐、必敗放開（2e）：鈕上照表寫「渡口多料」，名字旁網頁以前自己因為疊層有討伐就寫「有賞」，現在照伺服器給的、跟鈕一致。"""
     game = _held_strike(able=False)
     assert game.odds("shanzei", at="yingshui") == "必敗" and game.map_state()["places"]["yingshui"]["bounty"] == "討伐"  # 疊層照舊標討伐
     sub = _subs(game)["yingshui"]
-    assert sub.endswith("分・參半") and "有賞" not in sub
+    assert sub.endswith("分・多料") and "有賞" not in sub
     game.state.player.location = "yingshui"
     plan = game.outing_plan()
-    assert plan.how != "bounty" and plan.hint == "渡口參半" and sub.endswith(plan.hint[-2:])
+    assert plan.how != "bounty" and plan.hint == "渡口多料" and sub.endswith(plan.hint[-2:])
 
 
 def test_the_name_line_beside_a_dangerous_ford_reads_like_the_button_there():

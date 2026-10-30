@@ -243,7 +243,7 @@ def test_the_small_word_is_the_biggest_class_of_what_is_drawn():
 
 
 def test_each_default_table_is_worded_by_its_own_biggest_column():
-    """六張表（含寺）的字照表算，不寫死：最大那一欄的字，並列最大寫參半。"""
+    """每一張表的字照表算，不寫死：最大那一欄的字，並列最大寫參半（企劃者 2026-10-30 起十八張，每張掛在六種地點之一）。"""
     cfg = jianfa_game().content.config.jianfa
     words = {explore_one.EVENT: "多事", explore_one.ENCOUNTER: "多敵", explore_one.MATERIAL: "多料", explore_one.INSIGHT: "多悟"}
     assert {t.kind for t in cfg.explore_tables} == set(explore_one.PLACE_WORDS)
@@ -252,8 +252,11 @@ def test_each_default_table_is_worded_by_its_own_biggest_column():
         top = [k for k, v in cols.items() if v == max(cols.values())]
         expect = "參半" if len(top) > 1 else words[top[0]]
         assert explore_one.mostly_in(t) == expect and explore_one.hint_in(t) == explore_one.PLACE_WORDS[t.kind] + expect, t.kind
-    temple = next(t for t in cfg.explore_tables if t.kind == explore_one.TEMPLE)
-    assert (temple.event, temple.insight) == (50, 30) and explore_one.hint_in(temple) == "寺裡多事"
+    temple = next(t for t in cfg.explore_tables if t.name == "寺觀")
+    assert (temple.event, temple.insight) == (40, 50) and explore_one.hint_in(temple) == "寺裡多悟"
+    academy = next(t for t in cfg.explore_tables if t.name == "書院")
+    assert (academy.event, academy.insight) == (55, 40) and explore_one.hint_in(academy) == "寺裡多事"
+    assert explore_one.named_hint(temple) == "寺觀多悟" and explore_one.named_hint(academy) == "書院多事"
 
 
 def test_the_temple_says_so_on_the_button_the_cell_the_map_and_the_howto():
@@ -261,14 +264,14 @@ def test_the_temple_says_so_on_the_button_the_cell_the_map_and_the_howto():
 
     game = ready(jianfa_game(), side="guan", loc="baima_temple")
     plan = game.outing_plan()
-    assert plan.kind == explore_one.TEMPLE and plan.hint == "寺裡多事"
+    assert plan.kind == explore_one.TEMPLE and plan.hint == "寺裡多悟"  # 白馬寺是寺觀：感悟 50 比事件 40 重（企劃者 2026-10-30）
     label = next(o for o in game.options(odds=False) if o.id == "act:explore").label
-    assert label.endswith("・寺裡多事）") and server.main_view(game)["mostly"] == "寺裡多事"
-    assert "多半遇事" in _note(game)  # 行動列那一行本來就這麼說，現在小字跟它一致
-    assert {p["id"]: p["mostly"] for p in game.map_base()["places"]}["baima_temple"] == "多事"
+    assert label.endswith("・寺裡多悟）") and server.main_view(game)["mostly"] == "寺裡多悟"
+    assert "多半有悟" in _note(game)  # 行動列那一行與小字說同一件事
+    assert {p["id"]: p["mostly"] for p in game.map_base()["places"]}["baima_temple"] == "多悟"
     text = game.howto_text().split("**探索**")[1].split("\n")[0]
-    assert "寺裡多事" in text and "寺裡多悟" not in text
-    assert mapdata.mostly_here(game.state, game.content) == "寺裡多事"
+    assert "寺觀多悟" in text and "書院多事" in text
+    assert mapdata.mostly_here(game.state, game.content) == "寺裡多悟"
 
 
 LINE_WORD = {"遇事": "多事", "遇敵": "多敵", "得料": "多料", "有悟": "多悟"}
