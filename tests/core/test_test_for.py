@@ -93,6 +93,16 @@ def test_an_engine_method_picks_its_group_and_not_everyone_who_imports_engine():
     assert not picked.core and not picked.smoke
 
 
+def test_a_group_also_takes_the_tests_that_mostly_call_it():
+    """走一趟的方法叫 outing_*，引擎測試的檔名卻是 test_explore_one*（FB-880 只改 _outing_foe，壞的是
+    test_explore_one_single）：內文叫最多的是那一群（至少 DOMINANT_MIN 次）的測試檔也算那一群的。
+    拿別群的方法當準備動作的不算（不然改一個管理者工具、一個酒肆方法就挑一大片）。"""
+    src = "class Game:\n    def _outing_foe(self, loc, kind):\n        return None, None\n"
+    names = _names(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", src, 3))
+    assert {"test_outing.py", "test_explore_one_single.py", "test_drill_gates_engine.py"} <= names
+    assert len(test_for.group_files("tavern")) <= 10 and len(test_for.group_files("admin")) <= 30
+
+
 def test_a_verb_first_method_name_goes_to_the_feature_after_the_verb():
     """_deliver_seal_results 的 deliver 是動詞：照後面的 seal 分群。"""
     picked = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", FAKE_ENGINE, 9))

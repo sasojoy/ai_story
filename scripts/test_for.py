@@ -23,8 +23,9 @@
   （名字像功能也一樣），hunk 裡提到的功能前綴另外加。
 - server.py：hunk 落在哪條路由 → 路由前綴（/api/mall → mall）那一群＋tests/server/test_server.py；
   /api/do、/api/choose 這種不帶功能的路由看 hunk 裡提到什麼；殼（登入、鎖、路由以外）→ 核心測試＋煙霧＋test_server.py。
-- 「功能群的測試檔」＝ 檔名（test_ 後面照底線拆）有那個字的（test_tavern.py、test_seal_fb643_tavern.py）；
-  檔名都沒有的群（feast、road、ambush……）改用內文叫到那一群方法（.feast_open(）或寫到那一群選項 id（"feast:）的。
+- 「功能群的測試檔」＝ 檔名（test_ 後面照底線拆）有那個字的（test_tavern.py、test_seal_fb643_tavern.py），
+  加上內文叫最多的是那一群的（至少 DOMINANT_MIN 次；走一趟 outing_* 的引擎測試叫 test_explore_one*）；
+  兩樣都沒有的群（feast、road、ambush……）改用內文叫到那一群方法（.feast_open(）或寫到那一群選項 id（"feast:）的。
 - 其他 tianxia/<模組>.py、run_bots.py、scripts/<腳本>.py：直接 import 它的測試檔，加上檔名是 test_<模組>… 的
   （「import 了 engine」不再算相關：engine.py 照上面那一條）。
 - content/：test_content.py ＋ 寫到那個檔名的測試檔；test_real_content.py 不自動跟（每日整套會跑），--slow 才加。
@@ -109,6 +110,11 @@ GENERIC = {
 # 是功能前綴，可是共用的程式裡到處都寫得到（team.resolve_art、self.world.season、map() 內建函式）：
 # 方法名、欄位名是它的照它分群，hunk 裡提到它不算
 SCAN_SKIP = {"art", "arts", "season", "map", "xinde"}
+# 一個測試檔叫某一群的方法（或寫那一群的選項 id）至少這麼多次、而且是它叫最多的那一群，就算那一群的測試檔（_dominant）。
+# 2026-10-31 重放 develop 最近 250 筆改 engine.py 的提交（176 筆同時改了測試檔）：只看檔名時 engine.py 那一份挑法蓋到
+# 65 筆的全部被改測試檔，加這一條 81 筆，不含 slow 的條數中位數 152 → 227；把「內文叫到就算」全加進來是 118 筆、
+# 中位數 1,204 條（太多：拿 admin_*、practice_* 當準備動作的測試到處都是）。
+DOMINANT_MIN = 3
 
 
 @dataclass
@@ -282,12 +288,14 @@ def _engine_groups() -> dict[str, frozenset[str]]:
 
 
 def group_files(word: str) -> set[Path]:
-    """功能群 word 的測試檔：檔名有那個字的；檔名都沒有的群，改用內文寫到那一群的 Game 方法名（_feast_menu）
+    """功能群 word 的測試檔：檔名有那個字的，加上內文叫最多的是這一群的（_dominant：走一趟的方法叫 outing_*，
+    引擎測試叫 test_explore_one*）；兩樣都沒有的群，改用內文寫到那一群的 Game 方法名（_feast_menu）
     或那一群的選項 id（"feast:）的。"""
     by_name, by_text = _index()
     hit: set[Path] = set()
     for f in _forms(word):
         hit |= by_name.get(f, frozenset())
+    hit |= _dominant().get(word, frozenset())
     if not hit:
         for ident in (*_engine_groups().get(word, ()), word + ":"):
             hit |= by_text.get(ident, frozenset())
@@ -295,13 +303,50 @@ def group_files(word: str) -> set[Path]:
 
 
 @functools.lru_cache(maxsize=None)
-def vocabulary() -> frozenset[str]:
-    """功能前綴：Game 方法名、tianxia/ 底下模組名的第一個字與功能包的名字，扣掉 GENERIC，而且有測試檔的。"""
+def _candidates() -> frozenset[str]:
+    """可能是功能前綴的字：Game 方法名、tianxia/ 底下模組名的第一個字與功能包的名字，扣掉 GENERIC
+    （vocabulary 再扣掉沒有測試檔的）。"""
     found: set[str] = set(_engine_groups())
     found.update(_first_word(p.stem) for p in (ROOT / "tianxia").glob("*.py"))
     if FEATURES.is_dir():
         found.update(p.name for p in FEATURES.iterdir() if p.is_dir() and not p.name.startswith("_"))
-    return frozenset(w for w in found - GENERIC if w and group_files(w))
+    return frozenset(w for w in found - GENERIC if w)
+
+
+@functools.lru_cache(maxsize=None)
+def _dominant() -> dict[str, frozenset[Path]]:
+    """測試檔照「內文叫最多的是哪一群」分：數每一群的 Game 方法名（方法名第一個認得的字當群，同 _feature_words）
+    與選項 id（"outing:）各出現幾次，最多的那一群（一樣多就都算）至少 DOMINANT_MIN 次才算。
+    檔名對不上功能的測試檔靠這一條歸群；只拿別群的方法當準備動作（admin_open_season）的不會被算進那一群。"""
+    words_ok = _candidates()
+    owner: dict[str, str] = {}
+    for methods in _engine_groups().values():
+        for m in methods:
+            w = next((p for p in _parts(m) if p in words_ok), None)
+            if w:
+                owner[m] = w
+    found: dict[str, set[Path]] = collections.defaultdict(set)
+    for t in all_tests():
+        text = _text(t)
+        tally: collections.Counter[str] = collections.Counter()
+        for ident in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", text):
+            if ident in owner:
+                tally[owner[ident]] += 1
+        for prefix in re.findall(r"[\"']([a-z][a-z0-9]*):", text):
+            if prefix in words_ok:
+                tally[prefix] += 1
+        top = max(tally.values(), default=0)
+        if top >= DOMINANT_MIN:
+            for w, n in tally.items():
+                if n == top:
+                    found[w].add(t)
+    return {k: frozenset(v) for k, v in found.items()}
+
+
+@functools.lru_cache(maxsize=None)
+def vocabulary() -> frozenset[str]:
+    """功能前綴：_candidates 裡有測試檔的。"""
+    return frozenset(w for w in _candidates() if group_files(w))
 
 
 def _first_word(name: str) -> str:
