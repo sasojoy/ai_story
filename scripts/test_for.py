@@ -33,8 +33,10 @@
 - web/：寫到那個檔名的測試檔（main.js、map.js、outing.js 照 app.js 挑），加上 test_server.py。
 - tests/ 裡的測試檔：跑它自己，連 slow 一起（改了就是要跑它；挑到的其他檔照舊不含 slow，所以分兩次跑）；
   tests/kit/ 這類共用工具：import 它的測試檔；tests/fixtures/：寫到那個檔名的測試檔。
-- tests/conftest.py、pyproject.toml、requirements*.txt：不加任何東西（整套留給每日整套）。
-- docs/、CLAUDE.md 這類文件：不跑。
+- tests/conftest.py：hunk 落在哪個函式、fixture 或常數 → 用到它的測試檔（from conftest import、fixture 參數；conftest 裡
+  別的 fixture 用到它的連那一個的使用者）；autouse 的 fixture、最外層的 import 與 sys.path、或用到的檔超過 CONFTEST_CAP 個
+  （content、game 這種）→ 煙霧。整套留給每日整套。
+- pyproject.toml、requirements*.txt：不挑（整套留給每日整套）。docs/、CLAUDE.md 這類文件：不跑。
 slow 不自動跟（--slow 才加，連核心測試的 slow 一起）：挑到的檔整個標 slow 的，開跑前列出來；全被 slow 濾光、一條都沒跑時
 說要 --slow、結束碼 0（不是 pytest 的 5）。挑到三個檔以上預設 -n 4（不寫 auto：同一台常有別的代理在跑），
 -- 之後給了 -n 就照給的。"""
@@ -61,7 +63,8 @@ FEATURES = ROOT / "tianxia" / "features"
 PARALLEL_FROM = 3  # 挑到這麼多個檔以上才開 xdist（開工作行程本身要幾秒）
 WORKERS = "4"  # 開發規範手冊 4.5：同一台同時最多兩份測試在跑，各自 -n 4
 WEB_SCRIPTS = {"main.js", "map.js", "outing.js", "app.js"}  # 網頁測試每一條都載入的檔（tests/kit/webharness.py 的 APP_FILES；test_test_for 守兩邊一樣）
-SETUP_FILES = {"tests/conftest.py", "pyproject.toml", "requirements.txt", "requirements-dev.txt"}
+SETUP_FILES = {"pyproject.toml", "requirements.txt", "requirements-dev.txt"}  # conftest.py 另外照 hunk 挑（conftest_picks）
+CONFTEST_CAP = 50  # conftest 改到的名字有超過這麼多個測試檔在用（content、game、real_content）：不一個一個挑，跑煙霧
 # 跟哪一條分支比（企劃者 2026-10-18 起功能在功能分支上做：批的工作樹要跟功能分支比，不然越做越多）
 DEFAULT_BASE = os.environ.get("TIANXIA_TEST_BASE", "origin/main")
 REAL_CONTENT_TEST = "test_real_content.py"  # 內容改了就跟（不含 slow）；用真實內容跑整季的那幾條是 slow，--slow 才跑
@@ -577,6 +580,82 @@ def server_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[se
     return found, core, why
 
 
+_CONFTEST_IMPORT = re.compile(r"^[ \t]*from[ \t]+conftest[ \t]+import[ \t]+(\([^)]*\)|[^\n]*)", re.M)
+_PARAMS = re.compile(r"\bdef[ \t]+\w+[ \t]*\(([^)]*)\)", re.S)
+
+
+@functools.lru_cache(maxsize=None)
+def _conftest_uses(test: Path) -> frozenset[str]:
+    """這個測試檔用到的 conftest 名字：from conftest import 的、conftest.<名字>、函式參數（fixture），
+    與 request.getfixturevalue／usefixtures 裡寫的字串。"""
+    text = _text(test)
+    names: set[str] = set()
+    for m in _CONFTEST_IMPORT.finditer(text):
+        names.update(n.split()[0] for n in m.group(1).split("#")[0].strip("()").replace("\n", " ").split(",") if n.strip())
+    names.update(re.findall(r"\bconftest\.(\w+)", text))
+    for m in _PARAMS.finditer(text):
+        names.update(re.findall(r"(?:^|,)\s*\*{0,2}(\w+)", m.group(1)))
+    if "getfixturevalue" in text or "usefixtures" in text:
+        names.update(re.findall(r"[\"'](\w+)[\"']", text))
+    return frozenset(names)
+
+
+def _autouse(node) -> bool:
+    return any(isinstance(d, ast.Call) and any(k.arg == "autouse" and isinstance(k.value, ast.Constant) and k.value.value
+                                               for k in d.keywords)
+               for d in getattr(node, "decorator_list", []))
+
+
+def conftest_picks(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[set[Path], bool, list[str]]:
+    """conftest.py 的 hunk → （直接相關的測試檔, 要不要跑煙霧, 為什麼）。手冊 4.3「只跑改到的那幾個測試檔與直接相關的」：
+    hunk 落在哪個函式、類別或 fixture → 用到它的測試檔（conftest 裡別的 fixture 或函式用到它的，連那一個的使用者一起）。
+    每一條測試都會碰到的（autouse 的 fixture、最外層的 import 與 sys.path）、或用到的檔超過 CONFTEST_CAP 個（content、game
+    這種）：一個一個挑等於整套，改跑煙霧，整套留給每日整套。"""
+    def spans(src: str) -> list[tuple[str, int, int, object]]:
+        """最外層的 def、class 與常數（IDLE_LINE = …，照第一個名字）；import、sys.path 這些不算，落在外面。"""
+        tree = _parse(src)
+        out = []
+        for n in (tree.body if tree else []):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                out.append((n.name, *_span(n), n))
+            elif isinstance(n, (ast.Assign, ast.AnnAssign)):
+                names = [t.id for t in (n.targets if isinstance(n, ast.Assign) else [n.target]) if isinstance(t, ast.Name)]
+                if names:
+                    out.append((names[0], n.lineno, n.end_lineno or n.lineno, n))
+        return out
+
+    tops = {name: (node, src) for src in (old_src, new_src) for name, *_, node in spans(src)}
+    sources = {name: ast.get_source_segment(src, node) or "" for name, (node, src) in tops.items()}
+    files: set[Path] = set()
+    smoke = False
+    why: list[str] = []
+    for name, _lines in _split(hunk_list, old_src, new_src, lambda src: [s[:3] for s in spans(src)]).items():
+        if name is None:
+            smoke = True
+            why.append("最外層（import、sys.path 這些每一條測試都碰得到）→ 煙霧")
+            continue
+        todo, seen = {name}, set()
+        while todo:  # conftest 裡誰用到它：一路找上去（_prologue_master → prologue_content）
+            n = todo.pop()
+            seen.add(n)
+            todo |= {other for other, src in sources.items()
+                     if other not in seen and other != n and re.search(rf"\b{re.escape(n)}\b", src)}
+        label = name
+        if any(_autouse(tops[n][0]) for n in seen if n in tops):
+            smoke = True
+            why.append(f"{label}：autouse 的 fixture（每一條測試都用）→ 煙霧")
+            continue
+        users = {t for t in all_tests() if _conftest_uses(t) & seen}
+        if len(users) > CONFTEST_CAP:
+            smoke = True
+            why.append(f"{label}：{len(users)} 個測試檔在用，太多 → 煙霧（其他留給每日整套；要當場驗用 --all）")
+            continue
+        files |= users
+        via = sorted(seen - {name})
+        why.append(f"{label}" + (f"（連用到它的 {'、'.join(via)}）" if via else "") + f"：用到的 {len(users)} 個測試檔")
+    return files, smoke, why
+
+
 # ── 挑 ───────────────────────────────────────────────────────────────
 
 def pick(files: list[str], base: str = DEFAULT_BASE,
@@ -603,8 +682,20 @@ def pick(files: list[str], base: str = DEFAULT_BASE,
     for raw in files:
         f = raw.replace("\\", "/")
         path = Path(f)
+        if path.name == "conftest.py" and (f.startswith("tests/") or f.startswith("tianxia/features/")):
+            given = (hunks_of or {}).get(f)
+            hunk_list, old_src, new_src = given if given is not None else hunks(f, base)
+            if not hunk_list:  # 指名了、可是跟 base 沒有差
+                result.smoke = True
+                result.why.append(f"{f}：跟 base 沒有差異，照整個檔算 → 煙霧")
+                continue
+            found, smoke, why = conftest_picks(hunk_list, old_src, new_src)
+            result.files |= found
+            result.smoke |= smoke
+            result.why.extend(f"{f}：{w}" for w in why)
+            continue
         if f in SETUP_FILES:
-            result.why.append(f"{f}：不加（整套留給每日整套）")
+            result.why.append(f"{f}：測試設定，不挑（整套留給每日整套；要當場驗用 --all）")
             continue
         if f.startswith("tests/fixtures/"):
             hit = {t for t in tests if path.name in _text(t)}
@@ -683,6 +774,8 @@ def pick(files: list[str], base: str = DEFAULT_BASE,
             # 江湖頁（main.js）、輿圖（map.js）、走一趟（outing.js）是從 app.js 切出來的：測試照舊寫「app.js」，也算寫到它們
             names = {path.name, "app.js"} if path.name in WEB_SCRIPTS else {path.name}
             result.files |= {t for t in tests if any(n in _text(t) for n in names)}
+            continue
+        result.why.append(f"{f}：不是程式、內容或測試，不跑")
     return result
 
 
@@ -808,7 +901,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         chosen = pick(args.files or changed_files(args.base), base=args.base)
     if chosen.empty:
-        print("這些改動沒有對應的測試（文件之類）。要跑整套用 --all。")
+        print("這些改動挑不到要跑的測試（為什麼寫在下面）。要跑整套用 --all。")
         for w in chosen.why:
             print(f"  {w}")
         return 0

@@ -77,12 +77,56 @@ def test_the_promotion_and_rank_action_content_picks_the_tests_that_pin_it():
     assert "test_rank_actions.py" in _names(["content/orders.json"])
 
 
-def test_shared_test_setup_adds_nothing():
-    """手冊 4.3：conftest、fixtures、pyproject 改了只跑改到的那幾個測試檔，整套留給每日整套。"""
-    for f in ("tests/conftest.py", "pyproject.toml"):
-        picked = test_for.pick([f])
-        assert picked.empty and not picked.everything, f
-    assert _names(["tests/conftest.py", "tests/arts/test_fusion.py"]) == {"test_fusion.py"}
+FAKE_CONFTEST = (
+    "import pytest\n"                                   # 1
+    "\n"
+    "def classic_rules(content):\n"                     # 3
+    "    return content\n"                              # 4
+    "\n"
+    "@pytest.fixture(autouse=True)\n"                   # 6
+    "def isolated_database(tmp_path):\n"                # 7
+    "    yield\n"                                       # 8
+    "\n"
+    "@pytest.fixture\n"                                 # 10
+    "def content():\n"                                  # 11
+    "    return 1\n"                                    # 12
+    "\n"
+    "@pytest.fixture(scope='session')\n"                # 14
+    "def _prologue_master(tmp_path_factory):\n"         # 15
+    "    return 1\n"                                    # 16
+    "\n"
+    "@pytest.fixture\n"                                 # 18
+    "def prologue_content(_prologue_master):\n"         # 19
+    "    return _prologue_master\n"                     # 20
+)
+
+
+def test_conftest_picks_the_tests_that_use_the_changed_helper():
+    """手冊 4.3：conftest 改了跑「直接相關的」——hunk 落在哪個函式或 fixture，用到它的測試檔（from conftest import、
+    fixture 參數）；conftest 裡別的 fixture 用到它的，連那一個的使用者一起。"""
+    helper = test_for.pick(["tests/conftest.py"], hunks_of=_added("tests/conftest.py", FAKE_CONFTEST, 4))
+    users = {p.name for p in helper.files}
+    assert len(users) >= 10 and not helper.smoke and not helper.core
+    assert all("classic_rules" in test_for._text(p) for p in helper.files)
+    chained = test_for.pick(["tests/conftest.py"], hunks_of=_added("tests/conftest.py", FAKE_CONFTEST, 16))
+    assert chained.files and all("prologue_content" in test_for._text(p) for p in chained.files)
+
+
+def test_conftest_changes_that_touch_every_test_run_the_smoke_set():
+    """autouse 的 fixture、模組最外層（import、sys.path）、或一個幾百個檔都在用的 fixture（content）：一個一個挑等於整套，
+    跑煙霧（每一塊一小撮），整套留給每日整套。"""
+    for line in (1, 8, 12):
+        picked = test_for.pick(["tests/conftest.py"], hunks_of=_added("tests/conftest.py", FAKE_CONFTEST, line))
+        assert picked.smoke and not picked.files and not picked.core, line
+        assert picked.why and not any("文件" in w for w in picked.why), line
+
+
+def test_test_settings_pick_nothing_and_do_not_say_docs(capsys):
+    assert test_for.pick(["pyproject.toml"]).empty
+    assert test_for.main(["pyproject.toml", "--list"]) == 0
+    out = capsys.readouterr().out
+    assert "pyproject.toml" in out and "文件之類" not in out
+    assert _names(["tests/arts/test_fusion.py", "pyproject.toml"]) == {"test_fusion.py"}
 
 
 def test_docs_pick_nothing_and_a_test_file_picks_itself():
