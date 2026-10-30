@@ -300,10 +300,42 @@ def test_a_pick_that_is_all_slow_says_so_and_does_not_fail(capsys):
     assert test_for.finish([5], plain, slow=False) == 5
 
 
+def _slow_smoke(text: str, names: list[str]) -> bool:
+    """這一條煙霧（檔裡的 names：類別、函式）是不是也標了 slow（整個檔、類別或函式本身）。"""
+    import ast
+    import re
+    if re.search(r"^pytestmark[ \t]*=.*\bslow\b", text, re.M) or (not names and "mark.slow" in text):
+        return True
+    body = ast.parse(text).body
+    for name in names:
+        node = next(n for n in body if getattr(n, "name", None) == name)
+        marks = [ast.unparse(d) for d in node.decorator_list]
+        if isinstance(node, ast.ClassDef):
+            marks += [ast.unparse(s.value) for s in node.body if isinstance(s, ast.Assign)
+                      and any(getattr(t, "id", None) == "pytestmark" for t in s.targets)]
+            body = node.body
+        if any(re.search(r"\bslow\b", m) for m in marks):
+            return True
+    return False
+
+
+def test_a_slow_smoke_test_is_caught():
+    assert _slow_smoke("import pytest\n@pytest.mark.smoke\n@pytest.mark.slow\ndef test_x():\n    pass\n", ["test_x"])
+    assert _slow_smoke("import pytest\npytestmark = pytest.mark.slow\n@pytest.mark.smoke\ndef test_x():\n    pass\n",
+                       ["test_x"])
+    assert _slow_smoke("import pytest\n@pytest.mark.slow\nclass TestA:\n    @pytest.mark.smoke\n    def test_x(self):\n"
+                       "        pass\n", ["TestA", "test_x"])
+    assert not _slow_smoke("import pytest\n@pytest.mark.smoke\ndef test_x():\n    pass\n", ["test_x"])
+
+
 def test_the_smoke_set_covers_every_block():
-    """手冊 4.3：過渡期每個區塊（CLAUDE.md 區塊表十二塊）在現有測試裡挑約 10 條標 smoke；測試資料夾大致照區塊分。"""
+    """手冊 4.3：過渡期每個區塊（CLAUDE.md 區塊表十二塊）在現有測試裡挑約 10 條標 smoke；測試資料夾大致照區塊分。
+    煙霧不能也是 slow：單獨跑 -m smoke 會蓋掉 addopts 的 not slow（那一條就跑了、兩分鐘的保證破了），test_for 照
+    -m "not slow" 跑又會悄悄把它濾掉（那一塊的煙霧少一條）。"""
     ids = test_for.smoke_ids()
     assert 100 <= len(ids) <= 150 and len(set(ids)) == len(ids)
+    slow = [i for i in ids if _slow_smoke(test_for._text(ROOT / i.split("::")[0]), i.split("::")[1:])]
+    assert not slow, f"煙霧不能標 slow：{slow}"
     folders = {i.split("/")[1] for i in ids}
     assert {"core", "acts", "battle", "arts", "gear", "figures", "ranger", "seal", "mall", "map", "bots", "season"} <= folders
     goal = test_for.targets(test_for.Pick(files={ROOT / "tests/core/test_engine.py"}, smoke=True))
