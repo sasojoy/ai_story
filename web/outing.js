@@ -129,6 +129,15 @@
     OW.raf = 0;
   }
 
+  // 「去看看」之後把要選的那一張卡捲到眼前（事件、有所感、頭目的選項都是 data-act="choose"）
+  function outingRevealChoice() {
+    const btn = document.querySelector('#page [data-act="choose"]');
+    const card = btn && (btn.closest(".card") || btn);
+    if (!card) return;
+    const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    card.scrollIntoView({ block: "center", behavior: calm ? "auto" : "smooth" });
+  }
+
   function outingShut() {
     OW.open = false;
     OW.tasks = [];
@@ -509,7 +518,7 @@
       case "outing-go": await outingGo(Number(el.dataset.n)); return true;
       case "outing-speed": OW.speed = OW.speed === 2 ? 1 : 2; outingSaveSpeed(OW.speed); outingFoot(); return true;
       case "outing-skip": OW.turbo = true; return true;
-      case "outing-away": OW.away = true; outingHide(); return true;
+      case "outing-away": OW.away = true; outingHide(); outingRevealChoice(); return true;
       case "outing-close": outingShut(); OW.shown = 0; return true;
       case "outing-again": outingShut(); OW.shown = 0; S.wheelSel = "explore"; renderPage(); revealMoveCard(); return true;
       case "outing-say": await outingSay({ preset: Number(el.dataset.i) }); return true;

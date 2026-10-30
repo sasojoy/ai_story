@@ -3287,6 +3287,7 @@ svg.fig .blade.bow { stroke-width: 3; }
 .outing-pick .outing-segs .btn span { display: flex; flex-direction: column; align-items: center; }
 .outing-pick .outing-segs small { font-size: 11px; color: var(--ink-2); font-weight: 500; }
 .outing-pick .outing-note { margin: 8px 2px 0; }
+.outing-wrap[hidden] { display: none; } /* 按「去看看」藏起來：不寫這一行，下面的 display: flex 會蓋過 hidden，整層還擋在江湖頁上 */
 .outing-wrap { position: fixed; inset: 0; z-index: 58; display: flex; align-items: center; justify-content: center;
   padding: max(12px, var(--top)) 10px max(12px, var(--bottom)); background: rgba(20, 16, 12, .55); }
 .outing-card { background: var(--card); color: var(--ink); border: 1px solid var(--gold); border-radius: 20px; width: 100%; max-width: 24rem;
