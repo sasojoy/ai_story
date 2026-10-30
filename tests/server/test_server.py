@@ -21,7 +21,7 @@ import webharness
 from conftest import at, season_one_events
 from tianxia import (
     atlas, battle_instance, calendar, companion_agent, cultivation, database, fight_llm, fusion, insights, naming, renown, skillview, social,
-    sqlite_world, team,
+    sqlite_world, tale, team,
 )
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
@@ -382,7 +382,71 @@ def test_reports_view_is_empty_with_no_battles(game):
     assert view["list"] == [] and view["selected"] is None
     assert "還沒有戰報" in view["detail"]
     assert view["tale_id"] is None  # 不是決戰（這裡一場都沒有）就沒有戰記
-    assert server.tale_view(1) == {"status": "none"}  # 主機接上之前一律沒有：網頁不畫那一顆
+    assert server.tale_view(1) == {"status": "none"}  # 沒這一場：網頁不畫那一顆
+
+
+# ── 戰記（Joy 2026-10-29，原稱戰役話本）：/api/tale 的三種狀態、背景寫一篇、江湖史目錄的開關 ──
+# 寫法與存放的測試在 tests/battle/test_tale.py，這裡只管伺服器這一側。
+
+
+def _tale_store(tmp_path, monkeypatch):
+    store = tale.TaleStore(tmp_path / "server-tale.sqlite")
+    monkeypatch.setattr(server, "TALES", store)
+    return store
+
+
+def _ended_showdown(world, *, unfinished=False):
+    """開一場黃巾決戰再把它收掉（沒有回合紀錄也寫得出戰記）。回它在資料庫裡的流水號。"""
+    battle = world.start_battle(server.CONTENT.battles["huangjin_showdown"], now=0.0)
+
+    def _end(b):
+        b.phase, b.unfinished = "ended", unfinished
+        b.outcome_title = "" if unfinished else "黃巾大勝"
+        b.outcome_side = "huang"
+
+    world.mutate_battle(_end)
+    return battle.record_id
+
+
+def test_the_tale_api_says_pending_until_it_is_written(client, tmp_path, monkeypatch):
+    """收場了還沒寫好＝pending（網頁畫灰的「史官還在落筆」）、沒這一場＝none、寫好了＝整篇。
+    這裡沒有 client（TALES_CLIENT 是 None），寫出來的是模板版——叫不動模型也不會一直卡在 pending。"""
+    _player(client)
+    _tale_store(tmp_path, monkeypatch)
+    record_id = _ended_showdown(open_world())
+    assert client.get(f"/api/tale/{record_id}").json() == {"status": "pending"}
+    assert client.get("/api/tale/9999").json() == {"status": "none"}
+    assert server.tale_round() == record_id
+    page = client.get(f"/api/tale/{record_id}").json()
+    assert page["status"] == "ready" and page["title"] == "黃巾決戰戰記" and page["result"] == "黃巾大勝"
+    assert page["acts"] and all(scene["text"] for act in page["acts"] for scene in act["scenes"])
+    assert server.tale_round() is None  # 寫過的不重寫
+
+
+def test_a_showdown_cut_short_by_the_season_gets_no_tale(client, tmp_path, monkeypatch):
+    """季終沒打完收起來的那一場沒有結果（unfinished）：不寫、也不是 pending。"""
+    _player(client)
+    store = _tale_store(tmp_path, monkeypatch)
+    record_id = _ended_showdown(open_world(), unfinished=True)
+    assert client.get(f"/api/tale/{record_id}").json() == {"status": "none"}
+    assert server.tale_round() is None and store.done(open_world().get_season_number()) == set()
+
+
+def test_the_tale_needs_a_login_like_the_reports(client):
+    assert client.get("/api/tale/1").status_code != 200
+
+
+def test_the_chronicle_index_waits_for_the_switch(client, tmp_path, monkeypatch):
+    """江湖史最上面那排戰記：TALES_IN_CHRONICLE 關著一律空的（誰看得到等 Joy 定）；開了就一場一筆、新的在前。"""
+    _player(client)
+    _tale_store(tmp_path, monkeypatch)
+    first = _ended_showdown(open_world())
+    assert server.tale_round() == first
+    assert client.get("/api/main").json()["tales"] == []
+    monkeypatch.setattr(server, "TALES_IN_CHRONICLE", True)
+    listed = client.get("/api/main").json()["tales"]
+    assert listed == [{"battle_id": first, "title": "黃巾決戰", "season": open_world().get_season_number(),
+                       "result": "黃巾大勝"}]
 
 
 def test_status_text_still_reads_the_same(game):
@@ -5289,7 +5353,8 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
                                          "letter_once", "yuedan_once", "chatter_once",  # chatter_once：酒肆鄰桌閒談，同 crowd_once 當假人排
                                          "xingshi_once",
                                          "narration_round",  # 事件旁白每週改寫（減法季批 10）：背景一則一則，當假人排，名號 NARRATION_KEY
-                                         "verdict_text"}  # 人物評曰（減法季批 7b-2）：zhuan_job 寫完正文後在鎖外逐條叫，當假人排在真人後面
+                                         "verdict_text",  # 人物評曰（減法季批 7b-2）：zhuan_job 寫完正文後在鎖外逐條叫，當假人排在真人後面
+                                         "tale_round"}  # 戰記（Joy 2026-10-29）：決戰收場後在背景寫一篇，當假人排，名號 TALE_OWNER_KEY
     importers = [
         p.name for p in (server.ROOT / "tianxia").glob("*.py")
         if re.search(r"^\s*(import|from)\s+llm_queue\b", p.read_text(encoding="utf-8"), re.M)
