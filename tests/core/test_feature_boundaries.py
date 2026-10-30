@@ -77,6 +77,38 @@ def _module_exists(name: str) -> bool:
     return path.with_suffix(".py").exists() or (path / "__init__.py").exists()
 
 
+def _is_alias(tree: ast.AST) -> bool:
+    """這個模組把自己換成別的模組（sys.modules[__name__] = …）。"""
+    return any(isinstance(node, ast.Assign) and any(
+        isinstance(t, ast.Subscript) and ast.unparse(t.value) == "sys.modules" and ast.unparse(t.slice) == "__name__"
+        for t in node.targets) for node in ast.walk(tree))
+
+
+def _find_aliases() -> dict[str, str]:
+    out: dict[str, str] = {}
+    for path in sorted(TIANXIA.glob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        if "sys.modules" not in source or not _is_alias(ast.parse(source)):
+            continue
+        packages = {mod.split(".")[2] for _, mod, _ in imports_of(source, _modname(path))
+                    if mod.startswith("tianxia.features.") and len(mod.split(".")) > 2}
+        if len(packages) == 1:
+            out[path.stem] = packages.pop()
+    return out
+
+
+def aliases() -> dict[str, str]:
+    """舊名留成的別名（3.11 過渡：tianxia/mall.py、tianxia/feasts.py 把 sys.modules 換成包裡的 rules，給還沒改的測試）：舊名 → 包名。
+    import 它就是 import 那一包，掃描照那一包算（不然「包 import 包」換個名字就溜過去、還被算成一處過渡）。"""
+    global _ALIASES
+    if _ALIASES is None:
+        _ALIASES = _find_aliases()
+    return _ALIASES
+
+
+_ALIASES: dict[str, str] | None = None
+
+
 def problems_of(source: str, module: str) -> list[str]:
     """一個功能包的模組違反的地方（空的是乾淨）。"""
     own = module.split(".")[2]
@@ -84,6 +116,15 @@ def problems_of(source: str, module: str) -> list[str]:
     for line, name, marked in imports_of(source, module):
         parts = name.split(".")
         if name == "tianxia" or parts[1] == "core" or parts[1] in CORE:
+            continue
+        if parts[1] in aliases():  # 舊名的別名就是那一包
+            target = aliases()[parts[1]]
+            if target != own:
+                out.setdefault((line, target), f"{module}:{line} 經過別名 tianxia.{parts[1]} import 了別的包 {target}"
+                                               f"（要用別包的東西走核心的服務，手冊 3.4）")
+            else:
+                out.setdefault((line, target), f"{module}:{line} import 了自己這一包的別名 tianxia.{parts[1]}（別名只給還沒改的測試；"
+                                               f"包裡用相對 import）")
             continue
         if parts[1] == "features":
             if len(parts) > 2 and parts[2] != own:  # 別的包（還沒建的也算）
@@ -129,7 +170,7 @@ def transitional_imports() -> list[str]:
     for name in _packages():
         for path in _package_files(name):
             seen = {(line, ".".join(mod.split(".")[:2])) for line, mod, marked in imports_of(path.read_text(encoding="utf-8"), _modname(path))
-                    if marked and mod != "tianxia" and _module_exists(".".join(mod.split(".")[:2]))}
+                    if marked and mod != "tianxia" and _module_exists(".".join(mod.split(".")[:2])) and mod.split(".")[1] not in aliases()}
             out += [f"{_modname(path)}:{line} {mod}" for line, mod in sorted(seen)]
     return out
 
@@ -138,7 +179,7 @@ def test_every_transitional_import_points_at_an_old_module_not_the_core_or_a_pac
     """註了「過渡：待搬」的那一行真的是舊模組：搬完了（變成核心或包）就把註拿掉。"""
     for entry in transitional_imports():
         mod = entry.rsplit(" ", 1)[1].split(".")
-        assert mod[1] not in CORE and mod[1] not in ("core", "features"), entry
+        assert mod[1] not in CORE and mod[1] not in ("core", "features") and mod[1] not in aliases(), entry
 
 
 SERVICES = TIANXIA / "core" / "services.py"
@@ -189,10 +230,21 @@ def test_the_service_scanner_catches_a_game_method_off_the_list():
     ("from tianxia import library\n", "舊模組"),
     ("from tianxia import engine\n", "舊模組"),
     ("import tianxia.zhuan_end\n", "舊模組"),
+    # 舊名留成的別名（tianxia/feasts.py 把 sys.modules 換成宴客包的 rules）就是那一包：註了過渡也擋
+    ("from tianxia import feasts  # 過渡：待搬\n", "別的包 feast"),
+    ("from tianxia.feasts import ToastRequest\n", "別的包 feast"),
+    ("import tianxia.feasts\n", "別的包 feast"),
+    ("from tianxia import mall  # 過渡：待搬\n", "自己這一包的別名"),
 ])
 def test_the_scanner_catches_a_crossing(source, expected):
     found = problems_of(source, "tianxia.features.mall.actions")
     assert len(found) == 1 and expected in found[0]
+
+
+def test_the_old_names_left_as_aliases_are_known():
+    """tianxia/mall.py、tianxia/feasts.py 是指到包裡同一個模組的別名（給還沒改的測試）：掃描照它們指到的那一包算，不算舊模組。"""
+    assert aliases() == {"feasts": "feast", "mall": "mall"}
+    assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 
 @pytest.mark.parametrize("source", [
