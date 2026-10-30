@@ -46,8 +46,8 @@ def test_the_base_lists_open_places_roads_and_regions():
 # ── 輿圖表現 S1：底圖多 terrain 與 view 兩個鍵（給 W1 以後的新圖用；舊圖照舊畫 svg）─────────────
 
 OLD_BASE_KEYS = {"key", "w", "h", "svg", "places", "edges", "roads", "regions", "insight_kinds", "insight_layer", "world", "paint"}
-FORMAL_VIEW = {  # content/config.json 的 map_view（設計 4：八個鍵；W1 以後的畫面照這幾個數字取景）
-    "open_units": 250, "zoom_max": 1.6, "near_from": 0.8, "mid_from": 0.45,
+FORMAL_VIEW = {  # content/config.json 的 map_view（設計 4：九個鍵；W1 以後的畫面照這幾個數字取景）
+    "open_units": 250, "open_width_max": 480, "zoom_max": 1.6, "near_from": 0.8, "mid_from": 0.45,
     "named_hops_near": 2, "named_hops_mid": 1, "switch_zoom": 0.6, "patch_radius": 60,
 }
 
@@ -65,9 +65,10 @@ def test_the_base_adds_only_the_view_and_the_terrain(profile):
 def test_the_view_is_whatever_the_config_says():
     game = _game()
     game.content.config.map_view.open_units = 320
+    game.content.config.map_view.open_width_max = 520
     game.content.config.map_view.patch_radius = 45.5
     view = game.map_base()["view"]
-    assert (view["open_units"], view["patch_radius"]) == (320, 45.5) and view["zoom_max"] == 1.6
+    assert (view["open_units"], view["open_width_max"], view["patch_radius"]) == (320, 520, 45.5) and view["zoom_max"] == 1.6
 
 
 def test_the_terrain_has_every_peak_hill_tree_river_and_name_of_the_map():

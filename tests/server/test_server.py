@@ -2895,7 +2895,7 @@ def test_the_new_map_comes_as_a_base_and_an_overlay(client):
     _player(client)
     base = client.get("/api/map/base").json()
     assert base["svg"].startswith("<svg") and base["places"] and base["edges"] and base["key"]
-    # 輿圖表現 S1：多兩個鍵，給 W1 以後的新圖用（取景的八個數字、山頭樹河與山河名字的位置）
+    # 輿圖表現 S1：多兩個鍵，給 W1 以後的新圖用（取景的九個數字、山頭樹河與山河名字的位置）
     assert base["view"] == server.CONTENT.config.map_view.model_dump()
     assert set(base["terrain"]) == {"peaks", "trees", "rivers", "labels"}
     st = client.get("/api/map/state").json()

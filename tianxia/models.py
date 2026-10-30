@@ -3445,11 +3445,13 @@ class WebPushRules(_Strict):
 
 class MapViewRules(_Strict):
     """輿圖表現（docs/superpowers/specs/2026-10-30-輿圖表現-design.md 第四章；計畫 docs/superpowers/plans/2026-10-30-輿圖表現-S1.md）：
-    一張連續戰略圖的取景與密度。八個數字由 `/api/map/base` 的 `view` 原樣送到畫面（tianxia/mapdata.py `base()`），給 W1 以後的新圖用；
-    倍率都是「打開時的倍率」的幾倍（`open_units` 決定打開時螢幕寬放幾個地圖單位）。顏色、字級、半徑、透明度是畫法，寫在 `web/map.js`，
+    一張連續戰略圖的取景與密度。九個數字由 `/api/map/base` 的 `view` 原樣送到畫面（tianxia/mapdata.py `base()`），給 W1 以後的新圖用；
+    倍率都是「打開時的倍率」Z0 的幾倍（`Z0 = min(框寬, open_width_max) / open_units`：`open_units` 決定打開時螢幕寬放幾個地圖單位，
+    `open_width_max` 讓桌機、平板、橫向手機不再放大、只多看一圈）。顏色、字級、半徑、透明度是畫法，寫在 `web/map.js`，
     不進這裡。數字全是【預設】。"""
 
     open_units: float = Field(default=250, gt=0)  # 【預設】打開時螢幕寬放幾個地圖單位
+    open_width_max: int = Field(default=480, ge=1)  # 【預設】算打開倍率時框寬最多算到幾 px（Z0 = min(框寬, 它) / open_units）
     zoom_max: float = Field(default=1.6, ge=1)  # 【預設】最多放大到打開倍率的幾倍
     near_from: float = Field(default=0.8, gt=0)  # 【預設】倍率 ≥ 打開的幾倍算「近」
     mid_from: float = Field(default=0.45, gt=0)  # 【預設】倍率 ≥ 打開的幾倍算「中」（再小是「遠」）
