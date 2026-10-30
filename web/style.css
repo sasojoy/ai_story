@@ -1158,7 +1158,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mv-world > .mv-base { position: absolute; left: 0; top: 0; display: block; opacity: 0; transition: opacity 0.4s; }
 .mv-world > .mv-base.on { opacity: 1; }
 .mv-world > svg { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
-.mv-ground { transition: opacity 0.25s; }
+.mv-ground { transition: opacity 0.25s; mix-blend-mode: multiply; }
 .mv-marks { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
 .mv-marks > * { position: absolute; }
 .mv-marks button { pointer-events: auto; cursor: pointer; border: 0; background: none; padding: 0; margin: 0; font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }

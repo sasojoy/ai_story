@@ -760,7 +760,7 @@
   const WORLD_TUG_MAX = 0.75, WORLD_TUG_GAP = 5, WORLD_TUG_LINE = 2.2;
   const WORLD_COOL_DASH = 4, WORLD_COOL_GAP = 3, WORLD_COOL_LINE = 1.4;
   const WORLD_LETTER_DASH = 6, WORLD_LETTER_GAP = 3.5, WORLD_LETTER_LINE = 2.6;
-  const WORLD_INK = "#3A3127", WORLD_RIM = "#5B4A38", WORLD_GROUND = 0.8;
+  const WORLD_GROUND = 0.62; // 地面那一層多濃（淡彩：底下的山河要透得上來）
   function tugPattern(side, k) {
     const ink = sideInk(side), gap = f1(WORLD_TUG_GAP * k);
     return `<pattern id="wt-${esc(side)}" patternUnits="userSpaceOnUse" width="${gap}" height="${gap}" patternTransform="rotate(45)">`
@@ -904,35 +904,39 @@
     if (!wd) return "";
     const ctrl = controlAt(st, week), live = week === st.now_week;
     const cooling = (id) => live && !!ctrl[id] && !!(st.places[id] && st.places[id].cool);
-    const ground = (id) => (ctrl[id] ? sideInk(ctrl[id])[cooling(id) ? "tint" : "soft"] : wd.unheld);
+    const ground = (id) => sideInk(ctrl[id])[cooling(id) ? "tint" : "soft"];
     const tugs = live ? wd.cells.map((c) => [c, tugOf(st, c.id, ctrl[c.id] || null)]).filter(([, t]) => t) : [];
     const melee = live ? wd.cells.filter((c) => st.places[c.id] && (st.places[c.id].melee || st.places[c.id].siege === "fight")) : [];
     const letters = live ? wd.cells.filter((c) => st.places[c.id] && st.places[c.id].siege === "letter") : [];
     const cools = wd.cells.filter((c) => cooling(c.id));
     const patterns = [...new Set(tugs.map(([, t]) => t.side))].map((sd) => tugPattern(sd, k)).join("");
+    // 淡彩水暈（企劃者 2026-10-30「勢力範圍的多邊形還是一定只能那麼醜嗎」）：每一格照控制方的淡色平塗，整層用水暈的濾鏡把邊揉開、
+    // 往外滲一點、邊上積一圈稍濃的顏料（像水彩乾掉的邊），乘在底圖上（.mv-ground 的 mix-blend-mode）；沒人佔的不上色，露出底圖。
+    // 大區的墨線外框、有主與沒人佔之間的細墨線拿掉了（州界在底圖上）；兩方相接的紅線改成一筆淡一點的朱砂
     const out = [`<defs>${wd.regions.map((r) => `<clipPath id="wc-${esc(r.id)}"><path d="${r.d}"/></clipPath>`).join("")}${patterns}`
-      + '<filter id="mv-edge" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency=".05" numOctaves="2" seed="11"/><feDisplacementMap in="SourceGraphic" scale="10"/><feGaussianBlur stdDeviation="1.6"/></filter></defs>'];
-    out.push(`<g class="w-ground" opacity="${WORLD_GROUND}" filter="url(#mv-edge)">`);
+      + '<filter id="mv-wash" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency=".022" numOctaves="3" seed="11" result="n"/>'
+      + '<feDisplacementMap in="SourceGraphic" in2="n" scale="26" result="d"/><feGaussianBlur in="d" stdDeviation="4.5" result="b"/>'
+      + '<feMorphology in="d" operator="erode" radius="3" result="e"/><feGaussianBlur in="e" stdDeviation="2" result="eb"/>'
+      + '<feComposite in="b" in2="eb" operator="out" result="rim"/><feComponentTransfer in="rim" result="rim2"><feFuncA type="linear" slope=".55"/></feComponentTransfer>'
+      + '<feMerge><feMergeNode in="b"/><feMergeNode in="rim2"/></feMerge></filter>'
+      + '<filter id="mv-stroke" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency=".08" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="5"/><feGaussianBlur stdDeviation=".6"/></filter></defs>'];
+    out.push(`<g class="w-ground" opacity="${WORLD_GROUND}" filter="url(#mv-wash)">`);
     for (const r of wd.regions) {
-      out.push(`<path d="${r.d}" fill="${wd.unheld}"/><g clip-path="url(#wc-${esc(r.id)})">`);
-      for (const c of wd.cells) if (c.region === r.id) out.push(`<path data-cell="${esc(c.id)}" d="${c.d}" fill="${ground(c.id)}"/>`);
-      out.push("</g>");
+      const held = wd.cells.filter((c) => c.region === r.id && ctrl[c.id]);
+      if (held.length) out.push(`<g clip-path="url(#wc-${esc(r.id)})">${held.map((c) => `<path data-cell="${esc(c.id)}" d="${c.d}" fill="${ground(c.id)}" stroke="${ground(c.id)}" stroke-width="2"/>`).join("")}</g>`);
     }
     out.push("</g>");
     for (const r of wd.regions) {
       const mine = tugs.filter(([c]) => c.region === r.id);
       if (mine.length) out.push(`<g clip-path="url(#wc-${esc(r.id)})">${mine.map(([c, t]) => `<path class="w-tug" data-cell="${esc(c.id)}" d="${c.d}" fill="url(#wt-${esc(t.side)})" opacity="${f2((t.pct / 100) * WORLD_TUG_MAX)}"/>`).join("")}</g>`);
     }
-    out.push(`<g class="w-outline" fill="none" stroke="${WORLD_INK}" stroke-width="${f1(1.2 * k)}" stroke-linejoin="round" opacity=".6">${wd.regions.map((r) => `<path d="${r.d}"/>`).join("")}</g>`);
     for (const c of cools) out.push(`<path class="w-cool" data-cell="${esc(c.id)}" d="${c.d}" fill="none" stroke="${sideInk(ctrl[c.id]).color}" stroke-width="${f1(WORLD_COOL_LINE * k)}" stroke-dasharray="${f1(WORLD_COOL_DASH * k)} ${f1(WORLD_COOL_GAP * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})"/>`);
-    const front = [], rim = [];
+    const front = [];
     for (const e of wd.edges) {
       const a = (e.a && ctrl[e.a]) || null, b = (e.b && ctrl[e.b]) || null;
-      if (a === b) continue;
-      (a && b ? front : rim).push(`<path d="${e.d}"${e.clip ? ` clip-path="url(#wc-${esc(e.clip)})"` : ""}/>`);
+      if (a && b && a !== b) front.push(`<path d="${e.d}"${e.clip ? ` clip-path="url(#wc-${esc(e.clip)})"` : ""}/>`);
     }
-    out.push(`<g class="w-rim" fill="none" stroke="${WORLD_RIM}" stroke-width="${f1(1.1 * k)}">${rim.join("")}</g>`);
-    out.push(`<g class="w-front" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(3 * k)}" stroke-linecap="round">${front.join("")}</g>`);
+    out.push(`<g class="w-front" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(2.6 * k)}" stroke-linecap="round" stroke-linejoin="round" opacity=".7" filter="url(#mv-stroke)">${front.join("")}</g>`);
     for (const c of melee) out.push(`<path class="w-melee" data-cell="${esc(c.id)}" d="${c.d}" fill="${FRONT_RED}" fill-opacity=".16" stroke="${FRONT_RED}" stroke-width="${f1(3.2 * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})"/>`);
     for (const c of letters) out.push(`<path class="w-letter" data-cell="${esc(c.id)}" d="${c.d}" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(WORLD_LETTER_LINE * k)}" stroke-dasharray="${f1(WORLD_LETTER_DASH * k)} ${f1(WORLD_LETTER_GAP * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})"/>`);
     return out.join("");
