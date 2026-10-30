@@ -127,6 +127,7 @@ class OutingBeat(BaseModel):
     rare: bool = False  # 稀有的：二階以上的素材、奇遇事件、一條線的開頭（畫面亮金光）
     won: bool | None = None  # 遭遇：打贏 True、打輸或平手 False；別的類是 None
     stop: bool = False  # 這一段端出了要選的事（事件、有所感、頭目），走一趟停在這裡等玩家選
+    ref: int | None = None  # kind trace（路上看到的留言）：那一則留言的 id（管理者照它刪）；其餘是 None
 
 
 class Outing(BaseModel):
@@ -138,6 +139,23 @@ class Outing(BaseModel):
     done: int = 0
     beats: list[OutingBeat] = Field(default_factory=list)
     end: str = ""  # ""、done（走完）、lost（打輸）、hurt（氣血見底回頭）、tired（體力不夠）、left（離開了）
+    n: int = 0  # 第幾趟（上一趟加一；遊記的單子照它認是不是同一趟）
+    said: str = ""  # 走完在這一處留的那一句（一趟一句）；空的是還沒留
+    waved: bool = False  # 路上已經寫過「遠處有人揮手」那一行（一趟一次）
+    tale: str = ""  # 這一趟的遊記（模型寫的，鎖外三段式；叫不動或不合用是空字串，畫面用 outing.template_tale）
+    tale_done: bool = False  # 遊記請過模型了（成不成都算，不再請）
+    kept: bool = False  # 遊記收進行狀了
+
+
+class Inscription(BaseModel):
+    """走一趟留在一處的一句話（tianxia/outing.py）：之後來這裡走一趟的人路上會看到。預設句免費，自己寫的要一張題壁墨。"""
+
+    id: int
+    place: str
+    text: str
+    author: str  # 名號（改名照 rename.swap 一起換）
+    preset: bool = False
+    time: float = 0.0
 
 
 class Sensing(BaseModel):
@@ -1821,7 +1839,8 @@ class WorldState(BaseModel):
         data = handler(self)
         if isinstance(data, dict):
             for key in ("marks_fired", "mark_helpers", "final_tiers", "stance_counts", "stance_week", "stance_active", "god_names", "god_firsts",
-                        "chapter_weights", "chapter_done", "plans", "stops_done", "deeds", "deed_seq"):
+                        "chapter_weights", "chapter_done", "plans", "stops_done", "deeds", "deed_seq",
+                        "inscriptions", "inscription_seq"):
                 if key in data and not data[key]:
                     del data[key]
         return data
@@ -1835,6 +1854,9 @@ class WorldState(BaseModel):
     stops_done: dict[str, bool] = Field(default_factory=dict)
     deeds: list[Deed] = Field(default_factory=list)
     deed_seq: int = 0
+    # 走一趟的留言（tianxia/outing.py）：每一處留最近 outing_keep 則，換季整個重來
+    inscriptions: list[Inscription] = Field(default_factory=list)
+    inscription_seq: int = 0
     yuedan: list[YuedanEntry] = Field(default_factory=list)
     yuedan_week: int = 0  # 月旦評評到第幾週了
     rallies: list[Bounty] = Field(default_factory=list)  # 求援委託（motive「求援」；不上懸賞榜，自己陣營的人都看得到、前 quota 個辦成的有賞）

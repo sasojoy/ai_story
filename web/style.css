@@ -1462,7 +1462,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* 確認鈕固定用深一點的朱紅：深色模式的 --bad（#e06a5c）配白字只有 3.3:1，這個顏色兩種模式都是 5.9:1 */
 .btn.danger { background: #b23a2b; border-color: #b23a2b; color: #fff; font-weight: 600; }
 /* 管理者動作的確認框：疊在設定抽屜上面的小抽屜（app.js 的 ask） */
-.ask-layer { position: fixed; inset: 0; z-index: 45; }
+.ask-layer { position: fixed; inset: 0; z-index: 75; } /* 永遠在最上面：走一趟那一層（58）上按的選項也會問一次 */
 .ask-bg { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.35); animation: fade 0.2s; }
 .ask {
   position: absolute; left: 0; right: 0; bottom: 0; max-width: 640px; margin: 0 auto;
@@ -3287,6 +3287,7 @@ svg.fig .blade.bow { stroke-width: 3; }
 .outing-pick .outing-segs .btn span { display: flex; flex-direction: column; align-items: center; }
 .outing-pick .outing-segs small { font-size: 11px; color: var(--ink-2); font-weight: 500; }
 .outing-pick .outing-note { margin: 8px 2px 0; }
+.outing-wrap[hidden] { display: none; } /* 按「去看看」藏起來：不寫這一行，下面的 display: flex 會蓋過 hidden，整層還擋在江湖頁上 */
 .outing-wrap { position: fixed; inset: 0; z-index: 58; display: flex; align-items: center; justify-content: center;
   padding: max(12px, var(--top)) 10px max(12px, var(--bottom)); background: rgba(20, 16, 12, .55); }
 .outing-card { background: var(--card); color: var(--ink); border: 1px solid var(--gold); border-radius: 20px; width: 100%; max-width: 24rem;
@@ -3310,14 +3311,38 @@ svg.fig .blade.bow { stroke-width: 3; }
 .outing-line.bad .k { color: var(--bad); }
 .outing-ctl { display: flex; gap: 8px; }
 .outing-ctl .btn { flex: 1; justify-content: center; }
-.outing-wait p { margin: 0 0 8px; font-size: 13.5px; }
-.outing-wait .btn { width: 100%; justify-content: center; }
+.outing-card.choosing .outing-foot { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.outing-card.choosing .outing-log { min-height: 56px; max-height: 96px; }
+.outing-choice > p { margin: 0 0 8px; font-size: 13.5px; }
+.outing-ev { font-size: 13.5px; line-height: 1.7; margin: 0 2px 8px; }
+.outing-ev p { margin: 0 0 6px; }
+.outing-ev img { display: none; }
+.outing-choice .options { display: grid; gap: 6px; }
+.outing-choice .options > .btn { width: 100%; justify-content: flex-start; text-align: left; }
+.outing-choice .free { display: flex; gap: 6px; }
+.outing-choice .free .input { flex: 1 1 auto; min-width: 0; }
+.outing-choice .free .btn { flex: none; }
+.outing-line.after .k { color: var(--ink-2); }
 .outing-title { margin: 0 0 4px; font-family: var(--serif); }
 .outing-title b { color: var(--gold); }
 .outing-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .outing-chips .oc { font-size: 12.5px; line-height: 1.6; padding: 1px 8px; border-radius: 10px; background: var(--card-2); color: var(--ok); }
 .outing-chips .oc.rare { background: var(--gold); color: var(--card); font-weight: 700; }
 .outing-chips .oc.down { color: var(--bad); }
+.outing-line.trace { color: var(--rn-xia); }
+.outing-line.trace .k { color: var(--rn-xia); border-color: currentColor; }
+.outing-erase { margin-left: auto; flex: none; border: 0; background: none; color: var(--bad); font-size: 16px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.outing-say { margin: 6px 0; }
+.outing-say summary { cursor: pointer; font: 600 13.5px var(--serif); color: var(--gold); }
+.outing-chips .oc.say { border: 1px solid var(--line); color: var(--ink); background: var(--card-2); cursor: pointer; font: inherit; font-size: 12.5px; }
+.outing-own { display: flex; gap: 6px; margin: 4px 0; }
+.outing-own input { flex: 1 1 auto; min-width: 0; font: inherit; font-size: 13.5px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); }
+.outing-said { margin: 4px 0; font-size: 13px; color: var(--ink-2); }
+.outing-diary { margin: 6px 0 2px; font: 400 13.5px/1.75 var(--serif); color: var(--ink); }
+.outing-diary.fresh { animation: asc-in .6s ease-out; }
+.outing-keep { margin: 0 0 4px; text-align: right; }
+.outing-keep small { color: var(--ink-2); }
+.outing-here { margin: 4px 0 8px; font-size: 13px; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
 @media (prefers-reduced-motion: reduce) { .outing-card, .outing-line { animation: none; } }
 /* 特殊事件的跳顯框（特殊事件設計稿）：蓋在畫面上，看完才收；破境卡在它上面 */
 .story-wrap { position: fixed; inset: 0; z-index: 59; display: flex; align-items: center; justify-content: center;

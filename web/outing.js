@@ -2,7 +2,9 @@
  *
  * 伺服器一次算到「下一件要選的事」為止，沿路每一段放在 main.outing.trip.beats；這裡只把已經算好的結果演出來：
  * 斗笠小童在野地四層背景上跑（越近的層捲得越快），到了那一段照類別演動作（撿、打、停步），演完寫一行。
- * 要選的事（事件、有所感、頭目）：畫面停住，按「去看看」收起這一層，玩家在江湖頁照平常選；選完了（trip.can_go）自動接著走、重新打開。
+ * 要選的事（事件、有所感、頭目）：畫面停住，事情與選項直接畫在這張卡底下，就在這裡選（Joy 10/30：不要「去看看」那一步）；
+ * 選完了（trip.can_go）寫一行結果、自動接著走。要寫字或畫圖的選項（隨口應對、有所感畫形、取名……）那個框在江湖頁：
+ * 按了這一層先收起、捲到那個框，送出後再打開。
  * 演完一整趟給結算卡。動畫可以 2×、可以略過；系統設定「減少動態」的人直接快轉。圖是 Joy 10/30 生的（web/img/outing/）。
  */
 "use strict";
@@ -18,15 +20,23 @@
   const OUTING_FRONT = ["bg_wild_front", 1.6, 240, 150];
   const OUTING_W = 720, OUTING_H = 360, OUTING_GY = 300, OUTING_HX = 190;
   const OUTING_CELL = 220, OUTING_AX = 100, OUTING_BY = 212;
-  const OUTING_KIND = { material: "料", encounter: "戰", event: "事", insight: "悟" };
+  const OUTING_KIND = { material: "料", encounter: "戰", event: "事", insight: "悟", trace: "見" };
   const OUTING_SPEED_KEY = "outing-speed";
   // 畫面上的字（待 joy 潤）
   const OUTING_WAIT = "路上碰到要選的事。";
-  const OUTING_AWAY = "去看看";
+  const OUTING_AFTER = "果";
   const OUTING_CLOSE = "收起";
   const OUTING_AGAIN = "再走一趟";
   const OUTING_SKIP = "略過";
   const OUTING_SET_OFF = "出發";
+  const OUTING_SAY_HEAD = "在這裡留一句";
+  const OUTING_SAY_OWN = "自己寫";
+  const OUTING_SAY_INK = "用一張題壁墨（手上 {n} 張）";
+  const OUTING_SAY_BUY = "去萬寶閣買題壁墨";
+  const OUTING_SAID = "你留下：「{text}」";
+  const OUTING_HERE = "此地還有";
+  const OUTING_KEEP = "收進行狀";
+  const OUTING_KEPT = "已收進行狀";
 
   // 這一層自己的狀態（不放進 S：每一格動畫都會改，不該讓整頁重畫）
   const OW = { imgs: null, open: false, away: false, shown: 0, played: 0, tasks: [], cur: null, raf: 0, last: 0, scroll: 0, props: [], parts: [],
@@ -67,17 +77,66 @@
     });
   }
 
-  // 每次拿到新的畫面（setMain 之後）：停在要選的事上、玩家去選了、選完了（can_go）就自己接著走
+  // 每次拿到新的畫面（setMain 之後）：停在要選的事上時刷新卡上的選項；選完了（can_go）寫一行結果、自己接著走
   function outingSync() {
     const trip = S.main && S.main.outing && S.main.outing.trip;
-    // 重新整理頁面（或換了分頁）時那一趟還停在要選的事上：當作已經按過「去看看」，選完照樣接著走（沿路那幾行不重演）
-    if (trip && !trip.end && !OW.open && !OW.away && OW.shown === 0) { OW.away = true; OW.shown = OW.played = trip.beats.length; }
-    if (!trip || !OW.away || OW.going || S.busy) return;
+    if (!trip) return;
+    // 重新整理頁面（或換了分頁）時那一趟還停在要選的事上：直接打開這一層、選項畫在卡上（沿路那幾行不重演）
+    if (!trip.end && !OW.open && !OW.away && OW.shown === 0) {
+      OW.shown = trip.beats.length; OW.played = trip.done;
+      if (outingInputOpen()) OW.away = true; else outingOpen();
+      return;
+    }
+    if (OW.going || S.busy) return;
+    // 為了寫字、畫圖收起來的：框還開著就等；送出了又停在下一件要選的事上（有所感之後取名……）就打開、畫在卡上
+    if (OW.away && !trip.end && !trip.can_go) {
+      if (!outingInputOpen()) { OW.away = false; outingOpen(); }
+      return;
+    }
+    if (!OW.away && !OW.open) return;
+    if (OW.open && (OW.cur || OW.tasks.length)) return; // 還在演
+    if (OW.waitKey && (trip.end || trip.can_go)) outingAfter();
     if (trip.end) { OW.away = false; outingOpen(); return; }
-    if (!trip.can_go) return;
+    if (!trip.can_go) { outingFoot(); return; }
     OW.going = true;
     OW.away = false;
     outingGo(0).finally(() => { OW.going = false; });
+  }
+
+  // 要在江湖頁寫字或畫圖的選項（那個框只畫在江湖頁上）。隨口應對不在裡面：輸入框直接畫在這張卡上（outingChoiceHtml）
+  function outingNeedsPage(id) {
+    return id === SENSE_DRAW || SAY_OPTIONS.includes(id) || id.startsWith(PERSUADE_PREFIX) || id === OWN_NAME_ID || id === GATHER_SAY_ID;
+  }
+  function outingInputOpen() { return !!(S.sensing || S.answering || S.saying || S.persuading || S.godNaming || S.gatherSaying); }
+  const OUTING_INPUTS = "#sense-pad, #answer-form, #say-form, #persuade-form, #own-name-form, #gather-say-form";
+
+  // 選完了：「剛剛」那一則（事件的結果）的頭一句寫進沿路紀錄，接著走
+  function outingAfter() {
+    OW.waitKey = null;
+    // 「剛剛」那一則的每一行（.tx-line），時刻與小標不要；跟沿路已經寫過的那一行一樣的不再寫
+    const tmp = document.createElement("div");
+    tmp.innerHTML = S.main.now || "";
+    const seen = new Set([...document.querySelectorAll("#outing-pop .outing-line")].map((x) => x.textContent));
+    const lines = [...tmp.querySelectorAll(".tx-line")].map((x) => x.textContent.trim()).filter((t) => t && ![...seen].some((x) => x.includes(t)));
+    const now = (lines.length ? lines.join(" ") : tmp.textContent).replace(/\s+/g, " ").trim();
+    const text = now.length > 80 ? `${now.slice(0, 80)}……` : now;
+    const box = document.getElementById("outing-pop");
+    if (!text || !box) return;
+    const row = document.createElement("p");
+    row.className = "outing-line after";
+    row.innerHTML = `<span class="k">${OUTING_AFTER}</span><span>${esc(text)}</span>`;
+    const log = box.querySelector(".outing-log");
+    log.appendChild(row);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // 停下來要選的事：江湖頁場景卡上的那段話（伺服器的 m.scene）＋選項，畫在走一趟這張卡上
+  function outingChoiceHtml(m, answering) {
+    const label = (o) => (typeof optLabelHtml === "function" ? optLabelHtml(o) : `<span>${esc(o.label)}</span>`);
+    const opts = (m.options || []).filter((o) => o.id !== "act:on_road");
+    return `<div class="outing-choice">${m.scene ? `<div class="outing-ev">${m.scene}</div>` : `<p>${OUTING_WAIT}</p>`}
+      <div class="options">${opts.map((o, i) => answering && o.id === FREE_TEXT_OPTION && o.enabled ? `
+        <form class="free answer" id="outing-answer"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : `<button class="btn" data-act="outing-choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span class="k">${i + 1}</span>${label(o)}</button>`).join("")}</div></div>`;
   }
 
   function outingTrip() { return S.main && S.main.outing && S.main.outing.trip; }
@@ -112,13 +171,21 @@
     outingFoot();
   }
 
-  // 停在要選的事上按「去看看」：這一層先藏起來（沿路那幾行留著），選完接著走時再打開；動畫停掉省電
+  // 要寫字、畫圖的選項：這一層先藏起來（沿路那幾行留著），送出後再打開；動畫停掉省電
   function outingHide() {
     OW.open = false;
     const box = document.getElementById("outing-pop");
     if (box) box.hidden = true;
     if (OW.raf) cancelAnimationFrame(OW.raf);
     OW.raf = 0;
+  }
+
+  // 要寫字、畫圖的選項：這一層收起之後把那個框捲到眼前
+  function outingRevealInput() {
+    const el = document.querySelector(OUTING_INPUTS);
+    if (!el) return;
+    const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ block: "center", behavior: calm ? "auto" : "smooth" });
   }
 
   function outingShut() {
@@ -132,7 +199,7 @@
     OW.raf = 0;
   }
 
-  // 底下那一排：走著是速度與略過；停在要選的事上是「去看看」；走完是結算卡
+  // 底下那一排：走著是速度與略過；停在要選的事上是那件事與選項（outingChoiceHtml）；走完是結算卡
   function outingFoot() {
     const box = document.getElementById("outing-pop");
     const trip = outingTrip();
@@ -141,14 +208,40 @@
     box.querySelector(".outing-step").innerHTML = `第 ${at}／${trip.total} 段${Array.from({ length: trip.total }, (_, j) => `<i class="d${j < OW.played ? " on" : ""}"></i>`).join("")}`;
     const foot = box.querySelector(".outing-foot");
     const walking = OW.cur || OW.tasks.length;
+    const card = box.querySelector(".outing-card");
+    card.classList.toggle("choosing", !walking && !trip.end);
+    if (!walking && trip.end) foot.dataset.key = "";
     if (walking) {
+      foot.dataset.key = "";
       foot.innerHTML = `<div class="outing-ctl"><button class="btn" data-act="outing-speed">速度 ${OW.speed}×</button>
         <button class="btn" data-act="outing-skip">${OUTING_SKIP}</button></div>`;
     } else if (!trip.end) {
-      foot.innerHTML = `<div class="outing-wait"><p>${OUTING_WAIT}</p><button class="btn primary" data-act="outing-away">${OUTING_AWAY}</button></div>`;
+      // 輪詢每幾秒重畫一次：選項沒變就不動（捲到一半、按到一半的不被打斷）
+      const key = JSON.stringify([S.main.scene, (S.main.options || []).map((o) => [o.id, o.label, o.enabled])]);
+      if (OW.waitKey !== key) OW.answering = false; // 換了一件事：輸入框收起
+      OW.waitKey = key;
+      const drawn = `${key}|${OW.answering ? 1 : 0}`;
+      if (foot.dataset.key !== drawn) { foot.dataset.key = drawn; foot.innerHTML = outingChoiceHtml(S.main, OW.answering); foot.scrollTop = 0; }
     } else {
       foot.innerHTML = outingResultHtml(trip);
+      outingDiary(trip);
     }
+  }
+
+  // 遊記：結算卡先放模板那一段，請模型寫（鎖外，伺服器 outing_tale）；寫到了淡入換掉。一趟只請一次
+  async function outingDiary(trip) {
+    const key = `${trip.place}|${trip.beats.length}|${trip.done}`;
+    if (trip.diary_done || OW.diaryAsked === key) return;
+    OW.diaryAsked = key;
+    try {
+      const r = await api("/api/do/outing_tale", {});
+      if (r && r.main) {
+        applyMain(r.main);
+        const now = outingTrip();
+        const p = document.querySelector("#outing-pop .outing-diary");
+        if (now && p && now.diary && now.diary !== p.textContent) { p.textContent = now.diary; p.classList.add("fresh"); }
+      }
+    } catch (e) { /* 叫不動就留著模板那一段 */ }
   }
 
   // 結算卡：每一段的「得：…　失：…」併起來，同一樣東西加總（「驚羽 ×1」兩次寫「驚羽 ×2」、「氣血 -6」兩次寫「氣血 -12」）
@@ -182,8 +275,41 @@
     return `<div class="outing-result"><p class="outing-title"><b>${esc(trip.title)}</b>・${trip.done} 段</p>
       ${trip.end_line ? `<p class="muted small">${esc(trip.end_line)}</p>` : ""}
       ${chips ? `<p class="outing-chips">${chips}</p>` : ""}${lost ? `<p class="outing-chips">${lost}</p>` : ""}
+      ${trip.diary ? `<p class="outing-diary">${esc(trip.diary)}</p>` : ""}
+      <p class="outing-keep">${trip.kept ? `<small>${OUTING_KEPT}</small>` : `<button class="btn small ghost" data-act="outing-keep">${OUTING_KEEP}</button>`}</p>
+      ${outingSayHtml(trip)}${outingPeopleHtml(trip)}
       <div class="outing-ctl"><button class="btn" data-act="outing-close">${OUTING_CLOSE}</button>
       <button class="btn primary" data-act="outing-again">${OUTING_AGAIN}</button></div></div>`;
+  }
+
+  // 結算卡的留言格（企劃者 2026-10-29～30）：預設句免費一按就留；自己寫的用一張題壁墨（沒有就給去萬寶閣的鈕）；一趟一句
+  function outingSayHtml(trip) {
+    if (trip.said) return `<p class="outing-said">${esc(OUTING_SAID.replace("{text}", trip.said))}</p>`;
+    if (!trip.can_say) return "";
+    const presets = (trip.presets || []).map((t, i) => `<button class="oc say" data-act="outing-say" data-i="${i}">${esc(t)}</button>`).join("");
+    const ink = trip.ink | 0;
+    const own = ink > 0
+      ? `<div class="outing-own"><input id="outing-own" maxlength="${trip.say_max | 0}" placeholder="${esc(OUTING_SAY_OWN)}（${trip.say_max | 0} 字內）">
+          <button class="btn small" data-act="outing-say-own">${esc(OUTING_SAY_INK.replace("{n}", ink))}</button></div>`
+      : trip.ink_item ? `<button class="btn small ghost" data-act="outing-mall" data-id="${esc(trip.ink_item)}">${OUTING_SAY_BUY}</button>` : "";
+    return `<details class="outing-say"><summary>${OUTING_SAY_HEAD}</summary><p class="outing-chips">${presets}</p>${own}</details>`;
+  }
+
+  // 結算卡的「此地還有」：點名字開玩家卡（打招呼、邀結伴照玩家卡那幾顆）
+  function outingPeopleHtml(trip) {
+    const people = trip.people || [];
+    if (!people.length) return "";
+    return `<p class="outing-here">${OUTING_HERE}${people.slice(0, 6).map((n) => `<button class="peer-name" data-act="outing-peer" data-name="${esc(n)}">${esc(n)}</button>`).join("")}</p>`;
+  }
+
+  async function outingSay(body) {
+    await busy(async () => {
+      const r = await api("/api/do/outing_say", body);
+      applyMain(r.main);
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (text) toast(text);
+      outingFoot();
+    });
   }
 
   // 一段的帳：「得：…」綠、「失：…」紅
@@ -196,8 +322,10 @@
     if (!box) return;
     const log = box.querySelector(".outing-log");
     const row = document.createElement("p");
-    row.className = `outing-line${b.rare ? " rare" : ""}${lost ? " bad" : ""}`;
-    row.innerHTML = `<span class="k">${OUTING_KIND[b.kind] || "行"}</span><span>${esc(b.text)}${b.ledger ? outingLedgerHtml(b.ledger) : ""}</span>`;
+    const trip = outingTrip();
+    row.className = `outing-line${b.rare ? " rare" : ""}${lost ? " bad" : ""}${b.kind === "trace" ? " trace" : ""}`;
+    const erase = b.ref && trip && trip.admin ? `<button class="outing-erase" data-act="outing-erase" data-id="${b.ref | 0}" aria-label="抹掉這一句">×</button>` : "";
+    row.innerHTML = `<span class="k">${OUTING_KIND[b.kind] || "行"}</span><span>${esc(b.text)}${b.ledger ? outingLedgerHtml(b.ledger) : ""}</span>${erase}`;
     log.appendChild(row);
     log.scrollTop = log.scrollHeight;
   }
@@ -207,7 +335,8 @@
     while (OW.shown < trip.beats.length) {
       const i = OW.shown, b = trip.beats[i];
       const lost = trip.end === "lost" && i === trip.beats.length - 1;
-      OW.tasks.push(outingCall(() => { OW.played = i + 1; OW.hero.bubble = ""; outingFoot(); }), ...outingBeatTasks(b, lost), { dur: 0, end: () => { outingLine(b, lost); outingFoot(); } });
+      const seg = trip.beats.slice(0, i + 1).filter((x) => x.kind !== "trace").length; // 路上看到的那幾行不佔段數
+      OW.tasks.push(outingCall(() => { OW.played = seg; OW.hero.bubble = ""; outingFoot(); }), ...outingBeatTasks(b, lost), { dur: 0, end: () => { outingLine(b, lost); outingFoot(); } });
       OW.shown += 1;
     }
     OW.tasks.push({ dur: 0, end: () => { OW.turbo = false; if (trip.end) OW.hero.bubble = ""; outingFoot(); } }); // end：OW.cur 清掉之後才畫底下那一排（不然還當作在走）
@@ -251,6 +380,10 @@
       }
       out.push(outingCall(() => { OW.props = OW.props.filter((p) => !foes.includes(p)); }));
       return out;
+    }
+    if (b.kind === "trace") { // 路上看到的：有留言的石頭從右邊捲過來，或遠處山坡上一個小人揮手（不停步）
+      const t = b.ref ? { kind: "stone", x: OUTING_W + 30 } : { kind: "far", x: OUTING_W - 120, par: 0.4, t0: performance.now() };
+      return [outingCall(() => OW.props.push(t)), outingRun(b.ref ? t : null, b.ref ? 10 : 1.2), outingCall(() => { OW.props = OW.props.filter((p) => p !== t || p.kind === "far"); })];
     }
     // 事件、有所感：跑一段、停步、頭上冒字（要選的就停在這裡，結算交給江湖頁）
     const mark = b.kind === "insight" ? "…" : "！";
@@ -313,7 +446,7 @@
     }
     cx.save();
     cx.globalAlpha = opt.alpha == null ? 1 : opt.alpha;
-    cx.translate(x, OUTING_GY);
+    cx.translate(x, opt.y == null ? OUTING_GY : opt.y);
     if (opt.flip) cx.scale(-1, 1);
     cx.drawImage(src, sx, 0, OUTING_CELL, OUTING_CELL, -OUTING_AX * k, -OUTING_BY * k, OUTING_CELL * k, OUTING_CELL * k);
     cx.restore();
@@ -351,6 +484,18 @@
         g.addColorStop(1, `rgba(255,214,120,${0.6 * p.a})`);
         cx.fillStyle = g;
         cx.fillRect(p.x - 24, 0, 48, OUTING_GY);
+      } else if (p.kind === "stone") { // 刻了字的石頭
+        cx.fillStyle = "#8d8577";
+        cx.beginPath();
+        cx.ellipse(p.x, OUTING_GY - 22, 30, 26, 0, Math.PI, 0);
+        cx.lineTo(p.x + 30, OUTING_GY);
+        cx.lineTo(p.x - 30, OUTING_GY);
+        cx.fill();
+        cx.fillStyle = "#4a443c";
+        for (let k = 0; k < 3; k++) cx.fillRect(p.x - 12 + k * 9, OUTING_GY - 36, 3, 22);
+      } else if (p.kind === "far") { // 遠處山坡上的人：小小的、慢慢晃
+        const a = Math.min(1, (now - p.t0) / 400);
+        outingSprite(cx, "hero_idle", Math.floor(now / 220), p.x, { scale: 0.32, alpha: 0.85 * a, y: OUTING_GY - 120, flip: true });
       } else if (p.kind === "foe") {
         const x = p.x + (p.lunge || 0), opt = { flip: true, scale: 0.85 };
         if (p.dying) outingSprite(cx, "foe_hit_fall", 1 + Math.min(4, Math.floor(p.fall * 5)), x, { ...opt, alpha: 1 - p.fade });
@@ -432,9 +577,36 @@
       case "outing-go": await outingGo(Number(el.dataset.n)); return true;
       case "outing-speed": OW.speed = OW.speed === 2 ? 1 : 2; outingSaveSpeed(OW.speed); outingFoot(); return true;
       case "outing-skip": OW.turbo = true; return true;
-      case "outing-away": OW.away = true; outingHide(); return true;
+      case "outing-choose": {
+        const id = el.dataset.id;
+        if (id === FREE_TEXT_OPTION) {
+          OW.answering = true;
+          outingFoot();
+          const input = document.querySelector("#outing-answer .input");
+          if (input) input.focus();
+          return true;
+        }
+        if (outingNeedsPage(id)) { OW.away = true; outingHide(); await choose(el, id); outingRevealInput(); return true; }
+        await choose(el, id);
+        return true;
+      }
       case "outing-close": outingShut(); OW.shown = 0; return true;
       case "outing-again": outingShut(); OW.shown = 0; S.wheelSel = "explore"; renderPage(); revealMoveCard(); return true;
+      case "outing-say": await outingSay({ preset: Number(el.dataset.i) }); return true;
+      case "outing-keep":
+        await busy(async () => { const r = await api("/api/do/outing_keep", {}); applyMain(r.main); outingFoot(); });
+        return true;
+      case "outing-say-own": {
+        const box = document.getElementById("outing-own");
+        const text = box ? box.value.trim() : "";
+        if (text) await outingSay({ text });
+        return true;
+      }
+      case "outing-mall": outingShut(); OW.shown = 0; await openMall(); mallPick(el.dataset.id); return true;
+      case "outing-peer": outingShut(); OW.shown = 0; await openPeer(el.dataset.name); return true;
+      case "outing-erase":
+        await busy(async () => { const r = await api("/api/do/outing_erase", { id: Number(el.dataset.id) }); applyMain(r.main); el.closest(".outing-line").remove(); });
+        return true;
       default: return false;
     }
   }

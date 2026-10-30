@@ -63,7 +63,7 @@ import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
     arena_crowd, ascend, battle_instance, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata, might,
-    naming, narration,
+    naming, narration, outing,
     ollama_client, power_save, rules,
     precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
     zhuan_end,
@@ -1749,6 +1749,22 @@ def tavern_ask(game: Game, text: str) -> list[str]:
     return act(game, lambda g: g.tavern_ask(request.question, reply, request=request))
 
 
+def outing_tale(game: Game) -> list[str]:
+    """走一趟的遊記（tianxia/outing.py），三段：A Game.outing_tale_request（只讀；收了、還沒請過才開單）→ B 鎖外 outing.tale_write
+    （預算 Config.jianfa.outing_tale_seconds）→ C Game.outing_set_tale 照同一趟才收；叫不動、不合用記成請過了，畫面用模板。"""
+    started, request = _open_request(game, game.outing_tale_request)
+    if isinstance(request, list):
+        return request
+    total = game.content.config.jianfa.outing_tale_seconds
+
+    def write():
+        client = within_budget(game.client, total - (_monotonic() - started))
+        return outing.tale_write(client, request)
+
+    text = model_call(game, write, fallback=None, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+    return act(game, lambda g: g.outing_set_tale(text, request))
+
+
 def seal_text(game: Game, text: str) -> list[str]:
     """奪璽單挑的放手一搏（玉璽碎片設計 5.7），三段同 duel_text：A Game.seal_text_request（只讀；判成不在場的回合不開單）→
     B 鎖外請模型評成功率、寫成敗兩版劇情（預算同隨口應對，評不到 40）→ C Game.seal_gamble 重驗同一場、同一回合、同一邊、同一句才用，
@@ -2523,11 +2539,13 @@ MAIN_ACTIONS = {
     "sortie_join": lambda g, b: g.sortie_join(str(b.get("id", ""))[:80]),
     # 走一趟（tianxia/outing.py）：n 是段數（1／3／5）就出發；0 或沒帶是停在要選的事上、選完接著走。沿路的事在 main.outing.trip
     "outing": lambda g, b: g.outing_go(_int(b.get("n"), 0)),
+    "outing_keep": lambda g, b: g.outing_keep(),  # 走一趟的遊記收進行狀
 }
 # 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、不再提示、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」
 PAUSE_OK_ACTIONS = frozenset({"anonymous", "gender", "hints_off", "story_seen", "skip_tutorial", "view_map", "view_orders", "guide_ack"})
 ADMIN_ACTIONS = {
+    "outing_erase": lambda g, b: g.admin_erase_inscription(_int(b.get("id"), 0)),  # 走一趟的留言：管理者抹掉一則
     "open_season": lambda g, b: g.admin_open_season(time.time()),
     "end_season": lambda g, b: g.admin_end_season(time.time()),
     "next_season": lambda g, b: g.admin_next_season(time.time()),
@@ -2739,6 +2757,13 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         if not game.is_admin():
             raise GameError("只有管理者能這麼做。")
         msgs = act(game, lambda g: ADMIN_ACTIONS[op](g, body), paused_ok=True)  # 暫停中要按得到「繼續」；其他的引擎自己擋
+    elif op == "outing_say":  # 走一趟留言：自己寫的那一句先在行動鎖外審（speech.judge），預設句不必審
+        text = speech.clean(str(body.get("text", ""))[:200])
+        preset = _int(body.get("preset"), -1)
+        verdict = screen_text(game, text, speech.MOTTO) if preset < 0 and text else ""
+        msgs = act(game, lambda g: g.outing_say(preset, text, verdict))
+    elif op == "outing_tale":  # 走一趟的遊記：模型在行動鎖外寫（見 outing_tale）
+        msgs = outing_tale(game)
     elif op == "battle_text":  # 放手一搏：成功率在行動鎖外評（見 battle_text）
         msgs = battle_text(game, str(body.get("text", "")))
     elif op == "seal_text":  # 奪璽單挑的放手一搏：同上（見 seal_text）

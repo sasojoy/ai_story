@@ -449,6 +449,16 @@ def outing_segments(game: Game, rng: random.Random) -> int:
     return rng.choices(ok, weights=[OUTING_WEIGHTS.get(n, 1) for n in ok])[0]
 
 
+OUTING_SAY_CHANCE = 0.15  # 假人走完一趟留一句預設句的機會（不寫自己的話，同名帖自題從句庫挑）【預設】
+
+
+def outing_say(game: Game, rng: random.Random) -> list[str]:
+    """假人走完一趟（剛收、還能留言）有 OUTING_SAY_CHANCE 的機會留一句預設句（Game.outing_say，免費）；其餘什麼都不做。"""
+    if outing.say_ok(game.state) is None or rng.random() >= OUTING_SAY_CHANCE:
+        return []
+    return game.outing_say(rng.randrange(len(outing.PRESETS)))
+
+
 def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     """結識（choice 的 effect.recruit）一定接受；其餘隨機挑一個。沒得挑時回傳 None。
 

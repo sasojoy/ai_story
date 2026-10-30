@@ -113,6 +113,14 @@ class JianfaNumbers(_Strict):
     # 二階素材、特殊頓悟的機率上，其餘不動；畫面不寫倍數（Joy 10/30「不用顯示倍率」）
     outing_rare: dict[str, float] = Field(default_factory=lambda: {"1": 1.0, "3": 1.2, "5": 1.5})
     outing_turn_back: float = Field(default=0.3, ge=0, le=1)  # 一段走完氣血低於上限的這一成就回頭【預設】
+    # 走完在這一處留一句話（預設句免費、自己寫的用一張題壁墨，Joy 10/29～30）：自己寫的最多幾個字、一處留最近幾則【預設】
+    outing_say_max: int = Field(default=20, ge=1)
+    outing_keep: int = Field(default=20, ge=1)
+    # 路上看到別人的留言、遠處有人揮手：一趟最多幾行（不佔段數）、每段走完擲中的機率、自己寫的比預設句容易抽到幾倍【預設】
+    outing_trace_cap: int = Field(default=2, ge=0)
+    outing_trace_chance: float = Field(default=0.4, ge=0, le=1)
+    outing_trace_custom: float = Field(default=2.0, ge=1)
+    outing_tale_seconds: float = Field(default=20.0, ge=0)  # 遊記：請模型寫最多等幾秒（鎖外）；叫不動就用模板【預設】
     town_foes: list[str] = Field(default_factory=lambda: ["dipi"], min_length=1)
     town_loot_scale: float = Field(default=0.5, ge=0, le=1)
     # 自家營寨的遭遇是跟同袍比劃（不打、不掉東西）：給 _sortie_host 那一路心得、經驗的幾成（再乘三道閘的倍數）【暫】

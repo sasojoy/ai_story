@@ -5273,6 +5273,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "gather_text",  # 找素材的「自己說」（第 32 項）：三段同 feast_text
         "create_intent",  # 自創武學的形意那一句（武學重構）：鎖外請模型評分（create.score），結果交給 C 段
         "create_reread",  # 重悟帖重讀這句意：三段同 create_intent
+        "outing_tale",  # 走一趟的遊記：三段同 tavern_ask，模型只寫那三四句
         "ascend_line",  # 破境卡那一句（招式與絕學稿案第三節）：三段同 create_intent
         "persuade_text",  # 託付的勸降（減法季批 6）：三段同 gather_text，模型只評那一句
         "epiphany_think",  # 特殊頓悟的靜心思名：三段同 prepare_forge，模型一次取三個名字
@@ -6069,6 +6070,8 @@ NOT_IN_THE_FINGERPRINT = {
         "stops_done": "行程每一站做完了沒，做的那一下都寫天下大事",
         "deeds": "世界記事：人物對話與此地舊事才讀，寫的那一下都有天下大事或江湖紀錄",
         "deed_seq": "世界記事的流水號，跟 deeds 一起寫",
+        "inscriptions": "走一趟的留言：只在別人下一次走一趟、路上抽到才看得到，不在共用的畫面上",
+        "inscription_seq": "留言的流水號，跟 inscriptions 一起寫",
         "yuedan": "月旦評發出去那一刻寫天下大事與江湖史（都在指紋裡）；還沒發的那一批誰都看不到",
         "yuedan_week": "評到第幾週的記號，跟 yuedan 一起寫",
         "rallies": "求援委託只在那一方的人的懸賞卡（各人自己的畫面），掛單時寫一則陣營傳聞",
