@@ -106,6 +106,13 @@ class JianfaNumbers(_Strict):
     explore_tables: list[ExploreOneTable] = Field(default_factory=_default_tables, min_length=1)  # 六張表，照順序比對
     # 城類地點自己沒有對手（此刻站的、不是自家的隊伍）時，遭遇那一拍換成這幾路（第一路；PM 2026-10-25 第 3 件：自己有隊伍的城照原本的隊伍）：
     # 不推線、不算討伐、戰利（銀兩、心得、掉的素材）乘 town_loot_scale【PM】
+    # ── 走一趟（企劃者 2026-10-29～30；tianxia/outing.py）──
+    # 一趟走幾段：每一段就是上面那一次探索（一樣的表、一樣扣 explore_stamina）。三種段數【定】（Joy 10/29「可以分三段」）
+    outing_segments: list[int] = Field(default_factory=lambda: [1, 3, 5], min_length=1)
+    # 這一趟每一段的稀有倍數，照一趟幾段【定】（Joy 10/30「1，3，5倍率分別為 1 1.2 1.5」）：乘在奇遇事件、一條線開頭、
+    # 二階素材、特殊頓悟的機率上，其餘不動；畫面不寫倍數（Joy 10/30「不用顯示倍率」）
+    outing_rare: dict[str, float] = Field(default_factory=lambda: {"1": 1.0, "3": 1.2, "5": 1.5})
+    outing_turn_back: float = Field(default=0.3, ge=0, le=1)  # 一段走完氣血低於上限的這一成就回頭【預設】
     town_foes: list[str] = Field(default_factory=lambda: ["dipi"], min_length=1)
     town_loot_scale: float = Field(default=0.5, ge=0, le=1)
     # 自家營寨的遭遇是跟同袍比劃（不打、不掉東西）：給 _sortie_host 那一路心得、經驗的幾成（再乘三道閘的倍數）【暫】
