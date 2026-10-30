@@ -644,7 +644,7 @@
   // ── 一張到底（企劃者 2026-10-30「可以 這樣改」，示意稿第四版：讓地圖能自由滑動縮放、搜尋）──
   // 以前是三張固定取景的圖（第一層、全區、天下），從 A 到 B 要切好幾次地區。現在整個天下一張：一指拖（放手會順著滑）、兩指捏、滾輪、
   // 雙擊放大，從看得到整張天下縮到約 3 倍。字照倍率分三段（drawMarks）：遠看大區名與各方幾處、地點是一顆照誰佔著上色的點；中間、近看
-  // 每一處的小圖與名字，小圖角上掛危險度、⚔、寶、本週旗（輿圖表現第二版 W1：誰佔著看地的顏色，名字旁的小印、字條、底下那一行、悟字拿掉）。
+  // 每一處的小圖與名字，小圖角上掛⚔、寶、本週旗、近看再加危險度（輿圖表現第二版 W1：誰佔著看地的顏色，名字旁的小印、字條、底下那一行、悟字拿掉）。
   // 地（戰略圖的地塊，groundSvg）三段都畫、常駐。名字撞在一起時讓開，讓不開的先收（選的、你在的、本週要去的、篩到的、要地、近的先畫）。
   // 底圖不再用伺服器畫好的那一張：主機畫的淡彩水墨（web/img/map/base.webp）疊上州界與路，烤成一張圖（bakeBase）；抓不到那一張時
   // 網頁照內容（底圖的 paint：大區、河、山、林）自己畫。山河名照 paint 寫在字那一層；
@@ -1019,14 +1019,15 @@
     }
     return `<button type="button" class="mv-pin ink${dim}" style="${at}" data-act="map-place" data-id="${id}" aria-label="${name}"><svg width="30" height="30" viewBox="-15 -17 30 30" aria-hidden="true"><circle r="9" cy="-2" fill="${MAP_HALO}" opacity=".7"/>${inkIcon(b.glyph, MV_INK, "none")}</svg></button>`;
   }
-  // 小圖角上的徽（輿圖表現第二版 2.1「地點」「徽」；近、中景）：右下一顆危險度 1～3（像 SLG 的地等級；你腳下那一處不掛）、右上 ⚔（正在翻、
-  // 激戰）、左上「寶」、頂上本週的紅旗。名字前不再蓋官／巾小印（誰的看地的顏色）、名字後不再接「寶」「戰」「本週」字條（都變成徽；
-  // 戰書看地上的朱紅虛框）。o：here 你腳下、week 本週要去、fight 正在翻或激戰、dim 篩選淡掉
+  // 小圖角上的徽（輿圖表現第二版 2.1「地點」「徽」；近、中景）：右下一顆危險度 1～3（像 SLG 的地等級；只在近景、你腳下那一處不掛：設計 2.2
+  // 「中：沒有危險度徽」、第七章「危險度徽只在近」）、右上 ⚔（正在翻、激戰）、左上「寶」、頂上本週的紅旗。名字前不再蓋官／巾小印（誰的看地的
+  // 顏色）、名字後不再接「寶」「戰」「本週」字條（都變成徽；戰書看地上的朱紅虛框）。o：near 近景、here 你腳下、week 本週要去、fight 正在翻或
+  // 激戰、dim 篩選淡掉
   const MV_FLAG = '<path d="M3 24V2" stroke="#1B1F17" stroke-width="1.8"/><path d="M4 2l11 4.5-11 4.5z" fill="#C0392B" stroke="#7A1F18" stroke-width=".8"/>';
   function badgesHtml(q, x, y, o) {
     const at = (dx, dy) => `left:${f1(x + dx)}px;top:${f1(y + dy)}px`, dim = o.dim || "";
     return (o.week ? `<svg class="mv-flag${dim}" width="16" height="24" viewBox="0 0 16 24" style="${at(0, -12)}" aria-hidden="true">${MV_FLAG}</svg>` : "")
-      + (o.here ? "" : `<i class="mv-dg${dim}" style="${at(10, 9)}">${Number(q.danger) || 1}</i>`)
+      + (o.near && !o.here ? `<i class="mv-dg${dim}" style="${at(10, 9)}">${Number(q.danger) || 1}</i>` : "")
       + (o.fight ? `<i class="mv-bd mv-bd-x${dim}" style="${at(11, -10)}">${MV_LOOK.fight}</i>` : "")
       + (q.rich ? `<i class="mv-bd mv-bd-rich${dim}" style="${at(-11, -10)}">${MV_LOOK.rich}</i>` : "");
   }
@@ -1072,7 +1073,7 @@
         out.push(`<button type="button" class="mv-dot${dim}${q.rich ? " rich" : ""}" style="left:${f1(x)}px;top:${f1(y)}px;--c:${ctl ? sideInk(ctl).color : MV_UNHELD}" data-act="map-place" data-id="${esc(b.id)}" aria-label="${esc(b.name)}"></button>`);
       } else {
         out.push(pinHtml(b, x, y, dim, z));
-        out.push(badgesHtml(q, x, y, { here: isHere, week: isWk, fight: live && (!!tugOf(st, b.id, ctl) || !!q.melee || q.siege === "fight"), dim }));
+        out.push(badgesHtml(q, x, y, { near: lvl === 2, here: isHere, week: isWk, fight: live && (!!tugOf(st, b.id, ctl) || !!q.melee || q.siege === "fight"), dim }));
       }
       if (isSel) out.push(`<i class="mv-ring" style="left:${f1(x)}px;top:${f1(y)}px;--r:${lvl ? 22 : 12}px"></i>`);
       if (live && (q.melee || q.siege === "fight")) out.push(`<i class="mv-fight" style="left:${f1(x)}px;top:${f1(y)}px"></i>`);

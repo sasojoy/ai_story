@@ -205,11 +205,11 @@ def test_far_away_shows_regions_with_counts_and_coloured_dots():
 
 def test_middle_distance_shows_icons_names_and_badges():
     """中間：每一處的小圖與名字、山河名；寶是小圖左上角的徽（輿圖表現第二版 W1：誰佔著看地的顏色，名字旁不再蓋小印、不接「寶」字條）。
-    不寫幾分與勝算。"""
+    不寫幾分與勝算；沒有危險度徽（設計 2.2「中：沒有危險度徽」，近景才有）。"""
     game = _game()
     out = marks(game, 1)
     assert 'class="mv-pin' in out and 'class="mv-dot' not in out and 'class="mv-reg"' not in out and 'class="mv-geo' in out
-    assert 'class="mv-side"' not in out and 'class="mv-rich"' not in out and 'class="mv-bd mv-bd-rich"' in out and 'class="mv-dg"' in out
+    assert 'class="mv-side"' not in out and 'class="mv-rich"' not in out and 'class="mv-bd mv-bd-rich"' in out and 'class="mv-dg' not in out
     assert "<small>" not in _lab(out, "changshe")
 
 
@@ -399,13 +399,16 @@ def test_w1_near_and_middle_names_have_no_seal_line_bar_or_insight(z):
 
 
 def test_w1_every_icon_but_yours_wears_its_danger():
-    """危險度徽（右下，1～3）：數目＝畫出來的小圖數減一（你腳下那一處不掛），數字照疊層的 danger；在路上每一處都掛。"""
+    """危險度徽（右下，1～3）只在近景（設計 2.2「中：沒有危險度徽」、第七章「危險度徽只在近」；W1 審查 2026-10-30）：近景的數目＝畫出來的
+    小圖數減一（你腳下那一處不掛），數字照疊層的 danger；在路上每一處都掛。中景一顆都沒有（⚔、寶、本週旗中景照掛，下一條與中景那一條）。
+    近、中照 mvLevel 分（W2 換成照 Z0 的三段門檻，這一條不必改）。"""
     game = _game()
+    assert 'class="mv-dg' not in marks(game, 1) and 'class="mv-bd mv-bd-rich"' in marks(game, 1)  # z＝1 是中景
     for st in (game.map_state(), None):
         if st is None:
             game.travel("changshe", "walk")
             st = game.map_state()
-        out = marks(game, 1, st=st)
+        out = marks(game, 2, st=st)  # z＝2 是近景
         pins = re.findall(r'class="mv-pin [a-z]+" style="left:([-\d.]+)px;top:([-\d.]+)px[^"]*" data-act="map-place" data-id="([^"]+)"', out)
         dg = re.findall(r'<i class="mv-dg" style="left:([-\d.]+)px;top:([-\d.]+)px">(\d)</i>', out)
         mine = None if st["journey"] else st["here"]
