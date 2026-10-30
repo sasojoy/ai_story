@@ -3289,6 +3289,8 @@ svg.fig .blade.bow { stroke-width: 3; }
 .outing-pick .outing-note { margin: 8px 2px 0; }
 .outing-wrap { position: fixed; inset: 0; z-index: 58; display: flex; align-items: center; justify-content: center;
   padding: max(12px, var(--top)) 10px max(12px, var(--bottom)); background: rgba(20, 16, 12, .55); }
+/* 「去看看」把這一層藏起來（outingHide 設 hidden）：上面那條 display: flex 會蓋過 hidden，沒有這一條遮罩一直蓋著江湖頁、選項按不到（FB-9048） */
+.outing-wrap[hidden] { display: none; }
 .outing-card { background: var(--card); color: var(--ink); border: 1px solid var(--gold); border-radius: 20px; width: 100%; max-width: 24rem;
   max-height: 100%; display: flex; flex-direction: column; padding: 12px 12px 14px; overflow: hidden; box-shadow: 0 10px 40px rgba(0, 0, 0, .35); animation: asc-in .4s ease-out; }
 .outing-head { display: flex; justify-content: space-between; align-items: baseline; margin: 0 4px 6px; font-family: var(--serif); }

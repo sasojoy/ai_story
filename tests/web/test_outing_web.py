@@ -2,6 +2,9 @@
 動畫本身靠實機看（畫布在 node 裡畫不出來）；這裡只驗吐出來的字。"""
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 import webharness
 
@@ -46,3 +49,9 @@ def test_the_result_adds_up_the_segments():
 def test_a_segment_ledger_colours_gains_and_losses():
     html = _run()["ledger"]
     assert '<small class="up">得：驚羽 ×1</small>' in html and '<small class="down">失：氣血 -6</small>' in html
+
+def test_the_overlay_really_hides_when_you_go_and_look():
+    """按「去看看」outingHide 只設 hidden：.outing-wrap 寫了 display: flex，沒有 [hidden] 那一條就藏不起來，遮罩蓋著江湖頁、選項按不到（FB-9048）。
+    CSS 在 node 裡排不了版，讀 style.css 斷言那一條規則。"""
+    css = re.sub(r"/\*.*?\*/", "", (Path(__file__).resolve().parents[2] / "web" / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    assert re.search(r"\.outing-wrap\[hidden\]\s*\{\s*display:\s*none", css)
