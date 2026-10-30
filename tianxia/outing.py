@@ -8,6 +8,8 @@
 - 走完可以在這一處留一句話（say）：預設句免費，自己寫的要一張題壁墨（商城 inscribe，先只能用元寶買），過字表與模型、
   後面掛名號；一處留最近 outing_keep 則，管理者可以刪。之後來這裡走一趟的人，路上會看到刻在石頭、樹上的這一句（trace 那一行，
   不佔段數，一趟最多 outing_trace_cap 行，自己寫的比預設句容易抽到）；這一處 24 小時內有別人，遠處會有個人朝你揮手。
+- 畫面上方有塊路碑（stele）：最後一則題壁墨寫的，沒有就是最多人留的那一句預設句；點開看這一處全部的留言。
+- 撿到四階素材、勝算凶險以下還打贏（feat）：自動記一則行狀、世界記事一筆；別的不記（Joy 10/30）。
 
 這裡只放純規則（開關、倍數、這一趟還在不在路上、留言、畫面那一份）；走路本身在引擎（Game.outing_go、Game._outing_walk）。
 """
@@ -16,6 +18,7 @@ from __future__ import annotations
 
 import random
 import re
+from collections import Counter
 from dataclasses import dataclass
 
 from pydantic import BaseModel
@@ -38,10 +41,7 @@ MORE_IS_RARER = "走得越遠，越容易碰上稀有的東西。"
 INK = "inscribe"  # 題壁墨：商城的效果名（mall.EFFECTS）；買了得一張，自己寫一句用掉一張
 TRACE = "trace"  # 路上看到的那一行（留言、遠處的人）：OutingBeat.kind，不佔段數
 # 預設句（免費；假人也從這裡挑；待 joy 潤）
-PRESETS = (
-    "此處有匪，慎行。", "溪水可飲。", "前路難行，量力而為。", "此地清靜，宜歇腳。", "好風景，不枉此行。",
-    "某到此一遊。", "後來者保重。", "林中有寶，細找。", "夜裡莫獨行。", "江湖路遠，有緣再會。",
-)
+PRESETS = ("此處有匪，慎行。", "溪水可飲。", "林中有寶，細找。", "後來者保重。", "江湖路遠，有緣再會。")  # Joy 10/30「選項有點太多了」：十句減成五句
 SURFACES = ("路邊的石頭", "一棵老樹的樹幹", "半截斷碑", "破廟的牆", "橋頭的欄杆")  # 留言刻在哪（照留言 id 挑，同一則每次一樣）
 SEEN_LINE = "{surface}上刻著一行字：「{text}」——{author}"
 WAVE_LINE = "遠處山坡上，{name}朝你揮了揮手。"
@@ -53,10 +53,16 @@ SAY_NOT_HERE = "要人在這一處，走完一趟才能留言。"
 SAY_EMPTY = "寫點什麼再留。"
 NO_INK = "自己寫的要用一張題壁墨，你手上沒有，先到萬寶閣買。"
 ERASED = "那一句已經抹掉了。"
-KEPT = "這一趟收進了行狀。"
-TALE_MAX = 80  # 遊記最多幾個字（收進行狀那一則的上限，annals.TEXT_MAX）
-DEED_KIND = "outing"  # 世界記事（deeds.record）的種類：走一趟碰上稀罕的東西
-DEED_LINE = "{name}在{place}一帶走了一趟，碰上了稀罕的東西。"  # 待 joy 潤
+# 值得記下來的一段（Joy 10/30：每一趟都能收進行狀太多、沒價值；「真的出現超級稀有的物品或是奇蹟逆轉的戰役這種類型的才有價值被記錄」）：
+# 撿到四階素材、勝算凶險以下還打贏，自動記一則行狀、世界記事一筆。以前結算卡有「收進行狀」鈕，拿掉了（待 joy 潤）
+FEAT_TIER = 4  # 素材幾階以上算稀世
+FEAT_ODDS = ("凶險", "必敗")  # 開打前的勝算是這幾個字還打贏，算以弱勝強
+FEAT_TREASURE, FEAT_UPSET = "treasure", "upset"
+FEAT_ANNAL = {FEAT_TREASURE: "在{place}一帶走了一趟，撿到了世間少見的{what}。", FEAT_UPSET: "在{place}一帶撞上{what}，看著必輸的一仗，硬是打贏了。"}
+FEAT_DEED = {FEAT_TREASURE: "{name}在{place}一帶撿到了世間少見的{what}。", FEAT_UPSET: "{name}在{place}一帶以弱勝強，打退了{what}。"}
+FEAT_NOTE = "這一趟記進了行狀。"
+TALE_MAX = 80  # 遊記最多幾個字
+DEED_KIND = "outing"  # 世界記事（deeds.record）的種類：走一趟撿到稀世的東西、以弱勝強（FEAT_DEED）
 _ZH = "零一二三四五六七八九十"
 _DIGITS = re.compile(r"[0-9０-９]|[一二三四五六七八九十兩]+(?=[段場顆次件])")  # 遊記不准有數字：阿拉伯數字，與「三段」「兩場」這種數量
 _BANNED = ("假人", "機器人", "外掛", "遊戲", "系統", "玩家")
@@ -110,9 +116,27 @@ def view(state: GameState, content: Content) -> dict | None:
             "said": trip.said, "can_say": say_ok(state) is not None, "presets": list(PRESETS),
             "say_max": content.config.jianfa.outing_say_max,
             "diary": trip.tale or (template_tale(trip, content) if trip.end else ""), "diary_done": trip.tale_done,
-            "kept": trip.kept,
+            "feat_note": FEAT_NOTE if trip.end and any(b.feat for b in trip.beats) else "",
+            "stele": stele(state, trip.place),
         }
     return out
+
+
+def stele(state: GameState, place: str) -> dict | None:
+    """畫面上方那塊路碑（Joy 10/30）：這一處留過的話。碑上那一句是最後一則用題壁墨寫的；沒有人用過題壁墨，是最多人留的那一句預設句
+    （一樣多取最近留的）。all 是點開看到的全部，新的在前。這一處沒人留過是 None。"""
+    here = [i for i in state.world.inscriptions if i.place == place]
+    if not here:
+        return None
+    inked = [i for i in here if not i.preset]
+    if inked:
+        top, n = max(inked, key=lambda i: i.id), 0
+    else:
+        counts = Counter(i.text for i in here)
+        top = max(here, key=lambda i: (counts[i.text], i.id))
+        n = counts[top.text]
+    return {"text": top.text, "author": top.author if not top.preset else "", "n": n,
+            "all": [{"text": i.text, "author": i.author, "ink": not i.preset} for i in sorted(here, key=lambda i: -i.id)]}
 
 
 def say_ok(state: GameState) -> Outing | None:

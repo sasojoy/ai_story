@@ -9,7 +9,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node")
 
 DRIVER = r"""
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const code = ["OUTING_CLOSE", "OUTING_AGAIN", "OUTING_SAY_HEAD", "OUTING_SAY_OWN", "OUTING_SAY_INK", "OUTING_SAY_BUY", "OUTING_SAID", "OUTING_HERE", "OUTING_KEEP", "OUTING_KEPT"].map(konst).join("\n")
+const code = ["OUTING_CLOSE", "OUTING_AGAIN", "OUTING_SAY_HEAD", "OUTING_SAY_OWN", "OUTING_SAY_INK", "OUTING_SAY_BUY", "OUTING_SAID", "OUTING_HERE"].map(konst).join("\n")
   + fn("outingPickerHtml") + fn("outingSum") + fn("outingResultHtml") + fn("outingLedgerHtml") + fn("outingSayHtml") + fn("outingPeopleHtml");
 const H = new Function("esc", code + "\nreturn { outingPickerHtml, outingSum, outingResultHtml, outingLedgerHtml };")(esc);
 finish({ picker: H.outingPickerHtml(input.m), result: H.outingResultHtml(input.trip), ledger: H.outingLedgerHtml(input.ledger),
@@ -64,10 +64,31 @@ def test_the_result_card_offers_free_lines_and_ink():
     assert "你留下：「溪水可飲。」" in said and 'data-act="outing-say"' not in said
 
 
-def test_the_result_card_shows_the_tale_and_keeps_it():
-    tale, kept = _run(more=[{**TRIP, "diary": "你在潁川郊野走了一程。", "kept": False}, {**TRIP, "diary": "你在潁川郊野走了一程。", "kept": True}])["extra"]
-    assert '<p class="outing-diary">你在潁川郊野走了一程。</p>' in tale and 'data-act="outing-keep"' in tale
-    assert "已收進行狀" in kept and 'data-act="outing-keep"' not in kept
+def test_the_result_card_shows_the_tale_without_a_keep_button():
+    """Joy 10/30：每一趟都能收進行狀太多、沒價值。沒有「收進行狀」鈕；撿到稀世的東西、以弱勝強才寫一行「記進了行狀」。"""
+    plain, feat = _run(more=[{**TRIP, "diary": "你在潁川郊野走了一程。"}, {**TRIP, "diary": "你在潁川郊野走了一程。", "feat_note": "這一趟記進了行狀。"}])["extra"]
+    assert '<p class="outing-diary">你在潁川郊野走了一程。</p>' in plain
+    assert "行狀" not in plain and "outing-keep" not in plain
+    assert '<p class="outing-feat">這一趟記進了行狀。</p>' in feat
+
+
+STELE_DRIVER = r"""
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const code = ["OUTING_STELE", "OUTING_STELE_N", "OUTING_STELE_ALL"].map(konst).join("\n") + fn("outingSteleHtml") + fn("outingSteleAllHtml");
+const H = new Function("esc", code + "\nreturn { outingSteleHtml, outingSteleAllHtml };")(esc);
+finish({ signs: input.st.map((x) => H.outingSteleHtml(x)), all: H.outingSteleAllHtml(input.st[0]) });
+"""
+
+
+def test_the_stele_reads_the_ink_line_or_how_many_left_the_preset():
+    """畫面上方那塊路碑（Joy 10/30）：題壁墨寫的掛名號；預設句寫幾人留過；點開全部列出，題壁墨的另一個顏色。"""
+    every = [{"text": "橋下有魚", "author": "戊", "ink": True}, {"text": "溪水可飲。", "author": "甲", "ink": False}]
+    out = webharness.run(STELE_DRIVER, {"st": [{"text": "橋下有魚", "author": "戊", "n": 0, "all": every},
+                                              {"text": "溪水可飲。", "author": "", "n": 3, "all": every}]})
+    ink, preset = out["signs"]
+    assert "「橋下有魚」" in ink and "——戊" in ink
+    assert "「溪水可飲。」" in preset and "3 人留過" in preset
+    assert '<p class="ink">「橋下有魚」<small>——戊</small></p>' in out["all"] and "此處留過的話" in out["all"]
 
 
 CHOICE_DRIVER = r"""
