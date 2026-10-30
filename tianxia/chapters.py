@@ -19,7 +19,7 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING
 
-from . import calendar, storyline, wins
+from . import calendar, deeds, storyline, wins
 from .rules import jianfa
 
 if TYPE_CHECKING:
@@ -34,6 +34,7 @@ MISSED = "missed"  # 大事結算了還沒做成的那個結局 id
 LEFT = "作罷"  # 換了陣營：手上那一回收成這個（不寫傳、不跳卡）
 DONE = "做成"  # 做成那一刻記的記號（只記一次）
 DONE_LINE = "✦ 第{no}回「{title}」做成了：替{side}記了一功。{beat}結算時見分曉。"
+DEED = "{name}在{where}做成了第{no}回「{title}」。"  # 世界記事的那一句
 NUMERALS = "一二三四五六七八九十"
 
 
@@ -149,8 +150,20 @@ def after(state: GameState, content: Content) -> list[str]:
         points = content.config.jianfa.chapter_contribution
         wins.credit(p, content, w, calendar.point(w.time, content, w).week, points, side=side)
         beat = _beat_title(content, spec.beat)
+        place = _last_place(line)  # 世界記事（「世界活起來」讀）：誰、在哪、替哪一方做成了哪一回
+        where = content.locations[place].name if place in content.locations else ""
+        deeds.record(state, content, "chapter", DEED.format(name=p.name, where=where, no=numeral(spec.no), title=line.title),
+                     place=place, actors=[p.name], side=side or p.faction)
         msgs.append(DONE_LINE.format(no=numeral(spec.no), title=line.title, side=_side_name(content, side or p.faction or ""), beat=beat))
     return msgs
+
+
+def _last_place(line: StoryDef) -> str | None:
+    """這一回最後一幕做在哪（wait 前面那一段的第一個地點）；都沒寫地點是 None。"""
+    for stage in reversed(line.stages):
+        if stage.id != WAIT and stage.where.locations:
+            return stage.where.locations[0]
+    return None
 
 
 def _beat_task(state: GameState, content: Content, world: WorldStateStore, progress: StoryProgress, stage) -> bool:

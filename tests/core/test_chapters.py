@@ -93,6 +93,10 @@ def test_finishing_a_chapter_adds_weight_credit_and_count_then_the_beat_picks_th
     assert s.world.chapter_done[G1] == 1
     assert s.world.chapter_weights["bocai_routs_zhujun"] == {"guan": 0.5}  # 晚到 −0.5
     assert s.player.contrib - before == game.content.config.jianfa.chapter_contribution
+    if game.content.config.plans.enabled:  # 世界記事（「世界活起來」）：做成的那一刻記一筆
+        deed = s.world.deeds[-1]
+        assert (deed.kind, deed.place, deed.actors, deed.side) == ("chapter", "changshe", ["沈浪"], "guan")
+        assert deed.text == "沈浪在長社做成了第一回「投軍長社」。"
     card = weekcard.chapter_card(game)
     assert card["line"] == G2 and not card["waiting"]  # 做完了就開下一回，卡換成還沒做的那一回
     assert card["here"] and card["hint"] == "到長社城樓見皇甫嵩"  # 第二回第一段也在長社
