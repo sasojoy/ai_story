@@ -129,6 +129,24 @@ def test_sync_reports_the_elapsed_seconds_and_a_new_day(game, fake):
     assert ("on_day",) in fake.calls
 
 
+def test_a_new_day_follows_the_pill_day_through_fast_forward(game, fake):
+    """on_day 跟回體丹那一套（_pill_day：sync 給的 now 加上快轉推過的 advanced_real）同一個「天」：管理者快轉、整季機器人用 advance
+    跨過 00:00 也算換了一天，之後的 sync 照快轉後的那一天比，不重算、也不漏。"""
+    _made(game)
+    fake.calls.clear()
+    scale = game.content.config.time_scale
+    day = game._pill_day()
+    game.advance(60 * scale)  # 快轉一分鐘：同一天
+    assert game._pill_day() == day and ("on_day",) not in fake.calls
+    game.advance(DAY * scale)  # 快轉一整天：回體丹那一天換了
+    assert game._pill_day() == day + 1 and fake.calls.count(("on_day",)) == 1
+    fake.calls.clear()
+    game.sync(1060.0)  # 現實才過一分鐘：還是快轉後的那一天
+    assert game._pill_day() == day + 1 and ("on_day",) not in fake.calls
+    game.sync(1060.0 + DAY)  # 現實也過了一天
+    assert game._pill_day() == day + 2 and fake.calls.count(("on_day",)) == 1
+
+
 def test_a_new_season_ends_the_old_one_then_starts_the_new_one(content, world, fake):
     game = Game.new(content, "換季客", rng=random.Random(0), world=world)
     game.state.player.tutorial_step = len(content.tutorial.steps)

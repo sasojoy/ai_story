@@ -1107,8 +1107,10 @@ class Game:
         settled = plans.deliver(self.state, self.content)  # 世界活起來：我插過手的盤算有了結果
         if settled:
             self._write(plans.TITLE, settled)
-        if away_from is None or self._day_of(away_from) != self._day_of(now):
-            features_core.on_day(self)  # 功能包：回體丹那一天換了（台灣 00:00；上一次同步之後第一次）
+        # 功能包：回體丹那一天換了（台灣 00:00；上一次同步之後第一次）。同 _pill_day 照現實時間加快轉推過的那一截（advanced_real）比：
+        # 快轉跨過的那一次 advance 自己報過了，這裡只比上一次同步到這一次同步那一段
+        if away_from is None or self._day_of(away_from + self.advanced_real) != self._pill_day():
+            features_core.on_day(self)
         features_core.on_sync(self, elapsed)  # 功能包的補算（開發規範手冊 3.3；宴客：散席時席間最佳補名望、宴散了收起敬酒的選單）
         self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
         self._auto_checkin()  # 每日簽到自動領（Joy 2026-10-24 挑江湖頁乙案：簽到不放鈕）；要挑四階的日子留給玩家挑
@@ -1195,7 +1197,10 @@ class Game:
         if self.world.season_phase() == "running":
             msgs += advance_world_state(self.state.world, self.content, seconds, self.rng, self.world)
         msgs += self._advance_player_local(seconds)
+        day_before = self._pill_day()
         self.advanced_real += seconds / self.content.config.time_scale
+        if self._pill_day() != day_before:
+            features_core.on_day(self)  # 功能包：快轉跨過 00:00，回體丹那一天換了（同 sync；管理者快轉、整季機器人）
         arrived = self._arrivals()  # 同 sync：抵達自己寫紀錄
         msgs += self._conquest_tick(save=False)  # 領地爭奪：快轉跨過 22:00 也換天（下面一起存）
         self._deliver_conquest()  # 同 sync：快轉（與只 advance 的整季機器人）也補翻地的分紅
