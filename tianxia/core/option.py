@@ -3,6 +3,11 @@ from __future__ import annotations
 
 from pydantic import BaseModel, model_serializer
 
+# 閒著的選單（在地點上、沒有事件、對話、路上、閉關、開打的決戰）一定有這一顆，拿它認「此刻閒著」（切磋、論武、假人答論武、走一趟）。
+# 以前認「打坐」（永遠按得下去），打坐 2026-10-12 拿掉之後改認探索：_everyday_options 第一顆，體力不夠也在（灰的）。
+# 原本寫在 engine.py；走一趟搬進探索包（主動搬六包第 3＋4 批）要認它、又不能 import engine，搬進核心（`engine.IDLE_MARK` 照舊叫得到）
+IDLE_MARK = "act:explore"
+
 
 class Option(BaseModel):
     id: str
