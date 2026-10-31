@@ -13,7 +13,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - **新功能一律 `scripts/new_feature.py <包名>` 生一包**（`tianxia/features/<包>/`：`__init__.py` 登記與掛鉤、`rules.py`、`actions.py`、`state.py`、`content/`、`routes.py`、`web/`、`tests/`、`bots.py`、`README.md`；用不到的不生）。這支腳本在第 1 階（`feature/core-hooks`）合進 develop 之後才有，之前照舊寫在原本的模組。
   - **舊功能碰到才搬**：派工上哪一批要動某個功能，順手把它搬進包裡；搬的那一步是純搬——行為不變、測試只搬位置不改斷言，那一包的測試與核心契約綠。不搬的留在 `engine.py` 不動，沒有大翻修。
   - **包只 import 核心**，不 import 別的包；要用別包的東西走核心的服務（例：票的庫存與消耗走 `ctx.wallet`）。過渡期可以 import 還沒搬的舊模組，行尾註 `# 過渡：待搬`。`tests/core/test_feature_boundaries.py` 會掃。
-  - **只跑那一包的測試**（`-n 4`）；slow 不自動跟，要跑就 `scripts/test_for.py --slow`（第 0 階合進來之後）。
+  - **只跑那一包的測試**（`-n 4`）；slow 不自動跟，要跑就 `scripts/test_for.py --slow`。
   - **不改技能檔**：學到的寫在回報的「學到的」一節，PM 收進技能（手冊第十節）。
   - **每做完一個 Task 就推一次**自己的分支（手冊第八節）：換帳號最多丟一個 Task。
 - 先 `git worktree list`、`git remote -v` 核對自己在哪一份 clone、哪一條分支（這台有 `天下大勢`、`ai遊戲` 兩份）。
@@ -77,18 +77,19 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 
 ## 測試怎麼挑
 
-- 平常只跑 `scripts/test_for.py --base <base>`（含 slow），或直接 `pytest 改到的那幾個檔`。整套留給合併的人。
+- 平常只跑 `scripts/test_for.py --base <base>`（不含 slow，要連 slow 加 `--slow`；改到的測試檔本身照舊連 slow），或直接 `pytest 改到的那幾個檔 -m "slow or not slow"`。整套留給合併的人。挑法照手冊 4.3（2026-10-31 起），細節與量到的條數在 `docs/guide/量表與教訓.md`「測試怎麼挑」。
 - **base 要選對**：
-  - 跟你的分支開出來的那一點比，通常是 `origin/feature/formal-season`。
+  - 跟你的分支開出來的那一點比，通常是你的功能分支 `origin/feature/<名字>`（先明確 fetch）；不給 `--base` 跟 `origin/develop` 比；base 找不到分岔點會停下、結束碼 2。
   - 你自己合了別的分支進來時，base 用合完那一個 commit，只量你這一輪的改動，不然會把別人的東西全挑進來。
-  - `--list` 先看挑到哪些檔。
+  - `--list` 先看挑到哪些檔、每一段為什麼挑；`--count` 數條數。量「改這一行會挑到幾條」時把檔名明確傳給它（`test_for.py tianxia/engine.py --base HEAD --count`），不然工作樹裡別的還沒提交的改動也算進來；臨時改檔量完用位元組比對確認還原（2026-10-31 第 0 階）。
   - **合併還沒提交時別拿 `--list` 的清單**（2026-10-21 輿圖簡化第 2 批收尾）：`test_for` 跟 base 的分岔點比，`--no-commit` 合進來的東西都還算「沒提交的改動」，合功能分支的那一下挑到 327 個檔（幾乎整套）；先跑兩批的測試檔、提交合併，再 `--list` 只剩這一批自己的 117 個。
-- 改到 `tianxia/engine.py` 幾乎會挑到大半套（八千多條、約 6～8 分鐘），正常。只動內容或小模組時會少很多。改 `state.py`、`models.py`（就算只是在檔尾加一個獨立的模型）也一樣：減法季批 3c 純規則挑到 251 個檔。
+- 改 `tianxia/engine.py` 照改到的 Game 方法挑那一群（方法名第一個認得的字；檔名沒有那個字的群改看內文叫最多的是哪一群）；落在共用方法（choose、_everyday_options、sync、status_data……）或核心服務（_log、_side、_pill_day……）就跑核心測試＋煙霧，約 1,500 條、`-n 4` 約一分鐘。改 `models.py`、`state.py` 也是核心測試＋煙霧，欄位名帶功能前綴的再加那一群。（第 0 階之前改 `engine.py` 會挑到八千多條。）
+- **整個檔標 slow 的一般功能測試有 77 個檔**（`explore_one*`、`sortie_duel*`、`epiphany`、`errands`、`stances*`、`story_*`、`test_mall_web`……）：`test_for` 預設不跑，開跑前列出來、全被濾光時提示加 `--slow`。改的正是那一塊就加 `--slow`。
 - **功能分支在你做的時候往前走了**（2026-10-21 玉璽碎片第 2 批：開工時 `feature/territory-conquest` 是 `f5686765`，做到一半合進了翻地 `90e52e9b`）：`test_for --base origin/feature/<名字>` 照分岔點比，挑到的還是只有自己的改動，照用；「關著一個位元組都不變」照派工寫的那一版比（不是新的頭）。要不要合新的頭照派工，沒說就不合，回報裡寫功能分支到了哪裡、試合（`git merge-tree --write-tree HEAD origin/feature/<名字>`）有沒有衝突。
-- **`test_for.py -- -n 4` 擋不住 `-n auto`**（2026-10-20 領地爭奪第三批 A）：挑到三個檔以上它自己在最後補 `-n auto`，排在 `--` 之後的參數後面，pytest 照最後一個算。派工要 `-n 4`（同時有好幾個子代理在跑）時，在 scratchpad 寫一支小腳本 `import test_for`、拿 `test_for.pick(test_for.changed_files(base))` 的清單自己叫 pytest（`-q -m "slow or not slow" -n 4`，`TIANXIA_DB` 設新的暫存檔），背景跑、輸出導到檔。PowerShell 一行就夠：`$line = (& $py scripts/test_for.py --base <base> --list | Where-Object { $_ -like '要跑：*' }) -replace '^要跑：',''; $files = $line.Trim() -split '\s+'; & $py -u -m pytest @files -q -n 6 -m "slow or not slow" | Out-File $env:TEMP\x.log`（2026-10-21 玉璽碎片改版修正：改 `engine.py`＋`state.py`，挑到 303 個檔）。
+- `test_for` 預設 `-n 4`；`--` 之後給 `-n X` 就照給的（第 0 階之前它自己補 `-n auto`、擋不住，2026-10-31 改了）。
 - **兩張單的測試寫在同一個檔、又要一張一個 commit**（2026-10-21 FB-606、607 都在 `test_conquest_flip.py`）：先把第二張的測試從檔尾剪到 scratchpad（照第一個 `def` 的名字找頭、連前面的空行一起剪），提交第一張，再接回去寫第二張的實作。不要裸 `git stash`。
 - 新測試超過一秒（建 `Game`、載真實內容通常就超過）標 `@pytest.mark.slow`。
-  **直接 `pytest <檔>` 時 slow 預設被排除**（pyproject 的 addopts）：整個檔都是 slow 就會「no tests ran」、結束碼 5，要加 `-m "slow or not slow"`（`test_for` 自己會加）。
+  **直接 `pytest <檔>` 時 slow 預設被排除**（pyproject 的 addopts）：整個檔都是 slow 就會「no tests ran」、結束碼 5，要加 `-m "slow or not slow"`（`test_for` 只對改到的測試檔本身自動連 slow，別的要 `--slow`）。
 - **新測試綠了不等於有用，拿掉實作的一個條件跑一次看會不會紅**（變異檢查，2026-10-20 領地爭奪第三批 B）：用一支腳本「換掉一處、跑那個測試檔、換回來」。三個坑：
   (1) 換回來用的反向替換要先確認「換掉之後的字串」在檔裡剛好一處，不然斷言失敗、檔案留在改壞的狀態（短字串例如 `return msgs + self._legend_find(...)` 換掉一處之後會變兩處）；
   跑之前先 `git diff --stat` 記一下，跑完再看一次；
