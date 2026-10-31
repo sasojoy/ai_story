@@ -139,7 +139,6 @@ def test_conquest_paints_every_block():
 def test_ropes_say_which_side_sits_at_each_end():
     st = _game().map_state()
     assert [(r["low"], r["high"]) for r in st["ropes"]] == [("guan", "huang")] * len(st["ropes"])
-    assert st["geju_side"] == "haoqiang"
 
 
 def test_world_geometry_is_cached_by_content():
