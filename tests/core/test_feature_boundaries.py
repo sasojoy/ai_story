@@ -319,6 +319,44 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("_shelve_siege", "_deliver_battle_results"): "決戰「打」那一半（第 6 批搬）：攻城戰季終收起，補一則不算勝負的紀錄",
     ("_shelve_unfinished_battle", "_deliver_battle_results"): "決戰「打」那一半（第 8 批搬）：決戰季終收兵，同上",
 }
+# tavern（主動搬六包第 10 批：酒肆的引擎那一半）：四張名單的酒肆那幾筆集中在這一段（三條拆包線並行，PM 合的時候不跟別人的行穿插）
+_TAVERN_SEAM = "接縫留在原位（批次表第二節：位置算行為的接縫這一輪不開掛鉤，第 11 批一次收）"
+GAME_IMPORTS |= {
+    # 19 個一行委派；原本那一行 `from . import tavern as tavern_rules` 現在是別名（engine 照舊叫 tavern_rules.on、here、close、sign……，
+    # 見下面 GAME_DIRECT；BANNED_WORDS 合 develop 時搬進核心 naming）。`from . import tavern_ask` 搬完沒人用，拿掉了
+    "tianxia.features.tavern.actions", "tianxia.tavern",
+}
+GAME_DELEGATES |= {  # 13 個私有：server、假人、腳本、測試在叫的，與核心原位在叫的（_tavern_options、_tavern_enter、_tavern_hit_check、三個 deliver、_tavern_sign）
+    "tavern_do", "tavern_view", "tavern_ask_request", "tavern_ask", "tavern_chatter_request", "apply_tavern_chatter",
+    "_tavern_open", "_tavern_enter", "_tavern_price", "_tavern_options", "_tavern_sign", "_tavern_run", "_tavern_hit_problem",
+    "_tavern_hit_check", "_tavern_hit_fight", "_tavern_ask_facts", "_deliver_watches", "_deliver_hits", "_deliver_whispers",
+}
+GAME_DIRECT.update({  # 用到 tavern_rules 這個名字（現在是酒肆包 rules 的別名）的
+    "sync": "下線那一段的殺手（叫 _tavern_hit_check(away_from)）、人不在酒肆了就收店（tavern_rules.here、close）、三個 deliver（風聲、殺手單、"
+            "託付留意：放進 on_sync 會改江湖紀錄的先後、惡名排到 _marks_tick 之後，而且它們不看酒肆開關）；" + _TAVERN_SEAM,
+    "_drop_stale_references": "人不在酒肆了就收店（tavern_rules.here、close）：放進 on_drop_stale 會排到清路程（journey）與序章收尾之後，"
+                              "here() 看這兩樣，結果可能不同；" + _TAVERN_SEAM,
+    "_hint_triggers": "碰到才說：有酒肆的城（tavern_rules.on、here）排 h_tavern 那一條；提示還沒有掛鉤",
+    "_newbie_go": "新手目標「去酒肆」指哪幾個地點（tavern_rules.tavern_at）；新手目標還沒有掛鉤",
+    "_shop_open": "此刻開著哪一間店（picking_tavern 且 tavern_rules.here）：七間店共用，店面還沒有掛鉤；" + _TAVERN_SEAM,
+    "_depart": "出發時收起酒肆（tavern_rules.close）：七間店共用；" + _TAVERN_SEAM,
+})
+GAME_DIRECT["_everyday_options"] += ("；酒肆：坐在酒肆裡時選單整個是酒肆那一串（叫 _tavern_options；menu 掛鉤只有一個位置，會從擂台之後"
+                                     "提前到頭目戰之後）、act:tavern 入口（tavern_rules.on、here、TAVERN）")
+GAME_DIRECT["_act"] += "；酒肆：act:tavern 打開酒肆（叫 _tavern_enter）"
+GAME_DELEGATE_CALLERS.update({
+    ("choose", "_tavern_hit_check"): "每個動作之後的殺手檢查（「本人做完一件事」是表外的掛鉤，同商城的封測發放）；" + _TAVERN_SEAM,
+    ("shop_view", "tavern_view"): "店面那一頁：鐵匠鋪那條線（feature/smithing-flow）緊貼著這一行改，這一輪不動；店面還沒有掛鉤",
+    ("_action_title", "_tavern_sign"): "act:tavern 那一下的紀錄標題先算（act 是核心的前綴；同出陣的 _train_title）",
+    # 呼叫端本身在 GAME_DIRECT 裡的另外 6 對：開發時那一版的掃描不記；合 develop（出陣第 2 批的掃描：GAME_DIRECT 的方法裡叫的也記，
+    # PM 10/31）之後掃得到，取消註解（核心叫酒肆委派一共 9 對）
+    ("sync", "_tavern_hit_check"): "下線那一段殺手找上門（站在城外下線的人）；" + _TAVERN_SEAM,
+    ("sync", "_deliver_whispers"): "風聲：下線時有人在酒肆打聽你，回來補；" + _TAVERN_SEAM,
+    ("sync", "_deliver_hits"): "雇主收殺手單的結果（得手、失手、到期退一半），不看酒肆開關；" + _TAVERN_SEAM,
+    ("sync", "_deliver_watches"): "託酒家留意的捎信與到期；" + _TAVERN_SEAM,
+    ("_everyday_options", "_tavern_options"): "坐在酒肆裡時選單整個是酒肆那一串；" + _TAVERN_SEAM,
+    ("_act", "_tavern_enter"): "act:tavern 打開酒肆（act 是核心的前綴）；" + _TAVERN_SEAM,
+})
 
 
 @functools.lru_cache(maxsize=None)
@@ -580,11 +618,13 @@ def test_the_scanner_catches_a_crossing(source, expected):
 
 
 def test_the_old_names_left_as_aliases_are_known():
-    """tianxia/mall.py、tianxia/feasts.py、tianxia/sortie.py、tianxia/sortie_duel.py、tianxia/outing.py、tianxia/explore_one.py 是指到包裡
-    同一個模組的別名（給還沒改的測試與舊模組）：掃描照它們指到的那一包算，不算舊模組。"""
+    """tianxia/mall.py、tianxia/feasts.py、tianxia/sortie.py、tianxia/sortie_duel.py、tianxia/outing.py、tianxia/explore_one.py、
+    tianxia/tavern.py、tianxia/tavern_ask.py 是指到包裡同一個模組的別名（給還沒改的測試與舊模組）：掃描照它們指到的那一包算，不算舊模組。"""
     assert aliases() == {"feasts": "feast", "mall": "mall", "sortie": "sortie", "sortie_duel": "sortie",
                          # explore
-                         "outing": "explore", "explore_one": "explore"}
+                         "outing": "explore", "explore_one": "explore",
+                         # tavern
+                         "tavern": "tavern", "tavern_ask": "tavern"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 

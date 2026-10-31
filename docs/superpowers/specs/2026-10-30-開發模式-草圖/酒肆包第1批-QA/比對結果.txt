@@ -1,0 +1,563 @@
+酒肆包第 1 批 QA：BASE feature/tavern 6d926c17 對 HEAD dev/tavern-1 991ed0e7，同一份快照、凍住的時鐘與亂數（serve.py），逐鏡比像素、DOM、看得到的元素的位置與算好的樣式；跑完的資料庫逐表比（登入的 salt／hash／token 抹掉；〈天下形勢〉的寫成時刻與內文抹掉）。
+== season21（375 淺、375 深、320、1280）逐鏡
+d1280-14-board: 像素 1 處；DOM/字 一樣；樣式與位置 一樣；橫捲 [1265, 1280, 1265, 1280]
+base 對 head：215 鏡，完全一樣 214 鏡
+== season21 逐表 375 淺
+accounts: 一樣（4 列）
+action_counts: 一樣（10 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（1 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（4 列）
+chronicle: 一樣（9 列）
+faction_rolls: 一樣（2 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（4 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumors: 一樣（108 列）
+seasons: 一樣（1 列）
+sessions: 一樣（11 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== season21 逐表 375 深
+accounts: 一樣（4 列）
+action_counts: 一樣（10 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（1 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（4 列）
+chronicle: 一樣（9 列）
+faction_rolls: 一樣（2 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（4 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumors: 一樣（108 列）
+seasons: 一樣（1 列）
+sessions: 一樣（11 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== season21 逐表 320（第一輪）
+accounts: 一樣（4 列）
+action_counts: 一樣（10 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（1 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（4 列）
+chronicle: 一樣（9 列）
+faction_rolls: 一樣（2 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（4 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumors: 一樣（108 列）
+seasons: 一樣（1 列）
+sessions: 一樣（11 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== season21 逐表 1280
+accounts: 一樣（4 列）
+action_counts: 一樣（10 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（1 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（4 列）
+chronicle: 一樣（9 列）
+faction_rolls: 一樣（2 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（4 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumors: 一樣（108 列）
+seasons: 一樣（1 列）
+sessions: 一樣（11 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== season21 320 重跑（紀錄頁撐寬之後重新載入）逐鏡
+m320-80-t-killed-top: 像素 一樣；DOM/字 不一樣:text,page,rest；樣式與位置 一樣；橫捲 [320, 320, 320, 320]
+    text [["delete", "　〔天下大事〕第 2 週・週六 22:00　袁紹在大將軍府替盧植說情，求大將軍保他一命。", ""], ["insert", "", "〔天下大事〕第 2 週・週日 15:13　天下形勢：各路按兵，未見勝負。　"], ["replace", "2", "3"]]
+    page [["delete", "六 22:00　袁紹在大將軍府替盧植說情，求大將軍保他一命。　〔天下大事〕第 2 週・週", ""], ["insert", "", "〔天下大事〕第 2 週・週日 15:13　天下形勢：各路按兵，未見勝負。　"], ["replace", "2", "3"]]
+    rest [["delete", "六 22:00　袁紹在大將軍府替盧植說情，求大將軍保他一命。　〔天下大事〕第 2 週・週", ""], ["insert", "", "〔天下大事〕第 2 週・週日 15:13　天下形勢：各路按兵，未見勝負。　"], ["replace", "2", "3"]]
+m320-82b-t-log: 像素 7 處；DOM/字 不一樣:text,page,rest；樣式與位置 20 行不同；橫捲 [320, 320, 320, 320]
+    text [["replace", "9", "10"], ["delete", "\n〔天下大事〕第 2 週・週六 22:00　袁紹在大將軍府替盧植說情，求大將軍保他一命。", ""], ["insert", "", "〔天下大事〕第 2 週・週日 15:13　天下形勢：各路按兵，未見勝負。\n"]]
+    page [["replace", "9", "10"], ["delete", "</div><div class=\"tx-line\">〔天下大事〕第 2 週・週六 22:00　袁紹在大將軍府替盧植說情，求大將軍保他一命。", ""], ["insert", "", "〔天下大事〕第 2 週・週日 15:13　天下形勢：各路按兵，未見勝負。</div><div class=\"tx-line\">"]]
+    rest [["replace", "9", "10"], ["delete", "</div><div class=\"tx-line\">〔天下大事〕第 2 週・週六 22:00　袁紹在大將軍府替盧植說情，求大將軍保他一命。", ""], ["insert", "", "〔天下大事〕第 2 週・週日 15:13　天下形勢：各路按兵，未見勝負。</div><div class=\"tx-line\">"]]
+    sig -div||0,0,320,2037|15px|400|24.75px|rgb(42, 36, 29)|rgba(0, 0, 0, 0)|none|rgb(42, 36, 29)|0px|0px|0px|0px|block|none|1|none|-apple-system, BlinkMacSystemFont, "Ping
+    sig -div.shell||0,0,320,2037|15px|400|24.75px|rgb(42, 36, 29)|rgba(0, 0, 0, 0)|none|rgb(42, 36, 29)|0px|0px|0px|0px|block|none|1|none|-apple-system, BlinkMacSystemFont, "Ping
+    sig +div||0,0,320,2013|15px|400|24.75px|rgb(42, 36, 29)|rgba(0, 0, 0, 0)|none|rgb(42, 36, 29)|0px|0px|0px|0px|block|none|1|none|-apple-system, BlinkMacSystemFont, "Ping
+    sig +div.shell||0,0,320,2013|15px|400|24.75px|rgb(42, 36, 29)|rgba(0, 0, 0, 0)|none|rgb(42, 36, 29)|0px|0px|0px|0px|block|none|1|none|-apple-system, BlinkMacSystemFont, "Ping
+base 對 head：54 鏡，完全一樣 52 鏡
+== season21 320 重跑 逐表
+accounts: 一樣（4 列）
+action_counts: 一樣（10 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（1 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 不一樣（4 對 4 列）
+    -[('data', '{"player":{"name":"霜葉","location":"runan_wilds","stats":{"str":6,"agi":5,"con":6,"wis":5,"lore":5,"silver":454,"good":0,"evil":0,"fame":100001,"xinde":20},"stamina":250.0,"flags":["開局:投軍"],"sect":null,"faction":"huang","pending_faction":null,"pending_defect":null,"ally":null,"pending_ally":null,"defected":false,"member":{"level":1,"exp":0,"neili":1.0,"injury":0.0,"neigong_id":"jichu_tu
+    +[('data', '{"player":{"name":"霜葉","location":"runan_wilds","stats":{"str":6,"agi":5,"con":6,"wis":5,"lore":5,"silver":454,"good":0,"evil":0,"fame":100001,"xinde":20},"stamina":250.0,"flags":["開局:投軍"],"sect":null,"faction":"huang","pending_faction":null,"pending_defect":null,"ally":null,"pending_ally":null,"defected":false,"member":{"level":1,"exp":0,"neili":1.0,"injury":0.0,"neigong_id":"jichu_tu
+chronicle: 一樣（9 列）
+faction_rolls: 一樣（2 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（4 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumors: 一樣（108 列）
+seasons: 一樣（1 列）
+sessions: 一樣（11 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 1
+== season21 375 淺 BASE 對 BASE2 逐鏡
+base 對 base2：54 鏡，完全一樣 54 鏡
+== season21 375 淺 BASE 對 BASE2 逐表
+accounts: 一樣（4 列）
+action_counts: 一樣（10 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（1 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（4 列）
+chronicle: 一樣（9 列）
+faction_rolls: 一樣（2 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（4 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumors: 一樣（108 列）
+seasons: 一樣（1 列）
+sessions: 一樣（11 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== season21 1280 BASE 對 BASE2 逐鏡
+base 對 base2：54 鏡，完全一樣 54 鏡
+== season21 1280 BASE 對 BASE2 逐表
+accounts: 一樣（4 列）
+action_counts: 一樣（10 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（1 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（4 列）
+chronicle: 一樣（9 列）
+faction_rolls: 一樣（2 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（4 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumors: 一樣（108 列）
+seasons: 一樣（1 列）
+sessions: 一樣（11 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== season21 1280 HEAD 對 HEAD2 逐鏡
+head 對 head2：54 鏡，完全一樣 54 鏡
+== season21 1280 HEAD 對 HEAD2 逐表
+accounts: 一樣（4 列）
+action_counts: 一樣（10 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（1 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（4 列）
+chronicle: 一樣（9 列）
+faction_rolls: 一樣（2 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（4 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumors: 一樣（108 列）
+seasons: 一樣（1 列）
+sessions: 一樣（11 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== season21 1280 BASE 對 HEAD2 逐鏡
+d1280-14-board: 像素 1 處；DOM/字 一樣；樣式與位置 一樣；橫捲 [1265, 1280, 1265, 1280]
+base 對 head2：54 鏡，完全一樣 53 鏡
+== 護身（s21shield，雇主先同步）逐鏡
+base 對 head：8 鏡，完全一樣 8 鏡
+== 護身 逐表
+accounts: 一樣（4 列）
+action_counts: 一樣（11 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（1 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（4 列）
+chronicle: 一樣（9 列）
+faction_rolls: 一樣（2 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（4 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumors: 一樣（108 列）
+seasons: 一樣（1 列）
+sessions: 一樣（14 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== 護身（s21shieldt，目標先同步）逐鏡
+base 對 head：8 鏡，完全一樣 8 鏡
+== 護身（目標先同步）逐表
+accounts: 一樣（4 列）
+action_counts: 一樣（11 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（1 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（4 列）
+chronicle: 一樣（9 列）
+faction_rolls: 一樣（2 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（4 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumors: 一樣（108 列）
+seasons: 一樣（1 列）
+sessions: 一樣（14 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== week7 逐鏡
+base 對 head：32 鏡，完全一樣 32 鏡
+== week7 逐表 375 淺
+accounts: 一樣（4 列）
+action_counts: 一樣（4 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（4 列）
+chronicle: 一樣（2 列）
+faction_rolls: 一樣（2 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（4 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（4 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumors: 一樣（10 列）
+seasons: 一樣（1 列）
+sessions: 一樣（6 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== weekend 逐鏡
+base 對 head：44 鏡，完全一樣 44 鏡
+== weekend 逐表 375 淺
+accounts: 一樣（4 列）
+action_counts: 一樣（4 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（4 列）
+chronicle: 一樣（1 列）
+faction_rolls: 一樣（2 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（4 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumors: 一樣（8 列）
+seasons: 一樣（1 列）
+sessions: 一樣（5 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== 14 天 逐鏡
+base 對 head：44 鏡，完全一樣 44 鏡
+== 14 天 逐表 375 淺
+accounts: 一樣（4 列）
+action_counts: 一樣（4 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（4 列）
+chronicle: 一樣（0 列）
+faction_rolls: 一樣（2 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（4 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumors: 一樣（1 列）
+seasons: 一樣（1 列）
+sessions: 一樣（5 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== 1280 懸賞榜對照實驗（XBASE／XHEAD、只跑到懸賞榜；字型照載 vs 擋掉 Google 字型）
+== season21xf
+d1280 base server pid 40136 db run-season21xf-d1280-base.db
+d1280 base node 45s: {"shots":12,"notes":13,"exceptions":0,"consoleErrors":0,"failed":0,"bad":0,"waits":0,"rolled":[]} 
+vapid copied BASE → HEAD
+d1280 head server pid 23932 db run-season21xf-d1280-head.db
+d1280 head node 45s: {"shots":12,"notes":13,"exceptions":0,"consoleErrors":0,"failed":0,"bad":0,"waits":0,"rolled":[]} 
+d1280 base2 server pid 39772 db run-season21xf-d1280-base2.db
+d1280 base2 node 45s: {"shots":12,"notes":13,"exceptions":0,"consoleErrors":0,"failed":0,"bad":0,"waits":0,"rolled":[]} 
+d1280 head2 server pid 30388 db run-season21xf-d1280-head2.db
+d1280 head2 node 45s: {"shots":12,"notes":13,"exceptions":0,"consoleErrors":0,"failed":0,"bad":0,"waits":0,"rolled":[]} 
+done 
+base head | d1280-14-board: 像素 1 處；DOM/字 一樣；樣式與位置 一樣；橫捲 [1265, 1280, 1265, 1280] / base 對 head：12 鏡，完全一樣 11 鏡
+base base2 | base 對 base2：12 鏡，完全一樣 12 鏡
+head head2 | head 對 head2：12 鏡，完全一樣 12 鏡
+== season21xnf
+d1280 base server pid 832 db run-season21xnf-d1280-base.db
+d1280 base node 45s: {"shots":12,"notes":13,"exceptions":0,"consoleErrors":0,"failed":6,"bad":0,"waits":0,"rolled":[]} 
+d1280 head server pid 44836 db run-season21xnf-d1280-head.db
+d1280 head node 45s: {"shots":12,"notes":13,"exceptions":0,"consoleErrors":0,"failed":6,"bad":0,"waits":0,"rolled":[]} 
+d1280 base2 server pid 44200 db run-season21xnf-d1280-base2.db
+d1280 base2 node 45s: {"shots":12,"notes":13,"exceptions":0,"consoleErrors":0,"failed":6,"bad":0,"waits":0,"rolled":[]} 
+d1280 head2 server pid 1928 db run-season21xnf-d1280-head2.db
+d1280 head2 node 45s: {"shots":12,"notes":13,"exceptions":0,"consoleErrors":0,"failed":6,"bad":0,"waits":0,"rolled":[]} 
+done 
+base head | base 對 head：12 鏡，完全一樣 12 鏡
+base base2 | base 對 base2：12 鏡，完全一樣 12 鏡
+head head2 | head 對 head2：12 鏡，完全一樣 12 鏡
+queue4 done
+== 酒肆四頁量字（320／360／375／1280）
+== season21: base 對 head 量字結果一樣；量了 24 頁；例外 0/0；主控台 0/0；4xx/5xx 0/0
+   m320   ask-seek button.shop-page on                   「查人在哪・30 兩」 框 [12, 107] 字 [17, 118] 超出 11.6 sw/cw 105/93 nowrap
+   m320   ask-seek button.shop-page                      「打聽情誼・20 兩」 框 [113, 207] 字 [118, 219] 超出 11.5 sw/cw 105/93 nowrap
+   m320   ask-ties button.shop-page                      「查人在哪・30 兩」 框 [12, 107] 字 [17, 118] 超出 11.6 sw/cw 105/93 nowrap
+   m320   ask-ties button.shop-page on                   「打聽情誼・20 兩」 框 [113, 207] 字 [118, 219] 超出 11.5 sw/cw 105/93 nowrap
+   m320   ask-q    button.shop-page                      「查人在哪・30 兩」 框 [12, 107] 字 [17, 118] 超出 11.6 sw/cw 105/93 nowrap
+   m320   ask-q    button.shop-page                      「打聽情誼・20 兩」 框 [113, 207] 字 [118, 219] 超出 11.5 sw/cw 105/93 nowrap
+   橫捲 d1280 news 1265 1280
+   橫捲 d1280 ask-seek 1265 1280
+   橫捲 d1280 ask-ties 1265 1280
+   橫捲 d1280 ask-q 1265 1280
+   橫捲 d1280 wall 1265 1280
+   橫捲 d1280 shade 1265 1280
+== none: base 對 head 量字結果一樣；量了 24 頁；例外 0/0；主控台 0/0；4xx/5xx 0/0
+   m320   ask-seek button.shop-page on                   「查人在哪・20 兩」 框 [12, 107] 字 [17, 118] 超出 11.6 sw/cw 105/93 nowrap
+   m320   ask-seek button.shop-page                      「打聽情誼・13 兩」 框 [113, 207] 字 [118, 219] 超出 11.5 sw/cw 105/93 nowrap
+   m320   ask-ties button.shop-page                      「查人在哪・20 兩」 框 [12, 107] 字 [17, 118] 超出 11.6 sw/cw 105/93 nowrap
+   m320   ask-ties button.shop-page on                   「打聽情誼・13 兩」 框 [113, 207] 字 [118, 219] 超出 11.5 sw/cw 105/93 nowrap
+   m320   ask-q    button.shop-page                      「查人在哪・20 兩」 框 [12, 107] 字 [17, 118] 超出 11.6 sw/cw 105/93 nowrap
+   m320   ask-q    button.shop-page                      「打聽情誼・13 兩」 框 [113, 207] 字 [118, 219] 超出 11.5 sw/cw 105/93 nowrap
+   橫捲 d1280 news 1265 1280
+   橫捲 d1280 ask-seek 1265 1280
+   橫捲 d1280 ask-ties 1265 1280
+   橫捲 d1280 ask-q 1265 1280
+   橫捲 d1280 wall 1265 1280
+   橫捲 d1280 shade 1265 1280
+== week7: base 對 head 量字結果一樣；量了 24 頁；例外 0/0；主控台 0/0；4xx/5xx 0/0
+   m320   ask-seek button.shop-page on                   「查人在哪・10 兩」 框 [12, 107] 字 [17, 118] 超出 11.6 sw/cw 105/93 nowrap
+   m320   ask-seek button.shop-page                      「打聽情誼・7 兩」 框 [113, 207] 字 [118, 211] 超出 3.9 sw/cw 98/93 nowrap
+   m320   ask-ties button.shop-page                      「查人在哪・10 兩」 框 [12, 107] 字 [17, 118] 超出 11.6 sw/cw 105/93 nowrap
+   m320   ask-ties button.shop-page on                   「打聽情誼・7 兩」 框 [113, 207] 字 [118, 211] 超出 3.9 sw/cw 98/93 nowrap
+   m320   ask-q    button.shop-page                      「查人在哪・10 兩」 框 [12, 107] 字 [17, 118] 超出 11.6 sw/cw 105/93 nowrap
+   m320   ask-q    button.shop-page                      「打聽情誼・7 兩」 框 [113, 207] 字 [118, 211] 超出 3.9 sw/cw 98/93 nowrap
+   橫捲 d1280 news 1265 1280
+   橫捲 d1280 ask-seek 1265 1280
+   橫捲 d1280 ask-ties 1265 1280
+   橫捲 d1280 ask-q 1265 1280
+   橫捲 d1280 wall 1265 1280
+   橫捲 d1280 shade 1265 1280
+== weekend: base 對 head 量字結果一樣；量了 24 頁；例外 0/0；主控台 0/0；4xx/5xx 0/0
+   m320   ask-seek button.shop-page on                   「查人在哪・9 兩」 框 [12, 107] 字 [17, 111] 超出 3.9 sw/cw 98/93 nowrap
+   m320   ask-seek button.shop-page                      「打聽情誼・6 兩」 框 [113, 207] 字 [118, 211] 超出 3.9 sw/cw 98/93 nowrap
+   m320   ask-ties button.shop-page                      「查人在哪・9 兩」 框 [12, 107] 字 [17, 111] 超出 3.9 sw/cw 98/93 nowrap
+   m320   ask-ties button.shop-page on                   「打聽情誼・6 兩」 框 [113, 207] 字 [118, 211] 超出 3.9 sw/cw 98/93 nowrap
+   m320   ask-q    button.shop-page                      「查人在哪・9 兩」 框 [12, 107] 字 [17, 111] 超出 3.9 sw/cw 98/93 nowrap
+   m320   ask-q    button.shop-page                      「打聽情誼・6 兩」 框 [113, 207] 字 [118, 211] 超出 3.9 sw/cw 98/93 nowrap
+   橫捲 d1280 news 1265 1280
+   橫捲 d1280 ask-seek 1265 1280
+   橫捲 d1280 ask-ties 1265 1280
+   橫捲 d1280 ask-q 1265 1280
+   橫捲 d1280 wall 1265 1280
+   橫捲 d1280 shade 1265 1280
+== 主控台與網路（每一次瀏覽器；season21-d1280bb／hh 兩個資料夾是複本）
+none/base-d1280-log.json: 鏡 11；主控台 0（error 0）；例外 0；Log 0；回應 101 {200: 101}；失敗 0；問題記號 0；殺手 []；撐寬 []
+none/base-m320-log.json: 鏡 11；主控台 0（error 0）；例外 0；Log 0；回應 101 {200: 101}；失敗 0；問題記號 0；殺手 []；撐寬 []
+none/base-m375d-log.json: 鏡 11；主控台 0（error 0）；例外 0；Log 0；回應 101 {200: 101}；失敗 0；問題記號 0；殺手 []；撐寬 []
+none/base-m375l-log.json: 鏡 11；主控台 0（error 0）；例外 0；Log 0；回應 101 {200: 101}；失敗 0；問題記號 0；殺手 []；撐寬 []
+none/head-d1280-log.json: 鏡 11；主控台 0（error 0）；例外 0；Log 0；回應 102 {200: 102}；失敗 0；問題記號 0；殺手 []；撐寬 []
+none/head-m320-log.json: 鏡 11；主控台 0（error 0）；例外 0；Log 0；回應 101 {200: 101}；失敗 0；問題記號 0；殺手 []；撐寬 []
+none/head-m375d-log.json: 鏡 11；主控台 0（error 0）；例外 0；Log 0；回應 101 {200: 101}；失敗 0；問題記號 0；殺手 []；撐寬 []
+none/head-m375l-log.json: 鏡 11；主控台 0（error 0）；例外 0；Log 0；回應 102 {200: 102}；失敗 0；問題記號 0；殺手 []；撐寬 []
+s21shield/base-m375l-log.json: 鏡 8；主控台 0（error 0）；例外 0；Log 0；回應 224 {200: 224}；失敗 0；問題記號 0；殺手 []；撐寬 []
+s21shield/head-m375l-log.json: 鏡 8；主控台 0（error 0）；例外 0；Log 0；回應 224 {200: 224}；失敗 0；問題記號 0；殺手 []；撐寬 []
+s21shieldt/base-m375l-log.json: 鏡 8；主控台 0（error 0）；例外 0；Log 0；回應 219 {200: 219}；失敗 0；問題記號 0；殺手 []；撐寬 []
+s21shieldt/head-m375l-log.json: 鏡 8；主控台 0（error 0）；例外 0；Log 0；回應 219 {200: 219}；失敗 0；問題記號 0；殺手 []；撐寬 []
+season21/base-d1280-log.json: 鏡 54；主控台 0（error 0）；例外 0；Log 0；回應 861 {200: 861}；失敗 0；問題記號 0；殺手 [(1, '對方贏・供出'), (0, '殺手贏')]；撐寬 []
+season21/base-m320-log.json: 鏡 53；主控台 0（error 0）；例外 0；Log 0；回應 805 {200: 805}；失敗 0；問題記號 16；殺手 [(1, '對方贏・供出')]；撐寬 []
+    問題 {"scene": "m320-63b-e-log", "clickMissing": "[data-act=\"choose\"][data-id=\"act:tavern\"]", "idx": 0, "label": "酒肆入口", "err": null}
+    問題 {"scene": "m320-63b-e-log", "clickMissing": ".shop-tabs [data-act=\"tav-tab\"][data-tab=\"shade\"]", "idx": 0, "label": "酒肆 shade", "err": null}
+    問題 {"scene": "m320-64-e-streak", "clickMissing": ".shop-layer .shop-back", "idx": 0, "label": "出店", "err": null}
+    問題 {"scene": "m320-64-e-streak", "respTimeout": "/api/choose"}
+season21/base-m375d-log.json: 鏡 54；主控台 0（error 0）；例外 0；Log 0；回應 863 {200: 863}；失敗 0；問題記號 0；殺手 [(1, '對方贏・供出'), (0, '殺手贏')]；撐寬 []
+season21/base-m375l-log.json: 鏡 54；主控台 0（error 0）；例外 0；Log 0；回應 862 {200: 862}；失敗 0；問題記號 0；殺手 [(1, '對方贏・供出'), (0, '殺手贏')]；撐寬 []
+season21/base2-d1280-log.json: 鏡 54；主控台 0（error 0）；例外 0；Log 0；回應 861 {200: 861}；失敗 0；問題記號 0；殺手 [(1, '對方贏・供出'), (0, '殺手贏')]；撐寬 []
+season21/base2-m375l-log.json: 鏡 54；主控台 0（error 0）；例外 0；Log 0；回應 863 {200: 863}；失敗 0；問題記號 0；殺手 [(1, '對方贏・供出'), (0, '殺手贏')]；撐寬 []
+season21/head-d1280-log.json: 鏡 54；主控台 0（error 0）；例外 0；Log 0；回應 862 {200: 862}；失敗 0；問題記號 0；殺手 [(1, '對方贏・供出'), (0, '殺手贏')]；撐寬 []
+season21/head-m320-log.json: 鏡 53；主控台 0（error 0）；例外 0；Log 0；回應 807 {200: 807}；失敗 0；問題記號 16；殺手 [(1, '對方贏・供出')]；撐寬 []
+    問題 {"scene": "m320-63b-e-log", "clickMissing": "[data-act=\"choose\"][data-id=\"act:tavern\"]", "idx": 0, "label": "酒肆入口", "err": null}
+    問題 {"scene": "m320-63b-e-log", "clickMissing": ".shop-tabs [data-act=\"tav-tab\"][data-tab=\"shade\"]", "idx": 0, "label": "酒肆 shade", "err": null}
+    問題 {"scene": "m320-64-e-streak", "clickMissing": ".shop-layer .shop-back", "idx": 0, "label": "出店", "err": null}
+    問題 {"scene": "m320-64-e-streak", "respTimeout": "/api/choose"}
+season21/head-m375d-log.json: 鏡 54；主控台 0（error 0）；例外 0；Log 0；回應 862 {200: 862}；失敗 0；問題記號 0；殺手 [(1, '對方贏・供出'), (0, '殺手贏')]；撐寬 []
+season21/head-m375l-log.json: 鏡 54；主控台 0（error 0）；例外 0；Log 0；回應 832 {200: 832}；失敗 0；問題記號 0；殺手 [(1, '對方贏・供出'), (0, '殺手贏')]；撐寬 []
+season21-d1280bb/base-d1280-log.json: 鏡 54；主控台 0（error 0）；例外 0；Log 0；回應 861 {200: 861}；失敗 0；問題記號 0；殺手 [(1, '對方贏・供出'), (0, '殺手贏')]；撐寬 []
+season21-d1280bb/base2-d1280-log.json: 鏡 54；主控台 0（error 0）；例外 0；Log 0；回應 861 {200: 861}；失敗 0；問題記號 0；殺手 [(1, '對方贏・供出'), (0, '殺手贏')]；撐寬 []
+season21-d1280hh/base-d1280-log.json: 鏡 54；主控台 0（error 0）；例外 0；Log 0；回應 861 {200: 861}；失敗 0；問題記號 0；殺手 [(1, '對方贏・供出'), (0, '殺手贏')]；撐寬 []
+season21-d1280hh/head-d1280-log.json: 鏡 54；主控台 0（error 0）；例外 0；Log 0；回應 862 {200: 862}；失敗 0；問題記號 0；殺手 [(1, '對方贏・供出'), (0, '殺手贏')]；撐寬 []
+season21r/base-m320-log.json: 鏡 54；主控台 0（error 0）；例外 0；Log 0；回應 998 {200: 998}；失敗 0；問題記號 0；殺手 [(1, '對方贏・供出'), (0, '殺手贏')]；撐寬 [('63b-e-log', 358), ('70b-e-log', 358), ('83b-e-log', 358)]
+season21r/head-m320-log.json: 鏡 54；主控台 0（error 0）；例外 0；Log 0；回應 996 {200: 996}；失敗 0；問題記號 0；殺手 [(1, '對方贏・供出'), (0, '殺手贏')]；撐寬 [('63b-e-log', 358), ('70b-e-log', 358), ('83b-e-log', 358)]
+week7/base-d1280-log.json: 鏡 8；主控台 0（error 0）；例外 0；Log 0；回應 187 {200: 187}；失敗 0；問題記號 0；殺手 []；撐寬 []
+week7/base-m320-log.json: 鏡 8；主控台 0（error 0）；例外 0；Log 0；回應 188 {200: 188}；失敗 0；問題記號 0；殺手 []；撐寬 []
+week7/base-m375d-log.json: 鏡 8；主控台 0（error 0）；例外 0；Log 0；回應 188 {200: 188}；失敗 0；問題記號 0；殺手 []；撐寬 []
+week7/base-m375l-log.json: 鏡 8；主控台 0（error 0）；例外 0；Log 0；回應 188 {200: 188}；失敗 0；問題記號 0；殺手 []；撐寬 []
+week7/head-d1280-log.json: 鏡 8；主控台 0（error 0）；例外 0；Log 0；回應 187 {200: 187}；失敗 0；問題記號 0；殺手 []；撐寬 []
+week7/head-m320-log.json: 鏡 8；主控台 0（error 0）；例外 0；Log 0；回應 188 {200: 188}；失敗 0；問題記號 0；殺手 []；撐寬 []
+week7/head-m375d-log.json: 鏡 8；主控台 0（error 0）；例外 0；Log 0；回應 188 {200: 188}；失敗 0；問題記號 0；殺手 []；撐寬 []
+week7/head-m375l-log.json: 鏡 8；主控台 0（error 0）；例外 0；Log 0；回應 188 {200: 188}；失敗 0；問題記號 0；殺手 []；撐寬 []
+weekend/base-d1280-log.json: 鏡 11；主控台 0（error 0）；例外 0；Log 0；回應 103 {200: 103}；失敗 0；問題記號 0；殺手 []；撐寬 []
+weekend/base-m320-log.json: 鏡 11；主控台 0（error 0）；例外 0；Log 0；回應 103 {200: 103}；失敗 0；問題記號 0；殺手 []；撐寬 []
+weekend/base-m375d-log.json: 鏡 11；主控台 0（error 0）；例外 0；Log 0；回應 104 {200: 104}；失敗 0；問題記號 0；殺手 []；撐寬 []
+weekend/base-m375l-log.json: 鏡 11；主控台 0（error 0）；例外 0；Log 0；回應 103 {200: 103}；失敗 0；問題記號 0；殺手 []；撐寬 []
+weekend/head-d1280-log.json: 鏡 11；主控台 0（error 0）；例外 0；Log 0；回應 104 {200: 104}；失敗 0；問題記號 0；殺手 []；撐寬 []
+weekend/head-m320-log.json: 鏡 11；主控台 0（error 0）；例外 0；Log 0；回應 103 {200: 103}；失敗 0；問題記號 0；殺手 []；撐寬 []
+weekend/head-m375d-log.json: 鏡 11；主控台 0（error 0）；例外 0；Log 0；回應 104 {200: 104}；失敗 0；問題記號 0；殺手 []；撐寬 []
+weekend/head-m375l-log.json: 鏡 11；主控台 0（error 0）；例外 0；Log 0；回應 104 {200: 104}；失敗 0；問題記號 0；殺手 []；撐寬 []
+合計 {'runs': 44, 'shots': 1134, 'console': 0, 'errors': 0, 'exceptions': 0, 'logs': 0, 'responses': 17943, 'bad': 0, 'failed': 0, 'probs': 32}
+== 所有逐表的最後一行
+db-none-d1280: 不一樣的表： 0
+db-none-m320: 不一樣的表： 0
+db-none-m375d: 不一樣的表： 0
+db-none-m375l: 不一樣的表： 0
+db-s21shield-m375l: 不一樣的表： 0
+db-s21shieldt-m375l: 不一樣的表： 0
+db-season21-d1280-base-head2: 不一樣的表： 0
+db-season21-d1280-head-head2: 不一樣的表： 0
+db-season21-d1280: 不一樣的表： 0
+db-season21-d1280bb: 不一樣的表： 0
+db-season21-m320: 不一樣的表： 0
+db-season21-m375d: 不一樣的表： 0
+db-season21-m375l: 不一樣的表： 0
+db-season21-m375lbb: 不一樣的表： 0
+db-season21r-m320: 不一樣的表： 1
+db-week7-d1280: 不一樣的表： 0
+db-week7-m320: 不一樣的表： 0
+db-week7-m375d: 不一樣的表： 0
+db-week7-m375l: 不一樣的表： 0
+db-weekend-d1280: 不一樣的表： 0
+db-weekend-m320: 不一樣的表： 0
+db-weekend-m375d: 不一樣的表： 0
+db-weekend-m375l: 不一樣的表： 0
