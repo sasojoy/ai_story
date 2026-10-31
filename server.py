@@ -63,7 +63,7 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, ascend, battle_instance, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mapdata, might,
+    arena_crowd, ascend, battle_instance, flavor, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mapdata, might,
     naming, narration, outing,
     ollama_client, power_save, rules,
     precise, seal, seal_duel, server_bots, social, sortie, speech, tale, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
@@ -73,6 +73,7 @@ from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, Account
 from tianxia.content import env_profile, load_content, profile_line
 from tianxia.characters import name_key, open_characters
 from tianxia.database import default_path, open_database
+from tianxia.flavor import FlavorJob
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, TEXT_TALKS, Game, Refused
 from tianxia.core import features as features_core  # 功能包：殼照 FEATURES 掛管理者工具與路由（開發規範手冊 3.1）
 from tianxia.features.feast import rules as feasts  # 宴客自己寫的敬酒詞：鎖外評分（三段式還在殼裡，過渡）
@@ -325,15 +326,20 @@ def _locked(game: Game):
     （act、look、prepare_dialogue），不另外呼叫 game.world.action_lock()：資料庫是唯一的真實來源，
     GAMES 裡的 Game 只是這一個動作的工作副本。FastAPI 的同步端點跑在執行緒池裡，同一個角色的兩個請求
     可能同時進來；行動鎖是 BEGIN IMMEDIATE，不同執行緒就一個一個來，重讀與動作不會交錯。
-    鎖內的模型額度與斷路器見 _model_guard。"""
+    鎖內的模型額度與斷路器見 _model_guard。
+    這一次拿鎖裡觸發的江湖大事（S-09）：鎖內只寫固定的原文，放鎖之後才開背景執行緒請模型潤色（write_flavor）。"""
     _used(game)
+    jobs: list[FlavorJob] = []
     try:
         with game.world.action_lock(), _model_guard(game):
             _reload(game)
             game.set_move_mode(MOVE_MODE.get())  # 這次請求選的走法（見 MOVE_MODE）：之後的選單與 choose() 都照它
             yield
+            jobs = game.take_flavor_jobs()  # 動作丟例外就不拿：那一下整筆撤回，下一次拿鎖 reset_model_budget 會清掉
     finally:
         _used(game)
+    if jobs and TALE_THREADS and game.client is not None:
+        write_flavor(game, jobs)
 
 
 def _refuse_while_paused(game: Game) -> None:
@@ -1350,6 +1356,55 @@ def narrate_once(game: Game) -> int | None:
             stories = {}
     with _locked(game):  # 補上了，等著補的單子就少了：推送的指紋跟著變，開著的分頁會更新
         return game.apply_battle_tales(request, stories)
+
+
+FLAVOR_OWNER = "§大事"  # 江湖大事潤色排隊用的名號（當成假人排、排在真人後面；不是任何一個角色）
+FLAVOR_BUDGET_SECONDS = 30.0  # 一件江湖大事潤色的總預算（鎖外；晚幾秒換上是可以的）
+
+
+def write_flavor(game: Game, jobs: list[FlavorJob]) -> bool:
+    """江湖大事的潤色（S-09）：開一個背景執行緒。A 鎖內觸發時記單子（world._fire → Game.take_flavor_jobs，固定的原文已經寫進紀錄）
+    → B 鎖外請模型（flavor.polish_world_event，預算 FLAVOR_BUDGET_SECONDS；排隊時當假人排）→ C 鎖內驗過才存進全服快取、
+    把這個人的那一則換掉（Game.apply_flavor；寫不出來就留著固定的原文）。呼叫端不能握著行動鎖。"""
+
+    def job() -> None:
+        for one in jobs:
+            try:
+                flavor_once(game, one)
+            except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，留著固定的原文
+                traceback.print_exc()
+
+    threading.Thread(target=job, name="event-flavor", daemon=True).start()
+    return True
+
+
+def flavor_once(game: Game, job: FlavorJob) -> bool:
+    """潤色一件（write_flavor 的那一圈；測試直接叫）：換上了回 True。呼叫端不能握著行動鎖。
+    全服快取裡已經有合格的句子（別人先潤色好）就直接套、不叫模型。"""
+    with _locked(game):
+        done = game.apply_flavor(job, "")
+        if done:
+            open_characters().save(game.state)
+    if done:
+        return True
+    started = _monotonic()
+
+    def ask() -> str:
+        return flavor.polish_world_event(within_budget(game.client, FLAVOR_BUDGET_SECONDS - (_monotonic() - started)), job.text)
+
+    if QUEUE is None:
+        text = ask()
+    else:
+        try:
+            text = QUEUE.run(FLAVOR_OWNER, ask, fallback="", bot=True, wait=FLAVOR_BUDGET_SECONDS)
+        except (Busy, QueueTimeout):
+            text = ""
+    if not text:
+        return False
+    with _locked(game):
+        done = game.apply_flavor(job, text)
+        open_characters().save(game.state)
+    return done
 
 
 LETTER_RUNNING: set[str] = set()  # 正在背景重寫書信的角色（一人一條；名號）

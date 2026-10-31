@@ -20,7 +20,7 @@ import server_push
 import webharness
 from conftest import at, season_one_events
 from tianxia import (
-    atlas, battle_instance, calendar, companion_agent, cultivation, database, fight_llm, fusion, insights, naming, renown, skillview, social,
+    atlas, battle_instance, calendar, companion_agent, cultivation, database, fight_llm, fusion, insights, journal, naming, renown, skillview, social,
     sqlite_world, tale, team,
 )
 from tianxia.accounts import NAME_TAKEN
@@ -5417,6 +5417,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     assert _users_in_server("QUEUE") == {None, "model_call", "main", "api_queue", "admin_choices", "narrate_once", "crowd_once",
                                          "letter_once", "yuedan_once", "chatter_once",  # chatter_once：酒肆鄰桌閒談，同 crowd_once 當假人排
                                          "xingshi_once",
+                                         "flavor_once",  # 江湖大事的潤色（S-09）：觸發那一下寫固定的原文，放鎖之後背景請模型，當假人排，名號 FLAVOR_OWNER
                                          "narration_round",  # 事件旁白每週改寫（減法季批 10）：背景一則一則，當假人排，名號 NARRATION_KEY
                                          "verdict_text",  # 人物評曰（減法季批 7b-2）：zhuan_job 寫完正文後在鎖外逐條叫，當假人排在真人後面
                                          "tale_round"}  # 戰記（Joy 2026-10-29）：決戰收場後在背景寫一篇，當假人排，名號 TALE_OWNER_KEY
@@ -5425,6 +5426,57 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         if re.search(r"^\s*(import|from)\s+llm_queue\b", p.read_text(encoding="utf-8"), re.M)
     ]
     assert importers == []
+
+
+def _fire_an_event(g):
+    """觸發一件不收季、不開戰的江湖大事（huangjin_50），跟引擎各處一樣把潤色單子交給 _flavor_sink。"""
+    from tianxia import world as world_rules
+    return world_rules.fire_by_id(g.state, g.content, "huangjin_50", g.world, g._flavor_sink(), now=g.now)
+
+
+def test_a_world_event_is_written_plain_in_the_lock_and_polished_after(game, monkeypatch):
+    """S-09：觸發江湖大事的那一下鎖內不叫模型，先寫固定的原文；放鎖之後才請模型潤色（背景執行緒，這裡直接叫 flavor_once），
+    寫回時存進全服快取、把這個人江湖紀錄裡的那一則換掉。"""
+    from tianxia import flavor
+    game.client = OllamaClient.from_config(server.CONTENT.config)
+    calls = []
+
+    def polish(client, text):
+        calls.append(open_world().db.writing())
+        return "城頭的旗幟在風裡獵獵作響。"
+
+    monkeypatch.setattr(flavor, "polish_world_event", polish)
+    queued = []
+    monkeypatch.setattr(server, "TALE_THREADS", True)
+    monkeypatch.setattr(server, "write_flavor", lambda g, jobs: queued.extend(jobs))
+    text = server.CONTENT.scenario.thresholds[[t.id for t in server.CONTENT.scenario.thresholds].index("huangjin_50")].text
+
+    def action(g):
+        msgs = g._log(_fire_an_event(g) or [])
+        g.state.journal.insert(0, journal.news_entry(g.state.world.time, msgs))
+        return msgs
+
+    msgs = server.act(game, action)
+    assert msgs[0] == f"【江湖大事】{text}"  # 鎖內只寫原文
+    assert calls == [] and queued == [flavor.FlavorJob("huangjin_50", text)]
+    assert server.flavor_once(game, queued[0])
+    assert calls == [False]  # 模型在鎖外
+    assert game.world.get_event_flavor("huangjin_50") == "城頭的旗幟在風裡獵獵作響。"
+    saved = open_characters().load(game.state.player.name)
+    assert f"{text}\n\n城頭的旗幟在風裡獵獵作響。" in [saved.journal[0].tag, *saved.journal[0].lines]
+    assert text not in [saved.journal[0].tag, *saved.journal[0].lines]  # 固定的原文換掉了
+    assert f"【江湖大事】{text}\n\n城頭的旗幟在風裡獵獵作響。" in saved.log
+    assert server.flavor_once(game, queued[0]) and calls == [False]  # 快取裡有了：不再叫模型
+
+
+def test_a_world_event_without_a_client_queues_nothing(game, monkeypatch):
+    """沒有 client（伺服器假人的 Game）：一張潤色單子都不記、一個模型都不叫，原文照寫。"""
+    game.client = None
+    monkeypatch.setattr(server, "TALE_THREADS", True)
+    queued = []
+    monkeypatch.setattr(server, "write_flavor", lambda g, jobs: queued.extend(jobs))
+    msgs = server.act(game, _fire_an_event)
+    assert msgs and msgs[0].startswith("【江湖大事】") and queued == []
 
 
 def test_in_lock_model_calls_and_the_scheduler_never_wait_in_the_queue(game, monkeypatch):
