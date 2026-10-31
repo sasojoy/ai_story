@@ -423,12 +423,33 @@ def test_the_base_is_develop_unless_the_env_or_the_flag_says_otherwise(monkeypat
     assert "origin/develop" in first and "--base" in first
 
 
-def test_a_base_that_was_never_fetched_is_called_out(monkeypatch, capsys):
-    """這份 clone 的 git fetch origin 不更新 feature/*、dev/*：沒明確 fetch 的 base 找不到，挑法悄悄變成「沒有差異」。
-    第一行直接說找不到、怎麼 fetch。"""
+def test_a_base_that_was_never_fetched_stops_before_picking(monkeypatch, capsys):
+    """這份 clone 的 git fetch origin 不更新 feature/*、dev/*：沒明確 fetch 的 base 找不到分岔點，挑法就不準——不給檔名
+    只剩還沒提交的改動，給了檔名整個檔當新檔（10/31 審查：models.py 挑到 347 個檔、結束碼 0）。第一行說找不到、
+    怎麼 fetch，然後停下、結束碼 2，一個檔都不挑、不跑。"""
     monkeypatch.delenv("TIANXIA_TEST_BASE", raising=False)
-    first = _first_line(capsys, ["tests/arts/test_fusion.py", "--list", "--base", "origin/feature/no-such-branch-1031"])
-    assert "找不到" in first and "+refs/heads/feature/no-such-branch-1031:refs/remotes/origin/feature/no-such-branch-1031" in first
+    fetch = "git fetch origin +refs/heads/feature/no-such-branch-1031:refs/remotes/origin/feature/no-such-branch-1031"
+    for argv in (["--list"], ["tianxia/models.py", "--list"], ["tianxia/models.py", "--count"], ["tests/arts/test_fusion.py"]):
+        assert test_for.main([*argv, "--base", "origin/feature/no-such-branch-1031"]) == 2, argv
+        out = capsys.readouterr().out
+        first = out.splitlines()[0]
+        assert "找不到" in first and fetch in first and "挑不到" not in first, argv
+        assert "要跑（" not in out and "一共" not in out and "結束碼 2" in out, argv
+
+
+def test_a_base_without_a_fork_point_also_stops(monkeypatch, capsys):
+    """base 在、可是跟 HEAD 沒有共同的祖先：一樣沒有分岔點可比，一樣停下。"""
+    import subprocess
+    real = test_for._git
+
+    def no_fork(*args):
+        return subprocess.CompletedProcess(args, 1, "", "") if args[0] == "merge-base" else real(*args)
+
+    monkeypatch.setattr(test_for, "_git", no_fork)
+    monkeypatch.delenv("TIANXIA_TEST_BASE", raising=False)
+    assert test_for.main(["tianxia/models.py", "--list"]) == 2
+    out = capsys.readouterr().out
+    assert "沒有共同的祖先" in out.splitlines()[0] and "要跑（" not in out
 
 
 def test_describe_says_what_the_core_tests_are():

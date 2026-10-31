@@ -42,7 +42,7 @@
 - pyproject.toml、requirements*.txt：不挑（整套留給每日整套）。docs/、CLAUDE.md 這類文件：不跑。
 slow 不自動跟（--slow 才加，連核心測試的 slow 一起）：挑到的檔整個標 slow 的，開跑前列出來；全被 slow 濾光、一條都沒跑時
 說要 --slow、結束碼 0（不是 pytest 的 5）。挑到三個檔以上預設 -n 4（不寫 auto：同一台常有別的代理在跑），
--- 之後給了 -n 就照給的。"""
+-- 之後給了 -n 就照給的。跟 base 找不到分岔點（沒明確 fetch 的 feature/*、dev/*）：第一行說怎麼 fetch，停下、結束碼 2。"""
 from __future__ import annotations
 
 import argparse
@@ -163,19 +163,26 @@ def default_base() -> str:
     return os.environ.get(BASE_ENV, "").strip() or DEFAULT_BASE
 
 
-def base_line(base: str, source: str) -> str:
-    """--list（與每一次）的第一行：這一次跟哪個 base 比、從哪裡來的、分岔點；找不到那條分支就直說怎麼 fetch
-    （這份 clone 的 git fetch origin 不更新 feature/*、dev/*，沒抓過的 base 會讓挑法悄悄變成「沒有差異」）。"""
+def base_line(base: str, source: str) -> tuple[str, bool]:
+    """（--list 與每一次的第一行, 有沒有分岔點）。第一行寫這一次跟哪個 base 比、從哪裡來的、分岔點；找不到那條分支就直說
+    怎麼 fetch（這份 clone 的 git fetch origin 不更新 feature/*、dev/*）。沒有分岔點的 main 停下不挑（NO_FORK）。"""
     mb = _git("merge-base", base, "HEAD")
     if mb.returncode == 0 and mb.stdout.strip():
-        return f"跟 {base} 比（{source}；分岔點 {mb.stdout.strip()[:8]}）"
+        return f"跟 {base} 比（{source}；分岔點 {mb.stdout.strip()[:8]}）", True
     if _git("rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").returncode != 0:
         how = ""
         if base.startswith("origin/"):
             branch = base.removeprefix("origin/")
             how = f"，先明確 fetch：git fetch origin +refs/heads/{branch}:refs/remotes/origin/{branch}"
-        return f"跟 {base} 比（{source}）：找不到這條分支{how}（不然挑不到這條分支上的改動）"
-    return f"跟 {base} 比（{source}）：跟 HEAD 沒有共同的祖先"
+        return f"跟 {base} 比（{source}）：找不到這條分支{how}", False
+    return f"跟 {base} 比（{source}）：跟 HEAD 沒有共同的祖先", False
+
+
+# 跟 base 沒有分岔點時挑法不準（10/31 審查）：不給檔名，git diff base...HEAD 失敗、只剩還沒提交的改動；給了檔名，拿不到舊版、
+# 整個檔當成新檔（models.py 挑到 347 個檔）。兩種都停下、不挑不跑，結束碼 NO_FORK_EXIT。
+NO_FORK = ("沒有分岔點就算不出這條分支改了什麼（不給檔名只剩還沒提交的改動；給了檔名整個檔都當新的，挑到幾百個檔），"
+           "所以停下、一條都不跑（結束碼 2）。fetch 好再跑、換 --base，或用 --all 跑整套。")
+NO_FORK_EXIT = 2
 
 
 def changed_files(base: str | None = None) -> list[str]:
@@ -951,7 +958,11 @@ def main(argv: list[str] | None = None) -> int:
     else:
         base = args.base or default_base()
         source = "--base" if args.base else (BASE_ENV if os.environ.get(BASE_ENV, "").strip() else "預設")
-        print(base_line(base, source), flush=True)
+        line, forked = base_line(base, source)
+        print(line, flush=True)
+        if not forked:
+            print(NO_FORK, flush=True)
+            return NO_FORK_EXIT
         chosen = pick(args.files or changed_files(base), base=base)
     if chosen.empty:
         print("這些改動挑不到要跑的測試（為什麼寫在下面）。要跑整套用 --all。")
