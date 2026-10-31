@@ -17,7 +17,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 NAMES_START = 'wholeApp(["S", '
 assert PROLOGUE_DRIVER.count(NAMES_START) == 1
 DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "shopHtml", "renderShop", "shopPolled", "tavDo", ')
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[4]  # tianxia/features/tavern/tests/ 往上四層（主動搬六包第 10 批從 tests/web/ 搬進包）
 
 
 def run(m, script, S=None, responses=None):
