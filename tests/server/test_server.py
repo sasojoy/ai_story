@@ -225,7 +225,7 @@ def test_main_view_has_everything_the_page_draws(game):
     assert view["free_text"] is None
     assert view["free_text_note"] is None
     assert view["card"] is None
-    assert view["minimap"].startswith("<svg")
+    assert "minimap" not in view  # 網頁不畫了，不送（全面自檢 S-07）
     assert view["admin"] is False
 
 
