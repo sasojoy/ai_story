@@ -450,6 +450,7 @@ def card(state: GameState, content: Content, plan: Plan, *, when: str, minutes: 
         "head": CARD_HEAD.format(name=name),
         "text": _fill(st.contest.announce, content, plan.who, plan.place),
         "place": _place(content, plan.place),
+        "location": plan.place,  # 「去宛城 ›」直接把輿圖開在那一處（Joy 2026-10-31）
         "when": when,
         "minutes": minutes,
         "help": len(plan.helpers),

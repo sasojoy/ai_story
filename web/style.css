@@ -1203,6 +1203,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mv-side { flex: none; width: 17px; height: 17px; border-radius: 2px; font: 700 11px/17px var(--kai); color: #f4ecdc; text-align: center; text-shadow: none; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25); opacity: 0.9; }
 .mv-rich { flex: none; width: 17px; height: 17px; border-radius: 50%; background: var(--mv-red); color: #f4ecdc; font: 700 10px/17px var(--kai); text-align: center; text-shadow: none; }
 .mv-wk { flex: none; padding: 0 4px; border-radius: 2px; background: #c8961e; color: #fffaf0; font: 700 10.5px/16px var(--serif); text-shadow: none; }
+.mv-wk.leg { background: #a8321f; } /* 護糧那種兩點：下一站、終點（朱紅） */
 .mv-bar { display: block; height: 3px; margin-top: 2px; border-radius: 2px; background: #d8cdb4; overflow: hidden; }
 .mv-bar i { display: block; height: 100%; }
 /* 山河名、大區名與各方幾處（遠看那一段） */
