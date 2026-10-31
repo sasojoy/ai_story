@@ -647,6 +647,10 @@
     if (!d || !box) return;
     const px = mapDrawerPx(h), was = d.style.height;
     d.style.height = `${px}px`;
+    // 收回底條那一行（或一排卡那一格）：抽屜捲回頂上，底條（本週、可出陣）才露得出來（W2 審查 2026-10-31：全開捲到下面再收回、點了一處往下捲卡
+    // 再收回〔mapBack 整塊換掉〕，scrollTop 照留，那一行露的是底下那一段）。一行那一格一律回頂；一排卡那一格是換過來的才回（停在那一格往下捲的照留）
+    const body = document.getElementById("mbody");
+    if (body && drawerStops().includes("row") && (h === "peek" || (h === "row" && was !== d.style.height))) body.scrollTop = 0;
     // 露出來的那一塊變了：箭頭牌、名字照新的底邊重排（拖縮中不排，停下來那一次會排）
     if (was && was !== d.style.height && S.mapCam && !mvBusy()) marksSoon();
     // 右下兩顆圓鈕跟著抽屜上下（直接寫在那一塊上：寫在框上的自訂屬性會一路繼承，整棵地圖重算樣式，FB-322）
@@ -910,8 +914,11 @@
   // 「可出陣 N ›」（按了＝抽屜拉到一排卡那一格、那一排只列可出陣的，mapSortie）。沒有本週寫「本週沒有軍令」；一處都不能出陣不寫右邊那一顆。
   // 窄螢幕（< 360）軍令只留第一個詞（其餘包在 .m-tray-more，style.css 藏起來）、字縮。在路上那一行（在路上 → 地名、沿路做小事）是 W3 的：
   // 在路上照 Joy 的（往哪裡、喊停＋沿路能去那一排），不畫底條
+  // N＝按下去那一排的張數：那一排（nearList）不列你腳下那一處（腳下的卡接在後面），N 也不算它（W2 審查 2026-10-31：站在自己也能出陣的地方，
+  // 以前寫「可出陣 8 ›」、按下去只有 7 張）
   function trayHtml(base, st) {
-    const wk = nearWeek(st), wp = wk && placeOf(base, wk.id), n = Object.values(st.places).filter((q) => q.sortie).length;
+    const wk = nearWeek(st), wp = wk && placeOf(base, wk.id), here = st.journey ? null : st.here;
+    const n = Object.entries(st.places).filter(([id, q]) => q.sortie && id !== here && q.minutes !== null && q.minutes !== undefined).length;
     let left = `<span class="m-tray-none">${MV_LOOK.noWeek}</span>`;
     if (wp) {
       const parts = String(wk.why || "").split("・").filter(Boolean), body = parts.length > 1 ? parts.slice(1) : parts;
@@ -1179,7 +1186,7 @@
   }
   // 名字框（設計第七章：照估的字寬加 15% 餘裕）：名字（大地方 16px、其餘 14px、一定要寫而讓不開時縮到 11px）＋近景兩步內的「N 分」（11px，
   // 跟名字隔 3px）＋護糧的「下一站」「終點」字條（46px）。[寬, 高]
-  const MV_LAB_ROOM = 1.15, MV_LAB_SMALL = 11, MV_LEG_W = 46;
+  const MV_LAB_ROOM = 1.15, MV_LAB_SMALL = 11, MV_LEG_W = 46, MV_RING_R = 22;
   // 地圖上（近、中景的名字、箭頭牌、底條）寫的地名：括號裡那一段不寫（照丙：「潁川郡（陽翟）」寫「潁川郡」；卡、找地點、遠看照舊寫全名）
   function mapLabel(b) {
     return String(b.name).replace(/（[^）]*）/g, "") || b.name;
@@ -1197,7 +1204,8 @@
   function hudBoxes(base, g, lvl, area) {
     if (S.mapMode === "timeline") return [];
     const room = mapRoom(g), fb = deskMap() ? g.vh - 16 : room.bottom - 12;
-    const out = [[8, 8, 10 + 40 + MV_LAB_ROOM * textW(area, 14), 46], [g.vw - 60, 6, g.vw - 10, 56], [g.vw - 60, fb - 104, g.vw - 10, fb + 2]];
+    // 區名 chip 畫出來 34 高（上 10），點擊範圍上下各撐開 4px（style.css 的 .mv-area::before，W2 審查 2026-10-31）：讓開撐開的那一塊
+    const out = [[8, 4, 10 + 40 + MV_LAB_ROOM * textW(area, 14), 50], [g.vw - 60, 6, g.vw - 10, 56], [g.vw - 60, fb - 104, g.vw - 10, fb + 2]];
     if (lvl > 0) { const [mw, mh] = miniSize(base, g); out.push([g.vw - 14 - mw, MV_MINI_TOP - 2, g.vw - 10, MV_MINI_TOP + mh + 2]); }
     return out;
   }
@@ -1218,7 +1226,9 @@
   // 箭頭牌（設計 2.1「箭頭牌」）：近景、沒點地點、不在路上時，腳下一步、小圖整個在露出來那一塊外面的，畫面邊上掛一顆墨色膠囊「‹ 洛陽官道 8分」：
   // 從你畫一條線到它、交在邊上那一圈的那一點，沿那一邊滑開到不壓小圖、別的牌、浮著的那幾樣（那一邊都擺不下才換別的邊）。按了＝點那一處。
   // blocked：已經佔掉的框（小圖、浮著的那幾樣）。回 [{ id, box, html }]
-  const MV_PILL_H = 24, MV_PILL_STEP = 4;
+  // 牌畫出來 24 高，點擊範圍上下各撐開 8px（style.css 的 .mv-pill::before，40 高；W2 審查 2026-10-31「觸控熱區不到 40px」）：排的時候照撐開的那一塊
+  // （MV_PILL_HIT）讓開別的牌、小圖、浮著的那幾樣，名字也讓開它，點下去不會點到隔壁
+  const MV_PILL_H = 24, MV_PILL_HIT = 40, MV_PILL_STEP = 4;
   function pillsLayout(base, st, c, g, lvl, blocked) {
     if (lvl !== 2 || S.mapMode !== "overview" || st.journey || !st.here) return [];
     const me = placeOf(base, st.here);
@@ -1231,7 +1241,7 @@
       const q = st.places[b.id], px = c.x + b.x * z, py = c.y + b.y * z;
       if (boxCross(pinBox(b, q, px, py, lvl, null), vis)) continue; // 小圖還露著一點：不掛
       const text = MV_LOOK.pill.replace("{name}", mapLabel(b)).replace("{n}", q.minutes !== null && q.minutes !== undefined ? Number(q.minutes) : "?");
-      const w = Math.ceil(MV_LAB_ROOM * textW(text, 12) + 30), h = MV_PILL_H;
+      const w = Math.ceil(MV_LAB_ROOM * textW(text, 12) + 30), h = MV_PILL_HIT;
       const dx = px - hx, dy = py - hy, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
       let t = Infinity;
       if (ux > 0) t = Math.min(t, (E[2] - hx) / ux);
@@ -1260,7 +1270,7 @@
       if (!box) continue;
       taken.push(box);
       const arrow = side === "l" ? "‹" : side === "r" ? "›" : side === "t" ? "︿" : "﹀", pre = side === "r" ? "" : `<b aria-hidden="true">${arrow}</b>`;
-      out.push({ id: b.id, box, html: `<button type="button" class="mv-pill" style="left:${f1(box[0])}px;top:${f1(box[1])}px;width:${w}px" data-act="map-place" data-id="${esc(b.id)}" aria-label="${esc(b.name)}">`
+      out.push({ id: b.id, box, html: `<button type="button" class="mv-pill" style="left:${f1(box[0])}px;top:${f1(box[1] + (MV_PILL_HIT - MV_PILL_H) / 2)}px;width:${w}px" data-act="map-place" data-id="${esc(b.id)}" aria-label="${esc(b.name)}">`
         + `${pre}<span>${esc(text)}</span>${side === "r" ? `<b aria-hidden="true">${arrow}</b>` : ""}</button>` });
     }
     return out;
@@ -1297,9 +1307,11 @@
   function marksHtml(base, st, c, g) {
     return mvLayout(base, st, c, g).html;
   }
-  // 遠看（照 Joy 的，沒有動）：大區名＋各方幾處（地面已經照歸屬上色）、地點是一顆照誰佔著上色的點；你在的、選的、本週要去的、護糧的終點
-  // （篩選開著時篩到的）寫名字，底下一行；戰書、本週是名字後的字條。名字撞在一起時優先序：選的、滑到的、你在的、本週要去的、篩到的、要地、近的；
-  // 位置試四個（下、右、左、上），都壓到就不寫（選的、你在的、終點照寫）
+  // 遠看（照 Joy 的）：大區名＋各方幾處（地面已經照歸屬上色）、地點是一顆照誰佔著上色的點；你在的、選的、本週要去的（篩選開著時篩到的）
+  // 寫名字，底下一行；戰書、本週是名字後的字條。名字撞在一起時優先序：選的、滑到的、你在的、本週要去的、篩到的、要地、近的；位置試四個
+  // （下、右、左、上），都壓到就不寫（選的、你在的照寫）。比 Joy 的多一樣（W2 Task 0 合 Joy 的「去輿圖帶終點」3d9b6161 時加的）：護糧的終點
+  // 照寫名字（後面接「終點」；Joy 的遠景只掛圈、不寫名字）——Joy 的那一條測試在大框裡畫，W2 的門檻照 Z0 算之後落在遠景；遠景寫不寫終點請 PM 定
+  // （W2 審查 2026-10-31）
   function marksFar(base, st, c, g, scr, ctrl, live) {
     const out = [], boxes = [];
     const sel = S.mapSel, prev = S.mapMode === "overview" ? S.mapPreview : null, wk = nearWeek(st), here = st.journey ? null : st.here;
@@ -1390,9 +1402,16 @@
       const o = { near: lvl === 2, here: isHere, week: isWk, fight: live && (!!tugOf(st, b.id, ctl) || !!q.melee || q.siege === "fight"), dim };
       out.push(pinHtml(b, x, y, dim, lvl));
       out.push(badgesHtml(q, x, y, o));
-      const box = pinBox(b, q, x, y, lvl, o);
+      let box = pinBox(b, q, x, y, lvl, o);
       boxes.push(box);
-      if (isSel || isEnd) { out.push(`<i class="mv-ring" style="left:${f1(x)}px;top:${f1(y)}px;--r:22px"></i>`); boxes.push([x - 22, y - 22, x + 22, y + 22]); }
+      // 選的、終點那一圈也佔位（別的名字讓開它），它自己的名字從圈外擺起：名字的位置貼著小圖連圈的外框（W2 審查 2026-10-31：以前貼著小圖擺、
+      // 八個位置全落在自己那一圈裡，選中的名字每一次都縮成 11px、多半還拉線）
+      if (isSel || isEnd) {
+        const R = MV_RING_R, ring = [x - R, y - R, x + R, y + R];
+        out.push(`<i class="mv-ring" style="left:${f1(x)}px;top:${f1(y)}px;--r:${R}px"></i>`);
+        boxes.push(ring);
+        box = [Math.min(box[0], ring[0]), Math.min(box[1], ring[1]), Math.max(box[2], ring[2]), Math.max(box[3], ring[3])];
+      }
       if (live && (q.melee || q.siege === "fight")) { out.push(`<i class="mv-fight" style="left:${f1(x)}px;top:${f1(y)}px"></i>`); boxes.push([x - 20, y - 20, x + 20, y + 20]); }
       items.push({ b, q, x, y, ctl, isHere, isSel, isWk, isEnd, on, box });
     }

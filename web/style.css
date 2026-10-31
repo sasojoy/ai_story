@@ -1252,6 +1252,11 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mv-pill { position: absolute; height: 24px; padding: 0 6px; border-radius: 12px; border: 1px solid rgb(255 255 255 / 0.25); background: rgb(42 35 28 / 0.86);
   color: #f4f1e8; font: 700 12px/22px var(--sans); white-space: nowrap; box-sizing: border-box; text-align: center; cursor: pointer; }
 .mv-pill b { color: #f0a640; margin: 0 3px; }
+/* 點得到（W2 審查 2026-10-31：chip 34 高、箭頭牌 24 高，手指不好點）：樣子照丙，點擊範圍用 ::before 上下撐開——chip 42、箭頭牌 40
+   （map.js 排的時候照撐開的那一塊讓開：hudBoxes、MV_PILL_HIT） */
+.mv-area::before, .mv-pill::before { content: ""; position: absolute; left: 0; right: 0; }
+.mv-area::before { top: -4px; bottom: -4px; }
+.mv-pill::before { top: -8px; bottom: -8px; }
 .mapx.tl-mode .mv-hud { display: none; } /* 版圖變化：那一排收起，抽屜上面整塊給地圖（同 FB-261） */
 .mv-chips { display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px 4px; scrollbar-width: none; }
 .mv-chips::-webkit-scrollbar { display: none; }
@@ -1302,14 +1307,15 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .m-peek-end { display: block; height: 0; }
 /* 底條（輿圖表現第二版 W2）：抽屜收著的那一行——「本週」章＋地名＋軍令內容＋步行 N 分（按了點那一處）｜右邊朱字「可出陣 N ›」（按了拉到一排卡、
    只列可出陣的）。窄螢幕（< 360）軍令只留第一個詞、字縮 */
-.m-tray { display: flex; align-items: center; gap: 10px; min-height: 30px; padding: 0 0 8px; font: 500 13px var(--sans); }
-.m-tray-wk { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 4px 0; border: 0; background: none; color: var(--ink); font: inherit;
+/* 「本週」與「可出陣 N ›」本身 40 高，手指點得到（W2 審查 2026-10-31：以前 25～29；那一行多 4px） */
+.m-tray { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 0 2px; font: 500 13px var(--sans); }
+.m-tray-wk { flex: 1; min-width: 0; min-height: 40px; display: flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--ink); font: inherit;
   text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; }
 .m-tray-tag { flex: none; padding: 1px 5px; border-radius: 3px; background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 700; }
 .m-tray-wk b { flex: none; font: 700 15px var(--serif); }
 .m-tray-sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2); }
 .m-tray-none { flex: 1; min-width: 0; padding: 4px 0; color: var(--ink-2); }
-.m-tray-go { flex: none; margin-left: auto; padding: 4px 0; border: 0; background: none; color: var(--accent); font: 700 13px var(--sans); cursor: pointer; white-space: nowrap; }
+.m-tray-go { flex: none; margin-left: auto; min-height: 40px; padding: 0; border: 0; background: none; color: var(--accent); font: 700 13px var(--sans); cursor: pointer; white-space: nowrap; }
 .m-tray-end { display: block; height: 0; }
 @media (max-width: 359px) {
   .m-tray { gap: 6px; font-size: 12px; }
