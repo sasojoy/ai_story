@@ -5758,6 +5758,9 @@
         case "map-region": mapBack(); mapRegionFly(el.dataset.id); break; // 找地點的「跳到大區」：收起那一頁，飛過去
         case "map-filter": mapFilter(el.dataset.id); break; // 上面那一排標籤（再按一次回全部）
         case "map-search": mapFind(); break;
+        case "map-area": mapFind(true); break; // 左上的區名 chip：開找地點那一頁、捲到「跳到大區」（輿圖表現第二版 2.1 HUD）
+        case "map-mini": mapMini(el, ev); break; // 右上的小地圖：中心移到點的那一帶、倍率不變
+        case "map-sortie": mapSortie(); break; // 底條的「可出陣 N ›」：抽屜拉到一排卡、只列可出陣的
         case "map-open": mapOpen(); break;
         case "map-back": mapBack(); break;
         case "map-letter": { // 卡上的「下戰書」（設計 4.4）：先問一次，再照伺服器的入口條件下（Game.conquest_letter）

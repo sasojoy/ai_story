@@ -24,7 +24,9 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 NAMES = ["S", "pageMap", "controlAt", "drawerHtml", "placeCard", "cardExtras", "searchHtml", "searchResults", "timelineHtml", "graphSvg",
          "chartHtml", "mapDrawerPx", "setMapDrawer", "insightRow", "redrawDrawer", "journeyHtml", "nearHtml", "nearList", "chipList", "chipsHtml",
          "mapFilter", "marksHtml", "groundSvg", "camClamp", "camFit", "zMin", "mapPick", "mapBack", "mapFind", "routeD", "camSet", "mapFirst",
-         "groundShow", "landAt", "mapLand", "mvDown", "mvUp", "mvMove", "mvWheel", "camFly", "drawMarks", "mv", "mapGoto", "camFirst", "planHtml"]
+         "groundShow", "landAt", "mapLand", "mvDown", "mvUp", "mvMove", "mvWheel", "camFly", "drawMarks", "mv", "mapGoto", "camFirst", "planHtml",
+         "camOpen", "camAt", "mapRoom", "mvZ0", "mvLevel", "mvLayout", "mvArea", "miniHtml", "mapMini", "mapHome", "mapFit", "drawerStops", "drawerTap",
+         "mapStop", "mapSortie"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 APP = webharness.APP  # 三個檔（main.js、map.js、app.js）接起來的那一份
 # 一個夠大的地圖框：整張天下都在「畫面附近」，字一處都不會因為在畫面外被略過
@@ -63,17 +65,19 @@ def _lab(out, loc):
 
 # ── 整頁 ──
 def test_the_map_page_is_one_world_with_floating_search_chips_buttons_and_a_drawer():
-    """整頁一層：地圖框裡一張天下（#mvw：地面 #mk、路線 #mkr，大小是地圖本身的寬高）與照螢幕寫的字那一層（#mkt）；外面浮著搜尋列、
-    篩選、回到我與看整張兩顆、抽屜。以前三張圖的上面那一排（‹ 天下、大區、看大局）都沒有了。
-    輿圖表現第二版 W1：地常駐，「塗層」那一顆拿掉了；地（#mk）是一張向量的 SVG（不再是點陣）。"""
+    """整頁一層：地圖框裡一張天下（#mvw：地面 #mk、路線 #mkr，大小是地圖本身的寬高）與照螢幕寫的字那一層（#mkt）；外面浮著
+    回到我與看整張兩顆、抽屜。以前三張圖的上面那一排（‹ 天下、大區、看大局）都沒有了。
+    輿圖表現第二版 W1：地常駐，「塗層」那一顆拿掉了；地（#mk）是一張向量的 SVG（不再是點陣）。
+    W2：上面的搜尋列與篩選那一排（.mv-top）換成左上區名 chip＋右上 🔍 圓鈕、小地圖與箭頭牌的位子（#mv-hud）；篩選籤與 ⏱ 版圖 W3 搬進 🔍 那一頁。"""
     game = _game()
     out = run(game, "return H.pageMap();")
     b = game.map_base()
     assert f'<div class="mv-world" id="mvw" style="width:{b["w"]}px;height:{b["h"]}px">' in out
     assert 'id="mk"' in out and 'id="mkr"' in out and 'class="mv-marks" id="mkt"' in out and 'id="mdrawer"' in out
     assert f'<svg class="mv-ground" id="mk" width="{b["w"]}" height="{b["h"]}" viewBox="0 0 {b["w"]} {b["h"]}"' in out and "<canvas" not in out
-    assert 'data-act="map-search"' in out and 'id="mv-chips"' in out and 'data-act="map-home"' in out and 'data-act="map-fit"' in out
-    assert 'data-act="map-timeline"' in out and 'data-act="map-wash"' not in out and "塗層" not in out
+    assert 'data-act="map-search"' in out and 'data-act="map-home"' in out and 'data-act="map-fit"' in out
+    assert 'class="mv-hud" id="mv-hud"' in out and 'data-act="map-area"' in out and 'id="mv-mini"' in out and 'id="mv-pills"' in out
+    assert 'class="mv-top"' not in out and 'id="mv-chips"' not in out and 'data-act="map-wash"' not in out and "塗層" not in out
     assert 'id="mv-find"' not in out  # 找地點那一頁開著才畫
     for gone in ("r-top", "w-top", "world-enter", "region-go", "map-world", "map-full", "map-ctl", "map-legend"):
         assert gone not in out, gone
@@ -215,10 +219,13 @@ def test_middle_distance_shows_icons_names_and_badges():
 
 
 def test_close_up_names_are_only_names():
-    """近看（輿圖表現第二版 W1）：名字只有名字——分鐘・多半・勝算那一行、悟字都在抽屜的卡與一排卡裡，不畫在圖上。"""
+    """近看（輿圖表現第二版 W1）：名字只有名字——分鐘・多半・勝算那一行、悟字都在抽屜的卡與一排卡裡，不畫在圖上。
+    W2：兩步內的名字後面接一小段「N 分」（設計 2.1「名字」；長社離潁川郡兩步）。"""
     game = _game()
     out = marks(game, 2)
-    assert _lab(out, "changshe") and "<small>" not in _lab(out, "changshe") and 'class="ins"' not in out
+    minutes = game.map_state()["places"]["changshe"]["minutes"]
+    lab = _lab(out, "changshe")
+    assert lab and "<small>" not in lab and f'<small class="mv-min">{minutes} 分</small>' in lab and 'class="ins"' not in out
 
 
 def test_the_selected_place_gets_a_ring_a_route_and_a_minutes_bubble():
@@ -236,7 +243,7 @@ def test_names_never_overlap():
     game = _game()
     for z in (1, 1.6, 2.4):
         out = run(game, f"""const html = H.marksHtml(H.S.mapBase, H.S.mapState, {{ z: {z}, x: 0, y: 0 }}, {WIDE});
-return [...html.matchAll(/class="mv-lab[^"]*" style="left:([-\\d.]+)px;top:([-\\d.]+)px" data-act="map-place" data-id="([^"]+)"/g)].map((m) => [m[3], +m[1], +m[2]]);""")
+return [...html.matchAll(/class="mv-lab[^"]*" style="left:([-\\d.]+)px;top:([-\\d.]+)px[^"]*" data-act="map-place" data-id="([^"]+)"/g)].map((m) => [m[3], +m[1], +m[2]]);""")  # W2 的名字在 style 上多寫框寬
         assert len(out) > 10
         spots = {(round(x), round(y)) for _, x, y in out}
         assert len(spots) == len(out), z  # 沒有兩個名字擺在同一點
@@ -446,7 +453,8 @@ def test_w1_where_a_round_patch_overlaps_a_block_the_round_patch_wins():
 
 @pytest.mark.parametrize("z", [1, 2])
 def test_w1_near_and_middle_names_have_no_seal_line_bar_or_insight(z):
-    """近、中景：名字只有名字——沒有官／巾小印（.mv-side）、名字後的「寶」「戰」「本週」字條、名字底下那一行、進度條（.mv-bar）、悟字（.ins）。"""
+    """近、中景：名字只有名字——沒有官／巾小印（.mv-side）、名字後的「寶」「戰」「本週」字條、名字底下那一行、進度條（.mv-bar）、悟字（.ins）。
+    W2：近景兩步內的名字後面接一小段「N 分」（.mv-min，設計 2.1「名字」），只有它。"""
     game = _game(profile="season21")
     st = game.map_state()
     st["places"]["yingchuan_wilds"]["tug"] = {"huang": 40}  # 以前會畫進度條
@@ -455,8 +463,11 @@ def test_w1_near_and_middle_names_have_no_seal_line_bar_or_insight(z):
     out = marks(game, z, st=st)
     for gone in ('class="mv-side"', 'class="mv-bar"', 'class="ins"', 'class="mv-rich"', 'class="mv-wk"', "<small>"):
         assert gone not in out, gone
-    labs = re.findall(r'<button type="button" class="mv-lab[^"]*"[^>]*>(.*?)</button>', out)
-    assert len(labs) > 10 and all(re.fullmatch(r'<span class="t"><span class="nm">[^<]+</span></span>', x) for x in labs)
+    labs = re.findall(r'<button type="button" class="mv-lab[^"]*"[^>]*data-id="([^"]+)">(.*?)</button>', out)
+    near = z == 2  # 這一條用的大地圖框：Z0＝480／250，z＝2 是近景、1 是中景
+    hops = _hops(game.map_base(), st["here"])
+    assert len(labs) > 10 and all(re.fullmatch(r'<span class="t"><span class="nm">[^<]+(<small class="mv-min">\d+ 分</small>)?</span></span>', x) for _, x in labs)
+    assert all(("mv-min" in x) == (near and 0 < hops[pid] <= 2) for pid, x in labs)
 
 
 def test_w1_every_icon_but_yours_wears_its_danger():
@@ -853,7 +864,7 @@ const wait = () => new Promise((r) => setTimeout(r, 360));
 const look = () => [H.S.mapMode, H.S.mapSel, H.S.mapDrawer, body.innerHTML.includes('m-cards'), els.mkr.innerHTML];
 const under = ([x, y]) => [(x - H.S.mapCam.x) / H.S.mapCam.z, (y - H.S.mapCam.y) / H.S.mapCam.z];
 return (async () => {{
-  H.camSet({{ z: 1.6, x: 10 - {p['x']} * 1.6, y: 400 - {p['y']} * 1.6 }}); H.mapBack(); settle();
+  H.camSet({{ z: 1.2, x: 10 - {p['x']} * 1.2, y: 400 - {p['y']} * 1.2 }}); H.mapBack(); settle();
   const pinX = H.S.mapCam.x + {p['x']} * H.S.mapCam.z, z0 = H.S.mapCam.z, before = look();
   const finger = tapAt(1, {spot[0]}, {spot[1]}); await gap(); tapAt(2, {spot[0]}, {spot[1]}); settle(); await wait(); settle();
   const zoomed = {{ look: look(), z: H.S.mapCam.z, under: under(finger) }};
@@ -867,9 +878,10 @@ return (async () => {{
   await wait(); settle();
   return {{ pinX, z0, before, zoomed, open, kept, pending, single: look() }};
 }})();""")
-    assert out["pinX"] < 30 and out["z0"] == 1.6  # 長社的小圖在畫面左緣（以前第一下會 mvNudge 飛一下）
+    # 從 1.2 放大兩倍到 2.4（W2：最大是 Z0 × zoom_max，375 寬的框是 1.5 × 1.6＝2.4；以前從 1.6 放到 3.2）
+    assert out["pinX"] < 30 and out["z0"] == 1.2  # 長社的小圖在畫面左緣（以前第一下會 mvNudge 飛一下）
     assert out["before"] == ["overview", None, "peek", True, ""]
-    assert out["zoomed"]["look"] == out["before"] and out["zoomed"]["z"] == 3.2
+    assert out["zoomed"]["look"] == out["before"] and out["zoomed"]["z"] == pytest.approx(2.4)
     assert out["zoomed"]["under"] == pytest.approx(list(spot), abs=0.5)
     assert out["kept"] == out["open"] and out["open"][:2] == ["place", "yingchuan"]
     assert out["pending"] == out["before"]  # 點一下：還在等第二下
@@ -904,13 +916,14 @@ return (async () => {
 
 # ── 看哪裡 ──
 def test_the_camera_is_clamped_between_the_whole_world_and_three_times():
-    """倍率在「整張天下放得下」到 3.2 倍之間；圖比畫面大時拖到最遠，圖的邊貼著畫面的邊（不露出圖外，Joy 10/30「滑到邊邊會破圖」）。"""
+    """倍率在「整張天下放得下」到 Z0 × zoom_max 之間（W2；以前是 3.2 倍：390 寬的框 Z0＝390／250，乘 1.6）；圖比畫面大時拖到最遠，
+    圖的邊貼著畫面的邊（不露出圖外，Joy 10/30「滑到邊邊會破圖」）。"""
     out = run(_game(), f"""const g = {{ vw: 390, vh: 700 }};
 const lo = H.zMin(g), small = H.camClamp({{ z: 0.01, x: 0, y: 0 }}, g), big = H.camClamp({{ z: 99, x: 0, y: 0 }}, g);
 const far = H.camClamp({{ z: 1, x: 99999, y: 99999 }}, g), fit = H.camFit(g);
 const back = H.camClamp({{ z: 1, x: -99999, y: -99999 }}, g);
 return {{ lo, small: small.z, big: big.z, farLeft: far.x, farRight: back.x + H.S.mapBase.w * back.z, fitZ: fit.z }};""")
-    assert out["small"] == out["lo"] == out["fitZ"] and out["big"] == 3.2 and 0 < out["lo"] < 1
+    assert out["small"] == out["lo"] == out["fitZ"] and out["big"] == pytest.approx(390 / 250 * 1.6) and 0 < out["lo"] < 1
     assert out["farLeft"] == 0 and out["farRight"] == 390  # 左邊、右邊都貼著畫面的邊
 
 
@@ -1103,17 +1116,20 @@ T.ctx.document.getElementById = (id) => els[id] || orig(id);
 
 
 def test_the_drawer_heights_and_the_buttons_follow_it():
-    """半開量不到 .m-peek-end（還沒排版）時：附近那一排 196、一處的卡至少 200（三分之一）；拉高六成、全開九成四；右下兩顆圓鈕跟著抽屜上下。"""
+    """量不到（還沒排版）時：沒點地點的三格（輿圖表現第二版 W2，設計 2.1 底條）——一行（底條）58、一排卡（附近那一排，Joy 原本的半開）196、
+    全開九成四；一處的卡至少 200（三分之一）；拉高六成、全開九成四；右下兩顆圓鈕跟著抽屜上下。"""
     out = run(_game(), DRAWER_DOM + """
 H.setMapDrawer('peek');
+const line = [drawer.style.height, fab.style.bottom];
+H.setMapDrawer('row');
 const near = [drawer.style.height, fab.style.bottom];
 H.S.mapMode = 'place'; H.S.mapSel = 'changshe'; H.setMapDrawer('peek');
 const place = drawer.style.height;
 H.setMapDrawer('half'); const half = drawer.style.height;
 H.setMapDrawer('full'); const full = drawer.style.height;
-return { near, place, half, full, props };
+return { line, near, place, half, full, props };
 """)
-    assert out["near"] == ["196px", "208px"]
+    assert out["line"] == ["58px", "70px"] and out["near"] == ["196px", "208px"]
     assert out["place"] == f"{round(650 / 3)}px" and out["half"] == f"{round(650 * 0.6)}px" and out["full"] == f"{round(650 * 0.94)}px"
     assert out["props"] == {}  # --md-h 只有版圖變化才寫
 
@@ -1203,3 +1219,536 @@ def test_the_plan_card_button_carries_its_place():
          "help_side": "官軍", "mine": None, "acts": []}
     out = run(game, "return H.planHtml(" + json.dumps(x, ensure_ascii=False) + ");")
     assert 'data-goto="changshe"' in out
+
+
+# ── 輿圖表現第二版 W2：取景、密度、名字、HUD、底條（docs/superpowers/specs/2026-10-30-輿圖表現-design.md 2.1、2.2、2.3、第四章、第六章 W2、
+# 第七章；企劃者 2026-10-30「照丙定」）──
+# 打開倍率 Z0 ＝ min(地圖框寬, open_width_max) ／ open_units、中心＝你兩票＋腳下每一站一票；最大 Z0 × zoom_max；三段門檻是 Z0 的幾倍；點一處 < Z0 才飛；
+# 近、中景名字只寫跟我有關的；上面是區名 chip＋🔍、右上小地圖、框外一步的箭頭牌；抽屜沒點地點時三格，最低那一格是底條。資料照 season21 開季
+# （官軍站潁川郡）。地圖框照實機量的（375×812、360×780、320×568 的地圖框高）。
+FRAMES = {375: 668, 360: 636, 320: 402}
+
+
+def _w2(profile="season21", **kw):
+    return _game(profile=profile, **kw)
+
+
+def _hops(base, start):
+    adj = {}
+    for a, b in base["edges"]:
+        adj.setdefault(a, []).append(b)
+        adj.setdefault(b, []).append(a)
+    h, q = {start: 0}, [start]
+    for u in q:
+        for v in adj.get(u, []):
+            if v not in h:
+                h[v] = h[u] + 1
+                q.append(v)
+    return h
+
+
+def _view(game):
+    v = game.map_base()["view"]
+    return v, (lambda vw: min(vw, v["open_width_max"]) / v["open_units"])
+
+
+def test_w2_the_view_numbers_replace_joys_constants():
+    """數字改讀底圖的 view（設計第四章的取代表）：Joy 寫死的 MV_OPEN_Z、MV_PICK_Z、MV_HOME_Z、MV_PREVIEW_Z、MV_ZMAX、MV_LV1、MV_LV2 一個都不留。"""
+    code = re.sub(r"//[^\n]*", "", APP.read_text(encoding="utf-8"))  # 註解裡寫著取代了誰，不算
+    for gone in ("MV_OPEN_Z", "MV_PICK_Z", "MV_HOME_Z", "MV_PREVIEW_Z", "MV_ZMAX", "MV_LV1", "MV_LV2"):
+        assert not re.search(rf"\b{gone}\b", code), gone
+    for key in ("open_units", "open_width_max", "zoom_max", "near_from", "mid_from", "named_hops_near", "named_hops_mid", "switch_zoom"):
+        assert f"v.{key}" in code or f"mvView().{key}" in code, key  # 九個數字都有人讀（patch_radius 是 W1 的地在讀）
+
+
+@pytest.mark.parametrize("vw", [375, 1100])
+def test_w2_opening_zoom_is_the_frame_width_over_open_units(vw):
+    """打開倍率＝min(框寬, open_width_max)／open_units：375 寬是 1.5；1100 寬（桌機）跟 480 一樣是 1.92，只多看一圈。沒帶目標的打開（camFirst）就是它。"""
+    game = _w2()
+    v, z0 = _view(game)
+    out = run(game, f"const g = {{ vw: {vw}, vh: 700 }}; return [H.camFirst(g).z, H.camOpen(g).z, H.mvZ0(g)];")
+    assert out[0] == out[1] == out[2] == pytest.approx(z0(vw))
+    assert z0(1100) == z0(480) == pytest.approx(1.92) and z0(375) == pytest.approx(1.5)
+
+
+def test_w2_opening_centre_is_you_twice_and_each_neighbour_once():
+    """打開的中心＝你（算兩票）＋腳下每一站（各一票）的平均（設計 2.2）：露出來那一塊（區名那一排底下、底條上面）的正中對著那一點。"""
+    game = _w2()
+    base, st = game.map_base(), game.map_state()
+    pos = {p["id"]: (p["x"], p["y"]) for p in base["places"]}
+    near = [x for x, h in _hops(base, st["here"]).items() if h == 1 and x in st["places"]]
+    assert len(near) == 5
+    pts = [pos[st["here"]]] * 2 + [pos[x] for x in near]
+    want = (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
+    out = run(game, "const g = { vw: 375, vh: 668 }, c = H.camOpen(g), r = H.mapRoom(g); return [(g.vw / 2 - c.x) / c.z, ((r.top + r.bottom) / 2 - c.y) / c.z, r.top, r.bottom];")
+    assert out[:2] == pytest.approx(list(want), abs=0.01)
+    assert out[2:] == [56, 668 - 58]  # 上面讓開區名那一排、底下是底條那一行
+
+
+@pytest.mark.slow  # 單一條超過一秒（要一幀一幀飛）
+def test_w2_home_goes_back_to_the_opening_view_and_fit_shows_the_whole_world():
+    """◎（mapHome）＝回到打開的取景（不是「以你為中心、至少 1.2 倍」）；全（mapFit）＝整張天下放進露出來的那一塊（倍率＝zMin）。"""
+    out = run(_w2(), DRAWER_DOM + GESTURE_DOM + """
+const settle = () => { let i = 0; extra = 0; while (q.size && i++ < 400) frame(); };
+const g = { vw: 375, vh: 700 };
+H.camSet({ z: 0.7, x: -100, y: -300 }); H.drawMarks(); settle();
+H.mapHome(); settle();
+const home = H.S.mapCam, open = H.camOpen(g);
+H.mapFit(); settle();
+const fit = H.S.mapCam, b = H.S.mapBase;
+return { home, open, fit, zmin: H.zMin(g), w: b.w * fit.z, h: b.h * fit.z, room: H.mapRoom(g) };""")
+    assert out["home"] == pytest.approx(out["open"], abs=0.01)
+    assert out["fit"]["z"] == pytest.approx(out["zmin"]) and out["w"] <= 375 and out["h"] <= out["room"]["bottom"] - out["room"]["top"]
+
+
+@pytest.mark.parametrize("vw", [375, 1100])
+def test_w2_zoom_tops_out_at_z0_times_zoom_max(vw):
+    """最大＝Z0 × zoom_max（取代 Joy 的 3.2）；最小照舊是整張天下放得下。"""
+    game = _w2()
+    v, z0 = _view(game)
+    out = run(game, f"const g = {{ vw: {vw}, vh: 800 }}; return [H.camClamp({{ z: 99, x: 0, y: 0 }}, g).z, H.camClamp({{ z: 0.001, x: 0, y: 0 }}, g).z, H.zMin(g)];")
+    assert out[0] == pytest.approx(z0(vw) * v["zoom_max"]) and out[1] == out[2]
+
+
+def test_w2_the_three_levels_are_fractions_of_z0():
+    """三段門檻（設計 2.2）：近 ≥ Z0 × near_from、中 ≥ Z0 × mid_from、再小是遠——375 寬（Z0＝1.5）是 1.2 與 0.675。"""
+    game = _w2()
+    v, z0 = _view(game)
+    zs = [0.6, 0.674, 0.676, 1.19, 1.21, 2.4]
+    out = run(game, "const g = { vw: 375, vh: 700 }; return " + json.dumps(zs) + ".map((z) => H.mvLevel(z, g));")
+    near, mid = z0(375) * v["near_from"], z0(375) * v["mid_from"]
+    assert out == [2 if z >= near else 1 if z >= mid else 0 for z in zs] == [0, 0, 1, 1, 2, 2]
+
+
+@pytest.mark.slow  # 單一條超過一秒（要一幀一幀飛）
+def test_w2_picking_flies_to_z0_from_the_middle_and_stays_put_up_close():
+    """點一處（設計 2.2，三種地方一條規則）：此刻倍率 < Z0（中景）飛到那一處、倍率到 Z0；≥ Z0（近景）倍率不動、露著就不挪。
+    圖上點的（mapLand）、🔍 的結果與出陣建議（map-pick，以前 fly＝true 一律飛到至少 1.4）都一樣。"""
+    game = _w2()
+    out = run(game, DRAWER_DOM + GESTURE_DOM + """
+const settle = () => { let i = 0; extra = 0; while (q.size && i++ < 400) frame(); };
+const g = { vw: 375, vh: 700 }, z0 = H.mvZ0(g), at = (id) => H.S.mapBase.places.find((p) => p.id === id);
+const centre = () => { const c = H.S.mapCam, r = H.mapRoom(g); return [(g.vw / 2 - c.x) / c.z, ((r.top + r.bottom) / 2 - c.y) / c.z]; };
+const res = {};
+for (const [name, pick] of [["land", (id) => H.mapLand(id)], ["pick", (id) => H.mapPick(id, true)]]) {
+  H.mapBack(); settle();
+  const y = at('yingchuan');
+  H.camSet(H.camAt(g, y.x, y.y, z0 * 0.6)); H.drawMarks(); settle();
+  pick('changshe'); settle();
+  const mid = { z: H.S.mapCam.z, c: centre() };
+  H.mapBack(); settle();
+  const before = { ...H.camAt(g, y.x, y.y, z0 * 1.2) };
+  H.camSet(before); H.drawMarks(); settle();
+  pick('songshan_foot'); settle(); // 嵩山腳：近景露在卡上面，不必挪
+  res[name] = { z0, mid, near: H.S.mapCam, before, sel: H.S.mapSel };
+}
+const c = at('changshe');
+return { res, changshe: [c.x, c.y] };""")
+    for name, r in out["res"].items():
+        assert r["mid"]["z"] == pytest.approx(r["z0"]) and r["mid"]["c"] == pytest.approx(out["changshe"], abs=0.5), name
+        assert r["near"] == pytest.approx(r["before"]) and r["sel"] == "songshan_foot", name
+
+
+def _labs(html):
+    """近、中景的名字：[(地點, 名字, 幾分, 字條, class, left, top, 寫在 style 上的寬)]。"""
+    out = []
+    for m in re.finditer(r'<button type="button" class="mv-lab([^"]*)" style="left:([-\d.]+)px;top:([-\d.]+)px;width:([-\d.]+)px" data-act="map-place" data-id="([^"]+)">(.*?)</button>', html):
+        cls, l, t, w, pid, inner = m.groups()
+        name = re.search(r'<span class="nm">([^<]+)', inner).group(1)
+        mins = re.search(r'<small class="mv-min">([^<]+)</small>', inner)
+        leg = re.search(r'<span class="mv-wk leg">([^<]+)</span>', inner)
+        out.append((pid, htmllib.unescape(name), mins.group(1) if mins else "", leg.group(1) if leg else "", cls, float(l), float(t), float(w)))
+    return out
+
+
+def _text_w(text, px):
+    """Joy 的 textW 照抄（中日韓一個字寬、空白三成、其餘六成）：測試自己估，不借網頁的。"""
+    return sum(0.3 if ch == " " else 0.6 if ord(ch) < 0x2E80 else 1 for ch in text) * px
+
+
+def _lab_box(lab):
+    """名字的框：照估的字寬加 15% 餘裕（設計第七章），字級照 class（大地方 16、縮小 11、其餘 14），高 1.2 行加 2。"""
+    pid, name, mins, leg, cls, l, t, w = lab
+    fs = 11 if "tiny" in cls else 16 if "big" in cls else 14
+    W = 1.15 * (_text_w(name, fs) + (3 + _text_w(mins, 11) if mins else 0)) + (46 if leg else 0)
+    return (l, t, l + W, t + fs * 1.2 + 2), W
+
+
+def _ratios():
+    """畫的小圖的高／寬（照 web/img/map 那幾張 webp 的檔頭讀，不借網頁的常數）。"""
+    import struct
+    from pathlib import Path
+
+    out = {}
+    for f in (Path(server.WEB) / "img" / "map").glob("*.webp"):
+        b = f.read_bytes()[:30]
+        if b[12:16] == b"VP8X":
+            w, h = 1 + int.from_bytes(b[24:27], "little"), 1 + int.from_bytes(b[27:30], "little")
+        elif b[12:16] == b"VP8 ":
+            w, h = (v & 0x3FFF for v in struct.unpack("<HH", b[26:30]))
+        else:
+            bits = int.from_bytes(b[21:25], "little")
+            w, h = (bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1
+        out[f.stem] = h / w
+    return out
+
+
+RATIOS = _ratios()
+
+
+def _icons(html):
+    """畫出來的小圖與它角上的徽、圈各佔的框（照標記與 style.css 的大小算）：{地點: [框…]}（徽、圈不知道是哪一處的，放在 "" 底下）。"""
+    out = {"": []}
+    for m in re.finditer(r'<button type="button" class="mv-pin (paint|ink)[^"]*" style="left:([-\d.]+)px;top:([-\d.]+)px(?:;width:(\d+)px)?" data-act="map-place" data-id="([^"]+)"[^>]*>(?:<img src="/static/img/map/(\w+)\.webp")?', html):
+        kind, x, y, w, pid, key = m.groups()
+        x, y = float(x), float(y)
+        if kind == "paint":
+            w = float(w)
+            h = w * RATIOS[key]
+            out[pid] = [(x - w / 2, y - 0.62 * h, x + w / 2, y + 0.38 * h)]
+        else:
+            out[pid] = [(x - 15, y - 15, x + 15, y + 15)]
+    for x, y in re.findall(r'<i class="mv-dg[^"]*" style="left:([-\d.]+)px;top:([-\d.]+)px">', html):
+        out[""].append((float(x) - 7.5, float(y) - 7.5, float(x) + 7.5, float(y) + 7.5))
+    for x, y in re.findall(r'<i class="mv-bd [^"]*" style="left:([-\d.]+)px;top:([-\d.]+)px">', html):
+        out[""].append((float(x) - 8, float(y) - 8, float(x) + 8, float(y) + 8))
+    for x, y in re.findall(r'<svg class="mv-flag[^"]*" width="16" height="24" viewBox="0 0 16 24" style="left:([-\d.]+)px;top:([-\d.]+)px"', html):
+        out[""].append((float(x) - 3, float(y) - 24, float(x) + 13, float(y)))
+    for x, y, r in re.findall(r'<i class="mv-ring" style="left:([-\d.]+)px;top:([-\d.]+)px;--r:(\d+)px">', html):
+        out[""].append((float(x) - int(r), float(y) - int(r), float(x) + int(r), float(y) + int(r)))
+    for x, y in re.findall(r'<i class="mv-fight" style="left:([-\d.]+)px;top:([-\d.]+)px">', html):
+        out[""].append((float(x) - 20, float(y) - 20, float(x) + 20, float(y) + 20))
+    return out
+
+
+def _pills(html):
+    return [(pid, (float(l), float(t), float(l) + float(w), float(t) + 24)) for l, t, w, pid in
+            re.findall(r'<button type="button" class="mv-pill" style="left:([-\d.]+)px;top:([-\d.]+)px;width:([-\d.]+)px" data-act="map-place" data-id="([^"]+)"', html)]
+
+
+def _hud(vw, bottom, lvl, area, mini):
+    """浮著的那幾樣（照 style.css 的位置與大小）：區名 chip（左上 10，高 34；寬＝左右內距 10、14px 的字、間隔 6 與 ▾，字照估的寬加 15%）、
+    🔍（右上 12、46 見方）、小地圖（🔍 底下、右 12、上 62，連 1px 的框）、右下兩顆（46 見方、間隔 10，底下離抽屜 12）。"""
+    out = [(10, 10, 10 + 20 + 1.15 * _text_w(area, 14) + 6 + 11, 44), (vw - 58, 8, vw - 12, 54), (vw - 58, bottom - 12 - 102, vw - 12, bottom - 12)]
+    if lvl > 0:
+        out.append((vw - 12 - mini[0] - 2, 62, vw - 12, 62 + mini[1] + 2))
+    return out
+
+
+def _cross(a, b):
+    return a[0] < b[2] - 1e-6 and a[2] > b[0] + 1e-6 and a[1] < b[3] - 1e-6 and a[3] > b[1] + 1e-6
+
+
+SWEEP_JS = """
+const out = [];
+for (const [vw, vh] of FRAMES) {
+  const g = { vw, vh }, z0 = H.mvZ0(g);
+  for (const st of STATES) {
+    Object.assign(H.S, { mapState: st, mapMode: 'overview', mapSel: null, mapPreview: null, mapDrawer: 'peek', mapFilter: 'all', mapWeek: null, mapThen: null });
+    const open = H.camOpen(g), r = H.mapRoom(g);
+    const cx = (g.vw / 2 - open.x) / open.z, cy = ((r.top + r.bottom) / 2 - open.y) / open.z;
+    for (const [level, c] of [['near', open], ['mid', H.camAt(g, cx, cy, z0 * 0.6)]]) {
+      const lay = H.mvLayout(H.S.mapBase, st, c, g);
+      out.push({ vw, vh, here: st.here, level, c, lvl: lay.lvl, area: lay.area, room: r, html: lay.html, pills: lay.pills.map((p) => p.html).join(''), mini: H.miniHtml(H.S.mapBase, st, c, g).match(/width:(\\d+)px;height:(\\d+)px/).slice(1).map(Number) });
+    }
+  }
+}
+return out;
+"""
+
+
+def _sweep_states(game):
+    """每一處各站一次的疊層（伺服器真的會給的：分鐘、可出陣、本週都照站的那一處算）。"""
+    places = [p["id"] for p in game.map_base()["places"]]
+    out = []
+    for loc in places:
+        game.state.player.location = loc
+        out.append(game.map_state())
+    return out
+
+
+@pytest.mark.slow  # 單一條超過一秒（42 處 × 3 種寬 × 2 個密度）
+def test_w2_names_never_overlap_icons_pills_or_the_hud_and_stay_on_the_screen():
+    """名字不互壓、不壓小圖（連徽）、不壓箭頭牌與浮著的那幾樣、不出畫面（設計第六章 W2「測」、第七章「名字」）：375／360／320 三種寬 × 近（打開的取景）
+    中（同一個中心、Z0 × 0.6）兩個密度 × 42 處各站一次。框照估的字寬加 15% 餘裕（測試自己估）。畫面＝露出來那一塊（左右是地圖框、上面到框頂、
+    底下到底條）：小圖在裡面的名字整個在裡面，小圖在外面的名字整個在外面（不會切一半）。同一輪也驗：
+    名字都在「近：兩步內 ∪ 大地方 ∪ 本週 ∪ 寶 ∪ 翻 ∪ 可出陣；中：一步內 ∪ 大地方 ∪ 本週 ∪ 寶 ∪ 翻」（加你）裡，小圖在畫面裡的兩步內（中景一步內）與本週
+    一定有；近景兩步內的接「N 分」；箭頭牌只在近景、數目＝腳下一步而小圖整個在畫面外的，牌在畫面裡、互不相交、不壓小圖與浮著的那幾樣。"""
+    game = _w2()
+    base = game.map_base()
+    states = _sweep_states(game)
+    pos = {p["id"]: p for p in base["places"]}
+    out = run(game, SWEEP_JS.replace("FRAMES", json.dumps(sorted(FRAMES.items()))).replace("STATES", json.dumps(states, ensure_ascii=False)), timeout=600)
+    assert len(out) == 3 * 2 * len(states) == 252
+    shrunk = spiral = total = 0
+    for case in out:
+        st = next(s for s in states if s["here"] == case["here"])
+        key = (case["vw"], case["here"], case["level"])
+        vw, bottom, c = case["vw"], case["room"]["bottom"], case["c"]
+        vis = (0, 0, vw, bottom)
+        lvl = case["lvl"]
+        assert lvl == (2 if case["level"] == "near" else 1), key
+        hops = _hops(base, st["here"])
+        reach = 2 if lvl == 2 else 1
+        labs, icons, pills = _labs(case["html"]), _icons(case["html"]), _pills(case["pills"])
+        hud = _hud(vw, bottom, lvl, case["area"], case["mini"])
+        blocks = [b for bs in icons.values() for b in bs]
+        anchor = {pid: (c["x"] + pos[pid]["x"] * c["z"], c["y"] + pos[pid]["y"] * c["z"]) for pid in pos}
+        inside = lambda pid: 0 <= anchor[pid][0] <= vw and 0 <= anchor[pid][1] <= bottom  # noqa: E731
+        boxes = []
+        for lab in labs:
+            box, W = _lab_box(lab)
+            assert W <= lab[7] + 0.15, (key, lab)  # 網頁留的寬不比估的小
+            if inside(lab[0]):
+                assert box[0] >= -1e-6 and box[1] >= -1e-6 and box[2] <= vw + 1e-6 and box[3] <= bottom + 1e-6, (key, lab, box)
+            else:
+                assert not _cross(box, vis), (key, lab, box)
+            for other in blocks:
+                assert not _cross(box, other), (key, lab, other)
+            for pid, p in pills:
+                assert not _cross(box, p), (key, lab, pid)
+            for h in hud:
+                assert not _cross(box, h) or not inside(lab[0]), (key, lab, h)
+            for o, ob in boxes:
+                assert not _cross(box, ob), (key, lab, o)
+            boxes.append((lab[0], box))
+            if inside(lab[0]):
+                shrunk += "tiny" in lab[4]
+                total += 1
+        spiral += case["html"].count('class="mv-lead"')
+        named = {lab[0] for lab in labs}
+        q = st["places"]
+        wk = st["week"]["id"] if st.get("week") and st["week"]["id"] in q else None
+        allowed = {x for x in q if (hops.get(x, 99) <= reach or pos[x]["big"] or q[x].get("rich") or x == wk or x == st["here"]
+                                    or any(int(v) > 0 for sd, v in (q[x].get("tug") or {}).items() if sd != q[x]["control"])
+                                    or (lvl == 2 and q[x].get("sortie")))}
+        assert named <= allowed, (key, named - allowed)
+        must = {x for x in q if (hops.get(x, 99) <= reach or x == wk or x == st["here"]) and inside(x)}
+        assert must <= named, (key, must - named)
+        for lab in labs:
+            h = hops.get(lab[0], 99)
+            want = f'{q[lab[0]]["minutes"]} 分' if lvl == 2 and 0 < h <= 2 and q[lab[0]]["minutes"] is not None else ""
+            assert lab[2] == want, (key, lab)
+        # 箭頭牌
+        far = set()
+        if lvl == 2:
+            for x, h in hops.items():
+                if h == 1 and x in q:
+                    icon = icons.get(x)  # 沒畫小圖的是在畫面附近（一個畫面的 0.8）更外面：小圖當然整個在畫面外
+                    if not icon or not _cross(icon[0], vis):
+                        far.add(x)
+        assert sorted(p for p, _ in pills) == sorted(far), key
+        for i, (pid, p) in enumerate(pills):
+            assert p[0] >= 0 and p[1] >= 0 and p[2] <= vw and p[3] <= bottom, (key, pid, p)
+            for _, o in pills[i + 1:]:
+                assert not _cross(p, o), (key, pid)
+            for h in hud:
+                assert not _cross(p, h), (key, pid, h)
+            for other in blocks:
+                assert not _cross(p, other) or not _cross(other, vis), (key, pid, other)
+    # 讓步（縮到 11px、往外找拉線）是少數：開發時（W2，2026-10-31）量到小圖在畫面裡的 1,747 個名字縮了 87 個、拉線 64 條（約 8.6%，
+    # 多在 320 寬與近景的潁川一帶），擋住「大半都在讓步」的退步
+    assert total > 1500 and (shrunk + spiral) / total < 0.12, (shrunk, spiral, total)
+
+
+def test_w2_near_names_are_the_ones_about_you_with_minutes():
+    """近景（打開的取景）：名字都在「兩步內 ∪ 大地方 ∪ 本週 ∪ 寶 ∪ 翻 ∪ 可出陣」裡，兩步內與本週一定有；兩步內的接「N 分」（你腳下那一處不接）；
+    名字底下沒有那一行、沒有小印與悟字。中景：一步內、大地方、本週、寶、翻；不接幾分。篩選開著時合的照寫（三步外也寫），不合的不寫。"""
+    game = _w2()
+    st = game.map_state()
+    st["week"] = {"id": "deep_mountain", "why": "軍令・守城", "minutes": 7}
+    st["places"]["jade_cave"]["people"] = ["左慈"]  # 三步外、不是兩步內：篩「有人物」時照寫
+    out = run(game, """const g = { vw: 375, vh: 668 }, c = H.camOpen(g), z0 = H.mvZ0(g), r = H.mapRoom(g);
+const mid = H.camAt(g, (g.vw / 2 - c.x) / c.z, ((r.top + r.bottom) / 2 - c.y) / c.z, z0 * 0.6), wide = H.camAt(g, 330, 960, z0);
+const near = H.marksHtml(H.S.mapBase, H.S.mapState, c, g), midHtml = H.marksHtml(H.S.mapBase, H.S.mapState, mid, g);
+H.S.mapFilter = 'people'; const filt = H.marksHtml(H.S.mapBase, H.S.mapState, wide, g); H.S.mapFilter = 'all';
+return { near, mid: midHtml, filt };""", st=st)
+    hops = _hops(game.map_base(), "yingchuan")
+    near = {lab[0]: lab for lab in _labs(out["near"])}
+    assert {"yingchuan", "yingshui", "yingchuan_wilds", "songshan_foot", "yingchuan_academy", "deep_mountain"} <= set(near)
+    for pid, lab in near.items():
+        assert lab[2] == (f'{st["places"][pid]["minutes"]} 分' if 0 < hops[pid] <= 2 else ""), lab
+    assert "<small>" not in out["near"] and 'class="mv-side"' not in out["near"] and 'class="ins"' not in out["near"]
+    mid = {lab[0]: lab for lab in _labs(out["mid"])}
+    assert all(lab[2] == "" for lab in mid.values())
+    assert all(hops[x] <= 1 or x == "deep_mountain" or st["places"][x]["rich"] or next(p for p in game.map_base()["places"] if p["id"] == x)["big"] for x in mid)
+    assert "changshe" not in mid and "changshe" in near  # 長社兩步：近景寫、中景不寫
+    filt = {lab[0] for lab in _labs(out["filt"])}
+    assert "jade_cave" in filt and "songshan_foot" not in filt  # 篩到的照寫（三步外），沒篩到的兩步內也不寫
+
+
+def test_w2_selected_end_and_next_stop_are_always_named():
+    """PM 2026-10-31：選中的那一處、護糧的終點、標了下一站的那一處一定寫名字（跟你腳下、本週同一級）；下一站、終點照 Joy 的寫成名字後的字條。"""
+    game = _w2()
+    out = run(game, """H.mapGoto('changshe', 'runan_wilds'); const g = { vw: 375, vh: 668 }; H.S.mapCam = H.camFirst(g);
+return H.marksHtml(H.S.mapBase, H.S.mapState, H.S.mapCam, g);""")
+    labs = {lab[0]: lab for lab in _labs(out)}
+    assert labs["changshe"][3] == "下一站" and labs["runan_wilds"][3] == "終點" and "sel" in labs["changshe"][4]
+
+
+def test_w2_far_is_joys_far_view_with_no_minimap_or_pills():
+    """遠景照 Joy 的（大區名、各方幾處、小點，名字只有你、選的、本週）；區名 chip 寫「天下」、沒有小地圖、沒有箭頭牌。"""
+    game = _w2()
+    out = run(game, """const g = { vw: 375, vh: 668 }, c = H.camFit(g), lay = H.mvLayout(H.S.mapBase, H.S.mapState, c, g);
+return { lay, z: c.z, z0: H.mvZ0(g) };""")
+    lay = out["lay"]
+    assert lay["lvl"] == 0 and lay["area"] == "天下" and lay["pills"] == []
+    assert 'class="mv-reg"' in lay["html"] and 'class="mv-dot' in lay["html"] and 'class="mv-pin' not in lay["html"]
+    assert [lab for lab in re.findall(r'class="mv-lab[^"]*"[^>]*data-id="([^"]+)"', lay["html"])] == ["yingchuan"]
+
+
+def test_w2_the_area_chip_names_the_region_in_the_middle_of_the_screen():
+    """左上的區名 chip（設計 2.1 HUD）：寫畫面中心此刻在哪一區（打開＝你所在的區；拖過去跟著換；遠景寫「天下」）；點了開找地點那一頁、捲到跳到大區。"""
+    game = _w2()
+    out = run(game, """const g = { vw: 375, vh: 668 }, z0 = H.mvZ0(g);
+const open = H.mvArea(H.S.mapBase, H.S.mapState, H.camOpen(g), g), luoyang = H.mvArea(H.S.mapBase, H.S.mapState, H.camAt(g, 150, 800, z0), g);
+const far = H.mvArea(H.S.mapBase, H.S.mapState, H.camFit(g), g);
+const chrome = H.pageMap();
+T.docListeners.click[0]({ target: { closest: () => ({ dataset: { act: 'map-area' }, classList: { contains: () => false, add() {}, remove() {} } }) } });
+return { open, luoyang, far, chrome, mode: H.S.mapMode };""")
+    assert (out["open"], out["luoyang"], out["far"]) == ("潁川汝南", "洛陽", "天下")
+    assert 'data-act="map-area"' in out["chrome"] and ">潁川汝南</span>" in out["chrome"]
+    assert out["mode"] == "search"
+
+
+def test_w2_the_minimap_frame_is_the_current_view():
+    """右上的小地圖（設計 2.1）：整個天下、每一塊地照主人上色、白框＝此刻地圖框看到的那一塊（地圖座標）、你紅點；寬 100，窄螢幕（< 360）64；
+    近中景才有。點小地圖＝中心移到那一帶、倍率不變。"""
+    game = _w2()
+    base = game.map_base()
+    out = run(game, DRAWER_DOM + GESTURE_DOM + """const res = {};
+for (const vw of [375, 320]) {
+  const g = { vw, vh: 600 }, c = H.camOpen(g);
+  res[vw] = { html: H.miniHtml(H.S.mapBase, H.S.mapState, c, g), c, g };
+}
+const g = { vw: 375, vh: 700 }, settle = () => { let i = 0; extra = 0; while (q.size && i++ < 400) frame(); };
+H.camSet(H.camOpen(g)); H.drawMarks(); settle();
+const z = H.S.mapCam.z, el = { getBoundingClientRect: () => ({ left: 263, top: 62, width: 100, height: 149 }) };
+H.mapMini(el, { clientX: 263 + 50, clientY: 62 + 30 }); settle();
+const c = H.S.mapCam, r = H.mapRoom(g);
+res.click = { z, after: c.z, centre: [(g.vw / 2 - c.x) / c.z, ((r.top + r.bottom) / 2 - c.y) / c.z] };
+return res;""")
+    fx, fy, fw, fh = base["world"]["frame"]
+    for vw, mw in ((375, 100), (320, 64)):
+        r = out[str(vw)]
+        assert f'style="width:{mw}px;height:{round(mw * fh / fw)}px"' in r["html"]
+        rect = re.search(r'<rect id="mv-mini-view" x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)"', r["html"]).groups()
+        c, g = r["c"], r["g"]
+        assert [float(v) for v in rect] == pytest.approx([-c["x"] / c["z"], -c["y"] / c["z"], g["vw"] / c["z"], g["vh"] / c["z"]], abs=0.06)
+        assert r["html"].count("<path clip-path=") == len(set(game.map_state()["places"]) - _patches(base))  # 拿圓當地的不畫
+    click = out["click"]
+    assert click["after"] == click["z"]
+    want = (fx + 0.5 * fw, fy + 30 / 149 * fh)
+    assert click["centre"][0] == pytest.approx(want[0], abs=1) and click["centre"][1] == pytest.approx(want[1], abs=1)
+
+
+def test_w2_arrow_pills_point_at_neighbours_off_the_screen():
+    """箭頭牌（設計 2.1）：近景、沒點地點、不在路上時，腳下一步而小圖整個在畫面外的各掛一顆「‹ 地名 N分」；按了＝點那一處（data-act="map-place"）。
+    打開時是洛陽官道一顆（丙1 那一顆）；鏡頭移到別處（腳下五處都在外面）五顆互不相交、都在畫面裡。點了一處、中景都沒有。"""
+    game = _w2()
+    out = run(game, """const g = { vw: 375, vh: 668 }, z0 = H.mvZ0(g), base = H.S.mapBase, st = H.S.mapState;
+const open = H.mvLayout(base, st, H.camOpen(g), g), away = H.mvLayout(base, st, H.camAt(g, 700, 1200, z0), g);
+const midz = H.mvLayout(base, st, H.camAt(g, 424, 943, z0 * 0.6), g);
+H.S.mapMode = 'place'; H.S.mapSel = 'changshe'; const picked = H.mvLayout(base, st, H.camOpen(g), g);
+return { open: open.pills, away: away.pills, midz: midz.pills, picked: picked.pills };""")
+    assert [p["id"] for p in out["open"]] == ["luoyang_road"]
+    assert re.search(r'data-act="map-place" data-id="luoyang_road"[^>]*><b aria-hidden="true">‹</b><span>洛陽官道 8分</span>', out["open"][0]["html"])
+    away = out["away"]
+    assert sorted(p["id"] for p in away) == ["luoyang_road", "songshan_foot", "yingchuan_academy", "yingchuan_wilds", "yingshui"]
+    for i, p in enumerate(away):
+        assert 0 <= p["box"][0] and p["box"][2] <= 375 and 0 <= p["box"][1] and p["box"][3] <= 668 - 58
+        assert not any(_cross(p["box"], o["box"]) for o in away[i + 1:])
+    assert out["midz"] == [] and out["picked"] == []
+
+
+@pytest.mark.slow  # 單一條超過一秒（走一段路）
+def test_w2_no_tray_and_no_pills_on_the_road():
+    """在路上（W3 才換底條）：抽屜照 Joy 的（往哪裡、喊停＋沿路能去那一排、兩格），沒有底條、沒有箭頭牌。"""
+    game = _w2()
+    game.travel("changshe", "walk")
+    out = run(game, """const g = { vw: 375, vh: 668 }; return { near: H.nearHtml(H.S.mapBase, H.S.mapState), stops: H.drawerStops(),
+  pills: H.mvLayout(H.S.mapBase, H.S.mapState, H.camOpen(g), g).pills };""")
+    assert "m-tray" not in out["near"] and "m-journey" in out["near"] and out["stops"] == ["peek", "full"] and out["pills"] == []
+
+
+def test_w2_the_tray_says_this_weeks_order_and_how_many_places_you_can_sortie():
+    """底條（設計 2.1）：「本週」章＋地名＋軍令內容＋步行 N 分（按了＝點那一處）｜右邊朱字「可出陣 N ›」（N＝可出陣的地數＝地上的橘框數）；
+    沒有本週寫「本週沒有軍令」；窄螢幕只留軍令的第一個詞（其餘包在 .m-tray-more，style.css 在 < 360 藏起來）。"""
+    game = _w2()
+    st = game.map_state()
+    n = sum(1 for q in st["places"].values() if q["sortie"])
+    assert n == 8  # 開季八塊中立寶地
+    st["week"] = {"id": "changshe", "why": "軍令・護糧・新野→宛城", "minutes": 6}
+    out = run(game, "return H.nearHtml(H.S.mapBase, H.S.mapState);", st=st)
+    tray = out[: out.index('<i class="m-tray-end">')]
+    assert tray.startswith('<div class="m-tray"><button type="button" class="m-tray-wk" data-act="map-pick" data-id="changshe">')
+    assert '<span class="m-tray-tag">本週</span><b>長社</b><span class="m-tray-sub">護糧<span class="m-tray-more">・新野→宛城</span>・步行 6 分</span>' in tray
+    assert f'<button type="button" class="m-tray-go" data-act="map-sortie">可出陣 {n} ›</button>' in tray
+    assert out.index("m-tray-end") < out.index('class="m-nhead"') < out.index("m-peek-end")
+    st["week"] = None
+    none = run(game, "return H.nearHtml(H.S.mapBase, H.S.mapState);", st=st)
+    assert '<span class="m-tray-none">本週沒有軍令</span>' in none
+    css = re.sub(r"/\*.*?\*/", "", (server.WEB / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    narrow = [m.group(1) for m in re.finditer(r"@media \(max-width: 359px\) \{\n(.*?)\n\}", css, flags=re.S)]
+    assert any(".m-tray-more { display: none; }" in block for block in narrow)
+    assert "可出陣" not in run(_w2(faction=None), "return H.nearHtml(H.S.mapBase, H.S.mapState);")  # 散人：一處都不能出陣，不寫那一顆
+
+
+@pytest.mark.slow  # 單一條超過一秒（等點地點的 MV_TAP2）
+def test_w2_the_three_parts_of_the_tray_each_do_their_one_thing():
+    """底條按下去（設計 2.1 底條）：本週那一塊＝點那一處（開它的卡）；「可出陣 N ›」＝抽屜拉到一排卡那一格、那一排只列可出陣的、地圖上不合的淡掉；
+    拉回那一行（把手、✕ 收回）那個篩選就清掉。（在路上的「沿路做小事 ›」是 W3。）"""
+    game = _w2()
+    st = game.map_state()
+    st["week"] = {"id": "changshe", "why": "軍令・守城", "minutes": 6}
+    sortie = sorted(x for x, q in st["places"].items() if q["sortie"])
+    out = run(game, DRAWER_DOM + """
+const click = (act, id) => T.docListeners.click[0]({ target: { closest: () => ({ dataset: { act, id }, classList: { contains: () => false, add() {}, remove() {} } }) } });
+return (async () => {
+  H.mapBack();
+  await click('map-pick', 'changshe');
+  const week = [H.S.mapMode, H.S.mapSel, body.innerHTML.includes('data-act="map-back"')];
+  H.mapBack();
+  await click('map-sortie');
+  const row = { filter: H.S.mapFilter, drawer: H.S.mapDrawer, ids: H.nearList(H.S.mapBase, H.S.mapState).map((b) => b.id), head: body.innerHTML.match(/<div class="m-nhead"><b>([^<]+)/)[1],
+    marks: H.marksHtml(H.S.mapBase, H.S.mapState, { z: 1.5, x: -450, y: -1100 }, { vw: 375, vh: 668 }) };
+  H.mapStop('peek');
+  const back = [H.S.mapFilter, H.S.mapDrawer];
+  return { week, row, back };
+})();""", st=st)
+    assert out["week"] == ["place", "changshe", True]
+    row = out["row"]
+    assert row["filter"] == "sortie" and row["drawer"] == "row" and sorted(row["ids"]) == [x for x in sortie if x != "yingchuan"] and row["ids"]
+    assert row["head"] == f"可出陣・{len(row['ids'])} 處"
+    assert re.search(r'class="mv-pin [a-z]+ dim"[^>]*data-id="yingshui"', row["marks"])  # 不能出陣的淡掉
+    assert out["back"] == ["all", "peek"]
+
+
+def test_w2_the_drawer_has_three_stops_without_a_place():
+    """抽屜沒點地點時三格（設計 2.1 底條）：一行（底條，量不到照 58）、一排卡（Joy 原本量 .m-peek-end 的那一高，量不到 196）、全開九成四；
+    把手點一下在一行與一排卡之間換，再拉才到全開。點了一處照舊 peek／half／full、點一下在第一格與最後一格之間換。"""
+    out = run(_w2(), DRAWER_DOM + """const res = {};
+res.stops = H.drawerStops();
+for (const h of ['peek', 'row', 'full']) { H.setMapDrawer(h); res[h] = [drawer.style.height, fab.style.bottom]; }
+H.S.mapDrawer = 'peek'; res.tap1 = H.drawerTap(H.drawerStops()); H.S.mapDrawer = 'row'; res.tap2 = H.drawerTap(H.drawerStops());
+H.S.mapDrawer = 'full'; res.tap3 = H.drawerTap(H.drawerStops());
+H.S.mapMode = 'place'; H.S.mapSel = 'changshe'; res.place = H.drawerStops(); H.S.mapDrawer = 'peek'; res.tap4 = H.drawerTap(H.drawerStops());
+return res;""")
+    assert out["stops"] == ["peek", "row", "full"]
+    assert out["peek"] == ["58px", "70px"] and out["row"] == ["196px", "208px"] and out["full"] == [f"{round(650 * 0.94)}px", f"{round(650 * 0.94) + 12}px"]
+    assert (out["tap1"], out["tap2"], out["tap3"]) == ("row", "peek", "peek")
+    assert out["place"] == ["peek", "half", "full"] and out["tap4"] == "full"
+
+
+def test_w2_going_to_a_target_frames_both_ends_at_most_at_z0():
+    """帶著目標進來（江湖頁「去輿圖」，Joy 2026-10-31；PM 10/31 定的接法）：照 Joy 的把你與目標（護糧是下一站與終點）一起框進來，倍率最多 Z0
+    （Joy 的 MV_PICK_Z 換成 Z0）；框進來會成遠景（< Z0 × mid_from）才只看目標、倍率 Z0。"""
+    game = _w2()
+    out = run(game, """const g = { vw: 375, vh: 668 }, z0 = H.mvZ0(g), res = { z0 };
+H.mapGoto('yingshui'); res.close = H.camFirst(g);
+H.mapGoto('zhuo_county'); res.far = H.camFirst(g); res.farAt = H.camAt(g, 584, 118, z0);
+H.mapGoto('nanyang_wilds', 'nanyang_huangjin_camp'); res.leg = H.camFirst(g);
+return res;""")
+    z0 = out["z0"]
+    assert out["close"]["z"] <= z0 + 1e-9 and out["leg"]["z"] <= z0 + 1e-9 and out["leg"]["z"] >= z0 * 0.45
+    assert out["far"] == pytest.approx(out["farAt"])

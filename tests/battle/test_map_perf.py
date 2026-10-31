@@ -260,7 +260,8 @@ def test_fb324_the_map_layer_stays_put_while_you_are_on_another_tab():
     assert out["first"]["fills"] == 1 and '<div class="mv-world" id="mvw"' in out["first"]["html"]
     assert not out["first"]["away"] and out["first"]["page"] == ""
     assert out["again"]["fills"] == 1  # 同一張底圖：沒有再塞一次
-    assert out["again"]["removed"] == ["top", "drawer"] and 'class="mv-top"' in out["again"]["inserted"][0] and 'id="mdrawer"' in out["again"]["inserted"][0]
+    # 外圍：輿圖表現第二版 W2 起上面那一排是區名 chip＋🔍（.mv-hud），以前是搜尋列與篩選（.mv-top）
+    assert out["again"]["removed"] == ["top", "drawer"] and 'class="mv-hud"' in out["again"]["inserted"][0] and 'id="mdrawer"' in out["again"]["inserted"][0]
     assert out["again"]["cls"] == "mapx tl-mode"
     assert out["away"]["away"] and out["away"]["fills"] == 1 and out["away"]["page"] > 0  # 江湖頁照畫在 #page，地圖藏起來、沒拆
     assert out["fresh"] == 2  # 底圖換了：整層重畫

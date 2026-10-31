@@ -1199,6 +1199,13 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mv-lab .t { display: flex; flex-direction: column; }
 .mv-lab .nm { display: flex; align-items: center; gap: 3px; }
 .mv-lab small { font: 500 11px/1.3 var(--sans); color: var(--mv-ink2); letter-spacing: 0; }
+/* 近、中景的名字（輿圖表現第二版 W2）：框的寬照估的字寬加 15%（map.js 的 labSize）寫在 style 上，字在框裡照擺的位置靠：底下、上面置中，
+   左邊靠右；讓不開時縮到 11px（.tiny）、往外找的拉一條細線回小圖（.mv-lead）；近景兩步內的名字後面接「N 分」（.mv-min） */
+.mv-lab.c { justify-content: center; }
+.mv-lab.r { justify-content: flex-end; }
+.mv-lab.tiny, .mv-lab.big.tiny { font-size: 11px !important; letter-spacing: 0; }
+.mv-lab .mv-min { font: 500 11px/1.3 var(--sans); color: var(--mv-ink2); }
+.mv-lead { height: 1px; background: rgb(42 35 28 / 0.55); transform-origin: 0 50%; pointer-events: none; }
 .mv-rich { flex: none; width: 17px; height: 17px; border-radius: 50%; background: var(--mv-red); color: #f4ecdc; font: 700 10px/17px var(--kai); text-align: center; text-shadow: none; }
 .mv-wk { flex: none; padding: 0 4px; border-radius: 2px; background: #c8961e; color: #fffaf0; font: 700 10.5px/16px var(--serif); text-shadow: none; }
 .mv-wk.leg { background: #a8321f; } /* 護糧那種兩點：下一站、終點（朱紅） */
@@ -1227,13 +1234,25 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 @keyframes mv-pulse { 0% { transform: translate(-50%, -50%) scale(1); opacity: 0.9; } 100% { transform: translate(-50%, -50%) scale(2.25); opacity: 0; } }
 @keyframes w-melee { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
 
-/* 上面：搜尋列、篩選一排（左右滑） */
-.mv-top { position: absolute; top: 0; left: 0; right: 0; z-index: 3; padding-top: 10px; pointer-events: none; }
-.mv-top > * { pointer-events: auto; }
-.mv-q { display: flex; align-items: center; gap: 10px; width: calc(100% - 24px); margin: 0 12px; height: 46px; padding: 0 14px; border-radius: 4px; cursor: pointer; text-align: left;
-  border: 1px solid rgb(42 35 28 / 0.55); background: rgb(244 236 220 / 0.94); color: var(--mv-ink2); font: 400 16px var(--kai);
-  box-shadow: 0 1px 0 rgb(42 35 28 / 0.15), 0 6px 16px rgb(60 44 24 / 0.14); }
-.mv-q span:last-child { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 上面（輿圖表現第二版 W2，企劃者 2026-10-30「照丙定」）：左上區名 chip（畫面中心在哪一區，點了開找地點那一頁、捲到跳到大區）、右上 🔍 圓鈕、
+   其下小地圖（近中景）、框外一步的箭頭牌。整層不收點擊，只有那幾顆收。Joy 的搜尋列與篩選那一排（.mv-top）不畫了；篩選籤 W3 搬進找地點那一頁 */
+.mv-hud { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.mv-area, .mv-q, .mv-mini, .mv-pill { pointer-events: auto; }
+.mv-area { position: absolute; left: 10px; top: 10px; height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid rgb(42 35 28 / 0.55); background: rgb(244 236 220 / 0.94); color: var(--mv-ink); font: 700 14px var(--kai); white-space: nowrap;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.18); }
+.mv-area i { font-style: normal; font-size: 11px; color: var(--mv-ink2); }
+.mv-q { position: absolute; right: 12px; top: 8px; width: 46px; height: 46px; padding: 0; display: grid; place-items: center; border-radius: 50%; cursor: pointer;
+  border: 1px solid rgb(42 35 28 / 0.55); background: rgb(244 236 220 / 0.94); font-size: 18px; box-shadow: 0 1px 4px rgb(0 0 0 / 0.18); }
+.mv-minibox { position: absolute; right: 12px; top: 62px; }
+.mv-mini { display: block; padding: 0; border-radius: 6px; overflow: hidden; border: 1px solid rgb(42 35 28 / 0.55); background: #efe6d2; cursor: pointer;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.3); box-sizing: content-box; }
+.mv-mini svg { display: block; }
+.mv-pills { position: absolute; inset: 0; pointer-events: none; }
+.mv-pill { position: absolute; height: 24px; padding: 0 6px; border-radius: 12px; border: 1px solid rgb(255 255 255 / 0.25); background: rgb(42 35 28 / 0.86);
+  color: #f4f1e8; font: 700 12px/22px var(--sans); white-space: nowrap; box-sizing: border-box; text-align: center; cursor: pointer; }
+.mv-pill b { color: #f0a640; margin: 0 3px; }
+.mapx.tl-mode .mv-hud { display: none; } /* 版圖變化：那一排收起，抽屜上面整塊給地圖（同 FB-261） */
 .mv-chips { display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px 4px; scrollbar-width: none; }
 .mv-chips::-webkit-scrollbar { display: none; }
 .mv-chip { flex: none; height: 30px; padding: 0 11px; border-radius: 3px; border: 1px solid rgb(42 35 28 / 0.4); background: rgb(244 236 220 / 0.92); color: var(--mv-ink, #2a231c);
@@ -1242,7 +1261,6 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mv-chip i { font-style: normal; font-weight: 700; }
 .mv-chip .mv-red { color: #a8322a; }
 .mv-chip.on .mv-red, .mv-chip.on i { color: inherit; }
-.mapx.tl-mode .mv-top { display: none; } /* 版圖變化：那一排收起，抽屜上面整塊給地圖（同 FB-261） */
 .map-banner[hidden] { display: none; }
 .map-banner { position: absolute; left: 50%; transform: translateX(-50%); top: 8px; z-index: 3; background: var(--accent); color: #fff; font-size: 12.5px; padding: 4px 12px; border-radius: 16px; white-space: nowrap; pointer-events: none; }
 /* 右下兩顆：回到我、看整張 */
@@ -1282,6 +1300,23 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mgrab i { width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
 .mbody { flex: 1; min-height: 0; overflow-y: auto; padding: 0 14px 14px; font-size: 14px; line-height: 1.55; overscroll-behavior: contain; }
 .m-peek-end { display: block; height: 0; }
+/* 底條（輿圖表現第二版 W2）：抽屜收著的那一行——「本週」章＋地名＋軍令內容＋步行 N 分（按了點那一處）｜右邊朱字「可出陣 N ›」（按了拉到一排卡、
+   只列可出陣的）。窄螢幕（< 360）軍令只留第一個詞、字縮 */
+.m-tray { display: flex; align-items: center; gap: 10px; min-height: 30px; padding: 0 0 8px; font: 500 13px var(--sans); }
+.m-tray-wk { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 4px 0; border: 0; background: none; color: var(--ink); font: inherit;
+  text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; }
+.m-tray-tag { flex: none; padding: 1px 5px; border-radius: 3px; background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 700; }
+.m-tray-wk b { flex: none; font: 700 15px var(--serif); }
+.m-tray-sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2); }
+.m-tray-none { flex: 1; min-width: 0; padding: 4px 0; color: var(--ink-2); }
+.m-tray-go { flex: none; margin-left: auto; padding: 4px 0; border: 0; background: none; color: var(--accent); font: 700 13px var(--sans); cursor: pointer; white-space: nowrap; }
+.m-tray-end { display: block; height: 0; }
+@media (max-width: 359px) {
+  .m-tray { gap: 6px; font-size: 12px; }
+  .m-tray-wk b { font-size: 14px; }
+  .m-tray-go { font-size: 12px; }
+  .m-tray-more { display: none; }
+}
 /* 附近那一排：一張一張左右滑（停在哪一張，地圖飛過去） */
 .m-nhead { display: flex; align-items: baseline; gap: 8px; }
 .m-nhead b { font: 700 17px var(--kai); letter-spacing: 0.04em; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1311,8 +1346,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   .mapx .mdrawer { position: relative; grid-column: 2; grid-row: 1; height: auto !important; min-height: 0; border-radius: 0; box-shadow: -1px 0 0 var(--line); border-top: 0; }
   .mapx .mgrab { display: none; }
   .mapx .mbody { padding-top: 14px; }
-  .mv-top { right: 360px; }
-  .mv-q { max-width: 480px; }
+  .mv-hud { right: 360px; }
   .mv-fab { right: 372px; bottom: 16px !important; }
   .mv-find { right: 360px; }
   .map-banner { left: calc((100% - 360px) / 2); }
