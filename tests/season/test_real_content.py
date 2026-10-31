@@ -71,6 +71,7 @@ def content():
 # ── 內容結構完整性 ────────────────────────────────────────
 
 
+@pytest.mark.smoke
 def test_real_content_loads():
     c = load_content(CONTENT_DIR)
     assert 30 <= len([loc for loc in c.locations.values() if not loc.prologue_only]) <= 42  # 序章的草廬不算；四十處之外多一處官軍大營（FB-184）與綠林山寨（名聲 5.1）
@@ -84,6 +85,7 @@ def test_the_season_one_switch_stays_off_until_the_condensed_build_ships():
     assert config.season_days == 14
 
 
+@pytest.mark.smoke
 def test_real_content_waits_for_the_admin_to_open_the_season():
     assert load_content(CONTENT_DIR).config.auto_open_first_season is False
 

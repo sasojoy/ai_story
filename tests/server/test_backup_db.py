@@ -169,6 +169,7 @@ def test_backup_of_a_file_that_is_not_a_database(tmp_path):
     assert list((tmp_path / "backups").iterdir()) == []
 
 
+@pytest.mark.smoke
 def test_backup_of_a_missing_database(tmp_path):
     with pytest.raises(backup_db.BackupError, match="找不到資料庫"):
         backup_db.backup(tmp_path / "nope.db", tmp_path / "backups", tag="manual", now=NOW)

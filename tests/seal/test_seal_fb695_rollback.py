@@ -97,6 +97,7 @@ def test_history_only_has_kinds_the_old_program_knows():
         seal.log(SealRegistry(), 1, "use", shard="yunzhuan", holder="懷璽")
 
 
+@pytest.mark.smoke
 def test_no_uses_writes_the_same_bytes_as_before():
     """沒人起用過：登記的 JSON 不多 uses 這個鍵，跟舊程式的模型寫出來的一個位元組都不差。"""
     reg = SealRegistry.model_validate({"seq": 2, "salt": "鹽", "shards": {"yunzhuan": {"id": "yunzhuan", "state": "held", "holder": "甲"}},

@@ -85,6 +85,7 @@ def test_refunding_a_card_takes_the_rebate_back(on):
     assert [r["reason"] for r in mall.records(on, _wallet(player), "沈浪")["ledger"]][0] == "扣回月卡回饋"
 
 
+@pytest.mark.smoke
 def test_rebate_must_be_below_the_price(on):
     bad = MallItem(id="x", name="怪卡", price=100, kind="card", effects={"card_days": 3, "card_rebate": 100})
     assert any("要比價錢" in p for p in mall.item_problems(bad, on))

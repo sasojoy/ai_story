@@ -75,6 +75,7 @@ def test_one_general_has_one_arm(tmp_path):
         load_content(root)
 
 
+@pytest.mark.smoke
 def test_old_saves_read_with_empty_signature_fields(content, world):
     """舊存檔沒有 Equipment.signature、PlayerState.figure_wins、WorldState.signature_arms：讀得進來，都是預設值（不升資料庫版本）。"""
     game = Game.new(content, "舊檔", rng=random.Random(0), world=world)

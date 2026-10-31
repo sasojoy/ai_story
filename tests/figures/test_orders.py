@@ -62,6 +62,7 @@ def _order(game, template, faction, *, front=None, location=None, start=None, en
 # ── Task 1：資料模型與內容 ─────────────────────────────────
 
 
+@pytest.mark.smoke
 def test_new_fields_have_defaults_so_old_saves_load():
     cfg = Config()
     assert (cfg.orders_per_week, cfg.order_quota_min, cfg.convoy_ambush_chance, cfg.convoy_grain, cfg.duty_stamina) == (

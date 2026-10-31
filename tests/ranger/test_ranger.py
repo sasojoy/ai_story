@@ -34,6 +34,7 @@ def _gain(game, **stats) -> list[str]:
     return rules.apply_effect(Effect(stats=stats), game.state, game.content, game.world)
 
 
+@pytest.mark.smoke
 def test_good_and_evil_gains_build_the_name_and_pick_the_path(game):
     s, c = game.state, game.content
     assert ranger.tier(s, c) == 0 and ranger.title(c, s) is None

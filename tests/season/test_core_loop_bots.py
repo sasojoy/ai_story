@@ -43,6 +43,7 @@ def test_the_season_bot_never_presses_the_bare_explore():
     assert "act:explore" not in picks and any(p.startswith("explore:") for p in picks)
 
 
+@pytest.mark.smoke
 def test_explore_choice_prefers_gathering():
     assert bot.explore_choice({"act:explore", "explore:gather", "explore:seek"}) == "explore:gather"
     assert bot.explore_choice({"act:explore"}) == "act:explore"

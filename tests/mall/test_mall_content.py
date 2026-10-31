@@ -41,6 +41,7 @@ def test_real_content_has_placeholder_items():
     assert week7.enabled is True and week7.beta_grant == 5000
 
 
+@pytest.mark.smoke
 def test_fixture_content_keeps_the_mall_off(content):
     assert content.config.mall.enabled is False and content.mall == {}
     raw = json.loads((FIXTURE / "config.json").read_text(encoding="utf-8"))
@@ -83,6 +84,7 @@ def test_two_items_cannot_share_a_name(tmp_path):
     assert "同名" in str(caught.value)
 
 
+@pytest.mark.smoke
 def test_date_day_matches_the_pill_day():
     """台灣 2026-10-25 這一天＝回體丹那一套的日數（從 1970-01-01 起算、照台灣日期）。"""
     from datetime import datetime, timedelta, timezone

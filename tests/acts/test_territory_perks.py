@@ -40,6 +40,7 @@ def test_an_unknown_side_in_controlled_by_is_refused():
         validate(c)
 
 
+@pytest.mark.smoke
 def test_the_situation_layer_paints_who_holds_each_place():
     game = _game("huang", at="huangjin_camp")
     s, c = game.state, game.content

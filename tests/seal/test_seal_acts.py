@@ -46,6 +46,7 @@ def test_the_real_content_gives_seven_shards_their_acts():
     assert c.config.seal.revamp.acts.model_dump() == pytest.approx(NUMBERS)
 
 
+@pytest.mark.smoke
 def test_one_act_goes_to_one_shard_only(sealed):
     acts_on(sealed)
     assert seal_problems(sealed) == []
