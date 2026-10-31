@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from tianxia import journal  # 核心（江湖紀錄）
 from tianxia.state import JournalEntry
 
-from . import moves, orders, rules
+from . import market, moves, orders, rules
 
 if TYPE_CHECKING:
     from tianxia.engine import Game
@@ -37,6 +37,7 @@ def view(ctx: Game) -> dict | None:
         return None
     out = rules.view(ctx.content, wallet, ctx._mall_owner(), _shop(ctx))
     out["moves"] = moves_view(ctx)  # 招式動畫（第三批）
+    out["market"] = market_view(ctx)  # 形象市集（第四批）
     return out
 
 
@@ -268,3 +269,74 @@ def admin_reject(ctx: Game, pid: int, note: str) -> list[str]:
     if problem:
         return ctx._log([problem])
     return ctx._log([orders.reject(wallet, found, now=ctx.pill_now(), admin=ctx.state.player.name, note=note)])
+
+
+# ── 形象市集（第四批；market.py）─────────────────────────
+
+
+def _made_names(ctx: Game, wallet) -> dict[str, str]:
+    """全服做好了的自建形象：id → 名字。"""
+    item = orders.item_of(ctx.content)
+    return {} if item is None else {o.look: o.name for o in orders.every(wallet, item.id) if o.status == orders.MADE and o.look}
+
+
+def settle(ctx: Game) -> list[str]:
+    """把押滿了的市集分成入帳（看「形象」那一頁時順手結；入了寫一則「形象」江湖紀錄）。"""
+    wallet, item = ctx._wallet(), market.item_of(ctx.content)
+    if wallet is None or item is None or not rules.on(ctx.content) or ctx.state.player.bot:
+        return []
+    n = market.settle(wallet, item.id, ctx._mall_owner(), ctx.pill_now())
+    if not n:
+        return []
+    line = market.SETTLED.format(n=n)
+    journal.add_entry(ctx.state, JournalEntry(time=ctx.state.world.time, title=TITLE, lines=[line], changes=[f"元寶 +{n}"]))
+    return [line]
+
+
+def market_view(ctx: Game) -> dict | None:
+    """市集那一段：別人掛著的（我買過的、我自己的不列）、我做的每一套掛了沒、賣了幾份、分成入帳與押著的。"""
+    wallet, item = ctx._wallet(), market.item_of(ctx.content)
+    if wallet is None or item is None:
+        return None
+    owner = ctx._mall_owner()
+    names = _made_names(ctx, wallet)
+    have = market.bought(wallet, owner)
+    listed = {x["look"]: x for x in market.listings(wallet)}
+    shelf = [{"look": x["look"], "name": names[x["look"]], "seller": wallet.character_name(x["seller"]) or x["seller"], "price": x["price"]}
+             for x in listed.values() if x["seller"] != owner and x["look"] in names and x["look"] not in have]
+    mine = [{"look": look, "name": name, "price": listed[look]["price"] if look in listed else None}
+            for look, name in market.made_by(wallet, owner).items()]
+    return {"shelf": shelf, "mine": mine, "min": market.PRICE_MIN, "max": market.PRICE_MAX, "default": market.PRICE_DEFAULT,
+            "share": market.SHARE, "hold_days": market.HOLD_DAYS, "paid_only": ctx.content.config.mall.market_paid_only,
+            **market.earnings(wallet, item.id, owner)}
+
+
+def market_list(ctx: Game, look: str, price: int) -> list[str]:
+    wallet = ctx._wallet()
+    if wallet is None or market.item_of(ctx.content) is None or not rules.on(ctx.content):
+        return ctx._log([market.NOT_OPEN])
+    done, line = market.list_look(wallet, ctx._mall_owner(), look, price)
+    if done:
+        journal.add_entry(ctx.state, JournalEntry(time=ctx.state.world.time, title=TITLE, lines=[line]))
+    return ctx._log([line])
+
+
+def market_unlist(ctx: Game, look: str) -> list[str]:
+    wallet = ctx._wallet()
+    if wallet is None or market.item_of(ctx.content) is None or not rules.on(ctx.content):
+        return ctx._log([market.NOT_OPEN])
+    return ctx._log([market.unlist_look(wallet, ctx._mall_owner(), look)[1]])
+
+
+def market_buy(ctx: Game, look: str, ref: str) -> list[str]:
+    """買市集上的一套（假人不買）：成了寫一則「形象」江湖紀錄。"""
+    wallet = ctx._wallet()
+    if wallet is None or market.item_of(ctx.content) is None or not rules.on(ctx.content) or ctx.state.player.bot:
+        return ctx._log([market.NOT_OPEN])
+    found = market.listing(wallet, look)
+    seller = (wallet.character_name(found["seller"]) or found["seller"]) if found else ""
+    pid, line = market.buy(ctx.content, wallet, ctx._mall_owner(), look, ref, names=_made_names(ctx, wallet), seller_name=seller,
+                           now=ctx.pill_now(), day=ctx._pill_day(), season=ctx.world.get_season_number())
+    if pid is not None:
+        journal.add_entry(ctx.state, JournalEntry(time=ctx.state.world.time, title=TITLE, lines=[line], changes=[f"元寶 -{found['price']}"]))
+    return ctx._log([line])

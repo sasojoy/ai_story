@@ -6049,6 +6049,9 @@
         case "look-wear": await lookWear(el.dataset.id || ""); break; // 萬寶閣「形象」那一頁換上一套
         case "look-order": lookOrderAsk(); break; // 自建形象下單（先問一次）
         case "move-order": moveOrderAsk(); break; // 招式動畫下單（先問一次）
+        case "market-buy": lookMarketAsk(el.dataset.id, el.dataset.name || "", Number(el.dataset.price) || 0); break; // 形象市集買一套（先問一次）
+        case "market-list": await lookMarketList(el.dataset.id); break; // 自己做的一套掛上市集（照框裡的價錢）
+        case "market-unlist": await lookMarketDo({ op: "unlist", look: el.dataset.id }); break;
         case "move-bind": await moveBind(el.dataset.id); break; // 招式庫的一招綁到現在練的那一門
         case "looks-admin": await looksAdminDo(el.dataset.op, el.dataset.id); break; // 管理者區「自建形象」
         case "mall-retry": await (S.mallTab === "log" ? loadMallLog() : loadMall()); break;

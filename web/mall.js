@@ -244,7 +244,7 @@
       return `<div class="look-card${lk.id === d.worn ? " on" : ""}">${lookFaceHtml(lk.id)}<b>${esc(lk.name)}</b>
         ${lk.note ? `<small>${esc(lk.note)}</small>` : ""}${btn}</div>`; // 說明照字折行（三欄一格窄，切成不折行的小段會撐出格子）
     };
-    return `<div class="mall-sub">擂台形象</div><div class="mall-grid look-grid">${d.looks.map(card).join("")}</div>${lookOrderHtml(d.order)}${moveHtml(d.moves)}`;
+    return `<div class="mall-sub">擂台形象</div><div class="mall-grid look-grid">${d.looks.map(card).join("")}</div>${lookMarketHtml(d.market)}${lookOrderHtml(d.order)}${moveHtml(d.moves)}`;
   }
 
   // 自建形象（第二批）：寫名字與一句樣子下單（先扣元寶），圖做好、管理者看過才上架；退回的元寶全退。一次一張
@@ -330,6 +330,44 @@
       if (r.looks) S.mallLooks = r.looks;
       const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
       S.mallSay = text ? { text, ok: text.startsWith("把招式綁") } : null;
+      if (S.mallOpen) renderMall();
+    });
+  }
+  // 形象市集（第四批）：別人做的一套一張卡（預覽、名字、誰做的、價錢一顆）；自己做好的每一套一列：沒掛的寫價錢掛上去、掛著的撤下；
+  // 賣了幾份、分成入帳了多少、還押著多少（押滿天數才入帳）
+  function lookMarketHtml(m) {
+    if (!m) return "";
+    const card = (x) => `<div class="look-card">${lookFaceHtml(x.look)}<b>${esc(x.name)}</b><small>${esc(x.seller)}做的</small>
+        <button class="btn small" data-act="market-buy" data-id="${esc(x.look)}" data-name="${esc(x.name)}" data-price="${x.price | 0}">${ingotSvg()}${x.price | 0}</button></div>`;
+    const shelf = m.shelf.length ? `<div class="mall-grid look-grid">${m.shelf.map(card).join("")}</div>` : `<p class="mall-note">市集上還沒有別人做的形象。</p>`;
+    const mine = (m.mine || []).map((x) => x.price != null
+      ? `<li class="look-order-row"><b>${esc(x.name)}</b><span class="look-st st-made">掛著・${x.price | 0}</span>
+          <button class="btn small" data-act="market-unlist" data-id="${esc(x.look)}">撤下</button></li>`
+      : `<li class="look-order-row"><b>${esc(x.name)}</b><span class="look-st">沒掛</span>
+          <span class="market-set"><input class="input" type="number" id="market-price-${esc(x.look)}" min="${m.min | 0}" max="${m.max | 0}" value="${m.default | 0}" aria-label="價錢">
+          <button class="btn small primary" data-act="market-list" data-id="${esc(x.look)}">掛上去</button></span></li>`).join("");
+    const pct = Math.round((m.share || 0) * 100);
+    const earn = m.mine && m.mine.length ? `<p class="mall-note">賣出 ${m.sold | 0} 份・分成入帳 ${m.paid | 0}・押著 ${m.held | 0}（賣出的 ${pct}% 歸你，${m.hold_days | 0} 天後入帳）</p>` : "";
+    return `<div class="mall-sub">形象市集</div>${shelf}${mine ? `<ul class="look-orders">${mine}</ul>${earn}` : ""}`;
+  }
+  function lookMarketAsk(look, name, price) {
+    const ref = mallRef();
+    ask(`花 ${price | 0} 元寶買下市集上的「${name}」？`, "買", () => lookMarketDo({ op: "buy", look, ref }));
+  }
+  async function lookMarketList(look) { // 價錢照框裡寫的；讀不到框就照預設的
+    const m = (S.mallLooks && S.mallLooks.market) || {};
+    const price = Number((document.getElementById(`market-price-${look}`) || {}).value) || m.default || 0;
+    await lookMarketDo({ op: "list", look, price });
+  }
+  async function lookMarketDo(body) {
+    await busy(async () => {
+      const r = await api("/api/looks/market", body);
+      if (r.looks) S.mallLooks = r.looks;
+      if (r.main) setMain(r.main);
+      if (r.main && r.main.mall && S.mallData) S.mallData.balance = r.main.mall.balance;
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      S.mallSay = text ? { text, ok: /^(買下了|「)/.test(text) } : null;
+      renderTop();
       if (S.mallOpen) renderMall();
     });
   }

@@ -58,7 +58,7 @@ def router(shell) -> APIRouter:
     def api_looks(request: Request):
         """萬寶閣「形象」那一頁（actions.view）：穿著哪一套、每一套買了沒、自建形象的訂單。"""
         gate()
-        return shell.act_look(shell._game(request), lambda g: None, lambda g: actions.view(g))[1]
+        return shell.act_look(shell._game(request), lambda g: actions.settle(g), lambda g: actions.view(g))[1]  # 順手結市集分成
 
     @r.post("/api/looks/wear")
     def api_looks_wear(request: Request, body: dict = Body(...)):
@@ -103,6 +103,27 @@ def router(shell) -> APIRouter:
         pid = shell._int(body.get("id"), 0)
         msgs = shell.act(game, lambda g: actions.bind_move(g, pid))
         return {"message": shell.joined(msgs), "looks": shell.look(game, lambda g: actions.view(g))}
+
+    @r.post("/api/looks/market")
+    def api_looks_market(request: Request, body: dict = Body(...)):
+        """形象市集：{op: list（帶 look、price）| unlist（帶 look）| buy（帶 look、ref）}；回 {message, looks, main}。"""
+        gate()
+        game = shell._game(request)
+        op, look = str(body.get("op", "")), str(body.get("look", ""))[:40]
+        if op == "list":
+            price = shell._int(body.get("price"), 0)
+            msgs = shell.act(game, lambda g: actions.market_list(g, look, price))
+        elif op == "unlist":
+            msgs = shell.act(game, lambda g: actions.market_unlist(g, look))
+        elif op == "buy":
+            raw = body.get("ref")
+            ref = raw if isinstance(raw, str) and REF.fullmatch(raw) else secrets.token_urlsafe(12)
+            msgs = shell.act(game, lambda g: actions.market_buy(g, look, ref))
+            shell._tell_tabs(game)
+        else:
+            raise HTTPException(400)
+        return {"message": shell.joined(msgs), "looks": shell.look(game, lambda g: actions.view(g)),
+                "main": shell.look(game, shell.main_view)}
 
     @r.get("/api/admin/looks")
     def api_admin_looks(request: Request):

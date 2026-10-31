@@ -109,3 +109,23 @@ def test_no_art_no_move_form(m_on):  # noqa: F811
     looks = {**LOOKS, "moves": {**MOVES, "has_art": False, "art": "", "library": []}}
     html = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "move-order" }'), responses={"/api/looks": looks})["app"]
     assert 'id="move-prompt"' not in html and "先練一門自己合成或自創的武功" in html
+
+
+MARKET = {"shelf": [{"look": "u5", "name": "白衣書生", "seller": "沈浪", "price": 800}],
+          "mine": [{"look": "u9", "name": "黑衣客", "price": None}, {"look": "u11", "name": "紅袍", "price": 700}],
+          "min": 300, "max": 3000, "default": 600, "share": 0.5, "hold_days": 7, "paid_only": False, "sold": 2, "paid": 400, "held": 350}
+
+
+def test_the_market_buys_lists_and_unlists(m_on):  # noqa: F811
+    """形象市集（第四批）：別人的一套一顆價錢（先問一次才送）；自己的沒掛寫價錢「掛上去」、掛著的「撤下」；寫賣了幾份與分成。"""
+    looks = {**LOOKS, "market": MARKET}
+    reply = {"message": "買下了「白衣書生」（沈浪做的）：元寶 -800（還剩 4200）。", "looks": looks}
+    out = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "market-buy", id: "u5", name: "白衣書生", price: "800" }')
+                 + _click('{ act: "ask-yes" }') + _click('{ act: "market-list", id: "u9" }') + _click('{ act: "market-unlist", id: "u11" }'),
+                 responses={"/api/looks/market": reply, "/api/looks": looks})
+    html = out["app"]
+    assert "形象市集" in html and "沈浪做的" in html and 'data-act="market-buy" data-id="u5"' in html
+    assert 'id="market-price-u9"' in html and "掛著・700" in html and "賣出 2 份・分成入帳 400・押著 350" in html
+    sent = [c[1] for c in out["calls"] if c[0] == "/api/looks/market"]
+    assert sent[0]["op"] == "buy" and sent[0]["look"] == "u5" and sent[0]["ref"]
+    assert sent[1] == {"op": "list", "look": "u9", "price": 600} and sent[2] == {"op": "unlist", "look": "u11"}

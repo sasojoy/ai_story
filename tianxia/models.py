@@ -3711,6 +3711,9 @@ class MallTuning(_Strict):
     card_daily_ingots: int = Field(default=0, ge=0)
     card_daily_pills: int = Field(default=0, ge=0)
     records_shown: int = Field(default=50, ge=1)  # 購買紀錄與帳的畫面、管理者查帳最多列幾筆【預設】
+    # 形象市集（功能包 looks 第四批）：只准用儲值的元寶買別人的形象（設計 v3：封測、月卡送的元寶不能變成別人的收入）。
+    # 還沒有金流、沒有儲值，所以先關著：封測元寶也買得了；接金流那一天打開【預設】
+    market_paid_only: bool = False
 
 
 class MallLimit(_Strict):

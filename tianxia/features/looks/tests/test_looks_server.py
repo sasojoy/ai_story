@@ -48,3 +48,11 @@ def test_move_order_without_an_own_art_is_refused_and_charges_nothing():
     client.get("/api/main")
     got = client.post("/api/looks/move", json={"prompt": "劍氣", "ref": "web-move-0001"}).json()
     assert "先練一門自己合成或自創的武功" in got["message"] and got["main"]["mall"]["balance"] == 5000
+
+
+def test_the_market_endpoint_refuses_a_look_you_did_not_make():
+    client = _player()
+    client.get("/api/main")
+    got = client.post("/api/looks/market", json={"op": "list", "look": "u3", "price": 600}).json()
+    assert "不是你做的" in got["message"]
+    assert client.post("/api/looks/market", json={"op": "sell"}).status_code == 400

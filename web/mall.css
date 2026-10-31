@@ -91,6 +91,9 @@
 .shop-layer.shop-mall .move-row .move-fx { grid-row: span 3; }
 .shop-layer.shop-mall .move-row small, .shop-layer.shop-mall .move-row .btn { grid-column: 2 / -1; }
 .shop-layer.shop-mall .move-row .btn { justify-self: end; }
+/* 形象市集（第四批）：自己那一列的價錢框與「掛上去」 */
+.shop-layer.shop-mall .market-set { grid-column: 1 / -1; display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+.shop-layer.shop-mall .market-set .input { width: 96px; }
 .shop-layer.shop-mall .mall-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; margin: 0 0 8px;
   padding: 10px 12px; border-radius: 12px; border: 1px solid #f2c46a; background: linear-gradient(135deg, rgba(242, 196, 106, 0.14), rgba(43, 22, 22, 0.85) 55%);
   color: inherit; text-align: left; cursor: pointer; }

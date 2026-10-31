@@ -200,6 +200,21 @@ class Wallet:
 
     # ── 對帳 ────────────────────────────────────
 
+    def entitlements(self, kind: str) -> list[tuple[str, str, dict]]:
+        """全服這一種的每一格（主人、key、data），舊的在前（例：形象市集上架的，kind 'market'）。"""
+        with self.db.snapshot() as conn:
+            rows = conn.execute("SELECT owner, key, data FROM mall_entitlements WHERE kind = ? ORDER BY rowid", (kind,)).fetchall()
+        return [(r["owner"], r["key"], json.loads(r["data"] or "{}")) for r in rows]
+
+    def drop_entitlement(self, owner: str, kind: str, key: str) -> None:
+        with self.db.transaction() as conn:
+            conn.execute("DELETE FROM mall_entitlements WHERE owner = ? AND kind = ? AND key = ?", (owner, kind, key))
+
+    def reason_total(self, owner: str, reason: str) -> int:
+        """這個錢包某一種帳的加總（例：儲值 topup 一共進來多少）。"""
+        with self.db.snapshot() as conn:
+            return conn.execute("SELECT COALESCE(SUM(delta), 0) FROM mall_ledger WHERE owner = ? AND reason = ?", (owner, reason)).fetchone()[0]
+
     def character_name(self, owner: str) -> str | None:
         """這個錢包的角色名號（characters 表的原寫法）；沒有這個角色是 None。管理者查帳找人用（真人假人一樣查）。"""
         with self.db.snapshot() as conn:

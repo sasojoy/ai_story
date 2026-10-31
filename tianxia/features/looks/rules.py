@@ -14,7 +14,7 @@ from tianxia.core.services import look_ids
 from tianxia.models import Content
 from tianxia.wallet import Wallet
 
-from . import orders
+from . import market, orders
 
 DEFAULT = ""  # 預設的斗笠小子
 DEFAULT_NAME = "斗笠小子"
@@ -54,7 +54,7 @@ def wear(content: Content, wallet: Wallet, owner: str, look: str) -> tuple[bool,
     """換上一套（DEFAULT 是換回斗笠小子）：回（換了沒、那一句）。"""
     if look != DEFAULT and look not in owned(content, wallet, owner):
         return False, NOT_OWNED
-    custom = orders.names(wallet, owner)
+    custom = {**orders.names(wallet, owner), **market.bought(wallet, owner)}
     if look == worn(content, wallet, owner):
         return False, ALREADY.format(name=name_of(content, look, custom))
     wallet.set_entitlement(owner, WEAR_KIND, WEAR_KEY, {"look": look})
@@ -82,6 +82,9 @@ def view(content: Content, wallet: Wallet, owner: str, shop: dict[str, str]) -> 
     for o in reversed(mine):  # 自建的、上架了的（舊的在前）
         if o.status == orders.MADE and o.look in have:
             items.append({"id": o.look, "name": o.name, "note": o.prompt, "owned": True, "item": None, "mine": True})
+    for look, name in market.bought(wallet, owner).items():  # 從市集買到的（別人做的）
+        if look in have:
+            items.append({"id": look, "name": name, "note": "", "owned": True, "item": None, "mine": False})
     item = orders.item_of(content)
     order = None if item is None else {
         "price": item.price, "name_max": orders.NAME_MAX, "prompt_max": orders.PROMPT_MAX,

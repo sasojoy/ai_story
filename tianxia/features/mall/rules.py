@@ -63,6 +63,7 @@ EFFECTS: dict[str, EffectSpec] = {
     # 自建形象（功能包 looks 第二批）：寫一句樣子下單，那一列購買就是訂單（data 記 name、prompt、status）；不上貨架，在「形象」那一頁下單
     # （looks.orders.place 自己記帳，同 buy 的那幾步）。審核過了那一列的 data 記 look_id＝u<購買 id>，就是買到的那一套；退回照退款
     "look_order": EffectSpec("look", "自建形象一套（寫一句樣子，審核過了上架）", 1),
+    "look_market": EffectSpec("look", "市集上別人做的形象一套（價錢照上架的那一份）", 1),
     "move_order": EffectSpec("look", "招式動畫一張（替自己的武功寫一句樣子，審核過了放進招式庫）", 1),
 }
 TICKET_NAMES = {"zhuan_art": "列傳插畫", "zhuan_seal": "紀念印", "zhuan_quote": "人物親筆評曰", "deep_slot": "深交名額", "inscribe": "題壁墨"}  # 退款那一句
@@ -70,7 +71,7 @@ KIND_NAMES = {"look": "形象", "consumable": "消耗品", "card": "月卡", "pa
 REASONS = {"grant": "封測發放", "buy": "購買", "refund": "退款", "reissue": "補發", "revoke": "扣回", "topup": "儲值"}
 # 月卡的元寶照舊記成 grant（帳本的原因有 CHECK，加原因要改結構；不改結構版本），照編號的開頭認是月卡的哪一份：
 # 當場回的 card:rebate:<購買 id>、每天領的 card:daily:<主人>:<日>；退款時扣回當場回的那一份 refund:rebate:<購買 id>（revoke）
-CARD_REFS = {"card:rebate:": "月卡回饋", "card:daily:": "月卡每日", "refund:rebate:": "扣回月卡回饋"}
+CARD_REFS = {"card:rebate:": "月卡回饋", "card:daily:": "月卡每日", "refund:rebate:": "扣回月卡回饋", "sale:": "市集分成"}  # sale：形象市集賣出的分成（looks.market）
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _EPOCH = date(1970, 1, 1)
 
@@ -127,7 +128,7 @@ LOOK_GOT = "形象「{name}」（到萬寶閣的「形象」換上）"
 LOOK_OWNED = "你已經有「{name}」這一套形象了。"
 LOOK_BACK = "形象「{name}」收回。"
 MOVE_BACK = "「{name}」的招式動畫收回。"
-ORDERED = ("look_order", "move_order")  # 從形象包下單的（帶名字或武功與樣子），一般的購買、貨架都不賣
+ORDERED = ("look_order", "move_order", "look_market")  # 從形象包下單的（帶名字或武功與樣子），一般的購買、貨架都不賣
 
 
 
@@ -668,6 +669,9 @@ def item_problems(item: MallItem, content: Content) -> list[str]:
     if item.effects.get("look_order"):
         if item.look or item.effects != {"look_order": 1}:
             out.append(f"{where}：自建形象的效果只寫 {{\"look_order\": 1}}、不寫 look")
+    elif item.effects.get("look_market"):
+        if item.look or item.effects != {"look_market": 1}:
+            out.append(f"{where}：形象市集的效果只寫 {{\"look_market\": 1}}、不寫 look")
     elif item.effects.get("move_order"):
         if item.look or item.effects != {"move_order": 1}:
             out.append(f"{where}：招式動畫的效果只寫 {{\"move_order\": 1}}、不寫 look")
