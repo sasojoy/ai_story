@@ -17,7 +17,7 @@ import test_map_web as T  # noqa
 
 game = T._w2()
 base = game.map_base()
-states = T._sweep_states(game)
+states = T._sweep_states(game) + T._sweep_states(game, scene=True)  # 修正輪（W2 審查 2026-10-31）：開季那一刻＋本週、正在翻、激戰
 out = T.run(game, T.SWEEP_JS.replace("FRAMES", json.dumps(sorted(T.FRAMES.items()))).replace("STATES", json.dumps(states, ensure_ascii=False)), timeout=600)
 pos = {p["id"]: p for p in base["places"]}
 stats = Counter()
@@ -30,7 +30,7 @@ for case in out:
     leads = re.findall(r'<i class="mv-lead" style="left:([-\d.]+)px;top:([-\d.]+)px', case["html"])
     vis_leads = sum(1 for x, y in leads if 0 <= float(x) <= vw and 0 <= float(y) <= bottom)
     tiny_vis = sum(1 for lab in labs if "tiny" in lab[4] and inside(lab[0]))
-    k = (vw, case["level"])
+    k = (vw, case["level"], "scene" if case["i"] >= len(states) // 2 else "open")
     stats[k + ("labels",)] += sum(1 for lab in labs if inside(lab[0]))
     stats[k + ("all",)] += len(labs)
     stats[k + ("tiny_all",)] += sum(1 for lab in labs if "tiny" in lab[4])
@@ -39,8 +39,8 @@ for case in out:
     stats[k + ("lead_all",)] += len(leads)
     if vis_leads:
         examples.setdefault(k, []).append((case["here"], vis_leads, [lab[0] for lab in labs if "tiny" in lab[4] and inside(lab[0])]))
-for k in sorted({k[:2] for k in stats}):
+for k in sorted({k[:3] for k in stats}):
     print(k, {n: stats[k + (n,)] for n in ("labels", "all", "tiny_vis", "tiny_all", "lead_vis", "lead_all")})
-print("TOTAL", {n: sum(v for kk, v in stats.items() if kk[2] == n) for n in ("labels", "all", "tiny_vis", "tiny_all", "lead_vis", "lead_all")})
+print("TOTAL", {n: sum(v for kk, v in stats.items() if kk[3] == n) for n in ("labels", "all", "tiny_vis", "tiny_all", "lead_vis", "lead_all")})
 for k, v in sorted(examples.items()):
     print(k, v[:8])

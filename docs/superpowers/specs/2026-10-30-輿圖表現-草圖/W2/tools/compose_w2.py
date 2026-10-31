@@ -1,15 +1,17 @@
-"""compose_w2.py <live 資料夾> <丙的資料夾> <輸出資料夾>：W2 的十一張存 JPG（兩倍像素），拼對照圖（照 W1 compose3.py 的排法：每一格上面兩行字）。"""
+"""compose_w2.py <live 資料夾> <丙的資料夾> <輸出資料夾> [<修正前的 JPG 資料夾>]：W2 的十二張存 JPG（兩倍像素），拼對照圖（照 W1 compose3.py 的排法：
+每一格上面兩行字）。給了修正前那一份（W2 審查之前 c4140079 拍的 JPG）就多拼一張「對照-7-修正前後」。"""
 import os
 import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
 live, ref, out = sys.argv[1:4]
+old = sys.argv[4] if len(sys.argv) > 4 else None
 os.makedirs(out, exist_ok=True)
 FONT = ImageFont.truetype(r"C:\Windows\Fonts\msjh.ttc", 18)
 SMALL = ImageFont.truetype(r"C:\Windows\Fonts\msjh.ttc", 13)
 SHOTS = ["W2-1-打開-375淺", "W2-2-點一處-375", "W2-3-去輿圖-375", "W2-4-去輿圖護糧-375", "W2-5-抽屜一排卡-375", "W2-6-抽屜全開-375",
-         "W2-7-底條可出陣-375", "W2-8-中景-375", "W2-9-打開-360", "W2-10-打開-320", "W2-11-打開-1280"]
+         "W2-7-底條可出陣-375", "W2-8-中景-375", "W2-9-打開-360", "W2-10-打開-320", "W2-11-打開-1280", "W2-12-捲過再收回-375"]
 for s in SHOTS:
     Image.open(os.path.join(live, s + ".png")).convert("RGB").save(os.path.join(out, s + ".jpg"), quality=86)
 
@@ -73,4 +75,14 @@ row("對照-6-底條與中景.jpg", [
     panel(L("W2-8-中景-375"), P375, "中景（Z0 × 0.6＝0.9）", "名字：一步內、大地方、本週、寶、翻；沒有危險度徽與箭頭牌"),
     panel(L("W2-9-打開-360"), (360, 780), "360 寬打開", "倍率 1.44"),
 ])
+if old:
+    def O(n):
+        return os.path.join(old, n + ".jpg")
+
+    row("對照-7-修正前後.jpg", [
+        panel(O("W2-2-點一處-375"), P375, "修正前：點潁川郊野", "選中的名字被自己那一圈擋住、縮成 11px"),
+        panel(L("W2-2-點一處-375"), P375, "修正後：點潁川郊野", "名字從圈外擺起，照原本的 14px"),
+        panel(O("W2-4-去輿圖護糧-375"), P375, "修正前：護糧「去輿圖」", "下一站（長社）縮成 11px、擠到圈上面"),
+        panel(L("W2-4-去輿圖護糧-375"), P375, "修正後：護糧「去輿圖」（真的按）", "長社照原本的 14px、擺在圈下面"),
+    ])
 print("ok", sorted(os.listdir(out)))
