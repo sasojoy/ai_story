@@ -2032,3 +2032,66 @@ return res;""")
         assert r["during"] >= 1, (name, r)  # 途中真的重排過字
         assert r["shown"] == 0 and r["after"] == "", (name, r)
     assert out["open"]["start"]["pills"] > 0  # 打開的取景有箭頭牌（洛陽官道）
+
+
+# FB-9095 用的假 DOM：浮著的那幾樣各一個元素（記 style.visibility），地圖框照實機的寬高（FRAMES），抽屜照 DRAWER_DOM
+HUD_DOM = """
+const hudEl = (extra = {}) => Object.assign({ style: {}, dataset: {}, innerHTML: '' }, extra);
+const areaT = { textContent: '' };
+Object.assign(els, { 'mv-area': hudEl({ querySelector: () => areaT }), 'mv-q': hudEl(), 'mv-mini': hudEl(), 'mv-pills': hudEl() });
+const look = () => ({ area: els['mv-area'].style.visibility || '', q: els['mv-q'].style.visibility || '', mini: els['mv-mini'].style.visibility || '',
+  fab: fab.style.visibility || '', fabBottom: fab.style.bottom, drawer: drawer.style.height, text: areaT.textContent, lvl: H.mvLevel(H.S.mapCam.z, H.mapGeom(map)),
+  miniSize: (els['mv-mini'].innerHTML.match(/width:(\\d+)px;height:(\\d+)px/) || []).slice(1).map(Number) });
+"""
+
+
+def _hud_look(vw, case):
+    """浮著的那幾樣畫出來的框（照 style.css，跟 _hud 同一套位置，只是不含 chip 撐開的點擊範圍）：區名 chip（左上 10、高 34）、🔍（右上 12、上 8、
+    46 見方）、小地圖（近中景；右 12、上 62，連 1px 的框）、右下兩顆（46 見方、間隔 10，底下＝fab.style.bottom）。收起來的（visibility hidden）不算。"""
+    vh = case["vh"]
+    out = {"area": (10, 10, 10 + 20 + 1.15 * _text_w(case["text"], 14) + 6 + 11, 44), "q": (vw - 58, 8, vw - 12, 54)}
+    if case["lvl"] > 0 and case["miniSize"]:
+        mw, mh = case["miniSize"]
+        out["mini"] = (vw - 12 - mw - 2, 62, vw - 12, 62 + mh + 2)
+    fb = vh - float(case["fabBottom"][:-2])
+    out["fab"] = (vw - 58, fb - 102, vw - 12, fb)
+    return {k: b for k, b in out.items() if case[k] != "hidden"}
+
+
+def test_fb9095_the_round_buttons_and_the_hud_never_overlap_each_other_or_sit_under_the_drawer():
+    """FB-9095：右下兩顆（◎、全）跟著抽屜上移，小地圖固定在右上，以前兩樣不互相讓——卡拉到六成（375、360）、320 寬一排卡那一格（還有點了一處的那一行）
+    ◎ 整顆被小地圖蓋住，點下去點到的是小地圖；全開時區名、🔍、小地圖的下緣被抽屜蓋住一截。現在：右下兩顆跟任何一樣浮著的會疊到就跟全開一樣收起來
+    （不是挪位置），被抽屜蓋住（哪怕一截）的區名、🔍、小地圖也收起來。375／360／320 × 沒點地點的三格 × 點了一處的三格（含拉到六成）：
+    看得到的那幾樣兩兩不相交、都在抽屜上面；一行那一格五樣都在（不亂收）。"""
+    game = _w2()
+    out = run(game, DRAWER_DOM + GESTURE_DOM + HUD_DOM + SETTLE + """const res = [];
+for (const [vw, vh] of FRAMES) {
+  Object.assign(map, { clientWidth: vw, clientHeight: vh }); box.clientHeight = vh;
+  const g = H.mapGeom(map);
+  for (const [mode, stops] of [['overview', ['peek', 'row', 'full']], ['place', ['peek', 'half', 'full']]]) {
+    H.mapBack(); H.setMapDrawer('peek'); H.camSet(H.camOpen(g)); H.drawMarks(); settle();
+    if (mode === 'place') { H.mapPick('yingshui'); settle(); }
+    for (const h of stops) { H.setMapDrawer(h); settle(); H.drawMarks(); res.push({ vw, vh, mode, h, ...look() }); }
+  }
+}
+return res;""".replace("FRAMES", json.dumps(sorted(FRAMES.items()))))
+    assert len(out) == 3 * 6
+    hidden = set()
+    for case in out:
+        key = (case["vw"], case["mode"], case["h"])
+        top = case["vh"] - float(case["drawer"][:-2])
+        boxes = _hud_look(case["vw"], case)
+        names = sorted(boxes)
+        for i, a in enumerate(names):
+            assert boxes[a][3] <= top + 1e-6, (key, a, boxes[a], top)  # 不被抽屜蓋住
+            for b in names[i + 1:]:
+                assert not _cross(boxes[a], boxes[b]), (key, a, b, boxes[a], boxes[b])
+        hidden |= {(key, k) for k in ("area", "q", "mini", "fab") if case[k] == "hidden"}
+        if case["h"] == "peek" and case["mode"] == "overview":
+            assert set(boxes) == {"area", "q", "mini", "fab"}, (key, boxes)  # 一行那一格不亂收
+    # 真的收了該收的：拉到六成（375、360）與 320 一排卡的 ◎；全開時上面那一排與小地圖
+    for vw in (375, 360):
+        assert ((vw, "place", "half"), "fab") in hidden
+    assert ((320, "overview", "row"), "fab") in hidden
+    for vw in (375, 360, 320):
+        assert {((vw, "overview", "full"), k) for k in ("area", "q", "mini", "fab")} <= hidden

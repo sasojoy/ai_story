@@ -127,7 +127,7 @@
     const here = placeOf(S.mapBase, S.mapState.here), reg = here && S.mapBase.regions.find((r) => r.id === here.region);
     const top = `<div class="mv-hud" id="mv-hud"><button type="button" class="mv-area" id="mv-area" data-act="map-area" aria-label="${MV_LOOK.area}">`
       + `<span class="t">${esc(reg ? reg.name : MV_LOOK.world)}</span><i aria-hidden="true">▾</i></button>`
-      + `<button type="button" class="mv-q map-search" data-act="map-search" aria-label="${MV_LOOK.search}"><span aria-hidden="true">🔍</span></button>`
+      + `<button type="button" class="mv-q map-search" id="mv-q" data-act="map-search" aria-label="${MV_LOOK.search}"><span aria-hidden="true">🔍</span></button>`
       + `<div class="mv-minibox" id="mv-mini"></div><div class="mv-pills" id="mv-pills"></div></div>`;
     const fab = `<div class="mv-fab" id="mv-fab"><button type="button" class="mv-me" data-act="map-home" aria-label="${MV_WORDS.me}">◎</button><button type="button" data-act="map-fit" aria-label="${MV_WORDS.fit}">全</button></div>`;
     const find = S.mapMode === "search" ? `<div class="mv-find" id="mv-find">${searchHtml(S.mapBase, S.mapState, S.mapQuery)}</div>` : "";
@@ -667,11 +667,10 @@
     if (was && was !== d.style.height && S.mapCam && !mvBusy()) marksSoon();
     // 右下兩顆圓鈕跟著抽屜上下（直接寫在那一塊上：寫在框上的自訂屬性會一路繼承，整棵地圖重算樣式，FB-322）
     const fab = document.getElementById("mv-fab");
-    if (fab && fab.style) {
-      fab.style.bottom = deskMap() ? "" : `${px + 12}px`;
-      // 抽屜全開時地圖只剩上面一條：兩顆圓鈕收起來（不然疊在 🔍 上；輿圖表現第二版 W2）
-      fab.style.visibility = h === "full" && !deskMap() ? "hidden" : "";
-    }
+    if (fab && fab.style) fab.style.bottom = deskMap() ? "" : `${px + 12}px`;
+    // 抽屜全開時地圖只剩上面一條：兩顆圓鈕收起來（不然疊在 🔍 上；輿圖表現第二版 W2）；會疊到小地圖、被抽屜蓋住的也收（FB-9095，hudShow）
+    const mg = mapGeom(document.getElementById("map"));
+    hudShow(mg, S.mapCam && mg ? mvLevel(S.mapCam.z, mg) : 2);
     // --md-h 只有版圖變化用得到（地圖框縮到抽屜上面，style.css 的 .mapx.tl-mode）
     if (S.mapMode === "timeline") box.style.setProperty("--md-h", `${px}px`);
   }
@@ -1213,13 +1212,41 @@
     const fr = (base.world && base.world.frame) || [0, 0, base.w, base.h], mw = g.vw < 360 ? 64 : 100;
     return [mw, Math.round((mw * fr[3]) / fr[2])];
   }
+  // 每一樣兩個框：look 畫出來的那一塊（照 style.css：chip 上 10、高 34；🔍 上 8、46 見方；小地圖上 62、連 1px 的框；右下兩顆 46 見方、間隔 10、
+  // 底下離抽屜 12），room 名字、箭頭牌讓開的那一塊（多留 2px；chip 連撐開的點擊範圍，上下各 4px：style.css 的 .mv-area::before，W2 審查 2026-10-31）。
+  // hide：收起來（FB-9095，W2 第二輪 2026-10-31）——被抽屜蓋住（哪怕一截）的區名、🔍、小地圖收起；右下兩顆在全開、或會疊到任何一樣還露著的
+  // 浮著的時收起（跟全開一樣，不挪位置：卡拉到六成時 ◎ 整顆在小地圖底下、點下去點到的是小地圖；320 寬一排卡那一格也是）。桌機抽屜是右欄，不蓋
+  function hudParts(base, g, lvl, area) {
+    if (S.mapMode === "timeline") return {};
+    const desk = deskMap(), top = desk ? g.vh : g.vh - mapDrawerPx(S.mapDrawer), fb = desk ? g.vh - 16 : top - 12, cw = 10 + 40 + MV_LAB_ROOM * textW(area, 14);
+    const parts = {
+      area: { look: [10, 10, cw, 44], room: [8, 4, cw, 50] },
+      q: { look: [g.vw - 58, 8, g.vw - 12, 54], room: [g.vw - 60, 6, g.vw - 10, 56] },
+      fab: { look: [g.vw - 58, fb - 102, g.vw - 12, fb], room: [g.vw - 60, fb - 104, g.vw - 10, fb + 2] },
+    };
+    if (lvl > 0) {
+      const [mw, mh] = miniSize(base, g);
+      parts.mini = { look: [g.vw - 14 - mw, MV_MINI_TOP, g.vw - 12, MV_MINI_TOP + mh + 2], room: [g.vw - 14 - mw, MV_MINI_TOP - 2, g.vw - 10, MV_MINI_TOP + mh + 2] };
+    }
+    const up = ["area", "q", "mini"].filter((k) => parts[k]);
+    for (const k of up) parts[k].hide = parts[k].look[3] > top;
+    parts.fab.hide = !desk && (S.mapDrawer === "full" || up.some((k) => !parts[k].hide && boxCross(parts.fab.look, parts[k].look)));
+    return parts;
+  }
   function hudBoxes(base, g, lvl, area) {
-    if (S.mapMode === "timeline") return [];
-    const room = mapRoom(g), fb = deskMap() ? g.vh - 16 : room.bottom - 12;
-    // 區名 chip 畫出來 34 高（上 10），點擊範圍上下各撐開 4px（style.css 的 .mv-area::before，W2 審查 2026-10-31）：讓開撐開的那一塊
-    const out = [[8, 4, 10 + 40 + MV_LAB_ROOM * textW(area, 14), 50], [g.vw - 60, 6, g.vw - 10, 56], [g.vw - 60, fb - 104, g.vw - 10, fb + 2]];
-    if (lvl > 0) { const [mw, mh] = miniSize(base, g); out.push([g.vw - 14 - mw, MV_MINI_TOP - 2, g.vw - 10, MV_MINI_TOP + mh + 2]); }
-    return out;
+    const parts = hudParts(base, g, lvl, area);
+    return ["area", "q", "fab", "mini"].filter((k) => parts[k] && !parts[k].hide).map((k) => parts[k].room);
+  }
+  // 照 hudParts 把收起來的那幾樣藏起來（visibility：藏起來的也點不到）。沒有地圖框（還沒排版）時只照全開收右下兩顆
+  const MV_HUD_IDS = { area: "mv-area", q: "mv-q", mini: "mv-mini", fab: "mv-fab" };
+  function hudShow(g, lvl, area) {
+    const parts = g && S.mapBase && S.mapState ? hudParts(S.mapBase, g, lvl, area !== undefined ? area : mvArea(S.mapBase, S.mapState, S.mapCam, g)) : null;
+    for (const [k, id] of Object.entries(MV_HUD_IDS)) {
+      const el = document.getElementById(id);
+      if (!el || !el.style) continue;
+      const hide = parts ? !!(parts[k] && parts[k].hide) : k === "fab" && S.mapDrawer === "full" && !deskMap();
+      el.style.visibility = hide ? "hidden" : "";
+    }
   }
   // 區名 chip 寫的（設計 2.1 HUD）：畫面中心（露出來那一塊的正中）此刻在哪一區；落在每一區的多邊形外就看最近的那一處在哪一區；遠看寫「天下」
   function mvArea(base, st, c, g) {
@@ -1553,6 +1580,7 @@
       pills.innerHTML = lay.pills.map((p) => p.html).join("");
       if (pills.style) pills.style.visibility = mvBusy() ? "hidden" : "";
     }
+    hudShow(g, lay.lvl, lay.area);
   }
   // 點小地圖（設計 2.3）：中心移到點的那一帶、倍率不變
   function mapMini(el, ev) {
