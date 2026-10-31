@@ -20,6 +20,9 @@
 - `ctx._cost_option(id, label, stamina)`：花體力的選項（鈕上寫體力）
 
 戰報（出陣第 1 批加的；打一場的包都要）
+# battle（主動搬六包第 5 批：單打服務留核心、列進這一段，PM 10/31 定）
+- `ctx.battle_card()`、`ctx.battle_list()`、`ctx.battle_detail(record_id)`、`ctx.shows_battle_card()`：戰報（「剛剛」那張卡片、戰報頁的列表與
+  那一筆；決戰的戰局條要問「剛剛」那張卡片是不是一場決戰）
 - `ctx._record_exp(record, exp, source)`：本人的經驗寫進戰報（滿級換心得）；`ctx._file_battle(record, ...)`：存戰報、回那一行
 - `ctx._play_rounds(record, squad, tier, ...)`：排回合的演出；`ctx._deed_fame(kind)`：立功給名望
 - `ctx._load_kin(name)`、`ctx._save_kin(game)`：同一把鎖裡讀、寫別人的存檔（混戰、截殺）
@@ -39,6 +42,14 @@
 
 （還沒有。第 4 批決戰包起：別包要問「我在哪一場」這一類，由那一包經 Game 的委派回答，列在這裡、寫主人。）
 
+# battle（主動搬六包第 5 批；主人：決戰包。本體還在 Game——「打」那一半，第 6～8 批搬——決戰包「看」那一半經 ctx 叫；搬完由決戰包經
+# Game 的委派回答別的包）
+- `ctx._battle_for_me(tick)`：場景上畫著的那一場（戰鬥, 定義），序章裡、沒有是 None；tick 照原位（畫面是 False、放手一搏送出是 True：
+  一次請求只推進一次）。`ctx._battle_now()`：此刻自己參戰（或看）的那一場
+- `ctx._definition_of(battle)`（那一場的定義：攻城戰是「攻城・地點」）、`ctx._battle_region_name(definition)`（決戰的大區叫什麼）
+- `ctx._watching_battle(battle, definition)`（此刻只能在一旁看）、`ctx._absent_reason(definition)`（還沒到戰場的原因）、
+  `ctx._free_agent(definition)`（散人、豪強：只能臨時投效）、`ctx._own_side_name()`（臨時投效的人打完照樣是誰）
+
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
 - `ctx._squad_encounter(squad_id, as_sortie=True)`（戰鬥：打一場隊伍，出陣攻打）
@@ -46,6 +57,10 @@
 - `ctx._push_progress(loc_id, nominal, source, how)`（地盤：領地爭奪推、拉進度）
 - `ctx._order_credit(...)`（軍令）；`ctx._drill_gains(squad, share)`（操練）
 - `ctx._spar_power(a, b)`、`ctx._spar_mirror(result, power)`（切磋：本人對本人的威力、從另一邊看同一場）
+# battle（主動搬六包第 5 批）
+- `ctx._submit_battle_action(...)`、`ctx._mutate_battle_of(battle, fn)`、`ctx._escort_home(escort)`（決戰「打」那一半：放手一搏送出、改共用狀態裡的
+  那一場、隨你出陣的同伴回江湖；第 7、8 批搬進決戰包之後改成包裡直接叫）
+- `ctx._four_wins()`（三陣營四勝利：這一季開著沒；決戰的軍餉記不記豪強的貢獻）
 - `ctx._outing_on()`（探索：減法季探索一顆開著）
 - `ctx.duel_on()`、`ctx._duel_option(loc)`（出陣約戰：第 2 批搬進出陣包之後拿掉）
 - `ctx._raid_key(a, b)`（截殺：截殺與混戰共用的冷卻帳 WorldState.raids 的鍵）
