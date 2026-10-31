@@ -654,3 +654,20 @@ def test_the_long_tests_listed_first_still_exist_and_rank_in_order():
     assert conftest.long_first_rank("tests/season/test_real_content.py::test_bot_plays_a_full_season[2]") > 0
     assert conftest.long_first_rank("tests/season/test_sim_scripts.py::test_anything_else") == len(conftest.LONG_FIRST) - 2
     assert conftest.long_first_rank("tests/arts/test_fusion.py::test_x") == len(conftest.LONG_FIRST)
+
+
+def test_the_long_tests_are_spread_to_the_head_of_each_workers_first_chunk():
+    """xdist load 一開始給每個 worker 連續的一段（條數 ÷ worker 數 ÷ 4）：長的照蛇形分到每一段的最前面，不全擠在第一段。"""
+    from types import SimpleNamespace
+
+    import conftest
+    longs = [SimpleNamespace(nodeid=e) for e in conftest.LONG_FIRST[:6]]
+    rest = [SimpleNamespace(nodeid=f"tests/arts/test_x.py::test_{i}") for i in range(114)]
+    items = longs + rest
+    assert conftest.spread_long_first(items, 1) == items
+    out = conftest.spread_long_first(items, 3)
+    assert sorted(id(i) for i in out) == sorted(id(i) for i in items)
+    chunk = len(items) // 3 // 4  # 10
+    heads = [out[k * chunk:(k + 1) * chunk] for k in range(3)]
+    assert [[i for i in h if i in longs] for h in heads] == [[longs[0], longs[5]], [longs[1], longs[4]], [longs[2], longs[3]]]
+    assert [i for i in out if i not in longs] == rest  # 其餘照原本的順序

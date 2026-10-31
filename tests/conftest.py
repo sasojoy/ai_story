@@ -663,10 +663,13 @@ def install_foreshadows(content):
 
 # ── 已知很長的排在最前面（10/31 測試自檢 T-03）─────────────────────────────
 # 整套含 slow 的牆鐘有四成花在尾巴：最長的整季模擬（test_sim_scripts 一條三分鐘）照檔名排在最後，別的 worker 都跑完了，只剩
-# 一、兩個 worker 在跑它們。這裡把量過很長的（10/31 量的 per_test：單一條 6 秒以上，照長短排）挪到最前面，其餘照原本的順序。
-# xdist 的預設分法（--dist load，-n 時就是它）一開始把前四分之一的測試照順序輪流發給每個 worker，所以長的會平均分到每個
-# worker、先跑；不要用 --dist worksteal（它把連續的一段整塊分給同一個 worker，長的會全擠在第一個 worker）。
-# 不跑 slow 的時候這幾條本來就被 -m 濾掉，順序沒有差別。這張表是排程用的提示，少寫、多寫、名字改了都不會讓測試紅。
+# 一、兩個 worker 在跑它們。這裡把量過很長的（10/31 量的 per_test：單一條 6 秒以上，照長短排）挪到前面，其餘照原本的順序。
+# 只排在最前面不夠：xdist 3.8 的預設分法（--dist load，-n 時就是它）一開始給每個 worker「連續的一段」，一段是
+# 條數 ÷ worker 數 ÷ 4（xdist/scheduler/load.py 的 node_chunksize），長的會全落在第一個 worker 的那一段，它跑完長的還
+# 背著九百多條，別人早就閒著（10/31 實測）。所以平行跑時（workerinput 的 workercount）把長的照蛇形（0、1、2、2、1、0…）
+# 分到每一段的最前面：每個 worker 一開始各拿一份差不多長的，其餘照 load 動態發。不要用 --dist worksteal（它的段是
+# 條數 ÷ worker 數，長的又會擠在同一段）。不跑 slow 時這幾條本來就被 -m 濾掉（trylast：排在 -m 濾掉之後），順序沒有差別。
+# 這張表是排程用的提示，少寫、多寫、名字改了都不會讓測試紅。
 LONG_FIRST = (
     "tests/season/test_sim_scripts.py::test_the_server_bot_simulation_counts_its_forging_in_a_short_season",
     "tests/season/test_sim_scripts.py::test_a_week7_server_bot_season_splits_the_gentry_between_the_armies",
@@ -706,5 +709,28 @@ def long_first_rank(nodeid: str) -> int:
     return len(LONG_FIRST)
 
 
+def spread_long_first(items: list, workers: int) -> list:
+    """items 已經照 long_first_rank 排好（長的在前）：平行跑時把長的照蛇形分到 xdist load 一開始給每個 worker 的那一段
+    （條數 ÷ worker 數 ÷ 4，至少 2）的最前面，其餘的接著補滿每一段、再照原本的順序排在後面。一個 worker 照原樣。"""
+    end = next((i for i, item in enumerate(items) if long_first_rank(item.nodeid) == len(LONG_FIRST)), len(items))
+    if workers < 2 or end == 0:
+        return list(items)
+    long_items, rest = items[:end], items[end:]
+    chunk = max(len(items) // workers // 4, 2)
+    buckets: list[list] = [[] for _ in range(workers)]
+    for j, item in enumerate(long_items):
+        k = j % (2 * workers)
+        buckets[k if k < workers else 2 * workers - 1 - k].append(item)
+    out, pos = [], 0
+    for bucket in buckets:
+        take = max(chunk - len(bucket), 0)
+        out += bucket + rest[pos:pos + take]
+        pos += take
+    return out + rest[pos:]
+
+
+@pytest.hookimpl(trylast=True)
 def pytest_collection_modifyitems(config, items):
     items.sort(key=lambda item: long_first_rank(item.nodeid))  # 穩定排序：不在表上的照原本的順序
+    workers = int(getattr(config, "workerinput", {}).get("workercount", 1))
+    items[:] = spread_long_first(items, workers)
