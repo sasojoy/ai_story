@@ -59,11 +59,11 @@ def test_a_season_exactly_as_long_as_hours_still_ends(tmp_path):
 
 def test_acceptance_flags():
     """RF2：只判兩條——第 6 週以前沒有決定性勝利、三條戰線的週末中位數在 20～80。"""
-    weekly = {w: {"yingru": 50, "nanyang": 40, "jizhou": 60, "geju": 20} for w in range(1, 11)}
+    weekly = {w: {"yingru": 50, "nanyang": 40, "jizhou": 60} for w in range(1, 11)}
     content = _content()
-    ok = sim.checks({"weekly": weekly, "ending_id": "s1_warlords", "end_week": 10}, content)
+    ok = sim.checks({"weekly": weekly, "ending_id": "s1_huangtian", "end_week": 10}, content)
     assert ok["passed"] and ok["no_early_decisive"] and ok["medians"] == {"yingru": 50, "nanyang": 40, "jizhou": 60}
-    early = sim.checks({"weekly": weekly, "ending_id": "s1_warlords", "end_week": 5}, content)
+    early = sim.checks({"weekly": weekly, "ending_id": "s1_huangtian", "end_week": 5}, content)
     assert not early["no_early_decisive"] and not early["passed"]
     lopsided = {w: {**v, "jizhou": 90} for w, v in weekly.items()}
-    assert not sim.checks({"weekly": lopsided, "ending_id": "s1_gentry", "end_week": 12}, content)["passed"]
+    assert not sim.checks({"weekly": lopsided, "ending_id": "s1_turbans_hold", "end_week": 12}, content)["passed"]

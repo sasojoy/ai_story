@@ -5,13 +5,10 @@ from __future__ import annotations
 
 import random
 
-import pytest
 
 from stances_kit import BOCAI, DAY, HUANGFU, LUZHI, at, real_game
 from tianxia import bot_policy, stances
 from tianxia.state import BotProfile
-
-pytestmark = pytest.mark.slow  # 載正式內容、照伺服器開季
 
 
 def _bot(g, faction="guan"):

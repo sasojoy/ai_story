@@ -13,7 +13,6 @@ from pathlib import Path
 import pytest
 import test_prologue_web
 from conftest import real_content
-from test_map_web import _timeline_game
 
 import server
 import webharness

@@ -20,7 +20,7 @@ import server_push
 import webharness
 from conftest import at, season_one_events
 from tianxia import (
-    atlas, battle_instance, calendar, companion_agent, cultivation, database, fight_llm, fusion, insights, naming, renown, skillview, social,
+    atlas, battle_instance, calendar, companion_agent, cultivation, database, fight_llm, fusion, insights, journal, naming, renown, skillview, social,
     sqlite_world, tale, team,
 )
 from tianxia.accounts import NAME_TAKEN
@@ -225,7 +225,7 @@ def test_main_view_has_everything_the_page_draws(game):
     assert view["free_text"] is None
     assert view["free_text_note"] is None
     assert view["card"] is None
-    assert view["minimap"].startswith("<svg")
+    assert "minimap" not in view  # 網頁不畫了，不送（全面自檢 S-07）
     assert view["admin"] is False
 
 
@@ -240,7 +240,7 @@ def test_main_view_sends_the_fronts_only_with_the_switch_on(game, monkeypatch):
     game.world.mutate_season(lambda season: setattr(season, "season_one", True))
     view = server.look(game, server.main_view)
     assert [(f["name"], f["value"]) for f in view["fronts"]] == [("潁川汝南", 40), ("南陽", 35), ("冀州", 55)]
-    assert view["status"]["stances"] == {"guan": 55, "huang": 45, "haoqiang": 10}
+    assert view["status"]["stances"] == {"guan": 55, "huang": 45}  # 豪強依附兩軍之一，沒有自己的態勢（割據 2026-10-31 拿掉）
 
 
 def test_main_view_carries_the_chaos_band_and_which_fronts_are_in_it(game, monkeypatch):
@@ -252,18 +252,11 @@ def test_main_view_carries_the_chaos_band_and_which_fronts_are_in_it(game, monke
     assert view["status"]["chaos_band"] == {"low": 35, "high": 65}
     assert [(f["name"], f["value"], f["chaos"]) for f in view["fronts"]] == [
         ("潁川汝南", 35, True), ("南陽", 65, True), ("冀州", 66, False)]  # 35 與 65 剛好在邊上：算在亂局裡
-    # 名冊空著：割據的漲速乘人數係數、一點不漲，說明不能說漸長（FB-065 M1）
-    empty = "2 條戰線在亂局，但還沒有人投靠，割據暫時不動"
-    assert view["status"]["stance_notes"] == {"sum": "三條戰線合計", "haoqiang": empty}
-    assert empty in view["trends"]
-    game.world.record_faction("投靠者", "guan")
-    view = server.look(game, server.main_view)
-    assert view["status"]["stance_notes"] == {"sum": "三條戰線合計", "haoqiang": "2 條戰線在亂局，割據漸長"}
+    assert view["status"]["stance_notes"] == {"sum": "三條戰線合計"}  # 割據那一句 2026-10-31 拿掉
+    assert "割據" not in view["trends"]
     game.world.mutate_season(lambda season: season.trends.update(yingru=34, nanyang=66, jizhou=66))
     view = server.look(game, server.main_view)
     assert [f["chaos"] for f in view["fronts"]] == [False, False, False]
-    assert view["status"]["stance_notes"]["haoqiang"] == "沒有戰線在亂局，割據漸消"
-    assert "在亂局" in view["trends"] and "割據漸消" in view["trends"]  # 見聞→大勢的割據那一段同一句話
 
 
 def test_main_view_has_no_chaos_data_with_the_switch_off(game):
@@ -273,7 +266,7 @@ def test_main_view_has_no_chaos_data_with_the_switch_off(game):
 
 def test_admin_choices_follow_the_switch(game, monkeypatch):
     """管理者推大勢的下拉選單：開關關著跟 beta 一樣；開關打開但這一季沒蓋章也一樣；這一季蓋了「開」的章時
-    列三條戰線與割據，不列黃巾聲勢（由戰線合成）。"""
+    列三條戰線，不列黃巾聲勢（由戰線合成；割據 2026-10-31 拿掉）。"""
     def listed():
         return [t["id"] for t in server.look(game, server.admin_choices)["trends"]]
 
@@ -281,7 +274,7 @@ def test_admin_choices_follow_the_switch(game, monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "season_one", True)
     assert listed() == ["huangjin", "yuxi"]
     game.world.mutate_season(lambda season: setattr(season, "season_one", True))
-    assert listed() == ["yingru", "nanyang", "jizhou", "geju", "yuxi"]
+    assert listed() == ["yingru", "nanyang", "jizhou", "yuxi"]
 
 
 def test_admin_choices_leave_out_the_beta_battle_and_thresholds_in_season_one(game, monkeypatch):
@@ -586,6 +579,66 @@ def test_two_games_of_one_character_do_not_overwrite_each_other(game):
     assert tab_b.state.player.stats["silver"] == 777
 
 
+def _game_clock(monkeypatch, start: float = 1000.0) -> list[float]:
+    """GAMES 的閒置時鐘（server._game_clock）換成手撥的；掃描的節流從頭算。"""
+    clock = [start]
+    monkeypatch.setattr(server, "_game_clock", lambda: clock[0])
+    monkeypatch.setattr(server, "_games_swept", None)
+    return clock
+
+
+def _stored_view(game):
+    """這一份 Game 進鎖重讀之後的角色（不含賽季）與江湖畫面的狀態列：丟掉重建的那一份要跟它一模一樣。"""
+    return server.look(game, lambda g: (g.state.model_dump(exclude={"world"}), server.main_view(g)["status"]))
+
+
+def test_an_idle_game_is_dropped_and_rebuilt_the_same(client, monkeypatch):
+    """審查 S-06：GAMES 不是只進不出。閒置滿 GAME_IDLE_SECONDS 的那一份下一次 game_for 時丟掉，再有請求時照資料庫重建，
+    角色、畫面跟丟掉之前一模一樣；之後的動作照常存得進去。"""
+    clock = _game_clock(monkeypatch)
+    _player(client)
+    old = server.game_for("沈青衫")
+    server.act(old, lambda g: g.state.player.stats.__setitem__("silver", 321))
+    clock[0] += server.GAME_IDLE_SECONDS - 1
+    assert server.game_for("沈青衫") is old  # 還沒閒置滿
+    clock[0] += server.GAME_IDLE_SECONDS
+    assert client.get("/api/main").status_code == 200  # 有請求進來：先丟掉，再照資料庫重建
+    rebuilt = server.GAMES["沈青衫".casefold()]
+    assert rebuilt is not old
+    assert _stored_view(rebuilt) == _stored_view(old)  # 丟掉的那一份照資料庫重讀：兩份一模一樣
+    out = client.post("/api/choose", json={"id": "act:rest"})
+    assert out.status_code == 200
+    assert open_characters().load("沈青衫").player.stats["silver"] == 321
+
+
+def test_a_game_in_use_is_not_dropped(client, monkeypatch):
+    """請求拿著的那一份（進鎖、出鎖都算用過；三段式的 B 段在鎖外等模型）不算閒著：最後一次用過之後才開始算。
+    管理者快轉過的那一份（advanced_real 只留在那一份上）也不丟。"""
+    clock = _game_clock(monkeypatch)
+    _player(client)
+    game = server.game_for("沈青衫")
+    clock[0] += server.GAME_IDLE_SECONDS - 10
+    server.look(game, lambda g: None)  # 這一下用過
+    clock[0] += 20
+    assert server.game_for("沈青衫") is game
+    game.advanced_real = 3600.0  # 管理者快轉推過的那一截
+    clock[0] += 10 * server.GAME_IDLE_SECONDS
+    assert server.game_for("沈青衫") is game
+
+
+def test_dropping_idle_games_leaves_a_renamed_game_under_its_new_name(client, monkeypatch):
+    """易名帖把 GAMES 換到新名號底下（mall routes）：用到的時間跟著那一份 Game 走，新名號底下照樣會被丟、照樣重建得回來。"""
+    clock = _game_clock(monkeypatch)
+    _player(client)
+    game = server.game_for("沈青衫")
+    with server._GAMES_LOCK:
+        server.GAMES.pop("沈青衫".casefold())
+        server.GAMES["新名號"] = game
+    clock[0] += server.GAME_IDLE_SECONDS + 1
+    server.game_for("別人")
+    assert "新名號" not in server.GAMES
+
+
 def test_two_sessions_of_one_character_keep_each_others_changes(client):
     """同一個帳號開兩個分頁（兩個 session）：A 改了存檔，B 下一個動作保留 A 的改動、畫面也看得到。
     A 的改動經由另一份 Game 存進資料庫（不是 GAMES 裡共用的那一份）：兩個 session 共用同一份 Game，
@@ -729,6 +782,75 @@ def test_login_with_a_character_goes_straight_in(client):
     assert out["stage"] == "game"
 
 
+def test_a_login_survives_a_server_restart(client):
+    """審查 S-10：登入狀態在資料庫，伺服器重開（記憶體裡的角色快取、連線全清掉）同一個 cookie 照樣進得去；登出之後就不認。"""
+    _player(client)
+    token = client.cookies.get(server.COOKIE)
+    server.GAMES.clear()
+    database.close_all()
+    again = TestClient(server.app)
+    again.cookies.set(server.COOKIE, token)
+    assert again.get("/api/me").json()["stage"] == "game"
+    with database.open_database().snapshot() as conn:  # 資料庫裡只有雜湊
+        stored = [row[0] for row in conn.execute("SELECT token_hash FROM sessions")]
+    assert stored and token not in stored
+    again.post("/api/logout")
+    assert again.get("/api/me").json() == {"stage": "login"}
+
+
+def _register(client, login, headers=None):
+    return client.post("/api/register", json={"login": login, "password": "secret-pw", "again": "secret-pw"}, headers=headers or {})
+
+
+def test_one_address_registers_at_most_five_accounts_an_hour(client, monkeypatch):
+    clock = [1_000.0]
+    monkeypatch.setattr(server.time, "time", lambda: clock[0])
+    for i in range(server.REGISTER_LIMIT):
+        assert _register(client, f"user_{i}").json()["stage"] == "create"
+    over = _register(client, "user_x")
+    assert over.status_code == 400 and over.json() == {"error": server.TOO_MANY_REGISTERS}
+    assert server.account_store().get("user_x") is None
+    clock[0] += server.REGISTER_WINDOW
+    assert _register(client, "user_x").json()["stage"] == "create"  # 過了一小時又可以
+
+
+def test_failed_registrations_do_not_count(client):
+    for _ in range(server.REGISTER_LIMIT + 2):
+        _register(client, "沈")  # 格式不對
+    assert _register(client, "shen_01").json()["stage"] == "create"
+
+
+def test_behind_the_tunnel_each_visitor_counts_on_their_own(monkeypatch):
+    """走 cloudflared 進來時直接連線的一端是本機，照 CF-Connecting-IP 分開算；不是本機連進來的帶那個標頭也不算數。"""
+    local = TestClient(server.app, client=("127.0.0.1", 50000))
+    for i in range(server.REGISTER_LIMIT):
+        assert _register(local, f"a_{i}", {"CF-Connecting-IP": "203.0.113.5"}).json()["stage"] == "create"
+    assert _register(local, "a_x", {"CF-Connecting-IP": "203.0.113.5"}).json() == {"error": server.TOO_MANY_REGISTERS}
+    assert _register(local, "b_0", {"CF-Connecting-IP": "198.51.100.7"}).json()["stage"] == "create"
+    outside = TestClient(server.app, client=("192.0.2.9", 50000))
+    for i in range(server.REGISTER_LIMIT):
+        _register(outside, f"c_{i}", {"CF-Connecting-IP": f"10.0.0.{i}"})
+    assert _register(outside, "c_x", {"CF-Connecting-IP": "10.0.0.99"}).json() == {"error": server.TOO_MANY_REGISTERS}
+
+
+def _set_cookie(response) -> str:
+    return next(v for k, v in response.headers.items() if k == "set-cookie" and v.startswith(server.COOKIE))
+
+
+def test_the_cookie_is_secure_on_https_and_plain_on_local_http(monkeypatch):
+    monkeypatch.delenv(server.PUBLIC_URL_ENV, raising=False)
+    local = TestClient(server.app, base_url="http://127.0.0.1:7861", client=("127.0.0.1", 50000))
+    assert "secure" not in _set_cookie(_register(local, "plain_1")).lower()
+    tunnel = {"X-Forwarded-Proto": "https", "CF-Connecting-IP": "203.0.113.5"}
+    assert "secure" in _set_cookie(_register(local, "tunnel_1", tunnel)).lower()
+    monkeypatch.setenv(server.PUBLIC_URL_ENV, "https://tianxiadashi.com")
+    assert "secure" not in _set_cookie(_register(local, "plain_2")).lower()  # 主機在這台電腦上開 http 照樣登入得了
+    lan = TestClient(server.app, base_url="http://192.168.1.20:7861", client=("192.168.1.30", 50000))
+    assert "secure" not in _set_cookie(_register(lan, "lan_1")).lower()  # --lan 的區網也是 http
+    public = TestClient(server.app, base_url="http://tianxiadashi.com", client=("127.0.0.1", 50000))
+    assert "secure" in _set_cookie(_register(public, "public_1", {"CF-Connecting-IP": "203.0.113.9"})).lower()
+
+
 def test_login_errors_read_the_same(client):
     client.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
     wrong = client.post("/api/login", json={"login": "shen_01", "password": "wrong-pw"})
@@ -790,6 +912,16 @@ def test_change_password(client):
     assert change("secret-pw", "123", "123") == "密碼至少 6 字。"
     assert change("secret-pw", "new-secret", "new-secret") == "密碼已更新。"
     server.login("shen_01", "new-secret")
+
+
+def test_changing_the_password_keeps_this_device_and_logs_out_the_others(client):
+    # PM 2026-10-31：改密碼時同一個帳號別的裝置登出，改的這一台不必重登
+    client.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
+    other = server.SESSIONS.create("shen_01")  # 另一台裝置
+    out = client.post("/api/password", json={"old": "secret-pw", "new": "new-secret", "again": "new-secret"})
+    assert out.json() == {"message": "密碼已更新。"}
+    assert server.SESSIONS.get(client.cookies.get(server.COOKIE)) == "shen_01"
+    assert server.SESSIONS.get(other) is None
 
 
 def test_register_and_change_password_never_hash_while_holding_the_write_lock(client, monkeypatch):
@@ -5285,12 +5417,12 @@ def test_a_request_never_queues_past_its_budget(game, monkeypatch):
     assert started.wait(2)
     begun = time.monotonic()
     assert server.model_call(game, lambda: pytest.fail("不該輪到"), fallback="退路", left=0.2) == "退路"
-    assert 0.15 < time.monotonic() - begun < 2.0 < server.CONTENT.config.llm_queue_wait_seconds
+    assert 0.15 < time.monotonic() - begun < 5.0 < server.CONTENT.config.llm_queue_wait_seconds  # 不是等 20 秒；機器忙時留餘裕
     assert queue.position("測試") is None  # 票讓出來了
     begun = time.monotonic()
     with pytest.raises(server.GameError, match=server.BUSY_QUEUE_TIMEOUT):  # 給了 busy 句子的呼叫點：同樣只等 0.2 秒，然後被擋下來
         server.model_call(game, lambda: pytest.fail("不該輪到"), fallback="退路", left=0.2, busy=server.BUSY_FREE_TEXT)
-    assert 0.15 < time.monotonic() - begun < 2.0
+    assert 0.15 < time.monotonic() - begun < 5.0
     assert queue.position("測試") is None
     release.set()
     holder.join(2)
@@ -5357,6 +5489,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     assert _users_in_server("QUEUE") == {None, "model_call", "main", "api_queue", "admin_choices", "narrate_once", "crowd_once",
                                          "letter_once", "yuedan_once", "chatter_once",  # chatter_once：酒肆鄰桌閒談，同 crowd_once 當假人排
                                          "xingshi_once",
+                                         "flavor_once",  # 江湖大事的潤色（S-09）：觸發那一下寫固定的原文，放鎖之後背景請模型，當假人排，名號 FLAVOR_OWNER
                                          "narration_round",  # 事件旁白每週改寫（減法季批 10）：背景一則一則，當假人排，名號 NARRATION_KEY
                                          "verdict_text",  # 人物評曰（減法季批 7b-2）：zhuan_job 寫完正文後在鎖外逐條叫，當假人排在真人後面
                                          "tale_round"}  # 戰記（Joy 2026-10-29）：決戰收場後在背景寫一篇，當假人排，名號 TALE_OWNER_KEY
@@ -5365,6 +5498,65 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         if re.search(r"^\s*(import|from)\s+llm_queue\b", p.read_text(encoding="utf-8"), re.M)
     ]
     assert importers == []
+
+
+def _fire_an_event(g):
+    """觸發一件不收季、不開戰的江湖大事（huangjin_50），跟引擎各處一樣把潤色單子交給 _flavor_sink。"""
+    from tianxia import world as world_rules
+    return world_rules.fire_by_id(g.state, g.content, "huangjin_50", g.world, g._flavor_sink(), now=g.now)
+
+
+def test_a_world_event_is_written_plain_in_the_lock_and_polished_after(game, monkeypatch):
+    """S-09：觸發江湖大事的那一下鎖內不叫模型，先寫固定的原文；放鎖之後才請模型潤色（背景執行緒，這裡直接叫 flavor_once），
+    寫回時存進全服快取、把這個人江湖紀錄裡的那一則換掉。"""
+    from tianxia import flavor
+    game.client = OllamaClient.from_config(server.CONTENT.config)
+    calls = []
+
+    def polish(client, text):
+        calls.append(open_world().db.writing())
+        return "城頭的旗幟在風裡獵獵作響。"
+
+    monkeypatch.setattr(flavor, "polish_world_event", polish)
+    queued = []
+    monkeypatch.setattr(server, "TALE_THREADS", True)
+    monkeypatch.setattr(server, "write_flavor", lambda g, jobs: queued.extend(jobs))
+    text = server.CONTENT.scenario.thresholds[[t.id for t in server.CONTENT.scenario.thresholds].index("huangjin_50")].text
+
+    def action(g):
+        msgs = g._log(_fire_an_event(g) or [])
+        g.state.journal.insert(0, journal.news_entry(g.state.world.time, msgs))
+        return msgs
+
+    msgs = server.act(game, action)
+    assert msgs[0] == f"【江湖大事】{text}"  # 鎖內只寫原文
+    assert calls == [] and [job[:2] for job in queued] == [("huangjin_50", text)]
+    line = "城頭的旗幟在風裡獵獵作響。"
+
+    def told():  # 天下大事裡那一句潤色出現幾次（Joy 2026-10-31「也進天下大事」）
+        return sum(r.text == line for r in open_world().get_season().rumors)
+
+    assert told() == 0  # 潤色回來之前天下大事只有原文
+    assert server.flavor_once(game, queued[0])
+    assert calls == [False]  # 模型在鎖外
+    assert game.world.get_event_flavor("huangjin_50") == line
+    assert told() == 1
+    saved = open_characters().load(game.state.player.name)
+    assert f"{text}\n\n城頭的旗幟在風裡獵獵作響。" in [saved.journal[0].tag, *saved.journal[0].lines]
+    assert text not in [saved.journal[0].tag, *saved.journal[0].lines]  # 固定的原文換掉了
+    assert f"【江湖大事】{text}\n\n城頭的旗幟在風裡獵獵作響。" in saved.log
+    assert server.flavor_once(game, queued[0]) and calls == [False]  # 快取裡有了：不再叫模型
+    assert told() == 1  # 天下大事只記存進快取的那一下
+
+
+def test_a_world_event_without_a_client_queues_nothing(game, monkeypatch):
+    """沒有 client（伺服器假人的 Game）：一張潤色單子都不記、一個模型都不叫，原文照寫。"""
+    game.client = None
+    monkeypatch.setattr(server, "TALE_THREADS", True)
+    queued = []
+    monkeypatch.setattr(server, "write_flavor", lambda g, jobs: queued.extend(jobs))
+    msgs = server.act(game, _fire_an_event)
+    assert msgs and msgs[0].startswith("【江湖大事】") and queued == []
 
 
 def test_in_lock_model_calls_and_the_scheduler_never_wait_in_the_queue(game, monkeypatch):
@@ -6161,7 +6353,6 @@ NOT_IN_THE_FINGERPRINT = {
         "stance_active": "人物此刻照哪一個心意做事：換的那一刻另寫天下大事（傳聞流水號已在指紋裡）；週初歸零跟著週初的掛鉤",
         "pending_battle": "背景推進記下要開的戰鬥，開成集結之後 active_battle 的指紋就變了",
         "season_one": "開季時蓋的章，開季之後不變",
-        "haoqiang_allied": "開季時蓋的章（豪強分屬兩軍），開季之後不變",
         "season21": "開季時蓋的章（21 天季），開季之後不變",
         "precise_actions": "開季時蓋的章（一類一顆），開季之後不變",
         "cal_offset": "開季時蓋的章（21 天季季曆的偏移），開季之後不變",
@@ -6169,8 +6360,6 @@ NOT_IN_THE_FINGERPRINT = {
         "length_days": "同上",
         "locks": "伏筆鎖定不能露出來（推送計畫 Review Focus 1）",
         "lock_losers": "同上",
-        "third_party": "同上",
-        "third_party_shown": "同上",
         "event_mods": "一般伏筆的修正，畫面上看不到（推送計畫 F4）",
         "event_bonus": "時刻表結果帶來的修正，同上",
         "schedule": "只畫成『下一件大事』的倒數；時鐘本來就靠慢速輪詢，管理者改排定很少見（推送計畫沒納入）",
@@ -6843,3 +7032,27 @@ def test_epiphany_think_names_outside_the_lock(monkeypatch):
     monkeypatch.setattr(Game, "epiphany_request", lambda self: None)
     monkeypatch.setattr(epiphany, "propose_names", mock.Mock(side_effect=AssertionError("不該叫模型")))
     server.choose(game, server.EPIPHANY_THINK)
+
+
+def test_main_view_drops_the_battle_scene_when_its_own_poll_settles_the_battle():
+    """U-06（手機介面自檢 2026-10-31）：場景先讀、選單才把決戰推到收場——以前「剛剛」已經寫了結果，場景還停在最後一回合
+    「已送出 0／在場 0」。現在同一次回的場景就回到地點；U-08：上過陣的人全倒下了，這一下就收場，不等回合逾時。"""
+    from jianfa_kit import jianfa_game, ready
+
+    game = ready(jianfa_game("week7", name="Rayal"), side="guan", loc="changshe", level=20)
+    game.now = 1000.0
+    game.admin_start_showdown("changshe_fire", game.now)
+    game.choose("battle:join:guan")
+    game.now = game.world.get_battle().muster_deadline_real + 1
+    game.options()
+    assert game.world.get_battle().phase == "active"
+
+    def fall(battle):
+        for p in battle.participants.values():
+            p.eliminated = True
+    game.world.mutate_battle(fall)
+    game.now += 5  # 遠不到回合逾時
+    view = server.main_view(game)
+    assert game.world.get_battle().phase == "ended"
+    assert "回合" not in view["scene"] and "在場" not in view["scene"]
+    assert "長社" in view["scene"]  # 回到地點描述；結果在「剛剛」與戰報

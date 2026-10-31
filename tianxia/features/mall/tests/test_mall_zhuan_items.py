@@ -27,8 +27,6 @@ from zhuan_fix_kit import add_story, close_season, make_game, verdict_paras
 from zhuan_fix_kit import close_season, make_game, row, to_week
 from tianxia import calendar, mall
 
-pytestmark = pytest.mark.slow
-
 ADMIN = "史館管理者"
 FOUR = {"zhuan_art", "zhuan_seal", "zhuan_quote", "deep_slot"}
 
@@ -241,7 +239,7 @@ def test_off_the_server_adds_no_art_keys(monkeypatch, tmp_path):
 
 
 def test_the_schema_does_not_move_and_bad_windows_are_caught():
-    assert database.SCHEMA_VERSION == 7
+    assert database.SCHEMA_VERSION == 9
     game = jianfa_game()
     c = game.content
     bad = MallItem(id="x", name="測試貨", price=10, kind="consumable", effects={"zhuan_seal": 1},

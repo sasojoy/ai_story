@@ -23,8 +23,6 @@ from tianxia import calendar, seal, seats, timetable
 from tianxia import calendar, rules
 from tianxia.world_state import fresh_season, season_length_days, stamp_season
 
-pytestmark = pytest.mark.slow  # 每一條都載真實內容、開一季
-
 HOUR, DAY = 3600, 86400
 WEEK = 7 * DAY
 MON = 1792339200  # 2026-10-19 週一 00:00（台灣）
@@ -158,9 +156,12 @@ def test_the_generals_march_out_at_noon_of_day_one():
     assert figures.start_text(state, c7, GENERALS[0]) == "（第 1 天 12:00 起）"
 
 
-def test_the_two_buyers_come_between_changshe_and_wancheng():
+def test_a_week_four_to_six_condition_comes_between_changshe_and_wancheng():
+    """照週寫的條件（第 4～6 週）在 7 天季照天（第 2～4 天）；以前的例子是兩路買家，2026-10-31 跟豪強第三方一起拿掉。"""
+    from tianxia.models import Condition
+
     c7 = real_content("week7")
-    cond = c7.events["fs_ev_two_buyers"].condition.model_copy(update={"factions": []})
+    cond = Condition(week_min=4, week_max=6, cal_day_min=6, cal_day_max=11, cal_day_min7=2, cal_day_max7=4)
     state = _player(c7)
     seen = []
     for day in (1, 2, 4, 5):
@@ -290,7 +291,7 @@ def test_silver_outlets_and_season_caps_are_a_third():
     # 第 4 階 870 → 600：企劃者 2026-10-22 選甲（開著領地爭奪的季貢獻累得比關著慢，戰書要季中就下得了；計畫 2026-10-22-7天季領地爭奪調整.md 第七節）
     assert [ranks.threshold(c7, r) for r in (2, 3, 4)] == [130, 430, 600]
     assert cfg.figure_treasure_cap == 1 and cfg.figure_treasure_weekly == 1 and cfg.sortie.treasure_cap == 1
-    assert cfg.late_exp_step == 0.03 and cfg.duel.per_boss_week == 2 and cfg.haoqiang_allied
+    assert cfg.late_exp_step == 0.03 and cfg.duel.per_boss_week == 2
     assert figures.upkept(c7, state.world)
     assert cfg.season21_daily == real_content("season21").config.season21_daily  # 每天的那一批照天，跟 21 天季一樣
 
@@ -662,7 +663,7 @@ def _render(game, monkeypatch, app=None):
       H.S.mapMode = "timeline"; H.S.mapWeek = 1;
       return {
         orders: H.ordersHtml(fb.orders, 1, null),
-        board: (/<h3>(.*?)<\/h3>/.exec(H.trendsTopHtml(m)) || [])[1],  // 本週江湖大事（減法季批 1 搬到見聞・大事・大勢最上面）
+        board: (/<h3>(.*?)<\\/h3>/.exec(H.trendsTopHtml(m)) || [])[1],  // 本週江湖大事（減法季批 1 搬到見聞・大事・大勢最上面）
         result: H.resultHtml(fb.result),
         timeline: H.timelineHtml(base, st, 1),
         overview: H.cardExtras(base, st),

@@ -121,7 +121,7 @@ def win_gap(state: GameState, content: Content) -> str | None:
     不是第 3 段、沒有季曆、那一句是空的都是 None。"""
     if not rules.season_one(content, state.world) or phase_now(state, content) < 2:
         return None
-    if rules.jianfa(content, state.world, "four_wins"):  # 批 3c 接上了：兩軍各自離勝利條件還差多少（wins.gap_line）
+    if rules.jianfa(content, state.world):  # 批 3c 接上了：兩軍各自離勝利條件還差多少（wins.gap_line）
         from . import wins  # noqa: PLC0415  wins → rules：延後 import，這個模組照舊只在載入時依賴 calendar、rules
 
         return wins.gap_line(content, rules.stances(state, content)) or None

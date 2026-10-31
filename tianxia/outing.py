@@ -6,7 +6,7 @@
 - 段數越多稀有的越容易來（rare_boost）：奇遇事件、一條線的開頭、二階素材、特殊頓悟的機率乘這一趟的倍數。畫面不寫倍數。
 
 - 走完可以在這一處留一句話（say）：預設句免費，自己寫的要一張題壁墨（商城 inscribe，先只能用元寶買），過字表與模型、
-  後面掛名號；一處留最近 outing_keep 則，管理者可以刪。之後來這裡走一趟的人，路上會看到刻在石頭、樹上的這一句（trace 那一行，
+  後面掛名號；一處留最近 outing_keep 則（題壁墨寫的不擠掉、換季也留著），管理者可以刪。之後來這裡走一趟的人，路上會看到刻在石頭、樹上的這一句（trace 那一行，
   不佔段數，一趟最多 outing_trace_cap 行，自己寫的比預設句容易抽到）；這一處 24 小時內有別人，遠處會有個人朝你揮手。
 - 畫面上方有塊路碑（stele）：最後一則題壁墨寫的，沒有就是最多人留的那一句預設句；點開看這一處全部的留言。
 - 撿到四階素材、勝算凶險以下還打贏（feat）：自動記一則行狀、世界記事一筆；別的不記（Joy 10/30）。
@@ -26,7 +26,7 @@ from pydantic import BaseModel
 from . import explore_one
 from .models import Content
 from .rules import jianfa
-from .state import GameState, Inscription, Outing, OutingBeat
+from .state import GameState, Inscription, Outing, OutingBeat, WorldState
 
 DONE, LOST, HURT, TIRED, LEFT = "done", "lost", "hurt", "tired", "left"
 # 收尾那一句（待 joy 潤）：走完不另說，結算卡自己寫「走完一趟」
@@ -47,7 +47,7 @@ SURFACES = ("路邊的石頭", "一棵老樹的樹幹", "半截斷碑", "破廟�
 SEEN_LINE = "{surface}上刻著一行字：「{text}」——{author}"
 WAVE_LINE = "遠處山坡上，{name}朝你揮了揮手。"
 # 留言那一格（待 joy 潤）
-SAY_TITLE = "路上留字"  # 江湖紀錄的標題（酒肆另有「題壁」，分開）
+TRIP_TITLE = "走一趟・{place}"  # 一趟收了寫的那一則江湖紀錄（整趟的得失加總）；留一句併進這一則，「剛剛」才不會只剩留字（Joy 10/31）
 SAY_DONE = "你在{place}留下一句：「{text}」"
 SAY_AGAIN = "這一趟已經留過一句了。"
 SAY_NOT_HERE = "要人在這一處，走完一趟才能留言。"
@@ -117,7 +117,7 @@ def view(state: GameState, content: Content) -> dict | None:
             "place": content.locations[trip.place].name if trip.place in content.locations else trip.place,
             # 背景畫哪一套：這一處的地點種類（探索那六張表，explore_one.kind_of）
             "scene": explore_one.kind_of(content.config.jianfa, content.locations[trip.place]).kind if trip.place in content.locations else explore_one.WILD,
-            "total": trip.total, "done": trip.done, "end": trip.end,
+            "n": trip.n, "total": trip.total, "done": trip.done, "end": trip.end,
             "waiting": not trip.end and bool(trip.beats) and trip.beats[-1].stop,
             "title": END_TITLES.get(trip.end, ""), "end_line": END_LINES.get(trip.end, ""),
             "beats": [b.model_dump() for b in trip.beats],
@@ -128,6 +128,36 @@ def view(state: GameState, content: Content) -> dict | None:
             "stele": stele(state, trip.place, own=bool(trip.said)),
         }
     return out
+
+
+_NOTE = re.compile(r"^(\S+ [+-]\d+(?:\.\d+)?)（.*）$")  # 「善名 +1（離「江湖遊俠」還差 31）」後面那段說明
+
+
+def plain(change: str) -> str:
+    """數值變化後面接的說明（離下一個名號還差多少）拿掉：加總的時候同一個標籤才併得起來。"""
+    hit = _NOTE.match(change)
+    return hit.group(1) if hit else change
+
+
+def ledger_parts(text: str) -> list[str]:
+    """「得：a、b　失：c」拆回一樣一樣（a、b、c，說明拿掉）；空字串是空的。"""
+    out: list[str] = []
+    for part in text.split("　"):
+        if part.startswith(("得：", "失：")):
+            out += [plain(x) for x in part[2:].split("、") if x]
+    return out
+
+
+def trip_totals(trip: Outing) -> tuple[list[str], list[str]]:
+    """整趟的得失（結算卡與「走一趟」那一則江湖紀錄）：(撿到的東西「名 ×N」, 數值變化「標籤 ±N」)。每一段的得失、停下來選完的得失
+    （OutingBeat.after，含選項另外扣的體力）、每一段探索扣的體力都加進去；同一樣加總。"""
+    from . import journal  # journal 牽著 battlelog；這裡用到才拿
+
+    parts = [x for b in trip.beats for x in ledger_parts(b.ledger) + ledger_parts(b.after)]
+    spent = sum(b.spent for b in trip.beats)
+    items = explore_one.merge_items(x for x in parts if explore_one.is_item(x))
+    changes = journal.combine_changes([x for x in parts if not explore_one.is_item(x)] + ([f"體力 -{spent}"] if spent > 0 else []))
+    return items, changes
 
 
 def foe_look(squad) -> str:
@@ -176,10 +206,19 @@ def inscribe(state: GameState, content: Content, text: str, *, preset: bool) -> 
     item = Inscription(id=w.inscription_seq, place=trip.place, text=text, author=state.player.name, preset=preset, time=w.time)
     w.inscriptions.append(item)
     here = [i for i in w.inscriptions if i.place == trip.place]
-    drop = {i.id for i in here[:-content.config.jianfa.outing_keep]}
+    over = len(here) - content.config.jianfa.outing_keep
+    drop = {i.id for i in here if i.preset}  # 擠掉的只有免費的預設句（最舊的先走）；題壁墨寫的是花錢買的，不會被擠掉（Joy 10/31）
+    drop = set(sorted(drop)[:max(over, 0)])
     w.inscriptions = [i for i in w.inscriptions if i.id not in drop]
     trip.said = text
     return item
+
+
+def carry(old: WorldState, new: WorldState) -> None:
+    """換季（sqlite_world.next_season）：題壁墨寫的留言跟著到新的一季（花錢買的東西不能不見，Joy 10/31「路牌也會繼續傳承」），
+    免費的預設句照舊一季一清。流水號接著上一季走，題字的 id 不變（商城帳上用掉的那一張照舊指得到它）。"""
+    new.inscriptions = [i for i in old.inscriptions if not i.preset]
+    new.inscription_seq = max(new.inscription_seq, old.inscription_seq)
 
 
 def erase(state: GameState, ins_id: int) -> bool:

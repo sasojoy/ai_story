@@ -281,9 +281,11 @@ def current(state: GameState, content: Content) -> tuple[StoryDef, StoryProgress
     return None if best is None else (best[1], best[2])
 
 
-def card(state: GameState, content: Content, stamp, place) -> dict | None:
-    """章回卡（main.week_card.chapter）：{line, no, title, side, hint, waiting, scene, here, beat, at, sway, target}。
-    stamp 是 Game.stamp（世界秒 → 玩家看得到的時刻），place 是 step.place 那種（地點 id → {location, name, minutes}）。"""
+def card(state: GameState, content: Content, stamp, place, live=None) -> dict | None:
+    """章回卡（main.week_card.chapter）：{line, no, title, side, hint, waiting, scene, here, beat, at, live, sway, target}。
+    stamp 是 Game.stamp（世界秒 → 玩家看得到的時刻），place 是 step.place 那種（地點 id → {location, name, minutes}）。
+    live 是（大事 id → 那一場決戰此刻 "muster"／"active"，沒在打是 None）：那一件大事的決戰已經在集結、開打了（管理者提早開），
+    卡上不再寫排定的時刻，網頁照 live 寫「集結中」「開打了」（手機介面自檢 U-17）；不給一律 None。"""
     found = current(state, content)
     if found is None:
         return None
@@ -309,5 +311,6 @@ def card(state: GameState, content: Content, stamp, place) -> dict | None:
     return {
         "line": line.id, "no": numeral(spec.no), "title": line.title, "side": spec.side, "hint": hint, "waiting": waiting, "scene": scene,
         "here": storyline.doable(state, content, progress), "beat": event.title if event else "",
-        "at": stamp(at) if at is not None and math.isfinite(at) else "", "sway": sway_line(state, content, line), "target": target,
+        "at": stamp(at) if at is not None and math.isfinite(at) else "", "live": live(spec.beat) if live is not None else None,
+        "sway": sway_line(state, content, line), "target": target,
     }

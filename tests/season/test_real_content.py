@@ -34,7 +34,7 @@ FAKE_TURN = companion_agent.CompanionTurn(
     narrative="他微微頷首，若有所思。", options=["繼續交談", "就此告辭"], option_tags=["尋常寒暄", "尋常寒暄"],
 )
 FAKE_CONSOLIDATION = companion_agent.MemoryConsolidation(
-    relationship_summary="彼此的關係穩定發展。", new_milestones=["閒聊了幾句家常"],
+    relationship_summary="彼此的關係穩定發展。",
 )
 
 
@@ -75,7 +75,7 @@ def content():
 def test_real_content_loads():
     c = load_content(CONTENT_DIR)
     assert 30 <= len([loc for loc in c.locations.values() if not loc.prologue_only]) <= 42  # 序章的草廬不算；四十處之外多一處官軍大營（FB-184）與綠林山寨（名聲 5.1）
-    assert {t.id for t in c.scenario.trends} == {"huangjin", "yuxi", "yingru", "nanyang", "jizhou", "geju"}
+    assert {t.id for t in c.scenario.trends} == {"huangjin", "yuxi", "yingru", "nanyang", "jizhou"}  # 割據 2026-10-31 拿掉
 
 
 def test_the_season_one_switch_stays_off_until_the_condensed_build_ships():
@@ -1248,10 +1248,10 @@ def test_nobody_can_join_a_faction_at_the_start_location(content):
 
 
 def test_each_side_of_the_war_wants_the_yellow_turbans_to_go_its_way(content):
-    """官軍把三條戰線往 0 壓、黃巾往 100 推，豪強只推割據（第一季設計 4.4、總計畫 T1）。"""
+    """官軍把三條戰線往 0 壓、黃巾往 100 推（第一季設計 4.4、總計畫 T1）；豪強依附其中一軍、沒有自己的目標（割據 2026-10-31 拿掉）。"""
     goals = {f.id: f.goals for f in content.scenario.factions}
     fronts = ("yingru", "nanyang", "jizhou")
-    assert goals == {"guan": dict.fromkeys(fronts, -1), "huang": dict.fromkeys(fronts, 1), "haoqiang": {"geju": 1}}
+    assert goals == {"guan": dict.fromkeys(fronts, -1), "huang": dict.fromkeys(fronts, 1), "haoqiang": {}}
 
 
 # 遊歷推大勢：數字跟遷移前一模一樣，鍵換成所在大區的戰線；洛陽沒有戰況，寫 front
@@ -1266,14 +1266,14 @@ EXPECTED_TRAINING = {
 
 
 def test_real_content_fronts(content):
-    """三條戰線的起始值與權重照第一季設計 4.1，割據從 10 起；大區對戰線；遊歷指向所在戰線；
+    """三條戰線的起始值與權重照第一季設計 4.1（割據 2026-10-31 拿掉）；大區對戰線；遊歷指向所在戰線；
     虛擬玩家與決戰結果改推潁川汝南（數字不變）。"""
     trends = {t.id: t for t in content.scenario.trends}
-    starts = {key: trends[key].start for key in ("yingru", "nanyang", "jizhou", "geju")}
-    assert starts == {"yingru": 40, "nanyang": 35, "jizhou": 55, "geju": 10}
+    starts = {key: trends[key].start for key in ("yingru", "nanyang", "jizhou")}
+    assert starts == {"yingru": 40, "nanyang": 35, "jizhou": 55}
     assert trends["huangjin"].derived == {"yingru": 0.35, "nanyang": 0.25, "jizhou": 0.40}
     assert trends["huangjin"].start == 25 and not trends["huangjin"].season_one
-    assert all(trends[key].season_one for key in ("yingru", "nanyang", "jizhou", "geju"))
+    assert all(trends[key].season_one for key in ("yingru", "nanyang", "jizhou"))
     assert {r.id: r.front for r in content.map.regions} == {
         "youzhou": "jizhou", "jizhou": "jizhou", "luoyang": None, "yingru": "yingru", "nanyang": "nanyang",
     }
@@ -1377,21 +1377,20 @@ def test_real_timetable_matches_settlement_doc():
 
 
 def test_real_endings_valid(content):
-    """第一季的六種結局（第一季設計 13.1，不含玉璽）照順序；beta 的保底照舊；季末大事的三種句子（時刻表結算第 12 週）。"""
+    """第一季的四種結局（第一季設計 13.1，不含玉璽；群雄並起、豪強坐大 2026-10-31 跟豪強第三方一起拿掉）照順序；beta 的保底照舊；
+    季末大事的三種句子（時刻表結算第 12 週）。"""
     s1 = [e for e in content.scenario.endings if e.season_one and not e.mandate]  # 天命結局（玉璽二）另外驗
-    assert [e.title for e in s1] == ["黃天當立（無璽）", "黃巾平定", "群雄並起", "黃巾坐地", "黃巾敗退", "豪強坐大"]
-    assert [e.stance_min or e.stance_max for e in s1[:3]] == [{"huang": 85}, {"huang": 15}, {"haoqiang": 85}]
-    assert [e.stance_top for e in s1[3:]] == ["huang", "guan", "haoqiang"]
-    assert s1[4].text == "下曲陽破了，可冀州的山裡仍有黃旗。"
+    assert [e.title for e in s1] == ["黃天當立（無璽）", "黃巾平定", "黃巾坐地", "黃巾敗退"]
+    assert [e.stance_min or e.stance_max for e in s1[:2]] == [{"huang": 85}, {"huang": 15}]
+    assert [e.stance_top for e in s1[2:]] == ["huang", "guan"]
+    assert s1[3].text == "下曲陽破了，可冀州的山裡仍有黃旗。"
     for ending in s1[:2]:  # 決定性勝利第 10 週起才收（企劃者 2026-10-05）：提示不能說「當場收場」卻讓人空等五週（T9 審查 I1）
         assert f"第 {content.config.decisive_from_week} 週起" in ending.hint, ending.hint
     assert [e.hint for e in s1] == [  # 濃縮版內容表第七節（2026-10-05 審過）：一律照狀態列的「態勢」講
         "第 10 週起，黃巾的態勢一到 85，這一季當場收場。",
         "第 10 週起，官軍的態勢一到 85，這一季當場收場。",
-        "到了季末，豪強的態勢在 85 以上。",  # 提前收季只看戰線，割據到季末才判（FB-254；待 joy 潤）
         "到了季末，黃巾的態勢最高。",
         "到了季末，官軍的態勢最高。",
-        "到了季末，豪強的態勢最高。",
     ]
     beta = [e for e in content.scenario.endings if not e.season_one]
     assert beta[-1].id == "default"
@@ -1429,7 +1428,6 @@ def test_real_timetable_runs_a_whole_condensed_season():
 
     c = load_content(CONTENT_DIR, profile="week7")
     c.scenario.sim_players, c.scenario.thresholds, c.scenario.world_events = [], [], []  # 只看時刻表：舊聲勢門檻收季另外測
-    c.config.geju_chaos_per_day = 0.0  # 割據不漲：沒人玩時三條戰線一直在亂局，割據第 5 週就過 85，第 10 週（decisive_from_week）起會以「群雄並起」提前收季，廣宗與季末就輪不到；這裡測的不是它
     state = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0),
                       world=fresh_season(c))
     msgs = advance_world_state(state.world, c, c.config.season_days * 86400, _random.Random(0))
@@ -1477,7 +1475,7 @@ def _cell_key(ver: str, side: str, tier: str) -> str:
     return f"{ver}:{side}:{tier}" if ver else f"{side}:{tier}"
 
 
-def _announce(event_id, key, *, version="", lock=None, losers=(), third=(), commander=None):
+def _announce(event_id, key, *, version="", lock=None, losers=(), commander=None):
     """用真實內容（週末設定）結算一件決戰，回傳公告那一段。lock 是 (陣營, 名號)；losers 是 [(陣營, 名號)]。
     commander 換掉的是 figures.commander（{官軍主將}，以及人物欄位寫到的人不在時找的接手者）。"""
     from tianxia import figures, timetable
@@ -1494,8 +1492,6 @@ def _announce(event_id, key, *, version="", lock=None, losers=(), third=(), comm
     if lock is not None:
         state.world.locks[event_id] = Lock(side=lock[0], name=lock[1], time=0.0)
         state.world.lock_losers[event_id] = [Lock(side=s, name=n, time=1.0) for s, n in losers]
-    if third:
-        state.world.third_party[event_id] = list(third)
     event = next(e for e in c.timetable if e.id == event_id)
     with mock.patch.object(figures, "commander", lambda *a: commander):
         msgs = timetable.resolve(state, c, event, random.Random(0), key=key)
@@ -1533,18 +1529,17 @@ def test_changshe_guan_lock_narrow_win_reads_named_part_then_the_narrow_sentence
     )
 
 
-def test_changshe_guan_lock_big_win_with_the_baron_adds_his_line_last():
-    text, _ = _announce("changshe_fire", "guan:大勝", lock=("guan", "甲"), losers=[("huang", "乙"), ("huang", "丙")], third=["豪甲"])
+def test_changshe_guan_lock_big_win_names_the_reinforcement_and_the_losers():
+    text, _ = _announce("changshe_fire", "guan:大勝", lock=("guan", "甲"), losers=[("huang", "乙"), ("huang", "丙")])
     assert text == (
         "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，甲 讓史書沒有落空：葦束膏油早已備下，風起之時火光燭天。"
         "騎都尉曹操的援兵恰好趕到，波才的草營燒成一片火海。"  # 8.11：人名寫進「這一次」那半句
         "黃巾的 乙、丙 曾看破火攻、勸波才移營，可惜晚了一步。"
-        "事後才有人發現，兩軍那幾天吃的糧竟出自同一家：豪甲 的糧車。"
     )
 
 
 def test_changshe_huang_lock_big_win_says_the_northward_march_exactly_once():
-    text, _ = _announce("changshe_fire", "huang:大勝", lock=("huang", "甲"), losers=[("guan", "乙")], third=["豪甲"])
+    text, _ = _announce("changshe_fire", "huang:大勝", lock=("huang", "甲"), losers=[("guan", "乙")])
     assert text.count("波才分兵北上") == 1
     assert text == (
         "史書上，皇甫嵩趁夜縱火，大破波才於長社。這一次，甲 看破了火攻，先一步勸波才移營，那一夜燒的是一座空營。"
@@ -1552,7 +1547,6 @@ def test_changshe_huang_lock_big_win_says_the_northward_march_exactly_once():
         "潁川得手之後，波才分兵北上，往廣宗去了。"  # 北上是這一檔結果句的一部分（S1 表），排在搶輸的一筆前面
         "留在潁川的官軍，由朱儁收拾殘局。"  # 朱儁那筆人物效果的 note（FB-042；8.11 改字），接在這一格的 note 之後
         "官軍的 乙 費盡心思備下的火具，燒掉的只是幾頂空帳。"
-        "事後才有人發現，兩軍那幾天吃的糧竟出自同一家：豪甲 的糧車。"
     )
     unlocked, _ = _announce("changshe_fire", "huang:大勝")  # 沒人鎖定的黃巾大勝：note 照樣接、也只有一次
     assert unlocked.count("波才分兵北上") == 1 and unlocked.endswith("潁川得手之後，波才分兵北上，往廣宗去了。留在潁川的官軍，由朱儁收拾殘局。")
@@ -1588,11 +1582,10 @@ def test_wancheng_jia_lock_cells_fill_the_commander_slot_and_keep_the_loser_line
 
 
 def test_wancheng_guan_lock_cells_read_named_part_then_tier_sentence():
-    text, _ = _announce("wancheng", "guan:險勝", version="乙", lock=("guan", "甲"), losers=[("huang", "乙")], third=["豪甲"])
+    text, _ = _announce("wancheng", "guan:險勝", version="乙", lock=("guan", "甲"), losers=[("huang", "乙")])
     assert text == (
         "這一次，宛城在官軍手裡。黃巾圍城數十日，甲 跟著孫堅在一個雨夜縋城而出，直撲黃巾連營。"
         "黃巾的連營被衝亂，趙弘退兵三十里。"
-        "宛城殺聲震天的時候，新野縣衙的冊子換了主人：豪甲 開倉放糧，縣裡的人自己把冊子捧了出來。"
     )
     text, _ = _announce("wancheng", "guan:大勝", version="甲", lock=("guan", "甲"), losers=[("huang", "乙")])
     assert text == (
@@ -2149,7 +2142,6 @@ def test_a_real_weekend_season_opens_and_settles_the_three_showdowns(tmp_path):
 
     c = load_content(CONTENT_DIR, profile="week7")
     c.config.auto_open_first_season = True
-    c.config.geju_chaos_per_day = 0.0  # 割據不漲：沒人玩時三條戰線一直在亂局，割據第 5 週就過 85，第 10 週（decisive_from_week）起會以「群雄並起」提前收季，廣宗與季末就輪不到；這裡測的不是它
     world = open_world(tmp_path / "weekend.db")
     game = Game.new(c, "Rayal", rng=random.Random(0), world=world)
     game.now = 0.0

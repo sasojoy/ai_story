@@ -18,7 +18,6 @@ import server
 def _game(faction=None, at="yingshui"):
     c = real_content("week7")  # 地盤拔河、出陣推線的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
     classic_explore(c)  # 探索三選一的入口與三顆（減法季探索一顆開著時只剩一顆，tests/test_explore_one.py）
-    c.config.jianfa.four_wins = False  # 三陣營四勝利之前的規則（挑邊、改依附算叛投、攪局；測試整理批 1 把這個檔從週末搬到 7 天季，減法季開著）；新規則在 tests/test_four_wins_wiring.py
     c.config.auto_open_first_season = True
     c.config.precise_actions = False  # 一類一顆之前的三選一（新規則的假人分數在 tests/test_precise_actions.py，設計 8.4）
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())

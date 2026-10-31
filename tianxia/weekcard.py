@@ -36,7 +36,6 @@ WIN_GIVES = {
 }
 WIN_GIVES_OLD = "季末照陣營輸贏與你出的力論功行賞"  # 待 joy 潤：規則關著的季
 HAOQIANG_GOAL = "挑一軍幫：幫的那一軍贏了就算你贏；季末只算你替贏的那一軍出的力；換邊隨時換，不算叛逃"
-HAOQIANG_GOAL_OLD = "季末割據的態勢夠高是群雄並起"  # 規則關著、有割據那一條線的季
 
 
 def _bar(content, side: str) -> tuple[int, str] | None:
@@ -72,7 +71,7 @@ def sides_card(game: Game) -> dict | None:
     s, c = game.state, game.content
     if not c.scenario.factions or s.world.ended or prologue_rules.active(s, c) or opening_rules.pending(s, c):  # 開局三選一還沒選：先不畫（批 7）
         return None
-    four = rules.jianfa(c, s.world, "four_wins")
+    four = rules.jianfa(c, s.world)
     standing = rules.stances(s, c) if rules.season_one(c, s.world) else None
     mine = s.player.faction
     extra = game.sides_card() if four else None  # 批 3c（Game.sides_card）：豪強那一格的「現在」、贏了給（照 Config.jianfa.tiers）、投靠點的分鐘
@@ -86,9 +85,6 @@ def sides_card(game: Game) -> dict | None:
         elif four:  # 地方豪強（整合設計 3.1：兩本帳、幫哪一軍隨時換）
             cols.append({"id": f.id, "name": f.name, "goal": HAOQIANG_GOAL, "now": HAOQIANG_NOW_PENDING,
                          "gives": WIN_GIVES["haoqiang"], "where": _places(game, f), "mine": mine == f.id})
-        elif standing is not None and "haoqiang" in standing:  # 規則關著、割據那一條線還在的季：照舊三方
-            cols.append({"id": f.id, "name": STANCE_NAMES["haoqiang"], "goal": HAOQIANG_GOAL_OLD, "now": f"態勢 {standing['haoqiang']}",
-                         "gives": WIN_GIVES_OLD, "where": _places(game, f), "mine": mine == f.id})
     # 批 3c 接上了：贏了給照四階的稱號與比例寫、多一份投靠點的分鐘（join_at），豪強那一格「現在」寫兩本帳（看的人是豪強）或兩邊各幾人
     for col in cols:
         got = extra.get(col["id"]) if extra else None
@@ -150,9 +146,18 @@ def _steps(game: Game, status: dict, orders: list[dict]) -> list[dict]:
 CHAPTER_STEP = "第{no}回・{title}：{hint}"  # 眼下要事第一件（文字第一個全形冒號前是標題，web 照它拆）
 
 
+def _showdown_live(game: Game, event_id: str) -> str | None:
+    """時刻表上這一件大事的決戰此刻在集結（"muster"）或開打（"active"）；沒在打、或正在打的是別場是 None（章回卡的 live）。"""
+    battle = game.world.get_battle()
+    if battle is None or battle.phase not in ("muster", "active"):
+        return None
+    definition = game.content.battles.get(battle.battle_id)
+    return battle.phase if definition is not None and definition.timetable_event == event_id else None
+
+
 def chapter_card(game: Game) -> dict | None:
     """章回卡（main.week_card.chapter，chapters.card）：章回主線關著、手上沒有回是 None。"""
-    card = chapters.card(game.state, game.content, game.stamp, lambda loc: step_rules.place(game, loc))
+    card = chapters.card(game.state, game.content, game.stamp, lambda loc: step_rules.place(game, loc), lambda beat: _showdown_live(game, beat))
     if card is not None and card["here"]:  # 「去做」按的是選單上那一顆：選單此刻沒有它（例：豪強還沒挑一邊）就不畫
         want = f"{storyline.OPTION}:{card['line']}"
         card["here"] = any(o.id == want and o.enabled for o in game.options())

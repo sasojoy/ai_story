@@ -1,6 +1,6 @@
 """走一趟（tianxia/outing.py；企劃者 2026-10-29～30）：探索一次走一、三、五段，每一段是現行的一次探索；
 要選的事停下、選完接著走；打輸、氣血見底回頭，沒走的段不扣體力；段數越多稀有的越容易來（倍數 1／1.2／1.5，畫面不寫）。
-用正式內容（season21），整個檔標 slow。"""
+用正式內容（season21）（以前整個檔標 slow，2026-10-31 起只有超過一秒的那幾條標）。"""
 from __future__ import annotations
 
 import random
@@ -14,8 +14,6 @@ from jianfa_kit import jianfa_game, ready
 from tianxia import explore_modes, explore_one, outing, social, speech, team
 from tianxia.encounter import EncounterResult
 from tianxia.state import Inscription
-
-pytestmark = pytest.mark.slow
 
 MAT, EVT, ENC = explore_one.MATERIAL, explore_one.EVENT, explore_one.ENCOUNTER
 
@@ -51,7 +49,10 @@ def test_three_segments_walk_three_explores():
     assert [b.kind for b in trip.beats] == [MAT] * 3
     assert all(b.text and not b.stop for b in trip.beats)
     assert p.stamina == 100 - 3 * game.content.config.jianfa.explore_stamina  # 一段一次探索的體力
-    assert len(game.state.journal) - journal == 3  # 每一段各寫一則江湖紀錄
+    assert len(game.state.journal) - journal == 4  # 每一段各寫一則江湖紀錄，收尾再一則整趟的
+    head = game.state.journal[0]
+    assert head.title == outing.TRIP_TITLE.format(place="潁水河畔")
+    assert f"體力 -{3 * game.content.config.jianfa.explore_stamina}" in head.changes
 
 
 def test_an_event_stops_the_walk_until_it_is_settled():
@@ -78,6 +79,51 @@ def test_the_last_segment_stopping_closes_after_the_choice():
     _settle_event(game)
     game.outing_go()
     assert trip.end == outing.DONE
+
+
+def _bag_of_money(game, silver: int = 30, stamina: int = 5):
+    """把選事件的那一下換成「塞給你一袋錢」：銀兩 +silver、另外扣 stamina 體力、事件了結。"""
+    p = game.state.player
+
+    def settle(_i):
+        p.stamina -= stamina
+        game.state.pending_event = None
+        return ["你咬牙扛住，對方塞給你一袋錢。", f"銀兩 +{silver}"]
+    return mock.patch.object(game, "_choose", side_effect=settle)
+
+
+def test_a_settled_event_keeps_its_numbers_on_the_beat():
+    """Joy 10/31「你咬住了牙⋯獲得一袋錢（多少）（有額外扣體力？）」：選完的得失（含另外扣的體力）記在那一段。"""
+    game = _game()
+    with _draws(MAT, EVT, MAT):
+        game.outing_go(3)
+        with _bag_of_money(game):
+            _settle_event(game)
+        trip = game.state.player.outing
+        assert trip.beats[-1].after == "得：銀兩 +30　失：體力 -5"
+        game.outing_go()
+    assert trip.end == outing.DONE
+    assert trip.beats[1].after == "得：銀兩 +30　失：體力 -5"  # 接著走的那幾段不算進去
+    items, totals = outing.trip_totals(trip)
+    step = game.content.config.jianfa.explore_stamina
+    assert "銀兩 +30" in totals and f"體力 -{3 * step + 5}" in totals
+    assert items and all(" ×" in x for x in items)
+
+
+def test_leaving_a_line_keeps_the_trip_on_top():
+    """留一句併進「走一趟」那一則：「剛剛」照舊看得到整趟的得失（Joy 10/31）。"""
+    game = _game()
+    with _draws(EVT):
+        game.outing_go(1)
+    with _bag_of_money(game):
+        _settle_event(game)
+    game.outing_go()
+    count = len(game.state.journal)
+    game.outing_say(preset=0)
+    head = game.state.journal[0]
+    assert len(game.state.journal) == count
+    assert head.title == outing.TRIP_TITLE.format(place="潁水河畔")
+    assert "銀兩 +30" in head.changes and any("蒼天已死" in line for line in head.lines)
 
 
 def test_losing_a_fight_turns_back_and_saves_the_stamina():
@@ -205,6 +251,7 @@ def test_own_words_need_ink_and_pass_the_word_list():
     assert game.outing_ink_left() == 0
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_a_place_keeps_the_latest_lines():
     game = _game()
     keep = game.content.config.jianfa.outing_keep
@@ -214,6 +261,43 @@ def test_a_place_keeps_the_latest_lines():
         game.outing_say(0)
     here = [i for i in game.state.world.inscriptions if i.place == "yingshui"]
     assert len(here) == keep and here[0].id == 4  # 最舊的三則丟了
+
+
+def test_ink_lines_are_never_pushed_out_by_presets():
+    """題壁墨寫的是花錢買的（Joy 10/31）：一處留滿了，擠掉的只有最舊的預設句。"""
+    game = _game()
+    keep = game.content.config.jianfa.outing_keep
+    _walked(game)
+    _with_ink(game)
+    game.outing_say(text="此處風大")
+    w = game.state.world
+    for i in range(keep + 2):
+        w.inscription_seq += 1
+        w.inscriptions.append(Inscription(id=w.inscription_seq, place="yingshui", text=outing.PRESETS[0], author=f"甲{i}", preset=True))
+    game.state.player.stamina = 100.0
+    _walked(game)
+    game.outing_say(0)
+    here = [i for i in w.inscriptions if i.place == "yingshui"]
+    assert len(here) == keep and "此處風大" in [i.text for i in here]
+
+
+def test_ink_lines_carry_into_the_next_season():
+    """換季：題壁墨寫的跟著到新的一季（id 不變），免費的預設句清掉（Joy 10/31「路牌也會繼續傳承」）。"""
+    game = _game()
+    _walked(game)
+    game.outing_say(0)
+    game.state.player.stamina = 100.0
+    _walked(game)
+    _with_ink(game)
+    game.outing_say(text="此處風大")
+    paid = game.world.get_season().inscriptions[-1]
+    game.content.config.admins = [game.state.player.name]
+    game.admin_end_season(now=game.now)
+    assert game.world.next_season(game.content, game.now + 60)
+    season = game.world.get_season()
+    assert [(i.id, i.text, i.author, i.preset) for i in season.inscriptions] == [(paid.id, "此處風大", paid.author, False)]
+    assert season.inscription_seq >= paid.id
+    assert outing.stele(SimpleNamespace(world=season, player=game.state.player), "yingshui")["text"] == "此處風大"
 
 
 def test_others_lines_show_on_the_road_without_taking_a_segment():
@@ -369,6 +453,7 @@ def test_the_scene_follows_the_place_kind():
     game = _game()
     _walked(game)
     assert game.outing_view()["trip"]["scene"] == "ford"
+    assert game.outing_view()["trip"]["n"] == game.state.player.outing.n  # 畫面認「同一趟」（重新整理接回結算卡、畫布，U-13）
 
 
 def test_road_lines_are_rare():

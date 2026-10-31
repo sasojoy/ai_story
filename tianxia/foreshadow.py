@@ -1,11 +1,11 @@
 """關鍵伏筆（計畫 T7；伏筆文件第二節；濃縮版內容表第四節）：聽片段、對話裡的片段選項、最後一步、暗中鎖定、
-豪強第三方、天機、官銀。內容在 content/foreshadows.json（models.Foreshadows）。
+天機、官銀（豪強第三方 2026-10-31 拿掉）。內容在 content/foreshadows.json（models.Foreshadows）。
 
 全部掛在同一個判斷後面（active：第一季開關開著、這一季開季時也是開的、而且有鏈）：不成立時這裡的每個入口
 （片段、對話的片段選項、最後一步、官銀、準備事件的物品與計數、伏筆事件出不出現）都什麼都不做、不擲骰、不寫字——
 beta 那一季一個字都不變。
 
-鎖定不能露出來（伏筆文件 2.4、計畫 Review Focus 3）：最後一步答對時只寫 locks／lock_losers／third_party，
+鎖定不能露出來（伏筆文件 2.4、計畫 Review Focus 3）：最後一步答對時只寫 locks／lock_losers，
 不發任何傳聞、不推大勢；玩家看到的敘事不論先完成還是搶輸都一模一樣。只有大事當天的公告與江湖史揭曉（timetable）。
 
 state 是 GameState；只讀寫玩家自己（片段、物品、計數、做完的、冷卻、貢獻）與 state.world 的鎖定欄位，不碰儲存。
@@ -40,9 +40,8 @@ TIANJI_SLOTS = {"{風向}": "wind", "{偽裝}": "disguise"}  # 文字裡的插�
 OVERHEARD = "聽說{name}說過："  # 名望不夠求見不到的人，對話片段從行動偷聽到時，原文前面加的這一句（內容表 4.0）
 FIGURE_SLOT = "{人物}"  # 最後一步的敘事裡「出面的那位」：figure 在那條戰線上就是他，否則是 stand_in
 TIANJI_ANSWER = "tianji:"  # 答案寫成 tianji:<key>
-LOCK_SIDES = tuple(timetable.SIDE_NAMES)  # 會鎖定大事的兩方（官軍、黃巾）；其他陣營（豪強）是第三方
+LOCK_SIDES = tuple(timetable.SIDE_NAMES)  # 會鎖定大事的兩方（官軍、黃巾）；鏈只能是這兩方的（content.validate）
 FRONT_RULES = {"guan": (0, 60), "huang": (40, 100)}  # 戰況（往黃巾為正）：官軍 ≤ 60、黃巾 ≥ 40
-THIRD_PARTY_FRONT = (35, 65)  # 豪強（第三方）要亂局
 UNREADY = "東西還沒備齊"
 NOT_YET = "時候未到"
 BAD_FRONT = "戰況不利"
@@ -82,7 +81,7 @@ def tianji_answer(world_tianji: int, key: str) -> str:
 
 
 def _tianji(world: WorldStateStore | None) -> int:
-    return world.read().tianji if world is not None else 0
+    return world.tianji() if world is not None else 0
 
 
 # ── 找東西 ───────────────────────────────────────────────
@@ -152,16 +151,6 @@ def event_ids(content: Content) -> set[str]:
         if any(eff.clue_items or eff.fs_counters for eff in effects):
             found.add(event.id)
     return found
-
-
-def third_party_events(content: Content) -> set[str]:
-    """第三方的伏筆事件（豪強分屬兩軍的季不出現，設計第十節；events.event_candidates 擋）：伏筆的事件（event_ids）裡，
-    條件的陣營全是要依附的陣營（豪強）的——正式內容是新野老縣吏與兩路買家。"""
-    gentry = {f.id for f in content.scenario.factions if f.allies}
-    return {
-        eid for eid in event_ids(content)
-        if eid in content.events and (factions := content.events[eid].condition.factions) and set(factions) <= gentry
-    }
 
 
 # ── 誰做得了 ─────────────────────────────────────────────
@@ -400,7 +389,7 @@ def _front_ok(state: GameState, content: Content, c: FsChain) -> bool:
     front = _front(content, c)
     if front is None:
         return True
-    low, high = FRONT_RULES.get(c.side, THIRD_PARTY_FRONT)
+    low, high = FRONT_RULES[c.side]
     return low <= timetable._front_value(state, content, front) <= high  # noqa: SLF001  跟時刻表同一個讀法（T1：rules.trend_value）
 
 
@@ -701,23 +690,18 @@ def _succeed(
 
 
 def _complete(state: GameState, content: Content, c: FsChain, now: float) -> None:
-    """整條完成：記做完、記貢獻（先完成、搶輸、同陣營後到都照記）；官軍、黃巾寫鎖定（已經有人就進搶輸的名單），
-    其他陣營寫第三方。不發任何傳聞、不推大勢（伏筆文件 2.4）。
+    """整條完成：記做完、記貢獻（先完成、搶輸、同陣營後到都照記）；官軍、黃巾寫鎖定（已經有人就進搶輸的名單）。
+    不發任何傳聞、不推大勢（伏筆文件 2.4）。
     公告與江湖史一律寫名號（傳聞分層第七節：改寫歷史的事，留名本身就是獎勵），所以不再記 Lock.shown、third_party_shown；
     這一版之前匿名記下的照舊（timetable.shown 讀得到）。"""
     p, w = state.player, state.world
     p.fs_done.append(c.id)
     wins.credit(p, content, w, calendar.point(now, content, w).week, content.config.foreshadow_contrib)
-    if c.side in LOCK_SIDES:
-        lock = Lock(side=c.side, name=p.name, time=now)
-        if c.event not in w.locks:
-            w.locks[c.event] = lock
-        else:
-            w.lock_losers.setdefault(c.event, []).append(lock)
+    lock = Lock(side=c.side, name=p.name, time=now)
+    if c.event not in w.locks:
+        w.locks[c.event] = lock
     else:
-        names = w.third_party.setdefault(c.event, [])
-        if p.name not in names:
-            names.append(p.name)
+        w.lock_losers.setdefault(c.event, []).append(lock)
 
 
 # ── 官銀 ─────────────────────────────────────────────────

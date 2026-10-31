@@ -6,7 +6,7 @@
 4. 討伐懸賞與散人出陣的說明在探索一顆開著時不再寫「尋敵」；
 5. 45 級的打探懸賞出門一趟交差、經驗換成心得時，段落結尾也寫「境界已到」；
 6. 城裡打地痞打成平手寫平手的句子（town_draw），不是吃了虧。
-用正式內容（season21），整個檔標 slow。"""
+用正式內容（season21）（以前整個檔標 slow，2026-10-31 起只有超過一秒的那幾條標）。"""
 from __future__ import annotations
 
 from unittest import mock
@@ -19,8 +19,6 @@ from tianxia import bounties, explore_one, renown, sortie, team
 from tianxia.encounter import EncounterResult
 from tianxia.engine import drill_share
 from tianxia.state import Bounty
-
-pytestmark = pytest.mark.slow
 
 
 def _fight(tier: str = "大勝"):
@@ -92,6 +90,7 @@ def _trips(game, n: int):
     return len(met), tags
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_an_official_newbie_at_changshe_meets_the_boss_about_five_percent_of_trips():
     game = ready(jianfa_game(), side="guan", loc="changshe")  # 長社對官軍沒有別的隊伍，只有段鐵頭
     plan = game.outing_plan()
@@ -104,6 +103,7 @@ def test_an_official_newbie_at_changshe_meets_the_boss_about_five_percent_of_tri
     assert tags and not any("遇敵" in tag for tag in tags)  # 沒撞上時不出現遇敵拍
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_the_boss_chance_follows_the_renown_multiplier():
     plain = ready(jianfa_game(), side="guan", loc="changshe")
     famous = ready(jianfa_game(), side="guan", loc="changshe")
@@ -113,6 +113,7 @@ def test_the_boss_chance_follows_the_renown_multiplier():
     assert more > less * 2 and 25 <= more <= 100, (more, less)  # 15% 約 60
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_a_hit_on_the_boss_roll_always_puts_the_boss_in_the_trip():
     """擲中的那一趟一定是遭遇（頭目擋路），不是看抽不抽得到遭遇——一趟的機會就是 5% × 倍數。"""
     game = ready(jianfa_game(), side="guan", loc="changshe")
@@ -148,6 +149,7 @@ def test_a_won_encounter_at_a_tier_one_place_ticks_the_field_goal():
     assert "field2" in game.state.player.newbie_marks
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_a_lost_draw_or_low_tier_encounter_does_not_tick_the_field_goal():
     game = ready(jianfa_game(), side="guan", loc="songshan_foot")
     with _beat("encounter"), _fight("落敗"):
@@ -252,6 +254,7 @@ def test_a_town_brawl_ending_in_a_draw_reads_as_a_draw_not_a_loss():
     assert any(line in story for line in loses) and not any(line in story for line in draws)
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_the_town_draw_lines_are_checked_when_loaded():
     from tianxia.content import ContentError, validate
 

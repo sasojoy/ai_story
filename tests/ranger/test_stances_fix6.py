@@ -12,8 +12,6 @@ from stances_kit import DAY, HOUR, LUZHI, MON, at, real_game, week_start_real
 from tianxia import errands, events, stances
 from tianxia.state import StanceOn
 
-pytestmark = pytest.mark.slow  # 載正式內容、照伺服器開季
-
 
 def _deliver(g, fid=LUZHI, eid="luzhi_letter"):
     """替他辦成一件送信（ErrandDef.stance：盧植的送信是持重）。"""

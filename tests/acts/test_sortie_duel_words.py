@@ -11,8 +11,6 @@ from duel_kit import FAR, LOC, NOW, WINDOW, do, duel_content, duel_world, game_o
 from tianxia import atlas, conquest, orders, sortie_duel
 from tianxia.state import Order
 
-pytestmark = pytest.mark.slow  # 建 Game、載正式內容
-
 
 # ── 守軍迎戰：三處寫法一樣 ──
 

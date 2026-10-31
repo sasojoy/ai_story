@@ -6,7 +6,7 @@
 - 接了這裡的討伐懸賞：每一趟都是遭遇（打懸賞那一路），交了差回原表；
 - 這一拍沒收穫（抽到素材卻沒料、遭遇打輸）照舊補一個一階素材；
 - 頭目、三道閘照舊掛在遭遇那一拍；同一處連兩趟不抽同一則感悟（outing_last）照舊。
-用正式內容（season21），整個檔標 slow。"""
+用正式內容（season21）（以前整個檔標 slow，2026-10-31 起只有超過一秒的那幾條標）。"""
 from __future__ import annotations
 
 import json
@@ -19,8 +19,6 @@ from jianfa_kit import jianfa_game, ready
 from tianxia import explore_one, team
 from tianxia.encounter import EncounterResult
 from tianxia.state import Bounty
-
-pytestmark = pytest.mark.slow
 
 ONE_WORDS = set(explore_one.BEAT_WORDS.values())  # 遇事、遇敵、得料、有悟
 CONNECTIVES = ("接著", "最後", "然後", "隨後", "之後", "接下來", "後來", "末了", "於是")  # 三拍接成一段才會用到的接續字
@@ -53,6 +51,7 @@ def _strike_bounty(game, loc_id: str) -> Bounty:
     return b
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_a_real_trip_brings_one_thing_only():
     """渡口（事件、遭遇、素材、感悟都抽得到）連出六十趟：每一趟的結果標記只有一個字詞，不會同時打一仗又遇事或有所感。"""
     game = ready(jianfa_game(), side="guan", loc="yingshui")
@@ -106,6 +105,7 @@ def test_a_strike_bounty_here_makes_every_trip_that_bounty_fight_and_handing_it_
     assert plan.how == "foe" and plan.weights == table  # 交了差回原表
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_the_paragraph_of_one_trip_has_no_three_beat_connectives():
     """正式內容的句子庫與真的出門回來的那一段，都不出現接著、最後這類三拍才有的接續字。"""
     lines = json.loads((Path(__file__).resolve().parents[2] / "content" / "outing_lines.json").read_text(encoding="utf-8"))

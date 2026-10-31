@@ -80,7 +80,7 @@ def attribute_with(content: Content, tianji: int, kind: str, main: str, aux: str
 
 
 def attribute_of(world: WorldStateStore, content: Content, kind: str, main: str, aux: str) -> str:
-    return attribute_with(content, world.read().tianji, kind, main, aux)
+    return attribute_with(content, world.tianji(), kind, main, aux)
 
 
 def forge_problem(state: GameState, content: Content, kind: str, main: str, aux: str) -> str | None:
@@ -192,7 +192,7 @@ def forge(
         return None, [f"（{problem}。）"]
     key, slot = recipe_key(kind, main, aux), slot_of(kind)
     tier = tier_of(content, main)
-    tianji = world.read().tianji
+    tianji = world.tianji()
     attribute = attribute_with(content, tianji, kind, main, aux)
     odds = forge_odds(state, content, world, kind, main, aux)
     setting = setting_points(state, content, attribute, slot)
@@ -557,7 +557,7 @@ def go_option(state: GameState, content: Content, world: WorldStateStore, kind: 
     （神器配方接 DIVINE_HEAD，不寫機率：一定是上品的仿品）；別人打中的、沒打中過的都不寫。打不成灰掉寫原因。"""
     from .engine import Option  # noqa: PLC0415
 
-    tianji, slot = world.read().tianji, slot_of(kind)
+    tianji, slot = world.tianji(), slot_of(kind)
     known = forge_secrets.solved_name(state, content, tianji, slot, kind, main, aux)
     recipe = forge_secrets.match(content, tianji, slot, kind, main, aux, state.world) if known else None
     divine = recipe is not None and recipe.divine
@@ -606,7 +606,7 @@ def draft_options(state: GameState, content: Content, world: WorldStateStore, ar
                               enabled=cost <= silver))
         return out + ([cancel] if armor_draft else [undo, cancel])
     if d.aux is None:
-        tianji = world.read().tianji
+        tianji = world.tianji()
         out = []
         for mid, n in held:
             left = n - (1 if mid == d.main else 0)

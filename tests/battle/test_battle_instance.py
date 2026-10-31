@@ -843,8 +843,9 @@ def test_assess_action_success_rate_falls_back_when_the_llm_call_fails(gamble_de
 def test_bot_choose_action_never_selects_a_free_text_option(gamble_definition):
     """機器人不會自己想描述，free_text 選項對它們來說等同不存在。"""
     instance = _active_battle(gamble_definition)
+    rng = random.Random(0)  # 固定種子：紅了重現得出來
     for _ in range(50):
-        tag = bi.bot_choose_action(instance, gamble_definition, "甲", random.Random())
+        tag = bi.bot_choose_action(instance, gamble_definition, "甲", rng)
         assert tag not in ("guan_reckless", "huang_reckless")  # 這個 definition 裡 reckless 是 free_text
 
 
@@ -1205,6 +1206,29 @@ def test_end_without_fighters_also_ends_once_everyone_has_fallen(definition):
         p.eliminated = True
     bi.end_without_fighters(instance, definition, now=definition.round_seconds)
     assert instance.phase == "ended" and instance.outcome_title == "僵持"
+
+
+def test_end_without_fighters_ends_at_once_when_everyone_who_fought_has_fallen(definition):
+    """U-08（手機介面自檢 2026-10-31）：上過陣的人全倒下了（倒下的人回不來），當場收場，不讓觀戰的人乾等這一回合逾時。"""
+    instance = _active_battle(definition)
+    opened = instance.round.opened_real
+    for p in instance.participants.values():
+        p.eliminated = True
+    assert bi.round_progress(instance, definition) == (0, 0)
+    msgs = bi.end_without_fighters(instance, definition, now=opened + 1)
+    assert msgs and instance.phase == "ended" and instance.outcome_title == "僵持"
+
+
+def test_end_without_fighters_still_waits_out_the_round_when_someone_only_walked_away(definition):
+    """走開大區的人沒倒下、還回得來（也可能有人晚到投效）：照舊等這一回合逾時才收。"""
+    instance = _active_battle(definition)
+    opened = instance.round.opened_real
+    instance.participants["甲"].eliminated = True
+    bi.set_away(instance, "乙", True)
+    assert bi.end_without_fighters(instance, definition, now=opened + 1) == []
+    assert instance.phase == "active"
+    bi.end_without_fighters(instance, definition, now=opened + definition.round_seconds)
+    assert instance.phase == "ended"
 
 
 def test_end_without_fighters_leaves_a_battle_with_someone_still_standing_alone(definition):

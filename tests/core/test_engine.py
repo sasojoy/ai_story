@@ -1085,7 +1085,7 @@ def test_one_players_action_ending_the_season_propagates_to_another_on_sync(cont
     b = Game.new(content, "乙", rng=random.Random(2), world=world)
     a.state.world.trends["kou"] = 80
     from tianxia.world import check_thresholds
-    check_thresholds(a.state, content, a.world, a.client)
+    check_thresholds(a.state, content, a.world)
     a._save_season()
     assert a.state.world.ended
     assert not b.state.world.ended  # 乙還沒同步
@@ -1449,6 +1449,17 @@ def test_stale_world_flags_get_flag_time_backfilled(content, game):
     game.world.save_season(season)
     fresh = Game(content, game.state, world=game.world)
     assert fresh.state.world.flag_times["legacy_flag"] == 12345
+
+
+def test_a_rumor_at_a_removed_place_is_cleared_only_in_this_copy(content, game):
+    """內容拿掉了某個地點：讀進來的那一份傳聞清掉發生地（照舊），但不能就地改到共用的那一份（sqlite_world._logs 記下的
+    傳聞物件跟別的讀取共用）：下一次讀、別人讀到的照舊是資料庫裡的樣子。"""
+    game.world.mutate_season(lambda s: s.rumors.append(Rumor(time=0, text="舊地方的事", location="removed_place")))
+    first = game.world.get_season()
+    fresh = Game(content, game.state, world=game.world)
+    assert fresh.state.world.rumors[-1].location is None and fresh.state.world.rumors[-1].id is not None
+    assert first.rumors[-1].location == "removed_place"
+    assert game.world.get_season().rumors[-1].location == "removed_place"
 
 
 def test_stale_dialogue_reference_is_dropped(content, game):
@@ -2638,6 +2649,8 @@ def test_an_eliminated_participant_sees_a_spectate_only_option(content, game):
     game.world.start_battle(definition, now=0.0)
     with at(game, 0.0):
         game.choose("battle:join:guan")
+    # 場上還有別人站著：只剩倒下的人時當場用保底收場（U-08），就沒有觀戰這一刻了
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "同袍", "guan", neili_cap=100.0))
     after_muster = definition.muster_seconds + 1
     with at(game, after_muster):
         game._battle_status()  # 讓集結自動關閉

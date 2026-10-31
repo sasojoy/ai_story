@@ -2,8 +2,9 @@
 
 每個玩家的行動都在 WorldStateStore.action_lock() 裡做（SQLite 的 BEGIN IMMEDIATE），鎖拿著的時候全服玩家與假人都在等。
 鎖外的路徑（對話備料、開爐取名、隨口應對的評分與潤色）有自己的做法，鎖內還有幾處會叫模型：
-大事潤色、決戰自訂行動的評分（網頁走鎖外，見 server.battle_text；直接呼叫才在鎖內評）、鎖內才備料的對話與記憶整理、鎖內才取名的開爐。
-（決戰回合的敘事 2026-10-08 起不叫模型；重複事件與重遊的點綴句 2026-10-12 拿掉了。）它們全都拿 Game._quick_client() 給的短逾時複本；模型慢到沒回（逾時）或根本沒有 client（伺服器假人）時，
+決戰自訂行動的評分（網頁走鎖外，見 server.battle_text；直接呼叫才在鎖內評）、鎖內才備料的對話與記憶整理、鎖內才取名的開爐。
+（決戰回合的敘事 2026-10-08 起不叫模型；重複事件與重遊的點綴句 2026-10-12 拿掉了；江湖大事的潤色 2026-10-31 搬出鎖外，
+審查 S-09：鎖內只記單子，見 THRESHOLDS 與 server.write_flavor。）它們全都拿 Game._quick_client() 給的短逾時複本；模型慢到沒回（逾時）或根本沒有 client（伺服器假人）時，
 每一處都退回固定的文字，不丟例外。
 
 這裡把 OllamaClient 的兩個呼叫換成「記下當下那個 client 的 timeout、然後丟逾時」，一條路徑一條路徑地跑，
@@ -168,15 +169,33 @@ def _a_forge_named_in_the_lock(game):
     assert len(p.insights) == 5, msgs
 
 
-SCENARIOS = {
+THRESHOLDS = {  # 江湖大事：鎖內一個模型都不叫，只記一張潤色單子（審查 S-09）
     "大事潤色（行動選項）": _a_threshold_through_a_choice,
     "大事潤色（管理者觸發大事）": _a_threshold_through_admin_fire,
     "大事潤色（管理者推動大勢）": _a_threshold_through_admin_push_trend,
     "大事潤色（管理者定戰況）": _a_threshold_through_admin_set_trend,
     "大事潤色（隨口應對）": _a_threshold_through_a_free_text_answer,
+    "疾行抵達時的大事潤色": _a_threshold_reached_by_dashing,
+}
+
+
+@pytest.mark.parametrize("name", THRESHOLDS)
+def test_a_world_event_never_calls_the_model_in_the_lock_and_leaves_a_polish_job(slow, spy, name):
+    THRESHOLDS[name](slow)
+    assert spy.calls == [], spy.calls
+    assert [job.fire_id for job in slow._flavor_jobs] == ["kou50"]
+
+
+@pytest.mark.parametrize("name", THRESHOLDS)
+def test_without_a_client_a_world_event_leaves_no_polish_job(game, spy, name):
+    game.client = None
+    THRESHOLDS[name](game)
+    assert spy.calls == [] and game._flavor_jobs == []
+
+
+SCENARIOS = {
     "隨口應對的鎖內評分": _an_unrated_free_text_answer,
     "決戰自訂行動的評分": _a_custom_battle_action,
-    "疾行抵達時的大事潤色": _a_threshold_reached_by_dashing,
     "鎖內現生成的對話": _a_dialogue_that_is_first_generated_in_the_lock,
     "記憶整理與性情漂移": _a_dialogue_turn_that_consolidates_memory_and_drift,
     "鎖內取名的開爐": _a_forge_named_in_the_lock,
@@ -232,7 +251,7 @@ def test_a_client_that_is_already_faster_than_the_cap_keeps_its_own_timeout(game
 
 def test_the_cap_comes_from_the_config(slow, spy):
     slow.content.config.in_lock_model_timeout = 7
-    _a_threshold_through_a_choice(slow)
+    _an_unrated_free_text_answer(slow)
     assert spy.timeouts and set(spy.timeouts) == {7}
 
 
@@ -377,41 +396,22 @@ def test_the_out_of_lock_naming_budget_keeps_its_attempts(content):
     assert len(calls) == naming.NAME_ATTEMPTS
 
 
-def test_a_timed_out_threshold_polish_falls_back_to_the_plain_text(slow, spy):
-    """疾行抵達時跨過大事門檻：潤色在鎖內叫模型、逾時了，直接用原文，門檻照樣觸發，只送那一趟。
-    （同一次拿鎖裡第一次失敗之後別處都不叫，見 test_a_new_lock_hold_gets_a_fresh_budget。）"""
+def test_a_threshold_reached_by_dashing_writes_the_plain_text_without_a_model(slow, spy):
+    """疾行抵達時跨過大事門檻：鎖內不叫模型（審查 S-09），原文照給、門檻照樣觸發，潤色留給鎖外。"""
     walk_to(slow, "lake")
     slow.state.world.trends["kou"] = 50
     msgs = slow.travel("town", "dash")
-    assert spy.calls == [("chat_text", 15)]
+    assert spy.calls == []
     assert "blocked" in slow.state.world.flags and "【江湖大事】水寇封江！" in msgs
 
 
 def test_without_a_failure_every_in_lock_call_goes_out(game, monkeypatch):
-    """對照：模型回得出來時鎖內的呼叫照常送出、用上模型的字（逾時的旗子才是後面不叫的原因）。"""
+    """對照：模型回得出來時鎖內的呼叫照常送出（逾時的旗子才是後面不叫的原因）。"""
     spy = ModelSpy(monkeypatch, ok=True)
     game.client.timeout = PRODUCTION_TIMEOUT
-    walk_to(game, "lake")
-    game.state.world.trends["kou"] = 50
-    msgs = game.travel("town", "dash")
-    assert [kind for kind, _ in spy.calls] == ["chat_text"]  # 大事潤色（重遊的點綴句 2026-10-12 拿掉了）
-    assert any("山風捲過旌旗。" in m for m in msgs)
-
-
-def test_a_successful_in_lock_call_does_not_use_up_the_budget(game, monkeypatch):
-    """同一次拿鎖裡後面不叫模型的原因是前面**失敗過**（額度用完），不是「一次拿鎖只准叫一次」：
-    成功的呼叫不扣額度，第二處照樣拿得到 client、照樣用鎖內的短逾時。
-    （失敗那一半見 test_a_new_lock_hold_gets_a_fresh_budget。）"""
-    spy = ModelSpy(monkeypatch, ok=True)
-    game.client.timeout = PRODUCTION_TIMEOUT
-    game.reset_model_budget()
-    first = game._quick_client()
-    assert first is not None and first.chat_text([]) == "山風捲過旌旗。"
-    second = game._quick_client()
-    assert second is not None  # 成功不扣額度
-    assert second.chat_text([]) == "山風捲過旌旗。"
-    quick = game.content.config.in_lock_model_timeout
-    assert spy.timeouts == [quick, quick]
+    quick = game._quick_client()
+    assert quick.chat_text([]) == "山風捲過旌旗。" and quick.chat_text([]) == "山風捲過旌旗。"
+    assert [kind for kind, _ in spy.calls] == ["chat_text", "chat_text"]
 
 
 def test_a_new_lock_hold_gets_a_fresh_budget(slow, spy):
