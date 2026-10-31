@@ -1567,12 +1567,16 @@ _BATTLE_CLIENTS: dict[type, type] = {}
 
 def _battle_client(base: type) -> type:
     """放手一搏評分、補劇情的假模型（base 是 _setup_child 換好的 client 類別）：GambleScore 回 BATTLE_RATE、TaleBatch 照單子上的名號
-    每人一句 BATTLE_STORY，其餘照 base（丟連線錯誤、大場面判讀）。"""
+    每人一句 BATTLE_STORY，其餘照 base（丟連線錯誤、大場面判讀）。這兩種回答之前先把送來的提示整份寫進輸出（messages 與其餘參數）：
+    假模型不看提示，單子上的幕（act_index）、陣營名、原句、點名、性別、成敗改了，回的還是同一句，不寫進輸出就比不出來（審查 should；
+    提示由 battle_instance.score_gamble／write_tales 照 view.battle_text_request／battle_tale_request 開的單子組，兩份程式組法一樣）。"""
     if base not in _BATTLE_CLIENTS:
         import re
 
         class BattleClient(base):
             def chat_structured(self, messages, schema, *a, **k):
+                if schema.__name__ in ("GambleScore", "TaleBatch"):
+                    emit(f"模型單子 {schema.__name__}", {"messages": messages, "rest": repr((a, sorted(k.items())))})
                 if schema.__name__ == "GambleScore":
                     return schema(success_rate=BATTLE_RATE)
                 if schema.__name__ == "TaleBatch":
@@ -1730,10 +1734,13 @@ class BattleScenario(Scenario):
     # ── 情境 ──
 
     def seat(self) -> None:
-        """四個人擺在那一場決戰的大區（體力補滿、過了新手期）。這份內容沒有那一場（測試內容）就照原地補體力。"""
+        """四個人擺在那一場決戰的大區（體力補滿、過了新手期）。這份內容沒有那一場（測試內容）就照原地補體力。第二幕放手一搏的那一位
+        是女子（Scenario.setup 一律建男的）：補劇情的單子上有「女子」那一格，提示寫進輸出之後性別改了才比得出來。"""
         loc = self.spot(self.target()[1])
         for who in self.PLAYERS:
             self.place(who, loc)
+        self.edit(self.LATE_GAMBLER, lambda p: setattr(p, "gender", "女"))
+        emit(f"{self.LATE_GAMBLER} 改成女子", None)
 
     def look(self) -> None:
         """開戰之前：畫面上沒有戰局條、沒有攻城條、輸入框是空的；戰報頁是空的。"""
