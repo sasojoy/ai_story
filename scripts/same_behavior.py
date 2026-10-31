@@ -2336,8 +2336,9 @@ def _explore_entry(main_fn):
 main = _explore_entry(main)  # explore（第 3＋4 批）一行登記：多四個子命令，其餘照原本的 main
 
 
-# ═══════════════════════════ battle：決戰「看」一軌（主動搬六包第 5 批，dev/battle-1） ═══════════════════════════
-# 全服決戰「看」那一半（畫面、戰報、補送、放手一搏補劇情）搬進 tianxia/features/battle/（計畫 docs/superpowers/plans/2026-10-31-決戰包-第1批.md）。
+# ═══════════════════════════ battle：決戰一軌（主動搬六包第 5 批 dev/battle-1、全部拆包第 6 批 dev/battle-2） ═══════════════════════════
+# 全服決戰「看」那一半（畫面、戰報、補送、放手一搏補劇情）搬進 tianxia/features/battle/（計畫 docs/superpowers/plans/2026-10-31-決戰包-第1批.md）；
+# 第 6 批接著搬管理者的決戰工具與攻城（計畫 2026-11-01-決戰包-第2批.md：BattleScenario 加 admin、siege_*、resting 幾段）。
 # 這一段整塊是決戰的：四條拆包線並行，接在檔尾、最後一行登記（_battle_register_track），PM 合的時候不跟別人的行穿插。
 
 
@@ -2383,15 +2384,36 @@ class BattleScenario(Scenario):
     同步補回來（RESTORED_NOTE，照收場時刻排進兩筆尋常的戰報中間）；伺服器假人（BotRunner）打另一場、整季機器人（week7）帶一場；收季、
     開下一季（battle_results_seen 照帶），那一場收場之後還沒同步過的假人換季之後才補到（上一季那一支）。季終收兵那一支（unfinished）
     走不到（時刻表的季開不出第三場：長社、廣宗開過了，宛城要等第 3 週那件大事結算才知道是哪一版），由 tianxia/features/battle/tests/test_showdown_delivery.py 守。
-    序章裡的那一位（NEWBIE）一路看：序章不畫戰場。測試內容沒有決戰：同一串 API 照打（證明關著一個字都不變），假人那一段略過。"""
+    序章裡的那一位（NEWBIE）一路看：序章不畫戰場。測試內容沒有決戰：同一串 API 照打（證明關著一個字都不變），假人那一段略過。
+
+    第 6 批（決戰「打」a：管理者的決戰工具與攻城，dev/battle-2；計畫 docs/superpowers/plans/2026-11-01-決戰包-第2批.md）插進來的段：
+    admin（開戰之前按得到的被拒）、admin_trial（第 5 批那一場收場之後：開了再取消，與那時候按得到的被拒）——管理者的決戰工具一樣一樣按，
+    成的與被拒的各一次；siege_*（地盤開著的 weekend、season21、week7：六場攻城，見 SIEGES；none、test 沒有地盤，那幾段什麼都不打）；
+    resting（收季之後再按一輪，season 那一段裡）。前半照舊停在 gamble：同一刻兩場攻城（A、B）打了一兩回合、還沒收場（round 接一行
+    siege_round：決戰每一回合攻城的真人也各出一招）——後半由 head 打完兩場攻城、結算、補送。"""
 
     PLAYERS = {"秦朗月": "guan", "韓雲起": "huang", "柳青崖": "haoqiang", "葉寒舟": None}
     NEWBIE = "白小樓"  # Scenario.setup 註冊、不略過引導的那一位
     GAMBLER, LATE_GAMBLER, IDLER = "秦朗月", "韓雲起", "葉寒舟"
     # 伺服器假人：兩軍各二，擺在第二場決戰的大區（bots 那一段）
     BOT_SEATS = [("假戊", "guan"), ("假己", "guan"), ("假庚", "huang"), ("假辛", "huang")]
-    PHASES_FIRST = ["setup", "join", "seat", "look", "open", "muster", "start", "gamble"]
-    PHASES_SECOND = ["narrate", "fight", "deliver", "reports", "restore", "bots", "season"]
+    # 第 6 批：六場攻城（名字：(攻方, 地點)）。A 官軍攻中立的南陽官道：守將（那裡最強的一路隊伍）守住；B 黃巾攻官軍的涿郡：攻下、易手；
+    # C 集結中管理者取消（_cancel_siege）；D 集結中收季（_shelve_siege）；E 伺服器假人那一場：黃巾守住自己的新野（守城軍令記一次，_siege_guards）；
+    # F 黃巾攻官軍的洛陽官道、那一區沒有人、一個人都沒到：作罷（siege.void_absent 之後照樣經 _settle_siege）。結果是跑出來的（照兩份程式同一套
+    # 亂數），寫在這裡是情境走到哪幾支：守將守住、攻下易手、陣營守住、作罷、取消、季終收兵。每一場自己一個大區（D 在決戰收場之後才開）：同一個
+    # 大區兩場以上一起集結的話加入鈕帶 @流水號，第 5 批那幾位的加入會被改掉
+    SIEGES = {"A": ("guan", "nanyang_road"), "B": ("huang", "zhuo_county"), "C": ("huang", "xiaquyang"), "D": ("guan", "runan_wilds"),
+              "E": ("guan", "xinye"), "F": ("huang", "luoyang_road")}
+    # 攻城的真人（名號：(陣營, 哪一場, 每一回合出哪一招)）：A 兩位官軍攻、一位散人助守【守軍】；B 黃巾一位攻（固守）、官軍一位守（強攻）；C 黃巾一位
+    SIEGE_PLAYERS = {"程破軍": ("guan", "A", "強攻"), "方定遠": ("guan", "A", "奇襲"), "孟無涯": (None, "A", "固守"),
+                     "杜飛沙": ("huang", "B", "固守"), "季長安": ("guan", "B", "強攻"), "譚小滿": ("huang", "C", "強攻")}
+    SIEGE_BOT_SEATS = [("假壬", "guan"), ("假癸", "guan"), ("假子", "huang"), ("假丑", "huang")]  # E 那一場的假人：兩軍各二
+    # 戰書緊接在開戰之後下（siege_open）、攻城的真人之後才建（siege_seat）：攻城的集結截止跟決戰的差不到一分鐘，siege_start 把時鐘推過攻城的截止時
+    # 決戰才剛開打（season21 的長社火攻開季就開了集結、截止得更早，一樣在這一下開打）——決戰第一回合照第 5 批的樣子在 gamble 打
+    PHASES_FIRST = ["setup", "join", "seat", "look", "admin", "open", "siege_open", "siege_seat", "muster", "siege_muster", "siege_cancel",
+                    "siege_start", "start", "gamble"]
+    PHASES_SECOND = ["narrate", "fight", "siege_end", "deliver", "reports", "restore", "admin_trial", "siege_after", "bots", "siege_bots",
+                     "siege_shelve", "season"]
 
     def __init__(self, root: Path, profile: str, db: Path):
         super().__init__(root, profile, db)
@@ -2502,6 +2524,7 @@ class BattleScenario(Scenario):
             moves = sorted(i for i, o in self.ids(self.main(who)).items() if i.startswith("battle:act:") and o.get("enabled"))
             if moves:
                 self.choose(who, moves[n % len(moves)])
+        self.siege_round()  # 第 6 批：同時在打的攻城，攻城的真人也出這一回合（沒有開打中的攻城什麼都不打）
         b = self.world.get_battle()
         if b is not None and b.phase == "active" and b.round_number == n:
             self.skip_past(b.round.opened_real + self.c.battles[b.battle_id].round_seconds)
@@ -2746,6 +2769,7 @@ class BattleScenario(Scenario):
         self.do(ADMIN, "end_season")
         for who in self.PLAYERS:
             self.main(who)
+        self.resting()  # 第 6 批：休季時管理者的決戰工具一律被擋；季終收兵的那一場攻城（D）
         self.do(ADMIN, "next_season")
         for who in [*self.PLAYERS, self.NEWBIE]:
             self.main(who)
@@ -2765,6 +2789,367 @@ class BattleScenario(Scenario):
             book = self.world.biography(last, name)
             emit(f"{name} 第 {last} 季存起來的行狀", None if book is None else [[a["kind"], a["text"]] for a in book["annals"]][-4:])
 
+    # ── 第 6 批：管理者的決戰工具（admin、resting）──
+
+    def live_showdown(self) -> bool:
+        b = self.world.get_battle()
+        return b is not None and b.phase != "ended"
+
+    def trial(self) -> str | None:
+        """admin_trial 開了再取消的那一場（立刻開戰的 id）：不帶設定是黃巾決戰（world.start_battle 那一支）；時刻表的季是宛城（時刻表那一支：
+        world.open_showdown）——還不知道是哪一版的季（weekend、week7）先按開它被擋（要等張曼成那一件結算），「定結果」定了張曼成（GET /api/admin
+        的 results 第一個），那一版才出現在立刻開戰的選單上；season21 開季就知道了。測試內容沒有決戰是 None。"""
+        if not self.c.battles:
+            return None
+        if self.target()[0] == "start_battle":
+            return self.target()[1]
+        from tianxia import timetable
+
+        event = timetable.find(self.c, "wancheng")
+        _, data = self.call(ADMIN, "GET", "/api/admin")
+        found = next((b["id"] for b in data.get("battles", []) if b["id"].startswith(event.id)), None)
+        if found is not None:
+            return found
+        self.do(ADMIN, "start_showdown", {"id": event.id})  # 要等張曼成那一件結算了才知道是哪一版
+        value = next((r["value"] for r in data.get("results", []) if r["value"].startswith(f"{event.version_from}|")), None)
+        if value is not None:
+            eid, key = value.split("|", 1)
+            self.do(ADMIN, "resolve_event", {"id": eid, "key": key})
+        _, data = self.call(ADMIN, "GET", "/api/admin")
+        return next((b["id"] for b in data.get("battles", []) if b["id"].startswith(event.id)), None)
+
+    def admin(self) -> None:
+        """管理者的決戰工具，開戰之前按得到的那幾種被拒（GET /api/admin 看立刻開戰的選單〔admin_battles〕、三場大戲的鈕〔admin_showdowns、
+        _showdown_refusal〕、時刻表那幾列〔cancelled_showdowns〕）：不是管理者按開戰（伺服器擋）；暫停中按開戰、開這一場、取消決戰
+        （_admin_refusal），繼續；立刻開戰沒有這一場；開這一場時刻表上沒有（不帶設定：這一季沒有時刻表）；沒有進行中的決戰時取消決戰被擋——
+        season21 的長社火攻開季就開了集結：改成另開廣宗被擋（已經有一場戰鬥在進行），不取消它（第 5 批那一場照打）。成的那幾顆在 open（開這一場、
+        立刻開戰）、admin_trial（開了再取消）、bots（開這一場）。"""
+        op, target = self.target()
+        self.call(ADMIN, "GET", "/api/admin")
+        self.do(self.GAMBLER, "start_battle", {"id": target})  # 不是管理者：伺服器擋
+        self.do(ADMIN, "pause_clock")
+        self.do(ADMIN, "start_battle", {"id": target})
+        self.do(ADMIN, "start_showdown", {"id": target})
+        self.do(ADMIN, "cancel_battle")
+        self.do(ADMIN, "resume_clock")
+        self.do(ADMIN, "start_battle", {"id": "no_such_battle"})
+        self.do(ADMIN, "start_showdown", {"id": "no_such_event"})
+        if self.live_showdown():
+            second = self.second()[1]
+            self.do(ADMIN, "start_battle", {"id": second})
+            self.do(ADMIN, "start_showdown", {"id": second})
+        else:
+            self.do(ADMIN, "cancel_battle")
+
+    def admin_trial(self) -> None:
+        """開了再取消（第 5 批那一場收場、補送完之後）：取消決戰被擋（沒有進行中的）、開這一場長社被擋（已經結算了；不帶設定：沒有時刻表）；
+        試開一場（trial），再開一次、開別場都擋（已經有一場戰鬥在進行、已經開打過了），取消（不算勝負、天下大事一句、記進 showdowns_cancelled），
+        之後開這一場宛城被擋（開打後被取消，要收尾用定結果）；前後 GET /api/admin（時刻表那幾列的「開打後取消」）。"""
+        op, target = self.target()
+        self.do(ADMIN, "cancel_battle")
+        self.do(ADMIN, "start_showdown", {"id": target})
+        trial = self.trial()
+        emit("試開的那一場", trial)
+        if trial is None:
+            return
+        self.do(ADMIN, "start_battle", {"id": trial})
+        # 那一場的大區裡有一位加入（不帶設定：秦朗月在潁川汝南；時刻表的季：A 那一場打完的程破軍在南陽）：取消之後他補一則「不算勝負」——
+        # file_showdown 沒打完那一支（第 5 批的情境走不到，見 docstring 開頭）
+        joiner = self.GAMBLER if op == "start_battle" else next(iter(self.SIEGE_PLAYERS))
+        joined = joiner in self.clients
+        if joined:
+            ids = self.ids(self.main(joiner))
+            pick = next((i for i in sorted(ids) if i.startswith("battle:join:") and ids[i].get("enabled")), None)
+            emit(f"{joiner} 試開那一場按的", pick)
+            if pick is not None:
+                self.choose(joiner, pick)
+                if "battle:escort:none" in self.ids(self.main(joiner)):
+                    self.choose(joiner, "battle:escort:none")
+        self.battle_row("試開")
+        self.do(ADMIN, "start_battle", {"id": trial})
+        if op == "start_showdown":
+            self.do(ADMIN, "start_battle", {"id": self.second()[1]})
+            self.do(ADMIN, "start_showdown", {"id": self.second()[1]})
+            self.do(ADMIN, "start_showdown", {"id": "wancheng"})
+        self.call(ADMIN, "GET", "/api/admin")
+        self.do(ADMIN, "cancel_battle")
+        self.battle_row("取消之後")
+        self.call(ADMIN, "GET", "/api/admin")
+        if op == "start_showdown":
+            self.do(ADMIN, "start_showdown", {"id": "wancheng"})
+        if joined:
+            self.main(joiner)
+            self.me(joiner, "試開那一場取消之後")
+
+    def resting(self) -> None:
+        """收季之後（休季）管理者的決戰工具一律被擋（賽季沒有在進行）；季終收兵的那一場攻城（D）收起來了，秦朗月補一則不算勝負。"""
+        op, target = self.target()
+        self.do(ADMIN, "start_battle", {"id": target})
+        self.do(ADMIN, "start_showdown", {"id": target})
+        self.do(ADMIN, "cancel_battle")
+        if self.siege_on():
+            self.siege_row("季終收兵之後", ("D",))
+            self.me(self.GAMBLER, "季終收兵之後")
+
+    # ── 第 6 批：攻城（地盤開著的季；SIEGES、SIEGE_PLAYERS）──
+
+    def siege_on(self) -> bool:
+        from tianxia import territory
+
+        return territory.on(self.c)
+
+    def recruit(self, who: str, side: str | None, loc: str) -> bool:
+        """攻城的真人：兩軍的照 Scenario.newcomer（註冊、建角色、略過引導、投靠）；散人只註冊、建角色、略過引導。擺到 loc（體力補滿、過了新手期）。"""
+        if side is not None:
+            if not self.newcomer(who, side):
+                return False
+        else:
+            self.clients[who] = self.TestClient(self.server.app)
+            self.passwords[who] = "pw-" + self.login_of(who)
+            self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who],
+                                                    "again": self.passwords[who]})
+            self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
+            self.do(who, "skip_tutorial")
+            self.settle_choices(who)
+        return self.place(who, loc)
+
+    def slot_of(self, key: str):
+        """時程表上那一場（最後排的那一筆：SIEGES 的那一塊、攻方有那一軍）；沒有是 None。"""
+        side, loc = self.SIEGES[key]
+        season = self.world.get_season()
+        if season.conquest is None:
+            return None
+        return next((s for s in reversed(season.conquest.schedule) if s.loc == loc and side in s.attackers), None)
+
+    def siege_row(self, tag: str, keys=None) -> None:
+        """這幾場攻城此刻的樣子：時程表那一筆（狀態、流水號、誰拿下）、那一塊歸誰與兩軍的進度、那一場（還在共用狀態裡的，或已經拿掉、
+        從 battles 表讀的）的回合、戰局、結果、名單、SiegeInfo 與整份的雜湊。"""
+        from tianxia import conquest
+
+        season = self.world.get_season()
+        live = {b.record_id: b for b in self.world.get_sieges()}
+        out = {}
+        for key in keys or self.SIEGES:
+            slot = self.slot_of(key)
+            if slot is None:
+                continue
+            loc = self.SIEGES[key][1]
+            b = None if slot.record_id is None else live.get(slot.record_id) or self.world.ended_battle(slot.record_id)
+            out[key] = {
+                "slot": [slot.id, slot.status, slot.record_id, slot.winner, slot.attackers],
+                "holder": conquest.holder(season, self.c, loc),
+                "bars": {s: round(v, 3) for s, v in sorted(conquest.bars(season, loc).items())},
+                "battle": None if b is None else {
+                    "id": b.battle_id, "phase": b.phase, "round": b.round_number, "trend": b.trend,
+                    "outcome": [b.outcome_title, b.outcome_side, b.outcome_margin], "unfinished": b.unfinished,
+                    "who": {n: [q.faction, q.eliminated, q.acted_rounds] for n, q in sorted(b.participants.items())},
+                    "siege": None if b.siege is None else b.siege.model_dump(mode="json"),
+                    "sha": hashlib.sha256(b.model_dump_json().encode("utf-8")).hexdigest()},
+            }
+        emit(f"攻城 {tag}", out)
+
+    def siege_pick(self, who: str, ids: dict[str, dict]) -> str | None:
+        """攻城集結時這個人按哪一顆：兩軍的按自己那一軍的加入、散人按助守【守軍】；同一個大區有兩場打得進去時鈕帶「@流水號」，按自己那一場的。"""
+        side, key, _ = self.SIEGE_PLAYERS[who]
+        slot = self.slot_of(key)
+        rid = None if slot is None else slot.record_id
+        live = sorted(i for i, o in ids.items() if (i.startswith("battle:join:") or i.startswith("battle:enlist:")) and o.get("enabled"))
+        mine = [i for i in live if "@" not in i or i.endswith(f"@{rid}")]
+        if side is not None:
+            return next((i for i in mine if i.split("@")[0] == f"battle:join:{side}"), mine[0] if mine else None)
+        return next((i for i in mine if "助守" in ids[i].get("label", "")), mine[0] if mine else None)
+
+    def siege_round(self) -> None:
+        """攻城這一回合：還在場上的攻城真人各出一招（SIEGE_PLAYERS 寫的那一招；鈕上沒有就照第一顆）。沒有開打中的攻城什麼都不打。"""
+        if not self.siege_on():
+            return
+        live = [b for b in self.world.get_sieges() if b.phase == "active"]
+        for who, (_, _, move) in self.SIEGE_PLAYERS.items():
+            b = next((x for x in live if who in x.participants), None)
+            if b is None or b.participants[who].eliminated:
+                continue
+            ids = self.ids(self.main(who))
+            acts = sorted(i for i, o in ids.items() if i.startswith("battle:act:") and o.get("enabled"))
+            if acts:
+                self.choose(who, next((i for i in acts if f"（{move}" in ids[i].get("label", "")), acts[0]))
+        if live:
+            self.siege_row("這一回合之後", ("A", "B"))
+
+    def siege_seat(self) -> None:
+        """攻城的真人建好角色（一位十來個請求，攻城與決戰都還在集結），擺在各自那一場的地點。"""
+        if not self.siege_on():
+            return
+        for who, (side, key, _) in self.SIEGE_PLAYERS.items():
+            self.recruit(who, side, self.SIEGES[key][1])
+        self.siege_row("人到齊了", ("A", "B", "C", "F"))
+
+    def siege_open(self) -> None:
+        """開戰之後管理者立刻下四張戰書（admin_conquest_letter：不看階與門檻、集結馬上開）——A、B、C、F；下一個同步的人（GET /api/admin）把它們
+        開成集結（siege.open_waiting）。F 在洛陽，那一區沒有人：沒有人加入。"""
+        if not self.siege_on():
+            emit("這一季沒有地盤：攻城那幾段略過", None)
+            return
+        for key in ("A", "B", "C", "F"):
+            side, loc = self.SIEGES[key]
+            self.do(ADMIN, "admin_conquest_letter", {"id": loc, "side": side})
+        self.call(ADMIN, "GET", "/api/admin")  # 領地爭奪那一組的 sieges（取消一場攻城的下拉選單）
+        self.siege_row("開了集結", ("A", "B", "C", "F"))
+
+    def siege_muster(self) -> None:
+        """攻城集結中：每一位看一次、按加入（散人按助守；有挑同伴那一步就不派），再看一次。"""
+        if not self.siege_on():
+            return
+        for who in self.SIEGE_PLAYERS:
+            pick = self.siege_pick(who, self.ids(self.main(who)))
+            emit(f"{who} 攻城集結時按的", pick)
+            if pick is None:
+                continue
+            self.choose(who, pick)
+            if "battle:escort:none" in self.ids(self.main(who)):
+                self.choose(who, "battle:escort:none")
+        for who in self.SIEGE_PLAYERS:
+            self.main(who)
+        self.siege_row("集結中", ("A", "B", "C"))
+
+    def siege_cancel(self) -> None:
+        """集結中管理者「取消一場攻城」（admin_conquest_cancel → _cancel_siege → _shelve_siege：不算勝負、不發軍餉、不易手），C 那一位補一則；
+        再按一次被擋（已經作罷）。"""
+        if not self.siege_on():
+            return
+        slot = self.slot_of("C")
+        if slot is None:
+            emit("C 那一場沒排上", None)
+            return
+        self.do(ADMIN, "conquest_cancel", {"id": slot.id})
+        self.do(ADMIN, "conquest_cancel", {"id": slot.id})
+        self.main("譚小滿")
+        self.me("譚小滿", "攻城取消之後")
+        self.siege_row("取消之後", ("C",))
+
+    def siege_start(self) -> None:
+        """攻城的集結截止（戰書比決戰晚幾步下，截止也晚幾步）：時鐘推過最晚的那一場，攻城的真人各看一次——第一個同步的人把決戰與每一場攻城都
+        推到開打（_battle_status：先決戰、再每一場攻城各推一次，_tick_siege；沒人到的作罷）；start 那一段接著看決戰開打的畫面。"""
+        if not self.siege_on():
+            return
+        mustering = [b for b in self.world.get_sieges() if b.phase == "muster"]
+        if mustering:
+            self.skip_past(max(b.muster_deadline_real for b in mustering))
+        for who in self.SIEGE_PLAYERS:
+            self.main(who)
+        self.siege_row("開打", ("A", "B", "F"))
+
+    def siege_end(self) -> None:
+        """攻城打到收場（決戰收場時還沒收場的：照回合出招，回合沒結就把時鐘推過期限）：A 守將守住、B 攻下易手；收場之後攻城的真人各打一次
+        /api/main 收補送（戰報 kind siege、軍餉與貢獻乘 pay_share），存檔那幾格寫進輸出。"""
+        if not self.siege_on():
+            return
+        first = next(iter(self.SIEGE_PLAYERS))
+        for _ in range(12):
+            live = [b for b in self.world.get_sieges() if b.phase != "ended"]
+            if not live:
+                break
+            before = {b.record_id: b.round_number for b in live}
+            self.siege_round()
+            stuck = [b for b in self.world.get_sieges() if b.phase == "active" and before.get(b.record_id) == b.round_number]
+            if stuck:
+                self.skip_past(max(b.round.opened_real + self.c.battles[b.battle_id].round_seconds for b in stuck))
+                self.main(first)
+        self.siege_row("收場")
+        for who in self.SIEGE_PLAYERS:
+            self.main(who)
+            self.me(who, "攻城收補送之後")
+
+    def siege_after(self) -> None:
+        """易手之後的地盤與管理者那一頁：GET /api/admin（長社結算了、宛城開打後取消；領地爭奪那一組的此刻歸誰、冷卻）、輿圖的狀態
+        （/api/map/state）、戰報頁攻城那一筆；替黃巾再對涿郡下一張戰書被擋（B 攻下之後已經是黃巾的了）。"""
+        self.call(ADMIN, "GET", "/api/admin")
+        if not self.siege_on():
+            return
+        self.call(next(iter(self.SIEGE_PLAYERS)), "GET", "/api/map/state")
+        for who in self.SIEGE_PLAYERS:
+            _, data = self.call(who, "GET", "/api/reports")
+            rows = [r["id"] for r in data.get("list", [])] if isinstance(data, dict) else []
+            for rid in rows[:1]:
+                self.call(who, "GET", f"/api/reports?id={rid}")
+        side, loc = self.SIEGES["B"]
+        self.do(ADMIN, "admin_conquest_letter", {"id": loc, "side": side})
+
+    def siege_bots(self) -> None:
+        """伺服器假人打一場攻城（照 bots 那一段的寫法：BotRunner＋bot_policy，random.Random(9)、時鐘一輪推一分）：E 官軍攻黃巾的新野，
+        四個假人（兩軍各二）擺在那一塊，管理者下戰書，跑到加入、出招（battle_tick）、收場，收場之後再跑三輪就停。"""
+        if not self.siege_on():
+            emit("這一季沒有地盤：攻城的假人那一段略過", None)
+            return
+        from collections import Counter
+
+        from tianxia import server_bots
+        from tianxia.bot_runner import BotRunner
+        from tianxia.engine import Game
+        from tianxia.state import BotProfile
+
+        side, loc = self.SIEGES["E"]
+        for i, (name, faction) in enumerate(self.SIEGE_BOT_SEATS):
+            self.begin()
+            g = Game.new(self.c, name, rng=random.Random(20 + i), world=self.world, graduated=True)
+            g.client = None
+            g.sync(CLOCK[0])
+            for _ in range(6):  # 開局待選的事件：選掉
+                first = next((o.id for o in g.options(odds=False) if o.id.startswith("choice:") and o.enabled), None)
+                if first is None:
+                    break
+                g.choose(first)
+            p = g.state.player
+            p.bot = BotProfile(personality="普通", seed=61 + i, faction=faction, season_number=self.world.get_season_number())
+            p.faction, p.location, p.journey = faction, loc, None
+            p.visited.add(loc)
+            p.tutorial_step = len(self.c.tutorial.steps)
+            p.joined_at = -1.0e9
+            self.chars.save(g.state)
+        self.do(ADMIN, "admin_conquest_letter", {"id": loc, "side": side})
+        runner = BotRunner(self.c, self.world, self.chars, rng=random.Random(9), clock=lambda: CLOCK[0])
+        online = server_bots.is_online
+        seeds = {61 + i for i in range(len(self.SIEGE_BOT_SEATS))}
+        server_bots.is_online = lambda profile, now: profile.seed in seeds or online(profile, now)
+        totals = Counter()
+        try:
+            for _ in range(int(os.environ.get("SB_SIEGE_TICKS", "90"))):
+                STEP[0] += 5  # 一輪推一分（這一軌一步十秒）
+                self.begin()
+                for report in (runner.tick(), runner.battle_tick()):
+                    totals.update(acted=report.acted, added=report.added, skipped=report.skipped, failed=report.failed, online=report.online)
+                slot = self.slot_of("E")
+                done = slot is not None and slot.status in ("done", "void")
+                if done and totals["after_end"] >= 3:
+                    break
+                if done:
+                    totals["after_end"] += 1
+        finally:
+            server_bots.is_online = online
+        self.siege_row("假人那一場", ("E",))
+        names = {n for n, _ in self.SIEGE_BOT_SEATS}
+        states = [s for s in self.chars.all(bots_only=True) if s.player.name in names]
+        emit("攻城假人 一輪一輪", dict(sorted(totals.items())))
+        emit("攻城假人 紀錄標題", dict(sorted(Counter(e.title for s in states for e in s.journal).items())))
+        emit("攻城假人 存檔", {s.player.name: hashlib.sha256(s.model_dump_json().encode("utf-8")).hexdigest() for s in states})
+        for s in states:
+            self.me(s.player.name, "假人攻城收補送之後")
+
+    def siege_shelve(self) -> None:
+        """季終收兵那一場（D）：官軍攻中立的汝南荒野，秦朗月擺過去加入；集結中就收季（season 那一段，admin_end_season → _shelve_siege）。"""
+        if not self.siege_on():
+            return
+        side, loc = self.SIEGES["D"]
+        self.place(self.GAMBLER, loc)
+        self.do(ADMIN, "admin_conquest_letter", {"id": loc, "side": side})
+        ids = self.ids(self.main(self.GAMBLER))
+        pick = next((i for i in sorted(ids) if i.split("@")[0] == f"battle:join:{side}" and ids[i].get("enabled")), None)
+        emit(f"{self.GAMBLER} 季終之前加入的", pick)
+        if pick is not None:
+            self.choose(self.GAMBLER, pick)
+            if "battle:escort:none" in self.ids(self.main(self.GAMBLER)):
+                self.choose(self.GAMBLER, "battle:escort:none")
+        self.siege_row("季終之前", ("D",))
+
 
 def _battle_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
     """再開一軌（TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記；同 dev/tavern-1 的 _register_track，名字分開免得兩塊都在時
@@ -2776,8 +3161,10 @@ def _battle_register_track(name: str, scenario: type, mutation: tuple, profile: 
     MUTANT_PROFILE[name] = profile
 
 
-_battle_register_track("battle", BattleScenario, (("tianxia/features/battle/view.py", "tianxia/engine.py"), ("軍餉發下來了。", "軍餉發下來了！")),
-                       "week7")
+# 改一個字（selftest）：第 6 批換成這一批搬的一句（取消決戰沒有進行中的那一場；搬之前在 engine.py、之後在 features/battle/admin.py）。
+# 第 5 批那一句（view.py 的「軍餉發下來了。」）在計畫第五節的單點突變裡照樣驗
+_battle_register_track("battle", BattleScenario, (("tianxia/features/battle/admin.py", "tianxia/engine.py"),
+                                                  ("（沒有進行中的決戰。）", "（沒有進行中的決戰！）")), "week7")
 
 
 if __name__ == "__main__":
