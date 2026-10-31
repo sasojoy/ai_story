@@ -622,7 +622,8 @@
   // 抽屜的高度：半開（量到內容裡 .m-peek-end 那一點：附近那一排卡片底下、卡的動作那一排底下）、拉高六成、全開九成四、版圖變化 320；
   // 沒點地點、不在路上時最低那一格是底條那一行（量到 .m-tray-end，W2），一排卡（row）才是 Joy 原本量到 .m-peek-end 的半開。
   // 量不到（還沒排版）照預設。桌機是右欄（CSS 蓋掉高度）
-  const MV_PEEK_MIN = 120, MV_PEEK_NEAR = 196, MV_PEEK_PLACE = 200, MV_TRAY = 58;
+  // MV_TRAY：量不到時底條那一行多高＝實機量到的（375 寬：把手 22＋那一行 40＋下緣 2＋4；W2 審查 2026-10-31 那一行改 40 高之後是 68，以前寫 58、實機 63）
+  const MV_PEEK_MIN = 120, MV_PEEK_NEAR = 196, MV_PEEK_PLACE = 200, MV_TRAY = 68;
   function mapDrawerPx(h) {
     const box = document.getElementById("mapx");
     const avail = (box && box.clientHeight) || 600;

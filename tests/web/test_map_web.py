@@ -1116,7 +1116,7 @@ T.ctx.document.getElementById = (id) => els[id] || orig(id);
 
 
 def test_the_drawer_heights_and_the_buttons_follow_it():
-    """量不到（還沒排版）時：沒點地點的三格（輿圖表現第二版 W2，設計 2.1 底條）——一行（底條）58、一排卡（附近那一排，Joy 原本的半開）196、
+    """量不到（還沒排版）時：沒點地點的三格（輿圖表現第二版 W2，設計 2.1 底條）——一行（底條）68、一排卡（附近那一排，Joy 原本的半開）196、
     全開九成四；一處的卡至少 200（三分之一）；拉高六成、全開九成四；右下兩顆圓鈕跟著抽屜上下。"""
     out = run(_game(), DRAWER_DOM + """
 H.setMapDrawer('peek');
@@ -1129,7 +1129,7 @@ H.setMapDrawer('half'); const half = drawer.style.height;
 H.setMapDrawer('full'); const full = drawer.style.height;
 return { line, near, place, half, full, props };
 """)
-    assert out["line"] == ["58px", "70px"] and out["near"] == ["196px", "208px"]
+    assert out["line"] == ["68px", "80px"] and out["near"] == ["196px", "208px"]
     assert out["place"] == f"{round(650 / 3)}px" and out["half"] == f"{round(650 * 0.6)}px" and out["full"] == f"{round(650 * 0.94)}px"
     assert out["props"] == {}  # --md-h 只有版圖變化才寫
 
@@ -1225,8 +1225,8 @@ def test_the_plan_card_button_carries_its_place():
 # 第七章；企劃者 2026-10-30「照丙定」）──
 # 打開倍率 Z0 ＝ min(地圖框寬, open_width_max) ／ open_units、中心＝你兩票＋腳下每一站一票；最大 Z0 × zoom_max；三段門檻是 Z0 的幾倍；點一處 < Z0 才飛；
 # 近、中景名字只寫跟我有關的；上面是區名 chip＋🔍、右上小地圖、框外一步的箭頭牌；抽屜沒點地點時三格，最低那一格是底條。資料照 season21 開季
-# （官軍站潁川郡）。地圖框照實機量的（375×812、360×780、320×568 的地圖框高）。
-FRAMES = {375: 668, 360: 636, 320: 402}
+# （官軍站潁川郡）。地圖框照實機量的（375×812、360×780、320×568 的地圖框高；W2 審查 2026-10-31 修正輪重量：667、635、402，底條那一行 68）。
+FRAMES = {375: 667, 360: 635, 320: 402}
 
 
 def _w2(profile="season21", **kw):
@@ -1282,7 +1282,7 @@ def test_w2_opening_centre_is_you_twice_and_each_neighbour_once():
     want = (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
     out = run(game, "const g = { vw: 375, vh: 668 }, c = H.camOpen(g), r = H.mapRoom(g); return [(g.vw / 2 - c.x) / c.z, ((r.top + r.bottom) / 2 - c.y) / c.z, r.top, r.bottom];")
     assert out[:2] == pytest.approx(list(want), abs=0.01)
-    assert out[2:] == [56, 668 - 58]  # 上面讓開區名那一排、底下是底條那一行
+    assert out[2:] == [56, 668 - 68]  # 上面讓開區名那一排、底下是底條那一行
 
 
 @pytest.mark.slow  # 單一條超過一秒（要一幀一幀飛）
@@ -1486,9 +1486,9 @@ def _sweep_states(game, scene=False):
 
 # 名字讓步（縮到 11px，拉線的也是）的上限：小圖在畫面裡的名字裡最多幾成，照寬、密度各一條（W2 審查 2026-10-31：以前近中景、三種寬合在一起算、
 # 又把拉線的重算一次〔拉線的名字本來就縮了〕，開發回報的 8.6% 把打開那一眼的代價稀釋掉）。修正輪量到的（開季那一刻＋本週、正在翻、激戰各 42 處）：
-# 近景 375 8.3%（42／506）、360 8.7%（44／505）、320 16.2%（70／433）；中景 375 0.5%、360 0.9%、320 4.8%。上限照量到的再留三、四個百分點，
-# 擋住「大半都在讓步」的退步；320 寬的邊角是 W3 的事，到時候再收緊
-YIELD_CAPS = {(375, "near"): 0.12, (360, "near"): 0.12, (320, "near"): 0.20, (375, "mid"): 0.04, (360, "mid"): 0.04, (320, "mid"): 0.08}
+# 近景 375 8.3%（42／505）、360 9.3%（46／497）、320 17.6%（76／431）；中景 375 0.5%、360 0.9%、320 5.3%（拉線的 140 條都在縮了的裡面）。
+# 上限照量到的再留三、四個百分點，擋住「大半都在讓步」的退步；320 寬的邊角是 W3 的事，到時候再收緊
+YIELD_CAPS = {(375, "near"): 0.12, (360, "near"): 0.13, (320, "near"): 0.22, (375, "mid"): 0.04, (360, "mid"): 0.04, (320, "mid"): 0.08}
 
 
 @pytest.mark.slow  # 單一條超過一秒（42 處 × 2 種局面 × 3 種寬 × 2 個密度）
@@ -1688,7 +1688,7 @@ return { open: open.pills, away: away.pills, midz: midz.pills, full: full.pills,
     away = out["away"]
     assert sorted(p["id"] for p in away) == ["luoyang_road", "songshan_foot", "yingchuan_academy", "yingchuan_wilds", "yingshui"]
     for i, p in enumerate(away):
-        assert 0 <= p["box"][0] and p["box"][2] <= 375 and 0 <= p["box"][1] and p["box"][3] <= 668 - 58
+        assert 0 <= p["box"][0] and p["box"][2] <= 375 and 0 <= p["box"][1] and p["box"][3] <= 668 - 68
         assert not any(_cross(p["box"], o["box"]) for o in away[i + 1:])
     assert out["midz"] == [] and out["picked"] == [] and out["full"] == []  # 中景、點了一處、抽屜全開（地圖只剩一條）都不掛
 
@@ -1758,7 +1758,7 @@ return (async () => {
 
 
 def test_w2_the_drawer_has_three_stops_without_a_place():
-    """抽屜沒點地點時三格（設計 2.1 底條）：一行（底條，量不到照 58）、一排卡（Joy 原本量 .m-peek-end 的那一高，量不到 196）、全開九成四；
+    """抽屜沒點地點時三格（設計 2.1 底條）：一行（底條，量不到照 68）、一排卡（Joy 原本量 .m-peek-end 的那一高，量不到 196）、全開九成四；
     把手點一下在一行與一排卡之間換，再拉才到全開。點了一處照舊 peek／half／full、點一下在第一格與最後一格之間換。"""
     out = run(_w2(), DRAWER_DOM + """const res = {};
 res.stops = H.drawerStops();
@@ -1768,7 +1768,7 @@ H.S.mapDrawer = 'full'; res.tap3 = H.drawerTap(H.drawerStops());
 H.S.mapMode = 'place'; H.S.mapSel = 'changshe'; res.place = H.drawerStops(); H.S.mapDrawer = 'peek'; res.tap4 = H.drawerTap(H.drawerStops());
 return res;""")
     assert out["stops"] == ["peek", "row", "full"]
-    assert out["peek"] == ["58px", "70px"] and out["row"] == ["196px", "208px"] and out["full"] == [f"{round(650 * 0.94)}px", f"{round(650 * 0.94) + 12}px"]
+    assert out["peek"] == ["68px", "80px"] and out["row"] == ["196px", "208px"] and out["full"] == [f"{round(650 * 0.94)}px", f"{round(650 * 0.94) + 12}px"]
     assert (out["peekFab"], out["rowFab"], out["fullFab"]) == ("", "", "hidden")  # 全開時地圖只剩一條：右下兩顆收起來（不疊在 🔍 上）
     assert (out["tap1"], out["tap2"], out["tap3"]) == ("row", "peek", "peek")
     assert out["place"] == ["peek", "half", "full"] and out["tap4"] == "full"
