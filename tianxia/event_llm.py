@@ -462,4 +462,22 @@ def narrate_event_gamble(
     except Exception as e:
         logger.warning("隨口應對潤色失敗：%r", e)
         return None
-    return zh.to_traditional(reply.strip().strip('「」"')) or None
+    return clean_narration(reply, action, NARRATE_EVIL_MAX if evil else NARRATE_MAX)
+
+
+NARRATE_MAX = 100  # 潤色那一段的上限（字）：提示要 20~60 字，留一倍給模型
+NARRATE_EVIL_MAX = 150  # 惡行成了那一段（提示 30~80 字）
+_NARRATE_BANNED = ("假人", "機器人", "遊戲", "系統", "玩家", "以下", "好的，")
+_DIGIT_RUN = re.compile(r"[0-9０-９]+")
+
+
+def clean_narration(raw: str, action: str, limit: int) -> str | None:
+    """模型寫的潤色驗過才接進紀錄（2026-10-31 自檢：以前只轉繁體，模型的開場白、壞掉的 JSON、「獲得 50 兩」、英文、長段都原樣進去）。
+    轉繁體、去 markdown 的標記；太長、有 {}、有英文、有玩家做法裡沒有的阿拉伯數字、有不准出現的字的丟掉（回 None，呼叫端只用結果原文）。"""
+    text = zh.to_traditional(str(raw or ""))
+    text = re.sub(r"[*#>`_]+", "", text)
+    text = " ".join(text.split()).strip().strip('「」"')
+    if (not text or len(text) > limit or "{" in text or "}" in text or re.search(r"[A-Za-z]", text)
+            or any(run not in action for run in _DIGIT_RUN.findall(text)) or any(w in text for w in _NARRATE_BANNED)):
+        return None
+    return text

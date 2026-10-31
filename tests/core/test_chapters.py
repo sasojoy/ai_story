@@ -107,6 +107,22 @@ def test_finishing_a_chapter_adds_weight_credit_and_count_then_the_beat_picks_th
     assert any("投軍長社" in a.text for a in s.player.annals)
 
 
+def test_the_card_says_the_beats_battle_is_mustering_or_fighting_instead_of_its_scheduled_time():
+    """U-17（手機介面自檢 2026-10-31）：第二回的大事長社火攻被提早開了（管理者「立刻開這一場」）：卡上 live 是集結、開打，
+    網頁照它寫狀態；沒在打是 None（照舊寫排定的時刻）。"""
+    from tianxia.world import open_showdown
+
+    game = _game()
+    _do_g1(game)
+    card = weekcard.chapter_card(game)
+    assert card["line"] == G2 and card["live"] is None and card["at"]
+    game.now = 1000.0
+    assert open_showdown(game.world, game.content, "changshe_fire", game.now)
+    assert weekcard.chapter_card(game)["live"] == "muster"
+    game.world.mutate_battle(lambda b: setattr(b, "phase", "active"))
+    assert weekcard.chapter_card(game)["live"] == "active"
+
+
 def test_a_chapter_not_done_when_its_beat_settles_is_missed_and_cannot_be_made_up():
     game = _game(loc="luoyang_palace")
     s = game.state

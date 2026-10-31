@@ -355,6 +355,16 @@ def test_records_show_the_ledger_with_running_balance(on):
     assert "admin" not in records["ledger"][0]  # 玩家看自己的帳不寫經手的管理者
 
 
+def test_records_also_say_the_season_time(on):
+    """全面自檢 U-12（Joy 2026-10-31 照建議）：元寶是真錢，帳照舊寫現實時間，旁邊多寫季曆（跟江湖紀錄同一個寫法）。"""
+    game = _ready(on)
+    game.mall_buy("pills_5", "r1")
+    row = game.mall_records()["ledger"][0]
+    assert row["season_time"] == game.stamp(game.state.world.time)
+    game.state.world.ended = True
+    assert game.mall_records()["ledger"][0]["season_time"] is None  # 休季不寫
+
+
 # ── 管理者工具 ───────────────────────────────────
 
 

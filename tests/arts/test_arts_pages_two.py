@@ -999,3 +999,55 @@ def test_the_practice_poll_ignores_the_hit_points_ticking_up_on_the_card():
     assert same_hp, "氣血回了一點就判定成「變了」：修練頁每一輪都會整頁重畫"
     assert not same_level, "等級變了卻判定成「沒變」：真的該重畫的時候不重畫了"
     assert keeps_number and keeps_null, "不是字串的欄位不能被動到"
+
+
+def test_an_empty_library_says_whose_slots_the_count_is_and_not_that_it_is_empty():
+    """U-14（手機介面自檢 2026-10-31）：標題寫「功法庫 3/50」（身上兩門＋意境一份也佔格），點開不能說「功法庫是空的」。"""
+    rows = [_art("w1", "武學", "甲拳", worn=True), _art("n1", "內功", "乙功", worn=True)]
+    html = _practice(rows, insights=[_insight("feng", "風")], holdings={"count": 3, "cap": 50})
+    assert "功法庫 3/50" in html and "功法庫是空的" not in html
+    assert "庫裡還沒有閒置的武學。上面的 3/50 是身上練的 2 門、意境 1 份佔的。" in html
+    bare = _practice([], insights=[], holdings={"count": 0, "cap": 50})
+    assert "庫裡還沒有閒置的武學。合成出來的" in bare  # 什麼都沒有：不多那一句
+
+
+def _create_views(xinde: int):
+    """正式內容 week7 的一局，心得 xinde：/api/main 與 /api/menxia 那兩份（自創那一頁畫的是 main.status.create）。"""
+    import server
+    from jianfa_kit import jianfa_game, ready
+
+    game = ready(jianfa_game("week7"), side="guan", loc="changshe", level=20)
+    game.state.player.stats["xinde"] = xinde
+    return server.main_view(game), server.menxia_view(game)
+
+
+@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
+def test_create_short_of_xinde_greys_the_entry_and_the_button_and_says_how_much_is_missing():
+    """U-04（手機介面自檢 2026-10-31）：心得不夠開始自創時，俠客頁的入口與自創頁的鈕都灰掉、原地寫「還差 N 心得」，
+    說明不再讀成「走到立意才要心得」；被擋下的執器不把自創頁關掉，原因寫在自創頁頂上。"""
+    from test_prologue_web import run
+
+    m, x = _create_views(24)
+    c = m["status"]["create"]
+    need = c["price"] - 24
+    assert c["on"] and c["problem"] is None and need > 0
+    hero = run(m, "return H.pagePractice();", menxia=x)
+    entry = re.search(r'<button class="btn self-go" data-act="create-open"[^>]*>自創武學<small>([^<]*)</small>', hero)
+    assert entry and " disabled" in entry.group(0) and entry.group(1) == f"還差 {need} 心得"
+    page = run(m, "return H.pagePractice();", menxia=x, S={"createOpen": True, "createPick": {"kind": "武學", "form": "拳腳"}})
+    assert f"開始自創要先有 {c['price']} 心得，你有 24，還差 {need} 心得（立意那一刻才收）" in page
+    assert re.search(rf'data-act="create-begin" disabled>還差 {need} 心得<small>', page)
+    assert page.index("mc-cost") < page.index("cr-forms")  # 先說要多少心得，再讓人挑
+    # 伺服器擋下執器（例：剛好在別處花掉了心得）：留在自創頁，原因寫在頁首
+    refused = run(m, """return (async () => {
+      H.S.createOpen = true; H.S.tab = "practice"; H.S.createPick = { kind: "武學", form: "拳腳" };
+      T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
+      const target = { dataset: { act: "create-begin" }, classList: { contains: () => false, add() {}, remove() {} } };
+      await T.docListeners.click[0]({ target: { closest: () => target } });
+      return { open: H.S.createOpen, message: H.S.message, calls: T.calls.map((c) => c[0]) };
+    })();""", menxia=x, responses={"/api/menxia/create_begin": {"menxia": x, "main": m, "message": "<p>心得不足：自創一門要 100（你有 24）。</p>"}})
+    assert "/api/menxia/create_begin" in refused["calls"]
+    assert refused["open"] is True and "心得不足" in refused["message"]
+    m2, x2 = _create_views(c["price"] + 5)  # 夠了：照舊按得下去，說明寫「立意那一刻才收」
+    ok = run(m2, "return H.pagePractice();", menxia=x2, S={"createOpen": True, "createPick": {"kind": "武學", "form": "拳腳"}})
+    assert 'data-act="create-begin" >握起拳腳' in ok and "立意那一刻才收，之後擱下不退" in ok

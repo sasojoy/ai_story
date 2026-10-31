@@ -1875,12 +1875,20 @@
     const xinde = shown("xinde") ? `<p class="self-xinde"><em>心得</em><b>${s.xinde | 0}</b>${s.hint ? `<small>${esc(s.hint)}</small>` : ""}</p>` : "";
     return `<section class="self-stats self-sec" aria-label="心得與屬性">${stats}${xinde}</section>`;
   }
+  // 功法庫裡沒有閒置的武學（手機介面自檢 U-14）：標題的「3/50」連身上練的與意境一起算，這裡不說「空的」，說清楚那幾格是誰佔的
+  function libEmptyHtml(x) {
+    const worn = (x.owned_arts || []).filter((a) => a.worn).length, ins = (x.insights || []).length;
+    const held = [worn ? `身上練的 ${worn} 門` : "", ins ? `意境 ${ins} 份` : ""].filter(Boolean).join("、");
+    const why = held && x.holdings ? `上面的 ${x.holdings.count | 0}/${x.holdings.cap | 0} 是${held}佔的。` : "";
+    return `<p class="muted lib-empty">庫裡還沒有閒置的武學。${why}合成出來的武學、學來的武學會放在這裡。</p>`;
+  }
   // 「去做」那一段：兩格——煉製（煉製頁）、自創武學（自創頁）。療傷與閉關 Joy 2026-10-25 拿掉：療傷只在醫館做得了，
   // 入口就是江湖頁「此地還能做」的「醫館療傷」（act:heal），這裡再放一顆多半是灰的；閉關現在的玩法用不到。兩個都沒有時整段不畫
   function selfEntriesHtml(x) {
     const c = S.main && S.main.status && S.main.status.create;
     const craft = shown("tab:craft") ? '<button class="btn self-go" data-act="tab" data-tab="craft" data-glow="tab:craft">煉製<small>意境合成、看爐</small></button>' : "";
-    const create = c && c.on ? `<button class="btn self-go" data-act="create-open">${c.draft ? "接著自創" : "自創武學"}<small>${createSub(c)}</small></button>` : "";
+    // 心得不夠開始自創（還沒起意）：入口灰掉、小字寫還差多少（手機介面自檢 U-04），不讓人進去挑了才在下一步被踢回來
+    const create = c && c.on ? `<button class="btn self-go" data-act="create-open"${createShort(c) ? " disabled" : ""}>${c.draft ? "接著自創" : "自創武學"}<small>${createSub(c)}</small></button>` : "";
     if (!craft && !create) return "";
     return `<section class="self-sec" aria-label="去做"><div class="self-hd"><h3>去做</h3></div><div class="self-goes">${craft}${create}</div></section>`;
   }
@@ -2382,7 +2390,7 @@
       ${meltTools}
       ${meltList}` : `${chips}
       ${lib.length ? (picked.length ? libGroups(rows) : '<p class="muted">這一類沒有功法。</p>')
-        : '<p class="muted">功法庫是空的。合成出來的武學、學來的武學會放在這裡。</p>'}
+        : libEmptyHtml(x)}
       ${showAll ? "" : `<button class="btn ghost lib-more" data-act="lib-all">再列 ${picked.length - LIB_PAGE} 門</button>`}`}
       ${meltOn ? "" : `<div class="label">意境</div>
       ${x.insights.length ? `${insFilterRow}${insList.length ? `<div class="lib insl">${insList.map(insRow).join("")}</div>` : '<p class="muted">這一類沒有意境。</p>'}`
@@ -2752,6 +2760,7 @@
     if (!draft) {
       if (c.problem) return `${head}<div class="card create"><p class="muted">${esc(c.problem)}</p></div>`;
       const f = S.createPick || (S.createPick = { kind: c.kinds.includes("武學") ? "武學" : c.kinds[0], form: "" });
+      const short = createShort(c);
       const forms = (c.forms && c.forms[f.kind]) || [];
       const kinds = c.kinds.map((k) => `<button type="button" class="fchip${f.kind === k ? " on" : ""}" data-act="create-kind" data-val="${esc(k)}">${esc(k)}</button>`).join("");
       const tiles = forms.map((o) => `<button type="button" class="cr-form${f.form === o.key ? " on" : ""}" data-act="create-pick" data-val="${esc(o.key)}">
@@ -2760,9 +2769,11 @@
       return `${head}<div class="card create">${steps}
         <p class="muted">花心得立一門自己的功夫。手裡拿什麼、擺什麼架式、心裡存什麼意，都會讓它偏向不同的路數。</p>
         <div class="crow"><span>要立</span><div class="fchips">${kinds}</div></div>
+        <p class="mc-cost${short ? " short" : ""}">${short
+          ? `開始自創要先有 ${c.price | 0} 心得，你有 ${c.xinde | 0}，${createShortWord(c)}（立意那一刻才收）`
+          : `開始自創要有心得 ${c.price | 0}（你有 ${c.xinde | 0} 點）・立意那一刻才收，之後擱下不退`}</p>
         <div class="cr-forms">${tiles}</div>
-        <p class="mc-cost">心得 ${c.price | 0}（你有 ${c.xinde | 0} 點）・按下立意那一刻收，之後擱下不退</p>
-        <button class="btn primary" data-act="create-begin" ${f.form ? "" : "disabled"}>${f.form ? `握起${esc(f.form)}` : "先挑一樣"}<small>下一步：擺個架式</small></button>
+        <button class="btn primary" data-act="create-begin" ${f.form && !short ? "" : "disabled"}>${short ? createShortWord(c) : f.form ? `握起${esc(f.form)}` : "先挑一樣"}<small>${short ? "攢夠了再來" : "下一步：擺個架式"}</small></button>
       </div>`;
     }
     const weapon = draft.kind === "武學" ? draft.form : null;
@@ -2830,8 +2841,12 @@
   function createSub(c) {
     const d = c.draft;
     return d ? `${esc(d.kind)}・${esc(d.form)}，停在「${esc(CREATE_STEP_WORD[c.step] || "")}」`
-      : c.problem ? esc(c.problem) : (c.left == null ? `心得 ${c.price | 0}` : `本季還可自創 ${c.left | 0} 門・心得 ${c.price | 0}`);
+      : c.problem ? esc(c.problem) : createShort(c) ? createShortWord(c)
+      : (c.left == null ? `心得 ${c.price | 0}` : `本季還可自創 ${c.left | 0} 門・心得 ${c.price | 0}`);
   }
+  // 還沒起意、心得不夠開始自創：還差幾點（0＝夠了或已經起意）。伺服器在執器那一步就看心得（create.begin_problem），立意那一刻才收
+  const createShort = (c) => (c && !c.draft && !c.problem ? Math.max(0, (c.price | 0) - (c.xinde | 0)) : 0);
+  const createShortWord = (c) => `還差 ${createShort(c)} 心得`;
   function createPageHtml() {
     return `<div class="cr-page">
       <header class="cr-bar"><button class="book-back" data-act="create-close" aria-label="返回自己">‹ 返回自己</button><span class="cr-bar-title">自創武學</span></header>
@@ -4541,6 +4556,8 @@
     const s = S.main.status;
     const a = S.admin;
     const opts = (list) => list.map((x) => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join("");
+    // 開季、立刻收季、開啟下一季照賽季的階段（S.admin.phase）灰掉不對的那幾顆（手機介面自檢 U-19）；管理者資料還沒到（或舊伺服器沒給）照舊都能按
+    const seasonOff = (want) => (a && a.phase && a.phase !== want ? " disabled" : "");
     // 「匿名行走」那一句是傳聞分層一新寫的說明（待 joy 潤）；測試只比對這一句（tests/figures/test_rumor_layers.py）
     return `
       <div class="sheet-bg" data-act="sheet-close"></div>
@@ -4576,7 +4593,7 @@
             ${a && a.llm_queue ? `<p class="muted">模型佇列：處理中 ${a.llm_queue.running}、在排 ${a.llm_queue.waiting}</p>` : ""}
             ${a && a.divine_out ? `<p class="muted">${esc(a.divine_out)}</p>` : ""}
             <p class="muted">每一項按了都會先問一次才送出；做完會關掉設定、回到江湖頁。</p>
-            <div class="row seasons"><button class="btn" data-act="admin" data-op="open_season">開季</button><button class="btn warn" data-act="admin" data-op="end_season">⚠ 立刻收季</button><button class="btn warn" data-act="admin" data-op="next_season">⚠ 開啟下一季</button></div>
+            <div class="row seasons"><button class="btn" data-act="admin" data-op="open_season"${seasonOff("preparing")}>開季</button><button class="btn warn" data-act="admin" data-op="end_season"${seasonOff("running")}>⚠ 立刻收季</button><button class="btn warn" data-act="admin" data-op="next_season"${seasonOff("resting")}>⚠ 開啟下一季</button></div>
             <p class="muted">時間快轉（全服一起快轉，只在測試時用；小時是現實小時，季曆會跳得更多）</p>
             <div class="row">${[1, 8, 24].map((h) => `<button class="btn small" data-act="admin" data-op="fast_forward" data-hours="${h}">+${h} 小時</button>`).join("")}</div>
             <p class="muted">賽季時鐘（停機維護前按「暫停」，開回來按「繼續」；暫停中全服不能行動，畫面照常可看）</p>
@@ -5466,6 +5483,7 @@
       const place = mxPlace(op, extra);
       const was = S.menxia, mark = place ? placeTop(place.from) : null;
       const step = guideKey(S.main && S.main.guide);
+      const drafted = !!(S.main && S.main.status && S.main.status.create && S.main.status.create.draft);
       const r = await api(`/api/menxia/${op}`, { person: S.person, kind: S.kind, ...extra });
       if (r.secret) setTimeout(() => secretPop(r.secret), 0); // 裝滿意境槽暗合「裝滿」秘方：重畫完再跳視窗
       S.menxia = r.menxia;
@@ -5488,7 +5506,8 @@
       // 自創武學立好、作罷：草稿沒了就在這一次重畫裡直接回修練頁、一下回頂，不先畫一張空的自創頁、
       // 捲到一半再換一次（Joy 2026-10-22「自創武學完畢那個畫面會閃爍」）
       const cr = S.main && S.main.status && S.main.status.create;
-      if (S.createOpen && !(cr && cr.draft)) { S.createOpen = false; renderPage(); window.scrollTo(0, 0); return; }
+      // 只有本來有草稿、這一下沒了（立好、作罷）才回去；執器被擋下（例：心得不足）留在自創頁，原因寫在頁首（手機介面自檢 U-04）
+      if (S.createOpen && drafted && !(cr && cr.draft)) { S.createOpen = false; renderPage(); window.scrollTo(0, 0); return; }
       if (op === "switch" && S.tab === "craft") { // 煉製頁新武學卡上的「改練上身」：留在卡那裡，結果用提示泡泡說
         S.message = ""; S.artNote = null;
         keepPlace(() => renderPage(), ".made-card");
@@ -5556,8 +5575,7 @@
       revealMoveCard();
       return;
     }
-    mapFirst(loc);
-    S.mapKeep = true;
+    mapGoto(loc);
     return goTab("map");
   }
 
@@ -5738,7 +5756,8 @@
           S.craftPick = false; // 換分頁：煉製頁的抽屜收起
           const loc = el.classList.contains("mini") && ev.target.closest && ev.target.closest("[data-loc]");
           // 江湖頁的小地圖點了某一處（設計第八節）：輿圖開在那一處所在的區圖、抽屜半開它的卡（那一區照它算：mapReady）
-          if (loc) { mapFirst(loc.getAttribute("data-loc")); S.mapKeep = true; }
+          if (loc) mapGoto(loc.getAttribute("data-loc"));
+          else if (el.dataset.goto) mapGoto(el.dataset.goto, el.dataset.then || null); // 江湖頁「去輿圖」「去宛城」：直接開在目標地點
           // 底下的「見聞」：從「俠客」進過行狀（SELF_NEWS）的話換回上一次見聞的那一段，不然籤不畫、只剩「‹ 俠客」（Joy 2026-10-28「見聞那邊只剩下行狀」）
           if (el.dataset.tab === "news" && selfNews(S.news)) S.news = S.newsBack || "reports";
           await goTab(el.dataset.tab);
