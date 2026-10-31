@@ -5197,7 +5197,7 @@ class Content(_Strict):
     relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有
     gather_branches: dict[str, GatherBranch] = Field(default_factory=dict)  # 找素材分支（content/gather_branches.json，照內容的順序）；沒有這個檔就是空的（分支關著）
     mark_rules: list[MarkRule] = Field(default_factory=list)  # 地方痕跡過門檻（content/mark_rules.json，減法季批 4）；沒有這個檔就是空的
-    # 探索一顆出門一趟的段落句子（content/outing_lines.json，減法季批 2；explore_one.paragraph 讀、content.check_outing_lines 驗）：
+    # 探索一顆出門一趟的段落句子（content/outing_lines.json，減法季批 2；explore_one.paragraph 讀、探索包 checks.check_outing_lines 驗）：
     # 拍的類 → 結果 → 句子；沒有這個檔就是空的（照 explore_one.FALLBACK 寫）
     outing_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     # 人物評曰的固定句（content/verdicts.json，減法季批 7b-2；模型叫不動時照它，待 joy 潤）：寫的理由（affinity／tier／bought）→ 句子，
