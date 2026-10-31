@@ -31,7 +31,12 @@ GAMBLES_PER_ACT = 2  # 一幕最多挑幾次放手一搏寫成拍子（整篇才
 SCENE_MAX = 90  # 模型寫的一拍散文上限（字）
 HEAD_MAX = 6  # 一拍的小標上限（字）
 CAST_LINE_MAX = 40  # 名錄一句的上限（字）
-NUM_PREDICT = 1400  # 一次把整篇寫完的預算
+NUM_PREDICT = 1400  # 一次把整篇寫完的預算的下限（小場面）
+# 預算照篇幅加（2026-10-31 主機實測：9 拍＋6 人的名錄 1400 寫得完，線上 12 拍＋6 人那一篇缺了 cast、整篇變模板句）。
+# 一拍九十字的散文加小標、JSON 的框，名錄一句四十字；只是上限，寫完就停，給寬不花時間
+PREDICT_PER_SCENE = 150
+PREDICT_PER_CAST = 70
+PREDICT_BASE = 200
 
 _DIGITS = re.compile(r"[0-9０-９]")  # 模型不准寫阿拉伯數字（數字只能是引擎的；引擎自己那幾句用中文數字）
 _BANNED = ("遊戲", "系統", "玩家", "伺服器", "假人", "機器人", "bot", "BOT", "Bot")  # 「假人」那幾個字任何地方都不准出現
@@ -263,6 +268,8 @@ SYSTEM = (
     "替每一拍寫一小段：兩三句、九十字以內、繁體中文、半文白、第三人稱，用名號稱呼人。"
     "只寫那一拍寫到的事，不要編造清單上沒有的人名、地名、兵器、傷亡，也不要改變勝負。"
     "**不要寫任何阿拉伯數字**，不要寫標題編號、列點、不要提到遊戲、系統、玩家。"
+    "有些拍子附了那個人當場喊的原話：原話會另外原樣引在那一段底下，散文裡**不要引用、不要轉述那句話**，寫他怎麼做、場面怎麼變。"
+    "每一拍只寫那一拍的主角，不要把別一拍的人寫進來。"
     "head 是那一拍的小標（六個字以內，可以留空）。"
     "另外替名錄上每個人各寫一句（四十字以內）：照給的事實寫，不要加沒給的戰績。"
     "回傳 scenes（每一拍一筆，id 照抄）與 cast（每個人一筆，name 照抄）。"
@@ -274,7 +281,7 @@ def messages(material: Material) -> list[dict[str, str]]:
     for act in material.acts:
         lines.append(f"【{act.title}】{act.setting}")
         for beat in act.beats:
-            said = f"（他當場喊的是「{beat.said.line}」）" if beat.said is not None else ""
+            said = f"（他當場喊的是「{beat.said.line}」，這句會另外引在底下，散文裡不要引）" if beat.said is not None else ""
             lines.append(f"  {beat.id}：{beat.fact}{said}")
     cast = "\n".join(f"- {c.name}（{c.side}）：{c.fact}" for c in material.cast)
     body = (
@@ -295,24 +302,63 @@ def clean(raw: str, limit: int) -> str:
     return text
 
 
+def predict_budget(material: Material) -> int:
+    """這一篇給模型的輸出上限：照拍數與名錄人數加，不低於 NUM_PREDICT。"""
+    beats = sum(len(act.beats) for act in material.acts)
+    return max(NUM_PREDICT, PREDICT_BASE + PREDICT_PER_SCENE * beats + PREDICT_PER_CAST * len(material.cast))
+
+
+OTHER_NAME_MIN = 2  # 「寫到別的上陣的人」不認一個字的名號：單字（「霜」「城」）常常只是散文裡的普通字，會把該留的拍誤退成模板句
+
+
+def _bare(text: str) -> str:
+    """比對原話用：只留字，標點、空白都拿掉。"""
+    return re.sub(r"[\W_]+", "", text)
+
+
+def fits(beat: BeatFacts, text: str, others: Sequence[str]) -> bool:
+    """模型寫的這一拍對不對得上這一拍（2026-10-31 線上那一篇：原話在散文裡又抄一次、第二拍寫成第三拍的人）。
+    只看附了原話的那幾拍（放手一搏）：散文不准抄原話（原話底下另外引）、要寫到喊話的那個人、
+    不准寫到別的上陣的人（別一拍的主角）。開篇、倒下、戰局那幾拍寫到誰都照收。"""
+    if beat.said is None:
+        return True
+    line = _bare(beat.said.line)
+    if len(line) >= 2 and line in _bare(text):
+        return False
+    if beat.said.who and beat.said.who not in text:
+        return False
+    return not any(len(name) >= OTHER_NAME_MIN and name in text and name not in beat.said.who for name in others)
+
+
+def _gamblers(material: Material) -> tuple[str, ...]:
+    """別一拍的主角：整篇放手一搏那幾拍喊話的人。只拿他們比（不拿全部上陣的人）：配錯是拍子之間互換，名單越短越少誤判。"""
+    return tuple(sorted({b.said.who for a in material.acts for b in a.beats if b.said is not None and b.said.who}))
+
+
 def write(client, material: Material) -> tuple[dict[str, tuple[str, str]], dict[str, str]]:
     """B 段（鎖外）：請模型把整篇寫完。回（拍子 id → (小標, 散文), 名號 → 那一句）；叫不動、寫壞的不在裡面（照引擎那一句）。"""
     if client is None:
         return {}, {}
     try:
         reply = client.chat_structured(
-            messages(material), TaleReply, temperature=0.8, num_predict=NUM_PREDICT,
+            messages(material), TaleReply, temperature=0.8, num_predict=predict_budget(material),
             # 兩個欄位都有預設值：不寫進 required（而且語法強制）的話，模型回 {} 也算合法，整篇靜靜變成模板版
             required_fields=["scenes", "cast"], require_in_schema=True,
         )
     except Exception:  # noqa: BLE001 — 叫不動就用模板
         return {}, {}
-    wanted = {beat.id for act in material.acts for beat in act.beats}
+    beats = {beat.id: beat for act in material.acts for beat in act.beats}
     names = {c.name for c in material.cast}
-    scenes = {
-        s.id: (clean(s.head, HEAD_MAX), clean(s.text, SCENE_MAX))
-        for s in reply.scenes if s.id in wanted and clean(s.text, SCENE_MAX)
-    }
+    others = _gamblers(material)
+    scenes: dict[str, tuple[str, str]] = {}
+    for s in reply.scenes:
+        text = clean(s.text, SCENE_MAX)
+        if s.id in beats and s.id not in scenes and text and fits(beats[s.id], text, others):
+            scenes[s.id] = (clean(s.head, HEAD_MAX), text)
+    seen: dict[str, int] = {}
+    for _head, text in scenes.values():
+        seen[text] = seen.get(text, 0) + 1
+    scenes = {k: v for k, v in scenes.items() if seen[v[1]] == 1}  # 同一段字掛在兩拍上：至少一拍配錯了，兩拍都照引擎那一句
     cast = {c.name: clean(c.line, CAST_LINE_MAX) for c in reply.cast if c.name in names and clean(c.line, CAST_LINE_MAX)}
     return scenes, cast
 

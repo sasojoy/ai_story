@@ -35,6 +35,7 @@ def ids(game):
 # ── 新遊戲與選項 ─────────────────────────────────────────
 
 
+@pytest.mark.smoke
 def test_new_game(game):
     p = game.state.player
     assert p.location == "town" and p.stamina == 150
@@ -2637,6 +2638,8 @@ def test_an_eliminated_participant_sees_a_spectate_only_option(content, game):
     game.world.start_battle(definition, now=0.0)
     with at(game, 0.0):
         game.choose("battle:join:guan")
+    # 場上還有別人站著：只剩倒下的人時當場用保底收場（U-08），就沒有觀戰這一刻了
+    game.world.mutate_battle(lambda b: battle_instance.join_faction(b, "同袍", "guan", neili_cap=100.0))
     after_muster = definition.muster_seconds + 1
     with at(game, after_muster):
         game._battle_status()  # 讓集結自動關閉

@@ -133,6 +133,10 @@ class OutingBeat(BaseModel):
     feat: str = ""
     feat_kind: str = ""
     foe: str = ""  # 遭遇：對手長什麼樣（outing.foe_look：huang 黃巾、guan 官兵、retainer 豪強家丁、bandit 綠林盜匪、beast 猛獸）；別的類是空字串
+    spent: int = 0  # 這一段走掉的體力（探索那一下扣的；結算卡加總成「體力 -N」）
+    # 停下來要選的事（stop）選完的得失：「得：…　失：…」，含選項另外扣的體力（Joy 10/31「獲得一袋錢（多少）（有額外扣體力？）」）；
+    # 沒有是空字串
+    after: str = ""
 
 
 class Outing(BaseModel):
@@ -1879,7 +1883,7 @@ class WorldState(BaseModel):
     # 目標的名號鍵 → 上一次被截殺的世界秒（被截殺過的人一陣子之內誰都不能再截殺他）。換季整個重來
     raids: dict[str, float] = Field(default_factory=dict)
     raided: dict[str, float] = Field(default_factory=dict)
-    # 混戰（翻地與爭搶，Game._clash）寫進上面那兩本的是哪幾筆：同 raids 的鍵（兩個方向）、同 raided 的鍵（被撞的人）→ 那一場的世界秒。
+    # 混戰（翻地與爭搶，出陣包 features/sortie/actions.do_clash）寫進上面那兩本的是哪幾筆：同 raids 的鍵（兩個方向）、同 raided 的鍵（被撞的人）→ 那一場的世界秒。
     # 截殺的拒絕話照它分「混戰過」或「截殺過」（FB-607）：raids／raided 那一筆的時刻跟這裡一樣就是混戰寫的，之後真的截殺會蓋掉 raids／raided。換季整個重來
     clashes: dict[str, float] = Field(default_factory=dict)
     clashed: dict[str, float] = Field(default_factory=dict)

@@ -145,3 +145,10 @@ def test_wins_while_flawless_do_not_count_toward_the_streak(content):
     f.flawless = False
     tactics._after(f, True)
     assert f.stacks["後勁"] == 1
+
+
+def test_the_breakthrough_line_is_traditional_and_screened():
+    """2026-10-31 自檢：破境那一句以前不轉繁體，英文、「機器人」都照收。"""
+    assert ascend.clean("你的掌风如雷霆万钧般劈开了黑暗") == "你的掌風如雷霆萬鈞般劈開了黑暗"
+    assert ascend.clean("You finally broke through the limit now") == ""
+    assert ascend.clean("你這個機器人終於通了最後一關，破境成功") == ""

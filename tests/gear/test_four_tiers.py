@@ -6,6 +6,8 @@ from __future__ import annotations
 import random
 from unittest import mock
 
+import pytest
+
 from conftest import no_week_unlock, real_content
 
 from tianxia import economy, equipment, forge_secrets, four_tiers, howto, materials, renown, shopview, skillview
@@ -33,6 +35,7 @@ def test_fixture_stays_three_tiers_and_switch_off(content):
     assert four_tiers.on(real_content())
 
 
+@pytest.mark.smoke
 def test_bag_line_says_four_tiers(world):
     from tianxia.engine import Game
 

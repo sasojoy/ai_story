@@ -47,7 +47,7 @@ SURFACES = ("路邊的石頭", "一棵老樹的樹幹", "半截斷碑", "破廟�
 SEEN_LINE = "{surface}上刻著一行字：「{text}」——{author}"
 WAVE_LINE = "遠處山坡上，{name}朝你揮了揮手。"
 # 留言那一格（待 joy 潤）
-SAY_TITLE = "路上留字"  # 江湖紀錄的標題（酒肆另有「題壁」，分開）
+TRIP_TITLE = "走一趟・{place}"  # 一趟收了寫的那一則江湖紀錄（整趟的得失加總）；留一句併進這一則，「剛剛」才不會只剩留字（Joy 10/31）
 SAY_DONE = "你在{place}留下一句：「{text}」"
 SAY_AGAIN = "這一趟已經留過一句了。"
 SAY_NOT_HERE = "要人在這一處，走完一趟才能留言。"
@@ -117,7 +117,7 @@ def view(state: GameState, content: Content) -> dict | None:
             "place": content.locations[trip.place].name if trip.place in content.locations else trip.place,
             # 背景畫哪一套：這一處的地點種類（探索那六張表，explore_one.kind_of）
             "scene": explore_one.kind_of(content.config.jianfa, content.locations[trip.place]).kind if trip.place in content.locations else explore_one.WILD,
-            "total": trip.total, "done": trip.done, "end": trip.end,
+            "n": trip.n, "total": trip.total, "done": trip.done, "end": trip.end,
             "waiting": not trip.end and bool(trip.beats) and trip.beats[-1].stop,
             "title": END_TITLES.get(trip.end, ""), "end_line": END_LINES.get(trip.end, ""),
             "beats": [b.model_dump() for b in trip.beats],
@@ -128,6 +128,36 @@ def view(state: GameState, content: Content) -> dict | None:
             "stele": stele(state, trip.place, own=bool(trip.said)),
         }
     return out
+
+
+_NOTE = re.compile(r"^(\S+ [+-]\d+(?:\.\d+)?)（.*）$")  # 「善名 +1（離「江湖遊俠」還差 31）」後面那段說明
+
+
+def plain(change: str) -> str:
+    """數值變化後面接的說明（離下一個名號還差多少）拿掉：加總的時候同一個標籤才併得起來。"""
+    hit = _NOTE.match(change)
+    return hit.group(1) if hit else change
+
+
+def ledger_parts(text: str) -> list[str]:
+    """「得：a、b　失：c」拆回一樣一樣（a、b、c，說明拿掉）；空字串是空的。"""
+    out: list[str] = []
+    for part in text.split("　"):
+        if part.startswith(("得：", "失：")):
+            out += [plain(x) for x in part[2:].split("、") if x]
+    return out
+
+
+def trip_totals(trip: Outing) -> tuple[list[str], list[str]]:
+    """整趟的得失（結算卡與「走一趟」那一則江湖紀錄）：(撿到的東西「名 ×N」, 數值變化「標籤 ±N」)。每一段的得失、停下來選完的得失
+    （OutingBeat.after，含選項另外扣的體力）、每一段探索扣的體力都加進去；同一樣加總。"""
+    from . import journal  # journal 牽著 battlelog；這裡用到才拿
+
+    parts = [x for b in trip.beats for x in ledger_parts(b.ledger) + ledger_parts(b.after)]
+    spent = sum(b.spent for b in trip.beats)
+    items = explore_one.merge_items(x for x in parts if explore_one.is_item(x))
+    changes = journal.combine_changes([x for x in parts if not explore_one.is_item(x)] + ([f"體力 -{spent}"] if spent > 0 else []))
+    return items, changes
 
 
 def foe_look(squad) -> str:

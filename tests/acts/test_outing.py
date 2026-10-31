@@ -51,7 +51,10 @@ def test_three_segments_walk_three_explores():
     assert [b.kind for b in trip.beats] == [MAT] * 3
     assert all(b.text and not b.stop for b in trip.beats)
     assert p.stamina == 100 - 3 * game.content.config.jianfa.explore_stamina  # 一段一次探索的體力
-    assert len(game.state.journal) - journal == 3  # 每一段各寫一則江湖紀錄
+    assert len(game.state.journal) - journal == 4  # 每一段各寫一則江湖紀錄，收尾再一則整趟的
+    head = game.state.journal[0]
+    assert head.title == outing.TRIP_TITLE.format(place="潁水河畔")
+    assert f"體力 -{3 * game.content.config.jianfa.explore_stamina}" in head.changes
 
 
 def test_an_event_stops_the_walk_until_it_is_settled():
@@ -78,6 +81,51 @@ def test_the_last_segment_stopping_closes_after_the_choice():
     _settle_event(game)
     game.outing_go()
     assert trip.end == outing.DONE
+
+
+def _bag_of_money(game, silver: int = 30, stamina: int = 5):
+    """把選事件的那一下換成「塞給你一袋錢」：銀兩 +silver、另外扣 stamina 體力、事件了結。"""
+    p = game.state.player
+
+    def settle(_i):
+        p.stamina -= stamina
+        game.state.pending_event = None
+        return ["你咬牙扛住，對方塞給你一袋錢。", f"銀兩 +{silver}"]
+    return mock.patch.object(game, "_choose", side_effect=settle)
+
+
+def test_a_settled_event_keeps_its_numbers_on_the_beat():
+    """Joy 10/31「你咬住了牙⋯獲得一袋錢（多少）（有額外扣體力？）」：選完的得失（含另外扣的體力）記在那一段。"""
+    game = _game()
+    with _draws(MAT, EVT, MAT):
+        game.outing_go(3)
+        with _bag_of_money(game):
+            _settle_event(game)
+        trip = game.state.player.outing
+        assert trip.beats[-1].after == "得：銀兩 +30　失：體力 -5"
+        game.outing_go()
+    assert trip.end == outing.DONE
+    assert trip.beats[1].after == "得：銀兩 +30　失：體力 -5"  # 接著走的那幾段不算進去
+    items, totals = outing.trip_totals(trip)
+    step = game.content.config.jianfa.explore_stamina
+    assert "銀兩 +30" in totals and f"體力 -{3 * step + 5}" in totals
+    assert items and all(" ×" in x for x in items)
+
+
+def test_leaving_a_line_keeps_the_trip_on_top():
+    """留一句併進「走一趟」那一則：「剛剛」照舊看得到整趟的得失（Joy 10/31）。"""
+    game = _game()
+    with _draws(EVT):
+        game.outing_go(1)
+    with _bag_of_money(game):
+        _settle_event(game)
+    game.outing_go()
+    count = len(game.state.journal)
+    game.outing_say(preset=0)
+    head = game.state.journal[0]
+    assert len(game.state.journal) == count
+    assert head.title == outing.TRIP_TITLE.format(place="潁水河畔")
+    assert "銀兩 +30" in head.changes and any("蒼天已死" in line for line in head.lines)
 
 
 def test_losing_a_fight_turns_back_and_saves_the_stamina():
@@ -369,6 +417,7 @@ def test_the_scene_follows_the_place_kind():
     game = _game()
     _walked(game)
     assert game.outing_view()["trip"]["scene"] == "ford"
+    assert game.outing_view()["trip"]["n"] == game.state.player.outing.n  # 畫面認「同一趟」（重新整理接回結算卡、畫布，U-13）
 
 
 def test_road_lines_are_rare():

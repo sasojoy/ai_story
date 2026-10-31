@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import random
 
+import pytest
+
 from conftest import real_content
 from tianxia import tavern, tavern_ask
 from tianxia.characters import CharacterStore
@@ -66,6 +68,7 @@ def test_prices_follow_the_season_length():
     assert game._tavern_price(0) == 0
 
 
+@pytest.mark.smoke
 def test_news_charges_once_and_does_not_repeat():
     game = _game()
     w = game.state.world

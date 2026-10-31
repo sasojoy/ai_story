@@ -214,6 +214,7 @@ def test_season_one_off_changes_nothing(game, monkeypatch):
     assert view["bulletin"] == []
 
 
+@pytest.mark.smoke
 def test_main_view_has_everything_the_page_draws(game):
     view = server.look(game, server.main_view)
     assert view["status"]["name"] == "測試"
@@ -224,7 +225,7 @@ def test_main_view_has_everything_the_page_draws(game):
     assert view["free_text"] is None
     assert view["free_text_note"] is None
     assert view["card"] is None
-    assert view["minimap"].startswith("<svg")
+    assert "minimap" not in view  # 網頁不畫了，不送（全面自檢 S-07）
     assert view["admin"] is False
 
 
@@ -2404,7 +2405,8 @@ def test_a_second_scheduler_is_refused(monkeypatch):
 
 
 def _users_in_server(name: str) -> set[str | None]:
-    """server.py 裡用到 name 這個名字的地方各在哪個函式裡（模組層級是 None）。"""
+    """server.py 裡用到 name 這個名字的地方各在哪個函式裡（模組層級是 None）。功能包的路由（tianxia/features/<包>/routes.py，
+    殼照 FEATURES 掛，開發規範手冊 3.3）也是伺服器的一部分：那裡照 shell.<名字> 叫殼的東西，也算用到。"""
     found: set[str | None] = set()
 
     def visit(node: ast.AST, owner: str | None) -> None:
@@ -2414,9 +2416,13 @@ def _users_in_server(name: str) -> set[str | None]:
                 continue
             if isinstance(child, ast.Name) and child.id == name:
                 found.add(owner)
+            if isinstance(child, ast.Attribute) and child.attr == name and isinstance(child.value, ast.Name) and child.value.id == "shell":
+                found.add(owner)
             visit(child, owner)
 
     visit(ast.parse((server.ROOT / "server.py").read_text(encoding="utf-8")), None)
+    for routes in sorted((server.ROOT / "tianxia" / "features").glob("*/routes.py")):
+        visit(ast.parse(routes.read_text(encoding="utf-8")), None)
     return found
 
 
@@ -6837,3 +6843,27 @@ def test_epiphany_think_names_outside_the_lock(monkeypatch):
     monkeypatch.setattr(Game, "epiphany_request", lambda self: None)
     monkeypatch.setattr(epiphany, "propose_names", mock.Mock(side_effect=AssertionError("不該叫模型")))
     server.choose(game, server.EPIPHANY_THINK)
+
+
+def test_main_view_drops_the_battle_scene_when_its_own_poll_settles_the_battle():
+    """U-06（手機介面自檢 2026-10-31）：場景先讀、選單才把決戰推到收場——以前「剛剛」已經寫了結果，場景還停在最後一回合
+    「已送出 0／在場 0」。現在同一次回的場景就回到地點；U-08：上過陣的人全倒下了，這一下就收場，不等回合逾時。"""
+    from jianfa_kit import jianfa_game, ready
+
+    game = ready(jianfa_game("week7", name="Rayal"), side="guan", loc="changshe", level=20)
+    game.now = 1000.0
+    game.admin_start_showdown("changshe_fire", game.now)
+    game.choose("battle:join:guan")
+    game.now = game.world.get_battle().muster_deadline_real + 1
+    game.options()
+    assert game.world.get_battle().phase == "active"
+
+    def fall(battle):
+        for p in battle.participants.values():
+            p.eliminated = True
+    game.world.mutate_battle(fall)
+    game.now += 5  # 遠不到回合逾時
+    view = server.main_view(game)
+    assert game.world.get_battle().phase == "ended"
+    assert "回合" not in view["scene"] and "在場" not in view["scene"]
+    assert "長社" in view["scene"]  # 回到地點描述；結果在「剛剛」與戰報

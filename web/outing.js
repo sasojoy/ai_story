@@ -37,6 +37,7 @@
   // 畫面上的字（待 joy 潤）
   const OUTING_WAIT = "路上碰到要選的事。";
   const OUTING_AFTER = "果";
+  const OUTING_AFTER_HOLD = 2200; // 「果」寫出來之後停多久才接著走（毫秒）
   const OUTING_CLOSE = "收起";
   const OUTING_AGAIN = "再走一趟";
   const OUTING_TIRED = "體力不夠再走 {n} 段，挑短一點的。";
@@ -57,6 +58,13 @@
   // 這一層自己的狀態（不放進 S：每一格動畫都會改，不該讓整頁重畫）
   const OW = { imgs: null, open: false, away: false, shown: 0, played: 0, tasks: [], cur: null, raf: 0, last: 0, scroll: 0, props: [], parts: [],
     hero: { pose: "idle", k: 0, t: 0, runP: 0, kx: 0, red: 0, bubble: "", glow: 0, gold: false }, turbo: false, speed: 1, going: false };
+
+  // 重新整理之後接得回來（全面自檢 U-13）：這兩樣只有這一頁知道，記在瀏覽器裡（存不了就跟以前一樣，重新整理會走丟）
+  // - 收起過的那一趟（trip.n）：沒收起就重新整理的，結算卡（含「在這裡留一句」）再打開一次；收起了、再走一趟了就不再跳
+  // - 為了畫形、寫字收起來的那一步（第幾趟、走到第幾行、哪一個選項）：重新整理回到同一步，直接再叫出畫布／輸入框，不再問一次
+  const OUTING_CLOSED_KEY = "outing-closed", OUTING_AWAY_KEY = "outing-away";
+  function outingStore(key, v) { try { if (v == null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(v)); } catch (e) { /* 存不了就算了 */ } }
+  function outingRecall(key) { try { return JSON.parse(localStorage.getItem(key) || "null"); } catch (e) { return null; } }
 
   function outingSpeed() { try { return Number(localStorage.getItem(OUTING_SPEED_KEY)) === 2 ? 2 : 1; } catch (e) { return 1; } }
   function outingSaveSpeed(v) { try { localStorage.setItem(OUTING_SPEED_KEY, String(v)); } catch (e) { /* 存不了就這一頁有效 */ } }
@@ -105,20 +113,33 @@
     // 重新整理頁面（或換了分頁）時那一趟還停在要選的事上：直接打開這一層、選項畫在卡上（沿路那幾行不重演）
     if (!trip.end && !OW.open && !OW.away && OW.shown === 0) {
       OW.shown = trip.beats.length; OW.played = trip.done;
-      if (outingInputOpen()) OW.away = true; else outingOpen();
+      const away = outingRecall(OUTING_AWAY_KEY);
+      if (outingInputOpen()) OW.away = true;
+      else if (away && away.n === trip.n && away.at === trip.beats.length && outingNeedsPage(away.id)) {
+        OW.away = true; // 畫形、寫字寫到一半重新整理：同一步，直接叫回畫布／輸入框
+        Promise.resolve(choose(null, away.id)).then(outingRevealInput);
+      } else outingOpen();
+      return;
+    }
+    // 走完了、結算卡還沒收起就重新整理：再打開結算卡（留一句的入口在上面），沿路那幾行直接寫回去不重演
+    if (trip.end && !OW.open && !OW.away && OW.shown === 0) {
+      if (outingRecall(OUTING_CLOSED_KEY) !== trip.n) { OW.shown = trip.beats.length; OW.played = trip.done; outingOpen(); }
       return;
     }
     if (OW.going || S.busy) return;
     // 為了寫字、畫圖收起來的：框還開著就等；送出了又停在下一件要選的事上（有所感之後取名……）就打開、畫在卡上
     if (OW.away && !trip.end && !trip.can_go) {
-      if (!outingInputOpen()) { OW.away = false; outingOpen(); }
+      if (!outingInputOpen()) { OW.away = false; outingStore(OUTING_AWAY_KEY, null); outingOpen(); }
       return;
     }
     if (!OW.away && !OW.open) return;
     if (OW.open && (OW.cur || OW.tasks.length)) return; // 還在演
-    if (OW.waitKey && (trip.end || trip.can_go)) outingAfter();
+    if (OW.waitKey && (trip.end || trip.can_go)) { outingAfter(); OW.hold = Date.now() + (OW.turbo ? 300 : OUTING_AFTER_HOLD); }
     if (trip.end) { OW.away = false; outingOpen(); return; }
     if (!trip.can_go) { outingFoot(); return; }
+    // 「果」那一行先停一下讓人看清楚得失（Joy 10/31「很快就跳掉」），再接著走
+    if (OW.hold > Date.now()) { if (!OW.holdT) OW.holdT = setTimeout(() => { OW.holdT = null; outingSync(); }, OW.hold - Date.now()); return; }
+    OW.hold = 0;
     OW.going = true;
     OW.away = false;
     outingGo(0).finally(() => { OW.going = false; });
@@ -142,13 +163,20 @@
     const now = (lines.length ? lines.join(" ") : tmp.textContent).replace(/\s+/g, " ").trim();
     const text = now.length > 80 ? `${now.slice(0, 80)}……` : now;
     const box = document.getElementById("outing-pop");
-    if (!text || !box) return;
+    const trip = outingTrip();
+    const beat = trip && trip.beats.filter((b) => b.stop).pop();
+    if (!box || !(text || (beat && beat.after))) return;
+    const log = box.querySelector(".outing-log");
+    log.appendChild(outingAfterRow(text, beat ? beat.after : ""));
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // 「果」那一行：選完那件事的結果（一句）＋得失（伺服器記在那一段的 after，數字由引擎給）
+  function outingAfterRow(text, after) {
     const row = document.createElement("p");
     row.className = "outing-line after";
-    row.innerHTML = `<span class="k">${OUTING_AFTER}</span><span>${esc(text)}</span>`;
-    const log = box.querySelector(".outing-log");
-    log.appendChild(row);
-    log.scrollTop = log.scrollHeight;
+    row.innerHTML = `<span class="k">${OUTING_AFTER}</span><span>${esc(text)}${after ? outingLedgerHtml(after) : ""}</span>`;
+    return row;
   }
 
   // 停下來要選的事：江湖頁場景卡上的那段話（伺服器的 m.scene）＋選項，畫在走一趟這張卡上
@@ -186,7 +214,10 @@
       if (OW.shown === 0) { OW.played = 0; box.querySelector(".outing-log").innerHTML = ""; OW.props = []; OW.parts = []; OW.hero.pose = "idle"; OW.hero.kx = 0; OW.hero.glow = 0; }
     }
     // 重新整理頁面之後接著走：已經演過的那幾段直接寫回去，不重演
-    if (OW.shown && !box.querySelector(".outing-line")) trip.beats.slice(0, OW.shown).forEach((b) => outingLine(b, false));
+    if (OW.shown && !box.querySelector(".outing-line")) {
+      const log = box.querySelector(".outing-log");
+      trip.beats.slice(0, OW.shown).forEach((b) => { outingLine(b, false); if (b.after) log.appendChild(outingAfterRow("", b.after)); });
+    }
     box.hidden = false;
     box.querySelector(".outing-place").textContent = trip.place;
     outingQueue(trip);
@@ -303,7 +334,7 @@
   function outingSum(items) {
     const order = [], got = {};
     for (const x of items) {
-      const hit = /^(.*?)\s*([×+-])\s*(\d+)$/.exec(x.g);
+      const hit = /^(.*?)\s*([×+-])\s*(\d+)$/.exec(x.g.replace(/（.*）$/, "")); // 「善名 +1（離…還差 31）」的說明不算
       const key = hit ? `${hit[1]}|${hit[2] === "×" ? "×" : "±"}` : x.g;
       if (!(key in got)) { order.push(key); got[key] = { name: hit ? hit[1] : x.g, mark: hit ? hit[2] : "", n: 0, rare: false }; }
       const it = got[key];
@@ -313,20 +344,25 @@
     return order.map((k) => {
       const it = got[k];
       const text = !it.mark ? it.name : it.mark === "×" ? `${it.name} ×${it.n}` : `${it.name} ${it.n < 0 ? "-" : "+"}${Math.abs(it.n)}`;
-      return { g: text, rare: it.rare };
+      return { g: text, rare: it.rare, n: it.mark === "×" || !it.mark ? 0 : it.n, name: it.name };
     });
   }
 
   function outingResultHtml(trip) {
-    const gains = [], losses = [];
+    // 整趟的得失：每一段的、停下來選完那件事的（after），加上一路走掉的體力（Joy 10/31）
+    // 同一樣得失相抵（體力：一路走掉的、事件補回的），加總是零的不列；內傷多了算失
+    const all = [];
+    const spent = trip.beats.reduce((n, b) => n + (b.spent | 0), 0);
     for (const b of trip.beats) {
-      for (const part of (b.ledger || "").split("　")) {
-        if (part.startsWith("得：")) gains.push(...part.slice(2).split("、").map((g) => ({ g, rare: b.rare && b.kind === "material" })));
-        if (part.startsWith("失：")) losses.push(...part.slice(2).split("、").map((g) => ({ g, rare: false })));
+      for (const part of `${b.ledger || ""}　${b.after || ""}`.split("　")) {
+        if (part.startsWith("得：") || part.startsWith("失：")) all.push(...part.slice(2).split("、").map((g) => ({ g, rare: b.rare && b.kind === "material" && part.startsWith("得：") })));
       }
     }
-    const chips = outingSum(gains).map((x) => `<span class="oc${x.rare ? " rare" : ""}">${esc(x.g)}</span>`).join("");
-    const lost = outingSum(losses).map((x) => `<span class="oc down">${esc(x.g)}</span>`).join("");
+    if (spent > 0) all.push({ g: `體力 -${spent}`, rare: false });
+    const sum = outingSum(all).filter((x) => !/[+-]0$/.test(x.g));
+    const down = (x) => x.n !== 0 && (x.n < 0) !== (x.name === "內傷");
+    const chips = sum.filter((x) => !down(x)).map((x) => `<span class="oc${x.rare ? " rare" : ""}">${esc(x.g)}</span>`).join("");
+    const lost = sum.filter(down).map((x) => `<span class="oc down">${esc(x.g)}</span>`).join("");
     return `<div class="outing-result"><p class="outing-title"><b>${esc(trip.title)}</b>・${trip.done} 段</p>
       ${trip.end_line ? `<p class="muted small">${esc(trip.end_line)}</p>` : ""}
       ${chips ? `<p class="outing-chips">${chips}</p>` : ""}${lost ? `<p class="outing-chips">${lost}</p>` : ""}
@@ -644,14 +680,19 @@
           if (input) input.focus();
           return true;
         }
-        if (outingNeedsPage(id)) { OW.away = true; outingHide(); await choose(el, id); outingRevealInput(); return true; }
+        if (outingNeedsPage(id)) {
+          const trip = outingTrip();
+          if (trip) outingStore(OUTING_AWAY_KEY, { n: trip.n, at: trip.beats.length, id });
+          OW.away = true; outingHide(); await choose(el, id); outingRevealInput(); return true;
+        }
         await choose(el, id);
         return true;
       }
-      case "outing-close": outingShut(); OW.shown = 0; return true;
+      case "outing-close": { const trip = outingTrip(); if (trip && trip.end) outingStore(OUTING_CLOSED_KEY, trip.n); outingShut(); OW.shown = 0; return true; }
       case "outing-again": { // 照這一趟的段數直接再走一趟（Joy 10/30）；體力不夠才回到段數選單
         const trip = outingTrip(), o = S.main.outing;
         const n = trip ? trip.total : 0, pick = o && o.picker.find((x) => x.n === n);
+        if (trip) outingStore(OUTING_CLOSED_KEY, trip.n);
         outingShut();
         OW.shown = 0;
         if (pick && pick.ok) { await outingGo(n); return true; }

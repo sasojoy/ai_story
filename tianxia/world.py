@@ -6,7 +6,8 @@ import random
 import re
 from collections.abc import Callable
 
-from . import arena, battle_instance, bounties, calendar, feasts, figure_life, figures, flavor, leaderboard, orders, plans, ranks, renown, seal_acts, seats, territory, timetable, wins, yuedan
+from . import arena, battle_instance, bounties, calendar, figure_life, figures, flavor, leaderboard, orders, plans, ranks, renown, seal_acts, seats, territory, timetable, wins, yuedan
+from .features.feast import rules as feasts  # 宴客的散席（功能包；還沒搬的舊模組可以 import 包，開發規範手冊 3.11）
 from . import stances as stance_rules  # 人物心意（減法季批 6）；rules.stances（陣營的態勢）在這個檔裡也叫 stances
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
@@ -97,7 +98,7 @@ def _fire(
     add_chronicle(state, text)
     shown_text = text
     if world is not None:
-        flourish = world.get_event_flavor(fire_id)
+        flourish = flavor.clean(world.get_event_flavor(fire_id) or "")  # 舊的快取寫壞了也不再顯示（2026-10-31 自檢以前沒清理）
         if not flourish and client is not None:
             flourish = flavor.polish_world_event(client, text)
             if flourish:

@@ -42,6 +42,7 @@ def _explore_only(game, branch):
 # ── 每種行動寫成的紀錄 ─────────────────────────────────
 
 
+@pytest.mark.smoke
 def test_new_game_opens_with_the_season_intro(game):
     assert len(game.state.journal) == 1
     entry = latest(game)
@@ -956,6 +957,13 @@ def test_card_html_shows_time_title_tag_lines_and_coloured_changes():
                  '<span class="tx-chg tx-up">銀兩 +10</span>', '<span class="tx-chg tx-down">體力 -3</span>'):
         assert part in html
     assert html.index("剛剛") < html.index("探索揚州城") < html.index("✔ 引導完成") < html.index("銀兩 +10")
+
+
+def test_card_html_draws_one_chip_per_label_even_if_the_entry_listed_it_twice():
+    """U-20（手機介面自檢 2026-10-31）：決戰的軍餉與首功各給一次名望，紀錄裡是兩筆「名望 +2」：畫成一顆「名望 +4」（同戰報）。"""
+    html = journal.card_html(entry(changes=["銀兩 +53", "名望 +2", "貢獻 +27", "名望 +2"]))
+    chips = re.findall(r'<span class="tx-chg[^"]*">([^<]+)</span>', html)
+    assert chips == ["銀兩 +53", "名望 +4", "貢獻 +27"]
 
 
 def test_card_html_draws_a_merged_entry_once_per_action_in_order():

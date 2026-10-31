@@ -24,6 +24,7 @@ def _put_raw(characters, name: str, data: str) -> None:
         )
 
 
+@pytest.mark.smoke
 def test_roundtrip(characters, game):
     game.choose("act:socialize")
     game.choose("choice:0")

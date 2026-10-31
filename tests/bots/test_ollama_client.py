@@ -65,6 +65,7 @@ def test_the_games_client_carries_every_configured_parameter_too(content):
     assert {field: getattr(client, field) for field in expected} == expected
 
 
+@pytest.mark.smoke
 def test_the_game_builds_its_client_from_the_config(content):
     cfg = content.config
     cfg.ollama_model = "gemma4:26b"

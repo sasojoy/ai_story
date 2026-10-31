@@ -23,6 +23,7 @@ def test_clean_name_strips_the_wrapping(raw):
     assert naming.clean_name(raw) == "龍吟九霄"
 
 
+@pytest.mark.smoke
 def test_clean_name_converts_simplified_characters():
     assert naming.clean_name("龙吟九霄") == "龍吟九霄"
 
@@ -34,6 +35,21 @@ def test_clean_name_converts_simplified_characters():
 )
 def test_bad_names_are_rejected(content, name, why):
     assert naming.name_problem(name, content) is not None, why
+
+
+def test_the_proper_noun_list_only_blocks_with_its_switch_on(content):
+    # Joy 2026-10-31「關閉禁用名單，上面的內容可以留著，但是現階段不卡」：關著時名單照樣載入，取名不看它；只能中文、長度照擋
+    content.config.banned_names_on = False
+    assert content.banned_names and naming.name_problem("九陰真經", content) is None
+    assert naming.name_problem("Fist", content) is not None
+    content.config.banned_names_on = True
+    assert naming.name_problem("九陰真經", content) is not None
+
+
+@pytest.mark.parametrize("profile", [None, "week7", "season21"])
+def test_the_real_config_leaves_the_proper_noun_list_off(profile):
+    from conftest import real_content
+    assert real_content(profile).config.banned_names_on is False
 
 
 def test_a_name_that_collides_with_content_is_rejected(content):

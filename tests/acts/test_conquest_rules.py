@@ -109,6 +109,7 @@ def test_conquest_game_is_on():
     assert conquest.on(game.content, game.state.world)
 
 
+@pytest.mark.smoke
 def test_every_place_but_five_is_a_block():
     c = real_content("season21")
     assert set(c.locations) - set(conquest.blocks(c)) == NOT_BLOCKS

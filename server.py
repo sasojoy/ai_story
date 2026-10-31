@@ -62,7 +62,7 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, ascend, battle_instance, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata, might,
+    arena_crowd, ascend, battle_instance, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mapdata, might,
     naming, narration, outing,
     ollama_client, power_save, rules,
     precise, seal, seal_duel, server_bots, social, sortie, speech, tale, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
@@ -73,6 +73,8 @@ from tianxia.content import env_profile, load_content, profile_line
 from tianxia.characters import name_key, open_characters
 from tianxia.database import default_path, open_database
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, TEXT_TALKS, Game, Refused
+from tianxia.core import features as features_core  # 功能包：殼照 FEATURES 掛管理者工具與路由（開發規範手冊 3.1）
+from tianxia.features.feast import rules as feasts  # 宴客自己寫的敬酒詞：鎖外評分（三段式還在殼裡，過渡）
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.notices import KINDS as NOTICE_KINDS
 from tianxia.notices import current as current_notices
@@ -1834,9 +1836,15 @@ def main_view(game: Game) -> dict:
 
 
 def _main_view_body(game: Game) -> dict:
+    fighting = game.battle_on_screen()
     card = game.battle_card() if game.shows_battle_card() else None
     status, quest, scene = game.status_data(), md(game.quest_text()), md(game.scene_text())
     options = game.options()  # 照原本的順序：狀態、主線、場景先讀，選單（會推進全服戰鬥）最後
+    if fighting and not game.battle_on_screen():
+        # 這一次的選單把決戰推到收場了（手機介面自檢 U-06）：先讀的場景還停在最後一回合，換成收場之後的（回到地點），
+        # 卡片、狀態、主線也一起重讀，跟「剛剛」（下面才讀）同一刻
+        card = game.battle_card() if game.shows_battle_card() else None
+        status, quest, scene = game.status_data(), md(game.quest_text()), md(game.scene_text())
     latest = game.journal_top_html()
     view = {
         "status": status,
@@ -1888,7 +1896,7 @@ def _main_view_body(game: Game) -> dict:
         "now": game.battle_extra_html(for_card=True) if card is not None else game.now_entry_html(),
         # 出陣回報（企劃者 2026-10-23）：「剛剛」那一則是領地爭奪的出陣時，卡片底下的進度條、一句話與小籤（sortie.report）；不是 None
         "front": game.now_front(),
-        "minimap": game.minimap_svg(),
+        # 小地圖（舊的江湖頁那一張）網頁已經不畫了：不再每次輪詢在鎖裡重畫、多送 30 KB（全面自檢 S-07）
         # 此地還有誰（玩家之間的互動第一層）：[{name, side}]；路上、序章裡是空的。真人假人同一份（伺服器假人設計第五節）
         "here": game.peers_here(),
         "calls": game.calls_here(),  # 別人遞給你、還沒回的打招呼、結伴、切磋邀請（玩家互動第二層）；回應鈕是選單上的 invite: 選項
@@ -1918,9 +1926,8 @@ def _main_view_body(game: Game) -> dict:
     milestone = game.milestone_card()  # 減法季屬性五段的境界卡（主機側計畫欄位表 main.milestone）：到了境界、點還沒配完才有這個鍵
     if milestone is not None:
         view["milestone"] = milestone
-    entry = game.mall_entry()  # 商城的入口（商城第二批：齒輪旁的錠子鈕＋餘額、底部第六格）；商城關著沒有這個鍵
-    if entry is not None:
-        view["mall"] = entry
+    # 功能包的狀態（FEATURES 的 status，照清單的順序；開發規範手冊 3.3）：商城的入口 mall（齒輪旁的錠子鈕＋餘額、底部第六格）；關著沒有這個鍵
+    view.update(game.feature_status())
     if view["guide"] is not None:  # 入伍段「出一次力」：選單上能完成它的那幾顆（FB-093）；網頁讓它們發光，「此地還能做」攤開
         view["guide"]["glow"] = game.enlist_glow([o.id for o in options if o.enabled])
     if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
@@ -2134,6 +2141,8 @@ def admin_choices(game: Game) -> dict:
     大勢線照這一季的規則（第一季濃縮版要開關開著、而且這一季蓋了「開」的章）。呼叫端要拿著行動鎖（look）。"""
     world = game.state.world
     return {
+        # 賽季在哪個階段（籌備中 preparing／進行中 running／休季 resting）：開季、立刻收季、開啟下一季只在對的階段按得下去（U-19）
+        "phase": game.world.season_phase(),
         "battles": [{"label": b.name, "id": b.id} for b in game.admin_battles()],
         "events": [{"label": f"{x.text[:30]}（{x.id}）", "id": x.id} for x in game.admin_fires()],
         # 照開關：關著時不列第一季才有的線；開著時不列黃巾聲勢（由三條戰線合成，不能直接推）
@@ -2595,110 +2604,11 @@ ADMIN_ACTIONS = {
 }
 PLAYER_ADMIN_ACTIONS = frozenset({"summon", "give_opportunity", "give_fragment", "mingtie_remove"})  # 動到別人的存檔：做完也叫他的分頁刷新
 
-# ── 商城（docs/superpowers/specs/2026-10-20-商城架構-design.md；規則在 tianxia/mall.py、錢包在 tianxia/wallet.py）──
-# 開關 Config.mall.enabled 關著時這裡的 API 全部 404（4.10）。購買在行動鎖裡（act）：扣元寶、寫購買紀錄、發貨同一筆交易。
-
-MALL_REF = re.compile(r"[A-Za-z0-9_-]{8,64}")
-
-
-def _mall_ref(raw) -> str:
-    """這一筆的編號：網頁送的是 8～64 個英數字、底線、減號就照用（網頁按下確認那一刻產，重送同一個不會算兩次），
-    其餘（沒送、送了怪東西）由伺服器產一個。"""
-    text = raw if isinstance(raw, str) else ""
-    return text if MALL_REF.fullmatch(text) else secrets.token_urlsafe(12)
-
-
-def _mall_on() -> None:
-    if not mall.on(CONTENT):
-        raise HTTPException(404)
-
-
-# 管理者的商城工具（4.7）：補發、扣回、退一筆；原因 note 必填、每一筆寫進帳（誰、何時、為什麼）。查帳是 /api/admin/mall
-MALL_ADMIN_ACTIONS = {
-    "mall_reissue": lambda g, b: g.admin_mall_reissue(
-        str(b.get("name", ""))[:40], _int(b.get("amount"), 0), str(b.get("note", ""))[:100], _mall_ref(b.get("ref"))),
-    "mall_revoke": lambda g, b: g.admin_mall_revoke(
-        str(b.get("name", ""))[:40], _int(b.get("amount"), 0), str(b.get("note", ""))[:100], _mall_ref(b.get("ref"))),
-    "mall_refund": lambda g, b: g.admin_mall_refund(str(b.get("name", ""))[:40], _int(b.get("id"), 0), str(b.get("note", ""))[:100]),
-}
-
-
-@app.get("/api/mall")
-def api_mall(request: Request):
-    """商城那一頁（Game.mall_view）：同步之後的餘額、月卡、上架的商品。"""
-    _mall_on()
-    return act_look(_game(request), lambda g: None, lambda g: g.mall_view())[1]
-
-
-@app.get("/api/mall/records")
-def api_mall_records(request: Request):
-    """自己的購買紀錄與帳（Game.mall_records）。"""
-    _mall_on()
-    return act_look(_game(request), lambda g: None, lambda g: g.mall_records())[1]
-
-
-@app.post("/api/mall/buy")
-def api_mall_buy(request: Request, body: dict = Body(...)):
-    """買東西（Game.mall_buy）：{item, ref, qty}（qty 一次買幾件，不給是 1；Joy 2026-10-22）；回 {message, bought, already, mall, main}。bought 是買成的商品 id（不成是 None：網頁照它換
-    掌櫃那一句）、already 是這個編號早就買好的那一件（逾時重送，網頁照成了的樣子講，FB-491；其餘是 None）、main 是江湖畫面
-    （狀態列的錠子鈕與丹鈕當場換，商城第二批）。賽季時鐘暫停中照其他動作擋。"""
-    _mall_on()
-    game = _game(request)
-    item, ref = str(body.get("item", ""))[:40], _mall_ref(body.get("ref"))
-    got: dict = {}
-
-    def buy(g: Game):
-        out = g.mall_buy(item, ref, max(1, min(mall.MAX_QTY, _int(body.get("qty"), 1))))
-        got["bought"], got["already"] = g.mall_bought, g.mall_already  # 在鎖裡讀：出了鎖別的請求可能又動了這一份 Game
-        return out
-
-    msgs = act(game, buy)
-    _tell_tabs(game)
-    return {"message": joined(msgs), "bought": got.get("bought"), "already": got.get("already"),
-            "mall": look(game, lambda g: g.mall_view()), "main": look(game, main_view)}
-
-
-@app.post("/api/mall/claim")
-def api_mall_claim(request: Request):
-    """領月卡今天的份（Game.mall_claim；定案甲・每日領）：回 {message, mall, main}（錠子鈕、丹鈕與江湖頁那張小卡當場換）。"""
-    _mall_on()
-    game = _game(request)
-    msgs = act(game, lambda g: g.mall_claim())
-    _tell_tabs(game)
-    return {"message": joined(msgs), "mall": look(game, lambda g: g.mall_view()), "main": look(game, main_view)}
-
-
-@app.post("/api/mall/rename")
-def api_mall_rename(request: Request, body: dict = Body(...)):
-    """易名帖（Game.mall_rename；Joy 2026-10-21 當場生效）：{name}；回 {message, renamed, main}。名號的寫法照建角色（NFKC、長度、
-    看不見的字元），撞名照 name_taken 同一句。改成了：GAMES 換到新名號底下（帳號已經指向新名號，下一個請求照新名號找）。"""
-    _mall_on()
-    name = unicodedata.normalize("NFKC", str(body.get("name", ""))).strip()
-    if not name:
-        raise GameError("請先輸入新的名號。")
-    if len(name) > NAME_MAX or any(unicodedata.category(ch) in ("Cc", "Cf") for ch in name):
-        raise GameError(BAD_NAME)
-    game = _game(request)
-    old = game.state.player.name
-    msgs = act(game, lambda g: g.mall_rename(name, name_taken))
-    new = game.state.player.name
-    if new != old:
-        with _GAMES_LOCK:
-            GAMES.pop(old.casefold(), None)
-            GAMES[new.casefold()] = game
-    _tell_tabs(game)
-    return {"message": joined(msgs), "renamed": new != old, "name": new, "main": look(game, main_view)}
-
-
-@app.post("/api/admin/mall")
-def api_admin_mall(request: Request, body: dict = Body(...)):
-    """管理者查一個名號（或帳號）的帳（Game.admin_mall_ledger）。名號放在 POST 的內容裡、不放在網址上；查不到回 {refusal}。"""
-    _mall_on()
-    game = _game(request)
-    if not game.is_admin():
-        raise HTTPException(403)
-    name = str(body.get("name", ""))[:40]
-    return act_look(game, lambda g: None, lambda g: g.admin_mall_ledger(name))[1]
+# ── 功能包的管理者工具與路由（FEATURES；開發規範手冊 3.3）：殼照清單掛，位置就是原本商城那一段（路由的先後不變）。
+# 商城（/api/mall/…、/api/admin/mall、管理者的補發扣回退款）搬進 tianxia/features/mall/routes.py ──
+FEATURE_ADMIN_ACTIONS = features_core.admin_tools(sys.modules[__name__])
+for _router in features_core.routers(sys.modules[__name__]):
+    app.include_router(_router)
 
 
 @app.post("/api/choose")
@@ -2745,13 +2655,14 @@ def api_say(request: Request, body: dict = Body(...)):
 
 @app.post("/api/do/{op}")
 def api_do(op: str, request: Request, body: dict = Body(default={})):
-    if op in MALL_ADMIN_ACTIONS:
-        _mall_on()  # 商城關著：沒有這個東西（先於登入的檢查，跟 /api/mall 一樣）
+    tool = FEATURE_ADMIN_ACTIONS.get(op)  # 功能包的管理者工具（商城的補發、扣回、退一筆）
+    if tool is not None:
+        tool.gate()  # 那一包關著：沒有這個東西（先於登入的檢查，跟 /api/mall 一樣）
     game = _game(request)
-    if op in MALL_ADMIN_ACTIONS:
+    if tool is not None:
         if not game.is_admin():
             raise GameError("只有管理者能這麼做。")
-        msgs = act(game, lambda g: MALL_ADMIN_ACTIONS[op](g, body), paused_ok=True)  # 帳跟季無關：暫停中也做得了
+        msgs = act(game, lambda g: tool.run(g, body), paused_ok=tool.paused_ok)  # 商城：帳跟季無關，暫停中也做得了
     elif op in ADMIN_ACTIONS:
         if not game.is_admin():
             raise GameError("只有管理者能這麼做。")
@@ -3390,9 +3301,10 @@ def zhuan_extras(store, row: dict) -> dict:
     season = store.get_season() if number == store.get_season_number() else store.past_season(number)
     if season is None or not zhuan_end.on(CONTENT, season):
         return {}
+    from tianxia.core.services import wallet_on  # noqa: PLC0415  錢包開著沒（核心；開發規範手冊 3.10）
     from tianxia.wallet import Wallet  # noqa: PLC0415
 
-    purchases = Wallet(store.db).purchases(name_key(row["name"])) if mall.on(CONTENT) else []
+    purchases = Wallet(store.db).purchases(name_key(row["name"])) if wallet_on(CONTENT) else []
     got = zhuan_end.extras(CONTENT, number, row["profile"], zhuan_end.season_tickets(purchases, number), row["text"])
     out = {}
     art = zhuan_art_src(got["illustration"])

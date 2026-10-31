@@ -2,4 +2,5 @@
  "rank2_contrib": 400, "rank3_contrib": 1300, "rank4_contrib": 2600,
  "figure_treasure_cap": 3, "figure_treasure_weekly": 1,
  "duel": {"per_boss_week": 2}, "silver_outlets": {"enabled": true}, "checkin": {"enabled": true},"sortie": {"treasure_cap": 3, "duel_progress_scale": 10},
- "jianfa": {"enabled": true, "stat_milestones": false}, "epiphany": {"enabled": true, "retry_days": 0.0833333, "trial_wait_days": 0.0833333}}
+ "jianfa": {"enabled": true, "stat_milestones": false}, "epiphany": {"enabled": true, "retry_days": 0.0833333, "trial_wait_days": 0.0833333},
+ "push_events": true, "llm_queue_slots": 1, "llm_queue_wait_seconds": 45}

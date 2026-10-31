@@ -101,6 +101,7 @@ def test_switch_off_effect_front_pushes_huangjin_anywhere(real):
     assert msgs == ["（黃巾聲勢 +2）"]
 
 
+@pytest.mark.smoke
 def test_switch_off_world_and_screens_look_as_before(real):
     """新的一季只有黃巾聲勢與玉璽線索；大勢頁、地圖每個大區的標示與顏色、龍頭人物的說明都照舊寫黃巾聲勢。"""
     game = _game(real)

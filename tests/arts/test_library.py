@@ -1,3 +1,5 @@
+import pytest
+
 from tianxia import fusion, insights, library
 from tianxia.martial_arts import generate_from_name
 
@@ -12,6 +14,7 @@ def _fused(world, name):
     return art
 
 
+@pytest.mark.smoke
 def test_holding_cap_grows_three_slots_every_five_levels(content):
     """設計 4.5、6.3：基本 50，每升 5 級 +3 格（原本 +5）。"""
     assert [library.holding_cap(content, lv, 5) for lv in (1, 4, 5, 9, 10, 30)] == [50, 50, 53, 53, 56, 68]

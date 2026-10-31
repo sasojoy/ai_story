@@ -1140,13 +1140,16 @@
   const CH_NO = "第{no}回";
   const CH_NEXT = "下一步：";
   const CH_DO = "去做";
+  // 那一件大事的決戰已經在集結、開打了（管理者提早開，手機介面自檢 U-17）：右上角不再寫排定的時刻，改寫此刻的狀態
+  const CH_LIVE = { muster: "集結中", active: "開打了" };
   function chapterCardHtml(m) {
     const c = m.week_card && m.week_card.chapter;
     if (!c || !shown("quest")) return "";
     const t = c.target;
     // 說明裡已經寫了地名的（「出城看風（潁川郊野的草澤）」）不再補一次；回目就是那一件大事的（官軍第二回「長社火攻」）只寫時刻
     const far = !c.waiting && t && !c.here && !String(c.hint).includes(t.name) ? `（${esc(t.name)}${t.minutes ? `・${t.minutes | 0} 分` : ""}）` : "";
-    const at = c.beat && c.beat !== c.title ? `${esc(c.beat)}・${esc(c.at)}` : esc(c.at);
+    const when = CH_LIVE[c.live] || c.at;
+    const at = c.beat && c.beat !== c.title ? `${esc(c.beat)}・${esc(when)}` : esc(when);
     const go = c.waiting || c.scene ? "" : c.here ? `<button class="btn primary ch-go" data-act="choose" data-id="story:${esc(c.line)}">${CH_DO} ›</button>`
       : t && shown("tab:map") ? `<button class="btn primary ch-go" data-act="tab" data-tab="map"${gotoAttrs(t.location)}>${WK_MAP} ›</button>` : "";
     return `<section class="card ch-card side-${esc(c.side)}" aria-label="${esc(CH_NO.replace("{no}", c.no))}${esc(c.title)}">

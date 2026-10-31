@@ -257,3 +257,15 @@ def test_the_chapter_card_says_which_chapter_what_next_and_where_to_go():
     assert "眼前這一幕：北門" in html and "下一步" not in html and "ch-go" not in html
     m["week_card"].pop("chapter")
     assert run(m, "return H.chapterCardHtml(H.S.main);") == ""
+
+
+def test_the_chapter_card_writes_the_battles_state_once_it_is_mustering_or_fighting():
+    """U-17（手機介面自檢 2026-10-31）：那一件大事的決戰提早開了，右上角寫「集結中」「開打了」，不再寫排定的時刻。"""
+    m = _chapter_main("luoyang_palace")
+    c = m["week_card"]["chapter"]
+    for live, word in (("muster", "集結中"), ("active", "開打了")):
+        c["live"] = live
+        html = run(m, "return H.chapterCardHtml(H.S.main);")
+        assert f'<span class="ch-at">波才大敗朱儁・{word}</span>' in html and c["at"] not in html
+    c["live"] = None
+    assert f"波才大敗朱儁・{c['at']}" in run(m, "return H.chapterCardHtml(H.S.main);")

@@ -102,6 +102,7 @@ def test_chishou_and_jinjiao_drop_their_old_effects(content, world):
     assert team.dodge_chance(jinjiao.state, content) == 0.0
 
 
+@pytest.mark.smoke
 def test_the_talk_cap_and_stamina_regen_take_the_bigger_numbers(content, world):
     from tianxia.engine import Game
 
@@ -131,6 +132,7 @@ def test_switched_off_the_shards_keep_their_old_effects(content, world):
             assert treasures.amount(game.state, content, new_key) == (1.0 if new_key in treasures.MULTIPLY else 0.0)
 
 
+@pytest.mark.smoke
 def test_only_the_holder_gets_the_power_scale(content, world):
     from tianxia.engine import Game
 

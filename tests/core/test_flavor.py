@@ -34,3 +34,11 @@ def test_flavor_is_late_han_not_wuxia_and_comes_out_in_traditional_characters():
     client = mock.Mock()
     client.chat_text.return_value = "风吹过城头的旗帜。"
     assert flavor.polish_world_event(client, "城外營寨連綿。") == "風吹過城頭的旗幟。"
+
+
+def test_polish_world_event_drops_a_long_or_marked_up_reply():
+    """2026-10-31 自檢：結果全服快取、每季都看同一句，以前標題、數字、「假人」都原樣快取。"""
+    client = mock.Mock()
+    for reply in ("## 標題\n- 據說死了 10000 人", "假人都跑了，城裡空蕩蕩的。", "風" * 80):
+        client.chat_text.return_value = reply
+        assert flavor.polish_world_event(client, "黃巾軍攻破潁川防線！") == ""
