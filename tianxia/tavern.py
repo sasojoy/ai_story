@@ -603,7 +603,7 @@ def wall_problem(content: Content, text: str) -> str | None:
         return WALL_EMPTY
     if len(text) > cfg.wall_chars:
         return WALL_LONG.format(n=cfg.wall_chars)
-    if any(word in text for word in BANNED_WORDS) or any(b and b in text for b in content.banned_names):
+    if any(word in text for word in BANNED_WORDS) or any(b and b in text for b in content.banned_name_list()):
         return WALL_BANNED
     if "<" in text or ">" in text or "http" in text.lower():
         return WALL_BANNED
