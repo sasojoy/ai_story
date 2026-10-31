@@ -3,7 +3,8 @@
 搬包的審查（dev/battle-1，回歸鏡頭的 should）：這四步一處一處拿掉，相關的 58 個測試檔全綠——test_annals 直接叫 _annal_showdown、
 test_cultivation 直接叫 cultivation.seize，沒有一條驗「收場那一下真的寫了行狀、記了貢獻、傳了風聞、給了契機」（搬之前就是這樣）。
 這裡照正式內容（week7）造一場收場的長社火攻（官軍大勝），替官軍出手滿回合、戰功排第一的人補那一下（Game._file_showdown，這一季打的），
-四樣各驗一次；出手不到 Breakthrough.showdown_rounds 回合的人不擲契機（對照組）。"""
+四樣各驗一次；出手不到 Breakthrough.showdown_rounds 回合的人不擲契機（對照組）。file_showdown 另外兩支（上一季打的、季終收兵的）
+各一條：前後對照（scripts/same_behavior.py）原本一次都沒走到。"""
 from __future__ import annotations
 
 import random
@@ -94,3 +95,44 @@ def test_too_few_rounds_in_a_showdown_rolls_no_chance(seizes):
     game._file_showdown(battle, me, None)
     assert seizes == [] and SEIZED not in game.state.journal[0].lines
     assert any(a.kind == annals.SHOWDOWN for a in game.state.player.annals)  # 行狀照寫（對照：只有契機看回合數）
+
+
+# ── 另外兩支：上一季打的、季終收兵的（審查 nit：前後對照一次都沒走到，只有混合檔 tests/core/test_engine.py 守著） ──
+
+
+def test_last_seasons_showdown_is_marked_with_its_season_and_pays_nothing(seizes):
+    """上一季收場、這一季才回來補的（earlier 是那一季）：紀錄與戰報標「第 N 季・」，不發軍餉、不算這一季參戰、不記貢獻、不傳風聞、
+    不擲契機；行狀接在存起來的那一季後面，不進這一季的行狀。"""
+    game = _game()
+    c, p = game.content, game.state.player
+    game.world.save_annals(1, p.name, [], {})  # 換季時存起來的那一季（Game._reset_player_for_new_season）
+    silver = p.stats.get("silver", 0)
+    battle, me = _won(p.name, c.config.showdown_pay.full_rounds)
+    name = c.battles[BATTLE].name
+    game._file_showdown(battle, me, 1)
+    entry, record = game.state.journal[0], game.state.battles[0]
+    assert entry.title == f"第 1 季・{name}・官軍大勝" and record.location.startswith("第 1 季・")
+    assert entry.changes == [] and record.changes == [] and not any("軍餉" in line for line in entry.lines)
+    assert p.stats.get("silver", 0) == silver and p.showdowns == 0 and p.top_merits == 0 and p.contrib == 0
+    assert f"merit|{battle.record_id}" not in p.hearsay_keys and seizes == []
+    assert not any(a.kind == annals.SHOWDOWN for a in p.annals)
+    saved = game.world.biography(1, p.name)["annals"]
+    assert [a["kind"] for a in saved] == [annals.SHOWDOWN] and saved[0]["text"].startswith(name)
+
+
+def test_a_showdown_shelved_at_season_end_leaves_only_a_journal_line(seizes):
+    """季終沒打完就收兵的（unfinished，FB-035）：只寫一則「不算勝負」的江湖紀錄（出手過幾回合照寫），不加戰報、不放「剛剛」的卡片、
+    不發軍餉、不寫行狀、不擲契機。"""
+    game = _game()
+    c, p = game.content, game.state.player
+    silver = p.stats.get("silver", 0)
+    battle = battle_instance.BattleInstance(battle_id=BATTLE, record_id=8, phase="ended", unfinished=True,
+                                            outcome_title=battle_instance.UNFINISHED_TITLE)
+    me = battle_instance.BattleParticipant(name=p.name, faction="guan", neili=1, neili_cap=1, acted_rounds=4)
+    battle.participants[p.name] = me
+    game._file_showdown(battle, me, None)
+    entry = game.state.journal[0]
+    assert entry.title == f"{c.battles[BATTLE].name}・{battle_instance.UNFINISHED_TITLE}" and entry.tag == "你站在官軍"
+    assert entry.lines == [battle_instance.UNFINISHED_TEXT, "你出手 4 回合"] and entry.changes == []
+    assert game.state.battles == [] and game.state.battle_card is None and p.stats.get("silver", 0) == silver
+    assert not any(a.kind == annals.SHOWDOWN for a in p.annals) and seizes == [] and p.showdowns == 0

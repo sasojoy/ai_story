@@ -1595,7 +1595,9 @@ class BattleScenario(Scenario):
     （/api/do/battle_text，假模型評 BATTLE_RATE）、散人掛機到逾時、其餘出招——**這裡切一半**（那一回合結算了、劇情還沒補：
     批次表「舊程式寫到一半」）；後半重新登入，server.narrate_once 補劇情（假模型），打到收場（第二幕黃巾再搏一次、再補一次）；每個人打
     /api/main 收補送（江湖紀錄、戰報、軍餉、行狀、戰功）、/api/reports 與 ?id=；一位的決戰戰報從存檔拿掉、showdowns_restored 歸零，下一次
-    同步補回來（RESTORED_NOTE）；伺服器假人（BotRunner）打另一場、整季機器人（week7）帶一場；收季、開下一季（battle_results_seen 照帶）。
+    同步補回來（RESTORED_NOTE，照收場時刻排進兩筆尋常的戰報中間）；伺服器假人（BotRunner）打另一場、整季機器人（week7）帶一場；收季、
+    開下一季（battle_results_seen 照帶），那一場收場之後還沒同步過的假人換季之後才補到（上一季那一支）。季終收兵那一支（unfinished）
+    走不到（時刻表的季開不出第三場：長社、廣宗開過了，宛城要等第 3 週那件大事結算才知道是哪一版），由 tianxia/features/battle/tests/test_showdown_delivery.py 守。
     序章裡的那一位（NEWBIE）一路看：序章不畫戰場。測試內容沒有決戰：同一串 API 照打（證明關著一個字都不變），假人那一段略過。"""
 
     PLAYERS = {"秦朗月": "guan", "韓雲起": "huang", "柳青崖": "haoqiang", "葉寒舟": None}
@@ -1810,7 +1812,8 @@ class BattleScenario(Scenario):
             self.me(who, "收補送之後")
 
     def reports(self) -> None:
-        """戰報頁：列表（決戰另外一組排在最上面）、預設那一筆（決戰的完整戰況與收場那一刻的戰局條）、再點最舊的那一筆。"""
+        """戰報頁：列表、預設那一筆（決戰的完整戰況與收場那一刻的戰局條）、再點最舊的那一筆——這時每個人只有那一場決戰一筆，點的就是
+        預設那一筆；列表裡決戰排在最上面、補回來的照時刻排進去，在 restore 那一段擺了兩筆尋常的戰報才走得到（審查 nit）。"""
         for who in self.PLAYERS:
             _, data = self.call(who, "GET", "/api/reports")
             rows = [r["id"] for r in data.get("list", [])] if isinstance(data, dict) else []
@@ -1819,22 +1822,34 @@ class BattleScenario(Scenario):
 
     def restore(self) -> None:
         """被洗掉的決戰戰報補回來（_restore_showdowns，一季查一次）：官軍那一位的決戰戰報從存檔拿掉、showdowns_restored 歸零，下一次同步
-        照 battles 表重建一筆（軍餉與名望不再發，RESTORED_NOTE）。"""
+        照 battles 表重建一筆（軍餉與名望不再發，RESTORED_NOTE）。拿掉的同時擺兩筆尋常的戰報（收場前後各一分鐘）：補回來的那一筆要照
+        收場時刻排進兩筆中間（restore_showdowns 的 sort），戰報頁的列表決戰排最上面，再點最舊的那一筆（審查 nit：原本每人只有一筆）。"""
         from tianxia import battlelog
+        from tianxia.state import BattleRecord
 
         with self.world.action_lock():
             state = self.chars.load(self.GAMBLER)
             if state is not None:
+                gone = [r for r in state.battles if r.kind in battlelog.SHOWDOWN_KINDS]
                 state.battles = [r for r in state.battles if r.kind not in battlelog.SHOWDOWN_KINDS]
+                at = gone[0].time if gone else state.world.time
+                for dt in (60.0, -60.0):  # 存檔裡新的在前
+                    state.battle_seq += 1
+                    state.battles.append(BattleRecord(id=state.battle_seq, time=at + dt, location="某地", kind="train", opponent="山賊",
+                                                      ours=[], tier="大勝", our_power=1.0, difficulty=1.0))
                 state.player.showdowns_restored = 0
                 self.chars.save(state)
         self.main(self.GAMBLER)
         self.me(self.GAMBLER, "補回戰報之後")
-        self.call(self.GAMBLER, "GET", "/api/reports")
+        _, data = self.call(self.GAMBLER, "GET", "/api/reports")
+        rows = [r["id"] for r in data.get("list", [])] if isinstance(data, dict) else []
+        for rid in rows[-1:]:
+            self.call(self.GAMBLER, "GET", f"/api/reports?id={rid}")
 
     def bots(self) -> None:
         """伺服器假人（BotRunner＋bot_policy，random.Random(7)、時鐘一輪推一分）：另開一場（second），四個假人擺在那一場的大區，跑到加入、出招
-        （battle_tick）、收場、收補送。整季機器人（bot.play_season，week7、種子 5）：observe 第一步替它投靠官軍、擺進長社、開一場長社火攻，
+        （battle_tick）、收場，收場之後再跑三輪就停——這三輪裡輪到動的假人才同步、收到補送（week7、none 只有一位，weekend、season21 三位；
+        審查 nit），其餘的在換季之後（season 那一段）同步一次，走 file_showdown 上一季的那一支。整季機器人（bot.play_season，week7、種子 5）：observe 第一步替它投靠官軍、擺進長社、開一場長社火攻，
         之後每一步把它的現實時鐘推一分，讓它自己打完一場。測試內容沒有決戰：略過。"""
         from collections import Counter
 
@@ -1938,7 +1953,11 @@ class BattleScenario(Scenario):
         emit("整季機器人 資料庫", hashlib.sha256(db_text(path).encode("utf-8")).hexdigest())
 
     def season(self) -> None:
-        """收季、開下一季：補過的決戰照帶（battle_results_seen，不再補一次）、這一季參戰幾場與首功跟著新角色重來。"""
+        """收季、開下一季：補過的決戰照帶（battle_results_seen，不再補一次）、這一季參戰幾場與首功跟著新角色重來。假人那一場收場之後
+        還沒同步過的假人，換季之後第一次同步才補到（審查 nit）：file_showdown 上一季那一支——紀錄與戰報標「第 N 季・」、不發軍餉、
+        行狀接在存起來的上一季後面（add_saved_annal）。"""
+        from tianxia.engine import Game
+
         self.do(ADMIN, "end_season")
         for who in self.PLAYERS:
             self.main(who)
@@ -1946,6 +1965,20 @@ class BattleScenario(Scenario):
         for who in [*self.PLAYERS, self.NEWBIE]:
             self.main(who)
             self.me(who, "換季之後")
+        last = self.world.get_season_number() - 1
+        for name, _ in self.BOT_SEATS:  # 照假人程式的做法：鎖裡讀存檔、建 Game、同步、存回去（測試內容沒有擺假人：略過）
+            self.begin()
+            with self.world.action_lock():
+                state = self.chars.load(name)
+                if state is None:
+                    continue
+                g = Game(self.c, state, random.Random(STEP[0]), self.world)
+                g.client = None
+                g.sync(CLOCK[0])
+                self.chars.save(g.state)
+            self.me(name, "換季之後同步")
+            book = self.world.biography(last, name)
+            emit(f"{name} 第 {last} 季存起來的行狀", None if book is None else [[a["kind"], a["text"]] for a in book["annals"]][-4:])
 
 
 def _battle_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
