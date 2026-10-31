@@ -272,9 +272,6 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
         ("engine.py", 'record.changes += renown.gain(s, c, "fame", cfg.hit_win_fame)'),  # 酒肆：打退殺手（Game._tavern_hit_fight）
         ("engine.py", 'changes += renown.gain(s, c, "fame", fame)'),  # 奪璽單挑（玉璽碎片設計 5.9，同一季才給）
         ("engine.py", 'self._write(journal.ECHO, lines + renown.gain(self.state, self.content, "fame", gained))'),  # 首創回饋
-        ("engine.py", 'highlight_changes += renown.gain(s, c, "fame", fame)'),  # 決戰最有戲的那一搏與首功
-        ("engine.py", 'changes += renown.gain(s, c, "fame", c.config.seal.mandate.fame)'),  # 得天命的那一軍（玉璽二）
-        ("engine.py", 'changes += renown.gain(s, c, "fame", c.config.battle.generals.slay_fame)'),  # 決戰陣前擊退對面的龍頭（generals）
         ("engine.py", 'return renown.gain(self.state, c, "fame", n)'),  # 立功（名聲 3.1：出陣、挑戰本人、決戰參戰，Game._deed_fame）
         ("engine.py", 'lines += renown.gain(s, c, "fame", pay.fame)'),  # 領地爭奪的分紅與守城功（翻地與爭搶，Game._deliver_conquest）
         ("engine.py", 'out += renown.gain(s, c, "fame", cfg.guard_fame * n)'),  # 護衛替人物擋下挑戰（figure_aid，Game._deliver_guard_credits）
@@ -282,6 +279,10 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
         ("engine.py", 'record.changes += renown.gain(s, c, "fame", cfg.highlight_fame)'),  # 擂台上成了的最險一搏
         ("engine.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台每天的俸（Game._deliver_arena）
         ("engine.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台賽季末前三名（Game._deliver_arena）
+        # battle：決戰收場補送搬進決戰包（主動搬六包第 5 批；這三行原本在 engine.py 那一段的中間，字一個沒變）
+        ("features/battle/view.py", 'highlight_changes += renown.gain(s, c, "fame", fame)'),  # 決戰最有戲的那一搏與首功
+        ("features/battle/view.py", 'changes += renown.gain(s, c, "fame", c.config.seal.mandate.fame)'),  # 得天命的那一軍（玉璽二）
+        ("features/battle/view.py", 'changes += renown.gain(s, c, "fame", c.config.battle.generals.slay_fame)'),  # 決戰陣前擊退對面的龍頭（generals）
         ("features/feast/rules.py", 'out += renown.gain(state, content, "fame", amount)'),  # 宴客散席時最好的那一句敬酒（feasts.deliver；宴客搬進功能包）
     ]
     givers = []

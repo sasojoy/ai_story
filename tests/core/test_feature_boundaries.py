@@ -199,6 +199,10 @@ GAME_IMPORTS = {
     "tianxia.features.sortie.actions", "tianxia.sortie", "tianxia.features.sortie.rules",
     # 出陣約戰（主動搬六包第 2 批）：16 個一行委派；原本那一行 `from . import sortie_duel` 現在是別名（choose 照舊讀 PREFIX、PICK）
     "tianxia.features.sortie.duel_actions", "tianxia.sortie_duel",
+    # battle
+    # 全服決戰「看」那一半（主動搬六包第 5 批）：22 個一行委派（view）；rules 給測試從 engine 拿的 6 個字、委派的型別註記，與 Game 的類別屬性
+    # BATTLE_GAMBLE_NOTE／LAST（類別本體不是方法，game_links 掃不到那兩行，記在這裡）
+    "tianxia.features.battle.view", "tianxia.features.battle.rules",
 }
 GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
     # explore（主動搬六包第 3＋4 批）：走一趟 9 個（1 個私有）——server、bot、bot_policy、測試在叫的 8 個，與 engine 模組層的 _outing_watch
@@ -222,6 +226,14 @@ GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
     # （_duel_line、_duel_entry、_duel_choice、_sortie_duel_tick、_duty_credit；duel_on、_duel_squad 核心原位也叫）
     "duel_on", "_duel_power", "duel_convoy_here", "_duel_squad", "sortie_go_problem", "sortie_go", "sortie_answer", "sortie_join",
     "sortie_cards", "sortie_card", "sortie_duel_tick", "_duel_line", "_duel_entry", "_duel_choice", "_sortie_duel_tick", "_duty_credit",
+    # battle
+    # 全服決戰「看」那一半（主動搬六包第 5 批；11 個私有）：server 叫的 12 個（main_view 的戰局條、攻城條、輸入框，reports_view，放手一搏與
+    # 補劇情的三段式，_tales_waiting）、核心原位叫的 4 個（_battle_scene_text、_round_blocks、_round_wait、_deliver_battle_results），
+    # 只有測試直接叫的 6 個（_file_showdown、_annal_showdown、_showdown_pay、_showdown_credits、_showdown_tier4、_battle_spotlight）
+    "_battle_scene_text", "_round_blocks", "_round_wait", "_battle_spotlight", "battle_gauge", "siege_banner", "record_gauge", "card_gauge",
+    "battle_on_screen", "_deliver_battle_results", "_file_showdown", "_annal_showdown", "_showdown_pay", "_showdown_credits", "_showdown_tier4",
+    "battle_free_text_prompt", "battle_free_text_note", "battle_text_request", "submit_battle_custom_action", "battle_tale_request",
+    "apply_battle_tales", "_tale_battles",
 }
 _SORTIE_SEAM = "接縫留在原位（批次表第二節：會影響先後的接縫這一輪不開掛鉤，第 11 批一次收）"
 GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；過渡）
@@ -295,6 +307,17 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("map_state", "duel_on"): "輿圖：約戰開著時不畫零風險的守、攻不了的不推薦、運糧隊經過的帶 convoy；輿圖的線還在飛，這一輪不碰",
     ("_map_foes", "duel_on"): "輿圖的地點卡：約戰開著時列貼約戰會迎戰的守軍那一路",
     ("_map_foes", "_duel_squad"): "同上：守軍那一路（經驗最高的那一路）",
+    # battle
+    # 全服決戰「看」那一半（主動搬六包第 5 批）：會影響先後的接縫留在原位（批次表第二節，第 11 批一次收）
+    ("scene_text", "_battle_scene_text"): "場景卡：戰場蓋在畫面上或整個取代（開打了在場上的人），一次請求只推進一次（tick=False）；場景還沒有掛鉤",
+    ("battle_detail", "_round_blocks"): "戰報頁（核心的單打服務）：決戰那一筆照 battles 表重讀完整戰況（收場之後才補上的劇情也在）",
+    ("_battle_options", "_round_wait"): "決戰「打」那一半（第 7 批搬）：已選了、等其他人那一顆灰鈕上寫已送出／在場",
+    ("sync", "_deliver_battle_results"): "收場補送在 sync 裡的位置算行為（緊接在 _deliver_big_events 後、_deliver_seal_results 前，江湖紀錄的先後）",
+    ("_apply_battle_outcome", "_deliver_battle_results"): "決戰「打」那一半（第 8 批搬）：自己這一下把決戰推到收場，馬上補到自己手上",
+    ("_settle_showdown", "_deliver_battle_results"): "決戰「打」那一半（第 8 批搬）：時刻表決戰收場，同上",
+    ("_settle_siege", "_deliver_battle_results"): "決戰「打」那一半（第 6 批搬）：攻城戰收場，同上",
+    ("_shelve_siege", "_deliver_battle_results"): "決戰「打」那一半（第 6 批搬）：攻城戰季終收起，補一則不算勝負的紀錄",
+    ("_shelve_unfinished_battle", "_deliver_battle_results"): "決戰「打」那一半（第 8 批搬）：決戰季終收兵，同上",
 }
 
 
