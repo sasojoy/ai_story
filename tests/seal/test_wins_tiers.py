@@ -2,7 +2,7 @@
 
 贏的那一軍：一 → 三 → 四；豪強：替贏的那一軍那一本過門檻的二 → 三 → 四，那一本不到才看輸的那一本（三 → 四）；輸的那一軍：三 → 四。
 和局（結局的 winner 是 None）：兩軍都照輸的切、豪強照兩本合計。名次只在過了門檻的人裡排；20 人與 2,000 人同一條規則。
-用正式內容（season21）的劇本與結局，載入超過一秒，整個檔標 slow。開季收季的那一支（test_season_end_tiers.py）留給接線。"""
+用正式內容（season21）的劇本與結局（以前整個檔標 slow，2026-10-31 起只有超過一秒的那幾條標）。開季收季的那一支（test_season_end_tiers.py）留給接線。"""
 from __future__ import annotations
 
 import pytest
@@ -11,8 +11,6 @@ from conftest import real_content
 from tianxia import wins
 from tianxia.models import JianfaRules, TierRules
 from tianxia.state import PlayerState, WorldState
-
-pytestmark = pytest.mark.slow
 
 GUAN_WINS, HUANG_WINS, DRAW = "s1_pacified", "s1_turbans_hold", "s1_gentry"
 

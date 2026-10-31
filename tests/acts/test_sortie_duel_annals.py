@@ -5,12 +5,9 @@
 季末的傳的段落都跟其他單挑一樣（KINDS 寫「交手」、GROUPS 歸 FIGHT），畫面上看不出差別。"""
 from __future__ import annotations
 
-import pytest
 
 from duel_kit import FAR, LOC, MOVES, NOW, WINDOW, do, duel_content, duel_world, load, rounds_go, seat, tick
 from tianxia import annals, sortie_duel
-
-pytestmark = pytest.mark.slow  # 建 Game、載正式內容
 
 
 def _settled(monkeypatch):

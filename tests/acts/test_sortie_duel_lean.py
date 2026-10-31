@@ -5,13 +5,10 @@
 同去的人替攻方那一軍出力（join_problem 要求同一軍）。"""
 from __future__ import annotations
 
-import pytest
 
 from duel_kit import LOC, NOW, WINDOW, do, duel_content, duel_world, game_of, load, rounds_go, seat, tick
 from tianxia import conquest, orders, wins
 from tianxia.state import Order
-
-pytestmark = pytest.mark.slow  # 建 Game、載正式內容
 
 HOME = "zhuo_county"  # 涿郡：官軍的地方，黃巾開季就碰得到（守方贏要拉進度、守城軍令認它）
 

@@ -4,6 +4,8 @@ pythonpath = ["."]
 testpaths = ["tests", "tianxia/features"]
 # 平常的 pytest 不跑標了 slow 的（整季模擬、量表腳本）；合併前的整套用 pytest -m "slow or not slow"（見 CLAUDE.md「指令」）
 addopts = "-m 'not slow'"
+# -n 時用 xdist 預設的 --dist load（不要 worksteal）：tests/conftest.py 的 pytest_collection_modifyitems 把已知很長的整季模擬
+# 分到 load 一開始給每個 worker 的那一段的最前面，每個 worker 先各跑一份（10/31 測試自檢 T-03）
 markers = [
     "slow: 整季模擬、真實內容跑整季、量表與模擬腳本；平常不跑，每日整套與上 main 之前才跑（pytest -m \"slow or not slow\"）",
     "smoke: 煙霧：每個區塊（CLAUDE.md 區塊表十二塊）約 10 條快的、有代表性的；改核心時 test_for 會加，單獨跑 pytest -m smoke -n 4（開發規範手冊 4.3）",

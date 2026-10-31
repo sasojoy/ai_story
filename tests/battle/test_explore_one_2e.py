@@ -5,7 +5,7 @@
    行動列底下那一行都照沒有懸賞時），變強到不再必敗自動回到強制遭遇；打探懸賞照舊；判勝算不碰 `Game.rng`。
 2. FB-881：「這一帶的對手已經配不上你，所得有限」只在這一場打贏而且真的因為對手檔打了折才寫，輸了、平手了、沒打折都不寫。
 3. FB-882：鈕上與四格那一格的小字照這一處此刻的比重寫（跟行動列底下那一行同一份），寺的表是事件 50、感悟 30，不再寫「寺裡多悟」。
-用正式內容（season21），整個檔標 slow。"""
+用正式內容（season21）（以前整個檔標 slow，2026-10-31 起只有超過一秒的那幾條標）。"""
 from __future__ import annotations
 
 import re
@@ -17,8 +17,6 @@ from jianfa_kit import jianfa_game, ready
 from tianxia import explore_one, mapdata, team
 from tianxia.encounter import EncounterResult
 from tianxia.state import Bounty
-
-pytestmark = pytest.mark.slow
 
 LOSE = "必敗"
 CLOSE_OUTLEVEL = "這一帶的對手已經配不上你，所得有限。"
@@ -80,6 +78,7 @@ def test_a_hopeless_bounty_is_left_to_the_table_as_if_there_were_none():
     assert label.endswith("・野外多敵）")
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_trips_follow_the_table_while_the_bounty_is_hopeless_and_never_target_it():
     game = _hopeless_game()
     b = _strike(game)
@@ -277,6 +276,7 @@ def test_the_temple_says_so_on_the_button_the_cell_the_map_and_the_howto():
 LINE_WORD = {"遇事": "多事", "遇敵": "多敵", "得料": "多料", "有悟": "多悟"}
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 @pytest.mark.parametrize("side", ["guan", "huang", "haoqiang", None])
 def test_the_cell_word_and_the_action_line_always_say_the_same_thing(side):
     """每一處、每一種身分：鈕上的字＝四格那一格的字；而且跟行動列底下那一行說的「多半…」「可能…」「會…」是同一件事。"""

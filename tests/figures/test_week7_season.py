@@ -23,8 +23,6 @@ from tianxia import calendar, seal, seats, timetable
 from tianxia import calendar, rules
 from tianxia.world_state import fresh_season, season_length_days, stamp_season
 
-pytestmark = pytest.mark.slow  # 每一條都載真實內容、開一季
-
 HOUR, DAY = 3600, 86400
 WEEK = 7 * DAY
 MON = 1792339200  # 2026-10-19 週一 00:00（台灣）
@@ -662,7 +660,7 @@ def _render(game, monkeypatch, app=None):
       H.S.mapMode = "timeline"; H.S.mapWeek = 1;
       return {
         orders: H.ordersHtml(fb.orders, 1, null),
-        board: (/<h3>(.*?)<\/h3>/.exec(H.trendsTopHtml(m)) || [])[1],  // 本週江湖大事（減法季批 1 搬到見聞・大事・大勢最上面）
+        board: (/<h3>(.*?)<\\/h3>/.exec(H.trendsTopHtml(m)) || [])[1],  // 本週江湖大事（減法季批 1 搬到見聞・大事・大勢最上面）
         result: H.resultHtml(fb.result),
         timeline: H.timelineHtml(base, st, 1),
         overview: H.cardExtras(base, st),

@@ -347,8 +347,8 @@ def test_writing_tells_whether_this_thread_holds_a_transaction(tmp_path):
 def test_writing_does_not_open_a_connection(tmp_path, monkeypatch):
     db = open_database(tmp_path / "t.db")
     opened = []
-    real_connect = sqlite3.connect
-    monkeypatch.setattr(sqlite3, "connect", lambda *args, **kwargs: opened.append(args) or real_connect(*args, **kwargs))
+    real_connect = database._connect
+    monkeypatch.setattr(database, "_connect", lambda *args, **kwargs: opened.append(args) or real_connect(*args, **kwargs))
     seen = []
     thread = threading.Thread(target=lambda: seen.append(db.writing()))  # 這個執行緒從沒碰過資料庫
     thread.start()
@@ -465,7 +465,7 @@ def test_an_unknown_schema_version_is_refused(tmp_path):
 
 def test_a_connection_whose_setup_fails_is_closed(tmp_path, monkeypatch):
     """連上了、但設定用的 PRAGMA 出錯：剛開的連線要先關掉再把錯丟出去，不能留著沒人管。"""
-    real_connect = sqlite3.connect
+    real_connect = database._connect  # 只換 tianxia.database 的入口：換全域的 sqlite3.connect 連 coverage 的 SQLite 也被換掉
     made = []
 
     class SetupFails:
@@ -484,7 +484,7 @@ def test_a_connection_whose_setup_fails_is_closed(tmp_path, monkeypatch):
             self.closed = True
             self.real.close()
 
-    monkeypatch.setattr(sqlite3, "connect", lambda *a, **k: made.append(SetupFails(real_connect(*a, **k))) or made[-1])
+    monkeypatch.setattr(database, "_connect", lambda *a, **k: made.append(SetupFails(real_connect(*a, **k))) or made[-1])
     with pytest.raises(sqlite3.OperationalError, match="設定失敗"):
         Database(tmp_path / "t.db")
     assert len(made) == 1

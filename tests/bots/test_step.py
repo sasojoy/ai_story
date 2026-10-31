@@ -2,7 +2,7 @@
 
 畫面只有一份「你這一步」：批 1 的 main.week_card.steps（weekcard._steps 排：託付 → 軍令 → 揭了的懸賞 → 伏筆 → 新手目標 → 去投靠）。
 四勝利開著的季，step.finish 替每一件補 target（地點、名字、走過去的現實分鐘）與 id，並照「換一件事」（step:next）今天按了幾次從那一件
-排起、隔天從頭；step:next 不在選單上（假人碰不到）、不花體力、不寫江湖紀錄。關著的季 steps 一個字都不變。正式內容、建 Game，整個檔標 slow。"""
+排起、隔天從頭；step:next 不在選單上（假人碰不到）、不花體力、不寫江湖紀錄。關著的季 steps 一個字都不變。正式內容、建 Game（以前整個檔標 slow，2026-10-31 起只有超過一秒的那幾條標）。"""
 from __future__ import annotations
 
 import json
@@ -10,14 +10,11 @@ import random
 from types import SimpleNamespace
 from unittest import mock
 
-import pytest
 
 import server
 from wins_kit import wins_content, wins_game
 from tianxia import bot, newbie, orders, step, weekcard
 from tianxia.state import Bounty, Order
-
-pytestmark = pytest.mark.slow
 
 DAY = 86400
 

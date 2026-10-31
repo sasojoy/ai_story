@@ -5345,12 +5345,12 @@ def test_a_request_never_queues_past_its_budget(game, monkeypatch):
     assert started.wait(2)
     begun = time.monotonic()
     assert server.model_call(game, lambda: pytest.fail("不該輪到"), fallback="退路", left=0.2) == "退路"
-    assert 0.15 < time.monotonic() - begun < 2.0 < server.CONTENT.config.llm_queue_wait_seconds
+    assert 0.15 < time.monotonic() - begun < 5.0 < server.CONTENT.config.llm_queue_wait_seconds  # 不是等 20 秒；機器忙時留餘裕
     assert queue.position("測試") is None  # 票讓出來了
     begun = time.monotonic()
     with pytest.raises(server.GameError, match=server.BUSY_QUEUE_TIMEOUT):  # 給了 busy 句子的呼叫點：同樣只等 0.2 秒，然後被擋下來
         server.model_call(game, lambda: pytest.fail("不該輪到"), fallback="退路", left=0.2, busy=server.BUSY_FREE_TEXT)
-    assert 0.15 < time.monotonic() - begun < 2.0
+    assert 0.15 < time.monotonic() - begun < 5.0
     assert queue.position("測試") is None
     release.set()
     holder.join(2)

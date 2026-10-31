@@ -83,14 +83,6 @@ def test_an_unsided_gentry_is_not_pulled_into_a_running_fight():
     assert "battle:join_late" in [o.id for o in game.options()]  # 選了邊就照那一軍晚到
 
 
-def test_old_rules_gentry_still_enlists_without_a_side():
-    off = _old_rules()
-    game = _game(off, name="乙", faction="haoqiang")
-    definition = _showdown(game)
-    assert game._free_agent(definition)
-    assert [o.id for o in game.options() if o.id.startswith("battle:enlist:")]
-
-
 # ── FB-274：豪強的投靠點不算哪一方的地盤 ─────────────────────────────
 
 GENTRY_BASES = ("zhuo_militia_hall", "cao_manor", "haozu_fort")

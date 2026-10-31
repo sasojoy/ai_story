@@ -27,8 +27,6 @@ from zhuan_fix_kit import add_story, close_season, make_game, verdict_paras
 from zhuan_fix_kit import close_season, make_game, row, to_week
 from tianxia import calendar, mall
 
-pytestmark = pytest.mark.slow
-
 ADMIN = "史館管理者"
 FOUR = {"zhuan_art", "zhuan_seal", "zhuan_quote", "deep_slot"}
 
