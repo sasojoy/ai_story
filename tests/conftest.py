@@ -246,6 +246,13 @@ def no_leftover_web_push(monkeypatch, tmp_path):
     server.TALES_STOP.clear()
     server.TALES = None
     server.TALES_CLIENT = None
+    server.PUSH_STOP.set()  # 伺服器推送（2026-10-31 起 week7、season21 開著）：main() 照那兩份設定開看守，留著會在之後測試的暫存資料庫上讀、worker segfault
+    if server.PUSH_THREAD is not None:
+        server.PUSH_THREAD.join(5.0)
+    server.PUSH_THREAD = None
+    server.PUSH_STOP.clear()
+    server.HUB = None
+    server.QUEUE = None  # 模型佇列（同上兩份設定開著）：下一個測試從關著開始
 
 
 @pytest.fixture(autouse=True)
