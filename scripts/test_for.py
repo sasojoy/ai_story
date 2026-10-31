@@ -14,7 +14,8 @@
 - 「核心測試」（過渡期，PM 2026-10-31）＝ 手冊 3.1 核心模組自己檔名的測試（test_<模組>…）＋ tests/core/test_engine*.py
   ＋ tests/core/ 的核心契約、邊界、錢包服務測試（CORE_GLOBS），不含 slow；「煙霧」＝ 標了 @pytest.mark.smoke 的
   （每個區塊約 10 條）。
-- tianxia/features/<包>/**：那一包的 tests/ ＋ tests/core/test_contract*.py。
+- tianxia/features/<包>/**：那一包的 tests/ ＋ 核心契約（tests/core/test_contract*.py 與邊界 test_feature_boundaries.py，
+  CONTRACT_GLOBS：手冊 4.1 第三級的核心契約含邊界測試，改包最容易踩的就是 import 了別的包）。
 - 核心（tianxia/core/**、state.py、models.py、content.py、rules.py、calendar.py，與手冊 3.1 列的
   sqlite_world、world_state、characters、accounts、database、team、gender、naming）：核心測試＋煙霧＋檔名是 test_<模組>… 的。
   state.py、models.py 另外看 hunk 落在哪個類別、哪個欄位：類別名或欄位名帶功能前綴的（mall_tokens → mall）再加那一群。
@@ -34,7 +35,7 @@
 - content/：test_content.py ＋ test_real_content.py ＋ 寫到那個檔名的測試檔，照舊不含 slow：test_real_content.py 用真實內容
   跑整季的那幾條是 slow（--slow 才跑、每日整套會跑），其他的（事件難度帶 DIFFICULTY_BANDS 的鎖、地點走得到……）每次都跑。
 - web/：寫到那個檔名的測試檔（main.js、map.js、outing.js 照 app.js 挑），加上 test_server.py。功能包登記的網頁檔
-  （各包 __init__.py 的 web，例 web/mall.js、web/mall.css；feature_web）→ 那一包的 tests/＋tests/core/test_contract*.py
+  （各包 __init__.py 的 web，例 web/mall.js、web/mall.css；feature_web）→ 那一包的 tests/＋核心契約（CONTRACT_GLOBS）
   ＋寫到那個檔名的（店面的 CSS 守門），不照 app.js 挑、不加 test_server.py（PM 2026-10-31）。
 - tests/ 裡的測試檔：跑它自己，連 slow 一起（改了就是要跑它；挑到的其他檔照舊不含 slow，所以分兩次跑）；
   tests/kit/ 這類共用工具：import 它的測試檔；tests/fixtures/：寫到那個檔名的測試檔。
@@ -86,6 +87,8 @@ CORE_MODULES = {
 }
 # 「核心測試」除了核心模組自己檔名的，再收 tests/core/ 底下這幾種（core_tests）：Game 門面、核心契約、邊界、錢包服務
 CORE_GLOBS = ("test_engine*.py", "test_contract*.py", "test_feature_boundaries.py", "test_wallet.py")
+# 功能包改了跟著那一包跑的「核心契約」（tests/core/ 底下；手冊 4.1 第三級：選項帶前綴、choose 不吃別包的、關著不給、換季、邊界）
+CONTRACT_GLOBS = ("test_contract*.py", "test_feature_boundaries.py")
 HUNK_FILES = {"tianxia/engine.py", "tianxia/models.py", "tianxia/state.py", "server.py"}  # 看 hunk 落在哪裡的四個大檔
 # 大家都插一段的 Game 方法（手冊第一節量到的）：落在這裡不看方法名，看 hunk 裡提到哪些功能前綴
 SHARED_METHODS = {
@@ -474,6 +477,11 @@ def core_tests() -> list[Path]:
     return sorted(own | globbed)
 
 
+def contract_tests() -> set[Path]:
+    """功能包改了跟著跑的核心契約（CONTRACT_GLOBS）。"""
+    return {t for pattern in CONTRACT_GLOBS for t in CORE_TESTS.glob(pattern)}
+
+
 @functools.lru_cache(maxsize=None)
 def feature_web() -> dict[str, str]:
     """功能包登記的網頁檔 → 包名（{"mall.js": "mall", "mall.css": "mall"}）：各包 __init__.py 裡類別的 web = (…)，
@@ -799,7 +807,7 @@ def pick(files: list[str], base: str | None = None,
             pkg_tests = FEATURES / parts[2] / "tests" if len(parts) > 3 else None
             if pkg_tests is not None:
                 result.files |= set(pkg_tests.rglob("test_*.py")) if pkg_tests.is_dir() else set()
-                result.files |= set(CORE_TESTS.glob("test_contract*.py"))
+                result.files |= contract_tests()
                 result.why.append(f"{f}：{parts[2]} 這一包的 tests/＋核心契約")
             else:
                 core_and_smoke()
@@ -856,11 +864,14 @@ def pick(files: list[str], base: str | None = None,
         if owner is not None:  # 功能包的網頁檔（web/mall.js）：那一包的 tests/＋核心契約，不照 app.js 挑（PM 10/31）
             pkg_tests = FEATURES / owner / "tests"
             result.files |= set(pkg_tests.rglob("test_*.py")) if pkg_tests.is_dir() else set()
-            result.files |= set(CORE_TESTS.glob("test_contract*.py"))
-            named_it = {t for t in tests if t.name not in TEXT_BLIND and path.name in _text(t)}  # 店面的 CSS 守門讀包的樣式
+            result.files |= contract_tests()
+            # 寫到那個檔名的（店面的 CSS 守門讀包的樣式）：整個檔名，「mall.js」不算「mall.json」裡的那一段
+            exact = re.compile(rf"(?<![\w.]){re.escape(path.name)}(?!\w)")
+            named_it = {t for t in tests if t.name not in TEXT_BLIND and exact.search(_text(t))}
             result.files |= named_it
+            others = sorted(t.name for t in named_it if not t.is_relative_to(pkg_tests))
             result.why.append(f"{f}：{owner} 這一包的網頁檔 → 那一包的 tests/＋核心契約"
-                              + (f"＋寫到 {path.name} 的 {len(named_it)} 個檔" if named_it else ""))
+                              + (f"＋寫到 {path.name} 的 {'、'.join(others)}" if others else ""))
             continue
         if f.startswith("web/"):
             if SERVER_TEST in named:

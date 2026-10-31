@@ -267,7 +267,8 @@ def test_a_feature_package_picks_its_own_tests_and_the_contract(tmp_path, monkey
 ])
 def test_a_package_file_on_this_tree_picks_only_that_package_and_the_contract(changed, package):
     own = {p.name for p in (test_for.FEATURES / package / "tests").rglob("test_*.py")}
-    contract = {p.name for p in test_for.CORE_TESTS.glob("test_contract*.py")}
+    contract = {p.name for p in test_for.contract_tests()}  # 核心契約含邊界測試（手冊 4.1 第三級）
+    assert {"test_contract_core.py", "test_contract_features.py", "test_feature_boundaries.py"} <= contract
     picked = test_for.pick([changed])
     assert own and own | contract == {p.name for p in picked.files} and not picked.core and not picked.smoke
 
@@ -399,7 +400,7 @@ def test_a_feature_packages_web_file_picks_that_package_not_the_app_js_batch():
     """web/mall.js、web/mall.css 是商城包的（手冊 3.7 第 1 階切出來的）：挑那一包的 tests/＋核心契約（＋寫到那個檔名的店面
     CSS 守門），不照 app.js 挑一大批、不加 test_server.py；PM 10/31。"""
     mall_tests = {p.name for p in (test_for.FEATURES / "mall" / "tests").rglob("test_*.py")}
-    contract = {p.name for p in test_for.CORE_TESTS.glob("test_contract*.py")}
+    contract = {p.name for p in test_for.contract_tests()}
     js = test_for.pick(["web/mall.js"])
     assert {p.name for p in js.files} == mall_tests | contract and not js.core and not js.smoke
     assert "test_server.py" not in {p.name for p in js.files}
