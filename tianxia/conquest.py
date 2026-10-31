@@ -9,7 +9,7 @@
   照上一次的基準重錨偏移。
 - 出陣不推線、推那一塊的進度（翻地與爭搶，輿圖簡化設計第四章，計畫 docs/superpowers/plans/2026-10-20-翻地與爭搶.md）：每一塊對每個攻方
   各一條 0～100（ConquestState.fights，BlockFight.bars），攻推自己那一條、守（此刻佔著的那一方）把每一條都拉下，任一條到 100 當場易手（flip：
-  分紅、冷卻、加成暫停）；沒人推的每個季曆日往回（decay）；同一邊一起推有集火（focus_bonus）；混戰的判定在 engine（Game._clash），
+  分紅、冷卻、加成暫停）；沒人推的每個季曆日往回（decay）；同一邊一起推有集火（focus_bonus）；混戰的判定在出陣包（features/sortie/actions.do_clash），
   這裡只給「誰剛在這裡推過」（clash_names）。翻地對 N 方成立：進度、帳、控制方都照陣營 id 存（設計第九章第 12 條）。
 - 攻城戰（siege.py）改成第 4 階的人下戰書觸發（letter_problem；排時段在 conquest_day.py）；投票與每天 22:00 的公告結算拿掉了。
 只讀寫 WorldState；天下大事與江湖史照 territory._announce。territory 反過來在函式裡延後 import 這裡。"""
@@ -341,7 +341,7 @@ def focus_bonus(world: WorldState | None, content: Content, loc_id: str, side: s
 
 def clash_names(world: WorldState | None, content: Content, loc_id: str, side: str, name: str) -> list[str]:
     """混戰的對象（設計 4.3）：clash_minutes 內在這一塊出陣過、跟 side 不同一邊的人（最近的在前、不重複）。人還在不在這裡、保護
-    （新手期、冷卻、護身）由 engine（Game._clash）讀了存檔再判。"""
+    （新手期、冷卻、護身）由出陣包（features/sortie/actions.clash_target）讀了存檔再判。"""
     fight = fight_of(world, loc_id)
     if fight is None:
         return []

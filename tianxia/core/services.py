@@ -1,7 +1,11 @@
 """核心給功能包的服務（開發規範手冊 3.3、3.10）。第一階 ctx 就是 Game 本身；功能包只准叫下面這張清單上的東西。
 清單之外要用 Game 的別的方法，先加進這張清單（在派工單或回報裡寫明，PM 看過），不要直接叫。
 
-## 服務清單（ctx 上准用的）
+清單分四段（主動搬六包批次表第二節，PM 2026-10-31）：一、共用服務（每一包都可以用的）；二、查詢服務（別包問「我在哪一場」這一類，
+由那一包經 Game 的委派回答）；三、過渡（別的功能還沒搬的方法，標主人：主人搬成包時改成那一包的查詢服務、或拿掉）；四、寄放
+（包放在 Game 上的暫時旗標）。每一包只用自己用得到的那幾個；`tests/core/test_feature_boundaries.py` 照這一份放行。
+
+## 一、共用服務
 
 狀態與時刻
 - `ctx.state`（GameState：`state.player`、`state.world`）、`ctx.content`、`ctx.world`（WorldStateStore）、`ctx.now`、`ctx.rng`、`ctx.client`
@@ -11,8 +15,14 @@
 
 記錄與存回
 - `ctx._log(msgs)`：這一下的回話；`ctx._write(title, lines, tag=...)`：寫一則江湖紀錄；`ctx._guide(...)`：引導那一框
+- `ctx._outcome(tag, line)`：這一下那一則江湖紀錄的結果那一格；`ctx._draft`：這一下的那一則（choose 建的 Draft，例：出陣回報掛在 front）
 - `ctx._save_season()`：把這一次動到的季寫回共用賽季；`ctx._reconcile_season()`：重讀共用賽季
 - `ctx._cost_option(id, label, stamina)`：花體力的選項（鈕上寫體力）
+
+戰報（出陣第 1 批加的；打一場的包都要）
+- `ctx._record_exp(record, exp, source)`：本人的經驗寫進戰報（滿級換心得）；`ctx._file_battle(record, ...)`：存戰報、回那一行
+- `ctx._play_rounds(record, squad, tier, ...)`：排回合的演出；`ctx._deed_fame(kind)`：立功給名望
+- `ctx._load_kin(name)`、`ctx._save_kin(game)`：同一把鎖裡讀、寫別人的存檔（混戰、截殺）
 
 身分
 - `ctx._side()`：站哪一軍；`ctx.is_admin()`；`ctx._admin_target(name)`、`ctx._save_target(game)`：管理者動到別人的存檔
@@ -23,8 +33,34 @@
 - `ctx._wallet()`：商城開著時的 Wallet（資料庫那一側）；關著是 None。`ctx._mall_owner()`：錢包的主人（名號的 casefold）
 - `ctx.pill_cap()`、`ctx.pills_left_today()`：回體丹一天的上限（含月卡）與今天還能服幾顆
 
-包寄放在 Game 上的屬性（過渡，同 3.10 的委派：包外的呼叫端與測試還在 Game 上讀；第 2 階那一包的線再碰到時搬走）
-- `ctx.mall_bought`、`ctx.mall_already`：商城上一次 actions.buy 的結果（買成的商品 id；同一個編號早就買好的那一件），伺服器在鎖裡讀
+共用的字與小函式（不是 Game 上的，從這個模組 import）：`PAUSED_TEXT`、`NO_SUCH_PLAYER`、`drill_share`
+
+## 二、查詢服務
+
+（還沒有。第 4 批決戰包起：別包要問「我在哪一場」這一類，由那一包經 Game 的委派回答，列在這裡、寫主人。）
+
+## 三、過渡（別的功能還沒搬的方法；括號是主人）
+
+- `ctx._squad_encounter(squad_id, as_sortie=True)`（戰鬥：打一場隊伍，出陣攻打）
+- `ctx._train_option(...)`、`ctx._train_pick(loc)`、`ctx._big_trip(loc)`（舊遊歷：勝算與必敗先問的鈕、大場面挑哪一路）
+- `ctx._push_progress(loc_id, nominal, source, how)`（地盤：領地爭奪推、拉進度）
+- `ctx._order_credit(...)`（軍令）；`ctx._drill_gains(squad, share)`（操練）
+- `ctx._spar_power(a, b)`、`ctx._spar_mirror(result, power)`（切磋：本人對本人的威力、從另一邊看同一場）
+- `ctx._outing_on()`（探索：減法季探索一顆開著）
+- `ctx.duel_on()`、`ctx._duel_option(loc)`（出陣約戰：第 2 批搬進出陣包之後拿掉）
+- `ctx._raid_key(a, b)`（截殺：截殺與混戰共用的冷卻帳 WorldState.raids 的鍵）
+- `ctx._conquest_side()`（地盤：領地爭奪算哪一邊，豪強依附的那一軍；第 2 批約戰用）
+- `ctx.place_minutes(loc_id)`（輿圖與移動：走到那裡要現實幾分鐘；第 2 批約戰用）
+（這三個原本列在共用段——照規劃者 plan.json 第 1 批的分法；dev/sortie-1 審查照批次表第二節「過渡＝別的功能還沒搬的方法、標主人」
+搬到這裡：在 engine 裡分別定義在截殺、地盤、輿圖與移動那幾段。）
+- `ctx.sorties_left()`、`ctx._sortie_hold(loc, how)`（出陣包自己的委派：測試換掉 Game.sorties_left〔test_bot_policy_conquest〕、
+  腳本換掉 Game._sortie_hold〔sim_trend_sources〕，包裡經 ctx 叫，換掉的才打得到；呼叫端改完就拿掉）
+
+## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
+
+- `ctx.mall_bought`、`ctx.mall_already`（商城）：上一次 actions.buy 的結果（買成的商品 id；同一個編號早就買好的那一件），伺服器在鎖裡讀
+- `ctx._clash_won`、`ctx._sortie_marked`、`ctx._sortie_moved`、`ctx._sortie_flipped`（出陣）：Game.__init__ 起的、出陣那一下設、
+  `_push_progress`（地盤，留在核心）寫與讀——混戰得勝的加成、記過一筆出陣沒、這一下推（拉）動了多少、推滿易手了沒（出陣回報讀）
 
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """
@@ -41,6 +77,14 @@ if TYPE_CHECKING:
 # 共用的字（原本寫在 engine.py；功能包要用、又不能 import engine，搬到這裡，engine 照舊叫得到）
 PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，畫面照常可看"
 NO_SUCH_PLAYER = "（江湖上沒有「{name}」這個人。）"  # 管理者查不到名號（玩家個人劇情、商城查帳；只有管理者看得到）
+
+
+def drill_share(amount: int, share: float) -> int:
+    """跟自己人操練拿對手那一項獎勵的幾成（Config.drill_reward_share），四捨五入（round 是銀行家進位）。
+    操練真的給的（Game._drill）與行動列底下說會給什麼（Game._train_line）都算這一個；出陣的守與打贏（出陣包）、探索也用。
+    （原本寫在 engine.py；出陣包要用、又不能 import engine，搬到這裡，`from tianxia.engine import drill_share` 照舊拿得到。）"""
+    return int(amount * share + 0.5)
+
 
 CARD_KEY = "pill_cap"  # 月卡記在 mall_entitlements 的哪一格（回體丹每天的上限）
 

@@ -1,0 +1,205 @@
+出陣包第 1 批 QA：BASE feature/sortie f8ce2baa 對 HEAD dev/sortie-1 eec58b79，同一份快照、凍住的時鐘與亂數（serve.py），逐鏡比像素、DOM、看得到的元素的位置與算好的樣式；跑完的資料庫逐表比。
+== cmp-weekend2-bb.txt
+﻿base 對 base2：84 鏡，完全一樣 84 鏡
+== db-weekend2-bb.txt
+﻿accounts: 一樣（10 列）
+action_counts: 一樣（10 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（10 列）
+chronicle: 一樣（1 列）
+faction_rolls: 一樣（6 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（10 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumor_heard: 一樣（0 列）
+rumors: 一樣（8 列）
+seasons: 一樣（1 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== cmp-weekend2-bh.txt
+﻿base 對 head：84 鏡，完全一樣 84 鏡
+== db-weekend2.txt
+﻿accounts: 一樣（10 列）
+action_counts: 一樣（10 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（10 列）
+chronicle: 一樣（1 列）
+faction_rolls: 一樣（6 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（10 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumor_heard: 一樣（0 列）
+rumors: 一樣（8 列）
+seasons: 一樣（1 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== cmp-weekend3.txt
+﻿d1280-41-clash-ask: 像素 1 處；DOM/字 一樣；樣式與位置 一樣；橫捲 [1265, 1280, 1265, 1280]
+base 對 head：84 鏡，完全一樣 83 鏡
+== db-weekend3.txt
+﻿accounts: 一樣（10 列）
+action_counts: 一樣（10 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（10 列）
+chronicle: 一樣（1 列）
+faction_rolls: 一樣（6 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（10 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumor_heard: 一樣（0 列）
+rumors: 一樣（8 列）
+seasons: 一樣（1 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== cmp-season21.txt
+﻿base 對 head：60 鏡，完全一樣 60 鏡
+== db-season21.txt
+﻿accounts: 一樣（10 列）
+action_counts: 一樣（10 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（10 列）
+chronicle: 一樣（4 列）
+faction_rolls: 一樣（6 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（10 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumor_heard: 一樣（0 列）
+rumors: 一樣（21 列）
+seasons: 一樣（1 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== cmp-week7.txt
+﻿base 對 head：30 鏡，完全一樣 30 鏡
+== db-week7.txt
+﻿accounts: 一樣（10 列）
+action_counts: 一樣（10 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（10 列）
+chronicle: 一樣（2 列）
+faction_rolls: 一樣（6 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（10 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（10 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumor_heard: 一樣（0 列）
+rumors: 一樣（10 列）
+seasons: 一樣（1 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== cmp-none.txt
+﻿base 對 head：27 鏡，完全一樣 27 鏡
+== db-none.txt
+﻿accounts: 一樣（10 列）
+action_counts: 一樣（10 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（10 列）
+chronicle: 一樣（0 列）
+faction_rolls: 一樣（6 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（10 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumor_heard: 一樣（0 列）
+rumors: 一樣（1 列）
+seasons: 一樣（1 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== allogs.txt
+﻿none/base-log.json: 鏡 27；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 608 {200: 608}；失敗 0；問題記號 0
+   API: {'/api/me': 18, '/api/main': 15, '/api/login': 9, '/api/choose': 9, '/api/patch_notes': 1}
+none/head-log.json: 鏡 27；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 595 {200: 595}；失敗 0；問題記號 0
+   API: {'/api/me': 18, '/api/main': 15, '/api/login': 9, '/api/choose': 9, '/api/patch_notes': 1}
+season21/base-log.json: 鏡 60；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 2013 {200: 2013}；失敗 0；問題記號 0
+   API: {'/api/me': 40, '/api/main': 21, '/api/login': 18, '/api/choose': 3, '/api/do/sortie_go': 3, '/api/do/sortie_answer': 3, '/api/patch_notes': 1}
+season21/head-log.json: 鏡 60；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 2077 {200: 2077}；失敗 0；問題記號 0
+   API: {'/api/me': 42, '/api/main': 21, '/api/login': 18, '/api/choose': 3, '/api/do/sortie_go': 3, '/api/do/sortie_answer': 3, '/api/patch_notes': 1}
+week7/base-log.json: 鏡 30；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 703 {200: 703}；失敗 0；問題記號 0
+   API: {'/api/me': 15, '/api/login': 6, '/api/main': 6, '/api/do/sortie_go': 3, '/api/patch_notes': 1}
+week7/head-log.json: 鏡 30；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 705 {200: 705}；失敗 0；問題記號 0
+   API: {'/api/me': 15, '/api/login': 6, '/api/main': 6, '/api/do/sortie_go': 3, '/api/patch_notes': 1}
+weekend2/base-log.json: 鏡 84；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 1418 {200: 1418}；失敗 0；問題記號 0
+   API: {'/api/me': 39, '/api/main': 32, '/api/login': 18, '/api/choose': 15, '/api/reports': 6, '/api/patch_notes': 1}
+weekend2/base2-log.json: 鏡 84；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 1417 {200: 1417}；失敗 0；問題記號 0
+   API: {'/api/me': 39, '/api/main': 31, '/api/login': 18, '/api/choose': 15, '/api/reports': 6, '/api/patch_notes': 1}
+weekend2/head-log.json: 鏡 84；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 1418 {200: 1418}；失敗 0；問題記號 0
+   API: {'/api/me': 39, '/api/main': 33, '/api/login': 18, '/api/choose': 15, '/api/reports': 6, '/api/patch_notes': 1}
+weekend3/base-log.json: 鏡 84；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 1421 {200: 1421}；失敗 0；問題記號 0
+   API: {'/api/me': 39, '/api/main': 32, '/api/login': 18, '/api/choose': 15, '/api/reports': 6, '/api/patch_notes': 1}
+weekend3/head-log.json: 鏡 84；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 1420 {200: 1420}；失敗 0；問題記號 0
+   API: {'/api/me': 39, '/api/main': 32, '/api/login': 18, '/api/choose': 15, '/api/reports': 6, '/api/patch_notes': 1}
