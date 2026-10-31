@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import json
 import random
+import threading
+import weakref
 from collections.abc import Callable, Collection
 from contextlib import AbstractContextManager
 from pathlib import Path
@@ -40,6 +42,23 @@ from .world_state import (
     fresh_season,
     jade_seal_summary, stamp_season,
 )
+
+
+# 已經 COMMIT 的傳聞與江湖史（見 SqliteWorldStore._logs）：資料庫 → {(表, 季數): (那一季照流水號排的每一則, 最後一則的流水號)}。
+# 跟著 Database 物件走（同一個檔在一個程式裡只開一個，見 open_database）；close_all 之後重開的是新的物件、從頭讀。
+_LOG_CACHES: weakref.WeakKeyDictionary[Database, dict[tuple[str, int], tuple[tuple[Rumor, ...], int]]] = weakref.WeakKeyDictionary()
+_LOG_LOCK = threading.Lock()
+
+
+_LOGS_REWRITTEN = "logs-rewritten"  # Database.note 的鍵：這一筆交易改過已經寫進去的傳聞
+
+
+def _forget_logs(db: Database) -> None:
+    """已經寫進去的傳聞被改了（易名帖換名號，rename_character）、COMMIT 之後：記下的作廢，之後從頭讀。
+    比這一刻早開的交易讀到的是改之前的樣子，也不准記（Database.bump）。"""
+    with _LOG_LOCK:
+        db.bump()
+        _LOG_CACHES.pop(db, None)
 
 
 def open_world(path: Path | None = None) -> SqliteWorldStore:
@@ -94,14 +113,36 @@ class SqliteWorldStore:
         row = conn.execute("SELECT data FROM seasons WHERE number = ?", (number,)).fetchone()
         season = WorldState() if row is None else WorldState.model_validate_json(row["data"])
         if logs:
-            season.rumors = [
-                _rumor(r) for r in conn.execute("SELECT * FROM rumors WHERE season = ? ORDER BY id", (number,))
-            ]
-            season.chronicle = [
-                _chronicle_entry(r)
-                for r in conn.execute("SELECT * FROM chronicle WHERE season = ? ORDER BY id", (number,))
-            ]
+            season.rumors = self._logs(conn, "rumors", number, _rumor)
+            season.chronicle = self._logs(conn, "chronicle", number, _chronicle_entry)
         return season
+
+    def _logs(self, conn: Connection, table: str, number: int, parse: Callable[[Row], Rumor]) -> list[Rumor]:
+        """這一季的傳聞（或江湖史）每一則，照流水號排：跟整份 SELECT 回來一模一樣，只是不每次都重建（審查 S-01）。
+        兩張表只新增、不改、不刪（只有 _save_season 寫，流水號越來越大），所以已經 COMMIT 的那一段讀過一次就記在這個程式裡
+        （_LOG_CACHES，同一個資料庫檔共用），之後只撈流水號比記下的最後一則大的。記下的只收「這一筆交易還沒寫過任何東西」時
+        讀到的（Database.unchanged）：那時看到的每一列都已經 COMMIT，不會因為這一筆撤回而不見、流水號也不會被別人重用；
+        寫過之後讀到的照樣回、只是不記。每次先對一下記下的最後一則還在、內容一樣（資料庫檔被換掉之類），對不上就整份重讀。
+        回的清單是新的一份（呼叫端往裡加的不會加進記下的那一份）；裡面的 Rumor 物件跟別的讀取共用：不要就地改它們的欄位
+        （要改就換成 model_copy，見 Game._drop_stale_references）。"""
+        key = (table, number)
+        with _LOG_LOCK:
+            caches = _LOG_CACHES.setdefault(self.db, {})
+            kept, last = caches.get(key, ((), 0))
+        if self.db.noted(_LOGS_REWRITTEN):  # 這一筆交易改過已經寫進去的傳聞（易名帖）：記下的那一份是舊的，整份照資料庫讀
+            kept, last = (), 0
+        if kept:
+            row = conn.execute(f"SELECT time, text FROM {table} WHERE id = ? AND season = ?", (last, number)).fetchone()
+            if row is None or row["time"] != kept[-1].time or row["text"] != kept[-1].text:
+                kept, last = (), 0
+                with _LOG_LOCK:
+                    caches.pop(key, None)
+        fresh = [parse(r) for r in conn.execute(f"SELECT * FROM {table} WHERE season = ? AND id > ? ORDER BY id", (number, last))]
+        if fresh:
+            with _LOG_LOCK:  # unchanged 在鎖裡問：跟 _forget_logs 的「作廢＋清空」不會交錯
+                if self.db.unchanged() and caches.get(key, ((), 0))[1] == last:  # 別的執行緒剛好也記了：讓它的為準，這一次不記
+                    caches[key] = (tuple(kept) + tuple(fresh), fresh[-1].id)
+        return [*kept, *fresh]
 
     def _save_season(self, conn: Connection, number: int, season: WorldState) -> None:
         """季的小資料整份覆寫；傳聞與江湖史只新增還沒有流水號的（id 是 None），寫完把流水號填回去。
@@ -568,6 +609,9 @@ class SqliteWorldStore:
                                ("faction_rolls", "character"), ("rumors", "character")):
                 for o, n in mapping.items():
                     conn.execute(f"UPDATE {table} SET {col} = ? WHERE season = ? AND {col} = ?", (n, number, o))
+            # 傳聞的名號改了：這一筆交易接下來照資料庫整份讀，COMMIT 之後記下的那一份作廢（_logs）
+            self.db.note(_LOGS_REWRITTEN)
+            self.db.after_commit(lambda: _forget_logs(self.db))
             for table in ("skills", "insights", "gear_recipes"):
                 for r in conn.execute(f"SELECT rowid, data FROM {table} WHERE season = ?", (number,)).fetchall():
                     conn.execute(f"UPDATE {table} SET data = ? WHERE rowid = ?", (swap_json(r["data"], mapping), r["rowid"]))

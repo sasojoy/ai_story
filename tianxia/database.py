@@ -25,7 +25,7 @@ import sqlite3
 import threading
 import time
 import weakref
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -311,7 +311,8 @@ class _ThreadState:
     """一個執行緒在這個資料庫上的連線與交易狀態。放在 threading.local 裡：執行緒結束、local 被釋放時，
     這個物件被回收，登記的 weakref.finalize 就把連線關掉。"""
 
-    __slots__ = ("conn", "depth", "reading", "rewriting", "savepoints", "__weakref__")
+    __slots__ = ("conn", "depth", "reading", "rewriting", "savepoints", "began", "generation", "notes", "after",
+                 "__weakref__")
 
     def __init__(self, conn: sqlite3.Connection):
         self.conn = conn
@@ -319,12 +320,19 @@ class _ThreadState:
         self.savepoints = 0  # 現在開著的 savepoint 數（見 Database.savepoint），拿來給每一個取不同的名字
         self.reading = False  # 是不是在 snapshot() 的最外層
         self.rewriting = False  # 是不是在 rewriting() 的區段裡（整份讀出、改、整份寫回）
+        # 這一筆交易（寫入或快照的最外層）的記號（見 Database.unchanged）：開始時連線的 total_changes
+        self.began: int | None = None
+        self.generation = 0  # 開這一筆時 Database.generation 是多少（見 Database.unchanged）
+        self.notes: set[object] = set()  # 這一筆交易記下的事（Database.note）
+        self.after: list[Callable[[], None]] = []  # 這一筆 COMMIT 之後要做的事（Database.after_commit）
 
 
 class Database:
     def __init__(self, path: Path):
         self.path = Path(path)
         self._local = threading.local()
+        # 有人宣告「之前讀進記憶體、記下來的東西不算數了」就加一（bump；例：易名帖改了傳聞的名號）。比它早開的交易讀到的不記
+        self.generation = 0
         self._states: weakref.WeakSet[_ThreadState] = weakref.WeakSet()
         self._states_lock = threading.Lock()
         try:
@@ -370,18 +378,24 @@ class Database:
             return
         self._begin(conn, timeout)
         state.depth = 1
+        self._opened(state)
         try:
             yield conn
         except BaseException:
             state.depth = 0
+            self._closed(state)
             self._rollback(conn)
             raise
         state.depth = 0
+        after = state.after
+        self._closed(state)
         try:
             conn.execute("COMMIT")
         except BaseException:
             self._rollback(conn)  # COMMIT 失敗時交易還開著：不撤掉，這條連線就永遠握著寫入權
             raise
+        for fn in after:
+            fn()
 
     @contextlib.contextmanager
     def savepoint(self) -> Iterator[sqlite3.Connection]:
@@ -458,11 +472,56 @@ class Database:
             return
         conn.execute("BEGIN")  # DEFERRED：第一句 SELECT 才拿讀取的快照，不擋寫入的人
         state.reading = True
+        self._opened(state)
         try:
             yield conn
         finally:
             state.reading = False
+            self._closed(state)
             self._rollback(conn)  # 唯讀：一律 ROLLBACK，不 COMMIT
+
+    def _opened(self, state: _ThreadState) -> None:
+        state.began = state.conn.total_changes
+        state.generation = self.generation
+        state.notes = set()
+        state.after = []
+
+    @staticmethod
+    def _closed(state: _ThreadState) -> None:
+        state.began = None
+        state.notes = set()
+        state.after = []
+
+    def unchanged(self) -> bool:
+        """這個執行緒正在一筆交易（寫入或快照）裡，這一筆到現在還沒寫過任何東西，而且開始之後沒有人 bump：看到的每一列都是
+        已經 COMMIT 的，不會因為這一筆撤回而不見，也不是 bump 宣告作廢的舊樣子（sqlite_world 的傳聞快取只收這種時候讀到的）。
+        不在交易裡回 False。"""
+        state = getattr(self._local, "state", None)
+        return (state is not None and state.began is not None and state.conn.total_changes == state.began
+                and state.generation == self.generation)
+
+    def bump(self) -> None:
+        """宣告「記在這個程式裡、讀自資料庫的東西不算數了」：之後才開的交易讀到的才記（見 unchanged）。"""
+        with self._states_lock:
+            self.generation += 1
+
+    def note(self, key: object) -> None:
+        """在這一筆交易（寫入的最外層）上記一件事，交易結束（COMMIT 或撤回）就忘掉；不在寫入交易裡什麼都不做。"""
+        state = getattr(self._local, "state", None)
+        if state is not None and state.depth:
+            state.notes.add(key)
+
+    def noted(self, key: object) -> bool:
+        state = getattr(self._local, "state", None)
+        return state is not None and state.began is not None and key in state.notes
+
+    def after_commit(self, fn: Callable[[], None]) -> None:
+        """這一筆寫入交易（最外層）COMMIT 成功之後做 fn；撤回就不做。不在寫入交易裡時當場做。"""
+        state = getattr(self._local, "state", None)
+        if state is None or not state.depth:
+            fn()
+            return
+        state.after.append(fn)
 
     def writing(self) -> bool:
         """這個執行緒現在是不是在寫入交易裡（沒碰過資料庫的執行緒不會因為問這句而開連線）。"""

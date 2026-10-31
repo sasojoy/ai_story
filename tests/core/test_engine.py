@@ -1451,6 +1451,17 @@ def test_stale_world_flags_get_flag_time_backfilled(content, game):
     assert fresh.state.world.flag_times["legacy_flag"] == 12345
 
 
+def test_a_rumor_at_a_removed_place_is_cleared_only_in_this_copy(content, game):
+    """內容拿掉了某個地點：讀進來的那一份傳聞清掉發生地（照舊），但不能就地改到共用的那一份（sqlite_world._logs 記下的
+    傳聞物件跟別的讀取共用）：下一次讀、別人讀到的照舊是資料庫裡的樣子。"""
+    game.world.mutate_season(lambda s: s.rumors.append(Rumor(time=0, text="舊地方的事", location="removed_place")))
+    first = game.world.get_season()
+    fresh = Game(content, game.state, world=game.world)
+    assert fresh.state.world.rumors[-1].location is None and fresh.state.world.rumors[-1].id is not None
+    assert first.rumors[-1].location == "removed_place"
+    assert game.world.get_season().rumors[-1].location == "removed_place"
+
+
 def test_stale_dialogue_reference_is_dropped(content, game):
     game.state.player.pending_companion = "ghost"
     fresh = Game(content, game.state, world=game.world)

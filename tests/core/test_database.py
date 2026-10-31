@@ -544,6 +544,41 @@ for _ in range(int(sys.argv[2])):
 """
 
 
+def test_unchanged_tells_whether_this_transaction_wrote_or_was_bumped(tmp_path):
+    """Database.unchanged：交易裡、還沒寫過、開始之後沒有人 bump 才是 True（傳聞快取只記這種時候讀到的）。"""
+    db = open_database(tmp_path / "t.db")
+    assert not db.unchanged()  # 不在交易裡
+    with db.transaction() as conn:
+        assert db.unchanged()
+        conn.execute("SELECT 1").fetchall()
+        assert db.unchanged()  # 讀不算
+        conn.execute("INSERT INTO seasons (number, data) VALUES (1, '{}')")
+        assert not db.unchanged()
+    with db.snapshot():
+        assert db.unchanged()
+        db.bump()
+        assert not db.unchanged()
+    with db.snapshot():
+        assert db.unchanged()
+
+
+def test_after_commit_runs_only_once_the_outer_transaction_commits(tmp_path):
+    db = open_database(tmp_path / "t.db")
+    ran = []
+    with db.transaction():
+        with db.transaction():
+            db.after_commit(lambda: ran.append("成"))
+        assert ran == []
+    assert ran == ["成"]
+    with pytest.raises(RuntimeError):
+        with db.transaction():
+            db.after_commit(lambda: ran.append("撤回的"))
+            raise RuntimeError("出錯")
+    assert ran == ["成"]
+    db.after_commit(lambda: ran.append("當場"))  # 不在交易裡：當場做
+    assert ran == ["成", "當場"]
+
+
 def test_two_programs_counting_at_once_lose_no_updates(tmp_path):
     """伺服器與假人程式同時「讀一份、改、寫回」：寫入交易讓兩邊一個一個來，一次都不少。"""
     path = tmp_path / "t.db"
