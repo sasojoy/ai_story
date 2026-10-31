@@ -5556,8 +5556,7 @@
       revealMoveCard();
       return;
     }
-    mapFirst(loc);
-    S.mapKeep = true;
+    mapGoto(loc);
     return goTab("map");
   }
 
@@ -5738,7 +5737,8 @@
           S.craftPick = false; // 換分頁：煉製頁的抽屜收起
           const loc = el.classList.contains("mini") && ev.target.closest && ev.target.closest("[data-loc]");
           // 江湖頁的小地圖點了某一處（設計第八節）：輿圖開在那一處所在的區圖、抽屜半開它的卡（那一區照它算：mapReady）
-          if (loc) { mapFirst(loc.getAttribute("data-loc")); S.mapKeep = true; }
+          if (loc) mapGoto(loc.getAttribute("data-loc"));
+          else if (el.dataset.goto) mapGoto(el.dataset.goto, el.dataset.then || null); // 江湖頁「去輿圖」「去宛城」：直接開在目標地點
           // 底下的「見聞」：從「俠客」進過行狀（SELF_NEWS）的話換回上一次見聞的那一段，不然籤不畫、只剩「‹ 俠客」（Joy 2026-10-28「見聞那邊只剩下行狀」）
           if (el.dataset.tab === "news" && selfNews(S.news)) S.news = S.newsBack || "reports";
           await goTab(el.dataset.tab);
