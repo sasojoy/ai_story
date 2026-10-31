@@ -7,7 +7,7 @@ ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的
 explore_rules）；函式名＝原本的方法名去掉前導底線，一個例外：`_outing_plan(loc)` 是 `outing_plan_at`（跟 `outing_plan()` 分開）。
 Game 上留 9 個一行委派（核心原位：選單那一格、`_act` 的 act:explore、行動列底下那一行、紀錄的標題、輿圖；server 的 mostly 與輿圖；
 bot_policy；腳本；測試）。包裡互相叫直接叫這裡的函式；只有 `_outing_plan`、`outing_plan`、`_outing_on`、`odds` 經 ctx 叫
-（tests/battle/test_explore_one.py 換掉 game._outing_plan、test_explore_one_2e 換掉 game.odds：換掉的才打得到）。
+（這一包的 tests/test_explore_one.py 換掉 game._outing_plan、test_explore_one_2e 換掉 game.odds：換掉的才打得到）。
 擲骰都用自己的亂數（explore_rules.rng_for），Game.rng 一次都不多、不少（頭目戰與仗本身照它們原本的）。
 """
 from __future__ import annotations
