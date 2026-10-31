@@ -107,7 +107,7 @@ def outing_weights(ctx, loc: Location, *, has_foes: bool, bounty_here: bool, hid
 
 
 def outing_plan_at(ctx, loc: Location, *, hidden: set[str] | None = None) -> OutingPlan:
-    """這一處此刻出門一趟怎麼抽（OutingPlan）：比重照 _outing_weights。這裡沒有一般對手（也沒有討伐懸賞）遭遇就是 0，那一份分給其餘三類；
+    """這一處此刻出門一趟怎麼抽（OutingPlan）：比重照 outing_weights。這裡沒有一般對手（也沒有討伐懸賞）遭遇就是 0，那一份分給其餘三類；
     頭目不算對手（FB-815：只有頭目的地點不是一定撞上他）——他是這一趟另外擲的（_explore_one：5% × 名聲倍數），擲中那一趟才是
     遭遇。接了討伐懸賞：這一趟就是遭遇（weights 只有遭遇，explore_rules.encounter_only）；對懸賞那一路是必敗時不算（_outing_foe，2e），
     整份（對手、頭目、比重、小字）跟沒有這張懸賞時一樣。只讀，不擲骰（判勝算也不碰 Game.rng）。"""
