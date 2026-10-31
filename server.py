@@ -1658,7 +1658,7 @@ def chatter_once(game: Game) -> bool:
 
 def duel_text(game: Game, text: str) -> list[str]:
     """單人頭目戰的放手一搏，三段同 battle_text：A Game.duel_text_request（只讀）→ B 鎖外請模型評成功率、寫成敗兩版劇情
-    （預算同隨口應對）→ C Game.duel_gamble 重驗同一隻、同一回合、同一句才用評好的分，對不上就在鎖內重評。"""
+    （預算同隨口應對）→ C Game.duel_gamble 重驗同一隻、同一回合、同一句才用評好的分，對不上回「這一回合已經結算」、不重評。"""
     started, request = _open_request(game, lambda: game.duel_text_request(text))
     if isinstance(request, list):
         return request
