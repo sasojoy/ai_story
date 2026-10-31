@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import contextlib
 import hashlib
 import io
 import json
@@ -399,6 +400,46 @@ class Scenario:
         if self.profile in DUEL_PROFILES:
             self.c.config.jianfa.sortie_duel = on and self.duel_default
 
+    def contested(self, *locs: str) -> bool:
+        """這份內容有地盤、這幾處都是區塊（出陣開著的季才走得到出陣那幾段；none、test 沒有地盤）。"""
+        from tianxia import conquest, territory
+
+        return territory.on(self.c) and all(loc in conquest.blocks(self.c) for loc in locs)
+
+    def preset_bar(self, loc: str, side: str, value: float, by: str) -> None:
+        """把這一塊 side 那一條進度直接擺到 value（推的人記 by；到過警報線就記警報，同 conquest.push）：只靠出陣推，十幾步推不到那麼高。"""
+        from tianxia import conquest
+        from tianxia.state import Bar, BlockFight
+
+        def fn(s) -> None:
+            if s.conquest is None:
+                conquest.update(s, self.c)
+            fight = s.conquest.fights.setdefault(loc, BlockFight())
+            fight.bars[side] = Bar(value=value, pushers={by: value})
+            fight.alarm = fight.alarm or value >= self.c.config.conquest.alarm_at
+
+        self.world.mutate_season(fn)
+        emit(f"擺進度 {loc} {side} {value}", None)
+
+    @contextlib.contextmanager
+    def winning(self):
+        """這一下的仗照寫好的打贏：team.fight 帶 tier（同序章雪恥那一場：威力、難度、亂數照算，判定出來之後只把結果換成大勝）。
+        要的是打贏之後出陣包那幾支（推滿易手、截糧打贏、一類一顆之前的三成），本人練到頂也只是「難分勝負」。"""
+        from tianxia import team
+
+        real = team.fight
+
+        def fight(*args, **kwargs):
+            if kwargs.get("tier") is None:
+                kwargs["tier"] = "大勝"
+            return real(*args, **kwargs)
+
+        team.fight = fight
+        try:
+            yield
+        finally:
+            team.fight = real
+
     def login_all(self) -> None:
         """重新登入每一個帳號（前半＋後半在這裡接：後半是新的行程，記憶體裡的工作階段都不在了；整段也照樣登入一次）。"""
         for who in list(self.clients):
@@ -423,8 +464,10 @@ class Scenario:
         ("陸小鳳", "李尋歡", "nanyang_road"), ("花滿樓", "傅紅雪", "nanyang_wilds"),
         ("西門吹雪", "蕭十一郎", "yu_river"), ("楚留香", "沈浪", "lulin_zhai"),
     ]
+    NEWCOMER = ("韓青川", "huang")  # pull_mark 才來的黃巾：守時撞上的混戰要一個沒被撞過（沒有護身、沒有這一對的冷卻）的人
     PHASES_FIRST = ["setup", "prologue", "ranger", "join", "duel_on", "out_of_contest", "attack", "hold", "clash"]
-    PHASES_SECOND = ["resume", "used_up", "win", "convoy", "judge", "season"]
+    # pull_mark 起是審查之後加的（dev/sortie-1 審查：守把對面拉下來、守時的混戰、推滿易手、截糧打贏、一類一顆之前的三成原本都沒走到）
+    PHASES_SECOND = ["resume", "used_up", "win", "pull_mark", "pull", "host", "flip", "convoy", "drill", "judge", "season"]
 
     def setup(self) -> None:
         from tianxia.accounts import AccountStore
@@ -502,7 +545,8 @@ class Scenario:
             self.place(who, None)  # 體力補滿、過了新手期
 
     def duel_on(self) -> None:
-        """約戰開著的季（season21、week7）照原樣：按出陣只打開出陣前那張卡（不寫紀錄）；截糧的運糧隊經過照舊攻打（_squad_encounter → 出陣的獎勵）。"""
+        """約戰開著的季（season21、week7）照原樣：按出陣只打開出陣前那張卡（不寫紀錄）；截糧的運糧隊經過照舊攻打（_squad_encounter；
+        這一場傅紅雪打輸，截糧打贏在 convoy）。"""
         if self.profile not in DUEL_PROFILES:
             return
         self.set_duel(True)
@@ -538,7 +582,8 @@ class Scenario:
                 emit(f"{loc} 出陣回報", (out.get("main") or {}).get("front") if isinstance(out, dict) else None)
 
     def hold(self) -> None:
-        """自家地守：黃巾先在官軍的涿郡推一截，官軍守（零風險、把對面的進度拉下來）。"""
+        """自家地守：黃巾先在官軍的涿郡攻一下，官軍守（零風險）。楚留香這一下推不動（進度照舊 0），守的回報是「對面的進度都已歸零」
+        （推不動、不撞混戰）；把對面拉下來與守時撞上混戰在 pull_mark／pull。"""
         self.set_duel(False)
         if self.place("楚留香", "zhuo_county"):
             self.choose("楚留香", "act:train")
@@ -583,8 +628,8 @@ class Scenario:
         emit("用完那一行", (view.get("action_notes") or {}).get("act:train"))
 
     def win(self) -> None:
-        """打得贏的出陣（本人的武學、內功練到第九成）：攻推得動進度（出陣回報畫進度條）、拿戰利與經驗；黃巾在官軍的涿郡推上一截之後，
-        官軍守（把對面的進度拉下來，守拿自家那一路的數字）。"""
+        """打得贏的出陣（本人的武學、內功練到第九成）：攻推得動進度（出陣回報畫進度條）、拿戰利與經驗；楚留香在官軍的涿郡攻兩下，
+        官軍守（守拿自家那一路的數字）。楚留香在涿郡打不贏，那一條照舊是 0，守的回報是「都已歸零」；拉下來在 pull。"""
         self.set_duel(False)
         for who in ("蕭十一郎", "楚留香"):
             self.edit(who, lambda p: (setattr(p.member, "wugong_level", 9), setattr(p.member, "neigong_level", 9)))
@@ -597,6 +642,94 @@ class Scenario:
                 emit(f"{who} 在 {loc} 的 act:train", self.ids(view).get("act:train"))
                 out = self.choose(who, "act:train")
                 emit(f"{who} 在 {loc} 的出陣回報", (out.get("main") or {}).get("front") if isinstance(out, dict) else None)
+
+    def front(self, tag: str, out) -> None:
+        main = out.get("main") if isinstance(out, dict) else None
+        emit(tag, {"latest": (main or {}).get("latest"), "front": (main or {}).get("front")})
+
+    def newcomer(self, who: str, side: str) -> bool:
+        """後來才進江湖的一位：註冊、建角色、略過引導、投靠（同 setup、join），過了新手期。"""
+        factions = {f.id: f for f in self.c.scenario.factions}
+        if side not in factions or not factions[side].join_at:
+            return False
+        self.clients[who] = self.TestClient(self.server.app)
+        self.passwords[who] = "pw-" + self.login_of(who)
+        self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who], "again": self.passwords[who]})
+        self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
+        self.do(who, "skip_tutorial")
+        self.settle_choices(who)
+        if not self.place(who, factions[side].join_at[0]):
+            return False
+        self.choose(who, f"faction:{side}")
+        self.choose(who, "faction:confirm")
+        self.settle_choices(who)
+        return self.place(who, None)
+
+    def pull_mark(self) -> None:
+        """守把對面拉下來的前半：官軍的涿郡，黃巾那一條擺到 90（十幾步推不到那麼高），新來的黃巾韓青川在那裡攻一下——推得動，
+        記下他此刻在這一塊出陣過（混戰的對象；打輸也記一筆 0）。"""
+        self.set_duel(False)
+        if not self.contested("zhuo_county"):
+            return
+        who, side = self.NEWCOMER
+        if not self.newcomer(who, side):
+            return
+        self.preset_bar("zhuo_county", side, 90.0, who)
+        if self.place(who, "zhuo_county"):
+            emit(f"{who} 在涿郡的 act:train", self.ids(self.main(who)).get("act:train"))
+            self.front(f"{who} 在涿郡攻", self.choose(who, "act:train"))
+
+    def pull(self) -> None:
+        """守時撞上混戰、守把對面拉下來：傅紅雪在涿郡守（黃巾那一條 > 0，推得動）撞上 clash_minutes 內攻過的韓青川；李尋歡接著守
+        （韓青川剛被撞過、有護身，不再撞）——兩下的回報都是「黃巾軍的進度被拉到 N／100」（撞輸的那一下白跑、照舊 90）。"""
+        self.set_duel(False)
+        if not self.contested("zhuo_county"):
+            return
+        for who in ("傅紅雪", "李尋歡"):
+            if self.place(who, "zhuo_county"):
+                emit(f"{who} 守涿郡的 act:train", self.ids(self.main(who)).get("act:train"))
+                self.front(f"{who} 守涿郡", self.choose(who, "act:train"))
+
+    def host(self) -> None:
+        """守拿自家那一路的數字（_sortie_host）：涿郡沒有駐著官軍那一路，前面的守都不拿；黃巾的大本營（不在爭奪之列、推不動）
+        守照拿——黃巾渠帥那一路，一類一顆開著全額（hold_share 1.0）。"""
+        self.set_duel(False)
+        if not self.contested("huangjin_camp"):
+            return
+        if self.place("西門吹雪", "huangjin_camp"):
+            emit("大本營守的 act:train", self.ids(self.main("西門吹雪")).get("act:train"))
+            self.front("大本營守", self.choose("西門吹雪", "act:train"))
+
+    def flip(self) -> None:
+        """推滿易手：荒丘（中立）官軍那一條擺到 99，蕭十一郎這一下打贏（winning）就推滿——「被你這一下推滿，落入官軍之手」、
+        小籤「易手・這一下是你推滿的」、易手的分紅。"""
+        self.set_duel(False)
+        if not self.contested("hilltop_wilds"):
+            return
+        self.preset_bar("hilltop_wilds", "guan", 99.0, "蕭十一郎")
+        if self.place("蕭十一郎", "hilltop_wilds"):
+            emit("推滿那一下的 act:train", self.ids(self.main("蕭十一郎")).get("act:train"))
+            with self.winning():
+                self.front("推滿那一下", self.choose("蕭十一郎", "act:train"))
+
+    def drill(self) -> None:
+        """一類一顆之前（precise_actions 關著，test_sortie.py 也這樣測）：攻打贏照操練拿對手三成（sortie_drill；銀兩是 sortie_silver_share），
+        守在自家大本營拿 _sortie_host 那一路的三成（hold_share 是 None）。記憶體裡關掉、做完開回來（同 set_duel）。"""
+        self.set_duel(False)
+        if not self.contested("nanyang_wilds", "huangjin_camp"):
+            return
+        cfg = self.c.config
+        before, cfg.precise_actions = cfg.precise_actions, False
+        try:
+            if self.place("花滿樓", "nanyang_wilds"):
+                emit("三成的攻 act:train", self.ids(self.main("花滿樓")).get("act:train"))
+                with self.winning():
+                    self.front("三成的攻", self.choose("花滿樓", "act:train"))
+            if self.place("陸小鳳", "huangjin_camp"):
+                emit("三成的守 act:train", self.ids(self.main("陸小鳳")).get("act:train"))
+                self.front("三成的守", self.choose("陸小鳳", "act:train"))
+        finally:
+            cfg.precise_actions = before
 
     def intercept(self, side: str, loc: str) -> None:
         from tianxia import orders, territory
@@ -616,7 +749,8 @@ class Scenario:
         self.world.mutate_season(lambda s: s.orders.clear())
 
     def convoy(self) -> None:
-        """截糧的運糧隊經過自家的區塊：出陣就是去截它。"""
+        """截糧的運糧隊經過自家的區塊：出陣就是去截它。第一下照打（李尋歡打不過，落敗）；第二下打贏（winning：截糧打贏、出陣的獎勵、
+        軍令記功）。"""
         self.set_duel(False)
         self.intercept("guan", "yanshan_foot")
         if self.place("李尋歡", "yanshan_foot"):
@@ -624,6 +758,9 @@ class Scenario:
             emit("截糧的 act:train", self.ids(view).get("act:train"))
             emit("截糧那一行", (view.get("action_notes") or {}).get("act:train"))
             self.choose("李尋歡", "act:train")
+            if self.contested("yanshan_foot") and self.place("李尋歡", None):
+                with self.winning():
+                    self.front("截糧打贏", self.choose("李尋歡", "act:train"))
         self.clear_orders()
 
     def judge(self) -> None:
@@ -641,8 +778,14 @@ class Scenario:
             self.c.config.big_fight_difficulty = self.big_default
 
     def season(self) -> None:
-        """收季、開下一季：sortie_day、sorties_today 照帶（換季不能多出一輪陣）。"""
+        """收季、開下一季：sortie_day、sorties_today 照帶（換季不能多出一輪陣），不看地盤開不開（dev/sortie-1 審查）——
+        地盤關著的設定（none、test）這兩格本來沒人動，先擺成「今天出陣過 3 次」；接著再換一季、換季前把第一季規則關掉
+        （休季換設定：地盤從開變關），照樣照帶。"""
+        from tianxia import territory
+
         self.set_duel(self.duel_default is not None)
+        if not territory.on(self.c):
+            self.edit("沈浪", lambda p: (setattr(p, "sortie_day", int(CLOCK0 // 86400)), setattr(p, "sorties_today", 3)))
         self.do(ADMIN, "end_season")
         self.main("沈浪")
         self.do(ADMIN, "next_season")
@@ -651,6 +794,17 @@ class Scenario:
         p = self.chars.load("沈浪").player
         emit("換季之後的次數", {"sortie_day": p.sortie_day, "sorties_today": p.sorties_today})
         self.main(self.NEWBIE)
+        cfg = self.c.config
+        self.do(ADMIN, "end_season")
+        before, cfg.season_one = cfg.season_one, False
+        try:
+            self.do(ADMIN, "next_season")
+            view = self.main("沈浪")
+            emit("地盤關掉再換季之後的 act:train", self.ids(view).get("act:train"))
+            p = self.chars.load("沈浪").player
+            emit("地盤關掉再換季之後的次數", {"sortie_day": p.sortie_day, "sorties_today": p.sorties_today})
+        finally:
+            cfg.season_one = before
 
     def run(self, part: str, out: Path) -> None:
         state_file = Path(str(self.db) + ".state.json")
