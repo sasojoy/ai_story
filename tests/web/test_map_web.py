@@ -411,8 +411,9 @@ def test_w1_places_without_a_block_stand_on_a_round_patch():
 
 def test_w1_where_a_round_patch_overlaps_a_block_the_round_patch_wins():
     """圓照舊半徑 view.patch_radius 60（企劃者 2026-10-31「照舊 60」）。圓跟地塊重疊的那一截，點了開圓的那一處（PM 2026-10-31 定「圓優先」：
-    圓是官軍大營、綠林山寨、南華觀這些沒有地塊的地點，畫得小；landAt 先問圓）。畫的時候圓也排在地塊後面（蓋在上面），看到的跟點到的是
-    同一處。每一個圓 × 每一塊跟它重疊的地拿一點（不在別的圓上的）。"""
+    圓是官軍大營、綠林山寨、南華觀這些沒有地塊的地點，畫得小；landAt 先問圓）。畫的時候圓的填色與內框也排在地塊後面（蓋在上面）；
+    地塊的框（可出陣、戰書、你）照舊畫在最上面、會穿過那一截（框只有 3px，W1 審查 2026-10-31 記下、沒改），這一條只比填色。
+    每一個圓 × 每一塊跟它重疊的地拿一點（不在別的圓上的）。"""
     game = _game(profile="season21")
     base, st = game.map_base(), game.map_state()
     patches = _patches(base)
