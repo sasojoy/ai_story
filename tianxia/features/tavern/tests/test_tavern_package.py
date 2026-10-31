@@ -1,6 +1,6 @@
 """酒肆搬進功能包（主動搬六包第 10 批）守的幾件事：舊名是包裡同一個模組物件（tianxia.tavern、tianxia.tavern_ask；BANNED_WORDS 照舊
 拿得到——走一趟那條線照舊從舊名拿，PM 定不搬進 naming.py）、換掉舊名的屬性包裡看得到（test_tavern 換 tavern.find_chance）、
-開關在坐著的時候被關掉照樣出得去、假人的分數照舊、tavern:* 由包接走時標題跟搬之前一樣。"""
+開關在坐著的時候被關掉照樣出得去、假人的分數照舊、tavern:* 由包接走時標題跟搬之前一樣；審查補的：同一對人 hit_pair_hours 內只雇得了一次。"""
 from __future__ import annotations
 
 import importlib
@@ -71,3 +71,24 @@ def test_the_package_takes_the_tavern_ids_with_the_same_title():
     assert taken is not None and taken.title == rules.title_of(game.state, game.content, "news")
     assert FEATURE.choose(game, "act", "tavern") is None
     assert game._action_title("act", "tavern") == rules.sign(game.state, game.content)
+
+
+def test_the_same_client_hires_on_the_same_target_once_per_pair_window():
+    """同一對人 hit_pair_hours 內只雇得了一次（tavern_hit_problem 的 HIT_PAIR）：上一張結了也一樣、被拒不收錢，錯開 hit_pair_hours
+    才雇得了。搬之前沒有測試守這一條（酒肆第 10 批審查補的）。"""
+    from test_tavern import _content, _feud
+
+    from tianxia.features.tavern import rules
+
+    c = _content()
+    me, _ = _feud(open_world(), c)
+    me.choose("act:tavern")
+    me.tavern_do("seek", "李尋歡")
+    me.tavern_do("hit", "李尋歡", "0")
+    hit = me.state.world.tavern_hits[-1]
+    hit.done, hit.outcome, hit.refunded = True, "平手", True  # 上一張結了：對方身上沒有活的單，擋的不是 HIT_TAKEN
+    purse = me.state.player.stats["silver"]
+    assert me.tavern_do("hit", "李尋歡", "0") == [rules.HIT_PAIR.format(name="李尋歡")]
+    assert me.state.player.stats["silver"] == purse and len(me.state.world.tavern_hits) == 1
+    hit.placed_real -= c.config.tavern.hit_pair_hours * 3600 + 10
+    assert me._tavern_hit_problem("李尋歡", 0)[0] is None

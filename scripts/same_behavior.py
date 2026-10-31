@@ -1856,6 +1856,7 @@ class TavernScenario(Scenario):
 
     def strike(self) -> None:
         """丁鵬在城外做完一件事：殺手找上門，這一場殺手贏（氣血剩 1、銀兩照丟、之後一陣子殺手找不上）；雇主阿飛同步收「得手」與惡名。
+        阿飛同一對人 hit_pair_hours 內再雇被拒（審查：HIT_PAIR 原本沒有走到）。
         護身（審查：原本只寫了欄位，沒走到效果）：清掉截殺那一道護身（不然它先擋），葉開雇一張找丁鵬，丁鵬在 tavern_shield_until 之內
         再到城外做一件事——殺手不擲（killer 記不到打聽度）。這一張留著（後面那幾段丁鵬都在城裡）。"""
         from tianxia.characters import name_key
@@ -1865,6 +1866,7 @@ class TavernScenario(Scenario):
         self.me("丁鵬", "殺手得手之後")
         self.main("阿飛")
         self.me("阿飛", "收了得手")
+        self.tav("阿飛", "hit", "丁鵬", "0")  # 同一對人 hit_pair_hours 內再雇：被拒（HIT_PAIR；上一張結了，不是 HIT_TAKEN 擋的）
         self.world.mutate_season(lambda s: s.raided.pop(name_key("丁鵬"), None))
         emit("清掉丁鵬截殺那一道護身（只留殺手得手的護身）", None)
         self.tav("葉開", "hit", "丁鵬", "0")
