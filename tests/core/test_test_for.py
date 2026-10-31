@@ -54,8 +54,77 @@ def _added(path, src, *lines):
 
 
 def test_a_module_picks_the_tests_that_import_it():
-    names = _names(["tianxia/glyph.py"])
-    assert "test_sensing.py" in names and "test_real_content.py" not in names
+    picked = test_for.pick(["tianxia/glyph.py"])
+    assert "test_sensing.py" in {p.name for p in picked.files} and not picked.core
+    assert any("sensing" in w for w in picked.why)  # 經 import 它的 sensing 再挑（T-02）
+
+
+def test_a_module_also_picks_the_tests_of_the_modules_that_import_it():
+    """10/31 測試自檢 T-02：might.py 沒有測試檔直接 import，以前挑 0 個；把 might.now 改成回 0，透過 ascend、create 用到它的
+    test_ascend、test_create_ritual 會紅。現在照 tianxia/ 模組之間的 import 往上找。"""
+    picked = test_for.pick(["tianxia/might.py"])
+    assert {"test_ascend.py", "test_create_ritual.py"} <= {p.name for p in picked.files}
+    assert not picked.core and not picked.smoke
+    ups = test_for.dependents("might")
+    assert {"ascend", "create"} <= ups
+    assert not ups & test_for.DRIVERS and not ups & test_for.CORE_MODULES  # engine、假人、核心不往上走
+
+
+def test_the_import_graph_skips_type_checking_and_imports_inside_functions():
+    tree = test_for._ast(
+        "from __future__ import annotations\n"
+        "from typing import TYPE_CHECKING\n"
+        "from . import alpha, beta as b\n"
+        "from .gamma import thing\n"
+        "import tianxia.delta\n"
+        "try:\n"
+        "    from . import eps\n"
+        "except ImportError:\n"
+        "    pass\n"
+        "if TYPE_CHECKING:\n"
+        "    from .engine import Game\n"
+        "def late():\n"
+        "    from . import zeta\n"
+    )
+    known = frozenset({"alpha", "beta", "gamma", "delta", "eps", "engine", "zeta"})
+    assert test_for._module_deps(tree, known) == {"alpha", "beta", "gamma", "delta", "eps"}
+
+
+def test_an_aggregator_is_picked_but_not_walked_through(monkeypatch):
+    """彙整的模組（import 很多模組的 skillview 這種）：依賴它算，可是不再往上走；DRIVERS 與核心連算都不算。"""
+    many = frozenset(f"m{i}" for i in range(test_for.AGGREGATOR_FANOUT))
+    graph = {"low": frozenset(), "mid": frozenset({"low"}), "agg": frozenset({"mid"}) | many,
+             "top": frozenset({"agg"}), "bot": frozenset({"mid"}), "rules": frozenset({"low"})}
+    monkeypatch.setattr(test_for, "module_graph", lambda: graph)
+    test_for.dependents.cache_clear()
+    try:
+        assert test_for.dependents("low") == {"mid", "agg"}
+    finally:
+        test_for.dependents.cache_clear()
+
+
+def test_a_low_module_with_too_many_dependents_runs_core_and_smoke_instead():
+    """tactics、zh 這種底層模組往上找會挑到兩、三百個檔：超過 IMPORT_CAP 只挑直接 import 的，加核心測試＋煙霧。"""
+    picked = test_for.pick(["tianxia/zh.py"])
+    assert picked.core and picked.smoke
+    assert len(picked.files) < test_for.IMPORT_CAP
+    assert any("太多" in w for w in picked.why)
+
+
+@pytest.mark.parametrize("module, kind, expected", [
+    ("wanted", "wanted", {"test_bounties.py", "test_sanren_web.py"}),
+    ("mingtie_card", "mingtie", {"test_mingtie.py"}),
+])
+def test_a_module_engine_imports_to_register_picks_the_tests_that_name_its_action(module, kind, expected):
+    """T-02：wanted.py、mingtie_card.py 只靠 engine 的 `as _x  # noqa: F401` 登記進 social.ACTIONS，測試經 peer_card／peer_act
+    用到、沒有人 import：照登記的動作名挑寫到它的測試檔。讓 wanted.buttons 回 []，test_bounties 與 test_sanren_web 會紅。"""
+    assert kind in test_for.registered_actions(module)
+    assert expected <= _names([f"tianxia/{module}.py"])
+    assert test_for.registered_actions("might") == ()
+
+
+def test_a_module_picks_the_tests_named_after_its_first_word():
+    assert "test_mingtie.py" in _names(["tianxia/mingtie_card.py"])
 
 
 def test_content_picks_its_tests_and_the_fast_part_of_real_content():
