@@ -2,6 +2,8 @@
 主動搬六包第 3＋4 批搬進來）。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫、名字陷阱。
 
 - checks.py：內容驗證（探索表、段落句子；原本是核心 content.py 的 check_explore_one、check_outing_lines）
+- explore_rules.py：探索一顆的純規則（原 tianxia/explore_one.py；那個名字留成指到這裡的別名）
+- explore_actions.py：原本 Game 上探索一顆的 15 個方法與 OutingPlan（Game 留 9 個一行委派）——名字帶 outing 的那幾個是探索一顆的
 - outing_rules.py：走一趟的純規則（原 tianxia/outing.py；那個名字留成指到這裡的別名）
 - outing_actions.py：原本 Game 上走一趟的 12 個方法（Game 留 9 個一行委派）
 

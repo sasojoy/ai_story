@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from tianxia import annals  # 過渡：待搬（行狀：撿到稀世的東西、以弱勝強記一則）
 from tianxia import deeds  # 過渡：待搬（世界記事：同上）
-from tianxia import explore_one  # 過渡：待搬（探索一顆的類別與帳的寫法；Task 4 搬進這一包）
 from tianxia import journal, team
 from tianxia import materials  # 過渡：待搬（撿到的東西那一句的開頭）
 from tianxia import prologue as prologue_rules  # 過渡：待搬（序章裡不走一趟）
@@ -20,7 +19,7 @@ from tianxia import tavern as tavern_rules  # 過渡：待搬（酒肆題壁的�
 from tianxia.core.option import IDLE_MARK, Option
 from tianxia.state import PLAYER, JournalEntry, Outing, OutingBeat
 
-from . import outing_rules
+from . import explore_rules, outing_rules
 
 
 def outing_go(ctx, total: int = 0) -> list[str]:
@@ -103,9 +102,9 @@ def outing_watched(ctx, fn, *args, **kwargs):
     spent = round(stamina - p.stamina)
     grants = (n.removeprefix(materials.GRANT_PREFIX) for n in notes if n.startswith(materials.GRANT_PREFIX))
     parts = outing_rules.ledger_parts(beat.after) + list(grants) + changes + ([f"體力 -{spent}"] if spent > 0 else [])
-    items = explore_one.merge_items(x for x in parts if explore_one.is_item(x))
-    totals = journal.combine_changes([x for x in parts if not explore_one.is_item(x)])
-    beat.after = explore_one.ledger(items + [x for x in totals if journal.change_class(x) == "tx-up"],
+    items = explore_rules.merge_items(x for x in parts if explore_rules.is_item(x))
+    totals = journal.combine_changes([x for x in parts if not explore_rules.is_item(x)])
+    beat.after = explore_rules.ledger(items + [x for x in totals if journal.change_class(x) == "tx-up"],
                                     [x for x in totals if journal.change_class(x) == "tx-down"])
     return out
 
@@ -127,7 +126,7 @@ def outing_walk(ctx) -> list[str]:
             msgs = ctx.choose(IDLE_MARK)
         finally:
             ctx._outing_busy = False
-        beat, ctx._beat = ctx._beat or {"kind": explore_one.MATERIAL, "rare": False, "won": None}, None
+        beat, ctx._beat = ctx._beat or {"kind": explore_rules.MATERIAL, "rare": False, "won": None}, None
         lines = [m for m in msgs if isinstance(m, str)]
         ledger = lines[1] if len(lines) > 1 and lines[1].startswith(("得：", "失：")) else ""
         stop = IDLE_MARK not in {o.id for o in ctx.options(odds=False, tick=False)}

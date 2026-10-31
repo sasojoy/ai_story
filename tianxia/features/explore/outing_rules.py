@@ -24,10 +24,11 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
-from tianxia import explore_one  # 過渡：待搬（探索一顆的地點種類與帳的寫法；Task 4 搬進這一包）
 from tianxia.models import Content
 from tianxia.rules import jianfa
 from tianxia.state import GameState, Inscription, Outing, OutingBeat
+
+from . import explore_rules
 
 DONE, LOST, HURT, TIRED, LEFT = "done", "lost", "hurt", "tired", "left"
 # 收尾那一句（待 joy 潤）：走完不另說，結算卡自己寫「走完一趟」
@@ -116,8 +117,8 @@ def view(state: GameState, content: Content) -> dict | None:
     if trip is not None:
         out["trip"] = {
             "place": content.locations[trip.place].name if trip.place in content.locations else trip.place,
-            # 背景畫哪一套：這一處的地點種類（探索那六張表，explore_one.kind_of）
-            "scene": explore_one.kind_of(content.config.jianfa, content.locations[trip.place]).kind if trip.place in content.locations else explore_one.WILD,
+            # 背景畫哪一套：這一處的地點種類（探索那六張表，explore_rules.kind_of）
+            "scene": explore_rules.kind_of(content.config.jianfa, content.locations[trip.place]).kind if trip.place in content.locations else explore_rules.WILD,
             "n": trip.n, "total": trip.total, "done": trip.done, "end": trip.end,
             "waiting": not trip.end and bool(trip.beats) and trip.beats[-1].stop,
             "title": END_TITLES.get(trip.end, ""), "end_line": END_LINES.get(trip.end, ""),
@@ -156,8 +157,8 @@ def trip_totals(trip: Outing) -> tuple[list[str], list[str]]:
 
     parts = [x for b in trip.beats for x in ledger_parts(b.ledger) + ledger_parts(b.after)]
     spent = sum(b.spent for b in trip.beats)
-    items = explore_one.merge_items(x for x in parts if explore_one.is_item(x))
-    changes = journal.combine_changes([x for x in parts if not explore_one.is_item(x)] + ([f"體力 -{spent}"] if spent > 0 else []))
+    items = explore_rules.merge_items(x for x in parts if explore_rules.is_item(x))
+    changes = journal.combine_changes([x for x in parts if not explore_rules.is_item(x)] + ([f"體力 -{spent}"] if spent > 0 else []))
     return items, changes
 
 
