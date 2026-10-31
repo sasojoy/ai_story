@@ -17,7 +17,8 @@
   random.Random.__init__ 換成「沒給種子就用 12345 + 7919 × 步數」，Game 的預設 rng、各處沒給種子的 Random() 都是這一顆；每個請求之前
   random.seed(步數)（模組層的 random.random()），並清空 server.GAMES（每個請求重建 Game，等於每一下之間重開伺服器：
   前半＋後半跟整段才比得了）。
-- 時間：time.time 換成「CLOCK0 + 步數 × 60 秒、同一個請求裡每叫一次 +0.5 秒」；server._monotonic（斷路器）同一顆。
+- 時間：time.time 換成「CLOCK0 + 步數 × 60 秒、同一個請求裡每叫一次 +0.5 秒」；server._monotonic（鎖內模型的斷路器、大場面判讀
+  與取名的預算）讀同一顆鐘、讀的時候不往前推（不然機器慢的那一次預算先用完、斷路器開得久，結果跟著牆上的時間變）。
 - 模型：OllamaClient.from_config 照原樣建好之後換成不連網路的 client（chat_* 立刻丟連線錯誤、warm 什麼都不做；絕不打 11434）。
   大場面判讀那一步換成回固定判讀的（Judgment(advantage=8)），act:train 走 server.may_judge_fight → prepare_fight 那一條。
 - 資料庫轉成文字：每一張表、每一列（列照 repr 排序：列的先後不是行為）；帳號的 salt、hash 抹掉（每次隨機）。
@@ -211,6 +212,11 @@ def _fake_time() -> float:
     return CLOCK[0]
 
 
+def _fake_monotonic() -> float:
+    """server._monotonic：同一顆鐘，讀的時候不往前推（只有 time.time 推）。"""
+    return CLOCK[0]
+
+
 def _setup_child(root: Path, profile: str, db: Path) -> None:
     if os.environ.get("PYTHONHASHSEED") != "0":
         raise SystemExit("要帶 PYTHONHASHSEED=0 跑（compare／selftest 會自己帶）")
@@ -301,6 +307,7 @@ class Scenario:
         self.root, self.profile, self.db = root, profile, db
         import server
 
+        server._monotonic = _fake_monotonic  # 斷路器與模型預算的時鐘（server 每次叫都讀模組層的 _monotonic）
         if profile == "test":
             from tianxia.content import load_content
 
