@@ -167,9 +167,11 @@ def _dirty(annotation, default):
 
 
 @pytest.mark.parametrize("field", ["sortie_cooldown_until", "hidden_until", "escort_pick", "outing_last", "outing", "sorties_today",
-                                   "picking_audience", "visited", "letters"])
+                                   "picking_audience", "visited", "team", "affinities"])
 def test_dirty_moves_every_kind_of_field_off_its_default(field):
-    """_dirty 每一種都真的擺得出跟預設不一樣的值（還沒有包認領的那幾種也擺一次：不然補了永遠沒跑過）。"""
+    """_dirty 每一種都真的擺得出跟預設不一樣的值（還沒有包認領的那幾種也擺一次：不然補了永遠沒跑過）。只挑型別定義在 PlayerState 前面的欄位：
+    寫在後面的（letters 的 Letter）在 PlayerState 第一次建出來之前，model_fields 裡還是 ForwardRef（xdist 分到這一條先跑的那個 worker 就紅過）；
+    換季那一條先建了 Game，讀到的都是解開的型別。"""
     info = PlayerState.model_fields[field]
     default = info.get_default(call_default_factory=True)
     assert _dirty(info.annotation, default) != default

@@ -1244,6 +1244,8 @@ class DuelScenario(Scenario):
         攻方退一次出陣（同一天才退）與體力、應戰的人退一次應戰與體力，冷卻不退。"""
         for who in ("甲九", "乙五"):
             self.place(who, "juma_river")
+            # 體力擺到一半：滿的話退回來的那一下被上限與之後的回體力蓋掉，退多退少都看不出來（突變「攻方少退 1 點」抓不到過）
+            self.edit(who, lambda p: setattr(p, "stamina", 100.0))
         self.post("甲九")
         self.answer("乙五", "甲九")
         for who in ("甲九", "乙五"):
