@@ -174,7 +174,7 @@ def write(client, note: YuedanNote) -> dict[str, str]:
 def clean(raw: str, name: str = "") -> str:
     text = zh.to_traditional(str(raw or "")).strip()
     text = re.sub(r"[*#>`_\s]+", "", text).strip("「」『』\"'“”。")
-    if not (LINE_MIN <= len(text) <= LINE_MAX) or _DIGITS.search(text) or (name and name in text):
+    if not (LINE_MIN <= len(text) <= LINE_MAX) or _DIGITS.search(text) or (name and name in text) or zh.stray_latin(text):
         return ""
     return text
 

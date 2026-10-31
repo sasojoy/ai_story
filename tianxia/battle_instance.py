@@ -2134,13 +2134,13 @@ STORY_LIMIT = 60  # 劇情要模型寫 40 字內；多給一點餘裕，超過�
 _DIGITS = re.compile(r"[0-9０-９]")
 
 
-def clean_story(raw: str, name: str) -> str:
+def clean_story(raw: str, name: str, known: Sequence[str] = ()) -> str:
     """模型寫的一版劇情整理成能播的一句：轉繁體、去掉換行與 markdown、引號；有阿拉伯數字（數字只能是引擎的）、太長、
-    空的都不用（回空字串）。用「你」「妳」的也不用（FB-183：進天下大事與雙方的戰報，要第三人稱；名號裡本來就有的不算）。
+    空的都不用（回空字串）。有英文字母也不用（M-07），名號、known（玩家寫的那一句、點名的對手）裡本來就有的不算。用「你」「妳」的也不用（FB-183：進天下大事與雙方的戰報，要第三人稱；名號裡本來就有的不算）。
     不是以名號開頭的補上名號，名號後面接冒號的換成逗號，句尾補句號。"""
     text = zh.to_traditional(str(raw or ""))
     text = re.sub(r"[\s*#>`_]+", "", text).strip("「」『』\"'“”")
-    if not text or len(text) > STORY_LIMIT or _DIGITS.search(text):
+    if not text or len(text) > STORY_LIMIT or _DIGITS.search(text) or zh.stray_latin(text, name, *known):
         return ""
     if any(ch in (text.replace(name, "") if name else text) for ch in "你妳"):
         return ""
@@ -2196,7 +2196,7 @@ def assess_gamble(
     except Exception:
         return GambleVerdict(DEFAULT_FREE_TEXT_SUCCESS_RATE)
     rate = max(0, min(100, int(result.success_rate)))
-    return GambleVerdict(rate, clean_story(result.win, who), clean_story(result.lose, who))
+    return GambleVerdict(rate, clean_story(result.win, who, (text, target)), clean_story(result.lose, who, (text, target)))
 
 
 class GambleScore(BaseModel):
@@ -2304,13 +2304,14 @@ def write_tales(
     except Exception:
         return {}
     wanted = {item.name for item in items}
+    known = [n for item in items for n in (item.name, item.text, item.target)]  # 同一批的名號、寫的字（英文只能是這些裡面有的）
     lost = {item.name for item in items if not item.won}
     foes = foe_names(items, sides)
     out: dict[str, str] = {}
     for line in result.lines:
         name = str(line.name or "").strip()
         if name in wanted and name not in out:
-            story = clean_story(line.story, name)
+            story = clean_story(line.story, name, known)
             # 失手的那一句提到敵方陣營的名字就不用（Joy 2026-10-19：黃巾玩家失手卻被寫成「官軍嘔吐倒地」，
             # 文字看起來贏了、數字是自己退了一截）。提示詞本來就禁止拿陣營名當代名詞，這裡只是確定性地攔下來；
             # 攔掉的照舊播固定句（「X這一搏失敗了，付出了慘痛代價：…」），寧可平淡也不要跟數字矛盾。

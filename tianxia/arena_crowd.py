@@ -254,7 +254,7 @@ def write_line(client, note: CrowdNote) -> str:
 def clean(raw: str, must: str, names: tuple[str, ...] = ()) -> str:
     text = zh.to_traditional(str(raw or ""))
     text = re.sub(r"[\s*#>`_]+", "", text).strip("「」『』\"'“”")
-    if not text or len(text) > WRITE_LIMIT or _DIGITS.search(text) or must not in text:
+    if not text or len(text) > WRITE_LIMIT or _DIGITS.search(text) or must not in text or zh.stray_latin(text, must, *names):
         return ""
     bare = text
     for n in (must, *names):
