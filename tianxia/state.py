@@ -133,6 +133,10 @@ class OutingBeat(BaseModel):
     feat: str = ""
     feat_kind: str = ""
     foe: str = ""  # 遭遇：對手長什麼樣（outing.foe_look：huang 黃巾、guan 官兵、retainer 豪強家丁、bandit 綠林盜匪、beast 猛獸）；別的類是空字串
+    spent: int = 0  # 這一段走掉的體力（探索那一下扣的；結算卡加總成「體力 -N」）
+    # 停下來要選的事（stop）選完的得失：「得：…　失：…」，含選項另外扣的體力（Joy 10/31「獲得一袋錢（多少）（有額外扣體力？）」）；
+    # 沒有是空字串
+    after: str = ""
 
 
 class Outing(BaseModel):
