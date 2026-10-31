@@ -440,11 +440,15 @@ class Scenario:
         finally:
             team.fight = real
 
+    def relogin(self, who: str) -> None:
+        """重新登入一個帳號（後半是新的行程，記憶體裡的工作階段都不在了；整段也照樣登入，兩邊的步數才對得上）。"""
+        self.clients[who] = self.TestClient(self.server.app)
+        self.call(who, "POST", "/api/login", {"login": self.login_of(who), "password": self.passwords[who]})
+
     def login_all(self) -> None:
-        """重新登入每一個帳號（前半＋後半在這裡接：後半是新的行程，記憶體裡的工作階段都不在了；整段也照樣登入一次）。"""
+        """重新登入每一個帳號（前半＋後半在這裡接）。"""
         for who in list(self.clients):
-            self.clients[who] = self.TestClient(self.server.app)
-            self.call(who, "POST", "/api/login", {"login": self.login_of(who), "password": self.passwords[who]})
+            self.relogin(who)
 
     @staticmethod
     def login_of(who: str) -> str:
@@ -465,9 +469,11 @@ class Scenario:
         ("西門吹雪", "蕭十一郎", "yu_river"), ("楚留香", "沈浪", "lulin_zhai"),
     ]
     NEWCOMER = ("韓青川", "huang")  # pull_mark 才來的黃巾：守時撞上的混戰要一個沒被撞過（沒有護身、沒有這一對的冷卻）的人
-    PHASES_FIRST = ["setup", "prologue", "ranger", "join", "duel_on", "out_of_contest", "attack", "hold", "clash"]
-    # pull_mark 起是審查之後加的（dev/sortie-1 審查：守把對面拉下來、守時的混戰、推滿易手、截糧打贏、一類一顆之前的三成原本都沒走到）
-    PHASES_SECOND = ["resume", "used_up", "win", "pull_mark", "pull", "host", "flip", "convoy", "drill", "judge", "season"]
+    # pull_mark、pull、host、flip、drill 是審查之後加的（dev/sortie-1 審查：守把對面拉下來、守時的混戰、推滿易手、截糧打贏、
+    # 一類一顆之前的三成原本都沒走到）。前半切在 pull_mark 之後（審查：原本切點跨過去的只有今天的次數）：涿郡黃巾那一條是 90、
+    # 韓青川剛在那裡攻過（混戰的窗口開著、還沒被撞），後半第一件事就是官軍在那裡守、撞上他——正式上線就是這種舊程式寫到一半的局面。
+    PHASES_FIRST = ["setup", "prologue", "ranger", "join", "duel_on", "out_of_contest", "attack", "hold", "clash", "pull_mark"]
+    PHASES_SECOND = ["pull", "resume", "used_up", "win", "host", "flip", "convoy", "drill", "judge", "season"]
 
     def setup(self) -> None:
         from tianxia.accounts import AccountStore
@@ -681,10 +687,13 @@ class Scenario:
 
     def pull(self) -> None:
         """守時撞上混戰、守把對面拉下來：傅紅雪在涿郡守（黃巾那一條 > 0，推得動）撞上 clash_minutes 內攻過的韓青川；李尋歡接著守
-        （韓青川剛被撞過、有護身，不再撞）——兩下的回報都是「黃巾軍的進度被拉到 N／100」（撞輸的那一下白跑、照舊 90）。"""
+        （韓青川剛被撞過、有護身，不再撞）——兩下的回報都是「黃巾軍的進度被拉到 N／100」（撞輸的那一下白跑、照舊 90）。
+        這是後半的第一段：混戰的窗口只有 clash_minutes（10 分＝10 步），所以先只登入這兩位、馬上守，其餘的人等 resume 再登入。"""
         self.set_duel(False)
         if not self.contested("zhuo_county"):
             return
+        for who in ("傅紅雪", "李尋歡"):
+            self.relogin(who)
         for who in ("傅紅雪", "李尋歡"):
             if self.place(who, "zhuo_county"):
                 emit(f"{who} 守涿郡的 act:train", self.ids(self.main(who)).get("act:train"))
