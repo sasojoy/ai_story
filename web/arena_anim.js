@@ -1,7 +1,8 @@
 /* 天下大勢的網頁前端：擂台動畫（企劃者 2026-10-31「擂台也可以把走一趟的角色拿出來用，有攻擊跟受擊甚至是陣亡的動畫」）。說明見 app.js 檔頭。
  *
- * 只演、不算：每按一招，伺服器回來的擂台畫面（shop.fight）已經是這一回合打完的樣子。這裡跟上一回合比兩邊的氣血與氣勢，
- * 掉血多的那一邊受擊、另一邊出招；都沒掉血就是閃身（氣勢往哪邊倒，另一邊閃）。打完了（shop.result）在收場卡上演最後一幕：
+ * 只演、不算：每按一招，伺服器回來的擂台畫面（shop.fight）已經是這一回合打完的樣子。兩邊出了哪一招（fight.picks）照招演：
+ * 強攻衝上去劈、固守原地架住、奇襲先閃再補一下（Joy 2026-10-31）；誰挨打照兩邊的氣血比上一回合掉了多少。
+ * 不知道出了哪一招（放手一搏、舊的一場）照舊：掉血多的那一邊受擊、另一邊出招；都沒掉血就是閃身（氣勢往哪邊倒，另一邊閃）。打完了（shop.result）在收場卡上演最後一幕：
  * 大勝的輸家倒地、險勝的輸家跪地、僵持兩邊各出一招收手、落敗的你氣血見底倒地不然跪地。
  * 圖（web/img/arena/）是 Joy 10/31 生的斗笠小子：人畫空手，兵器另外一件一件畫，照每一格手的位置與角度疊上去（設計稿乙案）。
  * 兵器種類照伺服器的 looks（models.WEAPON_KINDS：劍、刀、槍、棍、弓弩、拳腳；空字串＝空手），四種打法各一張出招圖。
@@ -117,19 +118,43 @@
     cx.restore();
   }
 
-  // 一幕：兩個人各自的動作 {sheet, at（第幾毫秒開始）, dur, keep（演完停在最後一格）}；之前是站著，之後回到站著（keep 的除外）
+  // 一幕：兩個人各自的一串動作 [{sheet, at（第幾毫秒開始）, dur, keep（演完停在最後一格）, lunge（往前衝幾點，負的是往後退）}]；
+  // 同一刻有兩個在演，後開始的那一個算（受擊蓋掉自己還沒演完的招）。之前、之後是站著（keep 的除外）
   const ringIdle = () => ({ sheet: "hero_bare_idle", loop: true });
-  const ringAct = (sheet, at, dur, keep = false) => ({ sheet, at, dur, keep });
-  function ringStrike(who, hurt) { // who 出手、另一邊受擊（hurt）或閃開
-    const other = who === "me" ? "foe" : "me", look = RA.looks[who];
+  const ringAct = (sheet, at, dur, keep = false, lunge = 0) => ({ sheet, at, dur, keep, lunge });
+  const RING_HIT = (at) => ringAct("hero_bare_hit", at, 380, false, -18);
+  function ringStrike(who, hurt) { // 不知道出了哪一招（舊的一場、放手一搏）：who 出手、另一邊受擊（hurt）或閃開
+    const other = who === "me" ? "foe" : "me";
     const beat = { dur: 900 };
-    beat[who] = ringAct(ringAtk(look), 0, 560);
-    beat[other] = ringAct(hurt ? "hero_bare_hit" : "hero_bare_dodge", 300, hurt ? 380 : 440);
-    beat.lunge = who;
+    beat[who] = [ringAct(ringAtk(RA.looks[who]), 0, 560, false, 44)];
+    beat[other] = [hurt ? RING_HIT(300) : ringAct("hero_bare_dodge", 300, 440)];
     return beat;
   }
-  // 這一回合跟上一回合比：誰掉了血
-  function ringExchange(a, b) {
+  // 照出的招演（Joy 2026-10-31「強攻固守奇襲應該對應不同的動作」）：強攻大步衝上去整套劈下；固守原地架住（打中他的是架開之後回的那一下）；
+  // 奇襲先側身閃開、再貼近補一下快的。誰挨打照氣血（伺服器算好的），出手那一下打到的時候挨打的那一邊受擊
+  function ringPlan(who, pick, deals) {
+    const atk = ringAtk(RA.looks[who]);
+    if (pick === "強攻") return { acts: [ringAct(atk, 0, 640, false, 64)], hit: 330 };
+    if (pick === "奇襲") return { acts: [ringAct("hero_bare_dodge", 0, 360, false, -14), ringAct(atk, 360, 440, false, 52)], hit: 590 };
+    const guard = ringAct("hero_bare_guard", 0, deals ? 520 : 760, false, -4); // 固守
+    return deals ? { acts: [guard, ringAct(atk, 520, 420, false, 34)], hit: 720 } : { acts: [guard], hit: -1 };
+  }
+  function ringPicked(a, b, pick) {
+    const dMe = a.me - b.me, dFoe = a.foe - b.foe, tol = 0.5;
+    const hurt = { me: dMe > tol, foe: dFoe > tol };
+    const plan = { me: ringPlan("me", pick[0], hurt.foe), foe: ringPlan("foe", pick[1], hurt.me) };
+    const beat = { dur: 1250 };
+    for (const [side, other] of [["me", "foe"], ["foe", "me"]]) {
+      const hit = hurt[side] ? plan[other].hit : -1;
+      const acts = plan[side].acts.filter((x) => hit < 0 || x.at < hit); // 挨打之後還沒出的那一下就不出了（奇襲閃到一半被劈中）
+      if (hit >= 0) acts.push(RING_HIT(hit));
+      beat[side] = acts;
+    }
+    return [beat];
+  }
+  // 這一回合跟上一回合比：知道兩邊出了哪一招就照招演，不然照誰掉了血
+  function ringExchange(a, b, pick) {
+    if (pick && RING_PICKS.has(pick[0]) && RING_PICKS.has(pick[1])) return ringPicked(a, b, pick);
     const dMe = a.me - b.me, dFoe = a.foe - b.foe, tol = 0.5;
     if (dMe > tol && dFoe > tol) return dMe > dFoe ? [ringStrike("me", true), ringStrike("foe", true)] : [ringStrike("foe", true), ringStrike("me", true)];
     if (dFoe > tol) return [ringStrike("me", true)];
@@ -138,14 +163,17 @@
     if (b.edge < a.edge) return [ringStrike("foe", false)];
     return [];
   }
-  // 收場：照結果演最後一幕，倒地、跪地的那一邊停在最後一格
-  function ringFinale(tier, low) {
+  const RING_PICKS = new Set(["強攻", "固守", "奇襲"]);
+  // 收場：照結果演最後一幕，倒地、跪地的那一邊停在最後一格；贏的那一邊照最後一回合出的招出手
+  function ringFinale(tier, low, pick) {
     if (tier === "僵持") return [ringStrike("me", false), ringStrike("foe", false)];
     const won = tier === "大勝" || tier === "險勝", who = won ? "me" : "foe", loser = won ? "foe" : "me";
     const down = won ? tier === "大勝" : low;
-    const beat = { dur: 1500, lunge: who };
-    beat[who] = ringAct(ringAtk(RA.looks[who]), 0, 560);
-    beat[loser] = ringAct(down ? "hero_bare_fall" : "hero_bare_kneel", 300, down ? 900 : 640, true);
+    const mine = pick && RING_PICKS.has(pick[won ? 0 : 1]) ? pick[won ? 0 : 1] : "強攻";
+    const plan = ringPlan(who, mine, true);
+    const beat = { dur: Math.max(1500, plan.hit + 1100) };
+    beat[who] = plan.acts;
+    beat[loser] = [ringAct(down ? "hero_bare_fall" : "hero_bare_kneel", plan.hit, down ? 900 : 640, true)];
     return [beat];
   }
 
@@ -159,14 +187,14 @@
       RA.looks = f.looks || { me: "", foe: "", me_look: "", foe_look: "" };
       const now = { id: f.id, round: f.round, me: f.me.hp, foe: f.foe_hp.hp, cap: f.me.cap, edge: f.edge };
       const p = RA.prev;
-      if (p && p.id === now.id && now.round > p.round) RA.q.push(...ringExchange(p, now));
+      if (p && p.id === now.id && now.round > p.round) RA.q.push(...ringExchange(p, now, (f.picks || [])[now.round - 2]));
       else if (!p || p.id !== now.id) { RA.q = []; RA.cur = null; RA.hold = null; }
       RA.prev = now;
     } else if (r && RA.finaleFor !== r.id) {
       RA.looks = r.looks || RA.looks;
       RA.finaleFor = r.id;
       const p = RA.prev && RA.prev.id === r.id ? RA.prev : null;
-      RA.q = ringFinale(r.tier, !p || p.me <= p.cap * 0.25);
+      RA.q = ringFinale(r.tier, !p || p.me <= p.cap * 0.25, (r.picks || [])[(r.picks || []).length - 1]);
       RA.cur = null;
       RA.hold = null;
     }
@@ -179,8 +207,9 @@
   function ringStop() { if (RA.raf && typeof cancelAnimationFrame === "function") cancelAnimationFrame(RA.raf); RA.raf = 0; }
   function ringSettle(beat) { // 一幕演完：倒地、跪地的停在最後一格
     for (const side of ["me", "foe"]) {
-      const a = beat[side];
-      if (a && a.keep) { RA.hold = RA.hold || {}; RA.hold[side] = { sheet: a.sheet, i: RING_SHEETS[a.sheet] - 1 }; }
+      for (const a of [].concat(beat[side] || [])) {
+        if (a.keep) { RA.hold = RA.hold || {}; RA.hold[side] = { sheet: a.sheet, i: RING_SHEETS[a.sheet] - 1 }; }
+      }
     }
   }
 
@@ -211,21 +240,27 @@
     cx.fillRect(110, RING_GY + 10, RING_W - 220, 18);
     const beat = RA.cur ? RA.cur.beat : null;
     const sides = [["me", RING_X[0], false], ["foe", RING_X[1], true]];
+    const active = (side) => { // 這一刻在演的那一個（同一刻兩個在演，後開始的算）；演完了、keep 的停在最後一格
+      let on = null, kept = null;
+      for (const a of [].concat((beat && beat[side]) || [])) {
+        if (el >= a.at && el < a.at + a.dur && (!on || a.at >= on.at)) on = a;
+        else if (a.keep && el >= a.at + a.dur) kept = a;
+      }
+      return on ? { a: on, k: (el - on.at) / on.dur } : kept ? { a: kept, k: 1 } : null;
+    };
+    const now2 = { me: active("me"), foe: active("foe") };
     // 出手的那一個畫在後面（蓋在上面）
-    if (beat && beat.lunge === "me") sides.reverse();
+    if (now2.me && now2.me.a.sheet.startsWith("hero_atk_")) sides.reverse();
     for (const [side, x, flip] of sides) {
       let sheet = "hero_bare_idle", i = Math.floor(now / 230) % 4, lunge = 0, fxAt = -1;
-      const a = beat && beat[side];
-      if (a && el >= a.at && el < a.at + a.dur) {
-        const k = (el - a.at) / a.dur;
-        if (a.sheet.startsWith("hero_atk_")) fxAt = k;
+      const got = now2[side];
+      if (got) {
+        const { a, k } = got;
         sheet = a.sheet;
-        i = Math.floor(k * RING_SHEETS[sheet]);
-        if (beat.lunge === side) lunge = Math.sin(k * Math.PI) * 44;
-        else if (sheet === "hero_bare_hit") lunge = -Math.sin(k * Math.PI) * 18;
-      } else if (a && a.keep && el >= a.at + a.dur) {
-        sheet = a.sheet;
-        i = RING_SHEETS[sheet] - 1;
+        if (sheet === "hero_bare_guard" && !RING_SHEETS.hero_bare_guard) { sheet = "hero_bare_dodge"; i = k < 0.15 ? 0 : 1; } // 格擋的圖還沒到：借閃避往後架的那一格
+        else i = Math.min(RING_SHEETS[sheet] - 1, Math.floor(k * RING_SHEETS[sheet]));
+        if (k < 1) lunge = Math.sin(k * Math.PI) * (a.lunge || 0);
+        if (sheet.startsWith("hero_atk_") && k < 1) fxAt = k;
       } else if (RA.hold && RA.hold[side]) {
         sheet = RA.hold[side].sheet;
         i = RA.hold[side].i;

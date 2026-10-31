@@ -527,6 +527,7 @@ class ArenaFight(BaseModel):
     looks: list[str] = Field(default_factory=list)  # 擂台動畫：[挑的人, 分身] 手上兵器的種類（models.WEAPON_KINDS；空字串＝空手）；舊的一場沒有
     skins: list[str] = Field(default_factory=list)  # 擂台形象：[挑的人, 分身] 穿哪一套（content/looks.json 的 id；空字串＝斗笠小子）；舊的一場沒有
     fx: list[str] = Field(default_factory=list)  # 招式動畫：[挑的人, 分身] 出招疊哪一張光效（m<購買 id>；空字串＝沒有）；舊的一場沒有
+    picks: list[list[str]] = Field(default_factory=list)  # 擂台動畫：每回合 [你出的, 他出的]（強攻／固守／奇襲；出不了手是空字串；放手一搏是 ["搏", ""]）；只給畫面
 
 
 class ArenaResult(BaseModel):
@@ -540,6 +541,7 @@ class ArenaResult(BaseModel):
     looks: list[str] = Field(default_factory=list)  # 擂台動畫：照 ArenaFight.looks 抄（收場卡演最後一幕）
     skins: list[str] = Field(default_factory=list)  # 擂台形象：照 ArenaFight.skins 抄
     fx: list[str] = Field(default_factory=list)  # 招式動畫：照 ArenaFight.fx 抄
+    picks: list[list[str]] = Field(default_factory=list)  # 擂台動畫：照 ArenaFight.picks 抄（收場那一幕照最後一回合演）
 
 
 class ArenaReport(BaseModel):

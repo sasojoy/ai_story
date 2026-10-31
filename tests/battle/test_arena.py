@@ -543,3 +543,16 @@ def test_the_fight_and_the_result_carry_both_looks(ring, monkeypatch):
     assert game.shop_view()["fight"]["looks"] == {"me": "", "foe": "", "me_look": "", "foe_look": "moying", "me_fx": "", "foe_fx": ""}
     _, game = _fight(content, world)
     assert game.shop_view()["result"]["looks"]["foe_look"] == "moying"
+
+
+def test_each_round_records_both_picks_for_the_animation(ring):
+    """擂台動畫照出的招演（Joy 2026-10-31）：每回合記 [你出的, 他出的]，打的那一頁與收場卡都給網頁；數字不看它。"""
+    content, world = ring
+    _join(content, world, "乙")
+    _join(content, world, "甲")
+    _, game = _do(content, world, "甲", lambda g: g.choose("act:arena") + g.choose("arena:fight:乙") + g.choose("arena:強攻"))
+    picks = game.shop_view()["fight"]["picks"] if game.state.player.arena else game.shop_view()["result"]["picks"]
+    assert picks[0][0] == "強攻" and picks[0][1] in MOVES
+    _, game = _fight(content, world, moves=["固守"])  # 同一場打完
+    result = game.shop_view()["result"]["picks"]
+    assert [p[0] for p in result] == ["強攻"] + ["固守"] * (len(result) - 1) and len(result) > 1

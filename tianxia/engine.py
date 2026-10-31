@@ -14063,6 +14063,7 @@ class Game:
             f"第 {fight.round + 1} 回合：你{out.mine or '出不了手'}，他{out.his or '出不了手'}——{duel_rules.COUNTER_WORDS[out.beat]}。"
             f"（氣勢 {out.delta:+d}，你氣血 {-out.mine_hp:+d}，他氣血 {-out.foe_hp:+d}）", out.lines,
         )
+        fight.picks.append([out.mine or "", out.his or ""])  # 擂台動畫：兩邊照出的招演
         return self._arena_after(line, self._arena_crowd(move=out.mine or "", his=out.his or ""))
 
     def _arena_gamble(
@@ -14094,6 +14095,7 @@ class Game:
         if not story:
             story = f"你放手一搏：「{text}」——{'成了！' if won else '沒成，反倒露了破綻。'}"
         line = tactics.round_line(f"第 {fight.round + 1} 回合：{story}（氣勢 {delta:+d}，你氣血 {-hp:+d}）", fired)
+        fight.picks.append(["搏", ""])  # 擂台動畫：放手一搏照氣勢與氣血演
         return self._arena_after(line, self._arena_crowd(label=crowd, move=text))
 
     def _arena_after(self, line: str, crowd: str | None = None) -> list[str]:
@@ -14154,7 +14156,8 @@ class Game:
         self._write(title, msgs, tag=battlelog.outcome_text(record))
         # 收場之後回到擂台那一頁（擂台獨立一頁，Joy 2026-10-14「擂台應該要是獨立的一頁」）：收場卡照 arena_last 畫
         p.arena_last = ArenaResult(id=fight.id, foe=fight.foe.name, tier=tier, lines=list(fight.lines), changes=list(record.changes),
-                                   looks=list(fight.looks), skins=list(fight.skins), fx=list(fight.fx))
+                                   looks=list(fight.looks), skins=list(fight.skins), fx=list(fight.fx),
+                                   picks=list(fight.picks))
         p.picking_arena = arena.here(s, c)
         won = tier in team.WIN_TIERS
         annals.note(s, c, annals.FIGHT, f"上擂台挑{fight.foe.name}，{tier}。", 2 if won else 1, keep=[fight.foe.name])
