@@ -242,15 +242,17 @@ GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；�
     "sortie_join": "出陣約戰（第 2 批搬）：同去（sortie.spend）",
 }
 GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）
+    # explore（主動搬六包第 3＋4 批；審查修正：獨立一段放最前面，不夾在出陣那幾行中間）：核心叫探索委派一共 9 對，掃描看得到這 2 對；
+    # 另外 7 對的呼叫端本身在 GAME_DIRECT 裡——(_act, _outing_on)、(_act, _explore_one)、(_everyday_options, _outing_on)、
+    # (_everyday_options, _outing_option)、(action_notes, _outing_on)、(action_notes, _outing_plan)、(map_state, map_mostly)：
+    # dev/sortie-2 把掃描改成連 GAME_DIRECT 的方法裡叫的也記，合併之後補進來。
+    # 出陣第 1 批記的 (_outing_foe, _sortie_host) 拿掉了（下面出陣那一段少了那一行）：_outing_foe 進了探索包，經 ctx._sortie_host 叫
+    # （服務清單二、查詢服務）
+    ("_action_title", "_outing_on"): "這一下的紀錄標題先算（act:explore 是核心的前綴：探索一顆開著寫「出門一趟・某地」，關著寫「探索某地」）",
+    ("map_base", "map_mostly"): "輿圖的底圖：名字旁的兩個字照看的人站過去之後的比重（探索一顆開著時；輿圖的線還在飛，這一輪不碰）",
     ("own_turn_checks", "_mall_grant"): "封測元寶每一輪發（本人這一輪沒有掛鉤；on_sync 不夠：假人程式的那一輪不 sync）",
     # 出陣（主動搬六包第 1 批）。核心叫出陣委派一共 21 對：另外 15 對的呼叫端本身在 GAME_DIRECT 裡（掃描對它們不另記）
     ("_action_title", "_train_title"): "這一下的紀錄標題先算（act:train 是核心的前綴，標題照出陣開著沒、序章寫出陣／雪恥／遊歷）",
-    # explore（主動搬六包第 3＋4 批）：核心叫探索委派一共 9 對，掃描看得到這 2 對；另外 7 對的呼叫端本身在 GAME_DIRECT 裡——(_act, _outing_on)、
-    # (_act, _explore_one)、(_everyday_options, _outing_on)、(_everyday_options, _outing_option)、(action_notes, _outing_on)、
-    # (action_notes, _outing_plan)、(map_state, map_mostly)：dev/sortie-2 把掃描改成連 GAME_DIRECT 的方法裡叫的也記，合併之後補進來。
-    # 出陣第 1 批記的 (_outing_foe, _sortie_host) 拿掉了：_outing_foe 進了探索包，經 ctx._sortie_host 叫（服務清單二、查詢服務）
-    ("_action_title", "_outing_on"): "這一下的紀錄標題先算（act:explore 是核心的前綴：探索一顆開著寫「出門一趟・某地」，關著寫「探索某地」）",
-    ("map_base", "map_mostly"): "輿圖的底圖：名字旁的兩個字照看的人站過去之後的比重（探索一顆開著時；輿圖的線還在飛，這一輪不碰）",
     ("_duel_report", "_sortie_rewards"): "出陣約戰（第 2 批搬）：結算時攻方打贏給出陣的獎勵",
     ("_duel_report", "sorties_left"): "出陣約戰（第 2 批搬）：約戰卡上今天還能出陣幾次",
     ("sortie_card", "sorties_left"): "出陣約戰（第 2 批搬）：出陣前那張卡",
