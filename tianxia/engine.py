@@ -22,7 +22,7 @@ from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import chapters  # 章回主線（企劃者 2026-10-29）
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, create, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
-    deeds, fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, plans,
+    deeds, fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, plans,
     materials, mounts, naming, newbie, server_bots, opportunities, orders, parley, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, siege, signature, signature_arms, silver, skillview, smithing,
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, xingshi, zh, yuedan,
@@ -85,7 +85,7 @@ from .rules import (
     GEJU, HUANGJIN, add_chronicle, add_marks, add_rumor, add_season_rumor, add_world_flags, display_name, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
     check_gap, check_result_line,
     day_turn, ears_of, evil_success, failed, fill_marks, free_text_rate, game_day, geju_resisted, here_regions,
-    can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
+    chaos_fronts, chaos_note, front_chip, front_ids, front_of, humanize, in_chaos,
     is_revealed, learn_skill, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stance_rule_note, stance_sum_note, stances, stat_rate, trend_name, trend_shown, trend_value,
     world_day, world_trend_value,
