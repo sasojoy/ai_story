@@ -734,6 +734,96 @@ def test_fb9070_every_frame_runs_round_the_whole_block_you_can_see():
         assert xq["region"] > 0.5, xq  # 這一條咬得到：下曲陽看得到的外框一半以上在區界上
 
 
+# FB-9071：地的 key 以前是「抓疊層的時間」（S.mapStateAt），輪詢每重抓一次（在路上每 10 秒、平常每 30 秒）#mk 就整張重寫一次。現在 key 是地
+# 真的會畫的那幾樣（groundLook）＋級距：疊層重抓了、地上畫的沒變就不重寫；該換的每一樣都換。每一種改法都比 groundSvg 吐出來的變了沒有：
+# 「重寫了」要等於「畫出來的變了」——漏了一欄就會該換不換，多看一欄就會白寫。
+def _ground_writes(game, st, cases):
+    """cases：[(名字, 先改什麼, 再改什麼, 看哪一週〔None＝現在〕)]，改法是 [(路徑, 值)]，值 "__del__" 是刪掉那一欄。每一種：疊層照「先改」
+    畫一次地、換成「再改」的疊層（像輪詢重抓了一次：loadMap 換掉 S.mapState、S.mapStateAt 記成此刻）再叫一次 groundShow，
+    回 {名字: [重寫了幾次, groundSvg 吐出來的變了沒有]}。"""
+    return run(game, """
+const writes = [], mk = {};
+Object.defineProperty(mk, 'innerHTML', { set: (v) => { writes.push(v); }, get: () => writes[writes.length - 1] || '' });
+const doc = T.ctx.document, byId = doc.getElementById;
+doc.getElementById = (id) => (id === 'mk' ? mk : byId(id));
+const orig = JSON.stringify(H.S.mapState), cam = { z: 1.2, x: 0, y: 0 };
+const edit = (st, changes) => { for (const [path, v] of changes) { let o = st; for (const p of path.slice(0, -1)) o = o[p]; if (v === '__del__') delete o[path[path.length - 1]]; else o[path[path.length - 1]] = JSON.parse(JSON.stringify(v)); } return st; };
+const out = {};
+for (const [name, before, after, week] of CASES) {
+  H.S.mapWeek = week;
+  const a = edit(JSON.parse(orig), before), b = edit(edit(JSON.parse(orig), before), after), wk = (st) => week || st.now_week;
+  H.S.mapState = a; H.S.mapStateAt += 1; H.groundShow(cam);
+  const n = writes.length;
+  H.S.mapState = b; H.S.mapStateAt += 1; H.groundShow(cam);
+  out[name] = [writes.length - n, H.groundSvg(H.S.mapBase, a, 1, wk(a)) !== H.groundSvg(H.S.mapBase, b, 1, wk(b))];
+}
+return out;""".replace("CASES", json.dumps(cases, ensure_ascii=False)), st=st)
+
+
+@pytest.mark.slow  # 單一條超過一秒（三十幾種改法）
+def test_fb9071_the_land_is_rewritten_when_what_it_draws_changes_and_only_then():
+    """地讀的每一欄（主人、正在翻的那一方、冷卻、戰書、可出陣、必敗〔suggest 的 lose、不在 suggest 裡的勝算字、護糧車〕、你在哪、在不在路上、
+    哪些地點開著、現在第幾週〔看的是某一週時〕、以前那一週的主人）改了都重寫一次；地不讀的（分鐘、危險度、寶、路、激戰、人物、懸賞、
+    翻到幾成、冷卻還剩幾分鐘、在路上還剩幾分鐘與紅點的位置、必敗以外的勝算字、本週軍令、體力……）改了不重寫。"""
+    game = _game(profile="season21")
+    st = _cover_state(game)
+    P = lambda *path: ["places", *path]  # noqa: E731
+    road = [(["journey"], {"to": "changshe", "x": 400, "y": 1000, "minutes": 9})]
+    past = [(["now_week"], 2), (["weeks"], [{"week": 1, "control": {x: q["control"] for x, q in st["places"].items()}}])]
+    used = [
+        ("control", [], [(P("changshe", "control"), "huang")], None),
+        ("control to nobody", [], [(P("changshe", "control"), None)], None),
+        ("tug starts", [], [(P("changshe", "tug"), {"huang": 10})], None),
+        ("tug ends", [], [(P("runan_wilds", "tug"), None)], None),
+        ("tug side", [(P("yu_river", "tug"), {"guan": 30})], [(P("yu_river", "tug"), {"huang": 30})], None),
+        ("cool starts", [], [(P("changshe", "cool"), 50)], None),
+        ("cool ends", [], [(P("hilltop_wilds", "cool"), None)], None),
+        ("letter", [], [(P("changshe", "siege"), "letter")], None),
+        ("letter to fight", [], [(P("yingchuan_academy", "siege"), "fight")], None),
+        ("sortie", [], [(P("changshe", "sortie"), "attack")], None),
+        ("sortie ends", [], [(P("nanyang_road", "sortie"), None)], None),
+        ("lose in suggest", [(P("hilltop_wilds", "odds"), {"word": "穩勝", "tone": "safe"})], [(["suggest"], [])], None),
+        ("odds word of a sortie", [], [(P("nanyang_wilds", "odds"), {"word": "穩勝", "tone": "safe"})], None),
+        ("convoy", [], [(P("nanyang_wilds", "convoy"), {"side": "huang"})], None),
+        ("here", [], [(["here"], "changshe")], None),
+        ("journey", [], road, None),
+        ("place closed", [], [(P("changshe"), "__del__")], None),
+        ("now week while looking at one", [], [(["now_week"], 2)], 1),
+        ("past week control", past, [(["weeks", 0, "control", "changshe"], "huang")], 1),
+    ]
+    unused = [
+        ("refetched, nothing changed", [], [], None),
+        ("refetched on the road, nothing changed", road, [], None),
+        ("minutes", [], [(P("changshe", "minutes"), 99)], None),
+        ("danger", [], [(P("changshe", "danger"), 3)], None),
+        ("rich", [], [(P("changshe", "rich"), True)], None),
+        ("path", [], [(P("changshe", "path"), ["yingchuan", "changshe"])], None),
+        ("melee", [], [(P("changshe", "melee"), True)], None),
+        ("people", [], [(P("changshe", "people"), ["某人"])], None),
+        ("bounty", [], [(P("changshe", "bounty"), 5)], None),
+        ("tug progress", [], [(P("runan_wilds", "tug"), {"guan": 70})], None),
+        ("cool minutes", [], [(P("hilltop_wilds", "cool"), 39)], None),
+        ("odds word not lose", [(P("nanyang_wilds", "odds"), {"word": "穩勝", "tone": "safe"})], [(P("nanyang_wilds", "odds"), {"word": "有把握", "tone": "safe"})], None),
+        ("odds of a place you cannot sortie", [], [(P("changshe", "odds"), {"word": "必敗", "tone": "risk"})], None),
+        ("siege fight", [], [(P("changshe", "siege"), "fight")], None),
+        ("on the road", road, [(["journey", "minutes"], 5), (["journey", "x"], 420), (["journey", "y"], 990)], None),
+        ("suggest minutes", [], [(["suggest", 0, "minutes"], 30), (["suggest", 0, "score"], -30)], None),
+        ("week order", [], [(["week"], {"id": "changshe", "why": "軍令・守城", "minutes": 6})], None),
+        ("stamina", [], [(["stamina"], 1)], None),
+        ("past weeks while looking at now", [], [(["weeks"], [{"week": 1, "control": {}}])], None),
+    ]
+    got = _ground_writes(game, st, [list(c) for c in used + unused])
+    assert {name: got[name] for name, *_ in used} == {name: [1, True] for name, *_ in used}
+    assert {name: got[name] for name, *_ in unused} == {name: [0, False] for name, *_ in unused}
+    # 每一處、每一欄、疊層每一個鍵：拿掉（設成 null）之後，重寫了 ⇔ 畫出來的變了
+    keys = sorted({k for q in st["places"].values() for k in q})
+    generic = [[f"places.{x}.{k}", [], [[P(x, k), None]], None] for k in keys for x in [x for x in sorted(st["places"]) if st["places"][x].get(k)][:3]]
+    generic +=[[f"top.{k}", [], [[[k], None]], None] for k in sorted(st) if k not in {"places", "now_week", "key"} and st[k]]
+    got = _ground_writes(game, st, generic)
+    assert {n: (w == 1) == ch and w <= 1 for n, (w, ch) in got.items()} == {n: True for n in got}, {n: v for n, v in got.items() if (v[0] == 1) != v[1]}
+    assert sum(ch for _, ch in got.values()) >= 10  # 拿掉之後真的會變的不少（主人、可出陣、你在哪……）
+
+
 def _land_spot(base, loc, dxs, dys):
     """那一處的地上（地塊裡、區界裡、不在任何圓上）離小圖 (dx, dy) 的第一個點（地圖座標）。"""
     cell = next(c for c in base["world"]["cells"] if c["id"] == loc)
