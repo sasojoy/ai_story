@@ -6,7 +6,8 @@
 - 數字、清單、選項用 JSON；引擎寫的大段文字（場景、事件、角色卡、戰報）是 Markdown，
   在這裡轉成 HTML 再送出（`md()`，原始 HTML 一律跳脫，名號裡的 `<` 不會變成標籤）。
   江湖紀錄、地圖沿用引擎產生的 HTML／SVG（線上架構設計第七節的混合做法）。
-- 登入狀態放在 cookie（`tx_session`），伺服器記憶體裡對應到帳號；重開伺服器要重新登入。
+- 登入狀態放在 cookie（`tx_session`），資料庫的 sessions 表只存它的雜湊、對應到帳號（`accounts.SessionStore`，審查 S-10）；
+  重開伺服器不必重新登入。
 - 資料庫是唯一的真實來源；同一個角色在伺服器上只有一份 `Game`（`GAMES`），每次進行動鎖都先從資料庫
   重讀角色（`_locked`）：同一個帳號開兩個分頁、換手機再登入，看到的都是最新存好的那一份，
   動作中途出錯撤回時，做到一半的改動也不會被下一個請求存回去（線上架構設計 5.1）。
@@ -48,6 +49,7 @@ import time
 import traceback
 import unicodedata
 import weakref
+from urllib.parse import urlsplit
 from collections import deque
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -69,7 +71,7 @@ from tianxia import (
     precise, seal, seal_duel, server_bots, social, sortie, speech, tale, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
     zhuan_end,
 )
-from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
+from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, SESSION_SECONDS, AccountError, AccountStore, SessionStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
 from tianxia.characters import name_key, open_characters
 from tianxia.database import default_path, open_database
@@ -142,7 +144,35 @@ REPORT_EMPTY_TEXT = "還沒有戰報。打一場遭遇戰或劇情戰之後，�
 _MD = MarkdownIt("commonmark", {"html": False, "breaks": True}).enable("table")
 
 LOGIN_FAILURES: dict[str, list[float]] = {}  # 擋猜密碼的紀錄，整個伺服器共用、只放記憶體（帳號密碼登入設計第三節）
-SESSIONS: dict[str, str] = {}  # cookie → 帳號（normalize 過的）
+REGISTRATIONS: dict[str, list[float]] = {}  # 註冊的次數（來源 IP → 最近一小時註冊成功的時間），只放記憶體（審查 S-10）
+REGISTER_LIMIT = 5  # 同一個來源 IP 一小時最多註冊幾個帳號
+REGISTER_WINDOW = 3600.0
+TOO_MANY_REGISTERS = "這個網路註冊太多帳號了，請一小時後再試。"
+_REGISTER_LOCK = threading.Lock()
+
+
+class _Sessions:
+    """cookie → 帳號（normalize 過的）：存在資料庫（accounts.SessionStore，審查 S-10），重開伺服器照樣認得。
+    每次都照當下的資料庫開（測試每個換一個暫存檔）；介面照以前的 dict 留著 get／pop／clear。"""
+
+    @staticmethod
+    def _store() -> SessionStore:
+        return SessionStore(open_database())
+
+    def get(self, token: str | None) -> str | None:
+        return self._store().get(token)
+
+    def create(self, account_key: str) -> str:
+        return self._store().create(account_key)
+
+    def pop(self, token: str | None, default: str | None = None) -> str | None:
+        return self._store().pop(token, default)
+
+    def clear(self) -> None:
+        self._store().clear()
+
+
+SESSIONS = _Sessions()
 # 名號（casefold）→ 這個角色在伺服器上唯一的一份 Game。GAMES 只決定「這個角色的 Game 物件放在哪裡」，
 # 不是存檔：資料庫才是真實來源，每次進行動鎖都把這份 Game 的 state 換成資料庫裡存好的那一列（見 _locked）。
 GAMES: dict[str, Game] = {}
@@ -2489,11 +2519,54 @@ def _warm_model() -> None:
     client.warm()  # warm 自己在背景執行緒裡跑到模型載完（見 OllamaClient.warm），這裡不會被擋住
 
 
-def _start_session(response: Response, account_key: str) -> None:
-    token = secrets.token_urlsafe(32)
-    SESSIONS[token] = account_key
+LOOPBACK = ("127.0.0.1", "::1", "localhost")
+
+
+def client_ip(request: Request) -> str:
+    """這個請求從哪個 IP 來（註冊的次數照它算）。走固定網域時 cloudflared 在這台機器上轉進來，直接連線的一端永遠是本機，
+    真正的來源在 Cloudflare 加的 CF-Connecting-IP；只有直接連線的一端是本機時才認那個標頭（--lan 的時候外面的人
+    自己帶一個 CF-Connecting-IP 也騙不了）。都沒有就是空字串。"""
+    peer = request.client.host if request.client is not None else ""
+    forwarded = (request.headers.get("cf-connecting-ip") or "").strip()
+    if forwarded and peer in LOOPBACK:
+        return forwarded
+    return peer
+
+
+def via_https(request: Request) -> bool:
+    """這個請求是不是走 https 來的：直接 https，或 cloudflared 轉進來時標的 X-Forwarded-Proto: https。"""
+    return request.url.scheme == "https" or (request.headers.get("x-forwarded-proto") or "").strip().lower() == "https"
+
+
+def cookie_secure(request: Request) -> bool:
+    """cookie 要不要加 Secure（審查 S-10）：請求走 https 來的（via_https），或公開網址（TIANXIA_PUBLIC_URL）是 https、而這個請求
+    就是衝著那個網域來的（隧道沒標 X-Forwarded-Proto 也照樣加）。主機在這台電腦上開 http://127.0.0.1:7861、--lan 時區網用
+    http 連，都不是那個網域：不加，照樣登入得了（加了的話瀏覽器在 http 上直接丟掉這個 cookie）。"""
+    if via_https(request):
+        return True
+    public = urlsplit(os.environ.get(PUBLIC_URL_ENV) or "")
+    return public.scheme == "https" and bool(public.hostname) and request.url.hostname == public.hostname
+
+
+def _register_allowed(ip: str, now: float) -> bool:
+    """這個 IP 這一小時還能不能註冊（REGISTER_LIMIT）；只看，不記。"""
+    with _REGISTER_LOCK:
+        recent = [t for t in REGISTRATIONS.get(ip, []) if now - t < REGISTER_WINDOW]
+        REGISTRATIONS[ip] = recent
+        return len(recent) < REGISTER_LIMIT
+
+
+def _registered(ip: str, now: float) -> None:
+    with _REGISTER_LOCK:
+        REGISTRATIONS.setdefault(ip, []).append(now)
+
+
+def _start_session(request: Request, response: Response, account_key: str) -> None:
+    token = SESSIONS.create(account_key)
     _warm_model()
-    response.set_cookie(COOKIE, token, httponly=True, samesite="lax", max_age=30 * 86400)
+    response.set_cookie(
+        COOKIE, token, httponly=True, samesite="lax", max_age=SESSION_SECONDS, secure=cookie_secure(request),
+    )
 
 
 def _entry(account_key: str) -> dict:
@@ -2565,16 +2638,21 @@ def me(request: Request):
 
 
 @app.post("/api/login")
-def api_login(response: Response, body: dict = Body(...)):
+def api_login(request: Request, response: Response, body: dict = Body(...)):
     key = login(body.get("login", ""), body.get("password", ""))
-    _start_session(response, key)
+    _start_session(request, response, key)
     return _entry(key)
 
 
 @app.post("/api/register")
-def api_register(response: Response, body: dict = Body(...)):
+def api_register(request: Request, response: Response, body: dict = Body(...)):
+    """註冊。同一個來源 IP 一小時最多 REGISTER_LIMIT 個帳號（審查 S-10）：超過了回 TOO_MANY_REGISTERS，跟其他註冊錯誤一樣。"""
+    ip, now = client_ip(request), time.time()
+    if not _register_allowed(ip, now):
+        raise GameError(TOO_MANY_REGISTERS)
     key = register(body.get("login", ""), body.get("password", ""), body.get("again", ""))
-    _start_session(response, key)
+    _registered(ip, now)
+    _start_session(request, response, key)
     return _entry(key)
 
 
@@ -2588,7 +2666,7 @@ def api_character(request: Request, body: dict = Body(...)):
 @app.post("/api/logout")
 def api_logout(request: Request, response: Response):
     SESSIONS.pop(request.cookies.get(COOKIE, ""), None)
-    response.delete_cookie(COOKIE)
+    response.delete_cookie(COOKIE, httponly=True, samesite="lax", secure=cookie_secure(request))
     return {"stage": "login"}
 
 

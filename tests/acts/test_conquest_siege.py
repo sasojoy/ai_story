@@ -281,7 +281,7 @@ def test_two_sieges_persist_and_reload():
     assert again.get_sieges()[0].siege.loc == a.siege.loc
     assert again.get_battle() is None  # 決戰那一格不受影響
     # 結構版本不動：領地爭奪不升版。合 develop 之後基準是商城的第 6 版（以前寫死 5，那時 develop 的商城還沒合進來）
-    assert _user_version(again) == SCHEMA_VERSION == 7
+    assert _user_version(again) == SCHEMA_VERSION == 8  # 登入狀態（sessions，審查 S-10）升到 8
 
 
 def test_submit_in_one_battle_does_not_touch_the_other():

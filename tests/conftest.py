@@ -210,6 +210,7 @@ def no_tale_threads(monkeypatch):
 
     monkeypatch.setattr(server, "TALE_THREADS", False)
     monkeypatch.setattr(server, "TALE_RUNNING", False)
+    monkeypatch.setattr(server, "REGISTRATIONS", {})  # 同一個來源一小時註冊幾個（審查 S-10）：每個測試從零開始
 
 
 @pytest.fixture(autouse=True)

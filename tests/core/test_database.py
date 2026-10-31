@@ -26,7 +26,8 @@ V4_TABLES = {"gear_recipes"}
 V5_TABLES = {"biographies"}  # 玩家傳（2026-10-12）
 V6_TABLES = {"mall_purchases", "mall_ledger", "mall_entitlements"}  # 商城（2026-10-20）
 V7_TABLES = {"action_counts", "action_firsts"}  # 真人量表（減法季批 0，2026-10-24）
-TABLES = V1_TABLES | V2_TABLES | V3_TABLES | V4_TABLES | V5_TABLES | V6_TABLES | V7_TABLES
+V8_TABLES = {"sessions"}  # 登入狀態（審查 S-10，2026-10-31）
+TABLES = V1_TABLES | V2_TABLES | V3_TABLES | V4_TABLES | V5_TABLES | V6_TABLES | V7_TABLES | V8_TABLES
 
 
 def _count(db: Database, table: str) -> int:
@@ -135,10 +136,10 @@ def test_upgrading_a_populated_version_one_file_loses_nothing(tmp_path, content)
 
     assert _dump(path, V1_TABLES) == before  # 舊表原封不動（含 rowid 順序、流水號）
     with db.snapshot() as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 7
+        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 8
         names = {row["name"] for row in c.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert names == TABLES
-    assert all(_count(db, table) == 0 for table in V2_TABLES | V3_TABLES | V4_TABLES | V5_TABLES | V6_TABLES | V7_TABLES)
+    assert all(_count(db, table) == 0 for table in V2_TABLES | V3_TABLES | V4_TABLES | V5_TABLES | V6_TABLES | V7_TABLES | V8_TABLES)
     # 真正的存取層讀得回來
     store = AccountStore(db)
     assert store.authenticate("shenlang", "sesame88").character == "沈浪"
@@ -635,3 +636,25 @@ def test_two_programs_counting_at_once_lose_no_updates(tmp_path):
             proc.stdout.close()
     with db.snapshot() as conn:
         assert conn.execute("SELECT data FROM seasons WHERE number = 1").fetchone()[0] == "400"
+
+
+def test_a_version_seven_file_gains_the_sessions_table(tmp_path):
+    """第 7 版（真人量表）的檔打開時升到第 8 版：多一張 sessions，舊表不動，登入狀態寫得進去、讀得回來（審查 S-10）。"""
+    import sqlite3
+
+    from tianxia.accounts import SessionStore
+
+    path = tmp_path / "v7.db"
+    conn = sqlite3.connect(path)
+    for statement in database.SCHEMA_V1 + database.SCHEMA_V2_TABLES + database.SCHEMA_V3_TABLES + database.SCHEMA_V4_TABLES \
+            + database.SCHEMA_V5_TABLES + database.SCHEMA_V6_TABLES + database.SCHEMA_V7_TABLES:
+        conn.execute(statement)
+    conn.execute("PRAGMA user_version = 7")
+    conn.commit()
+    conn.close()
+    db = open_database(path)
+    with db.snapshot() as c:
+        assert c.execute("PRAGMA user_version").fetchone()[0] == 8
+    sessions = SessionStore(db, clock=lambda: 100.0)
+    token = sessions.create("shenlang")
+    assert sessions.get(token) == "shenlang"
