@@ -6,8 +6,8 @@ import pytest
 
 from conftest import real_content
 from tianxia import content as content_mod
-from tianxia import explore_one
 from tianxia.core import features as features_core
+from tianxia.features.explore import explore_rules
 
 
 def _problems(c) -> list[str]:
@@ -27,4 +27,4 @@ def test_the_package_checks_the_explore_tables_and_the_outing_lines():
 
 
 def test_the_core_and_the_package_spell_the_traveler_tag_the_same():
-    assert content_mod.TRAVELER_TAG == explore_one.TRAVELER
+    assert content_mod.TRAVELER_TAG == explore_rules.TRAVELER
