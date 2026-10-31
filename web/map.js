@@ -878,7 +878,11 @@
   // （world.edges）；正在翻的斜紋兩色（推的那一方＋現在的主人）；下了戰書內側朱紅虛框（w-letter）、剛易手內框改成虛線（w-cool）；
   // 可出陣內側橘虛框（引擎說必敗的淡一半）；你的那一塊內側紅框（在路上不畫）。沒有地塊、或座標落在所屬區外的地點（官軍大營、綠林山寨）
   // 拿半徑 view.patch_radius 的圓當它的地：一樣填色上框、不裁區界、不算戰線。常駐（「塗層」開關拿掉了）、不混色、沒有濾鏡。
-  // 線寬寫的是螢幕上看得到的寬（照丙畫出來的：內框 2.5、橘框紅框 3）：裁到塊內的那幾條畫兩倍寬，被裁掉外面那一半
+  // 線寬寫的是螢幕上看得到的寬（照丙畫出來的：內框 2.5、橘框紅框 3）：裁到塊內的那幾條畫兩倍寬，被裁掉外面那一半。
+  // 框（內框、冷卻虛內框、可出陣、戰書、你）沿著看得到的那一塊描一整圈（FB-9070，W1 第二輪 2026-10-31）：看得到的是塊 ∩ 區，邊界是塊的邊落在區內
+  // 的那幾段＋區界落在塊內的那幾段。框的路徑是塊的多邊形再接一條所在區的多邊形（同一個 d 兩段子路徑），裁到塊內（lc-）再裁到區界（lr-）：
+  // 塊那一段留下塊在區內的內側，區那一段留下區界在塊內的內側，合起來剛好是塊 ∩ 區內側一圈。以前只描塊，伸出區界的那一截被裁掉、區界上沒有框
+  // （36 塊有 30 塊缺 5% 以上，下曲陽缺七成）。不多一個節點，每一條框多一段區界的字（區的多邊形四到八個點、潁汝最多；開季平均每條多五十來個字）
   const LAND_UNHELD = "#B9B2A0", LAND_UNHELD_RIM = "#8F8B82", LAND_SEAM = "#1B1F17", LAND_FRONT = "#FFF6E0";
   const LAND_SORTIE = "#F0A640", LAND_HERE = "#C0392B";
   // 正在翻的中立地（沒人佔、有人在推）的內框：照丙是紅（企劃者 2026-10-31「照丙用紅框」；草圖 tools/slg5.js 的 txGround：有主人是主人色、
@@ -902,18 +906,19 @@
     }
     return ins;
   }
-  // 每一處的地（照底圖記一份）：地塊 { id, region, d, poly, rpoly }，或圓 { id, patch: true, x, y, r }（地塊在前、圓在後：圓蓋在上面）
+  // 每一處的地（照底圖記一份）：地塊 { id, region, d, rd（所在區的多邊形，框沿著區界那一段用）, poly, rpoly }，或圓 { id, patch: true, x, y, r }
+  // （地塊在前、圓在後：圓蓋在上面）
   const landMemo = new WeakMap();
   function landUnits(base) {
     let m = landMemo.get(base);
     if (m) return m;
     const wd = base.world || {}, r = Number(base.view && base.view.patch_radius) || LAND_PATCH_R;
-    const regions = Object.fromEntries((wd.regions || []).map((g) => [g.id, polyOf(g.d)]));
+    const regions = Object.fromEntries((wd.regions || []).map((g) => [g.id, { d: g.d, poly: polyOf(g.d) }]));
     const cells = Object.fromEntries((wd.cells || []).map((c) => [c.id, c]));
     const blocks = [], patches = [];
     for (const b of base.places) {
-      const c = cells[b.id], rp = c && regions[c.region];
-      if (rp && inPoly(b.x, b.y, rp)) blocks.push({ id: b.id, region: c.region, d: c.d, poly: polyOf(c.d), rpoly: rp });
+      const c = cells[b.id], rg = c && regions[c.region], rp = rg && rg.poly;
+      if (rp && inPoly(b.x, b.y, rp)) blocks.push({ id: b.id, region: c.region, d: c.d, rd: rg.d, poly: polyOf(c.d), rpoly: rp });
       else patches.push({ id: b.id, patch: true, x: b.x, y: b.y, r });
     }
     m = { units: [...blocks, ...patches], patch: new Set(patches.map((u) => u.id)) };
@@ -930,51 +935,68 @@
     }
     return null;
   }
-  // 純函式：k＝1／倍率（線寬照螢幕）、week 看哪一週（版圖變化：以前的週只畫顏色與你，不畫正在翻、冷卻、戰書、可出陣）
-  function groundSvg(base, st, k, week) {
+  // 地上畫的每一處長什麼樣子（groundSvg 只讀這一份，不再自己讀疊層）：疊層有沒有這一處、那一週的主人、正在翻的那一方（推得最多、不是主人）、
+  // 冷卻中、戰書、可出陣與淡不淡（必敗）、是不是你那一塊（在路上沒有）。以前的週（版圖變化）只有主人與你，不畫翻、冷卻、戰書、可出陣。
+  // groundShow 拿它當 key（FB-9071，W1 第二輪 2026-10-31）：以前 key 是抓疊層的時間（S.mapStateAt），輪詢重抓一次（在路上每 10 秒、平常每 30 秒）
+  // #mk 就整張重寫一次，疊層一個字都沒變也一樣。會一直變、地上又不畫的（冷卻還剩幾分鐘、翻到幾成、必敗以外的勝算字、在路上還剩幾分鐘）不在裡面
+  function groundLook(base, st, week) {
+    const ctrl = controlAt(st, week), live = week === st.now_week, here = st.journey ? null : st.here;
+    const lose = new Set((st.suggest || []).filter((g) => g.lose).map((g) => g.id)), out = {};
+    for (const u of landUnits(base).units) {
+      const q = st.places[u.id];
+      if (!q) continue;
+      const sd = ctrl[u.id] || null, t = live ? tugOf(st, u.id, sd) : null, sortie = live && !!q.sortie;
+      out[u.id] = { sd, tug: t ? t.side : null, cool: live && !!sd && !!q.cool, letter: live && q.siege === "letter", sortie,
+        faint: sortie && (lose.has(u.id) || (q.sortie === "attack" && !q.convoy && !!q.odds && q.odds.word === SORTIE_LOSE)), here: u.id === here };
+    }
+    return out;
+  }
+  // 純函式：k＝1／倍率（線寬照螢幕）、week 看哪一週（版圖變化：以前的週只畫顏色與你，不畫正在翻、冷卻、戰書、可出陣）；look 是 groundLook 那一份
+  // （groundShow 算 key 時已經算好的，沒給就照疊層算）
+  function groundSvg(base, st, k, week, look) {
     const wd = base.world;
     if (!wd) return "";
-    const ctrl = controlAt(st, week), live = week === st.now_week, { units, patch } = landUnits(base);
-    const here = st.journey ? null : st.here, lose = new Set((st.suggest || []).filter((g) => g.lose).map((g) => g.id));
+    const ls = look || groundLook(base, st, week), { units, patch } = landUnits(base);
     const w = (px) => f2(px * k), dash = (d) => `${w(d[0])} ${w(d[1])}`;
     const defs = wd.regions.map((r) => `<clipPath id="lr-${esc(r.id)}"><path d="${r.d}"/></clipPath>`), body = [], front = [], frames = [];
     for (const u of units) {
-      const q = st.places[u.id];
-      if (!q) continue;
-      const id = esc(u.id), sd = ctrl[u.id] || null, t = live ? tugOf(st, u.id, sd) : null, cool = live && !!sd && !!q.cool;
+      const g = ls[u.id];
+      if (!g) continue;
+      const id = esc(u.id), sd = g.sd, t = g.tug, cool = g.cool;
       const tag = u.patch ? "circle" : "path", geo = u.patch ? `cx="${u.x}" cy="${u.y}" r="${u.r}"` : `d="${u.d}"`, inner = `clip-path="url(#lc-${id})"`;
+      const ring = u.patch ? geo : `d="${u.d} ${u.rd}"`; // 框描的：塊＋所在區兩段子路徑，裁到塊內與區界裡＝塊 ∩ 區內側一圈（FB-9070）；圓不裁區界、照舊描圓
       const own = sd ? sideInk(sd).color : LAND_UNHELD;
       defs.push(`<clipPath id="lc-${id}"><${tag} ${geo}/></clipPath>`);
       if (t) {
         defs.push(`<pattern id="ls-${id}" patternUnits="userSpaceOnUse" width="${w(LAND_STRIPE)}" height="${w(LAND_STRIPE)}" patternTransform="rotate(45)">`
-          + `<rect width="${w(LAND_STRIPE / 2)}" height="${w(LAND_STRIPE)}" fill="${sideInk(t.side).color}"/><rect x="${w(LAND_STRIPE / 2)}" width="${w(LAND_STRIPE / 2)}" height="${w(LAND_STRIPE)}" fill="${own}"/></pattern>`);
+          + `<rect width="${w(LAND_STRIPE / 2)}" height="${w(LAND_STRIPE)}" fill="${sideInk(t).color}"/><rect x="${w(LAND_STRIPE / 2)}" width="${w(LAND_STRIPE / 2)}" height="${w(LAND_STRIPE)}" fill="${own}"/></pattern>`);
       }
       const rimInk = sd ? own : t ? LAND_TUG_RIM : null; // 主人色；沒主人而正在翻是紅（照丙）；都不是淡灰細線
       const rim = rimInk ? `stroke="${rimInk}" stroke-width="${w(LAND_RIM_W * 2)}" stroke-opacity="${LAND_RIM_OP}"`
         : `stroke="${LAND_UNHELD_RIM}" stroke-width="${w(LAND_RIM_W_UNHELD * 2)}" stroke-opacity="${LAND_RIM_OP_UNHELD}"`;
       const land = `<${tag} class="ld-fill" data-cell="${id}" ${geo} fill="${t ? `url(#ls-${id})` : own}" fill-opacity="${t ? LAND_FILL_TUG : sd ? LAND_FILL : LAND_FILL_UNHELD}"/>`
-        + `<${tag} class="${cool ? "w-cool" : "ld-rim"}" data-cell="${id}" ${geo} fill="none" ${rim}${cool ? ` stroke-dasharray="${dash(LAND_COOL_DASH)}"` : ""} stroke-linejoin="round" ${inner}/>`
+        + `<${tag} class="${cool ? "w-cool" : "ld-rim"}" data-cell="${id}" ${ring} fill="none" ${rim}${cool ? ` stroke-dasharray="${dash(LAND_COOL_DASH)}"` : ""} stroke-linejoin="round" ${inner}/>`
         + `<${tag} class="ld-seam" ${geo} fill="none" stroke="${LAND_SEAM}" stroke-opacity=".3" stroke-width="${w(LAND_SEAM_W)}"/>`;
       body.push(u.patch ? land : `<g clip-path="url(#lr-${esc(u.region)})">${land}</g>`);
       // 框畫在戰線上面、都裁到塊內：可出陣（必敗的淡一半）、戰書（凍結：出陣要知道的事，蓋在可出陣上面）、你
-      const frame = (cls, color, more) => `<${tag} class="${cls}" data-cell="${id}" ${geo} fill="none" stroke="${color}" stroke-width="${w(LAND_FRAME_W * 2)}"${more} stroke-linejoin="round" ${inner}/>`;
-      const faint = lose.has(u.id) || (q.sortie === "attack" && !q.convoy && !!q.odds && q.odds.word === SORTIE_LOSE);
-      const box = (live && q.sortie ? frame("ld-sortie", LAND_SORTIE, ` stroke-dasharray="${dash(LAND_DASH)}"${faint ? ` stroke-opacity="${LAND_LOSE_OP}"` : ""}`) : "")
-        + (live && q.siege === "letter" ? frame("w-letter", FRONT_RED, ` stroke-dasharray="${dash(LAND_DASH)}"`) : "")
-        + (u.id === here ? frame("ld-here", LAND_HERE, "") : "");
+      const frame = (cls, color, more) => `<${tag} class="${cls}" data-cell="${id}" ${ring} fill="none" stroke="${color}" stroke-width="${w(LAND_FRAME_W * 2)}"${more} stroke-linejoin="round" ${inner}/>`;
+      const box = (g.sortie ? frame("ld-sortie", LAND_SORTIE, ` stroke-dasharray="${dash(LAND_DASH)}"${g.faint ? ` stroke-opacity="${LAND_LOSE_OP}"` : ""}`) : "")
+        + (g.letter ? frame("w-letter", FRONT_RED, ` stroke-dasharray="${dash(LAND_DASH)}"`) : "")
+        + (g.here ? frame("ld-here", LAND_HERE, "") : "");
       if (box) frames.push(u.patch ? box : `<g clip-path="url(#lr-${esc(u.region)})">${box}</g>`);
     }
     for (const e of wd.edges || []) {
-      if (patch.has(e.a) || patch.has(e.b) || !st.places[e.a] || !st.places[e.b]) continue;
-      const a = ctrl[e.a] || null, b = ctrl[e.b] || null;
+      if (patch.has(e.a) || patch.has(e.b) || !ls[e.a] || !ls[e.b]) continue;
+      const a = ls[e.a].sd, b = ls[e.b].sd;
       if (a && b && a !== b) front.push(`<path class="ld-front" data-a="${esc(e.a)}" data-b="${esc(e.b)}" d="${e.d}"${e.clip ? ` clip-path="url(#lr-${esc(e.clip)})"` : ""}/>`);
     }
     return `<defs>${defs.join("")}</defs>${body.join("")}<g fill="none" stroke="${LAND_FRONT}" stroke-width="${w(LAND_FRONT_W)}" stroke-linecap="round">${front.join("")}</g>${frames.join("")}`;
   }
   // 地常駐（不看倍率、沒有塗層開關）。#mk 是一張向量的 SVG：Joy 10/30 把它畫成點陣是為了水暈的濾鏡與混色（拖縮每一幀重算、Safari 破圖），
   // 第二版兩樣都拿掉了；向量近看線才不糊。拖縮只換 #mvw 的 transform：手勢、慣性滑、滾輪、飛過去的途中（mvBusy）一次都不重寫，地跟著
-  // transform 縮放（線寬暫時跟著粗細）；停下來的那一次 drawMarks，換了疊層、週次、倍率差過三分之一級（log2 的 1/3，線寬差不到一成二）
-  // 才重寫一次（設計 2.2「key 含 log2(z)×3」、第七章「拖縮中只換 transform」；W1 審查 2026-10-30：以前捏、滾輪、飛的途中會整張重寫好幾次）
+  // transform 縮放（線寬暫時跟著粗細）；停下來的那一次 drawMarks，地上畫的變了（groundLook：疊層重抓了而地上畫的沒變不算，FB-9071）、換了週次而
+  // 那一週畫的不一樣、倍率差過三分之一級（log2 的 1/3，線寬差不到一成二）才重寫一次（設計 2.2「key 含 log2(z)×3」、第七章「拖縮中只換
+  // transform」；W1 審查 2026-10-30：以前捏、滾輪、飛的途中會整張重寫好幾次）
   const ground = { key: "", el: null };
   function groundK(z) {
     return Math.min(4, Math.max(0.25, 2 ** (-Math.round(Math.log2(z) * 3) / 3)));
@@ -982,10 +1004,11 @@
   function groundShow(c) {
     const svg = document.getElementById("mk");
     if (!svg || !S.mapBase || !S.mapState || !c || mvBusy()) return;
-    const k = groundK(c.z), week = mapWeek(), key = `${S.mapBase.key}|${S.mapStateAt}|${week}|${f2(k)}`;
+    const k = groundK(c.z), week = mapWeek(), look = groundLook(S.mapBase, S.mapState, week);
+    const key = `${S.mapBase.key}|${f2(k)}|${JSON.stringify(look)}`;
     if (ground.el === svg && ground.key === key) return;
     Object.assign(ground, { el: svg, key });
-    svg.innerHTML = groundSvg(S.mapBase, S.mapState, k, week);
+    svg.innerHTML = groundSvg(S.mapBase, S.mapState, k, week, look);
   }
 
   // ── 字與小圖（#mkt：照螢幕大小寫，位置照此刻的倍率算）──
