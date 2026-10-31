@@ -2035,15 +2035,19 @@ def _record_outcome(instance: BattleInstance, outcome: BattleOutcome) -> list[st
 def end_without_fighters(
     instance: BattleInstance, definition: BattleDef, now: float, tuning: BattleTuning | None = None,
 ) -> list[str]:
-    """場上已經沒有任何還能打的人（沒人參戰、或全都倒下了），而且這一回合已經逾時：
+    """場上已經沒有任何還能打的人（沒人參戰、或全都倒下了）：
     沒有人能送出行動，round_is_complete 永遠不會成立，這場戰鬥就會永遠卡著——這時直接用
     內容最後那個無條件的保底結果（definition.outcomes[-1]，content.py::validate 保證它
     沒有門檻）收場，記錄方式跟 resolve_round 分出勝負時一樣。這裡沒有 LLM 潤色，收場的
-    幾句話直接寫進 narrative_log。還有人在場、還在集結、或回合還沒逾時，什麼都不做、回傳空清單。"""
+    幾句話直接寫進 narrative_log。還有人在場、還在集結，什麼都不做、回傳空清單。
+    什麼時候收：兩軍上過陣的人全都倒下了（倒下的人回不來）就當場收，不讓觀戰的人乾等這一回合逾時（手機介面自檢 U-08）；
+    一個人都沒有、或還有人只是走開了大區（他可能回來、也可能有人晚到投效），照舊等這一回合逾時。"""
     armies = {f.id for f in definition.factions}
     if instance.phase != "active" or any(p.faction in armies for p in _active_participants(instance)):
         return []
-    if now - instance.round.opened_real < definition.round_seconds:
+    fought = [p for p in instance.participants.values() if p.faction in armies]
+    all_fallen = bool(fought) and all(p.eliminated for p in fought)
+    if not all_fallen and now - instance.round.opened_real < definition.round_seconds:
         return []
     msgs = ["戰場上已經沒有人還能出手，這場戰鬥就此收場。"] + _record_outcome(instance, definition.outcomes[-1])
     instance.narrative_log.append("\n".join(msgs))

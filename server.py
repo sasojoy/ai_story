@@ -1836,9 +1836,15 @@ def main_view(game: Game) -> dict:
 
 
 def _main_view_body(game: Game) -> dict:
+    fighting = game.battle_on_screen()
     card = game.battle_card() if game.shows_battle_card() else None
     status, quest, scene = game.status_data(), md(game.quest_text()), md(game.scene_text())
     options = game.options()  # 照原本的順序：狀態、主線、場景先讀，選單（會推進全服戰鬥）最後
+    if fighting and not game.battle_on_screen():
+        # 這一次的選單把決戰推到收場了（手機介面自檢 U-06）：先讀的場景還停在最後一回合，換成收場之後的（回到地點），
+        # 卡片、狀態、主線也一起重讀，跟「剛剛」（下面才讀）同一刻
+        card = game.battle_card() if game.shows_battle_card() else None
+        status, quest, scene = game.status_data(), md(game.quest_text()), md(game.scene_text())
     latest = game.journal_top_html()
     view = {
         "status": status,
@@ -2135,6 +2141,8 @@ def admin_choices(game: Game) -> dict:
     大勢線照這一季的規則（第一季濃縮版要開關開著、而且這一季蓋了「開」的章）。呼叫端要拿著行動鎖（look）。"""
     world = game.state.world
     return {
+        # 賽季在哪個階段（籌備中 preparing／進行中 running／休季 resting）：開季、立刻收季、開啟下一季只在對的階段按得下去（U-19）
+        "phase": game.world.season_phase(),
         "battles": [{"label": b.name, "id": b.id} for b in game.admin_battles()],
         "events": [{"label": f"{x.text[:30]}（{x.id}）", "id": x.id} for x in game.admin_fires()],
         # 照開關：關著時不列第一季才有的線；開著時不列黃巾聲勢（由三條戰線合成，不能直接推）

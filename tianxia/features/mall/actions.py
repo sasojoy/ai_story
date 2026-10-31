@@ -182,7 +182,17 @@ def view(ctx: Game) -> dict | None:
 def records(ctx: Game) -> dict | None:
     """自己的購買紀錄與帳（mall.records，不寫經手的管理者）；商城關著是 None。"""
     wallet = ctx._wallet()
-    return None if wallet is None else mall.records(ctx.content, wallet, ctx._mall_owner())
+    return None if wallet is None else mall.records(ctx.content, wallet, ctx._mall_owner(), season_time=lambda real: _season_stamp(ctx, real))
+
+
+def _season_stamp(ctx: Game, real: float) -> str | None:
+    """帳上那一筆（現實時間）在這一季的季曆是幾時（全面自檢 U-12：元寶是真錢、照舊寫現實時間，旁邊多寫季曆）。
+    照現在的賽季時鐘倒推（暫停過的那一段不扣，差一點無妨）；這一季開始以前的與休季不寫。"""
+    world = ctx.state.world
+    if world.ended:
+        return None
+    at = world.time - max(0.0, ctx.now - real) * ctx.content.config.time_scale
+    return ctx.stamp(at) if at >= 0 else None
 
 
 # ── 管理者（商城架構設計 4.7；帳跟季無關：籌備中、休季、暫停中都做得了）──
