@@ -575,7 +575,7 @@
       drawer.classList.remove("dragging");
       if (drag.moved) {
         const stops = drawerStops(), h = drawer.offsetHeight;
-        mapStop(stops.slice().sort((a, z) => Math.abs(mapDrawerPx(a) - h) - Math.abs(mapDrawerPx(z) - h))[0]);
+        mapStop(stops.slice().sort((a, z) => Math.abs(mapDrawerPx(a) - h) - Math.abs(mapDrawerPx(z) - h))[0], drag.h);
         dragged = Date.now();
       }
       drag = null;
@@ -600,14 +600,15 @@
     if (stops.includes("row")) return S.mapDrawer === "peek" ? "row" : "peek";
     return S.mapDrawer === stops[0] ? stops[stops.length - 1] : stops[0];
   }
-  // 拉把手停在哪一格：收回那一行時，底條「可出陣 N ›」開的那個內部篩選一起清掉（那一行又寫著「可出陣 N ›」）
-  function mapStop(h) {
+  // 拉把手停在哪一格：收回那一行時，底條「可出陣 N ›」開的那個內部篩選一起清掉（那一行又寫著「可出陣 N ›」）。from：拖的時候是拖動開始那一刻的高（px），
+  // 照它判有沒有換格（setMapDrawer）
+  function mapStop(h, from) {
     if (h === "peek" && S.mapMode !== "place" && S.mapFilter === "sortie") {
       S.mapFilter = "all";
       redrawDrawer();
       drawMarks();
     }
-    setMapDrawer(h);
+    setMapDrawer(h, from);
   }
   // 卡上「往上拉：能悟、對手……」、附近那一排往上拉
   function mapOpen() { setMapDrawer(S.mapMode === "place" ? "half" : "full"); }
@@ -650,11 +651,13 @@
     const end = document.querySelector("#mbody .m-tray-end");
     return end && end.offsetTop ? Math.round(end.offsetTop + 4) : MV_TRAY;
   }
-  function setMapDrawer(h) {
+  // from：拖把手放手時是拖動開始那一刻的高（px）——拖動中 pointermove 一路把高寫進 style，放手剛好停在那一格（拖上剛好到一排卡、拖到頂一定被夾在全開）
+  // 拿 style 比會判成沒換格、名字與箭頭牌照舊的底邊排著（FB-9093，W2 第二輪 2026-10-31）
+  function setMapDrawer(h, from) {
     S.mapDrawer = h;
     const d = document.getElementById("mdrawer"), box = document.getElementById("mapx");
     if (!d || !box) return;
-    const px = mapDrawerPx(h), was = d.style.height;
+    const px = mapDrawerPx(h), was = from !== undefined && from !== null ? `${Math.round(from)}px` : d.style.height;
     d.style.height = `${px}px`;
     // 收回底條那一行（或一排卡那一格）：抽屜捲回頂上，底條（本週、可出陣）才露得出來（W2 審查 2026-10-31：全開捲到下面再收回、點了一處往下捲卡
     // 再收回〔mapBack 整塊換掉〕，scrollTop 照留，那一行露的是底下那一段）。一行那一格一律回頂；一排卡那一格是換過來的才回（停在那一格往下捲的照留）

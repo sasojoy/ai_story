@@ -26,7 +26,7 @@ NAMES = ["S", "pageMap", "controlAt", "drawerHtml", "placeCard", "cardExtras", "
          "mapFilter", "marksHtml", "groundSvg", "camClamp", "camFit", "zMin", "mapPick", "mapBack", "mapFind", "routeD", "camSet", "mapFirst",
          "groundShow", "landAt", "mapLand", "mvDown", "mvUp", "mvMove", "mvWheel", "camFly", "drawMarks", "mv", "mapGoto", "camFirst", "planHtml",
          "camOpen", "camAt", "mapRoom", "mvZ0", "mvLevel", "mvLayout", "mvArea", "miniHtml", "mapMini", "mapHome", "mapFit", "drawerStops", "drawerTap",
-         "mapStop", "mapSortie", "mapRegionFly", "mapPreviewTo", "drawerGrab"]
+         "mapStop", "mapSortie", "mapRegionFly", "mapPreviewTo", "drawerGrab", "mapGeom", "mvBusy"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 APP = webharness.APP  # 三個檔（main.js、map.js、app.js）接起來的那一份
 # 一個夠大的地圖框：整張天下都在「畫面附近」，字一處都不會因為在畫面外被略過
@@ -1973,3 +1973,31 @@ return res;""")
     for k in ("one", "two", "three"):
         assert out[k]["hit"] == "grab" and out[k]["mode"] == "overview" and out[k]["sel"] is None, (k, out[k])
     assert out["drag"] == {"stop": "row", "after": "row"} and out["next"] == {"hit": "grab", "drawer": "peek"}
+
+
+def test_fb9093_a_drag_that_lets_go_exactly_on_a_stop_still_relays_the_names_and_pills():
+    """FB-9093：拖把手放手時剛好就是那一格的高（一行拖上剛好到一排卡、拖到頂一定被夾在全開），以前 setMapDrawer 拿拖動中一路寫進去的高度比、
+    判成沒換格，名字與箭頭牌照一行的時候排著（右下兩顆卻跟著抽屜上去，蓋住名字；全開時舊的箭頭牌留在抽屜底下）。現在照拖動開始那一刻的高比：
+    放手之後字那一層＝照新的底邊重排的那一份、名字不壓右下兩顆；全開不掛箭頭牌。放手不是剛好那一格的照舊重排。"""
+    game = _w2()
+    out = run(game, DRAWER_DOM + GRAB_DOM + GESTURE_DOM + SETTLE + """map.clientHeight = FRAME;
+const pills = { style: {}, innerHTML: '' }; els['mv-pills'] = pills;
+const g = { vw: 375, vh: FRAME }, res = {};
+const fresh = () => H.mvLayout(H.S.mapBase, H.S.mapState, H.S.mapCam, H.mapGeom(map));
+for (const [name, dy] of [['exact', () => H.mapDrawerPx('row') - H.mapDrawerPx('peek')], ['top', () => 2000], ['near', () => 100]]) {
+  H.mapBack(); H.setMapDrawer('peek'); H.drawerGrab(); H.camSet(H.camOpen(H.mapGeom(map))); H.drawMarks(); settle();
+  const before = els.mkt.innerHTML, d = dy(), y = grabY();
+  send('pointerdown', y); send('pointermove', y - d / 2); send('pointermove', y - d); send('pointerup', y - d); settle();
+  const lay = fresh();
+  res[name] = { stop: H.S.mapDrawer, px: drawer.style.height, fab: fab.style.bottom, same: els.mkt.innerHTML === lay.html, moved: els.mkt.innerHTML !== before,
+    pills: pills.innerHTML, freshPills: lay.pills.map((p) => p.html).join(''), html: els.mkt.innerHTML };
+}
+return res;""")
+    assert (out["exact"]["stop"], out["top"]["stop"], out["near"]["stop"]) == ("row", "full", "row")
+    for name, r in out.items():
+        assert r["same"] and r["moved"] and r["pills"] == r["freshPills"], (name, {k: v for k, v in r.items() if k != "html"})
+        fb = 650 - float(r["fab"][:-2])  # 右下兩顆：46 見方、間隔 10，底下離抽屜 12（fab.style.bottom＝抽屜高＋12）
+        fab = (375 - 58, fb - 102, 375 - 12, fb)
+        for lab in _labs(r["html"]):
+            assert r["stop"] == "full" or not _cross(_lab_box(lab)[0], fab), (name, lab)
+    assert out["top"]["pills"] == ""  # 全開：地圖只剩一條，不掛箭頭牌
