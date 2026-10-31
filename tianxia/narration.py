@@ -150,7 +150,7 @@ def clean(content: Content, original: str, text: str | None) -> str | None:
         return None
     if any(n in out and n not in original for n in _names(content)):
         return None
-    if any(b and b in out and b not in original for b in content.banned_names):
+    if any(b and b in out and b not in original for b in content.banned_name_list()):
         return None
     return out
 

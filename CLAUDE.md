@@ -45,7 +45,7 @@
 - **數值全部由規則引擎決定。** 模型只寫文字、評一個機率（放手一搏、隨口應對的成功率）、給一個夾過的優勢（大場面判讀，最多 ±`big_fight_swing` 個百分點），或從清單裡挑一個名字；擲骰、換算、損耗、獎勵都是引擎的事，引擎拿到模型的數字一律再夾一次。
 - **引擎不讀電腦時鐘**：現在時間一律由 `Game.sync(now)`（設定 `Game.now`）或明確的 `now` 參數傳入。`tianxia/` 裡只有 `database.py`（等寫入權的期限）、`accounts.py` 與 `bot_runner.py`（注入的 `clock`）碰時間；模型呼叫的時間預算靠 HTTP 逾時扣，由 `server.py` 量好傳進來。
 - **玩家看得到的時刻只有一個寫法**：第一季一律走 `calendar.point_text`（「第 N 週・週X HH:MM」，N 前後有空格）；寫時間的地方都經過 `calendar.stamp_text`／`Game.stamp`（狀態列第二行、下一件、軍令截止、江湖史、傳聞、戰報都是），不要在別處自己拼。開關關著時照舊「第2天 14:05」。
-- **名字原創**：我們寫的內容（武學、人物、意境）不用金庸等作品的專有名詞。模型取的名字與玩家替絕學定的名字都過 `naming.name_problem`（禁用名單 `content/banned_names.json`、只能是中文、不能跟素材、人物、內容武學、意境、江湖上任何角色的名號同名），全服重名在登記時原子判斷。
+- **名字原創**：我們寫的內容（武學、人物、意境）不用金庸等作品的專有名詞。模型取的名字與玩家替絕學定的名字都過 `naming.name_problem`（禁用名單 `content/banned_names.json`〔2026-10-31 起看 `Config.banned_names_on`，預設關：Joy「名單留著、現階段不卡」；讀名單一律走 `Content.banned_name_list()`〕、只能是中文、不能跟素材、人物、內容武學、意境、江湖上任何角色的名號同名），全服重名在登記時原子判斷。
 - **改名之後 id 跟顯示的名字不同**（絕學定名只改顯示的名字）：寫給玩家看的一律用 `team.resolve_art(...).name`，認東西的一律用 id。
 - **改內容後跑 `scripts/test_for.py`**（會挑到 `tests/season/test_real_content.py` 不含 slow 的那些，抓出內容錯誤、鎖住事件難度帶 `DIFFICULTY_BANDS`）；機器人用真實內容玩完整季的那幾條是 slow，要看就加 `--slow`。
 - **賽季由管理者開**：全服第一次開局停在「籌備中」，管理者（`content/config.json` 的 `admins`，加上 `.local/admins.txt` 與 `TIANXIA_ADMINS`）在設定頁按「開季」；季結束（或管理者「立刻收季」）進入「休季」，管理者按「開啟下一季」。換季時：同伴全部重獲自由、等級武學歸零；全服登記的武學、配方、改過的名字、意境、第一個練成絕學的人都照季分開存，新的一季自然是空的；上一季的首創（合成、意境、絕學）寫進那一季的江湖史；天機 +1（同一個配方長出不同的東西）；沒打完的決戰清掉；跟人物的好感度只帶一成。測試內容用 `auto_open_first_season: true` 直接開季。資料都在資料庫；舊的 `saves/*.json`、`saves/world/state.json`、`saves/accounts/accounts.json` 不再讀取（企劃者 2026-10-03 決定不搬）。管理者的角色用 `scripts/set_password.py <帳號> --character <名號>` 建立並綁到帳號上，只有登入那個帳號的人進得了；玩家不能取管理者的名號。

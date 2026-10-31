@@ -45,6 +45,14 @@ def test_the_result_adds_up_the_segments():
     assert "走完一趟</b>・3 段" in html
 
 
+def test_the_result_counts_the_settled_events_and_the_stamina():
+    """Joy 10/31：選完那件事的得失（after）與一路走掉的體力也加進結算卡。"""
+    trip = dict(TRIP, beats=[dict(b, spent=6) for b in TRIP["beats"]])
+    trip["beats"][1] = dict(trip["beats"][1], after="得：銀兩 +30　失：體力 -5")
+    html = _run(more=[trip])["extra"][0]
+    assert "銀兩 +35" in html and "體力 -23" in html
+
+
 def test_a_segment_ledger_colours_gains_and_losses():
     html = _run()["ledger"]
     assert '<small class="up">得：驚羽 ×1</small>' in html and '<small class="down">失：氣血 -6</small>' in html

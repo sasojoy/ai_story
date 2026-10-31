@@ -1565,9 +1565,11 @@ def check_orders(c: Content, need, known, front_ids: list[str]) -> None:
             if slot.intercept in c.locations:
                 region = region_of(c, slot.intercept)
                 need(region is not None and region.front == front, f"{where}：截糧的地點 {slot.intercept} 不在這條戰線上")
-                from . import sortie, territory  # noqa: PLC0415  延後 import（同 check_territory）
+                from . import territory  # noqa: PLC0415  延後 import（同 check_territory）
 
-                if sortie.on(c):  # FB-248：出陣開著時糧隊只在這一處，要是出得了陣的戰線地點
+                # FB-248：出陣開著時糧隊只在這一處，要是出得了陣的戰線地點。出陣的開關就是地盤的（sortie.on＝territory.on）：
+                # 讀 territory，核心的 content.py 不 import 出陣包（開發規範手冊 3.4；主動搬六包第 1 批）
+                if territory.on(c):
                     need(territory.line_of(c, slot.intercept) == front,
                          f"{where}：截糧的地點 {slot.intercept} 不是這條戰線的戰線地點（出陣開著時那裡沒有出陣）")
             if side in factions:

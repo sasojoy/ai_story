@@ -4237,6 +4237,9 @@ class Config(_Strict):
     # 「此地還有誰」只列這麼多現實秒數之內同步過的人：網頁開著每 10 秒同步一次，假人在線時 1～3 分鐘做一個動作，
     # 十分鐘夠把在線的都列進來；關了網頁、下了線的人十分鐘後就不在名單上（真人假人同一條規則）
     presence_seconds: float = 600
+    # 專有名詞禁用名單（content/banned_names.json）擋不擋（Joy 2026-10-31：「關閉禁用名單，上面的內容可以留著，但是現階段不卡」）：
+    # 關著時取名、潤色、題壁都不看這份名單（Content.banned_name_list 回空的），名單照樣載入、照樣驗；髒話字表照舊擋
+    banned_names_on: bool = False
     # 答應結伴之後，帶頭的人這麼多現實秒數之內沒動身，就各走各的
     party_wait_seconds: float = 600
     # 同一對人（不分誰送誰）每個遊戲日最多贈物幾次（FB-116，PM 2026-10-14）：贈物不必對方同意，沒有上限時連送三十次 1 兩就把
@@ -5221,6 +5224,10 @@ class Content(_Strict):
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示
     check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）
     create_forms: CreateForms = Field(default_factory=CreateForms)  # 自創武學的兵器偏向、起點架式、關鍵字表（content/create_forms.json）
+
+    def banned_name_list(self) -> list[str]:
+        """取名、潤色、題壁要擋的專有名詞：開關（Config.banned_names_on）關著時是空的，名單本身照樣留在 banned_names。"""
+        return self.banned_names if self.config.banned_names_on else []
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
