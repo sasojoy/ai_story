@@ -116,7 +116,6 @@ def test_a_week7_server_bot_season_splits_the_gentry_between_the_armies(tmp_path
     sim = _load("sim_server_bots")
     monkeypatch.setattr(sim, "MAX_REAL_DAYS", 0.4)
     content = load_content(ROOT / "content", profile="week7")
-    assert content.config.haoqiang_allied
     content.config.time_scale, content.config.bot_tick_seconds = 6.0, 60.0
     try:
         result = sim.run_season(content, tmp_path, seed=1, tick=60.0)

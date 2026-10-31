@@ -1212,6 +1212,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mv-reg { transform: translate(-50%, -50%); font: 700 24px/1 var(--kai); letter-spacing: 0.3em; color: var(--mv-ink); opacity: 0.82; white-space: nowrap;
   text-shadow: 0 0 4px var(--mv-halo), 0 0 4px var(--mv-halo), 0 0 8px var(--mv-halo); }
 .mv-cnt { transform: translate(-50%, 0); font: 400 13px var(--kai); color: var(--mv-ink); white-space: nowrap; text-shadow: 0 0 3px var(--mv-halo), 0 0 3px var(--mv-halo); }
+/* 看整張天下：州名與統計蓋在圓點上面（點得到底下的圓點），統計墊一層紙色，壓到圓點也讀得出來（全面自檢 U-11） */
+.mv-reg, .mv-cnt { z-index: 1; pointer-events: none; }
+.mv-cnt { padding: 0 6px; border-radius: 8px; background: rgb(244 236 220 / 0.82); }
 /* 你（紅點、外面一圈慢慢擴散）、選了的那一處（墨圈）、正在打的（紅圈閃）、版圖變化易手的（紅圈擴散）、路線中間的「幾分」 */
 .mv-you { transform: translate(-50%, -50%); width: 16px; height: 16px; border-radius: 50%; background: var(--mv-red); border: 2.5px solid #f4ecdc; box-sizing: border-box; box-shadow: 0 1px 3px rgb(0 0 0 / 0.3); }
 .mv-you::after { content: ""; position: absolute; inset: -9px; border-radius: 50%; border: 2px solid var(--mv-red); animation: mk-pulse 1.6s ease-out infinite; }
@@ -2525,6 +2528,9 @@ details.self-fold > .fold-body.gear { padding-top: 0; }
 .shop-arena .ring-board .top3 .rk { background: #c88a52; color: #fff; }
 .shop-arena .ring-board li.me { box-shadow: inset 0 0 0 2px #8e2a22; }
 /* 打到一半 */
+/* 擂台動畫（arena_anim.js）：打的那一頁最上面、收場卡的勝負底下一塊舞台 */
+.shop-arena .ring-stage { display: block; width: 100%; max-width: 520px; height: auto; aspect-ratio: 720 / 320; margin: 4px auto 0; border-radius: 6px; background: #d9cfb8; }
+.shop-arena .ring-result .ring-stage { margin: 0 0 2px; max-width: none; }
 .shop-arena .ring-round { text-align: center; margin: 8px 0 6px; font: 600 14px var(--serif); letter-spacing: 3px; color: #f2c46a; }
 .shop-arena .ring-sides { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
 .shop-arena .ring-side { display: grid; gap: 3px; min-width: 0; }

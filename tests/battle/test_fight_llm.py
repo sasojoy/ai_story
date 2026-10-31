@@ -73,7 +73,7 @@ def test_markdown_syntax_in_an_account_is_stripped_so_it_stays_one_plain_paragra
     hostile = [
         "```\n你一拳打出，對方連退三步。", "![圖](http://e.com/a.png)你出手如電。", "> 你退了一步，咬牙再上。",
         "[點我](http://e.com)你收劍而立。", "# 標題\n你搶上一步。", "你**橫掃**一腿，__對方__悶哼。", "| a | b |\n|---|---|\n你攻出一掌。",
-        "~~~\n你翻身避開。", "<img src=x onerror=1>你側身一閃。", "\\[你\\]抱拳。",
+        "~~~\n你翻身避開。", "<img src=x onerror=alert>你側身一閃。", "\\[你\\]抱拳。",
     ]
     for text in hostile:
         got = fight_llm.judge(_client(fight_llm.Judgment(winning=text, losing=text)), REQUEST, 15)
@@ -90,6 +90,13 @@ def test_an_account_that_is_only_a_rule_line_cannot_turn_the_heading_above_into_
         got = fight_llm.judge(_client(fight_llm.Judgment(winning=text, losing=text)), REQUEST, 15)
         assert not got.winning.startswith(("-", "+", "=")), text
     assert fight_llm.judge(_client(fight_llm.Judgment(winning="---", losing="===")), REQUEST, 15).winning == ""
+
+
+def test_an_account_with_arabic_digits_is_dropped_so_the_template_rounds_play():
+    """M-06：數字只能是引擎的。有半形或全形的阿拉伯數字就整版清成空的（戰報照範本回合），另一版、優勢照用；國字數字照留。"""
+    for text in ("你一掌打出 999 點傷害，對手退了 3 步。", "你連攻３招。"):
+        got = fight_llm.judge(_client(fight_llm.Judgment(advantage=5, winning=text, losing="你退了三步。")), REQUEST, 15)
+        assert (got.advantage, got.winning, got.losing) == (5, "", "你退了三步。"), text
 
 
 def _post_replying(content: str, sent: list):

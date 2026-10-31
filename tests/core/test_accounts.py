@@ -3,7 +3,7 @@ import threading
 import pytest
 
 from tianxia import database
-from tianxia.accounts import AccountError, AccountStore
+from tianxia.accounts import SESSION_SECONDS, AccountError, AccountStore, SessionStore
 from tianxia.database import open_database
 
 
@@ -297,3 +297,63 @@ def test_names_are_matched_ignoring_case(store):
     store.register("alpha", "secret-pw")
     store.bind_character("alpha", "Rayal")
     assert store.owner_of("rayal") == "alpha" and store.find("RAYAL") == "alpha"
+
+
+# ── 登入狀態（審查 S-10）────────────────────────
+
+
+def test_a_session_survives_a_new_store_on_the_same_file(tmp_path, clock):
+    """登入狀態在資料庫：伺服器重開（新的一份 SessionStore、連線全關）照樣認得同一個 cookie。"""
+    path = tmp_path / "s.db"
+    token = SessionStore(open_database(path), clock=clock).create("rayal_01")
+    database.close_all()
+    assert SessionStore(open_database(path), clock=clock).get(token) == "rayal_01"
+
+
+def test_only_a_hash_of_the_token_is_stored(tmp_path, clock):
+    sessions = SessionStore(open_database(tmp_path / "s.db"), clock=clock)
+    token = sessions.create("rayal_01")
+    with sessions.db.snapshot() as conn:
+        rows = [tuple(r) for r in conn.execute("SELECT token_hash, account FROM sessions")]
+    assert len(rows) == 1 and rows[0][1] == "rayal_01"
+    assert token not in rows[0][0] and len(rows[0][0]) == 64
+
+
+def test_a_session_expires_after_thirty_days_and_old_ones_are_swept(tmp_path, clock):
+    sessions = SessionStore(open_database(tmp_path / "s.db"), clock=clock)
+    old = sessions.create("a_user")
+    clock.now += SESSION_SECONDS - 1
+    assert sessions.get(old) == "a_user"
+    clock.now += 1
+    assert sessions.get(old) is None
+    fresh = sessions.create("b_user")  # 開新的那一下順手清掉過期的
+    with sessions.db.snapshot() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 1
+    assert sessions.get(fresh) == "b_user"
+
+
+def test_logging_out_forgets_only_that_session(tmp_path, clock):
+    sessions = SessionStore(open_database(tmp_path / "s.db"), clock=clock)
+    phone, laptop = sessions.create("a_user"), sessions.create("a_user")
+    assert sessions.pop(phone) == "a_user"
+    assert sessions.get(phone) is None and sessions.get(laptop) == "a_user"
+    assert sessions.pop(phone) is None and sessions.get("") is None and sessions.get("nonsense") is None
+
+
+def test_changing_a_password_logs_out_the_other_devices_but_not_this_one(store, clock):
+    # PM 2026-10-31：改密碼、管理者重設密碼時，那個帳號的所有裝置登出；自己改的那一台留著
+    sessions = SessionStore(store.db, clock=clock)
+    store.register("alpha", "secret-pw")
+    store.register("beta", "secret-pw")
+    here, there, other = sessions.create("alpha"), sessions.create("alpha"), sessions.create("beta")
+    store.change_password("alpha", "secret-pw", "new-secret", keep=here)
+    assert sessions.get(here) == "alpha" and sessions.get(there) is None
+    assert sessions.get(other) == "beta"  # 別的帳號不受影響
+
+
+def test_an_admin_reset_logs_out_every_device_of_that_account(store, clock):
+    sessions = SessionStore(store.db, clock=clock)
+    store.register("alpha", "secret-pw")
+    phone, pc = sessions.create("alpha"), sessions.create("alpha")
+    store.set_password("alpha", "temp-pass")
+    assert sessions.get(phone) is None and sessions.get(pc) is None

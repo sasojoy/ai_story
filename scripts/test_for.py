@@ -28,12 +28,17 @@
   （名字像功能也一樣），hunk 裡提到的功能前綴另外加。
 - server.py：hunk 落在哪條路由 → 路由前綴（/api/mall → mall）那一群＋tests/server/test_server.py；
   /api/do、/api/choose 這種不帶功能的路由看 hunk 裡提到什麼；殼（登入、鎖、路由以外）→ 核心測試＋煙霧＋test_server.py。
-- 「功能群的測試檔」＝ 檔名（test_ 後面照底線拆）有那個字的（test_tavern.py、test_seal_fb643_tavern.py），
+- 「功能群的測試檔」＝ 檔名（test_ 後面照底線拆）有那個字的（test_tavern.py、test_tavern_web.py），
   加上內文叫最多的是那一群的（至少 DOMINANT_MIN 次；走一趟 outing_* 的引擎測試叫 test_explore_one*）；
   兩樣都沒有的群（feast、road、ambush……）改用內文叫到那一群方法（.feast_open(）或寫到那一群選項 id（"feast:）的。
   內文是假原始碼的（test_test_for，TEXT_BLIND）不照內文歸群。
-- 其他 tianxia/<模組>.py、run_bots.py、scripts/<腳本>.py：直接 import 它的測試檔，加上檔名是 test_<模組>… 的
-  （「import 了 engine」不再算相關：engine.py 照上面那一條）。
+- 其他 tianxia/<模組>.py、run_bots.py、scripts/<腳本>.py：直接 import 它的測試檔，加上檔名是 test_<模組>… 的、檔名是模組名
+  第一個字的（mingtie_card → test_mingtie.py）（「import 了 engine」不再算相關：engine.py 照上面那一條）。
+  tianxia/<模組>.py 另外照模組之間最外層的 import 往上找（dependents；10/31 測試自檢 T-02：改 might.py 以前挑 0 個檔）：
+  import 任何依賴它的模組的測試檔也挑；engine 與假人三支（DRIVERS）、核心模組不往上走，彙整的模組（自己 import 至少
+  AGGREGATOR_FANOUT 個的：skillview、world……）算、不往上走；往上找到的超過 IMPORT_CAP 個檔（tactics、zh 這種底層的）改加
+  核心測試＋煙霧。engine 只為了登記才 import 的（from . import wanted as _wanted_card  # noqa: F401）照它登記的動作名
+  （social.register(CardAction(id=KIND))：wanted、mingtie）挑寫到 "wanted" 的測試檔＋那一群（registered_actions）。
 - content/：test_content.py ＋ test_real_content.py ＋ 寫到那個檔名的測試檔，照舊不含 slow：test_real_content.py 用真實內容
   跑整季的那幾條是 slow（--slow 才跑、每日整套會跑），其他的（事件難度帶 DIFFICULTY_BANDS 的鎖、地點走得到……）每次都跑。
 - web/：寫到那個檔名的測試檔（main.js、map.js、outing.js 照 app.js 挑），加上 test_server.py。功能包登記的網頁檔
@@ -73,7 +78,7 @@ PARALLEL_FROM = 3  # 挑到這麼多個檔以上才開 xdist（開工作行程�
 WORKERS = "4"  # 開發規範手冊 4.5：同一台同時最多兩份測試在跑，各自 -n 4
 # 殼的網頁檔：網頁測試每一條都載入（tests/kit/webharness.py 的 APP_FILES 扣掉功能包的 js），改哪一個都照 app.js 挑。
 # 功能包的 js（mall.js）也在 APP_FILES 裡，可是照那一包挑（feature_web）；test_test_for 守 WEB_SCRIPTS ∪ 各包的 js == APP_FILES
-WEB_SCRIPTS = {"main.js", "map.js", "outing.js", "app.js"}
+WEB_SCRIPTS = {"main.js", "map.js", "outing.js", "arena_anim.js", "app.js"}
 SETUP_FILES = {"pyproject.toml", "requirements.txt", "requirements-dev.txt"}  # conftest.py 另外照 hunk 挑（conftest_picks）
 CONFTEST_CAP = 50  # conftest 改到的名字有超過這麼多個測試檔在用（content、game、real_content）：不一個一個挑，跑煙霧
 # 跟哪一條分支比：PM 2026-10-31 起預設 origin/develop（大家從 develop 開）；環境變數 TIANXIA_TEST_BASE 蓋過預設、
@@ -329,6 +334,128 @@ def imported(test: Path) -> frozenset[str]:
                 if name:
                     names.add(name.split(".")[1] if name.startswith("tianxia.") else name.split(".")[0])
     return frozenset(names)
+
+
+# ── tianxia/ 模組之間的 import 圖（10/31 測試自檢 T-02）────────────────
+# 只看直接 import 的話，改 might.py 挑不到 test_ascend、test_create_ritual（它們透過 ascend、create 用到 might）。所以照
+# tianxia/ 模組之間最外層的 import 往上找：改了 X，import 任何「依賴 X 的模組」的測試檔也算。三種模組不往上走：
+# - engine 與假人的三支（DRIVERS：bot、bot_policy、bot_runner，經 Game 什麼都碰）：engine 照它自己那一條（hunk 落在哪個
+#   方法）另外挑，「import 了 engine」不算相關；拿 bot 當驅動的測試檔有三十幾個，算進來改 outing.py 也挑到七十幾個檔。
+# - 核心模組（CORE_MODULES）：改核心照核心那一條；X 被核心 import，也不把 import 核心的幾百個測試檔算進來。
+# - 彙整的模組（自己 import 至少 AGGREGATOR_FANOUT 個 tianxia 模組的：bot、skillview、shopview、world、mapdata……）：
+#   import 它的測試檔算，可是不再往上走（不然 bot 一路帶出整套）。
+# 函式裡的 import（多半是為了繞開互相 import 的圈）與 TYPE_CHECKING 底下的不算邊：算進來一百二十個模組連成一圈。
+# 往上找到的（不含直接 import 的）超過 IMPORT_CAP 個測試檔時（tactics、zh、martial_arts 這種底層模組）：不一個一個挑，
+# 改加核心測試＋煙霧，其他留給每日整套（同 conftest 的 CONFTEST_CAP）。
+DRIVERS = frozenset({"engine", "bot", "bot_policy", "bot_runner"})
+AGGREGATOR_FANOUT = 15
+IMPORT_CAP = 120
+TIANXIA = ROOT / "tianxia"
+
+
+def _type_checking(node: ast.If) -> bool:
+    t = node.test
+    return (isinstance(t, ast.Name) and t.id == "TYPE_CHECKING") or (isinstance(t, ast.Attribute) and t.attr == "TYPE_CHECKING")
+
+
+def _module_deps(tree: ast.Module, known: frozenset[str]) -> frozenset[str]:
+    """一個模組最外層（含最外層的 if、try 裡面；不含函式、類別裡、TYPE_CHECKING 底下）import 的 tianxia 模組。"""
+    found: set[str] = set()
+
+    def visit(nodes) -> None:
+        for n in nodes:
+            if isinstance(n, ast.ImportFrom):
+                if n.level == 1 and n.module is None or n.level == 0 and n.module == "tianxia":
+                    found.update(a.name for a in n.names)
+                elif n.level == 1:
+                    found.add(n.module.split(".")[0])
+                elif n.level == 0 and n.module and n.module.startswith("tianxia."):
+                    found.add(n.module.split(".")[1])
+            elif isinstance(n, ast.Import):
+                found.update(a.name.split(".")[1] for a in n.names if a.name.startswith("tianxia."))
+            elif isinstance(n, ast.If):
+                visit(n.orelse if _type_checking(n) else [*n.body, *n.orelse])
+            elif isinstance(n, ast.Try):
+                visit([*n.body, *n.orelse, *n.finalbody, *(s for h in n.handlers for s in h.body)])
+
+    visit(tree.body)
+    return frozenset(found & known)
+
+
+@functools.lru_cache(maxsize=None)
+def module_graph() -> dict[str, frozenset[str]]:
+    """tianxia/<模組>.py → 它最外層 import 的 tianxia 模組（照語法樹讀；讀不出來的當成沒有 import）。engine 不讀：
+    它從來不往上走，讀它要多半秒。"""
+    files = {p.stem: p for p in TIANXIA.glob("*.py") if p.stem != "__init__"}
+    known = frozenset(files)
+    graph: dict[str, frozenset[str]] = {}
+    for mod, path in files.items():
+        if mod == "engine":
+            continue
+        try:
+            graph[mod] = _module_deps(_ast(path.read_text(encoding="utf-8")), known)
+        except (OSError, SyntaxError):
+            graph[mod] = frozenset()
+    return graph
+
+
+@functools.lru_cache(maxsize=None)
+def dependents(mod: str) -> frozenset[str]:
+    """依賴 mod 的 tianxia 模組（一路往上找，不含 mod 自己；DRIVERS、核心模組不算也不往上走，彙整的模組算、不往上走）。"""
+    graph = module_graph()
+    users: dict[str, set[str]] = collections.defaultdict(set)
+    for m, deps in graph.items():
+        for d in deps:
+            users[d].add(m)
+    seen: set[str] = set()
+    todo = [mod]
+    while todo:
+        for u in users.get(todo.pop(), ()):
+            if u in seen or u == mod or u in DRIVERS or u in CORE_MODULES:
+                continue
+            seen.add(u)
+            if len(graph.get(u, ())) < AGGREGATOR_FANOUT:
+                todo.append(u)
+    return frozenset(seen)
+
+
+_ENGINE_SIDE_IMPORT = re.compile(r"^from[ \t]+\.[ \t]+import[ \t]+(\w+)[ \t]+as[ \t]+_\w+[ \t]*#[ \t]*noqa:[ \t]*F401", re.M)
+
+
+@functools.lru_cache(maxsize=None)
+def registered_actions(mod: str) -> tuple[str, ...]:
+    """engine.py 只為了登記才 import 的模組（`from . import wanted as _wanted_card  # noqa: F401`）登記的動作名：
+    模組裡 xxx.register(CardAction(id=…)) 的 id（字面字串，或最外層的常數 KIND = "wanted"）。其他模組回空的。
+    這種模組沒有測試檔 import 它（測試是經 Game.peer_card／peer_act 用到），只能照動作名挑。"""
+    engine = TIANXIA / "engine.py"
+    try:
+        if mod not in _ENGINE_SIDE_IMPORT.findall(engine.read_text(encoding="utf-8")):
+            return ()
+        tree = _ast((TIANXIA / f"{mod}.py").read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return ()
+    consts = {t.id: n.value.value for n in tree.body if isinstance(n, ast.Assign)
+              and isinstance(n.value, ast.Constant) and isinstance(n.value.value, str)
+              for t in n.targets if isinstance(t, ast.Name)}
+    found: list[str] = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, (ast.Attribute, ast.Name))
+                and getattr(node.func, "attr", getattr(node.func, "id", None)) == "register"):
+            continue
+        for arg in node.args:
+            for kw in (arg.keywords if isinstance(arg, ast.Call) else []):
+                if kw.arg != "id":
+                    continue
+                value = kw.value.value if isinstance(kw.value, ast.Constant) else consts.get(getattr(kw.value, "id", ""))
+                if isinstance(value, str) and value not in found:
+                    found.append(value)
+    return tuple(found)
+
+
+def action_files(kind: str) -> set[Path]:
+    """寫到動作名字串（"wanted"、'wanted'）的測試檔，加上那個字的功能群（group_files）。"""
+    quoted = (f'"{kind}"', f"'{kind}'")
+    return {t for t in all_tests() if t.name not in TEXT_BLIND and any(q in _text(t) for q in quoted)} | group_files(kind)
 
 
 def _parts(ident: str) -> list[str]:
@@ -889,9 +1016,27 @@ def pick(files: list[str], base: str | None = None,
             continue
         if path.suffix == ".py" and (f.startswith("tianxia/") or f.startswith("scripts/") or "/" not in f):
             mod = path.stem
+            first = _first_word(mod)  # mingtie_card 也挑 test_mingtie.py（檔名是模組名的第一個字）
             result.files |= {t for t in tests if mod in imported(t) or t.stem == f"test_{mod}"
-                             or t.stem.startswith(f"test_{mod}_")
+                             or t.stem.startswith(f"test_{mod}_") or (first != mod and t.stem == f"test_{first}")
                              or (f.startswith("scripts/") and f"{mod}.py" in _text(t))}
+            if f == f"tianxia/{path.name}":
+                ups = dependents(mod)
+                if ups:
+                    via = {t for t in tests if imported(t) & ups} - result.files
+                    if len(via) > IMPORT_CAP:
+                        core_and_smoke()
+                        result.why.append(f"{f}：依賴它的模組有 {len(ups)} 個、import 它們的測試檔 {len(via)} 個，太多"
+                                          " → 直接 import 它的＋核心測試＋煙霧（其他留給每日整套；要當場驗用 --all）")
+                    elif via:
+                        result.files |= via
+                        shown = sorted(ups)
+                        result.why.append(f"{f}：經 {'、'.join(shown[:8])}{'……' if len(shown) > 8 else ''}"
+                                          f"（依賴它的 {len(ups)} 個模組）再挑到 {len(via)} 個檔")
+                for kind in registered_actions(mod):
+                    hit = action_files(kind)
+                    result.files |= hit
+                    result.why.append(f"{f}：engine 為了登記才 import 它（動作 {kind}）→ 寫到 \"{kind}\" 的 {len(hit)} 個檔")
             continue
         if f.startswith("content/"):
             # test_real_content.py 147 條只有整季那 11 條是 slow：其他的（事件難度帶 DIFFICULTY_BANDS、地點走得到……）照

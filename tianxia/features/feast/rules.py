@@ -262,6 +262,14 @@ def request(state: GameState, content: Content, f: Feast, text: str) -> ToastReq
     )
 
 
+_PROMPT_UNSAFE = re.compile(r"[「」『』\"“”‘’'`\x00-\x1f\x7f]+")  # 同 zh.PROMPT_UNSAFE（功能包不 import 還沒搬的 zh）
+
+
+def _prompt_safe(text: str) -> str:
+    """名號、敬酒詞放進提示以前夾掉引號與換行（M-13，同 zh.prompt_safe）。"""
+    return _PROMPT_UNSAFE.sub("", str(text or ""))
+
+
 def score(client, req: ToastRequest) -> int:
     """B 段：主人聽了這一句有多高興（0～100 的整數）。同決戰放手一搏的評分：短提示、只回一個整數。評不到回 DEFAULT_SCORE。"""
     if client is None:
@@ -275,7 +283,8 @@ def score(client, req: ToastRequest) -> int:
         )},
         {"role": "user", "content": (
             (f"你此刻的心事：{req.mood}\n" if req.mood else "")
-            + f"敬酒的人：{req.name}（{req.side}{'，女子' if req.sex == '女' else ''}）\n敬酒詞：「{req.text}」"
+            + f"敬酒的人：{_prompt_safe(req.name)}（{req.side}{'，女子' if req.sex == '女' else ''}）\n"
+            f"敬酒詞：「{_prompt_safe(req.text)}」"  # 名號、敬酒詞夾掉引號與換行（M-13）
         )},
     ]
     try:

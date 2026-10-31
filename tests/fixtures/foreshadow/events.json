@@ -8,7 +8,7 @@
     {"text": "不理它"}
   ]},
   {"id": "fs_ev_two_buyers", "title": "兩路買家", "text": "官軍的軍需官與黃巾的頭目先後來買糧。", "locations": ["town"],
-   "condition": {"factions": ["haoqiang"], "week_min": 4, "week_max": 6}, "choices": [
+   "condition": {"factions": ["huang"], "week_min": 4, "week_max": 6}, "choices": [
     {"text": "賣給官軍"},
     {"text": "賣給黃巾"},
     {"text": "都不賣，關門囤糧"},

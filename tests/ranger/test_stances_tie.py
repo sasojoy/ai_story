@@ -12,8 +12,6 @@ from stances_kit import DAY, HOUR, LUZHI, MON, at, real_game
 from tianxia import stances
 from tianxia.state import StanceOn
 
-pytestmark = pytest.mark.slow  # 載正式內容、照伺服器開季
-
 
 def _set(game, active: str | None, counts: dict[str, int]) -> None:
     """這一週的計數與他此刻照著做的心意（同 stances.check 到門檻那一刻寫的）。"""

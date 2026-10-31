@@ -130,13 +130,6 @@ def renown_unscaled(content: Content) -> Content:
     return content
 
 
-def third_party_gentry(content: Content) -> Content:
-    """豪強分屬兩軍（企劃者 2026-10-15，Config.haoqiang_allied）之前的規則：週末設定裡豪強照舊是第三方（割據、攪局、臨時投效），
-    回傳同一份內容。測的是第三方豪強、割據本身的舊測試用它；新規則的測試不要叫（見 tests/test_gentry_allied.py）。"""
-    content.config.haoqiang_allied = False
-    return content
-
-
 @pytest.fixture(scope="session", autouse=True)
 def content_masters_stay_unchanged():
     """工作階段結束時，每份母本重新 pickle 一次，位元組要跟發第一份複本時一模一樣，不一樣就寫出是哪一份、哪幾個欄位。
@@ -213,6 +206,7 @@ def no_tale_threads(monkeypatch):
 
     monkeypatch.setattr(server, "TALE_THREADS", False)
     monkeypatch.setattr(server, "TALE_RUNNING", False)
+    monkeypatch.setattr(server, "REGISTRATIONS", {})  # 同一個來源一小時註冊幾個（審查 S-10）：每個測試從零開始
 
 
 @pytest.fixture(autouse=True)
@@ -246,6 +240,13 @@ def no_leftover_web_push(monkeypatch, tmp_path):
     server.TALES_STOP.clear()
     server.TALES = None
     server.TALES_CLIENT = None
+    server.PUSH_STOP.set()  # 伺服器推送（2026-10-31 起 week7、season21 開著）：main() 照那兩份設定開看守，留著會在之後測試的暫存資料庫上讀、worker segfault
+    if server.PUSH_THREAD is not None:
+        server.PUSH_THREAD.join(5.0)
+    server.PUSH_THREAD = None
+    server.PUSH_STOP.clear()
+    server.HUB = None
+    server.QUEUE = None  # 模型佇列（同上兩份設定開著）：下一個測試從關著開始
 
 
 @pytest.fixture(autouse=True)
@@ -425,11 +426,24 @@ def real():
 
 @pytest.fixture
 def on(real):
-    """同一份真實內容，照週末設定打開：開關、季長 2.5 天、人數上限 2（每道軍令 4 次）。"""
+    """同一份真實內容，照週末設定打開：開關、季長 2.5 天、人數上限 2（每道軍令 4 次）。豪強分屬兩軍（第一季規則的季一律如此；
+    豪強第三方 2026-10-31 拿掉）。不畫地盤（劇本的 territory 拿掉）：以前這一份沒開 haoqiang_allied，地盤（領地爭奪）本來就不開；
+    測領地爭奪的用 conquest_kit 或 week7、season21 設定。"""
     real.config.season_one = True
     real.config.season_days = 2.5
     real.config.server_max_players = 2
-    return real
+    return no_territory(real)
+
+
+def no_territory(content: Content) -> Content:
+    """拿掉劇本的地盤（territory）與時刻表結果裡的易手（control），回傳同一份內容：第一季規則開著、地盤（領地爭奪）不開。
+    2026-10-31 以前沒開 haoqiang_allied 的內容（週末設定、`on`）地盤本來就不開；豪強第三方連那個開關一起拿掉之後，
+    照舊靠舊玩法（遊歷、拔河以前的推線）測的就叫它。"""
+    content.scenario.territory = None
+    for event in [*content.timetable, *content.mandate_timetable]:
+        for outcome in event.outcomes.values():
+            outcome.control = {}
+    return content
 
 
 def next_season(content, world, *players):
@@ -476,7 +490,7 @@ CHANGSHE_LOSER = "黃巾的 {loser} 曾看破火攻，可惜晚了一步。"
 
 
 def season_one_events() -> list:
-    """縮小的時刻表，照結算文件的寫法（固定、擲骰、決戰、版本、鎖定、豪強、人物效果各有一件）。"""
+    """縮小的時刻表，照結算文件的寫法（固定、擲骰、決戰、版本、鎖定、人物效果各有一件；豪強第三方 2026-10-31 拿掉）。"""
     from tianxia.models import FigureChange, TimetableEvent, TimetableOutcome
 
     O = TimetableOutcome  # noqa: N806
@@ -497,7 +511,6 @@ def season_one_events() -> list:
         TimetableEvent(
             id="changshe_fire", week=6, front="yingru", title="長社火攻", kind="showdown",
             preface="史書上，皇甫嵩趁夜縱火，大破波才於長社。",
-            third_party_text="事後才有人發現，兩軍吃的糧出自同一家：{name} 的糧車。", third_party_trends={"geju": 10},
             outcomes={
                 "guan:大勝": O(text="這一次也一樣：火光燭天。", chronicle="皇甫嵩火攻長社。", trends={"yingru": -15},
                               locked_text={"guan": CHANGSHE_LOCKED}, loser_text={"guan": CHANGSHE_LOSER}),
@@ -530,16 +543,14 @@ def season_one_events() -> list:
         ),
         TimetableEvent(
             id="luzhi_jailed", week=8, front=None, title="盧植下獄", kind="roll", roll_side="huang", base_chance=0.5,
-            lock_result={"huang": "成", "guan": "不成"}, third_party_trends={"geju": 8},
+            lock_result={"huang": "成", "guan": "不成"},
             outcomes={
                 "成": O(text="史書上，盧植下獄。這一次也一樣。", chronicle="盧植被誣下獄。", trends={"jizhou": 8},
                        locked_text={"huang": LUZHI_LOCKED["huang"]}, loser_text={"huang": LUZHI_LOSER["huang"]},
-                       third_party_text="是袁本初在朝中替他說話，才減了死罪。",
                        figures={"luzhi": FigureChange(fate="下獄"),
                                 "dongzhuo": FigureChange(fate="到任", front="jizhou", location="luzhi_camp")}),
                 "不成": O(text="史書上，盧植下獄。這一次，奏報被壓了下來。", chronicle="盧植續圍廣宗。", trends={"jizhou": -5},
-                         locked_text={"guan": LUZHI_LOCKED["guan"]}, loser_text={"guan": LUZHI_LOSER["guan"]},
-                         third_party_text="朝中替盧中郎說話最力的是袁本初。{name} 在他府上坐了三個晚上。"),
+                         locked_text={"guan": LUZHI_LOCKED["guan"]}, loser_text={"guan": LUZHI_LOSER["guan"]}),
             },
         ),
         TimetableEvent(
@@ -560,7 +571,7 @@ def season_one_events() -> list:
 
 
 def install_season_one(content):
-    """打開第一季開關、季長 2.5 天，加上三條戰線與割據（起始值照結算文件的開季數字）與縮小的時刻表。
+    """打開第一季開關、季長 2.5 天，加上三條戰線（起始值照結算文件的開季數字；割據 2026-10-31 拿掉）與縮小的時刻表。
     每小時的虛擬玩家不在這裡測，先拿掉。"""
     from tianxia.models import Trend
 
@@ -568,7 +579,7 @@ def install_season_one(content):
     content.scenario.sim_players = []
     content.scenario.trends += [
         Trend(id="yingru", name="潁川汝南", start=40), Trend(id="nanyang", name="南陽", start=35),
-        Trend(id="jizhou", name="冀州", start=55), Trend(id="geju", name="豪強割據", start=20),
+        Trend(id="jizhou", name="冀州", start=55),
     ]
     content.timetable = season_one_events()
     return content
@@ -662,3 +673,78 @@ def install_foreshadows(content):
         content.events[raw["id"]] = Event(**raw)
     validate(content)
     return content
+
+
+# ── 已知很長的排在最前面（10/31 測試自檢 T-03）─────────────────────────────
+# 整套含 slow 的牆鐘有四成花在尾巴：最長的整季模擬（test_sim_scripts 一條三分鐘）照檔名排在最後，別的 worker 都跑完了，只剩
+# 一、兩個 worker 在跑它們。這裡把量過很長的（10/31 量的 per_test：單一條 6 秒以上，照長短排）挪到前面，其餘照原本的順序。
+# 只排在最前面不夠：xdist 3.8 的預設分法（--dist load，-n 時就是它）一開始給每個 worker「連續的一段」，一段是
+# 條數 ÷ worker 數 ÷ 4（xdist/scheduler/load.py 的 node_chunksize），長的會全落在第一個 worker 的那一段，它跑完長的還
+# 背著九百多條，別人早就閒著（10/31 實測）。所以平行跑時（workerinput 的 workercount）把長的照蛇形（0、1、2、2、1、0…）
+# 分到每一段的最前面：每個 worker 一開始各拿一份差不多長的，其餘照 load 動態發。不要用 --dist worksteal（它的段是
+# 條數 ÷ worker 數，長的又會擠在同一段）。不跑 slow 時這幾條本來就被 -m 濾掉（trylast：排在 -m 濾掉之後），順序沒有差別。
+# 這張表是排程用的提示，少寫、多寫、名字改了都不會讓測試紅。
+LONG_FIRST = (
+    "tests/season/test_sim_scripts.py::test_the_server_bot_simulation_counts_its_forging_in_a_short_season",
+    "tests/season/test_sim_scripts.py::test_a_week7_server_bot_season_splits_the_gentry_between_the_armies",
+    "tests/season/test_sim_scripts.py::test_the_sanren_measure_script_can_send_the_faction_side_to_the_local_gentry",
+    "tests/ranger/test_bounties.py::test_a_whole_beta_season_posts_one_batch_a_week",
+    "tests/season/test_sim_scripts.py::test_the_sanren_measure_script_can_measure_a_season_with_the_season_one_rules_off",
+    "tests/acts/test_sortie_duel_bots.py::test_a_bots_only_server_clears_every_duel_within_a_day",
+    "tests/season/test_sim_scripts.py::test_the_mounts_measure_script_prints_one_line_with_and_one_without_mounts",
+    "tests/season/test_sim_scripts.py::test_the_secrets_measure_script_also_prints_the_forge_part",
+    "tests/season/test_four_wins_gentry_bots.py::test_gentry_server_bots_split_between_the_two_armies",
+    "tests/season/test_sim_scripts.py::test_the_weapons_measure_script_prints_one_line_with_and_one_without_weapons",
+    "tests/season/test_sim_scripts.py::test_the_exp_pace_measure_prints_one_line_per_side_and_rule",
+    "tests/season/test_sim_scripts.py::test_the_treasures_measure_script_prints_one_line_with_and_one_without_treasures",
+    "tests/season/test_sim_scripts.py::test_the_gear_measure_script_prints_one_line_with_and_one_without_armor",
+    "tests/season/test_real_content.py::test_bot_plays_a_full_season",
+    "tests/bots/test_bot_runner.py::test_a_season_of_server_bots_runs_to_the_end_and_both_sides_fight",
+    "tests/acts/test_conquest_flip.py::test_bots_never_press_it_off_own_ground",
+    "tests/season/test_real_content.py::test_every_idle_menu_id_is_one_the_prologue_allow_list_knows",
+    "tests/season/test_sim_season_one.py",
+    "tests/battle/test_explore_one_fix.py::test_the_boss_chance_follows_the_renown_multiplier",
+    "tests/season/test_core_loop_bots.py::test_a_season_bot_plays_the_new_loop_on_the_real_content",
+    "tests/season/test_real_content.py::test_every_person_slot_resolves_whoever_is_left",
+    "tests/acts/test_sortie_duel_bots.py::test_the_whole_season_bot_runs_a_short_season21_stretch",
+    "tests/season/test_real_content.py::test_world_map_labels_never_collide_or_leave_the_canvas_at_the_start",
+    "tests/web/test_prologue_web.py::test_fb095_after_a_redraw_the_busy_mark_lands_on_the_button_on_the_page",
+    "tests/battle/test_explore_one_fix.py::test_an_official_newbie_at_changshe_meets_the_boss_about_five_percent_of_trips",
+    "tests/season/test_sim_scripts.py",
+    "tests/season/test_four_wins_gentry_bots.py",
+)
+
+
+def long_first_rank(nodeid: str) -> int:
+    """nodeid 在 LONG_FIRST 的第幾個（整個檔、一條測試，或一條測試的每一組參數 [..]）；不在表上的排在後面。"""
+    for i, prefix in enumerate(LONG_FIRST):
+        if nodeid == prefix or nodeid.startswith((prefix + "::", prefix + "[")):
+            return i
+    return len(LONG_FIRST)
+
+
+def spread_long_first(items: list, workers: int) -> list:
+    """items 已經照 long_first_rank 排好（長的在前）：平行跑時把長的照蛇形分到 xdist load 一開始給每個 worker 的那一段
+    （條數 ÷ worker 數 ÷ 4，至少 2）的最前面，其餘的接著補滿每一段、再照原本的順序排在後面。一個 worker 照原樣。"""
+    end = next((i for i, item in enumerate(items) if long_first_rank(item.nodeid) == len(LONG_FIRST)), len(items))
+    if workers < 2 or end == 0:
+        return list(items)
+    long_items, rest = items[:end], items[end:]
+    chunk = max(len(items) // workers // 4, 2)
+    buckets: list[list] = [[] for _ in range(workers)]
+    for j, item in enumerate(long_items):
+        k = j % (2 * workers)
+        buckets[k if k < workers else 2 * workers - 1 - k].append(item)
+    out, pos = [], 0
+    for bucket in buckets:
+        take = max(chunk - len(bucket), 0)
+        out += bucket + rest[pos:pos + take]
+        pos += take
+    return out + rest[pos:]
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(config, items):
+    items.sort(key=lambda item: long_first_rank(item.nodeid))  # 穩定排序：不在表上的照原本的順序
+    workers = int(getattr(config, "workerinput", {}).get("workercount", 1))
+    items[:] = spread_long_first(items, workers)

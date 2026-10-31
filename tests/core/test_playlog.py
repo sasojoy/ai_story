@@ -70,7 +70,7 @@ def test_retention_and_the_last_day(log):
 def test_a_version_6_file_upgrades_to_7_with_the_two_empty_tables(tmp_path):
     path = tmp_path / "v6.db"
     conn = sqlite3.connect(path)
-    for sql in database.SCHEMA[: len(database.SCHEMA) - len(database.SCHEMA_V7_TABLES)]:
+    for sql in database.SCHEMA[: len(database.SCHEMA) - len(database.SCHEMA_V7_TABLES) - len(database.SCHEMA_V8_CHANGES) - len(database.SCHEMA_V9_TABLES)]:
         conn.execute(sql)
     conn.execute("INSERT INTO characters (key, name, is_bot, faction, data) VALUES ('沈浪', '沈浪', 0, NULL, '{}')")
     conn.execute("PRAGMA user_version = 6")
@@ -78,7 +78,7 @@ def test_a_version_6_file_upgrades_to_7_with_the_two_empty_tables(tmp_path):
     conn.close()
     db = Database(path)
     with db.snapshot() as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == database.SCHEMA_VERSION == 7
+        assert c.execute("PRAGMA user_version").fetchone()[0] == database.SCHEMA_VERSION == 9
         assert c.execute("SELECT COUNT(*) FROM action_counts").fetchone()[0] == 0
         assert c.execute("SELECT COUNT(*) FROM action_firsts").fetchone()[0] == 0
         assert c.execute("SELECT name FROM characters").fetchone()[0] == "沈浪"

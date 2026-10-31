@@ -22,14 +22,12 @@ SIDES = ("guan", "huang")  # 交戰兩軍（領地爭奪設計 4.1：豪強不�
 
 
 def on(content: Content) -> bool:
-    """地盤（＝領地爭奪，conquest.on）開著：第一季規則開著、劇本有官軍與黃巾、寫了區塊；劇本有要依附的陣營（豪強）時豪強分屬兩軍
-    也開著（領地爭奪設計 4.1、4.10）。舊的拔河與割據（沒有第一季規則的季、豪強不分屬兩軍的季）2026-10-27 拿掉：那種季沒有地盤。"""
+    """地盤（＝領地爭奪，conquest.on）開著：第一季規則開著（豪強分屬兩軍跟著它，allied.on）、劇本有官軍與黃巾、寫了區塊
+    （領地爭奪設計 4.1、4.10）。舊的拔河與割據（沒有第一季規則的季）2026-10-27 拿掉：那種季沒有地盤。"""
     cfg, scen = content.config, content.scenario
     if not cfg.season_one or scen.territory is None or not scen.territory.blocks:
         return False
-    if not set(SIDES) <= {f.id for f in scen.factions}:
-        return False
-    return cfg.haoqiang_allied or not any(f.allies for f in scen.factions)
+    return set(SIDES) <= {f.id for f in scen.factions}
 
 
 def line_of(content: Content, loc_id: str) -> str | None:
@@ -51,12 +49,10 @@ def bases(content: Content) -> dict[str, str]:
 
 
 def held_bases(world: WorldState, content: Content) -> dict[str, str]:
-    """算得上誰的地盤的大本營（控制方、各佔幾處讀它）：豪強分屬兩軍的季，豪強的投靠點不算哪一方的地盤（不在戰線上、豪強依附
-    哪一軍都有；FB-274：以前算成豪強佔著，輿圖大區那一行多「豪 1」、三色條多一段綠的）。其他季同 bases。"""
-    out = bases(content)
-    if rules.haoqiang_allied(content, world):
-        out = {loc_id: side for loc_id, side in out.items() if not content.scenario.faction(side).allies}
-    return out
+    """算得上誰的地盤的大本營（控制方、各佔幾處讀它）：豪強的投靠點不算哪一方的地盤（豪強分屬兩軍，不在戰線上、豪強依附
+    哪一軍都有；FB-274：以前算成豪強佔著，輿圖大區那一行多「豪 1」、三色條多一段綠的）。地盤只在第一季規則的季有，那種季豪強
+    一律分屬兩軍（allied.on），所以不再問開關。"""
+    return {loc_id: side for loc_id, side in bases(content).items() if not content.scenario.faction(side).allies}
 
 
 def unheld(world: WorldState, content: Content, loc_id: str) -> bool:
@@ -69,11 +65,6 @@ def sides(content: Content, line: str) -> tuple[str | None, str | None]:
     low = next((f.id for f in content.scenario.factions if f.goals.get(line, 0) < 0), None)
     high = next((f.id for f in content.scenario.factions if f.goals.get(line, 0) > 0), None)
     return low, high
-
-
-def geju_side(content: Content) -> str | None:
-    """推豪強割據那一條線的陣營（輿圖版圖變化那一條曲線照它的顏色）。"""
-    return next((f.id for f in content.scenario.factions if f.goals.get(rules.GEJU, 0) > 0), None)
 
 
 def line_value(world: WorldState, content: Content, line: str) -> int:
@@ -123,11 +114,11 @@ START_WEEK = 0  # TerritoryState.weeks 裡開季那一刻的鍵：這一季第�
 
 
 def _snapshot(world: WorldState, content: Content, t: TerritoryState) -> None:
-    """把「這一週」那一格蓋成此刻的樣子（輿圖升級設計第九節）：控制方、每條戰線拔河看的值（line_value）、割據（沒有這條線是 None）。"""
+    """把「這一週」那一格蓋成此刻的樣子（輿圖升級設計第九節）：控制方、每條戰線拔河看的值（line_value）。
+    割據（TerritoryWeek.geju）2026-10-31 拿掉，不再記；舊存檔裡記過的照留、不讀。"""
     week = calendar.point(world.time, content, world).week
-    geju = rules.world_trend_value(world, content, rules.GEJU) if rules.trend_shown(content, world, rules.GEJU) else None
     t.weeks[week] = TerritoryWeek(
-        control=dict(t.control), fronts={line: line_value(world, content, line) for line in content.scenario.territory.lines}, geju=geju,
+        control=dict(t.control), fronts={line: line_value(world, content, line) for line in content.scenario.territory.lines},
     )
 
 

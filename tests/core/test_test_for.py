@@ -54,8 +54,77 @@ def _added(path, src, *lines):
 
 
 def test_a_module_picks_the_tests_that_import_it():
-    names = _names(["tianxia/glyph.py"])
-    assert "test_sensing.py" in names and "test_real_content.py" not in names
+    picked = test_for.pick(["tianxia/glyph.py"])
+    assert "test_sensing.py" in {p.name for p in picked.files} and not picked.core
+    assert any("sensing" in w for w in picked.why)  # 經 import 它的 sensing 再挑（T-02）
+
+
+def test_a_module_also_picks_the_tests_of_the_modules_that_import_it():
+    """10/31 測試自檢 T-02：might.py 沒有測試檔直接 import，以前挑 0 個；把 might.now 改成回 0，透過 ascend、create 用到它的
+    test_ascend、test_create_ritual 會紅。現在照 tianxia/ 模組之間的 import 往上找。"""
+    picked = test_for.pick(["tianxia/might.py"])
+    assert {"test_ascend.py", "test_create_ritual.py"} <= {p.name for p in picked.files}
+    assert not picked.core and not picked.smoke
+    ups = test_for.dependents("might")
+    assert {"ascend", "create"} <= ups
+    assert not ups & test_for.DRIVERS and not ups & test_for.CORE_MODULES  # engine、假人、核心不往上走
+
+
+def test_the_import_graph_skips_type_checking_and_imports_inside_functions():
+    tree = test_for._ast(
+        "from __future__ import annotations\n"
+        "from typing import TYPE_CHECKING\n"
+        "from . import alpha, beta as b\n"
+        "from .gamma import thing\n"
+        "import tianxia.delta\n"
+        "try:\n"
+        "    from . import eps\n"
+        "except ImportError:\n"
+        "    pass\n"
+        "if TYPE_CHECKING:\n"
+        "    from .engine import Game\n"
+        "def late():\n"
+        "    from . import zeta\n"
+    )
+    known = frozenset({"alpha", "beta", "gamma", "delta", "eps", "engine", "zeta"})
+    assert test_for._module_deps(tree, known) == {"alpha", "beta", "gamma", "delta", "eps"}
+
+
+def test_an_aggregator_is_picked_but_not_walked_through(monkeypatch):
+    """彙整的模組（import 很多模組的 skillview 這種）：依賴它算，可是不再往上走；DRIVERS 與核心連算都不算。"""
+    many = frozenset(f"m{i}" for i in range(test_for.AGGREGATOR_FANOUT))
+    graph = {"low": frozenset(), "mid": frozenset({"low"}), "agg": frozenset({"mid"}) | many,
+             "top": frozenset({"agg"}), "bot": frozenset({"mid"}), "rules": frozenset({"low"})}
+    monkeypatch.setattr(test_for, "module_graph", lambda: graph)
+    test_for.dependents.cache_clear()
+    try:
+        assert test_for.dependents("low") == {"mid", "agg"}
+    finally:
+        test_for.dependents.cache_clear()
+
+
+def test_a_low_module_with_too_many_dependents_runs_core_and_smoke_instead():
+    """tactics、zh 這種底層模組往上找會挑到兩、三百個檔：超過 IMPORT_CAP 只挑直接 import 的，加核心測試＋煙霧。"""
+    picked = test_for.pick(["tianxia/zh.py"])
+    assert picked.core and picked.smoke
+    assert len(picked.files) < test_for.IMPORT_CAP
+    assert any("太多" in w for w in picked.why)
+
+
+@pytest.mark.parametrize("module, kind, expected", [
+    ("wanted", "wanted", {"test_bounties.py", "test_sanren_web.py"}),
+    ("mingtie_card", "mingtie", {"test_mingtie.py"}),
+])
+def test_a_module_engine_imports_to_register_picks_the_tests_that_name_its_action(module, kind, expected):
+    """T-02：wanted.py、mingtie_card.py 只靠 engine 的 `as _x  # noqa: F401` 登記進 social.ACTIONS，測試經 peer_card／peer_act
+    用到、沒有人 import：照登記的動作名挑寫到它的測試檔。讓 wanted.buttons 回 []，test_bounties 與 test_sanren_web 會紅。"""
+    assert kind in test_for.registered_actions(module)
+    assert expected <= _names([f"tianxia/{module}.py"])
+    assert test_for.registered_actions("might") == ()
+
+
+def test_a_module_picks_the_tests_named_after_its_first_word():
+    assert "test_mingtie.py" in _names(["tianxia/mingtie_card.py"])
 
 
 def test_content_picks_its_tests_and_the_fast_part_of_real_content():
@@ -330,32 +399,32 @@ def _marker(cmd):
 def test_a_changed_test_file_runs_with_its_slow_tests():
     """手冊 4.3「只跑改到的那幾個測試檔」：改了一個整個檔標 slow 的測試檔，就是要跑它，連 slow 一起
     （以前 -m "not slow" 把它整個濾掉，39 deselected、結束碼 5）。"""
-    own = test_for.pick(["tests/arts/test_epiphany.py", "tests/core/test_errands.py"])
+    own = test_for.pick(["tests/core/test_story_wolong.py", "tests/core/test_story_maier.py"])
     (cmd,) = test_for.pytest_commands(own, slow=False, extra=[])
     assert _marker(cmd) == "slow or not slow"
-    assert {"tests/arts/test_epiphany.py", "tests/core/test_errands.py"} <= set(cmd)
+    assert {"tests/core/test_story_wolong.py", "tests/core/test_story_maier.py"} <= set(cmd)
 
 
 def test_changed_slow_test_files_run_apart_from_the_rest_of_the_pick():
     """改到的測試檔連 slow 一起跑，其他挑到的照舊不含 slow：分兩次，改到的那幾個不在第一次裡重複跑。"""
-    mixed = test_for.pick(["tests/arts/test_epiphany.py"])
+    mixed = test_for.pick(["tests/core/test_story_wolong.py"])
     mixed.files.add(ROOT / "tests/arts/test_fusion.py")
     mixed.core = True
     first, second = test_for.pytest_commands(mixed, slow=False, extra=[])
     assert _marker(first) == "not slow" and "tests/arts/test_fusion.py" in first
-    assert "tests/arts/test_epiphany.py" not in first and "tests/core/test_engine.py" in first
-    assert _marker(second) == "slow or not slow" and second[-1] == "tests/arts/test_epiphany.py"
+    assert "tests/core/test_story_wolong.py" not in first and "tests/core/test_engine.py" in first
+    assert _marker(second) == "slow or not slow" and second[-1] == "tests/core/test_story_wolong.py"
     plain = test_for.pick(["tests/arts/test_fusion.py"])  # 沒有 slow 的測試檔：一次就好
     assert len(test_for.pytest_commands(plain, slow=False, extra=[])) == 1
     # 這個檔的字串裡寫了 "@pytest.mark.slow"（_slow_smoke 的例子），不是標記：也是一次就好
     assert not test_for.has_slow(ROOT / "tests/core/test_test_for.py")
-    assert test_for.has_slow(ROOT / "tests/arts/test_epiphany.py")
+    assert test_for.has_slow(ROOT / "tests/core/test_story_wolong.py")
 
 
 def test_a_pick_that_is_all_slow_says_so_and_does_not_fail(capsys):
     """挑到的全在整個檔標 slow 的檔裡：先列出來；一條都沒跑（pytest 結束碼 5）時說要 --slow，結束碼 0。"""
-    picked = test_for.Pick(files={ROOT / "tests/arts/test_epiphany.py"})
-    assert any("--slow" in line and "test_epiphany.py" in line for line in test_for.describe(picked))
+    picked = test_for.Pick(files={ROOT / "tests/core/test_story_wolong.py"})
+    assert any("--slow" in line and "test_story_wolong.py" in line for line in test_for.describe(picked))
     assert test_for.finish([5], picked, slow=False) == 0
     assert "--slow" in capsys.readouterr().out
     assert test_for.finish([0, 5], picked, slow=False) == 0
@@ -445,11 +514,11 @@ def test_a_feature_packages_web_file_picks_that_package_not_the_app_js_batch():
 
 
 def test_a_feature_packages_js_runs_the_package_tests_that_execute_it_with_their_slow_tests():
-    """包的 js 只有包裡用假瀏覽器（webharness）跑整支頁面的測試會真的執行它，而商城的 test_mall_web.py 整個檔標 slow：
-    照「不含 slow」挑等於沒有一條在跑 mall.js（10/31 審查：插一行 function ((( 照預設 134 passed、exit 0，--slow 才 30 failed）。
+    """包的 js 只有包裡用假瀏覽器（webharness）跑整支頁面的測試會真的執行它，而商城的 test_mall_web.py 以前整個檔標 slow
+    （10/31 起只有超過一秒的那幾條）：照「不含 slow」挑等於沒有一條在跑 mall.js（10/31 審查：插一行 function ((( 照預設 134 passed、exit 0，--slow 才 30 failed）。
     那幾個連 slow 一起跑，跟改到的測試檔一樣分開跑一次；挑到的其他檔照舊不含 slow，也不再列成「這一次不跑」。"""
     web_test = test_for.FEATURES / "mall" / "tests" / "test_mall_web.py"
-    assert test_for.whole_slow(web_test) and "webharness" in test_for.imported(web_test)
+    assert test_for.has_slow(web_test) and "webharness" in test_for.imported(web_test)
     js = test_for.pick(["web/mall.js"])
     assert web_test in js.files
     rest, slow_too = test_for.pytest_commands(js, slow=False, extra=[])
@@ -567,3 +636,38 @@ def test_describe_says_what_the_core_tests_are():
     lines = test_for.describe(test_for.Pick(core=True))
     line = next(x for x in lines if x.startswith("核心測試"))
     assert "test_engine" in line and f"{len(test_for.core_tests())} 個檔" in line and "tests/core/ 不含 slow" not in line
+
+
+def test_the_long_tests_listed_first_still_exist_and_rank_in_order():
+    """tests/conftest.py 的 LONG_FIRST（T-03：已知很長的排在最前面）：每一筆的檔與測試函式都還在（改名了要跟著改，
+    不然那一條又排回尾巴），排序照表上的順序，不在表上的排在後面。"""
+    import re
+
+    import conftest
+    for entry in conftest.LONG_FIRST:
+        path, _, name = entry.partition("::")
+        assert (ROOT / path).is_file(), entry
+        if name:
+            assert re.search(rf"^def {re.escape(name)}\(", test_for._text(ROOT / path), re.M), entry
+    first = conftest.LONG_FIRST[0]
+    assert conftest.long_first_rank(first) == 0
+    assert conftest.long_first_rank("tests/season/test_real_content.py::test_bot_plays_a_full_season[2]") > 0
+    assert conftest.long_first_rank("tests/season/test_sim_scripts.py::test_anything_else") == len(conftest.LONG_FIRST) - 2
+    assert conftest.long_first_rank("tests/arts/test_fusion.py::test_x") == len(conftest.LONG_FIRST)
+
+
+def test_the_long_tests_are_spread_to_the_head_of_each_workers_first_chunk():
+    """xdist load 一開始給每個 worker 連續的一段（條數 ÷ worker 數 ÷ 4）：長的照蛇形分到每一段的最前面，不全擠在第一段。"""
+    from types import SimpleNamespace
+
+    import conftest
+    longs = [SimpleNamespace(nodeid=e) for e in conftest.LONG_FIRST[:6]]
+    rest = [SimpleNamespace(nodeid=f"tests/arts/test_x.py::test_{i}") for i in range(114)]
+    items = longs + rest
+    assert conftest.spread_long_first(items, 1) == items
+    out = conftest.spread_long_first(items, 3)
+    assert sorted(id(i) for i in out) == sorted(id(i) for i in items)
+    chunk = len(items) // 3 // 4  # 10
+    heads = [out[k * chunk:(k + 1) * chunk] for k in range(3)]
+    assert [[i for i in h if i in longs] for h in heads] == [[longs[0], longs[5]], [longs[1], longs[4]], [longs[2], longs[3]]]
+    assert [i for i in out if i not in longs] == rest  # 其餘照原本的順序

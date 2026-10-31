@@ -348,14 +348,15 @@ def write(client, note: LetterNote) -> str:
         )
     except Exception:
         return ""
-    return clean(result.letter)
+    return clean(result.letter, note.player, note.sender_name, note.about, note.task)
 
 
-def clean(raw: str) -> str:
+def clean(raw: str, *known: str) -> str:
+    """known 是提示裡本來就有的字（名號、寫信的人、事由）：英文只能是這些裡面有的（M-07）。"""
     text = zh.to_traditional(str(raw or "")).strip()
     text = re.sub(r"[*#>`_]+", "", text)
     text = re.sub(r"\s+", "", text).strip("「」『』\"'“”")
-    if not text or len(text) > WRITE_LIMIT or _DIGITS.search(text):
+    if not text or len(text) > WRITE_LIMIT or _DIGITS.search(text) or zh.stray_latin(text, *known):
         return ""
     return text
 

@@ -22,7 +22,7 @@ import server
 import webharness
 from tianxia.engine import Game
 
-pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.slow]
+pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NAMES_START = 'wholeApp(["S", '
 assert PROLOGUE_DRIVER.count(NAMES_START) == 1
 DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "shopHtml", "openMall", "renderMall", ')
@@ -183,6 +183,7 @@ def test_the_prologue_hides_both_entries_like_any_tab_not_open_yet(m_on):
     assert "mall-open" in out["top"] and "repeat(5, 1fr)" in out["tabs"]
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_after_graduating_both_entries_show_through_the_onboarding_steps(real):
     """FB-490：出師後就出現（docs/guide/商城.md）。出了草廬、初入江湖那四步（m.onboard，reveal 是前幾步的聯集、沒有 all）
     兩個入口都在，不等初入江湖走完；草廬裡（m.prologue）照舊藏著。照正式內容的序章與初入江湖算，教學步驟改了也照樣抓得到。"""
@@ -270,6 +271,7 @@ def test_buying_posts_a_ref_then_updates_the_balance_and_the_pill_button(m_on):
     assert "回體丹 33 顆" in out["app"]
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_a_buy_that_got_no_answer_reuses_its_ref_next_time(m_on):
     """逾時、沒送出去：伺服器可能其實買好了，再按一次同一件用同一個編號（伺服器回「這一筆已經買好了」、不會扣兩次）。"""
     out = run(m_on, _async(_click('{ act: "mall-open" }') + """
@@ -303,6 +305,7 @@ def test_a_resend_that_already_went_through_is_said_as_done(m_on):
     assert 'class="shop-line said ok"' in out["app"] and "said no" not in out["app"]
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_a_lost_buy_resent_says_it_is_the_same_one(m_on):
     """FB-491：沒等到回音、貨架也還沒變（不知道成了沒）：再點同一件，確認框照實講這是上一筆再送一次（同一個編號、不會扣兩次），
     不假裝是新的一筆。"""
@@ -318,6 +321,7 @@ def test_a_lost_buy_resent_says_it_is_the_same_one(m_on):
     assert "買下（100）" not in asked
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_a_lost_buy_that_shows_up_on_the_shelf_lets_the_next_one_be_new(m_on):
     """FB-491：沒等到回音，可是之後重抓到的貨架變了（元寶少了、丹多了：那一筆其實成了）：再點一件是新的一筆、用新的編號，
     確認框照新的貨架算（4900 → 4800），不寫「再送一次」。"""

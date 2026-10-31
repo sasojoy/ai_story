@@ -25,13 +25,18 @@ import sqlite3
 import threading
 import time
 import weakref
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from typing import TypeVar
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PATH = ROOT / "saves" / "tianxia.db"
 ENV_VAR = "TIANXIA_DB"  # 線上版與開發版用不同的資料（線上架構設計 8.1）：設了這個環境變數就開那個檔
+T = TypeVar("T")
 BUSY_SLICE = 5.0  # 不限時等寫入權時，每次最多等幾秒就重試一次
+# 開連線的入口：測試換掉這一個（monkeypatch tianxia.database._connect），不去動整個行程共用的 sqlite3.connect
+# （coverage 自己的 SQLite 也走那一個；10/31 測試自檢 T-09）。行為跟直接叫 sqlite3.connect 一樣。
+_connect = sqlite3.connect
 
 # 第 1 版的結構。已經有檔案是這個樣子了（試玩伺服器），不要再改它；要改結構就加新的一組、升版本。
 SCHEMA_V1: tuple[str, ...] = (
@@ -292,13 +297,33 @@ SCHEMA_V7_TABLES: tuple[str, ...] = (
     )""",
 )
 
-SCHEMA: tuple[str, ...] = (  # 新檔一次建好
+# 第 8 版拿掉見聞紀錄 rumor_heard（審查 S-12）：第 1 版照傳聞分層 3.1 建好之後一直沒人讀、沒人寫（傳聞分層第二份計畫沒做），
+# 它對 rumors 的外鍵還會擋住換季時把上上季的傳聞搬進封存檔（log_archive）。
+SCHEMA_V8_CHANGES: tuple[str, ...] = (
+    "DROP TABLE rumor_heard",
+)
+
+# 第 9 版（審查 S-10，2026-10-31）：登入狀態存進資料庫，重開伺服器不再全服登出。只存 cookie 的 SHA-256（token_hash），
+# 不存 cookie 本身：資料庫檔外流也拿不到能用的 cookie。account 是 accounts.normalize 過的帳號；created 照伺服器的時鐘，
+# 過了 accounts.SESSION_SECONDS（30 天，跟 cookie 的 max_age 一樣）就不認（accounts.SessionStore）。
+SCHEMA_V9_TABLES: tuple[str, ...] = (
+    """CREATE TABLE sessions (
+        token_hash TEXT PRIMARY KEY,
+        account TEXT NOT NULL,
+        created REAL NOT NULL
+    )""",
+    "CREATE INDEX sessions_by_created ON sessions (created)",
+)
+
+SCHEMA: tuple[str, ...] = (  # 新檔一次建好（第 1 版建的 rumor_heard 由第 8 版那一句拿掉）
     SCHEMA_V1 + SCHEMA_V2_TABLES + SCHEMA_V3_TABLES + SCHEMA_V4_TABLES + SCHEMA_V5_TABLES + SCHEMA_V6_TABLES + SCHEMA_V7_TABLES
+    + SCHEMA_V8_CHANGES + SCHEMA_V9_TABLES
 )
 MIGRATIONS: dict[int, tuple[str, ...]] = {  # 第 n 版 → 第 n+1 版要跑的句子
     1: SCHEMA_V2_TABLES, 2: SCHEMA_V3_TABLES, 3: SCHEMA_V4_TABLES, 4: SCHEMA_V5_TABLES, 5: SCHEMA_V6_TABLES, 6: SCHEMA_V7_TABLES,
+    7: SCHEMA_V8_CHANGES, 8: SCHEMA_V9_TABLES,
 }
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 9
 
 
 def default_path() -> Path:
@@ -311,7 +336,8 @@ class _ThreadState:
     """一個執行緒在這個資料庫上的連線與交易狀態。放在 threading.local 裡：執行緒結束、local 被釋放時，
     這個物件被回收，登記的 weakref.finalize 就把連線關掉。"""
 
-    __slots__ = ("conn", "depth", "reading", "rewriting", "savepoints", "__weakref__")
+    __slots__ = ("conn", "depth", "reading", "rewriting", "savepoints", "began", "generation", "epoch", "memo", "notes", "after",
+                 "__weakref__")
 
     def __init__(self, conn: sqlite3.Connection):
         self.conn = conn
@@ -319,12 +345,22 @@ class _ThreadState:
         self.savepoints = 0  # 現在開著的 savepoint 數（見 Database.savepoint），拿來給每一個取不同的名字
         self.reading = False  # 是不是在 snapshot() 的最外層
         self.rewriting = False  # 是不是在 rewriting() 的區段裡（整份讀出、改、整份寫回）
+        # 這一筆交易（寫入或快照的最外層）的記號（見 Database.unchanged、Database.memo）：開始時連線的 total_changes；
+        # epoch 每開一筆、結束一筆、撤回一個 savepoint 就加一（撤回不會讓 total_changes 變小，靠它認出「資料退回去了」）
+        self.began: int | None = None
+        self.generation = 0  # 開這一筆時 Database.generation 是多少（見 Database.unchanged）
+        self.epoch = 0
+        self.memo: dict[object, tuple[int, int, object]] = {}
+        self.notes: set[object] = set()  # 這一筆交易記下的事（Database.note）
+        self.after: list[Callable[[], None]] = []  # 這一筆 COMMIT 之後要做的事（Database.after_commit）
 
 
 class Database:
     def __init__(self, path: Path):
         self.path = Path(path)
         self._local = threading.local()
+        # 有人宣告「之前讀進記憶體、記下來的東西不算數了」就加一（bump；例：易名帖改了傳聞的名號）。比它早開的交易讀到的不記
+        self.generation = 0
         self._states: weakref.WeakSet[_ThreadState] = weakref.WeakSet()
         self._states_lock = threading.Lock()
         try:
@@ -339,7 +375,7 @@ class Database:
         state = getattr(local, "state", None)
         if state is None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            conn = sqlite3.connect(self.path, timeout=BUSY_SLICE, autocommit=True, check_same_thread=False)
+            conn = _connect(self.path, timeout=BUSY_SLICE, autocommit=True, check_same_thread=False)
             try:
                 conn.row_factory = sqlite3.Row
                 conn.execute("PRAGMA journal_mode = WAL")
@@ -370,18 +406,24 @@ class Database:
             return
         self._begin(conn, timeout)
         state.depth = 1
+        self._opened(state)
         try:
             yield conn
         except BaseException:
             state.depth = 0
+            self._closed(state)
             self._rollback(conn)
             raise
         state.depth = 0
+        after = state.after
+        self._closed(state)
         try:
             conn.execute("COMMIT")
         except BaseException:
             self._rollback(conn)  # COMMIT 失敗時交易還開著：不撤掉，這條連線就永遠握著寫入權
             raise
+        for fn in after:
+            fn()
 
     @contextlib.contextmanager
     def savepoint(self) -> Iterator[sqlite3.Connection]:
@@ -400,6 +442,7 @@ class Database:
         try:
             yield conn
         except BaseException:
+            state.epoch += 1  # 這一段的寫入撤回了：之前記下的（Database.memo）不算數
             if conn.in_transaction:
                 conn.execute(f"ROLLBACK TO {name}")
                 conn.execute(f"RELEASE {name}")
@@ -458,11 +501,75 @@ class Database:
             return
         conn.execute("BEGIN")  # DEFERRED：第一句 SELECT 才拿讀取的快照，不擋寫入的人
         state.reading = True
+        self._opened(state)
         try:
             yield conn
         finally:
             state.reading = False
+            self._closed(state)
             self._rollback(conn)  # 唯讀：一律 ROLLBACK，不 COMMIT
+
+    def _opened(self, state: _ThreadState) -> None:
+        state.began = state.conn.total_changes
+        state.generation = self.generation
+        state.epoch += 1
+        state.memo.clear()
+        state.notes = set()
+        state.after = []
+
+    @staticmethod
+    def _closed(state: _ThreadState) -> None:
+        state.began = None
+        state.epoch += 1
+        state.memo.clear()
+        state.notes = set()
+        state.after = []
+
+    def unchanged(self) -> bool:
+        """這個執行緒正在一筆交易（寫入或快照）裡，這一筆到現在還沒寫過任何東西，而且開始之後沒有人 bump：看到的每一列都是
+        已經 COMMIT 的，不會因為這一筆撤回而不見，也不是 bump 宣告作廢的舊樣子（sqlite_world 的傳聞快取只收這種時候讀到的）。
+        不在交易裡回 False。"""
+        state = getattr(self._local, "state", None)
+        return (state is not None and state.began is not None and state.conn.total_changes == state.began
+                and state.generation == self.generation)
+
+    def bump(self) -> None:
+        """宣告「記在這個程式裡、讀自資料庫的東西不算數了」：之後才開的交易讀到的才記（見 unchanged）。"""
+        with self._states_lock:
+            self.generation += 1
+
+    def note(self, key: object) -> None:
+        """在這一筆交易（寫入的最外層）上記一件事，交易結束（COMMIT 或撤回）就忘掉；不在寫入交易裡什麼都不做。"""
+        state = getattr(self._local, "state", None)
+        if state is not None and state.depth:
+            state.notes.add(key)
+
+    def noted(self, key: object) -> bool:
+        state = getattr(self._local, "state", None)
+        return state is not None and state.began is not None and key in state.notes
+
+    def after_commit(self, fn: Callable[[], None]) -> None:
+        """這一筆寫入交易（最外層）COMMIT 成功之後做 fn；撤回就不做。不在寫入交易裡時當場做。"""
+        state = getattr(self._local, "state", None)
+        if state is None or not state.depth:
+            fn()
+            return
+        state.after.append(fn)
+
+    def memo(self, key: object, make: Callable[[], T]) -> T:
+        """同一筆交易裡、中間沒有寫過東西（也沒撤回過 savepoint）時，同一個 key 只算一次 make()，之後回同一個值：
+        同一個請求裡反覆讀同一份全服狀態不必一再解析（審查 S-02）。寫過、撤回過、換了一筆交易就重算。
+        回的是同一個物件：只給不會改它、也不會把它交出去的讀取用。不在交易裡時每次都算。"""
+        state = getattr(self._local, "state", None)
+        if state is None or state.began is None:
+            return make()
+        stamp = (state.epoch, state.conn.total_changes)
+        hit = state.memo.get(key)
+        if hit is not None and (hit[0], hit[1]) == stamp:
+            return hit[2]  # type: ignore[return-value]
+        value = make()
+        state.memo[key] = (*stamp, value)  # 照算之前的記號記：make() 裡要是寫了東西，下一次就對不上、重算
+        return value
 
     def writing(self) -> bool:
         """這個執行緒現在是不是在寫入交易裡（沒碰過資料庫的執行緒不會因為問這句而開連線）。"""

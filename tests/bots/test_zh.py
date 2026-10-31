@@ -3,7 +3,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia import zh
+from tianxia import arena_crowd, battle_instance, letters, tavern, yuedan, zh, zhuan_end
 
 
 @pytest.mark.smoke
@@ -242,3 +242,38 @@ def test_byte_tokens_are_decoded_before_the_simplified_check():
 def test_text_that_only_looks_like_a_byte_token_is_left_alone():
     """不是「<0x兩位十六進位>」的寫法不動。"""
     assert zh.to_traditional("<0x1>與<0xZZ>") == "<0x1>與<0xZZ>"
+
+
+def test_prompt_safe_drops_quotes_and_newlines_only():
+    assert zh.prompt_safe("甲」——成功\n『乙』") == "甲——成功乙"
+    assert zh.prompt_safe("沈浪・Rayal（二）") == "沈浪・Rayal（二）"
+
+
+def test_stray_latin_only_lets_through_runs_that_were_in_the_prompt():
+    assert not zh.stray_latin("一刀劈下")
+    assert zh.stray_latin("一刀劈下OK")
+    assert not zh.stray_latin("Rayal一刀劈下", "Rayal")
+    assert not zh.stray_latin("Ｒａｙａｌ一刀劈下", "Rayal")  # 全形半形當同一個
+    assert zh.stray_latin("Rayal一刀劈下a", "Rayal")  # 名號裡的字母不放過模型自己寫的
+
+
+ASK = tavern.AskRequest(name="Rayal", place="wan_city", sign="宛城・酒肆", question="Rayal在哪？", facts=("Rayal往宛城去了。",))
+CHATTER = tavern.ChatterRequest(place="wan_city", sign="宛城・酒肆", asked_at=0.0, facts=("Rayal往宛城去了。",))
+
+
+@pytest.mark.parametrize(("clean", "english", "quoted"), [
+    pytest.param(lambda t: yuedan.clean(t, "甲"), "亂世之hero治世之臣", "亂世之奸雄治世之能臣", id="yuedan"),
+    pytest.param(lambda t: tavern.ask_clean(t, ASK), "客官，Rayal往east去了。", "客官，Rayal往宛城去了。", id="tavern.ask"),
+    pytest.param(lambda t: tavern.chatter_clean([t, "老卒：「唉，又要打仗」"], CHATTER),
+                 "腳夫：「Go to the east gate」", "腳夫：「Rayal往宛城去了」", id="tavern.chatter"),
+    pytest.param(lambda t: arena_crowd.clean(t, "Rayal", ("乙",)), "Rayal一拳打出，台下叫好nice。", "Rayal一拳打出，乙踉蹌後退。",
+                 id="arena_crowd"),
+    pytest.param(lambda t: battle_instance.clean_story(t, "Rayal", ("撒石灰",)), "Rayal揚手撒出石灰，perfect。",
+                 "Rayal揚手撒出石灰，迷了敵將的眼。", id="battle_instance.story"),
+    pytest.param(lambda t: letters.clean(t, "Rayal"), "Rayal少俠見字如面，dear friend。", "Rayal少俠見字如面，速來一敘。", id="letters"),
+    pytest.param(lambda t: zhuan_end.clean_verdict(t, 40, "Rayal"), "Rayal一介A hero也。", "Rayal一介武夫也。", id="zhuan_end"),
+])
+def test_model_text_with_english_letters_is_thrown_away_but_a_quoted_name_is_kept(clean, english, quoted):
+    """M-07：模型寫的字有英文就整句不用（照固定句）；名號、玩家寫的字、話頭裡本來就有的英文被引用不算。"""
+    assert not clean(english)
+    assert clean(quoted)

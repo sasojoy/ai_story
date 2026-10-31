@@ -24,9 +24,9 @@ REF = "_ref"  # weekcard._steps 掛在每一件上、給 finish 找目標的內�
 
 
 def on(game: Game) -> bool:
-    """這一季「你這一步」有批 3c 那一半：四勝利開著（總開關＋開季的章＋子開關 four_wins），季還沒收。"""
+    """這一季「你這一步」有批 3c 那一半：四勝利開著（減法季的總開關＋開季的章），季還沒收。"""
     w = game.state.world
-    return jianfa(game.content, w, "four_wins") and not w.ended
+    return jianfa(game.content, w) and not w.ended
 
 
 def place(game: Game, loc_id: str | None) -> dict | None:

@@ -48,9 +48,9 @@
       }
     },
     {
-      "id": "fs_fire_haoqiang", "event": "changshe_fire", "side": "haoqiang", "kind": "反直覺抉擇", "front": "yingru",
+      "id": "fs_fire_grain", "event": "changshe_fire", "side": "huang", "kind": "反直覺抉擇", "front": "yingru",
       "fragments": [
-        {"region": "north", "source": "action", "text": "長社城裡的官軍已經在殺馬吃了。"}
+        {"region": "north", "source": "event", "event": "fs_ev_two_buyers", "text": "長社城裡的官軍已經在殺馬吃了。"}
       ],
       "final": {
         "requires": {"counters": {"two_buyers": 1}},
@@ -104,7 +104,7 @@
       }
     },
     {
-      "id": "fs_wan_haoqiang", "event": "wancheng", "side": "haoqiang", "kind": "天時地利", "front": "nanyang",
+      "id": "fs_wan_guan", "event": "wancheng", "side": "guan", "kind": "天時地利", "front": "nanyang",
       "fragments": [
         {"region": "south", "source": "action", "text": "新野的縣令早就跑了。",
          "versions": {"乙": "新野的縣令早就跑了，縣衙裡只剩幾個老吏。"}}

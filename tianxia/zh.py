@@ -215,6 +215,36 @@ def to_traditional(text: str) -> str:
     return "".join(VARIANTS.get(ch, ch) for ch in text)  # OpenCC 不處理異體字，見 VARIANTS
 
 
+LATIN_RUN = re.compile(r"[A-Za-zＡ-Ｚａ-ｚ]+")
+
+
+def stray_latin(text: str, *known: str) -> bool:
+    """模型寫的字裡有沒有它自己冒出來的拉丁字母（M-07：正式設定的 repeat_penalty 太重時模型會改寫英文）。
+    known 是提示裡本來就有的字（名號、玩家寫的那一句、話頭）：裡面整串出現過的英文（例：名號 Rayal）被引用不算；
+    比的是整串字母（全形半形當同一個），所以名號裡有 Rayal 不會放過模型自己寫的 a、OK。"""
+    import unicodedata  # noqa: PLC0415
+
+    def runs(s: str) -> set[str]:
+        return {unicodedata.normalize("NFKC", r) for r in LATIN_RUN.findall(s or "")}
+
+    found = runs(text)
+    if not found:
+        return False
+    allowed: set[str] = set()
+    for k in known:
+        allowed |= runs(k)
+    return not found <= allowed
+
+
+PROMPT_UNSAFE = re.compile(r"[「」『』\"“”‘’'`\x00-\x1f\x7f]+")
+
+
+def prompt_safe(text: str) -> str:
+    """玩家的名號、寫的字放進提示以前夾掉引號與換行（M-13）：名號可以帶標點（server 只擋控制字元），一個「」——成功」
+    就能把提示裡「玩家：……」那一行或批次裡的別人那一行改了意思。一般的名號與句子原樣通過。"""
+    return PROMPT_UNSAFE.sub("", str(text or ""))
+
+
 def using_opencc() -> bool:
     """目前是真的在用 OpenCC，還是退回手寫對照表（測試與診斷用）。"""
     return _converter() is not None

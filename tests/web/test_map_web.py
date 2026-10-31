@@ -13,7 +13,7 @@ import test_prologue_web
 
 import server
 import webharness
-from conftest import real_content, third_party_gentry
+from conftest import real_content
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 import html as htmllib
@@ -22,18 +22,16 @@ from tianxia import terrain
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NAMES = ["S", "pageMap", "controlAt", "drawerHtml", "placeCard", "cardExtras", "searchHtml", "searchResults", "timelineHtml", "graphSvg",
          "chartHtml", "mapDrawerPx", "setMapDrawer", "insightRow", "redrawDrawer", "journeyHtml", "nearHtml", "nearList", "chipList", "chipsHtml",
-         "mapFilter", "marksHtml", "groundSvg", "camClamp", "camFit", "zMin", "mapPick", "mapBack", "mapFind", "routeD", "camSet", "mapFirst", "mapGoto", "camFirst", "planHtml"]
+         "mapFilter", "marksHtml", "groundSvg", "camClamp", "camFit", "zMin", "mapPick", "mapBack", "mapFind", "routeD", "camSet", "mapFirst", "mapGoto", "camFirst", "planHtml", "fabBox"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 APP = webharness.APP  # 三個檔（main.js、map.js、app.js）接起來的那一份
 # 一個夠大的地圖框：整張天下都在「畫面附近」，字一處都不會因為在畫面外被略過
 WIDE = "{ vw: 2400, vh: 3600 }"
 
 
-def _game(faction="guan", at="yingchuan", third_party=False, profile="week7", content=None):
+def _game(faction="guan", at="yingchuan", profile="week7", content=None):
     c = content or real_content(profile)
     c.config.auto_open_first_season = True
-    if third_party:
-        third_party_gentry(c)  # 豪強是第三方、有割據的規則（豪強分屬兩軍之前）
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None
     p = game.state.player
@@ -266,21 +264,6 @@ def test_travel_stays_on_the_map():
     body = js[js.index("async function travel(mode)"):]
     body = body[: body.index("\n  }\n") + 4]
     assert 'S.tab = "jianghu"' not in body and "loadMap()" in body and "S.mapSel" in body
-
-
-def _timeline_game():
-    """第 1 週記一筆，第 2 週把潁川汝南推到黃巾那頭（官軍大營易手）再記一筆，現在是第 3 週。豪強是第三方的規則（有割據曲線）。"""
-    from tianxia import calendar, territory
-
-    game = _game(third_party=True)
-    w, c = game.state.world, game.content
-    territory.update(w, c)
-    w.time = calendar.week_start(2, c, w) + 60
-    w.trends["yingru"] = 90
-    territory.update(w, c)
-    w.time = calendar.week_start(3, c, w) + 60
-    territory.update(w, c)
-    return game
 
 
 def test_the_chart_draws_unknown_weeks_as_blank():
@@ -537,3 +520,27 @@ def test_the_plan_card_button_carries_its_place():
          "help_side": "官軍", "mine": None, "acts": []}
     out = run(game, "return H.planHtml(" + json.dumps(x, ensure_ascii=False) + ");")
     assert 'data-goto="changshe"' in out
+
+
+def test_the_near_row_says_the_week_place_comes_first():
+    """本週那一處排第一張（不管多遠）：小字照實說，不寫「由近到遠」（全面自檢 U-16）。"""
+    game = _game()
+    st = game.map_state()
+    far = max((x for x, q in st["places"].items() if x != "yingchuan" and q.get("minutes") is not None), key=lambda x: st["places"][x]["minutes"])
+    st["week"] = {"id": far, "why": "本週"}
+    html = run(game, "return H.nearHtml(H.S.mapBase, H.S.mapState);", st=st)
+    assert "本週要去的排第一，其餘由近到遠" in html
+    st.pop("week")
+    assert "由近到遠，左右滑" in run(game, "return H.nearHtml(H.S.mapBase, H.S.mapState);", st=st)
+
+
+def test_names_stay_clear_of_the_round_buttons_and_inside_the_screen():
+    """右下 ◎／全 那一塊不擺名字、點在畫面裡的名字不擺到畫面外（全面自檢 U-10）。"""
+    game = _game()
+    out = run(game, """const g = { vw: 390, vh: 700 }, c = H.camFirst(g);
+const html = H.marksHtml(H.S.mapBase, H.S.mapState, c, g), fab = H.fabBox(g);
+return { fab, labs: [...html.matchAll(/class="mv-lab[^"]*" style="left:([-\\d.]+)px;top:([-\\d.]+)px"/g)].map((m) => [Number(m[1]), Number(m[2])]) };""")
+    fx0, fy0, fx1, fy1 = out["fab"]
+    assert out["labs"]
+    for x, y in out["labs"]:
+        assert not (fx0 < x + 40 and x < fx1 and fy0 < y + 18 and y < fy1)  # 名字左上角那一截不落在圓鈕那一塊

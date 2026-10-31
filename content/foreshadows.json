@@ -59,28 +59,6 @@
       }
     },
     {
-      "id": "fs_changshe_haoqiang", "event": "changshe_fire", "side": "haoqiang", "kind": "反直覺抉擇", "front": "yingru",
-      "fragments": [
-        {"region": "yingru", "source": "action", "text": "長社城裡的官軍已經在殺馬吃了。"},
-        {"region": "yingru", "source": "action", "text": "波才的人在汝南四處搶糧，連來年的種子都搶。"},
-        {"region": "luoyang", "source": "action", "text": "大司農的倉吏說，往潁川的軍糧扣在半路，等一道蓋印的公文。"},
-        {"region": "yingru", "source": "talk", "character": "caocao", "topic": "談起糧草", "affinity_min": 0,
-         "text": "「打仗缺的是糧。手上有糧的人，兩邊都得對他客氣。」"}
-      ],
-      "final": {
-        "requires": {"counters": {"two_buyers": 1}},
-        "steps": [
-          {"location": "changshe", "label": "交糧", "requires": {"grain": 4, "check": {"stat": "wis", "dc": 6}},
-           "wrong": {"text": "帳房翻了兩頁就看穿了假帳，糧車被扣下了。", "lose_grain": true},
-           "success_text": "長社的帳房在你的契上按了手印。"},
-          {"location": "huangjin_camp", "label": "交糧", "requires": {"grain": 4, "check": {"stat": "agi", "dc": 6}},
-           "wrong": {"text": "半路撞上官軍斥候，糧車被扣下了。", "lose_grain": true},
-           "success_text": "黃巾的帳房在你的契上按了手印。"}
-        ],
-        "success_text": "兩邊的帳房都在你的契上按了手印。不論那一夜誰勝誰敗，他們都欠你一份人情。"
-      }
-    },
-    {
       "id": "fs_luzhi_guan", "event": "luzhi_jailed", "side": "guan", "kind": "拼圖", "front": "jizhou",
       "invalid_if": {"figure_out": "luzhi"},
       "fragments": [
@@ -124,29 +102,6 @@
         ],
         "answer": "1",
         "success_text": "老宦官接過包袱掂了掂，沒有多看你一眼：「話會帶到。」"
-      }
-    },
-    {
-      "id": "fs_luzhi_haoqiang", "event": "luzhi_jailed", "side": "haoqiang", "kind": "情誼", "front": "jizhou",
-      "fragments": [
-        {"region": "luoyang", "source": "action", "text": "太學的諸生在議論：盧中郎若真因為不肯行賄下獄，天下讀書人的心就寒了。"},
-        {"region": "yingru", "source": "action", "text": "汝南的士人說，本初公子最看重的是名聲。四世三公的門楣，他比誰都看得重。"},
-        {"region": "luoyang", "source": "action", "text": "袁本初在大將軍府走動得勤，何進的話，他說得上三分。"},
-        {"region": "luoyang", "source": "talk", "character": "yuanshao", "topic": "談起時局", "affinity_min": 0,
-         "text": "「宦官弄權，忠良受辱，袁家世受國恩，豈能坐視？只是……此事牽連甚廣。」"}
-      ],
-      "final": {
-        "location": "dajiangjun_fu", "label": "說袁",
-        "requires": {"affinity": {"yuanshao": 40}},
-        "question": "袁紹沉吟：「此事牽連甚廣……」",
-        "options": [
-          {"id": "1", "text": "盧中郎是天下名士，救他，清議會記住袁家"},
-          {"id": "2", "text": "宦官該殺", "wrong": {"text": "袁紹變色：「牽連甚廣。」", "affinity": {"yuanshao": -5}}},
-          {"id": "3", "text": "救下盧植，北中郎將的兵就欠袁家人情",
-           "wrong": {"text": "說得太露骨，他外寬內忌最忌被看穿。", "affinity": {"yuanshao": -5}}}
-        ],
-        "answer": "1",
-        "success_text": "袁紹撫著案上的竹簡沉吟良久：「此事，袁家不能不說話。」"
       }
     },
     {
@@ -201,26 +156,6 @@
         "location": "nanyang_huangjin_camp", "label": "點糧",
         "requires": {"donations": {"nanyang_huangjin_camp:糧草": 24}},
         "success_text": "趙弘一袋一袋點過去，點到最後抬頭看了你一眼。他很少看人。「夠了。」"
-      }
-    },
-    {
-      "id": "fs_wancheng_haoqiang", "event": "wancheng", "side": "haoqiang", "kind": "天時地利", "front": "nanyang",
-      "fragments": [
-        {"region": "nanyang", "source": "action", "text": "新野的縣令早就跑了，縣衙裡只剩幾個老吏在看門。"},
-        {"region": "nanyang", "source": "action", "text": "等宛城那一仗打起來，南陽郡的兵全都會調進城，周邊的縣就空了。"},
-        {"region": "luoyang", "source": "action", "text": "南陽各縣的戶籍與地契冊，正本都在縣衙裡。誰拿著冊子，誰就說了算。"},
-        {"region": "nanyang", "source": "event", "event": "fs_ev_xinye_clerk", "text": "「誰能讓縣裡的人吃上飯，冊子就交給誰。」"}
-      ],
-      "final": {
-        "location": "xinye", "label": "接冊", "window": "during_muster",
-        "requires": {"grain": 4},
-        "question": "老縣吏抱著冊子不放。",
-        "options": [
-          {"id": "1", "text": "開倉放糧，讓縣裡的人自己推你"},
-          {"id": "2", "text": "帶人進縣衙直接拿冊子", "wrong": {"text": "老吏把冊子扔進火盆，這次不算。"}}
-        ],
-        "answer": "1",
-        "success_text": "老縣吏把冊子捧出來的時候，縣衙外跪了一地的人。"
       }
     },
     {

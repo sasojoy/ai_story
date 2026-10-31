@@ -100,7 +100,7 @@ def name_problem(name: str, content: Content, person: PersonCheck | None = None)
         return PERSON_CLASH
     if not all("一" <= ch <= "鿿" for ch in name):
         return "只能是中文字"
-    for banned in content.banned_names:
+    for banned in content.banned_name_list():
         if banned and banned in name:
             return f"用到了既有作品的專有名詞（{banned}）"
     if any(name == m.name for m in content.materials.values()):

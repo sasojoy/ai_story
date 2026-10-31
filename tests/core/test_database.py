@@ -26,7 +26,10 @@ V4_TABLES = {"gear_recipes"}
 V5_TABLES = {"biographies"}  # 玩家傳（2026-10-12）
 V6_TABLES = {"mall_purchases", "mall_ledger", "mall_entitlements"}  # 商城（2026-10-20）
 V7_TABLES = {"action_counts", "action_firsts"}  # 真人量表（減法季批 0，2026-10-24）
-TABLES = V1_TABLES | V2_TABLES | V3_TABLES | V4_TABLES | V5_TABLES | V6_TABLES | V7_TABLES
+DROPPED = {"rumor_heard"}  # 第 8 版拿掉的見聞紀錄（審查 S-12：從來沒人讀寫）
+KEPT_V1 = V1_TABLES - DROPPED
+V9_TABLES = {"sessions"}  # 登入狀態（審查 S-10，2026-10-31）
+TABLES = (V1_TABLES | V2_TABLES | V3_TABLES | V4_TABLES | V5_TABLES | V6_TABLES | V7_TABLES | V9_TABLES) - DROPPED
 
 
 def _count(db: Database, table: str) -> int:
@@ -39,7 +42,7 @@ def test_a_new_file_gets_every_table(tmp_path):
     with db.snapshot() as conn:
         names = {row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
-    assert TABLES <= names
+    assert TABLES <= names and not DROPPED & names
 
 
 def _make_version_one_file(path):
@@ -129,16 +132,16 @@ def test_upgrading_a_populated_version_one_file_loses_nothing(tmp_path, content)
     conn.execute("INSERT INTO faction_rolls (season, character, faction) VALUES (2, '沈浪', 'huangjin')")
     conn.commit()
     conn.close()
-    before = _dump(path, V1_TABLES)
+    before = _dump(path, KEPT_V1)
 
     db = open_database(path)  # 升級就在開檔的時候
 
-    assert _dump(path, V1_TABLES) == before  # 舊表原封不動（含 rowid 順序、流水號）
+    assert _dump(path, KEPT_V1) == before  # 舊表原封不動（含 rowid 順序、流水號）；rumor_heard 第 8 版拿掉了
     with db.snapshot() as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 7
+        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 9
         names = {row["name"] for row in c.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert names == TABLES
-    assert all(_count(db, table) == 0 for table in V2_TABLES | V3_TABLES | V4_TABLES | V5_TABLES | V6_TABLES | V7_TABLES)
+    assert all(_count(db, table) == 0 for table in V2_TABLES | V3_TABLES | V4_TABLES | V5_TABLES | V6_TABLES | V7_TABLES | V9_TABLES)
     # 真正的存取層讀得回來
     store = AccountStore(db)
     assert store.authenticate("shenlang", "sesame88").character == "沈浪"
@@ -153,7 +156,7 @@ def test_upgrading_a_populated_version_one_file_loses_nothing(tmp_path, content)
     # 升完的檔再打開不會再升一次、也不會掉資料
     database.close_all()
     again = open_database(path)
-    assert _dump(path, V1_TABLES) == before
+    assert _dump(path, KEPT_V1) == before
     with again.snapshot() as c:
         assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
 
@@ -347,8 +350,8 @@ def test_writing_tells_whether_this_thread_holds_a_transaction(tmp_path):
 def test_writing_does_not_open_a_connection(tmp_path, monkeypatch):
     db = open_database(tmp_path / "t.db")
     opened = []
-    real_connect = sqlite3.connect
-    monkeypatch.setattr(sqlite3, "connect", lambda *args, **kwargs: opened.append(args) or real_connect(*args, **kwargs))
+    real_connect = database._connect
+    monkeypatch.setattr(database, "_connect", lambda *args, **kwargs: opened.append(args) or real_connect(*args, **kwargs))
     seen = []
     thread = threading.Thread(target=lambda: seen.append(db.writing()))  # 這個執行緒從沒碰過資料庫
     thread.start()
@@ -465,7 +468,7 @@ def test_an_unknown_schema_version_is_refused(tmp_path):
 
 def test_a_connection_whose_setup_fails_is_closed(tmp_path, monkeypatch):
     """連上了、但設定用的 PRAGMA 出錯：剛開的連線要先關掉再把錯丟出去，不能留著沒人管。"""
-    real_connect = sqlite3.connect
+    real_connect = database._connect  # 只換 tianxia.database 的入口：換全域的 sqlite3.connect 連 coverage 的 SQLite 也被換掉
     made = []
 
     class SetupFails:
@@ -484,7 +487,7 @@ def test_a_connection_whose_setup_fails_is_closed(tmp_path, monkeypatch):
             self.closed = True
             self.real.close()
 
-    monkeypatch.setattr(sqlite3, "connect", lambda *a, **k: made.append(SetupFails(real_connect(*a, **k))) or made[-1])
+    monkeypatch.setattr(database, "_connect", lambda *a, **k: made.append(SetupFails(real_connect(*a, **k))) or made[-1])
     with pytest.raises(sqlite3.OperationalError, match="設定失敗"):
         Database(tmp_path / "t.db")
     assert len(made) == 1
@@ -544,6 +547,70 @@ for _ in range(int(sys.argv[2])):
 """
 
 
+def test_memo_keeps_one_value_until_something_is_written(tmp_path):
+    """Database.memo（審查 S-02）：同一筆交易裡沒寫過東西就回同一個值；寫過、撤回過 savepoint、換一筆交易就重算；不在交易裡每次都算。"""
+    db = open_database(tmp_path / "t.db")
+    calls = []
+
+    def make():
+        calls.append(1)
+        return object()
+
+    assert db.memo("k", make) is not db.memo("k", make)  # 不在交易裡
+    with db.transaction() as conn:
+        first = db.memo("k", make)
+        assert db.memo("k", make) is first
+        conn.execute("INSERT INTO seasons (number, data) VALUES (1, '{}')")
+        second = db.memo("k", make)
+        assert second is not first and db.memo("k", make) is second
+        with pytest.raises(RuntimeError):
+            with db.savepoint():
+                inside = db.memo("k", make)
+                assert inside is second  # 開 savepoint 本身不算寫
+                raise RuntimeError("撤回")
+        assert db.memo("k", make) is not inside  # 撤回過 savepoint：之前記下的都不算
+    with db.snapshot():
+        assert db.memo("k", make) is db.memo("k", make)
+    with db.snapshot():
+        fresh = db.memo("k", make)
+    assert fresh is not first
+
+
+def test_unchanged_tells_whether_this_transaction_wrote_or_was_bumped(tmp_path):
+    """Database.unchanged：交易裡、還沒寫過、開始之後沒有人 bump 才是 True（傳聞快取只記這種時候讀到的）。"""
+    db = open_database(tmp_path / "t.db")
+    assert not db.unchanged()  # 不在交易裡
+    with db.transaction() as conn:
+        assert db.unchanged()
+        conn.execute("SELECT 1").fetchall()
+        assert db.unchanged()  # 讀不算
+        conn.execute("INSERT INTO seasons (number, data) VALUES (1, '{}')")
+        assert not db.unchanged()
+    with db.snapshot():
+        assert db.unchanged()
+        db.bump()
+        assert not db.unchanged()
+    with db.snapshot():
+        assert db.unchanged()
+
+
+def test_after_commit_runs_only_once_the_outer_transaction_commits(tmp_path):
+    db = open_database(tmp_path / "t.db")
+    ran = []
+    with db.transaction():
+        with db.transaction():
+            db.after_commit(lambda: ran.append("成"))
+        assert ran == []
+    assert ran == ["成"]
+    with pytest.raises(RuntimeError):
+        with db.transaction():
+            db.after_commit(lambda: ran.append("撤回的"))
+            raise RuntimeError("出錯")
+    assert ran == ["成"]
+    db.after_commit(lambda: ran.append("當場"))  # 不在交易裡：當場做
+    assert ran == ["成", "當場"]
+
+
 def test_two_programs_counting_at_once_lose_no_updates(tmp_path):
     """伺服器與假人程式同時「讀一份、改、寫回」：寫入交易讓兩邊一個一個來，一次都不少。"""
     path = tmp_path / "t.db"
@@ -571,3 +638,27 @@ def test_two_programs_counting_at_once_lose_no_updates(tmp_path):
             proc.stdout.close()
     with db.snapshot() as conn:
         assert conn.execute("SELECT data FROM seasons WHERE number = 1").fetchone()[0] == "400"
+
+
+def test_a_version_seven_file_gains_the_sessions_table(tmp_path):
+    """第 7 版（真人量表）的檔打開時一路升到第 9 版：第 8 版拿掉 rumor_heard、第 9 版多一張 sessions，其他舊表不動，登入狀態寫得進去、讀得回來（審查 S-10）。"""
+    import sqlite3
+
+    from tianxia.accounts import SessionStore
+
+    path = tmp_path / "v7.db"
+    conn = sqlite3.connect(path)
+    for statement in database.SCHEMA_V1 + database.SCHEMA_V2_TABLES + database.SCHEMA_V3_TABLES + database.SCHEMA_V4_TABLES \
+            + database.SCHEMA_V5_TABLES + database.SCHEMA_V6_TABLES + database.SCHEMA_V7_TABLES:
+        conn.execute(statement)
+    conn.execute("PRAGMA user_version = 7")
+    conn.commit()
+    conn.close()
+    db = open_database(path)
+    with db.snapshot() as c:
+        assert c.execute("PRAGMA user_version").fetchone()[0] == 9
+        names = {row["name"] for row in c.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert "sessions" in names and "rumor_heard" not in names
+    sessions = SessionStore(db, clock=lambda: 100.0)
+    token = sessions.create("shenlang")
+    assert sessions.get(token) == "shenlang"

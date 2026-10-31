@@ -208,23 +208,29 @@ class AccountStore:
 
     # ── 密碼 ──────────────────────────────────────
 
-    def _replace_secret(self, key: str, new: str) -> None:
+    def _replace_secret(self, key: str, new: str, keep: str | None = None) -> None:
+        """換密碼，同一筆交易裡把這個帳號的登入狀態（sessions）都清掉：別的裝置要用新密碼重登（PM 2026-10-31）。
+        keep 是自己改密碼時正在用的那個 cookie，留著，不把改密碼的人自己踢出去。"""
         salt, digest = _new_secret(new)
         with self.db.transaction() as conn:
             conn.execute(
                 "UPDATE logins SET salt = ?, hash = ? WHERE provider = 'password' AND subject = ?", (salt, digest, key),
             )
+            conn.execute(
+                "DELETE FROM sessions WHERE account = ? AND token_hash != ?", (key, _token_hash(keep) if keep else ""),
+            )
 
-    def change_password(self, login: str | None, old: str | None, new: str | None) -> None:
+    def change_password(self, login: str | None, old: str | None, new: str | None, keep: str | None = None) -> None:
+        """自己改密碼：舊密碼要對；其他裝置的登入狀態清掉，keep（這個裝置的 cookie）留著。"""
         key = normalize(login)
         account = self.get(key)
         if account is None or not _matches(account, old or ""):
             raise AccountError(WRONG_OLD_PASSWORD)
         check_password(new)
-        self._replace_secret(key, new)
+        self._replace_secret(key, new, keep)
 
     def set_password(self, login: str | None, new: str | None) -> None:
-        """管理者重設、scripts/set_password.py 用：不必知道舊密碼；順便解除擋猜密碼。
+        """管理者重設、scripts/set_password.py 用：不必知道舊密碼；順便解除擋猜密碼，這個帳號所有裝置都登出。
 
         擋猜密碼的紀錄只在同一個程式的記憶體裡：從 scripts/set_password.py 重設，不會解除正在跑的伺服器裡的鎖定（最多再等 10 分鐘）；在遊戲裡由管理者重設才會。"""
         key = normalize(login)
@@ -234,3 +240,57 @@ class AccountStore:
         self._replace_secret(key, new)
         with _THROTTLE_LOCK:
             self.failures.pop(key, None)
+
+
+# ── 登入狀態（審查 S-10）────────────────────────
+
+SESSION_SECONDS = 30 * 86400  # 登入狀態認多久：跟 cookie 的 max_age 一樣（server._start_session）
+
+
+def _token_hash(token: str) -> str:
+    """cookie 的 SHA-256：token 是 32 位元組的亂數（secrets.token_urlsafe），不必加鹽或慢雜湊。"""
+    return hashlib.sha256(token.encode("utf-8", "surrogatepass")).hexdigest()
+
+
+class SessionStore:
+    """登入狀態（cookie → 帳號）存在資料庫的 sessions 表（第 8 版），重開伺服器照樣認得；只存 cookie 的雜湊。
+    過了 SESSION_SECONDS 就不認、順手刪掉。時鐘是注入的（引擎不讀時鐘；這裡跟 AccountStore 一樣由伺服器給）。"""
+
+    def __init__(self, db: Database, clock: Callable[[], float] = time.time):
+        self.db = db
+        self.clock = clock
+
+    def create(self, account_key: str) -> str:
+        """開一個新的登入狀態，回傳要放進 cookie 的 token（只有這裡看得到原文）。順手清掉過期的。"""
+        token = secrets.token_urlsafe(32)
+        now = self.clock()
+        with self.db.transaction() as conn:
+            conn.execute("DELETE FROM sessions WHERE created <= ?", (now - SESSION_SECONDS,))
+            conn.execute(
+                "INSERT INTO sessions (token_hash, account, created) VALUES (?, ?, ?)", (_token_hash(token), account_key, now),
+            )
+        return token
+
+    def get(self, token: str | None) -> str | None:
+        """這個 cookie 登入的帳號（normalize 過的）；沒有、或過期了是 None。"""
+        if not token:
+            return None
+        with self.db.snapshot() as conn:
+            row = conn.execute("SELECT account, created FROM sessions WHERE token_hash = ?", (_token_hash(token),)).fetchone()
+        if row is None or self.clock() - row["created"] >= SESSION_SECONDS:
+            return None
+        return row["account"]
+
+    def pop(self, token: str | None, default: str | None = None) -> str | None:
+        """登出：刪掉這個登入狀態，回傳原本的帳號（沒有就是 default）。"""
+        if not token:
+            return default
+        with self.db.transaction() as conn:
+            row = conn.execute("SELECT account FROM sessions WHERE token_hash = ?", (_token_hash(token),)).fetchone()
+            conn.execute("DELETE FROM sessions WHERE token_hash = ?", (_token_hash(token),))
+        return default if row is None else row["account"]
+
+    def clear(self) -> None:
+        """全部登出（測試每次從空的開始；主機要全服強制登出也可以叫）。"""
+        with self.db.transaction() as conn:
+            conn.execute("DELETE FROM sessions")

@@ -35,7 +35,7 @@ def test_stances_line_has_no_gentry_row():
 
 
 def _timeline_game_allied():
-    """同 test_map_web._timeline_game，只是週末設定照預設（豪強分屬兩軍開著）：第 1 週記一筆，第 2 週把潁川汝南推到黃巾那頭再記一筆。"""
+    """7 天季（豪強分屬兩軍）：第 1 週記一筆，第 2 週把潁川汝南推到黃巾那頭再記一筆。"""
     from test_map_web import _game
 
     from tianxia import calendar, territory
