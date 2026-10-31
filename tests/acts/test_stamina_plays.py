@@ -7,7 +7,7 @@ from unittest import mock
 import pytest
 
 from conftest import real_content
-from tianxia import ambush, encounter, territory, works
+from tianxia import allied, ambush, encounter, territory, works
 from tianxia.characters import CharacterStore
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
@@ -226,3 +226,98 @@ def test_stockpile_button_only_for_the_two_armies_in_season_one(world):
     assert g.state.world.supply == {"guan": 1}
     ranger = _player(c, world, "散甲", None, "changshe")
     assert "works:stockpile" not in {o.id for o in ranger.options()}
+
+
+# ── 設伏打開之後（Joy 2026-10-30「直接打開」）：現行規則下照樣走得通 ──
+
+
+def test_real_content_has_ambush_on_without_switching_it():
+    """正式內容自己就開著（7 天、21 天兩種季）；上面那幾條的 _plays_on 只是另外打開屯糧。"""
+    for profile in (None, "week7", "season21"):
+        assert ambush.on(real_content(profile))
+
+
+def test_haoqiang_counts_as_the_army_it_helps(real, world):
+    """三陣營：敵我照 allied.side_of（同截殺）——豪強分屬兩軍的季，幫哪一軍就算哪一軍；不分屬的季豪強自己一方，兩軍都劫得到。"""
+    owner = _player(real, world, "黃甲", "huang", "huangjin_camp")
+    _set(owner)
+    for name, ally in (("豪乙", "guan"), ("豪丙", "huang")):
+        g = _player(real, world, name, "haoqiang", "changshe")
+        g.state.player.ally = ally
+        CharacterStore(world.db).save(g.state)
+    ambusher = _reload(world, real, "黃甲").state
+    split = allied.on(real, ambusher.world)
+    helps_guan, helps_huang = _reload(world, real, "豪乙"), _reload(world, real, "豪丙")
+    assert ambush.hostile(ambusher, helps_guan.state, real)
+    assert ambush.hostile(ambusher, helps_huang.state, real) is (not split)
+    with _fight("大勝"):
+        helps_guan.travel("huangjin_camp", "dash")
+    assert helps_guan.state.battles[-1].kind == "ambush"
+
+
+def test_the_newbie_window_is_48_real_hours(real, world):
+    """新手期照現實時間（Config.newbie_real_hours 48）：加入不到 48 小時沒有設伏鈕、硬按也被擋；過了才有。"""
+    owner = _player(real, world, "黃甲", "huang", "huangjin_camp")
+    p = owner.state.player
+    hours = real.config.newbie_real_hours
+    assert hours == 48
+    p.joined_at = owner.state.world.time - (hours - 1) * HOUR * real.config.time_scale
+    assert not any(o.id.startswith("ambush:") for o in owner.options())
+    assert ambush.set_problem(owner.state, real, "changshe") == ambush.NEWBIE
+    p.joined_at = owner.state.world.time - (hours + 1) * HOUR * real.config.time_scale
+    assert "ambush:set:changshe" in {o.id for o in owner.options() if o.enabled}
+
+
+def test_both_sides_get_a_report_and_an_annals_line(real, world):
+    """戰報（kind ambush）與行狀（交手那一類，留對手的名號）兩邊都記。"""
+    from tianxia import annals
+
+    owner = _player(real, world, "黃甲", "huang", "huangjin_camp")
+    _player(real, world, "官乙", "guan", "changshe")
+    _set(owner)
+    passer = _reload(world, real, "官乙")
+    with _fight("落敗"):
+        passer.travel("huangjin_camp", "dash")
+    back = _reload(world, real, "黃甲")
+    for g, rival in ((passer, "黃甲"), (back, "官乙")):
+        assert g.state.battles[-1].kind == "ambush"
+        assert any(e.kind == annals.FIGHT and rival in e.text for e in g.state.player.annals), g.state.player.name
+
+
+def test_a_server_bot_sets_ambushes_and_walks_into_them_like_anyone(real, world):
+    """假人：體力多時有機會從選單按設伏（bot_policy._stamina_play，跟真人同一顆鈕）；假人路過敵方埋伏一樣中伏、戰報一樣。"""
+    from tianxia import bot_policy
+    from tianxia.state import BotProfile
+
+    owner = _player(real, world, "黃甲", "huang", "huangjin_camp")
+    owner.state.player.bot = BotProfile(personality="普通", seed=1)
+    owner.state.player.stamina = real.config.stamina_max
+
+    class Low(random.Random):
+        def random(self):
+            return 0.0
+
+        def choice(self, seq):
+            assert "ambush:set:changshe" in seq, seq
+            return "ambush:set:changshe"
+    bot_policy._stamina_play(owner, Low())
+    assert owner.state.player.ambush is not None
+    CharacterStore(world.db).save(owner.state)
+    passer = _player(real, world, "官乙", "guan", "changshe")
+    passer.state.player.bot = BotProfile(personality="普通", seed=2)
+    CharacterStore(world.db).save(passer.state)
+    passer = _reload(world, real, "官乙")
+    with _fight("大勝"):
+        passer.travel("huangjin_camp", "dash")
+    assert passer.state.battles[-1].kind == "ambush"
+
+
+def test_the_howto_page_explains_ambush_with_the_config_numbers(real):
+    """玩法說明的「行動」那一段多一行設伏（開著才寫），數字讀設定。"""
+    from tianxia import howto
+
+    cfg = real.config.ambush
+    line = howto.ambush_lines(real)[0]
+    assert "**設伏**" in line and f"體力 {cfg.stamina}" in line and f"{cfg.hours:g} 小時" in line and f"最多 {cfg.silver_cap} 兩" in line
+    cfg.enabled = False
+    assert howto.ambush_lines(real) == []
