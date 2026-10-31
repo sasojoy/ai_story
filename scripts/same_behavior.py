@@ -1584,7 +1584,7 @@ class TavernScenario(Scenario):
     聽消息、查人（確切、託付留意、查無此人、自己、人物）、交情、素材、題壁、請酒（換日再請）、藏行跡、反查、保鏢、問酒家（鎖外三段式，
     假模型）、鄰桌閒談（server.chatter_once，假模型）、牆上的懸賞榜、買殺手；被打聽的人收風聲、殺手在城外做一件事時找上（得手）、
     站在城外下線回來時找上（失手）、同一對人連著失手（加價五成、威力 +0.1、最多 3 次）、雇主收結果、過期退一半、託付留意捎信與到期；
-    酒肆開關關著時（記憶體裡關）坐著的人照樣出得去、三個 deliver 照樣送；伺服器假人（BotRunner）進酒肆；換季。
+    同一次同步收到風聲、殺手單的結果、託付到期與書信（sync 裡三個 deliver 的先後與位置，crossing）；酒肆開關關著時（記憶體裡關）坐著的人照樣出得去、三個 deliver 照樣送；伺服器假人（BotRunner）進酒肆；換季。
     殺手那一場用 killer(tier)：tavern.find_chance 換成 1（或 0）、單次判定照 tier（本人這一邊的結果）。
     四種正式設定都站潁川一帶；測試內容沒有酒肆、沒有陣營，同一串 API 照打（證明關著一個字都不變），假人那一段略過。
     半舊半新切在 hire 之後：四張殺手單沒結、風聲沒送到、託付沒回音（批次表第二節「還沒結的殺手單」）。"""
@@ -1597,7 +1597,7 @@ class TavernScenario(Scenario):
     FAME = {"丁鵬": 300, "孟星魂": 120, "郭大路": 0}
     BOT_SEATS = [("柳長街", "guan", "yingchuan"), ("卓東來", "huang", "wan_city"), ("王動", "guan", "runan"), ("鐵中棠", "huang", "zhuo_county")]
     PHASES_FIRST = ["setup", "seat", "enter", "ops", "keeper", "chatter", "board", "hire"]
-    PHASES_SECOND = ["resume", "whispers", "strike", "away", "streak", "lapse", "watch", "trace", "closed", "bots", "season"]
+    PHASES_SECOND = ["resume", "whispers", "strike", "away", "streak", "lapse", "watch", "crossing", "trace", "closed", "bots", "season"]
 
     def __init__(self, root: Path, profile: str, db: Path):
         super().__init__(root, profile, db)
@@ -1910,6 +1910,36 @@ class TavernScenario(Scenario):
         emit("查無此人那一筆託付擺成到期", None)
         self.main("葉開")
         self.me("葉開", "託付收尾")
+
+    def crossing(self) -> None:
+        """sync 裡三個 deliver 的先後與位置（審查：之前沒有一次同步同時收到兩樣，換順序、整段挪到 on_sync 前面都抓不到）：
+        葉開先託酒家留意一個查無此人的；孟星魂在城外做一件事，葉開連著失手三次之後的那一張出手、平手（價錢與威力停在上限）；阿飛在潁川的
+        酒肆查藏了行跡的葉開（風聲記在季上）；葉開那一筆託付擺成到期、身上擺一封委託過期的信（letters.deliver 排在三個 deliver 後面，
+        寫「書信」那一則）。然後葉開同步一次：風聲、殺手單的結果、託付到期、書信四則在同一下，江湖紀錄的先後照 sync 的順序。"""
+        from tianxia.state import Bounty, Letter
+
+        c = self.c
+        self.tav("葉開", "seek", "查無此人", "watch")
+        with self.killer("僵持"):
+            self.act_outside("孟星魂")
+        self.unpair("葉開", "孟星魂")  # 錯開冷卻、清掉截殺那一道護身
+        self.tav("阿飛", "seek", "葉開")
+        figure = next((f for f in c.figures.values() if f.character in c.characters), None)
+        world_now = self.world.get_season().time
+        until = self.now() - 1
+
+        def fn(p) -> None:
+            p.tavern_watches = [w.model_copy(update={"until_real": until}) if w.target == "查無此人" else w for w in p.tavern_watches]
+            if figure is not None:
+                task = Bounty(id="letter-crossing", kind="strike", faction=None, week=1, expires=world_now - 1, silver=0, deeds=0,
+                              figure=figure.character, motive="委託")
+                p.letters.append(Letter(id=900, kind="求援", sender=figure.character, at=world_now - 60, text="（求援）", task=task))
+
+        self.edit("葉開", fn)
+        emit("葉開 查無此人那一筆託付擺成到期、身上擺一封委託過期的信", figure.character if figure is not None else None)
+        self.main("葉開")
+        emit("葉開 同一下同步收到的（江湖紀錄新的在前）", [e.title for e in self.chars.load("葉開").journal[:6]])
+        self.hits("同一下同步之後")
 
     def trace(self) -> None:
         """丁鵬進潁川的酒肆反查（有沒有問不出名號的風聲，照前半雇殺手那一下聽到風聲的是不是生面孔）。"""
