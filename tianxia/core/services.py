@@ -102,6 +102,17 @@ def tokens(wallet: Wallet, owner: str, effect: str, season: int | None = None) -
             and (season is None or b.season == season)]
 
 
+def look_ids(wallet: Wallet, owner: str) -> list[str]:
+    """這個人買到的擂台形象（購買那一列 data 的 look_id；沒退的，舊的在前、不重複）：帳號的，換季也帶著走（Joy 2026-10-31
+    「花錢買的東西不能不見」）。商城包（買過了不再賣）與形象包（穿哪一套）都照它。"""
+    seen: list[str] = []
+    for b in reversed(wallet.purchases(owner)):
+        look = b.data.get("look_id")
+        if b.refunded is None and look and look not in seen:
+            seen.append(look)
+    return seen
+
+
 def card_bonus(content: Content, wallet: Wallet, owner: str, day: int) -> int:
     """月卡（商城架構設計 4.5）：day 這一天在卡的期間裡（開始日～到期日，不含到期日）就回 Config.mall.card_pill_bonus，其餘 0。"""
     if not wallet_on(content):

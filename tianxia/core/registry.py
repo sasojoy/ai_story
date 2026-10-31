@@ -9,11 +9,13 @@ from .features import Feature
 
 from ..features import feast, mall  # 商城（萬寶閣）：第 1 階搬進來的示範；宴客：第 1 階多搬的有按鈕的小包（3.10）
 from ..features import sortie  # 出陣：主動搬六包第 1 批（沒有選項、選單、狀態，排在哪裡結果都一樣）
+from ..features import looks  # 擂台形象
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
     mall.FEATURE,
     feast.FEATURE,
     sortie.FEATURE,
+    looks.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]

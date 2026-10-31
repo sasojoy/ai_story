@@ -10,6 +10,7 @@
 "use strict";
 
   const RING_IMG = "/static/img/arena/";
+  const RING_LOOKS = "/static/img/looks/"; // 擂台形象（content/looks.json）：web/img/looks/<id>/ 九張，檔名同預設的斗笠小子
   const RING_BG = ["/static/img/outing/bg_town_far.webp", "/static/img/outing/bg_town_ground.webp"]; // 擂台搭在城裡：借走一趟城鎮那一套的遠景與地面
   // 每一張動作圖幾格（每格 220×220，腳底在 (100, 212)，同走一趟）
   const RING_SHEETS = {
@@ -38,24 +39,32 @@
   const RING_W = 720, RING_H = 320, RING_GY = 292, RING_X = [252, 468], RING_CELL = 220, RING_AX = 100, RING_BY = 212, RING_SCALE = 1.05;
 
   // 這一塊自己的狀態（不放進 S：每一格動畫都會改，不該讓整頁重畫）
-  const RA = { imgs: null, prev: null, q: [], cur: null, raf: 0, looks: { me: "", foe: "" }, hold: null, finaleFor: null };
+  const RA = { imgs: null, prev: null, q: [], cur: null, raf: 0, looks: { me: "", foe: "", me_look: "", foe_look: "" }, hold: null, finaleFor: null };
 
   function ringLoad() {
     if (RA.imgs) return;
     RA.imgs = {};
     const add = (key, src) => { const im = new Image(); im.src = src; RA.imgs[key] = im; };
     for (const name of Object.keys(RING_SHEETS)) add(name, `${RING_IMG}${name}.webp`);
+    RA.add = add;
     for (const w of Object.keys(RING_WEAPON)) add(`weapon_${w}`, `${RING_IMG}weapon_${w}.webp`);
     RING_BG.forEach((src, i) => add(`bg${i}`, src));
   }
   const ringReady = (im) => im && im.complete && im.naturalWidth > 0;
+  // 這一套形象的這一張（第一次用到才抓；還沒抓好或抓不到就先畫斗笠小子）
+  function ringBody(look, sheet) {
+    if (!look || !/^[a-z0-9_]+$/.test(look)) return RA.imgs[sheet];
+    const key = `${look}/${sheet}`;
+    if (!RA.imgs[key]) RA.add(key, `${RING_LOOKS}${look}/${sheet}.webp`);
+    return ringReady(RA.imgs[key]) ? RA.imgs[key] : RA.imgs[sheet];
+  }
   const ringArms = (kind) => RING_ARMS[kind] || [null, "fist"];
   const ringAtk = (kind) => `hero_atk_${ringArms(kind)[1]}`;
   const ringStill = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // 一個人的一格：身體，加上手上那一件（劍在身前就再把拳頭那一小圈蓋回去，看起來是握著）
-  function ringFigure(cx, sheet, i, x, flip, kind, lunge) {
-    const img = RA.imgs[sheet];
+  function ringFigure(cx, sheet, i, x, flip, kind, lunge, look) {
+    const img = ringBody(look, sheet);
     if (!ringReady(img)) return;
     const n = RING_SHEETS[sheet];
     i = Math.max(0, Math.min(n - 1, i));
@@ -128,7 +137,7 @@
     ringLoad();
     const f = shop.fight, r = shop.result && shop.result.id !== S.arenaSeen ? shop.result : null;
     if (f) {
-      RA.looks = f.looks || { me: "", foe: "" };
+      RA.looks = f.looks || { me: "", foe: "", me_look: "", foe_look: "" };
       const now = { id: f.id, round: f.round, me: f.me.hp, foe: f.foe_hp.hp, cap: f.me.cap, edge: f.edge };
       const p = RA.prev;
       if (p && p.id === now.id && now.round > p.round) RA.q.push(...ringExchange(p, now));
@@ -201,6 +210,6 @@
         sheet = RA.hold[side].sheet;
         i = RA.hold[side].i;
       }
-      ringFigure(cx, sheet, i, x, flip, RA.looks[side], lunge);
+      ringFigure(cx, sheet, i, x, flip, RA.looks[side], lunge, RA.looks[`${side}_look`]);
     }
   }

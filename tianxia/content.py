@@ -30,7 +30,7 @@ from .models import (
     ArtBook, Itinerary,
     BEST_OF, FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
-    GiftDef, Hints, MingtieContent, InsightDef, Location, MallItem, MarkRule, MarkText, OppDef,
+    GiftDef, Hints, MingtieContent, InsightDef, Location, Look, MallItem, MarkRule, MarkText, OppDef,
     InsightScene, Opening, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
     SimRumor, SkillDef,
     SignatureArmDef, SteedDef, Squad, StoryDef, Tier4Named, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
@@ -143,6 +143,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         xingshi_lines=_read(root / "xingshi_lines.json") if (root / "xingshi_lines.json").exists() else {},
         seal=_shards(root / "seal.json"),
         mall=_index(MallItem, _read(root / "mall.json")) if (root / "mall.json").exists() else {},  # 商城的商品（joy 寫）
+        looks=_index(Look, _read(root / "looks.json")) if (root / "looks.json").exists() else {},  # 擂台形象（功能包 looks）
         relations=[_build(RelationDef, raw) for raw in _read(root / "relations.json")] if (root / "relations.json").exists() else [],
         itineraries=[_build(Itinerary, raw) for raw in _read(root / "itineraries.json")] if (root / "itineraries.json").exists() else [],
         gather_branches=_index(GatherBranch, _read(root / "gather_branches.json")) if (root / "gather_branches.json").exists() else {},

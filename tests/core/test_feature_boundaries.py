@@ -196,8 +196,10 @@ GAME_IMPORTS = {
     "tianxia.features.sortie.actions", "tianxia.sortie", "tianxia.features.sortie.rules",
     # 出陣約戰（主動搬六包第 2 批）：16 個一行委派；原本那一行 `from . import sortie_duel` 現在是別名（choose 照舊讀 PREFIX、PICK）
     "tianxia.features.sortie.duel_actions", "tianxia.sortie_duel",
+    "tianxia.features.looks.actions",  # 擂台形象：Game.arena_look 一行委派（擂台報名、開打記穿哪一套）
 }
 GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
+    "arena_look",  # 擂台形象（looks）
     "mall_buy", "mall_entry", "mall_rename_left", "mall_rename", "mall_claim", "mall_view", "mall_records",
     "admin_mall_reissue", "admin_mall_revoke", "admin_mall_refund", "admin_mall_ledger", "_mall_grant",
     "feast_free_text_prompt", "feast_text_request", "feast_toast",
@@ -233,6 +235,8 @@ GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；�
 }
 GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_DIRECT 的方法裡叫的也列（PM 10/31 答覆出陣第 1 批，第 2 批起）
     ("own_turn_checks", "_mall_grant"): "封測元寶每一輪發（本人這一輪沒有掛鉤；on_sync 不夠：假人程式的那一輪不 sync）",
+    ("_arena_join", "arena_look"): "擂台形象：報名、更新分身時記穿哪一套（擂台還在核心；擂台搬成包時改成形象包的查詢服務）",
+    ("_arena_start", "arena_look"): "擂台形象：挑人開打時記挑的人穿哪一套（同上）",
     # 出陣（主動搬六包第 1 批）：核心叫出陣委派 13 對（第 1 批時一共 21 對、掃描只看得到 6 對；約戰自己叫的 8 對第 2 批跟著進了包）
     ("_action_title", "_train_title"): "這一下的紀錄標題先算（act:train 是核心的前綴，標題照出陣開著沒、序章寫出陣／雪恥／遊歷）",
     ("_outing_foe", "_sortie_host"): "走一趟（探索）在自家營寨遇上的是自家那一路（出陣的守拿的同一路）；探索搬成包時改成查詢服務",
