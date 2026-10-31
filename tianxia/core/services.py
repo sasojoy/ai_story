@@ -46,7 +46,6 @@
 
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
-- `ctx._battle_now()`（決戰：此刻自己參戰的那一場；tavern 第 10 批：殺手不找決戰裡的人。決戰搬成包時改成那一包的查詢服務）
 - `ctx._squad_encounter(squad_id, as_sortie=True)`（戰鬥：打一場隊伍，出陣攻打）
 - `ctx._train_option(...)`、`ctx._train_pick(loc)`、`ctx._big_trip(loc)`（舊遊歷：勝算與必敗先問的鈕、大場面挑哪一路）
 - `ctx._push_progress(loc_id, nominal, source, how)`（地盤：領地爭奪推、拉進度）
@@ -62,13 +61,18 @@
 - `ctx.sorties_left()`、`ctx._sortie_hold(loc, how)`（出陣包自己的委派：測試換掉 Game.sorties_left〔test_bot_policy_conquest〕、
   腳本換掉 Game._sortie_hold〔sim_trend_sources〕，包裡經 ctx 叫，換掉的才打得到；呼叫端改完就拿掉）
 
+tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，不跟別條拆包線在段頭加的那幾行撞在一起）
+- `ctx._battle_now()`（決戰：此刻自己參戰的那一場；殺手不找決戰裡的人。決戰搬成包時改成那一包的查詢服務）
+
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 
-- `ctx._tavern_seek_exact`、`ctx._tavern_reply`（酒肆，tavern 第 10 批）：查人那一下問得多清楚（託酒家留意看它；None 沒查成、True 確切
-  地點、False 沒問清楚）、問酒家 B 段寫好的那一句（tavern_ask 放、問完清掉）
 - `ctx.mall_bought`、`ctx.mall_already`（商城）：上一次 actions.buy 的結果（買成的商品 id；同一個編號早就買好的那一件），伺服器在鎖裡讀
 - `ctx._clash_won`、`ctx._sortie_marked`、`ctx._sortie_moved`、`ctx._sortie_flipped`（出陣）：Game.__init__ 起的、出陣那一下設、
   `_push_progress`（地盤，留在核心）寫與讀——混戰得勝的加成、記過一筆出陣沒、這一下推（拉）動了多少、推滿易手了沒（出陣回報讀）
+
+tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由同上）
+- `ctx._tavern_seek_exact`、`ctx._tavern_reply`：查人那一下問得多清楚（託酒家留意看它；None 沒查成、True 確切地點、False 沒問清楚）、
+  問酒家 B 段寫好的那一句（tavern_ask 放、問完清掉）
 
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """

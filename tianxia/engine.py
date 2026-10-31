@@ -95,9 +95,10 @@ from .wallet import Wallet
 from .core import features as features_core  # 核心照 FEATURES 問每一包（開發規範手冊 3.3）
 from .core.option import Option  # 選單上的一顆（搬進核心：功能包要做選項）
 from .core.services import NO_SUCH_PLAYER, PAUSED_TEXT, WalletService, drill_share, wallet_on  # 共用的字與小函式、錢包服務（3.10）
-from .features.tavern import actions as tavern_actions  # 過渡：Game 上酒肆的 19 個一行委派（主動搬六包第 10 批）
 from .features.mall import actions as mall_actions  # 過渡：Game.mall_* 留一行委派（開發規範手冊 3.10）
 from .features.feast import actions as feast_actions  # 過渡：Game.feast_*（server 的三段式）與場景卡留一行委派
+# tavern（擺在宴客與出陣之間：別條拆包線在 core.services 之後、出陣那一行之後各加一段，不貼在一起）
+from .features.tavern import actions as tavern_actions  # 過渡：Game 上酒肆的 19 個一行委派（主動搬六包第 10 批）
 from .features.sortie import actions as sortie_actions  # 過渡：Game 上出陣的 13 個一行委派（主動搬六包第 1 批）
 from .features.sortie.rules import CLASH_OPEN, CLASH_THEIRS_WON, CLASH_WON  # noqa: F401  過渡：tests/ranger/test_raid.py 從 engine 拿
 from .state import (
