@@ -794,6 +794,8 @@ def _fight_view(state: GameState, content: Content) -> dict:
     log = list(fight.lines)
     lock = tactics.locks(fight.bout)  # 本命戰法（第二批）：使不出來的招灰掉、身上的狀態、看穿了架勢一定是真的
     return {
+        "id": fight.id,  # 擂台動畫：認是不是同一場（換一場從頭演）
+        "looks": arena.looks_view(fight.looks),  # 擂台動畫：兩邊手上的兵器種類
         "foe": fight.foe.name,
         "arts": list((state.world.arena.get(fight.foe_key).arts if state.world.arena.get(fight.foe_key) else [])),
         "round": fight.round + 1,
@@ -880,5 +882,5 @@ def arena_view(state: GameState, content: Content, world: WorldStateStore, power
         "wages": WAGES_NOTE.format(silver=top_silver, fame=top_fame, n=len(cfg.wages)) if cfg.wages else "",
         "fight": _fight_view(state, content) if p.arena is not None else None,
         "result": {"id": result.id, "foe": result.foe, "tier": result.tier, "lines": list(result.lines),
-                   "changes": list(result.changes)} if result is not None and p.arena is None else None,
+                   "changes": list(result.changes), "looks": arena.looks_view(result.looks)} if result is not None and p.arena is None else None,
     }

@@ -78,7 +78,7 @@ PARALLEL_FROM = 3  # 挑到這麼多個檔以上才開 xdist（開工作行程�
 WORKERS = "4"  # 開發規範手冊 4.5：同一台同時最多兩份測試在跑，各自 -n 4
 # 殼的網頁檔：網頁測試每一條都載入（tests/kit/webharness.py 的 APP_FILES 扣掉功能包的 js），改哪一個都照 app.js 挑。
 # 功能包的 js（mall.js）也在 APP_FILES 裡，可是照那一包挑（feature_web）；test_test_for 守 WEB_SCRIPTS ∪ 各包的 js == APP_FILES
-WEB_SCRIPTS = {"main.js", "map.js", "outing.js", "app.js"}
+WEB_SCRIPTS = {"main.js", "map.js", "outing.js", "arena_anim.js", "app.js"}
 SETUP_FILES = {"pyproject.toml", "requirements.txt", "requirements-dev.txt"}  # conftest.py 另外照 hunk 挑（conftest_picks）
 CONFTEST_CAP = 50  # conftest 改到的名字有超過這麼多個測試檔在用（content、game、real_content）：不一個一個挑，跑煙霧
 # 跟哪一條分支比：PM 2026-10-31 起預設 origin/develop（大家從 develop 開）；環境變數 TIANXIA_TEST_BASE 蓋過預設、
