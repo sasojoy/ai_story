@@ -14771,10 +14771,6 @@ class Game:
         arts = (team.player_art(s, c, self.world, m.wugong_id), team.player_art(s, c, self.world, m.neigong_id))
         return [a.name for a in arts if a is not None]
 
-    def arena_board(self) -> list[dict]:
-        """擂台榜（見聞「榜單」分頁的一張；arena.board）：照名次前 board_size 名，帶稱號。擂台關著是空的。"""
-        return arena.board(self.state.world, self.content.config.arena) if arena.on(self.content) else []
-
     def arena_power(self) -> float:
         """此刻上擂台的威力（假人照它決定報名、更新分身；bot_policy._arena）。"""
         return self._battle_power()
