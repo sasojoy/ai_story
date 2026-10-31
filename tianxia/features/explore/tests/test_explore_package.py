@@ -6,11 +6,11 @@ from unittest import mock
 
 import pytest
 from jianfa_kit import jianfa_game, ready
-from test_outing import _game, _walked, _with_ink
+from test_outing import _draws, _game, _settle_event, _walked, _with_ink
 
 from conftest import real_content
 from tianxia import content as content_mod
-from tianxia import speech
+from tianxia import sensing, speech
 from tianxia.core import features as features_core
 from tianxia.core.option import IDLE_MARK
 from tianxia.features.explore import explore_rules, outing_rules
@@ -66,3 +66,44 @@ def test_the_wall_refuses_the_words_the_tavern_wall_refuses_and_keeps_the_ink():
     assert game.outing_ink_left() == 1 and game.state.world.inscriptions == []
     game.outing_say(text="此處風大")  # 沒犯忌的照常刻下去、用掉那一張
     assert [i.text for i in game.state.world.inscriptions] == ["此處風大"] and game.outing_ink_left() == 0
+
+
+# ── 審查修正（回歸鏡頭）：搬過去的本體裡原本沒有人守的三條路（變異拿掉任何一條，整個包的測試與包外 5,355 條都是綠的）──
+
+def test_leaving_a_stopped_trip_closes_it_as_left_instead_of_walking_on():
+    """走一趟停在要選的事上、選完之後人已經不在出發的地方：接著走不再走，這一趟收成「中途離開」（outing_go 的 trip.place 那一道）。"""
+    game = _game()
+    p = game.state.player
+    with _draws(explore_rules.MATERIAL, explore_rules.EVENT, explore_rules.MATERIAL):
+        game.outing_go(3)
+        _settle_event(game)
+        trip = p.outing
+        assert (trip.done, trip.end) == (2, "") and game.outing_view()["trip"]["can_go"] is True
+        p.location = next(loc for loc in game.content.locations if loc != trip.place)  # 選完事之後走開了
+        assert game.outing_go() == [outing_rules.END_LINES[outing_rules.LEFT]]
+    assert (trip.done, trip.end) == (2, outing_rules.LEFT)  # 沒再走第三段、第三段的體力沒扣
+
+
+def test_a_material_beat_asks_the_home_gather_and_keeps_what_it_gives():
+    """素材那一拍收完照舊問領地爭奪「站在自家領地多給的那一個」（ctx._home_gather；測試換掉它，包裡經 ctx 叫才打得到），給的字進這一下的回話。"""
+    game = _game()
+    asked: list[tuple[str, list[str]]] = []
+
+    def home(loc, mids):
+        asked.append((loc.id, list(mids)))
+        return ["（自家領地多給了一個）"]
+
+    with _draws(explore_rules.MATERIAL), mock.patch.object(game, "_home_gather", side_effect=home):
+        said = game.choose(IDLE_MARK)
+    assert [place for place, _ in asked] == ["yingshui"] and asked[0][1]  # 問了一次，帶著這一拍找到的素材
+    assert "（自家領地多給了一個）" in said
+
+
+def test_a_sense_missed_today_zeroes_the_insight_beat_at_that_place():
+    """這個遊戲日在這一處選錯過做法（sensing.missed_today）：這一處的比重裡感悟是 0（分給其餘的）；沒選錯過寺裡的感悟本來就有。"""
+    game = _game()
+    game.state.player.location = "baima_temple"
+    assert game.outing_plan().weights[explore_rules.INSIGHT] > 0
+    with mock.patch.object(sensing, "missed_today", return_value=True):
+        weights = game.outing_plan().weights
+    assert weights[explore_rules.INSIGHT] == 0 and sum(weights.values()) > 0
