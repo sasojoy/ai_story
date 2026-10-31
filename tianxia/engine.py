@@ -17023,6 +17023,11 @@ class Game:
             return None
         return got
 
+    def battle_on_screen(self) -> bool:
+        """場景上此刻畫著一場全服戰鬥（同 scene_text 讀的那一場；只讀、不推進）。server.main_view 拿它認出「選單這一下把決戰推到
+        收場了」，場景要重讀（手機介面自檢 U-06）。"""
+        return self._battle_for_me(tick=False) is not None
+
     def scene_text(self) -> str:
         """有全服戰鬥時大家都看得到戰場；照常遊玩的人（集結中、只能觀戰、開打了還沒投效的散人，見 _fighting），自己眼前的事
         （事件、對話、地點）接在戰場底下，不然遇到事件時只看得到選項、看不到事件本身。序章裡不畫戰場（_battle_for_me）。"""

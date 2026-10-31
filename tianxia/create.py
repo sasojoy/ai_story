@@ -23,12 +23,13 @@ from __future__ import annotations
 
 import math
 import random
+import re
 import zlib
 from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
 
-from . import annals, arts as arts_mod, library, might, moves, naming, tactics, team, treasures
+from . import annals, arts as arts_mod, library, might, moves, naming, tactics, team, treasures, zh
 from .martial_arts import ATTRIBUTES, QUALITY_BASE_POWER, QUALITY_TOP_POWER, MartialArt, scaled
 from .models import Content, TacticDef
 from .ollama_client import OllamaClient
@@ -387,8 +388,9 @@ def clean_reading(reading: IntentReading | None) -> IntentReading:
     lean = reading.lean if reading.lean in LEANS else "無"
     move = naming.clean_name(reading.move or "")
     move = move if MOVE_MIN <= len(move) <= MOVE_MAX and all("\u4e00" <= ch <= "\u9fff" for ch in move) else ""
-    say = " ".join(str(reading.say or "").split())
-    say = say if SAY_MIN <= len(say) <= SAY_MAX and not any(ch.isdigit() for ch in say) and "{" not in say else ""
+    say = zh.to_traditional(" ".join(str(reading.say or "").split()))
+    say = (say if SAY_MIN <= len(say) <= SAY_MAX and not any(ch.isdigit() for ch in say) and "{" not in say
+           and not re.search(r"[A-Za-z]", say) else "")
     return IntentReading(score=clamp_score(reading.score), attributes=attrs, lean=lean, move=move, say=say)
 
 
@@ -564,7 +566,7 @@ def set_intent(
     draft.read = list(reading.attributes)
     draft.lean = reading.lean
     draft.score = reading.score
-    draft.move = reading.move
+    draft.move = reading.move if reading.move and move_problem(content, world, reading.move) is None else ""  # 模型起的招名也過名字過濾（禁用名單、人物）：過不了照表上的預設名
     draft.say = reading.say
     _form(state, content, world, draft)
     msgs = [FORMED_LINE.format(intent=draft.intent, colors=colors_text(draft.colors))]
@@ -659,7 +661,7 @@ def reread(
     draft.read = list(reading.attributes)
     draft.lean = reading.lean
     draft.score = reading.score
-    draft.move = reading.move
+    draft.move = reading.move if reading.move and move_problem(content, world, reading.move) is None else ""  # 模型起的招名也過名字過濾（禁用名單、人物）：過不了照表上的預設名
     draft.say = reading.say
     p.create_rerolls -= 1
     draft.rerolled += 1

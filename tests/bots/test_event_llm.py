@@ -94,3 +94,24 @@ def test_narrate_prompt_carries_the_outcome_and_forbids_new_rewards(event):
     system, user = (m["content"] for m in client.chat_text.call_args.args[0])
     assert "不要改變成敗" in system and "數字" in system and "獎勵" in system
     assert "判定：失敗" in user and "沒人理你，反挨了一拳。" in user and "大喊官兵來了" in user
+
+
+@pytest.mark.parametrize("reply", [
+    "**你拔刀相助**，獲得 50 兩銀子與名望！",  # 玩家做法裡沒有的數字
+    "As an AI，你拔刀相助，兩夥人散了。",  # 英文
+    '{"line": "你拔刀',  # 壞掉的 JSON
+    "好的，以下是潤色：你拔刀相助。",  # 開場白
+    "你像個機器人一樣衝了上去。",
+    "你" * 120,  # 太長
+])
+def test_narrate_drops_what_should_not_reach_the_log(event, reply):
+    """2026-10-31 自檢：以前只轉繁體，上面這些都原樣寫進江湖紀錄。"""
+    client = mock.Mock()
+    client.chat_text.return_value = reply
+    assert eg.narrate_event_gamble(client, event, "大喊官兵來了", True, "兩夥人一哄而散。") is None
+
+
+def test_narrate_keeps_a_number_the_player_wrote(event):
+    client = mock.Mock()
+    client.chat_text.return_value = "你扯開嗓子喊了3聲官兵來了，兩夥人面面相覷。"
+    assert eg.narrate_event_gamble(client, event, "喊3聲官兵來了", True, "兩夥人一哄而散。") == "你扯開嗓子喊了3聲官兵來了，兩夥人面面相覷。"

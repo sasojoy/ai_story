@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
@@ -507,7 +508,9 @@ def view(content: Content, wallet: Wallet, owner: str, day: int, season: int, mo
     return {"balance": balance, "card": card_view(content, wallet, owner, day), "items": items, "daily": daily}
 
 
-def records(content: Content, wallet: Wallet, owner: str, *, admin: bool = False) -> dict:
+def records(
+    content: Content, wallet: Wallet, owner: str, *, admin: bool = False, season_time: Callable[[float], str | None] | None = None,
+) -> dict:
     """購買紀錄與帳（最近 Config.mall.records_shown 筆，新的在前）；帳的每一列寫那一筆之後的餘額。admin 為真時多寫編號與
     經手的管理者（管理者查帳）；玩家自己看的不寫是誰經手。連著一筆購買的那幾列（購買、退款）寫商品的名字 item 與那一筆退了沒
     refunded（紀錄頁照它寫標題，商城第二批）；其餘 item 是 None。"""
@@ -517,7 +520,7 @@ def records(content: Content, wallet: Wallet, owner: str, *, admin: bool = False
     for row in wallet.ledger(owner, shown):
         bought = wallet.purchase(row.purchase_id) if row.purchase_id is not None else None
         known = content.mall.get(bought.item) if bought is not None else None
-        line = {"time": real_text(row.time, content), "delta": row.delta, "reason": reason_text(row.reason, row.ref),
+        line = {"time": real_text(row.time, content), "season_time": season_time(row.time) if season_time else None, "delta": row.delta, "reason": reason_text(row.reason, row.ref),
                 "note": row.note, "balance": after, "item": (known.name if known else bought.item) if bought is not None else None,
                 "refunded": bought is not None and bought.refunded is not None}
         if admin:

@@ -150,9 +150,18 @@ def _steps(game: Game, status: dict, orders: list[dict]) -> list[dict]:
 CHAPTER_STEP = "第{no}回・{title}：{hint}"  # 眼下要事第一件（文字第一個全形冒號前是標題，web 照它拆）
 
 
+def _showdown_live(game: Game, event_id: str) -> str | None:
+    """時刻表上這一件大事的決戰此刻在集結（"muster"）或開打（"active"）；沒在打、或正在打的是別場是 None（章回卡的 live）。"""
+    battle = game.world.get_battle()
+    if battle is None or battle.phase not in ("muster", "active"):
+        return None
+    definition = game.content.battles.get(battle.battle_id)
+    return battle.phase if definition is not None and definition.timetable_event == event_id else None
+
+
 def chapter_card(game: Game) -> dict | None:
     """章回卡（main.week_card.chapter，chapters.card）：章回主線關著、手上沒有回是 None。"""
-    card = chapters.card(game.state, game.content, game.stamp, lambda loc: step_rules.place(game, loc))
+    card = chapters.card(game.state, game.content, game.stamp, lambda loc: step_rules.place(game, loc), lambda beat: _showdown_live(game, beat))
     if card is not None and card["here"]:  # 「去做」按的是選單上那一顆：選單此刻沒有它（例：豪強還沒挑一邊）就不畫
         want = f"{storyline.OPTION}:{card['line']}"
         card["here"] = any(o.id == want and o.enabled for o in game.options())

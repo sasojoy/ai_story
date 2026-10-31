@@ -1309,13 +1309,18 @@ def test_world_tick_seconds_is_off_or_at_least_a_second():
 # ── LLM 佇列與鎖外模型呼叫的時間預算（線上架構第 2 期計畫）──────────────
 
 
+ONLINE_PROFILES = ("week7", "season21")  # 線上會開的那兩份設定：推送與模型佇列打開（全面自檢 S-03／M-10，Joy 2026-10-31 照建議）
+
+
 def test_llm_queue_is_off_by_default():
-    """LLM 佇列預設關（線上架構第 2 期計畫）：0＝不建佇列，鎖外的模型呼叫照舊直接叫。content/config.json 與玩家用的設定
-    （weekend 等）都不打開；要在哪一份打開由 PM 驗收之後決定，到時改這個測試、寫明是哪一份。"""
+    """LLM 佇列預設關（線上架構第 2 期計畫）：0＝不建佇列，鎖外的模型呼叫照舊直接叫。content/config.json 與 weekend 不打開；
+    線上的 week7、season21 開一格（主機的 Ollama 一次服務一件），排隊上限 45 秒（人物對話平均 19 秒，20 秒會擋掉排第二的人）。"""
     config = load_content(CONTENT_DIR).config
     assert (config.llm_queue_slots, config.llm_queue_bot_cap, config.llm_queue_wait_seconds) == (0, 1, 20)
     for path in sorted((CONTENT_DIR / "profiles").glob("*.json")):
-        assert load_content(CONTENT_DIR, profile=path.stem).config.llm_queue_slots == 0, path.stem
+        cfg = load_content(CONTENT_DIR, profile=path.stem).config
+        want = (1, 45) if path.stem in ONLINE_PROFILES else (0, 20)
+        assert (cfg.llm_queue_slots, cfg.llm_queue_wait_seconds) == want, path.stem
 
 
 @pytest.mark.parametrize("field", ["llm_queue_slots", "llm_queue_bot_cap", "llm_queue_wait_seconds"])
@@ -1352,12 +1357,12 @@ def test_every_model_call_outside_the_lock_has_a_total_budget():
 
 
 def test_push_is_off_by_default():
-    """伺服器推送預設關（線上架構推送計畫）：前端照舊每 10 秒輪詢，/api/events 是 404。content/config.json 與玩家用的設定
-    （weekend 等）都不打開；要在哪一份打開由 PM 驗收之後決定，到時改這個測試、寫明是哪一份。"""
+    """伺服器推送預設關（線上架構推送計畫）：前端照舊每 10 秒輪詢，/api/events 是 404。content/config.json 與 weekend 不打開；
+    線上的 week7、season21 打開（在線分頁有變化才刷新、平常 60 秒問一次）。"""
     config = load_content(CONTENT_DIR).config
     assert (config.push_events, config.push_watch_seconds, config.push_world_min_seconds) == (False, 5, 10)
     for path in sorted((CONTENT_DIR / "profiles").glob("*.json")):
-        assert load_content(CONTENT_DIR, profile=path.stem).config.push_events is False, path.stem
+        assert load_content(CONTENT_DIR, profile=path.stem).config.push_events is (path.stem in ONLINE_PROFILES), path.stem
 
 
 def test_push_timings_must_make_sense():

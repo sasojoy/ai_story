@@ -12,6 +12,8 @@
 """
 from __future__ import annotations
 
+import re
+
 from . import zh
 from .ollama_client import OllamaClient
 
@@ -33,7 +35,22 @@ def _ask(client: OllamaClient | None, prompt: str) -> str:
         text = client.chat_text(messages, num_predict=FLAVOR_NUM_PREDICT)
     except Exception:
         return ""
-    return zh.to_traditional(text.strip().strip('「」"'))
+    return clean(text)
+
+
+FLAVOR_MIN, FLAVOR_MAX = 4, 60  # 提示要 15~40 字；太短的也收，只擋長段
+_BANNED = ("假人", "機器人", "遊戲", "系統", "玩家")
+
+
+def clean(raw: str) -> str:
+    """點綴那一句驗過才用（結果全服快取、每季都看同一句，寫壞了就一直壞）：轉繁體、去標記；
+    太長太短、換行、有數字、英文、不准出現的字就丟掉（回空字串，呼叫端整句省略、不寫快取）。"""
+    text = zh.to_traditional(str(raw or "")).strip().strip('「」"')
+    text = re.sub(r"[*#>`_]+", "", text).strip()
+    if (not (FLAVOR_MIN <= len(text) <= FLAVOR_MAX) or "\n" in text or re.search(r"[0-9０-９A-Za-z{}]", text)
+            or any(w in text for w in _BANNED)):
+        return ""
+    return text
 
 
 def polish_world_event(client: OllamaClient | None, text: str) -> str:
