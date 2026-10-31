@@ -93,7 +93,7 @@ from .sqlite_world import open_world
 from .wallet import Wallet
 from .core import features as features_core  # 核心照 FEATURES 問每一包（開發規範手冊 3.3）
 from .core.option import Option  # 選單上的一顆（搬進核心：功能包要做選項）
-from .core.services import NO_SUCH_PLAYER, PAUSED_TEXT, WalletService, wallet_on  # 共用的字、錢包服務（3.10）
+from .core.services import NO_SUCH_PLAYER, PAUSED_TEXT, WalletService, drill_share, wallet_on  # 共用的字與小函式、錢包服務（3.10）
 from .features.mall import actions as mall_actions  # 過渡：Game.mall_* 留一行委派（開發規範手冊 3.10）
 from .features.feast import actions as feast_actions  # 過渡：Game.feast_*（server 的三段式）與場景卡留一行委派
 from .state import (
@@ -151,12 +151,6 @@ def _refusal(text: str, short: str) -> str:
     out = fusion.Refusal(text)
     out.short = short
     return out
-
-
-def drill_share(amount: int, share: float) -> int:
-    """跟自己人操練拿對手那一項獎勵的幾成（Config.drill_reward_share），四捨五入（round 是銀行家進位）。
-    操練真的給的（Game._drill）與行動列底下說會給什麼（Game._train_line）都算這一個。"""
-    return int(amount * share + 0.5)
 
 
 @dataclass(frozen=True)
