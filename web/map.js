@@ -1603,7 +1603,7 @@
   }
 
   // ── 看哪裡：S.mapCam = { z 倍率, x, y }，地圖上 (mx, my) 在地圖框裡的 (x + mx·z, y + my·z) ──
-  const mv = { pts: new Map(), start: null, moved: false, frame: 0, g: null, anim: 0, vel: [0, 0], last: null, lastTap: 0, tapTimer: 0, pickAt: 0, eatUntil: 0, wheelTimer: 0, laid: null };
+  const mv = { pts: new Map(), start: null, moved: false, frame: 0, g: null, anim: 0, vel: [0, 0], last: null, lastTap: 0, tapTimer: 0, pickAt: 0, eatUntil: 0, hudEat: null, wheelTimer: 0, laid: null };
   // 鏡頭還在動：手指按著又動過（拖、捏）、慣性滑或飛過去（mv.anim）、滾輪還沒停（mv.g 留著、沒有手指）。放手、滑停、飛完、滾輪停都會把它們
   // 清掉再叫一次 drawMarks（地在那一次才換級距，groundShow）
   const mvBusy = () => (mv.moved && mv.pts.size > 0) || !!mv.anim || (!!mv.g && !mv.pts.size);
@@ -2004,6 +2004,7 @@
     if (mv.pts.has(ev.pointerId)) mv.pts.clear(); // 同一個指標又按下：上一次沒收到放開（在視窗外放開），重新來過
     if (mv.pts.size >= 2) return;
     mv.eatUntil = 0;
+    mv.hudEat = null;
     mvStop();
     if (!mv.pts.size) { mv.moved = false; mv.g = mapGeom(document.getElementById("map")); mv.vel = [0, 0]; }
     mv.pts.set(ev.pointerId, [ev.clientX, ev.clientY]);
@@ -2060,8 +2061,27 @@
     // 點到地（輿圖表現第二版 2.3：整塊地都是那一處的熱區）：照畫出來的那一塊算是哪一處（landAt），地圖上的字與小圖照舊由 click 開卡。
     // 等 MV_TAP2 過了、確定沒有第二下才開卡：雙擊照 Joy 的只放大（上面那一行），不開卡、不畫路線、不先為了露出小圖挪鏡頭（W1 審查 2026-10-30）
     const land = g && c && S.mapBase && S.mapState ? landAt(S.mapBase, S.mapState, (ev.clientX - g.x0 - c.x) / c.z, (ev.clientY - g.y0 - c.y) / c.z) : null;
-    if (land) mv.tapTimer = setTimeout(() => { mv.tapTimer = 0; mapLand(land); }, MV_TAP2);
-    else mapBlank();
+    if (land) { mv.tapTimer = setTimeout(() => { mv.tapTimer = 0; mapLand(land); }, MV_TAP2); return; }
+    const was = hudHidden();
+    mapBlank();
+    const shown = was.filter((id) => !hudHidden().includes(id));
+    mv.hudEat = shown.length ? { ids: shown, until: Date.now() + MV_CLICK } : null;
+  }
+  // 點空地收卡（上面 mapBlank）那一下：抽屜縮回去，被抽屜蓋住而收起來的區名、🔍、小地圖、右下兩顆（hudShow）當場又露出來；觸控的 click 是放手之後
+  // 瀏覽器才照新的版面命中的，會落在剛露出來的那一顆上（W2 第二輪審查 2026-10-31：全開有卡時點地圖上緣那一條空地，卡收了又開了找地點頁；同 FB-9090）。
+  // 放手那一刻收著、收卡之後露出來的那幾樣記在 mv.hudEat，那一下的 click 落在它們身上就吃掉（MV_CLICK 之內）；下一次按下去（哪裡都算）就清掉，
+  // 不吃玩家真正的下一下。掛在地圖框外那一層（#mapx，捕獲階段）：浮著的那幾樣不在地圖框裡
+  function hudHidden() {
+    return Object.values(MV_HUD_IDS).filter((id) => { const el = document.getElementById(id); return !!(el && el.style && el.style.visibility === "hidden"); });
+  }
+  function mvHudEat(ev) {
+    const eat = mv.hudEat;
+    mv.hudEat = null;
+    if (!eat || ev.type !== "click" || Date.now() > eat.until) return;
+    const t = ev.target;
+    if (!t || !t.closest || !eat.ids.some((id) => t.closest(`#${id}`))) return;
+    ev.stopPropagation();
+    if (ev.preventDefault) ev.preventDefault();
   }
   function mvWheel(ev) {
     if (ev.preventDefault) ev.preventDefault();
@@ -2094,6 +2114,12 @@
     wrap.addEventListener("pointercancel", mvUp);
     wrap.addEventListener("wheel", mvWheel, { passive: false });
     wrap.addEventListener("click", mvEat, true);
+    const box = document.getElementById("mapx");
+    if (box && box.addEventListener && !mvWired.has(box)) {
+      mvWired.add(box);
+      box.addEventListener("pointerdown", mvHudEat, true);
+      box.addEventListener("click", mvHudEat, true);
+    }
     // 舊版 iOS Safari 的捏合（新的瀏覽器由 touch-action: none 擋）、拖到地圖上的字開始原生拖曳，都擋掉
     for (const t of ["gesturestart", "gesturechange", "dragstart"]) wrap.addEventListener(t, (ev) => ev.preventDefault());
   }

@@ -26,7 +26,7 @@ NAMES = ["S", "pageMap", "controlAt", "drawerHtml", "placeCard", "cardExtras", "
          "mapFilter", "marksHtml", "groundSvg", "camClamp", "camFit", "zMin", "mapPick", "mapBack", "mapFind", "routeD", "camSet", "mapFirst",
          "groundShow", "landAt", "mapLand", "mvDown", "mvUp", "mvMove", "mvWheel", "camFly", "drawMarks", "mv", "mapGoto", "camFirst", "planHtml",
          "camOpen", "camAt", "mapRoom", "mvZ0", "mvLevel", "mvLayout", "mvArea", "miniHtml", "mapMini", "mapHome", "mapFit", "drawerStops", "drawerTap",
-         "mapStop", "mapSortie", "mapRegionFly", "mapPreviewTo", "drawerGrab", "mapGeom", "mvBusy"]
+         "mapStop", "mapSortie", "mapRegionFly", "mapPreviewTo", "drawerGrab", "mapGeom", "mvBusy", "mvWire"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 APP = webharness.APP  # 三個檔（main.js、map.js、app.js）接起來的那一份
 # 一個夠大的地圖框：整張天下都在「畫面附近」，字一處都不會因為在畫面外被略過
@@ -2095,6 +2095,80 @@ return res;""".replace("FRAMES", json.dumps(sorted(FRAMES.items()))))
     assert ((320, "overview", "row"), "fab") in hidden
     for vw in (375, 360, 320):
         assert {((vw, "overview", "full"), k) for k in ("area", "q", "mini", "fab")} <= hidden
+
+
+# 點空地收卡那一下（W2 第二輪審查 2026-10-31）用的：地圖框（#map）與它外面那一層（#mapx）的監聽照 mvWire 掛的記，事件照瀏覽器的順序送——
+# pointer 事件給 #mapx（捕獲）再給地圖框（點在地圖上的話）；click 照此刻的版面命中（區名、🔍 看得到才點得到，不然落在地圖上），#mapx（捕獲）→
+# 地圖框（捕獲，mvEat）→ document（app.js 那一大串 case）
+HUD_CLICK_DOM = """
+const LX = {}, LM = {};
+Object.assign(box, { children: [], insertAdjacentHTML() {}, addEventListener: (t, f) => { (LX[t] = LX[t] || []).push(f); } });
+map.addEventListener = (t, f) => { (LM[t] = LM[t] || []).push(f); };
+const ground = { closest: () => null, onMap: true };
+const btn = (id, act) => Object.assign(els[id], { dataset: { act }, classList: { contains: () => false, add() {}, remove() {} },
+  closest: (s) => (s === '[data-act]' || s === '#' + id ? els[id] : null) });
+btn('mv-q', 'map-search'); btn('mv-area', 'map-area');
+const seen = (id) => els[id].style.visibility !== 'hidden';
+const hitAt = (x, y) => {
+  const vw = map.clientWidth;
+  if (seen('mv-q') && x >= vw - 58 && x <= vw - 12 && y >= 8 && y <= 54) return els['mv-q'];
+  if (seen('mv-area') && x >= 10 && x <= 90 && y >= 10 && y <= 44) return els['mv-area'];
+  return ground;
+};
+const who = (t) => (t === els['mv-q'] ? 'q' : t === els['mv-area'] ? 'area' : 'ground');
+const ptr = (type, x, y, t) => {
+  const ev = { type, pointerId: 1, pointerType: 'touch', button: 0, clientX: x, clientY: y, target: t };
+  for (const f of LX[type] || []) f(ev);
+  if (t.onMap) for (const f of LM[type] || []) f(ev);
+};
+const clickAt = (x, y) => {
+  const t = hitAt(x, y), ev = { type: 'click', target: t, clientX: x, clientY: y, stopped: false, stopPropagation() { this.stopped = true; }, preventDefault() {} };
+  for (const f of LX.click || []) if (!ev.stopped) f(ev);
+  if (t.onMap) for (const f of LM.click || []) if (!ev.stopped) f(ev);
+  if (!ev.stopped) for (const f of T.docListeners.click || []) f(ev);
+  return { hit: who(t), eaten: ev.stopped };
+};
+// 點一下：按下去的那一點照此刻的版面命中，放開之後 click 照新的版面命中（觸控）
+const tapAt = (x, y) => { const t = hitAt(x, y); ptr('pointerdown', x, y, t); ptr('pointerup', x, y, t); return { down: who(t), ...clickAt(x, y) }; };
+"""
+
+
+def test_fb9095_tapping_blank_map_to_close_the_card_does_not_let_the_click_land_on_the_hud_it_reveals():
+    """W2 第二輪審查（2026-10-31，FB-9095 的後續）：全開、有卡時區名 chip 與 🔍 被抽屜蓋住而收起來（visibility hidden，點不到）。點地圖上面那一條空地
+    （沒有地）在 pointerup 就收卡回底條（mvUp → mapBlank → mapBack → setMapDrawer → hudShow），兩樣當場又露出來；觸控的 click 是放手之後照新的版面命中的，
+    落在剛露出來的 🔍、區名上，卡收了又開了找地點頁（真觸控 375：30 下有 11 下）。現在放手那一刻收著、收卡之後露出來的那幾樣，那一下的 click 落在它們
+    身上就吃掉：卡收回底條、不開找地點頁；接著真的去點 🔍（再按下去一次）照開。"""
+    game = _w2()
+    out = run(game, DRAWER_DOM + GESTURE_DOM + HUD_DOM + SETTLE + HUD_CLICK_DOM + """const res = { taps: [] };
+Object.assign(map, { clientWidth: 375, clientHeight: 667 }); box.clientHeight = 667;
+const g = H.mapGeom(map);
+H.mvWire(map);
+const card = () => { H.mapBack(); H.setMapDrawer('peek'); H.camSet(H.camOpen(g)); H.drawMarks(); settle();
+  H.mapPick('changshe'); settle(); H.mapStop('full'); settle(); H.drawMarks(); H.mv.lastTap = 0; };
+card();
+res.full = { q: els['mv-q'].style.visibility, area: els['mv-area'].style.visibility };
+for (let x = 14; x < 371; x += 12) {
+  card();
+  const c = H.S.mapCam, y = 24;
+  if (H.landAt(H.S.mapBase, H.S.mapState, (x - c.x) / c.z, (y - c.y) / c.z)) continue; // 點到地：等 MV_TAP2 才開卡（click 早就送過了），不是這一條
+  const r = tapAt(x, y);
+  res.taps.push({ x, ...r, mode: H.S.mapMode, drawer: H.S.mapDrawer, sel: H.S.mapSel });
+}
+// 收卡之後真的去點 🔍：再按下去一次（清掉），click 照算
+card();
+let c = H.S.mapCam, x = 375 - 35;
+res.blank = !H.landAt(H.S.mapBase, H.S.mapState, (x - c.x) / c.z, (24 - c.y) / c.z);
+res.first = { ...tapAt(x, 24), mode: H.S.mapMode };
+res.again = { ...tapAt(x, 24), mode: H.S.mapMode };
+return res;""")
+    assert out["full"] == {"q": "hidden", "area": "hidden"}, out["full"]
+    landed = [t for t in out["taps"] if t["hit"] != "ground"]
+    assert any(t["hit"] == "q" for t in landed) and any(t["hit"] == "area" for t in landed), out["taps"]  # 真的有落在剛露出來的那兩樣上
+    for t in out["taps"]:
+        assert t["down"] == "ground" and t["mode"] == "overview" and t["drawer"] == "peek" and t["sel"] is None, t
+        assert t["eaten"] == (t["hit"] != "ground"), t
+    assert out["blank"] and out["first"]["hit"] == "q" and out["first"]["mode"] == "overview", out["first"]
+    assert out["again"] == {"down": "q", "hit": "q", "eaten": False, "mode": "search"}, out["again"]
 
 
 # 江湖頁「去輿圖」帶目標（FB-9091）：哪幾種、在哪幾種畫面。地圖框照實機（手機 FRAMES；1280×800 的桌機地圖框 905 寬，抽屜是右欄）
