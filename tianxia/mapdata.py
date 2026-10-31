@@ -141,7 +141,7 @@ def base(state: GameState, content: Content, mostly: dict[str, str] | None = Non
         "insight_layer": content.config.insight_strong.enabled and any(p["strong"] for p in places),
         "world": world(state, content),
         "paint": paint(content),
-        # 輿圖表現 S1（給 W1 以後的新圖用，舊的圖照舊畫 svg）：取景與密度的數字。只看內容，跟誰在看無關
+        # 輿圖表現 S1（給 W1 以後的新圖用；svg 照舊送〔一張到底已經不讀，W4 拿掉〕）：取景與密度的數字。只看內容，跟誰在看無關
         "view": content.config.map_view.model_dump(),
     }
     if mostly is not None:
