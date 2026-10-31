@@ -1584,6 +1584,7 @@ class TavernScenario(Scenario):
     聽消息、查人（確切、託付留意、查無此人、自己、人物）、交情、素材、題壁、請酒（換日再請）、藏行跡、反查、保鏢、問酒家（鎖外三段式，
     假模型）、鄰桌閒談（server.chatter_once，假模型）、牆上的懸賞榜、買殺手；被打聽的人收風聲、殺手在城外做一件事時找上（得手）、
     站在城外下線回來時找上（失手）、同一對人連著失手（加價五成、威力 +0.1、最多 3 次）、雇主收結果、過期退一半、託付留意捎信與到期；
+    得手之後的護身期內殺手不擲、藏了行跡的人殺手的打聽度少一截、酒肆關著時殺手不擲（審查之後補的：原本只走到買與欄位）；
     同一次同步收到風聲、殺手單的結果、託付到期與書信（sync 裡三個 deliver 的先後與位置，crossing）；酒肆開關關著時（記憶體裡關）坐著的人照樣出得去、三個 deliver 照樣送；伺服器假人（BotRunner）進酒肆；換季。
     殺手那一場用 killer(tier)：tavern.find_chance 換成 1（或 0）、單次判定照 tier（本人這一邊的結果）。
     四種正式設定都站潁川一帶；測試內容沒有酒肆、沒有陣營，同一串 API 照打（證明關著一個字都不變），假人那一段略過。
@@ -1656,18 +1657,24 @@ class TavernScenario(Scenario):
     @contextlib.contextmanager
     def killer(self, tier: str | None):
         """殺手那一場定死：tier 給了，tavern.find_chance 換成 1、單次判定照 tier（本人這一邊的結果，照樣用掉那一場的一個亂數），
-        記下殺手威力 ÷ 本人威力；tier 是 None，find_chance 換成 0（擲了、找不到）。換的都是模組屬性（tianxia.tavern 是包裡 rules 的別名）。"""
+        記下殺手威力 ÷ 本人威力；tier 是 None，find_chance 換成 0（擲了、找不到）。換的都是模組屬性（tianxia.tavern 是包裡 rules 的別名）。
+        也記下殺手擲的那一下的打聽度（find_chance 拿到的 reach：藏行跡扣 hide_reach；一個都沒有＝殺手沒擲）。"""
         from tianxia import encounter, tavern
 
         real_find, real_resolve = tavern.find_chance, encounter.resolve_encounter
         seen: list[float] = []
+        reaches: list[int] = []
 
         def fake(mine, theirs, rng, *a, **k):
             rng.random()
             seen.append(round(theirs / mine, 6) if mine else None)  # 選單上的勝算也走這裡（照樣換成 tier）
             return encounter.EncounterResult(tier=tier, margin=0.0, our_power=mine, difficulty=theirs)
 
-        tavern.find_chance = (lambda c, reach: 1.0) if tier else (lambda c, reach: 0.0)
+        def find(c, reach):
+            reaches.append(reach)
+            return 1.0 if tier else 0.0
+
+        tavern.find_chance = find
         if tier:
             encounter.resolve_encounter = fake
         try:
@@ -1675,6 +1682,7 @@ class TavernScenario(Scenario):
         finally:
             tavern.find_chance, encounter.resolve_encounter = real_find, real_resolve
             emit(f"殺手那一場（{tier or '找不到'}）殺手威力 ÷ 本人威力", seen)
+            emit(f"殺手那一場（{tier or '找不到'}）殺手擲的打聽度", reaches)
 
     def act_outside(self, who: str) -> None:
         """在城外做一件事（choose 最後那一下是殺手檢查）：體力補滿，選單上第一個按得下去的 act:explore／act:train／act:socialize；
@@ -1847,12 +1855,22 @@ class TavernScenario(Scenario):
         self.me("丁鵬", "收了風聲")
 
     def strike(self) -> None:
-        """丁鵬在城外做完一件事：殺手找上門，這一場殺手贏（氣血剩 1、銀兩照丟、之後一陣子殺手找不上）；雇主阿飛同步收「得手」與惡名。"""
+        """丁鵬在城外做完一件事：殺手找上門，這一場殺手贏（氣血剩 1、銀兩照丟、之後一陣子殺手找不上）；雇主阿飛同步收「得手」與惡名。
+        護身（審查：原本只寫了欄位，沒走到效果）：清掉截殺那一道護身（不然它先擋），葉開雇一張找丁鵬，丁鵬在 tavern_shield_until 之內
+        再到城外做一件事——殺手不擲（killer 記不到打聽度）。這一張留著（後面那幾段丁鵬都在城裡）。"""
+        from tianxia.characters import name_key
+
         with self.killer("落敗"):
             self.act_outside("丁鵬")
         self.me("丁鵬", "殺手得手之後")
         self.main("阿飛")
         self.me("阿飛", "收了得手")
+        self.world.mutate_season(lambda s: s.raided.pop(name_key("丁鵬"), None))
+        emit("清掉丁鵬截殺那一道護身（只留殺手得手的護身）", None)
+        self.tav("葉開", "hit", "丁鵬", "0")
+        with self.killer("落敗"):
+            self.act_outside("丁鵬")
+        self.me("丁鵬", "護身期內在城外做完一件事")
 
     def away(self) -> None:
         """郭大路站在城外下線（seat 那一下之後就沒同步過），時鐘再推過十二分：回來同步時殺手照下線那一段擲，這一場對方贏
@@ -1864,11 +1882,13 @@ class TavernScenario(Scenario):
         self.main("阿飛")
 
     def streak(self) -> None:
-        """同一個雇主找同一個人連著失手：孟星魂先進潁川雇保鏢（殺手威力照 guard_scale 打折）再回城外；四輪平手——每一輪孟星魂在城外
-        做一件事、葉開同步收「平手」、錯開冷卻與護身、再雇一張：價錢 +五成、威力 +0.1，第三次之後不再加。"""
+        """同一個雇主找同一個人連著失手：孟星魂先進潁川雇保鏢（殺手威力照 guard_scale 打折）、藏行跡（殺手的打聽度扣 hide_reach，
+        killer 記下打聽度）再回城外；四輪平手——每一輪孟星魂在城外做一件事、葉開同步收「平手」、錯開冷卻與護身、再雇一張：價錢 +五成、
+        威力 +0.1，第三次之後不再加（第五張在 crossing 出手，威力跟第四張一樣）。"""
         self.place("孟星魂", "yingchuan")
         self.choose("孟星魂", "act:tavern")
         self.tav("孟星魂", "guard")
+        self.tav("孟星魂", "hide")
         self.choose("孟星魂", "tavern:back")
         self.place("孟星魂", "yingshui")
         for _ in range(4):
@@ -1922,7 +1942,7 @@ class TavernScenario(Scenario):
         self.tav("葉開", "seek", "查無此人", "watch")
         with self.killer("僵持"):
             self.act_outside("孟星魂")
-        self.unpair("葉開", "孟星魂")  # 錯開冷卻、清掉截殺那一道護身
+        self.unpair("葉開", "孟星魂")  # 錯開冷卻、清掉截殺那一道護身（closed 那一段再雇一張找他）
         self.tav("阿飛", "seek", "葉開")
         figure = next((f for f in c.figures.values() if f.character in c.characters), None)
         world_now = self.world.get_season().time
@@ -1951,13 +1971,15 @@ class TavernScenario(Scenario):
     def closed(self) -> None:
         """酒肆開關關掉（記憶體裡，做完開回來）。開著時郭大路先坐進潁川的酒肆、照那一刻建一份 Game（建的時候開著，沒有收店）；
         關掉之後不 sync：選單照舊是酒肆那一串、假人看「出酒肆」照舊 0 分、按得出去（搬包之前 choose 那一支不看開關）。
-        季上擺一則給丁鵬的風聲、一張阿飛找丁鵬的過期單子：關著照樣送到、照樣退一半（三個 deliver 不看開關），殺手不擲。
-        坐在酒肆裡的葉開同步就收店、入口沒了、店面的動作與 tavern:news 都被拒。"""
+        季上擺一則給丁鵬的風聲、一張阿飛找丁鵬的過期單子：關著照樣送到、照樣退一半（三個 deliver 不看開關）。
+        坐在酒肆裡的葉開同步就收店、入口沒了、店面的動作與 tavern:news 都被拒。
+        殺手不擲（審查：原本沒有人帶著活單站在城外）：開著時葉開再雇一張找孟星魂，關著時孟星魂在城外做一件事——killer 記不到打聽度。"""
         from tianxia import bot_policy
         from tianxia.characters import name_key
         from tianxia.engine import Game
         from tianxia.state import BotProfile, TavernHit, Whisper
 
+        self.tav("葉開", "hit", "孟星魂", "0")
         self.choose("郭大路", "act:tavern")
         self.begin()
         game = Game(self.c, self.chars.load("郭大路"), world=self.world)
@@ -1989,6 +2011,8 @@ class TavernScenario(Scenario):
             self.main("丁鵬")
             self.main("阿飛")
             self.me("丁鵬", "關著收了風聲")
+            with self.killer("落敗"):
+                self.act_outside("孟星魂")
             self.hits("關著")
         finally:
             cfg.enabled = before
