@@ -1383,13 +1383,31 @@ class ExploreScenario(Scenario):
             self.player_view("葉開", "葉開 自己抽的五段")
 
     def tiered(self) -> None:
-        """分級事件：一則第二階以上的事件端在面前（場景卡上那一行），選第一個。"""
-        ev = self.first_event(lambda e: e.tier >= 2)
+        """分級事件經探索一顆抽出來：武事那一道門開到第二階（等級拉到門檻）的人，站在一則第二階武事事件掛的地點（不是野類：野類先抽旅人）
+        出門一趟抽到事件——事件分級挑第二階（tier_mix 換成只有第二階）、一次性奇遇不擲（rare_explore_chance 換成 0）——走的是
+        outing_event → pick_event 端出來（場景卡上那一行），選第一個。三選一的季照找事件那一顆按。"""
+        explore_one = _explore_rules()
+
+        cfg = self.c.config.jianfa
+
+        def fits(e) -> bool:
+            loc = self.c.locations.get(e.locations[0]) if e.locations else None
+            return e.tier == 2 and e.door == "武事" and "explore" in e.actions and loc is not None \
+                and explore_one.kind_of(cfg, loc).kind != explore_one.WILD
+
+        ev = self.first_event(fits)
         emit("分級事件", ev)
-        if ev is None or not self.place("孟星魂", "yingshui"):
+        if ev is None or not self.place("孟星魂", self.c.events[ev].locations[0]):
             return
-        self.edit_state("孟星魂", lambda s: setattr(s, "pending_event", ev))
-        self.main("孟星魂")
+        need = (cfg.tier_doors.get("武事") or [1])[0]
+        self.edit("孟星魂", lambda p: setattr(p.member, "level", max(p.member.level, need)))
+        mix = {**cfg.tier_mix, 2: [0.0, 1.0], 3: [0.0, 1.0, 0.0]}
+        with self.draws(explore_one.EVENT), self.tweak(self.c.config, rare_explore_chance=0.0), self.tweak(cfg, tier_mix=mix):
+            self.choose("孟星魂", "act:explore")
+            modes = [i for i, o in self.options("孟星魂").items() if i.startswith("explore:") and o.get("enabled")]
+            if modes:  # 三選一的季：找事件那一顆
+                self.choose("孟星魂", next((m for m in modes if m == "explore:seek"), modes[0]))
+        emit("孟星魂 抽到的分級事件", self.chars.load("孟星魂").pending_event)
         self.settle("孟星魂")
 
     def freetext(self) -> None:
