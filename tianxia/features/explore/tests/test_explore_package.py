@@ -68,6 +68,22 @@ def test_the_wall_refuses_the_words_the_tavern_wall_refuses_and_keeps_the_ink():
     assert [i.text for i in game.state.world.inscriptions] == ["此處風大"] and game.outing_ink_left() == 0
 
 
+def test_the_outing_wall_takes_the_banned_words_from_the_core(monkeypatch):
+    """合酒肆包（主動搬六包第 10 批）時禁字搬進核心 naming.BANNED_WORDS（探索包不 import 酒肆包，酒肆包 re-export 同一份）：走一趟的留言
+    照核心那一份擋——核心那一份多一個字，留言跟著擋；擋下的不用墨、不刻字。"""
+    from tianxia import naming
+
+    game = _game()
+    _walked(game)
+    _with_ink(game)
+    game.content.banned_words = []
+    monkeypatch.setattr(naming, "BANNED_WORDS", (*naming.BANNED_WORDS, "驛馬"))
+    text = "此處有驛馬"
+    assert speech.problem(text, game.content, speech.MOTTO, game.content.config.jianfa.outing_say_max) is None  # 字表碰不到
+    assert game.outing_say(text=text) == [speech.BLOCKED]
+    assert game.outing_ink_left() == 1 and game.state.world.inscriptions == []
+
+
 # ── 審查修正（回歸鏡頭）：搬過去的本體裡原本沒有人守的三條路（變異拿掉任何一條，整個包的測試與包外 5,355 條都是綠的）──
 
 def test_leaving_a_stopped_trip_closes_it_as_left_instead_of_walking_on():

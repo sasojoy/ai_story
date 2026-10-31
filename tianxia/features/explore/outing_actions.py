@@ -10,12 +10,11 @@ from __future__ import annotations
 
 from tianxia import annals  # 過渡：待搬（行狀：撿到稀世的東西、以弱勝強記一則）
 from tianxia import deeds  # 過渡：待搬（世界記事：同上）
-from tianxia import journal, team
+from tianxia import journal, naming, team
 from tianxia import materials  # 過渡：待搬（撿到的東西那一句的開頭）
 from tianxia import prologue as prologue_rules  # 過渡：待搬（序章裡不走一趟）
 from tianxia import social  # 過渡：待搬（「此地還有」那一份名單：結算卡、遠處有人揮手）
 from tianxia import speech  # 過渡：待搬（留言過字表）
-from tianxia import tavern as tavern_rules  # 過渡：待搬（酒肆題壁的禁字 BANNED_WORDS；酒肆那條線同時在把 tavern.py 搬成包，這一批不搬進 naming）
 from tianxia.core.option import IDLE_MARK, Option
 from tianxia.state import PLAYER, JournalEntry, Outing, OutingBeat
 
@@ -199,7 +198,7 @@ def outing_say(ctx, preset: int = -1, text: str = "", verdict: str = "") -> list
         if not line:
             return [outing_rules.SAY_EMPTY]
         problem = speech.problem(line, c, speech.MOTTO, c.config.jianfa.outing_say_max, verdict)
-        if problem is None and any(word in line for word in tavern_rules.BANNED_WORDS):
+        if problem is None and any(word in line for word in naming.BANNED_WORDS):
             problem = speech.BLOCKED  # 同酒肆題壁：牆上不寫這幾個字
         if problem:
             return [problem]

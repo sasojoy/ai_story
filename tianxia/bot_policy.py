@@ -871,8 +871,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return SMITH_SCORE if option.id == _smith_want(game) else 0.0 if arg in ("back", "forge-cancel") else None
     if kind == "arena":  # 擂台由 _arena 一次做完；萬一停在擂台邊只會返回，打到一半由 take_turn 照架勢出招
         return 0.0 if arg == "back" else None
-    if kind == "tavern":  # 酒肆裡：打聽由 take_turn 另外做（_tavern_play）；萬一停在酒肆裡就出門
-        return 0.0 if arg == "back" else None
+    # 酒肆（tavern:）搬進功能包：假人的分數在 features/tavern/bots.py，上面的 features_core.bot_pick 問它（主動搬六包第 10 批）
     if kind == "market":  # 馬市上：照 bot.market_want 按那一顆（換、買、餵），沒事就離開
         return MARKET_SCORE if option.id == bot.market_want(game) else 0.0 if arg == "back" else None
     if kind == "call":

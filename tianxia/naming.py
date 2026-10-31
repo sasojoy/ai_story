@@ -28,6 +28,9 @@ CLAIM_ATTEMPTS = 4  # 名字被占用時，用決定性組名換名字再試幾�
 # OllamaClient.chat_structured 一次呼叫最多送兩趟（第一次＋格式不對、逾時時的重問），兩趟都用同一個 timeout
 POSTS_PER_CALL = 2
 MIN_POST_SECONDS = 1.0  # 有預算時，一趟分不到這麼多秒就不叫了（叫了也等不到）
+# 玩家寫在牆上的字（酒肆題壁、問酒家，走一趟的留言）不准有這幾個：玩家看得到的地方不能提誰是假人。原本是 tavern.BANNED_WORDS；
+# 酒肆、探索兩包都要，包不能 import 別的包，搬進核心（主動搬六包第 10 批合 develop，PM 2026-11-01）。酒肆包的 rules 照舊 re-export
+BANNED_WORDS = ("假人", "機器人", "外掛")
 
 
 def per_post_seconds(client, left: float) -> float | None:
