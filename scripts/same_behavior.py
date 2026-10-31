@@ -873,7 +873,8 @@ class DuelScenario(Scenario):
     """出陣約戰（主動搬六包第 2 批；--track duel，自己一個資料庫）。照調查 survey_duel.json behavior_check 的十一步：
     /api/main 的 sortie_card、sorties 與 act:train 那一格；按 act:train 只回 PICK、不寫紀錄；sortie_go 封三招；對面看 can_answer 與
     duel:open、duel:answered 通知；sortie_answer、sortie_join（也走 /api/choose 的 sortie:* 那一條）；拒絕的路（散人貼、次數用完、應自己的、
-    三招不對、散人應、別區、在路上、同一邊應戰、冷卻、不認得的動詞、已有人應戰、你已應戰、已經同去、不是同袍同去、同去的次數、暫停中）；
+    三招不對、散人應、別區、在路上、同一邊應戰、冷卻、不認得的動詞、已有人應戰、你已應戰、已經同去、不是同袍同去、同去的次數、在路上同去、
+    在路上貼、暫停中）；
     時鐘推過窗分三條路結算——下一個人的 sync（D0、D4、D6）、沒有玩家的 world_tick（server.world_step：D1、D2、D5）、管理者快轉的
     Game.advance（D7：/api/do/fast_forward 先 sync，經 API 走不到 advance 裡那一處，這裡照 server 的做法拿鎖、只叫 advance）；
     沒人應戰時假人補位（D0）、連假人都沒有由守軍迎戰（D4）；暫停時窗往後挪（D5）；快轉到季末之後還沒打的作廢、退次數與體力（D8）；
@@ -1096,7 +1097,8 @@ class DuelScenario(Scenario):
 
     def answer_d1(self) -> None:
         """乙一應 D1（先到的那一位；攻方的通知「有人應了」）；乙二第二個應、乙一再應；甲三同去（走 /api/choose 的 sortie:join）、
-        再按一次；乙二同去、甲二（次數用完）同去。"""
+        再按一次；乙二同去、甲二（次數用完）同去；甲六上路之後同去、貼（在路上，dev/sortie-2 審查：_duel_join_extra 在路上那一條原本沒走到）。
+        D1 的窗 10 分＝10 步：同去都在貼之後第 9 步以內。"""
         self.place("乙一", self.LOC)
         self.answer("乙一", "甲五")
         self.notices("甲五")
@@ -1107,8 +1109,12 @@ class DuelScenario(Scenario):
         self.join_duel("甲三", "甲五")
         self.join_duel("乙二", "甲五")
         self.join_duel("甲二", "甲五")
+        if self.place("甲六", self.LOC):
+            self.call("甲六", "POST", "/api/travel", {"place": self.FAR, "mode": "walk"})
+        self.join_duel("甲六", "甲五")
+        self.post("甲六")
         self.duels("D1 應了、同去了")
-        for who in ("乙一", "乙二", "甲三", "甲二"):
+        for who in ("乙一", "乙二", "甲三", "甲二", "甲六"):
             self.player(who, "應戰、同去之後")
 
     def settle_tick(self) -> None:
