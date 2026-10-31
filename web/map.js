@@ -650,7 +650,7 @@
   // 縮放差過一截、跨了一段、停下來才重排字（地點多也不卡）。字待 joy 潤
   const MV_WORDS = {
     search: "要去哪？地點、人物、店面", all: "全部", sense: "能悟", tl: "⏱ 版圖", me: "回到我", fit: "看整張天下",
-    from: "從{place}出發", road: "沿路能去", swipe: "由近到遠，左右滑", none: "附近沒有。拉遠一點看看，或換個標籤。", week: "本週", here: "你在這裡", next: "下一站", end: "終點",
+    from: "從{place}出發", road: "沿路能去", swipe: "由近到遠，左右滑", swipeWk: "本週要去的排第一，其餘由近到遠", none: "附近沒有。拉遠一點看看，或換個標籤。", week: "本週", here: "你在這裡", next: "下一站", end: "終點",
     weekHead: "本週要事", figures: "附近的人物", jump: "跳到大區", places: "地點", people: "人物",
     notFound: "找不到「{q}」。地名、大區、人物、店面（醫館、鐵匠鋪、馬市）都找得到。",
   };
@@ -857,7 +857,9 @@
     const here = placeOf(base, st.here), list = nearList(base, st), f = S.mapFilter || "all";
     const from = st.journey ? MV_WORDS.road : MV_WORDS.from.replace("{place}", here ? here.name : "");
     const label = f === "all" ? from : `${chipName(base, st, f)}・${list.length} 處`;
-    const head = `<div class="m-nhead"><b>${esc(label)}</b><small>${MV_WORDS.swipe}</small></div>`;
+    // 本週那一處排在第一張（不管多遠）：小字照實說，不寫成「由近到遠」（全面自檢 U-16）
+    const wk = nearWeek(st), wkFirst = !!wk && list.length > 1 && list[0].id === wk.id;
+    const head = `<div class="m-nhead"><b>${esc(label)}</b><small>${wkFirst ? MV_WORDS.swipeWk : MV_WORDS.swipe}</small></div>`;
     const cards = list.length ? `<div class="m-cards">${list.map((b) => nearCard(base, st, b)).join("")}</div>` : `<p class="m-sub m-none">${MV_WORDS.none}</p>`;
     // 第 3 週「離贏還差多少」（減法季整合設計 6.8）
     const gap = st.gap ? `<p class="m-gap">${esc(st.gap)}</p>` : "";
@@ -982,10 +984,11 @@
     return out;
   }
   // 大區名擺哪：天下圖給的第一個位置（底圖的 world.regions[].spots），沒有照大區的中心
-  function regionSpot(base, r) {
+  function regionSpots(base, r) {
     const w = base.world && base.world.regions.find((x) => x.id === r.id);
-    return w && w.spots && w.spots.length ? w.spots[0] : [r.cx, r.cy];
+    return w && w.spots && w.spots.length ? w.spots : [[r.cx, r.cy]];
   }
+  const REG_NUDGE = [[0, 0], [0, -22], [0, 22], [-30, 0], [30, 0], [-26, -22], [26, -22], [-26, 22], [26, 22]]; // 只挪一小步：字不離開那一州
   // 山河名（底圖的 paint：河名照 labels，山名照地形的 name、直寫在山脊中間旁邊）
   function paintLabels(base) {
     const p = base.paint;
@@ -1007,6 +1010,13 @@
   const mvSeal = (c) => (c ? `<span class="mv-side" style="background:${sideInk(c).color}">${esc(sideInk(c).short)}</span>` : "");
   // 照此刻的倍率排好一整層（純函式：c 是 { z, x, y }，g 是地圖框）。只排畫面附近（一個畫面寬的邊）的；名字撞在一起時優先序：
   // 選的、滑到的、你在的、本週要去的、篩到的、要地、近的。名字的位置試四個（下、右、左、上），都壓到就不寫（選的、你在的照寫）
+  // 右下 ◎／全 兩顆圓鈕在地圖框裡佔的那一塊（style.css 的 .mv-fab：46px 兩顆、間隔 10，手機貼著抽屜上緣 12px、桌機在右欄左邊）；
+  // 字擺位當它是佔用的（留 6px）。框量不到（測試）不算
+  function fabBox(g) {
+    if (!g || !g.vw || !g.vh) return null;
+    const right = deskMap() ? 372 : 12, bottom = deskMap() ? 16 : mapDrawerPx(S.mapDrawer) + 12, w = 46, h = 46 * 2 + 10, m = 6;
+    return [g.vw - right - w - m, g.vh - bottom - h - m, g.vw - right + m, g.vh - bottom + m];
+  }
   function marksHtml(base, st, c, g) {
     const z = c.z, tl = S.mapMode === "timeline", lvl = tl ? 0 : mvLevel(z), out = [], boxes = [];
     const week = mapWeek(), ctrl = controlAt(st, week), live = week === st.now_week;
@@ -1022,14 +1032,31 @@
     const order = shown.slice().sort((a, b) => rank(a) - rank(b));
     const hit = (bx) => boxes.some((o) => bx[0] < o[2] && bx[2] > o[0] && bx[1] < o[3] && bx[3] > o[1]);
     for (const b of order) { const [x, y] = scr(b.x, b.y), r = lvl ? 13 : 6; boxes.push([x - r, y - r, x + r, y + r]); }
+    const fab = tl ? null : fabBox(g);
+    if (fab) boxes.push(fab); // 右下兩顆圓鈕那一塊：名字不擺在底下（全面自檢 U-10）
     // 遠看：大區名＋各方幾處（地面已經照歸屬上色）
     if (lvl === 0) {
       const n = regionCounts(base, st, ctrl), sides = st.sides || sideOrder(base);
       for (const r of base.regions) {
-        const [sx, sy] = regionSpot(base, r), [x, y0] = scr(sx, sy), y = y0 - 18, cnt = n[r.id] || { rich: 0 };
+        const cnt = n[r.id] || { rich: 0 };
         const line = [...sides.filter((sd) => cnt[sd]).map((sd) => `${sideInk(sd).short} ${cnt[sd]}`), ...(cnt.rich ? [`${RICH_WORD} ${cnt.rich}`] : [])].join("・");
-        const w = textW(r.name, 24) * 1.35;
-        boxes.push([x - w / 2, y - 14, x + w / 2, y + (line ? 32 : 14)]);
+        const w = Math.max(textW(r.name, 24) * 1.35, line ? textW(line, 13) : 0);
+        // 州名＋統計那一塊避開圓點與別州的字（全面自檢 U-11）：伺服器給的幾個擺位、每個再四周挪一挪，挑壓到最少的那一個
+        const at = (x, y) => [x - w / 2, y - 14, x + w / 2, y + (line ? 32 : 14)];
+        const room = mapRoom(g), off = (bx) => bx[0] < Math.max(4, c.x) || bx[2] > Math.min(g.vw - 4, c.x + base.w * z) || bx[1] < Math.max(room.top + 4, c.y) || bx[3] > Math.min(room.bottom - 4, c.y + base.h * z); // 出了露出來那一塊或出了圖（跑到搜尋列底下、紙外）最不要
+        const cover = (bx) => (off(bx) ? 100 : 0) + boxes.reduce((k, o) => k + (bx[0] < o[2] && bx[2] > o[0] && bx[1] < o[3] && bx[3] > o[1] ? 1 : 0), 0);
+        let best = null;
+        for (const [sx, sy] of regionSpots(base, r)) {
+          const [x0, y0] = scr(sx, sy);
+          for (const [dx, dy] of REG_NUDGE) {
+            const x = x0 + dx, y = y0 - 18 + dy, k = cover(at(x, y));
+            if (!best || k < best.k) best = { x, y, k };
+            if (!k) break;
+          }
+          if (!best.k) break;
+        }
+        const { x, y } = best;
+        boxes.push(at(x, y));
         out.push(`<div class="mv-reg" style="left:${f1(x)}px;top:${f1(y)}px">${esc(r.name)}</div>`);
         if (line) out.push(`<div class="mv-cnt" style="left:${f1(x)}px;top:${f1(y + 15)}px">${esc(line)}</div>`);
       }
@@ -1066,10 +1093,15 @@
       const W = Math.max(w, wsub), H = fs * 1.2 + 4 + (sub ? 15 : 0) + (bar ? 5 : 0);
       const tries0 = lvl === 0 ? [[-W / 2, 9], [12, -H / 2], [-12 - W, -H / 2], [-W / 2, -9 - H]] : [[-W / 2, 15], [20, -10], [-20 - W, -10], [-W / 2, -30 - H]];
       // 選了的、終點：寧可擺上面也不擺左邊（貼著地圖左緣時擺左邊會出畫面）；硬擺的那一個是最後一個
-      const tries = isSel || b.id === end ? [tries0[0], tries0[1], tries0[3], tries0[2]] : tries0;
+      const tries1 = isSel || b.id === end ? [tries0[0], tries0[1], tries0[3], tries0[2]] : tries0;
+      // 都擺不下（多半是貼著畫面邊）：下面、上面兩個擺法往畫面裡推一點再試；硬擺的那一個還是最後一個
+      const inside = ([dx, dy]) => [Math.min(g.vw - 2 - x - W, Math.max(2 - x, dx)), dy];
+      const tries = [...tries1.slice(0, -1), inside(tries0[0]), inside(tries0[3]), tries1[tries1.length - 1]];
       for (const [i, [dx, dy]] of tries.entries()) {
         const bx = [x + dx, y + dy, x + dx + W, y + dy + H];
-        if (hit(bx) && !((isSel || isHere || b.id === end) && i === tries.length - 1)) continue;
+        // 點在畫面裡的，名字也不擺到畫面外（被切一半看不出是哪裡）；點本來就在畫面外的照舊（拖過去時字已經在那裡）
+        const cut = x > 0 && x < g.vw && (bx[0] < 2 || bx[2] > g.vw - 2);
+        if ((hit(bx) || cut) && !((isSel || isHere || b.id === end) && i === tries.length - 1)) continue;
         boxes.push(bx);
         out.push(`<button type="button" class="mv-lab${b.big ? " big" : ""}${isHere ? " here" : ""}${isSel ? " sel" : ""}" style="left:${f1(bx[0])}px;top:${f1(bx[1])}px" data-act="map-place" data-id="${esc(b.id)}">`
           + `${lvl > 0 ? mvSeal(ctl) : ""}<span class="t"><span class="nm">${esc(b.name)}${ins}${seals}</span>${sub ? `<small>${esc(sub)}${odds}</small>` : ""}${bar}</span></button>`);

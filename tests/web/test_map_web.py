@@ -22,7 +22,7 @@ from tianxia import terrain
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NAMES = ["S", "pageMap", "controlAt", "drawerHtml", "placeCard", "cardExtras", "searchHtml", "searchResults", "timelineHtml", "graphSvg",
          "chartHtml", "mapDrawerPx", "setMapDrawer", "insightRow", "redrawDrawer", "journeyHtml", "nearHtml", "nearList", "chipList", "chipsHtml",
-         "mapFilter", "marksHtml", "groundSvg", "camClamp", "camFit", "zMin", "mapPick", "mapBack", "mapFind", "routeD", "camSet", "mapFirst", "mapGoto", "camFirst", "planHtml"]
+         "mapFilter", "marksHtml", "groundSvg", "camClamp", "camFit", "zMin", "mapPick", "mapBack", "mapFind", "routeD", "camSet", "mapFirst", "mapGoto", "camFirst", "planHtml", "fabBox"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 APP = webharness.APP  # 三個檔（main.js、map.js、app.js）接起來的那一份
 # 一個夠大的地圖框：整張天下都在「畫面附近」，字一處都不會因為在畫面外被略過
@@ -520,3 +520,27 @@ def test_the_plan_card_button_carries_its_place():
          "help_side": "官軍", "mine": None, "acts": []}
     out = run(game, "return H.planHtml(" + json.dumps(x, ensure_ascii=False) + ");")
     assert 'data-goto="changshe"' in out
+
+
+def test_the_near_row_says_the_week_place_comes_first():
+    """本週那一處排第一張（不管多遠）：小字照實說，不寫「由近到遠」（全面自檢 U-16）。"""
+    game = _game()
+    st = game.map_state()
+    far = max((x for x, q in st["places"].items() if x != "yingchuan" and q.get("minutes") is not None), key=lambda x: st["places"][x]["minutes"])
+    st["week"] = {"id": far, "why": "本週"}
+    html = run(game, "return H.nearHtml(H.S.mapBase, H.S.mapState);", st=st)
+    assert "本週要去的排第一，其餘由近到遠" in html
+    st.pop("week")
+    assert "由近到遠，左右滑" in run(game, "return H.nearHtml(H.S.mapBase, H.S.mapState);", st=st)
+
+
+def test_names_stay_clear_of_the_round_buttons_and_inside_the_screen():
+    """右下 ◎／全 那一塊不擺名字、點在畫面裡的名字不擺到畫面外（全面自檢 U-10）。"""
+    game = _game()
+    out = run(game, """const g = { vw: 390, vh: 700 }, c = H.camFirst(g);
+const html = H.marksHtml(H.S.mapBase, H.S.mapState, c, g), fab = H.fabBox(g);
+return { fab, labs: [...html.matchAll(/class="mv-lab[^"]*" style="left:([-\\d.]+)px;top:([-\\d.]+)px"/g)].map((m) => [Number(m[1]), Number(m[2])]) };""")
+    fx0, fy0, fx1, fy1 = out["fab"]
+    assert out["labs"]
+    for x, y in out["labs"]:
+        assert not (fx0 < x + 40 and x < fx1 and fy0 < y + 18 and y < fy1)  # 名字左上角那一截不落在圓鈕那一塊
