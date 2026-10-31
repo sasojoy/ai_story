@@ -1157,7 +1157,8 @@ class DuelScenario(Scenario):
         self.main("乙三")
 
     def pause(self) -> None:
-        """D5：甲六在淯水河畔貼；管理者暫停賽季時鐘、停 5 分（暫停中應戰、貼約戰回「賽季暫停中」、排程什麼都不推），繼續之後窗往後挪；
+        """D5：甲六在淯水河畔貼；管理者暫停賽季時鐘（暫停中應戰、貼約戰回「賽季暫停中」），停到 D5 的窗原本該滿了之後——暫停中到時的不結算：
+        排程那一下、一個人的同步都不收（dev/sortie-2 審查：原本只停 5 分，暫停中沒有一張到時）；再停 5 分，繼續之後窗往後挪停的長度；
         乙四應（走 /api/choose 的 sortie:answer），窗滿了排程結算。"""
         if self.place("甲六", "yu_river"):
             self.post("甲六")
@@ -1166,7 +1167,10 @@ class DuelScenario(Scenario):
         self.place("乙四", "yu_river")
         self.answer("乙四", "甲六")
         self.post("甲七")
+        self.skip(11)  # D5 的窗（10 分）在暫停中滿了
         self.tick("暫停中")
+        self.main("乙四")
+        self.duels("暫停中到時")
         self.skip(5)
         self.do(ADMIN, "resume_clock")
         self.duels("繼續之後")
