@@ -22,8 +22,7 @@
 戰報（出陣第 1 批加的；打一場的包都要）
 - `ctx._record_exp(record, exp, source)`：本人的經驗寫進戰報（滿級換心得）；`ctx._file_battle(record, ...)`：存戰報、回那一行
 - `ctx._play_rounds(record, squad, tier, ...)`：排回合的演出；`ctx._deed_fame(kind)`：立功給名望
-- `ctx._load_kin(name)`、`ctx._save_kin(game)`：同一把鎖裡讀、寫別人的存檔（混戰、截殺）；`ctx._raid_key(a, b)`：截殺與混戰共用的冷卻帳的鍵
-- `ctx._conquest_side()`：領地爭奪算哪一邊（豪強依附的那一軍）；`ctx.place_minutes(...)`：路程幾分鐘（第 2 批約戰用）
+- `ctx._load_kin(name)`、`ctx._save_kin(game)`：同一把鎖裡讀、寫別人的存檔（混戰、截殺）
 
 身分
 - `ctx._side()`：站哪一軍；`ctx.is_admin()`；`ctx._admin_target(name)`、`ctx._save_target(game)`：管理者動到別人的存檔
@@ -49,6 +48,11 @@
 - `ctx._spar_power(a, b)`、`ctx._spar_mirror(result, power)`（切磋：本人對本人的威力、從另一邊看同一場）
 - `ctx._outing_on()`（探索：減法季探索一顆開著）
 - `ctx.duel_on()`、`ctx._duel_option(loc)`（出陣約戰：第 2 批搬進出陣包之後拿掉）
+- `ctx._raid_key(a, b)`（截殺：截殺與混戰共用的冷卻帳 WorldState.raids 的鍵）
+- `ctx._conquest_side()`（地盤：領地爭奪算哪一邊，豪強依附的那一軍；第 2 批約戰用）
+- `ctx.place_minutes(loc_id)`（輿圖與移動：走到那裡要現實幾分鐘；第 2 批約戰用）
+（這三個原本列在共用段——照規劃者 plan.json 第 1 批的分法；dev/sortie-1 審查照批次表第二節「過渡＝別的功能還沒搬的方法、標主人」
+搬到這裡：在 engine 裡分別定義在截殺、地盤、輿圖與移動那幾段。）
 - `ctx.sorties_left()`、`ctx._sortie_hold(loc, how)`（出陣包自己的委派：測試換掉 Game.sorties_left〔test_bot_policy_conquest〕、
   腳本換掉 Game._sortie_hold〔sim_trend_sources〕，包裡經 ctx 叫，換掉的才打得到；呼叫端改完就拿掉）
 
