@@ -271,8 +271,6 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
             if re.search(r"""renown\.gain\([^)]*["']fame["']""", line):
                 gains.append((label(path), line.strip().split("#")[0].strip()))
     assert gains == [
-        ("engine.py", 'return [tavern_rules.TREAT_DONE] + renown.gain(s, c, "fame", cfg.treat_fame)'),  # 酒肆請全店喝酒（Game._tavern_treat）
-        ("engine.py", 'record.changes += renown.gain(s, c, "fame", cfg.hit_win_fame)'),  # 酒肆：打退殺手（Game._tavern_hit_fight）
         ("engine.py", 'changes += renown.gain(s, c, "fame", fame)'),  # 奪璽單挑（玉璽碎片設計 5.9，同一季才給）
         ("engine.py", 'self._write(journal.ECHO, lines + renown.gain(self.state, self.content, "fame", gained))'),  # 首創回饋
         ("engine.py", 'highlight_changes += renown.gain(s, c, "fame", fame)'),  # 決戰最有戲的那一搏與首功
@@ -286,6 +284,9 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
         ("engine.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台每天的俸（Game._deliver_arena）
         ("engine.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台賽季末前三名（Game._deliver_arena）
         ("features/feast/rules.py", 'out += renown.gain(state, content, "fame", amount)'),  # 宴客散席時最好的那一句敬酒（feasts.deliver；宴客搬進功能包）
+        # 酒肆搬進功能包（主動搬六包第 10 批）：同兩行，路徑從 engine.py 換成 features/tavern/actions.py（照路徑排在宴客後面）
+        ("features/tavern/actions.py", 'return [tavern_rules.TREAT_DONE] + renown.gain(s, c, "fame", cfg.treat_fame)'),  # 酒肆請全店喝酒（tavern_treat）
+        ("features/tavern/actions.py", 'record.changes += renown.gain(s, c, "fame", cfg.hit_win_fame)'),  # 酒肆：打退殺手（tavern_hit_fight）
     ]
     givers = []
 
