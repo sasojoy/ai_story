@@ -20,16 +20,17 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:  # 直接當腳本跑（PM 記過渡處數，見檔尾）時 repo 不在路徑上
+    sys.path.insert(0, str(ROOT))
+from tianxia.core import MODULES as CORE_MODULES  # noqa: E402
 TIANXIA = ROOT / "tianxia"
 FEATURES = TIANXIA / "features"
 MARK = "過渡：待搬"
 
-# 手冊 3.1 的核心模組，加上 3.10 的錢包（wallet）與江湖紀錄（journal：PM 10/31 定算核心——CLAUDE.md 區塊表把它列在
-# 「核心與存檔」，每個功能都寫江湖紀錄；手冊 3.1 由 PM 補）。journal 自己 import front_lines、battlelog（核心 → 舊模組，這一版不掃）
-CORE = {
-    "state", "sqlite_world", "world_state", "characters", "accounts", "database", "rules", "calendar", "models", "content",
-    "team", "gender", "naming", "wallet", "journal",
-}
+# 核心的模組：tianxia/core/__init__.py 的 MODULES（手冊 3.1 的十三個、3.10 的錢包、PM 10/31 定算核心的江湖紀錄），
+# 只有那一份——scripts/test_for.py 也照它挑（10/31 審查：以前這裡跟 test_for 各寫一份，對不上）。
+# journal 自己 import front_lines、battlelog（核心 → 舊模組，這一版不掃）
+CORE = set(CORE_MODULES)
 
 
 def _packages() -> list[str]:

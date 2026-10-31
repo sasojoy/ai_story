@@ -11,13 +11,15 @@
   python scripts/test_for.py -- -x -k fuse   # -- 之後的參數原樣交給 pytest（-- -n 2 會換掉預設的 -n 4）
 
 怎麼挑（開發規範手冊 4.3，docs/superpowers/specs/2026-10-30-開發模式-design.md）：
-- 「核心測試」（過渡期，PM 2026-10-31）＝ 手冊 3.1 核心模組自己檔名的測試（test_<模組>…）＋ tests/core/test_engine*.py
+- 「核心測試」（過渡期，PM 2026-10-31）＝ 核心模組自己檔名的測試（test_<模組>…；江湖紀錄的 test_journal 不收，
+  NOT_CORE_TESTS）＋ tests/core/test_engine*.py
   ＋ tests/core/ 的核心契約、邊界、錢包服務測試（CORE_GLOBS），不含 slow；「煙霧」＝ 標了 @pytest.mark.smoke 的
   （每個區塊約 10 條）。
 - tianxia/features/<包>/**：那一包的 tests/ ＋ 核心契約（tests/core/test_contract*.py 與邊界 test_feature_boundaries.py，
   CONTRACT_GLOBS：手冊 4.1 第三級的核心契約含邊界測試，改包最容易踩的就是 import 了別的包）。
-- 核心（tianxia/core/**、state.py、models.py、content.py、rules.py、calendar.py，與手冊 3.1 列的
-  sqlite_world、world_state、characters、accounts、database、team、gender、naming）：核心測試＋煙霧＋檔名是 test_<模組>… 的。
+- 核心（tianxia/core/**，與 tianxia/core/__init__.py 的 MODULES：手冊 3.1 的 state、models、content、rules、calendar、
+  sqlite_world、world_state、characters、accounts、database、team、gender、naming，3.10 的 wallet，PM 10/31 的 journal；
+  邊界測試照同一份）：核心測試＋煙霧＋檔名是 test_<模組>… 的。
   state.py、models.py 另外看 hunk 落在哪個類別、哪個欄位：類別名或欄位名帶功能前綴的（mall_tokens → mall）再加那一群。
 - tianxia/engine.py：hunk 落在 Game 的哪個方法 → 方法名第一個認得的字當功能群（tavern_seek → tavern；_deliver_seal_results
   → seal）→ 那一群的測試檔。落在 choose、_everyday_options、sync、status_data、__init__、換季重設、清失效參照這幾個共用方法
@@ -81,11 +83,42 @@ BASE_ENV = "TIANXIA_TEST_BASE"
 REAL_CONTENT_TEST = "test_real_content.py"  # 內容改了就跟（不含 slow）；用真實內容跑整季的那幾條是 slow，--slow 才跑
 SERVER_TEST = "test_server.py"
 
-# 核心（手冊 3.1、4.3）：改了跑核心測試＋煙霧＋自己檔名的測試，不照「誰 import 它」挑（team、models、state 被一兩百個測試檔 import）
-CORE_MODULES = {
-    "state", "models", "content", "rules", "calendar",
-    "sqlite_world", "world_state", "characters", "accounts", "database", "team", "gender", "naming",
-}
+CORE_INIT = ROOT / "tianxia" / "core" / "__init__.py"
+
+
+def core_modules(init: Path = CORE_INIT) -> frozenset[str]:
+    """核心的模組：tianxia/core/__init__.py 的 MODULES（手冊 3.1 的十三個、3.10 的錢包、PM 10/31 定算核心的江湖紀錄），
+    跟邊界測試 tests/core/test_feature_boundaries.py 同一份。照語法樹讀、不 import（同 feature_web：核心寫壞了 test_for
+    照樣挑得出來）；讀不出來（語法錯、沒有 MODULES）在 stderr 說一聲、當成沒有——改 tianxia/core/ 本來就跑核心測試＋煙霧。"""
+    try:
+        tree = ast.parse(init.read_text(encoding="utf-8"))  # 模組一載入就讀：_ast 還沒定義
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "MODULES" for t in node.targets):
+                value = node.value
+                if isinstance(value, ast.Call) and getattr(value.func, "id", None) == "frozenset" and value.args:
+                    value = value.args[0]
+                return frozenset(ast.literal_eval(value))
+        problem = "沒有 MODULES"
+    except (OSError, SyntaxError, ValueError) as e:
+        problem = f"{type(e).__name__}: {e}"
+    print(f"test_for：{_rel_root(init)} 讀不出核心的模組（{problem}），這一次不認核心模組", file=sys.stderr)
+    return frozenset()
+
+
+def _rel_root(p: Path) -> str:
+    try:
+        return p.relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(p)
+
+
+# 核心（手冊 3.1、4.2、4.3）：改了跑核心測試＋煙霧＋自己檔名的測試，不照「誰 import 它」挑（team、models、state 被一兩百個
+# 測試檔 import）。只有一份，在 tianxia/core/__init__.py（test_test_for 守它跟邊界測試的 CORE 一樣）
+CORE_MODULES = core_modules()
+# 核心模組裡、自己檔名的測試不收進「核心測試」的：江湖紀錄的 test_journal（76 條）。PM 10/31 定的核心測試是手冊 3.1 那十三個
+# 自己的測試＋test_engine＋契約、邊界、錢包（CORE_GLOBS），journal 算核心是同一天邊界測試那一條定的；收進來改 models.py 一個
+# 欄位的底數從 1,517 再漲到約 1,593，要不要收等 PM 跟 < 1,500 一起定。改 journal.py 照舊跑它（自己檔名的測試）。
+NOT_CORE_TESTS = frozenset({"journal"})
 # 「核心測試」除了核心模組自己檔名的，再收 tests/core/ 底下這幾種（core_tests）：Game 門面、核心契約、邊界、錢包服務
 CORE_GLOBS = ("test_engine*.py", "test_contract*.py", "test_feature_boundaries.py", "test_wallet.py")
 # 功能包改了跟著那一包跑的「核心契約」（tests/core/ 底下；手冊 4.1 第三級：選項帶前綴、choose 不吃別包的、關著不給、換季、邊界）
@@ -475,11 +508,11 @@ def smoke_ids() -> tuple[str, ...]:
 
 
 def core_tests() -> list[Path]:
-    """過渡期的「核心測試」（PM 2026-10-31；跑的時候 -m "not slow"）：手冊 3.1 核心模組（CORE_MODULES）自己檔名的測試
-    （test_<模組>.py、test_<模組>_….py，在哪個資料夾都算：test_naming 在 arts/、test_team 在 battle/）＋
+    """過渡期的「核心測試」（PM 2026-10-31；跑的時候 -m "not slow"）：核心模組（CORE_MODULES，扣掉 NOT_CORE_TESTS）自己檔名的
+    測試（test_<模組>.py、test_<模組>_….py，在哪個資料夾都算：test_naming 在 arts/、test_team 在 battle/）＋
     tests/core/test_engine*.py（Game 門面；第 2 階搬包時屬於包的搬走，條數往下掉）＋ tests/core/ 的核心契約、
     邊界、錢包服務測試（CORE_GLOBS，第 1 階才有）。不再是整個 tests/core/（雜燴：test_social、test_factions……）。"""
-    own = {t for t in all_tests() for mod in CORE_MODULES
+    own = {t for t in all_tests() for mod in CORE_MODULES - NOT_CORE_TESTS
            if t.stem == f"test_{mod}" or t.stem.startswith(f"test_{mod}_")}
     globbed = {t for pattern in CORE_GLOBS for t in CORE_TESTS.glob(pattern)}
     return sorted(own | globbed)

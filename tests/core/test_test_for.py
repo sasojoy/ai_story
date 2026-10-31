@@ -250,6 +250,40 @@ def test_core_modules_are_core_tests_and_smoke_not_their_importers():
     assert {p.name for p in picked.files} <= {"test_rules.py"}
 
 
+def test_the_core_modules_are_one_list_for_the_picker_and_the_boundary_test():
+    """「核心」只有一份：tianxia/core/__init__.py 的 MODULES（手冊 3.1 的十三個、3.10 的錢包、PM 10/31 定算核心的江湖紀錄）。
+    test_for 照語法樹讀它（不 import）、邊界測試 import 它。10/31 審查：以前兩邊各寫一份，邊界的有 journal、wallet，
+    test_for 的沒有——改 journal.py 挑「import 它的」22 個檔、改 wallet.py 挑 8 個檔，都沒有核心測試與煙霧。"""
+    from tianxia import core
+    import test_feature_boundaries
+    assert {"journal", "wallet", "models", "state", "rules", "naming"} <= core.MODULES
+    assert test_for.CORE_MODULES == core.MODULES
+    assert set(test_feature_boundaries.CORE) == set(core.MODULES)
+
+
+def test_the_core_modules_are_read_from_the_syntax_tree_and_a_broken_file_says_so(tmp_path, capsys):
+    """照語法樹讀（不 import）；讀不出來在 stderr 說一聲、當成沒有，test_for 照樣挑得下去。"""
+    good = tmp_path / "good.py"
+    good.write_text('"""核心。"""\nMODULES = frozenset({\n    "a", "b",\n})\n', encoding="utf-8")
+    assert test_for.core_modules(good) == {"a", "b"}
+    broken = tmp_path / "broken.py"
+    broken.write_text("MODULES = frozenset({\n", encoding="utf-8")
+    assert test_for.core_modules(broken) == frozenset()
+    missing = tmp_path / "none.py"
+    missing.write_text("OTHER = 1\n", encoding="utf-8")
+    assert test_for.core_modules(missing) == frozenset()
+    err = capsys.readouterr().err
+    assert err.count("讀不出核心的模組") == 2 and "沒有 MODULES" in err
+
+
+@pytest.mark.parametrize("module", ["journal", "wallet"])
+def test_the_journal_and_the_wallet_pick_like_the_rest_of_the_core(module):
+    """核心改了跑核心測試＋煙霧＋自己檔名的測試（手冊 4.2、4.3），不照「誰 import 它」挑；錢包、江湖紀錄也是核心。"""
+    picked = test_for.pick([f"tianxia/{module}.py"])
+    assert picked.core and picked.smoke
+    assert {p.name for p in picked.files} == {f"test_{module}.py"}
+
+
 def test_a_feature_package_picks_its_own_tests_and_the_contract(tmp_path, monkeypatch):
     pkg = tmp_path / "mall" / "tests"
     pkg.mkdir(parents=True)
@@ -444,8 +478,8 @@ def test_core_tests_are_the_core_modules_own_tests_and_test_engine():
     names = {p.name for p in test_for.core_tests()}
     assert CORE_OWN | {"test_engine.py"} <= names
     assert not names & {"test_social.py", "test_factions.py", "test_nightly.py", "test_test_for.py", "test_errands.py"}
-    allowed = {f"test_{m}" for m in test_for.CORE_MODULES} | {"test_engine", "test_contract", "test_feature_boundaries",
-                                                                "test_wallet"}
+    allowed = {f"test_{m}" for m in test_for.CORE_MODULES - test_for.NOT_CORE_TESTS} | {
+        "test_engine", "test_contract", "test_feature_boundaries", "test_wallet"}
     assert all(any(p.stem == a or p.stem.startswith(a + "_") or (a in ("test_engine", "test_contract")
                                                                  and p.stem.startswith(a)) for a in allowed)
                for p in test_for.core_tests()), sorted(names)
@@ -455,6 +489,15 @@ def test_core_tests_are_the_core_modules_own_tests_and_test_engine():
     # 第 1 階有了的核心契約、邊界、錢包服務（第 0 階收尾定的；test_wallet 從 tests/mall/ 搬到 tests/core/）
     assert {"tests/core/test_contract_core.py", "tests/core/test_contract_features.py",
             "tests/core/test_feature_boundaries.py", "tests/core/test_wallet.py"} <= set(goal)
+
+
+def test_the_core_tests_stay_what_the_pm_defined_when_the_journal_joins_the_core():
+    """江湖紀錄算核心（PM 10/31）只改「改了它挑什麼」：它自己的 test_journal 不收進核心測試（NOT_CORE_TESTS）——PM 10/31
+    定的核心測試是手冊 3.1 那十三個自己的測試＋test_engine＋契約、邊界、錢包，收了改 models.py 一個欄位的底數
+    再多七十幾條；要不要收等 PM 跟 < 1,500 一起定。錢包的 test_wallet 本來就在。"""
+    names = {p.name for p in test_for.core_tests()}
+    assert "test_wallet.py" in names and "test_journal.py" not in names
+    assert test_for.NOT_CORE_TESTS <= test_for.CORE_MODULES
 
 
 def test_core_tests_take_the_contract_boundary_and_wallet_tests_of_tests_core(tmp_path, monkeypatch):
