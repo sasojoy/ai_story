@@ -12,6 +12,11 @@
 ## 工作目錄與分支
 
 - GitHub `sasojoy/ai_story`，`main` 是線上正式版。**2026-10-18 起新功能不在 `main` 上做**（企劃者）：功能分支（現在是 `feature/formal-season`，正式季整合）從 `develop` 開，分批的工作樹從功能分支開；QA 過了合進功能分支、功能做完合進 `develop`（之後可能另外部署 `develop` 做內測），企劃者說可以上線才合回 `main`。分支、測試與合併的規矩全寫在專案技能 `.claude/skills/tianxia-flow/SKILL.md`，開工、派工、合併前先看。（2026-10-03～10-18 直接在 main 上開發；`feature/sanguo-companions` 不再更新；舊遊戲在 `legacy/ai-story-main`。）
+- **雲端 session 與 Joy 的 Claude**（企劃者 2026-10-31）：照開發規範手冊做（企劃者 10/30「只要符合開發規範，不管是本機還是雲端都沒差」）。
+  - 在自己的分支做、開 PR 到 `develop`，由 Joy 在 GitHub 合；PR 說明寫改了哪一包（或 `Game` 哪一群方法）、跑了哪些測試幾條過、退版風險。PM 靠每天 03:30 的整套事後驗，紅了開單交回。
+  - **不直推 `main`**：上 main 一律從 `develop` 合、先跑整套含 slow。Joy 的維運與緊急修正例外，推完跟企劃者說一聲（哪一筆、改了哪個方法）。
+  - **正在搬成包的那幾包不要改**：清單在 `docs/superpowers/plans/2026-10-31-主動搬六包-批次.md` 開頭「搬包中」那一段（全部拆完的路線在 `2026-10-31-全部拆包-總表.md`）。真要改先告訴企劃者。
+  - 已經搬進 `tianxia/features/<包>/` 的功能，改包裡的檔；`Game` 上的一行委派不加邏輯。新功能用 `scripts/new_feature.py` 開一包。
 - 這台機器有兩份 clone：`C:\Ray\專案\天下大勢` 是主要的那份（main 在這裡合併、推上 GitHub；專職開發的工作樹在它的 `.claude/worktrees/`）；`C:\Ray\專案\ai遊戲` 是另一份 clone，地圖擴充開發在它的 `.worktrees/` 裡做。**開工前先 `git worktree list`、`git remote -v` 核對一次**：曾經在另一個遊戲的目錄開 session，讀到錯的 CLAUDE.md，白繞一圈。
 - `.claude/worktrees/` 底下的工作樹沒有 `.venv`：下面指令裡的 `.venv/Scripts/python.exe` 換成那份 clone 的絕對路徑（例：`C:/Ray/專案/天下大勢/.venv/Scripts/python.exe`）。
 - 工作樹的檔案是 CRLF（`core.autocrlf=true`，git 裡存 LF）：用腳本改檔時先把 `\r\n` 轉成 `\n` 再比對，寫回時轉回去。
