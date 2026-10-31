@@ -122,6 +122,7 @@ def test_the_score_model_is_clamped_and_falls_back(c):
     assert feasts.score(Fake(), req) == 100
 
 
+@pytest.mark.smoke
 def test_the_game_seats_you_and_takes_a_fixed_toast(monkeypatch):
     import server
     from tianxia.engine import Game

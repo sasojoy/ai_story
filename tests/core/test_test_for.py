@@ -5,6 +5,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 _spec = importlib.util.spec_from_file_location("test_for", ROOT / "scripts" / "test_for.py")
 test_for = importlib.util.module_from_spec(_spec)
@@ -257,6 +259,19 @@ def test_a_feature_package_picks_its_own_tests_and_the_contract(tmp_path, monkey
     assert {p.name for p in picked.files} >= {"test_mall_pkg.py"} and not picked.core
 
 
+@pytest.mark.parametrize("changed, package", [
+    ("tianxia/features/mall/rules.py", "mall"),  # 不是 tianxia/rules.py（核心）：不帶核心測試與煙霧
+    ("tianxia/features/mall/actions.py", "mall"),
+    ("tianxia/features/mall/routes.py", "mall"),
+    ("tianxia/features/feast/rules.py", "feast"),
+])
+def test_a_package_file_on_this_tree_picks_only_that_package_and_the_contract(changed, package):
+    own = {p.name for p in (test_for.FEATURES / package / "tests").rglob("test_*.py")}
+    contract = {p.name for p in test_for.CORE_TESTS.glob("test_contract*.py")}
+    picked = test_for.pick([changed])
+    assert own and own | contract == {p.name for p in picked.files} and not picked.core and not picked.smoke
+
+
 def test_slow_is_opt_in_and_three_files_run_on_four_workers():
     three = test_for.Pick(files={ROOT / "tests/arts/test_fusion.py", ROOT / "tests/arts/test_naming.py",
                                  ROOT / "tests/arts/test_library.py"})
@@ -350,20 +365,48 @@ def test_the_smoke_set_covers_every_block():
     assert 100 <= len(ids) <= 150 and len(set(ids)) == len(ids)
     slow = [i for i in ids if _slow_smoke(test_for._text(ROOT / i.split("::")[0]), i.split("::")[1:])]
     assert not slow, f"煙霧不能標 slow：{slow}"
-    folders = {i.split("/")[1] for i in ids}
-    assert {"core", "acts", "battle", "arts", "gear", "figures", "ranger", "seal", "mall", "map", "bots", "season"} <= folders
+    # 手冊 4.3「搬成包的區塊，煙霧改成那一包 tests/ 裡的一條」：tianxia/features/<包>/tests/ 的算那一包（商城的在 mall 包裡）
+    blocks = {(p[2] if p[:2] == ["tianxia", "features"] else p[1]) for p in (i.split("::")[0].split("/") for i in ids)}
+    assert {"core", "acts", "battle", "arts", "gear", "figures", "ranger", "seal", "mall", "map", "bots", "season"} <= blocks
+    packages = {p.name for p in test_for.FEATURES.iterdir() if (p / "__init__.py").exists()}
+    assert packages and packages <= blocks, f"每一包至少一條煙霧（手冊 4.1 第三級）：{sorted(packages - blocks)}"
     goal = test_for.targets(test_for.Pick(files={ROOT / "tests/core/test_engine.py"}, smoke=True))
     assert "tests/core/test_engine.py" in goal and not any(g.startswith("tests/core/test_engine.py::") for g in goal)
 
 
 def test_the_web_scripts_are_the_ones_every_web_test_loads():
-    """網頁測試每一條都載入 webharness.APP_FILES 那幾個檔：改其中哪一個都照 app.js 挑（outing.js 10/30 加進去時漏了）。"""
+    """網頁測試每一條都載入 webharness.APP_FILES 那幾個檔：殼的（WEB_SCRIPTS）改哪一個都照 app.js 挑（outing.js 10/30 加進去時
+    漏了）；功能包的 js（mall.js，各包登記的 web）也在 APP_FILES 裡，照那一包挑（PM 10/31）。兩樣合起來就是 APP_FILES。"""
     import re
     harness = (ROOT / "tests" / "kit" / "webharness.py").read_text(encoding="utf-8")
     app_files = set(re.findall(r'"([\w.]+\.js)"', re.search(r"^APP_FILES = \(([^)]*)\)", harness, re.M).group(1)))
-    assert test_for.WEB_SCRIPTS == app_files
+    package_js = {name for name in test_for.feature_web() if name.endswith(".js")}
+    assert package_js and not package_js & test_for.WEB_SCRIPTS
+    assert test_for.WEB_SCRIPTS | package_js == app_files
     outing = _names(["web/outing.js"])
     assert {"test_server.py", "test_outing_web.py"} < outing and _names(["web/app.js"]) <= outing
+
+
+def test_feature_web_is_what_the_packages_register():
+    """test_for 照語法樹讀各包 __init__.py 的 web（不 import）：跟核心照 FEATURES 彙整的 web_files() 一樣、認得是哪一包的。"""
+    from tianxia.core import features as features_core
+    from tianxia.core.registry import FEATURES
+    assert sorted(test_for.feature_web()) == sorted(features_core.web_files())
+    assert test_for.feature_web() == {name: f.name for f in FEATURES for name in f.web}
+
+
+def test_a_feature_packages_web_file_picks_that_package_not_the_app_js_batch():
+    """web/mall.js、web/mall.css 是商城包的（手冊 3.7 第 1 階切出來的）：挑那一包的 tests/＋核心契約（＋寫到那個檔名的店面
+    CSS 守門），不照 app.js 挑一大批、不加 test_server.py；PM 10/31。"""
+    mall_tests = {p.name for p in (test_for.FEATURES / "mall" / "tests").rglob("test_*.py")}
+    contract = {p.name for p in test_for.CORE_TESTS.glob("test_contract*.py")}
+    js = test_for.pick(["web/mall.js"])
+    assert {p.name for p in js.files} == mall_tests | contract and not js.core and not js.smoke
+    assert "test_server.py" not in {p.name for p in js.files}
+    assert not {p.name for p in js.files} & (_names(["web/app.js"]) - mall_tests - contract)
+    css = {p.name for p in test_for.pick(["web/mall.css"]).files}
+    assert mall_tests | contract | {"test_desktop_type.py", "test_shop_width.py"} <= css and "test_server.py" not in css
+    assert "test_test_for.py" not in css  # 內文是假原始碼的（TEXT_BLIND）不照檔名算
 
 
 CORE_OWN = {  # 手冊 3.1 的核心模組自己檔名的測試（10/31 有的這 11 個；state、sqlite_world 還沒有自己的測試檔）
@@ -387,6 +430,9 @@ def test_core_tests_are_the_core_modules_own_tests_and_test_engine():
     goal = test_for.targets(test_for.Pick(core=True))
     assert {"tests/core/test_engine.py", "tests/arts/test_naming.py", "tests/battle/test_team.py"} <= set(goal)
     assert "tests/core/test_social.py" not in goal
+    # 第 1 階有了的核心契約、邊界、錢包服務（第 0 階收尾定的；test_wallet 從 tests/mall/ 搬到 tests/core/）
+    assert {"tests/core/test_contract_core.py", "tests/core/test_contract_features.py",
+            "tests/core/test_feature_boundaries.py", "tests/core/test_wallet.py"} <= set(goal)
 
 
 def test_core_tests_take_the_contract_boundary_and_wallet_tests_of_tests_core(tmp_path, monkeypatch):

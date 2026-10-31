@@ -33,7 +33,9 @@
   （「import 了 engine」不再算相關：engine.py 照上面那一條）。
 - content/：test_content.py ＋ test_real_content.py ＋ 寫到那個檔名的測試檔，照舊不含 slow：test_real_content.py 用真實內容
   跑整季的那幾條是 slow（--slow 才跑、每日整套會跑），其他的（事件難度帶 DIFFICULTY_BANDS 的鎖、地點走得到……）每次都跑。
-- web/：寫到那個檔名的測試檔（main.js、map.js、outing.js 照 app.js 挑），加上 test_server.py。
+- web/：寫到那個檔名的測試檔（main.js、map.js、outing.js 照 app.js 挑），加上 test_server.py。功能包登記的網頁檔
+  （各包 __init__.py 的 web，例 web/mall.js、web/mall.css；feature_web）→ 那一包的 tests/＋tests/core/test_contract*.py
+  ＋寫到那個檔名的（店面的 CSS 守門），不照 app.js 挑、不加 test_server.py（PM 2026-10-31）。
 - tests/ 裡的測試檔：跑它自己，連 slow 一起（改了就是要跑它；挑到的其他檔照舊不含 slow，所以分兩次跑）；
   tests/kit/ 這類共用工具：import 它的測試檔；tests/fixtures/：寫到那個檔名的測試檔。
 - tests/conftest.py：hunk 落在哪個函式、fixture 或常數 → 用到它的測試檔（from conftest import、fixture 參數；conftest 裡
@@ -65,7 +67,9 @@ CORE_TESTS = TESTS / "core"
 FEATURES = ROOT / "tianxia" / "features"
 PARALLEL_FROM = 3  # 挑到這麼多個檔以上才開 xdist（開工作行程本身要幾秒）
 WORKERS = "4"  # 開發規範手冊 4.5：同一台同時最多兩份測試在跑，各自 -n 4
-WEB_SCRIPTS = {"main.js", "map.js", "outing.js", "app.js"}  # 網頁測試每一條都載入的檔（tests/kit/webharness.py 的 APP_FILES；test_test_for 守兩邊一樣）
+# 殼的網頁檔：網頁測試每一條都載入（tests/kit/webharness.py 的 APP_FILES 扣掉功能包的 js），改哪一個都照 app.js 挑。
+# 功能包的 js（mall.js）也在 APP_FILES 裡，可是照那一包挑（feature_web）；test_test_for 守 WEB_SCRIPTS ∪ 各包的 js == APP_FILES
+WEB_SCRIPTS = {"main.js", "map.js", "outing.js", "app.js"}
 SETUP_FILES = {"pyproject.toml", "requirements.txt", "requirements-dev.txt"}  # conftest.py 另外照 hunk 挑（conftest_picks）
 CONFTEST_CAP = 50  # conftest 改到的名字有超過這麼多個測試檔在用（content、game、real_content）：不一個一個挑，跑煙霧
 # 跟哪一條分支比：PM 2026-10-31 起預設 origin/develop（大家從 develop 開）；環境變數 TIANXIA_TEST_BASE 蓋過預設、
@@ -470,6 +474,29 @@ def core_tests() -> list[Path]:
     return sorted(own | globbed)
 
 
+@functools.lru_cache(maxsize=None)
+def feature_web() -> dict[str, str]:
+    """功能包登記的網頁檔 → 包名（{"mall.js": "mall", "mall.css": "mall"}）：各包 __init__.py 裡類別的 web = (…)，
+    照語法樹讀、不 import（包寫壞了 test_for 照樣挑得出來）。test_test_for 守它跟 tianxia.core.features.web_files() 一樣。"""
+    found: dict[str, str] = {}
+    for init in sorted(FEATURES.glob("*/__init__.py")) if FEATURES.is_dir() else []:
+        try:
+            tree = _ast(init.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            for stmt in node.body:
+                targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target] if isinstance(stmt, ast.AnnAssign) else []
+                value = getattr(stmt, "value", None)
+                if any(isinstance(t, ast.Name) and t.id == "web" for t in targets) and isinstance(value, (ast.Tuple, ast.List)):
+                    for elt in value.elts:
+                        if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                            found[elt.value] = init.parent.name
+    return found
+
+
 _SLOW_MARK = re.compile(r"^[ \t]*(?:@pytest\.mark\.slow\b|pytestmark[ \t]*=[^\n]*\bslow\b)|\bmarks[ \t]*=[^\n]*\bmark\.slow\b",
                         re.M)
 
@@ -824,6 +851,16 @@ def pick(files: list[str], base: str | None = None,
                 if name in named:
                     result.files.add(named[name])
             result.files |= {t for t in tests if path.name in _text(t)}
+            continue
+        owner = feature_web().get(path.name) if f.startswith("web/") and f.count("/") == 1 else None
+        if owner is not None:  # 功能包的網頁檔（web/mall.js）：那一包的 tests/＋核心契約，不照 app.js 挑（PM 10/31）
+            pkg_tests = FEATURES / owner / "tests"
+            result.files |= set(pkg_tests.rglob("test_*.py")) if pkg_tests.is_dir() else set()
+            result.files |= set(CORE_TESTS.glob("test_contract*.py"))
+            named_it = {t for t in tests if t.name not in TEXT_BLIND and path.name in _text(t)}  # 店面的 CSS 守門讀包的樣式
+            result.files |= named_it
+            result.why.append(f"{f}：{owner} 這一包的網頁檔 → 那一包的 tests/＋核心契約"
+                              + (f"＋寫到 {path.name} 的 {len(named_it)} 個檔" if named_it else ""))
             continue
         if f.startswith("web/"):
             if SERVER_TEST in named:

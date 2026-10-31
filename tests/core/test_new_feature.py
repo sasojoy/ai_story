@@ -35,6 +35,8 @@ def test_it_makes_the_package_registers_it_and_adds_the_guide_heading(repo):
     init = (pkg / "__init__.py").read_text(encoding="utf-8")
     assert 'name = "tavern2"' in init and 'prefix = "tavern2"' in init and "FEATURE = Tavern2Feature()" in init
     assert b"\r\n" in (pkg / "__init__.py").read_bytes()  # 工作樹是 CRLF
+    smoke = (pkg / "tests" / "test_tavern2_smoke.py").read_text(encoding="utf-8")  # 每一包至少一條煙霧（手冊 4.3）
+    assert "@pytest.mark.smoke\ndef test_tavern2_" in smoke.replace("\r\n", "\n")
     registry = (repo / "tianxia" / "core" / "registry.py").read_text(encoding="utf-8")
     assert "from ..features import tavern2  # 酒肆" in registry and "    tavern2.FEATURE," in registry
     assert registry.index("tavern2.FEATURE,") < registry.index(new_feature.LIST_MARK.strip())

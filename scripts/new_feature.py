@@ -95,10 +95,13 @@ FEATURE = {cls}()
 - 設計稿：（`docs/superpowers/specs/<日期>-<名字>-design.md` 第 N 版）
 """,
         pkg / "tests" / f"test_{name}_smoke.py": f'''"""{title}的煙霧測試（開發規範手冊 4.1 第三級：一包一條，走一次最常見的路）。骨架生的這一條只驗登記與關著不出聲；
-功能做出來之後換成真的那一條（真實內容 real_content("week7")）。"""
+功能做出來之後換成真的那一條（真實內容 real_content("week7")）；標記 @pytest.mark.smoke 留著（每一包至少一條，test_test_for 守）。"""
+import pytest
+
 from tianxia.core.registry import FEATURES
 
 
+@pytest.mark.smoke
 def test_{name}_is_registered_and_quiet_while_closed(game):
     feature = next(f for f in FEATURES if f.name == "{name}")
     assert feature.enabled(game) is False
