@@ -369,6 +369,7 @@ def test_the_scene_follows_the_place_kind():
     game = _game()
     _walked(game)
     assert game.outing_view()["trip"]["scene"] == "ford"
+    assert game.outing_view()["trip"]["n"] == game.state.player.outing.n  # 畫面認「同一趟」（重新整理接回結算卡、畫布，U-13）
 
 
 def test_road_lines_are_rare():

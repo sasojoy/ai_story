@@ -58,6 +58,13 @@
   const OW = { imgs: null, open: false, away: false, shown: 0, played: 0, tasks: [], cur: null, raf: 0, last: 0, scroll: 0, props: [], parts: [],
     hero: { pose: "idle", k: 0, t: 0, runP: 0, kx: 0, red: 0, bubble: "", glow: 0, gold: false }, turbo: false, speed: 1, going: false };
 
+  // 重新整理之後接得回來（全面自檢 U-13）：這兩樣只有這一頁知道，記在瀏覽器裡（存不了就跟以前一樣，重新整理會走丟）
+  // - 收起過的那一趟（trip.n）：沒收起就重新整理的，結算卡（含「在這裡留一句」）再打開一次；收起了、再走一趟了就不再跳
+  // - 為了畫形、寫字收起來的那一步（第幾趟、走到第幾行、哪一個選項）：重新整理回到同一步，直接再叫出畫布／輸入框，不再問一次
+  const OUTING_CLOSED_KEY = "outing-closed", OUTING_AWAY_KEY = "outing-away";
+  function outingStore(key, v) { try { if (v == null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(v)); } catch (e) { /* 存不了就算了 */ } }
+  function outingRecall(key) { try { return JSON.parse(localStorage.getItem(key) || "null"); } catch (e) { return null; } }
+
   function outingSpeed() { try { return Number(localStorage.getItem(OUTING_SPEED_KEY)) === 2 ? 2 : 1; } catch (e) { return 1; } }
   function outingSaveSpeed(v) { try { localStorage.setItem(OUTING_SPEED_KEY, String(v)); } catch (e) { /* 存不了就這一頁有效 */ } }
 
@@ -105,13 +112,23 @@
     // 重新整理頁面（或換了分頁）時那一趟還停在要選的事上：直接打開這一層、選項畫在卡上（沿路那幾行不重演）
     if (!trip.end && !OW.open && !OW.away && OW.shown === 0) {
       OW.shown = trip.beats.length; OW.played = trip.done;
-      if (outingInputOpen()) OW.away = true; else outingOpen();
+      const away = outingRecall(OUTING_AWAY_KEY);
+      if (outingInputOpen()) OW.away = true;
+      else if (away && away.n === trip.n && away.at === trip.beats.length && outingNeedsPage(away.id)) {
+        OW.away = true; // 畫形、寫字寫到一半重新整理：同一步，直接叫回畫布／輸入框
+        Promise.resolve(choose(null, away.id)).then(outingRevealInput);
+      } else outingOpen();
+      return;
+    }
+    // 走完了、結算卡還沒收起就重新整理：再打開結算卡（留一句的入口在上面），沿路那幾行直接寫回去不重演
+    if (trip.end && !OW.open && !OW.away && OW.shown === 0) {
+      if (outingRecall(OUTING_CLOSED_KEY) !== trip.n) { OW.shown = trip.beats.length; OW.played = trip.done; outingOpen(); }
       return;
     }
     if (OW.going || S.busy) return;
     // 為了寫字、畫圖收起來的：框還開著就等；送出了又停在下一件要選的事上（有所感之後取名……）就打開、畫在卡上
     if (OW.away && !trip.end && !trip.can_go) {
-      if (!outingInputOpen()) { OW.away = false; outingOpen(); }
+      if (!outingInputOpen()) { OW.away = false; outingStore(OUTING_AWAY_KEY, null); outingOpen(); }
       return;
     }
     if (!OW.away && !OW.open) return;
@@ -644,14 +661,19 @@
           if (input) input.focus();
           return true;
         }
-        if (outingNeedsPage(id)) { OW.away = true; outingHide(); await choose(el, id); outingRevealInput(); return true; }
+        if (outingNeedsPage(id)) {
+          const trip = outingTrip();
+          if (trip) outingStore(OUTING_AWAY_KEY, { n: trip.n, at: trip.beats.length, id });
+          OW.away = true; outingHide(); await choose(el, id); outingRevealInput(); return true;
+        }
         await choose(el, id);
         return true;
       }
-      case "outing-close": outingShut(); OW.shown = 0; return true;
+      case "outing-close": { const trip = outingTrip(); if (trip && trip.end) outingStore(OUTING_CLOSED_KEY, trip.n); outingShut(); OW.shown = 0; return true; }
       case "outing-again": { // 照這一趟的段數直接再走一趟（Joy 10/30）；體力不夠才回到段數選單
         const trip = outingTrip(), o = S.main.outing;
         const n = trip ? trip.total : 0, pick = o && o.picker.find((x) => x.n === n);
+        if (trip) outingStore(OUTING_CLOSED_KEY, trip.n);
         outingShut();
         OW.shown = 0;
         if (pick && pick.ok) { await outingGo(n); return true; }
