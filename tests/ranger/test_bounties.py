@@ -655,7 +655,7 @@ def test_a_whole_beta_season_posts_one_batch_a_week(tmp_path):
     assert content.config.decisive_from_week <= end <= content.config.season_weeks and last == ran
     assert all(len(steps) == 1 for steps in batches.values())
     sizes = [sum(1 for _, w in seen.values() if w == week) for week in range(1, last + 1)]
-    assert all(0 < n <= _batch(content) for n in sizes)
+    assert all(0 < n <= _batch(content, allied=False) for n in sizes)
     assert season.bounty_week == last and season.hooked_week == 0
 
 
