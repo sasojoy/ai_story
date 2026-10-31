@@ -549,15 +549,19 @@
     const box = document.getElementById("map-results");
     if (box) box.innerHTML = searchResults(S.mapBase, S.mapState, S.mapQuery);
   }
-  // 抽屜的把手：拖上拖下（放開時靠到最近的一格），點一下在第一格與最後一格之間換
+  // 抽屜的把手：拖上拖下（放開時靠到最近的一格），點一下在第一格與最後一格之間換。
+  // 點一下在把手的 click 換格，不在 pointerup（FB-9090，W2 第二輪 2026-10-31）：觸控的 click 是放手之後瀏覽器才照那一點命中的，pointerup 就換了格的話，
+  // 一行換到一排卡那一下，click 落到滑到手指底下的那張卡、開了那一處的卡。拖照舊在 pointer 事件裡；拖完（滑鼠按放都在把手上）瀏覽器多送的那一個
+  // click 不算點一下（下一次按下去就清掉，不會吃掉玩家真正的下一下）
   function drawerGrab() {
     const grab = document.getElementById("mgrab"), drawer = document.getElementById("mdrawer");
     if (!grab || !drawer || (grab.dataset && grab.dataset.wired)) return; // 同一個把手只掛一次（remapChrome 換了新的把手才再掛）
     if (grab.dataset) grab.dataset.wired = "1";
-    let drag = null;
+    let drag = null, dragged = 0;
     grab.addEventListener("pointerdown", (ev) => {
       try { grab.setPointerCapture(ev.pointerId); } catch (e) { /* 合成的事件抓不住 */ }
       drag = { y: ev.clientY, h: drawer.offsetHeight, moved: false };
+      dragged = 0;
       drawer.classList.add("dragging");
     });
     grab.addEventListener("pointermove", (ev) => {
@@ -569,16 +573,20 @@
     const end = () => {
       if (!drag) return;
       drawer.classList.remove("dragging");
-      const stops = drawerStops();
-      if (!drag.moved) mapStop(drawerTap(stops));
-      else {
-        const h = drawer.offsetHeight;
+      if (drag.moved) {
+        const stops = drawerStops(), h = drawer.offsetHeight;
         mapStop(stops.slice().sort((a, z) => Math.abs(mapDrawerPx(a) - h) - Math.abs(mapDrawerPx(z) - h))[0]);
+        dragged = Date.now();
       }
       drag = null;
     };
     grab.addEventListener("pointerup", end);
     grab.addEventListener("pointercancel", end);
+    grab.addEventListener("click", () => {
+      if (dragged && Date.now() - dragged < MV_CLICK) { dragged = 0; return; }
+      dragged = 0;
+      mapStop(drawerTap(drawerStops()));
+    });
   }
   // 抽屜此刻可以停的幾格（拖動放開時靠到最近的一格）。沒點地點時三格（輿圖表現第二版 2.1 底條，W2）：peek 一行（底條）、row 一排卡（Joy 原本量
   // .m-peek-end 的那一高：滑卡片預覽時地圖還看得到）、full 全開。在路上照 Joy 的兩格（在路上的底條是 W3 的事）

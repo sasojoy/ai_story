@@ -26,7 +26,7 @@ NAMES = ["S", "pageMap", "controlAt", "drawerHtml", "placeCard", "cardExtras", "
          "mapFilter", "marksHtml", "groundSvg", "camClamp", "camFit", "zMin", "mapPick", "mapBack", "mapFind", "routeD", "camSet", "mapFirst",
          "groundShow", "landAt", "mapLand", "mvDown", "mvUp", "mvMove", "mvWheel", "camFly", "drawMarks", "mv", "mapGoto", "camFirst", "planHtml",
          "camOpen", "camAt", "mapRoom", "mvZ0", "mvLevel", "mvLayout", "mvArea", "miniHtml", "mapMini", "mapHome", "mapFit", "drawerStops", "drawerTap",
-         "mapStop", "mapSortie", "mapRegionFly", "mapPreviewTo"]
+         "mapStop", "mapSortie", "mapRegionFly", "mapPreviewTo", "drawerGrab"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 APP = webharness.APP  # 三個檔（main.js、map.js、app.js）接起來的那一份
 # 一個夠大的地圖框：整張天下都在「畫面附近」，字一處都不會因為在畫面外被略過
@@ -1926,3 +1926,50 @@ return { tray, ids: H.nearList(H.S.mapBase, H.S.mapState).map((b) => b.id), head
     n = int(re.search(r'data-act="map-sortie">可出陣 (\d+) ›<', out["tray"]).group(1))
     assert n == len(out["ids"]) == sum(1 for x, q in st["places"].items() if q["sortie"] and x != "nanyang_wilds") and "nanyang_wilds" not in out["ids"]
     assert out["head"] == f"可出陣・{n} 處"
+
+
+# ── W2 第二輪（2026-10-31，QA qa/map-view-w2 開的 FB-9090～FB-9095；PM 10/31 定 9090、9091、9092、9093、9095 在 W2 修）──
+# 把手（#mgrab）照瀏覽器真的順序點：pointerdown → pointerup →（版面照 pointerup 做的事換了）→ 瀏覽器照新的版面在同一點找元素送 click
+# （觸控的 click 是放手之後才照那一點命中的：CDP Input.dispatchTouchEvent 量到的，QA 的 FB-9090）。elementFromPoint 照抽屜此刻的高算：
+# 抽屜上面是地圖、抽屜頂上 22px 是把手、把手底下是抽屜的內文——一排卡那一格時，內文那一帶是附近那一排的卡（點了開那一處）。
+GRAB_DOM = """
+const L = {}, FRAME = 650;
+const grab = { dataset: {}, addEventListener: (t, f) => { (L[t] = L[t] || []).push(f); }, setPointerCapture() {}, closest: () => null };
+drawer.classList = { add() {}, remove() {} };
+Object.defineProperty(drawer, 'offsetHeight', { get: () => parseFloat(drawer.style.height) || 0 });
+els.mgrab = grab;
+const card = { dataset: { act: 'map-place', id: 'changshe' }, classList: { contains: () => false } }; card.closest = () => card;
+const inner = { closest: () => null }, land = { closest: () => null };
+const hitAt = (y) => { const top = FRAME - (parseFloat(drawer.style.height) || 0); return y < top ? land : y < top + 22 ? grab : H.S.mapDrawer === 'row' ? card : inner; };
+const send = (type, y, extra = {}) => { const ev = { type, pointerId: 1, pointerType: 'touch', button: 0, clientX: 187, clientY: y, ...extra }; for (const f of L[type] || []) f(ev); };
+// 瀏覽器的 click：照此刻的版面命中，先給命中的那一個（把手自己的監聽），再冒泡到 document（app.js 那一大串 case）
+const click = (y) => {
+  const t = hitAt(y), ev = { type: 'click', target: t, clientX: 187, clientY: y, stopped: false, stopPropagation() { this.stopped = true; }, preventDefault() {} };
+  if (t === grab) for (const f of L.click || []) f(ev);
+  if (!ev.stopped) for (const f of T.docListeners.click || []) f(ev);
+  return t === card ? 'card' : t === grab ? 'grab' : t === land ? 'land' : 'inner';
+};
+const tap = (y) => { send('pointerdown', y); send('pointerup', y); return click(y); };
+const grabY = () => FRAME - (parseFloat(drawer.style.height) || 0) + 11;
+"""
+
+
+def test_fb9090_tapping_the_handle_opens_the_row_without_the_click_landing_on_a_card():
+    """FB-9090：把手點一下（沒點地點時一行 ⇄ 一排卡）不能讓那一下的 click 落到換格之後滑到手指底下的卡上。以前 pointerup 就換格，瀏覽器接著照新的
+    版面在同一點送 click，那裡此刻是附近那一排的卡（長社），開了長社的卡、一排卡從頭到尾沒露出來。現在點一下在把手的 click 換格（命中的還是把手），
+    拖照舊在 pointer 事件裡；拖完（滑鼠按放都在把手上）多出來的那一個 click 不算點一下，可是下一次按下去的 click 照算。"""
+    out = run(_w2(), DRAWER_DOM + GRAB_DOM + """const res = {};
+H.setMapDrawer('peek'); H.drawerGrab();
+for (const k of ['one', 'two', 'three']) res[k] = { hit: tap(grabY()), drawer: H.S.mapDrawer, mode: H.S.mapMode, sel: H.S.mapSel, h: drawer.style.height };
+// 拖：按下、往上拖 130px、放開（靠到一排卡）；滑鼠的話按放都在把手上，瀏覽器還會送一個 click——不算點一下（不再換回一行）
+H.mapBack(); H.setMapDrawer('peek');
+let y = grabY(); send('pointerdown', y); send('pointermove', y - 60); send('pointermove', y - 130); send('pointerup', y - 130);
+const dragged = H.S.mapDrawer; for (const f of L.click || []) f({ type: 'click', target: grab, stopPropagation() {}, preventDefault() {} });
+res.drag = { stop: dragged, after: H.S.mapDrawer };
+// 拖完之後真的再點一下：照算
+res.next = { hit: tap(grabY()), drawer: H.S.mapDrawer };
+return res;""")
+    assert [out[k]["drawer"] for k in ("one", "two", "three")] == ["row", "peek", "row"], out
+    for k in ("one", "two", "three"):
+        assert out[k]["hit"] == "grab" and out[k]["mode"] == "overview" and out[k]["sel"] is None, (k, out[k])
+    assert out["drag"] == {"stop": "row", "after": "row"} and out["next"] == {"hit": "grab", "drawer": "peek"}
