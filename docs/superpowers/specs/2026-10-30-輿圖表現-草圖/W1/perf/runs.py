@@ -1,4 +1,5 @@
-"""runs.py <perf.jsonl> <dpr> <throttle> <手勢>：每一次（六次）的 p95、超過 33ms、超過 50ms、最大，照版本列出來；另算 Mann-Whitney U（看是不是雜訊）。"""
+"""runs.py <perf.jsonl> <dpr> <throttle> <手勢>：每一次（六次）的 p95、超過 33ms、超過 50ms、最大，照版本列出來；另算 Mann-Whitney U（看是不是雜訊）。
+注意（W1 審查 2026-10-31）：六次是兩個瀏覽器 × 三次，同一個瀏覽器裡的三次不獨立，這裡的 Mann-Whitney 是偽重複、p 不成立；只當每一次的清單看。"""
 import io
 import json
 import sys
