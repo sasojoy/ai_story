@@ -6,9 +6,11 @@ from unittest import mock
 
 import pytest
 from jianfa_kit import jianfa_game, ready
+from test_outing import _game, _walked, _with_ink
 
 from conftest import real_content
 from tianxia import content as content_mod
+from tianxia import speech
 from tianxia.core import features as features_core
 from tianxia.core.option import IDLE_MARK
 from tianxia.features.explore import explore_rules, outing_rules
@@ -48,3 +50,19 @@ def test_the_menu_explores_once_and_the_outing_walks_one_segment():
         assert game.outing_go(1) == []
     trip = p.outing
     assert (trip.total, trip.done, trip.end) == (1, 1, outing_rules.DONE) and p.stamina == before - 2 * step
+
+
+def test_the_wall_refuses_the_words_the_tavern_wall_refuses_and_keeps_the_ink():
+    """審查修正（回歸鏡頭）：走一趟留言除了字表（髒話）還擋三個字（假人、機器人、外掛；同酒肆題壁，牆上不寫這幾個字，也是不讓畫面透露
+    誰是假人的守門）。以前沒有任何測試守這一行（變異成 `if False:` 全綠）：把字表清空，讓擋下的只可能是這一道；擋下的不用墨、不刻字。"""
+    game = _game()
+    _walked(game)
+    _with_ink(game)
+    game.content.banned_words = []
+    for word in ("假人", "機器人", "外掛"):
+        text = f"此處有{word}"
+        assert speech.problem(text, game.content, speech.MOTTO, game.content.config.jianfa.outing_say_max) is None  # 字表碰不到
+        assert game.outing_say(text=text) == [speech.BLOCKED]
+    assert game.outing_ink_left() == 1 and game.state.world.inscriptions == []
+    game.outing_say(text="此處風大")  # 沒犯忌的照常刻下去、用掉那一張
+    assert [i.text for i in game.state.world.inscriptions] == ["此處風大"] and game.outing_ink_left() == 0
