@@ -2,7 +2,7 @@
 
 開著（season21：豪強分屬兩軍、減法季開著）：貢獻呼叫點改走 wins.credit（豪強另記此刻幫的那一軍那一本）、投靠豪強照投靠點直接給傾向、
 拜入曹氏莊院照門派所在地給、「改幫…」隨時換（不算叛投、不發傳聞、帳不清、名冊與活躍名單搬邊、舊那一軍的懸賞作廢）、叛投不列
-同陣營換一軍的槽、叛投清掉兩本帳。關著（four_wins 關掉、或週末設定）照舊。正式內容、建 Game，整個檔標 slow。"""
+同陣營換一軍的槽、叛投清掉兩本帳。正式內容、建 Game，整個檔標 slow。"""
 from __future__ import annotations
 
 from unittest import mock
@@ -32,8 +32,6 @@ def test_validate_wants_haoqiang_allied_with_four_wins():
     content.config.haoqiang_allied = False
     with pytest.raises(ContentError, match="haoqiang_allied"):
         validate(content)
-    content.config.jianfa.four_wins = False
-    validate(content)  # 子開關關著不驗
 
 
 def test_validate_checks_the_lean_defaults():
@@ -58,12 +56,6 @@ def test_join_gentry_takes_the_join_point_lean(place, side):
     assert game.world.roll_of(p.name) == f"haoqiang@{side}"
 
 
-def test_join_gentry_off_still_picks_a_side():
-    game = wins_game(wins_content(off=True), at="haozu_fort")
-    game.choose("faction:haoqiang")
-    assert ids(game) == ["faction:ally:guan", "faction:ally:huang", "faction:cancel"]
-
-
 def test_sect_join_takes_the_manor_lean():
     """拜入曹氏莊院而投靠（PM 2026-10-25 第 5 件）：照門派所在地，預設幫官軍；不出選邊鈕。"""
     game = wins_game(at="cao_manor")
@@ -75,15 +67,6 @@ def test_sect_join_takes_the_manor_lean():
     assert msgs[-1] == "你依附了官軍。"
     assert not [i for i in ids(game) if i.startswith("faction:ally:")]
     assert game.world.roll_of(p.name) == "haoqiang@guan"
-
-
-def test_sect_join_off_waits_for_a_side():
-    game = wins_game(wins_content(off=True), at="cao_manor")
-    game.state.pending_event = "cao_manor_join"
-    with _win():
-        game.choose("choice:0")
-    assert game.state.player.ally is None
-    assert ids(game) == ["faction:ally:guan", "faction:ally:huang"]
 
 
 # ── 兩本帳 ─────────────────────────────
@@ -106,12 +89,6 @@ def test_army_credit_keeps_no_books():
     assert game.state.player.contrib > 0 and game.state.player.ledgers == {}
 
 
-def test_off_gentry_credit_keeps_no_books():
-    game = wins_game(wins_content(off=True), faction="haoqiang", ally="guan", at="zhuo_militia_hall")
-    game.push_trend("yingru", -2, source="event")
-    assert game.state.player.contrib > 0 and game.state.player.ledgers == {}
-
-
 def test_showdown_credits_the_side_it_joined():
     """決戰的戰功記參戰那一刻那一邊那一本（計畫 5.0 第 12 條）：中途改幫另一軍，這一場照舊記原來那一軍。"""
     from tianxia.battle_instance import BattleParticipant
@@ -119,8 +96,6 @@ def test_showdown_credits_the_side_it_joined():
     game = wins_game(faction="haoqiang", ally="huang", at="zhuo_militia_hall")
     me = BattleParticipant(name=game.state.player.name, faction="guan", neili=100, neili_cap=100)
     assert game._showdown_credits(me)
-    off = wins_game(wins_content(off=True), name="乙客", faction="haoqiang", ally="huang", at="zhuo_militia_hall")
-    assert not off._showdown_credits(BattleParticipant(name="乙客", faction="guan", neili=100, neili_cap=100))
     army = wins_game(name="丙客", faction="huang", at="julu_altar")
     assert army._showdown_credits(BattleParticipant(name="丙客", faction="huang", neili=100, neili_cap=100))
     assert not army._showdown_credits(BattleParticipant(name="丙客", faction="guan", neili=100, neili_cap=100))
@@ -184,10 +159,6 @@ def test_lean_lapse_line_does_not_sound_like_a_defection():
 def test_lean_options_only_for_gentry_when_on():
     assert not [i for i in ids(wins_game(faction="guan", at="changshe")) if i.startswith(wins.LEAN_PREFIX)]
     assert not [i for i in ids(wins_game(name="乙客", at="changshe")) if i.startswith(wins.LEAN_PREFIX)]
-    off = wins_game(wins_content(off=True), name="丙客", faction="haoqiang", ally="guan", at="changshe")
-    assert not [o for o in off.options() if o.id.startswith(wins.LEAN_PREFIX)]
-    assert off.choose("faction:lean:huang") == ["（此刻無法這麼做。）"]
-    assert off.state.player.ally == "guan"
 
 
 def test_lean_switch_follows_a_mustering_battle():
@@ -208,8 +179,6 @@ def test_defect_has_no_same_faction_slot_when_on():
     assert defection.refusal(game.state, game.content, target, None, "huang") == wins.LEAN_NOT_DEFECT
     army = wins_game(name="乙客", faction="guan", at="zhuo_militia_hall")
     assert {(f.id, ally) for f, ally in defection.slots_here(army.state, army.content)} == {("haoqiang", "guan"), ("haoqiang", "huang")}
-    off = wins_game(wins_content(off=True), name="丙客", faction="haoqiang", ally="guan", at="zhuo_militia_hall")
-    assert ("haoqiang", "huang") in [(f.id, ally) for f, ally in defection.slots_here(off.state, off.content)]
 
 
 def test_defect_clears_the_books():

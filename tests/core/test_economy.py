@@ -1,5 +1,5 @@
 """素材與經濟（docs/superpowers/specs/2026-10-15-素材與經濟-design.md）第四～六節的純規則（tianxia/economy.py）：
-收購、升階、捐軍備的價錢、比例、每日上限、軍備的對應、捐軍備推哪一條線。正式內容、週末設定（Config.economy 預設開）。
+收購、升階、捐軍備的價錢、比例、每日上限、軍備的對應、捐軍備推哪一條線。正式內容、7 天季（week7；Config.economy 預設開）。
 素材：一階 rou_1 柳絲綿、二階 rou_2 流雲絮、三階 rou_3 化水晶（柔）；慢 man_*。"""
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def _state(faction="guan", at="changshe", silver=500, bag=None, profile="week7",
     if same is not None:
         c.config.economy.upgrade_same_share = same  # 1＝一定照投入的屬性（量價錢、上限的測試不看擲骰）
     s = new_game_state(c, "沈浪")
-    s.world = fresh_season(c)  # 照設定蓋章：週末設定是第一季的規則
+    s.world = fresh_season(c)  # 照設定蓋章：week7 是第一季的規則
     p = s.player
     p.faction, p.location = faction, at
     p.stats["silver"] = silver

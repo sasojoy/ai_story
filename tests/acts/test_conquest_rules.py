@@ -1128,8 +1128,8 @@ def test_yellow_turbans_took_the_two_neutral_blocks():
 
 
 @pytest.mark.slow  # 單一條超過一秒（2026-10-27 測試整理 4 量的）
-def test_han_army_took_runan_wilds_on_the_weekend():
-    """開著的季，佔領二（週末）：官軍拿下汝南荒野。"""
+def test_han_army_took_runan_wilds_in_week7():
+    """開著的季，佔領二（7 天季）：官軍拿下汝南荒野。"""
     game = conquest_game("week7")
     d, msgs, battle, season = _muster(game, given={"runan_wilds": "guan"})
     assert battle.front_note == bi.FrontNote(line="yingru", start=64, held={"guan": 9, "huang": 5}, open=1)

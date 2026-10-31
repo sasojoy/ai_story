@@ -72,7 +72,7 @@ def sides_card(game: Game) -> dict | None:
     s, c = game.state, game.content
     if not c.scenario.factions or s.world.ended or prologue_rules.active(s, c) or opening_rules.pending(s, c):  # 開局三選一還沒選：先不畫（批 7）
         return None
-    four = rules.jianfa(c, s.world, "four_wins")
+    four = rules.jianfa(c, s.world)
     standing = rules.stances(s, c) if rules.season_one(c, s.world) else None
     mine = s.player.faction
     extra = game.sides_card() if four else None  # 批 3c（Game.sides_card）：豪強那一格的「現在」、贏了給（照 Config.jianfa.tiers）、投靠點的分鐘
