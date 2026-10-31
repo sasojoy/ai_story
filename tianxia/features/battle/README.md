@@ -24,5 +24,6 @@
 - 補送、軍餉、行狀：`tests/battle/test_battle_merit.py`、`tests/core/test_annals.py`、`tests/core/test_prologue.py`、`tests/core/test_renown_cross.py`、`tests/figures/test_front_lines.py`、`tests/figures/test_gentry_allied.py`、`tests/seal/test_seal_mandate.py`、`tests/battle/test_maxed_xinde.py`、`tests/battle/test_renown_deeds.py`、`tests/battle/test_four_wins_wiring.py`、`tests/map/test_four_wins_lean_anytime.py`（後兩個整檔 slow）、`tianxia/features/sortie/tests/test_sortie_rewards.py`（`_showdown_tier4`）。
 - 放手一搏：`tests/server/test_server.py`（`battle_text` 三段式）、`tests/arts/test_in_lock_model_timeout.py`、`tests/core/test_season_pause.py`。
 - 一起跑：`scripts/test_for.py --base <分支> <改的包檔> <上面那幾個檔> --slow`（直接給的測試檔連 slow 一起跑）。
+- 前後對照：`scripts/same_behavior.py compare --tracks battle`（決戰一軌；送給假模型的兩張單子——放手一搏評分、補劇情——的提示整份寫進輸出，幕、陣營名、原句、點名、性別改了比得出來；上一季才補的、補回的戰報排進別的戰報中間也走到）。季終收兵那一支它走不到，由 `test_showdown_delivery.py` 守。
 
 **過渡 import**：`view.py` 6 行（18 個模組）、`rules.py` 1 行 import 還沒搬的舊模組（`annals`、`battle_instance`、`battlelog`、`tactics`、`conquest`、`siege`、`cultivation`、`four_tiers`、`materials`、`mounts`、`renown`、`roster`、`figure_life`、`front_lines`、`generals`、`seal`、`wins`、`prologue`，註「過渡：待搬」）；`battle_instance`、`battlelog`、`tactics` 是戰鬥規則核心（總表裁定歸共用規則層，第 15 批登記）。沒有舊名的別名（這一批沒有整個模組要搬）。
