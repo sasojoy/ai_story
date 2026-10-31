@@ -73,6 +73,17 @@
 .shop-layer.shop-mall .look-card small { font-size: 11px; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .shop-layer.shop-mall .look-card .btn .ingot { width: 14px; height: 10px; margin-right: 3px; }
 .shop-layer.shop-mall .look-on { font: 600 13px var(--serif); color: #f2c46a; letter-spacing: 0.2em; }
+/* 自建形象（第二批）：下單的表單與自己的訂單（字跟著外面，不另寫字級） */
+.shop-layer.shop-mall .look-order-form { display: grid; gap: 6px; margin: 6px 0; }
+.shop-layer.shop-mall .look-order-form .btn { justify-self: end; display: inline-flex; align-items: center; gap: 4px; }
+.shop-layer.shop-mall .look-orders { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.shop-layer.shop-mall .look-order-row { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; padding: 6px 10px; border-radius: 10px;
+  border: 1px solid #6b4a2e; background: rgba(0, 0, 0, 0.22); color: #c9b28a; }
+.shop-layer.shop-mall .look-order-row b { color: #f2e5c6; }
+.shop-layer.shop-mall .look-order-row small { grid-column: 1 / -1; }
+.shop-layer.shop-mall .look-st { justify-self: end; color: #f2c46a; }
+.shop-layer.shop-mall .look-st.st-made { color: #9fd0a8; }
+.shop-layer.shop-mall .look-st.st-rejected { color: #e0a08a; }
 .shop-layer.shop-mall .mall-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; margin: 0 0 8px;
   padding: 10px 12px; border-radius: 12px; border: 1px solid #f2c46a; background: linear-gradient(135deg, rgba(242, 196, 106, 0.14), rgba(43, 22, 22, 0.85) 55%);
   color: inherit; text-align: left; cursor: pointer; }
@@ -154,3 +165,11 @@
 .card.mall-today .moon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-family: var(--serif); }
 .card.mall-today b { display: block; font-family: var(--serif); }
 .card.mall-today .mt > span { display: block; font-size: 13px; color: var(--ink-2); }
+
+/* 設定頁管理者區的「自建形象」（第二批） */
+.look-admin { display: grid; gap: 6px; margin: 6px 0; }
+.look-admin p { margin: 0; }
+.look-sheets { display: flex; flex-wrap: wrap; gap: 4px; }
+.look-sheets span { padding: 0 6px; border-radius: 6px; border: 1px solid var(--line, #ccc); opacity: 0.55; }
+.look-sheets span.ok { opacity: 1; border-color: #4f8a5b; }
+.look-gen { white-space: pre-wrap; word-break: break-word; margin: 4px 0; padding: 6px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.05); }

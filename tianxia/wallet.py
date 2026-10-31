@@ -147,6 +147,19 @@ class Wallet:
             data["used"] = time
             conn.execute("UPDATE mall_purchases SET data = ? WHERE id = ?", (json.dumps(data, ensure_ascii=False), pid))
 
+    def update_data(self, pid: int, **fields) -> None:
+        """改一筆購買 data 裡的幾個欄位（自建形象的訂單照它換狀態）；其餘照舊。"""
+        with self.db.transaction() as conn:
+            r = conn.execute("SELECT data FROM mall_purchases WHERE id = ?", (pid,)).fetchone()
+            data = json.loads(r["data"]) if r is not None else {}
+            data.update(fields)
+            conn.execute("UPDATE mall_purchases SET data = ? WHERE id = ?", (json.dumps(data, ensure_ascii=False), pid))
+
+    def purchases_of(self, item: str) -> list[Purchase]:
+        """全部錢包買過這一件的紀錄（舊的在前）：管理者看自建形象的訂單用。"""
+        with self.db.snapshot() as conn:
+            return [_purchase(r) for r in conn.execute("SELECT * FROM mall_purchases WHERE item = ? ORDER BY id", (item,))]
+
     def mark_refunded(self, pid: int, time: float) -> None:
         with self.db.transaction() as conn:
             conn.execute("UPDATE mall_purchases SET refunded = ? WHERE id = ?", (time, pid))

@@ -55,7 +55,7 @@
   function ringBody(look, sheet) {
     if (!look || !/^[a-z0-9_]+$/.test(look)) return RA.imgs[sheet];
     const key = `${look}/${sheet}`;
-    if (!RA.imgs[key]) RA.add(key, `${RING_LOOKS}${look}/${sheet}.webp`);
+    if (!RA.imgs[key]) RA.add(key, /^u\d+$/.test(look) ? `/api/looks/img/${look}/${sheet}` : `${RING_LOOKS}${look}/${sheet}.webp`); // 自建的由伺服器送
     return ringReady(RA.imgs[key]) ? RA.imgs[key] : RA.imgs[sheet];
   }
   const ringArms = (kind) => RING_ARMS[kind] || [null, "fist"];

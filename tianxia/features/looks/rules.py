@@ -14,6 +14,8 @@ from tianxia.core.services import look_ids
 from tianxia.models import Content
 from tianxia.wallet import Wallet
 
+from . import orders
+
 DEFAULT = ""  # 預設的斗笠小子
 DEFAULT_NAME = "斗笠小子"
 WEAR_KIND, WEAR_KEY = "look", "wear"
@@ -31,14 +33,14 @@ def on(content: Content) -> bool:
     return content.config.mall.enabled and bool(content.looks)
 
 
-def name_of(content: Content, look: str) -> str:
+def name_of(content: Content, look: str, custom: dict[str, str] | None = None) -> str:
     known = content.looks.get(look)
-    return known.name if known else DEFAULT_NAME
+    return known.name if known else (custom or {}).get(look, DEFAULT_NAME)
 
 
 def owned(content: Content, wallet: Wallet, owner: str) -> list[str]:
-    """買到、而且內容裡還認得的那幾套（舊的在前）；預設的不算。"""
-    return [look for look in look_ids(wallet, owner) if look in content.looks]
+    """買到、而且還認得的那幾套（舊的在前）：內容裡的官方形象，加上自己下單、上架了的自建形象（u<購買 id>）；預設的不算。"""
+    return [look for look in look_ids(wallet, owner) if look in content.looks or orders.is_custom(look)]
 
 
 def worn(content: Content, wallet: Wallet, owner: str) -> str:
@@ -52,10 +54,11 @@ def wear(content: Content, wallet: Wallet, owner: str, look: str) -> tuple[bool,
     """換上一套（DEFAULT 是換回斗笠小子）：回（換了沒、那一句）。"""
     if look != DEFAULT and look not in owned(content, wallet, owner):
         return False, NOT_OWNED
+    custom = orders.names(wallet, owner)
     if look == worn(content, wallet, owner):
-        return False, ALREADY.format(name=name_of(content, look))
+        return False, ALREADY.format(name=name_of(content, look, custom))
     wallet.set_entitlement(owner, WEAR_KIND, WEAR_KEY, {"look": look})
-    return True, WORN.format(name=name_of(content, look))
+    return True, WORN.format(name=name_of(content, look, custom))
 
 
 def bot_look(content: Content, name: str) -> str:
@@ -70,12 +73,23 @@ def bot_look(content: Content, name: str) -> str:
 def view(content: Content, wallet: Wallet, owner: str, shop: dict[str, str]) -> dict:
     """萬寶閣「形象」那一頁：穿著哪一套、每一套（預設在最前）買了沒、沒買的賣哪一件商品（shop：look id → 商品 id，沒上架的不在）。"""
     have = set(owned(content, wallet, owner))
-    items = [{"id": DEFAULT, "name": DEFAULT_NAME, "note": "", "owned": True, "item": None}]
+    items = [{"id": DEFAULT, "name": DEFAULT_NAME, "note": "", "owned": True, "item": None, "mine": False}]
     for look in content.looks.values():
         if look.id in have or look.id in shop:
             items.append({"id": look.id, "name": look.name, "note": look.note, "owned": look.id in have,
-                          "item": None if look.id in have else shop[look.id]})
-    return {"worn": worn(content, wallet, owner), "looks": items}
+                          "item": None if look.id in have else shop[look.id], "mine": False})
+    mine = orders.mine(wallet, owner)
+    for o in reversed(mine):  # 自建的、上架了的（舊的在前）
+        if o.status == orders.MADE and o.look in have:
+            items.append({"id": o.look, "name": o.name, "note": o.prompt, "owned": True, "item": None, "mine": True})
+    item = orders.item_of(content)
+    order = None if item is None else {
+        "price": item.price, "name_max": orders.NAME_MAX, "prompt_max": orders.PROMPT_MAX,
+        "open": any(o.status in (orders.PENDING, orders.REVIEW) for o in mine),
+        "list": [{"id": o.pid, "name": o.name, "prompt": o.prompt, "status": o.status, "status_text": orders.STATUS_TEXT[o.status],
+                  "reason": o.reason} for o in mine],
+    }
+    return {"worn": worn(content, wallet, owner), "looks": items, "order": order}
 
 
 def problems(content: Content) -> list[str]:

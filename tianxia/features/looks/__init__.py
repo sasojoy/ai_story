@@ -20,6 +20,17 @@ class LooksFeature(Feature):
 
         return rules.on(ctx.content)
 
+    def status(self, ctx) -> dict:
+        """管理者的設定頁多一組「自建形象」（main.looks_admin）：賣自建形象、而且是管理者才有。"""
+        from . import orders  # noqa: PLC0415
+
+        return {"looks_admin": True} if ctx.is_admin() and orders.item_of(ctx.content) is not None else {}
+
+    def admin_tools(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415
+
+        return routes.admin_tools(shell)
+
     def routes(self, shell):
         from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）
 

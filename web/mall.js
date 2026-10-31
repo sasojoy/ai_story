@@ -227,9 +227,11 @@
 
   // ── 擂台形象（功能包 tianxia/features/looks/；Joy 2026-10-31）：萬寶閣「形象」那一頁。每一套一張卡：站著的那一格當預覽、名字、
   // 說明；穿著的寫「穿著」，買了的一顆「換上」，沒買的一顆「買（價錢）」（點了跟貨架同一條購買確認）。預設的斗笠小子永遠在最前 ──
-  const LOOK_IMG = (id) => (id ? `/static/img/looks/${id}/hero_bare_idle.webp` : "/static/img/arena/hero_bare_idle.webp");
+  // 官方的在 /static/img/looks/<id>/，自建的（u<數字>）由伺服器從資料庫旁邊送（/api/looks/img/<id>/<張>）
+  const LOOK_IMG = (id) => (/^u\d+$/.test(id || "") ? `/api/looks/img/${id}/hero_bare_idle`
+    : /^[a-z0-9_]+$/.test(id || "") ? `/static/img/looks/${id}/hero_bare_idle.webp` : "/static/img/arena/hero_bare_idle.webp");
   function lookFaceHtml(id) { // 站著那張的第一格（四格一張、880×220）裁成一個人
-    return `<span class="look-face" aria-hidden="true" style="background-image:url('${LOOK_IMG(/^[a-z0-9_]*$/.test(id || "") ? id : "")}')"></span>`;
+    return `<span class="look-face" aria-hidden="true" style="background-image:url('${LOOK_IMG(id)}')"></span>`;
   }
   function mallLooksHtml(d) {
     if (!d) return mallFailHtml();
@@ -242,7 +244,43 @@
       return `<div class="look-card${lk.id === d.worn ? " on" : ""}">${lookFaceHtml(lk.id)}<b>${esc(lk.name)}</b>
         ${lk.note ? `<small>${esc(lk.note)}</small>` : ""}${btn}</div>`; // 說明照字折行（三欄一格窄，切成不折行的小段會撐出格子）
     };
-    return `<div class="mall-sub">擂台形象</div><div class="mall-grid look-grid">${d.looks.map(card).join("")}</div>`;
+    return `<div class="mall-sub">擂台形象</div><div class="mall-grid look-grid">${d.looks.map(card).join("")}</div>${lookOrderHtml(d.order)}`;
+  }
+
+  // 自建形象（第二批）：寫名字與一句樣子下單（先扣元寶），圖做好、管理者看過才上架；退回的元寶全退。一次一張
+  const LOOK_ORDER_NOTE = "寫一句這一套長什麼樣子，例如「白衣書生，背著竹簍」。圖做好、審核過了才會出現在上面；沒通過的元寶全退。"; // 待 joy 潤
+  function lookOrderHtml(o) {
+    if (!o) return "";
+    const list = (o.list || []).map((x) => `<li class="look-order-row"><b>${esc(x.name)}</b><span class="look-st st-${esc(x.status)}">${esc(x.status_text)}</span>
+        <small>${esc(x.prompt)}${x.reason ? `（${esc(x.reason)}）` : ""}</small></li>`).join("");
+    const form = o.open ? `<p class="mall-note">${esc("你還有一張在做，等它好了再下一張。")}</p>`
+      : `<div class="look-order-form"><input class="input" id="look-name" maxlength="${o.name_max | 0}" placeholder="名字（${o.name_max | 0} 字內）" autocomplete="off" value="${esc(S.lookDraft ? S.lookDraft.name : "")}">
+        <textarea class="input" id="look-prompt" maxlength="${o.prompt_max | 0}" rows="2" placeholder="長什麼樣子（${o.prompt_max | 0} 字內）">${esc(S.lookDraft ? S.lookDraft.prompt : "")}</textarea>
+        <button class="btn small primary" data-act="look-order">${ingotSvg()}${o.price | 0} 下單</button></div>`;
+    return `<div class="mall-sub">自建形象</div><p class="mall-note">${esc(LOOK_ORDER_NOTE)}</p>${form}${list ? `<ul class="look-orders">${list}</ul>` : ""}`;
+  }
+  function lookOrderAsk() {
+    const name = (document.getElementById("look-name")?.value || "").trim();
+    const prompt = (document.getElementById("look-prompt")?.value || "").trim();
+    S.lookDraft = { name, prompt };
+    if (!name || !prompt) { S.mallSay = { text: !name ? "先替這一套取個名字。" : "寫一句這一套長什麼樣子。", ok: false }; renderMall(); return; }
+    const o = S.mallLooks && S.mallLooks.order;
+    const ref = mallRef();
+    ask(`花 ${o ? o.price | 0 : 0} 元寶下單自建形象「${name}」？審核沒過元寶全退。`, "下單", () => lookOrder(name, prompt, ref));
+  }
+  async function lookOrder(name, prompt, ref) {
+    await busy(async () => {
+      const r = await api("/api/looks/order", { name, prompt, ref });
+      if (r.looks) S.mallLooks = r.looks;
+      if (r.main) setMain(r.main);
+      if (r.main && r.main.mall && S.mallData) S.mallData.balance = r.main.mall.balance; // 招牌旁的餘額照貨架那一份：當場換
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      const ok = !!(r.looks && r.looks.order && r.looks.order.open);
+      if (ok) S.lookDraft = null;
+      S.mallSay = text ? { text, ok } : null;
+      renderTop();
+      if (S.mallOpen) renderMall();
+    });
   }
   async function loadLooks() {
     try {
@@ -421,6 +459,56 @@
     const reissue = op === "mall_reissue";
     ask(reissue ? `替${name}補發 ${amount} 元寶（原因：${note}），寫進帳，確定？` : `從${name}扣回 ${amount} 元寶（原因：${note}；餘額不能扣成負的），寫進帳，確定？`,
       reissue ? "確定補發" : "確定扣回", () => mallAdminDo(op, body));
+  }
+
+  // 管理者區「自建形象」（第二批）：還沒做完的訂單一張一格——下單的人、名字、樣子、九張到了幾張、給生圖工具的提示詞（展開才看）、
+  // 上傳（一次選好幾張，檔名照九張的名字：hero_bare_idle.png……）、上架、退回（原因寫給下單的人看）。按「看訂單」才抓
+  function looksAdminHtml() {
+    const d = S.adLooks;
+    const head = `<p class="muted">自建形象（玩家下的單：照提示詞生圖、切成 220 格〔scripts/cut_look.py〕再上傳；九張齊了看過再上架）</p>
+      <div class="row wrap"><button class="btn small" data-act="looks-admin" data-op="load">看訂單</button></div>
+      <p class="form-msg${S.adLooksOk ? " ok" : ""}" role="alert">${esc(S.adLooksMsg || "")}</p>`;
+    if (!d) return head;
+    const row = (o) => {
+      const have = new Set(o.have || []);
+      const sheets = Object.keys(d.sheets || {});
+      const faces = sheets.map((s) => `<span class="${have.has(s) ? "ok" : ""}">${esc(s.replace("hero_", ""))}</span>`).join("");
+      const prompts = Object.entries(o.prompts || {}).map(([s, text]) => `<details><summary>${esc(s)}</summary><pre class="look-gen">${esc(text)}</pre></details>`).join("");
+      return `<div class="card look-admin"><b>#${o.id | 0}「${esc(o.name)}」</b>・${esc(o.owner)}・${esc(o.status_text)}${o.reason ? `（${esc(o.reason)}）` : ""}
+        <p>${esc(o.prompt)}</p>${o.prompts && Object.keys(o.prompts).length ? `<div class="look-sheets">${faces}</div>${prompts}
+        <div class="row wrap"><input type="file" id="ad-looks-file-${o.id | 0}" accept="image/png,image/webp" multiple aria-label="上傳九張">
+        <button class="btn small" data-act="looks-admin" data-op="upload" data-id="${o.id | 0}">上傳</button>
+        <button class="btn small primary" data-act="looks-admin" data-op="release" data-id="${o.id | 0}" ${have.size === sheets.length ? "" : "disabled"}>上架</button></div>
+        <div class="row"><input class="input" id="ad-looks-note-${o.id | 0}" placeholder="退回的原因（必填）" maxlength="100"><button class="btn warn small" data-act="looks-admin" data-op="reject" data-id="${o.id | 0}">退回</button></div>` : ""}</div>`;
+    };
+    return head + (d.open.length ? d.open.map(row).join("") : `<p class="muted">沒有等著做的訂單。</p>`) + d.done.map(row).join("");
+  }
+  async function looksAdminDo(op, id) {
+    const done = async (r) => {
+      const text = (r && r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      S.adLooksMsg = text; S.adLooksOk = !!text && !text.startsWith("（");
+    };
+    await busy(async () => {
+      if (op === "upload") {
+        const input = document.getElementById(`ad-looks-file-${id}`);
+        const files = Array.from((input && input.files) || []);
+        if (!files.length) { S.adLooksMsg = "先選圖（檔名照九張的名字）。"; S.adLooksOk = false; }
+        const said = [];
+        for (const f of files) {
+          const data = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(",")[1] || ""); fr.onerror = no; fr.readAsDataURL(f); });
+          const r = await api("/api/do/looks_upload", { id: Number(id), sheet: f.name.replace(/\.[^.]+$/, ""), data });
+          said.push((r.message || "").replace(/<[^>]+>/g, " ").trim());
+        }
+        if (said.length) { S.adLooksMsg = said[said.length - 1]; S.adLooksOk = !said.some((t) => t.startsWith("（")); if (!S.adLooksOk) S.adLooksMsg = said.filter((t) => t.startsWith("（")).join(" "); }
+      } else if (op === "release") {
+        await done(await api("/api/do/looks_release", { id: Number(id) }));
+      } else if (op === "reject") {
+        const note = (document.getElementById(`ad-looks-note-${id}`)?.value || "").trim();
+        await done(await api("/api/do/looks_reject", { id: Number(id), note }));
+      }
+      S.adLooks = await api("/api/admin/looks");
+      renderKeepingSheet();
+    });
   }
 
   async function mallAdminDo(op, body) {

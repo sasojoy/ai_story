@@ -46,3 +46,41 @@ def test_no_look_tab_without_looks_on_the_shelf(m_on):  # noqa: F811
     out = run(m_on, _async(_click('{ act: "mall-open" }') + "return { app: T.els.app.innerHTML };"), responses={"/api/mall": _view()})
     assert 'data-tab="look"' not in out["app"]
     assert 'data-tab="look"' in _layer(m_on)["app"]
+
+
+ORDER = {"price": 900, "name_max": 6, "prompt_max": 120, "open": False, "list": [
+    {"id": 3, "name": "黑衣客", "prompt": "黑衣蒙面", "status": "rejected", "status_text": "退回", "reason": "看不清楚"},
+]}
+
+
+def test_the_look_tab_has_the_order_form_and_my_orders(m_on):  # noqa: F811
+    looks = {**LOOKS, "order": ORDER}
+    out = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "look-order" }'),
+                 responses={"/api/looks": looks})
+    html = out["app"]
+    assert 'id="look-name"' in html and 'id="look-prompt"' in html and 'data-act="look-order"' in html
+    assert "黑衣客" in html and "退回" in html and "看不清楚" in html
+    assert "先替這一套取個名字" in html  # 沒填名字就按：掌櫃講原因、不送
+    assert not any(c[0] == "/api/looks/order" for c in out["calls"])
+
+
+def test_an_open_order_hides_the_form(m_on):  # noqa: F811
+    looks = {**LOOKS, "order": {**ORDER, "open": True, "list": [{**ORDER["list"][0], "status": "pending", "status_text": "等圖中", "reason": ""}]}}
+    html = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }'), responses={"/api/looks": looks})["app"]
+    assert 'id="look-name"' not in html and "等圖中" in html
+
+
+def test_the_admin_box_lists_open_orders_with_prompts(m_on):  # noqa: F811
+    import json
+
+    from test_mall_web import DRIVER as MALL_DRIVER
+
+    driver = MALL_DRIVER.replace('wholeApp(["S", ', 'wholeApp(["S", "looksAdminHtml", ', 1)
+    admin = {"sheets": {"hero_bare_idle": 4, "hero_bare_hit": 3}, "gen": "off", "done": [], "open": [
+        {"id": 5, "owner": "沈浪", "name": "白衣書生", "prompt": "白衣書生，背著竹簍", "status": "pending", "status_text": "等圖中",
+         "reason": "", "look": "u5", "have": ["hero_bare_idle"], "prompts": {"hero_bare_idle": "Style: idle", "hero_bare_hit": "Style: hit"}}]}
+    script = f"H.S.adLooks = {json.dumps(admin, ensure_ascii=False)}; return H.looksAdminHtml();"
+    html = webharness.run(driver, {"m": m_on, "script": script, "S": {}, "menxia": None, "stored": {}, "responses": {}})
+    assert "白衣書生，背著竹簍" in html and "Style: idle" in html
+    assert 'id="ad-looks-file-5"' in html and 'data-op="reject"' in html
+    assert 'data-op="release" data-id="5" disabled' in html  # 九張還沒齊：上架按不下去

@@ -60,6 +60,9 @@ EFFECTS: dict[str, EffectSpec] = {
     # 擂台形象（功能包 looks；Joy 2026-10-31「預設形象就是斗笠小子」、買的東西不能不見）：商品的 look 寫哪一套，購買那一列的 data 記
     # look_id，那一列就是這一套（帳號的，換季也帶著走）；穿哪一套在萬寶閣的「形象」那一頁換
     "look": EffectSpec("look", "擂台形象一套（換季也帶著走）", 1),
+    # 自建形象（功能包 looks 第二批）：寫一句樣子下單，那一列購買就是訂單（data 記 name、prompt、status）；不上貨架，在「形象」那一頁下單
+    # （looks.orders.place 自己記帳，同 buy 的那幾步）。審核過了那一列的 data 記 look_id＝u<購買 id>，就是買到的那一套；退回照退款
+    "look_order": EffectSpec("look", "自建形象一套（寫一句樣子，審核過了上架）", 1),
 }
 TICKET_NAMES = {"zhuan_art": "列傳插畫", "zhuan_seal": "紀念印", "zhuan_quote": "人物親筆評曰", "deep_slot": "深交名額", "inscribe": "題壁墨"}  # 退款那一句
 KIND_NAMES = {"look": "形象", "consumable": "消耗品", "card": "月卡", "pass": "通行證"}
@@ -122,6 +125,7 @@ RENAMED_CHRONICLE = "{old}改名{new}。"
 LOOK_GOT = "形象「{name}」（到萬寶閣的「形象」換上）"
 LOOK_OWNED = "你已經有「{name}」這一套形象了。"
 LOOK_BACK = "形象「{name}」收回。"
+
 
 
 @dataclass(frozen=True)
@@ -291,8 +295,8 @@ def buy(
             known = content.mall.get(done.item)
             return DUPLICATE.format(name=known.name if known else done.item)
         item = content.mall.get(item_id)
-        if item is None or not on_sale(item, day, season, moment):
-            return NO_ITEM
+        if item is None or not on_sale(item, day, season, moment) or item.effects.get("look_order"):
+            return NO_ITEM  # 自建形象只從形象包下單那一條買（looks.orders.place 帶名字與樣子），一般的購買不賣它
         problem = buy_problem(item, wallet, owner, day, season, moment)
         if problem:
             return problem
@@ -500,8 +504,8 @@ def view(content: Content, wallet: Wallet, owner: str, day: int, season: int, mo
     span = wallet.card(owner, CARD_KEY)
     items = []
     for item in content.mall.values():
-        if not on_sale(item, day, season, moment):
-            continue
+        if not on_sale(item, day, season, moment) or item.effects.get("look_order"):
+            continue  # 自建形象不上貨架（在「形象」那一頁下單）
         why = buy_problem(item, wallet, owner, day, season, moment)
         days = item.effects.get("card_days", 0)
         room = limit_left(item, wallet, owner, day, season)
@@ -635,7 +639,7 @@ def refund(
                 took.append(TICKET_BACK.format(name=name))
         if bought.data.get("look_id"):  # 形象：退了那一列就不算買到（正穿著的換回預設的斗笠小子，形象包讀的時候照 look_ids 看）
             look = content.looks.get(bought.data["look_id"])
-            took.append(LOOK_BACK.format(name=look.name if look else bought.data["look_id"]))
+            took.append(LOOK_BACK.format(name=look.name if look else bought.data.get("name") or bought.data["look_id"]))
         left = wallet.balance(owner)
     known = content.mall.get(bought.item)
     return REFUNDED.format(name=shown, item=known.name if known else bought.item, price=bought.price, left=left, took="".join(took))
@@ -656,7 +660,10 @@ def item_problems(item: MallItem, content: Content) -> list[str]:
             out.append(f"{where}：效果 {key} 是{KIND_NAMES[spec.kind]}的，這件的種類寫{KIND_NAMES[item.kind]}")
         if not 1 <= n <= spec.max:
             out.append(f"{where}：{key} 的數量要 1～{spec.max}（寫了 {n}）")
-    if item.kind == "look" or item.look:
+    if item.effects.get("look_order"):
+        if item.look or item.effects != {"look_order": 1}:
+            out.append(f"{where}：自建形象的效果只寫 {{\"look_order\": 1}}、不寫 look")
+    elif item.kind == "look" or item.look:
         if item.look not in content.looks:
             out.append(f"{where}：形象要寫 content/looks.json 裡的一套（寫了「{item.look}」）")
         if item.effects != {"look": 1}:
