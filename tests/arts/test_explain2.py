@@ -33,12 +33,12 @@ def test_each_war_element_has_its_explanation_in_season_one(on):
     assert set(help_) == {"stance", "fronts", "board", "quest"}
     assert all(help_[k] and all(isinstance(line, str) and line for line in help_[k]) for k in help_)
     stance = "".join(help_["stance"])
-    assert f"這一季是{on.scenario.name}" in stance and "潁川汝南、南陽、冀州" in stance and "割據" in stance  # 在打什麼、割據
+    assert f"這一季是{on.scenario.name}" in stance and "潁川汝南、南陽、冀州" in stance and "依附其中一邊" in stance  # 在打什麼、豪強依附一邊
     assert "亂局" in "".join(help_["fronts"]) and "0 是官軍穩控、100 是黃巾控制" in help_["fronts"][0]  # 三條戰線與亂局帶
     board = "".join(help_["board"])
     assert "擲骰" in board and "看戰況" in board and "史書寫定" in board and "決戰" in board and "關鍵伏筆" in board  # 大事怎麼定：戰況、伏筆、寫定的
     quest = "".join(help_["quest"])
-    assert "遊歷" in quest and "軍令" in quest and "伏筆" in quest  # 你能怎麼出力（豪強是第三方的季沒有地盤，沒有出陣：照舊遊歷）
+    assert "遊歷" in quest and "軍令" in quest and "伏筆" in quest  # 你能怎麼出力（`on` 沒有地盤、沒有出陣：照舊遊歷，conftest.no_territory）
 
 
 def test_no_war_explanations_outside_season_one(real):
@@ -49,10 +49,10 @@ def test_no_war_explanations_outside_season_one(real):
 
 def test_the_chaos_band_in_the_explanations_follows_the_config(on):
     game = _war(on)
-    assert "戰況 35～65" in game.status_data()["war_help"]["stance"][1]
+    assert "落在 35～65 是亂局" in game.status_data()["war_help"]["fronts"][0]
     on.config.chaos_low, on.config.chaos_high = 30, 70
     help_ = game.status_data()["war_help"]
-    assert "戰況 30～70" in help_["stance"][1] and "落在 30～70 是亂局" in help_["fronts"][0]
+    assert "落在 30～70 是亂局" in help_["fronts"][0]
     assert "35" not in "".join(help_["stance"] + help_["fronts"])
 
 
@@ -114,18 +114,15 @@ def test_the_roll_limits_come_from_the_timetable_rule(on, monkeypatch):
     assert "最多給到八成、最少也有二成" in howto.board_help(on)[0]
 
 
-def test_the_chaos_and_geju_rule_is_written_once(on):
-    """審查 Minor 7：亂局帶與割據的規則只寫一次（howto.front_rule、howto.geju_rule），態勢、戰況圖卡、玩法說明都拿它；
-    割據回落的速度設成 0，三處一起不再說「漸消」。"""
+def test_the_chaos_and_stance_rule_is_written_once(on):
+    """審查 Minor 7：亂局帶與態勢的規則只寫一次（howto.front_rule、howto.allied_rule），態勢、戰況圖卡、玩法說明都拿它
+    （割據那一句 geju_rule 2026-10-31 跟豪強第三方一起拿掉）。"""
     game = _war(on)
-    geju, front = howto.geju_rule(on), howto.front_rule(on, card=False)
+    stance, front = howto.allied_rule(on), howto.front_rule(on, card=False)
     help_ = game.status_data()["war_help"]
     section = re.search(r"#### 這一季在打什麼\n((?:- .*\n)+)", game.howto_text()).group(1)
-    assert geju in help_["stance"] and f"- {geju}" in section and f"- {front}" in section
+    assert stance in help_["stance"] and f"- {stance}" in section and f"- {front}" in section
     assert help_["fronts"][0].startswith(howto.front_rule(on, card=True))
-    on.config.geju_calm_per_day = 0
-    texts = [howto.geju_rule(on), *game.status_data()["war_help"]["stance"], game.howto_text()]
-    assert all("漸消" not in t for t in texts) and "停住" in howto.geju_rule(on)
 
 
 def test_howto_reads_only_public_names_from_rules():
@@ -177,9 +174,9 @@ def _fame_title(content):
 def test_the_howto_page_has_the_new_sections_in_season_one(on):
     titles = _titles(_war(on).howto_text())
     assert titles[0] == "這一季在打什麼"  # 為什麼要做這些：排在最前面
-    for title in (_fame_title(on), "投靠與軍令", "三方有什麼不同", "修練與煉製"):
+    for title in (_fame_title(on), "投靠與軍令", "各陣營有什麼不同", "修練與煉製"):
         assert title in titles
-    assert titles.index(_fame_title(on)) < titles.index("投靠與軍令") < titles.index("三方有什麼不同") < titles.index("情誼")
+    assert titles.index(_fame_title(on)) < titles.index("投靠與軍令") < titles.index("各陣營有什麼不同") < titles.index("情誼")
     assert titles.index("心得") < titles.index("修練與煉製") < titles.index("意境")
 
 
@@ -336,22 +333,23 @@ def test_joining_and_orders_read_the_config(on):
 
 
 def test_the_three_sides_are_read_from_the_scenario_and_the_rank_content(on):
-    from tianxia import ranks
+    from tianxia import allied, ranks
 
-    section = re.search(r"#### 三方有什麼不同\n((?:- .*\n)+)", _war(on).howto_text()).group(1)
+    section = re.search(r"#### 各陣營有什麼不同\n((?:- .*\n)+)", _war(on).howto_text()).group(1)
     rows = section.splitlines()
     assert len(rows) == len(on.scenario.factions)
     for faction, row in zip(on.scenario.factions, rows):
         assert row.startswith(f"- **{faction.name}**（在{'、'.join(on.locations[i].name for i in faction.join_at)}投靠）")
         titles = [t for t in ranks.TITLES[faction.id] if t]
-        assert f"頭銜從{titles[0]}做到{titles[-1]}" in row
+        cap = allied.CAP_RANK if faction.allies else len(titles)  # 豪強分屬兩軍：最多到第 3 階
+        assert f"頭銜從{titles[0]}做到{titles[:cap][-1]}" in row
         assert f"「{on.orders.duties[faction.id].name}」" in row
         for action in on.orders.rank_actions:
-            assert (f"第 {action.rank} 階起多「{action.name}」" in row) == (action.faction == faction.id)
+            assert (f"第 {action.rank} 階起多「{action.name}」" in row) == (action.faction == faction.id and action.rank <= cap)
     guan, huang, hao = rows
-    # FB-112；豪強是第三方的季沒有地盤、沒有出陣：遊歷打贏推割據
-    assert "往官軍那一邊推" in guan and "往黃巾那一邊推" in huang and "不推戰線，在亂局的戰線上遊歷打贏才推割據" in hao
-    assert "軍令只有打擊" in hao and "軍令有攻城、守城、截糧、護糧、打擊" in guan
+    # FB-112；豪強分屬兩軍：照依附的那一邊推、接那一邊的軍令
+    assert "往官軍那一邊推" in guan and "往黃巾那一邊推" in huang and "依附官軍或黃巾軍，照那一邊推戰線、接那一邊的軍令" in hao
+    assert "軍令有攻城、守城、截糧、護糧、打擊" in guan
     on.orders.templates = [t for t in on.orders.templates if not (t.side == "guan" and t.kind != "strike")]
     assert "軍令只有打擊" in re.search(r"- \*\*官軍\*\*.*", _war(on, "乙").howto_text()).group(0)
 
@@ -630,7 +628,7 @@ def _notes(game):
 
 def test_the_drill_line_does_not_say_drill_again(on):
     """投靠黃巾之後在黃巾別部營寨：遊歷那一格本身寫「操練」，底下那一行不再開頭寫一次（以前是「操練　操練不冒險：…」）。
-    操練是舊遊歷的（出陣開著時這裡是出陣・守），所以關掉出陣。"""
+    操練是舊遊歷的（出陣開著時這裡是出陣・守）；`on` 沒有地盤（conftest.no_territory），再關掉出陣。"""
     game = _war(classic_rules(on))
     game.state.player.faction = "huang"
     game.state.player.location = "huangjin_camp"

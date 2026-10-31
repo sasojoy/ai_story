@@ -21,6 +21,7 @@ def _game(content, faction, at, rank=3):
     game = Game.new(content, "甲", rng=random.Random(0))
     p = game.state.player
     p.faction, p.rank, p.location, p.stamina = faction, rank, at, 100
+    p.ally = "guan" if faction == "haoqiang" else None  # 豪強分屬兩軍（第一季規則的季一律如此）：依附官軍
     return game
 
 
@@ -42,8 +43,7 @@ def test_defaults_so_old_saves_load():
 
 def test_real_rank_actions(real):
     by_id = {a.id: a for a in real.orders.rank_actions}
-    assert set(by_id) == {"incite", "fortify", "seize"}
-    assert (by_id["seize"].rank, by_id["seize"].weekly, by_id["seize"].push) == (4, 1, 10)
+    assert set(by_id) == {"incite", "fortify"}  # 豪強第四階的趁亂占據郡縣 2026-10-31 拿掉（豪強最多第三階）
 
 
 def test_the_real_rows_follow_the_plan_table(real):
@@ -56,7 +56,6 @@ def test_the_real_rows_follow_the_plan_table(real):
     assert rows == {
         "incite": ("huang", 3, "在一地煽動起事", 20, 3, ["城鎮"], False, ("wis", 7), 5),
         "fortify": ("haoqiang", 3, "修築塢堡", 20, 3, [], True, None, 5),
-        "seize": ("haoqiang", 4, "趁亂占據郡縣", 30, 1, ["城鎮"], True, None, 10),
     }
 
 
@@ -64,7 +63,7 @@ def test_the_real_texts_name_the_place(real):
     """成功與失敗的敘事都是照{地點}填的；沒有檢定的行動不會失敗，沒有 fail。"""
     by_id = {a.id: a for a in real.orders.rank_actions}
     assert all("{地點}" in a.ok for a in by_id.values())
-    assert "{地點}" in by_id["incite"].fail and by_id["fortify"].fail == "" and by_id["seize"].fail == ""
+    assert "{地點}" in by_id["incite"].fail and by_id["fortify"].fail == ""
 
 
 def test_rank_action_faction_must_exist(real):
@@ -167,12 +166,6 @@ def _said(content, action_id, field, loc_id):
     return getattr(_action(content, action_id), field).replace("{地點}", content.locations[loc_id].name)
 
 
-def _seat(game, faction="haoqiang"):
-    """有第 4 階資格、這一週在任（計畫丁）：rank_of 才是 4。"""
-    game.state.player.qualified = True
-    game.state.world.seats = {faction: [game.state.player.name]}
-
-
 def _check_note(game, action_id):
     """有檢定的行動在括號裡寫的那一段（跟事件選項同一個寫法，events.check_note；企劃者裁決 E5.3）。心裡話是 joy 的字，不在這裡寫死。"""
     return events.check_note(_action(game.content, action_id).check, game.state, game.content, game.world)
@@ -240,79 +233,21 @@ def test_the_chaos_band_includes_both_ends(on, value, shown):
     assert ("act:rank:fortify" in _ids(game)) is shown
 
 
-def test_fortify_pushes_geju_not_the_front(on):
+def test_fortify_pushes_the_front_toward_the_army_the_gentry_back(on):
+    """豪強分屬兩軍：修築塢堡照依附那一軍的目標推所在的戰線（依附官軍：潁川往 0 推 5 點；推割據 2026-10-31 拿掉）。"""
     game = _game(on, "haoqiang", "runan_wilds")
     _chaos(game, "yingru", 50)
-    front, geju = rules.trend_value(game.state, on, "yingru"), rules.trend_value(game.state, on, "geju")
+    front = rules.trend_value(game.state, on, "yingru")
     game.choose("act:rank:fortify")
-    assert rules.trend_value(game.state, on, "yingru") == front
-    assert rules.trend_value(game.state, on, "geju") == geju + 5
+    assert rules.trend_value(game.state, on, "yingru") == front - 5
 
 
-def test_the_geju_push_follows_the_factions_goal(on):
-    """割據的推動乘自己陣營對割據的目標（跟戰線那一支一樣乘目標）：目標是 2 就推 2 × 5 點（每人每曆日上限 10 點以內）。"""
-    game = _game(on, "haoqiang", "runan_wilds")
-    _chaos(game, "yingru", 50)
-    on.scenario.faction("haoqiang").goals["geju"] = 2
-    geju = rules.trend_value(game.state, on, "geju")
-    game.choose("act:rank:fortify")
-    assert rules.trend_value(game.state, on, "geju") == geju + 10
-
-
-def test_fortify_credits_orders_with_weight_five_and_seize_with_ten(on):
+def test_fortify_credits_orders_with_weight_five(on):
     game = _game(on, "haoqiang", "runan")
     _chaos(game, "yingru", 50)
-    _seat(game)
     with mock.patch.object(Game, "_order_credit", return_value=[]) as credit:
         game.choose("act:rank:fortify")
-        game.choose("act:rank:seize")
-    assert credit.call_args_list == [
-        mock.call(kind="fortify", location="runan", front="yingru", weight=5),
-        mock.call(kind="seize", location="runan", front="yingru", weight=10),
-    ]
-
-
-def test_seize_needs_a_seat(on):
-    game = _game(on, "haoqiang", "runan")
-    _chaos(game, "yingru", 50)
-    assert "act:rank:seize" not in _ids(game)  # 第 3 階
-    game.state.player.qualified = True
-    assert "act:rank:seize" not in _ids(game)  # 有資格、還沒在任（候缺）：rank_of 是 3
-    assert "act:rank:fortify" in _ids(game)
-    game.state.world.seats = {"haoqiang": ["甲"]}  # 這一週在任（計畫丁）
-    assert "act:rank:seize" in _ids(game)
-    game.state.world.seats = {"haoqiang": []}  # 週一輪替掉出席次
-    assert "act:rank:seize" not in _ids(game)
-
-
-def test_seize_needs_a_town_and_a_front_in_chaos(on):
-    game = _game(on, "haoqiang", "runan")
-    _seat(game)
-    _chaos(game, "yingru", 50)
-    option = _option(game, "act:rank:seize")
-    assert option.label == "趁亂占據郡縣（體力 30）"
-    game.state.player.location = "runan_wilds"  # 野外不是城鎮
-    assert "act:rank:seize" not in _ids(game)
-    game.state.player.location = "runan"
-    _chaos(game, "yingru", 80)  # 黃巾壓過去了，不在亂局
-    assert "act:rank:seize" not in _ids(game)
-
-
-def test_seize_pushes_geju_by_ten_and_names_the_place(on):
-    game = _game(on, "haoqiang", "runan")
-    _chaos(game, "yingru", 50)
-    _seat(game)
-    geju = rules.trend_value(game.state, on, "geju")
-    msgs = game.choose("act:rank:seize")
-    assert msgs[0] == _said(on, "seize", "ok", "runan")
-    assert rules.trend_value(game.state, on, "geju") == geju + 10
-
-
-def test_a_seated_member_may_still_fortify(on):
-    game = _game(on, "haoqiang", "runan")
-    _chaos(game, "yingru", 50)
-    _seat(game)
-    assert {"act:rank:fortify", "act:rank:seize"} <= set(_ids(game))
+    assert credit.call_args_list == [mock.call(kind="fortify", location="runan", front="yingru", weight=5)]
 
 
 def test_each_faction_gets_only_its_own_actions(on):
@@ -361,7 +296,7 @@ def test_an_option_that_is_not_on_the_menu_is_refused(on):
     game = _game(on, "haoqiang", "runan")
     _chaos(game, "yingru", 50)
     stamina = game.state.player.stamina
-    assert game.choose("act:rank:seize") == ["（此刻無法這麼做。）"]  # 第 3 階：沒有這個選項，按了什麼都沒發生
+    assert game.choose("act:rank:incite") == ["（此刻無法這麼做。）"]  # 不是黃巾：沒有這個選項，按了什麼都沒發生
     assert game.state.player.stamina == stamina and game.state.player.rank_action_weeks == {}
 
 
@@ -391,20 +326,6 @@ def test_the_weekly_count_keeps_only_this_week(on):
     _week(game, 3)
     game.choose("act:rank:fortify")
     assert game.state.player.rank_action_weeks == {"3:fortify": 1}  # 上一週的丟掉
-
-
-def test_the_count_is_per_action_and_seize_is_once_a_week(on):
-    game = _game(on, "haoqiang", "runan")
-    _chaos(game, "yingru", 50)
-    _seat(game)
-    _week(game, 2)
-    game.choose("act:rank:seize")
-    assert not _option(game, "act:rank:seize").enabled and "這週已經做滿 1 次" in _option(game, "act:rank:seize").label
-    assert "今天這條線已經推滿" in _option(game, "act:rank:fortify").label  # 占據郡縣推滿了今天的割據（E1）
-    _next_day(game)
-    assert _option(game, "act:rank:fortify").enabled  # 另一個行動各算各的：週次數不吃占據郡縣的
-    assert "這週已經做滿 1 次" in _option(game, "act:rank:seize").label
-    assert game.state.player.rank_action_weeks == {"2:seize": 1}
 
 
 def test_a_won_and_a_failed_try_both_count(on):
@@ -456,17 +377,6 @@ def test_the_actions_leave_a_bot_loop_no_endless_option(on):
     assert not _option(game, "act:rank:fortify").enabled  # 新的一週：體力不夠一樣灰
 
 
-def test_the_module_reads_the_rank_not_the_stored_rank(on):
-    """存檔的階（PlayerState.rank）停在 3；做得了哪些讀 ranks.rank_of：候缺是 3、在任是 4。"""
-    game = _game(on, "haoqiang", "runan")
-    assert [a.id for a in rank_actions.mine(game.state, on)] == ["fortify"]
-    game.state.player.qualified = True
-    assert [a.id for a in rank_actions.mine(game.state, on)] == ["fortify"]
-    _seat(game)
-    assert game.state.player.rank == 3
-    assert [a.id for a in rank_actions.mine(game.state, on)] == ["fortify", "seize"]
-
-
 def test_mine_is_empty_for_a_drifter_and_when_the_switch_is_off(on):
     assert rank_actions.mine(_game(on, None, "runan").state, on) == []
     game = _game(on, "haoqiang", "runan")
@@ -477,13 +387,13 @@ def test_mine_is_empty_for_a_drifter_and_when_the_switch_is_off(on):
 
 def test_where_ok_checks_front_tags_and_chaos(on):
     game = _game(on, "haoqiang", "runan")
-    fortify, seize = _action(on, "fortify"), _action(on, "seize")
+    fortify, incite = _action(on, "fortify"), _action(on, "incite")
     _chaos(game, "yingru", 50)
-    assert rank_actions.where_ok(game.state, on, fortify, "runan_wilds") and not rank_actions.where_ok(game.state, on, seize, "runan_wilds")
-    assert rank_actions.where_ok(game.state, on, seize, "runan")  # 城鎮、亂局
+    assert rank_actions.where_ok(game.state, on, fortify, "runan_wilds") and not rank_actions.where_ok(game.state, on, incite, "runan_wilds")
+    assert rank_actions.where_ok(game.state, on, incite, "runan")  # 城鎮
     assert not rank_actions.where_ok(game.state, on, fortify, "luoyang_road")  # 沒有戰線
     _chaos(game, "yingru", 10)
-    assert not rank_actions.where_ok(game.state, on, fortify, "runan") and not rank_actions.where_ok(game.state, on, seize, "runan")
+    assert not rank_actions.where_ok(game.state, on, fortify, "runan")  # 不在亂局
 
 
 def test_where_ok_for_a_tagless_action_that_is_not_chaos_only(on):
@@ -496,8 +406,8 @@ def test_where_ok_for_a_tagless_action_that_is_not_chaos_only(on):
     assert rank_actions.where_ok(game.state, on, incite, "runan_wilds")
 
 
-def test_weight_is_five_for_rank_three_and_ten_for_rank_four(on):
-    assert [rank_actions.weight(_action(on, i)) for i in ("incite", "fortify", "seize")] == [5, 5, 10]
+def test_weight_is_five_for_rank_three(on):
+    assert [rank_actions.weight(_action(on, i)) for i in ("incite", "fortify")] == [5, 5]
 
 
 def test_left_counts_down_and_count_rewrites_the_week(on):
@@ -602,23 +512,6 @@ def test_no_rank_actions_while_the_season_is_closed(on, state):
     assert game.state.player.stamina == stamina and game.state.player.rank_action_weeks == {}
 
 
-def test_a_menu_built_before_monday_is_refused_after_the_seat_changes_hands(on):
-    """審查焦點 1，走 choose：選單上有占據郡縣（在任），週一輪替時別人上週貢獻比他多、擠掉了他；按下去是被拒絕的，什麼都沒扣。"""
-    game = _game(on, "haoqiang", "runan")
-    _chaos(game, "yingru", 50)
-    _seat(game)
-    w = game.state.world
-    w.seat_ledger = {"haoqiang": {"乙": {1: 50}, "甲": {1: 5}}}  # 上一週乙做得比較多；這個伺服器每個陣營 1 席
-    assert "act:rank:seize" in _ids(game)  # 玩家看到的選單
-    _week(game, 2, offset=0)
-    seats.rotate(game.state, on, 2)  # 週一 00:00：乙上任、甲掉出來
-    assert w.seats == {"haoqiang": ["乙"]}
-    stamina = game.state.player.stamina
-    assert game.choose("act:rank:seize") == ["（此刻無法這麼做。）"]
-    assert game.state.player.stamina == stamina and game.state.player.rank_action_weeks == {}
-    assert "act:rank:fortify" in _ids(game)  # 還有資格：修築塢堡照舊做得了
-
-
 def test_a_menu_built_while_the_front_was_in_chaos_is_refused_once_it_left(on):
     """審查焦點 2，走 choose：選單上有修築塢堡，戰線離開亂局（黃巾壓過去了）；按下去是被拒絕的，什麼都沒扣。"""
     game = _game(on, "haoqiang", "runan_wilds")
@@ -630,18 +523,18 @@ def test_a_menu_built_while_the_front_was_in_chaos_is_refused_once_it_left(on):
     assert game.state.player.stamina == stamina and game.state.player.rank_action_weeks == {}
 
 
-def test_a_failed_check_on_a_geju_action_pushes_nothing_credits_nothing_and_still_counts(on):
+def test_a_failed_check_on_a_gentry_action_pushes_nothing_credits_nothing_and_still_counts(on):
     """真實內容的豪強行動都沒有檢定，失敗那一支走不到：給修築塢堡一個檢定（內容的複本），逼它失敗。"""
     fortify = _action(on, "fortify")
     fortify.check = Check(stat="str", difficulty=7)
     fortify.fail = "你的部曲在{地點}挖了半天，牆還是塌了。"
     game = _game(on, "haoqiang", "runan_wilds")
     _chaos(game, "yingru", 50)
-    geju = rules.trend_value(game.state, on, "geju")
+    front = rules.trend_value(game.state, on, "yingru")
     with _always(False), mock.patch.object(Game, "_order_credit", return_value=[]) as credit:
         msgs = game.choose("act:rank:fortify")
     assert msgs[0] == "你的部曲在汝南荒野挖了半天，牆還是塌了。"
-    assert rules.trend_value(game.state, on, "geju") == geju
+    assert rules.trend_value(game.state, on, "yingru") == front
     credit.assert_not_called()
     assert game.state.player.rank_action_weeks == {"1:fortify": 1}
     assert game.state.player.stamina == 80
@@ -655,7 +548,7 @@ def test_defecting_keeps_the_counter_but_the_old_actions_do_not_follow(on):
         game.choose("act:rank:incite")
     assert game.state.player.rank_action_weeks == {"1:incite": 1}
     game.state.player.location = "cao_manor"
-    game.choose("defect:haoqiang")
+    game.choose("defect:haoqiang:guan")  # 豪強分屬兩軍：投靠點每一軍一顆，依附官軍
     game.choose("defect:confirm")
     p = game.state.player
     assert (p.faction, p.rank, p.qualified) == ("haoqiang", 0, False)
@@ -753,7 +646,7 @@ def test_a_menu_built_before_the_line_filled_is_refused(on):
     game = _game(on, "haoqiang", "runan_wilds")
     _chaos(game, "yingru", 50)
     assert _option(game, "act:rank:fortify").enabled  # 玩家看到的選單
-    _fill(game, "geju")
+    _fill(game, "yingru")
     assert game.choose("act:rank:fortify") == ["（此刻無法這麼做。）"]
     assert game.state.player.stamina == 100 and game.state.player.rank_action_weeks == {}
 
@@ -768,36 +661,19 @@ def test_the_weekly_limit_label_comes_before_the_full_line(on):
     assert not option.enabled and option.label == "在一地煽動起事（這週已經做滿 3 次）"
 
 
-def test_hao_actions_check_geju_and_huang_incite_checks_its_front(on):
-    """看哪一條線跟推哪一條線同一個判斷：豪強（修築塢堡、占據郡縣）看割據，黃巾煽動起事看所在的戰線。"""
+def test_hao_and_huang_actions_check_the_front_they_push(on):
+    """看哪一條線跟推哪一條線同一個判斷：豪強（修築塢堡，照依附那一軍）與黃巾（煽動起事）都看所在的戰線（割據 2026-10-31 拿掉）。"""
     hao = _game(on, "haoqiang", "runan")
     _chaos(hao, "yingru", 50)
-    _seat(hao)
-    _fill(hao, "yingru")  # 戰線推滿了：豪強的行動不推戰線，照樣按得下去
-    assert _option(hao, "act:rank:fortify").enabled and _option(hao, "act:rank:seize").enabled
-    _fill(hao, "geju")
-    assert FULL in _option(hao, "act:rank:fortify").label and FULL in _option(hao, "act:rank:seize").label
+    assert _option(hao, "act:rank:fortify").enabled
+    _fill(hao, "nanyang")  # 別的戰線推滿了：不相干
+    assert _option(hao, "act:rank:fortify").enabled
+    _fill(hao, "yingru")
+    assert FULL in _option(hao, "act:rank:fortify").label
     huang = _game(on, "huang", "runan")
-    _fill(huang, "geju")  # 割據推滿了：黃巾的行動不推割據
     assert _option(huang, "act:rank:incite").enabled
     _fill(huang, "yingru")
     assert FULL in _option(huang, "act:rank:incite").label
-
-
-def test_seize_after_one_fortify_pushes_what_is_left(on):
-    """在任的豪強：修築塢堡（5）之後占據郡縣（10）推得動 5 點，照常付 30 體力；之後兩個都灰（一個推滿、一個這週做滿）。"""
-    game = _game(on, "haoqiang", "runan")
-    _chaos(game, "yingru", 50)
-    _seat(game)
-    _week(game, 2)
-    geju = rules.trend_value(game.state, on, "geju")
-    game.choose("act:rank:fortify")
-    assert _option(game, "act:rank:seize").enabled
-    game.choose("act:rank:seize")
-    assert rules.trend_value(game.state, on, "geju") == geju + 10
-    assert game.state.player.stamina == 100 - 20 - 30
-    assert _option(game, "act:rank:fortify").label == f"修築塢堡（{FULL}）"
-    assert _option(game, "act:rank:seize").label == "趁亂占據郡縣（這週已經做滿 1 次）"
 
 
 def test_the_menu_and_push_trend_read_the_same_room(on):
@@ -856,9 +732,7 @@ def test_evil_practice_shows_in_the_label(on):
 def test_actions_without_a_check_keep_their_label(on):
     game = _game(on, "haoqiang", "runan")
     _chaos(game, "yingru", 50)
-    _seat(game)
     assert _option(game, "act:rank:fortify").label == "修築塢堡（體力 20）"
-    assert _option(game, "act:rank:seize").label == "趁亂占據郡縣（體力 30）"
 
 
 def test_grey_labels_do_not_carry_the_check(on):

@@ -193,7 +193,7 @@ def file_showdown(
         lines += cultivation.seize(s, c, ctx.world, rule.showdown_ratio, ctx.rng)
     trends = {t.id: t.name for t in c.scenario.trends}
     moved = resolve_trends(c, s.world, battle.outcome_trend_delta)  # 開關關著時戰線都寫成黃巾聲勢
-    # 第一季規則開著時，戰線與豪強割據的增減不寫數字（FB-064，同 change_trend）：這一季的是機器可讀的標籤，畫在戰鬥卡片
+    # 第一季規則開著時，戰線的增減不寫數字（FB-064，同 change_trend）：這一季的是機器可讀的標籤，畫在戰鬥卡片
     # 底下、照看的人的陣營上色，戰報不收（「大勢」那一行不寫，跟遊歷的戰鬥卡片一樣）；上一季的寫進敘事，就直接是那一句話
     # （敘事沒有顏色）。其他的線、開關關著時照舊是帶正負號的數字。
     moves = {tid: d for tid, d in moved.items() if d}

@@ -1141,11 +1141,11 @@ def test_validate_still_lets_conditions_read_derived_and_ordinary_trends(content
 
 def test_validate_rejects_a_threshold_on_a_season_one_trend(content):
     content = _with_fronts(content)
-    content.scenario.trends.append(Trend(id="geju", name="豪強割據", season_one=True))
+    content.scenario.trends.append(Trend(id="side_line", name="邊線", season_one=True))
     content.scenario.thresholds.append(
-        Threshold(id="geju60", trend="geju", op=">=", value=60, text="豪強割據一方！")
+        Threshold(id="side60", trend="side_line", op=">=", value=60, text="邊線過了一甲子！")
     )
-    with pytest.raises(ContentError, match="門檻 geju60：不能掛在第一季的線 geju"):
+    with pytest.raises(ContentError, match="門檻 side60：不能掛在第一季的線 side_line"):
         validate(content)
 
 
@@ -1176,21 +1176,6 @@ def test_validate_lets_chaos_bounds_meet(content):
     validate(content)
 
 
-@pytest.mark.parametrize("field", ["geju_chaos_per_day", "geju_calm_per_day"])
-def test_config_rejects_negative_geju_rates(field):
-    with pytest.raises(ValidationError):
-        Config(**{field: -0.5})
-    assert getattr(Config(**{field: 0}), field) == 0
-
-
-def test_geju_full_players_must_be_positive():
-    """滿額人數是除數：0 或負的都不行。"""
-    for bad in (0, -3):
-        with pytest.raises(ValidationError):
-            Config(geju_full_players=bad)
-    assert Config(geju_full_players=1).geju_full_players == 1
-
-
 def test_validate_reports_a_malformed_region_polygon_instead_of_crashing(tmp_path):
     """train_trend 的戰線歸屬要先查地點在哪個大區，有個點只寫了一個數字時不能在那裡炸成 ValueError，要照舊回報多邊形的錯。"""
     root = copy_fixture(tmp_path)
@@ -1202,7 +1187,6 @@ def test_validate_reports_a_malformed_region_polygon_instead_of_crashing(tmp_pat
 # ── 週末設定（計畫 T2「總開關與週末設定」）：一次切換，不手改 content/config.json ──
 CONTENT_DIR = FIXTURE.parent.parent.parent / "content"
 WEEKEND_KEYS = {"season_one", "season_days", "server_max_players", "late_exp_step",  # 30 級以後的加陡：週末 0.12（50 級加陡）
-                "haoqiang_allied",  # 第一季豪強分屬兩軍（企劃者 2026-10-15）：週末開、預設關
                 "affinity_gain_scale"}  # 情誼放慢（歷史武將同行 3）：正式 0.7、週末 0.85
 BETA_TEST_KEYS = {"beta_free_refill"}  # 一鍵補滿體力（企劃者 2026-10-07 開、2026-10-12 拿掉）：週末設定不再開它
 
@@ -1373,11 +1357,11 @@ def test_push_timings_must_make_sense():
 
 
 def _timetable() -> list[dict]:
-    """測試夾具用的小時刻表：一件固定、一件擲骰（有鎖定與豪強）、一件看版本的決戰。"""
+    """測試夾具用的小時刻表：一件固定、一件擲骰（有鎖定）、一件看版本的決戰。"""
     return [
         {"id": "start", "week": 1, "title": "開場", "kind": "fixed", "outcomes": {"fixed": {"text": "開場了。"}}},
         {"id": "raid", "week": 2, "front": "north", "title": "劫江", "kind": "roll", "roll_side": "huang",
-         "lock_result": {"huang": "成", "guan": "不成"}, "third_party_trends": {"kou": 3},
+         "lock_result": {"huang": "成", "guan": "不成"},
          "outcomes": {
              "成": {"text": "劫成了。", "chronicle": "水寇劫江。", "trends": {"kou": 8},
                    "locked_text": {"huang": "{name} 劫成了。"}, "loser_text": {"huang": "{loser} 沒擋住。"},
@@ -1706,7 +1690,6 @@ def test_check_voice_must_cover_every_checked_stat_and_run_high_to_low(tmp_path)
     with pytest.raises(ContentError) as caught:
         load_content(root)
     assert "由高到低" in str(caught.value) and "con" in str(caught.value)  # 調息事件檢定根骨，第一檔沒寫
-
 
 
 # ── check_voice.json：檢定選項括號裡的那一句（企劃者 2026-10-05 定案；S1 的 check_lines.json 已退休）──

@@ -1,0 +1,110 @@
+[
+ {
+  "id": "hao_land_people_name",
+  "name": "地、人、名",
+  "faction": "haoqiang",
+  "rank": 4,
+  "kind": "puzzle",
+  "puzzle": {
+   "pieces": [
+    {
+     "key": "land",
+     "name": "地契",
+     "how": "silver",
+     "at": "haozu_fort",
+     "silver": 50,
+     "label": "向塢堡主買下荒田的地契（銀兩 50）",
+     "ok": "塢堡主收了銀子，把一張發黃的地契推過來。"
+    },
+    {
+     "key": "people",
+     "name": "戶籍",
+     "how": "check",
+     "at": "zhuo_militia_hall",
+     "stamina": 10,
+     "check": {
+      "stat": "wis",
+      "difficulty": 7
+     },
+     "label": "抄錄結社的鄉勇名冊",
+     "ok": "你一筆一筆抄完了名冊，連誰家幾口人都記上了。",
+     "fail": "名冊太亂，你抄到一半就對不上了。改天再來。"
+    },
+    {
+     "key": "name",
+     "name": "鄉望",
+     "how": "check",
+     "at": "cao_manor",
+     "stamina": 10,
+     "check": {
+      "stat": "wis",
+      "difficulty": 7
+     },
+     "label": "向三老說說怎麼保這一方",
+     "ok": "三老聽完點了點頭：『這個人說話實在。』",
+     "fail": "三老聽了半天，搖搖頭走了。改天再來。"
+    }
+   ],
+   "present": {
+    "label": "把地契、戶籍與鄉望交給{人物}",
+    "patrons": {
+     "yuan": {
+      "character": "yuanshao",
+      "at": "dajiangjun_fu",
+      "done": "袁紹看完地契、戶籍與鄉望，含笑點頭：「有地、有人、有名，足下已是一方之主了。」"
+     },
+     "cao": {
+      "character": "caocao",
+      "at": "qiao_county",
+      "done": "曹操把三樣東西推回給你：「這些你收好。往後這一方，就靠你了。」"
+     },
+     "self": {
+      "character": "liubei",
+      "at": "loushang_village",
+      "done": "劉備握著你的手：「有你守著這一方，百姓就有依靠了。」"
+     }
+    }
+   }
+  }
+ },
+ {
+  "id": "hao_alliance",
+  "name": "聯保",
+  "faction": "haoqiang",
+  "rank": 4,
+  "kind": "plot",
+  "plot": {
+   "how": "check",
+   "parts": [
+    {
+     "key": "zhuo_militia_hall",
+     "name": "鄉里結社",
+     "at": "zhuo_militia_hall"
+    },
+    {
+     "key": "cao_manor",
+     "name": "曹氏莊院",
+     "at": "cao_manor"
+    },
+    {
+     "key": "haozu_fort",
+     "name": "豪族塢堡",
+     "at": "haozu_fort"
+    }
+   ],
+   "headcount": 3,
+   "check": {
+    "stat": "wis",
+    "difficulty": 6
+   },
+   "stamina": 10,
+   "part_label": "在{地點}說服豪族立聯保盟約",
+   "part_ok": "{地點}的幾家豪族聽完，一個接一個在盟約上畫了押。",
+   "part_fail": "{地點}的豪族推三阻四，誰也不肯先畫押。這一處得換人，或改天再來。",
+   "start_text": "{name} 發起聯保，還缺{缺}。",
+   "done_text": "三處的盟約都畫了押，幾家豪族從此守望相助。家主說，這是你牽的線。",
+   "helper_text": "聯保成了，你跑的那一處也記上了。",
+   "fail_text": "聯保沒能在時限內湊齊，這一回作罷。"
+  }
+ }
+]

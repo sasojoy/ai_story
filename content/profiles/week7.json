@@ -1,5 +1,5 @@
 {"season_one": true, "season_days": 7, "server_max_players": 20, "stamina_regen_seconds": 90,
- "season21": true, "season_weeks": 3, "season_segments": [2, 2, 3], "haoqiang_allied": true, "late_exp_step": 0.03,
+ "season21": true, "season_weeks": 3, "season_segments": [2, 2, 3], "late_exp_step": 0.03,
  "rank2_contrib": 130, "rank3_contrib": 430, "rank4_contrib": 600,
  "figure_treasure_cap": 1, "figure_treasure_weekly": 1, "figure_return_days": 1,
  "figure_life": {"revenge_cal_days": 2, "rally_cal_days": 1},

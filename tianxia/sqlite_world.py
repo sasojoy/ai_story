@@ -898,6 +898,7 @@ class SqliteWorldStore:
                 state.season.chronicle.append(Rumor(time=state.season.time, text=line))
             if lines or wrote:
                 self._save_season(conn, state.season_number, state.season)
+            old_season = state.season
             state.season = fresh_season(content, now=now)  # 新的一季另起一列（_save 照新的編號寫），舊的那一列不動；21 天季照這一刻蓋錨點
             state.season_number += 1
             state.season_opened = True
@@ -907,6 +908,12 @@ class SqliteWorldStore:
             state.companions = {}  # 跨季不滾雪球第二條：同伴全部重獲自由、等級武學歸零
             state.tianji += 1  # 第三條：天機 +1；武學命名、煉製配方、投靠名冊照季分開存，新的一季自然是空的
             state.season.tianji = state.tianji  # 同 open_season：新的一季蓋上新的天機
+            # 路牌上題壁墨寫的字跟著到新的一季（花錢買的，Joy 10/31「路牌也會繼續傳承」），id 不變、流水號接著上一季走（商城帳上用掉的
+            # 那一張照舊指得到它）；免費的預設句照舊一季一清。欄位是探索包認領的（WorldState.inscriptions），這兩行寫在核心：核心不准
+            # import 包（別名 tianxia.outing 也算），世界那一層的換季沒有掛鉤（開掛鉤先過 PM）。PR #117 原本是 outing.carry，探索第 1 批
+            # 合 develop 時搬來這裡（第 11 批收接縫時再看要不要開掛鉤交回探索包）
+            state.season.inscriptions = [i for i in old_season.inscriptions if not i.preset]
+            state.season.inscription_seq = max(state.season.inscription_seq, old_season.inscription_seq)
             divine.stamp(state, content)  # 同 open_season：新的一季照全服登記挑神器（季數、天機都是新的）
             if content.seal and content.config.seal.enabled:  # 七片這一輪都現世過：新的一季蓋天命之季的章（8.1）
                 self._stamp_mandate(state, content)

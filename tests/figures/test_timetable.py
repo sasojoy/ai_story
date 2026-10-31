@@ -157,19 +157,16 @@ def test_same_side_late_finishers_are_not_named_as_losers(s1, season):
 
 def test_locked_chronicle_names_the_locker_and_falls_back(s1, season):
     """江湖史具名（計畫 T7、伏筆文件 2.4）：有人鎖定、而且是他那一方的具名公告時，江湖史用這件大事寫給那一方的那一行；
-    那一方沒寫就在原本那一行後面接「（名號改寫）」。沒人鎖定、或管理者給了另一方的結果（公告沒有具名），照原本那一行。
-    豪強做完的人另外記一行（多人用「、」接），不論誰贏。"""
+    那一方沒寫就在原本那一行後面接「（名號改寫）」。沒人鎖定、或管理者給了另一方的結果（公告沒有具名），照原本那一行。"""
     changshe, luzhi = event(s1, "changshe_fire"), event(s1, "luzhi_jailed")
     changshe.locked_chronicle = {"guan": "皇甫嵩火攻長社；火具是{name}備下的。"}
-    changshe.third_party_chronicle = "{name} 趁亂收了兩邊的糧錢。"
     w = season.world
     w.locks["changshe_fire"] = Lock(side="guan", name="甲", time=0.0)
-    w.third_party["changshe_fire"] = ["豪甲", "豪乙"]
     timetable.resolve(season, s1, changshe, random.Random(0), key="guan:大勝")
     w.locks["luzhi_jailed"] = Lock(side="huang", name="乙", time=0.0)
     timetable.resolve(season, s1, luzhi, FixedRandom(0.99))  # 擲骰本來會「不成」，鎖定定成「成」
     assert [r.text for r in w.chronicle] == [
-        "皇甫嵩火攻長社；火具是甲備下的。", "豪甲、豪乙 趁亂收了兩邊的糧錢。", "盧植被誣下獄。（乙改寫）",
+        "皇甫嵩火攻長社；火具是甲備下的。", "盧植被誣下獄。（乙改寫）",
     ]
 
     plain = GameState(player=_player(), world=fresh_season(s1))
@@ -182,17 +179,14 @@ def test_locked_chronicle_names_the_locker_and_falls_back(s1, season):
 
 
 def test_shown_names_go_into_the_text_and_real_names_into_the_timeline(s1, season):
-    """匿名的鎖定者（Lock.shown 是「某位少俠」）：公告、搶輸的一句、改寫的江湖史、豪強的一句都寫 shown；
-    時間軸的 locked_by、losers 留真名。舊資料沒有 shown（None）照舊寫名號；豪強的顯示名記在 third_party_shown。"""
+    """匿名的鎖定者（Lock.shown 是「某位少俠」）：公告、搶輸的一句、改寫的江湖史都寫 shown；
+    時間軸的 locked_by、losers 留真名。舊資料沒有 shown（None）照舊寫名號。"""
     w = season.world
     w.locks["luzhi_jailed"] = Lock(side="guan", name="甲", time=0.0, shown="某位少俠")
     w.lock_losers["luzhi_jailed"] = [Lock(side="huang", name="乙", time=1.0, shown="某位少俠"), Lock(side="huang", name="丙", time=2.0)]
-    w.third_party["luzhi_jailed"] = ["豪甲", "豪乙"]
-    w.third_party_shown["luzhi_jailed"] = {"豪甲": "某位少俠"}
     msgs = timetable.resolve(season, s1, event(s1, "luzhi_jailed"), FixedRandom(0.0))
-    third = "朝中替盧中郎說話最力的是袁本初。{name} 在他府上坐了三個晚上。".replace("{name}", "某位少俠、豪乙")
     assert msgs == ["【江湖大事】" + LUZHI_LOCKED["guan"].replace("{name}", "某位少俠")
-                    + LUZHI_LOSER["guan"].replace("{loser}", "某位少俠、丙") + third]
+                    + LUZHI_LOSER["guan"].replace("{loser}", "某位少俠、丙")]
     result = w.timeline["luzhi_jailed"]
     assert (result.locked_by, result.losers) == ("甲", ["乙", "丙"])
     assert [r.text for r in w.chronicle] == ["盧植續圍廣宗。（某位少俠改寫）"]
@@ -318,21 +312,6 @@ def test_commander_slot_uses_the_front_commander_when_there_is_one(s1, season, m
     msgs = timetable.resolve(season, s1, event(s1, "wancheng"), random.Random(0), key="huang:險勝")
     assert msgs == ["【江湖大事】乙版huang險勝，頭目也在。"]
     assert season.world.figures["captain"].prestige == 45
-
-
-@pytest.mark.parametrize("key", ["guan:大勝", "huang:險勝"])
-def test_third_party_applies_regardless_of_winner(s1, season, key):
-    season.world.third_party["changshe_fire"] = ["豪甲"]
-    msgs = timetable.resolve(season, s1, event(s1, "changshe_fire"), random.Random(0), key=key)
-    assert season.world.trends["geju"] == 30  # 割據 +10，不論誰贏
-    assert msgs[0].endswith("事後才有人發現，兩軍吃的糧出自同一家：豪甲 的糧車。")
-
-
-def test_third_party_line_can_differ_by_outcome(s1, season):
-    season.world.third_party["luzhi_jailed"] = ["豪甲", "豪乙"]
-    msgs = timetable.resolve(season, s1, event(s1, "luzhi_jailed"), FixedRandom(0.99))  # 不成
-    assert msgs[0].endswith("朝中替盧中郎說話最力的是袁本初。豪甲、豪乙 在他府上坐了三個晚上。")
-    assert season.world.trends["geju"] == 36  # 兩個名字各套一次 +8
 
 
 def test_resolve_is_idempotent(s1, season):
@@ -618,22 +597,6 @@ def test_person_slots_fill_every_line_and_before_the_effects(real_on):
     msgs = timetable.resolve(plain, real_on, changshe, random.Random(0), key="guan:大勝")
     assert msgs == [f"【江湖大事】{changshe.preface}這一次，皇甫嵩大勝。波才北走。波才退出戰事。"]
     assert plain.world.chronicle[-1].text == "皇甫嵩破波才。"
-
-
-def test_third_party_lines_are_filled_before_the_effects(real_on):
-    """FB-042 審查 I2：豪強那一句（公告）與另記的那一行江湖史也在套效果之前填：波才退場、彭脫接手之後仍寫波才。"""
-    changshe = event(real_on, "changshe_fire")
-    changshe.outcomes["guan:大勝"] = TimetableOutcome(
-        text="這一次，{人物:bocai}敗走。", figures={"@人物:bocai": FigureChange(fate="退場")},
-        third_party_text="{name} 的糧車餵飽了{人物:bocai}的兵。",
-    )
-    changshe.third_party_chronicle = "{name} 資助{人物:bocai}。"
-    s = _real_season(real_on)
-    s.world.third_party["changshe_fire"] = ["丙"]
-    msgs = timetable.resolve(s, real_on, changshe, random.Random(0), key="guan:大勝")
-    assert msgs[0].endswith("丙 的糧車餵飽了波才的兵。")
-    assert s.world.chronicle[-1].text == "丙 資助波才。"
-    assert s.world.figures["bocai"].status == "retired"
 
 
 def test_the_preface_is_not_filled(real_on):

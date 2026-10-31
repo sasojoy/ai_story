@@ -458,6 +458,7 @@
     if (S.mtEdit) mtPadReady();
     fitBars(); // 狀態列的「體力」「氣血」放不放得下（FB-198）；頁面畫上去之後再量一次（電腦上捲軸出來，狀態列跟著窄）
     if (S.sheet) document.querySelector(".sheet-bg")?.addEventListener("wheel", sheetWheel, { passive: false }); // 暗處是每次新畫的，掛一次
+    if (typeof ringSync === "function") ringSync(); // 擂台動畫（arena_anim.js）：畫布是新畫的，接著演
   }
 
   // 設定抽屜在電腦上只有中間 640px 寬、自己捲：滑鼠在兩旁的暗處（.sheet-bg）滾輪時，頁面不動、改捲抽屜。不然指標不在抽屜上就
@@ -3078,7 +3079,8 @@
     const log = f.log.length ? `<ol class="ring-log">${f.log.slice().reverse().map(ringLine).join("")}</ol>` : "";
     const last = f.log.length ? f.log[f.log.length - 1] : "";
     const crowd = last.startsWith(CROWD_MARK) ? `<p class="ring-crowd">${esc(last)}</p>` : "";
-    return `<div class="ring-round">第 ${f.round | 0}／${f.rounds | 0} 回合</div>
+    return `<canvas id="ring-stage" class="ring-stage" width="720" height="320" aria-hidden="true"></canvas>
+      <div class="ring-round">第 ${f.round | 0}／${f.rounds | 0} 回合</div>
       <div class="ring-sides">${side(f.me, "mine")}<span class="vs">對</span>${side(f.foe_hp, "theirs")}</div>
       ${crowd}
       <div class="ring-edge"><span>${esc(f.edge_words)}</span><div class="bar"><i style="left:${Math.max(0, Math.min(100, f.edge | 0))}%"></i></div></div>
@@ -3097,6 +3099,7 @@
     const won = r.tier === "大勝" || r.tier === "險勝";
     const cls = won ? "win" : r.tier === "僵持" ? "draw" : "lose";
     return `<div class="board-sheet ring-sheet"><article class="paper ring-result ${cls}"><i class="stamp">${esc(r.tier)}</i>
+        <canvas id="ring-stage" class="ring-stage" width="720" height="320" aria-hidden="true"></canvas>
         <h4>對${esc(r.foe)}的分身</h4><ol class="ring-log">${r.lines.map(ringLine).join("")}</ol>
         ${r.changes.length ? `<p class="reward">${esc(r.changes.join("・"))}</p>` : ""}
         <div class="btns one"><button class="btn primary" data-act="arena-seen" data-id="${r.id | 0}">回台下</button></div></article></div>`;
@@ -3605,6 +3608,7 @@
     if (!keep) { spot.top = 0; spot.left = 0; }
     layer.outerHTML = shopHtml(S.main.shop);
     putShopSpot(spot);
+    if (typeof ringSync === "function") ringSync(); // 擂台動畫（arena_anim.js）：這一回合打完的樣子，接著演
   }
 
   // 輪詢拿到新的畫面（refreshPage 最前面叫）：店面開了或收了整個重畫；開著而且店裡的資料變了只重畫店面（手指按著時等放開，

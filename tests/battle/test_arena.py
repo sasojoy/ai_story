@@ -498,3 +498,35 @@ def test_the_finishing_blow_reports_whole_numbers():
     assert isinstance(lost, int) and f"{-lost:+d}" == "-37" and side.hp == 0
     side = ArenaSide(name="乙", power=100.0, hp=399.5, hp_cap=400.0)
     assert isinstance(arena._pool(side, -30), int) and side.hp == 400.0
+
+
+def test_the_fight_and_the_result_carry_both_weapons_for_the_animation(ring):
+    """擂台動畫（企劃者 2026-10-31）：分身記報名那一刻手上兵器的種類，挑的人記開打那一刻的；打的那一頁與收場卡都給網頁，不碰數字。"""
+    from tianxia.state import Equipment
+    content, world = ring
+
+    def arm_and_join(g):
+        g.state.player.weapon = Equipment(id="兵:1", name="厚背槍", kind="槍")
+        return g.choose("act:arena") + g.choose("arena:join") + g.choose("arena:back")
+    _do(content, world, "乙", arm_and_join)
+    _join(content, world, "甲")
+    assert world.get_season().arena["乙"].weapon == "槍" and world.get_season().arena["甲"].weapon == ""
+    _, game = _do(content, world, "甲", lambda g: g.choose("act:arena") + g.choose("arena:fight:乙"))
+    fight = game.shop_view()["fight"]
+    assert fight["looks"] == {"me": "", "foe": "槍"} and fight["id"] == game.state.player.arena.id
+    _, game = _fight(content, world)
+    assert game.shop_view()["result"]["looks"] == {"me": "", "foe": "槍"}
+
+
+def test_an_old_fight_without_weapons_shows_both_bare_handed():
+    assert arena.looks_view([]) == {"me": "", "foe": ""}
+    assert arena.looks_view(["劍", "拳腳"]) == {"me": "劍", "foe": "拳腳"}
+
+
+def test_an_old_save_without_the_weapon_fields_still_loads():
+    from tianxia.state import ArenaEntry, ArenaResult
+
+    entry = ArenaEntry.model_validate({"name": "甲", "power": 10.0, "hp_cap": 50.0})
+    assert entry.weapon == ""
+    result = ArenaResult.model_validate({"id": 1, "foe": "乙", "tier": "大勝"})
+    assert result.looks == []

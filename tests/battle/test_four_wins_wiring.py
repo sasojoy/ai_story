@@ -27,13 +27,6 @@ def _win():
 # ── 開關與載入檢查 ─────────────────────────────
 
 
-def test_validate_wants_haoqiang_allied_with_four_wins():
-    content = wins_content()
-    content.config.haoqiang_allied = False
-    with pytest.raises(ContentError, match="haoqiang_allied"):
-        validate(content)
-
-
 def test_validate_checks_the_lean_defaults():
     content = wins_content()
     validate(content)

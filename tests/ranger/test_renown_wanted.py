@@ -99,9 +99,8 @@ def test_a_hero_with_the_magistrates_notice_beats_the_rogue_and_cuts_his_name():
 
 
 def _allied_season(g):
-    """豪強分屬兩軍的季（allied.on：蓋了第一季的章、而且開季時豪強分屬兩軍的章開著）。"""
-    w = g.state.world
-    w.season_one, w.haoqiang_allied = True, True
+    """豪強分屬兩軍的季（allied.on：蓋了第一季的章）。"""
+    g.state.world.season_one = True
 
 
 def test_allied_gentry_are_posted_by_the_other_army():
