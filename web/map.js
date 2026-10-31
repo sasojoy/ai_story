@@ -2101,16 +2101,36 @@
   // ── 打開、換外圍 ──
   // 第一次（每一次打開輿圖）看哪裡：沒帶目標照打開的取景（camOpen）；帶了目標（江湖頁「去輿圖」、小地圖點了某一處、約戰卡「前往」：mapGoto）
   // 照 Joy 的（2026-10-31）——連另一頭（護糧的終點，不然是你）一起框進露出來的那一塊（留邊給字），最多放到 Z0（輿圖表現第二版：Joy 的 MV_PICK_Z
-  // 換成 Z0）；兩頭太遠、框進來就成了遠景（< Z0 × mid_from，字只剩大區；Joy 的 MV_LV1）才只看選了的那一處、倍率 Z0
+  // 換成 Z0）；兩頭太遠、框進來就成了遠景（< Z0 × mid_from，字只剩大區；Joy 的 MV_LV1）才只看選了的那一處、倍率 Z0。
+  // 留白照螢幕 px（FB-9091，W2 第二輪 2026-10-31，PM 定照 Joy 的本意「你與目標一起框進來」）：左右合起來 MV_FIRST_X、上下 MV_FIRST_Y（名字寫在小圖旁）。
+  // 以前兩頭各留 160 個地圖單位，倍率越小這一截在螢幕上越寬，兩步外（洛陽官道→潁水河畔）就算成遠景、退回只看目標，你在畫面外。
+  // 留白放不下（窄螢幕：320 寬洛陽官道→潁水河畔留 160 就成了遠景）時倍率先拉到中景的門檻（Z0 × mid_from）、留白縮到放得下為止。
+  // 兩頭的小圖（± MV_FIRST_PAD）一定要在露出來那一塊裡、不在看得到的浮著的那幾樣底下（貼著框邊的夾框會把一頭推到邊上、小地圖在右上）：不行就再拉遠一點
+  // （每次 × MV_FIRST_STEP），拉到遠景還不行才只看目標
+  // 護糧（有終點）先試你、下一站、終點三點一起（以前只框下一站與終點，你常落在畫面外；留白改成螢幕 px 之後更緊），框不進來再照 Joy 的只框兩頭
+  const MV_FIRST_X = 160, MV_FIRST_Y = 80, MV_FIRST_PAD = 12, MV_FIRST_STEP = 0.94;
   function camFirst(g) {
-    const st = S.mapState, base = S.mapBase, z0 = mvZ0(g);
-    const leg = mapLeg(), a = S.mapSel && placeXY(S.mapSel), b = leg ? placeXY(leg.to) : st && !st.journey && youXY(base, st);
-    if (a && b) {
-      const room = mapRoom(g), w = Math.abs(a[0] - b[0]) + 320, h = Math.abs(a[1] - b[1]) + 160;
-      const z = Math.min(z0, (g.vw - 16) / w, (room.bottom - room.top - 16) / h);
-      if (z >= z0 * Number(mvView().mid_from)) return camAt(g, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, z);
+    const st = S.mapState, base = S.mapBase, z0 = mvZ0(g), zmid = z0 * Number(mvView().mid_from);
+    const leg = mapLeg(), a = S.mapSel && placeXY(S.mapSel), end = leg && placeXY(leg.to), me = st && !st.journey && youXY(base, st);
+    const sets = a ? (end ? [[a, end, me], [a, end]] : [[a, me]]).map((s) => s.filter(Boolean)).filter((s) => s.length > 1) : [];
+    for (const pts of sets) {
+      const room = mapRoom(g), xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), dx = x1 - x0, dy = y1 - y0;
+      let z = Math.max(zmid, Math.min(z0, dx ? (g.vw - 16 - MV_FIRST_X) / dx : z0, dy ? (room.bottom - room.top - 16 - MV_FIRST_Y) / dy : z0));
+      for (; z >= zmid - 1e-9; z *= MV_FIRST_STEP) {
+        const c = camAt(g, (x0 + x1) / 2, (y0 + y1) / 2, z);
+        if (firstClear(base, st, c, g, pts)) return c;
+      }
     }
     return a ? camAt(g, a[0], a[1], z0) : camOpen(g);
+  }
+  // 兩頭的小圖都露著：在露出來那一塊裡（上面讓開區名那一排、底下讓開抽屜），不在看得到的浮著的那幾樣（hudBoxes：收起來的不算）底下
+  function firstClear(base, st, c, g, pts) {
+    const room = mapRoom(g), P = MV_FIRST_PAD, hud = hudBoxes(base, g, mvLevel(c.z, g), mvArea(base, st, c, g));
+    return pts.every(([x, y]) => {
+      const sx = c.x + x * c.z, sy = c.y + y * c.z, bx = [sx - P, sy - P, sx + P, sy + P];
+      return bx[0] >= 0 && bx[2] <= g.vw && bx[1] >= room.top && bx[3] <= room.bottom && !hud.some((h) => boxCross(bx, h));
+    });
   }
   // 打開的取景（輿圖表現第二版 2.2）：倍率 Z0（螢幕寬放 open_units 個地圖單位）、中心＝你（算兩票）＋腳下每一站（各一票）的平均，夾在天下的框裡。
   // 每次打開輿圖分頁、◎ 都回到這裡。在路上照你此刻那一點（往要去的那一站偏的那一截是 W3 的事）

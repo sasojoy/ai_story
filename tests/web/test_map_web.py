@@ -2053,7 +2053,7 @@ def _hud_look(vw, case):
     if case["lvl"] > 0 and case["miniSize"]:
         mw, mh = case["miniSize"]
         out["mini"] = (vw - 12 - mw - 2, 62, vw - 12, 62 + mh + 2)
-    fb = vh - float(case["fabBottom"][:-2])
+    fb = vh - (float(case["fabBottom"][:-2]) if case["fabBottom"] else 16)  # 桌機貼底 16（style.css 的 bottom: 16px !important）
     out["fab"] = (vw - 58, fb - 102, vw - 12, fb)
     return {k: b for k, b in out.items() if case[k] != "hidden"}
 
@@ -2095,3 +2095,55 @@ return res;""".replace("FRAMES", json.dumps(sorted(FRAMES.items()))))
     assert ((320, "overview", "row"), "fab") in hidden
     for vw in (375, 360, 320):
         assert {((vw, "overview", "full"), k) for k in ("area", "q", "mini", "fab")} <= hidden
+
+
+# 江湖頁「去輿圖」帶目標（FB-9091）：哪幾種、在哪幾種畫面。地圖框照實機（手機 FRAMES；1280×800 的桌機地圖框 905 寬，抽屜是右欄）
+GOTO_CASES = [  # (站在哪, 去哪, 護糧的終點)
+    ("luoyang_road", "yingshui", None),   # 新手目標「升到第 5 級」的「去做 ›」：兩步 11 分（QA：375／360／320 只框潁水河畔，你在畫面左外）
+    ("yingchuan", "runan_wilds", None),   # 人物打算「皇甫嵩要追波才的殘部」：兩步 9 分（QA：320 只框目標）
+    ("yingchuan", "changshe", None),      # 章回卡「投軍長社」
+    ("yingchuan", "changshe", "runan"),   # 護糧：下一站長社、終點汝南
+]
+GOTO_FRAMES = [(375, 667, False), (360, 635, False), (320, 402, False), (905, 655, True)]
+
+
+def test_fb9091_go_to_map_frames_you_and_the_target_with_a_margin_in_screen_pixels():
+    """FB-9091：江湖頁「去輿圖」帶著目標，你與目標（護糧是下一站與終點）一起框進來（Joy 3d9b6161 的本意，PM 10/31 定）。以前兩頭各留 160 個地圖單位，
+    倍率越小這一截在螢幕上越寬，兩步外（洛陽官道→潁水河畔差 265 單位）就算成遠景、退回只看目標、你在畫面外。現在留白照螢幕 px（左右合起來 160、
+    上下 80；窄螢幕放不下時倍率先拉到中景的門檻、留白縮），倍率最多 Z0；你與目標的小圖（±12px）都在露出來那一塊裡、不在看得到的浮著的那幾樣
+    （區名、🔍、小地圖、右下兩顆）底下。護糧三點（你、下一站、終點）一起框（以前只框兩頭，你常在畫面外）。
+    375／360／320／桌機 × GOTO_CASES：都框進來（倍率 ≥ Z0 × mid_from）、每一點都看得到。"""
+    game = _w2()
+    states = {}
+    for here in sorted({c[0] for c in GOTO_CASES}):
+        game.state.player.location = here
+        states[here] = game.map_state()
+    base = game.map_base()
+    out = run(game, DRAWER_DOM + GESTURE_DOM + HUD_DOM + SETTLE + """const res = [], STATES = STATES_JSON;
+// 抽屜照實機量到的（W2 第二輪 hud.mjs：一處的卡第一格 147、底條那一行 68；node 量不到時是 200 以上、68）
+T.qs['#mbody .m-peek-end'] = { offsetTop: 137 }; T.qs['#mbody .m-tray-end'] = { offsetTop: 64 };
+for (const [vw, vh, desk] of FRAMES_JSON) {
+  T.ctx.window.matchMedia = () => ({ matches: desk });
+  Object.assign(map, { clientWidth: vw, clientHeight: vh }); box.clientHeight = vh;
+  for (const [here, sel, then] of CASES_JSON) {
+    H.S.mapState = STATES[here];
+    H.mapGoto(sel, then); H.setMapDrawer(H.S.mapDrawer);
+    const g = H.mapGeom(map), c = H.camFirst(g); H.camSet(c); H.drawMarks(); settle();
+    res.push({ vw, vh, desk, here, sel, then, c: H.S.mapCam, z0: H.mvZ0(g), mid: H.S.mapBase.view.mid_from, room: H.mapRoom(g), ...look() });
+  }
+}
+return res;""".replace("STATES_JSON", json.dumps(states, ensure_ascii=False)).replace("FRAMES_JSON", json.dumps(GOTO_FRAMES))
+              .replace("CASES_JSON", json.dumps(GOTO_CASES)))
+    pos = {p["id"]: (p["x"], p["y"]) for p in base["places"]}
+    assert len(out) == len(GOTO_FRAMES) * len(GOTO_CASES)
+    for case in out:
+        key = (case["vw"], case["here"], case["sel"], case["then"])
+        c, room = case["c"], case["room"]
+        assert case["z0"] * case["mid"] - 1e-9 <= c["z"] <= case["z0"] + 1e-9, (key, c, case["z0"])  # 框進來了（不是退回只看目標）、最多 Z0
+        hud = _hud_look(case["vw"], case)
+        for pid in [case["here"], case["sel"]] + ([case["then"]] if case["then"] else []):
+            x, y = c["x"] + pos[pid][0] * c["z"], c["y"] + pos[pid][1] * c["z"]
+            bx = (x - 12, y - 12, x + 12, y + 12)
+            assert bx[0] >= 0 and bx[2] <= case["vw"] and bx[1] >= room["top"] and bx[3] <= room["bottom"], (key, pid, bx, room)
+            for name, h in hud.items():
+                assert not _cross(bx, h), (key, pid, name, bx, h)
