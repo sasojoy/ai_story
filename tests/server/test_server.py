@@ -586,6 +586,66 @@ def test_two_games_of_one_character_do_not_overwrite_each_other(game):
     assert tab_b.state.player.stats["silver"] == 777
 
 
+def _game_clock(monkeypatch, start: float = 1000.0) -> list[float]:
+    """GAMES 的閒置時鐘（server._game_clock）換成手撥的；掃描的節流從頭算。"""
+    clock = [start]
+    monkeypatch.setattr(server, "_game_clock", lambda: clock[0])
+    monkeypatch.setattr(server, "_games_swept", None)
+    return clock
+
+
+def _stored_view(game):
+    """這一份 Game 進鎖重讀之後的角色（不含賽季）與江湖畫面的狀態列：丟掉重建的那一份要跟它一模一樣。"""
+    return server.look(game, lambda g: (g.state.model_dump(exclude={"world"}), server.main_view(g)["status"]))
+
+
+def test_an_idle_game_is_dropped_and_rebuilt_the_same(client, monkeypatch):
+    """審查 S-06：GAMES 不是只進不出。閒置滿 GAME_IDLE_SECONDS 的那一份下一次 game_for 時丟掉，再有請求時照資料庫重建，
+    角色、畫面跟丟掉之前一模一樣；之後的動作照常存得進去。"""
+    clock = _game_clock(monkeypatch)
+    _player(client)
+    old = server.game_for("沈青衫")
+    server.act(old, lambda g: g.state.player.stats.__setitem__("silver", 321))
+    clock[0] += server.GAME_IDLE_SECONDS - 1
+    assert server.game_for("沈青衫") is old  # 還沒閒置滿
+    clock[0] += server.GAME_IDLE_SECONDS
+    assert client.get("/api/main").status_code == 200  # 有請求進來：先丟掉，再照資料庫重建
+    rebuilt = server.GAMES["沈青衫".casefold()]
+    assert rebuilt is not old
+    assert _stored_view(rebuilt) == _stored_view(old)  # 丟掉的那一份照資料庫重讀：兩份一模一樣
+    out = client.post("/api/choose", json={"id": "act:rest"})
+    assert out.status_code == 200
+    assert open_characters().load("沈青衫").player.stats["silver"] == 321
+
+
+def test_a_game_in_use_is_not_dropped(client, monkeypatch):
+    """請求拿著的那一份（進鎖、出鎖都算用過；三段式的 B 段在鎖外等模型）不算閒著：最後一次用過之後才開始算。
+    管理者快轉過的那一份（advanced_real 只留在那一份上）也不丟。"""
+    clock = _game_clock(monkeypatch)
+    _player(client)
+    game = server.game_for("沈青衫")
+    clock[0] += server.GAME_IDLE_SECONDS - 10
+    server.look(game, lambda g: None)  # 這一下用過
+    clock[0] += 20
+    assert server.game_for("沈青衫") is game
+    game.advanced_real = 3600.0  # 管理者快轉推過的那一截
+    clock[0] += 10 * server.GAME_IDLE_SECONDS
+    assert server.game_for("沈青衫") is game
+
+
+def test_dropping_idle_games_leaves_a_renamed_game_under_its_new_name(client, monkeypatch):
+    """易名帖把 GAMES 換到新名號底下（mall routes）：用到的時間跟著那一份 Game 走，新名號底下照樣會被丟、照樣重建得回來。"""
+    clock = _game_clock(monkeypatch)
+    _player(client)
+    game = server.game_for("沈青衫")
+    with server._GAMES_LOCK:
+        server.GAMES.pop("沈青衫".casefold())
+        server.GAMES["新名號"] = game
+    clock[0] += server.GAME_IDLE_SECONDS + 1
+    server.game_for("別人")
+    assert "新名號" not in server.GAMES
+
+
 def test_two_sessions_of_one_character_keep_each_others_changes(client):
     """同一個帳號開兩個分頁（兩個 session）：A 改了存檔，B 下一個動作保留 A 的改動、畫面也看得到。
     A 的改動經由另一份 Game 存進資料庫（不是 GAMES 裡共用的那一份）：兩個 session 共用同一份 Game，
