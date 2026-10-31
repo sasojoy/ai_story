@@ -103,8 +103,8 @@ def test_fragments_only_for_capable_faction(fs, world):
     loner = player(fs, world, "丙", None, "lake")
     assert foreshadow.hear_after_action(loner.state, fs, "north", rng, world) == []
     assert loner.state.player.fragments == {}
-    haoqiang = player(fs, world, "丁", "haoqiang", "lake")
-    assert foreshadow.hear_after_action(haoqiang.state, fs, "north", rng, world) == ["你聽到一件事：長社城裡的官軍已經在殺馬吃了。"]
+    gentry = player(fs, world, "丁", "haoqiang", "lake")  # 豪強依附官軍、黃巾之一；沒有自己的鏈
+    assert foreshadow.hear_after_action(gentry.state, fs, "north", rng, world) == []
     other_region = player(fs, world, "戊", "guan", "port")
     heard = foreshadow.hear_after_action(other_region.state, fs, "south", rng, world)
     assert len(heard) == 1 and "營帳" not in heard[0]  # 南區只有南區的片段
@@ -121,16 +121,16 @@ def test_fragment_chance_is_rolled_and_can_miss(fs, world):
 
 @pytest.mark.smoke
 def test_fragment_never_repeats_and_writes_journal_not_rumor(fs, world):
-    """渡口（南區）探索：官軍在南區有兩則行動片段，兩次各聽一則、不重複，第三次什麼都沒有；寫進江湖紀錄、不發傳聞。"""
+    """渡口（南區）探索：官軍在南區有三則行動片段，三次各聽一則、不重複，第四次什麼都沒有；寫進江湖紀錄、不發傳聞。"""
     game = player(fs, world, "甲", "guan", "port", rng=FixedRandom(0.0))
     rumors = list(world.get_season().rumors)
     heard: list[str] = []
-    for _ in range(3):
+    for _ in range(4):
         game.choose("act:explore")
         heard += [line for line in game.state.journal[0].lines if line.startswith("你聽到一件事：")]
-    assert len(heard) == 2 and len(set(heard)) == 2
+    assert len(heard) == 3 and len(set(heard)) == 3
     assert f"你聽到一件事：靈台的太史說，今年夜裡的風從{wind(world)}來。" in heard
-    assert game.state.player.fragments == {"fs_fire_guan": [3], "fs_jail_guan": [0]}
+    assert game.state.player.fragments == {"fs_fire_guan": [3], "fs_jail_guan": [0], "fs_wan_guan": [0]}
     assert world.get_season().rumors == rumors
     assert all("聽到一件事" not in r.text for r in world.get_season().rumors)
 
@@ -223,9 +223,10 @@ def test_event_fragment_is_appended_when_the_event_is_presented(fs, world):
 
 def test_fragment_versions_follow_the_event_version(fs, world):
     """宛城有甲、乙兩版：第 3 週那件還沒定時用史書那一版（第一個，甲），定成乙之後用乙的文字。"""
-    game = player(fs, world, "甲", "haoqiang", "port", rng=FixedRandom(0.0))
+    game = player(fs, world, "甲", "guan", "port", rng=FixedRandom(0.0))
+    game.state.player.fragments = {"fs_fire_guan": [3], "fs_jail_guan": [0]}  # 南區官軍的其他片段都聽過了
     assert "你聽到一件事：新野的縣令早就跑了。" in foreshadow.hear_after_action(game.state, fs, "south", FixedRandom(0.0), world)
-    game.state.player.fragments = {}
+    game.state.player.fragments = {"fs_fire_guan": [3], "fs_jail_guan": [0]}
     game.state.world.timeline["zhangmancheng"] = TimelineResult(key="不成", time=0.0)
     assert foreshadow.hear_after_action(game.state, fs, "south", FixedRandom(0.0), world) == [
         "你聽到一件事：新野的縣令早就跑了，縣衙裡只剩幾個老吏。"
@@ -368,7 +369,7 @@ def test_final_step_window_night_and_front(fs, world):
     w.timeline["changshe_fire"] = TimelineResult(key="guan:大勝", time=w.time)
     assert option(game, "fs:fs_fire_guan") is None  # 大事已經發生：選項不出現
     huang = player(fs, world, "乙", "huang", "lake", time=night_in_window(fs))
-    assert not any(i.startswith("fs:") for i in ids(huang))
+    assert not any(i.startswith("fs:fs_fire_guan") for i in ids(huang))  # 別的陣營看不到這條
 
 
 def test_requires_any_of_and_unready_text(fs, world):
@@ -457,13 +458,12 @@ def test_lock_is_invisible(fs, world):
 
 
 def test_anonymous_lockers_are_named_in_the_announcement(fs, world):
-    """匿名行走只作用在地方傳聞（傳聞分層第七節，企劃者 2026-10-06）：匿名的人鎖定、搶輸、做完豪強那一條，公告、江湖史
-    照樣寫名號（改寫歷史的事，留名就是獎勵）；不再記 Lock.shown、third_party_shown。"""
+    """匿名行走只作用在地方傳聞（傳聞分層第七節，企劃者 2026-10-06）：匿名的人鎖定、搶輸，公告、江湖史
+    照樣寫名號（改寫歷史的事，留名就是獎勵）；不再記 Lock.shown（豪強第三方那一條 2026-10-31 拿掉）。"""
     t = night_in_window(fs)
     direction = wind(world)
     changshe = next(e for e in fs.timetable if e.id == "changshe_fire")
     changshe.locked_chronicle = {"guan": "火具是{name}備下的。"}
-    changshe.third_party_chronicle = "{name} 收了兩邊的糧錢。"
     jia = player(fs, world, "甲", "guan", "lake", time=t)
     jia.state.player.anonymous = True
     jia.state.player.clue_items = {"fs_reeds": 1, "fs_oil": 1}
@@ -473,29 +473,14 @@ def test_anonymous_lockers_are_named_in_the_announcement(fs, world):
     yi.state.player.clue_items = {"fs_dry_reeds": 1}
     yi.choose("fs:fs_fire_huang")
     yi.choose(f"fs:fs_fire_huang:{direction}")
-    bing = player(fs, world, "丙", "haoqiang", "town", rng=FixedRandom(0.0), time=t)
-    bing.state.player.anonymous = True
-    bing.state.player.fs_counters = {"two_buyers": 1}
-    bing.state.player.materials = {"man_1": 4}
-    bing.choose("fs:fs_fire_haoqiang")
-    bing.state.player.location = "lake"
-    bing.choose("fs:fs_fire_haoqiang")
-    ding = player(fs, world, "丁", "haoqiang", "town", rng=FixedRandom(0.0), time=t)  # 不匿名的豪強
-    ding.state.player.fs_counters = {"two_buyers": 1}
-    ding.state.player.materials = {"man_1": 4}
-    ding.choose("fs:fs_fire_haoqiang")
-    ding.state.player.location = "lake"
-    ding.choose("fs:fs_fire_haoqiang")
 
     season = world.get_season()
     assert season.locks["changshe_fire"] == Lock(side="guan", name="甲", time=t)
     assert season.lock_losers["changshe_fire"] == [Lock(side="huang", name="乙", time=t)]
-    assert season.third_party["changshe_fire"] == ["丙", "丁"] and season.third_party_shown == {}
-    reveal = GameState(player=ding.state.player, world=season)
+    reveal = GameState(player=yi.state.player, world=season)
     msgs = timetable.resolve(reveal, fs, changshe, FixedRandom(0.5), key="guan:大勝")
-    assert msgs == ["【江湖大事】" + CHANGSHE_LOCKED.replace("{name}", "甲") + CHANGSHE_LOSER.replace("{loser}", "乙")
-                    + changshe.third_party_text.replace("{name}", "丙、丁")]
-    assert [r.text for r in season.chronicle][-2:] == ["火具是甲備下的。", "丙、丁 收了兩邊的糧錢。"]
+    assert msgs == ["【江湖大事】" + CHANGSHE_LOCKED.replace("{name}", "甲") + CHANGSHE_LOSER.replace("{loser}", "乙")]
+    assert [r.text for r in season.chronicle][-1] == "火具是甲備下的。"
     result = season.timeline["changshe_fire"]
     assert (result.locked_by, result.losers) == ("甲", ["乙"])
     assert "某位少俠" not in msgs[0]
@@ -553,33 +538,33 @@ def test_wrong_answer_penalties(fs, world):
 
 def test_leaving_the_question_and_follow_up_questions(fs, world):
     """看題之後選單只剩答案與「作罷」；作罷什麼都不損失。追問（then）要全對才算；選項自己的懲罰蓋過那一步的。"""
-    game = player(fs, world, "甲", "haoqiang", "port", rng=FixedRandom(0.0))
+    game = player(fs, world, "甲", "guan", "port", rng=FixedRandom(0.0))
     w, p = game.state.world, game.state.player
     materials_bag = {"man_1": 2}
     p.materials = dict(materials_bag)
     w.time = timetable_when(game, "wancheng") - 1
-    assert option(game, "fs:fs_wan_haoqiang").label == "討冊子（時候未到）"  # 集結開始前
+    assert option(game, "fs:fs_wan_guan").label == "討冊子（時候未到）"  # 集結開始前
     w.time = timetable_when(game, "wancheng") + 1  # 決戰排定的時間到了（集結中）、還沒收場
-    assert option(game, "fs:fs_wan_haoqiang").enabled
-    assert game.choose("fs:fs_wan_haoqiang") == ["老縣吏抱著冊子不放。"]
-    assert ids(game) == ["fs:fs_wan_haoqiang:1", "fs:fs_wan_haoqiang:2", "fs:leave"]
+    assert option(game, "fs:fs_wan_guan").enabled
+    assert game.choose("fs:fs_wan_guan") == ["老縣吏抱著冊子不放。"]
+    assert ids(game) == ["fs:fs_wan_guan:1", "fs:fs_wan_guan:2", "fs:leave"]
     assert "老縣吏抱著冊子不放。" in game.scene_text()
     assert game.travel_refusal("town") == "正在答話，先作罷才能安排前往"
     assert game.choose("fs:leave") == ["你想了想，暫且作罷。"] and p.fs_asking is None
-    game.choose("fs:fs_wan_haoqiang")
-    assert game.choose("fs:fs_wan_haoqiang:2") == ["▸ 帶人進縣衙直接拿冊子", "老吏把冊子扔進火盆，這次不算。"]
+    game.choose("fs:fs_wan_guan")
+    assert game.choose("fs:fs_wan_guan:2") == ["▸ 帶人進縣衙直接拿冊子", "老吏把冊子扔進火盆，這次不算。"]
     assert p.materials == materials_bag
-    game.choose("fs:fs_wan_haoqiang")
-    assert game.choose("fs:fs_wan_haoqiang:1") == ["▸ 開倉放糧，讓縣裡的人自己推你", "老縣吏又問：「糧從哪裡來？」"]
-    assert ids(game) == ["fs:fs_wan_haoqiang:倉", "fs:fs_wan_haoqiang:搶", "fs:leave"]
-    assert game.choose("fs:fs_wan_haoqiang:搶") == ["▸ 從黃巾手上搶", "老縣吏搖頭。"]
-    game.choose("fs:fs_wan_haoqiang")
-    game.choose("fs:fs_wan_haoqiang:1")
+    game.choose("fs:fs_wan_guan")
+    assert game.choose("fs:fs_wan_guan:1") == ["▸ 開倉放糧，讓縣裡的人自己推你", "老縣吏又問：「糧從哪裡來？」"]
+    assert ids(game) == ["fs:fs_wan_guan:倉", "fs:fs_wan_guan:搶", "fs:leave"]
+    assert game.choose("fs:fs_wan_guan:搶") == ["▸ 從黃巾手上搶", "老縣吏搖頭。"]
+    game.choose("fs:fs_wan_guan")
+    game.choose("fs:fs_wan_guan:1")
     w.timeline["zhangmancheng"] = TimelineResult(key="不成", time=0.0)  # 宛城是乙版
-    assert game.choose("fs:fs_wan_haoqiang:倉") == ["▸ 從自家倉裡出", "老縣吏把冊子捧出來，城外的官軍還沒走遠。", "粗糧 -2"]
-    assert w.third_party["wancheng"] == ["甲"] and "wancheng" not in w.locks
+    assert game.choose("fs:fs_wan_guan:倉") == ["▸ 從自家倉裡出", "老縣吏把冊子捧出來，城外的官軍還沒走遠。", "粗糧 -2"]
+    assert w.locks["wancheng"].name == "甲"
     w.timeline["wancheng"] = TimelineResult(key="乙:guan:大勝", time=w.time)
-    assert option(game, "fs:fs_wan_haoqiang") is None
+    assert option(game, "fs:fs_wan_guan") is None
 
 
 def timetable_when(game: Game, event_id: str) -> float:
@@ -590,30 +575,30 @@ def timetable_when(game: Game, event_id: str) -> float:
 def test_requirements_in_final_and_a_step_add_up(fs, world):
     """審查 M1：整條另要 4 份糧草（final.requires）、每一趟也要 4 份（係數 0.3：2＋2＋2＝6）。條件照「這一趟加整條」一起算，
     整條的那份等完成才交，交不夠就不能完成；檢定失敗只沒收這一趟的 2 份。"""
-    chain = next(c for c in fs.foreshadows.chains if c.id == "fs_fire_haoqiang")
+    chain = next(c for c in fs.foreshadows.chains if c.id == "fs_fire_grain")
     chain.final.requires.grain = 4
     validate(fs)
     t = night_in_window(fs)
-    game = player(fs, world, "甲", "haoqiang", "town", rng=FixedRandom(0.0), time=t)
+    game = player(fs, world, "甲", "huang", "town", rng=FixedRandom(0.0), time=t)
     p = game.state.player
     p.fs_counters = {"two_buyers": 1}
     p.materials = {"man_1": 4}
-    assert option(game, "fs:fs_fire_haoqiang").enabled  # 這一趟 2 ＋ 整條 2
-    assert game.choose("fs:fs_fire_haoqiang") == ["（成功）", "長社的帳房在你的契上按了手印。", "粗糧 -2"]
+    assert option(game, "fs:fs_fire_grain").enabled  # 這一趟 2 ＋ 整條 2
+    assert game.choose("fs:fs_fire_grain") == ["（成功）", "長社的帳房在你的契上按了手印。", "粗糧 -2"]
     p.location = "lake"
-    assert option(game, "fs:fs_fire_haoqiang").label == "交糧（東西還沒備齊）"  # 只剩 2 份：不夠這一趟加整條
-    assert game.choose("fs:fs_fire_haoqiang") == ["（此刻無法這麼做。）"]
-    assert "fs_fire_haoqiang" not in p.fs_done and p.materials == {"man_1": 2}
+    assert option(game, "fs:fs_fire_grain").label == "交糧（東西還沒備齊）"  # 只剩 2 份：不夠這一趟加整條
+    assert game.choose("fs:fs_fire_grain") == ["（此刻無法這麼做。）"]
+    assert "fs_fire_grain" not in p.fs_done and p.materials == {"man_1": 2}
     p.materials = {"man_1": 4}
     game.rng = FixedRandom(0.99)
-    assert game.choose("fs:fs_fire_haoqiang") == ["（失敗）", "半路撞上官軍斥候，糧車被扣下。", "粗糧 -2"]
+    assert game.choose("fs:fs_fire_grain") == ["（失敗）", "半路撞上官軍斥候，糧車被扣下。", "粗糧 -2"]
     p.materials = {"man_1": 4}
     game.rng = FixedRandom(0.0)
-    assert game.choose("fs:fs_fire_haoqiang") == [
+    assert game.choose("fs:fs_fire_grain") == [
         "（成功）", "黃巾的帳房在你的契上按了手印。",
         "兩邊的帳房都在你的契上按了手印。不論那一夜誰勝誰敗，他們都欠你一份人情。", "粗糧 -4",
     ]
-    assert p.materials == {} and "fs_fire_haoqiang" in p.fs_done
+    assert p.materials == {} and "fs_fire_grain" in p.fs_done
 
 
 def test_any_of_branch_counts_items_on_top_of_the_rest(fs, world):
@@ -644,30 +629,30 @@ def test_cannot_seclude_while_answering(fs, world):
     assert game.state.player.busy_until is not None
 
 
-def test_haoqiang_chain_is_third_party(fs, world):
-    """兩頭賣糧：兩趟（長社、黃巾營寨各一趟）都做完才算；寫進 third_party，不碰 locks，也不會讓官軍、黃巾的鎖定失效。
+def test_a_two_trip_chain_counts_only_when_both_trips_are_done(fs, world):
+    """兩趟的鏈（final.steps；豪強第三方的兩頭賣糧 2026-10-31 拿掉，夾具改成黃巾的一條）：兩趟都做完才算；先有人鎖定時進搶輸的名單。
     檢定失敗沒收那一趟的糧草，可以再來。"""
     t = night_in_window(fs)
-    game = player(fs, world, "甲", "haoqiang", "town", rng=FixedRandom(0.99), time=t)
+    game = player(fs, world, "甲", "huang", "town", rng=FixedRandom(0.99), time=t)
     p, w = game.state.player, game.state.world
     p.materials = {"man_1": 6}
-    assert option(game, "fs:fs_fire_haoqiang").label == "交糧（東西還沒備齊）"  # 還沒有「兩邊都賣」的起點
+    assert option(game, "fs:fs_fire_grain").label == "交糧（東西還沒備齊）"  # 還沒有「兩邊都賣」的起點
     p.fs_counters = {"two_buyers": 1}
     w.locks["changshe_fire"] = Lock(side="guan", name="官軍某甲", time=0.0)
-    assert option(game, "fs:fs_fire_haoqiang").enabled
-    assert game.choose("fs:fs_fire_haoqiang") == ["（失敗）", "帳房翻了兩頁就看穿了假帳，糧車被扣下。", "粗糧 -2"]
+    assert option(game, "fs:fs_fire_grain").enabled
+    assert game.choose("fs:fs_fire_grain") == ["（失敗）", "帳房翻了兩頁就看穿了假帳，糧車被扣下。", "粗糧 -2"]
     assert p.materials == {"man_1": 4} and p.fs_done == []
     game.rng = FixedRandom(0.0)
-    assert game.choose("fs:fs_fire_haoqiang") == ["（成功）", "長社的帳房在你的契上按了手印。", "粗糧 -2"]
-    assert p.fs_done == ["fs_fire_haoqiang:0"] and option(game, "fs:fs_fire_haoqiang") is None  # 長社這一趟做完了
+    assert game.choose("fs:fs_fire_grain") == ["（成功）", "長社的帳房在你的契上按了手印。", "粗糧 -2"]
+    assert p.fs_done == ["fs_fire_grain:0"] and option(game, "fs:fs_fire_grain") is None  # 長社這一趟做完了
     p.location = "lake"
-    assert game.choose("fs:fs_fire_haoqiang") == [
+    assert game.choose("fs:fs_fire_grain") == [
         "（成功）", "黃巾的帳房在你的契上按了手印。",
         "兩邊的帳房都在你的契上按了手印。不論那一夜誰勝誰敗，他們都欠你一份人情。", "粗糧 -2",
     ]
-    assert p.fs_done == ["fs_fire_haoqiang:0", "fs_fire_haoqiang:1", "fs_fire_haoqiang"]
-    assert w.third_party["changshe_fire"] == ["甲"]
-    assert w.locks["changshe_fire"].name == "官軍某甲" and "changshe_fire" not in w.lock_losers
+    assert p.fs_done == ["fs_fire_grain:0", "fs_fire_grain:1", "fs_fire_grain"]
+    assert w.locks["changshe_fire"].name == "官軍某甲"
+    assert [x.name for x in w.lock_losers["changshe_fire"]] == ["甲"]
     assert p.contrib == 50
 
 
@@ -848,7 +833,7 @@ def test_prep_events_and_their_items(fs, world):
     assert guan.state.player.clue_items == {}
     assert rules.apply_effect(Effect(fs_counters={"two_buyers": 1}), guan.state, fs, world) == []
     assert guan.state.player.fs_counters == {"two_buyers": 1}
-    seller = player(fs, world, "丙", "haoqiang", "town")
+    seller = player(fs, world, "丙", "huang", "town")
     seller.state.world.time = cal(fs, 3, 6, 12)
     assert "fs_ev_two_buyers" not in [e.id for e in event_candidates(seller.state, fs, "explore")]
     seller.state.world.time = cal(fs, 4, 0, 1)
@@ -987,7 +972,7 @@ def test_validate_catches_the_review_gaps(fs):
 
 
 def test_validate_checks_steps_windows_and_counters(fs):
-    chain = next(c for c in fs.foreshadows.chains if c.id == "fs_fire_haoqiang")
+    chain = next(c for c in fs.foreshadows.chains if c.id == "fs_fire_grain")
     chain.final.steps[1].location = "atlantis"
     with pytest.raises(ContentError, match="地點 atlantis"):
         validate(fs)
@@ -999,7 +984,7 @@ def test_validate_checks_steps_windows_and_counters(fs):
     with pytest.raises(ContentError, match="steps"):
         validate(fs)
     chain.final.location = None
-    wan = next(c for c in fs.foreshadows.chains if c.id == "fs_wan_haoqiang")
+    wan = next(c for c in fs.foreshadows.chains if c.id == "fs_wan_guan")
     wan.event = "luzhi_jailed"
     with pytest.raises(ContentError, match="during_muster"):
         validate(fs)

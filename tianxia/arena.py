@@ -25,7 +25,7 @@ from . import prologue as prologue_rules
 from . import duel as duel_rules
 from .characters import name_key
 from .models import MOVES, ArenaTuning, Content, DuelTuning
-from .state import ArenaEntry, ArenaFight, ArenaSide, GameState, WorldState
+from .state import ArenaEntry, ArenaFight, ArenaSide, GameState, PlayerState, WorldState
 
 DAY = 86400
 WIN_TIERS = ("大勝", "險勝")
@@ -82,6 +82,17 @@ CHAMPION_HEAD = "本季擂主："
 CHAMPIONS_TITLE = "### 歷屆擂主"
 WAGE = "擂台第 {rank} 名（{title}）的俸發下來了：銀兩 +{silver}、名望 +{fame}。"
 PRIZE = "本季擂台第 {place} 名：名望 +{fame}。"
+
+
+def held_kind(p: PlayerState) -> str:
+    """擂台動畫：手上兵器的種類（models.WEAPON_KINDS）；沒拿兵器是空字串（空手）。只給畫面用，不碰數字。"""
+    return p.weapon.kind if p.weapon is not None else ""
+
+
+def looks_view(looks: list[str]) -> dict:
+    """擂台動畫給網頁的兩邊兵器種類（舊的一場沒記：兩邊都當空手）。"""
+    me, foe = (list(looks) + ["", ""])[:2]
+    return {"me": me, "foe": foe}
 
 
 def on(content: Content) -> bool:

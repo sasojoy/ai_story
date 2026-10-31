@@ -381,7 +381,7 @@ def _issue(state: GameState, content: Content, week: int, prefix: str, redraw: b
     elif any(o.week == week for o in w.orders):
         return []
     for faction in content.scenario.factions:
-        if faction.allies and rules.haoqiang_allied(content, w):  # 豪強分屬兩軍：豪強接依附那一軍的軍令，自己那一道不發
+        if faction.allies:  # 豪強分屬兩軍：豪強接依附那一軍的軍令，自己沒有軍令（豪強第三方的打擊 2026-10-31 拿掉）
             continue
         for t, front, fid in _picks(state, content, faction.id, week):
             order = _build(state, content, t, week, front, fid)

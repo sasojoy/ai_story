@@ -19,7 +19,7 @@ _spec.loader.exec_module(sim)
 
 ONE_EACH = {"guan": 1, "huang": 1, "haoqiang": 1}
 FIELDS = {"weekly", "events", "missing", "showdowns", "orders", "promoted", "ending", "ending_id", "end_week", "ended",
-          "stuck", "checks", "geju_first", "roster"}
+          "stuck", "checks", "roster"}
 
 
 def _content(days: float = 0.25):
@@ -33,14 +33,11 @@ def test_a_short_season_runs_to_the_end_with_every_field(tmp_path):
     assert FIELDS <= set(result)
     assert result["ended"] and not result["stuck"] and result["ending"]
     assert result["events"]["uprising"]["result"] == "fixed"
-    assert set(result["weekly"][1]) == {"yingru", "nanyang", "jizhou", "geju"}
+    assert set(result["weekly"][1]) == {"yingru", "nanyang", "jizhou"}
     assert set(result["orders"]) == set(ONE_EACH) and set(result["promoted"]) == set(ONE_EACH)
     assert set(result["showdowns"]) == {"changshe_fire", "wancheng", "guangzong"}
     assert result["events"].keys().isdisjoint(result["missing"])
-    assert set(result["geju_first"]) == {85, 100} and isinstance(result["roster"], int)  # 割據首次到 85／100：(週, 時間章) 或 None
-    for hit in result["geju_first"].values():
-        assert hit is None or (isinstance(hit[0], int) and isinstance(hit[1], str))
-    assert "割據首次到" in sim.summary(1, result)
+    assert isinstance(result["roster"], int)
     assert "第" in sim.summary(1, result)  # 印得出來
 
 
@@ -59,11 +56,11 @@ def test_a_season_exactly_as_long_as_hours_still_ends(tmp_path):
 
 def test_acceptance_flags():
     """RF2：只判兩條——第 6 週以前沒有決定性勝利、三條戰線的週末中位數在 20～80。"""
-    weekly = {w: {"yingru": 50, "nanyang": 40, "jizhou": 60, "geju": 20} for w in range(1, 11)}
+    weekly = {w: {"yingru": 50, "nanyang": 40, "jizhou": 60} for w in range(1, 11)}
     content = _content()
-    ok = sim.checks({"weekly": weekly, "ending_id": "s1_warlords", "end_week": 10}, content)
+    ok = sim.checks({"weekly": weekly, "ending_id": "s1_huangtian", "end_week": 10}, content)
     assert ok["passed"] and ok["no_early_decisive"] and ok["medians"] == {"yingru": 50, "nanyang": 40, "jizhou": 60}
-    early = sim.checks({"weekly": weekly, "ending_id": "s1_warlords", "end_week": 5}, content)
+    early = sim.checks({"weekly": weekly, "ending_id": "s1_huangtian", "end_week": 5}, content)
     assert not early["no_early_decisive"] and not early["passed"]
     lopsided = {w: {**v, "jizhou": 90} for w, v in weekly.items()}
-    assert not sim.checks({"weekly": lopsided, "ending_id": "s1_gentry", "end_week": 12}, content)["passed"]
+    assert not sim.checks({"weekly": lopsided, "ending_id": "s1_turbans_hold", "end_week": 12}, content)["passed"]

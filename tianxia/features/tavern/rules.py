@@ -32,6 +32,7 @@ from pydantic import BaseModel
 
 from tianxia.characters import name_key
 from tianxia.models import Content, Material
+from tianxia.naming import BANNED_WORDS  # 題壁、問酒家：不讓人在牆上寫這些（搬進核心 naming：走一趟的留言也用；舊名 tavern.BANNED_WORDS 照舊拿得到）
 from tianxia.state import GameState, Rumor, TavernHit, TavernNote, WallNote, Whisper, WorldState
 from tianxia.world_state import season_length_days
 
@@ -106,7 +107,6 @@ WHISPER_STRANGER = "，是個生面孔。"
 STRANGER = "一個生面孔"
 HINT_SIDE = "{side}的人"
 HINT_LONER = "一個沒投靠哪一方的散人"
-BANNED_WORDS = ("假人", "機器人", "外掛")  # 題壁、問酒家：不讓人在牆上寫這些（玩家看得到的地方不能提誰是假人）
 
 SECRET_WORDS = ("配方", "口訣", "秘方", "鑄譜", "鑄法", "神器", "隱藏", "假人", "機器人", "作弊")  # 問酒家：問到這些酒家不答
 

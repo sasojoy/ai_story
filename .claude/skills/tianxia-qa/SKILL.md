@@ -14,8 +14,13 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **開結果分支**：從派工單給的那個 commit 開，`git worktree add -b qa/<名字> .claude/worktrees/qa-<名字> <sha>`。複驗如果沿用既有的 qa/ 分支，先 `git merge --ff-only origin/<修好的分支>`，快轉到修好的版本。
 - **寫檔被擋**：如果 hook 擋你寫別的工作樹的檔，就在自己 session 的工作樹 `git switch` 到結果分支來做。
 - 工作樹沒有 `.venv`，一律用 `C:/Ray/專案/天下大勢/.venv/Scripts/python.exe`。印中文要設 `PYTHONIOENCODING=utf-8`（或把 stdout 包成 UTF-8）。
-- **不重跑開發跑過的測試**（〈開發規範手冊〉4.2，企劃者 2026-10-30）：QA 只在實機上驗畫面與手感，只能靠引擎驗的照 `引擎驗收.md` 寫腳本驗；開發的回報寫了跑過哪些測試，就不再跑一次。學到的寫在回報的「學到的」一節，不改技能檔（手冊第十節，PM 收）。派工單點名要跑的才跑。
-- **測試只跑派工單點名的檔**：`<python> -m pytest -q -m "slow or not slow" tests/a.py tests/b.py`。不跑整套；派工單沒點名就不跑（開發跑過的不重跑）。
+- **不重跑開發跑過的測試**（〈開發規範手冊〉4.2，企劃者 2026-10-30；`tianxia-flow` 同一句）：QA 只在實機上驗畫面與手感，只能靠引擎驗的照 `引擎驗收.md` 寫腳本驗；開發的回報寫了跑過哪些測試，就不再跑一次。學到的寫在回報的「學到的」一節，不改技能檔（手冊第十節，PM 收）。
+- **測試只跑派工單點名的檔**：`<python> -m pytest -q -n 4 -m "slow or not slow" tests/a.py tests/b.py`（點名的檔照字面跑，連 slow）。不跑整套、不跑 `test_for`；派工單沒點名就一條都不跑。
+- **純搬的批：兩台真伺服器逐位元組比**（全部拆包總表 5.0，PM 2026-10-31；第 5 批起）：派工單寫「純搬、`web/` 一個字沒動」的批，實機 QA 改成這樣做，不拍整套截圖：
+  - BASE（這一批開出來的那一點，派工單給 SHA）與 HEAD 各 `git archive` 解一份（只要 `tianxia content web server.py server_push.py zhuan_html.py llm_queue.py console.py scripts run_bots.py`），各開一台真伺服器：各自的埠與 `<名字>.localhost`、各自的新暫存資料庫、同一個 `TIANXIA_PROFILE`、`ollama_url` 指死埠。
+  - 同一串步驟用真的 HTTP 打兩台（建帳號與角色、管理者開季、這一批搬的那幾個動作；步驟照派工單與那一區調查的 `same_behavior` 清單），每個回應存下來，逐位元組比；收場後兩邊的資料庫轉成文字（每張表、每一列照 repr 排序，帳號的 salt／hash 與 `sessions.token_hash` 抹掉）逐位元組比。
+  - 兩台都要先固定亂數與時鐘，照 `scripts/same_behavior.py` 開頭那幾層的做法（包一支啟動腳本在 `import server` 前換掉；固定不了的現實時刻先換成記號再比，見下一條的兩版對照）；同一份跑兩次先確認一樣，再比 BASE 對 HEAD。這一套是第 5 批起才有的，第一次做的人把腳本留在自己的 scratchpad 子資料夾、做法寫進回報的「學到的」，PM 收進這裡。
+  - 位元組一樣之後再拍三張圖做 sanity（375 淺、375 深、1280）。動到 `web/`、server 的路由分派、第 3 階的批照舊完整實機 QA（並排截圖＋逐像素）。
 - **兩版對照（BASE 對 HEAD）的局面要凍得住**（2026-10-31 第 1 階 QA）：week7 的管理者「繼續」會把季曆對回現實的日子，暫停凍不住時刻；管理者快轉時時刻表事件的成敗用沒種子的亂數，每次跑都不一樣。比較點放在快轉之前，時刻先換成記號再比。逐鏡記「看得到的元素的位置＋算好的樣式」再 diff，比只比像素好分辨是字還是版面真的動了。
 - 無頭 Chromium 開 mobile 模擬時，CDP `Input.dispatchMouseEvent` 照樣點得到按鈕、`mouseWheel` 捲得動；點之前 `scrollIntoView({block:'center'})`，再用 `elementFromPoint` 確認點到的是那個元素（2026-10-31）。
 - 不開多代理工作流程，也不要一個驗收項目開一個子代理。
@@ -55,7 +60,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **擋 11434**：有人登入時，伺服器會預熱模型（`server._warm_model` 連 Ollama）。在複本的 `content/config.json` 加一個鍵 `"ollama_url": "http://127.0.0.1:9"`（只改 scratchpad 的複本），就打不到 11434。
   - **要看等模型的中間狀態**（〈天下形勢〉的「還在落筆」之類）：`127.0.0.1:9` 一叫就失敗、伺服器馬上照固定段收，中間狀態一次輪詢都撐不過。改開一個假的模型：Python `http.server`，GET 回 `{"models": []}`、POST 睡 25 秒再回 500，複本的 `ollama_url` 指到它（2026-10-21 翻地 QA，FB-578）。
 - **埠與 host**：先用 `netstat -ano | grep LISTEN` 挑沒人用的埠。cookie 照 host 分、不分埠，所以每個驗收都用自己的 `<名字>.localhost`（例 `qa7check.localhost:7893`）。同一個驗收要同時登兩個帳號，也要換 host。
-- **設定**：`TIANXIA_PROFILE` 是 `weekend`、`season21`、`week7`（7 天濃縮季），或空字串（預設，14 天的季）。`TIANXIA_DB` 指到 scratchpad 的暫存檔。伺服器、`set_password.py`、`run_bots.py` 三者要設成一樣的值。
+- **設定**：現役只有 `week7`（7 天濃縮季）與 `season21`（21 天季）兩種（企劃者 2026-10-31「現在只有7天跟21天兩種版本」），驗收照這兩種。`weekend` 與空字串（預設，14 天的季）排在全部拆包總表第 13、14 批整套拿掉；在那之前只在「關著不變」「前後一字不變」的對照裡照舊比，不再當成要驗收的季。`TIANXIA_DB` 指到 scratchpad 的暫存檔。伺服器、`set_password.py`、`run_bots.py` 三者要設成一樣的值。
 - **帳號**：`TIANXIA_PROFILE=… <python> scripts/set_password.py <帳號> --character <名號> --db <db> --local-dir <scratchpad>/local`。
   - 密碼寫在 `local/<帳號>_password.txt`，要用就從檔案讀，不要貼進對話。
   - 這樣建的角色不走草廬序章。要驗序章，就打 `POST /api/register {login,password,again}`，再打 `POST /api/character {name,gender}`（網頁註冊的那一條路）。
@@ -212,7 +217,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   5. assert 都過了才寫回 `\r\n`，寫完才印 ok，再用 `git diff --stat` 確認。
 - 不要用 sed 改，`\|` 會被當成「或」。
 - **表格一列八格**：`| FB-編號 | 日期 | 來源 | **一句話標題**：內容 | 類別 | 嚴重 | 狀態 | 位置 |`。
-  - 來源寫「QA 驗正式季第 N 批（host:埠，設定，分支 `sha`）」，接著同一來源的幾列寫「同上」。
+  - 來源寫「QA 驗<那一條線>第 N 批（host:埠，設定，分支 `sha`）」（例「QA 驗出陣包第 2 批」），接著同一來源的幾列寫「同上」。內測（這台主機跑的 `develop`）來的寫「內測」，雲端開的寫「雲端」（`tianxia-flow`「回饋單號段」）。
   - 內容寫實機怎麼重現、量到的數字、程式在哪、建議怎麼改。
   - 類別用介面、字、體驗、規則等；嚴重用小、中、大；位置寫函式名或檔名。
   - FB 編號從派工單給的號碼開始編。
@@ -221,11 +226,11 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - 開發修好寫 `已修好待複測（分支 `sha`：改了什麼）`。
   - 複驗通過就把整格**換成** `✅ 已驗證（日期 複驗，分支 `sha`，見「段落名」）`，不要接在舊狀態後面。合併時兩邊接起來的（「✅…；新」），看到就清掉後半。
 - **驗收紀錄**接在檔尾：
-  - 標題：`### 正式季第 N 批「名稱」QA（日期，分支 `sha`；host、暫存資料庫、設定、寬度）`；複驗寫成 `### …複驗：FB-xxx～yyy（…）`。
+  - 標題：`### <那一條線>第 N 批「名稱」QA（日期，分支 `sha`；host、暫存資料庫、設定、寬度）`（例 `### 出陣包第 2 批「出陣約戰」QA（…）`）；複驗寫成 `### …複驗：FB-xxx～yyy（…）`。
   - 條列：**測試**（跑了哪幾個檔、幾個 passed）、**做法**、**1.～N.** 每一項怎麼驗、看到什麼（照實寫數字與畫面上的原字）、**順帶**（看到但不是這一批的）、**新開的 FB**、**沒驗到的**（一定要寫，含只在引擎驗的）。
 
 ## 結果分支
-- qa/ 分支只 commit 試玩回饋（順手更新這個技能時，同一個 commit 帶上）。commit 訊息用英文一行，說驗了什麼、開了哪幾張 FB，結尾空一行加系統給的 `Co-Authored-By:` 署名（照當次 Claude Code 給的那一行，不要寫死模型名）。
+- qa/ 分支只 commit 試玩回饋（技能檔只有 PM 改：學到的寫在回報裡，手冊第十節）。commit 訊息用英文一行，說驗了什麼、開了哪幾張 FB，結尾空一行加系統給的 `Co-Authored-By:` 署名（照當次 Claude Code 給的那一行，不要寫死模型名）。
 - `git push -u origin qa/<名字>`，接著 `git ls-remote origin qa/<名字>`，確認遠端那一個跟本機的 commit 一樣。
 - 不合併，合併是 PM 的事。
 - **複驗**：上一輪的紀錄常常已經被 PM 合進被驗的分支（看 `git merge-base --is-ancestor origin/qa/<上一輪> HEAD`）。是的話不用硬做合併 commit，總表的狀態直接在原列換成複驗結果，驗收紀錄接在檔尾；不是的話才 `git merge --no-ff origin/qa/<上一輪>`（衝突兩邊都留）。

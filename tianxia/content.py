@@ -19,12 +19,11 @@ from typing import get_args
 from pydantic import BaseModel, ValidationError
 
 from . import encounter
-from . import explore_one  # 減法季探索一顆（批 2）：只 import 標準庫，載入時驗表與段落句子（check_explore_one、check_outing_lines）
 from . import forge_secrets as forge_rules
 from . import hints as hint_rules
 from .companion_agent import DIALOGUE_TAGS
 from .encounter import FALLBACK_TIER, TIER_RATIOS
-from .front_lines import BAND_KEYS, GEJU_KEYS
+from .front_lines import BAND_KEYS
 from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
     ArtBook, Itinerary,
@@ -46,7 +45,7 @@ FIGHT_TIERS = {tier for tier, _ in TIER_RATIOS} | {FALLBACK_TIER}  # 一場遭�
 ROAD_SIGHTS_PER_SPOT = 2  # 路上見聞：每一種路、每一個大區的組合至少要有幾則可挑（路上設計第五節）
 ROAD_SIGHT_CAPS = {"silver": 10, "xinde": 5}  # 路上見聞的小收穫上限
 TERRAIN_SIZE = (8, 40)  # 山脈、丘陵的山頭高度範圍（輿圖美術設計第四節）
-TIMETABLE_SIDES = ("guan", "huang")  # 時刻表的鎖定、決戰、@commander 只有官軍與黃巾兩方（豪強是第三方）
+TIMETABLE_SIDES = ("guan", "huang")  # 時刻表的鎖定、決戰、@commander 只有官軍與黃巾兩方
 TIMETABLE_KEYS = {  # 每種大事該有的結果鍵（不含版本；有版本時每個版本各一套）
     "fixed": ["fixed"],
     "roll": ["成", "不成"],
@@ -652,7 +651,7 @@ def check_check_voice(c: Content, need) -> None:
 
 def check_front_lines(c: Content, need) -> None:
     """戰況變化的說法（content/front_lines.json，FB-064）：generic 三段（front_lines.BANDS）一段都不能少、
-    不能多出不認得的段；各陣營自己的說法（by_side）只能寫存在的陣營與段、可以只寫其中幾段；割據要有漲與落兩組；
+    不能多出不認得的段；各陣營自己的說法（by_side）只能寫存在的陣營與段、可以只寫其中幾段；
     sides 的陣營名也要是存在的陣營。每一句、每個陣營名都不能是空的、只用繁體中文、不能寫數字或百分比（畫面上只有一句話、不攤出數字）。"""
     lines = c.front_lines
     factions = {f.id for f in c.scenario.factions}
@@ -677,11 +676,6 @@ def check_front_lines(c: Content, need) -> None:
         for band, pool in bands.items():
             need(band in BAND_KEYS, f"front_lines.by_side.{side}：不認得的段 {band}（只有 {'、'.join(BAND_KEYS)}）")
             check_pool(f"front_lines.by_side.{side}.{band}", pool)
-    for key in GEJU_KEYS:
-        need(key in lines.geju, f"front_lines.geju 缺少 {key}（漲 up、落 down 各一組）")
-    for key, pool in lines.geju.items():
-        need(key in GEJU_KEYS, f"front_lines.geju：不認得的鍵 {key}（只有 {'、'.join(GEJU_KEYS)}）")
-        check_pool(f"front_lines.geju.{key}", pool)
 
 
 def check_arena_crowd(c: Content, need) -> None:
@@ -742,62 +736,11 @@ def check_xingshi_lines(c: Content, need) -> None:
             check(f"{group}.{key}", text)
 
 
-TRAVELER_TAG = explore_one.TRAVELER  # 野外的事件拍偏向救助旅人那一類（減法季整合設計 4.1）：從現有的野外事件挑合適的標上（PM 2026-10-25 第 7 件）
+# 減法季探索一顆的「旅人」（整合設計 4.1）：野外的事件拍偏向救助旅人那一類（從現有的野外事件挑合適的標上，PM 2026-10-25 第 7 件）。
+# 探索表與段落句子的兩個驗證（原本的 check_explore_one、check_outing_lines）搬進探索包的 check_content（主動搬六包第 3＋4 批：
+# 核心不 import 包）；這兩個字留在核心——tests/core/test_jianfa_switch.py 從這裡拿、換掉 TRAVELER_MIN，包的驗證照舊讀這兩個模組屬性。
+TRAVELER_TAG = "旅人"  # 同探索包的 explore_one.TRAVELER（核心不 import 包：抄一份字，包的測試守兩邊一樣）
 TRAVELER_MIN = 3  # 野類地點抽得到的旅人事件至少幾則（PM 2026-10-25 第 7 件）
-
-
-def check_explore_one(c: Content, need) -> None:
-    """減法季探索一顆（整合設計 4.1，批 2；Config.jianfa 開著的設定才驗，測試內容與週末設定關著不驗）：
-    每個地點都靠自己的標籤歸得到一張探索表（explore_one.match；拼錯的標籤會靜靜掉進最後一張）；城裡換上的地痞是認得的隊伍、
-    沒有陣營（不然會被當成自己人）；標了「旅人」的事件至少 TRAVELER_MIN 則抽得到、而且都在野類的地點。
-    四欄加起來 100、標籤只落一張表在數字模型（jianfa_numbers）自己驗。"""
-    from .events import event_matches_location  # noqa: PLC0415  events → rules → …：在函式裡 import
-
-    cfg = c.config.jianfa
-    if not (cfg.enabled and cfg.explore_one):
-        return
-    for loc in c.locations.values():
-        need(explore_one.match(cfg, loc.tags) is not None,
-             f"地點 {loc.id}：標籤 {loc.tags} 一張探索表都對不上（Config.jianfa.explore_tables；減法季探索一顆照它抽）")
-    for sid in cfg.town_foes:
-        need(sid in c.squads and c.squads[sid].faction is None, f"config.jianfa.town_foes：{sid} 要是認得的隊伍、不能有陣營")
-    wild = {loc.id for loc in c.locations.values() if explore_one.kind_of(cfg, loc).kind == explore_one.WILD}
-    travelers = []
-    for event in c.events.values():
-        if TRAVELER_TAG not in event.tags:
-            continue
-        places = {loc.id for loc in c.locations.values() if event_matches_location(event, loc)}
-        need("explore" in event.actions and bool(places) and places <= wild,
-             f"事件 {event.id}：標了「{TRAVELER_TAG}」要是探索抽得到、只在野類地點的事件（現在在 {sorted(places - wild) or '哪裡都不在'}）")
-        travelers.append(event.id)
-    need(len(travelers) >= TRAVELER_MIN, f"標了「{TRAVELER_TAG}」的野外事件只有 {len(travelers)} 則，至少要 {TRAVELER_MIN} 則")
-
-
-def check_outing_lines(c: Content, need) -> None:
-    """探索一顆出門一趟的段落句子（content/outing_lines.json，減法季批 2；字待 joy 潤）：寫了的只能是認得的組與鍵
-    （explore_one.LINE_KEYS），每一句照 explore_one.SAMPLE 填得進去、只用繁體中文、不寫阿拉伯數字（數字只在「得：…　失：…」那一行，
-    是引擎拼的）；Config.jianfa 的探索一顆開著時每一個鍵都要有句子（沒寫的會退回 explore_one.FALLBACK 那一句，正式內容不准）。"""
-    lines = c.outing_lines
-    for group, table in lines.items():
-        keys = explore_one.LINE_KEYS.get(group)
-        need(keys is not None and isinstance(table, dict), f"outing_lines：不認得的組 {group}（要寫成「鍵：一串句子」）")
-        for key, pool in (table.items() if keys is not None and isinstance(table, dict) else ()):
-            need(key in keys, f"outing_lines.{group}：不認得的鍵 {key}")
-            need(isinstance(pool, list) and bool(pool), f"outing_lines.{group}.{key}：要寫成一串句子")
-            for text in pool if isinstance(pool, list) else []:
-                where = f"outing_lines.{group}.{key}"
-                try:
-                    filled = str(text).format(**explore_one.SAMPLE)
-                except (KeyError, IndexError, ValueError) as e:
-                    need(False, f"{where}：「{text}」填不進去（{e}）")
-                    continue
-                need(bool(filled.strip()) and not any(ch.isdigit() for ch in str(text)), f"{where}：「{text}」不能空、不能有數字")
-                need(to_traditional(str(text)) == str(text), f"{where}：文字只能用繁體中文（「{str(text)[:12]}」）")
-    cfg = c.config.jianfa
-    if cfg.enabled and cfg.explore_one:
-        for group, keys in explore_one.LINE_KEYS.items():
-            for key in keys:
-                need(bool((lines.get(group) or {}).get(key)), f"outing_lines.{group} 缺少 {key}（減法季探索一顆開著時每一個鍵都要有句子）")
 
 
 ART_PATH = re.compile(r"^(places|figures|events)/[a-z0-9_]+$")  # web/img/ 底下的路徑：子資料夾／鍵，不含副檔名
@@ -1188,7 +1131,7 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
     """時刻表（content/timetable.json，計畫 T2）：戰線（大事的 front、人物效果的 front 與 only_if、@commander 的戰線）
     寫的是戰線 id（大區的 front，T1：yingru／nanyang／jizhou），不是大區 id——幽州是大區、它的戰線是冀州，寫 youzhou
     讀戰況時會讀到固定的 50；結果鍵照種類齊全、鎖定對得到結果、人物與修正的
-    對象存在、文字只用繁體中文。大勢線的推動（第三方、結果）要是存在的線、而且不能是衍生線（黃巾聲勢由三條戰線合成）。
+    對象存在、文字只用繁體中文。大勢線的推動（結果）要是存在的線、而且不能是衍生線（黃巾聲勢由三條戰線合成）。
     人物認人物表（figures.json，T4）的 id；沒有人物表的內容（測試夾具）照舊認 characters.json。
     人物欄位（{人物:<id>}、@人物:<id>，FB-042）只認人物表：找人要看他的陣營與戰線。"""
     from .timetable import PERSON_KEY, PERSON_SLOT  # noqa: PLC0415  延後 import（同 validate 的 atlas）
@@ -1287,7 +1230,6 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
             need(side in TIMETABLE_SIDES, f"{where}：lock_result 的鎖定方只能是 guan 或 huang（寫的是 {side}）")
             need(all(f"{v}:{key}" in ev.outcomes for v in versions) if versions else key in ev.outcomes,
                  f"{where}：lock_result 指到不存在的結果 {key}")
-        known(where, ev.third_party_trends, trends, "大勢線")
         check_text(where, ev.preface)
         if ev.kind != "finale":  # 季末大事的三種句子（計畫 T9）
             need(not (ev.early_preface or ev.out_lines or ev.ending_chronicle),
@@ -1295,13 +1237,11 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
         known(where, ev.out_lines, c.characters, "人物")
         for text in (ev.early_preface, ev.ending_chronicle, *ev.out_lines.values()):
             check_text(where, text)
-        check_text(where, ev.third_party_text)
-        check_text(where, ev.third_party_chronicle)
         need(all(side in TIMETABLE_SIDES for side in ev.locked_chronicle), f"{where}：locked_chronicle 的鍵只能是 guan 或 huang")
         for text in ev.locked_chronicle.values():
             check_text(where, text)
         # 結算時經過 fill_slots 的句子才填人物欄位（preface 與季末大事的句子不填）
-        check_people(where, ev, [ev.third_party_text, ev.third_party_chronicle, *ev.locked_chronicle.values()], [])
+        check_people(where, ev, list(ev.locked_chronicle.values()), [])
         for key, outcome in ev.outcomes.items():
             ow = f"{where} 結果 {key}"
             known(ow, outcome.trends, trends, "大勢線")
@@ -1315,7 +1255,7 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
             need(set(outcome.loser_text) <= set(outcome.locked_text), f"{ow}：有搶輸的一句就要有那一方的具名公告")
             for fid, change in outcome.figures.items():
                 check_figure(ow, fid, change)
-            texts = [outcome.text, outcome.note, outcome.chronicle, outcome.third_party_text,
+            texts = [outcome.text, outcome.note, outcome.chronicle,
                      *outcome.locked_text.values(), *outcome.loser_text.values()]
             for text in texts:
                 check_text(ow, text)
@@ -1768,7 +1708,7 @@ def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
             need(bool(d.askers), f"{where}：至少要有一位指認的人")
             known(where, [h.figure for h in d.askers], c.figures, "人物")
             known(where, [h.at for h in d.askers], c.locations, "地點")
-            known(where, list(d.trend), trend_ids, "大勢線")  # 指對了推哪條線（戰線或割據都行；衍生線不能直接推）
+            known(where, list(d.trend), trend_ids, "大勢線")  # 指對了推哪條線（戰線；衍生線不能直接推）
             need(not set(d.trend) & derived_ids, f"{where}：trend 不能推衍生線（要推就推它的來源線）")
             texts += [d.label, d.right, d.wrong] + [s.name for s in d.suspects] + [t.text for t in d.traits]
         if o.plot is not None:
@@ -1882,6 +1822,8 @@ def check_foreshadows(
         where = f"伏筆 {ch.id}"
         known(where, [ch.event], events, "時刻表大事")
         known(where, [ch.side], faction_ids, "陣營")
+        # 豪強第三方的鏈 2026-10-31 拿掉（T-05）：鏈只能是會鎖定大事的兩方
+        need(ch.side in TIMETABLE_SIDES, f"{where}：side 只能是 guan 或 huang（寫的是 {ch.side}；豪強第三方的鏈已經拿掉）")
         event = events.get(ch.event)
         versions = set(event.versions.values()) if event is not None else set()
         if ch.front is not None:
@@ -2285,7 +2227,7 @@ def validate(c: Content) -> None:
     trend_ids = {t.id for t in c.scenario.trends}
     hidden = {t.id for t in c.scenario.trends if t.hidden}
     derived = {t.id for t in c.scenario.trends if t.derived}  # 衍生線（第一季濃縮版的黃巾聲勢）
-    season_one_trends = {t.id for t in c.scenario.trends if t.season_one}  # 第一季才有的線（三條戰線、豪強割據）
+    season_one_trends = {t.id for t in c.scenario.trends if t.season_one}  # 第一季才有的線（三條戰線）
     region_fronts = {region.front for region in c.map.regions if region.front}  # 戰線
     # 大區多邊形都寫得對（至少 3 個 [x, y] 點）：查地點在哪個大區（atlas.region_of）要拆每個點，寫壞了會炸成 ValueError，
     # 所以要先確定沒壞才查；壞的由後面的大區檢查照舊回報
@@ -2369,7 +2311,7 @@ def validate(c: Content) -> None:
         for key in [*cond.trend_min, *cond.trend_max]:
             need(
                 key not in season_one_trends,
-                f"{where}：條件不能讀第一季的線 {key}（條件讀的是大勢的原數字：開關關著時戰線與割據沒有值、"
+                f"{where}：條件不能讀第一季的線 {key}（條件讀的是大勢的原數字：開關關著時戰線沒有值、"
                 "季中才開季的那一季讀不到起始值；要讀就讀黃巾聲勢這種衍生線或一般的線）",
             )
         known(where, [*cond.revealed_all, *cond.revealed_none], trend_ids, "大勢線")
@@ -2582,7 +2524,7 @@ def validate(c: Content) -> None:
     need(all(factor > 0 for factor in cfg.road_factor.values()), "config.road_factor 的係數都要大於 0")
     need(
         cfg.chaos_low <= cfg.chaos_high,
-        f"config.chaos_low 不能大於 chaos_high（{cfg.chaos_low} > {cfg.chaos_high}：亂局的區間是空的，割據只會一路回落）",
+        f"config.chaos_low 不能大於 chaos_high（{cfg.chaos_low} > {cfg.chaos_high}：亂局的區間是空的）",
     )
 
     for loc in c.locations.values():
@@ -2843,7 +2785,7 @@ def validate(c: Content) -> None:
         known(where, [th.trend], trend_ids, "大勢線")
         need(
             th.trend not in season_one_trends,
-            f"{where}：不能掛在第一季的線 {th.trend}（門檻看的是原數字：開關關著時戰線與割據沒有值；要掛就掛衍生線或一般的線）",
+            f"{where}：不能掛在第一季的線 {th.trend}（門檻看的是原數字：開關關著時戰線沒有值；要掛就掛衍生線或一般的線）",
         )
         if th.location:
             known(where, [th.location], c.locations, "地點")
@@ -2933,9 +2875,8 @@ def validate(c: Content) -> None:
              f"陣營 {faction.id}：allies 只能寫劇本裡別的陣營（{faction.allies}）")
         need(not any(c.scenario.find_faction(a) is not None and c.scenario.find_faction(a).allies for a in faction.allies),
              f"陣營 {faction.id}：allies 寫的陣營自己不能再有 allies")
-    jf = c.config.jianfa  # 三陣營四勝利（減法季批 3c）：「此刻幫誰」就是 ally，只在豪強分屬兩軍的季寫；投靠點的預設對得上劇本
-    if jf.enabled and jf.four_wins:
-        need(c.config.haoqiang_allied, "config.jianfa.four_wins 開著，可是 haoqiang_allied 關著：豪強的「此刻幫誰」（ally）只在豪強分屬兩軍的季有")
+    jf = c.config.jianfa  # 三陣營四勝利（減法季批 3c）：「此刻幫誰」就是 ally；投靠點的預設對得上劇本
+    if jf.enabled:
         if any(f.allies for f in c.scenario.factions):
             from .wins import check as wins_check  # noqa: PLC0415  延後 import：wins → allied → calendar，content 不必一開始就依賴
 
@@ -3335,8 +3276,6 @@ def validate(c: Content) -> None:
     check_territory(c, need, known, front_ids)
     check_conquest_blocks(c, need, known, front_ids)
     check_siege_templates(c, need)
-    check_explore_one(c, need)
-    check_outing_lines(c, need)
     check_storylines(c, need)
     for ev in c.events.values():  # 事件分級：第二、三階要寫從哪一道門進來，第一階不寫門；第二、三階的難度帶（事件分級設計稿）
         need((ev.tier == 1) == (ev.door is None), f"事件 {ev.id}：第二、三階要寫 door，第一階不寫（tier {ev.tier}、door {ev.door}）")

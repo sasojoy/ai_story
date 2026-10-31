@@ -2,7 +2,7 @@
 只有伺服器假人（BotRunner）加一個不做事的旁觀者（像一直開著網頁的人：每一輪同步一次、刷新一次選單，
 共用賽季的時鐘與決戰的回合才會照現實時間往前走）。每個種子印出：
 
-- 每週末三條戰況與割據；十二件大事的結果與有沒有人鎖定；三場決戰的結果；
+- 每週末三條戰況；十二件大事的結果與有沒有人鎖定；三場決戰的結果；
 - 每陣營每週達成幾道軍令；升第 2 階的人數；
 - 結局、收季時間、有沒有卡住（時間用完還沒收季）；
 - 截殺的場數照結果分（守方勝、平手、攻方勝、策馬脫身〔裝備四欄 5.10：被截殺的人騎的馬比較快，跑掉了不打〕）；
@@ -41,7 +41,6 @@ from tianxia.world import settle_season_start  # noqa: E402
 START = 1_791_198_000.0  # 2026-10-05 19:00 台灣時間（同 sim_server_bots）
 FRONTS = ("yingru", "nanyang", "jizhou")
 SIDES = ("guan", "huang", "haoqiang")
-GEJU_LINES = (85, 100)  # 割據的兩條線：85 是決定性勝利的門檻（第 10 週起收季），100 是頂
 WATCHER = "旁觀者"  # 不做事的真人角色：每一輪同步、刷新選單（跟開著網頁的人一樣推著共用時鐘與決戰回合）
 
 
@@ -91,7 +90,6 @@ def run_season(
     rng = random.Random(seed)
     weekly: dict[int, dict[str, int]] = {}
     orders_done: dict[str, tuple[str, int]] = {}
-    geju_first: dict[int, tuple[int, str]] = {}  # 割據第一次到 85、到 100 是第幾週、什麼時候（曆法的時間章）
     raided: Counter = Counter()  # 截殺（Config.raid）：被截殺的次數、輸的次數、失的銀兩與氣血，照名號（輸出不列名號）
     raid_losses: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])  # 名號 → [輸幾場, 失銀, 失氣血]
     raid_tiers: Counter = Counter()
@@ -172,10 +170,7 @@ def run_season(
             season = world.get_season()
             if season.time > 0:
                 week = calendar.point(season.time, content, season).week
-                weekly[week] = {f: rules.trend_value(watcher.state, content, f) for f in (*FRONTS, "geju")}
-                for line in GEJU_LINES:
-                    if line not in geju_first and weekly[week]["geju"] >= line:
-                        geju_first[line] = (week, calendar.stamp_text(season.time, content, season))
+                weekly[week] = {f: rules.trend_value(watcher.state, content, f) for f in FRONTS}
             for order in season.orders:
                 if order.done:
                     orders_done[order.id] = (order.faction, order.week)
@@ -196,7 +191,7 @@ def run_season(
             now[0] += tick
         season = world.get_season()
         everyone = characters.all()
-        roster = sum(world.faction_counts().values())  # 這一季投靠名冊的人數（割據的漲速照它縮放）
+        roster = sum(world.faction_counts().values())  # 這一季投靠名冊的人數
     by_week: dict[str, Counter] = {side: Counter() for side in SIDES}
     for faction, week in orders_done.values():
         by_week.setdefault(faction, Counter())[week] += 1
@@ -204,7 +199,6 @@ def run_season(
     timeline = season.timeline
     result = {
         "weekly": weekly,
-        "geju_first": {line: geju_first.get(line) for line in GEJU_LINES},  # {85: (週, 時間章) 或 None, 100: …}
         "roster": roster,
         "events": {eid: {"result": r.key, "locked": r.locked_by is not None} for eid, r in timeline.items()},
         "missing": [e.id for e in content.timetable if e.id not in timeline],
@@ -245,7 +239,7 @@ def run_season(
 
 
 SIDE_NAMES = {"guan": "官軍", "huang": "黃巾", "haoqiang": "豪強"}
-FRONT_NAMES = {"yingru": "潁川汝南", "nanyang": "南陽", "jizhou": "冀州", "geju": "割據"}
+FRONT_NAMES = {"yingru": "潁川汝南", "nanyang": "南陽", "jizhou": "冀州"}
 
 
 def summary(seed: int, r: dict) -> str:
@@ -253,10 +247,8 @@ def summary(seed: int, r: dict) -> str:
     head = f"種子 {seed}：" + (f"{r['ending']}（{r['end_stamp']} 收季）" if r["ended"] else f"沒收季（停在{r['end_stamp']}）")
     lines = [head + f"　卡住：{'是' if r['stuck'] else '否'}　假人：" + "、".join(
         f"{SIDE_NAMES[s]} {n}" for s, n in r["bots"].items())]
-    lines.append("  每週末（潁川汝南/南陽/冀州/割據）：" + "　".join(
-        f"{w}:{v['yingru']}/{v['nanyang']}/{v['jizhou']}/{v['geju']}" for w, v in sorted(r["weekly"].items())))
-    lines.append(f"  割據首次到（投靠名冊 {r['roster']} 人）：" + "　".join(
-        f"{line}＝" + (f"第 {hit[0]} 週（{hit[1]}）" if hit else "沒到") for line, hit in r["geju_first"].items()))
+    lines.append(f"  每週末（潁川汝南/南陽/冀州；投靠名冊 {r['roster']} 人）：" + "　".join(
+        f"{w}:{v['yingru']}/{v['nanyang']}/{v['jizhou']}" for w, v in sorted(r["weekly"].items())))
     lines.append("  大事：" + "　".join(
         f"{eid}={v['result']}{'（鎖定）' if v['locked'] else ''}" for eid, v in r["events"].items()))
     if r["missing"]:

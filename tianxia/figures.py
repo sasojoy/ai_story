@@ -249,7 +249,7 @@ def tick(state: GameState, content: Content, cal_hours: float) -> None:
             rate *= push.resistance_share(value, goal, push.tuning_for(w, content))
         key = f"fig:{fid}"
         pending = w.trend_accum.get(key, 0.0) + rate * cal_hours / 24
-        whole = int(pending + 1e-9)  # 容一點浮點誤差：24 個 1/24 才剛好湊成 1（同 rules.geju_tick；累積不先四捨五入，誤差才不會越滾越大）
+        whole = int(pending + 1e-9)  # 容一點浮點誤差：24 個 1/24 才剛好湊成 1（累積不先四捨五入，誤差才不會越滾越大）
         rest = max(0.0, pending - whole)
         if rest:
             w.trend_accum[key] = rest

@@ -7,10 +7,12 @@
 
 ## 裡面有什麼
 
-- `rules.py`：純規則（原 `tianxia/tavern.py`）。`ask.py`：問酒家照問句找事實（原 `tianxia/tavern_ask.py`）。兩個舊名都留成 `sys.modules` 別名（同一個模組物件）：`bot_policy`、`howto`（名望來源）、`server`（`chatter_write`、`ask_write`）、`scripts/try_tavern_ask.py`、走一趟借的 `BANNED_WORDS`（`Game.outing_say`）與測試照舊 import 舊名，`monkeypatch.setattr(tavern, ...)` 照樣打得到包裡。
+- `rules.py`：純規則（原 `tianxia/tavern.py`）。`ask.py`：問酒家照問句找事實（原 `tianxia/tavern_ask.py`）。兩個舊名都留成 `sys.modules` 別名（同一個模組物件）：`bot_policy`、`howto`（名望來源）、`server`（`chatter_write`、`ask_write`）、`scripts/try_tavern_ask.py` 與測試照舊 import 舊名，`monkeypatch.setattr(tavern, ...)` 照樣打得到包裡。
 - `actions.py`：原本 `Game` 上酒肆的 43 個方法，加 `tavern_sign`（`act:tavern` 那一下紀錄的標題）。
 - `bots.py`：假人看到 `tavern:*` 怎麼按（原 `bot_policy.score` 那一段：只按出酒肆）。打聽那一步（`bot_policy._tavern`、`TAVERN_CHANCE`、`TAVERN_RESERVE`、`TAVERN_ASKS`）是 `take_turn` 的一步，不是分數，照舊在 `bot_policy`（測試直接換它們）。
 - 掛鉤：`enabled`（`rules.on` 或此刻還坐在酒肆裡）、`choose`（`tavern:*`）、`bot_pick`、`bot_always = ("tavern:",)`（`bot.py` 的排除清單原本就有這一個，重複無害，第 11 批收）。
+
+- 題壁、問酒家的禁字 `BANNED_WORDS` 合 develop 時（2026-11-01，PM 定）搬進核心 `tianxia/naming.py`：探索包的走一趟留言也擋同三個字，包不能 import 別的包。`rules.py` 從 `naming` re-export，`tavern.BANNED_WORDS` 照舊拿得到。
 
 ## 認領的欄位（手冊 3.5：留在原地）
 
@@ -24,7 +26,7 @@
 
 - `sync`：下線那一段的殺手（`_tavern_hit_check(away_from)`）、人不在酒肆了就收店、三個 deliver（放進 `on_sync` 會改江湖紀錄的先後；它們不看酒肆開關：關掉之後雇主照樣領退款、風聲照樣送到）。
 - `_everyday_options`：坐在酒肆裡時選單整個是酒肆那一串（`menu` 掛鉤只有一個位置）、`act:tavern` 入口；`_act`：`act:tavern` → `_tavern_enter`；`choose` 最後那一下殺手檢查。
-- `shop_view` 的 `if shop == "tavern": return self.tavern_view()`（鐵匠鋪那條線緊貼著它改）、`_action_title`（`act:tavern` 的標題叫 `_tavern_sign`）、`_drop_stale_references` 收店、`_hint_triggers`、`_newbie_go`、`outing_say`（`BANNED_WORDS`）、`_shop_open`、`_depart`、`_idle`（只讀 `picking_tavern`）、`LEAVE_SHOP_IDS`（寫字面 `"tavern:back"`）。
+- `shop_view` 的 `if shop == "tavern": return self.tavern_view()`（鐵匠鋪那條線緊貼著它改）、`_action_title`（`act:tavern` 的標題叫 `_tavern_sign`）、`_drop_stale_references` 收店、`_hint_triggers`、`_newbie_go`、`_shop_open`、`_depart`、`_idle`（只讀 `picking_tavern`）、`LEAVE_SHOP_IDS`（寫字面 `"tavern:back"`）。
 - `server.py`：`MAIN_ACTIONS["tavern"]`、`tavern_ask` 三段式、鄰桌閒談的背景執行緒（`write_chatter`、`chatter_once`）。
 
 ## 過渡（手冊 3.11）

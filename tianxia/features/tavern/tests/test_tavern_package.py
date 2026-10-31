@@ -1,6 +1,6 @@
 """酒肆搬進功能包（主動搬六包第 10 批）守的幾件事：舊名是包裡同一個模組物件（tianxia.tavern、tianxia.tavern_ask；BANNED_WORDS 照舊
-拿得到——走一趟那條線照舊從舊名拿，PM 定不搬進 naming.py）、換掉舊名的屬性包裡看得到（test_tavern 換 tavern.find_chance）、
-開關在坐著的時候被關掉照樣出得去、假人的分數照舊、tavern:* 由包接走時標題跟搬之前一樣；審查補的：同一對人 hit_pair_hours 內只雇得了一次。"""
+拿得到——合 develop 時搬進核心 naming.py，這裡 re-export、走一趟的留言從 naming 拿）、換掉舊名的屬性包裡看得到（test_tavern 換 tavern.find_chance）、
+開關在坐著的時候被關掉照樣出得去、假人的分數照舊、tavern:* 由包接走時標題跟搬之前一樣；審查補的：同一對人 hit_pair_hours 內只雇得了一次；合 develop 時補的：題壁擋禁字。"""
 from __future__ import annotations
 
 import importlib
@@ -92,3 +92,22 @@ def test_the_same_client_hires_on_the_same_target_once_per_pair_window():
     assert me.state.player.stats["silver"] == purse and len(me.state.world.tavern_hits) == 1
     hit.placed_real -= c.config.tavern.hit_pair_hours * 3600 + 10
     assert me._tavern_hit_problem("李尋歡", 0)[0] is None
+
+
+def test_the_tavern_wall_refuses_the_banned_words_from_the_core():
+    """合 develop 時禁字搬進核心 naming.BANNED_WORDS（酒肆包的 rules re-export 同一份，探索包的走一趟留言也讀它）：題壁照樣擋這三個字
+    （把專有名詞的名單清空，擋下的只可能是這一道）；擋下的不收錢、牆上不多一句，沒犯忌的照常題上去。"""
+    from tianxia import naming
+    from tianxia.features.tavern import rules
+
+    assert rules.BANNED_WORDS is naming.BANNED_WORDS
+    game = _seated()
+    game.content.banned_names = []
+    p = game.state.player
+    purse = p.stats["silver"]
+    for word in naming.BANNED_WORDS:
+        assert rules.wall_problem(game.content, f"此處有{word}") == rules.WALL_BANNED
+        assert game.tavern_do("wall", text=f"此處有{word}") == [rules.WALL_BANNED]
+    assert p.stats["silver"] == purse and not game.state.world.tavern_walls.get(p.location)
+    assert game.tavern_do("wall", text="此處風大")[0] == rules.WALL_DONE
+    assert [n.text for n in game.state.world.tavern_walls[p.location]] == ["此處風大"]

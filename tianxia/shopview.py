@@ -471,7 +471,7 @@ DONATE_CAP = "背包的素材（點一下挑要捐的；{points}）"  # 待 joy 
 DONATE_EMPTY = "背包裡沒有素材。"  # 待 joy 潤
 DONATE_TIER4_ONLY = "軍需官只收一到三階的料，四階的留著打神器。"  # 待 joy 潤（FB-343）：背包裡只剩四階（四階不能捐，正式季整合 4.6）
 # 軍需帳最上面那一格還沒捐時的一句（捐了換成結果；待 joy 潤）：第一季規則開著時記貢獻
-DONATE_HINT = "捐的記進陣營的軍備，也替陣營推一點大勢。"  # 豪強推的是割據，不寫「戰線」
+DONATE_HINT = "捐的記進陣營的軍備，也替陣營推一點大勢。"  # 豪強照依附的那一邊推；這裡不寫「戰線」（大本營不一定在戰線上）
 DONATE_HINT_S1 = "捐的記成貢獻、記進陣營的軍備，也替陣營推一點大勢。"
 TIER_NAMES = {1: "一階", 2: "二階", 3: "三階", 4: "四階"}
 BLACK_MARKET = "（黑市價）"  # 名聲 5.2：寇賣素材的鈕上（待 joy 潤）
@@ -794,6 +794,8 @@ def _fight_view(state: GameState, content: Content) -> dict:
     log = list(fight.lines)
     lock = tactics.locks(fight.bout)  # 本命戰法（第二批）：使不出來的招灰掉、身上的狀態、看穿了架勢一定是真的
     return {
+        "id": fight.id,  # 擂台動畫：認是不是同一場（換一場從頭演）
+        "looks": arena.looks_view(fight.looks),  # 擂台動畫：兩邊手上的兵器種類
         "foe": fight.foe.name,
         "arts": list((state.world.arena.get(fight.foe_key).arts if state.world.arena.get(fight.foe_key) else [])),
         "round": fight.round + 1,
@@ -880,5 +882,5 @@ def arena_view(state: GameState, content: Content, world: WorldStateStore, power
         "wages": WAGES_NOTE.format(silver=top_silver, fame=top_fame, n=len(cfg.wages)) if cfg.wages else "",
         "fight": _fight_view(state, content) if p.arena is not None else None,
         "result": {"id": result.id, "foe": result.foe, "tier": result.tier, "lines": list(result.lines),
-                   "changes": list(result.changes)} if result is not None and p.arena is None else None,
+                   "changes": list(result.changes), "looks": arena.looks_view(result.looks)} if result is not None and p.arena is None else None,
     }

@@ -663,6 +663,23 @@ $bots = Start-Process .venv\Scripts\python.exe -ArgumentList "-u","run_bots.py" 
 Get-CimInstance Win32_Process -Filter "Name='cloudflared.exe'" | Where-Object CommandLine -match '127.0.0.1:7861' | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
 ```
 
+## 內測 develop（企劃者 2026-10-31：在這台主機跑；還沒開過）
+
+企劃者 10/31（開發規範手冊第十一節第 5 題）：之後內測 `develop` **在這台主機跑**——另一個資料庫、另一個埠，不碰線上那一份——先在上面開一次 21 天的季試玩。**對外網址、埠、叫不叫模型待定**：下面標【待定】的，第一次開之前 PM 先問企劃者，照他的答案填回這一節。以下是 PM 2026-10-31 寫的做法（規範盤點 G4），還沒實際跑過，第一次開的人照實改。
+
+- **程式**：一份只給內測用的 checkout，跟線上那一份、每日整套的 `.local/nightly/checkout` 都分開。先明確 fetch（`git -C C:\Ray\專案\天下大勢 fetch origin +refs/heads/develop:refs/remotes/origin/develop`），再 `git -C C:\Ray\專案\天下大勢 worktree add --detach .local\devtest\checkout <SHA>`。
+  - 只從 `origin/develop` 換，而且換到**每日整套綠的那一筆**（`.local/nightly/latest.txt` 寫的 SHA）：先備份資料庫（上面「怎麼備份資料庫」），再停伺服器、`git -C .local\devtest\checkout checkout --detach <SHA>`、重開。
+  - 季中換程式先看那幾批的〈退版風險〉（季中能不能換、要不要休季部署；`tianxia-flow`「照舊的規矩」）。
+- **資料庫與設定**：`TIANXIA_DB` 指到內測自己的檔（PM 建議 `C:\Ray\專案\天下大勢\.local\devtest\tianxia-dev.db`），`TIANXIA_PROFILE` 是 `season21`。啟動時印的「資料庫：…」「設定：…」與埠，一定要跟線上那一份不一樣。
+- **埠【待定】**：PM 建議 7862（線上是 7861；PM 線的子代理用 8150～8199）。開之前 `Get-NetTCPConnection -LocalPort <埠> -State Listen` 看一眼沒人佔著。
+- **叫不叫模型【待定】**：甲、照舊叫這台的 Ollama（跟線上搶顯卡；人物對話、隨口應對、取名都跟線上一樣）；乙、不叫：把 `content/profiles/season21.json` 抄一份到 `.local\devtest\season21-dev.json`、加一行 `"ollama_url": "http://127.0.0.1:9"`，`TIANXIA_PROFILE` 給它的絕對路徑（不寫 `.json`），模型的那幾處走固定句與退路。
+- **對外【待定】**：甲、只給區網（`--lan`）；乙、具名 Tunnel 另開一個子網域（改 Tunnel 是這台機器的持久設定：企劃者自己按，或同意 PM 改；做法照上面「固定網域」）。
+- **管理者**：`.local/admins.txt` 是照**程式所在那一份 checkout** 讀的（`tianxia/content.py` 的 `LOCAL_DIR`），內測的 checkout 底下沒有：抄一份到 `.local\devtest\checkout\.local\admins.txt`，或啟動前設 `TIANXIA_ADMINS`。開季在設定頁按「開季」（`season21` 是現實 21 天）。
+- **假人**：先不開 `run_bots.py`（照試玩的慣例；要開等企劃者說）。
+- **啟動與停止**：照上面「給 session 用：不開視窗的啟動與停止」，`-WorkingDirectory` 是內測的 checkout、log 寫在 `.local\devtest\`；記下 PID，停的時候 `taskkill /PID <PID> /T /F`。**不要動 7861 那一台**；`TIANXIA_PUBLIC_URL` 照對外那一條定的網址設（只給區網就不設）。
+- **回饋**：內測的回饋照 `試玩回饋.md` 那一串接著編，來源寫「內測」（`tianxia-flow`「回饋單號段」）。
+- **記錄**：開季、收季、換程式（哪一筆 SHA、幾點、資料庫路徑、埠）都記進交接第一節。
+
 ## 已知限制
 
 - 推送開著、而且是直接用 `http://127.0.0.1` 或 `--lan` 連（不是經過 trycloudflare 的 https）時，瀏覽器對同一個網址最多同時開 6 條連線，每個看得到的分頁佔一條推送連線：同一個瀏覽器同時看著 6 個以上的視窗，請求會卡住。背景的分頁會自動放掉連線，所以只有同時看得到的才算；經過 trycloudflare（HTTP/2）沒有這個問題。

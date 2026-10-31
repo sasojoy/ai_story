@@ -1,5 +1,5 @@
 """過渡（開發規範手冊 3.11）：酒肆的規則搬進功能包 tianxia/features/tavern/rules.py（主動搬六包第 10 批）。這個名字留成指到同一個模組的
-別名：`from tianxia import tavern`（還沒搬的舊模組 bot_policy、howto、server、scripts/try_tavern_ask.py、走一趟借的 BANNED_WORDS 與測試，
+別名：`from tianxia import tavern`（還沒搬的舊模組 bot_policy、howto、server、scripts/try_tavern_ask.py 與測試，
 含 monkeypatch.setattr(tavern, "find_chance"...)）照舊拿到那一份（換掉的屬性兩邊都看得到）。程式裡新寫的一律 import 包；呼叫端改完就拿掉。"""
 import sys
 

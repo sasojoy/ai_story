@@ -8,7 +8,7 @@ from typing import Literal
 from . import foreshadow, precise, tiers
 from . import stances as stance_rules
 from .models import Check, Choice, Content, Event, FreeTextChoice, Location
-from .rules import check_condition, check_outlook, fail_stamina, haoqiang_allied, practice_line, season_one_off
+from .rules import check_condition, check_outlook, fail_stamina, practice_line, season_one_off
 from .state import GameState
 from .world_state import WorldStateStore
 
@@ -38,13 +38,10 @@ def is_rare(event: Event) -> bool:
 
 def hidden_events(state: GameState, content: Content) -> set[str]:
     """此刻抽不到的事件 id（藏起來的）：伏筆的事件（片段事件、準備事件，foreshadow.event_ids）只在伏筆在跑時出現（foreshadow.active：開關、蓋章、有鏈）；
-    第一季的規則開著時，劇本 season_one_off.events 裡的 beta 事件不出現（例：kou_boss，由挑戰大勢人物本人取代，T4）；人物心意開的事件；
-    豪強分屬兩軍的季第三方的伏筆事件。只看內容、世界與這個人的旗標，不看他站在哪裡（所以一次算好可以給好幾處用，event_candidates 的 hidden）。"""
+    第一季的規則開著時，劇本 season_one_off.events 裡的 beta 事件不出現（例：kou_boss，由挑戰大勢人物本人取代，T4）；人物心意開的事件。只看內容、世界與這個人的旗標，不看他站在哪裡（所以一次算好可以給好幾處用，event_candidates 的 hidden）。"""
     hidden = set() if foreshadow.active(state, content) else foreshadow.event_ids(content)
     hidden |= season_one_off(content, state.world, "events")
     hidden |= stance_rules.closed_events(state, content)  # 人物心意開的事件：心意生效時才有、每人每天一則（減法季批 6 修正輪）
-    if haoqiang_allied(content, state.world):  # 豪強分屬兩軍：沒有第三方，豪強那兩則第三方的伏筆事件不出現（設計第十節）
-        hidden |= foreshadow.third_party_events(content)
     return hidden
 
 
@@ -150,7 +147,7 @@ def pick_event(
 
 def pick_from(state: GameState, content: Content, candidates: list[Event], action: str, rng: random.Random) -> Event | None:
     """在給定的幾則裡照防重複輪替、照權重抽一則（同 pick_event 的寫法，只是候選由呼叫端先篩：減法季探索一顆的野類地點先在「旅人」那幾則
-    裡抽，Game._outing_event）。不改狀態；一則都沒有是 None。"""
+    裡抽，探索包 explore_actions.outing_event）。不改狀態；一則都沒有是 None。"""
     fresh = _fresh_among(state, tiers.narrow(state, content, candidates, rng), action)  # 事件分級：先挑一階
     if not fresh:
         return None
