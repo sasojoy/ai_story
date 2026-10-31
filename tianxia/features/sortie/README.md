@@ -21,5 +21,6 @@
 - 一類一顆之前的出陣銀兩與三成（`sortie_drill`）、守不給銀兩：`tests/acts/test_econ_gather_sortie.py`。
 - 照舊的合併閘門另外要的出陣 slow：`tests/bots/test_bot_policy_conquest.py`、`tests/web/test_core_loop_web.py`、`tests/acts/test_sortie_duel*.py`。
 - 一起跑：`scripts/test_for.py --base <分支> <改的包檔> tests/acts/test_conquest_flip.py tests/ranger/test_raid.py tests/acts/test_econ_gather_sortie.py`（直接給的測試檔連 slow 一起跑）；要不要讓 `test_for` 把這幾個混合檔算進包，交 PM 定。
+- **改出陣回報（`actions.front_report`、`rules.report`、`REPORT_*`、`CHIP_*`）要加 `--slow`**：`tests/test_sortie_report.py` 整檔標 slow（標記這一輪不改），`test_for` 不帶 `--slow` 時改包只跑 77 條、這 8 條一條都不跑（審查員把 `mine_today` 歸零，只有它紅、而且只在帶 slow 時）。
 
 **過渡 import**：`actions.py` 17 行、`rules.py` 6 行、`__init__.py` 1 行 import 還沒搬的舊模組（`conquest`、`territory`、`orders`、`treasures`……，註「過渡：待搬」）；`sortie_duel`、`atlas`、`bounties`、`howto`、`mapview`、`orders`、`bot_policy`、`server` 照舊 `from tianxia import sortie`（別名）。
