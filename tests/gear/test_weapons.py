@@ -59,6 +59,7 @@ def test_fused_art_inherits_weapon_kind(content, world, monkeypatch):
 
 # ── Task 2：兵器的資料、設定與存檔 ──
 
+@pytest.mark.smoke
 def test_old_save_without_weapon_fields_loads(content, world):
     import random
     from tianxia.engine import Game

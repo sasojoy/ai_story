@@ -4,6 +4,8 @@
 每一件 {"kind", "text", …}）。四勝利開著的季（on）這裡替每一件補（finish）：
 - target：要去的地點 {"location", "name", "minutes"}（走過去的現實分鐘，Game.place_minutes；就在那裡 0、走不到 null）；沒有地點是 null；
 - id：哪一道軍令、哪一張懸賞或委託、哪一條伏筆、哪一條新手目標、投靠哪一方；
+- then：護糧軍令還沒接糧車時（target 是起點）多這一個，糧車要送到的終點 {"location", "name"}：輿圖把兩點都框進畫面（Joy 2026-10-31）；
+
 並照「換一件事」（step:next，Game.choose 先接走、不在選單上）今天按了幾次從那一件排起（PlayerState.step_day／step_skip，pill_day 換日從頭）。
 關著的季 weekcard 一個字都不變（finish 只拿掉 weekcard 內部的 _ref）。只讀，skip 只改那兩個欄位。"""
 from __future__ import annotations
@@ -83,6 +85,19 @@ def _target(game: Game, ref: tuple) -> tuple[str | None, dict | None]:
     return None, None
 
 
+def _then(game: Game, ref: tuple) -> dict | None:
+    """護糧軍令還沒接糧車：糧車要送到的終點 {"location", "name"}（target 是起點）；其他都是 None。"""
+    s, c = game.state, game.content
+    if ref[0] != "order":
+        return None
+    o = next((x for x in s.world.orders if x.id == ref[1]), None)
+    if o is None or o.template != "escort" or (s.player.convoy is not None and s.player.convoy.order == o.id):
+        return None
+    if o.end not in c.locations or not atlas.is_known(s, c, o.end):
+        return None
+    return {"location": o.end, "name": c.locations[o.end].name}
+
+
 def skipped(game: Game) -> int:
     """今天按了幾次「換一件事」（隔天從 0 算）。"""
     p = game.state.player
@@ -101,6 +116,9 @@ def finish(game: Game, items: list[dict]) -> list[dict]:
             item["target"] = target
             if ident is not None:
                 item["id"] = ident
+            then = _then(game, ref) if ref else None
+            if then is not None and target is not None:
+                item["then"] = then
         out.append(item)
     k = skipped(game) % len(out) if live and out else 0
     return out[k:] + out[:k]

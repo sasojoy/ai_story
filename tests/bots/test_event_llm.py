@@ -18,6 +18,7 @@ def event():
 # ── assess_event_success_rate：LLM 只評機率 ─────────────────────────
 
 
+@pytest.mark.smoke
 def test_assess_without_a_client_returns_the_default(event):
     assert eg.assess_event_success_rate(None, event, "大喊官兵來了") == DEFAULT_FREE_TEXT_SUCCESS_RATE
 

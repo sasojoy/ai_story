@@ -15,7 +15,9 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **寫檔被擋**：如果 hook 擋你寫別的工作樹的檔，就在自己 session 的工作樹 `git switch` 到結果分支來做。
 - 工作樹沒有 `.venv`，一律用 `C:/Ray/專案/天下大勢/.venv/Scripts/python.exe`。印中文要設 `PYTHONIOENCODING=utf-8`（或把 stdout 包成 UTF-8）。
 - **不重跑開發跑過的測試**（〈開發規範手冊〉4.2，企劃者 2026-10-30）：QA 只在實機上驗畫面與手感，只能靠引擎驗的照 `引擎驗收.md` 寫腳本驗；開發的回報寫了跑過哪些測試，就不再跑一次。學到的寫在回報的「學到的」一節，不改技能檔（手冊第十節，PM 收）。派工單點名要跑的才跑。
-- **測試只跑派工單點名的檔**：`<python> -m pytest -q tests/a.py tests/b.py`。不跑整套，也不用 `test_for.py`，因為 engine、content 一動，它會挑到幾乎整套。
+- **測試只跑派工單點名的檔**：`<python> -m pytest -q -m "slow or not slow" tests/a.py tests/b.py`。不跑整套；派工單沒點名就不跑（開發跑過的不重跑）。
+- **兩版對照（BASE 對 HEAD）的局面要凍得住**（2026-10-31 第 1 階 QA）：week7 的管理者「繼續」會把季曆對回現實的日子，暫停凍不住時刻；管理者快轉時時刻表事件的成敗用沒種子的亂數，每次跑都不一樣。比較點放在快轉之前，時刻先換成記號再比。逐鏡記「看得到的元素的位置＋算好的樣式」再 diff，比只比像素好分辨是字還是版面真的動了。
+- 無頭 Chromium 開 mobile 模擬時，CDP `Input.dispatchMouseEvent` 照樣點得到按鈕、`mouseWheel` 捲得動；點之前 `scrollIntoView({block:'center'})`，再用 `elementFromPoint` 確認點到的是那個元素（2026-10-31）。
 - 不開多代理工作流程，也不要一個驗收項目開一個子代理。
 - **在隔離的工作樹裡**（PM 用 Agent 派的子代理）：Bash 工具會擋帶中文路徑的 python（`C:/Ray/專案/…/python.exe`），python 一律從 PowerShell 跑，git 照樣用 Bash。PowerShell 傳 JSON 參數會壞：把 JSON 寫進腳本，或讓腳本收一般參數。
   Bash 也會擋「`cd` 到工作樹外面」或太複雜的指令（heredoc 加管線、`od` 之類，回「too complex to verify that it stays inside the worktree」）：小腳本用 Write 寫進 scratchpad、用絕對路徑跑（系統的 `python` 可以），git 一律 `git -C <自己的工作樹>`。

@@ -14,6 +14,7 @@ def condensed(content):
     return content
 
 
+@pytest.mark.smoke
 def test_cal_scale_condensed(condensed):
     assert calendar.cal_scale(condensed) == pytest.approx(33.6)
     assert calendar.week_start(1, condensed) == 0

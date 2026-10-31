@@ -214,6 +214,7 @@ def test_season_one_off_changes_nothing(game, monkeypatch):
     assert view["bulletin"] == []
 
 
+@pytest.mark.smoke
 def test_main_view_has_everything_the_page_draws(game):
     view = server.look(game, server.main_view)
     assert view["status"]["name"] == "測試"
@@ -2404,7 +2405,8 @@ def test_a_second_scheduler_is_refused(monkeypatch):
 
 
 def _users_in_server(name: str) -> set[str | None]:
-    """server.py 裡用到 name 這個名字的地方各在哪個函式裡（模組層級是 None）。"""
+    """server.py 裡用到 name 這個名字的地方各在哪個函式裡（模組層級是 None）。功能包的路由（tianxia/features/<包>/routes.py，
+    殼照 FEATURES 掛，開發規範手冊 3.3）也是伺服器的一部分：那裡照 shell.<名字> 叫殼的東西，也算用到。"""
     found: set[str | None] = set()
 
     def visit(node: ast.AST, owner: str | None) -> None:
@@ -2414,9 +2416,13 @@ def _users_in_server(name: str) -> set[str | None]:
                 continue
             if isinstance(child, ast.Name) and child.id == name:
                 found.add(owner)
+            if isinstance(child, ast.Attribute) and child.attr == name and isinstance(child.value, ast.Name) and child.value.id == "shell":
+                found.add(owner)
             visit(child, owner)
 
     visit(ast.parse((server.ROOT / "server.py").read_text(encoding="utf-8")), None)
+    for routes in sorted((server.ROOT / "tianxia" / "features").glob("*/routes.py")):
+        visit(ast.parse(routes.read_text(encoding="utf-8")), None)
     return found
 
 

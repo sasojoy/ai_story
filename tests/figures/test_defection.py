@@ -37,6 +37,7 @@ def _game(content, name="甲", faction=None, at=None):
     return game
 
 
+@pytest.mark.smoke
 def test_new_fields_have_defaults_so_old_saves_load():
     p = PlayerState(name="甲", location="x", stats={}, stamina=0)
     assert (p.defected, p.pending_defect) == (False, None)

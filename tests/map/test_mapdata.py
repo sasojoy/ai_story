@@ -104,6 +104,7 @@ def test_the_state_suggests_where_to_sortie():
                for g in st["suggest"])  # 只有攻才看勝算（守、攪局不打，FB-259）
 
 
+@pytest.mark.smoke
 def test_a_place_you_can_win_comes_before_one_with_a_big_order_you_would_lose():
     """軍令 +100 的必敗那一處，排在什麼都沒有、打得過的那一處後面。"""
     from tianxia import mapdata as md

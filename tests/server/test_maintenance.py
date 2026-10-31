@@ -76,6 +76,7 @@ def test_no_note_means_no_empty_line(serving):
     assert '<p class="note"></p>' not in maintenance.page("").decode("utf-8")
 
 
+@pytest.mark.smoke
 def test_it_only_listens_on_localhost():
     """跟伺服器一樣只聽本機：外面一律走隧道進來（也就是說關了隧道就真的沒人進得來）。"""
     httpd = maintenance.Server(("127.0.0.1", 0), maintenance.handler(""))

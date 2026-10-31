@@ -24,7 +24,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 NAMES = ["S", "pageMap", "controlAt", "drawerHtml", "placeCard", "cardExtras", "searchHtml", "searchResults", "timelineHtml", "graphSvg",
          "chartHtml", "mapDrawerPx", "setMapDrawer", "insightRow", "redrawDrawer", "journeyHtml", "nearHtml", "nearList", "chipList", "chipsHtml",
          "mapFilter", "marksHtml", "groundSvg", "camClamp", "camFit", "zMin", "mapPick", "mapBack", "mapFind", "routeD", "camSet", "mapFirst",
-         "groundShow", "landAt", "mapLand", "mvDown", "mvUp", "mvMove", "mvWheel", "camFly", "drawMarks", "mv"]
+         "groundShow", "landAt", "mapLand", "mvDown", "mvUp", "mvMove", "mvWheel", "camFly", "drawMarks", "mv", "mapGoto", "camFirst", "planHtml"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 APP = webharness.APP  # 三個檔（main.js、map.js、app.js）接起來的那一份
 # 一個夠大的地圖框：整張天下都在「畫面附近」，字一處都不會因為在畫面外被略過
@@ -1181,3 +1181,25 @@ def test_the_terrain_line_breaks_only_after_its_commas():
 
 def test_no_terrain_draws_nothing():
     assert webharness.run(DRIVER_fb470, {"lines": [""]}) == [""]
+
+
+def test_go_to_map_opens_on_the_target_with_both_ends_of_an_escort():
+    """江湖頁「去輿圖」帶著目標（Joy 2026-10-31「應該直接點到目標地點」）：輿圖開在那一處、抽屜開它的卡；
+    護糧多一個終點：兩點都框進露出來的那一塊，下一站、終點各標一個字。"""
+    game = _game(at="yingchuan")
+    out = run(game, f"""H.mapGoto('nanyang_wilds', 'nanyang_huangjin_camp');
+const g = {{ vw: 390, vh: 700 }}, c = H.camFirst(g), at = (id) => {{ const b = H.S.mapBase.places.find((x) => x.id === id); return [c.x + b.x * c.z, c.y + b.y * c.z]; }};
+H.S.mapCam = c;
+return {{ mode: H.S.mapMode, sel: H.S.mapSel, keep: H.S.mapKeep, a: at('nanyang_wilds'), b: at('nanyang_huangjin_camp'), html: H.marksHtml(H.S.mapBase, H.S.mapState, c, {WIDE}) }};""")
+    assert (out["mode"], out["sel"], out["keep"]) == ("place", "nanyang_wilds", True)
+    for x, y in (out["a"], out["b"]):
+        assert 0 < x < 390 and 0 < y < 700
+    assert "下一站" in _lab(out["html"], "nanyang_wilds") and "終點" in _lab(out["html"], "nanyang_huangjin_camp")
+
+
+def test_the_plan_card_button_carries_its_place():
+    game = _game()
+    x = {"head": "曹操的打算", "text": "", "place": "長社", "location": "changshe", "when": "", "minutes": 6, "help": 0, "block": 0,
+         "help_side": "官軍", "mine": None, "acts": []}
+    out = run(game, "return H.planHtml(" + json.dumps(x, ensure_ascii=False) + ");")
+    assert 'data-goto="changshe"' in out

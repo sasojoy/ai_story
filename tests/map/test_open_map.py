@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import random
 
+import pytest
+
 from conftest import real_content
 from tianxia import atlas, figures, howto, mapview
 from tianxia.engine import Game
@@ -72,6 +74,7 @@ def test_the_road_has_no_terrain_survey_any_more():
     assert game.state.player.surveyed == surveyed and "survey" not in game.state.player.leg_actions
 
 
+@pytest.mark.smoke
 def test_the_road_scene_lists_three_road_tasks():
     """FB-300：「在路上」那一張場景卡寫路上小事——全圖開放沒有留意地形。"""
     game = _game()

@@ -36,15 +36,19 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
 | QA 驗收 | **不重跑開發跑過的測試**，只在實機上驗畫面與手感；只能靠引擎驗的照 `tianxia-qa/引擎驗收.md` | QA |
 | 合進功能分支 | 那一包＋核心契約＋每包煙霧（三級）。**等 Joy 回之前**：動到 `tianxia/`、`content/`、`server.py` 的照舊加跑不含 slow 的整套（下面「合併時跑哪一種」） | 合併的人（PM） |
 | 合進 develop | 同上；內容跟測過的一樣（`git diff --quiet`）就不再跑 | 合併的人（PM） |
-| 每天一次 | 整套含 slow（`scripts/nightly.ps1`，排程時間等企劃者定；紅了開 FB 交回那一線，新紅三天沒修 PM revert 那一線的合併；develop 上的紅不擋開工，只擋上 main） | 排程（手冊 4.4） |
+| 每天一次 | 整套含 slow（`scripts/nightly.ps1`，每天 03:30——企劃者 10/30「03:30，PM 註冊」；結果在 `.local/nightly/latest.txt`，有新紅、舊紅、轉綠三段；紅了開 FB 交回那一線，新紅三天沒修 PM revert 那一線的合併；develop 上的紅不擋開工，只擋上 main） | 排程（手冊 4.4） |
 | 上 main 前 | 整套含 slow | 合進 main 的人 |
 
-- pytest 一律 `-n 4`（同一台同時最多兩份測試；不寫 `-n auto`）。`test_for` 的新挑法（手冊 4.3：「import 了 engine」不再算相關、slow 不自動跟、`--slow` 才加、`-m smoke` 是過渡期的煙霧集）在第 0 階合進 develop 之後生效；之前照下面舊的寫法。
-- **開發中、QA 驗收（第 0 階合進來之前的舊寫法）**：只跑跟這一次改動直接相關的測試，**不跑整套**。
-  - 在批的工作樹裡：`.venv/Scripts/python.exe scripts/test_for.py --base origin/feature/<名字>`（只跟功能分支比；不給 `--base` 會跟 `origin/main` 比，把整條功能分支以前的改動都算進來）。也可以設環境變數 `TIANXIA_TEST_BASE`，或直接給檔名（`scripts/test_for.py tianxia/fusion.py`）、直接跑 `pytest tests/test_x.py`。
+- pytest 一律 `-n 4`（同一台同時最多兩份測試；不寫 `-n auto`）。
+- **`scripts/test_for.py` 照手冊 4.3 挑**（第 0 階 2026-10-31 合進 develop；手冊最後一節寫了落地時跟原文不同的地方）：
+  - 照功能群挑，「import 了 engine」不再算相關：`engine.py` 看改到 Game 的哪個方法（改酒肆的方法 43 條）；核心改了（`models.py`、`state.py`、核心模組、`engine.py` 的共用方法與核心服務）跑核心測試＋`-m smoke`（約 1,500 條、約一分鐘；欄位名帶功能前綴的再加那一群）；`tianxia/features/<包>/` 跑那一包的 `tests/`＋核心契約。
+  - **slow 不自動跟，`--slow` 才加**；改到的測試檔本身照舊連 slow。開跑前會列出「整個檔標 slow、這一次不跑」的檔：那些正是你這一包的，加 `--slow`。
+  - 預設 `-n 4`，`--` 之後給的 `-n X` 照給的；`--list` 每一段寫為什麼挑，`--count` 數條數。
+- **開發中、QA 驗收**：只跑跟這一次改動直接相關的測試，**不跑整套**。
+  - 在批的工作樹裡：`.venv/Scripts/python.exe scripts/test_for.py --base origin/feature/<名字>`（只跟功能分支比；不給 `--base` 跟 `origin/develop` 比；base 沒 fetch 過、找不到分岔點會停下、結束碼 2，第一行印要下的 fetch）。也可以設環境變數 `TIANXIA_TEST_BASE`，或直接給檔名（`scripts/test_for.py tianxia/fusion.py`）、直接跑 `pytest tests/test_x.py -m "slow or not slow"`。
   - QA 只跑它驗的那幾樣的測試檔，其餘靠實機（瀏覽器）驗；不要為了「保險」跑整套。
   - 修回饋單的測試寫進那個模組的測試檔，不開 `test_fb…` 新檔（2026-10-27 測試整理 1b 併掉了 53 個）；派工單寫「測試寫進 `tests/test_<模組>.py`」。
-  - 改到 `tests/conftest.py`、`tests/fixtures/`、`pyproject.toml` 的批，開發跑 `test_for.py` 會挑到整套：這時只跑那幾個改到的測試檔與直接相關的，整套留到合併那一刻。
+  - 改到 `tests/conftest.py` 的批：`test_for` 照改到的 fixture、函式挑用到它的測試檔；autouse 的、最外層的、或用到它的超過 50 個檔就跑煙霧。改 `tests/fixtures/`、`pyproject.toml` 時只跑那幾個改到的測試檔與直接相關的，整套留到合併那一刻。
 - **合併時跑哪一種**（Joy 2026-10-26 在決定卡上選「只有上 main 跑整套 slow」；以前每一次合併都跑整套含 slow。**手冊提議改成「合併只跑三級、每天一次整套含 slow」，等 Joy；回之前照下面這一段**）：
   - **批合進功能分支、功能分支合進 `develop`、`main` 合回 `develop`／功能分支**（Joy 2026-10-27「改UI也需要跑那麼多那麼久是不是有什麼問題？」之後 PM 再收）：
     - 只動 `web/`、文件、測試：只跑 `scripts/test_for.py --base origin/<要合進去的分支>` 挑的相關測試，**不跑整套**。
@@ -96,7 +100,7 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
     - 資料庫升級預演：舊程式（`origin/main`）在暫存資料庫開季、建幾個角色、做幾個動作 → 備份 → 新程式開同一份 → 驗版本、資料都在、發放、對帳 → 舊程式開新版會擋 → 還原備份舊程式打得開；季中那一份另外試（季曆換算會不會錯）。
   - PM 用 Bash heredoc 跑 Python 改中文路徑時，一般字串裡的 `\a`（例 `專案\ai遊戲`、`worktrees\agent-*`）會變成響鈴字元：路徑一律用 raw string，寫完 `assert '\x07' not in s`。Windows 路徑（`C:\Users\...`）寫在一般字串裡是 `\U` 跳脫，整支腳本直接 SyntaxError——**改檔的腳本與後面的 `git add`／`commit`／`push` 一定用 `&&` 串**（2026-10-21 PM 用 `;` 串，腳本失敗了提交照跑，`main` 上多了一筆只改檔名的提交）；中文多、反斜線多的替換，寫成 scratchpad 裡的 .py 檔（Write 工具）再跑，不要塞進 heredoc。
   - 同時跑很多子代理時，派工單寫 pytest 用 `-n 6`～`-n 8`、不要 `-n auto`，免得互相搶 CPU（六、七個同時跑時用 `-n 4`）。
-  - **派工單裡每一行 pytest 都寫 `-m "slow or not slow"`**（2026-10-20 小單 QA：`pyproject.toml` 的 `addopts` 預設擋掉 slow，整個檔都標 slow 的 `test_fb504_*` 一條都沒跑，合併那一刻的整套才會紅）。`scripts/test_for.py` 自己會帶，不必加。
+  - **派工單裡每一行 pytest 都寫 `-m "slow or not slow"`**（2026-10-20 小單 QA：`pyproject.toml` 的 `addopts` 預設擋掉 slow，整個檔都標 slow 的 `test_fb504_*` 一條都沒跑，合併那一刻的整套才會紅）。`scripts/test_for.py` 不帶 slow（改到的測試檔本身除外）：要連 slow 就加 `--slow`。
   - **子代理共用 PM 的 scratchpad**（2026-10-20 有一個的 `edit_guide.py` 被另一個蓋掉）：派工單寫明暫存檔放在 scratchpad 底下自己的子資料夾（用分支名，例 `qa-small-1020/`）。
   - 子代理（尤其 sonnet）有時用 Skill 工具找不到 `tianxia-dev`／`tianxia-qa`（2026-10-21 有一個回報「這份 checkout 沒有這個技能」，其實檔案在）：派工單寫「Skill 工具找不到就直接 Read 工作樹裡的 `.claude/skills/<技能>/SKILL.md`」。
   - 派工單要開的本地分支名，可能已經被別的工作樹佔著（舊的子代理留下的同名本地分支，`git switch -c` 會失敗）：寫明「同名本地分支已存在就開 `<分支>-work`，推的時候照樣推到 `origin/<分支>`」。

@@ -138,7 +138,7 @@ def tick(state: GameState, content: Content) -> None:
     first, w.life_turn = w.life_turn < 0, turn
     if first:
         return
-    from . import feasts  # noqa: PLC0415  feasts → figure_life
+    from .features.feast import rules as feasts  # noqa: PLC0415  宴客（功能包）→ figure_life：延後載入
 
     movers = [cid for cid, ch in content.characters.items() if ch.deep_interaction and ch.follows is None]
     for cid in movers:

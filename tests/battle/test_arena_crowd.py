@@ -49,6 +49,7 @@ def _open(content, world, name="甲", foe="乙"):
     return _do(content, world, name, lambda g: g.choose("act:arena") + g.choose(f"arena:fight:{foe}"))
 
 
+@pytest.mark.smoke
 def test_a_friendly_figure_helps_once_and_says_who(crowd):
     content, world = crowd
     _befriend(content, world, "甲")
