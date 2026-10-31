@@ -1890,7 +1890,7 @@ def _main_view_body(game: Game) -> dict:
         "now": game.battle_extra_html(for_card=True) if card is not None else game.now_entry_html(),
         # 出陣回報（企劃者 2026-10-23）：「剛剛」那一則是領地爭奪的出陣時，卡片底下的進度條、一句話與小籤（sortie.report）；不是 None
         "front": game.now_front(),
-        "minimap": game.minimap_svg(),
+        # 小地圖（舊的江湖頁那一張）網頁已經不畫了：不再每次輪詢在鎖裡重畫、多送 30 KB（全面自檢 S-07）
         # 此地還有誰（玩家之間的互動第一層）：[{name, side}]；路上、序章裡是空的。真人假人同一份（伺服器假人設計第五節）
         "here": game.peers_here(),
         "calls": game.calls_here(),  # 別人遞給你、還沒回的打招呼、結伴、切磋邀請（玩家互動第二層）；回應鈕是選單上的 invite: 選項
