@@ -171,7 +171,7 @@ def blend_key(a: str, b: str) -> str:
 
 def recipe_seed(world: WorldStateStore, key: str) -> tuple[int, str]:
     """這一季的天機與這個配方的種子：同一個配方同一季，屬性都一樣（設計 12.6）。"""
-    tianji = world.read().tianji
+    tianji = world.tianji()
     return tianji, f"{tianji}|{key}"
 
 

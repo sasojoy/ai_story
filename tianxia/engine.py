@@ -994,9 +994,9 @@ class Game:
             prologue_rules.finish(s, c, self.world, purse=False)  # 序章沒走完卻不在草廬（內容改版）：當作走過，不卡住
         p.visited = {loc_id for loc_id in p.visited if loc_id in c.locations}
         p.visited.add(p.location)
-        for rumor in s.world.rumors:
+        for i, rumor in enumerate(s.world.rumors):  # 換成一份新的、不就地改：讀回來的傳聞跟別的讀取共用（sqlite_world._logs）
             if rumor.location is not None and rumor.location not in c.locations:
-                rumor.location = None
+                s.world.rumors[i] = rumor.model_copy(update={"location": None})
         for flag in s.world.flags:
             if flag not in s.world.flag_times:
                 s.world.flag_times[flag] = s.world.time
@@ -7569,7 +7569,7 @@ class Game:
         keep = c.config.companions.parted_keep
         lines = []
         marked = set()
-        for cid, progress in self.world.read().companions.items():
+        for cid, progress in self.world.companions().items():
             if cid not in c.characters or not any(roster.owns(n, p.name) for n in progress.parted_from):
                 continue
             marked.add(cid)

@@ -63,7 +63,7 @@ def owned_by(world: WorldStateStore, companion_id: str) -> str | None:
 
 
 def owned_companions(world: WorldStateStore, player_name: str) -> list[str]:
-    return [cid for cid, p in world.read().companions.items() if owns(p.owner, player_name)]
+    return [cid for cid, p in world.companions().items() if owns(p.owner, player_name)]
 
 
 def recruit_problem(state: GameState, content: Content, world: WorldStateStore, companion_id: str) -> str | None:

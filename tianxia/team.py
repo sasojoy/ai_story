@@ -162,9 +162,9 @@ def team_arts(state: GameState, content: Content, world: WorldStateStore) -> dic
         if art:
             arts[skill_id] = art
     others = {unit.wugong_id for unit in follower_units(state, content)}
-    shared = world.read()
+    companions = world.companions()
     for key in state.player.team:
-        progress = shared.companions.get(key, CompanionProgress())
+        progress = companions.get(key, CompanionProgress())
         others |= {progress.neigong_id, progress.wugong_id}
     for skill_id in others:
         if skill_id and skill_id not in arts:
@@ -177,8 +177,8 @@ def team_arts(state: GameState, content: Content, world: WorldStateStore) -> dic
 def team_participants(state: GameState, world: WorldStateStore) -> list:
     """本隊每個人的「威力貢獻者」物件（玩家的 Member、同伴的 CompanionProgress），
     直接餵給 encounter.team_power——兩者欄位形狀相同（見 encounter.HasMartialArts）。部下另外接在後面（follower_units）。"""
-    shared = world.read()
-    return [state.player.member] + [shared.companions.get(k, CompanionProgress()) for k in state.player.team]
+    companions = world.companions()
+    return [state.player.member] + [companions.get(k, CompanionProgress()) for k in state.player.team]
 
 
 FOLLOWER_KEY = "follower:"  # 名冊裡部下的 key：follower:<在 PlayerState.followers 裡的位置>（同一種部下可以有兩個）
@@ -324,9 +324,9 @@ def lineup(
     p = state.player
     mine = [player_art(state, content, world, skill_id) for skill_id in (p.member.wugong_id, p.member.neigong_id)]
     out = [(p.name, *mine)]
-    shared = world.read()
+    companions = world.companions()
     for key in p.team:
-        progress = shared.companions.get(key, CompanionProgress())
+        progress = companions.get(key, CompanionProgress())
         out.append((
             content.characters[key].name,
             resolve_art(progress.wugong_id, content, world), resolve_art(progress.neigong_id, content, world),
@@ -1488,10 +1488,10 @@ def terrain_attributes(
     p = state.player
     mine = [art.attribute if (art := player_art(state, content, world, sid)) else None
             for sid in (p.member.wugong_id, p.member.neigong_id)]
-    shared = world.read()
+    companions = world.companions()
     mates = []
     for key in p.team:
-        progress = shared.companions.get(key, CompanionProgress())
+        progress = companions.get(key, CompanionProgress())
         mates.append((content.characters[key].name, [
             art.attribute if (art := resolve_art(sid, content, world)) else None for sid in (progress.wugong_id, progress.neigong_id)
         ]))

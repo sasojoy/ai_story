@@ -47,6 +47,7 @@ import threading
 import time
 import traceback
 import unicodedata
+import weakref
 from collections import deque
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -145,6 +146,17 @@ SESSIONS: dict[str, str] = {}  # cookie → 帳號（normalize 過的）
 # 不是存檔：資料庫才是真實來源，每次進行動鎖都把這份 Game 的 state 換成資料庫裡存好的那一列（見 _locked）。
 GAMES: dict[str, Game] = {}
 _GAMES_LOCK = threading.Lock()
+# GAMES 不是只進不出（審查 S-06：一份 Game 約 1.4 MB，上線過的人越多越大）：GAME_IDLE_SECONDS 沒有請求用到的那一份，下一次
+# game_for 時順手丟掉（最多每 GAME_SWEEP_SECONDS 掃一次），再有請求時照第一次的樣子從資料庫重建（open_game）。丟掉不會掉東西：
+# 每次進鎖本來就從資料庫重讀（_reload），Game 上其他的欄位都只活在一個請求裡。唯一的例外是管理者「時間快轉」推過的那一截
+# （Game.advanced_real，回體丹換日看它，留在那一份上直到伺服器重開），快轉過的那一份不丟。還有請求拿著的那一份（三段式的 B 段在
+# 鎖外等模型）在 GAME_USED 裡是剛剛才用過的，不會被丟；就算丟了，那個請求手上那一份照樣能用（C 段照舊進鎖重讀）。
+# 時鐘用伺服器自己的 _game_clock（引擎不讀時鐘），測試換掉它就不必真的等。
+GAME_IDLE_SECONDS = 30 * 60
+GAME_SWEEP_SECONDS = 60
+_game_clock = time.monotonic
+GAME_USED: weakref.WeakKeyDictionary[Game, float] = weakref.WeakKeyDictionary()  # 每一份 Game 最後一次被請求用到（_game_clock 的秒）
+_games_swept: float | None = None  # 上一次掃 GAMES 的時刻
 # 勝算的記憶（FB-321）：所有角色的 Game 共用這一份（game_for 掛上），輿圖疊層的勝算輸入一樣就不再在行動鎖裡模擬四十場
 ODDS_MEMO = team.OddsMemo()
 
@@ -186,14 +198,36 @@ def game_for(name: str) -> Game:
     但它的 state 只是工作副本：每次進鎖都從資料庫重讀（_locked），所以鎖外看到的 state 可能已經過時，
     拿來做決定的讀取一律放在 act／look 的鎖裡。"""
     key = name.casefold()
+    now = _game_clock()
     with _GAMES_LOCK:
+        _sweep_games(now)
         game = GAMES.get(key)
         if game is None:
             game = GAMES[key] = open_game(name)
             game.odds_memo = ODDS_MEMO
             if NARRATION is not None:  # 事件旁白每週改寫（減法季批 10）：這一週寫好的旁白從小檔讀
                 game.narration = NARRATION.get
+        GAME_USED[game] = now
         return game
+
+
+def _sweep_games(now: float) -> None:
+    """丟掉 GAME_IDLE_SECONDS 沒被用到的 Game（見 GAME_IDLE_SECONDS）；最多每 GAME_SWEEP_SECONDS 掃一次。呼叫端拿著 _GAMES_LOCK。
+    沒記過用到時間的（測試直接塞進 GAMES 的）不丟。"""
+    global _games_swept
+    if _games_swept is not None and now - _games_swept < GAME_SWEEP_SECONDS:
+        return
+    _games_swept = now
+    for key, game in list(GAMES.items()):
+        used = GAME_USED.get(game)
+        if used is not None and now - used >= GAME_IDLE_SECONDS and not game.advanced_real:
+            del GAMES[key]
+
+
+def _used(game: Game) -> None:
+    """這一份 Game 剛被用過（進鎖、出鎖時記）：一個請求拖得再久（鎖外等模型），它都不算閒著。"""
+    with _GAMES_LOCK:
+        GAME_USED[game] = _game_clock()
 
 
 def name_taken(name: str) -> bool:
@@ -292,10 +326,14 @@ def _locked(game: Game):
     GAMES 裡的 Game 只是這一個動作的工作副本。FastAPI 的同步端點跑在執行緒池裡，同一個角色的兩個請求
     可能同時進來；行動鎖是 BEGIN IMMEDIATE，不同執行緒就一個一個來，重讀與動作不會交錯。
     鎖內的模型額度與斷路器見 _model_guard。"""
-    with game.world.action_lock(), _model_guard(game):
-        _reload(game)
-        game.set_move_mode(MOVE_MODE.get())  # 這次請求選的走法（見 MOVE_MODE）：之後的選單與 choose() 都照它
-        yield
+    _used(game)
+    try:
+        with game.world.action_lock(), _model_guard(game):
+            _reload(game)
+            game.set_move_mode(MOVE_MODE.get())  # 這次請求選的走法（見 MOVE_MODE）：之後的選單與 choose() 都照它
+            yield
+    finally:
+        _used(game)
 
 
 def _refuse_while_paused(game: Game) -> None:

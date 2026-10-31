@@ -21,10 +21,14 @@ from __future__ import annotations
 
 import json
 import random
+import threading
+import weakref
 from collections.abc import Callable, Collection
 from contextlib import AbstractContextManager
 from pathlib import Path
 from sqlite3 import Connection, Row
+
+from pydantic import TypeAdapter
 
 from . import allied, calendar, divine
 from .battle_instance import BattleInstance, BattleRoundRecord, SiegeInfo, shift_deadlines, start_muster
@@ -40,6 +44,27 @@ from .world_state import (
     fresh_season,
     jade_seal_summary, stamp_season,
 )
+
+
+# 已經 COMMIT 的傳聞與江湖史（見 SqliteWorldStore._logs）：資料庫 → {(表, 季數): (那一季照流水號排的每一則, 最後一則的流水號)}。
+# 跟著 Database 物件走（同一個檔在一個程式裡只開一個，見 open_database）；close_all 之後重開的是新的物件、從頭讀。
+_LOG_CACHES: weakref.WeakKeyDictionary[Database, dict[tuple[str, int], tuple[tuple[Rumor, ...], int]]] = weakref.WeakKeyDictionary()
+_LOG_LOCK = threading.Lock()
+
+
+_LOGS_REWRITTEN = "logs-rewritten"  # Database.note 的鍵：這一筆交易改過已經寫進去的傳聞
+
+
+def _forget_logs(db: Database) -> None:
+    """已經寫進去的傳聞被改了（易名帖換名號，rename_character）、COMMIT 之後：記下的作廢，之後從頭讀。
+    比這一刻早開的交易讀到的是改之前的樣子，也不准記（Database.bump）。"""
+    with _LOG_LOCK:
+        db.bump()
+        _LOG_CACHES.pop(db, None)
+
+
+_FRAGMENTS = TypeAdapter(list[JadeSealFragment])  # 只解析 world 那一列的一格：跟整份解析時那一格的驗證一樣（JSON 模式）
+_COMPANIONS = TypeAdapter(dict[str, CompanionProgress])
 
 
 def open_world(path: Path | None = None) -> SqliteWorldStore:
@@ -94,14 +119,36 @@ class SqliteWorldStore:
         row = conn.execute("SELECT data FROM seasons WHERE number = ?", (number,)).fetchone()
         season = WorldState() if row is None else WorldState.model_validate_json(row["data"])
         if logs:
-            season.rumors = [
-                _rumor(r) for r in conn.execute("SELECT * FROM rumors WHERE season = ? ORDER BY id", (number,))
-            ]
-            season.chronicle = [
-                _chronicle_entry(r)
-                for r in conn.execute("SELECT * FROM chronicle WHERE season = ? ORDER BY id", (number,))
-            ]
+            season.rumors = self._logs(conn, "rumors", number, _rumor)
+            season.chronicle = self._logs(conn, "chronicle", number, _chronicle_entry)
         return season
+
+    def _logs(self, conn: Connection, table: str, number: int, parse: Callable[[Row], Rumor]) -> list[Rumor]:
+        """這一季的傳聞（或江湖史）每一則，照流水號排：跟整份 SELECT 回來一模一樣，只是不每次都重建（審查 S-01）。
+        兩張表只新增、不改、不刪（只有 _save_season 寫，流水號越來越大），所以已經 COMMIT 的那一段讀過一次就記在這個程式裡
+        （_LOG_CACHES，同一個資料庫檔共用），之後只撈流水號比記下的最後一則大的。記下的只收「這一筆交易還沒寫過任何東西」時
+        讀到的（Database.unchanged）：那時看到的每一列都已經 COMMIT，不會因為這一筆撤回而不見、流水號也不會被別人重用；
+        寫過之後讀到的照樣回、只是不記。每次先對一下記下的最後一則還在、內容一樣（資料庫檔被換掉之類），對不上就整份重讀。
+        回的清單是新的一份（呼叫端往裡加的不會加進記下的那一份）；裡面的 Rumor 物件跟別的讀取共用：不要就地改它們的欄位
+        （要改就換成 model_copy，見 Game._drop_stale_references）。"""
+        key = (table, number)
+        with _LOG_LOCK:
+            caches = _LOG_CACHES.setdefault(self.db, {})
+            kept, last = caches.get(key, ((), 0))
+        if self.db.noted(_LOGS_REWRITTEN):  # 這一筆交易改過已經寫進去的傳聞（易名帖）：記下的那一份是舊的，整份照資料庫讀
+            kept, last = (), 0
+        if kept:
+            row = conn.execute(f"SELECT time, text FROM {table} WHERE id = ? AND season = ?", (last, number)).fetchone()
+            if row is None or row["time"] != kept[-1].time or row["text"] != kept[-1].text:
+                kept, last = (), 0
+                with _LOG_LOCK:
+                    caches.pop(key, None)
+        fresh = [parse(r) for r in conn.execute(f"SELECT * FROM {table} WHERE season = ? AND id > ? ORDER BY id", (number, last))]
+        if fresh:
+            with _LOG_LOCK:  # unchanged 在鎖裡問：跟 _forget_logs 的「作廢＋清空」不會交錯
+                if self.db.unchanged() and caches.get(key, ((), 0))[1] == last:  # 別的執行緒剛好也記了：讓它的為準，這一次不記
+                    caches[key] = (tuple(kept) + tuple(fresh), fresh[-1].id)
+        return [*kept, *fresh]
 
     def _save_season(self, conn: Connection, number: int, season: WorldState) -> None:
         """季的小資料整份覆寫；傳聞與江湖史只新增還沒有流水號的（id 是 None），寫完把流水號填回去。
@@ -159,8 +206,27 @@ class SqliteWorldStore:
     # ── 武學命名登記與煉製配方 ──────────────────────────────
 
     def _season_number(self, conn: Connection) -> int:
-        row = conn.execute("SELECT json_extract(data, '$.season_number') AS number FROM world WHERE id = 1").fetchone()
-        return 1 if row is None or row["number"] is None else int(row["number"])
+        return self._world_fields(conn)[0]
+
+    def _world_fields(self, conn: Connection) -> tuple[int, bool, int, int | None]:
+        """world 那一列的幾個小欄位（季數, 開季了沒, 天機, 目前決戰的流水號），不整份解析（審查 S-02）。預設值跟
+        SharedWorldState 一樣（還沒有那一列＝全新的全服狀態）。同一筆交易裡沒寫過就不重查（Database.memo）。"""
+        def _read() -> tuple[int, bool, int, int | None]:
+            row = conn.execute(
+                "SELECT json_extract(data, '$.season_number') AS number, json_extract(data, '$.season_opened') AS opened, "
+                "json_extract(data, '$.tianji') AS tianji, active_battle_id FROM world WHERE id = 1"
+            ).fetchone()
+            if row is None:
+                fresh = SharedWorldState()
+                return fresh.season_number, fresh.season_opened, fresh.tianji, None
+            return (
+                1 if row["number"] is None else int(row["number"]),
+                bool(row["opened"]),
+                0 if row["tianji"] is None else int(row["tianji"]),
+                row["active_battle_id"],
+            )
+
+        return self.db.memo("world-fields", _read)
 
     def get_skill(self, name: str) -> MartialArt | None:
         with self.db.snapshot() as conn:
@@ -568,6 +634,9 @@ class SqliteWorldStore:
                                ("faction_rolls", "character"), ("rumors", "character")):
                 for o, n in mapping.items():
                     conn.execute(f"UPDATE {table} SET {col} = ? WHERE season = ? AND {col} = ?", (n, number, o))
+            # 傳聞的名號改了：這一筆交易接下來照資料庫整份讀，COMMIT 之後記下的那一份作廢（_logs）
+            self.db.note(_LOGS_REWRITTEN)
+            self.db.after_commit(lambda: _forget_logs(self.db))
             for table in ("skills", "insights", "gear_recipes"):
                 for r in conn.execute(f"SELECT rowid, data FROM {table} WHERE season = ?", (number,)).fetchall():
                     conn.execute(f"UPDATE {table} SET data = ? WHERE rowid = ?", (swap_json(r["data"], mapping), r["rowid"]))
@@ -686,7 +755,21 @@ class SqliteWorldStore:
         return result["fragment"]
 
     def get_jade_seal_fragments(self) -> list[JadeSealFragment]:
-        return self.read().jade_seal_fragments
+        """同 read().jade_seal_fragments，只解析那一格（審查 S-02）。"""
+        with self.db.snapshot() as conn:
+            row = conn.execute("SELECT json_extract(data, '$.jade_seal_fragments') AS f FROM world WHERE id = 1").fetchone()
+        return [] if row is None or row["f"] is None else _FRAGMENTS.validate_json(row["f"])
+
+    def tianji(self) -> int:
+        """天機（同 read().tianji，不整份解析）。"""
+        with self.db.snapshot() as conn:
+            return self._world_fields(conn)[2]
+
+    def companions(self) -> dict[str, CompanionProgress]:
+        """同 read().companions（人物 id → 進度），只解析那一格（審查 S-02）。"""
+        with self.db.snapshot() as conn:
+            row = conn.execute("SELECT json_extract(data, '$.companions') AS c FROM world WHERE id = 1").fetchone()
+        return {} if row is None or row["c"] is None else _COMPANIONS.validate_json(row["c"])
 
     def jade_seal_summary(self) -> str:
         return jade_seal_summary(self.get_jade_seal_fragments())
@@ -713,7 +796,8 @@ class SqliteWorldStore:
         return None if row is None else WorldState.model_validate_json(row["data"])
 
     def get_season_number(self) -> int:
-        return self.read().season_number
+        with self.db.snapshot() as conn:  # 同 read().season_number，不整份解析（審查 S-02）
+            return self._season_number(conn)
 
     def fingerprint_parts(self) -> tuple[SharedWorldState, int, int]:
         """推送的看守（server.current_fingerprint）每幾秒讀一次用：同一個唯讀快照裡讀出（全服狀態，這一季最大的天下大事傳聞
@@ -736,7 +820,17 @@ class SqliteWorldStore:
         self.mutate(lambda state: setattr(state, "season", season))
 
     def season_phase(self) -> SeasonPhase:
-        return self.read().season_phase()
+        """同 read().season_phase()（SharedWorldState.season_phase 的三個條件），只撈那幾格（審查 S-02）。"""
+        with self.db.snapshot() as conn:
+            number, opened, _, _ = self._world_fields(conn)
+            row = conn.execute(
+                "SELECT json_extract(data, '$.storyline') AS storyline, json_extract(data, '$.ended') AS ended "
+                "FROM seasons WHERE number = ?", (number,),
+            ).fetchone()
+        storyline, ended = ("", False) if row is None else (row["storyline"] or "", bool(row["ended"]))
+        if not storyline or not opened:
+            return "preparing"
+        return "resting" if ended else "running"
 
     def seed_first_season(self, content: Content) -> WorldState:
         def _apply(state: SharedWorldState) -> None:
@@ -1002,7 +1096,10 @@ class SqliteWorldStore:
     # ── 全服即時多人戰鬥 ──────────────────────────────────
 
     def get_battle(self) -> BattleInstance | None:
-        return self.read().active_battle
+        """同 read().active_battle：只讀決戰那一列，不解析全服狀態與季（審查 S-02）。每次都是新的一份。"""
+        with self.db.snapshot() as conn:
+            battle_id = self._world_fields(conn)[3]
+            return None if battle_id is None else self._load_battle(conn, battle_id)
 
     def mutate_battle(self, fn: Callable[[BattleInstance], None]) -> BattleInstance | None:
         result: dict[str, BattleInstance | None] = {"battle": None}
@@ -1098,7 +1195,7 @@ class SqliteWorldStore:
     # ── 同伴進度與招募 ────────────────────────────────────
 
     def get_companion(self, companion_id: str) -> CompanionProgress:
-        return self.read().companions.get(companion_id, CompanionProgress())
+        return self.companions().get(companion_id, CompanionProgress())
 
     def try_recruit(self, companion_id: str, player_name: str, cap: int | None = None) -> bool:
         """原子地招一位：已經有主、或（給了 cap）這個人名下已經有 cap 位（名號比對不分大小寫），都不寫、回 False。

@@ -82,7 +82,7 @@ def tianji_answer(world_tianji: int, key: str) -> str:
 
 
 def _tianji(world: WorldStateStore | None) -> int:
-    return world.read().tianji if world is not None else 0
+    return world.tianji() if world is not None else 0
 
 
 # ── 找東西 ───────────────────────────────────────────────
