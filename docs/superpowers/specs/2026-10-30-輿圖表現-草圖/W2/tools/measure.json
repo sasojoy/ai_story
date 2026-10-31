@@ -1,0 +1,502 @@
+{
+ "W2-1-打開-375淺": {
+  "z": 1.5,
+  "z0": 1.5,
+  "level": 2,
+  "vw": 375,
+  "vh": 667,
+  "roomBottom": 604,
+  "hscroll": false,
+  "labs": [
+   "yingchuan",
+   "yingshui",
+   "yingchuan_wilds",
+   "songshan_foot",
+   "yingchuan_academy",
+   "hilltop_wilds",
+   "deep_mountain"
+  ],
+  "tiny": 3,
+  "leads": 2,
+  "pills": [
+   "luoyang_road"
+  ],
+  "overlap": {
+   "labLab": 0,
+   "labIcon": 0,
+   "labPill": 0,
+   "labHud": 0,
+   "pillIcon": 0,
+   "labOut": 0
+  },
+  "pairs": [],
+  "area": "潁川汝南",
+  "mini": true,
+  "tray": "本週長社護糧・長社→汝南・步行 6 分可出陣 7 ›",
+  "drawer": "peek",
+  "drawerPx": 63,
+  "mode": "overview",
+  "sel": null,
+  "filter": "all",
+  "week": {
+   "id": "changshe",
+   "why": "軍令・護糧・長社→汝南",
+   "minutes": 6
+  }
+ },
+ "W2-2-點一處-375": {
+  "tapAt": [
+   328,
+   357
+  ],
+  "z": 1.5,
+  "z0": 1.5,
+  "level": 2,
+  "vw": 375,
+  "vh": 667,
+  "roomBottom": 520,
+  "hscroll": false,
+  "labs": [
+   "yingchuan_wilds",
+   "yingchuan",
+   "changshe",
+   "yingshui",
+   "hilltop_wilds",
+   "guan_camp",
+   "huangjin_camp",
+   "runan_wilds"
+  ],
+  "tiny": 1,
+  "leads": 1,
+  "pills": [],
+  "overlap": {
+   "labLab": 0,
+   "labIcon": 0,
+   "labPill": 0,
+   "labHud": 0,
+   "pillIcon": 0,
+   "labOut": 0
+  },
+  "pairs": [],
+  "area": "潁川汝南",
+  "mini": true,
+  "tray": null,
+  "drawer": "peek",
+  "drawerPx": 147,
+  "mode": "place",
+  "sel": "yingchuan_wilds",
+  "filter": "all",
+  "week": {
+   "id": "changshe",
+   "why": "軍令・護糧・長社→汝南",
+   "minutes": 6
+  }
+ },
+ "W2-3-去輿圖-375": {
+  "button": {
+   "goto": "changshe",
+   "then": null,
+   "text": "去輿圖 ›"
+  },
+  "z": 0.791,
+  "z0": 1.5,
+  "level": 1,
+  "vw": 375,
+  "vh": 667,
+  "roomBottom": 520,
+  "hscroll": false,
+  "labs": [
+   "changshe",
+   "yingchuan",
+   "yingshui",
+   "yingchuan_wilds",
+   "songshan_foot",
+   "yingchuan_academy",
+   "guan_camp",
+   "huangjin_camp",
+   "runan",
+   "hilltop_wilds",
+   "runan_wilds"
+  ],
+  "tiny": 1,
+  "leads": 0,
+  "pills": [],
+  "overlap": {
+   "labLab": 0,
+   "labIcon": 0,
+   "labPill": 0,
+   "labHud": 0,
+   "pillIcon": 0,
+   "labOut": 0
+  },
+  "pairs": [],
+  "area": "潁川汝南",
+  "mini": true,
+  "tray": null,
+  "drawer": "peek",
+  "drawerPx": 147,
+  "mode": "place",
+  "sel": "changshe",
+  "filter": "all",
+  "week": {
+   "id": "changshe",
+   "why": "軍令・護糧・長社→汝南",
+   "minutes": 6
+  }
+ },
+ "W2-4-去輿圖護糧-375": {
+  "button": {
+   "goto": "changshe",
+   "then": "runan",
+   "text": "護糧・長社→汝南：帶 4 份糧草到長社接下糧車，送到汝南記一次。"
+  },
+  "z": 0.962,
+  "z0": 1.5,
+  "level": 1,
+  "vw": 375,
+  "vh": 667,
+  "roomBottom": 520,
+  "hscroll": false,
+  "labs": [
+   "changshe",
+   "runan",
+   "yingchuan",
+   "yingshui",
+   "yingchuan_wilds",
+   "guan_camp",
+   "qiao_county",
+   "cao_manor",
+   "hilltop_wilds",
+   "runan_wilds"
+  ],
+  "tiny": 1,
+  "leads": 0,
+  "pills": [],
+  "overlap": {
+   "labLab": 0,
+   "labIcon": 0,
+   "labPill": 0,
+   "labHud": 0,
+   "pillIcon": 0,
+   "labOut": 0
+  },
+  "pairs": [],
+  "area": "潁川汝南",
+  "mini": true,
+  "tray": null,
+  "drawer": "peek",
+  "drawerPx": 147,
+  "mode": "place",
+  "sel": "changshe",
+  "filter": "all",
+  "week": {
+   "id": "changshe",
+   "why": "軍令・護糧・長社→汝南",
+   "minutes": 6
+  }
+ },
+ "W2-5-抽屜一排卡-375": {
+  "z": 1.5,
+  "z0": 1.5,
+  "level": 2,
+  "vw": 375,
+  "vh": 667,
+  "roomBottom": 492,
+  "hscroll": false,
+  "labs": [
+   "yingchuan",
+   "yingshui",
+   "yingchuan_wilds",
+   "songshan_foot",
+   "yingchuan_academy",
+   "deep_mountain"
+  ],
+  "tiny": 2,
+  "leads": 1,
+  "pills": [
+   "luoyang_road"
+  ],
+  "overlap": {
+   "labLab": 0,
+   "labIcon": 0,
+   "labPill": 0,
+   "labHud": 0,
+   "pillIcon": 0,
+   "labOut": 0
+  },
+  "pairs": [],
+  "area": "潁川汝南",
+  "mini": true,
+  "tray": "本週長社護糧・長社→汝南・步行 6 分可出陣 7 ›",
+  "drawer": "row",
+  "drawerPx": 175,
+  "mode": "overview",
+  "sel": null,
+  "filter": "all",
+  "week": {
+   "id": "changshe",
+   "why": "軍令・護糧・長社→汝南",
+   "minutes": 6
+  }
+ },
+ "W2-6-抽屜全開-375": {
+  "z": 1.5,
+  "z0": 1.5,
+  "level": 2,
+  "vw": 375,
+  "vh": 667,
+  "roomBottom": 116,
+  "hscroll": false,
+  "labs": [],
+  "tiny": 0,
+  "leads": 0,
+  "pills": [],
+  "overlap": {
+   "labLab": 0,
+   "labIcon": 0,
+   "labPill": 0,
+   "labHud": 0,
+   "pillIcon": 0,
+   "labOut": 0
+  },
+  "pairs": [],
+  "area": "潁川汝南",
+  "mini": true,
+  "tray": "本週長社護糧・長社→汝南・步行 6 分可出陣 7 ›",
+  "drawer": "full",
+  "drawerPx": 627,
+  "mode": "overview",
+  "sel": null,
+  "filter": "all",
+  "week": {
+   "id": "changshe",
+   "why": "軍令・護糧・長社→汝南",
+   "minutes": 6
+  }
+ },
+ "W2-7-底條可出陣-375": {
+  "z": 1.5,
+  "z0": 1.5,
+  "level": 2,
+  "vw": 375,
+  "vh": 667,
+  "roomBottom": 492,
+  "hscroll": false,
+  "labs": [
+   "yingchuan"
+  ],
+  "tiny": 0,
+  "leads": 0,
+  "pills": [
+   "luoyang_road"
+  ],
+  "overlap": {
+   "labLab": 0,
+   "labIcon": 0,
+   "labPill": 0,
+   "labHud": 0,
+   "pillIcon": 0,
+   "labOut": 0
+  },
+  "pairs": [],
+  "area": "潁川汝南",
+  "mini": true,
+  "tray": "本週長社護糧・長社→汝南・步行 6 分可出陣 7 ›",
+  "drawer": "row",
+  "drawerPx": 176,
+  "mode": "overview",
+  "sel": null,
+  "filter": "sortie",
+  "week": {
+   "id": "changshe",
+   "why": "軍令・護糧・長社→汝南",
+   "minutes": 6
+  }
+ },
+ "W2-8-中景-375": {
+  "z": 0.9,
+  "z0": 1.5,
+  "level": 1,
+  "vw": 375,
+  "vh": 667,
+  "roomBottom": 604,
+  "hscroll": false,
+  "labs": [
+   "yingchuan",
+   "changshe",
+   "yingshui",
+   "yingchuan_wilds",
+   "songshan_foot",
+   "yingchuan_academy",
+   "luoyang_road",
+   "guan_camp",
+   "jade_cave",
+   "nanyang_huangjin_camp",
+   "hilltop_wilds",
+   "nanyang_road"
+  ],
+  "tiny": 0,
+  "leads": 0,
+  "pills": [],
+  "overlap": {
+   "labLab": 0,
+   "labIcon": 0,
+   "labPill": 0,
+   "labHud": 0,
+   "pillIcon": 0,
+   "labOut": 0
+  },
+  "pairs": [],
+  "area": "潁川汝南",
+  "mini": true,
+  "tray": "本週長社護糧・長社→汝南・步行 6 分可出陣 7 ›",
+  "drawer": "peek",
+  "drawerPx": 63,
+  "mode": "overview",
+  "sel": null,
+  "filter": "all",
+  "week": {
+   "id": "changshe",
+   "why": "軍令・護糧・長社→汝南",
+   "minutes": 6
+  }
+ },
+ "W2-9-打開-360": {
+  "z": 1.44,
+  "z0": 1.44,
+  "level": 2,
+  "vw": 360,
+  "vh": 635,
+  "roomBottom": 572,
+  "hscroll": false,
+  "labs": [
+   "yingchuan",
+   "yingshui",
+   "yingchuan_wilds",
+   "songshan_foot",
+   "yingchuan_academy",
+   "hilltop_wilds",
+   "deep_mountain"
+  ],
+  "tiny": 3,
+  "leads": 3,
+  "pills": [
+   "luoyang_road"
+  ],
+  "overlap": {
+   "labLab": 0,
+   "labIcon": 0,
+   "labPill": 0,
+   "labHud": 0,
+   "pillIcon": 0,
+   "labOut": 0
+  },
+  "pairs": [],
+  "area": "潁川汝南",
+  "mini": true,
+  "tray": "本週長社護糧・長社→汝南・步行 6 分可出陣 7 ›",
+  "drawer": "peek",
+  "drawerPx": 63,
+  "mode": "overview",
+  "sel": null,
+  "filter": "all",
+  "week": {
+   "id": "changshe",
+   "why": "軍令・護糧・長社→汝南",
+   "minutes": 6
+  }
+ },
+ "W2-10-打開-320": {
+  "z": 1.28,
+  "z0": 1.28,
+  "level": 2,
+  "vw": 320,
+  "vh": 402,
+  "roomBottom": 340,
+  "hscroll": false,
+  "labs": [
+   "yingchuan",
+   "yingshui",
+   "yingchuan_wilds",
+   "songshan_foot",
+   "yingchuan_academy",
+   "deep_mountain"
+  ],
+  "tiny": 2,
+  "leads": 2,
+  "pills": [
+   "luoyang_road"
+  ],
+  "overlap": {
+   "labLab": 0,
+   "labIcon": 0,
+   "labPill": 0,
+   "labHud": 0,
+   "pillIcon": 0,
+   "labOut": 0
+  },
+  "pairs": [],
+  "area": "潁川汝南",
+  "mini": true,
+  "tray": "本週長社護糧・長社→汝南・步行 6 分可出陣 7 ›",
+  "drawer": "peek",
+  "drawerPx": 62,
+  "mode": "overview",
+  "sel": null,
+  "filter": "all",
+  "week": {
+   "id": "changshe",
+   "why": "軍令・護糧・長社→汝南",
+   "minutes": 6
+  }
+ },
+ "W2-11-打開-1280": {
+  "z": 1.92,
+  "z0": 1.92,
+  "level": 2,
+  "vw": 905,
+  "vh": 655,
+  "roomBottom": 655,
+  "hscroll": false,
+  "labs": [
+   "yingchuan",
+   "changshe",
+   "yingshui",
+   "yingchuan_wilds",
+   "songshan_foot",
+   "yingchuan_academy",
+   "luoyang_road",
+   "hilltop_wilds",
+   "deep_mountain",
+   "guan_camp",
+   "huangjin_camp",
+   "jade_cave",
+   "nanyang_road"
+  ],
+  "tiny": 0,
+  "leads": 0,
+  "pills": [],
+  "overlap": {
+   "labLab": 0,
+   "labIcon": 0,
+   "labPill": 0,
+   "labHud": 0,
+   "pillIcon": 0,
+   "labOut": 0
+  },
+  "pairs": [],
+  "area": "潁川汝南",
+  "mini": true,
+  "tray": "本週長社護糧・長社→汝南・步行 6 分可出陣 7 ›",
+  "drawer": "peek",
+  "drawerPx": 655,
+  "mode": "overview",
+  "sel": null,
+  "filter": "all",
+  "week": {
+   "id": "changshe",
+   "why": "軍令・護糧・長社→汝南",
+   "minutes": 6
+  }
+ }
+}
