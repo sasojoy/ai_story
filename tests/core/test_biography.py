@@ -57,6 +57,7 @@ def _request(**kw) -> biography.BiographyRequest:
 # ── 規則版、清理、數字 ──
 
 
+@pytest.mark.smoke
 def test_chinese_numbers():
     assert [biography._cn(n) for n in (0, 7, 10, 15, 20, 21, 105, 1200, 30000)] == [
         "〇", "七", "十", "十五", "二十", "二十一", "一百零五", "一千二百", "三〇〇〇〇"]

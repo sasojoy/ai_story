@@ -7,6 +7,8 @@ import json
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from tianxia import database, insights
 from tianxia.characters import open_characters
 from tianxia.content import load_content
@@ -20,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[2]
 OLD = json.loads((Path(__file__).parents[1] / "fixtures" / "old_saves" / "v2_main_b8a388c.json").read_text(encoding="utf-8"))
 
 
+@pytest.mark.smoke
 def test_an_old_character_save_loads_with_the_new_fields_empty():
     state = GameState.model_validate(OLD["state"])
     assert state.player.sensing is None

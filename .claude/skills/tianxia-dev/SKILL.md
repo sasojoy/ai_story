@@ -9,6 +9,13 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 
 ## 開工
 
+- **2026-10-30 起照〈開發規範手冊〉**（`docs/superpowers/specs/2026-10-30-開發模式-design.md` 第三、四節；分支與測試的總規矩在 `tianxia-flow`）：
+  - **新功能一律 `scripts/new_feature.py <包名>` 生一包**（`tianxia/features/<包>/`：`__init__.py` 登記與掛鉤、`rules.py`、`actions.py`、`state.py`、`content/`、`routes.py`、`web/`、`tests/`、`bots.py`、`README.md`；用不到的不生）。這支腳本在第 1 階（`feature/core-hooks`）合進 develop 之後才有，之前照舊寫在原本的模組。
+  - **舊功能碰到才搬**：派工上哪一批要動某個功能，順手把它搬進包裡；搬的那一步是純搬——行為不變、測試只搬位置不改斷言，那一包的測試與核心契約綠。不搬的留在 `engine.py` 不動，沒有大翻修。
+  - **包只 import 核心**，不 import 別的包；要用別包的東西走核心的服務（例：票的庫存與消耗走 `ctx.wallet`）。過渡期可以 import 還沒搬的舊模組，行尾註 `# 過渡：待搬`。`tests/core/test_feature_boundaries.py` 會掃。
+  - **只跑那一包的測試**（`-n 4`）；slow 不自動跟，要跑就 `scripts/test_for.py --slow`（第 0 階合進來之後）。
+  - **不改技能檔**：學到的寫在回報的「學到的」一節，PM 收進技能（手冊第十節）。
+  - **每做完一個 Task 就推一次**自己的分支（手冊第八節）：換帳號最多丟一個 Task。
 - 先 `git worktree list`、`git remote -v` 核對自己在哪一份 clone、哪一條分支（這台有 `天下大勢`、`ai遊戲` 兩份）。
 - 一批一個工作樹，從派工指定的分支開（多半是 `origin/feature/formal-season`）。分支名照派工寫的。
   如果是 `git worktree add -b` 開的，要加 `--no-track`，或開完 `git branch --unset-upstream`：不然它跟著功能分支，`git push` 可能推錯地方。推的時候一律寫明 `git push origin <你的分支>`。

@@ -1,9 +1,12 @@
 """簡繁轉換（tianxia/zh.py）：煉製的名字會永久登記，所以這一層一定要確定性。"""
 from unittest import mock
 
+import pytest
+
 from tianxia import zh
 
 
+@pytest.mark.smoke
 def test_simplified_characters_become_traditional():
     assert zh.to_traditional("龙吟九霄") == "龍吟九霄"
     assert zh.to_traditional("孙坚说这话") == "孫堅說這話"

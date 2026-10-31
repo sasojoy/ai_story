@@ -14,6 +14,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **開結果分支**：從派工單給的那個 commit 開，`git worktree add -b qa/<名字> .claude/worktrees/qa-<名字> <sha>`。複驗如果沿用既有的 qa/ 分支，先 `git merge --ff-only origin/<修好的分支>`，快轉到修好的版本。
 - **寫檔被擋**：如果 hook 擋你寫別的工作樹的檔，就在自己 session 的工作樹 `git switch` 到結果分支來做。
 - 工作樹沒有 `.venv`，一律用 `C:/Ray/專案/天下大勢/.venv/Scripts/python.exe`。印中文要設 `PYTHONIOENCODING=utf-8`（或把 stdout 包成 UTF-8）。
+- **不重跑開發跑過的測試**（〈開發規範手冊〉4.2，企劃者 2026-10-30）：QA 只在實機上驗畫面與手感，只能靠引擎驗的照 `引擎驗收.md` 寫腳本驗；開發的回報寫了跑過哪些測試，就不再跑一次。學到的寫在回報的「學到的」一節，不改技能檔（手冊第十節，PM 收）。派工單點名要跑的才跑。
 - **測試只跑派工單點名的檔**：`<python> -m pytest -q tests/a.py tests/b.py`。不跑整套，也不用 `test_for.py`，因為 engine、content 一動，它會挑到幾乎整套。
 - 不開多代理工作流程，也不要一個驗收項目開一個子代理。
 - **在隔離的工作樹裡**（PM 用 Agent 派的子代理）：Bash 工具會擋帶中文路徑的 python（`C:/Ray/專案/…/python.exe`），python 一律從 PowerShell 跑，git 照樣用 Bash。PowerShell 傳 JSON 參數會壞：把 JSON 寫進腳本，或讓腳本收一般參數。

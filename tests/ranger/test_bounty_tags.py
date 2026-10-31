@@ -41,6 +41,7 @@ def test_a_prize_gets_its_own_red_tag():
     assert bounties.reward_tags(s, c, b)[-1] == {"v": "重賞：寶物一件", "kind": "prize"}
 
 
+@pytest.mark.smoke
 def test_the_board_notes_carry_the_corner_and_tags():
     game = _ranger()
     game.choose("act:bounties")

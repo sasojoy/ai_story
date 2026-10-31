@@ -5,6 +5,8 @@ from __future__ import annotations
 import random
 from unittest import mock
 
+import pytest
+
 from conftest import classic_rules, real_content, third_party_gentry
 from conquest_kit import conquest_rules
 from test_real_content import _walk_the_hut
@@ -46,6 +48,7 @@ def _fight(tier="大勝"):
     return mock.patch.object(team, "fight", return_value=EncounterResult(tier=tier, margin=50, our_power=200, difficulty=40))
 
 
+@pytest.mark.smoke
 def test_losing_an_attack_costs_silver_and_pushes_nothing():
     game = _game(faction="guan")
     game.state.player.stats["silver"] = 100

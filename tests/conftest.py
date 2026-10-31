@@ -236,6 +236,13 @@ def no_leftover_web_push(monkeypatch, tmp_path):
     server.NARRATION = None
     server.NARRATION_CLIENT = None
     server.NARRATION_FAILS.clear()
+    server.TALES_STOP.set()  # 戰記（2026-10-29）：main() 一定開這一條，留著的話每 30 秒在之後測試的暫存資料庫上讀，資料庫收掉時 worker segfault
+    if server.TALES_THREAD is not None:
+        server.TALES_THREAD.join(5.0)
+    server.TALES_THREAD = None
+    server.TALES_STOP.clear()
+    server.TALES = None
+    server.TALES_CLIENT = None
 
 
 @pytest.fixture(autouse=True)

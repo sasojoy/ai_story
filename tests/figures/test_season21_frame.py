@@ -37,6 +37,7 @@ def test_the_season21_profile_turns_the_frame_on_and_nothing_else_does():
     assert not real_content().config.season21
 
 
+@pytest.mark.smoke
 def test_the_anchor_is_the_taiwan_monday_of_the_opening_week():
     c21 = real_content("season21")
     assert calendar.anchor_offset(WED, c21) == WED_OFFSET
