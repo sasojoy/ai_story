@@ -49,7 +49,7 @@ from pathlib import Path
 PROFILES = ("none", "weekend", "season21", "week7", "test")
 TRACK_NAMES = ("sortie", "duel")  # 第 1 批的一軌（出陣：Scenario）、第 2 批的一軌（出陣約戰：DuelScenario）；各自一個資料庫、各自切一半
 BOT_PROFILES = ("weekend", "week7")
-DUEL_BOT_PROFILES = ("season21", "week7")  # 約戰的假人（BotRunner 兩軍各 4 個）：約戰開著的兩種
+DUEL_BOT_PROFILES = ("season21", "week7")  # 約戰的假人（推現實時鐘的整季機器人、BotRunner 兩軍各 4 個）：約戰開著的兩種
 DUEL_PROFILES = ("season21", "week7")  # 減法季開著、出陣換成約戰的季：先照原樣（約戰）走一段，攻守混戰那幾段把約戰關掉走
 CLOCK0 = 1792900800.0  # 2026-10-25 08:00 UTC（台灣 16:00）
 STEP_SECONDS = 60.0
@@ -98,7 +98,8 @@ def _run_set(chains: list[list[tuple[list[str], Path]]], workers: int) -> None:
 
 
 def _bot_runs(tracks: list[str]) -> list[tuple[str, str]]:
-    """（seats, 設定）：出陣那一軌的假人（整季機器人＋BotRunner 四個）跑 BOT_PROFILES，約戰那一軌的（BotRunner 兩軍各 4 個）跑 DUEL_BOT_PROFILES。"""
+    """（seats, 設定）：出陣那一軌的假人（整季機器人＋BotRunner 四個）跑 BOT_PROFILES，約戰那一軌的（推現實時鐘的整季機器人＋BotRunner 兩軍
+    各 4 個）跑 DUEL_BOT_PROFILES。"""
     out = [("sortie", p) for p in BOT_PROFILES] if "sortie" in tracks else []
     return out + ([("duel", p) for p in DUEL_BOT_PROFILES] if "duel" in tracks else [])
 
@@ -1303,6 +1304,9 @@ def bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
     game = bot.play_season(content, seed=3, max_steps=int(os.environ.get("SB_PLAY_STEPS", "700")), world=world, now=CLOCK0)
     emit("整季機器人 存檔", hashlib.sha256(game.state.model_dump_json().encode("utf-8")).hexdigest())
     emit("整季機器人 紀錄標題", titles([game.state]))
+    # 約戰開著的季（week7）它貼過一張（bot.pick 最後那一行的 duel_go）：紀錄只留最近 30 則（journal.MAX_ENTRIES）、標題裡看不到，這裡寫出來。
+    # 現實時刻一直是開季那一刻（play_season 不動 game.now），那一張永遠不到時；只 advance 的結算在 duel_bots_run 那一段（推現實時鐘）
+    emit("整季機器人 約戰", _duel_rows(world))
     emit("整季機器人 資料庫", hashlib.sha256(db_text(tmp / "play.db").encode("utf-8")).hexdigest())
 
     content = load_content(root / "content", profile=profile)
@@ -1340,6 +1344,14 @@ def bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
     print(profile, "假人", dict(totals))
 
 
+def _duel_rows(world) -> list[dict]:
+    """world.sorties 的每一張（照開的先後）：誰貼、誰應、同去幾人、補位還是守軍、結果、什麼時候結算。"""
+    duels = sorted(world.sortie_duels().values(), key=lambda d: (d.opened_at, d.id))
+    return [{"id": d.id, "status": d.status, "block": d.block, "attacker": d.attacker.name, "allies": list(d.attacker.allies),
+             "defender": None if d.defender is None else [d.defender.name, d.defender.garrison], "filled": bool(d.report.get("filled")),
+             "tier": None if d.result is None else d.result.tier, "settled_at": d.settled_at} for d in duels]
+
+
 DUEL_SEATS = [  # 約戰（第 2 批）：兩軍各 4 個，擺在兩軍都約得到的區塊與它們的大區裡（汝南荒野、南陽三處、涿郡）
     ("甲兵一", "guan", "runan_wilds"), ("甲兵二", "guan", "runan_wilds"), ("甲兵三", "guan", "nanyang_road"), ("甲兵四", "guan", "yu_river"),
     ("乙兵一", "huang", "runan_wilds"), ("乙兵二", "huang", "runan_wilds"), ("乙兵三", "huang", "nanyang_wilds"),
@@ -1348,21 +1360,47 @@ DUEL_SEATS = [  # 約戰（第 2 批）：兩軍各 4 個，擺在兩軍都約�
 
 
 def duel_bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
-    """約戰的假人（--seats duel）：BotRunner＋bot_policy.take_turn（random.Random(7)、假時鐘、每一輪 +300 秒）兩軍各 4 個跑 N 輪——
-    假人貼約戰（bot.duel_go）、應戰與同去（bot_policy.duel_play）、到時由 BotRunner._duel_tick 結算。寫 world.sorties 的每一張（誰貼、
-    誰應、同去幾人、補位還是守軍、結果）、應戰與同去的次數、戰報、紀錄標題、存檔、各塊進度與資料庫的雜湊。整季機器人在 bots 那一份。"""
+    """約戰的假人（--seats duel）兩段。
+    一、整季機器人（bot.play_season，種子 3、SB_PLAY_STEPS 步）：observe 每一步把現實時鐘（game.now）往前推一分（同情境一步一分）——
+    play_season 自己從不動現實時刻（bots 那一份的整季機器人在 week7 貼了一張、永遠不到時、冷卻也永遠不過），推了之後它照 bot.pick 最後那一行
+    （duel_go）一張一張貼，窗滿了由它自己的 Game.advance 結算（整季機器人只 advance、不 sync、沒有排程：dev/sortie-2 審查，「只 advance 的
+    結算組合」原本只有情境的 D7 一場）。寫 world.sorties 的每一張、存檔、戰報、紀錄標題與資料庫的雜湊。
+    二、BotRunner＋bot_policy.take_turn（random.Random(7)、假時鐘、每一輪 +300 秒）兩軍各 4 個跑 N 輪——假人貼約戰（bot.duel_go）、應戰與同去
+    （bot_policy.duel_play）、到時由 BotRunner._duel_tick 結算。寫 world.sorties 的每一張（誰貼、誰應、同去幾人、補位還是守軍、結果）、
+    應戰與同去的次數、戰報、紀錄標題、存檔、各塊進度與資料庫的雜湊。"""
     tmp.mkdir(parents=True, exist_ok=True)
     for f in tmp.glob("*.db*"):
         f.unlink()
     _setup_child(root, profile, tmp / "unused.db")
     from collections import Counter
 
+    from tianxia import bot
     from tianxia.bot_runner import BotRunner
     from tianxia.characters import open_characters
     from tianxia.content import load_content
     from tianxia.engine import Game
     from tianxia.sqlite_world import open_world
     from tianxia.state import BotProfile
+
+    content = load_content(root / "content", profile=profile)
+    play_world = open_world(tmp / "play.db")
+    moved = [0]
+
+    def observe(g) -> None:  # 開始之前叫一次、之後每一步叫一次
+        moved[0] += 1
+        g.now = CLOCK0 + moved[0] * STEP_SECONDS
+
+    game = bot.play_season(content, seed=3, max_steps=int(os.environ.get("SB_PLAY_STEPS", "700")), world=play_world, now=CLOCK0,
+                           observe=observe)
+    rows = _duel_rows(play_world)
+    emit("約戰整季機器人 約戰", rows)
+    emit("約戰整季機器人 次數", dict(sorted(Counter(r["status"] for r in rows).items())))
+    emit("約戰整季機器人 紀錄標題", dict(sorted(Counter(e.title for e in game.state.journal).items())))
+    emit("約戰整季機器人 戰報", hashlib.sha256(json.dumps([r.model_dump(mode="json") for r in game.state.battles], ensure_ascii=False)
+                                                 .encode("utf-8")).hexdigest())
+    emit("約戰整季機器人 存檔", hashlib.sha256(game.state.model_dump_json().encode("utf-8")).hexdigest())
+    emit("約戰整季機器人 資料庫", hashlib.sha256(db_text(tmp / "play.db").encode("utf-8")).hexdigest())
+    print(profile, "約戰整季機器人", moved[0], "步", dict(Counter((r["status"], r["defender"][1] if r["defender"] else None) for r in rows)))
 
     content = load_content(root / "content", profile=profile)
     content.config.bot_tick_seconds = 10 ** 6  # 在線的假人每一輪都動（act_chance 夾到 1）
