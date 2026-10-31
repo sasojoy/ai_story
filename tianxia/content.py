@@ -2933,9 +2933,9 @@ def validate(c: Content) -> None:
              f"陣營 {faction.id}：allies 只能寫劇本裡別的陣營（{faction.allies}）")
         need(not any(c.scenario.find_faction(a) is not None and c.scenario.find_faction(a).allies for a in faction.allies),
              f"陣營 {faction.id}：allies 寫的陣營自己不能再有 allies")
-    jf = c.config.jianfa  # 三陣營四勝利（減法季批 3c）：「此刻幫誰」就是 ally，只在豪強分屬兩軍的季寫；投靠點的預設對得上劇本
-    if jf.enabled and jf.four_wins:
-        need(c.config.haoqiang_allied, "config.jianfa.four_wins 開著，可是 haoqiang_allied 關著：豪強的「此刻幫誰」（ally）只在豪強分屬兩軍的季有")
+    jf = c.config.jianfa  # 三陣營四勝利（減法季批 3c；子開關 four_wins 2026-10-31 拿掉，跟著總開關）：「此刻幫誰」就是 ally，只在豪強分屬兩軍的季寫；投靠點的預設對得上劇本
+    if jf.enabled:
+        need(c.config.haoqiang_allied, "config.jianfa 開著，可是 haoqiang_allied 關著：豪強的「此刻幫誰」（ally）只在豪強分屬兩軍的季有")
         if any(f.allies for f in c.scenario.factions):
             from .wins import check as wins_check  # noqa: PLC0415  延後 import：wins → allied → calendar，content 不必一開始就依賴
 

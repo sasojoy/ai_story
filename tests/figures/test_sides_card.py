@@ -23,8 +23,10 @@ def _guan(game) -> int:
 
 
 def test_off_adds_nothing_to_the_batch_one_card():
-    """four_wins 關著：批 1 的三方卡照舊（兩軍、贏了給是舊的那一句、沒有 lean、tier_hint、ledger、join_at）；總開關關著也一樣。"""
-    game = wins_game(wins_content(off=True), faction="guan", at="changshe")
+    """四勝利關著（減法季的總開關關著）：批 1 的三方卡照舊（兩軍、贏了給是舊的那一句、沒有 lean、tier_hint、ledger、join_at）。"""
+    content = wins_content()
+    content.config.jianfa.enabled = False
+    game = wins_game(content, faction="guan", at="changshe")
     assert game.sides_card() is None and game.ending_card() is None and game.tier_hint() is None
     view = server.main_view(game)
     assert not KEYS & set(view)
@@ -32,10 +34,6 @@ def test_off_adds_nothing_to_the_batch_one_card():
     assert set(card) == {"cols", "joined", "lean"} and card["lean"] is None
     assert [col["id"] for col in card["cols"]] == ["guan", "huang"]
     assert {col["gives"] for col in card["cols"]} == {weekcard.WIN_GIVES_OLD} and not any("join_at" in col for col in card["cols"])
-    content = wins_content()
-    content.config.jianfa.enabled = False
-    plain = wins_game(content, name="乙客", faction="guan", at="changshe")
-    assert not KEYS & set(server.main_view(plain))
 
 
 def test_on_fills_the_batch_one_card():
@@ -127,7 +125,7 @@ def test_gentry_column_shows_own_books():
 
 def test_last_week_says_how_far_from_winning():
     """最後一週（7 天的季最後一段）：批 5 留的位子 week_unlock.win_gap 換成兩軍各自離勝利條件還差多少（本週卡的 gap、輿圖天下層同一句）；
-    前面幾週沒有。four_wins 關著照舊是結局門檻那一句（rules.stance_rule_note）。"""
+    前面幾週沒有。"""
     game = wins_game(faction="guan", at="changshe")
     assert week_unlock.win_gap(game.state, game.content) is None
     w = game.state.world
@@ -138,10 +136,6 @@ def test_last_week_says_how_far_from_winning():
     assert week_unlock.win_gap(game.state, game.content) == expected
     assert game.map_state()["gap"] == expected
     assert server.main_view(game)["week_card"]["gap"] == expected
-    off = wins_game(wins_content(off=True), name="乙客", faction="guan", at="changshe")
-    ow = off.state.world
-    ow.time = calendar.week_start(calendar.weeks(off.content, ow), off.content, ow) + 3600
-    assert week_unlock.win_gap(off.state, off.content) == rules.stance_rule_note(off.state, off.content)
 
 
 def test_rest_season_has_none_of_it():

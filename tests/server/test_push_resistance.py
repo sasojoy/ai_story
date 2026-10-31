@@ -157,7 +157,6 @@ def test_pushing_too_far_from_your_own_ground_is_not_called_deep_in_enemy_land()
 
 def _game_fb248(faction=None, at="yingshui", name="沈浪", content=None):
     c = content or real_content("week7")  # 地盤拔河的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
-    c.config.jianfa.four_wins = False  # 三陣營四勝利之前的規則（挑邊、改依附算叛投、攪局；測試整理批 1 把這個檔從週末搬到 7 天季，減法季開著）；新規則在 tests/test_four_wins_wiring.py
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     game = Game.new(c, name, rng=random.Random(0), world=open_world())
