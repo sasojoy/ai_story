@@ -19,6 +19,7 @@ import typing
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
 
 from conftest import next_season, real_content
 from tianxia.core import features as features_core
@@ -143,10 +144,19 @@ def _dirty(annotation, default):
     """換季前把欄位擺成一個跟預設不一樣的值。"""
     origin = typing.get_origin(annotation)
     args = [a for a in typing.get_args(annotation) if a is not type(None)]
+    optional = origin in (typing.Union, types.UnionType)
     if annotation is bool:
         return not default
-    if annotation is int or (origin in (typing.Union, types.UnionType) and args == [int]):
+    if annotation is int or (optional and args == [int]):
         return (default or 0) + 7
+    # 小數、字串、可以沒有的子模型：主動搬六包第 2 批補的（約戰的 sortie_cooldown_until、answer_cooldown_until 是 float | None；
+    # 批次表第二節、critic.json issues[4]：走一趟的 outing 是 Outing | None、escort_pick 是 str。改核心測試，算例外）
+    if annotation is float or (optional and args == [float]):
+        return (default or 0.0) + 7.5
+    if annotation is str or (optional and args == [str]):
+        return (default or "") + "契約"
+    if optional and len(args) == 1 and isinstance(args[0], type) and issubclass(args[0], BaseModel):
+        return args[0].model_construct()  # 一份全是預設值的（不驗必填）：跟預設的 None 不一樣就夠
     if origin is list:
         return [7]
     if origin is set:
@@ -154,6 +164,15 @@ def _dirty(annotation, default):
     if origin is dict:
         return {"x": 7}
     raise AssertionError(f"契約測試還不會擺 {annotation} 這種欄位，補 _dirty")
+
+
+@pytest.mark.parametrize("field", ["sortie_cooldown_until", "hidden_until", "escort_pick", "outing_last", "outing", "sorties_today",
+                                   "picking_audience", "visited", "letters"])
+def test_dirty_moves_every_kind_of_field_off_its_default(field):
+    """_dirty 每一種都真的擺得出跟預設不一樣的值（還沒有包認領的那幾種也擺一次：不然補了永遠沒跑過）。"""
+    info = PlayerState.model_fields[field]
+    default = info.get_default(call_default_factory=True)
+    assert _dirty(info.annotation, default) != default
 
 
 @pytest.mark.parametrize("feature", FEATURES, ids=lambda f: f.name)

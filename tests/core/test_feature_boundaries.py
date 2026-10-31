@@ -212,8 +212,8 @@ GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；�
     "_act": f"act:train 的分派（出陣開著走 _sortie、序章與關著走 _train；並肩出陣包在外面）：act 是核心的前綴；{_SORTIE_SEAM}",
     "_everyday_options": f"行動列那一格（雪恥／遊歷／出陣、散人與不在爭奪之列的灰格，叫 _sortie_option）：選項的位置算行為；{_SORTIE_SEAM}",
     "action_notes": f"行動列底下那一行（出陣開著叫 _sortie_line，關著是遊歷那一行）；{_SORTIE_SEAM}",
-    "_squad_encounter": "戰鬥（as_sortie 那一支）：序章的戰報標題寫雪恥（sortie.PROLOGUE_FIGHT）、打贏回頭叫 _sortie_rewards（核心叫委派；"
-                        "這個方法在 GAME_DIRECT 裡，掃描不另記那一對）；等戰鬥搬成包時變成核心的事件",
+    "_squad_encounter": "戰鬥（as_sortie 那一支）：序章的戰報標題寫雪恥（sortie.PROLOGUE_FIGHT）、打贏回頭叫 _sortie_rewards（那一對記在 "
+                        "GAME_DELEGATE_CALLERS）；等戰鬥搬成包時變成核心的事件",
     "_train_squad_ids": "舊遊歷與出陣共用的對手池（出陣開著時只有攻才打，叫 _sortie_mode、_sortie_foes）",
     "_duty_option": "守勢行動（巡哨、傳道、保境安民）共用出陣的次數與鈕上的字（sortie.duty_problem、USED_UP、LEFT_NOTE；叫 sorties_left）",
     "_duty": "守勢行動算一次出陣（sortie.spend；叫 _sortie_host 拿自家那一路的數字）",
@@ -226,11 +226,26 @@ GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；�
     "_duel_join_extra": "出陣約戰（第 2 批搬）：同去的次數（sortie 的字；叫 sorties_left）",
     "sortie_join": "出陣約戰（第 2 批搬）：同去（sortie.spend）",
 }
-GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）
+GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_DIRECT 的方法裡叫的也列（PM 10/31 答覆出陣第 1 批，第 2 批起）
     ("own_turn_checks", "_mall_grant"): "封測元寶每一輪發（本人這一輪沒有掛鉤；on_sync 不夠：假人程式的那一輪不 sync）",
-    # 出陣（主動搬六包第 1 批）。核心叫出陣委派一共 21 對：另外 15 對的呼叫端本身在 GAME_DIRECT 裡（掃描對它們不另記）
+    # 出陣（主動搬六包第 1 批）：核心叫出陣委派一共 21 對（第 1 批的掃描只看得到 6 對，其餘 15 對的呼叫端在 GAME_DIRECT 裡）
     ("_action_title", "_train_title"): "這一下的紀錄標題先算（act:train 是核心的前綴，標題照出陣開著沒、序章寫出陣／雪恥／遊歷）",
     ("_outing_foe", "_sortie_host"): "走一趟（探索）在自家營寨遇上的是自家那一路（出陣的守拿的同一路）；探索搬成包時改成查詢服務",
+    ("_act", "_sortie"): f"act:train 的分派：出陣開著走出陣（並肩出陣、扣體力包在外面）；{_SORTIE_SEAM}",
+    ("_everyday_options", "_sortie_option"): f"行動列那一格（雪恥／遊歷／出陣）：選項的位置算行為；{_SORTIE_SEAM}",
+    ("action_notes", "_sortie_line"): f"行動列底下出陣那一行；{_SORTIE_SEAM}",
+    ("_squad_encounter", "_sortie_rewards"): "戰鬥（as_sortie）打贏給出陣的獎勵；等戰鬥搬成包時變成核心的事件",
+    ("_train_squad_ids", "_sortie_mode"): "舊遊歷與出陣共用的對手池：出陣開著時只有攻才打",
+    ("_train_squad_ids", "_sortie_foes"): "同上：攻打的對手",
+    ("_duty_option", "sorties_left"): "守勢行動共用出陣的次數（鈕上寫今天還能幾次）",
+    ("_duty", "_sortie_host"): "守勢行動拿自家那一路的經驗心得（一類一顆）",
+    ("map_state", "_sortie_foes"): "輿圖（今天去哪裡出陣）：出陣那一格是哪一種；輿圖的線還在飛，這一輪不碰",
+    ("map_state", "sorties_left"): "輿圖：今天還能出陣幾次",
+    ("_map_foes", "_sortie_foes"): "輿圖的地點卡：約戰關著時出陣打的那一批",
+    ("_duel_option", "sorties_left"): "出陣約戰（第 2 批搬）：約戰開著時出陣那一格的次數",
+    ("_duel_line", "sorties_left"): "出陣約戰（第 2 批搬）：行動列底下那一行的次數",
+    ("_duel_line", "_sortie_line"): "出陣約戰（第 2 批搬）：散人、不在爭奪之列照舊出陣那一行",
+    ("_duel_join_extra", "sorties_left"): "出陣約戰（第 2 批搬）：同去的次數",
     ("_duel_report", "_sortie_rewards"): "出陣約戰（第 2 批搬）：結算時攻方打贏給出陣的獎勵",
     ("_duel_report", "sorties_left"): "出陣約戰（第 2 批搬）：約戰卡上今天還能出陣幾次",
     ("sortie_card", "sorties_left"): "出陣約戰（第 2 批搬）：出陣前那張卡",
@@ -239,9 +254,27 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）
 
 
 @functools.lru_cache(maxsize=None)
+def _engine_tree() -> ast.Module:
+    return ast.parse((TIANXIA / "engine.py").read_text(encoding="utf-8"))  # 一萬七千行，parse 一次一秒多：大家共用這一份
+
+
+@functools.lru_cache(maxsize=None)
+def game_members() -> frozenset[str]:
+    """engine.Game 上的名字：類別裡定義的方法與類別屬性、方法裡寫 self.x = 的屬性（off_list_calls 認 attacker、defender 用）。"""
+    game = next(n for n in _engine_tree().body if isinstance(n, ast.ClassDef) and n.name == "Game")
+    names = {f.name for f in game.body if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    names |= {t.id for n in game.body if isinstance(n, (ast.Assign, ast.AnnAssign))
+              for t in (n.targets if isinstance(n, ast.Assign) else [n.target]) if isinstance(t, ast.Name)}
+    names |= {n.attr for n in ast.walk(game) if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == "self"
+              and isinstance(n.ctx, ast.Store)}
+    return frozenset(names)
+
+
+@functools.lru_cache(maxsize=None)
 def game_links() -> tuple[set[str], set[str], set[tuple[str, str]]]:
-    """engine.py：(模組頂層 import 的包的模組, Game 裡直接叫到包的方法, Game 裡叫委派的 (方法, 委派))。Game 以外碰到包也算直接叫。"""
-    tree = ast.parse((TIANXIA / "engine.py").read_text(encoding="utf-8"))
+    """engine.py：(模組頂層 import 的包的模組, Game 裡直接叫到包的方法, Game 裡叫委派的 (方法, 委派))。Game 以外碰到包也算直接叫。
+    叫委派的那一組連 GAME_DIRECT 的方法裡叫的也記（PM 10/31 答覆出陣第 1 批：以前只記呼叫端本身不碰包的，出陣的 21 對只看得到 6 對）。"""
+    tree = _engine_tree()
     local: dict[str, str] = {}  # 模組頂層 import 進來的包的模組：本地名字 → 模組
     for node in tree.body:
         if isinstance(node, ast.ImportFrom):
@@ -261,7 +294,7 @@ def game_links() -> tuple[set[str], set[str], set[tuple[str, str]]]:
     direct |= {f"<engine 模組層:{n.lineno}>" for n in outside}
     callers = {(f.name, n.attr) for f in methods for n in ast.walk(f)
                if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == "self"
-               and n.attr in direct and f.name not in direct}
+               and n.attr in direct and n.attr != f.name}
     return imports, direct, callers
 
 
@@ -325,6 +358,9 @@ def test_every_transitional_import_points_at_an_old_module_not_the_core_or_a_pac
 
 SERVICES = TIANXIA / "core" / "services.py"
 CTX_NAMES = ("ctx", "g", "game")  # 功能包裡拿 Game 的變數名（掛鉤的 ctx、路由 lambda 的 g、路由裡的 game）
+# 約戰結算（出陣包 duel_actions.duel_result，主動搬六包第 2 批）另外兩份 Game 叫 attacker、defender（軍令 _order_credit 叫在它們上面）。
+# 包裡同名的也有約戰的一方（duel_rules 的 attacker、defender 是 SortieSide：attacker.model_copy），所以這兩個名字只算 Game 上真的有的名字
+GAME_ALIASES = ("attacker", "defender")
 
 
 def service_list() -> set[str]:
@@ -334,11 +370,12 @@ def service_list() -> set[str]:
 
 def off_list_calls(source: str, module: str, allowed: set[str]) -> list[str]:
     """功能包的模組碰了 Game 上不在服務清單的東西（ctx.x、g.x、game.x；手冊 3.3「只准叫服務清單上的方法」）。
-    只認那三個變數名：拿別的名字接 Game 的（管理者動到的別人的存檔）看不到，第一版先這樣。"""
+    只認那三個變數名，加上 GAME_ALIASES（attacker、defender：只算 Game 上有的名字）：拿別的名字接 Game 的看不到，第一版先這樣。"""
     out = []
     for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in CTX_NAMES \
-                and node.attr not in allowed:
+        if not (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)) or node.attr in allowed:
+            continue
+        if node.value.id in CTX_NAMES or (node.value.id in GAME_ALIASES and node.attr in game_members()):
             out.append(f"{module}:{node.lineno} {node.value.id}.{node.attr}")
     return out
 
@@ -449,6 +486,11 @@ def test_the_service_scanner_catches_a_game_method_off_the_list():
     assert off_list_calls("def f(ctx):\n    return ctx._tavern_price(1)\n", "m", allowed) == ["m:2 ctx._tavern_price"]
     assert off_list_calls("route = lambda g: g.mall_view()\n", "m", allowed) == ["m:1 g.mall_view"]
     assert off_list_calls("def f(ctx):\n    ctx._log(['x'])\n    return ctx.state.player\n", "m", allowed) == []
+    # 約戰結算的另外兩份 Game（主動搬六包第 2 批）：Game 上有、清單上沒有的抓得到；清單上的、Game 上沒有的（約戰的一方 SortieSide）不算
+    assert off_list_calls("def f(attacker, defender):\n    attacker._tavern_price(1)\n    return defender._tavern_price(2)\n", "m",
+                          allowed) == ["m:2 attacker._tavern_price", "m:3 defender._tavern_price"]
+    assert off_list_calls("def f(attacker):\n    attacker._order_credit(kind='win')\n    return attacker.model_copy(deep=True)\n", "m",
+                          allowed) == []
 
 
 @pytest.mark.parametrize("source, expected", [
