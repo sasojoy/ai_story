@@ -11,12 +11,15 @@
   python scripts/test_for.py -- -x -k fuse   # -- 之後的參數原樣交給 pytest（-- -n 2 會換掉預設的 -n 4）
 
 怎麼挑（開發規範手冊 4.3，docs/superpowers/specs/2026-10-30-開發模式-design.md）：
-- 「核心測試」（過渡期，PM 2026-10-31）＝ 手冊 3.1 核心模組自己檔名的測試（test_<模組>…）＋ tests/core/test_engine*.py
+- 「核心測試」（過渡期，PM 2026-10-31）＝ 核心模組自己檔名的測試（test_<模組>…；江湖紀錄的 test_journal 不收，
+  NOT_CORE_TESTS）＋ tests/core/test_engine*.py
   ＋ tests/core/ 的核心契約、邊界、錢包服務測試（CORE_GLOBS），不含 slow；「煙霧」＝ 標了 @pytest.mark.smoke 的
   （每個區塊約 10 條）。
-- tianxia/features/<包>/**：那一包的 tests/ ＋ tests/core/test_contract*.py。
-- 核心（tianxia/core/**、state.py、models.py、content.py、rules.py、calendar.py，與手冊 3.1 列的
-  sqlite_world、world_state、characters、accounts、database、team、gender、naming）：核心測試＋煙霧＋檔名是 test_<模組>… 的。
+- tianxia/features/<包>/**：那一包的 tests/ ＋ 核心契約（tests/core/test_contract*.py 與邊界 test_feature_boundaries.py，
+  CONTRACT_GLOBS：手冊 4.1 第三級的核心契約含邊界測試，改包最容易踩的就是 import 了別的包）。
+- 核心（tianxia/core/**，與 tianxia/core/__init__.py 的 MODULES：手冊 3.1 的 state、models、content、rules、calendar、
+  sqlite_world、world_state、characters、accounts、database、team、gender、naming，3.10 的 wallet，PM 10/31 的 journal；
+  邊界測試照同一份）：核心測試＋煙霧＋檔名是 test_<模組>… 的。
   state.py、models.py 另外看 hunk 落在哪個類別、哪個欄位：類別名或欄位名帶功能前綴的（mall_tokens → mall）再加那一群。
 - tianxia/engine.py：hunk 落在 Game 的哪個方法 → 方法名第一個認得的字當功能群（tavern_seek → tavern；_deliver_seal_results
   → seal）→ 那一群的測試檔。落在 choose、_everyday_options、sync、status_data、__init__、換季重設、清失效參照這幾個共用方法
@@ -33,7 +36,10 @@
   （「import 了 engine」不再算相關：engine.py 照上面那一條）。
 - content/：test_content.py ＋ test_real_content.py ＋ 寫到那個檔名的測試檔，照舊不含 slow：test_real_content.py 用真實內容
   跑整季的那幾條是 slow（--slow 才跑、每日整套會跑），其他的（事件難度帶 DIFFICULTY_BANDS 的鎖、地點走得到……）每次都跑。
-- web/：寫到那個檔名的測試檔（main.js、map.js、outing.js 照 app.js 挑），加上 test_server.py。
+- web/：寫到那個檔名的測試檔（main.js、map.js、outing.js 照 app.js 挑），加上 test_server.py。功能包登記的網頁檔
+  （各包 __init__.py 的 web，例 web/mall.js、web/mall.css；feature_web）→ 那一包的 tests/＋核心契約（CONTRACT_GLOBS）
+  ＋寫到那個檔名的（店面的 CSS 守門），不照 app.js 挑、不加 test_server.py（PM 2026-10-31）。包的 js 另外：包裡用假瀏覽器
+  （webharness）跑整支頁面、真的執行它的網頁測試（test_mall_web）連 slow 一起跑，跟改到的測試檔一樣（runs_js）。
 - tests/ 裡的測試檔：跑它自己，連 slow 一起（改了就是要跑它；挑到的其他檔照舊不含 slow，所以分兩次跑）；
   tests/kit/ 這類共用工具：import 它的測試檔；tests/fixtures/：寫到那個檔名的測試檔。
 - tests/conftest.py：hunk 落在哪個函式、fixture 或常數 → 用到它的測試檔（from conftest import、fixture 參數；conftest 裡
@@ -65,7 +71,9 @@ CORE_TESTS = TESTS / "core"
 FEATURES = ROOT / "tianxia" / "features"
 PARALLEL_FROM = 3  # 挑到這麼多個檔以上才開 xdist（開工作行程本身要幾秒）
 WORKERS = "4"  # 開發規範手冊 4.5：同一台同時最多兩份測試在跑，各自 -n 4
-WEB_SCRIPTS = {"main.js", "map.js", "outing.js", "app.js"}  # 網頁測試每一條都載入的檔（tests/kit/webharness.py 的 APP_FILES；test_test_for 守兩邊一樣）
+# 殼的網頁檔：網頁測試每一條都載入（tests/kit/webharness.py 的 APP_FILES 扣掉功能包的 js），改哪一個都照 app.js 挑。
+# 功能包的 js（mall.js）也在 APP_FILES 裡，可是照那一包挑（feature_web）；test_test_for 守 WEB_SCRIPTS ∪ 各包的 js == APP_FILES
+WEB_SCRIPTS = {"main.js", "map.js", "outing.js", "app.js"}
 SETUP_FILES = {"pyproject.toml", "requirements.txt", "requirements-dev.txt"}  # conftest.py 另外照 hunk 挑（conftest_picks）
 CONFTEST_CAP = 50  # conftest 改到的名字有超過這麼多個測試檔在用（content、game、real_content）：不一個一個挑，跑煙霧
 # 跟哪一條分支比：PM 2026-10-31 起預設 origin/develop（大家從 develop 開）；環境變數 TIANXIA_TEST_BASE 蓋過預設、
@@ -75,13 +83,46 @@ BASE_ENV = "TIANXIA_TEST_BASE"
 REAL_CONTENT_TEST = "test_real_content.py"  # 內容改了就跟（不含 slow）；用真實內容跑整季的那幾條是 slow，--slow 才跑
 SERVER_TEST = "test_server.py"
 
-# 核心（手冊 3.1、4.3）：改了跑核心測試＋煙霧＋自己檔名的測試，不照「誰 import 它」挑（team、models、state 被一兩百個測試檔 import）
-CORE_MODULES = {
-    "state", "models", "content", "rules", "calendar",
-    "sqlite_world", "world_state", "characters", "accounts", "database", "team", "gender", "naming",
-}
+CORE_INIT = ROOT / "tianxia" / "core" / "__init__.py"
+
+
+def core_modules(init: Path = CORE_INIT) -> frozenset[str]:
+    """核心的模組：tianxia/core/__init__.py 的 MODULES（手冊 3.1 的十三個、3.10 的錢包、PM 10/31 定算核心的江湖紀錄），
+    跟邊界測試 tests/core/test_feature_boundaries.py 同一份。照語法樹讀、不 import（同 feature_web：核心寫壞了 test_for
+    照樣挑得出來）；讀不出來（語法錯、沒有 MODULES）在 stderr 說一聲、當成沒有——改 tianxia/core/ 本來就跑核心測試＋煙霧。"""
+    try:
+        tree = ast.parse(init.read_text(encoding="utf-8"))  # 模組一載入就讀：_ast 還沒定義
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "MODULES" for t in node.targets):
+                value = node.value
+                if isinstance(value, ast.Call) and getattr(value.func, "id", None) == "frozenset" and value.args:
+                    value = value.args[0]
+                return frozenset(ast.literal_eval(value))
+        problem = "沒有 MODULES"
+    except (OSError, SyntaxError, ValueError) as e:
+        problem = f"{type(e).__name__}: {e}"
+    print(f"test_for：{_rel_root(init)} 讀不出核心的模組（{problem}），這一次不認核心模組", file=sys.stderr)
+    return frozenset()
+
+
+def _rel_root(p: Path) -> str:
+    try:
+        return p.relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(p)
+
+
+# 核心（手冊 3.1、4.2、4.3）：改了跑核心測試＋煙霧＋自己檔名的測試，不照「誰 import 它」挑（team、models、state 被一兩百個
+# 測試檔 import）。只有一份，在 tianxia/core/__init__.py（test_test_for 守它跟邊界測試的 CORE 一樣）
+CORE_MODULES = core_modules()
+# 核心模組裡、自己檔名的測試不收進「核心測試」的：江湖紀錄的 test_journal（76 條）。PM 10/31 定的核心測試是手冊 3.1 那十三個
+# 自己的測試＋test_engine＋契約、邊界、錢包（CORE_GLOBS），journal 算核心是同一天邊界測試那一條定的；收進來改 models.py 一個
+# 欄位的底數從 1,517 再漲到約 1,593，要不要收等 PM 跟 < 1,500 一起定。改 journal.py 照舊跑它（自己檔名的測試）。
+NOT_CORE_TESTS = frozenset({"journal"})
 # 「核心測試」除了核心模組自己檔名的，再收 tests/core/ 底下這幾種（core_tests）：Game 門面、核心契約、邊界、錢包服務
 CORE_GLOBS = ("test_engine*.py", "test_contract*.py", "test_feature_boundaries.py", "test_wallet.py")
+# 功能包改了跟著那一包跑的「核心契約」（tests/core/ 底下；手冊 4.1 第三級：選項帶前綴、choose 不吃別包的、關著不給、換季、邊界）
+CONTRACT_GLOBS = ("test_contract*.py", "test_feature_boundaries.py")
 HUNK_FILES = {"tianxia/engine.py", "tianxia/models.py", "tianxia/state.py", "server.py"}  # 看 hunk 落在哪裡的四個大檔
 # 大家都插一段的 Game 方法（手冊第一節量到的）：落在這裡不看方法名，看 hunk 裡提到哪些功能前綴
 SHARED_METHODS = {
@@ -137,9 +178,11 @@ TEXT_BLIND = frozenset({"test_test_for.py"})
 @dataclass
 class Pick:
     """挑到的東西。files 整個檔跑（不含 slow，--slow 才含）；own 是改到的測試檔本身（也在 files 裡，連 slow 一起跑）；
+    runs_js 是包裡真的執行改到的那個包的 js 的網頁測試（也在 files 裡，跟 own 一樣連 slow 一起跑）；
     core 加核心測試；smoke 加煙霧；everything 是整套。"""
     files: set[Path] = field(default_factory=set)
     own: set[Path] = field(default_factory=set)
+    runs_js: set[Path] = field(default_factory=set)
     core: bool = False
     smoke: bool = False
     everything: bool = False
@@ -148,6 +191,11 @@ class Pick:
     @property
     def empty(self) -> bool:
         return not (self.files or self.core or self.smoke or self.everything)
+
+    @property
+    def with_slow(self) -> set[Path]:
+        """連 slow 一起跑的那幾個檔（另外跑一次）：改到的測試檔＋執行改到的包 js 的網頁測試。"""
+        return self.own | self.runs_js
 
 
 # ── git ──────────────────────────────────────────────────────────────
@@ -460,14 +508,42 @@ def smoke_ids() -> tuple[str, ...]:
 
 
 def core_tests() -> list[Path]:
-    """過渡期的「核心測試」（PM 2026-10-31；跑的時候 -m "not slow"）：手冊 3.1 核心模組（CORE_MODULES）自己檔名的測試
-    （test_<模組>.py、test_<模組>_….py，在哪個資料夾都算：test_naming 在 arts/、test_team 在 battle/）＋
+    """過渡期的「核心測試」（PM 2026-10-31；跑的時候 -m "not slow"）：核心模組（CORE_MODULES，扣掉 NOT_CORE_TESTS）自己檔名的
+    測試（test_<模組>.py、test_<模組>_….py，在哪個資料夾都算：test_naming 在 arts/、test_team 在 battle/）＋
     tests/core/test_engine*.py（Game 門面；第 2 階搬包時屬於包的搬走，條數往下掉）＋ tests/core/ 的核心契約、
     邊界、錢包服務測試（CORE_GLOBS，第 1 階才有）。不再是整個 tests/core/（雜燴：test_social、test_factions……）。"""
-    own = {t for t in all_tests() for mod in CORE_MODULES
+    own = {t for t in all_tests() for mod in CORE_MODULES - NOT_CORE_TESTS
            if t.stem == f"test_{mod}" or t.stem.startswith(f"test_{mod}_")}
     globbed = {t for pattern in CORE_GLOBS for t in CORE_TESTS.glob(pattern)}
     return sorted(own | globbed)
+
+
+def contract_tests() -> set[Path]:
+    """功能包改了跟著跑的核心契約（CONTRACT_GLOBS）。"""
+    return {t for pattern in CONTRACT_GLOBS for t in CORE_TESTS.glob(pattern)}
+
+
+@functools.lru_cache(maxsize=None)
+def feature_web() -> dict[str, str]:
+    """功能包登記的網頁檔 → 包名（{"mall.js": "mall", "mall.css": "mall"}）：各包 __init__.py 裡類別的 web = (…)，
+    照語法樹讀、不 import（包寫壞了 test_for 照樣挑得出來）。test_test_for 守它跟 tianxia.core.features.web_files() 一樣。"""
+    found: dict[str, str] = {}
+    for init in sorted(FEATURES.glob("*/__init__.py")) if FEATURES.is_dir() else []:
+        try:
+            tree = _ast(init.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            for stmt in node.body:
+                targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target] if isinstance(stmt, ast.AnnAssign) else []
+                value = getattr(stmt, "value", None)
+                if any(isinstance(t, ast.Name) and t.id == "web" for t in targets) and isinstance(value, (ast.Tuple, ast.List)):
+                    for elt in value.elts:
+                        if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                            found[elt.value] = init.parent.name
+    return found
 
 
 _SLOW_MARK = re.compile(r"^[ \t]*(?:@pytest\.mark\.slow\b|pytestmark[ \t]*=[^\n]*\bslow\b)|\bmarks[ \t]*=[^\n]*\bmark\.slow\b",
@@ -772,7 +848,7 @@ def pick(files: list[str], base: str | None = None,
             pkg_tests = FEATURES / parts[2] / "tests" if len(parts) > 3 else None
             if pkg_tests is not None:
                 result.files |= set(pkg_tests.rglob("test_*.py")) if pkg_tests.is_dir() else set()
-                result.files |= set(CORE_TESTS.glob("test_contract*.py"))
+                result.files |= contract_tests()
                 result.why.append(f"{f}：{parts[2]} 這一包的 tests/＋核心契約")
             else:
                 core_and_smoke()
@@ -825,6 +901,27 @@ def pick(files: list[str], base: str | None = None,
                     result.files.add(named[name])
             result.files |= {t for t in tests if path.name in _text(t)}
             continue
+        owner = feature_web().get(path.name) if f.startswith("web/") and f.count("/") == 1 else None
+        if owner is not None:  # 功能包的網頁檔（web/mall.js）：那一包的 tests/＋核心契約，不照 app.js 挑（PM 10/31）
+            pkg_tests = FEATURES / owner / "tests"
+            pkg_files = set(pkg_tests.rglob("test_*.py")) if pkg_tests.is_dir() else set()
+            result.files |= pkg_files
+            result.files |= contract_tests()
+            # 寫到那個檔名的（店面的 CSS 守門讀包的樣式）：整個檔名，「mall.js」不算「mall.json」裡的那一段
+            exact = re.compile(rf"(?<![\w.]){re.escape(path.name)}(?!\w)")
+            named_it = {t for t in tests if t.name not in TEXT_BLIND and exact.search(_text(t))}
+            result.files |= named_it
+            others = sorted(t.name for t in named_it if not t.is_relative_to(pkg_tests))
+            # 包的 js 只有包裡用假瀏覽器（webharness 載入 APP_FILES）跑整支頁面的測試會真的執行它，而那種測試常整個檔標 slow
+            # （test_mall_web）：照「不含 slow」挑等於沒有一條在跑它（10/31 審查：插一行 function ((( 照預設 134 passed）。
+            # 那幾個連 slow 一起跑，跟改到的測試檔一樣；樣式表不是 webharness 跑的，照舊。
+            runs_js = {t for t in pkg_files if "webharness" in imported(t)} if path.suffix == ".js" else set()
+            result.runs_js |= runs_js
+            result.why.append(f"{f}：{owner} 這一包的網頁檔 → 那一包的 tests/＋核心契約"
+                              + (f"＋寫到 {path.name} 的 {'、'.join(others)}" if others else "")
+                              + (f"；跑它的網頁測試 {'、'.join(sorted(t.name for t in runs_js))} 連 slow 一起跑"
+                                 if runs_js else ""))
+            continue
         if f.startswith("web/"):
             if SERVER_TEST in named:
                 result.files.add(named[SERVER_TEST])
@@ -854,14 +951,16 @@ def targets(chosen: Pick, leave_out: frozenset[Path] = frozenset()) -> list[str]
 
 def _slow_split(chosen: Pick, slow: bool) -> list[tuple[list[str], str]]:
     """（目標, -m 的式子）一次或兩次。改到的測試檔本身（own）連 slow 一起跑——改了就是要跑它（手冊 4.3「只跑改到的
-    那幾個測試檔」）；其他挑到的照舊不含 slow（--slow 才含）。改到的檔裡沒有 slow 的就一次跑完。"""
+    那幾個測試檔」）；執行改到的包 js 的網頁測試（runs_js）也是；其他挑到的照舊不含 slow（--slow 才含）。
+    那幾個檔裡沒有 slow 的就一次跑完。"""
     if chosen.everything or slow:
         return [(targets(chosen), "slow or not slow")]
-    if not any(has_slow(p) for p in chosen.own):
+    mine = chosen.with_slow
+    if not any(has_slow(p) for p in mine):
         return [(targets(chosen), "not slow")]
-    rest = targets(chosen, leave_out=frozenset(chosen.own))
+    rest = targets(chosen, leave_out=frozenset(mine))
     runs = [(rest, "not slow")] if rest else []
-    return runs + [(sorted(_rel(p) for p in chosen.own), "slow or not slow")]
+    return runs + [(sorted(_rel(p) for p in mine), "slow or not slow")]
 
 
 def _command(goal: list[str], marker: str, extra: list[str], everything: bool, args_file: Path | None) -> list[str]:
@@ -888,8 +987,8 @@ def pytest_commands(chosen: Pick, slow: bool, extra: list[str], tmp: Path | None
 
 
 def _slow_only(chosen: Pick) -> list[str]:
-    """挑到的（改到的測試檔以外）整個檔標 slow 的：不加 --slow 一條都不跑。"""
-    return sorted(_rel(p).removeprefix("tests/") for p in chosen.files - chosen.own if whole_slow(p))
+    """挑到的（連 slow 一起跑的那幾個以外）整個檔標 slow 的：不加 --slow 一條都不跑。"""
+    return sorted(_rel(p).removeprefix("tests/") for p in chosen.files - chosen.with_slow if whole_slow(p))
 
 
 def finish(codes: list[int], chosen: Pick, slow: bool) -> int:
@@ -929,6 +1028,9 @@ def describe(chosen: Pick, slow: bool = False) -> list[str]:
     mine = sorted(_rel(p).removeprefix("tests/") for p in chosen.own if has_slow(p))
     if mine and not slow:
         lines.append("改到的測試檔連 slow 一起跑：" + " ".join(mine))
+    web = sorted(_rel(p).removeprefix("tests/") for p in chosen.runs_js - chosen.own if has_slow(p))
+    if web and not slow:
+        lines.append("執行改到的包 js 的網頁測試連 slow 一起跑：" + " ".join(web))
     if _slow_only(chosen) and not slow:
         lines.append("整個檔標 slow、這一次不跑（要跑加 --slow）：" + " ".join(_slow_only(chosen)))
     if chosen.core:
@@ -974,7 +1076,7 @@ def main(argv: list[str] | None = None) -> int:
         cmds = pytest_commands(chosen, args.slow, extra, Path(tmp))
         if args.count:
             for cmd in cmds:
-                label = "改到的測試檔（連 slow）" if len(cmds) > 1 and cmd is cmds[-1] else "一共"
+                label = "連 slow 一起跑的那幾個檔" if len(cmds) > 1 and cmd is cmds[-1] else "一共"
                 print(f"{label}：" + count(cmd), flush=True)
         if args.list or args.count:
             return 0

@@ -963,19 +963,11 @@ def check_art(c: Content, need) -> None:
             need(bool(ART_PATH.match(ch.image)), f"人物 {ch.id} 的 image「{ch.image}」要寫成 figures/<鍵> 這種路徑（不含副檔名）")
 
 
-def check_mall(c: Content, need) -> None:
-    """商城的商品（content/mall.json，商城架構設計 4.3）：每一件照 mall.item_problems（效果在允許的效果表裡、種類對得上、數量、
-    名字過命名過濾、上架日期與季的格式）；商品之間不同名。開關關著也照驗（檔案寫壞了早點知道）。"""
-    from . import mall  # noqa: PLC0415  mall → naming：在函式裡 import，跟其他 check_* 一樣
+def check_features(c: Content, need) -> None:
+    """功能包自己的內容驗證（FEATURES 的 check_content，照清單的順序；開發規範手冊 3.6）：關著的包照驗（檔案寫壞了早點知道）。"""
+    from .core import features  # noqa: PLC0415  登記的包延後載入（包會 import 核心）
 
-    for item in c.mall.values():
-        for problem in mall.item_problems(item, c):
-            need(False, problem)
-    seen: dict[str, str] = {}
-    for item in c.mall.values():
-        if item.name in seen:
-            need(False, f"商城 {item.id}：跟 {seen[item.name]} 同名「{item.name}」")
-        seen.setdefault(item.name, item.id)
+    features.check_content(c, need)
 
 
 def check_shop_lines(c: Content, need) -> None:
@@ -2689,7 +2681,7 @@ def validate(c: Content) -> None:
     check_front_lines(c, need)
     check_combat_lines(c, need)
     check_shop_lines(c, need)
-    check_mall(c, need)
+    check_features(c, need)  # 功能包自己的內容（商城的商品，原本的 check_mall）
     check_art(c, need)
     check_arena_crowd(c, need)
     check_xingshi_lines(c, need)

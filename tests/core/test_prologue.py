@@ -56,7 +56,10 @@ def test_the_allow_lists_only_name_ids_the_code_really_makes():
     from tianxia import models
 
     package, found = Path(models.__file__).parent, set()
-    for name in ("engine.py", "foreshadow.py", "opportunities.py", "explore_modes.py", "training.py", "plans.py"):  # 探索三選一的 id 前綴在 explore_modes.PREFIX；操練在 training.DRILL_ID；盤算在 plans.options
+    names = ["engine.py", "foreshadow.py", "opportunities.py", "explore_modes.py", "training.py", "plans.py"]  # 探索三選一的 id 前綴在 explore_modes.PREFIX；操練在 training.DRILL_ID；盤算在 plans.options
+    # 功能包做的選項（開發規範手冊 3.2；宴客的 feast:join: 在 features/feast/actions.py）也是原始碼
+    names += [p.relative_to(package).as_posix() for p in sorted((package / "features").glob("*/*.py"))]
+    for name in names:
         for node in ast.walk(ast.parse((package / name).read_text(encoding="utf-8"))):
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 found.add(node.value)  # f"call:{id}" 的 "call:" 也是一個字串常數
