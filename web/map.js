@@ -1547,9 +1547,11 @@
         if (mini.dataset) mini.dataset.key = key;
       } else miniFrame(c, g);
     }
+    // 箭頭牌：拖縮、飛的途中照舊藏著（camSet 藏的），停下來那一次 drawMarks 才露——途中倍率差過 MV_RELAYOUT 也會重排字（drawMarks），
+    // 那一次不把它設回來，不然捏的途中牌一閃一閃（FB-9092，W2 第二輪 2026-10-31）
     if (pills) {
       pills.innerHTML = lay.pills.map((p) => p.html).join("");
-      if (pills.style) pills.style.visibility = "";
+      if (pills.style) pills.style.visibility = mvBusy() ? "hidden" : "";
     }
   }
   // 點小地圖（設計 2.3）：中心移到點的那一帶、倍率不變

@@ -2001,3 +2001,34 @@ return res;""")
         for lab in _labs(r["html"]):
             assert r["stop"] == "full" or not _cross(_lab_box(lab)[0], fab), (name, lab)
     assert out["top"]["pills"] == ""  # 全開：地圖只剩一條，不掛箭頭牌
+
+
+def test_fb9092_the_arrow_pills_stay_hidden_through_a_pinch_even_when_the_names_are_relaid():
+    """FB-9092：捏的途中箭頭牌一直藏著。camSet 在手勢途中把 #mv-pills 藏起來，可是捏的途中倍率差過 MV_RELAYOUT 會照 Joy 的規矩重排字
+    （marksSoon → drawMarks），drawMarks → hudDraw 以前無條件把 visibility 設回來，牌就露出來一兩幀、下一個 touchmove 又藏。現在途中（mvBusy）
+    hudDraw 不設回來，放手那一次 drawMarks 才露。捏開、捏回、選了一處再捏都一樣；途中真的重排過字（不然測不到）。"""
+    out = run(_w2(), DRAWER_DOM + GESTURE_DOM + SETTLE + """
+const pills = { style: {}, innerHTML: '' }; els['mv-pills'] = pills;
+let laid = 0; const mkt = els.mkt; let html = ''; Object.defineProperty(mkt, 'innerHTML', { set: (v) => { laid++; html = v; }, get: () => html });
+const g = H.mapGeom(map), res = {};
+const pinch = (name, d0, d1) => {
+  H.camSet(H.camOpen(g)); H.drawMarks(); settle();
+  const start = { vis: pills.style.visibility, pills: pills.innerHTML.length }, seen = [], n0 = laid;
+  H.mvDown(pt('pointerdown', 1, 187 - d0 / 2, 300)); H.mvDown(pt('pointerdown', 2, 187 + d0 / 2, 300));
+  for (let i = 1; i <= 40; i++) {
+    const d = d0 + (d1 - d0) * i / 40;
+    H.mvMove(pt('pointermove', 1, 187 - d / 2, 300)); H.mvMove(pt('pointermove', 2, 187 + d / 2, 300)); frame(); frame();
+    seen.push(pills.style.visibility);
+  }
+  const during = laid - n0;
+  H.mvUp(pt('pointerup', 1, 187 - d1 / 2, 300)); H.mvUp(pt('pointerup', 2, 187 + d1 / 2, 300)); settle();
+  res[name] = { start, shown: seen.filter((v) => v !== 'hidden').length, during, after: pills.style.visibility, z: H.S.mapCam.z };
+};
+pinch('open', 90, 240);
+pinch('close', 240, 90);
+H.mapPick('yingshui'); settle(); pinch('picked', 90, 200);
+return res;""")
+    for name, r in out.items():
+        assert r["during"] >= 1, (name, r)  # 途中真的重排過字
+        assert r["shown"] == 0 and r["after"] == "", (name, r)
+    assert out["open"]["start"]["pills"] > 0  # 打開的取景有箭頭牌（洛陽官道）
