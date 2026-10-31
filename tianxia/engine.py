@@ -8996,7 +8996,7 @@ class Game:
         return self._four_wins() and me.faction in wins.allies(p, self.content)
 
     def _four_wins(self) -> bool:
-        """這一季三陣營四勝利開著嗎（wins.on：Config.jianfa 的 four_wins＋開季的章）。"""
+        """這一季三陣營四勝利開著嗎（wins.on：減法季的總開關 Config.jianfa＋開季的章）。"""
         return wins.on(self.content, self.state.world)
 
     def _watching_battle(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> bool:

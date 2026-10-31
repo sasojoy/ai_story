@@ -3,7 +3,7 @@
 - 「此刻幫誰」就是 PlayerState.ally（豪強分屬兩軍的季投靠時挑的那一軍；敵我、出陣、軍令、決戰本來就照它）：lean_of 讀它、
   set_lean 寫它，換邊不算叛投、帳不清（計畫 5.0 第 8 條）。
 - 兩本帳 PlayerState.ledgers：豪強替哪一軍出的力記哪一本，contrib 照樣加總數（軍階、席次、榜照舊讀 contrib）。
-- 開關：Config.jianfa 的子開關 four_wins＋開季的章（on → rules.jianfa(content, world, "four_wins")）；數字在 Config.jianfa
+- 開關：減法季的總開關 Config.jianfa＋開季的章（on → rules.jianfa(content, world)；子開關 four_wins 2026-10-31 拿掉）；數字在 Config.jianfa
   的 tiers、lean_default_by_join（rules_of）。關著時 credit 只記 contrib，其餘函式引擎不叫，一個字都不變。
 
 純規則：只 import models、state、allied、push（rules 在函式裡延後 import：rules → wins 會成環），不碰引擎與全服狀態。"""
@@ -63,10 +63,10 @@ def rules_of(content: Content) -> JianfaRules:
 
 
 def on(content: Content, world: WorldState | None) -> bool:
-    """這一季三陣營四勝利開著嗎：rules.jianfa(content, world, "four_wins")（設定開著＋這一季開季時蓋了章）。"""
+    """這一季三陣營四勝利開著嗎：rules.jianfa(content, world)（減法季的設定開著＋這一季開季時蓋了章）。"""
     from .rules import jianfa  # noqa: PLC0415  rules → wins（貢獻呼叫點）：在函式裡 import，避免循環
 
-    return jianfa(content, world, "four_wins")
+    return jianfa(content, world)
 
 
 def is_gentry(p: PlayerState, content: Content) -> bool:

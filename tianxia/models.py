@@ -3366,7 +3366,6 @@ class JianfaRules(JianfaNumbers):
     outing: bool = True  # 走一趟：探索一次走一、三、五段（tianxia/outing.py；要 explore_one 也開著）
     drill_gates: bool = True  # 4.2 三道閘、45 級後只收仗的經驗（批 2）
     sortie_duel: bool = True  # 4.3 出陣改約戰（批 3b）
-    four_wins: bool = True  # 第三章 三陣營四勝利、豪強兩本帳（批 3c）
     free_text_outcomes: bool = True  # 第五章 隨口應對分岔（批 4）
     marks_visible: bool = True  # 第五章 痕跡看得見（批 4）
     stances: bool = True  # 第五章 人物心意（批 6）

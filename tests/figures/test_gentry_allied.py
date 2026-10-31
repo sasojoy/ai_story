@@ -16,7 +16,6 @@ from tianxia.state import PlayerState, WorldState
 @pytest.fixture
 def wk():
     c = real_content("week7")  # 地盤拔河、出陣推線的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
-    c.config.jianfa.four_wins = False  # 三陣營四勝利之前的規則（挑邊、改依附算叛投、攪局；測試整理批 1 把這個檔從週末搬到 7 天季，減法季開著）；新規則在 tests/test_four_wins_wiring.py
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c
@@ -33,7 +32,6 @@ def _game(content, name="甲", faction=None, ally=None, at=None):
 
 def _old_rules():
     c = third_party_gentry(real_content("week7"))
-    c.config.jianfa.four_wins = False  # 三陣營四勝利之前的規則（挑邊、改依附算叛投、攪局；測試整理批 1 把這個檔從週末搬到 7 天季，減法季開著）；新規則在 tests/test_four_wins_wiring.py
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c
@@ -150,29 +148,6 @@ def test_allies_must_be_real_other_factions(wk):
 
 def _ids(game):
     return [o.id for o in game.options() if o.enabled]
-
-
-def test_join_gentry_picks_a_side_then_confirms(wk):
-    game = _game(wk, at="zhuo_militia_hall")
-    game.choose("faction:haoqiang")
-    assert _ids(game) == ["faction:ally:guan", "faction:ally:huang", "faction:cancel"]
-    assert "依附官軍（目前 0 人）" in [o.label for o in game.options()]
-    game.choose("faction:ally:guan")
-    assert [o.label for o in game.options()][0] == "確定投靠地方豪強（依附官軍）"
-    game.choose("faction:confirm")
-    p = game.state.player
-    assert (p.faction, p.ally, p.pending_faction, p.pending_ally) == ("haoqiang", "guan", None, None)
-    assert game.world.roll_of("甲") == "haoqiang@guan"
-
-
-def test_cancel_clears_the_pick(wk):
-    game = _game(wk, at="zhuo_militia_hall")
-    game.choose("faction:haoqiang")
-    game.choose("faction:ally:huang")
-    assert game.state.player.pending_ally == "huang"
-    game.choose("faction:cancel")
-    p = game.state.player
-    assert (p.faction, p.pending_faction, p.pending_ally) == (None, None, None)
 
 
 def test_join_army_has_no_side_step(wk):
@@ -541,22 +516,6 @@ def test_seal_and_battles_read_the_side_from_the_roster(wk):
 
 def _defect_labels(game):
     return [o.label for o in game.options() if o.id.startswith("defect:")]
-
-
-def test_switching_ally_is_a_defection(wk):
-    game = _game(wk, faction="haoqiang", ally="guan", at="zhuo_militia_hall")
-    game._record_faction()
-    w = game.state.world
-    w.active_pushers["guan"] = {"甲": w.time}
-    assert _defect_labels(game) == ["改依附黃巾軍"]
-    game.choose("defect:haoqiang:huang")
-    assert [o.label for o in game.options()][0] == "確定改依附黃巾軍"
-    game.choose("defect:confirm")
-    p = game.state.player
-    assert (p.faction, p.ally, p.defected, p.pending_defect, p.pending_ally) == ("haoqiang", "huang", True, None, None)
-    assert game.world.roll_of("甲") == "haoqiang@huang"
-    assert "甲" not in w.active_pushers.get("guan", {})
-    assert _defect_labels(game) == []  # 一季一次
 
 
 def test_gentry_to_pure_army_on_the_same_side_is_a_defection(wk):

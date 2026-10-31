@@ -44,18 +44,17 @@ def _steps(game) -> list[dict]:
 
 
 def test_off_steps_stay_as_batch_one_wrote_them():
-    """four_wins 關著（總開關或子開關）：steps 只有批 1 的 kind、text、reward（新手目標多 i），沒有 target、id、_ref；step:next 照舊不在選單上。"""
+    """四勝利關著（減法季的總開關關著）：steps 只有批 1 的 kind、text、reward（新手目標多 i），沒有 target、id、_ref；step:next 照舊不在選單上。"""
     master_off = wins_content()
     master_off.config.jianfa.enabled = False
-    for content in (wins_content(off=True), master_off):
-        game = wins_game(content, faction="guan", at="changshe")
-        _order(game, start="changshe", end="wan_city")
-        rows = _steps(game)
-        assert rows and all(set(row) <= {"kind", "text", "who", "i", "reward"} for row in rows)
-        stamina = game.state.player.stamina
-        assert game.choose(step.NEXT) == ["（此刻無法這麼做。）"]
-        p = game.state.player
-        assert (p.step_day, p.step_skip, p.stamina) == (0, 0, stamina)
+    game = wins_game(master_off, faction="guan", at="changshe")
+    _order(game, start="changshe", end="wan_city")
+    rows = _steps(game)
+    assert rows and all(set(row) <= {"kind", "text", "who", "i", "reward"} for row in rows)
+    stamina = game.state.player.stamina
+    assert game.choose(step.NEXT) == ["（此刻無法這麼做。）"]
+    p = game.state.player
+    assert (p.step_day, p.step_skip, p.stamina) == (0, 0, stamina)
 
 
 def test_one_weekly_step_in_the_view():
