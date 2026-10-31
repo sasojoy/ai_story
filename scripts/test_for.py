@@ -11,7 +11,9 @@
   python scripts/test_for.py -- -x -k fuse   # -- 之後的參數原樣交給 pytest（-- -n 2 會換掉預設的 -n 4）
 
 怎麼挑（開發規範手冊 4.3，docs/superpowers/specs/2026-10-30-開發模式-design.md）：
-- 「核心測試」（過渡期）＝ tests/core/ 不含 slow 的；「煙霧」＝ 標了 @pytest.mark.smoke 的（每個區塊約 10 條）。
+- 「核心測試」（過渡期，PM 2026-10-31）＝ 手冊 3.1 核心模組自己檔名的測試（test_<模組>…）＋ tests/core/test_engine*.py
+  ＋ tests/core/ 的核心契約、邊界、錢包服務測試（CORE_GLOBS），不含 slow；「煙霧」＝ 標了 @pytest.mark.smoke 的
+  （每個區塊約 10 條）。
 - tianxia/features/<包>/**：那一包的 tests/ ＋ tests/core/test_contract*.py。
 - 核心（tianxia/core/**、state.py、models.py、content.py、rules.py、calendar.py，與手冊 3.1 列的
   sqlite_world、world_state、characters、accounts、database、team、gender、naming）：核心測試＋煙霧＋檔名是 test_<模組>… 的。
@@ -75,6 +77,8 @@ CORE_MODULES = {
     "state", "models", "content", "rules", "calendar",
     "sqlite_world", "world_state", "characters", "accounts", "database", "team", "gender", "naming",
 }
+# 「核心測試」除了核心模組自己檔名的，再收 tests/core/ 底下這幾種（core_tests）：Game 門面、核心契約、邊界、錢包服務
+CORE_GLOBS = ("test_engine*.py", "test_contract*.py", "test_feature_boundaries.py", "test_wallet.py")
 HUNK_FILES = {"tianxia/engine.py", "tianxia/models.py", "tianxia/state.py", "server.py"}  # 看 hunk 落在哪裡的四個大檔
 # 大家都插一段的 Game 方法（手冊第一節量到的）：落在這裡不看方法名，看 hunk 裡提到哪些功能前綴
 SHARED_METHODS = {
@@ -416,8 +420,14 @@ def smoke_ids() -> tuple[str, ...]:
 
 
 def core_tests() -> list[Path]:
-    """過渡期的「核心測試」：tests/core/ 底下的測試檔（跑的時候 -m "not slow"）。"""
-    return sorted(CORE_TESTS.glob("test_*.py"))
+    """過渡期的「核心測試」（PM 2026-10-31；跑的時候 -m "not slow"）：手冊 3.1 核心模組（CORE_MODULES）自己檔名的測試
+    （test_<模組>.py、test_<模組>_….py，在哪個資料夾都算：test_naming 在 arts/、test_team 在 battle/）＋
+    tests/core/test_engine*.py（Game 門面；第 2 階搬包時屬於包的搬走，條數往下掉）＋ tests/core/ 的核心契約、
+    邊界、錢包服務測試（CORE_GLOBS，第 1 階才有）。不再是整個 tests/core/（雜燴：test_social、test_factions……）。"""
+    own = {t for t in all_tests() for mod in CORE_MODULES
+           if t.stem == f"test_{mod}" or t.stem.startswith(f"test_{mod}_")}
+    globbed = {t for pattern in CORE_GLOBS for t in CORE_TESTS.glob(pattern)}
+    return sorted(own | globbed)
 
 
 _SLOW_MARK = re.compile(r"^[ \t]*(?:@pytest\.mark\.slow\b|pytestmark[ \t]*=[^\n]*\bslow\b)|\bmarks[ \t]*=[^\n]*\bmark\.slow\b",
@@ -881,7 +891,7 @@ def describe(chosen: Pick, slow: bool = False) -> list[str]:
     if _slow_only(chosen) and not slow:
         lines.append("整個檔標 slow、這一次不跑（要跑加 --slow）：" + " ".join(_slow_only(chosen)))
     if chosen.core:
-        lines.append(f"核心測試：tests/core/ 不含 slow 的（{len(core_tests())} 個檔）")
+        lines.append(f"核心測試：核心模組自己的測試＋test_engine，不含 slow（{len(core_tests())} 個檔）")
     if chosen.smoke:
         lines.append(f"煙霧：標了 smoke 的 {len(smoke_ids())} 條")
     if chosen.why:

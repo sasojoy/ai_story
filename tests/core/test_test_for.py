@@ -282,7 +282,7 @@ def test_changed_slow_test_files_run_apart_from_the_rest_of_the_pick():
     mixed.core = True
     first, second = test_for.pytest_commands(mixed, slow=False, extra=[])
     assert _marker(first) == "not slow" and "tests/arts/test_fusion.py" in first
-    assert "tests/arts/test_epiphany.py" not in first and "tests/core/test_errands.py" in first
+    assert "tests/arts/test_epiphany.py" not in first and "tests/core/test_engine.py" in first
     assert _marker(second) == "slow or not slow" and second[-1] == "tests/arts/test_epiphany.py"
     plain = test_for.pick(["tests/arts/test_fusion.py"])  # 沒有 slow 的測試檔：一次就好
     assert len(test_for.pytest_commands(plain, slow=False, extra=[])) == 1
@@ -355,6 +355,43 @@ def test_the_web_scripts_are_the_ones_every_web_test_loads():
     assert {"test_server.py", "test_outing_web.py"} < outing and _names(["web/app.js"]) <= outing
 
 
-def test_core_targets_are_the_core_folder():
+CORE_OWN = {  # 手冊 3.1 的核心模組自己檔名的測試（10/31 有的這 11 個；state、sqlite_world 還沒有自己的測試檔）
+    "test_accounts.py", "test_calendar.py", "test_characters.py", "test_content.py", "test_database.py",
+    "test_gender.py", "test_models.py", "test_naming.py", "test_rules.py", "test_team.py", "test_world_state.py",
+}
+
+
+def test_core_tests_are_the_core_modules_own_tests_and_test_engine():
+    """過渡期的「核心測試」（PM 10/31）＝手冊 3.1 核心模組自己檔名的測試（test_<模組>…，在哪個資料夾都算）＋
+    tests/core/test_engine*.py＋tests/core/ 的核心契約、邊界、錢包服務測試；不是整個 tests/core/（那裡是雜燴：
+    test_social、test_factions 這些屬於功能的，第 2 階搬包時搬走）。"""
+    names = {p.name for p in test_for.core_tests()}
+    assert CORE_OWN | {"test_engine.py"} <= names
+    assert not names & {"test_social.py", "test_factions.py", "test_nightly.py", "test_test_for.py", "test_errands.py"}
+    allowed = {f"test_{m}" for m in test_for.CORE_MODULES} | {"test_engine", "test_contract", "test_feature_boundaries",
+                                                                "test_wallet"}
+    assert all(any(p.stem == a or p.stem.startswith(a + "_") or (a in ("test_engine", "test_contract")
+                                                                 and p.stem.startswith(a)) for a in allowed)
+               for p in test_for.core_tests()), sorted(names)
     goal = test_for.targets(test_for.Pick(core=True))
-    assert "tests/core/test_engine.py" in goal and all(g.startswith("tests/core/") for g in goal)
+    assert {"tests/core/test_engine.py", "tests/arts/test_naming.py", "tests/battle/test_team.py"} <= set(goal)
+    assert "tests/core/test_social.py" not in goal
+
+
+def test_core_tests_take_the_contract_boundary_and_wallet_tests_of_tests_core(tmp_path, monkeypatch):
+    """第 1 階會在 tests/core/ 加核心契約（test_contract*）、邊界（test_feature_boundaries）、錢包服務（test_wallet）的
+    測試：用 glob 收，現在沒有就是空的；tests/core/ 的其他檔不算。"""
+    for name in ("test_contract_options.py", "test_contract.py", "test_feature_boundaries.py", "test_wallet.py",
+                 "test_engine_sync.py", "test_social.py", "test_wallet_ledger.py"):
+        (tmp_path / name).write_text("def test_x():\n    pass\n", encoding="utf-8")
+    monkeypatch.setattr(test_for, "CORE_TESTS", tmp_path)
+    names = {p.name for p in test_for.core_tests()}
+    assert {"test_contract_options.py", "test_contract.py", "test_feature_boundaries.py", "test_wallet.py",
+            "test_engine_sync.py"} <= names
+    assert not names & {"test_social.py", "test_wallet_ledger.py"}
+
+
+def test_describe_says_what_the_core_tests_are():
+    lines = test_for.describe(test_for.Pick(core=True))
+    line = next(x for x in lines if x.startswith("核心測試"))
+    assert "test_engine" in line and f"{len(test_for.core_tests())} 個檔" in line and "tests/core/ 不含 slow" not in line
