@@ -97,6 +97,7 @@ from .core import features as features_core  # 核心照 FEATURES 問每一包�
 from .core.option import Option  # 選單上的一顆（搬進核心：功能包要做選項）
 from .core.services import NO_SUCH_PLAYER, PAUSED_TEXT, WalletService, drill_share, wallet_on  # 共用的字與小函式、錢包服務（3.10）
 from .features.mall import actions as mall_actions  # 過渡：Game.mall_* 留一行委派（開發規範手冊 3.10）
+from .features.looks import actions as looks_actions  # 過渡：Game.arena_look 留一行委派（擂台記形象）
 from .features.feast import actions as feast_actions  # 過渡：Game.feast_*（server 的三段式）與場景卡留一行委派
 from .features.sortie import actions as sortie_actions  # 過渡：Game 上出陣的 13 個一行委派（主動搬六包第 1 批）
 from .features.sortie import duel_actions as sortie_duel_actions  # 過渡：Game 上出陣約戰的 16 個一行委派（主動搬六包第 2 批）
@@ -13908,13 +13909,18 @@ class Game:
             entry.kit = team.self_side(s, self.content, self.world)
             entry.crowd = arena_crowd.snapshot(s, self.content, self.world)  # 場邊事件看的底細（照更新這一刻）
             entry.weapon = arena.held_kind(p)  # 擂台動畫：分身手上拿什麼
+            entry.look = self.arena_look()  # 擂台形象：分身穿哪一套
             return [arena.UPDATED.format(arts=text)]
         entry = arena.join(s.world, ArenaEntry(
             name=p.name, power=side.power, bare=side.bare, scores=side.scores, role=side.role, hp_cap=side.hp_cap, arts=arts, joined=s.world.time,
             kit=team.self_side(s, self.content, self.world), famed=famed, crowd=arena_crowd.snapshot(s, self.content, self.world),
-            weapon=arena.held_kind(p),
+            weapon=arena.held_kind(p), look=self.arena_look(),
         ))
         return [arena.JOINED.format(rank=entry.rank, arts=text)]
+
+    def arena_look(self) -> str:
+        """擂台形象：這個人此刻穿哪一套（功能包 looks；空字串＝斗笠小子）。"""
+        return looks_actions.look_of(self)
 
     def _arena_start(self, key: str) -> list[str]:
         """挑一個守擂的人：記今天挑了幾次、冷卻與他今天被挑了幾場，快照兩邊，擲分身第一回合的招。不花體力。"""
@@ -13937,6 +13943,7 @@ class Game:
             edge=c.config.duel.start,
             crowd_me=arena_crowd.snapshot(s, c, self.world), crowd_foe=foe.crowd,  # 場邊事件看的底細（arena_crowd）
             looks=[arena.held_kind(p), foe.weapon],  # 擂台動畫：兩邊手上的兵器（分身的照報名那一刻）
+            skins=[self.arena_look(), foe.look],  # 擂台形象：兩邊穿哪一套（分身的照報名那一刻）
         )
         p.arena_crowd_note = None
         arena.roll_next(fight, arena.rng_for(p.season_number, p.name, fight, "招"), cfg, c.config.duel)
@@ -14141,7 +14148,7 @@ class Game:
         self._write(title, msgs, tag=battlelog.outcome_text(record))
         # 收場之後回到擂台那一頁（擂台獨立一頁，Joy 2026-10-14「擂台應該要是獨立的一頁」）：收場卡照 arena_last 畫
         p.arena_last = ArenaResult(id=fight.id, foe=fight.foe.name, tier=tier, lines=list(fight.lines), changes=list(record.changes),
-                                   looks=list(fight.looks))
+                                   looks=list(fight.looks), skins=list(fight.skins))
         p.picking_arena = arena.here(s, c)
         won = tier in team.WIN_TIERS
         annals.note(s, c, annals.FIGHT, f"上擂台挑{fight.foe.name}，{tier}。", 2 if won else 1, keep=[fight.foe.name])

@@ -525,6 +525,7 @@ class ArenaFight(BaseModel):
     crowd_foe: CrowdSide | None = None
     crowd_done: bool = False  # 這一場已經有過一件場邊事件（一場最多一件）
     looks: list[str] = Field(default_factory=list)  # 擂台動畫：[挑的人, 分身] 手上兵器的種類（models.WEAPON_KINDS；空字串＝空手）；舊的一場沒有
+    skins: list[str] = Field(default_factory=list)  # 擂台形象：[挑的人, 分身] 穿哪一套（content/looks.json 的 id；空字串＝斗笠小子）；舊的一場沒有
 
 
 class ArenaResult(BaseModel):
@@ -536,6 +537,7 @@ class ArenaResult(BaseModel):
     lines: list[str] = Field(default_factory=list)  # 每回合一行
     changes: list[str] = Field(default_factory=list)  # 戰報的得失（積分、名望）
     looks: list[str] = Field(default_factory=list)  # 擂台動畫：照 ArenaFight.looks 抄（收場卡演最後一幕）
+    skins: list[str] = Field(default_factory=list)  # 擂台形象：照 ArenaFight.skins 抄
 
 
 class ArenaReport(BaseModel):
@@ -568,6 +570,7 @@ class ArenaEntry(BaseModel):
     arts: list[str] = Field(default_factory=list)  # 身上兩門武學的名字（選單上寫他守擂用什麼）
     kit: BoutSide | None = None  # 報名那一刻身上的本命戰法（team.self_side）；沒有是 None，舊存檔也是
     weapon: str = ""  # 擂台動畫：報名、更新分身那一刻手上兵器的種類（空字串＝空手；舊存檔也是）
+    look: str = ""  # 擂台形象：報名、更新分身那一刻穿哪一套（空字串＝斗笠小子；舊存檔也是）
     joined: float = 0.0  # 第一次報名的世界秒
     rank: int = 0  # 名次（1 是天下第一）；報名排到榜尾，挑的人贏了兩人交換（arena.swap）
     wins: int = 0

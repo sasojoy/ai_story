@@ -89,10 +89,11 @@ def held_kind(p: PlayerState) -> str:
     return p.weapon.kind if p.weapon is not None else ""
 
 
-def looks_view(looks: list[str]) -> dict:
-    """擂台動畫給網頁的兩邊兵器種類（舊的一場沒記：兩邊都當空手）。"""
+def looks_view(looks: list[str], skins: list[str] | None = None) -> dict:
+    """擂台動畫給網頁的兩邊兵器種類與形象（舊的一場沒記：兩邊都當空手、斗笠小子）。"""
     me, foe = (list(looks) + ["", ""])[:2]
-    return {"me": me, "foe": foe}
+    me_look, foe_look = (list(skins or []) + ["", ""])[:2]
+    return {"me": me, "foe": foe, "me_look": me_look, "foe_look": foe_look}
 
 
 def on(content: Content) -> bool:

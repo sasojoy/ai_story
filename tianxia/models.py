@@ -3735,9 +3735,21 @@ class MallWindow(_Strict):
     from_week: int | None = Field(default=None, ge=1)
 
 
+class Look(_Strict):
+    """一套擂台形象（content/looks.json；功能包 tianxia/features/looks/）。圖在 web/img/looks/<id>/，檔名與張數照預設的斗笠小子
+    （web/img/arena/ 的 hero_*.webp，九張）。預設的斗笠小子不寫在這裡（id 是空字串）。"""
+
+    id: str
+    name: str  # 過 naming.name_problem
+    note: str = ""  # 一句說明（joy 寫）
+    bots: bool = False  # 假人也穿（照名號的雜湊挑；不然穿這一套的一定是真人，看得出來）
+    draft: str = ""  # 作者的備註；不給玩家看
+
+
 class MallItem(_Strict):
     """商城的一件商品（content/mall.json，joy 寫；4.3）。效果只能從 mall.EFFECTS（允許的效果表）挑、種類要對得上，載入時
-    content.check_mall 擋表外的。外觀（look）、通行證（pass）的種類留著，這一版允許表裡沒有它們的效果，所以寫不出來（4.3）。"""
+    content.check_mall 擋表外的。形象（look）賣 content/looks.json 的一套（look 寫那一套的 id）；通行證（pass）的種類留著，
+    這一版允許表裡沒有它的效果，所以寫不出來（4.3）。"""
 
     id: str
     name: str  # 過 naming.name_problem
@@ -3748,6 +3760,7 @@ class MallItem(_Strict):
     limit: MallLimit = Field(default_factory=MallLimit)
     on_sale: MallWindow = Field(default_factory=MallWindow)
     draft: str = ""  # 作者的備註（例「PM 佔位：名字、說明、價錢待 joy」）；不給玩家看
+    look: str = ""  # 形象（kind 是 look）賣的是 content/looks.json 的哪一套
 
 
 class Config(_Strict):
@@ -5193,6 +5206,7 @@ class Content(_Strict):
     shop_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)  # 店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4）：店 → 情況 → 句子；沒有這個檔就是空的
     seal: dict[str, ShardDef] = Field(default_factory=dict)  # 玉璽碎片（content/seal.json，照 id）；沒有這個檔就是空的（碎片關著）
     mall: dict[str, MallItem] = Field(default_factory=dict)  # 商城的商品（content/mall.json，照 id、照檔案的順序）；沒有這個檔就是空的
+    looks: dict[str, Look] = Field(default_factory=dict)  # 擂台形象（content/looks.json，照 id、照檔案的順序）；沒有這個檔就是空的（只有預設的斗笠小子）
     itineraries: list[Itinerary] = Field(default_factory=list)  # 人物的行程（content/itineraries.json，世界活起來）；沒有這個檔就是沒有
     relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有
     gather_branches: dict[str, GatherBranch] = Field(default_factory=dict)  # 找素材分支（content/gather_branches.json，照內容的順序）；沒有這個檔就是空的（分支關著）

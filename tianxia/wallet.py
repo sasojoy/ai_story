@@ -169,6 +169,22 @@ class Wallet:
                 (owner, key, start, end),
             )
 
+    def entitlement(self, owner: str, kind: str, key: str) -> dict | None:
+        """mall_entitlements 那一格的 data（例：形象穿哪一套，kind 'look'、key 'wear'）；沒有這一格是 None。"""
+        with self.db.snapshot() as conn:
+            r = conn.execute(
+                "SELECT data FROM mall_entitlements WHERE owner = ? AND kind = ? AND key = ?", (owner, kind, key),
+            ).fetchone()
+        return None if r is None else json.loads(r["data"])
+
+    def set_entitlement(self, owner: str, kind: str, key: str, data: dict) -> None:
+        with self.db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO mall_entitlements (owner, kind, key, data) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT (owner, kind, key) DO UPDATE SET data = excluded.data",
+                (owner, kind, key, json.dumps(data, ensure_ascii=False)),
+            )
+
     # ── 對帳 ────────────────────────────────────
 
     def character_name(self, owner: str) -> str | None:

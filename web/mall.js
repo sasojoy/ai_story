@@ -22,12 +22,13 @@
     fail: "帳簿沒拿到，連不上伺服器。",
     empty: "架上這會兒空著，過些時候再來。",
     nolog: "還沒有進出。",
+    look: "擂台上穿哪一套，在這兒換。買過的換季也帶著走。",
   };
   const MALL_NOTE = "封閉測試先發每個帳號 {n} 元寶，正式開服時清空重來。"; // 貨架底下那一句（封測有發才寫）；待 joy 潤
   const MALL_LOG_NOTE = "只記這個帳號的元寶進出。"; // 待 joy 潤
   // 購買確認：上一筆同一件送出去沒等到回音、貨架也還沒變（不知道成了沒），這一次照同一個編號再送（FB-491）；待 joy 潤
   const MALL_AGAIN = "上一筆「{name}」還沒等到回音：這一次照同一筆再送，已經買好了就不會扣兩次。";
-  const MALL_TABS = [["shelf", "貨架"], ["log", "紀錄"]];
+  const MALL_TABS = [["shelf", "貨架"], ["look", "形象"], ["log", "紀錄"]]; // 形象那一頁：貨架上有形象（d.looks）才有這一格
   const MALL_NB = "，。、；"; // 貨架上的說明、限購切成不折行的小段（同 nbHtml 的做法，多切「。」）
   // 掌櫃那一句（買成了的、買不了的原因）：切在「，。：；！？」後面與「（」前面，375 寬「元／寶 -600」「（還剩／4300）」不在詞中間斷
   // （打點的 sayHtml 一段超過 14 字就不包，「元寶 -600（還剩 4300）。」整段 18 字照常折行，所以不用它）
@@ -44,16 +45,16 @@
 
   // 換了帳號、登出：那一層收起、抓過的帳丟掉（另一個錢包）
   function forgetMall() {
-    S.mallOpen = false; S.mallTab = "shelf"; S.mallData = null; S.mallLog = null; S.mallSay = null; S.mallPick = null; S.mallPending = null; S.mallFail = false;
+    S.mallOpen = false; S.mallTab = "shelf"; S.mallData = null; S.mallLog = null; S.mallLooks = null; S.mallSay = null; S.mallPick = null; S.mallPending = null; S.mallFail = false;
     S.adMall = null; S.adMallName = ""; S.adMallNote = ""; S.adMallMsg = ""; S.adMallOk = false;
   }
 
   // 交給 shopHtml 的那一份：招牌、掌櫃那一句（剛買成了的、買不了的原因蓋過平常那一句）、餘額（紀錄頁照紀錄那一份，其餘照貨架、還沒抓到照狀態列）
   function mallShop() {
-    const tab = S.mallTab === "log" ? "log" : "shelf";
-    const d = tab === "log" ? S.mallLog : S.mallData;
+    const tab = S.mallTab === "log" || S.mallTab === "look" ? S.mallTab : "shelf";
+    const d = tab === "log" ? S.mallLog : tab === "look" ? S.mallLooks : S.mallData;
     const say = S.mallSay;
-    const balance = d ? d.balance : S.mallData ? S.mallData.balance : ((S.main && S.main.mall) || {}).balance;
+    const balance = d && d.balance != null ? d.balance : S.mallData ? S.mallData.balance : ((S.main && S.main.mall) || {}).balance; // 形象那一頁沒有餘額：照貨架
     return {
       shop: "mall", sign: MALL_SIGN, tab, balance,
       line: say ? say.text : !d && !S.mallFail ? MALL_SAY.loading : MALL_SAY[tab],
@@ -62,9 +63,10 @@
   }
 
   function mallHtml(shop) {
-    const body = shop.tab === "log" ? mallLogHtml(S.mallLog) : mallShelfHtml(S.mallData);
+    const body = shop.tab === "log" ? mallLogHtml(S.mallLog) : shop.tab === "look" ? mallLooksHtml(S.mallLooks) : mallShelfHtml(S.mallData);
+    const tabs = MALL_TABS.filter(([k]) => k !== "look" || (S.mallData && S.mallData.looks));
     return `<div class="shop-body mall-body"><div class="shop-col">${body}</div></div>
-      <nav class="shop-tabs">${MALL_TABS.map(([k, name]) => `<button class="shop-tab${shop.tab === k ? " on" : ""}" data-act="mall-tab" data-tab="${k}">${name}</button>`).join("")}</nav>`;
+      <nav class="shop-tabs">${tabs.map(([k, name]) => `<button class="shop-tab${shop.tab === k ? " on" : ""}" data-act="mall-tab" data-tab="${k}">${name}</button>`).join("")}</nav>`;
   }
 
   // 沒拿到資料：還在抓什麼都不畫（掌櫃那一句寫翻帳中），連不上畫一句與「再試一次」
@@ -97,8 +99,9 @@
 
   function mallTileHtml(it) {
     const cls = `mall-item${it.can ? "" : " off"}${S.mallPick === it.id ? " on" : ""}`;
+    const icon = it.look ? lookFaceHtml(it.look) : `<span class="dan" aria-hidden="true">${(it.gives || {}).pills ? "丹" : "寶"}</span>`;
     return `<button class="${cls}" data-act="mall-pick" data-id="${esc(it.id)}"${it.can ? "" : ' aria-disabled="true"'}>
-        <span class="dan" aria-hidden="true">${(it.gives || {}).pills ? "丹" : "寶"}</span><b>${esc(it.name)}</b>
+        ${icon}<b>${esc(it.name)}</b>
         <span class="price">${ingotSvg()}${it.price | 0}</span>${it.limit ? `<small>${nbHtml(it.limit, MALL_NB)}</small>` : ""}</button>`;
   }
 
@@ -214,11 +217,48 @@
   }
 
   async function mallTabTo(tab) {
-    S.mallTab = tab === "log" ? "log" : "shelf";
+    S.mallTab = tab === "log" || tab === "look" ? tab : "shelf";
     S.mallSay = null; S.mallPick = null; S.mallFail = false;
     closeAsk();
     renderMall(false);
     if (S.mallTab === "log") await loadMallLog(); // 紀錄每次切過去都重抓（別的分頁買的、管理者補的）
+    if (S.mallTab === "look") await loadLooks();
+  }
+
+  // ── 擂台形象（功能包 tianxia/features/looks/；Joy 2026-10-31）：萬寶閣「形象」那一頁。每一套一張卡：站著的那一格當預覽、名字、
+  // 說明；穿著的寫「穿著」，買了的一顆「換上」，沒買的一顆「買（價錢）」（點了跟貨架同一條購買確認）。預設的斗笠小子永遠在最前 ──
+  const LOOK_IMG = (id) => (id ? `/static/img/looks/${id}/hero_bare_idle.webp` : "/static/img/arena/hero_bare_idle.webp");
+  function lookFaceHtml(id) { // 站著那張的第一格（四格一張、880×220）裁成一個人
+    return `<span class="look-face" aria-hidden="true" style="background-image:url('${LOOK_IMG(/^[a-z0-9_]*$/.test(id || "") ? id : "")}')"></span>`;
+  }
+  function mallLooksHtml(d) {
+    if (!d) return mallFailHtml();
+    const shelf = (S.mallData && S.mallData.items) || [];
+    const card = (lk) => {
+      const it = lk.item ? shelf.find((one) => one.id === lk.item) : null;
+      const btn = lk.id === d.worn ? `<span class="look-on">穿著</span>`
+        : lk.owned ? `<button class="btn small primary" data-act="look-wear" data-id="${esc(lk.id)}">換上</button>`
+        : it ? `<button class="btn small" data-act="mall-pick" data-id="${esc(it.id)}">${ingotSvg()}${it.price | 0}</button>` : "";
+      return `<div class="look-card${lk.id === d.worn ? " on" : ""}">${lookFaceHtml(lk.id)}<b>${esc(lk.name)}</b>
+        ${lk.note ? `<small>${esc(lk.note)}</small>` : ""}${btn}</div>`; // 說明照字折行（三欄一格窄，切成不折行的小段會撐出格子）
+    };
+    return `<div class="mall-sub">擂台形象</div><div class="mall-grid look-grid">${d.looks.map(card).join("")}</div>`;
+  }
+  async function loadLooks() {
+    try {
+      S.mallLooks = await api("/api/looks");
+      S.mallFail = false;
+    } catch (e) { S.mallFail = true; }
+    if (S.mallOpen && S.mallTab === "look") renderMall();
+  }
+  async function lookWear(id) {
+    await busy(async () => {
+      const r = await api("/api/looks/wear", { look: id });
+      if (r.looks) S.mallLooks = r.looks;
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      S.mallSay = text ? { text, ok: true } : null;
+      if (S.mallOpen) renderMall();
+    });
   }
 
   // 點一件：買不了（元寶不夠、限購）掌櫃講原因、不問；買得了框起來、問一次
@@ -300,6 +340,7 @@
       S.mallLog = null;
       const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
       S.mallSay = text ? { text, ok: !!(r.bought || r.already) } : null;
+      if (S.mallTab === "look") S.mallLooks = await api("/api/looks").catch(() => S.mallLooks); // 形象那一頁買的：當場變成「換上」
       renderTop();
       if (S.mallOpen) renderMall(); else render();
     });
