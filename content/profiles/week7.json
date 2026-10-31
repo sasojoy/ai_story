@@ -8,4 +8,5 @@
  "checkin": {"enabled": true, "pill_days": [3, 6], "tier4_days": [6]},
  "mall": {"enabled": true, "beta_grant": 5000, "card_daily_ingots": 60, "card_daily_pills": 1},
  "conquest": {"progress_scale": 12},
- "jianfa": {"enabled": true, "week_unlock": false, "stat_milestones": false}, "epiphany": {"enabled": true, "retry_days": 0.0833333, "trial_wait_days": 0.0833333}}
+ "jianfa": {"enabled": true, "week_unlock": false, "stat_milestones": false}, "epiphany": {"enabled": true, "retry_days": 0.0833333, "trial_wait_days": 0.0833333},
+ "push_events": true, "llm_queue_slots": 1, "llm_queue_wait_seconds": 45}
