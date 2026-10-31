@@ -141,7 +141,6 @@ class Material:
     reason: str  # 勝負的關鍵（BattleInstance.outcome_reason）；沒有是空的
     acts: tuple[ActFacts, ...]
     cast: tuple[CastFacts, ...]
-    people: tuple[str, ...] = ()  # 這一場所有上陣的人的名號（檢查模型把哪一拍的事寫到別人身上）
 
     @property
     def title(self) -> str:
@@ -216,7 +215,6 @@ def gather(
         record_id=instance.record_id or 0, season=season, battle_name=definition.name,
         result=instance.outcome_title or "", reason=instance.outcome_reason,
         acts=tuple(acts), cast=tuple(_cast(instance, side_names)),
-        people=tuple(sorted({p.name for p in instance.participants.values() if p.name})),
     )
 
 
@@ -310,12 +308,15 @@ def predict_budget(material: Material) -> int:
     return max(NUM_PREDICT, PREDICT_BASE + PREDICT_PER_SCENE * beats + PREDICT_PER_CAST * len(material.cast))
 
 
+OTHER_NAME_MIN = 2  # 「寫到別的上陣的人」不認一個字的名號：單字（「霜」「城」）常常只是散文裡的普通字，會把該留的拍誤退成模板句
+
+
 def _bare(text: str) -> str:
     """比對原話用：只留字，標點、空白都拿掉。"""
     return re.sub(r"[\W_]+", "", text)
 
 
-def fits(beat: BeatFacts, text: str, people: Sequence[str]) -> bool:
+def fits(beat: BeatFacts, text: str, others: Sequence[str]) -> bool:
     """模型寫的這一拍對不對得上這一拍（2026-10-31 線上那一篇：原話在散文裡又抄一次、第二拍寫成第三拍的人）。
     只看附了原話的那幾拍（放手一搏）：散文不准抄原話（原話底下另外引）、要寫到喊話的那個人、
     不准寫到別的上陣的人（別一拍的主角）。開篇、倒下、戰局那幾拍寫到誰都照收。"""
@@ -326,7 +327,12 @@ def fits(beat: BeatFacts, text: str, people: Sequence[str]) -> bool:
         return False
     if beat.said.who and beat.said.who not in text:
         return False
-    return not any(name and name in text and name not in beat.said.who for name in people)
+    return not any(len(name) >= OTHER_NAME_MIN and name in text and name not in beat.said.who for name in others)
+
+
+def _gamblers(material: Material) -> tuple[str, ...]:
+    """別一拍的主角：整篇放手一搏那幾拍喊話的人。只拿他們比（不拿全部上陣的人）：配錯是拍子之間互換，名單越短越少誤判。"""
+    return tuple(sorted({b.said.who for a in material.acts for b in a.beats if b.said is not None and b.said.who}))
 
 
 def write(client, material: Material) -> tuple[dict[str, tuple[str, str]], dict[str, str]]:
@@ -343,10 +349,11 @@ def write(client, material: Material) -> tuple[dict[str, tuple[str, str]], dict[
         return {}, {}
     beats = {beat.id: beat for act in material.acts for beat in act.beats}
     names = {c.name for c in material.cast}
+    others = _gamblers(material)
     scenes: dict[str, tuple[str, str]] = {}
     for s in reply.scenes:
         text = clean(s.text, SCENE_MAX)
-        if s.id in beats and s.id not in scenes and text and fits(beats[s.id], text, material.people):
+        if s.id in beats and s.id not in scenes and text and fits(beats[s.id], text, others):
             scenes[s.id] = (clean(s.head, HEAD_MAX), text)
     seen: dict[str, int] = {}
     for _head, text in scenes.values():

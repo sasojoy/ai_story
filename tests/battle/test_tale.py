@@ -171,6 +171,8 @@ def test_a_scene_that_copies_the_player_line_or_names_someone_else_is_dropped():
     m = _material()
     beat = m.acts[0].beats[1]  # 霜刃放手一搏那一拍
     assert beat.said is not None
+    other = tale.BeatFacts(id="2-1", fact="鐵鍋放手一搏，沒成。", said=tale.Said(who="鐵鍋", line="守住城門"))
+    m = tale.Material(**{**m.__dict__, "acts": (m.acts[0], tale.ActFacts(title="二", banner="", setting="", beats=(other,)))})
     for text in ("霜刃大喝：包圍城頭那一隊！", "鐵鍋提刀衝上城頭。", "霜刃與鐵鍋同時撲上城頭。"):
         scenes, _ = tale.write(_Client({"scenes": [{"id": beat.id, "text": text}], "cast": []}), m)
         assert beat.id not in scenes, text
@@ -226,3 +228,13 @@ def test_a_broken_row_reads_as_missing(tmp_path):
     with sqlite3.connect(path) as conn:
         conn.execute("UPDATE tales SET data = ? WHERE record_id = ?", ("{壞掉的", 41))
     assert tale.TaleStore(path).get(41) is None and tale.TaleStore(path).listing(8) == []
+
+
+def test_a_short_name_inside_ordinary_words_does_not_drop_the_scene():
+    """單字的名號常常只是普通字（例：有人叫「城」），沒放手一搏的人也不拿來比：該留的那一拍不退回模板句。"""
+    m = _material()
+    beat = m.acts[0].beats[1]
+    other = tale.BeatFacts(id="2-1", fact="城放手一搏，沒成。", said=tale.Said(who="城", line="守住"))
+    m2 = tale.Material(**{**m.__dict__, "acts": (m.acts[0], tale.ActFacts(title="二", banner="", setting="", beats=(other,)))})
+    scenes, _ = tale.write(_Client({"scenes": [{"id": beat.id, "text": "霜刃一聲斷喝，帶人撲上城頭。"}], "cast": []}), m2)
+    assert beat.id in scenes
