@@ -502,14 +502,22 @@ def add_rumor(
 ) -> None:
     """記一則傳聞（傳聞分層設計第二節）。給了 content 與地點時，順便記下地點所在的大區。
     誰聽得到哪一則照 audible（地方傳聞看這裡記下的大區）；faction：陣營軍情只給這個陣營的人。"""
+    add_season_rumor(state.world, text, location, content=content, layer=layer, named=named, faction=faction)
+
+
+def add_season_rumor(
+    season: WorldState, text: str, location: str | None = None, *, content: Content | None = None,
+    layer: RumorLayer = "world", named: bool = True, faction: str | None = None,
+) -> None:
+    """同 add_rumor，直接記在一季上（手上沒有角色的 GameState 時用：WorldStateStore.mutate_season 裡）。"""
     from . import atlas  # atlas → world → rules：在函式裡 import，避免循環
 
     region = None
     if content is not None and location is not None and location in content.locations:
         found = atlas.region_of(content, location)
         region = found.id if found is not None else None
-    state.world.rumors.append(
-        Rumor(time=state.world.time, text=text, location=location, layer=layer, region=region, named=named, faction=faction)
+    season.rumors.append(
+        Rumor(time=season.time, text=text, location=location, layer=layer, region=region, named=named, faction=faction)
     )
 
 

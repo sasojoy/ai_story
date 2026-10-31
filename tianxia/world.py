@@ -93,7 +93,9 @@ def _fire(
 ) -> list[str]:
     """觸發一件江湖大事。潤色句（S-09，2026-10-31）：鎖內只用全服已經快取好的那一句；還沒有的話這一下先寫固定的原文，
     polish 給了就記一張單子（FlavorJob），由伺服器在行動鎖放掉之後請模型（三段式的 B 段），寫回時（C 段，Game.apply_flavor）
-    存進全服快取、把這一則紀錄換成潤色過的那一句。鎖內一個模型都不叫。"""
+    存進全服快取、把這一則紀錄換成潤色過的那一句。鎖內一個模型都不叫。
+    潤色那一句也進天下大事（Joy 2026-10-31 選「也進天下大事」）：快取裡有的這裡跟著原文記一則；還沒有的，潤色回來存進快取的
+    那一下記（Game.apply_flavor）。潤色回來之前天下大事只有原文。"""
     state.world.fired_thresholds.add(fire_id)
     add_world_flags(state, flags)
     add_rumor(state, text, location, content=content)
@@ -103,8 +105,9 @@ def _fire(
         flourish = flavor.clean(world.get_event_flavor(fire_id) or "")  # 舊的快取寫壞了也不再顯示（2026-10-31 自檢以前沒清理）
         if flourish:
             shown_text = f"{text}\n\n{flourish}"
+            add_rumor(state, flourish, location, content=content)  # 潤色那一句也進天下大事，全服看得到（Joy 2026-10-31）
         elif polish is not None:
-            polish.append(FlavorJob(fire_id, text))
+            polish.append(FlavorJob(fire_id, text, location))
     msgs = [f"【江湖大事】{shown_text}"]
     if starts_battle in season_one_off(content, state.world, "battles"):  # 第一季不開 beta 那場決戰（計畫 T8）
         starts_battle = None

@@ -101,7 +101,8 @@ def test_threshold_writes_the_plain_line_and_queues_the_flourish_without_calling
     with mock.patch.object(flavor, "polish_world_event") as model:
         msgs = check_thresholds(state, content, world, polish)
     assert msgs == ["【江湖大事】水寇封江！"]
-    assert polish == [flavor.FlavorJob("kou50", "水寇封江！")]
+    assert [job[:2] for job in polish] == [("kou50", "水寇封江！")]
+    assert state.world.rumors[-1].text == "水寇封江！"  # 潤色回來之前天下大事只有原文
     model.assert_not_called()
     assert world.get_event_flavor("kou50") == ""
 
@@ -113,6 +114,7 @@ def test_threshold_flavor_reuses_a_cached_value_without_queueing(state, content,
     msgs = check_thresholds(state, content, world, polish)
     assert msgs == ["【江湖大事】水寇封江！\n\n已經有人潤色過的句子。"]
     assert polish == []
+    assert [r.text for r in state.world.rumors][-2:] == ["水寇封江！", "已經有人潤色過的句子。"]  # 潤色那一句也進天下大事（Joy 2026-10-31）
 
 
 def test_ending_threshold_ends_season(state, content):
