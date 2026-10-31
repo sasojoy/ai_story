@@ -51,6 +51,21 @@ elif cmd == "scene":
     with world.action_lock():
         world.mutate_season(fn)
     print("scene set")
+elif cmd == "refresh":
+    # 拍圖前把局面擺回去：兩塊剛易手的冷卻重新起算，兩塊正在翻的進度補回 55／40（季曆走了一段，冷卻可能過了）
+    world = open_world()
+
+    def fn(season):
+        for loc in ("hilltop_wilds", "yingshui"):
+            conquest.flip(season, content, loc, "huang", note=False)
+        for loc, side, who, want in (("runan_wilds", "guan", "映雪", 55), ("yingchuan_wilds", "huang", "黃天客", 40)):
+            have = conquest.bars(season, loc).get(side, 0.0)
+            if want - have > 0.5:
+                conquest.push(season, content, loc, side, who, want - have, "attack")
+
+    with world.action_lock():
+        world.mutate_season(fn)
+    print("refreshed")
 elif cmd == "show":
     world = open_world()
     s = world.get_season()
