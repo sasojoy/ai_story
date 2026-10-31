@@ -1,0 +1,49 @@
+diff --git a/web/map.js b/web/map.js
+index f0e9a9ae..28028498 100644
+--- a/web/map.js
++++ b/web/map.js
+@@ -113,7 +113,8 @@
+     const b = S.mapBase;
+     return `<div class="${mapxClass()}" id="mapx" data-key="${esc(b.key)}">
+       <div class="map-wrap" id="map"><div class="mv-world" id="mvw" style="width:${Number(b.w)}px;height:${Number(b.h)}px">`
+-      + `<svg class="mv-ground" id="mk" width="${Number(b.w)}" height="${Number(b.h)}" viewBox="0 0 ${Number(b.w)} ${Number(b.h)}" aria-hidden="true"></svg>`
++      + (MV_GROUND_RASTER ? `<canvas class="mv-ground" id="mk" style="position:absolute;left:0;top:0;width:${Number(b.w)}px;height:${Number(b.h)}px;pointer-events:none" aria-hidden="true"></canvas>`
++        : `<svg class="mv-ground" id="mk" width="${Number(b.w)}" height="${Number(b.h)}" viewBox="0 0 ${Number(b.w)} ${Number(b.h)}" aria-hidden="true"></svg>`)
+       + `<svg class="mv-route" id="mkr" width="${Number(b.w)}" height="${Number(b.h)}" viewBox="0 0 ${Number(b.w)} ${Number(b.h)}"></svg></div>`
+       + `<div class="mv-marks" id="mkt"></div></div>${mapChrome()}
+     </div>`;
+@@ -981,8 +982,34 @@
+     const k = groundK(c.z), week = mapWeek(), key = `${S.mapBase.key}|${S.mapStateAt}|${week}|${f2(k)}`;
+     if (ground.el === svg && ground.key === key) return;
+     Object.assign(ground, { el: svg, key });
++    if (MV_GROUND_RASTER) { groundBake(svg, k, week, key); return; }
+     svg.innerHTML = groundSvg(S.mapBase, S.mapState, k, week);
+   }
++  // 量測用的暫時開關（W1 後續 Task 1，量完就拿掉）：網址帶 ?ground=raster 時 #mk 是一張 canvas，把同一份 groundSvg 的輸出烤上去
++  // （只在停下來、級距變了的那一次烤；手勢途中不烤）。大小：螢幕像素比 ÷ k（此刻級距的倍率 × 像素比），最多 GROUND_PX_MAX 個像素
++  // （iOS Safari 一張 canvas 的上限 16,777,216，留一點）
++  const MV_GROUND_RASTER = typeof location !== "undefined" && /[?&]ground=raster(?:&|$)/.test(String(location.search || ""));
++  const GROUND_PX_MAX = 16e6;
++  function groundBakeScale(base, k) {
++    const dpr = (typeof devicePixelRatio === "number" && devicePixelRatio > 0) ? devicePixelRatio : 1;
++    return Math.max(1, Math.min(Math.sqrt(GROUND_PX_MAX / (base.w * base.h)), dpr / k));
++  }
++  function groundBake(cv, k, week, key) {
++    if (!cv.getContext || typeof Image === "undefined" || !window.URL || !URL.createObjectURL) return;
++    const b = S.mapBase, s = groundBakeScale(b, k), W = Math.floor(b.w * s), H = Math.floor(b.h * s);
++    const url = URL.createObjectURL(new Blob([`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${b.w} ${b.h}">${groundSvg(b, S.mapState, k, week)}</svg>`], { type: "image/svg+xml" }));
++    const img = new Image();
++    img.onload = () => {
++      URL.revokeObjectURL(url);
++      if (ground.key !== key || ground.el !== cv) return; // 等的時候又換了
++      if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
++      const g = cv.getContext("2d");
++      g.clearRect(0, 0, W, H);
++      g.drawImage(img, 0, 0, W, H);
++    };
++    img.onerror = () => { URL.revokeObjectURL(url); ground.key = ""; };
++    img.src = url;
++  }
+ 
+   // ── 字與小圖（#mkt：照螢幕大小寫，位置照此刻的倍率算）──
+   // 每一處各方幾處、寶幾處（遠看那一段大區名底下那一行：照疊層的 sides，只寫不是 0 的）

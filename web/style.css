@@ -1163,7 +1163,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 #map-host.away { visibility: hidden; }
 /* 藏起來時：整層一律不收點擊（.mapx 是 fixed、蓋在另外四頁上，FB-326）；紅圈不跳（不然閒著也每一幀在算，FB-327）；地面的 filter 關掉（FB-328） */
 #map-host.away * { pointer-events: none !important; }
-#map-host.away .mv-you::after, #map-host.away .mv-pulse, #map-host.away .mv-fight, #map-host.away .w-melee { animation: none; }
+#map-host.away .mv-you::after, #map-host.away .mv-pulse, #map-host.away .mv-fight { animation: none; }
 #map-host.away [filter] { filter: none; }
 /* 地圖框：框裡的手勢不捲頁面、不放大整頁（touch-action: none）；長按不跳選字、不跳 iOS 的選單；游標一直是 grab（FB-322）。clip 一樣裁切、
    而且不能被 scrollIntoView 捲走 */
@@ -1178,8 +1178,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mv-world > .mv-base { position: absolute; left: 0; top: 0; display: block; opacity: 0; transition: opacity 0.4s; }
 .mv-world > .mv-base.on { opacity: 1; }
 .mv-world > svg { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
-.mv-world > canvas.mv-ground { position: absolute; left: 0; top: 0; pointer-events: none; transition: opacity 0.25s; }
-/* 手機 Safari：大圖層上的 mix-blend-mode 與 SVG 濾鏡會讓拖縮時整塊沒畫出來（Joy 2026-10-30 截圖「破圖」）；地面改成點陣、不混色 */
+/* 手機 Safari：大圖層上的 mix-blend-mode 與 SVG 濾鏡會讓拖縮時整塊沒畫出來（Joy 2026-10-30 截圖「破圖」）。地（#mk，輿圖表現第二版的地塊）
+   是一張向量的 SVG：不混色、沒有濾鏡；點一塊地由 map.js 照座標算（landAt），這一層不收點擊 */
 .mv-marks { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
 .mv-marks > * { position: absolute; }
 .mv-marks button { pointer-events: auto; cursor: pointer; border: 0; background: none; padding: 0; margin: 0; font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
@@ -1190,7 +1190,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mv-dot { transform: translate(-50%, -50%); width: 12px; height: 12px; border-radius: 50%; background: var(--mv-halo) !important; border: 2.5px solid var(--c) !important; box-sizing: border-box; }
 .mv-dot.rich { box-shadow: 0 0 0 2px #c8961e; }
 .mv-marks .dim { opacity: 0.28; }
-/* 名字：沒有框，紙色的暈；誰佔著是左邊一顆小印，寶、戰書是朱紅圓印，本週要去是金字條；近看再加此地能悟、幾分・多什麼・勝算 */
+/* 名字：沒有框，紙色的暈。中間、近看只有名字（輿圖表現第二版：誰佔著看地的顏色，寶、本週、⚔ 是小圖角上的徽）；
+   遠看你在的、選的、本週的照舊：戰書是朱紅圓印、本週要去是金字條、底下一行幾分・多什麼・勝算 */
 .mv-lab { white-space: nowrap; display: flex; align-items: center; gap: 4px; text-align: left; font: 700 14px/1.2 var(--serif) !important; color: var(--mv-ink) !important;
   text-shadow: 0 0 2px var(--mv-paper), 0 0 4px var(--mv-paper), 0 0 7px var(--mv-paper), 0 0 10px rgb(244 236 220 / 0.9); }
 .mv-lab.big { font-size: 16px !important; letter-spacing: 0.04em; }
@@ -1198,13 +1199,16 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mv-lab .t { display: flex; flex-direction: column; }
 .mv-lab .nm { display: flex; align-items: center; gap: 3px; }
 .mv-lab small { font: 500 11px/1.3 var(--sans); color: var(--mv-ink2); letter-spacing: 0; }
-.mv-lab .ins { font: 700 11px/1 var(--kai); margin-left: 2px; display: inline-flex; gap: 2px; }
-.mv-lab .ins i { font-style: normal; }
-.mv-side { flex: none; width: 17px; height: 17px; border-radius: 2px; font: 700 11px/17px var(--kai); color: #f4ecdc; text-align: center; text-shadow: none; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25); opacity: 0.9; }
 .mv-rich { flex: none; width: 17px; height: 17px; border-radius: 50%; background: var(--mv-red); color: #f4ecdc; font: 700 10px/17px var(--kai); text-align: center; text-shadow: none; }
 .mv-wk { flex: none; padding: 0 4px; border-radius: 2px; background: #c8961e; color: #fffaf0; font: 700 10.5px/16px var(--serif); text-shadow: none; }
-.mv-bar { display: block; height: 3px; margin-top: 2px; border-radius: 2px; background: #d8cdb4; overflow: hidden; }
-.mv-bar i { display: block; height: 100%; }
+/* 小圖角上的徽（輿圖表現第二版 2.1）：右下危險度 1～3、右上 ⚔（正在翻、激戰）、左上寶、頂上本週的紅旗。地圖只有紙墨一種顏色，深色主題也一樣 */
+.mv-dg { transform: translate(-50%, -50%); width: 15px; height: 15px; border-radius: 50%; background: #2b2f25; color: #fff; font: 700 9.5px/13px var(--sans);
+  text-align: center; border: 1px solid #fff; box-sizing: border-box; }
+.mv-bd { transform: translate(-50%, -50%); width: 16px; height: 16px; border-radius: 50%; color: #fff; font: 700 10px/14px var(--kai); text-align: center;
+  border: 1px solid #fff; box-sizing: border-box; }
+.mv-bd-x { background: #c0392b; }
+.mv-bd-rich { background: #e0b23a; color: #2b2f25; }
+.mv-flag { transform: translate(-3px, -100%); overflow: visible; }
 /* 山河名、大區名與各方幾處（遠看那一段） */
 .mv-geo { transform: translate(-50%, -50%); font: 400 13px var(--kai); color: #4c6378; letter-spacing: 0.3em; white-space: nowrap; text-shadow: 0 0 4px var(--mv-paper); opacity: 0.8; }
 .mv-geo.v { writing-mode: vertical-rl; letter-spacing: 0.4em; color: #4e5a55; }
@@ -1221,7 +1225,6 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 @keyframes mk-pulse { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(2.25); opacity: 0; } }
 @keyframes mv-pulse { 0% { transform: translate(-50%, -50%) scale(1); opacity: 0.9; } 100% { transform: translate(-50%, -50%) scale(2.25); opacity: 0; } }
 @keyframes w-melee { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
-.w-melee { animation: w-melee 1.1s ease-in-out infinite; }
 
 /* 上面：搜尋列、篩選一排（左右滑） */
 .mv-top { position: absolute; top: 0; left: 0; right: 0; z-index: 3; padding-top: 10px; pointer-events: none; }
@@ -1296,8 +1299,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .m-mine { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 10px; }
 .m-mine .m-x { display: none; }
 @media (prefers-reduced-motion: reduce) {
-  .mv-you::after, .mv-pulse, .mv-fight, .w-melee { animation: none; }
-  .mdrawer, .mv-fab, .mv-ground, .mv-world > .mv-base { transition: none; }
+  .mv-you::after, .mv-pulse, .mv-fight { animation: none; }
+  .mdrawer, .mv-fab, .mv-world > .mv-base { transition: none; }
 }
 /* 桌機（寬 900 以上）：地圖佔滿左邊、抽屜是右邊 360px 一欄 */
 @media (min-width: 900px) {

@@ -1,0 +1,45 @@
+{
+ "mode": "road",
+ "travel": {
+  "arrived": true,
+  "keys": [
+   "main",
+   "arrived"
+  ]
+ },
+ "opened": true,
+ "state": {
+  "journey": true,
+  "here": "yingchuan",
+  "z": 1.15,
+  "mkLen": 33276,
+  "mkNodes": 291
+ },
+ "idle": {
+  "t0": 3497,
+  "writes": [
+   6956,
+   16966,
+   26964,
+   36951,
+   46948,
+   56943
+  ],
+  "fetches": [
+   6894,
+   16903,
+   26904,
+   36889,
+   46886,
+   56881
+  ],
+  "bytes": 33276,
+  "journey": true
+ },
+ "log": {
+  "console": [],
+  "exceptions": [],
+  "http": [],
+  "failed": []
+ }
+}

@@ -6142,11 +6142,10 @@
         case "map-home": mapHome(); break; // 右下「◎」：回到我
         case "map-fit": mapFit(); break; // 右下「全」：看整張天下
         case "map-more": mapOpen(); break; // 卡上「往上拉：能悟、對手……」
-        case "map-place": mapPick(el.dataset.id); break; // 地圖上點了一處（小圖、名字）、附近那一排點了一張：抽屜開它的卡
+        case "map-place": mapLand(el.dataset.id); break; // 地圖上點了一處（小圖、名字）、附近那一排點了一張：抽屜開它的卡（再點同一處收回）
         case "map-pick": mapPick(el.dataset.id, true); break; // 找地點、今天去哪裡出陣挑了一處：飛過去、開它的卡
         case "map-region": mapBack(); mapRegionFly(el.dataset.id); break; // 找地點的「跳到大區」：收起那一頁，飛過去
         case "map-filter": mapFilter(el.dataset.id); break; // 上面那一排標籤（再按一次回全部）
-        case "map-wash": washToggle(); break; // 「塗層」
         case "map-search": mapFind(); break;
         case "map-open": mapOpen(); break;
         case "map-back": mapBack(); break;

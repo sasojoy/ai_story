@@ -196,7 +196,7 @@ def test_fb327_fb328_the_hidden_map_stops_its_pulse_and_its_paper_grain():
     rules = _away_rules()
     stop = next(body for sel, body in rules.items() if ".mv-you::after" in sel)
     assert stop == "animation: none;"
-    for part in (".mv-pulse", ".mv-fight", ".w-melee"):
+    for part in (".mv-pulse", ".mv-fight"):  # 地面的激戰紅底（.w-melee）輿圖表現第二版 W1 拿掉了，樣式表不留它的規則（tests/web/test_map_web.py）
         assert any(part in sel for sel, body in rules.items() if body == "animation: none;"), part
     assert rules["#map-host.away [filter]"] == "filter: none;"
 

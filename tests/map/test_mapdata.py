@@ -42,7 +42,7 @@ def test_the_base_lists_open_places_roads_and_regions():
     assert b["key"] == mapdata.base_key(game.state, game.content) and b["svg"].startswith("<svg")
 
 
-# ── 輿圖表現 S1：底圖多 view 一個鍵（給 W1 以後的新圖用；舊圖照舊畫 svg；S1 原本另送的 terrain 作廢，山河林與名字走 paint）──
+# ── 輿圖表現 S1：底圖多 view 一個鍵（給 W1 以後的新圖用；svg 照舊送〔一張到底已經不讀，W4 拿掉〕；S1 原本另送的 terrain 作廢，山河林與名字走 paint）──
 
 OLD_BASE_KEYS = {"key", "w", "h", "svg", "places", "edges", "roads", "regions", "insight_kinds", "insight_layer", "world", "paint"}
 FORMAL_VIEW = {  # content/config.json 的 map_view（設計 4：九個鍵；W1 以後的畫面照這幾個數字取景）
@@ -56,7 +56,7 @@ def test_the_base_adds_only_the_view(profile):
     game = _game(profile=profile)
     b = game.map_base()
     assert set(b) - {mapdata.VIEWER_MOSTLY} == OLD_BASE_KEYS | {"view"}  # 沒有 terrain：山河林與名字是 Joy 的 paint
-    assert b["svg"] == mapview.render_base(game.state, game.content)  # 舊圖照舊畫：位元組不變（W4 才拿掉）
+    assert b["svg"] == mapview.render_base(game.state, game.content)  # svg 照舊送（一張到底已經不讀，W4 拿掉）：位元組不變
     assert b["view"] == game.content.config.map_view.model_dump() == FORMAL_VIEW
     assert json.loads(json.dumps(b))["view"] == FORMAL_VIEW  # 送得出去
 

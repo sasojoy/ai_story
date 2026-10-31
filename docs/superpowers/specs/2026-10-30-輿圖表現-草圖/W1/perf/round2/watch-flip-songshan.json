@@ -1,0 +1,20 @@
+{
+ "opened": true,
+ "fill0": "#3D5F8F",
+ "after": {
+  "writes": [
+   37223
+  ],
+  "fetches": [
+   37167
+  ],
+  "control": "huang"
+ },
+ "fill1": "#B9821A",
+ "log": {
+  "console": [],
+  "exceptions": [],
+  "http": [],
+  "failed": []
+ }
+}

@@ -113,7 +113,7 @@
     const b = S.mapBase;
     return `<div class="${mapxClass()}" id="mapx" data-key="${esc(b.key)}">
       <div class="map-wrap" id="map"><div class="mv-world" id="mvw" style="width:${Number(b.w)}px;height:${Number(b.h)}px">`
-      + `<canvas class="mv-ground" id="mk" style="width:${Number(b.w)}px;height:${Number(b.h)}px"></canvas>`
+      + `<svg class="mv-ground" id="mk" width="${Number(b.w)}" height="${Number(b.h)}" viewBox="0 0 ${Number(b.w)} ${Number(b.h)}" aria-hidden="true"></svg>`
       + `<svg class="mv-route" id="mkr" width="${Number(b.w)}" height="${Number(b.h)}" viewBox="0 0 ${Number(b.w)} ${Number(b.h)}"></svg></div>`
       + `<div class="mv-marks" id="mkt"></div></div>${mapChrome()}
     </div>`;
@@ -643,9 +643,9 @@
 
   // ── 一張到底（企劃者 2026-10-30「可以 這樣改」，示意稿第四版：讓地圖能自由滑動縮放、搜尋）──
   // 以前是三張固定取景的圖（第一層、全區、天下），從 A 到 B 要切好幾次地區。現在整個天下一張：一指拖（放手會順著滑）、兩指捏、滾輪、
-  // 雙擊放大，從看得到整張天下縮到約 3 倍。字照倍率分三段（drawMarks）：遠看大區名與各方幾處、地點是一顆照誰佔著上色的點、地面照歸屬上色
-  // （以前的天下圖）；中間每一處的小圖與名字、誰佔著的小印、寶；近看再加此地能悟、幾分・多什麼・勝算。名字撞在一起時讓開，讓不開的先收
-  // （選的、你在的、本週要去的、篩到的、要地、近的先畫）。
+  // 雙擊放大，從看得到整張天下縮到約 3 倍。字照倍率分三段（drawMarks）：遠看大區名與各方幾處、地點是一顆照誰佔著上色的點；中間、近看
+  // 每一處的小圖與名字，小圖角上掛⚔、寶、本週旗、近看再加危險度（輿圖表現第二版 W1：誰佔著看地的顏色，名字旁的小印、字條、底下那一行、悟字拿掉）。
+  // 地（戰略圖的地塊，groundSvg）三段都畫、常駐。名字撞在一起時讓開，讓不開的先收（選的、你在的、本週要去的、篩到的、要地、近的先畫）。
   // 底圖不再用伺服器畫好的那一張：主機畫的淡彩水墨（web/img/map/base.webp）疊上州界與路，烤成一張圖（bakeBase）；抓不到那一張時
   // 網頁照內容（底圖的 paint：大區、河、山、林）自己畫。山河名照 paint 寫在字那一層；
   // 城與營用畫的小圖（web/img/map）。拖縮的每一幀只換兩層的 transform（底圖那一層、字那一層照上一次排字的倍率先跟著縮放），
@@ -656,6 +656,8 @@
     weekHead: "本週要事", figures: "附近的人物", jump: "跳到大區", places: "地點", people: "人物",
     notFound: "找不到「{q}」。地名、大區、人物、店面（醫館、鐵匠鋪、馬市）都找得到。",
   };
+  // 輿圖表現第二版（企劃者 2026-10-30「照丙定」）新寫給玩家看的字都放這一張（待 joy 潤）：W1 小圖角上的徽；W2、W3 的底條、箭頭牌、篩選籤接著加在這裡
+  const MV_LOOK = { rich: "寶", fight: "⚔" };
   const MV_CHIP_PEOPLE = "有人物";
   const NEAR_WORDS = { weekGo: "本週要去", bounty: "有賞" }; // 待 joy 潤
   const NEAR_PULL = "往上拉：能悟、對手、人物、今日產出"; // 待 joy 潤
@@ -756,16 +758,6 @@
     return k ? `<img src="${mvImg(k)}" width="${s + 6}" alt="" draggable="false">`
       : `<svg width="${s}" height="${s}" viewBox="-15 -17 30 30" aria-hidden="true">${inkIcon(b.glyph, MV_INK, "none")}</svg>`;
   }
-  // 正在翻那一層的斜紋（每一個出現在 tug 裡的攻方一個 <pattern>，顏色照 sideInk；地圖單位，k＝1／倍率）
-  const WORLD_TUG_MAX = 0.75, WORLD_TUG_GAP = 5, WORLD_TUG_LINE = 2.2;
-  const WORLD_COOL_DASH = 4, WORLD_COOL_GAP = 3, WORLD_COOL_LINE = 1.4;
-  const WORLD_LETTER_DASH = 6, WORLD_LETTER_GAP = 3.5, WORLD_LETTER_LINE = 2.6;
-  const WORLD_GROUND = 0.62; // 地面那一層多濃（淡彩：底下的山河要透得上來）
-  function tugPattern(side, k) {
-    const ink = sideInk(side), gap = f1(WORLD_TUG_GAP * k);
-    return `<pattern id="wt-${esc(side)}" patternUnits="userSpaceOnUse" width="${gap}" height="${gap}" patternTransform="rotate(45)">`
-      + `<rect width="${gap}" height="${gap}" fill="${ink.soft}" fill-opacity=".55"/><line x1="0" y1="0" x2="0" y2="${gap}" stroke="${ink.color}" stroke-width="${f1(WORLD_TUG_LINE * k)}"/></pattern>`;
-  }
   // 這一格正在被誰翻、翻到幾成（疊層的 tug 裡進度最高的那一方；守方自己、進度 0 不算）；沒有是 null。名字底下的進度條也照它
   function tugOf(st, id, holder) {
     const t = st.places[id] && st.places[id].tug;
@@ -773,21 +765,8 @@
     const best = Object.entries(t).filter(([sd, v]) => sd !== holder && Number(v) > 0).sort((a, z) => Number(z[1]) - Number(a[1]))[0];
     return best ? { side: best[0], pct: Math.min(100, Number(best[1])) } : null;
   }
-  // 塗層（地面照歸屬上色）：遠看那一段本來就有；開著時近看也有。記在這個瀏覽器（平常關著）
-  const WASH_WORD = "塗層"; // 待 joy 潤
-  const WASH_KEY = "tx-map-wash";
-  function washOn() {
-    if (S.mapWash === undefined) { try { S.mapWash = localStorage.getItem(WASH_KEY) === "1"; } catch (e) { S.mapWash = false; } }
-    return !!S.mapWash;
-  }
-  function washToggle() {
-    S.mapWash = !washOn();
-    try { localStorage.setItem(WASH_KEY, S.mapWash ? "1" : "0"); } catch (e) { /* 記不住就只管這一次 */ }
-    chipsRedraw();
-    drawMarks();
-  }
-
-  // ── 篩選（上面那一排標籤）：全部、多半什麼（照底圖的 mostly，多的在前）、寶、有人物、能悟哪一種；再加塗層、版圖。
+  // ── 篩選（上面那一排標籤）：全部、多半什麼（照底圖的 mostly，多的在前）、寶、有人物、能悟哪一種；再加版圖（「塗層」拿掉了：地常駐，
+  // 輿圖表現第二版第三章）。
   // 篩到的照舊畫、名字先畫，其餘淡掉；附近那一排只列篩到的 ──
   const MV_KINDS_MAX = 6;
   function chipList(base, st) {
@@ -809,9 +788,8 @@
   }
   function chipsHtml(base, st) {
     if (!base || !st) return "";
-    const f = S.mapFilter || "all", wash = washOn();
+    const f = S.mapFilter || "all";
     return chipList(base, st).map(([k, t]) => `<button type="button" class="mv-chip${f === k ? " on" : ""}" data-act="map-filter" data-id="${esc(k)}" aria-pressed="${f === k}">${t}</button>`).join("")
-      + `<button type="button" class="mv-chip${wash ? " on" : ""}" data-act="map-wash" aria-pressed="${wash}">${WASH_WORD}</button>`
       + `<button type="button" class="mv-chip w-tl" data-act="map-timeline" aria-pressed="false">${MV_WORDS.tl}</button>`;
   }
   function chipsRedraw() {
@@ -895,80 +873,142 @@
     else drawMarks();
   }
 
-  // ── 地面（以前的天下圖，輿圖簡化設計 5.1、4.1～4.4）：每一區的地面照「離哪個地點最近」分給那個地點此刻（或版圖變化看的那一週）的控制方
-  // （底圖的 world.cells，照那一區的輪廓裁），一方一色、沒人佔一色（顏色照劇本）；正在翻（攻方的斜紋照進度泛進來）、剛易手還在冷卻
-  // （新主人的淡色、一圈虛線）、紅線（兩方的地面相接）、細墨線（有主與沒人佔相接）、激戰（那一格一圈紅光閃）、下了戰書（朱紅虛線框）。
-  // 遠看那一段、塗層開著、版圖變化時才畫（#mk；底下的山水淡淡透上來）。純函式：k＝1／倍率（線寬照螢幕）、week 看哪一週
-  function groundSvg(base, st, k, week) {
+  // ── 地（輿圖表現第二版 2.1，企劃者 2026-10-30「照丙定」：Joy 的身子、戰略圖的衣服）：每一處的地塊（底圖的 world.cells）裁到它所在的區界，
+  // 填主人色（劇本的 world.sides）34%、沒人佔淡灰 10%（底圖透上來）；塊內一圈自己的色（沒人佔而正在翻的是紅，照丙）、塊與塊之間一條暗線；兩方的地相接那一段亮白
+  // （world.edges）；正在翻的斜紋兩色（推的那一方＋現在的主人）；下了戰書內側朱紅虛框（w-letter）、剛易手內框改成虛線（w-cool）；
+  // 可出陣內側橘虛框（引擎說必敗的淡一半）；你的那一塊內側紅框（在路上不畫）。沒有地塊、或座標落在所屬區外的地點（官軍大營、綠林山寨）
+  // 拿半徑 view.patch_radius 的圓當它的地：一樣填色上框、不裁區界、不算戰線。常駐（「塗層」開關拿掉了）、不混色、沒有濾鏡。
+  // 線寬寫的是螢幕上看得到的寬（照丙畫出來的：內框 2.5、橘框紅框 3）：裁到塊內的那幾條畫兩倍寬，被裁掉外面那一半。
+  // 框（內框、冷卻虛內框、可出陣、戰書、你）沿著看得到的那一塊描一整圈（FB-9070，W1 第二輪 2026-10-31）：看得到的是塊 ∩ 區，邊界是塊的邊落在區內
+  // 的那幾段＋區界落在塊內的那幾段。框的路徑是塊的多邊形再接一條所在區的多邊形（同一個 d 兩段子路徑），裁到塊內（lc-）再裁到區界（lr-）：
+  // 塊那一段留下塊在區內的內側，區那一段留下區界在塊內的內側，合起來剛好是塊 ∩ 區內側一圈。以前只描塊，伸出區界的那一截被裁掉、區界上沒有框
+  // （36 塊有 30 塊缺 5% 以上，下曲陽缺七成）。不多一個節點，每一條框多一段區界的字（區的多邊形四到八個點、潁汝最多；開季平均每條多五十來個字）
+  const LAND_UNHELD = "#B9B2A0", LAND_UNHELD_RIM = "#8F8B82", LAND_SEAM = "#1B1F17", LAND_FRONT = "#FFF6E0";
+  const LAND_SORTIE = "#F0A640", LAND_HERE = "#C0392B";
+  // 正在翻的中立地（沒人佔、有人在推）的內框：照丙是紅（企劃者 2026-10-31「照丙用紅框」；草圖 tools/slg5.js 的 txGround：有主人是主人色、
+  // 沒主人而正在翻是紅）。跟有主的內框一樣粗（可見 2.5px）、0.85、實線；「你的那一塊」是可見 3px、不透明——丙就是這樣分的
+  const LAND_TUG_RIM = "#C0392B";
+  const LAND_FILL = 0.34, LAND_FILL_UNHELD = 0.1, LAND_FILL_TUG = 0.5, LAND_RIM_OP = 0.85, LAND_RIM_OP_UNHELD = 0.45, LAND_LOSE_OP = 0.5;
+  const LAND_RIM_W = 2.5, LAND_RIM_W_UNHELD = 1.25, LAND_FRAME_W = 3, LAND_FRONT_W = 3.2, LAND_SEAM_W = 1; // 螢幕 px
+  const LAND_DASH = [8, 5], LAND_COOL_DASH = [5, 4], LAND_STRIPE = 10, LAND_PATCH_R = 60; // 虛線與斜紋（螢幕 px）；圓的半徑（地圖單位，view 沒寫時）
+  const SORTIE_LOSE = "必敗"; // 引擎判必敗的那一個字（mapdata 的 LOSE_WORD：suggest 的 lose 照它判；不在 suggest 裡的可出陣照同一個字）
+  // 多邊形（world.cells、world.regions 的 d 只有 M、L、Z）：[[x, y], …]
+  function polyOf(d) {
+    const n = String(d).match(/-?\d+(?:\.\d+)?/g) || [], out = [];
+    for (let i = 0; i + 1 < n.length; i += 2) out.push([Number(n[i]), Number(n[i + 1])]);
+    return out;
+  }
+  function inPoly(x, y, pg) {
+    let ins = false;
+    for (let i = 0, j = pg.length - 1; i < pg.length; j = i++) {
+      const a = pg[i], b = pg[j];
+      if ((a[1] > y) !== (b[1] > y) && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) ins = !ins;
+    }
+    return ins;
+  }
+  // 每一處的地（照底圖記一份）：地塊 { id, region, d, rd（所在區的多邊形，框沿著區界那一段用）, poly, rpoly }，或圓 { id, patch: true, x, y, r }
+  // （地塊在前、圓在後：圓蓋在上面）
+  const landMemo = new WeakMap();
+  function landUnits(base) {
+    let m = landMemo.get(base);
+    if (m) return m;
+    const wd = base.world || {}, r = Number(base.view && base.view.patch_radius) || LAND_PATCH_R;
+    const regions = Object.fromEntries((wd.regions || []).map((g) => [g.id, { d: g.d, poly: polyOf(g.d) }]));
+    const cells = Object.fromEntries((wd.cells || []).map((c) => [c.id, c]));
+    const blocks = [], patches = [];
+    for (const b of base.places) {
+      const c = cells[b.id], rg = c && regions[c.region], rp = rg && rg.poly;
+      if (rp && inPoly(b.x, b.y, rp)) blocks.push({ id: b.id, region: c.region, d: c.d, rd: rg.d, poly: polyOf(c.d), rpoly: rp });
+      else patches.push({ id: b.id, patch: true, x: b.x, y: b.y, r });
+    }
+    m = { units: [...blocks, ...patches], patch: new Set(patches.map((u) => u.id)) };
+    landMemo.set(base, m);
+    return m;
+  }
+  // 地圖上 (mx, my) 是哪一處的地（整塊地都是那一處的熱區，設計 2.3）：照畫出來的那一塊——圓蓋在上面先問、地塊要在區界裡；都不是回 null
+  function landAt(base, st, mx, my) {
+    const { units } = landUnits(base);
+    for (let i = units.length - 1; i >= 0; i--) {
+      const u = units[i];
+      if (!st.places[u.id]) continue;
+      if (u.patch ? (mx - u.x) * (mx - u.x) + (my - u.y) * (my - u.y) <= u.r * u.r : inPoly(mx, my, u.rpoly) && inPoly(mx, my, u.poly)) return u.id;
+    }
+    return null;
+  }
+  // 地上畫的每一處長什麼樣子（groundSvg 只讀這一份，不再自己讀疊層）：疊層有沒有這一處、那一週的主人、正在翻的那一方（推得最多、不是主人）、
+  // 冷卻中、戰書、可出陣與淡不淡（必敗）、是不是你那一塊（在路上沒有）。以前的週（版圖變化）只有主人與你，不畫翻、冷卻、戰書、可出陣。
+  // groundShow 拿它當 key（FB-9071，W1 第二輪 2026-10-31）：以前 key 是抓疊層的時間（S.mapStateAt），輪詢重抓一次（在路上每 10 秒、平常每 30 秒）
+  // #mk 就整張重寫一次，疊層一個字都沒變也一樣。會一直變、地上又不畫的（冷卻還剩幾分鐘、翻到幾成、必敗以外的勝算字、在路上還剩幾分鐘）不在裡面
+  function groundLook(base, st, week) {
+    const ctrl = controlAt(st, week), live = week === st.now_week, here = st.journey ? null : st.here;
+    const lose = new Set((st.suggest || []).filter((g) => g.lose).map((g) => g.id)), out = {};
+    for (const u of landUnits(base).units) {
+      const q = st.places[u.id];
+      if (!q) continue;
+      const sd = ctrl[u.id] || null, t = live ? tugOf(st, u.id, sd) : null, sortie = live && !!q.sortie;
+      out[u.id] = { sd, tug: t ? t.side : null, cool: live && !!sd && !!q.cool, letter: live && q.siege === "letter", sortie,
+        faint: sortie && (lose.has(u.id) || (q.sortie === "attack" && !q.convoy && !!q.odds && q.odds.word === SORTIE_LOSE)), here: u.id === here };
+    }
+    return out;
+  }
+  // 純函式：k＝1／倍率（線寬照螢幕）、week 看哪一週（版圖變化：以前的週只畫顏色與你，不畫正在翻、冷卻、戰書、可出陣）；look 是 groundLook 那一份
+  // （groundShow 算 key 時已經算好的，沒給就照疊層算）
+  function groundSvg(base, st, k, week, look) {
     const wd = base.world;
     if (!wd) return "";
-    const ctrl = controlAt(st, week), live = week === st.now_week;
-    const cooling = (id) => live && !!ctrl[id] && !!(st.places[id] && st.places[id].cool);
-    const ground = (id) => sideInk(ctrl[id])[cooling(id) ? "tint" : "soft"];
-    const tugs = live ? wd.cells.map((c) => [c, tugOf(st, c.id, ctrl[c.id] || null)]).filter(([, t]) => t) : [];
-    const melee = live ? wd.cells.filter((c) => st.places[c.id] && (st.places[c.id].melee || st.places[c.id].siege === "fight")) : [];
-    const letters = live ? wd.cells.filter((c) => st.places[c.id] && st.places[c.id].siege === "letter") : [];
-    const cools = wd.cells.filter((c) => cooling(c.id));
-    const patterns = [...new Set(tugs.map(([, t]) => t.side))].map((sd) => tugPattern(sd, k)).join("");
-    // 淡彩水暈（企劃者 2026-10-30「勢力範圍的多邊形還是一定只能那麼醜嗎」）：每一格照控制方的淡色平塗，整層用水暈的濾鏡把邊揉開、
-    // 往外滲一點、邊上積一圈稍濃的顏料（像水彩乾掉的邊），乘在底圖上（.mv-ground 的 mix-blend-mode）；沒人佔的不上色，露出底圖。
-    // 大區的墨線外框、有主與沒人佔之間的細墨線拿掉了（州界在底圖上）；兩方相接的紅線改成一筆淡一點的朱砂
-    const out = [`<defs>${wd.regions.map((r) => `<clipPath id="wc-${esc(r.id)}"><path d="${r.d}"/></clipPath>`).join("")}${patterns}`
-      + '<filter id="mv-wash" x="-15%" y="-15%" width="130%" height="130%"><feTurbulence type="fractalNoise" baseFrequency=".022" numOctaves="3" seed="11" result="n"/>'
-      + '<feDisplacementMap in="SourceGraphic" in2="n" scale="26" result="d"/><feGaussianBlur in="d" stdDeviation="4.5" result="b"/>'
-      + '<feMorphology in="d" operator="erode" radius="3" result="e"/><feGaussianBlur in="e" stdDeviation="2" result="eb"/>'
-      + '<feComposite in="b" in2="eb" operator="out" result="rim"/><feComponentTransfer in="rim" result="rim2"><feFuncA type="linear" slope=".55"/></feComponentTransfer>'
-      + '<feMerge><feMergeNode in="b"/><feMergeNode in="rim2"/></feMerge></filter>'
-      + '<filter id="mv-stroke" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency=".08" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="5"/><feGaussianBlur stdDeviation=".6"/></filter></defs>'];
-    out.push(`<g class="w-ground" opacity="${WORLD_GROUND}" filter="url(#mv-wash)">`);
-    for (const r of wd.regions) {
-      const held = wd.cells.filter((c) => c.region === r.id && ctrl[c.id]);
-      if (held.length) out.push(`<g clip-path="url(#wc-${esc(r.id)})">${held.map((c) => `<path data-cell="${esc(c.id)}" d="${c.d}" fill="${ground(c.id)}" stroke="${ground(c.id)}" stroke-width="2"/>`).join("")}</g>`);
+    const ls = look || groundLook(base, st, week), { units, patch } = landUnits(base);
+    const w = (px) => f2(px * k), dash = (d) => `${w(d[0])} ${w(d[1])}`;
+    const defs = wd.regions.map((r) => `<clipPath id="lr-${esc(r.id)}"><path d="${r.d}"/></clipPath>`), body = [], front = [], frames = [];
+    for (const u of units) {
+      const g = ls[u.id];
+      if (!g) continue;
+      const id = esc(u.id), sd = g.sd, t = g.tug, cool = g.cool;
+      const tag = u.patch ? "circle" : "path", geo = u.patch ? `cx="${u.x}" cy="${u.y}" r="${u.r}"` : `d="${u.d}"`, inner = `clip-path="url(#lc-${id})"`;
+      const ring = u.patch ? geo : `d="${u.d} ${u.rd}"`; // 框描的：塊＋所在區兩段子路徑，裁到塊內與區界裡＝塊 ∩ 區內側一圈（FB-9070）；圓不裁區界、照舊描圓
+      const own = sd ? sideInk(sd).color : LAND_UNHELD;
+      defs.push(`<clipPath id="lc-${id}"><${tag} ${geo}/></clipPath>`);
+      if (t) {
+        defs.push(`<pattern id="ls-${id}" patternUnits="userSpaceOnUse" width="${w(LAND_STRIPE)}" height="${w(LAND_STRIPE)}" patternTransform="rotate(45)">`
+          + `<rect width="${w(LAND_STRIPE / 2)}" height="${w(LAND_STRIPE)}" fill="${sideInk(t).color}"/><rect x="${w(LAND_STRIPE / 2)}" width="${w(LAND_STRIPE / 2)}" height="${w(LAND_STRIPE)}" fill="${own}"/></pattern>`);
+      }
+      const rimInk = sd ? own : t ? LAND_TUG_RIM : null; // 主人色；沒主人而正在翻是紅（照丙）；都不是淡灰細線
+      const rim = rimInk ? `stroke="${rimInk}" stroke-width="${w(LAND_RIM_W * 2)}" stroke-opacity="${LAND_RIM_OP}"`
+        : `stroke="${LAND_UNHELD_RIM}" stroke-width="${w(LAND_RIM_W_UNHELD * 2)}" stroke-opacity="${LAND_RIM_OP_UNHELD}"`;
+      const land = `<${tag} class="ld-fill" data-cell="${id}" ${geo} fill="${t ? `url(#ls-${id})` : own}" fill-opacity="${t ? LAND_FILL_TUG : sd ? LAND_FILL : LAND_FILL_UNHELD}"/>`
+        + `<${tag} class="${cool ? "w-cool" : "ld-rim"}" data-cell="${id}" ${ring} fill="none" ${rim}${cool ? ` stroke-dasharray="${dash(LAND_COOL_DASH)}"` : ""} stroke-linejoin="round" ${inner}/>`
+        + `<${tag} class="ld-seam" ${geo} fill="none" stroke="${LAND_SEAM}" stroke-opacity=".3" stroke-width="${w(LAND_SEAM_W)}"/>`;
+      body.push(u.patch ? land : `<g clip-path="url(#lr-${esc(u.region)})">${land}</g>`);
+      // 框畫在戰線上面、都裁到塊內：可出陣（必敗的淡一半）、戰書（凍結：出陣要知道的事，蓋在可出陣上面）、你
+      const frame = (cls, color, more) => `<${tag} class="${cls}" data-cell="${id}" ${ring} fill="none" stroke="${color}" stroke-width="${w(LAND_FRAME_W * 2)}"${more} stroke-linejoin="round" ${inner}/>`;
+      const box = (g.sortie ? frame("ld-sortie", LAND_SORTIE, ` stroke-dasharray="${dash(LAND_DASH)}"${g.faint ? ` stroke-opacity="${LAND_LOSE_OP}"` : ""}`) : "")
+        + (g.letter ? frame("w-letter", FRONT_RED, ` stroke-dasharray="${dash(LAND_DASH)}"`) : "")
+        + (g.here ? frame("ld-here", LAND_HERE, "") : "");
+      if (box) frames.push(u.patch ? box : `<g clip-path="url(#lr-${esc(u.region)})">${box}</g>`);
     }
-    out.push("</g>");
-    for (const r of wd.regions) {
-      const mine = tugs.filter(([c]) => c.region === r.id);
-      if (mine.length) out.push(`<g clip-path="url(#wc-${esc(r.id)})">${mine.map(([c, t]) => `<path class="w-tug" data-cell="${esc(c.id)}" d="${c.d}" fill="url(#wt-${esc(t.side)})" opacity="${f2((t.pct / 100) * WORLD_TUG_MAX)}"/>`).join("")}</g>`);
+    for (const e of wd.edges || []) {
+      if (patch.has(e.a) || patch.has(e.b) || !ls[e.a] || !ls[e.b]) continue;
+      const a = ls[e.a].sd, b = ls[e.b].sd;
+      if (a && b && a !== b) front.push(`<path class="ld-front" data-a="${esc(e.a)}" data-b="${esc(e.b)}" d="${e.d}"${e.clip ? ` clip-path="url(#lr-${esc(e.clip)})"` : ""}/>`);
     }
-    for (const c of cools) out.push(`<path class="w-cool" data-cell="${esc(c.id)}" d="${c.d}" fill="none" stroke="${sideInk(ctrl[c.id]).color}" stroke-width="${f1(WORLD_COOL_LINE * k)}" stroke-dasharray="${f1(WORLD_COOL_DASH * k)} ${f1(WORLD_COOL_GAP * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})"/>`);
-    const front = [];
-    for (const e of wd.edges) {
-      const a = (e.a && ctrl[e.a]) || null, b = (e.b && ctrl[e.b]) || null;
-      if (a && b && a !== b) front.push(`<path d="${e.d}"${e.clip ? ` clip-path="url(#wc-${esc(e.clip)})"` : ""}/>`);
-    }
-    out.push(`<g class="w-front" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(2.6 * k)}" stroke-linecap="round" stroke-linejoin="round" opacity=".7" filter="url(#mv-stroke)">${front.join("")}</g>`);
-    for (const c of melee) out.push(`<path class="w-melee" data-cell="${esc(c.id)}" d="${c.d}" fill="${FRONT_RED}" fill-opacity=".16" stroke="${FRONT_RED}" stroke-width="${f1(3.2 * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})"/>`);
-    for (const c of letters) out.push(`<path class="w-letter" data-cell="${esc(c.id)}" d="${c.d}" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(WORLD_LETTER_LINE * k)}" stroke-dasharray="${f1(WORLD_LETTER_DASH * k)} ${f1(WORLD_LETTER_GAP * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})"/>`);
-    return out.join("");
+    return `<defs>${defs.join("")}</defs>${body.join("")}<g fill="none" stroke="${LAND_FRONT}" stroke-width="${w(LAND_FRONT_W)}" stroke-linecap="round">${front.join("")}</g>${frames.join("")}`;
   }
-  // 地面要不要畫、照哪一個倍率與週次畫（一樣就不重畫）
-  const ground = { key: "" };
-  // 畫成點陣（#mk 是一張 canvas）：水暈的濾鏡很重，留成向量的話拖縮的每一幀手機都要重算一次（Joy 2026-10-30「效能有點太差」）；
-  // 點陣只在換了疊層、週次、倍率差一大段時重畫一次，拖縮只是移動一張圖
-  const GROUND_SCALE = 2; // 點陣是地圖的幾倍大（遠看那一段倍率在 0.72 以下，2 倍夠清楚）
+  // 地常駐（不看倍率、沒有塗層開關）。#mk 是一張向量的 SVG：Joy 10/30 把它畫成點陣是為了水暈的濾鏡與混色（拖縮每一幀重算、Safari 破圖），
+  // 第二版兩樣都拿掉了；向量近看線才不糊。拖縮只換 #mvw 的 transform：手勢、慣性滑、滾輪、飛過去的途中（mvBusy）一次都不重寫，地跟著
+  // transform 縮放（線寬暫時跟著粗細）；停下來的那一次 drawMarks，地上畫的變了（groundLook：疊層重抓了而地上畫的沒變不算，FB-9071）、換了週次而
+  // 那一週畫的不一樣、倍率差過三分之一級（log2 的 1/3，線寬差不到一成二）才重寫一次（設計 2.2「key 含 log2(z)×3」、第七章「拖縮中只換
+  // transform」；W1 審查 2026-10-30：以前捏、滾輪、飛的途中會整張重寫好幾次）
+  const ground = { key: "", el: null };
+  function groundK(z) {
+    return Math.min(4, Math.max(0.25, 2 ** (-Math.round(Math.log2(z) * 3) / 3)));
+  }
   function groundShow(c) {
-    const cv = document.getElementById("mk");
-    if (!cv || !S.mapBase || !S.mapState) return;
-    const on = S.mapMode === "timeline" || mvLevel(c.z) === 0 || washOn();
-    if (cv.style) cv.style.opacity = on ? "1" : "0";
-    if (!on || !cv.getContext || typeof Image === "undefined" || !window.URL || !URL.createObjectURL) return;
-    const k = Math.min(2, Math.max(0.5, 2 ** Math.round(Math.log2(1 / c.z))));
-    const week = mapWeek(), key = `${S.mapBase.key}|${S.mapStateAt}|${week}|${k}`;
-    if (ground.key === key) return;
-    ground.key = key;
-    const b = S.mapBase, W = Math.round(b.w * GROUND_SCALE), H = Math.round(b.h * GROUND_SCALE);
-    const url = URL.createObjectURL(new Blob([`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${b.w} ${b.h}">${groundSvg(b, S.mapState, k, week)}</svg>`], { type: "image/svg+xml" }));
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      if (ground.key !== key) return; // 等的時候又換了
-      if (cv.width !== W) { cv.width = W; cv.height = H; }
-      const g = cv.getContext("2d");
-      g.clearRect(0, 0, W, H);
-      g.drawImage(img, 0, 0, W, H);
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); ground.key = ""; };
-    img.src = url;
+    const svg = document.getElementById("mk");
+    if (!svg || !S.mapBase || !S.mapState || !c || mvBusy()) return;
+    const k = groundK(c.z), week = mapWeek(), look = groundLook(S.mapBase, S.mapState, week);
+    const key = `${S.mapBase.key}|${f2(k)}|${JSON.stringify(look)}`;
+    if (ground.el === svg && ground.key === key) return;
+    Object.assign(ground, { el: svg, key });
+    svg.innerHTML = groundSvg(S.mapBase, S.mapState, k, week, look);
   }
 
   // ── 字與小圖（#mkt：照螢幕大小寫，位置照此刻的倍率算）──
@@ -1006,7 +1046,18 @@
     }
     return `<button type="button" class="mv-pin ink${dim}" style="${at}" data-act="map-place" data-id="${id}" aria-label="${name}"><svg width="30" height="30" viewBox="-15 -17 30 30" aria-hidden="true"><circle r="9" cy="-2" fill="${MAP_HALO}" opacity=".7"/>${inkIcon(b.glyph, MV_INK, "none")}</svg></button>`;
   }
-  const mvSeal = (c) => (c ? `<span class="mv-side" style="background:${sideInk(c).color}">${esc(sideInk(c).short)}</span>` : "");
+  // 小圖角上的徽（輿圖表現第二版 2.1「地點」「徽」；近、中景）：右下一顆危險度 1～3（像 SLG 的地等級；只在近景、你腳下那一處不掛：設計 2.2
+  // 「中：沒有危險度徽」、第七章「危險度徽只在近」）、右上 ⚔（正在翻、激戰）、左上「寶」、頂上本週的紅旗。名字前不再蓋官／巾小印（誰的看地的
+  // 顏色）、名字後不再接「寶」「戰」「本週」字條（都變成徽；戰書看地上的朱紅虛框）。o：near 近景、here 你腳下、week 本週要去、fight 正在翻或
+  // 激戰、dim 篩選淡掉
+  const MV_FLAG = '<path d="M3 24V2" stroke="#1B1F17" stroke-width="1.8"/><path d="M4 2l11 4.5-11 4.5z" fill="#C0392B" stroke="#7A1F18" stroke-width=".8"/>';
+  function badgesHtml(q, x, y, o) {
+    const at = (dx, dy) => `left:${f1(x + dx)}px;top:${f1(y + dy)}px`, dim = o.dim || "";
+    return (o.week ? `<svg class="mv-flag${dim}" width="16" height="24" viewBox="0 0 16 24" style="${at(0, -12)}" aria-hidden="true">${MV_FLAG}</svg>` : "")
+      + (o.near && !o.here ? `<i class="mv-dg${dim}" style="${at(10, 9)}">${Number(q.danger) || 1}</i>` : "")
+      + (o.fight ? `<i class="mv-bd mv-bd-x${dim}" style="${at(11, -10)}">${MV_LOOK.fight}</i>` : "")
+      + (q.rich ? `<i class="mv-bd mv-bd-rich${dim}" style="${at(-11, -10)}">${MV_LOOK.rich}</i>` : "");
+  }
   // 照此刻的倍率排好一整層（純函式：c 是 { z, x, y }，g 是地圖框）。只排畫面附近（一個畫面寬的邊）的；名字撞在一起時優先序：
   // 選的、滑到的、你在的、本週要去的、篩到的、要地、近的。名字的位置試四個（下、右、左、上），都壓到就不寫（選的、你在的照寫）
   function marksHtml(base, st, c, g) {
@@ -1047,32 +1098,38 @@
       const on = isSel || isHere || mvMatch(st, b), dim = on ? "" : " dim", ctl = ctrl[b.id] || null;
       if (lvl === 0) {
         out.push(`<button type="button" class="mv-dot${dim}${q.rich ? " rich" : ""}" style="left:${f1(x)}px;top:${f1(y)}px;--c:${ctl ? sideInk(ctl).color : MV_UNHELD}" data-act="map-place" data-id="${esc(b.id)}" aria-label="${esc(b.name)}"></button>`);
-      } else out.push(pinHtml(b, x, y, dim, z));
+      } else {
+        out.push(pinHtml(b, x, y, dim, z));
+        out.push(badgesHtml(q, x, y, { near: lvl === 2, here: isHere, week: isWk, fight: live && (!!tugOf(st, b.id, ctl) || !!q.melee || q.siege === "fight"), dim }));
+      }
       if (isSel) out.push(`<i class="mv-ring" style="left:${f1(x)}px;top:${f1(y)}px;--r:${lvl ? 22 : 12}px"></i>`);
       if (live && (q.melee || q.siege === "fight")) out.push(`<i class="mv-fight" style="left:${f1(x)}px;top:${f1(y)}px"></i>`);
       if (!on || (lvl === 0 && !isSel && !isHere && !isWk && !filt)) continue;
-      const sub = isHere ? MV_WORDS.here : (lvl === 2 || isSel || isWk) ? nearSub(base, st, b.id, wk) : "";
-      const odds = !isHere && (lvl === 2 || isSel) && q.odds ? `・<b style="color:${TONE_COLOR[q.odds.tone] || MAP_INK}">${esc(q.odds.word)}</b>` : "";
-      const inks = lvl > 1 ? (b.insights || []).map((id) => insightInk(base, id)).filter(Boolean).slice(0, 3) : [];
-      const ins = inks.length ? `<span class="ins">${inks.map((k) => `<i style="color:${k.c}">${esc(k.name)}</i>`).join("")}</span>` : "";
-      const t = lvl > 0 && live ? tugOf(st, b.id, ctl) : null;
-      const bar = t ? `<span class="mv-bar"><i style="width:${t.pct}%;background:${sideInk(t.side).color}"></i></span>` : "";
-      const seals = (lvl > 0 && q.rich ? `<span class="mv-rich">${RICH_WORD}</span>` : "")
-        + (live && q.siege === "letter" ? `<span class="mv-rich">${LETTER_SEAL_WORD}</span>` : "")
-        + (isWk ? `<span class="mv-wk">${MV_WORDS.week}</span>` : "");
-      const fs = b.big ? 16 : 14, side = lvl > 0 && ctl ? 21 : 0;
-      const w = side + textW(b.name, fs) + inks.length * 13 + (sub ? 0 : 0) + (lvl > 0 && q.rich ? 21 : 0) + (q.siege === "letter" ? 21 : 0) + (isWk ? 34 : 0) + 8;
-      const wsub = sub ? side + textW(sub, 11) + (odds ? 40 : 0) + 8 : 0;
-      const W = Math.max(w, wsub), H = fs * 1.2 + 4 + (sub ? 15 : 0) + (bar ? 5 : 0);
-      const tries = lvl === 0 ? [[-W / 2, 9], [12, -H / 2], [-12 - W, -H / 2], [-W / 2, -9 - H]] : [[-W / 2, 15], [20, -10], [-20 - W, -10], [-W / 2, -30 - H]];
-      for (const [i, [dx, dy]] of tries.entries()) {
-        const bx = [x + dx, y + dy, x + dx + W, y + dy + H];
-        if (hit(bx) && !((isSel || isHere) && i === tries.length - 1)) continue;
-        boxes.push(bx);
-        out.push(`<button type="button" class="mv-lab${b.big ? " big" : ""}${isHere ? " here" : ""}${isSel ? " sel" : ""}" style="left:${f1(bx[0])}px;top:${f1(bx[1])}px" data-act="map-place" data-id="${esc(b.id)}">`
-          + `${lvl > 0 ? mvSeal(ctl) : ""}<span class="t"><span class="nm">${esc(b.name)}${ins}${seals}</span>${sub ? `<small>${esc(sub)}${odds}</small>` : ""}${bar}</span></button>`);
-        break;
+      // 名字擺在四個位置裡第一個不壓到的（都壓到就不寫；選的、你在的擺最後一個）
+      const put = (W, H, tries, inner) => {
+        for (const [i, [dx, dy]] of tries.entries()) {
+          const bx = [x + dx, y + dy, x + dx + W, y + dy + H];
+          if (hit(bx) && !((isSel || isHere) && i === tries.length - 1)) continue;
+          boxes.push(bx);
+          out.push(`<button type="button" class="mv-lab${b.big ? " big" : ""}${isHere ? " here" : ""}${isSel ? " sel" : ""}" style="left:${f1(bx[0])}px;top:${f1(bx[1])}px" data-act="map-place" data-id="${esc(b.id)}">${inner}</button>`);
+          return;
+        }
+      };
+      const fs = b.big ? 16 : 14;
+      if (lvl > 0) { // 近、中景只寫名字（設計 2.1「名字」）：分鐘・多半・勝算那一行、進度條、悟字都在抽屜的卡與一排卡裡
+        const W = textW(b.name, fs) + 8, H = fs * 1.2 + 4;
+        put(W, H, [[-W / 2, 15], [20, -10], [-20 - W, -10], [-W / 2, -30 - H]], `<span class="t"><span class="nm">${esc(b.name)}</span></span>`);
+        continue;
       }
+      // 遠看（照 Joy 的，沒有動）：你在的、選的、本週要去的（篩選開著時篩到的）寫名字，底下一行；戰書、本週是名字後的字條
+      const sub = isHere ? MV_WORDS.here : isSel || isWk ? nearSub(base, st, b.id, wk) : "";
+      const odds = !isHere && isSel && q.odds ? `・<b style="color:${TONE_COLOR[q.odds.tone] || MAP_INK}">${esc(q.odds.word)}</b>` : "";
+      const seals = (live && q.siege === "letter" ? `<span class="mv-rich">${LETTER_SEAL_WORD}</span>` : "") + (isWk ? `<span class="mv-wk">${MV_WORDS.week}</span>` : "");
+      const w = textW(b.name, fs) + (q.siege === "letter" ? 21 : 0) + (isWk ? 34 : 0) + 8;
+      const wsub = sub ? textW(sub, 11) + (odds ? 40 : 0) + 8 : 0;
+      const W = Math.max(w, wsub), H = fs * 1.2 + 4 + (sub ? 15 : 0);
+      put(W, H, [[-W / 2, 9], [12, -H / 2], [-12 - W, -H / 2], [-W / 2, -9 - H]],
+        `<span class="t"><span class="nm">${esc(b.name)}${seals}</span>${sub ? `<small>${esc(sub)}${odds}</small>` : ""}</span>`);
     }
     // 版圖變化：那一週易手的地點閃一圈
     const row = (st.weeks || []).find((x) => x.week === week);
@@ -1115,7 +1172,10 @@
   }
 
   // ── 看哪裡：S.mapCam = { z 倍率, x, y }，地圖上 (mx, my) 在地圖框裡的 (x + mx·z, y + my·z) ──
-  const mv = { pts: new Map(), start: null, moved: false, frame: 0, g: null, anim: 0, vel: [0, 0], last: null, lastTap: 0, eatUntil: 0, wheelTimer: 0, laid: null };
+  const mv = { pts: new Map(), start: null, moved: false, frame: 0, g: null, anim: 0, vel: [0, 0], last: null, lastTap: 0, tapTimer: 0, pickAt: 0, eatUntil: 0, wheelTimer: 0, laid: null };
+  // 鏡頭還在動：手指按著又動過（拖、捏）、慣性滑或飛過去（mv.anim）、滾輪還沒停（mv.g 留著、沒有手指）。放手、滑停、飛完、滾輪停都會把它們
+  // 清掉再叫一次 drawMarks（地在那一次才換級距，groundShow）
+  const mvBusy = () => (mv.moved && mv.pts.size > 0) || !!mv.anim || (!!mv.g && !mv.pts.size);
   // 地圖框與它的內緣在畫面上的位置；框還沒有大小回 null
   function mapGeom(wrap) {
     if (!wrap || !wrap.clientWidth || !wrap.clientHeight) return null;
@@ -1271,6 +1331,16 @@
   function mapBlank() {
     if (S.mapMode === "place" || (S.mapMode === "overview" && S.mapPreview)) mapBack();
     else if (S.mapMode === "timeline" && S.mapSel) { S.mapSel = null; redrawDrawer(); drawMarks(); }
+  }
+  // 地圖上點了一處（輿圖表現第二版 2.3：小圖、名字、遠看的小點、那一塊地都是這一條；附近那一排的卡也走這裡）：開那一處的卡；再點同一處收回
+  // （地鋪滿了，空地幾乎沒有了）。小圖、名字的雙擊照 Joy 的只開卡（那裡不放大）：第二下落在 MV_TAP2 之內，不算再點一次（W1 審查 2026-10-30）
+  function mapLand(id) {
+    if (S.mapMode === "place" && S.mapSel === id) {
+      if (Date.now() - mv.pickAt >= MV_TAP2) mapBack();
+      return;
+    }
+    mapPick(id);
+    mv.pickAt = Date.now();
   }
 
   // ── 底圖：照底圖的 paint（content/map.json）畫成淡彩水墨——紙紋、赭黃暈染、毛筆畫的河（一道淡青的暈＋一筆濃淡的墨線）、州界墨點線、
@@ -1456,7 +1526,8 @@
   }
 
   // ── 手勢：一指拖（放手會順著滑）、兩指捏、滾輪（觸控板捏合同）、雙擊放大；按下之後不到 MV_SLOP 放開是點一下（點地點照舊由 click 開卡，
-  // 點空白收回），拖過、捏過放開的那一下 click 吃掉。拖的指標動了才抓住（按下就抓的話，Chrome 會把 click 送到抓住的地圖框）──
+  // 點到地等 MV_TAP2 確定不是雙擊才開那一處的卡，點空白收回），拖過、捏過放開的那一下 click 吃掉。拖的指標動了才抓住（按下就抓的話，
+  // Chrome 會把 click 送到抓住的地圖框）──
   function mvBase() {
     const a = [...mv.pts.values()];
     mv.start = {
@@ -1483,8 +1554,13 @@
     }
   }
   const mvSoon = () => { if (!mv.frame) mv.frame = requestAnimationFrame(mvFrame); };
+  // 點了地、還在等 MV_TAP2 看有沒有第二下的那一下（mvUp）：又按下去了（雙擊的第二下、拖、捏）就作罷
+  function mvTapDrop() {
+    if (mv.tapTimer) { clearTimeout(mv.tapTimer); mv.tapTimer = 0; }
+  }
   function mvDown(ev) {
     if ((ev.pointerType === "mouse" && ev.button !== 0) || !S.mapBase || !S.mapCam) return;
+    mvTapDrop();
     if (mv.pts.has(ev.pointerId)) mv.pts.clear(); // 同一個指標又按下：上一次沒收到放開（在視窗外放開），重新來過
     if (mv.pts.size >= 2) return;
     mv.eatUntil = 0;
@@ -1538,10 +1614,14 @@
     }
     mv.g = null;
     if (ev.type !== "pointerup" || (ev.target && ev.target.closest && ev.target.closest("[data-act]"))) return; // 點到地點：click 開卡
-    const now = Date.now(), g = mapGeom(document.getElementById("map"));
+    const now = Date.now(), g = mapGeom(document.getElementById("map")), c = S.mapCam;
     if (g && now - mv.lastTap < MV_TAP2) { mv.lastTap = 0; zoomAt(S.mapCam.z * 2, ev.clientX - g.x0, ev.clientY - g.y0, true); return; }
     mv.lastTap = now;
-    mapBlank();
+    // 點到地（輿圖表現第二版 2.3：整塊地都是那一處的熱區）：照畫出來的那一塊算是哪一處（landAt），地圖上的字與小圖照舊由 click 開卡。
+    // 等 MV_TAP2 過了、確定沒有第二下才開卡：雙擊照 Joy 的只放大（上面那一行），不開卡、不畫路線、不先為了露出小圖挪鏡頭（W1 審查 2026-10-30）
+    const land = g && c && S.mapBase && S.mapState ? landAt(S.mapBase, S.mapState, (ev.clientX - g.x0 - c.x) / c.z, (ev.clientY - g.y0 - c.y) / c.z) : null;
+    if (land) mv.tapTimer = setTimeout(() => { mv.tapTimer = 0; mapLand(land); }, MV_TAP2);
+    else mapBlank();
   }
   function mvWheel(ev) {
     if (ev.preventDefault) ev.preventDefault();
