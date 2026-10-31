@@ -1,0 +1,99 @@
+{
+ "R": {
+  "open": {
+   "before": {
+    "mode": "overview",
+    "sel": null,
+    "pills": 1,
+    "z": 1.5,
+    "under": [
+     "nm",
+     "mv-base on"
+    ]
+   },
+   "frames": 163,
+   "shownDuring": 0,
+   "relaidDuring": 2,
+   "afterFramesShown": 119,
+   "end": {
+    "z": 2.4000000000000004,
+    "mode": "overview",
+    "pills": 2,
+    "vis": ""
+   }
+  },
+  "closeY": 306,
+  "close": {
+   "before": {
+    "mode": "overview",
+    "sel": null,
+    "pills": 2,
+    "z": 2.4000000000000004,
+    "under": [
+     "mv-base on",
+     "mv-pill"
+    ]
+   },
+   "frames": 165,
+   "shownDuring": 0,
+   "relaidDuring": 5,
+   "afterFramesShown": 0,
+   "end": {
+    "z": 0.9000000000000001,
+    "mode": "overview",
+    "pills": 0,
+    "vis": ""
+   }
+  },
+  "far": {
+   "before": {
+    "mode": "overview",
+    "sel": null,
+    "pills": 1,
+    "z": 1.5,
+    "under": [
+     "mv-base on",
+     "mv-base on"
+    ]
+   },
+   "frames": 166,
+   "shownDuring": 0,
+   "relaidDuring": 7,
+   "afterFramesShown": 0,
+   "end": {
+    "z": 0.3932835820895522,
+    "mode": "overview",
+    "pills": 0,
+    "vis": ""
+   }
+  },
+  "picked": {
+   "before": {
+    "mode": "place",
+    "sel": "yingshui",
+    "pills": 0,
+    "z": 1.5,
+    "under": [
+     "nm",
+     "mv-base on"
+    ]
+   },
+   "frames": 160,
+   "shownDuring": 0,
+   "relaidDuring": 2,
+   "afterFramesShown": 0,
+   "end": {
+    "z": 2.4000000000000004,
+    "mode": "place",
+    "pills": 0,
+    "vis": ""
+   }
+  }
+ },
+ "log": {
+  "console": [],
+  "exceptions": [],
+  "net": [],
+  "logEntries": []
+ }
+}

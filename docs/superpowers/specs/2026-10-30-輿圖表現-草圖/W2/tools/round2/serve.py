@@ -1,0 +1,12 @@
+"""W2 第二輪實機：從 w2b/srv（git archive 的複本）開伺服器（埠 8183、w2b.localhost），模型網址指到沒人聽的埠（絕不打 11434）。
+TIANXIA_DB、TIANXIA_PROFILE、TIANXIA_ADMINS 由外面設。改 web/ 不必重開（每次請求讀檔）：swap_web.py 換。"""
+import os
+import sys
+
+ROOT = r"C:\Users\ray61\AppData\Local\Temp\claude\C--Ray--------\86ac9c59-a3d9-4fe5-9ee7-8a5bdac64444\scratchpad\w2b\srv"
+sys.path.insert(0, ROOT)
+os.chdir(ROOT)
+import server  # noqa: E402
+
+server.CONTENT.config.ollama_url = "http://127.0.0.1:9"
+server.main(["--port", "8183"])

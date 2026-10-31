@@ -1,0 +1,82 @@
+--- a/web/map.js
++++ b/web/map.js
+@@ -129,7 +129,7 @@
+       + `<span class="t">${esc(reg ? reg.name : MV_LOOK.world)}</span><i aria-hidden="true">▾</i></button>`
+       + `<button type="button" class="mv-q map-search" id="mv-q" data-act="map-search" aria-label="${MV_LOOK.search}"><span aria-hidden="true">🔍</span></button>`
+       + `<div class="mv-minibox" id="mv-mini"></div><div class="mv-pills" id="mv-pills"></div></div>`;
+-    const fab = `<div class="mv-fab" id="mv-fab"><button type="button" class="mv-me" data-act="map-home" aria-label="${MV_WORDS.me}">◎</button><button type="button" data-act="map-fit" aria-label="${MV_WORDS.fit}">全</button></div>`;
++    const fab = `<div class="mv-fab" id="mv-fab"><button type="button" class="mv-me" data-act="map-home" aria-label="${MV_WORDS.me}">◎</button></div>`; // 【選項乙】◎ 與 全 併成一顆
+     const find = S.mapMode === "search" ? `<div class="mv-find" id="mv-find">${searchHtml(S.mapBase, S.mapState, S.mapQuery)}</div>` : "";
+     return `
+       ${top}${banner}${fab}
+@@ -1222,9 +1222,10 @@
+     const parts = {
+       area: { look: [10, 10, cw, 44], room: [8, 4, cw, 50] },
+       q: { look: [g.vw - 58, 8, g.vw - 12, 54], room: [g.vw - 60, 6, g.vw - 10, 56] },
+-      fab: { look: [g.vw - 58, fb - 102, g.vw - 12, fb], room: [g.vw - 60, fb - 104, g.vw - 10, fb + 2] },
++      fab: { look: [g.vw - 58, fb - 46, g.vw - 12, fb], room: [g.vw - 60, fb - 48, g.vw - 10, fb + 2] }, // 【選項乙】一顆
+     };
+-    if (lvl > 0) {
++    if (lvl > 0 && !S.mapMiniOpen) parts.mini = { look: [g.vw - 55, MV_MINI_TOP, g.vw - 15, MV_MINI_TOP + 40], room: [g.vw - 57, MV_MINI_TOP - 2, g.vw - 13, MV_MINI_TOP + 42] };
++    else if (lvl > 0) {
+       const [mw, mh] = miniSize(base, g);
+       parts.mini = { look: [g.vw - 14 - mw, MV_MINI_TOP, g.vw - 12, MV_MINI_TOP + mh + 2], room: [g.vw - 14 - mw, MV_MINI_TOP - 2, g.vw - 10, MV_MINI_TOP + mh + 2] };
+     }
+@@ -1567,10 +1568,11 @@
+     const t = area && area.querySelector && area.querySelector(".t");
+     if (t && t.textContent !== lay.area) t.textContent = lay.area;
+     if (mini) {
+-      const show = lay.lvl > 0 && S.mapMode !== "timeline", me = youXY(base, st);
+-      const key = show ? `${base.key}|${miniSize(base, g).join("x")}|${me ? me.join(",") : ""}|${JSON.stringify(controlAt(st, mapWeek()))}` : "";
++      // 【FB-9094 選項乙，原型】小地圖平常收成 🔍 底下一顆 40px 的鈕，點了才展開（展開時點一處＝中心移過去、再收起來）
++      const show = lay.lvl > 0 && S.mapMode !== "timeline", me = youXY(base, st), open = !!S.mapMiniOpen;
++      const key = show ? `${open ? "o" : "c"}|${base.key}|${miniSize(base, g).join("x")}|${me ? me.join(",") : ""}|${JSON.stringify(controlAt(st, mapWeek()))}` : "";
+       if (!mini.dataset || mini.dataset.key !== key) {
+-        mini.innerHTML = show ? miniHtml(base, st, c, g) : "";
++        mini.innerHTML = show ? (open ? miniHtml(base, st, c, g) : `<button type="button" class="mv-mini-c" data-act="map-mini" aria-label="${MV_LOOK.mini}">圖</button>`) : "";
+         if (mini.dataset) mini.dataset.key = key;
+       } else miniFrame(c, g);
+     }
+@@ -1581,9 +1583,13 @@
+       if (pills.style) pills.style.visibility = mvBusy() ? "hidden" : "";
+     }
+     hudShow(g, lay.lvl, lay.area);
++    const home = document.querySelector && document.querySelector("#mv-fab .mv-me");
++    if (home && S.mapState) { const t = atOpen(g) ? "全" : "◎"; if (home.textContent !== t) home.textContent = t; }
+   }
+   // 點小地圖（設計 2.3）：中心移到點的那一帶、倍率不變
+   function mapMini(el, ev) {
++    if (!S.mapMiniOpen) { S.mapMiniOpen = true; drawMarks(); return; } // 【選項乙】收著的那一顆：先展開
++    S.mapMiniOpen = false;
+     const g = mapGeom(document.getElementById("map")), c = S.mapCam, wd = S.mapBase && S.mapBase.world;
+     if (!g || !c || !wd || !el || !el.getBoundingClientRect) return;
+     const r = el.getBoundingClientRect(), [fx, fy, fw, fh] = wd.frame;
+@@ -1701,9 +1707,15 @@
+     else camSet(t, g);
+   }
+   // 右下兩顆：◎ 回到打開的取景（輿圖表現第二版 2.2：camOpen，不再是「以你為中心、至少 1.2 倍」）、全 看整張天下
++  // 【FB-9094 選項乙，原型】◎ 與 全 併成一顆：不在打開的取景時是 ◎（回到打開），已經在打開的取景時寫「全」（看整張天下）
+   function mapHome() {
+     const g = mapGeom(document.getElementById("map"));
+-    if (g && S.mapBase && S.mapState) camFly(camOpen(g));
++    if (!g || !S.mapBase || !S.mapState) return;
++    camFly(atOpen(g) ? camFit(g) : camOpen(g));
++  }
++  function atOpen(g) {
++    const o = camOpen(g), c = S.mapCam;
++    return !!c && Math.abs(c.z - o.z) < 1e-3 && Math.abs(c.x - o.x) < 1 && Math.abs(c.y - o.y) < 1;
+   }
+   function mapFit() {
+     const g = mapGeom(document.getElementById("map"));
+--- a/web/style.css
++++ b/web/style.css
+@@ -1248,6 +1248,9 @@
+ .mv-mini { display: block; padding: 0; border-radius: 6px; overflow: hidden; border: 1px solid rgb(42 35 28 / 0.55); background: #efe6d2; cursor: pointer;
+   box-shadow: 0 2px 6px rgb(0 0 0 / 0.3); box-sizing: content-box; }
+ .mv-mini svg { display: block; }
++/* 【FB-9094 選項乙，原型】小地圖收成一顆：🔍 底下 40px 的圓鈕（置中在 🔍 底下），點了才展開成整張小地圖 */
++.mv-mini-c { display: grid; place-items: center; width: 40px; height: 40px; margin-right: 3px; padding: 0; border-radius: 50%; border: 1px solid rgb(42 35 28 / 0.55);
++  background: rgb(244 236 220 / 0.94); color: var(--mv-ink); font: 700 15px var(--kai); box-shadow: 0 1px 4px rgb(0 0 0 / 0.18); cursor: pointer; pointer-events: auto; }
+ .mv-pills { position: absolute; inset: 0; pointer-events: none; }
+ .mv-pill { position: absolute; height: 24px; padding: 0 6px; border-radius: 12px; border: 1px solid rgb(255 255 255 / 0.25); background: rgb(42 35 28 / 0.86);
+   color: #f4f1e8; font: 700 12px/22px var(--sans); white-space: nowrap; box-sizing: border-box; text-align: center; cursor: pointer; }

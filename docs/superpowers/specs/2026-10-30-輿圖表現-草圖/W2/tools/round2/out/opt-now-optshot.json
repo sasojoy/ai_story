@@ -1,0 +1,91 @@
+{
+ "R": [
+  {
+   "loc": "yingshui",
+   "w": 375,
+   "home": "◎",
+   "here": "yingshui",
+   "out": [
+    {
+     "id": "runan_wilds",
+     "hop": 2,
+     "by": "map-home",
+     "f": 0.86,
+     "pill": false
+    },
+    {
+     "id": "guan_camp",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -570,
+    -1169.8
+   ],
+   "labs": 9,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 9,
+   "near2": 11
+  },
+  {
+   "loc": "haozu_fort",
+   "w": 375,
+   "home": "◎",
+   "here": "haozu_fort",
+   "out": [
+    {
+     "id": "xiaquyang",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.89,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -361.9,
+    -477.6
+   ],
+   "labs": 2,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [
+    "mengjin_ford"
+   ],
+   "near2In": 2,
+   "near2": 7
+  },
+  {
+   "loc": "yingchuan",
+   "w": 320,
+   "home": "◎",
+   "here": "yingchuan",
+   "out": [],
+   "z": 1.28,
+   "cam": [
+    -383.3,
+    -1011.7
+   ],
+   "labs": 6,
+   "tiny": 2,
+   "leads": 2,
+   "pills": [
+    "luoyang_road"
+   ],
+   "near2In": 6,
+   "near2": 11
+  }
+ ],
+ "log": {
+  "console": [],
+  "exceptions": [],
+  "net": [],
+  "logEntries": []
+ }
+}

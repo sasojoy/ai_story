@@ -1,0 +1,68 @@
+{
+ "R": [
+  {
+   "loc": "yingshui",
+   "w": 375,
+   "home": "全",
+   "here": "yingshui",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -570,
+    -1169.8
+   ],
+   "labs": 9,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 9,
+   "near2": 11
+  },
+  {
+   "loc": "haozu_fort",
+   "w": 375,
+   "home": "全",
+   "here": "haozu_fort",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -361.9,
+    -477.6
+   ],
+   "labs": 2,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [
+    "mengjin_ford"
+   ],
+   "near2In": 2,
+   "near2": 7
+  },
+  {
+   "loc": "yingchuan",
+   "w": 320,
+   "home": "全",
+   "here": "yingchuan",
+   "out": [],
+   "z": 1.28,
+   "cam": [
+    -383.3,
+    -1011.7
+   ],
+   "labs": 6,
+   "tiny": 2,
+   "leads": 2,
+   "pills": [
+    "luoyang_road"
+   ],
+   "near2In": 6,
+   "near2": 11
+  }
+ ],
+ "log": {
+  "console": [],
+  "exceptions": [],
+  "net": [],
+  "logEntries": []
+ }
+}

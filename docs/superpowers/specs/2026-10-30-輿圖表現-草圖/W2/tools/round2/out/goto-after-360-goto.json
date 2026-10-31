@@ -1,0 +1,453 @@
+{
+ "章回卡": {
+  "button": {
+   "goto": "changshe",
+   "then": null,
+   "i": null,
+   "text": "去輿圖 ›",
+   "act": "tab",
+   "x": 292.75,
+   "y": 215.625,
+   "top": true
+  },
+  "nb": null,
+  "target": "changshe",
+  "tab": "map",
+  "mode": "place",
+  "sel": "changshe",
+  "then": null,
+  "card": "長社",
+  "cardOk": true,
+  "route": 2,
+  "dash": false,
+  "legs": [],
+  "rings": 1,
+  "z": 1.3731,
+  "Z0": 1.44,
+  "lvl": 2,
+  "meOn": true,
+  "selOn": true,
+  "endOn": null,
+  "meScr": [
+   88,
+   218
+  ],
+  "selScr": [
+   272,
+   326
+  ],
+  "endScr": null,
+  "roomTop": 56,
+  "bottom": 488,
+  "drawer": "peek",
+  "drawerPx": 147,
+  "bad": [],
+  "missing": [],
+  "labTexts": [
+   "changshe:長社6 分"
+  ],
+  "hscroll": false,
+  "hudCover": [],
+  "ok": true
+ },
+ "眼下要事-章回": {
+  "button": {
+   "goto": "changshe",
+   "then": null,
+   "i": null,
+   "text": "去輿圖 ›",
+   "act": "tab",
+   "x": 292.75,
+   "y": 390.21875,
+   "top": true
+  },
+  "nb": null,
+  "target": "changshe",
+  "tab": "map",
+  "mode": "place",
+  "sel": "changshe",
+  "then": null,
+  "card": "長社",
+  "cardOk": true,
+  "route": 2,
+  "dash": false,
+  "legs": [],
+  "rings": 1,
+  "z": 1.3731,
+  "Z0": 1.44,
+  "lvl": 2,
+  "meOn": true,
+  "selOn": true,
+  "endOn": null,
+  "meScr": [
+   88,
+   218
+  ],
+  "selScr": [
+   272,
+   326
+  ],
+  "endScr": null,
+  "roomTop": 56,
+  "bottom": 488,
+  "drawer": "peek",
+  "drawerPx": 147,
+  "bad": [],
+  "missing": [],
+  "labTexts": [
+   "changshe:長社6 分"
+  ],
+  "hscroll": false,
+  "hudCover": [],
+  "ok": true
+ },
+ "眼下要事-護糧": {
+  "button": {
+   "goto": "changshe",
+   "then": "runan",
+   "i": null,
+   "text": "去輿圖 ›",
+   "act": "tab",
+   "x": 292.75,
+   "y": 389.609375,
+   "top": true
+  },
+  "nb": null,
+  "target": "changshe",
+  "tab": "map",
+  "mode": "place",
+  "sel": "changshe",
+  "then": {
+   "from": "changshe",
+   "to": "runan"
+  },
+  "card": "長社",
+  "cardOk": true,
+  "route": 3,
+  "dash": true,
+  "legs": [
+   "changshe:下一站",
+   "runan:終點"
+  ],
+  "rings": 2,
+  "z": 0.984,
+  "Z0": 1.44,
+  "lvl": 1,
+  "meOn": true,
+  "selOn": true,
+  "endOn": true,
+  "meScr": [
+   88,
+   160
+  ],
+  "selScr": [
+   220,
+   238
+  ],
+  "endScr": [
+   272,
+   384
+  ],
+  "roomTop": 56,
+  "bottom": 488,
+  "drawer": "peek",
+  "drawerPx": 147,
+  "bad": [],
+  "missing": [],
+  "labTexts": [
+   "changshe:長社下一站",
+   "runan:汝南終點"
+  ],
+  "hscroll": false,
+  "hudCover": [],
+  "ok": true
+ },
+ "人物打算": {
+  "button": {
+   "goto": "runan_wilds",
+   "then": null,
+   "i": null,
+   "text": "去汝南荒野 ›",
+   "act": "tab",
+   "x": 181,
+   "y": 390.328125,
+   "top": true
+  },
+  "nb": null,
+  "target": "runan_wilds",
+  "tab": "map",
+  "mode": "place",
+  "sel": "runan_wilds",
+  "then": null,
+  "card": "汝南荒野",
+  "cardOk": true,
+  "route": 2,
+  "dash": false,
+  "legs": [],
+  "rings": 1,
+  "z": 1.3431,
+  "Z0": 1.44,
+  "lvl": 2,
+  "meOn": true,
+  "selOn": true,
+  "endOn": null,
+  "meScr": [
+   88,
+   156
+  ],
+  "selScr": [
+   272,
+   388
+  ],
+  "endScr": null,
+  "roomTop": 56,
+  "bottom": 488,
+  "drawer": "peek",
+  "drawerPx": 147,
+  "bad": [],
+  "missing": [],
+  "labTexts": [
+   "runan_wilds:汝南荒野"
+  ],
+  "hscroll": false,
+  "hudCover": [],
+  "ok": true
+ },
+ "新手目標-眼下要事": {
+  "button": {
+   "goto": null,
+   "then": null,
+   "i": "0",
+   "text": "去做 ›",
+   "act": "newbie-go",
+   "x": 299.75,
+   "y": 389.734375,
+   "top": true
+  },
+  "nb": [
+   {
+    "key": "level5",
+    "go": {
+     "move": "yingshui",
+     "place": "潁水河畔"
+    },
+    "adjacent": false
+   },
+   {
+    "key": "merge",
+    "go": {
+     "tab": "craft"
+    },
+    "adjacent": false
+   },
+   {
+    "key": "field2",
+    "go": {
+     "tab": "jianghu"
+    },
+    "adjacent": false
+   }
+  ],
+  "target": "yingshui",
+  "tab": "map",
+  "mode": "place",
+  "sel": "yingshui",
+  "then": null,
+  "card": "潁水河畔",
+  "cardOk": true,
+  "route": 2,
+  "dash": false,
+  "legs": [],
+  "rings": 1,
+  "z": 0.6943,
+  "Z0": 1.44,
+  "lvl": 1,
+  "meOn": true,
+  "selOn": true,
+  "endOn": null,
+  "meScr": [
+   88,
+   223
+  ],
+  "selScr": [
+   272,
+   321
+  ],
+  "endScr": null,
+  "roomTop": 56,
+  "bottom": 488,
+  "drawer": "peek",
+  "drawerPx": 147,
+  "bad": [],
+  "missing": [],
+  "labTexts": [
+   "yingshui:潁水河畔"
+  ],
+  "hscroll": false,
+  "hudCover": [],
+  "ok": true
+ },
+ "新手目標-為什麼": {
+  "button": {
+   "goto": null,
+   "then": null,
+   "i": "0",
+   "text": "去做",
+   "act": "newbie-go",
+   "x": 302,
+   "y": 372.984375,
+   "top": true
+  },
+  "nb": [
+   {
+    "key": "level5",
+    "go": {
+     "move": "yingshui",
+     "place": "潁水河畔"
+    },
+    "adjacent": false
+   },
+   {
+    "key": "merge",
+    "go": {
+     "tab": "craft"
+    },
+    "adjacent": false
+   },
+   {
+    "key": "field2",
+    "go": {
+     "tab": "jianghu"
+    },
+    "adjacent": false
+   }
+  ],
+  "target": "yingshui",
+  "tab": "map",
+  "mode": "place",
+  "sel": "yingshui",
+  "then": null,
+  "card": "潁水河畔",
+  "cardOk": true,
+  "route": 2,
+  "dash": false,
+  "legs": [],
+  "rings": 1,
+  "z": 0.6943,
+  "Z0": 1.44,
+  "lvl": 1,
+  "meOn": true,
+  "selOn": true,
+  "endOn": null,
+  "meScr": [
+   88,
+   223
+  ],
+  "selScr": [
+   272,
+   321
+  ],
+  "endScr": null,
+  "roomTop": 56,
+  "bottom": 488,
+  "drawer": "peek",
+  "drawerPx": 147,
+  "bad": [],
+  "missing": [],
+  "labTexts": [
+   "yingshui:潁水河畔"
+  ],
+  "hscroll": false,
+  "hudCover": [],
+  "ok": true
+ },
+ "新手目標-遠": {
+  "button": {
+   "goto": null,
+   "then": null,
+   "i": "2",
+   "text": "去做",
+   "act": "newbie-go",
+   "x": 302,
+   "y": 373.3125,
+   "top": true
+  },
+  "nb": [
+   {
+    "key": "level5",
+    "go": {
+     "move": "hilltop_wilds",
+     "place": "荒丘"
+    },
+    "adjacent": false
+   },
+   {
+    "key": "merge",
+    "go": {
+     "tab": "craft"
+    },
+    "adjacent": false
+   },
+   {
+    "key": "field2",
+    "go": {
+     "move": "songshan_foot",
+     "place": "嵩山腳"
+    },
+    "adjacent": false
+   }
+  ],
+  "target": "songshan_foot",
+  "tab": "map",
+  "mode": "place",
+  "sel": "songshan_foot",
+  "then": null,
+  "card": "嵩山腳",
+  "cardOk": true,
+  "route": 2,
+  "dash": false,
+  "legs": [],
+  "rings": 1,
+  "z": 0.7188,
+  "Z0": 1.44,
+  "lvl": 1,
+  "meOn": true,
+  "selOn": true,
+  "endOn": null,
+  "meScr": [
+   272,
+   368
+  ],
+  "selScr": [
+   88,
+   176
+  ],
+  "endScr": null,
+  "roomTop": 56,
+  "bottom": 488,
+  "drawer": "peek",
+  "drawerPx": 147,
+  "bad": [],
+  "missing": [],
+  "labTexts": [
+   "songshan_foot:嵩山腳"
+  ],
+  "hscroll": false,
+  "hudCover": [],
+  "ok": true
+ },
+ "江湖頁小地圖": {
+  "error": "沒有那一顆",
+  "before": {
+   "tab": "jianghu",
+   "found": false
+  },
+  "nb": null
+ },
+ "log": {
+  "console": [],
+  "exceptions": [],
+  "net": [],
+  "logEntries": []
+ }
+}

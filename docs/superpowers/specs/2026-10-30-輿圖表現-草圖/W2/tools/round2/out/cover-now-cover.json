@@ -1,0 +1,2999 @@
+{
+ "rows": [
+  {
+   "id": "yingchuan",
+   "w": 375,
+   "here": "yingchuan",
+   "out": [
+    {
+     "id": "hilltop_wilds",
+     "hop": 2,
+     "by": "map-home",
+     "f": 0.37,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -449.1,
+    -1086.6
+   ],
+   "labs": 7,
+   "tiny": 3,
+   "leads": 2,
+   "pills": [
+    "luoyang_road"
+   ],
+   "near2In": 7,
+   "near2": 11
+  },
+  {
+   "id": "yingchuan",
+   "w": 360,
+   "here": "yingchuan",
+   "out": [
+    {
+     "id": "hilltop_wilds",
+     "hop": 2,
+     "by": "map-home",
+     "f": 0.36,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -431.2,
+    -1046
+   ],
+   "labs": 7,
+   "tiny": 3,
+   "leads": 3,
+   "pills": [
+    "luoyang_road"
+   ],
+   "near2In": 7,
+   "near2": 11
+  },
+  {
+   "id": "yingchuan",
+   "w": 320,
+   "here": "yingchuan",
+   "out": [],
+   "z": 1.28,
+   "cam": [
+    -383.3,
+    -1011.7
+   ],
+   "labs": 6,
+   "tiny": 2,
+   "leads": 2,
+   "pills": [
+    "luoyang_road"
+   ],
+   "near2In": 6,
+   "near2": 11
+  },
+  {
+   "id": "yingshui",
+   "w": 375,
+   "here": "yingshui",
+   "out": [
+    {
+     "id": "runan_wilds",
+     "hop": 2,
+     "by": "map-home",
+     "f": 0.86,
+     "pill": false
+    },
+    {
+     "id": "guan_camp",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -570,
+    -1169.8
+   ],
+   "labs": 9,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 9,
+   "near2": 11
+  },
+  {
+   "id": "yingshui",
+   "w": 360,
+   "here": "yingshui",
+   "out": [
+    {
+     "id": "runan_wilds",
+     "hop": 2,
+     "by": "map-home",
+     "f": 1,
+     "pill": false
+    },
+    {
+     "id": "guan_camp",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -547.2,
+    -1125.9
+   ],
+   "labs": 9,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 9,
+   "near2": 11
+  },
+  {
+   "id": "yingshui",
+   "w": 320,
+   "here": "yingshui",
+   "out": [
+    {
+     "id": "changshe",
+     "hop": 2,
+     "by": "map-home",
+     "f": 0.44,
+     "pill": false
+    },
+    {
+     "id": "guan_camp",
+     "hop": 2,
+     "by": "map-search",
+     "f": 0.3,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -486.4,
+    -1082.7
+   ],
+   "labs": 8,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 8,
+   "near2": 11
+  },
+  {
+   "id": "yingchuan_wilds",
+   "w": 375,
+   "here": "yingchuan_wilds",
+   "out": [
+    {
+     "id": "guan_camp",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.29,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -615.5,
+    -1116.3
+   ],
+   "labs": 8,
+   "tiny": 1,
+   "leads": 0,
+   "pills": [],
+   "near2In": 8,
+   "near2": 12
+  },
+  {
+   "id": "yingchuan_wilds",
+   "w": 360,
+   "here": "yingchuan_wilds",
+   "out": [
+    {
+     "id": "guan_camp",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.46,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -590.9,
+    -1074.5
+   ],
+   "labs": 8,
+   "tiny": 1,
+   "leads": 0,
+   "pills": [],
+   "near2In": 8,
+   "near2": 12
+  },
+  {
+   "id": "yingchuan_wilds",
+   "w": 320,
+   "here": "yingchuan_wilds",
+   "out": [],
+   "z": 1.28,
+   "cam": [
+    -525.2,
+    -1037
+   ],
+   "labs": 7,
+   "tiny": 1,
+   "leads": 0,
+   "pills": [],
+   "near2In": 7,
+   "near2": 12
+  },
+  {
+   "id": "changshe",
+   "w": 375,
+   "here": "changshe",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -707.8,
+    -1083
+   ],
+   "labs": 7,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [
+    "baima_ford"
+   ],
+   "near2In": 7,
+   "near2": 13
+  },
+  {
+   "id": "changshe",
+   "w": 360,
+   "here": "changshe",
+   "out": [],
+   "z": 1.44,
+   "cam": [
+    -679.4,
+    -1042.6
+   ],
+   "labs": 7,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [
+    "baima_ford"
+   ],
+   "near2In": 7,
+   "near2": 13
+  },
+  {
+   "id": "changshe",
+   "w": 320,
+   "here": "changshe",
+   "out": [],
+   "z": 1.28,
+   "cam": [
+    -603.9,
+    -998.1
+   ],
+   "labs": 5,
+   "tiny": 1,
+   "leads": 0,
+   "pills": [
+    "runan_wilds",
+    "baima_ford"
+   ],
+   "near2In": 5,
+   "near2": 13
+  },
+  {
+   "id": "luoyang_road",
+   "w": 375,
+   "here": "luoyang_road",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -222.8,
+    -972.3
+   ],
+   "labs": 6,
+   "tiny": 2,
+   "leads": 2,
+   "pills": [
+    "yingchuan"
+   ],
+   "near2In": 5,
+   "near2": 9
+  },
+  {
+   "id": "luoyang_road",
+   "w": 360,
+   "here": "luoyang_road",
+   "out": [],
+   "z": 1.44,
+   "cam": [
+    -213.8,
+    -936.3
+   ],
+   "labs": 6,
+   "tiny": 2,
+   "leads": 2,
+   "pills": [
+    "yingchuan"
+   ],
+   "near2In": 5,
+   "near2": 9
+  },
+  {
+   "id": "luoyang_road",
+   "w": 320,
+   "here": "luoyang_road",
+   "out": [
+    {
+     "id": "songshan_foot",
+     "hop": 2,
+     "by": "map-home",
+     "f": 0.25,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -190.1,
+    -914.1
+   ],
+   "labs": 5,
+   "tiny": 2,
+   "leads": 2,
+   "pills": [
+    "yingchuan"
+   ],
+   "near2In": 4,
+   "near2": 9
+  },
+  {
+   "id": "wan_city",
+   "w": 375,
+   "here": "wan_city",
+   "out": [
+    {
+     "id": "jade_cave",
+     "hop": 7,
+     "by": "map-mini",
+     "f": 0.29,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -69.4,
+    -1383.8
+   ],
+   "labs": 7,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 7,
+   "near2": 9
+  },
+  {
+   "id": "wan_city",
+   "w": 360,
+   "here": "wan_city",
+   "out": [
+    {
+     "id": "nanyang_road",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.44,
+     "pill": false
+    },
+    {
+     "id": "jade_cave",
+     "hop": 7,
+     "by": "map-search",
+     "f": 0.3,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -66.7,
+    -1331.3
+   ],
+   "labs": 7,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 7,
+   "near2": 9
+  },
+  {
+   "id": "wan_city",
+   "w": 320,
+   "here": "wan_city",
+   "out": [
+    {
+     "id": "nanyang_road",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.57,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -59.2,
+    -1254.8
+   ],
+   "labs": 7,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 7,
+   "near2": 9
+  },
+  {
+   "id": "baima_temple",
+   "w": 375,
+   "here": "baima_temple",
+   "out": [
+    {
+     "id": "jade_cave",
+     "hop": 5,
+     "by": "map-fit",
+     "f": 0.89,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -82.5,
+    -868.9
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 6,
+   "near2": 9
+  },
+  {
+   "id": "baima_temple",
+   "w": 360,
+   "here": "baima_temple",
+   "out": [
+    {
+     "id": "jade_cave",
+     "hop": 5,
+     "by": "map-fit",
+     "f": 0.69,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -79.2,
+    -837
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 6,
+   "near2": 9
+  },
+  {
+   "id": "baima_temple",
+   "w": 320,
+   "here": "baima_temple",
+   "out": [],
+   "z": 1.28,
+   "cam": [
+    -70.4,
+    -815.4
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 6,
+   "near2": 9
+  },
+  {
+   "id": "luoyang_palace",
+   "w": 375,
+   "here": "luoyang_palace",
+   "out": [
+    {
+     "id": "mengjin_ford",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    0,
+    -947.3
+   ],
+   "labs": 6,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [
+    "nanyang_wilds"
+   ],
+   "near2In": 6,
+   "near2": 9
+  },
+  {
+   "id": "luoyang_palace",
+   "w": 360,
+   "here": "luoyang_palace",
+   "out": [
+    {
+     "id": "baima_temple",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.39,
+     "pill": false
+    },
+    {
+     "id": "mengjin_ford",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    0,
+    -912.3
+   ],
+   "labs": 6,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [
+    "nanyang_wilds"
+   ],
+   "near2In": 6,
+   "near2": 9
+  },
+  {
+   "id": "luoyang_palace",
+   "w": 320,
+   "here": "luoyang_palace",
+   "out": [
+    {
+     "id": "luoyang_road",
+     "hop": 2,
+     "by": "map-home",
+     "f": 0.41,
+     "pill": false
+    },
+    {
+     "id": "baima_temple",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.28,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    0,
+    -892.8
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [
+    "nanyang_wilds"
+   ],
+   "near2In": 6,
+   "near2": 9
+  },
+  {
+   "id": "dajiangjun_fu",
+   "w": 375,
+   "here": "dajiangjun_fu",
+   "out": [
+    {
+     "id": "mengjin_ford",
+     "hop": 3,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    0,
+    -885.5
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 4,
+   "near2": 5
+  },
+  {
+   "id": "dajiangjun_fu",
+   "w": 360,
+   "here": "dajiangjun_fu",
+   "out": [
+    {
+     "id": "mengjin_ford",
+     "hop": 3,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    0,
+    -853
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 4,
+   "near2": 5
+  },
+  {
+   "id": "dajiangjun_fu",
+   "w": 320,
+   "here": "dajiangjun_fu",
+   "out": [
+    {
+     "id": "luoyang_road",
+     "hop": 3,
+     "by": "map-home",
+     "f": 0.36,
+     "pill": false
+    },
+    {
+     "id": "luoyang_road",
+     "hop": 3,
+     "by": "map-fit",
+     "f": 0.3,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    0,
+    -840.1
+   ],
+   "labs": 4,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 4,
+   "near2": 5
+  },
+  {
+   "id": "beimang_hill",
+   "w": 375,
+   "here": "beimang_hill",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -18.4,
+    -818.5
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 7
+  },
+  {
+   "id": "beimang_hill",
+   "w": 360,
+   "here": "beimang_hill",
+   "out": [
+    {
+     "id": "luoyang_road",
+     "hop": 3,
+     "by": "map-home",
+     "f": 0.42,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -17.6,
+    -788.7
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 7
+  },
+  {
+   "id": "beimang_hill",
+   "w": 320,
+   "here": "beimang_hill",
+   "out": [
+    {
+     "id": "luoyang_road",
+     "hop": 3,
+     "by": "map-fit",
+     "f": 0.51,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -15.7,
+    -772.4
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 7
+  },
+  {
+   "id": "mengjin_ford",
+   "w": 375,
+   "here": "mengjin_ford",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -137.1,
+    -708.7
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [
+    "haozu_fort"
+   ],
+   "near2In": 5,
+   "near2": 7
+  },
+  {
+   "id": "mengjin_ford",
+   "w": 360,
+   "here": "mengjin_ford",
+   "out": [],
+   "z": 1.44,
+   "cam": [
+    -131.6,
+    -683.3
+   ],
+   "labs": 4,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [
+    "haozu_fort"
+   ],
+   "near2In": 4,
+   "near2": 7
+  },
+  {
+   "id": "mengjin_ford",
+   "w": 320,
+   "here": "mengjin_ford",
+   "out": [],
+   "z": 1.28,
+   "cam": [
+    -117,
+    -678.7
+   ],
+   "labs": 3,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [
+    "haozu_fort"
+   ],
+   "near2In": 3,
+   "near2": 7
+  },
+  {
+   "id": "nanyang_road",
+   "w": 375,
+   "here": "nanyang_road",
+   "out": [
+    {
+     "id": "songshan_foot",
+     "hop": 4,
+     "by": "map-search",
+     "f": 0.96,
+     "pill": false
+    },
+    {
+     "id": "yingchuan_academy",
+     "hop": 4,
+     "by": "map-mini",
+     "f": 0.91,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -243.3,
+    -1324.6
+   ],
+   "labs": 5,
+   "tiny": 1,
+   "leads": 0,
+   "pills": [
+    "hilltop_wilds"
+   ],
+   "near2In": 4,
+   "near2": 9
+  },
+  {
+   "id": "nanyang_road",
+   "w": 360,
+   "here": "nanyang_road",
+   "out": [
+    {
+     "id": "songshan_foot",
+     "hop": 4,
+     "by": "map-search",
+     "f": 0.82,
+     "pill": false
+    },
+    {
+     "id": "yingchuan_academy",
+     "hop": 4,
+     "by": "map-mini",
+     "f": 0.88,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -233.6,
+    -1274.5
+   ],
+   "labs": 5,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [
+    "hilltop_wilds"
+   ],
+   "near2In": 4,
+   "near2": 9
+  },
+  {
+   "id": "nanyang_road",
+   "w": 320,
+   "here": "nanyang_road",
+   "out": [
+    {
+     "id": "yingchuan_academy",
+     "hop": 4,
+     "by": "map-search",
+     "f": 0.79,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -207.6,
+    -1214.8
+   ],
+   "labs": 4,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [
+    "hilltop_wilds"
+   ],
+   "near2In": 3,
+   "near2": 9
+  },
+  {
+   "id": "nanyang_huangjin_camp",
+   "w": 375,
+   "here": "nanyang_huangjin_camp",
+   "out": [
+    {
+     "id": "jade_cave",
+     "hop": 7,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -150.4,
+    -1367.1
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 7
+  },
+  {
+   "id": "nanyang_huangjin_camp",
+   "w": 360,
+   "here": "nanyang_huangjin_camp",
+   "out": [
+    {
+     "id": "jade_cave",
+     "hop": 7,
+     "by": "map-mini",
+     "f": 0.8,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -144.4,
+    -1315.3
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 7
+  },
+  {
+   "id": "nanyang_huangjin_camp",
+   "w": 320,
+   "here": "nanyang_huangjin_camp",
+   "out": [],
+   "z": 1.28,
+   "cam": [
+    -128.3,
+    -1251.1
+   ],
+   "labs": 4,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 4,
+   "near2": 7
+  },
+  {
+   "id": "yu_river",
+   "w": 375,
+   "here": "yu_river",
+   "out": [
+    {
+     "id": "nanyang_road",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 0.61,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    0,
+    -1407.3
+   ],
+   "labs": 7,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 7,
+   "near2": 7
+  },
+  {
+   "id": "yu_river",
+   "w": 360,
+   "here": "yu_river",
+   "out": [
+    {
+     "id": "nanyang_road",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 0.72,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    0,
+    -1353.9
+   ],
+   "labs": 7,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 7,
+   "near2": 7
+  },
+  {
+   "id": "yu_river",
+   "w": 320,
+   "here": "yu_river",
+   "out": [
+    {
+     "id": "nanyang_road",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 0.65,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    0,
+    -1285.3
+   ],
+   "labs": 7,
+   "tiny": 2,
+   "leads": 2,
+   "pills": [],
+   "near2In": 7,
+   "near2": 7
+  },
+  {
+   "id": "xinye",
+   "w": 375,
+   "here": "xinye",
+   "out": [
+    {
+     "id": "nanyang_road",
+     "hop": 3,
+     "by": "map-mini",
+     "f": 0.85,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -4.5,
+    -1411
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 6
+  },
+  {
+   "id": "xinye",
+   "w": 360,
+   "here": "xinye",
+   "out": [
+    {
+     "id": "nanyang_road",
+     "hop": 3,
+     "by": "map-mini",
+     "f": 0.87,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -4.3,
+    -1362.6
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 6
+  },
+  {
+   "id": "xinye",
+   "w": 320,
+   "here": "xinye",
+   "out": [
+    {
+     "id": "nanyang_road",
+     "hop": 3,
+     "by": "map-mini",
+     "f": 0.76,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -3.8,
+    -1298
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 6
+  },
+  {
+   "id": "nanyang_wilds",
+   "w": 375,
+   "here": "nanyang_wilds",
+   "out": [
+    {
+     "id": "luoyang_road",
+     "hop": 3,
+     "by": "map-search",
+     "f": 0.62,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -13.8,
+    -1276.3
+   ],
+   "labs": 8,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [
+    "luoyang_palace"
+   ],
+   "near2In": 7,
+   "near2": 11
+  },
+  {
+   "id": "nanyang_wilds",
+   "w": 360,
+   "here": "nanyang_wilds",
+   "out": [
+    {
+     "id": "luoyang_road",
+     "hop": 3,
+     "by": "map-search",
+     "f": 0.66,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -13.2,
+    -1228.1
+   ],
+   "labs": 7,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [
+    "luoyang_palace"
+   ],
+   "near2In": 6,
+   "near2": 11
+  },
+  {
+   "id": "nanyang_wilds",
+   "w": 320,
+   "here": "nanyang_wilds",
+   "out": [
+    {
+     "id": "nanyang_huangjin_camp",
+     "hop": 2,
+     "by": "map-fit",
+     "f": 0.55,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -11.8,
+    -1173.6
+   ],
+   "labs": 5,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [
+    "luoyang_palace",
+    "xinye"
+   ],
+   "near2In": 5,
+   "near2": 11
+  },
+  {
+   "id": "runan",
+   "w": 375,
+   "here": "runan",
+   "out": [
+    {
+     "id": "yingchuan_wilds",
+     "hop": 3,
+     "by": "map-area",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -777,
+    -1411
+   ],
+   "labs": 8,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 7,
+   "near2": 7
+  },
+  {
+   "id": "runan",
+   "w": 360,
+   "here": "runan",
+   "out": [
+    {
+     "id": "yingchuan_wilds",
+     "hop": 3,
+     "by": "map-area",
+     "f": 0.81,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -745.9,
+    -1362.6
+   ],
+   "labs": 8,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 7,
+   "near2": 7
+  },
+  {
+   "id": "runan",
+   "w": 320,
+   "here": "runan",
+   "out": [
+    {
+     "id": "hilltop_wilds",
+     "hop": 2,
+     "by": "map-area",
+     "f": 0.26,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -663,
+    -1308.5
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 6,
+   "near2": 7
+  },
+  {
+   "id": "runan_academy",
+   "w": 375,
+   "here": "runan_academy",
+   "out": [
+    {
+     "id": "yingchuan_wilds",
+     "hop": 4,
+     "by": "map-area",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -780.4,
+    -1411
+   ],
+   "labs": 7,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 5
+  },
+  {
+   "id": "runan_academy",
+   "w": 360,
+   "here": "runan_academy",
+   "out": [
+    {
+     "id": "yingchuan_wilds",
+     "hop": 4,
+     "by": "map-area",
+     "f": 0.81,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -749.2,
+    -1362.6
+   ],
+   "labs": 7,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 5
+  },
+  {
+   "id": "runan_academy",
+   "w": 320,
+   "here": "runan_academy",
+   "out": [
+    {
+     "id": "qiao_county",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 0.44,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -665.9,
+    -1362.8
+   ],
+   "labs": 5,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 5,
+   "near2": 5
+  },
+  {
+   "id": "hilltop_wilds",
+   "w": 375,
+   "here": "hilltop_wilds",
+   "out": [
+    {
+     "id": "yingchuan_wilds",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 0.96,
+     "pill": false
+    },
+    {
+     "id": "guan_camp",
+     "hop": 3,
+     "by": "map-search",
+     "f": 0.63,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -536.7,
+    -1271.8
+   ],
+   "labs": 8,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [
+    "nanyang_road"
+   ],
+   "near2In": 6,
+   "near2": 10
+  },
+  {
+   "id": "hilltop_wilds",
+   "w": 360,
+   "here": "hilltop_wilds",
+   "out": [
+    {
+     "id": "yingchuan_wilds",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    },
+    {
+     "id": "guan_camp",
+     "hop": 3,
+     "by": "map-search",
+     "f": 0.74,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -515.2,
+    -1223.8
+   ],
+   "labs": 8,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [
+    "nanyang_road"
+   ],
+   "near2In": 6,
+   "near2": 10
+  },
+  {
+   "id": "hilltop_wilds",
+   "w": 320,
+   "here": "hilltop_wilds",
+   "out": [
+    {
+     "id": "changshe",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 0.52,
+     "pill": false
+    },
+    {
+     "id": "runan_wilds",
+     "hop": 1,
+     "by": "map-home",
+     "f": 0.39,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -458,
+    -1159.2
+   ],
+   "labs": 7,
+   "tiny": 3,
+   "leads": 2,
+   "pills": [
+    "nanyang_road"
+   ],
+   "near2In": 6,
+   "near2": 10
+  },
+  {
+   "id": "songshan_foot",
+   "w": 375,
+   "here": "songshan_foot",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -405.3,
+    -1060.3
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 6,
+   "near2": 8
+  },
+  {
+   "id": "songshan_foot",
+   "w": 360,
+   "here": "songshan_foot",
+   "out": [],
+   "z": 1.44,
+   "cam": [
+    -389.1,
+    -1020.8
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 6,
+   "near2": 8
+  },
+  {
+   "id": "songshan_foot",
+   "w": 320,
+   "here": "songshan_foot",
+   "out": [
+    {
+     "id": "yingshui",
+     "hop": 2,
+     "by": "map-fit",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -345.9,
+    -978.8
+   ],
+   "labs": 6,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 6,
+   "near2": 8
+  },
+  {
+   "id": "yingchuan_academy",
+   "w": 375,
+   "here": "yingchuan_academy",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -431.6,
+    -1093.4
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 7
+  },
+  {
+   "id": "yingchuan_academy",
+   "w": 360,
+   "here": "yingchuan_academy",
+   "out": [],
+   "z": 1.44,
+   "cam": [
+    -414.4,
+    -1052.5
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 7
+  },
+  {
+   "id": "yingchuan_academy",
+   "w": 320,
+   "here": "yingchuan_academy",
+   "out": [],
+   "z": 1.28,
+   "cam": [
+    -368.3,
+    -1017.5
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 7
+  },
+  {
+   "id": "deep_mountain",
+   "w": 375,
+   "here": "deep_mountain",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -312,
+    -1054.8
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 4,
+   "near2": 5
+  },
+  {
+   "id": "deep_mountain",
+   "w": 360,
+   "here": "deep_mountain",
+   "out": [],
+   "z": 1.44,
+   "cam": [
+    -299.5,
+    -1015.5
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 4,
+   "near2": 5
+  },
+  {
+   "id": "deep_mountain",
+   "w": 320,
+   "here": "deep_mountain",
+   "out": [],
+   "z": 1.28,
+   "cam": [
+    -266.2,
+    -984.5
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 4,
+   "near2": 5
+  },
+  {
+   "id": "jade_cave",
+   "w": 375,
+   "here": "jade_cave",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -260.5,
+    -1092.5
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 3,
+   "near2": 3
+  },
+  {
+   "id": "jade_cave",
+   "w": 360,
+   "here": "jade_cave",
+   "out": [],
+   "z": 1.44,
+   "cam": [
+    -250.1,
+    -1051.7
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 3,
+   "near2": 3
+  },
+  {
+   "id": "jade_cave",
+   "w": 320,
+   "here": "jade_cave",
+   "out": [
+    {
+     "id": "songshan_foot",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    },
+    {
+     "id": "yingchuan_academy",
+     "hop": 3,
+     "by": "map-home",
+     "f": 0.37,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -222.3,
+    -1006.2
+   ],
+   "labs": 5,
+   "tiny": 1,
+   "leads": 0,
+   "pills": [],
+   "near2In": 3,
+   "near2": 3
+  },
+  {
+   "id": "runan_market",
+   "w": 375,
+   "here": "runan_market",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -838.8,
+    -1411
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 6
+  },
+  {
+   "id": "runan_market",
+   "w": 360,
+   "here": "runan_market",
+   "out": [],
+   "z": 1.44,
+   "cam": [
+    -805.2,
+    -1362.6
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 6
+  },
+  {
+   "id": "runan_market",
+   "w": 320,
+   "here": "runan_market",
+   "out": [
+    {
+     "id": "qiao_county",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.81,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -715.8,
+    -1348.7
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 6
+  },
+  {
+   "id": "qiao_county",
+   "w": 375,
+   "here": "qiao_county",
+   "out": [
+    {
+     "id": "huangjin_camp",
+     "hop": 5,
+     "by": "map-area",
+     "f": 0.59,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -950.6,
+    -1411
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 4,
+   "near2": 5
+  },
+  {
+   "id": "qiao_county",
+   "w": 360,
+   "here": "qiao_county",
+   "out": [
+    {
+     "id": "huangjin_camp",
+     "hop": 5,
+     "by": "map-area",
+     "f": 0.67,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -912.6,
+    -1362.6
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 4,
+   "near2": 5
+  },
+  {
+   "id": "qiao_county",
+   "w": 320,
+   "here": "qiao_county",
+   "out": [],
+   "z": 1.28,
+   "cam": [
+    -811.2,
+    -1289.9
+   ],
+   "labs": 4,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 4,
+   "near2": 5
+  },
+  {
+   "id": "cao_manor",
+   "w": 375,
+   "here": "cao_manor",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -975,
+    -1365
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 3,
+   "near2": 3
+  },
+  {
+   "id": "cao_manor",
+   "w": 360,
+   "here": "cao_manor",
+   "out": [],
+   "z": 1.44,
+   "cam": [
+    -936,
+    -1313.3
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 3,
+   "near2": 3
+  },
+  {
+   "id": "cao_manor",
+   "w": 320,
+   "here": "cao_manor",
+   "out": [],
+   "z": 1.28,
+   "cam": [
+    -832,
+    -1249.3
+   ],
+   "labs": 4,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 3,
+   "near2": 3
+  },
+  {
+   "id": "runan_wilds",
+   "w": 375,
+   "here": "runan_wilds",
+   "out": [
+    {
+     "id": "runan_market",
+     "hop": 2,
+     "by": "map-home",
+     "f": 0.56,
+     "pill": false
+    },
+    {
+     "id": "huangjin_camp",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 0.79,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -711,
+    -1315.9
+   ],
+   "labs": 10,
+   "tiny": 2,
+   "leads": 1,
+   "pills": [],
+   "near2In": 9,
+   "near2": 11
+  },
+  {
+   "id": "runan_wilds",
+   "w": 360,
+   "here": "runan_wilds",
+   "out": [
+    {
+     "id": "runan_market",
+     "hop": 2,
+     "by": "map-home",
+     "f": 0.38,
+     "pill": false
+    },
+    {
+     "id": "huangjin_camp",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 0.88,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -682.6,
+    -1266.2
+   ],
+   "labs": 10,
+   "tiny": 2,
+   "leads": 1,
+   "pills": [],
+   "near2In": 9,
+   "near2": 11
+  },
+  {
+   "id": "runan_wilds",
+   "w": 320,
+   "here": "runan_wilds",
+   "out": [
+    {
+     "id": "yingchuan_wilds",
+     "hop": 2,
+     "by": "map-area",
+     "f": 0.85,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -606.7,
+    -1207.4
+   ],
+   "labs": 7,
+   "tiny": 2,
+   "leads": 2,
+   "pills": [],
+   "near2In": 7,
+   "near2": 11
+  },
+  {
+   "id": "guan_camp",
+   "w": 375,
+   "here": "guan_camp",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -663,
+    -1033.5
+   ],
+   "labs": 7,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 5
+  },
+  {
+   "id": "guan_camp",
+   "w": 360,
+   "here": "guan_camp",
+   "out": [],
+   "z": 1.44,
+   "cam": [
+    -636.5,
+    -995.1
+   ],
+   "labs": 7,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 5
+  },
+  {
+   "id": "guan_camp",
+   "w": 320,
+   "here": "guan_camp",
+   "out": [
+    {
+     "id": "huangjin_camp",
+     "hop": 3,
+     "by": "map-home",
+     "f": 0.32,
+     "pill": false
+    },
+    {
+     "id": "huangjin_camp",
+     "hop": 3,
+     "by": "map-fit",
+     "f": 0.31,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -565.8,
+    -966.4
+   ],
+   "labs": 4,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 4,
+   "near2": 5
+  },
+  {
+   "id": "huangjin_camp",
+   "w": 375,
+   "here": "huangjin_camp",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -768.5,
+    -1153
+   ],
+   "labs": 7,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 4,
+   "near2": 5
+  },
+  {
+   "id": "huangjin_camp",
+   "w": 360,
+   "here": "huangjin_camp",
+   "out": [],
+   "z": 1.44,
+   "cam": [
+    -737.8,
+    -1109.8
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 4,
+   "near2": 5
+  },
+  {
+   "id": "huangjin_camp",
+   "w": 320,
+   "here": "huangjin_camp",
+   "out": [
+    {
+     "id": "guan_camp",
+     "hop": 3,
+     "by": "map-area",
+     "f": 0.3,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -655.8,
+    -1068.4
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 3,
+   "near2": 5
+  },
+  {
+   "id": "zhuo_county",
+   "w": 375,
+   "here": "zhuo_county",
+   "out": [
+    {
+     "id": "market_town",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.42,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -691.9,
+    56
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [
+    "julu_altar"
+   ],
+   "near2In": 6,
+   "near2": 10
+  },
+  {
+   "id": "zhuo_county",
+   "w": 360,
+   "here": "zhuo_county",
+   "out": [
+    {
+     "id": "market_town",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.62,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -664.2,
+    56
+   ],
+   "labs": 6,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [
+    "julu_altar"
+   ],
+   "near2In": 6,
+   "near2": 10
+  },
+  {
+   "id": "zhuo_county",
+   "w": 320,
+   "here": "zhuo_county",
+   "out": [
+    {
+     "id": "market_town",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -590.4,
+    -12.9
+   ],
+   "labs": 6,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [
+    "julu_altar"
+   ],
+   "near2In": 6,
+   "near2": 10
+  },
+  {
+   "id": "market_town",
+   "w": 375,
+   "here": "market_town",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -771.9,
+    56
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 7
+  },
+  {
+   "id": "market_town",
+   "w": 360,
+   "here": "market_town",
+   "out": [],
+   "z": 1.44,
+   "cam": [
+    -741,
+    56
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 7
+  },
+  {
+   "id": "market_town",
+   "w": 320,
+   "here": "market_town",
+   "out": [],
+   "z": 1.28,
+   "cam": [
+    -658.7,
+    49.6
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 5,
+   "near2": 7
+  },
+  {
+   "id": "loushang_village",
+   "w": 375,
+   "here": "loushang_village",
+   "out": [
+    {
+     "id": "yanshan_foot",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -616.9,
+    56
+   ],
+   "labs": 5,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 5,
+   "near2": 8
+  },
+  {
+   "id": "loushang_village",
+   "w": 360,
+   "here": "loushang_village",
+   "out": [
+    {
+     "id": "yanshan_foot",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -592.2,
+    56
+   ],
+   "labs": 5,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 5,
+   "near2": 8
+  },
+  {
+   "id": "loushang_village",
+   "w": 320,
+   "here": "loushang_village",
+   "out": [
+    {
+     "id": "zhuo_militia_hall",
+     "hop": 2,
+     "by": "map-home",
+     "f": 0.78,
+     "pill": false
+    },
+    {
+     "id": "yanshan_foot",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -526.4,
+    32.7
+   ],
+   "labs": 5,
+   "tiny": 2,
+   "leads": 2,
+   "pills": [],
+   "near2In": 5,
+   "near2": 8
+  },
+  {
+   "id": "zhuo_militia_hall",
+   "w": 375,
+   "here": "zhuo_militia_hall",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -763.5,
+    56
+   ],
+   "labs": 6,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 6,
+   "near2": 7
+  },
+  {
+   "id": "zhuo_militia_hall",
+   "w": 360,
+   "here": "zhuo_militia_hall",
+   "out": [
+    {
+     "id": "market_town",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.27,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -733,
+    56
+   ],
+   "labs": 6,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 6,
+   "near2": 7
+  },
+  {
+   "id": "zhuo_militia_hall",
+   "w": 320,
+   "here": "zhuo_militia_hall",
+   "out": [],
+   "z": 1.28,
+   "cam": [
+    -651.5,
+    12.3
+   ],
+   "labs": 6,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 6,
+   "near2": 7
+  },
+  {
+   "id": "juma_river",
+   "w": 375,
+   "here": "juma_river",
+   "out": [
+    {
+     "id": "zhuo_county",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.64,
+     "pill": false
+    },
+    {
+     "id": "yanshan_foot",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -606.3,
+    11.6
+   ],
+   "labs": 5,
+   "tiny": 2,
+   "leads": 1,
+   "pills": [
+    "xiaquyang"
+   ],
+   "near2In": 5,
+   "near2": 9
+  },
+  {
+   "id": "juma_river",
+   "w": 360,
+   "here": "juma_river",
+   "out": [
+    {
+     "id": "zhuo_county",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.71,
+     "pill": false
+    },
+    {
+     "id": "yanshan_foot",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -582,
+    8.2
+   ],
+   "labs": 5,
+   "tiny": 2,
+   "leads": 1,
+   "pills": [
+    "xiaquyang"
+   ],
+   "near2In": 5,
+   "near2": 9
+  },
+  {
+   "id": "juma_river",
+   "w": 320,
+   "here": "juma_river",
+   "out": [
+    {
+     "id": "zhuo_militia_hall",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 0.83,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -517.4,
+    -74.6
+   ],
+   "labs": 5,
+   "tiny": 2,
+   "leads": 1,
+   "pills": [
+    "xiaquyang"
+   ],
+   "near2In": 5,
+   "near2": 9
+  },
+  {
+   "id": "yanshan_foot",
+   "w": 375,
+   "here": "yanshan_foot",
+   "out": [
+    {
+     "id": "market_town",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.26,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -751.5,
+    56
+   ],
+   "labs": 6,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 6,
+   "near2": 7
+  },
+  {
+   "id": "yanshan_foot",
+   "w": 360,
+   "here": "yanshan_foot",
+   "out": [
+    {
+     "id": "market_town",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.45,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -721.4,
+    56
+   ],
+   "labs": 6,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 6,
+   "near2": 7
+  },
+  {
+   "id": "yanshan_foot",
+   "w": 320,
+   "here": "yanshan_foot",
+   "out": [],
+   "z": 1.28,
+   "cam": [
+    -641.3,
+    56
+   ],
+   "labs": 6,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 6,
+   "near2": 7
+  },
+  {
+   "id": "julu_altar",
+   "w": 375,
+   "here": "julu_altar",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -641.8,
+    -312.5
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [
+    "zhuo_county"
+   ],
+   "near2In": 5,
+   "near2": 13
+  },
+  {
+   "id": "julu_altar",
+   "w": 360,
+   "here": "julu_altar",
+   "out": [],
+   "z": 1.44,
+   "cam": [
+    -616.1,
+    -302.9
+   ],
+   "labs": 5,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [
+    "zhuo_county"
+   ],
+   "near2In": 5,
+   "near2": 13
+  },
+  {
+   "id": "julu_altar",
+   "w": 320,
+   "here": "julu_altar",
+   "out": [
+    {
+     "id": "luzhi_camp",
+     "hop": 2,
+     "by": "map-fit",
+     "f": 0.31,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -547.6,
+    -351.1
+   ],
+   "labs": 4,
+   "tiny": 2,
+   "leads": 1,
+   "pills": [
+    "zhuo_county",
+    "baima_ford"
+   ],
+   "near2In": 4,
+   "near2": 13
+  },
+  {
+   "id": "guangzong",
+   "w": 375,
+   "here": "guangzong",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -717.3,
+    -423.7
+   ],
+   "labs": 4,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 4,
+   "near2": 7
+  },
+  {
+   "id": "guangzong",
+   "w": 360,
+   "here": "guangzong",
+   "out": [],
+   "z": 1.44,
+   "cam": [
+    -688.6,
+    -409.7
+   ],
+   "labs": 4,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 4,
+   "near2": 7
+  },
+  {
+   "id": "guangzong",
+   "w": 320,
+   "here": "guangzong",
+   "out": [],
+   "z": 1.28,
+   "cam": [
+    -612.1,
+    -435.5
+   ],
+   "labs": 4,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 4,
+   "near2": 7
+  },
+  {
+   "id": "luzhi_camp",
+   "w": 375,
+   "here": "luzhi_camp",
+   "out": [],
+   "z": 1.5,
+   "cam": [
+    -765.8,
+    -448.4
+   ],
+   "labs": 4,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 4,
+   "near2": 5
+  },
+  {
+   "id": "luzhi_camp",
+   "w": 360,
+   "here": "luzhi_camp",
+   "out": [],
+   "z": 1.44,
+   "cam": [
+    -735.1,
+    -433.3
+   ],
+   "labs": 4,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 4,
+   "near2": 5
+  },
+  {
+   "id": "luzhi_camp",
+   "w": 320,
+   "here": "luzhi_camp",
+   "out": [],
+   "z": 1.28,
+   "cam": [
+    -653.4,
+    -456.6
+   ],
+   "labs": 4,
+   "tiny": 1,
+   "leads": 0,
+   "pills": [],
+   "near2In": 4,
+   "near2": 5
+  },
+  {
+   "id": "xiaquyang",
+   "w": 375,
+   "here": "xiaquyang",
+   "out": [
+    {
+     "id": "baima_ford",
+     "hop": 2,
+     "by": "map-fit",
+     "f": 0.6,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -537.6,
+    -289.6
+   ],
+   "labs": 4,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 4,
+   "near2": 9
+  },
+  {
+   "id": "xiaquyang",
+   "w": 360,
+   "here": "xiaquyang",
+   "out": [
+    {
+     "id": "baima_ford",
+     "hop": 2,
+     "by": "map-fit",
+     "f": 0.84,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -516.1,
+    -280.9
+   ],
+   "labs": 4,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 4,
+   "near2": 9
+  },
+  {
+   "id": "xiaquyang",
+   "w": 320,
+   "here": "xiaquyang",
+   "out": [],
+   "z": 1.28,
+   "cam": [
+    -458.8,
+    -321.1
+   ],
+   "labs": 3,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [
+    "juma_river"
+   ],
+   "near2In": 3,
+   "near2": 9
+  },
+  {
+   "id": "haozu_fort",
+   "w": 375,
+   "here": "haozu_fort",
+   "out": [
+    {
+     "id": "xiaquyang",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.89,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -361.9,
+    -477.6
+   ],
+   "labs": 2,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [
+    "mengjin_ford"
+   ],
+   "near2In": 2,
+   "near2": 7
+  },
+  {
+   "id": "haozu_fort",
+   "w": 360,
+   "here": "haozu_fort",
+   "out": [
+    {
+     "id": "xiaquyang",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.87,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -347.4,
+    -461.4
+   ],
+   "labs": 2,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [
+    "mengjin_ford"
+   ],
+   "near2In": 2,
+   "near2": 7
+  },
+  {
+   "id": "haozu_fort",
+   "w": 320,
+   "here": "haozu_fort",
+   "out": [
+    {
+     "id": "xiaquyang",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.61,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -308.8,
+    -492
+   ],
+   "labs": 2,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [
+    "mengjin_ford"
+   ],
+   "near2In": 2,
+   "near2": 7
+  },
+  {
+   "id": "baima_ford",
+   "w": 375,
+   "here": "baima_ford",
+   "out": [
+    {
+     "id": "luzhi_camp",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.78,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -709.5,
+    -575
+   ],
+   "labs": 4,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [
+    "changshe"
+   ],
+   "near2In": 4,
+   "near2": 10
+  },
+  {
+   "id": "baima_ford",
+   "w": 360,
+   "here": "baima_ford",
+   "out": [
+    {
+     "id": "luzhi_camp",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -681.1,
+    -554.9
+   ],
+   "labs": 4,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [
+    "changshe"
+   ],
+   "near2In": 4,
+   "near2": 10
+  },
+  {
+   "id": "baima_ford",
+   "w": 320,
+   "here": "baima_ford",
+   "out": [
+    {
+     "id": "luzhi_camp",
+     "hop": 1,
+     "by": "map-mini",
+     "f": 0.78,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -605.4,
+    -564.6
+   ],
+   "labs": 4,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [
+    "changshe"
+   ],
+   "near2In": 4,
+   "near2": 10
+  },
+  {
+   "id": "lulin_zhai",
+   "w": 375,
+   "here": "lulin_zhai",
+   "out": [
+    {
+     "id": "nanyang_road",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 0.95,
+     "pill": false
+    }
+   ],
+   "z": 1.5,
+   "cam": [
+    -53.3,
+    -1411
+   ],
+   "labs": 7,
+   "tiny": 0,
+   "leads": 0,
+   "pills": [],
+   "near2In": 7,
+   "near2": 7
+  },
+  {
+   "id": "lulin_zhai",
+   "w": 360,
+   "here": "lulin_zhai",
+   "out": [
+    {
+     "id": "nanyang_road",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.44,
+   "cam": [
+    -51.1,
+    -1362.6
+   ],
+   "labs": 7,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 7,
+   "near2": 7
+  },
+  {
+   "id": "lulin_zhai",
+   "w": 320,
+   "here": "lulin_zhai",
+   "out": [
+    {
+     "id": "nanyang_road",
+     "hop": 2,
+     "by": "map-search",
+     "f": 0.36,
+     "pill": false
+    },
+    {
+     "id": "nanyang_huangjin_camp",
+     "hop": 2,
+     "by": "map-mini",
+     "f": 1,
+     "pill": false
+    }
+   ],
+   "z": 1.28,
+   "cam": [
+    -45.4,
+    -1350
+   ],
+   "labs": 7,
+   "tiny": 1,
+   "leads": 1,
+   "pills": [],
+   "near2In": 7,
+   "near2": 7
+  }
+ ],
+ "log": {
+  "console": [],
+  "exceptions": [],
+  "net": [],
+  "logEntries": []
+ }
+}

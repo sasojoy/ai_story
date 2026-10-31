@@ -1,0 +1,219 @@
+{
+ "cover-now": {
+  "375": {
+   "half": 14,
+   "stands": 11,
+   "full": 6,
+   "nopill": 14,
+   "by": {
+    "map-home": 2,
+    "map-mini": 11,
+    "map-fit": 1
+   },
+   "labs": 253,
+   "tiny": 21,
+   "ratio": 0.083,
+   "leads": 16,
+   "near2In": 226,
+   "near2": 328,
+   "pills": 13
+  },
+  "360": {
+   "half": 14,
+   "stands": 12,
+   "full": 8,
+   "nopill": 14,
+   "by": {
+    "map-home": 1,
+    "map-mini": 12,
+    "map-fit": 1
+   },
+   "labs": 249,
+   "tiny": 22,
+   "ratio": 0.088,
+   "leads": 19,
+   "near2In": 224,
+   "near2": 328,
+   "pills": 13
+  },
+  "320": {
+   "half": 15,
+   "stands": 14,
+   "full": 5,
+   "nopill": 15,
+   "by": {
+    "map-mini": 11,
+    "map-fit": 2,
+    "map-area": 1,
+    "map-home": 1
+   },
+   "labs": 216,
+   "tiny": 31,
+   "ratio": 0.144,
+   "leads": 24,
+   "near2In": 207,
+   "near2": 328,
+   "pills": 17
+  }
+ },
+ "cover-甲": {
+  "375": {
+   "half": 0,
+   "stands": 0,
+   "full": 0,
+   "nopill": 0,
+   "by": {},
+   "labs": 265,
+   "tiny": 19,
+   "ratio": 0.072,
+   "leads": 11,
+   "near2In": 236,
+   "near2": 328,
+   "pills": 13
+  },
+  "360": {
+   "half": 1,
+   "stands": 1,
+   "full": 0,
+   "nopill": 1,
+   "by": {
+    "map-mini": 1
+   },
+   "labs": 260,
+   "tiny": 19,
+   "ratio": 0.073,
+   "leads": 15,
+   "near2In": 235,
+   "near2": 328,
+   "pills": 13
+  },
+  "320": {
+   "half": 4,
+   "stands": 4,
+   "full": 0,
+   "nopill": 4,
+   "by": {
+    "map-area": 1,
+    "map-fit": 2,
+    "map-mini": 1
+   },
+   "labs": 236,
+   "tiny": 35,
+   "ratio": 0.148,
+   "leads": 21,
+   "near2In": 228,
+   "near2": 328,
+   "pills": 15
+  }
+ },
+ "cover-乙": {
+  "375": {
+   "half": 1,
+   "stands": 1,
+   "full": 0,
+   "nopill": 1,
+   "by": {
+    "map-home": 1
+   },
+   "labs": 254,
+   "tiny": 9,
+   "ratio": 0.035,
+   "leads": 6,
+   "near2In": 226,
+   "near2": 328,
+   "pills": 13
+  },
+  "360": {
+   "half": 2,
+   "stands": 2,
+   "full": 0,
+   "nopill": 2,
+   "by": {
+    "map-mini": 1,
+    "map-home": 1
+   },
+   "labs": 251,
+   "tiny": 9,
+   "ratio": 0.036,
+   "leads": 8,
+   "near2In": 224,
+   "near2": 328,
+   "pills": 13
+  },
+  "320": {
+   "half": 4,
+   "stands": 4,
+   "full": 1,
+   "nopill": 4,
+   "by": {
+    "map-mini": 1,
+    "map-home": 2,
+    "map-area": 1
+   },
+   "labs": 218,
+   "tiny": 20,
+   "ratio": 0.092,
+   "leads": 16,
+   "near2In": 207,
+   "near2": 328,
+   "pills": 17
+  }
+ },
+ "cover-丙": {
+  "375": {
+   "half": 14,
+   "stands": 11,
+   "full": 6,
+   "nopill": 0,
+   "by": {
+    "map-home": 2,
+    "map-mini": 11,
+    "map-fit": 1
+   },
+   "labs": 253,
+   "tiny": 25,
+   "ratio": 0.099,
+   "leads": 19,
+   "near2In": 226,
+   "near2": 328,
+   "pills": 27
+  },
+  "360": {
+   "half": 14,
+   "stands": 12,
+   "full": 8,
+   "nopill": 0,
+   "by": {
+    "map-home": 1,
+    "map-mini": 12,
+    "map-fit": 1
+   },
+   "labs": 249,
+   "tiny": 26,
+   "ratio": 0.104,
+   "leads": 23,
+   "near2In": 224,
+   "near2": 328,
+   "pills": 28
+  },
+  "320": {
+   "half": 15,
+   "stands": 14,
+   "full": 5,
+   "nopill": 0,
+   "by": {
+    "map-mini": 11,
+    "map-fit": 2,
+    "map-area": 1,
+    "map-home": 1
+   },
+   "labs": 214,
+   "tiny": 37,
+   "ratio": 0.173,
+   "leads": 30,
+   "near2In": 207,
+   "near2": 328,
+   "pills": 32
+  }
+ }
+}

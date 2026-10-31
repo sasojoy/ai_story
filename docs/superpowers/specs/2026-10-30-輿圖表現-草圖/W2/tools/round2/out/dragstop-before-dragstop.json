@@ -1,0 +1,190 @@
+{
+ "R": [
+  {
+   "W": "375",
+   "kind": "exact",
+   "dy": 112,
+   "drawer": "row",
+   "px": 180,
+   "mode": "overview",
+   "relaid": false,
+   "pillsRelaid": true,
+   "pillsBelow": 0,
+   "bad": [
+    "lab×hud yingshui map-fit",
+    "lab×hud yingchuan_wilds mv-me"
+   ],
+   "pills": [
+    "luoyang_road"
+   ],
+   "labs": 27,
+   "fabVis": "visible"
+  },
+  {
+   "W": "375",
+   "kind": "top",
+   "dy": 1000,
+   "drawer": "full",
+   "px": 627,
+   "mode": "overview",
+   "relaid": false,
+   "pillsRelaid": false,
+   "pillsBelow": 1,
+   "bad": [
+    "pill-out luoyang_road@8,226.1,120,250.1"
+   ],
+   "pills": [
+    "luoyang_road"
+   ],
+   "labs": 27,
+   "fabVis": "hidden"
+  },
+  {
+   "W": "375",
+   "kind": "d100",
+   "dy": 100,
+   "drawer": "row",
+   "px": 180,
+   "mode": "overview",
+   "relaid": true,
+   "pillsRelaid": true,
+   "pillsBelow": 0,
+   "bad": [],
+   "pills": [
+    "luoyang_road"
+   ],
+   "labs": 27,
+   "fabVis": "visible"
+  },
+  {
+   "W": "375",
+   "kind": "d140",
+   "dy": 140,
+   "drawer": "row",
+   "px": 180,
+   "mode": "overview",
+   "relaid": true,
+   "pillsRelaid": true,
+   "pillsBelow": 0,
+   "bad": [],
+   "pills": [
+    "luoyang_road"
+   ],
+   "labs": 27,
+   "fabVis": "visible"
+  },
+  {
+   "W": "375",
+   "kind": "d300",
+   "dy": 300,
+   "drawer": "row",
+   "px": 180,
+   "mode": "overview",
+   "relaid": true,
+   "pillsRelaid": true,
+   "pillsBelow": 0,
+   "bad": [],
+   "pills": [
+    "luoyang_road"
+   ],
+   "labs": 27,
+   "fabVis": "visible"
+  },
+  {
+   "W": "320",
+   "kind": "exact",
+   "dy": 112,
+   "drawer": "row",
+   "px": 180,
+   "mode": "overview",
+   "relaid": false,
+   "pillsRelaid": false,
+   "pillsBelow": 0,
+   "bad": [
+    "lab-out yingchuan@185.7,206.7,235.6,225.9",
+    "lab-out yingchuan_wilds@177.1,243.6,243.8,257.9"
+   ],
+   "pills": [
+    "luoyang_road"
+   ],
+   "labs": 22,
+   "fabVis": "visible"
+  },
+  {
+   "W": "320",
+   "kind": "top",
+   "dy": 1000,
+   "drawer": "full",
+   "px": 378,
+   "mode": "overview",
+   "relaid": false,
+   "pillsRelaid": false,
+   "pillsBelow": 1,
+   "bad": [
+    "pill-out luoyang_road@8,88.7,120,112.7"
+   ],
+   "pills": [
+    "luoyang_road"
+   ],
+   "labs": 22,
+   "fabVis": "hidden"
+  },
+  {
+   "W": "320",
+   "kind": "d100",
+   "dy": 100,
+   "drawer": "row",
+   "px": 180,
+   "mode": "overview",
+   "relaid": true,
+   "pillsRelaid": true,
+   "pillsBelow": 0,
+   "bad": [],
+   "pills": [
+    "yingshui",
+    "luoyang_road"
+   ],
+   "labs": 22,
+   "fabVis": "visible"
+  },
+  {
+   "W": "320",
+   "kind": "d140",
+   "dy": 140,
+   "drawer": "row",
+   "px": 180,
+   "mode": "overview",
+   "relaid": true,
+   "pillsRelaid": true,
+   "pillsBelow": 0,
+   "bad": [],
+   "pills": [
+    "yingshui",
+    "luoyang_road"
+   ],
+   "labs": 22,
+   "fabVis": "visible"
+  },
+  {
+   "W": "320",
+   "kind": "d300",
+   "dy": 300,
+   "drawer": "full",
+   "px": 378,
+   "mode": "overview",
+   "relaid": true,
+   "pillsRelaid": true,
+   "pillsBelow": 0,
+   "bad": [],
+   "pills": [],
+   "labs": 22,
+   "fabVis": "hidden"
+  }
+ ],
+ "log": {
+  "console": [],
+  "exceptions": [],
+  "net": [],
+  "logEntries": []
+ }
+}

@@ -1,0 +1,163 @@
+{
+ "R": [
+  {
+   "W": "375",
+   "fx": 0.5,
+   "taps": [
+    {
+     "at": [
+      188,
+      700
+     ],
+     "under": "",
+     "mode": "place",
+     "sel": "changshe",
+     "drawer": "peek",
+     "px": 147,
+     "cards": 0,
+     "clicks": [
+      "B|map-place:changshe"
+     ]
+    },
+    {
+     "at": [
+      188,
+      621
+     ],
+     "under": "",
+     "mode": "place",
+     "sel": "changshe",
+     "drawer": "full",
+     "px": 627,
+     "cards": 0,
+     "clicks": [
+      "mbody|-"
+     ]
+    },
+    {
+     "at": [
+      188,
+      141
+     ],
+     "under": "",
+     "mode": "place",
+     "sel": "changshe",
+     "drawer": "peek",
+     "px": 147,
+     "cards": 0,
+     "clicks": [
+      "mv-base on|-"
+     ]
+    }
+   ]
+  },
+  {
+   "W": "375",
+   "fx": 0.15,
+   "taps": [
+    {
+     "at": [
+      56,
+      700
+     ],
+     "under": "mgrab",
+     "mode": "place",
+     "sel": "changshe",
+     "drawer": "peek",
+     "px": 147,
+     "cards": 0,
+     "clicks": [
+      "svg|map-place:changshe"
+     ]
+    },
+    {
+     "at": [
+      56,
+      621
+     ],
+     "under": "mgrab",
+     "mode": "place",
+     "sel": "changshe",
+     "drawer": "full",
+     "px": 627,
+     "cards": 0,
+     "clicks": [
+      "mbody|-"
+     ]
+    },
+    {
+     "at": [
+      56,
+      141
+     ],
+     "under": "mgrab",
+     "mode": "place",
+     "sel": "changshe",
+     "drawer": "peek",
+     "px": 147,
+     "cards": 0,
+     "clicks": [
+      "mv-base on|-"
+     ]
+    }
+   ]
+  },
+  {
+   "W": "375",
+   "fx": 0.85,
+   "taps": [
+    {
+     "at": [
+      319,
+      700
+     ],
+     "under": "mgrab",
+     "mode": "place",
+     "sel": "yingshui",
+     "drawer": "peek",
+     "px": 147,
+     "cards": 0,
+     "clicks": [
+      "svg|map-place:yingshui"
+     ]
+    },
+    {
+     "at": [
+      319,
+      621
+     ],
+     "under": "mgrab",
+     "mode": "place",
+     "sel": "yingshui",
+     "drawer": "full",
+     "px": 627,
+     "cards": 0,
+     "clicks": [
+      "H4|-"
+     ]
+    },
+    {
+     "at": [
+      319,
+      141
+     ],
+     "under": "mgrab",
+     "mode": "place",
+     "sel": "yingshui",
+     "drawer": "peek",
+     "px": 147,
+     "cards": 0,
+     "clicks": [
+      "mv-base on|-"
+     ]
+    }
+   ]
+  }
+ ],
+ "log": {
+  "console": [],
+  "exceptions": [],
+  "net": [],
+  "logEntries": []
+ }
+}

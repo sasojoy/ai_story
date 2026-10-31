@@ -1,0 +1,43 @@
+--- a/web/map.js
++++ b/web/map.js
+@@ -2139,7 +2139,39 @@
+     if (!me) return camFit(g);
+     let sx = me[0] * 2, sy = me[1] * 2, n = 2;
+     if (!st.journey) for (const b of mvNeighbors(base, st)) { sx += b.x; sy += b.y; n += 1; }
+-    return camAt(g, sx / n, sy / n, mvZ0(g));
++    return openDodge(g, sx / n, sy / n, mvZ0(g));
++  }
++  // 【FB-9094 選項甲，原型】取景避開 HUD：打開的中心算完（你兩票＋腳下每一站一票），再上下左右挪（螢幕上一次 16px，左右最多 96、上下最多 64），
++  // 倍率最多拉遠到 Z0 × 0.82（還是近景）。照的是「原本的取景裡露著（哪怕一點）的兩步內（含腳下）的小圖」：每一個取法數其中有一半以上看不到的
++  // ——看不到＝落在露出來那一塊外面、或被看得到的浮著的那幾樣（區名、🔍、小地圖、右下兩顆）蓋住；挑最少的，一樣少挑倍率大的、再挑挪得少的
++  // （本來就 0 就不動）。原本就在畫面外的（腳下一步的掛箭頭牌）不算，免得一律拉遠。◎ 也回到這裡
++  function openDodge(g, cx, cy, z0) {
++    const st = S.mapState, base = S.mapBase, c0 = camAt(g, cx, cy, z0);
++    if (!st || st.journey || !st.here) return c0;
++    const hops = mvHops(base, st.here), lvl = mvLevel(z0, g), room = mapRoom(g), vis = [0, 0, g.vw, room.bottom];
++    const inter = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
++    const box = (b, c) => pinBox(b, st.places[b.id], c.x + b.x * c.z, c.y + b.y * c.z, lvl, null);
++    const ids = base.places.filter((b) => hops[b.id] !== undefined && hops[b.id] <= 2 && st.places[b.id] && inter(box(b, c0), vis) > 0);
++    const score = (c) => {
++      const parts = hudParts(base, g, lvl, mvArea(base, st, c, g)), hud = Object.values(parts).filter((p) => !p.hide).map((p) => p.look);
++      let bad = 0;
++      for (const b of ids) {
++        const bx = box(b, c), area = (bx[2] - bx[0]) * (bx[3] - bx[1]);
++        let hid = area - inter(bx, vis);
++        for (const h of hud) hid += inter(bx, h);
++        if (hid >= 0.5 * area) bad++;
++      }
++      return bad;
++    };
++    let best = c0, bs = score(c0), bz = z0, bd = 0;
++    if (!bs) return c0;
++    for (const k of [1, 0.94, 0.88, 0.82]) for (let dy = -64; dy <= 64; dy += 16) for (let dx = -96; dx <= 96; dx += 16) {
++      const z = z0 * k, d = Math.hypot(dx, dy);
++      if (k === 1 && !d) continue;
++      const c = camAt(g, cx + dx / z, cy + dy / z, z), s = score(c);
++      if (s < bs || (s === bs && (z > bz + 1e-9 || (Math.abs(z - bz) < 1e-9 && d < bd)))) { best = c; bs = s; bz = z; bd = d; }
++    }
++    return best;
+   }
+   // 視窗換了大小、地圖框換了高（狀態列變高變矮，FB-710）：照新的框重夾、重排
+   function applyMapView() {

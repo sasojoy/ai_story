@@ -1,0 +1,469 @@
+{
+ "R": [
+  {
+   "W": "375",
+   "fx": 0.5,
+   "taps": [
+    {
+     "at": [
+      188,
+      700
+     ],
+     "under": "",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "row",
+     "px": 180,
+     "cards": 24,
+     "clicks": [
+      "I|-"
+     ]
+    },
+    {
+     "at": [
+      188,
+      588
+     ],
+     "under": "",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "peek",
+     "px": 68,
+     "cards": 24,
+     "clicks": [
+      "I|-"
+     ]
+    },
+    {
+     "at": [
+      188,
+      700
+     ],
+     "under": "",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "row",
+     "px": 180,
+     "cards": 24,
+     "clicks": [
+      "I|-"
+     ]
+    }
+   ]
+  },
+  {
+   "W": "375",
+   "fx": 0.15,
+   "taps": [
+    {
+     "at": [
+      56,
+      700
+     ],
+     "under": "mgrab",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "row",
+     "px": 180,
+     "cards": 24,
+     "clicks": [
+      "mgrab|-"
+     ]
+    },
+    {
+     "at": [
+      56,
+      588
+     ],
+     "under": "mgrab",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "peek",
+     "px": 68,
+     "cards": 24,
+     "clicks": [
+      "mgrab|-"
+     ]
+    },
+    {
+     "at": [
+      56,
+      700
+     ],
+     "under": "mgrab",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "row",
+     "px": 180,
+     "cards": 24,
+     "clicks": [
+      "mgrab|-"
+     ]
+    }
+   ]
+  },
+  {
+   "W": "375",
+   "fx": 0.85,
+   "taps": [
+    {
+     "at": [
+      319,
+      700
+     ],
+     "under": "mgrab",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "row",
+     "px": 180,
+     "cards": 24,
+     "clicks": [
+      "mgrab|-"
+     ]
+    },
+    {
+     "at": [
+      319,
+      588
+     ],
+     "under": "mgrab",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "peek",
+     "px": 68,
+     "cards": 24,
+     "clicks": [
+      "mgrab|-"
+     ]
+    },
+    {
+     "at": [
+      319,
+      700
+     ],
+     "under": "mgrab",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "row",
+     "px": 180,
+     "cards": 24,
+     "clicks": [
+      "mgrab|-"
+     ]
+    }
+   ]
+  },
+  {
+   "W": "360",
+   "fx": 0.5,
+   "taps": [
+    {
+     "at": [
+      180,
+      668
+     ],
+     "under": "",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "row",
+     "px": 180,
+     "cards": 24,
+     "clicks": [
+      "I|-"
+     ]
+    },
+    {
+     "at": [
+      180,
+      556
+     ],
+     "under": "",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "peek",
+     "px": 68,
+     "cards": 24,
+     "clicks": [
+      "I|-"
+     ]
+    },
+    {
+     "at": [
+      180,
+      668
+     ],
+     "under": "",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "row",
+     "px": 180,
+     "cards": 24,
+     "clicks": [
+      "I|-"
+     ]
+    }
+   ]
+  },
+  {
+   "W": "360",
+   "fx": 0.15,
+   "taps": [
+    {
+     "at": [
+      54,
+      668
+     ],
+     "under": "mgrab",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "row",
+     "px": 180,
+     "cards": 24,
+     "clicks": [
+      "mgrab|-"
+     ]
+    },
+    {
+     "at": [
+      54,
+      556
+     ],
+     "under": "mgrab",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "peek",
+     "px": 68,
+     "cards": 24,
+     "clicks": [
+      "mgrab|-"
+     ]
+    },
+    {
+     "at": [
+      54,
+      668
+     ],
+     "under": "mgrab",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "row",
+     "px": 180,
+     "cards": 24,
+     "clicks": [
+      "mgrab|-"
+     ]
+    }
+   ]
+  },
+  {
+   "W": "360",
+   "fx": 0.85,
+   "taps": [
+    {
+     "at": [
+      306,
+      668
+     ],
+     "under": "mgrab",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "row",
+     "px": 180,
+     "cards": 24,
+     "clicks": [
+      "mgrab|-"
+     ]
+    },
+    {
+     "at": [
+      306,
+      556
+     ],
+     "under": "mgrab",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "peek",
+     "px": 68,
+     "cards": 24,
+     "clicks": [
+      "mgrab|-"
+     ]
+    },
+    {
+     "at": [
+      306,
+      668
+     ],
+     "under": "mgrab",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "row",
+     "px": 180,
+     "cards": 24,
+     "clicks": [
+      "mgrab|-"
+     ]
+    }
+   ]
+  },
+  {
+   "W": "320",
+   "fx": 0.5,
+   "taps": [
+    {
+     "at": [
+      160,
+      456
+     ],
+     "under": "",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "row",
+     "px": 180,
+     "cards": 24,
+     "clicks": [
+      "I|-"
+     ]
+    },
+    {
+     "at": [
+      160,
+      344
+     ],
+     "under": "",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "peek",
+     "px": 68,
+     "cards": 24,
+     "clicks": [
+      "I|-"
+     ]
+    },
+    {
+     "at": [
+      160,
+      456
+     ],
+     "under": "",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "row",
+     "px": 180,
+     "cards": 24,
+     "clicks": [
+      "I|-"
+     ]
+    }
+   ]
+  },
+  {
+   "W": "320",
+   "fx": 0.15,
+   "taps": [
+    {
+     "at": [
+      48,
+      456
+     ],
+     "under": "mgrab",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "row",
+     "px": 180,
+     "cards": 24,
+     "clicks": [
+      "mgrab|-"
+     ]
+    },
+    {
+     "at": [
+      48,
+      344
+     ],
+     "under": "mgrab",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "peek",
+     "px": 68,
+     "cards": 24,
+     "clicks": [
+      "mgrab|-"
+     ]
+    },
+    {
+     "at": [
+      48,
+      456
+     ],
+     "under": "mgrab",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "row",
+     "px": 180,
+     "cards": 24,
+     "clicks": [
+      "mgrab|-"
+     ]
+    }
+   ]
+  },
+  {
+   "W": "320",
+   "fx": 0.85,
+   "taps": [
+    {
+     "at": [
+      272,
+      456
+     ],
+     "under": "mgrab",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "row",
+     "px": 180,
+     "cards": 24,
+     "clicks": [
+      "mgrab|-"
+     ]
+    },
+    {
+     "at": [
+      272,
+      344
+     ],
+     "under": "mgrab",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "peek",
+     "px": 68,
+     "cards": 24,
+     "clicks": [
+      "mgrab|-"
+     ]
+    },
+    {
+     "at": [
+      272,
+      456
+     ],
+     "under": "mgrab",
+     "mode": "overview",
+     "sel": null,
+     "drawer": "row",
+     "px": 180,
+     "cards": 24,
+     "clicks": [
+      "mgrab|-"
+     ]
+    }
+   ]
+  }
+ ],
+ "log": {
+  "console": [],
+  "exceptions": [],
+  "net": [],
+  "logEntries": []
+ }
+}
