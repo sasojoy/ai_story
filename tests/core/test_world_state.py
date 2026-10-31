@@ -13,6 +13,7 @@ from tianxia.database import Database
 from tianxia.martial_arts import Insight, generate_from_name
 from tianxia.sqlite_world import SqliteWorldStore, open_world
 from tianxia.state import Rumor
+from tianxia.world_state import CompanionProgress
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -1031,3 +1032,36 @@ def test_a_read_that_began_before_a_rename_is_not_remembered(store, content):
         assert store.get_season().rumors[0].character == "舊名"  # 這個快照看到的照舊是改之前的
     assert store.get_season().rumors[0].character == "新名"
     _same_as_table(store)
+
+
+def test_the_light_reads_match_the_full_read(store, content):
+    """只撈一格的讀取（季數、季的階段、天機、決戰、玉璽碎片、同伴進度）跟整份 read() 讀出來的一樣，每個階段都一樣。"""
+    def check():
+        shared = store.read()
+        assert store.get_season_number() == shared.season_number
+        assert store.season_phase() == shared.season_phase()
+        assert store.tianji() == shared.tianji
+        assert store.get_jade_seal_fragments() == shared.jade_seal_fragments
+        assert store.companions() == shared.companions
+        assert store.get_companion("dongzhuo") == shared.companions.get("dongzhuo", CompanionProgress())
+        battle = store.get_battle()
+        assert (battle is None and shared.active_battle is None) or battle.model_dump() == shared.active_battle.model_dump()
+
+    check()  # 什麼都還沒有的資料庫
+    content.config.auto_open_first_season = False
+    store.seed_first_season(content)
+    check()  # 籌備中
+    assert store.open_season(content, now=1.0)
+    check()  # 開打
+    store.record_jade_seal_fragment("甲", "第一季", "得了一塊")
+    store.update_companion("dongzhuo", lambda p: setattr(p, "owner", "甲"))
+    store.start_battle(_battle_definition(), now=0.0)
+    check()
+    with store.action_lock():  # 同一筆交易裡改了之後再讀：讀到的是改過的
+        store.mutate(lambda s: setattr(s, "tianji", 7))
+        assert store.tianji() == 7
+        store.mutate_season(lambda s: setattr(s, "ended", True))
+        assert store.season_phase() == "resting"
+    check()  # 休季
+    assert store.next_season(content, now=2.0)
+    check()  # 下一季

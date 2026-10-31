@@ -425,7 +425,7 @@ def culprit(content: Content, o: OppDef, world_tianji: int) -> str:
 
 
 def _world_tianji(world) -> int:
-    return world.read().tianji if world is not None else 0
+    return world.tianji() if world is not None else 0
 
 
 def _asker_here(state: GameState, content: Content, o: OppDef, loc_id: str) -> str | None:

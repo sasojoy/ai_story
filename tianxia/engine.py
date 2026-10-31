@@ -7569,7 +7569,7 @@ class Game:
         keep = c.config.companions.parted_keep
         lines = []
         marked = set()
-        for cid, progress in self.world.read().companions.items():
+        for cid, progress in self.world.companions().items():
             if cid not in c.characters or not any(roster.owns(n, p.name) for n in progress.parted_from):
                 continue
             marked.add(cid)

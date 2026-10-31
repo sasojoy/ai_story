@@ -46,7 +46,7 @@ def active(content: Content, tianji: int) -> list[SecretRecipe]:
 
 
 def tianji_of(world: WorldStateStore) -> int:
-    return world.read().tianji
+    return world.tianji()
 
 
 def key(recipe: SecretRecipe) -> str:

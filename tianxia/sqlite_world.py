@@ -28,6 +28,8 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from sqlite3 import Connection, Row
 
+from pydantic import TypeAdapter
+
 from . import allied, calendar, divine
 from .battle_instance import BattleInstance, BattleRoundRecord, SiegeInfo, shift_deadlines, start_muster
 from .characters import name_key
@@ -59,6 +61,10 @@ def _forget_logs(db: Database) -> None:
     with _LOG_LOCK:
         db.bump()
         _LOG_CACHES.pop(db, None)
+
+
+_FRAGMENTS = TypeAdapter(list[JadeSealFragment])  # 只解析 world 那一列的一格：跟整份解析時那一格的驗證一樣（JSON 模式）
+_COMPANIONS = TypeAdapter(dict[str, CompanionProgress])
 
 
 def open_world(path: Path | None = None) -> SqliteWorldStore:
@@ -200,8 +206,27 @@ class SqliteWorldStore:
     # ── 武學命名登記與煉製配方 ──────────────────────────────
 
     def _season_number(self, conn: Connection) -> int:
-        row = conn.execute("SELECT json_extract(data, '$.season_number') AS number FROM world WHERE id = 1").fetchone()
-        return 1 if row is None or row["number"] is None else int(row["number"])
+        return self._world_fields(conn)[0]
+
+    def _world_fields(self, conn: Connection) -> tuple[int, bool, int, int | None]:
+        """world 那一列的幾個小欄位（季數, 開季了沒, 天機, 目前決戰的流水號），不整份解析（審查 S-02）。預設值跟
+        SharedWorldState 一樣（還沒有那一列＝全新的全服狀態）。同一筆交易裡沒寫過就不重查（Database.memo）。"""
+        def _read() -> tuple[int, bool, int, int | None]:
+            row = conn.execute(
+                "SELECT json_extract(data, '$.season_number') AS number, json_extract(data, '$.season_opened') AS opened, "
+                "json_extract(data, '$.tianji') AS tianji, active_battle_id FROM world WHERE id = 1"
+            ).fetchone()
+            if row is None:
+                fresh = SharedWorldState()
+                return fresh.season_number, fresh.season_opened, fresh.tianji, None
+            return (
+                1 if row["number"] is None else int(row["number"]),
+                bool(row["opened"]),
+                0 if row["tianji"] is None else int(row["tianji"]),
+                row["active_battle_id"],
+            )
+
+        return self.db.memo("world-fields", _read)
 
     def get_skill(self, name: str) -> MartialArt | None:
         with self.db.snapshot() as conn:
@@ -730,7 +755,21 @@ class SqliteWorldStore:
         return result["fragment"]
 
     def get_jade_seal_fragments(self) -> list[JadeSealFragment]:
-        return self.read().jade_seal_fragments
+        """同 read().jade_seal_fragments，只解析那一格（審查 S-02）。"""
+        with self.db.snapshot() as conn:
+            row = conn.execute("SELECT json_extract(data, '$.jade_seal_fragments') AS f FROM world WHERE id = 1").fetchone()
+        return [] if row is None or row["f"] is None else _FRAGMENTS.validate_json(row["f"])
+
+    def tianji(self) -> int:
+        """天機（同 read().tianji，不整份解析）。"""
+        with self.db.snapshot() as conn:
+            return self._world_fields(conn)[2]
+
+    def companions(self) -> dict[str, CompanionProgress]:
+        """同 read().companions（人物 id → 進度），只解析那一格（審查 S-02）。"""
+        with self.db.snapshot() as conn:
+            row = conn.execute("SELECT json_extract(data, '$.companions') AS c FROM world WHERE id = 1").fetchone()
+        return {} if row is None or row["c"] is None else _COMPANIONS.validate_json(row["c"])
 
     def jade_seal_summary(self) -> str:
         return jade_seal_summary(self.get_jade_seal_fragments())
@@ -757,7 +796,8 @@ class SqliteWorldStore:
         return None if row is None else WorldState.model_validate_json(row["data"])
 
     def get_season_number(self) -> int:
-        return self.read().season_number
+        with self.db.snapshot() as conn:  # 同 read().season_number，不整份解析（審查 S-02）
+            return self._season_number(conn)
 
     def fingerprint_parts(self) -> tuple[SharedWorldState, int, int]:
         """推送的看守（server.current_fingerprint）每幾秒讀一次用：同一個唯讀快照裡讀出（全服狀態，這一季最大的天下大事傳聞
@@ -780,7 +820,17 @@ class SqliteWorldStore:
         self.mutate(lambda state: setattr(state, "season", season))
 
     def season_phase(self) -> SeasonPhase:
-        return self.read().season_phase()
+        """同 read().season_phase()（SharedWorldState.season_phase 的三個條件），只撈那幾格（審查 S-02）。"""
+        with self.db.snapshot() as conn:
+            number, opened, _, _ = self._world_fields(conn)
+            row = conn.execute(
+                "SELECT json_extract(data, '$.storyline') AS storyline, json_extract(data, '$.ended') AS ended "
+                "FROM seasons WHERE number = ?", (number,),
+            ).fetchone()
+        storyline, ended = ("", False) if row is None else (row["storyline"] or "", bool(row["ended"]))
+        if not storyline or not opened:
+            return "preparing"
+        return "resting" if ended else "running"
 
     def seed_first_season(self, content: Content) -> WorldState:
         def _apply(state: SharedWorldState) -> None:
@@ -1046,7 +1096,10 @@ class SqliteWorldStore:
     # ── 全服即時多人戰鬥 ──────────────────────────────────
 
     def get_battle(self) -> BattleInstance | None:
-        return self.read().active_battle
+        """同 read().active_battle：只讀決戰那一列，不解析全服狀態與季（審查 S-02）。每次都是新的一份。"""
+        with self.db.snapshot() as conn:
+            battle_id = self._world_fields(conn)[3]
+            return None if battle_id is None else self._load_battle(conn, battle_id)
 
     def mutate_battle(self, fn: Callable[[BattleInstance], None]) -> BattleInstance | None:
         result: dict[str, BattleInstance | None] = {"battle": None}
@@ -1142,7 +1195,7 @@ class SqliteWorldStore:
     # ── 同伴進度與招募 ────────────────────────────────────
 
     def get_companion(self, companion_id: str) -> CompanionProgress:
-        return self.read().companions.get(companion_id, CompanionProgress())
+        return self.companions().get(companion_id, CompanionProgress())
 
     def try_recruit(self, companion_id: str, player_name: str, cap: int | None = None) -> bool:
         """原子地招一位：已經有主、或（給了 cap）這個人名下已經有 cap 位（名號比對不分大小寫），都不寫、回 False。

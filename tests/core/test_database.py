@@ -544,6 +544,35 @@ for _ in range(int(sys.argv[2])):
 """
 
 
+def test_memo_keeps_one_value_until_something_is_written(tmp_path):
+    """Database.memo（審查 S-02）：同一筆交易裡沒寫過東西就回同一個值；寫過、撤回過 savepoint、換一筆交易就重算；不在交易裡每次都算。"""
+    db = open_database(tmp_path / "t.db")
+    calls = []
+
+    def make():
+        calls.append(1)
+        return object()
+
+    assert db.memo("k", make) is not db.memo("k", make)  # 不在交易裡
+    with db.transaction() as conn:
+        first = db.memo("k", make)
+        assert db.memo("k", make) is first
+        conn.execute("INSERT INTO seasons (number, data) VALUES (1, '{}')")
+        second = db.memo("k", make)
+        assert second is not first and db.memo("k", make) is second
+        with pytest.raises(RuntimeError):
+            with db.savepoint():
+                inside = db.memo("k", make)
+                assert inside is second  # 開 savepoint 本身不算寫
+                raise RuntimeError("撤回")
+        assert db.memo("k", make) is not inside  # 撤回過 savepoint：之前記下的都不算
+    with db.snapshot():
+        assert db.memo("k", make) is db.memo("k", make)
+    with db.snapshot():
+        fresh = db.memo("k", make)
+    assert fresh is not first
+
+
 def test_unchanged_tells_whether_this_transaction_wrote_or_was_bumped(tmp_path):
     """Database.unchanged：交易裡、還沒寫過、開始之後沒有人 bump 才是 True（傳聞快取只記這種時候讀到的）。"""
     db = open_database(tmp_path / "t.db")

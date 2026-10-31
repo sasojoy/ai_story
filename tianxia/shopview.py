@@ -313,7 +313,7 @@ def smith_line(state: GameState, content: Content, world: WorldStateStore, kind:
     out = {"kind": kind, "main": main, "aux": aux, "rack_full": equipment.RACK_FULL if full else None, "cells": cells, "ready": False}
     if main is None or aux is None:
         return out
-    tianji = world.read().tianji
+    tianji = world.tianji()
     tier = smithing.tier_of(content, main)
     known = forge_secrets.solved_name(state, content, tianji, slot, kind, main, aux)
     recipe = forge_secrets.match(content, tianji, slot, kind, main, aux, state.world) if known else None

@@ -26,11 +26,13 @@ import threading
 import time
 import weakref
 from collections.abc import Callable, Iterator
+from typing import TypeVar
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PATH = ROOT / "saves" / "tianxia.db"
 ENV_VAR = "TIANXIA_DB"  # 線上版與開發版用不同的資料（線上架構設計 8.1）：設了這個環境變數就開那個檔
+T = TypeVar("T")
 BUSY_SLICE = 5.0  # 不限時等寫入權時，每次最多等幾秒就重試一次
 
 # 第 1 版的結構。已經有檔案是這個樣子了（試玩伺服器），不要再改它；要改結構就加新的一組、升版本。
@@ -311,7 +313,7 @@ class _ThreadState:
     """一個執行緒在這個資料庫上的連線與交易狀態。放在 threading.local 裡：執行緒結束、local 被釋放時，
     這個物件被回收，登記的 weakref.finalize 就把連線關掉。"""
 
-    __slots__ = ("conn", "depth", "reading", "rewriting", "savepoints", "began", "generation", "notes", "after",
+    __slots__ = ("conn", "depth", "reading", "rewriting", "savepoints", "began", "generation", "epoch", "memo", "notes", "after",
                  "__weakref__")
 
     def __init__(self, conn: sqlite3.Connection):
@@ -320,9 +322,12 @@ class _ThreadState:
         self.savepoints = 0  # 現在開著的 savepoint 數（見 Database.savepoint），拿來給每一個取不同的名字
         self.reading = False  # 是不是在 snapshot() 的最外層
         self.rewriting = False  # 是不是在 rewriting() 的區段裡（整份讀出、改、整份寫回）
-        # 這一筆交易（寫入或快照的最外層）的記號（見 Database.unchanged）：開始時連線的 total_changes
+        # 這一筆交易（寫入或快照的最外層）的記號（見 Database.unchanged、Database.memo）：開始時連線的 total_changes；
+        # epoch 每開一筆、結束一筆、撤回一個 savepoint 就加一（撤回不會讓 total_changes 變小，靠它認出「資料退回去了」）
         self.began: int | None = None
         self.generation = 0  # 開這一筆時 Database.generation 是多少（見 Database.unchanged）
+        self.epoch = 0
+        self.memo: dict[object, tuple[int, int, object]] = {}
         self.notes: set[object] = set()  # 這一筆交易記下的事（Database.note）
         self.after: list[Callable[[], None]] = []  # 這一筆 COMMIT 之後要做的事（Database.after_commit）
 
@@ -414,6 +419,7 @@ class Database:
         try:
             yield conn
         except BaseException:
+            state.epoch += 1  # 這一段的寫入撤回了：之前記下的（Database.memo）不算數
             if conn.in_transaction:
                 conn.execute(f"ROLLBACK TO {name}")
                 conn.execute(f"RELEASE {name}")
@@ -483,12 +489,16 @@ class Database:
     def _opened(self, state: _ThreadState) -> None:
         state.began = state.conn.total_changes
         state.generation = self.generation
+        state.epoch += 1
+        state.memo.clear()
         state.notes = set()
         state.after = []
 
     @staticmethod
     def _closed(state: _ThreadState) -> None:
         state.began = None
+        state.epoch += 1
+        state.memo.clear()
         state.notes = set()
         state.after = []
 
@@ -522,6 +532,21 @@ class Database:
             fn()
             return
         state.after.append(fn)
+
+    def memo(self, key: object, make: Callable[[], T]) -> T:
+        """同一筆交易裡、中間沒有寫過東西（也沒撤回過 savepoint）時，同一個 key 只算一次 make()，之後回同一個值：
+        同一個請求裡反覆讀同一份全服狀態不必一再解析（審查 S-02）。寫過、撤回過、換了一筆交易就重算。
+        回的是同一個物件：只給不會改它、也不會把它交出去的讀取用。不在交易裡時每次都算。"""
+        state = getattr(self._local, "state", None)
+        if state is None or state.began is None:
+            return make()
+        stamp = (state.epoch, state.conn.total_changes)
+        hit = state.memo.get(key)
+        if hit is not None and (hit[0], hit[1]) == stamp:
+            return hit[2]  # type: ignore[return-value]
+        value = make()
+        state.memo[key] = (*stamp, value)  # 照算之前的記號記：make() 裡要是寫了東西，下一次就對不上、重算
+        return value
 
     def writing(self) -> bool:
         """這個執行緒現在是不是在寫入交易裡（沒碰過資料庫的執行緒不會因為問這句而開連線）。"""

@@ -659,6 +659,10 @@ class WorldStateStore(Protocol):
 
     def get_jade_seal_fragments(self) -> list[JadeSealFragment]: ...
 
+    def tianji(self) -> int:
+        """天機（同 read().tianji，只是不整份讀）。"""
+        ...
+
     def jade_seal_summary(self) -> str: ...
 
     # ── 共享賽季 ──
@@ -835,6 +839,10 @@ class WorldStateStore(Protocol):
     # ── 同伴進度與招募 ──
     def get_companion(self, companion_id: str) -> CompanionProgress:
         """讀目前進度；還沒有人動過這位人物時回傳一份預設值（不寫回）。"""
+        ...
+
+    def companions(self) -> dict[str, CompanionProgress]:
+        """每一位人物的進度（同 read().companions，只是不整份讀；每次都是新的一份）。"""
         ...
 
     def try_recruit(self, companion_id: str, player_name: str, cap: int | None = None) -> bool:
