@@ -1,6 +1,6 @@
 """走一趟（tianxia/outing.py；企劃者 2026-10-29～30）：探索一次走一、三、五段，每一段是現行的一次探索；
 要選的事停下、選完接著走；打輸、氣血見底回頭，沒走的段不扣體力；段數越多稀有的越容易來（倍數 1／1.2／1.5，畫面不寫）。
-用正式內容（season21），整個檔標 slow。"""
+用正式內容（season21）（以前整個檔標 slow，2026-10-31 起只有超過一秒的那幾條標）。"""
 from __future__ import annotations
 
 import random
@@ -14,8 +14,6 @@ from jianfa_kit import jianfa_game, ready
 from tianxia import explore_modes, explore_one, outing, social, speech, team
 from tianxia.encounter import EncounterResult
 from tianxia.state import Inscription
-
-pytestmark = pytest.mark.slow
 
 MAT, EVT, ENC = explore_one.MATERIAL, explore_one.EVENT, explore_one.ENCOUNTER
 
@@ -205,6 +203,7 @@ def test_own_words_need_ink_and_pass_the_word_list():
     assert game.outing_ink_left() == 0
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_a_place_keeps_the_latest_lines():
     game = _game()
     keep = game.content.config.jianfa.outing_keep

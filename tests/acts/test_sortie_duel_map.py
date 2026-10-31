@@ -11,8 +11,6 @@ from duel_kit import LOC, duel_content, duel_world, game_of, seat
 from tianxia import conquest, mapdata, orders
 from tianxia.state import Order
 
-pytestmark = pytest.mark.slow  # 建 Game、載正式內容
-
 
 def _own_block(c, world, side: str) -> str:
     season = world.get_season()

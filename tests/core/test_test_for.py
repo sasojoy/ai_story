@@ -330,32 +330,32 @@ def _marker(cmd):
 def test_a_changed_test_file_runs_with_its_slow_tests():
     """手冊 4.3「只跑改到的那幾個測試檔」：改了一個整個檔標 slow 的測試檔，就是要跑它，連 slow 一起
     （以前 -m "not slow" 把它整個濾掉，39 deselected、結束碼 5）。"""
-    own = test_for.pick(["tests/arts/test_epiphany.py", "tests/core/test_errands.py"])
+    own = test_for.pick(["tests/core/test_story_wolong.py", "tests/core/test_story_maier.py"])
     (cmd,) = test_for.pytest_commands(own, slow=False, extra=[])
     assert _marker(cmd) == "slow or not slow"
-    assert {"tests/arts/test_epiphany.py", "tests/core/test_errands.py"} <= set(cmd)
+    assert {"tests/core/test_story_wolong.py", "tests/core/test_story_maier.py"} <= set(cmd)
 
 
 def test_changed_slow_test_files_run_apart_from_the_rest_of_the_pick():
     """改到的測試檔連 slow 一起跑，其他挑到的照舊不含 slow：分兩次，改到的那幾個不在第一次裡重複跑。"""
-    mixed = test_for.pick(["tests/arts/test_epiphany.py"])
+    mixed = test_for.pick(["tests/core/test_story_wolong.py"])
     mixed.files.add(ROOT / "tests/arts/test_fusion.py")
     mixed.core = True
     first, second = test_for.pytest_commands(mixed, slow=False, extra=[])
     assert _marker(first) == "not slow" and "tests/arts/test_fusion.py" in first
-    assert "tests/arts/test_epiphany.py" not in first and "tests/core/test_engine.py" in first
-    assert _marker(second) == "slow or not slow" and second[-1] == "tests/arts/test_epiphany.py"
+    assert "tests/core/test_story_wolong.py" not in first and "tests/core/test_engine.py" in first
+    assert _marker(second) == "slow or not slow" and second[-1] == "tests/core/test_story_wolong.py"
     plain = test_for.pick(["tests/arts/test_fusion.py"])  # 沒有 slow 的測試檔：一次就好
     assert len(test_for.pytest_commands(plain, slow=False, extra=[])) == 1
     # 這個檔的字串裡寫了 "@pytest.mark.slow"（_slow_smoke 的例子），不是標記：也是一次就好
     assert not test_for.has_slow(ROOT / "tests/core/test_test_for.py")
-    assert test_for.has_slow(ROOT / "tests/arts/test_epiphany.py")
+    assert test_for.has_slow(ROOT / "tests/core/test_story_wolong.py")
 
 
 def test_a_pick_that_is_all_slow_says_so_and_does_not_fail(capsys):
     """挑到的全在整個檔標 slow 的檔裡：先列出來；一條都沒跑（pytest 結束碼 5）時說要 --slow，結束碼 0。"""
-    picked = test_for.Pick(files={ROOT / "tests/arts/test_epiphany.py"})
-    assert any("--slow" in line and "test_epiphany.py" in line for line in test_for.describe(picked))
+    picked = test_for.Pick(files={ROOT / "tests/core/test_story_wolong.py"})
+    assert any("--slow" in line and "test_story_wolong.py" in line for line in test_for.describe(picked))
     assert test_for.finish([5], picked, slow=False) == 0
     assert "--slow" in capsys.readouterr().out
     assert test_for.finish([0, 5], picked, slow=False) == 0
@@ -445,11 +445,11 @@ def test_a_feature_packages_web_file_picks_that_package_not_the_app_js_batch():
 
 
 def test_a_feature_packages_js_runs_the_package_tests_that_execute_it_with_their_slow_tests():
-    """包的 js 只有包裡用假瀏覽器（webharness）跑整支頁面的測試會真的執行它，而商城的 test_mall_web.py 整個檔標 slow：
-    照「不含 slow」挑等於沒有一條在跑 mall.js（10/31 審查：插一行 function ((( 照預設 134 passed、exit 0，--slow 才 30 failed）。
+    """包的 js 只有包裡用假瀏覽器（webharness）跑整支頁面的測試會真的執行它，而商城的 test_mall_web.py 以前整個檔標 slow
+    （10/31 起只有超過一秒的那幾條）：照「不含 slow」挑等於沒有一條在跑 mall.js（10/31 審查：插一行 function ((( 照預設 134 passed、exit 0，--slow 才 30 failed）。
     那幾個連 slow 一起跑，跟改到的測試檔一樣分開跑一次；挑到的其他檔照舊不含 slow，也不再列成「這一次不跑」。"""
     web_test = test_for.FEATURES / "mall" / "tests" / "test_mall_web.py"
-    assert test_for.whole_slow(web_test) and "webharness" in test_for.imported(web_test)
+    assert test_for.has_slow(web_test) and "webharness" in test_for.imported(web_test)
     js = test_for.pick(["web/mall.js"])
     assert web_test in js.files
     rest, slow_too = test_for.pytest_commands(js, slow=False, extra=[])

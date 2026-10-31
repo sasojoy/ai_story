@@ -12,8 +12,6 @@ from duel_kit import FAR, LOC, MOVES, NOW, WINDOW, do, duel_content, duel_world,
 from tianxia import conquest, sortie_duel
 from tianxia.characters import CharacterStore
 
-pytestmark = pytest.mark.slow  # 建 Game、載正式內容
-
 
 def _go(c, world, name="甲", moves=MOVES, now=NOW):
     return do(c, world, name, lambda g: g.choose(f"sortie:go:{moves}"), now)

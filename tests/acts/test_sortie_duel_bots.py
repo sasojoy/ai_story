@@ -7,14 +7,12 @@ from __future__ import annotations
 
 import random
 
-import pytest
 
+import pytest
 from duel_kit import FAR, LOC, MOVES, NOW, WINDOW, do, duel_content, duel_world, game_of, load, seat
 from tianxia import bot, bot_policy, sortie_duel
 from tianxia.characters import CharacterStore
 from tianxia.models import MOVES as THREE
-
-pytestmark = pytest.mark.slow  # 建 Game、載正式內容
 
 
 def _quiet(monkeypatch):
@@ -93,6 +91,7 @@ def test_a_server_bot_does_not_answer_when_far_or_outclassed():
     assert next(iter(world.sortie_duels().values())).defender is None
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_a_bots_only_server_clears_every_duel_within_a_day(monkeypatch):
     """只有假人的服：兩邊的假人貼約戰、窗內應戰或到時補位結算，一天之內收得掉（沒有卡著不結算的），紀錄不露假人。"""
     _quiet(monkeypatch)
@@ -118,6 +117,7 @@ def test_a_bots_only_server_clears_every_duel_within_a_day(monkeypatch):
         assert "假人" not in words and "機器人" not in words
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_the_whole_season_bot_runs_a_short_season21_stretch(tmp_path):
     from tianxia.sqlite_world import open_world
 

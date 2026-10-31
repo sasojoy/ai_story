@@ -7,15 +7,12 @@ from __future__ import annotations
 
 import random
 
-import pytest
 
 import server
 from duel_kit import LOC, MOVES, NOW, WINDOW, do, duel_content, duel_world, game_of, load, rounds_go, seat, tick
 from tianxia import sortie_duel
 from tianxia.bot_runner import BotRunner
 from tianxia.characters import CharacterStore
-
-pytestmark = pytest.mark.slow  # 建 Game、載正式內容
 
 
 def _posted():

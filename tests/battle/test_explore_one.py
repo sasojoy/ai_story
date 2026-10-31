@@ -1,7 +1,7 @@
 """減法季探索一顆的引擎接線（減法季整合設計 4.1；主機側計畫 Task 2-3）：開著時選單只剩一顆「探索」（act:explore，出門一趟），
 不畫三選一、尋敵、城裡操練；按一下扣 explore_stamina（6）、抽一件事結算，回一段話與一則「出門一趟」的江湖紀錄。
 城類地點自己沒有對手時遭遇換成地痞（不推線、不算討伐、戰利打 town_loot_scale），自家營寨的遭遇是跟同袍比劃（不掉東西）；
-事件端出 pending_event。用正式內容（season21）開局，整個檔標 slow。
+事件端出 pending_event。用正式內容（season21）開局（以前整個檔標 slow，2026-10-31 起只有超過一秒的那幾條標）。
 
 2d（企劃者 2026-10-26「只抽一件事情，然後體力先維持不動」，同天體力改 15）：以前連抽三拍，這個檔斷言三拍與體力 18 的測試照新規則改；
 一趟只有一件事的整體行為在 tests/test_explore_one_single.py。"""
@@ -17,8 +17,6 @@ from tianxia import explore_one, journal, team
 from tianxia.battlelog import OUTING_LABEL
 from tianxia.encounter import EncounterResult
 from tianxia.engine import FREE_TEXT_OPTION
-
-pytestmark = pytest.mark.slow
 
 
 def _fight(tier: str = "大勝"):

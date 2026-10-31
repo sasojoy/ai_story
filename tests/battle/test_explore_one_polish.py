@@ -6,7 +6,7 @@
    這一處此刻的比重算（寺的「多悟」跟表對不上），舊的「以地點種類的字為主」那幾條斷言翻過來，新規則與全部地點的對照在 tests/test_explore_one_2e.py；
    2f（FB-886，PM 2026-10-26）輿圖名字旁也照這一處此刻的比重，「名字旁不隨比重變」那一條翻過來，對照在 tests/test_explore_one_2f.py；
 4. hints.json 的 h_drill_done 在探索一顆開著時不再說「尋敵」。
-用正式內容（season21），整個檔標 slow。"""
+用正式內容（season21）（以前整個檔標 slow，2026-10-31 起只有超過一秒的那幾條標）。"""
 from __future__ import annotations
 
 import re
@@ -17,8 +17,6 @@ from jianfa_kit import jianfa_game, plain_game, ready
 
 from tianxia import explore_one, hints, journal, team
 from tianxia.encounter import EncounterResult
-
-pytestmark = pytest.mark.slow
 
 NUMERIC = re.compile(r"^\S+ [+-]\d+(\.\d+)?")  # 例如「銀兩 +5」「經驗 +10（每人）」
 

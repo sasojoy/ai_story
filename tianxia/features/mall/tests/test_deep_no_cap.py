@@ -3,7 +3,6 @@
 深交名額下架，已經買過的那一列照樣讀得出來、退得了款（mall.EFFECTS 還認得 deep_slot）。"""
 from __future__ import annotations
 
-import pytest
 
 from jianfa_kit import jianfa_game, ready
 from tianxia import mall
@@ -11,8 +10,6 @@ from tianxia.characters import name_key
 from tianxia.engine import Game
 from tianxia.models import MallItem
 from tianxia.wallet import Wallet
-
-pytestmark = pytest.mark.slow  # 每條都開一份減法季的正式內容世界
 
 FOUR = {"huangfusong": 72, "luzhi": 70, "zhujun": 80, "caocao": 75}
 
