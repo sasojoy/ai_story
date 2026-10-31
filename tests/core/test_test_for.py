@@ -153,6 +153,17 @@ def test_a_group_also_takes_the_tests_that_mostly_call_it():
     assert len(test_for.group_files("tavern")) <= 10 and len(test_for.group_files("admin")) <= 30
 
 
+def test_the_pickers_own_test_is_in_no_feature_group():
+    """這個檔的內文是假的 engine、server、models（_tavern_price、_pill_day……寫在字串裡）：照「內文叫最多」會被算進酒肆、
+    pill、season，每一群多它 31 條（10/31 審查：改 _tavern_price 從 43 條變 74 條，test_test_for 不 import engine）。
+    它只在改 scripts/test_for.py（與它自己）時跑。"""
+    me = ROOT / "tests" / "core" / "test_test_for.py"
+    assert not sorted(w for w in test_for.vocabulary() if me in test_for.group_files(w))
+    tavern = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", FAKE_ENGINE, 6))
+    assert me not in tavern.files and "test_tavern.py" in {p.name for p in tavern.files}
+    assert me in test_for.pick(["scripts/test_for.py"]).files
+
+
 def test_a_verb_first_method_name_goes_to_the_feature_after_the_verb():
     """_deliver_seal_results 的 deliver 是動詞：照後面的 seal 分群。"""
     picked = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", FAKE_ENGINE, 9))

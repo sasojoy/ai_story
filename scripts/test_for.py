@@ -28,6 +28,7 @@
 - 「功能群的測試檔」＝ 檔名（test_ 後面照底線拆）有那個字的（test_tavern.py、test_seal_fb643_tavern.py），
   加上內文叫最多的是那一群的（至少 DOMINANT_MIN 次；走一趟 outing_* 的引擎測試叫 test_explore_one*）；
   兩樣都沒有的群（feast、road、ambush……）改用內文叫到那一群方法（.feast_open(）或寫到那一群選項 id（"feast:）的。
+  內文是假原始碼的（test_test_for，TEXT_BLIND）不照內文歸群。
 - 其他 tianxia/<模組>.py、run_bots.py、scripts/<腳本>.py：直接 import 它的測試檔，加上檔名是 test_<模組>… 的
   （「import 了 engine」不再算相關：engine.py 照上面那一條）。
 - content/：test_content.py ＋ test_real_content.py ＋ 寫到那個檔名的測試檔，照舊不含 slow：test_real_content.py 用真實內容
@@ -127,6 +128,10 @@ SCAN_SKIP = {"art", "arts", "season", "map", "xinde"}
 # 65 筆的全部被改測試檔，加這一條 81 筆，不含 slow 的條數中位數 152 → 227；把「內文叫到就算」全加進來是 118 筆、
 # 中位數 1,204 條（太多：拿 admin_*、practice_* 當準備動作的測試到處都是）。
 DOMINANT_MIN = 3
+# 內文是假的原始碼、不是在叫那一群的測試檔：不照內文歸群（_dominant 與 group_files 的備案都不算它）。test_test_for 的
+# 假 engine 寫了 _tavern_price、_pill_day……，照「內文叫最多」會算進酒肆、pill、season（10/31 審查：每一列多它 31 條）。
+# 改 scripts/test_for.py 照舊挑到它（檔名 test_<模組>）。
+TEXT_BLIND = frozenset({"test_test_for.py"})
 
 
 @dataclass
@@ -303,6 +308,8 @@ def _index() -> tuple[dict[str, frozenset[Path]], dict[str, frozenset[Path]]]:
     for t in all_tests():
         for tok in t.stem.split("_")[1:]:
             by_name[tok].add(t)
+        if t.name in TEXT_BLIND:
+            continue
         text = _text(t)
         for ident in set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", text)):
             by_text[ident].add(t)
@@ -365,6 +372,8 @@ def _dominant() -> dict[str, frozenset[Path]]:
                 owner[m] = w
     found: dict[str, set[Path]] = collections.defaultdict(set)
     for t in all_tests():
+        if t.name in TEXT_BLIND:
+            continue
         text = _text(t)
         tally: collections.Counter[str] = collections.Counter()
         for ident in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", text):
