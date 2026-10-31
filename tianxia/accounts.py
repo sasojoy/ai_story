@@ -208,23 +208,29 @@ class AccountStore:
 
     # ── 密碼 ──────────────────────────────────────
 
-    def _replace_secret(self, key: str, new: str) -> None:
+    def _replace_secret(self, key: str, new: str, keep: str | None = None) -> None:
+        """換密碼，同一筆交易裡把這個帳號的登入狀態（sessions）都清掉：別的裝置要用新密碼重登（PM 2026-10-31）。
+        keep 是自己改密碼時正在用的那個 cookie，留著，不把改密碼的人自己踢出去。"""
         salt, digest = _new_secret(new)
         with self.db.transaction() as conn:
             conn.execute(
                 "UPDATE logins SET salt = ?, hash = ? WHERE provider = 'password' AND subject = ?", (salt, digest, key),
             )
+            conn.execute(
+                "DELETE FROM sessions WHERE account = ? AND token_hash != ?", (key, _token_hash(keep) if keep else ""),
+            )
 
-    def change_password(self, login: str | None, old: str | None, new: str | None) -> None:
+    def change_password(self, login: str | None, old: str | None, new: str | None, keep: str | None = None) -> None:
+        """自己改密碼：舊密碼要對；其他裝置的登入狀態清掉，keep（這個裝置的 cookie）留著。"""
         key = normalize(login)
         account = self.get(key)
         if account is None or not _matches(account, old or ""):
             raise AccountError(WRONG_OLD_PASSWORD)
         check_password(new)
-        self._replace_secret(key, new)
+        self._replace_secret(key, new, keep)
 
     def set_password(self, login: str | None, new: str | None) -> None:
-        """管理者重設、scripts/set_password.py 用：不必知道舊密碼；順便解除擋猜密碼。
+        """管理者重設、scripts/set_password.py 用：不必知道舊密碼；順便解除擋猜密碼，這個帳號所有裝置都登出。
 
         擋猜密碼的紀錄只在同一個程式的記憶體裡：從 scripts/set_password.py 重設，不會解除正在跑的伺服器裡的鎖定（最多再等 10 分鐘）；在遊戲裡由管理者重設才會。"""
         key = normalize(login)
