@@ -6,10 +6,10 @@
 
 | 檔 | 是什麼 |
 |---|---|
-| `__init__.py` | 登記（`SortieFeature`）：`enabled`＝`territory.on`（`rules.on` 同一個）、`on_season_start`（換季照帶今天出陣的次數）、`player_fields`／`carried`；`prefix` 是 None（出陣那一格是核心的 `act:train`） |
+| `__init__.py` | 登記（`SortieFeature`）：`enabled`＝`territory.on`（`rules.on` 同一個）、`player_fields`／`carried`（換季照帶今天出陣的次數：照帶本身照舊寫在 `Game._reset_player_for_new_season`、不看地盤開不開，同商城；不掛 `on_season_start`——遊戲當下的掛鉤只叫開著的包，地盤關著的那一季就不帶了）；`prefix` 是 None（出陣那一格是核心的 `act:train`） |
 | `rules.py` | 純規則與字（原 `tianxia/sortie.py`；那個名字留成別名）：開關、次數、哪一種（攻、守）、灰格的原因、出陣回報 `report`、小籤的字、混戰的字 `CLASH_*` |
 | `actions.py` | 原本 `Game` 上的 21 個方法：出陣本體（`sortie`、`sortie_option`、`sortie_line`、`train_title`、`sorties_left`、`sortie_foes`、`sortie_mode_of`、`sortie_mode`、`sortie_progress`、`sortie_host`、`sortie_hold`、`hold_share`）、混戰（`clash_target`、`do_clash`、`melee_record`）、出陣回報（`front_report`）、打贏的獎勵（`sortie_rewards`、`squad_drops`、`sortie_full`、`sortie_rare`、`sortie_drill`） |
-| `tests/` | `test_sortie.py`（7 條，含煙霧一條）、`test_sortie_report.py`（8 條，整檔 slow）、`test_sortie_rewards.py`（15 條）：原本在 `tests/acts/`，整檔搬過來 |
+| `tests/` | `test_sortie.py`（7 條，含煙霧一條）、`test_sortie_report.py`（8 條，整檔 slow）、`test_sortie_rewards.py`（15 條）：原本在 `tests/acts/`，整檔搬過來；`test_sortie_season_carry.py`（3 條，審查之後加的：換季照帶不看地盤開不開） |
 
 **認領的欄位**（3.5，留在原地）：`PlayerState.sortie_day`、`sorties_today`（換季照帶，`carried`）、`sortie_treasures`、`sortie_horses`（出陣打贏掉寶物、良駒一季的上限，換季重來）；`WorldState.clashes`、`clashed`（混戰寫的那幾筆，跟截殺共用 `raids`、`raided` 那一本）；`JournalEntry.front`（`FrontReport`、`FrontRow`、`FrontChip`）；`Config.sortie`（`SortieRules`，約戰的欄位一起，第 2 批）。
 

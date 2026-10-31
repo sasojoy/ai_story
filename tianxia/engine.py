@@ -766,6 +766,9 @@ class Game:
         fresh.player.create_rerolls = old.player.create_rerolls
         fresh.player.pills_topped_to = old.player.pills_topped_to  # 補過的不再補（第二季起建的角色在這裡還沒拿贈送）
         fresh.player.pill_day, fresh.player.pills_today = old.player.pill_day, old.player.pills_today  # 換季不能多吃一輪
+        # 出陣包認領、carried 宣告的兩格照帶留在這裡、不看地盤開不開（同商城的 legend_items、create_rerolls）：掛在包的
+        # on_season_start 的話，地盤關著的那一季不叫、就不帶了（dev/sortie-1 審查；features/sortie/tests/test_sortie_season_carry.py）
+        fresh.player.sortie_day, fresh.player.sorties_today = old.player.sortie_day, old.player.sorties_today  # 換季不能多出一輪陣
         fresh.player.drill_day, fresh.player.drills_today = old.player.drill_day, old.player.drills_today  # 換季不能多操練一輪
         fresh.player.newbie_marks, fresh.player.newbie_done = old.player.newbie_marks, old.player.newbie_done  # 新手目標只有一輪
         fresh.player.upgrade_day, fresh.player.upgrades_today = old.player.upgrade_day, old.player.upgrades_today  # 換季不能多升一輪三階
