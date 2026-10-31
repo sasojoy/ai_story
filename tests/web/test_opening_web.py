@@ -42,10 +42,16 @@ def test_after_the_choice_the_letter_opens_by_itself_above_the_sides_card_and_hi
     assert m["letter"]["open"] is True and m["week_card"] is not None
     page = run(m, "return H.pageJianghu();")
     letter = re.search(r'<section class="card letter open".*?</section>', page, re.S).group(0)
-    assert "傅燮來信" in letter and "長社" in letter and 'data-act="letter-read"' in letter
-    assert "letter-peek" not in letter  # 攤開了：不是只露一行
+    assert "傅燮來信" in letter and "長社" in letter and "letter-peek" not in letter  # 攤開了：不是只露一行
+    # 自檢 U-03（Joy 2026-10-31「都照建議」）：一到就攤開的這一封只露第一句與託的事，「看全文」點了才是整封、收起、婉拒
+    first = m["letter"]["text"].split("。")[0] + "。"
+    assert "letter-brief" in letter and f"<p>{first}</p>" in letter and m["letter"]["text"] not in letter
+    assert 'data-act="letter-read"' not in letter and 'class="linkish letter-more" data-act="letter-open"' in letter
+    full = run(m, "return H.pageJianghu();", S={"letterOpen": m["letter"]["id"]})
+    assert m["letter"]["text"] in full and 'data-act="letter-read"' in full and "letter-brief" not in full
     assert page.index('class="card letter') < page.index("sides-first")  # 先聽人說話，再看三方
     assert "wk-card" not in page  # 信收起來本週卡才出現
+    assert page.index('class="act-bar') < page.index("push-") if "push-" in page else True  # 問手機通知的那一張排在行動列底下（U-03）
     shut = run(m, "return H.pageJianghu();", S={"letterShut": m["letter"]["id"]})  # 玩家收攏過：照一行露著
     assert 'class="card letter"' in shut and "letter-peek" in shut
 

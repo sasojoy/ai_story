@@ -99,7 +99,7 @@ def test_the_lesson_lands_in_the_collapsed_here_fold_not_in_the_action_bar():
     src = webharness.app_source()
     cells = re.search(r"const ACT_CELLS = \[(.*?)\n  \];", src, re.S).group(1)
     assert "learn:" not in cells
-    assert "此地還能做 ${extras.length} 件事" in src and "const extras = m.options.filter((o) => !used.has(o.id))" in src
+    assert "此地還能做 ${extras.length} 件事" in src and "const extras = m.options.filter((o) => !used.has(o.id) && !joinedGrey(o))" in src
 
 
 def test_the_melt_row_and_result_say_where_a_starter_art_can_be_learned_again(content, world, state):

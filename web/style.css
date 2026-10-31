@@ -473,7 +473,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .page > .options.fit-tight > .btn { min-height: 44px; padding-top: 8px; padding-bottom: 8px; }
 /* 10. 一組選項還放不下（名聲的俠寇選項讓事件多到六顆，企劃者 2026-10-16 選 (c)）：態勢那一排收起；「剛剛」只留時間與標題
    （不淡出，「展開全文」看全文，得失照舊在）；灰掉的俠寇鈕底下那一行原因收掉（原因在鈕的 title，點了說整句） */
-.page > .wk-card.fit-hide { display: none; }
+.page > .wk-card.fit-hide, .page > .ch-card.fit-hide { display: none; }
 .now.fit-title:not(.open) .tx-now { max-height: none; -webkit-mask-image: none; mask-image: none; }
 .now.fit-title:not(.open) .tx-now > .tx-line, .now.fit-title:not(.open) .tx-now > .tx-heading, .now.fit-title:not(.open) .tx-now > .tx-glyph { display: none; }
 .options > .btn.off .opt-note.fit-hide { display: none; }
@@ -577,6 +577,13 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 :is(.scene, .report-detail) .b-round { margin: 6px 0; border-left: 3px solid var(--line); padding: 2px 0 2px 10px; }
 :is(.scene, .report-detail) .b-round.latest { border-left-color: var(--accent); }
 /* 決戰輪到你出招、第一屏放不下（FIT_STEPS 的 latest，自檢 U-01）：最新那一回合只留標題與第一句、一行，點了攤開 */
+/* 集結中加入了的那一行（自檢 U-09）：一行，點了看職位與怎麼算在場 */
+.scene details.muster-brief { margin: 0 0 8px; }
+.scene details.muster-brief > summary { cursor: pointer; list-style: none; font-weight: 600; }
+.scene details.muster-brief > summary::-webkit-details-marker { display: none; }
+.scene details.muster-brief > summary::after { content: " ▾"; color: var(--ink-2); font-weight: 400; }
+.scene details.muster-brief[open] > summary::after { content: " ▴"; }
+.scene details.muster-brief > p { margin: 4px 0 0; font-size: 14px; color: var(--ink-2); }
 .scene details.b-round.fit-hide, .g-merit.fit-board > .g-mcols { display: none; }
 .g-merit.fit-board { cursor: pointer; }
 .scene .b-round.latest.fit-latest { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
@@ -869,6 +876,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .letter-sign { text-align: right; color: var(--ink-2); }
 .letter-task { padding: 8px 0; border-top: 1px solid var(--line); margin-bottom: 8px; }
 .letter-body .row { display: flex; gap: 8px; justify-content: flex-end; }
+/* 一到就攤開的託付先只露第一句與託的事（自檢 U-03），點了看全文 */
+.letter-brief .letter-brief-task { font-family: inherit; font-size: 14px; font-weight: 600; color: var(--ink); }
+.letter-brief .letter-more { font-size: 13px; }
 /* 人物的盤算（世界活起來）：行動列底下一張卡，朱色左線；此地舊事一行一筆 */
 .card.plan-card { border-left: 3px solid var(--accent); }
 .plan-k { font-size: 12px; letter-spacing: .12em; color: var(--accent); }

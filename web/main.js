@@ -321,6 +321,9 @@
   // 那一小句用 aria-describedby 接到那一排鈕上（一頁只有一張場景卡，id 不會重複）。
   // FB-553：同一州兩場以上自己這一邊的攻城一起集結，加入鈕一場一顆、鈕上寫是哪一場（字長），兩顆擠在名字那一行把整頁撐出橫捲
   // （375 寬 488px）：兩顆以上照挑同伴那一步，另起一行、一顆一行（.pick），那一小句往下指；一顆的照舊在名字右邊
+  // 加入過、投效過的那一邊伺服器給一顆灰的「已加入【某軍】」「已臨時投效【某軍】」：集結那一行（musterBrief）已經寫著，
+  // 選單與「此地還能做」都不畫，不再佔掉事件、對話的第一個編號（自檢 U-09，Joy 2026-10-31「都照建議」）
+  const joinedGrey = (o) => /^battle:(join|enlist):/.test(o.id) && !o.enabled;
   function musterScene(m, scene) {
     const joins = musterJoins(m);
     if (!joins.length) return scene;
@@ -443,7 +446,8 @@
     return `<div class="gauge" role="img" aria-label="${esc(`戰局：${g.left.name} ${g.lean} 比 ${100 - g.lean} ${g.right.name}，${g.caption}`)}">`
       + `<div class="g-head">${end(g.left, g.lean, false)}${end(g.right, 100 - g.lean, true)}</div>`
       + `<div class="g-bar">${zones}${ticks}<i class="g-mid"></i>${trail}<b class="g-flag" style="left:${x(g.lean)}%"></b></div>`
-      + `<ol class="g-rounds">${chips}</ol><p class="g-cap">${esc(g.caption)}</p>${meritHtml(g, tint)}</div>`;
+      // 集結中（還沒有回合）只畫兩端的數字與條：回合格子是空的、底下那句是「開戰時戰線在正中間」，集結那一句已經寫著還剩多久（自檢 U-09）
+      + (g.phase === "muster" ? "" : `<ol class="g-rounds">${chips}</ol><p class="g-cap">${esc(g.caption)}</p>`) + `${meritHtml(g, tint)}</div>`;
   }
   // 本場戰功的名字（名聲 4B）：加入決戰時快照的稱號（善惡第 1 段起、名望名動一方起，r.renown）寫在名字底下第二行；
   // 第一屏放不下時 FIT_STEPS 的 merit 把第二行收掉（.fit-hide）
@@ -460,9 +464,18 @@
     const me = b.me ? `<p class="g-me">你排第 ${b.me.rank}／${b.me.of}・戰功 ${b.me.merit}${b.me.parts.length ? `：${esc(b.me.parts.join("、"))}` : "（還沒出手）"}</p>` : "";
     return `<div class="g-merit"><p class="g-mtitle">本場戰功</p><div class="g-mcols">${col(g.left, b.left)}${col(g.right, b.right)}</div>${me}</div>`;
   }
+  // 加入了、還在集結（自檢 U-09，Joy 2026-10-31「都照建議」）：「你已加入【官軍】，集結還剩現實 29 分 46 秒。你的職位…集結結束就開打…」
+  // 收成一行「已加入【官軍】・還剩 29 分 46 秒」，職位、騎馬、怎麼算在場收在底下、點了攤開（記在 S.musterBriefOpen，輪詢重畫照樣）。
+  // 只認引擎 _battle_scene_text 的寫法；對不上就照原樣
+  const MUSTER_MINE = /<p>你已([^【<]{1,4})【([^】<]+)】，集結還剩現實 ([^。<]+)。([\s\S]*?)<\/p>/;
+  function musterBrief(html) {
+    return html.replace(MUSTER_MINE, (all, verb, side, left, rest) =>
+      `<details class="muster-brief"${S.musterBriefOpen ? " open" : ""}><summary>已${verb}【${side}】・還剩 ${left}</summary>${rest ? `<p>${rest}</p>` : ""}</details>`);
+  }
   // 場景卡裡把戰局條放在戰場名字那一行底下（集結時名字那一行連著投效的鈕，見 musterScene）；收成一行的觀戰（battleScene）不放
   function withGauge(html, g) {
     if (!g || html.startsWith('<p class="battle-fold"')) return html;
+    if (g.phase === "muster") html = musterBrief(html);
     const muster = html.startsWith('<div class="muster-head">') ? html.indexOf("</div></div>\n") : -1;
     const cut = muster >= 0 ? muster + "</div></div>\n".length : html.startsWith("<p>") ? html.indexOf("</p>") + 4 : 0;
     return html.slice(0, cut) + gaugeHtml(g) + html.slice(cut);
@@ -608,7 +621,7 @@
     // 其他只在此地才有的行動（招募、投靠、多出來的求見）收在摺疊裡，不佔行動列的高度。
     // 入伍段要你按的那一顆收在這裡（巡哨、傳道、保境安民、接糧車……，伺服器在框上帶的 guide.glow，FB-093）：那一步在這一處開頭摺疊先打開
     // 一次、那一顆發光（applyGlow）；其他時候收著。開合記在 S.here（hereFold，FB-087），重畫照它補回
-    const extras = m.options.filter((o) => !used.has(o.id));
+    const extras = m.options.filter((o) => !used.has(o.id) && !joinedGrey(o));
     const hotHere = extras.some((o) => guideGlow().includes(o.id)) || extras.some(persuadingNow); // 勸降的輸入框叫出來了：摺疊要開著
     // 論武的「答應」（選單上那一顆引擎不收、是灰的）：場景底下那一列帶了 peer，這裡同一顆也畫成打開他的玩家卡（FB-117，callPeers）
     const peers = callPeers(m);
@@ -900,9 +913,14 @@
   // 書信（大勢人物擴充第二批）：「剛剛」上面一張小卡，收著只露一行（誰來信、開頭幾個字），點了攤開全文與委託；
   // 「收起」記成看過了（委託照樣在身上，懸賞卡上看得到），求援的「婉拒」讓委託作罷。字都是伺服器寫好的（letters.view）
   const ERRAND_STATE = { open: "託付", done: "辦成了", lapsed: "作罷了", declined: "婉拒了", failed: "沒談成" }; // errands.card 的 status
+  // 信的第一句（到第一個句號、問號、驚嘆號為止；沒有就整段）
+  const firstSentence = (text) => { const m = /^[\s\S]*?[。！？]/.exec(String(text || "")); return m ? m[0] : String(text || ""); };
   function letterHtml(x) {
     if (!x) return "";
     const open = S.letterOpen === x.id || (!!x.open && S.letterShut !== x.id); // 開局的託付一到就攤開（letters.view 的 open），收攏過才收著
+    // 一到就攤開的那一封（開局的託付）先只露第一句與託的是什麼事，點了才看全文與婉拒（自檢 U-03，Joy 2026-10-31「都照建議」：
+    // 新角色剛出開局，整封信、三方卡排在前面，四顆行動鈕掉到第一屏外）。玩家自己點開的照舊整封
+    const brief = open && S.letterOpen !== x.id;
 
     const t = x.task;
     const task = t ? `<div class="letter-task"><div class="order-head"><b>${esc(t.title)}</b><span>${esc(t.state || "委託")}</span></div>
@@ -913,8 +931,9 @@
         ${e.target && e.target.name ? `<div class="order-how">到${esc(e.target.name)}${e.target.minutes ? `（步行約 ${e.target.minutes} 分鐘）` : e.target.minutes === 0 ? "（就在這裡）" : ""}</div>` : ""}<div class="order-meta">期限 ${esc(e.deadline)}</div></div>` : "";
     const decline = (t && t.live) || (e && e.status === "open") ? `<button class="btn small ghost" data-act="letter-decline" data-id="${x.id}">婉拒</button>` : "";
     return `<section class="card letter${open ? " open" : ""}" data-letter="${x.id}">
-      <button class="letter-head" data-act="letter-open" data-id="${x.id}" aria-expanded="${open}"><span class="letter-k">${esc(x.kind)}</span><b>${esc(x.sender)}來信</b>${open ? "" : `<span class="letter-peek">${esc(x.text)}</span>`}<span class="letter-arrow" aria-hidden="true">${open ? "▴" : "›"}</span></button>
-      ${open ? `<div class="letter-body"><p>${esc(x.text)}</p><p class="letter-sign">${esc(x.sender)}</p>${task}${errand}<div class="row">${decline}<button class="btn small" data-act="letter-read" data-id="${x.id}">收起</button></div></div>` : ""}
+      <button class="letter-head" data-act="letter-open" data-id="${x.id}" aria-expanded="${open && !brief}"><span class="letter-k">${esc(x.kind)}</span><b>${esc(x.sender)}來信</b>${open ? "" : `<span class="letter-peek">${esc(x.text)}</span>`}<span class="letter-arrow" aria-hidden="true">${brief ? "▾" : open ? "▴" : "›"}</span></button>
+      ${brief ? `<div class="letter-body letter-brief"><p>${esc(firstSentence(x.text))}</p>${t || e ? `<p class="letter-brief-task">${esc(t ? t.title : e.text)}</p>` : ""}<button class="linkish letter-more" data-act="letter-open" data-id="${x.id}" aria-expanded="false">看全文${decline ? "・婉拒" : ""} ▾</button></div>`
+      : open ? `<div class="letter-body"><p>${esc(x.text)}</p><p class="letter-sign">${esc(x.sender)}</p>${task}${errand}<div class="row">${decline}<button class="btn small" data-act="letter-read" data-id="${x.id}">收起</button></div></div>` : ""}
     </section>`;
   }
 
@@ -1457,7 +1476,7 @@
     // 路上那顆灰的「（在路上，幾時抵達）」不畫：往哪、幾時到狀態列已經寫著（FB-046），少一顆也讓路上的捷徑回到第一屏（FB-048）。
     // 決戰集結時還沒參戰的加入鈕畫在場景卡戰場名字那一行（FB-105，musterScene）：事件、對話開著時也是，選項列不再列一次
     const joined = new Set(musterJoins(m).map((o) => o.id));
-    const opts = m.options.filter((o) => o.id !== "act:on_road" && !joined.has(o.id));
+    const opts = m.options.filter((o) => o.id !== "act:on_road" && !joined.has(o.id) && !joinedGrey(o));
     // 走法切換：選單上有「前往」或路上的「折返」才出現（對話、事件、戰鬥的選單沒有），緊貼在第一個這種選項上面——
     // 它只管這兩種，放在整排選項最上面的話，第一屏就被它擠掉一個選項（A4）
     const firstMove = opts.findIndex((o) => followsMode(o.id));
@@ -1531,7 +1550,9 @@
     const pushAsk = letterCard && typeof pushAskHtml === "function" ? pushAskHtml(m) : ""; // 第一次來信時信的小卡底下問一次手機通知（批 9；pushAskHtml 在 app.js，只切 main.js 的網頁測試沒有它）
     // 開局頭一刻（整合設計 6.7，批 7）：人物開口的那一封（letter.open）排在三方卡前面——先聽人說話，再看三方；其餘時候三方卡照舊在最上面
     // 本週卡：灰線（一行）照舊在最上面，「眼下要事」排在行動列底下（Joy 2026-10-26：四顆行動鈕一定在第一屏）；來信到了照舊換成來信
-    const peek = letterCard && m.letter.open ? letterCard + pushAsk + sidesFirstHtml(m) : sidesFirstHtml(m) + (letterCard ? letterCard + pushAsk : weekCardHtml(m, "top") + chapterCardHtml(m));
+    // 開局那一刻問手機通知的那一張排到行動列底下（自檢 U-03：信、三方卡、通知三張疊在上面，四顆行動鈕掉到第一屏外）
+    const openPush = letterCard && m.letter.open ? pushAsk : "";
+    const peek = letterCard && m.letter.open ? letterCard + sidesFirstHtml(m) : sidesFirstHtml(m) + (letterCard ? letterCard + pushAsk : weekCardHtml(m, "top") + chapterCardHtml(m));
     const weekCard = letterCard ? "" : weekCardHtml(m, "low");
     // 休季的結算卡排在最上面（計畫 T9）；季收了、有行狀時緊接一張「讀你的傳」（玩家傳第二批，m.zhuan）
     const resultCard = (m.season_result ? resultHtml(m.season_result) : "") + (m.zhuan ? zhuanEntry(m.zhuan, "這一季收了，史官替你立傳", "讀你的傳") : "");
@@ -1560,10 +1581,10 @@
     // 章回卡（本週卡、三方卡、來信）與「剛剛」也排到三招後面（自檢 U-01，2026-10-31：390×844 第 4 回合三招落在 859～959，分頁列頂 788）：
     // 這一刻要看的是戰場、要按的是三招；上一回合的結果寫在戰場裡，不在「剛剛」
     if (myTurn) {
-      return `${resultCard}${letter}${scene}${links}${menu}${peopleAfter}${free}${now}${peek}${guide}${senseNotes}${weekCard}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+      return `${resultCard}${letter}${scene}${links}${menu}${peopleAfter}${free}${now}${peek}${openPush}${guide}${senseNotes}${weekCard}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     }
     const planCard = planHtml(m.plan) + placeDeedsHtml(m.place_deeds); // 世界活起來：行動列與眼下要事底下（四顆行動鈕一定在第一屏）
-    return `${resultCard}${peek}${letter}${now}${scene}${links}${guideUp}${free}${menu}${senseNotes}${weekCard}${planCard}${guideDown}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+    return `${resultCard}${peek}${letter}${now}${scene}${links}${guideUp}${free}${menu}${senseNotes}${openPush}${weekCard}${planCard}${guideDown}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
   }
 
   // 此地還有誰（玩家之間的互動第一層，企劃者 2026-10-08）：場景卡底下一行，名字點了打開玩家卡（peerHtml）。

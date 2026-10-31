@@ -95,6 +95,7 @@ const meritSmalls = Array.from({ length: L.merit || 0 }, () => el("msmall", []))
 const peek = L.peek ? el("peek", ["peek"]) : null;
 if (peek) peek.querySelector = (s) => (s === ".wk-panel" && L.peekOpen ? {} : null);
 const notes = Array.from({ length: L.notes || 0 }, () => el("note", ["opt-note"]));
+const chapter = L.chapter ? el("chapter", ["card", "ch-card"]) : null; // 章回卡（第 10 步跟本週卡一起收，自檢 U-09）
 // 決戰輪到你出招（自檢 U-01，收法 5d～5f）：L.turn 是選單裡有三招；戰場裡最新那一回合（L.latest）、更早的幾回合（L.older 個，本來就一行）、
 // 本場戰功（L.board）。三樣的 parentElement 都是場景卡
 const latest = L.latest ? el("latest", ["b-round", "latest"]) : null;
@@ -145,7 +146,7 @@ if (callsBox) {
   callsBox.insertAdjacentHTML = () => { callsMore = makeMore("", true); };
 }
 // 每一樣收起來省多少 px（假的；真的看 375×812 估的數字）
-const SAVE = Object.assign({ latest: 110, older: 40, board: 55, art: 190, extra: 60, space: 30, cardSpace: 6, box: 22, hint: 20, renown: 20, line: 20, rounds: 23, merit: 6, own: 27, muster: 27, desc: 27, options: 22, call: 70, moreLine: 0, peek: 56, note: 18 }, input.save || {});
+const SAVE = Object.assign({ chapter: 110, latest: 110, older: 40, board: 55, art: 190, extra: 60, space: 30, cardSpace: 6, box: 22, hint: 20, renown: 20, line: 20, rounds: 23, merit: 6, own: 27, muster: 27, desc: 27, options: 22, call: 70, moreLine: 0, peek: 56, note: 18 }, input.save || {});
 // 「剛剛」只留時間與標題（fit-title）時剩兩行 48px；只露三行（fit-short）時最多 72px
 const bodyHeight = () => (now && has(now, "fit-title") && !has(now, "open") ? Math.min(L.nowBody, 48)
   : now && has(now, "fit-short") ? Math.min(L.nowBody, 72) : Math.min(L.nowBody || 0, 120));
@@ -173,6 +174,7 @@ const bottom = () => {
   if (latest && has(latest, "fit-latest")) b -= SAVE.latest;
   older.forEach((x) => { if (has(x, "fit-hide")) b -= SAVE.older; });
   if (board && has(board, "fit-board")) b -= SAVE.board;
+  if (chapter && has(chapter, "fit-hide")) b -= SAVE.chapter;
   return b;
 };
 const target = actbar || last;
@@ -217,8 +219,9 @@ const where = {
   ".call.fit-hide": () => callRows.filter((x) => has(x, "fit-hide")),
   ".calls-more": () => (callsMore ? [callsMore] : []),
   "#page > .wk-card": () => (peek ? [peek] : []),
+  "#page > .ch-card": () => (L.chapter && chapter ? [chapter] : []),
   "#page > .options > .btn.off .opt-note": () => notes,
-  ".wk-card.fit-hide, .opt-note.fit-hide": () => [peek, ...notes].filter((x) => x && has(x, "fit-hide")),
+  ".wk-card.fit-hide, .ch-card.fit-hide, .opt-note.fit-hide": () => [peek, chapter, ...notes].filter((x) => x && has(x, "fit-hide")),
   ".now.fit-title": () => all.filter((x) => has(x, "now", "fit-title")),
   '#page > .options [data-id^="battle:act:"]': () => (L.turn ? [{}] : []),
   "#page > .card.scene .b-round.latest:not(.fit-latest)": () => (latest && !has(latest, "fit-latest") ? [latest] : []),
@@ -280,6 +283,7 @@ const snap = () => ({
   desc: descParas.map((x) => [...x.classes].sort()), descAttrs: descParas.map((x) => ({ ...x.attrs })), descClassAttr: descParas.map((x) => x.getAttribute("class")), descHead: descHead ? [...descHead.classes].sort() : null,
   latest: latest ? [...latest.classes].sort() : null, latestAttrs: latest ? { ...latest.attrs } : null,
   older: older.map((x) => has(x, "fit-hide")), board: board ? [...board.classes].sort() : null,
+  chapter: chapter ? [...chapter.classes].sort() : null,
   peek: peek ? [...peek.classes].sort() : null, notes: notes.map((x) => has(x, "fit-hide")), nowWas: now ? now.dataset.fitWas || null : null,
 });
 finish(new Function("H", "S", "snap", "L", "W", "els", input.script || "H.fitFirstScreen(); return snap();")(
@@ -540,6 +544,16 @@ def test_a_choice_menu_still_too_tall_folds_the_peek_row_the_now_story_and_the_g
 
 
 @node
+def test_u09_the_chapter_card_folds_with_the_week_card_and_comes_back():
+    """自檢 U-09：集結時遇上事件、對話，章回卡跟本週卡同一步（choices）收起，有空間重量時攤回來；閒著（行動列）時不收。"""
+    out = run({**EVENT, "chapter": True, "bottom": 960}, "H.fitFirstScreen(); const a = snap(); L.bottom = 700; H.fitFirstScreen(); return { a, b: snap() };", idle=False)
+    assert "choices" in out["a"]["fitted"] and "fit-hide" in out["a"]["chapter"] and out["a"]["bottom"] <= 740
+    assert out["b"]["chapter"] == ["card", "ch-card"]
+    idle = run({"bottom": 900, "actbar": True, "scene": True, "chapter": True})
+    assert idle["chapter"] == ["card", "ch-card"]
+
+
+@node
 def test_the_buttons_tighten_before_any_words_are_hidden():
     """收緊鈕不少任何字：排在第 10 步前面；收緊就放得下的話，態勢那一排、「剛剛」的字、原因那一行都不動。"""
     out = run({**EVENT, "bottom": 815}, idle=False)
@@ -733,7 +747,7 @@ def test_each_step_only_touches_what_it_names():
         ".g-mcol li .rn-two small.fit-hide",  # 名聲 4B：本場戰功名字底下那一行稱號（名字照舊）
         # 第 10 步（choices）：「剛剛」的敘事（展開 .open 就回來）、灰掉的鈕底下那一行原因（在鈕的 title，點了說整句）、態勢那一排
         ".now.fit-title:not(.open) .tx-now > .tx-line, .now.fit-title:not(.open) .tx-now > .tx-heading, .now.fit-title:not(.open) .tx-now > .tx-glyph",
-        ".options > .btn.off .opt-note.fit-hide", ".page > .wk-card.fit-hide",
+        ".options > .btn.off .opt-note.fit-hide", ".page > .wk-card.fit-hide, .page > .ch-card.fit-hide",
         # 第 6a 步（front、front2）：出陣回報那一句、標題與其餘的條（點那一塊整塊攤開，frontOpen）
         ".sfront.fit-min .sf-head, .sfront.fit-min .sf-row ~ .sf-row", ".sfront.fit-tight .sf-text",
         # 第 5d～5f 步（latest、older、board；自檢 U-01）：最新一回合第一句以後的、更早的回合、本場戰功的名單（點了整張場景卡攤開，ownOpen）
@@ -1979,15 +1993,15 @@ def test_a_late_comer_on_your_own_side_keeps_the_ordinary_join_late_button(on):
 
 @node
 def test_once_you_joined_the_page_is_what_it_was(on):
-    """已經加入（或投效過）：「已加入」是灰的那一顆，照舊收在摺疊裡，場景卡就是伺服器給的那一段，一個字不多。"""
+    """已經加入（或投效過）：場景卡裡沒有加入的鈕（muster-head）；集結那一句收成一行（muster-brief，自檢 U-09），灰的「已加入」／「已臨時投效」
+    不畫（以前收在摺疊裡）。"""
     for who, first in (("guan", "battle:join:guan"), (None, "battle:enlist:guan")):
         game = _muster(on, who)
         game.choose(first)
         m = server.main_view(game)
         page = _page(m)
-        assert "muster-" not in page, who
-        assert _scene(page) == m["scene"], who
-        assert first in _fold(page), who  # 灰的「已加入」／「已臨時投效」還在摺疊裡
+        assert "muster-head" not in page and 'class="muster-brief"' in page, who
+        assert first not in page, who
 
 
 @node
@@ -2611,6 +2625,22 @@ def test_u01_on_your_turn_the_chapter_card_and_just_now_sit_below_the_moves(batt
     assert page.index('<section class="card scene') < moves < page.index('class="now')
     cards = [page.find(k) for k in ("ch-card", "wk-card") if k in page]
     assert cards and min(cards) > moves
+
+
+@node
+def test_u09_a_joined_muster_reads_one_line_and_drops_the_greyed_joined_button(on):
+    """自檢 U-09：加入了、還在集結——戰局條只留兩端與條（沒有回合格子與「開戰時戰線在正中間」），「你已加入【官軍】，集結還剩現實…」
+    收成一行「已加入【官軍】・還剩 …」、其餘點了攤開（S.musterBriefOpen），選單不再有灰的「已加入【官軍】」。"""
+    joiner = _player(on, "集結丁", "guan", "wan_city")
+    joiner.world.start_battle(on.battles[BATTLE], now=joiner.now)
+    joiner.choose("battle:join:guan")
+    m = server.main_view(joiner)
+    assert any(o["id"] == "battle:join:guan" and not o["enabled"] for o in m["options"]) and "你已加入【官軍】，集結還剩現實" in m["scene"]
+    page = run_prologue_web(m, "return H.pageJianghu();")
+    assert re.search(r'<details class="muster-brief"><summary>已加入【官軍】・還剩 [^<]+</summary><p>[^<]*集結結束就開打', page)
+    assert "你已加入【官軍】" not in page and "已加入【官軍】</span>" not in page and 'data-id="battle:join:guan"' not in page
+    assert '<div class="gauge"' in page and "g-rounds" not in page and "g-cap" not in page
+    assert '<details class="muster-brief" open>' in run_prologue_web(m, "return H.pageJianghu();", S={"musterBriefOpen": True})
 
 
 @node

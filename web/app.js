@@ -1231,6 +1231,9 @@
         peek.classList.add("fit-hide");
         any = true;
       }
+      // 章回卡（章回主線）跟本週卡同一類：一組選項放不下時一起收（自檢 U-09：集結時遇上事件，選項被章回卡、集結卡推出第一屏）
+      const chapter = document.querySelector("#page > .ch-card");
+      if (chapter) { chapter.classList.add("fit-hide"); any = true; }
       const now = document.querySelector("#page > .now:not(.open)");
       const body = now && now.querySelector(".tx-now");
       if (body && body.querySelector(".tx-line")) {
@@ -1265,7 +1268,7 @@
       el.classList.remove("fit-extra");
       ["data-act", "role", "tabindex", "aria-expanded"].forEach((a) => el.removeAttribute(a));
     });
-    page.querySelectorAll(".wk-card.fit-hide, .opt-note.fit-hide").forEach((el) => el.classList.remove("fit-hide")); // 第 10 步
+    page.querySelectorAll(".wk-card.fit-hide, .ch-card.fit-hide, .opt-note.fit-hide").forEach((el) => el.classList.remove("fit-hide")); // 第 10 步
     page.querySelectorAll(".now.fit-title").forEach((el) => el.classList.remove("fit-title")); // 第 10 步；fits／clamp 照下一段還原
     page.querySelectorAll(".now.fit-short").forEach((el) => {
       el.classList.remove("fit-short");
@@ -6828,6 +6831,8 @@
     else if (box instanceof Element && box.matches("details.self-fold")) (S.selfOpen || (S.selfOpen = {}))[box.dataset.sec] = box.open;
     // 出陣約戰的卡上收成一行的那幾段（這一塊、贏了、守住了）：記開合，輪詢重畫、挑招換卡照樣
     else if (box instanceof Element && box.matches("details.sx-det")) (S.sortieFold || (S.sortieFold = {}))[box.dataset.sec] = box.open;
+    // 集結中「已加入・還剩 N 分」那一行攤開、收起（main.js 的 musterBrief，自檢 U-09）：記下來，輪詢重畫照樣
+    else if (box instanceof Element && box.matches("details.muster-brief")) S.musterBriefOpen = box.open;
     // 決戰攤開、收起舊的回合（roundBlocks）：只記下來，下一次輪詢重畫照樣
     else if (box instanceof Element && box.matches("details.b-round")) {
       const open = S.roundsOpen || (S.roundsOpen = new Set());
