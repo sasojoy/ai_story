@@ -898,6 +898,7 @@ class SqliteWorldStore:
                 state.season.chronicle.append(Rumor(time=state.season.time, text=line))
             if lines or wrote:
                 self._save_season(conn, state.season_number, state.season)
+            old_season = state.season
             state.season = fresh_season(content, now=now)  # 新的一季另起一列（_save 照新的編號寫），舊的那一列不動；21 天季照這一刻蓋錨點
             state.season_number += 1
             state.season_opened = True
@@ -907,6 +908,9 @@ class SqliteWorldStore:
             state.companions = {}  # 跨季不滾雪球第二條：同伴全部重獲自由、等級武學歸零
             state.tianji += 1  # 第三條：天機 +1；武學命名、煉製配方、投靠名冊照季分開存，新的一季自然是空的
             state.season.tianji = state.tianji  # 同 open_season：新的一季蓋上新的天機
+            from . import outing  # noqa: PLC0415  延後 import：outing → explore_one → rules → world_state
+
+            outing.carry(old_season, state.season)  # 路牌上題壁墨寫的字跟著到新的一季（花錢買的，Joy 10/31）；預設句一季一清
             divine.stamp(state, content)  # 同 open_season：新的一季照全服登記挑神器（季數、天機都是新的）
             if content.seal and content.config.seal.enabled:  # 七片這一輪都現世過：新的一季蓋天命之季的章（8.1）
                 self._stamp_mandate(state, content)

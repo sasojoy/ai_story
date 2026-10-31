@@ -1859,7 +1859,7 @@ class WorldState(BaseModel):
     stops_done: dict[str, bool] = Field(default_factory=dict)
     deeds: list[Deed] = Field(default_factory=list)
     deed_seq: int = 0
-    # 走一趟的留言（tianxia/outing.py）：每一處留最近 outing_keep 則，換季整個重來
+    # 走一趟的留言（tianxia/outing.py）：每一處留最近 outing_keep 則；換季時預設句清掉、題壁墨寫的帶到下一季（outing.carry）
     inscriptions: list[Inscription] = Field(default_factory=list)
     inscription_seq: int = 0
     yuedan: list[YuedanEntry] = Field(default_factory=list)
