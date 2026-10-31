@@ -438,6 +438,14 @@ ONBOARD_SEVEN = 5  # 新手引導重做（老周七步、草廬第 7 步改服�
 SHOP_ACTS = frozenset({"smith", "bounties", "market", "arena"})  # 初入江湖「進城裡的鋪子看看」認的幾間（act:<這些>）
 LEAVE_SHOP_IDS = frozenset({"bounty:back", "smith:back", mounts.BACK, arena.BACK_ID, tavern_rules.BACK_ID})  # 出店的那一顆
 
+def _outing_watch(fn):
+    """走一趟停在要選的事上時，這一下選完的得失記在那一段（Game._outing_watched）。"""
+    @functools.wraps(fn)
+    def run(self, *args, **kwargs):
+        return self._outing_watched(fn, *args, **kwargs)
+    return run
+
+
 class Game:
     MAP_LAYERS = atlas.LAYERS  # 大地圖的圖層：id → 名稱
 
@@ -454,6 +462,7 @@ class Game:
         self._model_budget = ModelBudget()  # 鎖內的模型呼叫這一次拿鎖期間還有沒有額度（見 _quick_client）
         self._preparing_memo: list[bool] | None = None  # 一次畫面建構裡記住的「籌備中嗎」；None＝不在範圍裡（見 phase_memo）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
+        self._outing_busy = False  # 走一趟正在走（_outing_walk）或正在記一件事選完的得失（_outing_watched）：不再套一層
         self._loot_scale = 1.0  # 打贏的心得與銀兩倍數：練功分級（_practice，Config.training）那一場才不是 1
         # 減法季探索一顆（批 2）：遭遇拍那一場掉的素材打幾成（城裡的地痞 town_loot_scale、三道閘的倍數）；其餘的仗都是 1，一個字不變
         self._drop_scale = 1.0
@@ -3377,6 +3386,7 @@ class Game:
         if judged is not None:
             record.narration = judged.winning if result.tier in team.WIN_TIERS else judged.losing
 
+    @_outing_watch
     def choose(
         self, option_id: str, prepared: companion_agent.PreparedTurn | None = None,
         fight: fight_llm.PreparedFight | None = None, text: str | None = None,
@@ -3659,6 +3669,7 @@ class Game:
             return []
         return free.outcomes
 
+    @_outing_watch
     def answer_event(
         self, request: FreeTextRequest, llm_rate: int | None = None, moral: str | None = None, outcome: str | None = None,
     ) -> list[str]:
@@ -4075,6 +4086,7 @@ class Game:
             return None
         return epiphany.name_request(self.state, self.content)
 
+    @_outing_watch
     def epiphany_names(self, ask: epiphany.NameAsk, names: list[str]) -> list[str]:
         """C 段（鎖內）：鎖外拿到的名字交回來，重驗、不夠三個用字表補（epiphany.fill）；單子對不上（已經想過、換了一條線）什麼都不做。"""
         msgs = epiphany.fill(self.state, self.content, self.world, ask, names)
@@ -4087,6 +4099,7 @@ class Game:
             return PREPARING_REFUSAL
         return sensing.request(self.state, self.content, self.world, points, png)
 
+    @_outing_watch
     def sense_draw(self, req: sensing.SenseRequest, proposed: tuple[str | None, str] | None = None) -> list[str]:
         """畫完那一筆的 C 段（鎖內）：重驗還是同一次感悟、同一筆讀出同一個屬性才套用（sensing.finish）。proposed 是鎖外取好的
         （名字, 說明）；沒給（整季機器人、腳本、測試）而且要取名，就在這裡用 _quick_client 只看文字特徵問一次，取不到走退路字表。
@@ -5591,6 +5604,38 @@ class Game:
             return False
         return IDLE_MARK in {o.id for o in self.options(odds=False, tick=False)}
 
+    def _outing_watched(self, fn, *args, **kwargs):
+        """走一趟停在要選的事上（還沒選完）時做的這一下：照做，做完把這一下寫進江湖紀錄的得失（新的那幾則的數值變化、撿到的東西）
+        與另外扣的體力記在那一段（OutingBeat.after）——結果那一行、結算卡、「走一趟」那一則才寫得出數字（Joy 10/31）。
+        不在路上、已經選完、正在走（_outing_walk 自己的探索）都照做、什麼都不記。"""
+        trip = outing_rules.active(self.state)
+        if getattr(self, "_outing_busy", False) or trip is None or not trip.beats or not trip.beats[-1].stop or self.outing_can_go():
+            return fn(self, *args, **kwargs)
+        p, beat = self.state.player, trip.beats[-1]
+        stamina, before = p.stamina, {id(e): e for e in self.state.journal}
+        head = self.state.journal[0] if self.state.journal else None
+        self._outing_busy = True
+        try:
+            out = fn(self, *args, **kwargs)
+        finally:
+            self._outing_busy = False
+        changes, notes = [], []
+        for e in self.state.journal:
+            if id(e) in before or journal.is_world_entry(e):
+                continue
+            merged = head is not None and id(head) not in {id(x) for x in self.state.journal} and e is self.state.journal[0] \
+                and e.title == head.title  # 併進了原本最新那一則：只算這一下多出來的
+            changes += [outing_rules.plain(x) for x in (journal.subtract_changes(e.changes, head.changes) if merged else e.changes)]
+            notes += e.lines
+        spent = round(stamina - p.stamina)
+        grants = (n.removeprefix(materials.GRANT_PREFIX) for n in notes if n.startswith(materials.GRANT_PREFIX))
+        parts = outing_rules.ledger_parts(beat.after) + list(grants) + changes + ([f"體力 -{spent}"] if spent > 0 else [])
+        items = explore_one.merge_items(x for x in parts if explore_one.is_item(x))
+        totals = journal.combine_changes([x for x in parts if not explore_one.is_item(x)])
+        beat.after = explore_one.ledger(items + [x for x in totals if journal.change_class(x) == "tx-up"],
+                                        [x for x in totals if journal.change_class(x) == "tx-down"])
+        return out
+
     def _outing_walk(self) -> list[str]:
         """一段一段走（每一段是一次 choose(act:explore)，各寫各的江湖紀錄）：端出要選的事就停；打輸、氣血低於 outing_turn_back
         回頭；體力不夠一段也回頭。走完了寫 end。"""
@@ -5603,7 +5648,11 @@ class Game:
                     trip.end = outing_rules.TIRED  # 探索在選單上但灰了：體力不夠一段
                 break  # 不在選單上：還有事要選（不該走到這裡；保險）
             self._beat = None
-            msgs = self.choose(IDLE_MARK)
+            stamina, self._outing_busy = p.stamina, True
+            try:
+                msgs = self.choose(IDLE_MARK)
+            finally:
+                self._outing_busy = False
             beat, self._beat = self._beat or {"kind": explore_one.MATERIAL, "rare": False, "won": None}, None
             lines = [m for m in msgs if isinstance(m, str)]
             ledger = lines[1] if len(lines) > 1 and lines[1].startswith(("得：", "失：")) else ""
@@ -5611,7 +5660,7 @@ class Game:
             trip.done += 1
             trip.beats.append(OutingBeat(kind=beat["kind"], text=lines[0] if lines else "", ledger=ledger, rare=bool(beat["rare"]),
                                          won=beat["won"], stop=stop, feat=beat.get("feat", ""), feat_kind=beat.get("feat_kind", ""),
-                                         foe=beat.get("foe", "")))
+                                         foe=beat.get("foe", ""), spent=max(0, round(stamina - p.stamina))))
             now, cap = team.member_neili(c, p.member, team.con_of(s, c, self.world, PLAYER), season=s.world)
             if beat.get("lost"):
                 trip.end = outing_rules.LOST
@@ -5625,6 +5674,12 @@ class Game:
             trip.end = outing_rules.DONE  # 最後一段端出要選的事時先不收：選完、接著走那一下才收
         if trip.end:  # 撿到稀世的東西、以弱勝強（Joy 10/30：只有這種才值得記）：一段一則行狀、世界記事一筆（此地舊事、人物對話讀得到）
             place = c.locations[trip.place].name if trip.place in c.locations else trip.place
+            # 整趟的得失收成一則（「剛剛」放它；留一句併進這一則，不會只剩留字，Joy 10/31）
+            items, totals = outing_rules.trip_totals(trip)
+            lines = [f"走了 {trip.done} 段。{outing_rules.END_LINES.get(trip.end, '')}".strip()] + (
+                [f"撿到：{'、'.join(items)}"] if items else [])
+            journal.add_entry(s, JournalEntry(time=s.world.time, title=outing_rules.TRIP_TITLE.format(place=place),
+                                              tag=outing_rules.END_TITLES.get(trip.end, ""), lines=lines, changes=totals))
             for b in trip.beats:
                 if b.feat:
                     annals.note(s, c, annals.DEED, outing_rules.FEAT_ANNAL[b.feat_kind].format(place=place, what=b.feat), 3, place=place)
@@ -5683,8 +5738,8 @@ class Game:
         if token is not None:
             self.wallet.consume(outing_rules.INK, place=trip.place, inscription=item.id)  # 用掉的就是上面查到的那一張（最舊的）
         said = outing_rules.SAY_DONE.format(place=place, text=line)
-        journal.add_entry(s, JournalEntry(time=s.world.time, title=outing_rules.SAY_TITLE, lines=[said],
-                                          changes=[] if token is None else ["題壁墨 -1"]))
+        journal.add_entry(s, JournalEntry(time=s.world.time, title=outing_rules.TRIP_TITLE.format(place=place), lines=[said],
+                                          changes=[] if token is None else ["題壁墨 -1"]), merge=True)  # 併進這一趟那一則（Joy 10/31）
         return self._log([said])
 
     def outing_tale_request(self) -> outing_rules.TaleRequest | list[str]:
