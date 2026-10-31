@@ -294,13 +294,21 @@ SCHEMA_V7_TABLES: tuple[str, ...] = (
     )""",
 )
 
-SCHEMA: tuple[str, ...] = (  # 新檔一次建好
+# 第 8 版拿掉見聞紀錄 rumor_heard（審查 S-12）：第 1 版照傳聞分層 3.1 建好之後一直沒人讀、沒人寫（傳聞分層第二份計畫沒做），
+# 它對 rumors 的外鍵還會擋住換季時把上上季的傳聞搬進封存檔（log_archive）。
+SCHEMA_V8_CHANGES: tuple[str, ...] = (
+    "DROP TABLE rumor_heard",
+)
+
+SCHEMA: tuple[str, ...] = (  # 新檔一次建好（第 1 版建的 rumor_heard 由第 8 版那一句拿掉）
     SCHEMA_V1 + SCHEMA_V2_TABLES + SCHEMA_V3_TABLES + SCHEMA_V4_TABLES + SCHEMA_V5_TABLES + SCHEMA_V6_TABLES + SCHEMA_V7_TABLES
+    + SCHEMA_V8_CHANGES
 )
 MIGRATIONS: dict[int, tuple[str, ...]] = {  # 第 n 版 → 第 n+1 版要跑的句子
     1: SCHEMA_V2_TABLES, 2: SCHEMA_V3_TABLES, 3: SCHEMA_V4_TABLES, 4: SCHEMA_V5_TABLES, 5: SCHEMA_V6_TABLES, 6: SCHEMA_V7_TABLES,
+    7: SCHEMA_V8_CHANGES,
 }
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 def default_path() -> Path:

@@ -398,6 +398,8 @@ powershell -ExecutionPolicy Bypass -File C:\Users\User\.claude\tianxia-wake.ps1 
 
 伺服器開著也可以備份。備份腳本用 SQLite 內建的線上備份，做出來的是一個獨立的 `.db` 檔，先驗過才放上去。備份先放在這台電腦的資料夾 `C:\Ray\tianxia-play\backup`，不上雲端（企劃者 2026-10-06 定）；之後要上雲，看下面「之後要上雲時怎麼改」。
 
+**封存檔**（2026-10-31，審查 S-12）：開下一季時，上上季的傳聞與決戰回合紀錄會搬到資料庫旁邊的 `tianxia-archive.sqlite`（跟著 `TIANXIA_DB` 換名字），遊戲本身不再讀它、是備用的。備份腳本只備份主檔，要留著封存的資料就把這個檔一起複製走（換季之後做一次就好，它只在換季時變）。
+
 **手動備份**：換程式、收季、出事之前做。手動備份永遠留著，不會被刪。
 
 ```powershell

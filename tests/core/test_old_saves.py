@@ -69,7 +69,7 @@ def test_a_version_two_file_with_an_old_save_upgrades_and_plays(tmp_path):
 
     db = open_database(path)
     with db.snapshot() as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 7  # 一路升到第 7 版（商城 6、真人量表 7）
+        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 8  # 一路升到第 8 版（商城 6、真人量表 7、拿掉 rumor_heard 8）
         assert c.execute("SELECT COUNT(*) FROM insight_firsts").fetchone()[0] == 0
         assert c.execute("SELECT COUNT(*) FROM skills").fetchone()[0] == len(OLD["skills"])
     loaded = open_characters(path).load(name)
@@ -106,7 +106,7 @@ def test_a_version_three_file_upgrades_to_four_and_keeps_everything(tmp_path):
 
     db = open_database(path)
     with db.snapshot() as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 7  # 一路升到第 7 版（商城 6、真人量表 7）
+        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 8  # 一路升到第 8 版（商城 6、真人量表 7、拿掉 rumor_heard 8）
         assert c.execute("SELECT COUNT(*) FROM gear_recipes").fetchone()[0] == 0
         assert c.execute("SELECT name FROM insight_firsts").fetchone()[0] == "寒潭"
     assert open_characters(path).load(name) is not None
