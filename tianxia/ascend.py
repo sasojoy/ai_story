@@ -10,11 +10,12 @@
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from pydantic import BaseModel
 
-from . import annals, might, moves, tactics, team, traits
+from . import annals, might, moves, tactics, team, traits, zh
 from .martial_arts import MAX_LEVEL
 from .models import Content
 from .ollama_client import OllamaClient
@@ -32,6 +33,8 @@ DEED_LINE = "【{name}】破境，〔{move}〕練成絕招。"  # 待 joy 潤
 FALLBACK_SEIZED = "那一招在生死之間打磨了千百遍，這一刻終於不再是招，而是你自己。"  # 待 joy 潤
 FALLBACK_PILL = "藥力化開，閉門苦思的那一句意忽然清清楚楚，招隨意走，再無滯礙。"  # 待 joy 潤
 LINE_MIN, LINE_MAX = 8, 40
+_LATIN = re.compile(r"[A-Za-z]")  # 破境那一句是中文：夾了英文（模型的開場白、亂回）就照套句
+_BANNED = ("假人", "機器人", "遊戲", "系統", "玩家")
 LINE_PREDICT = 120
 
 
@@ -113,8 +116,9 @@ def fallback(req: LineRequest) -> str:
 
 
 def clean(text: str) -> str:
-    text = " ".join(str(text or "").split()).strip("「」\"' ")
-    if not (LINE_MIN <= len(text) <= LINE_MAX) or any(ch.isdigit() for ch in text) or "{" in text:
+    text = zh.to_traditional(" ".join(str(text or "").split()).strip("「」\"' "))
+    if (not (LINE_MIN <= len(text) <= LINE_MAX) or any(ch.isdigit() for ch in text) or "{" in text
+            or _LATIN.search(text) or any(w in text for w in _BANNED)):
         return ""
     return text
 

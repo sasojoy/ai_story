@@ -394,3 +394,13 @@ def test_the_draft_doc_says_the_grade_is_not_rolled():
 def test_the_create_module_agrees():
     assert "擲品級" not in create.__doc__
     assert "Config.arts.create_grade" in create.__doc__
+
+
+def test_the_model_move_name_and_line_are_screened(content):
+    """2026-10-31 自檢：模型起的招名不過名字過濾（禁用名單、人物同名進得了草稿，網頁還預填），招式那一句留著簡體與英文。"""
+    game = _game(content)
+    draft = _walk(game, reading=create.IntentReading(score=60, attributes=["快"], move="小龍女", say="腳下一错追了上去刺出一剑"))
+    assert draft.move == "" and draft.say == "腳下一錯追了上去刺出一劍"
+    game2 = _game(content, name="立派人二")
+    draft2 = _walk(game2, reading=create.IntentReading(score=60, attributes=["快"], move="追風影", say="He moves like the wind"))
+    assert draft2.move == "追風影" and draft2.say == ""

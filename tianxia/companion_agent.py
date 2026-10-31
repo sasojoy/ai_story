@@ -14,9 +14,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from random import Random
-from typing import ClassVar
+from typing import Annotated, ClassVar
 
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field, create_model, field_validator
 
 from . import figure_life, gender, parley, renown, seal_acts, stances, zh
 from .models import CharacterDef, Content
@@ -113,11 +113,18 @@ class CompanionTurn(BaseModel):
     ask: str | None = None
     willing: int | None = None
     condition: str | None = None
-    narrative_terms: str | None = None
-    narrative_no: str | None = None
+    # 開條件、婉拒那兩版在 schema 上至少一個字（2026-10-31 主機實測：鍵強制要寫了，模型照樣回空字串，婉拒那一版 5/5 是空的，
+    # 玩家擲到婉拒只看到固定句）。模型真的回了空字串照舊當沒寫（_blank_none），不因此整輪作廢
+    narrative_terms: Annotated[str, Field(min_length=1)] | None = None
+    narrative_no: Annotated[str, Field(min_length=1)] | None = None
     # 第二批：人物主動開口（求見的開場）時他想請你做的那一件與他的回報（parley.plea_pick 驗）
     want: str | None = None
     reward: str | None = None
+
+    @field_validator("narrative_terms", "narrative_no", mode="before")
+    @classmethod
+    def _blank_none(cls, value):
+        return None if isinstance(value, str) and not value.strip() else value
 
 
 _TURN_MODELS: dict[tuple[str, ...], type[CompanionTurn]] = {}

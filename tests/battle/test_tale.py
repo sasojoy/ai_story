@@ -154,6 +154,39 @@ def test_what_the_model_writes_is_screened():
     assert page.cast[1].line == m.cast[1].fact  # 被丟掉的照引擎那一句
 
 
+def test_the_output_budget_grows_with_the_tale():
+    """2026-10-31 線上：3 幕 12 拍＋6 人的名錄 1400 寫不完，cast 被截掉、整篇變模板句。預算照拍數與名錄加，小場面不低於原本的下限。"""
+    m = _material()
+    client = _Client({"scenes": [], "cast": []})
+    tale.write(client, m)
+    assert client.kwargs["num_predict"] == tale.predict_budget(m) >= tale.NUM_PREDICT
+    beats = sum(len(a.beats) for a in m.acts)
+    big = tale.Material(record_id=1, season=8, battle_name="長社", result="官軍勝", reason="",
+                        acts=m.acts * 3, cast=m.cast * 3)
+    assert tale.predict_budget(big) >= tale.PREDICT_PER_SCENE * beats * 3 + tale.PREDICT_PER_CAST * len(m.cast) * 3
+
+
+def test_a_scene_that_copies_the_player_line_or_names_someone_else_is_dropped():
+    """2026-10-31 線上那一篇：原話在散文裡又抄一次（底下金線引言又一次），還有一拍寫成另一拍的人。都照引擎那一句。"""
+    m = _material()
+    beat = m.acts[0].beats[1]  # 霜刃放手一搏那一拍
+    assert beat.said is not None
+    for text in ("霜刃大喝：包圍城頭那一隊！", "鐵鍋提刀衝上城頭。", "霜刃與鐵鍋同時撲上城頭。"):
+        scenes, _ = tale.write(_Client({"scenes": [{"id": beat.id, "text": text}], "cast": []}), m)
+        assert beat.id not in scenes, text
+    scenes, _ = tale.write(_Client({"scenes": [{"id": beat.id, "text": "霜刃一聲斷喝，帶人撲上城頭。"}], "cast": []}), m)
+    assert scenes[beat.id][1] == "霜刃一聲斷喝，帶人撲上城頭。"
+    assert "不要引" in tale.messages(m)[1]["content"]
+
+
+def test_the_same_text_on_two_beats_falls_back_on_both():
+    m = _material()
+    ids = [b.id for a in m.acts for b in a.beats if b.said is None][:2]
+    same = "城下塵土飛揚。"
+    scenes, _ = tale.write(_Client({"scenes": [{"id": i, "text": same} for i in ids], "cast": []}), m)
+    assert not set(ids) & set(scenes)
+
+
 def test_a_model_that_blows_up_falls_back_to_the_template():
     class _Boom:
         def chat_structured(self, *a, **k):

@@ -649,7 +649,7 @@ class WorldStateStore(Protocol):
     def get_event_flavor(self, fire_id: str) -> str: ...
 
     def set_event_flavor(self, fire_id: str, text: str) -> None:
-        """只在這個江湖大事還沒有人潤色過時才寫入：全服永遠只看到同一份。"""
+        """只在這個江湖大事還沒有人潤色過（或先寫的那一句不合格，flavor.clean）時才寫入：全服永遠只看到同一份。"""
         ...
 
     # ── 傳國玉璽碎片（跨季）──
