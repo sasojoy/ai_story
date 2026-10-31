@@ -1051,6 +1051,27 @@ class ExploreScenario(Scenario):
             team.fight = real
 
     @contextlib.contextmanager
+    def finds(self, *mids: str):
+        """素材拍這幾下找到的照 mids（一下一顆；用完了照真的找）：explore_modes.gather_finds 換掉（模組屬性；探索三選一不搬，
+        兩份程式叫的是同一個模組的同一個名字），每一次都寫進輸出。"""
+        from tianxia import explore_modes
+
+        real, queue = explore_modes.gather_finds, list(mids)
+
+        def gather_finds(*args, **kwargs):
+            if not queue:
+                return real(*args, **kwargs)
+            found = [queue.pop(0)]
+            emit("找到", found)
+            return found
+
+        explore_modes.gather_finds = gather_finds
+        try:
+            yield
+        finally:
+            explore_modes.gather_finds = real
+
+    @contextlib.contextmanager
     def tweak(self, obj, **values):
         """記憶體裡的設定這幾步換掉（兩份程式同一步換、同一步換回）。"""
         old = {k: getattr(obj, k) for k in values}
@@ -1237,12 +1258,14 @@ class ExploreScenario(Scenario):
         self.do("丁靈琳", "outing_tale")  # 請過了：不再開單
 
     def seen(self) -> None:
-        """別人看得到痕跡：路小佳在同一處走五段，路上的那一行（遠處有人揮手、刻在石頭上的留言）一定擲中。"""
+        """別人看得到痕跡：路小佳在同一處走五段，路上的那一行一定擲中（outing_trace_chance 換成 1），一趟最多兩行（outing_trace_cap
+        換成 2；正式是 1）：這一處有人，第一行一定是遠處有人揮手，第二行才輪得到刻在石頭上的別人的留言（葉開、丁靈琳剛在這裡留過）。"""
         explore_one = _explore_rules()
 
         if not self.place("路小佳", "yingshui"):
             return
-        with self.draws(*[explore_one.MATERIAL] * 5), self.tweak(self.c.config.jianfa, outing_trace_chance=1.0):
+        with self.draws(*[explore_one.MATERIAL] * 5), \
+                self.tweak(self.c.config.jianfa, outing_trace_chance=1.0, outing_trace_cap=2):
             self.walk("路小佳", 5)
         self.player_view("路小佳", "路小佳 路上看到的")
 
@@ -1331,13 +1354,30 @@ class ExploreScenario(Scenario):
             self.settle("丁靈琳")
 
     def rare(self) -> None:
-        """稀有：一次性奇遇必中（rare_explore_chance 換成 1）出門一趟抽到事件；五段的一趟照固定的亂數自己抽（段數越多稀有的越容易來）。"""
+        """稀有與稀世：
+        - 一次性奇遇必中（rare_explore_chance 換成 1）：站在此刻有一次性奇遇可抽的地點（白馬寺：鎮山塔；深山：飛瀑）出門一趟抽到事件，
+          走的是事件拍的稀有那一支（outing_event）。路小佳按一下探索；葉開走一趟一段，那一段記成稀有（"rare": true）。
+        - 稀世的素材：丁靈琳走一趟一段抽到素材，找到的換成一顆 FEAT_TIER 階以上的（finds；gather_finds 只給一、二階，自己走不到），
+          收的時候記一則行狀與世界記事。
+        - 五段的一趟照固定的亂數自己抽（段數越多稀有的越容易來）。"""
         explore_one = _explore_rules()
+        from tianxia import outing
 
-        if self.place("路小佳", "nanyang_wilds"):
+        if self.place("路小佳", "baima_temple"):
             with self.draws(explore_one.EVENT), self.tweak(self.c.config, rare_explore_chance=1.0):
                 self.choose("路小佳", "act:explore")
+            emit("路小佳 稀有的事件", self.chars.load("路小佳").pending_event)
             self.settle("路小佳")
+        if self.place("葉開", "deep_mountain"):
+            with self.draws(explore_one.EVENT), self.tweak(self.c.config, rare_explore_chance=1.0):
+                self.walk("葉開", 1)
+            self.player_view("葉開", "葉開 稀有的一段")
+        top = sorted(m.id for m in self.c.materials.values() if m.tier >= outing.FEAT_TIER)
+        emit("稀世的素材", top[:1])
+        if top and self.place("丁靈琳", "yingshui"):
+            with self.draws(explore_one.MATERIAL), self.finds(top[0]):
+                self.walk("丁靈琳", 1)
+            self.player_view("丁靈琳", "丁靈琳 稀世的一段")
         if self.place("葉開", "nanyang_wilds"):
             self.walk("葉開", 5)
             self.player_view("葉開", "葉開 自己抽的五段")
