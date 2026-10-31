@@ -92,6 +92,7 @@ def test_challengers_skip_turncoats_newbies_and_the_warlords(sealed, world):
     assert any(r.text == seal.NO_DUEL.format(holder="懷璽", shard="螭首") for r in world.get_season().rumors)
 
 
+@pytest.mark.smoke
 def test_a_small_battle_lets_a_spectating_free_agent_step_up(sealed, world):
     """PM 癸：參戰名單不到 10 人時，人在決戰大區、剛同步過、名冊上是散人、不在新手期的旁觀者也能被挑上陣前（戰功當 0）。"""
     _setup(sealed, world)

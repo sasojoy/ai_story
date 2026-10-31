@@ -91,6 +91,7 @@ def test_store_puts_a_treasure_on_without_a_warning_flag_or_into_the_rack(conten
     assert state.player.rack == [second] and second.id == "寶:2"
 
 
+@pytest.mark.smoke
 def test_old_save_from_equipment_batch_two_reads_with_empty_treasure_fields(content, world):
     """裝備四欄 3.2：裝備二的舊存檔（沒有 treasure、treasure_drops、held_gear，裝備沒有 template；季沒有 general_gifts、tianji）
     讀得進來，欄位都是預設值。"""

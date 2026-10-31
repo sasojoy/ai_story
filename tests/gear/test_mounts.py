@@ -94,6 +94,7 @@ def test_odds_text_rounds_half_up_and_says_under_one_tenth():
     assert [mounts.pct(x) for x in (0.125, 0.025, 0.225, 0.2, 0.43)] == ["13%", "3%", "23%", "20%", "43%"]
 
 
+@pytest.mark.smoke
 def test_old_save_from_equipment_batch_one_reads_on_foot_with_a_plain_pace(content, world):
     """裝備四欄 3.2、5.3：裝備一的舊存檔（沒有 mount、hunger_warned、picking_market，路上的 Journey 沒有 pace）讀得進來，
     沒騎馬、步調 1，已經排好的抵達時刻照舊。"""

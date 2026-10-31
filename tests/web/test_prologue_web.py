@@ -169,6 +169,7 @@ def test_the_first_screen_is_the_ambush_and_a_skip_link(hut):
     assert out["top"] == "" and out["tabs"] == ""  # 沒有狀態列、沒有分頁列
 
 
+@pytest.mark.smoke
 def test_the_whole_screen_has_no_top_and_no_tabs_on_the_first_step(hut):
     app = run(main_at(hut, 0), "H.render(); return T.els.app.innerHTML;")
     assert '<header class="top" id="top" hidden></header>' in app and "<nav" not in app

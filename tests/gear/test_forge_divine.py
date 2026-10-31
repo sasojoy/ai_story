@@ -76,6 +76,7 @@ def test_divine_recipes_are_picked_per_season_in_their_own_group(divine_content)
     assert all(r.slot == "weapon" for r in forge_secrets.active(divine_content, 0))  # 防具關著：防具的神器配方也不挑
 
 
+@pytest.mark.smoke
 def test_adding_the_divine_groups_leaves_the_other_picks_alone():
     """上線那一季（10.1）：每一組各自照雜湊排、各挑各的，多了神器那兩組，原本那 6 條一條都不變。"""
     rc = real_content()

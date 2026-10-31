@@ -31,6 +31,7 @@ class FixedRandom(random.Random):
 NO_LUCK = FixedRandom(0.5)  # uniform(-15, 15) -> 0，測試邊界時排除隨機干擾
 
 
+@pytest.mark.smoke
 def test_member_power_zero_without_wugong():
     member = Member()
     assert member_power(member, {}) == 0.0

@@ -46,6 +46,7 @@ def advance_to_week(state: GameState, content, week: int) -> list[str]:
 # ── 什麼時候發生 ─────────────────────────────────────────
 
 
+@pytest.mark.smoke
 def test_fixed_event_happens_on_its_week(s1):
     state = GameState(player=_player(), world=fresh_season(s1))
     msgs = advance_world_state(state.world, s1, calendar.cal_hour_seconds(s1), random.Random(0))

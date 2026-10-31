@@ -59,6 +59,7 @@ def test_daily_orders_take_turns():
     assert len(set(kinds)) >= 2  # 守、進攻、補給輪流
 
 
+@pytest.mark.smoke
 def test_a_daily_order_applies_a_share_of_its_effect():
     c = real_content("season21")
     v = _vehicle(c)

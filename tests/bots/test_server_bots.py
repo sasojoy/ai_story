@@ -1,6 +1,8 @@
 import random
 from collections import Counter
 
+import pytest
+
 from tianxia.models import Config
 from tianxia import server_bots
 from tianxia.server_bots import (
@@ -51,6 +53,7 @@ class _Scripted(random.Random):
         return pick
 
 
+@pytest.mark.smoke
 def test_names_never_match_a_famous_three_kingdoms_figure():
     """字庫組得出趙雲、周瑜、馬超這種名人；抽到了就重抽，假人不能頂著名人的名號。"""
     assert make_name(_Scripted(["雲", "趙", "雲", "陳"]), set()) == "陳雲"

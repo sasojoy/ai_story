@@ -70,6 +70,7 @@ def test_the_face_follows_your_faction(setup):
     assert "韓稜" in msgs[0]
 
 
+@pytest.mark.smoke
 def test_exploring_where_a_boss_lives_can_start_one(setup):
     content, game = setup
     content.config.duel.explore_chance = 1.0

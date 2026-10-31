@@ -263,6 +263,7 @@ def test_front_must_be_a_front_not_just_a_region(where):
         validate(c)
 
 
+@pytest.mark.smoke
 def test_real_talk_and_event_fragments_follow_table_4_2(fs_content):
     """11 則對話片段：誰說、誰接手、話題標籤、情誼門檻（基準量）；4 則事件片段：來自哪一則事件。"""
     chains = fs_content.foreshadows.chains

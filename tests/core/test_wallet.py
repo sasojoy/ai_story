@@ -25,6 +25,7 @@ def test_balance_is_the_sum_of_the_ledger(wallet):
     assert other.admin == "管理者" and other.note == "補償"
 
 
+@pytest.mark.smoke
 def test_same_ref_counts_once(wallet):
     assert wallet.post("沈青衫", 5000, "grant", "grant:beta:沈青衫", time=10.0) is True
     assert wallet.post("沈青衫", 5000, "grant", "grant:beta:沈青衫", time=20.0) is False
@@ -38,6 +39,7 @@ def test_balance_never_goes_negative(wallet):
     assert wallet.balance("沈青衫") == 50 and len(wallet.ledger("沈青衫")) == 1
 
 
+@pytest.mark.smoke
 def test_unknown_reason_is_refused_by_the_table(wallet):
     import sqlite3
 

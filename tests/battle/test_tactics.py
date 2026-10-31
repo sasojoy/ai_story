@@ -82,6 +82,7 @@ def test_rally_raises_the_brothers_rates():
     assert alone.rate(guan[0]) == pytest.approx(guan[0].tactic.rate)
 
 
+@pytest.mark.smoke
 def test_ward_keeps_your_own_side_from_losing_its_head():
     content = real_content()
     f = tactics._Fight([], _ctx(), content.config.tactics, random.Random(0))

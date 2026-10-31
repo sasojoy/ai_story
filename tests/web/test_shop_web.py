@@ -39,6 +39,7 @@ def test_the_shop_covers_the_screen_with_the_sign_line_and_four_tabs(m):
     assert html.count('data-act="choose" data-id="smith:buy:') == 6
 
 
+@pytest.mark.smoke
 def test_each_page_sends_the_right_action(m):
     out = run(m, """
       const pages = {};

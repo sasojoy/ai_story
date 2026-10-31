@@ -34,6 +34,7 @@ def test_off_by_default():
     assert power_save.keep_alive("12h") == "12h"
 
 
+@pytest.mark.smoke
 def test_the_flag_file_turns_it_on(monkeypatch, tmp_path):
     flag = tmp_path / "power_save"
     flag.write_text("2m", encoding="utf-8")

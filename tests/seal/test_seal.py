@@ -53,6 +53,7 @@ def sealed(content):
     return content
 
 
+@pytest.mark.smoke
 def test_the_real_content_has_seven_shards_and_marks_three_showdowns():
     """七片名字不重複、效果鍵剛好是 Config.seal.effects 的七個；時刻表標宛城現世、長社與廣宗璽動（PM 甲、8.5）。"""
     c = real_content()
@@ -117,6 +118,7 @@ def test_no_shards_means_the_marks_and_the_emerge_skill_are_not_checked(content)
 
 # ── Task 2：全服登記、密鹽、亂數 ──
 
+@pytest.mark.smoke
 def test_the_registry_lives_on_the_shared_world_and_survives_a_new_season(sealed, world):
     """登記在 world 那一列（不分季）：換季不清；開季、換季寫 opened_real（「這一季上線過」與隱沒都看它，5.3）。"""
     from conftest import next_season

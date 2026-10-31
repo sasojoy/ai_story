@@ -4,6 +4,8 @@ from __future__ import annotations
 import random
 import re
 
+import pytest
+
 from conftest import real_content
 from tianxia import mapart, mapview
 from tianxia.engine import Game
@@ -28,6 +30,7 @@ def test_the_base_has_paper_regions_and_roads_but_no_places():
     assert "data-loc" not in svg and "潁川郊野" not in svg  # 地點與名字是網頁照疊層畫的
 
 
+@pytest.mark.smoke
 def test_official_roads_are_double_lines():
     game = _game()
     s, c = game.state, game.content

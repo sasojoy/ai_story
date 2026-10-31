@@ -33,6 +33,7 @@ def _wait_until(predicate, seconds=2.0):
     return False
 
 
+@pytest.mark.smoke
 def test_runs_the_job_and_returns_its_result():
     queue = llm_queue.LlmQueue(slots=1, bot_cap=1)
     assert queue.run("甲", lambda: 7, fallback=0) == 7

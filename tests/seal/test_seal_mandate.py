@@ -120,6 +120,7 @@ def test_old_saves_read_without_the_new_fields():
     assert BattleInstance(battle_id="x").seal_lean == {}
 
 
+@pytest.mark.smoke
 def test_mandate_endings_stay_out_of_the_normal_list(mandated, world):
     """天命結局只由 evaluate_ending 照 mandate_endings 挑（Task 6），不進一般的清單：任務區塊的提示、決定性勝利、保底都看不到它們。"""
     from tianxia import world as world_rules

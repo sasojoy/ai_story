@@ -36,6 +36,7 @@ def _section(content) -> str:
     return page.split(head, 1)[1].split("\n####", 1)[0]
 
 
+@pytest.mark.smoke
 def test_the_page_has_a_mall_section(on):
     text = _section(on)
     assert howto.MALL_COIN in text  # 元寶只能儲值取得、不能換銀兩
@@ -44,6 +45,7 @@ def test_the_page_has_a_mall_section(on):
     assert "還沒到期再買，從到期日往後接" in text
 
 
+@pytest.mark.smoke
 def test_no_grant_no_grant_line(on):
     on.config.mall.beta_grant = 0
     text = _section(on)

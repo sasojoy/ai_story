@@ -42,6 +42,7 @@ def _explore_only(game, branch):
 # ── 每種行動寫成的紀錄 ─────────────────────────────────
 
 
+@pytest.mark.smoke
 def test_new_game_opens_with_the_season_intro(game):
     assert len(game.state.journal) == 1
     entry = latest(game)

@@ -73,6 +73,7 @@ def test_only_roads_without_a_town_at_either_end(real):
             assert real.config.explore_mix_of(real.locations[loc_id].tags).kind != "town"
 
 
+@pytest.mark.smoke
 def test_setting_an_ambush_costs_stamina_and_pins_you_in_place(real, world):
     owner = _player(real, world, "黃甲", "huang", "huangjin_camp")
     ids = {o.id for o in owner.options() if o.enabled}

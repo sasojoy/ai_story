@@ -63,6 +63,7 @@ def _titles(game) -> list[str]:
 # ── 封測發放 ─────────────────────────────────────
 
 
+@pytest.mark.smoke
 def test_off_means_no_grant_and_no_rows(content):
     content.config.mall.beta_grant = 5000  # 開關關著，數字寫了也不發
     game = _game(content)

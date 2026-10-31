@@ -1,3 +1,5 @@
+import pytest
+
 from tianxia import insights, library
 from tianxia.martial_arts import Insight
 
@@ -35,6 +37,7 @@ def test_an_unknown_insight_teaches_nothing(state, content, world):
     assert state.player.insights == []
 
 
+@pytest.mark.smoke
 def test_the_explore_pool_follows_the_location(content):
     assert sorted(insights.explore_pool(content.locations["lake"], content)) == ["feng", "shui"]
     content.locations["lake"].insights = []

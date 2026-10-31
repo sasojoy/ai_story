@@ -82,6 +82,7 @@ def test_wounds_still_hurt_against_a_risen_figure(real, world):
     assert game._figure_squad("bocai").difficulty == fresh
 
 
+@pytest.mark.smoke
 def test_the_reward_follows_the_prestige_not_the_risen_difficulty(real, world):
     game = _player(real, world, mates=("guanyu", "zhangfei"))
     game.state.player.stamina = 200.0

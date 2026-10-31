@@ -119,6 +119,7 @@ def test_players_who_already_joined_count_toward_the_minimum(runner, world, cont
     assert runner.tick().added == 1  # 只補黃巾
 
 
+@pytest.mark.smoke
 def test_a_retired_bot_is_woken_before_a_new_one_is_made(runner, world, content, monkeypatch):
     monkeypatch.setattr(server_bots, "is_online", lambda profile, now: False)
     content.config.bots_min_per_faction = 1

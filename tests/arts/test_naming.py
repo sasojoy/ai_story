@@ -23,6 +23,7 @@ def test_clean_name_strips_the_wrapping(raw):
     assert naming.clean_name(raw) == "龍吟九霄"
 
 
+@pytest.mark.smoke
 def test_clean_name_converts_simplified_characters():
     assert naming.clean_name("龙吟九霄") == "龍吟九霄"
 

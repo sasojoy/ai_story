@@ -26,6 +26,7 @@ def _wear(game, wugong, neigong, level=10):
     m.wugong_id, m.wugong_level, m.neigong_id, m.neigong_level = wugong, level, neigong, level
 
 
+@pytest.mark.smoke
 def test_every_figure_art_has_its_own_tactic_and_three_traits():
     content = real_content()
     names = set()

@@ -34,6 +34,7 @@ def _owner(game, loc_id):
     return territory.controller(game.state.world, game.content, loc_id)
 
 
+@pytest.mark.smoke
 def test_opening_a_prepared_season_starts_the_map_over(tmp_path):
     c = real_content("week7")
     store = open_world(tmp_path / "w.db")

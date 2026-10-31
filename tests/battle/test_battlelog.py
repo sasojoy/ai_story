@@ -1,5 +1,7 @@
 import random
 
+import pytest
+
 from tianxia import battlelog, rounds
 from tianxia.encounter import resolve_encounter
 from tianxia.state import BattleRecord, Fighter
@@ -39,6 +41,7 @@ def test_new_record_includes_the_team_at_their_current_levels(state, content, wo
     assert [(f.name, f.level) for f in rec.ours] == [("沈浪", 3), ("韓鐵", 2)]
 
 
+@pytest.mark.smoke
 def test_add_record_keeps_only_the_newest_records(state):
     for i in range(MAX_RECORDS + 5):
         battlelog.add_record(state, record(id=i + 1))
