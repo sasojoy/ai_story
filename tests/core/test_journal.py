@@ -959,6 +959,13 @@ def test_card_html_shows_time_title_tag_lines_and_coloured_changes():
     assert html.index("剛剛") < html.index("探索揚州城") < html.index("✔ 引導完成") < html.index("銀兩 +10")
 
 
+def test_card_html_draws_one_chip_per_label_even_if_the_entry_listed_it_twice():
+    """U-20（手機介面自檢 2026-10-31）：決戰的軍餉與首功各給一次名望，紀錄裡是兩筆「名望 +2」：畫成一顆「名望 +4」（同戰報）。"""
+    html = journal.card_html(entry(changes=["銀兩 +53", "名望 +2", "貢獻 +27", "名望 +2"]))
+    chips = re.findall(r'<span class="tx-chg[^"]*">([^<]+)</span>', html)
+    assert chips == ["銀兩 +53", "名望 +4", "貢獻 +27"]
+
+
 def test_card_html_draws_a_merged_entry_once_per_action_in_order():
     """FB-070 (c)：標記是敘事的最後一行（併成一則的門下動作）時，標記不另寫在標題旁、敘事照順序畫：N 次就是 N 行。
     一樣的一句話做了兩次（例如兩次療傷）也還是兩行；只有一行、或標記不在敘事最後的，照舊（FB-029 只看第一行）。"""
