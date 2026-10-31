@@ -4,6 +4,8 @@
 名字（攻城・地點），「每一位只扣一次」記在攻城那一列（generals.after_battle 的 where、mutate 兩個參數）。搬包之前也沒有一條測試守：
 tests/acts/test_conquest_siege.py 倒下的守將都是隊伍（squad:…，不在人物表、after_battle 略過），tests/battle/test_generals.py 拿決戰直接叫
 after_battle、不經攻城收場；scripts/same_behavior.py 決戰一軌的六場攻城，是人物的留守一位都沒倒。
+
+另一條（同一輪審查的單點突變裡沒人抓到的 M6）：收場只做一次——傳進來的那一份也標上 settled，同一份再叫一次什麼都不做。
 """
 from __future__ import annotations
 
@@ -68,3 +70,15 @@ def test_a_figure_felled_on_a_siege_loses_prestige_once_under_the_siege_name():
     again = game.world.get_season()
     assert again.figures[chief.fid].prestige == start - fall
     assert [r.text for r in again.rumors if r.layer == "world"].count(line) == 1
+
+
+def test_settling_the_same_object_again_does_nothing():
+    """收場只做一次（SiegeInfo.settled）：攻城那一列標上之外，傳進來的那一份也標上（收場那一下的呼叫端手上那一份）；同一份再叫一次
+    _settle_siege 什麼都不做——不重發天下大事、季與那一列都不動。"""
+    game = _game()
+    after = _felled(game, _siege(game))
+    assert after.siege.settled
+    season, row = game.world.get_season(), game.world.ended_battle(after.record_id)
+    game._settle_siege(after)
+    assert game.world.get_season().model_dump() == season.model_dump()
+    assert game.world.ended_battle(after.record_id).model_dump() == row.model_dump()
