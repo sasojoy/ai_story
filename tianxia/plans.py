@@ -235,7 +235,7 @@ def _fall_off(state: GameState, content: Content, it: Itinerary, st: ItinerarySt
 
 
 def _warring(content: Content) -> list[str]:
-    return [f.id for f in content.scenario.factions if f.goals and "geju" not in f.goals]
+    return [f.id for f in content.scenario.factions if f.goals]  # 交戰兩軍（豪強沒有自己的目標）
 
 
 def _other_side(content: Content, side: str) -> str | None:

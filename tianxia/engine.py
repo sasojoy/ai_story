@@ -82,10 +82,10 @@ from .models import (
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    GEJU, HUANGJIN, add_chronicle, add_marks, add_rumor, add_season_rumor, add_world_flags, display_name, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
+    HUANGJIN, add_chronicle, add_marks, add_rumor, add_season_rumor, add_world_flags, display_name, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
     check_gap, check_result_line,
-    day_turn, ears_of, evil_success, failed, fill_marks, free_text_rate, game_day, geju_resisted, here_regions,
-    can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
+    day_turn, ears_of, evil_success, failed, fill_marks, free_text_rate, game_day, here_regions,
+    can_draw_side_change, chaos_fronts, front_chip, front_ids, front_of, front_text, humanize,
     is_revealed, learn_skill, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stance_rule_note, stance_sum_note, stances, stat_rate, trend_name, trend_shown, trend_value,
     world_day, world_trend_value,
@@ -1698,7 +1698,7 @@ class Game:
 
     def _donate(self, items: list[tuple[str, int]]) -> list[str]:
         """收下（設計第六節）：每一種照 economy.take_donation 扣背包、記今天的點數（上限切一半：收得下的收，其餘留著），照給的先後收；
-        軍備存量照份量累積（economy.add_armament）；第一季規則開著時記貢獻（push.add_contribution，照份量）；推大本營那一條線（豪強推割據；
+        軍備存量照份量累積（economy.add_armament）；第一季規則開著時記貢獻（push.add_contribution，照份量）；推大本營那一條線（
         economy.donate_target）往自己陣營，量是 economy.donate_push（每點 0.05、事件五折），走 push_trend(source="donate")：季長倍數、
         盡頭阻力、每人每日上限照出陣，推力不另記貢獻（幾種一起捐也只推一次，照合起來的點數）。一樣都沒收下回第一個原因、什麼都不動。
         軍需帳上掌櫃那一句照這一下（_shop_after）。"""
@@ -1741,7 +1741,7 @@ class Game:
 
     def _credit_donation(self, by_attribute: dict[str, int]) -> list[str]:
         """捐軍備收下之後（捐素材、捐銀兩共用）：軍備存量照份量累積（economy.add_armament）；第一季規則開著時記貢獻（照份量）；
-        推大本營那一條線（豪強推割據；economy.donate_target），量是 economy.donate_push，走 push_trend(source="donate")。"""
+        推大本營那一條線（economy.donate_target），量是 economy.donate_push，走 push_trend(source="donate")。"""
         s, c = self.state, self.content
         p, w = s.player, s.world
         side = self._side()  # 豪強分屬兩軍：軍備進依附那一軍的存量、推依附那一軍的目標（設計第六、十二節）
@@ -5956,11 +5956,9 @@ class Game:
         return opts
 
     def _rank_action_line(self, loc_id: str) -> str | None:
-        """第 3、4 階行動在這裡推哪一條線：自己陣營有割據的目標就推割據（豪強的修築塢堡、占據郡縣），否則推所在的戰線
-        （黃巾的煽動起事）；都沒有目標是 None（不推）。選單看推滿了沒、_rank_action 真的推，都照這一個判斷。"""
+        """第 3、4 階行動在這裡推哪一條線：所在的戰線（照 _goals：豪強分屬兩軍，照依附那一軍的目標）；沒有目標是 None（不推）。
+        選單看推滿了沒、_rank_action 真的推，都照這一個判斷（推割據 2026-10-31 連豪強第三方一起拿掉）。"""
         goals = self._goals()
-        if goals.get(GEJU):
-            return GEJU
         front = front_of(self.content, loc_id)
         return front if front is not None and goals.get(front) else None
 
@@ -5974,8 +5972,8 @@ class Game:
         return push.room(s.player.pushed, day, trend_id, self.daily_push_cap())
 
     def _rank_action(self, action_id: str) -> list[str]:
-        """做一次第 3、4 階的行動：扣體力、記這週一次（不論成敗）；有檢定的過了才算——推動走 push_trend（黃巾推所在戰線往己方，
-        豪強推割據，都乘自己陣營的目標），再替軍令記功（第 3 階 5 次、第 4 階 10 次；收哪幾種由計畫戊二定，現在沒有軍令收，記不到）。
+        """做一次第 3、4 階的行動：扣體力、記這週一次（不論成敗）；有檢定的過了才算——推動走 push_trend（推所在戰線往己方，
+        乘自己那一邊的目標），再替軍令記功（第 3 階 5 次、第 4 階 10 次；收哪幾種由計畫戊二定，現在沒有軍令收，記不到）。
         choose 已經驗過選項在選單上，所以 mine 裡一定找得到。"""
         s, c = self.state, self.content
         p = s.player
@@ -6004,7 +6002,7 @@ class Game:
 
     def _duty(self) -> list[str]:
         """第 1 階守勢行動（官軍巡哨、黃巾傳道、豪強保境安民；軍令文件 3.2、濃縮版內容表 2.6）：體力 duty_stamina，
-        往己方推所在戰線 1 點（豪強在亂局時推割據，不在亂局什麼都不推），算守城的個人部分。推力走 push_trend
+        往己方推所在戰線 1 點（豪強照依附那一軍），算守城的個人部分。推力走 push_trend
         （緩衝、上限、貢獻）。"""
         s, c = self.state, self.content
         p = s.player
@@ -6020,8 +6018,6 @@ class Game:
         goals = {} if duel else self._goals()  # 約戰開著：線只在約戰結算、軍令、大勢人物、事件的痕跡這幾處動（設計 4.3）
         if goals.get(front):
             msgs += self.push_trend(front, goals[front], source="duty")
-        elif goals.get(GEJU) and in_chaos(s, c, front):
-            msgs += self.push_trend(GEJU, 1, source="duty")
         msgs += opportunities.after_success(s, c, "duty", loc.id, self.rng)  # 收容流民（正式版乙一）
         if precise.on(c, s.world):  # 一類一顆（正式季整合 2.6）：再加跟守一樣的經驗心得（這裡自家那一路的全額；沒有自家隊伍不給，只推線）
             host = self._sortie_host(loc)
@@ -7465,11 +7461,6 @@ class Game:
         豪強分屬兩軍的季照兩軍寫、括號寫豪強（「目前官軍 12 人（其中豪強 3 人）、黃巾軍 9 人」）。"""
         return allied.roster_text(self.content, self.state.world, self.world.roll_counts())
 
-    def _roster_players(self) -> int:
-        """這一季投靠了陣營的人數（全服投靠名冊，真人與假人一樣算）：跟 world.advance_world_state 查來縮放割據漲速的是
-        同一個算式，割據的說明（rules.chaos_note）才說得準現在是在漲還是不動（FB-065 M1）。每次畫面現查，只是讀。"""
-        return sum(self.world.roll_counts().values())
-
     def _record_faction(self) -> None:
         """把自己的陣營記進全服投靠名冊（陣營人數看這份；鍵是 allied.roll_key，依附的豪強寫「haoqiang@guan」）；已經記過同一個鍵
         就不再寫。choose() 結束時與 sync() 都會呼叫，名冊出現之前就投靠了的人（或拜入門派而投靠的人）也會補記進去。
@@ -8854,7 +8845,7 @@ class Game:
             lines += cultivation.seize(s, c, self.world, rule.showdown_ratio, self.rng)
         trends = {t.id: t.name for t in c.scenario.trends}
         moved = resolve_trends(c, s.world, battle.outcome_trend_delta)  # 開關關著時戰線都寫成黃巾聲勢
-        # 第一季規則開著時，戰線與豪強割據的增減不寫數字（FB-064，同 change_trend）：這一季的是機器可讀的標籤，畫在戰鬥卡片
+        # 第一季規則開著時，戰線的增減不寫數字（FB-064，同 change_trend）：這一季的是機器可讀的標籤，畫在戰鬥卡片
         # 底下、照看的人的陣營上色，戰報不收（「大勢」那一行不寫，跟遊歷的戰鬥卡片一樣）；上一季的寫進敘事，就直接是那一句話
         # （敘事沒有顏色）。其他的線、開關關著時照舊是帶正負號的數字。
         moves = {tid: d for tid, d in moved.items() if d}
@@ -9954,19 +9945,16 @@ class Game:
 
     def _resisted_lines(self) -> set[str]:
         """盡頭阻力與事件五折只管戰線（設計 5.1、3.2）：三條戰線照這一季的規則換成真的會動的線——第一季是三條戰線本身，
-        規則關著的季是它們合成的那一條（黃巾聲勢）。豪強割據、玉璽線索不算。"""
+        規則關著的季是它們合成的那一條（黃巾聲勢）。玉璽線索不算。"""
         c, w = self.content, self.state.world
         return {line for front in front_ids(c) if (line := resolve_trend(c, w, front)) is not None}
 
     def _shaped(self, trend_id: str, delta: float, source: str) -> tuple[float, bool]:
         """玩家這一下真的要推多少（設計 3.2、5.1、5.2）：可重複的事件推戰線打 event_trend_share；第一季的出陣乘季長倍數（規則關著的季
-        照舊在 push_trend 那一條縮）；再照推之前的戰線打盡頭阻力。回傳（推的量, 有沒有被阻力打折）。開關都關著時原樣回傳。
-        豪強割據往上漲也打盡頭阻力（FB-254，rules.geju_resisted）；推動那一行不接「深入敵境」那一句（說的是戰線）。"""
+        照舊在 push_trend 那一條縮）；再照推之前的戰線打盡頭阻力。回傳（推的量, 有沒有被阻力打折）。開關都關著時原樣回傳。"""
         c, w = self.content, self.state.world
         cfg = c.config
         amount = float(delta)
-        if trend_id == GEJU:
-            return geju_resisted(self.state, c, amount), False
         if trend_id not in self._resisted_lines():
             return amount, False
         if source == "event" and cfg.explore_modes.enabled:
@@ -11423,9 +11411,7 @@ class Game:
 
     def _train_push(self, trend_id: str, delta: int) -> int:
         """遊歷（打贏或操練）推大勢：量照地點設定；自己陣營對這條線有目標就往目標方向推，散人和
-        沒有這條線目標的陣營照地點原本的方向（企劃者 2026-10-02 決定）。trend_id 是換算過、真的會動的那條線：
-        豪強（目標只有割據）在亂局的戰線上遊歷時換成豪強割據（delta 已取絕對值、往漲的方向，見 train_trend_push），
-        所以這裡乘上的是割據的目標；不在亂局的戰線上，豪強根本不會走到這裡（什麼都不推）。"""
+        沒有這條線目標的陣營照地點原本的方向（企劃者 2026-10-02 決定）。trend_id 是換算過、真的會動的那條線。"""
         goal = self._goals().get(trend_id, 0)
         return abs(delta) * goal if goal else delta
 
@@ -11438,27 +11424,14 @@ class Game:
     def train_trend_push(self, loc_id: str | None = None) -> dict[str, int]:
         """在這個地點（預設所在地）遊歷打贏或操練時，各條大勢線會被推多少（照自己的陣營，見 _train_push）。
         鍵是真的會動的那條線：內容寫的戰線或 front 先照 rules.resolve_trend 換過（開關關著時一律是黃巾聲勢）。
-        第一季濃縮版的豪強（目標只有割據、對這條戰線沒有目標，見 _backs_the_chaos）不推戰線本身：這個地點的戰線
-        在亂局（戰況 chaos_low～chaos_high）時改推豪強割據（往漲的方向、量取絕對值），戰線已經穩下來（不在亂局）
-        時什麼都不推，所以那一趟遊歷或操練不會出現在回傳裡。散人與官軍、黃巾照舊推戰線。"""
+        豪強照依附那一軍（_goals）；推割據 2026-10-31 連豪強第三方一起拿掉。"""
         loc = self.content.locations[loc_id or self.state.player.location]
         pushes: dict[str, int] = {}
         for key, delta in loc.train_trend.items():
             target = resolve_trend(self.content, self.state.world, key, loc.id)
-            if target is not None and self._backs_the_chaos(target):
-                # 第一季濃縮版的豪強：那條戰線在亂局才推割據，不在亂局什麼都不推（第一季設計第七節）
-                target, delta = (GEJU, abs(delta)) if in_chaos(self.state, self.content, target) else (None, 0)
             if target is not None:
                 pushes[target] = pushes.get(target, 0) + self._train_push(target, delta)
         return pushes
-
-    def _backs_the_chaos(self, trend_id: str) -> bool:
-        """開關開著、這是一條戰線，而自己的陣營對它沒有目標、只想推割據（第一季濃縮版的豪強）。"""
-        goals = self._goals()
-        return (
-            season_one(self.content, self.state.world) and trend_id in front_ids(self.content)
-            and trend_id not in goals and GEJU in goals
-        )
 
     def push_trend(self, trend_id: str, delta: float, *, source: str) -> list[str]:
         """玩家自己造成的大勢推動一律走這裡（遊歷、出陣、操練、事件效果；sim_tick、時刻表、決戰、管理者不是個人推動，不走）。
@@ -16980,12 +16953,9 @@ class Game:
             ]
             data["chaos_band"] = {"low": c.config.chaos_low, "high": c.config.chaos_high}
             data["stances"] = stances(s, c)
-            notes = {"sum": stance_sum_note(c)}
-            if "haoqiang" in data["stances"]:  # 豪強分屬兩軍的季沒有割據那一方：不寫割據為什麼漲落
-                notes["haoqiang"] = chaos_note(s, c, self._roster_players())
-            data["stance_notes"] = notes
+            data["stance_notes"] = {"sum": stance_sum_note(c)}
             data["stance_rule"] = stance_rule_note(s, c)  # 態勢卡底下的收季規則（正式版辛）
-            # 點戰況圖卡、態勢、大事、主線看的說明（explain-2）：這一季在打什麼、亂局與割據、大事怎麼定、你能怎麼出力。
+            # 點戰況圖卡、態勢、大事、主線看的說明（explain-2）：這一季在打什麼、亂局、大事怎麼定、你能怎麼出力。
             # 門檻讀設定、此刻在亂局的讀 chaos_fronts、大事的件數讀時刻表（howto.war_help）；網頁點開才畫，不推動第一屏
             data["war_help"] = howto.war_help(s, c)
             data["invites"] = self._invite_status()
@@ -17103,8 +17073,8 @@ class Game:
         if not w.ended or not season_one(c, w):
             return None
         values = dict(w.final_trends)
-        huangjin, geju = values.get(HUANGJIN, 0), values.get(GEJU, 0)
-        standing = {"guan": 100 - huangjin, "huang": huangjin, "haoqiang": geju}
+        huangjin = values.get(HUANGJIN, 0)
+        standing = {"guan": 100 - huangjin, "huang": huangjin}
         names = {f.id: f.name for f in c.scenario.factions}
         timeline = []
         for event in timetable.events(w, c):  # 天命之季含天命之爭（玉璽二）
@@ -17486,11 +17456,7 @@ class Game:
                 continue
             value = trend_value(self.state, self.content, trend.id)
             bar = "█" * (value // 5) + "░" * (20 - value // 5)
-            note = (
-                f"\n\n現況：{chaos_note(self.state, self.content, self._roster_players())}。"
-                if trend.id == GEJU and season_one(self.content, w) else ""
-            )
-            parts.append(f"**{trend.name}** {value}/100\n\n`{bar}`\n\n{trend.desc}{note}")  # 割據：說明後面接現在漲或落（FB-065，同江湖頁態勢那一行）
+            parts.append(f"**{trend.name}** {value}/100\n\n`{bar}`\n\n{trend.desc}")
         if w.ended:
             parts.append(f"## 結局：{w.ending_title}\n\n{w.ending_text}")
         return "\n\n".join(parts) or "（江湖暫時風平浪靜。）"

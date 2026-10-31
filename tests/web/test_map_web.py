@@ -13,7 +13,7 @@ import test_prologue_web
 
 import server
 import webharness
-from conftest import real_content, third_party_gentry
+from conftest import real_content
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 import html as htmllib
@@ -29,11 +29,9 @@ APP = webharness.APP  # 三個檔（main.js、map.js、app.js）接起來的那�
 WIDE = "{ vw: 2400, vh: 3600 }"
 
 
-def _game(faction="guan", at="yingchuan", third_party=False, profile="week7", content=None):
+def _game(faction="guan", at="yingchuan", profile="week7", content=None):
     c = content or real_content(profile)
     c.config.auto_open_first_season = True
-    if third_party:
-        third_party_gentry(c)  # 豪強是第三方、有割據的規則（豪強分屬兩軍之前）
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None
     p = game.state.player
@@ -266,21 +264,6 @@ def test_travel_stays_on_the_map():
     body = js[js.index("async function travel(mode)"):]
     body = body[: body.index("\n  }\n") + 4]
     assert 'S.tab = "jianghu"' not in body and "loadMap()" in body and "S.mapSel" in body
-
-
-def _timeline_game():
-    """第 1 週記一筆，第 2 週把潁川汝南推到黃巾那頭（官軍大營易手）再記一筆，現在是第 3 週。豪強是第三方的規則（有割據曲線）。"""
-    from tianxia import calendar, territory
-
-    game = _game(third_party=True)
-    w, c = game.state.world, game.content
-    territory.update(w, c)
-    w.time = calendar.week_start(2, c, w) + 60
-    w.trends["yingru"] = 90
-    territory.update(w, c)
-    w.time = calendar.week_start(3, c, w) + 60
-    territory.update(w, c)
-    return game
 
 
 def test_the_chart_draws_unknown_weeks_as_blank():

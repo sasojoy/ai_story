@@ -1,4 +1,4 @@
-"""第一季濃縮版 T1：三條戰線、黃巾聲勢（衍生）、豪強割據，以及第一季的規則沒開（開關關著，或這一季開季時沒蓋「開」的章）時一切照舊。
+"""第一季濃縮版 T1：三條戰線、黃巾聲勢（衍生；豪強割據 2026-10-31 拿掉），以及第一季的規則沒開（開關關著，或這一季開季時沒蓋「開」的章）時一切照舊。
 
 規則與引擎的測試大多用真實內容（content/）：要驗的就是那三條戰線、起始值與地點歸屬。每個測試拿自己的一份
 （conftest.real_content 的複本），開關在測試裡才打開，不會漏到別的測試。"""
@@ -51,7 +51,7 @@ def _win():
 def test_the_season_one_switch_is_off_by_default():
     cfg = Config()
     assert cfg.season_one is False
-    assert (cfg.geju_chaos_per_day, cfg.geju_calm_per_day, cfg.chaos_low, cfg.chaos_high) == (1.0, 1.0, 35, 65)
+    assert (cfg.chaos_low, cfg.chaos_high) == (35, 65)
     assert WorldState().trend_accum == {}
 
 
@@ -71,25 +71,25 @@ def test_switch_off_reads_every_front_as_huangjin(real):
         assert rules.resolve_trend(real, w, key) == "huangjin"
     assert rules.resolve_trend(real, w, "front", "luoyang_palace") == "huangjin"
     assert rules.resolve_trend(real, w, "front", "changshe") == "huangjin"
-    assert rules.resolve_trend(real, w, "geju") is None
     assert (rules.resolve_trend(real, w, "huangjin"), rules.resolve_trend(real, w, "yuxi")) == ("huangjin", "yuxi")
     goals = {f.id: rules.resolve_goals(real, w, f.goals) for f in real.scenario.factions}
     assert goals == {"guan": {"huangjin": -1}, "huang": {"huangjin": 1}, "haoqiang": {}}
     sims = [rules.resolve_trends(real, w, s.trend) for s in real.scenario.sim_players]
     assert sims == [{"huangjin": 1}, {"huangjin": -1}, {"yuxi": 2}]
-    shown = [rules.trend_shown(real, w, t) for t in ("huangjin", "yuxi", *FRONTS, "geju")]
-    assert shown == [True, True, False, False, False, False]
+    shown = [rules.trend_shown(real, w, t) for t in ("huangjin", "yuxi", *FRONTS)]
+    assert shown == [True, True, False, False, False]
     assert [rules.pushable(real, w, t) for t in ("huangjin", "yingru")] == [True, False]
 
 
 def test_switch_on_reads_fronts_as_themselves(on):
     w = fresh_season(on)  # 開關開著時開的季：章是「開」
-    assert [rules.resolve_trend(on, w, key) for key in [*FRONTS, "geju"]] == [*FRONTS, "geju"]
+    assert [rules.resolve_trend(on, w, key) for key in FRONTS] == FRONTS
     assert rules.resolve_trend(on, w, "front", "changshe") == "yingru"
     assert rules.resolve_trend(on, w, "front", "zhuo_county") == "jizhou"
     assert rules.resolve_trend(on, w, "front", "luoyang_palace") is None
     assert rules.resolve_goals(on, w, on.scenario.factions[0].goals) == {"yingru": -1, "nanyang": -1, "jizhou": -1}
-    assert [rules.pushable(on, w, t) for t in ("huangjin", "yingru", "geju")] == [False, True, True]
+    assert [rules.pushable(on, w, t) for t in ("huangjin", "yingru")] == [False, True]
+    assert not rules.trend_shown(on, w, "geju")  # 豪強割據 2026-10-31 拿掉：劇本沒有這條線
 
 
 def test_switch_off_effect_front_pushes_huangjin_anywhere(real):
@@ -134,7 +134,7 @@ def test_switch_off_sim_players_and_battle_outcomes_push_huangjin(real):
 
 def test_admin_cannot_push_the_derived_trend_while_on(real):
     admin = _game(real, "Rayal")
-    assert admin.admin_push_trend("geju", 5) == ["（沒有這條大勢線。）"]  # 開關關著：豪強割據不存在
+    assert admin.admin_push_trend("geju", 5) == ["（沒有這條大勢線。）"]  # 豪強割據 2026-10-31 拿掉
     admin.admin_push_trend("huangjin", 5)
     assert admin.state.world.trends["huangjin"] == 30
     real.config.season_one = True
@@ -167,7 +167,7 @@ def test_the_timetable_reads_fronts_through_trend_value_and_cannot_push_huangjin
         validate(real)
 
 
-# ── Task 3：開關開著——加權、亂局、態勢、割據 ─────────────────────
+# ── Task 3：開關開著——加權、亂局、態勢 ─────────────────────
 
 
 def _set_fronts(state, yingru, nanyang, jizhou):
@@ -175,7 +175,7 @@ def _set_fronts(state, yingru, nanyang, jizhou):
 
 
 def _join(game, count=1):
-    """這一季的投靠名冊上有 count 個人（名冊空著，割據不漲，畫面上的說明也跟著變，見 FB-065 M1）。"""
+    """這一季的投靠名冊上有 count 個人。"""
     for i in range(count):
         game.world.record_faction(f"投靠者{i}", "guan")
 
@@ -188,7 +188,7 @@ def test_huangjin_is_the_weighted_fronts(on):
     rules.change_trend(s, on, "yingru", 10)  # 潁川 50
     assert rules.trend_value(s, on, "huangjin") == 48  # 48.25→48
     assert s.world.trends["huangjin"] == 48
-    assert rules.stances(s, on) == {"guan": 52, "huang": 48, "haoqiang": 10}
+    assert rules.stances(s, on) == {"guan": 52, "huang": 48}
 
 
 def test_derived_trend_cannot_be_pushed_directly(real):
@@ -203,8 +203,8 @@ def test_derived_trend_cannot_be_pushed_directly(real):
 
 def test_new_season_with_the_switch_on_has_every_line(on):
     season = fresh_season(on)
-    assert season.trends == {"huangjin": 45, "yingru": 40, "nanyang": 35, "jizhou": 55, "geju": 10, "yuxi": 0}
-    assert season.revealed == {"huangjin", "yingru", "nanyang", "jizhou", "geju"}
+    assert season.trends == {"huangjin": 45, "yingru": 40, "nanyang": 35, "jizhou": 55, "yuxi": 0}
+    assert season.revealed == {"huangjin", "yingru", "nanyang", "jizhou"}
 
 
 def test_old_world_without_fronts_reads_start_values_and_pushes(on):
@@ -215,7 +215,7 @@ def test_old_world_without_fronts_reads_start_values_and_pushes(on):
     s = game.state
     s.world.trends = {"huangjin": 25, "yuxi": 0}
     s.world.revealed = {"huangjin"}
-    assert [rules.trend_value(s, on, t) for t in (*FRONTS, "geju", "huangjin")] == [40, 35, 55, 10, 45]
+    assert [rules.trend_value(s, on, t) for t in (*FRONTS, "huangjin")] == [40, 35, 55, 45]
     assert rules.change_trend(s, on, "yingru", -2) == [front_lines.mark("yingru", -2)]
     assert (s.world.trends["yingru"], s.world.trends["huangjin"]) == (38, 44)  # 13.3＋8.75＋22＝44.05→44
     s.world.trends = {"huangjin": 25, "yuxi": 0}  # 回到沒推過的舊存檔
@@ -249,137 +249,6 @@ def test_front_key_at_luoyang_pushes_nothing_when_on(on):
     assert (s.world.trends["yingru"], s.world.trends["huangjin"]) == (42, 45)  # 14.7＋8.75＋22＝45.45→45
 
 
-def test_geju_rises_with_chaos_and_falls_when_calm(on):
-    game = _game(on)
-    s = game.state
-    _set_fronts(s, 40, 35, 80)  # 潁川、南陽在亂局（35 也算，含兩端），冀州穩
-    for _ in range(24):  # 一曆日
-        rules.geju_tick(s, on, 1)
-    assert s.world.trends["geju"] == 12
-    _set_fronts(s, 20, 34, 66)  # 三條都穩
-    for _ in range(24):
-        rules.geju_tick(s, on, 1)
-    assert s.world.trends["geju"] == 11
-    for _ in range(12):  # 半曆日：不足一點，先累積
-        rules.geju_tick(s, on, 1)
-    assert s.world.trends["geju"] == 11
-    assert s.world.trend_accum["geju"] == pytest.approx(-0.5)
-
-
-def _geju_rise(content, players, hours, fronts=(40, 40, 40)):
-    """三條戰線固定在 fronts，跑 hours 個曆時（每曆時一次 geju_tick）後割據漲了幾點；players 是這一季投靠名冊的人數（None＝不知道）。"""
-    s = _game(content).state
-    _set_fronts(s, *fronts)
-    before = s.world.trends["geju"]
-    for _ in range(hours):
-        rules.geju_tick(s, content, 1, players=players)
-    return s.world.trends["geju"] - before
-
-
-def test_geju_does_not_rise_when_nobody_has_joined_a_faction(on):
-    """人數等比例調整（企劃者 2026-10-05）：一個人都沒投靠，三條戰線全在亂局，割據也一點不漲，累積也不攢。"""
-    on.config.geju_full_players = 10
-    s = _game(on).state
-    _set_fronts(s, 40, 40, 40)
-    for _ in range(48):
-        rules.geju_tick(s, on, 1, players=0)
-    assert s.world.trends["geju"] == 10 and s.world.trend_accum["geju"] == 0
-
-
-@pytest.mark.parametrize("players, rise", [(5, 3), (10, 6), (2, 1)])  # 三條在亂局、兩曆日：全速 3×2＝6 點，按名冊占滿額的比例
-def test_geju_rise_is_proportional_to_the_roster_below_the_full_size(on, players, rise):
-    on.config.geju_full_players = 10
-    assert _geju_rise(on, players, 48) == rise
-
-
-@pytest.mark.parametrize("players", [10, 11, 40])
-def test_geju_rise_is_capped_at_the_designed_speed(on, players):
-    """滿額以上不再加快：一季真的湊滿人，割據照設計的速度漲。"""
-    on.config.geju_full_players = 10
-    assert _geju_rise(on, players, 48) == 6
-
-
-def test_geju_rise_is_unscaled_when_the_roster_is_unknown(on):
-    """沒給名冊（純函式的呼叫，沒有資料庫可查）：照設計速度，不縮放。"""
-    on.config.geju_full_players = 10
-    assert _geju_rise(on, None, 48) == 6
-
-
-def test_the_roster_scales_only_the_rise_not_the_calm_down(on):
-    """三條都穩下來時回落照 geju_calm_per_day，跟名冊幾個人無關。"""
-    on.config.geju_full_players = 10
-    assert _geju_rise(on, 0, 24, fronts=(20, 80, 90)) == -1
-    assert _geju_rise(on, 2, 24, fronts=(20, 80, 90)) == -1
-
-
-def test_geju_roster_scaling_does_nothing_while_the_switch_is_off(real):
-    real.config.geju_full_players = 10
-    game = _game(real)
-    for _ in range(48):
-        rules.geju_tick(game.state, real, 1, players=0)
-        rules.geju_tick(game.state, real, 1, players=40)
-    assert game.state.world.trends == {"huangjin": 25, "yuxi": 0}
-    assert game.state.world.trend_accum == {}
-
-
-def test_the_season_clock_reads_the_roster_from_the_store(on):
-    """季的時鐘自己去查名冊：真實 24 小時＝6 曆日，三條在亂局全速是 +18；四人投靠、滿額 8 人＝一半＝+9。
-    推進包在 mutate_season 裡（背景追趕走這一條）也查得到——讀名冊不是 mutate，不會撞「mutate 不能巢狀」。"""
-    on.scenario.sim_players, on.timetable = [], []
-    on.config.geju_full_players = 8
-    game = _game(on)
-    for name in "甲乙丙丁":
-        game.world.record_faction(name, "guan")
-    game.world.mutate_season(lambda season: season.trends.update(yingru=50, nanyang=50, jizhou=50))
-    world.advance_season(game.world, on, 24 * 3600, random.Random(0), now=0.0)
-    assert game.world.get_season().trends["geju"] == 19  # 10 + 18 × 4/8
-
-
-def test_the_players_advance_reads_the_roster_too(on):
-    """玩家自己「等待」那一條（Game.advance）一樣按名冊縮放；一個人都沒投靠就一點不漲。"""
-    on.scenario.sim_players, on.timetable = [], []
-    on.config.geju_full_players = 8
-    game = _game(on)
-    _set_fronts(game.state, 50, 50, 50)
-    game.advance(24 * 3600)
-    assert game.world.get_season().trends["geju"] == 10
-    for name in "甲乙":
-        game.world.record_faction(name, "huang")
-    game.advance(24 * 3600)
-    assert game.world.get_season().trends["geju"] == 14  # 每曆日 3 點全速、六曆日 18 點，2/8 ＝ 4.5 → 4（餘 0.5 累積）
-
-
-def test_geju_does_not_move_while_the_switch_is_off(real):
-    real.scenario.sim_players = []
-    real.config.figure_life.enabled = False  # 人物的襲擾在規則關著的季推黃巾聲勢（另測，tests/test_figure_life.py）
-    game = _game(real)
-    for _ in range(48):
-        rules.geju_tick(game.state, real, 1)
-    world.advance_world_state(game.state.world, real, 24 * 3600, random.Random(0))
-    assert game.state.world.trends == {"huangjin": 25, "yuxi": 0}
-    assert game.state.world.trend_accum == {}
-
-
-def test_the_season_clock_runs_the_geju_tick_once_per_calendar_hour(on):
-    """割據掛在 T2 的 season_hour：季長 14 天時一個真實小時是 6 個曆時，所以真實 24 小時＝6 曆日，三條都在亂局
-    就是 +18。每小時那一步若也掛了，會多出 +3，這裡看得出來。"""
-    on.scenario.sim_players, on.timetable = [], []  # 不讓虛擬玩家與時刻表動戰線，只看割據
-    game = _game(on)
-    s = game.state
-    _set_fronts(s, 50, 50, 50)
-    world.advance_world_state(s.world, on, 24 * 3600, random.Random(0))
-    assert s.world.trends["geju"] == 28
-
-
-def test_geju_waits_for_a_season_stamped_with_the_switch_on(real):
-    """開關關著時開的季（T2 的章是「關」），之後把開關打開：季的事不跑，割據也不動。"""
-    real.scenario.sim_players = []
-    game = _game(real)
-    real.config.season_one = True
-    world.advance_world_state(game.state.world, real, 24 * 3600, random.Random(0))
-    assert "geju" not in game.state.world.trends
-
-
 def test_map_tints_each_region_by_its_front(on):
     """Review Focus 4：開關開著時每個大區照自己的戰線標值、上色；幽州跟著冀州，洛陽不上色。"""
     game = _game(on)
@@ -404,7 +273,6 @@ def test_map_tints_each_region_by_its_front(on):
     ("guan", "changshe", "louluo", {"yingru": 39}),  # 官軍在長社打贏黃巾：潁川往 0 推
     ("huang", "nanyang_wilds", "jun_bing", {"nanyang": 36}),  # 黃巾在南陽郊野打贏郡國兵：南陽往 100 推
     (None, "changshe", "louluo", {"yingru": 39}),  # 散人照地點原本的方向（長社寫 -1）
-    ("haoqiang", "changshe", "louluo", {"geju": 11}),  # 豪強：潁川 40 在亂局，推割據、不動潁川
 ])
 def test_training_pushes_the_local_front_by_faction(on, faction, place, squad, moved):
     game = _game(on)
@@ -417,19 +285,6 @@ def test_training_pushes_the_local_front_by_faction(on, faction, place, squad, m
     changed = {k: v for k, v in s.world.trends.items() if before.get(k) != v and k != "huangjin"}
     assert changed == moved
     assert s.world.trends["huangjin"] == rules.trend_value(s, on, "huangjin")
-
-
-def test_warlords_push_nothing_where_the_front_is_settled(on):
-    game = _game(on)
-    s = game.state
-    s.player.faction = "haoqiang"
-    s.player.location = "guangzong"
-    s.world.trends["jizhou"] = 80  # 冀州穩在黃巾手上：不是亂局
-    before = dict(s.world.trends)
-    assert game.train_trend_push() == {}
-    with _win():
-        game._squad_encounter("toumu")
-    assert s.world.trends == before
 
 
 def test_training_at_luoyang_pushes_nothing_when_on(on):
@@ -447,7 +302,7 @@ def test_training_at_luoyang_pushes_nothing_when_on(on):
 
 def test_huangjin_stays_the_weighted_value_after_every_kind_of_push(on):
     """Review Focus 3：事件效果、遊歷、虛擬玩家、決戰結果（直接寫賽季、不經 change_trend）、管理者推戰線、
-    割據漲落——每一條路之後，存下來的黃巾聲勢都等於三條戰線的加權。"""
+    每一條路之後，存下來的黃巾聲勢都等於三條戰線的加權。"""
     on.scenario.sim_players = on.scenario.sim_players[:1]  # 波才：潁川 +1
     admin = _game(on, "Rayal")
     s = admin.state
@@ -473,9 +328,6 @@ def test_huangjin_stays_the_weighted_value_after_every_kind_of_push(on):
     admin.admin_push_trend("nanyang", 20)
     assert s.world.trends["nanyang"] == 55
     assert consistent()
-    for _ in range(24):
-        rules.geju_tick(s, on, 1)
-    assert consistent()
 
 
 # ── Task 5：狀態列 ───────────────────────────────────────
@@ -486,7 +338,7 @@ def test_status_shows_three_fronts_and_stances(real):
     data = game.status_data()
     assert not {"fronts", "stances", "chaos_band", "stance_notes"} & set(data)  # 開關關著：狀態列照舊
     real.config.season_one = True
-    game.state.world.season_one = True  # 開季時才補蓋「開」的章的季：割據沒存過，讀起始值 10
+    game.state.world.season_one = True  # 開季時才補蓋「開」的章的季
     _set_fronts(game.state, 30, 70, 90)
     data = game.status_data()
     assert data["fronts"] == [
@@ -494,7 +346,7 @@ def test_status_shows_three_fronts_and_stances(real):
         {"id": "nanyang", "name": "南陽", "value": 70, "chaos": False},
         {"id": "jizhou", "name": "冀州", "value": 90, "chaos": False},
     ]
-    assert data["stances"] == {"guan": 36, "huang": 64, "haoqiang": 10}  # 10.5＋17.5＋36＝64
+    assert data["stances"] == {"guan": 36, "huang": 64}  # 10.5＋17.5＋36＝64；豪強分屬兩軍，沒有豪強那一方
 
 
 # ── FB-065：圖卡標亂局帶、態勢那一行寫出數字是怎麼來的 ──────────────
@@ -504,26 +356,18 @@ CHAOS_CASES = [((20, 80, 10), 0), ((40, 80, 10), 1), ((40, 50, 10), 2), ((40, 50
 
 
 @pytest.mark.parametrize("fronts, count", CHAOS_CASES)
-def test_chaos_fronts_agree_with_what_geju_tick_does(on, fronts, count):
-    """畫面寫的「N 條戰線在亂局，割據漸長／漸消」與 geju_tick 讀的是同一份：N 條就是每曆日漲 N 點，N＝0 就是落 1 點。"""
+def test_chaos_fronts_are_the_fronts_in_chaos(on, fronts, count):
+    """畫面標的亂局（chaos_fronts）與 in_chaos 讀的是同一份（豪強割據 2026-10-31 拿掉，亂局只剩標記與只在亂局做得了的事）。"""
     s = _game(on).state
     _set_fronts(s, *fronts)
     assert [rules.in_chaos(s, on, f) for f in FRONTS] == [v in range(35, 66) for v in fronts]
     chaos = rules.chaos_fronts(s, on)
     assert len(chaos) == count and chaos == [f for f in FRONTS if rules.in_chaos(s, on, f)]
-    before = s.world.trends["geju"]
-    for _ in range(24):  # 一曆日（players 不傳＝不縮放）
-        rules.geju_tick(s, on, 1)
-    delta = s.world.trends["geju"] - before
-    assert delta == (count if count else -1)
-    note = rules.chaos_note(s, on)
-    assert note == (f"{count} 條戰線在亂局，割據漸長" if count else "沒有戰線在亂局，割據漸消")
-    assert ("漸長" in note) == (delta > 0) and ("漸消" in note) == (delta < 0)
 
 
 @pytest.mark.parametrize("value, inside", [(34, False), (35, True), (36, True), (64, True), (65, True), (66, False)])
 def test_chaos_band_edges_are_included_everywhere(on, value, inside):
-    """35 與 65 都算在亂局裡（含兩端）：in_chaos、chaos_fronts、狀態列的標記、割據的漲落、態勢那一行，一個說法。"""
+    """35 與 65 都算在亂局裡（含兩端）：in_chaos、chaos_fronts、狀態列的標記，一個說法。"""
     game = _game(on)
     s = game.state
     _join(game)
@@ -532,12 +376,6 @@ def test_chaos_band_edges_are_included_everywhere(on, value, inside):
     assert (rules.chaos_fronts(s, on) == ["yingru"]) is inside
     flags = {f["id"]: f["chaos"] for f in game.status_data()["fronts"]}
     assert flags == {"yingru": inside, "nanyang": False, "jizhou": False}
-    before = s.world.trends["geju"]
-    for _ in range(24):
-        rules.geju_tick(s, on, 1)
-    assert s.world.trends["geju"] - before == (1 if inside else -1)
-    assert game.status_data()["stance_notes"]["haoqiang"] == (
-        "1 條戰線在亂局，割據漸長" if inside else "沒有戰線在亂局，割據漸消")
 
 
 def test_chaos_band_edges_come_from_config(on):
@@ -549,7 +387,6 @@ def test_chaos_band_edges_come_from_config(on):
     data = game.status_data()
     assert data["chaos_band"] == {"low": 40, "high": 60}
     assert [(f["id"], f["chaos"]) for f in data["fronts"]] == [("yingru", False), ("nanyang", True), ("jizhou", False)]
-    assert data["stance_notes"]["haoqiang"] == "1 條戰線在亂局，割據漸長"
 
 
 def test_status_says_what_the_stance_numbers_are_made_of(on):
@@ -558,28 +395,8 @@ def test_status_says_what_the_stance_numbers_are_made_of(on):
     _set_fronts(game.state, 20, 50, 80)  # 只有南陽在亂局
     data = game.status_data()
     assert data["chaos_band"] == {"low": 35, "high": 65}
-    assert data["stance_notes"] == {"sum": "三條戰線合計", "haoqiang": "1 條戰線在亂局，割據漸長"}
+    assert data["stance_notes"] == {"sum": "三條戰線合計"}  # 豪強割據那一句 2026-10-31 拿掉
     assert not any(ch.isdigit() for ch in data["stance_notes"]["sum"])  # 不印權重
-    _set_fronts(game.state, 20, 80, 90)
-    assert game.status_data()["stance_notes"]["haoqiang"] == "沒有戰線在亂局，割據漸消"
-    _set_fronts(game.state, 40, 50, 60)
-    assert game.status_data()["stance_notes"]["haoqiang"] == "3 條戰線在亂局，割據漸長"
-
-
-def test_the_trends_page_gives_the_geju_note_the_same_wording(on):
-    game = _game(on)
-    _join(game)
-    s = game.state
-    _set_fronts(s, 40, 50, 90)
-    text = game.trends_text()
-    assert "地方豪強割據的程度" in text  # 劇本寫的說明照舊
-    assert "2 條戰線在亂局，割據漸長" in text
-    assert game.status_data()["stance_notes"]["haoqiang"] in text  # 跟江湖頁同一句
-    _set_fronts(s, 10, 90, 90)
-    text = game.trends_text()
-    assert "沒有戰線在亂局，割據漸消" in text and "戰線在亂局，割據漸長" not in text
-    # 這句話跟在割據那一段裡，不跑到別的線底下
-    assert "在亂局" not in text[: text.index("豪強割據")]
 
 
 def test_the_trends_page_is_unchanged_with_the_switch_off(real):
@@ -597,80 +414,9 @@ def test_chaos_and_stance_notes_are_the_same_for_every_faction(on, faction):
     _set_fronts(game.state, 40, 50, 90)
     data = game.status_data()
     assert [f["chaos"] for f in data["fronts"]] == [True, True, False]
-    assert data["stance_notes"]["haoqiang"] == "2 條戰線在亂局，割據漸長"
+    assert data["stance_notes"] == {"sum": "三條戰線合計"}
 
 
-# ── FB-065 M1：名冊空著時，亂局那一句不能說割據在長 ──────────────
-
-EMPTY_ROSTER_NOTE = "2 條戰線在亂局，但還沒有人投靠，割據暫時不動"
-
-
-def test_an_empty_roster_says_the_geju_is_not_moving(on):
-    """geju_tick 的漲速乘人數係數，沒人投靠就是 0：態勢那一行與見聞→大勢的現況，都不能說「漸長」。"""
-    game = _game(on)
-    _set_fronts(game.state, 40, 50, 90)  # 南陽、潁川在亂局
-    assert game.status_data()["stance_notes"]["haoqiang"] == EMPTY_ROSTER_NOTE
-    text = game.trends_text()
-    assert f"現況：{EMPTY_ROSTER_NOTE}。" in text and "割據漸長" not in text
-
-
-def test_no_chaos_still_says_the_geju_falls_with_an_empty_roster(on):
-    """回落不乘人數係數：名冊空著、沒有戰線在亂局，割據照樣一天落一點，說明寫漸消。"""
-    game = _game(on)
-    _set_fronts(game.state, 20, 80, 90)
-    assert game.status_data()["stance_notes"]["haoqiang"] == "沒有戰線在亂局，割據漸消"
-    assert "現況：沒有戰線在亂局，割據漸消。" in game.trends_text()
-
-
-def test_the_roster_follows_the_store_when_the_note_is_drawn(on):
-    """名冊人數是每次畫面現查的（跟 advance_world_state 同一個算式：全服各陣營人數加總），人一投靠說明就跟著變：
-    名冊上一個人就說割據漸長，見聞→大勢的那一句也是。"""
-    game = _game(on)
-    _set_fronts(game.state, 40, 50, 90)
-    assert game.status_data()["stance_notes"]["haoqiang"] == EMPTY_ROSTER_NOTE
-    _join(game)
-    assert game.status_data()["stance_notes"]["haoqiang"] == "2 條戰線在亂局，割據漸長"
-    assert "現況：2 條戰線在亂局，割據漸長。" in game.trends_text()
-
-
-@pytest.mark.parametrize("players", [None, 0, 1, 15, 40])
-@pytest.mark.parametrize("fronts, count", CHAOS_CASES)
-def test_the_geju_note_follows_the_same_per_day_change_as_geju_tick(on, fronts, count, players):
-    """說明讀的是 geju_tick 用的那個每曆日變動（rules.geju_per_day）：說漸長就真的在漲，說暫時不動就真的一點不動，
-    說漸消就真的在落；players 不傳（None）＝不縮放，照舊。"""
-    s = _game(on).state
-    _set_fronts(s, *fronts)
-    per_day = rules.geju_per_day(s, on, players)
-    before = s.world.trends["geju"]
-    for _ in range(24):  # 一曆日
-        rules.geju_tick(s, on, 1, players=players)
-    delta = s.world.trends["geju"] - before
-    moved = delta + s.world.trend_accum.get("geju", 0.0)  # 不足一點的累積在 trend_accum：整點加零頭就是這一曆日實際的變動
-    note = rules.chaos_note(s, on, players)
-    assert moved == pytest.approx(per_day)
-    if not count:
-        assert per_day == -1 and note == "沒有戰線在亂局，割據漸消"
-    elif players == 0:
-        assert per_day == 0 and delta == 0
-        assert note == f"{count} 條戰線在亂局，但還沒有人投靠，割據暫時不動"
-    else:
-        assert per_day > 0 and note == f"{count} 條戰線在亂局，割據漸長"
-
-
-def test_a_pure_call_without_the_roster_keeps_the_unscaled_note(on):
-    """沒給名冊人數（純函式呼叫）＝不知道，照設計的速度：說漸長，跟以前一字不差。"""
-    s = _game(on).state
-    _set_fronts(s, 40, 50, 90)
-    assert rules.chaos_note(s, on) == "2 條戰線在亂局，割據漸長"
-
-
-def test_a_geju_that_cannot_rise_for_another_reason_does_not_blame_the_roster(on):
-    """設定把每條戰線的漲速調成 0（名冊有人）：割據一樣不動，但不能說「還沒有人投靠」。"""
-    on.config.geju_chaos_per_day = 0
-    s = _game(on).state
-    _set_fronts(s, 40, 50, 90)
-    note = rules.chaos_note(s, on, players=5)
-    assert "割據漸長" not in note and "還沒有人投靠" not in note and "割據不動" in note
 
 
 def test_switch_on_but_season_unstamped_behaves_like_switch_off(real):
@@ -682,7 +428,8 @@ def test_switch_on_but_season_unstamped_behaves_like_switch_off(real):
     real.config.season_one = True
     assert s.world.season_one is False and not rules.season_one(real, s.world)
     world.advance_world_state(s.world, real, 3600, random.Random(0))
-    assert s.world.trends == {"huangjin": 25, "yuxi": 0}  # 沒有重算成 45、沒有割據
+    # 黃巾聲勢沒有重算成 45（地盤只看設定、不看章〔territory.on〕，會把三條戰線的起始值記進存檔；條件照舊讀黃巾聲勢）
+    assert (s.world.trends["huangjin"], s.world.trends["yuxi"]) == (25, 0)
     assert rules.trend_value(s, real, "huangjin") == 25
     assert rules.resolve_trend(real, s.world, "front", "changshe") == "huangjin"
     s.player.faction = "guan"

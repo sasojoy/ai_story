@@ -36,7 +36,6 @@ WIN_GIVES = {
 }
 WIN_GIVES_OLD = "季末照陣營輸贏與你出的力論功行賞"  # 待 joy 潤：規則關著的季
 HAOQIANG_GOAL = "挑一軍幫：幫的那一軍贏了就算你贏；季末只算你替贏的那一軍出的力；換邊隨時換，不算叛逃"
-HAOQIANG_GOAL_OLD = "季末割據的態勢夠高是群雄並起"  # 規則關著、有割據那一條線的季
 
 
 def _bar(content, side: str) -> tuple[int, str] | None:
@@ -86,9 +85,6 @@ def sides_card(game: Game) -> dict | None:
         elif four:  # 地方豪強（整合設計 3.1：兩本帳、幫哪一軍隨時換）
             cols.append({"id": f.id, "name": f.name, "goal": HAOQIANG_GOAL, "now": HAOQIANG_NOW_PENDING,
                          "gives": WIN_GIVES["haoqiang"], "where": _places(game, f), "mine": mine == f.id})
-        elif standing is not None and "haoqiang" in standing:  # 規則關著、割據那一條線還在的季：照舊三方
-            cols.append({"id": f.id, "name": STANCE_NAMES["haoqiang"], "goal": HAOQIANG_GOAL_OLD, "now": f"態勢 {standing['haoqiang']}",
-                         "gives": WIN_GIVES_OLD, "where": _places(game, f), "mine": mine == f.id})
     # 批 3c 接上了：贏了給照四階的稱號與比例寫、多一份投靠點的分鐘（join_at），豪強那一格「現在」寫兩本帳（看的人是豪強）或兩邊各幾人
     for col in cols:
         got = extra.get(col["id"]) if extra else None

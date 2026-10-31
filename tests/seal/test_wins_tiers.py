@@ -12,7 +12,8 @@ from tianxia import wins
 from tianxia.models import JianfaRules, TierRules
 from tianxia.state import PlayerState, WorldState
 
-GUAN_WINS, HUANG_WINS, DRAW = "s1_pacified", "s1_turbans_hold", "s1_gentry"
+# 和局：第一季的結局現在沒有和局（群雄並起、豪強坐大 2026-10-31 跟豪強第三方一起拿掉），和局的切法照舊在，拿 beta 的結局（winner 都是 None）測
+GUAN_WINS, HUANG_WINS, DRAW = "s1_pacified", "s1_turbans_hold", "hold"
 
 
 @pytest.fixture(scope="module")
@@ -40,13 +41,13 @@ def _count(result, names, tier) -> int:
     return sum(1 for name in names if result[name].tier == tier)
 
 
-def test_eight_season_one_endings_name_the_winner(content):
-    """企劃者 2026-10-24：三種官軍贏、三種黃巾贏、兩種豪強的結局（和局）是 None。"""
+def test_six_season_one_endings_name_the_winner(content):
+    """企劃者 2026-10-24：三種官軍贏、三種黃巾贏（兩種豪強的結局 2026-10-31 拿掉，第一季沒有和局）。"""
     endings = {e.id: e.winner for e in content.scenario.endings if e.season_one}
     assert endings == {
         "s1_tianming_guan": "guan", "s1_tianming_huang": "huang",
         "s1_huangtian": "huang", "s1_pacified": "guan",
-        "s1_warlords": None, "s1_turbans_hold": "huang", "s1_turbans_retreat": "guan", "s1_gentry": None,
+        "s1_turbans_hold": "huang", "s1_turbans_retreat": "guan",
     }
     assert all(e.winner is None for e in content.scenario.endings if not e.season_one)
     assert wins.winner_of(WorldState(ending_id=GUAN_WINS), content) == "guan"
@@ -181,7 +182,6 @@ def test_draw_cuts_both_armies_as_losers_and_gentry_by_both_books(content):
     assert {result[p.name].ledger_used for p in gentry[:6]} == {wins.BOTH}
     assert (result["g0"].points, result["g_split"].points, result["g_short"].points) == (140, 40, 39)
     assert result["g0"].title == "鄉里之望"
-    assert wins.winner_of(WorldState(ending_id="s1_warlords"), content) is None
 
 
 def test_drifters_and_unknown_factions_have_no_tier(content):

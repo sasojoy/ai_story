@@ -921,6 +921,8 @@ def _enlisted(on, faction, place=None):
     game.state.player.tutorial_step = len(guide.steps(game.state, on))
     game.set_hints_off(True)
     game.choose(f"faction:{faction}")
+    if faction == "haoqiang":  # 豪強先挑依附哪一軍
+        game.choose("faction:ally:guan")
     game.choose("faction:confirm")
     game.view_orders()
     assert game.guide_box()["key"] == "r3_first_order"
@@ -1020,7 +1022,7 @@ def test_fb094_a_week_later_the_recruiter_says_the_ending_anyway(on):
     game.advance(120)
     game.sync(2.0)
     box = _finished(game, on)
-    assert box["speaker"] == "季伯平" and box["text"] == on.tutorial.enlist.recruiters["haoqiang"].done
+    assert box["speaker"] == "季伯平" and box["text"] == on.tutorial.enlist.recruiters["haoqiang"].allied["done"]  # 豪強依附一邊的說法
     assert any(line.startswith("【季伯平】") and "保境安民" in line for e in game.state.journal for line in e.guide)  # 說的話記進江湖紀錄
     game.guide_ack()
     game.sync(3.0)
@@ -1036,6 +1038,7 @@ def test_fb094_the_week_counts_from_when_the_step_started_not_from_joining(on):
     game.state.player.tutorial_step = len(guide.steps(game.state, on))
     game.set_hints_off(True)
     game.choose("faction:haoqiang")
+    game.choose("faction:ally:guan")  # 豪強先挑依附哪一軍
     game.choose("faction:confirm")
     week = calendar.WEEK / calendar.cal_scale(on, game.state.world)
     joined = game.state.player.enlist_since

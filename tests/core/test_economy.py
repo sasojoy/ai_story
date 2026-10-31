@@ -5,20 +5,18 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import real_content, third_party_gentry
-from tianxia import economy, rules
+from conftest import real_content
+from tianxia import economy
 from tianxia.state import new_game_state
 from tianxia.world_state import fresh_season
 
 DAY = 20000  # 回體丹的換日算出來的「第幾天」，測試直接給
 
 
-def _state(faction="guan", at="changshe", silver=500, bag=None, profile="week7", same=None, third_party=False):
+def _state(faction="guan", at="changshe", silver=500, bag=None, profile="week7", same=None):
     c = real_content(profile)
     c.config.auto_open_first_season = True
     c.config.four_tiers.enabled = False  # 素材四階之前的規則（三階不收、二換三一天一個）；四階的規則在 test_four_tiers
-    if third_party:
-        third_party_gentry(c)  # 豪強是第三方、有割據的規則（豪強分屬兩軍之前）
     if same is not None:
         c.config.economy.upgrade_same_share = same  # 1＝一定照投入的屬性（量價錢、上限的測試不看擲骰）
     s = new_game_state(c, "沈浪")
@@ -176,11 +174,6 @@ def test_donating_pushes_the_bases_own_front_toward_your_side():
     assert economy.donate_target(c, w, "guan", "changshe") == ("yingru", -1)
     assert economy.donate_target(c, w, "guan", "wan_city") == ("nanyang", -1)  # 宛城不在戰線上：照大區的戰線
     assert economy.donate_target(c, w, "huang", "julu_altar") == ("jizhou", 1)
-
-
-def test_third_party_gentry_donations_push_the_hold():
-    s, c = _state(third_party=True)
-    assert economy.donate_target(c, s.world, "haoqiang", "cao_manor") == (rules.GEJU, 1)  # 豪強推割據
 
 
 def test_donating_in_a_season_without_the_season_one_rules():
