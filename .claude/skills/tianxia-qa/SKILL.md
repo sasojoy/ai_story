@@ -19,7 +19,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **純搬的批：兩台真伺服器逐位元組比**（全部拆包總表 5.0，PM 2026-10-31；第 5 批起）：派工單寫「純搬、`web/` 一個字沒動」的批，實機 QA 改成這樣做，不拍整套截圖：
   - BASE（這一批開出來的那一點，派工單給 SHA）與 HEAD 各 `git archive` 解一份（只要 `tianxia content web server.py server_push.py zhuan_html.py llm_queue.py console.py scripts run_bots.py`），各開一台真伺服器：各自的埠與 `<名字>.localhost`、各自的新暫存資料庫、同一個 `TIANXIA_PROFILE`、`ollama_url` 指死埠。
   - 同一串步驟用真的 HTTP 打兩台（建帳號與角色、管理者開季、這一批搬的那幾個動作；步驟照派工單與那一區調查的 `same_behavior` 清單），每個回應存下來，逐位元組比；收場後兩邊的資料庫轉成文字（每張表、每一列照 repr 排序，帳號的 salt／hash 與 `sessions.token_hash` 抹掉）逐位元組比。
-  - 兩台都要先固定亂數與時鐘，照 `scripts/same_behavior.py` 開頭那幾層的做法（包一支啟動腳本在 `import server` 前換掉；固定不了的現實時刻先換成記號再比，見上一條的兩版對照）；同一份跑兩次先確認一樣，再比 BASE 對 HEAD。這一套是第 5 批起才有的，第一次做的人把腳本留在自己的 scratchpad 子資料夾、做法寫進回報的「學到的」，PM 收進這裡。
+  - 兩台都要先固定亂數與時鐘，照 `scripts/same_behavior.py` 開頭那幾層的做法（包一支啟動腳本在 `import server` 前換掉；固定不了的現實時刻先換成記號再比，見下一條的兩版對照）；同一份跑兩次先確認一樣，再比 BASE 對 HEAD。這一套是第 5 批起才有的，第一次做的人把腳本留在自己的 scratchpad 子資料夾、做法寫進回報的「學到的」，PM 收進這裡。
   - 位元組一樣之後再拍三張圖做 sanity（375 淺、375 深、1280）。動到 `web/`、server 的路由分派、第 3 階的批照舊完整實機 QA（並排截圖＋逐像素）。
 - **兩版對照（BASE 對 HEAD）的局面要凍得住**（2026-10-31 第 1 階 QA）：week7 的管理者「繼續」會把季曆對回現實的日子，暫停凍不住時刻；管理者快轉時時刻表事件的成敗用沒種子的亂數，每次跑都不一樣。比較點放在快轉之前，時刻先換成記號再比。逐鏡記「看得到的元素的位置＋算好的樣式」再 diff，比只比像素好分辨是字還是版面真的動了。
 - 無頭 Chromium 開 mobile 模擬時，CDP `Input.dispatchMouseEvent` 照樣點得到按鈕、`mouseWheel` 捲得動；點之前 `scrollIntoView({block:'center'})`，再用 `elementFromPoint` 確認點到的是那個元素（2026-10-31）。

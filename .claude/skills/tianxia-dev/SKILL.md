@@ -177,7 +177,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **季種類對照**（企劃者 2026-10-31「現在只有7天跟21天兩種版本」：現役只有 7 天 `week7` 與 21 天 `season21`；週末 `weekend`、14 天＝不帶設定檔、探索三選一整套拿掉，排在全部拆包總表第 13、14 批）：
   - 新數字通常只寫在 `content/profiles/season21.json`、`week7.json` 或 `Config` 預設。
   - 改之前想清楚這兩種季各會怎樣。新功能、新測試只照顧 `week7`、`season21` 與測試內容，**不為 `weekend` 與不帶設定另寫分支或測試**；派工沒說要動週末與 14 天就不動（第 13、14 批落地以前它們照舊跑得起來、照舊在前後對照裡比）。三選一只修 bug、不搬。
-  - 測試用 `real_content("weekend")`／`("season21")` 各驗一次。7 天濃縮季是 `week7`（`season21` 骨架＋`season_segments`），只在那一季換的東西問 `calendar.week7_on`，寫「週／段」的字走 `calendar.week_word`／`week_label`，不要各處自己判斷。
+  - 測試用 `real_content("week7")`／`("season21")` 各驗一次。7 天濃縮季是 `week7`（`season21` 骨架＋`season_segments`），只在那一季換的東西問 `calendar.week7_on`，寫「週／段」的字走 `calendar.week_word`／`week_label`，不要各處自己判斷。
   - **「段」與「每天」是兩個開關**（FB-502）：季曆有段只有 7 天季（`week7_on`）；軍令每天一道是照現實天的季（`calendar.orders_daily`，21 天季也是）。軍令的字放 `calendar.ORDER_KEYS`，其他「週」的字照段。網頁 `calWords()` 有值不代表 7 天季（21 天季也送軍令那幾個字）：段問 `wk7()`、軍令問 `ordersDaily()`。
   - **照現實天的季有開季偏移**：名義季末一律 `calendar.nominal_end`（不是季長 × DAY，FB-500、FB-505）；時刻表某一件「到了沒」一律 `timetable.when_in`（決戰照 `schedule`），不要用 `calendar.event_time`——決戰只寫星期鐘點、`day` 是 0，會被當成那一週第一天就到了（FB-504）。
   - **設定覆寫檔是淺層合併**（`content._config` 是 `{**config.json, **profile}`）：profile 寫 `"figure_life": {"revenge_cal_days": 2}` 會把 config.json 裡整塊 `figure_life` 換掉，沒寫的鍵回到 `Config` 預設。寫巢狀的覆寫之前先看 config.json 有沒有那一塊；測試驗一次「這一塊跟別種季只差這幾個鍵」（例 `test_week7_shortens_the_calendar_day_spans_pm_ruling_5`）。
