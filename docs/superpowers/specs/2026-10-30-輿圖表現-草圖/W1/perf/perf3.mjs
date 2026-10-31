@@ -1,6 +1,7 @@
 // node perf3.mjs <輸出資料夾> <密碼檔> <帳號> <版本 V|R|S1> <像素比> <CPU 降速倍數> <第幾輪>
 // W1 後續 Task 1：地用向量（V）還是點陣（R）在手機上誰比較輕。375×812、觸控模擬開著，降速之後才打開輿圖；
-// 手勢都是在 #map 上送真的 PointerEvent（pointerType touch，每一幀 rAF 送一次 pointermove），網頁照 mv 判斷「還在拖縮」（mvBusy）。
+// 手勢都是在 #map 上用 dispatchEvent 送合成的 PointerEvent（pointerType touch，每一幀 rAF 送一次 pointermove），網頁照 mv 判斷「還在拖縮」（mvBusy）；
+// isTrusted 是 false：走網頁自己的手勢處理，瀏覽器的輸入路由、命中測試、合成執行緒的輸入處理沒跑到（那要 CDP 的 Input.dispatchTouchEvent；W1 審查 10/31）。
 // 每一次（三次）：一指拖 120 幀（緩起緩停，放手不滑）→ 兩指捏 160 幀 1.15 → 2.41 → 1.15 → 兩指捏 60 幀 1.15 → 2.41 停在那裡放手
 // （放手那一下換級距，地要重寫或重烤）→ 先縮到整張、等地畫好，點 ◎（回到我）飛回來。
 // 量：每一幀的間隔（p50／p95／最大、超過 33ms 與 50ms 的幀數）、放手到下一幀、放手到地換好之後的那一幀（穩下來）、

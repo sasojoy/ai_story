@@ -77,7 +77,7 @@
 - 同一台伺服器（埠 8166、`w1b.localhost`、`TIANXIA_PROFILE=season21`、模型網址指到沒人聽的埠、暫存資料庫）、同一個角色與局面（官軍「映雪」在潁川郡；荒丘、潁水河畔剛易手；潁川郊野與汝南荒野兩塊正在翻；`look_saves.py`）。
 - 三種：**V**＝W1 現在的向量（`groundShow` 把 `groundSvg` 寫進 `#mk` 的 SVG）；**R**＝同一份 `web/`、網址帶 `?ground=raster`（量測用的暫時開關，commit `2ac112a9`，Task 2 拿掉）：`#mk` 是 canvas，把同一份 `groundSvg` 的輸出烤上去，只在停下來、級距變了的那一次烤（手勢、慣性滑、滾輪、飛的途中不烤，跟 V 一樣看 `mvBusy`），大小＝像素比 ÷ k（此刻級距的倍率 × 像素比），最多 1600 萬像素（iOS Safari 一張 canvas 的上限 16,777,216，留一點）：像素比 3 一律 3278×4880；像素比 2 打開那一級 2267×3376（765 萬）、放到 2.4 那一級也頂到 3278×4880；遠看 900×1340；點地照座標算（`landAt`），canvas 不收點擊。**S1 預設**（參考，不是選項：Joy 的點陣、中近景不畫地，`feature/map-view` 的 `web/` 三個檔換進伺服器複本）。
 - 條件：375×812、像素比 3 與 2、CPU 降速 6 倍與 4 倍（`Emulation.setCPUThrottlingRate`；CDP 沒有讀回來的指令，改成降速前後各跑同一段迴圈比時間，比值 4 倍那一檔 4.2～5.3、6 倍那一檔 6.5～8.9，有生效，可是差得多、沒有拿來剔除或重跑，見「主要那一格量不出一成的差」）、觸控模擬開著（`Emulation.setTouchEmulationEnabled`，頁面看到 `maxTouchPoints` 5、`pointer: coarse`）。降速之後才打開輿圖。
-- 每一種條件兩輪，輪內 V、R 輪流（第二輪 R 先）、S1 排最後；每一次都是新開的無頭 Chromium（`perf_all.py`），裡面跑三次（`perf3.mjs`）：一指拖 120 幀（緩起緩停、放手不滑）→ 兩指捏 160 幀 1.15 → 2.41 → 1.15 → 兩指捏 60 幀 1.15 → 2.41 停在那裡放手（換級距，地要重寫或重烤）→ 先縮到整張、等地畫好，點 ◎（回到我）飛回來。手勢都是在 `#map` 上送真的 `PointerEvent`（`pointerType: "touch"`，每一幀 rAF 送一次 `pointermove`），不直接叫 `camSet`。
+- 每一種條件兩輪，輪內 V、R 輪流（第二輪 R 先）、S1 排最後；每一次都是新開的無頭 Chromium（`perf_all.py`），裡面跑三次（`perf3.mjs`）：一指拖 120 幀（緩起緩停、放手不滑）→ 兩指捏 160 幀 1.15 → 2.41 → 1.15 → 兩指捏 60 幀 1.15 → 2.41 停在那裡放手（換級距，地要重寫或重烤）→ 先縮到整張、等地畫好，點 ◎（回到我）飛回來。手勢都是在 `#map` 上用 `dispatchEvent` 送合成的 `PointerEvent`（`pointerType: "touch"`，每一幀 rAF 送一次 `pointermove`；`isTrusted` 是 false），不直接叫 `camSet`（只有準備的 PREP 與縮到整張的 FIT 直接叫）：走的是網頁自己的手勢處理（72 次捏都到 2.41、途中 `mvBusy` 擋住重寫），可是瀏覽器的輸入路由、命中測試、合成執行緒的輸入處理都沒跑到，要跑到得用 CDP 的 `Input.dispatchTouchEvent`。向量與點陣走同一條路，相對的比較不太受影響（W1 審查 10/31 指出以前這裡寫成「真的」）。
 - 量：每一幀的間隔（rAF）p50／p95／最大、超過 33ms 與 50ms 的幀數；放手到下一幀畫完（「放手」）；放手後地換好之後開始的那一幀畫完（「放手→穩」，地沒換＝放手）；飛：鏡頭最後一次動的那一幀到地換好之後那一幀畫完；打開輿圖（`goTab("map")`）到地畫出來之後那一幀；打開後與做完十二次手勢後先 GC 再讀的 JS heap（`Runtime.getHeapUsage`）、DOM 節點（`Memory.getDOMCounters`）、canvas 像素、整個瀏覽器（chrome 與它底下的行程）的私有記憶體；每一段手勢的 `Performance.getMetrics` 增量。每一格是兩輪 × 三次＝六次的中位數，超過 33ms／50ms 是每一次的平均、最大是六次裡最大的；打開與記憶體是兩次的中位數（`summarize.py`；`runs.py` 印每一次與 Mann-Whitney——這個 p 把同一個瀏覽器裡的三次當成獨立樣本，不成立）。
 - 畫質：`crop.mjs`＋`compose_crop.py`（像素比 3、倍率 2.4、不降速，字那一層藏起來）。
 - WebKit：這台的 `%LOCALAPPDATA%\ms-playwright` 只有 chromium，沒有 `webkit-*`（照規矩不安裝），**沒量**。
@@ -110,7 +110,7 @@ Joy 2026-10-30 把地面畫成點陣（`#mk` 是一張 canvas），理由是水�
 
 **W1 第一次交的有一個毛病（審查抓到、修正輪修了）**：README 與註解寫「拖縮照舊只換 `#mvw` 的 transform」，其實捏、滾輪、飛過去的途中，`camSet` 照 `MV_RELAYOUT` 排 `drawMarks`、`drawMarks` 又叫 `groundShow`，跨了三分之一級就把 `#mk` 整張重寫（每次約 31KB、47 個 clipPath）：node 裡捏 1 → 3.2 重寫 4 次、滾輪拉遠 6 次、飛過去 17 次。修正輪起手勢、慣性滑、滾輪、飛的途中（`mvBusy`）一次都不重寫，地跟著 transform 縮放（線寬暫時跟著粗細），停下來的那一次才照新的級距重寫（`test_w1_the_land_is_not_rewritten_while_pinching_wheeling_or_flying`）。
 
-第一次量的時候（W1 那一輪，`w1/perf.mjs`）是用 rAF 直接 `camSet`，網頁不知道手勢還沒完，拿來比的又是「S1 開著塗層」（塗層平常關著，玩家平常的是 S1 預設）。修正輪改成在 `#map` 上送真的 PointerEvent（`w1fix/perf2.mjs`：一指拖 120 幀、兩指捏 160 幀 1.15 → 2.41 → 1.15），同一台伺服器、同一個角色，三版輪流換 `web/` 各跑兩輪×三次（無頭 Chromium、375×812 兩倍像素、CPU 降速 4 倍；不是手機，只看相對）：
+第一次量的時候（W1 那一輪，`w1/perf.mjs`）是用 rAF 直接 `camSet`，網頁不知道手勢還沒完，拿來比的又是「S1 開著塗層」（塗層平常關著，玩家平常的是 S1 預設）。修正輪改成在 `#map` 上用 `dispatchEvent` 送合成的 PointerEvent（走網頁自己的手勢處理，不是瀏覽器的觸控輸入，見上面「怎麼量的」；`w1fix/perf2.mjs`：一指拖 120 幀、兩指捏 160 幀 1.15 → 2.41 → 1.15），同一台伺服器、同一個角色，三版輪流換 `web/` 各跑兩輪×三次（無頭 Chromium、375×812 兩倍像素、CPU 降速 4 倍；不是手機，只看相對）：
 
 | 版本 | 拖：p95／超過 33ms 的幀 | 捏：平均／p95／超過 33ms 的幀 | 捏的途中重寫地 |
 |---|---|---|---|
