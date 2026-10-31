@@ -24,6 +24,11 @@
 - `ctx._play_rounds(record, squad, tier, ...)`：排回合的演出；`ctx._deed_fame(kind)`：立功給名望
 - `ctx._load_kin(name)`、`ctx._save_kin(game)`：同一把鎖裡讀、寫別人的存檔（混戰、截殺）
 
+店面與戰報的補充（tavern：主動搬六包第 10 批酒肆加的）
+- `ctx._shop_say(key, problem=None)`、`ctx._shop_after(problem, done, keyer=None)`：掌櫃那一句（七間店共用，shop_lines.json 的情況）
+- `ctx._idle()`：閒著（不在路上、沒在閉關）才進得了店
+- `ctx._last_wear`：`_file_battle` 留下的這一場兵器、防具損耗那幾句（接在戰報那一則的後面）
+
 身分
 - `ctx._side()`：站哪一軍；`ctx.is_admin()`；`ctx._admin_target(name)`、`ctx._save_target(game)`：管理者動到別人的存檔
 - `ctx._quick_client()`：鎖內的模型呼叫（一步最多 in_lock_model_timeout 秒）
@@ -41,6 +46,7 @@
 
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
+- `ctx._battle_now()`（決戰：此刻自己參戰的那一場；tavern 第 10 批：殺手不找決戰裡的人。決戰搬成包時改成那一包的查詢服務）
 - `ctx._squad_encounter(squad_id, as_sortie=True)`（戰鬥：打一場隊伍，出陣攻打）
 - `ctx._train_option(...)`、`ctx._train_pick(loc)`、`ctx._big_trip(loc)`（舊遊歷：勝算與必敗先問的鈕、大場面挑哪一路）
 - `ctx._push_progress(loc_id, nominal, source, how)`（地盤：領地爭奪推、拉進度）
@@ -58,6 +64,8 @@
 
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 
+- `ctx._tavern_seek_exact`、`ctx._tavern_reply`（酒肆，tavern 第 10 批）：查人那一下問得多清楚（託酒家留意看它；None 沒查成、True 確切
+  地點、False 沒問清楚）、問酒家 B 段寫好的那一句（tavern_ask 放、問完清掉）
 - `ctx.mall_bought`、`ctx.mall_already`（商城）：上一次 actions.buy 的結果（買成的商品 id；同一個編號早就買好的那一件），伺服器在鎖裡讀
 - `ctx._clash_won`、`ctx._sortie_marked`、`ctx._sortie_moved`、`ctx._sortie_flipped`（出陣）：Game.__init__ 起的、出陣那一下設、
   `_push_progress`（地盤，留在核心）寫與讀——混戰得勝的加成、記過一筆出陣沒、這一下推（拉）動了多少、推滿易手了沒（出陣回報讀）
