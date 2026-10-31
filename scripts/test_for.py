@@ -1,8 +1,8 @@
 """改了哪些檔就跑哪幾條測試（開發中用；整套交給每日整套 scripts/nightly.ps1 與上 main 之前）。
 
 用法：
-  python scripts/test_for.py                 # 跟 origin/main 比，加上還沒提交的改動
-  python scripts/test_for.py --base origin/feature/formal-season   # 在功能分支上跟功能分支比
+  python scripts/test_for.py                 # 跟 origin/develop 比（或 TIANXIA_TEST_BASE），加上還沒提交的改動
+  python scripts/test_for.py --base origin/feature/formal-season   # 功能分支的工作樹：跟功能分支比
   python scripts/test_for.py tianxia/fusion.py content/skills.json
   python scripts/test_for.py --list ...      # 只列出會跑哪些、為什麼，不跑
   python scripts/test_for.py --count ...     # 再用 pytest --collect-only 數一共幾條（不跑）
@@ -67,8 +67,10 @@ WORKERS = "4"  # 開發規範手冊 4.5：同一台同時最多兩份測試在�
 WEB_SCRIPTS = {"main.js", "map.js", "outing.js", "app.js"}  # 網頁測試每一條都載入的檔（tests/kit/webharness.py 的 APP_FILES；test_test_for 守兩邊一樣）
 SETUP_FILES = {"pyproject.toml", "requirements.txt", "requirements-dev.txt"}  # conftest.py 另外照 hunk 挑（conftest_picks）
 CONFTEST_CAP = 50  # conftest 改到的名字有超過這麼多個測試檔在用（content、game、real_content）：不一個一個挑，跑煙霧
-# 跟哪一條分支比（企劃者 2026-10-18 起功能在功能分支上做：批的工作樹要跟功能分支比，不然越做越多）
-DEFAULT_BASE = os.environ.get("TIANXIA_TEST_BASE", "origin/main")
+# 跟哪一條分支比：PM 2026-10-31 起預設 origin/develop（大家從 develop 開）；環境變數 TIANXIA_TEST_BASE 蓋過預設、
+# --base 再蓋過它（功能分支的工作樹照舊給 --base origin/feature/<名字>）。default_base() 每次現讀環境變數。
+DEFAULT_BASE = "origin/develop"
+BASE_ENV = "TIANXIA_TEST_BASE"
 REAL_CONTENT_TEST = "test_real_content.py"  # 內容改了就跟（不含 slow）；用真實內容跑整季的那幾條是 slow，--slow 才跑
 SERVER_TEST = "test_server.py"
 
@@ -151,8 +153,30 @@ def _git(*args: str) -> subprocess.CompletedProcess:
                           encoding="utf-8", errors="replace")
 
 
-def changed_files(base: str = DEFAULT_BASE) -> list[str]:
-    """跟 base（預設 origin/main）分岔之後改過的、還沒提交的、還沒加進版控的檔。"""
+def default_base() -> str:
+    """沒給 --base 時跟哪一條比：TIANXIA_TEST_BASE，沒設就是 origin/develop。"""
+    return os.environ.get(BASE_ENV, "").strip() or DEFAULT_BASE
+
+
+def base_line(base: str, source: str) -> str:
+    """--list（與每一次）的第一行：這一次跟哪個 base 比、從哪裡來的、分岔點；找不到那條分支就直說怎麼 fetch
+    （這份 clone 的 git fetch origin 不更新 feature/*、dev/*，沒抓過的 base 會讓挑法悄悄變成「沒有差異」）。"""
+    mb = _git("merge-base", base, "HEAD")
+    if mb.returncode == 0 and mb.stdout.strip():
+        return f"跟 {base} 比（{source}；分岔點 {mb.stdout.strip()[:8]}）"
+    if _git("rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").returncode != 0:
+        how = ""
+        if base.startswith("origin/"):
+            branch = base.removeprefix("origin/")
+            how = f"，先明確 fetch：git fetch origin +refs/heads/{branch}:refs/remotes/origin/{branch}"
+        return f"跟 {base} 比（{source}）：找不到這條分支{how}（不然挑不到這條分支上的改動）"
+    return f"跟 {base} 比（{source}）：跟 HEAD 沒有共同的祖先"
+
+
+def changed_files(base: str | None = None) -> list[str]:
+    """跟 base（預設 default_base()）分岔之後改過的、還沒提交的、還沒加進版控的檔。"""
+    base = base or default_base()
+
     def names(*args: str) -> list[str]:
         return [line.strip() for line in _git(*args).stdout.splitlines() if line.strip()]
 
@@ -674,10 +698,11 @@ def conftest_picks(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[s
 
 # ── 挑 ───────────────────────────────────────────────────────────────
 
-def pick(files: list[str], base: str = DEFAULT_BASE,
+def pick(files: list[str], base: str | None = None,
          hunks_of: dict[str, tuple[list[Hunk], str, str]] | None = None) -> Pick:
     """要跑的測試（挑的時候不管 slow：要不要連 slow 一起跑是 pytest_commands 的事）。hunks_of 給測試用：
-    {"tianxia/engine.py": ([(拿掉的行, 加上的行)…], 舊原始碼, 新原始碼)}，沒給就問 git。"""
+    {"tianxia/engine.py": ([(拿掉的行, 加上的行)…], 舊原始碼, 新原始碼)}，沒給就問 git（跟 base 比，預設 default_base()）。"""
+    base = base or default_base()
     tests = all_tests()
     named = {t.name: t for t in tests}
     result = Pick()
@@ -907,15 +932,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--count", action="store_true", help="再用 pytest --collect-only 數一共幾條（不跑）")
     parser.add_argument("--slow", action="store_true", help="挑到的連 slow 一起跑（例：內容改了連 test_real_content 的整季）")
     parser.add_argument("--all", action="store_true", help="整套，含 slow（上 main 之前用）")
-    parser.add_argument("--base", default=DEFAULT_BASE,
-                        help="跟哪一條分支比（預設 origin/main，或環境變數 TIANXIA_TEST_BASE）")
+    parser.add_argument("--base", default=None,
+                        help=f"跟哪一條分支比（預設 {DEFAULT_BASE}；環境變數 {BASE_ENV} 蓋過預設，--base 再蓋過它）")
     argv = sys.argv[1:] if argv is None else argv
     extra = argv[argv.index("--") + 1:] if "--" in argv else []  # -- 之後的原樣交給 pytest（例：-- -x -k fusion）
     args = parser.parse_args(argv[:argv.index("--")] if "--" in argv else argv)
     if args.all:
         chosen = Pick(everything=True)
     else:
-        chosen = pick(args.files or changed_files(args.base), base=args.base)
+        base = args.base or default_base()
+        source = "--base" if args.base else (BASE_ENV if os.environ.get(BASE_ENV, "").strip() else "預設")
+        print(base_line(base, source), flush=True)
+        chosen = pick(args.files or changed_files(base), base=base)
     if chosen.empty:
         print("這些改動挑不到要跑的測試（為什麼寫在下面）。要跑整套用 --all。")
         for w in chosen.why:

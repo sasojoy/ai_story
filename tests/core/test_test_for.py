@@ -391,6 +391,35 @@ def test_core_tests_take_the_contract_boundary_and_wallet_tests_of_tests_core(tm
     assert not names & {"test_social.py", "test_wallet_ledger.py"}
 
 
+def _first_line(capsys, argv):
+    assert test_for.main(argv) == 0
+    return capsys.readouterr().out.splitlines()[0]
+
+
+def test_the_base_is_develop_unless_the_env_or_the_flag_says_otherwise(monkeypatch, capsys):
+    """PM 10/31：大家從 develop 開，不給 --base 跟 origin/develop 比；TIANXIA_TEST_BASE 與 --base 照舊蓋過預設
+    （--base 最優先）。--list 第一行寫這一次跟哪個 base 比、是從哪裡來的。"""
+    monkeypatch.delenv("TIANXIA_TEST_BASE", raising=False)
+    assert test_for.default_base() == "origin/develop"
+    first = _first_line(capsys, ["tests/arts/test_fusion.py", "--list"])
+    assert "origin/develop" in first and "預設" in first
+    assert "origin/develop" in _first_line(capsys, ["CLAUDE.md", "--list"])  # 挑不到東西的也先寫 base
+    monkeypatch.setenv("TIANXIA_TEST_BASE", "origin/main")
+    assert test_for.default_base() == "origin/main"
+    first = _first_line(capsys, ["tests/arts/test_fusion.py", "--list"])
+    assert "origin/main" in first and "TIANXIA_TEST_BASE" in first
+    first = _first_line(capsys, ["tests/arts/test_fusion.py", "--list", "--base", "origin/develop"])
+    assert "origin/develop" in first and "--base" in first
+
+
+def test_a_base_that_was_never_fetched_is_called_out(monkeypatch, capsys):
+    """這份 clone 的 git fetch origin 不更新 feature/*、dev/*：沒明確 fetch 的 base 找不到，挑法悄悄變成「沒有差異」。
+    第一行直接說找不到、怎麼 fetch。"""
+    monkeypatch.delenv("TIANXIA_TEST_BASE", raising=False)
+    first = _first_line(capsys, ["tests/arts/test_fusion.py", "--list", "--base", "origin/feature/no-such-branch-1031"])
+    assert "找不到" in first and "+refs/heads/feature/no-such-branch-1031:refs/remotes/origin/feature/no-such-branch-1031" in first
+
+
 def test_describe_says_what_the_core_tests_are():
     lines = test_for.describe(test_for.Pick(core=True))
     line = next(x for x in lines if x.startswith("核心測試"))
