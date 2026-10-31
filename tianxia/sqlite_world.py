@@ -660,7 +660,13 @@ class SqliteWorldStore:
         return self.read().event_flavor.get(fire_id, "")
 
     def set_event_flavor(self, fire_id: str, text: str) -> None:
-        self.mutate(lambda state: state.event_flavor.setdefault(fire_id, text))
+        def _set(state) -> None:
+            from .flavor import clean  # noqa: PLC0415
+
+            if not clean(state.event_flavor.get(fire_id, "")):  # 先寫的為準；先寫的那一句不合格（舊快取）才換
+                state.event_flavor[fire_id] = text
+
+        self.mutate(_set)
 
     # ── 傳國玉璽碎片（跨季）───────────────────────────────
 
