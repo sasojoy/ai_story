@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from tianxia.core.features import AdminTool
 from tianxia.database import default_path
 
-from . import actions, orders, rules
+from . import actions, moves, orders, rules
 
 REF = re.compile(r"[A-Za-z0-9_-]{8,64}")
 
@@ -33,7 +33,17 @@ def admin_tools(shell) -> dict[str, AdminTool]:
             return ["（圖讀不出來。）"]
         return actions.admin_upload(g, shell._int(b.get("id"), 0), str(b.get("sheet", ""))[:40], data)
 
+    def move_upload(g, b):
+        try:
+            data = base64.b64decode(str(b.get("data", "")), validate=True)
+        except (binascii.Error, ValueError):
+            return ["（圖讀不出來。）"]
+        return actions.admin_move_upload(g, shell._int(b.get("id"), 0), data)
+
     return {
+        "moves_upload": AdminTool(gate, move_upload),
+        "moves_release": AdminTool(gate, lambda g, b: actions.admin_move_release(g, shell._int(b.get("id"), 0))),
+        "moves_reject": AdminTool(gate, lambda g, b: actions.admin_move_reject(g, shell._int(b.get("id"), 0), str(b.get("note", ""))[:100])),
         "looks_upload": AdminTool(gate, upload),
         "looks_release": AdminTool(gate, lambda g, b: actions.admin_release(g, shell._int(b.get("id"), 0))),
         "looks_reject": AdminTool(gate, lambda g, b: actions.admin_reject(g, shell._int(b.get("id"), 0), str(b.get("note", ""))[:100])),
@@ -72,6 +82,28 @@ def router(shell) -> APIRouter:
         return {"message": shell.joined(msgs), "looks": shell.look(game, lambda g: actions.view(g)),
                 "main": shell.look(game, shell.main_view)}
 
+    @r.post("/api/looks/move")
+    def api_looks_move(request: Request, body: dict = Body(...)):
+        """招式動畫下單：{prompt, ref}（替現在練的那一門；打法照手上的兵器）；回 {message, looks, main}。"""
+        gate()
+        game = shell._game(request)
+        raw = body.get("ref")
+        ref = raw if isinstance(raw, str) and REF.fullmatch(raw) else secrets.token_urlsafe(12)
+        prompt = str(body.get("prompt", ""))[:300]
+        msgs = shell.act(game, lambda g: actions.order_move(g, prompt, ref))
+        shell._tell_tabs(game)
+        return {"message": shell.joined(msgs), "looks": shell.look(game, lambda g: actions.view(g)),
+                "main": shell.look(game, shell.main_view)}
+
+    @r.post("/api/looks/bind")
+    def api_looks_bind(request: Request, body: dict = Body(...)):
+        """把招式庫的一招綁到現在練的那一門上：{id}；回 {message, looks}。"""
+        gate()
+        game = shell._game(request)
+        pid = shell._int(body.get("id"), 0)
+        msgs = shell.act(game, lambda g: actions.bind_move(g, pid))
+        return {"message": shell.joined(msgs), "looks": shell.look(game, lambda g: actions.view(g))}
+
     @r.get("/api/admin/looks")
     def api_admin_looks(request: Request):
         """管理者看自建形象的訂單（actions.admin_view）。"""
@@ -83,9 +115,9 @@ def router(shell) -> APIRouter:
 
     @r.get("/api/looks/img/{look}/{sheet}")
     def api_looks_img(look: str, sheet: str):
-        """自建形象的圖（資料庫旁邊的 looks/<id>/）：擂台上別人也看得到，所以不看登入；只認 u<數字> 與九張的檔名。"""
+        """自建形象與招式動畫的圖（資料庫旁邊的 looks/<id>/）：擂台上別人也看得到，所以不看登入；只認 u<數字> 配九張的檔名、m<數字> 配 fx。"""
         gate()
-        if not orders.is_custom(look) or sheet not in orders.SHEETS:
+        if not ((orders.is_custom(look) and sheet in orders.SHEETS) or (moves.is_move(look) and sheet == moves.SHEET)):
             raise HTTPException(404)
         path = orders.sheet_file(actions.images_beside(default_path()), look, sheet)
         if path is None:

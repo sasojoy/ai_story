@@ -244,7 +244,7 @@
       return `<div class="look-card${lk.id === d.worn ? " on" : ""}">${lookFaceHtml(lk.id)}<b>${esc(lk.name)}</b>
         ${lk.note ? `<small>${esc(lk.note)}</small>` : ""}${btn}</div>`; // 說明照字折行（三欄一格窄，切成不折行的小段會撐出格子）
     };
-    return `<div class="mall-sub">擂台形象</div><div class="mall-grid look-grid">${d.looks.map(card).join("")}</div>${lookOrderHtml(d.order)}`;
+    return `<div class="mall-sub">擂台形象</div><div class="mall-grid look-grid">${d.looks.map(card).join("")}</div>${lookOrderHtml(d.order)}${moveHtml(d.moves)}`;
   }
 
   // 自建形象（第二批）：寫名字與一句樣子下單（先扣元寶），圖做好、管理者看過才上架；退回的元寶全退。一次一張
@@ -279,6 +279,57 @@
       if (ok) S.lookDraft = null;
       S.mallSay = text ? { text, ok } : null;
       renderTop();
+      if (S.mallOpen) renderMall();
+    });
+  }
+  // 招式動畫（第三批）：替現在練的那一門（自己合成或自創的）寫一句樣子下單，做好放進招式庫；每一季綁到一門武功上（同打法免費改綁）。
+  // 擂台上出招時疊那一張光效。範例那一格是 /static/img/arena/fx_sample.webp 的第四格
+  const MOVE_NOTE = "替自己合成或自創的武功畫一張出招的光效，擂台上出這門武功時疊在你身上。做好放進招式庫，換季帶著走；武功每季重練，再綁一次就好（同一種打法免費）。"; // 待 joy 潤
+  const MOVE_IMG = (id) => (/^m\d+$/.test(id || "") ? `/api/looks/img/${id}/fx` : "/static/img/arena/fx_sample.webp");
+  function moveFxHtml(id) { return `<span class="move-fx" aria-hidden="true" style="background-image:url('${MOVE_IMG(id)}')"></span>`; }
+  function moveHtml(m) {
+    if (!m) return "";
+    const lib = (m.library || []).map((x) => `<li class="look-order-row move-row">${moveFxHtml(x.move)}<b>${esc(x.art)}</b><span class="look-st st-made">${esc(x.style_text)}</span>
+        <small>${esc(x.prompt)}${x.bound ? `・這一季綁在「${esc(x.bound)}」` : "・這一季還沒綁"}</small>
+        ${x.bindable ? `<button class="btn small" data-act="move-bind" data-id="${x.id | 0}">綁到「${esc(m.art)}」</button>` : ""}</li>`).join("");
+    const list = (m.list || []).map((x) => `<li class="look-order-row"><b>${esc(x.art)}</b><span class="look-st st-${esc(x.status)}">${esc(x.status_text)}</span>
+        <small>${esc(x.style_text)}・${esc(x.prompt)}${x.reason ? `（${esc(x.reason)}）` : ""}</small></li>`).join("");
+    const now = !m.has_art ? `<p class="mall-note">先練一門自己合成或自創的武功，才能替它畫招式。</p>`
+      : `<p class="mall-note">現在練的「${esc(m.art)}」・打法${esc(m.style_text)}${m.bound ? "・已經綁了招式" : ""}</p>`;
+    const form = !m.has_art || m.bound ? "" : m.open ? `<p class="mall-note">你還有一張在做，等它好了再下一張。</p>`
+      : `<div class="look-order-form"><textarea class="input" id="move-prompt" maxlength="${m.prompt_max | 0}" rows="2" placeholder="這一招長什麼樣子（${m.prompt_max | 0} 字內）">${esc(S.moveDraft || "")}</textarea>
+        <button class="btn small primary" data-act="move-order">${ingotSvg()}${m.price | 0} 下單</button></div>`;
+    return `<div class="mall-sub">招式動畫</div><div class="move-intro">${moveFxHtml("")}<p class="mall-note">${esc(MOVE_NOTE)}</p></div>${now}${form}
+      ${lib ? `<ul class="look-orders">${lib}</ul>` : ""}${list ? `<ul class="look-orders">${list}</ul>` : ""}`;
+  }
+  function moveOrderAsk() {
+    const prompt = (document.getElementById("move-prompt")?.value || "").trim();
+    S.moveDraft = prompt;
+    const m = S.mallLooks && S.mallLooks.moves;
+    if (!prompt) { S.mallSay = { text: "寫一句這一招長什麼樣子。", ok: false }; renderMall(); return; }
+    const ref = mallRef();
+    ask(`花 ${m ? m.price | 0 : 0} 元寶替「${m ? m.art : ""}」下單招式動畫？審核沒過元寶全退。`, "下單", () => moveOrder(prompt, ref));
+  }
+  async function moveOrder(prompt, ref) {
+    await busy(async () => {
+      const r = await api("/api/looks/move", { prompt, ref });
+      if (r.looks) S.mallLooks = r.looks;
+      if (r.main) setMain(r.main);
+      if (r.main && r.main.mall && S.mallData) S.mallData.balance = r.main.mall.balance;
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      const ok = !!(r.looks && r.looks.moves && r.looks.moves.open);
+      if (ok) S.moveDraft = null;
+      S.mallSay = text ? { text, ok } : null;
+      renderTop();
+      if (S.mallOpen) renderMall();
+    });
+  }
+  async function moveBind(id) {
+    await busy(async () => {
+      const r = await api("/api/looks/bind", { id: Number(id) });
+      if (r.looks) S.mallLooks = r.looks;
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      S.mallSay = text ? { text, ok: text.startsWith("把招式綁") } : null;
       if (S.mallOpen) renderMall();
     });
   }
@@ -481,7 +532,16 @@
         <button class="btn small primary" data-act="looks-admin" data-op="release" data-id="${o.id | 0}" ${have.size === sheets.length ? "" : "disabled"}>上架</button></div>
         <div class="row"><input class="input" id="ad-looks-note-${o.id | 0}" placeholder="退回的原因（必填）" maxlength="100"><button class="btn warn small" data-act="looks-admin" data-op="reject" data-id="${o.id | 0}">退回</button></div>` : ""}</div>`;
     };
-    return head + (d.open.length ? d.open.map(row).join("") : `<p class="muted">沒有等著做的訂單。</p>`) + d.done.map(row).join("");
+    const mv = d.moves, mrow = (m) => `<div class="card look-admin"><b>#${m.id | 0}「${esc(m.art)}」</b>・${esc(m.style_text)}・${esc(m.owner)}・${esc(m.status_text)}${m.reason ? `（${esc(m.reason)}）` : ""}
+        <p>${esc(m.prompt)}</p>${m.gen_prompt ? `<div class="look-sheets"><span class="${m.have ? "ok" : ""}">fx</span></div>
+        <details><summary>提示詞</summary><pre class="look-gen">${esc(m.gen_prompt)}</pre></details>
+        <div class="row wrap"><input type="file" id="ad-moves-file-${m.id | 0}" accept="image/png,image/webp" aria-label="上傳光效">
+        <button class="btn small" data-act="looks-admin" data-op="move-upload" data-id="${m.id | 0}">上傳</button>
+        <button class="btn small primary" data-act="looks-admin" data-op="move-release" data-id="${m.id | 0}" ${m.have ? "" : "disabled"}>上架</button></div>
+        <div class="row"><input class="input" id="ad-moves-note-${m.id | 0}" placeholder="退回的原因（必填）" maxlength="100"><button class="btn warn small" data-act="looks-admin" data-op="move-reject" data-id="${m.id | 0}">退回</button></div>` : ""}</div>`;
+    const moves = !mv ? "" : `<p class="muted">招式動畫（一張 ${esc(mv.size)}、六格、透明底，只畫光效不畫人）</p>`
+      + (mv.open.length ? mv.open.map(mrow).join("") : `<p class="muted">沒有等著做的招式。</p>`) + mv.done.map(mrow).join("");
+    return head + (d.open.length ? d.open.map(row).join("") : `<p class="muted">沒有等著做的訂單。</p>`) + d.done.map(row).join("") + moves;
   }
   async function looksAdminDo(op, id) {
     const done = async (r) => {
@@ -500,6 +560,18 @@
           said.push((r.message || "").replace(/<[^>]+>/g, " ").trim());
         }
         if (said.length) { S.adLooksMsg = said[said.length - 1]; S.adLooksOk = !said.some((t) => t.startsWith("（")); if (!S.adLooksOk) S.adLooksMsg = said.filter((t) => t.startsWith("（")).join(" "); }
+      } else if (op === "move-upload") {
+        const f = ((document.getElementById(`ad-moves-file-${id}`) || {}).files || [])[0];
+        if (!f) { S.adLooksMsg = "先選一張光效圖。"; S.adLooksOk = false; }
+        else {
+          const data = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(",")[1] || ""); fr.onerror = no; fr.readAsDataURL(f); });
+          await done(await api("/api/do/moves_upload", { id: Number(id), data }));
+        }
+      } else if (op === "move-release") {
+        await done(await api("/api/do/moves_release", { id: Number(id) }));
+      } else if (op === "move-reject") {
+        const note = (document.getElementById(`ad-moves-note-${id}`)?.value || "").trim();
+        await done(await api("/api/do/moves_reject", { id: Number(id), note }));
       } else if (op === "release") {
         await done(await api("/api/do/looks_release", { id: Number(id) }));
       } else if (op === "reject") {

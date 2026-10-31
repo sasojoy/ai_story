@@ -84,3 +84,28 @@ def test_the_admin_box_lists_open_orders_with_prompts(m_on):  # noqa: F811
     assert "白衣書生，背著竹簍" in html and "Style: idle" in html
     assert 'id="ad-looks-file-5"' in html and 'data-op="reject"' in html
     assert 'data-op="release" data-id="5" disabled' in html  # 九張還沒齊：上架按不下去
+
+
+MOVES = {"price": 300, "prompt_max": 120, "art": "旋風腿", "has_art": True, "style": "fist", "style_text": "拳腳", "open": False, "bound": False,
+         "library": [{"id": 7, "move": "m7", "art": "流雲掌", "style": "fist", "style_text": "拳腳", "prompt": "青色劍氣", "status": "made",
+                      "status_text": "上架", "reason": "", "bound": "", "on_art": False, "bindable": True}],
+         "list": []}
+
+
+def test_the_move_section_orders_and_binds(m_on):  # noqa: F811
+    """招式動畫（第三批）：寫現在練的那一門與打法、下單的表單、招式庫一列一顆「綁到」；綁送 /api/looks/bind。"""
+    looks = {**LOOKS, "moves": MOVES}
+    out = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "move-bind", id: "7" }'),
+                 responses={"/api/looks/bind": {"message": "把招式綁到「旋風腿」上了（這一季）。", "looks": looks}, "/api/looks": looks})
+    html = out["app"]
+    assert "招式動畫" in html and "現在練的「旋風腿」・打法拳腳" in html
+    assert 'id="move-prompt"' in html and 'data-act="move-order"' in html
+    assert "/api/looks/img/m7/fx" in html and "/static/img/arena/fx_sample.webp" in html
+    assert any(c[0] == "/api/looks/bind" and c[1] == {"id": 7} for c in out["calls"])
+    assert "把招式綁到「旋風腿」" in html
+
+
+def test_no_art_no_move_form(m_on):  # noqa: F811
+    looks = {**LOOKS, "moves": {**MOVES, "has_art": False, "art": "", "library": []}}
+    html = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "move-order" }'), responses={"/api/looks": looks})["app"]
+    assert 'id="move-prompt"' not in html and "先練一門自己合成或自創的武功" in html

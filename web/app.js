@@ -6048,6 +6048,8 @@
         case "mall-claim": await mallClaim(); break;
         case "look-wear": await lookWear(el.dataset.id || ""); break; // 萬寶閣「形象」那一頁換上一套
         case "look-order": lookOrderAsk(); break; // 自建形象下單（先問一次）
+        case "move-order": moveOrderAsk(); break; // 招式動畫下單（先問一次）
+        case "move-bind": await moveBind(el.dataset.id); break; // 招式庫的一招綁到現在練的那一門
         case "looks-admin": await looksAdminDo(el.dataset.op, el.dataset.id); break; // 管理者區「自建形象」
         case "mall-retry": await (S.mallTab === "log" ? loadMallLog() : loadMall()); break;
         case "mall-admin": mallAdminAsk(el.dataset.op, el.dataset.id); break;

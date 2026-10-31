@@ -513,14 +513,14 @@ def test_the_fight_and_the_result_carry_both_weapons_for_the_animation(ring):
     assert world.get_season().arena["乙"].weapon == "槍" and world.get_season().arena["甲"].weapon == ""
     _, game = _do(content, world, "甲", lambda g: g.choose("act:arena") + g.choose("arena:fight:乙"))
     fight = game.shop_view()["fight"]
-    assert fight["looks"] == {"me": "", "foe": "槍", "me_look": "", "foe_look": ""} and fight["id"] == game.state.player.arena.id
+    assert fight["looks"] == {"me": "", "foe": "槍", "me_look": "", "foe_look": "", "me_fx": "", "foe_fx": ""} and fight["id"] == game.state.player.arena.id
     _, game = _fight(content, world)
-    assert game.shop_view()["result"]["looks"] == {"me": "", "foe": "槍", "me_look": "", "foe_look": ""}
+    assert game.shop_view()["result"]["looks"] == {"me": "", "foe": "槍", "me_look": "", "foe_look": "", "me_fx": "", "foe_fx": ""}
 
 
 def test_an_old_fight_without_weapons_shows_both_bare_handed():
-    assert arena.looks_view([]) == {"me": "", "foe": "", "me_look": "", "foe_look": ""}
-    assert arena.looks_view(["劍", "拳腳"]) == {"me": "劍", "foe": "拳腳", "me_look": "", "foe_look": ""}
+    assert arena.looks_view([]) == {"me": "", "foe": "", "me_look": "", "foe_look": "", "me_fx": "", "foe_fx": ""}
+    assert arena.looks_view(["劍", "拳腳"]) == {"me": "劍", "foe": "拳腳", "me_look": "", "foe_look": "", "me_fx": "", "foe_fx": ""}
 
 
 def test_an_old_save_without_the_weapon_fields_still_loads():
@@ -540,6 +540,6 @@ def test_the_fight_and_the_result_carry_both_looks(ring, monkeypatch):
     _join(content, world, "甲")
     assert world.get_season().arena["乙"].look == "moying"
     _, game = _do(content, world, "甲", lambda g: g.choose("act:arena") + g.choose("arena:fight:乙"))
-    assert game.shop_view()["fight"]["looks"] == {"me": "", "foe": "", "me_look": "", "foe_look": "moying"}
+    assert game.shop_view()["fight"]["looks"] == {"me": "", "foe": "", "me_look": "", "foe_look": "moying", "me_fx": "", "foe_fx": ""}
     _, game = _fight(content, world)
     assert game.shop_view()["result"]["looks"]["foe_look"] == "moying"

@@ -11,7 +11,8 @@
 | `actions.py` | `look_of`（`Game.arena_look` 的一行委派叫它）、`view`、`wear`；第二批 `order`、`admin_view`／`admin_upload`／`admin_release`／`admin_reject`、`gen_mode`（`TIANXIA_LOOK_GEN`） |
 | `orders.py` | 自建形象的訂單（第二批）：下單、狀態、圖的檔頭驗證與存放（資料庫旁邊的 `looks/u<id>/`）、假的生圖器、上架與退回、給生圖工具的提示詞 |
 | `routes.py` | `GET /api/looks`、`POST /api/looks/wear {look}`、`POST /api/looks/order`、`GET /api/looks/img/<u數字>/<張>`、`GET /api/admin/looks`、管理者工具 `looks_upload`／`looks_release`／`looks_reject`；關著 404 |
-| `tests/` | `test_looks.py`（買、換上、換季、退款、假人、關著）、`test_looks_orders.py`（自建形象）、`test_looks_server.py`、`test_looks_web.py`（萬寶閣「形象」那一頁、管理者區）、`looks_stage.py` |
+| `moves.py` | 招式動畫（第三批）：替自己的武功下單一張六格光效、招式庫、每季綁到一門武功（同打法免費）、擂台記哪一招 |
+| `tests/` | `test_looks.py`（買、換上、換季、退款、假人、關著）、`test_looks_orders.py`（自建形象）、`test_looks_moves.py`（招式動畫）、`test_looks_server.py`、`test_looks_web.py`（萬寶閣「形象」那一頁、管理者區）、`looks_stage.py` |
 
 切圖：`scripts/cut_look.py`（開發機或主機；Pillow、numpy、scipy）。
 

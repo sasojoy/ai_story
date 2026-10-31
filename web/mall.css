@@ -84,6 +84,13 @@
 .shop-layer.shop-mall .look-st { justify-self: end; color: #f2c46a; }
 .shop-layer.shop-mall .look-st.st-made { color: #9fd0a8; }
 .shop-layer.shop-mall .look-st.st-rejected { color: #e0a08a; }
+/* 招式動畫（第三批）：光效一格（六格一張、1320×220，拿第四格當預覽），招式庫那一列光效在左 */
+.shop-layer.shop-mall .move-fx { width: 56px; height: 56px; background: #2b1d14 no-repeat 60% 0 / 600% 100%; border-radius: 8px; }
+.shop-layer.shop-mall .move-intro { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; }
+.shop-layer.shop-mall .move-row { grid-template-columns: auto auto 1fr; }
+.shop-layer.shop-mall .move-row .move-fx { grid-row: span 3; }
+.shop-layer.shop-mall .move-row small, .shop-layer.shop-mall .move-row .btn { grid-column: 2 / -1; }
+.shop-layer.shop-mall .move-row .btn { justify-self: end; }
 .shop-layer.shop-mall .mall-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; margin: 0 0 8px;
   padding: 10px 12px; border-radius: 12px; border: 1px solid #f2c46a; background: linear-gradient(135deg, rgba(242, 196, 106, 0.14), rgba(43, 22, 22, 0.85) 55%);
   color: inherit; text-align: left; cursor: pointer; }

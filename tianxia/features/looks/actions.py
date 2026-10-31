@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from tianxia import journal  # 核心（江湖紀錄）
 from tianxia.state import JournalEntry
 
-from . import orders, rules
+from . import moves, orders, rules
 
 if TYPE_CHECKING:
     from tianxia.engine import Game
@@ -35,7 +35,9 @@ def view(ctx: Game) -> dict | None:
     wallet = ctx._wallet()
     if wallet is None or not rules.on(ctx.content):
         return None
-    return rules.view(ctx.content, wallet, ctx._mall_owner(), _shop(ctx))
+    out = rules.view(ctx.content, wallet, ctx._mall_owner(), _shop(ctx))
+    out["moves"] = moves_view(ctx)  # 招式動畫（第三批）
+    return out
 
 
 def wear(ctx: Game, look: str) -> list[str]:
@@ -95,6 +97,129 @@ def _admin_order(ctx: Game, pid: int):
     return wallet, found, None if found is not None else f"（沒有第 {pid} 號訂單。）"
 
 
+# ── 招式動畫（第三批；moves.py）─────────────────────────
+
+FX_SAMPLE = WEB_IMG / "arena" / "fx_sample.webp"  # 範例光效（假的生圖器抄這一張；萬寶閣也拿它當示範）
+
+
+def current_art(ctx: Game) -> tuple[str, str]:
+    """現在練的武功，是自己合成或自創的（全服登記的，不在內容裡）才算：回（id, 顯示的名字）；不是回（"", ""）。"""
+    wid = ctx.state.player.member.wugong_id
+    if not wid or wid in ctx.content.skills:
+        return "", ""
+    art = ctx.world.get_skill(wid)
+    return (wid, art.name) if art is not None else ("", "")
+
+
+def current_style(ctx: Game) -> str:
+    weapon = ctx.state.player.weapon
+    return moves.style_of(weapon.kind if weapon is not None else "")
+
+
+def move_of(ctx: Game) -> str:
+    """上擂台那一刻疊哪一張光效（m<id>；沒有是空字串）：現在練的那一門這一季綁了招式、手上的打法對得上。假人沒有。"""
+    if not rules.on(ctx.content) or ctx.state.player.bot:
+        return ""
+    wallet = ctx._wallet()
+    if wallet is None:
+        return ""
+    art, _ = current_art(ctx)
+    return moves.bound(wallet, ctx._mall_owner(), art, current_style(ctx), ctx.world.get_season_number())
+
+
+def moves_view(ctx: Game) -> dict | None:
+    wallet = ctx._wallet()
+    if wallet is None or not rules.on(ctx.content):
+        return None
+    art, name = current_art(ctx)
+    return moves.view(ctx.content, wallet, ctx._mall_owner(), art, name, current_style(ctx), ctx.world.get_season_number())
+
+
+def order_move(ctx: Game, prompt: str, ref: str) -> list[str]:
+    """替現在練的武功下單招式動畫（moves.place）：成了寫一則「形象」江湖紀錄；生圖器是 fake 就當場抄範例、變成待審。"""
+    wallet = ctx._wallet()
+    if wallet is None or not rules.on(ctx.content):
+        return ctx._log([rules.OFF])
+    art, name = current_art(ctx)
+    pid, line = moves.place(ctx.content, wallet, ctx._mall_owner(), art, name, current_style(ctx), prompt, ref,
+                            now=ctx.pill_now(), day=ctx._pill_day(), season=ctx.world.get_season_number())
+    if pid is None:
+        return ctx._log([line])
+    item = moves.item_of(ctx.content)
+    journal.add_entry(ctx.state, JournalEntry(time=ctx.state.world.time, title=TITLE, lines=[line], changes=[f"元寶 -{item.price}"]))
+    if gen_mode() == "fake":
+        moves.fake_generate(image_root(ctx), moves.move_id(pid), FX_SAMPLE)
+        moves.mark(wallet, moves.find(wallet, item.id, pid), image_root(ctx))
+    return ctx._log([line])
+
+
+def bind_move(ctx: Game, pid: int) -> list[str]:
+    """把招式庫的一招綁到現在練的武功上（這一季；同打法免費）。"""
+    wallet = ctx._wallet()
+    if wallet is None or not rules.on(ctx.content):
+        return ctx._log([rules.OFF])
+    art, name = current_art(ctx)
+    done, line = moves.bind(wallet, ctx._mall_owner(), pid, art, name, current_style(ctx), ctx.world.get_season_number())
+    if done:
+        journal.add_entry(ctx.state, JournalEntry(time=ctx.state.world.time, title=TITLE, lines=[line]))
+    return ctx._log([line])
+
+
+def _admin_move(ctx: Game, pid: int):
+    wallet = ctx._wallet()
+    item = moves.item_of(ctx.content)
+    if wallet is None or item is None or not ctx.is_admin():
+        return None, None, "（此刻無法這麼做。）"
+    found = moves.find(wallet, item.id, pid)
+    return wallet, found, None if found is not None else f"（沒有第 {pid} 號招式訂單。）"
+
+
+def admin_move_upload(ctx: Game, pid: int, data: bytes) -> list[str]:
+    wallet, found, problem = _admin_move(ctx, pid)
+    if problem:
+        return ctx._log([problem])
+    if found.status not in (orders.PENDING, orders.REVIEW):
+        return ctx._log([f"（「{found.art_name}」的招式{orders.STATUS_TEXT[found.status]}了，不收圖。）"])
+    problem = moves.sheet_problem(moves.SHEET, data)
+    if problem:
+        return ctx._log([f"（{problem}）"])
+    root = image_root(ctx)
+    orders.save_sheet(root, moves.move_id(pid), moves.SHEET, data)
+    moves.mark(wallet, found, root)
+    return ctx._log([f"收到「{found.art_name}」的光效，可以審核。"])
+
+
+def admin_move_release(ctx: Game, pid: int) -> list[str]:
+    wallet, found, problem = _admin_move(ctx, pid)
+    if problem:
+        return ctx._log([problem])
+    return ctx._log([moves.release(wallet, found, image_root(ctx))])
+
+
+def admin_move_reject(ctx: Game, pid: int, note: str) -> list[str]:
+    wallet, found, problem = _admin_move(ctx, pid)
+    if problem:
+        return ctx._log([problem])
+    return ctx._log([orders.reject(wallet, found, now=ctx.pill_now(), admin=ctx.state.player.name, note=note)])
+
+
+def _admin_moves(ctx: Game, wallet) -> dict | None:
+    item = moves.item_of(ctx.content)
+    if item is None:
+        return None
+    root = image_root(ctx)
+    every = moves.every(wallet, item.id)
+    open_ = [m for m in every if m.status in (orders.PENDING, orders.REVIEW)]
+    done = [m for m in reversed(every) if m.status not in (orders.PENDING, orders.REVIEW)][:10]
+
+    def row(m):
+        mid = moves.move_id(m.pid)
+        return {"id": m.pid, "owner": wallet.character_name(m.owner) or m.owner, "art": m.art_name, "style_text": moves.STYLES.get(m.style, m.style),
+                "prompt": m.prompt, "status": m.status, "status_text": orders.STATUS_TEXT[m.status], "reason": m.reason, "move": mid,
+                "have": orders.sheet_file(root, mid, moves.SHEET) is not None, "gen_prompt": moves.gen_prompt(m) if m in open_ else ""}
+    return {"sheet": moves.SHEET, "size": f"{moves.FRAMES * orders.CELL}×{orders.CELL}", "open": [row(m) for m in open_], "done": [row(m) for m in done]}
+
+
 def admin_view(ctx: Game) -> dict | None:
     """管理者那一頁：還沒做完的訂單（等圖、待審）在前，最近做完的十張在後。每張寫下單的人、名字、樣子、九張到了哪幾張、
     給生圖工具的提示詞。"""
@@ -111,7 +236,8 @@ def admin_view(ctx: Game) -> dict | None:
         return {"id": o.pid, "owner": wallet.character_name(o.owner) or o.owner, "name": o.name, "prompt": o.prompt,
                 "status": o.status, "status_text": orders.STATUS_TEXT[o.status], "reason": o.reason, "look": orders.look_id(o.pid),
                 "have": orders.present(root, orders.look_id(o.pid)), "prompts": orders.gen_prompts(o) if o in open_ else {}}
-    return {"sheets": orders.SHEETS, "gen": gen_mode(), "open": [row(o) for o in open_], "done": [row(o) for o in done]}
+    return {"sheets": orders.SHEETS, "gen": gen_mode(), "open": [row(o) for o in open_], "done": [row(o) for o in done],
+            "moves": _admin_moves(ctx, wallet)}
 
 
 def admin_upload(ctx: Game, pid: int, sheet: str, data: bytes) -> list[str]:

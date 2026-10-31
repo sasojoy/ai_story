@@ -39,7 +39,7 @@
   const RING_W = 720, RING_H = 320, RING_GY = 292, RING_X = [252, 468], RING_CELL = 220, RING_AX = 100, RING_BY = 212, RING_SCALE = 1.05;
 
   // 這一塊自己的狀態（不放進 S：每一格動畫都會改，不該讓整頁重畫）
-  const RA = { imgs: null, prev: null, q: [], cur: null, raf: 0, looks: { me: "", foe: "", me_look: "", foe_look: "" }, hold: null, finaleFor: null };
+  const RA = { imgs: null, prev: null, q: [], cur: null, raf: 0, looks: { me: "", foe: "", me_look: "", foe_look: "", me_fx: "", foe_fx: "" }, hold: null, finaleFor: null };
 
   function ringLoad() {
     if (RA.imgs) return;
@@ -57,6 +57,25 @@
     const key = `${look}/${sheet}`;
     if (!RA.imgs[key]) RA.add(key, /^u\d+$/.test(look) ? `/api/looks/img/${look}/${sheet}` : `${RING_LOOKS}${look}/${sheet}.webp`); // 自建的由伺服器送
     return ringReady(RA.imgs[key]) ? RA.imgs[key] : RA.imgs[sheet];
+  }
+  // 招式動畫（m<數字>，由伺服器送）：六格一張的光效，出招那幾格疊在出手的人身上（沒抓好就不疊）
+  function ringFxImg(fx) {
+    if (!fx || !/^m\d+$/.test(fx)) return null;
+    const key = `fx/${fx}`;
+    if (!RA.imgs[key]) RA.add(key, `/api/looks/img/${fx}/fx`);
+    return ringReady(RA.imgs[key]) ? RA.imgs[key] : null;
+  }
+  function ringFx(cx, fx, k, x, flip, lunge) {
+    const img = ringFxImg(fx);
+    if (!img) return;
+    const i = Math.max(0, Math.min(5, Math.floor(k * 6)));
+    cx.save();
+    cx.translate(x + (flip ? -lunge : lunge), RING_GY);
+    if (flip) cx.scale(-1, 1);
+    cx.scale(RING_SCALE, RING_SCALE);
+    cx.translate(-RING_AX, -RING_BY);
+    cx.drawImage(img, i * RING_CELL, 0, RING_CELL, RING_CELL, 0, 0, RING_CELL, RING_CELL);
+    cx.restore();
   }
   const ringArms = (kind) => RING_ARMS[kind] || [null, "fist"];
   const ringAtk = (kind) => `hero_atk_${ringArms(kind)[1]}`;
@@ -195,10 +214,11 @@
     // 出手的那一個畫在後面（蓋在上面）
     if (beat && beat.lunge === "me") sides.reverse();
     for (const [side, x, flip] of sides) {
-      let sheet = "hero_bare_idle", i = Math.floor(now / 230) % 4, lunge = 0;
+      let sheet = "hero_bare_idle", i = Math.floor(now / 230) % 4, lunge = 0, fxAt = -1;
       const a = beat && beat[side];
       if (a && el >= a.at && el < a.at + a.dur) {
         const k = (el - a.at) / a.dur;
+        if (a.sheet.startsWith("hero_atk_")) fxAt = k;
         sheet = a.sheet;
         i = Math.floor(k * RING_SHEETS[sheet]);
         if (beat.lunge === side) lunge = Math.sin(k * Math.PI) * 44;
@@ -211,5 +231,6 @@
         i = RA.hold[side].i;
       }
       ringFigure(cx, sheet, i, x, flip, RA.looks[side], lunge, RA.looks[`${side}_look`]);
+      if (fxAt >= 0) ringFx(cx, RA.looks[`${side}_fx`], fxAt, x, flip, lunge);
     }
   }
