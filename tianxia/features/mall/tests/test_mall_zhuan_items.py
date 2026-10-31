@@ -239,7 +239,7 @@ def test_off_the_server_adds_no_art_keys(monkeypatch, tmp_path):
 
 
 def test_the_schema_does_not_move_and_bad_windows_are_caught():
-    assert database.SCHEMA_VERSION == 7
+    assert database.SCHEMA_VERSION == 9
     game = jianfa_game()
     c = game.content
     bad = MallItem(id="x", name="測試貨", price=10, kind="consumable", effects={"zhuan_seal": 1},
