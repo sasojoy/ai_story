@@ -878,7 +878,11 @@
   // （world.edges）；正在翻的斜紋兩色（推的那一方＋現在的主人）；下了戰書內側朱紅虛框（w-letter）、剛易手內框改成虛線（w-cool）；
   // 可出陣內側橘虛框（引擎說必敗的淡一半）；你的那一塊內側紅框（在路上不畫）。沒有地塊、或座標落在所屬區外的地點（官軍大營、綠林山寨）
   // 拿半徑 view.patch_radius 的圓當它的地：一樣填色上框、不裁區界、不算戰線。常駐（「塗層」開關拿掉了）、不混色、沒有濾鏡。
-  // 線寬寫的是螢幕上看得到的寬（照丙畫出來的：內框 2.5、橘框紅框 3）：裁到塊內的那幾條畫兩倍寬，被裁掉外面那一半
+  // 線寬寫的是螢幕上看得到的寬（照丙畫出來的：內框 2.5、橘框紅框 3）：裁到塊內的那幾條畫兩倍寬，被裁掉外面那一半。
+  // 框（內框、冷卻虛內框、可出陣、戰書、你）沿著看得到的那一塊描一整圈（FB-9070，W1 第二輪 2026-10-31）：看得到的是塊 ∩ 區，邊界是塊的邊落在區內
+  // 的那幾段＋區界落在塊內的那幾段。框的路徑是塊的多邊形再接一條所在區的多邊形（同一個 d 兩段子路徑），裁到塊內（lc-）再裁到區界（lr-）：
+  // 塊那一段留下塊在區內的內側，區那一段留下區界在塊內的內側，合起來剛好是塊 ∩ 區內側一圈。以前只描塊，伸出區界的那一截被裁掉、區界上沒有框
+  // （36 塊有 30 塊缺 5% 以上，下曲陽缺七成）。不多一個節點，每一條框多一段區界的字（區的多邊形四、五個點）
   const LAND_UNHELD = "#B9B2A0", LAND_UNHELD_RIM = "#8F8B82", LAND_SEAM = "#1B1F17", LAND_FRONT = "#FFF6E0";
   const LAND_SORTIE = "#F0A640", LAND_HERE = "#C0392B";
   // 正在翻的中立地（沒人佔、有人在推）的內框：照丙是紅（企劃者 2026-10-31「照丙用紅框」；草圖 tools/slg5.js 的 txGround：有主人是主人色、
@@ -902,18 +906,19 @@
     }
     return ins;
   }
-  // 每一處的地（照底圖記一份）：地塊 { id, region, d, poly, rpoly }，或圓 { id, patch: true, x, y, r }（地塊在前、圓在後：圓蓋在上面）
+  // 每一處的地（照底圖記一份）：地塊 { id, region, d, rd（所在區的多邊形，框沿著區界那一段用）, poly, rpoly }，或圓 { id, patch: true, x, y, r }
+  // （地塊在前、圓在後：圓蓋在上面）
   const landMemo = new WeakMap();
   function landUnits(base) {
     let m = landMemo.get(base);
     if (m) return m;
     const wd = base.world || {}, r = Number(base.view && base.view.patch_radius) || LAND_PATCH_R;
-    const regions = Object.fromEntries((wd.regions || []).map((g) => [g.id, polyOf(g.d)]));
+    const regions = Object.fromEntries((wd.regions || []).map((g) => [g.id, { d: g.d, poly: polyOf(g.d) }]));
     const cells = Object.fromEntries((wd.cells || []).map((c) => [c.id, c]));
     const blocks = [], patches = [];
     for (const b of base.places) {
-      const c = cells[b.id], rp = c && regions[c.region];
-      if (rp && inPoly(b.x, b.y, rp)) blocks.push({ id: b.id, region: c.region, d: c.d, poly: polyOf(c.d), rpoly: rp });
+      const c = cells[b.id], rg = c && regions[c.region], rp = rg && rg.poly;
+      if (rp && inPoly(b.x, b.y, rp)) blocks.push({ id: b.id, region: c.region, d: c.d, rd: rg.d, poly: polyOf(c.d), rpoly: rp });
       else patches.push({ id: b.id, patch: true, x: b.x, y: b.y, r });
     }
     m = { units: [...blocks, ...patches], patch: new Set(patches.map((u) => u.id)) };
@@ -943,6 +948,7 @@
       if (!q) continue;
       const id = esc(u.id), sd = ctrl[u.id] || null, t = live ? tugOf(st, u.id, sd) : null, cool = live && !!sd && !!q.cool;
       const tag = u.patch ? "circle" : "path", geo = u.patch ? `cx="${u.x}" cy="${u.y}" r="${u.r}"` : `d="${u.d}"`, inner = `clip-path="url(#lc-${id})"`;
+      const ring = u.patch ? geo : `d="${u.d} ${u.rd}"`; // 框描的：塊＋所在區兩段子路徑，裁到塊內與區界裡＝塊 ∩ 區內側一圈（FB-9070）；圓不裁區界、照舊描圓
       const own = sd ? sideInk(sd).color : LAND_UNHELD;
       defs.push(`<clipPath id="lc-${id}"><${tag} ${geo}/></clipPath>`);
       if (t) {
@@ -953,11 +959,11 @@
       const rim = rimInk ? `stroke="${rimInk}" stroke-width="${w(LAND_RIM_W * 2)}" stroke-opacity="${LAND_RIM_OP}"`
         : `stroke="${LAND_UNHELD_RIM}" stroke-width="${w(LAND_RIM_W_UNHELD * 2)}" stroke-opacity="${LAND_RIM_OP_UNHELD}"`;
       const land = `<${tag} class="ld-fill" data-cell="${id}" ${geo} fill="${t ? `url(#ls-${id})` : own}" fill-opacity="${t ? LAND_FILL_TUG : sd ? LAND_FILL : LAND_FILL_UNHELD}"/>`
-        + `<${tag} class="${cool ? "w-cool" : "ld-rim"}" data-cell="${id}" ${geo} fill="none" ${rim}${cool ? ` stroke-dasharray="${dash(LAND_COOL_DASH)}"` : ""} stroke-linejoin="round" ${inner}/>`
+        + `<${tag} class="${cool ? "w-cool" : "ld-rim"}" data-cell="${id}" ${ring} fill="none" ${rim}${cool ? ` stroke-dasharray="${dash(LAND_COOL_DASH)}"` : ""} stroke-linejoin="round" ${inner}/>`
         + `<${tag} class="ld-seam" ${geo} fill="none" stroke="${LAND_SEAM}" stroke-opacity=".3" stroke-width="${w(LAND_SEAM_W)}"/>`;
       body.push(u.patch ? land : `<g clip-path="url(#lr-${esc(u.region)})">${land}</g>`);
       // 框畫在戰線上面、都裁到塊內：可出陣（必敗的淡一半）、戰書（凍結：出陣要知道的事，蓋在可出陣上面）、你
-      const frame = (cls, color, more) => `<${tag} class="${cls}" data-cell="${id}" ${geo} fill="none" stroke="${color}" stroke-width="${w(LAND_FRAME_W * 2)}"${more} stroke-linejoin="round" ${inner}/>`;
+      const frame = (cls, color, more) => `<${tag} class="${cls}" data-cell="${id}" ${ring} fill="none" stroke="${color}" stroke-width="${w(LAND_FRAME_W * 2)}"${more} stroke-linejoin="round" ${inner}/>`;
       const faint = lose.has(u.id) || (q.sortie === "attack" && !q.convoy && !!q.odds && q.odds.word === SORTIE_LOSE);
       const box = (live && q.sortie ? frame("ld-sortie", LAND_SORTIE, ` stroke-dasharray="${dash(LAND_DASH)}"${faint ? ` stroke-opacity="${LAND_LOSE_OP}"` : ""}`) : "")
         + (live && q.siege === "letter" ? frame("w-letter", FRONT_RED, ` stroke-dasharray="${dash(LAND_DASH)}"`) : "")

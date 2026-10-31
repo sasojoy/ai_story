@@ -4,6 +4,7 @@
 底圖與疊層；沒有 node 就略過。"""
 from __future__ import annotations
 
+import json
 import random
 import re
 
@@ -635,6 +636,102 @@ return (async () => {
         assert abs(math.log2(g["z"] / start)) > 1, (name, g)  # 真的跨了好幾個三分之一級
         assert abs(float(g["front"]) * g["z"] / 3.2 - 1) < 0.13, (name, g)  # 放手那一次照新的倍率：白邊 3.2 照螢幕（差不到三分之一級）
     assert out["fly"]["frames"] > 5
+
+
+# ── FB-9070、FB-9071（W1 第二輪，2026-10-31；QA qa/map-view-w1 開的兩張）──
+# FB-9070：框（內框、正在翻的中立紅框、冷卻虛內框、可出陣橘框、戰書框、你的紅框）要沿著看得到的那一塊（塊 ∩ 區）描一整圈。以前只描塊的
+# 多邊形、裁到塊內再裁到區界，塊伸出區界的那一截被裁掉，區界上那一段沒有框（36 塊有 30 塊缺 5% 以上，下曲陽缺七成）。
+# 量法照 QA（scratchpad qa-w1/p4.js）：沿著每一塊看得到的外框取樣——塊的邊落在區內的那幾段、區界落在塊內的那幾段，每一點往那一塊裡面
+# 挪半個框寬，看有沒有一條框畫在那裡：離那一條框的路徑（每一段子路徑）不到半個線寬、而且在它的每一層裁切裡面（自己的 clip-path 與
+# 外面每一層 <g> 的）。虛線當實線算（量的是那一邊有沒有框）。在 node 裡照 groundSvg 吐出來的標記算，不靠瀏覽器排版。
+COVER_JS = r"""
+function landCover(base, svg, want) {
+  const pts = (d) => { const n = (String(d).match(/-?\d+(?:\.\d+)?/g) || []).map(Number), o = []; for (let i = 0; i + 1 < n.length; i += 2) o.push([n[i], n[i + 1]]); return o; };
+  const subs = (d) => String(d || "").split(/(?=M)/).map(pts).filter((p) => p.length > 2);
+  const inside = (x, y, pg) => { let r = false; for (let i = 0, j = pg.length - 1; i < pg.length; j = i++) { const a = pg[i], e = pg[j]; if ((a[1] > y) !== (e[1] > y) && x < ((e[0] - a[0]) * (y - a[1])) / (e[1] - a[1]) + a[0]) r = !r; } return r; };
+  const seg = (x, y, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy; let t = L ? ((x - a[0]) * dx + (y - a[1]) * dy) / L : 0; t = t < 0 ? 0 : t > 1 ? 1 : t; return Math.hypot(a[0] + t * dx - x, a[1] + t * dy - y); };
+  const near = (x, y, sp, r) => sp.some((pg) => pg.some((a, i) => seg(x, y, a, pg[(i + 1) % pg.length]) <= r));
+  const attr = (s, k) => { const m = s.match(new RegExp(`(?:^|\\s)${k}="([^"]*)"`)); return m ? m[1] : null; };
+  const clipOf = (s) => { const c = attr(s, "clip-path"); return c ? c.match(/#([^)]+)\)/)[1] : null; };
+  const clips = {}, els = [], stack = [];
+  for (const m of svg.matchAll(/<(\/?)([a-zA-Z]+)([^>]*?)(\/?)>/g)) {
+    const [, close, tag, rest, self] = m;
+    if (close) { stack.pop(); continue; }
+    const open = stack.find((s) => s.tag === "clipPath");
+    if (open && tag === "path") (clips[attr(open.rest, "id")] = clips[attr(open.rest, "id")] || []).push(...subs(attr(rest, "d")));
+    else if (!open && tag === "path" && attr(rest, "fill") === "none" && attr(rest, "data-cell")) {
+      els.push({ cls: attr(rest, "class"), cell: attr(rest, "data-cell"), sp: subs(attr(rest, "d")), half: Number(attr(rest, "stroke-width")) / 2,
+        chain: [clipOf(rest), ...stack.map((s) => clipOf(s.rest))].filter(Boolean) });
+    }
+    if (!self) stack.push({ tag, rest });
+  }
+  const cells = Object.fromEntries(base.world.cells.map((c) => [c.id, c])), regs = Object.fromEntries(base.world.regions.map((r) => [r.id, pts(r.d)]));
+  return want.map(([id, classes]) => {
+    const cell = pts(cells[id].d), reg = regs[cells[id].region], mine = els.filter((e) => e.cell === id && classes.includes(e.cls));
+    if (!mine.length) return { id, classes, n: 0, cover: 0, region: null };
+    const dep = Math.min(...mine.map((e) => e.half)) / 2;
+    let total = 0, covered = 0, onRegion = 0;
+    const walk = (pg, other, isRegion) => {
+      for (let i = 0; i < pg.length; i++) {
+        const a = pg[i], b = pg[(i + 1) % pg.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (!L) continue;
+        const n = Math.max(1, Math.round(L)), nx = -(b[1] - a[1]) / L, ny = (b[0] - a[0]) / L;
+        for (let s = 0; s < n; s++) {
+          const t = (s + 0.5) / n, x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
+          if (!inside(x, y, other)) continue;
+          const q = [[x + nx * dep, y + ny * dep], [x - nx * dep, y - ny * dep]].find(([qx, qy]) => inside(qx, qy, pg));
+          if (!q || !inside(q[0], q[1], other)) continue;  // 塊的邊與區界交會的那一角
+          total += L / n;
+          if (isRegion) onRegion += L / n;
+          if (mine.some((e) => near(q[0], q[1], e.sp, e.half) && e.chain.every((c) => clips[c] && clips[c].some((pg) => inside(q[0], q[1], pg))))) covered += L / n;
+        }
+      }
+    };
+    walk(cell, reg, false);
+    walk(reg, cell, true);
+    return { id, classes, n: mine.length, cover: covered / total, region: onRegion / total };
+  });
+}
+"""
+FRAME_KINDS = {"rim": ["ld-rim", "w-cool"], "sortie": ["ld-sortie"], "letter": ["w-letter"], "here": ["ld-here"]}
+
+
+def _cover_state(game):
+    """量框的局面：開季（season21，官軍站潁川郡）再加正在翻的中立地（汝南荒野，紅框）、剛易手（荒丘，虛內框）、戰書（潁川書院）。"""
+    st = game.map_state()
+    st["places"]["runan_wilds"].update(control=None, tug={"guan": 55})
+    st["places"]["hilltop_wilds"].update(control="huang", cool=40)
+    st["places"]["yingchuan_academy"]["siege"] = "letter"
+    return st
+
+
+def _covers(game, st, want, k=1):
+    """want：[(地點, 哪一種框), …] → 每一項 {id, classes, n（幾條）, cover（框涵蓋看得到的外框幾成）, region（外框有幾成落在區界上）}。"""
+    pairs = json.dumps([[x, FRAME_KINDS[kind]] for x, kind in want])
+    return run(game, COVER_JS + f"return landCover(H.S.mapBase, H.groundSvg(H.S.mapBase, H.S.mapState, {k}, H.S.mapState.now_week), {pairs});", st=st)
+
+
+@pytest.mark.slow  # 單一條超過一秒（36 塊 × 每一單位取一點）
+def test_fb9070_every_frame_runs_round_the_whole_block_you_can_see():
+    """FB-9070：每一塊的框涵蓋看得到的外框（塊 ∩ 區的邊）九成五以上——每一塊的內框（36 塊；含正在翻的中立紅框、冷卻虛內框）、你那一塊的
+    紅框（潁川郡）、每一處可出陣的橘框（開季五塊中立寶地：南陽官道、拒馬河畔……）、戰書框；伸出區界最多的下曲陽外框有一半以上落在區界上，
+    修之前它的內框只描到三成。線寬照倍率（k）換，涵蓋率不跟著變：k＝1 與 k＝0.5（倍率 2）各量一次。"""
+    game = _game(profile="season21")
+    base = game.map_base()
+    st = _cover_state(game)
+    blocks = sorted(set(st["places"]) - _patches(base))
+    sortie = [x for x in blocks if st["places"][x]["sortie"]]
+    assert {"nanyang_road", "juma_river", "yu_river", "baima_ford", "nanyang_wilds"} <= set(sortie)
+    assert all(st["places"][x]["control"] is None and st["places"][x]["rich"] for x in ("nanyang_road", "juma_river"))  # 中立寶地
+    want = [(x, "rim") for x in blocks] + [(st["here"], "here"), ("yingchuan_academy", "letter")] + [(x, "sortie") for x in sortie]
+    assert len(blocks) == 36 and st["here"] == "yingchuan"
+    for k in (1, 0.5):
+        got = _covers(game, st, want, k)
+        assert all(g["n"] >= 1 for g in got), [g for g in got if not g["n"]]
+        thin = [(g["id"], g["classes"][0], round(g["cover"], 3)) for g in got if g["cover"] < 0.95]
+        assert not thin, (k, thin)
+        xq = next(g for g in got if g["id"] == "xiaquyang" and g["classes"] == FRAME_KINDS["rim"])
+        assert xq["region"] > 0.5, xq  # 這一條咬得到：下曲陽看得到的外框一半以上在區界上
 
 
 def _land_spot(base, loc, dxs, dys):
