@@ -10,8 +10,9 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 ## 開工
 
 - **2026-10-30 起照〈開發規範手冊〉**（`docs/superpowers/specs/2026-10-30-開發模式-design.md` 第三、四節；分支與測試的總規矩在 `tianxia-flow`）：
-  - **新功能一律 `scripts/new_feature.py <包名>` 生一包**（`tianxia/features/<包>/`：`__init__.py` 登記與掛鉤、`rules.py`、`actions.py`、`state.py`、`content/`、`routes.py`、`web/`、`tests/`、`bots.py`、`README.md`；用不到的不生）。這支腳本在第 1 階（`feature/core-hooks`）合進 develop 之後才有，之前照舊寫在原本的模組。
-  - **舊功能碰到才搬**：派工上哪一批要動某個功能，順手把它搬進包裡；搬的那一步是純搬——行為不變、測試只搬位置不改斷言，那一包的測試與核心契約綠。不搬的留在 `engine.py` 不動，沒有大翻修。
+  - **新功能一律 `scripts/new_feature.py <包名>` 生一包**（`tianxia/features/<包>/`：`__init__.py` 登記與掛鉤、`rules.py`、`actions.py`、`state.py`、`content/`、`routes.py`、`web/`、`tests/`、`bots.py`、`README.md`；用不到的不生）。（第 1 階 2026-10-31 合進 develop；範例照 `tianxia/features/mall/`、`tianxia/features/feast/`，導覽 `docs/guide/核心與存檔.md`「核心、功能包、FEATURES、掛鉤、服務清單」。）
+  - **舊功能搬進包**：企劃者 2026-10-31 定 PM 主動照順序一批搬一包（出陣、走一趟、戰鬥、探索、約戰、酒肆）；派工上其他批要動某個還沒搬的功能，也可以順手搬。搬的那一步是純搬——行為不變、測試只搬位置不改斷言，那一包的測試與核心契約綠，TestClient 前後位元組比對＋實機截圖並排。
+  - **搬包常踩的**（第 1 階 2026-10-31）：掃原始碼的測試多半寫 `glob("tianxia/*.py")`，搬了之後看不到包裡的程式，期待清單寫了檔名的會紅（`test_explain2`、`test_schema_required`、`test_prologue`），改成也掃 `tianxia/features/*/*.py`；測試檔搬進 `tianxia/features/<包>/tests/` 之後 `Path(__file__).parents[2]` 要改 `parents[4]`；舊的 import 路徑留成別名（`sys.modules[__name__] = rules`），`monkeypatch.setattr(舊模組, …)` 照樣有效；把規則從 `style.css` 搬到後載的檔會改串接順序，375 與 1280 都要拍（商城那一層的背景簡寫蓋掉了電腦寬的欄寬底色）；搬之前先查原本那幾段在開關關著時還做不做事（宴客的 `enabled` 是「開著，或這一季還有擺過的宴」）。
   - **包只 import 核心**，不 import 別的包；要用別包的東西走核心的服務（例：票的庫存與消耗走 `ctx.wallet`）。過渡期可以 import 還沒搬的舊模組，行尾註 `# 過渡：待搬`。`tests/core/test_feature_boundaries.py` 會掃。
   - **只跑那一包的測試**（`-n 4`）；slow 不自動跟，要跑就 `scripts/test_for.py --slow`。
   - **不改技能檔**：學到的寫在回報的「學到的」一節，PM 收進技能（手冊第十節）。
