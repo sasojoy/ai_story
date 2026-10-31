@@ -1649,8 +1649,9 @@ def test_w2_arrow_pills_point_at_neighbours_off_the_screen():
     out = run(game, """const g = { vw: 375, vh: 668 }, z0 = H.mvZ0(g), base = H.S.mapBase, st = H.S.mapState;
 const open = H.mvLayout(base, st, H.camOpen(g), g), away = H.mvLayout(base, st, H.camAt(g, 700, 1200, z0), g);
 const midz = H.mvLayout(base, st, H.camAt(g, 424, 943, z0 * 0.6), g);
+H.S.mapDrawer = 'full'; const full = H.mvLayout(base, st, H.camAt(g, 700, 1200, z0), g); H.S.mapDrawer = 'peek';
 H.S.mapMode = 'place'; H.S.mapSel = 'changshe'; const picked = H.mvLayout(base, st, H.camOpen(g), g);
-return { open: open.pills, away: away.pills, midz: midz.pills, picked: picked.pills };""")
+return { open: open.pills, away: away.pills, midz: midz.pills, full: full.pills, picked: picked.pills };""")
     assert [p["id"] for p in out["open"]] == ["luoyang_road"]
     assert re.search(r'data-act="map-place" data-id="luoyang_road"[^>]*><b aria-hidden="true">‹</b><span>洛陽官道 8分</span>', out["open"][0]["html"])
     away = out["away"]
@@ -1658,7 +1659,7 @@ return { open: open.pills, away: away.pills, midz: midz.pills, picked: picked.pi
     for i, p in enumerate(away):
         assert 0 <= p["box"][0] and p["box"][2] <= 375 and 0 <= p["box"][1] and p["box"][3] <= 668 - 58
         assert not any(_cross(p["box"], o["box"]) for o in away[i + 1:])
-    assert out["midz"] == [] and out["picked"] == []
+    assert out["midz"] == [] and out["picked"] == [] and out["full"] == []  # 中景、點了一處、抽屜全開（地圖只剩一條）都不掛
 
 
 @pytest.mark.slow  # 單一條超過一秒（走一段路）
@@ -1729,13 +1730,14 @@ def test_w2_the_drawer_has_three_stops_without_a_place():
     把手點一下在一行與一排卡之間換，再拉才到全開。點了一處照舊 peek／half／full、點一下在第一格與最後一格之間換。"""
     out = run(_w2(), DRAWER_DOM + """const res = {};
 res.stops = H.drawerStops();
-for (const h of ['peek', 'row', 'full']) { H.setMapDrawer(h); res[h] = [drawer.style.height, fab.style.bottom]; }
+for (const h of ['peek', 'row', 'full']) { H.setMapDrawer(h); res[h] = [drawer.style.height, fab.style.bottom]; res[h + 'Fab'] = fab.style.visibility; }
 H.S.mapDrawer = 'peek'; res.tap1 = H.drawerTap(H.drawerStops()); H.S.mapDrawer = 'row'; res.tap2 = H.drawerTap(H.drawerStops());
 H.S.mapDrawer = 'full'; res.tap3 = H.drawerTap(H.drawerStops());
 H.S.mapMode = 'place'; H.S.mapSel = 'changshe'; res.place = H.drawerStops(); H.S.mapDrawer = 'peek'; res.tap4 = H.drawerTap(H.drawerStops());
 return res;""")
     assert out["stops"] == ["peek", "row", "full"]
     assert out["peek"] == ["58px", "70px"] and out["row"] == ["196px", "208px"] and out["full"] == [f"{round(650 * 0.94)}px", f"{round(650 * 0.94) + 12}px"]
+    assert (out["peekFab"], out["rowFab"], out["fullFab"]) == ("", "", "hidden")  # 全開時地圖只剩一條：右下兩顆收起來（不疊在 🔍 上）
     assert (out["tap1"], out["tap2"], out["tap3"]) == ("row", "peek", "peek")
     assert out["place"] == ["peek", "half", "full"] and out["tap4"] == "full"
 

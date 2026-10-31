@@ -651,7 +651,11 @@
     if (was && was !== d.style.height && S.mapCam && !mvBusy()) marksSoon();
     // 右下兩顆圓鈕跟著抽屜上下（直接寫在那一塊上：寫在框上的自訂屬性會一路繼承，整棵地圖重算樣式，FB-322）
     const fab = document.getElementById("mv-fab");
-    if (fab && fab.style) fab.style.bottom = deskMap() ? "" : `${px + 12}px`;
+    if (fab && fab.style) {
+      fab.style.bottom = deskMap() ? "" : `${px + 12}px`;
+      // 抽屜全開時地圖只剩上面一條：兩顆圓鈕收起來（不然疊在 🔍 上；輿圖表現第二版 W2）
+      fab.style.visibility = h === "full" && !deskMap() ? "hidden" : "";
+    }
     // --md-h 只有版圖變化用得到（地圖框縮到抽屜上面，style.css 的 .mapx.tl-mode）
     if (S.mapMode === "timeline") box.style.setProperty("--md-h", `${px}px`);
   }
@@ -1220,6 +1224,7 @@
     const me = placeOf(base, st.here);
     if (!me) return [];
     const room = mapRoom(g), z = c.z, vis = [0, 0, g.vw, room.bottom], E = [8, room.top + 4, g.vw - 8, room.bottom - 8];
+    if (E[3] - E[1] < 120) return []; // 抽屜拉到快全開、地圖只剩一條：不掛
     const hx = Math.min(E[2], Math.max(E[0], c.x + me.x * z)), hy = Math.min(E[3], Math.max(E[1], c.y + me.y * z));
     const taken = blocked.slice(), out = [];
     for (const b of mvNeighbors(base, st)) {
