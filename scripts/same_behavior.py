@@ -983,6 +983,14 @@ EXPLORE_MUTATIONS = {
 }
 
 
+
+def _explore_rules():
+    """探索一顆的純規則模組：base 是 tianxia/explore_one.py，head 是指到探索包 explore_rules 的別名（同一個模組物件；換掉它的屬性兩邊都打得到）。"""
+    from tianxia import explore_one
+
+    return explore_one
+
+
 class ExploreScenario(Scenario):
     """走一趟與探索一顆（第 3＋4 批）。照調查 plan.json order 3、6 的 behavior_check：各種地點按探索、事件卡等回答、遭遇、稀有、
     分級事件、隨口應對分岔（假模型）、45 級閘、掉落與破境丹、頭目、自家營寨比劃；走一趟一、三、五段、停下來、結算卡、題壁留言與
@@ -1009,7 +1017,7 @@ class ExploreScenario(Scenario):
     @contextlib.contextmanager
     def draws(self, *kinds: str):
         """探索一顆這幾下抽到的類別照 kinds 的順序（用完了照真的抽）；每一次都把引擎給的比重、上一趟的類別寫進輸出。"""
-        from tianxia import explore_one
+        explore_one = _explore_rules()
 
         real, queue = explore_one.draw, list(kinds)
 
@@ -1125,7 +1133,7 @@ class ExploreScenario(Scenario):
 
     def kind_places(self) -> list[tuple[str, str]]:
         """（地點種類, 這一種照 id 排的第一個地點）：城、寺、渡、野、山、營。"""
-        from tianxia import explore_one
+        explore_one = _explore_rules()
 
         cfg = self.c.config.jianfa
         out = []
@@ -1182,7 +1190,7 @@ class ExploreScenario(Scenario):
 
     def beats(self) -> None:
         """四類各一下（照寫好的抽）：事件卡等你回答、有所感、素材、遭遇打贏與打輸。"""
-        from tianxia import explore_one
+        explore_one = _explore_rules()
 
         for kind, tier in ((explore_one.EVENT, None), (explore_one.INSIGHT, None), (explore_one.MATERIAL, None),
                            (explore_one.ENCOUNTER, "大勝"), (explore_one.ENCOUNTER, "落敗")):
@@ -1196,7 +1204,7 @@ class ExploreScenario(Scenario):
 
     def trip(self) -> None:
         """走一趟：段數選單、n=2 不收、五段（第二段停在事件上、選完接著走；有一段打贏）、結算卡、預設句留言、同一趟再留一句被擋。"""
-        from tianxia import explore_one
+        explore_one = _explore_rules()
 
         if not self.place("葉開", "yingshui"):
             return
@@ -1214,7 +1222,7 @@ class ExploreScenario(Scenario):
 
     def ink(self) -> None:
         """自己寫的一句要一張題壁墨：沒有回 NO_INK → 管理者補發元寶 → 萬寶閣買題壁墨 → 再寫；遊記（模型不在，照模板）。"""
-        from tianxia import explore_one
+        explore_one = _explore_rules()
 
         if not self.place("丁靈琳", "yingshui"):
             return
@@ -1230,7 +1238,7 @@ class ExploreScenario(Scenario):
 
     def seen(self) -> None:
         """別人看得到痕跡：路小佳在同一處走五段，路上的那一行（遠處有人揮手、刻在石頭上的留言）一定擲中。"""
-        from tianxia import explore_one
+        explore_one = _explore_rules()
 
         if not self.place("路小佳", "yingshui"):
             return
@@ -1240,7 +1248,7 @@ class ExploreScenario(Scenario):
 
     def refuse(self) -> None:
         """拒絕：體力不夠、在路上、走到一半人離開（收成「中途離開」）。"""
-        from tianxia import explore_one
+        explore_one = _explore_rules()
 
         if not self.place("燕南飛", "yingshui"):
             return
@@ -1262,7 +1270,7 @@ class ExploreScenario(Scenario):
 
     def half(self) -> None:
         """前半的最後一段（半舊半新的切點）：胡鐵花開一趟五段走到第二段停（等選事件）；姬冰雁出門一趟抽到事件、卡等回答。"""
-        from tianxia import explore_one
+        explore_one = _explore_rules()
 
         if self.place("胡鐵花", "yingshui"):
             with self.draws(explore_one.MATERIAL, explore_one.EVENT):
@@ -1283,7 +1291,7 @@ class ExploreScenario(Scenario):
 
     def answer(self) -> None:
         """新程式接手：姬冰雁回答舊程式端出來的事件卡；胡鐵花選完那件事（走一趟記下那一下的得失）、接著走完。"""
-        from tianxia import explore_one
+        explore_one = _explore_rules()
 
         self.settle("姬冰雁")
         self.player_view("姬冰雁", "姬冰雁 回答之後")
@@ -1302,7 +1310,7 @@ class ExploreScenario(Scenario):
 
     def fight(self) -> None:
         """遭遇：散人在官軍大營撞上北軍五校（必敗）照寫好的打贏＝以弱勝強（行狀、世界記事）；走一趟裡也打贏一次；城裡的地痞照打。"""
-        from tianxia import explore_one
+        explore_one = _explore_rules()
 
         if self.place("燕南飛", "guan_camp"):
             emit("必敗的探索", self.options("燕南飛").get("act:explore"))
@@ -1324,7 +1332,7 @@ class ExploreScenario(Scenario):
 
     def rare(self) -> None:
         """稀有：一次性奇遇必中（rare_explore_chance 換成 1）出門一趟抽到事件；五段的一趟照固定的亂數自己抽（段數越多稀有的越容易來）。"""
-        from tianxia import explore_one
+        explore_one = _explore_rules()
 
         if self.place("路小佳", "nanyang_wilds"):
             with self.draws(explore_one.EVENT), self.tweak(self.c.config, rare_explore_chance=1.0):
@@ -1346,7 +1354,7 @@ class ExploreScenario(Scenario):
 
     def freetext(self) -> None:
         """隨口應對的分岔（假模型）：走一趟停在事件上，換成一則寫了後果的事件，回一句話；接著走完。"""
-        from tianxia import explore_one
+        explore_one = _explore_rules()
 
         ev = self.first_event(lambda e: e.free_text is not None and bool(e.free_text.outcomes)) or \
             self.first_event(lambda e: e.free_text is not None)
@@ -1366,7 +1374,7 @@ class ExploreScenario(Scenario):
 
     def capped(self) -> None:
         """45 級閘：45 級的人出門一趟打贏一場、撿一次素材（經驗換心得、段落結尾「境界已到」）。"""
-        from tianxia import explore_one
+        explore_one = _explore_rules()
 
         if not self.place("孟星魂", "nanyang_wilds"):
             return
@@ -1382,7 +1390,7 @@ class ExploreScenario(Scenario):
 
     def drops(self) -> None:
         """掉落與破境丹：破境丹必中（explore_legend_chance 換成 1）出門兩趟。"""
-        from tianxia import explore_one
+        explore_one = _explore_rules()
 
         if not self.place("姬冰雁", "yingshui"):
             return
@@ -1397,7 +1405,7 @@ class ExploreScenario(Scenario):
 
     def boss(self) -> None:
         """頭目：長社（只有頭目、沒有一般對手）出門一趟抽到遭遇，頭目擋路、頭目戰照第一招打完；頭目機率換成 1 再擲一次。"""
-        from tianxia import explore_one
+        explore_one = _explore_rules()
 
         if not self.place("燕南飛", "changshe"):
             return
@@ -1409,7 +1417,7 @@ class ExploreScenario(Scenario):
 
     def spar(self) -> None:
         """自家營寨：官軍的人在官軍大營出門一趟抽到遭遇是跟同袍比劃（出陣包的 _sortie_host 那一路的三成，不打、不掉東西）。"""
-        from tianxia import explore_one
+        explore_one = _explore_rules()
 
         if not self.place("高寄萍", "guan_camp"):
             return
