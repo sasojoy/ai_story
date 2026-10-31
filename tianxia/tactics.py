@@ -1550,7 +1550,7 @@ class War(BaseModel):
     damage: float = 1.0
     hp: float = 0.0
     lines: list[str] = Field(default_factory=list)
-    kinds: dict[str, str] = Field(default_factory=dict)  # 戰法名 → kind（決戰戰況把一軍的那幾句摺成一行時分類用，Game._fold_war_lines）
+    kinds: dict[str, str] = Field(default_factory=dict)  # 戰法名 → kind（決戰戰況把一軍的那幾句摺成一行時分類用，決戰包 features/battle/view.fold_war_lines）
 
 
 def war_round(side: BoutSide, move: str | None, beat: int, round_: int, edge: float, hp_ratio: float,

@@ -833,7 +833,7 @@ class WorldStateStore(Protocol):
         ...
 
     def season_ended_battles(self, season: int) -> list[BattleInstance]:
-        """這一季收場的決戰，照先後（季終沒打完的也在，看 unfinished）。補回被洗掉的決戰戰報用（Game._restore_showdowns）。只讀。"""
+        """這一季收場的決戰，照先後（季終沒打完的也在，看 unfinished）。補回被洗掉的決戰戰報用（決戰包 features/battle/view.restore_showdowns）。只讀。"""
         ...
 
     # ── 同伴進度與招募 ──
