@@ -73,7 +73,6 @@ from .guide import speaker_of as guide_speaker_of
 from .guide import speakers as guide_speakers
 from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
-from . import mapview  # 輿圖名字旁（map_mostly）問 mapview.open_places：哪些地點畫得出來，跟底圖、疊層同一個判斷
 from .mapview import legend_data, render_map, render_minimap
 from .martial_arts import QUALITIES, is_renamed
 from .models import (
@@ -105,7 +104,7 @@ from .features.sortie import actions as sortie_actions  # 過渡：Game 上出�
 from .features.sortie.rules import CLASH_OPEN, CLASH_THEIRS_WON, CLASH_WON  # noqa: F401  過渡：tests/ranger/test_raid.py 從 engine 拿
 from .state import (
     ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, Fighter, FrontReport, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
-    Outing, OutingBeat, StoryCard, StoryProgress, TierResult, Whisper, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
+    StoryCard, StoryProgress, TierResult, Whisper, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
     new_game_state,
 )
 from .world import (
