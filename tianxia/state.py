@@ -1879,7 +1879,7 @@ class WorldState(BaseModel):
     # 目標的名號鍵 → 上一次被截殺的世界秒（被截殺過的人一陣子之內誰都不能再截殺他）。換季整個重來
     raids: dict[str, float] = Field(default_factory=dict)
     raided: dict[str, float] = Field(default_factory=dict)
-    # 混戰（翻地與爭搶，Game._clash）寫進上面那兩本的是哪幾筆：同 raids 的鍵（兩個方向）、同 raided 的鍵（被撞的人）→ 那一場的世界秒。
+    # 混戰（翻地與爭搶，出陣包 features/sortie/actions.do_clash）寫進上面那兩本的是哪幾筆：同 raids 的鍵（兩個方向）、同 raided 的鍵（被撞的人）→ 那一場的世界秒。
     # 截殺的拒絕話照它分「混戰過」或「截殺過」（FB-607）：raids／raided 那一筆的時刻跟這裡一樣就是混戰寫的，之後真的截殺會蓋掉 raids／raided。換季整個重來
     clashes: dict[str, float] = Field(default_factory=dict)
     clashed: dict[str, float] = Field(default_factory=dict)
