@@ -921,6 +921,16 @@ def test_change_password(client):
     server.login("shen_01", "new-secret")
 
 
+def test_changing_the_password_keeps_this_device_and_logs_out_the_others(client):
+    # PM 2026-10-31：改密碼時同一個帳號別的裝置登出，改的這一台不必重登
+    client.post("/api/register", json={"login": "shen_01", "password": "secret-pw", "again": "secret-pw"})
+    other = server.SESSIONS.create("shen_01")  # 另一台裝置
+    out = client.post("/api/password", json={"old": "secret-pw", "new": "new-secret", "again": "new-secret"})
+    assert out.json() == {"message": "密碼已更新。"}
+    assert server.SESSIONS.get(client.cookies.get(server.COOKIE)) == "shen_01"
+    assert server.SESSIONS.get(other) is None
+
+
 def test_register_and_change_password_never_hash_while_holding_the_write_lock(client, monkeypatch):
     """scrypt 很慢：註冊、改密碼不另外包一層交易（帳號的每個方法自己就是一筆交易，雜湊在進交易之前算好），
     不然算雜湊的那段時間全服玩家與假人程式都拿不到寫入權。"""
