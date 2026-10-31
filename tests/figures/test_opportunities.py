@@ -37,6 +37,7 @@ def _game(content, name="甲", faction=None, at=None, rank=0):
     game = Game.new(content, name, rng=random.Random(0))
     p = game.state.player
     p.faction, p.rank = faction, rank
+    p.ally = "guan" if faction == "haoqiang" else None  # 豪強一律依附兩軍之一（豪強第三方 2026-10-31 拿掉）
     if at is not None:
         p.location = at
     return game
@@ -454,19 +455,9 @@ def test_refugees_roll_after_duty(on):
     msgs = game.choose("act:duty")
     assert any(m.startswith("第 2 批流民裡有個老人說") for m in msgs)
     assert game.state.player.opp_items == {"hao_refugees": "佃戶名冊"}
-    before = rules.trend_value(game.state, on, "geju")
+    before = rules.trend_value(game.state, on, "yingru")
     game.choose("opp:deliver:hao_refugees")
-    assert rules.trend_value(game.state, on, "geju") == before + 1
-
-
-def test_geju_push_on_delivery_follows_the_goals_sign(on):
-    haoqiang = next(f for f in on.scenario.factions if f.id == "haoqiang")
-    haoqiang.goals[rules.GEJU] = -1  # 假設有個陣營要把割據往下壓：跟戰線那一支一樣是 目標 × 次數
-    game = _game(on, faction="haoqiang", at="cao_manor")
-    game.state.player.opp_items = {"hao_refugees": "佃戶名冊"}
-    before = rules.trend_value(game.state, on, rules.GEJU)
-    game.choose("opp:deliver:hao_refugees")
-    assert rules.trend_value(game.state, on, rules.GEJU) == before - 1
+    assert rules.trend_value(game.state, on, "yingru") == before - 1  # 曹氏莊院在潁川汝南：往依附的官軍那邊推（割據 2026-10-31 拿掉）
 
 
 def test_refugees_come_with_their_chance(on):

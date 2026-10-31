@@ -263,6 +263,43 @@ def test_a_place_keeps_the_latest_lines():
     assert len(here) == keep and here[0].id == 4  # 最舊的三則丟了
 
 
+def test_ink_lines_are_never_pushed_out_by_presets():
+    """題壁墨寫的是花錢買的（Joy 10/31）：一處留滿了，擠掉的只有最舊的預設句。"""
+    game = _game()
+    keep = game.content.config.jianfa.outing_keep
+    _walked(game)
+    _with_ink(game)
+    game.outing_say(text="此處風大")
+    w = game.state.world
+    for i in range(keep + 2):
+        w.inscription_seq += 1
+        w.inscriptions.append(Inscription(id=w.inscription_seq, place="yingshui", text=outing.PRESETS[0], author=f"甲{i}", preset=True))
+    game.state.player.stamina = 100.0
+    _walked(game)
+    game.outing_say(0)
+    here = [i for i in w.inscriptions if i.place == "yingshui"]
+    assert len(here) == keep and "此處風大" in [i.text for i in here]
+
+
+def test_ink_lines_carry_into_the_next_season():
+    """換季：題壁墨寫的跟著到新的一季（id 不變），免費的預設句清掉（Joy 10/31「路牌也會繼續傳承」）。"""
+    game = _game()
+    _walked(game)
+    game.outing_say(0)
+    game.state.player.stamina = 100.0
+    _walked(game)
+    _with_ink(game)
+    game.outing_say(text="此處風大")
+    paid = game.world.get_season().inscriptions[-1]
+    game.content.config.admins = [game.state.player.name]
+    game.admin_end_season(now=game.now)
+    assert game.world.next_season(game.content, game.now + 60)
+    season = game.world.get_season()
+    assert [(i.id, i.text, i.author, i.preset) for i in season.inscriptions] == [(paid.id, "此處風大", paid.author, False)]
+    assert season.inscription_seq >= paid.id
+    assert outing.stele(SimpleNamespace(world=season, player=game.state.player), "yingshui")["text"] == "此處風大"
+
+
 def test_others_lines_show_on_the_road_without_taking_a_segment():
     game = _game()
     w = game.state.world

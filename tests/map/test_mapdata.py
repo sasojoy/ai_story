@@ -1,10 +1,10 @@
-"""輿圖升級的資料（設計第九節）：底圖的清單與疊層。正式內容、週末設定。"""
+"""輿圖升級的資料（設計第九節）：底圖的清單與疊層。正式內容、7 天季（week7）。"""
 from __future__ import annotations
 
 import json
 import random
 
-from conftest import classic_rules, real_content, third_party_gentry
+from conftest import classic_rules, real_content
 from tianxia import atlas, calendar, mapdata, mapview, orders, territory
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -17,13 +17,11 @@ import datetime
 from tianxia.world_state import fresh_season, stamp_season
 
 
-def _game(faction="guan", at="yingchuan", classic=False, profile="week7", third_party=False):
+def _game(faction="guan", at="yingchuan", classic=False, profile="week7"):
     c = real_content(profile)  # 地盤拔河的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開；翻地的輿圖資料在 tests/test_world_map.py）
     c.config.auto_open_first_season = True
     if classic:
         classic_rules(c)
-    if third_party:
-        third_party_gentry(c)  # 豪強是第三方、有割據的規則（豪強分屬兩軍之前）
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None
     p = game.state.player
@@ -197,15 +195,15 @@ def test_season21_lists_the_saturday_battle_only_on_saturday_night():
     assert "盧植下獄" in titles and "廣宗決戰" not in titles and "下曲陽・季末" not in titles
 
 
-def _weekend():
+def _week7_state():
     cw = real_content("week7")
     return cw, fb501._state(cw)
 
 
 @pytest.mark.slow
-def test_weekend_does_not_list_the_changshe_battle_on_its_week_monday():
-    """修前重現：週末第 6 週週一 00:00 起「這一段大事」就列出長社火攻（週四 20:00 才開集結）。"""
-    cw, state = _weekend()
+def test_week7_by_week_start_does_not_list_the_changshe_battle_on_its_week_monday():
+    """修前重現（當時寫成週末）：第 6 週週一 00:00 起「這一段大事」就列出長社火攻（週四 20:00 才開集結）。"""
+    cw, state = _week7_state()
     changshe = next(e for e in cw.timetable if e.id == "changshe_fire")
     battle = timetable.when_in(state.world, cw, changshe)
     monday = calendar.week_start(changshe.week, cw, state.world)
@@ -222,12 +220,12 @@ def test_weekend_does_not_list_the_changshe_battle_on_its_week_monday():
 
 
 @pytest.mark.slow
-def test_weekend_follows_the_schedule_the_admin_moved():
+def test_week7_by_week_start_follows_the_schedule_the_admin_moved():
     """管理者把長社往後排：照排的時刻，預設的時刻到了也不列；排的時刻到了才列。"""
-    cw, state = _weekend()
+    cw, state = _week7_state()
     changshe = next(e for e in cw.timetable if e.id == "changshe_fire")
     default = timetable.when_in(state.world, cw, changshe)
-    later = default + 7200  # 往後排兩個現實小時（週末一週是 5 小時，仍在第 6 週裡）
+    later = default + 7200  # 往後排兩個現實小時（仍在第 6 週裡）
     state.world.schedule["changshe_fire"] = later
     for at, listed in ((default, False), (later - 60, False), (later, True)):
         state.world.time = at
@@ -237,9 +235,9 @@ def test_weekend_follows_the_schedule_the_admin_moved():
 
 
 @pytest.mark.slow
-def test_weekend_lists_the_finale_only_after_the_season_end():
-    """修前重現：週末最後一週（第 12 週）週一 00:00 起就列出「下曲陽・季末」；現在要等到排定的季末。"""
-    cw, state = _weekend()
+def test_week7_by_week_start_lists_the_finale_only_after_the_season_end():
+    """修前重現（當時寫成週末）：最後一週週一 00:00 起就列出「下曲陽・季末」；現在要等到排定的季末。"""
+    cw, state = _week7_state()
     finale = next(e for e in cw.timetable if e.kind == "finale")
     end = timetable.when_in(state.world, cw, finale)
     monday = calendar.week_start(finale.week, cw, state.world)
@@ -261,9 +259,9 @@ def test_weekend_lists_the_finale_only_after_the_season_end():
 
 
 @pytest.mark.slow
-def test_weekend_past_weeks_list_the_battle_once_it_has_happened():
+def test_week7_by_week_start_past_weeks_list_the_battle_once_it_has_happened():
     """「天下怎麼變」逐週列大事：以前的週列的是已經打過的決戰（過了排定的時刻），管理者往後排到還沒到的不列。"""
-    cw, state = _weekend()
+    cw, state = _week7_state()
     guangzong = next(e for e in cw.timetable if e.id == "guangzong")
     battle = timetable.when_in(state.world, cw, guangzong)
     monday = calendar.week_start(guangzong.week + 1, cw, state.world)
@@ -275,10 +273,10 @@ def test_weekend_past_weeks_list_the_battle_once_it_has_happened():
 
 
 @pytest.mark.slow
-def test_weekend_changes_only_the_showdowns_and_the_finale():
-    """週末除了決戰與季末，每一刻列出來的大事跟改之前的寫法（以前的週全列、這一週照 calendar.event_time）一模一樣；
+def test_week7_by_week_start_changes_only_the_showdowns_and_the_finale():
+    """7 天季除了決戰與季末，每一刻列出來的大事跟改之前的寫法（以前的週全列、這一週照 calendar.event_time）一模一樣；
     決戰與季末照 timetable.when_in。整季從頭到尾每 20 分鐘看一次（現實 20 分鐘 ≈ 11 季曆小時，每一週都跨得到）。"""
-    cw, state = _weekend()
+    cw, state = _week7_state()
     special = {e.title for e in cw.timetable if e.kind in ("showdown", "finale")}
     assert special == {"長社火攻", "宛城之戰", "廣宗決戰", "下曲陽・季末"}
     end = calendar.nominal_end(cw, state.world)
@@ -402,7 +400,7 @@ NOW = 1000.0
 
 @pytest.mark.slow
 def test_the_admin_start_button_lists_the_battle_on_the_map_at_once(tmp_path):
-    """整條路走一遍（週末）：管理者在排定時刻之前按「立刻開這一場」，輿圖當下就列，「天下怎麼變」那一週也有。"""
+    """整條路走一遍（7 天季）：管理者在排定時刻之前按「立刻開這一場」，輿圖當下就列，「天下怎麼變」那一週也有。"""
     content = real_content("week7")
     content.config.auto_open_first_season = True
     content.config.admins = ["管"]
@@ -694,8 +692,8 @@ def _ordered(content, season):
 
 
 @pytest.mark.slow
-def test_the_weekend_mandate_stamp_after_a_monday_midnight_open_lands_after_guangzong(tmp_path):
-    """QA 重現（FB-564）：週一 00:00 開季的週末，管理者「這一季立刻蓋章」，修前天命之爭被挪到第 10 週・週四 06:00，
+def test_the_week7_mandate_stamp_after_a_monday_midnight_open_lands_after_guangzong(tmp_path):
+    """QA 重現（FB-564，當時在週末；現在照 7 天季）：週一 00:00 開季，管理者「這一季立刻蓋章」，修前天命之爭被挪到第 10 週・週四 06:00，
     廣宗決戰被挪到第 12 週・週二 10:00（約晚 9 個現實小時）。現在天命之爭排在廣宗決戰收尾之後。"""
     content, world, admin, start = _game_fb563("week7", tmp_path)
     admin.admin_seal_mandate("now")

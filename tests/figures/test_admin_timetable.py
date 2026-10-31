@@ -39,7 +39,6 @@ def real():
     c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
-    c.config.geju_chaos_per_day = 0.0  # 跳過好幾週時割據不會先衝到 85、提早收季（決定性勝利，T9）
     c.config.admins = ["管"]
     return c
 

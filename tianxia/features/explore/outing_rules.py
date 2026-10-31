@@ -6,7 +6,7 @@
 - 段數越多稀有的越容易來（rare_boost）：奇遇事件、一條線的開頭、二階素材、特殊頓悟的機率乘這一趟的倍數。畫面不寫倍數。
 
 - 走完可以在這一處留一句話（say）：預設句免費，自己寫的要一張題壁墨（商城 inscribe，先只能用元寶買），過字表與模型、
-  後面掛名號；一處留最近 outing_keep 則，管理者可以刪。之後來這裡走一趟的人，路上會看到刻在石頭、樹上的這一句（trace 那一行，
+  後面掛名號；一處留最近 outing_keep 則（題壁墨寫的不擠掉、換季也留著），管理者可以刪。之後來這裡走一趟的人，路上會看到刻在石頭、樹上的這一句（trace 那一行，
   不佔段數，一趟最多 outing_trace_cap 行，自己寫的比預設句容易抽到）；這一處 24 小時內有別人，遠處會有個人朝你揮手。
 - 畫面上方有塊路碑（stele）：最後一則題壁墨寫的，沒有就是最多人留的那一句預設句；點開看這一處全部的留言。
 - 撿到四階素材、勝算凶險以下還打贏（feat）：自動記一則行狀、世界記事一筆；別的不記（Joy 10/30）。
@@ -208,7 +208,9 @@ def inscribe(state: GameState, content: Content, text: str, *, preset: bool) -> 
     item = Inscription(id=w.inscription_seq, place=trip.place, text=text, author=state.player.name, preset=preset, time=w.time)
     w.inscriptions.append(item)
     here = [i for i in w.inscriptions if i.place == trip.place]
-    drop = {i.id for i in here[:-content.config.jianfa.outing_keep]}
+    over = len(here) - content.config.jianfa.outing_keep
+    drop = {i.id for i in here if i.preset}  # 擠掉的只有免費的預設句（最舊的先走）；題壁墨寫的是花錢買的，不會被擠掉（Joy 10/31）
+    drop = set(sorted(drop)[:max(over, 0)])
     w.inscriptions = [i for i in w.inscriptions if i.id not in drop]
     trip.said = text
     return item

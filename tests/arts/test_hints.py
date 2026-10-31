@@ -1269,6 +1269,8 @@ def _rejoiner(content, faction, **kwargs):
 
 def _join(game, faction):
     game.choose(f"faction:{faction}")
+    if faction == "haoqiang":  # 豪強先挑依附哪一軍
+        game.choose("faction:ally:guan")
     game.choose("faction:confirm")
     assert game.state.player.faction == faction
 

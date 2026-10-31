@@ -60,6 +60,7 @@ class FlavorJob(NamedTuple):
 
     fire_id: str
     text: str
+    location: str | None = None  # 那件大事的地點：潤色好的那一句也進天下大事（Joy 2026-10-31 選「也進天下大事」），照原文的地點記
 
 
 def polish_world_event(client: OllamaClient | None, text: str) -> str:
