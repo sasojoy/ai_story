@@ -874,13 +874,16 @@
   }
 
   // ── 地（輿圖表現第二版 2.1，企劃者 2026-10-30「照丙定」：Joy 的身子、戰略圖的衣服）：每一處的地塊（底圖的 world.cells）裁到它所在的區界，
-  // 填主人色（劇本的 world.sides）34%、沒人佔淡灰 10%（底圖透上來）；塊內一圈自己的色、塊與塊之間一條暗線；兩方的地相接那一段亮白
+  // 填主人色（劇本的 world.sides）34%、沒人佔淡灰 10%（底圖透上來）；塊內一圈自己的色（沒人佔而正在翻的是紅，照丙）、塊與塊之間一條暗線；兩方的地相接那一段亮白
   // （world.edges）；正在翻的斜紋兩色（推的那一方＋現在的主人）；下了戰書內側朱紅虛框（w-letter）、剛易手內框改成虛線（w-cool）；
   // 可出陣內側橘虛框（引擎說必敗的淡一半）；你的那一塊內側紅框（在路上不畫）。沒有地塊、或座標落在所屬區外的地點（官軍大營、綠林山寨）
   // 拿半徑 view.patch_radius 的圓當它的地：一樣填色上框、不裁區界、不算戰線。常駐（「塗層」開關拿掉了）、不混色、沒有濾鏡。
   // 線寬寫的是螢幕上看得到的寬（照丙畫出來的：內框 2.5、橘框紅框 3）：裁到塊內的那幾條畫兩倍寬，被裁掉外面那一半
   const LAND_UNHELD = "#B9B2A0", LAND_UNHELD_RIM = "#8F8B82", LAND_SEAM = "#1B1F17", LAND_FRONT = "#FFF6E0";
   const LAND_SORTIE = "#F0A640", LAND_HERE = "#C0392B";
+  // 正在翻的中立地（沒人佔、有人在推）的內框：照丙是紅（企劃者 2026-10-31「照丙用紅框」；草圖 tools/slg5.js 的 txGround：有主人是主人色、
+  // 沒主人而正在翻是紅）。跟有主的內框一樣粗（可見 2.5px）、0.85、實線；「你的那一塊」是可見 3px、不透明——丙就是這樣分的
+  const LAND_TUG_RIM = "#C0392B";
   const LAND_FILL = 0.34, LAND_FILL_UNHELD = 0.1, LAND_FILL_TUG = 0.5, LAND_RIM_OP = 0.85, LAND_RIM_OP_UNHELD = 0.45, LAND_LOSE_OP = 0.5;
   const LAND_RIM_W = 2.5, LAND_RIM_W_UNHELD = 1.25, LAND_FRAME_W = 3, LAND_FRONT_W = 3.2, LAND_SEAM_W = 1; // 螢幕 px
   const LAND_DASH = [8, 5], LAND_COOL_DASH = [5, 4], LAND_STRIPE = 10, LAND_PATCH_R = 60; // 虛線與斜紋（螢幕 px）；圓的半徑（地圖單位，view 沒寫時）
@@ -946,7 +949,8 @@
         defs.push(`<pattern id="ls-${id}" patternUnits="userSpaceOnUse" width="${w(LAND_STRIPE)}" height="${w(LAND_STRIPE)}" patternTransform="rotate(45)">`
           + `<rect width="${w(LAND_STRIPE / 2)}" height="${w(LAND_STRIPE)}" fill="${sideInk(t.side).color}"/><rect x="${w(LAND_STRIPE / 2)}" width="${w(LAND_STRIPE / 2)}" height="${w(LAND_STRIPE)}" fill="${own}"/></pattern>`);
       }
-      const rim = sd ? `stroke="${own}" stroke-width="${w(LAND_RIM_W * 2)}" stroke-opacity="${LAND_RIM_OP}"`
+      const rimInk = sd ? own : t ? LAND_TUG_RIM : null; // 主人色；沒主人而正在翻是紅（照丙）；都不是淡灰細線
+      const rim = rimInk ? `stroke="${rimInk}" stroke-width="${w(LAND_RIM_W * 2)}" stroke-opacity="${LAND_RIM_OP}"`
         : `stroke="${LAND_UNHELD_RIM}" stroke-width="${w(LAND_RIM_W_UNHELD * 2)}" stroke-opacity="${LAND_RIM_OP_UNHELD}"`;
       const land = `<${tag} class="ld-fill" data-cell="${id}" ${geo} fill="${t ? `url(#ls-${id})` : own}" fill-opacity="${t ? LAND_FILL_TUG : sd ? LAND_FILL : LAND_FILL_UNHELD}"/>`
         + `<${tag} class="${cool ? "w-cool" : "ld-rim"}" data-cell="${id}" ${geo} fill="none" ${rim}${cool ? ` stroke-dasharray="${dash(LAND_COOL_DASH)}"` : ""} stroke-linejoin="round" ${inner}/>`

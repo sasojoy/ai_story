@@ -323,6 +323,32 @@ def test_w1_a_block_being_taken_is_striped_in_both_colours():
     assert "<pattern " not in past and "url(#ls-" not in past
 
 
+def _rim(out, pid):
+    """那一處的內框（ld-rim，或冷卻的 w-cool）那一個標記。"""
+    return re.search(rf'<(?:path|circle) class="(?:ld-rim|w-cool)" data-cell="{pid}" [^>]*?/>', out).group(0)
+
+
+def test_w1_a_neutral_block_being_taken_has_a_red_rim_as_in_bing():
+    """正在翻的中立地：內框照丙畫紅框（企劃者 2026-10-31「照丙用紅框」；草圖 tools/slg5.js 的 txGround：有主人是主人色，沒主人而正在翻是紅
+    #C0392B，跟有主的內框一樣粗——stroke 5 裁到塊內、可見 2.5px、0.85、實線、在塊內）。丙跟「你的那一塊」的紅框就差在這裡：你那一塊 stroke 6
+    （可見 3px）、不透明，照舊。沒在翻的中立地照舊淡灰細框；有主的地正在翻，內框照舊是主人色；看以前的週（版圖變化）不畫紅框。"""
+    game = _game(profile="season21")
+    st = game.map_state()
+    sides = _sides(game)
+    st["places"]["runan_wilds"].update(control=None, tug={"guan": 55})
+    st["places"]["yingchuan_wilds"]["tug"] = {"huang": 40}
+    calm = next(x for x, q in sorted(st["places"].items()) if not q["control"] and not q.get("tug") and x != "runan_wilds")
+    out = _ground(game, st=st)
+    red = _rim(out, "runan_wilds")
+    assert 'stroke="#C0392B" stroke-width="5" stroke-opacity="0.85"' in red, red
+    assert "stroke-dasharray" not in red and 'clip-path="url(#lc-runan_wilds)"' in red
+    assert 'stroke="#8F8B82" stroke-width="2.5" stroke-opacity="0.45"' in _rim(out, calm)
+    assert f'stroke="{sides["guan"]}" stroke-width="5" stroke-opacity="0.85"' in _rim(out, "yingchuan_wilds")
+    here = re.search(rf'<path class="ld-here" data-cell="{st["here"]}" [^>]*?/>', out).group(0)
+    assert 'stroke="#C0392B" stroke-width="6"' in here and "stroke-opacity" not in here  # 你那一塊：粗一點、不透明
+    assert 'stroke="#8F8B82"' in _rim(_ground(game, st=st, week=0), "runan_wilds")
+
+
 def test_w1_orange_frames_are_where_you_can_sortie_and_the_hopeless_ones_are_faint():
     """可出陣：那一塊內側橘虛框，框數＝疊層 sortie 不是 null 的數；引擎說必敗的（suggest 的 lose，不在 suggest 裡的照同一個字）畫淡一半。"""
     game = _game(profile="season21")
