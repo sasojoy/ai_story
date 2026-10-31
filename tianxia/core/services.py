@@ -29,9 +29,9 @@
 
 身分
 - `ctx._side()`：站哪一軍；`ctx.is_admin()`；`ctx._admin_target(name)`、`ctx._save_target(game)`：管理者動到別人的存檔
+- `ctx._quick_client()`：鎖內的模型呼叫（一步最多 in_lock_model_timeout 秒）
 # battle（全部拆包第 6 批：管理者的決戰工具）
 - `ctx._admin_refusal(action)`：管理者觸發的共同檢查（不是管理者、賽季沒在進行、暫停中回那一句；做得了回 None）——管理者外殼（手冊 3.1，核心）
-- `ctx._quick_client()`：鎖內的模型呼叫（一步最多 in_lock_model_timeout 秒）
 
 錢包（3.10：跨包的票經過這裡，不叫商城）
 - `ctx.wallet`：WalletService（下面）——`tokens(kind)`、`consume(kind)`、`purchases()`、`card_bonus()`、`item_for(effect)`
