@@ -29,6 +29,8 @@
 
 身分
 - `ctx._side()`：站哪一軍；`ctx.is_admin()`；`ctx._admin_target(name)`、`ctx._save_target(game)`：管理者動到別人的存檔
+# battle（全部拆包第 6 批：管理者的決戰工具）
+- `ctx._admin_refusal(action)`：管理者觸發的共同檢查（不是管理者、賽季沒在進行、暫停中回那一句；做得了回 None）——管理者外殼（手冊 3.1，核心）
 - `ctx._quick_client()`：鎖內的模型呼叫（一步最多 in_lock_model_timeout 秒）
 
 錢包（3.10：跨包的票經過這裡，不叫商城）
@@ -37,6 +39,10 @@
 - `ctx.pill_cap()`、`ctx.pills_left_today()`：回體丹一天的上限（含月卡）與今天還能服幾顆
 
 共用的字與小函式（不是 Game 上的，從這個模組 import）：`PAUSED_TEXT`、`NO_SUCH_PLAYER`、`drill_share`
+# battle（全部拆包第 6 批：PM 定的「siege.py 不搬，這一批用到的名字列進共用段、標主人」）
+- 共用規則層的名字（不是 Game 上的、也不在這個模組；包直接 import 那個模組、行尾照註「過渡：待搬」，總表第 15 批登記進共用規則層的名單
+  之後拿掉註）：`siege.title`（攻城戰的名字「攻城・地點」）、`siege.settle`（收場那一下改季：易手或守住、進度歸 50、時程表記結果）、
+  `siege.verdict`（誰贏、大勝或險勝）——主人：共用規則層（地盤與攻城；總表附錄甲，`tianxia/siege.py` 不搬）
 
 選單與分派（explore：主動搬六包第 3＋4 批加的這一段）
 - `ctx.options(odds=False, tick=False)`：此刻的選單（走一趟問「探索按不按得下去、這一段端出要選的事沒」）；`ctx.choose(id)`：按一顆
@@ -51,6 +57,10 @@
 - `ctx._definition_of(battle)`（那一場的定義：攻城戰是「攻城・地點」）、`ctx._battle_region_name(definition)`（決戰的大區叫什麼）
 - `ctx._watching_battle(battle, definition)`（此刻只能在一旁看）、`ctx._absent_reason(definition)`（還沒到戰場的原因）、
   `ctx._free_agent(definition)`（散人、豪強：只能臨時投效）、`ctx._own_side_name()`（臨時投效的人打完照樣是誰）
+# battle（全部拆包第 6 批）
+- `ctx._definition_of` 的本體搬進了包（`features/battle/sieges.py`），包裡照樣經 ctx 叫（測試直接叫 `Game._definition_of`）；
+  `ctx._sieges()`（還沒收場的攻城戰，照開集結的先後；這一季沒開領地爭奪是空的、不讀資料庫）——本體也在 `sieges.py`，核心原位叫委派，
+  別的包問「此刻有沒有攻城」叫它
 
 explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._outing_on()`（主人 explore：減法季探索一顆開著、不在序章裡；出陣包問——散人那一行、出陣的字；出陣第 1 批原本列在
@@ -76,6 +86,13 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._submit_battle_action(...)`、`ctx._mutate_battle_of(battle, fn)`、`ctx._escort_home(escort)`（決戰「打」那一半：放手一搏送出、改共用狀態裡的
   那一場、隨你出陣的同伴回江湖；第 7、8 批搬進決戰包之後改成包裡直接叫）
 - `ctx._four_wins()`（三陣營四勝利：這一季開著沒；決戰的軍餉記不記豪強的貢獻）
+# battle（全部拆包第 6 批：管理者的決戰工具、攻城）
+- `ctx._shelve_unfinished_battle(text)`、`ctx._advance_battle_round(battle, definition)`、`ctx._apply_battle_outcome(battle)`（測試換掉
+  `Game._apply_battle_outcome`〔test_server〕）、`ctx._highlight_line(battle, definition)`、`ctx._merit_line(battle, definition)`（決戰「打」
+  那一半：取消決戰收兵、推一回合、收場套結果、最有戲與首功那兩則；第 8 批搬進決戰包之後改成包裡直接叫）
+- `ctx._timetable_event(event_id)`、`ctx._timetable_refusal(action)`（時刻表：這一季的那一件、時刻表類管理者動作的共同檢查；主人大勢人物與賽季）
+- `ctx.admin_battles()`、`ctx.admin_start_battle(battle_id, now)`、`ctx.cancelled_showdowns()`、`ctx._deliver_battle_results()`（決戰包自己的
+  委派：測試直接叫〔前三個〕或換掉〔`Game._deliver_battle_results`，test_renown_cross〕，包裡經 ctx 叫才打得到；呼叫端改完就拿掉）
 - `ctx._push_progress(loc_id, nominal, source, how)`（地盤：領地爭奪推、拉進度）
 - `ctx._order_credit(...)`（軍令；出陣約戰結算時也叫在攻方、應戰的人那兩份 Game 上——包裡的變數名 attacker、defender，邊界測試照樣掃）；
   `ctx._drill_gains(squad, share)`（操練）
