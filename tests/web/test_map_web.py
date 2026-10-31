@@ -409,6 +409,39 @@ def test_w1_places_without_a_block_stand_on_a_round_patch():
         assert f'<clipPath id="lc-{p["id"]}"><circle ' in out
 
 
+def test_w1_where_a_round_patch_overlaps_a_block_the_round_patch_wins():
+    """圓照舊半徑 view.patch_radius 60（企劃者 2026-10-31「照舊 60」）。圓跟地塊重疊的那一截，點了開圓的那一處（PM 2026-10-31 定「圓優先」：
+    圓是官軍大營、綠林山寨、南華觀這些沒有地塊的地點，畫得小；landAt 先問圓）。畫的時候圓也排在地塊後面（蓋在上面），看到的跟點到的是
+    同一處。每一個圓 × 每一塊跟它重疊的地拿一點（不在別的圓上的）。"""
+    game = _game(profile="season21")
+    base, st = game.map_base(), game.map_state()
+    patches = _patches(base)
+    regions = {r["id"]: _poly(r["d"]) for r in base["world"]["regions"]}
+    r = base["view"]["patch_radius"]
+    assert r == 60
+    pos = {b["id"]: b for b in base["places"]}
+    spots = []
+    for pid in sorted(patches):
+        p = pos[pid]
+        for c in base["world"]["cells"]:
+            if c["id"] in patches or c["id"] not in st["places"]:
+                continue
+            cell = _poly(c["d"])
+            ring = ((f, a) for f in (0.5, 0.8, 0.95) for a in range(0, 360, 10))
+            hit = next(((x, y) for x, y in ((p["x"] + f * r * math.cos(math.radians(a)), p["y"] + f * r * math.sin(math.radians(a))) for f, a in ring)
+                        if _inside(x, y, cell) and _inside(x, y, regions[c["region"]])
+                        and all(q == pid or (x - pos[q]["x"]) ** 2 + (y - pos[q]["y"]) ** 2 > r * r for q in patches)), None)
+            if hit:
+                spots.append((pid, c["id"], round(hit[0], 2), round(hit[1], 2)))
+    pairs = {(p, c) for p, c, _, _ in spots}
+    assert ("guan_camp", "yingchuan_wilds") in pairs and len(pairs) >= 5  # 官軍大營的圓蓋到潁川郊野；鄉里結社、曹氏莊院這些也都蓋到鄰塊
+    got = run(game, "return [" + ", ".join(f"H.landAt(H.S.mapBase, H.S.mapState, {x}, {y})" for _, _, x, y in spots) + "];", st=st)
+    assert got == [p for p, _, _, _ in spots]
+    out = _ground(game, st=st)
+    for p, c, _, _ in spots:
+        assert out.index(f'<circle class="ld-fill" data-cell="{p}"') > out.index(f'<path class="ld-fill" data-cell="{c}"'), (p, c)
+
+
 @pytest.mark.parametrize("z", [1, 2])
 def test_w1_near_and_middle_names_have_no_seal_line_bar_or_insight(z):
     """近、中景：名字只有名字——沒有官／巾小印（.mv-side）、名字後的「寶」「戰」「本週」字條、名字底下那一行、進度條（.mv-bar）、悟字（.ins）。"""
