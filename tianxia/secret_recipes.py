@@ -86,20 +86,6 @@ def _quality(state: GameState, art_id: str, art: MartialArt) -> str:
     return state.player.art_quality.get(art_id, art.quality)
 
 
-def match_fuse(
-    state: GameState, content: Content, world: WorldStateStore, art_id: str, art: MartialArt, insight: Insight,
-) -> SecretRecipe | None:
-    """一門武學配一個意境合不合這一季的「裝滿」秘方（只看形狀，不看槽滿了沒；量表與 match_slots 用）。"""
-    if not content.secret_recipes:
-        return None
-    quality = _quality(state, art_id, art)
-    return next((
-        r for r in active(content, tianji_of(world))
-        if r.kind == "fuse" and r.art is not None and r.insight is not None
-        and art_fits(r.art, art, quality) and insight_fits(r.insight, insight, content)
-    ), None)
-
-
 def match_slots(
     state: GameState, content: Content, world: WorldStateStore, art_id: str, art: MartialArt, slots: list,
 ) -> SecretRecipe | None:

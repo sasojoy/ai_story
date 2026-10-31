@@ -14443,7 +14443,7 @@ class Game:
         request: seal_duel.TextRequest | None = None,
     ) -> list[str]:
         """奪璽放手一搏的 C 段（5.7）：鎖內重驗，同一場、同一回合、同一邊、同一句才採用，記進 pending（送出不等於結算，湊齊而且滿 20 秒才算）。
-        回合對不上直接回「這一回合已經結算」，不重評、不套用（不照抄 duel_gamble 的鎖內重評：會把第 r 回合寫的那一句套到第 r＋1 回合）。
+        回合對不上直接回「這一回合已經結算」，不重評、不套用（鎖內重評會把第 r 回合寫的那一句套到第 r＋1 回合；頭目戰、擂台同一條）。
         沒給 request（腳本、測試）就在這裡開單；沒給分數就用 _quick_client 在鎖內評，評不到是 40。"""
         if request is None:
             request = self.seal_text_request(text)
@@ -14598,9 +14598,10 @@ class Game:
         self, text: str, llm_rate: int | None = None, stories: tuple[str, str] | None = None,
         request: DuelTextRequest | None = None, crowd: str = "",
     ) -> list[str]:
-        """頭目戰放手一搏的 C 段（擂台也走這裡：crowd 是鎖外判的觀眾反應，arena_crowd.judge_gamble）：llm_rate 是鎖外評好的成功率，request 是當時開的單子——還是同一隻、同一回合才用，
-        對不上（這一回合已經出過招、換了一場）就丟掉重評。沒給分數（假人不寫自由文字；腳本、測試）在這裡用 _quick_client 評，
-        評不到是保底的 40。擲骰、推進、損耗全在 duel.gamble。"""
+        """頭目戰放手一搏的 C 段（擂台也走這裡：crowd 是鎖外判的觀眾反應，arena_crowd.judge_gamble）：llm_rate 是鎖外評好的成功率，request 是當時開的單子——還是同一隻、同一回合、同一句才用；
+        對不上（這一回合已經出過招、換了一場）回「這一回合已經結算」、句子不同回「請再送一次」，不重評、不套用（同 seal_gamble：
+        鎖內重評會把第 r 回合寫的那一句套到第 r＋1 回合，還佔住全服的鎖；M-05）。沒給 request（假人不寫自由文字；腳本、測試）
+        而且沒給分數，在這裡用 _quick_client 評，評不到是保底的 40。擲骰、推進、損耗全在 duel.gamble。"""
         checked = self._duel_text_check(text)
         if isinstance(checked, list):
             return self._log(checked)
@@ -14608,8 +14609,9 @@ class Game:
         if s.player.arena is not None:
             return self._log(self._arena_gamble(checked, llm_rate, stories, request, crowd))
         duel = s.player.duel
-        if request is not None and (request.boss, request.round, request.text) != (duel.boss, duel.round, checked):
-            llm_rate, stories = None, None
+        stale = self._stale_duel_request(request, duel.boss, duel.round, checked)
+        if stale:
+            return self._log(stale)
         if llm_rate is None:
             verdict = battle_instance.assess_gamble(
                 self._quick_client(), duel_rules.scene(c, duel), self._duel_side(), checked, s.player.name,
@@ -14627,6 +14629,17 @@ class Game:
             story = f"你放手一搏：「{checked}」——{'成了！' if won else '沒成，反倒露了破綻。'}"
         line = tactics.round_line(f"第 {duel.round + 1} 回合：{story}（氣勢 {delta:+d}，你氣血 {-hp:+d}）", fired)
         return self._log(self._duel_after(line))
+
+    @staticmethod
+    def _stale_duel_request(request: DuelTextRequest | None, boss: str, round_: int, text: str) -> list[str]:
+        """頭目戰、擂台 C 段的重驗：單子是別一場、別一回合的回 duel.STALE，同一回合換了一句回 duel.RESEND；沒給單子或對得上是 []。"""
+        if request is None:
+            return []
+        if (request.boss, request.round) != (boss, round_):
+            return [f"（{duel_rules.STALE}）"]
+        if request.text != text:
+            return [f"（{duel_rules.RESEND}）"]
+        return []
 
     def _duel_act(self, arg: str) -> list[str]:
         """選單上的一招，或抽身退走。"""
@@ -14757,10 +14770,6 @@ class Game:
         s, c, m = self.state, self.content, self.state.player.member
         arts = (team.player_art(s, c, self.world, m.wugong_id), team.player_art(s, c, self.world, m.neigong_id))
         return [a.name for a in arts if a is not None]
-
-    def arena_board(self) -> list[dict]:
-        """擂台榜（見聞「榜單」分頁的一張；arena.board）：照名次前 board_size 名，帶稱號。擂台關著是空的。"""
-        return arena.board(self.state.world, self.content.config.arena) if arena.on(self.content) else []
 
     def arena_power(self) -> float:
         """此刻上擂台的威力（假人照它決定報名、更新分身；bot_policy._arena）。"""
@@ -14969,11 +14978,12 @@ class Game:
     def _arena_gamble(
         self, text: str, rate: int | None, stories: tuple[str, str] | None, request: DuelTextRequest | None, crowd: str = "",
     ) -> list[str]:
-        """擂台的放手一搏（C 段）：同一場、同一回合、同一句才用鎖外評好的分，對不上就在鎖內重評（同頭目戰）。"""
+        """擂台的放手一搏（C 段）：同一場、同一回合、同一句才用鎖外評好的分，對不上就回原因、不重評、不套用（同頭目戰）。"""
         s, c, p = self.state, self.content, self.state.player
         fight = p.arena
-        if request is not None and (request.boss, request.round, request.text) != (f"arena:{fight.id}", fight.round, text):
-            rate, stories, crowd = None, None, ""
+        stale = self._stale_duel_request(request, f"arena:{fight.id}", fight.round, text)
+        if stale:
+            return stale
         if rate is None:
             verdict = battle_instance.assess_gamble(
                 self._quick_client(), arena.scene(fight), self._duel_side(), text, p.name,

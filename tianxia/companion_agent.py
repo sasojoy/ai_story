@@ -30,6 +30,7 @@ MAX_HISTORY_MESSAGES = 40
 MEMORY_CONSOLIDATION_INTERVAL = 20
 MAX_RETRIES = 3
 # 情誼達到 Config.signature_affinity，才能向對方習得本命武學（設計文件七.1；explain-1 從這裡的常數搬進設定，提示與玩法說明讀同一個數）
+NOTE_MAX = 60  # 記憶整理的關係現況、性情漂移那一句最多幾個字：每一輪對話的系統提示都帶著它（M-09；以前沒上限，實測 400 字照存）
 DRIFT_SYNTHESIS_INTERVAL = 15  # 全服玩家對這位人物又新累積了幾次交友 tag，就該重新語意化一次性情漂移
 
 # 好感度 tag 查表（設計文件七.1／五.1 一貫原則：好感度變化只信任封閉分類查表，
@@ -168,8 +169,8 @@ class PreparedTurn:
 
 
 class MemoryConsolidation(BaseModel):
+    # 以前還要一欄 new_milestones（值得永久記住的事），寫了也只拿來判斷「有沒有寫」、內容丟掉：模型白生成，拿掉（M-09）
     relationship_summary: str = ""
-    new_milestones: list[str] = Field(default_factory=list)
 
 
 class DriftSynthesis(BaseModel):
@@ -530,6 +531,16 @@ def _attempts(client: OllamaClient | None) -> int:
     return 1 if getattr(client, "retry", True) is False else MAX_RETRIES
 
 
+def clip_note(text: str, limit: int = NOTE_MAX) -> str:
+    """餵回對話提示的那一句夾到 limit 個字：太長退回 limit 以內最後一個「。！？」，沒有句號才硬切。"""
+    text = "".join(str(text or "").split())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    end = max(cut.rfind(mark) for mark in "。！？")
+    return cut[:end + 1] if end > 0 else cut
+
+
 def _maybe_consolidate_memory(client: OllamaClient | None, state: GameState, character: CharacterDef, companion_id: str) -> list[str]:
     """每隔 MEMORY_CONSOLIDATION_INTERVAL 輪，獨立呼叫一次濃縮關係現況、補上漏記的細節——
     不是每輪順便問 LLM「這輪值不值得記住」（那個做法實測填寫率極低，見 CLAUDE.md
@@ -545,9 +556,8 @@ def _maybe_consolidate_memory(client: OllamaClient | None, state: GameState, cha
         {"role": "system", "content": (
             f"你是遊戲的記憶整理系統，負責替角色「{character.name}」回顧近期發生的事，不負責寫新劇情。"
             "這是一段累積了好幾輪互動的對話紀錄，這段期間一定發生過值得記錄的事——"
-            "relationship_summary 請用一到兩句話重新濃縮這段期間累積下來的關係現況；"
-            "new_milestones 請列出這段對話裡出現過、值得永久記住的具體事件（不分大小）。"
-            "兩個欄位都不可以留空，務必從對話紀錄裡找出至少一件具體的事寫下來。"
+            f"relationship_summary 請用一到兩句話、{NOTE_MAX}字以內，重新濃縮這段期間累積下來的關係現況；"
+            "不可以留空，務必從對話紀錄裡找出至少一件具體的事寫進去。"
         )},
         {"role": "user", "content": f"近期對話紀錄：\n{history_text}"},
     ]
@@ -557,14 +567,14 @@ def _maybe_consolidate_memory(client: OllamaClient | None, state: GameState, cha
             candidate = client.chat_structured(messages, MemoryConsolidation, temperature=0.6)
         except Exception:
             continue
-        if candidate.relationship_summary.strip() or candidate.new_milestones:
+        if candidate.relationship_summary.strip():
             result = candidate
             break
     if result is None:
         return []
     p.turns_since_consolidation[companion_id] = 0
     # 這句會餵回之後的對話：跟玩家看得到的模型文字一樣先清位元組碼、轉繁體（FB-075）
-    p.relationship_notes[companion_id] = zh.to_traditional(result.relationship_summary.strip()) or p.relationship_notes.get(companion_id, "")
+    p.relationship_notes[companion_id] = clip_note(zh.to_traditional(result.relationship_summary.strip())) or p.relationship_notes.get(companion_id, "")
     return [f"📖 【記憶梳理】{character.name} 這段時光的點滴，已在心底沉澱。"]
 
 
@@ -589,7 +599,7 @@ def _maybe_synthesize_drift(client: OllamaClient | None, character: CharacterDef
             f"【{character.name}的性格基礎模板（不可違背，只能在這個基礎上微調）】{character.personality}"
             f"{baseline_str}\n"
             f"【眾玩家累積至今、對他的言行傾向統計】{distribution}\n"
-            "請用一句話描述他現在的性情，應該要反映統計裡占比最高的傾向，但措辭要貼合他的基礎性格，"
+            f"請用一句話、{NOTE_MAX}字以內描述他現在的性情，應該要反映統計裡占比最高的傾向，但措辭要貼合他的基礎性格，"
             "不能整個變成另一個人；如果統計分佈很平均、看不出明顯傾向，就寫他維持基礎性格、"
             "只是更加篤定或更加圓融這類細微描述，不要憑空編造劇情事件。"
         )},
@@ -600,7 +610,7 @@ def _maybe_synthesize_drift(client: OllamaClient | None, character: CharacterDef
             result = client.chat_structured(messages, DriftSynthesis, temperature=0.6, required_fields=["drift_note"])
         except Exception:
             continue
-        note = zh.to_traditional(result.drift_note.strip())  # 全服共用、餵回模型：同樣先清乾淨（FB-075）
+        note = clip_note(zh.to_traditional(result.drift_note.strip()))  # 全服共用、餵回模型：同樣先清乾淨（FB-075）、夾長度（M-09）
         if note:
             world.record_drift_synthesis(companion_id, note)
             return
