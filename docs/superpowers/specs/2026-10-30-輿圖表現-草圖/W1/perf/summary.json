@@ -1,0 +1,1286 @@
+{
+ "3|6|R": {
+  "n": 6,
+  "launches": 2,
+  "pan": {
+   "p50": 7.5,
+   "p95": 11.6,
+   "max": 22,
+   "avg": 8.1,
+   "over33": 0.0,
+   "over50": 0.0,
+   "release": 68.2,
+   "settle": 68.2,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 14.2,
+    "RecalcStyle": 165.4,
+    "Script": 162.6,
+    "Task": 1174.8
+   }
+  },
+  "pinch": {
+   "p50": 7.4,
+   "p95": 22.8,
+   "max": 71,
+   "avg": 9.7,
+   "over33": 4.2,
+   "over50": 1.2,
+   "release": 58.5,
+   "settle": 58.5,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 61.1,
+    "RecalcStyle": 231.2,
+    "Script": 311.9,
+    "Task": 1492.7
+   }
+  },
+  "zoom": {
+   "p50": 7.6,
+   "p95": 30.3,
+   "max": 83.6,
+   "avg": 10.3,
+   "over33": 2.3,
+   "over50": 1.0,
+   "release": 57.8,
+   "settle": 70.8,
+   "groundDone": 66.3,
+   "writesDuring": 0,
+   "groundWrites": 6,
+   "cdp": {
+    "Layout": 35.2,
+    "RecalcStyle": 248.6,
+    "Script": 203.4,
+    "Task": 1323.4
+   }
+  },
+  "fly": {
+   "p50": 7.8,
+   "p95": 39.0,
+   "max": 206.3,
+   "avg": 13.2,
+   "over33": 3.5,
+   "over50": 2.8,
+   "settleAfterFly": 131.4,
+   "flyMs": 826.8,
+   "writesDuring": 0,
+   "groundWrites": 6,
+   "cdp": {
+    "Layout": 102.2,
+    "RecalcStyle": 285.1,
+    "Script": 226.8,
+    "Task": 1401.8
+   }
+  },
+  "open": 1761.0,
+  "openFromFrame": 1592.7,
+  "throttleRatio": [
+   7.53,
+   6.69
+  ],
+  "memOpen": {
+   "heapMB": 2.2,
+   "domNodes": 1408.0,
+   "all": 716.0,
+   "px": 15996640,
+   "cw": 3278,
+   "ch": 4880,
+   "procMB": 667.4,
+   "rendererMB": 182.9,
+   "gpuMB": 379.4
+  },
+  "memAfter": {
+   "heapMB": 2.5,
+   "domNodes": 1408.0,
+   "all": 716.0,
+   "px": 15996640,
+   "cw": 3278,
+   "ch": 4880,
+   "procMB": 591.6,
+   "rendererMB": 177.7,
+   "gpuMB": 312.5
+  }
+ },
+ "3|6|S1": {
+  "n": 6,
+  "launches": 2,
+  "pan": {
+   "p50": 7.5,
+   "p95": 9.2,
+   "max": 16.3,
+   "avg": 7.9,
+   "over33": 0.0,
+   "over50": 0.0,
+   "release": 68.9,
+   "settle": 68.9,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 7.8,
+    "RecalcStyle": 148.8,
+    "Script": 141.4,
+    "Task": 1120.7
+   }
+  },
+  "pinch": {
+   "p50": 7.5,
+   "p95": 23.4,
+   "max": 106.9,
+   "avg": 10.2,
+   "over33": 6.2,
+   "over50": 2.5,
+   "release": 52.7,
+   "settle": 52.7,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 109.7,
+    "RecalcStyle": 213.7,
+    "Script": 318.1,
+    "Task": 1630.4
+   }
+  },
+  "zoom": {
+   "p50": 7.7,
+   "p95": 30.5,
+   "max": 79.1,
+   "avg": 10.8,
+   "over33": 2.7,
+   "over50": 0.7,
+   "release": 44.1,
+   "settle": 44.1,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 38.5,
+    "RecalcStyle": 215.3,
+    "Script": 195.8,
+    "Task": 1284.5
+   }
+  },
+  "fly": {
+   "p50": 7.5,
+   "p95": 23.4,
+   "max": 94.2,
+   "avg": 11.4,
+   "over33": 3.0,
+   "over50": 2.7,
+   "settleAfterFly": 71.1,
+   "flyMs": 820.8,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 78.6,
+    "RecalcStyle": 259.6,
+    "Script": 190.9,
+    "Task": 1270.1
+   }
+  },
+  "open": null,
+  "openFromFrame": null,
+  "throttleRatio": [
+   6.47,
+   7.11
+  ],
+  "memOpen": {
+   "heapMB": 1.9,
+   "domNodes": 1123.0,
+   "all": 746.0,
+   "px": 45000,
+   "cw": 300,
+   "ch": 150,
+   "procMB": 495.4,
+   "rendererMB": 171.9,
+   "gpuMB": 218.1
+  },
+  "memAfter": {
+   "heapMB": 2.2,
+   "domNodes": 1123.0,
+   "all": 746.0,
+   "px": 4824000,
+   "cw": 1800,
+   "ch": 2680,
+   "procMB": 527.5,
+   "rendererMB": 171.3,
+   "gpuMB": 255.1
+  }
+ },
+ "3|6|V": {
+  "n": 6,
+  "launches": 2,
+  "pan": {
+   "p50": 7.5,
+   "p95": 8.5,
+   "max": 38.3,
+   "avg": 7.8,
+   "over33": 0.2,
+   "over50": 0.0,
+   "release": 68.6,
+   "settle": 68.6,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 14.1,
+    "RecalcStyle": 148.2,
+    "Script": 148.4,
+    "Task": 1126.0
+   }
+  },
+  "pinch": {
+   "p50": 7.6,
+   "p95": 23.0,
+   "max": 102,
+   "avg": 9.9,
+   "over33": 5.7,
+   "over50": 2.2,
+   "release": 67.0,
+   "settle": 67.0,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 69.8,
+    "RecalcStyle": 238.7,
+    "Script": 306.9,
+    "Task": 1638.3
+   }
+  },
+  "zoom": {
+   "p50": 8.0,
+   "p95": 31.6,
+   "max": 112,
+   "avg": 11.1,
+   "over33": 2.8,
+   "over50": 1.7,
+   "release": 55.8,
+   "settle": 67.3,
+   "groundDone": 21.1,
+   "writesDuring": 0,
+   "groundWrites": 7,
+   "cdp": {
+    "Layout": 40.9,
+    "RecalcStyle": 262.4,
+    "Script": 219.1,
+    "Task": 1397.3
+   }
+  },
+  "fly": {
+   "p50": 7.5,
+   "p95": 24.3,
+   "max": 99.3,
+   "avg": 11.7,
+   "over33": 3.0,
+   "over50": 2.5,
+   "settleAfterFly": 99.2,
+   "flyMs": 809.3,
+   "writesDuring": 0,
+   "groundWrites": 6,
+   "cdp": {
+    "Layout": 61.9,
+    "RecalcStyle": 307.9,
+    "Script": 222.9,
+    "Task": 1445.4
+   }
+  },
+  "open": 1693.2,
+  "openFromFrame": 1513.9,
+  "throttleRatio": [
+   6.68,
+   8.94
+  ],
+  "memOpen": {
+   "heapMB": 1.9,
+   "domNodes": 1358.0,
+   "all": 1007.0,
+   "px": 0,
+   "cw": null,
+   "ch": null,
+   "procMB": 541.0,
+   "rendererMB": 173.8,
+   "gpuMB": 262.6
+  },
+  "memAfter": {
+   "heapMB": 2.2,
+   "domNodes": 1358.0,
+   "all": 1007.0,
+   "px": 0,
+   "cw": null,
+   "ch": null,
+   "procMB": 515.9,
+   "rendererMB": 168.9,
+   "gpuMB": 245.7
+  }
+ },
+ "3|4|R": {
+  "n": 6,
+  "launches": 2,
+  "pan": {
+   "p50": 7.3,
+   "p95": 8.3,
+   "max": 37.3,
+   "avg": 7.6,
+   "over33": 0.2,
+   "over50": 0.0,
+   "release": 36.4,
+   "settle": 36.4,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 3.8,
+    "RecalcStyle": 96.1,
+    "Script": 94.2,
+    "Task": 662.9
+   }
+  },
+  "pinch": {
+   "p50": 7.3,
+   "p95": 15.4,
+   "max": 38.1,
+   "avg": 8.4,
+   "over33": 0.3,
+   "over50": 0.0,
+   "release": 36.5,
+   "settle": 36.5,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 33.4,
+    "RecalcStyle": 135.9,
+    "Script": 172.4,
+    "Task": 845.2
+   }
+  },
+  "zoom": {
+   "p50": 7.5,
+   "p95": 15.9,
+   "max": 46.9,
+   "avg": 8.7,
+   "over33": 0.2,
+   "over50": 0.0,
+   "release": 35.4,
+   "settle": 43.8,
+   "groundDone": 40.6,
+   "writesDuring": 0,
+   "groundWrites": 6,
+   "cdp": {
+    "Layout": 16.4,
+    "RecalcStyle": 154.6,
+    "Script": 121.4,
+    "Task": 765.8
+   }
+  },
+  "fly": {
+   "p50": 7.5,
+   "p95": 29.0,
+   "max": 61.6,
+   "avg": 10.1,
+   "over33": 3.0,
+   "over50": 0.3,
+   "settleAfterFly": 60.6,
+   "flyMs": 805.9,
+   "writesDuring": 0,
+   "groundWrites": 6,
+   "cdp": {
+    "Layout": 47.9,
+    "RecalcStyle": 174.9,
+    "Script": 146.4,
+    "Task": 887.8
+   }
+  },
+  "open": 1363.5,
+  "openFromFrame": 1214.0,
+  "throttleRatio": [
+   4.18,
+   4.25
+  ],
+  "memOpen": {
+   "heapMB": 2.1,
+   "domNodes": 1237.5,
+   "all": 716.0,
+   "px": 15996640,
+   "cw": 3278,
+   "ch": 4880,
+   "procMB": 644.1,
+   "rendererMB": 184.1,
+   "gpuMB": 360.9
+  },
+  "memAfter": {
+   "heapMB": 2.4,
+   "domNodes": 1237.5,
+   "all": 716.0,
+   "px": 15996640,
+   "cw": 3278,
+   "ch": 4880,
+   "procMB": 572.5,
+   "rendererMB": 188.0,
+   "gpuMB": 288.4
+  }
+ },
+ "3|4|S1": {
+  "n": 6,
+  "launches": 2,
+  "pan": {
+   "p50": 7.3,
+   "p95": 8.2,
+   "max": 14.3,
+   "avg": 7.6,
+   "over33": 0.0,
+   "over50": 0.0,
+   "release": 36.2,
+   "settle": 36.2,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 4.5,
+    "RecalcStyle": 92.7,
+    "Script": 86.8,
+    "Task": 635.0
+   }
+  },
+  "pinch": {
+   "p50": 7.3,
+   "p95": 15.8,
+   "max": 47.8,
+   "avg": 8.8,
+   "over33": 1.0,
+   "over50": 0.0,
+   "release": 33.5,
+   "settle": 33.5,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 43.8,
+    "RecalcStyle": 132.9,
+    "Script": 197.3,
+    "Task": 977.8
+   }
+  },
+  "zoom": {
+   "p50": 7.7,
+   "p95": 17.4,
+   "max": 36.9,
+   "avg": 9.1,
+   "over33": 0.3,
+   "over50": 0.0,
+   "release": 29.4,
+   "settle": 29.4,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 21.2,
+    "RecalcStyle": 147.8,
+    "Script": 128.8,
+    "Task": 824.0
+   }
+  },
+  "fly": {
+   "p50": 7.5,
+   "p95": 19.1,
+   "max": 87.2,
+   "avg": 9.6,
+   "over33": 2.0,
+   "over50": 1.0,
+   "settleAfterFly": 31.1,
+   "flyMs": 807.5,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 36.9,
+    "RecalcStyle": 194.8,
+    "Script": 137.0,
+    "Task": 934.0
+   }
+  },
+  "open": null,
+  "openFromFrame": null,
+  "throttleRatio": [
+   4.41,
+   4.42
+  ],
+  "memOpen": {
+   "heapMB": 1.9,
+   "domNodes": 1123.0,
+   "all": 746.0,
+   "px": 45000,
+   "cw": 300,
+   "ch": 150,
+   "procMB": 486.9,
+   "rendererMB": 166.1,
+   "gpuMB": 216.6
+  },
+  "memAfter": {
+   "heapMB": 2.2,
+   "domNodes": 1123.0,
+   "all": 746.0,
+   "px": 4824000,
+   "cw": 1800,
+   "ch": 2680,
+   "procMB": 518.3,
+   "rendererMB": 164.1,
+   "gpuMB": 251.1
+  }
+ },
+ "3|4|V": {
+  "n": 6,
+  "launches": 2,
+  "pan": {
+   "p50": 7.3,
+   "p95": 8.4,
+   "max": 16,
+   "avg": 7.6,
+   "over33": 0.0,
+   "over50": 0.0,
+   "release": 37.9,
+   "settle": 37.9,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 4.3,
+    "RecalcStyle": 92.3,
+    "Script": 88.0,
+    "Task": 711.3
+   }
+  },
+  "pinch": {
+   "p50": 7.4,
+   "p95": 15.6,
+   "max": 40.2,
+   "avg": 8.6,
+   "over33": 0.3,
+   "over50": 0.0,
+   "release": 36.2,
+   "settle": 36.2,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 37.7,
+    "RecalcStyle": 144.6,
+    "Script": 190.6,
+    "Task": 936.9
+   }
+  },
+  "zoom": {
+   "p50": 7.3,
+   "p95": 15.8,
+   "max": 36.1,
+   "avg": 8.9,
+   "over33": 0.2,
+   "over50": 0.0,
+   "release": 33.7,
+   "settle": 33.7,
+   "groundDone": 11.6,
+   "writesDuring": 0,
+   "groundWrites": 6,
+   "cdp": {
+    "Layout": 17.1,
+    "RecalcStyle": 158.2,
+    "Script": 121.5,
+    "Task": 821.5
+   }
+  },
+  "fly": {
+   "p50": 7.5,
+   "p95": 20.2,
+   "max": 62.9,
+   "avg": 10.0,
+   "over33": 3.0,
+   "over50": 1.2,
+   "settleAfterFly": 54.3,
+   "flyMs": 807.2,
+   "writesDuring": 0,
+   "groundWrites": 6,
+   "cdp": {
+    "Layout": 43.5,
+    "RecalcStyle": 186.2,
+    "Script": 153.7,
+    "Task": 954.8
+   }
+  },
+  "open": 911.5,
+  "openFromFrame": 750.5,
+  "throttleRatio": [
+   4.51,
+   4.5
+  ],
+  "memOpen": {
+   "heapMB": 1.9,
+   "domNodes": 1358.0,
+   "all": 1007.0,
+   "px": 0,
+   "cw": null,
+   "ch": null,
+   "procMB": 555.3,
+   "rendererMB": 180.1,
+   "gpuMB": 270.4
+  },
+  "memAfter": {
+   "heapMB": 2.2,
+   "domNodes": 1358.0,
+   "all": 1007.0,
+   "px": 0,
+   "cw": null,
+   "ch": null,
+   "procMB": 518.9,
+   "rendererMB": 177.9,
+   "gpuMB": 238.7
+  }
+ },
+ "2|6|R": {
+  "n": 6,
+  "launches": 2,
+  "pan": {
+   "p50": 7.3,
+   "p95": 8.9,
+   "max": 31.5,
+   "avg": 7.7,
+   "over33": 0.0,
+   "over50": 0.0,
+   "release": 55.3,
+   "settle": 55.3,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 17.0,
+    "RecalcStyle": 135.4,
+    "Script": 150.1,
+    "Task": 923.5
+   }
+  },
+  "pinch": {
+   "p50": 7.5,
+   "p95": 22.0,
+   "max": 104.4,
+   "avg": 9.7,
+   "over33": 5.5,
+   "over50": 2.7,
+   "release": 73.9,
+   "settle": 73.9,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 67.2,
+    "RecalcStyle": 215.1,
+    "Script": 306.4,
+    "Task": 1402.0
+   }
+  },
+  "zoom": {
+   "p50": 7.7,
+   "p95": 30.5,
+   "max": 109.1,
+   "avg": 10.3,
+   "over33": 2.5,
+   "over50": 1.3,
+   "release": 63.0,
+   "settle": 74.5,
+   "groundDone": 74.2,
+   "writesDuring": 0,
+   "groundWrites": 7,
+   "cdp": {
+    "Layout": 30.6,
+    "RecalcStyle": 198.1,
+    "Script": 201.4,
+    "Task": 1132.4
+   }
+  },
+  "fly": {
+   "p50": 7.7,
+   "p95": 35.5,
+   "max": 115.6,
+   "avg": 11.8,
+   "over33": 3.5,
+   "over50": 3.0,
+   "settleAfterFly": 130.8,
+   "flyMs": 819.5,
+   "writesDuring": 0,
+   "groundWrites": 6,
+   "cdp": {
+    "Layout": 74.9,
+    "RecalcStyle": 254.1,
+    "Script": 228.2,
+    "Task": 1282.0
+   }
+  },
+  "open": 1764.8,
+  "openFromFrame": 1599.9,
+  "throttleRatio": [
+   8.16,
+   6.48
+  ],
+  "memOpen": {
+   "heapMB": 2.2,
+   "domNodes": 1408.0,
+   "all": 716.0,
+   "px": 7653392,
+   "cw": 2267,
+   "ch": 3376,
+   "procMB": 628.9,
+   "rendererMB": 186.4,
+   "gpuMB": 337.1
+  },
+  "memAfter": {
+   "heapMB": 2.5,
+   "domNodes": 1408.0,
+   "all": 716.0,
+   "px": 7653392,
+   "cw": 2267,
+   "ch": 3376,
+   "procMB": 564.2,
+   "rendererMB": 180.2,
+   "gpuMB": 282.6
+  }
+ },
+ "2|6|S1": {
+  "n": 6,
+  "launches": 2,
+  "pan": {
+   "p50": 7.3,
+   "p95": 8.3,
+   "max": 20.2,
+   "avg": 7.5,
+   "over33": 0.0,
+   "over50": 0.0,
+   "release": 62.2,
+   "settle": 62.2,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 7.4,
+    "RecalcStyle": 133.9,
+    "Script": 135.8,
+    "Task": 910.4
+   }
+  },
+  "pinch": {
+   "p50": 7.5,
+   "p95": 23.2,
+   "max": 82.8,
+   "avg": 10.0,
+   "over33": 6.3,
+   "over50": 2.0,
+   "release": 55.4,
+   "settle": 55.4,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 91.8,
+    "RecalcStyle": 202.0,
+    "Script": 312.6,
+    "Task": 1594.2
+   }
+  },
+  "zoom": {
+   "p50": 7.5,
+   "p95": 31.0,
+   "max": 133.5,
+   "avg": 10.6,
+   "over33": 3.0,
+   "over50": 0.8,
+   "release": 42.0,
+   "settle": 42.0,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 35.5,
+    "RecalcStyle": 196.6,
+    "Script": 180.3,
+    "Task": 1160.8
+   }
+  },
+  "fly": {
+   "p50": 7.7,
+   "p95": 27.4,
+   "max": 150.5,
+   "avg": 11.4,
+   "over33": 3.3,
+   "over50": 2.5,
+   "settleAfterFly": 55.2,
+   "flyMs": 812.2,
+   "writesDuring": 0,
+   "groundWrites": 1,
+   "cdp": {
+    "Layout": 82.2,
+    "RecalcStyle": 259.0,
+    "Script": 202.8,
+    "Task": 1277.2
+   }
+  },
+  "open": null,
+  "openFromFrame": null,
+  "throttleRatio": [
+   7.04,
+   7.54
+  ],
+  "memOpen": {
+   "heapMB": 1.9,
+   "domNodes": 1123.0,
+   "all": 746.0,
+   "px": 45000,
+   "cw": 300,
+   "ch": 150,
+   "procMB": 488.0,
+   "rendererMB": 168.4,
+   "gpuMB": 214.7
+  },
+  "memAfter": {
+   "heapMB": 2.2,
+   "domNodes": 1123.0,
+   "all": 746.0,
+   "px": 4824000,
+   "cw": 1800,
+   "ch": 2680,
+   "procMB": 550.5,
+   "rendererMB": 168.6,
+   "gpuMB": 280.9
+  }
+ },
+ "2|6|V": {
+  "n": 6,
+  "launches": 2,
+  "pan": {
+   "p50": 7.5,
+   "p95": 8.2,
+   "max": 51.1,
+   "avg": 7.7,
+   "over33": 0.3,
+   "over50": 0.2,
+   "release": 58.7,
+   "settle": 58.7,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 10.4,
+    "RecalcStyle": 148.2,
+    "Script": 132.8,
+    "Task": 1009.7
+   }
+  },
+  "pinch": {
+   "p50": 7.7,
+   "p95": 22.3,
+   "max": 68.3,
+   "avg": 9.6,
+   "over33": 4.0,
+   "over50": 0.8,
+   "release": 59.5,
+   "settle": 59.5,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 56.2,
+    "RecalcStyle": 214.6,
+    "Script": 303.1,
+    "Task": 1497.3
+   }
+  },
+  "zoom": {
+   "p50": 7.9,
+   "p95": 27.2,
+   "max": 59.8,
+   "avg": 10.6,
+   "over33": 2.2,
+   "over50": 0.2,
+   "release": 74.6,
+   "settle": 74.6,
+   "groundDone": 20.5,
+   "writesDuring": 0,
+   "groundWrites": 6,
+   "cdp": {
+    "Layout": 31.3,
+    "RecalcStyle": 241.4,
+    "Script": 198.0,
+    "Task": 1274.8
+   }
+  },
+  "fly": {
+   "p50": 8.0,
+   "p95": 30.7,
+   "max": 340.6,
+   "avg": 12.3,
+   "over33": 3.2,
+   "over50": 2.7,
+   "settleAfterFly": 77.7,
+   "flyMs": 819.8,
+   "writesDuring": 0,
+   "groundWrites": 6,
+   "cdp": {
+    "Layout": 86.3,
+    "RecalcStyle": 288.9,
+    "Script": 222.8,
+    "Task": 1392.8
+   }
+  },
+  "open": 1289.5,
+  "openFromFrame": 1126.6,
+  "throttleRatio": [
+   7.66,
+   7.48
+  ],
+  "memOpen": {
+   "heapMB": 1.9,
+   "domNodes": 1358.0,
+   "all": 1007.0,
+   "px": 0,
+   "cw": null,
+   "ch": null,
+   "procMB": 558.8,
+   "rendererMB": 176.9,
+   "gpuMB": 275.9
+  },
+  "memAfter": {
+   "heapMB": 2.2,
+   "domNodes": 1358.0,
+   "all": 1007.0,
+   "px": 0,
+   "cw": null,
+   "ch": null,
+   "procMB": 512.6,
+   "rendererMB": 171.3,
+   "gpuMB": 239.5
+  }
+ },
+ "2|4|R": {
+  "n": 6,
+  "launches": 2,
+  "pan": {
+   "p50": 7.5,
+   "p95": 8.3,
+   "max": 61,
+   "avg": 7.7,
+   "over33": 0.2,
+   "over50": 0.2,
+   "release": 33.2,
+   "settle": 33.2,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 5.7,
+    "RecalcStyle": 95.4,
+    "Script": 95.6,
+    "Task": 660.2
+   }
+  },
+  "pinch": {
+   "p50": 7.4,
+   "p95": 15.8,
+   "max": 56,
+   "avg": 8.6,
+   "over33": 1.3,
+   "over50": 0.2,
+   "release": 37.0,
+   "settle": 37.0,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 39.0,
+    "RecalcStyle": 146.2,
+    "Script": 193.7,
+    "Task": 908.1
+   }
+  },
+  "zoom": {
+   "p50": 7.6,
+   "p95": 16.2,
+   "max": 54.5,
+   "avg": 9.0,
+   "over33": 0.8,
+   "over50": 0.2,
+   "release": 44.8,
+   "settle": 56.5,
+   "groundDone": 53.2,
+   "writesDuring": 0,
+   "groundWrites": 6,
+   "cdp": {
+    "Layout": 20.9,
+    "RecalcStyle": 190.2,
+    "Script": 146.5,
+    "Task": 947.2
+   }
+  },
+  "fly": {
+   "p50": 7.7,
+   "p95": 24.1,
+   "max": 93.9,
+   "avg": 10.1,
+   "over33": 2.3,
+   "over50": 1.5,
+   "settleAfterFly": 73.2,
+   "flyMs": 806.0,
+   "writesDuring": 0,
+   "groundWrites": 6,
+   "cdp": {
+    "Layout": 39.5,
+    "RecalcStyle": 225.4,
+    "Script": 155.1,
+    "Task": 1021.7
+   }
+  },
+  "open": 1387.3,
+  "openFromFrame": 1246.7,
+  "throttleRatio": [
+   4.35,
+   4.28
+  ],
+  "memOpen": {
+   "heapMB": 2.2,
+   "domNodes": 1408.0,
+   "all": 716.0,
+   "px": 7653392,
+   "cw": 2267,
+   "ch": 3376,
+   "procMB": 629.6,
+   "rendererMB": 184.6,
+   "gpuMB": 339.5
+  },
+  "memAfter": {
+   "heapMB": 2.5,
+   "domNodes": 1417.5,
+   "all": 721.0,
+   "px": 7653392,
+   "cw": 2267,
+   "ch": 3376,
+   "procMB": 582.8,
+   "rendererMB": 188.4,
+   "gpuMB": 292.2
+  }
+ },
+ "2|4|S1": {
+  "n": 6,
+  "launches": 2,
+  "pan": {
+   "p50": 7.5,
+   "p95": 8.2,
+   "max": 11.3,
+   "avg": 7.6,
+   "over33": 0.0,
+   "over50": 0.0,
+   "release": 41.0,
+   "settle": 41.0,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 5.2,
+    "RecalcStyle": 114.8,
+    "Script": 105.2,
+    "Task": 707.2
+   }
+  },
+  "pinch": {
+   "p50": 7.5,
+   "p95": 16.3,
+   "max": 74.9,
+   "avg": 9.2,
+   "over33": 3.2,
+   "over50": 1.3,
+   "release": 41.1,
+   "settle": 41.1,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 57.9,
+    "RecalcStyle": 170.2,
+    "Script": 233.9,
+    "Task": 1162.9
+   }
+  },
+  "zoom": {
+   "p50": 7.8,
+   "p95": 21.9,
+   "max": 51.6,
+   "avg": 9.9,
+   "over33": 1.5,
+   "over50": 0.2,
+   "release": 29.4,
+   "settle": 29.4,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 30.1,
+    "RecalcStyle": 180.2,
+    "Script": 159.3,
+    "Task": 1000.6
+   }
+  },
+  "fly": {
+   "p50": 7.6,
+   "p95": 29.6,
+   "max": 98.5,
+   "avg": 10.4,
+   "over33": 2.8,
+   "over50": 1.5,
+   "settleAfterFly": 35.5,
+   "flyMs": 807.0,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 67.7,
+    "RecalcStyle": 267.1,
+    "Script": 161.8,
+    "Task": 1193.8
+   }
+  },
+  "open": null,
+  "openFromFrame": null,
+  "throttleRatio": [
+   4.72,
+   5.27
+  ],
+  "memOpen": {
+   "heapMB": 1.9,
+   "domNodes": 1135.5,
+   "all": 752.5,
+   "px": 45000,
+   "cw": 300,
+   "ch": 150,
+   "procMB": 494.8,
+   "rendererMB": 173.1,
+   "gpuMB": 217.1
+  },
+  "memAfter": {
+   "heapMB": 2.2,
+   "domNodes": 1135.5,
+   "all": 752.5,
+   "px": 4824000,
+   "cw": 1800,
+   "ch": 2680,
+   "procMB": 540.5,
+   "rendererMB": 173.6,
+   "gpuMB": 265.9
+  }
+ },
+ "2|4|V": {
+  "n": 6,
+  "launches": 2,
+  "pan": {
+   "p50": 7.3,
+   "p95": 8.2,
+   "max": 15.4,
+   "avg": 7.5,
+   "over33": 0.0,
+   "over50": 0.0,
+   "release": 43.7,
+   "settle": 43.7,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 5.0,
+    "RecalcStyle": 109.6,
+    "Script": 105.3,
+    "Task": 742.2
+   }
+  },
+  "pinch": {
+   "p50": 7.5,
+   "p95": 16.1,
+   "max": 56.4,
+   "avg": 8.8,
+   "over33": 1.3,
+   "over50": 0.3,
+   "release": 42.1,
+   "settle": 42.1,
+   "groundDone": null,
+   "writesDuring": 0,
+   "groundWrites": 0,
+   "cdp": {
+    "Layout": 45.5,
+    "RecalcStyle": 162.4,
+    "Script": 223.7,
+    "Task": 1085.5
+   }
+  },
+  "zoom": {
+   "p50": 7.6,
+   "p95": 22.6,
+   "max": 38.6,
+   "avg": 9.2,
+   "over33": 0.5,
+   "over50": 0.0,
+   "release": 36.8,
+   "settle": 36.8,
+   "groundDone": 13.9,
+   "writesDuring": 0,
+   "groundWrites": 6,
+   "cdp": {
+    "Layout": 23.9,
+    "RecalcStyle": 194.7,
+    "Script": 145.0,
+    "Task": 948.0
+   }
+  },
+  "fly": {
+   "p50": 7.7,
+   "p95": 23.1,
+   "max": 81.2,
+   "avg": 10.3,
+   "over33": 3.2,
+   "over50": 1.7,
+   "settleAfterFly": 69.8,
+   "flyMs": 805.7,
+   "writesDuring": 0,
+   "groundWrites": 6,
+   "cdp": {
+    "Layout": 60.8,
+    "RecalcStyle": 217.3,
+    "Script": 169.7,
+    "Task": 1076.5
+   }
+  },
+  "open": 891.7,
+  "openFromFrame": 725.5,
+  "throttleRatio": [
+   4.87,
+   4.68
+  ],
+  "memOpen": {
+   "heapMB": 1.9,
+   "domNodes": 1370.0,
+   "all": 1014.0,
+   "px": 0,
+   "cw": null,
+   "ch": null,
+   "procMB": 558.8,
+   "rendererMB": 181.8,
+   "gpuMB": 272.3
+  },
+  "memAfter": {
+   "heapMB": 2.2,
+   "domNodes": 1370.0,
+   "all": 1014.0,
+   "px": 0,
+   "cw": null,
+   "ch": null,
+   "procMB": 539.2,
+   "rendererMB": 178.5,
+   "gpuMB": 259.3
+  }
+ }
+}
