@@ -2446,11 +2446,12 @@ def create_character(account_key: str, name: str, sex: str | None = None) -> Gam
     return game_for(name)
 
 
-def change_password(account_key: str, old: str, new: str, again: str) -> str:
+def change_password(account_key: str, old: str, new: str, again: str, keep: str | None = None) -> str:
+    """keep 是改密碼的這個裝置的 cookie：它留著，同一個帳號別的裝置都登出（PM 2026-10-31）。"""
     if (new or "") != (again or ""):
         return PASSWORDS_DIFFER
     try:
-        account_store().change_password(account_key, old, new)  # 同上：自己是一筆交易，慢的雜湊不在交易裡算
+        account_store().change_password(account_key, old, new, keep)  # 同上：自己是一筆交易，慢的雜湊不在交易裡算
     except AccountError as exc:
         return str(exc)
     return "密碼已更新。"
@@ -3536,7 +3537,9 @@ def api_travel(request: Request, body: dict = Body(...)):
 @app.post("/api/password")
 def api_password(request: Request, body: dict = Body(...)):
     key = _account(request)
-    return {"message": change_password(key, body.get("old", ""), body.get("new", ""), body.get("again", ""))}
+    return {"message": change_password(
+        key, body.get("old", ""), body.get("new", ""), body.get("again", ""), request.cookies.get(COOKIE),
+    )}
 
 
 @app.get("/api/queue")

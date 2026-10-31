@@ -338,3 +338,22 @@ def test_logging_out_forgets_only_that_session(tmp_path, clock):
     assert sessions.pop(phone) == "a_user"
     assert sessions.get(phone) is None and sessions.get(laptop) == "a_user"
     assert sessions.pop(phone) is None and sessions.get("") is None and sessions.get("nonsense") is None
+
+
+def test_changing_a_password_logs_out_the_other_devices_but_not_this_one(store, clock):
+    # PM 2026-10-31：改密碼、管理者重設密碼時，那個帳號的所有裝置登出；自己改的那一台留著
+    sessions = SessionStore(store.db, clock=clock)
+    store.register("alpha", "secret-pw")
+    store.register("beta", "secret-pw")
+    here, there, other = sessions.create("alpha"), sessions.create("alpha"), sessions.create("beta")
+    store.change_password("alpha", "secret-pw", "new-secret", keep=here)
+    assert sessions.get(here) == "alpha" and sessions.get(there) is None
+    assert sessions.get(other) == "beta"  # 別的帳號不受影響
+
+
+def test_an_admin_reset_logs_out_every_device_of_that_account(store, clock):
+    sessions = SessionStore(store.db, clock=clock)
+    store.register("alpha", "secret-pw")
+    phone, pc = sessions.create("alpha"), sessions.create("alpha")
+    store.set_password("alpha", "temp-pass")
+    assert sessions.get(phone) is None and sessions.get(pc) is None
