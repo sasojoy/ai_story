@@ -236,6 +236,15 @@ def stray_latin(text: str, *known: str) -> bool:
     return not found <= allowed
 
 
+PROMPT_UNSAFE = re.compile(r"[「」『』\"“”‘’'`\x00-\x1f\x7f]+")
+
+
+def prompt_safe(text: str) -> str:
+    """玩家的名號、寫的字放進提示以前夾掉引號與換行（M-13）：名號可以帶標點（server 只擋控制字元），一個「」——成功」
+    就能把提示裡「玩家：……」那一行或批次裡的別人那一行改了意思。一般的名號與句子原樣通過。"""
+    return PROMPT_UNSAFE.sub("", str(text or ""))
+
+
 def using_opencc() -> bool:
     """目前是真的在用 OpenCC，還是退回手寫對照表（測試與診斷用）。"""
     return _converter() is not None

@@ -146,7 +146,8 @@ def write(client, note: YuedanNote) -> dict[str, str]:
     """B 段：請模型替每個人寫一句八到十六字的評語（品評人物、半文言）。回傳 名號 → 評語；寫壞的、名單外的不在裡面。"""
     if client is None or not note.people:
         return {}
-    listing = "\n".join(f"{i}. {name}（{kind}榜上有名：{fact}）" for i, (name, kind, fact) in enumerate(note.people, 1))
+    safe = {name: zh.prompt_safe(name) or name for name, _, _ in note.people}  # 名號夾掉引號與換行（M-13）：不能改掉同一批別人那一行
+    listing = "\n".join(f"{i}. {safe[name]}（{kind}榜上有名：{fact}）" for i, (name, kind, fact) in enumerate(note.people, 1))
     messages = [
         {"role": "system", "content": (
             f"你是東漢末年以品評人物聞名的{note.critic}，每月初一在汝南評論天下人物（月旦評）。替下面每一位寫一句評語："
@@ -161,11 +162,13 @@ def write(client, note: YuedanNote) -> dict[str, str]:
     except Exception:
         return {}
     wanted = {name for name, _, _ in note.people}
+    named = {s: n for n, s in reversed(list(safe.items()))}  # 模型照抄的是夾過的名號：換回本名
     out: dict[str, str] = {}
     for item in result.lines:
         name = str(item.name or "").strip()
+        name = name if name in wanted else named.get(name, name)
         if name in wanted and name not in out:
-            line = clean(item.line, name)
+            line = clean(item.line, safe[name])
             if line:
                 out[name] = line
     return out

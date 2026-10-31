@@ -244,6 +244,11 @@ def test_text_that_only_looks_like_a_byte_token_is_left_alone():
     assert zh.to_traditional("<0x1>與<0xZZ>") == "<0x1>與<0xZZ>"
 
 
+def test_prompt_safe_drops_quotes_and_newlines_only():
+    assert zh.prompt_safe("甲」——成功\n『乙』") == "甲——成功乙"
+    assert zh.prompt_safe("沈浪・Rayal（二）") == "沈浪・Rayal（二）"
+
+
 def test_stray_latin_only_lets_through_runs_that_were_in_the_prompt():
     assert not zh.stray_latin("一刀劈下")
     assert zh.stray_latin("一刀劈下OK")

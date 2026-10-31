@@ -2172,7 +2172,8 @@ def assess_gamble(
     sex 是玩家的性別（gender）：女的提示多一行，劇情裡的稱呼跟著換（PM 2026-10-12）。"""
     if client is None:
         return GambleVerdict(DEFAULT_FREE_TEXT_SUCCESS_RATE)
-    who = name or "這位" + gender.hero(sex)
+    real = name or "這位" + gender.hero(sex)
+    who, said = zh.prompt_safe(real) or real, zh.prompt_safe(text)  # 名號與那一句夾掉引號、換行（M-13）；劇情裡寫的名號換回本名
     messages = [
         {"role": "system", "content": (
             f"你是{setting}判定系統，也是說書人。第一件事：評估玩家描述的行動在{place}上合理的成功機率，"
@@ -2188,7 +2189,7 @@ def assess_gamble(
         {"role": "user", "content": (
             f"{place}情境：【{act.title}】{act.text}\n玩家：{who}（所屬：{faction_name}）\n"
             + (f"玩家點名攻擊的對手：{target}\n" if target else "")
-            + f"玩家的行動：「{text}」\n請給出 success_rate、reasoning、win、lose。"
+            + f"玩家的行動：「{said}」\n請給出 success_rate、reasoning、win、lose。"
         )},
     ]
     try:
@@ -2196,7 +2197,14 @@ def assess_gamble(
     except Exception:
         return GambleVerdict(DEFAULT_FREE_TEXT_SUCCESS_RATE)
     rate = max(0, min(100, int(result.success_rate)))
-    return GambleVerdict(rate, clean_story(result.win, who, (text, target)), clean_story(result.lose, who, (text, target)))
+    return GambleVerdict(rate, clean_story(_real_name(result.win, who, real), real, (text, target)),
+                         clean_story(_real_name(result.lose, who, real), real, (text, target)))
+
+
+def _real_name(story, safe: str, name: str) -> str:
+    """提示裡的名號夾過標點（zh.prompt_safe）時，模型照抄的是夾過的那一個：換回本名，clean_story 才認得是名號開頭。"""
+    story = str(story or "")
+    return story.replace(safe, name) if safe and safe != name else story
 
 
 class GambleScore(BaseModel):
@@ -2215,7 +2223,7 @@ def score_gamble(
     write_tales 寫。跟 assess_gamble 同一套評法（只評行動本身合不合理，荒唐的給低分）；評不到回保底值。"""
     if client is None:
         return DEFAULT_FREE_TEXT_SUCCESS_RATE
-    who = name or "這位" + gender.hero(sex)
+    who, text = zh.prompt_safe(name) or "這位" + gender.hero(sex), zh.prompt_safe(text)  # 名號與那一句夾掉引號、換行（M-13）
     messages = [
         {"role": "system", "content": (
             "你是漢末兩軍交戰的戰場判定系統。評估玩家描述的行動在戰場上合理的成功機率，只回 0~100 的整數 success_rate："
@@ -2277,10 +2285,11 @@ def write_tales(
     if client is None or not items:
         return {}
     women = {item.name for item in items if item.sex == "女"}
-    listing = "\n".join(
-        f"{i}. {item.name}（{item.faction_name}{'，女子' if item.name in women else ''}）："
-        f"「{item.text}」——{'成功' if item.won else '失敗'}"
-        + (f"，點名攻擊的對手是{item.target}" if item.target else "")
+    safe = {item.name: zh.prompt_safe(item.name) or item.name for item in items}  # 名號、寫的字夾掉引號與換行（M-13）：一個人的名號
+    listing = "\n".join(  # 不能改掉同一批別人那一行的意思
+        f"{i}. {safe[item.name]}（{item.faction_name}{'，女子' if item.name in women else ''}）："
+        f"「{zh.prompt_safe(item.text)}」——{'成功' if item.won else '失敗'}"
+        + (f"，點名攻擊的對手是{zh.prompt_safe(item.target)}" if item.target else "")
         for i, item in enumerate(items, 1)
     )
     messages = [
@@ -2304,14 +2313,16 @@ def write_tales(
     except Exception:
         return {}
     wanted = {item.name for item in items}
+    named = {s: n for n, s in reversed(list(safe.items()))}  # 模型照抄的是夾過的名號：換回本名（同一個夾法撞名時算排在前面的）
     known = [n for item in items for n in (item.name, item.text, item.target)]  # 同一批的名號、寫的字（英文只能是這些裡面有的）
     lost = {item.name for item in items if not item.won}
     foes = foe_names(items, sides)
     out: dict[str, str] = {}
     for line in result.lines:
         name = str(line.name or "").strip()
+        name = name if name in wanted else named.get(name, name)
         if name in wanted and name not in out:
-            story = clean_story(line.story, name, known)
+            story = clean_story(_real_name(line.story, safe[name], name), name, known)
             # 失手的那一句提到敵方陣營的名字就不用（Joy 2026-10-19：黃巾玩家失手卻被寫成「官軍嘔吐倒地」，
             # 文字看起來贏了、數字是自己退了一截）。提示詞本來就禁止拿陣營名當代名詞，這裡只是確定性地攔下來；
             # 攔掉的照舊播固定句（「X這一搏失敗了，付出了慘痛代價：…」），寧可平淡也不要跟數字矛盾。
