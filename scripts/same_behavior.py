@@ -974,12 +974,18 @@ def main(argv: list[str] | None = None) -> int:
 
 EXPLORE_BOT_PROFILES = ("season21", "week7")  # 走一趟、探索一顆開著的兩種（不帶、weekend、測試內容關著）
 EXPLORE_MUTANT_PROFILE = "week7"
-# selftest 故意改的一個字：走一趟（同一趟留第二句那一句）、探索一顆（紀錄的結果標記「得料」）各一句；舊名的檔、搬進包的檔兩處找
+# selftest 故意改的一個字：走一趟（同一趟留第二句那一句）、探索一顆（紀錄的結果標記「得料」）各一句；舊名的檔、搬進包的檔兩處找。
+# 那兩處在整檔照搬的規則模組裡；動作模組（本體從 Game 搬過去、self 換成 ctx 的那兩個檔）另各改一處（審查修正）：探索一顆每一下少扣
+# 1 體力、走一趟中途離開不收成「中途離開」——搬之前在 engine.py，搬進包之後在 explore_actions.py、outing_actions.py
 EXPLORE_MUTATIONS = {
     "outing": (("tianxia/features/explore/outing_rules.py", "tianxia/outing.py"),
                ('SAY_AGAIN = "這一趟已經留過一句了。"', 'SAY_AGAIN = "這一趟已經留過一句了！"')),
     "explore_one": (("tianxia/features/explore/explore_rules.py", "tianxia/explore_one.py"),
                     ('MATERIAL: "得料"', 'MATERIAL: "得料！"')),
+    "explore_actions": (("tianxia/features/explore/explore_actions.py", "tianxia/engine.py"),
+                        ("p.stamina -= cfg.explore_stamina\n", "p.stamina -= cfg.explore_stamina - 1\n")),
+    "outing_actions": (("tianxia/features/explore/outing_actions.py", "tianxia/engine.py"),
+                       ("if trip.place != p.location:", "if trip.place != p.location and False:")),
 }
 
 
