@@ -36,7 +36,8 @@
   跑整季的那幾條是 slow（--slow 才跑、每日整套會跑），其他的（事件難度帶 DIFFICULTY_BANDS 的鎖、地點走得到……）每次都跑。
 - web/：寫到那個檔名的測試檔（main.js、map.js、outing.js 照 app.js 挑），加上 test_server.py。功能包登記的網頁檔
   （各包 __init__.py 的 web，例 web/mall.js、web/mall.css；feature_web）→ 那一包的 tests/＋核心契約（CONTRACT_GLOBS）
-  ＋寫到那個檔名的（店面的 CSS 守門），不照 app.js 挑、不加 test_server.py（PM 2026-10-31）。
+  ＋寫到那個檔名的（店面的 CSS 守門），不照 app.js 挑、不加 test_server.py（PM 2026-10-31）。包的 js 另外：包裡用假瀏覽器
+  （webharness）跑整支頁面、真的執行它的網頁測試（test_mall_web）連 slow 一起跑，跟改到的測試檔一樣（runs_js）。
 - tests/ 裡的測試檔：跑它自己，連 slow 一起（改了就是要跑它；挑到的其他檔照舊不含 slow，所以分兩次跑）；
   tests/kit/ 這類共用工具：import 它的測試檔；tests/fixtures/：寫到那個檔名的測試檔。
 - tests/conftest.py：hunk 落在哪個函式、fixture 或常數 → 用到它的測試檔（from conftest import、fixture 參數；conftest 裡
@@ -144,9 +145,11 @@ TEXT_BLIND = frozenset({"test_test_for.py"})
 @dataclass
 class Pick:
     """挑到的東西。files 整個檔跑（不含 slow，--slow 才含）；own 是改到的測試檔本身（也在 files 裡，連 slow 一起跑）；
+    runs_js 是包裡真的執行改到的那個包的 js 的網頁測試（也在 files 裡，跟 own 一樣連 slow 一起跑）；
     core 加核心測試；smoke 加煙霧；everything 是整套。"""
     files: set[Path] = field(default_factory=set)
     own: set[Path] = field(default_factory=set)
+    runs_js: set[Path] = field(default_factory=set)
     core: bool = False
     smoke: bool = False
     everything: bool = False
@@ -155,6 +158,11 @@ class Pick:
     @property
     def empty(self) -> bool:
         return not (self.files or self.core or self.smoke or self.everything)
+
+    @property
+    def with_slow(self) -> set[Path]:
+        """連 slow 一起跑的那幾個檔（另外跑一次）：改到的測試檔＋執行改到的包 js 的網頁測試。"""
+        return self.own | self.runs_js
 
 
 # ── git ──────────────────────────────────────────────────────────────
@@ -863,15 +871,23 @@ def pick(files: list[str], base: str | None = None,
         owner = feature_web().get(path.name) if f.startswith("web/") and f.count("/") == 1 else None
         if owner is not None:  # 功能包的網頁檔（web/mall.js）：那一包的 tests/＋核心契約，不照 app.js 挑（PM 10/31）
             pkg_tests = FEATURES / owner / "tests"
-            result.files |= set(pkg_tests.rglob("test_*.py")) if pkg_tests.is_dir() else set()
+            pkg_files = set(pkg_tests.rglob("test_*.py")) if pkg_tests.is_dir() else set()
+            result.files |= pkg_files
             result.files |= contract_tests()
             # 寫到那個檔名的（店面的 CSS 守門讀包的樣式）：整個檔名，「mall.js」不算「mall.json」裡的那一段
             exact = re.compile(rf"(?<![\w.]){re.escape(path.name)}(?!\w)")
             named_it = {t for t in tests if t.name not in TEXT_BLIND and exact.search(_text(t))}
             result.files |= named_it
             others = sorted(t.name for t in named_it if not t.is_relative_to(pkg_tests))
+            # 包的 js 只有包裡用假瀏覽器（webharness 載入 APP_FILES）跑整支頁面的測試會真的執行它，而那種測試常整個檔標 slow
+            # （test_mall_web）：照「不含 slow」挑等於沒有一條在跑它（10/31 審查：插一行 function ((( 照預設 134 passed）。
+            # 那幾個連 slow 一起跑，跟改到的測試檔一樣；樣式表不是 webharness 跑的，照舊。
+            runs_js = {t for t in pkg_files if "webharness" in imported(t)} if path.suffix == ".js" else set()
+            result.runs_js |= runs_js
             result.why.append(f"{f}：{owner} 這一包的網頁檔 → 那一包的 tests/＋核心契約"
-                              + (f"＋寫到 {path.name} 的 {'、'.join(others)}" if others else ""))
+                              + (f"＋寫到 {path.name} 的 {'、'.join(others)}" if others else "")
+                              + (f"；跑它的網頁測試 {'、'.join(sorted(t.name for t in runs_js))} 連 slow 一起跑"
+                                 if runs_js else ""))
             continue
         if f.startswith("web/"):
             if SERVER_TEST in named:
@@ -902,14 +918,16 @@ def targets(chosen: Pick, leave_out: frozenset[Path] = frozenset()) -> list[str]
 
 def _slow_split(chosen: Pick, slow: bool) -> list[tuple[list[str], str]]:
     """（目標, -m 的式子）一次或兩次。改到的測試檔本身（own）連 slow 一起跑——改了就是要跑它（手冊 4.3「只跑改到的
-    那幾個測試檔」）；其他挑到的照舊不含 slow（--slow 才含）。改到的檔裡沒有 slow 的就一次跑完。"""
+    那幾個測試檔」）；執行改到的包 js 的網頁測試（runs_js）也是；其他挑到的照舊不含 slow（--slow 才含）。
+    那幾個檔裡沒有 slow 的就一次跑完。"""
     if chosen.everything or slow:
         return [(targets(chosen), "slow or not slow")]
-    if not any(has_slow(p) for p in chosen.own):
+    mine = chosen.with_slow
+    if not any(has_slow(p) for p in mine):
         return [(targets(chosen), "not slow")]
-    rest = targets(chosen, leave_out=frozenset(chosen.own))
+    rest = targets(chosen, leave_out=frozenset(mine))
     runs = [(rest, "not slow")] if rest else []
-    return runs + [(sorted(_rel(p) for p in chosen.own), "slow or not slow")]
+    return runs + [(sorted(_rel(p) for p in mine), "slow or not slow")]
 
 
 def _command(goal: list[str], marker: str, extra: list[str], everything: bool, args_file: Path | None) -> list[str]:
@@ -936,8 +954,8 @@ def pytest_commands(chosen: Pick, slow: bool, extra: list[str], tmp: Path | None
 
 
 def _slow_only(chosen: Pick) -> list[str]:
-    """挑到的（改到的測試檔以外）整個檔標 slow 的：不加 --slow 一條都不跑。"""
-    return sorted(_rel(p).removeprefix("tests/") for p in chosen.files - chosen.own if whole_slow(p))
+    """挑到的（連 slow 一起跑的那幾個以外）整個檔標 slow 的：不加 --slow 一條都不跑。"""
+    return sorted(_rel(p).removeprefix("tests/") for p in chosen.files - chosen.with_slow if whole_slow(p))
 
 
 def finish(codes: list[int], chosen: Pick, slow: bool) -> int:
@@ -977,6 +995,9 @@ def describe(chosen: Pick, slow: bool = False) -> list[str]:
     mine = sorted(_rel(p).removeprefix("tests/") for p in chosen.own if has_slow(p))
     if mine and not slow:
         lines.append("改到的測試檔連 slow 一起跑：" + " ".join(mine))
+    web = sorted(_rel(p).removeprefix("tests/") for p in chosen.runs_js - chosen.own if has_slow(p))
+    if web and not slow:
+        lines.append("執行改到的包 js 的網頁測試連 slow 一起跑：" + " ".join(web))
     if _slow_only(chosen) and not slow:
         lines.append("整個檔標 slow、這一次不跑（要跑加 --slow）：" + " ".join(_slow_only(chosen)))
     if chosen.core:
@@ -1022,7 +1043,7 @@ def main(argv: list[str] | None = None) -> int:
         cmds = pytest_commands(chosen, args.slow, extra, Path(tmp))
         if args.count:
             for cmd in cmds:
-                label = "改到的測試檔（連 slow）" if len(cmds) > 1 and cmd is cmds[-1] else "一共"
+                label = "連 slow 一起跑的那幾個檔" if len(cmds) > 1 and cmd is cmds[-1] else "一共"
                 print(f"{label}：" + count(cmd), flush=True)
         if args.list or args.count:
             return 0

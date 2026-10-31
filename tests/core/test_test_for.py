@@ -410,6 +410,27 @@ def test_a_feature_packages_web_file_picks_that_package_not_the_app_js_batch():
     assert "test_test_for.py" not in css  # 內文是假原始碼的（TEXT_BLIND）不照檔名算
 
 
+def test_a_feature_packages_js_runs_the_package_tests_that_execute_it_with_their_slow_tests():
+    """包的 js 只有包裡用假瀏覽器（webharness）跑整支頁面的測試會真的執行它，而商城的 test_mall_web.py 整個檔標 slow：
+    照「不含 slow」挑等於沒有一條在跑 mall.js（10/31 審查：插一行 function ((( 照預設 134 passed、exit 0，--slow 才 30 failed）。
+    那幾個連 slow 一起跑，跟改到的測試檔一樣分開跑一次；挑到的其他檔照舊不含 slow，也不再列成「這一次不跑」。"""
+    web_test = test_for.FEATURES / "mall" / "tests" / "test_mall_web.py"
+    assert test_for.whole_slow(web_test) and "webharness" in test_for.imported(web_test)
+    js = test_for.pick(["web/mall.js"])
+    assert web_test in js.files
+    rest, slow_too = test_for.pytest_commands(js, slow=False, extra=[])
+    assert _marker(rest) == "not slow" and test_for._rel(web_test) not in rest
+    assert "tianxia/features/mall/tests/test_mall.py" in rest
+    assert _marker(slow_too) == "slow or not slow" and test_for._rel(web_test) in slow_too
+    assert not [a for a in slow_too[slow_too.index("slow or not slow") + 1:] if a.endswith(".py")
+                and a != test_for._rel(web_test)]
+    assert "test_mall_web.py" not in " ".join(test_for._slow_only(js))
+    lines = test_for.describe(js)
+    assert any("連 slow 一起跑" in line and "test_mall_web.py" in line for line in lines), lines
+    # 樣式表不是 webharness 跑的：照舊一次、不含 slow（店面的 CSS 守門不是 slow）
+    assert len(test_for.pytest_commands(test_for.pick(["web/mall.css"]), slow=False, extra=[])) == 1
+
+
 CORE_OWN = {  # 手冊 3.1 的核心模組自己檔名的測試（10/31 有的這 11 個；state、sqlite_world 還沒有自己的測試檔）
     "test_accounts.py", "test_calendar.py", "test_characters.py", "test_content.py", "test_database.py",
     "test_gender.py", "test_models.py", "test_naming.py", "test_rules.py", "test_team.py", "test_world_state.py",
