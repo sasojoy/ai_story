@@ -521,3 +521,12 @@ def test_the_fight_and_the_result_carry_both_weapons_for_the_animation(ring):
 def test_an_old_fight_without_weapons_shows_both_bare_handed():
     assert arena.looks_view([]) == {"me": "", "foe": ""}
     assert arena.looks_view(["劍", "拳腳"]) == {"me": "劍", "foe": "拳腳"}
+
+
+def test_an_old_save_without_the_weapon_fields_still_loads():
+    from tianxia.state import ArenaEntry, ArenaResult
+
+    entry = ArenaEntry.model_validate({"name": "甲", "power": 10.0, "hp_cap": 50.0})
+    assert entry.weapon == ""
+    result = ArenaResult.model_validate({"id": 1, "foe": "乙", "tier": "大勝"})
+    assert result.looks == []
