@@ -1,7 +1,7 @@
 """功能包的掛鉤（開發規範手冊 3.3）與核心照 FEATURES 彙整（registry.py 的清單，有順序）。
 
 一個功能一包（tianxia/features/<包>/）；核心在幾個大家都插一段的地方照清單依序問每一包。
-兩種掛鉤看 enabled 的方式不一樣（手冊 3.3 寫「關著的包一個掛鉤都不叫」，指的是第一種）：
+兩種掛鉤看 enabled 的方式不一樣（手冊 3.3 寫「關著的包一個掛鉤都不叫」，指的是第一種；PM 10/31 認可，3.3 由 PM 補註）：
 - 遊戲當下的（options、menu、choose、status、on_sync、on_day、on_season_*、on_drop_stale、bot_pick）：每一次先問 enabled(ctx)，
   關著的包一個都不叫（tests/core/test_contract_core.py、test_contract_features.py 守）。
 - 殼啟動、載入內容時的（routes、admin_tools、check_content、bot_always，與宣告的 web、content）：那時候還沒有 ctx（沒有角色、
@@ -22,7 +22,7 @@
 | admin_tools(shell)、routes(shell) | server：/api/do/{op} 的管理者工具、掛路由（shell 是 server 模組） |
 | check_content(content, need)、web、content | content.validate（關著的包照驗）；index.html 的檔；content.py 讀的檔。check_content **手冊 3.3 表外**（見下） |
 
-比手冊 3.3「就這幾個，不多開」那張表多開了兩個（第 1 階開的，待 PM 認可、請 Fable 回寫 3.3；之後再要加先過 PM）：
+比手冊 3.3「就這幾個，不多開」那張表多開了兩個（第 1 階開的，PM 10/31 認可，理由照下面；手冊 3.3 由 PM 補；之後再要加先過 PM）：
 - menu：現行的 _everyday_options 裡一包有兩個位置——接管整個選單（坐在席上、店開著……十幾樣都是）與接在「此地還能做」裡（options），
   一個 options 擺不下兩個位置。
 - check_content：取代原本的 content.check_mall（載入時驗商品）。核心的 content.py 不能 import 包，3.3 的 content 那一列只宣告
@@ -63,7 +63,7 @@ class AdminTool:
 
 
 class FeatureHooks(Protocol):
-    """一包要回答的（手冊 3.3）。簽名第一階定的；比 3.3 的表多兩個（menu、check_content，見模組的說明，待 PM 認可）。
+    """一包要回答的（手冊 3.3）。簽名第一階定的；比 3.3 的表多兩個（menu、check_content，見模組的說明，PM 10/31 認可）。
     之後要加先看這一張表，不多開；真的要加先過 PM。"""
 
     name: str  # 包名（資料夾名）

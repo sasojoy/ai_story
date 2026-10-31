@@ -4,12 +4,17 @@
   不能 import 別的包。還沒搬的舊模組過渡期可以 import，那一行要註「# 過渡：待搬」（第一版只禁「包 import 包」與沒註的舊模組）。
 - 核心不 import 功能包：tianxia/core/ 只有 registry.py（FEATURES 登記）可以，CORE 那幾個模組都不行。
 - if TYPE_CHECKING: 底下的 import 只給型別看，不算。
+- 網頁框架（fastapi）只有功能包的 routes.py 可以 import，而且只在殼掛路由時延後 import；引擎、run_bots、假人不碰（PM 10/31）。
 """
 from __future__ import annotations
 
 import ast
 import functools
+import json
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -19,11 +24,11 @@ TIANXIA = ROOT / "tianxia"
 FEATURES = TIANXIA / "features"
 MARK = "過渡：待搬"
 
-# 手冊 3.1 的核心模組，加上 3.10 的錢包（wallet）。journal（江湖紀錄）不在 3.1 的清單上、自己又 import front_lines、battlelog：
-# 包 import 它照舊模組註「過渡：待搬」（要算成核心先過 PM、回寫手冊 3.1）
+# 手冊 3.1 的核心模組，加上 3.10 的錢包（wallet）與江湖紀錄（journal：PM 10/31 定算核心——CLAUDE.md 區塊表把它列在
+# 「核心與存檔」，每個功能都寫江湖紀錄；手冊 3.1 由 PM 補）。journal 自己 import front_lines、battlelog（核心 → 舊模組，這一版不掃）
 CORE = {
     "state", "sqlite_world", "world_state", "characters", "accounts", "database", "rules", "calendar", "models", "content",
-    "team", "gender", "naming", "wallet",
+    "team", "gender", "naming", "wallet", "journal",
 }
 
 
@@ -308,6 +313,93 @@ def test_feature_packages_only_touch_the_service_list_on_the_game():
         for path in _package_files(name):
             found += off_list_calls(path.read_text(encoding="utf-8"), _modname(path), allowed)
     assert found == []
+
+
+# ── 網頁框架（docs/guide/核心與存檔.md「tianxia/ 不得 import 任何網頁框架」的例外，PM 10/31）──
+# 只有 tianxia/features/<包>/routes.py 可以 import fastapi，而且只在殼掛路由時延後 import（包的 __init__ 在 routes()、
+# admin_tools() 裡面才 from . import routes）；引擎、run_bots、假人不碰。
+
+WEB_FRAMEWORKS = {"fastapi", "starlette", "uvicorn"}
+_ROUTES_IMPORT = re.compile(r"^[ \t]*(?:from[ \t]+\S*[ \t]+import[ \t]+[^\n]*\broutes\b|from[ \t]+\S*\broutes[ \t]+import|import[ \t]+\S*\broutes\b)",
+                            re.M)
+
+
+def _engine_files() -> list[Path]:
+    """tianxia/ 底下的程式（功能包的 tests/ 不算：測試本來就可以用 fastapi 的 TestClient）。"""
+    return sorted(p for p in TIANXIA.rglob("*.py") if "tests" not in p.relative_to(TIANXIA).parts)
+
+
+def _load_time_nodes(tree: ast.AST):
+    """import 這個模組的那一刻就會跑到的節點：不進函式（def、async def、lambda）的本體；類別的本體會跑，要進。"""
+    todo = list(ast.iter_child_nodes(tree))
+    while todo:
+        node = todo.pop()
+        yield node
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            todo.extend(ast.iter_child_nodes(node))
+
+
+def web_framework_problems() -> list[str]:
+    found = []
+    for path in _engine_files():
+        text = path.read_text(encoding="utf-8")
+        rel = path.relative_to(ROOT).as_posix()
+        is_routes = path.name == "routes.py" and path.parent.parent == FEATURES
+        if any(w in text for w in WEB_FRAMEWORKS) and not is_routes:
+            for node in ast.walk(ast.parse(text)):
+                names = ([a.name for a in node.names] if isinstance(node, ast.Import)
+                         else [node.module or ""] if isinstance(node, ast.ImportFrom) and not node.level else [])
+                found += [f"{rel}:{node.lineno} import {n}（只有功能包的 routes.py 可以）" for n in names
+                          if n.split(".")[0] in WEB_FRAMEWORKS]
+        if _ROUTES_IMPORT.search(text):
+            module = _modname(path)
+            tree = ast.parse(text)
+            skip = _type_checking_lines(tree)
+            for node in _load_time_nodes(tree):
+                if not isinstance(node, (ast.Import, ast.ImportFrom)) or node.lineno in skip:
+                    continue
+                for _, mod, _ in imports_of(ast.unparse(node) + "\n", module):
+                    parts = mod.split(".")
+                    if len(parts) == 4 and parts[:2] == ["tianxia", "features"] and parts[3] == "routes":
+                        found.append(f"{rel}:{node.lineno} 載入時就 import {mod}（要延後到殼掛路由的那一刻）")
+    return found
+
+
+def test_only_package_routes_import_a_web_framework_and_only_when_the_shell_mounts_them():
+    """幾毫秒的那一半：照原始碼看。另一半（真的 import 之後 sys.modules 裡沒有 fastapi）是下面那一條 slow 的。"""
+    assert web_framework_problems() == []
+    assert (FEATURES / "mall" / "routes.py").exists()  # 有一包真的用到（不然這一條永遠綠）
+
+
+def test_the_web_framework_scan_catches_a_load_time_import(tmp_path, monkeypatch):
+    pkg = tmp_path / "tianxia" / "features" / "demo"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("from . import routes\n\ndef later():\n    from . import routes\n", encoding="utf-8")
+    (pkg / "routes.py").write_text("from fastapi import APIRouter\n", encoding="utf-8")
+    (tmp_path / "tianxia" / "glyph2.py").write_text("import fastapi\n", encoding="utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+    monkeypatch.setattr(sys.modules[__name__], "TIANXIA", tmp_path / "tianxia")
+    monkeypatch.setattr(sys.modules[__name__], "FEATURES", tmp_path / "tianxia" / "features")
+    found = web_framework_problems()
+    assert len(found) == 2, found
+    assert any("features/demo/__init__.py:1" in f and "tianxia.features.demo.routes" in f for f in found)
+    assert any("glyph2.py:1 import fastapi" in f for f in found)
+
+
+@pytest.mark.slow  # 開一個乾淨的子行程 import 引擎與假人程式，約 3 秒
+def test_the_engine_the_bot_program_and_the_bots_load_no_web_framework(tmp_path):
+    code = (
+        "import json, sys\n"
+        "import tianxia.engine, tianxia.bot, tianxia.bot_policy, tianxia.bot_runner, run_bots\n"
+        "from tianxia.core import features\n"
+        "features.bot_always()\n"
+        "print(json.dumps(sorted(m for m in sys.modules if m.split('.')[0] in %r)))\n" % (sorted(WEB_FRAMEWORKS),)
+    )
+    env = {**os.environ, "TIANXIA_DB": str(tmp_path / "t.db"), "PYTHONIOENCODING": "utf-8"}
+    out = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
+                         env=env, timeout=120)
+    assert out.returncode == 0, out.stderr[-2000:]
+    assert json.loads(out.stdout.strip().splitlines()[-1]) == []
 
 
 # ── 掃描本身抓得到（不然上面幾條永遠綠）──

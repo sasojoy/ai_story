@@ -14,4 +14,4 @@
 | `tests/` | 原 `tests/mall/`（`test_wallet.py` 測核心的錢包，搬到 `tests/core/`）與 `tests/web/test_mall_web.py` |
 
 **認領的欄位**（3.5，留在原地）：`PlayerState.holding_bonus`（只這一季）、`create_rerolls`、`legend_items`（換季帶著走，核心的換季照抄）；`Game.mall_bought`、`Game.mall_already`（伺服器在鎖裡讀）。資料庫第 6 版的三張表 `mall_purchases`、`mall_ledger`、`mall_entitlements`（`database.py`，核心）。
-**過渡**：`rules.py` import `tianxia.library`（功法庫上限）、`actions.py` import `server_bots`（保留的名號）、`zhuan_end`（插畫票用不上不賣）、`journal`（江湖紀錄：手冊 3.1 的核心清單沒有它），都註「過渡：待搬」；`howto.py`（玩法說明「商城」一節）、`scripts/mall_ledger.py` import 這一包；`Game._mall_grant` 在 `own_turn_checks` 裡（封測發放）。
+**過渡**：`rules.py` import `tianxia.library`（功法庫上限）、`actions.py` import `server_bots`（保留的名號）、`zhuan_end`（插畫票用不上不賣），都註「過渡：待搬」（`journal` 江湖紀錄 PM 10/31 定算核心，不再是過渡）；`howto.py`（玩法說明「商城」一節）、`scripts/mall_ledger.py` import 這一包；`Game._mall_grant` 在 `own_turn_checks` 裡（封測發放）。
