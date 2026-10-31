@@ -165,7 +165,7 @@ def hint_of(kind: str, how: str | None, weights: Mapping[str, float]) -> str:
 
 
 BEAT_WORDS = {EVENT: "遇事", ENCOUNTER: "遇敵", MATERIAL: "得料", INSIGHT: "有悟"}  # 一類事寫成兩個字（紀錄的結果標記、行動列底下那一行）
-TRAVELER = "旅人"  # 野類地點的事件偏這個標籤的事件（救助旅人那一類；content.check_explore_one 驗至少三則、都在野類地點）
+TRAVELER = "旅人"  # 野類地點的事件偏這個標籤的事件（救助旅人那一類；checks.check_explore_one 驗至少三則、都在野類地點）
 
 
 def items_of(lines: list[str], prefix: str) -> str:
@@ -195,7 +195,7 @@ def merge_items(items: Iterable[str]) -> list[str]:
             order.append(item)
     return [f"{key} ×{counts[key]}" if key in counts else key for key in order]
 
-# content/outing_lines.json 的組與鍵（content.check_outing_lines 驗）；句子裡可以寫 {place} 地點、{foe} 對手、{item} 素材
+# content/outing_lines.json 的組與鍵（checks.check_outing_lines 驗）；句子裡可以寫 {place} 地點、{foe} 對手、{item} 素材
 LINE_KEYS: dict[str, tuple[str, ...]] = {
     "open": (TOWN, TEMPLE, FORD, WILD, HILL, CAMP),  # 出門那一句，照這一處是哪一種地點
     "material": ("found",),  # 素材拍撿到東西（item 是「精鐵砂 ×1」這種）
@@ -206,7 +206,7 @@ LINE_KEYS: dict[str, tuple[str, ...]] = {
     # 結尾：疲勞打了折（tired）、對手配不上你（outlevel）、境界已到經驗換心得（capped）、這一趟沒收穫補一個一階（empty）
     "close": ("tired", "outlevel", "capped", "empty"),
 }
-SAMPLE = {"place": "潁水河畔", "foe": "河灘潑皮", "item": "精鐵砂 ×1"}  # 驗句子填不填得進去用的（content.check_outing_lines）
+SAMPLE = {"place": "潁水河畔", "foe": "河灘潑皮", "item": "精鐵砂 ×1"}  # 驗句子填不填得進去用的（checks.check_outing_lines）
 # 內容沒有 outing_lines.json 時的退路（測試內容）：每一個鍵一句
 FALLBACK: dict[str, dict[str, list[str]]] = {
     "open": {k: ["你出了門，往{place}一帶走了一趟。"] for k in LINE_KEYS["open"]},

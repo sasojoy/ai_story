@@ -3,7 +3,7 @@
 （`reached`、`milestone_points`）與假人照路配點（`stat_path`、`plan_points`）。
 
 cfg 是 `Config.jianfa`（`models.JianfaRules`，繼承 `jianfa_numbers.JianfaNumbers`；純規則的測試直接建後者）。不 import engine、不改狀態。
-接線（批 2）：遭遇拍乘前兩道閘在 `Game._fight_gate`（`PlayerState.fights_today`／`fight_day`）；十一處給經驗的地方標來源、
+接線（批 2）：遭遇拍乘前兩道閘在探索包的 `explore_actions.fight_gate`（`PlayerState.fights_today`／`fight_day`）；十一處給經驗的地方標來源、
 `team.player_exp`／`maxed_xinde`／`grant_team_exp`／`add_exp` 收來源；升級給點走 `team.level_points`（開著時照里程碑）；
 `bot.allocate_points` 照路配。開關一律問 `rules.jianfa(content, world, "drill_gates"|"stat_milestones")`。
 """
