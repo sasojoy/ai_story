@@ -1,6 +1,7 @@
 import random
 from unittest import mock
 
+from tianxia import flavor
 from tianxia.state import PlayerState, TimelineResult
 from tianxia.world import (
     check_thresholds, current_act, current_storyline, end_season, evaluate_ending, sim_active, sim_tick,
@@ -93,30 +94,25 @@ def test_threshold_without_world_or_client_stays_unflavored(state, content):
     assert check_thresholds(state, content) == ["【江湖大事】水寇封江！"]
 
 
-def test_threshold_flavor_is_computed_once_and_cached(state, content, world):
-    client = mock.Mock()
-    client.chat_text.return_value = "碼頭的船家議論紛紛。"
+def test_threshold_writes_the_plain_line_and_queues_the_flourish_without_calling_a_model(state, content, world):
+    """S-09：鎖內不叫模型。觸發的那一下先寫固定的原文，潤色記成一張單子，等行動鎖放掉再請（server.write_flavor）。"""
     state.world.trends["kou"] = 50
-    msgs = check_thresholds(state, content, world, client)
-    assert msgs == ["【江湖大事】水寇封江！\n\n碼頭的船家議論紛紛。"]
-    assert client.chat_text.call_count == 1
-    assert world.get_event_flavor("kou50") == "碼頭的船家議論紛紛。"
+    polish: list = []
+    with mock.patch.object(flavor, "polish_world_event") as model:
+        msgs = check_thresholds(state, content, world, polish)
+    assert msgs == ["【江湖大事】水寇封江！"]
+    assert polish == [flavor.FlavorJob("kou50", "水寇封江！")]
+    model.assert_not_called()
+    assert world.get_event_flavor("kou50") == ""
 
 
-def test_threshold_flavor_reuses_a_cached_value_without_calling_the_llm_again(state, content, world):
+def test_threshold_flavor_reuses_a_cached_value_without_queueing(state, content, world):
     world.set_event_flavor("kou50", "已經有人潤色過的句子。")
-    client = mock.Mock()
     state.world.trends["kou"] = 50
-    msgs = check_thresholds(state, content, world, client)
+    polish: list = []
+    msgs = check_thresholds(state, content, world, polish)
     assert msgs == ["【江湖大事】水寇封江！\n\n已經有人潤色過的句子。"]
-    client.chat_text.assert_not_called()
-
-
-def test_threshold_skips_the_flourish_when_the_llm_call_fails(state, content, world):
-    client = mock.Mock()
-    client.chat_text.side_effect = RuntimeError("連不上")
-    state.world.trends["kou"] = 50
-    assert check_thresholds(state, content, world, client) == ["【江湖大事】水寇封江！"]
+    assert polish == []
 
 
 def test_ending_threshold_ends_season(state, content):

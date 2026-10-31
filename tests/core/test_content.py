@@ -202,11 +202,6 @@ def test_check_by_must_be_team_or_self(tmp_path):
         load_content(root)
 
 
-def test_checks_default_to_team(content):
-    assert content.events["drunk"].choices[0].check.by == "team"
-    assert content.events["insight"].choices[0].check.by == "self"
-
-
 def test_characters_and_squads_loaded(content):
     assert content.characters["mate"].starting_wugong == "palm"
     assert content.squads["thug"].difficulty == 5

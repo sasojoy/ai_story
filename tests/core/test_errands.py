@@ -10,8 +10,6 @@ from stances_kit import BOCAI, DAY, HUANGFU, LUZHI, at, real_game
 from tianxia import annals, errands, letters, rules, stances
 from tianxia.state import BotProfile
 
-pytestmark = pytest.mark.slow  # 載正式內容、照伺服器開季
-
 
 def _friend(g, cid=LUZHI, affinity=50):
     g.state.player.affinities[cid] = affinity

@@ -404,7 +404,7 @@ def test_the_record_is_a_player_field_and_needs_no_schema_change(content):
     from tianxia import database
     from tianxia.state import PlayerState, new_game_state
 
-    assert database.SCHEMA_VERSION == 7  # 兵器第二批（gear_recipes）升到 4、玩家傳（biographies）升到 5、商城升到 6、真人量表升到 7；renames_told 自己是 PlayerState 的欄位，沒有升版
+    assert database.SCHEMA_VERSION == 9  # 兵器第二批（gear_recipes）升到 4、玩家傳（biographies）升到 5、商城升到 6、真人量表升到 7、拿掉 rumor_heard 升到 8、登入狀態（sessions）升到 9；renames_told 自己是 PlayerState 的欄位，沒有升版
     data = new_game_state(content, "舊檔").player.model_dump()
     assert data.pop("renames_told") == []
     assert PlayerState.model_validate(data).renames_told == []  # 沒有這個欄位的舊存檔照樣讀得進來

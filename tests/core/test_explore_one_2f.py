@@ -4,7 +4,7 @@
 （沒有危險度、不看誰在看），所以渡口 2★（白馬津、拒馬河畔、孟津渡）名字旁寫「參半」、鈕上寫「渡口多敵」，山 2★（北邙山、嵩山深處、綠林山寨、燕山腳）
 名字旁寫「多料」、鈕上寫「山裡參半」。現在名字旁＝這個人站過去之後，鈕上小字的最後兩個字（Game.map_mostly 走 _outing_plan，跟鈕同一個函式）。
 名字旁在底圖的地點清單裡（網頁讀 /api/map/base 的 places[].mostly，沒有改），所以底圖與疊層的 key 都帶著這一串字：字變了網頁才會重抓。
-用正式內容（week7、season21），整個檔標 slow。"""
+用正式內容（week7、season21）（以前整個檔標 slow，2026-10-31 起只有超過一秒的那幾條標）。"""
 from __future__ import annotations
 
 import re
@@ -17,8 +17,6 @@ import server
 from tianxia import events as event_rules
 from tianxia import explore_one, mapdata
 from tianxia.state import Bounty
-
-pytestmark = pytest.mark.slow
 
 SIDES = ["guan", "huang", "haoqiang", None]
 # 2★ 的渡與山（每星遭遇 +10、事件 −10；企劃者 2026-10-30 細分成十八張表之後各照自己的表）：

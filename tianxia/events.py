@@ -103,11 +103,6 @@ def rotation_pool(event: Event, location_id: str, action: str) -> str | None:
     return key + BORROWED_POOL if precise.borrowed(event, action) else key
 
 
-def fresh_events(state: GameState, content: Content, action: str, pool: EventPool | None = None) -> list[Event]:
-    """這一次真的抽得到的那幾則：合格的（event_candidates）再照防重複輪替拿掉這一輪看過的。"""
-    return _fresh_among(state, event_candidates(state, content, action, pool), action)
-
-
 def _capped_group(
     state: GameState, content: Content, candidates: list[Event], action: str, rng: random.Random,
 ) -> list[Event]:

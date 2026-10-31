@@ -303,6 +303,25 @@ def test_a_gamble_rides_the_boss_duel_box_and_tells_the_model_who_it_faces(ring)
     assert fight is None or fight.best_set
 
 
+def test_a_stale_arena_rating_says_the_round_is_over(ring, monkeypatch):
+    """M-05：擂台的單子是上一回合開的就回「這一回合已經結算」，不在鎖內重評、不套用。"""
+    from tianxia import battle_instance, duel
+
+    content, world = ring
+    _join(content, world, "乙")
+    _join(content, world, "甲")
+    _, game = _do(content, world, "甲", lambda g: g.choose("act:arena") + g.choose("arena:fight:乙"))
+    request = game.duel_text_request("踢沙迷他的眼")
+    game.choose(f"arena:{MOVES[0]}")
+    fight = game.state.player.arena
+    assert fight is not None  # 一招分不出勝負
+    seen = []
+    monkeypatch.setattr(battle_instance, "assess_gamble", lambda *a, **k: seen.append(a) or battle_instance.GambleVerdict(40))
+    rounds = fight.round
+    assert game.duel_gamble("踢沙迷他的眼", 5, ("成", "敗"), request=request) == [f"（{duel.STALE}）"]
+    assert seen == [] and fight.round == rounds
+
+
 def test_a_long_shot_that_lands_makes_the_news(ring):
     content, world = ring
     _join(content, world, "乙")

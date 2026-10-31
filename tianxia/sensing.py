@@ -281,7 +281,7 @@ def _outcome(
     method = s.method or ""
     if scene.prologue:
         return method, insights.base_of(method, loc, content)
-    seed = f"{world.read().tianji}|{MARK}|{loc.id}|{method}|{drawn}"
+    seed = f"{world.tianji()}|{MARK}|{loc.id}|{method}|{drawn}"
     attribute = insights.merged_attribute(
         SimpleNamespace(id=method, attribute=method), SimpleNamespace(id=drawn, attribute=drawn), seed,
     )
@@ -331,7 +331,7 @@ def own_name(
     name, note = naming.recheck(content, proposed or (None, ""), person=world.is_character_name)
     if name is not None and name not in taken:
         return name, note, True
-    tianji = world.read().tianji
+    tianji = world.tianji()
     for salt in range(FALLBACK_TRIES):
         fallback = naming.fallback_name(content, key, "意境", salt=salt, tianji=tianji)
         if fallback not in taken and not world.is_character_name(fallback):

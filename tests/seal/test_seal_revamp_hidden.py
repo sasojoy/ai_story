@@ -25,8 +25,6 @@ from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 from tianxia.state import BotProfile
 
-pytestmark = pytest.mark.slow  # 每一條都載正式內容、開資料庫
-
 VIEWER = "旁觀客"
 BOTS = {"甲客": ("guan", "changshe"), "乙客": ("huang", "huangjin_camp")}  # 兩個伺服器假人：陣營、所在地
 SHARD = "螭首"
@@ -143,6 +141,7 @@ def test_the_seal_duel_itself_still_shows_both_names():
     assert "甲客" in card and VIEWER in card
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_two_worlds_that_differ_only_in_the_holder_look_the_same():
     """差異測試（設計第三章「兩個只差誰持有的世界，別人看得到的一切一字不差」）：甲客（官軍）或乙客（黃巾）懷著螭首，其餘一模一樣；
     旁觀客（黃巾）看到的一個字不差——包括「戰功居前」（以前只給持有者對面那一軍，看得出持有者站哪一軍）與酒肆查人（以前名氣多一點）。
@@ -268,6 +267,7 @@ def _side_seen(c, w) -> dict:
     return out
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_the_side_doors_look_the_same_in_two_worlds_that_differ_only_in_the_holder():
     """差異測試（延伸到側門）：甲客或乙客懷著螭首，其餘一模一樣。旁觀客看到的玩家卡（含截殺鈕上的勝算）、擂台挑人的身手、
     戰報上的「對手威力」一個字不差；兩個假人自己看旁觀客的勝算也一樣（持有者自己看自己的也照不含碎片的算）。"""
@@ -277,6 +277,7 @@ def test_the_side_doors_look_the_same_in_two_worlds_that_differ_only_in_the_hold
         assert a[key] == b[key], key
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_the_side_door_guard_has_teeth(monkeypatch):
     """守門抓得到漏：把「給別人看的威力」改回含碎片的（_spar_power 不理 seal、擂台不記不含碎片的那一份），兩個世界就看得出差別——
     勝算字、身手字、三種戰報的「對手威力」都在裡面。（子開關關著時碎片沒有 ×1.10，這幾處本來就看不出，所以這條用還原漏洞來證明。）"""

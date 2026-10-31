@@ -12,8 +12,6 @@ from conquest_kit import conquest_game, join
 from tianxia import xingshi
 from tianxia.state import XingshiMark
 
-pytestmark = pytest.mark.slow
-
 
 def _game():
     game = join(conquest_game("season21", xingshi=True), "huang")

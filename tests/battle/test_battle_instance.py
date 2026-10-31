@@ -843,8 +843,9 @@ def test_assess_action_success_rate_falls_back_when_the_llm_call_fails(gamble_de
 def test_bot_choose_action_never_selects_a_free_text_option(gamble_definition):
     """機器人不會自己想描述，free_text 選項對它們來說等同不存在。"""
     instance = _active_battle(gamble_definition)
+    rng = random.Random(0)  # 固定種子：紅了重現得出來
     for _ in range(50):
-        tag = bi.bot_choose_action(instance, gamble_definition, "甲", random.Random())
+        tag = bi.bot_choose_action(instance, gamble_definition, "甲", rng)
         assert tag not in ("guan_reckless", "huang_reckless")  # 這個 definition 裡 reckless 是 free_text
 
 

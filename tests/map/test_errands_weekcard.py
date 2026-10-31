@@ -5,12 +5,9 @@
 永遠排在差事前面（引擎的排序不改，FB-9037）：差事自己的順序（領頭、換一件事從下一件排起）關掉章回測，章回排在差事前面另外鎖一條。"""
 from __future__ import annotations
 
-import pytest
 
 from stances_kit import LUZHI, real_game
 from tianxia import errands, step, weekcard
-
-pytestmark = pytest.mark.slow  # 載正式內容、照伺服器開季
 
 
 def _steps(g):

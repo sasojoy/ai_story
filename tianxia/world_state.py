@@ -67,7 +67,7 @@ class SealEvent(BaseModel):
     seq: int
     season: int
     # 不要往這裡加新的種類（FB-695）：舊程式的 kind 也是這一串 Literal，多一種，退回舊程式時整列 world 讀不進來（伺服器與假人程式都
-    # 起不來）。新的紀錄另開一欄、空的時候不寫（例 SealRegistry.uses）；tests/seal/test_seal_fb695_rollback.py 守這一串跟舊程式一樣
+    # 起不來）。新的紀錄另開一欄、空的時候不寫（例 SealRegistry.uses）；tests/seal/test_seal.py 守這一串跟舊程式一樣
     kind: Literal["emerge", "stir", "keep", "take", "sink", "unsettled", "assign", "recall", "scatter", "mandate"]
     shard: str | None = None
     holder: str | None = None  # 這一筆之後的持有者（take 是挑戰者；sink、收回是 None）
@@ -659,6 +659,10 @@ class WorldStateStore(Protocol):
 
     def get_jade_seal_fragments(self) -> list[JadeSealFragment]: ...
 
+    def tianji(self) -> int:
+        """天機（同 read().tianji，只是不整份讀）。"""
+        ...
+
     def jade_seal_summary(self) -> str: ...
 
     # ── 共享賽季 ──
@@ -835,6 +839,10 @@ class WorldStateStore(Protocol):
     # ── 同伴進度與招募 ──
     def get_companion(self, companion_id: str) -> CompanionProgress:
         """讀目前進度；還沒有人動過這位人物時回傳一份預設值（不寫回）。"""
+        ...
+
+    def companions(self) -> dict[str, CompanionProgress]:
+        """每一位人物的進度（同 read().companions，只是不整份讀；每次都是新的一份）。"""
         ...
 
     def try_recruit(self, companion_id: str, player_name: str, cap: int | None = None) -> bool:

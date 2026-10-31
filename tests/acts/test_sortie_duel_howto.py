@@ -9,8 +9,6 @@ import pytest
 from duel_kit import duel_content, duel_world, game_of, seat
 from tianxia import howto
 
-pytestmark = pytest.mark.slow  # 建 Game、載正式內容
-
 
 @pytest.mark.parametrize("profile", ["week7", "season21"])
 def test_join_line_says_post_a_duel_not_hold_one_while_duels_are_on(profile):

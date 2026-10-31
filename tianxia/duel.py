@@ -302,6 +302,9 @@ def edge_words(edge: float, viewer: str = "你") -> str:
 
 SETTING = "江湖上一對一單打獨鬥的"
 PLACE = "打鬥"
+# 鎖外評好的單子跟現在對不上（M-05，同奪璽 seal_duel.GONE／RESEND）：回這兩句，不重評、不套用
+STALE = "這一回合已經結算了，下一回合再出手。"
+RESEND = "這一手跟剛才送出的對不上（是不是開了兩個分頁？），請再送一次。"
 
 
 class Scene(NamedTuple):

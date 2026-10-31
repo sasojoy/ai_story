@@ -28,6 +28,8 @@ from . import (
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, xingshi, zh, yuedan,
 )
 from . import sortie_duel  # 出陣約戰（減法季批 3b）
+from . import flavor
+from .flavor import FlavorJob
 from . import tavern_ask  # 問酒家照問題找事實（企劃者 2026-10-27）
 from . import storyline  # 一條線：特殊事件與特殊頓悟的底座（企劃者 2026-10-26）
 from . import epiphany  # 特殊頓悟（登記一條線的鉤子；企劃者 2026-10-26）
@@ -460,6 +462,7 @@ class Game:
         cfg = content.config
         self.client = OllamaClient.from_config(cfg)  # companion_agent.py 用；連不上時那輪對話取消，這裡不用先健檢
         self._model_budget = ModelBudget()  # 鎖內的模型呼叫這一次拿鎖期間還有沒有額度（見 _quick_client）
+        self._flavor_jobs: list[FlavorJob] = []  # 這一份 Game 觸發、還沒潤色的江湖大事（S-09，見 _flavor_sink、take_flavor_jobs）
         self._preparing_memo: list[bool] | None = None  # 一次畫面建構裡記住的「籌備中嗎」；None＝不在範圍裡（見 phase_memo）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
         self._outing_busy = False  # 走一趟正在走（_outing_walk）或正在記一件事選完的得失（_outing_watched）：不再套一層
@@ -533,9 +536,43 @@ class Game:
         用 bot_runner 自己的 client 叫 naming.generate（_name_and_apply），不經過這裡。"""
         return quick_client(self.client, self.content.config.in_lock_model_timeout, self._model_budget)
 
+    def _flavor_sink(self) -> list[FlavorJob] | None:
+        """江湖大事的潤色單子記在哪（S-09，world._fire）：有 client 才記（伺服器在行動鎖外請模型，見 server.write_flavor）；
+        沒有 client（伺服器假人：bot_runner 把 game.client 設成 None；測試與腳本）回 None，一張都不記、一個模型都不叫。"""
+        return self._flavor_jobs if self.client is not None else None
+
+    def take_flavor_jobs(self) -> list[FlavorJob]:
+        """三段式的 A 段（行動鎖內）：拿走等著潤色的江湖大事，全服快取裡已經有合格句子的（別人先潤色好了）先套上、不再請模型。"""
+        jobs, self._flavor_jobs = self._flavor_jobs, []
+        waiting: list[FlavorJob] = []
+        for job in jobs:
+            if not self.apply_flavor(job, ""):
+                waiting.append(job)
+        return waiting
+
+    def apply_flavor(self, job: FlavorJob, flourish: str) -> bool:
+        """三段式的 C 段（行動鎖內）：模型寫回的那一句再驗一次（flavor.clean），合格就存進全服快取（先寫的為準），
+        再把這個人江湖紀錄與原始訊息裡那一則固定的原文換成潤色過的（全服共用的那一句）。快取裡沒有合格句子就什麼都不動，回 False。
+        呼叫端存檔。"""
+        line = flavor.clean(flourish)
+        if line:
+            self.world.set_event_flavor(job.fire_id, line)
+        shared = flavor.clean(self.world.get_event_flavor(job.fire_id) or "")
+        if not shared:
+            return False
+        polished = f"{job.text}\n\n{shared}"
+        swap = {job.text: polished, f"【江湖大事】{job.text}": f"【江湖大事】{polished}"}
+        s = self.state
+        s.log[:] = [swap.get(m, m) for m in s.log]
+        for entry in s.journal:
+            entry.tag = swap.get(entry.tag, entry.tag)
+            entry.lines = [swap.get(m, m) for m in entry.lines]
+        return True
+
     def reset_model_budget(self) -> None:
         """新的一次拿鎖：鎖內的模型呼叫重新有額度（見 _quick_client）。server._locked 與 bot_runner._bot_game 每次拿到行動鎖先呼叫。"""
         self._model_budget.gave_up = False
+        self._flavor_jobs = []  # 上一次拿鎖留下的潤色單子（動作丟例外、整筆撤回的那一下）不算數
 
     @classmethod
     def new(
@@ -990,9 +1027,9 @@ class Game:
             prologue_rules.finish(s, c, self.world, purse=False)  # 序章沒走完卻不在草廬（內容改版）：當作走過，不卡住
         p.visited = {loc_id for loc_id in p.visited if loc_id in c.locations}
         p.visited.add(p.location)
-        for rumor in s.world.rumors:
+        for i, rumor in enumerate(s.world.rumors):  # 換成一份新的、不就地改：讀回來的傳聞跟別的讀取共用（sqlite_world._logs）
             if rumor.location is not None and rumor.location not in c.locations:
-                rumor.location = None
+                s.world.rumors[i] = rumor.model_copy(update={"location": None})
         for flag in s.world.flags:
             if flag not in s.world.flag_times:
                 s.world.flag_times[flag] = s.world.time
@@ -3565,7 +3602,7 @@ class Game:
             # 名將贈禮（裝備四欄 6.4）與本命兵器（打造第三批）：這一下的情誼（對話、事件）到了門檻就送；另起一則「名將贈禮」，
             # 不接在當下這個動作的紀錄裡（FB-139、FB-149：名將多半不在場，也跟那件事無關），排在這一則之後（「剛剛」看得到）
             gifts = self._general_gifts() + self._signature_arms()
-            msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
+            msgs += check_thresholds(self.state, self.content, self.world, self._flavor_sink(), now=self.now)
             msgs += self._settle_plots()  # 參與過的密謀收場了：各自結算一次（正式版乙二）
             msgs += self._story_tick()  # 一條線：這一下做成的事、過了的期限往下走（關著是空的）
             msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
@@ -3723,7 +3760,7 @@ class Game:
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             self._greet_rejoin(faction_before)  # 同樣：入伍段早就走完的人拜入門派，引薦人打個招呼（新手引導計畫三）
             gifts = self._general_gifts() + self._signature_arms()  # 隨口應對的效果也可能加情誼（同 choose：另起一則）
-            msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
+            msgs += check_thresholds(s, c, self.world, self._flavor_sink(), now=self.now)
             msgs += self._report_seat()  # 隨口應對的效果也可能推大勢、記貢獻：第四階席次的帳在這裡也抄（正式版丁）
             self._check_hints()  # 隨口應對了結了事件：同選項一樣，碰到的新玩法排一條、排著的上框（新手引導計畫三）
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
@@ -3800,7 +3837,7 @@ class Game:
             self._begin_enlistment(faction_before)
             self._greet_rejoin(faction_before)
             gifts = self._general_gifts() + self._signature_arms()
-            msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
+            msgs += check_thresholds(s, c, self.world, self._flavor_sink(), now=self.now)
             msgs += self._report_seat()
             self._check_hints()
             journal.add_entry(s, self._draft.entry(s.world.time, msgs))
@@ -7583,7 +7620,7 @@ class Game:
         keep = c.config.companions.parted_keep
         lines = []
         marked = set()
-        for cid, progress in self.world.read().companions.items():
+        for cid, progress in self.world.companions().items():
             if cid not in c.characters or not any(roster.owns(n, p.name) for n in progress.parted_from):
                 continue
             marked.add(cid)
@@ -11744,7 +11781,6 @@ class Game:
         if j is None or (j.arrive_at[j.reached] > s.world.time and not s.world.ended):
             return []
         own = self._draft is None
-        client = None if own else self._quick_client()  # sync／advance 的抵達（計時器、備料都拿著行動鎖）不叫模型；只有疾行在玩家自己這次行動裡
         if own:
             self._draft = Draft(atlas.journey_title(c, j.path))
         try:
@@ -11764,7 +11800,7 @@ class Game:
                 if new_leg:
                     s.player.leg_actions = set()
                     msgs += self._ambush_check(came_from, stop, when)  # 設伏劫道：這一段路上有沒有埋伏（字典查一次，疾行也算）
-                msgs += self._arrive(stop, client=client)
+                msgs += self._arrive(stop)
                 if new_leg:
                     msgs += mounts.hunger(s, c, j.mode)  # 騎著馬走完一段（裝備四欄 5.4）：扣飽足度，第一次低到 30 以下提醒一次；掉頭回原地不扣
                 if new_leg and not c.locations[came_from].prologue_only:  # 出師那段路不抽路上見聞
@@ -11788,9 +11824,9 @@ class Game:
         self._sync_battle_presence()
         return msgs
 
-    def _arrive(self, loc_id: str, client: OllamaClient | None = None) -> list[str]:
-        """抵達一站：照原本走到一個地點的規則——地點描寫、新手引導、大勢門檻。client 是這次抵達可以用的模型（只給江湖大事潤色）：
-        None（計時器的抵達）就完全不叫模型；門檻照樣觸發。以前重遊的終點還在鎖內請模型補一句點綴，那句只進 GameState.log、
+    def _arrive(self, loc_id: str) -> list[str]:
+        """抵達一站：照原本走到一個地點的規則——地點描寫、新手引導、大勢門檻。鎖內一個模型都不叫：江湖大事的潤色記成單子、
+        放鎖之後才請（S-09，見 _flavor_sink）。以前重遊的終點還在鎖內請模型補一句點綴，那句只進 GameState.log、
         畫面上看不到，卻佔著全服的行動鎖（2026-10-12 拿掉，見 _present）。"""
         s, c = self.state, self.content
         before = s.player.tutorial_step
@@ -11803,7 +11839,7 @@ class Game:
         guide = self._guide(note_action(s, c, self.world, "move"))  # 出師的盤纏（序章步驟的獎勵）是這一趟路的結果，回在這裡
         if not explore_modes.is_town(c, c.locations[loc_id]):  # 走到城外（初入江湖逛鋪子那一步：沒進鋪子、直接出城也算過，Joy 2026-10-22）
             guide += self._guide(note_action(s, c, self.world, "leave_town"))
-        thresholds = check_thresholds(s, c, self.world, client, now=self.now)
+        thresholds = check_thresholds(s, c, self.world, self._flavor_sink(), now=self.now)
         t = c.tutorial
         left = [t.leave_text] if t.location is not None and before < t.prologue_steps <= s.player.tutorial_step and t.leave_text else []
         # 出師、抵達起點：「剛剛」先接一句草廬已經看不見了（新手引導設計 10.3），再寫盤纏（T7 審查 M4）
@@ -14177,7 +14213,7 @@ class Game:
         request: seal_duel.TextRequest | None = None,
     ) -> list[str]:
         """奪璽放手一搏的 C 段（5.7）：鎖內重驗，同一場、同一回合、同一邊、同一句才採用，記進 pending（送出不等於結算，湊齊而且滿 20 秒才算）。
-        回合對不上直接回「這一回合已經結算」，不重評、不套用（不照抄 duel_gamble 的鎖內重評：會把第 r 回合寫的那一句套到第 r＋1 回合）。
+        回合對不上直接回「這一回合已經結算」，不重評、不套用（鎖內重評會把第 r 回合寫的那一句套到第 r＋1 回合；頭目戰、擂台同一條）。
         沒給 request（腳本、測試）就在這裡開單；沒給分數就用 _quick_client 在鎖內評，評不到是 40。"""
         if request is None:
             request = self.seal_text_request(text)
@@ -14332,9 +14368,10 @@ class Game:
         self, text: str, llm_rate: int | None = None, stories: tuple[str, str] | None = None,
         request: DuelTextRequest | None = None, crowd: str = "",
     ) -> list[str]:
-        """頭目戰放手一搏的 C 段（擂台也走這裡：crowd 是鎖外判的觀眾反應，arena_crowd.judge_gamble）：llm_rate 是鎖外評好的成功率，request 是當時開的單子——還是同一隻、同一回合才用，
-        對不上（這一回合已經出過招、換了一場）就丟掉重評。沒給分數（假人不寫自由文字；腳本、測試）在這裡用 _quick_client 評，
-        評不到是保底的 40。擲骰、推進、損耗全在 duel.gamble。"""
+        """頭目戰放手一搏的 C 段（擂台也走這裡：crowd 是鎖外判的觀眾反應，arena_crowd.judge_gamble）：llm_rate 是鎖外評好的成功率，request 是當時開的單子——還是同一隻、同一回合、同一句才用；
+        對不上（這一回合已經出過招、換了一場）回「這一回合已經結算」、句子不同回「請再送一次」，不重評、不套用（同 seal_gamble：
+        鎖內重評會把第 r 回合寫的那一句套到第 r＋1 回合，還佔住全服的鎖；M-05）。沒給 request（假人不寫自由文字；腳本、測試）
+        而且沒給分數，在這裡用 _quick_client 評，評不到是保底的 40。擲骰、推進、損耗全在 duel.gamble。"""
         checked = self._duel_text_check(text)
         if isinstance(checked, list):
             return self._log(checked)
@@ -14342,8 +14379,9 @@ class Game:
         if s.player.arena is not None:
             return self._log(self._arena_gamble(checked, llm_rate, stories, request, crowd))
         duel = s.player.duel
-        if request is not None and (request.boss, request.round, request.text) != (duel.boss, duel.round, checked):
-            llm_rate, stories = None, None
+        stale = self._stale_duel_request(request, duel.boss, duel.round, checked)
+        if stale:
+            return self._log(stale)
         if llm_rate is None:
             verdict = battle_instance.assess_gamble(
                 self._quick_client(), duel_rules.scene(c, duel), self._duel_side(), checked, s.player.name,
@@ -14361,6 +14399,17 @@ class Game:
             story = f"你放手一搏：「{checked}」——{'成了！' if won else '沒成，反倒露了破綻。'}"
         line = tactics.round_line(f"第 {duel.round + 1} 回合：{story}（氣勢 {delta:+d}，你氣血 {-hp:+d}）", fired)
         return self._log(self._duel_after(line))
+
+    @staticmethod
+    def _stale_duel_request(request: DuelTextRequest | None, boss: str, round_: int, text: str) -> list[str]:
+        """頭目戰、擂台 C 段的重驗：單子是別一場、別一回合的回 duel.STALE，同一回合換了一句回 duel.RESEND；沒給單子或對得上是 []。"""
+        if request is None:
+            return []
+        if (request.boss, request.round) != (boss, round_):
+            return [f"（{duel_rules.STALE}）"]
+        if request.text != text:
+            return [f"（{duel_rules.RESEND}）"]
+        return []
 
     def _duel_act(self, arg: str) -> list[str]:
         """選單上的一招，或抽身退走。"""
@@ -14491,10 +14540,6 @@ class Game:
         s, c, m = self.state, self.content, self.state.player.member
         arts = (team.player_art(s, c, self.world, m.wugong_id), team.player_art(s, c, self.world, m.neigong_id))
         return [a.name for a in arts if a is not None]
-
-    def arena_board(self) -> list[dict]:
-        """擂台榜（見聞「榜單」分頁的一張；arena.board）：照名次前 board_size 名，帶稱號。擂台關著是空的。"""
-        return arena.board(self.state.world, self.content.config.arena) if arena.on(self.content) else []
 
     def arena_power(self) -> float:
         """此刻上擂台的威力（假人照它決定報名、更新分身；bot_policy._arena）。"""
@@ -14703,11 +14748,12 @@ class Game:
     def _arena_gamble(
         self, text: str, rate: int | None, stories: tuple[str, str] | None, request: DuelTextRequest | None, crowd: str = "",
     ) -> list[str]:
-        """擂台的放手一搏（C 段）：同一場、同一回合、同一句才用鎖外評好的分，對不上就在鎖內重評（同頭目戰）。"""
+        """擂台的放手一搏（C 段）：同一場、同一回合、同一句才用鎖外評好的分，對不上就回原因、不重評、不套用（同頭目戰）。"""
         s, c, p = self.state, self.content, self.state.player
         fight = p.arena
-        if request is not None and (request.boss, request.round, request.text) != (f"arena:{fight.id}", fight.round, text):
-            rate, stories, crowd = None, None, ""
+        stale = self._stale_duel_request(request, f"arena:{fight.id}", fight.round, text)
+        if stale:
+            return stale
         if rate is None:
             verdict = battle_instance.assess_gamble(
                 self._quick_client(), arena.scene(fight), self._duel_side(), text, p.name,
@@ -15425,7 +15471,7 @@ class Game:
             return self._log(refusal)
         if fire_id in self.state.world.fired_thresholds:
             return self._log(["（這件大事已經發生過了。）"])
-        msgs = fire_by_id(self.state, self.content, fire_id, self.world, self._quick_client(), now=self.now)
+        msgs = fire_by_id(self.state, self.content, fire_id, self.world, self._flavor_sink(), now=self.now)
         if msgs is None:
             return self._log(["（沒有這件大事。）"])
         self._write("觸發大事", msgs, tag="管理者")
@@ -15442,7 +15488,7 @@ class Game:
         if not pushable(self.content, self.state.world, trend_id):  # 開關開著時的黃巾聲勢由三條戰線合成，change_trend 推它會丟 ValueError
             return self._log([f"（{trend_name(self.content, trend_id)}由三條戰線合成，不能直接推；請推其中一條戰線。）"])
         msgs = change_trend(self.state, self.content, trend_id, delta)
-        msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
+        msgs += check_thresholds(self.state, self.content, self.world, self._flavor_sink(), now=self.now)
         self._write("推動大勢", msgs or ["大勢紋絲不動。"], tag="管理者")
         self._save_season()
         return self._log(msgs)
@@ -15551,7 +15597,7 @@ class Game:
             return self._log([f"（{trend_name(self.content, trend_id)}由三條戰線合成，不能直接推；請推其中一條戰線。）"])
         delta = max(0, min(100, value)) - trend_value(self.state, self.content, trend_id)
         msgs = change_trend(self.state, self.content, trend_id, delta) if delta else []
-        msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
+        msgs += check_thresholds(self.state, self.content, self.world, self._flavor_sink(), now=self.now)
         self._write("定戰況", msgs or ["大勢紋絲不動。"], tag="管理者")
         self._save_season()
         return self._log(msgs)
@@ -15574,7 +15620,7 @@ class Game:
         if before == side:
             return self._log(["（這一塊本來就是這樣。）"])
         conquest.set_control(w, c, loc_id, side)
-        msgs = check_thresholds(self.state, c, self.world, self._quick_client(), now=self.now)
+        msgs = check_thresholds(self.state, c, self.world, self._flavor_sink(), now=self.now)
         name = c.locations[loc_id].name
         line = f"{name}改歸{c.scenario.faction_name(side, side)}。" if side else f"{name}放回中立。"  # 管理者看的，不是天下大事
         self._write("定一塊歸誰", [line] + msgs, tag="管理者")
@@ -15603,7 +15649,7 @@ class Game:
         msgs = [f"{name}：{c.scenario.faction_name(side, side)}的進度定成 {round(value)}。"]  # 管理者看的
         if value >= conquest.FULL:
             msgs += conquest.flip(w, c, loc_id, side)
-            msgs += check_thresholds(self.state, c, self.world, self._quick_client(), now=self.now)
+            msgs += check_thresholds(self.state, c, self.world, self._flavor_sink(), now=self.now)
         elif value <= 0:
             fight.bars.pop(side, None)
         self._write("定一塊的進度", msgs, tag="管理者")

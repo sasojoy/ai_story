@@ -10,8 +10,6 @@ import pytest
 from conftest import real_content
 from tianxia.atlas import region_of
 
-pytestmark = pytest.mark.slow
-
 ROOT = Path(__file__).resolve().parents[2]
 MERGED = {
     "yz_zhuo_wild_horse", "yz_hall_yard_test", "yz_juma_toll", "yz_yan_loose_horses", "yz_market_salt",

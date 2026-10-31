@@ -34,7 +34,7 @@ FAKE_TURN = companion_agent.CompanionTurn(
     narrative="他微微頷首，若有所思。", options=["繼續交談", "就此告辭"], option_tags=["尋常寒暄", "尋常寒暄"],
 )
 FAKE_CONSOLIDATION = companion_agent.MemoryConsolidation(
-    relationship_summary="彼此的關係穩定發展。", new_milestones=["閒聊了幾句家常"],
+    relationship_summary="彼此的關係穩定發展。",
 )
 
 

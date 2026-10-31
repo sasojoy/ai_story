@@ -164,12 +164,26 @@ def test_the_gamble_without_a_story_uses_a_fixed_line(setup):
 
 
 def test_a_stale_rating_is_thrown_away(setup, monkeypatch):
-    """C 段重驗：單子是上一回合開的就不用那個分數，在鎖內重評（沒有模型是保底的 40）。"""
+    """C 段重驗（M-05）：單子是上一回合開的就回「這一回合已經結算」，不在鎖內重評、不套用；同一回合換了一句回「請再送一次」。"""
     content, game = setup
     _meet(game)
     request = game.duel_text_request("一斧頭劈他腦門")
     assert request.round == 0 and request.title == "黃巾小帥段鐵頭"
+    fresh = game.duel_text_request("一斧頭劈他腦門")
+    assert game.duel_gamble("換一句", 100, ("成", "敗"), request=fresh) == [f"（{duel.RESEND}）"]
     game.choose("duel:固守")
+    seen = []
+    monkeypatch.setattr(battle_instance, "assess_gamble", lambda *a, **k: seen.append(a) or battle_instance.GambleVerdict(40))
+    assert game.state.player.duel is not None  # 一回合推不到 90 或 10
+    lines = len(game.state.player.duel.lines)
+    assert game.duel_gamble("一斧頭劈他腦門", 100, ("成", "敗"), request=request) == [f"（{duel.STALE}）"]
+    assert seen == [] and len(game.state.player.duel.lines) == lines and game.state.player.duel.round == 1
+
+
+def test_without_a_request_the_gamble_is_rated_inside(setup, monkeypatch):
+    """沒給單子也沒給分數（腳本、測試）：在鎖內用 _quick_client 評。"""
+    content, game = setup
+    _meet(game)
     seen = []
 
     def rate(client, act, faction, text, name, setting, place, sex="男"):
@@ -177,8 +191,7 @@ def test_a_stale_rating_is_thrown_away(setup, monkeypatch):
         return battle_instance.GambleVerdict(40)
 
     monkeypatch.setattr(battle_instance, "assess_gamble", rate)
-    assert game.state.player.duel is not None  # 一回合推不到 90 或 10
-    game.duel_gamble("一斧頭劈他腦門", 100, ("成", "敗"), request=request)
+    game.duel_gamble("一斧頭劈他腦門")
     assert seen == [("黃巾小帥段鐵頭", "散人", "一斧頭劈他腦門", duel.SETTING)]
 
 

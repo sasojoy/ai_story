@@ -11,8 +11,6 @@ from conftest import real_content
 from tianxia import sortie_duel
 from tianxia.models import SortieRules
 
-pytestmark = pytest.mark.slow  # 載正式內容（四份）
-
 
 @pytest.mark.parametrize(("profile", "duel", "old"), [("week7", 27, 12), ("season21", 10, 2)])
 def test_jianfa_seasons_carry_their_own_duel_scale(profile, duel, old):
