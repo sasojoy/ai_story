@@ -10,21 +10,32 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 ## 開工
 
 - **2026-10-30 起照〈開發規範手冊〉**（`docs/superpowers/specs/2026-10-30-開發模式-design.md` 第三、四節；分支與測試的總規矩在 `tianxia-flow`）：
-  - **新功能一律 `scripts/new_feature.py <包名>` 生一包**（`tianxia/features/<包>/`：`__init__.py` 登記與掛鉤、`rules.py`、`actions.py`、`state.py`、`content/`、`routes.py`、`web/`、`tests/`、`bots.py`、`README.md`；用不到的不生）。（第 1 階 2026-10-31 合進 develop；範例照 `tianxia/features/mall/`、`tianxia/features/feast/`，導覽 `docs/guide/核心與存檔.md`「核心、功能包、FEATURES、掛鉤、服務清單」。）
-  - **舊功能搬進包**：企劃者 2026-10-31 定 PM 主動照順序一批搬一包（出陣、走一趟、戰鬥、探索、約戰、酒肆）；派工上其他批要動某個還沒搬的功能，也可以順手搬。搬的那一步是純搬——行為不變、測試只搬位置不改斷言，那一包的測試與核心契約綠，TestClient 前後位元組比對＋實機截圖並排。
+  - **新功能一律生一包**：`python scripts/new_feature.py <包名> --title <中文名> --guide <導覽區塊>`（例 `tavern --title 酒肆 --guide 裝備與店面`；`--guide` 是 `docs/guide/` 底下的檔名、不寫 `.md`）。**只生這六樣**（照 `scripts/new_feature.py` 現行程式）：
+    - `tianxia/features/<包>/__init__.py`：`Feature` 子類別（`name`、`prefix` 跟包名一樣、`player_fields`／`carried` 空的、`enabled` 先回 False，其餘掛鉤是預設的空的）；
+    - `tianxia/features/<包>/README.md`（三行等著填）；
+    - `tianxia/features/<包>/tests/test_<包>_smoke.py`（一條 `@pytest.mark.smoke`：登記了、關著一個選項都不給）；
+    - `tianxia/features/<包>/tests/<包>_stage.py`（契約測試 `tests/core/test_contract_features.py` 擺局面用，先只 yield「平常」）；
+    - `docs/guide/<導覽區塊>.md` 最後加一節的標題；
+    - `tianxia/core/registry.py` 的 `FEATURES` 一行（排最後；要排前面寫明理由，順序就是選單與分派的先後）。
+    - `rules.py`、`actions.py`、`bots.py`、`routes.py`、網頁檔**用到才自己加**（範本：`tianxia/features/feast/`〔有按鈕、`bots.py`、三段式〕、`tianxia/features/mall/`〔API、管理者工具、`check_content`、網頁檔〕；導覽 `docs/guide/核心與存檔.md`「核心、功能包、FEATURES、掛鉤、服務清單」）。包裡的 `state.py`、`content/`、`web/` 子資料夾第 3 階以前不開。
+    - **生完要做的**：①`enabled` 接上 `Config.<包>.enabled`；②選項 id 一律 `<prefix>:`；③假人會按的寫 `bot_pick`（`bots.py`），永遠按得下去的寫 `bot_always`（前綴的 tuple）；④煙霧換成真實內容 `real_content("week7")` 走一次最常見的路，`smoke` 標記留著（每一包至少一條，`test_test_for` 守）；⑤`<包>_stage.py` 擺出「有選項」的局面；⑥README 寫好（做什麼、導覽、設計稿第 N 版、認領的欄位、過渡）；⑦導覽那一節寫規則。跑 `scripts/test_for.py`（挑到包的 `tests/`＋核心契約）。
+    - **欄位、`Config`、內容檔、畫面、三段式放哪**（第 3 階以前；手冊第十五節「PM 10/31 補的規範」）：欄位加在核心 `tianxia/state.py`（名字帶包名前綴、有預設值、加進 `state.QUIET_DEFAULTS`），包用 `player_fields`／`carried` 認領；`Config.<包>` 寫在 `models.py`；內容檔 `content/<包>.json` 由核心載（`models.Content` 加欄位、`content.py::load_content` 讀），驗證寫在包的 `check_content`——這三樣都算改核心，派工單寫明、PM 點頭、跑一次核心測試＋煙霧。畫面寫在 `web/<包>.js`、`web/<包>.css`（不寫進 `app.js`／`style.css`；`index.html` 與 `tests/kit/webharness.APP_FILES` 手動加，見 `網頁.md`）。三段式照宴客的敬酒：A、C 段在包的 `actions.py`（`Game` 留一行委派）、B 段在包的 `rules.py`、殼的接線照 `server.feast_text` 放 `server.py`（見 `docs/guide/模型與假人.md`「功能包的三段式」）。
+  - **改哪裡**（手冊第十五節，PM 2026-10-31）：還在 `engine.py`／舊模組的功能，修 bug 與小延伸照舊改在原位、可以在那一群加方法，**不順手搬**；已經搬進 `tianxia/features/<包>/` 的改包裡的檔，`Game` 上的一行委派不加邏輯；正在搬的那一包（`docs/superpowers/plans/2026-10-31-主動搬六包-批次.md` 開頭「搬包中」）不改，非改不可推自己的分支、告訴 PM；全新的玩法一律生一包。
+  - **舊功能搬進包**：企劃者 2026-10-31 定 PM 主動照〈全部拆包總表〉（`docs/superpowers/plans/2026-10-31-全部拆包-總表.md`，32 包、68 批；「趕快拆」）一批搬一包，**只由總表的批搬**，派工上別的批不順手搬。搬的那一步是純搬——行為不變、測試只搬位置不改斷言，那一包的測試與核心契約綠，前後對照＋實機（純搬、`web/` 沒動的批是兩台真伺服器逐位元組比，總表 5.0）。
+  - **前後對照用 `scripts/same_behavior.py`**（主動搬六包第 1 批收進來；用法在腳本開頭的 docstring）：`selftest --base <根> --tmp <暫存>` 先證明同一份跑兩次一樣、前半＋後半＝整段、改一個字抓得到；`compare --base <根> --head <根> --tmp <暫存> [--profiles …] [--jobs 4]` 比設定（`none`、`weekend`、`season21`、`week7`、`test`；週末與不帶設定在總表第 14 批拿掉以前照比）。每一批在 `PHASES` 後面加自己的情境（總表第六節第 10 條：那一區調查的 `risks`／`same_behavior`），半舊半新（`--part first`／`second`）也要切在這一包還開著的局面上。不加 `-I`（會連 `PYTHONHASHSEED` 一起忽略）。
   - **搬包常踩的**（第 1 階 2026-10-31）：掃原始碼的測試多半寫 `glob("tianxia/*.py")`，搬了之後看不到包裡的程式，期待清單寫了檔名的會紅（`test_explain2`、`test_schema_required`、`test_prologue`），改成也掃 `tianxia/features/*/*.py`；測試檔搬進 `tianxia/features/<包>/tests/` 之後 `Path(__file__).parents[2]` 要改 `parents[4]`；舊的 import 路徑留成別名（`sys.modules[__name__] = rules`），`monkeypatch.setattr(舊模組, …)` 照樣有效；把規則從 `style.css` 搬到後載的檔會改串接順序，375 與 1280 都要拍（商城那一層的背景簡寫蓋掉了電腦寬的欄寬底色）；搬之前先查原本那幾段在開關關著時還做不做事（宴客的 `enabled` 是「開著，或這一季還有擺過的宴」）。
   - **包只 import 核心**，不 import 別的包；要用別包的東西走核心的服務（例：票的庫存與消耗走 `ctx.wallet`）。過渡期可以 import 還沒搬的舊模組，行尾註 `# 過渡：待搬`。`tests/core/test_feature_boundaries.py` 會掃。
   - **只跑那一包的測試**（`-n 4`）；slow 不自動跟，要跑就 `scripts/test_for.py --slow`。
   - **不改技能檔**：學到的寫在回報的「學到的」一節，PM 收進技能（手冊第十節）。
   - **每做完一個 Task 就推一次**自己的分支（手冊第八節）：換帳號最多丟一個 Task。
 - 先 `git worktree list`、`git remote -v` 核對自己在哪一份 clone、哪一條分支（這台有 `天下大勢`、`ai遊戲` 兩份）。
-- 一批一個工作樹，從派工指定的分支開（多半是 `origin/feature/formal-season`）。分支名照派工寫的。
+- 一批一個工作樹，從派工指定的分支開（現在多半是那一包的 `origin/feature/<包名>`，例 `feature/sortie`；有哪幾條看 `docs/superpowers/handoff/` 最新那一份的第一節）。分支名照派工寫的。
   如果是 `git worktree add -b` 開的，要加 `--no-track`，或開完 `git branch --unset-upstream`：不然它跟著功能分支，`git push` 可能推錯地方。推的時候一律寫明 `git push origin <你的分支>`。
 - 工作樹沒有 `.venv`：python 用 `C:/Ray/專案/天下大勢/.venv/Scripts/python.exe`，PowerShell 呼叫。（Bash 另外會拒絕 `git -C .`〔路徑要寫死〕與 `"...python.exe" --version` 這種「指令名算出來的」；Bash 的 heredoc 寫 python 時字串裡的反斜線 n 會變成真的換行，寫腳本一律用 Write。Git Bash 的 `git show <版本>:<路徑>` 會被 MSYS 的路徑轉換弄壞〔`ambiguous argument 'origin\dev\…;…'`〕，前面加 `MSYS_NO_PATHCONV=1`。）
 - **派工要你載的技能或設計稿不在這條分支上**（2026-10-21：`tianxia-map-remake` 與 `2026-10-20-輿圖簡化-design.md` 只在 `develop`、`origin/design/map-simplify-3`，`feature/territory-conquest` 與它開出來的 `dev/blocks-2` 都沒有）：`git log --all --format='%h %ci %D' -3 -- <路徑>` 找最新的那一版，`git show <那一版>:<路徑>` 讀（設計稿存到 scratchpad 再 grep），不要為了讀它把檔加進自己的分支（之後合 `develop` 會變成兩邊都新增的衝突）。
 - **派工寫的 `origin/feature/<名字>` SHA 是派工當下的**，開工 fetch 之後可能已往前走（2026-10-26 減法季 3b 修正輪：寫 `20e78b3f`，fetch 後是 `52b598a5`，多的是雲端的旁白兩筆）：合最新的、回報寫實際合了哪一版；「關著不變」的 base 也是合進來的那一版。合進來的衝突多半是同一個檔兩邊各加一段（`models.py` 的 `SortieRules` 欄位、試玩回饋檔的 FB 列與 QA 節、QA 技能檔）：scratchpad 寫一支「兩邊都留、可選擇中間補空行」的小腳本（讀進來轉 `\n`、assert 標記各 N 處、寫回轉 CRLF），比手改穩。
 - 先寫計畫 `docs/superpowers/plans/<日期>-<名字>.md`（派工說「不必給企劃者審」就不審），一張回饋單不用計畫。不開子代理、不開 Workflow，除非派工明講。
-- 派工若要「先合某分支」，合之前先 `git merge-base --is-ancestor <那一版> origin/feature/formal-season` 看是不是已經在功能分支上。PM 前後兩則指示衝突時照後一則；合到一半發現不對就 `git merge --abort`。
+- 派工若要「先合某分支」，合之前先 `git merge-base --is-ancestor <那一版> origin/feature/<你的功能分支>` 看是不是已經在功能分支上。PM 前後兩則指示衝突時照後一則；合到一半發現不對就 `git merge --abort`。
 - 派工寫 `git switch -c dev/<名字> origin/dev/<名字>`，但 `git worktree list` 看得到那條本地分支已經在別的工作樹 checkout 著（上一位開發的）：同一條本地分支不能兩處同時 checkout，`switch -c` 也會說已經存在。開一條別名的本地分支（例 `conquest-1-fix`）從 `origin/dev/<名字>` 開，推的時候寫 `git push origin HEAD:dev/<名字>`，不去動別人的工作樹（2026-10-20 領地爭奪第一批修正）。
 
 ## 工作樹與指令的坑
@@ -102,7 +113,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   同一條測試裡把開關關掉再比一次、斷言「關著時看得出差別」（列出哪幾項不一樣），才證明這條測試抓得到漏（玉璽碎片改版第 1 批 `test_two_worlds_that_differ_only_in_the_holder_look_the_same`）。要找名號字串時，名號別跟固定的字撞（拿「懷璽」當持有者的名號，會撞到「懷璽之人」），用「甲客」「持璽客」這種。
 - **差異測試要讓「世界差在祕密、後面的步驟不被結果帶開」**（玉璽碎片改版第 1 批修正，側門）：兩個世界裡誰贏誰輸、誰掉了氣血會不同，之後算威力的步驟（氣血係數 `condition` 也在 `_spar_power` 裡）就跟著差，測試紅了不是漏而是被結果帶開。做法：先把所有「看」的畫面讀完再打；每個人至多打一場有損耗的仗（截殺各挑沒打過的人）；擂台挑了就認輸（`arena:yield`，結果固定是落敗、名次不動）；只比「對手那一格」的數字，不比勝負與氣血。
 - **差異測試抓不抓得到，用「還原漏洞」證明**：當祕密只在子開關開著時存在（關著本來就看不出差別），不能靠「關著看得出差別」那招，改成 `monkeypatch` 把防線拆掉（例：`Game._spar_power` 不理 `seal`、`_arena_bare` 回 None），斷言兩個世界在該有的鍵上真的不一樣（`test_the_side_door_guard_has_teeth`）。另外對實作做變異檢查：一處一處換掉、跑那組測試、看會紅；腳本把原檔 bytes 存在記憶體、`finally` 寫回，比反向替換安全（不會因為換回去的字串不唯一而卡在改壞的狀態）。
-- **差異測試的「旁觀者」要站在看得到的位置**（FB-643，2026-10-21）：第 2 批的不具名守門有比「酒肆查兩人」，可是旁觀客在別處、兩人名望 0，打聽度只到 3，「近來的事」根本不列，漏了也比不出來。照被測的那個門檻擺人：同陣營、同一間酒肆（地頭熟）、名望第一段（打聽度 4 才列近來的事）、份量 4 的舊事湊到差一件就加名氣、舊事的時刻挪到兩天前（近況只看新的那一件），再斷言「看得到的那一行真的有出現」（`tests/seal/test_seal_fb643_tavern.py`）。
+- **差異測試的「旁觀者」要站在看得到的位置**（FB-643，2026-10-21）：第 2 批的不具名守門有比「酒肆查兩人」，可是旁觀客在別處、兩人名望 0，打聽度只到 3，「近來的事」根本不列，漏了也比不出來。照被測的那個門檻擺人：同陣營、同一間酒肆（地頭熟）、名望第一段（打聽度 4 才列近來的事）、份量 4 的舊事湊到差一件就加名氣、舊事的時刻挪到兩天前（近況只看新的那一件），再斷言「看得到的那一行真的有出現」（`tests/seal/test_seal_acts.py`）。
 - **要對某些讀者藏起來的資料，先找現成的分類欄位**（FB-643：起用碎片的行狀不給酒肆讀）：`AnnalEntry` 加一個布林欄位會讓每個人每一則行狀的 JSON 都多一個鍵（`model_dump_json` 不省預設值，資料庫對照會整片不一樣）；改用新的 `kind`（`annals.SEAL`），顯示的地方給同一個標籤（`KINDS`）、季末的傳照舊歸段（`GROUPS`），讀者那幾處問 `annals.heard`。資料庫只有那幾則的 `kind` 變。
 - **假瀏覽器的點擊不管 `disabled`**（`test_seal_acts_web.CLICK` 直接呼叫 click 的監聽器）：灰掉的鈕在真的瀏覽器按不到，在測試裡按得到。動作的處理要自己再驗一次（`seal-pick` 只收按得下去、那一列沒灰的），不要只靠 `disabled`。
 - **給別人看的數字（勝算、身手、戰報的「對手威力」）每一處都要走同一個「給別人看的那一份」**：選單、玩家卡、頁面（`shopview`）、戰報兩邊各一份（發的與收的、守的與挑的）、假人讀的勝算清單；寫在存檔裡的快照（擂台分身）要另記一份，欄位加預設 `None`（舊存檔讀得進來、沒碎片時狀態不多一個字）。算這個數字的時機要排在記戰報之前：第一邊的記帳可能升級，第二邊再算就變了（`_spar`、`raid`、`_ambush_fight` 都在算 `ours`／`theirs` 的同一處先算好）。
@@ -138,6 +149,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 
 ## 內容改動的雷
 
+- **內容檔歸誰**（企劃者 2026-10-03；手冊第十五節）：`content/*.json` 只有開發（含雲端開發）與 Joy 改；討論對話、設計 session 把內容寫成「欄位對應 JSON 的表」交開發轉檔。Joy 寫好的事件文字不改，非改不可先問企劃者（經 PM）。**內容 id 不改**（PM 2026-10-31）：上線後武學、物品、地點、事件、商品、配方的 id 不改，要換名改 `name`；真要拿掉某個 id，`_drop_stale_references`（或包的 `on_drop_stale`）要清得掉，回報的〈退版風險〉寫明。新包的內容檔以包名開頭（`content/<包>.json`），舊的內容檔搬包時不改名。
 - 內容載入時 `tianxia/content.py::validate` 會擋很多東西，改完一定要至少載一次正式內容（`real_content()` 或跑相關測試）。
   名字還要過命名過濾：不能跟素材、人物、隱藏配方、四階名器表、寶物撞名（新加的名器撞到 `tier4_named.json` 會整個載不起來）。
 - **地點的 `enemies` 與地盤的 `garrison` 是兩回事**：
@@ -162,10 +174,10 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 新規則多半是 `Config` 開關＋開季時蓋在 `WorldState` 的章（例 `precise.on(content, world)` 同時看設定、章、探索三選一）。
   - 判斷開沒開一定走那個 `on()`，要把 world/state 傳進去。只傳 content 時它會回假，悄悄退回舊說法（FB-435 就是這樣：傳聞沒給 world，寫回舊句）。
   - 改函式簽名加 world/state 時，grep 所有呼叫點一起改，包括 letters、figure_life、shopview、engine。
-- **季種類對照**（週末 `weekend`、14 天＝不帶設定檔、21 天 `season21`）：
-  - 新數字通常只寫在 `content/profiles/season21.json` 或 `Config` 預設。
-  - 改之前想清楚三種季各會怎樣。派工沒說要動週末與 14 天就不動。
-  - 測試用 `real_content("weekend")`／`("season21")` 各驗一次。7 天濃縮季是 `week7`（`season21` 骨架＋`season_segments`），只在那一季換的東西問 `calendar.week7_on`，寫「週／段」的字走 `calendar.week_word`／`week_label`，不要各處自己判斷。
+- **季種類對照**（企劃者 2026-10-31「現在只有7天跟21天兩種版本」：現役只有 7 天 `week7` 與 21 天 `season21`；週末 `weekend`、14 天＝不帶設定檔、探索三選一整套拿掉，排在全部拆包總表第 13、14 批）：
+  - 新數字通常只寫在 `content/profiles/season21.json`、`week7.json` 或 `Config` 預設。
+  - 改之前想清楚這兩種季各會怎樣。新功能、新測試只照顧 `week7`、`season21` 與測試內容，**不為 `weekend` 與不帶設定另寫分支或測試**；派工沒說要動週末與 14 天就不動（第 13、14 批落地以前它們照舊跑得起來、照舊在前後對照裡比）。三選一只修 bug、不搬。
+  - 測試用 `real_content("week7")`／`("season21")` 各驗一次。7 天濃縮季是 `week7`（`season21` 骨架＋`season_segments`），只在那一季換的東西問 `calendar.week7_on`，寫「週／段」的字走 `calendar.week_word`／`week_label`，不要各處自己判斷。
   - **「段」與「每天」是兩個開關**（FB-502）：季曆有段只有 7 天季（`week7_on`）；軍令每天一道是照現實天的季（`calendar.orders_daily`，21 天季也是）。軍令的字放 `calendar.ORDER_KEYS`，其他「週」的字照段。網頁 `calWords()` 有值不代表 7 天季（21 天季也送軍令那幾個字）：段問 `wk7()`、軍令問 `ordersDaily()`。
   - **照現實天的季有開季偏移**：名義季末一律 `calendar.nominal_end`（不是季長 × DAY，FB-500、FB-505）；時刻表某一件「到了沒」一律 `timetable.when_in`（決戰照 `schedule`），不要用 `calendar.event_time`——決戰只寫星期鐘點、`day` 是 0，會被當成那一週第一天就到了（FB-504）。
   - **設定覆寫檔是淺層合併**（`content._config` 是 `{**config.json, **profile}`）：profile 寫 `"figure_life": {"revenge_cal_days": 2}` 會把 config.json 裡整塊 `figure_life` 換掉，沒寫的鍵回到 `Config` 預設。寫巢狀的覆寫之前先看 config.json 有沒有那一塊；測試驗一次「這一塊跟別種季只差這幾個鍵」（例 `test_week7_shortens_the_calendar_day_spans_pm_ruling_5`）。
@@ -200,7 +212,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **`PlayerState` 加進 `QUIET_DEFAULTS` 的欄位**：`tests/core/test_gentry_ledgers.py::test_new_fields_add_no_keys_until_used` 現在照整個 `QUIET_DEFAULTS` 減（以前寫死只少兩個鍵），之後加欄位不必再改它；自己那一批另寫一條「預設不寫、有值寫得回來、舊存檔讀得進來」。
 - **動作中間要改全服狀態**（例：探索撿到碎片，`Game._seal_find`）：用一次 `self.world.mutate(...)`，寫入時整個重驗；只想補天下大事或江湖史就寫在 mutate 裡的 `shared.season`（傳聞與江湖史只增不減，動作結束的 `_save_season` 不會蓋掉）。**不要**在動作中間把 `self.state.world = self.world.get_season()` 換掉：這個動作前面對 `self.state.world` 的就地修改還沒存，會一起丟掉（決戰收場那幾處這樣換是因為前面沒有未存的修改）。
 - **新的全服登記欄位（`SealRegistry` 這類）在開季才寫**：寫的地方有三個進入點——`seed_first_season`（自動開季）、`open_season`、`next_season`；沒蓋章的季連登記都不要碰（`filled(...)` 也會改登記），舊的季才一個字不變。
-- 資料庫結構（第 5 版）不改，要改先問 PM。新狀態欄位加在 `PlayerState`／`WorldState`，舊存檔讀得進來。
+- 資料庫結構（現在**第 9 版**，`tianxia/database.py` 的 `SCHEMA_VERSION`）不改，要改先問 PM 對號碼；搬包不升。新狀態欄位加在 `PlayerState`／`WorldState`（新包的也是，名字帶包名前綴，包用 `player_fields` 認領；手冊第十五節），舊存檔讀得進來。
 - **`PlayerState` 新欄位要「關著的季存檔一個鍵都不多」**（減法季批 3c，2026-10-24）：`CharacterStore.save` 是 `state.model_dump_json()`，每個欄位都寫，加一個有預設值的欄位，每個角色的 JSON 就多一個鍵。`PlayerState` 有一個 wrap serializer（`_drop_quiet_defaults`），把欄位名加進 `state.QUIET_DEFAULTS`，空的、0、None 的時候就不寫那個鍵（讀檔沒有這個鍵就是預設值）。測試照 `tests/core/test_gentry_ledgers.py::test_new_fields_add_no_keys_until_used`：預設時 JSON 的鍵＝`model_fields` 減掉這幾個與 `exclude=True` 的、有值時寫得出來讀得回去、拿掉鍵的舊存檔讀得進來；拿掉 serializer 裡那一行跑一次看會紅。
 - **也要讓舊程式讀得進新存檔**（FB-695，2026-10-22：上線之後出事要退回上一版）：加欄位沒事（模型沒設 `extra`，舊程式略過、寫回時丟掉），**往舊程式也有的 `Literal` 加值不行**（碎片登記 `SealEvent.kind` 加 `use`，舊程式讀 world 那一列就 `ValidationError`，伺服器、假人程式都起不來）。新的種類另開一欄、空的時候用 wrap serializer 把鍵拿掉（**不用 `Field(exclude_if=…)`**：Pydantic 2.11 才有，`requirements.txt` 是 `pydantic>=2.6`，舊版略過它、空的照寫）、讀檔時 before 驗證器搬舊資料（見 `docs/guide/核心與存檔.md`）。查有沒有這種改動：`git grep -n "Literal\[" <舊版> -- tianxia/` 與 HEAD 各存一份、去掉行號 diff。實測退回：`git archive <舊版>` 解到 scratchpad，包一支 `serve.py`（`sys.path.insert`、`os.chdir` 到那一份、`server.CONTENT.config.ollama_url` 指死埠、`server.main(["--port", 埠])`）與 `bots.py`（`run_bots._wait` 換成不等、`run_bots.main(ticks=N)`），新程式寫的資料庫抄一份給舊程式開；**抄之前先 `PRAGMA wal_checkpoint(TRUNCATE)`**（`taskkill` 掉的伺服器留著 `-wal`，只抄 `.db` 會少掉最近寫的）。假人程式要另外拿一份「舊伺服器還沒碰過的」抄本先開（舊伺服器一啟動就把 world 那一列寫回去了，之後才開的假人程式讀到的已經是舊程式的樣子）。腳本在 PM 那個 session 的 scratchpad `fb695/`（`setup_roll.py`、`serve.py`、`bots.py`、`probe.py`、`inspect_db.py`）。
 - **全服戰鬥不只一場了**（領地爭奪第二批：攻城戰跟時刻表決戰同時打，`SharedWorldState.sieges`）：引擎裡讀「這個人的那一場」用 `Game._battle_now()`（假人程式、bot_policy 用 `game.battle_now()`），改它用 `_mutate_battle_of(battle, fn)`，全部列出來用 `battles_now()`；**不要再寫 `world.get_battle()`／`world.mutate_battle()`**，除非真的只講時刻表決戰（璽動、管理者的決戰工具、`_settle_showdown`）。新的 `SharedWorldState`／`BattleInstance` 欄位照舊要分進 `tests/server/test_server.py` 的推送指紋表。
@@ -233,7 +245,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **`SharedWorldState` 加欄位**（2026-10-25 減法季 3b-1 的 `sorties`）：world 那一列是 `model_dump_json(exclude={"season", "active_battle", "sieges"})` 整份寫，加欄位不必改 `sqlite_world._load`／`_save`；「空的時候不寫鍵」在 `SharedWorldState._drop_empty_sorties`（wrap serializer）多判一個鍵就好。另外三件一起想：換季要不要清（`next_season`）、暫停繼續要不要把現實時刻往後挪（`resume_clock`，同 `seal_duels`）、輪詢要不要只讀那一格（`json_extract`，同 `seal_state`）。`tests/server/test_server.py` 的 `NOT_IN_THE_FINGERPRINT` 裡 `SharedWorldState` 那一組到 `siege_records` 就結束，緊接著是 `WorldState` 那一組（`seal_acts`、`xingshi_*` 是季的）——加在 `seal_acts` 後面會進錯組，分類測試報「沒分類」。
 - **招名是中文**：`tactics.counter`／`best_against`、`models.MOVES`／`BEATS` 認的是強攻、固守、奇襲（選項 id 也是 `duel:強攻`）；設計稿寫的「以巧破力」就是奇襲。撤退不在 `BEATS`，`tactics.counter("撤退", …)` 會 `KeyError`，有撤退的回合要自己判 0。
 - **欄位表上的鍵先 grep 畫面在讀什麼**（2026-10-26 減法季 3b 接線）：計畫寫「出陣前那張卡放 `main.sortie`」，可是 `main_view` 早就有 `"sortie": sortie.on(content)`（布林，`web/main.js` 拿 `m.sortie` 把行動列那一格叫「出陣」）。換成 dict 雖然還是真值，型別就變了——卡改放新鍵 `main.sortie_card`，欄位表那一列改成實際的鍵、回報寫給雲端。行動列那一格的選項 id 也一樣：網頁 `ACT_CELLS` 認 `act:train`，新規則沿用它（按了只回一句、不花體力，同探索的入口），不另開 `sortie:card`。
-- **從 `CharacterStore` 讀出來的別人沒有季**（`GameState.world` 是 `exclude=True`，讀回來是空的 `WorldState`）：拿別人的存檔問跟季有關的規則（`allied.side_of` 判豪強依附哪一軍、`team._fighters` 算威力）之前先 `state.world = self.state.world`（`_kin` 就是這樣做的）。3b 接線第一版漏了，豪強的假人一個都補不上約戰（`allied.on` 讀到空季回假，side 變成 `haoqiang`）；`tests/acts/test_sortie_duel.py::test_a_gentry_bot_leaning_on_the_other_army_fills_in` 守。
+- **從 `CharacterStore` 讀出來的別人沒有季**（`GameState.world` 是 `exclude=True`，讀回來是空的 `WorldState`）：拿別人的存檔問跟季有關的規則（`allied.side_of` 判豪強依附哪一軍、`team._fighters` 算威力）之前先 `state.world = self.state.world`（`_kin` 就是這樣做的）。3b 接線第一版漏了，豪強的假人一個都補不上約戰（`allied.on` 讀到空季回假，side 變成 `haoqiang`）；`tianxia/features/sortie/tests/test_sortie_duel.py::test_a_gentry_bot_leaning_on_the_other_army_fills_in` 守。
 - **`BattleRecord.kind` 是 Literal，新的一種戰報不要加值**（FB-695：舊程式讀不進新存檔）：照舊用現成的 kind（例 `sortie`），種類的字寫在 `BattleRecord.label`（戰報上寫的種類，空的照 `battlelog.KIND_WORDS`）。
 - **照現實秒走的規則，整季機器人推不動**（`Game.advance` 只加 `advanced_real`、不動 `now`）：約戰的窗、冷卻照 `self.now`（FB-577：存進全服的時刻不用 `pill_now`），`bot.play_season` 裡永遠不到時，貼了就等季末作廢。量表與測試照伺服器的做法一步一步 `sync(now)`（`scripts/measure_conquest.py`）。
 - **參數放不進選單的玩家動作**（約戰封三招有 64 種組合，2026-10-26）：同 `step:next`，在 `Game.choose` 最前面接走（先問那條規則的 `on()`，關著照舊「此刻無法這麼做」），各自在 `world.mutate` 裡重驗；伺服器另開 `MAIN_ACTIONS` 走同一組 `Game` 方法。整季機器人與假人挑到的是選單上那一格（`act:train`），在 `bot.pick`／`bot_policy.take_turn` 最後換成帶參數的 id（`bot.duel_go`），不然按了那一格什麼都不做、每一步都白按。
@@ -304,4 +316,6 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 順手改的東西另列，讓 PM 決定留不留。
   - 數字照實寫，有疑慮直接講。
   - 只做被要求的事；看到別的問題先報，不自己擴大範圍。
-- 收尾交接：分支與 HEAD、沒提交或沒推的、開著的伺服器或背景程式（埠、PID，關掉）、還開著的 FB、踩過的坑、這一路改了 CLAUDE.md 或 `docs/guide/` 的哪幾條。
+  - 這一批新寫「待 joy 潤」的字列一張清單（程式旁註解 `# 待 joy 潤`／`// 待 joy 潤`；json 寫不了註解的直接列在這裡），PM 收進交接。
+  - 會上 `main` 的批寫〈退版風險〉：資料庫版本升不升、舊程式讀新存檔會不會讀不下（新的 `Literal` 值、新的子模型、季上的新章、world 那一列的新鍵）、季中能不能換、要不要休季部署、備份與緊急開關（`tianxia-flow`「照舊的規矩」）。
+- 收尾交接：分支與 HEAD、沒提交或沒推的、開著的伺服器或背景程式（埠、PID，關掉）、還開著的 FB、踩過的坑、這一路改了 `docs/guide/` 的哪幾條；**開發不改 `CLAUDE.md`**，覺得要改的寫在這裡由 PM 提。

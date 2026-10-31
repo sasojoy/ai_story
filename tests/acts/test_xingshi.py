@@ -9,13 +9,20 @@ from __future__ import annotations
 import calendar as pycal
 import re
 from datetime import datetime
+import random
+import tempfile
+from pathlib import Path
 
 import pytest
 
 import server
-from conquest_kit import announce, conquest_game, go, join
-from tianxia import conquest, conquest_day, rules, siege, xingshi
+from conquest_kit import announce, conquest_game, conquest_rules, go, join
+from tianxia import conquest, conquest_day, rules, seal, siege, territory, xingshi
 from tianxia.engine import Game
+from tianxia.state import DayNote
+from conftest import real_content
+from tianxia.characters import CharacterStore
+from tianxia.sqlite_world import open_world
 
 DIGITS = re.compile(r"[0-9０-９]")
 ESSAY = "　　是日也，" + "南陽一帶兵戈不息，黃巾漸佔上風，官軍據城自守，未敢輕出。" * 6  # 一篇寫得好好的（一百二十字以上）
@@ -175,7 +182,7 @@ def test_letters_are_facts_with_the_name():
     guan = game.content.scenario.faction_name("guan", "guan")
     assert words["letter"].format(who="沈浪", side=huang, place="南陽官道") in t.facts  # 修前 note_fact 認不得，沒有這一條
     # 管理者 21:45 立刻下的那一張，22:00 換天時辰已過作罷（VOID_LATE）：FB-610 之後寫成已經發生的事（letter_done_plain，照樣不帶名號），
-    # 不再當「下一仗」排在後面（修 FB-610 之前這裡斷言 letter_plain；新規則的測試在 test_xingshi_fb610_order.py）
+    # 不再當「下一仗」排在後面（修 FB-610 之前這裡斷言 letter_plain；新規則的測試在這個檔後面 FB-610 那一段）
     assert words["letter_done_plain"].format(side=guan, place="荒丘") in t.facts
     assert words["letter_plain"].format(side=guan, place="荒丘") not in t.facts
     assert t.line == xingshi.SUMMARY_HEAD + xingshi.lines(game.content)["summary"]["none"] + "。"  # 還沒打：「是日」照舊各路按兵
@@ -469,3 +476,274 @@ def test_lines_file_has_every_key(tmp_path):
     for key in xingshi.SUMMARY_KEYS:
         assert lines["summary"][key]
     assert lines["open"] and lines["close"]
+
+
+# ── FB-610（2026-10-31 從 tests/acts/test_xingshi_fb610_order.py 併進來）────────
+# FB-610（QA 驗輿圖第三版第 1 批）：〈天下形勢〉把當天已經打完、作罷的那一場戰書排在最後，讀起來像還有下一仗。
+#
+# xingshi.facts 把沒有結果的 day_log（戰書）一律當「下一仗打哪裡」排在三條線後面，不看同一場是不是已經收場或作罷。修法（PM 2026-10-21）：
+# 照時間順序排，那一場已經打完（收場、作罷、或正在打）的戰書寫成已經發生的事（letter_done：「某某替某軍下戰書攻某地」），排在它的結果前面；
+# 只有還沒開打的才是「下一仗」、排在三條線後面。
+#
+# 順帶（同一輪 QA）：管理者白天按「現在就開一篇」時，正在打的那一場不寫「一仗打到入夜」（fighting_day）。
+#
+# 輿圖第三版第 5 批：原本還有一條「舊季（第二批投票那一版）的眾議、主將定奪照舊是下一仗」，那兩種 day_log 收掉了（領地爭奪從沒合進
+# develop／main，沒有那一版的存檔），那一條拿掉；舊資料讀得進來、略過不寫，改在 tests/test_conquest_rules.py 守。
+
+
+def _tw_fb610(y, mo, d, h, mi=0) -> float:
+    """台灣時間 → 現實 epoch 秒（同 test_xingshi._tw）。"""
+    return float(pycal.timegm(datetime(y, mo, d, h, mi).timetuple())) - 8 * 3600
+
+
+def _world():
+    game = conquest_game("season21", xingshi=True)
+    return game, game.state.world, game.content
+
+
+def _letter_fb610(side, loc, who=""):
+    return DayNote(key=1, side=side, loc=loc, minute=12 * 60, by=conquest_day.LETTER, reason=who)
+
+
+def _words(c):
+    return xingshi.lines(c)["fact"]
+
+
+def _names(c):
+    return c.scenario.faction_name("guan", "guan"), c.scenario.faction_name("huang", "huang")
+
+
+def _first_line_fact(c, facts) -> int:
+    lines = [t.name for t in c.scenario.trends]
+    return next(i for i, f in enumerate(facts) if any(f.startswith(f"{name}一帶") for name in lines))
+
+
+@pytest.mark.slow  # 原本整個檔標 slow（建 Game、載正式內容）
+def test_a_letter_whose_siege_was_won_comes_before_the_result_as_a_past_fact():
+    """QA 的第一個例子：週三官帥下戰書攻汝南荒野、官甲推滿荒丘、12:00 攻城戰打贏。修前那一篇最後是「官帥替官軍下了戰書，約戰汝南荒野。」"""
+    game, w, c = _world()
+    guan, _ = _names(c)
+    notes = [
+        _letter_fb610("guan", "runan_wilds", "官帥"),
+        DayNote(key=1, side="guan", loc="hilltop_wilds", minute=0, by=conquest_day.FLIP, reason="官甲"),
+        DayNote(key=1, side="guan", loc="runan_wilds", minute=12 * 60, by=conquest_day.LETTER, reason="官帥", result="taken",
+                taken="guan", margin="大勝", keeper="guard", attackers=["guan"]),
+    ]
+    facts = xingshi.facts(w, c, notes, {})
+    words = _words(c)
+    done = words["letter_done"].format(who="官帥", side=guan, place="汝南荒野")
+    taken = words["taken"].format(side=guan, margin="大勝", place="汝南荒野")
+    flip = words["flip"].format(who="官甲", side=guan, place="荒丘")
+    assert words["letter"].format(who="官帥", side=guan, place="汝南荒野") not in facts  # 修前排在最後，像還有下一仗
+    assert facts.index(done) < facts.index(flip) < facts.index(taken) < _first_line_fact(c, facts)  # 照時間順序
+
+
+@pytest.mark.slow  # 原本整個檔標 slow（建 Game、載正式內容）
+def test_an_admin_letter_that_was_called_off_is_a_past_fact_before_the_void():
+    """QA 的第二個例子：管理者立刻下戰書攻荒丘（沒有名號）、沒人到作罷。修前最後一條「黃巾軍下了戰書，約戰荒丘。」"""
+    game, w, c = _world()
+    _, huang = _names(c)
+    notes = [_letter_fb610("huang", "hilltop_wilds"),
+             DayNote(key=1, side="huang", loc="hilltop_wilds", minute=12 * 60, by=conquest_day.LETTER, void="absent")]
+    facts = xingshi.facts(w, c, notes, {})
+    words = _words(c)
+    done = words["letter_done_plain"].format(side=huang, place="荒丘")
+    void = words["void"].format(side=huang, place="荒丘")
+    assert words["letter_plain"].format(side=huang, place="荒丘") not in facts
+    assert facts.index(done) < facts.index(void) < _first_line_fact(c, facts)
+
+
+@pytest.mark.slow  # 原本整個檔標 slow（建 Game、載正式內容）
+def test_a_letter_still_to_be_fought_stays_the_next_battle_after_the_lines():
+    game, w, c = _world()
+    _, huang = _names(c)
+    announce(game, "nanyang_road", "huang")  # 那一場還在時程表上、還沒開集結
+    facts = xingshi.facts(w, c, [_letter_fb610("huang", "nanyang_road", "沈浪")], {})
+    pending = _words(c)["letter"].format(who="沈浪", side=huang, place="南陽官道")
+    assert facts.index(pending) > _first_line_fact(c, facts)
+
+
+@pytest.mark.slow  # 原本整個檔標 slow（建 Game、載正式內容）
+def test_after_a_held_siege_a_new_letter_on_the_same_block_is_the_next_one():
+    game, w, c = _world()
+    guan, _ = _names(c)
+    announce(game, "runan_wilds", "guan")  # 第二張戰書排的那一場
+    notes = [
+        _letter_fb610("guan", "runan_wilds", "官帥"),
+        DayNote(key=1, side="guan", loc="runan_wilds", minute=12 * 60, by=conquest_day.LETTER, reason="官帥", result="held",
+                keeper="guard", attackers=["guan"]),
+        _letter_fb610("guan", "runan_wilds", "官帥"),
+    ]
+    facts = xingshi.facts(w, c, notes, {})
+    words = _words(c)
+    done = words["letter_done"].format(who="官帥", side=guan, place="汝南荒野")
+    pending = words["letter"].format(who="官帥", side=guan, place="汝南荒野")
+    held = words["held"].format(keeper="守軍", place="汝南荒野", attackers=guan)
+    assert facts.index(done) < facts.index(held) < _first_line_fact(c, facts) < facts.index(pending)
+
+
+@pytest.mark.slow  # 原本整個檔標 slow（建 Game、載正式內容）
+def test_a_letter_whose_siege_is_being_fought_is_not_the_next_battle():
+    game, w, c = _world()
+    guan, _ = _names(c)
+    slot = announce(game, "runan_wilds", "guan")
+    slot.status = "open"  # 開了集結、正在打
+    facts = xingshi.facts(w, c, [_letter_fb610("guan", "runan_wilds", "官帥")], {})
+    words = _words(c)
+    done = words["letter_done"].format(who="官帥", side=guan, place="汝南荒野")
+    fighting = words["fighting"].format(place="汝南荒野")
+    assert facts.index(done) < facts.index(fighting) < _first_line_fact(c, facts)
+
+
+@pytest.mark.slow  # 原本整個檔標 slow（建 Game、載正式內容）
+def test_fighting_in_daytime_does_not_say_nightfall():
+    """順帶：管理者白天開單，正在打的那一場不寫「打到入夜」；每天 22:00 那一篇照舊。"""
+    game, w, c = _world()
+    slot = announce(game, "runan_wilds", "guan")
+    slot.status = "open"
+    words = _words(c)
+    day = xingshi.facts(w, c, [], {}, night=False)
+    night = xingshi.facts(w, c, [], {})
+    assert words["fighting_day"].format(place="汝南荒野") in day and not any("入夜" in f for f in day)
+    assert words["fighting"].format(place="汝南荒野") in night
+
+
+@pytest.mark.slow  # 原本整個檔標 slow（建 Game、載正式內容）
+def test_admin_opens_one_at_noon_without_nightfall():
+    game = join(conquest_game("season21", name="Rayal", xingshi=True), "guan")
+    game.now = _tw_fb610(2026, 10, 20, 10)
+    game._conquest_tick()
+    game.state.world = game.world.get_season()
+    slot = announce(game, "runan_wilds", "guan")
+    slot.status = "open"
+    game._save_season()
+    game.now = _tw_fb610(2026, 10, 20, 13)
+    game.admin_xingshi_now()
+    facts = game.world.get_season().xingshi_ticket.facts
+    assert any("汝南荒野" in f and "還沒分出勝負" in f for f in facts)
+    assert not any("入夜" in f for f in facts)  # 修前「汝南荒野一仗打到入夜，還沒分出勝負。」
+
+
+# ── FB-646（2026-10-31 從 tests/acts/test_xingshi_fb646_mend.py 併進來）────────
+# FB-646（QA 驗玉璽碎片改版第 3 批）：同一天被補缺退回的地，〈天下形勢〉「是日」照樣寫「黃巾軍拿下涿郡」，事實的因果也排倒
+# （天下大事新的在前：先「官軍收復涿郡」、後「有人起用了『金角』」）。原因：補缺照開發定的不記 day_log，summary_line 只看 day_log。
+#
+# PM 定：補缺記一筆 day_log（by="mend"，不記是誰——持有者要藏），〈天下形勢〉照時間順序寫：同一篇裡先被翻走、又被補回的，「是日」寫
+# 「某軍拿下某地，旋即被補回」，事實接在那一筆易手後面寫「某地旋即又退回某軍手中」；翻走是上一篇以前的事，「是日」寫「某軍補回某地」。
+# territory 另發的「收復」那一句跟這一筆是同一件事，不再當天下大事列一次。新句型在 content/xingshi_lines.json（待 joy 潤）。
+
+
+def _person(c, w, name, side, at):
+    g = Game.new(c, name, rng=random.Random(0), world=w)
+    g.client = None
+    p = g.state.player
+    p.faction, p.location, p.tutorial_step = side, at, len(c.tutorial.steps)
+    p.visited.add(at)
+    g.sync(0.0)
+    g._save_season()
+    CharacterStore(w.db).save(g.state)
+
+
+def _do(c, w, name, fn, now):
+    game = Game(c, CharacterStore(w.db).load(name), random.Random(0), w)
+    game.client = None
+    game.sync(now)
+    out = fn(game)
+    game._save_season()
+    CharacterStore(w.db).save(game.state)
+    return out
+
+
+def _mended_world(user: str = "甲客"):
+    """QA 的 x_xingshi：21 天季＋領地爭奪＋〈天下形勢〉；黃巾推滿官軍的涿郡（當場易手），官軍的 user 起用金角補回來。
+    甲客、乙客都是官軍、站涿郡；回（內容, 世界, 開出來的那一張單）。"""
+    c = conquest_rules(real_content("season21"), xingshi=True)
+    c.config.auto_open_first_season = True
+    c.config.seal.revamp.enabled = True
+    c.config.newbie_days, c.config.newbie_real_hours = -1, 0
+    w = open_world(Path(tempfile.mkdtemp(prefix="xs646-")) / "t.db")
+
+    def _give(st):
+        s = seal.filled(st.seal, c).shards["jinjiao"]
+        s.state, s.holder, s.since_season = "held", user, 0
+
+    w.mutate(_give)
+    for name in ("甲客", "乙客"):
+        _person(c, w, name, "guan", "zhuo_county")
+    _do(c, w, "乙客", lambda g: conquest.push(g.state.world, c, "zhuo_county", "huang", "巾甲", 100, "attack"), now=100.0)
+    _do(c, w, user, lambda g: g.seal_use("zhuo_county"), now=200.0)
+
+    def _open(g):
+        g._xingshi_open(1)
+        return g.state.world.xingshi_ticket
+
+    ticket = _do(c, w, "乙客", _open, now=300.0)
+    return c, w, ticket
+
+
+def test_a_mend_is_logged_without_a_name():
+    c, w, ticket = _mended_world()
+    flip, mend = w.get_season().conquest.day_log[-2:]
+    assert (flip.by, flip.side, flip.loc) == (conquest_day.FLIP, "huang", "zhuo_county")
+    assert (mend.by, mend.side, mend.loc, mend.reason) == (conquest_day.MEND, "guan", "zhuo_county", "")
+
+
+def test_the_day_says_taken_then_mended_in_order():
+    """「是日」照時間順序：黃巾軍拿下涿郡，旋即被補回（修前「是日：黃巾軍拿下涿郡。」）；事實裡補回那一條接在易手後面，「收復」不再列一次。"""
+    c, w, ticket = _mended_world()
+    guan, huang = c.scenario.faction_name("guan", "guan"), c.scenario.faction_name("huang", "huang")
+    summary = xingshi.lines(c)["summary"]
+    assert ticket.line == f"{xingshi.SUMMARY_HEAD}{summary['taken_mended'].format(side=huang, place='涿郡')}。"
+    facts = ticket.facts
+    fact = xingshi.lines(c)["fact"]
+    took = fact["flip"].format(who="巾甲", side=huang, place="涿郡")
+    back = fact["mended"].format(side=guan, place="涿郡")
+    assert facts.index(took) + 1 == facts.index(back)
+    assert territory.RETAKE_LINE.format(place="涿郡", side=guan) not in facts
+    assert not any("甲客" in f for f in facts) and "甲客" not in ticket.line  # 不點名起用的人
+
+
+def test_who_used_it_does_not_show_in_the_xingshi():
+    a, b = _mended_world("甲客")[2], _mended_world("乙客")[2]
+    assert (a.facts, a.line) == (b.facts, b.line)
+
+
+def _game_fb646():
+    game = conquest_game("season21", xingshi=True)
+    return game.state.world, game.content
+
+
+def test_a_mend_after_a_siege_win_reads_the_same():
+    w, c = _game_fb646()
+    notes = [
+        DayNote(key=1, side="huang", loc="zhuo_county", minute=12 * 60, by=conquest_day.LETTER, reason="巾帥", result="taken",
+                taken="huang", margin="大勝", keeper="guan", attackers=["huang"]),
+        DayNote(key=1, side="guan", loc="zhuo_county", minute=13 * 60, by=conquest_day.MEND),
+    ]
+    huang = c.scenario.faction_name("huang", "huang")
+    assert xingshi.summary_line(notes, c) == f"{xingshi.SUMMARY_HEAD}{xingshi.lines(c)['summary']['taken_mended'].format(side=huang, place='涿郡')}。"
+
+
+def test_a_mend_whose_flip_was_in_an_earlier_piece_says_mended():
+    """翻走是上一篇以前的事（這一篇只有補回那一筆）：「是日」寫「官軍補回涿郡」、事實寫「涿郡退回官軍手中」（沒有「旋即」）。"""
+    w, c = _game_fb646()
+    guan = c.scenario.faction_name("guan", "guan")
+    notes = [DayNote(key=1, side="guan", loc="zhuo_county", minute=1 * 60, by=conquest_day.MEND)]
+    words = xingshi.lines(c)
+    assert xingshi.summary_line(notes, c) == f"{xingshi.SUMMARY_HEAD}{words['summary']['mended'].format(side=guan, place='涿郡')}。"
+    facts = xingshi.facts(w, c, notes, {})
+    late = words["fact"]["mended_late"].format(side=guan, place="涿郡")
+    trends = [t.name for t in c.scenario.trends]
+    first_line = next(i for i, f in enumerate(facts) if any(f.startswith(f"{name}一帶") for name in trends))
+    assert facts.index(late) < first_line  # 已經發生的事，排在三條線前面（不是「下一仗」）
+    assert words["fact"]["mended"].format(side=guan, place="涿郡") not in facts
+
+
+def test_flips_without_a_mend_are_unchanged():
+    w, c = _game_fb646()
+    notes = [DayNote(key=1, side="huang", loc="zhuo_county", minute=10 * 60, by=conquest_day.FLIP, reason="巾甲"),
+             DayNote(key=1, side="guan", loc="runan", minute=11 * 60, by=conquest_day.FLIP)]
+    words = xingshi.lines(c)["summary"]
+    guan, huang = c.scenario.faction_name("guan", "guan"), c.scenario.faction_name("huang", "huang")
+    assert xingshi.summary_line(notes, c) == (f"{xingshi.SUMMARY_HEAD}{words['taken'].format(side=huang, place='涿郡')}；"
+                                              f"{words['taken'].format(side=guan, place='汝南')}。")

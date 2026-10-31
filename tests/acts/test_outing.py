@@ -1,6 +1,6 @@
 """走一趟（tianxia/outing.py；企劃者 2026-10-29～30）：探索一次走一、三、五段，每一段是現行的一次探索；
 要選的事停下、選完接著走；打輸、氣血見底回頭，沒走的段不扣體力；段數越多稀有的越容易來（倍數 1／1.2／1.5，畫面不寫）。
-用正式內容（season21），整個檔標 slow。"""
+用正式內容（season21）（以前整個檔標 slow，2026-10-31 起只有超過一秒的那幾條標）。"""
 from __future__ import annotations
 
 import random
@@ -14,8 +14,6 @@ from jianfa_kit import jianfa_game, ready
 from tianxia import explore_modes, explore_one, outing, social, speech, team
 from tianxia.encounter import EncounterResult
 from tianxia.state import Inscription
-
-pytestmark = pytest.mark.slow
 
 MAT, EVT, ENC = explore_one.MATERIAL, explore_one.EVENT, explore_one.ENCOUNTER
 
@@ -253,6 +251,7 @@ def test_own_words_need_ink_and_pass_the_word_list():
     assert game.outing_ink_left() == 0
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_a_place_keeps_the_latest_lines():
     game = _game()
     keep = game.content.config.jianfa.outing_keep
@@ -262,6 +261,43 @@ def test_a_place_keeps_the_latest_lines():
         game.outing_say(0)
     here = [i for i in game.state.world.inscriptions if i.place == "yingshui"]
     assert len(here) == keep and here[0].id == 4  # 最舊的三則丟了
+
+
+def test_ink_lines_are_never_pushed_out_by_presets():
+    """題壁墨寫的是花錢買的（Joy 10/31）：一處留滿了，擠掉的只有最舊的預設句。"""
+    game = _game()
+    keep = game.content.config.jianfa.outing_keep
+    _walked(game)
+    _with_ink(game)
+    game.outing_say(text="此處風大")
+    w = game.state.world
+    for i in range(keep + 2):
+        w.inscription_seq += 1
+        w.inscriptions.append(Inscription(id=w.inscription_seq, place="yingshui", text=outing.PRESETS[0], author=f"甲{i}", preset=True))
+    game.state.player.stamina = 100.0
+    _walked(game)
+    game.outing_say(0)
+    here = [i for i in w.inscriptions if i.place == "yingshui"]
+    assert len(here) == keep and "此處風大" in [i.text for i in here]
+
+
+def test_ink_lines_carry_into_the_next_season():
+    """換季：題壁墨寫的跟著到新的一季（id 不變），免費的預設句清掉（Joy 10/31「路牌也會繼續傳承」）。"""
+    game = _game()
+    _walked(game)
+    game.outing_say(0)
+    game.state.player.stamina = 100.0
+    _walked(game)
+    _with_ink(game)
+    game.outing_say(text="此處風大")
+    paid = game.world.get_season().inscriptions[-1]
+    game.content.config.admins = [game.state.player.name]
+    game.admin_end_season(now=game.now)
+    assert game.world.next_season(game.content, game.now + 60)
+    season = game.world.get_season()
+    assert [(i.id, i.text, i.author, i.preset) for i in season.inscriptions] == [(paid.id, "此處風大", paid.author, False)]
+    assert season.inscription_seq >= paid.id
+    assert outing.stele(SimpleNamespace(world=season, player=game.state.player), "yingshui")["text"] == "此處風大"
 
 
 def test_others_lines_show_on_the_road_without_taking_a_segment():

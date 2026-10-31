@@ -771,6 +771,8 @@ def chatter_clean(raw: list, req: ChatterRequest) -> list[str]:
             continue
         if any(d not in known for d in _DIGITS.findall(rebuilt)) or any(word in rebuilt for word in BANNED_WORDS):
             continue
+        if zh.stray_latin(rebuilt, *req.facts):  # 英文只能是話頭裡本來就有的（M-07）
+            continue
         out.append(rebuilt)
     return out if len(out) >= 2 else []
 
@@ -1002,5 +1004,7 @@ def ask_clean(raw: str, req: AskRequest) -> str | None:
     if any(d not in known for d in _DIGITS.findall(text)):
         return None
     if any(word in text for word in BANNED_WORDS):
+        return None
+    if zh.stray_latin(text, *req.facts, req.question):  # 英文只能是事實或問題裡本來就有的（名號；M-07）
         return None
     return text if text[-1] in "。！？…」" else text + "。"

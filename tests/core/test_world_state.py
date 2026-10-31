@@ -1,4 +1,5 @@
 import random
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -6,12 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import database
+from tianxia import database, sqlite_world
 from tianxia.battle_instance import BattleRoundRecord
 from tianxia.database import Database
 from tianxia.martial_arts import Insight, generate_from_name
 from tianxia.sqlite_world import SqliteWorldStore, open_world
 from tianxia.state import Rumor
+from tianxia.world_state import CompanionProgress
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -938,3 +940,128 @@ def test_the_seasons_firsts_list_an_art_reached_by_two_recipes_once(store, conte
     assert store.next_season(content, now=1.0)
     [(_, entries)] = store.chronicle_before(2)
     assert [e.text for e in entries] == ["第 1 季合成首創 1 門：【旋風腿】甲", "第 1 季首悟意境 1 個：「燎原」丙"]
+
+
+# ── 輪詢不再每次整份重建傳聞、整份解析全服狀態（審查 S-01、S-02）──────────────────
+
+
+def _table_logs(store, table: str, season: int = 1) -> list[dict]:
+    """資料庫裡這一季的傳聞（或江湖史）原樣：拿來跟 get_season() 讀回的比，記下的那一份不能跟它差一個字。"""
+    with store.db.snapshot() as conn:
+        rows = conn.execute(f"SELECT * FROM {table} WHERE season = ? ORDER BY id", (season,)).fetchall()
+    parse = sqlite_world._rumor if table == "rumors" else sqlite_world._chronicle_entry
+    return [parse(row).model_dump() for row in rows]
+
+
+def _same_as_table(store) -> None:
+    season = store.get_season()
+    assert [r.model_dump() for r in season.rumors] == _table_logs(store, "rumors")
+    assert [r.model_dump() for r in season.chronicle] == _table_logs(store, "chronicle")
+
+
+def test_rumors_read_again_and_again_are_exactly_the_table(store, content, tmp_path):
+    """同步一次讀好幾次 get_season：記下已經讀過的那一段、只撈新的，讀回來的跟整份 SELECT 一模一樣；往回傳的清單加的不會漏進記下的那一份。"""
+    store.seed_first_season(content)
+    for i in range(3):
+        store.mutate_season(lambda s, i=i: (s.rumors.append(Rumor(time=i, text=f"傳聞{i}", layer="personal", character="甲")),
+                                            s.chronicle.append(Rumor(time=i, text=f"史{i}"))))
+        _same_as_table(store)
+    taken = store.get_season()
+    taken.rumors.append(Rumor(time=9, text="沒存的"))  # 拿到的那一份自己加的（還沒存）：別人讀不到
+    _same_as_table(store)
+    other = sqlite3.connect(tmp_path / "world.db")  # 另一支程式（假人程式）寫進來的：照樣讀得到
+    other.execute("INSERT INTO rumors (season, time, layer, named, text) VALUES (1, 5, 'world', 1, '別處寫的')")
+    other.commit()
+    other.close()
+    _same_as_table(store)
+    assert [r.text for r in store.get_season().rumors][-1] == "別處寫的"
+
+
+def test_a_rolled_back_rumor_is_not_remembered(store, content):
+    """同一筆交易裡寫了又讀的傳聞，交易撤回了就不見：之後同一個流水號寫進來的是別的話，讀回來的也是別的話。"""
+    store.seed_first_season(content)
+    store.mutate_season(lambda s: s.rumors.append(Rumor(time=0, text="甲")))
+    _same_as_table(store)
+    with pytest.raises(RuntimeError):
+        with store.action_lock():
+            store.mutate_season(lambda s: s.rumors.append(Rumor(time=1, text="乙", layer="personal", character="撤回的")))
+            assert [r.character for r in store.get_season().rumors] == [None, "撤回的"]
+            raise RuntimeError("動作中途出錯")
+    # 流水號跟撤回的那一則一樣，時間與字也一樣（對最後一則的檢查認不出來），只有聽得到的人不同
+    store.mutate_season(lambda s: s.rumors.append(Rumor(time=1, text="乙", layer="personal", character="後來的")))
+    assert [r.character for r in store.get_season().rumors] == [None, "後來的"]
+    _same_as_table(store)
+
+
+def test_a_rumor_undone_by_a_savepoint_is_not_remembered(store, content):
+    """輪詢的畫面包在 savepoint 裡（server.act_look）：畫面寫的傳聞撤回了，外面那一筆照常 COMMIT，讀回來也沒有它。"""
+    store.seed_first_season(content)
+    with store.action_lock():
+        store.get_season()
+        with pytest.raises(RuntimeError):
+            with store.db.savepoint():
+                store.mutate_season(lambda s: s.rumors.append(Rumor(time=1, text="乙", layer="personal", character="畫面寫的")))
+                store.get_season()
+                raise RuntimeError("畫面出錯")
+    store.mutate_season(lambda s: s.rumors.append(Rumor(time=1, text="乙", layer="personal", character="之後的")))
+    assert [r.character for r in store.get_season().rumors] == ["之後的"]
+    _same_as_table(store)
+
+
+def test_a_rename_reaches_rumors_already_read(store, content):
+    """易名帖把傳聞的名號換掉（rename_character 改的是已經寫進去的列）：同一筆交易接下來、之後每一次讀到的都是新名號。"""
+    store.seed_first_season(content)
+    store.mutate_season(lambda s: s.rumors.append(Rumor(time=0, text="只有你", layer="personal", character="舊名")))
+    assert store.get_season().rumors[0].character == "舊名"  # 記下了
+    with store.action_lock():
+        store.rename_character("舊名", "新名")
+        assert store.get_season().rumors[0].character == "新名"
+    assert store.get_season().rumors[0].character == "新名"
+    _same_as_table(store)
+
+
+def test_a_read_that_began_before_a_rename_is_not_remembered(store, content):
+    """別的執行緒在易名帖 COMMIT 之前開的快照讀到的是舊名號：它不准記下（Database.bump），之後讀到的是新名號。"""
+    store.seed_first_season(content)
+    store.mutate_season(lambda s: s.rumors.append(Rumor(time=0, text="只有你", layer="personal", character="舊名")))
+    with store.db.snapshot() as conn:
+        conn.execute("SELECT 1 FROM rumors").fetchall()  # 快照從這一句起定住
+        worker = threading.Thread(target=lambda: store.rename_character("舊名", "新名"))
+        worker.start()
+        worker.join()
+        assert store.get_season().rumors[0].character == "舊名"  # 這個快照看到的照舊是改之前的
+    assert store.get_season().rumors[0].character == "新名"
+    _same_as_table(store)
+
+
+def test_the_light_reads_match_the_full_read(store, content):
+    """只撈一格的讀取（季數、季的階段、天機、決戰、玉璽碎片、同伴進度）跟整份 read() 讀出來的一樣，每個階段都一樣。"""
+    def check():
+        shared = store.read()
+        assert store.get_season_number() == shared.season_number
+        assert store.season_phase() == shared.season_phase()
+        assert store.tianji() == shared.tianji
+        assert store.get_jade_seal_fragments() == shared.jade_seal_fragments
+        assert store.companions() == shared.companions
+        assert store.get_companion("dongzhuo") == shared.companions.get("dongzhuo", CompanionProgress())
+        battle = store.get_battle()
+        assert (battle is None and shared.active_battle is None) or battle.model_dump() == shared.active_battle.model_dump()
+
+    check()  # 什麼都還沒有的資料庫
+    content.config.auto_open_first_season = False
+    store.seed_first_season(content)
+    check()  # 籌備中
+    assert store.open_season(content, now=1.0)
+    check()  # 開打
+    store.record_jade_seal_fragment("甲", "第一季", "得了一塊")
+    store.update_companion("dongzhuo", lambda p: setattr(p, "owner", "甲"))
+    store.start_battle(_battle_definition(), now=0.0)
+    check()
+    with store.action_lock():  # 同一筆交易裡改了之後再讀：讀到的是改過的
+        store.mutate(lambda s: setattr(s, "tianji", 7))
+        assert store.tianji() == 7
+        store.mutate_season(lambda s: setattr(s, "ended", True))
+        assert store.season_phase() == "resting"
+    check()  # 休季
+    assert store.next_season(content, now=2.0)
+    check()  # 下一季

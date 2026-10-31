@@ -158,7 +158,7 @@ class Effect(_Strict):
     marks: dict[str, int] = Field(default_factory=dict)
     # 伏筆（計畫 T7）的準備事件用；第一季開關關著時兩個都不發生（不給也不寫任何字）
     clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品（foreshadows.json 的 items）：正數給、負數收走
-    fs_counters: dict[str, int] = Field(default_factory=dict)  # 伏筆的隱藏計數（例：豪強兩頭賣糧的起點 two_buyers）：加多少，不寫字
+    fs_counters: dict[str, int] = Field(default_factory=dict)  # 伏筆的隱藏計數（例：例：官銀 guanyin）：加多少，不寫字
     # ── 晉升（計畫 T5）：只寫在晉升奇遇的選項上（content.validate 檢查）──
     promote: int | None = None  # 演完晉升到第幾階（清掉召見、接結尾那一句、記進當天的彙整）
     followers: list[str] = Field(default_factory=list)  # 給的部下（followers.json 的模板 id）
@@ -366,12 +366,11 @@ class FrontLines(_Strict):
     1、2-3、4+，變動的大小），一段可以寫好幾句，同一則紀錄永遠挑同一句。
     sides：陣營 id → 寫在句子前面的名字（黃巾軍簡稱「黃巾」）；沒寫的陣營用劇本裡的陣營名。
     generic：每一段都要有，兩個陣營共用；by_side：某一方自己的說法（陣營 id → 段 → 句子），可以只寫其中幾段，沒寫的退回 generic。
-    geju：豪強割據漲（up）、落（down）的整句話，已經有「豪強」兩字，不再接陣營名、也不冠戰線名。"""
+    （豪強割據那一組 geju 2026-10-31 拿掉，T-05。）"""
 
     sides: dict[str, str] = Field(default_factory=dict)
     generic: dict[str, list[str]]
     by_side: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
-    geju: dict[str, list[str]]
 
 
 class VirtueNeed(_Strict):
@@ -1155,7 +1154,7 @@ class Trend(_Strict):
     # 衍生線（第一季濃縮版的黃巾聲勢）：來源線 id → 權重，加起來是 1。開關（Config.season_one）開著時它的值一律是
     # 來源線的加權和（rules.recompute_trends），不能直接推；開關關著時它是一般的線，照 start 起算
     derived: dict[str, float] = Field(default_factory=dict)
-    season_one: bool = False  # 第一季濃縮版才有的線（三條戰線、豪強割據）：開關關著時不顯示、不推（rules.trend_shown）
+    season_one: bool = False  # 第一季濃縮版才有的線（三條戰線）：開關關著時不顯示、不推（rules.trend_shown）
 
 
 class Threshold(_Strict):
@@ -3366,7 +3365,6 @@ class JianfaRules(JianfaNumbers):
     outing: bool = True  # 走一趟：探索一次走一、三、五段（tianxia/outing.py；要 explore_one 也開著）
     drill_gates: bool = True  # 4.2 三道閘、45 級後只收仗的經驗（批 2）
     sortie_duel: bool = True  # 4.3 出陣改約戰（批 3b）
-    four_wins: bool = True  # 第三章 三陣營四勝利、豪強兩本帳（批 3c）
     free_text_outcomes: bool = True  # 第五章 隨口應對分岔（批 4）
     marks_visible: bool = True  # 第五章 痕跡看得見（批 4）
     stances: bool = True  # 第五章 人物心意（批 6）
@@ -3930,18 +3928,13 @@ class Config(_Strict):
     # 做到一半的 main 也會換上試玩伺服器，開關關著才不會把正在跑的那一季弄壞；
     # 全部做完、開測前由 PM 跟季長（season_days 改 2.5）一起打開（計畫 2026-10-04-第一季濃縮版）
     season_one: bool = False
-    # 三條戰線與豪強割據（計畫 2026-10-04-T1；開關關著時沒人讀它們）
-    geju_chaos_per_day: float = Field(default=1.0, ge=0)  # 每有一條戰線在亂局，豪強割據每曆日漲幾點
-    # 割據漲速依人數等比例調整（企劃者 2026-10-05，測試階段）：漲速再乘 min(1, 這一季投靠名冊人數 ÷ geju_full_players)。
-    # 湊滿這個人數就是設計的速度；人少的季（週末只有兩個人、沒人玩）割據照人數比例慢下來，不會第 5 週就衝到 100 提早收季。只管漲，不管回落
-    geju_full_players: int = Field(default=15, gt=0)
-    geju_calm_per_day: float = Field(default=1.0, ge=0)  # 三條戰線都穩下來時，豪強割據每曆日回落幾點（不能是負的，否則「回落」變成漲）
+    # 三條戰線（計畫 2026-10-04-T1；開關關著時沒人讀它們）
+    # 豪強割據的漲落（geju_chaos_per_day、geju_full_players、geju_calm_per_day）2026-10-31 連豪強第三方一起拿掉（T-05）
     chaos_low: int = 35  # 亂局：戰況在 chaos_low～chaos_high 之間（含兩端，第一季設計 4.2；low 不能大於 high，content.validate 檢查）
     chaos_high: int = 65
     # 第一季豪強分屬兩軍（企劃者 2026-10-15：「一樣可以選豪強～只是豪強中也區分黃巾～以及官軍」「純官軍或者純黃巾才有辦法升到最高
-    # 軍階，豪強版的只能升到三階」）：開季時蓋章（WorldState.haoqiang_allied），只在蓋了第一季章的季生效（allied.on）。
-    # 預設關、週末設定開；14 天的季就算打開也照舊有第三方豪強
-    haoqiang_allied: bool = False
+    # 軍階，豪強版的只能升到三階」）：沒有開關，蓋了第一季章的季就是（allied.on）；沒有第一季規則的季（14 天）照舊是第三方豪強。
+    # 2026-10-31 開關 haoqiang_allied 連豪強第三方的季（割據、攪局、第三方臨時投效）一起拿掉（T-05，企劃者「都照建議」）
     # 21 天季的骨架（正式季整合設計第一章；12.3 第 41 條：預設關，只有 content/profiles/season21.json 打開，週末與 14 天一個字都不變）：
     # 季曆就是現實的三週（season_weeks 3、season_days 21，cal_scale 1），錨在開季那一週的台灣週一 00:00（WorldState.cal_offset）；
     # 21 天季自己的時刻表（TimetableEvent.real）、官軍將領與伏筆照天數、不提前收季、「今天」是現實的一天（台灣 00:00 換日）。
@@ -3955,7 +3948,7 @@ class Config(_Strict):
     # 空的是一週 7 天（21 天季與其他季，一個字都不變）。載入時驗：要 season21、段數＝season_weeks、段的和＝season_days＝7
     season_segments: list[int] = Field(default_factory=list)
     # 決定性勝利（黃巾聲勢 ≥85、≤15）季曆第幾週起才提前收季；之前到了門檻也不收，季末照常比（企劃者 2026-10-05，計畫 T9）。
-    # 割據 ≥85 不提前收季、季末才判群雄並起（FB-254，企劃者 2026-10-15「提前收季只看戰線」；rules.ends_early）
+    # 提前收季只看戰線（FB-254，企劃者 2026-10-15；rules.ends_early）
     decisive_from_week: int = Field(default=10, ge=1)
     # 企劃者 2026-10-13「季中，第 5 週起才開」（FB-168）：規則關著的季，開決戰的大勢門檻（starts_battle，例 huangjin_60）季曆第幾週起才開
     # 集結；之前推過了也不開、不記成觸發過，到了那一週還在門檻上就開（world.battle_held，寫法同 decisive_from_week）。第一季照時刻表，
@@ -4523,7 +4516,6 @@ class TimetableOutcome(_Strict):
     figures: dict[str, FigureChange] = Field(default_factory=dict)  # 人物 id、「@commander:<戰線>:<guan|huang>」或「@人物:<人物 id>」
     chance_mods: dict[str, float] = Field(default_factory=dict)  # 之後那件大事的成功率修正（寫進 event_bonus，不佔 ±0.20 上限）
     world_flags_add: list[str] = Field(default_factory=list)
-    third_party_text: str | None = None  # 這個結果專用的豪強那一句，蓋過 TimetableEvent.third_party_text（盧植下獄分兩版）
     control: dict[str, str] = Field(default_factory=dict)  # 這個結果讓哪幾處易手：地點 → 陣營（設計 4.2 第 3 點；只能是可易手或 fixed 的地點）
 
 
@@ -4563,13 +4555,9 @@ class TimetableEvent(_Strict):
     skip_if_out: str | None = None  # 這位人物已經退場（或重創）就跳過，不公告
     outcomes: dict[str, TimetableOutcome] = Field(default_factory=dict)
     lock_result: dict[str, str] = Field(default_factory=dict)  # 鎖定方 → 結果鍵（不含版本）；決戰不寫，由 T8 給鍵
-    third_party_text: str | None = None  # 豪強做完伏筆時接在公告後面的一句（{name} 是豪強那邊的人）
-    third_party_trends: dict[str, int] = Field(default_factory=dict)  # 豪強每個名字各套一次的效果
     # 江湖史具名（計畫 T7、伏筆文件 2.4）：有人鎖定、結果是他那一方的具名公告時，江湖史用這一方的這一行（{name} 是鎖定者）；
     # 這一方沒寫就在原本那一行後面接「（{name}改寫）」
     locked_chronicle: dict[str, str] = Field(default_factory=dict)
-    # 豪強做完伏筆時另外記的一行江湖史（例：「{name} 取得新野」；多人用「、」接），不論誰贏都記
-    third_party_chronicle: str | None = None
     # ── 季末大事（kind＝finale，計畫 T9；別的種類不能寫）──
     early_preface: str = ""  # 季中就收季（決定性勝利、管理者提早收季）時取代 preface 的開頭
     out_lines: dict[str, str] = Field(default_factory=dict)  # 人物 id → 那位人物退場或重創時接在最後的一句（董卓兵敗）
@@ -4704,7 +4692,7 @@ class FsChain(_Strict):
 
     id: str
     event: str  # 時刻表大事 id（content/timetable.json）
-    side: str  # 誰能做：劇本的陣營 id（guan、huang 會鎖定那件大事；其他陣營是第三方，寫進 third_party）
+    side: str  # 誰能做：會鎖定那件大事的一方（guan、huang；豪強第三方的鏈 2026-10-31 拿掉，content.validate 擋）
     kind: FsKind
     front: str | None = None  # 戰況看哪條線；沒寫就看那件大事的戰線（盧植下獄、張角病逝要寫 jizhou）
     fragments: list[FsFragment] = Field(default_factory=list)
@@ -4809,7 +4797,7 @@ class Rank2Action(_Strict):
 class RankAction(_Strict):
     """第 3、4 階的行動（第一季設計 5.5；正式版戊一）。id 也是選項（act:rank:<id>）與軍令記功的 kind。
     tags：只能在帶其中一個標籤的地點做（空＝有戰線的地方都行）；chaos_only：那條戰線要在亂局。
-    push：檢定過了（沒有 check 就是一定過）推幾點——官軍、黃巾推所在戰線往己方，豪強推割據。
+    push：檢定過了（沒有 check 就是一定過）推幾點——官軍、黃巾推所在戰線往己方，豪強照依附的那一軍。
     content/orders.json 的 rank_actions 三筆是新寫的初稿，待 joy 潤（JSON 沒有註解，標記記在這裡）。"""
 
     id: str
@@ -4915,7 +4903,7 @@ class OppHost(_Strict):
 
 class OppAccumulate(_Strict):
     """累積型：source 的行動成功時（流民是守勢行動之後擲 chance）記一次，湊滿 count（基準量）拿到 item，
-    交到 deliver（那條戰線己方主將所在，或己方據點）就完成；完成時推 trend 點（戰線往己方，豪強推割據）。"""
+    交到 deliver（那條戰線己方主將所在，或己方據點）就完成；完成時推 trend 點（戰線往己方，豪強照依附的那一軍）。"""
 
     source: Literal["rank2", "duty"]
     count: int = Field(gt=0)
@@ -5021,7 +5009,7 @@ class OppDeduce(_Strict):
     right: str  # （{人物}）
     wrong: str  # （{人物}、{嫌疑人}）
     wrong_affinity: int = -10
-    trend: dict[str, int] = Field(default_factory=dict)  # 指對了推的大勢線（戰線或割據；衍生線不行）（例：{"jizhou": 1}）
+    trend: dict[str, int] = Field(default_factory=dict)  # 指對了推的大勢線（戰線或玉璽線索；衍生線不行）（例：{"jizhou": 1}）
 
 
 class OppPart(_Strict):

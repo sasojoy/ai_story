@@ -18,8 +18,6 @@ from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
-pytestmark = pytest.mark.slow  # 每一條都載正式內容、開資料庫
-
 AT = "yingchuan_wilds"  # 甲客、乙客站的地方（潁川汝南；不是城鎮）
 VIEWER, VIEWER_AT = "旁觀客", "yingchuan"  # 同一區、另一處（城鎮）
 CASES = {  # 片 → 指定的目標
@@ -91,7 +89,7 @@ def _seen(c, w) -> dict:
             other = store.load(name)
             other.world = viewer.state.world
             out[f"seek:{name}"] = tavern.seek_lines(viewer.state, c, other, 100.0, set())
-            # FB-643：打聽交情、名氣、近況、買兇找人也一樣（打聽度夠高、看得到近來的事的那一種在 test_seal_fb643_tavern.py）
+            # FB-643：打聽交情、名氣、近況、買兇找人也一樣（打聽度夠高、看得到近來的事的那一種在 test_seal_acts.py 的 FB-643 那一段）
             out[f"ties:{name}"] = tavern.ties_player_lines(viewer.state, c, other, [], set())
             out[f"tavern:{name}"] = (tavern.person_fame(other, c), tavern.fresh(other, viewer.state.world.time),
                                      tavern.hit_reach(c, VIEWER_AT, other))
@@ -101,6 +99,7 @@ def _seen(c, w) -> dict:
     return _do(c, w, VIEWER, look, now=20.0)
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 @pytest.mark.parametrize("shard", list(CASES))
 def test_two_worlds_that_differ_only_in_who_used_it_look_the_same(shard):
     a, b = _world(shard, "甲客"), _world(shard, "乙客")
@@ -111,6 +110,7 @@ def test_two_worlds_that_differ_only_in_who_used_it_look_the_same(shard):
     assert len(public) == 1 and "甲客" not in public[0] and "乙客" not in public[0]
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_the_guard_has_teeth(monkeypatch):
     """還原漏洞：天下大事那一句帶上起用的人，兩個世界就看得出差別（天下大事、江湖史、江湖頁都在裡面）。"""
     acting: list[str] = []

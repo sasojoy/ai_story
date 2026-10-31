@@ -116,7 +116,7 @@ def resistance_share(value: float, direction: float, tuning: PushResistance) -> 
 
 def tuning_for(world: WorldState, content: Content) -> PushResistance:
     """這一季的盡頭阻力用哪一組數字：21 天季照 Season21Daily 的兩檔（push_mid_share、push_far_share；離 50 的兩個邊界與開關照
-    Config.push_resistance，正式季整合設計 7.4），其他季就是 Config.push_resistance 本身。出陣、事件、軍令、大勢人物、割據都走它。"""
+    Config.push_resistance，正式季整合設計 7.4），其他季就是 Config.push_resistance 本身。出陣、事件、軍令、大勢人物都走它。"""
     tuning = content.config.push_resistance
     if not calendar.season21_on(world, content):
         return tuning

@@ -4,13 +4,21 @@ from __future__ import annotations
 import random
 
 from conftest import real_content
-from test_gentry_allied import _game, _old_rules, _showdown
+from test_gentry_allied import _game, _showdown
 
 from tianxia import allied, battle_instance
 
 
 def _wk():
     c = real_content("week7")
+    c.config.auto_open_first_season = True
+    c.config.train_event_chance = 0.0
+    return c
+
+
+def _fourteen_day():
+    """沒有第一季規則的季（不帶設定、14 天）：豪強照舊是第三方（2026-10-31 第一季規則的季的豪強第三方拿掉）。"""
+    c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c
@@ -83,14 +91,6 @@ def test_an_unsided_gentry_is_not_pulled_into_a_running_fight():
     assert "battle:join_late" in [o.id for o in game.options()]  # 選了邊就照那一軍晚到
 
 
-def test_old_rules_gentry_still_enlists_without_a_side():
-    off = _old_rules()
-    game = _game(off, name="乙", faction="haoqiang")
-    definition = _showdown(game)
-    assert game._free_agent(definition)
-    assert [o.id for o in game.options() if o.id.startswith("battle:enlist:")]
-
-
 # ── FB-274：豪強的投靠點不算哪一方的地盤 ─────────────────────────────
 
 GENTRY_BASES = ("zhuo_militia_hall", "cao_manor", "haozu_fort")
@@ -159,7 +159,7 @@ def test_presence_names_the_side_of_an_allied_gentry():
 def test_presence_old_rules_say_the_faction_only():
     from tianxia import social
 
-    off = _old_rules()
+    off = _fourteen_day()
     game = _game(off, name="乙", faction="haoqiang")
     assert social.side(game.state, off) == "地方豪強"
 
@@ -185,4 +185,4 @@ def test_presence_read_back_from_the_database_names_the_allied_side():
 
 def test_presence_read_back_under_the_old_rules_says_the_faction_only():
     """豪強不分屬兩軍的季（14 天那一種）照舊只寫陣營名。"""
-    assert _seen_here(_old_rules(), None) == [{"name": "豪客子", "side": "地方豪強"}]
+    assert _seen_here(_fourteen_day(), None) == [{"name": "豪客子", "side": "地方豪強"}]

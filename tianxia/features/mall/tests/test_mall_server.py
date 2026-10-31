@@ -17,8 +17,6 @@ from tianxia.characters import name_key
 from tianxia.database import open_database
 from tianxia.wallet import Wallet
 
-pytestmark = pytest.mark.slow  # 每一條都用真實內容建角色（超過一秒）
-
 ROOT = Path(__file__).resolve().parents[4]  # repo 的根（搬進功能包 tianxia/features/mall/tests/，開發規範手冊 4.6）
 
 
@@ -179,6 +177,7 @@ def test_export_script_does_not_create_a_missing_file(tmp_path):
     assert not db_path.exists()
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_month_card_daily_claim_and_rename_over_http():
     """萬寶閣販賣清單定案：月卡當場回 300、每天領一次（江湖畫面的 mall.daily 跟著收起）；易名帖改了名號，下一個請求照新名號找得到。"""
     client = _player()

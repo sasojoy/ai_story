@@ -14,8 +14,6 @@ from tianxia.characters import open_characters
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
-pytestmark = pytest.mark.slow  # 正式內容
-
 LUZHI = "luzhi"
 
 

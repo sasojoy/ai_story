@@ -24,7 +24,7 @@ from . import forge_secrets as forge_rules
 from . import hints as hint_rules
 from .companion_agent import DIALOGUE_TAGS
 from .encounter import FALLBACK_TIER, TIER_RATIOS
-from .front_lines import BAND_KEYS, GEJU_KEYS
+from .front_lines import BAND_KEYS
 from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
     ArtBook, Itinerary,
@@ -46,7 +46,7 @@ FIGHT_TIERS = {tier for tier, _ in TIER_RATIOS} | {FALLBACK_TIER}  # 一場遭�
 ROAD_SIGHTS_PER_SPOT = 2  # 路上見聞：每一種路、每一個大區的組合至少要有幾則可挑（路上設計第五節）
 ROAD_SIGHT_CAPS = {"silver": 10, "xinde": 5}  # 路上見聞的小收穫上限
 TERRAIN_SIZE = (8, 40)  # 山脈、丘陵的山頭高度範圍（輿圖美術設計第四節）
-TIMETABLE_SIDES = ("guan", "huang")  # 時刻表的鎖定、決戰、@commander 只有官軍與黃巾兩方（豪強是第三方）
+TIMETABLE_SIDES = ("guan", "huang")  # 時刻表的鎖定、決戰、@commander 只有官軍與黃巾兩方
 TIMETABLE_KEYS = {  # 每種大事該有的結果鍵（不含版本；有版本時每個版本各一套）
     "fixed": ["fixed"],
     "roll": ["成", "不成"],
@@ -652,7 +652,7 @@ def check_check_voice(c: Content, need) -> None:
 
 def check_front_lines(c: Content, need) -> None:
     """戰況變化的說法（content/front_lines.json，FB-064）：generic 三段（front_lines.BANDS）一段都不能少、
-    不能多出不認得的段；各陣營自己的說法（by_side）只能寫存在的陣營與段、可以只寫其中幾段；割據要有漲與落兩組；
+    不能多出不認得的段；各陣營自己的說法（by_side）只能寫存在的陣營與段、可以只寫其中幾段；
     sides 的陣營名也要是存在的陣營。每一句、每個陣營名都不能是空的、只用繁體中文、不能寫數字或百分比（畫面上只有一句話、不攤出數字）。"""
     lines = c.front_lines
     factions = {f.id for f in c.scenario.factions}
@@ -677,11 +677,6 @@ def check_front_lines(c: Content, need) -> None:
         for band, pool in bands.items():
             need(band in BAND_KEYS, f"front_lines.by_side.{side}：不認得的段 {band}（只有 {'、'.join(BAND_KEYS)}）")
             check_pool(f"front_lines.by_side.{side}.{band}", pool)
-    for key in GEJU_KEYS:
-        need(key in lines.geju, f"front_lines.geju 缺少 {key}（漲 up、落 down 各一組）")
-    for key, pool in lines.geju.items():
-        need(key in GEJU_KEYS, f"front_lines.geju：不認得的鍵 {key}（只有 {'、'.join(GEJU_KEYS)}）")
-        check_pool(f"front_lines.geju.{key}", pool)
 
 
 def check_arena_crowd(c: Content, need) -> None:
@@ -1188,7 +1183,7 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
     """時刻表（content/timetable.json，計畫 T2）：戰線（大事的 front、人物效果的 front 與 only_if、@commander 的戰線）
     寫的是戰線 id（大區的 front，T1：yingru／nanyang／jizhou），不是大區 id——幽州是大區、它的戰線是冀州，寫 youzhou
     讀戰況時會讀到固定的 50；結果鍵照種類齊全、鎖定對得到結果、人物與修正的
-    對象存在、文字只用繁體中文。大勢線的推動（第三方、結果）要是存在的線、而且不能是衍生線（黃巾聲勢由三條戰線合成）。
+    對象存在、文字只用繁體中文。大勢線的推動（結果）要是存在的線、而且不能是衍生線（黃巾聲勢由三條戰線合成）。
     人物認人物表（figures.json，T4）的 id；沒有人物表的內容（測試夾具）照舊認 characters.json。
     人物欄位（{人物:<id>}、@人物:<id>，FB-042）只認人物表：找人要看他的陣營與戰線。"""
     from .timetable import PERSON_KEY, PERSON_SLOT  # noqa: PLC0415  延後 import（同 validate 的 atlas）
@@ -1287,7 +1282,6 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
             need(side in TIMETABLE_SIDES, f"{where}：lock_result 的鎖定方只能是 guan 或 huang（寫的是 {side}）")
             need(all(f"{v}:{key}" in ev.outcomes for v in versions) if versions else key in ev.outcomes,
                  f"{where}：lock_result 指到不存在的結果 {key}")
-        known(where, ev.third_party_trends, trends, "大勢線")
         check_text(where, ev.preface)
         if ev.kind != "finale":  # 季末大事的三種句子（計畫 T9）
             need(not (ev.early_preface or ev.out_lines or ev.ending_chronicle),
@@ -1295,13 +1289,11 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
         known(where, ev.out_lines, c.characters, "人物")
         for text in (ev.early_preface, ev.ending_chronicle, *ev.out_lines.values()):
             check_text(where, text)
-        check_text(where, ev.third_party_text)
-        check_text(where, ev.third_party_chronicle)
         need(all(side in TIMETABLE_SIDES for side in ev.locked_chronicle), f"{where}：locked_chronicle 的鍵只能是 guan 或 huang")
         for text in ev.locked_chronicle.values():
             check_text(where, text)
         # 結算時經過 fill_slots 的句子才填人物欄位（preface 與季末大事的句子不填）
-        check_people(where, ev, [ev.third_party_text, ev.third_party_chronicle, *ev.locked_chronicle.values()], [])
+        check_people(where, ev, list(ev.locked_chronicle.values()), [])
         for key, outcome in ev.outcomes.items():
             ow = f"{where} 結果 {key}"
             known(ow, outcome.trends, trends, "大勢線")
@@ -1315,7 +1307,7 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
             need(set(outcome.loser_text) <= set(outcome.locked_text), f"{ow}：有搶輸的一句就要有那一方的具名公告")
             for fid, change in outcome.figures.items():
                 check_figure(ow, fid, change)
-            texts = [outcome.text, outcome.note, outcome.chronicle, outcome.third_party_text,
+            texts = [outcome.text, outcome.note, outcome.chronicle,
                      *outcome.locked_text.values(), *outcome.loser_text.values()]
             for text in texts:
                 check_text(ow, text)
@@ -1768,7 +1760,7 @@ def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
             need(bool(d.askers), f"{where}：至少要有一位指認的人")
             known(where, [h.figure for h in d.askers], c.figures, "人物")
             known(where, [h.at for h in d.askers], c.locations, "地點")
-            known(where, list(d.trend), trend_ids, "大勢線")  # 指對了推哪條線（戰線或割據都行；衍生線不能直接推）
+            known(where, list(d.trend), trend_ids, "大勢線")  # 指對了推哪條線（戰線；衍生線不能直接推）
             need(not set(d.trend) & derived_ids, f"{where}：trend 不能推衍生線（要推就推它的來源線）")
             texts += [d.label, d.right, d.wrong] + [s.name for s in d.suspects] + [t.text for t in d.traits]
         if o.plot is not None:
@@ -1882,6 +1874,8 @@ def check_foreshadows(
         where = f"伏筆 {ch.id}"
         known(where, [ch.event], events, "時刻表大事")
         known(where, [ch.side], faction_ids, "陣營")
+        # 豪強第三方的鏈 2026-10-31 拿掉（T-05）：鏈只能是會鎖定大事的兩方
+        need(ch.side in TIMETABLE_SIDES, f"{where}：side 只能是 guan 或 huang（寫的是 {ch.side}；豪強第三方的鏈已經拿掉）")
         event = events.get(ch.event)
         versions = set(event.versions.values()) if event is not None else set()
         if ch.front is not None:
@@ -2285,7 +2279,7 @@ def validate(c: Content) -> None:
     trend_ids = {t.id for t in c.scenario.trends}
     hidden = {t.id for t in c.scenario.trends if t.hidden}
     derived = {t.id for t in c.scenario.trends if t.derived}  # 衍生線（第一季濃縮版的黃巾聲勢）
-    season_one_trends = {t.id for t in c.scenario.trends if t.season_one}  # 第一季才有的線（三條戰線、豪強割據）
+    season_one_trends = {t.id for t in c.scenario.trends if t.season_one}  # 第一季才有的線（三條戰線）
     region_fronts = {region.front for region in c.map.regions if region.front}  # 戰線
     # 大區多邊形都寫得對（至少 3 個 [x, y] 點）：查地點在哪個大區（atlas.region_of）要拆每個點，寫壞了會炸成 ValueError，
     # 所以要先確定沒壞才查；壞的由後面的大區檢查照舊回報
@@ -2369,7 +2363,7 @@ def validate(c: Content) -> None:
         for key in [*cond.trend_min, *cond.trend_max]:
             need(
                 key not in season_one_trends,
-                f"{where}：條件不能讀第一季的線 {key}（條件讀的是大勢的原數字：開關關著時戰線與割據沒有值、"
+                f"{where}：條件不能讀第一季的線 {key}（條件讀的是大勢的原數字：開關關著時戰線沒有值、"
                 "季中才開季的那一季讀不到起始值；要讀就讀黃巾聲勢這種衍生線或一般的線）",
             )
         known(where, [*cond.revealed_all, *cond.revealed_none], trend_ids, "大勢線")
@@ -2582,7 +2576,7 @@ def validate(c: Content) -> None:
     need(all(factor > 0 for factor in cfg.road_factor.values()), "config.road_factor 的係數都要大於 0")
     need(
         cfg.chaos_low <= cfg.chaos_high,
-        f"config.chaos_low 不能大於 chaos_high（{cfg.chaos_low} > {cfg.chaos_high}：亂局的區間是空的，割據只會一路回落）",
+        f"config.chaos_low 不能大於 chaos_high（{cfg.chaos_low} > {cfg.chaos_high}：亂局的區間是空的）",
     )
 
     for loc in c.locations.values():
@@ -2843,7 +2837,7 @@ def validate(c: Content) -> None:
         known(where, [th.trend], trend_ids, "大勢線")
         need(
             th.trend not in season_one_trends,
-            f"{where}：不能掛在第一季的線 {th.trend}（門檻看的是原數字：開關關著時戰線與割據沒有值；要掛就掛衍生線或一般的線）",
+            f"{where}：不能掛在第一季的線 {th.trend}（門檻看的是原數字：開關關著時戰線沒有值；要掛就掛衍生線或一般的線）",
         )
         if th.location:
             known(where, [th.location], c.locations, "地點")
@@ -2933,9 +2927,8 @@ def validate(c: Content) -> None:
              f"陣營 {faction.id}：allies 只能寫劇本裡別的陣營（{faction.allies}）")
         need(not any(c.scenario.find_faction(a) is not None and c.scenario.find_faction(a).allies for a in faction.allies),
              f"陣營 {faction.id}：allies 寫的陣營自己不能再有 allies")
-    jf = c.config.jianfa  # 三陣營四勝利（減法季批 3c）：「此刻幫誰」就是 ally，只在豪強分屬兩軍的季寫；投靠點的預設對得上劇本
-    if jf.enabled and jf.four_wins:
-        need(c.config.haoqiang_allied, "config.jianfa.four_wins 開著，可是 haoqiang_allied 關著：豪強的「此刻幫誰」（ally）只在豪強分屬兩軍的季有")
+    jf = c.config.jianfa  # 三陣營四勝利（減法季批 3c）：「此刻幫誰」就是 ally；投靠點的預設對得上劇本
+    if jf.enabled:
         if any(f.allies for f in c.scenario.factions):
             from .wins import check as wins_check  # noqa: PLC0415  延後 import：wins → allied → calendar，content 不必一開始就依賴
 

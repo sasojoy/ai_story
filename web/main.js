@@ -1240,18 +1240,17 @@
     chaos ? '<span class="chaos-tag">亂局</span>' : ""}<span class="guan">官軍</span></div>`;
   const FRONT_ENDS = frontEnds(false);
 
-  // 態勢那一行（FB-065）：官軍、黃巾是幾條戰況合起來的，豪強是割據（有戰線在亂局就漸長）。說明由伺服器給（status.stance_notes），
-  // 跟見聞→大勢的割據說明同一句，前端不自己數條數。狀態列展開時用它（江湖頁的三條在最上面那一排小標的態勢面板裡，正式版辛）
+  // 態勢那一行（FB-065）：官軍、黃巾是幾條戰況合起來的。說明由伺服器給（status.stance_notes），前端不自己數條數。
+  // 狀態列展開時用它（江湖頁的三條在最上面那一排小標的態勢面板裡，正式版辛）
   function stancesHtml(stances, notes) {
     const n = notes || {};
     const side = (id) => `${STANCE_NAMES.find(([key]) => key === id)[1]} ${stances[id]}`;
     const note = (text) => (text ? `（${esc(text)}）` : "");
-    const gentry = "haoqiang" in stances ? `<br>${side("haoqiang")}${note(n.haoqiang)}` : ""; // 豪強分屬兩軍的季沒有豪強那一行
-    return `<div class="stances-line"><span>態勢</span><span>${side("guan")}・${side("huang")}${note(n.sum)}${gentry}</span></div>`;
+    return `<div class="stances-line"><span>態勢</span><span>${side("guan")}・${side("huang")}${note(n.sum)}</span></div>`;
   }
 
   // 第一季濃縮版的三條戰況（伺服器有送 fronts 才畫）：0 是官軍穩控、100 是黃巾控制，條上黃的那一截是黃巾佔的。
-  // 條上淺色的一段是亂局帶（band＝status.chaos_band，兩端含在內；豪強趁亂割據的戰況區間），戰況落在裡面的圖卡標「亂局」（f.chaos）。
+  // 條上淺色的一段是亂局帶（band＝status.chaos_band，兩端含在內；兩軍拉鋸的戰況區間），戰況落在裡面的圖卡標「亂局」（f.chaos）。
   // 三方態勢在江湖頁最上面那一排小標的態勢面板裡（正式版辛），不在這一排底下重複
   // tap：伺服器有給戰況的說明（status.war_help.fronts，explain-2）時整排圖卡是一顆按鈕，點了在底下攤開說明（跟點體力條同一個做法）。
   // 變成按鈕之後裡面的 meter 不再念得出來（審查 Minor 4）：鈕的名字自己帶三條戰線的值，用的是同一份資料，畫面不變

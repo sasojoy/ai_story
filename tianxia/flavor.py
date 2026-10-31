@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import re
+from typing import NamedTuple
 
 from . import zh
 from .ollama_client import OllamaClient
@@ -51,6 +52,15 @@ def clean(raw: str) -> str:
             or any(w in text for w in _BANNED)):
         return ""
     return text
+
+
+class FlavorJob(NamedTuple):
+    """一件江湖大事等著潤色（S-09）：鎖內觸發時記下（world._fire），伺服器在行動鎖外請模型（polish_world_event），
+    寫回時照 fire_id 存進全服快取、照 text 找到這一則紀錄換掉（Game.apply_flavor）。"""
+
+    fire_id: str
+    text: str
+    location: str | None = None  # 那件大事的地點：潤色好的那一句也進天下大事（Joy 2026-10-31 選「也進天下大事」），照原文的地點記
 
 
 def polish_world_event(client: OllamaClient | None, text: str) -> str:

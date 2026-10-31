@@ -67,7 +67,7 @@ class SealEvent(BaseModel):
     seq: int
     season: int
     # 不要往這裡加新的種類（FB-695）：舊程式的 kind 也是這一串 Literal，多一種，退回舊程式時整列 world 讀不進來（伺服器與假人程式都
-    # 起不來）。新的紀錄另開一欄、空的時候不寫（例 SealRegistry.uses）；tests/seal/test_seal_fb695_rollback.py 守這一串跟舊程式一樣
+    # 起不來）。新的紀錄另開一欄、空的時候不寫（例 SealRegistry.uses）；tests/seal/test_seal.py 守這一串跟舊程式一樣
     kind: Literal["emerge", "stir", "keep", "take", "sink", "unsettled", "assign", "recall", "scatter", "mandate"]
     shard: str | None = None
     holder: str | None = None  # 這一筆之後的持有者（take 是挑戰者；sink、收回是 None）
@@ -396,7 +396,6 @@ def stamp_season(season: WorldState, content: Content, now: float | None = None)
     season.season21 = cfg.season21
     season.precise_actions = cfg.precise_actions  # 一類一顆（正式季整合第二章、12.3 第 13 條）：照開季蓋章，正在跑的季不變
     season.cal_offset = anchor_offset(now, content) if cfg.season21 and now is not None else 0.0
-    season.haoqiang_allied = cfg.season_one and cfg.haoqiang_allied  # 豪強分屬兩軍（企劃者 2026-10-15）：只在第一季的季（allied.on）
     season.jianfa_on = cfg.jianfa.enabled  # 減法季（Config.jianfa）：season21、week7 開，週末不開；正在跑的季不變（rules.jianfa）
     season.schedule = default_schedule(content, season) if cfg.season_one else {}  # 照剛蓋好的季長排
     # 素材與經濟（企劃者 2026-10-15）：神器配方的條數與線索分片從下一季開季起照這個章（正在跑的季沒有＝照舊）
@@ -659,6 +658,10 @@ class WorldStateStore(Protocol):
 
     def get_jade_seal_fragments(self) -> list[JadeSealFragment]: ...
 
+    def tianji(self) -> int:
+        """天機（同 read().tianji，只是不整份讀）。"""
+        ...
+
     def jade_seal_summary(self) -> str: ...
 
     # ── 共享賽季 ──
@@ -835,6 +838,10 @@ class WorldStateStore(Protocol):
     # ── 同伴進度與招募 ──
     def get_companion(self, companion_id: str) -> CompanionProgress:
         """讀目前進度；還沒有人動過這位人物時回傳一份預設值（不寫回）。"""
+        ...
+
+    def companions(self) -> dict[str, CompanionProgress]:
+        """每一位人物的進度（同 read().companions，只是不整份讀；每次都是新的一份）。"""
         ...
 
     def try_recruit(self, companion_id: str, player_name: str, cap: int | None = None) -> bool:

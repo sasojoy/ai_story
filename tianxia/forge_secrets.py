@@ -454,7 +454,7 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> list[dic
     """鑄譜給畫面的資料（status_data["forge_manual"]，形狀同 secret_recipes.view 多一個 recipe）：這一季聽過口訣或打中過的隱藏配方，
     一條一筆——聽過的那幾句（照版本的先後）、打中了寫名字與配方（照自己打中的那一爐）；沒聽過也沒打過的不露。
     輪替季跨季記得的神器那幾行多帶 past：這一季沒聽到片子也沒打中，卷首「本季所聞」不算它（FB-404）。"""
-    tianji = world.read().tianji
+    tianji = world.tianji()
     book = state.player.forge_manual if state.player.forge_manual.tianji == tianji else Manual(tianji=tianji)
     rows = []
     split = split_on(state.world)

@@ -369,7 +369,7 @@ def test_consolidation_only_reads_this_seasons_dialogue(content, state, world):
     p.turns_since_consolidation = {"mate": companion_agent.MEMORY_CONSOLIDATION_INTERVAL}
     client = mock.Mock()
     client.chat_structured.return_value = companion_agent.MemoryConsolidation(
-        relationship_summary="這一季的交情", new_milestones=["一件事"],
+        relationship_summary="這一季的交情",
     )
     companion_agent._maybe_consolidate_memory(client, state, content.characters["mate"], "mate")  # noqa: SLF001
     sent = client.chat_structured.call_args.args[0][1]["content"]
@@ -384,9 +384,26 @@ def test_memory_consolidation_stores_a_cleaned_note(content, state):
     p.dialogue_history["mate"] = [{"role": "user", "content": "你好"}, {"role": "assistant", "content": "他點了點頭。"}]
     client = mock.Mock()
     client.chat_structured.return_value = companion_agent.MemoryConsolidation(
-        relationship_summary="他对你<0xE5><0xB7><0x8D>然敬重", new_milestones=["初次見面"])
+        relationship_summary="他对你<0xE5><0xB7><0x8D>然敬重")
     companion_agent._maybe_consolidate_memory(client, state, content.characters["mate"], "mate")
     assert p.relationship_notes["mate"] == "他對你巍然敬重"
+
+
+def test_memory_and_drift_notes_are_clipped_before_they_feed_every_prompt(content, state, world):
+    """M-09：記憶整理的關係現況、性情漂移那一句每一輪對話的系統提示都帶著，夾到 NOTE_MAX 字（退回句號；沒有句號硬切）。"""
+    p = state.player
+    p.turns_since_consolidation["mate"] = companion_agent.MEMORY_CONSOLIDATION_INTERVAL
+    p.dialogue_history["mate"] = [{"role": "user", "content": "你好"}, {"role": "assistant", "content": "他點了點頭。"}]
+    sentence = "他對你十分敬重，常說起那一回並肩退敵的事。"  # 21 字：三句 63 字，第三句會被切在中間
+    client = mock.Mock()
+    client.chat_structured.return_value = companion_agent.MemoryConsolidation(relationship_summary=sentence * 20)
+    companion_agent._maybe_consolidate_memory(client, state, content.characters["mate"], "mate")  # noqa: SLF001
+    assert p.relationship_notes["mate"] == sentence * 2
+    for _ in range(companion_agent.DRIFT_SYNTHESIS_INTERVAL):
+        world.record_companion_tag("mate", "雪中送炭")
+    client.chat_structured.return_value = DriftSynthesis(drift_note="越" * 400)
+    companion_agent._maybe_synthesize_drift(client, content.characters["mate"], "mate", world)  # noqa: SLF001
+    assert world.get_companion_drift_note("mate") == "越" * companion_agent.NOTE_MAX
 
 
 def test_drift_synthesis_stores_a_cleaned_note(content, world):

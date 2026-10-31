@@ -148,18 +148,6 @@ def test_the_sect_join_of_a_human_is_unchanged():
 
 
 @pytest.mark.slow
-def test_four_wins_off_still_goes_through_the_pick_buttons():
-    """子開關關著：假人照舊在選邊鈕上挑（allied.pick_side：那一軍此刻人少的），投靠那一下不改傾向。"""
-    world = open_world()
-    game = _bot(wins_game(wins_content(off=True), name="假丙", at="haozu_fort", world=world))
-    game.choose("faction:haoqiang")
-    assert game.state.player.pending_ally is None  # 關著的季投靠豪強還要挑邊（ally: 鈕），pending_ally 不預先填
-    game.choose("faction:ally:huang")
-    game.choose("faction:confirm")
-    assert game.state.player.ally == "huang"
-
-
-@pytest.mark.slow
 def test_gentry_server_bots_split_between_the_two_armies(monkeypatch):
     """BotRunner 假時鐘跑一段（QA 的重現：season21 正式內容，每輪 40 秒；修之前豪強假人 5 個全是官軍）：豪強假人兩軍都有、差距不超過 1；
     假人投靠之後照舊不按「改幫」或叛投。"""

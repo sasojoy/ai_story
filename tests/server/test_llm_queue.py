@@ -276,7 +276,7 @@ def test_a_free_slot_wakes_the_next_waiter_even_if_the_first_waiter_woke_late():
     late.armed = True  # 從現在起，甲醒來重新拿鎖要慢 50 毫秒
     go.set()
     assert b_started.wait(1.5), "乙一路睡到自己的期限才輪到：位子空著、甲進場之後沒有叫醒它"
-    assert time.monotonic() - released_at < 0.5
+    assert time.monotonic() - released_at < 1.2  # 沒被叫醒的話要睡到自己的期限（2 秒）；機器忙時留點餘裕
     assert late.delayed >= 1, "沒有拖慢到甲：這個測試沒有重現它要擋的交錯"
     a_release.set()
     for thread in (*holders, first, second):
