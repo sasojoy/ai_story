@@ -190,12 +190,19 @@ def _feature_imports_cached(path: Path) -> tuple[tuple[int, str], ...]:
 # 瘦下來的 Game（engine.py）也是核心（手冊 3.1）。3.10 准它留一行的委派，所以它是核心裡唯一另外 import 包的地方：只准下面這幾樣，
 # 多一處就紅（要接一包先想掛鉤；真的要過渡就加進這裡、回報寫明）。第 2 階呼叫端改叫包、委派拿掉時從這裡刪。
 GAME_IMPORTS = {
+    # explore（主動搬六包第 3＋4 批）：走一趟 9 個一行委派；原本那一行 `from . import outing as outing_rules` 現在是別名（有所感照舊讀
+    # rare_boost，見 GAME_DIRECT 的 _sense）
+    "tianxia.features.explore.outing_actions", "tianxia.outing",
     "tianxia.features.mall.actions", "tianxia.features.feast.actions",
     # 出陣（主動搬六包第 1 批）：13 個一行委派；原本那一行 `from . import (..., sortie, ...)` 現在是別名（engine 照舊叫 sortie.on、
     # sortie.NAME 這些字，見 GAME_DIRECT）；混戰的字搬進包，tests/ranger/test_raid.py 照舊從 engine 拿那三個
     "tianxia.features.sortie.actions", "tianxia.sortie", "tianxia.features.sortie.rules",
 }
 GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
+    # explore（主動搬六包第 3＋4 批）：走一趟 9 個（1 個私有）——server、bot、bot_policy、測試在叫的 8 個，與 engine 模組層的 _outing_watch
+    # （套在 choose、answer_event、epiphany_names、sense_draw 上；不是 Game 的方法，掃描看不到）叫的 _outing_watched
+    "outing_go", "outing_view", "outing_can_go", "_outing_watched", "outing_say", "outing_tale_request", "outing_set_tale",
+    "outing_ink_left", "admin_erase_inscription",
     "mall_buy", "mall_entry", "mall_rename_left", "mall_rename", "mall_claim", "mall_view", "mall_records",
     "admin_mall_reissue", "admin_mall_revoke", "admin_mall_refund", "admin_mall_ledger", "_mall_grant",
     "feast_free_text_prompt", "feast_text_request", "feast_toast",
@@ -206,6 +213,11 @@ GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
 }
 _SORTIE_SEAM = "接縫留在原位（批次表第二節：會影響先後的接縫這一輪不開掛鉤，第 11 批一次收）"
 GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；過渡）
+    # explore（主動搬六包第 3＋4 批）：用到 outing 這個名字（現在是探索包 outing_rules 的別名）的只剩有所感
+    "_sense": "有所感畫完那一筆擲特殊頓悟（epiphany.roll 的 boost＝outing_rules.rare_boost：走一趟段數越多越容易來）：sense:* 的分派"
+              "留在核心；等探索包開「此刻稀有的乘多少」的查詢服務時改叫它",
+    "_explore_one": "探索一顆（Task 4 搬進同一包）：rare_boost、FEAT_TIER、FEAT_TREASURE、FEAT_UPSET、foe_look",
+    "_outing_fight": "探索一顆的遭遇（Task 4 搬進同一包）：FEAT_ODDS",
     "_own_scene_text": "坐在宴席上的場景卡（feast_actions.scene）：場景卡還沒有掛鉤；搬包之前也不看宴客開關",
     # 出陣（主動搬六包第 1 批）：下面這些方法用到 sortie 這個名字（現在是出陣包 rules 的別名）——開關（sortie.on＝territory.on）、
     # 鈕上的字（NAME、USED_UP、LEFT_NOTE、OUT_NOTE……）、次數（spend）
@@ -472,7 +484,7 @@ def test_the_scanner_catches_a_crossing(source, expected):
 def test_the_old_names_left_as_aliases_are_known():
     """tianxia/mall.py、tianxia/feasts.py、tianxia/sortie.py 是指到包裡同一個模組的別名（給還沒改的測試與舊模組）：掃描照它們指到的那一包算，
     不算舊模組。"""
-    assert aliases() == {"feasts": "feast", "mall": "mall", "sortie": "sortie"}
+    assert aliases() == {"feasts": "feast", "mall": "mall", "sortie": "sortie", "outing": "explore"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 

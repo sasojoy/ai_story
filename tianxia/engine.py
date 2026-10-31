@@ -96,6 +96,8 @@ from .wallet import Wallet
 from .core import features as features_core  # 核心照 FEATURES 問每一包（開發規範手冊 3.3）
 from .core.option import IDLE_MARK, Option  # 選單上的一顆（搬進核心：功能包要做選項）；閒著的選單一定有的那一顆（走一趟要認它）
 from .core.services import NO_SUCH_PLAYER, PAUSED_TEXT, WalletService, drill_share, wallet_on  # 共用的字與小函式、錢包服務（3.10）
+# explore
+from .features.explore import outing_actions  # 過渡：Game 上走一趟的 9 個一行委派（主動搬六包第 3＋4 批）
 from .features.mall import actions as mall_actions  # 過渡：Game.mall_* 留一行委派（開發規範手冊 3.10）
 from .features.feast import actions as feast_actions  # 過渡：Game.feast_*（server 的三段式）與場景卡留一行委派
 from .features.sortie import actions as sortie_actions  # 過渡：Game 上出陣的 13 個一行委派（主動搬六包第 1 批）
@@ -5586,219 +5588,34 @@ class Game:
         losses = [ch for ch in totals if journal.change_class(ch) == "tx-down"]
         return explore_one.ledger(gains, losses)
 
-    # ── 走一趟（tianxia/outing.py；企劃者 2026-10-29～30）──
+    # ── 走一趟（企劃者 2026-10-29～30）：本體在功能包 tianxia/features/explore/outing_actions.py（主動搬六包第 3＋4 批），這裡留一行委派 ──
 
     def outing_go(self, total: int = 0) -> list[str]:
-        """走一趟：total 是段數（Config.jianfa.outing_segments）就出發；0 是停在要選的事上、選完之後接著走。
-        出發要閒著（選單上的探索按得下去）、體力夠走完這麼多段；每一段照舊扣一次探索的體力，沒走的段不扣。
-        回的訊息只有拒絕的那一句：沿路發生的事都在 PlayerState.outing（outing.view）與每一段自己的江湖紀錄裡。"""
-        s, c = self.state, self.content
-        p = s.player
-        if not outing_rules.on(c, s) or prologue_rules.active(s, c) or p.journey is not None:
-            return ["（此刻無法這麼做。）"]
-        if total:
-            if total not in outing_rules.segments(c):
-                return ["（此刻無法這麼做。）"]
-            if self._explore_ready() is None:
-                return ["（此刻無法這麼做。）"]
-            if p.stamina < outing_rules.cost(c, total):
-                return ["（體力不夠走這麼多段。）"]
-            p.outing = Outing(place=p.location, total=total, n=(p.outing.n + 1) if p.outing is not None else 1)
-        else:
-            trip = p.outing
-            if trip is None or trip.end:
-                return ["（此刻無法這麼做。）"]
-            if trip.place != p.location:
-                trip.end = outing_rules.LEFT
-                return [outing_rules.END_LINES[outing_rules.LEFT]]
-        return self._outing_walk()
-
-    def _explore_ready(self) -> Option | None:
-        """選單上的探索此刻按得下去就回那一顆（閒著、體力夠一段）；不然是 None。"""
-        option = {o.id: o for o in self.options(odds=False, tick=False)}.get(IDLE_MARK)
-        return option if option is not None and option.enabled else None
+        return outing_actions.outing_go(self, total)
 
     def outing_view(self) -> dict | None:
-        """/api/main 的 outing（outing.view）加 can_go：停在要選的事上的那一趟，事情選完了、可以接著走（網頁照它自己送「接著走」；
-        最後一段是要選的事時，接著走只是把這一趟收成「走完」）。關著是 None。"""
-        view = outing_rules.view(self.state, self.content)
-        if view is not None and view["trip"] is not None:
-            trip = view["trip"]
-            trip["can_go"] = self.outing_can_go()
-            if trip["can_say"]:
-                trip["ink"] = self.outing_ink_left()
-                trip["ink_item"] = self.wallet.item_for(outing_rules.INK)
-                trip["people"] = [o.player.name for o in social.here(self)]  # 結算卡的「此地還有」：點名字開玩家卡打招呼、邀結伴
-            trip["admin"] = self.is_admin()
-        return view
+        return outing_actions.outing_view(self)
 
     def outing_can_go(self) -> bool:
-        """停下來的那一趟可以接著走了：事情選完了（探索回到選單上；體力不夠一段也算，接著走會把它收成「累了」）。"""
-        if outing_rules.active(self.state) is None:
-            return False
-        return IDLE_MARK in {o.id for o in self.options(odds=False, tick=False)}
+        return outing_actions.outing_can_go(self)
 
     def _outing_watched(self, fn, *args, **kwargs):
-        """走一趟停在要選的事上（還沒選完）時做的這一下：照做，做完把這一下寫進江湖紀錄的得失（新的那幾則的數值變化、撿到的東西）
-        與另外扣的體力記在那一段（OutingBeat.after）——結果那一行、結算卡、「走一趟」那一則才寫得出數字（Joy 10/31）。
-        不在路上、已經選完、正在走（_outing_walk 自己的探索）都照做、什麼都不記。"""
-        trip = outing_rules.active(self.state)
-        if getattr(self, "_outing_busy", False) or trip is None or not trip.beats or not trip.beats[-1].stop or self.outing_can_go():
-            return fn(self, *args, **kwargs)
-        p, beat = self.state.player, trip.beats[-1]
-        stamina, before = p.stamina, {id(e): e for e in self.state.journal}
-        head = self.state.journal[0] if self.state.journal else None
-        self._outing_busy = True
-        try:
-            out = fn(self, *args, **kwargs)
-        finally:
-            self._outing_busy = False
-        changes, notes = [], []
-        for e in self.state.journal:
-            if id(e) in before or journal.is_world_entry(e):
-                continue
-            merged = head is not None and id(head) not in {id(x) for x in self.state.journal} and e is self.state.journal[0] \
-                and e.title == head.title  # 併進了原本最新那一則：只算這一下多出來的
-            changes += [outing_rules.plain(x) for x in (journal.subtract_changes(e.changes, head.changes) if merged else e.changes)]
-            notes += e.lines
-        spent = round(stamina - p.stamina)
-        grants = (n.removeprefix(materials.GRANT_PREFIX) for n in notes if n.startswith(materials.GRANT_PREFIX))
-        parts = outing_rules.ledger_parts(beat.after) + list(grants) + changes + ([f"體力 -{spent}"] if spent > 0 else [])
-        items = explore_one.merge_items(x for x in parts if explore_one.is_item(x))
-        totals = journal.combine_changes([x for x in parts if not explore_one.is_item(x)])
-        beat.after = explore_one.ledger(items + [x for x in totals if journal.change_class(x) == "tx-up"],
-                                        [x for x in totals if journal.change_class(x) == "tx-down"])
-        return out
-
-    def _outing_walk(self) -> list[str]:
-        """一段一段走（每一段是一次 choose(act:explore)，各寫各的江湖紀錄）：端出要選的事就停；打輸、氣血低於 outing_turn_back
-        回頭；體力不夠一段也回頭。走完了寫 end。"""
-        s, c = self.state, self.content
-        p, cfg = s.player, c.config.jianfa
-        trip = p.outing
-        while trip.done < trip.total and not trip.end:
-            if self._explore_ready() is None:
-                if IDLE_MARK in {o.id for o in self.options(odds=False, tick=False)}:
-                    trip.end = outing_rules.TIRED  # 探索在選單上但灰了：體力不夠一段
-                break  # 不在選單上：還有事要選（不該走到這裡；保險）
-            self._beat = None
-            stamina, self._outing_busy = p.stamina, True
-            try:
-                msgs = self.choose(IDLE_MARK)
-            finally:
-                self._outing_busy = False
-            beat, self._beat = self._beat or {"kind": explore_one.MATERIAL, "rare": False, "won": None}, None
-            lines = [m for m in msgs if isinstance(m, str)]
-            ledger = lines[1] if len(lines) > 1 and lines[1].startswith(("得：", "失：")) else ""
-            stop = IDLE_MARK not in {o.id for o in self.options(odds=False, tick=False)}
-            trip.done += 1
-            trip.beats.append(OutingBeat(kind=beat["kind"], text=lines[0] if lines else "", ledger=ledger, rare=bool(beat["rare"]),
-                                         won=beat["won"], stop=stop, feat=beat.get("feat", ""), feat_kind=beat.get("feat_kind", ""),
-                                         foe=beat.get("foe", ""), spent=max(0, round(stamina - p.stamina))))
-            now, cap = team.member_neili(c, p.member, team.con_of(s, c, self.world, PLAYER), season=s.world)
-            if beat.get("lost"):
-                trip.end = outing_rules.LOST
-            elif cap > 0 and now < cap * cfg.outing_turn_back:
-                trip.end = outing_rules.HURT
-            if stop:
-                break
-            if trip.end != outing_rules.LOST:
-                self._outing_trace(trip)
-        if not trip.end and trip.done >= trip.total and IDLE_MARK in {o.id for o in self.options(odds=False, tick=False)}:
-            trip.end = outing_rules.DONE  # 最後一段端出要選的事時先不收：選完、接著走那一下才收
-        if trip.end:  # 撿到稀世的東西、以弱勝強（Joy 10/30：只有這種才值得記）：一段一則行狀、世界記事一筆（此地舊事、人物對話讀得到）
-            place = c.locations[trip.place].name if trip.place in c.locations else trip.place
-            # 整趟的得失收成一則（「剛剛」放它；留一句併進這一則，不會只剩留字，Joy 10/31）
-            items, totals = outing_rules.trip_totals(trip)
-            lines = [f"走了 {trip.done} 段。{outing_rules.END_LINES.get(trip.end, '')}".strip()] + (
-                [f"撿到：{'、'.join(items)}"] if items else [])
-            journal.add_entry(s, JournalEntry(time=s.world.time, title=outing_rules.TRIP_TITLE.format(place=place),
-                                              tag=outing_rules.END_TITLES.get(trip.end, ""), lines=lines, changes=totals))
-            for b in trip.beats:
-                if b.feat:
-                    annals.note(s, c, annals.DEED, outing_rules.FEAT_ANNAL[b.feat_kind].format(place=place, what=b.feat), 3, place=place)
-                    deeds.record(s, c, outing_rules.DEED_KIND, outing_rules.FEAT_DEED[b.feat_kind].format(name=p.name, place=place, what=b.feat),
-                                 place=trip.place, actors=[p.name])
-        return []
-
-    def _outing_trace(self, trip: Outing) -> None:
-        """一段走完、沒停下：擲一下路上有沒有看到東西（outing_trace_chance）——這一處有別人、這一趟還沒揮過手的話先是遠處有人揮手，
-        不然是一則別人的留言。一趟最多 outing_trace_cap 行，不佔段數。亂數另起（outing.trace_rng），Game.rng 一個都不動。"""
-        c = self.content
-        if outing_rules.traces_left(trip, c) <= 0:
-            return
-        rng = outing_rules.trace_rng(self.state, trip)
-        if rng.random() >= c.config.jianfa.outing_trace_chance:
-            return
-        beat = None
-        if not trip.waved:
-            beat = outing_rules.wave_beat([o.player.name for o in social.here(self)], rng)
-            trip.waved = beat is not None
-        if beat is None:
-            beat = outing_rules.seen_beat(self.state, c, trip, rng)
-        if beat is not None:
-            trip.beats.append(beat)
+        return outing_actions.outing_watched(self, fn, *args, **kwargs)
 
     def outing_say(self, preset: int = -1, text: str = "", verdict: str = "") -> list[str]:
-        """走完一趟在這一處留一句（outing.say_ok）：preset 是預設句的第幾句（免費）；不然是自己寫的 text（伺服器量過長度、
-        鎖外審過，verdict 是模型的判斷），過字表（speech.problem，同名帖自題那一套），用掉一張題壁墨（商城 inscribe）。
-        成了刻進這一處（outing.inscribe）、寫一則江湖紀錄；不成只回一句、什麼都不動。"""
-        s, c = self.state, self.content
-        if not outing_rules.on(c, s):
-            return ["（此刻無法這麼做。）"]
-        trip = outing_rules.say_ok(s)
-        if trip is None:
-            p = s.player
-            return [outing_rules.SAY_AGAIN if p.outing is not None and p.outing.said else outing_rules.SAY_NOT_HERE]
-        token = None
-        if 0 <= preset < len(outing_rules.PRESETS):
-            line, is_preset = outing_rules.PRESETS[preset], True
-        else:
-            line, is_preset = speech.clean(text), False
-            if not line:
-                return [outing_rules.SAY_EMPTY]
-            problem = speech.problem(line, c, speech.MOTTO, c.config.jianfa.outing_say_max, verdict)
-            if problem is None and any(word in line for word in tavern_rules.BANNED_WORDS):
-                problem = speech.BLOCKED  # 同酒肆題壁：牆上不寫這幾個字
-            if problem:
-                return [problem]
-            left = self.wallet.tokens(outing_rules.INK)
-            if not left:
-                return [outing_rules.NO_INK]
-            token = left[0]
-        place = c.locations[trip.place].name if trip.place in c.locations else trip.place
-        item = outing_rules.inscribe(s, c, line, preset=is_preset)
-        self._save_season()  # 留言刻在全服這一季（WorldState.inscriptions），不寫回共用賽季的話下一次重讀就沒了
-        if token is not None:
-            self.wallet.consume(outing_rules.INK, place=trip.place, inscription=item.id)  # 用掉的就是上面查到的那一張（最舊的）
-        said = outing_rules.SAY_DONE.format(place=place, text=line)
-        journal.add_entry(s, JournalEntry(time=s.world.time, title=outing_rules.TRIP_TITLE.format(place=place), lines=[said],
-                                          changes=[] if token is None else ["題壁墨 -1"]), merge=True)  # 併進這一趟那一則（Joy 10/31）
-        return self._log([said])
+        return outing_actions.outing_say(self, preset, text, verdict)
 
     def outing_tale_request(self) -> outing_rules.TaleRequest | list[str]:
-        """遊記的 A 段（只讀）：這一趟收了、還沒請過模型就開單；不然回一句（不叫模型）。"""
-        req = outing_rules.tale_request(self.state, self.content)
-        return ["（此刻無法這麼做。）"] if req is None or not outing_rules.on(self.content, self.state) else req
+        return outing_actions.outing_tale_request(self)
 
     def outing_set_tale(self, text: str | None, request: outing_rules.TaleRequest) -> list[str]:
-        """遊記的 C 段：還是同一趟（outing.same_trip）才收；text 是 None（叫不動、不合用）就記成請過了、畫面照用模板。"""
-        trip = outing_rules.same_trip(self.state, request)
-        if trip is None:
-            return []
-        trip.tale, trip.tale_done = text or "", True
-        return []
+        return outing_actions.outing_set_tale(self, text, request)
 
     def outing_ink_left(self) -> int:
-        """手上還沒用掉的題壁墨幾張；商城關著是 0。"""
-        return len(self.wallet.tokens(outing_rules.INK))
+        return outing_actions.outing_ink_left(self)
 
     def admin_erase_inscription(self, ins_id: int) -> list[str]:
-        """管理者抹掉一則留言（路上那一行的 ref）。不是管理者、沒有這一則都回同一句「此刻無法」。"""
-        if not self.is_admin() or not outing_rules.erase(self.state, ins_id):
-            return ["（此刻無法這麼做。）"]
-        self._save_season()
-        return self._log([outing_rules.ERASED])
+        return outing_actions.admin_erase_inscription(self, ins_id)
 
     def is_idle(self) -> bool:
         """此刻閒著（切磋、論武、假人答論武都問它）：選單上有探索（IDLE_MARK）——不在路上、沒有事件、對話、店面的選單擋著、不在開打的決戰裡。

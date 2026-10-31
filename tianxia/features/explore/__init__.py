@@ -2,6 +2,8 @@
 主動搬六包第 3＋4 批搬進來）。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫、名字陷阱。
 
 - checks.py：內容驗證（探索表、段落句子；原本是核心 content.py 的 check_explore_one、check_outing_lines）
+- outing_rules.py：走一趟的純規則（原 tianxia/outing.py；那個名字留成指到這裡的別名）
+- outing_actions.py：原本 Game 上走一趟的 12 個方法（Game 留 9 個一行委派）
 
 這一批不拿選項前綴（prefix 是 None）：那一格的 id 照留核心的 act:explore（IDLE_MARK；跟扣體力、晉升奇遇、序章的舊探索、
 探索三選一纏在一起），分派留在 Game._act；走一趟沒有自己的選項，走 /api/do/outing。所以這一包只接 enabled、欄位、內容驗證與網頁檔，
@@ -15,6 +17,7 @@ from tianxia.core.features import Feature
 class ExploreFeature(Feature):
     name = "explore"
     prefix: str | None = None  # act:explore 是核心的 act 前綴；走一趟沒有選項（/api/do/outing、outing_say、outing_tale、outing_erase）
+    web = ("outing.js",)  # 走一趟的畫面（本來就是獨立的檔；這一輪不切網頁，位置不動、index.html 照舊手寫）
     content = ("outing_lines.json",)  # 出門一趟回來那一段的句子（content.py 照舊讀；檔名照舊，批次表第二節）
     # 走一趟這一趟（outing）、探索一顆上一趟要選的那件事（outing_last）、第幾次探索（explore_seq：跟還留在 engine 的探索三選一共用）、
     # 遭遇的疲勞那一天與場數（fight_day、fights_today：三道閘的前一道）；換季全部跟著新角色重來
