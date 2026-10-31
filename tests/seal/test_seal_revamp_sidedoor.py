@@ -151,6 +151,7 @@ def test_a_raid_is_still_fought_with_the_real_power(trio, monkeypatch):
 
 # ── FB-615：切磋、截殺、設伏、擂台的戰報寫「對手威力 N」──
 
+@pytest.mark.smoke
 def test_a_spar_report_names_the_rivals_bare_power(trio):
     """丙跟甲切磋（甲答應）：丙的戰報寫甲不含碎片的 50（不是 55），甲自己的「我方威力」照實寫 55；甲發邀請、丙答應也一樣；
     對沒有碎片的乙寫 50，跟對甲一樣。"""

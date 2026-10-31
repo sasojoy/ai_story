@@ -14,6 +14,8 @@ import server
 import webharness
 from pathlib import Path
 
+from tianxia.core import features as features_core
+
 DESKTOP = "@media (min-width: 641px) {"
 needs_node = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 
@@ -58,7 +60,8 @@ def test_the_desktop_block_starts_just_above_the_game_column():
 
 
 def test_the_shop_draws_its_colors_only_in_the_game_column():
-    """三間店的底色（爐火、土黃、木紋）照欄寬畫在中間、不重複；欄外是遊戲本來的頁面底色。深色主題的馬市那一條在前面，蓋不掉這一條。"""
+    """三間店的底色（爐火、土黃、木紋）照欄寬畫在中間、不重複；欄外是遊戲本來的頁面底色。深色主題的馬市那一條在前面，蓋不掉這一條。
+    （功能包切出去的樣式排在 style.css 後面，蓋得掉這一條：見下一條。）"""
     col = _column()
     rules = _rules(_block(_css(), "FB-225"))
     # 軍需帳（素材與經濟 B6）、擂台的紅布（FB-306）、打點的雅間（第 9 批畫面乙）、商城的紫檀（商城第二批）同一條
@@ -66,6 +69,30 @@ def test_the_shop_draws_its_colors_only_in_the_game_column():
                ".shop-layer.shop-dadian, .shop-layer.shop-mall"]
     assert "background-color: var(--paper)" in bg and f"background-size: min(100%, {col}px) 100%" in bg
     assert "background-position: 50% 0" in bg and "background-repeat: no-repeat" in bg
+
+
+def test_a_package_stylesheet_paints_its_shop_color_in_the_game_column_again():
+    """功能包切出去的樣式（FEATURES 的 web 裡的 .css，現在是商城的 web/mall.css；開發規範手冊 3.7）在 index.html 排在 style.css 後面：
+    它替自己那一層寫的 background 簡寫會把上面那一條欄寬的底色蓋回整片寬（2026-10-31 商城切出來時實機 1280 寬量到的退步）。
+    所以上面那一條列到的那一層，只要在功能包的檔裡寫了 background 簡寫，同一個檔在它後面的電腦寬那一段就要照上面那一條再寫一次。"""
+    col = _column()
+    layers = [s.strip() for s in next(sel for sel in _rules(_block(_css(), "FB-225")) if ".shop-layer.shop-smith" in sel).split(",")]
+    page = (server.WEB / "index.html").read_text(encoding="utf-8")
+    checked = []
+    for name in (n for n in features_core.web_files() if n.endswith(".css")):
+        css = re.sub(r"/\*.*?\*/", "", _css(name), flags=re.S)
+        assert page.index('href="/static/style.css"') < page.index(f'href="/static/{name}"')
+        for layer in layers:
+            mobile = re.search(rf"(?m)^{re.escape(layer)} \{{([^}}]*)\}}", css)
+            if mobile is None or not re.search(r"(^|;)\s*background:", mobile.group(1)):
+                continue
+            again = re.search(rf"{re.escape(layer)} \{{([^}}]*)\}}", css[css.index(DESKTOP, mobile.end()):])
+            assert again, f"{name} 沒有在電腦寬再寫一次 {layer} 的底色"
+            for decl in ("background-color: var(--paper)", f"background-size: min(100%, {col}px) 100%", "background-position: 50% 0",
+                         "background-repeat: no-repeat"):
+                assert decl in again.group(1), (name, layer, decl)
+            checked.append((name, layer))
+    assert ("mall.css", ".shop-layer.shop-mall") in checked  # 商城那一層在這裡：讀漏了這一條就空轉
 
 
 def test_everything_in_the_shop_lines_up_with_the_game_column():

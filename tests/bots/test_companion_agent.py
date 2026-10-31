@@ -11,6 +11,7 @@ from tianxia.world_state import WorldStateStore
 # ── 好感度 tag 查表：個別人物覆寫（還要改進第 6 點）────────────────
 
 
+@pytest.mark.smoke
 def test_trim_options_keeps_three_and_drops_the_blank_ones():
     """2026-10-14 線上回報：跟盧植對話時選單冒出 400 顆按鈕，第 4 顆之後全是空的，第 3 顆的字尾還帶著 JSON 的「],」。
     模型那一輪的結構化輸出壞了，而 CompanionTurn.options 沒有長度上限，壞掉的清單就一路畫成按鈕。"""

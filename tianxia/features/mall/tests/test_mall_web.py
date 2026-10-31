@@ -5,7 +5,8 @@
 - 商城那一層沿用店面的框（shopHtml：招牌、掌櫃那一句、左上出店），底下貨架、紀錄兩頁；按一件先問一次（花多少、元寶剩多少、
   丹或月卡變成多少），買成了餘額與狀態列的丹鈕當場換；買不了的（元寶不夠、限購、下架）掌櫃回一句原因。
 - 設定頁的管理者區多一組商城：查帳、補發、扣回、退一筆。
-假瀏覽器照 test_prologue_web 那一套跑整支 app.js（同 test_shop2_web）。"""
+假瀏覽器照 test_prologue_web 那一套跑整支 app.js（同 test_shop2_web）；商城的畫面在 web/mall.js、樣式在 web/mall.css（開發規範手冊 3.7
+第 1 階從 app.js、style.css 切出來；webharness 照 index.html 的順序把 mall.js 接在 app.js 前面）。"""
 from __future__ import annotations
 
 import copy
@@ -610,13 +611,24 @@ def test_fb493_the_fold_is_a_line_each_and_drops_the_gap():
 
 
 def test_the_mall_layer_follows_the_640_column_on_desktop():
+    """電腦寬的紫檀底只畫在中間那一欄、欄外是頁面的紙色（FB-225）。商城那一層的樣式在 web/mall.css（開發規範手冊 3.7 從 style.css 切出來），
+    index.html 排在 style.css 後面：mall.css 手機那一條的 background 簡寫會把 style.css「電腦上的店面」那一條蓋回整片寬
+    （2026-10-31 實機 1280 寬量到的退步），所以 mall.css 電腦寬那一段要在它後面再寫一次欄寬的底色。狀態列的錠子鈕（.mall-btn）是殼的，留在 style.css。"""
     from pathlib import Path
 
-    css = (Path(__file__).resolve().parents[2] / "web" / "style.css").read_text(encoding="utf-8")
-    wide = css[css.index("/* ── 電腦上的店面與武學譜那本書（FB-225"):]
-    head = wide[wide.index("@media (min-width: 641px) {"):]
-    assert ".shop-layer.shop-mall" in head[:head.index("{", head.index(".shop-layer.shop-smith"))]
-    assert ".mall-btn" in css and ".shop-layer.shop-mall" in css
+    web = Path(__file__).resolve().parents[4] / "web"  # repo 的根（搬進功能包）
+    css, mall_css = (web / "style.css").read_text(encoding="utf-8"), (web / "mall.css").read_text(encoding="utf-8")
+    page = (web / "index.html").read_text(encoding="utf-8")
+    assert page.index('href="/static/style.css"') < page.index('href="/static/mall.css"')  # mall.css 在後面：同權重的它說了算
+    base = mall_css.index(".shop-layer.shop-mall {")
+    assert "background: radial-gradient(" in mall_css[base: mall_css.index("}", base)]  # 手機那一條：紫檀（簡寫把 background-* 全部重設）
+    wide = mall_css[mall_css.index("@media (min-width: 641px) {", base):]
+    rule = wide[wide.index(".shop-layer.shop-mall {"):]
+    rule = rule[: rule.index("}")]
+    for decl in ("background-color: var(--paper)", "background-size: min(100%, 640px) 100%", "background-position: 50% 0",
+                 "background-repeat: no-repeat"):
+        assert decl in rule, decl
+    assert ".mall-btn" in css
 
 
 # ── 一次買好幾件（Joy 2026-10-22）──

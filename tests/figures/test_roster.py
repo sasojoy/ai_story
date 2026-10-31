@@ -1,3 +1,5 @@
+import pytest
+
 from conftest import FixedRandom
 
 from tianxia import roster, team
@@ -14,6 +16,7 @@ def test_nobody_owns_anyone_at_the_start(state, world):
 # ── 成功率 ──────────────────────────────────────────────
 
 
+@pytest.mark.smoke
 def test_recruit_chance_rises_with_affinity_and_is_clamped(content, state):
     assert roster.recruit_chance(content, state, "mate") == 0.35
     state.player.affinities["mate"] = 100

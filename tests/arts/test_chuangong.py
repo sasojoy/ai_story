@@ -5,6 +5,8 @@ from __future__ import annotations
 import random
 from pathlib import Path
 
+import pytest
+
 from tianxia import bot, chuangong, encounter, skillview, team
 from tianxia.content import load_content
 from tianxia.engine import Game
@@ -40,6 +42,7 @@ def _lesson(game, key, what):
 
 # ── 同伴 ──
 
+@pytest.mark.smoke
 def test_teaching_a_companion_his_art_costs_more_each_cheng(game):
     _with_mate(game)
     per = game.content.config.chuangong.mate_art_xinde

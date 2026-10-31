@@ -652,7 +652,7 @@
   // 縮放差過一截、跨了一段、停下來才重排字（地點多也不卡）。字待 joy 潤
   const MV_WORDS = {
     search: "要去哪？地點、人物、店面", all: "全部", sense: "能悟", tl: "⏱ 版圖", me: "回到我", fit: "看整張天下",
-    from: "從{place}出發", road: "沿路能去", swipe: "由近到遠，左右滑", none: "附近沒有。拉遠一點看看，或換個標籤。", week: "本週", here: "你在這裡",
+    from: "從{place}出發", road: "沿路能去", swipe: "由近到遠，左右滑", none: "附近沒有。拉遠一點看看，或換個標籤。", week: "本週", here: "你在這裡", next: "下一站", end: "終點",
     weekHead: "本週要事", figures: "附近的人物", jump: "跳到大區", places: "地點", people: "人物",
     notFound: "找不到「{q}」。地名、大區、人物、店面（醫館、鐵匠鋪、馬市）都找得到。",
   };
@@ -1013,12 +1013,13 @@
     const z = c.z, tl = S.mapMode === "timeline", lvl = tl ? 0 : mvLevel(z), out = [], boxes = [];
     const week = mapWeek(), ctrl = controlAt(st, week), live = week === st.now_week;
     const sel = S.mapSel, prev = S.mapMode === "overview" ? S.mapPreview : null, wk = nearWeek(st), here = st.journey ? null : st.here;
+    const leg = mapLeg(), end = leg && leg.to;
     const filt = (S.mapFilter || "all") !== "all";
     const scr = (x, y) => [c.x + x * z, c.y + y * z];
     const padX = g.vw * 0.8, padY = g.vh * 0.8;
     const near = ([x, y]) => x > -padX && y > -padY && x < g.vw + padX && y < g.vh + padY;
     const shown = base.places.filter((b) => st.places[b.id]);
-    const rank = (b) => (b.id === sel || b.id === prev ? 0 : b.id === here ? 1 : wk && wk.id === b.id ? 1.5
+    const rank = (b) => (b.id === sel || b.id === prev || b.id === end ? 0 : b.id === here ? 1 : wk && wk.id === b.id ? 1.5
       : (mvMatch(st, b) ? 2 : 6) + (b.big ? 0 : 1) + (st.places[b.id].minutes ?? 500) / 1000);
     const order = shown.slice().sort((a, b) => rank(a) - rank(b));
     const hit = (bx) => boxes.some((o) => bx[0] < o[2] && bx[2] > o[0] && bx[1] < o[3] && bx[3] > o[1]);
@@ -1048,7 +1049,7 @@
       if (lvl === 0) {
         out.push(`<button type="button" class="mv-dot${dim}${q.rich ? " rich" : ""}" style="left:${f1(x)}px;top:${f1(y)}px;--c:${ctl ? sideInk(ctl).color : MV_UNHELD}" data-act="map-place" data-id="${esc(b.id)}" aria-label="${esc(b.name)}"></button>`);
       } else out.push(pinHtml(b, x, y, dim, z));
-      if (isSel) out.push(`<i class="mv-ring" style="left:${f1(x)}px;top:${f1(y)}px;--r:${lvl ? 22 : 12}px"></i>`);
+      if (isSel || b.id === end) out.push(`<i class="mv-ring" style="left:${f1(x)}px;top:${f1(y)}px;--r:${lvl ? 22 : 12}px"></i>`);
       if (live && (q.melee || q.siege === "fight")) out.push(`<i class="mv-fight" style="left:${f1(x)}px;top:${f1(y)}px"></i>`);
       if (!on || (lvl === 0 && !isSel && !isHere && !isWk && !filt)) continue;
       const sub = isHere ? MV_WORDS.here : (lvl === 2 || isSel || isWk) ? nearSub(base, st, b.id, wk) : "";
@@ -1059,15 +1060,18 @@
       const bar = t ? `<span class="mv-bar"><i style="width:${t.pct}%;background:${sideInk(t.side).color}"></i></span>` : "";
       const seals = (lvl > 0 && q.rich ? `<span class="mv-rich">${RICH_WORD}</span>` : "")
         + (live && q.siege === "letter" ? `<span class="mv-rich">${LETTER_SEAL_WORD}</span>` : "")
-        + (isWk ? `<span class="mv-wk">${MV_WORDS.week}</span>` : "");
+        + (isWk ? `<span class="mv-wk">${MV_WORDS.week}</span>` : "")
+        + (leg && b.id === sel ? `<span class="mv-wk leg">${MV_WORDS.next}</span>` : leg && b.id === end ? `<span class="mv-wk leg">${MV_WORDS.end}</span>` : "");
       const fs = b.big ? 16 : 14, side = lvl > 0 && ctl ? 21 : 0;
-      const w = side + textW(b.name, fs) + inks.length * 13 + (sub ? 0 : 0) + (lvl > 0 && q.rich ? 21 : 0) + (q.siege === "letter" ? 21 : 0) + (isWk ? 34 : 0) + 8;
+      const w = side + textW(b.name, fs) + inks.length * 13 + (sub ? 0 : 0) + (lvl > 0 && q.rich ? 21 : 0) + (q.siege === "letter" ? 21 : 0) + (isWk ? 34 : 0) + (leg && (b.id === sel || b.id === end) ? 46 : 0) + 8;
       const wsub = sub ? side + textW(sub, 11) + (odds ? 40 : 0) + 8 : 0;
       const W = Math.max(w, wsub), H = fs * 1.2 + 4 + (sub ? 15 : 0) + (bar ? 5 : 0);
-      const tries = lvl === 0 ? [[-W / 2, 9], [12, -H / 2], [-12 - W, -H / 2], [-W / 2, -9 - H]] : [[-W / 2, 15], [20, -10], [-20 - W, -10], [-W / 2, -30 - H]];
+      const tries0 = lvl === 0 ? [[-W / 2, 9], [12, -H / 2], [-12 - W, -H / 2], [-W / 2, -9 - H]] : [[-W / 2, 15], [20, -10], [-20 - W, -10], [-W / 2, -30 - H]];
+      // 選了的、終點：寧可擺上面也不擺左邊（貼著地圖左緣時擺左邊會出畫面）；硬擺的那一個是最後一個
+      const tries = isSel || b.id === end ? [tries0[0], tries0[1], tries0[3], tries0[2]] : tries0;
       for (const [i, [dx, dy]] of tries.entries()) {
         const bx = [x + dx, y + dy, x + dx + W, y + dy + H];
-        if (hit(bx) && !((isSel || isHere) && i === tries.length - 1)) continue;
+        if (hit(bx) && !((isSel || isHere || b.id === end) && i === tries.length - 1)) continue;
         boxes.push(bx);
         out.push(`<button type="button" class="mv-lab${b.big ? " big" : ""}${isHere ? " here" : ""}${isSel ? " sel" : ""}" style="left:${f1(bx[0])}px;top:${f1(bx[1])}px" data-act="map-place" data-id="${esc(b.id)}">`
           + `${lvl > 0 ? mvSeal(ctl) : ""}<span class="t"><span class="nm">${esc(b.name)}${ins}${seals}</span>${sub ? `<small>${esc(sub)}${odds}</small>` : ""}${bar}</span></button>`);
@@ -1111,7 +1115,9 @@
     const id = S.mapMode === "timeline" ? null : S.mapSel || (S.mapMode === "overview" ? S.mapPreview : null);
     const d = id ? routeD(S.mapBase, st, id) : "";
     const line = (ink, w) => `<path d="${d}" fill="none" stroke="${ink}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
-    svg.innerHTML = d ? line(MAP_HALO, 9) + line(FRONT_RED, 4.5) : "";
+    const leg = mapLeg(), a = leg && placeXY(leg.from), b = leg && placeXY(leg.to);
+    const dash = a && b ? `<path d="M${f1(a[0])},${f1(a[1])}L${f1(b[0])},${f1(b[1])}" fill="none" stroke="${FRONT_RED}" stroke-width="3" stroke-dasharray="2 7" stroke-linecap="round" vector-effect="non-scaling-stroke"/>` : "";
+    svg.innerHTML = (d ? line(MAP_HALO, 9) + line(FRONT_RED, 4.5) : "") + dash;
   }
 
   // ── 看哪裡：S.mapCam = { z 倍率, x, y }，地圖上 (mx, my) 在地圖框裡的 (x + mx·z, y + my·z) ──
@@ -1582,6 +1588,14 @@
   // 第一次（每一次打開輿圖）看哪裡：選了一處以它為中心、放到 MV_PICK_Z；不然以你為中心、MV_OPEN_Z
   function camFirst(g) {
     const st = S.mapState, base = S.mapBase;
+    // 選了一處：連另一頭（護糧的終點，不然是你）一起框進露出來的那一塊（留邊給字），最多放到 MV_PICK_Z；
+    // 兩頭太遠、框進來字就看不到了（拉遠到只剩大區）才只看選了的那一處
+    const leg = mapLeg(), a = S.mapSel && placeXY(S.mapSel), b = leg ? placeXY(leg.to) : st && !st.journey && youXY(base, st);
+    if (a && b) {
+      const room = mapRoom(g), w = Math.abs(a[0] - b[0]) + 320, h = Math.abs(a[1] - b[1]) + 160;
+      const z = Math.min(MV_PICK_Z, (g.vw - 16) / w, (room.bottom - room.top - 16) / h);
+      if (z >= MV_LV1) return camAt(g, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, z);
+    }
     const p = (S.mapSel && placeXY(S.mapSel)) || (st && youXY(base, st));
     return p ? camAt(g, p[0], p[1], S.mapSel ? MV_PICK_Z : MV_OPEN_Z) : camFit(g);
   }
@@ -1604,10 +1618,19 @@
     setMapDrawer(S.mapDrawer);
   }
   // 每一次打開輿圖（goTab）：以你為中心、附近那一排。江湖頁的小地圖點了某一處、別區那一張的「前往」：以那一處為中心、開它的卡
-  function mapFirst(sel = null) {
+  // then：有起終點的（護糧）那一件的終點——兩點都框進畫面，選了的那一處標「下一站」、終點標「終點」（Joy 2026-10-31）
+  function mapFirst(sel = null, then = null) {
     mvStop();
-    Object.assign(S, { mapMode: sel ? "place" : "overview", mapSel: sel, mapPreview: null, mapDrawer: "peek", mapWeek: null, mapQuery: "", mapCam: null });
+    Object.assign(S, { mapMode: sel ? "place" : "overview", mapSel: sel, mapPreview: null, mapDrawer: "peek", mapWeek: null, mapQuery: "", mapCam: null,
+      mapThen: sel && then && then !== sel ? { from: sel, to: then } : null });
   }
+  // 江湖頁「去輿圖」「去宛城」那幾顆（Joy 2026-10-31「應該直接點到目標地點，讓玩家不用在地圖還要一直找」）：輿圖開在那一處、抽屜開它的卡、畫出路
+  function mapGoto(loc, then = null) {
+    mapFirst(loc || null, then);
+    S.mapKeep = !!loc;
+  }
+  // 「下一站→終點」那一段：只在還選著那一處的時候算數（點了別處、回附近那一排就不畫）
+  const mapLeg = () => (S.mapThen && S.mapMode === "place" && S.mapSel === S.mapThen.from ? S.mapThen : null);
   // 輿圖頁每次畫好（afterPage）：量框、抽屜、看哪裡、字、路線、底圖、手勢
   function mapReady() {
     const wrap = document.getElementById("map");

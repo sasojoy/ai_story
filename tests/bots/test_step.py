@@ -73,6 +73,7 @@ def test_order_step_gets_its_place():
     row = next(r for r in _steps(game) if r["kind"] == "order")
     assert row["id"] == o.id
     assert row["target"] == {"location": "changshe", "name": "長社", "minutes": 0}  # 護糧：還沒接糧車，去起點
+    assert row["then"] == {"location": "wan_city", "name": game.content.locations["wan_city"].name}  # 輿圖兩點都框進來
     assert "_ref" not in row
 
 

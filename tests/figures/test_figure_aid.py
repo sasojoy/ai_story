@@ -99,6 +99,7 @@ def test_breaking_through_the_guard_then_fighting_him(real, world):
     assert figure_aid.posts(huang.state, real, "huangfusong") == []
 
 
+@pytest.mark.smoke
 def test_a_guard_post_ends_when_the_figure_moves_or_the_shift_is_over(real, world):
     guan = _player(real, world, "官甲", "guan")
     guan.choose("aid:guard:huangfusong")

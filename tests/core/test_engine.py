@@ -35,6 +35,7 @@ def ids(game):
 # ── 新遊戲與選項 ─────────────────────────────────────────
 
 
+@pytest.mark.smoke
 def test_new_game(game):
     p = game.state.player
     assert p.location == "town" and p.stamina == 150

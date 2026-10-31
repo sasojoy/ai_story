@@ -29,6 +29,7 @@ def test_location_views(state, content):
     assert location_view("cave", state, content) == "visible"
 
 
+@pytest.mark.smoke
 def test_render_map(state, content):
     html_out = render_map(state, content)
     # max-width:100% 是手機上那個「地圖超出邊界、卡住看不了」的修法：少了它，這個 div 會被

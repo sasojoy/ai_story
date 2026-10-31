@@ -1203,6 +1203,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .mv-side { flex: none; width: 17px; height: 17px; border-radius: 2px; font: 700 11px/17px var(--kai); color: #f4ecdc; text-align: center; text-shadow: none; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25); opacity: 0.9; }
 .mv-rich { flex: none; width: 17px; height: 17px; border-radius: 50%; background: var(--mv-red); color: #f4ecdc; font: 700 10px/17px var(--kai); text-align: center; text-shadow: none; }
 .mv-wk { flex: none; padding: 0 4px; border-radius: 2px; background: #c8961e; color: #fffaf0; font: 700 10.5px/16px var(--serif); text-shadow: none; }
+.mv-wk.leg { background: #a8321f; } /* 護糧那種兩點：下一站、終點（朱紅） */
 .mv-bar { display: block; height: 3px; margin-top: 2px; border-radius: 2px; background: #d8cdb4; overflow: hidden; }
 .mv-bar i { display: block; height: 100%; }
 /* 山河名、大區名與各方幾處（遠看那一段） */
@@ -1485,31 +1486,6 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   padding: 18px 16px calc(20px + var(--bottom)); animation: up 0.25s ease-out;
 }
 .ask p { margin: 0 0 14px; font-size: 15px; }
-/* 商城的購買確認（商城第二批，草圖子的「點了十顆」）：同一個小抽屜（紙底，跟著深淺色），多一張花多少、元寶剩多少、丹或月卡變成多少的小表 */
-.mall-ask h4 { margin: 0 0 8px; font: 700 17px var(--serif); }
-/* 購買確認的數量（Joy 2026-10-22 一次買好幾件）：− 數字 ＋ 最多，一排 */
-.mall-qty { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
-.mall-qty .btn { min-width: 44px; min-height: 40px; padding: 0 10px; font-size: 18px; }
-.mall-qty .btn.ghost { margin-left: auto; font-size: 14px; }
-.mall-qty b { min-width: 2ch; text-align: center; font-size: 20px; }
-.mall-qty span { color: var(--ink-2); font-size: 14px; }
-.mall-sum { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0 0 12px; padding: 10px 12px; border-radius: 12px;
-  background: var(--card); border: 1px solid var(--line); font-size: 14px; }
-.mall-sum dt { color: var(--ink-2); }
-.mall-sum dd { margin: 0; font-variant-numeric: tabular-nums; }
-.mall-sum dd s { color: var(--ink-2); text-decoration: none; }
-.ask p.mall-ask-note { margin: 0 0 12px; font-size: 12.5px; color: var(--ink-2); }
-/* 上一筆沒等到回音、再送同一筆（FB-491）：標題底下一句，講清楚這不是新的一筆 */
-.ask p.mall-ask-again { margin: 0 0 10px; padding: 6px 10px; border-left: 3px solid var(--gold); border-radius: 4px; background: var(--card-2); font-size: 13.5px; }
-.mall-ask .row .btn { flex: 1; font-size: 15px; }
-/* （電腦寬的字在「電腦上的店面」那一段後面：這份檔第一個 641px 的 media 以前都算手機那一半，tests/ranger/test_bounty_tags.py 照它切） */
-/* 管理者區商城那一組查到的帳 */
-.mall-ad { margin: 2px 0 6px; font-size: 13px; }
-.mall-ad p { margin: 4px 0; }
-.mall-ad-buy { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
-.mall-ad-buy .btn { margin-left: auto; }
-.mall-ad-log { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6; color: var(--ink-2); }
-.mall-ad-log b { color: var(--ink); font-variant-numeric: tabular-nums; }
 
 /* ── 登入 ── */
 .gate { max-width: 420px; margin: 0 auto; padding: calc(48px + var(--top)) 20px 32px; }
@@ -2665,64 +2641,6 @@ details.self-fold > .fold-body.gear { padding-top: 0; }
   .shop-layer.shop-dadian .ledger-page + .ledger-page { padding: 10px; border-left: 0; border-top: 1px solid #c9b78f; background: #f1e7cf; }
 }
 
-/* ── 商城那一層（商城第二批，企劃者 2026-10-20 從對比圖挑「子」：沿用店面的框，萬寶閣紫檀底）：貨架上面兩張小卡、消耗品一格一件
-   （三欄）、月卡一張寬卡；紀錄一列一筆。顏色寫死在這一層（同三間店：店面不分深淺色），購買確認是紙底的 .ask（跟著深淺色）。
-   選擇器一律從 .shop-layer.shop-mall 起：電腦寬那一段的字級 ×1.3 照同一個選擇器寫（tests/core/test_desktop_type.py） ── */
-.shop-layer.shop-mall { color: #f2e5c6; background: radial-gradient(ellipse at 50% 18%, #3d2326 0%, #24141a 60%, #140a0d 100%); }
-.shop-layer.shop-mall .shop-sign { background: #2b1414; }
-.shop-layer.shop-mall .shop-silver { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.shop-layer.shop-mall .ingot { width: 18px; height: 12px; flex: none; fill: #f2c46a; }
-.shop-layer.shop-mall .ingot .shine { fill: #fff; opacity: 0.35; }
-.shop-layer.shop-mall .shop-line.said.ok { border-left-color: #9fd0a8; } /* 買成了的那一句 */
-.shop-layer.shop-mall .shop-line.said.no { border-left-color: #e0a08a; color: #f6d9cc; } /* 買不了的原因 */
-.shop-layer.shop-mall .mall-status { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 2px 0 4px; }
-.shop-layer.shop-mall .mall-status > div { padding: 6px 10px; border-radius: 10px; border: 1px solid #6b4a2e; background: rgba(0, 0, 0, 0.22);
-  font-size: 12px; line-height: 1.45; color: #c9b28a; }
-.shop-layer.shop-mall .mall-status b { display: block; font: 600 14px var(--serif); color: #f2e5c6; }
-.shop-layer.shop-mall .mall-sub { display: flex; align-items: baseline; gap: 8px; margin: 12px 2px 6px; font: 600 13px var(--serif); color: #f2c46a; letter-spacing: 0.2em; }
-.shop-layer.shop-mall .mall-sub small { font: 400 12px var(--sans); color: #c9b28a; letter-spacing: 0; }
-.shop-layer.shop-mall .mall-sub::after { content: ""; flex: 1; border-top: 1px solid #5a3030; }
-.shop-layer.shop-mall .mall-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-/* 比 360 窄時三欄一格只剩 93px，六個字的名字（回體丹三十顆）斷成「回體丹三十／顆」：改兩欄，字一個不改 */
-@media (max-width: 359px) { .shop-layer.shop-mall .mall-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.shop-layer.shop-mall .mall-item { display: grid; justify-items: center; align-content: start; gap: 2px; padding: 10px 6px 9px; border-radius: 10px;
-  border: 1px solid #6b4a2e; background: rgba(43, 22, 22, 0.85); color: inherit; text-align: center; font: 12px/1.45 var(--sans); cursor: pointer; }
-.shop-layer.shop-mall .mall-item b { font: 600 15px var(--serif); color: #f2e5c6; }
-.shop-layer.shop-mall .mall-item .price, .shop-layer.shop-mall .mall-card .price { display: inline-flex; align-items: center; gap: 3px; color: #f2c46a;
-  font: 600 14px var(--sans); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.shop-layer.shop-mall .mall-item .price { margin-top: 3px; }
-.shop-layer.shop-mall .price .ingot { width: 14px; height: 10px; }
-.shop-layer.shop-mall .mall-item small { color: #c9b28a; font-size: 11px; }
-.shop-layer.shop-mall .mall-item.on, .shop-layer.shop-mall .mall-card.on { border-color: #f2c46a; box-shadow: 0 0 0 2px rgba(242, 196, 106, 0.25); }
-.shop-layer.shop-mall .mall-item.off, .shop-layer.shop-mall .mall-card.off { opacity: 0.55; } /* 買不了的畫淡，照樣點得到：點了掌櫃講原因 */
-.shop-layer.shop-mall .dan { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; margin-bottom: 2px;
-  background: radial-gradient(circle at 35% 30%, #f6d58a 0%, #c98a2a 55%, #7a4a14 100%); color: #3a1e08; font: 700 15px var(--serif);
-  box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.3); }
-.shop-layer.shop-mall .mall-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; margin: 0 0 8px;
-  padding: 10px 12px; border-radius: 12px; border: 1px solid #f2c46a; background: linear-gradient(135deg, rgba(242, 196, 106, 0.14), rgba(43, 22, 22, 0.85) 55%);
-  color: inherit; text-align: left; cursor: pointer; }
-.shop-layer.shop-mall .moon { width: 38px; height: 38px; border-radius: 4px; display: grid; place-items: center; background: #a8322a; color: #fff6e6;
-  font: 700 18px var(--serif); transform: rotate(-5deg); }
-.shop-layer.shop-mall .mall-card b { font: 600 15px var(--serif); color: #f2e5c6; }
-.shop-layer.shop-mall .mall-card .mt > span { display: block; font-size: 12px; line-height: 1.5; color: #c9b28a; }
-/* 月卡的好處逐條（萬寶閣販賣清單定案）：每一條自己一行、前面一個金點，折行對齊字不對齊點 */
-.shop-layer.shop-mall .mall-card .mall-perks { display: block; margin: 4px 0 2px; }
-.shop-layer.shop-mall .mall-card .perk { position: relative; display: block; padding-left: 12px; font-size: 13px; line-height: 1.55; color: #ead9b4; }
-.shop-layer.shop-mall .mall-card .perk::before { content: ""; position: absolute; left: 2px; top: 0.62em; width: 5px; height: 5px; border-radius: 50%; background: #f2c46a; }
-.shop-layer.shop-mall .mall-status .mall-daily { display: block; margin-top: 6px; }
-.shop-layer.shop-mall .mall-status button.mall-daily { width: 100%; min-height: 36px; }
-.shop-layer.shop-mall .mall-status small.mall-daily { color: #9fd18b; }
-.shop-layer.shop-mall .mall-note { margin: 12px 2px 0; font-size: 12px; line-height: 1.55; color: #c9b28a; }
-.shop-layer.shop-mall .mall-log-head { display: flex; justify-content: space-between; align-items: baseline; margin: 6px 2px 4px; font-size: 12px; color: #c9b28a; }
-.shop-layer.shop-mall .mall-log-head b { font: 600 18px var(--sans); color: #f2c46a; font-variant-numeric: tabular-nums; }
-.shop-layer.shop-mall .mall-log-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 9px 4px; border-bottom: 1px solid #4a2828;
-  font-size: 12px; color: #c9b28a; }
-.shop-layer.shop-mall .mall-log-row b { font: 600 14px var(--serif); color: #f2e5c6; }
-.shop-layer.shop-mall .mall-log-row .amt { text-align: right; font: 600 14px var(--sans); font-variant-numeric: tabular-nums; color: #e0a08a; }
-.shop-layer.shop-mall .mall-log-row .amt.in { color: #9fd0a8; }
-.shop-layer.shop-mall .mall-log-row .bal { text-align: right; font-variant-numeric: tabular-nums; }
-.shop-layer.shop-mall .mall-tag { margin-left: 6px; padding: 0 6px; border: 1px solid #6b4a2e; border-radius: 8px; font: 400 11px var(--sans); color: #c9b28a; }
-
 /* ── 電腦上的店面與武學譜那本書（FB-225，企劃者 2026-10-14「最主要是寬度的設計沒有照著 UI 框架延續」）：遊戲本體在電腦上是一欄 640px
    （.shell、.tabs-inner），店面與書也照這一欄。圖層照舊蓋滿畫面（擋住底下的頁面），可是底色（爐火、土黃、木紋、書頁）只畫在中間那一欄
    （背景圖照欄寬、置中、不重複），欄外是遊戲本來的頁面底色 --paper：從江湖頁進店、出店，欄的左右邊不跳，欄外也不變色。
@@ -2881,37 +2799,6 @@ details.self-fold > .fold-body.gear { padding-top: 0; }
   .shop-layer.shop-dadian .entry .tick { font: 15.5px var(--sans); }
   .shop-layer.shop-dadian .entry.off .note { font: 600 15.5px var(--serif); }
   .shop-layer.shop-dadian .ledger-hang { font: 16px var(--sans); }
-  /* 商城那一層（商城第二批）：同一個選擇器、字級 ×1.3 */
-  .shop-layer.shop-mall .mall-status > div { font-size: 15.5px; }
-  .shop-layer.shop-mall .mall-status b { font: 600 18px var(--serif); }
-  .shop-layer.shop-mall .mall-sub { font: 600 17px var(--serif); }
-  .shop-layer.shop-mall .mall-sub small { font: 400 15.5px var(--sans); }
-  .shop-layer.shop-mall .mall-item { font: 15.5px/1.45 var(--sans); }
-  .shop-layer.shop-mall .mall-item b { font: 600 19.5px var(--serif); }
-  .shop-layer.shop-mall .mall-item .price, .shop-layer.shop-mall .mall-card .price { font: 600 18px var(--sans); }
-  .shop-layer.shop-mall .mall-item small { font-size: 14.5px; }
-  .shop-layer.shop-mall .dan { width: 44px; height: 44px; font: 700 19.5px var(--serif); } /* 圖示跟著字放大 */
-  .shop-layer.shop-mall .moon { width: 49px; height: 49px; font: 700 23.5px var(--serif); }
-  .shop-layer.shop-mall .ingot { width: 23px; height: 15.5px; }
-  .shop-layer.shop-mall .price .ingot { width: 18px; height: 13px; }
-  .shop-layer.shop-mall .mall-card b { font: 600 19.5px var(--serif); }
-  .shop-layer.shop-mall .mall-card .mt > span { font-size: 15.5px; }
-  .shop-layer.shop-mall .mall-card .perk { font-size: 17px; }
-  .shop-layer.shop-mall .mall-note { font-size: 15.5px; }
-  .shop-layer.shop-mall .mall-log-head { font-size: 15.5px; }
-  .shop-layer.shop-mall .mall-log-head b { font: 600 23.5px var(--sans); }
-  .shop-layer.shop-mall .mall-log-row { font-size: 15.5px; }
-  .shop-layer.shop-mall .mall-log-row b { font: 600 18px var(--serif); }
-  .shop-layer.shop-mall .mall-log-row .amt { font: 600 18px var(--sans); }
-  .shop-layer.shop-mall .mall-tag { font: 400 14.5px var(--sans); }
-}
-/* 商城的購買確認在電腦寬：疊在店面那一層上面，字跟店面一樣 ×1.3（FB-305；這張紙掛在 body 上，不在店面那一段） */
-@media (min-width: 641px) {
-  .mall-ask h4 { font: 700 22px var(--serif); }
-  .mall-sum { font-size: 18px; }
-  .ask p.mall-ask-note { font-size: 16px; }
-  .ask p.mall-ask-again { font-size: 17.5px; }
-  .mall-ask .row .btn { font-size: 19.5px; }
 }
 
 /* ── 電腦上整頁的捲軸溝一直留著（FB-240）：江湖頁短到沒有整頁捲軸時，進鐵匠鋪、懸賞榜，底下那一頁換成一長串選項、整頁捲軸冒出來，
@@ -3090,16 +2977,6 @@ details.self-fold > .fold-body.gear { padding-top: 0; }
 .mt-admin { display: grid; gap: 10px; margin-bottom: 10px; }
 .mt-admin-row { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: start; }
 .mt-admin-row .muted { margin: 2px 0 6px; font-size: 12px; }
-/* 設定頁的易名帖那一格（萬寶閣）：手上有帖才畫 */
-.rename-row { margin: 8px 0; }
-.rename-row p { margin: 0 0 6px; }
-.rename-row .row { display: flex; gap: 8px; align-items: center; }
-.rename-row .input { flex: 1; min-width: 0; }
-/* 江湖頁「月卡・今日份」小卡：月卡生效、今天還沒領時「剛剛」上面一張，領完收起 */
-.card.mall-today { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 12px; border-left: 3px solid var(--gold); }
-.card.mall-today .moon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-family: var(--serif); }
-.card.mall-today b { display: block; font-family: var(--serif); }
-.card.mall-today .mt > span { display: block; font-size: 13px; color: var(--ink-2); }
 
 /* 武學重構：意境槽（Joy 2026-10-20「●好醜…槽位，包含整張卡都很醜」）。一門武學一排玉環：環的顏色就是這一格收哪一路的意境
    （單色一路、雙色兩路各半、八色一圈什麼都收），環心是裝著的意境名字的頭兩個字，底下〔技能〕與三節玉（一重～三重）。

@@ -63,6 +63,7 @@ def test_rack_rows_carry_the_grade_and_a_dismantle_question(content, world):
     assert data["worn"]["grade"] == "一階下品" and data["worn"]["confirm"] == ""  # 身上那把不能拆，沒有問句
 
 
+@pytest.mark.smoke
 def test_smith_dismantle_buttons_ask_first_with_their_own_yes_word(content, world):
     game = _town(content, world)
     p = game.state.player

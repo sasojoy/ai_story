@@ -13,7 +13,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from . import allied as allied_rules
-from . import calendar, conquest, economy, equipment, explore_modes, figures, four_tiers, mall, precise, renown, rules, seal, sortie, territory, timetable, training
+from . import calendar, conquest, economy, equipment, explore_modes, figures, four_tiers, precise, renown, rules, seal, sortie, territory, timetable, training
+from .features.mall import rules as mall  # 商城那一節（功能包；還沒搬的舊模組可以 import 包，開發規範手冊 3.11）
 from . import sortie_duel  # 出陣約戰（減法季批 3b）：出陣那一行與玩法說明
 from . import explore_one  # 減法季探索一顆（批 2）：行動列底下那一行用同一份兩個字的叫法
 from .models import Content

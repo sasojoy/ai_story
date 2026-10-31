@@ -1,3 +1,5 @@
+import pytest
+
 from tianxia.martial_arts import (
     ATTRIBUTES,
     QUALITIES,
@@ -11,6 +13,7 @@ from tianxia.martial_arts import (
 )
 
 
+@pytest.mark.smoke
 def test_generate_from_name_is_deterministic():
     a = generate_from_name("烈日decompose拳", "武學", "created:烈日拳")
     b = generate_from_name("烈日decompose拳", "武學", "created:烈日拳")
