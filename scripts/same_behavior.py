@@ -1937,8 +1937,12 @@ class TavernScenario(Scenario):
         """sync 裡三個 deliver 的先後與位置（審查：之前沒有一次同步同時收到兩樣，換順序、整段挪到 on_sync 前面都抓不到）：
         葉開先託酒家留意一個查無此人的；孟星魂在城外做一件事，葉開連著失手三次之後的那一張出手、平手（價錢與威力停在上限）；阿飛在潁川的
         酒肆查藏了行跡的葉開（風聲記在季上）；葉開那一筆託付擺成到期、身上擺一封委託過期的信（letters.deliver 排在三個 deliver 後面，
-        寫「書信」那一則）。然後葉開同步一次：風聲、殺手單的結果、託付到期、書信四則在同一下，江湖紀錄的先後照 sync 的順序。"""
-        from tianxia.state import Bounty, Letter
+        寫「書信」那一則）。然後葉開同步一次：風聲、殺手單的結果、託付到期、書信四則在同一下，江湖紀錄的先後照 sync 的順序。
+        三個 deliver 的前後再各夾一格會寫紀錄的：前一格護衛補帳（_deliver_guard_credits）、後面翻地的守城分紅（_deliver_conquest，有領地
+        爭奪的季）——三行整段挪過它們（例：挪到 _deliver_big_events 前面、挪到 _marks_tick 之後）也看得出來。_marks_tick、
+        _stance_annals、_zhuan_tick 只寫行狀、不讀惡名，跟三個 deliver 的先後只能靠這兩格看。"""
+        from tianxia import figure_aid
+        from tianxia.state import Bounty, ConquestPayout, Letter
 
         c = self.c
         self.tav("葉開", "seek", "查無此人", "watch")
@@ -1959,8 +1963,18 @@ class TavernScenario(Scenario):
 
         self.edit("葉開", fn)
         emit("葉開 查無此人那一筆託付擺成到期、身上擺一封委託過期的信", figure.character if figure is not None else None)
+
+        def bracket(s) -> None:  # 三個 deliver 前後緊鄰、會寫江湖紀錄的兩格：前面的護衛補帳、後面的翻地分紅（有領地爭奪的季）
+            who = figure.name if figure is not None else "某人"
+            s.guard_credits.setdefault("葉開", []).append(figure_aid.CREDIT_LINE.format(name=who, who="郭大路"))
+            if s.conquest is not None and c.scenario.factions and "yingchuan" in c.locations:
+                s.conquest.payouts.append(ConquestPayout(name="葉開", kind="guard", loc="yingchuan", side=c.scenario.factions[0].id,
+                                                         silver=5, share=0.5, time=s.time))
+
+        self.world.mutate_season(bracket)
+        emit("季上擺葉開的護衛補帳與一筆守城分紅（三個 deliver 的前一格與後面那一格）", None)
         self.main("葉開")
-        emit("葉開 同一下同步收到的（江湖紀錄新的在前）", [e.title for e in self.chars.load("葉開").journal[:6]])
+        emit("葉開 同一下同步收到的（江湖紀錄新的在前）", [e.title for e in self.chars.load("葉開").journal[:8]])
         self.hits("同一下同步之後")
 
     def trace(self) -> None:
