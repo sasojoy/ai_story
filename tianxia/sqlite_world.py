@@ -4,9 +4,9 @@
 - `seasons` 表一季一列：WorldState，整份覆寫。換季不刪資料：賽季編號加一、新的一季另起一列，
   舊的一季原封不動留著。
 - 傳聞（`rumors` 表）與江湖史（`chronicle` 表）一則一列：寫的時候只新增還沒有流水號的；讀全服狀態時不讀回來，
-  只有 get_season() 讀（給畫面看）。江湖史跨季保留。
+  只有 get_season() 讀（給畫面看）。江湖史跨季保留；傳聞換季時只留這一季與上一季，上上季的搬進封存檔（log_archive）。
 - 目前的決戰在 `battles` 表（一場一列、整份覆寫，`world.active_battle_id` 指向它），結算過的回合在
-  `battle_rounds` 表一回合一列（只寫不讀回）。換季、開新的一場時舊的那一場留著；收場的那幾場給參戰者補送戰報
+  `battle_rounds` 表一回合一列（只有寫戰記讀；上上季的換季時搬進封存檔，log_archive）。換季、開新的一場時舊的那一場留著；收場的那幾場給參戰者補送戰報
   （ended_battles）。
 - 自創武學（`skills`）、煉製配方（`recipes`）、投靠名冊（`faction_rolls`）一列一筆、記著第幾季：
   換季不用清空，新的一季自然是空的，上一季的留著。第 2 版再加改過的名字（`skill_aliases`）、合併出來的意境
@@ -30,7 +30,7 @@ from sqlite3 import Connection, Row
 
 from pydantic import TypeAdapter
 
-from . import allied, calendar, divine
+from . import allied, calendar, divine, log_archive
 from .battle_instance import BattleInstance, BattleRoundRecord, SiegeInfo, shift_deadlines, start_muster
 from .characters import name_key
 from .database import Database, open_database
@@ -125,7 +125,7 @@ class SqliteWorldStore:
 
     def _logs(self, conn: Connection, table: str, number: int, parse: Callable[[Row], Rumor]) -> list[Rumor]:
         """這一季的傳聞（或江湖史）每一則，照流水號排：跟整份 SELECT 回來一模一樣，只是不每次都重建（審查 S-01）。
-        兩張表只新增、不改、不刪（只有 _save_season 寫，流水號越來越大），所以已經 COMMIT 的那一段讀過一次就記在這個程式裡
+        兩張表平常只新增（只有 _save_season 寫，流水號越來越大；易名帖改這一季的傳聞、換季把上上季的傳聞搬進封存檔是例外，兩者都 COMMIT 之後 _forget_logs），所以已經 COMMIT 的那一段讀過一次就記在這個程式裡
         （_LOG_CACHES，同一個資料庫檔共用），之後只撈流水號比記下的最後一則大的。記下的只收「這一筆交易還沒寫過任何東西」時
         讀到的（Database.unchanged）：那時看到的每一列都已經 COMMIT，不會因為這一筆撤回而不見、流水號也不會被別人重用；
         寫過之後讀到的照樣回、只是不記。每次先對一下記下的最後一則還在、內容一樣（資料庫檔被換掉之類），對不上就整份重讀。
@@ -613,7 +613,7 @@ class SqliteWorldStore:
 
     def rename_character(self, old: str, new: str) -> None:
         """易名帖（rename.py）：資料庫裡名號當身分的地方一起從 old 換成 new，一筆交易。只換整個字串相等的（rename.swap）；
-        這一季的全服狀態、決戰、全服登記與投靠名冊照換，以前的季不動；列傳、錢包、帳號、見聞紀錄跨季照鍵搬；
+        這一季的全服狀態、決戰、全服登記與投靠名冊照換，以前的季不動；列傳、錢包、帳號跨季照鍵搬；
         別人的存檔裡提到他的（邀請、結伴、風聞……）照換。自己那一列角色由呼叫端用新名號存（這裡刪掉舊的那一列）。"""
         from .core.swap import swap_json
         okey, nkey = name_key(old), name_key(new)
@@ -640,7 +640,6 @@ class SqliteWorldStore:
             for table in ("skills", "insights", "gear_recipes"):
                 for r in conn.execute(f"SELECT rowid, data FROM {table} WHERE season = ?", (number,)).fetchall():
                     conn.execute(f"UPDATE {table} SET data = ? WHERE rowid = ?", (swap_json(r["data"], mapping), r["rowid"]))
-            conn.execute("UPDATE rumor_heard SET character = ? WHERE character IN (?, ?)", (nkey, old, okey))
             conn.execute("UPDATE biographies SET key = ? WHERE key = ?", (nkey, okey))
             conn.execute("UPDATE character_backups SET key = ? WHERE key = ?", (nkey, okey))
             conn.execute("UPDATE accounts SET character = ?, character_key = ? WHERE character_key = ?", (new, nkey, okey))
@@ -919,6 +918,11 @@ class SqliteWorldStore:
             state.sieges = []  # 攻城戰同上（領地爭奪第二批）
             state.sorties = {}  # 出陣約戰（減法季批 3b）同上：季結束時還沒打的已記成作廢（sortie_duel.advance），塊與條都是上一季的
             self._save(conn, state)
+            # 上上季（含更早）的傳聞與決戰回合紀錄搬進封存檔（審查 S-12）；沒搬成也照樣換季，下一次換季再搬
+            moved = log_archive.move_old_logs(self.db, conn, state.season_number - log_archive.KEEP_SEASONS)
+            if moved is not None and any(moved):  # 刪了已經寫進去的傳聞：同易名帖，這一筆接下來照資料庫讀、COMMIT 之後記下的作廢
+                self.db.note(_LOGS_REWRITTEN)
+                self.db.after_commit(lambda: _forget_logs(self.db))
             return True
 
     @staticmethod

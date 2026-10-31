@@ -294,10 +294,16 @@ SCHEMA_V7_TABLES: tuple[str, ...] = (
     )""",
 )
 
-# 第 8 版（審查 S-10，2026-10-31）：登入狀態存進資料庫，重開伺服器不再全服登出。只存 cookie 的 SHA-256（token_hash），
+# 第 8 版拿掉見聞紀錄 rumor_heard（審查 S-12）：第 1 版照傳聞分層 3.1 建好之後一直沒人讀、沒人寫（傳聞分層第二份計畫沒做），
+# 它對 rumors 的外鍵還會擋住換季時把上上季的傳聞搬進封存檔（log_archive）。
+SCHEMA_V8_CHANGES: tuple[str, ...] = (
+    "DROP TABLE rumor_heard",
+)
+
+# 第 9 版（審查 S-10，2026-10-31）：登入狀態存進資料庫，重開伺服器不再全服登出。只存 cookie 的 SHA-256（token_hash），
 # 不存 cookie 本身：資料庫檔外流也拿不到能用的 cookie。account 是 accounts.normalize 過的帳號；created 照伺服器的時鐘，
 # 過了 accounts.SESSION_SECONDS（30 天，跟 cookie 的 max_age 一樣）就不認（accounts.SessionStore）。
-SCHEMA_V8_TABLES: tuple[str, ...] = (
+SCHEMA_V9_TABLES: tuple[str, ...] = (
     """CREATE TABLE sessions (
         token_hash TEXT PRIMARY KEY,
         account TEXT NOT NULL,
@@ -306,15 +312,15 @@ SCHEMA_V8_TABLES: tuple[str, ...] = (
     "CREATE INDEX sessions_by_created ON sessions (created)",
 )
 
-SCHEMA: tuple[str, ...] = (  # 新檔一次建好
+SCHEMA: tuple[str, ...] = (  # 新檔一次建好（第 1 版建的 rumor_heard 由第 8 版那一句拿掉）
     SCHEMA_V1 + SCHEMA_V2_TABLES + SCHEMA_V3_TABLES + SCHEMA_V4_TABLES + SCHEMA_V5_TABLES + SCHEMA_V6_TABLES + SCHEMA_V7_TABLES
-    + SCHEMA_V8_TABLES
+    + SCHEMA_V8_CHANGES + SCHEMA_V9_TABLES
 )
 MIGRATIONS: dict[int, tuple[str, ...]] = {  # 第 n 版 → 第 n+1 版要跑的句子
     1: SCHEMA_V2_TABLES, 2: SCHEMA_V3_TABLES, 3: SCHEMA_V4_TABLES, 4: SCHEMA_V5_TABLES, 5: SCHEMA_V6_TABLES, 6: SCHEMA_V7_TABLES,
-    7: SCHEMA_V8_TABLES,
+    7: SCHEMA_V8_CHANGES, 8: SCHEMA_V9_TABLES,
 }
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 def default_path() -> Path:
