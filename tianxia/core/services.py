@@ -44,8 +44,8 @@
 （還沒有。第 4 批決戰包起：別包要問「我在哪一場」這一類，由那一包經 Game 的委派回答，列在這裡、寫主人。）
 
 explore（主動搬六包第 3＋4 批加的這一段）
-- `ctx._outing_on()`（主人 explore：減法季探索一顆開著、不在序章裡；出陣包問——散人那一行、出陣的字。三、過渡那一行是第 1 批寫的，
-  合併時拿掉）
+- `ctx._outing_on()`（主人 explore：減法季探索一顆開著、不在序章裡；出陣包問——散人那一行、出陣的字；出陣第 1 批原本列在
+  三、過渡，審查修正拿掉了，只在這一段）
 - `ctx._sortie_host(loc)`（主人 sortie：這一處自家的那一路；探索一顆在自家營寨跟同袍比劃問）
 
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
@@ -66,7 +66,6 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._push_progress(loc_id, nominal, source, how)`（地盤：領地爭奪推、拉進度）
 - `ctx._order_credit(...)`（軍令）；`ctx._drill_gains(squad, share)`（操練）
 - `ctx._spar_power(a, b)`、`ctx._spar_mirror(result, power)`（切磋：本人對本人的威力、從另一邊看同一場）
-- `ctx._outing_on()`（探索：減法季探索一顆開著）
 - `ctx.duel_on()`、`ctx._duel_option(loc)`（出陣約戰：第 2 批搬進出陣包之後拿掉）
 - `ctx._raid_key(a, b)`（截殺：截殺與混戰共用的冷卻帳 WorldState.raids 的鍵）
 - `ctx._conquest_side()`（地盤：領地爭奪算哪一邊，豪強依附的那一軍；第 2 批約戰用）
