@@ -32,6 +32,9 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PATH = ROOT / "saves" / "tianxia.db"
 ENV_VAR = "TIANXIA_DB"  # 線上版與開發版用不同的資料（線上架構設計 8.1）：設了這個環境變數就開那個檔
 BUSY_SLICE = 5.0  # 不限時等寫入權時，每次最多等幾秒就重試一次
+# 開連線的入口：測試換掉這一個（monkeypatch tianxia.database._connect），不去動整個行程共用的 sqlite3.connect
+# （coverage 自己的 SQLite 也走那一個；10/31 測試自檢 T-09）。行為跟直接叫 sqlite3.connect 一樣。
+_connect = sqlite3.connect
 
 # 第 1 版的結構。已經有檔案是這個樣子了（試玩伺服器），不要再改它；要改結構就加新的一組、升版本。
 SCHEMA_V1: tuple[str, ...] = (
@@ -339,7 +342,7 @@ class Database:
         state = getattr(local, "state", None)
         if state is None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            conn = sqlite3.connect(self.path, timeout=BUSY_SLICE, autocommit=True, check_same_thread=False)
+            conn = _connect(self.path, timeout=BUSY_SLICE, autocommit=True, check_same_thread=False)
             try:
                 conn.row_factory = sqlite3.Row
                 conn.execute("PRAGMA journal_mode = WAL")
