@@ -1,0 +1,28 @@
+{
+ "mode": "idle",
+ "opened": true,
+ "state": {
+  "journey": false,
+  "here": "yingchuan",
+  "z": 1.15,
+  "mkLen": 33528,
+  "mkNodes": 293
+ },
+ "idle": {
+  "t0": 3631,
+  "writes": [
+   36815
+  ],
+  "fetches": [
+   36766
+  ],
+  "bytes": 33528,
+  "journey": false
+ },
+ "log": {
+  "console": [],
+  "exceptions": [],
+  "http": [],
+  "failed": []
+ }
+}

@@ -1,0 +1,654 @@
+{
+ "rev": "work",
+ "open": {
+  "len": 33349,
+  "elements": 281,
+  "kinds": {
+   "defs": 1,
+   "clipPath": 47,
+   "path": 163,
+   "circle": 25,
+   "g": 45
+  },
+  "rows": [
+   {
+    "id": "baima_ford",
+    "name": "白馬津",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.4419
+   },
+   {
+    "id": "baima_temple",
+    "name": "白馬寺",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.2053
+   },
+   {
+    "id": "beimang_hill",
+    "name": "北邙山",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.2711
+   },
+   {
+    "id": "changshe",
+    "name": "長社",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0
+   },
+   {
+    "id": "dajiangjun_fu",
+    "name": "大將軍府",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.561
+   },
+   {
+    "id": "deep_mountain",
+    "name": "嵩山深處",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.6002
+   },
+   {
+    "id": "guangzong",
+    "name": "廣宗",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.3619
+   },
+   {
+    "id": "hilltop_wilds",
+    "name": "荒丘",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.1827
+   },
+   {
+    "id": "huangjin_camp",
+    "name": "黃巾別部營寨",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.4007
+   },
+   {
+    "id": "julu_altar",
+    "name": "鉅鹿道壇",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.2496
+   },
+   {
+    "id": "juma_river",
+    "name": "拒馬河畔",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.5016
+   },
+   {
+    "id": "loushang_village",
+    "name": "樓桑里",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.5309
+   },
+   {
+    "id": "luoyang_palace",
+    "name": "洛陽宮城",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.3332
+   },
+   {
+    "id": "luoyang_road",
+    "name": "洛陽官道",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.617
+   },
+   {
+    "id": "luzhi_camp",
+    "name": "盧植營",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.5558
+   },
+   {
+    "id": "market_town",
+    "name": "集市小鎮",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.5427
+   },
+   {
+    "id": "mengjin_ford",
+    "name": "孟津渡",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.6102
+   },
+   {
+    "id": "nanyang_huangjin_camp",
+    "name": "南陽黃巾營",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.4765
+   },
+   {
+    "id": "nanyang_road",
+    "name": "南陽官道",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.5154
+   },
+   {
+    "id": "nanyang_wilds",
+    "name": "南陽郊野",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.4303
+   },
+   {
+    "id": "qiao_county",
+    "name": "譙縣",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.5024
+   },
+   {
+    "id": "runan",
+    "name": "汝南",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0
+   },
+   {
+    "id": "runan_academy",
+    "name": "汝南學宮",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.4515
+   },
+   {
+    "id": "runan_market",
+    "name": "汝南集市",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.3507
+   },
+   {
+    "id": "runan_wilds",
+    "name": "汝南荒野",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.0378
+   },
+   {
+    "id": "songshan_foot",
+    "name": "嵩山腳",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.3361
+   },
+   {
+    "id": "wan_city",
+    "name": "宛城",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0
+   },
+   {
+    "id": "xiaquyang",
+    "name": "下曲陽",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.7161
+   },
+   {
+    "id": "xinye",
+    "name": "新野",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.2102
+   },
+   {
+    "id": "yanshan_foot",
+    "name": "燕山腳",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.4811
+   },
+   {
+    "id": "yingchuan",
+    "name": "潁川郡（陽翟）",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.2069
+   },
+   {
+    "id": "yingchuan_academy",
+    "name": "潁川書院",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.2918
+   },
+   {
+    "id": "yingchuan_wilds",
+    "name": "潁川郊野",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0
+   },
+   {
+    "id": "yingshui",
+    "name": "潁水河畔",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.1106
+   },
+   {
+    "id": "yu_river",
+    "name": "淯水河畔",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.4503
+   },
+   {
+    "id": "zhuo_county",
+    "name": "涿郡",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.0158
+   },
+   {
+    "id": "yingchuan",
+    "name": "潁川郡（陽翟）",
+    "kind": "ld-here",
+    "cover": 1,
+    "region": 0.2069
+   },
+   {
+    "id": "baima_ford",
+    "name": "白馬津",
+    "kind": "ld-sortie",
+    "cover": 1,
+    "region": 0.4403
+   },
+   {
+    "id": "hilltop_wilds",
+    "name": "荒丘",
+    "kind": "ld-sortie",
+    "cover": 1,
+    "region": 0.1827
+   },
+   {
+    "id": "juma_river",
+    "name": "拒馬河畔",
+    "kind": "ld-sortie",
+    "cover": 1,
+    "region": 0.5016
+   },
+   {
+    "id": "nanyang_road",
+    "name": "南陽官道",
+    "kind": "ld-sortie",
+    "cover": 1,
+    "region": 0.5154
+   },
+   {
+    "id": "nanyang_wilds",
+    "name": "南陽郊野",
+    "kind": "ld-sortie",
+    "cover": 1,
+    "region": 0.4303
+   },
+   {
+    "id": "runan_wilds",
+    "name": "汝南荒野",
+    "kind": "ld-sortie",
+    "cover": 1,
+    "region": 0.0379
+   },
+   {
+    "id": "yu_river",
+    "name": "淯水河畔",
+    "kind": "ld-sortie",
+    "cover": 1,
+    "region": 0.4503
+   }
+  ]
+ },
+ "scene": {
+  "len": 34532,
+  "elements": 290,
+  "kinds": {
+   "defs": 1,
+   "clipPath": 47,
+   "path": 168,
+   "pattern": 1,
+   "rect": 2,
+   "circle": 25,
+   "g": 46
+  },
+  "rows": [
+   {
+    "id": "baima_ford",
+    "name": "白馬津",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.4419
+   },
+   {
+    "id": "baima_temple",
+    "name": "白馬寺",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.2053
+   },
+   {
+    "id": "beimang_hill",
+    "name": "北邙山",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.2711
+   },
+   {
+    "id": "changshe",
+    "name": "長社",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0
+   },
+   {
+    "id": "dajiangjun_fu",
+    "name": "大將軍府",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.561
+   },
+   {
+    "id": "deep_mountain",
+    "name": "嵩山深處",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.6002
+   },
+   {
+    "id": "guangzong",
+    "name": "廣宗",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.3619
+   },
+   {
+    "id": "hilltop_wilds",
+    "name": "荒丘",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.1827
+   },
+   {
+    "id": "huangjin_camp",
+    "name": "黃巾別部營寨",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.4007
+   },
+   {
+    "id": "julu_altar",
+    "name": "鉅鹿道壇",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.2496
+   },
+   {
+    "id": "juma_river",
+    "name": "拒馬河畔",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.5016
+   },
+   {
+    "id": "loushang_village",
+    "name": "樓桑里",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.5309
+   },
+   {
+    "id": "luoyang_palace",
+    "name": "洛陽宮城",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.3332
+   },
+   {
+    "id": "luoyang_road",
+    "name": "洛陽官道",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.617
+   },
+   {
+    "id": "luzhi_camp",
+    "name": "盧植營",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.5558
+   },
+   {
+    "id": "market_town",
+    "name": "集市小鎮",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.5427
+   },
+   {
+    "id": "mengjin_ford",
+    "name": "孟津渡",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.6102
+   },
+   {
+    "id": "nanyang_huangjin_camp",
+    "name": "南陽黃巾營",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.4765
+   },
+   {
+    "id": "nanyang_road",
+    "name": "南陽官道",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.5154
+   },
+   {
+    "id": "nanyang_wilds",
+    "name": "南陽郊野",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.4303
+   },
+   {
+    "id": "qiao_county",
+    "name": "譙縣",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.5024
+   },
+   {
+    "id": "runan",
+    "name": "汝南",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0
+   },
+   {
+    "id": "runan_academy",
+    "name": "汝南學宮",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.4515
+   },
+   {
+    "id": "runan_market",
+    "name": "汝南集市",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.3507
+   },
+   {
+    "id": "runan_wilds",
+    "name": "汝南荒野",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.0378
+   },
+   {
+    "id": "songshan_foot",
+    "name": "嵩山腳",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.3361
+   },
+   {
+    "id": "wan_city",
+    "name": "宛城",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0
+   },
+   {
+    "id": "xiaquyang",
+    "name": "下曲陽",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.7161
+   },
+   {
+    "id": "xinye",
+    "name": "新野",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.2102
+   },
+   {
+    "id": "yanshan_foot",
+    "name": "燕山腳",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.4811
+   },
+   {
+    "id": "yingchuan",
+    "name": "潁川郡（陽翟）",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.2069
+   },
+   {
+    "id": "yingchuan_academy",
+    "name": "潁川書院",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.2918
+   },
+   {
+    "id": "yingchuan_wilds",
+    "name": "潁川郊野",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0
+   },
+   {
+    "id": "yingshui",
+    "name": "潁水河畔",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.1106
+   },
+   {
+    "id": "yu_river",
+    "name": "淯水河畔",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.4503
+   },
+   {
+    "id": "zhuo_county",
+    "name": "涿郡",
+    "kind": "ld-rim",
+    "cover": 1,
+    "region": 0.0158
+   },
+   {
+    "id": "yingchuan",
+    "name": "潁川郡（陽翟）",
+    "kind": "ld-here",
+    "cover": 1,
+    "region": 0.2069
+   },
+   {
+    "id": "baima_ford",
+    "name": "白馬津",
+    "kind": "ld-sortie",
+    "cover": 1,
+    "region": 0.4403
+   },
+   {
+    "id": "hilltop_wilds",
+    "name": "荒丘",
+    "kind": "ld-sortie",
+    "cover": 1,
+    "region": 0.1827
+   },
+   {
+    "id": "juma_river",
+    "name": "拒馬河畔",
+    "kind": "ld-sortie",
+    "cover": 1,
+    "region": 0.5016
+   },
+   {
+    "id": "nanyang_road",
+    "name": "南陽官道",
+    "kind": "ld-sortie",
+    "cover": 1,
+    "region": 0.5154
+   },
+   {
+    "id": "nanyang_wilds",
+    "name": "南陽郊野",
+    "kind": "ld-sortie",
+    "cover": 1,
+    "region": 0.4303
+   },
+   {
+    "id": "runan_wilds",
+    "name": "汝南荒野",
+    "kind": "ld-sortie",
+    "cover": 1,
+    "region": 0.0379
+   },
+   {
+    "id": "yu_river",
+    "name": "淯水河畔",
+    "kind": "ld-sortie",
+    "cover": 1,
+    "region": 0.4503
+   },
+   {
+    "id": "yingchuan_academy",
+    "name": "潁川書院",
+    "kind": "w-letter",
+    "cover": 1,
+    "region": 0.2918
+   }
+  ]
+ }
+}
