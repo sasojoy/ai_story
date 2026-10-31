@@ -5537,15 +5537,23 @@ def test_a_world_event_is_written_plain_in_the_lock_and_polished_after(game, mon
 
     msgs = server.act(game, action)
     assert msgs[0] == f"【江湖大事】{text}"  # 鎖內只寫原文
-    assert calls == [] and queued == [flavor.FlavorJob("huangjin_50", text)]
+    assert calls == [] and [job[:2] for job in queued] == [("huangjin_50", text)]
+    line = "城頭的旗幟在風裡獵獵作響。"
+
+    def told():  # 天下大事裡那一句潤色出現幾次（Joy 2026-10-31「也進天下大事」）
+        return sum(r.text == line for r in open_world().get_season().rumors)
+
+    assert told() == 0  # 潤色回來之前天下大事只有原文
     assert server.flavor_once(game, queued[0])
     assert calls == [False]  # 模型在鎖外
-    assert game.world.get_event_flavor("huangjin_50") == "城頭的旗幟在風裡獵獵作響。"
+    assert game.world.get_event_flavor("huangjin_50") == line
+    assert told() == 1
     saved = open_characters().load(game.state.player.name)
     assert f"{text}\n\n城頭的旗幟在風裡獵獵作響。" in [saved.journal[0].tag, *saved.journal[0].lines]
     assert text not in [saved.journal[0].tag, *saved.journal[0].lines]  # 固定的原文換掉了
     assert f"【江湖大事】{text}\n\n城頭的旗幟在風裡獵獵作響。" in saved.log
     assert server.flavor_once(game, queued[0]) and calls == [False]  # 快取裡有了：不再叫模型
+    assert told() == 1  # 天下大事只記存進快取的那一下
 
 
 def test_a_world_event_without_a_client_queues_nothing(game, monkeypatch):

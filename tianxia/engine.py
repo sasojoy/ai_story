@@ -82,7 +82,7 @@ from .models import (
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    GEJU, HUANGJIN, add_chronicle, add_marks, add_rumor, add_world_flags, display_name, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
+    GEJU, HUANGJIN, add_chronicle, add_marks, add_rumor, add_season_rumor, add_world_flags, display_name, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
     check_gap, check_result_line,
     day_turn, ears_of, evil_success, failed, fill_marks, free_text_rate, game_day, geju_resisted, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
@@ -551,12 +551,14 @@ class Game:
         return waiting
 
     def apply_flavor(self, job: FlavorJob, flourish: str) -> bool:
-        """三段式的 C 段（行動鎖內）：模型寫回的那一句再驗一次（flavor.clean），合格就存進全服快取（先寫的為準），
+        """三段式的 C 段（行動鎖內）：模型寫回的那一句再驗一次（flavor.clean），合格就存進全服快取（先寫的為準）、記一則天下大事，
         再把這個人江湖紀錄與原始訊息裡那一則固定的原文換成潤色過的（全服共用的那一句）。快取裡沒有合格句子就什麼都不動，回 False。
         呼叫端存檔。"""
         line = flavor.clean(flourish)
-        if line:
+        if line and not flavor.clean(self.world.get_event_flavor(job.fire_id) or ""):
             self.world.set_event_flavor(job.fire_id, line)
+            # 這一下才存進快取的（先寫的為準，別人先潤色好的那一句由他那一下記）：也進天下大事，全服看得到（Joy 2026-10-31）
+            self.world.mutate_season(lambda season: add_season_rumor(season, line, job.location, content=self.content))
         shared = flavor.clean(self.world.get_event_flavor(job.fire_id) or "")
         if not shared:
             return False
