@@ -636,3 +636,21 @@ def test_describe_says_what_the_core_tests_are():
     lines = test_for.describe(test_for.Pick(core=True))
     line = next(x for x in lines if x.startswith("核心測試"))
     assert "test_engine" in line and f"{len(test_for.core_tests())} 個檔" in line and "tests/core/ 不含 slow" not in line
+
+
+def test_the_long_tests_listed_first_still_exist_and_rank_in_order():
+    """tests/conftest.py 的 LONG_FIRST（T-03：已知很長的排在最前面）：每一筆的檔與測試函式都還在（改名了要跟著改，
+    不然那一條又排回尾巴），排序照表上的順序，不在表上的排在後面。"""
+    import re
+
+    import conftest
+    for entry in conftest.LONG_FIRST:
+        path, _, name = entry.partition("::")
+        assert (ROOT / path).is_file(), entry
+        if name:
+            assert re.search(rf"^def {re.escape(name)}\(", test_for._text(ROOT / path), re.M), entry
+    first = conftest.LONG_FIRST[0]
+    assert conftest.long_first_rank(first) == 0
+    assert conftest.long_first_rank("tests/season/test_real_content.py::test_bot_plays_a_full_season[2]") > 0
+    assert conftest.long_first_rank("tests/season/test_sim_scripts.py::test_anything_else") == len(conftest.LONG_FIRST) - 2
+    assert conftest.long_first_rank("tests/arts/test_fusion.py::test_x") == len(conftest.LONG_FIRST)

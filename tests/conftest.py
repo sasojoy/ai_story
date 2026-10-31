@@ -659,3 +659,52 @@ def install_foreshadows(content):
         content.events[raw["id"]] = Event(**raw)
     validate(content)
     return content
+
+
+# ── 已知很長的排在最前面（10/31 測試自檢 T-03）─────────────────────────────
+# 整套含 slow 的牆鐘有四成花在尾巴：最長的整季模擬（test_sim_scripts 一條三分鐘）照檔名排在最後，別的 worker 都跑完了，只剩
+# 一、兩個 worker 在跑它們。這裡把量過很長的（10/31 量的 per_test：單一條 6 秒以上，照長短排）挪到最前面，其餘照原本的順序。
+# xdist 的預設分法（--dist load，-n 時就是它）一開始把前四分之一的測試照順序輪流發給每個 worker，所以長的會平均分到每個
+# worker、先跑；不要用 --dist worksteal（它把連續的一段整塊分給同一個 worker，長的會全擠在第一個 worker）。
+# 不跑 slow 的時候這幾條本來就被 -m 濾掉，順序沒有差別。這張表是排程用的提示，少寫、多寫、名字改了都不會讓測試紅。
+LONG_FIRST = (
+    "tests/season/test_sim_scripts.py::test_the_server_bot_simulation_counts_its_forging_in_a_short_season",
+    "tests/season/test_sim_scripts.py::test_a_week7_server_bot_season_splits_the_gentry_between_the_armies",
+    "tests/season/test_sim_scripts.py::test_the_sanren_measure_script_can_send_the_faction_side_to_the_local_gentry",
+    "tests/ranger/test_bounties.py::test_a_whole_beta_season_posts_one_batch_a_week",
+    "tests/season/test_sim_scripts.py::test_the_sanren_measure_script_can_measure_a_season_with_the_season_one_rules_off",
+    "tests/acts/test_sortie_duel_bots.py::test_a_bots_only_server_clears_every_duel_within_a_day",
+    "tests/season/test_sim_scripts.py::test_the_mounts_measure_script_prints_one_line_with_and_one_without_mounts",
+    "tests/season/test_sim_scripts.py::test_the_secrets_measure_script_also_prints_the_forge_part",
+    "tests/season/test_four_wins_gentry_bots.py::test_gentry_server_bots_split_between_the_two_armies",
+    "tests/season/test_sim_scripts.py::test_the_weapons_measure_script_prints_one_line_with_and_one_without_weapons",
+    "tests/season/test_sim_scripts.py::test_the_exp_pace_measure_prints_one_line_per_side_and_rule",
+    "tests/season/test_sim_scripts.py::test_the_treasures_measure_script_prints_one_line_with_and_one_without_treasures",
+    "tests/season/test_sim_scripts.py::test_the_gear_measure_script_prints_one_line_with_and_one_without_armor",
+    "tests/season/test_real_content.py::test_bot_plays_a_full_season",
+    "tests/bots/test_bot_runner.py::test_a_season_of_server_bots_runs_to_the_end_and_both_sides_fight",
+    "tests/acts/test_conquest_flip.py::test_bots_never_press_it_off_own_ground",
+    "tests/season/test_real_content.py::test_every_idle_menu_id_is_one_the_prologue_allow_list_knows",
+    "tests/season/test_sim_season_one.py",
+    "tests/battle/test_explore_one_fix.py::test_the_boss_chance_follows_the_renown_multiplier",
+    "tests/season/test_core_loop_bots.py::test_a_season_bot_plays_the_new_loop_on_the_real_content",
+    "tests/season/test_real_content.py::test_every_person_slot_resolves_whoever_is_left",
+    "tests/acts/test_sortie_duel_bots.py::test_the_whole_season_bot_runs_a_short_season21_stretch",
+    "tests/season/test_real_content.py::test_world_map_labels_never_collide_or_leave_the_canvas_at_the_start",
+    "tests/web/test_prologue_web.py::test_fb095_after_a_redraw_the_busy_mark_lands_on_the_button_on_the_page",
+    "tests/battle/test_explore_one_fix.py::test_an_official_newbie_at_changshe_meets_the_boss_about_five_percent_of_trips",
+    "tests/season/test_sim_scripts.py",
+    "tests/season/test_four_wins_gentry_bots.py",
+)
+
+
+def long_first_rank(nodeid: str) -> int:
+    """nodeid 在 LONG_FIRST 的第幾個（整個檔、一條測試，或一條測試的每一組參數 [..]）；不在表上的排在後面。"""
+    for i, prefix in enumerate(LONG_FIRST):
+        if nodeid == prefix or nodeid.startswith((prefix + "::", prefix + "[")):
+            return i
+    return len(LONG_FIRST)
+
+
+def pytest_collection_modifyitems(config, items):
+    items.sort(key=lambda item: long_first_rank(item.nodeid))  # 穩定排序：不在表上的照原本的順序
