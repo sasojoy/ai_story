@@ -16,7 +16,7 @@
 | `explore_actions.py` | 原本 `Game` 上探索一顆的 15 個方法與模組層的 `OutingPlan` |
 | `outing_rules.py` | 走一趟的純規則（原 `tianxia/outing.py`；那個名字留成別名）：開關、倍數、這一趟在不在路上、留言與路碑、畫面那一份、遊記 |
 | `outing_actions.py` | 原本 `Game` 上走一趟的 12 個方法 |
-| `tests/` | `test_explore_package.py`（2 條，含煙霧一條：包的內容驗證擋得下壞的內容、核心與包的「旅人」同一個字）與原本在 `tests/` 底下、整檔屬於這一包的 9 個檔（226 條）：`test_explore_one.py`、`_2e`、`_fix`、`_polish`、`_single`（原 `tests/battle/`）、`test_explore_one_2f.py`、`test_explore_one_rules.py`（原 `tests/core/`）、`test_outing.py`（原 `tests/acts/`）、`test_outing_web.py`（原 `tests/web/`） |
+| `tests/` | `test_explore_package.py`（7 條，含煙霧兩條：包的內容驗證擋得下壞的內容、week7 按一次探索再走一趟一段；核心與包的「旅人」同一個字；留言擋「假人」那三個字；中途離開收成 LEFT、素材那一拍問領地多給、悟錯過感悟歸 0 這三條審查修正補的）與原本在 `tests/` 底下、整檔屬於這一包的 9 個檔（226 條）：`test_explore_one.py`、`_2e`、`_fix`、`_polish`、`_single`（原 `tests/battle/`）、`test_explore_one_2f.py`、`test_explore_one_rules.py`（原 `tests/core/`）、`test_outing.py`（原 `tests/acts/`）、`test_outing_web.py`（原 `tests/web/`） |
 
 **認領的欄位**（3.5，留在原地）：`PlayerState.outing`（`Outing`、`OutingBeat`）、`outing_last`、`explore_seq`（第幾次探索：跟留在 engine 的探索三選一共用，`seal.find`、`epiphany` 讀）、`fight_day`、`fights_today`（遭遇的疲勞，三道閘的第一道）——換季都跟著新角色重來（`carried` 是空的）；`WorldState.inscriptions`、`inscription_seq`（走一趟的留言）；`Config.jianfa` 的 `explore_one`、`outing` 兩個子開關與 `explore_stamina`、`explore_tables`、`town_foes`、`town_loot_scale`、`camp_spar_share`、`outing_*` 那幾個數字（`jianfa_numbers.py`）；`content/outing_lines.json`。題壁墨這件商品（`inscribe_ink`）在商城的 `mall.json`，經核心的錢包服務（`ctx.wallet`）用。
 
