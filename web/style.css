@@ -576,6 +576,15 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* 決戰的戰況一回合一段（Joy 2026-10-14，app.js 的 roundBlocks）：最新那一回合攤開、一行一條；舊的回合各收成一行，點了攤開；戰報頁的完整戰況（.report-detail）每一回合都收成一行 */
 :is(.scene, .report-detail) .b-round { margin: 6px 0; border-left: 3px solid var(--line); padding: 2px 0 2px 10px; }
 :is(.scene, .report-detail) .b-round.latest { border-left-color: var(--accent); }
+/* 決戰輪到你出招、第一屏放不下（FIT_STEPS 的 latest，自檢 U-01）：最新那一回合只留標題與第一句、一行，點了攤開 */
+.scene details.b-round.fit-hide, .g-merit.fit-board > .g-mcols { display: none; }
+.g-merit.fit-board { cursor: pointer; }
+.scene .b-round.latest.fit-latest { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+.scene .b-round.latest.fit-latest > .b-rhead { flex: none; margin: 0; }
+.scene .b-round.latest.fit-latest > .b-rhead::before { content: "▸ "; }
+.scene .b-round.latest.fit-latest > .b-lines { flex: 1 1 0; min-width: 0; margin: 0; padding: 0; list-style: none; }
+.scene .b-round.latest.fit-latest > .b-lines > li { display: none; }
+.scene .b-round.latest.fit-latest > .b-lines > li:first-child { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; font-weight: 400; color: var(--ink-2); }
 :is(.scene, .report-detail) .b-rhead { margin: 0 0 2px; font: 600 14px var(--serif); color: var(--accent); }
 :is(.scene, .report-detail) .b-lines { list-style: none; margin: 0; padding: 0; }
 :is(.scene, .report-detail) .b-lines li { margin: 0; padding: 3px 0; font-size: 14.5px; line-height: 1.6; }

@@ -1556,9 +1556,11 @@
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
     if (m.on_road) return `${resultCard}${letter}${letterCard}${pushAsk}${now}${scene}${links}${free}${menu}${guide}${sidesFirstHtml(m)}${weekCardHtml(m)}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     // 決戰輪到你出招的回合（FB-136）：三招緊接在場景底下，放手一搏的輸入框與說書人的框排在三招後面（同在路上，這一刻要按的排前面）。
-    // 開打那一刻場景多了戰局條、這一幕的開場、騎兵那一句，框與輸入框再排在上面的話三招整排落到分頁列底下（14 天、騎著馬、框還在：855～999）
+    // 開打那一刻場景多了戰局條、這一幕的開場、騎兵那一句，框與輸入框再排在上面的話三招整排落到分頁列底下（14 天、騎著馬、框還在：855～999）。
+    // 章回卡（本週卡、三方卡、來信）與「剛剛」也排到三招後面（自檢 U-01，2026-10-31：390×844 第 4 回合三招落在 859～959，分頁列頂 788）：
+    // 這一刻要看的是戰場、要按的是三招；上一回合的結果寫在戰場裡，不在「剛剛」
     if (myTurn) {
-      return `${resultCard}${peek}${letter}${now}${scene}${links}${menu}${peopleAfter}${free}${guide}${senseNotes}${weekCard}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+      return `${resultCard}${letter}${scene}${links}${menu}${peopleAfter}${free}${now}${peek}${guide}${senseNotes}${weekCard}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     }
     const planCard = planHtml(m.plan) + placeDeedsHtml(m.place_deeds); // 世界活起來：行動列與眼下要事底下（四顆行動鈕一定在第一屏）
     return `${resultCard}${peek}${letter}${now}${scene}${links}${guideUp}${free}${menu}${senseNotes}${weekCard}${planCard}${guideDown}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;

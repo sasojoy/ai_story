@@ -95,6 +95,11 @@ const meritSmalls = Array.from({ length: L.merit || 0 }, () => el("msmall", []))
 const peek = L.peek ? el("peek", ["peek"]) : null;
 if (peek) peek.querySelector = (s) => (s === ".wk-panel" && L.peekOpen ? {} : null);
 const notes = Array.from({ length: L.notes || 0 }, () => el("note", ["opt-note"]));
+// 決戰輪到你出招（自檢 U-01，收法 5d～5f）：L.turn 是選單裡有三招；戰場裡最新那一回合（L.latest）、更早的幾回合（L.older 個，本來就一行）、
+// 本場戰功（L.board）。三樣的 parentElement 都是場景卡
+const latest = L.latest ? el("latest", ["b-round", "latest"]) : null;
+const older = Array.from({ length: L.older || 0 }, () => el("older", ["b-round"]));
+const board = L.board ? el("board", ["g-merit"]) : null;
 // 狀態列（#top）的高度（FB-123）：input.topHeight；input.realTop 時 renderTop 照真的那樣先量高度、重畫（💡 收成一行時矮 input.topSaves）、
 // 再交給 fitTopMoved
 const topEl = { offsetHeight: input.topHeight || 120 };
@@ -140,7 +145,7 @@ if (callsBox) {
   callsBox.insertAdjacentHTML = () => { callsMore = makeMore("", true); };
 }
 // 每一樣收起來省多少 px（假的；真的看 375×812 估的數字）
-const SAVE = Object.assign({ art: 190, extra: 60, space: 30, cardSpace: 6, box: 22, hint: 20, renown: 20, line: 20, rounds: 23, merit: 6, own: 27, muster: 27, desc: 27, options: 22, call: 70, moreLine: 0, peek: 56, note: 18 }, input.save || {});
+const SAVE = Object.assign({ latest: 110, older: 40, board: 55, art: 190, extra: 60, space: 30, cardSpace: 6, box: 22, hint: 20, renown: 20, line: 20, rounds: 23, merit: 6, own: 27, muster: 27, desc: 27, options: 22, call: 70, moreLine: 0, peek: 56, note: 18 }, input.save || {});
 // 「剛剛」只留時間與標題（fit-title）時剩兩行 48px；只露三行（fit-short）時最多 72px
 const bodyHeight = () => (now && has(now, "fit-title") && !has(now, "open") ? Math.min(L.nowBody, 48)
   : now && has(now, "fit-short") ? Math.min(L.nowBody, 72) : Math.min(L.nowBody || 0, 120));
@@ -165,6 +170,9 @@ const bottom = () => {
   if (callsMore && callsMore.dataset.fit) b += SAVE.moreLine; // 收法 6b 補上的「還有 N 份」那一行自己也佔高度
   if (peek && has(peek, "fit-hide")) b -= SAVE.peek;
   notes.forEach((x) => { if (has(x, "fit-hide")) b -= SAVE.note; });
+  if (latest && has(latest, "fit-latest")) b -= SAVE.latest;
+  older.forEach((x) => { if (has(x, "fit-hide")) b -= SAVE.older; });
+  if (board && has(board, "fit-board")) b -= SAVE.board;
   return b;
 };
 const target = actbar || last;
@@ -212,6 +220,12 @@ const where = {
   "#page > .options > .btn.off .opt-note": () => notes,
   ".wk-card.fit-hide, .opt-note.fit-hide": () => [peek, ...notes].filter((x) => x && has(x, "fit-hide")),
   ".now.fit-title": () => all.filter((x) => has(x, "now", "fit-title")),
+  '#page > .options [data-id^="battle:act:"]': () => (L.turn ? [{}] : []),
+  "#page > .card.scene .b-round.latest:not(.fit-latest)": () => (latest && !has(latest, "fit-latest") ? [latest] : []),
+  "#page > .card.scene .b-round.fit-latest": () => (latest && has(latest, "fit-latest") ? [latest] : []),
+  "#page > .card.scene details.b-round:not(.fit-hide)": () => older.filter((x) => !has(x, "fit-hide")),
+  "#page > .card.scene .g-merit:not(.fit-board)": () => (board && !has(board, "fit-board") ? [board] : []),
+  ".fit-latest, .fit-board": () => [latest, board].filter((x) => x && (has(x, "fit-latest") || has(x, "fit-board"))),
   // 出陣回報（frontReportHtml）：假頁面沒有這一塊
   "#page .sfront": () => [],
   "#page .sfront.fit-tight": () => [],
@@ -239,7 +253,10 @@ if (scene) {
     : s === ":scope > p" ? (mhead ? musterLines[0] || null : title) : s === ":scope > .battle-shut" ? (L.battleShut ? {} : null)
     : s === ":scope > .scene-art" ? art : null);
   scene.querySelectorAll = (s) => (s === ":scope > hr ~ p" && hr ? own : s === ".fit-clip" ? all.filter((x) => has(x, "fit-clip"))
-    : s === ":scope > p:not([class])" ? [descHead, ...descParas].filter((x) => x && !x.hasClassAttr) : []);
+    : s === ":scope > p:not([class])" ? [descHead, ...descParas].filter((x) => x && !x.hasClassAttr)
+    : s === ".fit-latest, .fit-board" ? [latest, board].filter((x) => x && (has(x, "fit-latest") || has(x, "fit-board")))
+    : s === ":scope > details.b-round.fit-hide" ? older.filter((x) => has(x, "fit-hide")) : []);
+  [latest, board].forEach((x) => { if (x) x.parentElement = scene; });
 }
 const S = Object.assign({ stage: "game", tab: "jianghu", hearOpen: null, linesOpen: null, extraOpen: null, ownOpen: null, hintTight: false, hintOpen: false, renownTight: false,
   fitWidth: 0, main: { card_id: 7, scene: "<p>x</p>", on_road: false } }, input.S || {});
@@ -261,6 +278,8 @@ const snap = () => ({
   renownTight: S.renownTight, merit: meritSmalls.map((x) => has(x, "fit-hide")),
   art: art ? [...art.classes].sort() : null, extra: extra ? [...extra.classes].sort() : null, extraAttrs: extra ? extra.attrs : null,
   desc: descParas.map((x) => [...x.classes].sort()), descAttrs: descParas.map((x) => ({ ...x.attrs })), descClassAttr: descParas.map((x) => x.getAttribute("class")), descHead: descHead ? [...descHead.classes].sort() : null,
+  latest: latest ? [...latest.classes].sort() : null, latestAttrs: latest ? { ...latest.attrs } : null,
+  older: older.map((x) => has(x, "fit-hide")), board: board ? [...board.classes].sort() : null,
   peek: peek ? [...peek.classes].sort() : null, notes: notes.map((x) => has(x, "fit-hide")), nowWas: now ? now.dataset.fitWas || null : null,
 });
 finish(new Function("H", "S", "snap", "L", "W", "els", input.script || "H.fitFirstScreen(); return snap();")(
@@ -332,6 +351,33 @@ def test_the_titles_line_folds_after_the_spacing_and_comes_back():
     assert out["tight"]["fitted"] == ["space", "renown"] and out["tight"]["renownTight"] is True
     assert out["tight"]["bottom"] <= 740
     assert out["roomy"]["fitted"] == [] and out["roomy"]["renownTight"] is False
+
+
+# 決戰輪到你出招（自檢 U-01）：場景卡、三招（選單最後一顆是第三招）、戰場裡最新一回合、更早的兩回合、本場戰功
+TURN = {"bottom": 1000, "options": True, "scene": True, "turn": True, "latest": True, "older": 2, "board": True}
+
+
+@node
+def test_u01_on_your_turn_the_newest_round_folds_then_the_older_ones_then_the_board():
+    """390×844 第 4 回合：三招落在分頁列底下。間距收完先把最新那一回合收成一行，再收更早的幾回合，矮手機才收本場戰功的名單；
+    放得下就停。收起來的點了攤開（ownOpen），記住攤開過就不再收。"""
+    out = run(TURN, tabsTop=788)
+    assert out["fitted"][:1] == ["space"] and out["fitted"][-3:] == ["latest", "older", "board"]
+    assert "fit-latest" in out["latest"] and out["latestAttrs"]["data-act"] == "own-more" and out["older"] == [True, True]
+    assert "fit-board" in out["board"] and out["bottom"] <= 772
+    roomy = run({**TURN, "bottom": 900}, tabsTop=788)
+    assert "latest" in roomy["fitted"] and "board" not in roomy["fitted"] and roomy["board"] == ["g-merit"]
+    opened = run(TURN, "H.fitFirstScreen(); H.ownOpen(); const a = snap(); H.fitFirstScreen(); return { a, b: snap() };", tabsTop=788)
+    for o in (opened["a"], opened["b"]):
+        assert o["latest"] == ["b-round", "latest"] and o["older"] == [False, False] and o["board"] == ["g-merit"]
+    assert "latest" not in opened["b"]["fitted"]
+
+
+@node
+def test_u01_the_battle_folds_wait_for_your_turn():
+    """只能觀戰、已經出過招（選單裡沒有三招）時戰場不收這幾樣。"""
+    out = run({**TURN, "turn": False}, tabsTop=788)
+    assert "latest" not in out["fitted"] and out["latest"] == ["b-round", "latest"] and out["older"] == [False, False]
 
 
 @node
@@ -680,7 +726,7 @@ def test_each_step_only_touches_what_it_names():
     併進「還有 N 份邀請」那一行，點了攤開）；第 2、5 步是一行加「…」。"""
     css = _css()
     hiding = [sel for sel, body in re.findall(r"(?m)^([^{}\n@]*fit-[^{}\n]*)\{([^}]*)\}", css) if "display: none" in body]
-    assert sorted(s.strip() for s in hiding) == [
+    assert sorted(s.strip() for s in hiding) == sorted([
         # 第 5c 步（extra）：戰鬥補充第一行以後的（點那一塊整塊攤開，extraOpen）
         ".battle-card .tx-extra.fit-extra > .tx-line ~ .tx-line",
         ".battle-card p.rounds-tale.fit-fold:not(.open)", ".battle-card ul.rounds.fit-fold:not(.open)", ".call.fit-hide",
@@ -690,7 +736,9 @@ def test_each_step_only_touches_what_it_names():
         ".options > .btn.off .opt-note.fit-hide", ".page > .wk-card.fit-hide",
         # 第 6a 步（front、front2）：出陣回報那一句、標題與其餘的條（點那一塊整塊攤開，frontOpen）
         ".sfront.fit-min .sf-head, .sfront.fit-min .sf-row ~ .sf-row", ".sfront.fit-tight .sf-text",
-    ]
+        # 第 5d～5f 步（latest、older、board；自檢 U-01）：最新一回合第一句以後的、更早的回合、本場戰功的名單（點了整張場景卡攤開，ownOpen）
+        ".scene .b-round.latest.fit-latest > .b-lines > li", ".scene details.b-round.fit-hide, .g-merit.fit-board > .g-mcols",
+    ])
     title = _rules(css, "fit-title")[".now.fit-title:not(.open) .tx-now"]
     assert "max-height: none" in title and "mask-image: none" in title  # 只剩標題：不淡出
     tight = _rules(css, ".tx-tight")
@@ -2550,6 +2598,19 @@ def test_fb136_in_a_battle_round_the_three_moves_come_right_after_the_scene(batt
     free, box = page.index('<form class="free"'), page.index('<section class="card guide"')
     assert scene < moves < free < box
     assert page.index('data-id="battle:act:') < free  # 三招都在輸入框前面（選單那一塊裡）
+
+
+@node
+def test_u01_on_your_turn_the_chapter_card_and_just_now_sit_below_the_moves(battle):
+    """自檢 U-01：輪到你出招時，章回卡（本週卡）與「剛剛」排在三招後面——這一刻要看的是戰場、要按的是三招。"""
+    _, fighter = battle
+    m = {**server.main_view(fighter), "now": "<p>剛才的事</p>"}
+    assert m.get("week_card")
+    page = run_prologue_web(m, "return H.pageJianghu();")
+    moves = page.index('data-id="battle:act:')
+    assert page.index('<section class="card scene') < moves < page.index('class="now')
+    cards = [page.find(k) for k in ("ch-card", "wk-card") if k in page]
+    assert cards and min(cards) > moves
 
 
 @node

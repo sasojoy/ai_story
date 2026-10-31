@@ -1094,6 +1094,37 @@
       rows.forEach((el) => el.classList.add("fit-hide"));
       return rows.length > 0;
     } },
+    // 5d. 決戰輪到你出招時，戰場裡最新那一回合（展開著的那一段）收成一行：只留「第 N 回合」與第一句（誰佔上風），其餘點了攤開
+    //     （同第 7 步：ownOpen，S.ownOpen 記著玩家攤開過就不再收）。舊回合本來就是一行（roundBlocks）。自檢 U-01（2026-10-31）
+    { key: "latest", run: () => {
+      if (!document.querySelector('#page > .options [data-id^="battle:act:"]') || S.ownOpen === fitOwnKey()) return false;
+      const round = document.querySelector("#page > .card.scene .b-round.latest:not(.fit-latest)");
+      if (!round) return false;
+      round.classList.add("fit-latest");
+      round.setAttribute("data-act", "own-more");
+      round.setAttribute("role", "button");
+      round.setAttribute("tabindex", "0");
+      round.setAttribute("aria-expanded", "false");
+      return true;
+    } },
+    // 5e. 還放不下：更早的那幾回合（本來就是一行一回合）也收掉，點最新那一回合時跟著攤開（ownOpen）
+    { key: "older", run: () => {
+      if (!document.querySelector("#page > .card.scene .b-round.fit-latest")) return false;
+      const older = document.querySelectorAll("#page > .card.scene details.b-round:not(.fit-hide)");
+      older.forEach((el) => el.classList.add("fit-hide"));
+      return older.length > 0;
+    } },
+    // 5f. 還放不下（矮手機）：本場戰功的兩欄名單收掉，只留「本場戰功」與自己排第幾那一行；點了跟著攤開（ownOpen）
+    { key: "board", run: () => {
+      const board = document.querySelector("#page > .card.scene .b-round.fit-latest") && document.querySelector("#page > .card.scene .g-merit:not(.fit-board)");
+      if (!board) return false;
+      board.classList.add("fit-board");
+      board.setAttribute("data-act", "own-more");
+      board.setAttribute("role", "button");
+      board.setAttribute("tabindex", "0");
+      board.setAttribute("aria-expanded", "false");
+      return true;
+    } },
     // 6. 「剛剛」（不是戰鬥卡片的那種）收著時只露三行（同在路上，FB-060），「展開全文」照舊
     { key: "now", run: () => {
       const now = document.querySelector("#page > .now:not(.open)");
@@ -1241,6 +1272,7 @@
       if (el.dataset.fitWas && !el.classList.contains("open")) el.classList.replace(el.classList.contains("fits") ? "fits" : "clamp", el.dataset.fitWas);
       delete el.dataset.fitWas;
     });
+    page.querySelectorAll(".fit-latest, .fit-board").forEach(dropBattleFold); // 5d、5e、5f
     page.querySelectorAll(".fit-own, .fit-muster").forEach((el) => el.classList.remove("fit-own", "fit-muster")); // 第 6c、7、8 步（收成一行的段落由下面的 fitUnclip 攤回來）
     page.querySelectorAll(".call.fit-hide").forEach((el) => el.classList.remove("fit-hide")); // 6b：收掉的邀請攤回來
     page.querySelectorAll(".calls-more").forEach((el) => {
@@ -1299,6 +1331,11 @@
     p.classList.remove("fit-clip");
     if (!p.getAttribute("class")) p.removeAttribute("class");
   }
+  function dropBattleFold(el) {
+    el.parentElement.querySelectorAll(":scope > details.b-round.fit-hide").forEach((d) => d.classList.remove("fit-hide")); // 5e
+    el.classList.remove("fit-latest", "fit-board");
+    ["data-act", "role", "tabindex", "aria-expanded"].forEach((a) => el.removeAttribute(a));
+  }
   function fitUnclip(root) {
     root.querySelectorAll(".fit-clip").forEach((p) => {
       dropClip(p);
@@ -1348,6 +1385,7 @@
     const scene = document.querySelector("#page > .card.scene:not(.road)");
     if (!scene) return;
     scene.classList.remove("fit-own", "fit-muster");
+    scene.querySelectorAll(".fit-latest, .fit-board").forEach(dropBattleFold);
     fitUnclip(scene);
   }
 
