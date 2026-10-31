@@ -240,7 +240,7 @@ def test_main_view_sends_the_fronts_only_with_the_switch_on(game, monkeypatch):
     game.world.mutate_season(lambda season: setattr(season, "season_one", True))
     view = server.look(game, server.main_view)
     assert [(f["name"], f["value"]) for f in view["fronts"]] == [("潁川汝南", 40), ("南陽", 35), ("冀州", 55)]
-    assert view["status"]["stances"] == {"guan": 55, "huang": 45, "haoqiang": 10}
+    assert view["status"]["stances"] == {"guan": 55, "huang": 45}  # 豪強依附兩軍之一，沒有自己的態勢（割據 2026-10-31 拿掉）
 
 
 def test_main_view_carries_the_chaos_band_and_which_fronts_are_in_it(game, monkeypatch):
@@ -252,18 +252,11 @@ def test_main_view_carries_the_chaos_band_and_which_fronts_are_in_it(game, monke
     assert view["status"]["chaos_band"] == {"low": 35, "high": 65}
     assert [(f["name"], f["value"], f["chaos"]) for f in view["fronts"]] == [
         ("潁川汝南", 35, True), ("南陽", 65, True), ("冀州", 66, False)]  # 35 與 65 剛好在邊上：算在亂局裡
-    # 名冊空著：割據的漲速乘人數係數、一點不漲，說明不能說漸長（FB-065 M1）
-    empty = "2 條戰線在亂局，但還沒有人投靠，割據暫時不動"
-    assert view["status"]["stance_notes"] == {"sum": "三條戰線合計", "haoqiang": empty}
-    assert empty in view["trends"]
-    game.world.record_faction("投靠者", "guan")
-    view = server.look(game, server.main_view)
-    assert view["status"]["stance_notes"] == {"sum": "三條戰線合計", "haoqiang": "2 條戰線在亂局，割據漸長"}
+    assert view["status"]["stance_notes"] == {"sum": "三條戰線合計"}  # 割據那一句 2026-10-31 拿掉
+    assert "割據" not in view["trends"]
     game.world.mutate_season(lambda season: season.trends.update(yingru=34, nanyang=66, jizhou=66))
     view = server.look(game, server.main_view)
     assert [f["chaos"] for f in view["fronts"]] == [False, False, False]
-    assert view["status"]["stance_notes"]["haoqiang"] == "沒有戰線在亂局，割據漸消"
-    assert "在亂局" in view["trends"] and "割據漸消" in view["trends"]  # 見聞→大勢的割據那一段同一句話
 
 
 def test_main_view_has_no_chaos_data_with_the_switch_off(game):
@@ -273,7 +266,7 @@ def test_main_view_has_no_chaos_data_with_the_switch_off(game):
 
 def test_admin_choices_follow_the_switch(game, monkeypatch):
     """管理者推大勢的下拉選單：開關關著跟 beta 一樣；開關打開但這一季沒蓋章也一樣；這一季蓋了「開」的章時
-    列三條戰線與割據，不列黃巾聲勢（由戰線合成）。"""
+    列三條戰線，不列黃巾聲勢（由戰線合成；割據 2026-10-31 拿掉）。"""
     def listed():
         return [t["id"] for t in server.look(game, server.admin_choices)["trends"]]
 
@@ -281,7 +274,7 @@ def test_admin_choices_follow_the_switch(game, monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "season_one", True)
     assert listed() == ["huangjin", "yuxi"]
     game.world.mutate_season(lambda season: setattr(season, "season_one", True))
-    assert listed() == ["yingru", "nanyang", "jizhou", "geju", "yuxi"]
+    assert listed() == ["yingru", "nanyang", "jizhou", "yuxi"]
 
 
 def test_admin_choices_leave_out_the_beta_battle_and_thresholds_in_season_one(game, monkeypatch):
@@ -6360,7 +6353,6 @@ NOT_IN_THE_FINGERPRINT = {
         "stance_active": "人物此刻照哪一個心意做事：換的那一刻另寫天下大事（傳聞流水號已在指紋裡）；週初歸零跟著週初的掛鉤",
         "pending_battle": "背景推進記下要開的戰鬥，開成集結之後 active_battle 的指紋就變了",
         "season_one": "開季時蓋的章，開季之後不變",
-        "haoqiang_allied": "開季時蓋的章（豪強分屬兩軍），開季之後不變",
         "season21": "開季時蓋的章（21 天季），開季之後不變",
         "precise_actions": "開季時蓋的章（一類一顆），開季之後不變",
         "cal_offset": "開季時蓋的章（21 天季季曆的偏移），開季之後不變",
@@ -6368,8 +6360,6 @@ NOT_IN_THE_FINGERPRINT = {
         "length_days": "同上",
         "locks": "伏筆鎖定不能露出來（推送計畫 Review Focus 1）",
         "lock_losers": "同上",
-        "third_party": "同上",
-        "third_party_shown": "同上",
         "event_mods": "一般伏筆的修正，畫面上看不到（推送計畫 F4）",
         "event_bonus": "時刻表結果帶來的修正，同上",
         "schedule": "只畫成『下一件大事』的倒數；時鐘本來就靠慢速輪詢，管理者改排定很少見（推送計畫沒納入）",

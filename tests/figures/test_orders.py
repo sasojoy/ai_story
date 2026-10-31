@@ -79,8 +79,8 @@ def test_real_orders_content(real):
     assert kinds == sorted([
         ("defend", "guan"), ("defend", "huang"), ("intercept", "guan"), ("intercept", "huang"),
         ("escort", "guan"), ("escort", "huang"), ("siege", "guan"), ("siege", "huang"),
-        ("strike", "guan"), ("strike", "huang"), ("strike", "haoqiang"),
-    ])
+        ("strike", "guan"), ("strike", "huang"),
+    ])  # 豪強依附兩軍之一、領那一軍的軍令，沒有自己的模板
     assert o.slots["yingru"]["guan"].intercept == "runan_wilds"  # FB-248（PM 2026-10-15）：截糧的地點一律在戰線上，以前是荒丘
     assert o.slots["nanyang"]["huang"].escort == ("nanyang_wilds", "nanyang_huangjin_camp")
     assert {f: d.name for f, d in o.duties.items()} == {"guan": "巡哨", "huang": "傳道", "haoqiang": "保境安民"}
@@ -139,8 +139,7 @@ def test_issue_week_one_by_the_rules(on):
     # 黃巾：南陽 35、潁川 40 都 ≤ 40，守城兩道（南陽比較吃緊排前面）；第三格留給攻城（只有南陽打得到官軍隊伍），
     # 原本的南陽截糧讓給它（FB-061 之前是守城兩道加南陽截糧）
     assert _kinds(game, "huang") == [("defend", "nanyang"), ("defend", "yingru"), ("siege", "nanyang")]
-    # 豪強：一道打擊，三條戰線都在亂局，挑聲威最低的張曼成（50）
-    assert _kinds(game, "haoqiang") == [("strike", "zhangmancheng")]
+    assert _kinds(game, "haoqiang") == []  # 豪強依附兩軍之一，領那一軍的軍令
     assert all(o.quota == 4 and o.week == 1 for o in game.state.world.orders)
 
 
@@ -173,7 +172,6 @@ def test_issue_fills_slots(on):
     assert escort.front == "nanyang"
     assert (escort.start, escort.end, escort.location) == ("xinye", "wan_city", "xinye")
     assert escort.text == "一批軍糧要從新野送到宛城，各營派人沿途護送。"
-    assert by_id[("haoqiang", "strike")].text == "家主吩咐：張曼成擋了咱們的路。"
     assert "{" not in "".join(o.text for o in game.state.world.orders)
 
 
@@ -435,16 +433,14 @@ def test_duty_pushes_the_front_and_counts_for_defend(on):
     assert game.state.journal[0].lines[0] == msgs[0]  # 那句敘事寫進「剛剛」與紀錄（FB-043：以前被當成結果標記藏起來）
 
 
-def test_haoqiang_duty_pushes_geju_only_in_chaos(on):
+def test_haoqiang_duty_pushes_for_its_ally(on):
+    """豪強的保境安民照依附的那一軍推所在戰線（豪強第三方的割據 2026-10-31 拿掉）。"""
     game = _game(on, faction="haoqiang", at="changshe")
+    game.state.player.ally = "huang"
     _fronts(game, 50, 50, 50)
-    geju = rules.trend_value(game.state, on, "geju")
+    before = rules.trend_value(game.state, on, "yingru")
     game.choose("act:duty")
-    assert rules.trend_value(game.state, on, "geju") == geju + 1
-    _fronts(game, 80, 50, 50)
-    game.state.player.stamina = 150
-    game.choose("act:duty")
-    assert rules.trend_value(game.state, on, "geju") == geju + 1  # 潁川不在亂局：什麼都不推
+    assert rules.trend_value(game.state, on, "yingru") > before  # 潁川汝南往黃巾那邊推
 
 
 def test_duty_only_for_members_on_a_front(on):
@@ -978,16 +974,6 @@ def test_week_one_composition_with_the_offense(on):
     assert sum(o.template in ("intercept", "escort") for o in guan) == 1
 
 
-def test_haoqiang_keeps_its_single_strike_every_week(on):
-    """豪強只有一種模板（打擊），每週最多一道：留格不能讓它多發、少發或重複發，奇偶週都一樣。"""
-    game = _game(on)
-    for week in range(1, 9):
-        got = _week_orders(game, "haoqiang", week)
-        assert [o.template for o in got] == ["strike"], week
-        assert got[0].figure == orders.strike_target(game.state, on, next(
-            t for t in on.orders.templates if t.side == "haoqiang"))
-
-
 def test_a_one_slot_week_keeps_plain_priority(crowded):
     """每週只有一格時沒有「其中一格」可留：照優先序，不讓進攻的軍令把守城、截糧、護糧全擠掉。"""
     crowded.content.config.orders_per_week = 1
@@ -1100,9 +1086,9 @@ def test_can_challenge_is_the_rule_behind_the_challenge_button(on):
 
 
 def test_strikes_issued_for_real_each_week_all_carry_how(crowded):
-    """真的發出來的打擊：豪強每週都有，官軍、黃巾在偶數週；三邊的卡都寫「挑戰他本人」。"""
+    """真的發出來的打擊：官軍、黃巾在偶數週；兩邊的卡都寫「挑戰他本人」。"""
     seen = set()
-    for week, factions in ((1, ("haoqiang",)), (2, ("guan", "huang"))):
+    for week, factions in ((2, ("guan", "huang")),):
         for faction in factions:
             got = [o for o in _week_orders(crowded, faction, week) if o.template == "strike"]
             assert len(got) == 1, (week, faction)
@@ -1110,7 +1096,7 @@ def test_strikes_issued_for_real_each_week_all_carry_how(crowded):
             card = next(c for c in crowded.orders_view() if c["id"] == got[0].id)
             assert card["how"].startswith(f"到{orders.figure_name(crowded.content, got[0].figure)}所在的地方挑戰他本人，打贏記一次（")
             seen.add(faction)
-    assert seen == {"guan", "huang", "haoqiang"}
+    assert seen == {"guan", "huang"}
 
 
 # 地圖：局勢層標出本週打擊軍令的目標
@@ -1197,6 +1183,8 @@ def _recruit(on, faction, at):
     game = _game(on, at=at)
     game.state.player.tutorial_step = BASE
     game.choose(f"faction:{faction}")
+    if faction == "haoqiang":  # 豪強先挑依附哪一軍
+        game.choose("faction:ally:guan")
     game.choose("faction:confirm")
     game.view_orders()
     return game
@@ -1208,7 +1196,7 @@ def test_the_duty_action_finishes_the_first_order_step_and_glows(on, faction, at
     FB-093：那顆按鈕在第 2 步會發光，「此地還能做」自己打開。"""
     game = _recruit(on, faction, at)
     game.state.world.orders = []
-    _order(game, "strike", faction, figure="zhangjiao")  # 新手打不動的那種
+    _order(game, "strike", game.state.player.ally or faction, figure="zhangjiao")  # 新手打不動的那種
     assert game.guide_box()["key"] == "r3_first_order"
     ids = [o.id for o in game.options() if o.enabled]
     assert "act:duty" in ids and "act:duty" in game.enlist_glow(ids)

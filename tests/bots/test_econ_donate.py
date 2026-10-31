@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import random
 
-from conftest import real_content, third_party_gentry
+from conftest import real_content
 from tianxia import bot, economy
 from tianxia.engine import Game
 from tianxia.equipment import NOT_NOW
@@ -14,11 +14,9 @@ from tianxia.sqlite_world import open_world
 TW_MIDNIGHT = 16 * 3600  # UTC 16:00＝台灣 00:00（1970-01-02）
 
 
-def _game(faction="guan", at="changshe", bag=None, profile="week7", third_party=False, **econ):
+def _game(faction="guan", at="changshe", bag=None, profile="week7", **econ):
     c = real_content(profile)
     c.config.auto_open_first_season = True
-    if third_party:
-        third_party_gentry(c)  # 豪強是第三方、有割據的規則（豪強分屬兩軍之前）
     for key, value in econ.items():
         setattr(c.config.economy, key, value)
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
@@ -75,15 +73,6 @@ def test_the_daily_cap_takes_only_what_fits_and_keeps_the_rest():
     game.now = TW_MIDNIGHT + 24 * 3600  # 隔天台灣 00:00
     game.donate("rou_1", 10)
     assert p.materials["rou_1"] == 35
-
-
-def test_the_gentry_push_their_hold():
-    game = _game(faction="haoqiang", at="cao_manor", bag={"man_2": 20}, third_party=True)
-    w = game.state.world
-    before = w.trends.get("geju", 0) + w.trend_accum.get("geju", 0)
-    game.donate("man_2", 20)  # 60 點
-    assert w.armaments == {"haoqiang": {"慢": 60}}
-    assert w.trends.get("geju", 0) + w.trend_accum.get("geju", 0) > before
 
 
 def test_a_season_without_the_season_one_rules_only_stores():

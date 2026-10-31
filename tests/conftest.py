@@ -130,13 +130,6 @@ def renown_unscaled(content: Content) -> Content:
     return content
 
 
-def third_party_gentry(content: Content) -> Content:
-    """豪強分屬兩軍（企劃者 2026-10-15，Config.haoqiang_allied）之前的規則：週末設定裡豪強照舊是第三方（割據、攪局、臨時投效），
-    回傳同一份內容。測的是第三方豪強、割據本身的舊測試用它；新規則的測試不要叫（見 tests/test_gentry_allied.py）。"""
-    content.config.haoqiang_allied = False
-    return content
-
-
 @pytest.fixture(scope="session", autouse=True)
 def content_masters_stay_unchanged():
     """工作階段結束時，每份母本重新 pickle 一次，位元組要跟發第一份複本時一模一樣，不一樣就寫出是哪一份、哪幾個欄位。
@@ -433,11 +426,24 @@ def real():
 
 @pytest.fixture
 def on(real):
-    """同一份真實內容，照週末設定打開：開關、季長 2.5 天、人數上限 2（每道軍令 4 次）。"""
+    """同一份真實內容，照週末設定打開：開關、季長 2.5 天、人數上限 2（每道軍令 4 次）。豪強分屬兩軍（第一季規則的季一律如此；
+    豪強第三方 2026-10-31 拿掉）。不畫地盤（劇本的 territory 拿掉）：以前這一份沒開 haoqiang_allied，地盤（領地爭奪）本來就不開；
+    測領地爭奪的用 conquest_kit 或 week7、season21 設定。"""
     real.config.season_one = True
     real.config.season_days = 2.5
     real.config.server_max_players = 2
-    return real
+    return no_territory(real)
+
+
+def no_territory(content: Content) -> Content:
+    """拿掉劇本的地盤（territory）與時刻表結果裡的易手（control），回傳同一份內容：第一季規則開著、地盤（領地爭奪）不開。
+    2026-10-31 以前沒開 haoqiang_allied 的內容（週末設定、`on`）地盤本來就不開；豪強第三方連那個開關一起拿掉之後，
+    照舊靠舊玩法（遊歷、拔河以前的推線）測的就叫它。"""
+    content.scenario.territory = None
+    for event in [*content.timetable, *content.mandate_timetable]:
+        for outcome in event.outcomes.values():
+            outcome.control = {}
+    return content
 
 
 def next_season(content, world, *players):
@@ -484,7 +490,7 @@ CHANGSHE_LOSER = "黃巾的 {loser} 曾看破火攻，可惜晚了一步。"
 
 
 def season_one_events() -> list:
-    """縮小的時刻表，照結算文件的寫法（固定、擲骰、決戰、版本、鎖定、豪強、人物效果各有一件）。"""
+    """縮小的時刻表，照結算文件的寫法（固定、擲骰、決戰、版本、鎖定、人物效果各有一件；豪強第三方 2026-10-31 拿掉）。"""
     from tianxia.models import FigureChange, TimetableEvent, TimetableOutcome
 
     O = TimetableOutcome  # noqa: N806
@@ -505,7 +511,6 @@ def season_one_events() -> list:
         TimetableEvent(
             id="changshe_fire", week=6, front="yingru", title="長社火攻", kind="showdown",
             preface="史書上，皇甫嵩趁夜縱火，大破波才於長社。",
-            third_party_text="事後才有人發現，兩軍吃的糧出自同一家：{name} 的糧車。", third_party_trends={"geju": 10},
             outcomes={
                 "guan:大勝": O(text="這一次也一樣：火光燭天。", chronicle="皇甫嵩火攻長社。", trends={"yingru": -15},
                               locked_text={"guan": CHANGSHE_LOCKED}, loser_text={"guan": CHANGSHE_LOSER}),
@@ -538,16 +543,14 @@ def season_one_events() -> list:
         ),
         TimetableEvent(
             id="luzhi_jailed", week=8, front=None, title="盧植下獄", kind="roll", roll_side="huang", base_chance=0.5,
-            lock_result={"huang": "成", "guan": "不成"}, third_party_trends={"geju": 8},
+            lock_result={"huang": "成", "guan": "不成"},
             outcomes={
                 "成": O(text="史書上，盧植下獄。這一次也一樣。", chronicle="盧植被誣下獄。", trends={"jizhou": 8},
                        locked_text={"huang": LUZHI_LOCKED["huang"]}, loser_text={"huang": LUZHI_LOSER["huang"]},
-                       third_party_text="是袁本初在朝中替他說話，才減了死罪。",
                        figures={"luzhi": FigureChange(fate="下獄"),
                                 "dongzhuo": FigureChange(fate="到任", front="jizhou", location="luzhi_camp")}),
                 "不成": O(text="史書上，盧植下獄。這一次，奏報被壓了下來。", chronicle="盧植續圍廣宗。", trends={"jizhou": -5},
-                         locked_text={"guan": LUZHI_LOCKED["guan"]}, loser_text={"guan": LUZHI_LOSER["guan"]},
-                         third_party_text="朝中替盧中郎說話最力的是袁本初。{name} 在他府上坐了三個晚上。"),
+                         locked_text={"guan": LUZHI_LOCKED["guan"]}, loser_text={"guan": LUZHI_LOSER["guan"]}),
             },
         ),
         TimetableEvent(
@@ -568,7 +571,7 @@ def season_one_events() -> list:
 
 
 def install_season_one(content):
-    """打開第一季開關、季長 2.5 天，加上三條戰線與割據（起始值照結算文件的開季數字）與縮小的時刻表。
+    """打開第一季開關、季長 2.5 天，加上三條戰線（起始值照結算文件的開季數字；割據 2026-10-31 拿掉）與縮小的時刻表。
     每小時的虛擬玩家不在這裡測，先拿掉。"""
     from tianxia.models import Trend
 
@@ -576,7 +579,7 @@ def install_season_one(content):
     content.scenario.sim_players = []
     content.scenario.trends += [
         Trend(id="yingru", name="潁川汝南", start=40), Trend(id="nanyang", name="南陽", start=35),
-        Trend(id="jizhou", name="冀州", start=55), Trend(id="geju", name="豪強割據", start=20),
+        Trend(id="jizhou", name="冀州", start=55),
     ]
     content.timetable = season_one_events()
     return content

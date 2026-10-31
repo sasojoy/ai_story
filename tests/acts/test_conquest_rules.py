@@ -63,9 +63,6 @@ def test_conquest_is_on_wherever_territory_is(profile, on):
     assert conquest.on(c) is on and territory.on(c) is on and sortie.on(c) is on
     if not on:
         return
-    c.config.haoqiang_allied = False  # 豪強是第三方：割據要佔地，跟領地爭奪對不上（設計 4.1）
-    assert not conquest.on(c)
-    c = real_content(profile)
     c.scenario.territory.blocks = {}
     assert not conquest.on(c)
 
@@ -1521,7 +1518,7 @@ def test_a_gentry_follower_gets_the_scale_on_the_side_he_follows_and_a_ranger_ne
     monkeypatch.setattr(seal, "find", lambda reg_, tianji, name, seq, own_, cfg_: calls.append(own_) or False)
     _stand(game, loc, "haoqiang")
     p = game.state.player
-    assert game.state.world.haoqiang_allied
+    assert rules.haoqiang_allied(game.content, game.state.world)
     p.ally = "guan"
     game._explore_mode(_mode_for(game, "seek"))  # 沒人佔：不算
     conquest.set_control(game.state.world, game.content, loc, "guan")

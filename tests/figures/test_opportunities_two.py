@@ -6,12 +6,15 @@ content/opportunities.json 裡六筆第 4 階機緣、content/orders.json 的 pe
 （JSON 沒有註解、模型不收多的欄位，所以標記記在這裡與 models.py；跟乙一同一個做法）。機緣文件寫好的句子照原文，不在此列。"""
 from __future__ import annotations
 
+import json
 import random
+from pathlib import Path
 from unittest import mock
 
 import pytest
 
 from conftest import idle_step, real_content
+from tianxia.models import OppDef
 from tianxia import bot, bot_policy, calendar, defection, figures, foreshadow, opportunities, rules, team
 from tianxia.content import ContentError, validate
 from tianxia.encounter import EncounterResult
@@ -19,9 +22,19 @@ from tianxia.engine import Game
 from tianxia.state import BotProfile, PlayerState, Plot, WorldState
 
 
+GENTRY_RANK4 = Path(__file__).parents[1] / "fixtures" / "opportunities" / "gentry_rank4.json"
+
+
+def with_gentry_rank4(c):
+    """豪強第 4 階的兩筆機緣（地、人、名；聯保）2026-10-31 跟豪強第 4 階一起從正式內容拿掉（T-05）。它們是唯一用到
+    銀兩與檢定兩種東西、靠山交付、檢定類密謀的內容，拼圖與密謀的這幾條規則還在，所以測試照舊用原本那兩筆（tests/fixtures/opportunities/）。"""
+    c.opportunities += [OppDef.model_validate(raw) for raw in json.loads(GENTRY_RANK4.read_text(encoding="utf-8"))]
+    return c
+
+
 @pytest.fixture
 def real():
-    c = real_content()
+    c = with_gentry_rank4(real_content())
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c
@@ -37,6 +50,7 @@ def _game(content, name="甲", faction=None, at=None, rank=3, world=None):
     game = Game.new(content, name, rng=random.Random(0), world=world)
     p = game.state.player
     p.faction, p.rank = faction, rank
+    p.ally = "guan" if faction == "haoqiang" else None  # 豪強一律依附兩軍之一（豪強第三方 2026-10-31 拿掉）
     if at is not None:
         p.location = at
     return game
@@ -72,13 +86,12 @@ def test_new_fields_survive_a_save_and_load():
     assert again.plots == w.plots and again.plots[0].status == "open"
 
 
-def test_real_rank_four_opportunities(real):
-    four = {o.id: o.kind for o in real.opportunities if o.rank == 4}
-    assert four == {
+def test_real_rank_four_opportunities():
+    four = {o.id: o.kind for o in real_content().opportunities if o.rank == 4}
+    assert four == {  # 豪強沒有第 4 階（2026-10-31）
         "guan_three_plans": "puzzle", "guan_three_roads": "plot", "huang_mole": "deduce", "huang_jiazi": "plot",
-        "hao_land_people_name": "puzzle", "hao_alliance": "plot",
     }
-    assert set(real.orders.petition) == {"guan", "huang", "haoqiang"}
+    assert set(real_content().orders.petition) == {"guan", "huang", "haoqiang"}
 
 
 def test_real_petition_wording(real):
@@ -209,8 +222,8 @@ def test_validate_catches_broken_new_content(real, break_it, message):
 
 
 def test_a_deduction_may_push_any_real_trend_line(real):
-    """審查 m-3：推的是大勢線（戰線、割據），不只戰線；真實內容的 jizhou 照舊過。"""
-    _opp(real, "huang_mole").deduce.trend = {"geju": 1}
+    """審查 m-3：推的是大勢線（戰線、玉璽線索），不只戰線；真實內容的 jizhou 照舊過。"""
+    _opp(real, "huang_mole").deduce.trend = {"yuxi": 1}
     validate(real)
 
 

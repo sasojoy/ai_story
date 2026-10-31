@@ -12,7 +12,7 @@ from unittest import mock
 import pytest
 
 import server
-from conftest import no_plans, real_content
+from conftest import no_plans, no_territory, real_content
 from tianxia import (
     atlas, calendar, defection, foreshadow, journal, mapview, opportunities, orders, ranks, rules, rumor_view, timetable,
 )
@@ -41,7 +41,7 @@ def on(real):
     real.config.season_one = True
     real.config.season_days = 2.5
     real.config.server_max_players = 2
-    return real
+    return no_territory(real)  # 地盤不開（豪強分屬兩軍的開關拿掉之前，這一份本來就沒有地盤）
 
 
 def _game(content, name="甲", faction=None, at="yingchuan", world=None):

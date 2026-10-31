@@ -384,7 +384,7 @@ def spread(state: GameState, content: Content, kind: str, target: str, *, at: st
     tuning = content.config.figure_life
     region = region or _region(content, at)  # 決戰直接給大區
     victim = content.figures[target].character if kind == "beat" and target in content.figures else None
-    warring = [f.id for f in content.scenario.factions if f.goals and "geju" not in f.goals]  # 交戰兩軍（豪強不算誰的仇敵）
+    warring = [f.id for f in content.scenario.factions if f.goals]  # 交戰兩軍（豪強沒有自己的目標，不算誰的仇敵）
     deltas: dict[int, list[str]] = {}
     for cid, ch in content.characters.items():
         if not ch.deep_interaction or cid == victim:

@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import random
 
-from conftest import classic_rules, real_content, third_party_gentry
+from conftest import classic_rules, real_content
 from tianxia import atlas, calendar, mapdata, mapview, orders, territory
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -17,13 +17,11 @@ import datetime
 from tianxia.world_state import fresh_season, stamp_season
 
 
-def _game(faction="guan", at="yingchuan", classic=False, profile="week7", third_party=False):
+def _game(faction="guan", at="yingchuan", classic=False, profile="week7"):
     c = real_content(profile)  # 地盤拔河的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開；翻地的輿圖資料在 tests/test_world_map.py）
     c.config.auto_open_first_season = True
     if classic:
         classic_rules(c)
-    if third_party:
-        third_party_gentry(c)  # 豪強是第三方、有割據的規則（豪強分屬兩軍之前）
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None
     p = game.state.player

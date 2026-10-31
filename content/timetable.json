@@ -86,8 +86,6 @@
     "kind": "showdown",
     "seal": "stir",
     "preface": "史書上，皇甫嵩趁夜縱火，大破波才於長社。",
-    "third_party_text": "事後才有人發現，兩軍那幾天吃的糧竟出自同一家：{name} 的糧車。",
-    "third_party_trends": {"geju": 10},
     "outcomes": {
       "guan:大勝": {
         "text": "這一次也一樣：大風夜起，城上舉火，{人物:bocai}的草營燒成一片火海，騎都尉曹操的援兵恰好趕到。",
@@ -198,13 +196,11 @@
     "base_chance": 0.5,
     "skip_if_out": "luzhi",
     "lock_result": {"huang": "成", "guan": "不成"},
-    "third_party_trends": {"geju": 8},
     "outcomes": {
       "成": {
         "text": "史書上，盧植不肯賄賂監軍的宦官左豐，被誣以『固壘息軍，以待天誅』，檻車徵還洛陽。這一次也一樣。接替他的是東中郎將董卓。",
         "locked_text": {"huang": "史書上，盧植因不肯行賄而下獄。這一次也一樣，只是讓左豐開口的那份金帛，是黃巾的 {name} 託宮中舊人送去的。盧植檻車還京，接替他的是東中郎將董卓。"},
         "loser_text": {"huang": "官軍的 {loser} 蒐齊的證據送進了大將軍府，卻遲遲沒有下文。"},
-        "third_party_text": "是袁本初在朝中替他說話，才減了死罪。",
         "chronicle": "盧植被誣下獄，董卓接手冀州。",
         "trends": {"jizhou": 8},
         "figures": {
@@ -216,7 +212,6 @@
         "text": "史書上，盧植因不肯行賄而下獄。這一次，左豐回朝的奏報被壓了下來，盧植仍在廣宗城下。",
         "locked_text": {"guan": "史書上，盧植不肯賄賂左豐，被誣下獄。這一次，{name} 把貨帳、血書與宮中的證人一併送進了大將軍府，左豐的誣告還沒出口，自己先下了獄。盧植仍在廣宗城下。"},
         "loser_text": {"guan": "黃巾的 {loser} 託人送進宮的金帛，最後成了左豐的罪證之一。"},
-        "third_party_text": "朝中替盧中郎說話最力的是袁本初。{name} 在他府上坐了三個晚上。",
         "chronicle": "左豐的誣告沒有得逞，盧植續圍廣宗。",
         "trends": {"jizhou": -5}
       }
@@ -233,9 +228,6 @@
     "seal": "emerge",
     "version_from": "zhangmancheng_wan",
     "versions": {"成": "甲", "不成": "乙"},
-    "third_party_text": "宛城殺聲震天的時候，新野縣衙的冊子換了主人：{name} 開倉放糧，縣裡的人自己把冊子捧了出來。",
-    "third_party_trends": {"geju": 10},
-    "third_party_chronicle": "{name} 取得新野",
     "outcomes": {
       "甲:guan:大勝": {
         "text": "史書上，孫堅身當一面，登城先入，大破宛城。這一次也一樣：{人物:sunjian}的兵攀上東北角的城牆，城門從裡面打開了。",

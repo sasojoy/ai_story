@@ -125,39 +125,6 @@
     "closing": "一個門客收拾了行囊，跟到你身邊：「往後替您跑腿。」"
   },
   {
-    "faction": "haoqiang",
-    "rank": 4,
-    "legs": [
-      {
-        "location": "loushang_village",
-        "casts": [
-          {
-            "event": "promo_hao_4",
-            "summons_text": "劉備捎信給你，約在{據點}村口的大桑樹下見。"
-          }
-        ]
-      }
-    ],
-    "closing": "一個家養部曲扛著刀跟了上來：「一方之主，往後這條命是您的。」",
-    "patron_lines": {
-      "yuan": {
-        "text": "關羽冷冷道：「四世三公的門客？」",
-        "affinity": {
-          "guanyu": -3
-        }
-      },
-      "cao": {
-        "text": "劉備頓了一下：「曹孟德的人……也好。」"
-      },
-      "self": {
-        "text": "劉備笑了：「都是白手起家。」",
-        "affinity": {
-          "liubei": 5
-        }
-      }
-    }
-  },
-  {
     "faction": "huang",
     "rank": 3,
     "legs": [

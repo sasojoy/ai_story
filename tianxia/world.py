@@ -11,7 +11,7 @@ from .features.feast import rules as feasts  # 宴客的散席（功能包；還
 from . import stances as stance_rules  # 人物心意（減法季批 6）；rules.stances（陣營的態勢）在這個檔裡也叫 stances
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .rules import (
-    add_chronicle, add_rumor, add_world_flags, change_trend, check_condition, geju_tick, recompute_trends,
+    add_chronicle, add_rumor, add_world_flags, change_trend, check_condition, recompute_trends,
     decisive_week, ends_early, resolve_trends, season_one, season_one_off, stance_sides, stances, trend_shown, trend_value,
 )
 from .state import GameState, PlayerState, Rumor, TimelineResult, WorldState
@@ -230,7 +230,7 @@ def season_endings(state: GameState, content: Content) -> list[Ending]:
     """這一季算的結局：第一季（開關開著＋這一季的章）只看標了 season_one 的，beta 季只看沒標的。清單照劇本的順序，
     最後一筆是那一季的保底（content.validate 檢查）。內容沒寫第一季的結局（測試夾具）時，第一季照 beta 那一份。
     天命結局（mandate）不在這裡，由 evaluate_ending 照天命之爭的結果挑（玉璽二）。
-    豪強分屬兩軍的季（企劃者 2026-10-15），態勢條件寫到這一季沒有的一方（豪強）的結局不參與（群雄並起、豪強坐大），季末只比官軍、黃巾。"""
+    態勢條件寫到這一季沒有的一方的結局不參與（豪強的兩個結局 2026-10-31 連割據一起拿掉），季末只比官軍、黃巾。"""
     on = season_one(content, state.world)
     sides = set(stance_sides(content, state.world))
     chosen = [
@@ -313,8 +313,7 @@ def early_end_flags(content: Content) -> set[str]:
 
 def decisive_ending(state: GameState, content: Content) -> Ending | None:
     """決定性勝利（會提前收季的結局，rules.ends_early：態勢門檻只看官軍、黃巾）此刻成立了沒（計畫 T9：季的事每曆時看一次）；
-    第一季以外一律 None。提前收季只看戰線（FB-254，企劃者 2026-10-15）：割據到 85 的群雄並起不在這裡，季末結算時由
-    evaluate_ending 照清單的先後判。季曆第 decisive_from_week 週（預設 10）以前一律 None：太早收季三場大戲就打不完
+    第一季以外一律 None。提前收季只看戰線（FB-254，企劃者 2026-10-15）。季曆第 decisive_from_week 週（預設 10）以前一律 None：太早收季三場大戲就打不完
     （企劃者 2026-10-05）；到了那一週已經在門檻上的，照規則當下收；天命之季從第 13 週起（等於不提前收，玉璽二）。"""
     if not season_one(content, state.world):
         return None
@@ -648,15 +647,13 @@ def _front_muster(world: WorldStateStore, content: Content, definition: BattleDe
     return [f"🗺️ 【天下大事】{line}"]
 
 
-def season_hour(state: GameState, content: Content, rng: random.Random, players: int | None = None) -> list[str]:
+def season_hour(state: GameState, content: Content, rng: random.Random) -> list[str]:
     """第一季「季的事」，每跨過一個曆時跑一次（advance_world_state 照曆時切段呼叫；開關關著或舊季不跑）：
     先跑每曆時才有的事，再跑 season_events（週初掛鉤、到了的大事）。
-    每曆時的 tick 一律放在 season_events 之前：T1 的 geju_tick、T4 的 figures.tick——開季那一刻只跑
-    season_events（settle_season_start），不跑這一段，才不會多算一次割據變動與人物推動。
-    players 是這一季投靠名冊的人數（advance_world_state 每次推進查一次帶進來），給割據按人數縮放漲速；None＝不知道，不縮放。"""
+    每曆時的 tick 一律放在 season_events 之前：T4 的 figures.tick——開季那一刻只跑
+    season_events（settle_season_start），不跑這一段，才不會多算一次人物推動（T1 的割據 2026-10-31 拿掉）。"""
     msgs: list[str] = []
     ranks.flush_news(state, content, calendar.point(state.world.time, content, state.world).cal_day)  # T5：前一天的晉升彙整
-    geju_tick(state, content, 1, players=players)  # T1：豪強割據每曆時一次，在週初掛鉤與大事之前
     figures.tick(state, content, 1)  # T4：大勢人物每曆時累積一次推動（取代每小時的虛擬玩家）
     return msgs + season_events(state, content, rng)
 
@@ -712,12 +709,8 @@ def advance_world_state(
     remaining = seconds
     # 第一季（開關開著、這一季也蓋了章）：另外在每個曆時的交界停一下跑季的事；跨過好幾件大事也逐件照時間來
     cal_hour = calendar.cal_hour_seconds(content, season) if calendar.season_one_on(season, content) else None
-    # 割據漲速依人數縮放：這一季投靠名冊的人數，一次推進只查一次（推進握著寫入權，名冊中途不會變）。讀名冊只是讀，
-    # 在 advance_season 的 mutate_season 裡也查得到（交易裡的快照直接用同一條連線，不是 mutate，不撞「不能巢狀」）。
-    # 沒傳 store（純函式的呼叫，例如測試）就不知道人數：None＝割據照設計的速度漲，不縮放
-    players = sum(world.faction_counts().values()) if cal_hour is not None and world is not None else None
     # 有沒打完的奪璽單挑時，那一個曆時先不提前收季（玉璽碎片設計 5.11，最多約 13 分鐘）：一次推進只查一次；在 advance_season 的
-    # mutate_season 裡也查得到（同上面的名冊）。沒傳 store（純函式的呼叫）照舊
+    # mutate_season 裡也查得到（讀只是讀，交易裡的快照直接用同一條連線）。沒傳 store（純函式的呼叫）照舊
     # 主機關掉碎片（Config.seal.enabled）時單挑推不動了，也就不擋（不然關著的那段時間每一季都收不了季）
     seal_open = (cal_hour is not None and world is not None and content.config.seal.enabled and bool(content.seal)
                  and world.seal_duel_open())
@@ -750,7 +743,7 @@ def advance_world_state(
             plans.tick(vehicle, content, season_end_time(season, content))  # 世界活起來：人物照行程動身、盤算公告與結算
             yuedan.tick(vehicle, content, world)  # 月旦評（第三批）：跨進新的一週評六個人；給了 store 才評（要掃角色）
         if crossed and not season.ended:
-            msgs += season_hour(vehicle, content, rng, players=players)
+            msgs += season_hour(vehicle, content, rng)
             decisive = None if season.ended or seal_open else decisive_ending(vehicle, content)
             if decisive is not None:  # 決定性勝利：當曆時收季，結局就是它（計畫 T9）
                 msgs += end_season(vehicle, content, world, rng, ending=decisive)

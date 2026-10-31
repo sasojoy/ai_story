@@ -150,11 +150,16 @@ def test_the_generals_march_out_by_day_in_season21():
     assert figures.started(state, c21, "bocai", 0.0)
 
 
-def test_the_two_buyers_foreshadow_is_open_by_day_in_season21():
+# 照週寫的事件條件另寫照天的版本（以前的例子是兩路買家，2026-10-31 跟豪強第三方一起拿掉；正式內容現在沒有照週寫的事件）
+WEEK_4_TO_6 = {"week_min": 4, "week_max": 6, "cal_day_min": 6, "cal_day_max": 11, "cal_day_min7": 2, "cal_day_max7": 4}
+
+
+def test_a_week_condition_is_open_by_day_in_season21():
+    from tianxia.models import Condition
     from tianxia.rules import check_condition
 
     c21 = real_content("season21")
-    cond = c21.events["fs_ev_two_buyers"].condition.model_copy(update={"factions": []})
+    cond = Condition(**WEEK_4_TO_6)
     state = world._season_vehicle(c21, _season(c21, now=MON))
     opened = {}
     for day in (5, 6, 11, 12):
@@ -176,7 +181,13 @@ def test_season21_content_must_carry_the_day_versions():
 
     broken(lambda c: setattr(c.timetable[1], "real", None))
     broken(lambda c: setattr(c.figures["huangfusong"], "active_from_day", None))
-    broken(lambda c: setattr(c.events["fs_ev_two_buyers"].condition, "cal_day_min", None))
+    def week_without_days(c):
+        from tianxia.models import Condition
+
+        event = next(iter(c.events.values()))
+        event.condition = Condition(**{**WEEK_4_TO_6, "cal_day_min": None})
+
+    broken(week_without_days)
     broken(lambda c: setattr(c.config, "season_days", 14))
 
 
