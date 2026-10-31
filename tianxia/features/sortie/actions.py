@@ -3,7 +3,8 @@
 ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx、sortie 模組換成 rules）。
 函式名＝原本的方法名去掉前導底線，兩個例外：`_sortie_mode(loc)` 是 `sortie_mode_of`（跟 `sortie_mode()` 分開）、`_clash` 是 `do_clash`
 （`sortie` 裡有區域變數叫 clash）。Game 上留 13 個一行委派（server、假人、測試、腳本與核心原位還在叫：選單那一格、`_act` 的
-act:train、行動列底下那一行、`_squad_encounter` 的 as_sortie、守勢行動、輿圖、約戰）。包裡互相叫直接叫這裡的函式；只有
+act:train、行動列底下那一行、`_squad_encounter` 的 as_sortie、守勢行動、輿圖）。包裡互相叫直接叫這裡的函式（約戰，第 2 批的
+duel_actions，也直接叫 sortie_line、sortie_rewards；約戰開著時出陣那一格與次數，這裡直接叫 duel_actions）；只有
 `sorties_left`、`_sortie_hold` 經 ctx 叫（測試換掉 Game.sorties_left、腳本換掉 Game._sortie_hold，換掉的才打得到）。
 """
 from __future__ import annotations
@@ -26,7 +27,6 @@ from tianxia import precise  # 過渡：待搬（一類一顆：打贏的獎勵�
 from tianxia import prologue as prologue_rules  # 過渡：待搬（序章：雪恥、不掉東西）
 from tianxia import ranger  # 過渡：待搬（遊俠名號：經驗倍數）
 from tianxia import roster  # 過渡：待搬（截殺的新手期：混戰照它）
-from tianxia import sortie_duel  # 過渡：待搬（出陣約戰：第 2 批搬進這一包）
 from tianxia import territory  # 過渡：待搬（地盤：誰控制、這裡駐著哪幾路）
 from tianxia import treasures  # 過渡：待搬（寶物：多掉一個素材、出陣的稀有掉落）
 from tianxia.characters import name_key
@@ -36,6 +36,8 @@ from tianxia.guide import note_action  # 過渡：待搬（入伍段的「出一
 from tianxia.models import Location, Squad
 from tianxia.state import FrontReport
 
+from . import duel_actions  # 出陣約戰（第 2 批搬進同一包）：約戰開著時出陣那一格與次數
+from . import duel_rules as sortie_duel
 from . import rules
 
 if TYPE_CHECKING:
@@ -80,7 +82,7 @@ def train_title(ctx: Game) -> str:
 
 def sorties_left(ctx: Game) -> int:
     """今天還能出陣幾次（Config.sortie.per_day；換日同回體丹，_pill_day）。約戰開著的季讀 jianfa_per_day（減法季批 3b）。"""
-    if ctx.duel_on():
+    if duel_actions.duel_on(ctx):
         return sortie_duel.left_today(ctx.state.player, ctx.content.config.sortie, ctx._pill_day())
     return rules.left_today(ctx.state.player, ctx.content, ctx._pill_day())
 
@@ -210,8 +212,8 @@ def sortie_option(ctx: Game, loc: Location, cost: int, odds: bool) -> Option | N
     """出陣的鈕（設計 2.2、2.3）：沒有出陣是 None；今天次數用完灰掉、寫什麼時候再來；攻照遊歷的寫法寫對手與勝算、必敗先問、
     大場面等模型（_train_option）；守寫零風險。標籤一律「出陣・攻／守（體力 N・今日還能 M 次・…）」。
     約戰開著的季（減法季批 3b）換成 _duel_option。"""
-    if ctx.duel_on():
-        return ctx._duel_option(loc)
+    if duel_actions.duel_on(ctx):
+        return duel_actions.duel_option(ctx, loc)
     how = sortie_mode_of(ctx, loc)
     if how is None:
         return None

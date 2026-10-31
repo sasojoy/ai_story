@@ -194,6 +194,8 @@ GAME_IMPORTS = {
     # 出陣（主動搬六包第 1 批）：13 個一行委派；原本那一行 `from . import (..., sortie, ...)` 現在是別名（engine 照舊叫 sortie.on、
     # sortie.NAME 這些字，見 GAME_DIRECT）；混戰的字搬進包，tests/ranger/test_raid.py 照舊從 engine 拿那三個
     "tianxia.features.sortie.actions", "tianxia.sortie", "tianxia.features.sortie.rules",
+    # 出陣約戰（主動搬六包第 2 批）：16 個一行委派；原本那一行 `from . import sortie_duel` 現在是別名（choose 照舊讀 PREFIX、PICK）
+    "tianxia.features.sortie.duel_actions", "tianxia.sortie_duel",
 }
 GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
     "mall_buy", "mall_entry", "mall_rename_left", "mall_rename", "mall_claim", "mall_view", "mall_records",
@@ -203,15 +205,21 @@ GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
     # _sortie_option、_sortie）。這一輪私有的也留（批次表第二節「偏離手冊第三節的」）
     "sorties_left", "_sortie_foes", "sortie_mode", "sortie_progress", "_sortie_host", "_sortie_hold", "_sortie_line", "_melee_record",
     "_sortie_rewards", "_train_title", "_sortie_mode", "_sortie_option", "_sortie",
+    # 出陣約戰（主動搬六包第 2 批；7 個私有）：server、假人、腳本、測試在叫的 11 個（duel_on、_duel_power、duel_convoy_here、_duel_squad、
+    # sortie_go_problem、sortie_go、sortie_answer、sortie_join、sortie_cards、sortie_card、sortie_duel_tick），與只有核心原位在叫的 5 個
+    # （_duel_line、_duel_entry、_duel_choice、_sortie_duel_tick、_duty_credit；duel_on、_duel_squad 核心原位也叫）
+    "duel_on", "_duel_power", "duel_convoy_here", "_duel_squad", "sortie_go_problem", "sortie_go", "sortie_answer", "sortie_join",
+    "sortie_cards", "sortie_card", "sortie_duel_tick", "_duel_line", "_duel_entry", "_duel_choice", "_sortie_duel_tick", "_duty_credit",
 }
 _SORTIE_SEAM = "接縫留在原位（批次表第二節：會影響先後的接縫這一輪不開掛鉤，第 11 批一次收）"
 GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；過渡）
     "_own_scene_text": "坐在宴席上的場景卡（feast_actions.scene）：場景卡還沒有掛鉤；搬包之前也不看宴客開關",
     # 出陣（主動搬六包第 1 批）：下面這些方法用到 sortie 這個名字（現在是出陣包 rules 的別名）——開關（sortie.on＝territory.on）、
     # 鈕上的字（NAME、USED_UP、LEFT_NOTE、OUT_NOTE……）、次數（spend）
-    "_act": f"act:train 的分派（出陣開著走 _sortie、序章與關著走 _train；並肩出陣包在外面）：act 是核心的前綴；{_SORTIE_SEAM}",
+    "_act": f"act:train 的分派（約戰開著走 _duel_entry、出陣開著走 _sortie、序章與關著走 _train；並肩出陣包在外面）：act 是核心的前綴；"
+            f"{_SORTIE_SEAM}",
     "_everyday_options": f"行動列那一格（雪恥／遊歷／出陣、散人與不在爭奪之列的灰格，叫 _sortie_option）：選項的位置算行為；{_SORTIE_SEAM}",
-    "action_notes": f"行動列底下那一行（出陣開著叫 _sortie_line，關著是遊歷那一行）；{_SORTIE_SEAM}",
+    "action_notes": f"行動列底下那一行（約戰開著叫 _duel_line、出陣開著叫 _sortie_line，關著是遊歷那一行）；{_SORTIE_SEAM}",
     "_squad_encounter": "戰鬥（as_sortie 那一支）：序章的戰報標題寫雪恥（sortie.PROLOGUE_FIGHT）、打贏回頭叫 _sortie_rewards（那一對記在 "
                         "GAME_DELEGATE_CALLERS）；等戰鬥搬成包時變成核心的事件",
     "_train_squad_ids": "舊遊歷與出陣共用的對手池（出陣開著時只有攻才打，叫 _sortie_mode、_sortie_foes）",
@@ -219,16 +227,13 @@ GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；�
     "_duty": "守勢行動算一次出陣（sortie.spend；叫 _sortie_host 拿自家那一路的數字）",
     "map_state": "輿圖（今天去哪裡出陣：sortie.on、叫 _sortie_foes、sorties_left）；輿圖的線還在飛，這一輪不碰",
     "_map_foes": "輿圖的地點卡（出陣打誰：sortie.on、叫 _sortie_foes）；同上",
-    "_duel_option": "出陣約戰（第 2 批搬）：約戰開著時出陣那一格（sortie.NAME、OUT_NOTE、LEFT_NOTE；叫 sorties_left）",
-    "_duel_line": "出陣約戰（第 2 批搬）：約戰開著時行動列底下那一行（叫 _sortie_line、sorties_left）",
-    "_duel_entry": "出陣約戰（第 2 批搬）：截糧的運糧隊經過時攻打（sortie.spend）",
-    "sortie_go": "出陣約戰（第 2 批搬）：貼約戰（sortie.spend）",
-    "_duel_join_extra": "出陣約戰（第 2 批搬）：同去的次數（sortie 的字；叫 sorties_left）",
-    "sortie_join": "出陣約戰（第 2 批搬）：同去（sortie.spend）",
+    # 出陣約戰（主動搬六包第 2 批）：用到 sortie_duel 這個名字（現在是出陣包 duel_rules 的別名）的只剩 choose
+    "choose": "選單外的前綴（sortie_duel.PREFIX：sortie:go／answer／join 在查選單、建 Draft 之前接走，叫 _duel_choice）與按出陣那一格只回 "
+              f"sortie_duel.PICK 時不寫紀錄（picked_only、quiet 兩處）：choose 的掛鉤在驗過選單之後才問包，順序不一樣；{_SORTIE_SEAM}",
 }
 GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_DIRECT 的方法裡叫的也列（PM 10/31 答覆出陣第 1 批，第 2 批起）
     ("own_turn_checks", "_mall_grant"): "封測元寶每一輪發（本人這一輪沒有掛鉤；on_sync 不夠：假人程式的那一輪不 sync）",
-    # 出陣（主動搬六包第 1 批）：核心叫出陣委派一共 21 對（第 1 批的掃描只看得到 6 對，其餘 15 對的呼叫端在 GAME_DIRECT 裡）
+    # 出陣（主動搬六包第 1 批）：核心叫出陣委派 13 對（第 1 批時一共 21 對、掃描只看得到 6 對；約戰自己叫的 8 對第 2 批跟著進了包）
     ("_action_title", "_train_title"): "這一下的紀錄標題先算（act:train 是核心的前綴，標題照出陣開著沒、序章寫出陣／雪恥／遊歷）",
     ("_outing_foe", "_sortie_host"): "走一趟（探索）在自家營寨遇上的是自家那一路（出陣的守拿的同一路）；探索搬成包時改成查詢服務",
     ("_act", "_sortie"): f"act:train 的分派：出陣開著走出陣（並肩出陣、扣體力包在外面）；{_SORTIE_SEAM}",
@@ -242,14 +247,25 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("map_state", "_sortie_foes"): "輿圖（今天去哪裡出陣）：出陣那一格是哪一種；輿圖的線還在飛，這一輪不碰",
     ("map_state", "sorties_left"): "輿圖：今天還能出陣幾次",
     ("_map_foes", "_sortie_foes"): "輿圖的地點卡：約戰關著時出陣打的那一批",
-    ("_duel_option", "sorties_left"): "出陣約戰（第 2 批搬）：約戰開著時出陣那一格的次數",
-    ("_duel_line", "sorties_left"): "出陣約戰（第 2 批搬）：行動列底下那一行的次數",
-    ("_duel_line", "_sortie_line"): "出陣約戰（第 2 批搬）：散人、不在爭奪之列照舊出陣那一行",
-    ("_duel_join_extra", "sorties_left"): "出陣約戰（第 2 批搬）：同去的次數",
-    ("_duel_report", "_sortie_rewards"): "出陣約戰（第 2 批搬）：結算時攻方打贏給出陣的獎勵",
-    ("_duel_report", "sorties_left"): "出陣約戰（第 2 批搬）：約戰卡上今天還能出陣幾次",
-    ("sortie_card", "sorties_left"): "出陣約戰（第 2 批搬）：出陣前那張卡",
-    ("sortie_go_problem", "sorties_left"): "出陣約戰（第 2 批搬）：貼不了的原因（今天的次數）",
+    # 出陣約戰（主動搬六包第 2 批）：核心叫約戰委派 17 對（搬之前約戰自己叫出陣委派的 8 對跟著進了包）
+    ("world_tick", "_sortie_duel_tick"): "伺服器排程那一下結算到時的約戰：追完共用賽季之後、領地爭奪換天之前（三處結算的位置算行為：作廢退體力"
+                                         f"與回體力誰先誰後夾上限的結果不同；這一輪不開「世界推進」的掛鉤）；{_SORTIE_SEAM}",
+    ("sync", "_sortie_duel_tick"): f"排程關著時下一個同步的人替窗滿了的約戰結算：追完共用賽季之後、_stamp_join 之前；同上；{_SORTIE_SEAM}",
+    ("advance", "_sortie_duel_tick"): f"快轉（管理者、整季機器人只 advance）：_deliver_conquest 之後、_save_season 之前；同上；{_SORTIE_SEAM}",
+    ("choose", "duel_on"): "sortie:* 在查選單之前接走：約戰關著的季照舊當成不在選單上（見 GAME_DIRECT 的 choose）",
+    ("choose", "_duel_choice"): "同上：貼、應戰、同去三個動詞",
+    ("_act", "duel_on"): f"act:train 的分派：約戰開著（序章以外）出陣那一格只打開出陣前那張卡；{_SORTIE_SEAM}",
+    ("_act", "_duel_entry"): "同上：截糧的運糧隊經過時照舊攻打（體力在裡面扣）",
+    ("action_notes", "duel_on"): f"行動列底下出陣那一行：約戰開著換約戰那一句；{_SORTIE_SEAM}",
+    ("action_notes", "_duel_line"): "同上",
+    ("_fight_squad", "duel_on"): "大場面判讀：約戰開著時出陣那一格不判（不會打仗）",
+    ("_duty_option", "duel_on"): "守勢行動的鈕：約戰開著時收進此地、不佔出陣的次數",
+    ("_duty", "duel_on"): "守勢行動：約戰開著時不佔出陣、不推線、不算守城",
+    ("_duty", "_duty_credit"): "同上：一天記一點貢獻（企劃者 2026-10-24 第 2 件）",
+    ("_squad_encounter", "duel_on"): "戰鬥（as_sortie）：約戰開著時只剩截糧，打贏不推進度（進度只在約戰結算動）",
+    ("map_state", "duel_on"): "輿圖：約戰開著時不畫零風險的守、攻不了的不推薦、運糧隊經過的帶 convoy；輿圖的線還在飛，這一輪不碰",
+    ("_map_foes", "duel_on"): "輿圖的地點卡：約戰開著時列貼約戰會迎戰的守軍那一路",
+    ("_map_foes", "_duel_squad"): "同上：守軍那一路（經驗最高的那一路）",
 }
 
 
@@ -512,9 +528,9 @@ def test_the_scanner_catches_a_crossing(source, expected):
 
 
 def test_the_old_names_left_as_aliases_are_known():
-    """tianxia/mall.py、tianxia/feasts.py、tianxia/sortie.py 是指到包裡同一個模組的別名（給還沒改的測試與舊模組）：掃描照它們指到的那一包算，
-    不算舊模組。"""
-    assert aliases() == {"feasts": "feast", "mall": "mall", "sortie": "sortie"}
+    """tianxia/mall.py、tianxia/feasts.py、tianxia/sortie.py、tianxia/sortie_duel.py 是指到包裡同一個模組的別名（給還沒改的測試與舊模組）：
+    掃描照它們指到的那一包算，不算舊模組。"""
+    assert aliases() == {"feasts": "feast", "mall": "mall", "sortie": "sortie", "sortie_duel": "sortie"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 
