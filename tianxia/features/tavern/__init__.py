@@ -12,7 +12,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature
+from tianxia.core.features import Feature, Outcome
 
 
 class TavernFeature(Feature):
@@ -28,9 +28,18 @@ class TavernFeature(Feature):
     def enabled(self, ctx) -> bool:
         """酒肆開著（Config.tavern.enabled、內容有帶「酒肆」標籤的地點），或此刻還坐在酒肆裡：開關在坐著的時候被關掉（沒經過 sync
         收店）照樣按得到「出酒肆」、假人照樣只按它——搬包之前 choose 的 tavern 那一支、bot_policy.score 的那一段都不看開關。"""
-        from tianxia import tavern  # noqa: PLC0415  過渡：待搬（Task 3 搬進這一包的 rules）
+        from . import rules  # noqa: PLC0415
 
-        return tavern.on(ctx.content) or ctx.state.player.picking_tavern
+        return rules.on(ctx.content) or ctx.state.player.picking_tavern
+
+    def choose(self, ctx, kind, arg):
+        """tavern:* 那幾顆（選單接管那一格給的，只在坐在酒肆裡時有）：標題照招牌與動作（原 Game._action_title 的 tavern 那一支），
+        動作照原 Game._tavern_choice（出酒肆、看牆上的懸賞榜、其餘照店面那一頁的動作）。"""
+        if kind != self.prefix:
+            return None
+        from . import actions, rules  # noqa: PLC0415
+
+        return Outcome(title=rules.title_of(ctx.state, ctx.content, arg), run=lambda: actions.tavern_choice(ctx, arg))
 
     def bot_pick(self, ctx, option):
         from . import bots  # noqa: PLC0415
