@@ -201,8 +201,8 @@ GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
     "mall_buy", "mall_entry", "mall_rename_left", "mall_rename", "mall_claim", "mall_view", "mall_records",
     "admin_mall_reissue", "admin_mall_revoke", "admin_mall_refund", "admin_mall_ledger", "_mall_grant",
     "feast_free_text_prompt", "feast_text_request", "feast_toast",
-    # 出陣（主動搬六包第 1 批；9 個私有）：server、假人、腳本、測試在叫的 9 個，與核心原位在叫的 4 個（_train_title、_sortie_mode、
-    # _sortie_option、_sortie）。這一輪私有的也留（批次表第二節「偏離手冊第三節的」）
+    # 出陣（主動搬六包第 1 批；10 個私有，第 1 批記成 9 個是少算了一個）：server、假人、腳本、測試在叫的 9 個，與核心原位在叫的 4 個
+    # （_train_title、_sortie_mode、_sortie_option、_sortie）。這一輪私有的也留（批次表第二節「偏離手冊第三節的」）
     "sorties_left", "_sortie_foes", "sortie_mode", "sortie_progress", "_sortie_host", "_sortie_hold", "_sortie_line", "_melee_record",
     "_sortie_rewards", "_train_title", "_sortie_mode", "_sortie_option", "_sortie",
     # 出陣約戰（主動搬六包第 2 批；7 個私有）：server、假人、腳本、測試在叫的 11 個（duel_on、_duel_power、duel_convoy_here、_duel_squad、
