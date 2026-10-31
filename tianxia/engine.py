@@ -35,7 +35,7 @@ from . import storyline  # 一條線：特殊事件與特殊頓悟的底座（�
 from . import epiphany  # 特殊頓悟（登記一條線的鉤子；企劃者 2026-10-26）
 from . import tiers  # 事件分級：場景卡上那一行「州郡大事」「天下大事」
 from . import outing as outing_rules  # 走一趟（企劃者 2026-10-29～30）：探索一次走一、三、五段
-from . import explore_one, growth  # 減法季批 2：探索一顆、三道閘、屬性五段的純規則（開關走 rules.jianfa）
+from . import growth  # 減法季批 2：三道閘、屬性五段的純規則（開關走 rules.jianfa；探索一顆搬進了探索包）
 from . import zhuan_end  # 減法季批 7b：列傳為終點（票、深交上限、人物評曰）
 from . import ambush as ambush_rules  # 設伏劫道（後期體力玩法第一批）；叫 ambush_rules：這個檔裡有區域變數叫 ambush
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
@@ -73,7 +73,6 @@ from .guide import speaker_of as guide_speaker_of
 from .guide import speakers as guide_speakers
 from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
-from . import mapview  # 輿圖名字旁（map_mostly）問 mapview.open_places：哪些地點畫得出來，跟底圖、疊層同一個判斷
 from .mapview import legend_data, render_map, render_minimap
 from .martial_arts import QUALITIES, is_renamed
 from .models import (
@@ -94,15 +93,18 @@ from .rules import jianfa  # 減法季（Config.jianfa＋開季的章；子開�
 from .sqlite_world import open_world
 from .wallet import Wallet
 from .core import features as features_core  # 核心照 FEATURES 問每一包（開發規範手冊 3.3）
-from .core.option import Option  # 選單上的一顆（搬進核心：功能包要做選項）
+from .core.option import IDLE_MARK, Option  # 選單上的一顆（搬進核心：功能包要做選項）；閒著的選單一定有的那一顆（走一趟要認它）
 from .core.services import NO_SUCH_PLAYER, PAUSED_TEXT, WalletService, drill_share, wallet_on  # 共用的字與小函式、錢包服務（3.10）
+# explore
+from .features.explore import explore_actions  # 過渡：Game 上探索一顆的 9 個一行委派（主動搬六包第 3＋4 批）
+from .features.explore import outing_actions  # 過渡：Game 上走一趟的 9 個一行委派（主動搬六包第 3＋4 批）
 from .features.mall import actions as mall_actions  # 過渡：Game.mall_* 留一行委派（開發規範手冊 3.10）
 from .features.feast import actions as feast_actions  # 過渡：Game.feast_*（server 的三段式）與場景卡留一行委派
 from .features.sortie import actions as sortie_actions  # 過渡：Game 上出陣的 13 個一行委派（主動搬六包第 1 批）
 from .features.sortie.rules import CLASH_OPEN, CLASH_THEIRS_WON, CLASH_WON  # noqa: F401  過渡：tests/ranger/test_raid.py 從 engine 拿
 from .state import (
     ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, Fighter, FrontReport, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
-    Outing, OutingBeat, StoryCard, StoryProgress, TierResult, Whisper, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
+    StoryCard, StoryProgress, TierResult, Whisper, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
     new_game_state,
 )
 from .world import (
@@ -168,24 +170,6 @@ class TollFacts:
     saved: int = 0  # 化勁這一場少扣的氣血（team.toll_saved）
     spared: int = 0  # 不動這一場免掉的內傷（team.toll_saved）
     gained: tuple[tuple[str, int], ...] = ()  # 回血的功效掛點 → 回了多少氣血（「氣血 +N」那一行的 N），順序同 healed
-
-
-@dataclass(frozen=True)
-class OutingPlan:
-    """減法季探索一顆（整合設計 4.1）：這一處此刻出門一趟會怎麼抽（Game._outing_plan；鈕上的小字、行動列底下那一行、真的出門、假人打分數
-    都讀這一份，說的跟擲的不會走樣）。只讀，不擲骰。"""
-
-    kind: str  # 這一處算哪一種地點（explore_one.kind_of：town、temple、ford、wild、hill、camp）
-    weights: dict[str, int]  # 這一趟四類事的比重（explore_one.weights；這裡此刻抽不到事件、悟不出的那一類已經是 0；接了討伐懸賞只有遭遇）
-    how: str | None  # 遭遇打誰：bounty 討伐懸賞那一路（對它必敗時不算，2e）、spar 自家營寨跟同袍比劃、foe 這裡最弱的對手、town 城裡的地痞；都沒有是 None
-    foe: Squad | None  # 那一路
-    boss: DuelBoss | None  # 遭遇有機會撞上的頭目（接了這裡的討伐懸賞不擲）
-    hint: str  # 鈕上括號裡最後那一段小字，也是四格探索那一格的小字（/api/main 的 mostly；explore_one.hint_of：地點種類的字加上面 weights 最重的一類；有賞、同袍比劃）；最後兩個字是輿圖名字旁（map_mostly）
-
-    @property
-    def foe_note(self) -> str | None:
-        """行動列底下那一行補的那一句（howto.OUTING_FOE 的鍵）；一般的對手不補。"""
-        return self.how if self.how in ("town", "spar", "bounty") else None
 
 
 def _rank_action_id(arg: str) -> str | None:
@@ -349,9 +333,6 @@ PREPARING_REFUSAL = f"（{PREPARING_TEXT}。）"
 REFILL_TITLE = "補滿體力"  # 江湖紀錄那一則的標題（joy 的丹是「服下回體丹」）
 REFILL_LINE = "你運了口氣，體力回滿了。"  # 補滿成功時寫進紀錄的那一句
 REFILL_FULL = "體力是滿的，用不著補。"  # 體力本來就是滿的：跟丹的「這時候服丹是糟蹋」一樣，只回一句話、不寫紀錄
-# 閒著的選單（在地點上、沒有事件、對話、路上、閉關、開打的決戰）一定有這一顆，拿它認「此刻閒著」（切磋、論武、假人答論武）。
-# 以前認「打坐」（永遠按得下去），打坐 2026-10-12 拿掉之後改認探索：_everyday_options 第一顆，體力不夠也在（灰的）
-IDLE_MARK = "act:explore"
 PROLOGUE_REST = "調息（照師父教的吐納，把體力調回來）"  # 序章教體力那一步（打坐 2026-10-12 拿掉，只留這一下）
 NO_REST = "（打坐已經拿掉了：體力會隨時辰自己回來，急用就服回體丹。）"  # 舊分頁按到 act:rest
 PILL_DAY_FULL = "今天已服{n}顆，明日 00:00 後再服。"  # 回體丹一天的上限（企劃者 2026-10-12）
@@ -441,7 +422,7 @@ SHOP_ACTS = frozenset({"smith", "bounties", "market", "arena"})  # 初入江湖�
 LEAVE_SHOP_IDS = frozenset({"bounty:back", "smith:back", mounts.BACK, arena.BACK_ID, tavern_rules.BACK_ID})  # 出店的那一顆
 
 def _outing_watch(fn):
-    """走一趟停在要選的事上時，這一下選完的得失記在那一段（Game._outing_watched）。"""
+    """走一趟停在要選的事上時，這一下選完的得失記在那一段（outing_actions.outing_watched，Game 上留一行委派）。"""
     @functools.wraps(fn)
     def run(self, *args, **kwargs):
         return self._outing_watched(fn, *args, **kwargs)
@@ -465,13 +446,13 @@ class Game:
         self._flavor_jobs: list[FlavorJob] = []  # 這一份 Game 觸發、還沒潤色的江湖大事（S-09，見 _flavor_sink、take_flavor_jobs）
         self._preparing_memo: list[bool] | None = None  # 一次畫面建構裡記住的「籌備中嗎」；None＝不在範圍裡（見 phase_memo）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
-        self._outing_busy = False  # 走一趟正在走（_outing_walk）或正在記一件事選完的得失（_outing_watched）：不再套一層
+        self._outing_busy = False  # 走一趟正在走（outing_actions.outing_walk）或正在記一件事選完的得失（_outing_watched）：不再套一層
         self._loot_scale = 1.0  # 打贏的心得與銀兩倍數：練功分級（_practice，Config.training）那一場才不是 1
         # 減法季探索一顆（批 2）：遭遇拍那一場掉的素材打幾成（城裡的地痞 town_loot_scale、三道閘的倍數）；其餘的仗都是 1，一個字不變
         self._drop_scale = 1.0
-        self._gate_scale = 1.0  # 減法季三道閘（批 2）：遭遇拍那一場的經驗、心得、銀兩乘疲勞與對手兩道閘（_fight_gate）；其餘是 1
-        self._outing_close: set[str] = set()  # 這一趟出門打了折的那幾道閘（_fight_gate 記、_explore_one 寫段落結尾那一句）
-        self._beat: dict | None = None  # 走一趟：剛剛那一次探索抽到什麼（_explore_one 寫、_outing_walk 讀）
+        self._gate_scale = 1.0  # 減法季三道閘（批 2）：遭遇拍那一場的經驗、心得、銀兩乘疲勞與對手兩道閘（explore_actions.fight_gate）；其餘是 1
+        self._outing_close: set[str] = set()  # 這一趟出門打了折的那幾道閘（explore_actions.fight_gate 記、explore_one 寫段落結尾那一句）
+        self._beat: dict | None = None  # 走一趟：剛剛那一次探索抽到什麼（explore_actions.explore_one 寫、outing_actions.outing_walk 讀）
         self._outing_upset = False  # 走一趟這一場遭遇開打前勝算凶險以下（_outing_fight 寫、_explore_one 讀）
         self._affinity_before: dict[str, int] | None = None  # choose()、隨口應對進行中：這一下之前的情誼（_people_here 認這一下加了誰的情誼）
         # 歷史武將同行：挑好了隨你上陣的那一位、正在照它加入（_escort_step 開著、_escort_carry 讀）
@@ -5289,519 +5270,63 @@ class Game:
         found = insights.roll_explore(loc, c, rng)
         return [f"你在{loc.name}靜下心來，看了好一陣。"] + insights.learn(s, c, self.world, found, at=loc)
 
-    # ── 減法季探索一顆（整合設計 4.1，批 2；Config.jianfa 的 explore_one）────────────────
+    # ── 減法季探索一顆（整合設計 4.1，批 2；Config.jianfa 的 explore_one）：本體在功能包 tianxia/features/explore/explore_actions.py（主動搬六包第 3＋4 批），這裡留一行委派 ──
 
     def _outing_on(self) -> bool:
-        """探索一顆在這一季開著（Config.jianfa 的 explore_one＋開季的章，rules.jianfa），而且不在序章裡（序章照舊按「探索」走寫好的那幾步）。
-        開著時選單上只剩一顆「探索」（act:explore，出門一趟），不畫三選一（explore:*）、尋敵、城裡操練。"""
-        return jianfa(self.content, self.state.world, "explore_one") and not prologue_rules.active(self.state, self.content)
+        return explore_actions.outing_on(self)
 
-    def _outing_foe(self, loc: Location, kind: str) -> tuple[str | None, Squad | None]:
-        """遭遇拍打誰（設計 4.1，PM 2026-10-25 第 3 件）：手上有這裡的討伐懸賞、那一路不是自己人，就是它（bounty；易手了也找得到，同
-        _gather_foe）；**可是對那一路的勝算是必敗時不算**（2e，FB-880，企劃者 2026-10-26「勝算是必敗時不強制打懸賞，照原本的表抽」）：
-        問的是鈕上寫勝算的同一個函式（odds，固定種子、不碰 Game.rng），必敗就當這一處沒有這張懸賞，往下照沒有懸賞時挑；變強到不再必敗
-        就又是它。自家營寨（營類、此刻歸自己這一邊、有自家的隊伍）是跟同袍比劃（spar，_sortie_host 那一路）；否則這裡此刻站的、
-        不是自家的隊伍裡最弱的一路（foe）；城類的地點自己沒有對手才換成地痞（town，Config.jianfa.town_foes 的第一路）。都沒有是 (None, None)。"""
-        s, c = self.state, self.content
-        for b in bounties.mine(s, c):
-            if b.kind == "strike" and b.location == loc.id and b.squad in c.squads and not self._drills_with(c.squads[b.squad]):
-                if self.odds(b.squad) == mapdata.LOSE_WORD:
-                    continue  # 打不贏的懸賞不強制：這一處當作沒有它（沒有放棄，手上還揭著）
-                return "bounty", c.squads[b.squad]
-        side = self._side()
-        if kind == explore_one.CAMP and side is not None and territory.controller(s.world, c, loc.id) == side:
-            host = self._sortie_host(loc)
-            if host is not None:
-                return "spar", host
-        foes = self._wild_foes(loc)
-        if foes:
-            return "foe", min(foes, key=lambda foe: foe.difficulty)  # 同分取這裡列的第一路
-        if kind == explore_one.TOWN:
-            sid = next((sid for sid in c.config.jianfa.town_foes if sid in c.squads), None)
-            if sid is not None:
-                return "town", c.squads[sid]
-        return None, None
-
-    def _outing_weights(self, loc: Location, *, has_foes: bool, bounty_here: bool, hidden: set[str] | None = None) -> dict[str, int]:
-        """這一處這一趟四類事的比重（explore_one.weights：表照標籤或 explore_mix、危險度、懸賞、有沒有對手），再把此刻做不到的歸 0：
-        抽不到事件（一次性、可重複的都沒有）事件是 0，悟不出（insights.explore_gives 是空的，或這個遊戲日在這裡選錯過做法）感悟是 0——
-        那一份照比重分給其餘的。只讀，不擲骰。hidden：藏起來的事件（events.hidden_events），替好幾處一起問時（map_mostly）先算好給。"""
-        s, c = self.state, self.content
-        weights = explore_one.weights(c.config.jianfa, loc, has_foes=has_foes, bounty_here=bounty_here)
-        # 一次性與奇遇（rare）加可重複的（common）就是全部（pool=None），一趟只問一次，找到一則就夠
-        if not event_rules.has_event_candidates(s, c, "explore", hidden=hidden):
-            weights[explore_one.EVENT] = 0
-        if not insights.explore_gives(loc, c) or sensing.missed_today(s, c, loc):
-            weights[explore_one.INSIGHT] = 0
-        return weights
-
-    def _outing_plan(self, loc: Location, *, hidden: set[str] | None = None) -> OutingPlan:
-        """這一處此刻出門一趟怎麼抽（OutingPlan）：比重照 _outing_weights。這裡沒有一般對手（也沒有討伐懸賞）遭遇就是 0，那一份分給其餘三類；
-        頭目不算對手（FB-815：只有頭目的地點不是一定撞上他）——他是這一趟另外擲的（_explore_one：5% × 名聲倍數），擲中那一趟才是
-        遭遇。接了討伐懸賞：這一趟就是遭遇（weights 只有遭遇，explore_one.encounter_only）；對懸賞那一路是必敗時不算（_outing_foe，2e），
-        整份（對手、頭目、比重、小字）跟沒有這張懸賞時一樣。只讀，不擲骰（判勝算也不碰 Game.rng）。"""
-        s, c = self.state, self.content
-        cfg = c.config.jianfa
-        kind = explore_one.kind_of(cfg, loc).kind
-        how, foe = self._outing_foe(loc, kind)
-        boss = None if how == "bounty" else duel_rules.available(s, c)  # 接了懸賞：遭遇就是懸賞那一路，不擲頭目
-        weights = self._outing_weights(loc, has_foes=foe is not None, bounty_here=how == "bounty", hidden=hidden)
-        return OutingPlan(kind=kind, weights=weights, how=how, foe=foe, boss=boss, hint=explore_one.hint_of(kind, how, weights))
+    def _outing_plan(self, loc: Location, *, hidden: set[str] | None = None) -> explore_actions.OutingPlan:
+        return explore_actions.outing_plan_at(self, loc, hidden=hidden)
 
     def mostly_here(self) -> str:
-        """四格探索那一格的小字（/api/main 的 mostly；雲端批 5 的欄位，網頁 m.mostly）：探索一顆開著時是出門一趟的那一份
-        （_outing_plan 的 hint：地點種類的字，招牌類此刻的比重是 0 才改寫比重最高的那一類；接了討伐懸賞「…有賞」、自家營寨「同袍比劃」，跟鈕上括號那一段同一個字）；
-        關著照雲端的 mapdata.mostly_here（照地點的小圖）。在路上是空字串。"""
-        plan = self.outing_plan()
-        if plan is not None:
-            return plan.hint
-        return mapdata.mostly_here(self.state, self.content)
+        return explore_actions.mostly_here(self)
 
-    def outing_plan(self) -> OutingPlan | None:
-        """探索一顆開著時，這裡此刻出門一趟怎麼抽（假人打分數、量表讀；同 _outing_plan）；關著、序章裡、在路上是 None。"""
-        p = self.state.player
-        if not self._outing_on() or p.journey is not None:
-            return None
-        return self._outing_plan(self.content.locations[p.location])
+    def outing_plan(self) -> explore_actions.OutingPlan | None:
+        return explore_actions.outing_plan(self)
 
     def map_mostly(self) -> dict[str, str] | None:
-        """輿圖第一層名字旁的兩個字（2f，FB-886；PM 2026-10-26「照這一處自己的比重寫，跟鈕上同一套」）：每一個畫得出來的地點，這個人**站過去之後**
-        鈕上小字的最後兩個字（explore_one.tail_of：多事、多敵、多料、多悟、參半，接了這裡的討伐懸賞「有賞」、自家營寨「比劃」）。
-        替每一處「假裝站過去」叫 _outing_plan（鈕、四格、行動列那一行讀的同一個函式，不另寫一份判斷）：危險度、有沒有對手（看的人是哪一邊、
-        這一處此刻歸誰）、懸賞、自家營寨、抽不到事件、悟不出感悟都算進去，也就不看他現在站在哪。探索一顆沒開著、序章裡（探索鈕是寫好的幾步，
-        沒有比重可看）是 None，名字旁照舊（mapdata.place_mostly）。只讀，不擲骰、不動存檔（站回原處），在路上也算得出。"""
-        if not self._outing_on():
-            return None
-        out: dict[str, str] = {}
-        hidden = event_rules.hidden_events(self.state, self.content)  # 藏起來的事件不看站在哪，四十幾處共用一份，不必每處重算
-        for loc_id in mapview.open_places(self.state, self.content):
-            with self._standing_at(loc_id):
-                plan = self._outing_plan(self.content.locations[loc_id], hidden=hidden)
-            out[loc_id] = explore_one.tail_of(plan.how, plan.weights)
-        return out
-
-    @contextlib.contextmanager
-    def _standing_at(self, loc_id: str):
-        """裡面的讀取都當作這個人已經站在 loc_id（沒有在路上）：state 換成一份淺拷貝（只有 player 的位置與路上換掉，其餘還是同一批物件，不動它們），
-        出了範圍（含丟例外）換回原來那一份。給「站過去之後會怎樣」的只讀查詢用（map_mostly）：事件抽得到嗎、對手是誰、勝算的地利都看
-        state.player.location，一處一處改函式簽名既費事又會漏，換一份 state 才跟真的站過去一樣。範圍裡不准寫。"""
-        home = self.state
-        self.state = home.model_copy(update={"player": home.player.model_copy(update={"location": loc_id, "journey": None})})
-        try:
-            yield
-        finally:
-            self.state = home
+        return explore_actions.map_mostly(self)
 
     def _outing_option(self, loc: Location) -> Option:
-        """探索一顆的鈕：「探索（體力 15・城裡多事）」，括號裡最後那一段是這一處多半給什麼（同 /api/main 的 mostly，mostly_here）。"""
-        return self._cost_option("act:explore", "探索", self.content.config.jianfa.explore_stamina, note=self._outing_plan(loc).hint)
+        return explore_actions.outing_option(self, loc)
 
     def _explore_one(self) -> list[str]:
-        """出門一趟（減法季探索一顆，整合設計 4.1）：扣 explore_stamina（15），照這一處的比重（_outing_plan）抽**一件事**
-        （explore_one.draw；2d，企劃者 2026-10-26「只抽一件事情」，同天體力改 15）：遭遇、事件、素材、感悟其中一件，感悟不連兩趟，
-        接了討伐懸賞這一趟就是遭遇（打懸賞那一路，交了差回原表）。素材與遭遇當場結算；事件或感悟端出來等玩家選；遭遇上撞到頭目時，
-        那一趟收在頭目戰。回來寫成一段（content/outing_lines.json：出門那一句加這一件事的一句），後面一行「得：…　失：…」；
-        這一趟沒收穫補一個一階素材；收尾照舊擲回體丹、殘譜、破境丹、打探懸賞、玉璽碎片。
-        擲骰都用自己的亂數（explore_one.rng_for），不碰 Game.rng（頭目戰與仗本身照它們原本的）。"""
-        s, c = self.state, self.content
-        p, cfg = s.player, c.config.jianfa
-        loc = c.locations[p.location]
-        plan = self._outing_plan(loc)
-        p.stamina -= cfg.explore_stamina
-        p.explore_seq += 1
-        roll = functools.partial(explore_one.rng_for, self.world.get_season_number(), p.name, p.explore_seq)
-        last_loc, _, last_kind = p.outing_last.partition(":")
-        weights = plan.weights
-        if plan.boss is not None and plan.foe is None and plan.how != "bounty":
-            # 這裡只有頭目、沒有一般對手（官軍在長社，FB-815）：這一趟照 5% × 名聲倍數擲一次他；擲中了這一趟就是遭遇（頭目擋路），
-            # 沒擲中就當這裡沒有對手——遭遇那一格已經分給其餘三類（plan.weights 的遭遇是 0）
-            if roll("頭目").random() < c.config.duel.explore_chance * renown.duel_chance(s, c):
-                weights = explore_one.encounter_only()
-        beat = explore_one.draw(roll("拍"), weights, last_choice=last_kind if last_loc == loc.id else None)
-        # 一條線（特殊事件）：在開頭的地方擲中了，這一趟就是那條線的第一段（關著、沒有線不擲；用自己的亂數，不動拍子）
-        boost = outing_rules.rare_boost(s, c)  # 走一趟：段數越多，稀有的越容易來（不在路上是 1）
-        strand = storyline.roll_start(s, c, roll("奇事"), boost=boost)
-        if strand is not None:
-            beat = explore_one.EVENT
-        say, lines = roll("段落"), c.outing_lines
-        story = [explore_one.line(lines, "open", plan.kind, say, place=loc.name)]
-        if self._draft is not None and not self._draft.tag:
-            self._draft.tag = explore_one.BEAT_WORDS[beat]
-        before = len(self._draft.changes) if self._draft is not None else 0
-        out: list[str] = []
-        got_any, boss, choice = False, None, ""
-        self._outing_close = set()
-        self._beat = {"kind": beat, "rare": strand is not None, "won": None}  # 走一趟讀這一段是什麼（_outing_walk）
-        rng = roll("結算")
-        if beat == explore_one.MATERIAL:  # 素材：找素材一定給的那一套（不展開分支；屬性照這裡的素材）
-            mids = explore_modes.gather_finds(c, loc, rng, sure=True, boost=boost)
-            self._beat["rare"] = any(c.materials[m].tier >= 2 for m in mids if m in c.materials)
-            top = next((c.materials[m].name for m in mids if m in c.materials and c.materials[m].tier >= outing_rules.FEAT_TIER), "")
-            if top:  # 稀世的素材：這一趟收的時候記一則行狀（outing.FEAT_ANNAL）
-                self._beat["feat"], self._beat["feat_kind"] = top, outing_rules.FEAT_TREASURE
-            found = [granted for mid in mids if (granted := materials.grant(s, c, mid))]
-            found += self._home_gather(loc, mids)  # 領地爭奪：站在自家領地多給的那一個
-            items = explore_one.items_of(found, materials.GRANT_PREFIX)
-            if items:
-                story.append(explore_one.line(lines, "material", "found", say, place=loc.name, item=items))
-                got_any = True
-            out += found
-        elif beat == explore_one.ENCOUNTER:
-            if plan.boss is not None and (plan.foe is None or rng.random() < c.config.duel.explore_chance * renown.duel_chance(s, c)):
-                boss = plan.boss  # 頭目擋路（5% × 名聲倍數；這裡只有頭目時直接對上）：頭目戰收在這一趟最後
-                story.append(explore_one.line(lines, "encounter", "boss", say, place=loc.name, foe=self._boss_face(boss)))
-                got_any = True
-            elif plan.foe is not None:
-                msgs, key, won = self._outing_fight(loc, plan)
-                self._beat["won"], self._beat["lost"] = won, key in ("lose", "town_lose")
-                self._beat["foe"] = outing_rules.foe_look(plan.foe)  # 畫面照它挑對手的圖（黃巾、官兵、家丁、盜匪、猛獸）
-                if won and self._outing_upset:  # 開打前勝算凶險以下還打贏：以弱勝強，這一趟收的時候記一則行狀
-                    self._beat["feat"], self._beat["feat_kind"] = plan.foe.name, outing_rules.FEAT_UPSET
-                story.append(explore_one.line(lines, "encounter", key, say, place=loc.name, foe=plan.foe.name))
-                out += msgs
-                got_any = won
-        elif beat == explore_one.EVENT:  # 要選的：事件（野類偏旅人那一類）；擲中了一條線就是那條線的第一段
-            msgs = self._story_begin(strand) if strand is not None else self._outing_event(loc, plan.kind, rng, boost)
-            if msgs:
-                story.append(explore_one.line(lines, "event", "lead", say, place=loc.name))
-                out += msgs
-                got_any, choice = True, beat
-        elif beat == explore_one.INSIGHT:  # 要選的：感悟（有所感）
-            story.append(explore_one.line(lines, "insight", "lead", say, place=loc.name))
-            out += self._sense_here(loc, rng)
-            got_any, choice = True, beat
-        if boss is not None:
-            out += self._duel_start(boss)
-        if not got_any:  # 這一趟沒收穫（素材找不到料、遭遇打輸或沒對手）：補一個一階素材（設計 4.1【PM】）
-            kinds = {c.materials[m].attribute for m in loc.materials if m in c.materials}
-            mid = explore_modes.one_of(c, kinds, 1, roll("補"))
-            granted = materials.grant(s, c, mid) if mid is not None else None
-            if granted:
-                story.append(explore_one.line(lines, "close", "empty", say, place=loc.name,
-                                              item=explore_one.items_of([granted], materials.GRANT_PREFIX)))
-                out.append(granted)
-        # 收尾的幾樣先算（打探懸賞交差在 45 級換成心得時，那一句「境界已到」也在這裡面，段落結尾要看得到它，FB-818）
-        extras = self._pill_find(roll("回體丹")) + self._scrap_find() + self._legend_find(roll("破境丹"))
-        extras += bounties.on_explore(s, c, self.world, loc.id) + self._seal_find(loc.id)  # 打探懸賞：出門一趟就算
-        if any(line.startswith(team.CAPPED_XINDE.partition("，")[0]) for line in out + extras):
-            self._outing_close.add("capped")
-        for key in explore_one.LINE_KEYS["close"]:  # 段落結尾：疲勞打了折、對手配不上你、境界已到（三道閘，設計 4.2）
-            if key in self._outing_close:
-                story.append(explore_one.line(lines, "close", key, say, place=loc.name))
-        p.outing_last = f"{loc.id}:{choice}" if choice else ""
-        ledger = self._outing_ledger(out + extras, before)
-        return ["".join(story)] + ([ledger] if ledger else []) + out + extras
+        return explore_actions.explore_one(self)
 
-    def _outing_fight(self, loc: Location, plan: OutingPlan) -> tuple[list[str], str, bool]:
-        """遭遇拍打的那一場：回（訊息, outing_lines 的 encounter 鍵, 打贏了沒）。自家營寨跟同袍比劃：不打、不掉東西，照 _sortie_host 那一路
-        的心得經驗 camp_spar_share（三成，_drill_gains；算仗）。其餘照探索的野怪打（_squad_encounter(wild=True)：扣氣血減半、不問模型、不推大勢），戰報標
-        「出門一趟・遭遇」；城裡的地痞戰利（銀兩、心得、掉的素材）乘 town_loot_scale、不算討伐；其餘打贏算討伐懸賞的交差。"""
-        s, c = self.state, self.content
-        cfg, foe = c.config.jianfa, plan.foe
-        self._outing_upset = False
-        gate = self._fight_gate(foe)  # 三道閘的前兩道（疲勞、對手配不配得上你）：這一場的經驗、心得、銀兩、掉的素材一起乘
-        if plan.how == "spar":  # 對手那一路心得、經驗的 camp_spar_share（三成）乘三道閘的倍數（PM 2026-10-26：以前全額）
-            return self._drill_gains(foe, cfg.camp_spar_share * gate, "camp_spar", echo=False), "spar", True  # 心得只由草稿記（FB-830）
-        town = plan.how == "town"
-        self._loot_scale = cfg.town_loot_scale if town else 1.0
-        self._gate_scale = gate
-        self._drop_scale = gate * self._loot_scale
-        card = s.battle_card
-        try:
-            msgs = self._squad_encounter(foe.id, wild=True)
-        finally:
-            self._loot_scale = self._drop_scale = self._gate_scale = 1.0
-        record = next((r for r in s.battles if r.id == s.battle_card), None) if s.battle_card != card else None
-        won = record is not None and record.tier in team.WIN_TIERS
-        # 以弱勝強：打贏了才回頭看開打那一刻的威力對這一路的勝算（team.odds_word，固定種子、不碰 Game.rng；沒打贏、沒懸賞的趟都不算勝算，2e）
-        self._outing_upset = won and team.odds_word(record.our_power, foe) in outing_rules.FEAT_ODDS
-        if not won:
-            self._outing_close.discard("outlevel")  # FB-881：「對手配不上你，所得有限」只在打贏、真的因為對手檔打了折才寫；輸了、平手不寫
-        if record is not None:
-            record.label = battlelog.OUTING_LABEL
-        if won and not town:
-            done = bounties.on_win(s, c, self.world, loc.id, foe.id)
-            changes, notes = battlelog.split_changes(done, for_record=True)
-            record.changes += changes
-            record.notes += notes
-            msgs += done
-        if won and not town and (self._practice_tier(loc) or 0) >= 1:
-            s.player.newbie_marks.add("field2")  # 新手目標：在二級以上的地方打贏一場（這一季沒有尋敵，遭遇拍打贏也算，FB-816）
-        tier = record.tier if record is not None else "落敗"
-        if town:
-            return msgs, "town_win" if won else "town_draw" if tier == "僵持" else "town_lose", won  # 平手有自己的句子（FB-819）
-        return msgs, "win" if won else "draw" if tier == "僵持" else "lose", won
-
-    def _fight_gate(self, foe: Squad) -> float:
-        """遭遇拍這一場的倍數（減法季三道閘的前兩道，整合設計 4.2；Config.jianfa 的 drill_gates）：今天第幾場（PlayerState.fights_today，
-        台灣 00:00 換日、照 _pill_day）的疲勞（growth.fatigue_factor：前 drill_full_per_day 場 1，之後每場 ×drill_decay，最低 drill_floor）
-        乘對手的檔（growth.outlevel_factor：對手難度的檔比自己等級的檔低一檔 0.5、兩檔 0.1）。關著是 1、也不記場數（存檔一個鍵都不多）。
-        打了折的那一道記進 _outing_close（段落結尾那一句：tired、outlevel）；outlevel 在 _outing_fight 看到這一場沒打贏時收回（FB-881：
-        輸了、平手沒拿到東西，不是因為對手檔）。"""
-        s, c = self.state, self.content
-        if not jianfa(c, s.world, "drill_gates"):
-            return 1.0
-        cfg, p = c.config.jianfa, s.player
-        today = self._pill_day()
-        n = growth.nth_fight(fight_day=p.fight_day, fights_today=p.fights_today, today=today)
-        p.fight_day, p.fights_today = today, n
-        tired = growth.fatigue_factor(cfg, n)
-        matched = growth.outlevel_factor(cfg, p.member.level, foe.difficulty)
-        if tired < 1:
-            self._outing_close.add("tired")
-        if matched < 1:
-            self._outing_close.add("outlevel")
-        return tired * matched
+    def _outing_fight(self, loc: Location, plan: explore_actions.OutingPlan) -> tuple[list[str], str, bool]:
+        return explore_actions.outing_fight(self, loc, plan)
 
     def fatigue_next(self) -> float:
-        """下一場遭遇的疲勞倍數（同 _fight_gate 的第一道，只讀、不記場數）：假人打探索的分數、量表讀；三道閘關著是 1。"""
-        s, c = self.state, self.content
-        if not jianfa(c, s.world, "drill_gates"):
-            return 1.0
-        p = s.player
-        n = growth.nth_fight(fight_day=p.fight_day, fights_today=p.fights_today, today=self._pill_day())
-        return growth.fatigue_factor(c.config.jianfa, n)
+        return explore_actions.fatigue_next(self)
 
-    def _outing_event(self, loc: Location, kind: str, rng: random.Random, boost: float = 1.0) -> list[str]:
-        """事件拍（設計 4.1）：一次性奇遇先擲 rare_explore_chance（可重複的一則都沒有時直接是它）；沒中照防重複輪替抽這裡可重複的事件，
-        野類的地點有標了「旅人」的就在那幾則裡抽（救助旅人那一類）。抽到就端出來（pending_event），一則都沒有是空的。"""
-        s, c = self.state, self.content
-        common = event_candidates(s, c, "explore", "common")
-        if event_candidates(s, c, "explore", "rare") and (rng.random() < c.config.rare_explore_chance * boost or not common):
-            if self._beat is not None:
-                self._beat["rare"] = True
-            return self._present(pick_event(s, c, "explore", rng, "rare"), "explore")
-        travelers = [e for e in common if explore_one.TRAVELER in e.tags] if kind == explore_one.WILD else []
-        event = event_rules.pick_from(s, c, travelers, "explore", rng) if travelers else None
-        event = event or pick_event(s, c, "explore", rng, "common")
-        return self._present(event, "explore") if event is not None else []
-
-    def _outing_ledger(self, msgs: list[str], since: int) -> str:
-        """出門一趟最後那一行「得：…　失：…」：這一趟的訊息裡撿到的東西（「獲得 精鐵砂 ×1」，只列這種「名 ×數量」的；破境丹、回體丹
-        那一句說明不是一樣東西，帳上只列它後面的「破境丹 +1」，FB-831）與數值變化，加上草稿裡另外補的（仗的經驗，since 之後那幾筆）；
-        同一個標籤加總，增加的寫在「得」、減少的（與內傷）寫在「失」。"""
-        extra = self._draft.changes[since:] if self._draft is not None else []
-        changes, notes = battlelog.split_changes(msgs)
-        totals = journal.combine_changes(changes + extra)
-        grants = (note.removeprefix(materials.GRANT_PREFIX) for note in notes if note.startswith(materials.GRANT_PREFIX))
-        items = explore_one.merge_items(item for item in grants if explore_one.is_item(item))
-        gains = items + [ch for ch in totals if journal.change_class(ch) == "tx-up"]
-        losses = [ch for ch in totals if journal.change_class(ch) == "tx-down"]
-        return explore_one.ledger(gains, losses)
-
-    # ── 走一趟（tianxia/outing.py；企劃者 2026-10-29～30）──
+    # ── 走一趟（企劃者 2026-10-29～30）：本體在功能包 tianxia/features/explore/outing_actions.py（主動搬六包第 3＋4 批），這裡留一行委派 ──
 
     def outing_go(self, total: int = 0) -> list[str]:
-        """走一趟：total 是段數（Config.jianfa.outing_segments）就出發；0 是停在要選的事上、選完之後接著走。
-        出發要閒著（選單上的探索按得下去）、體力夠走完這麼多段；每一段照舊扣一次探索的體力，沒走的段不扣。
-        回的訊息只有拒絕的那一句：沿路發生的事都在 PlayerState.outing（outing.view）與每一段自己的江湖紀錄裡。"""
-        s, c = self.state, self.content
-        p = s.player
-        if not outing_rules.on(c, s) or prologue_rules.active(s, c) or p.journey is not None:
-            return ["（此刻無法這麼做。）"]
-        if total:
-            if total not in outing_rules.segments(c):
-                return ["（此刻無法這麼做。）"]
-            if self._explore_ready() is None:
-                return ["（此刻無法這麼做。）"]
-            if p.stamina < outing_rules.cost(c, total):
-                return ["（體力不夠走這麼多段。）"]
-            p.outing = Outing(place=p.location, total=total, n=(p.outing.n + 1) if p.outing is not None else 1)
-        else:
-            trip = p.outing
-            if trip is None or trip.end:
-                return ["（此刻無法這麼做。）"]
-            if trip.place != p.location:
-                trip.end = outing_rules.LEFT
-                return [outing_rules.END_LINES[outing_rules.LEFT]]
-        return self._outing_walk()
-
-    def _explore_ready(self) -> Option | None:
-        """選單上的探索此刻按得下去就回那一顆（閒著、體力夠一段）；不然是 None。"""
-        option = {o.id: o for o in self.options(odds=False, tick=False)}.get(IDLE_MARK)
-        return option if option is not None and option.enabled else None
+        return outing_actions.outing_go(self, total)
 
     def outing_view(self) -> dict | None:
-        """/api/main 的 outing（outing.view）加 can_go：停在要選的事上的那一趟，事情選完了、可以接著走（網頁照它自己送「接著走」；
-        最後一段是要選的事時，接著走只是把這一趟收成「走完」）。關著是 None。"""
-        view = outing_rules.view(self.state, self.content)
-        if view is not None and view["trip"] is not None:
-            trip = view["trip"]
-            trip["can_go"] = self.outing_can_go()
-            if trip["can_say"]:
-                trip["ink"] = self.outing_ink_left()
-                trip["ink_item"] = self.wallet.item_for(outing_rules.INK)
-                trip["people"] = [o.player.name for o in social.here(self)]  # 結算卡的「此地還有」：點名字開玩家卡打招呼、邀結伴
-            trip["admin"] = self.is_admin()
-        return view
+        return outing_actions.outing_view(self)
 
     def outing_can_go(self) -> bool:
-        """停下來的那一趟可以接著走了：事情選完了（探索回到選單上；體力不夠一段也算，接著走會把它收成「累了」）。"""
-        if outing_rules.active(self.state) is None:
-            return False
-        return IDLE_MARK in {o.id for o in self.options(odds=False, tick=False)}
+        return outing_actions.outing_can_go(self)
 
     def _outing_watched(self, fn, *args, **kwargs):
-        """走一趟停在要選的事上（還沒選完）時做的這一下：照做，做完把這一下寫進江湖紀錄的得失（新的那幾則的數值變化、撿到的東西）
-        與另外扣的體力記在那一段（OutingBeat.after）——結果那一行、結算卡、「走一趟」那一則才寫得出數字（Joy 10/31）。
-        不在路上、已經選完、正在走（_outing_walk 自己的探索）都照做、什麼都不記。"""
-        trip = outing_rules.active(self.state)
-        if getattr(self, "_outing_busy", False) or trip is None or not trip.beats or not trip.beats[-1].stop or self.outing_can_go():
-            return fn(self, *args, **kwargs)
-        p, beat = self.state.player, trip.beats[-1]
-        stamina, before = p.stamina, {id(e): e for e in self.state.journal}
-        head = self.state.journal[0] if self.state.journal else None
-        self._outing_busy = True
-        try:
-            out = fn(self, *args, **kwargs)
-        finally:
-            self._outing_busy = False
-        changes, notes = [], []
-        for e in self.state.journal:
-            if id(e) in before or journal.is_world_entry(e):
-                continue
-            merged = head is not None and id(head) not in {id(x) for x in self.state.journal} and e is self.state.journal[0] \
-                and e.title == head.title  # 併進了原本最新那一則：只算這一下多出來的
-            changes += [outing_rules.plain(x) for x in (journal.subtract_changes(e.changes, head.changes) if merged else e.changes)]
-            notes += e.lines
-        spent = round(stamina - p.stamina)
-        grants = (n.removeprefix(materials.GRANT_PREFIX) for n in notes if n.startswith(materials.GRANT_PREFIX))
-        parts = outing_rules.ledger_parts(beat.after) + list(grants) + changes + ([f"體力 -{spent}"] if spent > 0 else [])
-        items = explore_one.merge_items(x for x in parts if explore_one.is_item(x))
-        totals = journal.combine_changes([x for x in parts if not explore_one.is_item(x)])
-        beat.after = explore_one.ledger(items + [x for x in totals if journal.change_class(x) == "tx-up"],
-                                        [x for x in totals if journal.change_class(x) == "tx-down"])
-        return out
-
-    def _outing_walk(self) -> list[str]:
-        """一段一段走（每一段是一次 choose(act:explore)，各寫各的江湖紀錄）：端出要選的事就停；打輸、氣血低於 outing_turn_back
-        回頭；體力不夠一段也回頭。走完了寫 end。"""
-        s, c = self.state, self.content
-        p, cfg = s.player, c.config.jianfa
-        trip = p.outing
-        while trip.done < trip.total and not trip.end:
-            if self._explore_ready() is None:
-                if IDLE_MARK in {o.id for o in self.options(odds=False, tick=False)}:
-                    trip.end = outing_rules.TIRED  # 探索在選單上但灰了：體力不夠一段
-                break  # 不在選單上：還有事要選（不該走到這裡；保險）
-            self._beat = None
-            stamina, self._outing_busy = p.stamina, True
-            try:
-                msgs = self.choose(IDLE_MARK)
-            finally:
-                self._outing_busy = False
-            beat, self._beat = self._beat or {"kind": explore_one.MATERIAL, "rare": False, "won": None}, None
-            lines = [m for m in msgs if isinstance(m, str)]
-            ledger = lines[1] if len(lines) > 1 and lines[1].startswith(("得：", "失：")) else ""
-            stop = IDLE_MARK not in {o.id for o in self.options(odds=False, tick=False)}
-            trip.done += 1
-            trip.beats.append(OutingBeat(kind=beat["kind"], text=lines[0] if lines else "", ledger=ledger, rare=bool(beat["rare"]),
-                                         won=beat["won"], stop=stop, feat=beat.get("feat", ""), feat_kind=beat.get("feat_kind", ""),
-                                         foe=beat.get("foe", ""), spent=max(0, round(stamina - p.stamina))))
-            now, cap = team.member_neili(c, p.member, team.con_of(s, c, self.world, PLAYER), season=s.world)
-            if beat.get("lost"):
-                trip.end = outing_rules.LOST
-            elif cap > 0 and now < cap * cfg.outing_turn_back:
-                trip.end = outing_rules.HURT
-            if stop:
-                break
-            if trip.end != outing_rules.LOST:
-                self._outing_trace(trip)
-        if not trip.end and trip.done >= trip.total and IDLE_MARK in {o.id for o in self.options(odds=False, tick=False)}:
-            trip.end = outing_rules.DONE  # 最後一段端出要選的事時先不收：選完、接著走那一下才收
-        if trip.end:  # 撿到稀世的東西、以弱勝強（Joy 10/30：只有這種才值得記）：一段一則行狀、世界記事一筆（此地舊事、人物對話讀得到）
-            place = c.locations[trip.place].name if trip.place in c.locations else trip.place
-            # 整趟的得失收成一則（「剛剛」放它；留一句併進這一則，不會只剩留字，Joy 10/31）
-            items, totals = outing_rules.trip_totals(trip)
-            lines = [f"走了 {trip.done} 段。{outing_rules.END_LINES.get(trip.end, '')}".strip()] + (
-                [f"撿到：{'、'.join(items)}"] if items else [])
-            journal.add_entry(s, JournalEntry(time=s.world.time, title=outing_rules.TRIP_TITLE.format(place=place),
-                                              tag=outing_rules.END_TITLES.get(trip.end, ""), lines=lines, changes=totals))
-            for b in trip.beats:
-                if b.feat:
-                    annals.note(s, c, annals.DEED, outing_rules.FEAT_ANNAL[b.feat_kind].format(place=place, what=b.feat), 3, place=place)
-                    deeds.record(s, c, outing_rules.DEED_KIND, outing_rules.FEAT_DEED[b.feat_kind].format(name=p.name, place=place, what=b.feat),
-                                 place=trip.place, actors=[p.name])
-        return []
-
-    def _outing_trace(self, trip: Outing) -> None:
-        """一段走完、沒停下：擲一下路上有沒有看到東西（outing_trace_chance）——這一處有別人、這一趟還沒揮過手的話先是遠處有人揮手，
-        不然是一則別人的留言。一趟最多 outing_trace_cap 行，不佔段數。亂數另起（outing.trace_rng），Game.rng 一個都不動。"""
-        c = self.content
-        if outing_rules.traces_left(trip, c) <= 0:
-            return
-        rng = outing_rules.trace_rng(self.state, trip)
-        if rng.random() >= c.config.jianfa.outing_trace_chance:
-            return
-        beat = None
-        if not trip.waved:
-            beat = outing_rules.wave_beat([o.player.name for o in social.here(self)], rng)
-            trip.waved = beat is not None
-        if beat is None:
-            beat = outing_rules.seen_beat(self.state, c, trip, rng)
-        if beat is not None:
-            trip.beats.append(beat)
+        return outing_actions.outing_watched(self, fn, *args, **kwargs)
 
     def outing_say(self, preset: int = -1, text: str = "", verdict: str = "") -> list[str]:
-        """走完一趟在這一處留一句（outing.say_ok）：preset 是預設句的第幾句（免費）；不然是自己寫的 text（伺服器量過長度、
-        鎖外審過，verdict 是模型的判斷），過字表（speech.problem，同名帖自題那一套），用掉一張題壁墨（商城 inscribe）。
-        成了刻進這一處（outing.inscribe）、寫一則江湖紀錄；不成只回一句、什麼都不動。"""
-        s, c = self.state, self.content
-        if not outing_rules.on(c, s):
-            return ["（此刻無法這麼做。）"]
-        trip = outing_rules.say_ok(s)
-        if trip is None:
-            p = s.player
-            return [outing_rules.SAY_AGAIN if p.outing is not None and p.outing.said else outing_rules.SAY_NOT_HERE]
-        token = None
-        if 0 <= preset < len(outing_rules.PRESETS):
-            line, is_preset = outing_rules.PRESETS[preset], True
-        else:
-            line, is_preset = speech.clean(text), False
-            if not line:
-                return [outing_rules.SAY_EMPTY]
-            problem = speech.problem(line, c, speech.MOTTO, c.config.jianfa.outing_say_max, verdict)
-            if problem is None and any(word in line for word in tavern_rules.BANNED_WORDS):
-                problem = speech.BLOCKED  # 同酒肆題壁：牆上不寫這幾個字
-            if problem:
-                return [problem]
-            left = self.wallet.tokens(outing_rules.INK)
-            if not left:
-                return [outing_rules.NO_INK]
-            token = left[0]
-        place = c.locations[trip.place].name if trip.place in c.locations else trip.place
-        item = outing_rules.inscribe(s, c, line, preset=is_preset)
-        self._save_season()  # 留言刻在全服這一季（WorldState.inscriptions），不寫回共用賽季的話下一次重讀就沒了
-        if token is not None:
-            self.wallet.consume(outing_rules.INK, place=trip.place, inscription=item.id)  # 用掉的就是上面查到的那一張（最舊的）
-        said = outing_rules.SAY_DONE.format(place=place, text=line)
-        journal.add_entry(s, JournalEntry(time=s.world.time, title=outing_rules.TRIP_TITLE.format(place=place), lines=[said],
-                                          changes=[] if token is None else ["題壁墨 -1"]), merge=True)  # 併進這一趟那一則（Joy 10/31）
-        return self._log([said])
+        return outing_actions.outing_say(self, preset, text, verdict)
 
     def outing_tale_request(self) -> outing_rules.TaleRequest | list[str]:
-        """遊記的 A 段（只讀）：這一趟收了、還沒請過模型就開單；不然回一句（不叫模型）。"""
-        req = outing_rules.tale_request(self.state, self.content)
-        return ["（此刻無法這麼做。）"] if req is None or not outing_rules.on(self.content, self.state) else req
+        return outing_actions.outing_tale_request(self)
 
     def outing_set_tale(self, text: str | None, request: outing_rules.TaleRequest) -> list[str]:
-        """遊記的 C 段：還是同一趟（outing.same_trip）才收；text 是 None（叫不動、不合用）就記成請過了、畫面照用模板。"""
-        trip = outing_rules.same_trip(self.state, request)
-        if trip is None:
-            return []
-        trip.tale, trip.tale_done = text or "", True
-        return []
+        return outing_actions.outing_set_tale(self, text, request)
 
     def outing_ink_left(self) -> int:
-        """手上還沒用掉的題壁墨幾張；商城關著是 0。"""
-        return len(self.wallet.tokens(outing_rules.INK))
+        return outing_actions.outing_ink_left(self)
 
     def admin_erase_inscription(self, ins_id: int) -> list[str]:
-        """管理者抹掉一則留言（路上那一行的 ref）。不是管理者、沒有這一則都回同一句「此刻無法」。"""
-        if not self.is_admin() or not outing_rules.erase(self.state, ins_id):
-            return ["（此刻無法這麼做。）"]
-        self._save_season()
-        return self._log([outing_rules.ERASED])
+        return outing_actions.admin_erase_inscription(self, ins_id)
 
     def is_idle(self) -> bool:
         """此刻閒著（切磋、論武、假人答論武都問它）：選單上有探索（IDLE_MARK）——不在路上、沒有事件、對話、店面的選單擋著、不在開打的決戰裡。
@@ -10028,7 +9553,7 @@ class Game:
         操練（_drill）與出陣的守（_sortie_hold）、守勢行動（_duty）共用；一類一顆開著時守、守勢行動給全額（_hold_share）。
         source（growth.exp_source）：這幾樣都不打仗（hold，PM 2026-10-25 第 5 件）；減法季自家營寨跟同袍比劃算仗（camp_spar）。
         echo：「心得 +N」那一行要不要也放進回傳的訊息。江湖紀錄的標籤本來就由草稿（_draft.changes）記一顆、訊息那一行在敘事裡收掉；
-        出門一趟的比劃（_outing_fight）自己有「得：」那一行，兩邊都有就被 _outing_ledger 加成兩倍、後面還多一則單獨的訊息
+        出門一趟的比劃（_outing_fight）自己有「得：」那一行，兩邊都有就被 explore_actions.outing_ledger 加成兩倍、後面還多一則單獨的訊息
         （FB-830），所以它傳 False：只由草稿記。沒有草稿時（直接叫的）照樣放進訊息，帳才不會漏掉這一筆。"""
         s, c = self.state, self.content
         p = s.player

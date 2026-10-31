@@ -190,12 +190,24 @@ def _feature_imports_cached(path: Path) -> tuple[tuple[int, str], ...]:
 # 瘦下來的 Game（engine.py）也是核心（手冊 3.1）。3.10 准它留一行的委派，所以它是核心裡唯一另外 import 包的地方：只准下面這幾樣，
 # 多一處就紅（要接一包先想掛鉤；真的要過渡就加進這裡、回報寫明）。第 2 階呼叫端改叫包、委派拿掉時從這裡刪。
 GAME_IMPORTS = {
+    # explore（主動搬六包第 3＋4 批）：走一趟 9 個、探索一顆 9 個一行委派；原本那一行 `from . import outing as outing_rules` 現在是別名
+    # （有所感照舊讀 rare_boost，見 GAME_DIRECT 的 _sense）；原本的 `from . import explore_one` 拿掉了（engine 不再用它）
+    "tianxia.features.explore.outing_actions", "tianxia.features.explore.explore_actions", "tianxia.outing",
     "tianxia.features.mall.actions", "tianxia.features.feast.actions",
     # 出陣（主動搬六包第 1 批）：13 個一行委派；原本那一行 `from . import (..., sortie, ...)` 現在是別名（engine 照舊叫 sortie.on、
     # sortie.NAME 這些字，見 GAME_DIRECT）；混戰的字搬進包，tests/ranger/test_raid.py 照舊從 engine 拿那三個
     "tianxia.features.sortie.actions", "tianxia.sortie", "tianxia.features.sortie.rules",
 }
 GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
+    # explore（主動搬六包第 3＋4 批）：走一趟 9 個（1 個私有）——server、bot、bot_policy、測試在叫的 8 個，與 engine 模組層的 _outing_watch
+    # （套在 choose、answer_event、epiphany_names、sense_draw 上；不是 Game 的方法，掃描看不到）叫的 _outing_watched
+    "outing_go", "outing_view", "outing_can_go", "_outing_watched", "outing_say", "outing_tale_request", "outing_set_tale",
+    "outing_ink_left", "admin_erase_inscription",
+    # 探索一顆 9 個（5 個私有）：核心原位在叫的 5 個（_outing_on：_act、_action_title、_everyday_options、action_notes；_outing_plan：
+    # action_notes；_outing_option：_everyday_options；_explore_one：_act；map_mostly：map_base、map_state），server、bot_policy、腳本、
+    # 測試在叫的 mostly_here、outing_plan、fatigue_next、_outing_fight（出陣包經 ctx 叫 _outing_on、包裡經 ctx 叫 _outing_plan、outing_plan）
+    "_outing_on", "_outing_plan", "mostly_here", "outing_plan", "map_mostly", "_outing_option", "_explore_one", "_outing_fight",
+    "fatigue_next",
     "mall_buy", "mall_entry", "mall_rename_left", "mall_rename", "mall_claim", "mall_view", "mall_records",
     "admin_mall_reissue", "admin_mall_revoke", "admin_mall_refund", "admin_mall_ledger", "_mall_grant",
     "feast_free_text_prompt", "feast_text_request", "feast_toast",
@@ -206,6 +218,9 @@ GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
 }
 _SORTIE_SEAM = "接縫留在原位（批次表第二節：會影響先後的接縫這一輪不開掛鉤，第 11 批一次收）"
 GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；過渡）
+    # explore（主動搬六包第 3＋4 批）：用到 outing 這個名字（現在是探索包 outing_rules 的別名）的只剩有所感
+    "_sense": "有所感畫完那一筆擲特殊頓悟（epiphany.roll 的 boost＝outing_rules.rare_boost：走一趟段數越多越容易來）：sense:* 的分派"
+              "留在核心；等探索包開「此刻稀有的乘多少」的查詢服務時改叫它",
     "_own_scene_text": "坐在宴席上的場景卡（feast_actions.scene）：場景卡還沒有掛鉤；搬包之前也不看宴客開關",
     # 出陣（主動搬六包第 1 批）：下面這些方法用到 sortie 這個名字（現在是出陣包 rules 的別名）——開關（sortie.on＝territory.on）、
     # 鈕上的字（NAME、USED_UP、LEFT_NOTE、OUT_NOTE……）、次數（spend）
@@ -227,10 +242,17 @@ GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；�
     "sortie_join": "出陣約戰（第 2 批搬）：同去（sortie.spend）",
 }
 GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）
+    # explore（主動搬六包第 3＋4 批；審查修正：獨立一段放最前面，不夾在出陣那幾行中間）：核心叫探索委派一共 9 對，掃描看得到這 2 對；
+    # 另外 7 對的呼叫端本身在 GAME_DIRECT 裡——(_act, _outing_on)、(_act, _explore_one)、(_everyday_options, _outing_on)、
+    # (_everyday_options, _outing_option)、(action_notes, _outing_on)、(action_notes, _outing_plan)、(map_state, map_mostly)：
+    # dev/sortie-2 把掃描改成連 GAME_DIRECT 的方法裡叫的也記，合併之後補進來。
+    # 出陣第 1 批記的 (_outing_foe, _sortie_host) 拿掉了（下面出陣那一段少了那一行）：_outing_foe 進了探索包，經 ctx._sortie_host 叫
+    # （服務清單二、查詢服務）
+    ("_action_title", "_outing_on"): "這一下的紀錄標題先算（act:explore 是核心的前綴：探索一顆開著寫「出門一趟・某地」，關著寫「探索某地」）",
+    ("map_base", "map_mostly"): "輿圖的底圖：名字旁的兩個字照看的人站過去之後的比重（探索一顆開著時；輿圖的線還在飛，這一輪不碰）",
     ("own_turn_checks", "_mall_grant"): "封測元寶每一輪發（本人這一輪沒有掛鉤；on_sync 不夠：假人程式的那一輪不 sync）",
     # 出陣（主動搬六包第 1 批）。核心叫出陣委派一共 21 對：另外 15 對的呼叫端本身在 GAME_DIRECT 裡（掃描對它們不另記）
     ("_action_title", "_train_title"): "這一下的紀錄標題先算（act:train 是核心的前綴，標題照出陣開著沒、序章寫出陣／雪恥／遊歷）",
-    ("_outing_foe", "_sortie_host"): "走一趟（探索）在自家營寨遇上的是自家那一路（出陣的守拿的同一路）；探索搬成包時改成查詢服務",
     ("_duel_report", "_sortie_rewards"): "出陣約戰（第 2 批搬）：結算時攻方打贏給出陣的獎勵",
     ("_duel_report", "sorties_left"): "出陣約戰（第 2 批搬）：約戰卡上今天還能出陣幾次",
     ("sortie_card", "sorties_left"): "出陣約戰（第 2 批搬）：出陣前那張卡",
@@ -472,7 +494,7 @@ def test_the_scanner_catches_a_crossing(source, expected):
 def test_the_old_names_left_as_aliases_are_known():
     """tianxia/mall.py、tianxia/feasts.py、tianxia/sortie.py 是指到包裡同一個模組的別名（給還沒改的測試與舊模組）：掃描照它們指到的那一包算，
     不算舊模組。"""
-    assert aliases() == {"feasts": "feast", "mall": "mall", "sortie": "sortie"}
+    assert aliases() == {"feasts": "feast", "mall": "mall", "sortie": "sortie", "outing": "explore", "explore_one": "explore"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 

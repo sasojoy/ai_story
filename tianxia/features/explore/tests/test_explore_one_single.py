@@ -108,7 +108,7 @@ def test_a_strike_bounty_here_makes_every_trip_that_bounty_fight_and_handing_it_
 @pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_the_paragraph_of_one_trip_has_no_three_beat_connectives():
     """正式內容的句子庫與真的出門回來的那一段，都不出現接著、最後這類三拍才有的接續字。"""
-    lines = json.loads((Path(__file__).resolve().parents[2] / "content" / "outing_lines.json").read_text(encoding="utf-8"))
+    lines = json.loads((Path(__file__).resolve().parents[4] / "content" / "outing_lines.json").read_text(encoding="utf-8"))
     sentences = [s for group in lines.values() for pool in group.values() for s in pool]
     assert sentences and not [s for s in sentences if any(word in s for word in CONNECTIVES)]
     game = ready(jianfa_game(), side="guan", loc="yingshui")

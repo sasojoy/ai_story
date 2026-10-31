@@ -150,7 +150,7 @@ def pick_event(
 
 def pick_from(state: GameState, content: Content, candidates: list[Event], action: str, rng: random.Random) -> Event | None:
     """在給定的幾則裡照防重複輪替、照權重抽一則（同 pick_event 的寫法，只是候選由呼叫端先篩：減法季探索一顆的野類地點先在「旅人」那幾則
-    裡抽，Game._outing_event）。不改狀態；一則都沒有是 None。"""
+    裡抽，探索包 explore_actions.outing_event）。不改狀態；一則都沒有是 None。"""
     fresh = _fresh_among(state, tiers.narrow(state, content, candidates, rng), action)  # 事件分級：先挑一階
     if not fresh:
         return None

@@ -487,8 +487,9 @@ def test_the_web_scripts_are_the_ones_every_web_test_loads():
     package_js = {name for name in test_for.feature_web() if name.endswith(".js")}
     assert package_js and not package_js & test_for.WEB_SCRIPTS
     assert test_for.WEB_SCRIPTS | package_js == app_files
+    # 走一趟的 outing.js 主動搬六包第 3＋4 批登記成探索包的網頁檔：照那一包挑（寫到它的 test_outing_web 照樣在），不再照 app.js 一大批
     outing = _names(["web/outing.js"])
-    assert {"test_server.py", "test_outing_web.py"} < outing and _names(["web/app.js"]) <= outing
+    assert "test_outing_web.py" in outing and "test_server.py" not in outing and test_for.feature_web()["outing.js"] == "explore"
 
 
 def test_feature_web_is_what_the_packages_register():
