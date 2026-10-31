@@ -893,7 +893,7 @@ class DuelScenario(Scenario):
         "乙八": "huang",
     }
     NEWBIE = "丙一"  # Scenario.setup 註冊、不投靠的那一位：這一軌的散人
-    BOT = ("假乙", "huang")  # 只有黃巾那一邊有一個假人：官軍貼的沒人應由他補位（D3），黃巾貼的連假人都沒有由守軍迎戰（D4）
+    BOT = ("假乙", "huang")  # 只有黃巾那一邊有一個假人：官軍貼的沒人應由他補位（D0），黃巾貼的連假人都沒有由守軍迎戰（D4）
     LOC, FAR = "runan_wilds", "nanyang_road"  # 汝南荒野（潁汝的中立地，兩軍開季都碰得到）、南陽官道（別區的中立地）
     MOVES = "強攻,固守,奇襲"
     PHASES_FIRST = ["setup", "join", "seat", "look", "pick", "refuse_post", "post_d0", "refuse_answer", "fill", "post_d1", "answer_d1",
