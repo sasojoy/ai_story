@@ -26,7 +26,7 @@
 
 | 區塊 | 管什麼 | 模組（`tianxia/`） | 原本「規則速查」的節 |
 |---|---|---|---|
-| [核心與存檔](docs/guide/核心與存檔.md) | 門面、存檔與全服狀態、規則核心（條件與效果、事件、世界、性別、行狀與傳）、事件檢定、減法季的開關、真人量表 | database、world_state、characters、accounts、playlog、models、rules、gender、events、tiers、world、annals、biography、journal、guide、newbie、prologue、opening、storyline | 事件檢定 |
+| [核心與存檔](docs/guide/核心與存檔.md) | 門面、存檔與全服狀態、規則核心（條件與效果、事件、世界、性別、行狀與傳）、事件檢定、減法季的開關、真人量表 | database、world_state、log_archive、characters、accounts、playlog、models、rules、gender、events、tiers、world、annals、biography、journal、guide、newbie、prologue、opening、storyline | 事件檢定 |
 | [行動與地盤](docs/guide/行動與地盤.md) | 體力與行動、探索三選一、出陣、交友求見、閉關、移動、醫館、地盤易手、設伏與工事 | territory、sortie、explore_modes、training、gather_llm、clinic、ambush、works | 行動、屬性、威力與氣血、地盤易手（每季都有，`Config.territory`；`tianxia/territory.py`）、後期體力玩法（第一批，Joy 2026-10-16；2026-10-16 合進 main〔ff60ed83〕，正式內容三個開關都關著，數字等 21 天的季一起定） |
 | [戰鬥](docs/guide/戰鬥.md) | 屬性與威力、單次判定、回合與戰法、大場面、頭目戰、擂台、全服決戰、江湖水漲 | encounter、team、rounds、tactics、battlelog、styles、fight_llm、duel、arena、arena_crowd、escorts、generals、battle_instance、tale、rise、terrain | 屬性、威力與氣血、戰鬥的演出與大場面、第一季濃縮版（`rules.season_one` 開著時才有）、江湖水漲（大場面、頭目、事件跟得上變強的人）、擂台賽（每季都有，`Config.arena`；設計 `docs/superpowers/specs/2026-10-14-擂台賽-design.md`）、全服決戰 |
 | [武學與成長](docs/guide/武學與成長.md) | 等級、武學、意境槽、兩種合成、自創、絕學、口訣秘方、熔煉、傳功 | martial_arts、arts、insight_fx、insights、epiphany、fusion、create、secret_recipes、naming、signature、cultivation、library、chuangong、skillview | 行動、屬性、威力與氣血、武學與成長（武學與成長設計；計畫一～三、二之二、二之三、四、五都已在 main）、第一季濃縮版（`rules.season_one` 開著時才有） |

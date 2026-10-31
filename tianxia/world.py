@@ -10,12 +10,12 @@ from . import arena, battle_instance, bounties, calendar, figure_life, figures, 
 from .features.feast import rules as feasts  # 宴客的散席（功能包；還沒搬的舊模組可以 import 包，開發規範手冊 3.11）
 from . import stances as stance_rules  # 人物心意（減法季批 6）；rules.stances（陣營的態勢）在這個檔裡也叫 stances
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
-from .ollama_client import OllamaClient
 from .rules import (
     add_chronicle, add_rumor, add_world_flags, change_trend, check_condition, geju_tick, recompute_trends,
     decisive_week, ends_early, resolve_trends, season_one, season_one_off, stance_sides, stances, trend_shown, trend_value,
 )
 from .state import GameState, PlayerState, Rumor, TimelineResult, WorldState
+from .flavor import FlavorJob
 from .world_state import WorldStateStore, season_length_days
 
 HOUR = 3600
@@ -50,12 +50,11 @@ def _now_for_battle(now: float | None) -> float:
 
 
 def check_thresholds(
-    state: GameState, content: Content, world: WorldStateStore | None = None, client: OllamaClient | None = None,
+    state: GameState, content: Content, world: WorldStateStore | None = None, polish: list[FlavorJob] | None = None,
     now: float | None = None,
 ) -> list[str]:
-    """依序處理大勢門檻、世界事件（各只觸發一次），最後更新主線進度。world/client 給
-    _fire() 用來潤色江湖大事的傳聞文字（設計文件 8.2 第 4 點）；不傳就是原本的純文字，
-    兩者都是選填，不影響既有呼叫端或測試。"""
+    """依序處理大勢門檻、世界事件（各只觸發一次），最後更新主線進度。world 給 _fire() 讀全服共用的潤色句（設計文件 8.2
+    第 4 點）；polish 給了的話，還沒潤色過的那一件記一張單子進去，等行動鎖放掉再請模型（見 _fire）。都是選填。"""
     w = state.world
     msgs: list[str] = []
     if w.ended:
@@ -70,7 +69,7 @@ def check_thresholds(
             continue
         msgs += _fire(
             state, content, th.id, th.text, th.world_flags_add, th.ends_season, th.starts_battle, th.location,
-            world, client, now,
+            world, polish, now,
         )
         if w.ended:
             return msgs
@@ -80,7 +79,7 @@ def check_thresholds(
             continue
         msgs += _fire(
             state, content, event.id, event.text, event.world_flags_add, event.ends_season, event.starts_battle,
-            event.location, world, client, now,
+            event.location, world, polish, now,
         )
         if w.ended:
             return msgs
@@ -90,8 +89,11 @@ def check_thresholds(
 def _fire(
     state: GameState, content: Content, fire_id: str, text: str, flags: list[str], ends_season: bool,
     starts_battle: str | None = None, location: str | None = None, world: WorldStateStore | None = None,
-    client: OllamaClient | None = None, now: float | None = None,
+    polish: list[FlavorJob] | None = None, now: float | None = None,
 ) -> list[str]:
+    """觸發一件江湖大事。潤色句（S-09，2026-10-31）：鎖內只用全服已經快取好的那一句；還沒有的話這一下先寫固定的原文，
+    polish 給了就記一張單子（FlavorJob），由伺服器在行動鎖放掉之後請模型（三段式的 B 段），寫回時（C 段，Game.apply_flavor）
+    存進全服快取、把這一則紀錄換成潤色過的那一句。鎖內一個模型都不叫。"""
     state.world.fired_thresholds.add(fire_id)
     add_world_flags(state, flags)
     add_rumor(state, text, location, content=content)
@@ -99,13 +101,10 @@ def _fire(
     shown_text = text
     if world is not None:
         flourish = flavor.clean(world.get_event_flavor(fire_id) or "")  # 舊的快取寫壞了也不再顯示（2026-10-31 自檢以前沒清理）
-        if not flourish and client is not None:
-            flourish = flavor.polish_world_event(client, text)
-            if flourish:
-                world.set_event_flavor(fire_id, flourish)
-                flourish = world.get_event_flavor(fire_id)  # 可能被別的玩家搶先寫入，讀回真正共用的那一份
         if flourish:
             shown_text = f"{text}\n\n{flourish}"
+        elif polish is not None:
+            polish.append(FlavorJob(fire_id, text))
     msgs = [f"【江湖大事】{shown_text}"]
     if starts_battle in season_one_off(content, state.world, "battles"):  # 第一季不開 beta 那場決戰（計畫 T8）
         starts_battle = None
@@ -121,7 +120,7 @@ def _fire(
 
 def fire_by_id(
     state: GameState, content: Content, fire_id: str, world: WorldStateStore | None = None,
-    client: OllamaClient | None = None, now: float | None = None,
+    polish: list[FlavorJob] | None = None, now: float | None = None,
 ) -> list[str] | None:
     """管理者手動觸發：照 id 找大勢門檻或世界事件，照自然觸發的方式觸發一次（旗標、傳聞、江湖史、
     開戰、結束賽季都一樣），再更新主線。已經發生過、找不到這個 id、或是第一季不觸發的 beta 門檻，回傳 None。"""
@@ -135,7 +134,7 @@ def fire_by_id(
         return None
     msgs = _fire(
         state, content, source.id, source.text, source.world_flags_add, source.ends_season, source.starts_battle,
-        source.location, world, client, now,
+        source.location, world, polish, now,
     )
     return msgs if state.world.ended else msgs + update_storyline(state, content)
 

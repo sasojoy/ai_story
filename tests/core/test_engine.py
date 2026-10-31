@@ -1085,7 +1085,7 @@ def test_one_players_action_ending_the_season_propagates_to_another_on_sync(cont
     b = Game.new(content, "乙", rng=random.Random(2), world=world)
     a.state.world.trends["kou"] = 80
     from tianxia.world import check_thresholds
-    check_thresholds(a.state, content, a.world, a.client)
+    check_thresholds(a.state, content, a.world)
     a._save_season()
     assert a.state.world.ended
     assert not b.state.world.ended  # 乙還沒同步

@@ -20,7 +20,7 @@ import server_push
 import webharness
 from conftest import at, season_one_events
 from tianxia import (
-    atlas, battle_instance, calendar, companion_agent, cultivation, database, fight_llm, fusion, insights, naming, renown, skillview, social,
+    atlas, battle_instance, calendar, companion_agent, cultivation, database, fight_llm, fusion, insights, journal, naming, renown, skillview, social,
     sqlite_world, tale, team,
 )
 from tianxia.accounts import NAME_TAKEN
@@ -787,6 +787,75 @@ def test_login_with_a_character_goes_straight_in(client):
     assert client.get("/api/me").json() == {"stage": "login"}
     out = client.post("/api/login", json={"login": "SHEN_01", "password": "secret-pw"}).json()
     assert out["stage"] == "game"
+
+
+def test_a_login_survives_a_server_restart(client):
+    """審查 S-10：登入狀態在資料庫，伺服器重開（記憶體裡的角色快取、連線全清掉）同一個 cookie 照樣進得去；登出之後就不認。"""
+    _player(client)
+    token = client.cookies.get(server.COOKIE)
+    server.GAMES.clear()
+    database.close_all()
+    again = TestClient(server.app)
+    again.cookies.set(server.COOKIE, token)
+    assert again.get("/api/me").json()["stage"] == "game"
+    with database.open_database().snapshot() as conn:  # 資料庫裡只有雜湊
+        stored = [row[0] for row in conn.execute("SELECT token_hash FROM sessions")]
+    assert stored and token not in stored
+    again.post("/api/logout")
+    assert again.get("/api/me").json() == {"stage": "login"}
+
+
+def _register(client, login, headers=None):
+    return client.post("/api/register", json={"login": login, "password": "secret-pw", "again": "secret-pw"}, headers=headers or {})
+
+
+def test_one_address_registers_at_most_five_accounts_an_hour(client, monkeypatch):
+    clock = [1_000.0]
+    monkeypatch.setattr(server.time, "time", lambda: clock[0])
+    for i in range(server.REGISTER_LIMIT):
+        assert _register(client, f"user_{i}").json()["stage"] == "create"
+    over = _register(client, "user_x")
+    assert over.status_code == 400 and over.json() == {"error": server.TOO_MANY_REGISTERS}
+    assert server.account_store().get("user_x") is None
+    clock[0] += server.REGISTER_WINDOW
+    assert _register(client, "user_x").json()["stage"] == "create"  # 過了一小時又可以
+
+
+def test_failed_registrations_do_not_count(client):
+    for _ in range(server.REGISTER_LIMIT + 2):
+        _register(client, "沈")  # 格式不對
+    assert _register(client, "shen_01").json()["stage"] == "create"
+
+
+def test_behind_the_tunnel_each_visitor_counts_on_their_own(monkeypatch):
+    """走 cloudflared 進來時直接連線的一端是本機，照 CF-Connecting-IP 分開算；不是本機連進來的帶那個標頭也不算數。"""
+    local = TestClient(server.app, client=("127.0.0.1", 50000))
+    for i in range(server.REGISTER_LIMIT):
+        assert _register(local, f"a_{i}", {"CF-Connecting-IP": "203.0.113.5"}).json()["stage"] == "create"
+    assert _register(local, "a_x", {"CF-Connecting-IP": "203.0.113.5"}).json() == {"error": server.TOO_MANY_REGISTERS}
+    assert _register(local, "b_0", {"CF-Connecting-IP": "198.51.100.7"}).json()["stage"] == "create"
+    outside = TestClient(server.app, client=("192.0.2.9", 50000))
+    for i in range(server.REGISTER_LIMIT):
+        _register(outside, f"c_{i}", {"CF-Connecting-IP": f"10.0.0.{i}"})
+    assert _register(outside, "c_x", {"CF-Connecting-IP": "10.0.0.99"}).json() == {"error": server.TOO_MANY_REGISTERS}
+
+
+def _set_cookie(response) -> str:
+    return next(v for k, v in response.headers.items() if k == "set-cookie" and v.startswith(server.COOKIE))
+
+
+def test_the_cookie_is_secure_on_https_and_plain_on_local_http(monkeypatch):
+    monkeypatch.delenv(server.PUBLIC_URL_ENV, raising=False)
+    local = TestClient(server.app, base_url="http://127.0.0.1:7861", client=("127.0.0.1", 50000))
+    assert "secure" not in _set_cookie(_register(local, "plain_1")).lower()
+    tunnel = {"X-Forwarded-Proto": "https", "CF-Connecting-IP": "203.0.113.5"}
+    assert "secure" in _set_cookie(_register(local, "tunnel_1", tunnel)).lower()
+    monkeypatch.setenv(server.PUBLIC_URL_ENV, "https://tianxiadashi.com")
+    assert "secure" not in _set_cookie(_register(local, "plain_2")).lower()  # 主機在這台電腦上開 http 照樣登入得了
+    lan = TestClient(server.app, base_url="http://192.168.1.20:7861", client=("192.168.1.30", 50000))
+    assert "secure" not in _set_cookie(_register(lan, "lan_1")).lower()  # --lan 的區網也是 http
+    public = TestClient(server.app, base_url="http://tianxiadashi.com", client=("127.0.0.1", 50000))
+    assert "secure" in _set_cookie(_register(public, "public_1", {"CF-Connecting-IP": "203.0.113.9"})).lower()
 
 
 def test_login_errors_read_the_same(client):
@@ -5417,6 +5486,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     assert _users_in_server("QUEUE") == {None, "model_call", "main", "api_queue", "admin_choices", "narrate_once", "crowd_once",
                                          "letter_once", "yuedan_once", "chatter_once",  # chatter_once：酒肆鄰桌閒談，同 crowd_once 當假人排
                                          "xingshi_once",
+                                         "flavor_once",  # 江湖大事的潤色（S-09）：觸發那一下寫固定的原文，放鎖之後背景請模型，當假人排，名號 FLAVOR_OWNER
                                          "narration_round",  # 事件旁白每週改寫（減法季批 10）：背景一則一則，當假人排，名號 NARRATION_KEY
                                          "verdict_text",  # 人物評曰（減法季批 7b-2）：zhuan_job 寫完正文後在鎖外逐條叫，當假人排在真人後面
                                          "tale_round"}  # 戰記（Joy 2026-10-29）：決戰收場後在背景寫一篇，當假人排，名號 TALE_OWNER_KEY
@@ -5425,6 +5495,57 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         if re.search(r"^\s*(import|from)\s+llm_queue\b", p.read_text(encoding="utf-8"), re.M)
     ]
     assert importers == []
+
+
+def _fire_an_event(g):
+    """觸發一件不收季、不開戰的江湖大事（huangjin_50），跟引擎各處一樣把潤色單子交給 _flavor_sink。"""
+    from tianxia import world as world_rules
+    return world_rules.fire_by_id(g.state, g.content, "huangjin_50", g.world, g._flavor_sink(), now=g.now)
+
+
+def test_a_world_event_is_written_plain_in_the_lock_and_polished_after(game, monkeypatch):
+    """S-09：觸發江湖大事的那一下鎖內不叫模型，先寫固定的原文；放鎖之後才請模型潤色（背景執行緒，這裡直接叫 flavor_once），
+    寫回時存進全服快取、把這個人江湖紀錄裡的那一則換掉。"""
+    from tianxia import flavor
+    game.client = OllamaClient.from_config(server.CONTENT.config)
+    calls = []
+
+    def polish(client, text):
+        calls.append(open_world().db.writing())
+        return "城頭的旗幟在風裡獵獵作響。"
+
+    monkeypatch.setattr(flavor, "polish_world_event", polish)
+    queued = []
+    monkeypatch.setattr(server, "TALE_THREADS", True)
+    monkeypatch.setattr(server, "write_flavor", lambda g, jobs: queued.extend(jobs))
+    text = server.CONTENT.scenario.thresholds[[t.id for t in server.CONTENT.scenario.thresholds].index("huangjin_50")].text
+
+    def action(g):
+        msgs = g._log(_fire_an_event(g) or [])
+        g.state.journal.insert(0, journal.news_entry(g.state.world.time, msgs))
+        return msgs
+
+    msgs = server.act(game, action)
+    assert msgs[0] == f"【江湖大事】{text}"  # 鎖內只寫原文
+    assert calls == [] and queued == [flavor.FlavorJob("huangjin_50", text)]
+    assert server.flavor_once(game, queued[0])
+    assert calls == [False]  # 模型在鎖外
+    assert game.world.get_event_flavor("huangjin_50") == "城頭的旗幟在風裡獵獵作響。"
+    saved = open_characters().load(game.state.player.name)
+    assert f"{text}\n\n城頭的旗幟在風裡獵獵作響。" in [saved.journal[0].tag, *saved.journal[0].lines]
+    assert text not in [saved.journal[0].tag, *saved.journal[0].lines]  # 固定的原文換掉了
+    assert f"【江湖大事】{text}\n\n城頭的旗幟在風裡獵獵作響。" in saved.log
+    assert server.flavor_once(game, queued[0]) and calls == [False]  # 快取裡有了：不再叫模型
+
+
+def test_a_world_event_without_a_client_queues_nothing(game, monkeypatch):
+    """沒有 client（伺服器假人的 Game）：一張潤色單子都不記、一個模型都不叫，原文照寫。"""
+    game.client = None
+    monkeypatch.setattr(server, "TALE_THREADS", True)
+    queued = []
+    monkeypatch.setattr(server, "write_flavor", lambda g, jobs: queued.extend(jobs))
+    msgs = server.act(game, _fire_an_event)
+    assert msgs and msgs[0].startswith("【江湖大事】") and queued == []
 
 
 def test_in_lock_model_calls_and_the_scheduler_never_wait_in_the_queue(game, monkeypatch):

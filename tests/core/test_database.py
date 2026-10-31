@@ -26,7 +26,10 @@ V4_TABLES = {"gear_recipes"}
 V5_TABLES = {"biographies"}  # 玩家傳（2026-10-12）
 V6_TABLES = {"mall_purchases", "mall_ledger", "mall_entitlements"}  # 商城（2026-10-20）
 V7_TABLES = {"action_counts", "action_firsts"}  # 真人量表（減法季批 0，2026-10-24）
-TABLES = V1_TABLES | V2_TABLES | V3_TABLES | V4_TABLES | V5_TABLES | V6_TABLES | V7_TABLES
+DROPPED = {"rumor_heard"}  # 第 8 版拿掉的見聞紀錄（審查 S-12：從來沒人讀寫）
+KEPT_V1 = V1_TABLES - DROPPED
+V9_TABLES = {"sessions"}  # 登入狀態（審查 S-10，2026-10-31）
+TABLES = (V1_TABLES | V2_TABLES | V3_TABLES | V4_TABLES | V5_TABLES | V6_TABLES | V7_TABLES | V9_TABLES) - DROPPED
 
 
 def _count(db: Database, table: str) -> int:
@@ -39,7 +42,7 @@ def test_a_new_file_gets_every_table(tmp_path):
     with db.snapshot() as conn:
         names = {row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
-    assert TABLES <= names
+    assert TABLES <= names and not DROPPED & names
 
 
 def _make_version_one_file(path):
@@ -129,16 +132,16 @@ def test_upgrading_a_populated_version_one_file_loses_nothing(tmp_path, content)
     conn.execute("INSERT INTO faction_rolls (season, character, faction) VALUES (2, '沈浪', 'huangjin')")
     conn.commit()
     conn.close()
-    before = _dump(path, V1_TABLES)
+    before = _dump(path, KEPT_V1)
 
     db = open_database(path)  # 升級就在開檔的時候
 
-    assert _dump(path, V1_TABLES) == before  # 舊表原封不動（含 rowid 順序、流水號）
+    assert _dump(path, KEPT_V1) == before  # 舊表原封不動（含 rowid 順序、流水號）；rumor_heard 第 8 版拿掉了
     with db.snapshot() as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 7
+        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 9
         names = {row["name"] for row in c.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert names == TABLES
-    assert all(_count(db, table) == 0 for table in V2_TABLES | V3_TABLES | V4_TABLES | V5_TABLES | V6_TABLES | V7_TABLES)
+    assert all(_count(db, table) == 0 for table in V2_TABLES | V3_TABLES | V4_TABLES | V5_TABLES | V6_TABLES | V7_TABLES | V9_TABLES)
     # 真正的存取層讀得回來
     store = AccountStore(db)
     assert store.authenticate("shenlang", "sesame88").character == "沈浪"
@@ -153,7 +156,7 @@ def test_upgrading_a_populated_version_one_file_loses_nothing(tmp_path, content)
     # 升完的檔再打開不會再升一次、也不會掉資料
     database.close_all()
     again = open_database(path)
-    assert _dump(path, V1_TABLES) == before
+    assert _dump(path, KEPT_V1) == before
     with again.snapshot() as c:
         assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
 
@@ -635,3 +638,27 @@ def test_two_programs_counting_at_once_lose_no_updates(tmp_path):
             proc.stdout.close()
     with db.snapshot() as conn:
         assert conn.execute("SELECT data FROM seasons WHERE number = 1").fetchone()[0] == "400"
+
+
+def test_a_version_seven_file_gains_the_sessions_table(tmp_path):
+    """第 7 版（真人量表）的檔打開時一路升到第 9 版：第 8 版拿掉 rumor_heard、第 9 版多一張 sessions，其他舊表不動，登入狀態寫得進去、讀得回來（審查 S-10）。"""
+    import sqlite3
+
+    from tianxia.accounts import SessionStore
+
+    path = tmp_path / "v7.db"
+    conn = sqlite3.connect(path)
+    for statement in database.SCHEMA_V1 + database.SCHEMA_V2_TABLES + database.SCHEMA_V3_TABLES + database.SCHEMA_V4_TABLES \
+            + database.SCHEMA_V5_TABLES + database.SCHEMA_V6_TABLES + database.SCHEMA_V7_TABLES:
+        conn.execute(statement)
+    conn.execute("PRAGMA user_version = 7")
+    conn.commit()
+    conn.close()
+    db = open_database(path)
+    with db.snapshot() as c:
+        assert c.execute("PRAGMA user_version").fetchone()[0] == 9
+        names = {row["name"] for row in c.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert "sessions" in names and "rumor_heard" not in names
+    sessions = SessionStore(db, clock=lambda: 100.0)
+    token = sessions.create("shenlang")
+    assert sessions.get(token) == "shenlang"
