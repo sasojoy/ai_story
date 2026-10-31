@@ -203,6 +203,8 @@ GAME_IMPORTS = {
     # 全服決戰「看」那一半（主動搬六包第 5 批）：22 個一行委派（view）；rules 給測試從 engine 拿的 6 個字、委派的型別註記，與 Game 的類別屬性
     # BATTLE_GAMBLE_NOTE／LAST（類別本體不是方法，game_links 掃不到那兩行，記在這裡）
     "tianxia.features.battle.view", "tianxia.features.battle.rules",
+    # 決戰「打」那一半之一（全部拆包第 6 批）：管理者的決戰工具 6 個、攻城 6 個一行委派
+    "tianxia.features.battle.admin", "tianxia.features.battle.sieges",
 }
 GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
     # explore（主動搬六包第 3＋4 批）：走一趟 9 個（1 個私有）——server、bot、bot_policy、測試在叫的 8 個，與 engine 模組層的 _outing_watch
@@ -234,6 +236,11 @@ GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
     "battle_on_screen", "_deliver_battle_results", "_file_showdown", "_annal_showdown", "_showdown_pay", "_showdown_credits", "_showdown_tier4",
     "battle_free_text_prompt", "battle_free_text_note", "battle_text_request", "submit_battle_custom_action", "battle_tale_request",
     "apply_battle_tales", "_tale_battles",
+    # 決戰「打」那一半之一（全部拆包第 6 批；6 個私有）：server 與測試叫的管理者工具 6 個（ADMIN_ACTIONS 的 start_battle、cancel_battle、
+    # start_showdown，admin_choices 的立刻開戰選單與三場大戲，timetable_choices 的開打後取消），核心原位叫的攻城 6 個（_definition_of、
+    # _tick_siege 測試也直接叫）。_showdown_refusal、_siege_guards 只有包裡叫，沒有委派
+    "admin_battles", "admin_start_battle", "admin_cancel_battle", "admin_showdowns", "cancelled_showdowns", "admin_start_showdown",
+    "_sieges", "_definition_of", "_tick_siege", "_shelve_siege", "_cancel_siege", "_settle_siege",
 }
 _SORTIE_SEAM = "接縫留在原位（批次表第二節：會影響先後的接縫這一輪不開掛鉤，第 11 批一次收）"
 GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；過渡）
@@ -315,9 +322,29 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("sync", "_deliver_battle_results"): "收場補送在 sync 裡的位置算行為（緊接在 _deliver_big_events 後、_deliver_seal_results 前，江湖紀錄的先後）",
     ("_apply_battle_outcome", "_deliver_battle_results"): "決戰「打」那一半（第 8 批搬）：自己這一下把決戰推到收場，馬上補到自己手上",
     ("_settle_showdown", "_deliver_battle_results"): "決戰「打」那一半（第 8 批搬）：時刻表決戰收場，同上",
-    ("_settle_siege", "_deliver_battle_results"): "決戰「打」那一半（第 6 批搬）：攻城戰收場，同上",
-    ("_shelve_siege", "_deliver_battle_results"): "決戰「打」那一半（第 6 批搬）：攻城戰季終收起，補一則不算勝負的紀錄",
     ("_shelve_unfinished_battle", "_deliver_battle_results"): "決戰「打」那一半（第 8 批搬）：決戰季終收兵，同上",
+    # 決戰「打」那一半之一（全部拆包第 6 批）：核心叫攻城委派 20 對（第 5 批記的 (_settle_siege|_shelve_siege, _deliver_battle_results) 兩對
+    # 拿掉了：那兩個成了委派，補送在包裡經 ctx 叫）。「我在哪一場」與每一場推一次還是「打」那一半（第 7、8 批），叫的位置算行為
+    ("_battle_status", "_sieges"): "每一場推一次（先決戰、再每一場攻城；沒有攻城戰時照舊走 _showdown_status）：決戰「打」那一半，第 8 批",
+    ("_battle_status", "_tick_siege"): "同上：tick 時每一場攻城各推一次，一次請求只推一次",
+    ("_battle_status", "_shelve_siege"): "同上：季收了，每一場攻城收兵",
+    ("_battle_status", "_definition_of"): "同上：回這個人看的那一場與它的定義",
+    ("_battle_now", "_sieges"): "這個人看的那一場（按鈕指定、自己參戰、站得進去、自己大區裡的）：決戰「打」那一半，第 8 批",
+    ("_joinable", "_sieges"): "自己大區裡加得進去的那幾場（決戰在前）：集結，第 7 批",
+    ("_joinable", "_definition_of"): "同上：那一場在哪個大區、看不看得進去",
+    ("_in_region", "_definition_of"): "這幾場裡在自己大區的：集結，第 7 批",
+    ("_battle_menu", "_definition_of"): "同一個大區兩場以上時每一場一組加入鈕（字前面寫是哪一場）：集結，第 7 批",
+    ("_rally_any", "_sieges"): "假人趕路：有攻城戰時每一場都看（rally_region 那一支）：集結，第 7 批",
+    ("_rally_any", "_definition_of"): "同上：那一場的大區",
+    ("rally_region", "_sieges"): "假人趕路：有攻城戰時走 _rally_any（bot_runner 在叫）：集結，第 7 批",
+    ("battles_now", "_sieges"): "全服此刻的每一場（假人程式、bot_policy 讀）：決戰「打」那一半，第 8 批",
+    ("_siege_live", "_sieges"): "地盤畫面（conquest_view）的集結・交戰中那一場加不加得進去（FB-690）；地盤搬成包（第 46 批）時改叫決戰包的查詢服務",
+    ("_apply_battle_outcome", "_settle_siege"): "收場分進攻城那一支（易手、作罷、時程表另外收）：決戰「打」那一半，第 8 批",
+    ("admin_end_season", "_sieges"): "管理者立刻收季：沒打完的攻城照決戰收兵（收季的順序算行為：先決戰、再攻城、再補大事）；管理者外殼是核心",
+    ("admin_end_season", "_shelve_siege"): "同上",
+    ("admin_next_season", "_sieges"): "開下一季：季自然結束、沒人同步過的攻城換季前收起來（參戰者補得到交代）；管理者外殼是核心",
+    ("admin_next_season", "_shelve_siege"): "同上",
+    ("admin_conquest_cancel", "_cancel_siege"): "地盤的救場工具「取消一場攻城」：已經開了集結的那一場照收兵收起來；地盤搬成包（第 46 批）時改叫決戰包",
 }
 
 
