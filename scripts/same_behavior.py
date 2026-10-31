@@ -1181,7 +1181,9 @@ class ExploreScenario(Scenario):
         self.place("高寄萍", None, faction="guan")  # 自家營寨比劃要有陣營（直接擺：投靠那一段是出陣那一軌驗的）
 
     def prologue(self) -> None:
-        """序章的舊探索（草廬四景，_explore_outcome）；序章裡走一趟回「此刻無法」。"""
+        """序章的舊探索（草廬四景，_explore_outcome），接著按一下走一趟一段。有序章的只有不帶、weekend，那兩種走一趟本來就關著
+        （回「此刻無法」是因為關著，不是因為在序章裡）；season21、week7 沒有序章，那一下是真的出發。所以 outing_go 的「序章裡不走」
+        那一條在這五種設定裡都碰不到（審查修正：原本這裡寫成驗到了）。"""
         who = self.NEWBIE
         view = self.main(who)
         if not view.get("prologue"):
