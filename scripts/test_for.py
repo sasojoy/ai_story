@@ -178,7 +178,10 @@ DOMINANT_MIN = 3
 # 內文是假的原始碼、不是在叫那一群的測試檔：不照內文歸群（_dominant 與 group_files 的備案都不算它）。test_test_for 的
 # 假 engine 寫了 _tavern_price、_pill_day……，照「內文叫最多」會算進酒肆、pill、season（10/31 審查：每一列多它 31 條）。
 # 改 scripts/test_for.py 照舊挑到它（檔名 test_<模組>）。
-TEXT_BLIND = frozenset({"test_test_for.py"})
+# 核心契約與邊界測試（CONTRACT_GLOBS 那幾個）也不照內文歸群（全部拆包第 11 批）：邊界測試的名單寫滿了各包的委派名，照「內文叫最多」
+# 歸到哪一群跟著名單翻（develop b1eeb4ec 時是 sortie 群），契約的假包叫 _pill_day 被算進 pill 群。它們固定跟著核心走：改核心照核心測試
+# 挑到（CORE_GLOBS）、改包與包的委派照核心契約挑到（contract_tests）。
+TEXT_BLIND = frozenset({"test_test_for.py", "test_feature_boundaries.py", "test_contract_core.py", "test_contract_features.py"})
 
 
 @dataclass
@@ -738,8 +741,37 @@ def _split(hunk_list: list[Hunk], old_src: str, new_src: str, spans_of) -> dict:
     return groups
 
 
-def engine_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[set[str], bool, list[str]]:
-    """engine.py 的 hunk → （功能群, 要不要核心測試＋煙霧, 為什麼）。"""
+def engine_delegates(src: str) -> dict[str, str]:
+    """engine.py 裡 Game 上的一行委派 → 它委派給哪一包（全部拆包第 11 批）：方法的本體（說明字之後）只有一句
+    `return <名字>.<函式>(self, …)`（或不 return 的那一句），<名字> 是最外層 `from .features.<包> import <模組> [as <名字>]` 進來的。
+    邊界測試的 GAME_DELEGATES 是同一批方法（那一份另外記理由；這裡照原始碼認，不必兩邊同步）。"""
+    tree = _parse(src)
+    if tree is None:
+        return {}
+    local: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.level == 1 and (node.module or "").startswith("features."):
+            pkg = node.module.split(".")[1]
+            local.update({a.asname or a.name: pkg for a in node.names})
+    out: dict[str, str] = {}
+    for node in tree.body:
+        if not (isinstance(node, ast.ClassDef) and node.name == "Game"):
+            continue
+        for f in node.body:
+            if not isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            body = [s for s in f.body if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant)
+                                              and isinstance(s.value.value, str))]
+            call = body[0].value if len(body) == 1 and isinstance(body[0], (ast.Return, ast.Expr)) else None
+            if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name)
+                    and call.func.value.id in local and call.args and isinstance(call.args[0], ast.Name) and call.args[0].id == "self"):
+                out[f.name] = local[call.func.value.id]
+    return out
+
+
+def engine_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[set[str], bool, list[str], set[str]]:
+    """engine.py 的 hunk → （功能群, 要不要核心測試＋煙霧, 為什麼, 委派到的包）。hunk 落在一行委派（engine_delegates）上照那一包挑
+    （那一包的 tests/＋核心契約，同改那一包的檔；第 11 批：以前照方法名的第一個字分群，_settle_siege 算 siege、admin_start_battle 算 admin）。"""
     def spans_of(src: str):
         methods = _game_methods(src)
         tops = [(name, start, end) for name, start, end, node in _top_level(src)
@@ -749,8 +781,14 @@ def engine_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[se
     found: set[str] = set()
     core = False
     why: list[str] = []
+    packages: set[str] = set()
+    delegates = {**engine_delegates(old_src), **engine_delegates(new_src)}
     for name, (removed, added) in _split(hunk_list, old_src, new_src, spans_of).items():
         label = name or "方法以外"
+        if name in delegates:
+            packages.add(delegates[name])
+            why.append(f"{label}：{delegates[name]} 這一包的一行委派 → 那一包的 tests/＋核心契約")
+            continue
         if name in CORE_METHODS:
             hits = scan(removed + added)
             core = True
@@ -771,7 +809,7 @@ def engine_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[se
         else:
             core = True
             why.append(f"{label} 沒提到功能前綴 → 核心測試＋煙霧")
-    return found, core, why
+    return found, core, why, packages
 
 
 def fields_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[set[str], list[str]]:
@@ -999,7 +1037,11 @@ def pick(files: list[str], base: str | None = None,
                 result.why.append(f"{f}：跟 base 沒有差異，照整個檔算 → 核心測試＋煙霧")
                 continue
             if mod == "engine":
-                found, core, why = engine_groups(hunk_list, old_src, new_src)
+                found, core, why, packages = engine_groups(hunk_list, old_src, new_src)
+                for pkg in sorted(packages):  # 一行委派（第 11 批）：同改那一包的檔
+                    pkg_tests = FEATURES / pkg / "tests"
+                    result.files |= set(pkg_tests.rglob("test_*.py")) if pkg_tests.is_dir() else set()
+                    result.files |= contract_tests()
             elif mod == "server":
                 found, core, why = server_groups(hunk_list, old_src, new_src)
             else:

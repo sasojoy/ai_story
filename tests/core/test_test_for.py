@@ -235,6 +235,49 @@ def test_the_pickers_own_test_is_in_no_feature_group():
     assert me in test_for.pick(["scripts/test_for.py"]).files
 
 
+def test_the_contract_and_boundary_tests_follow_the_core_not_a_feature_group():
+    """核心契約與邊界測試（全部拆包第 11 批）：內文寫滿各包的委派名，照「內文叫最多」歸群會跟著名單翻（b1eeb4ec 時邊界測試在 sortie 群、
+    契約的假包在 pill 群）。它們不在任何一群；改核心照核心測試挑到、改包照核心契約挑到。"""
+    names = {"test_feature_boundaries.py", "test_contract_core.py", "test_contract_features.py"}
+    assert sorted((w, p.name) for w, files in test_for._dominant().items() for p in files if p.name in names) == []
+    for word in ("sortie", "pill", "tavern", "battle", "explore", "duel", "siege"):  # 內文寫得最多的那幾群
+        assert not names & {p.name for p in test_for.group_files(word)}, word
+    assert names <= {p.name for p in test_for.core_tests()} and names <= {p.name for p in test_for.contract_tests()}
+
+
+DELEGATE_ENGINE = (
+    "from .features.tavern import actions as tavern_actions\n"
+    "from .features.battle import sieges as battle_sieges\n"
+    "class Game:\n"
+    "    def _tavern_price(self, base):\n"
+    "        return tavern_actions.tavern_price(self, base)\n"
+    "\n"
+    "    def _settle_siege(self, battle):\n"
+    "        \"\"\"說明字不算本體。\"\"\"\n"
+    "        return battle_sieges.settle_siege(self, battle)\n"
+    "\n"
+    "    def _tavern_close(self):\n"
+    "        x = 1\n"
+    "        return tavern_actions.close(self, x)\n"
+)
+
+
+def test_an_engine_delegate_picks_its_package_and_the_contract():
+    """改 engine 上一行委派（本體只有 return <包的模組>.<函式>(self, …)，第 11 批）：照那一包挑（那一包的 tests/＋核心契約），不照方法名的
+    第一個字——_settle_siege 以前算 siege 群（第 6 批量到 105 條），現在是決戰包；本體不只一句的不算委派，照舊照名字分群。"""
+    assert test_for.engine_delegates(DELEGATE_ENGINE) == {"_tavern_price": "tavern", "_settle_siege": "battle"}
+    siege = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", DELEGATE_ENGINE, 9))
+    names = {p.name for p in siege.files}
+    battle_pkg = {p.name for p in (test_for.FEATURES / "battle" / "tests").rglob("test_*.py")}
+    assert battle_pkg <= names and {p.name for p in test_for.contract_tests()} <= names
+    assert "test_conquest_siege.py" not in names and not siege.core
+    assert any("battle 這一包的一行委派" in w for w in siege.why)
+    tavern = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", DELEGATE_ENGINE, 5))
+    assert {p.name for p in (test_for.FEATURES / "tavern" / "tests").rglob("test_*.py")} <= {p.name for p in tavern.files}
+    plain = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", DELEGATE_ENGINE, 13))
+    assert not any("一行委派" in w for w in plain.why)
+
+
 def test_a_verb_first_method_name_goes_to_the_feature_after_the_verb():
     """_deliver_seal_results 的 deliver 是動詞：照後面的 seal 分群。"""
     picked = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", FAKE_ENGINE, 9))

@@ -252,25 +252,32 @@ GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
     "admin_battles", "admin_start_battle", "admin_cancel_battle", "admin_showdowns", "cancelled_showdowns", "admin_start_showdown",
     "_sieges", "_definition_of", "_tick_siege", "_shelve_siege", "_cancel_siege", "_settle_siege",
 }
-_SORTIE_SEAM = "接縫留在原位（批次表第二節：會影響先後的接縫這一輪不開掛鉤，第 11 批一次收）"
+# 第 11 批（全部拆包「核心收接縫」，計畫 docs/superpowers/plans/2026-11-01-核心收接縫.md 1.2）之後留下的直連：核心的接縫（選單、補算時間、
+# 行動列與 act 子動詞、choose 前後段、本人這一輪、場景卡、戰報頁、店面）都換成了接縫掛鉤（tianxia/core/features.py），留下的都不是核心
+# 自己的接縫——還沒搬的別的功能（或同一包還沒搬的那一半）叫包。每一條寫「為什麼留、哪一批收」；「打完之後」那一種（一包發生了、別包跟著動）
+# PM 定這一批不開掛鉤，原位行尾標「# 過渡：第 26 批」（事件機制）。
+_LATER_17 = "出陣自己還沒搬的那一半（舊遊歷、序章雪恥、守勢；act:train 整格）：總表第 17 批（出陣三）收進出陣包"
+_MAP_LINE = "輿圖的線（feature/map-view）還在飛，這一輪不碰；輿圖成包（總表第 46～50 批）時改叫出陣、探索的查詢服務"
 GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；過渡）
     # explore（主動搬六包第 3＋4 批）：用到 outing 這個名字（現在是探索包 outing_rules 的別名）的只剩有所感
-    "_sense": "有所感畫完那一筆擲特殊頓悟（epiphany.roll 的 boost＝outing_rules.rare_boost：走一趟段數越多越容易來）：sense:* 的分派"
-              "留在核心；等探索包開「此刻稀有的乘多少」的查詢服務時改叫它",
+    "_sense": "有所感畫完那一筆擲特殊頓悟（epiphany.roll 的 boost＝outing_rules.rare_boost：走一趟段數越多越容易來）：有所感還沒成包"
+              "（總表第 24 批）；成包時探索包開「此刻稀有的乘多少」的查詢服務，改叫它",
     # （_own_scene_text：坐在宴席上的場景卡第 11 批換成 scene 掛鉤，拿掉）
     # 出陣（主動搬六包第 1 批）：下面這些方法用到 sortie 這個名字（現在是出陣包 rules 的別名）——開關（sortie.on＝territory.on）、
     # 鈕上的字（NAME、USED_UP、LEFT_NOTE、OUT_NOTE……）、次數（spend）
-    "_act": "act:train 打的那一場（出陣開著走 _sortie、序章與關著走 _train；扣體力、並肩出陣的加成、晉升奇遇包在外面）：act:train 整格"
-            "總表第 17 批（出陣三）收進出陣包。第 11 批：探索一顆、進酒肆、約戰開著時那張卡換成 act 子動詞的掛鉤（Verb.run）",
+    "_act": "act:train 打的那一場（出陣開著走 _sortie、序章與關著走 _train）：扣體力、並肩出陣的加成、晉升奇遇包在外面，" + _LATER_17
+            + "。第 11 批：探索一顆、進酒肆、約戰開著時那張卡換成 act 子動詞的掛鉤（Verb.run）",
     # （_everyday_options、action_notes：行動列那一格與底下那一行第 11 批換成 act 子動詞的掛鉤〔Verb.cell、Verb.note〕、酒肆那幾行換成
     # 店面登記〔Shop〕，拿掉）
-    "_squad_encounter": "戰鬥（as_sortie 那一支）：序章的戰報標題寫雪恥（sortie.PROLOGUE_FIGHT）、打贏回頭叫 _sortie_rewards（那一對記在 "
-                        "GAME_DELEGATE_CALLERS）；等戰鬥搬成包時變成核心的事件",
-    "_train_squad_ids": "舊遊歷與出陣共用的對手池（出陣開著時只有攻才打，叫 _sortie_mode、_sortie_foes）",
-    "_duty_option": "守勢行動（巡哨、傳道、保境安民）共用出陣的次數與鈕上的字（sortie.duty_problem、USED_UP、LEFT_NOTE；叫 sorties_left）",
-    "_duty": "守勢行動算一次出陣（sortie.spend；叫 _sortie_host 拿自家那一路的數字）",
-    "map_state": "輿圖（今天去哪裡出陣：sortie.on、叫 _sortie_foes、sorties_left）；輿圖的線還在飛，這一輪不碰",
-    "_map_foes": "輿圖的地點卡（出陣打誰：sortie.on、叫 _sortie_foes）；同上",
+    "_squad_encounter": "戰鬥（as_sortie 那一支）打贏之後出陣包給獎勵、約戰開著的季不推進度（那兩對記在 GAME_DELEGATE_CALLERS，原位行尾標"
+                        "「# 過渡：第 26 批」）：「一包發生了、別包跟著動」是總表第 26 批的事件（打贏一場），PM 定第 11 批不開；序章那一場的"
+                        "戰報標題寫雪恥（sortie.on、PROLOGUE_FIGHT）：" + _LATER_17,
+    "_train_squad_ids": "舊遊歷與出陣共用的對手池（出陣開著時只有攻才打，叫 _sortie_mode、_sortie_foes）：" + _LATER_17,
+    "_duty_option": "守勢行動（巡哨、傳道、保境安民）共用出陣的次數與鈕上的字（sortie.duty_problem、USED_UP、LEFT_NOTE；叫 sorties_left）："
+                    + _LATER_17,
+    "_duty": "守勢行動算一次出陣（sortie.spend；叫 _sortie_host 拿自家那一路的數字）：" + _LATER_17,
+    "map_state": "輿圖（今天去哪裡出陣：sortie.on、叫 _sortie_foes、sorties_left）：" + _MAP_LINE,
+    "_map_foes": "輿圖的地點卡（出陣打誰：sortie.on、叫 _sortie_foes）：" + _MAP_LINE,
     # （choose：用到 sortie_duel 這個名字的 PREFIX、PICK 第 11 批換成 choose_unlisted 與 Verb.picks，拿掉）
 }
 GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_DIRECT 的方法裡叫的也列（PM 10/31 答覆出陣第 1 批，第 2 批起）
@@ -279,33 +286,34 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     # 出陣第 1 批記的 (_outing_foe, _sortie_host) 拿掉了（下面出陣那一段少了那一行）：_outing_foe 進了探索包，經 ctx._sortie_host 叫
     # （服務清單二、查詢服務）。第 11 批（核心收接縫）：_act、_action_title、_everyday_options、action_notes 那 7 對換成 act 子動詞的掛鉤
     # （Verb：探索一顆開著時的出門一趟、標題、那一顆、那一行），拿掉
-    ("map_base", "map_mostly"): "輿圖的底圖：名字旁的兩個字照看的人站過去之後的比重（探索一顆開著時；輿圖的線還在飛，這一輪不碰）",
-    ("map_state", "map_mostly"): "輿圖：地點旁的兩個字照看的人站過去之後的比重（探索一顆開著時；輿圖的線還在飛，這一輪不碰）",
+    ("map_base", "map_mostly"): "輿圖的底圖：名字旁的兩個字照看的人站過去之後的比重（探索一顆開著時）：" + _MAP_LINE,
+    ("map_state", "map_mostly"): "輿圖：地點旁的兩個字照看的人站過去之後的比重（探索一顆開著時）：" + _MAP_LINE,
     # （(own_turn_checks, _mall_grant)：封測元寶每一輪發，第 11 批換成 on_own_turn 掛鉤，拿掉）
     # 出陣（主動搬六包第 1 批）：核心叫出陣委派 13 對（第 1 批時一共 21 對、掃描只看得到 6 對；約戰自己叫的 8 對第 2 批跟著進了包）
     # （第 11 批：_action_title、_everyday_options、action_notes 叫 _train_title、_sortie_option、_sortie_line 那 3 對換成 act 子動詞的掛鉤，拿掉）
-    ("_act", "_sortie"): f"act:train 的分派：出陣開著走出陣（並肩出陣、扣體力包在外面）；{_SORTIE_SEAM}",
-    ("_squad_encounter", "_sortie_rewards"): "戰鬥（as_sortie）打贏給出陣的獎勵；等戰鬥搬成包時變成核心的事件",
-    ("_train_squad_ids", "_sortie_mode"): "舊遊歷與出陣共用的對手池：出陣開著時只有攻才打",
+    ("_act", "_sortie"): "act:train 打的那一場：出陣開著走出陣（扣體力、並肩出陣的加成包在外面）：" + _LATER_17,
+    ("_squad_encounter", "_sortie_rewards"): "戰鬥（as_sortie）打贏之後給出陣的獎勵：總表第 26 批的事件（打贏一場；原位標「# 過渡：第 26 批」）",
+    ("_train_squad_ids", "_sortie_mode"): "舊遊歷與出陣共用的對手池：出陣開著時只有攻才打；" + _LATER_17,
     ("_train_squad_ids", "_sortie_foes"): "同上：攻打的對手",
-    ("_duty_option", "sorties_left"): "守勢行動共用出陣的次數（鈕上寫今天還能幾次）",
-    ("_duty", "_sortie_host"): "守勢行動拿自家那一路的經驗心得（一類一顆）",
-    ("map_state", "_sortie_foes"): "輿圖（今天去哪裡出陣）：出陣那一格是哪一種；輿圖的線還在飛，這一輪不碰",
-    ("map_state", "sorties_left"): "輿圖：今天還能出陣幾次",
-    ("_map_foes", "_sortie_foes"): "輿圖的地點卡：約戰關著時出陣打的那一批",
+    ("_duty_option", "sorties_left"): "守勢行動共用出陣的次數（鈕上寫今天還能幾次）；" + _LATER_17,
+    ("_duty", "_sortie_host"): "守勢行動拿自家那一路的經驗心得（一類一顆）；同上",
+    ("map_state", "_sortie_foes"): "輿圖（今天去哪裡出陣）：出陣那一格是哪一種；" + _MAP_LINE,
+    ("map_state", "sorties_left"): "輿圖：今天還能出陣幾次；同上",
+    ("_map_foes", "_sortie_foes"): "輿圖的地點卡：約戰關著時出陣打的那一批；同上",
     # 出陣約戰（主動搬六包第 2 批）：核心叫約戰委派 17 對（搬之前約戰自己叫出陣委派的 8 對跟著進了包）。第 11 批（核心收接縫）：三處結算
     # （world_tick、sync、advance → _sortie_duel_tick）換成 on_due 掛鉤，拿掉；choose 那兩對（sortie:* 在查選單之前接走）換成 choose_unlisted，拿掉；
     # _act、action_notes 那 4 對（約戰開著時那張卡、約戰那一句）換成 act 子動詞的掛鉤，拿掉
-    ("_fight_squad", "duel_on"): "大場面判讀：約戰開著時出陣那一格不判（不會打仗）",
-    ("_duty_option", "duel_on"): "守勢行動的鈕：約戰開著時收進此地、不佔出陣的次數",
-    ("_duty", "duel_on"): "守勢行動：約戰開著時不佔出陣、不推線、不算守城",
+    ("_fight_squad", "duel_on"): "大場面判讀（核心的單打服務）問出陣那一格這一下打不打仗：約戰開著時不判（不會打仗）；" + _LATER_17,
+    ("_duty_option", "duel_on"): "守勢行動的鈕：約戰開著時收進此地、不佔出陣的次數；" + _LATER_17,
+    ("_duty", "duel_on"): "守勢行動：約戰開著時不佔出陣、不推線、不算守城；同上",
     ("_duty", "_duty_credit"): "同上：一天記一點貢獻（企劃者 2026-10-24 第 2 件）",
-    ("_squad_encounter", "duel_on"): "戰鬥（as_sortie）：約戰開著時只剩截糧，打贏不推進度（進度只在約戰結算動）",
-    ("map_state", "duel_on"): "輿圖：約戰開著時不畫零風險的守、攻不了的不推薦、運糧隊經過的帶 convoy；輿圖的線還在飛，這一輪不碰",
-    ("_map_foes", "duel_on"): "輿圖的地點卡：約戰開著時列貼約戰會迎戰的守軍那一路",
+    ("_squad_encounter", "duel_on"): "戰鬥（as_sortie）打贏之後：約戰開著時只剩截糧、不推進度（進度只在約戰結算動）：總表第 26 批的事件"
+                                     "（原位標「# 過渡：第 26 批」）",
+    ("map_state", "duel_on"): "輿圖：約戰開著時不畫零風險的守、攻不了的不推薦、運糧隊經過的帶 convoy；" + _MAP_LINE,
+    ("_map_foes", "duel_on"): "輿圖的地點卡：約戰開著時列貼約戰會迎戰的守軍那一路；同上",
     ("_map_foes", "_duel_squad"): "同上：守軍那一路（經驗最高的那一路）",
     # battle
-    # 全服決戰「看」那一半（主動搬六包第 5 批）：會影響先後的接縫留在原位（批次表第二節，第 11 批一次收）。第 11 批：場景卡
+    # 全服決戰「看」那一半（主動搬六包第 5 批）：叫它的都是「打」那一半（第 7、8 批搬進同一包之後變成包裡互相叫）。第 11 批：場景卡
     # (scene_text, _battle_scene_text) 換成 scene_over 掛鉤、戰報頁 (battle_detail, _round_blocks) 換成 record_detail 掛鉤，拿掉
     ("_battle_options", "_round_wait"): "決戰「打」那一半（第 7 批搬）：已選了、等其他人那一顆灰鈕上寫已送出／在場",
     # （第 11 批：sync 的收場補送換成 deliver_results 掛鉤，拿掉 (sync, _deliver_battle_results)）
@@ -329,14 +337,14 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("battles_now", "_sieges"): "全服此刻的每一場（假人程式、bot_policy 讀）：決戰「打」那一半，第 8 批",
     ("_siege_live", "_sieges"): "地盤畫面（conquest_view）的集結・交戰中那一場加不加得進去（FB-690）；地盤搬成包（第 46 批）時改叫決戰包的查詢服務",
     ("_apply_battle_outcome", "_settle_siege"): "收場分進攻城那一支（易手、作罷、時程表另外收）：決戰「打」那一半，第 8 批",
-    ("admin_end_season", "_sieges"): "管理者立刻收季：沒打完的攻城照決戰收兵（收季的順序算行為：先決戰、再攻城、再補大事）；管理者外殼是核心",
+    ("admin_end_season", "_sieges"): "管理者立刻收季：沒打完的攻城照決戰收兵（收季的順序算行為：先決戰、再攻城、再補大事）；管理者外殼是核心，"
+                                     "可是前一行的決戰收兵（_shelve_unfinished_battle）還在 Game：第 8 批兩段一起搬進決戰包時一起換成「收季」的掛鉤",
     ("admin_end_season", "_shelve_siege"): "同上",
-    ("admin_next_season", "_sieges"): "開下一季：季自然結束、沒人同步過的攻城換季前收起來（參戰者補得到交代）；管理者外殼是核心",
+    ("admin_next_season", "_sieges"): "開下一季：季自然結束、沒人同步過的攻城換季前收起來（參戰者補得到交代）；同上",
     ("admin_next_season", "_shelve_siege"): "同上",
     ("admin_conquest_cancel", "_cancel_siege"): "地盤的救場工具「取消一場攻城」：已經開了集結的那一場照收兵收起來；地盤搬成包（第 46 批）時改叫決戰包",
 }
 # tavern（主動搬六包第 10 批：酒肆的引擎那一半）：四張名單的酒肆那幾筆集中在這一段（三條拆包線並行，PM 合的時候不跟別人的行穿插）
-_TAVERN_SEAM = "接縫留在原位（批次表第二節：位置算行為的接縫這一輪不開掛鉤，第 11 批一次收）"
 GAME_IMPORTS |= {
     # 19 個一行委派；原本那一行 `from . import tavern as tavern_rules` 現在是別名（engine 照舊叫 tavern_rules.on、here、close、sign……，
     # 見下面 GAME_DIRECT；BANNED_WORDS 合 develop 時搬進核心 naming）。`from . import tavern_ask` 搬完沒人用，拿掉了
@@ -353,12 +361,13 @@ GAME_DELEGATES |= {  # 13 個私有：server、假人、腳本、測試在叫的
 # 第 11 批（核心收接縫）：sync、_drop_stale_references 的收店，_shop_open、_depart、_everyday_options 的選單接管與入口換成店面登記（Shop），
 # _act 的 act:tavern 換成 act 子動詞的掛鉤（Verb.run），拿掉
 GAME_DIRECT.update({  # 用到 tavern_rules 這個名字（現在是酒肆包 rules 的別名）的
-    "_hint_triggers": "碰到才說：有酒肆的城（tavern_rules.on、here）排 h_tavern 那一條；提示還沒有掛鉤",
-    "_newbie_go": "新手目標「去酒肆」指哪幾個地點（tavern_rules.tavern_at）；新手目標還沒有掛鉤",
+    "_hint_triggers": "碰到才說：有酒肆的城（tavern_rules.on、here）排 h_tavern 那一條：引導還沒成包（總表第 22 批）；成包時改叫酒肆的查詢服務",
+    "_newbie_go": "新手目標「去酒肆」指哪幾個地點（tavern_rules.tavern_at）：同上",
 })
 GAME_DELEGATE_CALLERS.update({
     # （(choose, _tavern_hit_check)：每個動作之後的殺手檢查，第 11 批換成 after_action 掛鉤，拿掉）
-    ("shop_view", "tavern_view"): "店面那一頁：鐵匠鋪那條線（feature/smithing-flow）緊貼著這一行改，這一輪不動；店面還沒有掛鉤",
+    ("shop_view", "tavern_view"): "店面那一頁：鐵匠鋪那條線（feature/smithing-flow）緊貼著這一行改，這一輪不動；鐵匠鋪落地、成包時（總表第 41 批）"
+                                  "店面那一頁接上店面登記（Shop）",
     # 呼叫端本身在 GAME_DIRECT 裡的另外 6 對：開發時那一版的掃描不記；合 develop（出陣第 2 批的掃描：GAME_DIRECT 的方法裡叫的也記，
     # PM 10/31）之後掃得到，取消註解（核心叫酒肆委派一共 9 對）。第 11 批：sync 那四對（下線的殺手、三個 deliver）換成 on_away、
     # deliver_notices 掛鉤，拿掉；(_everyday_options, _tavern_options) 換成店面登記，拿掉；(_act, _tavern_enter)、
@@ -695,4 +704,6 @@ if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python 
     for title, rows in (("包 → 舊模組（transitional_imports）", transitional_imports()), ("舊模組 → 包（reverse_imports）", reverse_imports())):
         print(f"{title}：{len(rows)} 處")
         print("\n".join(f"  {r}" for r in rows))
-    print(f"Game 碰包：委派 {len(GAME_DELEGATES)} 個、直連 {len(GAME_DIRECT) + len(GAME_DELEGATE_CALLERS)} 處")
+    print(f"Game 碰包：委派 {len(GAME_DELEGATES)} 個、直連 {len(GAME_DIRECT) + len(GAME_DELEGATE_CALLERS)} 處"
+          f"（GAME_DIRECT {len(GAME_DIRECT)}、GAME_DELEGATE_CALLERS {len(GAME_DELEGATE_CALLERS)}）；GAME_IMPORTS {len(GAME_IMPORTS)}")
+    print(f"共用規則層（registry.SHARED）：{len(SHARED)} 個模組（{'、'.join(sorted(SHARED))}）")

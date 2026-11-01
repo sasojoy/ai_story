@@ -414,7 +414,7 @@ class Game:
         self._gate_scale = 1.0  # 減法季三道閘（批 2）：遭遇拍那一場的經驗、心得、銀兩乘疲勞與對手兩道閘（explore_actions.fight_gate）；其餘是 1
         self._outing_close: set[str] = set()  # 這一趟出門打了折的那幾道閘（explore_actions.fight_gate 記、explore_one 寫段落結尾那一句）
         self._beat: dict | None = None  # 走一趟：剛剛那一次探索抽到什麼（explore_actions.explore_one 寫、outing_actions.outing_walk 讀）
-        self._outing_upset = False  # 走一趟這一場遭遇開打前勝算凶險以下（_outing_fight 寫、_explore_one 讀）
+        self._outing_upset = False  # 走一趟這一場遭遇開打前勝算凶險以下（_outing_fight 寫、探索包的 explore_one 讀）
         self._affinity_before: dict[str, int] | None = None  # choose()、隨口應對進行中：這一下之前的情誼（_people_here 認這一下加了誰的情誼）
         # 歷史武將同行：挑好了隨你上陣的那一位、正在照它加入（_escort_step 開著、_escort_carry 讀）
         self._escort_picked = False
@@ -2466,8 +2466,8 @@ class Game:
         return prepared.turn
 
     # ── 酒肆（企劃者 2026-10-18）：本體在功能包 tianxia/features/tavern/actions.py（主動搬六包第 10 批），這裡留一行委派——server 的
-    # MAIN_ACTIONS 與鎖外三段式、假人、腳本、測試，與核心原位：選單接管那一格（_tavern_options）、act:tavern（_tavern_enter）、sync 的下線殺手與
-    # 三個 deliver、choose 最後那一下殺手檢查（_tavern_hit_check）、shop_view（tavern_view）、紀錄標題（_tavern_sign）──
+    # MAIN_ACTIONS 與鎖外三段式、假人、腳本、測試，與核心原位的 shop_view（tavern_view）。選單接管那一格、act:tavern、sync 的下線殺手與
+    # 三個 deliver、choose 最後那一下殺手檢查、紀錄標題第 11 批換成接縫掛鉤（酒肆包的 shops、verbs、on_away、deliver_notices、after_action）──
 
     def _tavern_open(self) -> bool:
         return tavern_actions.tavern_open(self)
@@ -7903,7 +7903,7 @@ class Game:
         self._narrate(record, result, judged)
         msgs: list[str] = []
         if result.tier in team.WIN_TIERS:
-            rewards = self._sortie_rewards(squad, record) if as_sortie else self._battle_rewards(squad, record)
+            rewards = self._sortie_rewards(squad, record) if as_sortie else self._battle_rewards(squad, record)  # 過渡：第 26 批（打贏之後出陣包給獎勵）
             msgs += rewards
             extra: list[str] = []
             if not wild and not prologue_rules.active(s, c):  # 序章打贏不推大勢、不抽伏筆、不記軍令
@@ -7912,7 +7912,7 @@ class Game:
                         extra += self.push_trend(trend_id, delta, source="train")
                 credit: list[str] | None = None
                 # 領地爭奪：出陣攻打贏推這一塊的進度、不推線（設計 3.7）；約戰開著時這裡只剩截糧（減法季批 3b：進度只在約戰結算動）
-                if as_sortie and not self.duel_on():
+                if as_sortie and not self.duel_on():  # 過渡：第 26 批（打贏之後約戰開著的季不推進度）
                     # 軍令照推之前的清單記（FB-608：推滿易手的那一下，推完那一塊已經是自家的、在冷卻，不在攻的清單上）；那一句照舊排在後面
                     credit = self._order_credit(
                         kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,

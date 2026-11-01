@@ -18,7 +18,7 @@ from tianxia.core.features import Feature, Outcome, Shop, Verb
 class TavernFeature(Feature):
     name = "tavern"
     prefix = "tavern"  # tavern:news、tavern:treat、tavern:hide、tavern:trace、tavern:board、tavern:back；入口 act:tavern 是核心的前綴
-    bot_always = ("tavern:",)  # 坐在酒肆裡一直按得下去：整季機器人不按（bot.py 的排除清單原本就有這一個，重複無害，第 11 批收）
+    bot_always = ("tavern:",)  # 坐在酒肆裡一直按得下去：整季機器人不按（bot.py 的排除清單原本也寫了一個，第 11 批拿掉那一個，只剩這裡）
     # 酒肆開著沒、酒家最近幾則回話、聽過的傳聞、查到過的名號、哪一天請過酒、收到的風聲、藏行跡到幾時、託酒家留意的人、
     # 保鏢跟到幾時、剛被殺手得手的護身：換季全部跟著新角色重來（季上的牆、風聲、請酒、殺手單、閒談照季存）
     player_fields = ("picking_tavern", "tavern_notes", "tavern_heard", "tavern_known", "tavern_treat_day", "whispers", "hidden_until",

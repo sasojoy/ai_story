@@ -3,7 +3,7 @@
 ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx；包裡互相叫直接叫這裡的
 函式）。函式名＝原本的方法名去掉前導底線（`_tavern_news` → `tavern_news`、`_deliver_hits` → `deliver_hits`），兩個例外：公開的
 `tavern_ask` 是 `tavern_ask_reply`、私有的 `_tavern_ask` 是 `tavern_ask_once`——這裡 `tavern_ask` 是問酒家那個模組（ask.py）的名字，
-本體照舊寫 `tavern_ask.topics(...)`。另加一個 `tavern_sign`：`act:tavern` 那一下紀錄的標題（Game._action_title 叫 Game._tavern_sign）。
+本體照舊寫 `tavern_ask.topics(...)`。另加一個 `tavern_sign`：`act:tavern` 那一下紀錄的標題（Game._action_title 經 act 子動詞的掛鉤叫，第 11 批）。
 `_tavern_run` 的動作表原本放的是 Game 的方法本身（`self._tavern_news`），這裡換成同樣不帶參數的 lambda。
 Game 上留 19 個一行委派（server、假人、腳本、測試與核心原位還在叫：選單接管那一格、act:tavern、sync 的下線殺手與三個 deliver、
 choose 最後那一下殺手檢查、shop_view、紀錄標題）。換掉的模組屬性一律照模組叫（tavern_rules.find_chance、encounter.resolve_encounter），

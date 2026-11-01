@@ -1,5 +1,5 @@
 """走一趟（企劃者 2026-10-29～30；設計稿 https://claude.ai/artifact/RJu4dK5cZoQcEe8SHphktc）：按一次探索走一、三、五段，
-每一段就是現行的一次探索（Game._explore_one：一樣的表、一樣扣體力、一樣寫一則江湖紀錄），只是串起來演。
+每一段就是現行的一次探索（explore_actions.explore_one，原本的 Game._explore_one：一樣的表、一樣扣體力、一樣寫一則江湖紀錄），只是串起來演。
 
 - 素材、遭遇自動走；端出要選的事（事件、有所感、頭目）就停在那一段，玩家選完再接著走（Game.outing_go 不帶段數）。
 - 打輸、一段走完氣血低於上限的 outing_turn_back 就回頭；沒走的段不扣體力（體力是一段一段扣的）。
