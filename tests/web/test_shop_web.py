@@ -404,14 +404,17 @@ def test_tapping_a_brew_cell_opens_the_sheet_and_brewing_posts_the_upgrade(conte
         H.render();
         """ + _click('{ act: "shop-brew", attr: "剛", tier: "2", why: "" }') + """
         const sheet = T.els.app.innerHTML;
-        """ + _click('{ act: "shop-brew-go", attr: "剛", tier: "2" }') + """
+        // 「熬」那一顆照畫出來的鈕自己帶的 data 點（不手寫）：鈕上的屬性或階寫錯，送出去的就跟小單寫的不一樣
+        const at = sheet.indexOf('data-act="shop-brew-go"'), tag = sheet.slice(sheet.lastIndexOf("<button", at), sheet.indexOf(">", at));
+        const own = (k) => (new RegExp(` data-${k}="([^"]*)"`).exec(tag) || [])[1];
+        """ + _click('{ act: "shop-brew-go", attr: own("attr"), tier: own("tier") }') + """
         await new Promise((ok) => setTimeout(ok, 5));
         return { sheet, after: T.els.app.innerHTML, calls: T.calls.map((c) => c), brew: H.S.shopBrew };
       })();""", responses={"/api/do/smith_upgrade": {"main": m, "message": "<p>你用 3 個精鐵砂熬出了一個玄鋼骨。</p>"},
                            "/api/smith_line": m["shop"]["forge"]["line"]})
     sheet = out["sheet"][out["sheet"].index('class="brew-sheet"'):]
     assert f"用 3 個一階剛熬一個二階剛，{up['cost']} 兩？" in sheet and up["odds"] in sheet  # 設計稿 3.3 的那一句與素材頁的機率
-    assert 'data-act="shop-brew-go"' in sheet and 'data-act="shop-brew-close"' in sheet
+    assert 'data-act="shop-brew-go" data-attr="剛" data-tier="2"' in sheet and 'data-act="shop-brew-close"' in sheet  # 熬的就是小單寫的那一格
     assert out["sheet"].index('class="row-attr gang"') < out["sheet"].index('class="brew-sheet"')  # 彈在那一排底下
     posted = [c for c in out["calls"] if c[0] == "/api/do/smith_upgrade"]
     assert posted == [["/api/do/smith_upgrade", {"attribute": "剛", "tier": 2}]]
