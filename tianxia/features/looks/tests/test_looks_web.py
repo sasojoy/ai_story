@@ -140,6 +140,27 @@ def test_the_move_preview_shows_what_needs_drawing(m_on):  # noqa: F811
     assert "只能寫中文。" in bad and 'id="scene-preview"' not in bad
 
 
+def test_made_looks_and_moves_can_be_shown(m_on):  # noqa: F811
+    """做好了的也要能看（Joy 2026-11-01「形象頁那邊，已經做好的形象跟絕招也要能展示」）：每一套一顆「看動作」，按了格子上面多一塊畫布
+    （arena_scene.js 的 lookShow 一張一張演），再按收起；招式庫裡一句話自創的那一招一顆「演一次」，抓 /api/looks/scene/m<id> 照稿演、
+    表單先收起來。"""
+    lib = [{**MOVES["library"][0], "id": 8, "move": "m8", "scene": True, "arts": ["大佛"]}]
+    looks = {**LOOKS, "moves": {**MOVES, "library": lib}}
+    out = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "look-show", id: "moying", name: "墨影" }'),
+                 responses={"/api/looks": looks})
+    html = out["app"]
+    assert 'data-act="look-show" data-id="jinshen"' in html  # 沒買的也看得到
+    assert 'id="look-show"' in html and "<b>墨影</b>" in html and 'data-act="look-show" data-id=""' in html
+    closed = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "look-show", id: "moying", name: "墨影" }')
+                    + _click('{ act: "look-show", id: "" }'), responses={"/api/looks": looks})["app"]
+    assert 'id="look-show"' not in closed
+    out = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "move-show", id: "m8" }'),
+                 responses={"/api/looks/scene/m8": {"scene": SCENE}, "/api/looks": looks})
+    html = out["app"]
+    assert any(c[0] == "/api/looks/scene/m8" for c in out["calls"])
+    assert 'id="scene-preview"' in html and 'id="move-prompt"' not in html and ">收起</button>" in html
+
+
 def test_no_art_no_move_form(m_on):  # noqa: F811
     looks = {**LOOKS, "moves": {**MOVES, "has_art": False, "art": "", "library": []}}
     html = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "move-order" }'), responses={"/api/looks": looks})["app"]

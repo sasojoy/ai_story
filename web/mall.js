@@ -47,6 +47,7 @@
   function forgetMall() {
     S.mallOpen = false; S.mallTab = "shelf"; S.mallData = null; S.mallLog = null; S.mallLooks = null; S.mallSay = null; S.mallPick = null; S.mallPending = null; S.mallFail = false;
     S.adMall = null; S.adMallName = ""; S.adMallNote = ""; S.adMallMsg = ""; S.adMallOk = false;
+    S.lookShow = null; S.moveShow = null; S.movePreview = null;
   }
 
   // 交給 shopHtml 的那一份：招牌、掌櫃那一句（剛買成了的、買不了的原因蓋過平常那一句）、餘額（紀錄頁照紀錄那一份，其餘照貨架、還沒抓到照狀態列）
@@ -242,11 +243,24 @@
         : lk.owned ? `<button class="btn small primary" data-act="look-wear" data-id="${esc(lk.id)}">換上</button>`
         : it ? `<button class="btn small" data-act="mall-pick" data-id="${esc(it.id)}">${ingotSvg()}${it.price | 0}</button>` : "";
       return `<div class="look-card${lk.id === d.worn ? " on" : ""}">${lookFaceHtml(lk.id)}<b>${esc(lk.name)}</b>
-        ${lk.note ? `<small>${esc(lk.note)}</small>` : ""}${btn}</div>`; // 說明照字折行（三欄一格窄，切成不折行的小段會撐出格子）
+        ${lk.note ? `<small>${esc(lk.note)}</small>` : ""}${lookShowBtn(lk.id, lk.name)}${btn}</div>`; // 說明照字折行（三欄一格窄，切成不折行的小段會撐出格子）
     };
-    return `<div class="mall-sub">擂台形象</div><div class="mall-grid look-grid">${d.looks.map(card).join("")}</div>${lookMarketHtml(d.market)}${lookOrderHtml(d.order)}${moveHtml(d.moves)}`;
+    return `<div class="mall-sub">擂台形象</div>${lookShowHtml()}<div class="mall-grid look-grid">${d.looks.map(card).join("")}</div>${lookMarketHtml(d.market)}${lookOrderHtml(d.order)}${moveHtml(d.moves)}`;
   }
 
+  // 看動作（Joy 2026-11-01「已經做好的形象跟絕招也要能展示」）：按了在格子上面那塊畫布把這一套十張一張一張演（arena_scene.js 的 lookShow）
+  const lookShowBtn = (id, name) => `<button class="btn small ghost look-show-btn" data-act="look-show" data-id="${esc(id)}" data-name="${esc(name)}">看動作</button>`;
+  function lookShowHtml() {
+    const v = S.lookShow;
+    if (!v) return "";
+    return `<div class="look-show"><canvas id="look-show" class="scene-preview" width="720" height="320" aria-label="「${esc(v.name)}」的動作"></canvas>
+      <div class="row"><b>${esc(v.name)}</b><button class="btn small ghost" data-act="look-show" data-id="">收起</button></div></div>`;
+  }
+  function lookShowTo(id, name) {
+    S.lookShow = id === "" || (S.lookShow && S.lookShow.id === id) ? null : { id, name };
+    if (S.mallOpen) renderMall();
+    if (S.lookShow && typeof lookShow === "function") lookShow(S.lookShow.id);
+  }
   // 自建形象（第二批）：寫名字與一句樣子下單（先扣元寶），圖做好、管理者看過才上架；退回的元寶全退。一次一張
   const LOOK_ORDER_NOTE = "寫一句這一套長什麼樣子，例如「白衣書生，背著竹簍」。圖做好、審核過了才會出現在上面；沒通過的元寶全退。"; // 待 joy 潤
   function lookOrderHtml(o) {
@@ -291,6 +305,7 @@
     if (!m) return "";
     const lib = (m.library || []).map((x) => `<li class="look-order-row move-row">${x.scene ? `<span class="move-fx move-seal" aria-hidden="true">絕</span>` : moveFxHtml(x.move)}<b>${esc(x.art)}</b><span class="look-st st-made">${esc(x.style_text)}</span>
         <small>${esc(x.prompt)}${x.bound ? `・這一季綁在「${esc(x.bound)}」` : "・這一季還沒綁"}</small>
+        ${x.scene ? `<button class="btn small ghost" data-act="move-show" data-id="${esc(x.move)}">${S.moveShow === x.move ? "收起" : "演一次"}</button>` : ""}
         ${x.bindable ? `<button class="btn small" data-act="move-bind" data-id="${x.id | 0}">綁到「${esc(m.art)}」</button>` : ""}</li>`).join("");
     const list = (m.list || []).map((x) => `<li class="look-order-row"><b>${esc(x.art)}</b><span class="look-st st-${esc(x.status)}">${esc(x.status_text)}</span>
         <small>${esc(x.style_text)}・${esc(x.prompt)}${moveArtsNote(x)}${x.reason ? `（${esc(x.reason)}）` : ""}</small></li>`).join("");
@@ -300,8 +315,9 @@
       : `<div class="look-order-form"><textarea class="input" id="move-prompt" maxlength="${m.prompt_max | 0}" rows="2" placeholder="這一招長什麼樣子（${m.prompt_max | 0} 字內，只能中文）">${esc(S.moveDraft || "")}</textarea>
         <button class="btn small" data-act="move-preview">先看看</button>
         <button class="btn small primary" data-act="move-order">${ingotSvg()}${m.price | 0} 下單</button></div>${moveSceneHtml()}`;
-    return `<div class="mall-sub">絕招</div><p class="mall-note">${esc(MOVE_NOTE)}</p>${now}${form}
-      ${lib ? `<ul class="look-orders">${lib}</ul>` : ""}${list ? `<ul class="look-orders">${list}</ul>` : ""}`;
+    const show = S.moveShow ? `<canvas id="scene-preview" class="scene-preview" width="720" height="320" aria-label="絕招演一次"></canvas>` : "";
+    return `<div class="mall-sub">絕招</div><p class="mall-note">${esc(MOVE_NOTE)}</p>${now}${S.moveShow ? "" : form}
+      ${lib ? `<ul class="look-orders">${lib}</ul>${show}` : ""}${list ? `<ul class="look-orders">${list}</ul>` : ""}`;
   }
   const moveArtsNote = (row) => { const need = row.arts || []; return need.length ? `・要畫「${esc(need.join("」「"))}」` : ""; }; // 一句話自創要畫的那幾樣
   // 先看看：伺服器把這一句變成導演稿（不扣元寶），在下面那塊畫布照稿演（arena_scene.js 的 scenePreview）
@@ -312,6 +328,15 @@
     const arts = (p.scene.arts || []).map((a) => a.label);
     const note = arts.length ? `要畫「${arts.join("」「")}」：畫好、審過才上身（這裡先用剪影演）。` : "不用畫圖：下單當場學成。";
     return `<canvas id="scene-preview" class="scene-preview" width="720" height="320" aria-label="絕招預覽"></canvas><p class="mall-note">${esc(note)}</p>`;
+  }
+  // 招式庫裡做好了的那一招：照它的稿和畫好的圖演一次（同擂台；再按一次收起，回到下單的表單）
+  async function moveShowTo(mid) {
+    if (!mid || S.moveShow === mid) { S.moveShow = null; if (S.mallOpen) renderMall(); return; }
+    const r = await api(`/api/looks/scene/${mid}`);
+    if (!r || !r.scene) { S.mallSay = { text: "這一招演不出來，等一下再試。", ok: false }; if (S.mallOpen) renderMall(); return; }
+    S.moveShow = mid; S.movePreview = null;
+    if (S.mallOpen) renderMall();
+    if (typeof scenePreview === "function") scenePreview(r.scene, mid);
   }
   async function movePreview() {
     const text = (document.getElementById("move-prompt")?.value || "").trim();
@@ -357,7 +382,7 @@
   // 賣了幾份、分成入帳了多少、還押著多少（押滿天數才入帳）
   function lookMarketHtml(m) {
     if (!m) return "";
-    const card = (x) => `<div class="look-card">${lookFaceHtml(x.look)}<b>${esc(x.name)}</b><small>${esc(x.seller)}做的</small>
+    const card = (x) => `<div class="look-card">${lookFaceHtml(x.look)}<b>${esc(x.name)}</b><small>${esc(x.seller)}做的</small>${lookShowBtn(x.look, x.name)}
         <button class="btn small" data-act="market-buy" data-id="${esc(x.look)}" data-name="${esc(x.name)}" data-price="${x.price | 0}">${ingotSvg()}${x.price | 0}</button></div>`;
     const shelf = m.shelf.length ? `<div class="mall-grid look-grid">${m.shelf.map(card).join("")}</div>` : `<p class="mall-note">市集上還沒有別人做的形象。</p>`;
     const mine = (m.mine || []).map((x) => x.price != null

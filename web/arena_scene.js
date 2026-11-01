@@ -254,9 +254,11 @@ function sceneSwords(env, sc, b, t, tgt, glow) {
 }
 
 // 萬寶閣下單前的預覽：寫一句、按「先看看」，伺服器回稿，在 #scene-preview 那一塊畫布上演（站在擂台上的是自己的樣子）
-const SCP = { sc: null, t0: 0, raf: 0 };
-function scenePreview(sc) {
-  SCP.sc = sc; SCP.t0 = 0;
+const SCP = { sc: null, mid: "", t0: 0, raf: 0 };
+// mid：做好了的那一招（m<id>）照它的圖演；萬寶閣「先看看」沒有 id，要畫的先用剪影
+function scenePreview(sc, mid) {
+  SCP.sc = sc; SCP.mid = mid || ""; SCP.t0 = 0;
+  if (SCP.mid) sceneArts(SCP.mid, sc);
   if (typeof ringLoad === "function") ringLoad();
   if (!SCP.raf && typeof requestAnimationFrame === "function") SCP.raf = requestAnimationFrame(scenePreviewTick);
 }
@@ -267,7 +269,7 @@ function scenePreviewTick(now) {
   if (!SCP.t0) SCP.t0 = now;
   let t = now - SCP.t0;
   if (t > SCENE_LEN + 700) { SCP.t0 = now; t = 0; }
-  sceneOnRing(cv.getContext("2d"), SCP.sc, t, "me", "");
+  sceneOnRing(cv.getContext("2d"), SCP.sc, t, "me", SCP.mid);
   SCP.raf = requestAnimationFrame(scenePreviewTick);
 }
 // 在擂台的畫布上演（arena_anim.js 的場地與人）；who 是出招的那一邊
@@ -288,4 +290,51 @@ function sceneOnRing(cx, sc, t, who, mid) {
       if (filter) cx.restore();
     },
   }, sc, t);
+}
+
+// ── 形象展示（萬寶閣「形象」那一頁按「看動作」；Joy 2026-11-01「已經做好的形象跟絕招也要能展示」）：一套十張照順序一張一張演，
+// 出招那四張各拿那一種打法的兵器。畫在 #look-show 那塊畫布（重畫整頁也接得上：每一格都重新找畫布）
+const LOOK_SHOW_SEQ = [
+  ["hero_bare_idle", "", "站樁", 2], ["hero_atk_slash", "劍", "揮砍", 1], ["hero_atk_pole", "槍", "長兵", 1], ["hero_atk_fist", "拳腳", "拳腳", 1],
+  ["hero_atk_shoot", "弓弩", "射", 1], ["hero_bare_block", "", "架住", 1], ["hero_bare_dodge", "", "閃身", 1], ["hero_bare_hit", "", "受擊", 1],
+  ["hero_bare_kneel", "", "跪地", 1], ["hero_bare_fall", "", "倒地", 1],
+];
+const LOOK_SHOW_FRAME = 130, LOOK_SHOW_HOLD = 450; // 一格幾毫秒、每一張演完停多久
+const LSP = { look: "", t0: 0, raf: 0 };
+// 現在演到第幾張的第幾格：回 [那一張, 第幾格]
+function lookShowAt(t) {
+  const showLens = LOOK_SHOW_SEQ.map(([sheet, , , loops]) => RING_SHEETS[sheet] * LOOK_SHOW_FRAME * loops + LOOK_SHOW_HOLD);
+  let k = t % showLens.reduce((a, b) => a + b, 0);
+  for (let j = 0; j < LOOK_SHOW_SEQ.length; j++) {
+    if (k < showLens[j]) {
+      const n = RING_SHEETS[LOOK_SHOW_SEQ[j][0]];
+      const step = Math.floor(k / LOOK_SHOW_FRAME);
+      return [LOOK_SHOW_SEQ[j], step >= n * LOOK_SHOW_SEQ[j][3] ? n - 1 : step % n];
+    }
+    k -= showLens[j];
+  }
+  return [LOOK_SHOW_SEQ[0], 0];
+}
+function lookShow(look) {
+  LSP.look = look || ""; LSP.t0 = 0;
+  if (typeof ringLoad === "function") ringLoad();
+  if (!LSP.raf && typeof requestAnimationFrame === "function") LSP.raf = requestAnimationFrame(lookShowTick);
+}
+function lookShowTick(now) {
+  LSP.raf = 0;
+  const showCv = typeof document !== "undefined" ? document.getElementById("look-show") : null;
+  if (!showCv) return;
+  if (!LSP.t0) LSP.t0 = now;
+  const showCx = showCv.getContext("2d");
+  const [[sheet, kind, label], i] = lookShowAt(now - LSP.t0);
+  showCx.clearRect(0, 0, RING_W, RING_H);
+  ringGround(showCx);
+  ringFigure(showCx, sheet, i, RING_W / 2 - 20, false, kind, 0, LSP.look);
+  showCx.save();
+  showCx.font = "bold 24px serif"; showCx.textAlign = "left"; showCx.textBaseline = "middle";
+  const pillW = showCx.measureText(label).width + 28;
+  showCx.fillStyle = "rgba(20,14,8,.72)"; showCx.fillRect(14, 14, pillW, 38); // 淺色的城牆上也看得清
+  showCx.fillStyle = "#f4e3c0"; showCx.fillText(label, 28, 34);
+  showCx.restore();
+  LSP.raf = requestAnimationFrame(lookShowTick);
 }
