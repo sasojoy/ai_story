@@ -94,6 +94,10 @@ def test_the_admin_box_lists_open_orders_with_prompts(m_on):  # noqa: F811
     assert "art1・大佛" in html and "「佛掌」" in html  # 一句話自創：要畫的一樣一格，附提示詞
     assert 'data-slot="art2"' in html and 'id="ad-moves-file-9-art2"' in html
     assert 'data-op="move-release" data-id="9" disabled' in html  # 還缺佛掌：上架按不下去
+    stopped = {**moves["open"][0], "studio": {"painted": 3, "failed": "佛掌：有字"}}  # 畫坊停手：寫原因、給「再畫一次」
+    script = f"H.S.adLooks = {json.dumps({**admin, 'gen': 'api', 'open': [], 'moves': {**moves, 'open': [stopped]}}, ensure_ascii=False)}; return H.looksAdminHtml();"
+    html = webharness.run(driver, {"m": m_on, "script": script, "S": {}, "menxia": None, "stored": {}, "responses": {}})
+    assert "畫坊：畫了 3 張・停手了：佛掌：有字" in html and 'data-op="studio-retry" data-id="9"' in html and "畫坊自動畫" in html
 
 
 MOVES = {"price": 300, "prompt_max": 120, "art": "旋風腿", "has_art": True, "style": "fist", "style_text": "拳腳", "open": False, "bound": False,

@@ -46,6 +46,7 @@ def admin_tools(shell) -> dict[str, AdminTool]:
         "moves_reject": AdminTool(gate, lambda g, b: actions.admin_move_reject(g, shell._int(b.get("id"), 0), str(b.get("note", ""))[:100])),
         "looks_upload": AdminTool(gate, upload),
         "looks_release": AdminTool(gate, lambda g, b: actions.admin_release(g, shell._int(b.get("id"), 0))),
+        "looks_studio_retry": AdminTool(gate, lambda g, b: actions.admin_studio_retry(g, shell._int(b.get("id"), 0))),
         "looks_reject": AdminTool(gate, lambda g, b: actions.admin_reject(g, shell._int(b.get("id"), 0), str(b.get("note", ""))[:100])),
     }
 

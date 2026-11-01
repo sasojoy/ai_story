@@ -574,17 +574,21 @@
   // 上傳（一次選好幾張，檔名照十張的名字：hero_bare_idle.png……）、上架、退回（原因寫給下單的人看）。按「看訂單」才抓
   function looksAdminHtml() {
     const d = S.adLooks;
-    const head = `<p class="muted">自建形象（玩家下的單：照提示詞生圖、切成 220 格〔scripts/cut_look.py〕再上傳；十張齊了看過再上架）</p>
+    const auto = S.adLooks && S.adLooks.gen === "api" ? "畫坊自動畫、自動審，畫好的會自己出現；" : "";
+    const head = `<p class="muted">自建形象（玩家下的單：${auto}也可以照提示詞生圖、切成 220 格〔scripts/cut_look.py〕再上傳；十張齊了看過再上架）</p>
       <div class="row wrap"><button class="btn small" data-act="looks-admin" data-op="load">看訂單</button></div>
       <p class="form-msg${S.adLooksOk ? " ok" : ""}" role="alert">${esc(S.adLooksMsg || "")}</p>`;
     if (!d) return head;
+    // 畫坊（run_studio.py）：自動畫了幾張；畫不好停手時寫原因、給一顆「再畫一次」
+    const studio = (x) => !x.studio || (!x.studio.painted && !x.studio.failed) ? "" : `<p class="muted">畫坊：畫了 ${x.studio.painted | 0} 張${x.studio.failed ? `・停手了：${esc(x.studio.failed)}` : ""}</p>`
+      + (x.studio.failed && (x.status === "pending") ? `<div class="row wrap"><button class="btn small" data-act="looks-admin" data-op="studio-retry" data-id="${x.id | 0}">再畫一次</button></div>` : "");
     const row = (o) => {
       const have = new Set(o.have || []);
       const sheets = Object.keys(d.sheets || {});
       const faces = sheets.map((s) => `<span class="${have.has(s) ? "ok" : ""}">${esc(s.replace("hero_", ""))}</span>`).join("");
       const prompts = Object.entries(o.prompts || {}).map(([s, text]) => `<details><summary>${esc(s)}</summary><pre class="look-gen">${esc(text)}</pre></details>`).join("");
       return `<div class="card look-admin"><b>#${o.id | 0}「${esc(o.name)}」</b>・${esc(o.owner)}・${esc(o.status_text)}${o.reason ? `（${esc(o.reason)}）` : ""}
-        <p>${esc(o.prompt)}</p>${o.prompts && Object.keys(o.prompts).length ? `<div class="look-sheets">${faces}</div>${prompts}
+        <p>${esc(o.prompt)}</p>${studio(o)}${o.prompts && Object.keys(o.prompts).length ? `<div class="look-sheets">${faces}</div>${prompts}
         <div class="row wrap"><input type="file" id="ad-looks-file-${o.id | 0}" accept="image/png,image/webp" multiple aria-label="上傳十張">
         <button class="btn small" data-act="looks-admin" data-op="upload" data-id="${o.id | 0}">上傳</button>
         <button class="btn small primary" data-act="looks-admin" data-op="release" data-id="${o.id | 0}" ${have.size === sheets.length ? "" : "disabled"}>上架</button></div>
@@ -592,7 +596,7 @@
     };
     // 一句話自創的絕招：導演稿要畫的那一兩樣（法相、巨物）一樣一格——提示詞、選一張上傳；到齊了才按得下上架
     const srow = (m) => `<div class="card look-admin"><b>#${m.id | 0}「${esc(m.art)}」</b>・${esc(m.style_text)}・${esc(m.owner)}・${esc(m.status_text)}${m.reason ? `（${esc(m.reason)}）` : ""}
-        <p>${esc(m.prompt)}</p>${(m.arts || []).some((a) => a.prompt) ? (m.arts || []).map((a) => `<div class="look-sheets"><span class="${a.have ? "ok" : ""}">${esc(a.slot)}・${esc(a.label)}</span></div>
+        <p>${esc(m.prompt)}</p>${studio(m)}${(m.arts || []).some((a) => a.prompt) ? (m.arts || []).map((a) => `<div class="look-sheets"><span class="${a.have ? "ok" : ""}">${esc(a.slot)}・${esc(a.label)}</span></div>
         <details><summary>提示詞</summary><pre class="look-gen">${esc(a.prompt)}</pre></details>
         <div class="row wrap"><input type="file" id="ad-moves-file-${m.id | 0}-${esc(a.slot)}" accept="image/png,image/webp" aria-label="上傳${esc(a.label)}">
         <button class="btn small" data-act="looks-admin" data-op="move-upload" data-id="${m.id | 0}" data-slot="${esc(a.slot)}">上傳</button></div>`).join("")
@@ -638,6 +642,8 @@
       } else if (op === "move-reject") {
         const note = (document.getElementById(`ad-moves-note-${id}`)?.value || "").trim();
         await done(await api("/api/do/moves_reject", { id: Number(id), note }));
+      } else if (op === "studio-retry") {
+        await done(await api("/api/do/looks_studio_retry", { id: Number(id) }));
       } else if (op === "release") {
         await done(await api("/api/do/looks_release", { id: Number(id) }));
       } else if (op === "reject") {
