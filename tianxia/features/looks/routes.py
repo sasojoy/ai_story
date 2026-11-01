@@ -5,7 +5,7 @@ import re
 import secrets
 
 from fastapi import APIRouter, Body, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from tianxia.core.features import AdminTool
 from tianxia.database import default_path
@@ -154,7 +154,7 @@ def router(shell) -> APIRouter:
         return shell.act_look(game, lambda g: None, lambda g: actions.admin_view(g))[1]
 
     @r.get("/api/looks/img/{look}/{sheet}")
-    def api_looks_img(look: str, sheet: str):
+    def api_looks_img(request: Request, look: str, sheet: str):
         """自建形象與招式動畫的圖（資料庫旁邊的 looks/<id>/）：擂台上別人也看得到，所以不看登入；只認 u<數字> 配十張的檔名、m<數字> 配 fx。"""
         gate()
         if not ((orders.is_custom(look) and sheet in orders.SHEETS) or (moves.is_move(look) and sheet in (moves.SHEET, *scenes.ART_SLOTS))):
@@ -162,6 +162,16 @@ def router(shell) -> APIRouter:
         path = orders.sheet_file(actions.images_beside(default_path()), look, sheet)
         if path is None:
             raise HTTPException(404)
-        return FileResponse(path, media_type=f"image/{path.suffix[1:]}", headers={"Cache-Control": "public, max-age=86400"})
+        # 每次都向伺服器確認，沒換就回 304（Starlette 1.7 的 FileResponse 不處理條件請求，這幾行自己做）。
+        # 原本寫 public, max-age=86400：圖換了網址沒換，瀏覽器整天拿舊的那張——2026-11-02 把「魔教聖女」
+        # 十張 refit 回標準身高之後，畫面上還是舊的大號身體，看起來像沒生效（Joy「沒辦法透過管理工具重複上架」；
+        # 上架狀態不必動，圖是從磁碟送的）。上架之後圖還會被 refit、重畫、退回重來，所以不能釘死快取；
+        # 照 server.NO_CACHE 那條家規（「開發時改了檔沒重開，會被瀏覽器釘死」）。
+        stat = path.stat()
+        tag = f'"{int(stat.st_mtime)}-{stat.st_size}"'  # 檔案換了（mtime 或大小變了）這個就變
+        if request.headers.get("if-none-match") == tag:
+            return Response(status_code=304, headers={"ETag": tag, "Cache-Control": "no-cache"})
+        return FileResponse(path, media_type=f"image/{path.suffix[1:]}",
+                            headers={"Cache-Control": "no-cache", "ETag": tag})
 
     return r

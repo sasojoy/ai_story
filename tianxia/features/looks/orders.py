@@ -283,7 +283,8 @@ FRAMING = ("The WHOLE character must be inside every frame: the top of the head 
            "afterimages, no fading, no transparency, no washed-out or half-drawn figures; the face and clothes keep their full "
            "colour in every frame.")
 RULES = ("IMPORTANT: the character holds NO weapon and NO object. Hands are closed into loose fists as if gripping an invisible handle. "
-         "Sprite sheet rules: pure white background, no ground shadow, no text, no numbers, no frame borders. Every frame is the same "
+         "Sprite sheet rules: pure white background, no ground shadow, NO ground line, no horizon line, no floor or platform, "
+         "no text, no numbers, no frame borders. Every frame is the same "
          "size and the character is the same size in every frame. Feet stand on the same horizontal ground line in every frame. "
          "Side view, facing right. " + FRAMING)
 ACTIONS = {

@@ -47,6 +47,21 @@ class CutError(ValueError):
     """切不出來（cutting 丟的也是這一種的子類或同名的；畫坊一律當作沒畫好）。"""
 
 
+class CutProblem(CutError):
+    """切出來了，但我們自己機械驗就看得出不能用（空格、貼邊、地面線、去背吃掉大半）。
+
+    為什麼獨立一種（Joy 2026-11-02「要把能過的方法模組化，不要每次都重複做一堆」）：這幾樣以前要
+    等 Claude 審圖才擋得下來——花一次審圖的錢、而且意見每次寫法不同，人要重新判一輪是生圖的錯
+    還是我們切壞的。改成切完就驗（cutting.sheet_problems），壞的當場帶著指定好的改法重畫，
+    不叫審圖；過得了這一關的才送 Claude 看「像不像同一個人、有沒有不該有的東西」。
+    problems 是寫給管理者看的中文，fix 是丟回生圖的英文一句。"""
+
+    def __init__(self, problems: list[str], fix: str):
+        super().__init__("；".join(problems))
+        self.problems = problems
+        self.fix = fix
+
+
 @dataclass(frozen=True)
 class Verdict:
     ok: bool
@@ -119,13 +134,20 @@ CHECK_PORTRAIT = (
     "third of the height) like the reference sprite; it matches the description; holds no weapon or object; soft ink-wash watercolor "
     "style like the reference. " + CHECK_COMMON
 )
+# 動作比對放寬（Joy 2026-11-02 選的）：原本要求「逐格照參考圖的姿勢」，出招那四張因此一直過不了——
+# 2026-11-02 #3 的理由是「第2格雙拳未併攏舉至右肩上方」「第5格不是低位收勢」這種逐格手部位置，
+# 而六格的出招圖要生圖穩定對準手的位置本來就做不到。硬規則全留（格數、整個人在框內、同一個人、
+# 沒有武器、側面向右、腳在同一條線），只把姿勢那一句改成「整串讀起來是那個動作、順序對」。
+# 「沒有武器」也補一句：寬袖、飄帶、長髮不算東西——魔教聖女的紅袖一揚就被判成「手持紅布或刀刃」。
 CHECK_SHEET = (
     "This is an animation strip for a 2D fighting game: {frames} frames side by side, each 220×220, cut out from the background "
     "(cut-out areas are flat gray). The action should be: {action}\n"
-    "Reference 1 is the same animation drawn for another character (poses and layout to follow). Reference 2 is this character's "
-    "design.\nPass it only if: exactly {frames} frames, one whole character in each (no frame empty, cut in half, or holding two "
-    "characters); it is the same character as reference 2 in every frame (face, hair, clothes, colors); the poses follow reference 1 "
-    "in order; side view facing right; holds no weapon or object; feet roughly on the same ground line. " + CHECK_COMMON
+    "Reference 1 is the same animation drawn for another character (layout and overall action to follow). Reference 2 is this "
+    "character's design.\nPass it only if: exactly {frames} frames, one whole character in each (no frame empty, cut in half, or "
+    "holding two characters); it is the same character as reference 2 in every frame (face, hair, clothes, colors); the frames read "
+    "as the action above and run in the same order as reference 1 — small differences in limb position are fine, judge the action as "
+    "a whole, not frame by frame; side view facing right; holds no weapon or object (loose sleeves, ribbons, sashes and long hair are "
+    "not objects); feet roughly on the same ground line. " + CHECK_COMMON
 )
 
 
@@ -216,6 +238,8 @@ def work(job: Job, painter: Painter, critic: Critic, cut: Callable[[Job, bytes],
             return Result(ok=False, painted=n, problems=problems)
         try:
             image = cut(job, raw)
+        except CutProblem as exc:  # 我們自己驗出來的：帶著指定好的改法重畫，不花審圖的錢
+            verdict = Verdict(False, exc.problems, exc.fix)
         except (CutError, ValueError) as exc:
             verdict = Verdict(False, [f"切不出來：{exc}"], "Draw the subject(s) clearly on a pure white background, "
                                                               "well separated, nothing touching the edges.")

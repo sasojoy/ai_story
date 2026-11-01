@@ -221,6 +221,201 @@ def test_the_real_cut_keeps_one_subject_and_cuts_a_sheet():
     assert orders.sheet_problem("hero_atk_slash", strip) is None
 
 
+def test_a_character_without_a_hat_is_not_scaled_until_its_head_is_cut_off():
+    """切格照斗笠寬定比例；自建形象不一定戴斗笠（2026-11-02「魔教聖女」連十張都被擋下，理由都是頭頂被裁掉）：
+    hat() 在沒有斗笠時量到的是頭髮或肩線，倍率算過大、整個人被放大出框。cutting.FIT 夾住它——
+    頭頂要留在格子裡，而且上緣要有空白。"""
+    pytest.importorskip("scipy")
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    from tianxia.features.looks import cutting
+
+    # 四格：一個「高瘦、沒有斗笠」的人形——頭很窄（會讓 hat() 量到窄寬度）、身子長
+    src = Image.new("RGB", (4 * 260, 400), "white")
+    for k in range(4):
+        ox = k * 260 + 130
+        for y in range(40, 110):  # 頭：窄
+            for x in range(ox - 18, ox + 18):
+                src.putpixel((x, y), (40, 40, 60))
+        for y in range(110, 360):  # 身子與腿：更窄
+            for x in range(ox - 26, ox + 26):
+                src.putpixel((x, y), (150, 40, 40))
+    buf = io.BytesIO()
+    src.save(buf, "PNG")
+
+    strip = cutting.sheet_bytes(buf.getvalue(), "hero_bare_idle")
+    assert orders.sheet_problem("hero_bare_idle", strip) is None
+    out = Image.open(io.BytesIO(strip)).convert("RGBA")
+    assert out.size == (4 * cutting.CELL, cutting.CELL)
+    alpha = np.asarray(out)[..., 3]
+    assert alpha[0].max() == 0, "最上面那一列有東西：頭被切到格子邊界了"
+    for k in range(4):
+        cell = alpha[:, k * cutting.CELL:(k + 1) * cutting.CELL]
+        rows = np.nonzero(cell.max(1))[0]
+        assert len(rows), f"第 {k + 1} 格是空的"
+        assert rows.min() >= 2, f"第 {k + 1} 格的頭貼到上緣（y={rows.min()}）"
+        assert rows.max() <= cutting.BY + 2, f"第 {k + 1} 格的腳超過地平線（y={rows.max()}）"
+
+
+def test_we_catch_the_bad_cuts_ourselves_before_paying_for_a_review():
+    """切完自己先驗一遍（cutting.sheet_problems；Joy 2026-11-02「把能過的方法模組化」）：空格、腳下的地面線、
+    貼到上緣這幾樣機器看得出來，就不要花一次審圖的錢——丟 CutProblem，畫坊照它帶的那一句英文重畫。
+    每一條都是實際踩過的（#3 hero_atk_slash：「第2格是空的，只有一條地面線」「各格腳下畫有多餘的地面橫線」）。"""
+    pytest.importorskip("scipy")
+    import io
+
+    from PIL import Image
+
+    from tianxia.features.looks import cutting
+
+    def strip_of(cells):
+        im = Image.new("RGBA", (len(cells) * cutting.CELL, cutting.CELL), (0, 0, 0, 0))
+        for k, draw in enumerate(cells):
+            draw(im, k * cutting.CELL)
+        return im
+
+    def person(im, ox, top=60, bottom=cutting.BY):
+        for y in range(top, bottom):
+            for x in range(ox + 80, ox + 140):
+                im.putpixel((x, y), (40, 40, 60, 255))
+
+    def ground(im, ox):
+        for x in range(ox + 4, ox + cutting.CELL - 4):
+            for y in range(cutting.BY - 2, cutting.BY):
+                im.putpixel((x, y), (60, 60, 60, 255))
+
+    good = strip_of([lambda im, ox: person(im, ox)] * 3)
+    assert cutting.sheet_problems(good, 3) == ([], "")
+
+    empty = strip_of([lambda im, ox: person(im, ox), lambda im, ox: None, lambda im, ox: person(im, ox)])
+    bad, fix = cutting.sheet_problems(empty, 3)
+    assert any("第 2 格幾乎是空的" in b for b in bad) and "frame 2 is empty" in fix
+
+    lined = strip_of([lambda im, ox: (person(im, ox), ground(im, ox))] * 3)
+    bad, fix = cutting.sheet_problems(lined, 3)
+    assert any("橫跨整格的線" in b for b in bad) and "do NOT draw any ground line" in fix
+
+    high = strip_of([lambda im, ox: person(im, ox, top=0)] * 3)
+    bad, fix = cutting.sheet_problems(high, 3)
+    assert any("貼到上緣" in b for b in bad) and "empty space above the head" in fix
+
+    # 壞的那一條走的是 CutProblem（畫坊照它帶的那一句重畫，不叫審圖）。照實際踩到的樣子造：
+    # 第二格沒有人、只有一條地面線（#3 hero_atk_slash「第2格是空的，只有一條地面線」）
+    buf = io.BytesIO()
+    src = Image.new("RGB", (3 * 260, 400), "white")
+    for k in range(3):
+        ox = k * 260
+        if k == 1:
+            for x in range(ox + 20, ox + 240):  # 只有線
+                for y in range(352, 356):
+                    src.putpixel((x, y), (60, 60, 60))
+            continue
+        for y in range(60, 356):
+            for x in range(ox + 110, ox + 150):
+                src.putpixel((x, y), (40, 40, 60))
+    src.save(buf, "PNG")
+    with pytest.raises(studio.CutProblem) as caught:
+        cutting.sheet_bytes(buf.getvalue(), "hero_bare_hit")
+    assert caught.value.fix, "要帶一句給生圖的改法"
+
+
+def test_cut_sheets_come_out_the_same_height_as_the_hat_boy_so_weapons_line_up():
+    """web/arena_anim.js 的 RING_HAND（每一格的手部座標）是照預設斗笠小子 155 高的身體寫死的，
+    所以切出來的自建形象一定要跟它一樣高，兵器才掛得準（Joy 2026-11-02「兵器套用上去就破圖了」）。
+    照斗笠寬縮放做不到這件事：沒戴斗笠量到的是頭髮，連預設的 hero_bare_idle 重切都算成 199 高。"""
+    pytest.importorskip("scipy")
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    from tianxia.features.looks import cutting
+
+    def heights(data, frames):
+        a = np.asarray(Image.open(io.BytesIO(data)).convert("RGBA"))[..., 3]
+        out = []
+        for k in range(frames):
+            ys = np.nonzero((a[:, k * cutting.CELL:(k + 1) * cutting.CELL] > 32).max(1))[0]
+            out.append(int(ys.max() - ys.min() + 1) if len(ys) else 0)
+        return out
+
+    # 預設的斗笠小子重切一次：身高要跟原圖一樣（新規則不能改掉既有的圖）
+    for name in ("hero_bare_idle", "hero_atk_slash"):
+        cols, rows = cutting.LAYOUT[name]
+        flat = Image.open(actions.WEB_IMG / "arena" / f"{name}.webp").convert("RGBA")
+        white = Image.new("RGBA", flat.size, "white")
+        white.alpha_composite(flat)
+        src = Image.new("RGB", (cols * cutting.CELL, rows * cutting.CELL), "white")
+        for k in range(cols * rows):
+            src.paste(white.crop((k * cutting.CELL, 0, (k + 1) * cutting.CELL, cutting.CELL)).convert("RGB"),
+                      ((k % cols) * cutting.CELL, (k // cols) * cutting.CELL))
+        buf = io.BytesIO()
+        src.save(buf, "PNG")
+        after = heights(cutting.sheet_bytes(buf.getvalue(), name), cols * rows)
+        assert max(after) == pytest.approx(cutting.BODY[name], abs=2), (name, after)
+
+    # 一個「高瘦、沒斗笠」的人：也要被縮到標準身高，不是塞滿格子
+    src = Image.new("RGB", (4 * 260, 400), "white")
+    for k in range(4):
+        ox = k * 260 + 130
+        for y in range(30, 370):
+            for x in range(ox - 22, ox + 22):
+                src.putpixel((x, y), (40, 40, 60))
+    buf = io.BytesIO()
+    src.save(buf, "PNG")
+    tall = heights(cutting.sheet_bytes(buf.getvalue(), "hero_bare_idle"), 4)
+    assert max(tall) == pytest.approx(cutting.BODY["hero_bare_idle"], abs=2), tall
+
+
+def test_refit_rescales_an_old_oversized_sheet_without_redrawing_it():
+    """2026-11-02 之前切的自建形象高 190～200（照斗笠寬），生圖的原圖沒留著：refit 直接把成品縮回標準身高。"""
+    pytest.importorskip("scipy")
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    from tianxia.features.looks import cutting
+
+    big = Image.new("RGBA", (4 * cutting.CELL, cutting.CELL), (0, 0, 0, 0))
+    for k in range(4):
+        for y in range(cutting.BY - 200, cutting.BY):
+            for x in range(k * cutting.CELL + 80, k * cutting.CELL + 130):
+                big.putpixel((x, y), (40, 40, 60, 255))
+    buf = io.BytesIO()
+    big.save(buf, "WEBP")
+    fixed = cutting.refit(buf.getvalue(), "hero_bare_idle")
+    a = np.asarray(Image.open(io.BytesIO(fixed)).convert("RGBA"))[..., 3]
+    for k in range(4):
+        ys = np.nonzero((a[:, k * cutting.CELL:(k + 1) * cutting.CELL] > 32).max(1))[0]
+        assert int(ys.max() - ys.min() + 1) == pytest.approx(cutting.BODY["hero_bare_idle"], abs=2)
+        assert ys.max() == pytest.approx(cutting.BY, abs=2), "腳底要還在地平線上"
+    assert cutting.refit(fixed, "hero_bare_idle") == fixed, "已經對的那一條原樣回傳"
+
+
+def test_the_sheet_checklist_judges_the_action_as_a_whole_not_frame_by_frame():
+    """Joy 2026-11-02 定的標準：出招那四張不要求逐格對準手的位置（六格動作圖生圖做不到，#3 一直卡在
+    「第2格雙拳未併攏舉至右肩上方」這種理由），但硬規則全留。寬袖、飄帶也不算「手上拿著東西」。"""
+    check = studio.CHECK_SHEET
+    assert "judge the action as a whole, not frame by frame" in check
+    assert "small differences in limb position are fine" in check
+    assert "loose sleeves, ribbons, sashes and long hair are not objects" in check
+    for hard in ("exactly {frames} frames", "one whole character in each", "same character as reference 2",
+                 "holds no weapon or object", "side view facing right", "feet roughly on the same ground line"):
+        assert hard in check, hard
+
+
+def test_the_sheet_prompt_forbids_a_drawn_ground_line():
+    """提示詞原本只說 no ground shadow（不要陰影），生圖照樣畫地平線，去背留著它、切格被帶歪。"""
+    order = orders.Order(pid=1, owner="甲", name="試", prompt="紅衣少女", status=orders.PENDING,
+                         reason="", look="u1", time=0.0)
+    for prompt in orders.gen_prompts(order).values():
+        assert "NO ground line" in prompt and "no horizon line" in prompt
+
+
 # ── 真的去叫的那兩家（假的連線：看送出去的長什麼樣、回來的怎麼讀） ──
 
 
