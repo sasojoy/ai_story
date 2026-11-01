@@ -289,7 +289,10 @@ RULES = ("IMPORTANT: the character holds NO weapon and NO object. Hands are clos
          "Side view, facing right. " + FRAMING)
 ACTIONS = {
     "hero_bare_idle": "Idle fighting stance, gentle breathing loop: 4 frames, right fist held forward at waist height. "
-                      "The body visibly rises and sinks across the four frames (chest and shoulders up on 2, down on 4) and the fists drift slightly — every frame must be a different drawing, never the same pose twice. Layout: 4 frames in one row. Aspect 4:1.",
+                      "Breathing means the WHOLE body moves straight up and down by roughly a tenth of its height: frame 1 lowest, "
+                      "frames 2 and 3 higher, frame 4 back down, so no two frames are the same drawing. Keep exactly the same "
+                      "stance, the same facing and the feet in the same place — do NOT lean forward, do not step, do not stretch "
+                      "or squash the body, no motion blur. Layout: 4 frames in one row. Aspect 4:1.",
     "hero_bare_hit": "Getting hit: 1 flinch, head snapping back, 2 knocked backward, arms flung out, 3 staggering to regain balance. Layout: 3 frames in one row. Aspect 3:1.",
     "hero_bare_kneel": "Losing and dropping to one knee: 1 wobbling, 2 one knee bending, 3 kneeling, right fist planted on the ground, head down, 4 same pose, breathing hard. Layout: 4 frames in one row. Aspect 4:1.",
     "hero_bare_dodge": "Dodging: 1 stance, 2 quick lean back and sidestep, 3 deepest point of the dodge, low and leaning back, 4 springing back into stance. Layout: 4 frames in one row. Aspect 4:1.",
