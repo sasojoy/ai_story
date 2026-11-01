@@ -551,7 +551,12 @@ def test_feature_packages_only_touch_the_service_list_on_the_game():
 # core-events（全部拆包第 16 批「事件檢定進核心」，計畫 docs/superpowers/plans/2026-11-01-事件檢定進核心.md）：事件檢定的本體從 Game 搬進
 # 核心本體 tianxia/core/event_check.py。以前那幾個方法在 Game 上，叫包的委派會被 game_links 記成 GAME_DELEGATE_CALLERS；搬進 tianxia/core/
 # 之後 game_links（只掃 engine.py）看不到，所以這裡補兩條：核心模組經 ctx 叫的不准是包的委派；Game 上叫 event_check 的只有那幾個一行的委派。
-CORE_EVENT_DELEGATES: set[str] = set()  # Game 上本體只有一行 `return event_check.<名>(self, …)` 的方法（Task 3 填）
+CORE_EVENT_DELEGATES = {  # Game 上本體只有一行 `return event_check.<名>(self, …)` 的方法：server、假人、測試、探索包與 Game 原位在叫的 15 個
+    # （只有 event_check 自己叫的 _answer_branch、_deed_credit 不留委派）
+    "_present", "_event_text", "event_tier", "event_option_view", "_choice_label",  # 事件卡
+    "_choose", "_tale_clue", "_event_battle", "_apply",  # 固定選項
+    "_free_text_of", "_branches", "event_free_text_prompt", "free_text_request", "answer_event", "add_gamble_narration",  # 隨口應對
+}
 
 
 def ctx_package_calls(source: str, name: str) -> list[str]:
