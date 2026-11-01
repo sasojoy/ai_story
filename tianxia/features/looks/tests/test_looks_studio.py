@@ -260,6 +260,76 @@ def test_a_character_without_a_hat_is_not_scaled_until_its_head_is_cut_off():
         assert rows.max() <= cutting.BY, f"第 {k + 1} 格的腳超過地平線（y={rows.max()}）"
 
 
+def test_we_catch_the_bad_cuts_ourselves_before_paying_for_a_review():
+    """切完自己先驗一遍（cutting.sheet_problems；Joy 2026-11-02「把能過的方法模組化」）：空格、腳下的地面線、
+    貼到上緣這幾樣機器看得出來，就不要花一次審圖的錢——丟 CutProblem，畫坊照它帶的那一句英文重畫。
+    每一條都是實際踩過的（#3 hero_atk_slash：「第2格是空的，只有一條地面線」「各格腳下畫有多餘的地面橫線」）。"""
+    pytest.importorskip("scipy")
+    import io
+
+    from PIL import Image
+
+    from tianxia.features.looks import cutting
+
+    def strip_of(cells):
+        im = Image.new("RGBA", (len(cells) * cutting.CELL, cutting.CELL), (0, 0, 0, 0))
+        for k, draw in enumerate(cells):
+            draw(im, k * cutting.CELL)
+        return im
+
+    def person(im, ox, top=60, bottom=cutting.BY):
+        for y in range(top, bottom):
+            for x in range(ox + 80, ox + 140):
+                im.putpixel((x, y), (40, 40, 60, 255))
+
+    def ground(im, ox):
+        for x in range(ox + 4, ox + cutting.CELL - 4):
+            for y in range(cutting.BY - 2, cutting.BY):
+                im.putpixel((x, y), (60, 60, 60, 255))
+
+    good = strip_of([lambda im, ox: person(im, ox)] * 3)
+    assert cutting.sheet_problems(good, 3) == ([], "")
+
+    empty = strip_of([lambda im, ox: person(im, ox), lambda im, ox: None, lambda im, ox: person(im, ox)])
+    bad, fix = cutting.sheet_problems(empty, 3)
+    assert any("第 2 格幾乎是空的" in b for b in bad) and "frame 2 is empty" in fix
+
+    lined = strip_of([lambda im, ox: (person(im, ox), ground(im, ox))] * 3)
+    bad, fix = cutting.sheet_problems(lined, 3)
+    assert any("橫跨整格的線" in b for b in bad) and "do NOT draw any ground line" in fix
+
+    high = strip_of([lambda im, ox: person(im, ox, top=0)] * 3)
+    bad, fix = cutting.sheet_problems(high, 3)
+    assert any("貼到上緣" in b for b in bad) and "empty space above the head" in fix
+
+    # 壞的那一條走的是 CutProblem（畫坊照它帶的那一句重畫，不叫審圖）。照實際踩到的樣子造：
+    # 第二格沒有人、只有一條地面線（#3 hero_atk_slash「第2格是空的，只有一條地面線」）
+    buf = io.BytesIO()
+    src = Image.new("RGB", (3 * 260, 400), "white")
+    for k in range(3):
+        ox = k * 260
+        if k == 1:
+            for x in range(ox + 20, ox + 240):  # 只有線
+                for y in range(352, 356):
+                    src.putpixel((x, y), (60, 60, 60))
+            continue
+        for y in range(60, 356):
+            for x in range(ox + 110, ox + 150):
+                src.putpixel((x, y), (40, 40, 60))
+    src.save(buf, "PNG")
+    with pytest.raises(studio.CutProblem) as caught:
+        cutting.sheet_bytes(buf.getvalue(), "hero_bare_hit")
+    assert caught.value.fix, "要帶一句給生圖的改法"
+
+
+def test_the_sheet_prompt_forbids_a_drawn_ground_line():
+    """提示詞原本只說 no ground shadow（不要陰影），生圖照樣畫地平線，去背留著它、切格被帶歪。"""
+    order = orders.Order(pid=1, owner="甲", name="試", prompt="紅衣少女", status=orders.PENDING,
+                         reason="", look="u1", time=0.0)
+    for prompt in orders.gen_prompts(order).values():
+        assert "NO ground line" in prompt and "no horizon line" in prompt
+
+
 # ── 真的去叫的那兩家（假的連線：看送出去的長什麼樣、回來的怎麼讀） ──
 
 

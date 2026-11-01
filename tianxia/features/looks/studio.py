@@ -47,6 +47,21 @@ class CutError(ValueError):
     """切不出來（cutting 丟的也是這一種的子類或同名的；畫坊一律當作沒畫好）。"""
 
 
+class CutProblem(CutError):
+    """切出來了，但我們自己機械驗就看得出不能用（空格、貼邊、地面線、去背吃掉大半）。
+
+    為什麼獨立一種（Joy 2026-11-02「要把能過的方法模組化，不要每次都重複做一堆」）：這幾樣以前要
+    等 Claude 審圖才擋得下來——花一次審圖的錢、而且意見每次寫法不同，人要重新判一輪是生圖的錯
+    還是我們切壞的。改成切完就驗（cutting.sheet_problems），壞的當場帶著指定好的改法重畫，
+    不叫審圖；過得了這一關的才送 Claude 看「像不像同一個人、有沒有不該有的東西」。
+    problems 是寫給管理者看的中文，fix 是丟回生圖的英文一句。"""
+
+    def __init__(self, problems: list[str], fix: str):
+        super().__init__("；".join(problems))
+        self.problems = problems
+        self.fix = fix
+
+
 @dataclass(frozen=True)
 class Verdict:
     ok: bool
@@ -216,6 +231,8 @@ def work(job: Job, painter: Painter, critic: Critic, cut: Callable[[Job, bytes],
             return Result(ok=False, painted=n, problems=problems)
         try:
             image = cut(job, raw)
+        except CutProblem as exc:  # 我們自己驗出來的：帶著指定好的改法重畫，不花審圖的錢
+            verdict = Verdict(False, exc.problems, exc.fix)
         except (CutError, ValueError) as exc:
             verdict = Verdict(False, [f"切不出來：{exc}"], "Draw the subject(s) clearly on a pure white background, "
                                                               "well separated, nothing touching the edges.")

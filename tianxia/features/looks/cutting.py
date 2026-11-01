@@ -11,7 +11,7 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage
 
-from .studio import CutError  # 切不出來（整張白的、東西太小）：畫坊當作沒畫好，叫生圖的重畫
+from .studio import CutError, CutProblem  # 切不出來（整張白的、東西太小）：畫坊當作沒畫好，叫生圖的重畫
 
 def cutout(im):
     a = np.asarray(im.convert('RGB')).astype(np.int16)
@@ -127,13 +127,65 @@ LAYOUT = {  # 十張 → (每排幾格, 幾排)；格數同 tianxia/features/loo
 
 
 
+MIN_INK = 600  # 一格至少要有這麼多不透明的點，不然算空的（220×220 的格子，一個小人大概四五千點）
+EDGE = 2  # 上下緣留白至少幾列
+LINE_SHARE = 0.8  # 一列橫跨格寬這麼多比例、而且上下都空 → 當成畫出來的地面線
+
+
+def sheet_problems(strip: "Image.Image", frames: int) -> tuple[list[str], str]:
+    """切完的那一條自己先驗一遍（Joy 2026-11-02「把能過的方法模組化」）：這幾樣機器看得出來，
+    不必花一次審圖的錢，也不會每次都要人重新判是生圖畫壞還是我們切壞。
+    回（寫給管理者的中文問題, 丟回生圖的英文改法）；都沒問題回 ([], "")。
+
+    驗四樣，每一樣都是實際踩過的：
+      1. 空格——「第2格是空的，只有一條地面線」（2026-11-02 #3 hero_atk_slash）
+      2. 貼到上下緣——頭被切掉那一類（#3 前十張，根因是 FIT，留著當回歸哨）
+      3. 整條幾乎透明——去背把人吃掉了（#3 第二格「大片殘缺、呈半透明」）
+      4. 橫跨整格的細橫線——生圖畫了地面線，去背留著它、切格被它帶歪
+    """
+    a = np.asarray(strip.convert("RGBA"))
+    alpha = a[..., 3]
+    bad: list[str] = []
+    fixes: list[str] = []
+    for k in range(frames):
+        cell = alpha[:, k * CELL:(k + 1) * CELL]
+        ink = int((cell > 32).sum())
+        if ink < MIN_INK:
+            bad.append(f"第 {k + 1} 格幾乎是空的（只有 {ink} 點）")
+            fixes.append(f"frame {k + 1} is empty — draw the whole character in every frame")
+            continue
+        rows_with = np.nonzero((cell > 32).max(1))[0]
+        if rows_with.min() < EDGE:
+            bad.append(f"第 {k + 1} 格的人貼到上緣（第 {int(rows_with.min())} 列就有東西）")
+            fixes.append("the whole character must be inside the frame, with empty space above the head")
+        if rows_with.max() > BY:
+            bad.append(f"第 {k + 1} 格的人超過地平線（畫到第 {int(rows_with.max())} 列）")
+            fixes.append("keep the feet on the ground line, nothing below it")
+        # 地面線：那一列橫跨整格，但它上面幾列窄得多（人站在線上，所以要比「寬度」而不是「點數」）
+        width = (cell > 32).sum(1)
+        flat = [int(y) for y in rows_with
+                if width[y] > CELL * LINE_SHARE and float(np.median(width[max(0, y - 8):max(1, y - 2)])) < width[y] * 0.5]
+        if flat:
+            bad.append(f"第 {k + 1} 格腳下有一條橫跨整格的線（第 {flat[0]} 列）")
+            fixes.append("do NOT draw any ground line, horizon line, floor or platform")
+    seen: list[str] = []
+    for f in fixes:  # 同一句只留一次（一條十格很容易每格都中同一樣）
+        if f not in seen:
+            seen.append(f)
+    return bad, " ".join(seen)
+
+
 def sheet_bytes(raw: bytes, name: str) -> bytes:
-    """生圖工具給的一張原圖 → 擂台用的一條（webp，格數照 LAYOUT）。"""
+    """生圖工具給的一張原圖 → 擂台用的一條（webp，格數照 LAYOUT）。切完自己驗一遍（sheet_problems）：
+    機器看得出來的壞法直接丟 CutProblem，畫坊照它帶的那一句重畫，不叫審圖。"""
     cols, rows = LAYOUT[name]
     try:
         strip = sheet(io.BytesIO(raw), cols, rows)
     except (ValueError, IndexError) as exc:  # 去背之後什麼都不剩、某一格是空的
         raise CutError(f"切不出 {cols * rows} 格：{exc}") from exc
+    bad, fix = sheet_problems(strip, cols * rows)
+    if bad:
+        raise CutProblem(bad, fix)
     out = io.BytesIO()
     strip.save(out, "WEBP", quality=82, method=6)
     return out.getvalue()
