@@ -727,6 +727,28 @@ def test_ticking_rows_lights_the_batch_button_and_it_asks_with_one_line_each(con
     assert out["calls"] == [["/api/menxia/dismantle_many", {"items": ["兵:1", "兵:2"]}]] and out["pick"] == {}
 
 
+def test_leaving_and_entering_the_shop_forgets_ticks_the_sheet_and_the_tapped_cell(m):
+    """出了店（setMain 看到店收了）、再走進來：裝備庫勾著的、打造頁點開的小單、神器頁點著的格子都清掉，從頭來。"""
+    plain = {**m}
+    plain.pop("shop")
+    picked = {"rackPick": {"兵:1": True}, "shopBrew": {"attr": "剛", "tier": 2}, "divinePick": "wd_x"}
+    out = run(m, """
+      const now = () => ({ pick: H.S.rackPick, brew: H.S.shopBrew, dv: H.S.divinePick });
+      H.render();
+      H.setMain(H.S.out); const gone = now();
+      Object.assign(H.S, H.S.again); H.S.main = H.S.out;
+      H.setMain(H.S.back); return { gone, back: now() };""", S={**picked, "again": picked, "out": plain, "back": m})
+    assert out == {"gone": {"pick": {}, "brew": None, "dv": None}, "back": {"pick": {}, "brew": None, "dv": None}}
+
+
+def test_switching_pages_closes_the_brew_sheet_and_the_tapped_cell(m):
+    """換一頁（分頁列）：打造頁點開的小單、神器頁點著的那一格收起，「再列 N 件」收回 8 件；回來那一頁從頭開始。"""
+    out = run(m, "return (async () => { H.render(); " + _click('{ act: "shop-tab", tab: "rack" }')
+              + " return { brew: H.S.shopBrew, dv: H.S.divinePick, more: H.S.shopMore }; })();",
+              S={"shopTab": "forge", "shopBrew": {"attr": "剛", "tier": 2}, "divinePick": "wd_x", "shopMore": True})
+    assert out == {"brew": None, "dv": None, "more": False}
+
+
 def test_ticking_again_unticks(content, world):
     m = server.main_view(_racked(content, world))
     out = _rack_page(m, "return (async () => { H.render(); " + _click('{ act: "rack-pick", id: "兵:1" }') * 2 + " return H.S.rackPick; })();")
