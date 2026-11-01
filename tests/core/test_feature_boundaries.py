@@ -209,8 +209,11 @@ GAME_IMPORTS = {
     "tianxia.features.battle.view", "tianxia.features.battle.rules",
     # 決戰「打」那一半之一（全部拆包第 6 批）：管理者的決戰工具 6 個、攻城 6 個一行委派
     "tianxia.features.battle.admin", "tianxia.features.battle.sieges",
+    "tianxia.features.looks.actions",  # 擂台形象：Game.arena_look、arena_move 一行委派（擂台報名、開打記穿哪一套、疊哪一張光效）
 }
 GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
+    "arena_look",  # 擂台形象（looks）
+    "arena_move",  # 招式動畫（looks）
     # explore（主動搬六包第 3＋4 批）：走一趟 9 個（1 個私有）——server、bot、bot_policy、測試在叫的 8 個，與 engine 模組層的 _outing_watch
     # （套在 choose、answer_event、epiphany_names、sense_draw 上；不是 Game 的方法，掃描看不到）叫的 _outing_watched
     "outing_go", "outing_view", "outing_can_go", "_outing_watched", "outing_say", "outing_tale_request", "outing_set_tale",
@@ -289,6 +292,11 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("map_base", "map_mostly"): "輿圖的底圖：名字旁的兩個字照看的人站過去之後的比重（探索一顆開著時）：" + _MAP_LINE,
     ("map_state", "map_mostly"): "輿圖：地點旁的兩個字照看的人站過去之後的比重（探索一顆開著時）：" + _MAP_LINE,
     # （(own_turn_checks, _mall_grant)：封測元寶每一輪發，第 11 批換成 on_own_turn 掛鉤，拿掉）
+    # 擂台形象（looks；PR #121 Joy 11/1 合進 develop，第 11 批合 develop 時接上）：核心的擂台叫形象委派 4 對
+    ("_arena_join", "arena_look"): "擂台形象：報名、更新分身時記穿哪一套（擂台還在核心；擂台搬成包時改成形象包的查詢服務）",
+    ("_arena_start", "arena_look"): "擂台形象：挑人開打時記挑的人穿哪一套（同上）",
+    ("_arena_join", "arena_move"): "招式動畫：報名、更新分身時記出招疊哪一張（同上）",
+    ("_arena_start", "arena_move"): "招式動畫：挑人開打時記挑的人出招疊哪一張（同上）",
     # 出陣（主動搬六包第 1 批）：核心叫出陣委派 13 對（第 1 批時一共 21 對、掃描只看得到 6 對；約戰自己叫的 8 對第 2 批跟著進了包）
     # （第 11 批：_action_title、_everyday_options、action_notes 叫 _train_title、_sortie_option、_sortie_line 那 3 對換成 act 子動詞的掛鉤，拿掉）
     ("_act", "_sortie"): "act:train 打的那一場：出陣開著走出陣（扣體力、並肩出陣的加成包在外面）：" + _LATER_17,

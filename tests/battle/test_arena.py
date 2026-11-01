@@ -513,14 +513,14 @@ def test_the_fight_and_the_result_carry_both_weapons_for_the_animation(ring):
     assert world.get_season().arena["乙"].weapon == "槍" and world.get_season().arena["甲"].weapon == ""
     _, game = _do(content, world, "甲", lambda g: g.choose("act:arena") + g.choose("arena:fight:乙"))
     fight = game.shop_view()["fight"]
-    assert fight["looks"] == {"me": "", "foe": "槍"} and fight["id"] == game.state.player.arena.id
+    assert fight["looks"] == {"me": "", "foe": "槍", "me_look": "", "foe_look": "", "me_fx": "", "foe_fx": ""} and fight["id"] == game.state.player.arena.id
     _, game = _fight(content, world)
-    assert game.shop_view()["result"]["looks"] == {"me": "", "foe": "槍"}
+    assert game.shop_view()["result"]["looks"] == {"me": "", "foe": "槍", "me_look": "", "foe_look": "", "me_fx": "", "foe_fx": ""}
 
 
 def test_an_old_fight_without_weapons_shows_both_bare_handed():
-    assert arena.looks_view([]) == {"me": "", "foe": ""}
-    assert arena.looks_view(["劍", "拳腳"]) == {"me": "劍", "foe": "拳腳"}
+    assert arena.looks_view([]) == {"me": "", "foe": "", "me_look": "", "foe_look": "", "me_fx": "", "foe_fx": ""}
+    assert arena.looks_view(["劍", "拳腳"]) == {"me": "劍", "foe": "拳腳", "me_look": "", "foe_look": "", "me_fx": "", "foe_fx": ""}
 
 
 def test_an_old_save_without_the_weapon_fields_still_loads():
@@ -530,3 +530,29 @@ def test_an_old_save_without_the_weapon_fields_still_loads():
     assert entry.weapon == ""
     result = ArenaResult.model_validate({"id": 1, "foe": "乙", "tier": "大勝"})
     assert result.looks == []
+
+
+def test_the_fight_and_the_result_carry_both_looks(ring, monkeypatch):
+    """擂台形象（功能包 looks）：分身記報名那一刻穿哪一套，挑的人記開打那一刻的；打的那一頁與收場卡都給網頁。"""
+    content, world = ring
+    monkeypatch.setattr(Game, "arena_look", lambda self: "moying" if self.state.player.name == "乙" else "")
+    _join(content, world, "乙")
+    _join(content, world, "甲")
+    assert world.get_season().arena["乙"].look == "moying"
+    _, game = _do(content, world, "甲", lambda g: g.choose("act:arena") + g.choose("arena:fight:乙"))
+    assert game.shop_view()["fight"]["looks"] == {"me": "", "foe": "", "me_look": "", "foe_look": "moying", "me_fx": "", "foe_fx": ""}
+    _, game = _fight(content, world)
+    assert game.shop_view()["result"]["looks"]["foe_look"] == "moying"
+
+
+def test_each_round_records_both_picks_for_the_animation(ring):
+    """擂台動畫照出的招演（Joy 2026-10-31）：每回合記 [你出的, 他出的]，打的那一頁與收場卡都給網頁；數字不看它。"""
+    content, world = ring
+    _join(content, world, "乙")
+    _join(content, world, "甲")
+    _, game = _do(content, world, "甲", lambda g: g.choose("act:arena") + g.choose("arena:fight:乙") + g.choose("arena:強攻"))
+    picks = game.shop_view()["fight"]["picks"] if game.state.player.arena else game.shop_view()["result"]["picks"]
+    assert picks[0][0] == "強攻" and picks[0][1] in MOVES
+    _, game = _fight(content, world, moves=["固守"])  # 同一場打完
+    result = game.shop_view()["result"]["picks"]
+    assert [p[0] for p in result] == ["強攻"] + ["固守"] * (len(result) - 1) and len(result) > 1
