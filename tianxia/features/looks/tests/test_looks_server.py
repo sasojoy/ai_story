@@ -28,6 +28,13 @@ def test_custom_images_are_served_from_beside_the_database():
     orders.save_sheet(root, "u7", "hero_bare_idle", (ART / "hero_bare_idle.webp").read_bytes())
     got = client.get("/api/looks/img/u7/hero_bare_idle")
     assert got.status_code == 200 and got.headers["content-type"] == "image/webp"
+    # 圖換了網址不會換（上架之後還會 refit、重畫、退回重來），所以不能讓瀏覽器釘死：
+    # 每次都要回來問，靠 ETag 省流量（照 server.NO_CACHE 那條家規）。2026-11-02 之前寫 max-age=86400，
+    # 把十張 refit 回標準身高之後畫面上還是舊的大號身體。
+    assert got.headers["cache-control"] == "no-cache"
+    assert got.headers.get("etag"), "要有 ETag，不然每次都得重傳整張"
+    again = client.get("/api/looks/img/u7/hero_bare_idle", headers={"If-None-Match": got.headers["etag"]})
+    assert again.status_code == 304, "沒換就回 304"
     assert client.get("/api/looks/img/u7/hero_bare_hit").status_code == 404
     assert client.get("/api/looks/img/moying/hero_bare_idle").status_code == 404
     assert client.get("/api/looks/img/u7/..%2Fsecret").status_code == 404
