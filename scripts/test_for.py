@@ -769,9 +769,13 @@ def engine_delegates(src: str) -> dict[str, str]:
     return out
 
 
-def engine_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[set[str], bool, list[str], set[str]]:
-    """engine.py 的 hunk → （功能群, 要不要核心測試＋煙霧, 為什麼, 委派到的包）。hunk 落在一行委派（engine_delegates）上照那一包挑
-    （那一包的 tests/＋核心契約，同改那一包的檔；第 11 批：以前照方法名的第一個字分群，_settle_siege 算 siege、admin_start_battle 算 admin）。"""
+def engine_groups(hunk_list: list[Hunk], old_src: str,
+                  new_src: str) -> tuple[set[str], bool, list[str], set[str], set[Path]]:
+    """engine.py 的 hunk → （功能群, 要不要核心測試＋煙霧, 為什麼, 委派到的包, 寫到那幾個委派名的測試檔）。hunk 落在一行委派
+    （engine_delegates）上照那一包挑（那一包的 tests/＋核心契約，同改那一包的檔；第 11 批：以前照方法名的第一個字分群，_settle_siege 算
+    siege、admin_start_battle 算 admin），再加內文寫到那個方法名的測試檔（包外直接叫它的混合檔：_battle_scene_text 的 test_engine、
+    test_seal……；第 11 批審查）。是不是委派照舊檔認：舊檔裡是胖方法、這一次換成委派的（往後的搬包批）照舊照方法名分群，守那段舊本體的
+    混合檔才挑得到（第 11 批審查：照新舊兩份的聯集認，test_train_variety 就掉了）；舊檔沒有這個方法的才照新檔認。"""
     def spans_of(src: str):
         methods = _game_methods(src)
         tops = [(name, start, end) for name, start, end, node in _top_level(src)
@@ -782,12 +786,18 @@ def engine_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[se
     core = False
     why: list[str] = []
     packages: set[str] = set()
-    delegates = {**engine_delegates(old_src), **engine_delegates(new_src)}
+    callers: set[Path] = set()
+    old_methods = {name for name, _, _ in _game_methods(old_src)}
+    delegates = {**{n: p for n, p in engine_delegates(new_src).items() if n not in old_methods}, **engine_delegates(old_src)}
+    by_text = _index()[1]
     for name, (removed, added) in _split(hunk_list, old_src, new_src, spans_of).items():
         label = name or "方法以外"
         if name in delegates:
             packages.add(delegates[name])
-            why.append(f"{label}：{delegates[name]} 這一包的一行委派 → 那一包的 tests/＋核心契約")
+            named = set(by_text.get(name, frozenset()))
+            callers |= named
+            why.append(f"{label}：{delegates[name]} 這一包的一行委派 → 那一包的 tests/＋核心契約"
+                       + (f"＋寫到 {name} 的 {len(named)} 個檔" if named else ""))
             continue
         if name in CORE_METHODS:
             hits = scan(removed + added)
@@ -809,7 +819,7 @@ def engine_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[se
         else:
             core = True
             why.append(f"{label} 沒提到功能前綴 → 核心測試＋煙霧")
-    return found, core, why, packages
+    return found, core, why, packages, callers
 
 
 def fields_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[set[str], list[str]]:
@@ -1037,11 +1047,12 @@ def pick(files: list[str], base: str | None = None,
                 result.why.append(f"{f}：跟 base 沒有差異，照整個檔算 → 核心測試＋煙霧")
                 continue
             if mod == "engine":
-                found, core, why, packages = engine_groups(hunk_list, old_src, new_src)
+                found, core, why, packages, callers = engine_groups(hunk_list, old_src, new_src)
                 for pkg in sorted(packages):  # 一行委派（第 11 批）：同改那一包的檔
                     pkg_tests = FEATURES / pkg / "tests"
                     result.files |= set(pkg_tests.rglob("test_*.py")) if pkg_tests.is_dir() else set()
                     result.files |= contract_tests()
+                result.files |= callers
             elif mod == "server":
                 found, core, why = server_groups(hunk_list, old_src, new_src)
             else:
