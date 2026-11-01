@@ -93,6 +93,8 @@
 - 本人對本人：`ctx._spar_power(who, against, seal=True)`、`ctx._spar_mirror(result, power)`、`ctx._raid_key(attacker, target)`
 - 操練的得：`ctx._drill_gains(squad, share=None, source="hold", echo=True)`、`ctx._exp_changes(exp, keep, gained)`、`ctx._drills_with(squad)`
 - 閒著：`ctx._idle()`（同上）、`ctx.is_idle()`（切磋、論武問的那一個）
+名聲（總表附錄甲：名聲服務是核心，`_log` 每一下都叫）
+- `ctx._deed_fame(kind)`（同上）、`ctx._renown_after(synced=False, fresh=None)`、`ctx._deliver_echoes()`（首創名望回饋）、`ctx._famed_news(place, foe, tier)`
 
 ## 二、查詢服務
 

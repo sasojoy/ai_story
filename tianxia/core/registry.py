@@ -98,4 +98,17 @@ SHARED: dict[str, str] = {
               "（讀輿圖的路線 atlas 記在 SHARED_PENDING：第 50 批那一半進這一層）",
     "ranger": "遊俠名號（散人的成長階梯、經驗倍數）：核心的 rules 讀；出陣包與截殺、懸賞、列傳都叫",
     "precise": "一類一顆（每一顆行動鈕只給一類東西）：出陣包的獎勵與懸賞、有所感、玩法說明讀（讀三選一的開關與 is_town 記在 SHARED_PENDING：第 13 批）",
+    # 其餘（12 個；總表寫 20 個，events、tiers、narration、leaderboard、rumor_view 先不收：讀擂台、伏筆、機緣，理由在 SHARED_LATER）
+    "renown": "名聲（名望、善惡稱號、跨段）：核心的 rules、team、world_state 讀；決戰、探索、宴客、酒肆四包與十幾個舊模組都叫（總表附錄甲裁定）",
+    "speech": "玩家寫給別人看的一句話（擋髒話）：探索包的題壁、形象包的招式名與名帖、挑釁共用（總表附錄甲裁定）",
+    "jianfa_numbers": "減法季的數字（自己的 pydantic 模型、不 import models）：核心的 models 掛它（總表附錄甲裁定）",
+    "outcomes": "隨口應對分岔的純規則：事件檢定（engine，總表第 16 批搬進核心）讀；接 event_llm 的評分",
+    "marks": "地方痕跡看得見的純規則：事件、世界一步、天下形勢讀",
+    "ollama_client": "本機模型的 client：核心的 naming 讀；人物對話、取名、判讀十幾個舊模組與殼、腳本都經它（模型服務）",
+    "power_save": "省電模式（模型卸不卸）：ollama_client 讀；主機端的 warm_keeper、監控頁也用（模型服務）",
+    "zh": "簡繁轉換（模型寫的字轉成台灣正字）：核心的 content、naming 讀；探索、酒肆兩包與十幾個舊模組都叫（模型服務）",
+    "event_llm": "探索的隨口應對（模型只評一個機率）：事件檢定（engine）、隨口應對分岔 outcomes 讀；殼的三段式也用（模型服務）",
+    "flavor": "重複內容的模型潤色（世界事件傳聞全服只潤一次）：核心的 sqlite_world 讀；世界一步也叫（模型服務）",
+    "playlog": "真人量表（每個帳號每天按了哪幾顆）：只 import 核心的 database；殼記帳、量表腳本讀",
+    "prologue": "序章（草廬那幾步）：決戰、探索、出陣、酒肆四包都問「還在序章裡」，引導、開局、輿圖也讀",
 }

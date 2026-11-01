@@ -30,7 +30,7 @@ from tianxia import encounter  # 共用規則層（整隊威力）
 from tianxia import howto  # 過渡：待搬（行動列底下那一行的句子）
 from tianxia import orders  # 過渡：待搬（軍令：截糧的運糧隊、攻城軍令對不對）
 from tianxia import precise  # 共用規則層（一類一顆：打贏的獎勵怎麼算）
-from tianxia import prologue as prologue_rules  # 過渡：待搬（序章裡沒有約戰）
+from tianxia import prologue as prologue_rules  # 共用規則層（序章裡沒有約戰）
 from tianxia import push  # 共用規則層（人數緩衝、貢獻、活躍名單）
 from tianxia import ranger  # 共用規則層（遊俠名號：經驗倍數）
 from tianxia import ranks  # 過渡：待搬（晉升：離下一階還差多少）

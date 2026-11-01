@@ -22,7 +22,7 @@ from tianxia import battle_instance, battlelog, tactics  # 共用規則層（戰
 from tianxia import conquest, siege  # 共用規則層（地盤與攻城）
 from tianxia import cultivation, four_tiers, materials, mounts, renown, roster  # 過渡：待搬（絕學的契機、四階料、素材、坐騎、名聲、同伴）
 from tianxia import figure_life, front_lines, generals, seal, wins  # 過渡：待搬（人物風聞、戰線、龍頭上陣、玉璽、三陣營四勝利）
-from tianxia import prologue as prologue_rules  # 過渡：待搬（序章；照 engine 的叫法）
+from tianxia import prologue as prologue_rules  # 共用規則層（序章；照 engine 的叫法）
 from tianxia.core.services import PAUSED_TEXT
 from tianxia.models import MOVES, BattleDef
 from tianxia.rules import can_draw_side_change, front_text, resolve_trends, season_one

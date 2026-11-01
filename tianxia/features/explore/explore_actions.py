@@ -30,8 +30,8 @@ from tianxia import journal, team
 from tianxia import mapdata  # 過渡：待搬（輿圖：勝算的字、關著時的「多半」）
 from tianxia import mapview  # 過渡：待搬（輿圖：哪些地點畫得出來）
 from tianxia import materials  # 共用規則層（素材的發放）
-from tianxia import prologue as prologue_rules  # 過渡：待搬（序章裡探索照舊是寫好的那幾步）
-from tianxia import renown  # 過渡：待搬（名聲：頭目的倍數）
+from tianxia import prologue as prologue_rules  # 共用規則層（序章裡探索照舊是寫好的那幾步）
+from tianxia import renown  # 共用規則層（名聲：頭目的倍數）
 from tianxia import sensing  # 過渡：待搬（有所感：這一處今天悟錯過沒）
 from tianxia import storyline  # 過渡：待搬（一條線：開頭擲不擲中）
 from tianxia import territory  # 共用規則層（地盤：這一處此刻歸誰）

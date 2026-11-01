@@ -12,9 +12,9 @@ from tianxia import annals  # 過渡：待搬（行狀：撿到稀世的東西�
 from tianxia import deeds  # 共用規則層（世界記事：同上）
 from tianxia import journal, naming, team
 from tianxia import materials  # 共用規則層（撿到的東西那一句的開頭）
-from tianxia import prologue as prologue_rules  # 過渡：待搬（序章裡不走一趟）
+from tianxia import prologue as prologue_rules  # 共用規則層（序章裡不走一趟）
 from tianxia import social  # 過渡：待搬（「此地還有」那一份名單：結算卡、遠處有人揮手）
-from tianxia import speech  # 過渡：待搬（留言過字表）
+from tianxia import speech  # 共用規則層（留言過字表）
 from tianxia.core.option import IDLE_MARK, Option
 from tianxia.state import PLAYER, JournalEntry, Outing, OutingBeat
 
