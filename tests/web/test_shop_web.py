@@ -33,8 +33,9 @@ def test_the_shop_covers_the_screen_with_the_sign_line_and_four_tabs(m):
     shop = m["shop"]
     assert 'class="shop-layer shop-smith"' in html and shop["sign"] in html and shop["line"] in html
     assert f'data-act="choose" data-id="{shop["back"]}"' in html and "出店" in html
-    for tab in ("架上", "打造", "淬煉與修", "裝備庫"):
+    for tab in ("架上", "打造", "裝備庫"):  # 鐵匠鋪與合成流程 3.4：「淬煉與修」併進裝備庫（素材、神器另外接在後面）
         assert tab in html
+    assert "淬煉與修" not in html
     assert 'data-act="choose" data-id="smith:page:armor"' in html  # 兵器／防具切換
     assert html.count('data-act="choose" data-id="smith:buy:') == 6
 
@@ -548,3 +549,141 @@ def test_the_hot_fire_stops_for_reduced_motion():
     assert re.search(r"\.shop-layer \.furnace\.hot:not\(\.firing\) \.flame svg \{[^}]*animation: fu-hot", css)
     # 同一個選擇器（權重一樣，排在後面才蓋得過）
     assert "@media (prefers-reduced-motion: reduce) { .shop-layer .furnace.hot:not(.firing) .flame svg { animation: none; } }" in css
+
+
+# ── 鐵匠鋪與合成流程 3.4（C 批）：淬煉、修、拆解併進「裝備庫」一頁；勾選與批量拆解 ──
+
+
+def _racked(content, world):
+    """手上一把（鈍了），裝備庫三把：鈍了淬過兩次的、還利的、神器原品（拆不得、不給勾）。背包精鐵砂 ×4（修、淬煉都收一階）。"""
+    from tianxia.state import Weapon
+
+    game = _smith(content, world, name="庫主")
+    p = game.state.player
+    p.weapon = Weapon(id="兵:9", name="手上刃", kind="劍", attribute="柔", tier=1, quality="下品", edge=60)
+    p.rack = [Weapon(id="兵:1", name="鈍刀", kind="刀", attribute="剛", tier=1, quality="中品", edge=40, tempers=2),
+              Weapon(id="兵:2", name="利刀", kind="刀", attribute="剛", tier=1, quality="下品"),
+              Weapon(id="兵:3", name="原品劍", kind="劍", attribute="快", tier=3, quality="上品", original=True)]
+    return game
+
+
+def _text(html):
+    import re
+
+    return re.sub(r"<[^>]+>", "", html)
+
+
+def _row_of(html, item_id):
+    """裝備庫那一列（照 data-id 找；那一列起到下一列之前）。"""
+    starts = [i for i in range(len(html)) if html.startswith('<div class="shop-row rk-row', i)]
+    for k, start in enumerate(starts):
+        end = starts[k + 1] if k + 1 < len(starts) else len(html)
+        if f'data-id="{item_id}"' in html[start:end]:
+            return html[start:end]
+    raise AssertionError(item_id)
+
+
+def _rack_page(m, script="H.render(); return T.els.app.innerHTML;", S=None, responses=None):
+    return run(m, 'H.S.shopTab = "rack";' + script, S=S, responses=responses)
+
+
+def test_the_old_temper_page_opens_the_rack(m):
+    html = run(m, "H.render(); return T.els.app.innerHTML;", S={"shopTab": "temper"})  # 網頁沒重新載入、手上還記著舊的那一頁
+    assert 'class="shop-tab on" data-act="shop-tab" data-tab="rack"' in html and 'data-tab="temper"' not in html
+
+
+def test_the_rack_page_has_the_worn_card_on_top_with_its_two_big_buttons(content, world):
+    m = server.main_view(_racked(content, world))
+    html = _rack_page(m)
+    worn = m["shop"]["worn"]
+    assert html.index('class="shop-worn"') < html.index(f'data-id="{worn["repair"]["id"]}"') < html.index("rk-cap")
+    assert f'data-act="choose" data-id="{worn["temper"]["id"]}"' in html  # 身上那件照舊送原本的選項 id（smith:repair／smith:temper）
+    assert f"裝備庫 {m['shop']['rack']['used']}／{m['shop']['rack']['cap']}" in html
+
+
+def test_each_rack_row_has_a_box_and_four_buttons_with_their_small_print(content, world):
+    m = server.main_view(_racked(content, world))
+    rows = {r["id"]: r for r in m["shop"]["rack"]["rows"]}
+    html = _rack_page(m)
+    assert html.count('class="shop-row rk-row') == 3
+    dull = _row_of(html, "兵:1")
+    assert rows["兵:1"]["repair"]["ok"] and rows["兵:1"]["repair"]["use"] in _text(dull)  # 做得了：小字寫用什麼料多少錢
+    assert rows["兵:1"]["temper"]["use"] in _text(dull) and 'data-act="rack-pick" data-id="兵:1"' in dull
+    for act in ("shop-wield", "rack-repair", "rack-temper", "shop-dismantle"):
+        assert f'data-act="{act}" data-id="兵:1"' in dull
+    keen = _row_of(html, "兵:2")
+    why = rows["兵:2"]["repair"]["why"]
+    assert why and why in _text(keen) and f'disabled title="{why}"><b>修</b>' in keen  # 還不用修：灰掉、原因在鈕的小字
+    kept = _row_of(html, "兵:3")
+    assert rows["兵:3"]["into"] is None and 'role="checkbox" aria-checked="false" aria-label="勾選【原品劍】" disabled' in kept
+    assert "shop-dismantle" not in kept and rows["兵:3"]["keep"] in _text(kept)  # 原品：拆解灰掉寫原因、不給勾
+
+
+def test_repair_and_temper_go_through_menxia_with_the_item_id(content, world):
+    m = server.main_view(_racked(content, world))
+    reply = {"menxia": None, "main": m, "message": "<p>修好了。</p>"}
+    out = _rack_page(m, "return (async () => { H.render(); " + _click('{ act: "rack-repair", id: "兵:1" }')
+                     + _click('{ act: "rack-temper", id: "兵:1" }') + " return { calls: T.calls, toast: T.els.toast.textContent }; })();",
+                     responses={"/api/menxia/repair_item": reply, "/api/menxia/temper_item": reply})
+    assert out["calls"] == [["/api/menxia/repair_item", {"item": "兵:1"}], ["/api/menxia/temper_item", {"item": "兵:1"}]]
+    assert "修好了" in out["toast"]
+
+
+_MELT = """return (async () => {
+  T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
+  H.render();
+  %s
+  const lit = T.els.app.innerHTML;
+  %s
+  const asked = T.bodyHtml.join("");
+  const before = T.calls.length;
+  %s
+  return { lit, asked, before, calls: T.calls, pick: H.S.rackPick };
+})();"""
+
+
+def test_ticking_rows_lights_the_batch_button_and_it_asks_with_one_line_each(content, world):
+    m = server.main_view(_racked(content, world))
+    rows = {r["id"]: r for r in m["shop"]["rack"]["rows"]}
+    plain = _rack_page(m)
+    assert 'data-act="rack-melt" disabled>拆解勾選的 0 件' in plain  # 一件都沒勾：灰
+    script = _MELT % (_click('{ act: "rack-pick", id: "兵:1" }') + _click('{ act: "rack-pick", id: "兵:2" }'),
+                      _click('{ act: "rack-melt" }'), _click('{ act: "ask-yes" }'))
+    out = _rack_page(m, script, responses={"/api/menxia/dismantle_many": {"menxia": None, "main": m, "message": "<p>拆了 2 件。</p>"}})
+    assert 'data-act="rack-melt">拆解勾選的 2 件' in out["lit"] and 'class="shop-row rk-row on"' in out["lit"]
+    one, two = rows["兵:1"], rows["兵:2"]
+    assert "拆掉這 2 件？拆了就沒了。" in out["asked"] and ">拆掉</button>" in out["asked"]
+    assert f"<li>【鈍刀】→ {one['into']['name']} ×1（淬過 2 次一起沒了）</li>" in out["asked"]
+    assert f"<li>【利刀】→ {two['into']['name']} ×1</li>" in out["asked"]  # 沒淬過不寫
+    assert out["before"] == 0  # 問了才送
+    assert out["calls"] == [["/api/menxia/dismantle_many", {"items": ["兵:1", "兵:2"]}]] and out["pick"] == {}
+
+
+def test_ticking_again_unticks(content, world):
+    m = server.main_view(_racked(content, world))
+    out = _rack_page(m, "return (async () => { H.render(); " + _click('{ act: "rack-pick", id: "兵:1" }') * 2 + " return H.S.rackPick; })();")
+    assert out == {}
+
+
+def test_a_ticked_row_that_is_gone_is_not_sent(content, world):
+    """勾了之後那一件不在了（輪詢換了資料：別的分頁拆掉、成了原品）：只認現在列上拆得了的。"""
+    m = server.main_view(_racked(content, world))
+    script = _MELT % ("", _click('{ act: "rack-melt" }'), _click('{ act: "ask-yes" }'))
+    out = _rack_page(m, script, S={"rackPick": {"兵:1": True, "兵:7": True, "兵:3": True}},
+                     responses={"/api/menxia/dismantle_many": {"menxia": None, "main": m, "message": ""}})
+    assert "拆解勾選的 1 件" in out["lit"] and "拆掉這 1 件？" in out["asked"]
+    assert out["calls"] == [["/api/menxia/dismantle_many", {"items": ["兵:1"]}]]
+
+
+def test_rack_rows_keep_words_whole_and_the_buttons_get_their_own_line(content, world):
+    """375 寬（FB-297 的做法）：鈕上的小字切成不折行的小段（「精鐵砂×1＋」「5 兩」），四顆鈕一整行、一樣寬，不擠在名字旁邊。"""
+    import re
+
+    m = server.main_view(_racked(content, world))
+    dull = _row_of(_rack_page(m), "兵:1")
+    small = dull[dull.index("<b>修</b>"):]
+    small = small[:small.index("</button>")]
+    assert small.count('<span class="nb">') >= 2 and "＋" in small
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    assert re.search(r"\.shop-layer \.rk-btns \{ grid-column: 1 / -1; display: grid; grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);", css)
+    assert re.search(r"\.shop-layer \.rk-btn \{ flex-direction: column;", css)

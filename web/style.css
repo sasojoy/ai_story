@@ -3607,3 +3607,22 @@ svg.fig .blade.bow { stroke-width: 3; }
 .shop-layer .fu-say.hot { color: #f2c46a; }
 .shop-layer .fu-say.off { color: #a08a6a; }
 .shop-layer .fu-say .fu-look { width: auto; min-height: 30px; padding: 2px 16px; }
+/* 裝備庫一列（3.4）：勾選框｜名字與那一行數字；底下一整行四顆一樣寬的鈕（換上、修、淬煉、拆解），鈕上的小字只在小段之間換行
+   （FB-297、FB-305：375 寬四顆擠在名字旁邊會把字擠成直排）。勾了的那一列左邊一條金線；拆不得的不給勾。
+   「拆解勾選的 N 件」黏在捲的那一層底下，勾完不用捲回最底下找 */
+.shop-layer .rk-cap { margin-top: 14px; }
+.shop-layer .rk-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; align-items: start; padding: 10px 4px; }
+.shop-layer .rk-row.on { background: rgba(242, 196, 106, 0.08); box-shadow: inset 3px 0 0 #f2c46a; }
+.shop-layer .rk-pick { position: relative; width: 1.47em; height: 1.47em; margin-top: 0.1em; padding: 0; border: 1.5px solid #b7862b; border-radius: 4px;
+  background: transparent; cursor: pointer; }
+.shop-layer .rk-pick.on { background: #f2c46a; border-color: #f2c46a; }
+.shop-layer .rk-pick.on::after { content: ""; position: absolute; left: 34%; top: 12%; width: 26%; height: 52%; border: solid #1e1510; border-width: 0 2px 2px 0;
+  transform: rotate(45deg); }
+.shop-layer .rk-pick:disabled { opacity: 0.3; cursor: default; }
+.shop-layer .rk-pick:focus-visible { outline: 2px solid #f2c46a; outline-offset: 2px; }
+.shop-layer .rk-btns { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.shop-layer .rk-btn { flex-direction: column; gap: 0; min-height: 2.9em; padding: 4px 3px; line-height: 1.25; }
+.shop-layer .rk-btn b { font-size: 0.93em; }
+.shop-layer .rk-btn small { font-size: 0.75em; font-weight: 400; opacity: 0.9; }
+.shop-layer .rk-btn:disabled { opacity: 0.6; }
+.shop-layer .rk-go { position: sticky; bottom: 0; margin-top: 6px; padding: 12px 2px 4px; background: linear-gradient(to bottom, rgba(30, 19, 12, 0), rgba(30, 19, 12, 0.96) 30%); }

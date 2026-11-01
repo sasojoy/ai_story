@@ -106,7 +106,7 @@
     boardSeen: null, // 這個名號看過的本週大事：{ owner, season, week, count }；記憶體裡一份，localStorage 另存一份（見 boardSeen）
     ordersShut: null, // 江湖頁「本週軍令」收起來的那一週；換週就重新展開（計畫 T6）
     bountyShut: null, // 江湖頁「懸賞」卡收起來時手上那幾張的 id（逗號接起來）；揭了新的或交了差就重新展開
-    shopTab: "shelf", // 店面（店面獨立介面設計第二節）：鐵匠鋪停在哪一頁（shelf 架上／forge 打造／temper 淬煉與修／rack 裝備庫）；進門停在架上
+    shopTab: "shelf", // 店面（店面獨立介面設計第二節）：鐵匠鋪停在哪一頁（shelf 架上／forge 打造／rack 裝備庫〔淬煉與修 3.4 併進來；舊的 temper 當它〕／trade 素材）；進門停在架上
     shopPot: null, // 打造頁爐裡放了什麼：{ slot, kind, main, aux }（素材 id 或 null）；換了兵器防具那一頁從頭來，開爐成了清掉主輔料
     shopLine: null, // 這一爐會怎樣（/api/smith_line 回的那一份）；null 時照 shop.forge.line（空爐）
     shopReveal: null, // 剛出爐的那一件（/api/do/smith_forge 回的 forged）：麻布包著，點開才看；關掉出爐卡清掉
@@ -116,6 +116,7 @@
     shopHorse: null, // 馬市點著的那一間（馬的 id；待售那匹是「架:馬」）；null 照伺服器的 focus（你騎的，沒有馬就待售的）
     shopNote: null, // 鐵匠鋪素材頁、軍需帳上一下的結果那一句（升階出了什麼、捐了多少；素材與經濟 B6）；換頁、出店清掉
     shopBrew: null, // 打造頁點開的那一格灰格（鐵匠鋪與合成流程 3.3）：{ attr, tier }，那一排底下彈熬的小單；熬了、取消、出店清掉
+    rackPick: {}, // 裝備庫勾了要拆的（3.4）：裝備 id → true；送出、出店清掉，畫的時候只認現在列上拆得了的
     donatePick: {}, // 軍需帳挑好要捐的：素材 id → 個數（點一格挑、＋−改個數，「捐出」一起送）
     boardZoom: null, // 懸賞榜放大的那一張告示（懸賞 id）；第三層開著時照伺服器的 picked
     tavTab: "news", // 酒肆那一頁停在哪（news 聽消息／ask 打聽／wall 題壁／shade 暗處）；進門停在聽消息（企劃者 2026-10-18）
@@ -406,7 +407,7 @@
       S.shopTab = "shelf"; S.shopPot = null; S.shopLine = null; S.shopMore = false;
       S.shopHorse = null; S.boardZoom = null; S.boardStamp = null; S.arenaTab = "floor";
       S.shopNote = null; S.donatePick = {}; // 素材頁、軍需帳上一下的結果與挑好要捐的（素材與經濟 B6）
-      S.shopBrew = null; // 打造頁點開的灰格（鐵匠鋪與合成流程 3.3）
+      S.shopBrew = null; S.rackPick = {}; // 打造頁點開的灰格、裝備庫勾了的（鐵匠鋪與合成流程 3.3、3.4）
       S.tavTab = "news"; S.tavAsk = "seek"; // 酒肆從聽消息那一頁來
       if (shopKind(main) !== "smith") { S.shopReveal = null; S.shopOpened = false; }
     }
@@ -3005,7 +3006,8 @@
   // ── 店面（店面獨立介面設計第一、二節；第一批：鐵匠鋪）──
   // 伺服器在店開著、開關開著時給 main.shop（shopview.smith_view）：蓋住整個畫面（同武學譜那本書的蓋法），左上「出店」送現在的離開，
   // 兵器／防具切換、買、修、淬煉送現在的選項 id（choose），換上、拆解走修練頁的動作（shopMx），開爐是 /api/do/smith_forge。字待 joy 潤
-  const SHOP_TABS = [["shelf", "架上"], ["forge", "打造"], ["temper", "淬煉與修"], ["rack", "裝備庫"]];
+  // 鐵匠鋪與合成流程 3.4（企劃者 2026-10-29 選「乙 併成一頁」）：「淬煉與修」併進裝備庫，五頁變四頁（素材、神器照舊另外接在後面）
+  const SHOP_TABS = [["shelf", "架上"], ["forge", "打造"], ["rack", "裝備庫"]];
   const SHOP_ATTR = { 剛: "gang", 快: "kuai", 柔: "rou", 慢: "man" };
   const SHOP_RACK_LIST = 8;
 
@@ -3122,9 +3124,11 @@
   }
 
   // 鐵匠鋪現在停在哪一頁（S.shopTab 不認得的當架上，同 smithHtml）。素材頁只在伺服器給了 shop.trade（收購或升階開著）時有
+  // 舊的「淬煉與修」（temper；網頁沒重新載入、手上還記著那一頁）當裝備庫：那一頁併進去了（3.4）
   function smithTab(shop) {
     if (S.shopTab === "trade") return shop && shop.trade ? "trade" : "shelf";
-    return ["forge", "temper", "rack"].includes(S.shopTab) ? S.shopTab : "shelf";
+    if (S.shopTab === "temper") return "rack";
+    return ["forge", "rack"].includes(S.shopTab) ? S.shopTab : "shelf";
   }
   // 鐵匠鋪的分頁：四頁，素材買賣開著時多第五頁「素材」（素材與經濟 B6，企劃者 2026-10-15 選草圖 A1）
   function smithTabs(shop) { return shop.trade ? [...SHOP_TABS, ["trade", "素材"]] : SHOP_TABS; }
@@ -3134,7 +3138,7 @@
   function smithHtml(shop, line = "") {
     const tab = smithTab(shop);
     const pages = shop.pages.length > 1 && tab !== "trade" ? `<div class="shop-pages">${shop.pages.map((p) => `<button class="shop-page${p.slot === shop.page ? " on" : ""}"${p.slot === shop.page ? " disabled" : ` data-act="choose" data-id="${esc(p.id)}"`}>${esc(p.label)}</button>`).join("")}</div>` : "";
-    const body = { shelf: shelfHtml, forge: forgePageHtml, temper: temperHtml, rack: rackHtml, trade: tradeHtml }[tab];
+    const body = { shelf: shelfHtml, forge: forgePageHtml, rack: rackHtml, trade: tradeHtml }[tab];
     return `${tab === "shelf" ? SMITH_HERO + line : ""}${pages}
       <div class="shop-body"><div class="shop-col">${body(shop)}</div></div>
       <nav class="shop-tabs">${smithTabs(shop).map(([k, name]) => `<button class="shop-tab${tab === k ? " on" : ""}" data-act="shop-tab" data-tab="${k}">${name}</button>`).join("")}</nav>
@@ -3582,8 +3586,9 @@
         ${ware.note ? `<span class="fit-note">${esc(ware.note)}</span>` : ""}<span class="price">${ware.enabled ? `${ware.price | 0} 兩` : esc(ware.why)}</span></button>`).join("")}</div>`;
   }
 
-  // 淬煉與修（2.4）：身上那件的卡（鋒利度或耐久度的長條、淬煉五格），兩顆大鈕；做不了照伺服器的原因寫
-  function temperHtml(shop) {
+  // 裝備庫頁最上面身上那件的卡（原本「淬煉與修」那一頁，2.4；鐵匠鋪與合成流程 3.4 搬到這裡）：鋒利度或耐久度的長條、淬煉幾格，
+  // 「修」「淬煉」兩顆大鈕送原本的選項 id（smith:repair、smith:temper、smith:armor-repair、smith:armor-temper）；做不了照伺服器的原因寫
+  function smithWornHtml(shop) {
     const w = shop.worn;
     if (!w.item) return `<p class="shop-empty">${esc(w.empty)}</p>`;
     const it = w.item;
@@ -3596,23 +3601,68 @@
       ${w.unfit ? `<p class="shop-note">${esc(w.unfit)}</p>` : ""}`;
   }
 
-  // 裝備庫（2.5）：每件一列「換上」「拆解」（走修練頁的動作，不受店裡選單只列 8 顆的限制）；原品、本命兵器的拆解灰掉寫原因；
-  // 等著定名的原品那一列底下一張定名表單；先列 8 件，其餘按「再列 N 件」
+  // 裝備庫（2.5；鐵匠鋪與合成流程 3.4 併進淬煉與修）：最上面身上那件的卡，底下「裝備庫 N／100」每件一列——勾選框、名字、一行數字、
+  // 「換上」「修」「淬煉」「拆解」四顆（換上、拆解走修練頁的動作，修、淬煉走 /api/menxia/repair_item、temper_item，都不受店裡選單只列 8 顆的限制；
+  // 修、淬煉這一件做不了時鈕灰掉、原因寫在鈕的小字，做得了寫用什麼料多少錢，全照伺服器那一列的 repair／temper）。原品、本命兵器的拆解灰掉寫原因、
+  // 不給勾；等著定名的原品那一列底下一張定名表單；先列 8 件，其餘按「再列 N 件」。最底下「拆解勾選的 N 件」先問一次（一件一行拆成什麼）。
+  // 名字一行、鈕一行（FB-297、FB-305：375 寬四顆鈕擠在名字旁邊會把字擠成直排）；小字都切成不折行的小段。字待 joy 潤
+  const RACK_MELT_GO = "拆解勾選的 {n} 件"; // 待 joy 潤
+  const RACK_MELT_ASK = "拆掉這 {n} 件？拆了就沒了。"; // 待 joy 潤
+  const RACK_MELT_LINE = "【{name}】→ {into} ×{count}"; // 待 joy 潤：確認框一件一行（素材與件數照伺服器那一列的 into）
+  const RACK_MELT_TEMPERED = "（淬過 {n} 次一起沒了）"; // 待 joy 潤
+  function rackPicks(shop) {
+    const picked = S.rackPick || {};
+    return shop.rack.rows.filter((r) => r.into && picked[r.id]); // 只送現在列上、拆得了的（輪詢之後不見了、成了原品的自動拿掉）
+  }
+  function rackRowHtml(shop, r) {
+    const on = !!r.into && !!(S.rackPick || {})[r.id];
+    const line = shop.page === "armor"
+      ? `屬${r.attribute}・${r.grade}・${r.wear_word} ${r.edge | 0}・少扣 ${r.cut}`
+      : `${r.noun || r.kind}・屬${r.attribute}・${r.grade}・鋒利度 ${r.edge | 0}${r.bonus ? `・威力 ${r.bonus}` : "・用不上"}`;
+    const box = `<button type="button" class="rk-pick${on ? " on" : ""}" role="checkbox" aria-checked="${on}" aria-label="勾選【${esc(r.name)}】"${r.into ? ` data-act="rack-pick" data-id="${esc(r.id)}"` : " disabled"}></button>`;
+    const note = (text) => (text ? `<small>${nbHtml(text)}</small>` : "");
+    const work = (act, b, name) => `<button class="btn small rk-btn" data-act="${act}" data-id="${esc(r.id)}"${b.ok ? "" : ` disabled title="${esc(b.why || "")}"`}><b>${name}</b>${note(b.ok ? b.use : b.why)}</button>`;
+    const wield = `<button class="btn small rk-btn" data-act="shop-wield" data-id="${esc(r.id)}"${r.wield_ok === false ? ` disabled title="${esc(r.wield_note || "")}"` : ""}><b>換上</b></button>`;
+    const melt = r.keep
+      ? `<button class="btn small ghost rk-btn" disabled><b>拆解</b>${note(r.keep)}</button>`
+      : `<button class="btn small ghost rk-btn" data-act="shop-dismantle" data-id="${esc(r.id)}" data-confirm="${esc(r.confirm || "")}"><b>拆解</b></button>`;
+    return `<div class="shop-row rk-row${on ? " on" : ""}">${box}
+        <div class="winfo"><b>【${esc(r.name)}】</b><span>${nbHtml(line)}</span>${r.wield_ok === false ? `<small class="rwhy">${esc(r.wield_note || "")}</small>` : ""}</div>
+        <div class="rk-btns">${wield}${work("rack-repair", r.repair, "修")}${work("rack-temper", r.temper, "淬煉")}${melt}</div>
+      </div>${r.divine ? divineFormHtml(r.id, r.divine.pattern, true, r.divine.unit) : ""}`;
+  }
   function rackHtml(shop) {
     const rows = shop.rack.rows;
-    if (!rows.length) return '<p class="shop-empty">裝備庫裡沒有這一欄的東西。</p>'; // 待 joy 潤
+    const worn = smithWornHtml(shop);
+    if (!rows.length) return `${worn}<p class="shop-empty">裝備庫裡沒有這一欄的東西。</p>`; // 待 joy 潤
     const shown = S.shopMore ? rows : rows.slice(0, SHOP_RACK_LIST);
     const more = rows.length - shown.length;
-    const line = (r) => (shop.page === "armor"
-      ? `屬${r.attribute}・${r.grade}・${r.wear_word} ${r.edge | 0}・少扣 ${r.cut}`
-      : `${r.noun || r.kind}・屬${r.attribute}・${r.grade}・鋒利度 ${r.edge | 0}${r.bonus ? `・威力 ${r.bonus}` : "・用不上"}`);
-    return `<p class="shop-cap">裝備庫 ${shop.rack.used | 0}／${shop.rack.cap | 0}</p>${shown.map((r) => `<div class="shop-row">
-        <div class="winfo"><b>【${esc(r.name)}】</b><span>${nbHtml(line(r))}</span>${r.wield_ok === false ? `<small class="rwhy">${esc(r.wield_note || "")}</small>` : ""}</div>
-        <div class="wbtns"><button class="btn small" data-act="shop-wield" data-id="${esc(r.id)}"${r.wield_ok === false ? ` disabled title="${esc(r.wield_note || "")}"` : ""}>換上</button>${r.keep
-          ? `<button class="btn small ghost" disabled>${esc(r.keep)}</button>`
-          : `<button class="btn small ghost" data-act="shop-dismantle" data-id="${esc(r.id)}" data-confirm="${esc(r.confirm || "")}">拆解</button>`}</div>
-      </div>${r.divine ? divineFormHtml(r.id, r.divine.pattern, true, r.divine.unit) : ""}`).join("")}
-      ${more > 0 ? `<button class="btn small ghost shop-more" data-act="shop-more">再列 ${more} 件</button>` : ""}`;
+    const n = rackPicks(shop).length;
+    const go = rows.some((r) => r.into)
+      ? `<div class="rk-go"><button class="btn primary" data-act="rack-melt"${n ? "" : " disabled"}>${RACK_MELT_GO.replace("{n}", n)}</button></div>` : "";
+    return `${worn}<p class="shop-cap rk-cap">裝備庫 ${shop.rack.used | 0}／${shop.rack.cap | 0}</p>${shown.map((r) => rackRowHtml(shop, r)).join("")}
+      ${more > 0 ? `<button class="btn small ghost shop-more" data-act="shop-more">再列 ${more} 件</button>` : ""}${go}`;
+  }
+  // 拆解勾選的：先問一次（ask），一件一行「【名字】→ 素材 ×1」、淬過的多寫幾次一起沒了（素材與淬煉次數照伺服器那一列，網頁不剖確認句）；
+  // 確認鈕「拆掉」，送 dismantle_many（拆不了的伺服器跳過寫原因，回話是那一句總結）
+  function rackMelt() {
+    const shop = S.main && S.main.shop;
+    if (!shop || shop.shop !== "smith") return;
+    const picks = rackPicks(shop);
+    if (!picks.length) return;
+    const lines = picks.map((r) => RACK_MELT_LINE.replace("{name}", r.name).replace("{into}", r.into.name).replace("{count}", r.into.count | 0)
+      + (r.tempers ? RACK_MELT_TEMPERED.replace("{n}", r.tempers | 0) : ""));
+    ask(RACK_MELT_ASK.replace("{n}", picks.length), "拆掉", () => {
+      S.rackPick = {};
+      return shopMx("dismantle_many", { items: picks.map((r) => r.id) });
+    }, { lines });
+  }
+  function rackPick(id) {
+    const picked = { ...(S.rackPick || {}) };
+    if (picked[id]) delete picked[id];
+    else picked[id] = true;
+    S.rackPick = picked;
+    renderShop();
   }
 
   // 只重畫店面那一層（輪詢、爐裡換了東西）；畫面上還沒有那一層就整個重畫。店裡捲到哪裡照放回去（往下捲去點素材格，
@@ -6294,6 +6344,11 @@
           if (S.shopReveal && S.shopReveal.id === el.dataset.id) { S.shopReveal = null; S.shopOpened = false; renderShop(); } // 出爐卡上的「換上」：換好了卡收起
           break;
         case "shop-dismantle": ask(el.dataset.confirm || "把這一件拆成素材？拆掉就沒了。", "拆掉", () => shopMx("dismantle", { weapon: el.dataset.id })); break;
+        // 裝備庫那一列的修、淬煉、勾選與批量拆解（鐵匠鋪與合成流程 3.4）：id 是裝備庫的「兵:N」「甲:N」，修淬完照舊留在裝備庫
+        case "rack-repair": await shopMx("repair_item", { item: el.dataset.id }); break;
+        case "rack-temper": await shopMx("temper_item", { item: el.dataset.id }); break;
+        case "rack-pick": rackPick(el.dataset.id); break;
+        case "rack-melt": rackMelt(); break;
         case "shop-divine-keep": await shopMx("name_divine", { weapon: el.dataset.id, keep: true }); break;
         case "dismantle": // 裝備庫上那一把拆成一個素材（兵器設計 4.7.1）：先問一次（FB-125），按「拆掉」才送
           ask(el.dataset.confirm || "把這一件拆成素材？拆掉就沒了。", "拆掉", () => mx("dismantle", { weapon: el.dataset.id }));
