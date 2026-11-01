@@ -9,7 +9,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node")
 
 DRIVER = r"""
 const block = (name) => { const a = src.indexOf(`\n  const ${name} = `); return a < 0 ? konst(name) : src.slice(a, src.indexOf(";\n", a) + 2); };
-const code = ["RING_ARMS", "RING_SHEETS", "RING_PICKS"].map(block).join("\n")
+const code = ["RING_ARMS", "RING_SHEETS", "RING_PICKS", "RING_BEATS"].map(block).join("\n")
   + "\nconst RA = { looks: { me: '', foe: '' } };\n"
   + "\n" + ["ringArms", "ringAtk", "ringAct", "RING_HIT"].map(konst).join("\n")
   + fn("ringStrike") + fn("ringPlan") + fn("ringPicked") + fn("ringExchange") + fn("ringFinale");
@@ -20,15 +20,18 @@ const seq = (acts) => [].concat(acts || []).slice().sort((x, y) => x.at - y.at).
 const brief = (beats) => beats.map((b) => ({
   lunge: ["me", "foe"].filter((k) => [].concat(b[k] || []).some((a) => (a.lunge || 0) > 0)).join(","),
   me: seq(b.me), foe: seq(b.foe), keep: ["me", "foe"].some((k) => [].concat(b[k] || []).some((a) => a.keep)),
+  fx: ["me", "foe"].filter((k) => [].concat(b[k] || []).some((a) => a.fx)).join(","),
 }));
-finish({ ex: input.ex.map(([a, b, pick]) => brief(H.ringExchange(a, b, pick))), fin: input.fin.map(([t, low, pick]) => brief(H.ringFinale(t, low, pick))) });
+const plain = (beats) => beats.map(({ fx, ...rest }) => (input.fx ? { fx, ...rest } : rest));
+finish({ ex: input.ex.map(([a, b, pick, burst]) => plain(brief(H.ringExchange(a, b, pick, burst)))),
+         fin: input.fin.map(([t, low, pick, burst]) => plain(brief(H.ringFinale(t, low, pick, burst)))) });
 """
 
 A = {"me": 100, "foe": 100, "edge": 50}
 
 
-def _run(ex=(), fin=(), looks=None):
-    return webharness.run(DRIVER, {"ex": list(ex), "fin": list(fin), "looks": looks or {"me": "槍", "foe": ""}})
+def _run(ex=(), fin=(), looks=None, fx=False):
+    return webharness.run(DRIVER, {"ex": list(ex), "fin": list(fin), "looks": looks or {"me": "槍", "foe": ""}, "fx": fx})
 
 
 def test_whoever_loses_blood_is_the_one_hit():
@@ -79,3 +82,34 @@ const H = new Function(code + "\nreturn { RING_SHEETS, RING_HAND };")();
 finish(Object.keys(H.RING_SHEETS).map((k) => [k, H.RING_SHEETS[k], (H.RING_HAND[k] || []).length]));
 """, {})
     assert all(n == hands for _, n, hands in out), out
+
+
+def test_only_the_countered_side_is_hit():
+    """Joy 2026-11-01：剋人的那一邊不受擊（就算這一回合也掉了血）；出一樣的兩邊都受擊。"""
+    out = _run(ex=[
+        (A, dict(A, me=95, foe=80), ["強攻", "奇襲"]),  # 你剋他：你也掉了一點血，照樣不演受擊
+        (A, dict(A, me=80, foe=95), ["奇襲", "強攻"]),  # 他剋你
+        (A, A, ["固守", "固守"]),  # 出一樣：兩邊都受擊
+    ])["ex"]
+    assert "hero_bare_hit" not in out[0][0]["me"] and out[0][0]["foe"][-1] == "hero_bare_hit"
+    assert out[1][0]["me"][-1] == "hero_bare_hit" and "hero_bare_hit" not in out[1][0]["foe"]
+    assert out[2][0]["me"][-1] == "hero_bare_hit" and out[2][0]["foe"][-1] == "hero_bare_hit"
+
+
+def test_the_move_effect_only_shows_when_its_art_fires():
+    """Joy 2026-11-01「我以為是招式發動的時候才會有」：光效只疊在伺服器說那一門的戰法發動了的那一回合（bursts），
+    平常出手不疊；發動的那一下對手受擊（固守也架開之後回一下）。"""
+    out = _run(ex=[
+        (A, dict(A, foe=85), ["強攻", "奇襲"]),  # 沒發動：平常一劈，不疊光效
+        (A, dict(A, foe=85), ["強攻", "奇襲"], [1, 0]),  # 發動了：出手那一下疊光效
+        (A, dict(A, foe=90), ["固守", "固守"], [1, 0]),  # 固守發動：架開之後回一下
+        (A, dict(A, me=90), ["強攻", "固守"], [1, 0]),  # 被剋了照樣發動：他也受擊
+        (A, dict(A, foe=80), ["搏", ""], [1, 0]),  # 放手一搏那一回合發動
+        (A, A, ["搏", ""], [0, 1]),  # 分身發動：沒掉血也出手、你受擊
+    ], fin=[("大勝", False, ["強攻", "奇襲"], [1, 0]), ("大勝", False, ["強攻", "奇襲"])], fx=True)
+    ex, fin = out["ex"], out["fin"]
+    assert ex[0][0]["fx"] == "" and ex[1][0]["fx"] == "me"
+    assert ex[2][0]["fx"] == "me" and ex[2][0]["me"] == ["hero_bare_block", "hero_atk_pole", "hero_bare_hit"]
+    assert ex[3][0]["fx"] == "me" and ex[3][0]["foe"][-1] == "hero_bare_hit"
+    assert ex[4][0]["fx"] == "me" and ex[5] == [{"lunge": "foe", "me": ["hero_bare_hit"], "foe": ["hero_atk_fist"], "keep": False, "fx": "foe"}]
+    assert fin[0][0]["fx"] == "me" and fin[1][0]["fx"] == ""

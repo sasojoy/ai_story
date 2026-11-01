@@ -278,6 +278,31 @@ def test_the_arena_snapshots_the_kit_and_both_sides_fire(ring):
     assert text.count("〔先登斬將〕") >= 2  # 兩邊各發一次
 
 
+def test_the_arena_marks_the_rounds_where_the_move_art_fires(ring):
+    """招式動畫（Joy 2026-11-01「我以為是招式發動的時候才會有」）：每回合記兩邊綁了招式的那一門的戰法發動了沒（bursts），
+    光效只在發動的那一回合疊；沒綁招式、綁的那一門沒發動都是 0。"""
+    from tianxia import shopview
+
+    content, world = ring
+    for name in ("乙", "甲"):
+        _as(content, world, name, lambda g: g.choose("act:arena") + g.choose("arena:join") + g.choose("arena:back"))
+
+    def go(g):
+        g.choose("act:arena")
+        g.choose("arena:fight:乙")
+        fight = g.state.player.arena
+        fight.fx, fight.fx_arts = ["m1", ""], ["fist", ""]  # 你的拳綁了招式、分身沒有
+        msgs = g.choose("arena:強攻")
+        assert "\n".join(msgs).count("〔先登斬將〕") >= 2  # 兩邊都發動了
+        assert fight.bursts == [[1, 0]]
+        fight.fx_arts = ["sword", ""]  # 綁的是別的一門：拳發動了也不疊
+        g.choose("arena:強攻")
+        assert fight.bursts[-1] == [0, 0]
+        assert shopview._fight_view(g.state, g.content)["bursts"] == fight.bursts
+        return []
+    _as(content, world, "甲", go)
+
+
 def test_the_arena_page_greys_out_a_locked_move_and_shows_the_status(ring):
     from tianxia import shopview
 
