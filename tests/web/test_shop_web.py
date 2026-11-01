@@ -519,8 +519,10 @@ def test_a_furnace_you_cannot_afford_says_why_in_grey():
     _game, m = _fired(silver=10)
     fu = m["shop"]["forge"]["furnace"]
     assert fu["problem"] and "還差" in fu["problem"]
-    say = _say(_forge_page(m, "H.render(); return T.els.app.innerHTML;"))
+    html = _forge_page(m, "H.render(); return T.els.app.innerHTML;")
+    say = _say(html)
     assert f"看火候 {fu['price']} 兩・{fu['problem']}" in say and " off" in say and "data-act" not in say
+    assert 'class="flame fu-fire" data-act="shop-furnace" aria-label="看火候" disabled' in html  # 中間的火也按不下去
 
 
 def test_the_furnace_is_not_tappable_when_the_silver_outlets_are_off(m):
