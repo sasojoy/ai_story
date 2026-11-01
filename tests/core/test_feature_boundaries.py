@@ -481,10 +481,13 @@ SHARED_PENDING = {
     ("timetable", "chapters"): "排定：章回的擲骰修正（chapters.roll_mod，函式裡）——第 40 批收進共用規則層",
     ("seats", "ranks"): "排定：階級的稱號（ranks.TITLES，函式裡）——第 40 批收進共用規則層",
     ("conquest", "seal_acts"): "排定：璽效查詢（seal_acts.held、ends、held_during、hold_lapse）——第 51 批 16 個璽效查詢進共用規則層",
-    ("siege", "atlas"): "排定：大區（atlas.region_of）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層",
-    ("clinic", "atlas"): "排定：最近的醫館（atlas.routes、shortest_routes、Route）——同上，第 50 批",
+    ("siege", "atlas"): "排定：大區（atlas.region_of）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層。atlas 最外層 import 出陣包"
+                        "（舊名 sortie；函式裡還有 sortie_duel），也經 world 帶進宴客包 feast：切開之前 import siege 會連帶載入 sortie、feast 兩包",
+    ("clinic", "atlas"): "排定：最近的醫館（atlas.routes、shortest_routes、Route）——同上，第 50 批；切開之前 import clinic 同樣經 atlas"
+                         "連帶載入出陣包 sortie、宴客包 feast",
     ("siege", "conquest_day"): "排定：作罷（conquest_day.void、note_void）——第 46 批 Task 1 先搬進 conquest",
-    ("siege", "world"): "排定：開集結那一季（world._season_vehicle，函式裡）——第 25 批 world 收進核心本體",
+    ("siege", "world"): "排定：開集結那一季（world._season_vehicle，函式裡）——第 25 批 world 收進核心本體。world 最外層 import 宴客包 feast："
+                        "叫到那個函式就連帶載入 feast（現在 import siege 已經經 atlas 載進來了），收進核心本體之前那一行要先處理（核心不 import 包）",
     ("precise", "explore_modes"): "排定：三選一的開關與城鎮（explore_modes.on、is_town）——第 13 批 on 改成一直是開著的值、is_town 進共用規則層",
     ("moves", "create"): "之後成包：擺式的幾何（create.icon_pose、stance_of，函式裡）——煉製與自創第 44 批 create 進包之前，先把這一段留在"
                          "共用規則層或改成查詢服務（moves 是 tactics 的底、tactics 是核心 team 的底，先不收會連帶 43 個收不了）",
@@ -515,6 +518,19 @@ def test_the_shared_rules_layer_only_imports_the_core_and_itself():
     for (name, old), why in SHARED_PENDING.items():
         assert name in SHARED and old not in SHARED and old not in CORE and old not in aliases(), (name, old)
         assert why.startswith(("排定：", "之後成包：")), (name, old)
+
+
+def test_a_pending_target_that_imports_a_package_says_it_drags_the_package_in():
+    """SHARED_PENDING 的對象自己 import 了包的（atlas 經舊名 sortie import 出陣包、world import 宴客包）：import 那個共用規則層的模組，
+    包就跟著載進來（import clinic、siege 實際載入出陣、宴客兩包；其餘 58 個一包都不載）。上面那幾條只看共用規則層自己的 import，
+    看不到這一層，所以理由要寫明「連帶載入」與那幾包的名字；對象不再 import 包了，「連帶載入」那句也拿掉（第 15 批審查修正）。
+    只驗對象直接的 import；經對象再往下一層的（atlas 經 world 載宴客包）寫在理由裡，這裡不驗。"""
+    for (name, old), why in SHARED_PENDING.items():
+        packages = sorted({feature_target(mod) for _, mod in _feature_imports(TIANXIA / f"{old}.py")})
+        if packages:
+            assert "連帶載入" in why and all(p in why for p in packages), (name, old, packages)
+        else:
+            assert "連帶載入" not in why, (name, old)
 
 
 def test_the_modules_left_out_of_the_shared_layer_still_reach_past_it():
