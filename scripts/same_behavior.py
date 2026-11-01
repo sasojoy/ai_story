@@ -2409,7 +2409,7 @@ class BattleScenario(Scenario):
     MUSTER_PLAYERS 直接建進資料庫再登入、擺位置；秦朗月、顧長風、莫問天、石破浪名下各一位同伴）、muster_pick（挑同伴與「再想想」、臨時投效再改投、同一個
     大區兩場打得進去時照 @流水號加入——潁汝多一場攻城 G、集結被拒的路）、muster_more（顧長風挑好同伴加入、江映雪投靠豪強之後集結名單跟著換邊）、
     late（開打之後：停在挑同伴的才挑〔改成晚到〕、晚到、晚到臨時投效、再按另一邊被擋）、wander（參戰者走出大區、喊停）、muster_deliver（同伴回江湖、
-    情誼減半、再同步一次清記號）；bots 那一段多一位名下有同伴、站在大區外的官軍假人（趕路、挑同伴的分數）。這一軌照舊切在 gamble；同一套段落另外
+    情誼減半、同一次同步清記號）；bots 那一段多一位名下有同伴、站在大區外的官軍假人（趕路、挑同伴的分數）。這一軌照舊切在 gamble；同一套段落另外
     登記成 muster 一軌（MusterScenario），切在 muster_pick 之後——舊程式寫到兩位按了加入、停在挑同伴（escort_pick 寫進存檔）就停，新程式接著挑。
     第 7 批插進來的請求不吃決戰與攻城的時間（審查 should：原本吃掉集結那 30 分鐘與第一回合的 180 秒——season21 的長社火攻在 muster_more 裡就開打、
     第一幕全是逾時；weekend、week7 的第一回合在 late 裡逾時，放手一搏落到第二回合）：上面那幾段（_still）、narrate 裡新人的重新登入、名下有第 7 批
@@ -3538,8 +3538,10 @@ class BattleScenario(Scenario):
 
     @_still
     def muster_deliver(self) -> None:
-        """第 7 批的新人收補送（下一次同步）：帶著同伴的顧長風、莫問天——同伴打完回江湖（file_showdown → escort_home：拿出隊伍、一句、情誼減半），
-        再同步一次清掉全服的記號（settle_partings，FB-361）；秦朗月不派，沒有那一句。"""
+        """第 7 批的新人收補送（下一次同步）：帶著同伴的顧長風、莫問天——同伴打完回江湖（file_showdown → escort_home：拿出隊伍、一句、情誼減半，
+        settle_partings(write=False) 那一句併進決戰那一則紀錄），同一次同步後段的 settle_partings 看到 parted_done、清掉全服的記號（FB-361）；
+        再同步一次什麼都不變（照實寫，審查 nit：另起一則「同伴回江湖」、同步時才減半的那一支——收場在輪詢組畫面時、角色沒存——四種設定都沒走到）。
+        秦朗月、石破浪不派，沒有那一句。"""
         for who in self.MUSTER_PLAYERS:
             self.main(who)
             self.me(who, "收補送之後")
