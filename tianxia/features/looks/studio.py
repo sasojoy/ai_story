@@ -147,7 +147,14 @@ CHECK_SHEET = (
     "holding two characters); it is the same character as reference 2 in every frame (face, hair, clothes, colors); the frames read "
     "as the action above and run in the same order as reference 1 — small differences in limb position are fine, judge the action as "
     "a whole, not frame by frame; side view facing right; holds no weapon or object (loose sleeves, ribbons, sashes and long hair are "
-    "not objects); feet roughly on the same ground line. " + CHECK_COMMON
+    "not objects); feet roughly on the same ground line.\n"
+    # 校準（2026-11-02）：審圖連去背留下的 1～2 像素白邊都當成「白色毛絨狀雜物」擋下來，但量過了——
+    # 那種邊緣佔實心像素的 0.0～0.2%，預設的斗笠小子（同一條去背管線切的）與這一套已經過審的六張
+    # 都在同一個量級。所以要寫明比較的基準是斗笠小子，不是乾淨的向量圖。
+    "The strip was cut out automatically, so a one or two pixel pale edge along the outline is normal — the default "
+    "hat-boy sprites have the same. Judge it at normal viewing size: ignore single-pixel fringes and faint edge "
+    "halos, and only fail the cut-out if a whole limb or a large area is missing, see-through or buried in leftover "
+    "background. " + CHECK_COMMON
 )
 
 

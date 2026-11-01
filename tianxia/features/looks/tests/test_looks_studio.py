@@ -415,6 +415,8 @@ def test_the_sheet_checklist_judges_the_action_as_a_whole_not_frame_by_frame():
     assert "judge the action as a whole, not frame by frame" in check
     assert "small differences in limb position are fine" in check
     assert "loose sleeves, ribbons, sashes and long hair are not objects" in check
+    # 去背留下的 1～2 px 白邊不算雜物（量過：佔實心像素 0.0～0.2%，斗笠小子的原圖也一樣）
+    assert "ignore single-pixel fringes" in check and "the default " in check
     for hard in ("exactly {frames} frames", "one whole character in each", "same character as reference 2",
                  "holds no weapon or object", "side view facing right", "feet roughly on the same ground line"):
         assert hard in check, hard
