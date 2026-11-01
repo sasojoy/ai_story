@@ -733,6 +733,33 @@ def test_a_ticked_row_that_is_gone_is_not_sent(content, world):
     assert out["calls"] == [["/api/menxia/dismantle_many", {"items": ["兵:1"]}]]
 
 
+def test_only_ticks_on_rows_you_can_see_count(content, world):
+    """先列 8 件（SHOP_RACK_LIST）：按「再列 N 件」勾了第 9 件，換到別頁再回來（列表又收成 8 件），那一件看不見了；鈕上的件數與送出去的
+    只算畫面上看得到的列（淬煉之後重排、勾著的那一件被擠到 8 件以後也一樣）。再列出來時那一件照舊勾著。"""
+    from tianxia.state import Weapon
+
+    game = _smith(content, world, name="多件客")
+    game.state.player.rack = [Weapon(id=f"兵:{k}", name=f"刀{k}", kind="刀", attribute="剛", tier=1, quality="下品") for k in range(1, 11)]
+    m = server.main_view(game)
+    ninth = m["shop"]["rack"]["rows"][8]["id"]
+    out = _rack_page(m, """return (async () => {
+        T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
+        H.S.shopMore = true; H.render();
+        """ + _click('{ act: "rack-pick", id: "%s" }' % ninth) + """
+        const ticked = T.els.app.innerHTML;
+        """ + _click('{ act: "shop-tab", tab: "forge" }') + _click('{ act: "shop-tab", tab: "rack" }') + """
+        const folded = T.els.app.innerHTML;
+        """ + _click('{ act: "rack-melt" }') + """
+        const asked = T.bodyHtml.length;
+        """ + _click('{ act: "shop-more" }') + """
+        return { ticked, folded, asked, again: T.els.app.innerHTML };
+      })();""")
+    assert "拆解勾選的 1 件" in out["ticked"]
+    assert f'data-id="{ninth}"' not in out["folded"] and 'data-act="rack-melt" disabled>拆解勾選的 0 件' in out["folded"]
+    assert out["asked"] == 0  # 看不見的那一件不問、不送
+    assert "拆解勾選的 1 件" in out["again"] and f'aria-checked="true" aria-label="勾選【{m["shop"]["rack"]["rows"][8]["name"]}】"' in out["again"]
+
+
 def test_rack_rows_keep_words_whole_and_the_buttons_get_their_own_line(content, world):
     """375 寬（FB-297 的做法）：鈕上的小字切成不折行的小段（「精鐵砂×1＋」「5 兩」），四顆鈕一整行、一樣寬，不擠在名字旁邊。"""
     import re

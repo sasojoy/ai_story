@@ -3624,9 +3624,14 @@
   const RACK_MELT_ASK = "拆掉這 {n} 件？拆了就沒了。"; // 待 joy 潤
   const RACK_MELT_LINE = "【{name}】→ {into} ×{count}"; // 待 joy 潤：確認框一件一行（素材與件數照伺服器那一列的 into）
   const RACK_MELT_TEMPERED = "（淬過 {n} 次一起沒了）"; // 待 joy 潤
+  // 畫面上列得出來的那幾件：先列 8 件，按了「再列 N 件」才全列（換頁回來又收成 8 件）
+  function rackShown(shop) {
+    return S.shopMore ? shop.rack.rows : shop.rack.rows.slice(0, SHOP_RACK_LIST);
+  }
   function rackPicks(shop) {
     const picked = S.rackPick || {};
-    return shop.rack.rows.filter((r) => r.into && picked[r.id]); // 只送現在列上、拆得了的（輪詢之後不見了、成了原品的自動拿掉）
+    // 只送現在畫面上列著、拆得了的（輪詢之後不見了、成了原品的自動拿掉；收起「再列」、淬煉之後重排擠到 8 件以後的不算，件數跟畫面對得上）
+    return rackShown(shop).filter((r) => r.into && picked[r.id]);
   }
   function rackRowHtml(shop, r) {
     const on = !!r.into && !!(S.rackPick || {})[r.id];
@@ -3651,7 +3656,7 @@
     const rows = shop.rack.rows;
     const worn = smithWornHtml(shop);
     if (!rows.length) return `${worn}<p class="shop-empty">裝備庫裡沒有這一欄的東西。</p>`; // 待 joy 潤
-    const shown = S.shopMore ? rows : rows.slice(0, SHOP_RACK_LIST);
+    const shown = rackShown(shop);
     const more = rows.length - shown.length;
     const n = rackPicks(shop).length;
     const go = rows.some((r) => r.into)
