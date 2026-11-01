@@ -3627,9 +3627,9 @@ svg.fig .blade.bow { stroke-width: 3; }
 .shop-layer .rk-btn:disabled { opacity: 0.6; }
 /* 神器頁（3.8）：架上頁鐵匠那一句底下一行連過去；上半「江湖已見」一件一列（你手上有的那一枚標籤亮），鑄譜上有、還沒人打出的虛線框；
    下半收藏冊一件一格（375 寬一排四格、電腦寬五格）：你有的亮、這一季打出的框粗、點著的外圈一道，沒人打出過的「？」虛線、淡 */
-.shop-layer .dv-link { display: block; width: auto; margin: 0 14px 4px; padding: 6px 10px; border: 1px solid #6b4a2e; border-radius: 8px;
+/* 左右邊照鐵匠那一句（.shop-line）：手機 14px，電腦寬對齊遊戲那一欄（50% − 306px 在手機上是負的，max 取 14px，不必另開 641px 的 media） */
+.shop-layer .dv-link { display: block; width: auto; margin: 0 max(14px, calc(50% - 306px)) 4px; padding: 6px 10px; border: 1px solid #6b4a2e; border-radius: 8px;
   background: rgba(242, 196, 106, 0.06); color: #f2c46a; font: 0.87em/1.4 var(--serif); text-align: left; cursor: pointer; }
-@media (min-width: 641px) { .shop-layer > .dv-link { margin-left: max(14px, calc(50% - 306px)); margin-right: max(14px, calc(50% - 306px)); } }
 .shop-layer .dv-h { margin: 14px 2px 6px; font: 600 0.93em var(--serif); color: #f2c46a; letter-spacing: 2px; }
 .shop-layer .dv-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; padding: 8px 10px;
   border: 1px solid #6b4a2e; border-radius: 10px; background: rgba(43, 26, 16, 0.85); }
