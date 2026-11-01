@@ -257,7 +257,7 @@ def test_a_character_without_a_hat_is_not_scaled_until_its_head_is_cut_off():
         rows = np.nonzero(cell.max(1))[0]
         assert len(rows), f"第 {k + 1} 格是空的"
         assert rows.min() >= 2, f"第 {k + 1} 格的頭貼到上緣（y={rows.min()}）"
-        assert rows.max() <= cutting.BY, f"第 {k + 1} 格的腳超過地平線（y={rows.max()}）"
+        assert rows.max() <= cutting.BY + 2, f"第 {k + 1} 格的腳超過地平線（y={rows.max()}）"
 
 
 def test_we_catch_the_bad_cuts_ourselves_before_paying_for_a_review():
@@ -320,6 +320,80 @@ def test_we_catch_the_bad_cuts_ourselves_before_paying_for_a_review():
     with pytest.raises(studio.CutProblem) as caught:
         cutting.sheet_bytes(buf.getvalue(), "hero_bare_hit")
     assert caught.value.fix, "要帶一句給生圖的改法"
+
+
+def test_cut_sheets_come_out_the_same_height_as_the_hat_boy_so_weapons_line_up():
+    """web/arena_anim.js 的 RING_HAND（每一格的手部座標）是照預設斗笠小子 155 高的身體寫死的，
+    所以切出來的自建形象一定要跟它一樣高，兵器才掛得準（Joy 2026-11-02「兵器套用上去就破圖了」）。
+    照斗笠寬縮放做不到這件事：沒戴斗笠量到的是頭髮，連預設的 hero_bare_idle 重切都算成 199 高。"""
+    pytest.importorskip("scipy")
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    from tianxia.features.looks import cutting
+
+    def heights(data, frames):
+        a = np.asarray(Image.open(io.BytesIO(data)).convert("RGBA"))[..., 3]
+        out = []
+        for k in range(frames):
+            ys = np.nonzero((a[:, k * cutting.CELL:(k + 1) * cutting.CELL] > 32).max(1))[0]
+            out.append(int(ys.max() - ys.min() + 1) if len(ys) else 0)
+        return out
+
+    # 預設的斗笠小子重切一次：身高要跟原圖一樣（新規則不能改掉既有的圖）
+    for name in ("hero_bare_idle", "hero_atk_slash"):
+        cols, rows = cutting.LAYOUT[name]
+        flat = Image.open(actions.WEB_IMG / "arena" / f"{name}.webp").convert("RGBA")
+        white = Image.new("RGBA", flat.size, "white")
+        white.alpha_composite(flat)
+        src = Image.new("RGB", (cols * cutting.CELL, rows * cutting.CELL), "white")
+        for k in range(cols * rows):
+            src.paste(white.crop((k * cutting.CELL, 0, (k + 1) * cutting.CELL, cutting.CELL)).convert("RGB"),
+                      ((k % cols) * cutting.CELL, (k // cols) * cutting.CELL))
+        buf = io.BytesIO()
+        src.save(buf, "PNG")
+        after = heights(cutting.sheet_bytes(buf.getvalue(), name), cols * rows)
+        assert max(after) == pytest.approx(cutting.BODY[name], abs=2), (name, after)
+
+    # 一個「高瘦、沒斗笠」的人：也要被縮到標準身高，不是塞滿格子
+    src = Image.new("RGB", (4 * 260, 400), "white")
+    for k in range(4):
+        ox = k * 260 + 130
+        for y in range(30, 370):
+            for x in range(ox - 22, ox + 22):
+                src.putpixel((x, y), (40, 40, 60))
+    buf = io.BytesIO()
+    src.save(buf, "PNG")
+    tall = heights(cutting.sheet_bytes(buf.getvalue(), "hero_bare_idle"), 4)
+    assert max(tall) == pytest.approx(cutting.BODY["hero_bare_idle"], abs=2), tall
+
+
+def test_refit_rescales_an_old_oversized_sheet_without_redrawing_it():
+    """2026-11-02 之前切的自建形象高 190～200（照斗笠寬），生圖的原圖沒留著：refit 直接把成品縮回標準身高。"""
+    pytest.importorskip("scipy")
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    from tianxia.features.looks import cutting
+
+    big = Image.new("RGBA", (4 * cutting.CELL, cutting.CELL), (0, 0, 0, 0))
+    for k in range(4):
+        for y in range(cutting.BY - 200, cutting.BY):
+            for x in range(k * cutting.CELL + 80, k * cutting.CELL + 130):
+                big.putpixel((x, y), (40, 40, 60, 255))
+    buf = io.BytesIO()
+    big.save(buf, "WEBP")
+    fixed = cutting.refit(buf.getvalue(), "hero_bare_idle")
+    a = np.asarray(Image.open(io.BytesIO(fixed)).convert("RGBA"))[..., 3]
+    for k in range(4):
+        ys = np.nonzero((a[:, k * cutting.CELL:(k + 1) * cutting.CELL] > 32).max(1))[0]
+        assert int(ys.max() - ys.min() + 1) == pytest.approx(cutting.BODY["hero_bare_idle"], abs=2)
+        assert ys.max() == pytest.approx(cutting.BY, abs=2), "腳底要還在地平線上"
+    assert cutting.refit(fixed, "hero_bare_idle") == fixed, "已經對的那一條原樣回傳"
 
 
 def test_the_sheet_checklist_judges_the_action_as_a_whole_not_frame_by_frame():

@@ -82,7 +82,18 @@ def hat(mask_crop):
     return best
 
 CELL, AX, BY = 220, 100, 212
-FIT = 200  # 沒戴斗笠的角色照斗笠寬會被放大到出框：縮完最高那一格不超過這個高度（BY 之上還留得下頭與一點空白）
+# 一張一個「標準身高」：照 web/img/arena 的斗笠小子量出來的（最高那一格；2026-11-02 量）。
+# 為什麼不照斗笠寬（舊規則 s = 104 ÷ hat()）：
+#   1. 自建形象不一定戴斗笠，量到的是頭髮或肩線，倍率失準——「魔教聖女」第一版高 190～200，
+#      比預設的 155 大了四分之一，而 web/arena_anim.js 的 RING_HAND（每一格的手部座標）是照
+#      155 高的身體寫死的，兵器就掛在錯的位置（Joy 2026-11-02「兵器套用上去就破圖了」）。
+#   2. 連預設的圖都量不準：拿斗笠小子的 hero_bare_idle 重切，斗笠寬算出來是 199～200 高，原圖是 154。
+# 照身高正規化則完全重現原圖（154/155、156/157，驗過），而且不管戴不戴斗笠都一樣準。
+BODY = {
+    "hero_bare_idle": 155, "hero_bare_hit": 161, "hero_bare_kneel": 154, "hero_bare_dodge": 168, "hero_bare_fall": 156,
+    "hero_bare_block": 162, "hero_atk_slash": 157, "hero_atk_pole": 153, "hero_atk_fist": 154, "hero_atk_shoot": 154,
+}
+BODY_SLACK = 1.18  # 躺著、縮著的那幾格可能比最高的那一格矮：倍率照最高那一格算，這個數只給驗收用
 def sheet(path, cols, rows, kind='hero', scale_from=None, ref_h=None):
     im = Image.open(path)
     rgba, mask = cutout(im)
@@ -94,15 +105,10 @@ def sheet(path, cols, rows, kind='hero', scale_from=None, ref_h=None):
             w, cx = hat(crop); info.append((w, x0+cx, y1, y1-y0))
         else:
             ys, xs = np.nonzero(crop); info.append((0, x0+xs.mean(), y1, y1-y0))
-    if ref_h:
-        s = ref_h / info[0][3]
+    if ref_h:  # 照身高：最高那一格對到標準身高（看 BODY 那一段為什麼不照斗笠寬）
+        s = ref_h / float(max(i[3] for i in info))
     elif kind == 'hero':
-        # 照斗笠寬定比例（斗笠小子那一套的慣例）。但自建形象不一定戴斗笠：2026-11-02 第一張「魔教聖女」
-        # 連十張都被審圖擋下，理由都是「四格的頭頂被裁掉」——hat() 取的是上半部最寬的一條橫列，
-        # 沒有斗笠時量到的是頭髮或肩線（窄得多），104÷窄寬度 算出來的倍率過大，整個人被放大，
-        # 腳底釘在 BY=212、格子只有 CELL=220 高，頭就被切掉。所以再夾一次：最高那一格也要塞得進格子。
-        s = 104 / float(np.median([i[0] for i in info]))
-        s = min(s, FIT / float(max(i[3] for i in info)))
+        s = 104 / float(np.median([i[0] for i in info]))  # 沒給標準身高時照舊（舊腳本 scripts/cut_look.py）
     else:
         ref = scale_from if scale_from else [i[3] for i in info[:4]]
         s = 190 / float(np.median(ref))
@@ -158,7 +164,7 @@ def sheet_problems(strip: "Image.Image", frames: int) -> tuple[list[str], str]:
         if rows_with.min() < EDGE:
             bad.append(f"第 {k + 1} 格的人貼到上緣（第 {int(rows_with.min())} 列就有東西）")
             fixes.append("the whole character must be inside the frame, with empty space above the head")
-        if rows_with.max() > BY:
+        if rows_with.max() > BY + 2:  # 2 px 容差：縮放的四捨五入會讓腳底落在 BY+1
             bad.append(f"第 {k + 1} 格的人超過地平線（畫到第 {int(rows_with.max())} 列）")
             fixes.append("keep the feet on the ground line, nothing below it")
         # 地面線：那一列橫跨整格，但它上面幾列窄得多（人站在線上，所以要比「寬度」而不是「點數」）
@@ -175,12 +181,49 @@ def sheet_problems(strip: "Image.Image", frames: int) -> tuple[list[str], str]:
     return bad, " ".join(seen)
 
 
+def refit(strip_bytes: bytes, name: str) -> bytes:
+    """把已經切好、但身高不對的一條重新排版到標準身高（BODY[name]），腳底照舊對到 BY、左右位置不動。
+
+    給 2026-11-02 之前切的自建形象用：那時照斗笠寬縮放，沒戴斗笠的角色被放大（「魔教聖女」高 190～200，
+    預設是 155），web/arena_anim.js 的 RING_HAND 按 155 寫死，兵器就掛歪。生圖的原圖沒留著，
+    所以不重畫、直接把成品縮回標準身高（多一次重取樣，看不出來）。本來就對的那一條原樣回傳。
+    """
+    im = Image.open(io.BytesIO(strip_bytes)).convert('RGBA')
+    frames = im.width // CELL
+    a = np.asarray(im)[..., 3]
+    tall = 0
+    for k in range(frames):
+        ys = np.nonzero((a[:, k*CELL:(k+1)*CELL] > 32).max(1))[0]
+        if len(ys):
+            tall = max(tall, int(ys.max() - ys.min() + 1))
+    if not tall or abs(tall - BODY[name]) <= 1:
+        return strip_bytes
+    s = BODY[name] / float(tall)
+    out = Image.new('RGBA', im.size, (0, 0, 0, 0))
+    for k in range(frames):
+        cell = im.crop((k*CELL, 0, (k+1)*CELL, CELL))
+        m = np.asarray(cell)[..., 3] > 32
+        if not m.any():
+            continue
+        ys, xs = np.nonzero(m)
+        box = (int(xs.min()), int(ys.min()), int(xs.max())+1, int(ys.max())+1)
+        piece = cell.crop(box)
+        piece = piece.resize((max(1, int(round(piece.width*s))), max(1, int(round(piece.height*s)))), Image.LANCZOS)
+        cx = (box[0] + box[2]) / 2
+        px = int(round(k*CELL + cx - piece.width/2))
+        py = int(round(BY - (box[3] - box[1])*s)) if box[3] >= BY - 2 else int(round(k*0 + box[1]*s))
+        out.alpha_composite(piece, (max(0, px), max(0, py)))
+    buf = io.BytesIO()
+    out.save(buf, "WEBP", quality=82, method=6)
+    return buf.getvalue()
+
+
 def sheet_bytes(raw: bytes, name: str) -> bytes:
     """生圖工具給的一張原圖 → 擂台用的一條（webp，格數照 LAYOUT）。切完自己驗一遍（sheet_problems）：
     機器看得出來的壞法直接丟 CutProblem，畫坊照它帶的那一句重畫，不叫審圖。"""
     cols, rows = LAYOUT[name]
     try:
-        strip = sheet(io.BytesIO(raw), cols, rows)
+        strip = sheet(io.BytesIO(raw), cols, rows, ref_h=BODY[name])  # 跟預設的斗笠小子一樣高，兵器才掛得準
     except (ValueError, IndexError) as exc:  # 去背之後什麼都不剩、某一格是空的
         raise CutError(f"切不出 {cols * rows} 格：{exc}") from exc
     bad, fix = sheet_problems(strip, cols * rows)
