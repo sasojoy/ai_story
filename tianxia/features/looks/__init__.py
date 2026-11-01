@@ -21,10 +21,15 @@ class LooksFeature(Feature):
         return rules.on(ctx.content)
 
     def status(self, ctx) -> dict:
-        """管理者的設定頁多一組「自建形象」（main.looks_admin）：賣自建形象、而且是管理者才有。"""
-        from . import orders  # noqa: PLC0415
+        """管理者的設定頁多一組「自建形象」（main.looks_admin）：賣自建形象、而且是管理者才有。
+        穿的不是預設那一套時多一個 main.look：走一趟照它畫（Joy 2026-11-02「探索那邊應該要一起換吧」；擂台照擂台自己記的）。"""
+        from . import actions, orders, rules  # noqa: PLC0415
 
-        return {"looks_admin": True} if ctx.is_admin() and orders.item_of(ctx.content) is not None else {}
+        out = {"looks_admin": True} if ctx.is_admin() and orders.item_of(ctx.content) is not None else {}
+        look = actions.look_of(ctx)
+        if look != rules.DEFAULT:
+            out["look"] = look
+        return out
 
     def admin_tools(self, shell) -> dict:
         from . import routes  # noqa: PLC0415

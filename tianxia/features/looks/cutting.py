@@ -92,6 +92,8 @@ CELL, AX, BY = 220, 100, 212
 BODY = {
     "hero_bare_idle": 155, "hero_bare_hit": 161, "hero_bare_kneel": 154, "hero_bare_dodge": 168, "hero_bare_fall": 156,
     "hero_bare_block": 162, "hero_atk_slash": 157, "hero_atk_pole": 153, "hero_atk_fist": 154, "hero_atk_shoot": 154,
+    # 走一趟那六張（web/img/outing 的斗笠小子，2026-11-02 量；舉手、拔劍的那幾格比較高）
+    "hero_run": 155, "hero_pickup": 161, "hero_lift": 182, "hero_slash": 174, "hero_meditate": 177, "hero_push": 153,
 }
 BODY_SLACK = 1.18  # 躺著、縮著的那幾格可能比最高的那一格矮：倍率照最高那一格算，這個數只給驗收用
 def sheet(path, cols, rows, kind='hero', scale_from=None, ref_h=None):
@@ -128,6 +130,7 @@ def sheet(path, cols, rows, kind='hero', scale_from=None, ref_h=None):
 LAYOUT = {  # 十張 → (每排幾格, 幾排)；格數同 tianxia/features/looks/orders.py 的 SHEETS
     "hero_bare_idle": (4, 1), "hero_bare_hit": (3, 1), "hero_bare_kneel": (4, 1), "hero_bare_dodge": (4, 1), "hero_bare_fall": (3, 2), "hero_bare_block": (4, 1),
     "hero_atk_slash": (3, 2), "hero_atk_pole": (3, 2), "hero_atk_fist": (3, 2), "hero_atk_shoot": (3, 2),
+    "hero_run": (4, 2), "hero_pickup": (3, 2), "hero_lift": (3, 1), "hero_slash": (3, 2), "hero_meditate": (4, 1), "hero_push": (4, 1),
 }
 
 

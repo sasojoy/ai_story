@@ -13,7 +13,7 @@
 | `routes.py` | `GET /api/looks`、`POST /api/looks/wear {look}`、`POST /api/looks/order`、`GET /api/looks/img/<u數字>/<張>`、`GET /api/admin/looks`、管理者工具 `looks_upload`／`looks_release`／`looks_reject`；關著 404 |
 | `moves.py` | 招式動畫（第三批）：替自己的武功下單、招式庫、每季綁到一門武功（同打法免費）、擂台記哪一招；2026-11-01 起下單是一句話自創（`scenes.py`） |
 | `scenes.py` | 一句話自創絕招：一句話 → 導演稿（動作表、夾參數、時間照表排）、要畫的法相巨物、給生圖工具的提示詞 |
-| `studio.py` | 畫坊的流程（2026-11-01）：抓等圖的單（絕招的法相巨物、自建形象的定裝照與十張）、畫、切、審、不過照意見改最多三張、收或停手、管理者「再畫一次」 |
+| `studio.py` | 畫坊的流程（2026-11-01）：抓等圖的單（絕招的法相巨物、自建形象的定裝照與擂台十張、走一趟六張；做好的形象缺走一趟那六張也補畫）、畫、切、審、不過照意見改最多三張、收或停手、管理者「再畫一次」 |
 | `studio_api.py` | 畫坊真的去叫的：Nano Banana（Gemini 生圖，`GEMINI_API_KEY`）、Claude 審圖（`ANTHROPIC_API_KEY`）；只有 `run_studio.py` 用 |
 | `cutting.py` | 去背、切格（畫坊與 `scripts/cut_look.py` 共用；Pillow、numpy、scipy，伺服器不 import） |
 | `market.py` | 形象市集（第四批）：自建形象定價上架、撤下、別人買一份、分成五五押七天才入帳、儲值限定的開關 |
