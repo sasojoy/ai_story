@@ -221,6 +221,45 @@ def test_the_real_cut_keeps_one_subject_and_cuts_a_sheet():
     assert orders.sheet_problem("hero_atk_slash", strip) is None
 
 
+def test_a_character_without_a_hat_is_not_scaled_until_its_head_is_cut_off():
+    """切格照斗笠寬定比例；自建形象不一定戴斗笠（2026-11-02「魔教聖女」連十張都被擋下，理由都是頭頂被裁掉）：
+    hat() 在沒有斗笠時量到的是頭髮或肩線，倍率算過大、整個人被放大出框。cutting.FIT 夾住它——
+    頭頂要留在格子裡，而且上緣要有空白。"""
+    pytest.importorskip("scipy")
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    from tianxia.features.looks import cutting
+
+    # 四格：一個「高瘦、沒有斗笠」的人形——頭很窄（會讓 hat() 量到窄寬度）、身子長
+    src = Image.new("RGB", (4 * 260, 400), "white")
+    for k in range(4):
+        ox = k * 260 + 130
+        for y in range(40, 110):  # 頭：窄
+            for x in range(ox - 18, ox + 18):
+                src.putpixel((x, y), (40, 40, 60))
+        for y in range(110, 360):  # 身子與腿：更窄
+            for x in range(ox - 26, ox + 26):
+                src.putpixel((x, y), (150, 40, 40))
+    buf = io.BytesIO()
+    src.save(buf, "PNG")
+
+    strip = cutting.sheet_bytes(buf.getvalue(), "hero_bare_idle")
+    assert orders.sheet_problem("hero_bare_idle", strip) is None
+    out = Image.open(io.BytesIO(strip)).convert("RGBA")
+    assert out.size == (4 * cutting.CELL, cutting.CELL)
+    alpha = np.asarray(out)[..., 3]
+    assert alpha[0].max() == 0, "最上面那一列有東西：頭被切到格子邊界了"
+    for k in range(4):
+        cell = alpha[:, k * cutting.CELL:(k + 1) * cutting.CELL]
+        rows = np.nonzero(cell.max(1))[0]
+        assert len(rows), f"第 {k + 1} 格是空的"
+        assert rows.min() >= 2, f"第 {k + 1} 格的頭貼到上緣（y={rows.min()}）"
+        assert rows.max() <= cutting.BY, f"第 {k + 1} 格的腳超過地平線（y={rows.max()}）"
+
+
 # ── 真的去叫的那兩家（假的連線：看送出去的長什麼樣、回來的怎麼讀） ──
 
 

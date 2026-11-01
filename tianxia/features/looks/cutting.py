@@ -82,6 +82,7 @@ def hat(mask_crop):
     return best
 
 CELL, AX, BY = 220, 100, 212
+FIT = 200  # 沒戴斗笠的角色照斗笠寬會被放大到出框：縮完最高那一格不超過這個高度（BY 之上還留得下頭與一點空白）
 def sheet(path, cols, rows, kind='hero', scale_from=None, ref_h=None):
     im = Image.open(path)
     rgba, mask = cutout(im)
@@ -96,7 +97,12 @@ def sheet(path, cols, rows, kind='hero', scale_from=None, ref_h=None):
     if ref_h:
         s = ref_h / info[0][3]
     elif kind == 'hero':
+        # 照斗笠寬定比例（斗笠小子那一套的慣例）。但自建形象不一定戴斗笠：2026-11-02 第一張「魔教聖女」
+        # 連十張都被審圖擋下，理由都是「四格的頭頂被裁掉」——hat() 取的是上半部最寬的一條橫列，
+        # 沒有斗笠時量到的是頭髮或肩線（窄得多），104÷窄寬度 算出來的倍率過大，整個人被放大，
+        # 腳底釘在 BY=212、格子只有 CELL=220 高，頭就被切掉。所以再夾一次：最高那一格也要塞得進格子。
         s = 104 / float(np.median([i[0] for i in info]))
+        s = min(s, FIT / float(max(i[3] for i in info)))
     else:
         ref = scale_from if scale_from else [i[3] for i in info[:4]]
         s = 190 / float(np.median(ref))
