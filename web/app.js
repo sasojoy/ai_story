@@ -2297,16 +2297,18 @@
         <div class="row"><select class="input" id="bind-art-${esc(w.id)}">${w.bind.options.map((o) => `<option value="${esc(o.id)}">【${esc(o.name)}】${esc(o.bond)}</option>`).join("")}</select>
         <button class="btn small primary" data-act="bind-art" data-id="${esc(w.id)}">以器配招</button></div>`
       : `<small class="muted">以器配招：自己合成的武學練成絕學、有了絕招，就能把這件神器綁在那一門上。</small>`}</div>`;
-    // 武器：淬過的寫「淬煉 N/5」，自己打的寫配方（兵器第二批 Task 8）
-    // 待 joy 潤：「淬煉 N/M」「配方 …」這兩段字
+    // 武器：淬過的寫「淬煉 N/M」（M 照這一件的品質，鐵匠鋪與合成流程 3.6：下品 5、中品 6、上品 7，伺服器給 temper_max），自己打的寫配方（兵器第二批 Task 8）；
+    // 上品磨得慢（wear_note，3.6）接在鋒利度後面
+    // 待 joy 潤：「淬煉 N/M」「配方 …」「磨得慢」這幾段字
+    const slowNote = (w) => (w.wear_note ? `・${esc(w.wear_note)}` : "");
     const weaponRow = (w, wornNow) => `<div class="wrow${w.fits ? "" : " muted"}">
-        <div class="winfo"><b>【${esc(w.name)}】</b><span>${esc(w.noun || w.kind)}・屬${esc(w.attribute)}${w.grade ? `・${esc(w.grade)}` : ""}${w.tempers ? `・淬煉 ${w.tempers | 0}/${w.temper_max | 0}` : ""}・鋒利度 ${w.edge | 0}${w.bonus ? `・威力 ${esc(w.bonus)}` : "・用不上"}</span>${w.recipe ? `<small class="muted">配方 ${esc(w.recipe)}</small>` : ""}${(w.tactic || []).map((t) => `<small class="gear-tactic">${esc(t)}</small>`).join("")}${w.wield_ok === false && !wornNow ? `<small class="rwhy">${esc(w.wield_note || "")}</small>` : ""}${wornNow ? "" : mightTag(w)}</div>
+        <div class="winfo"><b>【${esc(w.name)}】</b><span>${esc(w.noun || w.kind)}・屬${esc(w.attribute)}${w.grade ? `・${esc(w.grade)}` : ""}${w.tempers ? `・淬煉 ${w.tempers | 0}/${w.temper_max | 0}` : ""}・鋒利度 ${w.edge | 0}${slowNote(w)}${w.bonus ? `・威力 ${esc(w.bonus)}` : "・用不上"}</span>${w.recipe ? `<small class="muted">配方 ${esc(w.recipe)}</small>` : ""}${(w.tactic || []).map((t) => `<small class="gear-tactic">${esc(t)}</small>`).join("")}${w.wield_ok === false && !wornNow ? `<small class="rwhy">${esc(w.wield_note || "")}</small>` : ""}${wornNow ? "" : mightTag(w)}</div>
         ${wornNow ? "" : rowButtons(w)}
       </div>${w.divine ? divineForm(w) : ""}${bindForm(w)}`;
     // 防具：不分種類、沒有「配不上」；寫耐久度與這件一場少扣幾成氣血、對不對得上你的內功（裝備四欄設計 4.1、4.2）。
     // 磨損的叫法照伺服器給的 wear_word（equipment.WEAR_WORDS，2.5、3.1），不寫死。這一行的寫法待 joy 潤；淬過的寫「淬煉 N/M」、自己打的寫配方（防具打造，同武器列）
     const armorRow = (a, wornNow) => `<div class="wrow">
-        <div class="winfo"><b>【${esc(a.name)}】</b><span>屬${esc(a.attribute)}・${esc(a.grade)}${a.tempers ? `・淬煉 ${a.tempers | 0}/${a.temper_max | 0}` : ""}・${esc(a.wear_word)} ${a.edge | 0}・少扣 ${esc(a.cut)} 氣血${a.fit ? `・${esc(a.fit)}` : ""}</span>${a.recipe ? `<small class="muted">配方 ${esc(a.recipe)}</small>` : ""}${(a.tactic || []).map((t) => `<small class="gear-tactic">${esc(t)}</small>`).join("")}${a.wield_ok === false && !wornNow ? `<small class="rwhy">${esc(a.wield_note || "")}</small>` : ""}${wornNow ? "" : mightTag(a)}</div>
+        <div class="winfo"><b>【${esc(a.name)}】</b><span>屬${esc(a.attribute)}・${esc(a.grade)}${a.tempers ? `・淬煉 ${a.tempers | 0}/${a.temper_max | 0}` : ""}・${esc(a.wear_word)} ${a.edge | 0}${slowNote(a)}・少扣 ${esc(a.cut)} 氣血${a.fit ? `・${esc(a.fit)}` : ""}</span>${a.recipe ? `<small class="muted">配方 ${esc(a.recipe)}</small>` : ""}${(a.tactic || []).map((t) => `<small class="gear-tactic">${esc(t)}</small>`).join("")}${a.wield_ok === false && !wornNow ? `<small class="rwhy">${esc(a.wield_note || "")}</small>` : ""}${wornNow ? "" : mightTag(a)}</div>
         ${wornNow ? "" : rowButtons(a)}
       </div>${a.divine ? divineForm(a) : ""}${bindForm(a)}`;
     // 坐騎（裝備四欄設計第五節）：駑馬、良駒、名駒的階品，飽足度（照伺服器給的 wear_word）、疾行省幾成體力、路上快幾成、
@@ -3597,9 +3599,10 @@
     const it = w.item;
     const pips = Array.from({ length: it.temper_max | 0 }, (_, i) => `<i class="${i < it.tempers ? "on" : ""}"></i>`).join("");
     const big = (b, name) => `<button class="btn shop-big" data-act="choose" data-id="${esc(b.id)}" ${b.enabled ? "" : "disabled"}><b>${name}</b><small>${esc(b.enabled ? b.use : b.why)}</small></button>`;
-    return `<div class="shop-worn"><b>【${esc(it.name)}】</b><span>${esc(it.grade)}</span>
+    // 淬煉幾格照這一件的上限（3.6：上品 7 格），旁邊寫「N/M」；上品多一句磨得慢（wear_note）。待 joy 潤
+    return `<div class="shop-worn"><b>【${esc(it.name)}】</b><span>${esc(it.grade)}${it.wear_note ? `・${esc(it.wear_note)}` : ""}</span>
         <div class="shop-wear"><span>${esc(it.wear_word)} ${it.wear | 0}</span><div class="wear-bar"><i style="width:${Math.max(0, Math.min(100, it.wear | 0))}%"></i></div></div>
-        <div class="tempers"><span>淬煉</span>${pips}</div></div>
+        <div class="tempers"><span>淬煉 ${it.tempers | 0}/${it.temper_max | 0}</span>${pips}</div></div>
       <div class="shop-bigs">${big(w.repair, "修")}${big(w.temper, "淬煉")}</div>
       ${w.unfit ? `<p class="shop-note">${esc(w.unfit)}</p>` : ""}`;
   }
@@ -3619,9 +3622,11 @@
   }
   function rackRowHtml(shop, r) {
     const on = !!r.into && !!(S.rackPick || {})[r.id];
+    // 那一行數字：這一頁就是淬煉的地方，淬煉幾次一律寫（「淬煉 0/7」看得出還能淬幾次；上限照這一件的品質，3.6），上品接「磨得慢」
+    const temper = `・淬煉 ${r.tempers | 0}/${r.temper_max | 0}`, slow = r.wear_note ? `・${r.wear_note}` : "";
     const line = shop.page === "armor"
-      ? `屬${r.attribute}・${r.grade}・${r.wear_word} ${r.edge | 0}・少扣 ${r.cut}`
-      : `${r.noun || r.kind}・屬${r.attribute}・${r.grade}・鋒利度 ${r.edge | 0}${r.bonus ? `・威力 ${r.bonus}` : "・用不上"}`;
+      ? `屬${r.attribute}・${r.grade}${temper}・${r.wear_word} ${r.edge | 0}${slow}・少扣 ${r.cut}`
+      : `${r.noun || r.kind}・屬${r.attribute}・${r.grade}${temper}・鋒利度 ${r.edge | 0}${slow}${r.bonus ? `・威力 ${r.bonus}` : "・用不上"}`;
     const box = `<button type="button" class="rk-pick${on ? " on" : ""}" role="checkbox" aria-checked="${on}" aria-label="勾選【${esc(r.name)}】"${r.into ? ` data-act="rack-pick" data-id="${esc(r.id)}"` : " disabled"}></button>`;
     const note = (text) => (text ? `<small>${nbHtml(text)}</small>` : "");
     const work = (act, b, name) => `<button class="btn small rk-btn" data-act="${act}" data-id="${esc(r.id)}"${b.ok ? "" : ` disabled title="${esc(b.why || "")}"`}><b>${name}</b>${note(b.ok ? b.use : b.why)}</button>`;
@@ -3939,7 +3944,7 @@
 
   // 麻布與出爐卡（2.3）：先包著（光色照結果），點開是卡——名字、階品、種類屬性、加成或減損、配不配得上；首位發現多一個朱印；
   // 還等著定名的原品多一張定名表單（同修練頁那一張）；底下的鈕照那件去了哪裡：進了裝備庫是「換上」與「留在裝備庫」，在手上只有「收下」。
-  // 名字照店面那一份（定了名之後是新名字）。這一段的變數不用單字母 x（見 shelfHtml）
+  // 名字照店面那一份（定了名之後是新名字）；淬煉上限與「磨得慢」也照那一列（鐵匠鋪與合成流程 3.6：上品 7 次、磨得慢）。這一段的變數不用單字母 x（見 shelfHtml）
   function revealHtml(card, shop) {
     if (!S.shopOpened) {
       return `<div class="reveal-layer"><button class="bundle g-${esc(card.glow)}" data-act="shop-unwrap" aria-label="點開麻布"><span>裹著麻布</span><small>${esc(GLOW_HINT[card.glow] || "")}</small></button><p class="tapme">點開看看</p></div>`;
@@ -3954,6 +3959,7 @@
         ${card.first ? '<span class="first-seal">首位發現</span>' : ""}
         <span class="q">${esc(card.grade)}</span><h4>${esc((now && now.name) || card.name)}</h4>
         <p class="meta">${esc(card.kind)}・屬${esc(card.attribute)}</p>
+        ${now && now.temper_max ? `<p class="meta">淬煉 ${now.tempers | 0}/${now.temper_max | 0}${now.wear_note ? `・${esc(now.wear_note)}` : ""}</p>` : ""}
         ${card.value ? `<p class="stat">${esc(card.value)}</p>` : ""}${card.fit ? `<p class="fit">${esc(card.fit)}</p>` : ""}${(card.tactic || []).map((t) => `<p class="fit tactic">${esc(t)}</p>`).join("")}
         ${pending ? divineFormHtml(card.id, pending, true, card.unit) : ""}
         <div class="btns${card.where === "rack" ? "" : " one"}">${btns}</div></article></div>`;
