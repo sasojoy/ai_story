@@ -322,6 +322,18 @@ def test_we_catch_the_bad_cuts_ourselves_before_paying_for_a_review():
     assert caught.value.fix, "要帶一句給生圖的改法"
 
 
+def test_the_sheet_checklist_judges_the_action_as_a_whole_not_frame_by_frame():
+    """Joy 2026-11-02 定的標準：出招那四張不要求逐格對準手的位置（六格動作圖生圖做不到，#3 一直卡在
+    「第2格雙拳未併攏舉至右肩上方」這種理由），但硬規則全留。寬袖、飄帶也不算「手上拿著東西」。"""
+    check = studio.CHECK_SHEET
+    assert "judge the action as a whole, not frame by frame" in check
+    assert "small differences in limb position are fine" in check
+    assert "loose sleeves, ribbons, sashes and long hair are not objects" in check
+    for hard in ("exactly {frames} frames", "one whole character in each", "same character as reference 2",
+                 "holds no weapon or object", "side view facing right", "feet roughly on the same ground line"):
+        assert hard in check, hard
+
+
 def test_the_sheet_prompt_forbids_a_drawn_ground_line():
     """提示詞原本只說 no ground shadow（不要陰影），生圖照樣畫地平線，去背留著它、切格被帶歪。"""
     order = orders.Order(pid=1, owner="甲", name="試", prompt="紅衣少女", status=orders.PENDING,

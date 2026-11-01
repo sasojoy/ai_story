@@ -134,13 +134,20 @@ CHECK_PORTRAIT = (
     "third of the height) like the reference sprite; it matches the description; holds no weapon or object; soft ink-wash watercolor "
     "style like the reference. " + CHECK_COMMON
 )
+# 動作比對放寬（Joy 2026-11-02 選的）：原本要求「逐格照參考圖的姿勢」，出招那四張因此一直過不了——
+# 2026-11-02 #3 的理由是「第2格雙拳未併攏舉至右肩上方」「第5格不是低位收勢」這種逐格手部位置，
+# 而六格的出招圖要生圖穩定對準手的位置本來就做不到。硬規則全留（格數、整個人在框內、同一個人、
+# 沒有武器、側面向右、腳在同一條線），只把姿勢那一句改成「整串讀起來是那個動作、順序對」。
+# 「沒有武器」也補一句：寬袖、飄帶、長髮不算東西——魔教聖女的紅袖一揚就被判成「手持紅布或刀刃」。
 CHECK_SHEET = (
     "This is an animation strip for a 2D fighting game: {frames} frames side by side, each 220×220, cut out from the background "
     "(cut-out areas are flat gray). The action should be: {action}\n"
-    "Reference 1 is the same animation drawn for another character (poses and layout to follow). Reference 2 is this character's "
-    "design.\nPass it only if: exactly {frames} frames, one whole character in each (no frame empty, cut in half, or holding two "
-    "characters); it is the same character as reference 2 in every frame (face, hair, clothes, colors); the poses follow reference 1 "
-    "in order; side view facing right; holds no weapon or object; feet roughly on the same ground line. " + CHECK_COMMON
+    "Reference 1 is the same animation drawn for another character (layout and overall action to follow). Reference 2 is this "
+    "character's design.\nPass it only if: exactly {frames} frames, one whole character in each (no frame empty, cut in half, or "
+    "holding two characters); it is the same character as reference 2 in every frame (face, hair, clothes, colors); the frames read "
+    "as the action above and run in the same order as reference 1 — small differences in limb position are fine, judge the action as "
+    "a whole, not frame by frame; side view facing right; holds no weapon or object (loose sleeves, ribbons, sashes and long hair are "
+    "not objects); feet roughly on the same ground line. " + CHECK_COMMON
 )
 
 
