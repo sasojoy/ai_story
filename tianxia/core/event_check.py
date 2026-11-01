@@ -1,8 +1,10 @@
 """事件檢定（核心本體；全部拆包第 16 批，計畫 docs/superpowers/plans/2026-11-01-事件檢定進核心.md，導覽 docs/guide/核心與存檔.md「事件檢定」）：
 端出事件卡、固定選項的檢定與結果、效果套用、事件裡打一場、隨口應對的三段式。原本是 Game 上的 17 個方法，本體照抄、self 換成 ctx
 （第一階 ctx 就是 Game，開發規範手冊 3.3），Game 留 15 個一行委派（server、假人、測試、探索包都在叫；只有這裡叫的 answer_branch、
-deed_credit 不留）。模組裡互相叫直接叫函式；被測試換掉的 Game 方法經 ctx.<名>（_present：tests/bots/test_event_rotation 換掉
-Game._present），留在 Game 上的（選單、分派、記錄、戰鬥的單打服務、地盤的進度……）一律經 ctx。
+deed_credit 不留）。模組裡互相叫直接叫函式；被測試換掉的 Game 方法經 ctx.<名>（手冊第十五節：換掉的才打得到）——ctx._present
+（tests/bots/test_event_rotation 換掉 Game._present）、ctx._apply（tests/figures/test_seats 換掉 Game._apply：效果裡記的貢獻要排在抄帳之前）、
+ctx.free_text_request（tests/server/test_server 換掉 Game.free_text_request：暫停中不問引擎）；留在 Game 上的（選單、分派、記錄、
+戰鬥的單打服務、地盤的進度……）一律經 ctx。
 
 - 事件卡：present（把事件端到眼前）、event_text（旁白）、event_tier（州郡大事、天下大事那一行）、event_option_view（江湖頁的鈕）、
   choice_label_of（選單上那一顆的字）
@@ -172,11 +174,11 @@ def resolve_choice(ctx, index: int) -> list[str]:
         ctx._outcome(tag, line)
         if rare:
             annals.note(s, c, annals.DEED, what + ("，成了。" if success else "，沒成。"), 3)
-        msgs += apply(ctx, choice.effect if success else failed(choice.fail_effect, c), once=event.once) + tale_clue(ctx, event)
+        msgs += ctx._apply(choice.effect if success else failed(choice.fail_effect, c), once=event.once) + tale_clue(ctx, event)
         return msgs + ctx._event_progress()
     if rare:
         annals.note(s, c, annals.DEED, what + "。", 3)
-    msgs += apply(ctx, choice.effect, once=event.once) + tale_clue(ctx, event)
+    msgs += ctx._apply(choice.effect, once=event.once) + tale_clue(ctx, event)
     return msgs + ctx._event_progress()
 
 
@@ -289,7 +291,7 @@ def answer_event(
     分岔開著、這則事件寫了後果（_branches）時改走 _answer_branch（outcome 是 B 段歸好的那一種的 id）；關著的季 outcome 不理。"""
     s, c = ctx.state, ctx.content
     ctx.last_gamble = None
-    current = free_text_request(ctx, request.text)
+    current = ctx.free_text_request(request.text)
     if current is None or current.event_id != request.event_id:
         return ctx._log(["（事情已經過去了，這句話沒派上用場。）"])
     event = c.events[request.event_id]
@@ -324,7 +326,7 @@ def answer_event(
             effect = evil_success(choice.effect)
         else:
             effect = choice.effect if success else failed(choice.fail_effect, c)  # 失手另扣的體力減半（體力平衡提案）
-        msgs += apply(ctx, effect, once=event.once)
+        msgs += ctx._apply(effect, once=event.once)
         msgs += ctx._event_progress()  # 領地爭奪：隨口應對了結也推一次進度（開關關著是空的）
         ctx._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
         ctx._greet_rejoin(faction_before)  # 同樣：入伍段早就走完的人拜入門派，引薦人打個招呼（新手引導計畫三）
@@ -387,7 +389,7 @@ def answer_branch(
             msgs = [f"你：「{request.text}」（{name}・{rate_words(plan.rate)}）", line]
             ctx._outcome(tag, line)
             effect = chosen.effect if success else failed(chosen.fail_effect, c)
-            msgs += apply(ctx, effect, once=event.once)
+            msgs += ctx._apply(effect, once=event.once)
         elif plan.way == "combat":
             msgs = [f"你：「{request.text}」（{name}）"]
             msgs += event_battle(ctx, event, outcome_rules.as_choice(chosen))  # 效果在打完那一刻照勝負套
@@ -398,7 +400,7 @@ def answer_branch(
             evil = fallback and moral == event_llm.MORAL_EVIL
             effect = evil_success(chosen.effect) if evil else outcome_rules.paid(chosen)
             msgs = [f"你：「{request.text}」" + (f"（{name}）" if name else "")]
-            msgs += apply(ctx, effect, once=event.once)
+            msgs += ctx._apply(effect, once=event.once)
         deed_credit(ctx, chosen, success)
         done = EVIL_ANNAL if evil else "。" if fallback else "，成了。" if success else "，沒成。"
         annals.note(s, c, annals.DEED, f"遇上{'奇遇' if event.qiyu else ''}【{event.title}】，隨口應對{'：' + name if name else ''}{done}",

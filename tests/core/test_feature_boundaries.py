@@ -600,6 +600,25 @@ def test_the_game_reaches_the_event_check_only_through_its_one_line_delegates():
     assert users == CORE_EVENT_DELEGATES
 
 
+# 被測試換掉的 Game 方法（手冊第十五節「換掉的才打得到」）：event_check 裡叫它們一律經 ctx，不直接叫模組裡的本體。
+# 模組裡的函式 → Game 上的委派、誰換掉它
+EVENT_CHECK_VIA_CTX = {
+    "present": ("_present", "tests/bots/test_event_rotation.py 換掉 Game._present：只有端出事件那一下記輪替"),
+    "apply": ("_apply", "tests/figures/test_seats.py 換掉 Game._apply：效果裡記的貢獻要排在抄帳之前"),
+    "free_text_request": ("free_text_request", "tests/server/test_server.py 換掉 Game.free_text_request：暫停中不問引擎"),
+}
+
+
+def test_the_event_check_calls_the_patched_game_methods_through_ctx():
+    tree = ast.parse((TIANXIA / "core" / "event_check.py").read_text(encoding="utf-8"))
+    direct = sorted(f"{node.lineno} {node.func.id}" for node in ast.walk(tree)
+                    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in EVENT_CHECK_VIA_CTX)
+    assert direct == []
+    via = {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "ctx"}
+    assert {name for name, _ in EVENT_CHECK_VIA_CTX.values()} <= via
+    assert {name for name, _ in EVENT_CHECK_VIA_CTX.values()} <= CORE_EVENT_DELEGATES
+
+
 # ── 網頁框架（docs/guide/核心與存檔.md「tianxia/ 不得 import 任何網頁框架」的例外，PM 10/31）──
 # 只有 tianxia/features/<包>/routes.py 可以 import fastapi，而且只在殼掛路由時延後 import（包的 __init__ 在 routes()、
 # admin_tools() 裡面才 from . import routes）；引擎、run_bots、假人不碰。
