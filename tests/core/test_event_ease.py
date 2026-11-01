@@ -1,5 +1,5 @@
 """第一階事件放寬（Config.jianfa.event_ease；企劃者 2026-10-26「事件初期根本一個都過不了…只需調低能力檢定的基礎」）：
-減法季開著時檢定的差值加 event_ease，成功率與選項上的心裡話一起變；關著一個字都不變。用正式內容，整個檔標 slow。"""
+減法季開著時檢定的差值加 event_ease，成功率與選項上的心裡話一起變；關著一個字都不變。用正式內容（以前整個檔標 slow，2026-10-31 起只有超過一秒的那幾條標）。"""
 from __future__ import annotations
 
 import pytest
@@ -7,8 +7,6 @@ import pytest
 from jianfa_kit import jianfa_game, plain_game
 from tianxia import rules
 from tianxia.models import Check
-
-pytestmark = pytest.mark.slow
 
 
 def _even(game) -> Check:

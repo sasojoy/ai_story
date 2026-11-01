@@ -7,10 +7,11 @@ import random
 import pytest
 
 from conftest import classic_rules, real_content
-from tianxia import figures, orders, push, timetable
+from tianxia import atlas, figures, orders, push, territory, timetable
 from tianxia.engine import Game
 from tianxia.models import PushResistance
 from tianxia.sqlite_world import open_world
+from tianxia.state import Order
 
 TUNING = PushResistance()
 
@@ -148,3 +149,51 @@ def test_pushing_too_far_from_your_own_ground_is_not_called_deep_in_enemy_land()
     w.trends["yingru"] = 30
     msgs = game.push_trend("yingru", -4, source="sortie")
     assert push.RESISTED_LINE in msgs and push.STEADY_LINE not in msgs  # 官軍在黃巾的地盤上推
+
+
+# ── FB-248（2026-10-31 從 tests/core/test_core_loop_fb.py 併進來）────────
+# 核心玩法重整第 1 塊 QA 的回饋（docs/superpowers/feedback/試玩回饋.md 的 FB-248～254，PM 2026-10-15 定的修法）。正式內容、週末設定。
+
+
+def _game_fb248(faction=None, at="yingshui", name="沈浪", content=None):
+    c = content or real_content("week7")  # 地盤拔河的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
+    c.config.auto_open_first_season = True
+    c.config.train_event_chance = 0.0
+    game = Game.new(c, name, rng=random.Random(0), world=open_world())
+    game.client = None
+    p = game.state.player
+    p.faction, p.location, p.stamina = faction, at, float(c.config.stamina_max)
+    p.tutorial_step = len(c.tutorial.steps)
+    p.visited.add(at)
+    return game
+
+
+# ── FB-248：截糧的地點一律在戰線上，糧隊只在那一處 ─────────────────────
+
+
+def _intercept(game, faction, location):
+    order = Order(id=f"1:{faction}:intercept:x", template="intercept", faction=faction, week=orders.week_of(game.state, game.content),
+                  front=territory.line_of(game.content, location), location=location, quota=99, text="")
+    game.state.world.orders = [o for o in game.state.world.orders if o.template != "intercept"] + [order]
+    return order
+
+
+def test_fb248_every_intercept_slot_is_a_front_place():
+    c = real_content()
+    for front, sides in c.orders.slots.items():
+        for side, slot in sides.items():
+            assert territory.line_of(c, slot.intercept) == front, (front, side, slot.intercept)
+
+
+def test_fb248_the_intercept_card_names_only_the_place():
+    game = _game_fb248("guan", "changshe")
+    order = _intercept(game, "guan", "runan_wilds")
+    assert atlas.order_how(game.state, game.content, order) == atlas.INTERCEPT_SORTIE.format(place="汝南荒野")
+    assert "附近" not in atlas.order_how(game.state, game.content, order)
+
+
+def test_fb256_the_legend_line_is_no_longer_than_the_one_that_fit():
+    """375 寬的圖例：「⚔ 可出陣攻打」把「打」擠到第二行；出陣的說法不能比原本放得下的「⚔ 可遊歷」那一句長。"""
+    from tianxia import mapview
+
+    assert len(mapview.LEGEND_RING_SORTIE) <= len(mapview.LEGEND_RING) and "遊歷" not in mapview.LEGEND_RING_SORTIE

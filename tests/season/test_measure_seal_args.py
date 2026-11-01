@@ -12,8 +12,6 @@ import pytest
 
 from conftest import real_content
 
-pytestmark = pytest.mark.slow  # 要載正式內容、跑蒙地卡羅
-
 ROOT = Path(__file__).parents[2]
 
 

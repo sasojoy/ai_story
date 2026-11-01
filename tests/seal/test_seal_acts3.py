@@ -20,8 +20,6 @@ from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 from tianxia.state import SealAct
 
-pytestmark = pytest.mark.slow  # 每一條都載正式內容、開資料庫
-
 HUANG_BLOCKS = ["runan", "runan_academy", "runan_market", "qiao_county", "xinye"]  # 開季黃巾的、搶得下來的（大本營與廣宗不算）
 
 
@@ -331,6 +329,7 @@ def test_a_faction_member_cannot_pick_the_other_army():
     assert w.get_season().seal_acts[0].side == "huang"
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_two_worlds_that_differ_only_in_who_used_it_look_the_same():
     """不具名（企劃者）：甲客或乙客懷著那一片（同一陣營、同一處、同樣的目標），旁觀客看到的江湖頁、江湖史、天下大事與傳聞、輿圖、
     兩人的玩家卡一個字不差。補缺那一場先讓官軍翻走汝南。"""
@@ -362,7 +361,7 @@ def test_two_worlds_that_differ_only_in_who_used_it_look_the_same():
                                                  default=str)
                 other = store.load(name)
                 other.world = viewer.state.world
-                # FB-643：酒肆打聽交情、查人在哪、名氣、近況、買兇找人（打聽度夠高的那一種在 test_seal_fb643_tavern.py）
+                # FB-643：酒肆打聽交情、查人在哪、名氣、近況、買兇找人（打聽度夠高的那一種在 test_seal_acts.py 的 FB-643 那一段）
                 out[f"tavern:{name}"] = (tavern.ties_player_lines(viewer.state, c, other, [], set()),
                                          tavern.seek_lines(viewer.state, c, other, 100.0, set()), tavern.person_fame(other, c),
                                          tavern.fresh(other, viewer.state.world.time), tavern.hit_reach(c, "runan", other))

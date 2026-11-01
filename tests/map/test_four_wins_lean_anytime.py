@@ -177,16 +177,6 @@ def test_lean_is_still_refused_when_it_should_be():
     assert (army.state.player.faction, free.state.player.faction) == ("guan", None)
 
 
-def test_lean_is_refused_when_four_wins_is_off():
-    game = wins_game(wins_content(off=True), faction="haoqiang", ally="guan", at="zhuo_militia_hall")
-    game.travel(game.content.locations["zhuo_militia_hall"].connections[0], "walk")
-    assert _refused(game)
-    game.state.player.journey = None
-    game.state.pending_event = next(iter(game.content.events))
-    assert _refused(game)
-    assert game.state.player.ally == "guan"
-
-
 def test_lean_is_refused_when_the_season_is_not_running():
     ended = _gentry()
     ended.state.world.ended = True

@@ -2,7 +2,7 @@
 這一份先放出陣、推力、地盤那幾塊（PM 2026-10-14：探索三選一與地盤福利另外平行做，合進來之後再補那兩段）。"""
 from __future__ import annotations
 
-from conftest import classic_rules, real_content, third_party_gentry
+from conftest import classic_rules, real_content
 from jianfa_kit import classic_explore
 from tianxia import howto
 import random
@@ -37,7 +37,7 @@ def test_the_first_order_hint_points_at_the_sortie():
 # 講得比規則寬。現在照程式與內容寫：
 #
 # - 伏筆：只有官軍、黃巾做完能改寫一件大事（foreshadow.LOCK_SIDES）；散人拿不到片段、做不了最後一步（foreshadow.capable 要陣營對得上）；
-#   豪強做完只在揭曉時留名（公告與江湖史）、推一把割據，結果不變（timetable 的 third_party）。
+#   豪強分屬兩軍，照依附的那一邊（以前豪強第三方做完只在揭曉時留名、推一把割據，2026-10-31 拿掉）。
 # - 推線：不是每一處都推（Location.train_trend 空著的不推，潁水河畔就是），寫「有些地方…（行動列底下那一行寫著）」。
 # - 軍令湊滿額度推一把：只對有推線軍令的陣營（orders.json 的 effect.trend）；豪強只有打擊（挫大勢人物的聲威）。
 # - 豪強操練：它能操練的地方（有它自己隊伍的地點）都沒有 train_trend，就照實說操練推不動。
@@ -64,7 +64,7 @@ def test_only_the_two_armies_can_rewrite_a_big_event(on):
     before = quest[:quest.index("改寫")]
     assert all(name in before for name in _sides_that_lock())  # 「官軍、黃巾……能暗中改寫」
     hao = STANCE_NAMES["haoqiang"]
-    assert hao in quest and "不改結果" in quest and "割據" in quest  # 豪強做完：留名、推割據，結果不變
+    assert f"地方{hao}照依附的那一邊" in quest and "割據" not in quest  # 豪強分屬兩軍：沒有第三方（2026-10-31 留名、推割據那一句拿掉）
     assert "散人" in quest and "伏筆" in quest[quest.index("散人"):]  # 散人拿不到伏筆
 
 
@@ -82,29 +82,18 @@ def test_the_order_push_is_claimed_only_for_sides_whose_orders_push(on):
     pushers = {t.side for t in on.orders.templates if t.effect.trend > 0}
     assert pushers == {"guan", "huang"}
     line = _fronts(on)
-    clause = line[:line.index("軍令湊滿額度")]
+    end = line.index("軍令湊滿額度")
+    clause = line[line.rindex("；", 0, end) + 1:end]  # 軍令那一句（前一句寫地方豪強算依附的那一邊）
     assert all(STANCE_NAMES[s] in clause for s in pushers) and STANCE_NAMES["haoqiang"] not in clause
     on.orders.templates = [t for t in on.orders.templates if t.side != "huang" or t.kind == "strike"]  # 黃巾只剩打擊
     line = _fronts(on)
-    assert STANCE_NAMES["huang"] not in line[:line.index("軍令湊滿額度")]
+    end = line.index("軍令湊滿額度")
+    assert STANCE_NAMES["huang"] not in line[line.rindex("；", 0, end) + 1:end]
 
 
 def _hao_row(on):
     rows = howto.faction_lines(on, Game.new(on, "丙").state.world)
     return next(r for r in rows if r.startswith("**地方豪強**"))
-
-
-def test_the_warlords_drill_pushes_nothing_and_their_one_order_pushes_no_front(on):
-    on = classic_rules(on)  # 豪強操練是舊遊歷的（出陣開著時豪強是攪局，howto.SORTIE_GEJU）
-    drill_places =[loc for loc in on.locations.values() if any(on.squads[s].faction == "haoqiang" for s in loc.enemies)]
-    assert drill_places and not any(loc.train_trend for loc in drill_places)
-    row = _hao_row(on)
-    assert "操練" in row and "推不動" in row and "遊歷、操練推割據" not in row
-    assert "軍令只有打擊" in row and "不推戰線" in row[row.index("軍令只有打擊"):]
-    fronts = _fronts(on)
-    assert "操練推不動" in fronts[fronts.index(STANCE_NAMES["haoqiang"]):]
-    on.locations["haozu_fort"].train_trend = {"jizhou": 1}  # 哪天豪族塢堡會推線了：照實說操練也推
-    assert "推不動" not in _hao_row(on) and "操練" in _hao_row(on)
 
 
 def test_drifters_hear_they_can_enlist_for_one_battle(on):

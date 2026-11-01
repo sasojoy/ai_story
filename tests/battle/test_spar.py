@@ -68,6 +68,7 @@ def test_an_invite_shows_up_on_both_menus(pair):
     assert status["invites"]["incoming"][0]["seconds_left"] == content.config.invite_ttl_seconds
 
 
+@pytest.mark.smoke
 def test_accepting_fights_once_and_both_get_a_record(pair):
     content, world = pair
     cost, cfg = content.config.action_cost["train"], content.config.spar

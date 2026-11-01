@@ -1,6 +1,6 @@
 """季末四階的接線（減法季整合設計 3.3、3.4；計畫 Task 3c-2、5.1 接線清單第 5 條）：開季 → 幾個人做事 → 管理者收季 →
 WorldState.final_tiers、一二階寫江湖史、結局卡（欄位表 main.ending）→ 開下一季 → 起手資源與稱號（狀態列、玩家卡接在後面）。
-關著（four_wins 關掉）的季什麼都不寫、下一季也不發。正式內容（season21）、整季的流程，整個檔標 slow。"""
+關著（減法季的總開關關掉）的季什麼都不寫、下一季也不發。正式內容（season21）、整季的流程，整個檔標 slow。"""
 from __future__ import annotations
 
 import json
@@ -21,7 +21,9 @@ ADMIN = "論功官"
 
 def _season(off: bool = False):
     """一季：管理者＋官軍三人、黃巾兩人、豪強兩人（各幫一軍）、散人一人，貢獻直接寫好（其中兩人照引擎真的推一次）。"""
-    content = wins_content(off=off)
+    content = wins_content()
+    if off:
+        content.config.jianfa.enabled = False
     content.config.admins = [ADMIN]
     admin = wins_game(content, name=ADMIN)
     w = admin.world

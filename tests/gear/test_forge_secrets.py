@@ -67,6 +67,7 @@ def test_match_reads_the_shape_kind_slot_and_main_aux_order(forge_content):
     assert m("weapon", "劍", "gang_1", "kuai_1") is None  # 這一季沒挑到的不算
 
 
+@pytest.mark.smoke
 def test_the_real_pool_has_fifty_four_named_recipes_and_validates():
     rc = real_content()  # 載入時已經跑過 _validate_forge_secrets
     # 3.4：兵器 22、防具 9，神器 9；正式季第 10 批加新神器第一批 12 件（兵器 8、防具 4，wave 2）；第 4 批補三階一組（兵器 8、防具 3）

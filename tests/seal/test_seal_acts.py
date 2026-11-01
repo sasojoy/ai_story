@@ -7,20 +7,22 @@ from __future__ import annotations
 import random
 import tempfile
 from pathlib import Path
+import json
 
 import pytest
 
 import server
-from conftest import real_content
+from conftest import no_plans, real_content
 from test_seal import put_shards, seal_problems, sealed  # noqa: F401  sealed 是夾具
 from test_seal_revamp import revamp
-from tianxia import calendar, seal, seal_acts
+from tianxia import annals, biography, calendar, conquest, renown, seal, seal_acts, tavern
 from tianxia.calendar import DAY
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 from tianxia.state import SealAct, WorldState
 from tianxia.world_state import SealShard
+from conquest_kit import conquest_rules
 
 ACTS = {"xuanniu": "yinjiang", "yunzhuan": "banzhao", "chenglu": "chenglu", "chizhang": "chuanxi", "guixin": "shouxin"}
 NUMBERS = {"uses": 2, "gap_days": 3, "days": 1, "sense_points": 10, "cultivate": 1.2, "stamina": 1.5, "push": 1.25, "affinity": 2.0,
@@ -46,6 +48,7 @@ def test_the_real_content_gives_seven_shards_their_acts():
     assert c.config.seal.revamp.acts.model_dump() == pytest.approx(NUMBERS)
 
 
+@pytest.mark.smoke
 def test_one_act_goes_to_one_shard_only(sealed):
     acts_on(sealed)
     assert seal_problems(sealed) == []
@@ -182,8 +185,10 @@ def test_the_public_line_names_nobody(sealed):
 
 # ── Task 3～6：正式內容 ──
 
-def _world(profile="season21", *, on=True, conquest_on=True):
+def _world(profile="season21", *, on=True, conquest_on=True, plans=True):
     c = real_content(profile) if conquest_on else real_content(profile)  # 正式內容 PM 2026-10-22 起打開
+    if not plans:
+        no_plans(c)  # 引將測的是「人物原本站在原處」：行程（世界活起來）會先把有行程的人（波才）帶走，要寫死他在哪的測試關掉
     c.config.auto_open_first_season = True
     c.config.seal.revamp.enabled = on
     c.config.newbie_days, c.config.newbie_real_hours = -1, 0  # 新手期的體力回復加快不混進承露的帳
@@ -222,8 +227,8 @@ def _do(c, w, name, fn, now=10.0):
     return out
 
 
-def _holder(shard, *, profile="season21", side="huang", at="yingchuan_wilds", on=True, name="懷璽", conquest_on=True):
-    c, w = _world(profile, on=on, conquest_on=conquest_on)
+def _holder(shard, *, profile="season21", side="huang", at="yingchuan_wilds", on=True, name="懷璽", conquest_on=True, plans=True):
+    c, w = _world(profile, on=on, conquest_on=conquest_on, plans=plans)
     _give(c, w, shard, name)
     return c, w, _person(c, w, name, side=side, at=at)
 
@@ -233,7 +238,7 @@ def _use(c, w, name="懷璽", target="", side="", now=10.0):
 
 
 def _uses(w):
-    return w.seal_state().registry.uses  # FB-695：起用另記一欄，不在 history（tests/test_seal_fb695_rollback.py）
+    return w.seal_state().registry.uses  # FB-695：起用另記一欄，不在 history（tests/seal/test_seal.py 的 FB-695 那一段）
 
 
 @pytest.mark.slow
@@ -321,7 +326,8 @@ def test_the_card_carries_the_act_for_the_holder_only():
     assert (act["kind"], act["name"], act["left"], act["ok"], act["why"]) == ("yinjiang", "引將", 2, True, "")
     ids = {t["id"]: t for t in act["targets"]}
     assert ids["huangfusong"]["why"] == seal_acts.HERE  # 皇甫嵩就在長社
-    assert ids["bocai"]["why"] == "" and "波才" in ids["bocai"]["name"]
+    assert ids["qinjie"]["why"] == "" and "秦頡" in ids["qinjie"]["name"]  # 沒有行程的人照舊按得下去
+    assert ids["bocai"]["why"] == seal_acts.CLASH_PLAN  # 波才的盤算公告（長社那一件）就在第一天之內：FB-9038，行程要動他
     assert "pengtuo" not in ids  # 還沒出場
     assert "{target}" in act["confirm"] and "長社" in act["confirm"]
     other = _person(c, w, "旁人", side="huang")
@@ -376,21 +382,26 @@ def test_the_admin_sees_who_used_what():
 
 @pytest.mark.slow
 def test_yinjiang_pulls_a_figure_to_you_and_sends_him_back_on_time():
-    from tianxia import figures
+    from tianxia import figures, plans
 
+    # 盤算開著（FB-9039：主流程要在行程開著時有人守）：挑一位沒有行程的人（秦頡），行程不會把他帶走；
+    # 行程開著時波才一開季就先被帶到長社（盤算公告），沒東西可引，所以不挑他
     c, w, g = _holder("xuanniu", at="changshe")
-    _use(c, w, target="bocai")
+    assert plans.on(c) and not plans.holds(c, "qinjie")
+    origin = figures.state_of(_vehicle(c, w.get_season()), c, "qinjie").location
+    assert origin != "changshe"
+    _use(c, w, target="qinjie")
     season = w.get_season()
-    assert season.figures["bocai"].location == "changshe"
+    assert season.figures["qinjie"].location == "changshe"
     [act] = season.seal_acts
-    assert (act.target, act.place, act.origin) == ("bocai", "changshe", "huangjin_camp")
-    assert any("波才應召移駐長社" in r.text for r in season.rumors)
+    assert (act.target, act.place, act.origin) == ("qinjie", "changshe", origin)
+    assert any("秦頡應召移駐長社" in r.text for r in season.rumors)
     assert seal_acts.next_end(season) == pytest.approx(act.until)
     late = _do(c, w, "懷璽", lambda game: game.state.world, now=10.0 + DAY + 5)
-    assert figures.state_of(_vehicle(c, late), c, "bocai").location == "huangjin_camp"
+    assert figures.state_of(_vehicle(c, late), c, "qinjie").location == origin
     back = w.get_season()
     assert back.seal_acts[0].ended == pytest.approx(act.until)
-    assert any(seal_acts.BACK.format(figure="波才", place="黃巾別部營寨") == r.text for r in back.rumors)
+    assert any(seal_acts.BACK.format(figure="秦頡", place=c.locations[origin].name) == r.text for r in back.rumors)
 
 
 def _vehicle(c, season):
@@ -405,7 +416,7 @@ def test_yinjiang_releases_early_when_the_timetable_moves_him():
     from tianxia import figures
     from tianxia.models import FigureChange
 
-    c, w, g = _holder("xuanniu", at="changshe")
+    c, w, g = _holder("xuanniu", at="changshe", plans=False)
     _use(c, w, target="bocai")
     season = w.get_season()
     v = _vehicle(c, season)
@@ -414,7 +425,7 @@ def test_yinjiang_releases_early_when_the_timetable_moves_him():
     assert season.seal_acts[0].ended == pytest.approx(season.time)
     assert seal_acts.pinned(season, "bocai") is None
 
-    c, w, g = _holder("xuanniu", at="changshe")
+    c, w, g = _holder("xuanniu", at="changshe", plans=False)
     _use(c, w, target="bocai")
     season = w.get_season()
     v = _vehicle(c, season)
@@ -430,7 +441,7 @@ def test_a_figure_staying_put_ends_nothing():
     from tianxia import figures
     from tianxia.models import FigureChange
 
-    c, w, g = _holder("xuanniu", at="changshe")
+    c, w, g = _holder("xuanniu", at="changshe", plans=False)
     _use(c, w, target="bocai")
     season = w.get_season()
     figures.apply(_vehicle(c, season), c, "bocai", FigureChange(fate="受挫"))
@@ -440,10 +451,12 @@ def test_a_figure_staying_put_ends_nothing():
 @pytest.mark.slow
 def test_a_pinned_figure_does_not_wander():
     """14 天的季人物會自己走動：被引將釘著的不走、不跟、不趕（亂數照擲，別人的序列不位移）。"""
-    from tianxia import figure_life, figures
+    from tianxia import figure_life, figures, plans
 
+    # 盤算開著（FB-9039）：有行程的人本來就不亂晃（plans.holds），挑到他就測不到引將，所以只挑沒有行程的人
     c, w, g = _holder("xuanniu", profile=None, at="yingchuan_wilds")
-    fid = next(f for f, d in c.figures.items() if d.character and len(c.characters[d.character].haunts) > 1
+    assert plans.on(c)
+    fid = next(f for f, d in c.figures.items() if d.character and not plans.holds(c, d.character) and len(c.characters[d.character].haunts) > 1
                and figures.state_of(_vehicle(c, w.get_season()), c, f).location in c.characters[d.character].haunts
                and figures.state_of(_vehicle(c, w.get_season()), c, f).location != "yingchuan_wilds")
     cid = c.figures[fid].character
@@ -486,6 +499,40 @@ def test_yinjiang_greys_out_a_figure_the_timetable_will_move_within_the_day():
     assert not seal_acts.clash(v, c, fid, first - 1)
     rows = {t["id"]: t["why"] for t in seal_acts.figure_targets(v, c, first + 1)}
     assert rows[fid] == seal_acts.CLASH
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(("day", "place", "plans_on", "usable"), [
+    (1.2, "nanyang_road", True, False),  # 一日之內行程要把他帶去南陽道上：灰掉，按下去被拒
+    (1.9, "nanyang_road", True, True),  # 那一站在窗口外：照舊按得下去
+    (1.2, "wan_city", True, True),  # 要去的地方就是他此刻站的地方：不灰
+    (1.2, "nanyang_road", False, True),  # 盤算關著：行程不算，跟以前一樣
+])
+def test_yinjiang_refuses_a_figure_whose_itinerary_moves_him_within_the_day(day, place, plans_on, usable):
+    """FB-9038：行程比照時刻表，窗口（一日）內會把人搬離他此刻所在的地方，目標灰掉、起用按下去被拒、不記次數、人不動；
+    起用那一下的檢查跟目標清單是同一條（seal_acts.figure_targets）。7 天季第 1.7 天孫堅動身那種情形（QA develop-red7）。"""
+    from tianxia import figures
+    from tianxia.models import Itinerary, ItineraryStop
+
+    c, w, g = _holder("xuanniu", at="changshe", plans=plans_on)
+    c.itineraries = [Itinerary(who="qinjie", stops=[ItineraryStop(id="t_march", day=day, place=place, text="{name}拔營了。")])]
+    origin = figures.state_of(_vehicle(c, w.get_season()), c, "qinjie").location
+    assert origin == "wan_city"
+    shard_id = "xuanniu"
+    msgs = _use(c, w, target="qinjie")
+    season = w.get_season()
+    shard = w.seal_state().registry.shards[shard_id]
+    number = w.get_season_number()
+    if usable:
+        [act] = season.seal_acts
+        assert (act.target, act.origin) == ("qinjie", origin) and seal_acts.used(shard, number) == 1
+        assert figures.state_of(_vehicle(c, season), c, "qinjie").location == "changshe"
+    else:
+        assert msgs == [f"（秦頡{seal_acts.CLASH_PLAN}。）"]  # 灰掉的原因就是按下去被拒的那一句
+        assert season.seal_acts == [] and _uses(w) == [] and seal_acts.used(shard, number) == 0  # 不扣次數
+        assert figures.state_of(_vehicle(c, season), c, "qinjie").location == origin  # 人不動
+        view = _do(c, w, "懷璽", lambda game: game.seal_view()["act"])  # 碎片卡的目標清單也灰著
+        assert {t["id"]: t["why"] for t in view["targets"]}["qinjie"] == seal_acts.CLASH_PLAN
 
 
 # ── Task 5：頒詔、承露、收心 ──
@@ -821,3 +868,139 @@ def test_chuanxi_lifts_block_progress_in_a_conquest_season():
     off = progress(False)
     assert off > 0
     assert progress(True) == pytest.approx(off * 1.25)
+
+
+# ── FB-643（2026-10-31 從 tests/seal/test_seal_fb643_tavern.py 併進來）────────
+# FB-643：起用碎片的那一筆行狀（份量 4）被酒肆讀到——打聽交情列出「近來的事：起用了『X』…」、近況（tavern.fresh）讓查人在哪與
+# 買兇找人變準、行狀份量 4 的三件以上算名氣（person_fame），起用的人被認出來；七片同一條路（第 2 批就有）。PM 定：碎片起用的行狀不給酒肆與
+# 買兇找人讀（annals.SEAL 這一類，tavern.ties_player_lines、fresh、person_fame、hit_reach 一律跳過），行狀本身留著（傳、本人的行狀頁照舊）。
+#
+# 守門照「兩個只差誰起用的世界」：甲客或乙客懷著那一片（同一陣營、同一處、同樣的目標），旁觀客跟他們同陣營、站在同一間酒肆（地頭熟），
+# 兩人名望都到第一段（打聽度 4 以上才列近來的事）、份量 4 的舊事各兩件而且都在兩天前（再一件就多一點名氣、近況只看這一件）。
+# 旁觀客在酒肆打聽交情、查人在哪，加上名氣、近況、打聽度、買兇找人的打聽度與酒肆那一頁，兩個世界要一字不差。正式內容（21 天季＋領地爭奪打開）。
+
+
+AT = "runan"  # 汝南：黃巾的、有酒肆
+VIEWER = "旁觀客"
+TARGETS = {  # 片 → 指定的目標（甲客、乙客是黃巾、站在汝南）
+    "xuanniu": "bocai",  # 引將
+    "yunzhuan": "",  # 頒詔
+    "chenglu": "",  # 承露：潁川汝南
+    "chizhang": "yingru",  # 傳檄
+    "guixin": "caocao",  # 收心
+    "chishou": "runan",  # 鎮地
+    "jinjiao": "runan_academy",  # 補缺：官軍先翻走汝南書院
+}
+OLD = -2 * DAY  # 舊事的時刻：兩天前，近況（24 小時）不算它
+
+
+def _person_fb643(c, w, name, side, *, known=False):
+    g = Game.new(c, name, rng=random.Random(0), world=w)
+    g.client = None
+    p = g.state.player
+    p.faction, p.location, p.tutorial_step = side, AT, len(c.tutorial.steps)
+    p.visited.add(AT)
+    p.stats["silver"] = 5000
+    if known:
+        p.stats["fame"] = renown.fame_bars(c, g.state.world)[0]  # 名望第一段：打聽度 4 以上，打聽交情列得出近來的事
+    g.sync(0.0)
+    if known:
+        for a in p.annals:  # 開局記下的（投靠）挪到兩天前
+            a.time = OLD
+        while sum(1 for a in p.annals if a.weight >= 4) < 2:
+            annals.note(g.state, c, annals.DEED, f"舊事{len(p.annals)}。", 4, time=OLD)
+        assert renown.fame_tier(g.state, c) == 1
+    g._save_season()
+    CharacterStore(w.db).save(g.state)
+    return g
+
+
+def _do_fb643(c, w, name, fn, now):
+    game = Game(c, CharacterStore(w.db).load(name), random.Random(0), w)
+    game.client = None
+    game.sync(now)
+    out = fn(game)
+    game._save_season()
+    CharacterStore(w.db).save(game.state)
+    return out
+
+
+def _world_fb643(shard: str, user: str, side: str | None):
+    """甲客、乙客（side；None 是散人）與旁觀客（黃巾）都在汝南；user 懷著 shard、在 10 秒起用（散人替黃巾）。回旁觀客在酒肆問到的一切。"""
+    c = conquest_rules(real_content("season21"))
+    c.config.auto_open_first_season = True
+    c.config.seal.revamp.enabled = True
+    c.config.newbie_days, c.config.newbie_real_hours = -1, 0
+    w = open_world(Path(tempfile.mkdtemp(prefix="seal643-")) / "t.db")
+
+    def _give(st):
+        s = seal.filled(st.seal, c).shards[shard]
+        s.state, s.holder, s.since_season = "held", user, 0
+
+    w.mutate(_give)
+    for name in ("甲客", "乙客"):
+        _person_fb643(c, w, name, side, known=True)
+    _person_fb643(c, w, VIEWER, "huang")
+    if shard == "jinjiao":
+        _do_fb643(c, w, VIEWER, lambda g: conquest.push(g.state.world, c, "runan_academy", "guan", "官甲", 100, "attack"), now=5.0)
+    for name in ("甲客", "乙客"):
+        _do_fb643(c, w, name, (lambda g: g.seal_use(TARGETS[shard], "huang")) if name == user else (lambda g: None), now=10.0)
+    assert [e.holder for e in w.seal_state().registry.uses] == [user]  # 真的起用了
+    store = CharacterStore(w.db)
+
+    def look(viewer: Game) -> dict:
+        assert viewer._tavern_enter() and viewer._tavern_open()
+        now = viewer.state.world.time
+        out = {}
+        for name in ("甲客", "乙客"):
+            other = store.load(name)
+            other.world = viewer.state.world
+            out[f"ties:{name}"] = viewer.tavern_do("ties", name)
+            out[f"seek:{name}"] = viewer.tavern_do("seek", name)
+            out[f"fame:{name}"] = tavern.person_fame(other, c)
+            out[f"fresh:{name}"] = tavern.fresh(other, now)
+            out[f"reach:{name}"] = tavern.person_reach(viewer.state, c, other, set())
+            out[f"hit:{name}"] = tavern.hit_reach(c, AT, other)
+        out["page"] = json.dumps(viewer.tavern_view(), ensure_ascii=False, sort_keys=True, default=str)
+        return out
+
+    return _do_fb643(c, w, VIEWER, look, now=20.0)
+
+
+CASES = [(shard, "huang") for shard in TARGETS] + [("chizhang", None), ("chishou", None)]
+
+
+@pytest.mark.slow  # 原本整個檔標 slow（建 Game、載正式內容）
+@pytest.mark.parametrize(("shard", "side"), CASES, ids=[f"{s}-{side or 'ranger'}" for s, side in CASES])
+def test_the_tavern_cannot_tell_who_used_a_shard(shard, side):
+    a, b = _world_fb643(shard, "甲客", side), _world_fb643(shard, "乙客", side)
+    assert a.keys() == b.keys()
+    for key in a:
+        assert a[key] == b[key], key
+    if side is not None:  # 打聽度到 4：近來的事真的列得出來（列得出舊事，就列得出起用那一筆）
+        assert any("近來的事" in line for line in a["ties:甲客"])
+
+
+@pytest.mark.slow  # 原本整個檔標 slow（建 Game、載正式內容）
+def test_the_seal_annal_stays_for_its_owner():
+    """行狀本身留著：本人的行狀頁照舊寫「行事」、季末的傳照舊歸在出身與行事那一段（跟改之前一樣）。"""
+    c = conquest_rules(real_content("season21"))
+    c.config.auto_open_first_season = True
+    c.config.seal.revamp.enabled = True
+    w = open_world(Path(tempfile.mkdtemp(prefix="seal643o-")) / "t.db")
+
+    def _give(st):
+        s = seal.filled(st.seal, c).shards["yunzhuan"]
+        s.state, s.holder, s.since_season = "held", "懷璽", 0
+
+    w.mutate(_give)
+    _person_fb643(c, w, "懷璽", "huang")
+    _do_fb643(c, w, "懷璽", lambda g: g.seal_use(""), now=10.0)
+    me = CharacterStore(w.db).load("懷璽")
+    [entry] = [a for a in me.player.annals if a.text.startswith("起用了『雲篆』")]
+    assert (entry.kind, entry.weight) == (annals.SEAL, 4) and not annals.heard(entry)
+    [row] = [r for r in annals.rows(me, c) if r["text"] == entry.text]
+    assert row["kind"] == annals.KINDS[annals.DEED]
+    req = biography.BiographyRequest(season=1, name="懷璽", scenario="黃巾之亂", era_note="", annals=(entry.model_dump(),))
+    assert entry.text in biography.outline(req).split("【出身與行事】")[1].split("【大戰】")[0]
+    assert biography._strip(entry.text, "懷璽") in biography.rule_text(req)

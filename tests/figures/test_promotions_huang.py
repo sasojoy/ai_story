@@ -725,7 +725,7 @@ def _rank2_event(on):
 def test_donations_and_runic_pieces_need_an_event_only_one_side_can_reach(on, field, value):
     """沒投靠的人、別的陣營的人領得到貢獻與殘片就是漏洞：只准寫在晉升奇遇（召見只發給自己陣營的人），或條件寫了 factions
     的事件；兩邊都不是的，載入時擋下。"""
-    event = next(e for e in on.events.values() if not e.id.startswith("promo_") and e.free_text is None)
+    event = next(e for e in on.events.values() if not e.id.startswith("promo_") and e.free_text is None and len(e.choices) > 1)
     setattr(event.choices[0].effect, field, value)
     with pytest.raises(ContentError, match=f"{event.id}：donate_grain／runic 只能寫在晉升奇遇"):
         validate(on)
@@ -733,7 +733,7 @@ def test_donations_and_runic_pieces_need_an_event_only_one_side_can_reach(on, fi
 
 @pytest.mark.parametrize("field, value", [("donate_grain", {"nanyang_huangjin_camp": 2}), ("runic", 2)])
 def test_a_factions_condition_gates_the_event_or_the_choice(on, field, value):
-    event = next(e for e in on.events.values() if not e.id.startswith("promo_") and e.free_text is None)
+    event = next(e for e in on.events.values() if not e.id.startswith("promo_") and e.free_text is None and len(e.choices) > 1)
     setattr(event.choices[0].effect, field, value)
     event.condition = event.condition.model_copy(update={"factions": ["huang"]})
     validate(on)  # 事件整個只給黃巾：過得了

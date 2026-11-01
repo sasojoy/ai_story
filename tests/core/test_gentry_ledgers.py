@@ -1,7 +1,7 @@
 """豪強兩本帳與「此刻幫誰」的純規則（減法季整合設計 3.2；計畫第五節 Task 3c-1、5.0 第 8～10 條）。
 
 「此刻幫誰」就是 PlayerState.ally（豪強分屬兩軍的季投靠時挑的那一軍）：wins.lean_of 讀它、wins.set_lean 寫它；
-換邊不算叛投、帳不清。這裡只測 wins 的函式與存檔的鍵；兩本帳要四勝利開著（Config.jianfa.four_wins＋開季的章，ON），
+換邊不算叛投、帳不清。這裡只測 wins 的函式與存檔的鍵；兩本帳要四勝利開著（減法季 Config.jianfa＋開季的章，ON），
 引擎的接線另見 tests/test_four_wins_wiring.py。
 用正式內容（season21：豪強分屬兩軍、劇本有三個陣營），載入超過一秒，整個檔標 slow。"""
 from __future__ import annotations
@@ -74,15 +74,11 @@ def test_gentry_without_a_lean_only_adds_contrib(content):
 
 
 def test_off_season_credit_only_adds_contrib(content):
-    """四勝利關著（沒蓋章的季、或主機把 four_wins 關掉）：照舊只記 contrib，豪強也不記帳（一個字都不變）。"""
+    """四勝利關著（沒蓋減法季章的季）：照舊只記 contrib，豪強也不記帳（一個字都不變）。"""
     p = _player(content, faction="haoqiang", ally="guan")
     wins.credit(p, content, WorldState(), 1, 5)
     assert (p.contrib, p.contrib_weeks, p.ledgers) == (5, {1: 5}, {})
-    off = content.model_copy(deep=True)
-    off.config.jianfa.four_wins = False
-    wins.credit(p, off, ON, 1, 5)
-    assert (p.contrib, p.ledgers) == (10, {})
-    assert wins.on(content, ON) and not wins.on(off, ON) and not wins.on(content, WorldState())
+    assert wins.on(content, ON) and not wins.on(content, WorldState())
 
 
 def test_zero_points_record_nothing(content):

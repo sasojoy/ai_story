@@ -89,15 +89,6 @@
       "effect": {"figure_prestige": -15},
       "faction_rumor": "{人物}{這週}連敗幾陣，躲在營裡不敢出來。",
       "leak_rumor": "{人物}這陣子天天被人挑，敗走了好幾回。"
-    },
-    {
-      "kind": "strike", "side": "haoqiang", "priority": 1,
-      "when": {"always": true},
-      "text": "家主吩咐：{人物}擋了咱們的路。",
-      "personal": "challenge", "quota_base": 600,
-      "effect": {"figure_prestige": -15},
-      "faction_rumor": "{人物}{這週}連敗幾陣，躲在營裡不敢出來。",
-      "leak_rumor": "{人物}這陣子天天被人挑，敗走了好幾回。"
     }
   ],
   "slots": {
@@ -134,10 +125,7 @@
      "fail": "你在{地點}喊了半天，圍觀的人一鬨而散，怕官府來抓。"},
     {"id": "fortify", "faction": "haoqiang", "rank": 3, "name": "修築塢堡", "stamina": 20, "weekly": 3,
      "chaos_only": true, "push": 5,
-     "ok": "你帶著部曲在{地點}挖溝築牆，一座塢堡的雛形立了起來，附近的鄉民扛著家當往裡搬。"},
-    {"id": "seize", "faction": "haoqiang", "rank": 4, "name": "趁亂占據郡縣", "stamina": 30, "weekly": 1,
-     "tags": ["城鎮"], "chaos_only": true, "push": 10,
-     "ok": "趁著官軍與黃巾殺得難分難解，你帶人進了{地點}的縣衙，把官印收進了自己的匣子。"}
+     "ok": "你帶著部曲在{地點}挖溝築牆，一座塢堡的雛形立了起來，附近的鄉民扛著家當往裡搬。"}
   ],
   "commander_fallback": {"guan": "營中", "huang": "渠帥", "haoqiang": "家主"},
   "callers": [

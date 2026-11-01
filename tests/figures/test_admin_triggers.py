@@ -12,7 +12,7 @@ import random
 
 import pytest
 
-from conftest import FixedRandom, real_content
+from conftest import FixedRandom, no_territory, real_content
 from tianxia import calendar, foreshadow, opportunities, orders, ranks, rules, seats
 from tianxia.characters import open_characters
 from tianxia.engine import PAUSED_REFUSAL, Game
@@ -34,7 +34,7 @@ def real():
 @pytest.fixture
 def on(real):
     real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 250
-    return real
+    return no_territory(real)  # 地盤不開（豪強分屬兩軍的開關拿掉之前，這一份本來就沒有地盤）
 
 
 def _game(content, name="管", world=None):

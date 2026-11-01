@@ -12,8 +12,6 @@ import pytest
 from stances_kit import BOCAI, LUZHI, at, real_game
 from tianxia import calendar, errands, letters, renown, rules
 
-pytestmark = pytest.mark.slow  # 載正式內容、照伺服器開季
-
 
 def _friend(g, cid=LUZHI, affinity=50):
     g.state.player.affinities[cid] = affinity

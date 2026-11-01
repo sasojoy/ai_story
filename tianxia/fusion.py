@@ -24,7 +24,7 @@ from dataclasses import dataclass
 
 from . import annals, arts as arts_mod, calendar, insight_fx, insights, library, naming, rules, secret_recipes, sensing
 from .martial_arts import Insight, MartialArt, shown_creator
-from .models import Content, PresetRecipe
+from .models import Content
 from .ollama_client import OllamaClient
 from .rules import add_chronicle, add_rumor, season_one
 from .state import Echo, GameState, GearFind, WeaponRecipe
@@ -171,7 +171,7 @@ def blend_key(a: str, b: str) -> str:
 
 def recipe_seed(world: WorldStateStore, key: str) -> tuple[int, str]:
     """這一季的天機與這個配方的種子：同一個配方同一季，屬性都一樣（設計 12.6）。"""
-    tianji = world.read().tianji
+    tianji = world.tianji()
     return tianji, f"{tianji}|{key}"
 
 
@@ -180,11 +180,6 @@ def merge_shape(world: WorldStateStore, a: Insight, b: Insight, content: Content
     merge 照它登記，煉製頁的預覽照它寫——兩邊同一個函式，預覽不會跟結果各說各話（FB-082）。"""
     seed = recipe_seed(world, merge_key(a.id, b.id))[1]
     return insights.merged_attribute(a, b, seed), insights.merged_lean(a, b)
-
-
-def preset_for(content: Content, art_id: str, insight_id: str) -> PresetRecipe | None:
-    """師門配方（content/preset_recipes.json）：這一版武學＋意境的合成拿掉了，師門配方等劇情重填；先留著讀。"""
-    return next((r for r in content.preset_recipes if r.base == art_id and r.insight == insight_id), None)
 
 
 # ── 共用的小零件 ──────────────────────────────────────────
@@ -217,15 +212,8 @@ def _dash_note(thing: MartialArt | Insight) -> str:
     return f"——{thing.note}" if thing.note else ""
 
 
-def _attr_text(thing: MartialArt | Insight) -> str:
-    return f"屬{thing.attribute}" if thing.attribute else "尚無屬性"
-
-
 FIRST_ART = "\n這是江湖上第一次有人合出這一門——從此它就叫這個名字。"
 FIRST_INSIGHT = "\n這是江湖上第一次有人悟出這個意境。"
-OWN_FIRST = "\n這一門是你首創的。"  # 自己首創、熔掉之後照配方又合了一次（FB-117；待 joy 潤）
-CO_FIRST = "\n這是江湖上第一次有人合出這一門——你與{other}一起首創的。"  # 論武共同首創（FB-117；待 joy 潤）
-CO_OWN = "\n這一門是你與{other}首創的。"  # 共同首創的人之後再合（FB-243；待 joy 潤）
 OWN_FIRST_INSIGHT = "\n這個意境是你首悟的。"
 CO_FIRST_INSIGHT = "\n這是江湖上第一次有人悟出這個意境——你與{other}一起首悟的。"
 CO_OWN_INSIGHT = "\n這個意境是你與{other}首悟的。"
@@ -252,20 +240,6 @@ def _partner_of(thing: MartialArt | Insight, me: str) -> str | None:
     if not me or me not in (thing.creator, thing.co_creator):
         return None
     return (thing.co_creator if me == thing.creator else thing.creator) or ""
-
-
-def _arrival(art: MartialArt, first: bool, me: str = "", partner: Partner | None = None) -> str:
-    """新武學那一則訊息的後半：模型寫的說明（有的話），再接首創或照著合的那一句。"""
-    tail = f"\n{art.note}" if art.note else ""
-    if art.preset:
-        return tail + "\n這是師門傳下來的路數。"
-    if first:
-        return tail + FIRST_ART
-    other = _partner_of(art, me)
-    if other is not None:
-        return tail + _founders_line(other, _together(partner, other), CO_FIRST, CO_OWN, OWN_FIRST)
-    by = shown_creator(art) or "不知名的前人"
-    return tail + f"\n這一門由{by}首創，你照著合出了同一門。"
 
 
 ECHO_RUMOR = "江湖上照著{who}首創的{thing}練出來的人越來越多了。"

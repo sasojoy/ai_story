@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from tianxia.database import default_path  # noqa: E402
-from tianxia.mall import reason_text  # noqa: E402
+from tianxia.features.mall.rules import reason_text  # noqa: E402  商城的規則（功能包 tianxia/features/mall/）
 from tianxia.wallet import Wallet  # noqa: E402
 
 HEADER = ["編號", "時間（台灣）", "名號", "錢包", "增減", "原因", "單號", "購買", "經手", "說明", "之後的餘額"]

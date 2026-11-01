@@ -118,6 +118,54 @@ ONBOARDING_VERSION = 5  # 新手引導的版本：2＝有序章的新引導（�
 # 比 3 小而且已經有陣營的，是入伍段上線之前就投靠的老手，讀檔時蓋成入伍段走完（enlist.mark_veteran，設計 7.2）
 
 
+class OutingBeat(BaseModel):
+    """走一趟的一段（tianxia/outing.py）：一段就是一次探索（Game._explore_one）抽到的那一件事。畫面照 kind 挑動作、照 text 寫那一行。"""
+
+    kind: str  # explore_one 的四類：event／encounter／material／insight
+    text: str = ""  # 那一段的段落（_explore_one 的第一行）
+    ledger: str = ""  # 「得：…　失：…」那一行；沒有是空字串
+    rare: bool = False  # 稀有的：二階以上的素材、奇遇事件、一條線的開頭（畫面亮金光）
+    won: bool | None = None  # 遭遇：打贏 True、打輸或平手 False；別的類是 None
+    stop: bool = False  # 這一段端出了要選的事（事件、有所感、頭目），走一趟停在這裡等玩家選
+    ref: int | None = None  # kind trace（路上看到的留言）：那一則留言的 id（管理者照它刪）；其餘是 None
+    # 值得記下來的一段（Joy 10/30「真的出現超級稀有的物品或是奇蹟逆轉的戰役這種類型的才有價值被記錄」）：
+    # 撿到四階素材是那一樣的名字、勝算凶險以下打贏是對手的名字（outing.FEAT_*）；其餘是空字串
+    feat: str = ""
+    feat_kind: str = ""
+    foe: str = ""  # 遭遇：對手長什麼樣（outing.foe_look：huang 黃巾、guan 官兵、retainer 豪強家丁、bandit 綠林盜匪、beast 猛獸）；別的類是空字串
+    spent: int = 0  # 這一段走掉的體力（探索那一下扣的；結算卡加總成「體力 -N」）
+    # 停下來要選的事（stop）選完的得失：「得：…　失：…」，含選項另外扣的體力（Joy 10/31「獲得一袋錢（多少）（有額外扣體力？）」）；
+    # 沒有是空字串
+    after: str = ""
+
+
+class Outing(BaseModel):
+    """走一趟（企劃者 2026-10-29～30）：探索一次走 total 段。end 是空字串時還在路上（停著等選或還沒走完）；走完寫原因，
+    留著給結算卡，下一趟出發才換掉。"""
+
+    place: str  # 出發的地點 id；人不在這裡了，這一趟就收
+    total: int
+    done: int = 0
+    beats: list[OutingBeat] = Field(default_factory=list)
+    end: str = ""  # ""、done（走完）、lost（打輸）、hurt（氣血見底回頭）、tired（體力不夠）、left（離開了）
+    n: int = 0  # 第幾趟（上一趟加一；遊記的單子照它認是不是同一趟）
+    said: str = ""  # 走完在這一處留的那一句（一趟一句）；空的是還沒留
+    waved: bool = False  # 路上已經寫過「遠處有人揮手」那一行（一趟一次）
+    tale: str = ""  # 這一趟的遊記（模型寫的，鎖外三段式；叫不動或不合用是空字串，畫面用 outing.template_tale）
+    tale_done: bool = False  # 遊記請過模型了（成不成都算，不再請）
+
+
+class Inscription(BaseModel):
+    """走一趟留在一處的一句話（tianxia/outing.py）：之後來這裡走一趟的人路上會看到。預設句免費，自己寫的要一張題壁墨。"""
+
+    id: int
+    place: str
+    text: str
+    author: str  # 名號（改名照 rename.swap 一起換）
+    preset: bool = False
+    time: float = 0.0
+
+
 class Sensing(BaseModel):
     """有所感（悟意境設計第零節）：探索落在悟意境那一支、這一處有場景時，存一份待決的感悟，直到悟成或落空。
     stage 是 "choose"（卡上三四個做法、還沒選）或 "draw"（選對又擲中，進了感悟狀態、等著畫那一筆）。"""
@@ -480,6 +528,10 @@ class ArenaFight(BaseModel):
     crowd_me: CrowdSide | None = None  # 場邊事件看的底細（tianxia/arena_crowd.py）：挑的人開打那一刻、守的人照 ArenaEntry.crowd
     crowd_foe: CrowdSide | None = None
     crowd_done: bool = False  # 這一場已經有過一件場邊事件（一場最多一件）
+    looks: list[str] = Field(default_factory=list)  # 擂台動畫：[挑的人, 分身] 手上兵器的種類（models.WEAPON_KINDS；空字串＝空手）；舊的一場沒有
+    skins: list[str] = Field(default_factory=list)  # 擂台形象：[挑的人, 分身] 穿哪一套（content/looks.json 的 id；空字串＝斗笠小子）；舊的一場沒有
+    fx: list[str] = Field(default_factory=list)  # 招式動畫：[挑的人, 分身] 出招疊哪一張光效（m<購買 id>；空字串＝沒有）；舊的一場沒有
+    picks: list[list[str]] = Field(default_factory=list)  # 擂台動畫：每回合 [你出的, 他出的]（強攻／固守／奇襲；出不了手是空字串；放手一搏是 ["搏", ""]）；只給畫面
 
 
 class ArenaResult(BaseModel):
@@ -490,6 +542,10 @@ class ArenaResult(BaseModel):
     tier: str
     lines: list[str] = Field(default_factory=list)  # 每回合一行
     changes: list[str] = Field(default_factory=list)  # 戰報的得失（積分、名望）
+    looks: list[str] = Field(default_factory=list)  # 擂台動畫：照 ArenaFight.looks 抄（收場卡演最後一幕）
+    skins: list[str] = Field(default_factory=list)  # 擂台形象：照 ArenaFight.skins 抄
+    fx: list[str] = Field(default_factory=list)  # 招式動畫：照 ArenaFight.fx 抄
+    picks: list[list[str]] = Field(default_factory=list)  # 擂台動畫：照 ArenaFight.picks 抄（收場那一幕照最後一回合演）
 
 
 class ArenaReport(BaseModel):
@@ -522,6 +578,9 @@ class ArenaEntry(BaseModel):
     arts: list[str] = Field(default_factory=list)  # 身上兩門武學的名字（選單上寫他守擂用什麼）
     kit: BoutSide | None = None  # 報名那一刻身上的本命戰法（team.self_side）；沒有是 None，舊存檔也是
     cut: float = 0.0  # 報名或更新分身那一刻的防具減損（含耐久，team.duel_armor_cut）：別人來挑時這一邊挨的打乘 1 − 它（鐵匠鋪與合成流程 3.9）；舊的分身沒有＝0
+    weapon: str = ""  # 擂台動畫：報名、更新分身那一刻手上兵器的種類（空字串＝空手；舊存檔也是）
+    look: str = ""  # 擂台形象：報名、更新分身那一刻穿哪一套（空字串＝斗笠小子；舊存檔也是）
+    move: str = ""  # 招式動畫：報名、更新分身那一刻出招疊哪一張光效（m<購買 id>；空字串＝沒有）
     joined: float = 0.0  # 第一次報名的世界秒
     rank: int = 0  # 名次（1 是天下第一）；報名排到榜尾，挑的人贏了兩人交換（arena.swap）
     wins: int = 0
@@ -691,6 +750,7 @@ class PlayerState(BaseModel):
     picking_dadian: bool = False  # 打開了「打點」那一間店（21 天季的銀兩出口，第 9 批畫面乙）；離開、同步時這裡一樣都做不了、出發都收起來
     picking_market: bool = False  # 打開了馬市的第二層選單（同 picking_smith）；離開、存檔修補、同步時人不在馬市、出發都收起來
     feasting: int | None = None  # 赴宴中（宴客，tianxia/feasts.py）：坐在哪一場宴席上（Feast.id），選單換成敬酒詞
+    plans_paid: list[str] = Field(default_factory=list)  # 領過盤算結果的站 id（世界活起來，這一季的）
     feasts_paid: list[int] = Field(default_factory=list)  # 領過「席間最佳」名望的宴席 id（這一季的）
     picking_arena: bool = False  # 打開了擂台的第二層選單（同 picking_market）；離開、存檔修補、同步時人不在城鎮、出發都收起來
     treasure: Equipment | None = None  # 身上的寶物（裝備四欄設計第六節；隨時能換，2.3）；舊存檔沒有＝沒帶
@@ -826,6 +886,7 @@ class PlayerState(BaseModel):
     fights_today: int = 0  # 遭遇的疲勞（drill_gates，growth.nth_fight）：fight_day 那一天打了幾場遭遇（含城裡的地痞、自家營寨的比劃）
     fight_day: int = 0  # fights_today 記在哪一天（Game._pill_day，台灣 00:00 換日）；不是今天就從頭算
     milestone_due: int = 0  # 升到境界那一級、還沒配完點時記那一級（stat_milestones；境界卡 main.milestone）；配完清成 0
+    outing: Outing | None = None  # 走一趟（tianxia/outing.py）：這一趟走到哪、沿路發生了什麼；走完留著給結算卡，下一趟出發才換掉
     outing_last: str = ""  # 探索一顆（explore_one）上一趟要選的那件事（事件或感悟）：「地點 id:類」（感悟不連兩趟，explore_one.draw 的 last_choice）
     anonymous: bool = False
     # 性別（PM 2026-10-12，企劃者「創建角色時可以選擇性別」）：「男」／「女」，不影響任何數值；稱呼換字一律走 tianxia/gender.py。
@@ -885,7 +946,7 @@ class PlayerState(BaseModel):
     # 處理過的收場決戰（BattleInstance.record_id）：自己參戰、已經補進江湖紀錄與戰報的，以及看過不是自己參戰的
     # （FB-027，見 Game._deliver_battle_results）。跨季保留：決戰常常把季收掉，下一季才回來的人也要補、而且只補一次
     battle_results_seen: list[int] = Field(default_factory=list)
-    # 補回被洗掉的決戰戰報（Game._restore_showdowns）做過的那一季：一季只查一次 battles 表。舊存檔沒有是 0
+    # 補回被洗掉的決戰戰報（決戰包 features/battle/view.restore_showdowns）做過的那一季：一季只查一次 battles 表。舊存檔沒有是 0
     showdowns_restored: int = 0
     # 這一季參戰幾場、當過幾次首功（Joy 2026-10-10 個人戰功；玩家卡寫）。角色每季重來，跟著清空；舊存檔沒有就是 0
     showdowns: int = 0
@@ -964,7 +1025,7 @@ class PlayerState(BaseModel):
     # ── 伏筆（計畫 T7、伏筆文件）；角色每季重來，跟著新角色清空（不在跨季保留的清單上）──
     fragments: dict[str, list[int]] = Field(default_factory=dict)  # 鏈 id → 聽過的片段（fragments 的索引）
     clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品 id → 數量
-    fs_counters: dict[str, int] = Field(default_factory=dict)  # 隱藏計數：guanyin（官銀）、two_buyers（豪強兩頭賣糧的起點）
+    fs_counters: dict[str, int] = Field(default_factory=dict)  # 隱藏計數：guanyin（官銀）
     fs_done: list[str] = Field(default_factory=list)  # 做完的鏈 id；多趟的鏈每做完一趟另記「鏈 id:第幾趟」（從 0 起）
     fs_cooldown_until: dict[str, float] = Field(default_factory=dict)  # 鏈 id → 答錯之後要等到哪個世界秒才能再做
     fs_asking: str | None = None  # 正在答最後一步的題的那條鏈；None＝沒在答（選單照常）
@@ -1037,7 +1098,7 @@ class PlayerState(BaseModel):
 # PlayerState 裡「沒用到就不寫進存檔」的欄位（_drop_quiet_defaults）：新規則掛開關、關著的季存檔一個鍵都不多的，加在這裡
 QUIET_DEFAULTS = (
     "ledgers", "lean_changed", "season_title", "step_day", "step_skip", "deed_day", "deed_today",  # 批 3c、批 4
-    "fights_today", "fight_day", "milestone_due", "outing_last",  # 批 2
+    "fights_today", "fight_day", "milestone_due", "outing_last", "outing",  # 批 2、走一趟
     "stance_notes", "errands",  # 批 6
     "xingshi_seen", "deep_order",  # 批 7b
     # 出陣約戰（減法季批 3b）
@@ -1365,6 +1426,36 @@ class Toast(BaseModel):
     fixed: bool = False  # 挑的是固定的敬酒詞
 
 
+class Deed(BaseModel):
+    """世界記事的一筆（tianxia/deeds.py；世界活起來）：誰、在哪、做了什麼。kind：plan（盤算的結果）、move（人物照行程走到哪）、
+    beat（玩家打退大勢人物）、figure_fell（大勢人物退場或重創）；章回主線另寫 chapter。figures 是對話人物 id，actors 是玩家名號，
+    side 是這件事算哪一方的（沒有是 None）。人物對話、此地舊事、章回都讀它。"""
+
+    id: int
+    kind: str
+    text: str
+    place: str | None = None
+    figures: list[str] = Field(default_factory=list)
+    actors: list[str] = Field(default_factory=list)
+    side: str | None = None
+    time: float = 0.0
+
+
+class Plan(BaseModel):
+    """一件盤算（tianxia/plans.py）：行程的一站 stop，從 open_at 公告到 due 到點結算（世界秒）。helpers／blockers 是助他一臂、
+    壞他事的玩家名號（一人一件一次）。settled 之後 won 是成不成。"""
+
+    stop: str
+    who: str  # 對話人物 id
+    place: str
+    open_at: float
+    due: float
+    helpers: list[str] = Field(default_factory=list)
+    blockers: list[str] = Field(default_factory=list)
+    settled: bool = False
+    won: bool | None = None
+
+
 class Feast(BaseModel):
     """一位人物設的宴（tianxia/feasts.py）：在 place 從 start 擺到 end（世界秒），人在那裡就能赴宴、敬一句酒。
     散席（settled）時分數最高的那一句（best：名號）上天下大事，那個人同步時名望 +feast_fame（PlayerState.feasts_paid 記領過的）。"""
@@ -1450,7 +1541,7 @@ class Ambush(BaseModel):
 
 
 class TerritoryWeek(BaseModel):
-    """地盤某一週的樣子（輿圖升級設計第九節）：那一週最後一次重算時的控制方、每條戰線拔河看的值、割據（沒有這條線是 None）。"""
+    """地盤某一週的樣子（輿圖升級設計第九節）：那一週最後一次重算時的控制方、每條戰線拔河看的值、割據（2026-10-31 拿掉，舊存檔照讀，不再寫）。"""
 
     control: dict[str, str] = Field(default_factory=dict)
     fronts: dict[str, int] = Field(default_factory=dict)
@@ -1707,7 +1798,6 @@ class WorldState(BaseModel):
     # 籌備中的季在管理者開季時再蓋一次（第一次啟動忘了設 TIANXIA_PROFILE 也救得回來）──
     # 開關打開時還在跑的舊季照它自己的章走：不跑季曆與時刻表，也不會因為設定的季長變短就一口氣收掉。
     season_one: bool = False  # 這一季開季時第一季濃縮版的規則是不是開著
-    haoqiang_allied: bool = False  # 這一季開季時豪強分屬兩軍是不是開著（allied.on 還要第一季的章）；舊季讀檔是 False
     season21: bool = False  # 這一季開季時 21 天季的骨架是不是開著（Config.season21；calendar.season21_on 還要設定也開著）
     precise_actions: bool = False  # 這一季開季時一類一顆是不是開著（Config.precise_actions；precise.on 還要設定也開著）
     cal_offset: float = 0.0  # 21 天季：開季那一刻離那一週台灣週一 00:00 幾個季曆秒（calendar.anchor_offset）；其他季是 0
@@ -1716,15 +1806,17 @@ class WorldState(BaseModel):
     # （calendar.offset_at），不跟著往後挪。存在季的 JSON 裡；其他季一直是空的
     cal_offset_history: list[tuple[float, float]] = Field(default_factory=list)
     length_days: float | None = None  # 這一季的長度（遊戲日）；None＝T2 之前開的季，一律照 models.DEFAULT_SEASON_DAYS（FB-037）
-    # ── 時刻表（計畫 T2；鎖定、搶輸、豪強、一般伏筆修正由 T7 寫入）──
+    # ── 時刻表（計畫 T2；鎖定、搶輸、一般伏筆修正由 T7 寫入）──
     timeline: dict[str, TimelineResult] = Field(default_factory=dict)  # 大事 id → 結算結果（有就不再結算）
     locks: dict[str, Lock] = Field(default_factory=dict)  # 大事 id → 第一個做完關鍵伏筆的人
     lock_losers: dict[str, list[Lock]] = Field(default_factory=dict)  # 大事 id → 之後才做完的人
-    third_party: dict[str, list[str]] = Field(default_factory=dict)  # 大事 id → 做完豪強伏筆的名號（真名）
-    # 大事 id → {名號: 公告寫的名字}：這一版之前做完時匿名的豪強（「某位少俠」）；現在不再記，沒記的照名號寫
-    third_party_shown: dict[str, dict[str, str]] = Field(default_factory=dict)
+    # third_party、third_party_shown（做完豪強第三方伏筆的名號）2026-10-31 連豪強第三方一起拿掉；舊存檔裡的鍵讀進來時丟掉
     event_mods: dict[str, float] = Field(default_factory=dict)  # 大事 id → 一般伏筆、軍令的成功率修正（合計夾在 ±0.20）
     event_bonus: dict[str, float] = Field(default_factory=dict)  # 大事 id → 時刻表結果帶來的修正（例：波才北上，不夾）
+    # 章回主線（tianxia/chapters.py）：大事 id → 陣營 → 做成那一回的份量合計（改那一骰、決戰的起點）；線 id → 做成的人數（章回卡寫）。
+    # 空的時候不寫進 JSON（_drop_empty_marks_fired）
+    chapter_weights: dict[str, dict[str, float]] = Field(default_factory=dict)
+    chapter_done: dict[str, int] = Field(default_factory=dict)
     schedule: dict[str, float] = Field(default_factory=dict)  # 決戰 id 與 "finale" → 世界秒；開季時填預設、管理者可改
     mandate: bool = False  # 天命之季（玉璽碎片設計 8.1；換季時由 seal.stamp_mandate 蓋，季的規則看它）
     mandate_result: str | None = None  # 天命之爭得天命的那一軍；"" 是天命未定；None 是還沒定（季末看它，world.evaluate_ending）
@@ -1747,7 +1839,7 @@ class WorldState(BaseModel):
     # 升第 2 階的每日彙整（計畫 T5）：「曆日:陣營:階」→ 名號（陣營軍情一律具名）；過了那個曆日由季的事發成一則陣營軍情（傳聞只能新增，不能改）
     promoted_today: dict[str, list[str]] = Field(default_factory=dict)
     # ── 推力規則（計畫 T3）──
-    trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"geju"、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）、"regen:<人物 id>"（沒有時刻表的季聲威回復不足一點的部分）、"lost:<人物 id>:<遊戲日>"（沒有時刻表的季這一天被打掉了多少，一天上限用）
+    trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）、"regen:<人物 id>"（沒有時刻表的季聲威回復不足一點的部分）、"lost:<人物 id>:<遊戲日>"（沒有時刻表的季這一天被打掉了多少，一天上限用）
     active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）
     # 特殊頓悟（tianxia/epiphany.py）：這一季全服神品意境的名字 → 悟的人（名字全服不重複）；模板 id → 這一季第一個悟出它的「名字|名號」
     god_names: dict[str, str] = Field(default_factory=dict)
@@ -1767,7 +1859,9 @@ class WorldState(BaseModel):
         （同 world_state.SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
         data = handler(self)
         if isinstance(data, dict):
-            for key in ("marks_fired", "mark_helpers", "final_tiers", "stance_counts", "stance_week", "stance_active", "god_names", "god_firsts"):
+            for key in ("marks_fired", "mark_helpers", "final_tiers", "stance_counts", "stance_week", "stance_active", "god_names", "god_firsts",
+                        "chapter_weights", "chapter_done", "plans", "stops_done", "deeds", "deed_seq",
+                        "inscriptions", "inscription_seq"):
                 if key in data and not data[key]:
                     del data[key]
         return data
@@ -1776,6 +1870,14 @@ class WorldState(BaseModel):
     # 大勢人物擴充第三批（tianxia/feasts.py、yuedan.py、bounties 的求援委託）：這一季的宴席、月旦評、人物對整個陣營發的求援委託
     feasts: list[Feast] = Field(default_factory=list)
     feast_seq: int = 0
+    # 世界活起來（tianxia/plans.py、deeds.py）：盤算（開著的與這一季結算過的）、行程每一站做完了沒（站 id → 成不成；一般的一站記 True）、世界記事
+    plans: list[Plan] = Field(default_factory=list)
+    stops_done: dict[str, bool] = Field(default_factory=dict)
+    deeds: list[Deed] = Field(default_factory=list)
+    deed_seq: int = 0
+    # 走一趟的留言（tianxia/outing.py）：每一處留最近 outing_keep 則；換季時預設句清掉、題壁墨寫的帶到下一季（sqlite_world.next_season）
+    inscriptions: list[Inscription] = Field(default_factory=list)
+    inscription_seq: int = 0
     yuedan: list[YuedanEntry] = Field(default_factory=list)
     yuedan_week: int = 0  # 月旦評評到第幾週了
     rallies: list[Bounty] = Field(default_factory=list)  # 求援委託（motive「求援」；不上懸賞榜，自己陣營的人都看得到、前 quota 個辦成的有賞）
@@ -1794,7 +1896,7 @@ class WorldState(BaseModel):
     # 目標的名號鍵 → 上一次被截殺的世界秒（被截殺過的人一陣子之內誰都不能再截殺他）。換季整個重來
     raids: dict[str, float] = Field(default_factory=dict)
     raided: dict[str, float] = Field(default_factory=dict)
-    # 混戰（翻地與爭搶，Game._clash）寫進上面那兩本的是哪幾筆：同 raids 的鍵（兩個方向）、同 raided 的鍵（被撞的人）→ 那一場的世界秒。
+    # 混戰（翻地與爭搶，出陣包 features/sortie/actions.do_clash）寫進上面那兩本的是哪幾筆：同 raids 的鍵（兩個方向）、同 raided 的鍵（被撞的人）→ 那一場的世界秒。
     # 截殺的拒絕話照它分「混戰過」或「截殺過」（FB-607）：raids／raided 那一筆的時刻跟這裡一樣就是混戰寫的，之後真的截殺會蓋掉 raids／raided。換季整個重來
     clashes: dict[str, float] = Field(default_factory=dict)
     clashed: dict[str, float] = Field(default_factory=dict)

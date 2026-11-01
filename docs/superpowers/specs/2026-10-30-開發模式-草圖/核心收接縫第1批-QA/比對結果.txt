@@ -1,0 +1,595 @@
+全部拆包第 11 批（核心收接縫）QA：兩台真伺服器逐位元組比——HEAD dev/core-seams-1 34590df5（127.0.0.1:8197）、BASE origin/feature/core-seams b1eeb4ec（127.0.0.1:8198），season21 正式內容。
+腳本在 scratchpad chk-seams1/s/（serve.py、srv.py、prep.py、drive.py、dbcmp.py、twice.py、snapdb.py、shots.mjs、cmpshots.py、mutate.py、firstdiff.py）。
+
+run1 summary：{"responses": 418, "diffs": 0, "steps": 760, "t_end": 1793524000.0, "stop_after": null}
+run2 summary：{"responses": 324, "diffs": 0, "steps": 788, "t_end": 1793524280.0, "stop_after": null}
+run3 summary：{"responses": 327, "diffs": 0, "steps": 698, "t_end": 1793523380.0, "stop_after": null}
+run4 summary：{"responses": 327, "diffs": 0, "steps": 698, "t_end": 1793523380.0, "stop_after": null}
+run5 summary：{"responses": 105, "diffs": 0, "steps": 189, "t_end": 1793518290.0, "stop_after": "start"}
+run6-teeth summary：{"responses": 175, "diffs": 72, "steps": 269, "t_end": 1793519090.0, "stop_after": "deliver"}
+
+run1、run2 是前兩版腳本（run1 決戰集結在季初就截止了、沒打成；run2 決戰排在酒肆前面，殺手找不上參戰的人，見 FB-9170），回應照樣逐位元組比、0 處差。
+run3 是正式那一輪；run4 同一串步驟、新的資料庫再跑一次；run5 同一串停在決戰開打（拍決戰頁）；run6 是牙的那一輪（HEAD 故意改三處）。
+
+== run3 階段
+── setup  step 0  responses 0  diffs 0
+── join  step 34  responses 34  diffs 0
+── tavern  step 46  responses 46  diffs 0
+── battle_seat  step 111  responses 74  diffs 0
+── muster  step 121  responses 84  diffs 0
+── start  step 138  responses 101  diffs 0
+── fight  step 189  responses 105  diffs 0
+── deliver  step 252  responses 158  diffs 0
+── mall  step 270  responses 176  diffs 0
+── explore  step 276  responses 182  diffs 0
+── duel  step 300  responses 206  diffs 0
+── feast  step 441  responses 231  diffs 0
+── siege_open  step 449  responses 239  diffs 0
+── siege_muster  step 456  responses 246  diffs 0
+── siege_fight  step 469  responses 259  diffs 0
+── advance  step 665  responses 294  diffs 0
+── final  step 667  responses 296  diffs 0
+── done  step 698  responses 327  diffs 0
+SUMMARY {"responses": 327, "diffs": 0, "steps": 698, "t_end": 1793523380.0, "stop_after": null}
+
+== 同一份跑兩次（twice.py：HEAD 對 HEAD、BASE 對 BASE）
+run3 對 run4：head 327 個回應不一樣 0 個、base 327 個不一樣 0 個；run3 對 run5（前 105 個）：head 0、base 0。
+
+== 資料庫逐表比（收場後；logins 的 salt／hash、sessions 的 token_hash 抹掉）
+-- run3
+[main] head.db 對 base.db：逐位元組一樣（220222 位元組，sha b4e2d511e137b1b6 / b4e2d511e137b1b6）
+   accounts: 一樣（5 列）
+   action_counts: 一樣（5 列）
+   action_firsts: 一樣（0 列）
+   battle_rounds: 一樣（12 列）
+   battles: 一樣（3 列）
+   biographies: 一樣（0 列）
+   character_backups: 一樣（0 列）
+   characters: 一樣（5 列）
+   chronicle: 一樣（5 列）
+   faction_rolls: 一樣（3 列）
+   gear_recipes: 一樣（0 列）
+   insight_firsts: 一樣（0 列）
+   insight_recipes: 一樣（0 列）
+   insights: 一樣（0 列）
+   logins: 一樣（5 列）
+   mall_entitlements: 一樣（0 列）
+   mall_ledger: 一樣（7 列）
+   mall_purchases: 一樣（1 列）
+   masters: 一樣（0 列）
+   recipes: 一樣（0 列）
+   rumors: 一樣（41 列）
+   seasons: 一樣（1 列）
+   sessions: 一樣（5 列）
+   skill_aliases: 一樣（0 列）
+   skills: 一樣（0 列）
+   world: 一樣（1 列）
+[tale] head-tale.sqlite 對 base-tale.sqlite：逐位元組一樣（1211 位元組，sha 30345ed1dc992e25 / 30345ed1dc992e25）
+   tales: 一樣（1 列）
+[narration] head-narration.sqlite 對 base-narration.sqlite：逐位元組一樣（51 位元組，sha 3143c2a5f59600f4 / 3143c2a5f59600f4）
+   narration: 一樣（0 列）
+[push] head-push.sqlite 對 base-push.sqlite：逐位元組一樣（93 位元組，sha 85b90f06d10d9dce / 85b90f06d10d9dce）
+   prefs: 一樣（0 列）
+   subs: 一樣（0 列）
+不一樣的地方： 0
+-- run4
+[main] head.db 對 base.db：逐位元組一樣（220222 位元組，sha b4e2d511e137b1b6 / b4e2d511e137b1b6）
+   accounts: 一樣（5 列）
+   action_counts: 一樣（5 列）
+   action_firsts: 一樣（0 列）
+   battle_rounds: 一樣（12 列）
+   battles: 一樣（3 列）
+   biographies: 一樣（0 列）
+   character_backups: 一樣（0 列）
+   characters: 一樣（5 列）
+   chronicle: 一樣（5 列）
+   faction_rolls: 一樣（3 列）
+   gear_recipes: 一樣（0 列）
+   insight_firsts: 一樣（0 列）
+   insight_recipes: 一樣（0 列）
+   insights: 一樣（0 列）
+   logins: 一樣（5 列）
+   mall_entitlements: 一樣（0 列）
+   mall_ledger: 一樣（7 列）
+   mall_purchases: 一樣（1 列）
+   masters: 一樣（0 列）
+   recipes: 一樣（0 列）
+   rumors: 一樣（41 列）
+   seasons: 一樣（1 列）
+   sessions: 一樣（5 列）
+   skill_aliases: 一樣（0 列）
+   skills: 一樣（0 列）
+   world: 一樣（1 列）
+[tale] head-tale.sqlite 對 base-tale.sqlite：逐位元組一樣（1211 位元組，sha 30345ed1dc992e25 / 30345ed1dc992e25）
+   tales: 一樣（1 列）
+[narration] head-narration.sqlite 對 base-narration.sqlite：逐位元組一樣（51 位元組，sha 3143c2a5f59600f4 / 3143c2a5f59600f4）
+   narration: 一樣（0 列）
+[push] head-push.sqlite 對 base-push.sqlite：逐位元組一樣（93 位元組，sha 85b90f06d10d9dce / 85b90f06d10d9dce）
+   prefs: 一樣（0 列）
+   subs: 一樣（0 列）
+不一樣的地方： 0
+
+== 截圖（375×812 淺色；1、3 是 run3 收場後，2 是 run5 決戰開打那一刻）
+1-jianghu: 尺寸 (750, 1624)/(750, 1624) 不同像素 0；png sha 24285655b470/24285655b470；文字 一樣、#page 一樣、版面 一樣（118 個元素）、橫向捲動 375>375=False
+   開頭： 葉寒舟散人・第6級 ｜ 可配 5 點 ｜ ▾ ｜ 📍 南陽官道　第 1 週・週日 17:56 ｜ 450 ｜ ⚙ ｜ 體力 250/250 ｜ 丹30今2 ｜ 氣血 427/433 ｜ 傷 5 ｜ 銀740 ｜ 託付 ｜ 傅燮來信 ｜ ▴ ｜  ｜ 少俠台鑒：我是護軍司馬傅燮。皇甫將軍在長社等這封信，軍中人手都派出去了，城門口只有你一個看著不像要跑的。替我送到長社，交給營門口的
+2-battle: 尺寸 (750, 1624)/(750, 1624) 不同像素 0；png sha b0c8397d6fbe/b0c8397d6fbe；文字 一樣、#page 一樣、版面 一樣（109 個元素）、橫向捲動 375>375=False
+   開頭： 秦朗月官軍・鄉勇・第1級 ｜ ▾ ｜ 📍 長社　第 1 週・週日 15:31 ｜ 500 ｜ ⚙ ｜ 體力 250/250 ｜ 丹30今2 ｜ 氣血 330/330 ｜ 銀80 ｜ 託付 ｜ 傅燮來信 ｜ ▴ ｜  ｜ 少俠台鑒：我是護軍司馬傅燮。皇甫將軍在長社等這封信，軍中人手都派出去了，城門口只有你一個看著不像要跑的。替我送到長社，交給營門口的人就行。辦妥了，我記你
+3-reports: 尺寸 (750, 1624)/(750, 1624) 不同像素 0；png sha e97b65011f3b/e97b65011f3b；文字 一樣、#page 一樣、版面 一樣（124 個元素）、橫向捲動 375>375=False
+   開頭： 秦朗月官軍・鄉勇・第5級 ｜ 可配 4 點 ｜ ▾ ｜ 📍 南陽官道　第 1 週・週日 17:56 ｜ 500 ｜ ⚙ ｜ 體力 250/250 ｜ 丹30今2 ｜ 氣血 398/412 ｜ 傷 14 ｜ 銀150 ｜ 大事 ｜ 傳聞 ｜ 榜單 ｜ 江湖史 ｜ 紀錄 ｜ 戰報 ｜ 大勢 ｜ 形勢 ｜ ‹ 全部戰報 ｜ 戰記 › ｜ 官軍（我方） 33 ｜ 67 黃巾軍 ｜ 官軍大勝 ｜ 黃巾軍大勝 ｜ 1 ｜ 2 ｜ 3 ｜ 4
+ok
+
+== 牙的那一輪（mutate.py：explore Verb.title「・」→「‧」、tavern on_away 門檻多一小時、battle record_detail 回合新的在前；--stop-after deliver）
+── setup  step 0  responses 0  diffs 0
+── join  step 34  responses 34  diffs 0
+── tavern  step 46  responses 46  diffs 0
+DIFF #67 韓雲起 POST /api/choose status 200/200 len 46515/46515
+DIFF #68 韓雲起 GET /api/main status 200/200 len 46506/46506
+DIFF #70 柳青崖 GET /api/main status 200/200 len 45704/46225
+DIFF #71 柳青崖 GET /api/main status 200/200 len 45705/46226
+DIFF #72 葉寒舟 GET /api/main status 200/200 len 45828/46163
+DIFF #73 葉寒舟 GET /api/main status 200/200 len 46437/46772
+── battle_seat  step 111  responses 74  diffs 6
+DIFF #76 韓雲起 GET /api/main status 200/200 len 47522/47522
+DIFF #77 柳青崖 GET /api/main status 200/200 len 47305/47826
+DIFF #78 葉寒舟 GET /api/main status 200/200 len 47022/47357
+DIFF #81 韓雲起 GET /api/main status 200/200 len 47618/47618
+DIFF #82 柳青崖 GET /api/main status 200/200 len 47341/47862
+DIFF #83 葉寒舟 GET /api/main status 200/200 len 47022/47357
+── muster  step 121  responses 84  diffs 12
+DIFF #88 韓雲起 GET /api/main status 200/200 len 47617/47617
+DIFF #89 韓雲起 POST /api/choose status 200/200 len 47856/47856
+DIFF #90 韓雲起 GET /api/main status 200/200 len 47798/47798
+DIFF #91 柳青崖 GET /api/main status 200/200 len 47341/47862
+DIFF #92 柳青崖 POST /api/choose status 200/200 len 47388/47909
+DIFF #93 柳青崖 GET /api/main status 200/200 len 47330/47851
+DIFF #94 葉寒舟 GET /api/main status 200/200 len 47020/47355
+DIFF #95 葉寒舟 POST /api/choose status 200/200 len 47444/47779
+DIFF #96 葉寒舟 GET /api/main status 200/200 len 47341/47676
+DIFF #98 韓雲起 GET /api/main status 200/200 len 47798/47798
+DIFF #99 柳青崖 GET /api/main status 200/200 len 47330/47851
+DIFF #100 葉寒舟 GET /api/main status 200/200 len 47340/47675
+── start  step 138  responses 101  diffs 24
+DIFF #103 韓雲起 GET /api/main status 200/200 len 45640/45640
+DIFF #104 柳青崖 GET /api/main status 200/200 len 44776/45297
+── fight  step 189  responses 105  diffs 26
+DIFF #107 韓雲起 GET /api/main status 200/200 len 45640/45640
+DIFF #108 韓雲起 POST /api/choose status 200/200 len 45221/45221
+DIFF #109 柳青崖 GET /api/main status 200/200 len 44776/45297
+DIFF #110 柳青崖 POST /api/choose status 200/200 len 44380/44901
+DIFF #114 韓雲起 GET /api/main status 200/200 len 47144/47144
+DIFF #115 韓雲起 POST /api/choose status 200/200 len 46751/46751
+DIFF #116 柳青崖 GET /api/main status 200/200 len 46269/46790
+DIFF #117 柳青崖 POST /api/choose status 200/200 len 46790/47311
+DIFF #120 韓雲起 GET /api/main status 200/200 len 47434/47434
+DIFF #121 韓雲起 POST /api/choose status 200/200 len 47041/47041
+DIFF #122 柳青崖 GET /api/main status 200/200 len 46559/47080
+DIFF #123 柳青崖 POST /api/choose status 200/200 len 47796/48317
+DIFF #126 韓雲起 POST /api/do/battle_text status 200/200 len 47714/47714
+DIFF #127 柳青崖 GET /api/main status 200/200 len 47244/47765
+DIFF #128 柳青崖 POST /api/choose status 200/200 len 48241/48762
+DIFF #131 韓雲起 GET /api/main status 200/200 len 48568/48568
+DIFF #132 韓雲起 POST /api/choose status 200/200 len 48199/48199
+DIFF #133 柳青崖 GET /api/main status 200/200 len 47780/48301
+DIFF #134 柳青崖 POST /api/choose status 200/200 len 48246/48767
+DIFF #137 韓雲起 GET /api/main status 200/200 len 48851/48851
+DIFF #138 韓雲起 POST /api/choose status 200/200 len 48482/48482
+DIFF #139 柳青崖 GET /api/main status 200/200 len 48015/48536
+DIFF #140 柳青崖 POST /api/choose status 200/200 len 48321/48842
+DIFF #143 韓雲起 GET /api/main status 200/200 len 48677/48677
+DIFF #144 韓雲起 POST /api/choose status 200/200 len 48200/48200
+DIFF #145 柳青崖 GET /api/main status 200/200 len 47724/48245
+DIFF #146 柳青崖 POST /api/choose status 200/200 len 48016/48537
+DIFF #149 韓雲起 GET /api/main status 200/200 len 48714/48714
+DIFF #150 韓雲起 POST /api/choose status 200/200 len 48237/48237
+DIFF #151 柳青崖 GET /api/main status 200/200 len 47788/48309
+DIFF #152 柳青崖 POST /api/choose status 200/200 len 47675/48196
+DIFF #155 韓雲起 GET /api/main status 200/200 len 48369/48369
+DIFF #156 韓雲起 POST /api/choose status 200/200 len 47892/47892
+DIFF #157 柳青崖 GET /api/main status 200/200 len 47444/47965
+DIFF #158 柳青崖 POST /api/choose status 200/200 len 51032/51553
+── deliver  step 252  responses 158  diffs 61
+DIFF #160 韓雲起 GET /api/main status 200/200 len 50863/50863
+DIFF #161 柳青崖 GET /api/main status 200/200 len 49977/50498
+DIFF #162 秦朗月 GET /api/reports status 200/200 len 7803/7803
+DIFF #163 秦朗月 GET /api/reports?id=1 status 200/200 len 7803/7803
+DIFF #165 韓雲起 GET /api/reports status 200/200 len 8299/8299
+DIFF #166 韓雲起 GET /api/reports?id=2 status 200/200 len 8299/8299
+DIFF #169 柳青崖 GET /api/reports status 200/200 len 7961/8069
+DIFF #170 柳青崖 GET /api/reports?id=1 status 200/200 len 7961/1416
+DIFF #172 葉寒舟 GET /api/main status 200/200 len 49886/50221
+DIFF #173 葉寒舟 GET /api/reports status 200/200 len 8004/8004
+DIFF #174 葉寒舟 GET /api/reports?id=1 status 200/200 len 8004/8004
+stopped after deliver
+SUMMARY {"responses": 175, "diffs": 72, "steps": 269, "t_end": 1793519090.0, "stop_after": "deliver"}
+
+第一處差：
+#067 第一處差在第 10440 字（HEAD 31801 字／BASE 31801 字）
+   HEAD: "tx-main\"><span class=\"tx-title\">出門一趟‧潁川郊野</span><span class=\"tx-tag\">得料</span></span></summary
+   BASE: "tx-main\"><span class=\"tx-title\">出門一趟・潁川郊野</span><span class=\"tx-tag\">得料</span></span></summary
+#070 第一處差在第 10722 字（HEAD 31069 字／BASE 31438 字）
+   HEAD: m\"><span class=\"tx-time\">第 1 週・週日 15:07</span><span class=\"tx-main\"><span class=\"tx-title\">投靠
+   BASE: m\"><span class=\"tx-time\">第 1 週・週日 15:17</span><span class=\"tx-main\"><span class=\"tx-title\">遭殺
+#072 第一處差在第 9540 字（HEAD 31198 字／BASE 31465 字）
+   HEAD: ><div class=\"tx-when\">剛剛　第 1 週・週日 15:11</div><div class=\"tx-head\"><span class=\"tx-title\">買殺手</
+   BASE: ><div class=\"tx-when\">剛剛　第 1 週・週日 15:18</div><div class=\"tx-head\"><span class=\"tx-title\">買殺手</
+#174 第一處差在第 644 字（HEAD 4178 字／BASE 4178 字）
+   HEAD: 120</p>\n<p><strong>完整戰況</strong></p>\n<h5>第 9 回合</h5>\n<ul>\n<li>這一回合官軍佔了上風，把戰線往自己這邊推了一截：官軍的強攻剋住了黃巾
+   BASE: 120</p>\n<p><strong>完整戰況</strong></p>\n<p>【長社火攻】集結完畢，戰鬥開始！</p>\n<h5>第 1 回合</h5>\n<ul>\n<li>這一回合黃巾軍佔了
+
+== run3 每個回應一行（HEAD 那一份；最新一則紀錄的標題）
+-- setup
+#001 驗收官 POST /api/login [管理者登入] 200/200 一樣 19333B 商城
+#002 驗收官 GET /api/main [] 200/200 一樣 19281B 商城
+#003 驗收官 GET /api/admin [開季之前] 200/200 一樣 4765B 
+#004 驗收官 POST /api/do/open_season [開季] 200/200 一樣 34942B 江湖大事
+#005 驗收官 GET /api/main [] 200/200 一樣 41216B 江湖大事
+#006 秦朗月 POST /api/register [註冊] 200/200 一樣 18B 
+#007 秦朗月 POST /api/character [建角色] 200/200 一樣 34660B 商城
+#008 秦朗月 GET /api/main [第一次 main（封測發放 on_own_turn）] 200/200 一樣 34608B 商城
+#009 秦朗月 POST /api/do/skip_tutorial [略過引導] 200/200 一樣 34941B 新手引導
+#010 秦朗月 GET /api/main [settle 看] 200/200 一樣 34880B 新手引導
+#011 秦朗月 POST /api/choose [settle] 200/200 一樣 42058B 潁川城門口・「投軍。黃巾作亂，總得有人去打。」
+#012 秦朗月 GET /api/main [settle 看] 200/200 一樣 42433B 簽到
+#013 韓雲起 POST /api/register [註冊] 200/200 一樣 18B 
+#014 韓雲起 POST /api/character [建角色] 200/200 一樣 34697B 商城
+#015 韓雲起 GET /api/main [第一次 main（封測發放 on_own_turn）] 200/200 一樣 34645B 商城
+#016 韓雲起 POST /api/do/skip_tutorial [略過引導] 200/200 一樣 34978B 新手引導
+#017 韓雲起 GET /api/main [settle 看] 200/200 一樣 34916B 新手引導
+#018 韓雲起 POST /api/choose [settle] 200/200 一樣 42096B 潁川城門口・「投軍。黃巾作亂，總得有人去打。」
+#019 韓雲起 GET /api/main [settle 看] 200/200 一樣 42470B 簽到
+#020 柳青崖 POST /api/register [註冊] 200/200 一樣 18B 
+#021 柳青崖 POST /api/character [建角色] 200/200 一樣 34734B 商城
+#022 柳青崖 GET /api/main [第一次 main（封測發放 on_own_turn）] 200/200 一樣 34682B 商城
+#023 柳青崖 POST /api/do/skip_tutorial [略過引導] 200/200 一樣 35014B 新手引導
+#024 柳青崖 GET /api/main [settle 看] 200/200 一樣 34954B 新手引導
+#025 柳青崖 POST /api/choose [settle] 200/200 一樣 42133B 潁川城門口・「投軍。黃巾作亂，總得有人去打。」
+#026 柳青崖 GET /api/main [settle 看] 200/200 一樣 42507B 簽到
+#027 葉寒舟 POST /api/register [註冊] 200/200 一樣 18B 
+#028 葉寒舟 POST /api/character [建角色] 200/200 一樣 34771B 商城
+#029 葉寒舟 GET /api/main [第一次 main（封測發放 on_own_turn）] 200/200 一樣 34718B 商城
+#030 葉寒舟 POST /api/do/skip_tutorial [略過引導] 200/200 一樣 35052B 新手引導
+#031 葉寒舟 GET /api/main [settle 看] 200/200 一樣 34991B 新手引導
+#032 葉寒舟 POST /api/choose [settle] 200/200 一樣 42170B 潁川城門口・「投軍。黃巾作亂，總得有人去打。」
+#033 葉寒舟 GET /api/main [settle 看] 200/200 一樣 42544B 簽到
+#034 葉寒舟 GET /api/push [推播金鑰（兩台同一把）] 200/200 一樣 173B 
+-- join
+   （擺位 edit {"name": "秦朗月", "loc": "changshe"}）
+#035 秦朗月 GET /api/main [] 200/200 一樣 41226B 簽到
+#036 秦朗月 POST /api/choose [投靠] 200/200 一樣 39991B 考慮投靠官軍
+#037 秦朗月 POST /api/choose [投靠確認] 200/200 一樣 45393B 投靠官軍
+#038 秦朗月 GET /api/main [settle 看] 200/200 一樣 45384B 投靠官軍
+   （擺位 edit {"name": "韓雲起", "loc": "huangjin_camp"}）
+#039 韓雲起 GET /api/main [] 200/200 一樣 40601B 簽到
+#040 韓雲起 POST /api/choose [投靠] 200/200 一樣 39797B 考慮投靠黃巾軍
+#041 韓雲起 POST /api/choose [投靠確認] 200/200 一樣 43836B 投靠黃巾軍
+#042 韓雲起 GET /api/main [settle 看] 200/200 一樣 43828B 投靠黃巾軍
+   （擺位 edit {"name": "柳青崖", "loc": "zhuo_militia_hall"}）
+#043 柳青崖 GET /api/main [] 200/200 一樣 40129B 簽到
+#044 柳青崖 POST /api/choose [投靠] 200/200 一樣 39468B 考慮投靠地方豪強
+#045 柳青崖 POST /api/choose [投靠確認] 200/200 一樣 43031B 投靠地方豪強（依附官軍）
+#046 柳青崖 GET /api/main [settle 看] 200/200 一樣 43022B 投靠地方豪強（依附官軍）
+-- tavern
+   （擺位 edit {"name": "葉寒舟", "loc": "yingchuan", "stats": {"silver": 900}}）
+   （擺位 edit {"name": "韓雲起", "loc": "yingchuan_wilds", "stats": {"fame": 300}}）
+   （擺位 edit {"name": "柳青崖", "loc": "yingshui", "stats": {"fame": 300}}）
+#047 葉寒舟 GET /api/main [酒肆入口] 200/200 一樣 41487B 簽到
+#048 葉寒舟 POST /api/do/tavern [還沒進店就聽消息（被拒）] 200/200 一樣 41549B 簽到
+#049 葉寒舟 POST /api/choose [進酒肆] 200/200 一樣 40596B 潁川郡・酒肆
+#050 葉寒舟 POST /api/choose [聽消息（選單那一顆）] 200/200 一樣 42264B 潁川郡・酒肆
+#051 葉寒舟 POST /api/do/tavern [查黃巾（風聲）] 200/200 一樣 42606B 潁川郡・酒肆
+#052 葉寒舟 POST /api/do/tavern [查豪強] 200/200 一樣 42826B 潁川郡・酒肆
+#053 葉寒舟 POST /api/do/tavern [查官軍、託付留意] 200/200 一樣 43339B 潁川郡・酒肆
+#054 葉寒舟 POST /api/do/tavern [查無此人、託付留意] 200/200 一樣 43798B 潁川郡・酒肆
+#055 葉寒舟 POST /api/do/tavern [交情] 200/200 一樣 44045B 潁川郡・酒肆
+#056 葉寒舟 POST /api/choose [請酒] 200/200 一樣 43599B 潁川郡・酒肆
+#057 葉寒舟 POST /api/choose [藏行跡] 200/200 一樣 44253B 潁川郡・酒肆
+#058 葉寒舟 POST /api/do/tavern [雇殺手找黃巾] 200/200 一樣 44784B 潁川郡・酒肆
+#059 葉寒舟 POST /api/do/tavern [雇殺手找豪強] 200/200 一樣 45129B 潁川郡・酒肆
+#060 葉寒舟 POST /api/do/tavern_ask [問酒家（模型擋著）] 200/200 一樣 45045B 潁川郡・酒肆
+#061 葉寒舟 POST /api/travel [坐在酒肆裡動身（被擋）] 200/200 一樣 198801B 潁川郡・酒肆
+#062 葉寒舟 GET /api/main [店面那一頁] 200/200 一樣 44936B 潁川郡・酒肆
+#063 葉寒舟 POST /api/choose [出酒肆] 200/200 一樣 45851B 潁川郡・酒肆
+#064 葉寒舟 POST /api/choose [再進酒肆] 200/200 一樣 45140B 潁川郡・酒肆
+   （擺位 edit {"name": "葉寒舟", "loc": "yingchuan_wilds"}）
+#065 葉寒舟 GET /api/main [被挪走之後同步（收店）] 200/200 一樣 45501B 潁川郡・酒肆
+   （擺位 killer {"find": 1}）
+#066 韓雲起 GET /api/main [黃巾同步：收風聲] 200/200 一樣 45718B 名聲
+#067 韓雲起 POST /api/choose [黃巾在城外做一件事（after_action：殺手）] 200/200 一樣 46515B 遭殺手找上
+#068 韓雲起 GET /api/main [settle 看] 200/200 一樣 46506B 遭殺手找上
+#069 葉寒舟 GET /api/main [雇主收殺手單的結果] 200/200 一樣 45828B 買殺手
+#070 柳青崖 GET /api/main [豪強城外下線十一分回來（on_away：殺手）] 200/200 一樣 46225B 名聲
+#071 柳青崖 GET /api/main [settle 看] 200/200 一樣 46226B 名聲
+#072 葉寒舟 GET /api/main [雇主再收一張] 200/200 一樣 46163B 買殺手
+   （擺位 watch_expire {"name": "葉寒舟"}）
+#073 葉寒舟 GET /api/main [託付到期] 200/200 一樣 46772B 酒家捎信
+   （擺位 killer {"find": 0}）
+#074 葉寒舟 GET /api/annals [江湖史] 200/200 一樣 51B 
+-- battle_seat
+   （擺位 edit {"name": "秦朗月", "loc": "changshe"}）
+#075 秦朗月 GET /api/main [settle 看] 200/200 一樣 45860B 風聲
+   （擺位 edit {"name": "韓雲起", "loc": "changshe"}）
+#076 韓雲起 GET /api/main [settle 看] 200/200 一樣 47522B 遭殺手找上
+   （擺位 edit {"name": "柳青崖", "loc": "changshe"}）
+#077 柳青崖 GET /api/main [settle 看] 200/200 一樣 47826B 名聲
+   （擺位 edit {"name": "葉寒舟", "loc": "changshe"}）
+#078 葉寒舟 GET /api/main [settle 看] 200/200 一樣 47357B 酒家捎信
+#079 驗收官 GET /api/admin [開戰之前] 200/200 一樣 7208B 
+#080 秦朗月 GET /api/main [集結中（scene_over）] 200/200 一樣 45994B 風聲
+#081 韓雲起 GET /api/main [集結中（scene_over）] 200/200 一樣 47618B 遭殺手找上
+#082 柳青崖 GET /api/main [集結中（scene_over）] 200/200 一樣 47862B 名聲
+#083 葉寒舟 GET /api/main [集結中（scene_over）] 200/200 一樣 47357B 酒家捎信
+#084 秦朗月 POST /api/do/battle_text [集結中的放手一搏] 200/200 一樣 46055B 風聲
+-- muster
+#085 秦朗月 GET /api/main [集結中] 200/200 一樣 45994B 風聲
+#086 秦朗月 POST /api/choose [加入] 200/200 一樣 46471B 長社火攻・加入官軍
+#087 秦朗月 GET /api/main [] 200/200 一樣 46413B 長社火攻・加入官軍
+#088 韓雲起 GET /api/main [集結中] 200/200 一樣 47617B 遭殺手找上
+#089 韓雲起 POST /api/choose [加入] 200/200 一樣 47856B 長社火攻・加入黃巾軍
+#090 韓雲起 GET /api/main [] 200/200 一樣 47798B 長社火攻・加入黃巾軍
+#091 柳青崖 GET /api/main [集結中] 200/200 一樣 47862B 名聲
+#092 柳青崖 POST /api/choose [加入] 200/200 一樣 47909B 長社火攻・加入官軍
+#093 柳青崖 GET /api/main [] 200/200 一樣 47851B 長社火攻・加入官軍
+#094 葉寒舟 GET /api/main [集結中] 200/200 一樣 47355B 酒家捎信
+#095 葉寒舟 POST /api/choose [加入] 200/200 一樣 47779B 長社火攻・臨時投效官軍
+#096 葉寒舟 GET /api/main [] 200/200 一樣 47676B 長社火攻・臨時投效官軍
+#097 秦朗月 GET /api/main [加入之後] 200/200 一樣 46412B 長社火攻・加入官軍
+#098 韓雲起 GET /api/main [加入之後] 200/200 一樣 47798B 長社火攻・加入黃巾軍
+#099 柳青崖 GET /api/main [加入之後] 200/200 一樣 47851B 長社火攻・加入官軍
+#100 葉寒舟 GET /api/main [加入之後] 200/200 一樣 47675B 長社火攻・臨時投效官軍
+#101 驗收官 GET /api/admin [集結中] 200/200 一樣 7208B 
+-- start
+#102 秦朗月 GET /api/main [開打（scene_over）] 200/200 一樣 43826B 長社火攻・加入官軍
+#103 韓雲起 GET /api/main [開打（scene_over）] 200/200 一樣 45640B 長社火攻・加入黃巾軍
+#104 柳青崖 GET /api/main [開打（scene_over）] 200/200 一樣 45297B 長社火攻・加入官軍
+#105 驗收官 GET /api/main [開打] 200/200 一樣 41444B 江湖大事
+-- fight
+#106 秦朗月 POST /api/do/battle_text [放手一搏] 200/200 一樣 43439B 長社火攻・加入官軍
+#107 韓雲起 GET /api/main [出招前] 200/200 一樣 45640B 長社火攻・加入黃巾軍
+#108 韓雲起 POST /api/choose [出招] 200/200 一樣 45221B 長社火攻・加入黃巾軍
+#109 柳青崖 GET /api/main [出招前] 200/200 一樣 45297B 長社火攻・加入官軍
+#110 柳青崖 POST /api/choose [出招] 200/200 一樣 44901B 長社火攻・加入官軍
+#111 秦朗月 GET /api/main [回合逾時之後輪詢] 200/200 一樣 44143B 長社火攻・加入官軍
+#112 秦朗月 GET /api/main [出招前] 200/200 一樣 45278B 長社火攻・加入官軍
+#113 秦朗月 POST /api/choose [出招] 200/200 一樣 44906B 長社火攻・加入官軍
+#114 韓雲起 GET /api/main [出招前] 200/200 一樣 47144B 長社火攻・加入黃巾軍
+#115 韓雲起 POST /api/choose [出招] 200/200 一樣 46751B 長社火攻・加入黃巾軍
+#116 柳青崖 GET /api/main [出招前] 200/200 一樣 46790B 長社火攻・加入官軍
+#117 柳青崖 POST /api/choose [出招] 200/200 一樣 47311B 長社火攻・加入官軍
+#118 秦朗月 GET /api/main [出招前] 200/200 一樣 45618B 長社火攻・加入官軍
+#119 秦朗月 POST /api/choose [出招] 200/200 一樣 45246B 長社火攻・加入官軍
+#120 韓雲起 GET /api/main [出招前] 200/200 一樣 47434B 長社火攻・加入黃巾軍
+#121 韓雲起 POST /api/choose [出招] 200/200 一樣 47041B 長社火攻・加入黃巾軍
+#122 柳青崖 GET /api/main [出招前] 200/200 一樣 47080B 長社火攻・加入官軍
+#123 柳青崖 POST /api/choose [出招] 200/200 一樣 48317B 長社火攻・加入官軍
+#124 秦朗月 GET /api/main [出招前] 200/200 一樣 46303B 長社火攻・加入官軍
+#125 秦朗月 POST /api/choose [出招] 200/200 一樣 45919B 長社火攻・加入官軍
+#126 韓雲起 POST /api/do/battle_text [放手一搏] 200/200 一樣 47714B 長社火攻・加入黃巾軍
+#127 柳青崖 GET /api/main [出招前] 200/200 一樣 47765B 長社火攻・加入官軍
+#128 柳青崖 POST /api/choose [出招] 200/200 一樣 48762B 長社火攻・加入官軍
+#129 秦朗月 GET /api/main [出招前] 200/200 一樣 46839B 長社火攻・加入官軍
+#130 秦朗月 POST /api/choose [出招] 200/200 一樣 46455B 長社火攻・加入官軍
+#131 韓雲起 GET /api/main [出招前] 200/200 一樣 48568B 長社火攻・加入黃巾軍
+#132 韓雲起 POST /api/choose [出招] 200/200 一樣 48199B 長社火攻・加入黃巾軍
+#133 柳青崖 GET /api/main [出招前] 200/200 一樣 48301B 長社火攻・加入官軍
+#134 柳青崖 POST /api/choose [出招] 200/200 一樣 48767B 長社火攻・加入官軍
+#135 秦朗月 GET /api/main [出招前] 200/200 一樣 47074B 長社火攻・加入官軍
+#136 秦朗月 POST /api/choose [出招] 200/200 一樣 46690B 長社火攻・加入官軍
+#137 韓雲起 GET /api/main [出招前] 200/200 一樣 48851B 長社火攻・加入黃巾軍
+#138 韓雲起 POST /api/choose [出招] 200/200 一樣 48482B 長社火攻・加入黃巾軍
+#139 柳青崖 GET /api/main [出招前] 200/200 一樣 48536B 長社火攻・加入官軍
+#140 柳青崖 POST /api/choose [出招] 200/200 一樣 48842B 長社火攻・加入官軍
+#141 秦朗月 GET /api/main [出招前] 200/200 一樣 46873B 長社火攻・加入官軍
+#142 秦朗月 POST /api/choose [出招] 200/200 一樣 46396B 長社火攻・加入官軍
+#143 韓雲起 GET /api/main [出招前] 200/200 一樣 48677B 長社火攻・加入黃巾軍
+#144 韓雲起 POST /api/choose [出招] 200/200 一樣 48200B 長社火攻・加入黃巾軍
+#145 柳青崖 GET /api/main [出招前] 200/200 一樣 48245B 長社火攻・加入官軍
+#146 柳青崖 POST /api/choose [出招] 200/200 一樣 48537B 長社火攻・加入官軍
+#147 秦朗月 GET /api/main [出招前] 200/200 一樣 46910B 長社火攻・加入官軍
+#148 秦朗月 POST /api/choose [出招] 200/200 一樣 46433B 長社火攻・加入官軍
+#149 韓雲起 GET /api/main [出招前] 200/200 一樣 48714B 長社火攻・加入黃巾軍
+#150 韓雲起 POST /api/choose [出招] 200/200 一樣 48237B 長社火攻・加入黃巾軍
+#151 柳青崖 GET /api/main [出招前] 200/200 一樣 48309B 長社火攻・加入官軍
+#152 柳青崖 POST /api/choose [出招] 200/200 一樣 48196B 長社火攻・加入官軍
+#153 秦朗月 GET /api/main [出招前] 200/200 一樣 46566B 長社火攻・加入官軍
+#154 秦朗月 POST /api/choose [出招] 200/200 一樣 46089B 長社火攻・加入官軍
+#155 韓雲起 GET /api/main [出招前] 200/200 一樣 48369B 長社火攻・加入黃巾軍
+#156 韓雲起 POST /api/choose [出招] 200/200 一樣 47892B 長社火攻・加入黃巾軍
+#157 柳青崖 GET /api/main [出招前] 200/200 一樣 47965B 長社火攻・加入官軍
+#158 柳青崖 POST /api/choose [出招] 200/200 一樣 51553B 
+-- deliver
+#159 秦朗月 GET /api/main [收場] 200/200 一樣 48650B 奇事
+#160 韓雲起 GET /api/main [收場] 200/200 一樣 50863B 奇事
+#161 柳青崖 GET /api/main [收場] 200/200 一樣 50498B 奇事
+   （擺位 tale null）
+#162 秦朗月 GET /api/reports [戰報列表] 200/200 一樣 7803B 
+#163 秦朗月 GET /api/reports?id=1 [戰報一筆] 200/200 一樣 7803B 
+#164 秦朗月 GET /api/tale/1 [戰記] 200/200 一樣 1133B 
+#165 韓雲起 GET /api/reports [戰報列表] 200/200 一樣 8299B 
+#166 韓雲起 GET /api/reports?id=2 [戰報一筆] 200/200 一樣 8299B 
+#167 韓雲起 GET /api/tale/1 [戰記] 200/200 一樣 1133B 
+#168 韓雲起 GET /api/reports?id=1 [戰報一筆] 200/200 一樣 1394B 
+#169 柳青崖 GET /api/reports [戰報列表] 200/200 一樣 8069B 
+#170 柳青崖 GET /api/reports?id=2 [戰報一筆] 200/200 一樣 8069B 
+#171 柳青崖 GET /api/tale/1 [戰記] 200/200 一樣 1133B 
+#172 柳青崖 GET /api/reports?id=1 [戰報一筆] 200/200 一樣 1416B 
+#173 葉寒舟 GET /api/main [整場沒同步的那一位回來（deliver_results）] 200/200 一樣 50221B 
+#174 葉寒舟 GET /api/reports [戰報列表] 200/200 一樣 8004B 
+#175 葉寒舟 GET /api/reports?id=1 [戰報一筆] 200/200 一樣 8004B 
+#176 葉寒舟 GET /api/tale/1 [戰記] 200/200 一樣 1133B 
+-- mall
+#177 葉寒舟 GET /api/mall [商城] 200/200 一樣 3974B 
+#178 葉寒舟 POST /api/mall/buy [買題壁墨] 200/200 一樣 54293B 商城
+#179 葉寒舟 POST /api/mall/buy [同一個編號再買] 200/200 一樣 54267B 商城
+#180 驗收官 POST /api/do/mall_reissue [管理者補發] 200/200 一樣 41423B 商城
+#181 韓雲起 GET /api/mall/records [商城紀錄] 200/200 一樣 345B 
+#182 韓雲起 GET /api/main [補發之後] 200/200 一樣 50863B 奇事
+-- explore
+   （擺位 edit {"name": "葉寒舟", "loc": "yingchuan_wilds"}）
+#183 葉寒舟 GET /api/main [探索之前] 200/200 一樣 49490B 商城
+#184 葉寒舟 POST /api/choose [出門一趟] 200/200 一樣 50070B 出門一趟・潁川郊野
+#185 葉寒舟 GET /api/main [settle 看] 200/200 一樣 50061B 出門一趟・潁川郊野
+   （擺位 edit {"name": "葉寒舟", "loc": "yingchuan_wilds"}）
+#186 葉寒舟 POST /api/do/outing [走一趟 3 段] 200/200 一樣 52429B 出門一趟・潁川郊野
+#187 葉寒舟 GET /api/main [settle 看] 200/200 一樣 52407B 出門一趟・潁川郊野
+#188 葉寒舟 POST /api/choose [settle] 200/200 一樣 52932B 田埂設卡・跟他們說，鄉民跟他們一樣是窮人
+#189 葉寒舟 GET /api/main [settle 看] 200/200 一樣 52923B 田埂設卡・跟他們說，鄉民跟他們一樣是窮人
+#190 葉寒舟 POST /api/do/outing [走一趟 接著走] 200/200 一樣 54873B 走一趟・潁川郊野
+#191 葉寒舟 POST /api/do/outing_say [題壁 預設句] 200/200 一樣 55195B 走一趟・潁川郊野
+#192 葉寒舟 POST /api/do/outing_say [同一趟再留一句] 200/200 一樣 55177B 走一趟・潁川郊野
+   （擺位 edit {"name": "葉寒舟", "loc": "yingchuan_wilds"}）
+#193 葉寒舟 POST /api/do/outing [走一趟 1 段] 200/200 一樣 53623B 出門一趟・潁川郊野
+#194 葉寒舟 GET /api/main [settle 看] 200/200 一樣 53601B 出門一趟・潁川郊野
+#195 葉寒舟 POST /api/choose [settle] 200/200 一樣 53406B 有所感・鷹
+#196 葉寒舟 GET /api/main [settle 看] 200/200 一樣 53397B 有所感・鷹
+#197 葉寒舟 POST /api/choose [settle] 200/200 一樣 55383B 有所感・鷹
+#198 葉寒舟 GET /api/main [settle 看] 200/200 一樣 55374B 有所感・鷹
+#199 葉寒舟 POST /api/do/outing [走一趟 接著走] 200/200 一樣 55837B 走一趟・潁川郊野
+#200 葉寒舟 POST /api/do/outing_say [題壁 自己寫一句（題壁墨）] 200/200 一樣 56290B 走一趟・潁川郊野
+#201 葉寒舟 POST /api/do/outing_tale [遊記（模型擋著）] 200/200 一樣 56214B 走一趟・潁川郊野
+   （擺位 edit {"name": "柳青崖", "loc": "yingshui"}）
+#202 柳青崖 POST /api/choose [豪強出門一趟] 200/200 一樣 47686B 出門一趟・潁水河畔
+#203 柳青崖 GET /api/main [settle 看] 200/200 一樣 47677B 出門一趟・潁水河畔
+#204 柳青崖 POST /api/choose [settle] 200/200 一樣 50200B 河灘蘆葦・割幾捆帶走
+#205 柳青崖 GET /api/main [settle 看] 200/200 一樣 50191B 河灘蘆葦・割幾捆帶走
+#206 葉寒舟 GET /api/main [探索之後] 200/200 一樣 56192B 走一趟・潁川郊野
+-- duel
+   （擺位 edit {"name": "秦朗月", "loc": "runan_wilds"}）
+#207 秦朗月 GET /api/main [約戰之前] 200/200 一樣 47584B 奇事
+   （擺位 edit {"name": "韓雲起", "loc": "runan_wilds"}）
+#208 韓雲起 GET /api/main [約戰之前] 200/200 一樣 49961B 奇事
+   （擺位 edit {"name": "柳青崖", "loc": "runan_wilds"}）
+#209 柳青崖 GET /api/main [約戰之前] 200/200 一樣 50587B 河灘蘆葦・割幾捆帶走
+   （擺位 edit {"name": "葉寒舟", "loc": "runan_wilds"}）
+#210 葉寒舟 GET /api/main [約戰之前] 200/200 一樣 56329B 走一趟・潁川郊野
+#211 秦朗月 POST /api/choose [按出陣那一格（只打開卡）] 200/200 一樣 47727B 奇事
+#212 葉寒舟 POST /api/do/sortie_go [散人貼（被拒）] 200/200 一樣 56387B 走一趟・潁川郊野
+#213 秦朗月 POST /api/do/sortie_go [貼 D1] 200/200 一樣 48807B 約戰・汝南荒野
+#214 葉寒舟 POST /api/do/sortie_answer [散人應（被拒）] 200/200 一樣 56387B 走一趟・潁川郊野
+#215 韓雲起 POST /api/do/sortie_answer [應 D1] 200/200 一樣 51271B 約戰・汝南荒野
+#216 柳青崖 POST /api/do/sortie_join [豪強同去] 200/200 一樣 51628B 約戰・汝南荒野
+#217 秦朗月 POST /api/choose [不認得的動詞（choose_unlisted）] 200/200 一樣 48765B 約戰・汝南荒野
+#218 秦朗月 GET /api/main [D1 應了] 200/200 一樣 48756B 約戰・汝南荒野
+#219 柳青崖 GET /api/main [D1 窗滿：下一個同步的人結算（sync 的 on_due）] 200/200 一樣 52217B 約戰・汝南荒野
+#220 秦朗月 GET /api/main [D1 結算之後] 200/200 一樣 49584B 
+#221 韓雲起 GET /api/main [D1 結算之後] 200/200 一樣 51901B 
+#222 秦朗月 GET /api/reports [戰報列表] 200/200 一樣 1183B 
+#223 秦朗月 GET /api/reports?id=2 [戰報一筆] 200/200 一樣 1183B 
+#224 秦朗月 GET /api/reports?id=1 [戰報一筆] 200/200 一樣 7908B 
+#225 秦朗月 GET /api/tale/1 [戰記] 200/200 一樣 1133B 
+#226 韓雲起 GET /api/reports [戰報列表] 200/200 一樣 1285B 
+#227 韓雲起 GET /api/reports?id=3 [戰報一筆] 200/200 一樣 1285B 
+#228 韓雲起 POST /api/choose [貼 D2（choose_unlisted 的 sortie:go）] 200/200 一樣 52715B 約戰・汝南荒野
+   （擺位 tick null）
+#229 韓雲起 GET /api/main [D2 結算之後] 200/200 一樣 53085B 
+#230 韓雲起 GET /api/reports [戰報列表] 200/200 一樣 1346B 
+#231 韓雲起 GET /api/reports?id=4 [戰報一筆] 200/200 一樣 1346B 
+-- feast
+   （擺位 feast {"loc": "yingchuan"}）
+   （擺位 edit {"name": "韓雲起", "loc": "yingchuan"}）
+#232 韓雲起 GET /api/main [settle 看] 200/200 一樣 53295B 
+#233 韓雲起 GET /api/main [宴席入口] 200/200 一樣 53295B 
+#234 韓雲起 POST /api/choose [入席] 200/200 一樣 51750B 宴客・波才
+#235 韓雲起 GET /api/main [坐在席上（場景卡）] 200/200 一樣 51741B 宴客・波才
+#236 韓雲起 POST /api/choose [敬一句固定的] 200/200 一樣 54085B 宴客・波才
+#237 韓雲起 GET /api/main [敬酒之後] 200/200 一樣 54076B 宴客・波才
+   （擺位 edit {"name": "秦朗月", "loc": "yingchuan"}）
+#238 秦朗月 GET /api/main [同一城的官軍看得到入席] 200/200 一樣 49785B 
+#239 韓雲起 POST /api/choose [離席] 200/200 一樣 54122B 宴客・波才
+-- siege_open
+#240 驗收官 POST /api/do/admin_conquest_letter [戰書 nanyang_road] 200/200 一樣 42333B 立刻下戰書
+#241 驗收官 POST /api/do/admin_conquest_letter [戰書 xiaquyang] 200/200 一樣 42843B 立刻下戰書
+#242 驗收官 GET /api/admin [下了戰書] 200/200 一樣 7078B 
+   （擺位 edit {"name": "秦朗月", "loc": "nanyang_road"}）
+#243 秦朗月 GET /api/main [settle 看] 200/200 一樣 50628B 
+   （擺位 edit {"name": "韓雲起", "loc": "nanyang_road"}）
+#244 韓雲起 GET /api/main [settle 看] 200/200 一樣 54593B 宴客・波才
+   （擺位 edit {"name": "柳青崖", "loc": "nanyang_road"}）
+#245 柳青崖 GET /api/main [settle 看] 200/200 一樣 53208B 約戰・汝南荒野
+   （擺位 edit {"name": "葉寒舟", "loc": "nanyang_road"}）
+#246 葉寒舟 GET /api/main [settle 看] 200/200 一樣 57823B 走一趟・潁川郊野
+-- siege_muster
+#247 秦朗月 GET /api/main [攻城集結中] 200/200 一樣 50762B 
+#248 秦朗月 POST /api/choose [攻城加入] 200/200 一樣 51014B 攻城・南陽官道・加入官軍
+#249 秦朗月 GET /api/main [] 200/200 一樣 50956B 攻城・南陽官道・加入官軍
+#250 韓雲起 GET /api/main [攻城集結中] 200/200 一樣 54688B 宴客・波才
+#251 柳青崖 GET /api/main [攻城集結中] 200/200 一樣 53245B 約戰・汝南荒野
+#252 柳青崖 POST /api/choose [攻城加入] 200/200 一樣 53578B 攻城・南陽官道・加入官軍
+#253 柳青崖 GET /api/main [] 200/200 一樣 53521B 攻城・南陽官道・加入官軍
+#254 葉寒舟 GET /api/main [攻城集結中] 200/200 一樣 57824B 走一趟・潁川郊野
+#255 葉寒舟 POST /api/choose [攻城加入] 200/200 一樣 57630B 攻城・南陽官道・助守
+#256 葉寒舟 GET /api/main [] 200/200 一樣 57530B 攻城・南陽官道・助守
+#257 驗收官 POST /api/do/conquest_cancel [取消攻城 C] 200/200 一樣 42920B 取消一場攻城
+#258 驗收官 POST /api/do/conquest_cancel [再取消一次] 200/200 一樣 42938B 取消一場攻城
+#259 驗收官 GET /api/admin [攻城集結中] 200/200 一樣 6968B 
+-- siege_fight
+#260 秦朗月 GET /api/main [攻城開打] 200/200 一樣 49190B 攻城・南陽官道・加入官軍
+#261 韓雲起 GET /api/main [攻城開打] 200/200 一樣 54614B 宴客・波才
+#262 柳青崖 GET /api/main [攻城開打] 200/200 一樣 51596B 攻城・南陽官道・加入官軍
+#263 葉寒舟 GET /api/main [攻城開打] 200/200 一樣 56527B 攻城・南陽官道・助守
+#264 秦朗月 GET /api/main [攻城出招前] 200/200 一樣 49172B 攻城・南陽官道・加入官軍
+#265 秦朗月 POST /api/choose [攻城出招] 200/200 一樣 48776B 攻城・南陽官道・加入官軍
+#266 柳青崖 GET /api/main [攻城出招前] 200/200 一樣 51595B 攻城・南陽官道・加入官軍
+#267 柳青崖 POST /api/choose [攻城出招] 200/200 一樣 51200B 攻城・南陽官道・加入官軍
+#268 葉寒舟 GET /api/main [攻城出招前] 200/200 一樣 56527B 攻城・南陽官道・助守
+#269 葉寒舟 POST /api/choose [攻城出招] 200/200 一樣 58145B 攻城・南陽官道・助守
+#270 秦朗月 GET /api/main [攻城出招前] 200/200 一樣 50170B 攻城・南陽官道・加入官軍
+#271 秦朗月 POST /api/choose [攻城出招] 200/200 一樣 49774B 攻城・南陽官道・加入官軍
+#272 柳青崖 GET /api/main [攻城出招前] 200/200 一樣 52594B 攻城・南陽官道・加入官軍
+#273 柳青崖 POST /api/choose [攻城出招] 200/200 一樣 52198B 攻城・南陽官道・加入官軍
+#274 葉寒舟 GET /api/main [攻城出招前] 200/200 一樣 57612B 攻城・南陽官道・助守
+#275 葉寒舟 POST /api/choose [攻城出招] 200/200 一樣 58191B 攻城・南陽官道・助守
+#276 秦朗月 GET /api/main [攻城出招前] 200/200 一樣 50496B 攻城・南陽官道・加入官軍
+#277 秦朗月 POST /api/choose [攻城出招] 200/200 一樣 50100B 攻城・南陽官道・加入官軍
+#278 柳青崖 GET /api/main [攻城出招前] 200/200 一樣 52920B 攻城・南陽官道・加入官軍
+#279 柳青崖 POST /api/choose [攻城出招] 200/200 一樣 52524B 攻城・南陽官道・加入官軍
+#280 葉寒舟 GET /api/main [攻城出招前] 200/200 一樣 57937B 攻城・南陽官道・助守
+#281 葉寒舟 POST /api/choose [攻城出招] 200/200 一樣 57943B 
+#282 秦朗月 GET /api/main [攻城收場] 200/200 一樣 51001B 
+#283 秦朗月 GET /api/reports [戰報列表] 200/200 一樣 3657B 
+#284 秦朗月 GET /api/reports?id=3 [戰報一筆] 200/200 一樣 3657B 
+#285 韓雲起 GET /api/main [攻城收場] 200/200 一樣 53699B 宴客・波才
+#286 韓雲起 GET /api/reports [戰報列表] 200/200 一樣 1346B 
+#287 韓雲起 GET /api/reports?id=4 [戰報一筆] 200/200 一樣 1346B 
+#288 柳青崖 GET /api/main [攻城收場] 200/200 一樣 53541B 
+#289 柳青崖 GET /api/reports [戰報列表] 200/200 一樣 3739B 
+#290 柳青崖 GET /api/reports?id=4 [戰報一筆] 200/200 一樣 3739B 
+#291 葉寒舟 GET /api/main [攻城收場] 200/200 一樣 57359B 
+#292 葉寒舟 GET /api/reports [戰報列表] 200/200 一樣 3997B 
+#293 葉寒舟 GET /api/reports?id=3 [戰報一筆] 200/200 一樣 3997B 
+#294 秦朗月 GET /api/map/state [輿圖狀態] 200/200 一樣 24985B 
+-- advance
+#295 驗收官 POST /api/do/fast_forward [快轉一小時] 200/200 一樣 42805B 取消一場攻城
+#296 驗收官 GET /api/admin [快轉之後] 200/200 一樣 6848B 
+-- final
+#297 秦朗月 GET /api/main [最後] 200/200 一樣 51176B 
+#298 秦朗月 GET /api/reports [戰報列表] 200/200 一樣 3657B 
+#299 秦朗月 GET /api/reports?id=3 [戰報一筆] 200/200 一樣 3657B 
+#300 秦朗月 GET /api/reports?id=2 [戰報一筆] 200/200 一樣 1297B 
+#301 秦朗月 GET /api/reports?id=1 [戰報一筆] 200/200 一樣 8022B 
+#302 秦朗月 GET /api/tale/1 [戰記] 200/200 一樣 1133B 
+#303 秦朗月 GET /api/annals [江湖史] 200/200 一樣 1380B 
+#304 韓雲起 GET /api/main [最後] 200/200 一樣 53690B 宴客・波才
+#305 韓雲起 GET /api/reports [戰報列表] 200/200 一樣 1346B 
+#306 韓雲起 GET /api/reports?id=4 [戰報一筆] 200/200 一樣 1346B 
+#307 韓雲起 GET /api/reports?id=3 [戰報一筆] 200/200 一樣 1387B 
+#308 韓雲起 GET /api/reports?id=2 [戰報一筆] 200/200 一樣 8506B 
+#309 韓雲起 GET /api/tale/1 [戰記] 200/200 一樣 1133B 
+#310 韓雲起 GET /api/reports?id=1 [戰報一筆] 200/200 一樣 1601B 
+#311 韓雲起 GET /api/annals [江湖史] 200/200 一樣 1766B 
+#312 柳青崖 GET /api/main [最後] 200/200 一樣 53716B 
+#313 柳青崖 GET /api/reports [戰報列表] 200/200 一樣 3739B 
+#314 柳青崖 GET /api/reports?id=4 [戰報一筆] 200/200 一樣 3739B 
+#315 柳青崖 GET /api/reports?id=3 [戰報一筆] 200/200 一樣 1385B 
+#316 柳青崖 GET /api/reports?id=2 [戰報一筆] 200/200 一樣 8288B 
+#317 柳青崖 GET /api/tale/1 [戰記] 200/200 一樣 1133B 
+#318 柳青崖 GET /api/reports?id=1 [戰報一筆] 200/200 一樣 1635B 
+#319 柳青崖 GET /api/annals [江湖史] 200/200 一樣 1518B 
+#320 葉寒舟 GET /api/main [最後] 200/200 一樣 57350B 
+#321 葉寒舟 GET /api/reports [戰報列表] 200/200 一樣 3997B 
+#322 葉寒舟 GET /api/reports?id=3 [戰報一筆] 200/200 一樣 3997B 
+#323 葉寒舟 GET /api/reports?id=2 [戰報一筆] 200/200 一樣 1638B 
+#324 葉寒舟 GET /api/reports?id=1 [戰報一筆] 200/200 一樣 8226B 
+#325 葉寒舟 GET /api/tale/1 [戰記] 200/200 一樣 1133B 
+#326 葉寒舟 GET /api/annals [江湖史] 200/200 一樣 731B 
+#327 驗收官 GET /api/main [最後] 200/200 一樣 42783B 取消一場攻城
+-- done

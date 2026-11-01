@@ -29,6 +29,7 @@ def no_odds(squad_id: str) -> str:
     raise AssertionError(f"不該算勝算：{squad_id}")
 
 
+@pytest.mark.smoke
 def test_locations_belong_to_the_region_that_contains_them(content):
     assert region_of(content, "town").id == "north"
     assert region_of(content, "cave").id == "north"

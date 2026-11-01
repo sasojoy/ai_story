@@ -1,6 +1,6 @@
 """特殊頓悟（tianxia/epiphany.py；企劃者 2026-10-26 設計稿）：擲中感悟時再擲、機率與保底；中了開一條頓悟的線，
 拷問→小試→心魔（打自己的影子、輸了隔一日再打、次數不限）→挑模板→取名（三個候選或自己寫，全服不重複）→收進意境（神品）；
-神品不能揣摩、合成、熔，身上只准裝一個；關著時不擲、存檔不多鍵。用正式內容（season21），整個檔標 slow。"""
+神品不能揣摩、合成、熔，身上只准裝一個；關著時不擲、存檔不多鍵。用正式內容（season21）（以前整個檔標 slow，2026-10-31 起只有超過一秒的那幾條標）。"""
 from __future__ import annotations
 
 from unittest import mock
@@ -12,8 +12,6 @@ from tianxia import arts, epiphany, fusion, insight_fx, library, storyline, team
 from tianxia.encounter import EncounterResult
 from tianxia.rules import day_seconds
 from tianxia.state import InsightFx
-
-pytestmark = pytest.mark.slow
 
 HERE = "yingshui"
 

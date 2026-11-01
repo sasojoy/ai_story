@@ -6,7 +6,8 @@
 - 數字、清單、選項用 JSON；引擎寫的大段文字（場景、事件、角色卡、戰報）是 Markdown，
   在這裡轉成 HTML 再送出（`md()`，原始 HTML 一律跳脫，名號裡的 `<` 不會變成標籤）。
   江湖紀錄、地圖沿用引擎產生的 HTML／SVG（線上架構設計第七節的混合做法）。
-- 登入狀態放在 cookie（`tx_session`），伺服器記憶體裡對應到帳號；重開伺服器要重新登入。
+- 登入狀態放在 cookie（`tx_session`），資料庫的 sessions 表只存它的雜湊、對應到帳號（`accounts.SessionStore`，審查 S-10）；
+  重開伺服器不必重新登入。
 - 資料庫是唯一的真實來源；同一個角色在伺服器上只有一份 `Game`（`GAMES`），每次進行動鎖都先從資料庫
   重讀角色（`_locked`）：同一個帳號開兩個分頁、換手機再登入，看到的都是最新存好的那一份，
   動作中途出錯撤回時，做到一半的改動也不會被下一個請求存回去（線上架構設計 5.1）。
@@ -47,6 +48,8 @@ import threading
 import time
 import traceback
 import unicodedata
+import weakref
+from urllib.parse import urlsplit
 from collections import deque
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -62,17 +65,20 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, ascend, battle_instance, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata, might,
-    naming, narration,
+    arena_crowd, ascend, battle_instance, flavor, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mapdata, might,
+    naming, narration, outing,
     ollama_client, power_save, rules,
-    precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
+    precise, seal, seal_duel, server_bots, social, sortie, speech, tale, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
     zhuan_end,
 )
-from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
+from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, SESSION_SECONDS, AccountError, AccountStore, SessionStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
 from tianxia.characters import name_key, open_characters
 from tianxia.database import default_path, open_database
+from tianxia.flavor import FlavorJob
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, TEXT_TALKS, Game, Refused
+from tianxia.core import features as features_core  # 功能包：殼照 FEATURES 掛管理者工具與路由（開發規範手冊 3.1）
+from tianxia.features.feast import rules as feasts  # 宴客自己寫的敬酒詞：鎖外評分（三段式還在殼裡，過渡）
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.notices import KINDS as NOTICE_KINDS
 from tianxia.notices import current as current_notices
@@ -138,11 +144,50 @@ REPORT_EMPTY_TEXT = "還沒有戰報。打一場遭遇戰或劇情戰之後，�
 _MD = MarkdownIt("commonmark", {"html": False, "breaks": True}).enable("table")
 
 LOGIN_FAILURES: dict[str, list[float]] = {}  # 擋猜密碼的紀錄，整個伺服器共用、只放記憶體（帳號密碼登入設計第三節）
-SESSIONS: dict[str, str] = {}  # cookie → 帳號（normalize 過的）
+REGISTRATIONS: dict[str, list[float]] = {}  # 註冊的次數（來源 IP → 最近一小時註冊成功的時間），只放記憶體（審查 S-10）
+REGISTER_LIMIT = 5  # 同一個來源 IP 一小時最多註冊幾個帳號
+REGISTER_WINDOW = 3600.0
+TOO_MANY_REGISTERS = "這個網路註冊太多帳號了，請一小時後再試。"
+_REGISTER_LOCK = threading.Lock()
+
+
+class _Sessions:
+    """cookie → 帳號（normalize 過的）：存在資料庫（accounts.SessionStore，審查 S-10），重開伺服器照樣認得。
+    每次都照當下的資料庫開（測試每個換一個暫存檔）；介面照以前的 dict 留著 get／pop／clear。"""
+
+    @staticmethod
+    def _store() -> SessionStore:
+        return SessionStore(open_database())
+
+    def get(self, token: str | None) -> str | None:
+        return self._store().get(token)
+
+    def create(self, account_key: str) -> str:
+        return self._store().create(account_key)
+
+    def pop(self, token: str | None, default: str | None = None) -> str | None:
+        return self._store().pop(token, default)
+
+    def clear(self) -> None:
+        self._store().clear()
+
+
+SESSIONS = _Sessions()
 # 名號（casefold）→ 這個角色在伺服器上唯一的一份 Game。GAMES 只決定「這個角色的 Game 物件放在哪裡」，
 # 不是存檔：資料庫才是真實來源，每次進行動鎖都把這份 Game 的 state 換成資料庫裡存好的那一列（見 _locked）。
 GAMES: dict[str, Game] = {}
 _GAMES_LOCK = threading.Lock()
+# GAMES 不是只進不出（審查 S-06：一份 Game 約 1.4 MB，上線過的人越多越大）：GAME_IDLE_SECONDS 沒有請求用到的那一份，下一次
+# game_for 時順手丟掉（最多每 GAME_SWEEP_SECONDS 掃一次），再有請求時照第一次的樣子從資料庫重建（open_game）。丟掉不會掉東西：
+# 每次進鎖本來就從資料庫重讀（_reload），Game 上其他的欄位都只活在一個請求裡。唯一的例外是管理者「時間快轉」推過的那一截
+# （Game.advanced_real，回體丹換日看它，留在那一份上直到伺服器重開），快轉過的那一份不丟。還有請求拿著的那一份（三段式的 B 段在
+# 鎖外等模型）在 GAME_USED 裡是剛剛才用過的，不會被丟；就算丟了，那個請求手上那一份照樣能用（C 段照舊進鎖重讀）。
+# 時鐘用伺服器自己的 _game_clock（引擎不讀時鐘），測試換掉它就不必真的等。
+GAME_IDLE_SECONDS = 30 * 60
+GAME_SWEEP_SECONDS = 60
+_game_clock = time.monotonic
+GAME_USED: weakref.WeakKeyDictionary[Game, float] = weakref.WeakKeyDictionary()  # 每一份 Game 最後一次被請求用到（_game_clock 的秒）
+_games_swept: float | None = None  # 上一次掃 GAMES 的時刻
 # 勝算的記憶（FB-321）：所有角色的 Game 共用這一份（game_for 掛上），輿圖疊層的勝算輸入一樣就不再在行動鎖裡模擬四十場
 ODDS_MEMO = team.OddsMemo()
 
@@ -184,14 +229,36 @@ def game_for(name: str) -> Game:
     但它的 state 只是工作副本：每次進鎖都從資料庫重讀（_locked），所以鎖外看到的 state 可能已經過時，
     拿來做決定的讀取一律放在 act／look 的鎖裡。"""
     key = name.casefold()
+    now = _game_clock()
     with _GAMES_LOCK:
+        _sweep_games(now)
         game = GAMES.get(key)
         if game is None:
             game = GAMES[key] = open_game(name)
             game.odds_memo = ODDS_MEMO
             if NARRATION is not None:  # 事件旁白每週改寫（減法季批 10）：這一週寫好的旁白從小檔讀
                 game.narration = NARRATION.get
+        GAME_USED[game] = now
         return game
+
+
+def _sweep_games(now: float) -> None:
+    """丟掉 GAME_IDLE_SECONDS 沒被用到的 Game（見 GAME_IDLE_SECONDS）；最多每 GAME_SWEEP_SECONDS 掃一次。呼叫端拿著 _GAMES_LOCK。
+    沒記過用到時間的（測試直接塞進 GAMES 的）不丟。"""
+    global _games_swept
+    if _games_swept is not None and now - _games_swept < GAME_SWEEP_SECONDS:
+        return
+    _games_swept = now
+    for key, game in list(GAMES.items()):
+        used = GAME_USED.get(game)
+        if used is not None and now - used >= GAME_IDLE_SECONDS and not game.advanced_real:
+            del GAMES[key]
+
+
+def _used(game: Game) -> None:
+    """這一份 Game 剛被用過（進鎖、出鎖時記）：一個請求拖得再久（鎖外等模型），它都不算閒著。"""
+    with _GAMES_LOCK:
+        GAME_USED[game] = _game_clock()
 
 
 def name_taken(name: str) -> bool:
@@ -289,11 +356,20 @@ def _locked(game: Game):
     （act、look、prepare_dialogue），不另外呼叫 game.world.action_lock()：資料庫是唯一的真實來源，
     GAMES 裡的 Game 只是這一個動作的工作副本。FastAPI 的同步端點跑在執行緒池裡，同一個角色的兩個請求
     可能同時進來；行動鎖是 BEGIN IMMEDIATE，不同執行緒就一個一個來，重讀與動作不會交錯。
-    鎖內的模型額度與斷路器見 _model_guard。"""
-    with game.world.action_lock(), _model_guard(game):
-        _reload(game)
-        game.set_move_mode(MOVE_MODE.get())  # 這次請求選的走法（見 MOVE_MODE）：之後的選單與 choose() 都照它
-        yield
+    鎖內的模型額度與斷路器見 _model_guard。
+    這一次拿鎖裡觸發的江湖大事（S-09）：鎖內只寫固定的原文，放鎖之後才開背景執行緒請模型潤色（write_flavor）。"""
+    _used(game)
+    jobs: list[FlavorJob] = []
+    try:
+        with game.world.action_lock(), _model_guard(game):
+            _reload(game)
+            game.set_move_mode(MOVE_MODE.get())  # 這次請求選的走法（見 MOVE_MODE）：之後的選單與 choose() 都照它
+            yield
+            jobs = game.take_flavor_jobs()  # 動作丟例外就不拿：那一下整筆撤回，下一次拿鎖 reset_model_budget 會清掉
+    finally:
+        _used(game)
+    if jobs and TALE_THREADS and game.client is not None:
+        write_flavor(game, jobs)
 
 
 def _refuse_while_paused(game: Game) -> None:
@@ -1312,6 +1388,55 @@ def narrate_once(game: Game) -> int | None:
         return game.apply_battle_tales(request, stories)
 
 
+FLAVOR_OWNER = "§大事"  # 江湖大事潤色排隊用的名號（當成假人排、排在真人後面；不是任何一個角色）
+FLAVOR_BUDGET_SECONDS = 30.0  # 一件江湖大事潤色的總預算（鎖外；晚幾秒換上是可以的）
+
+
+def write_flavor(game: Game, jobs: list[FlavorJob]) -> bool:
+    """江湖大事的潤色（S-09）：開一個背景執行緒。A 鎖內觸發時記單子（world._fire → Game.take_flavor_jobs，固定的原文已經寫進紀錄）
+    → B 鎖外請模型（flavor.polish_world_event，預算 FLAVOR_BUDGET_SECONDS；排隊時當假人排）→ C 鎖內驗過才存進全服快取、
+    把這個人的那一則換掉（Game.apply_flavor；寫不出來就留著固定的原文）。呼叫端不能握著行動鎖。"""
+
+    def job() -> None:
+        for one in jobs:
+            try:
+                flavor_once(game, one)
+            except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，留著固定的原文
+                traceback.print_exc()
+
+    threading.Thread(target=job, name="event-flavor", daemon=True).start()
+    return True
+
+
+def flavor_once(game: Game, job: FlavorJob) -> bool:
+    """潤色一件（write_flavor 的那一圈；測試直接叫）：換上了回 True。呼叫端不能握著行動鎖。
+    全服快取裡已經有合格的句子（別人先潤色好）就直接套、不叫模型。"""
+    with _locked(game):
+        done = game.apply_flavor(job, "")
+        if done:
+            open_characters().save(game.state)
+    if done:
+        return True
+    started = _monotonic()
+
+    def ask() -> str:
+        return flavor.polish_world_event(within_budget(game.client, FLAVOR_BUDGET_SECONDS - (_monotonic() - started)), job.text)
+
+    if QUEUE is None:
+        text = ask()
+    else:
+        try:
+            text = QUEUE.run(FLAVOR_OWNER, ask, fallback="", bot=True, wait=FLAVOR_BUDGET_SECONDS)
+        except (Busy, QueueTimeout):
+            text = ""
+    if not text:
+        return False
+    with _locked(game):
+        done = game.apply_flavor(job, text)
+        open_characters().save(game.state)
+    return done
+
+
 LETTER_RUNNING: set[str] = set()  # 正在背景重寫書信的角色（一人一條；名號）
 
 
@@ -1656,7 +1781,7 @@ def chatter_once(game: Game) -> bool:
 
 def duel_text(game: Game, text: str) -> list[str]:
     """單人頭目戰的放手一搏，三段同 battle_text：A Game.duel_text_request（只讀）→ B 鎖外請模型評成功率、寫成敗兩版劇情
-    （預算同隨口應對）→ C Game.duel_gamble 重驗同一隻、同一回合、同一句才用評好的分，對不上就在鎖內重評。"""
+    （預算同隨口應對）→ C Game.duel_gamble 重驗同一隻、同一回合、同一句才用評好的分，對不上回「這一回合已經結算」、不重評。"""
     started, request = _open_request(game, lambda: game.duel_text_request(text))
     if isinstance(request, list):
         return request
@@ -1749,6 +1874,22 @@ def tavern_ask(game: Game, text: str) -> list[str]:
     return act(game, lambda g: g.tavern_ask(request.question, reply, request=request))
 
 
+def outing_tale(game: Game) -> list[str]:
+    """走一趟的遊記（tianxia/outing.py），三段：A Game.outing_tale_request（只讀；收了、還沒請過才開單）→ B 鎖外 outing.tale_write
+    （預算 Config.jianfa.outing_tale_seconds）→ C Game.outing_set_tale 照同一趟才收；叫不動、不合用記成請過了，畫面用模板。"""
+    started, request = _open_request(game, game.outing_tale_request)
+    if isinstance(request, list):
+        return request
+    total = game.content.config.jianfa.outing_tale_seconds
+
+    def write():
+        client = within_budget(game.client, total - (_monotonic() - started))
+        return outing.tale_write(client, request)
+
+    text = model_call(game, write, fallback=None, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+    return act(game, lambda g: g.outing_set_tale(text, request))
+
+
 def seal_text(game: Game, text: str) -> list[str]:
     """奪璽單挑的放手一搏（玉璽碎片設計 5.7），三段同 duel_text：A Game.seal_text_request（只讀；判成不在場的回合不開單）→
     B 鎖外請模型評成功率、寫成敗兩版劇情（預算同隨口應對，評不到 40）→ C Game.seal_gamble 重驗同一場、同一回合、同一邊、同一句才用，
@@ -1818,9 +1959,15 @@ def main_view(game: Game) -> dict:
 
 
 def _main_view_body(game: Game) -> dict:
+    fighting = game.battle_on_screen()
     card = game.battle_card() if game.shows_battle_card() else None
     status, quest, scene = game.status_data(), md(game.quest_text()), md(game.scene_text())
     options = game.options()  # 照原本的順序：狀態、主線、場景先讀，選單（會推進全服戰鬥）最後
+    if fighting and not game.battle_on_screen():
+        # 這一次的選單把決戰推到收場了（手機介面自檢 U-06）：先讀的場景還停在最後一回合，換成收場之後的（回到地點），
+        # 卡片、狀態、主線也一起重讀，跟「剛剛」（下面才讀）同一刻
+        card = game.battle_card() if game.shows_battle_card() else None
+        status, quest, scene = game.status_data(), md(game.quest_text()), md(game.scene_text())
     latest = game.journal_top_html()
     view = {
         "status": status,
@@ -1828,6 +1975,8 @@ def _main_view_body(game: Game) -> dict:
         "scene": scene,
         "art": scene_art(game, status),  # 場景卡上面那張圖（減法季批 8）：事件插圖、人物像或地點的圖；沒有圖檔是 None、網頁一字不變
         "options": [o.model_dump() for o in options],
+        # 走一趟（tianxia/outing.py）：探索鈕的段數選單（picker）與這一趟（trip）；關著是 None、網頁照舊一顆探索
+        "outing": game.outing_view(),
         "say_max": game.say_max(),  # 「自己說」最多幾個字（NPC 智能 2.0開著時比較長，網頁的輸入框照它）
         # 出陣開著（出陣探索與地盤設計第二節）：行動列那一格叫「出陣」、等候的話換一句；關著時照舊「遊歷」
         "sortie": sortie.on(game.content),
@@ -1870,7 +2019,7 @@ def _main_view_body(game: Game) -> dict:
         "now": game.battle_extra_html(for_card=True) if card is not None else game.now_entry_html(),
         # 出陣回報（企劃者 2026-10-23）：「剛剛」那一則是領地爭奪的出陣時，卡片底下的進度條、一句話與小籤（sortie.report）；不是 None
         "front": game.now_front(),
-        "minimap": game.minimap_svg(),
+        # 小地圖（舊的江湖頁那一張）網頁已經不畫了：不再每次輪詢在鎖裡重畫、多送 30 KB（全面自檢 S-07）
         # 此地還有誰（玩家之間的互動第一層）：[{name, side}]；路上、序章裡是空的。真人假人同一份（伺服器假人設計第五節）
         "here": game.peers_here(),
         "calls": game.calls_here(),  # 別人遞給你、還沒回的打招呼、結伴、切磋邀請（玩家互動第二層）；回應鈕是選單上的 invite: 選項
@@ -1879,6 +2028,7 @@ def _main_view_body(game: Game) -> dict:
         "trends": md(game.trends_text()),
         "rumors": md(game.rumors_text()),
         "chronicle": md(game.chronicle_text()),
+        "tales": tale_index(game),  # 江湖史最上面那排「戰記」：[{battle_id, title, season, result}]，新的在前；開關關著是空的
         "admin": game.is_admin(),
         "paused": game.paused_minutes(),  # 賽季時鐘停了幾分鐘；沒暫停是 None（設定頁的「暫停／繼續」）
         "guide": game.guide_box(),  # 行動列上方的說書人對話框（引導重做設計 8.1）；略過或早就做完是 None
@@ -1899,9 +2049,8 @@ def _main_view_body(game: Game) -> dict:
     milestone = game.milestone_card()  # 減法季屬性五段的境界卡（主機側計畫欄位表 main.milestone）：到了境界、點還沒配完才有這個鍵
     if milestone is not None:
         view["milestone"] = milestone
-    entry = game.mall_entry()  # 商城的入口（商城第二批：齒輪旁的錠子鈕＋餘額、底部第六格）；商城關著沒有這個鍵
-    if entry is not None:
-        view["mall"] = entry
+    # 功能包的狀態（FEATURES 的 status，照清單的順序；開發規範手冊 3.3）：商城的入口 mall（齒輪旁的錠子鈕＋餘額、底部第六格）；關著沒有這個鍵
+    view.update(game.feature_status())
     if view["guide"] is not None:  # 入伍段「出一次力」：選單上能完成它的那幾顆（FB-093）；網頁讓它們發光，「此地還能做」攤開
         view["guide"]["glow"] = game.enlist_glow([o.id for o in options if o.enabled])
     if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
@@ -1952,6 +2101,12 @@ def _main_view_body(game: Game) -> dict:
     if xingshi.on(game.content, game.state.world):  # 〈天下形勢〉開著的季：見聞多一顆「形勢」（文章另外讀 /api/xingshi；關著沒有這個鍵）
         view["xingshi"] = True
         view["xingshi_mark"] = game.xingshi_mark()  # FB-578：最新一篇的篇次＋有沒有一張還在寫；變了，停在「形勢」頁的網頁就重抓
+    plan = game.plan_view()  # 世界活起來：全服開著的盤算裡最切身的一件（江湖頁行動列底下一張卡）；沒有開著的就沒有這個鍵
+    if plan is not None:
+        view["plan"] = plan
+    place_deeds = game.place_deeds_view()  # 世界活起來：此地舊事（場景卡底下最近的幾筆世界記事）；沒有就沒有這個鍵
+    if place_deeds is not None:
+        view["place_deeds"] = place_deeds
     letter = game.letter_view()  # 書信（大勢人物擴充第二批）：江湖頁「剛剛」上面一張小卡；沒有沒看過的信就沒有這個鍵
     if letter is not None:
         view["letter"] = letter
@@ -2093,7 +2248,14 @@ def reports_view(game: Game, record_id: int | None) -> dict:
         "selected": record_id,
         "detail": md(game.battle_detail(record_id)) if record_id is not None else md(REPORT_EMPTY_TEXT),
         "gauge": game.record_gauge(record_id),  # 決戰的戰報畫收場那一刻的戰局條（Joy 2026-10-10）；不是決戰是 None
+        # 戰記（Joy 2026-10-29）：決戰、奪璽單挑的戰報帶著資料庫裡那一場的流水號，網頁拿它問 /api/tale/<流水號>；其他是 None
+        "tale_id": _tale_ref(game, record_id),
     }
+
+
+def _tale_ref(game: Game, record_id: int | None) -> int | None:
+    record = battlelog.find(game.state, record_id)
+    return record.battle_ref if record is not None and record.kind in battlelog.BIG_KINDS else None
 
 
 def admin_choices(game: Game) -> dict:
@@ -2102,6 +2264,8 @@ def admin_choices(game: Game) -> dict:
     大勢線照這一季的規則（第一季濃縮版要開關開著、而且這一季蓋了「開」的章）。呼叫端要拿著行動鎖（look）。"""
     world = game.state.world
     return {
+        # 賽季在哪個階段（籌備中 preparing／進行中 running／休季 resting）：開季、立刻收季、開啟下一季只在對的階段按得下去（U-19）
+        "phase": game.world.season_phase(),
         "battles": [{"label": b.name, "id": b.id} for b in game.admin_battles()],
         "events": [{"label": f"{x.text[:30]}（{x.id}）", "id": x.id} for x in game.admin_fires()],
         # 照開關：關著時不列第一季才有的線；開著時不列黃巾聲勢（由三條戰線合成，不能直接推）
@@ -2282,11 +2446,12 @@ def create_character(account_key: str, name: str, sex: str | None = None) -> Gam
     return game_for(name)
 
 
-def change_password(account_key: str, old: str, new: str, again: str) -> str:
+def change_password(account_key: str, old: str, new: str, again: str, keep: str | None = None) -> str:
+    """keep 是改密碼的這個裝置的 cookie：它留著，同一個帳號別的裝置都登出（PM 2026-10-31）。"""
     if (new or "") != (again or ""):
         return PASSWORDS_DIFFER
     try:
-        account_store().change_password(account_key, old, new)  # 同上：自己是一筆交易，慢的雜湊不在交易裡算
+        account_store().change_password(account_key, old, new, keep)  # 同上：自己是一筆交易，慢的雜湊不在交易裡算
     except AccountError as exc:
         return str(exc)
     return "密碼已更新。"
@@ -2355,11 +2520,54 @@ def _warm_model() -> None:
     client.warm()  # warm 自己在背景執行緒裡跑到模型載完（見 OllamaClient.warm），這裡不會被擋住
 
 
-def _start_session(response: Response, account_key: str) -> None:
-    token = secrets.token_urlsafe(32)
-    SESSIONS[token] = account_key
+LOOPBACK = ("127.0.0.1", "::1", "localhost")
+
+
+def client_ip(request: Request) -> str:
+    """這個請求從哪個 IP 來（註冊的次數照它算）。走固定網域時 cloudflared 在這台機器上轉進來，直接連線的一端永遠是本機，
+    真正的來源在 Cloudflare 加的 CF-Connecting-IP；只有直接連線的一端是本機時才認那個標頭（--lan 的時候外面的人
+    自己帶一個 CF-Connecting-IP 也騙不了）。都沒有就是空字串。"""
+    peer = request.client.host if request.client is not None else ""
+    forwarded = (request.headers.get("cf-connecting-ip") or "").strip()
+    if forwarded and peer in LOOPBACK:
+        return forwarded
+    return peer
+
+
+def via_https(request: Request) -> bool:
+    """這個請求是不是走 https 來的：直接 https，或 cloudflared 轉進來時標的 X-Forwarded-Proto: https。"""
+    return request.url.scheme == "https" or (request.headers.get("x-forwarded-proto") or "").strip().lower() == "https"
+
+
+def cookie_secure(request: Request) -> bool:
+    """cookie 要不要加 Secure（審查 S-10）：請求走 https 來的（via_https），或公開網址（TIANXIA_PUBLIC_URL）是 https、而這個請求
+    就是衝著那個網域來的（隧道沒標 X-Forwarded-Proto 也照樣加）。主機在這台電腦上開 http://127.0.0.1:7861、--lan 時區網用
+    http 連，都不是那個網域：不加，照樣登入得了（加了的話瀏覽器在 http 上直接丟掉這個 cookie）。"""
+    if via_https(request):
+        return True
+    public = urlsplit(os.environ.get(PUBLIC_URL_ENV) or "")
+    return public.scheme == "https" and bool(public.hostname) and request.url.hostname == public.hostname
+
+
+def _register_allowed(ip: str, now: float) -> bool:
+    """這個 IP 這一小時還能不能註冊（REGISTER_LIMIT）；只看，不記。"""
+    with _REGISTER_LOCK:
+        recent = [t for t in REGISTRATIONS.get(ip, []) if now - t < REGISTER_WINDOW]
+        REGISTRATIONS[ip] = recent
+        return len(recent) < REGISTER_LIMIT
+
+
+def _registered(ip: str, now: float) -> None:
+    with _REGISTER_LOCK:
+        REGISTRATIONS.setdefault(ip, []).append(now)
+
+
+def _start_session(request: Request, response: Response, account_key: str) -> None:
+    token = SESSIONS.create(account_key)
     _warm_model()
-    response.set_cookie(COOKIE, token, httponly=True, samesite="lax", max_age=30 * 86400)
+    response.set_cookie(
+        COOKIE, token, httponly=True, samesite="lax", max_age=SESSION_SECONDS, secure=cookie_secure(request),
+    )
 
 
 def _entry(account_key: str) -> dict:
@@ -2431,16 +2639,21 @@ def me(request: Request):
 
 
 @app.post("/api/login")
-def api_login(response: Response, body: dict = Body(...)):
+def api_login(request: Request, response: Response, body: dict = Body(...)):
     key = login(body.get("login", ""), body.get("password", ""))
-    _start_session(response, key)
+    _start_session(request, response, key)
     return _entry(key)
 
 
 @app.post("/api/register")
-def api_register(response: Response, body: dict = Body(...)):
+def api_register(request: Request, response: Response, body: dict = Body(...)):
+    """註冊。同一個來源 IP 一小時最多 REGISTER_LIMIT 個帳號（審查 S-10）：超過了回 TOO_MANY_REGISTERS，跟其他註冊錯誤一樣。"""
+    ip, now = client_ip(request), time.time()
+    if not _register_allowed(ip, now):
+        raise GameError(TOO_MANY_REGISTERS)
     key = register(body.get("login", ""), body.get("password", ""), body.get("again", ""))
-    _start_session(response, key)
+    _registered(ip, now)
+    _start_session(request, response, key)
     return _entry(key)
 
 
@@ -2454,7 +2667,7 @@ def api_character(request: Request, body: dict = Body(...)):
 @app.post("/api/logout")
 def api_logout(request: Request, response: Response):
     SESSIONS.pop(request.cookies.get(COOKIE, ""), None)
-    response.delete_cookie(COOKIE)
+    response.delete_cookie(COOKIE, httponly=True, samesite="lax", secure=cookie_secure(request))
     return {"stage": "login"}
 
 
@@ -2507,11 +2720,14 @@ MAIN_ACTIONS = {
     "sortie_go": lambda g, b: g.sortie_go(_moves(b.get("moves"))),
     "sortie_answer": lambda g, b: g.sortie_answer(str(b.get("id", ""))[:80], _moves(b.get("moves"))),
     "sortie_join": lambda g, b: g.sortie_join(str(b.get("id", ""))[:80]),
+    # 走一趟（tianxia/outing.py）：n 是段數（1／3／5）就出發；0 或沒帶是停在要選的事上、選完接著走。沿路的事在 main.outing.trip
+    "outing": lambda g, b: g.outing_go(_int(b.get("n"), 0)),
 }
 # 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、不再提示、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」
 PAUSE_OK_ACTIONS = frozenset({"anonymous", "gender", "hints_off", "story_seen", "skip_tutorial", "view_map", "view_orders", "guide_ack"})
 ADMIN_ACTIONS = {
+    "outing_erase": lambda g, b: g.admin_erase_inscription(_int(b.get("id"), 0)),  # 走一趟的留言：管理者抹掉一則
     "open_season": lambda g, b: g.admin_open_season(time.time()),
     "end_season": lambda g, b: g.admin_end_season(time.time()),
     "next_season": lambda g, b: g.admin_next_season(time.time()),
@@ -2562,110 +2778,11 @@ ADMIN_ACTIONS = {
 }
 PLAYER_ADMIN_ACTIONS = frozenset({"summon", "give_opportunity", "give_fragment", "mingtie_remove"})  # 動到別人的存檔：做完也叫他的分頁刷新
 
-# ── 商城（docs/superpowers/specs/2026-10-20-商城架構-design.md；規則在 tianxia/mall.py、錢包在 tianxia/wallet.py）──
-# 開關 Config.mall.enabled 關著時這裡的 API 全部 404（4.10）。購買在行動鎖裡（act）：扣元寶、寫購買紀錄、發貨同一筆交易。
-
-MALL_REF = re.compile(r"[A-Za-z0-9_-]{8,64}")
-
-
-def _mall_ref(raw) -> str:
-    """這一筆的編號：網頁送的是 8～64 個英數字、底線、減號就照用（網頁按下確認那一刻產，重送同一個不會算兩次），
-    其餘（沒送、送了怪東西）由伺服器產一個。"""
-    text = raw if isinstance(raw, str) else ""
-    return text if MALL_REF.fullmatch(text) else secrets.token_urlsafe(12)
-
-
-def _mall_on() -> None:
-    if not mall.on(CONTENT):
-        raise HTTPException(404)
-
-
-# 管理者的商城工具（4.7）：補發、扣回、退一筆；原因 note 必填、每一筆寫進帳（誰、何時、為什麼）。查帳是 /api/admin/mall
-MALL_ADMIN_ACTIONS = {
-    "mall_reissue": lambda g, b: g.admin_mall_reissue(
-        str(b.get("name", ""))[:40], _int(b.get("amount"), 0), str(b.get("note", ""))[:100], _mall_ref(b.get("ref"))),
-    "mall_revoke": lambda g, b: g.admin_mall_revoke(
-        str(b.get("name", ""))[:40], _int(b.get("amount"), 0), str(b.get("note", ""))[:100], _mall_ref(b.get("ref"))),
-    "mall_refund": lambda g, b: g.admin_mall_refund(str(b.get("name", ""))[:40], _int(b.get("id"), 0), str(b.get("note", ""))[:100]),
-}
-
-
-@app.get("/api/mall")
-def api_mall(request: Request):
-    """商城那一頁（Game.mall_view）：同步之後的餘額、月卡、上架的商品。"""
-    _mall_on()
-    return act_look(_game(request), lambda g: None, lambda g: g.mall_view())[1]
-
-
-@app.get("/api/mall/records")
-def api_mall_records(request: Request):
-    """自己的購買紀錄與帳（Game.mall_records）。"""
-    _mall_on()
-    return act_look(_game(request), lambda g: None, lambda g: g.mall_records())[1]
-
-
-@app.post("/api/mall/buy")
-def api_mall_buy(request: Request, body: dict = Body(...)):
-    """買東西（Game.mall_buy）：{item, ref, qty}（qty 一次買幾件，不給是 1；Joy 2026-10-22）；回 {message, bought, already, mall, main}。bought 是買成的商品 id（不成是 None：網頁照它換
-    掌櫃那一句）、already 是這個編號早就買好的那一件（逾時重送，網頁照成了的樣子講，FB-491；其餘是 None）、main 是江湖畫面
-    （狀態列的錠子鈕與丹鈕當場換，商城第二批）。賽季時鐘暫停中照其他動作擋。"""
-    _mall_on()
-    game = _game(request)
-    item, ref = str(body.get("item", ""))[:40], _mall_ref(body.get("ref"))
-    got: dict = {}
-
-    def buy(g: Game):
-        out = g.mall_buy(item, ref, max(1, min(mall.MAX_QTY, _int(body.get("qty"), 1))))
-        got["bought"], got["already"] = g.mall_bought, g.mall_already  # 在鎖裡讀：出了鎖別的請求可能又動了這一份 Game
-        return out
-
-    msgs = act(game, buy)
-    _tell_tabs(game)
-    return {"message": joined(msgs), "bought": got.get("bought"), "already": got.get("already"),
-            "mall": look(game, lambda g: g.mall_view()), "main": look(game, main_view)}
-
-
-@app.post("/api/mall/claim")
-def api_mall_claim(request: Request):
-    """領月卡今天的份（Game.mall_claim；定案甲・每日領）：回 {message, mall, main}（錠子鈕、丹鈕與江湖頁那張小卡當場換）。"""
-    _mall_on()
-    game = _game(request)
-    msgs = act(game, lambda g: g.mall_claim())
-    _tell_tabs(game)
-    return {"message": joined(msgs), "mall": look(game, lambda g: g.mall_view()), "main": look(game, main_view)}
-
-
-@app.post("/api/mall/rename")
-def api_mall_rename(request: Request, body: dict = Body(...)):
-    """易名帖（Game.mall_rename；Joy 2026-10-21 當場生效）：{name}；回 {message, renamed, main}。名號的寫法照建角色（NFKC、長度、
-    看不見的字元），撞名照 name_taken 同一句。改成了：GAMES 換到新名號底下（帳號已經指向新名號，下一個請求照新名號找）。"""
-    _mall_on()
-    name = unicodedata.normalize("NFKC", str(body.get("name", ""))).strip()
-    if not name:
-        raise GameError("請先輸入新的名號。")
-    if len(name) > NAME_MAX or any(unicodedata.category(ch) in ("Cc", "Cf") for ch in name):
-        raise GameError(BAD_NAME)
-    game = _game(request)
-    old = game.state.player.name
-    msgs = act(game, lambda g: g.mall_rename(name, name_taken))
-    new = game.state.player.name
-    if new != old:
-        with _GAMES_LOCK:
-            GAMES.pop(old.casefold(), None)
-            GAMES[new.casefold()] = game
-    _tell_tabs(game)
-    return {"message": joined(msgs), "renamed": new != old, "name": new, "main": look(game, main_view)}
-
-
-@app.post("/api/admin/mall")
-def api_admin_mall(request: Request, body: dict = Body(...)):
-    """管理者查一個名號（或帳號）的帳（Game.admin_mall_ledger）。名號放在 POST 的內容裡、不放在網址上；查不到回 {refusal}。"""
-    _mall_on()
-    game = _game(request)
-    if not game.is_admin():
-        raise HTTPException(403)
-    name = str(body.get("name", ""))[:40]
-    return act_look(game, lambda g: None, lambda g: g.admin_mall_ledger(name))[1]
+# ── 功能包的管理者工具與路由（FEATURES；開發規範手冊 3.3）：殼照清單掛，位置就是原本商城那一段（路由的先後不變）。
+# 商城（/api/mall/…、/api/admin/mall、管理者的補發扣回退款）搬進 tianxia/features/mall/routes.py ──
+FEATURE_ADMIN_ACTIONS = features_core.admin_tools(sys.modules[__name__])
+for _router in features_core.routers(sys.modules[__name__]):
+    app.include_router(_router)
 
 
 @app.post("/api/choose")
@@ -2712,17 +2829,25 @@ def api_say(request: Request, body: dict = Body(...)):
 
 @app.post("/api/do/{op}")
 def api_do(op: str, request: Request, body: dict = Body(default={})):
-    if op in MALL_ADMIN_ACTIONS:
-        _mall_on()  # 商城關著：沒有這個東西（先於登入的檢查，跟 /api/mall 一樣）
+    tool = FEATURE_ADMIN_ACTIONS.get(op)  # 功能包的管理者工具（商城的補發、扣回、退一筆）
+    if tool is not None:
+        tool.gate()  # 那一包關著：沒有這個東西（先於登入的檢查，跟 /api/mall 一樣）
     game = _game(request)
-    if op in MALL_ADMIN_ACTIONS:
+    if tool is not None:
         if not game.is_admin():
             raise GameError("只有管理者能這麼做。")
-        msgs = act(game, lambda g: MALL_ADMIN_ACTIONS[op](g, body), paused_ok=True)  # 帳跟季無關：暫停中也做得了
+        msgs = act(game, lambda g: tool.run(g, body), paused_ok=tool.paused_ok)  # 商城：帳跟季無關，暫停中也做得了
     elif op in ADMIN_ACTIONS:
         if not game.is_admin():
             raise GameError("只有管理者能這麼做。")
         msgs = act(game, lambda g: ADMIN_ACTIONS[op](g, body), paused_ok=True)  # 暫停中要按得到「繼續」；其他的引擎自己擋
+    elif op == "outing_say":  # 走一趟留言：自己寫的那一句先在行動鎖外審（speech.judge），預設句不必審
+        text = speech.clean(str(body.get("text", ""))[:200])
+        preset = _int(body.get("preset"), -1)
+        verdict = screen_text(game, text, speech.MOTTO) if preset < 0 and text else ""
+        msgs = act(game, lambda g: g.outing_say(preset, text, verdict))
+    elif op == "outing_tale":  # 走一趟的遊記：模型在行動鎖外寫（見 outing_tale）
+        msgs = outing_tale(game)
     elif op == "battle_text":  # 放手一搏：成功率在行動鎖外評（見 battle_text）
         msgs = battle_text(game, str(body.get("text", "")))
     elif op == "seal_text":  # 奪璽單挑的放手一搏：同上（見 seal_text）
@@ -2987,6 +3112,138 @@ def api_reports(request: Request, id: int | None = None):
     return look(game, lambda g: reports_view(g, id))
 
 
+# ── 戰記（Joy 2026-10-29，原稱戰役話本）：決戰收場那一刻在背景寫、全服一份，戰報頁「戰記 ›」與戰記頁讀它 ──
+# 介面（主機那邊照同一份寫）：{status: "ready"|"pending"|"none", title, season, battle_name, result,
+#   acts: [{title, banner?, scenes: [{head, text, said?: {who, side, line}}]}], cast: [{name, side?, line}], made_at}
+# 寫法、產生、存放在 tianxia/tale.py 與下面這一段：收場之後由背景執行緒（tale_round）一篇一篇寫，
+# 存進資料庫旁邊的小檔 <db>-tale.sqlite（不動 SCHEMA_VERSION）。模型叫不動就存引擎自己拼的那一版（tale.plain），
+# 所以「史官還在落筆」只會是「還沒輪到它寫」，不會永遠卡著。
+def tale_view(battle_id: int) -> dict:
+    """一場的戰記：寫好了回整篇（ready）；是決戰、收場了、還沒寫好回 pending；其餘（不是決戰、沒這場、還沒接上）回 none。"""
+    store = TALES
+    if store is None:
+        return {"status": "none"}
+    written = store.get(battle_id)
+    if written is not None:
+        return written.model_dump()
+    return {"status": "pending"} if _tale_due(battle_id) else {"status": "none"}
+
+
+def _tale_due(record_id: int) -> bool:
+    """這一場該有戰記：收場的決戰，有結果（季終沒打完的 unfinished 沒有結果，不寫）。"""
+    battle = open_world().ended_battle(record_id)
+    return battle is not None and not battle.unfinished and bool(battle.outcome_title)
+
+
+# 江湖史也點得進戰記：誰看得到（只有參戰的人，還是全服）等 Joy 定，先關著
+TALES_IN_CHRONICLE = False
+
+
+def tale_index(game: Game) -> list[dict]:
+    """江湖史的戰記目錄（新的在前）：開關關著、或主機還沒接上都是空的。"""
+    if not TALES_IN_CHRONICLE or TALES is None:
+        return []
+    return [{"battle_id": record_id, "title": written.battle_name, "season": written.season, "result": written.result}
+            for record_id, written in TALES.listing(game.world.get_season_number())]
+
+
+@app.get("/api/tale/{battle_id}")
+def api_tale(request: Request, battle_id: int):
+    _game(request)  # 要登入，跟戰報一樣
+    return tale_view(battle_id)
+
+
+# ── 戰記怎麼寫出來：全服一條背景執行緒（start_tales，main() 開），每 TALE_ROUND_SECONDS 秒看一次這一季有沒有收場了
+# 卻還沒有戰記的決戰，有就寫一篇。不拿行動鎖（只讀收場的那一場與它的回合、寫旁邊的小檔），模型呼叫排在真人後面
+# （佇列開著時當假人排）；省電模式下沒有真人來過就不叫，不把模型載回 VRAM（同旁白改寫）。
+TALES: tale.TaleStore | None = None
+TALES_CLIENT = None  # 寫戰記用的 client（main() 照設定建；測試塞假的）
+TALES_STOP = threading.Event()
+TALES_THREAD: threading.Thread | None = None
+TALE_ROUND_SECONDS = 30.0  # 看一次的間隔（一季頂多十來場，寫完就閒著）
+TALE_BUDGET_SECONDS = 180.0  # 一篇的模型預算
+TALE_OWNER_KEY = "戰記"  # 佇列裡的名號（不是任何角色）
+
+
+def tale_store_path() -> Path:
+    db = default_path()
+    return db.with_name(f"{db.stem}-tale.sqlite")
+
+
+def start_tales(config, client=None) -> threading.Thread | None:
+    """建 TALES（小檔不管叫不叫得動模型都建：讀的一邊才有東西可查）、開背景執行緒（daemon）。只有 main() 與測試呼叫。"""
+    global TALES, TALES_CLIENT, TALES_THREAD
+    TALES = tale.TaleStore(tale_store_path())
+    if client is None:
+        try:
+            client = OllamaClient.from_config(config)
+        except Exception:  # noqa: BLE001  建不起 client：照模板寫，不擋伺服器
+            client = None
+    TALES_CLIENT = client
+    failures = _StepFailures(time.monotonic, "戰記")
+
+    def loop() -> None:
+        while not TALES_STOP.wait(TALE_ROUND_SECONDS):
+            try:
+                tale_round()
+            except Exception as e:  # noqa: BLE001  一篇出錯不能讓整條停下來
+                failures.failed(e)
+            failures.tick()
+
+    TALES_THREAD = threading.Thread(target=loop, daemon=True, name="tales")
+    TALES_THREAD.start()
+    return TALES_THREAD
+
+
+def tale_material(world, battle) -> tale.Material | None:
+    """把收場的一場決戰整理成寫戰記的料（只讀）。內容裡沒有這一場（換過內容的舊季）是 None。"""
+    definition = CONTENT.battles.get(battle.battle_id)
+    if definition is None or battle.record_id is None:
+        return None
+    return tale.gather(
+        definition, battle, world.battle_rounds(battle.record_id),
+        season=world.get_season_number(), side_names=battle_instance.side_names(battle, definition),
+    )
+
+
+def tale_round(clock: Callable[[], float] = time.time) -> int | None:
+    """寫一篇（背景執行緒的一輪；測試直接叫）：這一季收場了、還沒有戰記的決戰挑最新的一場寫。回傳寫好的流水號，
+    沒做事是 None。模型叫不動、寫壞就存模板版（照引擎自己那幾句），不留著讓玩家一直看「史官還在落筆」。
+    呼叫端不能握著行動鎖。"""
+    store = TALES
+    if store is None:
+        return None
+    if power_save.on() and clock() - LAST_HUMAN > ONLINE_SECONDS:
+        return None  # 省電模式、沒人在線：等有人來再寫
+    world = open_world()
+    if world.season_phase() != "running":
+        return None
+    season = world.get_season_number()
+    done = store.done(season)
+    todo = [b for b in world.season_ended_battles(season)
+            if b.record_id is not None and b.record_id not in done and not b.unfinished and b.outcome_title]
+    if not todo:
+        return None
+    battle = todo[-1]  # 最新的那一場先（玩家剛打完就在等它）
+    material = tale_material(world, battle)
+    if material is None:
+        return None
+    budget, started = TALE_BUDGET_SECONDS, _monotonic()
+
+    def ask() -> tuple[dict, dict]:
+        return tale.write(within_budget(TALES_CLIENT, budget - (_monotonic() - started)), material)
+
+    if QUEUE is None:
+        scenes, cast = ask()
+    else:
+        try:  # 排在真人後面（當成假人排）；排不到這一輪就算了，下一輪再寫
+            scenes, cast = QUEUE.run(TALE_OWNER_KEY, ask, fallback=({}, {}), bot=True, wait=min(budget, 120))
+        except Busy:
+            return None
+    store.put(material.record_id, tale.compose(material, scenes, cast, made_at=clock()))
+    return material.record_id
+
+
 # ── 見聞的「榜單」（企劃者 2026-10-14：善人、惡人、名人、宗師榜，連同武學榜、內功榜）──
 # 一張榜要掃過這一季每一個角色（leaderboard.compute_boards）：二三十人在線、每個人點開都掃一次划不來，整份快取 BOARDS_TTL_SECONDS 秒，
 # 全服共用一份（榜上寫的都是名號，人人看到的一樣；「你排第幾」照快取裡的整張找）。不拿行動鎖：只讀，晚幾十秒無妨。
@@ -3224,9 +3481,10 @@ def zhuan_extras(store, row: dict) -> dict:
     season = store.get_season() if number == store.get_season_number() else store.past_season(number)
     if season is None or not zhuan_end.on(CONTENT, season):
         return {}
+    from tianxia.core.services import wallet_on  # noqa: PLC0415  錢包開著沒（核心；開發規範手冊 3.10）
     from tianxia.wallet import Wallet  # noqa: PLC0415
 
-    purchases = Wallet(store.db).purchases(name_key(row["name"])) if mall.on(CONTENT) else []
+    purchases = Wallet(store.db).purchases(name_key(row["name"])) if wallet_on(CONTENT) else []
     got = zhuan_end.extras(CONTENT, number, row["profile"], zhuan_end.season_tickets(purchases, number), row["text"])
     out = {}
     art = zhuan_art_src(got["illustration"])
@@ -3287,7 +3545,9 @@ def api_travel(request: Request, body: dict = Body(...)):
 @app.post("/api/password")
 def api_password(request: Request, body: dict = Body(...)):
     key = _account(request)
-    return {"message": change_password(key, body.get("old", ""), body.get("new", ""), body.get("again", ""))}
+    return {"message": change_password(
+        key, body.get("old", ""), body.get("new", ""), body.get("again", ""), request.cookies.get(COOKIE),
+    )}
 
 
 @app.get("/api/queue")
@@ -3518,6 +3778,7 @@ def main(argv: list[str] | None = None) -> None:
     start_web_push(CONTENT.config)  # 開關關著、沒裝 cryptography 什麼都不做：WEB_PUSH 是 None
     print(narration_line(CONTENT.config), flush=True)
     start_narration(CONTENT.config)  # 減法季的開關關著只建小檔、不開執行緒
+    start_tales(CONTENT.config)  # 戰記：小檔一定建，執行緒照樣開（叫不動模型就寫模板版）
     if args.lan:
         print("已開放區網連線：同一個網路裡的裝置都連得到。", flush=True)
     # timeout_graceful_shutdown：uvicorn 關機時會等進行中的回應收完，而 SSE 串流永遠不會自己收完，Ctrl+C 一下就卡住

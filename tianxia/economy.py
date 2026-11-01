@@ -332,13 +332,13 @@ def add_armament(world: WorldState, faction: str, attribute: str, points: int) -
 
 
 def donate_target(content: Content, world: WorldState, faction: str, loc_id: str) -> tuple[str, int] | None:
-    """捐軍備推哪一條線、往哪個方向（第六節第 2 點）：豪強（目標是割據的陣營）推割據；其餘推大本營所在那一條戰線
+    """捐軍備推哪一條線、往哪個方向（第六節第 2 點）：推大本營所在那一條戰線
     （territory.line_of；不在戰線上的投靠點照所在大區的戰線，rules.front_of），往自己陣營的目標方向。鍵照 rules.resolve_trend 換過
-    （規則關著的季三條戰線都是黃巾聲勢、沒有割據）；推不了是 None。"""
+    （規則關著的季三條戰線都是黃巾聲勢）；推不了是 None（faction 是那一邊：豪強分屬兩軍時是依附那一軍）。"""
     found = content.scenario.find_faction(faction)
     if found is None:
         return None
-    key = rules.GEJU if found.goals.get(rules.GEJU, 0) > 0 else (territory.line_of(content, loc_id) or rules.front_of(content, loc_id))
+    key = territory.line_of(content, loc_id) or rules.front_of(content, loc_id)
     if key is None:
         return None
     target = rules.resolve_trend(content, world, key, loc_id)

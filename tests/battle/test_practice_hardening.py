@@ -123,26 +123,6 @@ def test_a_missed_chance_leaves_a_soft_hint(kicker, hard, world):
     assert kicker.player.art_quality["旋風腿"] == "上品"
 
 
-@pytest.mark.parametrize(("ratio", "level", "slots"), [
-    (0.29, 10, BASICS), (0.5, 9, BASICS),
-])
-def test_no_chance_without_a_hard_enough_fight_and_ten_levels(kicker, hard, world, ratio, level, slots):
-    _worn(kicker, level=level, slots=slots)
-    assert cultivation.seize(kicker, hard, world, ratio, WIN) == []
-    assert kicker.player.art_quality["旋風腿"] == "上品"
-
-
-def test_the_breakthrough_chance_grows_with_how_hard_the_fight_was(kicker, hard, world):
-    """機會＝25% ×（難度比 ÷ 0.5）× 悟性，夾在 1～60：難度比 0.3 是 15%、0.5 是 25%、1.0 是 50%。"""
-    for ratio, odds in ((0.3, 15), (0.5, 25), (1.0, 50), (3.0, 60)):
-        _worn(kicker)
-        kicker.player.naming = None
-        assert cultivation.seize(kicker, hard, world, ratio, Fixed((odds - 0.01) / 100))[0].startswith("這一戰")
-        _worn(kicker)
-        kicker.player.naming = None
-        assert cultivation.seize(kicker, hard, world, ratio, Fixed((odds + 0.01) / 100))[0].startswith("打到緊處")
-
-
 def test_the_pill_forces_the_last_step_from_the_practice_room_only_when_ticked(kicker, hard, world):
     at(kicker, 10)
     kicker.player.legend_items = 2

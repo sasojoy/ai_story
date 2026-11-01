@@ -69,6 +69,7 @@ def test_every_general_trait_has_an_ultimate_with_a_bond():
         assert "{" not in tactics.card_text(trait.ultimate, traits.ULTIMATE_TITLE)
 
 
+@pytest.mark.smoke
 def test_only_a_self_made_mastered_art_gets_an_ultimate_named_after_it():
     content = real_content()
     game = _game(content)

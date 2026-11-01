@@ -13,6 +13,7 @@ import fake_ollama  # noqa: E402
 import load_common  # noqa: E402
 
 
+@pytest.mark.smoke
 def test_percentiles_handle_empty_one_and_many():
     """樣本空的、只有一筆：不丟例外（Review Focus 5）。"""
     assert load_common.percentiles([]) == {"count": 0, "p50": None, "p95": None, "p99": None, "max": None}

@@ -1,16 +1,13 @@
 """減法季三道閘的引擎接線（減法季整合設計 4.2；主機側計畫 Task 2-4）：遭遇拍那一場的經驗、心得、銀兩乘疲勞（今天第幾場）與對手的檔；
-45 級以後只有打出來的經驗算（不是仗的換心得，跨過 45 的那一截也是）。純規則在 tests/test_drill_gates.py。用正式內容（season21），整個檔標 slow。"""
+45 級以後只有打出來的經驗算（不是仗的換心得，跨過 45 的那一截也是）。純規則在 tests/test_drill_gates.py。用正式內容（season21）（以前整個檔標 slow，2026-10-31 起只有超過一秒的那幾條標）。"""
 from __future__ import annotations
 
 from unittest import mock
 
-import pytest
 from jianfa_kit import jianfa_game, plain_game, ready
 
 from tianxia import explore_one, team
 from tianxia.encounter import EncounterResult
-
-pytestmark = pytest.mark.slow
 
 
 def _fight(tier: str = "大勝"):

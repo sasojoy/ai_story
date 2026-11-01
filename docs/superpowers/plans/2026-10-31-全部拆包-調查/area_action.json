@@ -1,0 +1,1208 @@
+{
+ "area": "action",
+ "base": "develop 5fccb11a（工作樹 splitwt）",
+ "assign": {
+  "features/sortie": {
+   "game_methods": [
+    "sorties_left",
+    "_sortie_foes",
+    "_sortie_mode",
+    "sortie_mode",
+    "sortie_progress",
+    "_melee_record",
+    "_sortie_option",
+    "_sortie",
+    "_sortie_rewards",
+    "_sortie_host",
+    "_sortie_hold",
+    "_sortie_line",
+    "_train_title",
+    "duel_on",
+    "answers_left",
+    "_duel_power_of",
+    "_duel_power",
+    "_duel_region",
+    "duel_convoy_here",
+    "_duel_squad",
+    "sortie_go_problem",
+    "_duel_option",
+    "_duel_line",
+    "_duel_entry",
+    "_duel_choice",
+    "_duel_who",
+    "sortie_go",
+    "sortie_answer",
+    "_duel_join_extra",
+    "sortie_join",
+    "_duel_mine",
+    "sortie_cards",
+    "_duel_amount",
+    "_duel_loot",
+    "sortie_card",
+    "_duel_candidates_for",
+    "_sortie_duel_tick",
+    "sortie_duel_tick",
+    "_duel_party",
+    "_settle_duel",
+    "_duel_void",
+    "_duel_result",
+    "_duel_move",
+    "_duel_toll",
+    "_duel_hold_gains",
+    "_duel_report",
+    "_duty_credit",
+    "_train_option",
+    "_train_note",
+    "_train_line",
+    "_train",
+    "_train_squad_ids",
+    "_big_trip",
+    "_train_pick",
+    "_drill",
+    "_drill_push",
+    "drill_scale",
+    "_duty_option",
+    "_duty"
+   ],
+   "modules": [
+    "tianxia/sortie.py",
+    "tianxia/sortie_duel.py",
+    "tianxia/features/sortie/__init__.py",
+    "tianxia/features/sortie/rules.py",
+    "tianxia/features/sortie/actions.py"
+   ],
+   "routes": [],
+   "do_ops": [
+    "MAIN_ACTIONS:sortie_go",
+    "MAIN_ACTIONS:sortie_answer",
+    "MAIN_ACTIONS:sortie_join"
+   ],
+   "server_funcs": [
+    "_moves",
+    "may_judge_fight（認 act:train，留殼）",
+    "main_view 的 sortie／front／sortie_card／sorties 四個鍵",
+    "current_notices（world.sortie_duels()）"
+   ],
+   "app_js": [
+    "sortieMove",
+    "sortieSend",
+    "sortieDo",
+    "sortieTravel",
+    "fitDuelRow"
+   ],
+   "other_js": [
+    "web/main.js: frontOpen frontReportHtml sortieCardOn sortieAnswering sxMine sxSide sxBlockLine sxBars sxDutyLine sxDutyBars sxGain sxKeep sxFold sxGo sxSeal sortiePanelHtml sxRank sxRow sortieDuelsHtml（actionBar 那一格與行動列常數留殼）"
+   ],
+   "bot_policy": [
+    "_train_value",
+    "_cannot_push",
+    "_sortie_win",
+    "_outmatched",
+    "_focus_hop",
+    "duel_play",
+    "_duel_value",
+    "score 的 act:train／act:duty 子分支（act: 不是包的前綴，第 11 批再收）",
+    "bot.duel_go",
+    "bot.duel_moves",
+    "bot_runner._duel_tick"
+   ],
+   "content": [
+    "content/events/train_aftermath.json（遊歷戰後事件池；照舊由核心的 events 載入，包只認領）"
+   ],
+   "tests": [
+    "tianxia/features/sortie/tests/test_sortie.py",
+    "tianxia/features/sortie/tests/test_sortie_report.py",
+    "tianxia/features/sortie/tests/test_sortie_rewards.py",
+    "tianxia/features/sortie/tests/test_sortie_season_carry.py",
+    "tests/acts/test_sortie_duel.py",
+    "tests/acts/test_sortie_duel_annals.py",
+    "tests/acts/test_sortie_duel_bots.py",
+    "tests/acts/test_sortie_duel_howto.py",
+    "tests/acts/test_sortie_duel_lean.py",
+    "tests/acts/test_sortie_duel_map.py",
+    "tests/acts/test_sortie_duel_rules.py",
+    "tests/acts/test_sortie_duel_scale.py",
+    "tests/acts/test_sortie_duel_tick.py",
+    "tests/acts/test_sortie_duel_words.py",
+    "tests/core/test_drill_push.py",
+    "tests/core/test_train_variety.py"
+   ],
+   "tests_mixed": [
+    "tests/acts/test_conquest_flip.py（混戰那一段）",
+    "tests/acts/test_econ_gather_sortie.py（一類一顆之前的出陣銀兩；另一半是三選一找素材）",
+    "tests/bots/test_bot_policy_conquest.py",
+    "tests/web/test_core_loop_web.py",
+    "tests/ranger/test_raid.py::test_a_melee_and_an_ambush_note_the_rivals_name_to_keep_too"
+   ]
+  },
+  "features/explore": {
+   "game_methods": [
+    "outing_go",
+    "_explore_ready",
+    "outing_view",
+    "outing_can_go",
+    "_outing_walk",
+    "_outing_trace",
+    "outing_say",
+    "outing_tale_request",
+    "outing_set_tale",
+    "outing_ink_left",
+    "admin_erase_inscription",
+    "_outing_watched",
+    "_explore_one",
+    "_outing_on",
+    "_outing_foe",
+    "_outing_weights",
+    "_outing_plan",
+    "outing_plan",
+    "_outing_option",
+    "_outing_fight",
+    "_outing_event",
+    "_outing_ledger",
+    "mostly_here",
+    "map_mostly",
+    "_standing_at",
+    "_fight_gate",
+    "fatigue_next",
+    "_explore",
+    "_explore_outcome",
+    "_explore_weights",
+    "_explore_can",
+    "_wild_foes",
+    "_here_squads",
+    "_home_gather",
+    "_sense_here",
+    "_boss_face",
+    "_practice_tier"
+   ],
+   "modules": [
+    "tianxia/outing.py",
+    "tianxia/explore_one.py"
+   ],
+   "routes": [],
+   "do_ops": [
+    "MAIN_ACTIONS:outing",
+    "ADMIN_ACTIONS:outing_erase",
+    "/api/do 特判:outing_say",
+    "/api/do 特判:outing_tale"
+   ],
+   "server_funcs": [
+    "outing_tale（鎖外三段式）",
+    "map_base_view 叫 map_mostly（輿圖那一側留殼）",
+    "_main_view_body 的 outing、mostly 鍵"
+   ],
+   "app_js": [],
+   "other_js": [
+    "web/outing.js（整個檔，45 個函式；已經是獨立的檔，宣告進包的 web）",
+    "app.js 的 outingSync／outingClick 是殼裡的行（不是頂層函式），留殼"
+   ],
+   "bot_policy": [
+    "_outing_score",
+    "take_turn 的「接著走」「挑段數出發」兩段",
+    "bot.outing_segments",
+    "bot.outing_say",
+    "bot.OUTING_WEIGHTS",
+    "score 的 act:explore 子分支（第 11 批收）"
+   ],
+   "content": [
+    "content/outing_lines.json",
+    "content/events/explore_jizhou.json",
+    "content/events/explore_luoyang.json",
+    "content/events/explore_nanyang.json",
+    "content/events/explore_runan.json",
+    "content/events/explore_yingchuan.json",
+    "content/events/explore_youzhou.json"
+   ],
+   "tests": [
+    "tests/acts/test_outing.py",
+    "tests/web/test_outing_web.py",
+    "tests/battle/test_explore_one.py",
+    "tests/battle/test_explore_one_2e.py",
+    "tests/battle/test_explore_one_fix.py",
+    "tests/battle/test_explore_one_polish.py",
+    "tests/battle/test_explore_one_single.py",
+    "tests/battle/test_drill_gates_engine.py",
+    "tests/core/test_explore_one_2f.py",
+    "tests/core/test_explore_one_rules.py",
+    "tests/battle/test_explore.py",
+    "tests/core/test_explore_variety.py"
+   ],
+   "tests_mixed": [
+    "tests/core/test_jianfa_switch.py（減法季開關本身，偏核心）",
+    "49 個把 act:explore 當萬用動作的測試檔（六包第 4 批風險）"
+   ]
+  },
+  "features/territory": {
+   "game_methods": [
+    "_letter_key",
+    "letter_problem",
+    "conquest_letter",
+    "_conquest_tick",
+    "_deliver_conquest",
+    "_xingshi_start",
+    "_xingshi_open",
+    "_xingshi_finish",
+    "_xingshi_grace",
+    "xingshi_waiting",
+    "release_xingshi",
+    "xingshi_request",
+    "settle_xingshi",
+    "xingshi_view",
+    "xingshi_mark",
+    "admin_xingshi_now",
+    "conquest_view",
+    "_siege_you",
+    "_region_name",
+    "_siege_live",
+    "_siege_join",
+    "_siege_margin",
+    "admin_conquest_set",
+    "admin_conquest_progress",
+    "admin_conquest_letter",
+    "admin_conquest_cancel",
+    "admin_conquest_choices"
+   ],
+   "modules": [
+    "tianxia/conquest_day.py",
+    "tianxia/xingshi.py"
+   ],
+   "routes": [
+    "/api/xingshi"
+   ],
+   "do_ops": [
+    "MAIN_ACTIONS:conquest_letter",
+    "ADMIN_ACTIONS:conquest_set",
+    "ADMIN_ACTIONS:conquest_progress",
+    "ADMIN_ACTIONS:admin_conquest_letter",
+    "ADMIN_ACTIONS:conquest_cancel",
+    "ADMIN_ACTIONS:xingshi_now"
+   ],
+   "server_funcs": [
+    "_xingshi_waiting",
+    "write_xingshi",
+    "xingshi_once（鎖外三段式）",
+    "XINGSHI_RUNNING",
+    "admin_choices 叫 admin_conquest_choices",
+    "_main_view_body 的 conquest、xingshi 鍵"
+   ],
+   "app_js": [
+    "xingshiParas",
+    "xingshiHtml",
+    "loadXingshi",
+    "conquestAdminHtml"
+   ],
+   "other_js": [
+    "web/map.js 畫地盤的那幾段歸輿圖（feature/map-view 在改），不進這一包"
+   ],
+   "bot_policy": [
+    "沒有自己的前綴；_toward_battle／_front_hop／_losing_front 讀地盤的留給戰鬥與大勢"
+   ],
+   "content": [
+    "content/xingshi_lines.json"
+   ],
+   "tests": [
+    "tests/acts/test_xingshi.py",
+    "tests/acts/test_xingshi_fb610_order.py",
+    "tests/acts/test_xingshi_fb646_mend.py",
+    "tests/core/test_marks_xingshi_once.py",
+    "tests/acts/test_fb883_admin_letter_ids.py",
+    "tests/web/test_conquest_web.py",
+    "tests/acts/test_conquest_bots.py"
+   ],
+   "tests_mixed": [
+    "tests/acts/test_conquest_siege.py（戰書、換天、救場在這一包；攻城戰本身在決戰包）"
+   ]
+  },
+  "features/stamina_plays": {
+   "game_methods": [
+    "_ambush_act",
+    "_ambush_expire",
+    "_ambush_check",
+    "_ambush_fight",
+    "_ambush_spoils",
+    "_ambush_record",
+    "_works_act"
+   ],
+   "modules": [
+    "tianxia/ambush.py",
+    "tianxia/works.py"
+   ],
+   "routes": [],
+   "do_ops": [],
+   "server_funcs": [],
+   "app_js": [],
+   "other_js": [],
+   "bot_policy": [
+    "_stamina_play（設伏、屯糧那兩樣；aid: 那一樣是大勢組的 figure_aid）",
+    "score 的 ambush:/works: 那一段（跟 aid: 同一行，要拆成兩段）",
+    "PLAY_CHANCE"
+   ],
+   "content": [],
+   "tests": [
+    "tests/acts/test_stamina_plays.py",
+    "tests/acts/test_stamina_plays_off.py"
+   ],
+   "tests_mixed": []
+  },
+  "features/travel": {
+   "game_methods": [
+    "_move_option",
+    "_back_way",
+    "_back_option",
+    "_road_task_options",
+    "set_move_mode",
+    "_move",
+    "_road",
+    "_road_ends",
+    "_road_rewards_used",
+    "_road_reward_due",
+    "_count_road_reward",
+    "_road_reopen",
+    "_road_think",
+    "_road_ask",
+    "_road_gather",
+    "_road_sight",
+    "_halt",
+    "travel",
+    "travel_refusal",
+    "_depart",
+    "_arrivals",
+    "_arrive",
+    "_real_minutes",
+    "_journey_line",
+    "place_minutes",
+    "_party_expires",
+    "_party",
+    "party_view",
+    "leave_party",
+    "_part_ways",
+    "_lead",
+    "_partners",
+    "_share_road",
+    "join_refusal",
+    "_join"
+   ],
+   "modules": [],
+   "routes": [
+    "/api/travel",
+    "/api/party/leave"
+   ],
+   "do_ops": [],
+   "server_funcs": [
+    "_locked 裡的 set_move_mode",
+    "_main_view_body 的 journey"
+   ],
+   "app_js": [
+    "setMoveMode",
+    "travel"
+   ],
+   "other_js": [
+    "web/main.js: routeGlowKey routeGlowOn revealShift revealMoveCard"
+   ],
+   "bot_policy": [
+    "score 的 move: 那一段（9 行）",
+    "take_turn 的 road:／act:halt 那幾行",
+    "next_hop（往哪裡走，懸賞、軍令、決戰都叫它，偏共用）"
+   ],
+   "content": [
+    "content/road_sights.json"
+   ],
+   "tests": [],
+   "tests_mixed": [
+    "移動沒有自己的測試檔：tests/core/test_engine.py、tests/map/test_atlas.py、tests/gear/test_mounts.py、tests/core/test_social.py（結伴）、tests/server/test_server.py 裡各有一段"
+   ]
+  },
+  "features/peers": {
+   "game_methods": [
+    "peers_here",
+    "_peer",
+    "peer_card",
+    "peer_request",
+    "peer_act",
+    "calls_here",
+    "_invite_options",
+    "_invite",
+    "answer_invite",
+    "answer_on_card",
+    "_greet_back",
+    "_tell_sender",
+    "_invite_status",
+    "gifts_left",
+    "gift_day_left",
+    "gift_day_tick",
+    "_spar_pair",
+    "_pair_left",
+    "_pair_tick",
+    "_shared_or_none",
+    "mingtie_face",
+    "mingtie_view",
+    "mingtie_screen",
+    "make_mingtie",
+    "mingtie_send_problem",
+    "mingtie_send",
+    "_mingtie_swap",
+    "report_mingtie",
+    "admin_mingtie_reports",
+    "admin_mingtie_remove",
+    "admin_mingtie_restore",
+    "_spar_problem",
+    "_spars_left",
+    "discusses_left",
+    "spar_refusal",
+    "spar_invite",
+    "_spar_answer_problem",
+    "_spar",
+    "_spar_record",
+    "discuss_items",
+    "_discuss_cost",
+    "discuss_refusal",
+    "discuss_invite",
+    "_discuss_partner",
+    "discuss_request",
+    "_discuss_forge",
+    "discuss_problem",
+    "discuss_invite_problem",
+    "discuss_item_problem",
+    "_discuss",
+    "raid_shown",
+    "raid_refusal",
+    "raid_odds",
+    "raid_targets",
+    "raid",
+    "raid_flee_odds",
+    "_raid_fled",
+    "_raid_spoils",
+    "_raid_record"
+   ],
+   "modules": [
+    "tianxia/social.py",
+    "tianxia/invites.py",
+    "tianxia/spar.py",
+    "tianxia/discuss.py",
+    "tianxia/mingtie.py",
+    "tianxia/mingtie_card.py",
+    "tianxia/raid.py"
+   ],
+   "routes": [
+    "/api/peer",
+    "/api/peer/act",
+    "/api/mingtie",
+    "/api/mingtie/{op}"
+   ],
+   "do_ops": [
+    "PLAYER_ADMIN_ACTIONS:mingtie_remove"
+   ],
+   "server_funcs": [
+    "prepare_peer（論武首創取名的鎖外 B 段）",
+    "screen_peer",
+    "admin_choices 叫 admin_mingtie_reports"
+   ],
+   "app_js": [
+    "mtSeal",
+    "mtCardHtml",
+    "mtZoomHtml",
+    "mtReport",
+    "loadMingtie",
+    "mingtieBoxHtml",
+    "mtEditOpen",
+    "mtPoints",
+    "mtEditHtml",
+    "mtEditRedraw",
+    "mtPadReady",
+    "mtSave",
+    "mingtieAdminHtml"
+   ],
+   "other_js": [
+    "web/main.js: hereHtml callPeers callsOpened openCalls socialHtml peerHtml peerRenownToggle peerRenownHtml peerActsHtml peerFocus applyPeer"
+   ],
+   "bot_policy": [
+    "_answer_invite",
+    "answer_call",
+    "_answer_discuss",
+    "DiscussJob",
+    "_raid",
+    "RAID_CHANCE",
+    "_make_card",
+    "_hand_card"
+   ],
+   "content": [
+    "content/mingtie.json"
+   ],
+   "tests": [
+    "tests/core/test_social.py",
+    "tests/battle/test_spar.py",
+    "tests/arts/test_discuss.py",
+    "tests/bots/test_mingtie.py",
+    "tests/ranger/test_raid.py",
+    "tests/core/test_presence_window.py"
+   ],
+   "tests_mixed": [
+    "tests/gear/test_tavern_seek_presence.py（酒肆查人照「此地還有」的窗口）"
+   ]
+  },
+  "features/bounties": {
+   "game_methods": [
+    "_bounty_options",
+    "_bounty",
+    "post_wanted",
+    "_raid_bounty"
+   ],
+   "modules": [
+    "tianxia/bounties.py",
+    "tianxia/wanted.py"
+   ],
+   "routes": [],
+   "do_ops": [],
+   "server_funcs": [],
+   "app_js": [
+    "boardHtml",
+    "paperHtml",
+    "boardUnpick",
+    "boardZoom",
+    "boardClose",
+    "boardLeave",
+    "boardHanded"
+   ],
+   "other_js": [
+    "web/main.js: bountiesHtml rewardChips"
+   ],
+   "bot_policy": [
+    "score 的 bounty: 那一段（7 行）",
+    "_takeable",
+    "_bounty_here",
+    "_bounty_hop",
+    "BOUNTY_SCORE／BOUNTY_MOVE_SCORE",
+    "bot.take_bounties",
+    "bounties.give_choice（整季機器人與假人共用）"
+   ],
+   "content": [],
+   "tests": [
+    "tests/ranger/test_bounties.py",
+    "tests/ranger/test_bounty_tags.py",
+    "tests/ranger/test_renown_prize.py",
+    "tests/ranger/test_renown_wanted.py",
+    "tests/bots/test_bounty_hand_in.py",
+    "tests/web/test_sanren_web.py"
+   ],
+   "tests_mixed": [
+    "tests/ranger/test_season21_daily.py（每天一批懸賞＋每天一道軍令）"
+   ]
+  },
+  "features/socialize": {
+   "game_methods": [
+    "_precise_social_option",
+    "_talkable",
+    "_why_not_talk",
+    "_meet_event",
+    "_fortune_free",
+    "_social_plan",
+    "_socialize_option",
+    "_socialize",
+    "_precise_socialize",
+    "_call",
+    "_figures_here",
+    "_can_meet",
+    "can_meet_figure",
+    "_fame_gap",
+    "_brush_off",
+    "_talks_used",
+    "_talks_left",
+    "_talks_reopen",
+    "_count_talk",
+    "_deep_interaction_target",
+    "_audience_hall",
+    "_socialize_figure",
+    "_audience_options",
+    "_talked_out_note",
+    "_audience_intro",
+    "_no_audience_line",
+    "socialize_starts_dialogue",
+    "socialize_is_futile",
+    "_talk_cap",
+    "_recruit",
+    "_recruit_one",
+    "_recruit_target",
+    "_recruit_targets",
+    "_recruitable_here",
+    "_fortune_gift",
+    "_deliver_fortune",
+    "_encounter"
+   ],
+   "modules": [],
+   "routes": [],
+   "do_ops": [],
+   "server_funcs": [],
+   "app_js": [],
+   "other_js": [],
+   "bot_policy": [
+    "score 的 call: 那一段（4 行）",
+    "score 的 act:socialize／act:call／act:recruit:* 子分支（第 11 批收）"
+   ],
+   "content": [
+    "content/events/social_nanyang_yingchuan.json",
+    "content/events/social_north.json",
+    "content/events/social_runan.json",
+    "content/events/recruit.json"
+   ],
+   "tests": [
+    "tests/figures/test_recruit_gate.py",
+    "tests/core/test_socialize_variety.py"
+   ],
+   "tests_mixed": [
+    "tests/core/test_precise_actions.py"
+   ]
+  },
+  "features/seclusion": {
+   "game_methods": [
+    "seclude",
+    "seclusion_refusal",
+    "_finish_seclusion"
+   ],
+   "modules": [],
+   "routes": [],
+   "do_ops": [
+    "MAIN_ACTIONS:seclude"
+   ],
+   "server_funcs": [],
+   "app_js": [],
+   "other_js": [],
+   "bot_policy": [],
+   "content": [],
+   "tests": [],
+   "tests_mixed": [
+    "閉關沒有自己的測試檔：tests/core/test_engine.py、tests/gear/test_treasures.py、tests/bots/test_stamina_refill.py 裡各有一段"
+   ]
+  },
+  "core": {
+   "game_methods": [
+    "_push_progress",
+    "_event_progress",
+    "_conquest_side",
+    "_at_own_base",
+    "pill_now",
+    "_pill_day",
+    "_day_of",
+    "pill_cap",
+    "_pill_card_bonus",
+    "pills_left_today",
+    "take_stamina_pill",
+    "_refill_stamina",
+    "_top_up_pills",
+    "_action_costs",
+    "_cost_option",
+    "_pill_find",
+    "_heal_option",
+    "_heal_msgs",
+    "heal",
+    "heal_button",
+    "_at_clinic_town",
+    "_spar_power",
+    "_spar_mirror",
+    "_raid_key",
+    "_drill_gains",
+    "_exp_changes",
+    "_drills_with",
+    "is_idle",
+    "_idle"
+   ],
+   "modules": [
+    "tianxia/territory.py",
+    "tianxia/conquest.py",
+    "tianxia/clinic.py",
+    "tianxia/ranger.py",
+    "tianxia/precise.py"
+   ],
+   "routes": [],
+   "do_ops": [
+    "MAIN_ACTIONS:pill",
+    "MENXIA_ACTIONS:heal"
+   ],
+   "server_funcs": [],
+   "app_js": [
+    "rangerHtml"
+   ],
+   "other_js": [],
+   "bot_policy": [
+    "_crippled",
+    "_clinic_score",
+    "bot.take_pill（先問 pills_left_today）"
+   ],
+   "content": [
+    "content/events/ranger.json（散人奇遇，照遊俠名號的階）"
+   ],
+   "tests": [
+    "tests/acts/test_conquest_rules.py",
+    "tests/acts/test_territory.py",
+    "tests/acts/test_territory_perks.py",
+    "tests/core/test_week7_conquest_numbers.py",
+    "tests/acts/test_clinic.py",
+    "tests/bots/test_pill_per_day.py",
+    "tests/bots/test_stamina_pill.py",
+    "tests/bots/test_stamina_refill.py",
+    "tests/ranger/test_ranger.py",
+    "tests/ranger/test_renown_ranger.py"
+   ],
+   "tests_mixed": [
+    "tests/acts/test_conquest_flip.py（97 條：翻地的純規則在核心的 conquest，接到出陣上的與混戰在出陣包）"
+   ]
+  },
+  "drop": {
+   "game_methods": [
+    "_explore_mode_options",
+    "_gather_branch_options",
+    "_seek_option",
+    "_practice_option",
+    "_boss_away",
+    "_practice_line",
+    "_nearest_practice",
+    "gather_text_request",
+    "gather_say",
+    "_explore_mode",
+    "_gather",
+    "_gather_say",
+    "_practice",
+    "_gather_foe",
+    "_gather_fight",
+    "_seek",
+    "_training_option",
+    "_town_drill"
+   ],
+   "modules": [
+    "tianxia/explore_modes.py",
+    "tianxia/gather_llm.py",
+    "tianxia/training.py（tier_of 與練功分級的字要先挪給 _practice_tier，見 unclear）"
+   ],
+   "routes": [],
+   "do_ops": [
+    "/api/do 特判:gather_text"
+   ],
+   "server_funcs": [
+    "gather_text（鎖外 B 段）",
+    "_main_view_body 的 training 鍵（main.training）"
+   ],
+   "app_js": [
+    "gatherSay"
+   ],
+   "other_js": [
+    "web/main.js: gatherWheel；ACT_CELLS 的 practice 格與 drill"
+   ],
+   "bot_policy": [
+    "score 的 explore: 那一段（27 行）",
+    "_gather_branch",
+    "_scarce_attributes",
+    "PRACTICE_SCORE",
+    "DRILL_SCORE",
+    "score 的 act:drill 子分支",
+    "bot.explore_choice 的三選一那一半",
+    "bot.pick 排除入口與「自己說」那幾行"
+   ],
+   "content": [
+    "content/gather_branches.json",
+    "content/profiles/weekend.json"
+   ],
+   "tests": [
+    "tests/acts/test_explore_modes.py",
+    "tests/acts/test_gather_branches.py",
+    "tests/acts/test_practice_spots.py",
+    "tests/acts/test_training.py",
+    "tests/web/test_gather_branches_web.py"
+   ],
+   "tests_mixed": [
+    "tests/acts/test_econ_gather_sortie.py（找素材那一半）"
+   ]
+  }
+ },
+ "batches": {
+  "features/sortie": [
+   {
+    "title": "六包第 1 批（已成包：Game 上留的 13 個一行委派）",
+    "methods": 13,
+    "lines": 28,
+    "game_methods": [
+     "sorties_left",
+     "_sortie_foes",
+     "_sortie_mode",
+     "sortie_mode",
+     "sortie_progress",
+     "_melee_record",
+     "_sortie_option",
+     "_sortie",
+     "_sortie_rewards",
+     "_sortie_host",
+     "_sortie_hold",
+     "_sortie_line",
+     "_train_title"
+    ]
+   },
+   {
+    "title": "六包第 2 批（出陣約戰）",
+    "methods": 34,
+    "lines": 683,
+    "game_methods": [
+     "duel_on",
+     "answers_left",
+     "_duel_power_of",
+     "_duel_power",
+     "_duel_region",
+     "duel_convoy_here",
+     "_duel_squad",
+     "sortie_go_problem",
+     "_duel_option",
+     "_duel_line",
+     "_duel_entry",
+     "_duel_choice",
+     "_duel_who",
+     "sortie_go",
+     "sortie_answer",
+     "_duel_join_extra",
+     "sortie_join",
+     "_duel_mine",
+     "sortie_cards",
+     "_duel_amount",
+     "_duel_loot",
+     "sortie_card",
+     "_duel_candidates_for",
+     "_sortie_duel_tick",
+     "sortie_duel_tick",
+     "_duel_party",
+     "_settle_duel",
+     "_duel_void",
+     "_duel_result",
+     "_duel_move",
+     "_duel_toll",
+     "_duel_hold_gains",
+     "_duel_report",
+     "_duty_credit"
+    ]
+   },
+   {
+    "title": "出陣-3：act:train 整格的另一半（序章雪恥＝舊遊歷、跟自己人操練）＋守勢行動 act:duty",
+    "methods": 12,
+    "lines": 178,
+    "game_methods": [
+     "_train_option",
+     "_train_note",
+     "_train_line",
+     "_train",
+     "_train_squad_ids",
+     "_big_trip",
+     "_train_pick",
+     "_drill",
+     "_drill_push",
+     "drill_scale",
+     "_duty_option",
+     "_duty"
+    ]
+   }
+  ],
+  "features/explore": [
+   {
+    "title": "六包第 3 批（走一趟）",
+    "methods": 12,
+    "lines": 200,
+    "game_methods": [
+     "outing_go",
+     "_explore_ready",
+     "outing_view",
+     "outing_can_go",
+     "_outing_walk",
+     "_outing_trace",
+     "outing_say",
+     "outing_tale_request",
+     "outing_set_tale",
+     "outing_ink_left",
+     "admin_erase_inscription",
+     "_outing_watched"
+    ]
+   },
+   {
+    "title": "六包第 4 批（探索一顆）",
+    "methods": 15,
+    "lines": 283,
+    "game_methods": [
+     "_explore_one",
+     "_outing_on",
+     "_outing_foe",
+     "_outing_weights",
+     "_outing_plan",
+     "outing_plan",
+     "_outing_option",
+     "_outing_fight",
+     "_outing_event",
+     "_outing_ledger",
+     "mostly_here",
+     "map_mostly",
+     "_standing_at",
+     "_fight_gate",
+     "fatigue_next"
+    ]
+   },
+   {
+    "title": "探索-3：序章的草廬四景與探索的底（三選一拿掉之後才做）",
+    "methods": 10,
+    "lines": 104,
+    "game_methods": [
+     "_explore",
+     "_explore_outcome",
+     "_explore_weights",
+     "_explore_can",
+     "_wild_foes",
+     "_here_squads",
+     "_home_gather",
+     "_sense_here",
+     "_boss_face",
+     "_practice_tier"
+    ]
+   }
+  ],
+  "features/territory": [
+   {
+    "title": "地盤-1：戰書、每天的鐘、〈天下形勢〉、地盤畫面與管理者救場",
+    "methods": 27,
+    "lines": 431,
+    "game_methods": [
+     "_letter_key",
+     "letter_problem",
+     "conquest_letter",
+     "_conquest_tick",
+     "_deliver_conquest",
+     "_xingshi_start",
+     "_xingshi_open",
+     "_xingshi_finish",
+     "_xingshi_grace",
+     "xingshi_waiting",
+     "release_xingshi",
+     "xingshi_request",
+     "settle_xingshi",
+     "xingshi_view",
+     "xingshi_mark",
+     "admin_xingshi_now",
+     "conquest_view",
+     "_siege_you",
+     "_region_name",
+     "_siege_live",
+     "_siege_join",
+     "_siege_margin",
+     "admin_conquest_set",
+     "admin_conquest_progress",
+     "admin_conquest_letter",
+     "admin_conquest_cancel",
+     "admin_conquest_choices"
+    ]
+   }
+  ],
+  "features/stamina_plays": [
+   {
+    "title": "體力玩法-1：設伏劫道、屯糧練兵",
+    "methods": 7,
+    "lines": 203,
+    "game_methods": [
+     "_ambush_act",
+     "_ambush_expire",
+     "_ambush_check",
+     "_ambush_fight",
+     "_ambush_spoils",
+     "_ambush_record",
+     "_works_act"
+    ]
+   }
+  ],
+  "features/travel": [
+   {
+    "title": "移動-1：移動選單、路上小事、喊停折返、前往",
+    "methods": 19,
+    "lines": 208,
+    "game_methods": [
+     "_move_option",
+     "_back_way",
+     "_back_option",
+     "_road_task_options",
+     "set_move_mode",
+     "_move",
+     "_road",
+     "_road_ends",
+     "_road_rewards_used",
+     "_road_reward_due",
+     "_count_road_reward",
+     "_road_reopen",
+     "_road_think",
+     "_road_ask",
+     "_road_gather",
+     "_road_sight",
+     "_halt",
+     "travel",
+     "travel_refusal"
+    ]
+   },
+   {
+    "title": "移動-2：出發與抵達的補算、在路上的字、結伴同行的路上那一半",
+    "methods": 16,
+    "lines": 319,
+    "game_methods": [
+     "_depart",
+     "_arrivals",
+     "_arrive",
+     "_real_minutes",
+     "_journey_line",
+     "place_minutes",
+     "_party_expires",
+     "_party",
+     "party_view",
+     "leave_party",
+     "_part_ways",
+     "_lead",
+     "_partners",
+     "_share_road",
+     "join_refusal",
+     "_join"
+    ]
+   }
+  ],
+  "features/peers": [
+   {
+    "title": "玩家互動-1：此地還有、玩家卡、邀請框、打招呼、贈物、名帖",
+    "methods": 31,
+    "lines": 365,
+    "game_methods": [
+     "peers_here",
+     "_peer",
+     "peer_card",
+     "peer_request",
+     "peer_act",
+     "calls_here",
+     "_invite_options",
+     "_invite",
+     "answer_invite",
+     "answer_on_card",
+     "_greet_back",
+     "_tell_sender",
+     "_invite_status",
+     "gifts_left",
+     "gift_day_left",
+     "gift_day_tick",
+     "_spar_pair",
+     "_pair_left",
+     "_pair_tick",
+     "_shared_or_none",
+     "mingtie_face",
+     "mingtie_view",
+     "mingtie_screen",
+     "make_mingtie",
+     "mingtie_send_problem",
+     "mingtie_send",
+     "_mingtie_swap",
+     "report_mingtie",
+     "admin_mingtie_reports",
+     "admin_mingtie_remove",
+     "admin_mingtie_restore"
+    ]
+   },
+   {
+    "title": "玩家互動-2：切磋、論武、截殺",
+    "methods": 28,
+    "lines": 435,
+    "game_methods": [
+     "_spar_problem",
+     "_spars_left",
+     "discusses_left",
+     "spar_refusal",
+     "spar_invite",
+     "_spar_answer_problem",
+     "_spar",
+     "_spar_record",
+     "discuss_items",
+     "_discuss_cost",
+     "discuss_refusal",
+     "discuss_invite",
+     "_discuss_partner",
+     "discuss_request",
+     "_discuss_forge",
+     "discuss_problem",
+     "discuss_invite_problem",
+     "discuss_item_problem",
+     "_discuss",
+     "raid_shown",
+     "raid_refusal",
+     "raid_odds",
+     "raid_targets",
+     "raid",
+     "raid_flee_odds",
+     "_raid_fled",
+     "_raid_spoils",
+     "_raid_record"
+    ]
+   }
+  ],
+  "features/bounties": [
+   {
+    "title": "懸賞-1：懸賞榜、求兵、通緝、人物託付（bounties.py 整個）",
+    "methods": 4,
+    "lines": 86,
+    "game_methods": [
+     "_bounty_options",
+     "_bounty",
+     "post_wanted",
+     "_raid_bounty"
+    ]
+   }
+  ],
+  "features/socialize": [
+   {
+    "title": "交友-1：交友、求見、招募的入口、門檻與次數",
+    "methods": 37,
+    "lines": 354,
+    "game_methods": [
+     "_precise_social_option",
+     "_talkable",
+     "_why_not_talk",
+     "_meet_event",
+     "_fortune_free",
+     "_social_plan",
+     "_socialize_option",
+     "_socialize",
+     "_precise_socialize",
+     "_call",
+     "_figures_here",
+     "_can_meet",
+     "can_meet_figure",
+     "_fame_gap",
+     "_brush_off",
+     "_talks_used",
+     "_talks_left",
+     "_talks_reopen",
+     "_count_talk",
+     "_deep_interaction_target",
+     "_audience_hall",
+     "_socialize_figure",
+     "_audience_options",
+     "_talked_out_note",
+     "_audience_intro",
+     "_no_audience_line",
+     "socialize_starts_dialogue",
+     "socialize_is_futile",
+     "_talk_cap",
+     "_recruit",
+     "_recruit_one",
+     "_recruit_target",
+     "_recruit_targets",
+     "_recruitable_here",
+     "_fortune_gift",
+     "_deliver_fortune",
+     "_encounter"
+    ]
+   }
+  ],
+  "features/seclusion": [
+   {
+    "title": "閉關-1",
+    "methods": 3,
+    "lines": 37,
+    "game_methods": [
+     "seclude",
+     "seclusion_refusal",
+     "_finish_seclusion"
+    ]
+   }
+  ]
+ }
+}

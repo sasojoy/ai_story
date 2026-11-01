@@ -1,0 +1,131 @@
+{
+ "summary": "先回答企劃者的問題「現在專案有用新的規範重新重構嗎」：開始了，只做到前兩步。新規範的第 0 階與第 1 階已經合進 develop：dd479c26、22e7ad0d 是 10/31 上午合的，含 slow 的整套 11597 條通過。develop 現在在 2322447b。商城、宴客兩包已經搬進 tianxia/features/。「主動搬六包」那一輪還沒開工，第一批（出陣）從 2322447b 開就行。計畫裡「等第 1 階合進 develop、dev/core-hooks-1 比 develop 多 30 筆」那段已經過時。\n\n我拿 develop 2322447b 用 ast 和實際指令把計畫逐條對過。大方向（一次一批、接縫留在原位、Game 上留一行委派）可行，但下面幾條照現在的寫法會直接紅、會撞，或驗不到：\n\n**會直接紅、會撞的（3 條）**\n1. **假人打分數**：一包一給選項前綴，假人分數就先問那一包（bot_policy.score 第 816 行）。第 7 批（探索三選一）、第 8 批（酒肆）卻把 bot_policy 裡探索、酒肆那兩段留在原位，那兩段就成了死碼：假人不再按探索的三顆，卡在酒肆裡也不出門。\n2. **第 6 批漏了核心的 content.py**：content.py 第 22 行在模組頂層 import explore_one，第 745 行也在模組層用它。核心不准 import 功能包，邊界測試會紅。第 10 批的 content.py 第 690 行 arena_crowd 也一樣。\n3. **埠撞了**：交接寫 8171～8174 正被 W1 的工作流程 D 佔著，下一個空的是 8175。\n\n**驗法的洞**\n- 前後位元組比對沒有固定亂數。伺服器每個請求都重建 Game，用的是不帶種子的系統亂數；第 1 階 QA 也記了「沒種子的世界亂數不同」。要先固定種子，再加一步「base 跑兩次要一樣」。\n- 第 1 批的假人比對只跑整季機器人，碰不到 bot_policy 裡出陣那幾段。相關的測試（test_bot_policy_conquest 全部、混戰那 10 條、test_core_loop_web 18 條裡 13 條）都是 slow，合併閘門跑不到。\n- 契約測試裡把欄位擺成別的值的小工具（_dirty）不會處理小數、字串和子模型。第 2 批就會踩到，不是計畫寫的第 8 批。\n- 兩條測試換掉 Game 的方法之後，走的是包裡面的路，計畫只照顧到一半。\n- 沒有「舊程式寫到一半、新程式接手」的驗法，正式上線時正好是這種情況。\n- 擋掉模型之後，出陣的大場面判讀那條路完全沒走到。\n\n**量的數字對不上**\n- 第 6 批漏了 explore_one 的兩個測試檔（共 107 條），探索包會超過手冊「改一包挑到 300 條以內」的上限，算起來約 400 條。\n- 服務清單漏列：第 1 批少 _duel_option、duel_on；第 6 批少 _sortie_host（等於探索包經 Game 叫出陣包）、五個三選一的方法，還有 _gate_scale、_drop_scale。\n- 核心直接碰包的地方被低估：光第 1 批就多 15 個方法、21 對呼叫要記例外。\n- 決戰第 4、5 批的切法逆著呼叫方向：「看」那 18 個方法要叫「打」那半的 20 個方法，第 4 批得把決戰自己的方法暫時列進核心服務清單。「打」那半有 74 個方法、1,148 行，一批做不完。\n\n**順序**：「走一趟 24 筆」改動裡，有 20 筆其實落在第 6 批（探索一顆，名字帶 outing 的那九個方法）。第 3 批只搬了冷的那一半，雲端也得分兩段停手。建議第 6 批緊接在第 3 批後面。\n\n**給 Joy 的話要改**：\n- 「別改 engine.py 裡的 outing_*」寫錯批次，那九個方法第 6 批才搬。\n- 第 1 題只問了第 3 批，第 6 批也要問。\n- 「server.py、bot_policy 幾乎不動」不對：第 9 批會改，第 7、8 批也會動 bot_policy。\n- 沒提 Joy 直推 main 的緊急修正：包搬走之後再改 main 上的舊位置，合回 develop 一定衝突。\n- 第 2 題說戰記「照排在最後」，可是十批裡沒有戰記。\n\n**沒有問題的部分**：\n- 鐵匠鋪那條線（feature/smithing-flow）在 engine 只碰 10 個方法，跟第 1～8 批要搬的沒有一個重疊。\n- 輿圖這一輪寫的程式（dev/map-view-w1）不碰 engine。\n- 開著的 PR 只有 #50。\n- 雲端分支 4oij8o、戰記那兩條都已經合進 develop。\n\n這些數字是用 scratchpad\\survey\\critic 裡的 links.py、hunks.py、battle.py、who_imports.py、patches.py 量的（完整路徑在第 9 條）；開過的工作樹都已經移除，主 clone 停在 main、沒有改動。",
+ "issues": [
+  {
+   "title": "第 7、8 批（還有第 10 批）一給包前綴，bot_policy.score 那一段就變死碼，假人行為會變",
+   "severity": "must-fix",
+   "evidence": "develop 2322447b 的 tianxia/bot_policy.py:816-818 是 `owned, value = features_core.bot_pick(game, option)`、`if owned: return value`，排在 `if kind == \"explore\":`（約 833 起，31 行）與 `if kind == \"tavern\": return 0.0 if arg == \"back\" else None`（874-875）之前。tianxia/core/features.py 的 owner_of 照 prefix 找包，Feature.bot_pick 預設回 None。計畫第 7 批把 prefix 改成 \"explore\"，卻寫「留在原位：bot_policy.score 探索那一段」；第 8 批 choose 吃 tavern:，但沒列 bot_pick，pm_decisions 第 8 條又寫「假人的程式這一輪不搬」。結果是 BotRunner 的假人永遠不按 explore:*、停在酒肆裡也按不到 tavern:back。",
+   "suggestion": "給前綴的那一批，把 score 那一段同時搬進包的 bots.py（照宴客 feast 的做法）；或讓包的 bot_pick 回頭叫 bot_policy 的舊函式（包 import 舊模組，註「# 過渡：待搬」）。第 7 批假人雜湊的比對照現在的寫法會直接紅。"
+  },
+  {
+   "title": "第 6 批漏了核心 content.py 頂層 import explore_one（第 10 批的 arena_crowd 同理）",
+   "severity": "must-fix",
+   "evidence": "scratchpad\\survey\\critic\\who_imports.py 的輸出：`explore_one 5 tianxia/content.py:22 tianxia/engine.py:36 tianxia/howto.py:19 tianxia/mapdata.py:14 tianxia/outing.py:26`。content.py:745 在模組層寫 `TRAVELER_TAG = explore_one.TRAVELER`，751-798 的兩個驗證（探索表、outing_lines 段落句子）用 explore_one.match／kind_of／LINE_KEYS／SAMPLE。content 在 tianxia/core/__init__.py 的 MODULES 裡；test_the_core_never_imports_a_feature_package_except_the_registry 會掃 CORE 模組，而 aliases() 會把舊名 explore_one 認成 explore 包，所以會紅。content.py:690 的 `from . import arena_crowd` 第 10 批也一樣。計畫第 6、10 批都沒提。",
+   "suggestion": "第 6 批把這兩個驗證改成 explore 包的 check_content（內容寫壞時錯誤先後會變，跟第 7 批一樣寫進風險），TRAVELER 這個常數搬進核心或包；第 10 批同樣把 check_arena_crowd 收進包。"
+  },
+  {
+   "title": "埠 8171～8174 正被 W1 的工作流程 D 佔著",
+   "severity": "must-fix",
+   "evidence": "develop 上的 docs/superpowers/handoff/2026-10-30-主機側交接.md 第 201 行：「下一個：FB-9080、埠 8175（10/31 下午：8171 W1 第二輪開發 w1c、8172 複驗 w1qa2、8173 審查 w1crev、8174 修 w1c2…）」；第 87 行寫工作流程 D 正在用它們。計畫 pm_decisions 第 1 條寫「埠從 8171 起」。",
+   "suggestion": "從 8175 起。PM 線（8150～8199）只剩 25 個，十批每批開發、審查、修、QA 要 3～4 個，會不夠；寫明伺服器停掉之後埠可以回收。"
+  },
+  {
+   "title": "前後位元組比對沒有固定亂數",
+   "severity": "should",
+   "evidence": "server.py:174/178/181 是 `Game.new(CONTENT, name)`、`Game(CONTENT, state)`，不傳 rng；engine.py:465 是 `self.rng = rng or random.Random()`。每個請求都重建 Game、用系統亂數，PYTHONHASHSEED 管不到。手冊第十五節第 1 階的實數寫「實機 QA…只有時刻與沒種子的世界亂數不同」；第 1 階的對照腳本沒進版控（計畫第五節只寫結果）。出陣「贏、輸、平各一次」、混戰、約戰結算都吃這顆亂數。",
+   "suggestion": "scripts/same_behavior.py 明寫把 tianxia.engine 的 random.Random（或 Game 的預設 rng）換成固定種子。除了「故意改一個字抓得到差別」，再加「base 跑兩次雜湊一樣」這一步，證明比對本身是穩的。"
+  },
+  {
+   "title": "契約測試 _dirty 擺不了小數、字串、子模型欄位：第 2 批就紅，不是第 8 批",
+   "severity": "should",
+   "evidence": "tests/core/test_contract_features.py 的 _dirty 只認 bool、int、list、set、dict，其餘一律 `raise AssertionError(...補 _dirty)`。state.py 的欄位型別：sortie_cooldown_until、answer_cooldown_until 是 `float | None`（806-807，第 2 批）；outing 是 `Outing | None`（869，第 3 批）；escort_pick 是 `str`（668，第 5 批）；outing_last 是 `str`（870，第 6 批）；hidden_until、tavern_guard_until、tavern_shield_until 是 `float`（847-850，第 8 批）。計畫只在第 8 批寫「契約測試的 _dirty 要認 float」。",
+   "suggestion": "第 2 批（第一個踩到的）就補 _dirty 的 float、str、Optional[子模型]。這是改核心測試，列進「測試不改」的例外。"
+  },
+  {
+   "title": "第 6 批漏兩個測試檔，探索包會超過 300 條",
+   "severity": "should",
+   "evidence": "在 develop 2322447b 跑 `scripts/test_for.py --list tianxia/explore_one.py`，挑到 14 個檔，其中有 core/test_explore_one_rules.py（collect 73 條，explore_one.py 的純規則測試）與 core/test_explore_one_2f.py（34 條，全 slow）。計畫第 6 批只列 test_explore_one、_2e、_fix、_polish、_single、test_drill_gates_engine。整包加起來：走一趟 33、探索一顆 92＋107、三選一 117，再加契約 12＋10、邊界 30，約 400 條；計畫寫「約 290，貼著 300」。",
+   "suggestion": "這兩個檔跟著搬。第 7 批之前就要決定：探索包拆兩包，或接受超過手冊第 2 階驗收的 300 條上限並寫進交接。"
+  },
+  {
+   "title": "測試換掉的 Game 方法，搬進包之後內部呼叫要經 ctx，計畫只顧一半",
+   "severity": "should",
+   "evidence": "scratchpad\\survey\\critic\\patches.py 的輸出：tests/battle/test_explore_one.py:191 `setattr(game, '_outing_plan')`，接著 `game.choose(\"act:explore\")`，期待 _explore_one（engine 5400 `plan = self._outing_plan(loc)`）用到換掉的版本；第 6 批兩個方法都進包，包裡直接叫就打不到。tests/core/test_explain.py:63 換掉 Game._explore_weights 之後，還呼叫 `game._explore()` 並斷言 battle_seq+1（engine 5059 `_explore` 裡 `self._explore_weights(loc)`）；計畫只寫「action_notes 照舊叫 self._explore_weights」。其餘 4 處（sorties_left、_battle_status、_apply_battle_outcome、_deliver_battle_results）是核心原位在叫，或計畫已經寫了。",
+   "suggestion": "第 6、7 批的派工單點名這兩條：包裡叫 _outing_plan、_explore_weights 一律寫 ctx.<名>，並列進服務清單的過渡段；不然就得改測試，要另外准。"
+  },
+  {
+   "title": "第 1 批的假人比對與合併閘門都碰不到 bot_policy 的出陣邏輯",
+   "severity": "should",
+   "evidence": "bot.play_season（bot.py 916）只用 bot.pick；bot.py 只有 3 處提到 sortie，bot_policy 有 7 處叫 sorties_left、sortie_mode、_sortie_foes、sortie_progress（_train_value、_focus_hop…）。collect 的數字：tests/bots/test_bot_policy_conquest.py 11 條全 slow（就是 patch Game.sorties_left 的那一檔），test_conquest_flip 124 條裡 10 條 slow，test_core_loop_web 18 條裡 13 條 slow。合併閘門是不含 slow 的整套，這些只剩每日整套會跑，那時已經合進 develop 了。",
+   "suggestion": "第 1 批照第 2 批的做法，加 BotRunner／take_turn 的雜湊比對；派工單明寫用 --slow 跑 test_bot_policy_conquest、test_conquest_flip、test_core_loop_web、test_econ_gather_sortie。"
+  },
+  {
+   "title": "服務清單漏列幾項（邊界測試會紅），其中有包經 Game 叫別的包",
+   "severity": "should",
+   "evidence": "在 develop 2322447b 跑 scratchpad\\survey\\critic\\links.py：第 1 批搬的方法用到 `_duel_option`、`duel_on`（_sortie_option 10304、sorties_left 10016 在叫；約戰第 2 批才搬），計畫第 1 批的清單沒有。第 6 批：_outing_foe 叫 `_sortie_host`（第 1 批已在出陣包＝探索包經 Game 叫出陣包）；_explore_one 叫 `_boss_face`、`_home_gather`、`_sense_here`，_outing_fight 叫 `_practice_tier`，_outing_foe 還叫 `_wild_foes`——這五個是第 7 批三選一的方法；`_gate_scale`、`_drop_scale`（engine 474-475 初始化、5498-5499 由 _outing_fight 寫、核心 _battle_rewards 11764/11783 讀）也沒列。第 1 批列的 `_outing_on` 第 6 批之後也變成出陣包經 Game 叫探索包。",
+   "suggestion": "第 1 批加 _duel_option、duel_on（過渡，第 2 批拿掉）。第 6 批把 _sortie_host、_outing_on 列成「跨包查詢服務」並寫主人；三選一那五個列過渡，並寫明第 7 批不做的話它們會永久掛在 Game 上；_gate_scale、_drop_scale 列寄放。"
+  },
+  {
+   "title": "決戰第 4、5 批的切法逆著呼叫方向，第 5 批太大",
+   "severity": "should",
+   "evidence": "scratchpad\\survey\\critic\\battle.py 用 battle 調查員的 pkgs2.json 量：計畫點名的 18 個「看」方法（567 行）叫「打」那一半的 20 個方法、共 31 處（_battle_for_me、_battle_now、_mutate_battle_of、_submit_battle_action、_free_agent、_definition_of、_watching_battle、_battle_text_check、_escort_home、_tale_battles、_gauge_of、_watch_line…）；反方向只有 _deliver_battle_results 一個。「打」那一半剩 74 個方法、1,148 行（計畫寫約 64 個、1,072 行），再加 generals 143 行、escorts 57 行，核心叫委派約 41 對。",
+   "suggestion": "第 4 批至少要把決戰自己的十來個方法暫列進核心服務清單（第 5 批再拿掉），計畫要寫出來；或把顯示用的葉子方法（_gauge_of、_watch_line、_round_wait…）跟著「看」一起搬。第 5 批再切成三小批：管理者＋攻城、集結＋投效＋escorts、推進結算＋generals。"
+  },
+  {
+   "title": "順序：走一趟熱的那一半排在第 6 批",
+   "severity": "should",
+   "evidence": "走一趟調查重算過：手冊「走一趟 24 筆」裡，只有 7 筆碰到第 3 批的 11 個方法，20 筆碰的是探索一顆名字帶 outing 的方法（_outing_fight 9 筆、_outing_plan 7 筆）。計畫把它們排在第 6 批，中間隔兩批決戰。第 3 批加的 GAME_DIRECT 3 處（_sense、_explore_one、_outing_fight）和服務 _beat、options、choose，第 6 批又要收回。另外 links.py 量到第 6 批的 map_base、map_state 會叫搬走的 map_mostly——那是輿圖用的方法，目前 dev/map-view-w1 沒碰 engine（hunks.py：0 個方法）。",
+   "suggestion": "第 6 批緊接第 3 批，決戰往後排：雲端只要停手一段連續的時間，「照改動頻率」的理由也才對得上。第 6 批開工前再查一次輿圖那條線有沒有碰 map_mostly。"
+  },
+  {
+   "title": "給 Joy 的話：有寫錯的、有缺的",
+   "severity": "should",
+   "evidence": "(a) 例子「搬走一趟的期間，別改 outing.py 和 engine.py 裡的 outing_*」：第 3 批只搬 outing_go 等 11 個，名字帶 outing 的那九個方法第 6 批才搬；第 1 題也只問第 3 批，熱的 _outing_fight、_outing_plan 在第 6 批沒問。(b)「server.py、web/、bot_policy 這一輪幾乎不動」：第 9 批要開 /api/do 玩家操作與「假人這一輪先問包」的掛鉤，server、bot_policy、bot_runner 都會改；第 7、8 批照第一條也要動 bot_policy。(c) 沒提 Joy 直推 main 的緊急修正：`git rev-list --count origin/main..origin/develop` = 72，包搬了之後在 main 上改舊位置，合回 develop 一定衝突。(d) 第 2 題寫「否：戰記照排在最後」，可是十批裡沒有戰記。(e)「第 1 階…合進 develop 之後」——已經合了（dd479c26）。(f) 雲端以前直接把 feature/jianfa 合進 develop（60565499、7a067b1a、4afdb0e2 的作者都是 Claude），這條路沒提到。",
+   "suggestion": "照上面改寫：第 1 題改成「第 3 批與第 6 批」兩段，列出確切的方法名；加一句「緊急修正碰到已經搬走的那一塊，推完告訴 PM 是哪個方法，PM 照抄進包」；提醒 Joy 要潤的字之後在 features/<包>/ 裡；戰記那一題配合批次表改寫。"
+  },
+  {
+   "title": "前提已經過時：第 1 階 10/31 上午就合進 develop 了",
+   "severity": "minor",
+   "evidence": "`git log --first-parent origin/develop`：dd479c26「Merge feature/core-hooks (development handbook stage 1…) into develop」、22e7ad0d「Stage 1 lands」、bddac53c「full suite with slow 11597」。develop 現在是 2322447b、engine.py 17,911 行；`git rev-list --count origin/dev/core-hooks-1..origin/develop` = 11、反方向 0。計畫第 1 批 waits_for 和 conflicts 第一段還寫「0893aaff，比 develop 多 30 筆」。行號也混用舊 develop（1465-1486）與 core-hooks 版（784/803）。",
+   "suggestion": "第 1 批直接從 2322447b 開，行號一律照它重量。"
+  },
+  {
+   "title": "核心直接碰包的量被低估，名詞也有用錯的地方",
+   "severity": "minor",
+   "evidence": "links.py：第 1 批搬完，Game 還有 15 個方法用到 `sortie` 這個模組名（_act、_everyday_options、action_notes、map_state、_map_foes、_squad_encounter、_train_squad_ids、_duty、_duty_option，加上 6 個約戰方法）。engine 的 `from . import (..., sortie, ...)` 一變成別名，邊界測試 game_links 就照本地名字把它們全算成 GAME_DIRECT；另有核心叫委派 21 對。六包（不含決戰）搬完：GAME_DIRECT 19 個方法（出陣 10、探索 6——含移動的 _arrive〔engine 12070 explore_modes.is_town〕、酒肆 8，有重疊）、核心叫委派 58 對；計畫第 9 批估的是 16＋14＋3＋10＋9＝52。第 1 批風險寫「_squad_encounter 回頭叫 _sortie_rewards，記進 GAME_DIRECT」——那是 GAME_DELEGATE_CALLERS。第 8 批的委派清單漏了 _tavern_options（menu 留原位，_everyday_options 還在叫它）。",
+   "suggestion": "每一批的「規模」寫出這兩個數，PM 才知道自己接受了多少例外；第 9 批照實數排；第 7 批的「留在原位」加上 _arrive。"
+  },
+  {
+   "title": "第 1 批的行為比對沒走到大場面判讀那條路",
+   "severity": "minor",
+   "evidence": "server.py:968-973 的 may_judge_fight 認 act:train，會走 prepare_fight 三段式（鎖外 fight_llm.judge）。計畫的環境是 patch ollama_client.from_config、擋 11434，沒有模型就只走一般的仗；計畫自己的風險第一條卻寫「act:train…大場面判讀都認它」。",
+   "suggestion": "用回固定判讀的假 client，跑一次 act:train 的大場面（第 4 批放手一搏就是用假模型）。"
+  },
+  {
+   "title": "舊程式寫到一半、新程式接手的情況沒驗",
+   "severity": "minor",
+   "evidence": "每一批的對照都是 base、head 各自從零跑。正式上線那一刻會有舊程式寫下、新程式接手的狀態：還在等人應戰的約戰（SharedWorldState.sorties）、走到一半的一趟（PlayerState.outing）、還沒結的殺手單（tavern_hits）、集結中的決戰。",
+   "suggestion": "每批加一步：base 跑到一半停下，head 開同一個資料庫接著跑完，再跟 base 從頭跑完的結果比（tianxia-dev 技能 FB-695「退回舊版」那一套的反方向）。"
+  },
+  {
+   "title": "偏離手冊第三節的地方沒記下來",
+   "severity": "minor",
+   "evidence": "3.8 寫「每一包的 bots.py…核心的 bot_runner 只問包、不再叫 Game 的私有方法」，計畫寫「假人的程式這一輪不搬」（第 1 階宴客是搬了的）。3.6 寫「一包的檔以包名開頭」，gather_branches.json、outing_lines.json 照舊不改。3.2 要求 README 寫設計稿是哪一份幾版，出陣有四份稿都沒有版本號（出陣調查）。3.10 寫的是「公開方法留一行委派」，第 1 批 13 個委派裡 9 個是私有的、第 8 批 17 個裡 11 個是私有的（先例只有 _mall_grant）。",
+   "suggestion": "寫進手冊第十五節，當成這一輪的過渡例外並記數；出陣的設計稿先合成一份有版本號的再派工。"
+  },
+  {
+   "title": "範圍超出企劃者點頭的六包，順序也改了",
+   "severity": "minor",
+   "evidence": "手冊第十五節（企劃者 10/31）：「出陣、走一趟、戰鬥、探索、約戰、酒肆…鐵匠鋪、輿圖等它們的線落地再搬」。計畫另外加了第 9 批（核心接縫，八種新掛鉤）與第 10 批（頭目戰＋擂台，不在手冊「戰鬥 20」那一群裡），約戰也挪到第 2 批；planner_questions 只問三選一要不要留。",
+   "suggestion": "給企劃者的題目加一題：第 9、10 批要不要排在這一輪、約戰提前可不可以（照記憶的規矩給是／否）。"
+  },
+  {
+   "title": "每一批都會動核心檔，開發中跑的測試不是「只跑一包」",
+   "severity": "minor",
+   "evidence": "`scripts/test_for.py --list --count tianxia/core/services.py` 的輸出：「tianxia/core/services.py：核心 → 核心測試＋煙霧」「一共：1517/1522」；改 registry.py、content.py、naming.py 一樣帶 16 個核心測試檔＋121 條煙霧。每一批都要改 services.py 和 registry.py；第 1 批改 content.py、第 3 批改 core/option.py 與 naming.py。",
+   "suggestion": "每批的 Task 1 一次改好服務清單、登記、別名與邊界名單（跑一次 1,517 條），之後的 Task 只碰包。計畫裡「改這一包挑到約 N 條」只適用 Task 1 以後。"
+  },
+  {
+   "title": "test_explain2 的斷言第 4 批就要改",
+   "severity": "minor",
+   "evidence": "tests/arts/test_explain2.py 266-283 是照檔名排序的名望來源清單。_file_showdown（engine 8792）、_showdown_pay（8902、8922）共三行，第 4 批會搬進 features/battle/，路徑與順序都要改；計畫只在第 8 批列了 test_explain2。",
+   "suggestion": "第 4 批列進「改斷言字的例外」；第 10 批的 _duel_finish、_arena_finish、_deliver_arena 也一樣。"
+  },
+  {
+   "title": "數字：import sortie 的測試檔是 7 個，不是 16 個",
+   "severity": "minor",
+   "evidence": "用 ast 數 tests 底下的 import：sortie 7 個檔、sortie_duel 8、explore_one 14、explore_modes 9、tavern 6、outing 1。計畫第 1 批寫「16 個測試檔 import 它」。",
+   "suggestion": "更正。結論不變，兩個舊名照樣要留別名。"
+  }
+ ]
+}

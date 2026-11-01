@@ -70,6 +70,7 @@ def test_the_map_detail_of_a_wild_place_lists_the_insight_exploring_teaches(cont
         assert len(names) >= 2 and f"這裡能悟：{'、'.join(names)}" in _detail(content, state, loc_id)
 
 
+@pytest.mark.smoke
 def test_every_scouted_real_place_lists_exactly_what_exploring_there_can_teach(content):
     from tianxia import insights
     from tianxia.atlas import is_known

@@ -12,6 +12,9 @@
 """
 from __future__ import annotations
 
+import re
+from typing import NamedTuple
+
 from . import zh
 from .ollama_client import OllamaClient
 
@@ -33,7 +36,31 @@ def _ask(client: OllamaClient | None, prompt: str) -> str:
         text = client.chat_text(messages, num_predict=FLAVOR_NUM_PREDICT)
     except Exception:
         return ""
-    return zh.to_traditional(text.strip().strip('「」"'))
+    return clean(text)
+
+
+FLAVOR_MIN, FLAVOR_MAX = 4, 60  # 提示要 15~40 字；太短的也收，只擋長段
+_BANNED = ("假人", "機器人", "遊戲", "系統", "玩家")
+
+
+def clean(raw: str) -> str:
+    """點綴那一句驗過才用（結果全服快取、每季都看同一句，寫壞了就一直壞）：轉繁體、去標記；
+    太長太短、換行、有數字、英文、不准出現的字就丟掉（回空字串，呼叫端整句省略、不寫快取）。"""
+    text = zh.to_traditional(str(raw or "")).strip().strip('「」"')
+    text = re.sub(r"[*#>`_]+", "", text).strip()
+    if (not (FLAVOR_MIN <= len(text) <= FLAVOR_MAX) or "\n" in text or re.search(r"[0-9０-９A-Za-z{}]", text)
+            or any(w in text for w in _BANNED)):
+        return ""
+    return text
+
+
+class FlavorJob(NamedTuple):
+    """一件江湖大事等著潤色（S-09）：鎖內觸發時記下（world._fire），伺服器在行動鎖外請模型（polish_world_event），
+    寫回時照 fire_id 存進全服快取、照 text 找到這一則紀錄換掉（Game.apply_flavor）。"""
+
+    fire_id: str
+    text: str
+    location: str | None = None  # 那件大事的地點：潤色好的那一句也進天下大事（Joy 2026-10-31 選「也進天下大事」），照原文的地點記
 
 
 def polish_world_event(client: OllamaClient | None, text: str) -> str:

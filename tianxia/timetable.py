@@ -436,7 +436,11 @@ def roll_chance(state: GameState, content: Content, event: TimetableEvent) -> fl
         p = event.base_chance if event.base_chance is not None else 0.5
     p = min(CHANCE_CEIL, max(CHANCE_FLOOR, p))
     w = state.world
-    mods = max(-EVENT_MODS_CAP, min(EVENT_MODS_CAP, w.event_mods.get(event.id, 0.0)))
+    from . import chapters  # noqa: PLC0415  章回主線 import storyline → rules → 這裡
+
+    # 章回主線做成的份量（chapters.roll_mod，自己夾在 ±chapter_roll_cap）跟伏筆、軍令合計仍夾在 ±0.20
+    total = w.event_mods.get(event.id, 0.0) + chapters.roll_mod(w, content, event)
+    mods = max(-EVENT_MODS_CAP, min(EVENT_MODS_CAP, total))
     return apply_mods(p, mods + w.event_bonus.get(event.id, 0.0))
 
 
@@ -534,7 +538,7 @@ def _pick_key(state: GameState, content: Content, event: TimetableEvent, lock: L
 
 
 def _push(state: GameState, content: Content, trend_id: str, delta: int) -> None:
-    """戰況移動。劇本沒有這條線（沒寫三條戰線的內容，例如測試夾具）就略過；真實內容的三條戰線與豪強割據都在，
+    """戰況移動。劇本沒有這條線（沒寫三條戰線的內容，例如測試夾具）就略過；真實內容的三條戰線都在，
     照 change_trend 推（時刻表只在第一季開關開著時結算，那時這些線才有值）；推動的文字不另外顯示，公告已經寫了。"""
     if any(t.id == trend_id for t in content.scenario.trends):
         change_trend(state, content, trend_id, delta)
@@ -587,7 +591,7 @@ def resolve(
     losers = [x.name for x in losing]  # 時間軸留名號（T9 的稱號）；公告寫 shown（一律名號；這一版之前匿名鎖定的是「某位少俠」）
     # 文字先填好再套效果：{官軍主將}、{人物:…} 指的是這件事發生「之前」的人（例：廣宗黃巾大勝，重挫的就是他）；
     # 人物效果落在誰身上也在這時定好——文字寫誰，效果就落在誰身上（FB-042），不因前一筆效果換了主將而改落到別人身上
-    # 公告的組法（伏筆文件 3.4、5.4）：具名的一段＋這一檔的結果（含 note 與人物的後話）＋搶輸的一筆＋豪強的一筆
+    # 公告的組法（伏筆文件 3.4、5.4）：具名的一段＋這一檔的結果（含 note 與人物的後話）＋搶輸的一筆（豪強第三方那一筆 2026-10-31 拿掉）
     text = _headline(state, content, event, outcome, lock) + fill_slots(state, content, event, outcome.note)
     loser_line = _loser_line(state, content, event, outcome, lock, [shown(x) for x in losing])
     chronicle = _chronicle(state, content, event, outcome, lock if named else None)
@@ -595,14 +599,6 @@ def resolve(
         (_target(state, content, event, key), change, fill_slots(state, content, event, change.note))
         for key, change in outcome.figures.items()
     ]
-    third = w.third_party.get(event.id, [])
-    third_names = "、".join(w.third_party_shown.get(event.id, {}).get(name, name) for name in third)
-    third_line = outcome.third_party_text or event.third_party_text
-    third_text = fill_slots(state, content, event, third_line).replace("{name}", third_names) if third and third_line else ""
-    third_chronicle = (  # 豪強另記一行（例：「{name} 取得新野」），不論誰贏；同樣先填好（FB-042 審查 I2）
-        fill_slots(state, content, event, event.third_party_chronicle).replace("{name}", third_names)
-        if third and event.third_party_chronicle else ""
-    )
     for trend_id, delta in outcome.trends.items():
         _push(state, content, trend_id, delta)
     for fid, change, note in effects:
@@ -614,18 +610,12 @@ def resolve(
         w.event_bonus[target] = w.event_bonus.get(target, 0.0) + mod
     add_world_flags(state, outcome.world_flags_add)
     text += loser_line
-    for _ in third:  # 豪強是第三方：不論誰贏，每個做完的名字各套一次自己的效果（伏筆文件 2.6）
-        for trend_id, delta in event.third_party_trends.items():
-            _push(state, content, trend_id, delta)
-    text += third_text
     w.timeline[event.id] = TimelineResult(
         key=full_key, time=w.time, locked_by=lock.name if named else None, losers=losers if named else [], text=text,
     )
     add_rumor(state, text, content=content, layer="world")
     if chronicle:
         add_chronicle(state, chronicle)
-    if third_chronicle:
-        add_chronicle(state, third_chronicle)
     return [f"【江湖大事】{text}"]
 
 

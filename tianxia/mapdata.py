@@ -1,6 +1,6 @@
 """輿圖升級的資料（docs/superpowers/specs/2026-10-15-輿圖升級-design.md 第九節）：
 - 底圖（base）：一張只有紙、大區、山河、路的 SVG（mapview.render_base），加上地點、路、大區的清單；伺服器照開放的地點（base_key）快取。
-- 疊層（state）：一份 JSON：每個地點此刻的控制方、勝算、出陣、分鐘、軍令懸賞……；戰線、割據、本週大事、今天去哪裡出陣、每一週的地盤。
+- 疊層（state）：一份 JSON：每個地點此刻的控制方、勝算、出陣、分鐘、軍令懸賞……；戰線、本週大事、今天去哪裡出陣、每一週的地盤。
 網頁照這兩份自己畫記號、抽屜與年表。純資料：不 import 網頁框架、不讀時鐘、不擲骰；要引擎才算得出來的（勝算、出陣、分鐘換算）由 Game 傳進來。"""
 from __future__ import annotations
 
@@ -139,10 +139,23 @@ def base(state: GameState, content: Content, mostly: dict[str, str] | None = Non
         "insight_kinds": {d.id: {"name": d.name, "attribute": d.attribute} for d in content.insights.values() if d.grant is None},
         "insight_layer": content.config.insight_strong.enabled and any(p["strong"] for p in places),
         "world": world(state, content),
+        "paint": paint(content),
     }
     if mostly is not None:
         out[VIEWER_MOSTLY] = True  # 名字旁整個是看的人的（含「有賞」）：網頁不再另判討伐；沒給的季這個鍵不存在，底圖一個字不變
     return out
+
+
+def paint(content: Content) -> dict:
+    """輿圖一張到底（企劃者 2026-10-30「可以 這樣改」）：網頁照這一份自己畫淡彩水墨的底圖（大區、河、山、林、山河名），烤成一張圖。
+    只是內容（content/map.json），跟人無關、跟底圖一起快取。"""
+    m = content.map
+    return {
+        "regions": [{"id": r.id, "points": r.points} for r in m.regions],
+        "rivers": [{"points": r.points, "width": list(r.width), "color": r.color} for r in m.rivers],
+        "terrain": [t.model_dump(exclude_none=True) for t in m.terrain],
+        "labels": [{"text": x.text, "x": x.x, "y": x.y} for x in m.labels],
+    }
 
 
 def ground_places(state: GameState, content: Content) -> list[str]:
@@ -443,7 +456,7 @@ def _rope_values(snap: TerritoryWeek, ropes: list[dict]) -> dict[str, int | None
 
 
 def _weeks(state: GameState, content: Content, now_week: int, ropes: list[dict]) -> list[dict]:
-    """每一週週末的地盤（版圖變化）：控制方、每根繩的值、割據、大事、這一週易手的地點。地盤關著或這一季還沒算過是空的；
+    """每一週週末的地盤（版圖變化）：控制方、每根繩的值、大事、這一週易手的地點。地盤關著或這一季還沒算過是空的；
     第一筆快照以前的週 control 是 None（中途上線、舊存檔）。"""
     w = state.world
     if not territory.on(content) or w.territory is None:
@@ -454,7 +467,7 @@ def _weeks(state: GameState, content: Content, now_week: int, ropes: list[dict])
         snap = territory.week_at(w, week)
         events = _titles(state, content, week, now_week)
         if snap is None:
-            out.append({"week": week, "control": None, "ropes": {}, "geju": None, "events": events, "changed": []})
+            out.append({"week": week, "control": None, "ropes": {}, "events": events, "changed": []})
             continue
         control = _held(w, content, snap.control)
         # 沒人佔↔有人佔也算易手（FB-632：開季中立的地第一次被佔下，同規則那一邊 conquest._announce 發天下大事；from／to 是 None＝沒人佔）。
@@ -463,7 +476,7 @@ def _weeks(state: GameState, content: Content, now_week: int, ropes: list[dict])
             {"id": loc, "from": before.get(loc), "to": control.get(loc)} for loc in [*control, *(x for x in before if x not in control)]
             if before.get(loc) != control.get(loc)
         ]
-        out.append({"week": week, "control": control, "ropes": _rope_values(snap, ropes), "geju": snap.geju,
+        out.append({"week": week, "control": control, "ropes": _rope_values(snap, ropes),
                     "events": events, "changed": changed})
         before = control
     return out
@@ -540,9 +553,9 @@ def state(
      "journey": None | {"to","to_name","minutes","next_name","x","y"}, "travel_block": None | {"reason","to_jianghu"},
      "places": {地點: {"control","kind","odds","sortie","armed","minutes","stamina","order","bounty","goal","news","people","services",
                        "price","squads","danger","flips","rich","yield"} ＋ 領地爭奪開著時區塊多 "tug","melee","cool","siege"（flip_marks）},
-     "ropes": [{"id","name","value","delta","beads": [{"id","threshold","control"}],"low","high"}], "geju", "geju_side", "events",
+     "ropes": [{"id","name","value","delta","beads": [{"id","threshold","control"}],"low","high"}], "events",
      "suggest": [{"id","sortie","why": [[字, 種類]],"minutes","score","lose"}], "chart": [{"name","spots"}],
-     "weeks": [{"week","control","ropes","geju","events","changed"}], "start": None | {地點: 開季那一刻的控制方}}"""
+     "weeks": [{"week","control","ropes","events","changed"}], "start": None | {地點: 開季那一刻的控制方}}"""
     s, c, w, p = state, content, state.world, state.player
     memo: dict[tuple[str, str | None], str] = {}
 
@@ -650,12 +663,10 @@ def state(
     return {
         "key": base_key(s, c, mostly), "now_week": now_week, "weeks_total": weeks_total, "season_one": rules.season_one(c, w),
         "territory": on, "faction": faction, "here": p.location, "stamina": int(p.stamina), "sorties_left": sorties_left,
-        # 會佔地的幾方（網頁的各佔幾處、圖例照它畫）：劇本的陣營，豪強分屬兩軍的季拿掉要依附的那一個（豪強不佔地）
+        # 會佔地的幾方（網頁的各佔幾處、圖例照它畫）：劇本的陣營，拿掉要依附的那一個（豪強分屬兩軍、不佔地）
         "sides": [f.id for f in c.scenario.factions if not (f.allies and rules.haoqiang_allied(c, w))],
         "journey": journey, "travel_block": None if block is None else {"reason": block.reason, "to_jianghu": block.to_jianghu},
         "places": places, "ropes": ropes,
-        "geju": rules.world_trend_value(w, c, rules.GEJU) if rules.trend_shown(c, w, rules.GEJU) else None,
-        "geju_side": territory.geju_side(c),  # 割據那一條曲線照誰的顏色（劇本裡推割據的那一方）
         "events": _titles(s, c, now_week, now_week), "suggest": suggest, "chart": chart,
         "start": _start_control(w, c) if on else None,
         "week": _week_place(s, c, faction, places),  # 本週要去的那一處（輿圖第一層，減法季整合設計第七章）

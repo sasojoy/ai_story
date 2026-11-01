@@ -5,6 +5,8 @@ from __future__ import annotations
 import random
 from unittest import mock
 
+import pytest
+
 from conftest import classic_rules, real_content
 from jianfa_kit import classic_explore
 from tianxia import engine as engine_mod
@@ -86,6 +88,7 @@ def test_explore_itself_only_points_at_the_three():
     assert game.state.player.stamina == stamina and len(game.state.journal) == journal
 
 
+@pytest.mark.smoke
 def test_gathering_in_the_wild_gives_a_first_tier_of_the_places_kind():
     game = _game(encounter_chance=0.0)
     before = _bag(game)

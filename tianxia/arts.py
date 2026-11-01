@@ -130,20 +130,6 @@ def skill_desc(content: Content, insight: Insight, strength: int, fx=None) -> st
     return g.desc.replace("{value}", traits_mod._value(g.hook, number)).replace("{extra}", traits_mod._value(g.hook, extra))
 
 
-def skill_weight(content: Content, insight: Insight, strength: int, fx=None) -> float:
-    """戰力裡這一招值多少（Config.arts 的三個權重 × 強度；高階與特別功效強度固定算 1）。給了 fx 照那一份的每一個效果加起來。"""
-    cfg = content.config.arts
-    if fx is not None:
-        total = cfg.special_weight if insight.secret_special else 0.0
-        total += sum(cfg.general_weight * min(MAX_STRENGTH, n) for n in fx.general.values())
-        return total + (cfg.high_weight if fx.grand else 0.0)
-    if insight.secret_special:
-        return cfg.special_weight
-    if is_compound(content, insight):
-        return cfg.high_weight
-    return cfg.general_weight * strength
-
-
 # ── 身上的樣子 ───────────────────────────────────────────
 
 
@@ -373,11 +359,6 @@ def slot_colors(state: GameState, content: Content, art: MartialArt) -> list[lis
 
 def affinity_text(art: MartialArt) -> str:
     return "、".join(art.affinity) if art.affinity else "兼容並蓄"
-
-
-def takes_text(affinity: str) -> str:
-    """「收快、陽的意境」；兼容並蓄寫「什麼意境都收」（不寫「收兼容並蓄的意境」）。待 joy 潤"""
-    return "什麼意境都收" if affinity == "兼容並蓄" else f"收{affinity}的意境"
 
 
 def slot_problem(

@@ -151,3 +151,13 @@ def test_a_plan_without_a_rate_is_not_silently_floored(talking):
 
 def test_the_prompt_keeps_condition_ids_out_of_ask(on, talking):
     assert "只能填在 condition，不能填在 ask" in talking._parley_prompt("mate")
+
+
+def test_the_two_other_versions_must_have_words_in_the_schema(wire):
+    """2026-10-31 主機實測：鍵強制要寫了，模型照樣把婉拒那一版回成空字串（5/5）。schema 上那兩版至少一個字；
+    模型真的回了空字串照舊當沒寫（引擎用固定句），不因此整輪作廢、也不重問。"""
+    wire["replies"] = [_reply(ask="", willing=50, condition="", narrative_terms="", narrative_no=" ")]
+    turn = companion_agent.generate_turn(OllamaClient(), [{"role": "user", "content": "談"}], parley.ASK_FIELDS)
+    props = wire["schemas"][0]["properties"]
+    assert props["narrative_no"]["minLength"] == 1 and props["narrative_terms"]["minLength"] == 1
+    assert turn.narrative_no is None and turn.narrative_terms is None and len(wire["schemas"]) == 1

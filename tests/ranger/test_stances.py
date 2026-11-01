@@ -13,8 +13,6 @@ from stances_kit import BOCAI, DAY, HOUR, HUANGFU, LUZHI, MON, at, real_game, st
 from tianxia import annals, companion_agent, conquest, figures, rules, stances
 from tianxia.state import GameState, PlayerState, QUIET_DEFAULTS, StanceNote, StanceOn, WorldState, new_game_state
 
-pytestmark = pytest.mark.slow  # 載正式內容、照伺服器開季
-
 
 def _def(content, fid, sid):
     return next(x for x in content.figures[fid].stances if x.id == sid)

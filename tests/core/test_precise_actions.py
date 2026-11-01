@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import random
 
+import pytest
+
 from conftest import real_content, renown_unscaled
 from jianfa_kit import classic_explore
 
@@ -98,6 +100,7 @@ def test_unstamped_season_still_fights_while_gathering():
 # ── Task 3：練功（2.5）──
 
 
+@pytest.mark.smoke
 def test_practice_always_fights_one_and_is_unlimited():
     game = _game(at="changshe")
     p = game.state.player

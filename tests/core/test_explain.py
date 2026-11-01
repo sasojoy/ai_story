@@ -307,10 +307,13 @@ def _code_strings(path):
 
 def test_no_player_visible_old_words_in_code():
     """玩家看得到的一律叫「情誼」（explain-1）：tianxia/、server.py 的字串（說明字串與交給模型的提示不算）、web/ 的字串（註解不算）
-    都不再寫「好感度」「交情」。content/ 不在這裡（事件文字歸 joy，見下一條）。"""
+    都不再寫「好感度」「交情」。content/ 不在這裡（事件文字歸 joy，見下一條）。
+    功能包（tianxia/features/<包>/*.py）一起掃：搬進包的字（出陣的混戰、出陣回報……）原本在 engine.py、sortie.py 裡被這一條守著
+    （dev/sortie-1 審查；同 tests/arts/test_explain2.py 的路徑例外）。"""
+    code = [*sorted((ROOT / "tianxia").glob("*.py")), *sorted((ROOT / "tianxia" / "features").glob("*/*.py")), ROOT / "server.py"]
     found = [
-        (path.name, line, text[:30])
-        for path in [*sorted((ROOT / "tianxia").glob("*.py")), ROOT / "server.py"]
+        (path.relative_to(ROOT).as_posix(), line, text[:30])
+        for path in code
         for line, text in _code_strings(path) if OLD_WORDS.search(text)
     ]
     for path in sorted((ROOT / "web").iterdir()):

@@ -28,10 +28,10 @@ def test_a_throw_the_harness_cannot_print_fails_at_once(mode):
     而且是請求自己的失敗（describe 寫得出它是什麼），不是掉進 harness 出錯的那條路（「webharness: …」）：
     describe 只剩 String() 的話會走到那條路，這裡就抓得到。"""
     started = time.monotonic()
-    done = webharness.node("throw Object.create(null);", timeout=20)
+    done = webharness.node("throw Object.create(null);", timeout=60)
     assert done.returncode == 1 and done.stderr
     assert "webharness:" not in done.stderr
-    assert time.monotonic() - started < 15
+    assert time.monotonic() - started < 40  # 逾時是 60 秒：遠早於逾時就回來（機器忙時開 node 也要幾秒，所以不卡太緊）
     assert webharness.node("process.stdout.write('next');").stdout == "next"  # 下一個請求照常
 
 
@@ -46,11 +46,11 @@ def test_a_throw_even_describe_cannot_handle_fails_at_once_and_clears_its_timers
     done = webharness.node(
         "setInterval(() => { Promise.reject(new Error('上一個請求留下的計時器')); }, 20);"
         f"throw {UNDESCRIBABLE};",
-        timeout=20,
+        timeout=60,
     )
     assert done.returncode != 0
-    assert time.monotonic() - started < 15
-    after = webharness.node("setTimeout(() => process.stdout.write('clean'), 200);", timeout=20)
+    assert time.monotonic() - started < 40  # 逾時是 60 秒：遠早於逾時就回來（機器忙時開 node 也要幾秒，所以不卡太緊）
+    after = webharness.node("setTimeout(() => process.stdout.write('clean'), 200);", timeout=60)
     assert (after.returncode, after.stdout) == (0, "clean"), after.stderr
 
 
@@ -58,9 +58,9 @@ def test_a_throw_whose_description_throws_itself_still_fails_at_once(mode):
     """更糟的：寫它的時候丟出來的還是它自己（讀任何屬性都丟出自己的 Proxy），describe 怎樣都寫不出來。harness 出錯的回覆
     （broken）自己接住、寫成「寫不出來的例外」，這個請求一樣馬上失敗（以前常駐的 node 會停在「忙」，之後每個請求都等到逾時）。"""
     started = time.monotonic()
-    done = webharness.node("const bad = new Proxy({}, { get() { throw bad; } }); throw bad;", timeout=20)
+    done = webharness.node("const bad = new Proxy({}, { get() { throw bad; } }); throw bad;", timeout=60)
     assert done.returncode != 0
-    assert time.monotonic() - started < 15
+    assert time.monotonic() - started < 40  # 逾時是 60 秒：遠早於逾時就回來（機器忙時開 node 也要幾秒，所以不卡太緊）
     assert webharness.node("process.stdout.write('next');").stdout == "next"
 
 
@@ -68,9 +68,9 @@ def test_a_bad_exit_code_at_the_end_fails_at_once(mode):
     """結束時才出錯（exitCode 轉不成數字）：等結束的那段非同步程式出錯也馬上失敗（它的 .catch），不是卡到逾時。
     各開一個 node 時，node 在設定 exitCode 的當下就不收，一樣以非 0 結束。"""
     started = time.monotonic()
-    done = webharness.node("process.exitCode = { valueOf() { throw new Error('不是數字'); } };", timeout=20)
+    done = webharness.node("process.exitCode = { valueOf() { throw new Error('不是數字'); } };", timeout=60)
     assert done.returncode != 0
-    assert time.monotonic() - started < 15
+    assert time.monotonic() - started < 40  # 逾時是 60 秒：遠早於逾時就回來（機器忙時開 node 也要幾秒，所以不卡太緊）
     assert webharness.node("process.stdout.write('next');").stdout == "next"
 
 
@@ -111,10 +111,10 @@ def test_clear_timeout_takes_the_numeric_id(mode):
         "const t = setTimeout(() => process.stdout.write('late'), 30000); clearTimeout(+t);"
         "const u = setInterval(() => process.stdout.write('tick'), 30000); clearInterval(+u);"
         "process.stdout.write('ok');",
-        timeout=20,
+        timeout=60,
     )
     assert (done.returncode, done.stdout) == (0, "ok")
-    assert time.monotonic() - started < 15
+    assert time.monotonic() - started < 40  # 逾時是 60 秒：遠早於逾時就回來（機器忙時開 node 也要幾秒，所以不卡太緊）
 
 
 def test_a_nonzero_exit_code_fails_the_request_and_stays_with_it(mode):

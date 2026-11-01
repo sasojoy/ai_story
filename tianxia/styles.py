@@ -48,7 +48,7 @@ def style_of(state: GameState, content: Content, world: WorldStateStore, squad: 
     """這一路對手的路數；不是大場面、或第一季沒開著是 None。"""
     if not rules.season_one(content, state.world) or not is_big(content, squad):
         return None
-    return pick(world.read().tianji, squad.id, content.config.styles.attributes)
+    return pick(world.tianji(), squad.id, content.config.styles.attributes)
 
 
 def factor(content: Content, style: Style | None, attribute: str | None) -> float:

@@ -197,12 +197,14 @@ def one_of(content: Content, kinds: set[str], tier: int, rng: random.Random) -> 
 
 def gather_finds(
     content: Content, loc: Location, rng: random.Random, sure: bool = False, attributes: list[str] | None = None,
+    boost: float = 1.0,
 ) -> list[str]:
     """找素材撿到的素材 id（設計 3.1 的表）：屬性照這裡寫的素材（Location.materials），沒寫就從同階全部挑；城鎮 town_chance 一個一階；
     其餘一個一階（素材與經濟設計第七節：Config.economy.gather_cut 開著時是 gather_first_chance〔七成〕，關著一定給、不擲骰），
     照危險度 second_tier 的機會再一個二階。三階不從這裡來。
     sure（一類一顆，正式季整合 2.4）：一定給——城鎮一定一個一階、城外一定一個一階（不擲 town_chance、gather_first_chance），二階照舊。
-    attributes（找素材分支，第 32 項）：給了就拿它當屬性的池子，數量的規則一個字不變；沒給（None）跟以前一模一樣。"""
+    attributes（找素材分支，第 32 項）：給了就拿它當屬性的池子，數量的規則一個字不變；沒給（None）跟以前一模一樣。
+    boost：走一趟的稀有倍數（outing.rare_boost），乘在二階那一顆的機會上。"""
     cfg = content.config.explore_modes
     econ = content.config.economy
     if attributes:
@@ -217,7 +219,7 @@ def gather_finds(
         found = [one(1)] if sure or rng.random() < cfg.town_chance else []
     else:
         found = [one(1)] if sure or not econ.gather_cut or rng.random() < econ.gather_first_chance else []
-        if rng.random() < cfg.second_tier.get(loc.danger, 0.0):
+        if rng.random() < cfg.second_tier.get(loc.danger, 0.0) * boost:
             found.append(one(2))
     return [mid for mid in found if mid is not None]
 

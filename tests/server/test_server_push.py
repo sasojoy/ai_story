@@ -81,14 +81,12 @@ def _order(**kw):
 
 
 def test_fingerprint_ignores_time_locks_and_hidden_things():
-    """時間、鎖定、搶輸、豪強、隱藏的大勢線、陣營軍情都不算（伏筆鎖定看不出來，Review Focus 1）。"""
+    """時間、鎖定、搶輸、隱藏的大勢線、陣營軍情都不算（伏筆鎖定看不出來，Review Focus 1）。"""
     s = _season()
     base = _fp(s)
     s.time += 3600
     s.locks["changshe_fire"] = Lock(side="guan", name="甲", time=1.0)
     s.lock_losers["changshe_fire"] = [Lock(side="huang", name="乙", time=2.0)]
-    s.third_party["changshe_fire"] = ["丙"]
-    s.third_party_shown["changshe_fire"] = {"丙": "某位少俠"}
     s.trends["hidden"] = 9
     s.rumors.append(Rumor(time=1.0, text="陣營的事", id=5, layer="faction", faction="guan"))
     assert _fp(s) == base

@@ -9,6 +9,7 @@ US = [rounds.Fighter(name="沈浪", art="旋風腿", attribute="快")]
 THUG = rounds.Foe(name="山賊", attribute="剛", agility=6.0)
 
 
+@pytest.mark.smoke
 def test_split_adds_up_exactly():
     rng = random.Random(1)
     for total, parts in ((0, 3), (7, 4), (155, 5)):

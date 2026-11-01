@@ -14,6 +14,7 @@ from tianxia.world_state import fresh_season
 def c():
     content = real_content()
     content.config.jianfa.enabled = True
+    content.config.banned_names_on = True  # 專有名詞名單正式設定關著（Joy 2026-10-31），這裡驗開著時潤色照擋
     return content
 
 

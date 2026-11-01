@@ -99,7 +99,7 @@ Start-Process "C:\Users\User\AppData\Local\Programs\Ollama\ollama app.exe"
   - 啟動訊息在排程那一行下面會多一行 `推送：開（SSE；世界每 5 秒看一次，兩次通知至少隔 10 秒）`；關著時是 `推送：關（分頁每 10 秒輪詢）`。
   - 另外兩個數字可以不動：`push_watch_seconds`（看守每幾秒看一次世界，預設 5，要大於 0）、`push_world_min_seconds`（兩次「世界變了」的通知至少隔幾秒，也是各分頁收到之後隨機等多久才去抓，預設 10，0 是不限制）。想讓世界的變化更快出現，就把兩個都調小。**試玩建議 `push_watch_seconds` 寫 2、`push_world_min_seconds` 寫 2～3**（平均約 2.5 秒、最慢約 8 秒）；代價是同一時間更多人一起來問，所以 `push_world_min_seconds` 要大於等於開著的分頁數 ÷ 30（一百個分頁以內 2～3 秒；三百個分頁就是預設的 10 秒）。
   - **推送和排程請一起開**（兩個都加：`"push_events": true` 和 `"world_tick_seconds": 10`，排程見上一節）。看守只看世界、不推進世界；時間到了該結算的事（決戰回合與集結的期限、時刻表的大事），平常是排程或假人程式推進的。只開推送、排程關著、也沒有假人程式在跑（例如一兩個人的小型試玩）時，過了期限沒有人動作，就要等某個人的下一次輪詢才結算；推送開著時輪詢是每 60 秒一次（以前 10 秒），所以最多晚 60 秒才結算，結算之後世界的通知又晚 5～10 秒才到。排程開著，期限一到最多 10 秒內就結算，推送再把它送出去。有假人程式在跑時，假人每 20 秒一輪也會推進決戰，影響比較小，但兩個一起開還是對的。
-- 推送斷了（例如伺服器重開），網頁會自動回到每 10 秒問一次，不用做什麼；重開後要重新登入，登入之後推送再連上。
+- 推送斷了（例如伺服器重開），網頁會自動回到每 10 秒問一次，不用做什麼；重開後不必重新登入（登入狀態在資料庫，審查 S-10），推送自己再連上。
 - 怎麼知道連上了：網頁開發者工具（F12）的「網路」頁，會有一個叫 `events` 的請求一直開著（類型 eventsource），點進去每 15 秒一個 `ping`。推送連著的時候，`/api/main` 大約每 60 秒才出現一次，另外加上收到通知時的幾次。
 - 看不到的分頁（切到別的分頁、手機鎖屏）會自動放掉推送連線，回來的時候再連、補抓一次。
 - 看到伺服器視窗印「推送的看守這一下出錯：KeyError」這樣的話，請截圖回報。
@@ -398,6 +398,8 @@ powershell -ExecutionPolicy Bypass -File C:\Users\User\.claude\tianxia-wake.ps1 
 
 伺服器開著也可以備份。備份腳本用 SQLite 內建的線上備份，做出來的是一個獨立的 `.db` 檔，先驗過才放上去。備份先放在這台電腦的資料夾 `C:\Ray\tianxia-play\backup`，不上雲端（企劃者 2026-10-06 定）；之後要上雲，看下面「之後要上雲時怎麼改」。
 
+**封存檔**（2026-10-31，審查 S-12）：開下一季時，上上季的傳聞與決戰回合紀錄會搬到資料庫旁邊的 `tianxia-archive.sqlite`（跟著 `TIANXIA_DB` 換名字），遊戲本身不再讀它、是備用的。備份腳本只備份主檔，要留著封存的資料就把這個檔一起複製走（換季之後做一次就好，它只在換季時變）。
+
 **手動備份**：換程式、收季、出事之前做。手動備份永遠留著，不會被刪。
 
 ```powershell
@@ -660,6 +662,23 @@ $bots = Start-Process .venv\Scripts\python.exe -ArgumentList "-u","run_bots.py" 
 ```powershell
 Get-CimInstance Win32_Process -Filter "Name='cloudflared.exe'" | Where-Object CommandLine -match '127.0.0.1:7861' | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
 ```
+
+## 內測 develop（企劃者 2026-10-31：在這台主機跑；還沒開過）
+
+企劃者 10/31（開發規範手冊第十一節第 5 題）：之後內測 `develop` **在這台主機跑**——另一個資料庫、另一個埠，不碰線上那一份——先在上面開一次 21 天的季試玩。**對外網址、埠、叫不叫模型待定**：下面標【待定】的，第一次開之前 PM 先問企劃者，照他的答案填回這一節。以下是 PM 2026-10-31 寫的做法（規範盤點 G4），還沒實際跑過，第一次開的人照實改。
+
+- **程式**：一份只給內測用的 checkout，跟線上那一份、每日整套的 `.local/nightly/checkout` 都分開。先明確 fetch（`git -C C:\Ray\專案\天下大勢 fetch origin +refs/heads/develop:refs/remotes/origin/develop`），再 `git -C C:\Ray\專案\天下大勢 worktree add --detach .local\devtest\checkout <SHA>`。
+  - 只從 `origin/develop` 換，而且換到**每日整套綠的那一筆**（`.local/nightly/latest.txt` 寫的 SHA）：先備份資料庫（上面「怎麼備份資料庫」），再停伺服器、`git -C .local\devtest\checkout checkout --detach <SHA>`、重開。
+  - 季中換程式先看那幾批的〈退版風險〉（季中能不能換、要不要休季部署；`tianxia-flow`「照舊的規矩」）。
+- **資料庫與設定**：`TIANXIA_DB` 指到內測自己的檔（PM 建議 `C:\Ray\專案\天下大勢\.local\devtest\tianxia-dev.db`），`TIANXIA_PROFILE` 是 `season21`。啟動時印的「資料庫：…」「設定：…」與埠，一定要跟線上那一份不一樣。
+- **埠【待定】**：PM 建議 7862（線上是 7861；PM 線的子代理用 8150～8199）。開之前 `Get-NetTCPConnection -LocalPort <埠> -State Listen` 看一眼沒人佔著。
+- **叫不叫模型【待定】**：甲、照舊叫這台的 Ollama（跟線上搶顯卡；人物對話、隨口應對、取名都跟線上一樣）；乙、不叫：把 `content/profiles/season21.json` 抄一份到 `.local\devtest\season21-dev.json`、加一行 `"ollama_url": "http://127.0.0.1:9"`，`TIANXIA_PROFILE` 給它的絕對路徑（不寫 `.json`），模型的那幾處走固定句與退路。
+- **對外【待定】**：甲、只給區網（`--lan`）；乙、具名 Tunnel 另開一個子網域（改 Tunnel 是這台機器的持久設定：企劃者自己按，或同意 PM 改；做法照上面「固定網域」）。
+- **管理者**：`.local/admins.txt` 是照**程式所在那一份 checkout** 讀的（`tianxia/content.py` 的 `LOCAL_DIR`），內測的 checkout 底下沒有：抄一份到 `.local\devtest\checkout\.local\admins.txt`，或啟動前設 `TIANXIA_ADMINS`。開季在設定頁按「開季」（`season21` 是現實 21 天）。
+- **假人**：先不開 `run_bots.py`（照試玩的慣例；要開等企劃者說）。
+- **啟動與停止**：照上面「給 session 用：不開視窗的啟動與停止」，`-WorkingDirectory` 是內測的 checkout、log 寫在 `.local\devtest\`；記下 PID，停的時候 `taskkill /PID <PID> /T /F`。**不要動 7861 那一台**；`TIANXIA_PUBLIC_URL` 照對外那一條定的網址設（只給區網就不設）。
+- **回饋**：內測的回饋照 `試玩回饋.md` 那一串接著編，來源寫「內測」（`tianxia-flow`「回饋單號段」）。
+- **記錄**：開季、收季、換程式（哪一筆 SHA、幾點、資料庫路徑、埠）都記進交接第一節。
 
 ## 已知限制
 

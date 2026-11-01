@@ -10,7 +10,7 @@ from unittest import mock
 
 import pytest
 
-from conftest import classic_rules, idle_step, real_content
+from conftest import classic_rules, idle_step, no_territory, real_content
 from tianxia import bot_policy, calendar, encounter, figures, ranks, team
 from tianxia.content import ContentError, load_content, validate
 from tianxia.encounter import EncounterResult
@@ -33,7 +33,7 @@ def real():
 @pytest.fixture
 def on(real):
     real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 2
-    return real
+    return no_territory(real)  # 地盤不開（豪強分屬兩軍的開關拿掉之前，這一份本來就沒有地盤）
 
 
 def _game(content, name="甲", faction=None, at=None, world=None):
@@ -221,6 +221,7 @@ def test_haoqiang_summons_nearest_base(on):
     for name, at, base, base_name in (("甲", "qiao_county", "cao_manor", "曹氏莊院"),
                                       ("乙", "zhuo_county", "zhuo_militia_hall", "鄉里結社")):
         game = _game(on, name=name, faction="haoqiang", at=at)
+        game.state.player.ally = "guan"  # 豪強一律依附兩軍之一（豪強第三方 2026-10-31 拿掉）
         game.state.player.contrib = 300
         assert f"中山的馬商張世平、蘇雙到了{base_name}，指名要見你。" in idle_step(game), at
         assert (game.state.player.summons.location, game.state.player.summons.figure) == (base, None)

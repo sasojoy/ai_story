@@ -52,6 +52,7 @@ def test_effect_score_follows_the_faction_goal_and_likes_rewards():
     assert bot_policy.effect_score(effect, {"kou": -1}) == -19.0
 
 
+@pytest.mark.smoke
 def test_full_strength_always_picks_the_best_option(content, game):
     _install_factions(content)
     content.config.bot_strength = 1.0

@@ -1,0 +1,270 @@
+出陣包第 2 批（約戰）QA：BASE feature/sortie a8e1d57c 對 HEAD dev/sortie-2 28a11335，同一份快照、凍住的時鐘與亂數（serve.py），逐鏡比像素、DOM、看得到的元素的位置與算好的樣式；跑完的資料庫逐表比。
+== cmp-season21.txt
+﻿base 對 head：365 鏡，完全一樣 365 鏡
+== db-season21.txt
+﻿accounts: 一樣（31 列）
+action_counts: 一樣（31 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 不一樣（31 對 31 列）
+    -['寒渚', '寒渚', 0, 'guan', '{"player":{"name":"寒渚","location":"hilltop_wilds","stats":{"str":6,"agi":5,"con":6,"wis":5,"lore":5,"silver":80,"good":0,"evil":0,"fame":0,"xinde":20},"stamina":241.67777777777778,"flags":["開局:投軍","看過地圖"],"sect":null,"faction":"guan","pending_faction":null,"pending_defect":null,"ally":null,"pending_ally":null,"defected":false,"member":{"level":1,"exp":0,"neili":261.341666
+    +['寒渚', '寒渚', 0, 'guan', '{"player":{"name":"寒渚","location":"hilltop_wilds","stats":{"str":6,"agi":5,"con":6,"wis":5,"lore":5,"silver":80,"good":0,"evil":0,"fame":0,"xinde":20},"stamina":241.67777777777778,"flags":["看過地圖","開局:投軍"],"sect":null,"faction":"guan","pending_faction":null,"pending_defect":null,"ally":null,"pending_ally":null,"defected":false,"member":{"level":1,"exp":0,"neili":261.341666
+    -['槐巷', '槐巷', 0, 'guan', '{"player":{"name":"槐巷","location":"juma_river","stats":{"str":6,"agi":5,"con":6,"wis":5,"lore":5,"silver":80,"good":0,"evil":0,"fame":0,"xinde":20},"stamina":241.67777777777778,"flags":["開局:投軍","看過地圖"],"sect":null,"faction":"guan","pending_faction":null,"pending_defect":null,"ally":null,"pending_ally":null,"defected":false,"member":{"level":1,"exp":0,"neili":261.341666666
+    +['槐巷', '槐巷', 0, 'guan', '{"player":{"name":"槐巷","location":"juma_river","stats":{"str":6,"agi":5,"con":6,"wis":5,"lore":5,"silver":80,"good":0,"evil":0,"fame":0,"xinde":20},"stamina":241.67777777777778,"flags":["看過地圖","開局:投軍"],"sect":null,"faction":"guan","pending_faction":null,"pending_defect":null,"ally":null,"pending_ally":null,"defected":false,"member":{"level":1,"exp":0,"neili":261.341666666
+chronicle: 一樣（4 列）
+faction_rolls: 一樣（25 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（31 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumor_heard: 一樣（0 列）
+rumors: 一樣（21 列）
+seasons: 一樣（1 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 1
+== chardiff-season21.txt
+﻿寒渚 order-only .player.flags ["開局:投軍", "看過地圖"] → ["看過地圖", "開局:投軍"]
+槐巷 order-only .player.flags ["開局:投軍", "看過地圖"] → ["看過地圖", "開局:投軍"]
+kinds {'order-only': 2}
+== cmp-season21-bb.txt
+﻿d1280-72-h-result-top: 像素 5 處；DOM/字 一樣；樣式與位置 一樣；橫捲 [1265, 1280, 1265, 1280]
+d1280-72b-h-result-card: 像素 5 處；DOM/字 一樣；樣式與位置 一樣；橫捲 [1265, 1280, 1265, 1280]
+m320-16-post-sent: 像素 一樣；DOM/字 一樣；樣式與位置 2 行不同；橫捲 [320, 320, 320, 320]
+    sig -div.show|你在南陽郊野替官軍貼出約戰，封好三招：強攻、固守、奇襲。10 分鐘內對面的人可以|80,302,160,182|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|1|none|-apple-system, BlinkMacSystemFont, "Ping
+    sig +div|你在南陽郊野替官軍貼出約戰，封好三招：強攻、固守、奇襲。10 分鐘內對面的人可以|80,322,160,182|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|0|none|-apple-system, BlinkMacSystemFont, "Ping
+m320-23-p-sent: 像素 1 處；DOM/字 一樣；樣式與位置 2 行不同；橫捲 [320, 320, 320, 320]
+    sig -div.show|你在白馬津替官軍貼出約戰，封好三招：固守、固守、強攻。10 分鐘內對面的人可以來|80,302,160,182|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|1|none|-apple-system, BlinkMacSystemFont, "Ping
+    sig +div|你在白馬津替官軍貼出約戰，封好三招：固守、固守、強攻。10 分鐘內對面的人可以來|80,322,160,182|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|0|none|-apple-system, BlinkMacSystemFont, "Ping
+m320-32-j-joined: 像素 一樣；DOM/字 一樣；樣式與位置 2 行不同；橫捲 [320, 320, 320, 320]
+    sig -div.show|你跟雪舟同去南陽郊野，替官軍一起推這一塊（同去算集火）。窗滿就開打。|80,372,160,112|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|1|none|-apple-system, BlinkMacSystemFont, "Ping
+    sig +div|你跟雪舟同去南陽郊野，替官軍一起推這一塊（同去算集火）。窗滿就開打。|80,392,160,112|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|0|none|-apple-system, BlinkMacSystemFont, "Ping
+m375d-23-p-sent: 像素 一樣；DOM/字 一樣；樣式與位置 2 行不同；橫捲 [375, 375, 375, 375]
+    sig -div.show|你在荒丘替官軍貼出約戰，封好三招：固守、固守、強攻。10 分鐘內對面的人可以來應|94,593,188,135|14px|400|23.1px|rgb(22, 19, 15)|rgb(236, 227, 211)|none|rgb(22, 19, 15)|0px|12px|10px 16px|0px|block|none|1|none|-apple-system, BlinkMacSystemFont, "Ping
+    sig +div|你在荒丘替官軍貼出約戰，封好三招：固守、固守、強攻。10 分鐘內對面的人可以來應|94,613,188,135|14px|400|23.1px|rgb(22, 19, 15)|rgb(236, 227, 211)|none|rgb(22, 19, 15)|0px|12px|10px 16px|0px|block|none|0|none|-apple-system, BlinkMacSystemFont, "Ping
+m667-16-post-sent: 像素 1 處；DOM/字 一樣；樣式與位置 2 行不同；橫捲 [375, 375, 375, 375]
+    sig -div.show|你在淯水河畔替官軍貼出約戰，封好三招：強攻、固守、奇襲。10 分鐘內對面的人可以|94,424,188,159|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|1|none|-apple-system, BlinkMacSystemFont, "Ping
+    sig +div|你在淯水河畔替官軍貼出約戰，封好三招：強攻、固守、奇襲。10 分鐘內對面的人可以|94,444,188,159|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|0|none|-apple-system, BlinkMacSystemFont, "Ping
+m667-23-p-sent: 像素 1 處；DOM/字 一樣；樣式與位置 2 行不同；橫捲 [375, 375, 375, 375]
+    sig -div.show|你在汝南荒野替官軍貼出約戰，封好三招：固守、固守、強攻。10 分鐘內對面的人可以|94,424,188,159|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|1|none|-apple-system, BlinkMacSystemFont, "Ping
+    sig +div|你在汝南荒野替官軍貼出約戰，封好三招：固守、固守、強攻。10 分鐘內對面的人可以|94,444,188,159|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|0|none|-apple-system, BlinkMacSystemFont, "Ping
+m667-32-j-joined: 像素 一樣；DOM/字 一樣；樣式與位置 2 行不同；橫捲 [375, 375, 375, 375]
+    sig -div.show|你跟蒼梧同去淯水河畔，替官軍一起推這一塊（同去算集火）。窗滿就開打。|94,471,188,112|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|1|none|-apple-system, BlinkMacSystemFont, "Ping
+    sig +div|你跟蒼梧同去淯水河畔，替官軍一起推這一塊（同去算集火）。窗滿就開打。|94,491,188,112|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|0|none|-apple-system, BlinkMacSystemFont, "Ping
+base 對 base2：365 鏡，完全一樣 356 鏡
+== db-season21-bb.txt
+﻿accounts: 一樣（31 列）
+action_counts: 一樣（31 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 不一樣（31 對 31 列）
+    -['桑陌', '桑陌', 0, 'guan', '{"player":{"name":"桑陌","location":"runan_wilds","stats":{"str":6,"agi":5,"con":6,"wis":5,"lore":5,"silver":80,"good":0,"evil":0,"fame":0,"xinde":20},"stamina":241.67777777777778,"flags":["開局:投軍","看過地圖"],"sect":null,"faction":"guan","pending_faction":null,"pending_defect":null,"ally":null,"pending_ally":null,"defected":false,"member":{"level":1,"exp":0,"neili":261.34166666
+    +['桑陌', '桑陌', 0, 'guan', '{"player":{"name":"桑陌","location":"runan_wilds","stats":{"str":6,"agi":5,"con":6,"wis":5,"lore":5,"silver":80,"good":0,"evil":0,"fame":0,"xinde":20},"stamina":241.67777777777778,"flags":["看過地圖","開局:投軍"],"sect":null,"faction":"guan","pending_faction":null,"pending_defect":null,"ally":null,"pending_ally":null,"defected":false,"member":{"level":1,"exp":0,"neili":261.34166666
+chronicle: 一樣（4 列）
+faction_rolls: 一樣（25 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（31 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumor_heard: 一樣（0 列）
+rumors: 一樣（21 列）
+seasons: 一樣（1 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 1
+== chardiff-season21-bb.txt
+﻿桑陌 order-only .player.flags ["開局:投軍", "看過地圖"] → ["看過地圖", "開局:投軍"]
+kinds {'order-only': 1}
+== cmp-season21top.txt
+﻿m375d-32-j-joined: 像素 1 處；DOM/字 一樣；樣式與位置 2 行不同；橫捲 [375, 375, 375, 375]
+    sig -div|你跟青蘅同去南陽官道，替官軍一起推這一塊（同去算集火）。窗滿就開打。|94,636,188,112|14px|400|23.1px|rgb(22, 19, 15)|rgb(236, 227, 211)|none|rgb(22, 19, 15)|0px|12px|10px 16px|0px|block|none|0|none|-apple-system, BlinkMacSystemFont, "Ping
+    sig +div.show|你跟青蘅同去南陽官道，替官軍一起推這一塊（同去算集火）。窗滿就開打。|94,616,188,112|14px|400|23.1px|rgb(22, 19, 15)|rgb(236, 227, 211)|none|rgb(22, 19, 15)|0px|12px|10px 16px|0px|block|none|1|none|-apple-system, BlinkMacSystemFont, "Ping
+m375l-23-p-sent: 像素 一樣；DOM/字 一樣；樣式與位置 2 行不同；橫捲 [375, 375, 375, 375]
+    sig -div.show|你在拒馬河畔替官軍貼出約戰，封好三招：固守、固守、強攻。10 分鐘內對面的人可以|94,569,188,159|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|1|none|-apple-system, BlinkMacSystemFont, "Ping
+    sig +div|你在拒馬河畔替官軍貼出約戰，封好三招：固守、固守、強攻。10 分鐘內對面的人可以|94,589,188,159|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|0|none|-apple-system, BlinkMacSystemFont, "Ping
+m375l-32-j-joined: 像素 一樣；DOM/字 一樣；樣式與位置 2 行不同；橫捲 [375, 375, 375, 375]
+    sig -div|你跟墨川同去汝南荒野，替官軍一起推這一塊（同去算集火）。窗滿就開打。|94,636,188,112|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|0|none|-apple-system, BlinkMacSystemFont, "Ping
+    sig +div.show|你跟墨川同去汝南荒野，替官軍一起推這一塊（同去算集火）。窗滿就開打。|94,616,188,112|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|1|none|-apple-system, BlinkMacSystemFont, "Ping
+m375l-43-h-sent: 像素 一樣；DOM/字 一樣；樣式與位置 2 行不同；橫捲 [375, 375, 375, 375]
+    sig -div|你應下墨川在汝南荒野的約戰，替黃巾軍封好三招：奇襲、強攻、固守。窗滿就開打，打完|94,613,188,135|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|0|none|-apple-system, BlinkMacSystemFont, "Ping
+    sig +div.show|你應下墨川在汝南荒野的約戰，替黃巾軍封好三招：奇襲、強攻、固守。窗滿就開打，打完|94,593,188,135|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|1|none|-apple-system, BlinkMacSystemFont, "Ping
+base 對 head：146 鏡，完全一樣 142 鏡
+== db-season21top.txt
+﻿accounts: 一樣（31 列）
+action_counts: 一樣（31 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（31 列）
+chronicle: 一樣（4 列）
+faction_rolls: 一樣（25 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（31 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumor_heard: 一樣（0 列）
+rumors: 一樣（21 列）
+seasons: 一樣（1 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== cmp-week7.txt
+﻿base 對 head：105 鏡，完全一樣 105 鏡
+== db-week7.txt
+﻿accounts: 一樣（31 列）
+action_counts: 一樣（31 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（31 列）
+chronicle: 一樣（2 列）
+faction_rolls: 一樣（25 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（31 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（31 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumor_heard: 一樣（0 列）
+rumors: 一樣（10 列）
+seasons: 一樣（1 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== cmp-weekend.txt
+﻿m375d-13-attack-cancelled: 像素 一樣；DOM/字 一樣；樣式與位置 4 行不同；橫捲 [375, 375, 375, 375]
+    sig -span.where-at|第 1 週・週一 02:45|95,34,105,17|12px|400|19.8px|rgb(168, 155, 136)|rgba(0, 0, 0, 0)|none|rgb(168, 155, 136)|0px|0px|0px|0px|inline|none|1|none|-apple-system, BlinkMacSystemFont, "Ping
+    sig +span.where-at|第 1 週・週一 02:46|95,34,105,17|12px|400|19.8px|rgb(168, 155, 136)|rgba(0, 0, 0, 0)|none|rgb(168, 155, 136)|0px|0px|0px|0px|inline|none|1|none|-apple-system, BlinkMacSystemFont, "Ping
+    sig -span.time|第 1 週・週一 02:45|235,161,109,22|12.5px|400|21.875px|rgb(255, 255, 255)|rgba(0, 0, 0, 0)|none|rgb(255, 255, 255)|0px|0px|0px|0px 0px 0px 61.0156px|block|none|0.9|none|-apple-system, BlinkMacSystemFont, "Ping
+    sig +span.time|第 1 週・週一 02:46|235,161,109,22|12.5px|400|21.875px|rgb(255, 255, 255)|rgba(0, 0, 0, 0)|none|rgb(255, 255, 255)|0px|0px|0px|0px 0px 0px 61.0156px|block|none|0.9|none|-apple-system, BlinkMacSystemFont, "Ping
+base 對 head：111 鏡，完全一樣 110 鏡
+== db-weekend.txt
+﻿accounts: 一樣（31 列）
+action_counts: 一樣（31 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（31 列）
+chronicle: 一樣（1 列）
+faction_rolls: 一樣（25 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（31 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumor_heard: 一樣（0 列）
+rumors: 一樣（8 列）
+seasons: 一樣（1 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== cmp-none.txt
+﻿base 對 head：45 鏡，完全一樣 45 鏡
+== db-none.txt
+﻿accounts: 一樣（31 列）
+action_counts: 一樣（31 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（31 列）
+chronicle: 一樣（0 列）
+faction_rolls: 一樣（25 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（31 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（0 列）
+mall_purchases: 一樣（0 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumor_heard: 一樣（0 列）
+rumors: 一樣（1 列）
+seasons: 一樣（1 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== allogs.txt
+﻿none/base-log.json: 鏡 45；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 988 {200: 988}；失敗 0；問題記號 0
+   API: {'/api/me': 28, '/api/main': 25, '/api/login': 15, '/api/choose': 15, '/api/patch_notes': 1}
+none/head-log.json: 鏡 45；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 1021 {200: 1021}；失敗 0；問題記號 0
+   API: {'/api/me': 30, '/api/main': 25, '/api/login': 15, '/api/choose': 15, '/api/patch_notes': 1}
+season21/base-log.json: 鏡 365；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 6445 {200: 6445}；失敗 0；問題記號 5
+   API: {'/api/me': 115, '/api/events': 114, '/api/login': 50, '/api/main': 44, '/api/reports': 30, '/api/do/view_map': 14, '/api/map/state': 14, '/api/map/base': 14, '/api/do/sortie_go': 10, '/api/choose': 5, '/api/do/sortie_join': 5, '/api/do/letter_read': 5}
+    {"scene": "m375l-70b-j-result-card", "clickMissing": "#page .battle-card [data-act=\"rounds-more\"]", "idx": 0, "label": "展開過程", "err": null}
+    {"scene": "m375d-70b-j-result-card", "clickMissing": "#page .battle-card [data-act=\"rounds-more\"]", "idx": 0, "label": "展開過程", "err": null}
+    {"scene": "m320-70b-j-result-card", "clickMissing": "#page .battle-card [data-act=\"rounds-more\"]", "idx": 0, "label": "展開過程", "err": null}
+season21/base2-log.json: 鏡 365；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 6393 {200: 6393}；失敗 0；問題記號 5
+   API: {'/api/me': 113, '/api/events': 112, '/api/login': 50, '/api/main': 44, '/api/reports': 30, '/api/do/view_map': 14, '/api/map/state': 14, '/api/map/base': 14, '/api/do/sortie_go': 10, '/api/choose': 5, '/api/do/sortie_join': 5, '/api/do/letter_read': 5}
+    {"scene": "m375l-70b-j-result-card", "clickMissing": "#page .battle-card [data-act=\"rounds-more\"]", "idx": 0, "label": "展開過程", "err": null}
+    {"scene": "m375d-70b-j-result-card", "clickMissing": "#page .battle-card [data-act=\"rounds-more\"]", "idx": 0, "label": "展開過程", "err": null}
+    {"scene": "m320-70b-j-result-card", "clickMissing": "#page .battle-card [data-act=\"rounds-more\"]", "idx": 0, "label": "展開過程", "err": null}
+season21/head-log.json: 鏡 365；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 6444 {200: 6444}；失敗 0；問題記號 5
+   API: {'/api/me': 115, '/api/events': 114, '/api/login': 50, '/api/main': 44, '/api/reports': 30, '/api/do/view_map': 14, '/api/map/state': 14, '/api/map/base': 14, '/api/do/sortie_go': 10, '/api/choose': 5, '/api/do/sortie_join': 5, '/api/do/letter_read': 5}
+    {"scene": "m375l-70b-j-result-card", "clickMissing": "#page .battle-card [data-act=\"rounds-more\"]", "idx": 0, "label": "展開過程", "err": null}
+    {"scene": "m375d-70b-j-result-card", "clickMissing": "#page .battle-card [data-act=\"rounds-more\"]", "idx": 0, "label": "展開過程", "err": null}
+    {"scene": "m320-70b-j-result-card", "clickMissing": "#page .battle-card [data-act=\"rounds-more\"]", "idx": 0, "label": "展開過程", "err": null}
+season21top/base-log.json: 鏡 146；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 2494 {200: 2494}；失敗 0；問題記號 2
+   API: {'/api/me': 45, '/api/events': 44, '/api/login': 20, '/api/main': 17, '/api/reports': 12, '/api/do/view_map': 5, '/api/map/state': 5, '/api/map/base': 5, '/api/do/sortie_go': 4, '/api/choose': 2, '/api/do/sortie_join': 2, '/api/do/letter_read': 2}
+    {"scene": "m375l-70b-j-result-card", "clickMissing": "#page .battle-card [data-act=\"rounds-more\"]", "idx": 0, "label": "展開過程", "err": null}
+    {"scene": "m375d-70b-j-result-card", "clickMissing": "#page .battle-card [data-act=\"rounds-more\"]", "idx": 0, "label": "展開過程", "err": null}
+season21top/head-log.json: 鏡 146；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 2495 {200: 2495}；失敗 0；問題記號 2
+   API: {'/api/me': 45, '/api/events': 44, '/api/login': 20, '/api/main': 17, '/api/reports': 12, '/api/do/view_map': 5, '/api/map/state': 5, '/api/map/base': 5, '/api/do/sortie_go': 4, '/api/choose': 2, '/api/do/sortie_join': 2, '/api/do/letter_read': 2}
+    {"scene": "m375l-70b-j-result-card", "clickMissing": "#page .battle-card [data-act=\"rounds-more\"]", "idx": 0, "label": "展開過程", "err": null}
+    {"scene": "m375d-70b-j-result-card", "clickMissing": "#page .battle-card [data-act=\"rounds-more\"]", "idx": 0, "label": "展開過程", "err": null}
+week7/base-log.json: 鏡 105；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 2033 {200: 2033}；失敗 0；問題記號 0
+   API: {'/api/me': 38, '/api/events': 37, '/api/login': 20, '/api/main': 15, '/api/reports': 10, '/api/do/sortie_go': 5, '/api/do/sortie_answer': 5, '/api/patch_notes': 1}
+week7/head-log.json: 鏡 105；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 2035 {200: 2035}；失敗 0；問題記號 0
+   API: {'/api/me': 39, '/api/events': 38, '/api/login': 20, '/api/main': 15, '/api/reports': 10, '/api/do/sortie_go': 5, '/api/do/sortie_answer': 5, '/api/patch_notes': 1}
+weekend/base-log.json: 鏡 111；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 2018 {200: 2018}；失敗 0；問題記號 0
+   API: {'/api/me': 46, '/api/main': 41, '/api/login': 21, '/api/choose': 21, '/api/do/view_map': 5, '/api/map/state': 5, '/api/map/base': 5, '/api/patch_notes': 1}
+weekend/head-log.json: 鏡 111；主控台 0（error 0）；例外 0；Log 0（Counter()）；回應 2004 {200: 2004}；失敗 0；問題記號 0
+   API: {'/api/me': 46, '/api/main': 44, '/api/login': 21, '/api/choose': 21, '/api/do/view_map': 5, '/api/map/state': 5, '/api/map/base': 5, '/api/patch_notes': 1}

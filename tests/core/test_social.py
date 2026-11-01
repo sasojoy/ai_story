@@ -32,6 +32,7 @@ def _player(content, name, *, at="town", now=NOW, bot=False, save=True):
     return game
 
 
+@pytest.mark.smoke
 def test_people_in_the_same_place_see_each_other(content):
     a = _player(content, "甲")
     _player(content, "乙")

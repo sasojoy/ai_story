@@ -77,8 +77,6 @@ def _win():
 SMALL = ["稍佔上風", "略有斬獲", "小有進展"]
 MEDIUM = ["步步進逼", "穩穩推進", "連連得手"]
 LARGE = ["大舉推進", "勢如破竹", "長驅直入"]
-GEJU_UP = ["豪強趁亂坐大", "豪強勢力漸長", "豪強乘勢而起"]
-GEJU_DOWN = ["豪強勢頭受挫", "豪強收斂了些", "豪強聲勢漸消"]
 
 
 def texts(chip_list) -> list[str]:
@@ -135,14 +133,6 @@ def test_the_same_entry_draws_the_same_phrase_every_time(on):
 # ── 割據 ───────────────────────────────────────────────────────
 
 
-def test_geju_rising_and_falling_have_their_own_phrases_without_a_number_or_a_second_haoqiang(on):
-    """句子裡已經有「豪強」，不再把陣營名接在前面（不是「豪強豪強趁亂坐大」）；前面也不冠戰線名。"""
-    (up,) = texts(push(make(on), 3, "geju"))
-    (down,) = texts(push(make(on), -2, "geju"))
-    assert up in GEJU_UP and down in GEJU_DOWN
-    assert up.count("豪強") == down.count("豪強") == 1 and "：" not in up + down
-
-
 # ── 顏色：看的人站在哪一邊 ───────────────────────────────────────
 
 
@@ -150,22 +140,11 @@ def test_geju_rising_and_falling_have_their_own_phrases_without_a_number_or_a_se
     (None, "flat", "flat"),  # 散人：兩邊都不偏
     ("guan", "up", "down"),
     ("huang", "down", "up"),
-    ("haoqiang", "flat", "flat"),  # 豪強靠亂局吃飯，不站戰線的任何一邊
+    ("haoqiang", "flat", "flat"),  # 還沒挑依附哪一邊的豪強：兩邊都不偏
 ])
 def test_the_colour_follows_the_viewers_faction(on, faction, toward_guan, toward_huang):
     assert tone(push(make(on, faction), -1)[0][0]) == toward_guan
     assert tone(push(make(on, faction), 2)[0][0]) == toward_huang
-
-
-@pytest.mark.parametrize("faction, rising, falling", [
-    ("haoqiang", "up", "down"),  # 豪強坐大是自己的好事；勢頭受挫對豪強是壞事
-    ("guan", "flat", "flat"),
-    ("huang", "flat", "flat"),
-    (None, "flat", "flat"),
-])
-def test_geju_is_good_news_only_for_haoqiang(on, faction, rising, falling):
-    assert tone(push(make(on, faction), 2, "geju")[0][0]) == rising
-    assert tone(push(make(on, faction), -1, "geju")[0][0]) == falling
 
 
 def test_the_colour_is_decided_when_the_journal_is_drawn(on):
@@ -187,7 +166,7 @@ def test_the_colour_is_decided_when_the_journal_is_drawn(on):
 @pytest.mark.parametrize("faction", [None, "guan", "huang", "haoqiang"])
 def test_no_digit_reaches_the_player_on_any_screen_that_shows_the_line(on, faction):
     game = make(on, faction)
-    for trend, delta in (("yingru", -1), ("yingru", 3), ("nanyang", 6), ("jizhou", -2), ("geju", 4), ("geju", -1)):
+    for trend, delta in (("yingru", -1), ("yingru", 3), ("nanyang", 6), ("jizhou", -2)):
         game._write("測試", rules.change_trend(game.state, on, trend, delta))
     screens = [game.latest_entry_html(), game.now_entry_html(), game.journal_html(0, 20)]
     for html in screens:
@@ -269,44 +248,35 @@ def file_showdown(game, trend_delta, *, earlier=None, time=1234.0):
     return game.state.battles[0]
 
 
-@pytest.mark.parametrize("faction, front_tone, geju_tone", [
-    (None, "flat", "flat"),
-    ("guan", "up", "flat"),
-    ("huang", "down", "flat"),
-    ("haoqiang", "flat", "up"),
+@pytest.mark.parametrize("faction, front_tone", [
+    (None, "flat"),
+    ("guan", "up"),
+    ("huang", "down"),
 ])
-def test_a_showdown_result_shows_the_front_move_as_a_phrase_chip_under_the_card(on, faction, front_tone, geju_tone):
-    """這一季打的決戰：潁川汝南 −15（官軍大舉推進）與割據 +3（豪強趁亂坐大）是江湖紀錄裡機器可讀的標籤，畫在戰鬥卡片底下、
+def test_a_showdown_result_shows_the_front_move_as_a_phrase_chip_under_the_card(on, faction, front_tone):
+    """這一季打的決戰：潁川汝南 −15（官軍大舉推進）是江湖紀錄裡機器可讀的標籤，畫在戰鬥卡片底下、
     照看的人的陣營上色；戰報不收（跟遊歷的戰鬥卡片一樣，「大勢」那一行不再寫數字），原本寫的「潁川汝南 -15」不見了。"""
     game = make(on, faction)
-    record = file_showdown(game, {"yingru": -15, "geju": 3})
-    assert game.state.journal[0].changes == [front_lines.mark("yingru", -15), front_lines.mark("geju", 3)]
+    record = file_showdown(game, {"yingru": -15})
+    assert game.state.journal[0].changes == [front_lines.mark("yingru", -15)]
     assert record.changes == [] and not any(front_lines.MARK in t for t in (*record.notes, *record.changes))
     assert game.shows_battle_card()
-    (front, geju) = chips(game.battle_extra_html())
-    assert (tone(front[0]), tone(geju[0])) == (front_tone, geju_tone)
-    assert front[1] in {f"潁川汝南：官軍{phrase}" for phrase in LARGE} and geju[1] in GEJU_UP
+    (front,) = chips(game.battle_extra_html())
+    assert tone(front[0]) == front_tone
+    assert front[1] in {f"潁川汝南：官軍{phrase}" for phrase in LARGE}
     for card in (battlelog.card_text(record), battlelog.detail_text(record)):
         assert "**大勢**" not in card and "潁川汝南 -15" not in card and not re.search(r"[+-]\d", card), card
-
-
-def test_a_showdown_that_pulls_the_geju_down_is_red_for_haoqiang(on):
-    game = make(on, "haoqiang")
-    file_showdown(game, {"geju": -4})
-    ((classes, text),) = chips(game.battle_extra_html())
-    assert tone(classes) == "down" and text in GEJU_DOWN
 
 
 def test_last_seasons_showdown_says_the_front_move_in_words_without_a_number(on):
     """上一季打的：數值變化放不進去（看起來像剛發生在你身上），大勢的增減寫進敘事，標明第幾季；有開關時是那一句話、不是數字。"""
     game = make(on, "guan")
-    record = file_showdown(game, {"yingru": -15, "geju": 2}, earlier=1)
+    record = file_showdown(game, {"yingru": -15}, earlier=1)
     entry = game.state.journal[0]
     assert entry.changes == [] and record.changes == []
     said = [line for line in entry.lines if line.startswith("（第 1 季）")]
-    assert len(said) == 2
+    assert len(said) == 1
     assert said[0].removeprefix("（第 1 季）") in {f"潁川汝南：官軍{phrase}" for phrase in LARGE}
-    assert said[1].removeprefix("（第 1 季）") in GEJU_UP
     assert said == [line for line in record.notes if line.startswith("（第 1 季）")]
     assert not any(re.search(r"[+-]\d", line) for line in (*entry.lines, *record.notes))
 
@@ -375,15 +345,11 @@ def test_with_the_switch_off_the_old_wording_stays_exactly(real):
 
 
 def test_background_pushes_stay_silent(on):
-    """大勢人物每曆時的推動（figures.tick）、割據的自然漲落（geju_tick）都不回訊息、不寫紀錄（同虛擬玩家）。"""
+    """大勢人物每曆時的推動（figures.tick）不回訊息、不寫紀錄（同虛擬玩家）。"""
     game = make(on)
-    game.state.world.trends["yingru"] = 50  # 亂局，割據會漲
     journal_before = [e.model_dump() for e in game.state.journal]
     log_before = list(game.state.log)
-    for _ in range(48):
-        rules.geju_tick(game.state, on, 1)
     figures.tick(game.state, on, 24)
-    assert game.state.world.trends["geju"] > 10  # 真的推了，只是沒出聲
     assert [e.model_dump() for e in game.state.journal] == journal_before and game.state.log == log_before
     msgs = world.sim_tick(game.state, on, 3, FixedRandom(0.0))
     assert not any(front_lines.MARK in m for m in msgs)
@@ -403,20 +369,17 @@ def test_with_the_switch_off_sim_tick_still_says_nothing(real):
 
 def test_variants_are_picked_by_hash_and_never_touch_the_rng(on):
     on.front_lines.generic["1"] = [f"句{i}" for i in range(6)]
-    on.front_lines.geju = {"up": [f"豪強起{i}" for i in range(6)], "down": ["豪強落"]}
     game = make(on)
     state = game.rng.getstate()
-    game._write("測試", rules.change_trend(game.state, on, "yingru", -1) + rules.change_trend(game.state, on, "geju", 1))
+    game._write("測試", rules.change_trend(game.state, on, "yingru", -1))
     first = chips(game.latest_entry_html())
     assert chips(game.latest_entry_html()) == first  # 同一則永遠同一句
-    seen, seen_geju = set(), set()
+    seen = set()
     for n in range(40):
         game.state.journal[0] = game.state.journal[0].model_copy(update={"time": float(n * 977)})
-        front, geju = texts(chips(game.latest_entry_html()))
+        (front,) = texts(chips(game.latest_entry_html()))
         seen.add(front)
-        seen_geju.add(geju)
     assert len(seen) > 1 and all(s.startswith("潁川汝南：官軍句") for s in seen)
-    assert len(seen_geju) > 1 and all(s.startswith("豪強起") for s in seen_geju)
     assert game.rng.getstate() == state
 
 
@@ -447,7 +410,7 @@ def test_the_real_content_ships_the_s1_phrase_tables(real):
     assert lines.sides == {"guan": "官軍", "huang": "黃巾"}
     assert lines.generic == {"1": SMALL, "2-3": MEDIUM, "4+": LARGE}
     assert lines.by_side == {}
-    assert lines.geju == {"up": GEJU_UP, "down": GEJU_DOWN}
+    assert "geju" not in lines.model_dump()  # 豪強割據的那兩組句子 2026-10-31 拿掉
     assert "推進一程" not in json.dumps(lines.model_dump(), ensure_ascii=False)
 
 
@@ -497,10 +460,6 @@ def test_a_missing_file_is_a_content_error_that_names_the_file(tmp_path):
     ("sides 空的陣營名", lambda d: d["sides"].update({"guan": " "}), "空白"),
     ("sides 陣營名寫了數字", lambda d: d["sides"].update({"huang": "黃巾2軍"}), "數字"),
     ("sides 簡體字", lambda d: d["sides"].update({"guan": "官军"}), "繁體"),
-    ("geju 缺 down", lambda d: d["geju"].pop("down"), "down"),
-    ("geju 多了別的鍵", lambda d: d["geju"].update({"sideways": ["橫著走"]}), "sideways"),
-    ("geju 寫了數字", lambda d: d["geju"].update({"up": ["豪強坐大 3 成"]}), "數字"),
-    ("geju 空串列", lambda d: d["geju"].update({"down": []}), "不能是空的"),
 ])
 def test_validation_rejects_bad_phrases(where, change, match):
     content = load_content(CONTENT_DIR)

@@ -15,6 +15,7 @@ from tianxia.models import (
 from tianxia.sqlite_world import open_world
 
 
+@pytest.mark.smoke
 def test_wants_heal_only_with_internal_injury(game):
     """療傷照內傷計價：氣血低但沒有內傷時會自己回，不用去療傷（不然只會一直寫「氣血無恙」）。"""
     member = game.state.player.member

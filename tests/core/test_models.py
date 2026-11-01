@@ -13,6 +13,7 @@ SPEC_AFFINITY = {
 }
 
 
+@pytest.mark.smoke
 def test_event_requires_at_least_one_choice():
     with pytest.raises(ValidationError):
         Event(id="e", title="t", text="x", choices=[])

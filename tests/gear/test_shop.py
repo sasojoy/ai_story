@@ -61,6 +61,7 @@ def test_a_missing_situation_is_refused_when_the_smithy_is_open():
         validate(c)
 
 
+@pytest.mark.smoke
 def test_entering_and_each_smith_action_record_a_keeper_situation(content, world):
     game = _smith(content, world)
     p = game.state.player

@@ -157,6 +157,7 @@ def test_not_in_a_town_and_not_on_newcomers(pair):
     assert _load(world, "乙").player.stats["silver"] == before
 
 
+@pytest.mark.smoke
 def test_a_late_comer_in_a_beta_season_is_protected_from_his_own_join_time(beta_pair):
     """第一季規則關著的季，截殺的新手期從各自加入的那一刻算（企劃者 2026-10-10，懸賞榜設計 14.1 丁）：季初就在的兩個人早就過了，
     很晚才來的人在自己的新手期內截殺不了別人、也不會被截殺；新手的體力、氣血福利照舊從季初算（roster.newbie 不動）。"""

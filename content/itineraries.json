@@ -1,0 +1,164 @@
+[
+  {"who": "liubei", "stops": [
+    {"id": "liubei_raise", "day": 1.3, "place": "zhuo_militia_hall", "text": "{name}在{place}張榜招募鄉勇，說要討賊報國。關羽、張飛都在榜下。"},
+    {"id": "liubei_zoujing", "day": 2.2, "place": "juma_river", "contest": {
+      "side": "guan", "announce": "{name}帶著鄉勇出涿郡，要隨校尉鄒靖在{place}截擊一股黃巾。",
+      "win": "{name}的鄉勇在{place}擊破黃巾，劉關張三人的名字在幽州傳開了。",
+      "lose": "{name}的鄉勇在{place}被黃巾衝散，只得退回樓桑里重整。",
+      "trends_win": {"jizhou": -2}, "lose_place": "loushang_village"}},
+    {"id": "liubei_luzhi", "day": 3.6, "place": "luzhi_camp", "if_won": ["liubei_zoujing"], "text": "{name}帶著關羽、張飛到{place}投效。盧植認出這是當年的學生，留他在營中聽用。"},
+    {"id": "liubei_regroup", "day": 3.6, "place": "zhuo_county", "if_lost": ["liubei_zoujing"], "text": "{name}在{place}重新招兵，這一回來的人少了許多。"},
+    {"id": "liubei_guangzong", "day": 6.4, "place": "guangzong", "if_won": ["liubei_zoujing"], "contest": {
+      "side": "guan", "announce": "{name}請纓，要帶鄉勇夜襲{place}城外的黃巾營寨。",
+      "win": "{name}夜襲{place}外營得手，燒了黃巾三座糧帳。",
+      "lose": "{name}夜襲{place}外營撲空，折了一半鄉勇。",
+      "base": 0.55, "trends_win": {"jizhou": -2}, "lose_place": "luzhi_camp"}}
+  ]},
+  {"who": "caocao", "stops": [
+    {"id": "caocao_raise", "day": 1.4, "place": "qiao_county", "text": "{name}在{place}散家財募兵，拜了騎都尉。"},
+    {"id": "caocao_changshe", "day": 2.5, "place": "changshe", "contest": {
+      "side": "guan", "announce": "{name}率騎兵星夜馳援{place}，要趕在城破之前到。",
+      "win": "{name}的騎兵趕到{place}，與皇甫嵩合兵一處，城上的人都看見了那面旗。",
+      "lose": "{name}的騎兵在潁川郊野被黃巾攔了一整夜，沒趕上{place}。",
+      "trends_win": {"yingru": -2}, "lose_place": "yingchuan_wilds"}},
+    {"id": "caocao_chase", "day": 3.3, "place": "yingchuan", "if_won": ["caocao_changshe"], "text": "{name}與皇甫嵩追擊潁川殘賊，到了{place}。"},
+    {"id": "caocao_home", "day": 3.3, "place": "qiao_county", "if_lost": ["caocao_changshe"], "text": "{name}回到{place}擴兵，說下一仗不會再晚。"}
+  ]},
+  {"who": "sunjian", "stops": [
+    {"id": "sunjian_march", "day": 1.7, "place": "nanyang_road", "text": "{name}募了淮泗精兵千餘人，隨朱儁南下，在{place}紮營。"},
+    {"id": "sunjian_wall", "day": 4.7, "place": "wan_city", "contest": {
+      "side": "guan", "announce": "{name}要親自率眾先登{place}的城頭。",
+      "win": "{name}第一個登上{place}城頭，身後的人跟著湧了上去。",
+      "lose": "{name}登城時中箭墜下，被抬回新野養傷。",
+      "trends_win": {"nanyang": -3}, "lose_place": "xinye"}}
+  ]},
+  {"who": "huangfusong", "stops": [
+    {"id": "huangfusong_runan", "day": 3.2, "place": "runan_wilds", "contest": {
+      "side": "guan", "announce": "{name}要追波才的殘部，一路追進{place}。",
+      "win": "{name}在{place}追上波才殘部，斬首數千。",
+      "lose": "波才殘部在{place}設伏，{name}無功而返，退回長社。",
+      "trends_win": {"yingru": -3}, "lose_place": "changshe"}},
+    {"id": "huangfusong_east", "day": 4.3, "place": "baima_ford", "text": "{name}移師東郡，大軍到了{place}，要找卜己算帳。"},
+    {"id": "huangfusong_cangting", "day": 5.3, "place": "baima_ford", "contest": {
+      "side": "guan", "announce": "{name}要在{place}一帶擊破卜己的營寨。",
+      "win": "{name}在{place}擊破卜己，生擒賊首七千餘人。",
+      "lose": "卜己據河死守，{name}在{place}連攻三日不下。",
+      "trends_win": {"jizhou": -2}}},
+    {"id": "huangfusong_north", "day": 6.3, "place": "guangzong", "text": "{name}北上{place}，接手冀州的戰事。"}
+  ]},
+  {"who": "zhujun", "stops": [
+    {"id": "zhujun_runan", "day": 3.0, "place": "runan", "text": "{name}移兵{place}，要討西華的彭脫。"},
+    {"id": "zhujun_xihua", "day": 3.9, "place": "runan", "contest": {
+      "side": "guan", "announce": "{name}要在{place}城外與彭脫決一死戰。",
+      "win": "{name}在{place}城外大破彭脫，汝南的黃巾散了一半。",
+      "lose": "彭脫據營死守，{name}在{place}損兵折將。",
+      "trends_win": {"yingru": -2}, "trends_lose": {"yingru": 1}}},
+    {"id": "zhujun_wan", "day": 4.4, "place": "wan_city", "text": "{name}南下，與秦頡合兵圍{place}。"}
+  ]},
+  {"who": "luzhi", "stops": [
+    {"id": "luzhi_trench", "day": 2.6, "place": "luzhi_camp", "text": "{name}在廣宗城下築圍鑿塹、造雲梯，連營數十里。"}
+  ]},
+  {"who": "dongzhuo", "stops": [
+    {"id": "dongzhuo_xiaquyang", "day": 6.6, "place": "xiaquyang", "contest": {
+      "side": "guan", "announce": "{name}要率西涼兵強攻{place}。",
+      "win": "{name}攻破{place}外城，張寶退守內城。",
+      "lose": "{name}攻{place}不下，朝中已經有人說要撤他的職。",
+      "base": 0.45, "trends_win": {"jizhou": -2}, "trends_lose": {"jizhou": 1}, "lose_place": "luzhi_camp"}}
+  ]},
+  {"who": "gongsunzan", "stops": [
+    {"id": "gongsunzan_luzhi", "day": 3.0, "place": "luzhi_camp", "text": "{name}從遼西趕到{place}，來看老師盧植。"},
+    {"id": "gongsunzan_north", "day": 6.0, "place": "juma_river", "text": "{name}引白馬義從回防北邊，在{place}過河。"}
+  ]},
+  {"who": "wangyun", "stops": [
+    {"id": "wangyun_raise", "day": 2.5, "place": "runan", "text": "{name}以豫州刺史之名在{place}募兵討賊。"},
+    {"id": "wangyun_letters", "day": 4.0, "place": "runan_market", "contest": {
+      "side": "guan", "announce": "{name}要在{place}搜查黃巾往來的書信，聽說裡面有宮中的人。",
+      "win": "{name}在{place}搜出張讓賓客與黃巾往來的書信，連夜封好送往洛陽。",
+      "lose": "{name}的人趕到{place}時，那批書信已經被人燒了。",
+      "flag_win": "zhangrang_letters_found"}},
+    {"id": "wangyun_court", "day": 5.0, "place": "luoyang_palace", "if_won": ["wangyun_letters"], "text": "{name}把書信呈到御前，張讓跪地叩頭謝罪。"}
+  ]},
+  {"who": "zhangrang", "stops": [
+    {"id": "zhangrang_grudge", "day": 5.4, "place": "luoyang_palace", "if_won": ["wangyun_letters"], "text": "{name}記恨王允，在宮中四處說他的不是。"},
+    {"id": "zhangrang_gold", "day": 5.4, "place": "luoyang_palace", "if_lost": ["wangyun_letters"], "text": "{name}收的那幾箱金帛沒人再追問，宮裡一切照舊。"}
+  ]},
+  {"who": "fuxie", "stops": [
+    {"id": "fuxie_memorial", "day": 5.5, "place": "guan_camp", "text": "{name}在{place}上疏，說天下之亂根在宦官，得罪了張讓。"}
+  ]},
+  {"who": "yuanshao", "stops": [
+    {"id": "yuanshao_luzhi", "day": 5.3, "place": "dajiangjun_fu", "text": "{name}在{place}替盧植說情，求大將軍保他一命。"}
+  ]},
+  {"who": "zhangjiao", "stops": [
+    {"id": "zhangjiao_altar", "day": 3.8, "place": "guangzong", "text": "{name}病中仍登壇作法，{place}的信眾日夜跪著不散。"}
+  ]},
+  {"who": "zhangbao", "stops": [
+    {"id": "zhangbao_altar", "day": 2.0, "place": "julu_altar", "text": "{name}在{place}前招集信眾，說天公將軍的病就快好了。"},
+    {"id": "zhangbao_walls", "day": 5.8, "place": "xiaquyang", "contest": {
+      "side": "huang", "announce": "{name}要趕在官軍到之前加築{place}的城防。",
+      "win": "{name}把{place}的城牆加高了三尺，城外挖了兩道深溝。",
+      "lose": "{place}的城防趕工不及，北面的城牆還塌著一角。",
+      "trends_win": {"jizhou": 2}}}
+  ]},
+  {"who": "zhangliang", "stops": [
+    {"id": "zhangliang_guangzong", "day": 3.0, "place": "guangzong", "text": "{name}領精兵入{place}，與盧植隔著城牆對峙。"}
+  ]},
+  {"who": "bocai", "stops": [
+    {"id": "bocai_changshe", "day": 1.6, "place": "changshe", "contest": {
+      "side": "huang", "announce": "{name}要率眾把{place}團團圍住。",
+      "win": "{name}把{place}圍得水洩不通，城裡的官軍只能守著。",
+      "lose": "{place}城防堅固，{name}圍城不成，退回營寨。",
+      "trends_win": {"yingru": 3}, "lose_place": "huangjin_camp"}},
+    {"id": "bocai_yangdi", "day": 3.7, "place": "yingchuan", "if_lost": ["huangfusong_runan"], "contest": {
+      "side": "huang", "announce": "{name}收攏殘部，要在{place}陳兵反撲。",
+      "win": "{name}在{place}反撲得手，潁川又亂了起來。",
+      "lose": "{name}在{place}再敗，殘部散入汝南荒野。",
+      "trends_win": {"yingru": 3}, "trends_lose": {"yingru": -1}, "lose_place": "runan_wilds"}},
+    {"id": "bocai_scatter", "day": 3.7, "place": "runan_wilds", "if_won": ["huangfusong_runan"], "text": "{name}的殘部被逐入{place}，躲在荒野裡收攏散兵。"}
+  ]},
+  {"who": "zhangmancheng", "stops": [
+    {"id": "zhangmancheng_grain", "day": 2.6, "place": "nanyang_huangjin_camp", "contest": {
+      "side": "huang", "announce": "{name}派人從{place}四出徵糧，要撐過官軍的圍城。",
+      "win": "{name}的人馬徵足了糧，{place}裡堆滿了糧袋。",
+      "lose": "徵糧的隊伍在半路被鄉勇截了，{place}只運回一半。",
+      "trends_win": {"nanyang": 2}}}
+  ]},
+  {"who": "buji", "stops": [
+    {"id": "buji_gather", "day": 2.8, "place": "baima_ford", "text": "{name}在{place}聚眾數萬，沿河紮下大營。"}
+  ]},
+  {"who": "zhangyan", "stops": [
+    {"id": "zhangyan_gather", "day": 2.2, "place": "lulin_zhai", "text": "{name}在{place}聚眾，自號黑山。"},
+    {"id": "zhangyan_grain", "day": 4.2, "place": "yanshan_foot", "contest": {
+      "side": "huang", "announce": "{name}要帶人下山，在{place}劫官軍北上的糧車。",
+      "win": "{name}在{place}劫下官軍糧車，車上的糧一夜之間搬進了山裡。",
+      "lose": "劫糧的人馬在{place}被護糧的官軍打了回去。",
+      "trends_win": {"jizhou": 2}, "lose_place": "lulin_zhai"}}
+  ]},
+  {"who": "liupi", "stops": [
+    {"id": "liupi_gather", "day": 3.4, "place": "hilltop_wilds", "text": "{name}在{place}收攏波才的散兵，人越聚越多。"}
+  ]},
+  {"who": "tangzhou", "stops": [
+    {"id": "tangzhou_flee", "day": 1.2, "place": "luoyang_road", "text": "{name}告密之後一路往洛陽逃，有人在{place}見到他，頭都不敢抬。"},
+    {"id": "tangzhou_hunted", "day": 5.0, "place": "baima_temple", "contest": {
+      "side": "guan", "announce": "黃巾派了刺客，要在{place}取{name}的性命。",
+      "win": "{name}在{place}躲過了刺客，寺裡的僧人把他藏進了經閣。",
+      "lose": "{name}在{place}被刺客砍傷，連夜逃進洛陽。",
+      "base": 0.5, "lose_place": "luoyang_road"}}
+  ]},
+  {"who": "xuchu", "stops": [
+    {"id": "xuchu_hold", "day": 3.0, "place": "haozu_fort", "text": "{name}聚了宗族少年千餘家，在{place}堅守。"},
+    {"id": "xuchu_siege", "day": 4.5, "place": "haozu_fort", "contest": {
+      "side": "guan", "announce": "黃巾要攻{place}，{name}帶著宗族少年上了牆。",
+      "win": "黃巾攻{place}，{name}在牆上飛石退敵，賊人不敢再近。",
+      "lose": "{place}的外牆被黃巾攻破，{name}退守內堡。",
+      "trends_lose": {"yingru": 1}}}
+  ]},
+  {"who": "xunyu", "stops": [
+    {"id": "xunyu_talk", "day": 2.0, "place": "yingchuan_academy", "text": "{name}在{place}與門生論天下大勢，說潁川是四戰之地。"},
+    {"id": "xunyu_leave", "day": 4.6, "place": "yingchuan", "text": "{name}在{place}勸鄉人早作打算，離開潁川避兵。"}
+  ]},
+  {"who": "huatuo", "stops": [
+    {"id": "huatuo_changshe", "day": 2.9, "place": "yingchuan", "text": "{name}聽說長社大戰，趕到{place}醫治傷兵。"},
+    {"id": "huatuo_wan", "day": 5.0, "place": "wan_city", "text": "{name}到{place}救治城破之後的百姓。"},
+    {"id": "huatuo_north", "day": 6.8, "place": "xiaquyang", "text": "{name}北上{place}，城裡城外都是傷兵。"}
+  ]}
+]

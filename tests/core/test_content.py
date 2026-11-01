@@ -202,11 +202,6 @@ def test_check_by_must_be_team_or_self(tmp_path):
         load_content(root)
 
 
-def test_checks_default_to_team(content):
-    assert content.events["drunk"].choices[0].check.by == "team"
-    assert content.events["insight"].choices[0].check.by == "self"
-
-
 def test_characters_and_squads_loaded(content):
     assert content.characters["mate"].starting_wugong == "palm"
     assert content.squads["thug"].difficulty == 5
@@ -1146,11 +1141,11 @@ def test_validate_still_lets_conditions_read_derived_and_ordinary_trends(content
 
 def test_validate_rejects_a_threshold_on_a_season_one_trend(content):
     content = _with_fronts(content)
-    content.scenario.trends.append(Trend(id="geju", name="豪強割據", season_one=True))
+    content.scenario.trends.append(Trend(id="side_line", name="邊線", season_one=True))
     content.scenario.thresholds.append(
-        Threshold(id="geju60", trend="geju", op=">=", value=60, text="豪強割據一方！")
+        Threshold(id="side60", trend="side_line", op=">=", value=60, text="邊線過了一甲子！")
     )
-    with pytest.raises(ContentError, match="門檻 geju60：不能掛在第一季的線 geju"):
+    with pytest.raises(ContentError, match="門檻 side60：不能掛在第一季的線 side_line"):
         validate(content)
 
 
@@ -1181,21 +1176,6 @@ def test_validate_lets_chaos_bounds_meet(content):
     validate(content)
 
 
-@pytest.mark.parametrize("field", ["geju_chaos_per_day", "geju_calm_per_day"])
-def test_config_rejects_negative_geju_rates(field):
-    with pytest.raises(ValidationError):
-        Config(**{field: -0.5})
-    assert getattr(Config(**{field: 0}), field) == 0
-
-
-def test_geju_full_players_must_be_positive():
-    """滿額人數是除數：0 或負的都不行。"""
-    for bad in (0, -3):
-        with pytest.raises(ValidationError):
-            Config(geju_full_players=bad)
-    assert Config(geju_full_players=1).geju_full_players == 1
-
-
 def test_validate_reports_a_malformed_region_polygon_instead_of_crashing(tmp_path):
     """train_trend 的戰線歸屬要先查地點在哪個大區，有個點只寫了一個數字時不能在那裡炸成 ValueError，要照舊回報多邊形的錯。"""
     root = copy_fixture(tmp_path)
@@ -1207,7 +1187,6 @@ def test_validate_reports_a_malformed_region_polygon_instead_of_crashing(tmp_pat
 # ── 週末設定（計畫 T2「總開關與週末設定」）：一次切換，不手改 content/config.json ──
 CONTENT_DIR = FIXTURE.parent.parent.parent / "content"
 WEEKEND_KEYS = {"season_one", "season_days", "server_max_players", "late_exp_step",  # 30 級以後的加陡：週末 0.12（50 級加陡）
-                "haoqiang_allied",  # 第一季豪強分屬兩軍（企劃者 2026-10-15）：週末開、預設關
                 "affinity_gain_scale"}  # 情誼放慢（歷史武將同行 3）：正式 0.7、週末 0.85
 BETA_TEST_KEYS = {"beta_free_refill"}  # 一鍵補滿體力（企劃者 2026-10-07 開、2026-10-12 拿掉）：週末設定不再開它
 
@@ -1309,13 +1288,18 @@ def test_world_tick_seconds_is_off_or_at_least_a_second():
 # ── LLM 佇列與鎖外模型呼叫的時間預算（線上架構第 2 期計畫）──────────────
 
 
+ONLINE_PROFILES = ("week7", "season21")  # 線上會開的那兩份設定：推送與模型佇列打開（全面自檢 S-03／M-10，Joy 2026-10-31 照建議）
+
+
 def test_llm_queue_is_off_by_default():
-    """LLM 佇列預設關（線上架構第 2 期計畫）：0＝不建佇列，鎖外的模型呼叫照舊直接叫。content/config.json 與玩家用的設定
-    （weekend 等）都不打開；要在哪一份打開由 PM 驗收之後決定，到時改這個測試、寫明是哪一份。"""
+    """LLM 佇列預設關（線上架構第 2 期計畫）：0＝不建佇列，鎖外的模型呼叫照舊直接叫。content/config.json 與 weekend 不打開；
+    線上的 week7、season21 開一格（主機的 Ollama 一次服務一件），排隊上限 45 秒（人物對話平均 19 秒，20 秒會擋掉排第二的人）。"""
     config = load_content(CONTENT_DIR).config
     assert (config.llm_queue_slots, config.llm_queue_bot_cap, config.llm_queue_wait_seconds) == (0, 1, 20)
     for path in sorted((CONTENT_DIR / "profiles").glob("*.json")):
-        assert load_content(CONTENT_DIR, profile=path.stem).config.llm_queue_slots == 0, path.stem
+        cfg = load_content(CONTENT_DIR, profile=path.stem).config
+        want = (1, 45) if path.stem in ONLINE_PROFILES else (0, 20)
+        assert (cfg.llm_queue_slots, cfg.llm_queue_wait_seconds) == want, path.stem
 
 
 @pytest.mark.parametrize("field", ["llm_queue_slots", "llm_queue_bot_cap", "llm_queue_wait_seconds"])
@@ -1352,12 +1336,12 @@ def test_every_model_call_outside_the_lock_has_a_total_budget():
 
 
 def test_push_is_off_by_default():
-    """伺服器推送預設關（線上架構推送計畫）：前端照舊每 10 秒輪詢，/api/events 是 404。content/config.json 與玩家用的設定
-    （weekend 等）都不打開；要在哪一份打開由 PM 驗收之後決定，到時改這個測試、寫明是哪一份。"""
+    """伺服器推送預設關（線上架構推送計畫）：前端照舊每 10 秒輪詢，/api/events 是 404。content/config.json 與 weekend 不打開；
+    線上的 week7、season21 打開（在線分頁有變化才刷新、平常 60 秒問一次）。"""
     config = load_content(CONTENT_DIR).config
     assert (config.push_events, config.push_watch_seconds, config.push_world_min_seconds) == (False, 5, 10)
     for path in sorted((CONTENT_DIR / "profiles").glob("*.json")):
-        assert load_content(CONTENT_DIR, profile=path.stem).config.push_events is False, path.stem
+        assert load_content(CONTENT_DIR, profile=path.stem).config.push_events is (path.stem in ONLINE_PROFILES), path.stem
 
 
 def test_push_timings_must_make_sense():
@@ -1373,11 +1357,11 @@ def test_push_timings_must_make_sense():
 
 
 def _timetable() -> list[dict]:
-    """測試夾具用的小時刻表：一件固定、一件擲骰（有鎖定與豪強）、一件看版本的決戰。"""
+    """測試夾具用的小時刻表：一件固定、一件擲骰（有鎖定）、一件看版本的決戰。"""
     return [
         {"id": "start", "week": 1, "title": "開場", "kind": "fixed", "outcomes": {"fixed": {"text": "開場了。"}}},
         {"id": "raid", "week": 2, "front": "north", "title": "劫江", "kind": "roll", "roll_side": "huang",
-         "lock_result": {"huang": "成", "guan": "不成"}, "third_party_trends": {"kou": 3},
+         "lock_result": {"huang": "成", "guan": "不成"},
          "outcomes": {
              "成": {"text": "劫成了。", "chronicle": "水寇劫江。", "trends": {"kou": 8},
                    "locked_text": {"huang": "{name} 劫成了。"}, "loser_text": {"huang": "{loser} 沒擋住。"},
@@ -1706,7 +1690,6 @@ def test_check_voice_must_cover_every_checked_stat_and_run_high_to_low(tmp_path)
     with pytest.raises(ContentError) as caught:
         load_content(root)
     assert "由高到低" in str(caught.value) and "con" in str(caught.value)  # 調息事件檢定根骨，第一檔沒寫
-
 
 
 # ── check_voice.json：檢定選項括號裡的那一句（企劃者 2026-10-05 定案；S1 的 check_lines.json 已退休）──

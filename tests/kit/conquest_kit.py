@@ -19,7 +19,7 @@ def conquest_rules(content: Content, xingshi: bool = False) -> Content:
     """領地爭奪的測試用的內容（地盤開著就是領地爭奪，沒有開關），回傳同一份內容。〈天下形勢〉（第三批 A，Config.xingshi）預設關掉：第一、二批的測試照舊
     （每天結算不開單、不多一則天下大事），要測它的另外給 xingshi=True。
     減法季的出陣約戰（批 3b，jianfa 的 sortie_duel）關掉：這裡建的局測的是翻地、混戰、出陣攻守那一套（season21、week7 的設定減法季開著，
-    出陣換成約戰之後那幾條就不成立了；斷言不動。約戰的測試在 tests/test_sortie_duel*.py，建法 tests/duel_kit.py）。"""
+    出陣換成約戰之後那幾條就不成立了；斷言不動。約戰的測試在 tianxia/features/sortie/tests/test_sortie_duel*.py，建法 tests/kit/duel_kit.py）。"""
     content.config.xingshi.enabled = xingshi
     content.config.jianfa.sortie_duel = False
     return content

@@ -250,6 +250,7 @@
   const SORTIE_FULL_SUB = "今日已滿"; // 用完了：整句（什麼時候再來）在行動列底下那一行（待 joy 潤）
   const EXPLORE_PREFIX = "explore:"; // 探索三選一（出陣探索與地盤設計第三節）：探索那一格點了展開這三顆
   const EXPLORE_SUB = "三選一"; // 探索那一格是展開鈕時的小字（待 joy 潤）
+  const OUTING_SUB = "走一趟"; // 走一趟開著、伺服器沒給「多半給什麼」時探索那一格的小字（待 joy 潤）
   const TIER_WORDS = ["宵小出沒", "匪寇橫行", "兇徒盤據"]; // training.TIER_WORDS：尋敵那一格的小字寫這一帶多兇（不寫幾級，Joy 2026-10-22）
   const DRILL_FULL = "今日已練滿", DRILL_FULL_SUB = "今日已滿"; // training.DRILL_FULL：用完了，格子寫短的、整句在底下那一行，點了打開移動
   // 找素材分支（第 32 項，計畫 2.1 甲）：選單上有 explore:gather:<分支> 時「找素材」是展開鈕，點了在它底下再攤一排分支（S.gatherOpen）；
@@ -382,6 +383,16 @@
   // 小標籤、整條左邊一道那一軍的顏色（同戰局條的 side-<陣營 id>）；自己那一軍多標「我方」。認不出的名字照字留著。
   // 兩個式子寫在函式裡：測試的假瀏覽器照名字只抽函式出來
   // report：戰報頁那一場的流水號（決戰的完整戰況，Joy 2026-10-14）：每一回合都收成一行、照先後，展開了哪幾回合跟場景分開記（「r<流水號>:<回合>」）
+  // 一軍這一回合發動武學的那幾句，引擎摺成一列摘要、逐人那幾句縮在它底下一層（engine._fold_war_lines，Joy 2026-10-30）：
+  // 那一層畫成點開才看的 <details class="b-fold">；裡面換成 <ol>，底下 ROUND_HEAD 認回合結尾的 </ul> 才不會停在裡面那一層。開合記在 S.foldOpen
+  const WAR_FOLD = /<li>(〔[^〕<]+〕)?([^\n<]*)\n<ul>\n([\s\S]*?)<\/ul>\n<\/li>/g;
+  function warFolds(html, roundKey) {
+    const open = S.foldOpen || (S.foldOpen = new Set());
+    return html.replace(WAR_FOLD, (all, tag, head, rows) => {
+      const key = `${roundKey}:${tag || head}`;
+      return `<li>${tag || ""}<details class="b-fold" data-fold="${esc(key)}"${open.has(key) ? " open" : ""}><summary>${head}</summary><ol class="b-fold-lines">\n${rows}</ol></details></li>`;
+    });
+  }
   function roundBlocks(html, g, report) {
     const ROUND_HEAD = /<h5>第 (\d+) 回合<\/h5>\n<ul>\n([\s\S]*?)<\/ul>\n?/g;
     const SIDE_TAG = /<li>〔([^〕<]+)〕/g;
@@ -389,6 +400,7 @@
     const open = S.roundsOpen || (S.roundsOpen = new Set());
     const sides = {};
     if (g) for (const w of [g.left, g.right]) if (w) sides[w.name] = w;
+    html = html.replace(/<h5>第 (\d+) 回合<\/h5>\n<ul>\n[\s\S]*?(?=<h5>|$)/g, (block, n) => warFolds(block, report == null ? n : `r${report}:${n}`));
     return html.replace(ROUND_HEAD, (all, n, rows) => {
       const items = rows.replace(SIDE_TAG, (tag, name) => {
         const w = sides[name];
@@ -496,7 +508,9 @@
     modes.forEach((o) => used.add(o.id));
     branches.forEach((o) => used.add(o.id));
     // 入口灰著（體力不夠，三顆都按不下去）時就算記著展開也不畫：那一格是灰格子，不是展開鈕
-    const exploreOpen = S.wheelSel === "explore" && modes.length > 0 && !!(byId["act:explore"] && byId["act:explore"].enabled);
+    // 走一趟（outing.js；企劃者 2026-10-29～30）：探索那一格點了在底下展開一、三、五段，挑了才出發；關著（m.outing 是 null）照舊一按就探索
+    const outingOn = !!m.outing && !m.prologue;
+    const exploreOpen = S.wheelSel === "explore" && (modes.length > 0 || outingOn) && !!(byId["act:explore"] && byId["act:explore"].enabled);
     // 序章（新手引導計畫一）：還沒亮的格子不畫（act:explore、act:practice、act:train、act:rest、act:social、act:move）；
     // 不畫的格子對到的選項照樣記成用過，不會掉進「此地還能做」那個摺疊裡。練功的鍵教學內容還沒寫：草廬與初入江湖那四步都不畫（FB-670）
     // 四格（減法季批 1，整合設計 6.3）：探索、出陣、交友、移動。尋敵、操練那一格只在新手引導（序章、初入江湖）時還在——引導的話叫你按它
@@ -526,7 +540,7 @@
       // 出陣：小字寫今天還剩幾次（「今日 5 次」，體力在鈕上、說明那一行也有）；用完了寫「今日已滿」，什麼時候再來在底下那一行
       const left = SORTIE_LEFT.exec(detail);
       // 探索三選一開著：探索那一格是展開鈕（同移動），點了在下面就地展開三顆；入口灰著（三顆都按不下去）時照一般的灰格子
-      const wheel = d.key === "explore" && modes.length > 0 && o.enabled;
+      const wheel = d.key === "explore" && (modes.length > 0 || outingOn) && o.enabled;
       // 練功（FB-670）：亮著「不限次數」（只有頭目時「對上頭目」）；灰著沒有對手照鈕的 note（城外才有／這裡沒有）、頭目不在「頭目不在」，體力不夠照別格。
       // 城外練功分級（Config.training）：亮著寫級數（一級／二級／三級）；城裡的操練照出陣寫「今日 N 次」，用完了「今日已滿」
       const practice = d.key === "practice" && o.id === PRACTICE_ID && (o.enabled || !detail.startsWith("體力"))
@@ -537,7 +551,7 @@
       // 探索那一格亮著時小字寫這裡多半給什麼（「城裡多事」「野外多敵」，整合設計 6.3；伺服器的 m.mostly，在路上沒有）
       const mostly = d.key === "explore" && o.enabled && m.mostly ? m.mostly : "";
       const sub = mostly ? mostly
-        : wheel ? EXPLORE_SUB
+        : wheel ? (outingOn ? OUTING_SUB : EXPLORE_SUB)
         : tier ? tier
         : drillFull ? DRILL_FULL_SUB
         : practice ? practice
@@ -588,7 +602,7 @@
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}</div>
         <div class="options">${moves.map((o) => `<button class="btn go${routeGlowOn(m, o.id) ? " glow" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">→</span><span>${esc(o.label)}${o.note ? `<small class="opt-note">${esc(o.note)}</small>` : ""}</span></button>`).join("")}</div></div>`;
-    const exploreCard = !exploreOpen ? "" : `<div class="card act-explore"><div class="options">${modes.map((o) => o.id === GATHER_ID && branches.length
+    const exploreCard = !exploreOpen ? "" : outingOn ? outingPickerHtml(m) : `<div class="card act-explore"><div class="options">${modes.map((o) => o.id === GATHER_ID && branches.length
       ? gatherWheel(o, branches) : `
           <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
     // 其他只在此地才有的行動（招募、投靠、多出來的求見）收在摺疊裡，不佔行動列的高度。
@@ -904,6 +918,29 @@
     </section>`;
   }
 
+  // 人物的盤算（世界活起來，main.plan）：全服開著的盤算裡最切身的一件，行動列底下一張卡。誰打算做什麼、在哪、什麼時候見分曉、
+  // 兩邊各幾人；人在那裡就有「助一臂」「壞他的事」（就是選單上的 plan: 選項，按了走 choose），不在那裡寫走過去幾分鐘、一顆去輿圖。字都是伺服器寫好的
+  function planHtml(x) {
+    if (!x) return "";
+    const far = x.minutes ? `步行約 ${x.minutes} 分鐘` : x.minutes === 0 ? "就在這裡" : "";
+    const mine = x.mine === "help" ? "你已經出過力了" : x.mine === "block" ? "你已經出過手了" : "";
+    const acts = x.acts && x.acts.length
+      ? x.acts.map((a) => `<button class="btn small${a.id.includes(":help:") ? " primary" : ""}" data-act="choose" data-id="${esc(a.id)}">${esc(a.label)}</button>`).join("")
+      : !mine && x.minutes && shown("tab:map") ? `<button class="btn small" data-act="tab" data-tab="map"${gotoAttrs(x.location)}>去${esc(x.place)} ›</button>` : "";
+    return `<section class="card plan-card"><div class="plan-k">${esc(x.head)}</div>
+      <p class="plan-text">${esc(x.text)}</p>
+      <div class="plan-meta"><span>${esc(x.place)}${far ? `・${esc(far)}` : ""}</span><span>${esc(x.when)} 見分曉</span></div>
+      <div class="plan-meta"><span>助${esc(x.help_side)}一方 ${x.help | 0} 人</span><span>壞事 ${x.block | 0} 人</span></div>
+      ${mine ? `<div class="plan-mine">${esc(mine)}</div>` : ""}${acts ? `<div class="row">${acts}</div>` : ""}</section>`;
+  }
+
+  // 此地舊事（世界活起來，main.place_deeds）：這裡最近的幾筆世界記事，一行一筆
+  function placeDeedsHtml(list) {
+    if (!list || !list.length) return "";
+    return `<section class="card place-deeds"><div class="pd-k">此地舊事</div>${list.map((d) =>
+      `<p><span class="pd-when">${esc(d.when)}</span>${esc(d.text)}</p>`).join("")}</section>`;
+  }
+
   // 手上揭了的懸賞，加上身上有合用兵器的求兵（status.bounties，bounties.status；後者多一行 have）：一張一行，怎麼交差、賞什麼。懸賞榜在城鎮才看得到，
   // 選單上有 act:bounties 時卡底下一顆「看懸賞榜」（就是那個選項，按了走 choose），不在城鎮寫一句去哪裡看。
   // 預設展開，收起來的狀態照手上那幾張記住（S.bountyShut）：揭了新的、交了差，清單變了就重新展開
@@ -1002,7 +1039,7 @@
     if (!r) return;
     if (r.go.tab) { if (r.go.tab !== S.tab) goTab(r.go.tab); else window.scrollTo({ top: 0, behavior: "smooth" }); return; }
     const id = `move:${r.go.move}`, hit = (x) => x === id || x.startsWith(`${id}:`); // 疾行的 id 後面多接走法
-    if (!S.main.options.some((o) => hit(o.id))) { goTab("map"); return; }
+    if (!S.main.options.some((o) => hit(o.id))) { mapGoto(r.go.move); goTab("map"); return; }
     S.wheelSel = "move";
     S.glowRoute = id; // 往那一處的那一條發光：記在狀態裡，重畫、摺疊 toggle 都保得住（FB-9001）
     renderPage();
@@ -1020,6 +1057,8 @@
   // 序章裡、休季伺服器不給 week_card：不畫。字待 joy 潤
   // （一行一個 const：測試的 konst 照「const 名字」切）
   const WK_STEP = "眼下要事";
+  // 跳到輿圖的那幾顆帶上目標地點（data-goto；護糧多一個終點 data-then）：輿圖開在那一處（mapGoto，Joy 2026-10-31）
+  const gotoAttrs = (loc, then) => (loc ? ` data-goto="${esc(loc)}"${then ? ` data-then="${esc(then)}"` : ""}` : "");
   const WK_HIDE = "收起，明天再出現";
   const WK_WHY = "為什麼";
   const WK_NEXT = "換一件";
@@ -1071,7 +1110,7 @@
     const [title, detail] = wkSplit(step ? step.text : "");
     // 本週要去的那一處畫在輿圖第一層（批 3：/api/map/state 的 week，金路、紅旗、「本週」朱印）：這裡不另算，只給一顆去輿圖看的
     const go = step && step.kind === "newbie" ? `<button class="btn primary wk-go" data-act="newbie-go" data-i="${step.i | 0}">${WK_GO} ›</button>`
-      : step && shown("tab:map") ? `<button class="btn primary wk-go" data-act="tab" data-tab="map">${WK_MAP} ›</button>` : "";
+      : step && shown("tab:map") ? `<button class="btn primary wk-go" data-act="tab" data-tab="map"${gotoAttrs(step.target && step.target.location, step.then && step.then.location)}>${WK_MAP} ›</button>` : "";
     const x = (part) => `<button class="wk-x" data-act="wk-hide" data-id="${part}" aria-label="${WK_HIDE}" title="${WK_HIDE}">×</button>`;
     // 灰線（第 N 週、主題、兩軍態勢）整條是一顆鈕、點了攤開「為什麼」；右邊一顆 × 收到明天。灰線底下那一行小字跟著它收
     const hideStrip = wkHidden(m, "strip");
@@ -1094,6 +1133,29 @@
     const tag = (group, parts) => (parts.length ? parts : ['<i class="wk-none" hidden></i>']).map((h) => h.replace(/^<(\w+) /, `<$1 data-wk="${group}" `)).join("\n      ");
     const top = tag("top", [strip, note, panel].filter(Boolean)), low = tag("low", [card, checkinPickHtml(m)].filter(Boolean));
     return part === "top" ? top : part === "low" ? low : `${top}\n      ${low}`;
+  }
+  // 章回卡（章回主線，企劃者 2026-10-29）：江湖頁最上面一張，你那一方此刻的那一回——第幾回、回目、哪一件大事什麼時候結算、
+  // 下一步去哪做什麼、這一方做完了幾個人推了多少；人就在那裡是一顆「去做」（按「未了之事」那一顆），不在是一顆去輿圖。
+  // 伺服器沒給（沒投靠、開關關著、這一季的回都收了）不畫。整張壓成三行，四顆行動鈕還在第一屏
+  const CH_NO = "第{no}回";
+  const CH_NEXT = "下一步：";
+  const CH_DO = "去做";
+  // 那一件大事的決戰已經在集結、開打了（管理者提早開，手機介面自檢 U-17）：右上角不再寫排定的時刻，改寫此刻的狀態
+  const CH_LIVE = { muster: "集結中", active: "開打了" };
+  function chapterCardHtml(m) {
+    const c = m.week_card && m.week_card.chapter;
+    if (!c || !shown("quest")) return "";
+    const t = c.target;
+    // 說明裡已經寫了地名的（「出城看風（潁川郊野的草澤）」）不再補一次；回目就是那一件大事的（官軍第二回「長社火攻」）只寫時刻
+    const far = !c.waiting && t && !c.here && !String(c.hint).includes(t.name) ? `（${esc(t.name)}${t.minutes ? `・${t.minutes | 0} 分` : ""}）` : "";
+    const when = CH_LIVE[c.live] || c.at;
+    const at = c.beat && c.beat !== c.title ? `${esc(c.beat)}・${esc(when)}` : esc(when);
+    const go = c.waiting || c.scene ? "" : c.here ? `<button class="btn primary ch-go" data-act="choose" data-id="story:${esc(c.line)}">${CH_DO} ›</button>`
+      : t && shown("tab:map") ? `<button class="btn primary ch-go" data-act="tab" data-tab="map"${gotoAttrs(t.location)}>${WK_MAP} ›</button>` : "";
+    return `<section class="card ch-card side-${esc(c.side)}" aria-label="${esc(CH_NO.replace("{no}", c.no))}${esc(c.title)}">
+      <div class="ch-head"><span class="ch-no">${esc(CH_NO.replace("{no}", c.no))}</span><b class="ch-title">${esc(c.title)}</b>${at ? `<span class="ch-at">${at}</span>` : ""}</div>
+      <p class="ch-next">${c.waiting || c.scene ? "" : CH_NEXT}${esc(c.hint)}${far}</p>
+      <div class="ch-foot"><span class="ch-sway">${esc(c.sway)}</span>${go}</div></section>`;
   }
   // 簽到要挑四階的日子（還沒挑）：本週卡底下一張小卡，四顆挑屬性的鈕（點一種就領，同以前簽到格裡的那四顆）
   function checkinPickHtml(m) {
@@ -1178,18 +1240,17 @@
     chaos ? '<span class="chaos-tag">亂局</span>' : ""}<span class="guan">官軍</span></div>`;
   const FRONT_ENDS = frontEnds(false);
 
-  // 態勢那一行（FB-065）：官軍、黃巾是幾條戰況合起來的，豪強是割據（有戰線在亂局就漸長）。說明由伺服器給（status.stance_notes），
-  // 跟見聞→大勢的割據說明同一句，前端不自己數條數。狀態列展開時用它（江湖頁的三條在最上面那一排小標的態勢面板裡，正式版辛）
+  // 態勢那一行（FB-065）：官軍、黃巾是幾條戰況合起來的。說明由伺服器給（status.stance_notes），前端不自己數條數。
+  // 狀態列展開時用它（江湖頁的三條在最上面那一排小標的態勢面板裡，正式版辛）
   function stancesHtml(stances, notes) {
     const n = notes || {};
     const side = (id) => `${STANCE_NAMES.find(([key]) => key === id)[1]} ${stances[id]}`;
     const note = (text) => (text ? `（${esc(text)}）` : "");
-    const gentry = "haoqiang" in stances ? `<br>${side("haoqiang")}${note(n.haoqiang)}` : ""; // 豪強分屬兩軍的季沒有豪強那一行
-    return `<div class="stances-line"><span>態勢</span><span>${side("guan")}・${side("huang")}${note(n.sum)}${gentry}</span></div>`;
+    return `<div class="stances-line"><span>態勢</span><span>${side("guan")}・${side("huang")}${note(n.sum)}</span></div>`;
   }
 
   // 第一季濃縮版的三條戰況（伺服器有送 fronts 才畫）：0 是官軍穩控、100 是黃巾控制，條上黃的那一截是黃巾佔的。
-  // 條上淺色的一段是亂局帶（band＝status.chaos_band，兩端含在內；豪強趁亂割據的戰況區間），戰況落在裡面的圖卡標「亂局」（f.chaos）。
+  // 條上淺色的一段是亂局帶（band＝status.chaos_band，兩端含在內；兩軍拉鋸的戰況區間），戰況落在裡面的圖卡標「亂局」（f.chaos）。
   // 三方態勢在江湖頁最上面那一排小標的態勢面板裡（正式版辛），不在這一排底下重複
   // tap：伺服器有給戰況的說明（status.war_help.fronts，explain-2）時整排圖卡是一顆按鈕，點了在底下攤開說明（跟點體力條同一個做法）。
   // 變成按鈕之後裡面的 meter 不再念得出來（審查 Minor 4）：鈕的名字自己帶三條戰線的值，用的是同一份資料，畫面不變
@@ -1472,7 +1533,7 @@
     const pushAsk = letterCard && typeof pushAskHtml === "function" ? pushAskHtml(m) : ""; // 第一次來信時信的小卡底下問一次手機通知（批 9；pushAskHtml 在 app.js，只切 main.js 的網頁測試沒有它）
     // 開局頭一刻（整合設計 6.7，批 7）：人物開口的那一封（letter.open）排在三方卡前面——先聽人說話，再看三方；其餘時候三方卡照舊在最上面
     // 本週卡：灰線（一行）照舊在最上面，「眼下要事」排在行動列底下（Joy 2026-10-26：四顆行動鈕一定在第一屏）；來信到了照舊換成來信
-    const peek = letterCard && m.letter.open ? letterCard + pushAsk + sidesFirstHtml(m) : sidesFirstHtml(m) + (letterCard ? letterCard + pushAsk : weekCardHtml(m, "top"));
+    const peek = letterCard && m.letter.open ? letterCard + pushAsk + sidesFirstHtml(m) : sidesFirstHtml(m) + (letterCard ? letterCard + pushAsk : weekCardHtml(m, "top") + chapterCardHtml(m));
     const weekCard = letterCard ? "" : weekCardHtml(m, "low");
     // 休季的結算卡排在最上面（計畫 T9）；季收了、有行狀時緊接一張「讀你的傳」（玩家傳第二批，m.zhuan）
     const resultCard = (m.season_result ? resultHtml(m.season_result) : "") + (m.zhuan ? zhuanEntry(m.zhuan, "這一季收了，史官替你立傳", "讀你的傳") : "");
@@ -1501,7 +1562,8 @@
     if (myTurn) {
       return `${resultCard}${peek}${letter}${now}${scene}${links}${menu}${peopleAfter}${free}${guide}${senseNotes}${weekCard}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     }
-    return `${resultCard}${peek}${letter}${now}${scene}${links}${guideUp}${free}${menu}${senseNotes}${weekCard}${guideDown}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+    const planCard = planHtml(m.plan) + placeDeedsHtml(m.place_deeds); // 世界活起來：行動列與眼下要事底下（四顆行動鈕一定在第一屏）
+    return `${resultCard}${peek}${letter}${now}${scene}${links}${guideUp}${free}${menu}${senseNotes}${weekCard}${planCard}${guideDown}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
   }
 
   // 此地還有誰（玩家之間的互動第一層，企劃者 2026-10-08）：場景卡底下一行，名字點了打開玩家卡（peerHtml）。

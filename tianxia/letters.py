@@ -128,7 +128,7 @@ def _cheer_letter(state: GameState, content: Content) -> Letter | None:
 
 def _feast_letter(state: GameState, content: Content) -> Letter | None:
     """情誼夠的人物正在擺宴、這一場還沒邀過你、你還沒敬過酒：寫一封邀宴（第三批，feasts.py）。"""
-    from . import feasts  # noqa: PLC0415  feasts → figure_life
+    from .features.feast import rules as feasts  # noqa: PLC0415  宴客（功能包）→ figure_life：延後載入
 
     if not feasts.on(content):
         return None
@@ -348,14 +348,15 @@ def write(client, note: LetterNote) -> str:
         )
     except Exception:
         return ""
-    return clean(result.letter)
+    return clean(result.letter, note.player, note.sender_name, note.about, note.task)
 
 
-def clean(raw: str) -> str:
+def clean(raw: str, *known: str) -> str:
+    """known 是提示裡本來就有的字（名號、寫信的人、事由）：英文只能是這些裡面有的（M-07）。"""
     text = zh.to_traditional(str(raw or "")).strip()
     text = re.sub(r"[*#>`_]+", "", text)
     text = re.sub(r"\s+", "", text).strip("「」『』\"'“”")
-    if not text or len(text) > WRITE_LIMIT or _DIGITS.search(text):
+    if not text or len(text) > WRITE_LIMIT or _DIGITS.search(text) or zh.stray_latin(text, *known):
         return ""
     return text
 

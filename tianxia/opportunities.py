@@ -16,7 +16,7 @@ from typing import NamedTuple
 from . import calendar, figures, foreshadow, ranks, timetable, wins
 from .journal import fragment_line
 from .models import Content, Effect, OppDef, OppPiece, Rank2Action
-from .rules import GEJU, add_rumor, apply_effect, change_trend, front_of, geju_resisted, haoqiang_allied, roll_check, season_one, side_of
+from .rules import add_rumor, apply_effect, change_trend, front_of, haoqiang_allied, roll_check, season_one, side_of
 from .state import GameState, PlayerState, Plot, WorldState
 
 DONE = "（機緣「{name}」完成。）"
@@ -425,7 +425,7 @@ def culprit(content: Content, o: OppDef, world_tianji: int) -> str:
 
 
 def _world_tianji(world) -> int:
-    return world.read().tianji if world is not None else 0
+    return world.tianji() if world is not None else 0
 
 
 def _asker_here(state: GameState, content: Content, o: OppDef, loc_id: str) -> str | None:
@@ -738,17 +738,12 @@ def place_options(state: GameState, content: Content, loc_id: str) -> list:
 
 def _trend_on_done(state: GameState, content: Content, o: OppDef, loc_id: str) -> list[str]:
     """交付完成時推一點：官軍、黃巾推那條戰線往己方（降卒、密信是記下的戰線；名冊是交在哪個據點，就是那裡的戰線），
-    豪強推割據。推的是機緣的效果，不是個人推動：直接 change_trend，不走人數緩衝與上限（同軍令達成）。
-    豪強分屬兩軍的季（企劃者 2026-10-15 第 1 題甲），豪強的機緣照依附那一軍的目標推那條戰線（同兩軍的機緣）。"""
+    推的是機緣的效果，不是個人推動：直接 change_trend，不走人數緩衝與上限（同軍令達成）。
+    豪強分屬兩軍的季（企劃者 2026-10-15 第 1 題甲），豪強的機緣照依附那一軍的目標推那條戰線（同兩軍的機緣；推割據 2026-10-31 拿掉）。"""
     amount = o.accumulate.trend if o.kind == "accumulate" else 0
     if not amount:
         return []
     faction = content.scenario.faction(side_of(state, content) if haoqiang_allied(content, state.world) else o.faction)
-    geju_goal = faction.goals.get(GEJU, 0)  # 豪強：推割據；跟戰線那一支一樣是「目標 × 次數」，目標的正負照陣營
-    if geju_goal:  # 割據往上漲打盡頭阻力（FB-254），四捨五入成整點（同軍令達成推戰線）
-        from .push import round_half_away  # noqa: PLC0415
-
-        return change_trend(state, content, GEJU, round_half_away(geju_resisted(state, content, geju_goal * amount)))
     front = front_of(content, loc_id) if o.kind == "accumulate" and o.accumulate.deliver == "nearest_base" \
         else state.player.opp_fronts.get(o.id)
     goal = faction.goals.get(front or "", 0)

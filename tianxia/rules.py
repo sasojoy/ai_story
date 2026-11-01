@@ -8,7 +8,6 @@ from collections.abc import Callable
 from typing import Literal, NamedTuple
 
 from . import calendar, front_lines, gender, insights, library, materials, renown, rise, roster, seal_acts, team, treasures  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
-from .allied import hidden_trends as allied_hidden
 from .allied import on as haoqiang_allied  # noqa: F401  豪強分屬兩軍：設計寫 rules.haoqiang_allied、rules.side_of，其他模組照這兩個名字讀
 from .allied import side_of  # noqa: F401
 from .martial_arts import content_art
@@ -502,14 +501,22 @@ def add_rumor(
 ) -> None:
     """記一則傳聞（傳聞分層設計第二節）。給了 content 與地點時，順便記下地點所在的大區。
     誰聽得到哪一則照 audible（地方傳聞看這裡記下的大區）；faction：陣營軍情只給這個陣營的人。"""
+    add_season_rumor(state.world, text, location, content=content, layer=layer, named=named, faction=faction)
+
+
+def add_season_rumor(
+    season: WorldState, text: str, location: str | None = None, *, content: Content | None = None,
+    layer: RumorLayer = "world", named: bool = True, faction: str | None = None,
+) -> None:
+    """同 add_rumor，直接記在一季上（手上沒有角色的 GameState 時用：WorldStateStore.mutate_season 裡）。"""
     from . import atlas  # atlas → world → rules：在函式裡 import，避免循環
 
     region = None
     if content is not None and location is not None and location in content.locations:
         found = atlas.region_of(content, location)
         region = found.id if found is not None else None
-    state.world.rumors.append(
-        Rumor(time=state.world.time, text=text, location=location, layer=layer, region=region, named=named, faction=faction)
+    season.rumors.append(
+        Rumor(time=season.time, text=text, location=location, layer=layer, region=region, named=named, faction=faction)
     )
 
 
@@ -595,11 +602,10 @@ def pending_event_title(state: GameState, content: Content) -> str | None:
 
 
 # ── 第一季濃縮版：戰線與開關（2026-10-04 計畫 T1）─────────────────
-# 內容只寫一份（三條戰線、豪強割據、front 鍵）。第一季的規則沒開時（開關關著，或這一季開季時沒蓋「開」的章），
-# 下面的換算讓規則與畫面跟 beta 那一季一模一樣：三條戰線與 front 都算黃巾聲勢，第一季才有的其他線（豪強割據）不存在。
+# 內容只寫一份（三條戰線、front 鍵）。第一季的規則沒開時（開關關著，或這一季開季時沒蓋「開」的章），
+# 下面的換算讓規則與畫面跟 beta 那一季一模一樣：三條戰線與 front 都算黃巾聲勢，第一季才有的其他線不存在。
 
 HUANGJIN = "huangjin"  # 黃巾聲勢：開關開著時是三條戰線的加權（Trend.derived）
-GEJU = "geju"  # 豪強割據
 
 
 def season_one(content: Content, world: WorldState) -> bool:
@@ -651,9 +657,9 @@ def front_ids(content: Content) -> list[str]:
 
 def trend_shown(content: Content, world: WorldState, trend_id: str) -> bool:
     """這條線在這一季的規則下存在嗎：第一季的規則沒開時，第一季才有的線（Trend.season_one）不顯示、不推；
-    豪強分屬兩軍的季（allied.on），只有豪強當目標的線（割據）也不存在（allied.hidden_trends）。"""
+    （豪強割據 2026-10-31 連豪強第三方一起拿掉，T-05。）"""
     trend = _trend(content, trend_id)
-    if trend is None or trend_id in allied_hidden(content, world):
+    if trend is None:
         return False
     return season_one(content, world) or not trend.season_one
 
@@ -667,11 +673,11 @@ def pushable(content: Content, world: WorldState, trend_id: str) -> bool:
 def resolve_trend(content: Content, world: WorldState, key: str, location: str | None = None) -> str | None:
     """內容寫的大勢鍵 → 這一次真的要推（或讀）的那條線；None＝這次不推。
     第一季的規則開著（season_one）：front 是 location 所在大區的戰線（洛陽沒有戰況→None），其他照寫。
-    沒開（beta 照舊）：front 與三條戰線都算它們合成的那條線（黃巾聲勢），第一季才有的其他線（豪強割據）→None。"""
+    沒開（beta 照舊）：front 與三條戰線都算它們合成的那條線（黃巾聲勢），第一季才有的其他線→None。"""
     if season_one(content, world):
         if key == FRONT_KEY:
             return front_of(content, location) if location is not None else None
-        return None if _trend(content, key) is not None and not trend_shown(content, world, key) else key  # 豪強分屬兩軍：割據→None
+        return None if _trend(content, key) is not None and not trend_shown(content, world, key) else key
     if key == FRONT_KEY:
         return next((t.id for t in content.scenario.trends if t.derived), None)
     total = next((t.id for t in content.scenario.trends if key in t.derived), None)
@@ -737,7 +743,7 @@ def is_revealed(world: WorldState, content: Content, trend_id: str) -> bool:
 
 
 def trend_value(state: GameState, content: Content, trend_id: str) -> int:
-    """同 world_trend_value，讀這個角色看到的那一份賽季。讀戰線、黃巾聲勢、割據一律走這裡。"""
+    """同 world_trend_value，讀這個角色看到的那一份賽季。讀戰線、黃巾聲勢一律走這裡。"""
     return world_trend_value(state.world, content, trend_id)
 
 
@@ -756,26 +762,9 @@ def in_chaos(state: GameState, content: Content, front: str) -> bool:
 
 
 def chaos_fronts(state: GameState, content: Content) -> list[str]:
-    """在亂局裡的戰線 id（照 front_ids 的順序）。geju_tick 的漲落、江湖頁圖卡的「亂局」標與亂局帶、態勢那一行、
-    見聞→大勢的割據說明，讀的都是這一份（FB-065），所以畫面上寫的條數與漲落的方向跟實際漲落永遠一致。"""
+    """在亂局裡的戰線 id（照 front_ids 的順序）。江湖頁圖卡的「亂局」標與亂局帶、只在亂局做得了的軍階行動、軍令挑線
+    讀的都是這一份（FB-065；豪強割據 2026-10-31 拿掉）。"""
     return [front for front in front_ids(content) if in_chaos(state, content, front)]
-
-
-def chaos_note(state: GameState, content: Content, players: int | None = None) -> str:
-    """豪強割據現在為什麼漲或落（FB-065），江湖頁態勢那一行（「豪強 32（…）」）與見聞→大勢的割據說明共用這一句：
-    有戰線在亂局就漲（geju_tick：每條每曆日漲 geju_chaos_per_day × 人數係數），一條都沒有就落（每曆日落 geju_calm_per_day）。
-    條數寫阿拉伯數字；只寫方向與條數，不寫速度，也不寫是哪幾條（圖卡自己標）。
-    漲速乘人數係數（geju_rise_factor）：名冊空著（players 是 0）時有戰線在亂局也一點不漲，這句不能說漸長，改說還沒有人
-    投靠、暫時不動（FB-065 M1）。每曆日的變動讀 geju_per_day，跟 geju_tick 同一個算式；players 是 None＝不知道名冊，
-    不縮放，照舊說漸長。回落不乘係數，所以名冊空著、沒有戰線在亂局時還是漸消。"""
-    count = len(chaos_fronts(state, content))
-    if not count:
-        return "沒有戰線在亂局，割據漸消"
-    if geju_per_day(state, content, players) > 0:
-        return f"{count} 條戰線在亂局，割據漸長"
-    if geju_rise_factor(content, players) == 0:
-        return f"{count} 條戰線在亂局，但還沒有人投靠，割據暫時不動"
-    return f"{count} 條戰線在亂局，割據不動"  # 名冊有人，是設定把漲速調成 0：不能怪名冊
 
 
 _COUNT_WORDS = "零一二三四五六七八九十"
@@ -791,21 +780,18 @@ def stance_sum_note(content: Content) -> str:
     return f"{count_word(len(front_ids(content)))}條戰線合計"
 
 
-_STANCE_SIDES = ("guan", "huang", "haoqiang")
+_STANCE_SIDES = ("guan", "huang")
 
 
 def stance_sides(content: Content, world: WorldState) -> tuple[str, ...]:
-    """這一季有態勢的幾方：官軍、黃巾，割據這條線存在（trend_shown）才有豪強（豪強分屬兩軍的季沒有）。"""
-    return _STANCE_SIDES if trend_shown(content, world, GEJU) else _STANCE_SIDES[:2]
+    """這一季有態勢的幾方：官軍、黃巾（豪強割據與第三方豪強 2026-10-31 拿掉，T-05；豪強分屬兩軍）。"""
+    return _STANCE_SIDES
 
 
 def stances(state: GameState, content: Content) -> dict[str, int]:
-    """態勢（第一季設計 4.4）：官軍＝100－黃巾聲勢，黃巾＝黃巾聲勢，豪強＝豪強割據（豪強分屬兩軍的季沒有這一方）。"""
+    """態勢（第一季設計 4.4）：官軍＝100－黃巾聲勢，黃巾＝黃巾聲勢。"""
     huangjin = trend_value(state, content, HUANGJIN)
-    out = {"guan": 100 - huangjin, "huang": huangjin}
-    if "haoqiang" in stance_sides(content, state.world):
-        out["haoqiang"] = trend_value(state, content, GEJU)
-    return out
+    return {"guan": 100 - huangjin, "huang": huangjin}
 # 態勢卡上三方的叫法（web/app.js 的 STANCE_NAMES 同一份；陣營本身叫黃巾軍、地方豪強）；玩法說明（howto）照它寫，跟卡上同一個叫法
 STANCE_NAMES = {"guan": "官軍", "huang": "黃巾", "haoqiang": "豪強"}
 _STANCE_COMPLEMENT = {"guan": "huang", "huang": "guan"}  # 官軍＝100－黃巾：兩邊互為補數；豪強沒有另一方可換
@@ -815,8 +801,7 @@ MANDATE_RULE = "天命之季不提前收季：天命之爭得勝的一方得天�
 # 整季都不提前收、又不是天命之季（21 天季，正式季整合設計 1.1）的那一句；finale 是「到季末，…」那半句（待 joy 潤）
 NO_EARLY_RULE = "這一季不會提前收場：{finale}"
 
-# 提前收季只看戰線（FB-254，企劃者 2026-10-15）：只有官軍、黃巾的態勢（黃巾聲勢）到了門檻才提前收季；豪強的門檻（割據，群雄並起）
-# 到季末結算時才照 world.evaluate_ending 的先後判
+# 提前收季只看戰線（FB-254，企劃者 2026-10-15）：只有官軍、黃巾的態勢（黃巾聲勢）到了門檻才提前收季
 EARLY_END_SIDES = frozenset({"guan", "huang"})
 
 
@@ -852,7 +837,7 @@ def stance_rule_note(state: GameState, content: Content) -> str:
     會提前收季的結局（ends_early：只看官軍、黃巾）換成「哪一方到幾分」：stance_min 的那一方到那個值；stance_max 的黃巾 ≤ 15
     就是官軍 ≥ 85（官軍與黃巾互為補數）。同一方有幾個門檻取最小的。數字都一樣寫「官軍或黃巾的態勢一到 85」，不一樣照每一方寫自己的
     （「官軍一到 85、黃巾一到 90」）；兩個條件合成一種的結局換不出「哪一方到幾分」，寫一句不帶數字的話，不報算不出來的數字。
-    其餘有態勢門檻的（豪強的割據，群雄並起）到季末才判：「否則到季末，豪強的態勢在 85 以上是群雄並起，不然比高低。」；
+    其餘有態勢門檻的到季末才判：「否則到季末，某方的態勢在 N 以上是某結局，不然比高低。」；
     寫不成「哪一方在幾分以上」的也寫一句不帶數字的話。第 decisive_from_week 週以前寫「第 N 週起」，之後不寫。
     整季都不提前收的季（decisive_week 超過 season_weeks）：蓋了天命之季的章寫 MANDATE_RULE；其餘（21 天季，正式季整合設計 1.1）
     會提前收的那幾種也到季末才判，寫 NO_EARLY_RULE。沒有任何有態勢門檻的結局時是空字串。"""
@@ -860,13 +845,13 @@ def stance_rule_note(state: GameState, content: Content) -> str:
     whole = start > content.config.season_weeks  # 整季都不提前收：天命之季（8.2）、21 天季（1.1）
     reach: dict[str, int] = {}  # 一方 → 它到幾分就收季
     early, unclear = False, False
-    late: list[str] = []  # 季末才判的門檻：「豪強的態勢在 85 以上是群雄並起」
+    late: list[str] = []  # 季末才判的門檻：「某方的態勢在 N 以上是某結局」
     late_unclear = False
     shown = set(stance_sides(content, state.world))
     for e in content.scenario.endings:
         if not e.season_one or not (e.stance_min or e.stance_max):
             continue
-        if not (set(e.stance_min) | set(e.stance_max)) <= shown:  # 這一季沒有的一方（豪強分屬兩軍沒有豪強）：那個結局不參與
+        if not (set(e.stance_min) | set(e.stance_max)) <= shown:  # 這一季沒有的一方：那個結局不參與
             continue
         bar = _one_bar(e)
         if whole or not ends_early(e):  # 季末才判（整季不提前收的季，黃巾聲勢 ≥85、≤15 也只影響季末的結局，1.1）
@@ -906,55 +891,6 @@ def stance_rule_note(state: GameState, content: Content) -> str:
     return f"第 {start} 週起，{rule}" if early and week < start else rule
 
 
-def geju_rise_factor(content: Content, players: int | None) -> float:
-    """割據漲速的人數係數（企劃者 2026-10-05，測試階段「依據人數等比例調整」）：min(1, players ÷ geju_full_players)。
-    players 是這一季投靠了陣營的人數（投靠名冊，真人與假人一樣算）；沒人投靠就是 0（割據不漲），湊滿 geju_full_players 人
-    以上是 1（設計的速度）。players 是 None＝不知道名冊（沒有資料庫可查的純函式呼叫）：不縮放，照設計的速度。"""
-    if players is None:
-        return 1.0
-    return min(1.0, max(0, players) / content.config.geju_full_players)
-
-
-def geju_per_day(state: GameState, content: Content, players: int | None = None) -> float:
-    """割據每曆日的自然變動（漲為正、落為負）：每有一條戰線在亂局漲 geju_chaos_per_day × 人數係數（geju_rise_factor），
-    一條都沒有就落 geju_calm_per_day（回落不乘係數）。geju_tick 實際漲落與畫面上的說明（chaos_note）讀的是這同一個算式，
-    所以畫面說漲就是在漲、說不動就是不動（FB-065 M1）。players 的意思同 geju_rise_factor（None＝不縮放）。"""
-    cfg = content.config
-    chaos = len(chaos_fronts(state, content))
-    return chaos * cfg.geju_chaos_per_day * geju_rise_factor(content, players) if chaos else -cfg.geju_calm_per_day
-
-
-def geju_resisted(state: GameState, content: Content, delta: float) -> float:
-    """割據往上漲打盡頭阻力（FB-254，企劃者 2026-10-15「割據也套越近盡頭越難推」）：跟戰線同一套分段（push.resistance_share：
-    推之前 65 以下全額、65～85 一半、85 以上兩成）；割據只有往 100 那一頭有盡頭，往下落一律全額。開關同 Config.push_resistance。
-    自然漲落（geju_tick）、玩家推的（Game._shaped）、機緣交付（opportunities）都走它；時刻表、決戰、管理者不打折（同戰線）。"""
-    from .push import resistance_share, tuning_for  # noqa: PLC0415  只引這兩個函式：apply_effect 有一個參數叫 push
-
-    tuning = tuning_for(state.world, content)  # 21 天季照自己那一組（7.4）
-    if not tuning.enabled or delta <= 0:
-        return delta
-    return delta * resistance_share(trend_value(state, content, GEJU), delta, tuning)
-
-
-def geju_tick(state: GameState, content: Content, cal_hours: float, players: int | None = None) -> None:
-    """豪強割據的自然漲落（第一季設計 4.2）：每有一條戰線在亂局，每曆日漲 geju_chaos_per_day × 人數係數
-    （geju_rise_factor：這一季投靠名冊 players 人，占 geju_full_players 的比例，至多 1）；三條都穩下來時每曆日
-    落 geju_calm_per_day（回落不乘係數）。不足一點的累積在 trend_accum["geju"]。背景推動，不回傳訊息（同虛擬玩家）。
-    由 T2 的 world.season_hour 每曆時呼叫一次（cal_hours＝1），players 由 advance_world_state 每次推進查一次名冊帶進來。
-    開關關著、劇本沒有割據、豪強分屬兩軍的季（割據不存在，trend_shown）、或地圖沒有戰線時什麼都不做。"""
-    fronts = front_ids(content)
-    if not season_one(content, state.world) or not trend_shown(content, state.world, GEJU) or not fronts:
-        return
-    per_day = geju_per_day(state, content, players)  # 畫面上寫的條數與漸長／不動／漸消（chaos_note）讀同一個算式
-    per_day = geju_resisted(state, content, per_day)  # 漲的時候照此刻的割據打盡頭阻力（FB-254；方向不變，畫面那一句照舊）
-    w = state.world
-    pending = w.trend_accum.get(GEJU, 0.0) + per_day * cal_hours / 24
-    whole = int(pending + (1e-9 if pending > 0 else -1e-9))  # 往零取整；容一點浮點誤差，24 個 1/24 才剛好湊成 1
-    w.trend_accum[GEJU] = pending - whole
-    if whole:
-        change_trend(state, content, GEJU, whole, reveal=False)
-
-
 def change_trend(
     state: GameState, content: Content, trend_id: str, delta: int, reveal: bool = True
 ) -> list[str]:
@@ -967,7 +903,7 @@ def change_trend(
     行動有沒有用。sim_tick()（背景虛擬玩家，每小時自動微幅推動）刻意不接住這個回傳值，
     所以背景推動依然維持安靜，不會洗版；只有玩家自己選擇/打贏的那一刻才會顯示。
 
-    第一季的規則開著時（season_one），三條戰線與豪強割據的變動不寫數字（FB-064）：回機器可讀的「大勢@<線 id> ±N」
+    第一季的規則開著時（season_one），三條戰線的變動不寫數字（FB-064）：回機器可讀的「大勢@<線 id> ±N」
     （front_lines.mark），畫面上由 front_chip／humanize 換成「潁川汝南：官軍步步進逼」這樣的一句話；其他的線與
     開關關著時一個字都不變。"""
     w = state.world
@@ -993,9 +929,9 @@ def change_trend(
         recompute_trends(w, content)  # 開關開著時推了戰線，黃巾聲勢跟著重算
         from . import territory  # noqa: PLC0415  territory → rules：在函式裡 import，避免循環
 
-        territory.update(w, content)  # 戰線、割據動了：地盤重算（出陣探索與地盤設計 4.2）
+        territory.update(w, content)  # 戰線動了：地盤重算（出陣探索與地盤設計 4.2）
         if season_one(content, w) and is_side_trend(content, trend_id):
-            # FB-064：戰線與豪強割據不給玩家看數字（看不出是哪一邊、也看不出好壞）。這裡回機器可讀的寫法，
+            # FB-064：戰線不給玩家看數字（看不出是哪一邊、也看不出好壞）。這裡回機器可讀的寫法，
             # 江湖紀錄照舊把同一條線的變動加總；畫出來的那一刻才換成一句話、照看的人的陣營上色（front_chip、humanize）
             msgs.append(front_lines.mark(trend_id, actual))
         else:
@@ -1007,12 +943,12 @@ def change_trend(
 
 
 def is_side_trend(content: Content, trend_id: str) -> bool:
-    """變動要寫成「哪一方佔了便宜」的線：三條戰線與豪強割據。其他的線（玉璽線索、開關關著時的黃巾聲勢）照舊寫數字。"""
-    return trend_id == GEJU or trend_id in front_ids(content)
+    """變動要寫成「哪一方佔了便宜」的線：三條戰線。其他的線（玉璽線索、開關關著時的黃巾聲勢）照舊寫數字。"""
+    return trend_id in front_ids(content)
 
 
 def can_draw_side_change(content: Content, trend_id: str) -> bool:
-    """這條線的戰況變化畫得出來嗎：內容裡有這條線，而且它還是戰線或豪強割據。紀錄裡存的是機器可讀的寫法，存檔可能比內容舊
+    """這條線的戰況變化畫得出來嗎：內容裡有這條線，而且它還是戰線。紀錄裡存的是機器可讀的寫法，存檔可能比內容舊
     （內容改版拿掉了那條線）：畫不出來的一律丟掉，不當機、也不把原文露給玩家（front_chip、humanize 都先問這一關）。"""
     return _trend(content, trend_id) is not None and is_side_trend(content, trend_id)
 
@@ -1027,12 +963,9 @@ def _beneficiary(content: Content, trend_id: str, delta: int) -> FactionDef | No
 
 def front_text(content: Content, trend_id: str, delta: int, seed: str) -> str:
     """戰況變化的一句話（不寫數字）。戰線：「{戰線}：{陣營}{句子}」，陣營是往那個方向動時佔便宜的一方，
-    句子照變動的大小（front_lines.band_of）在 content/front_lines.json 挑；割據：整句話（已經有「豪強」，不再接陣營名）。
+    句子照變動的大小（front_lines.band_of）在 content/front_lines.json 挑。
     一段有好幾句時照 seed 與線、段雜湊挑一句，不動引擎的亂數；seed 通常是那則紀錄的時間，同一則永遠同一句。"""
     lines = content.front_lines
-    if trend_id == GEJU:
-        key = "up" if delta > 0 else "down"
-        return front_lines.pick(lines.geju[key], f"{seed}|{trend_id}|{key}")
     side = _beneficiary(content, trend_id, delta)
     band = front_lines.band_of(delta)
     pool = (lines.by_side.get(side.id, {}).get(band) if side is not None else None) or lines.generic[band]
@@ -1043,7 +976,7 @@ def front_text(content: Content, trend_id: str, delta: int, seed: str) -> str:
 
 def front_favour(content: Content, viewer: str | None, trend_id: str, delta: int) -> int:
     """這一次變動對看畫面的人（viewer＝他的陣營 id，散人是 None）是好事（1）、壞事（−1）還是無關（0）：
-    他的陣營對這條線有目標（goals）時，方向一致是好事、相反是壞事；沒有目標的（散人、戰線上的豪強、割據上的官軍與黃巾）一律 0。"""
+    他的陣營對這條線有目標（goals）時，方向一致是好事、相反是壞事；沒有目標的（散人、戰線上的豪強）一律 0。"""
     faction = content.scenario.find_faction(viewer)
     goal = faction.goals.get(trend_id, 0) if faction is not None else 0
     if not goal:

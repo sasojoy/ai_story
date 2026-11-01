@@ -16,7 +16,7 @@ from tianxia.sqlite_world import open_world
 import re
 from pathlib import Path
 
-pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.slow]
+pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 
 DRIVER = BASE_DRIVER.replace('"bookHtml", "peerHtml"]', '"bookHtml", "peerHtml", "gatherSay", "gatherWheel"]')
 assert DRIVER != BASE_DRIVER
@@ -75,6 +75,7 @@ def test_one_branch_keeps_the_plain_gather_button():
     assert 'data-act="choose" data-id="explore:gather"' in bar and "gather-wheel" not in bar
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-31 測試自檢 T-01 量的；這個檔以前整個標 slow）
 def test_the_box_sends_the_line_to_gather_text():
     m = _main()
     out = run(m, """return (async () => {

@@ -74,16 +74,3 @@ def drop(world: WorldState, invite_id: str) -> Invite | None:
     if invite is not None:
         world.invites = [i for i in world.invites if i.id != invite_id]
     return invite
-
-
-def drop_involving(world: WorldState, name: str, *, away_from: str | None = None) -> list[Invite]:
-    """跟這個人有關的邀請全部作廢（他離開了 away_from 這個地點、換季、叛投……）；away_from 給了就只作廢在那個地點的。"""
-    key = name_key(name)
-    gone = [
-        i for i in world.invites
-        if key in (name_key(i.sender), name_key(i.target)) and (away_from is None or i.location == away_from)
-    ]
-    if gone:
-        ids = {i.id for i in gone}
-        world.invites = [i for i in world.invites if i.id not in ids]
-    return gone

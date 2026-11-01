@@ -10,10 +10,11 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, epiphany, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, precise, rules, sensing, server_bots, social, sortie, stances, team
+from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, epiphany, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, outing, precise, rules, sensing, server_bots, social, sortie, stances, team
 from . import sortie_duel  # 出陣約戰（減法季批 3b）
 from . import tavern as tavern_rules  # 酒肆殺手：失手加價
 from .bot import allocate_points, can_practise, wants_heal
+from .core import features as features_core
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import MOVES, Content, Effect, SkillDef
 from .state import BotProfile, Invite
@@ -242,7 +243,13 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
         step = _toward_faction(game, profile.faction, ids)
         if step is not None:
             return msgs + game.choose(step)
+    if outing.active(s) is not None and game.outing_can_go():  # 走一趟停在要選的事上、選完了：接著走（同真人）
+        return msgs + game.outing_go() + bot.outing_say(game, rng)
     choice = pick(game, options, profile, rng)
+    if choice == "act:explore" and outing.on(game.content, s):  # 走一趟開著：探索照真人一樣挑段數出發（bot.outing_segments）
+        n = bot.outing_segments(game, rng)
+        if n:
+            return msgs + game.outing_go(n) + bot.outing_say(game, rng)
     # 約戰開著（減法季批 3b）：挑到出陣那一格（只是打開出陣前那張卡）換成真的貼一張、封好三招（bot.duel_go）
     return msgs + game.choose(bot.duel_go(game, choice, rng)) if choice else msgs
 
@@ -799,10 +806,6 @@ def duel_move(game: Game, rng: random.Random, fight=None) -> str:
     return answer if answer is not None and rng.random() < DUEL_READ else rng.choice(MOVES)
 
 
-FEAST_SCORE = 8.0  # 入席：不花體力，路過就坐一下（低過軍令與懸賞）
-FEAST_TOAST_SCORE = 50.0  # 坐下了就敬酒（不然卡在宴席的選單上）
-
-
 def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     """選項的分數；None＝假人不會選（別的陣營的投靠、叛投、閒聊或求見大勢人物、只會被擋在門外的交友、投靠的確認畫面另外處理）。"""
     kind, _, arg = option.id.partition(":")
@@ -810,8 +813,9 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return None  # 假人不叛投（計畫甲）
     if kind in ("ambush", "works", "aid"):
         return None  # 設伏、工事、屯糧、護衛、犒軍、探望由 take_turn 的 _stamina_play 做，不交給打分數
-    if kind == "feast":  # 宴客（大勢人物擴充第三批）：路過擺著宴的地方就入席，入了席挑一句固定的敬酒詞（不寫自己的，同放手一搏）
-        return None if arg == "leave" else FEAST_TOAST_SCORE if arg.startswith("toast:") else FEAST_SCORE
+    owned, value = features_core.bot_pick(game, option)  # 搬成包的功能：假人看到這一顆怎麼按問那一包（開發規範手冊 3.8；宴客 feast:）
+    if owned:
+        return value
     if kind == "opp":
         return None  # 機緣：假人不做（正式版乙一）；對話裡的 talk:opp: 落在下面 talk 的 None
     if kind == "battle":
@@ -867,8 +871,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return SMITH_SCORE if option.id == _smith_want(game) else 0.0 if arg in ("back", "forge-cancel") else None
     if kind == "arena":  # 擂台由 _arena 一次做完；萬一停在擂台邊只會返回，打到一半由 take_turn 照架勢出招
         return 0.0 if arg == "back" else None
-    if kind == "tavern":  # 酒肆裡：打聽由 take_turn 另外做（_tavern_play）；萬一停在酒肆裡就出門
-        return 0.0 if arg == "back" else None
+    # 酒肆（tavern:）搬進功能包：假人的分數在 features/tavern/bots.py，上面的 features_core.bot_pick 問它（主動搬六包第 10 批）
     if kind == "market":  # 馬市上：照 bot.market_want 按那一顆（換、買、餵），沒事就離開
         return MARKET_SCORE if option.id == bot.market_want(game) else 0.0 if arg == "back" else None
     if kind == "call":

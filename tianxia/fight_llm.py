@@ -95,13 +95,18 @@ SENTENCE_END = re.compile(r"[。！？][」』”）]*")  # 一句話的結尾�
 # 強調、表格，中文敘事一個都用不到（中文標點、全形括號與引號不在內）。模型的字是不可信的輸入（Final review Minor 1）
 MARKDOWN_SYNTAX = re.compile(r"[`*_#>\[\]|~<\\]")
 RULE_RUN = re.compile(r"^[-+=]+")  # 整段只有 --- 或 === 會變成上一行「**過程**」的標題底線；開頭的 -、+ 一併拿掉
+# 數字只能是引擎的（M-06）：提示寫了「不要寫任何數字」，模型還是寫了（「打出 999 點傷害」）就整版不用，戰報照範本回合
+DIGITS = re.compile(r"[0-9０-９]")
 
 
 def _account(text) -> str:
     """一版過程：轉成繁體（模型常夾簡體字）、拿掉換行與空白收成一段（卡片上「過程」底下就是一段話）、拿掉 Markdown 語法字元
     （一律是純文字一段，不會冒出連結、圖片、程式碼區塊）、最多 TEXT_MAX 個字。
-    太長就退回 TEXT_MAX 以內最後一句話的結尾（「。！？」，後面緊跟的收尾引號一起留），不從句子中間斷；沒有句號才硬切。"""
+    太長就退回 TEXT_MAX 以內最後一句話的結尾（「。！？」，後面緊跟的收尾引號一起留），不從句子中間斷；沒有句號才硬切。
+    有阿拉伯數字（半形、全形）就整版清成空字串（M-06）：Game._narrate 挑到空的那一版，戰報照範本回合（battlelog）。"""
     text = RULE_RUN.sub("", MARKDOWN_SYNTAX.sub("", zh.to_traditional("".join(str(text or "").split()))))
+    if DIGITS.search(text):
+        return ""
     if len(text) <= TEXT_MAX:
         return text
     cut = text[:TEXT_MAX]

@@ -158,7 +158,7 @@ class Effect(_Strict):
     marks: dict[str, int] = Field(default_factory=dict)
     # 伏筆（計畫 T7）的準備事件用；第一季開關關著時兩個都不發生（不給也不寫任何字）
     clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品（foreshadows.json 的 items）：正數給、負數收走
-    fs_counters: dict[str, int] = Field(default_factory=dict)  # 伏筆的隱藏計數（例：豪強兩頭賣糧的起點 two_buyers）：加多少，不寫字
+    fs_counters: dict[str, int] = Field(default_factory=dict)  # 伏筆的隱藏計數（例：例：官銀 guanyin）：加多少，不寫字
     # ── 晉升（計畫 T5）：只寫在晉升奇遇的選項上（content.validate 檢查）──
     promote: int | None = None  # 演完晉升到第幾階（清掉召見、接結尾那一句、記進當天的彙整）
     followers: list[str] = Field(default_factory=list)  # 給的部下（followers.json 的模板 id）
@@ -366,12 +366,11 @@ class FrontLines(_Strict):
     1、2-3、4+，變動的大小），一段可以寫好幾句，同一則紀錄永遠挑同一句。
     sides：陣營 id → 寫在句子前面的名字（黃巾軍簡稱「黃巾」）；沒寫的陣營用劇本裡的陣營名。
     generic：每一段都要有，兩個陣營共用；by_side：某一方自己的說法（陣營 id → 段 → 句子），可以只寫其中幾段，沒寫的退回 generic。
-    geju：豪強割據漲（up）、落（down）的整句話，已經有「豪強」兩字，不再接陣營名、也不冠戰線名。"""
+    （豪強割據那一組 geju 2026-10-31 拿掉，T-05。）"""
 
     sides: dict[str, str] = Field(default_factory=dict)
     generic: dict[str, list[str]]
     by_side: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
-    geju: dict[str, list[str]]
 
 
 class VirtueNeed(_Strict):
@@ -612,6 +611,22 @@ class StoryStart(_Strict):
     chance: float = Field(default=0.08, ge=0, le=1)
 
 
+class ChapterSpec(_Strict):
+    """章回主線的一回（tianxia/chapters.py）：哪一方、第幾回、什麼時候開、收在哪一件大事、做成了推誰。
+    side 是陣營 id（guan、huang、haoqiang）；after 是同一方前面要先做完（或已經收了）的那幾回的線 id；after_beat 是還要等哪一件大事結算了才開。
+    beat 是收在哪一件時刻表大事（結算的那一刻沒做完就收成 missed）；做成＝走進最後一段 wait（task「chapter_beat」，等 beat 結算）。
+    sway 是做成推哪一方（None：豪強照此刻幫的那一軍；side_marks 的記號先算）；sway_marks 是帶著某個記號的人份量另加（可以是負的，份量最低 0）。"""
+
+    side: str
+    no: int = Field(ge=1)
+    after: list[str] = Field(default_factory=list)
+    after_beat: str | None = None
+    beat: str
+    sway: Literal["guan", "huang"] | None = None
+    sway_marks: dict[str, float] = Field(default_factory=dict)
+    side_marks: dict[str, Literal["guan", "huang"]] = Field(default_factory=dict)  # 帶著這個記號就推這一軍（豪強賣給誰；先於 sway）
+
+
 class StoryDef(_Strict):
     """一條線（content/storylines.json，或程式在跑的時候自己組的，storyline.start）。kind 分開算同時開著幾條
     （Config.jianfa.story_caps：「奇事」兩條、「頓悟」一條），也決定叫哪一組鉤子（storyline.FIGHT_HOOKS、END_HOOKS）。
@@ -626,6 +641,15 @@ class StoryDef(_Strict):
     stages: list[StoryStage] = Field(min_length=1)
     endings: list[StoryEnding] = Field(min_length=1)
     unfinished: str = "{name}手上的一件事，到季末還沒有了結。"
+    chapter: ChapterSpec | None = None  # 章回主線的一回（kind「章回」）；別種線是 None，不寫進序列化（_drop_no_chapter）
+
+    @model_serializer(mode="wrap")
+    def _drop_no_chapter(self, handler):
+        """chapter 是 None 時不寫這個鍵：存檔裡程式組的線（特殊頓悟）跟加這一欄之前一個位元組都一樣。"""
+        data = handler(self)
+        if isinstance(data, dict) and data.get("chapter", 0) is None:
+            del data["chapter"]
+        return data
 
     def stage(self, stage_id: str) -> StoryStage | None:
         return next((st for st in self.stages if st.id == stage_id), None)
@@ -1059,6 +1083,41 @@ class CharacterDef(_Strict):
     recruitable: bool = False
 
 
+class PlanContest(_Strict):
+    """行程裡的一站是「盤算」（tianxia/plans.py）：提前公告，side 那一方的人可以助他一臂、交戰的另一方可以壞他的事（散人兩樣都行、
+    豪強照此刻幫的那一軍），到點照兩邊各幾人擲骰。trends 的正數是往黃巾推（同時刻表）。"""
+
+    side: str  # 想讓這件事成的那一方（陣營 id）
+    announce: str  # 公告：「{name}打算…」（{name} 換成人物名、{place} 換成地點名）
+    win: str  # 成了的天下大事
+    lose: str  # 不成的天下大事
+    base: float = Field(default=0.6, ge=0, le=1)  # 沒人插手時成的機會
+    trends_win: dict[str, int] = Field(default_factory=dict)
+    trends_lose: dict[str, int] = Field(default_factory=dict)
+    flag_win: str | None = None  # 成了立的世界旗標
+    lose_place: str | None = None  # 不成時他退到哪（沒寫就留在原地）
+
+
+class ItineraryStop(_Strict):
+    """行程的一站（content/itineraries.json）。day 照 7 天季寫（1.0 是第 1 天 00:00、2.5 是第 2 天 12:00），別的季長照比例。
+    沒有 contest 的一站到時間就做：人走到 place、發一則天下大事 text。if_won／if_lost 列的站（可以是別人的）辦成了、沒辦成，這一站才有。"""
+
+    id: str
+    day: float = Field(ge=1, le=8)
+    place: str
+    text: str = ""  # 一般的一站：天下大事（{name}、{place} 照換）；盤算照 contest 的字
+    contest: PlanContest | None = None
+    if_won: list[str] = Field(default_factory=list)
+    if_lost: list[str] = Field(default_factory=list)
+
+
+class Itinerary(_Strict):
+    """一位人物這一季的行程（content/itineraries.json）：照史書排的幾站。有行程的人不再在常去的地方之間隨機晃（figure_life._act）。"""
+
+    who: str  # 對話人物 id（characters.json）
+    stops: list[ItineraryStop]
+
+
 class RelationDef(_Strict):
     """人物之間的一條關係（content/relations.json；大勢人物擴充第二批）。kind：brother 兄弟、mentor 師生、chief 上下（head 是師長、上司，
     members 是學生、部屬）、foe 仇敵（members 兩兩為敵；寫了 faction 的是 members 跟那一方的每一位為敵，例：唐周與黃巾）。
@@ -1095,7 +1154,7 @@ class Trend(_Strict):
     # 衍生線（第一季濃縮版的黃巾聲勢）：來源線 id → 權重，加起來是 1。開關（Config.season_one）開著時它的值一律是
     # 來源線的加權和（rules.recompute_trends），不能直接推；開關關著時它是一般的線，照 start 起算
     derived: dict[str, float] = Field(default_factory=dict)
-    season_one: bool = False  # 第一季濃縮版才有的線（三條戰線、豪強割據）：開關關著時不顯示、不推（rules.trend_shown）
+    season_one: bool = False  # 第一季濃縮版才有的線（三條戰線）：開關關著時不顯示、不推（rules.trend_shown）
 
 
 class Threshold(_Strict):
@@ -1331,6 +1390,7 @@ ALLOW_FAMILIES = (
     "aid:guard:", "aid:rally:", "aid:visit:",  # 護著大勢人物（figure_aid；序章裡沒有陣營，不出現）
     "act:recruit:",  # 招募歷史武將（act:recruit:<人物>，歷史武將同行；序章裡不出現）
     "feast:join:",  # 入席（宴客，tianxia/feasts.py；序章裡不出現）
+    "plan:help:", "plan:block:",  # 盤算（世界活起來，tianxia/plans.py；序章裡不出現）
 )
 
 
@@ -2982,6 +3042,27 @@ class FigureLifeTuning(_Strict):
     rally_cal_days: float = Field(default=3.0, gt=0)
 
 
+class PlanTuning(_Strict):
+    """世界活起來（Joy 2026-10-29「讓整個世界活起來」，選了「世界會自己變」加「你做的事被世界記住」；設計稿
+    https://claude.ai/artifact/LFooPvhRw5NHosh3wDUKRV；tianxia/plans.py、tianxia/deeds.py）。有名的人物照 content/itineraries.json
+    的行程自己動身、自己做事；有些站是「盤算」：提前公告，全服的人都能去那裡助他一臂或壞他的事，到點由引擎照兩邊各幾人擲骰。
+    數字全在這裡，模型不碰。"""
+
+    enabled: bool = False  # 關著時人物照舊在常去的地方之間晃，沒有行程、沒有盤算、不記世界記事（一個字都不變）
+    lead_days7: float = Field(default=1.0, ge=0)  # 盤算提前多久公告（7 天季的天數；別的季長照比例：21 天季是 3 天）
+    max_open: int = Field(default=2, ge=1)  # 全服同時最多開幾件盤算（Joy 2026-10-29「會不會一大堆盤算玩家看都看不完」）
+    stamina: int = Field(default=10, ge=0)  # 助一臂、壞他的事花幾點體力（一人一件一次）
+    # 成算：base（內容寫，預設 0.6）＋ swing ×（助的人－壞的人）÷（助＋壞＋soft），夾在 [floor, cap]
+    swing: float = Field(default=0.35, ge=0, le=1)
+    soft: int = Field(default=3, ge=1)
+    floor: float = Field(default=0.1, ge=0, le=1)
+    cap: float = Field(default=0.9, ge=0, le=1)
+    affinity: int = Field(default=3, ge=0)  # 站對了邊：替他辦成的人跟他的情誼加多少（壞事得逞的人不加情誼）
+    deeds_keep: int = Field(default=300, ge=10)  # 世界記事全服留幾筆（舊的先丟）
+    deeds_prompt: int = Field(default=3, ge=0)  # 人物對話提示最多帶幾筆跟玩家有關的記事
+    deeds_place: int = Field(default=3, ge=0)  # 此地舊事最多列幾筆
+
+
 class ParleyTuning(_Strict):
     """NPC 智能 2.0（Joy 2026-10-23「先做看看」；設計稿 https://claude.ai/artifact/KtRz62jWShogpaXEzv2sbt；tianxia/parley.py）：
     對話裡「自己說」那一句也可以是求他做事。模型當談判者，從引擎列的清單挑一件、評一個意願、要不要開條件；引擎照情誼與份量夾住意願、
@@ -3289,9 +3370,9 @@ class JianfaRules(JianfaNumbers):
     # 子開關（整合設計第十二章）：總開關開著、這一季有章時，各批的規則再看自己的那一個（rules.jianfa(content, world, "explore_one")）；
     # 預設全開，哪一批出了事主機可以單獨關掉那一批。總開關關著時子開關一律不算。
     explore_one: bool = True  # 4.1 探索一顆照地點抽（批 2）
+    outing: bool = True  # 走一趟：探索一次走一、三、五段（tianxia/outing.py；要 explore_one 也開著）
     drill_gates: bool = True  # 4.2 三道閘、45 級後只收仗的經驗（批 2）
     sortie_duel: bool = True  # 4.3 出陣改約戰（批 3b）
-    four_wins: bool = True  # 第三章 三陣營四勝利、豪強兩本帳（批 3c）
     free_text_outcomes: bool = True  # 第五章 隨口應對分岔（批 4）
     marks_visible: bool = True  # 第五章 痕跡看得見（批 4）
     stances: bool = True  # 第五章 人物心意（批 6）
@@ -3308,6 +3389,13 @@ class JianfaRules(JianfaNumbers):
     storylines: bool = True
     # 同時開著幾條（照 StoryDef.kind）；沒列的種類不限。【預設】設計稿：奇事兩條、頓悟一條
     story_caps: dict[str, int] = Field(default_factory=lambda: {"奇事": 2, "頓悟": 1})
+    # 章回主線（企劃者 2026-10-29 選丙、2026-10-29「四個都同意」；tianxia/chapters.py）：每一方照時刻表大事各幾回，做完改那一件大事。
+    # 要 storylines 也開著（章回是一條線，kind「章回」，不佔 story_caps）
+    chapters: bool = True
+    chapter_roll_cap: float = Field(default=0.15, ge=0, le=0.2)  # 【定：企劃者 10-29】全陣營做成這一回最多讓那一骰動多少（跟伏筆合計仍夾 ±0.20）
+    chapter_half_at: float = Field(default=9, gt=0)  # 【預設】做成的人（照份量）到幾個，那一方推到上限的一半（開根號：√n ÷（√n＋√half_at））
+    chapter_edge_cap: int = Field(default=5, ge=0, le=20)  # 【預設】決戰那幾回：開打時起點最多挪幾點（大場面判讀的量級）
+    chapter_contribution: int = Field(default=8, ge=0)  # 【預設】做成一回記幾點貢獻
     # 事件分級（企劃者 2026-10-26，事件分級設計稿；tianxia/tiers.py）：第二、三階事件照門開，抽的時候照開到第幾階的比例先挑階
     event_tiers: bool = True
     # 五道門：[第二階的門檻, 第三階的門檻]。武事是等級、名流是名望第幾段、俠義與綠林是善名、惡名第幾段（要走那一條路）、
@@ -3631,6 +3719,9 @@ class MallTuning(_Strict):
     card_daily_ingots: int = Field(default=0, ge=0)
     card_daily_pills: int = Field(default=0, ge=0)
     records_shown: int = Field(default=50, ge=1)  # 購買紀錄與帳的畫面、管理者查帳最多列幾筆【預設】
+    # 形象市集（功能包 looks 第四批）：只准用儲值的元寶買別人的形象（設計 v3：封測、月卡送的元寶不能變成別人的收入）。
+    # Joy 已同意只准儲值元寶買；還沒有金流、沒有儲值，所以先關著（封測元寶也買得了）。接上金流的那一刻一定要打開【預設】
+    market_paid_only: bool = False
 
 
 class MallLimit(_Strict):
@@ -3655,9 +3746,21 @@ class MallWindow(_Strict):
     from_week: int | None = Field(default=None, ge=1)
 
 
+class Look(_Strict):
+    """一套擂台形象（content/looks.json；功能包 tianxia/features/looks/）。圖在 web/img/looks/<id>/，檔名與張數照預設的斗笠小子
+    （web/img/arena/ 的 hero_*.webp，十張）。預設的斗笠小子不寫在這裡（id 是空字串）。"""
+
+    id: str
+    name: str  # 過 naming.name_problem
+    note: str = ""  # 一句說明（joy 寫）
+    bots: bool = False  # 假人也穿（照名號的雜湊挑；不然穿這一套的一定是真人，看得出來）
+    draft: str = ""  # 作者的備註；不給玩家看
+
+
 class MallItem(_Strict):
     """商城的一件商品（content/mall.json，joy 寫；4.3）。效果只能從 mall.EFFECTS（允許的效果表）挑、種類要對得上，載入時
-    content.check_mall 擋表外的。外觀（look）、通行證（pass）的種類留著，這一版允許表裡沒有它們的效果，所以寫不出來（4.3）。"""
+    content.check_mall 擋表外的。形象（look）賣 content/looks.json 的一套（look 寫那一套的 id）；通行證（pass）的種類留著，
+    這一版允許表裡沒有它的效果，所以寫不出來（4.3）。"""
 
     id: str
     name: str  # 過 naming.name_problem
@@ -3668,6 +3771,7 @@ class MallItem(_Strict):
     limit: MallLimit = Field(default_factory=MallLimit)
     on_sale: MallWindow = Field(default_factory=MallWindow)
     draft: str = ""  # 作者的備註（例「PM 佔位：名字、說明、價錢待 joy」）；不給玩家看
+    look: str = ""  # 形象（kind 是 look）賣的是 content/looks.json 的哪一套
 
 
 class Config(_Strict):
@@ -3768,6 +3872,7 @@ class Config(_Strict):
     signature_arts: SignatureArtTuning = Field(default_factory=SignatureArtTuning)  # 本命武學的威力與學到時的成數（見 SignatureArtTuning）
     tactics: TacticTuning = Field(default_factory=TacticTuning)  # 一般的仗的回合與本命戰法（見 TacticTuning）
     figure_life: FigureLifeTuning = Field(default_factory=FigureLifeTuning)  # 人物活起來：每日行事、心事、風聞（見 FigureLifeTuning）
+    plans: PlanTuning = Field(default_factory=PlanTuning)  # 世界活起來：人物的行程與盤算、世界記事（見 PlanTuning）
     parley: ParleyTuning = Field(default_factory=ParleyTuning)  # NPC 智能 2.0：模型談判、引擎做事（見 ParleyTuning）
     companions: CompanionsTuning = Field(default_factory=CompanionsTuning)  # 歷史武將同行：招募、名下三位、決戰助陣（見 CompanionsTuning）
     # 情誼放慢（歷史武將同行第三節、9.4）：每一筆加的情誼乘這個倍數（renown.warmed：四捨五入，原本加 1 以上的至少加 1；扣的不乘）。
@@ -3847,18 +3952,13 @@ class Config(_Strict):
     # 做到一半的 main 也會換上試玩伺服器，開關關著才不會把正在跑的那一季弄壞；
     # 全部做完、開測前由 PM 跟季長（season_days 改 2.5）一起打開（計畫 2026-10-04-第一季濃縮版）
     season_one: bool = False
-    # 三條戰線與豪強割據（計畫 2026-10-04-T1；開關關著時沒人讀它們）
-    geju_chaos_per_day: float = Field(default=1.0, ge=0)  # 每有一條戰線在亂局，豪強割據每曆日漲幾點
-    # 割據漲速依人數等比例調整（企劃者 2026-10-05，測試階段）：漲速再乘 min(1, 這一季投靠名冊人數 ÷ geju_full_players)。
-    # 湊滿這個人數就是設計的速度；人少的季（週末只有兩個人、沒人玩）割據照人數比例慢下來，不會第 5 週就衝到 100 提早收季。只管漲，不管回落
-    geju_full_players: int = Field(default=15, gt=0)
-    geju_calm_per_day: float = Field(default=1.0, ge=0)  # 三條戰線都穩下來時，豪強割據每曆日回落幾點（不能是負的，否則「回落」變成漲）
+    # 三條戰線（計畫 2026-10-04-T1；開關關著時沒人讀它們）
+    # 豪強割據的漲落（geju_chaos_per_day、geju_full_players、geju_calm_per_day）2026-10-31 連豪強第三方一起拿掉（T-05）
     chaos_low: int = 35  # 亂局：戰況在 chaos_low～chaos_high 之間（含兩端，第一季設計 4.2；low 不能大於 high，content.validate 檢查）
     chaos_high: int = 65
     # 第一季豪強分屬兩軍（企劃者 2026-10-15：「一樣可以選豪強～只是豪強中也區分黃巾～以及官軍」「純官軍或者純黃巾才有辦法升到最高
-    # 軍階，豪強版的只能升到三階」）：開季時蓋章（WorldState.haoqiang_allied），只在蓋了第一季章的季生效（allied.on）。
-    # 預設關、週末設定開；14 天的季就算打開也照舊有第三方豪強
-    haoqiang_allied: bool = False
+    # 軍階，豪強版的只能升到三階」）：沒有開關，蓋了第一季章的季就是（allied.on）；沒有第一季規則的季（14 天）照舊是第三方豪強。
+    # 2026-10-31 開關 haoqiang_allied 連豪強第三方的季（割據、攪局、第三方臨時投效）一起拿掉（T-05，企劃者「都照建議」）
     # 21 天季的骨架（正式季整合設計第一章；12.3 第 41 條：預設關，只有 content/profiles/season21.json 打開，週末與 14 天一個字都不變）：
     # 季曆就是現實的三週（season_weeks 3、season_days 21，cal_scale 1），錨在開季那一週的台灣週一 00:00（WorldState.cal_offset）；
     # 21 天季自己的時刻表（TimetableEvent.real）、官軍將領與伏筆照天數、不提前收季、「今天」是現實的一天（台灣 00:00 換日）。
@@ -3872,7 +3972,7 @@ class Config(_Strict):
     # 空的是一週 7 天（21 天季與其他季，一個字都不變）。載入時驗：要 season21、段數＝season_weeks、段的和＝season_days＝7
     season_segments: list[int] = Field(default_factory=list)
     # 決定性勝利（黃巾聲勢 ≥85、≤15）季曆第幾週起才提前收季；之前到了門檻也不收，季末照常比（企劃者 2026-10-05，計畫 T9）。
-    # 割據 ≥85 不提前收季、季末才判群雄並起（FB-254，企劃者 2026-10-15「提前收季只看戰線」；rules.ends_early）
+    # 提前收季只看戰線（FB-254，企劃者 2026-10-15；rules.ends_early）
     decisive_from_week: int = Field(default=10, ge=1)
     # 企劃者 2026-10-13「季中，第 5 週起才開」（FB-168）：規則關著的季，開決戰的大勢門檻（starts_battle，例 huangjin_60）季曆第幾週起才開
     # 集結；之前推過了也不開、不記成觸發過，到了那一週還在門檻上就開（world.battle_held，寫法同 decisive_from_week）。第一季照時刻表，
@@ -4154,6 +4254,9 @@ class Config(_Strict):
     # 「此地還有誰」只列這麼多現實秒數之內同步過的人：網頁開著每 10 秒同步一次，假人在線時 1～3 分鐘做一個動作，
     # 十分鐘夠把在線的都列進來；關了網頁、下了線的人十分鐘後就不在名單上（真人假人同一條規則）
     presence_seconds: float = 600
+    # 專有名詞禁用名單（content/banned_names.json）擋不擋（Joy 2026-10-31：「關閉禁用名單，上面的內容可以留著，但是現階段不卡」）：
+    # 關著時取名、潤色、題壁都不看這份名單（Content.banned_name_list 回空的），名單照樣載入、照樣驗；髒話字表照舊擋
+    banned_names_on: bool = False
     # 答應結伴之後，帶頭的人這麼多現實秒數之內沒動身，就各走各的
     party_wait_seconds: float = 600
     # 同一對人（不分誰送誰）每個遊戲日最多贈物幾次（FB-116，PM 2026-10-14）：贈物不必對方同意，沒有上限時連送三十次 1 兩就把
@@ -4437,7 +4540,6 @@ class TimetableOutcome(_Strict):
     figures: dict[str, FigureChange] = Field(default_factory=dict)  # 人物 id、「@commander:<戰線>:<guan|huang>」或「@人物:<人物 id>」
     chance_mods: dict[str, float] = Field(default_factory=dict)  # 之後那件大事的成功率修正（寫進 event_bonus，不佔 ±0.20 上限）
     world_flags_add: list[str] = Field(default_factory=list)
-    third_party_text: str | None = None  # 這個結果專用的豪強那一句，蓋過 TimetableEvent.third_party_text（盧植下獄分兩版）
     control: dict[str, str] = Field(default_factory=dict)  # 這個結果讓哪幾處易手：地點 → 陣營（設計 4.2 第 3 點；只能是可易手或 fixed 的地點）
 
 
@@ -4477,13 +4579,9 @@ class TimetableEvent(_Strict):
     skip_if_out: str | None = None  # 這位人物已經退場（或重創）就跳過，不公告
     outcomes: dict[str, TimetableOutcome] = Field(default_factory=dict)
     lock_result: dict[str, str] = Field(default_factory=dict)  # 鎖定方 → 結果鍵（不含版本）；決戰不寫，由 T8 給鍵
-    third_party_text: str | None = None  # 豪強做完伏筆時接在公告後面的一句（{name} 是豪強那邊的人）
-    third_party_trends: dict[str, int] = Field(default_factory=dict)  # 豪強每個名字各套一次的效果
     # 江湖史具名（計畫 T7、伏筆文件 2.4）：有人鎖定、結果是他那一方的具名公告時，江湖史用這一方的這一行（{name} 是鎖定者）；
     # 這一方沒寫就在原本那一行後面接「（{name}改寫）」
     locked_chronicle: dict[str, str] = Field(default_factory=dict)
-    # 豪強做完伏筆時另外記的一行江湖史（例：「{name} 取得新野」；多人用「、」接），不論誰贏都記
-    third_party_chronicle: str | None = None
     # ── 季末大事（kind＝finale，計畫 T9；別的種類不能寫）──
     early_preface: str = ""  # 季中就收季（決定性勝利、管理者提早收季）時取代 preface 的開頭
     out_lines: dict[str, str] = Field(default_factory=dict)  # 人物 id → 那位人物退場或重創時接在最後的一句（董卓兵敗）
@@ -4618,7 +4716,7 @@ class FsChain(_Strict):
 
     id: str
     event: str  # 時刻表大事 id（content/timetable.json）
-    side: str  # 誰能做：劇本的陣營 id（guan、huang 會鎖定那件大事；其他陣營是第三方，寫進 third_party）
+    side: str  # 誰能做：會鎖定那件大事的一方（guan、huang；豪強第三方的鏈 2026-10-31 拿掉，content.validate 擋）
     kind: FsKind
     front: str | None = None  # 戰況看哪條線；沒寫就看那件大事的戰線（盧植下獄、張角病逝要寫 jizhou）
     fragments: list[FsFragment] = Field(default_factory=list)
@@ -4723,7 +4821,7 @@ class Rank2Action(_Strict):
 class RankAction(_Strict):
     """第 3、4 階的行動（第一季設計 5.5；正式版戊一）。id 也是選項（act:rank:<id>）與軍令記功的 kind。
     tags：只能在帶其中一個標籤的地點做（空＝有戰線的地方都行）；chaos_only：那條戰線要在亂局。
-    push：檢定過了（沒有 check 就是一定過）推幾點——官軍、黃巾推所在戰線往己方，豪強推割據。
+    push：檢定過了（沒有 check 就是一定過）推幾點——官軍、黃巾推所在戰線往己方，豪強照依附的那一軍。
     content/orders.json 的 rank_actions 三筆是新寫的初稿，待 joy 潤（JSON 沒有註解，標記記在這裡）。"""
 
     id: str
@@ -4829,7 +4927,7 @@ class OppHost(_Strict):
 
 class OppAccumulate(_Strict):
     """累積型：source 的行動成功時（流民是守勢行動之後擲 chance）記一次，湊滿 count（基準量）拿到 item，
-    交到 deliver（那條戰線己方主將所在，或己方據點）就完成；完成時推 trend 點（戰線往己方，豪強推割據）。"""
+    交到 deliver（那條戰線己方主將所在，或己方據點）就完成；完成時推 trend 點（戰線往己方，豪強照依附的那一軍）。"""
 
     source: Literal["rank2", "duty"]
     count: int = Field(gt=0)
@@ -4935,7 +5033,7 @@ class OppDeduce(_Strict):
     right: str  # （{人物}）
     wrong: str  # （{人物}、{嫌疑人}）
     wrong_affinity: int = -10
-    trend: dict[str, int] = Field(default_factory=dict)  # 指對了推的大勢線（戰線或割據；衍生線不行）（例：{"jizhou": 1}）
+    trend: dict[str, int] = Field(default_factory=dict)  # 指對了推的大勢線（戰線或玉璽線索；衍生線不行）（例：{"jizhou": 1}）
 
 
 class OppPart(_Strict):
@@ -5119,10 +5217,12 @@ class Content(_Strict):
     shop_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)  # 店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4）：店 → 情況 → 句子；沒有這個檔就是空的
     seal: dict[str, ShardDef] = Field(default_factory=dict)  # 玉璽碎片（content/seal.json，照 id）；沒有這個檔就是空的（碎片關著）
     mall: dict[str, MallItem] = Field(default_factory=dict)  # 商城的商品（content/mall.json，照 id、照檔案的順序）；沒有這個檔就是空的
+    looks: dict[str, Look] = Field(default_factory=dict)  # 擂台形象（content/looks.json，照 id、照檔案的順序）；沒有這個檔就是空的（只有預設的斗笠小子）
+    itineraries: list[Itinerary] = Field(default_factory=list)  # 人物的行程（content/itineraries.json，世界活起來）；沒有這個檔就是沒有
     relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有
     gather_branches: dict[str, GatherBranch] = Field(default_factory=dict)  # 找素材分支（content/gather_branches.json，照內容的順序）；沒有這個檔就是空的（分支關著）
     mark_rules: list[MarkRule] = Field(default_factory=list)  # 地方痕跡過門檻（content/mark_rules.json，減法季批 4）；沒有這個檔就是空的
-    # 探索一顆出門一趟的段落句子（content/outing_lines.json，減法季批 2；explore_one.paragraph 讀、content.check_outing_lines 驗）：
+    # 探索一顆出門一趟的段落句子（content/outing_lines.json，減法季批 2；explore_one.paragraph 讀、探索包 checks.check_outing_lines 驗）：
     # 拍的類 → 結果 → 句子；沒有這個檔就是空的（照 explore_one.FALLBACK 寫）
     outing_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     # 人物評曰的固定句（content/verdicts.json，減法季批 7b-2；模型叫不動時照它，待 joy 潤）：寫的理由（affinity／tier／bought）→ 句子，
@@ -5137,6 +5237,10 @@ class Content(_Strict):
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示
     check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）
     create_forms: CreateForms = Field(default_factory=CreateForms)  # 自創武學的兵器偏向、起點架式、關鍵字表（content/create_forms.json）
+
+    def banned_name_list(self) -> list[str]:
+        """取名、潤色、題壁要擋的專有名詞：開關（Config.banned_names_on）關著時是空的，名單本身照樣留在 banned_names。"""
+        return self.banned_names if self.config.banned_names_on else []
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):

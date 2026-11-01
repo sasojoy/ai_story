@@ -1,5 +1,8 @@
 """遊俠名號併進善惡稱號（名聲設計 2.3）：人人都有、投靠了也照算；散人原本的好處照舊只給散人、階讀善惡稱號；
 懸賞的功績照交差那一刻走的路記成善名或惡名；狀態列不再接遊俠名號。關著一個字都不變。"""
+
+import pytest
+
 from conftest import real_content
 
 from tianxia import bounties, ranger, renown, rules, social
@@ -30,6 +33,7 @@ def test_old_ranger_books_are_ignored_when_merged():
     assert ranger.tier(s, c) == 0 and ranger.status(s, c) is None
 
 
+@pytest.mark.smoke
 def test_affiliation_no_longer_carries_the_ranger_title():
     c = real_content("week7")
     s = _sanren(c, good=18)

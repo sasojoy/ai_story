@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 
-from conftest import no_week_unlock, real_content
+from conftest import no_plans, no_week_unlock, real_content
 
 from tianxia import calendar, orders, push, world
 from tianxia.world_state import fresh_season, stamp_season
@@ -59,6 +59,7 @@ def test_daily_orders_take_turns():
     assert len(set(kinds)) >= 2  # 守、進攻、補給輪流
 
 
+@pytest.mark.smoke
 def test_a_daily_order_applies_a_share_of_its_effect():
     c = real_content("season21")
     v = _vehicle(c)
@@ -89,7 +90,7 @@ def _game(profile="season21", opened=MON):
     from tianxia.engine import Game
     from tianxia.sqlite_world import open_world
 
-    c = no_week_unlock(real_content(profile))  # 開季第一天就進店：功能照週解鎖（減法季 6.6）關掉
+    c = no_plans(no_week_unlock(real_content(profile)))  # 開季第一天就進店：功能照週解鎖（減法季 6.6）關掉；傳聞寫死，行程關掉
     c.config.admins = ["甲"]
     c.config.train_event_chance = 0.0
     w = open_world()

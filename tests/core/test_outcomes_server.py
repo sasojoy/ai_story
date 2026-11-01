@@ -14,8 +14,6 @@ from tianxia import event_llm
 from tianxia.characters import open_characters
 from tianxia.engine import FREE_TEXT_OPTION, Game
 
-pytestmark = pytest.mark.slow  # 正式內容
-
 PLOW = "yc_wilds_plow"
 
 

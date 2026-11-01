@@ -1,21 +1,21 @@
-"""後期體力玩法（joy 10/16：設伏劫道、修築工事、屯糧練兵）合進 main 時，三個開關在正式內容都關著（企劃者 10/16：數字與設計等第 5 塊、
-21 天的季再一起定）。開關關著：選單上沒有這三樣（假人與整季機器人照選單做，所以也不做）。"""
+"""後期體力玩法（joy 10/16：設伏劫道、修築工事、屯糧練兵）的正式開關：設伏 2026-10-30 打開（Joy「直接打開」，7 天、21 天兩種季都有），
+屯糧練兵照舊關著（修築工事 10/27 跟著舊拔河拿掉）。開關關著：選單上沒有那一樣（假人與整季機器人照選單做，所以也不做）。"""
 import random
 
 import pytest
 from conftest import real_content
 
-from tianxia import ambush, works
+from tianxia import ambush
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
 PLAYS = ("ambush:", "works:")
 
 
-@pytest.mark.parametrize("profile", [None, "week7"])
-def test_real_content_ships_the_three_stamina_plays_off(profile):
+@pytest.mark.parametrize("profile", [None, "week7", "season21"])
+def test_real_content_ships_ambush_on_and_stockpile_off(profile):
     cfg = real_content(profile).config
-    assert not cfg.ambush.enabled and not cfg.stockpile.enabled
+    assert cfg.ambush.enabled and not cfg.stockpile.enabled
 
 
 def _guan_at_changshe(c):
@@ -32,10 +32,13 @@ def _plays(g):
     return [o.id for o in g.options() if o.id.startswith(PLAYS)]
 
 
-def test_no_stamina_play_on_the_menu_with_the_real_switches():
-    c = real_content("week7")
+@pytest.mark.parametrize("profile", ["week7", "season21"])
+def test_the_real_menu_offers_ambush_but_not_stockpile(profile):
+    c = real_content(profile)
+    plays = _plays(_guan_at_changshe(c))
+    assert ambush.on(c) and any(i.startswith("ambush:set:") for i in plays) and not any(i.startswith("works:") for i in plays)
+    c.config.ambush.enabled = False  # 主機的緊急開關：關了就沒有鈕
     assert _plays(_guan_at_changshe(c)) == []
-    assert not ambush.on(c)
 
 
 def test_the_same_spot_offers_them_once_switched_on():  # 反證：上面那一條是空的，不是因為站錯了地方

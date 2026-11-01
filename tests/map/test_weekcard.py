@@ -22,6 +22,7 @@ def _game(content, name="甲"):
     return Game.new(content, name, rng=random.Random(0))
 
 
+@pytest.mark.smoke
 def test_phase_cuts_the_season_in_three():
     assert [weekcard.phase(w, 3) for w in (1, 2, 3)] == [0, 1, 2]
     assert [weekcard.phase(w, 12) for w in (1, 4, 5, 8, 9, 12)] == [0, 0, 1, 1, 2, 2]

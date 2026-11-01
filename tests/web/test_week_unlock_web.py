@@ -1,5 +1,5 @@
 """功能照週解鎖與三週主題的網頁部分（減法季批 5，整合設計 6.3、6.6、6.8）：本週卡灰線底下那一行（第 3 週離贏還差多少、功能開了、45 級）、
-「為什麼」裡哪幾樣第 2 週開、四格探索那一格的小字「城裡多事」、輿圖天下層抽屜的同一句。照 tests/test_week_card_web.py 的做法把整支網頁放進
+「為什麼」裡哪幾樣第 2 週開、四格探索那一格的小字「城裡多事」、輿圖抽屜的同一句。照 tests/test_week_card_web.py 的做法把整支網頁放進
 node 的假瀏覽器；沒有 node 就略過。"""
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import random
 import pytest
 from conftest import real_content
 from test_prologue_web import run
-from test_world_map_web import run as run_map
+from test_map_web import run as run_map
 
 import server
 import webharness
@@ -75,7 +75,7 @@ def test_the_world_drawer_writes_the_same_gap_sentence():
     game = _game()
     st = game.map_state()
     assert st["gap"] is None
-    assert "m-gap" not in run_map(game, "return H.worldDrawerHtml(H.S.mapBase, H.S.mapState);", st=st, mapDrawer="half")
+    assert "m-gap" not in run_map(game, "return H.nearHtml(H.S.mapBase, H.S.mapState);", st=st)
     st["gap"] = GAP
-    full = run_map(game, "return H.worldDrawerHtml(H.S.mapBase, H.S.mapState);", st=st, mapDrawer="half")
+    full = run_map(game, "return H.nearHtml(H.S.mapBase, H.S.mapState);", st=st)
     assert f'<p class="m-gap">{GAP}</p>' in full

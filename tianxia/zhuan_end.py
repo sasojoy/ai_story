@@ -320,14 +320,15 @@ def messages(job: VerdictJob, limit: int) -> list[dict[str, str]]:
     ]
 
 
-def clean_verdict(raw: str | None, limit: int) -> str:
-    """模型寫的評曰：轉繁體、去標記與引號、去空白；空的、太長、有數字或假名回空字串（照固定句）。"""
+def clean_verdict(raw: str | None, limit: int, *known: str) -> str:
+    """模型寫的評曰：轉繁體、去標記與引號、去空白；空的、太長、有數字或假名回空字串（照固定句）。
+    有英文字母也回空字串（M-07），known（名號、這一季的事）裡本來就有的不算。"""
     from . import zh  # noqa: PLC0415
 
     text = zh.to_traditional(str(raw or "")).strip()
     text = re.sub(r"[*#>`_]+", "", text)
     text = re.sub(r"\s+", "", text).strip("「」『』\"'“”")
-    if not text or len(text) > limit or _DIGIT.search(text) or _KANA.search(text):
+    if not text or len(text) > limit or _DIGIT.search(text) or _KANA.search(text) or zh.stray_latin(text, *known):
         return ""
     return text
 
@@ -341,7 +342,7 @@ def write_verdict(client, job: VerdictJob, limit: int) -> str:
                                         schema_required=["verdict"])
     except Exception:  # noqa: BLE001 — 模型叫不動一律照固定句
         return ""
-    return clean_verdict(result.verdict, limit)
+    return clean_verdict(result.verdict, limit, job.player, job.about)
 
 
 def apply_verdict(job: VerdictJob, text: str) -> str:

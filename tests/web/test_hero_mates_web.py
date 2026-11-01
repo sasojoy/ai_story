@@ -11,8 +11,6 @@ import server
 import webharness
 from tianxia import roster
 
-pytestmark = pytest.mark.slow  # 載正式內容
-
 
 def _game(real, world):  # noqa: F811
     g = _player(real, world, "沈浪", "guan", "zhuo_county", warm=True)

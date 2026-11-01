@@ -242,7 +242,7 @@ def fake_structured(self, messages, response_model, **kwargs):
             narrative="他微微頷首。", options=["繼續交談", "就此告辭"], option_tags=["尋常寒暄", "尋常寒暄"],
         )
     if response_model is companion_agent.MemoryConsolidation:
-        return companion_agent.MemoryConsolidation(relationship_summary="關係穩定。", new_milestones=["聊了幾句"])
+        return companion_agent.MemoryConsolidation(relationship_summary="關係穩定。")
     return response_model()
 
 

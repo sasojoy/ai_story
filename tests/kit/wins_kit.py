@@ -1,7 +1,7 @@
 """三陣營四勝利（減法季批 3c）測試共用的建法（不改 tests/conftest.py；批 2 的 tests/jianfa_kit.py 是另一份，這裡不建同名檔）。
 
-正式內容的 season21（豪強分屬兩軍、減法季開著、領地爭奪開著）開季就蓋章；off=True 把 four_wins 關掉（總開關照開），
-拿來證明「子開關關著一個字都不變」。每一局各載一份內容的複本，世界照 conftest 給這一個測試的 TIANXIA_DB（open_world 預設），
+正式內容的 season21（豪強分屬兩軍、減法季開著、領地爭奪開著）開季就蓋章（子開關 four_wins 2026-10-31 拿掉：四勝利跟著減法季的
+總開關）。每一局各載一份內容的複本，世界照 conftest 給這一個測試的 TIANXIA_DB（open_world 預設），
 角色存檔與季末論功讀的是同一個資料庫。"""
 from __future__ import annotations
 
@@ -14,12 +14,10 @@ from tianxia.engine import Game
 from tianxia.models import Content
 
 
-def wins_content(profile: str = "season21", off: bool = False) -> Content:
+def wins_content(profile: str = "season21") -> Content:
     content = real_content(profile)
     content.config.auto_open_first_season = True
     content.config.train_event_chance = 0.0
-    if off:
-        content.config.jianfa.four_wins = False
     return content
 
 

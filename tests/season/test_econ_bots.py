@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import random
 
+import pytest
+
 from conftest import no_week_unlock, real_content
 from tianxia import bot, bot_policy
 from tianxia.engine import Game
@@ -29,6 +31,7 @@ def _game(at="yingchuan", faction="guan", bag=None, silver=500, same=None):
     return game
 
 
+@pytest.mark.smoke
 def test_upgrade_toward_tier_two_first_then_sell_the_rest_above_the_keep():
     game = _game(bag={"rou_1": 20})
     assert bot.trade_want(game) == ("upgrade", "柔", 2)  # 二階不到 10、一階比留的多 3 個以上
@@ -49,6 +52,7 @@ def test_whatever_attribute_comes_out_the_bot_keeps_it():
     assert bot.trade_want(game) is None  # 慢的三階今天換過了，不再試
 
 
+@pytest.mark.smoke
 def test_ten_tier_twos_make_a_tier_three_once_a_day_and_tier_three_is_never_sold():
     game = _game(bag={"man_2": 25, "gang_3": 3}, same=1)
     game.choose("act:smith")

@@ -403,9 +403,10 @@ ChipFn = Callable[[str, str], tuple[str, int] | None]
 
 
 def _chips(changes: list[str], tag: str, chip: ChipFn | None = None, seed: str = "") -> str:
-    """數值標籤。chip 認得的變化（戰況）用它給的字與好壞上色；機器可讀的戰況變化沒人認得（沒交 chip）時不畫，不讓它原樣露給玩家。"""
+    """數值標籤。chip 認得的變化（戰況）用它給的字與好壞上色；機器可讀的戰況變化沒人認得（沒交 chip）時不畫，不讓它原樣露給玩家。
+    同一個標籤先加總成一顆再畫（手機介面自檢 U-20：決戰的軍餉與首功各給一次名望，以前畫成兩顆「名望 +2」，戰報寫「名望 +4」）。"""
     shown: list[tuple[str, str]] = []
-    for change in changes:
+    for change in combine_changes(changes):
         if is_renown_mark(change):  # 名聲：金色的「名號傳開」，點了開名聲的說明（web/app.js 的 renown-open）
             shown.append((RENOWN_CHIP.format(title=change[len(RENOWN_MARK):]), "tx-renown"))
             continue

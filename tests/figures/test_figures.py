@@ -10,7 +10,7 @@ import random
 import re
 from unittest import mock
 
-from conftest import FixedRandom, real_content
+from conftest import FixedRandom, no_plans, no_territory, real_content
 from tianxia import atlas, battle_instance, battlelog, bot_policy, calendar, figures, team, timetable, world
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game, Option
@@ -61,7 +61,7 @@ SQUAD_TABLE = {
 @pytest.fixture
 def real():
     """真實內容，開關關著（beta 那一季的樣子）。"""
-    c = real_content()
+    c = no_plans(real_content())  # 盤算會推線、搬人（世界活起來）：這裡寫死人物在哪、大勢線的數字
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0  # 遊歷打完不接戰後事件，結果才寫得死
     c.config.renown.scale = False  # 名聲（2026-10-15）的門檻倍數另測（tests/test_renown*）；這裡的求見照原本的門檻
@@ -75,7 +75,7 @@ def on(real):
     天下大事，反應另在 tests/test_relations_letters.py。"""
     real.config.season_one = True
     real.config.figure_life.reactions = False
-    return real
+    return no_territory(real)  # 地盤不開（豪強分屬兩軍的開關拿掉之前，這一份本來就沒有地盤）
 
 
 # ── Task 1：人物表與檢查 ─────────────────────────────────
@@ -108,6 +108,7 @@ def test_content_without_figures_loads(content):
     assert content.figures == {}
 
 
+@pytest.mark.smoke
 def test_figure_settings_defaults():
     cfg = Config()
     assert (cfg.figure_reaction_lean, cfg.figure_reaction_mult, cfg.figure_defeat_prestige, cfg.figure_defeat_affinity,
@@ -579,7 +580,7 @@ def _fight(tier: str = "大勝"):
 
 def test_challenge_only_for_enemy_faction_at_location(on, world):
     """挑戰本人只給敵方陣營、站在人物所在地點的人：官軍在黃巾別部營寨看得到「挑戰波才」（勝算照聲威算的難度）；
-    黃巾（同陣營）、散人看不到；官軍在長社（皇甫嵩、朱儁是自己人）看不到；豪強兩邊都打。還沒出場的彭脫不在。"""
+    黃巾（同陣營）、散人看不到；官軍在長社（皇甫嵩、朱儁是自己人）看不到；豪強照依附的那一邊（依附黃巾的打得了皇甫嵩）。還沒出場的彭脫不在。"""
     ids = lambda game: [o.id for o in game.options()]  # noqa: E731
     guan = _player(on, world, "官甲", "guan", "huangjin_camp")
     challenge = _option(guan, "act:challenge:bocai")
@@ -587,7 +588,11 @@ def test_challenge_only_for_enemy_faction_at_location(on, world):
     assert "act:challenge:pengtuo" not in ids(guan)
     for name, faction, at in (("黃乙", "huang", "huangjin_camp"), ("散丙", None, "huangjin_camp"), ("官丁", "guan", "changshe")):
         assert not any(i.startswith("act:challenge:") for i in ids(_player(on, world, name, faction, at))), name
-    assert {"act:challenge:huangfusong", "act:challenge:zhujun"} <= set(ids(_player(on, world, "豪戊", "haoqiang", "changshe")))
+    hao = _player(on, world, "豪戊", "haoqiang", "changshe")
+    hao.state.player.ally = "huang"
+    assert {"act:challenge:huangfusong", "act:challenge:zhujun"} <= set(ids(hao))
+    hao.state.player.ally = "guan"
+    assert not any(i.startswith("act:challenge:") for i in ids(hao))
 
 
 def test_figures_off_the_front_refuse_challenges_but_still_meet(on, world, real):
@@ -792,8 +797,8 @@ def test_the_rout_is_buffered_by_the_sides_active_members(on, world):
 
 
 def test_challenge_while_a_showdown_is_on(on, world):
-    """Review Focus 4：決戰打起來的時候——上場的人只看得到決戰的選單（不能分身去挑戰）；在一旁觀戰的豪強照常挑戰，
-    打贏扣的是人物的聲威，決戰的戰局一點都不動。"""
+    """Review Focus 4：決戰打起來的時候——上場的人只看得到決戰的選單（不能分身去挑戰）。以前在一旁觀戰的第三方豪強照常挑戰；
+    豪強第三方 2026-10-31 拿掉之後，依附一邊的豪強跟那一邊的人一樣只看得到晚到參戰。"""
     definition = on.battles["huangjin_showdown"]
     fighter = _player(on, world, "官甲", "guan", "huangjin_camp", now=0.0)
     world.start_battle(definition, now=0.0)
@@ -803,10 +808,8 @@ def test_challenge_while_a_showdown_is_on(on, world):
     assert fighter._battle_status()[0].phase == "active"
     assert not any(o.id.startswith("act:") for o in fighter.options())
     watcher = _player(on, world, "豪丙", "haoqiang", "huangjin_camp", now=definition.muster_seconds + 2)
-    trend = world.get_battle().trend
-    with _fight():
-        watcher.choose("act:challenge:bocai")
-    assert world.get_battle().trend == trend and world.get_season().figures["bocai"].prestige == 55
+    watcher.state.player.ally = "guan"  # 依附官軍、沒上場的豪強
+    assert [o.id for o in watcher.options()] == ["battle:join_late"]
 
 
 def test_jailed_figure_is_gone_from_audience_and_dongzhuo_receives_at_the_camp(on, world):

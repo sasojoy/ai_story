@@ -6,7 +6,7 @@ import random
 
 import pytest
 
-from conftest import classic_rules, real_content, third_party_gentry
+from conftest import classic_rules, real_content
 from tianxia import bounties, orders, rules, territory, timetable
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
@@ -22,7 +22,7 @@ OPENING = {
 
 
 def _game(profile="week7"):
-    c = third_party_gentry(real_content(profile))  # 這一檔測割據佔地：豪強是第三方的規則（豪強分屬兩軍見 test_gentry_allied.py）
+    c = real_content(profile)
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None
@@ -34,6 +34,7 @@ def _owner(game, loc_id):
     return territory.controller(game.state.world, game.content, loc_id)
 
 
+@pytest.mark.smoke
 def test_opening_a_prepared_season_starts_the_map_over(tmp_path):
     c = real_content("week7")
     store = open_world(tmp_path / "w.db")

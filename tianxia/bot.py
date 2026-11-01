@@ -16,8 +16,10 @@ from . import arts as arts_mod, allied, armor, bounties, checkin, chuangong, cli
 from . import prologue as prologue_rules
 from . import sortie_duel, tactics  # 出陣約戰（減法季批 3b）：封三招
 from . import growth  # 減法季屬性五段：假人照路配點（stat_path、plan_points）
+from . import outing  # 走一趟：假人挑段數（outing_segments）
 from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, TEXT_TALKS, Game, Option
 from .rules import jianfa
+from .core import features as features_core
 from .martial_arts import MartialArt, next_quality
 from .models import MOVES, Content
 from .models import Outcome  # 減法季批 4：pick_outcome 的位子
@@ -436,6 +438,28 @@ def pick_outcome(game: Game, outcomes: list[Outcome], rng: random.Random) -> str
     return None
 
 
+OUTING_WEIGHTS = {1: 1, 3: 3, 5: 2}  # 假人走一趟挑幾段的比重（只在體力夠的段數裡挑）【預設】
+
+
+def outing_segments(game: Game, rng: random.Random) -> int:
+    """假人走一趟挑幾段（tianxia/outing.py）：體力夠走的段數照 OUTING_WEIGHTS 挑一種；一段都走不起是 0。"""
+    c, p = game.content, game.state.player
+    ok = [n for n in outing.segments(c) if p.stamina >= outing.cost(c, n)]
+    if not ok:
+        return 0
+    return rng.choices(ok, weights=[OUTING_WEIGHTS.get(n, 1) for n in ok])[0]
+
+
+OUTING_SAY_CHANCE = 0.15  # 假人走完一趟留一句預設句的機會（不寫自己的話，同名帖自題從句庫挑）【預設】
+
+
+def outing_say(game: Game, rng: random.Random) -> list[str]:
+    """假人走完一趟（剛收、還能留言）有 OUTING_SAY_CHANCE 的機會留一句預設句（Game.outing_say，免費）；其餘什麼都不做。"""
+    if outing.say_ok(game.state) is None or rng.random() >= OUTING_SAY_CHANCE:
+        return []
+    return game.outing_say(rng.randrange(len(outing.PRESETS)))
+
+
 def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     """結識（choice 的 effect.recruit）一定接受；其餘隨機挑一個。沒得挑時回傳 None。
 
@@ -489,15 +513,17 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     # 捐軍備（act:donate，素材與經濟設計第六節）同鐵匠鋪：在大本營一直按得下去；捐走 donate_spare，軍需官那一串（donate:）不隨機按
     # 設伏、修工事、屯糧（ambush:、works:，後期體力玩法）：體力夠就一直按得下去、收伏一直按得下去；整季機器人只有一個人，劫不到誰，不做
     # 護衛、犒軍、探望（aid:，figure_aid）：體力夠就按得下去；整季機器人不做（同 works:）；宴客（feast:）不花體力、入席離席能一直按
-    # 酒肆（act:tavern、tavern:）同鐵匠鋪：在城裡一直按得下去；整季機器人只有一個人，打聽不到誰，不進
+# （宴客搬進功能包：排除的前綴改由那一包宣告，features_core.bot_always）
+    # 酒肆（act:tavern、tavern:）同鐵匠鋪：在城裡一直按得下去；整季機器人只有一個人，打聽不到誰，不進（tavern: 由酒肆包的 bot_always
+    # 宣告，第 11 批拿掉這裡重複的那一個；act:tavern 是核心 act 前綴的一顆，照留在下面那張清單）
     # 拜入門派（sect:，一類一顆）：不花體力、婉拒之後還在，同 act:rest；只在第一次看到那一則時按得下去（還是隨機挑，婉拒的就不再按）
     options = [o for o in options if not o.id.startswith("sect:") or o.id.partition(":")[2] not in s.player.seen_events]
     options = [
         o for o in options
         if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", "act:market", "act:heal", "act:arena", "act:donate", "act:dadian",
                         "act:tavern", DUEL_FLEE, ARENA_YIELD)
-        and not o.id.startswith(("road:", "defect:", "invite:", "smith:page:", "donate:", "dadian:", "ambush:", "works:", "aid:", "feast:", "tavern:",
-                                 "act:recruit:", "errand:", "faction:lean:"))
+        and not o.id.startswith(("road:", "defect:", "invite:", "smith:page:", "donate:", "dadian:", "ambush:", "works:", "aid:",
+                                 "act:recruit:", "errand:", "faction:lean:") + features_core.bot_always())  # 功能包宣告的永遠按得下去
     ]  # 招募歷史武將（act:recruit:<id>，歷史武將同行第七節）：整季機器人不招。託付（errand:，減法季批 6）：機器人不收託付，萬一有也不按（勸降要寫字）。頭目戰的抽身退走（DUEL_FLEE）：打到一半一直按得下去，機器人照出招打完
     # 豪強改幫另一軍（faction:lean:，三陣營四勝利）：隨時按得下去、不花體力，同叛投排除（機器人不換邊）
     # 一條線答題的「先擱著」（story:<線>:later）：擱著之後那一顆又按得下去，同 act:rest 排除（答題照隨機答完）

@@ -3,24 +3,22 @@ from __future__ import annotations
 
 import random
 
-from conftest import classic_rules, real_content, third_party_gentry
+from conftest import real_content
 from tianxia import calendar, territory
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 from tianxia.state import TerritoryState
 
 
-def _world(classic=False):
-    c = third_party_gentry(real_content("week7"))  # 快照記割據：豪強是第三方的規則（豪強分屬兩軍見 test_gentry_allied.py）
+def _world(profile="week7"):
+    c = real_content(profile)
     c.config.auto_open_first_season = True
-    if classic:
-        classic_rules(c)
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     return game.state.world, c
 
 
 def test_no_territory_no_snapshot():
-    w, c = _world(classic=True)
+    w, c = _world(profile=None)  # 沒有第一季規則的季：沒有地盤
     territory.update(w, c)
     assert w.territory is None and territory.week_at(w, 1) is None
 

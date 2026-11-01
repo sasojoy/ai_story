@@ -196,7 +196,7 @@ def judge_gamble(client, text: str, title: str, name: str) -> str:
             "你是江湖擂台台下的觀眾。玩家在擂台上寫了一句放手一搏的招數，只判斷台下觀眾的反應，回 crowd 一個詞："
             "「叫好」＝漂亮、有膽識、精彩；「平常」＝普通的招；「離譜」＝荒唐、下三濫、不講武德、亂寫一通，讓觀眾看不下去。多數招都是平常。"
         )},
-        {"role": "user", "content": f"擂台：【{title}】\n出手的人：{name}\n他寫的招：「{text}」"},
+        {"role": "user", "content": f"擂台：【{title}】\n出手的人：{zh.prompt_safe(name)}\n他寫的招：「{zh.prompt_safe(text)}」"},  # M-13
     ]
     try:
         result = client.chat_structured(
@@ -254,7 +254,7 @@ def write_line(client, note: CrowdNote) -> str:
 def clean(raw: str, must: str, names: tuple[str, ...] = ()) -> str:
     text = zh.to_traditional(str(raw or ""))
     text = re.sub(r"[\s*#>`_]+", "", text).strip("「」『』\"'“”")
-    if not text or len(text) > WRITE_LIMIT or _DIGITS.search(text) or must not in text:
+    if not text or len(text) > WRITE_LIMIT or _DIGITS.search(text) or must not in text or zh.stray_latin(text, must, *names):
         return ""
     bare = text
     for n in (must, *names):

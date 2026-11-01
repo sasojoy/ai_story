@@ -30,8 +30,9 @@ ALLY_STAYS = "{battle}已經開打，這一場你照舊站在{old}那一邊；�
 
 
 def on(content: Content, world: WorldState) -> bool:
-    """這一季豪強分屬兩軍：蓋了第一季的章（calendar.season_one_on，同 rules.season_one），而且開季時這個章是開著的。"""
-    return calendar.season_one_on(world, content) and world.haoqiang_allied
+    """這一季豪強分屬兩軍：蓋了第一季的章（calendar.season_one_on，同 rules.season_one）。2026-10-31 起沒有自己的開關與章
+    （Config.haoqiang_allied、WorldState.haoqiang_allied 拿掉；舊存檔裡的鍵讀進來時丟掉）。"""
+    return calendar.season_one_on(world, content)
 
 
 def allies_of(content: Content, faction_id: str | None) -> list[FactionDef]:
@@ -166,11 +167,3 @@ def pick_side(name: str, option_ids: list[str], rolls: dict[str, int]) -> str | 
 
     return min(picks, key=key)
 
-
-def hidden_trends(content: Content, world: WorldState) -> set[str]:
-    """依附的季不存在的大勢線：只有要依附的陣營（豪強）當目標的線（割據）。"""
-    if not on(content, world):
-        return set()
-    armies = [f for f in content.scenario.factions if not f.allies]
-    gentry = [f for f in content.scenario.factions if f.allies]
-    return {t for f in gentry for t in f.goals if not any(t in a.goals for a in armies)}

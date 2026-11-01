@@ -160,6 +160,20 @@ def test_the_new_controls_are_drawn_only_for_admins(client):
     assert "issue_orders" not in beta and "start_showdown" not in beta  # 開關關著：沒有每週的事、沒有三場大戲
 
 
+@needs_node
+def test_the_season_buttons_grey_out_by_the_seasons_phase(client):
+    """U-19（手機介面自檢 2026-10-31）：開季之後「開季」灰掉；收季、開下一季也只在對的階段按得下去。"""
+    _, main, admin = _views(client)
+    assert admin["phase"] == "running"
+    for phase, live in (("running", "end_season"), ("preparing", "open_season"), ("resting", "next_season")):
+        sheet = run(main, "return H.sheetHtml();", S={"admin": {**admin, "phase": phase}})
+        for op in ("open_season", "end_season", "next_season"):
+            grey = f'data-op="{op}" disabled>' in sheet
+            assert grey == (op != live), (phase, op)
+    old = run(main, "return H.sheetHtml();", S={"admin": {k: v for k, v in admin.items() if k != "phase"}})
+    assert 'data-op="open_season">' in old  # 沒給階段（舊伺服器）：照舊按得下去
+
+
 CLICK = """return (async () => {
   T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
   const target = (dataset) => ({ dataset, classList: { contains: () => false, add() {}, remove() {} } });

@@ -249,7 +249,7 @@ def tick(state: GameState, content: Content, cal_hours: float) -> None:
             rate *= push.resistance_share(value, goal, push.tuning_for(w, content))
         key = f"fig:{fid}"
         pending = w.trend_accum.get(key, 0.0) + rate * cal_hours / 24
-        whole = int(pending + 1e-9)  # 容一點浮點誤差：24 個 1/24 才剛好湊成 1（同 rules.geju_tick；累積不先四捨五入，誤差才不會越滾越大）
+        whole = int(pending + 1e-9)  # 容一點浮點誤差：24 個 1/24 才剛好湊成 1（累積不先四捨五入，誤差才不會越滾越大）
         rest = max(0.0, pending - whole)
         if rest:
             w.trend_accum[key] = rest
@@ -326,6 +326,7 @@ def _change(state: GameState, content: Content, fid: str, change: FigureChange) 
         from . import figure_life  # noqa: PLC0415  figure_life → figures：延後載入
 
         react = figure_life.on_fall(state, content, fid)  # 第二批：盟友悲憤趕來、掛復仇懸賞，仇敵得意（接在接手那一句後面）
+        figure_life.note_fall(state, content, fid)  # 世界活起來：記一筆世界記事（figure_fell）
     if fate in ("重挫", "到任"):  # 重挫：退出原戰線、轉往別處；到任：接下新戰線
         figure.front = change.front
         if change.location is not None:

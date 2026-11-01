@@ -29,6 +29,7 @@ def _game(content, name="甲", sex=None, at="yingchuan"):
     return game
 
 
+@pytest.mark.smoke
 def test_the_helpers_switch_only_for_women():
     assert (gender.pronoun("女"), gender.hero("女"), gender.anon("女")) == ("她", "女俠", "某位女俠")
     assert (gender.pronoun("男"), gender.hero("男"), gender.anon("男")) == ("他", "少俠", "某位少俠")
