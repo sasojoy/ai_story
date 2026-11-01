@@ -517,7 +517,24 @@ def test_the_journal_and_the_wallet_pick_like_the_rest_of_the_core(module):
     assert {p.name for p in picked.files} == {f"test_{module}.py"}
 
 
-def test_a_feature_package_picks_its_own_tests_and_the_contract(tmp_path, monkeypatch):
+# shared（第 15 批審查修正）：test_for 的 lru_cache（_all_tests、_candidates、smoke_ids、feature_web……）照當時的 FEATURES 記，
+# monkeypatch 還原了 FEATURES、快取還是暫存資料夾那一份：同一個行程後面跑的 test_the_smoke_set_covers_every_block 就少了 mall
+# （-p no:xdist 照這個先後跑兩條，base a242343b 也紅；-n 4 分到同一個行程時才踩到）。換掉 FEATURES 的測試前後都清。
+def _clear_test_for_caches() -> None:
+    for obj in vars(test_for).values():
+        clear = getattr(obj, "cache_clear", None)
+        if callable(clear):
+            clear()
+
+
+@pytest.fixture
+def fresh_test_for_caches():
+    _clear_test_for_caches()
+    yield
+    _clear_test_for_caches()
+
+
+def test_a_feature_package_picks_its_own_tests_and_the_contract(tmp_path, monkeypatch, fresh_test_for_caches):
     pkg = tmp_path / "mall" / "tests"
     pkg.mkdir(parents=True)
     (pkg / "test_mall_pkg.py").write_text("def test_x():\n    pass\n", encoding="utf-8")
