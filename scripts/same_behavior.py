@@ -2406,7 +2406,7 @@ class BattleScenario(Scenario):
     siege_round：決戰每一回合攻城的真人也各出一招）——後半由 head 打完兩場攻城、結算、補送。
 
     第 7 批（決戰「打」b：集結、投效、挑同伴，dev/battle-3；計畫 docs/superpowers/plans/2026-11-01-決戰包-第3批.md）插進來的段：muster_seat（六位新人
-    MUSTER_PLAYERS 直接建進資料庫再登入、擺位置；秦朗月、顧長風、莫問天名下各一位同伴）、muster_pick（挑同伴與「再想想」、臨時投效再改投、同一個
+    MUSTER_PLAYERS 直接建進資料庫再登入、擺位置；秦朗月、顧長風、莫問天、石破浪名下各一位同伴）、muster_pick（挑同伴與「再想想」、臨時投效再改投、同一個
     大區兩場打得進去時照 @流水號加入——潁汝多一場攻城 G、集結被拒的路）、muster_more（顧長風挑好同伴加入、江映雪投靠豪強之後集結名單跟著換邊）、
     late（開打之後：停在挑同伴的才挑〔改成晚到〕、晚到、晚到臨時投效、再按另一邊被擋）、wander（參戰者走出大區、喊停）、muster_deliver（同伴回江湖、
     情誼減半、再同步一次清記號）；bots 那一段多一位名下有同伴、站在大區外的官軍假人（趕路、挑同伴的分數）。這一軌照舊切在 gamble；同一套段落另外
@@ -2440,10 +2440,11 @@ class BattleScenario(Scenario):
     # （第 7 批插進來的段落照 still 不吃這段時間；gamble 開頭 expect 驗）
     # 第 7 批：六位新人（名號：(陣營, 擺在哪)）。region＝那一場決戰的大區（spot）、hilltop＝荒丘（同一個大區，G 那一塊）、away＝那一場決戰的大區外（away_spot）。
     # 顧長風按加入、挑同伴、再想想、再按加入停在挑，後半才挑；莫問天按加入停在挑，開打了才挑（改成晚到）；江映雪（散人）臨時投效官軍再改投黃巾，
-    # 後半到曹氏莊院投靠豪強；石破浪在荒丘看得到兩場、照 @流水號加入決戰；嚴不悔、沐晚晴集結時在大區外，開打之後才到（晚到、晚到臨時投效）
+    # 後半到曹氏莊院投靠豪強；石破浪在荒丘看得到兩場、先按 G 那一場的 @ 停在挑同伴、再想想，照 @流水號加入決戰；嚴不悔、沐晚晴集結時在大區外，開打之後才到（晚到、晚到臨時投效）
     MUSTER_PLAYERS = {"顧長風": ("guan", "region"), "莫問天": ("guan", "region"), "江映雪": (None, "region"), "石破浪": ("huang", "hilltop"),
                       "嚴不悔": ("huang", "away"), "沐晚晴": (None, "away")}
-    ESCORTERS = ("秦朗月", "顧長風", "莫問天")  # 名下各一位同伴（秦朗月集結時照舊按「不派」：muster 那一段本來就這樣按）
+    # 名下各一位同伴（秦朗月集結時照舊按「不派」：muster 那一段本來就這樣按；石破浪是審查之後加的：先按 G 那一場停在挑、再想想）
+    ESCORTERS = ("秦朗月", "顧長風", "莫問天", "石破浪")
     AWAY_BOT = ("假寅", "guan")  # bots 那一段：名下一位同伴、站在大區外的官軍假人
     PHASES_FIRST = ["setup", "join", "seat", "look", "admin", "open", "siege_open", "siege_seat", "muster_seat", "muster", "muster_pick",
                     "muster_more", "siege_muster", "siege_cancel", "siege_start", "start", "late", "gamble"]
@@ -3394,7 +3395,7 @@ class BattleScenario(Scenario):
     @_still
     def muster_seat(self) -> None:
         """第 7 批的六位新人建好、擺好（region：那一場決戰的大區；hilltop：荒丘，同一個大區；away：那一場決戰的大區外）；秦朗月、顧長風、
-        莫問天名下各一位同伴（歷史武將同行開著的季）。"""
+        莫問天、石破浪名下各一位同伴（歷史武將同行開著的季）。"""
         spots = {"region": self.spot(self.target()[1]), "hilltop": "hilltop_wilds", "away": self.away_spot()}
         for who, (side, where) in self.MUSTER_PLAYERS.items():
             self.enroll(who, side)
@@ -3407,7 +3408,8 @@ class BattleScenario(Scenario):
         """集結中第 7 批的加入那幾種與被拒的路——攻城開著的季先在潁汝多開一場（G：黃巾攻中立的荒丘）：黃巾與散人站在那一區看得到兩場、
         加入與投效的鈕帶 @流水號（_battle_menu），官軍那一格是守將、站不進去。
         顧長風：按加入 → 挑同伴那一步（名下每一位一顆、「不派」「再想想」）→ 再想想 → 再按加入，停在挑；莫問天：按加入，停在挑。
-        江映雪（散人）：臨時投效官軍 → 改投黃巾。石破浪：先按一顆壞掉的 @，再照決戰那一場的 @ 加入。被拒：韓雲起按官軍的加入（不在選單上）、
+        江映雪（散人）：臨時投效官軍 → 改投黃巾。石破浪：先按一顆壞掉的 @，再按 G 那一場的 @（名下有同伴：停在挑、escort_pick 記著 @G）→
+        再想想，再照決戰那一場的 @ 加入（不派）。被拒：韓雲起按官軍的加入（不在選單上）、
         沐晚晴在大區外按投效（看不到戰場）。集結一軌的前半停在這一段之後。"""
         if self.siege_on():
             side, loc = self.SIEGES["G"]
@@ -3429,7 +3431,15 @@ class BattleScenario(Scenario):
         who = "石破浪"
         emit(f"{who} 看到的戰鬥鈕", sorted(i for i in self.ids(self.main(who)) if i.startswith("battle:")))
         self.choose(who, "battle:join:huang@abc")  # 壞掉的流水號：不在選單上
+        g = self.slot_of("G") if self.siege_on() else None
+        if g is not None and g.record_id is not None:
+            # 照 @流水號按 G 那一場（不是排第一的決戰：審查 nit，按 @1 的話不帶流水號也落在同一場，@ 整個被忽略也比不出來）——名下有同伴，
+            # 停在挑，記下的那一下帶著 @G（PlayerState.escort_pick）；再想想，回頭照決戰那一場的 @ 加入
+            self.choose(who, f"battle:join:huang@{g.record_id}")
+            self.mates(who, "按了 G 那一場的加入、停在挑")
+            self.choose(who, "battle:escort:back")
         self.press(who, "battle:join:huang", "集結時按的")
+        self.no_escort(who)
         self.choose("韓雲起", "battle:join:guan")  # 只能站自己陣營那一邊：選單上沒有
         self.main("沐晚晴")
         # 人在大區外：看不到戰場、沒有決戰的投效鈕。按的是決戰那一顆在潁汝的 id（攻城開著的季潁汝有決戰與 G 兩場，鈕帶 @流水號）——她站的冀州
