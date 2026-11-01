@@ -2376,6 +2376,17 @@ def _battle_client(base: type) -> type:
     return _BATTLE_CLIENTS[base]
 
 
+def _still(phase):
+    """第 7 批插進來的段落（BattleScenario.still）：這一段裡的每一個請求，決戰與攻城的期限都跟著時鐘往後挪那一步。"""
+
+    def run(self, *a, **k):
+        with self.still():
+            return phase(self, *a, **k)
+
+    run.__name__, run.__doc__ = phase.__name__, phase.__doc__
+    return run
+
+
 class BattleScenario(Scenario):
     """全服決戰「看」那一半（主動搬六包第 5 批；--track battle，自己一個資料庫）。照 plan.json order 4 的 behavior_check：管理者開季、
     開戰（不帶設定：start_battle 黃巾決戰；weekend、season21、week7：start_showdown 長社火攻）；官軍、黃巾、豪強、散人各一人擺在決戰的大區，
@@ -2399,7 +2410,13 @@ class BattleScenario(Scenario):
     大區兩場打得進去時照 @流水號加入——潁汝多一場攻城 G、集結被拒的路）、muster_more（顧長風挑好同伴加入、江映雪投靠豪強之後集結名單跟著換邊）、
     late（開打之後：停在挑同伴的才挑〔改成晚到〕、晚到、晚到臨時投效、再按另一邊被擋）、wander（參戰者走出大區、喊停）、muster_deliver（同伴回江湖、
     情誼減半、再同步一次清記號）；bots 那一段多一位名下有同伴、站在大區外的官軍假人（趕路、挑同伴的分數）。這一軌照舊切在 gamble；同一套段落另外
-    登記成 muster 一軌（MusterScenario），切在 muster_pick 之後——舊程式寫到兩位按了加入、停在挑同伴（escort_pick 寫進存檔）就停，新程式接著挑。"""
+    登記成 muster 一軌（MusterScenario），切在 muster_pick 之後——舊程式寫到兩位按了加入、停在挑同伴（escort_pick 寫進存檔）就停，新程式接著挑。
+    第 7 批插進來的請求不吃決戰與攻城的時間（審查 should：原本吃掉集結那 30 分鐘與第一回合的 180 秒——season21 的長社火攻在 muster_more 裡就開打、
+    第一幕全是逾時；weekend、week7 的第一回合在 late 裡逾時，放手一搏落到第二回合）：上面那幾段（_still）、narrate 裡新人的重新登入、名下有第 7 批
+    給的同伴的人按「不派」那一下，每一步之前把決戰與攻城的期限往後挪那一步（still、hold），G 在 muster_more 最後取消；第 5、6 批的集結截止、
+    開打那一刻與每一回合的逾時照那幾段原本的請求算，跟第 6 批的情境一樣（有決戰的四種設定逐回合比過：哪幾回合逾時、第幾回合換幕、兩次放手一搏
+    落在哪一回合、第九回合收場，都跟第 6 批那一版一樣；收場的勝負照多出來的參戰者變了）。第 7 批的人加入之後不出招（第一回合逾時代為固守，之後不再等他們），出招的照舊是第 5 批那三位與攻城的真人。gamble 開頭、
+    siege_start 開頭、muster_more 最後各驗一次（expect）：放手一搏打的是第一回合、攻城截止之前決戰還在集結，不成立就停。"""
 
     PLAYERS = {"秦朗月": "guan", "韓雲起": "huang", "柳青崖": "haoqiang", "葉寒舟": None}
     NEWBIE = "白小樓"  # Scenario.setup 註冊、不略過引導的那一位
@@ -2420,6 +2437,7 @@ class BattleScenario(Scenario):
     SIEGE_BOT_SEATS = [("假壬", "guan"), ("假癸", "guan"), ("假子", "huang"), ("假丑", "huang")]  # E 那一場的假人：兩軍各二
     # 戰書緊接在開戰之後下（siege_open）、攻城的真人之後才建（siege_seat）：攻城的集結截止跟決戰的差不到一分鐘，siege_start 把時鐘推過攻城的截止時
     # 決戰才剛開打（season21 的長社火攻開季就開了集結、截止得更早，一樣在這一下開打）——決戰第一回合照第 5 批的樣子在 gamble 打
+    # （第 7 批插進來的段落照 still 不吃這段時間；gamble 開頭 expect 驗）
     # 第 7 批：六位新人（名號：(陣營, 擺在哪)）。region＝那一場決戰的大區（spot）、hilltop＝荒丘（同一個大區，G 那一塊）、away＝大區外、也不在攻城的大區（away_spot）。
     # 顧長風按加入、挑同伴、再想想、再按加入停在挑，後半才挑；莫問天按加入停在挑，開打了才挑（改成晚到）；江映雪（散人）臨時投效官軍再改投黃巾，
     # 後半到曹氏莊院投靠豪強；石破浪在荒丘看得到兩場、照 @流水號加入決戰；嚴不悔、沐晚晴集結時在大區外，開打之後才到（晚到、晚到臨時投效）
@@ -2445,6 +2463,7 @@ class BattleScenario(Scenario):
 
         ollama_client.OllamaClient.from_config = classmethod(from_config)
         self.late_done = False
+        self.stills = 0  # still() 疊了幾層：大於 0 時每一個請求都是第 7 批插進來的（begin 先挪期限）
 
     # ── 小工具 ──
 
@@ -2452,8 +2471,10 @@ class BattleScenario(Scenario):
 
     def begin(self) -> None:
         """同 Scenario.begin，只是一步 STEP_SECONDS（十秒）；同約戰那一軌，每個請求換一份空的勝算記憶（前半＋後半是兩個行程，集結中那幾位
-        選單上的勝算字才對得上）。"""
+        選單上的勝算字才對得上）。第 7 批插進來的請求（still 裡）先把決戰與攻城的期限往後挪這一步（hold）。"""
         STEP[0] += 1
+        if self.stills:
+            self.hold()
         CLOCK[0] = CLOCK0 + STEP[0] * self.STEP_SECONDS
         random.seed(STEP[0])
         self.server.GAMES.clear()
@@ -2464,6 +2485,49 @@ class BattleScenario(Scenario):
     def skip(self, steps: int) -> None:
         STEP[0] += steps
         emit(f"時鐘推過 {steps} 步", None)
+
+    def expect(self, ok: bool, what: str) -> None:
+        """情境自己驗的前提：不成立就停、不往下比（審查 should：第 7 批插進來的段落吃掉了集結的時間，第 5、6 批決戰那一段的節奏悄悄變了，
+        base 與 head 跑同一套段落，比對照樣相等，看不出來）。"""
+        if not ok:
+            raise RuntimeError(f"情境的前提不成立（第 {STEP[0]} 步）：{what}")
+
+    @contextlib.contextmanager
+    def still(self):
+        """這一段裡的請求是第 7 批插進來的（審查 should）：決戰與攻城的時鐘不走——每一步之前把期限往後挪那一步（hold），集結截止與每一回合的
+        逾時照第 5、6 批那幾段的請求算，跟沒有這幾段時一樣（集結那 30 分鐘、一回合 180 秒放不下第 7 批的幾十個請求：season21 的長社火攻
+        開季就開了集結、截止最早，原本在第 7 批的段落裡就開打了；late 那九個請求排在開打與放手一搏之間，第一回合在 late 裡逾時）。"""
+        self.stills += 1
+        try:
+            yield
+        finally:
+            self.stills -= 1
+
+    def hold(self) -> None:
+        """還沒收場的決戰與攻城：期限往後挪一步（battle_instance.shift_deadlines，管理者暫停再繼續的同一個做法：集結中挪集結截止、開打了挪這一回合
+        開放的時間）。賽季的時鐘照走。都收場了（或還沒開）什麼都不寫。"""
+        from tianxia import battle_instance
+
+        b = self.world.get_battle()
+        if (b is None or b.phase == "ended") and all(s.phase == "ended" for s in self.world.get_sieges()):
+            return
+
+        def fn(state) -> None:
+            for x in ([state.active_battle] if state.active_battle is not None else []) + list(state.sieges):
+                battle_instance.shift_deadlines(x, self.STEP_SECONDS)
+
+        self.world.mutate(fn)
+
+    def relogin(self, who: str) -> None:
+        """同 Scenario.relogin；第 7 批的新人（MUSTER_PLAYERS）重新登入那一下照第 7 批插進來的請求算（still：narrate 那一段的 login_all）。"""
+        with self.still() if who in self.MUSTER_PLAYERS else contextlib.nullcontext():
+            super().relogin(who)
+
+    def no_escort(self, who: str) -> None:
+        """有挑同伴那一步就按「不派」。名下的同伴是第 7 批給的（ESCORTERS）：那一下照第 7 批插進來的請求算（still）。"""
+        if "battle:escort:none" in self.ids(self.main(who)):
+            with self.still() if who in self.ESCORTERS else contextlib.nullcontext():
+                self.choose(who, "battle:escort:none")
 
     def skip_past(self, deadline: float) -> None:
         """時鐘推到下一個請求剛過 deadline（begin 的時刻是 CLOCK0 + 步數 × STEP_SECONDS）。"""
@@ -2589,8 +2653,7 @@ class BattleScenario(Scenario):
             if pick is None:
                 continue
             self.choose(who, pick)
-            if "battle:escort:none" in self.ids(self.main(who)):
-                self.choose(who, "battle:escort:none")
+            self.no_escort(who)  # 秦朗月名下有第 7 批給的同伴：按「不派」那一下照第 7 批插進來的請求算
         for who in [*self.PLAYERS, self.NEWBIE]:
             self.main(who)
         self.battle_row("集結中")
@@ -2606,7 +2669,10 @@ class BattleScenario(Scenario):
 
     def gamble(self) -> None:
         """第一回合：官軍放手一搏、散人掛機（回合等到逾時、代為固守）、其餘出招；這一回合結算之後劇情還沒補（場景上是固定句，等
-        narrate_once）——前半停在這裡。"""
+        narrate_once）——前半停在這裡。這一回合是第一回合（第一幕、還沒有一回合逾時），不然就停。"""
+        b = self.world.get_battle()
+        self.expect(b is None or (b.phase == "active" and b.round_number == 0 and b.act_index == 0),
+                    "放手一搏打的是第一回合" + ("" if b is None else f"（此刻 {b.phase}、第 {b.round_number + 1} 回合、第 {b.act_index + 1} 幕）"))
         self.round({self.GAMBLER: "火燒連營，直搗敵陣"})
         self.main(self.GAMBLER)
 
@@ -2924,8 +2990,7 @@ class BattleScenario(Scenario):
             emit(f"{joiner} 試開那一場按的", pick)
             if pick is not None:
                 self.choose(joiner, pick)
-                if "battle:escort:none" in self.ids(self.main(joiner)):
-                    self.choose(joiner, "battle:escort:none")
+                self.no_escort(joiner)
         self.battle_row("試開")
         self.do(ADMIN, "start_battle", {"id": trial})
         if op == "start_showdown":
@@ -3066,8 +3131,7 @@ class BattleScenario(Scenario):
             if pick is None:
                 continue
             self.choose(who, pick)
-            if "battle:escort:none" in self.ids(self.main(who)):
-                self.choose(who, "battle:escort:none")
+            self.no_escort(who)
         for who in self.SIEGE_PLAYERS:
             self.main(who)
         self.siege_row("集結中", ("A", "B", "C"))
@@ -3089,7 +3153,10 @@ class BattleScenario(Scenario):
 
     def siege_start(self) -> None:
         """攻城的集結截止（戰書比決戰晚幾步下，截止也晚幾步）：時鐘推過最晚的那一場，攻城的真人各看一次——第一個同步的人把決戰與每一場攻城都
-        推到開打（_battle_status：先決戰、再每一場攻城各推一次，_tick_siege；沒人到的作罷）；start 那一段接著看決戰開打的畫面。"""
+        推到開打（_battle_status：先決戰、再每一場攻城各推一次，_tick_siege；沒人到的作罷）；start 那一段接著看決戰開打的畫面。
+        到這裡為止決戰還在集結（season21 的長社火攻開季就開了集結、截止最早：集結那幾段要放得進去），不然就停。"""
+        b = self.world.get_battle()
+        self.expect(b is None or b.phase == "muster", f"攻城截止之前決戰還在集結（此刻 {None if b is None else b.phase}）")
         if not self.siege_on():
             return
         mustering = [b for b in self.world.get_sieges() if b.phase == "muster"]
@@ -3207,8 +3274,7 @@ class BattleScenario(Scenario):
         emit(f"{self.GAMBLER} 季終之前加入的", pick)
         if pick is not None:
             self.choose(self.GAMBLER, pick)
-            if "battle:escort:none" in self.ids(self.main(self.GAMBLER)):
-                self.choose(self.GAMBLER, "battle:escort:none")
+            self.no_escort(self.GAMBLER)
         self.siege_row("季終之前", ("D",))
 
     # ── 第 7 批：集結、投效、挑同伴（MUSTER_PLAYERS、ESCORTERS、AWAY_BOT）──
@@ -3321,6 +3387,7 @@ class BattleScenario(Scenario):
         emit("大區外的一處", found)
         return found
 
+    @_still
     def muster_seat(self) -> None:
         """第 7 批的六位新人建好、擺好（region：那一場決戰的大區；hilltop：荒丘，同一個大區；away：大區外、也不在攻城的大區）；秦朗月、顧長風、
         莫問天名下各一位同伴（歷史武將同行開著的季）。"""
@@ -3331,6 +3398,7 @@ class BattleScenario(Scenario):
         for who in self.ESCORTERS:
             self.give_mate(who, self.PLAYERS.get(who, self.MUSTER_PLAYERS.get(who, (None,))[0]))
 
+    @_still
     def muster_pick(self) -> None:
         """集結中第 7 批的加入那幾種與被拒的路——攻城開著的季先在潁汝多開一場（G：黃巾攻中立的荒丘）：黃巾與散人站在那一區看得到兩場、
         加入與投效的鈕帶 @流水號（_battle_menu），官軍那一格是守將、站不進去。
@@ -3364,9 +3432,12 @@ class BattleScenario(Scenario):
         self.battle_row("第 7 批的人加入之後")
         self.escorts_row("集結中")
 
+    @_still
     def muster_more(self) -> None:
         """集結一軌的後半從這裡接（重新登入）：顧長風挑好同伴加入（集結中，照加入帶著那一位）；江映雪到曹氏莊院（同一個大區）投靠地方豪強，
-        豪強分屬兩軍的季挑了依附哪一軍、集結名單跟著換到那一邊（_ally_follows_battle，FB-273）；豪強不分屬兩軍的季照舊臨時投效著。"""
+        豪強分屬兩軍的季挑了依附哪一軍、集結名單跟著換到那一邊（_ally_follows_battle，FB-273）；豪強不分屬兩軍的季照舊臨時投效著。
+        最後管理者取消 G（同 C：admin_conquest_cancel）——G 只為了集結時潁汝有兩場，留著的話 siege_start 要把時鐘推過它的截止（比 A、B、F 晚
+        將近一個集結），第 5、6 批的決戰與攻城就晚那麼久才開打。"""
         self.login_all()
         who = "顧長風"
         ids = self.ids(self.main(who))
@@ -3391,7 +3462,14 @@ class BattleScenario(Scenario):
             self.settle_choices(who)
         self.battle_row("第 7 批後半的人加入之後")
         self.escorts_row("集結中（後半）")
+        b = self.world.get_battle()
+        self.expect(b is None or b.phase == "muster", f"第 7 批集結那幾段做完時決戰還在集結（此刻 {None if b is None else b.phase}）")
+        slot = self.slot_of("G") if self.siege_on() else None
+        if slot is not None:
+            self.do(ADMIN, "conquest_cancel", {"id": slot.id})
+            self.siege_row("G 取消之後", ("G",))
 
+    @_still
     def late(self) -> None:
         """開打之後才到：莫問天集結時按了加入、停在挑同伴，現在才挑（改成晚到、帶著那一位）；嚴不悔（黃巾）擺進決戰的大區，按「加入戰局」；
         沐晚晴（散人）擺進大區，晚到臨時投效官軍——人多的那一邊（晚到照投效的那一軍記，不照「補人少的那一邊」分；Task 5 的單點突變抓到
@@ -3412,6 +3490,7 @@ class BattleScenario(Scenario):
         self.battle_row("晚到之後")
         self.escorts_row("開打")
 
+    @_still
     def wander(self) -> None:
         """參戰者走出決戰的大區、再喊停（_sync_battle_presence：出發那一下記離開；喊停那一下這一趟只剩下一站，落回大區就不算離開；抵達時
         再記一次）：顧長風（帶著同伴：主人離開大區時同伴也不在場上）往大區外的一處走（照 id 排、第一站還在大區裡的第一處），喊停。之後
@@ -3441,6 +3520,7 @@ class BattleScenario(Scenario):
             self.choose(who, "act:halt")
         self.escorts_row("喊停之後")
 
+    @_still
     def muster_deliver(self) -> None:
         """第 7 批的新人收補送（下一次同步）：帶著同伴的顧長風、莫問天——同伴打完回江湖（file_showdown → escort_home：拿出隊伍、一句、情誼減半），
         再同步一次清掉全服的記號（settle_partings，FB-361）；秦朗月不派，沒有那一句。"""
@@ -3452,6 +3532,7 @@ class BattleScenario(Scenario):
             self.main(who)
             self.mates(who, "再同步一次之後")
 
+    @_still
     def away_bot(self, battle_id: str, seed: int) -> set[int]:
         """假人那一場：一位官軍假人站在那一場的大區外、名下一位同伴（BotRunner 的 _toward_battle 照 rally_region 趕路，到了按加入、停在挑同伴：
         battle:escort:* 照決戰包的分數〔None：不按〕）。回它的種子（一直在線），這份內容沒有那一場是空的。"""
