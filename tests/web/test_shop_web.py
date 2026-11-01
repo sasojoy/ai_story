@@ -808,6 +808,25 @@ def test_rack_lines_write_each_items_cap_and_slow_wear(content, world):
     assert "淬煉 0/5" in low and "磨得慢" not in low
 
 
+def test_armor_rack_lines_write_each_items_cap_and_slow_wear(content, world):
+    """防具頁那一列另一種寫法（耐久度、少扣）：同樣寫「淬煉 N/M」照這一件的上限、上品接「磨得慢」。設定照正式內容防具那一組佔位。"""
+    from tianxia.state import Equipment
+
+    content.config.armor.temper_max_by_quality = {"下品": 5, "中品": 6, "上品": 7}
+    content.config.armor.wear_less_by_quality = {"上品": 1}
+    game = _smith(content, world, name="甲品客")
+    game.state.player.rack = [Equipment(id="甲:1", slot="armor", name="上品甲", attribute="柔", tier=1, quality="上品", edge=60),
+                              Equipment(id="甲:2", slot="armor", name="下品甲", attribute="剛", tier=1, quality="下品")]
+    game.choose("smith:page:armor")
+    m = server.main_view(game)
+    assert m["shop"]["page"] == "armor"
+    html = _rack_page(m)
+    rows = {r["id"]: r for r in m["shop"]["rack"]["rows"]}
+    top, low = _text(_row_of(html, "甲:1")), _text(_row_of(html, "甲:2"))
+    assert f"屬柔・一階上品・淬煉 0/7・{rows['甲:1']['wear_word']} 60・磨得慢・少扣 {rows['甲:1']['cut']}" in top
+    assert "淬煉 0/5" in low and "磨得慢" not in low
+
+
 def test_the_worn_card_draws_this_items_cap_in_pips(content, world):
     html = _rack_page(server.main_view(_qualities(content, world)))
     worn = html[html.index('class="shop-worn"'):html.index('class="shop-bigs"')]
