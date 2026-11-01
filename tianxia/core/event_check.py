@@ -16,10 +16,15 @@ Game._present），留在 Game 上的（選單、分派、記錄、戰鬥的單�
 event_llm、secret_recipes）這裡也叫模組屬性——測試換掉的東西兩邊打得到的一樣。engine 在 `from .world import (...)` 之後才 import 這一份
 （這裡 import 的模組那時都已經載入，載入順序不變）。
 
-改這一份 test_for 挑核心測試＋煙霧；照舊直接碰到事件檢定、要另外跑的（-m "slow or not slow"）：tests/bots/test_free_text_and_marks.py、
-tests/bots/test_event_rotation.py、tests/core/test_outcomes_answer.py、tests/core/test_outcomes_server.py、tests/core/test_outcomes_bots.py、
-tests/arts/test_in_lock_model_timeout.py、tests/core/test_events.py、tests/core/test_event_tiers.py、tests/server/test_server.py，
-與 scripts/same_behavior.py 的 events 一軌（見計畫第五節）。
+改這一份 test_for 挑核心測試＋煙霧（約 1,600 條）。搬之前改這幾個方法，test_for 照方法名（answer、event、foreshadow）挑到的事件測試不在
+核心測試裡，改這一份要另外跑（-m "slow or not slow" -n 4）：
+- 隨口應對：tests/bots/test_free_text_and_marks.py、tests/core/test_outcomes_answer.py、tests/core/test_outcomes_server.py、
+  tests/core/test_outcomes_bots.py、tests/arts/test_in_lock_model_timeout.py
+- 端出事件與固定選項：tests/bots/test_event_rotation.py、tests/bots/test_event_llm.py、tests/core/test_events.py、tests/core/test_event_ease.py、
+  tests/core/test_event_reward_caps.py、tests/core/test_event_tiers.py、tests/core/test_events_new_regions.py、tests/core/test_faction_events.py、
+  tests/map/test_weekcard.py、tests/bots/test_silver_gates.py、tests/figures/test_foreshadow.py、tests/figures/test_item7_foreshadow_cooldown.py、
+  tests/season/test_real_foreshadows.py
+- 與 scripts/same_behavior.py 的 events 一軌（compare --tracks events；見計畫第五節）
 """
 from __future__ import annotations
 
