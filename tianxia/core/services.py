@@ -82,6 +82,8 @@
 - 修練頁紀錄：`ctx._xinde()`、`ctx._menxia_entry(tag, xinde_before, ...)`（修練頁、煉製頁的動作寫進江湖紀錄，同一種連續的併成一則）
 - 線索（口訣、殘譜、鑄譜、秘方）：`ctx._tale_clue(event)`、`ctx._scrap_find()`、`ctx._forge_clue(source, seed)`、`ctx._overhear(companion_id, msgs)`、
   `ctx._solved_secrets()`、`ctx._note_solved(before)`；素材與經濟的一天 `ctx.econ_day()`；探索那一行悟意境被拿掉的原因 `ctx._insight_blocked(loc)`
+地點（大勢人物＋地圖區；總表附錄甲裁核心）
+- `ctx.place_minutes(loc_id)`（走到那裡要現實幾分鐘）、`ctx._figures_here()`（這個地點的大勢人物：核心的選單也叫）
 
 ## 二、查詢服務
 

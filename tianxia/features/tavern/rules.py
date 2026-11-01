@@ -468,7 +468,7 @@ def ties_player_lines(state: GameState, content: Content, other: GameState, mate
                       wanted: set[str] | None = None) -> tuple[list[str], bool]:
     """打聽一個玩家跟誰走得近：照打聽度，2 以上說陣營與稱號，3 以上加身邊的同伴，4 以上加近來的三件事（行狀份量 3 以上、最新的在前；
     起用碎片那一筆不列，annals.heard，FB-643）；1 以下沒人聽過（退一半）。"""
-    from tianxia import allied  # noqa: PLC0415  過渡：待搬（豪強依附的那一軍）
+    from tianxia import allied  # noqa: PLC0415  共用規則層（豪強依附的那一軍）
 
     score = person_reach(state, content, other, wanted)
     p = other.player

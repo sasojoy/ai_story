@@ -9,7 +9,7 @@ bot.py、bot_policy.take_turn、測試，與 engine 模組層的 `_outing_watch`
 from __future__ import annotations
 
 from tianxia import annals  # 過渡：待搬（行狀：撿到稀世的東西、以弱勝強記一則）
-from tianxia import deeds  # 過渡：待搬（世界記事：同上）
+from tianxia import deeds  # 共用規則層（世界記事：同上）
 from tianxia import journal, naming, team
 from tianxia import materials  # 共用規則層（撿到的東西那一句的開頭）
 from tianxia import prologue as prologue_rules  # 過渡：待搬（序章裡不走一趟）

@@ -21,7 +21,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from tianxia import calendar, journal, team
-from tianxia import allied  # 過渡：待搬（豪強依附的那一軍：補位的人算哪一邊）
+from tianxia import allied  # 共用規則層（豪強依附的那一軍：補位的人算哪一邊）
 from tianxia import annals  # 過渡：待搬（行狀：約戰那一筆交手）
 from tianxia import atlas  # 過渡：待搬（大區：同一區才應得了戰）
 from tianxia import battlelog  # 共用規則層（戰報）
@@ -31,13 +31,13 @@ from tianxia import howto  # 過渡：待搬（行動列底下那一行的句子
 from tianxia import orders  # 過渡：待搬（軍令：截糧的運糧隊、攻城軍令對不對）
 from tianxia import precise  # 過渡：待搬（一類一顆：打贏的獎勵怎麼算）
 from tianxia import prologue as prologue_rules  # 過渡：待搬（序章裡沒有約戰）
-from tianxia import push  # 過渡：待搬（人數緩衝、貢獻、活躍名單）
+from tianxia import push  # 共用規則層（人數緩衝、貢獻、活躍名單）
 from tianxia import ranger  # 過渡：待搬（遊俠名號：經驗倍數）
 from tianxia import ranks  # 過渡：待搬（晉升：離下一階還差多少）
 from tianxia import seal_acts  # 過渡：待搬（玉璽：傳檄的倍數、補位的人在哪一區）
 from tianxia import server_bots  # 過渡：待搬（這一季的假人：補位）
 from tianxia import treasures  # 共用規則層（寶物：內傷、經驗心得的加成）
-from tianxia import wins  # 過渡：待搬（三陣營四勝利：貢獻記在哪一軍）
+from tianxia import wins  # 共用規則層（三陣營四勝利：貢獻記在哪一軍）
 from tianxia.calendar import DAY
 from tianxia.characters import CharacterStore, name_key
 from tianxia.core.option import Option

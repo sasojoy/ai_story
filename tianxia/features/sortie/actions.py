@@ -14,7 +14,7 @@ import random
 from typing import TYPE_CHECKING
 
 from tianxia import gender, team
-from tianxia import allied  # 過渡：待搬（豪強依附的那一軍：混戰撞不撞得上）
+from tianxia import allied  # 共用規則層（豪強依附的那一軍：混戰撞不撞得上）
 from tianxia import annals  # 過渡：待搬（行狀：混戰那一筆交手）
 from tianxia import battlelog  # 共用規則層（戰報）
 from tianxia import conquest  # 過渡：待搬（地盤：區塊、進度、推不推得動、混戰的對象）
@@ -26,7 +26,7 @@ from tianxia import orders  # 過渡：待搬（軍令：截糧的運糧隊、�
 from tianxia import precise  # 過渡：待搬（一類一顆：打贏的獎勵怎麼算）
 from tianxia import prologue as prologue_rules  # 過渡：待搬（序章：雪恥、不掉東西）
 from tianxia import ranger  # 過渡：待搬（遊俠名號：經驗倍數）
-from tianxia import roster  # 過渡：待搬（截殺的新手期：混戰照它）
+from tianxia import roster  # 共用規則層（截殺的新手期：混戰照它）
 from tianxia import territory  # 過渡：待搬（地盤：誰控制、這裡駐著哪幾路）
 from tianxia import treasures  # 共用規則層（寶物：多掉一個素材、出陣的稀有掉落）
 from tianxia.characters import name_key
