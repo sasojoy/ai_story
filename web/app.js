@@ -117,6 +117,7 @@
     shopNote: null, // 鐵匠鋪素材頁、軍需帳上一下的結果那一句（升階出了什麼、捐了多少；素材與經濟 B6）；換頁、出店清掉
     shopBrew: null, // 打造頁點開的那一格灰格（鐵匠鋪與合成流程 3.3）：{ attr, tier }，那一排底下彈熬的小單；熬了、取消、出店清掉
     rackPick: {}, // 裝備庫勾了要拆的（3.4）：裝備 id → true；送出、出店清掉，畫的時候只認現在列上拆得了的
+    divinePick: null, // 神器頁收藏冊點著的那一格（3.8，配方 id）：底下翻出神器譜那一行；再點、換頁、出店收起
     donatePick: {}, // 軍需帳挑好要捐的：素材 id → 個數（點一格挑、＋−改個數，「捐出」一起送）
     boardZoom: null, // 懸賞榜放大的那一張告示（懸賞 id）；第三層開著時照伺服器的 picked
     tavTab: "news", // 酒肆那一頁停在哪（news 聽消息／ask 打聽／wall 題壁／shade 暗處）；進門停在聽消息（企劃者 2026-10-18）
@@ -407,7 +408,7 @@
       S.shopTab = "shelf"; S.shopPot = null; S.shopLine = null; S.shopMore = false;
       S.shopHorse = null; S.boardZoom = null; S.boardStamp = null; S.arenaTab = "floor";
       S.shopNote = null; S.donatePick = {}; // 素材頁、軍需帳上一下的結果與挑好要捐的（素材與經濟 B6）
-      S.shopBrew = null; S.rackPick = {}; // 打造頁點開的灰格、裝備庫勾了的（鐵匠鋪與合成流程 3.3、3.4）
+      S.shopBrew = null; S.rackPick = {}; S.divinePick = null; // 打造頁點開的灰格、裝備庫勾了的、神器頁點著的（鐵匠鋪與合成流程 3.3、3.4、3.8）
       S.tavTab = "news"; S.tavAsk = "seek"; // 酒肆從聽消息那一頁來
       if (shopKind(main) !== "smith") { S.shopReveal = null; S.shopOpened = false; }
     }
@@ -3129,22 +3130,28 @@
   }
 
   // 鐵匠鋪現在停在哪一頁（S.shopTab 不認得的當架上，同 smithHtml）。素材頁只在伺服器給了 shop.trade（收購或升階開著）時有
-  // 舊的「淬煉與修」（temper；網頁沒重新載入、手上還記著那一頁）當裝備庫：那一頁併進去了（3.4）
+  // 舊的「淬煉與修」（temper；網頁沒重新載入、手上還記著那一頁）當裝備庫：那一頁併進去了（3.4）。神器頁只在輪替季（shop.divine）有
   function smithTab(shop) {
     if (S.shopTab === "trade") return shop && shop.trade ? "trade" : "shelf";
+    if (S.shopTab === "divine") return shop && shop.divine ? "divine" : "shelf";
     if (S.shopTab === "temper") return "rack";
     return ["forge", "rack"].includes(S.shopTab) ? S.shopTab : "shelf";
   }
-  // 鐵匠鋪的分頁：四頁，素材買賣開著時多第五頁「素材」（素材與經濟 B6，企劃者 2026-10-15 選草圖 A1）
-  function smithTabs(shop) { return shop.trade ? [...SHOP_TABS, ["trade", "素材"]] : SHOP_TABS; }
+  // 鐵匠鋪的分頁：三頁，素材買賣開著時多一頁「素材」（素材與經濟 B6，企劃者 2026-10-15 選草圖 A1），神器輪替的季最後多一頁「神器」
+  // （鐵匠鋪與合成流程 3.8；沒蓋章的季照舊）
+  function smithTabs(shop) {
+    const tabs = shop.trade ? [...SHOP_TABS, ["trade", "素材"]] : SHOP_TABS;
+    return shop.divine ? [...tabs, ["divine", "神器"]] : tabs;
+  }
 
   // 鐵匠鋪（第一批）：兵器防具切換、四頁、分頁列、出爐卡。架上頁最上面是爐火與鐵匠那一句（line，shopHtml 交過來），不跟著貨卡捲。
   // 素材頁不分兵器、防具：那一頁不畫上面的切換
   function smithHtml(shop, line = "") {
     const tab = smithTab(shop);
-    const pages = shop.pages.length > 1 && tab !== "trade" ? `<div class="shop-pages">${shop.pages.map((p) => `<button class="shop-page${p.slot === shop.page ? " on" : ""}"${p.slot === shop.page ? " disabled" : ` data-act="choose" data-id="${esc(p.id)}"`}>${esc(p.label)}</button>`).join("")}</div>` : "";
-    const body = { shelf: shelfHtml, forge: forgePageHtml, rack: rackHtml, trade: tradeHtml }[tab];
-    return `${tab === "shelf" ? SMITH_HERO + line : ""}${pages}
+    const pages = shop.pages.length > 1 && tab !== "trade" && tab !== "divine" ? `<div class="shop-pages">${shop.pages.map((p) => `<button class="shop-page${p.slot === shop.page ? " on" : ""}"${p.slot === shop.page ? " disabled" : ` data-act="choose" data-id="${esc(p.id)}"`}>${esc(p.label)}</button>`).join("")}</div>` : "";
+    const body = { shelf: shelfHtml, forge: forgePageHtml, rack: rackHtml, trade: tradeHtml, divine: divineHtml }[tab];
+    // 架上頁鐵匠那一句底下一行連到神器頁（3.8：輪替季才有）
+    return `${tab === "shelf" ? SMITH_HERO + line + (shop.divine ? divineLinkHtml(shop.divine) : "") : ""}${pages}
       <div class="shop-body"><div class="shop-col">${body(shop)}</div></div>
       <nav class="shop-tabs">${smithTabs(shop).map(([k, name]) => `<button class="shop-tab${tab === k ? " on" : ""}" data-act="shop-tab" data-tab="${k}">${name}</button>`).join("")}</nav>
       ${S.shopReveal ? revealHtml(S.shopReveal, shop) : ""}`;
@@ -3671,6 +3678,60 @@
     else picked[id] = true;
     S.rackPick = picked;
     renderShop();
+  }
+
+  // ── 神器頁（鐵匠鋪與合成流程 3.8，企劃者 2026-10-29 三張對比圖選丙；守正式季整合 5.10，企劃者「乙 守 5.10」）：輪替季才有（shop.divine）。
+  // 上半「江湖已見」：這一季已經有人打出原品的一件一列（名字、原品在誰手上、全服仿品幾件、你有沒有），加上只有自己看得到的「鑄譜上有・尚無人打出」；
+  // 一件都沒有時寫一句，不寫件數。下半收藏冊：內容裡每一件一格，有人打出過的寫名字（你有的亮、這一季打出的框粗），點了底下翻出神器譜那一行；
+  // 從來沒人打出過的畫「？」、不可點、不帶任何資料（伺服器那一格的 id、name 本來就是 null）。網頁只畫伺服器給的，名單與件數一個字都不推。字待 joy 潤
+  const DV_SEEN = "江湖已見"; // 待 joy 潤
+  const DV_NONE = "這一季江湖上還沒有人打出神器的原品。"; // 待 joy 潤
+  const DV_OWNER = "原品在{owner}手上・全服仿品 {copies} 件"; // 待 joy 潤（owner 是名號，原品在你手上時伺服器給「你」）
+  const DV_MINE = { original: "原品在手", copy: "仿品在手" }; // 待 joy 潤
+  const DV_NOT_MINE = "未有"; // 待 joy 潤
+  const DV_SOLVED = "鑄譜上有・尚無人打出"; // 待 joy 潤
+  const DV_ALBUM = "收藏 {have}／{total}"; // 待 joy 潤
+  const DV_UNKNOWN = "？"; // 待 joy 潤
+  const DV_LINK = "神器 江湖已見 {k} 件・收藏 {have}／{total} ›"; // 待 joy 潤：架上頁那一行（K 是這一季已打出原品的件數）
+  const DV_LINK_ZERO = "神器 收藏 {have}／{total} ›"; // 待 joy 潤：K 是 0
+  const DV_REF = "鑄|"; // 神器譜那一筆的 ref 是「鑄|配方 id」（伺服器的 GearFind.id）；tests/web/test_smith_divine_web.py 拿真的神器譜鎖著
+  function divineAlbum(dv, tpl) {
+    return tpl.replace("{have}", dv.collected.have | 0).replace("{total}", dv.collected.total | 0);
+  }
+  function divineLinkHtml(dv) {
+    const k = dv.seen.filter((r) => !r.solved_only).length;
+    return `<button class="dv-link" data-act="shop-tab" data-tab="divine">${divineAlbum(dv, k ? DV_LINK.replace("{k}", k) : DV_LINK_ZERO)}</button>`;
+  }
+  function divineSeenRow(r) {
+    if (r.solved_only) return `<div class="dv-row solved"><b>【${esc(r.name)}】</b><small>${DV_SOLVED}</small></div>`;
+    const owner = DV_OWNER.replace("{owner}", r.owner || "").replace("{copies}", r.copies | 0);
+    return `<div class="dv-row${r.mine ? " mine" : ""}"><div class="dv-who"><b>【${esc(r.name)}】</b><small>${esc(owner)}</small></div><span class="dv-tag${r.mine ? " on" : ""}">${DV_MINE[r.mine] || DV_NOT_MINE}</span></div>`;
+  }
+  function divineCellHtml(cell) {
+    if (!cell.forged || !cell.id || !cell.name) return `<span class="dv-cell unknown">${DV_UNKNOWN}</span>`;
+    return `<button class="dv-cell${cell.have ? " have" : ""}${cell.now ? " now" : ""}${S.divinePick === cell.id ? " on" : ""}" data-act="dv-cell" data-id="${esc(cell.id)}">${esc(cell.name)}</button>`;
+  }
+  // 點著那一格在神器譜（見聞・榜單的那一張，/api/boards）裡的那一行：「第 N 季・劍・屬快・原品在甲手上」；還沒抓到、找不到是 null
+  function divineBookLine(id) {
+    const book = ((S.boards && S.boards.boards) || []).find((b) => b.id === "神器");
+    const row = book && (book.book || []).find((r) => r.ref === DV_REF + id);
+    return row ? `第 ${Number(row.season)} 季・${row.text}` : null;
+  }
+  function divineHtml(shop) {
+    const dv = shop.divine;
+    const seen = dv.seen.length ? `<div class="dv-seen">${dv.seen.map(divineSeenRow).join("")}</div>` : `<p class="shop-empty">${DV_NONE}</p>`;
+    const line = S.divinePick ? divineBookLine(S.divinePick) : null;
+    return `<h4 class="dv-h">${DV_SEEN}</h4>${seen}
+      <h4 class="dv-h">${divineAlbum(dv, DV_ALBUM)}</h4><div class="dv-album">${dv.collected.cells.map(divineCellHtml).join("")}</div>
+      ${line ? `<p class="dv-line">${esc(line)}</p>` : ""}`;
+  }
+  // 點收藏冊的一格：翻出（再點收起）神器譜那一行；手上的榜單沒有那一筆（還沒看過榜單、或是剛打出來的）就抓一次再畫
+  async function divinePick(id) {
+    S.divinePick = S.divinePick === id ? null : id;
+    renderShop();
+    if (!S.divinePick || divineBookLine(id) !== null) return;
+    try { await loadBoards(); } catch (e) { return; } // api() 提示過
+    if (S.divinePick === id) renderShop();
   }
 
   // 只重畫店面那一層（輪詢、爐裡換了東西）；畫面上還沒有那一層就整個重畫。店裡捲到哪裡照放回去（往下捲去點素材格，
@@ -6309,7 +6370,7 @@
           break;
         }
         // 店面（店面獨立介面設計第二節）：換頁只在網頁上；換上、拆解、定名走修練頁的動作（shopMx）
-        case "shop-tab": S.shopTab = el.dataset.tab; S.shopMore = false; S.shopNote = null; S.shopBrew = null; renderShop(false); break;
+        case "shop-tab": S.shopTab = el.dataset.tab; S.shopMore = false; S.shopNote = null; S.shopBrew = null; S.divinePick = null; renderShop(false); break;
         // 鐵匠鋪素材頁（素材與經濟 B6）：升一個（灰掉的只說原因）、賣一個、全賣（先問一次）
         case "trade-up":
           if (el.dataset.why) toast(el.dataset.why);
@@ -6358,6 +6419,7 @@
         case "rack-temper": await shopMx("temper_item", { item: el.dataset.id }); break;
         case "rack-pick": rackPick(el.dataset.id); break;
         case "rack-melt": rackMelt(); break;
+        case "dv-cell": await divinePick(el.dataset.id); break; // 神器頁收藏冊的一格（3.8）：翻出神器譜那一行
         case "shop-divine-keep": await shopMx("name_divine", { weapon: el.dataset.id, keep: true }); break;
         case "dismantle": // 裝備庫上那一把拆成一個素材（兵器設計 4.7.1）：先問一次（FB-125），按「拆掉」才送
           ask(el.dataset.confirm || "把這一件拆成素材？拆掉就沒了。", "拆掉", () => mx("dismantle", { weapon: el.dataset.id }));

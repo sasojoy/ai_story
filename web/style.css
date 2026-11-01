@@ -3625,6 +3625,30 @@ svg.fig .blade.bow { stroke-width: 3; }
 .shop-layer .rk-btn b { font-size: 0.93em; }
 .shop-layer .rk-btn small { font-size: 0.75em; font-weight: 400; opacity: 0.9; }
 .shop-layer .rk-btn:disabled { opacity: 0.6; }
+/* 神器頁（3.8）：架上頁鐵匠那一句底下一行連過去；上半「江湖已見」一件一列（你手上有的那一枚標籤亮），鑄譜上有、還沒人打出的虛線框；
+   下半收藏冊一件一格（375 寬一排四格、電腦寬五格）：你有的亮、這一季打出的框粗、點著的外圈一道，沒人打出過的「？」虛線、淡 */
+.shop-layer .dv-link { display: block; width: auto; margin: 0 14px 4px; padding: 6px 10px; border: 1px solid #6b4a2e; border-radius: 8px;
+  background: rgba(242, 196, 106, 0.06); color: #f2c46a; font: 0.87em/1.4 var(--serif); text-align: left; cursor: pointer; }
+@media (min-width: 641px) { .shop-layer > .dv-link { margin-left: max(14px, calc(50% - 306px)); margin-right: max(14px, calc(50% - 306px)); } }
+.shop-layer .dv-h { margin: 14px 2px 6px; font: 600 0.93em var(--serif); color: #f2c46a; letter-spacing: 2px; }
+.shop-layer .dv-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; padding: 8px 10px;
+  border: 1px solid #6b4a2e; border-radius: 10px; background: rgba(43, 26, 16, 0.85); }
+.shop-layer .dv-row b { font: 600 0.93em var(--serif); color: #f2e5c6; }
+.shop-layer .dv-row.mine { border-color: #b7862b; }
+.shop-layer .dv-row.solved { display: grid; gap: 2px; border-style: dashed; }
+.shop-layer .dv-who { display: grid; gap: 2px; min-width: 0; }
+.shop-layer .dv-who small, .shop-layer .dv-row.solved small { font-size: 0.8em; color: #c9b28a; }
+.shop-layer .dv-tag { flex: none; padding: 2px 8px; border: 1px solid #6b4a2e; border-radius: 10px; font-size: 0.8em; color: #a08a6a; white-space: nowrap; }
+.shop-layer .dv-tag.on { border-color: #f2c46a; background: #f2c46a; color: #1e1510; }
+.shop-layer .dv-album { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.4em, 1fr)); gap: 6px; }
+.shop-layer .dv-cell { display: flex; align-items: center; justify-content: center; min-height: 3.2em; padding: 4px; border: 1px solid #6b4a2e;
+  border-radius: 8px; background: rgba(43, 26, 16, 0.6); color: #c9b28a; font: 0.8em/1.3 var(--serif); text-align: center; opacity: 0.6; }
+.shop-layer button.dv-cell { cursor: pointer; }
+.shop-layer .dv-cell.have { opacity: 1; color: #f2e5c6; border-color: #b7862b; background: rgba(242, 196, 106, 0.14); }
+.shop-layer .dv-cell.now { border-width: 2px; border-color: #f2c46a; }
+.shop-layer .dv-cell.on { opacity: 1; box-shadow: 0 0 0 2px #f2e5c6; }
+.shop-layer .dv-cell.unknown { border-style: dashed; opacity: 0.35; font-size: 1.07em; }
+.shop-layer .dv-line { margin: 8px 2px; padding: 6px 10px; border-left: 3px solid #b7862b; background: rgba(0, 0, 0, 0.25); font: 0.8em/1.5 var(--serif); color: #e8d6ad; }
 /* 煉製頁合併的預覽卡（3.5）：火候字後面「真意 N%」，金字、不拆行 */
 .made-card .mc-grand { margin-left: 8px; font-weight: 600; color: var(--gold); white-space: nowrap; }
 .shop-layer .rk-go { position: sticky; bottom: 0; margin-top: 6px; padding: 12px 2px 4px; background: linear-gradient(to bottom, rgba(30, 19, 12, 0), rgba(30, 19, 12, 0.96) 30%); }

@@ -383,6 +383,7 @@ def test_tier_one_in_the_bag_makes_tier_two_brewable(content, world):
     assert "手上 0／10" in _cell_of(html, "剛", 3)
 
 
+@pytest.mark.slow  # 提示泡泡的 3.2 秒計時器把 node 留到時間到（同 test_a_blocked_cell_only_says_why）
 def test_a_brew_cell_that_cannot_brew_only_says_why(content, world):
     game = _brewing(content, world, {"gang_2": 1})
     m = server.main_view(game)
@@ -522,6 +523,7 @@ def test_the_furnace_is_not_tappable_when_the_silver_outlets_are_off(m):
     assert "shop-furnace" not in html and "fu-say" not in html and '<div class="flame">' in html
 
 
+@pytest.mark.slow  # 提示泡泡的計時器（約 3 秒）
 def test_looking_posts_the_op_and_asks_the_line_again():
     game, m = _fired()
     after = server.main_view(game)
@@ -619,6 +621,7 @@ def test_each_rack_row_has_a_box_and_four_buttons_with_their_small_print(content
     assert "shop-dismantle" not in kept and rows["兵:3"]["keep"] in _text(kept)  # 原品：拆解灰掉寫原因、不給勾
 
 
+@pytest.mark.slow  # 提示泡泡的計時器（約 3 秒）
 def test_repair_and_temper_go_through_menxia_with_the_item_id(content, world):
     m = server.main_view(_racked(content, world))
     reply = {"menxia": None, "main": m, "message": "<p>修好了。</p>"}
@@ -642,6 +645,7 @@ _MELT = """return (async () => {
 })();"""
 
 
+@pytest.mark.slow  # 提示泡泡的計時器（約 3 秒）
 def test_ticking_rows_lights_the_batch_button_and_it_asks_with_one_line_each(content, world):
     m = server.main_view(_racked(content, world))
     rows = {r["id"]: r for r in m["shop"]["rack"]["rows"]}
