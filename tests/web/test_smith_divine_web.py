@@ -64,11 +64,11 @@ def test_once_forged_the_seen_row_and_the_album_cell_appear():
     name = c.forge_secrets[SWORD].name
     mine = _layer(_page(_shop_of(jia)))
     assert f"<b>【{name}】</b>" in mine and "原品在你手上・全服仿品 0 件" in mine and '<span class="dv-tag on">原品在手</span>' in mine
-    assert f'<button class="dv-cell have now" data-act="dv-cell" data-id="{SWORD}">{name}</button>' in mine  # 這一季打出的框粗、你有的亮
+    assert f'<button class="dv-cell have dv-now" data-act="dv-cell" data-id="{SWORD}">{name}</button>' in mine  # 這一季打出的框粗、你有的亮
     theirs_m = _shop_of(yi)
     theirs = _layer(_page(theirs_m))
     assert "原品在甲手上・全服仿品 0 件" in theirs and '<span class="dv-tag">未有</span>' in theirs
-    assert f'<button class="dv-cell now" data-act="dv-cell" data-id="{SWORD}">{name}</button>' in theirs
+    assert f'<button class="dv-cell dv-now" data-act="dv-cell" data-id="{SWORD}">{name}</button>' in theirs
     total = theirs_m["shop"]["divine"]["collected"]["total"]
     assert f">神器 江湖已見 1 件・收藏 0／{total} ›</button>" in _layer(_page(theirs_m, "shelf"))
     for rid in w.get_season().divine_lineup:  # 其餘八件照樣不露
@@ -118,8 +118,8 @@ def test_tapping_a_forged_cell_shows_its_line_from_the_book():
         return { shown, closed: T.els.app.innerHTML, calls: T.calls.map((c) => c[0]) };
       })();""", S={"shopTab": "divine"}, responses={"/api/boards": boards})
     assert out["calls"].count("/api/boards") == 1
-    assert f'<p class="dv-line">第 {row["season"]} 季・{row["text"]}</p>' in out["shown"] and "dv-cell have now on" not in out["shown"]
-    assert f'data-id="{SWORD}">' in out["shown"] and 'class="dv-cell now on"' in out["shown"]
+    assert f'<p class="dv-line">第 {row["season"]} 季・{row["text"]}</p>' in out["shown"] and "dv-cell have dv-now on" not in out["shown"]
+    assert f'data-id="{SWORD}">' in out["shown"] and 'class="dv-cell dv-now on"' in out["shown"]
     assert "dv-line" not in out["closed"]  # 再點一次收起
 
 
@@ -131,6 +131,23 @@ def test_question_marks_carry_no_data():
     album = page[page.index('class="dv-album"'):]
     album = album[:album.index("</div>")]
     assert "data-" not in album and "<button" not in album
+
+
+def test_no_album_cell_class_hits_a_site_wide_rule():
+    """收藏冊的格子不能撞到全站沒加範圍的 class：江湖頁「剛剛」那張卡的 .now 帶 animation tx-now-rise（從透明浮上來）、邊框與底色，
+    格子掛上它每次重畫（換頁、點格子、輪詢）都淡入一次。這一季打出的那一格用 dv-now（計畫 Global Constraints：新 class 加前綴）。"""
+    import re
+
+    c, w = _divine_ctx()
+    jia = _smith(c, w, "甲")
+    _forge_sword(c, w, jia)
+    page = _layer(_page(_shop_of(jia)))
+    album = page[page.index('class="dv-album"'):]
+    classes = {k for cls in re.findall(r'class="(dv-cell[^"]*)"', album) for k in cls.split()}
+    sheets = "\n".join(f.read_text(encoding="utf-8") for f in sorted(server.WEB.glob("*.css")))  # 頁面載的每一份樣式表
+    bare = {k for k in classes if re.search(r"(?m)^\." + re.escape(k) + r"\s*[{,]", sheets)}  # 有一條就是這個 class 開頭、沒加範圍的
+    assert "dv-now" in classes and "now" not in classes and not bare
+    assert ".shop-layer .dv-cell.dv-now {" in (server.WEB / "style.css").read_text(encoding="utf-8")
 
 
 def test_the_divine_tab_comes_last_and_has_no_weapon_armor_switch():

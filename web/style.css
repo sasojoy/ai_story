@@ -3645,7 +3645,7 @@ svg.fig .blade.bow { stroke-width: 3; }
   border-radius: 8px; background: rgba(43, 26, 16, 0.6); color: #c9b28a; font: 0.8em/1.3 var(--serif); text-align: center; opacity: 0.6; }
 .shop-layer button.dv-cell { cursor: pointer; }
 .shop-layer .dv-cell.have { opacity: 1; color: #f2e5c6; border-color: #b7862b; background: rgba(242, 196, 106, 0.14); }
-.shop-layer .dv-cell.now { border-width: 2px; border-color: #f2c46a; }
+.shop-layer .dv-cell.dv-now { border-width: 2px; border-color: #f2c46a; } /* 不叫 .now：江湖頁那一條沒加範圍、帶淡入動畫 */
 .shop-layer .dv-cell.on { opacity: 1; box-shadow: 0 0 0 2px #f2e5c6; }
 .shop-layer .dv-cell.unknown { border-style: dashed; opacity: 0.35; }
 .shop-layer .dv-line { margin: 8px 2px; padding: 6px 10px; border-left: 3px solid #b7862b; background: rgba(0, 0, 0, 0.25); font: 0.8em/1.5 var(--serif); color: #e8d6ad; }
