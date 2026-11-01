@@ -3640,8 +3640,8 @@ svg.fig .blade.bow { stroke-width: 3; }
 .shop-layer .dv-who small, .shop-layer .dv-row.solved small { font-size: 0.8em; color: #c9b28a; }
 .shop-layer .dv-tag { flex: none; padding: 2px 8px; border: 1px solid #6b4a2e; border-radius: 10px; font-size: 0.8em; color: #a08a6a; white-space: nowrap; }
 .shop-layer .dv-tag.on { border-color: #f2c46a; background: #f2c46a; color: #1e1510; }
-.shop-layer .dv-album { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.4em, 1fr)); gap: 6px; align-items: start; } /* 格子（鈕與「？」）一樣高：鈕不跟著拉 */
-.shop-layer .dv-cell { display: flex; align-items: center; justify-content: center; min-height: 3.2em; padding: 4px; border: 1px solid #6b4a2e;
+.shop-layer .dv-album { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.4em, 1fr)); gap: 6px; align-items: start; } /* 格子（鈕與「？」）一樣高：鈕不跟著拉、不帶通用的下邊距 */
+.shop-layer .dv-cell { display: flex; align-items: center; justify-content: center; min-height: 3.2em; margin: 0; padding: 4px; border: 1px solid #6b4a2e;
   border-radius: 8px; background: rgba(43, 26, 16, 0.6); color: #c9b28a; font: 0.8em/1.3 var(--serif); text-align: center; opacity: 0.6; }
 .shop-layer button.dv-cell { cursor: pointer; }
 .shop-layer .dv-cell.have { opacity: 1; color: #f2e5c6; border-color: #b7862b; background: rgba(242, 196, 106, 0.14); }
