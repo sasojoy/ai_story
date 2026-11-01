@@ -32,3 +32,11 @@ FEATURES: list[Feature] = [
     looks.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
+
+# 共用規則層（全部拆包總表第六節第 5 條；第 11 批 PM 定的格式）：還沒、也不會搬進任何一包的規則模組（tianxia/<名字>.py），好幾包都讀。
+# 模組名 → 一句誰在用、為什麼在共用層。包 import 這裡的模組不必註「過渡：待搬」；這幾個模組跟核心一樣不准 import 包
+# （tests/core/test_feature_boundaries.py 守）。核心本體（tianxia/core/__init__.py 的 MODULES）可以 import 這一層、這一層可以 import 核心
+# 本體與同一層。第 11 批只放主人已經寫成「共用規則層」的那一個；戰鬥引擎、武學與裝備、世界模型那幾十個照總表第 15 批登記。
+SHARED: dict[str, str] = {
+    "siege": "攻城的規則（攻城戰的名字、收場改季、誰贏）：決戰包的攻城與戰況、地盤都讀；總表附錄甲裁定不搬進任何一包",
+}

@@ -5,9 +5,11 @@
 
 ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx、explore_one 模組換成
 explore_rules）；函式名＝原本的方法名去掉前導底線，一個例外：`_outing_plan(loc)` 是 `outing_plan_at`（跟 `outing_plan()` 分開）。
-Game 上留 9 個一行委派（核心原位：選單那一格、`_act` 的 act:explore、行動列底下那一行、紀錄的標題、輿圖；server 的 mostly 與輿圖；
-bot_policy；腳本；測試）。包裡互相叫直接叫這裡的函式；只有 `_outing_plan`、`outing_plan`、`_outing_on`、`odds` 經 ctx 叫
-（這一包的 tests/test_explore_one.py 換掉 game._outing_plan、test_explore_one_2e 換掉 game.odds：換掉的才打得到）。
+Game 上留 7 個一行委派（第 3＋4 批是 9 個；核心原位的選單那一格、`_act` 的 act:explore、行動列底下那一行、紀錄的標題在全部拆包
+第 11 批換成 act 子動詞的掛鉤〔__init__.py 的 verbs〕，`_outing_option`、`_explore_one` 拿掉；還在叫的：輿圖、server 的 mostly 與輿圖、
+出陣包〔_outing_on〕、bot_policy、腳本、測試）。包裡互相叫直接叫這裡的函式；經 ctx 叫的是 `_outing_plan`、`outing_plan`、`odds`
+（這一包的 tests/test_explore_one.py 換掉 game._outing_plan、test_explore_one_2e 換掉 game.odds：換掉的才打得到）與 `outing_plan`、
+`map_mostly` 照搬原本寫法的 `ctx._outing_on()`；第 11 批的 verbs() 與 outing_note 直接叫 outing_on（沒有測試換掉它，手冊第十五節）。
 擲骰都用自己的亂數（explore_rules.rng_for），Game.rng 一次都不多、不少（頭目戰與仗本身照它們原本的）。
 """
 from __future__ import annotations
@@ -108,7 +110,7 @@ def outing_weights(ctx, loc: Location, *, has_foes: bool, bounty_here: bool, hid
 
 def outing_plan_at(ctx, loc: Location, *, hidden: set[str] | None = None) -> OutingPlan:
     """這一處此刻出門一趟怎麼抽（OutingPlan）：比重照 outing_weights。這裡沒有一般對手（也沒有討伐懸賞）遭遇就是 0，那一份分給其餘三類；
-    頭目不算對手（FB-815：只有頭目的地點不是一定撞上他）——他是這一趟另外擲的（_explore_one：5% × 名聲倍數），擲中那一趟才是
+    頭目不算對手（FB-815：只有頭目的地點不是一定撞上他）——他是這一趟另外擲的（explore_one：5% × 名聲倍數），擲中那一趟才是
     遭遇。接了討伐懸賞：這一趟就是遭遇（weights 只有遭遇，explore_rules.encounter_only）；對懸賞那一路是必敗時不算（_outing_foe，2e），
     整份（對手、頭目、比重、小字）跟沒有這張懸賞時一樣。只讀，不擲骰（判勝算也不碰 Game.rng）。"""
     s, c = ctx.state, ctx.content
@@ -171,6 +173,17 @@ def standing_at(ctx, loc_id: str):
 def outing_option(ctx, loc: Location) -> Option:
     """探索一顆的鈕：「探索（體力 15・城裡多事）」，括號裡最後那一段是這一處多半給什麼（同 /api/main 的 mostly，mostly_here）。"""
     return ctx._cost_option("act:explore", "探索", ctx.content.config.jianfa.explore_stamina, note=ctx._outing_plan(loc).hint)
+
+
+def outing_note(ctx, loc: Location) -> str | None:
+    """行動列底下探索那一行（act 子動詞，第 11 批從 Game.action_notes 搬來）：探索一顆開著時寫這一處多半給什麼，比重照擲骰用的那一份
+    （經 ctx._outing_plan：測試換掉它）；關著是 None（核心照舊寫三選一、舊探索那一行）。"""
+    if not outing_on(ctx):
+        return None
+    from tianxia import howto  # noqa: PLC0415  過渡：待搬（行動列底下那一行的句子；函式裡 import：howto 照舊 import explore_one 的舊名）
+
+    plan = ctx._outing_plan(loc)
+    return howto.outing_line(plan.weights, plan.foe_note)
 
 
 def explore_one(ctx) -> list[str]:

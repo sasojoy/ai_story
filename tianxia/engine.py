@@ -27,7 +27,6 @@ from . import (
     shopview, siege, signature, signature_arms, silver, skillview, smithing,
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, xingshi, zh, yuedan,
 )
-from . import sortie_duel  # 出陣約戰（減法季批 3b）
 from . import flavor
 from .flavor import FlavorJob
 from . import storyline  # 一條線：特殊事件與特殊頓悟的底座（企劃者 2026-10-26）
@@ -122,7 +121,7 @@ from .world import (
     _season_vehicle, advance_world_state, check_thresholds, end_season, evaluate_ending, fire_by_id, open_waiting_showdown,
     resume_season_clock, settle_season_start, showdown_key, start_pending_battle,
 )
-from .world_state import SealDuel, SealSide, SortieDuel, WorldStateStore, season_length_days
+from .world_state import SealDuel, SealSide, WorldStateStore, season_length_days
 
 HOUR = 3600
 DAY = 86400
@@ -416,7 +415,7 @@ class Game:
         self._gate_scale = 1.0  # 減法季三道閘（批 2）：遭遇拍那一場的經驗、心得、銀兩乘疲勞與對手兩道閘（explore_actions.fight_gate）；其餘是 1
         self._outing_close: set[str] = set()  # 這一趟出門打了折的那幾道閘（explore_actions.fight_gate 記、explore_one 寫段落結尾那一句）
         self._beat: dict | None = None  # 走一趟：剛剛那一次探索抽到什麼（explore_actions.explore_one 寫、outing_actions.outing_walk 讀）
-        self._outing_upset = False  # 走一趟這一場遭遇開打前勝算凶險以下（_outing_fight 寫、_explore_one 讀）
+        self._outing_upset = False  # 走一趟這一場遭遇開打前勝算凶險以下（_outing_fight 寫、探索包的 explore_one 讀）
         self._affinity_before: dict[str, int] | None = None  # choose()、隨口應對進行中：這一下之前的情誼（_people_here 認這一下加了誰的情誼）
         # 歷史武將同行：挑好了隨你上陣的那一位、正在照它加入（_escort_step 開著、_escort_carry 讀）
         self._escort_picked = False
@@ -884,8 +883,7 @@ class Game:
             self._close_dadian()  # 銀兩出口關了、這裡一樣都做不了了：收起打點那一間店
         if p.picking_arena and not arena.here(s, c):
             p.picking_arena = False  # 擂台關了、季收了：收起擂台
-        if p.picking_tavern and not tavern_rules.here(s, c):
-            tavern_rules.close(s)  # 酒肆關了、人不在有酒肆的城鎮了：收起酒肆
+        features_core.drop_shops(self)  # 搬成包的店（店面登記，第 11 批；酒肆）：關了、人不在那裡了就收起來（接在舊的六間店後面）
         treasures.refresh_names(p, c)  # 寶物、名駒的名字照內容讀（裝備四欄 3.1）：joy 改了名字，存檔裡的跟著改；內容拿掉了留著舊名字
         forge_secrets.refresh_names(p, c, self.world)  # 名器的名字照內容讀（4.2）、神器的名字照全服那一列讀（5.2、5.3：原品定了名，仿品跟著改）
         signature_arms.refresh_names(p, c)  # 本命兵器的名字照內容讀（打造第三批）：joy 改了名，手上的跟著改
@@ -1008,7 +1006,7 @@ class Game:
         # 減法季批 4：痕跡過門檻的防漏（只發，不替任何人記行狀：排程那一份 Game 沒有自己的人；直接寫回、不經 _save_season）
         if jianfa(self.content, self.state.world, "marks_visible") and marks_rules.fire_due(self.state, self.content):
             self.world.save_season(self.state.world)
-        self._sortie_duel_tick()  # 減法季批 3b：窗滿了的約戰沒人在線也照時結算（關著、沒有到時的什麼都不做、不寫）
+        features_core.on_due(self)  # 到時的結算（接縫掛鉤，第 11 批；出陣包：窗滿了的約戰沒人在線也照時結算，關著、沒有到時的什麼都不做、不寫）
         msgs += self._conquest_tick()  # 領地爭奪：22:00 沒人在線也照時換天
         self._battle_status(tick=True)
         self._seal_tick()
@@ -1026,8 +1024,9 @@ class Game:
         self._reconcile_season()
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()  # 剛才的追趕可能進一步推進了賽季，拉回最新的一份
-        # 減法季批 3b：排程關著（或還沒輪到）時，下一個同步的人替窗滿了的約戰結算（只往前走；手上這一份季剛讀回來，結算改的進度當場存）
-        self._sortie_duel_tick()
+        # 到時的結算（接縫掛鉤，第 11 批）：排程關著（或還沒輪到）時，下一個同步的人替窗滿了的約戰結算（出陣包；只往前走、手上這一份季
+        # 剛讀回來，結算改的進度當場存）
+        features_core.on_due(self)
         self._stamp_join()  # 新角色、換季重來的角色：補算完賽季才記下加入的那一刻
         self._week_unlock_tick()  # 減法季 6.6：第 2 週的功能對這個人開了的那一刻，寫一則紀錄
         self._record_faction()
@@ -1039,9 +1038,8 @@ class Game:
             elapsed = max(0.0, now - self.state.last_real) * self.content.config.time_scale
             self.state.last_real = now
             msgs += self._advance_player_local(elapsed)
-            if away_from is not None and now - away_from >= self.content.config.tavern.hit_offline_minutes * 60:
-                if self._tavern_hit_check(away_from):  # 酒肆：下線那一段殺手找上門（站在城外下線的人）；戰報與紀錄自己寫，不併進江湖大事
-                    self._save_season()
+            # 下線那一段（接縫掛鉤，第 11 批）：酒肆包——離線夠久，殺手找上門（站在城外下線的人）；戰報與紀錄自己寫，不併進江湖大事
+            features_core.on_away(self, away_from)
         if self.state.player.picking_smith and not equipment.smith_open(self.state, self.content):
             equipment.close_smith(self.state.player)  # 開關關了、人不在城鎮了（內容改版、管理者挪人）：收起鐵匠鋪，單子與頁一起清
         if self.state.player.smith_draft is not None and not smithing.draft_here(self.state, self.content, self.state.player.smith_draft):
@@ -1054,8 +1052,7 @@ class Game:
             self._close_dadian()  # 銀兩出口關了、這裡一樣都做不了了：收起打點那一間店
         if self.state.player.picking_arena and not arena.here(self.state, self.content):
             self.state.player.picking_arena = False  # 擂台關了、季收了：收起擂台
-        if self.state.player.picking_tavern and not tavern_rules.here(self.state, self.content):
-            tavern_rules.close(self.state)  # 酒肆關了、人被挪走了：收起酒肆
+        features_core.drop_shops(self)  # 搬成包的店（店面登記，第 11 批；酒肆）：關了、人被挪走了就收起來（接在舊的六間店後面）
         self._ambush_expire()  # 守著的埋伏到時刻了、或季上那一筆已經沒了（被打退、換季）：收起來
         arrived = self._arrivals()  # 抵達的站自己寫一則江湖紀錄（途中觸發的大事也寫在那裡），不併進下面的「江湖大事」
         if arrived:
@@ -1065,14 +1062,13 @@ class Game:
             journal.add_entry(self.state, news, merge=True)
         self._deliver_big_events()  # 這一季的時刻表大事人人有份：沒看過的補上，推進的人也走這一條（FB-038）
         self._backfill_battle_scores()  # 場上沒有份量快照的自己（上線前就在決戰裡）：補上；排程的 world_tick 不走這裡
-        self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
+        features_core.deliver_results(self)  # 收場補送（接縫掛鉤，第 11 批）：決戰包——下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
         self._deliver_seal_results()  # 玉璽碎片：現世、單挑收場、隱沒（5.9），下線時發生的回來補
         self._deliver_renames()  # 手上的絕學被人定了名：下一次同步補一則紀錄（FB-083）
         self._deliver_echoes()  # 別人照著你首創的配方合了出來：補名望（首創名望回饋）
         self._deliver_guard_credits()  # 護衛：下線時替人物擋下的挑戰，回來補名望與心得
-        self._deliver_whispers()  # 酒肆：有人在酒肆打聽你（風聲），下線時的回來補
-        self._deliver_hits()  # 酒肆：自己雇的殺手得手、失手、到期退錢
-        self._deliver_watches()  # 酒肆：託酒家留意的人有了準信、或到期沒消息
+        # 別人捎來的（接縫掛鉤，第 11 批）：酒肆包——風聲（有人在酒肆打聽你）、自己雇的殺手得手失手或到期退錢、託酒家留意的人有了準信或到期
+        features_core.deliver_notices(self)
         self._conquest_tick()  # 領地爭奪：換天（22:00）的掛鉤（前一天沒開成的攻城作罷；第一個看到新的一天的人觸發）
         self._deliver_conquest()  # 領地爭奪：翻地的分紅、守城功（下線時易手的回來補）
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
@@ -1183,7 +1179,7 @@ class Game:
         arrived = self._arrivals()  # 同 sync：抵達自己寫紀錄
         msgs += self._conquest_tick(save=False)  # 領地爭奪：快轉跨過 22:00 也換天（下面一起存）
         self._deliver_conquest()  # 同 sync：快轉（與只 advance 的整季機器人）也補翻地的分紅
-        self._sortie_duel_tick()  # 減法季批 3b：快轉不動現實時刻，約戰的窗照現實時間；快轉到季末時還沒打的作廢、退次數
+        features_core.on_due(self)  # 到時的結算（接縫掛鉤，第 11 批；出陣包的約戰：快轉不動現實時刻，窗照現實時間；快轉到季末時還沒打的作廢、退次數）
         self._save_season()
         msgs += start_pending_battle(self.world, self.content, self.now)
         self.state.world = self.world.get_season()
@@ -1231,9 +1227,9 @@ class Game:
     def own_turn_checks(self) -> None:
         """本人這一輪（mark_seen；假人程式自己那一輪也叫）：系統通緝這一週還沒掛就掛（bounties.post_auto，名聲 4.6、5.4），被掛的那幾句
         寫進一則「懸賞」紀錄。結伴同行的人、管理者查玩家、玩家卡動到別人建的 Game 都不叫、不掛。
-        商城的封測元寶也在這裡發（_mall_grant）：錢包第一次進來的那一下，真人假人一樣；暫停中照發（帳跟世界無關）。"""
+        最前面問功能包（on_own_turn，接縫掛鉤，第 11 批）：商城包的封測元寶在這裡發——錢包第一次進來的那一下，真人假人一樣；暫停中照發（帳跟世界無關）。"""
         self.own_turn = True
-        self._mall_grant()
+        features_core.on_own_turn(self)
         if self.world.paused_at() is not None:  # 賽季時鐘暫停中世界不變（線上架構 8.3）：mark_seen 在 server.act 的暫停擋之前
             return
         posted = bounties.post_auto(self.state, self.content)
@@ -1399,8 +1395,9 @@ class Game:
             return self._silver_options() + [Option(id="dadian:back", label=silver.SHOP_BACK)]  # 打點（銀兩出口）：這裡做得了的幾樣與離開
         if s.player.picking_arena:
             return self._arena_options()
-        if s.player.picking_tavern:
-            return self._tavern_options()  # 酒肆（企劃者 2026-10-18）
+        shop_taken = features_core.shop_menu(self)  # 坐在搬成包的店裡（店面登記，第 11 批；酒肆，企劃者 2026-10-18）：選單整個是那間店的
+        if shop_taken is not None:
+            return shop_taken
         if s.player.fs_asking is not None:
             return foreshadow.asking_options(s, c)  # 伏筆的最後一步正在答題：只有答案與「作罷」
         if s.player.busy_until is not None:
@@ -1421,36 +1418,33 @@ class Game:
             return opts + self._road_task_options(j) + self._arena_entry()  # 路上也能上擂台
         loc = c.locations[s.player.location]
         cost = self._action_costs()
-        outing = self._outing_on()  # 減法季探索一顆（整合設計 4.1）：只剩一顆「探索」，不畫三選一、尋敵、操練
+        # 探索那一格（act 子動詞的主人，接縫掛鉤，第 11 批）：探索包——減法季探索一顆（整合設計 4.1）開著時只剩那一顆「探索」，
+        # 不畫三選一、尋敵、操練（outing：探索包接走了這一格）
+        cell = features_core.act_cell(self, "explore", loc, cost["explore"], odds)
+        outing = cell is not None
         modes = [] if outing else self._explore_mode_options(loc, cost["explore"], odds)
         if outing:
-            opts = [self._outing_option(loc)]
+            opts = cell
         elif modes:  # 探索三選一：「探索」只是展開三顆的入口、按了不花體力，鈕上不寫體力（三顆各自寫）；三顆都按不下去時入口也灰（PM 2026-10-14）
             opts = [Option(id="act:explore", label="探索", enabled=any(o.enabled for o in modes)), *modes]
         else:
             opts = [self._cost_option("act:explore", "探索", cost["explore"])]
         if training.on(c, s.world) and not prologue_rules.active(s, c) and not outing:  # 新手引導重做：城裡操練、城外練功，行動列自成一格
             opts.append(self._training_option(loc, cost["explore"], odds))
-        if prologue_rules.active(s, c) or not sortie.on(c):
-            if self._train_squad_ids(loc):
-                # 遊歷：這個地點的敵人，必定開打（見 _train）。sanguo-companions 合併時這個行動被
-                # 整個拿掉，於是 Location.enemies／action_cost["train"]／train_event_chance 三個設定
-                # 一起變成死的，而遭遇戰只剩劇情事件的 combat 選項——實測整季只打 3 場。
-                #
-                # 標籤要顯示勝算（跟劇情戰的選項同一套慣例，見 _choice_label）：實機試玩發現
-                # 新角色沒有武學時威力是 0，在任何地點遊歷都**必敗**，而落敗現在真的要付氣血與
-                # 內傷的代價——不顯示勝算的話，玩家會在開局連輸三場、氣血見底才知道自己不該打。
-                # 序章的雪恥照舊是遊歷那一套（不看出陣開關、不算次數），出陣開著時鈕上寫「雪恥」（出陣探索與地盤）
-                name = sortie.PROLOGUE_FIGHT if sortie.on(c) else "遊歷"
-                opts.append(self._train_option(loc, cost["train"], odds, name=name))
-        else:
-            option = self._sortie_option(loc, cost["train"], odds)  # 出陣（出陣探索與地盤設計第二節）：散人、不在戰線上的地點沒有
-            if option is not None:
-                opts.append(option)
-            elif sortie.ranger_here(c, self._side(), loc.id, s.world):  # 散人站在戰線上：灰的一顆寫真正的原因（FB-250）
-                opts.append(Option(id="act:train", label=f"{sortie.NAME}（{sortie.RANGER_NOTE}）", enabled=False))
-            elif sortie.out_of_contest(c, s.world, self._side(), loc.id):  # 領地爭奪：別人的大本營、廣宗不給攻（裁決 18）
-                opts.append(Option(id="act:train", label=f"{sortie.NAME}（{sortie.OUT_NOTE}）", enabled=False))
+        # 出陣那一格（act 子動詞的主人，接縫掛鉤，第 11 批）：出陣包——地盤開著時整格是它的（序章的雪恥、出陣、散人與不在爭奪之列的灰格；
+        # 出陣探索與地盤設計第二節、FB-250、裁決 18）；接了一顆都沒有是 []。地盤關著照舊是遊歷
+        train_cell = features_core.act_cell(self, "train", loc, cost["train"], odds)
+        if train_cell is not None:
+            opts += train_cell
+        elif self._train_squad_ids(loc):
+            # 遊歷：這個地點的敵人，必定開打（見 _train）。sanguo-companions 合併時這個行動被
+            # 整個拿掉，於是 Location.enemies／action_cost["train"]／train_event_chance 三個設定
+            # 一起變成死的，而遭遇戰只剩劇情事件的 combat 選項——實測整季只打 3 場。
+            #
+            # 標籤要顯示勝算（跟劇情戰的選項同一套慣例，見 _choice_label）：實機試玩發現
+            # 新角色沒有武學時威力是 0，在任何地點遊歷都**必敗**，而落敗現在真的要付氣血與
+            # 內傷的代價——不顯示勝算的話，玩家會在開局連輸三場、氣血見底才知道自己不該打。
+            opts.append(self._train_option(loc, cost["train"], odds, name="遊歷"))
         opts += self._challenge_options(odds)  # 挑戰本人（T4；每季都有，figures.challenge_on）：有陣營、這裡站著敵方的大勢人物時才有
         if ranks.summons_event(s, c) is not None:
             # 晉升奇遇（計畫 T5）：人在召見的地點才有，不花體力。一類一顆開著時網頁畫成行動列上面一條金框橫幅（設計 9.1 第 1 組乙），
@@ -1529,8 +1523,7 @@ class Game:
             opts.append(Option(id="act:smith", label=weapons.SMITH))
         if mounts.market_here(s, c):  # 馬市（裝備四欄 5.5，帶「馬市」標籤的城鎮）：只是打開第二層選單，不花體力
             opts.append(Option(id="act:market", label=mounts.MARKET))
-        if tavern_rules.on(c) and tavern_rules.here(s, c):  # 酒肆（帶「酒肆」標籤的城鎮）：只是打開酒肆，不花體力
-            opts.append(Option(id="act:tavern", label=tavern_rules.TAVERN))
+        opts += features_core.shop_entries(self)  # 搬成包的店的入口（店面登記，第 11 批；酒肆：帶「酒肆」標籤的城鎮，只是打開酒肆，不花體力）
         opts += self._arena_entry()
         opts += self._stamina_play_options()  # 後期體力玩法：設伏劫道、修築工事、屯糧練兵
         heal = self._heal_option()
@@ -2216,9 +2209,10 @@ class Game:
         ids = set(option_ids)
         loc = c.locations[s.player.location]
         notes: dict[str, str] = {}
-        if "act:explore" in ids and self._outing_on():  # 減法季探索一顆：這一處多半給什麼（比重照擲骰用的那一份，_outing_plan）
-            plan = self._outing_plan(loc)
-            notes["act:explore"] = howto.outing_line(plan.weights, plan.foe_note)
+        # 探索那一行（act 子動詞的主人，接縫掛鉤，第 11 批）：探索包——減法季探索一顆開著時寫這一處多半給什麼（比重照擲骰用的那一份）
+        outing_note = features_core.act_note(self, "explore", loc) if "act:explore" in ids else None
+        if outing_note is not None:
+            notes["act:explore"] = outing_note
         elif "act:explore" in ids and explore_modes.on(c):  # 探索三選一：會不會撞上怪、悟不悟得出（設計第三節）
             # 一類一顆開著時找素材不撞仗（正式季整合 2.4），打一場在練功
             fight = not precise.on(c, s.world) and not explore_modes.is_town(c, loc) and bool(self._wild_foes(loc))
@@ -2231,10 +2225,9 @@ class Game:
         practice = explore_modes.option_id(explore_modes.PRACTICE)
         if practice in ids:  # 練功在行動列自己一格（FB-670）：灰著的城鎮寫最近的在哪、步行多久
             notes[practice] = self._practice_line(loc)
-        if "act:train" in ids and self.duel_on():  # 減法季批 3b：出陣那一格是貼約戰（或截糧）
-            notes["act:train"] = self._duel_line(loc)
-        elif "act:train" in ids:
-            notes["act:train"] = self._sortie_line(loc) if sortie.on(c) and not prologue_rules.active(s, c) else self._train_line(loc)
+        if "act:train" in ids:  # 出陣那一行（act 子動詞的主人，接縫掛鉤，第 11 批）：出陣包——約戰開著寫約戰那一句、出陣開著寫出陣那一行；都不是照舊遊歷
+            train_note = features_core.act_note(self, "train", loc)
+            notes["act:train"] = train_note if train_note is not None else self._train_line(loc)
         if "act:socialize" in ids:
             figure = self._socialize_figure()
             notes["act:socialize"] = howto.social_line(
@@ -2474,8 +2467,8 @@ class Game:
         return prepared.turn
 
     # ── 酒肆（企劃者 2026-10-18）：本體在功能包 tianxia/features/tavern/actions.py（主動搬六包第 10 批），這裡留一行委派——server 的
-    # MAIN_ACTIONS 與鎖外三段式、假人、腳本、測試，與核心原位：選單接管那一格（_tavern_options）、act:tavern（_tavern_enter）、sync 的下線殺手與
-    # 三個 deliver、choose 最後那一下殺手檢查（_tavern_hit_check）、shop_view（tavern_view）、紀錄標題（_tavern_sign）──
+    # MAIN_ACTIONS 與鎖外三段式、假人、腳本、測試，與核心原位的 shop_view（tavern_view）。選單接管那一格、act:tavern、sync 的下線殺手與
+    # 三個 deliver、choose 最後那一下殺手檢查、紀錄標題第 11 批換成接縫掛鉤（酒肆包的 shops、verbs、on_away、deliver_notices、after_action）──
 
     def _tavern_open(self) -> bool:
         return tavern_actions.tavern_open(self)
@@ -2485,12 +2478,6 @@ class Game:
 
     def _tavern_price(self, base: int) -> int:
         return tavern_actions.tavern_price(self, base)
-
-    def _tavern_options(self) -> list[Option]:
-        return tavern_actions.tavern_options(self)
-
-    def _tavern_sign(self) -> str:
-        return tavern_actions.tavern_sign(self)
 
     def tavern_do(self, op: str, target: str = "", text: str = "") -> list[str]:
         return tavern_actions.tavern_do(self, op, target, text)
@@ -2527,9 +2514,6 @@ class Game:
 
     def tavern_ask(self, text: str, reply: str | None, request: tavern_rules.AskRequest | None = None) -> list[str]:
         return tavern_actions.tavern_ask_reply(self, text, reply, request)
-
-    def _deliver_whispers(self) -> None:
-        return tavern_actions.deliver_whispers(self)
 
     def tavern_view(self) -> dict:
         return tavern_actions.tavern_view(self)
@@ -2675,8 +2659,11 @@ class Game:
         不寫戰報也不寫江湖紀錄（跟其他的拒絕一樣）。"""
         if option_id == step_rules.NEXT and step_rules.on(self):  # 本週卡「換一件事」（減法季批 3c）：不在選單上（假人碰不到）、
             return step_rules.skip(self)  # 不花體力、不寫江湖紀錄；關著的季照舊當成不在選單上
-        if option_id.startswith(sortie_duel.PREFIX) and self.duel_on():  # 出陣約戰（減法季批 3b）：貼、應戰、同去不在選單上（封招的組合放不進選單），
-            return self._duel_choice(option_id)  # 各自在 world.mutate 裡重驗；關著的季照舊當成不在選單上
+        # 不在選單上的動作（接縫掛鉤，第 11 批）：出陣包——約戰開著時的貼、應戰、同去（sortie:*，封招的組合放不進選單），各自在 world.mutate
+        # 裡重驗；約戰關著的季照舊當成不在選單上
+        unlisted = features_core.choose_unlisted(self, option_id)
+        if unlisted is not None:
+            return unlisted
         if option_id.startswith(zhuan_end.PREFIX) and any(o.id == option_id and o.enabled for o in self.options(odds=False)):
             return self._log(self._zhuan_act(option_id))  # 休季用列傳的票（減法季批 7b）：不走行動那一串（季收了，不推大勢、不存季）
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
@@ -2808,9 +2795,10 @@ class Game:
                 msgs = self._choose(int(arg))
             # 三選一開著時按「探索」本身（_act 只回 PICK）：不算探索過、不寫紀錄。要在後面接上大勢門檻、召見那些訊息之前記
             # 找素材分支的入口（第 32 項）也一樣：按「找素材」本身只回 GATHER_PICK、展開分支
+            # act 子動詞的主人宣告的「只打開一張卡」的回話（Verb.picks，第 11 批）：約戰開著時按出陣那一格只是打開出陣前那張卡（減法季批 3b）
             picked_only = (kind == "act" and arg == "explore" and msgs == [explore_modes.PICK]) or (
                 kind == "explore" and msgs == [explore_modes.GATHER_PICK]) or (
-                kind == "act" and arg == "train" and msgs == [sortie_duel.PICK])  # 約戰開著時按出陣那一格只是打開出陣前那張卡（減法季批 3b）
+                kind == "act" and msgs in [[reply] for reply in features_core.pick_replies(arg)])
             if faction_before is None and self.state.player.faction is not None:
                 msgs += self._join_lean()  # 三陣營四勝利：拜入曹氏莊院而投靠的那一下照門派所在地給傾向（關著什麼都不做）
             self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
@@ -2855,7 +2843,8 @@ class Game:
             quiet = kind == "smith" and arg.startswith("page:") and not (entry.lines or entry.changes or entry.guide)
             quiet = quiet or (kind == "bounty" and arg.partition(":")[0] in bounties.BROWSE_VERBS and not (entry.changes or entry.guide)
                               and all(bounties.is_browse_line(line) for line in entry.lines))
-            quiet = quiet or (picked_only and entry.lines in ([explore_modes.PICK], [explore_modes.GATHER_PICK], [sortie_duel.PICK])
+            quiet = quiet or (picked_only and entry.lines in ([explore_modes.PICK], [explore_modes.GATHER_PICK],
+                                                              *[[reply] for reply in features_core.pick_replies()])
                               and not (entry.changes or entry.guide))
             if not quiet:
                 # FB-141：開爐成了（_smith_act 打完把單子收起來了）那一下併進「打造」那一則時只留結果——結果句排第一，375 寬「剛剛」
@@ -2872,7 +2861,7 @@ class Game:
             self._fight = None
             self._affinity_before = None
         self._record_faction()
-        msgs += self._tavern_hit_check()  # 酒肆：有人雇了殺手找你，你剛在城外做完一件事（設計第六節）
+        msgs += features_core.after_action(self)  # 本人做完一件事（接縫掛鉤，第 11 批）：酒肆包——有人雇了殺手找你，你剛在城外做完一件事（設計第六節）
         self._save_season()
         return self._log(msgs)
 
@@ -3415,9 +3404,6 @@ class Game:
         msgs += self._guide(note_action(s, c, self.world, "sense"))
         return msgs
 
-    def _train_title(self) -> str:
-        return sortie_actions.train_title(self)
-
     def _action_title(self, kind: str, arg: str) -> str:
         s, c = self.state, self.content
         if kind == "explore":  # 探索三選一：「找素材・潁水河畔」；找素材分支：「挖礦・嵩山深處」，「自己說」照找素材
@@ -3525,8 +3511,13 @@ class Game:
         here = c.locations[s.player.location].name
         duty = c.orders.duties.get(s.player.faction or "")  # 守勢行動的標題寫陣營自己的名字（巡哨、傳道、保境安民）
         action2 = opportunities.rank2_action(s, c)  # 第 2 階行動的標題也寫它自己的名字（招降黃巾散兵、施符水收人心）
+        # act 子動詞的主人是功能包的那幾格（接縫掛鉤，第 11 批）：探索包「出門一趟・某地」（探索一顆開著）、出陣包「出陣／雪恥／遊歷・某地」、
+        # 酒肆包的招牌。下面那張表照 arg 查、不看 kind，這裡也照 arg 問；主人不接照舊查表
+        owned = features_core.act_title(self, arg)
+        if owned is not None:
+            return owned
         titles = {
-            "explore": f"{journal.OUTING}・{here}" if self._outing_on() else f"探索{here}", "socialize": f"交友・{here}", "call": f"求見・{here}", "train": f"{self._train_title()}・{here}",
+            "explore": f"探索{here}", "socialize": f"交友・{here}", "call": f"求見・{here}", "train": f"遊歷・{here}",
             "recruit": f"招募・{here}", "rest": f"調息・{here}", "summons": f"應召・{here}", "halt": "喊停", "part": "分道揚鑣",
             "duty": f"{duty.name if duty else '守勢'}・{here}", "convoy": f"接下糧車・{here}",
             "rank2": f"{action2.name if action2 else '第二階行動'}・{here}",
@@ -3537,7 +3528,6 @@ class Game:
             "heal": f"療傷・{here}",
             "donate": f"{economy.DONATE_TITLE}・{here}",
             "dadian": f"{silver.SHOP}・{here}",
-            "tavern": self._tavern_sign(),
             "drill": f"{training.DRILL}・{here}",
         }
         return titles.get(arg, "提前出關")
@@ -4000,8 +3990,12 @@ class Game:
         return dict(self.content.config.action_cost)
 
     def _act(self, what: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
-        if what == "explore" and self._outing_on():  # 減法季探索一顆：出門一趟（體力在裡面扣）
-            return self._explore_one()
+        # act 子動詞的主人是功能包的（接縫掛鉤，第 11 批；計畫 docs/superpowers/plans/2026-11-01-核心收接縫.md 1.3）：探索包——減法季探索一顆的
+        # 出門一趟（體力在裡面扣）；酒肆包——進店（不花體力）；出陣包——約戰開著、不在序章時出陣那一格打開出陣前那張卡（不花體力；截糧的
+        # 運糧隊經過時照舊攻打，體力在裡面扣）。後兩支原本在中段：前面那幾支只比 what、只讀，子動詞互斥，挪到最前面結果一樣
+        got = features_core.act(self, what, prepared)
+        if got is not None:
+            return got
         if what == "explore" and explore_modes.on(self.content) and not prologue_rules.active(self.state, self.content):
             return [explore_modes.PICK]  # 三選一開著：「探索」只是展開三顆的入口，按了不花體力、不做事（網頁在行動列底下展開）
         if what == "break":
@@ -4062,8 +4056,6 @@ class Game:
             self.state.player.picking_donate, self.state.player.shop_clue = True, ""
             self._shop_say("enter")  # 軍需帳上軍需官那一句（店面同一套）
             return [economy.DONATE_OPEN.format(faction=self.content.scenario.faction_name(self.state.player.faction, ""))]
-        if what == "tavern":  # 酒肆（企劃者 2026-10-18）：打開酒肆（見 _tavern_options），不花體力
-            return self._tavern_enter()
         if what == "drill":  # 城裡操練（新手引導重做，Config.training）：體力在裡面扣
             return self._town_drill()
         if what == "call":
@@ -4074,8 +4066,6 @@ class Game:
         promotion = ranks.summons_event(self.state, self.content)
         if what == "summons":
             return self._present(self.content.events[promotion])
-        if what == "train" and self.duel_on() and not prologue_rules.active(self.state, self.content):
-            return self._duel_entry()  # 減法季批 3b：出陣那一格打開出陣前那張卡（不花體力）；截糧的運糧隊經過時照舊攻打（體力在裡面扣）
         self.state.player.stamina -= self._action_costs()[what]  # 不花體力的行動（上面那些）不必算（要翻武學的資料）
         if promotion is not None and what in ("explore", "socialize") and not precise.on(self.content, self.state.world):
             # 在召見的地點探索、交友：端出晉升奇遇（計畫 T5）；一類一顆開著時不再換掉（正式季整合 2.10），應召照舊在「此地還能做」
@@ -4539,12 +4529,6 @@ class Game:
 
     def map_mostly(self) -> dict[str, str] | None:
         return explore_actions.map_mostly(self)
-
-    def _outing_option(self, loc: Location) -> Option:
-        return explore_actions.outing_option(self, loc)
-
-    def _explore_one(self) -> list[str]:
-        return explore_actions.explore_one(self)
 
     def _outing_fight(self, loc: Location, plan: explore_actions.OutingPlan) -> tuple[list[str], str, bool]:
         return explore_actions.outing_fight(self, loc, plan)
@@ -5352,9 +5336,7 @@ class Game:
             return "donate" if self._at_own_base() else None
         if p.picking_dadian:  # 打點（21 天季的銀兩出口，第 9 批畫面乙）
             return "dadian" if self._silver_options() else None
-        if p.picking_tavern:  # 酒肆（企劃者 2026-10-18）
-            return "tavern" if tavern_rules.here(s, c) else None
-        return None
+        return features_core.shop_open(self)  # 搬成包的店（店面登記，第 11 批；酒肆，企劃者 2026-10-18）：坐在店裡、這裡也還開著
 
     def _shop_live(self, option_ids=None, shop: str = "smith") -> bool:
         """這間店那一串此刻真的是眼前的選單（店面與直接開爐都問它）：選單上有這間店的離開鈕（shopview.BACKS：鐵匠鋪 smith:back、
@@ -7563,12 +7545,6 @@ class Game:
     def _battle_scene_text(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:
         return battle_view.battle_scene_text(self, battle, definition)
 
-    def _round_blocks(
-        self, battle: battle_instance.BattleInstance, definition: BattleDef, *, last: int | None = ROUND_BLOCKS,
-        oldest_first: bool = False, me: battle_instance.BattleParticipant | None = None,
-    ) -> list[str]:
-        return battle_view.round_blocks(self, battle, definition, last=last, oldest_first=oldest_first, me=me)
-
     def _battle_spotlight(
         self, battle: battle_instance.BattleInstance, definition: BattleDef, p: battle_instance.BattleParticipant,
     ) -> list[str]:
@@ -7928,7 +7904,7 @@ class Game:
         self._narrate(record, result, judged)
         msgs: list[str] = []
         if result.tier in team.WIN_TIERS:
-            rewards = self._sortie_rewards(squad, record) if as_sortie else self._battle_rewards(squad, record)
+            rewards = self._sortie_rewards(squad, record) if as_sortie else self._battle_rewards(squad, record)  # 過渡：第 26 批（打贏之後出陣包給獎勵）
             msgs += rewards
             extra: list[str] = []
             if not wild and not prologue_rules.active(s, c):  # 序章打贏不推大勢、不抽伏筆、不記軍令
@@ -7937,7 +7913,7 @@ class Game:
                         extra += self.push_trend(trend_id, delta, source="train")
                 credit: list[str] | None = None
                 # 領地爭奪：出陣攻打贏推這一塊的進度、不推線（設計 3.7）；約戰開著時這裡只剩截糧（減法季批 3b：進度只在約戰結算動）
-                if as_sortie and not self.duel_on():
+                if as_sortie and not self.duel_on():  # 過渡：第 26 批（打贏之後約戰開著的季不推進度）
                     # 軍令照推之前的清單記（FB-608：推滿易手的那一下，推完那一塊已經是自家的、在冷卻，不在攻的清單上）；那一句照舊排在後面
                     credit = self._order_credit(
                         kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,
@@ -8288,9 +8264,6 @@ class Game:
     ) -> list[str]:
         return sortie_actions.melee_record(self, result, rival, rival_power, rival_game, story, title)
 
-    def _sortie_option(self, loc: Location, cost: int, odds: bool) -> Option | None:
-        return sortie_actions.sortie_option(self, loc, cost, odds)
-
     def _sortie(self) -> list[str]:
         return sortie_actions.sortie(self)
 
@@ -8360,15 +8333,6 @@ class Game:
     def sortie_go_problem(self, moves: list[str] | None = None) -> str | None:
         return sortie_duel_actions.sortie_go_problem(self, moves)
 
-    def _duel_line(self, loc: Location) -> str:
-        return sortie_duel_actions.duel_line(self, loc)
-
-    def _duel_entry(self) -> list[str]:
-        return sortie_duel_actions.duel_entry(self)
-
-    def _duel_choice(self, option_id: str) -> list[str]:
-        return sortie_duel_actions.duel_choice(self, option_id)
-
     def sortie_go(self, moves) -> list[str]:
         return sortie_duel_actions.sortie_go(self, moves)
 
@@ -8383,9 +8347,6 @@ class Game:
 
     def sortie_card(self) -> dict | None:
         return sortie_duel_actions.sortie_card(self)
-
-    def _sortie_duel_tick(self) -> list[SortieDuel]:
-        return sortie_duel_actions.duel_tick(self)
 
     def sortie_duel_tick(self, now: float) -> int:
         return sortie_duel_actions.sortie_duel_tick(self, now)
@@ -9081,8 +9042,7 @@ class Game:
         if s.player.picking_dadian:
             self._close_dadian()  # 打點那一間店也收起來
         s.player.picking_arena = False  # 擂台也收起來
-        if s.player.picking_tavern:
-            tavern_rules.close(s)  # 酒肆也收起來
+        features_core.close_shops(self)  # 搬成包的店也收起來（店面登記，第 11 批；酒肆）
         rerouting = s.player.journey is not None
         start = None if rerouting else s.player.location
         parted = self._part_ways() if s.player.tagalong is not None and not rerouting else []  # 答應了結伴卻自己先走：散了
@@ -10298,10 +10258,8 @@ class Game:
         """錢包的主人：角色名號的 casefold（同 characters.key、真人的 accounts.character_key；假人沒有帳號也有錢包）。"""
         return name_key(self.state.player.name)
 
-    # 過渡：server 與測試照舊叫 Game 的這幾個；第 2 階那一包的線再碰到時呼叫端改成直接叫包、委派拿掉（手冊 3.10）
-    def _mall_grant(self) -> None:
-        mall_actions.grant(self)
-
+    # 過渡：server 與測試照舊叫 Game 的這幾個；第 2 階那一包的線再碰到時呼叫端改成直接叫包、委派拿掉（手冊 3.10）。
+    # 封測發放（原本的 _mall_grant）第 11 批換成 on_own_turn 掛鉤，委派拿掉
     def mall_buy(self, item_id: str, ref: str, qty: int = 1) -> list[str]:
         return mall_actions.buy(self, item_id, ref, qty)
 
@@ -12436,12 +12394,8 @@ class Game:
     def battle_detail(self, record_id: int | None = None) -> str:
         s = self.state
         record = battlelog.find(s, record_id) or (s.battles[0] if s.battles else None)
-        if record is not None and record.battle_ref is not None:  # 決戰：照 battles 表重讀完整戰況（收場之後才補上的放手一搏劇情也在）
-            battle = self.world.ended_battle(record.battle_ref)
-            me = battle.participants.get(s.player.name) if battle is not None else None
-            definition = self.content.battles.get(battle.battle_id) if battle is not None else None
-            if me is not None and definition is not None:
-                record = record.model_copy(update={"log": self._round_blocks(battle, definition, last=None, oldest_first=True, me=me)})
+        if record is not None:  # 戰報頁那一筆（接縫掛鉤，第 11 批）：決戰包——決戰照 battles 表重讀完整戰況（收場之後才補上的放手一搏劇情也在）
+            record = features_core.record_detail(self, record)
         return battlelog.detail_text(record, self.stamp) if record else battlelog.NO_RECORD
 
     def notice(self, text: str, title: str = "提醒") -> list[str]:
@@ -14083,12 +14037,13 @@ class Game:
 
     def scene_text(self) -> str:
         """有全服戰鬥時大家都看得到戰場；照常遊玩的人（集結中、只能觀戰、開打了還沒投效的散人，見 _fighting），自己眼前的事
-        （事件、對話、地點）接在戰場底下，不然遇到事件時只看得到選項、看不到事件本身。序章裡不畫戰場（_battle_for_me）。"""
-        battle_status = self._battle_for_me(tick=False)
-        if battle_status is None:
+        （事件、對話、地點）接在戰場底下，不然遇到事件時只看得到選項、看不到事件本身。序章裡不畫戰場（_battle_for_me）。
+        蓋在畫面上的問功能包（scene_over，接縫掛鉤，第 11 批）：決戰包回（戰場那一段, 要不要整個取代）。"""
+        over = features_core.scene_over(self)
+        if over is None:
             return self._own_scene_text()
-        battle_scene = self._battle_scene_text(*battle_status)
-        if self._fighting(*battle_status):
+        battle_scene, whole = over
+        if whole:
             return battle_scene  # 開打後在場上的人：戰場取代整個畫面；其餘照常遊玩，自己眼前的事接在底下（同 options）
         return f"{battle_scene}\n\n---\n\n{self._own_scene_text()}"
 
@@ -14105,7 +14060,7 @@ class Game:
             return self._duel_scene()
         if s.player.arena is not None:
             return self._arena_scene()
-        seat = feast_actions.scene(self)  # 坐在宴席上（宴客包；過渡：場景卡還沒有掛鉤）
+        seat = features_core.scene(self)  # 自己眼前的場景卡（接縫掛鉤，第 11 批）：宴客包——坐在宴席上那一張
         if seat is not None:
             return seat
         sense_card = sensing.scene_text(s, c) if s.player.sensing is not None else ""

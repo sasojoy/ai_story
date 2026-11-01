@@ -3,10 +3,11 @@
 ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx；包裡互相叫直接叫這裡的
 函式）。函式名＝原本的方法名去掉前導底線（`_tavern_news` → `tavern_news`、`_deliver_hits` → `deliver_hits`），兩個例外：公開的
 `tavern_ask` 是 `tavern_ask_reply`、私有的 `_tavern_ask` 是 `tavern_ask_once`——這裡 `tavern_ask` 是問酒家那個模組（ask.py）的名字，
-本體照舊寫 `tavern_ask.topics(...)`。另加一個 `tavern_sign`：`act:tavern` 那一下紀錄的標題（Game._action_title 叫 Game._tavern_sign）。
+本體照舊寫 `tavern_ask.topics(...)`。另加一個 `tavern_sign`：`act:tavern` 那一下紀錄的標題（Game._action_title 經 act 子動詞的掛鉤叫，第 11 批）。
 `_tavern_run` 的動作表原本放的是 Game 的方法本身（`self._tavern_news`），這裡換成同樣不帶參數的 lambda。
-Game 上留 19 個一行委派（server、假人、腳本、測試與核心原位還在叫：選單接管那一格、act:tavern、sync 的下線殺手與三個 deliver、
-choose 最後那一下殺手檢查、shop_view、紀錄標題）。換掉的模組屬性一律照模組叫（tavern_rules.find_chance、encounter.resolve_encounter），
+Game 上留 16 個一行委派（server、假人、腳本、測試與 shop_view 還在叫）：第 10 批是 19 個，選單接管那一格、act:tavern、sync 的
+下線殺手與三個 deliver、choose 最後那一下殺手檢查、紀錄標題在全部拆包第 11 批換成接縫掛鉤（__init__.py），沒人叫了的
+_tavern_options、_tavern_sign、_deliver_whispers 拿掉。換掉的模組屬性一律照模組叫（tavern_rules.find_chance、encounter.resolve_encounter），
 Game._spar_power 經 ctx 叫（測試換掉的才打得到）。
 """
 from __future__ import annotations
@@ -43,7 +44,7 @@ if TYPE_CHECKING:
 
 
 def tavern_sign(ctx: Game) -> str:
-    """act:tavern 那一下江湖紀錄的標題（招牌；Game._action_title 經 Game._tavern_sign 叫，同出陣的 _train_title）。"""
+    """act:tavern 那一下江湖紀錄的標題（招牌；Game._action_title 經 act 子動詞的掛鉤叫，第 11 批，同出陣的 train_title）。"""
     return tavern_rules.sign(ctx.state, ctx.content)
 
 
@@ -184,7 +185,7 @@ def tavern_find(ctx: Game, target: str) -> tuple[str | None, Game | None]:
 
 
 def tavern_whisper(ctx: Game, kind: str, other: Game) -> None:
-    """被打聽的人收到風聲：記在季上，他下次同步時補（_deliver_whispers）。匿名行走的人只會是個生面孔。"""
+    """被打聽的人收到風聲：記在季上，他下次同步時補（deliver_whispers：sync 的 deliver_notices 掛鉤）。匿名行走的人只會是個生面孔。"""
     s, c = ctx.state, ctx.content
     w = tavern_rules.whisper(kind, s, c, s.player.location, s.world.time)
     if s.player.anonymous:

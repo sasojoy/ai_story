@@ -45,9 +45,10 @@
 
 共用的字與小函式（不是 Game 上的，從這個模組 import）：`PAUSED_TEXT`、`NO_SUCH_PLAYER`、`drill_share`
 # battle（全部拆包第 6 批：PM 定的「siege.py 不搬，這一批用到的名字列進共用段、標主人」）
-- 共用規則層的名字（不是 Game 上的、也不在這個模組；包直接 import 那個模組、行尾照註「過渡：待搬」，總表第 15 批登記進共用規則層的名單
-  之後拿掉註）：`siege.title`（攻城戰的名字「攻城・地點」）、`siege.settle`（收場那一下改季：易手或守住、進度歸 50、時程表記結果）、
-  `siege.verdict`（誰贏、大勝或險勝）——主人：共用規則層（地盤與攻城；總表附錄甲，`tianxia/siege.py` 不搬）
+- 共用規則層的名字（不是 Game 上的、也不在這個模組；包直接 import 那個模組）：`siege.title`（攻城戰的名字「攻城・地點」）、
+  `siege.settle`（收場那一下改季：易手或守住、進度歸 50、時程表記結果）、`siege.verdict`（誰贏、大勝或險勝）——主人：共用規則層
+  （地盤與攻城；總表附錄甲，`tianxia/siege.py` 不搬）。第 11 批開了共用規則層的名單（`tianxia/core/registry.SHARED`），`siege` 登記在上面：
+  包 import 它不必註「過渡：待搬」（同一行還有別的舊模組的照註）；其餘的共用規則層模組總表第 15 批登記
 
 選單與分派（explore：主動搬六包第 3＋4 批加的這一段）
 - `ctx.options(odds=False, tick=False)`：此刻的選單（走一趟問「探索按不按得下去、這一段端出要選的事沒」）；`ctx.choose(id)`：按一顆
@@ -58,7 +59,8 @@
 # battle（主動搬六包第 5 批；主人：決戰包。本體還在 Game——「打」那一半，第 6～8 批搬——決戰包「看」那一半經 ctx 叫；搬完由決戰包經
 # Game 的委派回答別的包）
 - `ctx._battle_for_me(tick)`：場景上畫著的那一場（戰鬥, 定義），序章裡、沒有是 None；tick 照原位（畫面是 False、放手一搏送出是 True：
-  一次請求只推進一次）。`ctx._battle_now()`：此刻自己參戰（或看）的那一場
+  一次請求只推進一次）。`ctx._battle_now()`：此刻自己參戰（或看）的那一場（酒肆也在用：殺手不找決戰裡的人；酒肆第 10 批在三、過渡
+  也記了一行，第 11 批去重，留這一行）
 - `ctx._definition_of(battle)`（那一場的定義：攻城戰是「攻城・地點」）、`ctx._battle_region_name(definition)`（決戰的大區叫什麼）
 - `ctx._watching_battle(battle, definition)`（此刻只能在一旁看）、`ctx._absent_reason(definition)`（還沒到戰場的原因）、
   `ctx._free_agent(definition)`（散人、豪強：只能臨時投效）、`ctx._own_side_name()`（臨時投效的人打完照樣是誰）
@@ -111,9 +113,12 @@ explore（主動搬六包第 3＋4 批加的這一段）
   腳本換掉 Game._sortie_hold〔sim_trend_sources〕，包裡經 ctx 叫，換掉的才打得到；呼叫端改完就拿掉）
 （原本這裡還有 `duel_on`、`_duel_option`：第 1 批替出陣約戰留的；第 2 批約戰搬進同一包，包裡直接叫 duel_actions，拿掉了。）
 
-tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，不跟別條拆包線在段頭加的那幾行撞在一起）
-- `ctx._battle_now()`（決戰：此刻自己參戰的那一場；殺手不找決戰裡的人。決戰第 5 批合進 develop 時已經把它列在二、查詢服務〔主人決戰〕，
-  這一行留著標酒肆在用）
+（酒肆第 10 批在這裡記的 `_battle_now` 第 11 批去重：只留二、查詢服務那一行。）
+
+core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡包要叫回 Game 的）
+- `ctx._train_squad_ids(loc)`（出陣包行動列那一格的序章雪恥：此地有沒有遊歷的對手；主人：舊遊歷與出陣共用的對手池，總表第 17 批）
+- `ctx._fighting(battle, definition)`（決戰包蓋在畫面上的戰場要不要整個取代自己眼前的事：開打了在場上的人；主人：決戰「打」那一半，
+  第 7、8 批搬進決戰包之後改成包裡直接叫）
 
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 

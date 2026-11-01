@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -233,6 +234,113 @@ def test_the_pickers_own_test_is_in_no_feature_group():
     tavern = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", FAKE_ENGINE, 6))
     assert me not in tavern.files and "test_tavern.py" in {p.name for p in tavern.files}
     assert me in test_for.pick(["scripts/test_for.py"]).files
+
+
+def test_the_contract_and_boundary_tests_follow_the_core_not_a_feature_group():
+    """核心契約與邊界測試（全部拆包第 11 批）：內文寫滿各包的委派名，照「內文叫最多」歸群會跟著名單翻（b1eeb4ec 時邊界測試在 sortie 群、
+    契約的假包在 pill 群）。它們不在任何一群；改核心照核心測試挑到、改包照核心契約挑到。"""
+    names = {"test_feature_boundaries.py", "test_contract_core.py", "test_contract_features.py"}
+    assert sorted((w, p.name) for w, files in test_for._dominant().items() for p in files if p.name in names) == []
+    for word in ("sortie", "pill", "tavern", "battle", "explore", "duel", "siege"):  # 內文寫得最多的那幾群
+        assert not names & {p.name for p in test_for.group_files(word)}, word
+    assert names <= {p.name for p in test_for.core_tests()} and names <= {p.name for p in test_for.contract_tests()}
+
+
+DELEGATE_ENGINE = (
+    "from .features.tavern import actions as tavern_actions\n"
+    "from .features.battle import sieges as battle_sieges\n"
+    "class Game:\n"
+    "    def _tavern_price(self, base):\n"
+    "        return tavern_actions.tavern_price(self, base)\n"
+    "\n"
+    "    def _settle_siege(self, battle):\n"
+    "        \"\"\"說明字不算本體。\"\"\"\n"
+    "        return battle_sieges.settle_siege(self, battle)\n"
+    "\n"
+    "    def _tavern_close(self):\n"
+    "        x = 1\n"
+    "        return tavern_actions.close(self, x)\n"
+)
+
+
+def test_an_engine_delegate_picks_its_package_and_the_contract():
+    """改 engine 上一行委派（本體只有 return <包的模組>.<函式>(self, …)，第 11 批）：照那一包挑（那一包的 tests/＋核心契約），不照方法名的
+    第一個字——_settle_siege 以前算 siege 群（第 6 批量到 105 條），現在是決戰包；本體不只一句的不算委派，照舊照名字分群。"""
+    assert test_for.engine_delegates(DELEGATE_ENGINE) == {"_tavern_price": "tavern", "_settle_siege": "battle"}
+    siege = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", DELEGATE_ENGINE, 9))
+    names = {p.name for p in siege.files}
+    battle_pkg = {p.name for p in (test_for.FEATURES / "battle" / "tests").rglob("test_*.py")}
+    assert battle_pkg <= names and {p.name for p in test_for.contract_tests()} <= names
+    assert not siege.core
+    assert any("battle 這一包的一行委派" in w for w in siege.why)
+    tavern = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", DELEGATE_ENGINE, 5))
+    assert {p.name for p in (test_for.FEATURES / "tavern" / "tests").rglob("test_*.py")} <= {p.name for p in tavern.files}
+    plain = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", DELEGATE_ENGINE, 13))
+    assert not any("一行委派" in w for w in plain.why)
+
+
+def _writes(name: str) -> set[str]:
+    """內文寫到這個識別字的測試檔（不照內文歸群的 TEXT_BLIND 不算）。"""
+    word = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])")
+    return {t.name for t in test_for.all_tests() if t.name not in test_for.TEXT_BLIND and word.search(test_for._text(t))}
+
+
+SCENE_ENGINE = (
+    "from .features.battle import view as battle_view\n"
+    "class Game:\n"
+    "    def _battle_scene_text(self, battle, definition):\n"
+    "        return battle_view.battle_scene_text(self, battle, definition)\n"
+)
+
+
+def test_an_engine_delegate_also_picks_the_tests_that_call_it_by_name():
+    """一行委派也挑內文寫到那個方法名的測試檔（第 11 批審查）：包外直接叫它的混合檔（_battle_scene_text 有 test_engine、test_seal、
+    test_conquest_siege、test_companions_battle 直接叫）不在那一包的 tests/ 裡，只照包挑會掉。挑到的就是那一包的 tests/＋核心契約
+    ＋寫到那個名字的，不多不少。"""
+    scene = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", SCENE_ENGINE, 4))
+    battle_pkg = {p.name for p in (test_for.FEATURES / "battle" / "tests").rglob("test_*.py")}
+    callers = _writes("_battle_scene_text")
+    assert {"test_engine.py", "test_seal.py", "test_conquest_siege.py", "test_companions_battle.py"} <= callers
+    assert {p.name for p in scene.files} == battle_pkg | {p.name for p in test_for.contract_tests()} | callers
+    assert any("寫到 _battle_scene_text 的" in w for w in scene.why) and not scene.core
+
+
+MOVED_OLD = (
+    "from .features.sortie import actions as sortie_actions\n"
+    "class Game:\n"
+    "    def _train_squad_ids(self, loc):\n"
+    "        ids = [s for s in loc.squads]\n"
+    "        return ids\n"
+)
+MOVED_NEW = (
+    "from .features.sortie import actions as sortie_actions\n"
+    "class Game:\n"
+    "    def _train_squad_ids(self, loc):\n"
+    "        return sortie_actions.train_squad_ids(self, loc)\n"
+)
+
+
+def test_a_method_that_becomes_a_delegate_is_still_picked_by_its_name():
+    """往後的搬包批把胖方法換成一行委派（第 11 批審查）：那一筆照「舊檔裡是不是委派」認——舊檔是胖方法，照舊照方法名分群，守那段舊本體的
+    混合檔（test_train_variety）才挑得到；那一包的 tests/ 由同改包裡的檔挑到。舊檔沒有、新加的委派照新檔認。"""
+    old_lines, new_lines = MOVED_OLD.splitlines(), MOVED_NEW.splitlines()
+    moved = {"tianxia/engine.py": ([([(4, old_lines[3]), (5, old_lines[4])], [(4, new_lines[3])])], MOVED_OLD, MOVED_NEW)}
+    picked = test_for.pick(["tianxia/engine.py"], hunks_of=moved)
+    assert not any("一行委派" in w for w in picked.why), picked.why
+    assert {p.name for p in test_for.group_files("train")} <= {p.name for p in picked.files}
+    assert "test_train_variety.py" in {p.name for p in picked.files}
+    fresh = {"tianxia/engine.py": ([([], [(3, new_lines[2]), (4, new_lines[3])])], MOVED_NEW.replace("_train_squad_ids", "_x"),
+                                   MOVED_NEW)}
+    assert any("sortie 這一包的一行委派" in w for w in test_for.pick(["tianxia/engine.py"], hunks_of=fresh).why)
+
+
+def test_any_engine_hunk_picks_the_contract_and_boundary_tests():
+    """改 engine 上不是核心、也不是委派的方法（第 11 批審查）：邊界測試的 GAME_* 名單只有它守（Game 新叫了一個包的名字就該紅），可是
+    它不照內文歸群了（TEXT_BLIND），以前碰巧在 sortie 群才挑得到（_squad_encounter）。engine.py 有 hunk 就一律帶核心契約。"""
+    picked = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", FAKE_ENGINE, 6))
+    assert {p.name for p in test_for.contract_tests()} <= {p.name for p in picked.files}
+    assert not picked.core and not picked.smoke
+    assert any("核心契約與邊界測試" in w for w in picked.why)
 
 
 def test_a_verb_first_method_name_goes_to_the_feature_after_the_verb():

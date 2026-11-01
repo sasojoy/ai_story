@@ -16,7 +16,7 @@ sieges、shelve_siege、siege_guards 直接叫。
 """
 from __future__ import annotations
 
-from tianxia import allied, battle_instance, conquest, generals, orders, siege  # 過渡：待搬（豪強依附、戰鬥規則核心、地盤、攻城、龍頭上陣、軍令）
+from tianxia import allied, battle_instance, conquest, generals, orders, siege  # 過渡：待搬（豪強依附、戰鬥規則核心、地盤、龍頭上陣、軍令；siege 是共用規則層 registry.SHARED）
 from tianxia.characters import name_key
 from tianxia.models import BattleDef
 from tianxia.state import Rumor, WorldState

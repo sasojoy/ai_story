@@ -10,7 +10,7 @@
 - `rules.py`：純規則（原 `tianxia/tavern.py`）。`ask.py`：問酒家照問句找事實（原 `tianxia/tavern_ask.py`）。兩個舊名都留成 `sys.modules` 別名（同一個模組物件）：`bot_policy`、`howto`（名望來源）、`server`（`chatter_write`、`ask_write`）、`scripts/try_tavern_ask.py` 與測試照舊 import 舊名，`monkeypatch.setattr(tavern, ...)` 照樣打得到包裡。
 - `actions.py`：原本 `Game` 上酒肆的 43 個方法，加 `tavern_sign`（`act:tavern` 那一下紀錄的標題）。
 - `bots.py`：假人看到 `tavern:*` 怎麼按（原 `bot_policy.score` 那一段：只按出酒肆）。打聽那一步（`bot_policy._tavern`、`TAVERN_CHANCE`、`TAVERN_RESERVE`、`TAVERN_ASKS`）是 `take_turn` 的一步，不是分數，照舊在 `bot_policy`（測試直接換它們）。
-- 掛鉤：`enabled`（`rules.on` 或此刻還坐在酒肆裡）、`choose`（`tavern:*`）、`bot_pick`、`bot_always = ("tavern:",)`（`bot.py` 的排除清單原本就有這一個，重複無害，第 11 批收）。
+- 掛鉤：`enabled`（`rules.on` 或此刻還坐在酒肆裡）、`choose`（`tavern:*`）、`bot_pick`、`bot_always = ("tavern:",)`（`bot.py` 的排除清單原本也寫了一個，第 11 批拿掉那一個，只剩這裡）；第 11 批的接縫掛鉤見下面「委派與留在原位的接縫」。
 
 - 題壁、問酒家的禁字 `BANNED_WORDS` 合 develop 時（2026-11-01，PM 定）搬進核心 `tianxia/naming.py`：探索包的走一趟留言也擋同三個字，包不能 import 別的包。`rules.py` 從 `naming` re-export，`tavern.BANNED_WORDS` 照舊拿得到。
 
@@ -22,12 +22,12 @@
 
 ## 委派與留在原位的接縫
 
-`Game` 留 19 個一行委派（公開 6：`tavern_do`、`tavern_view`、`tavern_ask_request`、`tavern_ask`、`tavern_chatter_request`、`apply_tavern_chatter`；私有 13：`_tavern_open`、`_tavern_enter`、`_tavern_price`、`_tavern_options`、`_tavern_sign`、`_tavern_run`、`_tavern_hit_problem`、`_tavern_hit_check`、`_tavern_hit_fight`、`_tavern_ask_facts`、`_deliver_watches`、`_deliver_hits`、`_deliver_whispers`）。位置算行為的接縫照舊在 `Game` 原位（批次表第二節；`tests/core/test_feature_boundaries.py` 的 `# tavern` 那一段寫了理由）：
+`Game` 留 16 個一行委派（公開 6：`tavern_do`、`tavern_view`、`tavern_ask_request`、`tavern_ask`、`tavern_chatter_request`、`apply_tavern_chatter`；私有 10：`_tavern_open`、`_tavern_enter`、`_tavern_price`、`_tavern_run`、`_tavern_hit_problem`、`_tavern_hit_check`、`_tavern_hit_fight`、`_tavern_ask_facts`、`_deliver_watches`、`_deliver_hits`）。第 10 批留在 `Game` 原位的接縫，**全部拆包第 11 批（核心收接縫，計畫 `docs/superpowers/plans/2026-11-01-核心收接縫.md`）換成了接縫掛鉤**，掛在原本那一行（`_tavern_options`、`_tavern_sign`、`_deliver_whispers` 三個委派沒人叫了，拿掉）：
 
-- `sync`：下線那一段的殺手（`_tavern_hit_check(away_from)`）、人不在酒肆了就收店、三個 deliver（放進 `on_sync` 會改江湖紀錄的先後；它們不看酒肆開關：關掉之後雇主照樣領退款、風聲照樣送到）。
-- `_everyday_options`：坐在酒肆裡時選單整個是酒肆那一串（`menu` 掛鉤只有一個位置）、`act:tavern` 入口；`_act`：`act:tavern` → `_tavern_enter`；`choose` 最後那一下殺手檢查。
-- `shop_view` 的 `if shop == "tavern": return self.tavern_view()`（鐵匠鋪那條線緊貼著它改）、`_action_title`（`act:tavern` 的標題叫 `_tavern_sign`）、`_drop_stale_references` 收店、`_hint_triggers`、`_newbie_go`、`_shop_open`、`_depart`、`_idle`（只讀 `picking_tavern`）、`LEAVE_SHOP_IDS`（寫字面 `"tavern:back"`）。
-- `server.py`：`MAIN_ACTIONS["tavern"]`、`tavern_ask` 三段式、鄰桌閒談的背景執行緒（`write_chatter`、`chatter_once`）。
+- 店面登記 `shops()`（`Shop("tavern", …)`）：坐在酒肆裡時選單整個是酒肆那一串（`_everyday_options` 擂台之後）、「此地還能做」裡的 `act:tavern` 入口（馬市之後）、`_shop_open`、`_depart` 收店、`sync` 與 `_drop_stale_references` 的「人不在酒肆了就收店」。
+- act 子動詞 `verbs()`（`Verb("tavern", …)`）：`_act` 的 `act:tavern` → `actions.tavern_enter`、`_action_title` 的招牌。
+- `on_away`（`sync` 下線那一段的殺手）、`deliver_notices`（三個 deliver：照舊不看酒肆開關，關掉之後雇主照樣領退款、風聲照樣送到）、`after_action`（`choose` 最後那一下殺手檢查）。
+- 還在原位的：`shop_view` 的 `if shop == "tavern": return self.tavern_view()`（鐵匠鋪那條線緊貼著它改，第 41 批）、`_hint_triggers`、`_newbie_go`（引導，第 22 批）、`_idle`（只讀 `picking_tavern`）、`LEAVE_SHOP_IDS`（寫字面 `"tavern:back"`）；`server.py` 的 `MAIN_ACTIONS["tavern"]`、`tavern_ask` 三段式、鄰桌閒談的背景執行緒（`write_chatter`、`chatter_once`）。
 
 ## 過渡（手冊 3.11）
 
@@ -36,7 +36,7 @@
 
 ## 測試
 
-- 這一包的：`tests/test_tavern.py`（32 條，1 條 smoke）、`test_tavern_seek_presence.py`（7，查人的「此刻就在…」不比「此地還有」寬）、`test_tavern_web.py`（4，假瀏覽器跑整支 `app.js` 的酒肆那幾頁）、`test_tavern_package.py`（6，別名、開關關著時出得去、掛鉤的標題、同一對人的冷卻、題壁擋禁字〔合 develop 時補的〕）。`pytest tianxia/features/tavern/tests -n 4 -m "slow or not slow"`。
+- 這一包的：`tests/test_tavern.py`（32 條，1 條 smoke）、`test_tavern_seek_presence.py`（7，查人的「此刻就在…」不比「此地還有」寬）、`test_tavern_web.py`（4，假瀏覽器跑整支 `app.js` 的酒肆那幾頁）、`test_tavern_package.py`（6，別名、開關關著時出得去、掛鉤的標題、同一對人的冷卻、題壁擋禁字〔合 develop 時補的〕）、`test_tavern_seams.py`（4，整檔 slow；接縫掛鉤走公開的路：下線那一段殺手得手存回季、一次同步收護衛／風聲／殺手單／託付的先後、在城外做完一件事經 `choose` 殺手找上門、進店那一顆只有一顆——第 11 批審查補的，以前只有 `same_behavior` 抓得到）。`pytest tianxia/features/tavern/tests -n 4 -m "slow or not slow"`。
 - **`test_for` 挑不到的混在別人檔裡的**（這一輪不拆）：`tests/seal/test_seal_acts.py`（FB-643 併進來的玉璽 × 酒肆）、`test_seal_acts3.py`、`test_seal_acts_hidden.py`、`test_seal_revamp.py`（`_tavern_hit_fight`）、`test_seal_revamp_hidden.py`、`tests/bots/test_zh.py`（`ask_clean`、`chatter_clean`）、`tianxia/features/sortie/tests/test_sortie_duel_bots.py`（換掉 `bot_policy._tavern`）、`tests/arts/test_explain2.py`（名望來源）、`test_hints.py`（`h_tavern`）、`tests/server/test_server.py`、`tests/season/test_real_content.py`。改這一包時連它們一起跑：`python scripts/test_for.py --base HEAD tianxia/features/tavern/actions.py tests/seal/test_seal_acts.py tests/seal/test_seal_acts3.py tests/seal/test_seal_acts_hidden.py tests/seal/test_seal_revamp.py tests/seal/test_seal_revamp_hidden.py tests/bots/test_zh.py tianxia/features/sortie/tests/test_sortie_duel_bots.py tests/arts/test_explain2.py tests/arts/test_hints.py tests/server/test_server.py`（`--slow` 連整檔 slow 的那幾個；`test_real_content` 改內容時 `test_for` 自己會挑）。
 - **改 `rules.py`、`actions.py` 時 `test_for` 挑的比搬之前窄**（審查量的）：搬之前改 `tianxia/tavern.py` 會挑到 import `tavern` 的 `test_zh` 與五個 seal 檔（8 個檔 120／176 條）；現在程式在包裡，改 `rules.py` 或 `actions.py` 只挑包的 4 個檔＋核心契約與邊界（7 個檔 118／119 條，不含／含 slow）。例：`rules.chatter_clean` 拿掉 `zh.stray_latin` 那一關只有 `test_zh` 紅、`tavern_hit_fight` 的 `hit_win_fame` 加倍只有 `test_explain2` 紅——上面這條指令兩個都抓得到，`test_for` 只給包的檔抓不到。這一輪不讓 `test_for` 把混合檔算進包（同出陣 README），交 PM 定。
 - 前後一字不變：`scripts/same_behavior.py` 的 `tavern` 一軌（`--tracks tavern`）。

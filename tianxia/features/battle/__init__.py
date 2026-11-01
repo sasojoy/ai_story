@@ -28,8 +28,40 @@ class BattleFeature(Feature):
     carried = ("battle_results_seen",)  # Game._reset_player_for_new_season 照帶（不看開關，同商城、出陣的 carried）
 
     def enabled(self, ctx) -> bool:
-        """內容裡有決戰（battles.json）就有：決戰本身沒有開關（beta、第一季、減法季都打）。這一包的掛鉤全是預設的空的，開著關著結果都一樣。"""
+        """內容裡有決戰（battles.json）就有：決戰本身沒有開關（beta、第一季、減法季都打）。遊戲當下的掛鉤全是預設的空的，開著關著結果都一樣；
+        第 11 批的接縫掛鉤不問它（下面）。"""
         return bool(ctx.content.battles)
+
+    # ── 接縫掛鉤（全部拆包第 11 批：原本在 Game 原位直接叫這一包的那幾行；不問 enabled）──
+
+    def deliver_results(self, ctx) -> None:
+        """收場補送（原本 Game.sync 補份量快照之後、玉璽碎片之前那一行）：下線時收場的決戰與攻城，回來第一次同步補上（休季、籌備中也一樣，
+        FB-027）。經 Game 叫：tests/core/test_renown_cross.py 換掉 Game._deliver_battle_results（服務清單三、過渡）。"""
+        ctx._deliver_battle_results()
+
+    def scene_over(self, ctx):
+        """蓋在畫面上的（原本 Game.scene_text 最前面那幾行）：有全服戰鬥時大家都看得到戰場（序章裡不畫，_battle_for_me；tick=False：一次請求
+        只推進一次）；回（戰場那一段, 開打了在場上的人〔_fighting〕戰場整個取代畫面）。沒有是 None。"""
+        from . import view  # noqa: PLC0415
+
+        battle_status = ctx._battle_for_me(tick=False)
+        if battle_status is None:
+            return None
+        return view.battle_scene_text(ctx, *battle_status), ctx._fighting(*battle_status)
+
+    def record_detail(self, ctx, record):
+        """戰報頁那一筆（原本 Game.battle_detail 裡那幾行）：決戰那一筆照 battles 表重讀完整戰況（收場之後才補上的放手一搏劇情也在）；
+        不是決戰、表上沒有那一場、自己不在名單上、內容裡沒有那一場是 None（照原本那一筆）。"""
+        if record.battle_ref is None:
+            return None
+        from . import view  # noqa: PLC0415
+
+        battle = ctx.world.ended_battle(record.battle_ref)
+        me = battle.participants.get(ctx.state.player.name) if battle is not None else None
+        definition = ctx.content.battles.get(battle.battle_id) if battle is not None else None
+        if me is None or definition is None:
+            return None
+        return record.model_copy(update={"log": view.round_blocks(ctx, battle, definition, last=None, oldest_first=True, me=me)})
 
 
 FEATURE = BattleFeature()
