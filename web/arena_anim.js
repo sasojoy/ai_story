@@ -54,6 +54,15 @@
     RING_BG.forEach((src, i) => add(`bg${i}`, src));
   }
   const ringReady = (im) => im && im.complete && im.naturalWidth > 0;
+  // 兩邊的形象一確定就把十張抓齊（2026-11-02）：以前是第一次用到那一張才抓，抓好之前 ringBody 回傳預設圖，
+  // 所以每換一個動作就閃一次斗笠小子（Joy「有時候動畫中間又會變成斗笠小子」）。帶 ?v= 之後十張都是新網址，更明顯。
+  function ringWarm(looks) {
+    for (const side of ["me", "foe"]) {
+      const look = looks && looks[`${side}_look`];
+      if (!look) continue;
+      for (const sheet of Object.keys(RING_SHEETS)) ringBody(look, sheet);
+    }
+  }
   // 自建的圖換了（refit、重畫、退回重來）網址就換：舊快取不會擋住新圖（main.looks_ver）
   const looksVer = () => (window.LOOKS_VER ? `?v=${window.LOOKS_VER}` : "");
   // 這一套形象的這一張（第一次用到才抓；還沒抓好或抓不到就先畫斗笠小子）
@@ -216,6 +225,7 @@
     const f = shop.fight, r = shop.result && shop.result.id !== S.arenaSeen ? shop.result : null;
     if (f) {
       RA.looks = f.looks || { me: "", foe: "", me_look: "", foe_look: "" };
+      ringWarm(RA.looks);
       if (typeof sceneFor === "function") { sceneFor(RA.looks.me_fx); sceneFor(RA.looks.foe_fx); } // 先抓好導演稿，發動那一回合才演得出來
       const now = { id: f.id, round: f.round, me: f.me.hp, foe: f.foe_hp.hp, cap: f.me.cap, edge: f.edge };
       const p = RA.prev;
@@ -224,6 +234,7 @@
       RA.prev = now;
     } else if (r && RA.finaleFor !== r.id) {
       RA.looks = r.looks || RA.looks;
+      ringWarm(RA.looks);
       RA.finaleFor = r.id;
       const p = RA.prev && RA.prev.id === r.id ? RA.prev : null;
       const last = (r.picks || []).length - 1;

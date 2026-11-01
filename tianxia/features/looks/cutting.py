@@ -136,9 +136,20 @@ LAYOUT = {  # 十張 → (每排幾格, 幾排)；格數同 tianxia/features/loo
 MIN_INK = 600  # 一格至少要有這麼多不透明的點，不然算空的（220×220 的格子，一個小人大概四五千點）
 EDGE = 2  # 上下緣留白至少幾列
 LINE_SHARE = 0.8  # 一列橫跨格寬這麼多比例、而且上下都空 → 當成畫出來的地面線
+# 相鄰兩格最多能有多像（形狀重疊率）：照 web/img/arena 的斗笠小子量出來的上限加 0.10 餘裕（2026-11-02 量）。
+# 餘裕給 0.10 不給 0.05：0.05 連差一點的（block 0.785 對上限 0.78）都擋，重畫的次數與錢都要多花；
+# 0.10 只擋明顯的——第一版「魔教聖女」的 idle 0.967、kneel 0.948、shoot 0.936 照樣擋得下來。
+# 規則是「不准比斗笠小子更懶」——不能用單一門檻：hero_bare_fall 的第 5、6 格是「躺著不動」，本來就重疊 0.973，
+# 而 hero_bare_idle 的斗笠小子是 0.845、第一版「魔教聖女」是 0.967（看起來完全不晃，Joy 2026-11-02
+# 「原版斗笠小子會一直前後晃動，新模型不會」）。
+MOVE_MAX = {  # 斗笠小子量到的上限：idle .845 hit .462 kneel .745 dodge .508 fall .973 block .721 slash .805 pole .818 fist .719 shoot .803
+    "hero_bare_idle": 0.945, "hero_bare_hit": 0.562, "hero_bare_kneel": 0.845, "hero_bare_dodge": 0.608,
+    "hero_bare_fall": 1.01,  # 第 5、6 格是躺著不動，本來就幾乎一樣：這一張不驗
+    "hero_bare_block": 0.821, "hero_atk_slash": 0.905, "hero_atk_pole": 0.918, "hero_atk_fist": 0.819, "hero_atk_shoot": 0.903,
+}
 
 
-def sheet_problems(strip: "Image.Image", frames: int) -> tuple[list[str], str]:
+def sheet_problems(strip: "Image.Image", frames: int, name: str | None = None) -> tuple[list[str], str]:
     """切完的那一條自己先驗一遍（Joy 2026-11-02「把能過的方法模組化」）：這幾樣機器看得出來，
     不必花一次審圖的錢，也不會每次都要人重新判是生圖畫壞還是我們切壞。
     回（寫給管理者的中文問題, 丟回生圖的英文改法）；都沒問題回 ([], "")。
@@ -174,6 +185,18 @@ def sheet_problems(strip: "Image.Image", frames: int) -> tuple[list[str], str]:
         if flat:
             bad.append(f"第 {k + 1} 格腳下有一條橫跨整格的線（第 {flat[0]} 列）")
             fixes.append("do NOT draw any ground line, horizon line, floor or platform")
+    # 動得夠不夠：相鄰兩格的形狀重疊率不能比斗笠小子還高（MOVE_MAX）。比形狀（alpha）不比顏色——
+    # 同一個人同一件衣服，顏色本來就幾乎一樣。name 是哪一張（sheet_bytes 一定會給；沒給就不驗這一項）。
+    if not bad and name in MOVE_MAX:
+        masks = [(alpha[:, k * CELL:(k + 1) * CELL] > 32) for k in range(frames)]
+        for k in range(1, frames):
+            a1, a2 = masks[k - 1], masks[k]
+            union = int((a1 | a2).sum())
+            if union and int((a1 & a2).sum()) / union > MOVE_MAX[name]:
+                bad.append(f"第 {k} 與第 {k + 1} 格幾乎一樣（動作幅度太小）")
+                fixes.append("every frame must be a clearly different pose — move the body, arms and legs between frames "
+                             "as much as in the reference animation; do not redraw almost the same picture")
+                break
     seen: list[str] = []
     for f in fixes:  # 同一句只留一次（一條十格很容易每格都中同一樣）
         if f not in seen:
@@ -226,7 +249,7 @@ def sheet_bytes(raw: bytes, name: str) -> bytes:
         strip = sheet(io.BytesIO(raw), cols, rows, ref_h=BODY[name])  # 跟預設的斗笠小子一樣高，兵器才掛得準
     except (ValueError, IndexError) as exc:  # 去背之後什麼都不剩、某一格是空的
         raise CutError(f"切不出 {cols * rows} 格：{exc}") from exc
-    bad, fix = sheet_problems(strip, cols * rows)
+    bad, fix = sheet_problems(strip, cols * rows, name)
     if bad:
         raise CutProblem(bad, fix)
     out = io.BytesIO()
