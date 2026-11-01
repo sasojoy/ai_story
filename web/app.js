@@ -2551,11 +2551,12 @@
   // 點了捲回上面看整張卡。資料同 previewCardHtml（S.forgePreview）
   // 爐火（招式與絕學稿案第五輪，Joy 2026-10-21「火候用文字加爐火圖」）：四段，火苗一到四簇、越旺越亮；不寫品級、不寫機率
   const FLAME = "M6 0C7 4 11 6 11 11a5 5 0 0 1-10 0C1 8 3 7 3 4c1 2 2 3 3 3C6 5 5 3 6 0Z";
-  function fireHtml(f, small) {
+  // after：緊接在火候字後面的一段（預覽卡的「真意 N%」，鐵匠鋪與合成流程 3.5），已經是畫好的標記
+  function fireHtml(f, small, after = "") {
     if (!f) return "";
     const lv = Math.max(0, Math.min(3, f.level | 0));
     const flames = Array.from({ length: lv + 1 }, (_, k) => `<path d="${FLAME}" transform="translate(${k * 9},${k % 2 ? 2 : 0})"/>`).join("");
-    return `<span class="fire f${lv}${small ? " small" : ""}"><svg viewBox="0 -1 ${12 + lv * 9} 18" aria-hidden="true">${flames}</svg><b>${esc(f.word)}</b>${small ? "" : `<span>${esc(f.line)}</span>`}</span>`;
+    return `<span class="fire f${lv}${small ? " small" : ""}"><svg viewBox="0 -1 ${12 + lv * 9} 18" aria-hidden="true">${flames}</svg><b>${esc(f.word)}</b>${after}${small ? "" : `<span>${esc(f.line)}</span>`}</span>`;
   }
   function kilnPeek(v) {
     const merge = v.kind === "合併";
@@ -2651,7 +2652,7 @@
     // 真意幾成（鐵匠鋪與合成流程 3.5，企劃者 2026-10-29「寫百分比沒關係」）：合併而且那一路有真意時伺服器給 grand_pct，寫在火候字後面；
     // 揣摩、那一路沒有真意是 null，不寫（不寫「真意 0%」）。字待 joy 潤
     const grand = merge && v.grand_pct != null ? `<span class="mc-grand">真意 ${v.grand_pct | 0}%</span>` : "";
-    const verdict = pair ? `${fireHtml(v.fire)}${grand}${merge && v.depth ? `<span class="muted">${esc(v.depth)}</span>` : ""}`
+    const verdict = pair ? `${fireHtml(v.fire, false, grand)}${merge && v.depth ? `<span class="muted">${esc(v.depth)}</span>` : ""}`
       : v.quality ? `<b>${esc(v.quality)}</b>${v.why && v.why.length ? `<span class="muted">・${v.why.map(esc).join("；")}</span>` : ""}${v.near ? `<span class="near">・${esc(v.near)}</span>` : ""}`
       : `品質看造化：${esc(v.odds || "")}`;
     const tags = (v.traits || []).map((t) => t.grand ? `<i class="tr grand${t.maybe ? " maybe" : ""}">${esc(t.name)}<small>真意</small></i>`
@@ -3654,7 +3655,7 @@
     const more = rows.length - shown.length;
     const n = rackPicks(shop).length;
     const go = rows.some((r) => r.into)
-      ? `<div class="rk-go"><button class="btn primary" data-act="rack-melt"${n ? "" : " disabled"}>${RACK_MELT_GO.replace("{n}", n)}</button></div>` : "";
+      ? `<div class="rk-go${n ? " live" : ""}"><button class="btn primary" data-act="rack-melt"${n ? "" : " disabled"}>${RACK_MELT_GO.replace("{n}", n)}</button></div>` : "";
     return `${worn}<p class="shop-cap rk-cap">裝備庫 ${shop.rack.used | 0}／${shop.rack.cap | 0}</p>${shown.map((r) => rackRowHtml(shop, r)).join("")}
       ${more > 0 ? `<button class="btn small ghost shop-more" data-act="shop-more">再列 ${more} 件</button>` : ""}${go}`;
   }

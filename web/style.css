@@ -3609,7 +3609,7 @@ svg.fig .blade.bow { stroke-width: 3; }
 .shop-layer .fu-say .fu-look { width: auto; min-height: 30px; padding: 2px 16px; }
 /* 裝備庫一列（3.4）：勾選框｜名字與那一行數字；底下一整行四顆一樣寬的鈕（換上、修、淬煉、拆解），鈕上的小字只在小段之間換行
    （FB-297、FB-305：375 寬四顆擠在名字旁邊會把字擠成直排）。勾了的那一列左邊一條金線；拆不得的不給勾。
-   「拆解勾選的 N 件」黏在捲的那一層底下，勾完不用捲回最底下找 */
+   「拆解勾選的 N 件」排在最底下，勾了至少一件才黏在捲的那一層底下（勾完不用捲回最底下找；沒勾時不擋著列表） */
 .shop-layer .rk-cap { margin-top: 14px; }
 .shop-layer .rk-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; align-items: start; padding: 10px 4px; }
 .shop-layer .rk-row.on { background: rgba(242, 196, 106, 0.08); box-shadow: inset 3px 0 0 #f2c46a; }
@@ -3640,15 +3640,16 @@ svg.fig .blade.bow { stroke-width: 3; }
 .shop-layer .dv-who small, .shop-layer .dv-row.solved small { font-size: 0.8em; color: #c9b28a; }
 .shop-layer .dv-tag { flex: none; padding: 2px 8px; border: 1px solid #6b4a2e; border-radius: 10px; font-size: 0.8em; color: #a08a6a; white-space: nowrap; }
 .shop-layer .dv-tag.on { border-color: #f2c46a; background: #f2c46a; color: #1e1510; }
-.shop-layer .dv-album { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.4em, 1fr)); gap: 6px; }
+.shop-layer .dv-album { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.4em, 1fr)); gap: 6px; align-items: start; } /* 格子（鈕與「？」）一樣高：鈕不跟著拉 */
 .shop-layer .dv-cell { display: flex; align-items: center; justify-content: center; min-height: 3.2em; padding: 4px; border: 1px solid #6b4a2e;
   border-radius: 8px; background: rgba(43, 26, 16, 0.6); color: #c9b28a; font: 0.8em/1.3 var(--serif); text-align: center; opacity: 0.6; }
 .shop-layer button.dv-cell { cursor: pointer; }
 .shop-layer .dv-cell.have { opacity: 1; color: #f2e5c6; border-color: #b7862b; background: rgba(242, 196, 106, 0.14); }
 .shop-layer .dv-cell.now { border-width: 2px; border-color: #f2c46a; }
 .shop-layer .dv-cell.on { opacity: 1; box-shadow: 0 0 0 2px #f2e5c6; }
-.shop-layer .dv-cell.unknown { border-style: dashed; opacity: 0.35; font-size: 1.07em; }
+.shop-layer .dv-cell.unknown { border-style: dashed; opacity: 0.35; }
 .shop-layer .dv-line { margin: 8px 2px; padding: 6px 10px; border-left: 3px solid #b7862b; background: rgba(0, 0, 0, 0.25); font: 0.8em/1.5 var(--serif); color: #e8d6ad; }
-/* 煉製頁合併的預覽卡（3.5）：火候字後面「真意 N%」，金字、不拆行 */
-.made-card .mc-grand { margin-left: 8px; font-weight: 600; color: var(--gold); white-space: nowrap; }
-.shop-layer .rk-go { position: sticky; bottom: 0; margin-top: 6px; padding: 12px 2px 4px; background: linear-gradient(to bottom, rgba(30, 19, 12, 0), rgba(30, 19, 12, 0.96) 30%); }
+/* 煉製頁合併的預覽卡（3.5）：火候字後面「真意 N%」（爐火那一排的一格，間距照那一排），金字、不拆行 */
+.made-card .mc-grand { font-weight: 600; color: var(--gold); white-space: nowrap; }
+.shop-layer .rk-go { margin-top: 10px; }
+.shop-layer .rk-go.live { position: sticky; bottom: 0; padding: 18px 2px 4px; background: linear-gradient(to bottom, rgba(30, 19, 12, 0), #1e130c 40%); }
