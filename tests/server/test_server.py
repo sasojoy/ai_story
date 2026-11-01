@@ -5493,8 +5493,8 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
                                          "narration_round",  # 事件旁白每週改寫（減法季批 10）：背景一則一則，當假人排，名號 NARRATION_KEY
                                          "verdict_text",  # 人物評曰（減法季批 7b-2）：zhuan_job 寫完正文後在鎖外逐條叫，當假人排在真人後面
                                          "tale_round"}  # 戰記（Joy 2026-10-29）：決戰收場後在背景寫一篇，當假人排，名號 TALE_OWNER_KEY
-    importers = [
-        p.name for p in (server.ROOT / "tianxia").glob("*.py")
+    importers = [  # 核心本體 tianxia/core/ 也掃（事件檢定搬進 core/event_check.py，dev/core-events-1 審查）
+        p.name for p in [*(server.ROOT / "tianxia").glob("*.py"), *(server.ROOT / "tianxia" / "core").glob("*.py")]
         if re.search(r"^\s*(import|from)\s+llm_queue\b", p.read_text(encoding="utf-8"), re.M)
     ]
     assert importers == []
