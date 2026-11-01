@@ -123,6 +123,27 @@ def test_tapping_a_forged_cell_shows_its_line_from_the_book():
     assert "dv-line" not in out["closed"]  # 再點一次收起
 
 
+def test_a_tapped_cell_reads_the_book_again():
+    """手上的榜單（S.boards）只在見聞→榜單、或手上沒有那一筆時才抓：之前看過榜單、之後別人又打了仿品，江湖已見那一列（輪詢的
+    shop.divine）寫「全服仿品 3 件」、格子底下那一行還是舊的「仿品 0 把」。點一格就重抓一次神器譜（伺服器那一張不快取），照新的畫。"""
+    c, w = _divine_ctx()
+    jia, yi = _smith(c, w, "甲"), _smith(c, w, "乙")
+    _forge_sword(c, w, jia)
+    m = _shop_of(yi)
+    book = yi.divine_book_view()
+    row = next(r for r in book if r["ref"].endswith(SWORD))
+    board = lambda rows: {"boards": [{"id": "神器", "title": "神器譜", "note": "", "book": rows}]}  # noqa: E731
+    stale = board([{**row, "text": "舊的那一行"}])
+    out = run(m, """return (async () => {
+        H.render();
+        """ + _click('{ act: "dv-cell", id: "%s" }' % SWORD) + """
+        await new Promise((ok) => setTimeout(ok, 5));
+        return { html: T.els.app.innerHTML, calls: T.calls.map((c) => c[0]) };
+      })();""", S={"shopTab": "divine", "boards": stale}, responses={"/api/boards": board(book)})
+    assert out["calls"].count("/api/boards") == 1
+    assert f'<p class="dv-line">第 {row["season"]} 季・{row["text"]}</p>' in out["html"] and "舊的那一行" not in out["html"]
+
+
 _SCROLL = """return (async () => {
     // 捲的那一層：底邊在分頁列頂上（320×700 實機量到 658）；翻出的那一行畫在整本收藏冊底下（739～769），畫上去了才找得到
     const line = { getBoundingClientRect: () => ({ top: %(top)s, bottom: %(bottom)s }) };

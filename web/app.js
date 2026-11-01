@@ -3737,12 +3737,13 @@
     const below = line.getBoundingClientRect().bottom + DV_LINE_ROOM - body.getBoundingClientRect().bottom;
     if (below > 0) body.scrollTop += below;
   }
-  // 點收藏冊的一格：翻出（再點收起）神器譜那一行；手上的榜單沒有那一筆（還沒看過榜單、或是剛打出來的）就抓一次再畫
+  // 點收藏冊的一格：翻出（再點收起）神器譜那一行。手上的榜單有那一筆先照它畫，再一律重抓一次神器譜照新的畫（伺服器那一張不快取）：
+  // 手上那一份可能是之前在見聞→榜單抓的，之後別人又打了仿品，那一行的「仿品 N 把」就跟上面江湖已見那一列（輪詢的）對不上
   async function divinePick(id) {
     S.divinePick = S.divinePick === id ? null : id;
     renderShop();
     divineLineShow();
-    if (!S.divinePick || divineBookLine(id) !== null) return;
+    if (!S.divinePick) return;
     try { await loadBoards(); } catch (e) { return; } // api() 提示過
     if (S.divinePick === id) { renderShop(); divineLineShow(); }
   }
