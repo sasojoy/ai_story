@@ -385,11 +385,15 @@ def test_a_poll_while_the_mall_is_open_reloads_it_only_when_the_balance_moved(m_
     assert out["same"] == out["before"] and out["after"] == out["before"] + 1
 
 
-# ── 設定頁的管理者區 ─────────────────────────────
+# ── 管理頁的商城一塊（admin.js；以前在設定抽屜最底下）─────────────────────────────
+
+# 管理頁要有一份管理資料才畫各塊（/api/admin 的最少那幾格）；商城那一塊不靠它
+ADMIN = {"phase": "running", "battles": [], "events": [], "trends": [], "timetable": [], "results": [], "locks": [],
+         "season_one": False, "showdowns": [], "now": {}}
 
 
 def _sheet(m, S=None):
-    return run(m, "return H.sheetHtml();", S={"admin": None, **(S or {})})
+    return run(m, "return H.adminHtml();", S={"admin": ADMIN, **(S or {})})
 
 
 def test_admin_mall_tools_show_only_for_an_admin_with_the_mall_on(m_on, m_off):
@@ -397,7 +401,8 @@ def test_admin_mall_tools_show_only_for_an_admin_with_the_mall_on(m_on, m_off):
     html = _sheet(admin)
     assert 'id="ad-mall-form"' in html and 'data-op="mall_reissue"' in html and 'data-op="mall_revoke"' in html
     assert 'id="ad-mall-amount"' in html and 'id="ad-mall-note"' in html
-    assert 'id="ad-mall-form"' not in _sheet(m_on)  # 不是管理者
+    assert 'id="ad-mall-form"' not in run(m_on, "return H.sheetHtml();", S={"admin": None})  # 設定抽屜不再有（管理頁只有管理者進得去）
+    assert 'id="ad-mall-form"' not in run(admin, "return H.sheetHtml();", S={"admin": None})
     assert 'id="ad-mall-form"' not in _sheet({**m_off, "admin": True})  # 商城關著
 
 
@@ -443,8 +448,8 @@ def _admin_result(m_on, op, message):
       T.ctx.document.getElementById = (id) => fields[id] || orig(id);
       T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
       """ + _click('{ act: "mall-admin", op: "' + op + '" }') + _click('{ act: "ask-yes" }') + """
-      return H.sheetHtml();"""),
-        S={"sheet": True, "admin": None},
+      return H.adminHtml();"""),
+        S={"sheet": True, "admin": ADMIN},
         responses={f"/api/do/{op}": {"main": admin, "message": message},
                    "/api/admin/mall": {"name": "沈浪", "balance": 400, "card": None, "ledger": [], "purchases": []}})
 
