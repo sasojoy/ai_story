@@ -683,7 +683,8 @@ def test_a_mark_with_no_old_module_left_is_caught():
     """註了過渡、import 的卻都是核心本體或共用規則層（搬完了、登記了）：那一行的註要拿掉；同一行還有一個舊模組的照註（第 11 批）。"""
     assert stale_marks("from tianxia import siege  # 過渡：待搬\n", "tianxia.features.battle.view") == [1]
     assert stale_marks("from tianxia import journal, team  # 過渡：待搬\n", "tianxia.features.battle.view") == [1]
-    assert stale_marks("from tianxia import conquest, siege  # 過渡：待搬\n", "tianxia.features.battle.view") == []
+    # shared：原本的例子 conquest 第 15 批登記進共用規則層，換一個還是舊模組的
+    assert stale_marks("from tianxia import bounties, siege  # 過渡：待搬\n", "tianxia.features.battle.view") == []
     assert stale_marks("from tianxia import siege\n", "tianxia.features.battle.view") == []
 
 

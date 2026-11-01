@@ -84,6 +84,15 @@
   `ctx._solved_secrets()`、`ctx._note_solved(before)`；素材與經濟的一天 `ctx.econ_day()`；探索那一行悟意境被拿掉的原因 `ctx._insight_blocked(loc)`
 地點（大勢人物＋地圖區；總表附錄甲裁核心）
 - `ctx.place_minutes(loc_id)`（走到那裡要現實幾分鐘）、`ctx._figures_here()`（這個地點的大勢人物：核心的選單也叫）
+回體丹、醫館、地盤、本人對本人、操練的得、閒著（行動與地盤＋散人區）
+- 回體丹與體力：`ctx.pill_now()`、`ctx._pill_day()`、`ctx.pill_cap()`、`ctx.pills_left_today()`、`ctx._cost_option(...)`（同上）、`ctx._day_of(t)`、
+  `ctx._pill_card_bonus()`、`ctx.take_stamina_pill(pill_only=False)`、`ctx._refill_stamina()`、`ctx._top_up_pills()`、`ctx._action_costs()`（各行動花的體力）、
+  `ctx._pill_find(rng)`、`ctx._stamina_play_options()`（設伏、屯糧那一串；附錄甲裁核心，留作接縫）
+- 醫館：`ctx._heal_option()`、`ctx._heal_msgs()`、`ctx.heal()`、`ctx.heal_button()`、`ctx._at_clinic_town()`（附錄甲裁核心：店面與打點都問）
+- 地盤：`ctx._push_progress(loc_id, nominal, source, how=None)`、`ctx._event_progress()`、`ctx._conquest_side()`、`ctx._at_own_base()`
+- 本人對本人：`ctx._spar_power(who, against, seal=True)`、`ctx._spar_mirror(result, power)`、`ctx._raid_key(attacker, target)`
+- 操練的得：`ctx._drill_gains(squad, share=None, source="hold", echo=True)`、`ctx._exp_changes(exp, keep, gained)`、`ctx._drills_with(squad)`
+- 閒著：`ctx._idle()`（同上）、`ctx.is_idle()`（切磋、論武問的那一個）
 
 ## 二、查詢服務
 

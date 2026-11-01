@@ -26,7 +26,7 @@ from tianxia import figures  # 過渡：待搬（大勢人物：名氣、心事�
 from tianxia import gender
 from tianxia import renown  # 過渡：待搬（名望段、善惡稱號）
 from tianxia import rules
-from tianxia import territory  # 過渡：待搬（地盤：誰控制、地頭熟、大勢線）
+from tianxia import territory  # 共用規則層（地盤：誰控制、地頭熟、大勢線）
 from tianxia import treasures  # 共用規則層（玉璽碎片改版開著沒）
 from pydantic import BaseModel
 

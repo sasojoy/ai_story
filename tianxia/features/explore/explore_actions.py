@@ -34,7 +34,7 @@ from tianxia import prologue as prologue_rules  # 過渡：待搬（序章裡探
 from tianxia import renown  # 過渡：待搬（名聲：頭目的倍數）
 from tianxia import sensing  # 過渡：待搬（有所感：這一處今天悟錯過沒）
 from tianxia import storyline  # 過渡：待搬（一條線：開頭擲不擲中）
-from tianxia import territory  # 過渡：待搬（地盤：這一處此刻歸誰）
+from tianxia import territory  # 共用規則層（地盤：這一處此刻歸誰）
 from tianxia.core.option import Option
 from tianxia.events import event_candidates, pick_event  # 過渡：待搬（事件：候選、抽一則）
 from tianxia.models import DuelBoss, Location, Squad
