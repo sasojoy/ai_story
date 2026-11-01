@@ -340,3 +340,117 @@ def test_a_refused_divine_name_on_the_forged_card_stays_in_the_box(m):
     assert out["kept"] == "斬月刀" and "同名" in out["toast"]
     assert [(p.get("weapon"), p.get("name")) for p in out["posts"]] == [("兵:1", "斬月刀"), ("兵:1", "斬月刀")]
     assert out["after"] == ""
+
+
+# ── 鐵匠鋪與合成流程 3.3（A 批）：打造頁缺料的灰格就地熬（只用現成的 shop.trade 與 smith_upgrade）──
+
+
+def _brewing(content, world, bag, upgrade=True):
+    """升階開著（測試內容預設關著）的鐵匠鋪，背包換成 bag。測試內容的素材：剛一到三階、快只有一階（剛的二、三階換得出來，快沒有）。"""
+    content.config.economy.upgrade = upgrade
+    game = _smith(content, world)
+    game.state.player.materials = dict(bag)
+    return game
+
+
+def _cell_of(html, attr, tier):
+    """打造頁那一格的標記（灰格照 data-attr／data-tier 找）。"""
+    at = html.index(f'data-act="shop-brew" data-attr="{attr}" data-tier="{tier}"')
+    start = html.rindex("<button", 0, at)
+    return html[start:html.index("</button>", at)]
+
+
+def test_missing_tiers_are_grey_brew_cells_and_tier_one_is_none(content, world):
+    game = _brewing(content, world, {"gang_2": 1, "kuai_1": 2})
+    m = server.main_view(game)
+    html = _forge_page(m, "H.render(); return T.els.app.innerHTML;")
+    ups = {(u["attribute"], u["tier"]): u for u in m["shop"]["trade"]["upgrade"]}
+    assert html.count('data-act="shop-cell"') == 2  # 背包有的照舊是實格
+    t3 = _cell_of(html, "剛", 3)
+    assert "熬" in t3 and f"{ups[('剛', 3)]['need']} 個二階" in t3 and ups[("剛", 3)]["short"] in t3 and " off" in t3  # 料不夠：短原因、灰
+    assert 'class="cell t1 brew none"' in html and ">無<" in html  # 剛沒有一階：「無」、不可點（不是 button）
+    assert 'data-attr="快"' not in html  # 快沒有二、三階的素材（內容裡就沒有）：沒有熬的路就不畫
+    assert html.index('class="row-attr gang"') < html.index('data-attr="剛" data-tier="3"') < html.index('class="row-attr kuai"')
+
+
+def test_tier_one_in_the_bag_makes_tier_two_brewable(content, world):
+    game = _brewing(content, world, {"gang_1": 4})
+    m = server.main_view(game)
+    html = _forge_page(m, "H.render(); return T.els.app.innerHTML;")
+    t2 = _cell_of(html, "剛", 2)
+    assert "熬" in t2 and "3 個一階" in t2 and " off" not in t2 and 'data-why=""' in t2
+    assert "手上 0／10" in _cell_of(html, "剛", 3)
+
+
+def test_a_brew_cell_that_cannot_brew_only_says_why(content, world):
+    game = _brewing(content, world, {"gang_2": 1})
+    m = server.main_view(game)
+    why = next(u for u in m["shop"]["trade"]["upgrade"] if u["tier"] == 3)["problem"]
+    out = _forge_page(m, """return (async () => {
+        H.render();
+        """ + _click('{ act: "shop-brew", attr: "剛", tier: "3", why: %s }' % json.dumps(why)) + """
+        return { brew: H.S.shopBrew, toast: T.els.toast.textContent, html: T.els.app.innerHTML, calls: T.calls.length };
+      })();""")
+    assert out["brew"] is None and out["toast"] == why and "brew-sheet" not in out["html"] and out["calls"] == 0
+
+
+def test_tapping_a_brew_cell_opens_the_sheet_and_brewing_posts_the_upgrade(content, world):
+    game = _brewing(content, world, {"gang_1": 4})
+    m = server.main_view(game)
+    up = next(u for u in m["shop"]["trade"]["upgrade"] if u["tier"] == 2)
+    out = _forge_page(m, """return (async () => {
+        H.render();
+        """ + _click('{ act: "shop-brew", attr: "剛", tier: "2", why: "" }') + """
+        const sheet = T.els.app.innerHTML;
+        """ + _click('{ act: "shop-brew-go", attr: "剛", tier: "2" }') + """
+        await new Promise((ok) => setTimeout(ok, 5));
+        return { sheet, after: T.els.app.innerHTML, calls: T.calls.map((c) => c), brew: H.S.shopBrew };
+      })();""", responses={"/api/do/smith_upgrade": {"main": m, "message": "<p>你用 3 個精鐵砂熬出了一個玄鋼骨。</p>"},
+                           "/api/smith_line": m["shop"]["forge"]["line"]})
+    sheet = out["sheet"][out["sheet"].index('class="brew-sheet"'):]
+    assert f"用 3 個一階剛熬一個二階剛，{up['cost']} 兩？" in sheet and up["odds"] in sheet  # 設計稿 3.3 的那一句與素材頁的機率
+    assert 'data-act="shop-brew-go"' in sheet and 'data-act="shop-brew-close"' in sheet
+    assert out["sheet"].index('class="row-attr gang"') < out["sheet"].index('class="brew-sheet"')  # 彈在那一排底下
+    posted = [c for c in out["calls"] if c[0] == "/api/do/smith_upgrade"]
+    assert posted == [["/api/do/smith_upgrade", {"attribute": "剛", "tier": 2}]]
+    assert out["calls"][-1][0] == "/api/smith_line"  # 熬完再問一次這一爐（素材格跟著變）
+    assert out["brew"] is None and "brew-sheet" not in out["after"]
+    assert '<p class="shop-line brewed" role="status">你用 3 個精鐵砂熬出了一個玄鋼骨。</p>' in out["after"]  # 鐵匠那一句換成結果句
+
+
+def test_closing_the_sheet_and_changing_the_pot_put_the_smith_line_back(content, world):
+    game = _brewing(content, world, {"gang_1": 4})
+    m = server.main_view(game)
+    out = _forge_page(m, """return (async () => {
+        H.render();
+        """ + _click('{ act: "shop-brew", attr: "剛", tier: "2", why: "" }') + """
+        """ + _click('{ act: "shop-brew-close" }') + """
+        const closed = T.els.app.innerHTML;
+        H.S.shopNote = "熬出來了";
+        """ + _click('{ act: "shop-cell", id: "gang_1", why: "" }') + """
+        return { closed, note: H.S.shopNote };
+      })();""", responses={"/api/smith_line": m["shop"]["forge"]["line"]})
+    assert "brew-sheet" not in out["closed"] and out["note"] is None
+
+
+def test_no_trade_no_grey_cells(content, world):
+    """升階關著（shop.trade 是 None，或只開收購、upgrade 是空的）：打造頁照現在，一格灰格都不畫。"""
+    off = server.main_view(_brewing(content, world, {"gang_1": 4}, upgrade=False))
+    assert off["shop"]["trade"] is None
+    html = _forge_page(off, "H.render(); return T.els.app.innerHTML;")
+    assert "shop-brew" not in html and "brew none" not in html
+    sell_only = json.loads(json.dumps(off))
+    sell_only["shop"]["trade"] = {"sell": [], "upgrade": [], "hint": "", "up_cap": "", "sell_cap": "", "sell_empty": ""}
+    only = _forge_page(sell_only, "H.render(); return T.els.app.innerHTML;")
+    assert "shop-brew" not in only and "brew none" not in only
+    grid = lambda page: page[page.index('<div class="cells'):page.index('<nav class="shop-tabs">')]  # noqa: E731  素材格一模一樣（只多「素材」那一頁的分頁）
+    assert grid(only) == grid(html)
+
+
+def test_a_brewed_material_turns_into_a_real_cell(content, world):
+    """真的熬一次（Game.smith_upgrade，打造頁開著時按得下去）：灰格變實格、數字照背包。"""
+    game = _brewing(content, world, {"gang_1": 4})
+    game.smith_upgrade("剛", 2)
+    assert game.state.player.materials.get("gang_2") == 1
+    html = _forge_page(server.main_view(game), "H.render(); return T.els.app.innerHTML;")
+    assert 'data-act="shop-cell" data-id="gang_2"' in html and 'data-attr="剛" data-tier="2"' not in html

@@ -115,6 +115,7 @@
     shopMore: false, // 裝備庫頁按了「再列 N 件」
     shopHorse: null, // 馬市點著的那一間（馬的 id；待售那匹是「架:馬」）；null 照伺服器的 focus（你騎的，沒有馬就待售的）
     shopNote: null, // 鐵匠鋪素材頁、軍需帳上一下的結果那一句（升階出了什麼、捐了多少；素材與經濟 B6）；換頁、出店清掉
+    shopBrew: null, // 打造頁點開的那一格灰格（鐵匠鋪與合成流程 3.3）：{ attr, tier }，那一排底下彈熬的小單；熬了、取消、出店清掉
     donatePick: {}, // 軍需帳挑好要捐的：素材 id → 個數（點一格挑、＋−改個數，「捐出」一起送）
     boardZoom: null, // 懸賞榜放大的那一張告示（懸賞 id）；第三層開著時照伺服器的 picked
     tavTab: "news", // 酒肆那一頁停在哪（news 聽消息／ask 打聽／wall 題壁／shade 暗處）；進門停在聽消息（企劃者 2026-10-18）
@@ -405,6 +406,7 @@
       S.shopTab = "shelf"; S.shopPot = null; S.shopLine = null; S.shopMore = false;
       S.shopHorse = null; S.boardZoom = null; S.boardStamp = null; S.arenaTab = "floor";
       S.shopNote = null; S.donatePick = {}; // 素材頁、軍需帳上一下的結果與挑好要捐的（素材與經濟 B6）
+      S.shopBrew = null; // 打造頁點開的灰格（鐵匠鋪與合成流程 3.3）
       S.tavTab = "news"; S.tavAsk = "seek"; // 酒肆從聽消息那一頁來
       if (shopKind(main) !== "smith") { S.shopReveal = null; S.shopOpened = false; }
     }
@@ -3018,7 +3020,10 @@
       : `<button class="shop-back" data-act="choose" data-id="${esc(shop.back)}">‹ 出店</button>`;
     // 鐵匠講神器的規矩（背包有四階時，shop.rule；設計 9.1 第 2 批甲）：就畫在平常那一句的位置、金框標出來；順口講配方線索那一下伺服器給空的
     // shop.said：商城掌櫃那一句換成買成了的那一句（said ok）或買不了的原因（said no），左邊那條線換色
-    const line = shop.rule ? `<p class="shop-line rule">${esc(shop.rule)}</p>`
+    // 打造頁就地熬了一個（鐵匠鋪與合成流程 3.3）：鐵匠那一句換成素材頁的結果句（熬出了什麼，不是投的屬性也照寫），放料、換頁就換回來
+    const brewed = kind === "smith" && S.shopNote && smithTab(shop) === "forge";
+    const line = brewed ? `<p class="shop-line brewed" role="status">${esc(S.shopNote)}</p>`
+      : shop.rule ? `<p class="shop-line rule">${esc(shop.rule)}</p>`
       : `<p class="shop-line${shop.said ? ` ${esc(shop.said)}` : ""}">${kind === "dadian" ? sayHtml(shop.line) : kind === "mall" ? nbHtml(shop.line, MALL_SAY_AFTER) : esc(shop.line)}</p>`; // 打點：掮客那一句不在詞中間斷（FB-433）；商城見 MALL_SAY_AFTER
     // 鐵匠鋪的架上頁照草圖 A 把鐵匠那一句放在爐火底下（smithHtml 畫，企劃者 2026-10-14）；其他頁、馬市、懸賞榜緊接招牌
     const underForge = kind === "smith" && smithTab(shop) === "shelf";
@@ -3702,18 +3707,18 @@
     // 整段字包在一個 span 裡（FB-297 複驗）：.btn 是不換行的橫向 flex，字與每一段折扣原因的小段各成一個 flex 項目時排成一列，
     // 兩段原因就把鈕撐出 375、字擠成直排、「鑄譜」被推出畫面；只有一個項目時字照常換行
     const go = `<button class="btn primary shop-go" data-act="shop-go"${can ? "" : " disabled"}><span>${dealHtml(line.ready ? line.problem || line.go : "開爐")}</span></button>`;
-    // 素材格一屬性一排（企劃者 2026-10-14 微調）：伺服器已經照剛柔快慢、再照階排好，這裡只照屬性分排、排頭寫屬性
-    const rows = [];
-    for (const c of line.cells || []) {
-      const mat = mats.get(c.id);
-      if (!mat) continue;
+    // 素材格一屬性一排（企劃者 2026-10-14 微調）：伺服器已經照剛柔快慢、再照階排好，這裡只照屬性分排、排頭寫屬性。
+    // 格子照背包現在的那一份（forge.materials）畫，這一爐的說法（line.cells）只拿來查放不放得進去：熬完、回應還沒回來時新的那一格照樣畫出來
+    const rows = [], fits = new Map((line.cells || []).map((c) => [c.id, c]));
+    for (const mat of f.materials) {
+      const c = fits.get(mat.id) || { id: mat.id, ok: true, why: "" };
       const cell = `<button class="cell t${mat.tier | 0}${c.main || c.aux ? " used" : ""}${c.ok ? "" : " off"}" data-act="shop-cell" data-id="${esc(c.id)}" data-why="${esc(c.why || "")}">
         <span class="n">${mat.count | 0}</span><span class="nm"><i class="dot ${SHOP_ATTR[mat.attribute] || ""}"></i>${esc(mat.name)}</span><small>${esc(mat.tier_word)}</small>${c.ok ? "" : `<span class="why">${esc(c.why)}</span>`}</button>`;
       const last = rows[rows.length - 1];
-      if (last && last.attribute === mat.attribute) last.cells.push(cell);
-      else rows.push({ attribute: mat.attribute, cells: [cell] });
+      if (last && last.attribute === mat.attribute) last.cells.push([mat.tier | 0, cell]);
+      else rows.push({ attribute: mat.attribute, cells: [[mat.tier | 0, cell]] });
     }
-    const cells = rows.map((r) => `<div class="cell-row"><span class="row-attr ${SHOP_ATTR[r.attribute] || ""}">${esc(r.attribute)}</span>${r.cells.join("")}</div>`).join("");
+    const cells = rows.map((r) => brewRowHtml(shop, r)).join("");
     return `${kinds}
       <div class="furnace${S.shopFiring ? " firing" : ""}">${slot("main", pot.main)}<div class="flame">${FLAME_SVG}</div>${slot("aux", pot.aux)}</div>
       ${out}<div class="shop-gorow">${go}<button class="btn small ghost shop-book" data-act="book-open" data-book="forge">鑄譜</button></div>
@@ -3721,10 +3726,68 @@
       <p class="shop-cap">背包的素材（點一下放進爐裡）</p><div class="cells${shop.four ? " four" : ""}">${cells || '<p class="shop-empty">背包裡沒有素材。</p>'}</div>`;
   }
 
-  // 爐裡換了東西：先照放的畫一次，再問這一爐會怎樣（/api/smith_line；只用最後一次請求的回應）
+  // 缺料的灰格（鐵匠鋪與合成流程 3.3，企劃者 2026-10-29 選「乙 點爐火、就地熬」）：素材格每一排補齊一階到三階（四階開著到四階）。背包沒有的
+  // 那一階：一階畫「無」（沒有零換一，不可點）；二階以上照素材頁那一筆（shop.trade.upgrade，同屬性同階）畫「熬」＋要幾個低一階，按不下去的
+  // 灰掉、格上寫素材頁同一句短原因（點了只說整句），按得下去的點了在那一排底下彈小單，熬送現成的 smith_upgrade（需求、工錢、上限、屬性機率
+  // 全照素材頁）。升階關著（shop.trade 是 None，或只開收購、upgrade 是空的）一格都不畫，打造頁照舊；內容裡沒有那一階的素材（換不出來）不畫。
+  // 灰格只說「這一格你沒有、怎麼熬」，不說熬了會打中什麼（企劃者 2026-10-10「不替玩家列出合得出來的組合」）。字待 joy 潤
+  const SHOP_TIER = ["", "一階", "二階", "三階", "四階"];
+  const BREW_NONE = "無"; // 待 joy 潤
+  const BREW_WORD = "熬"; // 待 joy 潤
+  function brewUps(shop) {
+    const t = shop.trade;
+    return t && (t.upgrade || []).length ? t.upgrade : null;
+  }
+  function brewOpen(attr, tier) { return !!S.shopBrew && S.shopBrew.attr === attr && S.shopBrew.tier === tier; }
+  function brewCellHtml(up, attr, tier) {
+    if (tier === 1) return `<div class="cell t1 brew none" aria-hidden="true"><span class="nm">${BREW_NONE}</span></div>`;
+    if (!up) return "";
+    return `<button class="cell t${tier} brew${up.problem ? " off" : ""}${brewOpen(attr, tier) ? " on" : ""}" data-act="shop-brew" data-attr="${esc(attr)}" data-tier="${tier}" data-why="${esc(up.problem || "")}">
+        <span class="nm">${BREW_WORD}</span><small>${up.need | 0} 個${SHOP_TIER[tier - 1]}</small>${up.problem ? `<span class="why">${esc(up.short || up.problem)}</span>` : ""}</button>`; // 待 joy 潤：「3 個一階」
+  }
+  // 小單：「用 3 個一階剛熬一個二階剛，5 兩？」、素材頁那一句機率（「五成出流雲絮，其餘隨機」）與上限字（二換三今天、三換四這一季）、熬與取消
+  function brewSheetHtml(up) {
+    const ask = `用 ${up.need | 0} 個${SHOP_TIER[up.tier - 1]}${esc(up.attribute)}熬一個${SHOP_TIER[up.tier]}${esc(up.attribute)}，${up.cost | 0} 兩${dealHtml(up.cost_note || "")}？`; // 待 joy 潤
+    return `<div class="brew-sheet" role="group" aria-label="${BREW_WORD}">
+        <p class="brew-ask">${ask}</p><p class="brew-odds">${esc(up.odds || "")}${up.left_text ? `・<span class="nb">${esc(up.left_text)}</span>` : ""}</p>
+        <div class="brew-btns"><button class="btn small ghost" data-act="shop-brew-close">取消</button><button class="btn small primary" data-act="shop-brew-go" data-attr="${esc(up.attribute)}" data-tier="${up.tier | 0}">${BREW_WORD}</button></div>
+      </div>`;
+  }
+  // 一排素材格（forgePageHtml 交過來的 {attribute, cells: [[階, 標記]]}）：升階開著時補齊灰格，點開的那一格的小單接在這一排底下
+  function brewRowHtml(shop, row) {
+    const ups = brewUps(shop);
+    let list = row.cells, sheet = "";
+    if (ups) {
+      const have = new Set(list.map(([t]) => t));
+      for (let t = 1; t <= (shop.four ? 4 : 3); t += 1) {
+        if (have.has(t)) continue;
+        const up = t > 1 ? ups.find((u) => u.attribute === row.attribute && u.tier === t) : null;
+        const html = brewCellHtml(up, row.attribute, t);
+        if (html) list = [...list, [t, html]];
+        if (up && !up.problem && brewOpen(row.attribute, t)) sheet = brewSheetHtml(up);
+      }
+      list = list.slice().sort((p, q) => p[0] - q[0]);
+    }
+    return `<div class="cell-row"><span class="row-attr ${SHOP_ATTR[row.attribute] || ""}">${esc(row.attribute)}</span>${list.map((pair) => pair[1]).join("")}</div>${sheet}`;
+  }
+  // 點灰格：按不下去的只說原因；按得下去的打開（再點一次收起）小單，鐵匠那一句換回平常的
+  function shopBrew(attr, tier, why) {
+    if (why) { toast(why); return; }
+    S.shopBrew = brewOpen(attr, tier) ? null : { attr, tier };
+    S.shopNote = null;
+    renderShop();
+  }
+  // 熬（同素材頁的升階，MAIN_ACTIONS smith_upgrade）：結果那一句（S.shopNote）在打造頁換掉鐵匠那一句，再問一次這一爐（素材格跟著變）
+  async function smithBrew(attribute, tier) {
+    await shopDo("smith_upgrade", { attribute, tier }, () => { S.shopBrew = null; });
+    await updateSmithLine();
+  }
+
+  // 爐裡換了東西：先照放的畫一次，再問這一爐會怎樣（/api/smith_line；只用最後一次請求的回應）。熬過的結果那一句收起（鐵匠那一句換回來）
   async function setPot(change) {
     const shop = S.main && S.main.shop;
     if (!shop) return;
+    S.shopNote = null;
     S.shopPot = { ...shopPotNow(shop), ...change, slot: shop.page };
     renderShop();
     await updateSmithLine();
@@ -6151,7 +6214,7 @@
           break;
         }
         // 店面（店面獨立介面設計第二節）：換頁只在網頁上；換上、拆解、定名走修練頁的動作（shopMx）
-        case "shop-tab": S.shopTab = el.dataset.tab; S.shopMore = false; S.shopNote = null; renderShop(false); break;
+        case "shop-tab": S.shopTab = el.dataset.tab; S.shopMore = false; S.shopNote = null; S.shopBrew = null; renderShop(false); break;
         // 鐵匠鋪素材頁（素材與經濟 B6）：升一個（灰掉的只說原因）、賣一個、全賣（先問一次）
         case "trade-up":
           if (el.dataset.why) toast(el.dataset.why);
@@ -6182,6 +6245,9 @@
         case "shop-leave": await boardLeave(el); break; // 第三層開著時出店
         case "shop-kind": setPot({ kind: el.dataset.kind }); break;
         case "shop-cell": shopCell(el.dataset.id, el.dataset.why); break;
+        case "shop-brew": shopBrew(el.dataset.attr, Number(el.dataset.tier), el.dataset.why); break; // 打造頁的灰格（3.3）：點了彈小單
+        case "shop-brew-close": S.shopBrew = null; renderShop(); break;
+        case "shop-brew-go": await smithBrew(el.dataset.attr, Number(el.dataset.tier)); break;
         case "shop-slot": setPot(el.dataset.role === "main" ? { main: null, aux: null } : { aux: null }); break; // 拿掉主料，輔料跟著出來（伺服器也這樣修）
         case "shop-go": await smithForge(); break;
         case "shop-unwrap": S.shopOpened = true; renderShop(); break; // 點開麻布（2.3）
