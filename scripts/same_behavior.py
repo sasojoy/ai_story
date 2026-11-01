@@ -2614,23 +2614,40 @@ class BattleScenario(Scenario):
 
     def deliver(self) -> None:
         """收場之後每個人打 /api/main：下一次同步把那一場補到自己手上（江湖紀錄、戰報、軍餉、名望、行狀、戰功；「剛剛」是那一場的卡片與
-        收場那一刻的戰局條）。序章裡的那一位不在名單上，什麼都不補。第一位同步之前先擺 crossing（核心收接縫，全部拆包第 11 批）。"""
-        self.crossing()
+        收場那一刻的戰局條）。序章裡的那一位不在名單上，什麼都不補。第一位要經同步才補到那一場的人（crossing_who）同步之前先擺 crossing
+        （核心收接縫，全部拆包第 11 批）。"""
+        who_x = self.crossing_who()
         for who in [*self.PLAYERS, self.NEWBIE]:
+            if who == who_x:
+                self.crossing(who)
             self.main(who)
             self.me(who, "收補送之後")
 
-    def crossing(self) -> None:
+    def crossing_who(self) -> str:
+        """名單上第一位還沒補到收場那一場的人：自己最後一手收了場的那一位在 _battle_choose 那一下就補了（_settle_showdown 叫補送，不經
+        sync；第 11 批審查：原本擺在秦朗月身上，他那一則「長社火攻」不是 deliver_results 那一格補的，挪動那一格比不出差），其餘參戰的人
+        要等自己下一次同步，才經 sync 的 deliver_results 補到。內容裡沒有決戰（測試內容）照舊是秦朗月。"""
+        b = self.world.get_battle()
+        if b is not None and b.phase == "ended":
+            for who in self.PLAYERS:
+                state = self.chars.load(who)
+                if who in b.participants and state is not None and b.record_id not in state.player.battle_results_seen:
+                    return who
+        return self.GAMBLER
+
+    def crossing(self, who: str) -> None:
         """同一次同步收好幾包的補送（核心收接縫，全部拆包第 11 批；計畫 docs/superpowers/plans/2026-11-01-核心收接縫.md 1.3）：收場之後
-        秦朗月第一次同步之前，季上替他擺一筆護衛補帳（還在 engine 的 _deliver_guard_credits）、一則酒肆的風聲、一張他雇的過期殺手單。
-        那一下同步依序補：決戰的補送（決戰包，deliver_results 的位置：補份量快照之後、玉璽碎片之前）→ 護衛 → 風聲、殺手單（酒肆包，
-        deliver_notices 的位置：護衛之後、領地爭奪換天之前）。deliver 那一行 me 的江湖紀錄標題看得出三個位置的先後：兩個掛鉤挪了位置、
-        或酒肆那三個搬到決戰前面都抓得到。三個 deliver 不看酒肆開關，測試內容沒有酒肆也照擺照送。"""
+        這個人（crossing_who：還沒補到那一場、這一下同步才經 deliver_results 補到的那一位）同步之前，季上替他擺一筆護衛補帳（還在 engine
+        的 _deliver_guard_credits）、一則酒肆的風聲、一張他雇的過期殺手單。那一下同步依序補：決戰的補送（決戰包，deliver_results 的位置：
+        補份量快照之後、玉璽碎片之前）→ 護衛 → 風聲、殺手單（酒肆包，deliver_notices 的位置：護衛之後、領地爭奪換天之前）。deliver 那一行
+        me 的江湖紀錄標題看得出三格的先後：決戰的補送挪過護衛、挪到酒肆後面，酒肆那三個挪過護衛、挪到決戰前面，都抓得到；沒越過護衛的
+        看不出來（決戰的補送只在補份量快照與護衛之間挪、越過玉璽碎片與改名那幾格，它們這一下什麼都不寫）。三個 deliver 不看酒肆開關，
+        測試內容沒有酒肆也照擺照送；測試內容沒有決戰，只看得出護衛與酒肆兩格。"""
         from tianxia import figure_aid
         from tianxia.characters import name_key
         from tianxia.state import TavernHit, Whisper
 
-        who, other = self.GAMBLER, self.LATE_GAMBLER
+        other = self.LATE_GAMBLER if who == self.GAMBLER else self.GAMBLER
         state = self.chars.load(who)
         place = state.player.location if state is not None else self.c.scenario.start_location
         now = CLOCK0 + STEP[0] * self.STEP_SECONDS
