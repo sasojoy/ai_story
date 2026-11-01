@@ -190,17 +190,35 @@ def _feature_imports_cached(path: Path) -> tuple[tuple[int, str], ...]:
 # 瘦下來的 Game（engine.py）也是核心（手冊 3.1）。3.10 准它留一行的委派，所以它是核心裡唯一另外 import 包的地方：只准下面這幾樣，
 # 多一處就紅（要接一包先想掛鉤；真的要過渡就加進這裡、回報寫明）。第 2 階呼叫端改叫包、委派拿掉時從這裡刪。
 GAME_IMPORTS = {
+    # explore（主動搬六包第 3＋4 批）：走一趟 9 個、探索一顆 9 個一行委派；原本那一行 `from . import outing as outing_rules` 現在是別名
+    # （有所感照舊讀 rare_boost，見 GAME_DIRECT 的 _sense）；原本的 `from . import explore_one` 拿掉了（engine 不再用它）
+    "tianxia.features.explore.outing_actions", "tianxia.features.explore.explore_actions", "tianxia.outing",
     "tianxia.features.mall.actions", "tianxia.features.feast.actions",
     # 出陣（主動搬六包第 1 批）：13 個一行委派；原本那一行 `from . import (..., sortie, ...)` 現在是別名（engine 照舊叫 sortie.on、
     # sortie.NAME 這些字，見 GAME_DIRECT）；混戰的字搬進包，tests/ranger/test_raid.py 照舊從 engine 拿那三個
     "tianxia.features.sortie.actions", "tianxia.sortie", "tianxia.features.sortie.rules",
     # 出陣約戰（主動搬六包第 2 批）：16 個一行委派；原本那一行 `from . import sortie_duel` 現在是別名（choose 照舊讀 PREFIX、PICK）
     "tianxia.features.sortie.duel_actions", "tianxia.sortie_duel",
-    "tianxia.features.looks.actions",  # 擂台形象：Game.arena_look 一行委派（擂台報名、開打記穿哪一套）
+    # battle
+    # 全服決戰「看」那一半（主動搬六包第 5 批）：22 個一行委派（view）；rules 給測試從 engine 拿的 6 個字、委派的型別註記，與 Game 的類別屬性
+    # BATTLE_GAMBLE_NOTE／LAST（類別本體不是方法，game_links 掃不到那兩行，記在這裡）
+    "tianxia.features.battle.view", "tianxia.features.battle.rules",
+    # 決戰「打」那一半之一（全部拆包第 6 批）：管理者的決戰工具 6 個、攻城 6 個一行委派
+    "tianxia.features.battle.admin", "tianxia.features.battle.sieges",
+    "tianxia.features.looks.actions",  # 擂台形象：Game.arena_look、arena_move 一行委派（擂台報名、開打記穿哪一套、疊哪一張光效）
 }
 GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
     "arena_look",  # 擂台形象（looks）
     "arena_move",  # 招式動畫（looks）
+    # explore（主動搬六包第 3＋4 批）：走一趟 9 個（1 個私有）——server、bot、bot_policy、測試在叫的 8 個，與 engine 模組層的 _outing_watch
+    # （套在 choose、answer_event、epiphany_names、sense_draw 上；不是 Game 的方法，掃描看不到）叫的 _outing_watched
+    "outing_go", "outing_view", "outing_can_go", "_outing_watched", "outing_say", "outing_tale_request", "outing_set_tale",
+    "outing_ink_left", "admin_erase_inscription",
+    # 探索一顆 9 個（5 個私有）：核心原位在叫的 5 個（_outing_on：_act、_action_title、_everyday_options、action_notes；_outing_plan：
+    # action_notes；_outing_option：_everyday_options；_explore_one：_act；map_mostly：map_base、map_state），server、bot_policy、腳本、
+    # 測試在叫的 mostly_here、outing_plan、fatigue_next、_outing_fight（出陣包經 ctx 叫 _outing_on、包裡經 ctx 叫 _outing_plan、outing_plan）
+    "_outing_on", "_outing_plan", "mostly_here", "outing_plan", "map_mostly", "_outing_option", "_explore_one", "_outing_fight",
+    "fatigue_next",
     "mall_buy", "mall_entry", "mall_rename_left", "mall_rename", "mall_claim", "mall_view", "mall_records",
     "admin_mall_reissue", "admin_mall_revoke", "admin_mall_refund", "admin_mall_ledger", "_mall_grant",
     "feast_free_text_prompt", "feast_text_request", "feast_toast",
@@ -213,9 +231,25 @@ GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
     # （_duel_line、_duel_entry、_duel_choice、_sortie_duel_tick、_duty_credit；duel_on、_duel_squad 核心原位也叫）
     "duel_on", "_duel_power", "duel_convoy_here", "_duel_squad", "sortie_go_problem", "sortie_go", "sortie_answer", "sortie_join",
     "sortie_cards", "sortie_card", "sortie_duel_tick", "_duel_line", "_duel_entry", "_duel_choice", "_sortie_duel_tick", "_duty_credit",
+    # battle
+    # 全服決戰「看」那一半（主動搬六包第 5 批；11 個私有）：server 叫的 12 個（main_view 的戰局條、攻城條、輸入框，reports_view，放手一搏與
+    # 補劇情的三段式，_tales_waiting）、核心原位叫的 4 個（_battle_scene_text、_round_blocks、_round_wait、_deliver_battle_results），
+    # 只有測試直接叫的 6 個（_file_showdown、_annal_showdown、_showdown_pay、_showdown_credits、_showdown_tier4、_battle_spotlight）
+    "_battle_scene_text", "_round_blocks", "_round_wait", "_battle_spotlight", "battle_gauge", "siege_banner", "record_gauge", "card_gauge",
+    "battle_on_screen", "_deliver_battle_results", "_file_showdown", "_annal_showdown", "_showdown_pay", "_showdown_credits", "_showdown_tier4",
+    "battle_free_text_prompt", "battle_free_text_note", "battle_text_request", "submit_battle_custom_action", "battle_tale_request",
+    "apply_battle_tales", "_tale_battles",
+    # 決戰「打」那一半之一（全部拆包第 6 批；6 個私有）：server 與測試叫的管理者工具 6 個（ADMIN_ACTIONS 的 start_battle、cancel_battle、
+    # start_showdown，admin_choices 的立刻開戰選單與三場大戲，timetable_choices 的開打後取消），核心原位叫的攻城 6 個（_definition_of、
+    # _tick_siege 測試也直接叫）。_showdown_refusal、_siege_guards 只有包裡叫，沒有委派
+    "admin_battles", "admin_start_battle", "admin_cancel_battle", "admin_showdowns", "cancelled_showdowns", "admin_start_showdown",
+    "_sieges", "_definition_of", "_tick_siege", "_shelve_siege", "_cancel_siege", "_settle_siege",
 }
 _SORTIE_SEAM = "接縫留在原位（批次表第二節：會影響先後的接縫這一輪不開掛鉤，第 11 批一次收）"
 GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；過渡）
+    # explore（主動搬六包第 3＋4 批）：用到 outing 這個名字（現在是探索包 outing_rules 的別名）的只剩有所感
+    "_sense": "有所感畫完那一筆擲特殊頓悟（epiphany.roll 的 boost＝outing_rules.rare_boost：走一趟段數越多越容易來）：sense:* 的分派"
+              "留在核心；等探索包開「此刻稀有的乘多少」的查詢服務時改叫它",
     "_own_scene_text": "坐在宴席上的場景卡（feast_actions.scene）：場景卡還沒有掛鉤；搬包之前也不看宴客開關",
     # 出陣（主動搬六包第 1 批）：下面這些方法用到 sortie 這個名字（現在是出陣包 rules 的別名）——開關（sortie.on＝territory.on）、
     # 鈕上的字（NAME、USED_UP、LEFT_NOTE、OUT_NOTE……）、次數（spend）
@@ -235,6 +269,21 @@ GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；�
               f"sortie_duel.PICK 時不寫紀錄（picked_only、quiet 兩處）：choose 的掛鉤在驗過選單之後才問包，順序不一樣；{_SORTIE_SEAM}",
 }
 GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_DIRECT 的方法裡叫的也列（PM 10/31 答覆出陣第 1 批，第 2 批起）
+    # explore（主動搬六包第 3＋4 批；審查修正：獨立一段放最前面，不夾在出陣那幾行中間）：核心叫探索委派一共 9 對。開發時掃描只看得到
+    # 頭兩對；合了 develop（出陣第 2 批把掃描改成連 GAME_DIRECT 的方法裡叫的也記）之後，呼叫端本身在 GAME_DIRECT 裡的另外 7 對補進來。
+    # 出陣第 1 批記的 (_outing_foe, _sortie_host) 拿掉了（下面出陣那一段少了那一行）：_outing_foe 進了探索包，經 ctx._sortie_host 叫
+    # （服務清單二、查詢服務）
+    ("_action_title", "_outing_on"): "這一下的紀錄標題先算（act:explore 是核心的前綴：探索一顆開著寫「出門一趟・某地」，關著寫「探索某地」）",
+    ("map_base", "map_mostly"): "輿圖的底圖：名字旁的兩個字照看的人站過去之後的比重（探索一顆開著時；輿圖的線還在飛，這一輪不碰）",
+    ("_act", "_outing_on"): f"act:explore 的分派：探索一顆開著走 _explore_one（出門一趟，體力在裡面扣）、關著走舊探索；act 是核心的前綴；"
+                              f"{_SORTIE_SEAM}",
+    ("_act", "_explore_one"): "同上：出門一趟那一下（遇上什麼、收尾的掉落都在包裡）",
+    ("_everyday_options", "_outing_on"): f"行動列探索那一格：探索一顆開著只剩一顆「探索」（不畫三選一、尋敵、操練）；選項的位置算行為；"
+                                          f"{_SORTIE_SEAM}",
+    ("_everyday_options", "_outing_option"): "同上：那一顆鈕（字、勝算、能不能按）",
+    ("action_notes", "_outing_on"): f"行動列底下探索那一行：探索一顆開著寫這一處多半給什麼；{_SORTIE_SEAM}",
+    ("action_notes", "_outing_plan"): "同上：比重照擲骰用的那一份",
+    ("map_state", "map_mostly"): "輿圖：地點旁的兩個字照看的人站過去之後的比重（探索一顆開著時；輿圖的線還在飛，這一輪不碰）",
     ("own_turn_checks", "_mall_grant"): "封測元寶每一輪發（本人這一輪沒有掛鉤；on_sync 不夠：假人程式的那一輪不 sync）",
     ("_arena_join", "arena_look"): "擂台形象：報名、更新分身時記穿哪一套（擂台還在核心；擂台搬成包時改成形象包的查詢服務）",
     ("_arena_start", "arena_look"): "擂台形象：挑人開打時記挑的人穿哪一套（同上）",
@@ -242,7 +291,6 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("_arena_start", "arena_move"): "招式動畫：挑人開打時記挑的人出招疊哪一張（同上）",
     # 出陣（主動搬六包第 1 批）：核心叫出陣委派 13 對（第 1 批時一共 21 對、掃描只看得到 6 對；約戰自己叫的 8 對第 2 批跟著進了包）
     ("_action_title", "_train_title"): "這一下的紀錄標題先算（act:train 是核心的前綴，標題照出陣開著沒、序章寫出陣／雪恥／遊歷）",
-    ("_outing_foe", "_sortie_host"): "走一趟（探索）在自家營寨遇上的是自家那一路（出陣的守拿的同一路）；探索搬成包時改成查詢服務",
     ("_act", "_sortie"): f"act:train 的分派：出陣開著走出陣（並肩出陣、扣體力包在外面）；{_SORTIE_SEAM}",
     ("_everyday_options", "_sortie_option"): f"行動列那一格（雪恥／遊歷／出陣）：選項的位置算行為；{_SORTIE_SEAM}",
     ("action_notes", "_sortie_line"): f"行動列底下出陣那一行；{_SORTIE_SEAM}",
@@ -273,7 +321,76 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("map_state", "duel_on"): "輿圖：約戰開著時不畫零風險的守、攻不了的不推薦、運糧隊經過的帶 convoy；輿圖的線還在飛，這一輪不碰",
     ("_map_foes", "duel_on"): "輿圖的地點卡：約戰開著時列貼約戰會迎戰的守軍那一路",
     ("_map_foes", "_duel_squad"): "同上：守軍那一路（經驗最高的那一路）",
+    # battle
+    # 全服決戰「看」那一半（主動搬六包第 5 批）：會影響先後的接縫留在原位（批次表第二節，第 11 批一次收）
+    ("scene_text", "_battle_scene_text"): "場景卡：戰場蓋在畫面上或整個取代（開打了在場上的人），一次請求只推進一次（tick=False）；場景還沒有掛鉤",
+    ("battle_detail", "_round_blocks"): "戰報頁（核心的單打服務）：決戰那一筆照 battles 表重讀完整戰況（收場之後才補上的劇情也在）",
+    ("_battle_options", "_round_wait"): "決戰「打」那一半（第 7 批搬）：已選了、等其他人那一顆灰鈕上寫已送出／在場",
+    ("sync", "_deliver_battle_results"): "收場補送在 sync 裡的位置算行為（緊接在 _deliver_big_events 後、_deliver_seal_results 前，江湖紀錄的先後）",
+    ("_apply_battle_outcome", "_deliver_battle_results"): "決戰「打」那一半（第 8 批搬）：自己這一下把決戰推到收場，馬上補到自己手上",
+    ("_settle_showdown", "_deliver_battle_results"): "決戰「打」那一半（第 8 批搬）：時刻表決戰收場，同上",
+    ("_shelve_unfinished_battle", "_deliver_battle_results"): "決戰「打」那一半（第 8 批搬）：決戰季終收兵，同上",
+    # 決戰「打」那一半之一（全部拆包第 6 批）：核心叫攻城委派 20 對（第 5 批記的 (_settle_siege|_shelve_siege, _deliver_battle_results) 兩對
+    # 拿掉了：那兩個成了委派，補送在包裡經 ctx 叫）。「我在哪一場」與每一場推一次還是「打」那一半（第 7、8 批），叫的位置算行為
+    ("_battle_status", "_sieges"): "每一場推一次（先決戰、再每一場攻城；沒有攻城戰時照舊走 _showdown_status）：決戰「打」那一半，第 8 批",
+    ("_battle_status", "_tick_siege"): "同上：tick 時每一場攻城各推一次，一次請求只推一次",
+    ("_battle_status", "_shelve_siege"): "同上：季收了，每一場攻城收兵",
+    ("_battle_status", "_definition_of"): "同上：回這個人看的那一場與它的定義",
+    ("_battle_now", "_sieges"): "這個人看的那一場（按鈕指定、自己參戰、站得進去、自己大區裡的）：決戰「打」那一半，第 8 批",
+    ("_joinable", "_sieges"): "自己大區裡加得進去的那幾場（決戰在前）：集結，第 7 批",
+    ("_joinable", "_definition_of"): "同上：那一場在哪個大區、看不看得進去",
+    ("_in_region", "_definition_of"): "這幾場裡在自己大區的：集結，第 7 批",
+    ("_battle_menu", "_definition_of"): "同一個大區兩場以上時每一場一組加入鈕（字前面寫是哪一場）：集結，第 7 批",
+    ("_rally_any", "_sieges"): "假人趕路：有攻城戰時每一場都看（rally_region 那一支）：集結，第 7 批",
+    ("_rally_any", "_definition_of"): "同上：那一場的大區",
+    ("rally_region", "_sieges"): "假人趕路：有攻城戰時走 _rally_any（bot_runner 在叫）：集結，第 7 批",
+    ("battles_now", "_sieges"): "全服此刻的每一場（假人程式、bot_policy 讀）：決戰「打」那一半，第 8 批",
+    ("_siege_live", "_sieges"): "地盤畫面（conquest_view）的集結・交戰中那一場加不加得進去（FB-690）；地盤搬成包（第 46 批）時改叫決戰包的查詢服務",
+    ("_apply_battle_outcome", "_settle_siege"): "收場分進攻城那一支（易手、作罷、時程表另外收）：決戰「打」那一半，第 8 批",
+    ("admin_end_season", "_sieges"): "管理者立刻收季：沒打完的攻城照決戰收兵（收季的順序算行為：先決戰、再攻城、再補大事）；管理者外殼是核心",
+    ("admin_end_season", "_shelve_siege"): "同上",
+    ("admin_next_season", "_sieges"): "開下一季：季自然結束、沒人同步過的攻城換季前收起來（參戰者補得到交代）；管理者外殼是核心",
+    ("admin_next_season", "_shelve_siege"): "同上",
+    ("admin_conquest_cancel", "_cancel_siege"): "地盤的救場工具「取消一場攻城」：已經開了集結的那一場照收兵收起來；地盤搬成包（第 46 批）時改叫決戰包",
 }
+# tavern（主動搬六包第 10 批：酒肆的引擎那一半）：四張名單的酒肆那幾筆集中在這一段（三條拆包線並行，PM 合的時候不跟別人的行穿插）
+_TAVERN_SEAM = "接縫留在原位（批次表第二節：位置算行為的接縫這一輪不開掛鉤，第 11 批一次收）"
+GAME_IMPORTS |= {
+    # 19 個一行委派；原本那一行 `from . import tavern as tavern_rules` 現在是別名（engine 照舊叫 tavern_rules.on、here、close、sign……，
+    # 見下面 GAME_DIRECT；BANNED_WORDS 合 develop 時搬進核心 naming）。`from . import tavern_ask` 搬完沒人用，拿掉了
+    "tianxia.features.tavern.actions", "tianxia.tavern",
+}
+GAME_DELEGATES |= {  # 13 個私有：server、假人、腳本、測試在叫的，與核心原位在叫的（_tavern_options、_tavern_enter、_tavern_hit_check、三個 deliver、_tavern_sign）
+    "tavern_do", "tavern_view", "tavern_ask_request", "tavern_ask", "tavern_chatter_request", "apply_tavern_chatter",
+    "_tavern_open", "_tavern_enter", "_tavern_price", "_tavern_options", "_tavern_sign", "_tavern_run", "_tavern_hit_problem",
+    "_tavern_hit_check", "_tavern_hit_fight", "_tavern_ask_facts", "_deliver_watches", "_deliver_hits", "_deliver_whispers",
+}
+GAME_DIRECT.update({  # 用到 tavern_rules 這個名字（現在是酒肆包 rules 的別名）的
+    "sync": "下線那一段的殺手（叫 _tavern_hit_check(away_from)）、人不在酒肆了就收店（tavern_rules.here、close）、三個 deliver（風聲、殺手單、"
+            "託付留意：放進 on_sync 會改江湖紀錄的先後、惡名排到 _marks_tick 之後，而且它們不看酒肆開關）；" + _TAVERN_SEAM,
+    "_drop_stale_references": "人不在酒肆了就收店（tavern_rules.here、close）：放進 on_drop_stale 會排到清路程（journey）與序章收尾之後，"
+                              "here() 看這兩樣，結果可能不同；" + _TAVERN_SEAM,
+    "_hint_triggers": "碰到才說：有酒肆的城（tavern_rules.on、here）排 h_tavern 那一條；提示還沒有掛鉤",
+    "_newbie_go": "新手目標「去酒肆」指哪幾個地點（tavern_rules.tavern_at）；新手目標還沒有掛鉤",
+    "_shop_open": "此刻開著哪一間店（picking_tavern 且 tavern_rules.here）：七間店共用，店面還沒有掛鉤；" + _TAVERN_SEAM,
+    "_depart": "出發時收起酒肆（tavern_rules.close）：七間店共用；" + _TAVERN_SEAM,
+})
+GAME_DIRECT["_everyday_options"] += ("；酒肆：坐在酒肆裡時選單整個是酒肆那一串（叫 _tavern_options；menu 掛鉤只有一個位置，會從擂台之後"
+                                     "提前到頭目戰之後）、act:tavern 入口（tavern_rules.on、here、TAVERN）")
+GAME_DIRECT["_act"] += "；酒肆：act:tavern 打開酒肆（叫 _tavern_enter）"
+GAME_DELEGATE_CALLERS.update({
+    ("choose", "_tavern_hit_check"): "每個動作之後的殺手檢查（「本人做完一件事」是表外的掛鉤，同商城的封測發放）；" + _TAVERN_SEAM,
+    ("shop_view", "tavern_view"): "店面那一頁：鐵匠鋪那條線（feature/smithing-flow）緊貼著這一行改，這一輪不動；店面還沒有掛鉤",
+    ("_action_title", "_tavern_sign"): "act:tavern 那一下的紀錄標題先算（act 是核心的前綴；同出陣的 _train_title）",
+    # 呼叫端本身在 GAME_DIRECT 裡的另外 6 對：開發時那一版的掃描不記；合 develop（出陣第 2 批的掃描：GAME_DIRECT 的方法裡叫的也記，
+    # PM 10/31）之後掃得到，取消註解（核心叫酒肆委派一共 9 對）
+    ("sync", "_tavern_hit_check"): "下線那一段殺手找上門（站在城外下線的人）；" + _TAVERN_SEAM,
+    ("sync", "_deliver_whispers"): "風聲：下線時有人在酒肆打聽你，回來補；" + _TAVERN_SEAM,
+    ("sync", "_deliver_hits"): "雇主收殺手單的結果（得手、失手、到期退一半），不看酒肆開關；" + _TAVERN_SEAM,
+    ("sync", "_deliver_watches"): "託酒家留意的捎信與到期；" + _TAVERN_SEAM,
+    ("_everyday_options", "_tavern_options"): "坐在酒肆裡時選單整個是酒肆那一串；" + _TAVERN_SEAM,
+    ("_act", "_tavern_enter"): "act:tavern 打開酒肆（act 是核心的前綴）；" + _TAVERN_SEAM,
+})
 
 
 @functools.lru_cache(maxsize=None)
@@ -535,9 +652,13 @@ def test_the_scanner_catches_a_crossing(source, expected):
 
 
 def test_the_old_names_left_as_aliases_are_known():
-    """tianxia/mall.py、tianxia/feasts.py、tianxia/sortie.py、tianxia/sortie_duel.py 是指到包裡同一個模組的別名（給還沒改的測試與舊模組）：
-    掃描照它們指到的那一包算，不算舊模組。"""
-    assert aliases() == {"feasts": "feast", "mall": "mall", "sortie": "sortie", "sortie_duel": "sortie"}
+    """tianxia/mall.py、tianxia/feasts.py、tianxia/sortie.py、tianxia/sortie_duel.py、tianxia/outing.py、tianxia/explore_one.py、
+    tianxia/tavern.py、tianxia/tavern_ask.py 是指到包裡同一個模組的別名（給還沒改的測試與舊模組）：掃描照它們指到的那一包算，不算舊模組。"""
+    assert aliases() == {"feasts": "feast", "mall": "mall", "sortie": "sortie", "sortie_duel": "sortie",
+                         # explore
+                         "outing": "explore", "explore_one": "explore",
+                         # tavern
+                         "tavern": "tavern", "tavern_ask": "tavern"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 
