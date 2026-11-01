@@ -17,13 +17,18 @@
 
 **Game 上留的一行委派**（29 個，17 個私有：出陣 10 個、約戰 7 個；server、假人、腳本、測試與核心原位還在叫）：出陣 13 個——`sorties_left`、`_sortie_foes`、`sortie_mode`、`sortie_progress`、`_sortie_host`、`_sortie_hold`、`_sortie_line`、`_melee_record`、`_sortie_rewards`、`_train_title`、`_sortie_mode`、`_sortie_option`、`_sortie`；約戰 16 個——`duel_on`、`_duel_power`、`duel_convoy_here`、`_duel_squad`、`sortie_go_problem`、`sortie_go`、`sortie_answer`、`sortie_join`、`sortie_cards`、`sortie_card`、`sortie_duel_tick`（server、假人、測試在叫）、`_duel_line`、`_duel_entry`、`_duel_choice`、`_sortie_duel_tick`、`_duty_credit`（核心原位在叫）。包裡只有 `sorties_left`、`_sortie_hold` 經 `ctx` 叫（`tests/bots/test_bot_policy_conquest.py` 換掉 `Game.sorties_left`、`scripts/sim_trend_sources.py` 換掉 `Game._sortie_hold`）；其餘互相直接叫（約戰也直接叫出陣的 `sortie_line`、`sortie_rewards`）。約戰結算開好幾份 Game（`ctx._load_kin` 讀、`ctx._save_kin` 存回）：別人那一份上做的直接叫 `duel_void(g, …)`、`duel_report(g, …)`，軍令記在 `attacker`、`defender` 兩份上（`_order_credit`，服務清單的過渡；邊界測試照樣掃這兩個名字）。
 
-**還留在原位的接縫（過渡；批次表第二節，第 11 批一次收）**：
-- 出陣：`Game._act` 的 `act:train` 分派（約戰開著走 `_duel_entry`、出陣開著走 `_sortie`，序章的雪恥與關著的季走 `_train`；並肩出陣包在外面）、`_everyday_options` 那一格（雪恥／遊歷／出陣、散人與不在爭奪之列的灰格）、`action_notes` 底下那一行（約戰開著叫 `_duel_line`）、`_squad_encounter` 的 as_sortie（打贏回頭叫 `_sortie_rewards`；約戰開著只剩截糧）、`_push_progress`（地盤）寫、`_sortie` 讀的四個旗標（`_clash_won`、`_sortie_marked`、`_sortie_moved`、`_sortie_flipped`，服務清單的寄放段）、守勢行動（`_duty_option`、`_duty`：約戰開著時收進此地、叫 `_duty_credit`）、輿圖（`map_state`、`_map_foes`：約戰開著叫 `_duel_squad`）。
-- 約戰：三處結算（`world_tick` 追完共用賽季之後、`sync` 追完共用賽季之後 `_stamp_join` 之前、`advance` 的 `_deliver_conquest` 之後 `_save_season` 之前，都叫 `_sortie_duel_tick`；位置算行為）、`Game.choose` 最前面接走 `sortie:*`（`_duel_choice`）與按出陣那一格只回 `PICK` 時不寫紀錄（`choose` 讀 `sortie_duel.PREFIX`、`PICK`，在 `GAME_DIRECT`）、`_fight_squad`（約戰開著不判大場面）。
+**全部拆包第 11 批（核心收接縫，計畫 `docs/superpowers/plans/2026-11-01-核心收接縫.md`）換成接縫掛鉤的**（掛在原本那一行；`_train_title`、`_sortie_option`、`_duel_line`、`_duel_entry`、`_duel_choice`、`_sortie_duel_tick` 六個委派沒人叫了，拿掉，`Game` 上還留 23 個）：
+- act 子動詞 `verbs()`（`Verb("train", …)`，`actions.py` 的 `train_cell`、`train_note`、`train_run` 與標題）：`_everyday_options` 出陣那一格（地盤開著時整格：序章的雪恥、出陣、散人與不在爭奪之列的灰格；問 `enabled`）、`action_notes` 底下那一行（約戰那一句、出陣那一行）、`_act` 最前面約戰開著時打開那張卡、`_action_title`（出陣／雪恥／遊歷・某地）、`choose` 只打開那張卡時不寫紀錄（`picks=(sortie_duel.PICK,)`）。
+- `on_due`：約戰的三處結算（`world_tick`、`sync`、`advance`，位置照舊）。`choose_unlisted`：`Game.choose` 最前面接走約戰開著時的 `sortie:*`。
+
+**還留在原位的**（不是核心的接縫，`tests/core/test_feature_boundaries.py` 逐條寫為什麼、哪一批收）：
+- 出陣自己還沒搬的那一半（總表第 17 批「出陣三」）：`Game._act` 打的那一場（出陣開著走 `_sortie`，序章的雪恥與關著的季走 `_train`；扣體力、並肩出陣的加成包在外面）、`_train_squad_ids`（舊遊歷與出陣共用的對手池）、守勢行動（`_duty_option`、`_duty`）、`_fight_squad`（大場面判讀問出陣那一格打不打仗）。
+- 「打完之後」（PM 定第 11 批不開掛鉤，第 26 批的事件）：`_squad_encounter` 的 as_sortie 打贏回頭叫 `_sortie_rewards`、約戰開著時不推進度（原位行尾標「# 過渡：第 26 批」）。
+- `_push_progress`（地盤）寫、`_sortie` 讀的四個旗標（`_clash_won`、`_sortie_marked`、`_sortie_moved`、`_sortie_flipped`，服務清單的寄放段）；輿圖（`map_state`、`_map_foes`：輿圖的線還在飛）。
 - `server`：`main_view` 的 `sortie`、`front`、`sortie_card`、`sorties` 四個鍵（鍵的順序算行為）、`may_judge_fight`、`MAIN_ACTIONS` 的 `sortie_go`、`sortie_answer`、`sortie_join` 與 `_moves`、通知 `current_notices(..., world.sortie_duels())`。
 - 假人：`bot_policy` 的出陣那幾段（`_train_value`、`_sortie_win`、`_outmatched`、`_focus_hop`……）與約戰那幾段（`duel_play`、`_duel_value`、`take_turn` 那幾行），`bot.duel_go`／`duel_moves`、`bot_runner._duel_tick`——照舊叫 Game 的委派與 `sortie_duel` 這個舊名。
 - 舊模組：`howto` 的 `duel_line`、`duel_lines`、`CONQUEST_JOIN_DUEL`，`notices._duels`、`DUEL_SOURCES`，`atlas.SIEGE_AREA_DUEL`，`annals.DUEL`，`biography` 的 TIES。網頁一行沒動。
-- `tests/core/test_feature_boundaries.py` 的 `GAME_DIRECT`（11 個）、`GAME_DELEGATE_CALLERS`（31 對，第 2 批起連 `GAME_DIRECT` 的方法裡叫的也列）逐條寫理由。
+- `tests/core/test_feature_boundaries.py` 的 `GAME_DIRECT`、`GAME_DELEGATE_CALLERS` 逐條寫理由（第 2 批時 11 個、31 對；第 11 批之後出陣與約戰剩 `GAME_DIRECT` 7 個〔`_act`、`_squad_encounter`、`_train_squad_ids`、`_duty_option`、`_duty`、`map_state`、`_map_foes`〕、`GAME_DELEGATE_CALLERS` 17 對）。
 
 **改這一包時 `test_for` 挑不到、要另外跑的**（混在別人檔裡的測試，這一輪不拆，批次表第二節；dev/sortie-1 審查用突變量過）：改包的檔只挑這一包的 `tests/` 與核心契約，下面這幾個蓋著搬過來的程式卻不在包裡——
 - 混戰（`clash_target`、`do_clash`、`melee_record`）：`tests/acts/test_conquest_flip.py` 原 `test_conquest_clash` 那一段（贏寫成平、不看冷卻、不記行狀都只有它紅）、`tests/ranger/test_raid.py::test_a_melee_and_an_ambush_note_the_rivals_name_to_keep_too`（`Game._melee_record`）。

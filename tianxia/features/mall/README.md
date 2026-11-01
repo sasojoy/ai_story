@@ -6,7 +6,7 @@
 
 | 檔 | 是什麼 |
 |---|---|
-| `__init__.py` | 登記（`MallFeature`）：`enabled`＝`Config.mall.enabled`、`status`（江湖畫面的 `mall`）、`admin_tools`、`routes`、`check_content`；`web`＝`mall.js`、`mall.css`（在 `web/`，第 3 階才搬進包）、`content`＝`mall.json`（在 `content/`） |
+| `__init__.py` | 登記（`MallFeature`）：`enabled`＝`Config.mall.enabled`、`status`（江湖畫面的 `mall`）、`admin_tools`、`routes`、`check_content`、`on_own_turn`（封測發放，全部拆包第 11 批的接縫掛鉤）；`web`＝`mall.js`、`mall.css`（在 `web/`，第 3 階才搬進包）、`content`＝`mall.json`（在 `content/`） |
 | `rules.py` | 純規則（原 `tianxia/mall.py`；那個名字留成別名給測試） |
 | `rename.py` | 易名帖換名號的規矩（`clash`；`swap` 在核心 `tianxia/core/swap.py`） |
 | `actions.py` | 原本 `Game` 上的 `mall_*`、`admin_mall_*`；`Game` 留一行委派 |
@@ -14,4 +14,4 @@
 | `tests/` | 原 `tests/mall/`（`test_wallet.py` 測核心的錢包，搬到 `tests/core/`）與 `tests/web/test_mall_web.py` |
 
 **認領的欄位**（3.5，留在原地）：`PlayerState.holding_bonus`（只這一季）、`create_rerolls`、`legend_items`（換季帶著走，核心的換季照抄）；`Game.mall_bought`、`Game.mall_already`（伺服器在鎖裡讀）。資料庫第 6 版的三張表 `mall_purchases`、`mall_ledger`、`mall_entitlements`（`database.py`，核心）。
-**過渡**：`rules.py` import `tianxia.library`（功法庫上限）、`actions.py` import `server_bots`（保留的名號）、`zhuan_end`（插畫票用不上不賣），都註「過渡：待搬」（`journal` 江湖紀錄 PM 10/31 定算核心，不再是過渡）；`howto.py`（玩法說明「商城」一節）、`scripts/mall_ledger.py` import 這一包；`Game._mall_grant` 在 `own_turn_checks` 裡（封測發放）。
+**過渡**：`rules.py` import `tianxia.library`（功法庫上限）、`actions.py` import `server_bots`（保留的名號）、`zhuan_end`（插畫票用不上不賣），都註「過渡：待搬」（`journal` 江湖紀錄 PM 10/31 定算核心，不再是過渡）；`howto.py`（玩法說明「商城」一節）、`scripts/mall_ledger.py` import 這一包。封測發放原本是 `own_turn_checks` 叫 `Game._mall_grant`，全部拆包第 11 批（核心收接縫）換成 `on_own_turn` 接縫掛鉤（`own_turn_checks` 最前面、暫停的檢查之前，不問 `enabled`），委派拿掉。

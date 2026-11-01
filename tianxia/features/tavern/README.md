@@ -22,12 +22,12 @@
 
 ## 委派與留在原位的接縫
 
-`Game` 留 19 個一行委派（公開 6：`tavern_do`、`tavern_view`、`tavern_ask_request`、`tavern_ask`、`tavern_chatter_request`、`apply_tavern_chatter`；私有 13：`_tavern_open`、`_tavern_enter`、`_tavern_price`、`_tavern_options`、`_tavern_sign`、`_tavern_run`、`_tavern_hit_problem`、`_tavern_hit_check`、`_tavern_hit_fight`、`_tavern_ask_facts`、`_deliver_watches`、`_deliver_hits`、`_deliver_whispers`）。位置算行為的接縫照舊在 `Game` 原位（批次表第二節；`tests/core/test_feature_boundaries.py` 的 `# tavern` 那一段寫了理由）：
+`Game` 留 16 個一行委派（公開 6：`tavern_do`、`tavern_view`、`tavern_ask_request`、`tavern_ask`、`tavern_chatter_request`、`apply_tavern_chatter`；私有 10：`_tavern_open`、`_tavern_enter`、`_tavern_price`、`_tavern_run`、`_tavern_hit_problem`、`_tavern_hit_check`、`_tavern_hit_fight`、`_tavern_ask_facts`、`_deliver_watches`、`_deliver_hits`）。第 10 批留在 `Game` 原位的接縫，**全部拆包第 11 批（核心收接縫，計畫 `docs/superpowers/plans/2026-11-01-核心收接縫.md`）換成了接縫掛鉤**，掛在原本那一行（`_tavern_options`、`_tavern_sign`、`_deliver_whispers` 三個委派沒人叫了，拿掉）：
 
-- `sync`：下線那一段的殺手（`_tavern_hit_check(away_from)`）、人不在酒肆了就收店、三個 deliver（放進 `on_sync` 會改江湖紀錄的先後；它們不看酒肆開關：關掉之後雇主照樣領退款、風聲照樣送到）。
-- `_everyday_options`：坐在酒肆裡時選單整個是酒肆那一串（`menu` 掛鉤只有一個位置）、`act:tavern` 入口；`_act`：`act:tavern` → `_tavern_enter`；`choose` 最後那一下殺手檢查。
-- `shop_view` 的 `if shop == "tavern": return self.tavern_view()`（鐵匠鋪那條線緊貼著它改）、`_action_title`（`act:tavern` 的標題叫 `_tavern_sign`）、`_drop_stale_references` 收店、`_hint_triggers`、`_newbie_go`、`_shop_open`、`_depart`、`_idle`（只讀 `picking_tavern`）、`LEAVE_SHOP_IDS`（寫字面 `"tavern:back"`）。
-- `server.py`：`MAIN_ACTIONS["tavern"]`、`tavern_ask` 三段式、鄰桌閒談的背景執行緒（`write_chatter`、`chatter_once`）。
+- 店面登記 `shops()`（`Shop("tavern", …)`）：坐在酒肆裡時選單整個是酒肆那一串（`_everyday_options` 擂台之後）、「此地還能做」裡的 `act:tavern` 入口（馬市之後）、`_shop_open`、`_depart` 收店、`sync` 與 `_drop_stale_references` 的「人不在酒肆了就收店」。
+- act 子動詞 `verbs()`（`Verb("tavern", …)`）：`_act` 的 `act:tavern` → `actions.tavern_enter`、`_action_title` 的招牌。
+- `on_away`（`sync` 下線那一段的殺手）、`deliver_notices`（三個 deliver：照舊不看酒肆開關，關掉之後雇主照樣領退款、風聲照樣送到）、`after_action`（`choose` 最後那一下殺手檢查）。
+- 還在原位的：`shop_view` 的 `if shop == "tavern": return self.tavern_view()`（鐵匠鋪那條線緊貼著它改，第 41 批）、`_hint_triggers`、`_newbie_go`（引導，第 22 批）、`_idle`（只讀 `picking_tavern`）、`LEAVE_SHOP_IDS`（寫字面 `"tavern:back"`）；`server.py` 的 `MAIN_ACTIONS["tavern"]`、`tavern_ask` 三段式、鄰桌閒談的背景執行緒（`write_chatter`、`chatter_once`）。
 
 ## 過渡（手冊 3.11）
 
