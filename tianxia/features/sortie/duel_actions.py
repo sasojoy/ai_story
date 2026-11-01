@@ -36,7 +36,7 @@ from tianxia import ranger  # 過渡：待搬（遊俠名號：經驗倍數）
 from tianxia import ranks  # 過渡：待搬（晉升：離下一階還差多少）
 from tianxia import seal_acts  # 過渡：待搬（玉璽：傳檄的倍數、補位的人在哪一區）
 from tianxia import server_bots  # 過渡：待搬（這一季的假人：補位）
-from tianxia import treasures  # 過渡：待搬（寶物：內傷、經驗心得的加成）
+from tianxia import treasures  # 共用規則層（寶物：內傷、經驗心得的加成）
 from tianxia import wins  # 過渡：待搬（三陣營四勝利：貢獻記在哪一軍）
 from tianxia.calendar import DAY
 from tianxia.characters import CharacterStore, name_key

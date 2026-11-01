@@ -21,7 +21,7 @@ from tianxia import annals  # 過渡：待搬（行狀：殺手那一場記一�
 from tianxia import battlelog  # 共用規則層（戰報：殺手那一場）
 from tianxia import bounties  # 過渡：待搬（懸賞榜：通緝名單、牆上的榜）
 from tianxia import encounter  # 共用規則層（單次判定：殺手那一場；測試換掉 encounter.resolve_encounter）
-from tianxia import equipment  # 過渡：待搬（店沒開時那一句 NOT_NOW）
+from tianxia import equipment  # 共用規則層（店沒開時那一句 NOT_NOW）
 from tianxia import renown  # 過渡：待搬（名望、惡名、名望段）
 from tianxia import roster  # 過渡：待搬（截殺與通緝的新手期）
 from tianxia import shopview  # 過渡：待搬（店面：掌櫃那一句、素材屬性的排序）

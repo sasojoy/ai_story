@@ -654,7 +654,7 @@ def test_the_service_scanner_catches_a_game_method_off_the_list():
     ("from tianxia.features import feast\n", "別的包"),
     ("from tianxia.features.feast import rules\n", "別的包"),
     ("from ..feast import rules\n", "別的包"),
-    ("from tianxia import library\n", "舊模組"),
+    ("from tianxia import bounties\n", "舊模組"),  # shared：原本的例子 library 第 15 批登記進共用規則層，換一個還是舊模組的
     ("from tianxia import engine\n", "舊模組"),
     ("import tianxia.zhuan_end\n", "舊模組"),
     # 舊名留成的別名（tianxia/feasts.py 把 sys.modules 換成宴客包的 rules）就是那一包：註了過渡也擋
@@ -688,7 +688,8 @@ def test_a_mark_with_no_old_module_left_is_caught():
 
 
 @pytest.mark.parametrize("source", [
-    "from tianxia import library  # 過渡：待搬\n",
+    "from tianxia import bounties  # 過渡：待搬\n",  # shared：原本的例子 library 第 15 批登記進共用規則層
+    "from tianxia import library\n",  # shared：共用規則層（第 15 批）不必註
     "from tianxia import siege\n",  # 共用規則層（registry.SHARED，第 11 批）：不必註
     "from tianxia.siege import title\n",
     "from tianxia.core.services import WalletService\n",

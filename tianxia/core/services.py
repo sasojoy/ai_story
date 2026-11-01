@@ -76,6 +76,12 @@
 - 戰力快照（加入決戰那一刻存進 BattleParticipant 的）：`ctx._battle_power(seal=True)`、`ctx._battle_scores(mounted=True, seal=True)`、
   `ctx._battle_role()`、`ctx._battle_mount()`、`ctx._battle_troops()`、`ctx._battle_gear()`、`ctx._battle_marks()`、`ctx._battle_road()`、
   `ctx._battle_neili_cap()`（`_seal_bare` 附錄甲裁給玉璽，不在這裡）
+店面殼、修練頁紀錄、線索（武學與成長＋裝備區）
+- 店面殼（七間店共用）：`ctx._shop_say(...)`、`ctx._shop_after(...)`（同上）、`ctx._shop_open()`（哪一間店開著）、
+  `ctx._shop_live(option_ids=None, shop="smith")`（那一串是不是眼前的選單）、`ctx.shop_view(option_ids=None)`（店面的畫面資料）
+- 修練頁紀錄：`ctx._xinde()`、`ctx._menxia_entry(tag, xinde_before, ...)`（修練頁、煉製頁的動作寫進江湖紀錄，同一種連續的併成一則）
+- 線索（口訣、殘譜、鑄譜、秘方）：`ctx._tale_clue(event)`、`ctx._scrap_find()`、`ctx._forge_clue(source, seed)`、`ctx._overhear(companion_id, msgs)`、
+  `ctx._solved_secrets()`、`ctx._note_solved(before)`；素材與經濟的一天 `ctx.econ_day()`；探索那一行悟意境被拿掉的原因 `ctx._insight_blocked(loc)`
 
 ## 二、查詢服務
 

@@ -51,4 +51,29 @@ SHARED: dict[str, str] = {
     "fight_llm": "大場面的模型判讀（三段式的單子與夾過的優勢）：單打服務（fight_request、_checked_fight）與殼的 prepare_fight 用，每一種打一場都可能經它",
     "battle_instance": "全服決戰與攻城的資料型別與回合規則：核心的 world_state、sqlite_world 存它的資料型別；決戰包、siege、奪璽單挑、擂台都讀"
                        "（總表第 54 批拆兩半：規則那一半進決戰包、資料型別留下）",
+    # 武學與裝備的規則（22 個；總表寫 25 個，fusion、skillview、shopview 先不收：讀了之後成包的有所感、自創、修練、玉璽、鐵匠鋪、擂台、懸賞，
+    # 理由在 tests/core/test_feature_boundaries.py 的 SHARED_LATER）：核心的 team、content 算威力、驗內容都讀，修練、煉製、鐵匠鋪、裝備好幾包共用
+    "martial_arts": "武學的品質、熟練度、威力：核心的 content、rules、state、team、world_state、sqlite_world 都讀；二十幾個舊模組在用",
+    "arts": "武學的評分、裝卸、意境格（arts.score）：核心的 team 讀；修練、煉製、榜單、序章都叫",
+    "insight_fx": "意境效果池與層數：武學 arts、意境 insights、功法庫、序章讀；修練、有所感成包之後也要",
+    "insights": "意境（基本意境與悟得）：核心的 content、rules 讀；探索包的悟意境、合成、有所感都叫",
+    "traits": "武學的功效（八個一般功效與特別功效）：核心的 team 打仗時讀；武學 arts、鐵匠鋪、修練頁都用",
+    "moves": "以意成招（自創武學的招）：戰法 tactics、武學 arts、功效 traits 讀；認勢用到的擺式幾何在 create（函式裡 import，"
+             "記在邊界測試的 SHARED_PENDING：煉製第 44 批成包之前要處理）",
+    "might": "戰力（全身加總的數）：修練頁、自創、破境讀；它自己讀 arts、equipment、encounter 這一層",
+    "signature": "本命武學（本命戰法）：核心的 team 讀；人物對話、功法庫也用",
+    "library": "功法庫（持有上限、熔煉、學基礎武學）：核心的 rules 讀；商城包的深交名額上限 cap_of（手冊 3.10）、修練、自創、名帖都叫",
+    "growth": "成長的三道閘（疲勞、今天第幾場、對手的檔）：核心的 team 讀；探索包的遭遇照它打折",
+    "secret_recipes": "口訣與秘方：意境效果、鑄器的隱藏配方 forge_secrets 讀；合成、自創、人物對話也叫",
+    "forge_secrets": "打造的隱藏配方與神器譜：核心的 content 驗內容時讀；鐵匠鋪、榜單、店面、假人都叫",
+    "divine": "神器輪替（這個伺服器現世過哪幾件、每一季開哪幾件）：核心的 sqlite_world 換季時讀",
+    "equipment": "裝備四欄的共用部分（耐久、損耗）：核心的 team 讀；酒肆包、鐵匠鋪、馬市、懸賞、寶物都叫",
+    "weapons": "兵器（加成、損耗、本命兵器）：核心的 team、content 讀；鐵匠鋪、懸賞、店面都叫",
+    "armor": "防具（少扣的氣血與內傷、耐久）：核心的 team、content 讀；鐵匠鋪、店面都叫",
+    "mounts": "坐騎（移動省體力、騎兵加成）：核心的 team 讀；決戰包的進場快照、輿圖、截殺、馬市都叫",
+    "treasures": "寶物與好馬的來源與加成：核心的 rules、team 讀；出陣、酒肆兩包與修練、玉璽都叫",
+    "materials": "素材的掉落與背包：核心的 content、rules 讀；決戰、探索、出陣三包的掉落都經它",
+    "four_tiers": "素材四階的小規則：決戰、出陣兩包的掉落與鐵匠鋪、經濟、名聲都讀",
+    "silver": "銀兩出口的數（21 天季多的花銀兩的地方）：修練、鐵匠鋪、店面讀",
+    "economy": "素材與經濟的純規則（升階、捐軍備的上限）：店面、玩法說明、假人讀；銀兩出口、鐵匠鋪、馬市成包之後都還要",
 }
