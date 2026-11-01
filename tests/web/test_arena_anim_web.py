@@ -9,7 +9,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node")
 
 DRIVER = r"""
 const block = (name) => { const a = src.indexOf(`\n  const ${name} = `); return a < 0 ? konst(name) : src.slice(a, src.indexOf(";\n", a) + 2); };
-const code = ["RING_ARMS", "RING_SHEETS", "RING_PICKS"].map(block).join("\n")
+const code = ["RING_ARMS", "RING_SHEETS", "RING_PICKS", "RING_BEATS"].map(block).join("\n")
   + "\nconst RA = { looks: { me: '', foe: '' } };\n"
   + "\n" + ["ringArms", "ringAtk", "ringAct", "RING_HIT"].map(konst).join("\n")
   + fn("ringStrike") + fn("ringPlan") + fn("ringPicked") + fn("ringExchange") + fn("ringFinale");
@@ -79,3 +79,15 @@ const H = new Function(code + "\nreturn { RING_SHEETS, RING_HAND };")();
 finish(Object.keys(H.RING_SHEETS).map((k) => [k, H.RING_SHEETS[k], (H.RING_HAND[k] || []).length]));
 """, {})
     assert all(n == hands for _, n, hands in out), out
+
+
+def test_only_the_countered_side_is_hit():
+    """Joy 2026-11-01：剋人的那一邊不受擊（就算這一回合也掉了血）；出一樣的兩邊都受擊。"""
+    out = _run(ex=[
+        (A, dict(A, me=95, foe=80), ["強攻", "奇襲"]),  # 你剋他：你也掉了一點血，照樣不演受擊
+        (A, dict(A, me=80, foe=95), ["奇襲", "強攻"]),  # 他剋你
+        (A, A, ["固守", "固守"]),  # 出一樣：兩邊都受擊
+    ])["ex"]
+    assert "hero_bare_hit" not in out[0][0]["me"] and out[0][0]["foe"][-1] == "hero_bare_hit"
+    assert out[1][0]["me"][-1] == "hero_bare_hit" and "hero_bare_hit" not in out[1][0]["foe"]
+    assert out[2][0]["me"][-1] == "hero_bare_hit" and out[2][0]["foe"][-1] == "hero_bare_hit"
