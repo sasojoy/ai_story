@@ -3,8 +3,8 @@
 - 功能包（tianxia/features/<包>/，tests/ 不算）只能 import 核心（tianxia/core/ 與 CORE 那幾個模組）、共用規則層（registry.SHARED，第 11 批）、
   自己這一包、標準庫與第三方；不能 import 別的包。還沒搬的舊模組過渡期可以 import，那一行要註「# 過渡：待搬」（第一版只禁「包 import 包」
   與沒註的舊模組）；註了的那一行要真的有一個還沒搬的舊模組（全是核心、共用規則層的就把註拿掉）。
-- 核心不 import 功能包：tianxia/core/ 只有 registry.py（FEATURES 登記）可以，CORE 那幾個模組都不行；共用規則層的模組也不行
-  （它們 import 的別的舊模組總表第 15 批登記進同一層之後再守「只 import 核心本體與同一層」）。
+- 核心不 import 功能包：tianxia/core/ 只有 registry.py（FEATURES 登記）可以，CORE 那幾個模組都不行；共用規則層的模組也不行，
+  而且只 import 核心本體與同一層（總表第 15 批：還碰到別的舊模組的那幾條逐條記在 SHARED_PENDING，總表寫了、先不收的在 SHARED_LATER）。
 - if TYPE_CHECKING: 底下的 import 只給型別看，不算。
 - 網頁框架（fastapi）只有功能包的 routes.py 可以 import，而且只在殼掛路由時延後 import；引擎、run_bots、假人不碰（PM 10/31）。
 """
@@ -450,6 +450,96 @@ def test_the_shared_rules_layer_is_real_old_modules_with_a_reason_and_never_impo
     assert [f"{name}.py:{line} {mod}" for name in sorted(SHARED) for line, mod in _feature_imports(TIANXIA / f"{name}.py")] == []
 
 
+# shared（全部拆包第 15 批「共用規則層登記」，計畫 docs/superpowers/plans/2026-11-01-共用規則層登記.md 1.3、2.2）
+# 總表第六節第 5 條「共用規則層可以 import 核心本體與同層」：共用規則層的模組 import 的別的 tianxia 模組只能是核心本體（MODULES、tianxia/core/）
+# 與同一層；包與舊名的別名是上面那一條，一律不准。現行程式裡碰到別的舊模組的逐條記在 SHARED_PENDING，兩種寫在理由開頭：
+# 「排定：」收進核心本體或共用規則層的（那一批收完拿掉這一行）；「之後成包：」主人成包之前要先改成查詢服務、或把用到的那一段留在共用規則層
+# （不然那一下就是「共用規則層 import 包」，上面那一條紅）。多一條、少一條都紅。
+
+
+def outside_imports(source: str, module: str) -> set[str]:
+    """共用規則層的模組（module 的原文 source）import 了哪些不是核心本體、不是同一層的 tianxia 舊模組：最外層與函式裡都算，
+    TYPE_CHECKING 底下不算；包、舊名的別名、from tianxia import 名字（不是模組）不在這裡（包與別名是另一條，一律不准）。"""
+    out: set[str] = set()
+    for _, name, _ in imports_of(source, module):
+        parts = name.split(".")
+        if name == "tianxia" or parts[1] in ("core", "features") or parts[1] in CORE or parts[1] in SHARED or parts[1] in aliases():
+            continue
+        if _module_exists(".".join(parts[:2])):
+            out.add(parts[1])
+    return out
+
+
+def shared_reach() -> set[tuple[str, str]]:
+    """共用規則層碰到的別的舊模組：{(共用規則層的模組, 舊模組)}。"""
+    return {(name, old) for name in SHARED
+            for old in outside_imports((TIANXIA / f"{name}.py").read_text(encoding="utf-8"), f"tianxia.{name}")}
+
+
+SHARED_PENDING = {
+    ("timetable", "figures"): "排定：大勢人物（figures.apply、commander、holds、is_out、name_of、state_of）——總表第 40 批收進共用規則層",
+    ("timetable", "chapters"): "排定：章回的擲骰修正（chapters.roll_mod，函式裡）——第 40 批收進共用規則層",
+    ("seats", "ranks"): "排定：階級的稱號（ranks.TITLES，函式裡）——第 40 批收進共用規則層",
+    ("conquest", "seal_acts"): "排定：璽效查詢（seal_acts.held、ends、held_during、hold_lapse）——第 51 批 16 個璽效查詢進共用規則層",
+    ("siege", "atlas"): "排定：大區（atlas.region_of）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層",
+    ("clinic", "atlas"): "排定：最近的醫館（atlas.routes、shortest_routes、Route）——同上，第 50 批",
+    ("siege", "conquest_day"): "排定：作罷（conquest_day.void、note_void）——第 46 批 Task 1 先搬進 conquest",
+    ("siege", "world"): "排定：開集結那一季（world._season_vehicle，函式裡）——第 25 批 world 收進核心本體",
+    ("precise", "explore_modes"): "排定：三選一的開關與城鎮（explore_modes.on、is_town）——第 13 批 on 改成一直是開著的值、is_town 進共用規則層",
+    ("moves", "create"): "之後成包：擺式的幾何（create.icon_pose、stance_of，函式裡）——煉製與自創第 44 批 create 進包之前，先把這一段留在"
+                         "共用規則層或改成查詢服務（moves 是 tactics 的底、tactics 是核心 team 的底，先不收會連帶 43 個收不了）",
+    ("siege", "generals"): "之後成包：攻城的留守挑龍頭（generals.on、pick）——決戰第 8 批 generals 進包之前，先改成查詢服務或把挑法留在共用規則層"
+                           "（siege 第 11 批就登記了）",
+}
+
+# 總表第 15 列寫了、這一批先不收的（派工：import 了包的「先改成查詢服務，或者先不收」；讀的都是還沒成包的舊模組，還沒有包可以回答查詢）：
+# 模組 → 卡在哪、哪一批之後收。包 import 它們的那幾行照舊註「過渡：待搬」。
+SHARED_LATER = {
+    "fusion": "讀有所感的自創（sensing.add_own、own_name：有所感第 24 批成包）與行狀（annals.note）：有所感成包時改成查詢服務再收",
+    "skillview": "門下頁的說明（彙整）：讀自創 create（第 44 批）、修練 cultivation（第 23 批）、玉璽 seal（第 27 批）、鐵匠鋪 smithing（第 41 批）、"
+                 "輿圖 atlas；那幾包成包、改成查詢服務之後再收",
+    "shopview": "店面的畫面資料（彙整）：讀擂台 arena（第 12 批）、懸賞 bounties（第 45 批）、鐵匠鋪 smithing（第 41 批）、單挑 duel 的底層；"
+                "那幾包成包之後再收",
+    "events": "事件抽選：讀伏筆 foreshadow（軍情第 34 批成包）與心意 stances（第 19 批）；伏筆改成查詢服務、事件檢定搬進核心（第 16 批）之後再看",
+    "tiers": "事件分級：讀擂台的名次 arena.entry_of（單挑第 12 批成包）；第 12 批把擂台的稱號與名次留在核心當查詢服務之後再收（總表第 12 列）",
+    "narration": "事件旁白每週改寫：讀伏筆 foreshadow.event_ids（軍情第 34 批）；那時改成查詢服務再收",
+    "leaderboard": "賽季榜單：讀擂台榜 arena（第 12 批）、本命兵器 signature_arms（裝備第 42 批）；擂台的名次改成查詢服務、裝備成包之後再收",
+    "rumor_view": "傳聞分層的畫面：讀伏筆 foreshadow、機緣 opportunities（軍情第 34 批）與軍令 orders（第 40 批）；軍情成包時改成查詢服務再收",
+}
+
+
+def test_the_shared_rules_layer_only_imports_the_core_and_itself():
+    """共用規則層只 import 核心本體與同一層（總表第六節第 5 條）：碰到別的舊模組的就是 SHARED_PENDING 那幾條，多一條、少一條都紅
+    （新碰到的要寫理由、收掉的要拿掉）；對象沒有一個是核心本體、同一層或別名，理由開頭寫是哪一種。"""
+    assert shared_reach() == set(SHARED_PENDING)
+    for (name, old), why in SHARED_PENDING.items():
+        assert name in SHARED and old not in SHARED and old not in CORE and old not in aliases(), (name, old)
+        assert why.startswith(("排定：", "之後成包：")), (name, old)
+
+
+def test_the_modules_left_out_of_the_shared_layer_still_reach_past_it():
+    """總表寫了、先不收的（SHARED_LATER）：不在 SHARED，而且真的還 import 了核心本體與共用規則層以外的模組（或包）——卡住的那一條不見了，
+    這裡紅，登記進 registry.SHARED。"""
+    for name, why in SHARED_LATER.items():
+        path = TIANXIA / f"{name}.py"
+        assert path.exists() and name not in SHARED and why.strip(), name
+        assert outside_imports(path.read_text(encoding="utf-8"), _modname(path)) or _feature_imports(path), \
+            f"{name} 只 import 核心本體與共用規則層了：登記進 registry.SHARED"
+
+
+def test_the_shared_scanner_catches_an_old_module():
+    """outside_imports 本身抓得到（不然上面那一條永遠綠）：最外層、函式裡、import tianxia.x 都算；TYPE_CHECKING、tianxia/core/、核心本體、
+    同一層、from tianxia import 名字、標準庫不算；包與別名不在這裡算（是上面那一條）。"""
+    m = "tianxia.timetable"
+    assert outside_imports("from . import figures, territory\n", m) == {"figures"}
+    assert outside_imports("def f():\n    from .world import _season_vehicle\n", m) == {"world"}
+    assert outside_imports("import tianxia.engine\n", m) == {"engine"}
+    assert outside_imports("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from .engine import Game\n", m) == set()
+    assert outside_imports("from .core import features\nfrom .models import Content\nfrom tianxia import calendar, siege\n", m) == set()
+    assert outside_imports("from tianxia import TYPE_NAME_NOT_A_MODULE\nimport json\nfrom pydantic import BaseModel\n", m) == set()
+    assert outside_imports("from .features.battle import rules\nfrom . import feasts\n", m) == set()
+
+
 def test_the_game_reaches_the_packages_only_through_the_listed_methods():
     """Game 碰包的地方只有：一行的委派（3.10）、寫明了的過渡直連（GAME_DIRECT、GAME_DELEGATE_CALLERS）。其餘一律走 FEATURES 的掛鉤。"""
     imports, direct, callers = game_links()
@@ -717,3 +807,9 @@ if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python 
     print(f"Game 碰包：委派 {len(GAME_DELEGATES)} 個、直連 {len(GAME_DIRECT) + len(GAME_DELEGATE_CALLERS)} 處"
           f"（GAME_DIRECT {len(GAME_DIRECT)}、GAME_DELEGATE_CALLERS {len(GAME_DELEGATE_CALLERS)}）；GAME_IMPORTS {len(GAME_IMPORTS)}")
     print(f"共用規則層（registry.SHARED）：{len(SHARED)} 個模組（{'、'.join(sorted(SHARED))}）")
+    # shared（第 15 批）
+    print(f"共用規則層碰到的別的舊模組（SHARED_PENDING）：{len(SHARED_PENDING)} 條"
+          f"（排定 {sum(w.startswith('排定：') for w in SHARED_PENDING.values())}、"
+          f"之後成包 {sum(w.startswith('之後成包：') for w in SHARED_PENDING.values())}）")
+    print("\n".join(f"  {a} → {b}" for a, b in sorted(SHARED_PENDING)))
+    print(f"總表寫了、先不收的（SHARED_LATER）：{len(SHARED_LATER)} 個（{'、'.join(sorted(SHARED_LATER))}）")
