@@ -43,7 +43,8 @@ SHARED: dict[str, str] = {
     "siege": "攻城的規則（攻城戰的名字、收場改季、誰贏）：決戰包的攻城與戰況、地盤都讀；總表附錄甲裁定不搬進任何一包",
     # shared（全部拆包第 15 批「共用規則層登記」，計畫 docs/superpowers/plans/2026-11-01-共用規則層登記.md 1.2）：只登記、不搬程式。
     # 戰鬥引擎（9 個）：核心的 team 打每一場都讀，每一種打一場的包都用，放進哪一包都會變成包 import 包
-    "encounter": "單次判定（威力差、勝算、四種結果）：核心的 team、content 讀；出陣、酒肆的殺手那一場與大勢人物、單挑都叫",
+    "encounter": "單次判定（威力差、勝算、四種結果）：核心的 team、content 讀，Game 的單打服務（大場面判讀、切磋、截殺、設伏、頭目戰與擂台的"
+                 "收場、戰力快照）也叫；出陣、酒肆的殺手那一場與大勢人物的護衛（figure_aid）都叫，門下頁的說明（skillview）也讀",
     "rounds": "一般的仗一回合一回合的演出（from_clash）：核心的 team 照它寫戰報的回合；戰報 battlelog 也讀",
     "tactics": "回合與本命戰法、相剋：核心的 team、state、world_state、content 都讀；決戰包的戰況、出陣約戰的三招、擂台、單挑都叫",
     "styles": "大場面對手的路數（一門打不遍）：核心的 team 算威力時讀；單打服務的戰報那一句、人物對話也用",
@@ -98,7 +99,8 @@ SHARED: dict[str, str] = {
                 "（讀璽效 seal_acts 記在邊界測試的 SHARED_PENDING：第 51 批那一半進這一層）",
     "clinic": "醫館（只在城鎮療傷、最近的醫館在哪）：核心的 team 讀；修練頁的療傷、名師指點、買破境丹都問（總表附錄甲：醫館是核心的服務）"
               "（讀輿圖的路線 atlas 記在 SHARED_PENDING：第 50 批那一半進這一層）",
-    "ranger": "遊俠名號（散人的成長階梯、經驗倍數）：核心的 rules 讀；出陣包與截殺、懸賞、列傳都叫",
+    "ranger": "遊俠名號（散人的成長階梯、經驗倍數）：核心的 rules 讀，Game 的戰後獎勵與狀態列也叫；出陣包與懸賞（bounties）、同伴招募（roster）、"
+              "玩家卡（social）、行狀（annals：列傳讀它記下的名號）都叫",
     "precise": "一類一顆（每一顆行動鈕只給一類東西）：出陣包的獎勵與懸賞、有所感、玩法說明讀（讀三選一的開關與 is_town 記在 SHARED_PENDING：第 13 批）",
     # 其餘（12 個；總表寫 20 個，events、tiers、narration、leaderboard、rumor_view 先不收：讀擂台、伏筆、機緣，理由在 SHARED_LATER）
     "renown": "名聲（名望、善惡稱號、跨段）：核心的 rules、team、world_state 讀；決戰、探索、宴客、酒肆四包與十幾個舊模組都叫（總表附錄甲裁定）",
@@ -107,7 +109,7 @@ SHARED: dict[str, str] = {
     "outcomes": "隨口應對分岔的純規則：事件檢定（engine，總表第 16 批搬進核心）讀；接 event_llm 的評分",
     "marks": "地方痕跡看得見的純規則：事件、世界一步、天下形勢讀",
     "ollama_client": "本機模型的 client：核心的 naming 讀；人物對話、取名、判讀十幾個舊模組與殼、腳本都經它（模型服務）",
-    "power_save": "省電模式（模型卸不卸）：ollama_client 讀；主機端的 warm_keeper、監控頁也用（模型服務）",
+    "power_save": "省電模式（模型卸不卸）：ollama_client 讀；殼 server.py（有人登入就叫模型載起來）與主機端的 warm_keeper 也用（模型服務）",
     "zh": "簡繁轉換（模型寫的字轉成台灣正字）：核心的 content、naming 讀；探索、酒肆兩包與十幾個舊模組都叫（模型服務）",
     "event_llm": "探索的隨口應對（模型只評一個機率）：事件檢定（engine）、隨口應對分岔 outcomes 讀；殼的三段式也用（模型服務）",
     "flavor": "重複內容的模型潤色（世界事件傳聞全服只潤一次）：核心的 sqlite_world 讀；世界一步也叫（模型服務）",
