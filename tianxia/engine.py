@@ -107,6 +107,8 @@ from .features.sortie.rules import CLASH_OPEN, CLASH_THEIRS_WON, CLASH_WON  # no
 # battle
 from .features.battle import rules as battle_rules  # 過渡：決戰的字（Game.BATTLE_GAMBLE_* 類別屬性、委派的型別註記）
 from .features.battle import view as battle_view  # 過渡：Game 上決戰「看」那一半的 22 個一行委派（主動搬六包第 5 批）
+from .features.battle import admin as battle_admin  # 過渡：Game 上管理者的決戰工具 6 個一行委派（全部拆包第 6 批）
+from .features.battle import sieges as battle_sieges  # 過渡：Game 上攻城的 6 個一行委派（全部拆包第 6 批）
 from .features.battle.rules import (  # noqa: F401  過渡：測試從 engine 拿（test_companions_battle、test_followers_matter、
     ESCORT_MUSTER, ESCORT_SCENE, RESTORED_NOTE, ROUND_BLOCKS, TROOPS_LINE, TROOPS_REPORT,  # test_showdown_full_report、test_battle_round_blocks）
 )
@@ -116,8 +118,8 @@ from .state import (
     new_game_state,
 )
 from .world import (
-    _season_vehicle, advance_world_state, check_thresholds, end_season, evaluate_ending, fire_by_id, open_showdown, open_waiting_showdown,
-    resume_season_clock, settle_season_start, showdown_battle, showdown_key, start_pending_battle,
+    _season_vehicle, advance_world_state, check_thresholds, end_season, evaluate_ending, fire_by_id, open_waiting_showdown,
+    resume_season_clock, settle_season_start, showdown_key, start_pending_battle,
 )
 from .world_state import SealDuel, SealSide, SortieDuel, WorldStateStore, season_length_days
 
@@ -6452,12 +6454,11 @@ class Game:
     # ── 好幾場戰鬥並存（領地爭奪第二批 Task 10）：時刻表決戰一場（world.get_battle）＋攻城戰一串（world.get_sieges）──
     # 沒有攻城戰時一切照舊（這一季沒開領地爭奪時 _sieges 不讀資料庫、回空的）。有的時候每個人看「自己的那一場」（_battle_now）：
     # 選單、場景、出招、放手一搏都照它；全服的推進（_battle_status 的 tick）每一場各推一次。
+    # 攻城那幾個（_sieges、_definition_of、_tick_siege、_shelve_siege、_cancel_siege、_settle_siege）的本體在 tianxia/features/battle/sieges.py
+    # （全部拆包第 6 批），這裡留一行委派。
 
     def _sieges(self) -> list[battle_instance.BattleInstance]:
-        """還沒收場的攻城戰（照開集結的先後）；這一季沒開領地爭奪是空的、不讀資料庫。"""
-        if not conquest.on(self.content, self.state.world):
-            return []
-        return [b for b in self.world.get_sieges() if b.phase != "ended"]
+        return battle_sieges.sieges(self)
 
     def battles_now(self) -> list[battle_instance.BattleInstance]:
         """全服此刻的每一場：決戰那一格（收場了照舊在，同 get_battle）在前，再照開集結的先後是還沒收場的攻城戰。"""
@@ -6519,11 +6520,7 @@ class Game:
         return out
 
     def _definition_of(self, battle: battle_instance.BattleInstance) -> BattleDef | None:
-        """這一場的定義：決戰照內容；攻城戰是那個大區的範本，名字換成「攻城・地點」（siege.title）。"""
-        definition = self.content.battles.get(battle.battle_id)
-        if definition is None or battle.siege is None:
-            return definition
-        return definition.model_copy(update={"name": siege.title(self.content, battle.siege)})
+        return battle_sieges.definition_of(self, battle)
 
     def _mutate_battle_of(self, battle: battle_instance.BattleInstance, fn) -> battle_instance.BattleInstance | None:
         """改這一場（照它是決戰還是攻城走 store 的那一個；同 mutate_battle：fn 在交易裡改、回改完的那一場）。"""
@@ -6537,34 +6534,13 @@ class Game:
         return None if battle is None else self._mutate_battle_of(battle, fn)
 
     def _tick_siege(self, battle: battle_instance.BattleInstance) -> None:
-        """推一場攻城（同決戰的 _run_battle_tick：集結截止、回合逾時、補位、結算），剛收場就套結果（_apply_battle_outcome）。"""
-        definition = self._definition_of(battle)
-        if definition is None:
-            return
-        after = self.world.mutate_siege(battle.record_id, lambda b: self._advance_battle_round(b, definition))
-        if after is not None and after.phase == "ended":
-            self._apply_battle_outcome(after)
+        battle_sieges.tick_siege(self, battle)
 
     def _shelve_siege(self, battle: battle_instance.BattleInstance, text: str = "") -> None:
-        """季終（或管理者取消）時還沒打完的攻城收起來：同 _shelve_unfinished_battle（不算勝負、不發軍餉、不易手），參戰者補一則交代。"""
-        end_time = self.state.world.time
-
-        def _mark(b: battle_instance.BattleInstance) -> None:
-            b.phase, b.unfinished, b.unfinished_text = "ended", True, text
-            b.outcome_title, b.end_time = battle_instance.UNFINISHED_TITLE, end_time
-            if b.siege is not None:
-                b.siege.settled = True
-
-        self.world.mutate_siege(battle.record_id, _mark)
-        self.world.drop_siege(battle.record_id)
-        self._deliver_battle_results()
+        battle_sieges.shelve_siege(self, battle, text)
 
     def _cancel_siege(self, record_id: int, text: str) -> None:
-        """管理者取消一場已經開了集結的攻城（admin_conquest_cancel）：照季終收兵收起來，參戰者那一則寫 text。"""
-        battle = next((b for b in self._sieges() if b.record_id == record_id), None)
-        if battle is not None:
-            self._shelve_siege(battle, text)
-            self.state.world = self.world.get_season()
+        battle_sieges.cancel_siege(self, record_id, text)
 
     def _battle_status(self, tick: bool = True) -> tuple[battle_instance.BattleInstance, BattleDef] | None:
         """目前這場全服戰鬥的最新狀態（有攻城戰時是這個人看的那一場，_battle_now）。沒有攻城戰時照舊（_showdown_status）。
@@ -6760,68 +6736,7 @@ class Game:
         self._open_waiting_showdown()
 
     def _settle_siege(self, battle: battle_instance.BattleInstance) -> None:
-        """攻城戰剛收場（_apply_battle_outcome 分進來；只做一次，SiegeInfo.settled）：龍頭上陣的留守敗走扣聲威（守將是隊伍，不扣）；
-        最有戲的一搏與兩軍首功照決戰上天下大事；易手（conquest.flip：分紅、冷卻、「落入／收復」）、守住各一句天下大事（作罷不發，攻方沒人到記
-        day_log，裁決 19）、打輸攻方的條砍半、時程表記 done 或 void
-        （siege.settle）；戰鬥那一列寫上結果（贏的一方、大勝或險勝、「某某大勝，拿下某地」）；參戰者照決戰補戰報與軍餉（軍餉、貢獻乘
-        Config.conquest.pay_share，_showdown_pay）。隨行同伴不放回江湖（裁決 14）。收場的那一場留在共用狀態裡到每天結算才拿掉
-        （最後一回合的放手一搏劇情收場之後才寫好）。"""
-        if battle.siege is None or battle.siege.settled:
-            return
-        c = self.content
-        definition = self._definition_of(battle)
-        if definition is None:
-            return
-        if not battle.unfinished:
-            if any(x.fallen_round is not None and not x.settled and x.fid in c.figures for x in battle.commanders):
-                generals.after_battle(self.world, c, battle, where=definition.name,
-                                      mutate=lambda fn: self.world.mutate_siege(battle.record_id, fn))
-            for line in (self._highlight_line(battle, definition), self._merit_line(battle, definition)):
-                if line:
-                    self.world.mutate_season(lambda season, line=line: season.rumors.append(Rumor(time=season.time, text=line, layer="world")))
-        result: dict = {}
-        guards = self._siege_guards(battle, definition)
-
-        def _season(season: WorldState) -> None:
-            if guards:  # FB-605：守方守住，替每一個守方的人記一次守城——那一塊還凍結著（siege.settle 之前），守城的清單照樣列它
-                vehicle, line = _season_vehicle(c, season), conquest.line_of(season, c, battle.siege.loc)
-                for name, side in guards:
-                    orders.credit(vehicle, c, side, name, kind=orders.SIEGE_GUARD, location=battle.siege.loc, front=line)
-            result.update(siege.settle(season, c, battle, definition))
-
-        self.world.mutate_season(_season)
-
-        def _relabel(b: battle_instance.BattleInstance) -> None:
-            b.siege.settled = True
-            if not b.unfinished:
-                b.outcome_title = result["title"]
-                b.outcome_side, b.outcome_margin = result["winner"], result["margin"]
-                b.outcome_text = b.outcome_text or ""
-
-        after = self.world.mutate_siege(battle.record_id, _relabel)
-        battle.siege.settled = True
-        self.state.world = self.world.get_season()
-        if after is not None:
-            battle.outcome_title, battle.outcome_side, battle.outcome_margin = after.outcome_title, after.outcome_side, after.outcome_margin
-        self._deliver_battle_results()
-
-    def _siege_guards(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[tuple[str, str]]:
-        """攻城戰守方守住時，替守城軍令記一次的人（FB-605，PM 2026-10-21）：[(名號, 他自己那一邊)]。打的是陣營佔著的那一塊、照常打完
-        （不是作罷、季終收兵）、沒被拿下；站守方那一格、而且自己那一邊（allied.side_of：豪強依附的那一軍）就是守方的人——臨時投效、助守的
-        散人與別的陣營不算（只算這一場，不記貢獻）。讀別人的存檔只為了看他是哪一邊。"""
-        info_ = battle.siege
-        if info_ is None or battle.unfinished or info_.void or info_.holder not in conquest.SIDES:
-            return []
-        if siege.verdict(info_, battle, definition)[0] is not None:
-            return []
-        out: list[tuple[str, str]] = []
-        for name, p in battle.participants.items():
-            if p.faction != info_.holder:
-                continue
-            kin = self if name_key(name) == name_key(self.state.player.name) else self._load_kin(name)
-            if kin is not None and allied.side_of(kin.state, self.content) == info_.holder:
-                out.append((name, info_.holder))
-        return out
+        battle_sieges.settle_siege(self, battle)
 
     def _merit_line(self, battle: battle_instance.BattleInstance, definition: BattleDef | None) -> str:
         """收場時的論功那一則：兩軍各自戰功最高的人（battle_instance.top_merit；臨時投效的人算在投效的那一軍）；
@@ -12852,21 +12767,11 @@ class Game:
         self._save_season()
         return self._log(msgs)
 
+    # 立刻開戰的選單、立刻開戰、取消決戰（admin_battles、admin_start_battle、admin_cancel_battle）與三場大戲那三顆鈕：本體在
+    # tianxia/features/battle/admin.py（全部拆包第 6 批），這裡留一行委派
+
     def admin_battles(self) -> list[BattleDef]:
-        """管理者「立刻開戰」的選單，照內容的順序（計畫 T8）：
-        - 第一季不觸發的 beta 決戰不列；
-        - 時刻表決戰只在第一季列（開關關著時 beta 那一季沒有時刻表），而且只列還沒開過、還沒收場的，分版本的只列這一季
-          該開的那一版（宛城照第 3 週的結果）——開出來跟時間到了自動開的一樣（見 admin_start_battle）。"""
-        w = self.state.world
-        off = season_one_off(self.content, w, "battles")
-        showdowns = [
-            showdown_battle(self.state, self.content, e) for e in timetable.events(w, self.content)
-            if season_one(self.content, w) and e.kind == "showdown" and e.id not in w.timeline and e.id not in w.showdowns_opened
-            and (e.version_from is None or e.version_from in w.timeline)  # 宛城：第 3 週結算前不知道是哪一版，不列（PM 2026-10-05）
-        ]
-        openable = {b.id for b in showdowns if b is not None}
-        return [b for b in self.content.battles.values()  # 攻城範本（領地爭奪第二批）不列：照時程表開
-                if b.id not in off and not b.siege and (b.timetable_event is None or b.id in openable)]
+        return battle_admin.admin_battles(self)
 
     def admin_fires(self) -> list[Threshold | WorldEvent]:
         """管理者「觸發大事」的選單：大勢門檻與世界事件，第一季不觸發的 beta 門檻與世界事件不列（計畫 T8；玉璽碎片設計 11.2）。"""
@@ -12875,24 +12780,7 @@ class Game:
         return [x for x in [*self.content.scenario.thresholds, *self.content.scenario.world_events] if x.id not in off]
 
     def admin_start_battle(self, battle_id: str, now: float) -> list[str]:
-        """管理者直接開一場全服戰鬥（試玩時人少、大勢推不到門檻也能開戰）。選單上沒有的（第一季不觸發的 beta 決戰）開不了。"""
-        refusal = self._admin_refusal("開戰")
-        if refusal:
-            return self._log(refusal)
-        definition = next((b for b in self.admin_battles() if b.id == battle_id), None)
-        if definition is None:
-            return self._log(["（沒有這場戰鬥。）"])
-        current = self.world.get_battle()
-        if current is not None and current.phase != "ended":
-            return self._log(["（已經有一場戰鬥在進行。）"])
-        if definition.timetable_event is not None:  # 時刻表決戰：跟時間到了一樣開（起點照戰況、記下開過了，之後不再開）
-            msgs = open_showdown(self.world, self.content, definition.timetable_event, now)
-            self.state.world = self.world.get_season()
-        else:
-            self.world.start_battle(definition, now)
-            msgs = [f"🛡️ 【全服戰報】{definition.name}的集結號角已經吹響！"]
-        self._write(f"開戰・{definition.name}", msgs, tag="管理者")
-        return self._log(msgs)
+        return battle_admin.admin_start_battle(self, battle_id, now)
 
     def admin_fire(self, fire_id: str) -> list[str]:
         """管理者直接觸發一則大勢門檻或世界事件：效果跟自然發生一樣，一季只會發生一次。"""
@@ -13208,27 +13096,7 @@ class Game:
         return self._log([msg])
 
     def admin_cancel_battle(self) -> list[str]:
-        """取消決戰：正在集結或開打的那一場收起來、不算結果（參戰者各補一則「不算勝負」，同收季，FB-035），發一則天下大事。
-        時刻表決戰取消後不會自己再開（開過的記號留著）；要收尾用「定結果」。"""
-        refusal = self._admin_refusal("取消決戰")
-        if refusal:
-            return self._log(refusal)
-        battle = self.world.get_battle()
-        if battle is None or battle.phase == "ended":
-            return self._log(["（沒有進行中的決戰。）"])
-        definition = self.content.battles.get(battle.battle_id)
-        name = definition.name if definition else battle.battle_id
-        line = f"{name}臨時取消，這一仗沒有打成。"
-        self.state.world = self.world.get_season()  # 收場時間記此刻的季時間（同 admin_end_season）
-        self._shelve_unfinished_battle(f"{name}臨時取消，這一仗沒有打成，不算勝負。")
-        event_id = definition.timetable_event if definition else None
-        w = self.state.world
-        if event_id and event_id in w.showdowns_opened and event_id not in w.timeline and event_id not in w.showdowns_cancelled:
-            w.showdowns_cancelled.append(event_id)  # 取消的時刻表決戰：輿圖不列（FB-563；之後「定結果」了才照有結果的寫法列）
-        add_rumor(self.state, line, content=self.content, layer="world")
-        self._save_season()
-        self._write("取消決戰", [line], tag="管理者")
-        return self._log([line])
+        return battle_admin.admin_cancel_battle(self)
 
     # ── 管理者：每週的事（管理者觸發鈕第 1 組，企劃者 2026-10-07）────────────
     # 「效果跟自然發生一樣」：每一顆都叫週一掛鉤（world.WEEK_HOOKS）用的同一個函式，不另寫一份。
@@ -13521,55 +13389,16 @@ class Game:
     # ── 管理者：三場大戲（管理者觸發鈕第 3 組）──────────────────────
     # 「立刻開戰」（admin_start_battle）早就照時刻表開時刻表決戰（world.open_showdown：照版本挑那一筆、照前線戰況定起點、
     # 在 WorldState.showdowns_opened 記下開過了，時間到了不再開）。這裡只是每一場一顆鈕、照時刻表的大事認，按不下去時說清楚為什麼。
+    # 本體在 tianxia/features/battle/admin.py（全部拆包第 6 批），這裡留一行委派。
 
     def admin_showdowns(self) -> list[tuple[TimetableEvent, str | None]]:
-        """三場大戲那三顆鈕：時刻表上的每一件決戰，與此刻按下去會被拒絕的原因（開得了是 None）。這一季沒有時刻表時是空的。"""
-        if not season_one(self.content, self.state.world):
-            return []
-        return [(e, self._showdown_refusal(e)) for e in timetable.events(self.state.world, self.content) if e.kind == "showdown"]
-
-    def _showdown_refusal(self, event: TimetableEvent) -> str | None:
-        """這一件決戰此刻開不開得了：已經結算、已經開過（時刻表那一份記號，開過就不再開）、要看別的大事定版本而那件還沒結算
-        （宛城，PM 2026-10-05）、另一場還在集結或開打，都開不了。"""
-        w = self.state.world
-        if event.id in w.timeline:
-            return f"（{event.title}已經結算了。）"
-        if event.id in self.cancelled_showdowns():  # FB-099：開過、被取消、還沒有結果——照舊開不了，說清楚怎麼收尾
-            return f"（{event.title}開打後被取消，還沒有結果；要收尾請用「定結果」。）"
-        if event.id in w.showdowns_opened:
-            return f"（{event.title}已經開打過了。）"
-        if event.version_from is not None and event.version_from not in w.timeline:
-            source = self._timetable_event(event.version_from)
-            return f"（{event.title}要等{source.title if source else event.version_from}結算了才知道是哪一版。）"
-        battle = self.world.get_battle()
-        if battle is not None and battle.phase != "ended":
-            return "（已經有一場戰鬥在進行。）"
-        if showdown_battle(self.state, self.content, event) is None:
-            return f"（內容裡沒有{event.title}這一場的戰鬥。）"
-        return None
+        return battle_admin.admin_showdowns(self)
 
     def cancelled_showdowns(self) -> set[str]:
-        """開打後被取消、時間軸上還沒有結果的時刻表決戰（FB-099；管理者工具的三場大戲與時刻表那兩列照它寫）：開過集結
-        （showdowns_opened，記號照舊留著、不會再開），時間軸上沒有它，此刻也不是在打的那一場（取消決戰把它從共用狀態拿掉了）。
-        真的打完的時間軸上有結果，不算；還在集結、開打或剛收場的那一場是此刻的那一場，也不算。"""
-        w = self.state.world
-        battle = self.world.get_battle()
-        live = battle.battle_id if battle is not None else None
-        return {eid for eid, battle_id in w.showdowns_opened.items() if eid not in w.timeline and battle_id != live}
+        return battle_admin.cancelled_showdowns(self)
 
     def admin_start_showdown(self, event_id: str, now: float) -> list[str]:
-        """立刻開時刻表上這一場決戰：照時刻表開（admin_start_battle → world.open_showdown，跟時間到了一樣：同一個函式、同一句集結
-        號角），開過就記在 showdowns_opened，排定的時間到了不再開。版本照此刻的規則（宛城看第 3 週的結果）。"""
-        refusal = self._timetable_refusal("開這一場決戰")
-        if refusal:
-            return self._log(refusal)
-        event = self._timetable_event(event_id)
-        if event is None or event.kind != "showdown":
-            return self._log(["（時刻表上沒有這一場決戰。）"])
-        why = self._showdown_refusal(event)
-        if why:
-            return self._log([why])
-        return self.admin_start_battle(showdown_battle(self.state, self.content, event).id, now)
+        return battle_admin.admin_start_showdown(self, event_id, now)
 
     # ── 玩家之間的互動（social.py，企劃者 2026-10-08）────────────────────
     # 同一個地點的人看得到彼此：場景底下一行「此地還有誰」、點名字打開玩家卡、卡上的動作鈕（social.ACTIONS）。
