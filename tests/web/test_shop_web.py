@@ -541,6 +541,39 @@ def test_looking_posts_the_op_and_asks_the_line_again():
     assert "老師傅答應" in out["toast"]
 
 
+def test_looking_at_the_fire_puts_the_smith_line_back_after_a_brew():
+    """熬完的結果句蓋著鐵匠那一句（3.3）；同一頁按「看」看火候，回話是提示泡泡、鐵匠那一句伺服器換了新的：結果句收起，換回鐵匠那一句。"""
+    game, m = _fired()
+    game.smith_furnace()
+    after = server.main_view(game)
+    line = after["shop"]["line"]
+    out = _forge_page(m, """return (async () => {
+        H.render();
+        """ + _click('{ act: "shop-furnace" }') + """
+        await new Promise((ok) => setTimeout(ok, 5));
+        return { html: T.els.app.innerHTML, note: H.S.shopNote };
+      })();""", S={"shopNote": "你用 3 個精鐵砂熬出了一個玄鋼骨。"},
+                      responses={"/api/do/smith_furnace": {"main": after, "message": ""}, "/api/smith_line": m["shop"]["forge"]["line"]})
+    assert out["note"] is None and "熬出了一個玄鋼骨" not in out["html"]
+    assert f'<p class="shop-line">{line}</p>' in out["html"]
+
+
+def test_a_poll_with_a_new_smith_line_puts_it_back_after_a_brew(m):
+    """輪詢拿到的鐵匠那一句換了（伺服器那一刻說了別的）：熬完的結果句收起；那一句沒換（只是銀兩之類變了）就照舊蓋著，讓人看完。"""
+    said = json.loads(json.dumps(m))
+    said["shop"]["line"] = "鐵匠抬頭看了你一眼。"
+    richer = json.loads(json.dumps(m))
+    richer["shop"]["silver"] = 999
+    script = """
+      H.S.shopTab = "forge"; H.render(); H.S.shopNote = "熬出來了";
+      const was = H.S.main; H.setMain(H.S.next); H.shopPolled(was);
+      return { note: H.S.shopNote, html: T.els.app.innerHTML };"""
+    new_line = run(m, script, S={"next": said})
+    assert new_line["note"] is None and "鐵匠抬頭看了你一眼。" in new_line["html"]
+    same_line = run(m, script, S={"next": richer})
+    assert same_line["note"] == "熬出來了"
+
+
 def test_tapping_a_furnace_that_cannot_look_sends_nothing():
     _game, m = _fired(looked=True)
     out = _forge_page(m, "return (async () => { H.render(); " + _click('{ act: "shop-furnace" }') + " return T.calls.length; })();")

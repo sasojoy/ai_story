@@ -3767,6 +3767,8 @@
     if (was !== now) { render(); return true; } // 開了、收了、換了一間：整個重畫
     if (!now) return false;
     if (JSON.stringify(old.shop) !== JSON.stringify(S.main.shop)) {
+      // 打造頁熬過的結果那一句蓋著鐵匠那一句（3.3）：鐵匠那一句換了（伺服器那一刻說了別的）就收起；沒換的照舊蓋著，讓人看完
+      if (now === "smith" && S.shopNote && old.shop.line !== S.main.shop.line && smithTab(S.main.shop) === "forge") S.shopNote = null;
       if (pointerHeld) redrawHeld = true;
       else { renderShop(); if (now === "smith" && S.shopPot && (S.shopPot.main || S.shopPot.aux)) updateSmithLine(); }
     }
@@ -3836,7 +3838,8 @@
     if (fu.problem) return `<p class="fu-say off">${esc(FURNACE_SAY.no.replace("{price}", price).replace("{why}", fu.problem))}</p>`;
     return `<p class="fu-say"><span>${FURNACE_SAY.open.replace("{price}", price)}</span><button class="btn small fu-look" data-act="shop-furnace">${FURNACE_LOOK}</button></p>`;
   }
-  // 看（/api/do/<furnace.id>，MAIN_ACTIONS smith_furnace）：回來照新的畫面畫、話用提示泡泡講，再問一次這一爐（機率那一行換成新基準）
+  // 看（/api/do/<furnace.id>，MAIN_ACTIONS smith_furnace）：回來照新的畫面畫、話用提示泡泡講，再問一次這一爐（機率那一行換成新基準）。
+  // 熬過的結果那一句收起：鐵匠那一句伺服器這一下換了新的，不能還被上一下的結果蓋著
   async function smithFurnace() {
     const shop = S.main && S.main.shop;
     const fu = shop && shop.forge ? shop.forge.furnace : null;
@@ -3844,6 +3847,7 @@
     await busy(async () => {
       const r = await api(`/api/do/${fu.id}`, {});
       setMain(r.main);
+      S.shopNote = null;
       renderKeepingShop();
       const said = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
       if (said) toast(said);
