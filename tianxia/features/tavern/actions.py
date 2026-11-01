@@ -5,8 +5,9 @@ ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的
 `tavern_ask` 是 `tavern_ask_reply`、私有的 `_tavern_ask` 是 `tavern_ask_once`——這裡 `tavern_ask` 是問酒家那個模組（ask.py）的名字，
 本體照舊寫 `tavern_ask.topics(...)`。另加一個 `tavern_sign`：`act:tavern` 那一下紀錄的標題（Game._action_title 經 act 子動詞的掛鉤叫，第 11 批）。
 `_tavern_run` 的動作表原本放的是 Game 的方法本身（`self._tavern_news`），這裡換成同樣不帶參數的 lambda。
-Game 上留 19 個一行委派（server、假人、腳本、測試與核心原位還在叫：選單接管那一格、act:tavern、sync 的下線殺手與三個 deliver、
-choose 最後那一下殺手檢查、shop_view、紀錄標題）。換掉的模組屬性一律照模組叫（tavern_rules.find_chance、encounter.resolve_encounter），
+Game 上留 16 個一行委派（server、假人、腳本、測試與 shop_view 還在叫）：第 10 批是 19 個，選單接管那一格、act:tavern、sync 的
+下線殺手與三個 deliver、choose 最後那一下殺手檢查、紀錄標題在全部拆包第 11 批換成接縫掛鉤（__init__.py），沒人叫了的
+_tavern_options、_tavern_sign、_deliver_whispers 拿掉。換掉的模組屬性一律照模組叫（tavern_rules.find_chance、encounter.resolve_encounter），
 Game._spar_power 經 ctx 叫（測試換掉的才打得到）。
 """
 from __future__ import annotations

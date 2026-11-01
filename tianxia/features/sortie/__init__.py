@@ -4,8 +4,10 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 - rules.py：純規則（原 tianxia/sortie.py；那個名字留成指到這裡的別名）
 - actions.py：原本 Game 上出陣本體、混戰、出陣回報的 21 個方法（Game 留 13 個一行委派）
 
-出陣那一格的 id 照留核心的 act:train（遊歷、序章的雪恥、並肩出陣、大場面判讀都認它），分派留在 Game._act；約戰的 sortie:*（第 2 批
-拿了前綴）不在選單上、Game.choose 最前面接走。所以這一包只接 enabled 與欄位，假人照舊走 bot_policy。
+出陣那一格的 id 照留核心的 act:train（遊歷、序章的雪恥、並肩出陣、大場面判讀都認它）。全部拆包第 11 批起這一包是那一格的主人
+（act 子動詞 verbs：行動列那一格、底下那一行、約戰開著時按下去打開那張卡、紀錄標題），出陣那一場本身（扣體力、並肩出陣、晉升奇遇）
+照舊在 Game._act（總表第 17 批收）；約戰的 sortie:*（第 2 批拿了前綴）不在選單上，Game.choose 查選單之前經 choose_unlisted 接走；
+窗滿了的約戰經 on_due 結算（三處都是第 11 批的接縫掛鉤，下面）。假人照舊走 bot_policy。
 換季照帶今天出陣的次數（carried 那兩格）照舊寫在 Game._reset_player_for_new_season、不掛 on_season_start：遊戲當下的掛鉤只叫
 開著的包，掛在這裡的話地盤關著的那一季就不帶了（同商城的 carried；dev/sortie-1 審查，tests/test_sortie_season_carry.py 守）。
 """

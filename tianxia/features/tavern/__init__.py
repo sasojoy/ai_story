@@ -7,8 +7,9 @@
 - actions.py：原本 Game 上酒肆的 43 個方法（Game 留一行委派）
 - bots.py：假人的分數（原本 bot_policy.score 的 tavern 那一段）
 
-選單接管那一格（坐在酒肆裡）、act:tavern 入口、sync 的下線殺手與三個 deliver、choose 最後那一下殺手檢查照舊留在 Game 原位
-（位置算行為，批次表第二節）；這一包接 tavern:* 的 choose（互斥前綴）與假人分數。
+選單接管那一格（坐在酒肆裡）、act:tavern 入口、sync 的下線殺手與三個 deliver、choose 最後那一下殺手檢查，第 10 批留在 Game 原位
+直接叫這一包（位置算行為，批次表第二節）；全部拆包第 11 批換成接縫掛鉤，掛在原本那一行（店面登記 shops、act 子動詞 verbs、
+on_away、deliver_notices、after_action，下面）。這一包另接 tavern:* 的 choose（互斥前綴）與假人分數。
 """
 from __future__ import annotations
 
