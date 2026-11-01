@@ -16,9 +16,9 @@ from typing import TYPE_CHECKING
 from tianxia import gender, team
 from tianxia import allied  # 過渡：待搬（豪強依附的那一軍：混戰撞不撞得上）
 from tianxia import annals  # 過渡：待搬（行狀：混戰那一筆交手）
-from tianxia import battlelog  # 過渡：待搬（戰報）
+from tianxia import battlelog  # 共用規則層（戰報）
 from tianxia import conquest  # 過渡：待搬（地盤：區塊、進度、推不推得動、混戰的對象）
-from tianxia import encounter  # 過渡：待搬（單次判定：混戰）
+from tianxia import encounter  # 共用規則層（單次判定：混戰）
 from tianxia import four_tiers  # 過渡：待搬（素材四階：打贏照掉落表掉素材）
 from tianxia import howto  # 過渡：待搬（行動列底下那一行的句子）
 from tianxia import materials  # 過渡：待搬（素材的掉落與發放）

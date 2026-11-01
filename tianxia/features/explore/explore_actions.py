@@ -19,7 +19,7 @@ import functools
 import random
 from dataclasses import dataclass
 
-from tianxia import battlelog  # 過渡：待搬（戰報：出門一趟・遭遇的標籤、拆得失）
+from tianxia import battlelog  # 共用規則層（戰報：出門一趟・遭遇的標籤、拆得失）
 from tianxia import bounties  # 過渡：待搬（懸賞榜：討伐那一路、打探交差、打贏交差）
 from tianxia import duel as duel_rules  # 過渡：待搬（頭目戰：此刻遇得上的頭目）
 from tianxia import events as event_rules  # 過渡：待搬（事件：抽不抽得到、藏起來的、照輪替抽）

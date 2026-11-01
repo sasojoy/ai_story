@@ -24,9 +24,9 @@ from tianxia import calendar, journal, team
 from tianxia import allied  # 過渡：待搬（豪強依附的那一軍：補位的人算哪一邊）
 from tianxia import annals  # 過渡：待搬（行狀：約戰那一筆交手）
 from tianxia import atlas  # 過渡：待搬（大區：同一區才應得了戰）
-from tianxia import battlelog  # 過渡：待搬（戰報）
+from tianxia import battlelog  # 共用規則層（戰報）
 from tianxia import conquest  # 過渡：待搬（地盤：區塊、進度、推、拉、集火、易手）
-from tianxia import encounter  # 過渡：待搬（整隊威力）
+from tianxia import encounter  # 共用規則層（整隊威力）
 from tianxia import howto  # 過渡：待搬（行動列底下那一行的句子）
 from tianxia import orders  # 過渡：待搬（軍令：截糧的運糧隊、攻城軍令對不對）
 from tianxia import precise  # 過渡：待搬（一類一顆：打贏的獎勵怎麼算）
