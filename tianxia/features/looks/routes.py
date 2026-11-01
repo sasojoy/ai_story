@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from tianxia.core.features import AdminTool
 from tianxia.database import default_path
 
-from . import actions, moves, orders, rules
+from . import actions, moves, orders, rules, scenes
 
 REF = re.compile(r"[A-Za-z0-9_-]{8,64}")
 
@@ -38,7 +38,7 @@ def admin_tools(shell) -> dict[str, AdminTool]:
             data = base64.b64decode(str(b.get("data", "")), validate=True)
         except (binascii.Error, ValueError):
             return ["（圖讀不出來。）"]
-        return actions.admin_move_upload(g, shell._int(b.get("id"), 0), data)
+        return actions.admin_move_upload(g, shell._int(b.get("id"), 0), data, str(b.get("sheet", moves.SHEET))[:10] or moves.SHEET)
 
     return {
         "moves_upload": AdminTool(gate, move_upload),
@@ -95,6 +95,24 @@ def router(shell) -> APIRouter:
         return {"message": shell.joined(msgs), "looks": shell.look(game, lambda g: actions.view(g)),
                 "main": shell.look(game, shell.main_view)}
 
+    @r.post("/api/looks/scene")
+    def api_looks_scene_preview(request: Request, body: dict = Body(...)):
+        """一句話自創的預覽：{text}；回 {scene}（導演稿）或 {problem}。不扣元寶、不存。"""
+        gate()
+        game = shell._game(request)
+        text = str(body.get("text", ""))[:120]
+        return shell.look(game, lambda g: actions.preview_scene(g, text))
+
+    @r.get("/api/looks/scene/{mid}")
+    def api_looks_scene(request: Request, mid: str):
+        """擂台上要演的那一招的導演稿（m<數字>，上架了的才有）：擂台上別人的招也要演，所以看得到的是登入的人。"""
+        gate()
+        game = shell._game(request)
+        scene = shell.look(game, lambda g: actions.scene_of(g, mid))
+        if scene is None:
+            raise HTTPException(404)
+        return {"scene": scene}
+
     @r.post("/api/looks/bind")
     def api_looks_bind(request: Request, body: dict = Body(...)):
         """把招式庫的一招綁到現在練的那一門上：{id}；回 {message, looks}。"""
@@ -138,7 +156,7 @@ def router(shell) -> APIRouter:
     def api_looks_img(look: str, sheet: str):
         """自建形象與招式動畫的圖（資料庫旁邊的 looks/<id>/）：擂台上別人也看得到，所以不看登入；只認 u<數字> 配十張的檔名、m<數字> 配 fx。"""
         gate()
-        if not ((orders.is_custom(look) and sheet in orders.SHEETS) or (moves.is_move(look) and sheet == moves.SHEET)):
+        if not ((orders.is_custom(look) and sheet in orders.SHEETS) or (moves.is_move(look) and sheet in (moves.SHEET, *scenes.ART_SLOTS))):
             raise HTTPException(404)
         path = orders.sheet_file(actions.images_beside(default_path()), look, sheet)
         if path is None:

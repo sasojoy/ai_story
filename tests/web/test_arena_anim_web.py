@@ -12,7 +12,7 @@ const block = (name) => { const a = src.indexOf(`\n  const ${name} = `); return 
 const code = ["RING_ARMS", "RING_SHEETS", "RING_PICKS", "RING_BEATS"].map(block).join("\n")
   + "\nconst RA = { looks: { me: '', foe: '' } };\n"
   + "\n" + ["ringArms", "ringAtk", "ringAct", "RING_HIT"].map(konst).join("\n")
-  + fn("ringStrike") + fn("ringPlan") + fn("ringPicked") + fn("ringExchange") + fn("ringFinale");
+  + fn("ringScenes") + fn("ringStrike") + fn("ringPlan") + fn("ringPicked") + fn("ringExchange") + fn("ringFinale");
 const H = new Function(code + "\nreturn { RA, ringExchange, ringFinale };")();
 H.RA.looks = input.looks;
 // 每一幕寫成：誰往前衝（有正的 lunge 的那一邊）、兩邊依序演哪幾張、有沒有停在最後一格
@@ -113,3 +113,21 @@ def test_the_move_effect_only_shows_when_its_art_fires():
     assert ex[3][0]["fx"] == "me" and ex[3][0]["foe"][-1] == "hero_bare_hit"
     assert ex[4][0]["fx"] == "me" and ex[5] == [{"lunge": "foe", "me": ["hero_bare_hit"], "foe": ["hero_atk_fist"], "keep": False, "fx": "foe"}]
     assert fin[0][0]["fx"] == "me" and fin[1][0]["fx"] == ""
+
+
+def test_a_written_ultimate_replaces_the_round_when_it_fires():
+    """一句話自創（arena_scene.js）：發動的那一邊有導演稿，這一回合整段照稿演（取代平常的一幕）；收場那一回合先演稿再倒地。
+    沒發動、或稿還沒抓到，照舊。"""
+    driver = DRIVER.replace(
+        'const code = ["RING_ARMS"',
+        'const stub = "const SCENE_LEN = 3700; function sceneFor(m) { return m === \'m1\' ? { name: \'寒光\' } : null; }\\n";\n'
+        'const code = stub + ["RING_ARMS"', 1,
+    ).replace("finish({ ex:", "finish({ raw: input.ex.map(([a, b, pick, burst]) => H.ringExchange(a, b, pick, burst).map((x) => x.scene ? x.who + ':' + x.mid : 'plain')),"
+              " rawFin: input.fin.map(([t, low, pick, burst]) => H.ringFinale(t, low, pick, burst).map((x) => x.scene ? x.who + ':' + x.mid : 'plain')), ex:", 1)
+    out = webharness.run(driver, {
+        "ex": [(A, dict(A, foe=80), ["強攻", "奇襲"], [1, 0]), (A, dict(A, me=80), ["強攻", "固守"], [0, 1]), (A, dict(A, foe=80), ["強攻", "奇襲"], [0, 0])],
+        "fin": [("大勝", False, ["強攻", "奇襲"], [1, 0])],
+        "looks": {"me": "劍", "foe": "", "me_fx": "m1", "foe_fx": "m2"}, "fx": False,
+    })
+    assert out["raw"] == [["me:m1"], ["plain"], ["plain"]]  # 分身那一招（m2）的稿還沒抓到：照舊演
+    assert out["rawFin"] == [["me:m1", "plain"]]

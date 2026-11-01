@@ -1,4 +1,4 @@
-"""自建形象與招式動畫的伺服器那一側：下單走 /api/looks/order、/api/looks/move（同一個編號送兩次只扣一次）、圖從資料庫旁邊的 looks/ 送（只認 u<數字> 配十張、m<數字> 配 fx）。"""
+"""自建形象與招式動畫的伺服器那一側：下單走 /api/looks/order、/api/looks/move（同一個編號送兩次只扣一次）、圖從資料庫旁邊的 looks/ 送（只認 u<數字> 配十張、m<數字> 配 fx 與 art1、art2）。"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -41,6 +41,21 @@ def test_move_effects_are_served_as_fx_only():
     assert client.get("/api/looks/img/m9/fx").status_code == 200
     assert client.get("/api/looks/img/m9/hero_bare_idle").status_code == 404
     assert client.get("/api/looks/img/u9/fx").status_code == 404
+    orders.save_sheet(root, "m9", "art1", actions.FX_SAMPLE.read_bytes())
+    assert client.get("/api/looks/img/m9/art1").status_code == 200  # 一句話自創要畫的那幾張（法相、巨物）
+    assert client.get("/api/looks/img/m9/art3").status_code == 404
+
+
+def test_the_scene_preview_charges_nothing_and_unknown_scenes_404():
+    """一句話自創（Joy 2026-11-01）：/api/looks/scene 回導演稿或不行的那一句，不扣元寶；沒上架的招沒有稿。"""
+    client = _player()
+    client.get("/api/main")
+    got = client.post("/api/looks/scene", json={"text": "背後出現一座大佛擊出一掌"}).json()
+    assert [a["label"] for a in got["scene"]["arts"]] == ["大佛", "佛掌"]
+    assert client.post("/api/looks/scene", json={"text": "fire"}).json() == {"problem": "只能寫中文。"}
+    assert client.get("/api/looks/scene/m424242").status_code == 404
+    assert client.get("/api/looks/scene/u1").status_code == 404
+    assert client.get("/api/main").json()["mall"]["balance"] == 5000
 
 
 def test_move_order_without_an_own_art_is_refused_and_charges_nothing():

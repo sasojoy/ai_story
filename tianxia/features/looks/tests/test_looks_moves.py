@@ -16,6 +16,8 @@ from tianxia.models import Look, MallItem
 from tianxia.wallet import Wallet
 
 FX = actions.FX_SAMPLE
+ART = (actions.WEB_IMG / "arena" / "weapon_sword.webp").read_bytes()  # 一張小的去背圖，當法相、巨物那一張
+BUDDHA = "背後出現一座大佛擊出一掌"  # 要畫兩樣：大佛、佛掌
 
 
 @pytest.fixture
@@ -46,10 +48,12 @@ def _admin(content, world) -> Game:
 
 
 def _made(on, game, ref="move-ref-001") -> int:
-    actions.order_move(game, "一道青色劍氣橫掃", ref)
+    """一句話自創、有要畫的那一種：下單、管理者上傳兩張、上架。"""
+    actions.order_move(game, BUDDHA, ref)
     pid = actions.view(game)["moves"]["list"][0]["id"]
     admin = _admin(on, game.world)
-    assert "可以審核" in actions.admin_move_upload(admin, pid, FX.read_bytes())[-1]
+    assert "還缺 art2" in actions.admin_move_upload(admin, pid, ART, "art1")[-1]
+    assert "可以審核" in actions.admin_move_upload(admin, pid, ART, "art2")[-1]
     assert "上架了" in actions.admin_move_release(admin, pid)[-1]
     return pid
 
@@ -58,22 +62,51 @@ def _made(on, game, ref="move-ref-001") -> int:
 def test_order_upload_release_and_the_arena_draws_it(on):
     game = _game(on)
     art = _art(game)
-    msgs = actions.order_move(game, "一道青色劍氣橫掃", "move-ref-001")
-    assert f"替「{art.name}」下單了招式動畫（拳腳）" in msgs[-1] and Wallet(game.world.db).balance("沈浪") == 4700
+    msgs = actions.order_move(game, BUDDHA, "move-ref-001")
+    assert f"替「{art.name}」下單了絕招（拳腳）" in msgs[-1] and "「大佛」「佛掌」" in msgs[-1]
+    assert Wallet(game.world.db).balance("沈浪") == 4700
     view = actions.view(game)["moves"]
     assert view["open"] and view["art"] == art.name and view["list"][0]["status"] == orders.PENDING
-    assert actions.order_move(game, "第二招", "move-ref-002")[-1] == moves.OPEN_ORDER  # 一次一張
+    assert view["list"][0]["arts"] == ["大佛", "佛掌"]
+    assert actions.order_move(game, "一劍寒光", "move-ref-002")[-1] == moves.OPEN_ORDER  # 一次一張
     assert game.arena_move() == ""  # 還沒上架
     pid = view["list"][0]["id"]
     admin = _admin(on, game.world)
     row = actions.admin_view(admin)["moves"]["open"][0]
-    assert row["owner"] == "沈浪" and "一道青色劍氣橫掃" in row["gen_prompt"]
-    actions.admin_move_upload(admin, pid, FX.read_bytes())
+    assert row["owner"] == "沈浪" and row["missing"] == ["art1", "art2"] and row["gen_prompt"] == ""
+    assert [a["label"] for a in row["arts"]] == ["大佛", "佛掌"] and BUDDHA in row["arts"][0]["prompt"]
+    assert "還沒有圖" in actions.admin_move_release(admin, pid)[-1]
+    actions.admin_move_upload(admin, pid, ART, "art1")
+    actions.admin_move_upload(admin, pid, ART, "art2")
     actions.admin_move_release(admin, pid)
     assert game.arena_move() == moves.move_id(pid)
+    assert actions.scene_of(game, moves.move_id(pid))["arts"][1]["label"] == "佛掌"
     lib = actions.view(game)["moves"]["library"]
     assert [(x["move"], x["bound"], x["on_art"]) for x in lib] == [(moves.move_id(pid), art.name, True)]
     assert actions.order_move(game, "再一招", "move-ref-003")[-1] == moves.ALREADY.format(art=art.name)  # 這一門已經綁了
+
+
+def test_a_line_with_nothing_to_draw_is_learned_on_the_spot(on):
+    """一句話自創（Joy 2026-11-01）：稿裡沒有要畫的（劍氣、光、冰……程式畫得出來）當場學成、上身，不用審核。"""
+    game = _game(on)
+    art = _art(game)
+    msgs = actions.order_move(game, "一劍寒光九萬里", "move-ref-010")
+    assert msgs[-1].startswith(f"「{art.name}」的絕招學成了") and Wallet(game.world.db).balance("沈浪") == 4700
+    mid = game.arena_move()
+    assert mid.startswith("m")
+    scene = actions.scene_of(game, mid)
+    assert [b["op"] for b in scene["beats"]] == ["暗場", "蓄勢", "落款", "飄落", "光束", "異狀", "白光"] and scene["arts"] == []
+    assert scene["name"] == art.name  # 沒有長出招名時落款寫武功的名字
+
+
+def test_the_line_is_checked_before_charging(on):
+    game = _game(on)
+    _art(game)
+    assert actions.order_move(game, "a sword", "move-ref-011")[-1] == "只能寫中文。"
+    assert "最多" in actions.order_move(game, "劍" * 31, "move-ref-012")[-1]
+    assert actions.preview_scene(game, "一劍寒光")["scene"]["beats"]
+    assert actions.preview_scene(game, "")["problem"] == "寫一句這一招長什麼樣子。"
+    assert Wallet(game.world.db).balance("沈浪") == 5000
 
 
 def test_only_your_own_art_and_a_matching_style(on, monkeypatch):
@@ -103,7 +136,7 @@ def test_a_new_season_keeps_the_move_and_rebinds_for_free(on, world):
 def test_reject_refunds(on):
     game = _game(on)
     _art(game)
-    actions.order_move(game, "劍氣", "move-ref-007")
+    actions.order_move(game, BUDDHA, "move-ref-007")
     pid = actions.view(game)["moves"]["list"][0]["id"]
     admin = _admin(on, game.world)
     assert "（要寫原因" in actions.admin_move_reject(admin, pid, "")[-1]
@@ -115,25 +148,26 @@ def test_reject_refunds(on):
 def test_bad_uploads_and_the_shelf(on):
     game = _game(on)
     _art(game)
-    actions.order_move(game, "劍氣", "move-ref-008")
+    actions.order_move(game, BUDDHA, "move-ref-008")
     pid = actions.view(game)["moves"]["list"][0]["id"]
     admin = _admin(on, game.world)
-    hit = (actions.WEB_IMG / "arena" / "hero_bare_hit.webp").read_bytes()
-    assert "要 1320×220" in actions.admin_move_upload(admin, pid, hit)[-1]
-    assert "還沒有光效圖" in actions.admin_move_release(admin, pid)[-1]
+    assert "這一招只要art1（大佛）、art2（佛掌）" in actions.admin_move_upload(admin, pid, ART, "fx")[-1]
+    assert "要是 PNG 或 WebP" in actions.admin_move_upload(admin, pid, b"not an image", "art1")[-1]
+    assert "還沒有圖" in actions.admin_move_release(admin, pid)[-1]
     assert actions.admin_move_upload(game, pid, b"")[-1] == "（此刻無法這麼做。）"  # 不是管理者
     assert "move_order" not in [i["id"] for i in game.mall_view()["items"]]
     assert game.mall_buy("move_order", "buy-ref-0012")[-1] == "沒有這件商品。"
 
 
-def test_the_fake_generator_copies_the_sample(on, monkeypatch):
+def test_the_fake_generator_leaves_drawings_to_the_admin(on, monkeypatch):
+    """假的生圖器只抄舊的光效單；一句話自創要畫的（大佛、佛掌）照樣等管理者上傳。"""
     monkeypatch.setenv(actions.GEN_ENV, "fake")
     game = _game(on)
     _art(game)
-    actions.order_move(game, "劍氣", "move-ref-009")
+    actions.order_move(game, BUDDHA, "move-ref-009")
     row = actions.view(game)["moves"]["list"][0]
-    assert row["status"] == orders.REVIEW
-    assert orders.sheet_file(actions.image_root(game), moves.move_id(row["id"]), moves.SHEET) is not None
+    assert row["status"] == orders.PENDING
+    assert orders.sheet_file(actions.image_root(game), moves.move_id(row["id"]), moves.SHEET) is None
 
 
 def test_bots_never_carry_a_move(on):
