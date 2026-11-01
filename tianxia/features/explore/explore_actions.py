@@ -173,6 +173,17 @@ def outing_option(ctx, loc: Location) -> Option:
     return ctx._cost_option("act:explore", "探索", ctx.content.config.jianfa.explore_stamina, note=ctx._outing_plan(loc).hint)
 
 
+def outing_note(ctx, loc: Location) -> str | None:
+    """行動列底下探索那一行（act 子動詞，第 11 批從 Game.action_notes 搬來）：探索一顆開著時寫這一處多半給什麼，比重照擲骰用的那一份
+    （經 ctx._outing_plan：測試換掉它）；關著是 None（核心照舊寫三選一、舊探索那一行）。"""
+    if not outing_on(ctx):
+        return None
+    from tianxia import howto  # noqa: PLC0415  過渡：待搬（行動列底下那一行的句子；函式裡 import：howto 照舊 import explore_one 的舊名）
+
+    plan = ctx._outing_plan(loc)
+    return howto.outing_line(plan.weights, plan.foe_note)
+
+
 def explore_one(ctx) -> list[str]:
     """出門一趟（減法季探索一顆，整合設計 4.1）：扣 explore_stamina（15），照這一處的比重（_outing_plan）抽**一件事**
     （explore_rules.draw；2d，企劃者 2026-10-26「只抽一件事情」，同天體力改 15）：遭遇、事件、素材、感悟其中一件，感悟不連兩趟，

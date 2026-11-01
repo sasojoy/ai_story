@@ -11,7 +11,7 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature
+from tianxia.core.features import Feature, Verb
 
 
 class SortieFeature(Feature):
@@ -39,6 +39,22 @@ class SortieFeature(Feature):
         from . import duel_actions  # noqa: PLC0415
 
         duel_actions.duel_tick(ctx)
+
+    _verbs: tuple[Verb, ...] | None = None
+
+    def verbs(self) -> tuple[Verb, ...]:
+        """act:train 那一格的主人（act 子動詞，第 11 批；actions.py 的 train_*）：行動列那一格（地盤開著時整格，問 enabled）、底下那一行、
+        按下去（約戰開著時打開那張卡）、紀錄標題（出陣／雪恥／遊歷・某地：關著照舊寫遊歷，所以不問 enabled）、只打開那張卡的回話
+        （sortie_duel.PICK：不算做過、不寫紀錄）。出陣那一場本身（扣體力、並肩出陣）照舊在核心 _act，總表第 17 批收。建一次就留著。"""
+        if self._verbs is None:
+            from . import actions, duel_rules  # noqa: PLC0415
+
+            def title(ctx):
+                return f"{actions.train_title(ctx)}・{ctx.content.locations[ctx.state.player.location].name}"
+
+            self._verbs = (Verb("train", run=actions.train_run, title=title, cell=actions.train_cell, note=actions.train_note,
+                                picks=(duel_rules.PICK,)),)
+        return self._verbs
 
     def choose_unlisted(self, ctx, option_id):
         """不在選單上的動作（接縫掛鉤，第 11 批；原本 Game.choose 本週卡「換一件事」之後、列傳的票之前那一行）：約戰開著時的貼、應戰、同去

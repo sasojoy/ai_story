@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 
 
 def tavern_sign(ctx: Game) -> str:
-    """act:tavern 那一下江湖紀錄的標題（招牌；Game._action_title 經 Game._tavern_sign 叫，同出陣的 _train_title）。"""
+    """act:tavern 那一下江湖紀錄的標題（招牌；Game._action_title 經 act 子動詞的掛鉤叫，第 11 批，同出陣的 train_title）。"""
     return tavern_rules.sign(ctx.state, ctx.content)
 
 

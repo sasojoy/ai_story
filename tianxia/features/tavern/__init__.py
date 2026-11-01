@@ -12,7 +12,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, Shop
+from tianxia.core.features import Feature, Outcome, Shop, Verb
 
 
 class TavernFeature(Feature):
@@ -68,6 +68,18 @@ class TavernFeature(Feature):
                 close=lambda ctx: rules.close(ctx.state), menu=actions.tavern_options, entry=entry,
             ),)
         return self._shops
+
+    _verbs: tuple[Verb, ...] | None = None
+
+    def verbs(self) -> tuple[Verb, ...]:
+        """act:tavern 的主人（act 子動詞，第 11 批）：按下去打開酒肆（actions.tavern_enter：開著、人在酒肆、閒著才進得去，不花體力；
+        原本 Game._act 中段那一行）、紀錄標題是招牌（actions.tavern_sign；原本 Game._action_title 那張表的 tavern）。兩樣都不問 enabled
+        （原位不看開關；這一包的 tests/test_tavern_package.py 直接叫 _action_title("act", "tavern")）。進店那一顆在店面登記（Shop.entry）。"""
+        if self._verbs is None:
+            from . import actions  # noqa: PLC0415
+
+            self._verbs = (Verb("tavern", run=lambda ctx, prepared: actions.tavern_enter(ctx), title=actions.tavern_sign),)
+        return self._verbs
 
     def on_away(self, ctx, away_from) -> None:
         """下線那一段殺手找上門（原本 Game.sync 補算完本人下線那一段之後的那幾行，照抄）：離線夠久（Config.tavern.hit_offline_minutes）

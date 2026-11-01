@@ -341,6 +341,22 @@ def test_choose_takes_the_unlisted_ones_first_and_hears_the_package_after_each_a
     assert ("after_action",) not in seams.calls
 
 
+def test_a_verb_owner_runs_titles_fills_the_cell_and_writes_the_note(game, seams):
+    """act 子動詞的主人（Verb）：行動列那一格（探索那一格換成它給的那幾顆）、底下那一行、按下去（_act 最前面）、紀錄的標題（照 arg 問、
+    不看 kind，同原本那張表）；按了只打開一張卡的回話不寫江湖紀錄（Verb.picks）。行動列那一格給選項：關著的主人不接；其餘不問 enabled。"""
+    g = _made(game)
+    assert g.options()[0].id == "act:fakeverb"
+    assert g.action_notes(["act:explore"])["act:explore"] == "假的那一行"
+    assert g._action_title("act", "fakeverb") == "假的子動詞・此地" and g._action_title("xyz", "fakeverb") == "假的子動詞・此地"
+    journal = len(g.state.journal)
+    assert g.choose("act:fakeverb") == ["只打開一張卡。", "做完之後的那一句。"]  # 做完一件事那一下照樣接在後面（同約戰那張卡之後的殺手檢查）
+    assert len(g.state.journal) == journal
+    assert g._act("fakeverb") == ["只打開一張卡。"]
+    seams.open = False
+    assert "act:fakeverb" not in [o.id for o in g.options()]
+    assert g.action_notes(["act:explore"])["act:explore"] == "假的那一行" and g._act("fakeverb") == ["只打開一張卡。"]
+
+
 def test_the_own_turn_is_heard_even_when_the_package_is_closed(game, seams):
     """on_own_turn 在 own_turn_checks 最前面（暫停的檢查之前：原位的封測發放暫停中照發），關著的包照叫。"""
     g = _made(game)
