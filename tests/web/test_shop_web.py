@@ -711,8 +711,12 @@ def test_ticking_rows_lights_the_batch_button_and_it_asks_with_one_line_each(con
     assert 'data-act="rack-melt">拆解勾選的 2 件' in out["lit"] and 'class="shop-row rk-row on"' in out["lit"]
     one, two = rows["兵:1"], rows["兵:2"]
     assert "拆掉這 2 件？拆了就沒了。" in out["asked"] and ">拆掉</button>" in out["asked"]
-    assert f"<li>【鈍刀】→ {one['into']['name']} ×1（淬過 2 次一起沒了）</li>" in out["asked"]
-    assert f"<li>【利刀】→ {two['into']['name']} ×1</li>" in out["asked"]  # 沒淬過不寫
+    import re
+
+    assert [_text(li) for li in re.findall(r"<li>(.*?)</li>", out["asked"])] == [
+        f"【鈍刀】→ {one['into']['name']} ×1（淬過 2 次一起沒了）", f"【利刀】→ {two['into']['name']} ×1"]  # 沒淬過不寫
+    # 一行裡的字切成不折行的小段（同裝備庫那一列，FB-297）：320 寬折在「淬過 3 次一｜起沒了」中間的那一次（審查 2026-11-01）
+    assert '<span class="nb">（淬過 2 次一起沒了）</span>' in out["asked"] and f'<span class="nb">{one["into"]["name"]} ×1</span>' in out["asked"]
     assert out["before"] == 0  # 問了才送
     assert out["calls"] == [["/api/menxia/dismantle_many", {"items": ["兵:1", "兵:2"]}]] and out["pick"] == {}
 

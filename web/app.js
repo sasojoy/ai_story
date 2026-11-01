@@ -4972,7 +4972,8 @@
   function ask(text, yes, go, opts = {}) {
     closeAsk();
     askGo = go;
-    const lines = (opts.lines || []).length ? `<ul class="ask-list">${opts.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : "";
+    // 清單一行切成不折行的小段（nbHtml，切在「→」後與「（」前）：320 寬「（淬過 3 次一起沒了）」會折在「一｜起」中間（FB-297 同一類）
+    const lines = (opts.lines || []).length ? `<ul class="ask-list">${opts.lines.map((l) => `<li>${nbHtml(l)}</li>`).join("")}</ul>` : "";
     document.body.insertAdjacentHTML("beforeend", `
       <div class="ask-layer">
         <div class="ask-bg" data-act="ask-no"></div>
