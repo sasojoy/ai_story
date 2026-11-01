@@ -15,7 +15,7 @@
   const RING_BG = ["/static/img/outing/bg_town_far.webp", "/static/img/outing/bg_town_ground.webp"]; // 擂台搭在城裡：借走一趟城鎮那一套的遠景與地面
   // 每一張動作圖幾格（每格 220×220，腳底在 (100, 212)，同走一趟）
   const RING_SHEETS = {
-    hero_bare_idle: 4, hero_bare_hit: 3, hero_bare_kneel: 4, hero_bare_dodge: 4, hero_bare_fall: 6,
+    hero_bare_idle: 4, hero_bare_hit: 3, hero_bare_kneel: 4, hero_bare_dodge: 4, hero_bare_fall: 6, hero_bare_block: 4,
     hero_atk_slash: 6, hero_atk_pole: 6, hero_atk_fist: 6, hero_atk_shoot: 6,
   };
   // 兵器種類 → [兵器圖, 打法]（揮砍：劍刀；長兵：槍棍；射：弩；拳腳：拳套與空手）
@@ -31,6 +31,7 @@
     hero_bare_hit: [[119, 120, -70, 1], [161, 119, -20, 1], [157, 134, 10, 1]],
     hero_bare_kneel: [[129, 152, 20, 1], [155, 150, 30, 1], [102, 165, 80, 1], [100, 162, 80, 1]],
     hero_bare_dodge: [[131, 136, -40, 1], [147, 105, -60, 1], [149, 107, -60, 1], [134, 136, -40, 1]],
+    hero_bare_block: [[128, 149, -40, 1], [141, 107, -70, 1], [150, 105, -72, 1], [130, 110, -70, 1]], // 格擋：兵器豎在身前架住
     hero_bare_fall: [[142, 127, -30, 1], [157, 109, -60, 1], [175, 115, 70, 2], [150, 207, -3, 3], [150, 207, -3, 3], [150, 207, -3, 3]],
     hero_atk_slash: [[128, 145, -40, 1], [67, 95, -125, 0], [87, 98, -165, 0], [147, 133, -5, 1], [158, 133, 25, 1], [123, 147, -30, 1]],
     hero_atk_pole: [[131, 147, -15, 1], [120, 150, -10, 1], [162, 131, 0, 1], [148, 114, -35, 1], [160, 132, 10, 1], [124, 147, -15, 1]],
@@ -136,7 +137,7 @@
     const atk = ringAtk(RA.looks[who]);
     if (pick === "強攻") return { acts: [ringAct(atk, 0, 640, false, 64)], hit: 330 };
     if (pick === "奇襲") return { acts: [ringAct("hero_bare_dodge", 0, 360, false, -14), ringAct(atk, 360, 440, false, 52)], hit: 590 };
-    const guard = ringAct("hero_bare_guard", 0, deals ? 520 : 760, false, -4); // 固守
+    const guard = ringAct("hero_bare_block", 0, deals ? 520 : 760, false, -4); // 固守
     return deals ? { acts: [guard, ringAct(atk, 520, 420, false, 34)], hit: 720 } : { acts: [guard], hit: -1 };
   }
   function ringPicked(a, b, pick) {
@@ -257,8 +258,7 @@
       if (got) {
         const { a, k } = got;
         sheet = a.sheet;
-        if (sheet === "hero_bare_guard" && !RING_SHEETS.hero_bare_guard) { sheet = "hero_bare_dodge"; i = k < 0.15 ? 0 : 1; } // 格擋的圖還沒到：借閃避往後架的那一格
-        else i = Math.min(RING_SHEETS[sheet] - 1, Math.floor(k * RING_SHEETS[sheet]));
+        i = Math.min(RING_SHEETS[sheet] - 1, Math.floor(k * RING_SHEETS[sheet]));
         if (k < 1) lunge = Math.sin(k * Math.PI) * (a.lunge || 0);
         if (sheet.startsWith("hero_atk_") && k < 1) fxAt = k;
       } else if (RA.hold && RA.hold[side]) {

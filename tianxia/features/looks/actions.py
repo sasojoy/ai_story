@@ -222,7 +222,7 @@ def _admin_moves(ctx: Game, wallet) -> dict | None:
 
 
 def admin_view(ctx: Game) -> dict | None:
-    """管理者那一頁：還沒做完的訂單（等圖、待審）在前，最近做完的十張在後。每張寫下單的人、名字、樣子、九張到了哪幾張、
+    """管理者那一頁：還沒做完的訂單（等圖、待審）在前，最近做完的十張在後。每張寫下單的人、名字、樣子、十張到了哪幾張、
     給生圖工具的提示詞。"""
     wallet = ctx._wallet()
     item = orders.item_of(ctx.content)
@@ -254,7 +254,7 @@ def admin_upload(ctx: Game, pid: int, sheet: str, data: bytes) -> list[str]:
     orders.save_sheet(root, orders.look_id(pid), sheet, data)
     now = orders.mark(wallet, found, root)
     have = len(orders.present(root, orders.look_id(pid)))
-    return ctx._log([f"收到「{found.name}」的 {sheet}（{have}/{len(orders.SHEETS)}）" + ("，九張齊了，可以審核。" if now.status == orders.REVIEW else "。")])
+    return ctx._log([f"收到「{found.name}」的 {sheet}（{have}/{len(orders.SHEETS)}）" + ("，十張齊了，可以審核。" if now.status == orders.REVIEW else "。")])
 
 
 def admin_release(ctx: Game, pid: int) -> list[str]:

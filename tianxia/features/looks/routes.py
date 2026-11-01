@@ -136,7 +136,7 @@ def router(shell) -> APIRouter:
 
     @r.get("/api/looks/img/{look}/{sheet}")
     def api_looks_img(look: str, sheet: str):
-        """自建形象與招式動畫的圖（資料庫旁邊的 looks/<id>/）：擂台上別人也看得到，所以不看登入；只認 u<數字> 配九張的檔名、m<數字> 配 fx。"""
+        """自建形象與招式動畫的圖（資料庫旁邊的 looks/<id>/）：擂台上別人也看得到，所以不看登入；只認 u<數字> 配十張的檔名、m<數字> 配 fx。"""
         gate()
         if not ((orders.is_custom(look) and sheet in orders.SHEETS) or (moves.is_move(look) and sheet == moves.SHEET)):
             raise HTTPException(404)

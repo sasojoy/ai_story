@@ -1,6 +1,6 @@
 """擂台形象的規則（純函式；功能包 tianxia/features/looks/）。
 
-- 預設是斗笠小子（id 空字串，圖在 web/img/arena/）；其他的一套寫在 content/looks.json，圖在 web/img/looks/<id>/（九張，同預設的檔名）。
+- 預設是斗笠小子（id 空字串，圖在 web/img/arena/）；其他的一套寫在 content/looks.json，圖在 web/img/looks/<id>/（十張，同預設的檔名）。
 - 買到的形象是帳號的（購買那一列 data 的 look_id，core.services.look_ids），換季也帶著走（Joy 2026-10-31「花錢買的東西不能不見」）。
 - 穿哪一套記在 mall_entitlements（kind 'look'、key 'wear'、data {"look": id}）；讀的時候再驗一次買到了沒（退了款就換回預設）。
 - 假人不買，照名號的雜湊挑一套 bots 開著的（多數穿預設的）：不然「穿付費形象的一定是真人」看得出來（伺服器假人設計）。

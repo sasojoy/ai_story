@@ -3740,7 +3740,7 @@ class MallWindow(_Strict):
 
 class Look(_Strict):
     """一套擂台形象（content/looks.json；功能包 tianxia/features/looks/）。圖在 web/img/looks/<id>/，檔名與張數照預設的斗笠小子
-    （web/img/arena/ 的 hero_*.webp，九張）。預設的斗笠小子不寫在這裡（id 是空字串）。"""
+    （web/img/arena/ 的 hero_*.webp，十張）。預設的斗笠小子不寫在這裡（id 是空字串）。"""
 
     id: str
     name: str  # 過 naming.name_problem

@@ -550,11 +550,11 @@
       reissue ? "確定補發" : "確定扣回", () => mallAdminDo(op, body));
   }
 
-  // 管理者區「自建形象」（第二批）：還沒做完的訂單一張一格——下單的人、名字、樣子、九張到了幾張、給生圖工具的提示詞（展開才看）、
-  // 上傳（一次選好幾張，檔名照九張的名字：hero_bare_idle.png……）、上架、退回（原因寫給下單的人看）。按「看訂單」才抓
+  // 管理者區「自建形象」（第二批）：還沒做完的訂單一張一格——下單的人、名字、樣子、十張到了幾張、給生圖工具的提示詞（展開才看）、
+  // 上傳（一次選好幾張，檔名照十張的名字：hero_bare_idle.png……）、上架、退回（原因寫給下單的人看）。按「看訂單」才抓
   function looksAdminHtml() {
     const d = S.adLooks;
-    const head = `<p class="muted">自建形象（玩家下的單：照提示詞生圖、切成 220 格〔scripts/cut_look.py〕再上傳；九張齊了看過再上架）</p>
+    const head = `<p class="muted">自建形象（玩家下的單：照提示詞生圖、切成 220 格〔scripts/cut_look.py〕再上傳；十張齊了看過再上架）</p>
       <div class="row wrap"><button class="btn small" data-act="looks-admin" data-op="load">看訂單</button></div>
       <p class="form-msg${S.adLooksOk ? " ok" : ""}" role="alert">${esc(S.adLooksMsg || "")}</p>`;
     if (!d) return head;
@@ -565,7 +565,7 @@
       const prompts = Object.entries(o.prompts || {}).map(([s, text]) => `<details><summary>${esc(s)}</summary><pre class="look-gen">${esc(text)}</pre></details>`).join("");
       return `<div class="card look-admin"><b>#${o.id | 0}「${esc(o.name)}」</b>・${esc(o.owner)}・${esc(o.status_text)}${o.reason ? `（${esc(o.reason)}）` : ""}
         <p>${esc(o.prompt)}</p>${o.prompts && Object.keys(o.prompts).length ? `<div class="look-sheets">${faces}</div>${prompts}
-        <div class="row wrap"><input type="file" id="ad-looks-file-${o.id | 0}" accept="image/png,image/webp" multiple aria-label="上傳九張">
+        <div class="row wrap"><input type="file" id="ad-looks-file-${o.id | 0}" accept="image/png,image/webp" multiple aria-label="上傳十張">
         <button class="btn small" data-act="looks-admin" data-op="upload" data-id="${o.id | 0}">上傳</button>
         <button class="btn small primary" data-act="looks-admin" data-op="release" data-id="${o.id | 0}" ${have.size === sheets.length ? "" : "disabled"}>上架</button></div>
         <div class="row"><input class="input" id="ad-looks-note-${o.id | 0}" placeholder="退回的原因（必填）" maxlength="100"><button class="btn warn small" data-act="looks-admin" data-op="reject" data-id="${o.id | 0}">退回</button></div>` : ""}</div>`;
@@ -590,7 +590,7 @@
       if (op === "upload") {
         const input = document.getElementById(`ad-looks-file-${id}`);
         const files = Array.from((input && input.files) || []);
-        if (!files.length) { S.adLooksMsg = "先選圖（檔名照九張的名字）。"; S.adLooksOk = false; }
+        if (!files.length) { S.adLooksMsg = "先選圖（檔名照十張的名字）。"; S.adLooksOk = false; }
         const said = [];
         for (const f of files) {
           const data = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(",")[1] || ""); fr.onerror = no; fr.readAsDataURL(f); });

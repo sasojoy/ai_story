@@ -1,4 +1,4 @@
-"""自建形象的訂單（功能包 looks 第二批）：下單扣元寶、一次一張、名字與樣子過字表；圖九張齊了變待審（假的生圖器當場抄好）；
+"""自建形象的訂單（功能包 looks 第二批）：下單扣元寶、一次一張、名字與樣子過字表；圖十張齊了變待審（假的生圖器當場抄好）；
 管理者上傳、上架（從此是買到的一套，換季也在）、退回（元寶全退）；上傳的圖驗格式與大小；萬寶閣的一般購買不賣它。"""
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ def test_order_upload_release_and_wear(on):
     row = actions.admin_view(admin)["open"][0]
     assert row["owner"] == "沈浪" and row["prompts"]["hero_bare_idle"].count("白衣書生，背著竹簍") == 1
     out = _upload_all(admin, pid)
-    assert "九張齊了" in out[-1]
+    assert "十張齊了" in out[-1]
     assert "上架了" in actions.admin_release(admin, pid)[-1]
     look = orders.look_id(pid)
     assert look in [lk["id"] for lk in actions.view(game)["looks"] if lk["mine"]]
@@ -106,7 +106,7 @@ def test_bad_uploads_are_refused(on):
     assert "要 880×220" in actions.admin_upload(admin, pid, "hero_bare_idle", (ART / "hero_bare_hit.webp").read_bytes())[-1]
     assert "PNG 或 WebP" in actions.admin_upload(admin, pid, "hero_bare_idle", b"GIF89a....")[-1]
     assert "沒有「cape」" in actions.admin_upload(admin, pid, "cape", b"")[-1]
-    assert "還缺 9 張" in actions.admin_release(admin, pid)[-1]
+    assert "還缺 10 張" in actions.admin_release(admin, pid)[-1]
     assert actions.admin_upload(game, pid, "hero_bare_idle", b"")[-1] == "（此刻無法這麼做。）"  # 不是管理者
 
 

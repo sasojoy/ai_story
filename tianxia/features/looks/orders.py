@@ -1,16 +1,16 @@
 """自建形象的訂單（功能包 looks 第二批；Joy 2026-10-31「誰跟你等金流好才開工…繼續優化這邊」、設計 v3 第二期）。純規則，不讀時鐘。
 
 流程：玩家在萬寶閣「形象」那一頁寫名字與一句樣子下單（place：扣元寶、記一筆購買，那一列就是訂單）→ 生圖（gen.py：預設關著等管理者
-上傳；開發可以用假的生圖器）→ 九張都到了變成「待審」→ 管理者看過上架（release：那一列的 data 記 look_id＝u<購買 id>，從此就是買到的一套，
+上傳；開發可以用假的生圖器）→ 十張都到了變成「待審」→ 管理者看過上架（release：那一列的 data 記 look_id＝u<購買 id>，從此就是買到的一套，
 帳號的、換季也帶著走）或退回（reject：元寶全退，那一列記退了）。
 
 訂單的狀態記在購買那一列的 data（status）：
-- pending：等圖（九張還沒齊）
-- review：九張齊了，等管理者看
+- pending：等圖（十張還沒齊）
+- review：十張齊了，等管理者看
 - made：上架了（data.look_id）
 - rejected：退回了（元寶退了，data.reason 寫原因）
 
-圖放在資料庫旁邊的 looks/<id>/（不進版控；伺服器的 /api/looks/img/<id>/<張> 照它送），九張的檔名與格數同預設的斗笠小子。
+圖放在資料庫旁邊的 looks/<id>/（不進版控；伺服器的 /api/looks/img/<id>/<張> 照它送），十張的檔名與格數同預設的斗笠小子。
 """
 from __future__ import annotations
 
@@ -28,8 +28,8 @@ from tianxia.wallet import Purchase, Wallet
 EFFECT = "look_order"
 PREFIX = "u"  # 自建形象的 id：u<購買 id>（官方的寫在 content/looks.json，只有小寫英數；不會撞）
 CELL = 220
-SHEETS = {  # 一套九張：檔名 → 格數（每格 220×220，腳底在 (100, 212)；同 web/arena_anim.js 的 RING_SHEETS）
-    "hero_bare_idle": 4, "hero_bare_hit": 3, "hero_bare_kneel": 4, "hero_bare_dodge": 4, "hero_bare_fall": 6,
+SHEETS = {  # 一套十張：檔名 → 格數（每格 220×220，腳底在 (100, 212)；同 web/arena_anim.js 的 RING_SHEETS）
+    "hero_bare_idle": 4, "hero_bare_hit": 3, "hero_bare_kneel": 4, "hero_bare_dodge": 4, "hero_bare_fall": 6, "hero_bare_block": 4,
     "hero_atk_slash": 6, "hero_atk_pole": 6, "hero_atk_fist": 6, "hero_atk_shoot": 6,
 }
 NAME_MAX, PROMPT_MAX = 6, 120
@@ -227,7 +227,7 @@ def find(wallet: Wallet, item: str, pid: int) -> Order | None:
 
 
 def mark(wallet: Wallet, order: Order, root: Path) -> Order:
-    """九張齊了而且還在等圖：換成待審。回最新的那一張。"""
+    """十張齊了而且還在等圖：換成待審。回最新的那一張。"""
     if order.status == PENDING and len(present(root, look_id(order.pid))) == len(SHEETS):
         wallet.update_data(order.pid, status=REVIEW)
         return Order(**{**order.__dict__, "status": REVIEW})
@@ -264,7 +264,7 @@ def reject(wallet: Wallet, order: Order, *, now: float, admin: str, note: str) -
 
 
 def gen_prompts(order: Order) -> dict[str, str]:
-    """給生圖工具的提示詞（一張一段）：畫風、九張的動作照斗笠小子那一套（擂台圖提示表），人物換成下單的人寫的那一句。
+    """給生圖工具的提示詞（一張一段）：畫風、十張的動作照斗笠小子那一套（擂台圖提示表），人物換成下單的人寫的那一句。
     生好的圖要切成 220 格、腳底對齊（scripts/cut_look.py）再上傳。"""
     character = (f"Character: a chibi child martial artist (big head about one third of body height) described by the player as: "
                  f"\"{order.prompt}\". Keep the same proportions, size and poses as the attached reference sprite sheet.")
@@ -282,6 +282,7 @@ ACTIONS = {
     "hero_bare_hit": "Getting hit: 1 flinch, head snapping back, 2 knocked backward, arms flung out, 3 staggering to regain balance. Layout: 3 frames in one row. Aspect 3:1.",
     "hero_bare_kneel": "Losing and dropping to one knee: 1 wobbling, 2 one knee bending, 3 kneeling, right fist planted on the ground, head down, 4 same pose, breathing hard. Layout: 4 frames in one row. Aspect 4:1.",
     "hero_bare_dodge": "Dodging: 1 stance, 2 quick lean back and sidestep, 3 deepest point of the dodge, low and leaning back, 4 springing back into stance. Layout: 4 frames in one row. Aspect 4:1.",
+    "hero_bare_block": "Guarding / blocking: 1 settling into a low, wide defensive stance, 2 both fists raised crossed in front of the chest as if holding a blade sideways to block, 3 bracing against an impact, body pushed slightly back, back foot sliding, 4 holding the guard firmly, eyes on the opponent. Layout: 4 frames in one row. Aspect 4:1.",
     "hero_bare_fall": "Knocked down: 1 big hit, flinching back, 2 knocked back with arms up, 3 stumbling backward, 4 falling backward, 5 lying on the back, 6 lying still (knocked out, no blood). Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_atk_slash": "Two-handed overhead slash with an invisible blade: 1 stance, fists together at waist, 2 fists raised over the right shoulder, 3 fists at the top, 4 fast downward diagonal swing, 5 follow-through low in front, 6 returning to stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_atk_pole": "Long-weapon attack with an invisible spear, fists one behind the other at hip height: 1 low stance, 2 pulling back, 3 lunging thrust, arms extended, 4 recovering, 5 wide horizontal sweep, 6 back to stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",

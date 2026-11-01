@@ -83,7 +83,7 @@ def test_the_admin_box_lists_open_orders_with_prompts(m_on):  # noqa: F811
     html = webharness.run(driver, {"m": m_on, "script": script, "S": {}, "menxia": None, "stored": {}, "responses": {}})
     assert "白衣書生，背著竹簍" in html and "Style: idle" in html
     assert 'id="ad-looks-file-5"' in html and 'data-op="reject"' in html
-    assert 'data-op="release" data-id="5" disabled' in html  # 九張還沒齊：上架按不下去
+    assert 'data-op="release" data-id="5" disabled' in html  # 十張還沒齊：上架按不下去
 
 
 MOVES = {"price": 300, "prompt_max": 120, "art": "旋風腿", "has_art": True, "style": "fist", "style_text": "拳腳", "open": False, "bound": False,

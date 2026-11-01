@@ -54,9 +54,9 @@ def test_each_move_has_its_own_moves():
         (A, dict(A, me=85), ["固守", "奇襲"]),  # 奇襲剋固守
         (A, dict(A, me=90, foe=90), ["強攻", "強攻"]),  # 對拼：兩邊都挨
     ])["ex"]
-    assert out[0] == [{"lunge": "me,foe", "me": ["hero_atk_pole", "hero_bare_hit"], "foe": ["hero_bare_guard", "hero_atk_fist"], "keep": False}]
+    assert out[0] == [{"lunge": "me,foe", "me": ["hero_atk_pole", "hero_bare_hit"], "foe": ["hero_bare_block", "hero_atk_fist"], "keep": False}]
     assert out[1] == [{"lunge": "me", "me": ["hero_atk_pole"], "foe": ["hero_bare_dodge", "hero_bare_hit"], "keep": False}]  # 閃到一半被劈中
-    assert out[2] == [{"lunge": "foe", "me": ["hero_bare_guard", "hero_bare_hit"], "foe": ["hero_bare_dodge", "hero_atk_fist"], "keep": False}]
+    assert out[2] == [{"lunge": "foe", "me": ["hero_bare_block", "hero_bare_hit"], "foe": ["hero_bare_dodge", "hero_atk_fist"], "keep": False}]
     assert out[3][0]["me"] == ["hero_atk_pole", "hero_bare_hit"] and out[3][0]["foe"] == ["hero_atk_fist", "hero_bare_hit"]
 
 

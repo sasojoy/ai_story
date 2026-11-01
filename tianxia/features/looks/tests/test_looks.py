@@ -102,7 +102,7 @@ def test_closed_means_default_and_no_view(content):
     assert game.arena_look() == "" and looks_actions.view(game) is None
 
 
-def test_every_look_in_the_real_content_has_all_nine_sheets():
+def test_every_look_in_the_real_content_has_all_ten_sheets():
     from pathlib import Path
 
     from tianxia.content import load_content
@@ -110,7 +110,7 @@ def test_every_look_in_the_real_content_has_all_nine_sheets():
     root = Path(__file__).resolve().parents[4]
     content = load_content(root / "content")
     sheets = sorted(p.name for p in (root / "web/img/arena").glob("hero_*.webp"))
-    assert len(sheets) == 9
+    assert len(sheets) == 10  # 九張加格擋（Joy 11/1）
     for look in content.looks:
         assert sorted(p.name for p in (root / "web/img/looks" / look).glob("hero_*.webp")) == sheets
     sold = {item.look for item in content.mall.values() if item.look}
