@@ -1,0 +1,131 @@
+"""擂台形象的畫面（萬寶閣「形象」那一頁，畫在商城包的網頁檔裡）：貨架上有形象才多一格「形象」；每一套一張卡，穿著的寫「穿著」、買了的「換上」、
+沒買的一顆價錢（點了走貨架同一條購買確認）；換上送 /api/looks/wear。擂台動畫照 looks 的 me_look／foe_look 抓 web/img/looks/<id>/。"""
+from __future__ import annotations
+
+import pytest
+from test_mall_web import _async, _click, _view, m_on, run  # noqa: F401  m_on 是 fixture
+
+import webharness
+
+pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
+
+LOOKS = {"worn": "moying", "looks": [
+    {"id": "", "name": "斗笠小子", "note": "", "owned": True, "item": None},
+    {"id": "moying", "name": "墨影", "note": "一身墨色。", "owned": True, "item": None},
+    {"id": "jinshen", "name": "金身", "note": "通體鎏金。", "owned": False, "item": "look_jinshen"},
+]}
+
+
+def _shelf():
+    d = _view()
+    d["looks"] = True
+    d["items"].append({"id": "look_jinshen", "name": "金身形象", "note": "", "price": 600, "kind": "look", "kind_name": "形象",
+                       "effects": "擂台形象一套（換季也帶著走）", "limit": "", "can": True, "why": None, "after": 4400,
+                       "gives": {"look": 1}, "card_to": None, "look": "jinshen"})
+    return d
+
+
+def _layer(m, extra="", responses=None):
+    """打開商城（點錠子鈕），再做 extra；/api/mall 給有形象的貨架（同 test_mall_web._layer，貨架換一份）。"""
+    return run(m, _async(_click('{ act: "mall-open" }') + extra + """
+      return { app: T.els.app.innerHTML, calls: T.calls };"""), responses={**(responses or {}), "/api/mall": _shelf()})
+
+
+def test_the_look_tab_shows_each_look_and_wears_one(m_on):  # noqa: F811
+    out = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "look-wear", id: "" }'),
+                 responses={"/api/looks/wear": {"message": "換上了「斗笠小子」。", "looks": {**LOOKS, "worn": ""}}, "/api/looks": LOOKS})
+    assert any(c[0] == "/api/looks/wear" and c[1] == {"look": ""} for c in out["calls"])
+    html = out["app"]
+    assert "斗笠小子" in html and "墨影" in html and "金身" in html
+    assert 'data-act="mall-pick" data-id="look_jinshen"' in html  # 沒買的那一套：一顆價錢、走貨架的購買確認
+    assert "/static/img/looks/moying/hero_bare_idle.webp" in html
+    assert "換上了「斗笠小子」" in html
+
+
+def test_no_look_tab_without_looks_on_the_shelf(m_on):  # noqa: F811
+    out = run(m_on, _async(_click('{ act: "mall-open" }') + "return { app: T.els.app.innerHTML };"), responses={"/api/mall": _view()})
+    assert 'data-tab="look"' not in out["app"]
+    assert 'data-tab="look"' in _layer(m_on)["app"]
+
+
+ORDER = {"price": 900, "name_max": 6, "prompt_max": 120, "open": False, "list": [
+    {"id": 3, "name": "黑衣客", "prompt": "黑衣蒙面", "status": "rejected", "status_text": "退回", "reason": "看不清楚"},
+]}
+
+
+def test_the_look_tab_has_the_order_form_and_my_orders(m_on):  # noqa: F811
+    looks = {**LOOKS, "order": ORDER}
+    out = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "look-order" }'),
+                 responses={"/api/looks": looks})
+    html = out["app"]
+    assert 'id="look-name"' in html and 'id="look-prompt"' in html and 'data-act="look-order"' in html
+    assert "黑衣客" in html and "退回" in html and "看不清楚" in html
+    assert "先替這一套取個名字" in html  # 沒填名字就按：掌櫃講原因、不送
+    assert not any(c[0] == "/api/looks/order" for c in out["calls"])
+
+
+def test_an_open_order_hides_the_form(m_on):  # noqa: F811
+    looks = {**LOOKS, "order": {**ORDER, "open": True, "list": [{**ORDER["list"][0], "status": "pending", "status_text": "等圖中", "reason": ""}]}}
+    html = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }'), responses={"/api/looks": looks})["app"]
+    assert 'id="look-name"' not in html and "等圖中" in html
+
+
+def test_the_admin_box_lists_open_orders_with_prompts(m_on):  # noqa: F811
+    import json
+
+    from test_mall_web import DRIVER as MALL_DRIVER
+
+    driver = MALL_DRIVER.replace('wholeApp(["S", ', 'wholeApp(["S", "looksAdminHtml", ', 1)
+    admin = {"sheets": {"hero_bare_idle": 4, "hero_bare_hit": 3}, "gen": "off", "done": [], "open": [
+        {"id": 5, "owner": "沈浪", "name": "白衣書生", "prompt": "白衣書生，背著竹簍", "status": "pending", "status_text": "等圖中",
+         "reason": "", "look": "u5", "have": ["hero_bare_idle"], "prompts": {"hero_bare_idle": "Style: idle", "hero_bare_hit": "Style: hit"}}]}
+    script = f"H.S.adLooks = {json.dumps(admin, ensure_ascii=False)}; return H.looksAdminHtml();"
+    html = webharness.run(driver, {"m": m_on, "script": script, "S": {}, "menxia": None, "stored": {}, "responses": {}})
+    assert "白衣書生，背著竹簍" in html and "Style: idle" in html
+    assert 'id="ad-looks-file-5"' in html and 'data-op="reject"' in html
+    assert 'data-op="release" data-id="5" disabled' in html  # 十張還沒齊：上架按不下去
+
+
+MOVES = {"price": 300, "prompt_max": 120, "art": "旋風腿", "has_art": True, "style": "fist", "style_text": "拳腳", "open": False, "bound": False,
+         "library": [{"id": 7, "move": "m7", "art": "流雲掌", "style": "fist", "style_text": "拳腳", "prompt": "青色劍氣", "status": "made",
+                      "status_text": "上架", "reason": "", "bound": "", "on_art": False, "bindable": True}],
+         "list": []}
+
+
+def test_the_move_section_orders_and_binds(m_on):  # noqa: F811
+    """招式動畫（第三批）：寫現在練的那一門與打法、下單的表單、招式庫一列一顆「綁到」；綁送 /api/looks/bind。"""
+    looks = {**LOOKS, "moves": MOVES}
+    out = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "move-bind", id: "7" }'),
+                 responses={"/api/looks/bind": {"message": "把招式綁到「旋風腿」上了（這一季）。", "looks": looks}, "/api/looks": looks})
+    html = out["app"]
+    assert "招式動畫" in html and "現在練的「旋風腿」・打法拳腳" in html
+    assert 'id="move-prompt"' in html and 'data-act="move-order"' in html
+    assert "/api/looks/img/m7/fx" in html and "/static/img/arena/fx_sample.webp" in html
+    assert any(c[0] == "/api/looks/bind" and c[1] == {"id": 7} for c in out["calls"])
+    assert "把招式綁到「旋風腿」" in html
+
+
+def test_no_art_no_move_form(m_on):  # noqa: F811
+    looks = {**LOOKS, "moves": {**MOVES, "has_art": False, "art": "", "library": []}}
+    html = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "move-order" }'), responses={"/api/looks": looks})["app"]
+    assert 'id="move-prompt"' not in html and "先練一門自己合成或自創的武功" in html
+
+
+MARKET = {"shelf": [{"look": "u5", "name": "白衣書生", "seller": "沈浪", "price": 800}],
+          "mine": [{"look": "u9", "name": "黑衣客", "price": None}, {"look": "u11", "name": "紅袍", "price": 700}],
+          "min": 300, "max": 3000, "default": 600, "share": 0.5, "hold_days": 7, "paid_only": False, "sold": 2, "paid": 400, "held": 350}
+
+
+def test_the_market_buys_lists_and_unlists(m_on):  # noqa: F811
+    """形象市集（第四批）：別人的一套一顆價錢（先問一次才送）；自己的沒掛寫價錢「掛上去」、掛著的「撤下」；寫賣了幾份與分成。"""
+    looks = {**LOOKS, "market": MARKET}
+    reply = {"message": "買下了「白衣書生」（沈浪做的）：元寶 -800（還剩 4200）。", "looks": looks}
+    out = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "market-buy", id: "u5", name: "白衣書生", price: "800" }')
+                 + _click('{ act: "ask-yes" }') + _click('{ act: "market-list", id: "u9" }') + _click('{ act: "market-unlist", id: "u11" }'),
+                 responses={"/api/looks/market": reply, "/api/looks": looks})
+    html = out["app"]
+    assert "形象市集" in html and "沈浪做的" in html and 'data-act="market-buy" data-id="u5"' in html
+    assert 'id="market-price-u9"' in html and "掛著・700" in html and "賣出 2 份・分成入帳 400・押著 350" in html
+    sent = [c[1] for c in out["calls"] if c[0] == "/api/looks/market"]
+    assert sent[0]["op"] == "buy" and sent[0]["look"] == "u5" and sent[0]["ref"]
+    assert sent[1] == {"op": "list", "look": "u9", "price": 600} and sent[2] == {"op": "unlist", "look": "u11"}

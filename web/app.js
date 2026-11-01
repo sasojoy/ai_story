@@ -130,7 +130,8 @@
     sealShut: {}, // 兩張玉璽卡收起來的狀態（FB-182，照懸賞卡）：duel＝奪璽卡那一場的 id、card＝碎片卡的 sealCardKey；換了一場、被牽動了就重新展開
     // 商城（商城第二批，企劃者 2026-10-20 挑的入口乙＋丙、那一層子）：跟三間店不同，開不開只在網頁這一邊（伺服器沒有「人在店裡」這件事）
     mallOpen: false, // 商城那一層開著沒（齒輪旁的錠子鈕、底部第六格打開，左上「出店」收起）
-    mallTab: "shelf", // 停在哪一頁（shelf 貨架／log 紀錄）；每次打開從貨架來
+    mallTab: "shelf", // 停在哪一頁（shelf 貨架／look 形象／log 紀錄）；每次打開從貨架來
+    mallLooks: null, // 形象那一頁（/api/looks）
     mallData: null, // /api/mall 那一份（餘額、月卡、回體丹、上架的商品）：打開時重抓、買完換成回來的那一份
     mallLog: null, // /api/mall/records 那一份（紀錄頁）：切到紀錄頁就重抓
     mallSay: null, // 掌櫃那一句換成什麼：{ text, ok }（買成了的那一句、買不了的原因）；換頁、出店清掉
@@ -4635,6 +4636,7 @@
               <p class="muted">重設密碼（朋友忘記密碼時用；臨時密碼私下告訴他）</p>
               <form id="reset-form"><div class="row"><input class="input" name="target" placeholder="帳號或名號"><input class="input" name="temp" placeholder="臨時密碼"><button class="btn small" type="submit">重設</button></div><p class="form-msg" role="alert"></p></form>` : ""}
             ${S.main.mall ? mallAdminHtml() : ""}
+            ${S.main.mall && S.main.looks_admin ? looksAdminHtml() : ""}
           </section>` : ""}
       </div>`;
   }
@@ -6044,6 +6046,14 @@
           break;
         }
         case "mall-claim": await mallClaim(); break;
+        case "look-wear": await lookWear(el.dataset.id || ""); break; // 萬寶閣「形象」那一頁換上一套
+        case "look-order": lookOrderAsk(); break; // 自建形象下單（先問一次）
+        case "move-order": moveOrderAsk(); break; // 招式動畫下單（先問一次）
+        case "market-buy": lookMarketAsk(el.dataset.id, el.dataset.name || "", Number(el.dataset.price) || 0); break; // 形象市集買一套（先問一次）
+        case "market-list": await lookMarketList(el.dataset.id); break; // 自己做的一套掛上市集（照框裡的價錢）
+        case "market-unlist": await lookMarketDo({ op: "unlist", look: el.dataset.id }); break;
+        case "move-bind": await moveBind(el.dataset.id); break; // 招式庫的一招綁到現在練的那一門
+        case "looks-admin": await looksAdminDo(el.dataset.op, el.dataset.id); break; // 管理者區「自建形象」
         case "mall-retry": await (S.mallTab === "log" ? loadMallLog() : loadMall()); break;
         case "mall-admin": mallAdminAsk(el.dataset.op, el.dataset.id); break;
         case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); forgetHowto(); S.sheet = false; S.peer = null; S.adPlayer = null; S.adPlayerName = ""; S.stage = "gate"; S.main = null; forgetMap(); forgetMall(); render(); break;
@@ -6568,6 +6578,7 @@
       if ((old && old.mall ? old.mall.balance : null) !== S.main.mall.balance) {
         await loadMall();
         if (S.mallTab === "log") await loadMallLog();
+        if (S.mallTab === "look") await loadLooks();
       }
       return;
     }
