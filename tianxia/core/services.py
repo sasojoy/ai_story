@@ -65,9 +65,10 @@
 - `ctx._battle_for_me(tick)`：場景上畫著的那一場（戰鬥, 定義），序章裡、沒有是 None；tick 照原位（畫面是 False、放手一搏送出是 True：
   一次請求只推進一次）。`ctx._battle_now()`：此刻自己參戰（或看）的那一場（酒肆也在用：殺手不找決戰裡的人；酒肆第 10 批在三、過渡
   也記了一行，第 11 批去重，留這一行）
-- `ctx._definition_of(battle)`（那一場的定義：攻城戰是「攻城・地點」）、`ctx._battle_region_name(definition)`（決戰的大區叫什麼）
-- `ctx._watching_battle(battle, definition)`（此刻只能在一旁看）、`ctx._absent_reason(definition)`（還沒到戰場的原因）、
-  `ctx._free_agent(definition)`（散人、豪強：只能臨時投效）、`ctx._own_side_name()`（臨時投效的人打完照樣是誰）
+- `ctx._definition_of(battle)`（那一場的定義：攻城戰是「攻城・地點」）
+- `ctx._watching_battle(battle, definition)`（此刻只能在一旁看）、`ctx._free_agent(definition)`（散人、豪強：只能臨時投效；本體第 7 批搬進
+  `features/battle/muster.py`，決戰包裡直接叫，別的包問它叫 Game 的委派）。（第 7 批：決戰的大區叫什麼、還沒到戰場的原因、臨時投效的人
+  打完照樣是誰三個本體搬進 `muster.py`、只有決戰包裡叫，Game 上不留，從這裡拿掉）
 # battle（全部拆包第 6 批）
 - `ctx._definition_of` 的本體搬進了包（`features/battle/sieges.py`），包裡照樣經 ctx 叫（測試直接叫 `Game._definition_of`）；
   `ctx._sieges()`（還沒收場的攻城戰，照開集結的先後；這一季沒開領地爭奪是空的、不讀資料庫）——本體也在 `sieges.py`，核心原位叫委派，
@@ -96,8 +97,8 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._squad_encounter(squad_id, as_sortie=True)`（戰鬥：打一場隊伍，出陣攻打）
 - `ctx._train_option(...)`、`ctx._train_pick(loc)`、`ctx._big_trip(loc)`（舊遊歷：勝算與必敗先問的鈕、大場面挑哪一路）
 # battle（主動搬六包第 5 批；擺在這兩行之間：別條拆包線與 develop 改的是段頭、_order_credit、_outing_on 以下與段尾，不跟它們貼在一起）
-- `ctx._submit_battle_action(...)`、`ctx._mutate_battle_of(battle, fn)`、`ctx._escort_home(escort)`（決戰「打」那一半：放手一搏送出、改共用狀態裡的
-  那一場、隨你出陣的同伴回江湖；第 7、8 批搬進決戰包之後改成包裡直接叫）
+- `ctx._mutate_battle_of(battle, fn)`（決戰「打」那一半：改共用狀態裡的那一場；第 8 批搬進決戰包之後改成包裡直接叫。第 7 批：放手一搏送出、
+  隨你出陣的同伴回江湖兩個本體搬進 `muster.py`、包裡直接叫，從這裡拿掉）
 - `ctx._four_wins()`（三陣營四勝利：這一季開著沒；決戰的軍餉記不記豪強的貢獻）
 # battle（全部拆包第 6 批：管理者的決戰工具、攻城）
 - `ctx._shelve_unfinished_battle(text)`、`ctx._advance_battle_round(battle, definition)`、`ctx._apply_battle_outcome(battle)`（測試換掉
