@@ -123,6 +123,35 @@ def test_tapping_a_forged_cell_shows_its_line_from_the_book():
     assert "dv-line" not in out["closed"]  # 再點一次收起
 
 
+_SCROLL = """return (async () => {
+    // 捲的那一層：底邊在分頁列頂上（320×700 實機量到 658）；翻出的那一行畫在整本收藏冊底下（739～769），畫上去了才找得到
+    const line = { getBoundingClientRect: () => ({ top: %(top)s, bottom: %(bottom)s }) };
+    const body = { scrollTop: 40, getBoundingClientRect: () => ({ top: 150, bottom: 658 }),
+      querySelector: (s) => (s === ".dv-line" && T.els.app.innerHTML.includes('class="dv-line"') ? line : null) };
+    T.qs[".shop-layer .shop-body"] = body;
+    H.render();
+    """ + _click('{ act: "dv-cell", id: "%(id)s" }') + """
+    await new Promise((ok) => setTimeout(ok, 5));
+    const opened = body.scrollTop;
+    body.scrollTop = 40;
+    """ + _click('{ act: "dv-cell", id: "%(id)s" }') + """
+    return { opened, closed: body.scrollTop };
+  })();"""
+
+
+@pytest.mark.parametrize(("top", "bottom", "opened"), [(739, 769, 40 + 769 + 8 - 658), (600, 630, 40)])
+def test_the_book_line_is_scrolled_above_the_tab_bar(top, bottom, opened):
+    """點收藏冊一格翻出的那一行畫在整本收藏冊底下：小螢幕（320×700，375×667 照算的也一樣）或江湖已見的列多了，那一行落在捲的那一層的底邊
+    （分頁列頂上）以下、看起來點了沒反應（審查 2026-11-01）。翻出來之後往下捲到那一行整個看得到（底下留 8px）；本來就看得到的不動，收起不捲。"""
+    c, w = _divine_ctx()
+    jia, yi = _smith(c, w, "甲"), _smith(c, w, "乙")
+    _forge_sword(c, w, jia)
+    m = _shop_of(yi)
+    boards = {"boards": [{"id": "神器", "title": "神器譜", "note": "", "book": yi.divine_book_view()}]}
+    out = run(m, _SCROLL % {"top": top, "bottom": bottom, "id": SWORD}, S={"shopTab": "divine"}, responses={"/api/boards": boards})
+    assert out == {"opened": opened, "closed": 40}
+
+
 def test_question_marks_carry_no_data():
     """收藏冊沒人打出過的格子：伺服器給的 id、name 都是 None；畫出來的「？」不可點、不帶任何 data（名單不能從屬性裡讀出來）。"""
     c, w = _divine_ctx()

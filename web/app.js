@@ -3727,13 +3727,24 @@
       <h4 class="dv-h">${divineAlbum(dv, DV_ALBUM)}</h4><div class="dv-album">${dv.collected.cells.map(divineCellHtml).join("")}</div>
       ${line ? `<p class="dv-line">${esc(line)}</p>` : ""}`;
   }
+  // 翻出的那一行畫在整本收藏冊底下：小螢幕（320×700、375×667）或江湖已見的列多了，那一行落在捲的那一層的底邊（分頁列頂上）以下，
+  // 看起來點了沒反應。畫完量那一行的底跟捲的那一層的底，差多少往下捲多少、底下留一點空；本來就看得到的不動（審查 2026-11-01）
+  const DV_LINE_ROOM = 8;
+  function divineLineShow() {
+    const body = document.querySelector(".shop-layer .shop-body");
+    const line = body && body.querySelector ? body.querySelector(".dv-line") : null;
+    if (!line) return;
+    const below = line.getBoundingClientRect().bottom + DV_LINE_ROOM - body.getBoundingClientRect().bottom;
+    if (below > 0) body.scrollTop += below;
+  }
   // 點收藏冊的一格：翻出（再點收起）神器譜那一行；手上的榜單沒有那一筆（還沒看過榜單、或是剛打出來的）就抓一次再畫
   async function divinePick(id) {
     S.divinePick = S.divinePick === id ? null : id;
     renderShop();
+    divineLineShow();
     if (!S.divinePick || divineBookLine(id) !== null) return;
     try { await loadBoards(); } catch (e) { return; } // api() 提示過
-    if (S.divinePick === id) renderShop();
+    if (S.divinePick === id) { renderShop(); divineLineShow(); }
   }
 
   // 只重畫店面那一層（輪詢、爐裡換了東西）；畫面上還沒有那一層就整個重畫。店裡捲到哪裡照放回去（往下捲去點素材格，
