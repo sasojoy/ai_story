@@ -45,15 +45,17 @@ class SortieFeature(Feature):
     def verbs(self) -> tuple[Verb, ...]:
         """act:train 那一格的主人（act 子動詞，第 11 批；actions.py 的 train_*）：行動列那一格（地盤開著時整格，問 enabled）、底下那一行、
         按下去（約戰開著時打開那張卡）、紀錄標題（出陣／雪恥／遊歷・某地：關著照舊寫遊歷，所以不問 enabled）、只打開那張卡的回話
-        （sortie_duel.PICK：不算做過、不寫紀錄）。出陣那一場本身（扣體力、並肩出陣）照舊在核心 _act，總表第 17 批收。建一次就留著。"""
+        （sortie_duel.PICK：不算做過、不寫紀錄）。出陣那一場本身（扣體力、並肩出陣）照舊在核心 _act，總表第 17 批收。建一次就留著，
+        每一格在叫的那一下才照模組屬性找 actions 的函式（monkeypatch 照樣有效；tests/core/test_contract_features.py 守）。"""
         if self._verbs is None:
             from . import actions, duel_rules  # noqa: PLC0415
 
             def title(ctx):
                 return f"{actions.train_title(ctx)}・{ctx.content.locations[ctx.state.player.location].name}"
 
-            self._verbs = (Verb("train", run=actions.train_run, title=title, cell=actions.train_cell, note=actions.train_note,
-                                picks=(duel_rules.PICK,)),)
+            self._verbs = (Verb("train", run=lambda ctx, prepared: actions.train_run(ctx, prepared), title=title,
+                                cell=lambda ctx, loc, cost, odds: actions.train_cell(ctx, loc, cost, odds),
+                                note=lambda ctx, loc: actions.train_note(ctx, loc), picks=(duel_rules.PICK,)),)
         return self._verbs
 
     def choose_unlisted(self, ctx, option_id):

@@ -110,6 +110,67 @@ def test_a_tuple_prefix_is_spread_and_dispatched_by_the_first_match(monkeypatch)
     assert features_core.owner_of("seal:go") is one and features_core.owner_of("act:arena") is None
 
 
+def _held_functions(fn) -> list:
+    """fn 與它的閉包裡（一層層往下）存著的函式物件。"""
+    out, stack, seen = [], [fn], set()
+    while stack:
+        f = stack.pop()
+        if id(f) in seen or not hasattr(f, "__code__"):
+            continue
+        seen.add(id(f))
+        out.append(f)
+        for cell in getattr(f, "__closure__", None) or ():
+            try:
+                stack.append(cell.cell_contents)
+            except ValueError:  # 還沒賦值的格
+                continue
+    return out
+
+
+@pytest.mark.parametrize("feature", FEATURES, ids=lambda f: f.name)
+def test_declared_seams_look_up_the_package_functions_when_called(feature):
+    """店面登記（Shop）與 act 子動詞（Verb）建一次就留著（契約照同一個物件認），裡面每一格卻要在叫的那一下才去包的模組找函式
+    （批次表第二節「同一個模組物件，monkeypatch 照樣有效」；原本 Game 上的委派每次照模組屬性找）：宣告裡、它的閉包裡都不准存著
+    包裡別的模組的函式物件（`menu=actions.tavern_options`、`on = explore_actions.outing_on`）——存了的話，建好之後換掉模組上的函式打不到，
+    建之前就換的話還原之後還留著，漏到同一個行程後面的測試（第 11 批審查）。寫成在包的 __init__ 裡的 lambda、照模組屬性叫。"""
+    import dataclasses
+
+    home = type(feature).__module__
+    for decl in [*feature.shops(), *feature.verbs()]:
+        for field in dataclasses.fields(decl):
+            value = getattr(decl, field.name)
+            if not callable(value):
+                continue
+            held = [f"{f.__module__}.{f.__qualname__}" for f in _held_functions(value) if f.__module__ != home]
+            assert not held, (feature.name, type(decl).__name__, getattr(decl, "verb", getattr(decl, "key", None)), field.name, held)
+
+
+def test_a_patched_package_function_reaches_the_seam_before_and_after_the_first_call(monkeypatch):
+    """同上，照實際的路走一次：先照常問一次紀錄標題（宣告建好），再換掉酒肆的招牌、探索的開關，掛鉤要叫到換過的；宣告建之前就換、
+    換回來之後，掛鉤要跟著回到真的那一個（不留在閉包裡）。"""
+    from tianxia import journal
+    from tianxia.features.explore import FEATURE as explore
+    from tianxia.features.explore import explore_actions
+    from tianxia.features.tavern import actions as tavern_actions
+
+    game = _game()
+    game._action_title("act", "tavern")
+    game._action_title("act", "explore")
+    monkeypatch.setattr(tavern_actions, "tavern_sign", lambda ctx: "換過的招牌")
+    assert game._action_title("act", "tavern") == "換過的招牌"
+    real = bool(explore_actions.outing_on(game))
+    monkeypatch.setattr(explore_actions, "outing_on", lambda ctx: not real)
+    assert game._action_title("act", "explore").startswith(journal.OUTING) is (not real)
+    monkeypatch.undo()
+
+    monkeypatch.setattr(explore, "_verbs", None)  # 宣告還沒建（例：同一個 worker 裡這是第一個問它的測試）
+    with monkeypatch.context() as m:
+        m.setattr(explore_actions, "outing_on", lambda ctx: not real)
+        assert game._action_title("act", "explore").startswith(journal.OUTING) is (not real)
+    assert bool(explore_actions.outing_on(game)) is real
+    assert game._action_title("act", "explore").startswith(journal.OUTING) is real
+
+
 def test_every_package_web_file_is_loaded_by_the_page_and_the_web_harness():
     """一包登記的網頁檔（Feature.web；手冊 3.3、3.7）現在還記在三個地方：登記、index.html、tests/kit/webharness.APP_FILES（第 3 階才由伺服器
     照 FEATURES 生成）。三份要對得上：漏寫進 index.html 頁面上就沒有它，漏寫進 APP_FILES 網頁測試的假瀏覽器裡就沒有它，兩種都不會讓別的測試紅。

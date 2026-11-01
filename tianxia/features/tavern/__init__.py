@@ -54,7 +54,7 @@ class TavernFeature(Feature):
         """店面登記：酒肆是第一間搬成包的店（原本 Game 上七間店共用的那幾處，酒肆那幾行照抄；都排在舊的六間後面）——坐在酒肆裡
         （picking_tavern）選單整個是酒肆那一串（actions.tavern_options）；此地還能做裡「酒肆」那一顆（開著、這裡帶酒肆標籤，只是打開酒肆，
         不花體力）；店面那一頁的 key 是 tavern（坐著、這裡也還開著）；動身、此地不開了收起來（rules.close：掌櫃那一句一併清）。
-        建一次就留著（契約測試照同一個物件認）。"""
+        建一次就留著（契約測試照同一個物件認），每一格在叫的那一下才照模組屬性找 actions、rules 的函式（monkeypatch 照樣有效）。"""
         if self._shops is None:
             from tianxia.core.option import Option  # noqa: PLC0415
 
@@ -65,7 +65,7 @@ class TavernFeature(Feature):
 
             self._shops = (Shop(
                 key="tavern", inside=lambda ctx: ctx.state.player.picking_tavern, here=lambda ctx: rules.here(ctx.state, ctx.content),
-                close=lambda ctx: rules.close(ctx.state), menu=actions.tavern_options, entry=entry,
+                close=lambda ctx: rules.close(ctx.state), menu=lambda ctx: actions.tavern_options(ctx), entry=entry,
             ),)
         return self._shops
 
@@ -78,7 +78,7 @@ class TavernFeature(Feature):
         if self._verbs is None:
             from . import actions  # noqa: PLC0415
 
-            self._verbs = (Verb("tavern", run=lambda ctx, prepared: actions.tavern_enter(ctx), title=actions.tavern_sign),)
+            self._verbs = (Verb("tavern", run=lambda ctx, prepared: actions.tavern_enter(ctx), title=lambda ctx: actions.tavern_sign(ctx)),)
         return self._verbs
 
     def on_away(self, ctx, away_from) -> None:
