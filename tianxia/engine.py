@@ -122,6 +122,9 @@ from .world import (
     resume_season_clock, settle_season_start, showdown_key, start_pending_battle,
 )
 from .world_state import SealDuel, SealSide, WorldStateStore, season_length_days
+# core-events：事件檢定是核心本體（tianxia/core/event_check.py，全部拆包第 16 批）。排在上面的 import 都做完之後：那一份 import 的模組這時都已經
+# 載入，載入的先後一個都不變；模組層的四個名字照名字拿回來（server、假人、測試 `from tianxia.engine import FREE_TEXT_OPTION` 照舊）
+from .core.event_check import EVIL_ANNAL, FREE_TEXT_OPTION, FreeTextOutcome, FreeTextRequest
 
 HOUR = 3600
 DAY = 86400
@@ -196,8 +199,8 @@ def _points(lines: list[str]) -> int:
 LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣血見底」：厚的那一句「氣血見底，……硬撐」（battlelog.LOW_HP_MARKS）才挑得到
 
 RANK_ACTION_PREFIX = "act:rank:"  # 第 3、4 階行動的選項 id 前綴（act:rank:<行動 id>，正式版戊一）；models.ALLOW_FAMILIES 也列它，原始碼裡要真的有
-FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只是叫出輸入框，真正送出走 free_text_request／answer_event
-EVIL_ANNAL = "，行了一件惡事，成了。"  # 行狀：隨口應對判成惡行而且成了（FB-223），接在「遇上【某事】，隨口應對」後面。待 joy 潤
+# （FREE_TEXT_OPTION、EVIL_ANNAL 與 FreeTextRequest、FreeTextOutcome 搬進核心的事件檢定 tianxia/core/event_check.py，全部拆包第 16 批；
+# 上面 import 回來，`from tianxia.engine import FREE_TEXT_OPTION` 照舊拿得到）
 # 跟人物對話時的「自己說」（企劃者 2026-10-08）：按下去只是叫出輸入框，真正送出帶著那句話走 choose(SAY_OPTION, text=…)（server.say）
 SAY_OPTION = "talk:say"
 # NPC 智能 2.1（parley.py）：同「自己說」要打一句話的兩顆——對話裡跟答應陪你出陣的人商量打法、他帶路的路上跟他說一句
@@ -340,14 +343,6 @@ def _not_while_preparing(action: Callable) -> Callable:
     return guarded
 
 
-class FreeTextRequest(BaseModel):
-    """隨口應對鎖外評估的單子（server.py 的 A 段拿到、B 段送模型、C 段交回 answer_event 重驗）。"""
-    event_id: str
-    text: str
-    # 減法季批 4：分岔開著、這則事件寫了後果時是可能的走向（outcomes.tags；B 段照它改叫 event_llm.judge_outcome）；其餘是空的
-    outcomes: list[dict[str, str]] = []
-
-
 class DuelTextRequest(BaseModel):
     """頭目戰放手一搏鎖外評估的單子（server.duel_text 的 A 段拿到、B 段送模型、C 段交回 duel_gamble 重驗：同一隻、同一回合、同一句才用）。"""
     boss: str
@@ -363,18 +358,6 @@ class DuelTextRequest(BaseModel):
     target: str = ""
     setting: str = ""
     place: str = ""
-
-
-class FreeTextOutcome(BaseModel):
-    """擲完骰的結果：server.py 拿它在鎖外請模型潤色，再交回 add_gamble_narration 插進那一則江湖紀錄。"""
-    event_id: str
-    text: str
-    success: bool
-    effect_text: str
-    time: float  # 那一則紀錄的遊戲時間與標題，插潤色前用來認是不是同一則
-    title: str
-    evil: bool = False  # 判成惡行而且成了（FB-223）：effect_text 是 rules.EVIL_DONE，潤色照惡行寫、寫成了換掉那一句
-    outcome: str = ""  # 減法季批 4：分岔開著時走的是哪一種後果（id）；關著是空的
 
 
 ONBOARD_SEGMENT = 4  # 初入江湖上線的版本章（ONBOARDING_VERSION 升到 4 的那一版）：比它小、已經走出草廬的存檔讀檔時蓋成引導走完

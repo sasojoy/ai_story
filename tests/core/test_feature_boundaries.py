@@ -548,6 +548,53 @@ def test_feature_packages_only_touch_the_service_list_on_the_game():
     assert found == []
 
 
+# core-events（全部拆包第 16 批「事件檢定進核心」，計畫 docs/superpowers/plans/2026-11-01-事件檢定進核心.md）：事件檢定的本體從 Game 搬進
+# 核心本體 tianxia/core/event_check.py。以前那幾個方法在 Game 上，叫包的委派會被 game_links 記成 GAME_DELEGATE_CALLERS；搬進 tianxia/core/
+# 之後 game_links（只掃 engine.py）看不到，所以這裡補兩條：核心模組經 ctx 叫的不准是包的委派；Game 上叫 event_check 的只有那幾個一行的委派。
+CORE_EVENT_DELEGATES: set[str] = set()  # Game 上本體只有一行 `return event_check.<名>(self, …)` 的方法（Task 3 填）
+
+
+def ctx_package_calls(source: str, name: str) -> list[str]:
+    """核心模組（source 是原文、name 是檔名）經 ctx.<名> 叫的、而且是 GAME_DELEGATES 裡包的委派的那幾處。"""
+    return [f"{name}:{node.lineno} ctx.{node.attr}" for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "ctx" and node.attr in GAME_DELEGATES]
+
+
+def test_the_core_modules_reach_no_package_delegate_through_ctx():
+    """tianxia/core/ 底下（registry.py 以外）經 ctx 叫回 Game 的，沒有一個是包的委派：要用包的東西照第 11 批開掛鉤（接縫掛鉤、Shop、Verb）。"""
+    found = []
+    for path in sorted((TIANXIA / "core").glob("*.py")):
+        if path.name != "registry.py":
+            found += ctx_package_calls(path.read_text(encoding="utf-8"), path.name)
+    assert found == []
+    assert ctx_package_calls("def f(ctx):\n    return ctx._tavern_price(1)\n", "m") == ["m:2 ctx._tavern_price"]  # 掃描抓得到
+    assert ctx_package_calls("def f(ctx):\n    return ctx._present(e)\n", "m") == []
+
+
+def event_check_delegates() -> set[str]:
+    """engine.Game 上本體（說明字以外）只有一行 `return event_check.<名>(self, …)` 的方法。"""
+    game = next(n for n in _engine_tree().body if isinstance(n, ast.ClassDef) and n.name == "Game")
+    out = set()
+    for f in game.body:
+        if not isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        body = [n for n in f.body if not (isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant))]
+        call = body[0].value if len(body) == 1 and isinstance(body[0], ast.Return) else None
+        if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name)
+                and call.func.value.id == "event_check" and call.args and isinstance(call.args[0], ast.Name) and call.args[0].id == "self"):
+            out.add(f.name)
+    return out
+
+
+def test_the_game_reaches_the_event_check_only_through_its_one_line_delegates():
+    """Game 上叫 event_check 的只有 CORE_EVENT_DELEGATES 那幾個一行的委派（多一處就是把事件檢定的邏輯寫回 Game、或委派加了邏輯）。"""
+    game = next(n for n in _engine_tree().body if isinstance(n, ast.ClassDef) and n.name == "Game")
+    users = {f.name for f in game.body if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))
+             and any(isinstance(n, ast.Name) and n.id == "event_check" for n in ast.walk(f))}
+    assert event_check_delegates() == CORE_EVENT_DELEGATES
+    assert users == CORE_EVENT_DELEGATES
+
+
 # ── 網頁框架（docs/guide/核心與存檔.md「tianxia/ 不得 import 任何網頁框架」的例外，PM 10/31）──
 # 只有 tianxia/features/<包>/routes.py 可以 import fastapi，而且只在殼掛路由時延後 import（包的 __init__ 在 routes()、
 # admin_tools() 裡面才 from . import routes）；引擎、run_bots、假人不碰。
