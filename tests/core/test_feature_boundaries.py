@@ -559,21 +559,48 @@ CORE_EVENT_DELEGATES = {  # Game 上本體只有一行 `return event_check.<名>
 }
 
 
-def ctx_package_calls(source: str, name: str) -> list[str]:
-    """核心模組（source 是原文、name 是檔名）經 ctx.<名> 叫的、而且是 GAME_DELEGATES 裡包的委派的那幾處。"""
-    return [f"{name}:{node.lineno} ctx.{node.attr}" for node in ast.walk(ast.parse(source))
-            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "ctx" and node.attr in GAME_DELEGATES]
+# 核心模組經 ctx 叫包的委派（過渡；同 GAME_DELEGATE_CALLERS 的格式與規矩：(模組.函式, 委派) → 為什麼留、哪一批收）。dev/core-events-1 審查補的：
+# 搬進 tianxia/core/ 之前，這些呼叫在 Game 上，主人搬成包、留下委派的那一批照批次表第二節記進 GAME_DELEGATE_CALLERS；搬進核心之後記這裡。
+# 現在是空的：event_check 經 ctx 叫的 Game 方法都還不是包的委派。總表（final_owner.json）把其中 8 個歸給包，那一包搬的批把它換成委派時
+# 這條守門會紅——照下面取消註解、附上理由（或照第 11 批開掛鉤、拿掉那一處），不要拿掉守門：
+#   ("event_check.event_tier", "_battle_for_me")：features/battle（決戰「打」，第 8 批）：全服戰鬥蓋著場景時不寫分級那一行
+#   ("event_check.answer_event", "_begin_enlistment")、("event_check.answer_event", "_greet_rejoin")、
+#   ("event_check.answer_event", "_check_hints")：features/guide（新手引導）：隨口應對的結果也可能拜入門派、碰到新玩法
+#   ("event_check.answer_event", "_general_gifts")、("event_check.answer_event", "_signature_arms")、
+#   ("event_check.answer_event", "_gift_entry")：features/gear：效果加了情誼，另起一則贈禮
+#   ("event_check.answer_event", "_report_seat")：features/orders：效果推了大勢、記了貢獻，第四階席次的帳也抄
+#   answer_branch 叫同樣那 7 個（一共 15 對）。
+# import 那一向沒有名單：event_check 第 37 行 import 的 bounties（總表歸 features/bounties）、foreshadow（歸 features/orders）成包、
+# 舊名留成別名時，test_the_core_never_imports_a_feature_package_except_the_registry 會抓到（核心只准 engine.py 的 GAME_IMPORTS）；
+# 那一批交 PM 定：開一張核心的 import 名單，或那一包開查詢服務、event_check 改經 ctx 叫。
+CORE_DELEGATE_CALLERS: dict[tuple[str, str], str] = {}
+
+
+def ctx_delegate_callers(source: str, name: str, delegates: set[str] | None = None) -> set[tuple[str, str]]:
+    """核心模組（source 是原文、name 是模組名，例 event_check）經 ctx.<名> 叫的、而且是包的委派（預設 GAME_DELEGATES）的
+    (模組.函式, 委派)；函式以外的記成 (模組, 委派)。巢狀的函式算在最外層那一個。"""
+    delegates = GAME_DELEGATES if delegates is None else delegates
+    out: set[tuple[str, str]] = set()
+    for top in ast.parse(source).body:
+        where = f"{name}.{top.name}" if isinstance(top, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) else name
+        out |= {(where, node.attr) for node in ast.walk(top)
+                if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "ctx" and node.attr in delegates}
+    return out
 
 
 def test_the_core_modules_reach_no_package_delegate_through_ctx():
-    """tianxia/core/ 底下（registry.py 以外）經 ctx 叫回 Game 的，沒有一個是包的委派：要用包的東西照第 11 批開掛鉤（接縫掛鉤、Shop、Verb）。"""
-    found = []
+    """tianxia/core/ 底下（registry.py 以外）經 ctx 叫回 Game 的，是包的委派的只有 CORE_DELEGATE_CALLERS 列的過渡（附理由）；
+    新的要用包的東西照第 11 批開掛鉤（接縫掛鉤、Shop、Verb）。"""
+    found: set[tuple[str, str]] = set()
     for path in sorted((TIANXIA / "core").glob("*.py")):
         if path.name != "registry.py":
-            found += ctx_package_calls(path.read_text(encoding="utf-8"), path.name)
-    assert found == []
-    assert ctx_package_calls("def f(ctx):\n    return ctx._tavern_price(1)\n", "m") == ["m:2 ctx._tavern_price"]  # 掃描抓得到
-    assert ctx_package_calls("def f(ctx):\n    return ctx._present(e)\n", "m") == []
+            found |= ctx_delegate_callers(path.read_text(encoding="utf-8"), path.stem)
+    assert found == set(CORE_DELEGATE_CALLERS)
+    assert all(isinstance(why, str) and why.strip() for why in CORE_DELEGATE_CALLERS.values())
+    assert ctx_delegate_callers("def f(ctx):\n    return ctx._tavern_price(1)\n", "m") == {("m.f", "_tavern_price")}  # 掃描抓得到
+    assert ctx_delegate_callers("def f(ctx):\n    return ctx._present(e)\n", "m") == set()
+    # 主人搬成包的那一批：委派多一個，掃描報出 (模組.函式, 委派) 這一對（記進名單就過，見上面的註解）
+    assert ctx_delegate_callers("def f(ctx):\n    def g():\n        return ctx._x()\n    return g\n", "m", {"_x"}) == {("m.f", "_x")}
 
 
 def event_check_delegates() -> set[str]:
