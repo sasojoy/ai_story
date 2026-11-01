@@ -1227,9 +1227,9 @@ class Game:
     def own_turn_checks(self) -> None:
         """本人這一輪（mark_seen；假人程式自己那一輪也叫）：系統通緝這一週還沒掛就掛（bounties.post_auto，名聲 4.6、5.4），被掛的那幾句
         寫進一則「懸賞」紀錄。結伴同行的人、管理者查玩家、玩家卡動到別人建的 Game 都不叫、不掛。
-        商城的封測元寶也在這裡發（_mall_grant）：錢包第一次進來的那一下，真人假人一樣；暫停中照發（帳跟世界無關）。"""
+        最前面問功能包（on_own_turn，接縫掛鉤，第 11 批）：商城包的封測元寶在這裡發——錢包第一次進來的那一下，真人假人一樣；暫停中照發（帳跟世界無關）。"""
         self.own_turn = True
-        self._mall_grant()
+        features_core.on_own_turn(self)
         if self.world.paused_at() is not None:  # 賽季時鐘暫停中世界不變（線上架構 8.3）：mark_seen 在 server.act 的暫停擋之前
             return
         posted = bounties.post_auto(self.state, self.content)
@@ -2665,8 +2665,11 @@ class Game:
         不寫戰報也不寫江湖紀錄（跟其他的拒絕一樣）。"""
         if option_id == step_rules.NEXT and step_rules.on(self):  # 本週卡「換一件事」（減法季批 3c）：不在選單上（假人碰不到）、
             return step_rules.skip(self)  # 不花體力、不寫江湖紀錄；關著的季照舊當成不在選單上
-        if option_id.startswith(sortie_duel.PREFIX) and self.duel_on():  # 出陣約戰（減法季批 3b）：貼、應戰、同去不在選單上（封招的組合放不進選單），
-            return self._duel_choice(option_id)  # 各自在 world.mutate 裡重驗；關著的季照舊當成不在選單上
+        # 不在選單上的動作（接縫掛鉤，第 11 批）：出陣包——約戰開著時的貼、應戰、同去（sortie:*，封招的組合放不進選單），各自在 world.mutate
+        # 裡重驗；約戰關著的季照舊當成不在選單上
+        unlisted = features_core.choose_unlisted(self, option_id)
+        if unlisted is not None:
+            return unlisted
         if option_id.startswith(zhuan_end.PREFIX) and any(o.id == option_id and o.enabled for o in self.options(odds=False)):
             return self._log(self._zhuan_act(option_id))  # 休季用列傳的票（減法季批 7b）：不走行動那一串（季收了，不推大勢、不存季）
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
@@ -2862,7 +2865,7 @@ class Game:
             self._fight = None
             self._affinity_before = None
         self._record_faction()
-        msgs += self._tavern_hit_check()  # 酒肆：有人雇了殺手找你，你剛在城外做完一件事（設計第六節）
+        msgs += features_core.after_action(self)  # 本人做完一件事（接縫掛鉤，第 11 批）：酒肆包——有人雇了殺手找你，你剛在城外做完一件事（設計第六節）
         self._save_season()
         return self._log(msgs)
 
@@ -8354,9 +8357,6 @@ class Game:
     def _duel_entry(self) -> list[str]:
         return sortie_duel_actions.duel_entry(self)
 
-    def _duel_choice(self, option_id: str) -> list[str]:
-        return sortie_duel_actions.duel_choice(self, option_id)
-
     def sortie_go(self, moves) -> list[str]:
         return sortie_duel_actions.sortie_go(self, moves)
 
@@ -10282,10 +10282,8 @@ class Game:
         """錢包的主人：角色名號的 casefold（同 characters.key、真人的 accounts.character_key；假人沒有帳號也有錢包）。"""
         return name_key(self.state.player.name)
 
-    # 過渡：server 與測試照舊叫 Game 的這幾個；第 2 階那一包的線再碰到時呼叫端改成直接叫包、委派拿掉（手冊 3.10）
-    def _mall_grant(self) -> None:
-        mall_actions.grant(self)
-
+    # 過渡：server 與測試照舊叫 Game 的這幾個；第 2 階那一包的線再碰到時呼叫端改成直接叫包、委派拿掉（手冊 3.10）。
+    # 封測發放（原本的 _mall_grant）第 11 批換成 on_own_turn 掛鉤，委派拿掉
     def mall_buy(self, item_id: str, ref: str, qty: int = 1) -> list[str]:
         return mall_actions.buy(self, item_id, ref, qty)
 

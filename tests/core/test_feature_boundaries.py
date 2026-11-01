@@ -220,7 +220,7 @@ GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
     "_outing_on", "_outing_plan", "mostly_here", "outing_plan", "map_mostly", "_outing_option", "_explore_one", "_outing_fight",
     "fatigue_next",
     "mall_buy", "mall_entry", "mall_rename_left", "mall_rename", "mall_claim", "mall_view", "mall_records",
-    "admin_mall_reissue", "admin_mall_revoke", "admin_mall_refund", "admin_mall_ledger", "_mall_grant",
+    "admin_mall_reissue", "admin_mall_revoke", "admin_mall_refund", "admin_mall_ledger",  # _mall_grant：第 11 批換成 on_own_turn，拿掉
     "feast_free_text_prompt", "feast_text_request", "feast_toast",
     # 出陣（主動搬六包第 1 批；10 個私有，第 1 批記成 9 個是少算了一個）：server、假人、腳本、測試在叫的 9 個，與核心原位在叫的 4 個
     # （_train_title、_sortie_mode、_sortie_option、_sortie）。這一輪私有的也留（批次表第二節「偏離手冊第三節的」）
@@ -229,9 +229,9 @@ GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
     # 出陣約戰（主動搬六包第 2 批；7 個私有）：server、假人、腳本、測試在叫的 11 個（duel_on、_duel_power、duel_convoy_here、_duel_squad、
     # sortie_go_problem、sortie_go、sortie_answer、sortie_join、sortie_cards、sortie_card、sortie_duel_tick），與只有核心原位在叫的 5 個
     # （_duel_line、_duel_entry、_duel_choice、_sortie_duel_tick、_duty_credit；duel_on、_duel_squad 核心原位也叫）。
-    # 第 11 批（核心收接縫）：三處結算換成 on_due 掛鉤，_sortie_duel_tick 沒人叫了，拿掉
+    # 第 11 批（核心收接縫）：三處結算換成 on_due 掛鉤，_sortie_duel_tick 沒人叫了，拿掉；choose 前段換成 choose_unlisted，_duel_choice 拿掉
     "duel_on", "_duel_power", "duel_convoy_here", "_duel_squad", "sortie_go_problem", "sortie_go", "sortie_answer", "sortie_join",
-    "sortie_cards", "sortie_card", "sortie_duel_tick", "_duel_line", "_duel_entry", "_duel_choice", "_duty_credit",
+    "sortie_cards", "sortie_card", "sortie_duel_tick", "_duel_line", "_duel_entry", "_duty_credit",
     # battle
     # 全服決戰「看」那一半（主動搬六包第 5 批；11 個私有）：server 叫的 12 個（main_view 的戰局條、攻城條、輸入框，reports_view，放手一搏與
     # 補劇情的三段式，_tales_waiting）、核心原位叫的 4 個（_battle_scene_text、_round_blocks、_round_wait、_deliver_battle_results），
@@ -266,8 +266,8 @@ GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；�
     "map_state": "輿圖（今天去哪裡出陣：sortie.on、叫 _sortie_foes、sorties_left）；輿圖的線還在飛，這一輪不碰",
     "_map_foes": "輿圖的地點卡（出陣打誰：sortie.on、叫 _sortie_foes）；同上",
     # 出陣約戰（主動搬六包第 2 批）：用到 sortie_duel 這個名字（現在是出陣包 duel_rules 的別名）的只剩 choose
-    "choose": "選單外的前綴（sortie_duel.PREFIX：sortie:go／answer／join 在查選單、建 Draft 之前接走，叫 _duel_choice）與按出陣那一格只回 "
-              f"sortie_duel.PICK 時不寫紀錄（picked_only、quiet 兩處）：choose 的掛鉤在驗過選單之後才問包，順序不一樣；{_SORTIE_SEAM}",
+    "choose": "按出陣那一格只回 sortie_duel.PICK 時不寫紀錄（picked_only、quiet 兩處）；選單外的前綴（sortie:*）第 11 批換成 "
+              f"choose_unlisted 掛鉤；{_SORTIE_SEAM}",
 }
 GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_DIRECT 的方法裡叫的也列（PM 10/31 答覆出陣第 1 批，第 2 批起）
     # explore（主動搬六包第 3＋4 批；審查修正：獨立一段放最前面，不夾在出陣那幾行中間）：核心叫探索委派一共 9 對。開發時掃描只看得到
@@ -285,7 +285,7 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("action_notes", "_outing_on"): f"行動列底下探索那一行：探索一顆開著寫這一處多半給什麼；{_SORTIE_SEAM}",
     ("action_notes", "_outing_plan"): "同上：比重照擲骰用的那一份",
     ("map_state", "map_mostly"): "輿圖：地點旁的兩個字照看的人站過去之後的比重（探索一顆開著時；輿圖的線還在飛，這一輪不碰）",
-    ("own_turn_checks", "_mall_grant"): "封測元寶每一輪發（本人這一輪沒有掛鉤；on_sync 不夠：假人程式的那一輪不 sync）",
+    # （(own_turn_checks, _mall_grant)：封測元寶每一輪發，第 11 批換成 on_own_turn 掛鉤，拿掉）
     # 出陣（主動搬六包第 1 批）：核心叫出陣委派 13 對（第 1 批時一共 21 對、掃描只看得到 6 對；約戰自己叫的 8 對第 2 批跟著進了包）
     ("_action_title", "_train_title"): "這一下的紀錄標題先算（act:train 是核心的前綴，標題照出陣開著沒、序章寫出陣／雪恥／遊歷）",
     ("_act", "_sortie"): f"act:train 的分派：出陣開著走出陣（並肩出陣、扣體力包在外面）；{_SORTIE_SEAM}",
@@ -300,9 +300,7 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("map_state", "sorties_left"): "輿圖：今天還能出陣幾次",
     ("_map_foes", "_sortie_foes"): "輿圖的地點卡：約戰關著時出陣打的那一批",
     # 出陣約戰（主動搬六包第 2 批）：核心叫約戰委派 17 對（搬之前約戰自己叫出陣委派的 8 對跟著進了包）。第 11 批（核心收接縫）：三處結算
-    # （world_tick、sync、advance → _sortie_duel_tick）換成 on_due 掛鉤，拿掉
-    ("choose", "duel_on"): "sortie:* 在查選單之前接走：約戰關著的季照舊當成不在選單上（見 GAME_DIRECT 的 choose）",
-    ("choose", "_duel_choice"): "同上：貼、應戰、同去三個動詞",
+    # （world_tick、sync、advance → _sortie_duel_tick）換成 on_due 掛鉤，拿掉；choose 那兩對（sortie:* 在查選單之前接走）換成 choose_unlisted，拿掉
     ("_act", "duel_on"): f"act:train 的分派：約戰開著（序章以外）出陣那一格只打開出陣前那張卡；{_SORTIE_SEAM}",
     ("_act", "_duel_entry"): "同上：截糧的運糧隊經過時照舊攻打（體力在裡面扣）",
     ("action_notes", "duel_on"): f"行動列底下出陣那一行：約戰開著換約戰那一句；{_SORTIE_SEAM}",
@@ -368,7 +366,7 @@ GAME_DIRECT.update({  # 用到 tavern_rules 這個名字（現在是酒肆包 ru
 })
 GAME_DIRECT["_act"] += "；酒肆：act:tavern 打開酒肆（叫 _tavern_enter）"
 GAME_DELEGATE_CALLERS.update({
-    ("choose", "_tavern_hit_check"): "每個動作之後的殺手檢查（「本人做完一件事」是表外的掛鉤，同商城的封測發放）；" + _TAVERN_SEAM,
+    # （(choose, _tavern_hit_check)：每個動作之後的殺手檢查，第 11 批換成 after_action 掛鉤，拿掉）
     ("shop_view", "tavern_view"): "店面那一頁：鐵匠鋪那條線（feature/smithing-flow）緊貼著這一行改，這一輪不動；店面還沒有掛鉤",
     ("_action_title", "_tavern_sign"): "act:tavern 那一下的紀錄標題先算（act 是核心的前綴；同出陣的 _train_title）",
     # 呼叫端本身在 GAME_DIRECT 裡的另外 6 對：開發時那一版的掃描不記；合 develop（出陣第 2 批的掃描：GAME_DIRECT 的方法裡叫的也記，

@@ -87,5 +87,11 @@ class TavernFeature(Feature):
         actions.deliver_hits(ctx)
         actions.deliver_watches(ctx)
 
+    def after_action(self, ctx) -> list[str]:
+        """本人做完一件事（原本 Game.choose 最後、記下陣營之後、存回季之前那一行）：有人雇了殺手找你，你剛在城外做完一件事（設計第六節）。"""
+        from . import actions  # noqa: PLC0415
+
+        return actions.tavern_hit_check(ctx)
+
 
 FEATURE = TavernFeature()

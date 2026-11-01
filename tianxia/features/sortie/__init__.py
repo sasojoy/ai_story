@@ -40,5 +40,14 @@ class SortieFeature(Feature):
 
         duel_actions.duel_tick(ctx)
 
+    def choose_unlisted(self, ctx, option_id):
+        """不在選單上的動作（接縫掛鉤，第 11 批；原本 Game.choose 本週卡「換一件事」之後、列傳的票之前那一行）：約戰開著時的貼、應戰、同去
+        （sortie:go／answer／join，封招的組合放不進選單），各自在 world.mutate 裡重驗；約戰關著的季照舊當成不在選單上（回 None，核心照舊查選單）。"""
+        from . import duel_actions, duel_rules  # noqa: PLC0415
+
+        if option_id.startswith(duel_rules.PREFIX) and duel_actions.duel_on(ctx):
+            return duel_actions.duel_choice(ctx, option_id)
+        return None
+
 
 FEATURE = SortieFeature()

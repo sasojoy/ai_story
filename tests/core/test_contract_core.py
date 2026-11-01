@@ -323,3 +323,27 @@ def test_a_closed_shop_gives_no_menu_or_entry_but_still_opens_its_page_and_close
     seams.shop_here = False
     g.sync(1060.0)
     assert not seams.in_shop
+
+
+def test_choose_takes_the_unlisted_ones_first_and_hears_the_package_after_each_action(game, seams):
+    """choose_unlisted 在查選單、建紀錄之前問（不在選單上的也接得到、不寫江湖紀錄、不走做完一件事那一下）；after_action 在每個動作的
+    最後（記下陣營之後、存回季之前），回的話接在動作的話後面。兩個都不問 enabled。"""
+    g = _made(game)
+    journal = len(g.state.journal)
+    assert g.choose("fake:raw") == ["不在選單上的也接得到。"]
+    assert len(g.state.journal) == journal and ("after_action",) not in seams.calls
+    assert g.choose("fake:do") == ["做了do。", "做完之後的那一句。"]
+    assert seams.calls.index(("run", "do")) < seams.calls.index(("after_action",))
+    seams.open = False
+    assert g.choose("fake:raw") == ["不在選單上的也接得到。"]
+    seams.calls.clear()
+    g.choose("fake:do")  # 關著：fake:do 不在選單上，「此刻無法這麼做」那一下不走到最後
+    assert ("after_action",) not in seams.calls
+
+
+def test_the_own_turn_is_heard_even_when_the_package_is_closed(game, seams):
+    """on_own_turn 在 own_turn_checks 最前面（暫停的檢查之前：原位的封測發放暫停中照發），關著的包照叫。"""
+    g = _made(game)
+    seams.open = False
+    g.mark_seen(1000.0)
+    assert ("on_own_turn",) in seams.calls
