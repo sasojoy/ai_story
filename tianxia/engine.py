@@ -883,8 +883,7 @@ class Game:
             self._close_dadian()  # 銀兩出口關了、這裡一樣都做不了了：收起打點那一間店
         if p.picking_arena and not arena.here(s, c):
             p.picking_arena = False  # 擂台關了、季收了：收起擂台
-        if p.picking_tavern and not tavern_rules.here(s, c):
-            tavern_rules.close(s)  # 酒肆關了、人不在有酒肆的城鎮了：收起酒肆
+        features_core.drop_shops(self)  # 搬成包的店（店面登記，第 11 批；酒肆）：關了、人不在那裡了就收起來（接在舊的六間店後面）
         treasures.refresh_names(p, c)  # 寶物、名駒的名字照內容讀（裝備四欄 3.1）：joy 改了名字，存檔裡的跟著改；內容拿掉了留著舊名字
         forge_secrets.refresh_names(p, c, self.world)  # 名器的名字照內容讀（4.2）、神器的名字照全服那一列讀（5.2、5.3：原品定了名，仿品跟著改）
         signature_arms.refresh_names(p, c)  # 本命兵器的名字照內容讀（打造第三批）：joy 改了名，手上的跟著改
@@ -1053,8 +1052,7 @@ class Game:
             self._close_dadian()  # 銀兩出口關了、這裡一樣都做不了了：收起打點那一間店
         if self.state.player.picking_arena and not arena.here(self.state, self.content):
             self.state.player.picking_arena = False  # 擂台關了、季收了：收起擂台
-        if self.state.player.picking_tavern and not tavern_rules.here(self.state, self.content):
-            tavern_rules.close(self.state)  # 酒肆關了、人被挪走了：收起酒肆
+        features_core.drop_shops(self)  # 搬成包的店（店面登記，第 11 批；酒肆）：關了、人被挪走了就收起來（接在舊的六間店後面）
         self._ambush_expire()  # 守著的埋伏到時刻了、或季上那一筆已經沒了（被打退、換季）：收起來
         arrived = self._arrivals()  # 抵達的站自己寫一則江湖紀錄（途中觸發的大事也寫在那裡），不併進下面的「江湖大事」
         if arrived:
@@ -1397,8 +1395,9 @@ class Game:
             return self._silver_options() + [Option(id="dadian:back", label=silver.SHOP_BACK)]  # 打點（銀兩出口）：這裡做得了的幾樣與離開
         if s.player.picking_arena:
             return self._arena_options()
-        if s.player.picking_tavern:
-            return self._tavern_options()  # 酒肆（企劃者 2026-10-18）
+        shop_taken = features_core.shop_menu(self)  # 坐在搬成包的店裡（店面登記，第 11 批；酒肆，企劃者 2026-10-18）：選單整個是那間店的
+        if shop_taken is not None:
+            return shop_taken
         if s.player.fs_asking is not None:
             return foreshadow.asking_options(s, c)  # 伏筆的最後一步正在答題：只有答案與「作罷」
         if s.player.busy_until is not None:
@@ -1527,8 +1526,7 @@ class Game:
             opts.append(Option(id="act:smith", label=weapons.SMITH))
         if mounts.market_here(s, c):  # 馬市（裝備四欄 5.5，帶「馬市」標籤的城鎮）：只是打開第二層選單，不花體力
             opts.append(Option(id="act:market", label=mounts.MARKET))
-        if tavern_rules.on(c) and tavern_rules.here(s, c):  # 酒肆（帶「酒肆」標籤的城鎮）：只是打開酒肆，不花體力
-            opts.append(Option(id="act:tavern", label=tavern_rules.TAVERN))
+        opts += features_core.shop_entries(self)  # 搬成包的店的入口（店面登記，第 11 批；酒肆：帶「酒肆」標籤的城鎮，只是打開酒肆，不花體力）
         opts += self._arena_entry()
         opts += self._stamina_play_options()  # 後期體力玩法：設伏劫道、修築工事、屯糧練兵
         heal = self._heal_option()
@@ -2483,9 +2481,6 @@ class Game:
 
     def _tavern_price(self, base: int) -> int:
         return tavern_actions.tavern_price(self, base)
-
-    def _tavern_options(self) -> list[Option]:
-        return tavern_actions.tavern_options(self)
 
     def _tavern_sign(self) -> str:
         return tavern_actions.tavern_sign(self)
@@ -5347,9 +5342,7 @@ class Game:
             return "donate" if self._at_own_base() else None
         if p.picking_dadian:  # 打點（21 天季的銀兩出口，第 9 批畫面乙）
             return "dadian" if self._silver_options() else None
-        if p.picking_tavern:  # 酒肆（企劃者 2026-10-18）
-            return "tavern" if tavern_rules.here(s, c) else None
-        return None
+        return features_core.shop_open(self)  # 搬成包的店（店面登記，第 11 批；酒肆，企劃者 2026-10-18）：坐在店裡、這裡也還開著
 
     def _shop_live(self, option_ids=None, shop: str = "smith") -> bool:
         """這間店那一串此刻真的是眼前的選單（店面與直接開爐都問它）：選單上有這間店的離開鈕（shopview.BACKS：鐵匠鋪 smith:back、
@@ -9073,8 +9066,7 @@ class Game:
         if s.player.picking_dadian:
             self._close_dadian()  # 打點那一間店也收起來
         s.player.picking_arena = False  # 擂台也收起來
-        if s.player.picking_tavern:
-            tavern_rules.close(s)  # 酒肆也收起來
+        features_core.close_shops(self)  # 搬成包的店也收起來（店面登記，第 11 批；酒肆）
         rerouting = s.player.journey is not None
         start = None if rerouting else s.player.location
         parted = self._part_ways() if s.player.tagalong is not None and not rerouting else []  # 答應了結伴卻自己先走：散了

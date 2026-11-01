@@ -289,3 +289,37 @@ def test_the_time_seams_are_asked_even_when_the_package_is_closed(game, seams):
     game.sync(1060.0)
     assert [c[0] for c in seams.calls if c[0] in TIME_SEAMS] == [
         "on_due", "deliver_results", "deliver_notices", "on_due", "on_away", "deliver_results", "deliver_notices"]
+
+
+def test_a_shop_takes_over_the_menu_opens_its_page_and_closes(game, seams):
+    """店面登記：此地還能做裡有進店那一顆；坐進去選單整個是那間店的、店面那一頁是它；這裡不開門了同步就收（_drop_stale_references 也收）；
+    動身也收（Game._depart）。"""
+    g = _made(game)
+    assert "act:fakeshop" in [o.id for o in g.options()] and g._shop_open() is None
+    seams.in_shop = True
+    assert [o.id for o in g.options()] == ["fake:leave"] and g._shop_open() == "fakeshop"
+    seams.shop_here = False
+    assert g._shop_open() is None
+    g.sync(1060.0)
+    assert not seams.in_shop and ("close_shop",) in seams.calls
+    seams.in_shop, seams.shop_here = True, False
+    Game(g.content, g.state, world=g.world)  # 建 Game 就清失效參照：此地不開了，收
+    assert not seams.in_shop
+    seams.in_shop, seams.shop_here = True, True
+    loc = g.content.locations[g.state.player.location]
+    g.travel(next(d for d in loc.connections if d in g.content.locations))
+    assert not seams.in_shop
+
+
+def test_a_closed_shop_gives_no_menu_or_entry_but_still_opens_its_page_and_closes(game, seams):
+    """給選項的兩樣（店裡那一串、進店那一顆）關著的包不給；哪一間開著、收店照舊看坐在店裡沒（原位本來就不看開關：酒肆的 enabled 在
+    坐著的時候一定是 True）。"""
+    seams.open = False
+    seams.in_shop = True
+    g = _made(game)
+    ids = [o.id for o in g.options()]
+    assert "fake:leave" not in ids and "act:fakeshop" not in ids
+    assert g._shop_open() == "fakeshop"
+    seams.shop_here = False
+    g.sync(1060.0)
+    assert not seams.in_shop

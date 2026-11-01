@@ -356,23 +356,16 @@ GAME_IMPORTS |= {
 }
 GAME_DELEGATES |= {  # 13 個私有：server、假人、腳本、測試在叫的，與核心原位在叫的（_tavern_options、_tavern_enter、_tavern_hit_check、三個 deliver、_tavern_sign）
     # 第 11 批（核心收接縫）：sync 的三個 deliver 換成 deliver_notices 掛鉤，_deliver_whispers 沒人叫了，拿掉（_deliver_hits、_deliver_watches、
-    # _tavern_hit_check 測試直接叫，留著）
+    # _tavern_hit_check 測試直接叫，留著）；選單接管那一格換成店面登記（Shop.menu），_tavern_options 沒人叫了，拿掉
     "tavern_do", "tavern_view", "tavern_ask_request", "tavern_ask", "tavern_chatter_request", "apply_tavern_chatter",
-    "_tavern_open", "_tavern_enter", "_tavern_price", "_tavern_options", "_tavern_sign", "_tavern_run", "_tavern_hit_problem",
+    "_tavern_open", "_tavern_enter", "_tavern_price", "_tavern_sign", "_tavern_run", "_tavern_hit_problem",
     "_tavern_hit_check", "_tavern_hit_fight", "_tavern_ask_facts", "_deliver_watches", "_deliver_hits",
 }
+# 第 11 批（核心收接縫）：sync、_drop_stale_references 的收店，_shop_open、_depart、_everyday_options 的選單接管與入口換成店面登記（Shop），拿掉
 GAME_DIRECT.update({  # 用到 tavern_rules 這個名字（現在是酒肆包 rules 的別名）的
-    "sync": "人不在酒肆了就收店（tavern_rules.here、close）；第 11 批換掉了下線那一段的殺手（on_away）與三個 deliver（deliver_notices）；"
-            + _TAVERN_SEAM,
-    "_drop_stale_references": "人不在酒肆了就收店（tavern_rules.here、close）：放進 on_drop_stale 會排到清路程（journey）與序章收尾之後，"
-                              "here() 看這兩樣，結果可能不同；" + _TAVERN_SEAM,
     "_hint_triggers": "碰到才說：有酒肆的城（tavern_rules.on、here）排 h_tavern 那一條；提示還沒有掛鉤",
     "_newbie_go": "新手目標「去酒肆」指哪幾個地點（tavern_rules.tavern_at）；新手目標還沒有掛鉤",
-    "_shop_open": "此刻開著哪一間店（picking_tavern 且 tavern_rules.here）：七間店共用，店面還沒有掛鉤；" + _TAVERN_SEAM,
-    "_depart": "出發時收起酒肆（tavern_rules.close）：七間店共用；" + _TAVERN_SEAM,
 })
-GAME_DIRECT["_everyday_options"] += ("；酒肆：坐在酒肆裡時選單整個是酒肆那一串（叫 _tavern_options；menu 掛鉤只有一個位置，會從擂台之後"
-                                     "提前到頭目戰之後）、act:tavern 入口（tavern_rules.on、here、TAVERN）")
 GAME_DIRECT["_act"] += "；酒肆：act:tavern 打開酒肆（叫 _tavern_enter）"
 GAME_DELEGATE_CALLERS.update({
     ("choose", "_tavern_hit_check"): "每個動作之後的殺手檢查（「本人做完一件事」是表外的掛鉤，同商城的封測發放）；" + _TAVERN_SEAM,
@@ -380,8 +373,7 @@ GAME_DELEGATE_CALLERS.update({
     ("_action_title", "_tavern_sign"): "act:tavern 那一下的紀錄標題先算（act 是核心的前綴；同出陣的 _train_title）",
     # 呼叫端本身在 GAME_DIRECT 裡的另外 6 對：開發時那一版的掃描不記；合 develop（出陣第 2 批的掃描：GAME_DIRECT 的方法裡叫的也記，
     # PM 10/31）之後掃得到，取消註解（核心叫酒肆委派一共 9 對）。第 11 批：sync 那四對（下線的殺手、三個 deliver）換成 on_away、
-    # deliver_notices 掛鉤，拿掉
-    ("_everyday_options", "_tavern_options"): "坐在酒肆裡時選單整個是酒肆那一串；" + _TAVERN_SEAM,
+    # deliver_notices 掛鉤，拿掉；(_everyday_options, _tavern_options) 換成店面登記，拿掉
     ("_act", "_tavern_enter"): "act:tavern 打開酒肆（act 是核心的前綴）；" + _TAVERN_SEAM,
 })
 

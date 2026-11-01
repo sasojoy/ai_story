@@ -12,7 +12,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome
+from tianxia.core.features import Feature, Outcome, Shop
 
 
 class TavernFeature(Feature):
@@ -47,6 +47,27 @@ class TavernFeature(Feature):
         return bots.score(option)
 
     # ── 接縫掛鉤（全部拆包第 11 批：原本在 Game 原位直接叫這一包的那幾行；不問 enabled，原位本來就不看酒肆開關）──
+
+    _shops: tuple[Shop, ...] | None = None
+
+    def shops(self) -> tuple[Shop, ...]:
+        """店面登記：酒肆是第一間搬成包的店（原本 Game 上七間店共用的那幾處，酒肆那幾行照抄；都排在舊的六間後面）——坐在酒肆裡
+        （picking_tavern）選單整個是酒肆那一串（actions.tavern_options）；此地還能做裡「酒肆」那一顆（開著、這裡帶酒肆標籤，只是打開酒肆，
+        不花體力）；店面那一頁的 key 是 tavern（坐著、這裡也還開著）；動身、此地不開了收起來（rules.close：掌櫃那一句一併清）。
+        建一次就留著（契約測試照同一個物件認）。"""
+        if self._shops is None:
+            from tianxia.core.option import Option  # noqa: PLC0415
+
+            from . import actions, rules  # noqa: PLC0415
+
+            def entry(ctx):
+                return Option(id="act:tavern", label=rules.TAVERN) if rules.on(ctx.content) and rules.here(ctx.state, ctx.content) else None
+
+            self._shops = (Shop(
+                key="tavern", inside=lambda ctx: ctx.state.player.picking_tavern, here=lambda ctx: rules.here(ctx.state, ctx.content),
+                close=lambda ctx: rules.close(ctx.state), menu=actions.tavern_options, entry=entry,
+            ),)
+        return self._shops
 
     def on_away(self, ctx, away_from) -> None:
         """下線那一段殺手找上門（原本 Game.sync 補算完本人下線那一段之後的那幾行，照抄）：離線夠久（Config.tavern.hit_offline_minutes）
