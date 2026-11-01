@@ -454,3 +454,97 @@ def test_a_brewed_material_turns_into_a_real_cell(content, world):
     assert game.state.player.materials.get("gang_2") == 1
     html = _forge_page(server.main_view(game), "H.render(); return T.els.app.innerHTML;")
     assert 'data-act="shop-cell" data-id="gang_2"' in html and 'data-attr="剛" data-tier="2"' not in html
+
+
+# ── 鐵匠鋪與合成流程 3.2（C 批）：打造頁的爐火可以點、火旁一行鐵匠的話（forge.furnace、MAIN_ACTIONS smith_furnace）──
+
+
+def _fired(**set_):
+    """正式內容 week7（銀兩出口開著）的鐵匠鋪（test_shop._fire），玩家欄位照 set_ 改，回 /api/main 那一份。"""
+    from test_shop import _fire
+
+    game = _fire()
+    for key, value in set_.items():
+        if key == "silver":
+            game.state.player.stats["silver"] = value
+        elif key == "used":
+            game.state.player.furnace_ready, game.state.player.furnace_day = False, game._pill_day()
+        elif key == "looked":
+            game.smith_furnace()
+    return game, server.main_view(game)
+
+
+def _say(html):
+    at = html.index('class="fu-say')
+    return html[at:html.index("</p>", at)]
+
+
+def test_an_unlooked_furnace_says_its_price_and_the_fire_can_be_tapped():
+    _game, m = _fired()
+    fu = m["shop"]["forge"]["furnace"]
+    assert fu["problem"] is None and not fu["ready"]
+    html = _forge_page(m, "H.render(); return T.els.app.innerHTML;")
+    say = _say(html)
+    assert f"看火候 {fu['price']} 兩，今天還沒看。" in say and 'data-act="shop-furnace"' in say and ">看</button>" in say
+    fire = html[html.index('class="flame fu-fire"') - 8:]
+    assert fire.startswith("<button ") and 'data-act="shop-furnace"' in fire[:120] and "disabled" not in fire[:fire.index(">")]
+    assert 'class="furnace"' in html  # 還沒看：火照平常的樣子
+
+
+def test_a_looked_furnace_burns_hot_and_says_the_next_pot_uses_it():
+    _game, m = _fired(looked=True)
+    assert m["shop"]["forge"]["furnace"]["ready"]
+    html = _forge_page(m, "H.render(); return T.els.app.innerHTML;")
+    assert 'class="furnace hot"' in html and "火候看過了，下一爐照新基準。" in _say(html) and " hot" in _say(html)
+    assert ">看</button>" not in html and 'class="flame fu-fire" data-act="shop-furnace" aria-label="看火候" disabled' in html
+
+
+def test_a_furnace_used_today_is_grey_until_tomorrow():
+    _game, m = _fired(used=True)
+    assert m["shop"]["forge"]["furnace"]["used_today"]
+    html = _forge_page(m, "H.render(); return T.els.app.innerHTML;")
+    assert "今天看過了，明日再來。" in _say(html) and " off" in _say(html) and "hot" not in html.split('class="furnace', 1)[1][:6]
+
+
+def test_a_furnace_you_cannot_afford_says_why_in_grey():
+    _game, m = _fired(silver=10)
+    fu = m["shop"]["forge"]["furnace"]
+    assert fu["problem"] and "還差" in fu["problem"]
+    say = _say(_forge_page(m, "H.render(); return T.els.app.innerHTML;"))
+    assert f"看火候 {fu['price']} 兩・{fu['problem']}" in say and " off" in say and "data-act" not in say
+
+
+def test_the_furnace_is_not_tappable_when_the_silver_outlets_are_off(m):
+    """銀兩出口關著（測試內容；週末、14 天季也是）：forge.furnace 是 None，爐火不可點、那一行不畫，打造頁跟以前一樣。"""
+    assert m["shop"]["forge"]["furnace"] is None
+    html = _forge_page(m, "H.render(); return T.els.app.innerHTML;")
+    assert "shop-furnace" not in html and "fu-say" not in html and '<div class="flame">' in html
+
+
+def test_looking_posts_the_op_and_asks_the_line_again():
+    game, m = _fired()
+    after = server.main_view(game)
+    out = _forge_page(m, """return (async () => {
+        H.render();
+        """ + _click('{ act: "shop-furnace" }') + """
+        await new Promise((ok) => setTimeout(ok, 5));
+        return { calls: T.calls.map((c) => c), toast: T.els.toast.textContent };
+      })();""", responses={"/api/do/smith_furnace": {"main": after, "message": "<p>老師傅答應下一爐親自替你看火候。</p>"},
+                           "/api/smith_line": m["shop"]["forge"]["line"]})
+    assert out["calls"][0] == ["/api/do/smith_furnace", {}] and out["calls"][-1][0] == "/api/smith_line"
+    assert "老師傅答應" in out["toast"]
+
+
+def test_tapping_a_furnace_that_cannot_look_sends_nothing():
+    _game, m = _fired(looked=True)
+    out = _forge_page(m, "return (async () => { H.render(); " + _click('{ act: "shop-furnace" }') + " return T.calls.length; })();")
+    assert out == 0
+
+
+def test_the_hot_fire_stops_for_reduced_motion():
+    import re
+
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    assert re.search(r"\.shop-layer \.furnace\.hot:not\(\.firing\) \.flame svg \{[^}]*animation: fu-hot", css)
+    # 同一個選擇器（權重一樣，排在後面才蓋得過）
+    assert "@media (prefers-reduced-motion: reduce) { .shop-layer .furnace.hot:not(.firing) .flame svg { animation: none; } }" in css

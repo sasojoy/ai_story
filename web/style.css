@@ -3592,3 +3592,18 @@ svg.fig .blade.bow { stroke-width: 3; }
 .shop-layer .brew-btns { display: flex; gap: 8px; justify-content: flex-end; }
 .shop-layer .brew-btns .btn { width: auto; min-width: 5em; }
 .shop-layer .shop-line.brewed { border-left-color: #f2c46a; color: #f2e5c6; }
+/* 打造頁的爐火（3.2）：中間的火是一顆鈕（不畫框），看過了還沒開爐時爐子整座亮一點、火大一圈、慢慢晃（開爐竄火那一下照舊優先）；
+   減少動態效果的人不晃。爐子底下一行鐵匠的話：看過了金字、看不了灰字 */
+.shop-layer .furnace .fu-fire { border: 0; padding: 0; background: transparent; color: inherit; cursor: pointer; border-radius: 50%; }
+.shop-layer .furnace .fu-fire:disabled { cursor: default; }
+.shop-layer .furnace .fu-fire:focus-visible { outline: 2px solid #f2c46a; outline-offset: 2px; }
+.shop-layer .furnace.hot { background: radial-gradient(circle at 50% 70%, #c8561e 0%, #6a2c12 52%, #2a1a10 100%); box-shadow: 0 0 22px 2px rgba(255, 150, 60, 0.35); }
+.shop-layer .furnace.hot:not(.firing) .flame svg { filter: drop-shadow(0 0 8px rgba(255, 196, 96, 0.9)) brightness(1.12); transform: scale(1.18);
+  animation: fu-hot 1.6s ease-in-out infinite; }
+@keyframes fu-hot { 0%, 100% { transform: scale(1.14); } 50% { transform: scale(1.24) translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) { .shop-layer .furnace.hot:not(.firing) .flame svg { animation: none; } }
+.shop-layer .fu-say { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; margin: -2px 0 6px;
+  font: 0.87em/1.5 var(--serif); color: #e8d6ad; text-align: center; }
+.shop-layer .fu-say.hot { color: #f2c46a; }
+.shop-layer .fu-say.off { color: #a08a6a; }
+.shop-layer .fu-say .fu-look { width: auto; min-height: 30px; padding: 2px 16px; }

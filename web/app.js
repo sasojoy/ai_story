@@ -3683,6 +3683,39 @@
   }
   // 爐子中間的火（內嵌 SVG，水墨暖色；Joy 之後有正式的圖可以換）
   const FLAME_SVG = '<svg viewBox="0 0 60 60" aria-hidden="true"><path class="fl-out" d="M30 4 C40 18 50 26 46 40 C43 52 34 56 30 56 C24 56 14 50 14 38 C14 28 22 22 26 12 C28 20 31 24 34 26 C34 18 32 10 30 4Z"/><path class="fl-in" d="M30 24 C36 32 40 38 37 46 C35 51 32 52 30 52 C26 52 22 48 23 42 C24 36 28 32 30 24Z"/></svg>';
+  // 看火候搬進打造頁（鐵匠鋪與合成流程 3.2，企劃者 2026-10-29 選「乙 點爐火、就地熬」）：爐子中間的火可以點，爐子底下一行鐵匠的話照
+  // forge.furnace 寫——還沒看（價錢＋「看」）、看過了還沒開爐（火畫旺）、今天用掉了、看不了（錢不夠、序章：照 silver.furnace_problem 的原因）。
+  // 價錢、一天一次、下一爐用掉全照伺服器；跟打點帳簿那一格是同一個狀態。銀兩出口關著（furnace 是 None）這一行不畫、火不可點。字待 joy 潤
+  const FURNACE_SAY = {
+    open: "看火候 {price} 兩，今天還沒看。", // 待 joy 潤
+    ready: "火候看過了，下一爐照新基準。", // 待 joy 潤
+    used: "今天看過了，明日再來。", // 待 joy 潤
+    no: "看火候 {price} 兩・{why}", // 待 joy 潤：看不了（原因照伺服器）
+  };
+  const FURNACE_LOOK = "看"; // 待 joy 潤
+  function furnaceOk(fu) { return !!fu && !fu.ready && !fu.used_today && !fu.problem; }
+  function furnaceSayHtml(fu) {
+    if (!fu) return "";
+    const price = String(fu.price | 0);
+    if (fu.ready) return `<p class="fu-say hot">${FURNACE_SAY.ready}</p>`;
+    if (fu.used_today) return `<p class="fu-say off">${FURNACE_SAY.used}</p>`;
+    if (fu.problem) return `<p class="fu-say off">${esc(FURNACE_SAY.no.replace("{price}", price).replace("{why}", fu.problem))}</p>`;
+    return `<p class="fu-say"><span>${FURNACE_SAY.open.replace("{price}", price)}</span><button class="btn small fu-look" data-act="shop-furnace">${FURNACE_LOOK}</button></p>`;
+  }
+  // 看（/api/do/<furnace.id>，MAIN_ACTIONS smith_furnace）：回來照新的畫面畫、話用提示泡泡講，再問一次這一爐（機率那一行換成新基準）
+  async function smithFurnace() {
+    const shop = S.main && S.main.shop;
+    const fu = shop && shop.forge ? shop.forge.furnace : null;
+    if (!furnaceOk(fu)) return;
+    await busy(async () => {
+      const r = await api(`/api/do/${fu.id}`, {});
+      setMain(r.main);
+      renderKeepingShop();
+      const said = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (said) toast(said);
+    });
+    await updateSmithLine();
+  }
 
   // 打造頁（2.2）：上面一排種類（防具頁換成一行說明），中間爐子左右兩格（主料、輔料；點有東西的那一格拿出來），
   // 兩格放好時底下寫這一爐會怎樣（種類、屬性、階、工錢、三個機率、最多兩句原因、鑄譜上打中過的那一句）與開爐鈕，最底下是素材格。
@@ -3719,9 +3752,12 @@
       else rows.push({ attribute: mat.attribute, cells: [[mat.tier | 0, cell]] });
     }
     const cells = rows.map((r) => brewRowHtml(shop, r)).join("");
+    // 爐火（3.2）：銀兩出口開著（forge.furnace 有東西）時中間的火是一顆鈕，看過了還沒開爐火畫旺；關著照舊是畫
+    const fu = f.furnace;
+    const fire = fu ? `<button class="flame fu-fire" data-act="shop-furnace" aria-label="看火候"${furnaceOk(fu) ? "" : " disabled"}>${FLAME_SVG}</button>` : `<div class="flame">${FLAME_SVG}</div>`;
     return `${kinds}
-      <div class="furnace${S.shopFiring ? " firing" : ""}">${slot("main", pot.main)}<div class="flame">${FLAME_SVG}</div>${slot("aux", pot.aux)}</div>
-      ${out}<div class="shop-gorow">${go}<button class="btn small ghost shop-book" data-act="book-open" data-book="forge">鑄譜</button></div>
+      <div class="furnace${S.shopFiring ? " firing" : ""}${fu && fu.ready ? " hot" : ""}">${slot("main", pot.main)}${fire}${slot("aux", pot.aux)}</div>
+      ${furnaceSayHtml(fu)}${out}<div class="shop-gorow">${go}<button class="btn small ghost shop-book" data-act="book-open" data-book="forge">鑄譜</button></div>
       ${line.rack_full ? `<p class="shop-warn">${esc(line.rack_full)}</p>` : ""}
       <p class="shop-cap">背包的素材（點一下放進爐裡）</p><div class="cells${shop.four ? " four" : ""}">${cells || '<p class="shop-empty">背包裡沒有素材。</p>'}</div>`;
   }
@@ -6250,6 +6286,7 @@
         case "shop-brew-go": await smithBrew(el.dataset.attr, Number(el.dataset.tier)); break;
         case "shop-slot": setPot(el.dataset.role === "main" ? { main: null, aux: null } : { aux: null }); break; // 拿掉主料，輔料跟著出來（伺服器也這樣修）
         case "shop-go": await smithForge(); break;
+        case "shop-furnace": await smithFurnace(); break; // 打造頁的爐火（3.2）：看火候
         case "shop-unwrap": S.shopOpened = true; renderShop(); break; // 點開麻布（2.3）
         case "shop-keep": S.shopReveal = null; S.shopOpened = false; renderShop(); break; // 收下、留在裝備庫：收起出爐卡
         case "shop-wield":
