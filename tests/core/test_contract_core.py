@@ -295,7 +295,7 @@ def test_a_shop_takes_over_the_menu_opens_its_page_and_closes(game, seams):
     """店面登記：此地還能做裡有進店那一顆；坐進去選單整個是那間店的、店面那一頁是它；這裡不開門了同步就收（_drop_stale_references 也收）；
     動身也收（Game._depart）。"""
     g = _made(game)
-    assert "act:fakeshop" in [o.id for o in g.options()] and g._shop_open() is None
+    assert [o.id for o in g.options()].count("act:fakeshop") == 1 and g._shop_open() is None  # 進店那一顆只有一顆（第 11 批審查）
     seams.in_shop = True
     assert [o.id for o in g.options()] == ["fake:leave"] and g._shop_open() == "fakeshop"
     seams.shop_here = False
