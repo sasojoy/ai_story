@@ -334,6 +334,15 @@ def test_a_method_that_becomes_a_delegate_is_still_picked_by_its_name():
     assert any("sortie 這一包的一行委派" in w for w in test_for.pick(["tianxia/engine.py"], hunks_of=fresh).why)
 
 
+def test_any_engine_hunk_picks_the_contract_and_boundary_tests():
+    """改 engine 上不是核心、也不是委派的方法（第 11 批審查）：邊界測試的 GAME_* 名單只有它守（Game 新叫了一個包的名字就該紅），可是
+    它不照內文歸群了（TEXT_BLIND），以前碰巧在 sortie 群才挑得到（_squad_encounter）。engine.py 有 hunk 就一律帶核心契約。"""
+    picked = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", FAKE_ENGINE, 6))
+    assert {p.name for p in test_for.contract_tests()} <= {p.name for p in picked.files}
+    assert not picked.core and not picked.smoke
+    assert any("核心契約與邊界測試" in w for w in picked.why)
+
+
 def test_a_verb_first_method_name_goes_to_the_feature_after_the_verb():
     """_deliver_seal_results 的 deliver 是動詞：照後面的 seal 分群。"""
     picked = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", FAKE_ENGINE, 9))

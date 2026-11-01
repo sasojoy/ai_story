@@ -1051,8 +1051,13 @@ def pick(files: list[str], base: str | None = None,
                 for pkg in sorted(packages):  # 一行委派（第 11 批）：同改那一包的檔
                     pkg_tests = FEATURES / pkg / "tests"
                     result.files |= set(pkg_tests.rglob("test_*.py")) if pkg_tests.is_dir() else set()
-                    result.files |= contract_tests()
                 result.files |= callers
+                # 核心契約與邊界測試一律帶（第 11 批審查）：Game 新叫了一個包的名字，只有邊界測試的 GAME_* 名單抓得到；它們不照內文歸群了
+                # （TEXT_BLIND），改 engine 上非核心、非委派的方法以前碰巧在 sortie 群才挑得到（_squad_encounter）。要跑核心測試時不另加
+                # （核心測試本來就含它們，CORE_GLOBS）。
+                if not core:
+                    result.files |= contract_tests()
+                    why = [*why, "engine.py 有改動 → 核心契約與邊界測試（GAME_* 名單只有邊界測試守）"]
             elif mod == "server":
                 found, core, why = server_groups(hunk_list, old_src, new_src)
             else:
