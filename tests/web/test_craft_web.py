@@ -269,3 +269,49 @@ def test_the_furnace_itself_holds_both_slots_and_the_forge_button_and_flashes_wh
     assert "⚠ 心得不夠。" in mini
     assert 'kiln-slot full r2 flash" data-act="unslot" data-i="1"' in out["drawn"]  # 放進右邊那一格，放進去那一下閃
     assert 'w-slot full r2 flash" data-act="unslot" data-i="1"' in out["drawn"]  # 大爐子那一格也閃
+
+
+# ── 鐵匠鋪與合成流程 3.1（A 批，FB-903）：付過心得之後按「作罷」先問一次；還沒付的直接作罷 ──
+
+_CANCEL = """return (async () => {
+  T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
+  const click = (dataset) => T.docListeners.click[0]({ target: { closest: () => ({ dataset, classList: { contains: () => false, add() {}, remove() {} }, isConnected: false }) } });
+  await click({ act: "create-cancel" });
+  const before = T.calls.map((c) => c[0]);
+  await click({ act: "ask-yes" });
+  return { asked: T.bodyHtml.join(""), before, after: T.calls.map((c) => c[0]) };
+})();"""
+
+
+def _drafted(game, intent=True):
+    """自創走到擺式（還沒付心得）或立意之後（付了，draft.paid 是實際收的那一筆）。"""
+    from tianxia import create
+
+    game.state.player.stats["xinde"] = 5000
+    assert game.create_begin("武學", "拳腳")
+    if intent:
+        game.create_pose(create.preset(game.content, "起手"))
+        game.create_intent("風過林梢，影不留痕", reading=create.IntentReading(score=60, attributes=["快"]))
+    return game
+
+
+def test_cancelling_a_paid_draft_asks_first_with_the_xinde_it_cost(game):
+    game = _drafted(game)
+    m = server.main_view(game)
+    paid = m["status"]["create"]["draft"]["paid"]
+    assert paid > 0
+    out = run(m, _CANCEL, S={"tab": "craft"}, menxia=server.menxia_view(game),
+              responses={"/api/menxia/create_cancel": {"menxia": server.menxia_view(game), "main": m, "message": ""}})
+    assert f"作罷？立意時收的 {paid} 心得不退。" in out["asked"] and "再想想" in out["asked"] and ">作罷</button>" in out["asked"]
+    assert "取消" not in out["asked"]  # 另一顆是「再想想」
+    assert "/api/menxia/create_cancel" not in out["before"]  # 問了才送
+    assert out["after"].count("/api/menxia/create_cancel") == 1
+
+
+def test_cancelling_before_paying_goes_straight(game):
+    game = _drafted(game, intent=False)
+    m = server.main_view(game)
+    assert not m["status"]["create"]["draft"]["paid"]
+    out = run(m, _CANCEL, S={"tab": "craft"}, menxia=server.menxia_view(game),
+              responses={"/api/menxia/create_cancel": {"menxia": server.menxia_view(game), "main": m, "message": ""}})
+    assert out["asked"] == "" and out["before"].count("/api/menxia/create_cancel") == 1  # 沒有損失：不問

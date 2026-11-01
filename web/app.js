@@ -2750,6 +2750,16 @@
       ${c.rare_line ? `<p class="muted small">${esc(c.rare_line)}</p>` : ""}`;
   }
   const biasHtml = (bias) => Object.entries(bias || {}).sort((p, q) => q[1] - p[1]).map(([k]) => ringHtml([k], esc(k), "jchip")).join("");
+  // 作罷（鐵匠鋪與合成流程 3.1，FB-903：誤觸白丟心得）：立意時付過心得（draft.paid 是實際收的那一筆）先問一次，確認鈕「作罷」、另一顆「再想想」；
+  // 還沒付（執器、擺式）沒有損失，直接作罷。規則不動：作罷照舊不退。字待 joy 潤
+  const CREATE_CANCEL_ASK = "作罷？立意時收的 {n} 心得不退。"; // 待 joy 潤
+  const CREATE_CANCEL_NO = "再想想"; // 待 joy 潤
+  function createCancel() {
+    const c = S.main && S.main.status && S.main.status.create;
+    const paid = c && c.draft ? c.draft.paid | 0 : 0;
+    if (paid > 0) ask(CREATE_CANCEL_ASK.replace("{n}", paid), "作罷", () => mx("create_cancel"), { no: CREATE_CANCEL_NO });
+    else return mx("create_cancel");
+  }
   function createHtml() {
     const c = S.main && S.main.status && S.main.status.create;
     if (!c || !c.on) return "";
@@ -4713,16 +4723,18 @@
 
   // 管理者動作的確認框（G3）：每一項按了都先問一次、問句說出後果。疊在設定抽屜上面、不重畫抽屜，
   // 選好的下拉選單、填好的重設密碼欄位都留著；按「取消」或旁邊的暗處就關掉，什麼都不送
+  // opts.no：取消那一顆的字（自創作罷寫「再想想」，鐵匠鋪與合成流程 3.1）；opts.lines：問句底下一行一件的清單（批量拆解，3.4）
   let askGo = null;
-  function ask(text, yes, go) {
+  function ask(text, yes, go, opts = {}) {
     closeAsk();
     askGo = go;
+    const lines = (opts.lines || []).length ? `<ul class="ask-list">${opts.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : "";
     document.body.insertAdjacentHTML("beforeend", `
       <div class="ask-layer">
         <div class="ask-bg" data-act="ask-no"></div>
         <div class="ask" role="alertdialog" aria-modal="true" aria-labelledby="ask-text">
-          <p id="ask-text">${esc(text)}</p>
-          <div class="row"><button class="btn" data-act="ask-no">取消</button><button class="btn danger" data-act="ask-yes">${esc(yes)}</button></div>
+          <p id="ask-text">${esc(text)}</p>${lines}
+          <div class="row"><button class="btn" data-act="ask-no">${esc(opts.no || "取消")}</button><button class="btn danger" data-act="ask-yes">${esc(yes)}</button></div>
         </div>
       </div>`);
     document.querySelector('.ask [data-act="ask-no"]').focus();
@@ -6098,7 +6110,7 @@
           document.activeElement?.blur?.(); // 手機的鍵盤先在這一下收起，不要等換頁那一刻才收、整頁再跳一次
           await mx("create_name", { name: n ? n.value.trim() : "", move: m ? m.value.trim() : "" }); break; // 立好了 mx 直接回修練頁
         }
-        case "create-cancel": await mx("create_cancel"); break;
+        case "create-cancel": await createCancel(); break; // 付過心得的先問一次（3.1）
         case "create-reroll": await mx("create_reroll"); break; // 重悟帖：留在成形那一步，三格換了
         case "create-reread": await createReread(); break; // 重悟帖的第二個用法：重讀這句意（Joy 2026-10-22）
         case "create-open": S.createOpen = true; S.message = ""; renderPage(); window.scrollTo(0, 0); break;
