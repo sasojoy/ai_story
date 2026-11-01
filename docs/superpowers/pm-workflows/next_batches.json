@@ -1,0 +1,64 @@
+{
+ "8": {
+  "n": 8,
+  "title": "決戰「打」c——推進與結算（`generals.py`）、收季的收兵",
+  "pkg": "battle",
+  "feature": "feature/battle",
+  "dev": "dev/battle-4",
+  "plan": "docs/superpowers/plans/2026-11-01-決戰包-第4批.md",
+  "prev_plan": "docs/superpowers/plans/2026-11-01-決戰包-第3批.md",
+  "host": "battle4",
+  "reviewers": 3,
+  "body": "- 範圍照總表第 3.2 節第 8 列（約 19 個方法、345 行）：決戰的推進（一回合一回合推、輪詢時順便推進只能推一次）、結算（收場、論功、補送前的那一段）、`generals.py` 進包（舊名留別名）。\n- **收季的收兵**（手冊第十五節「第 11 批的 PM 認定」第 7 條）：`admin_end_season`、`admin_next_season` 叫攻城的 `_sieges`、`_shelve_siege` 與前一行的決戰收兵，兩段一起進包、照第 11 批的掛鉤接回原位（或留一行委派，寫理由）。\n- 第 5 批留的 `_showdown_tier4` 若在第 5 批計畫寫了挪到這一批，就在這一批搬。`_mandate_weight` 照總表歸玉璽，不搬。\n- 收場時一長串叫玉璽、時刻表、地盤、軍令、四勝利的那幾處：照第 11 批的寫法，能接掛鉤的接，不能的經 `ctx` 叫、記進邊界清單。順序一個都不能變。\n- Task 1 的情境：決戰從集結打到收場（三種收場：官軍勝、黃巾勝、平手或時刻表到了）、論功與補送、管理者收季時決戰與攻城一起收兵、開下一季；半舊半新切在**打到一半**（base 推了幾回合停，head 接著推到收場）。\n- 決戰包這一批不必再拿前綴（第 7 批拿了）。\n- **第 15 批留的「之後成包」過渡**：共用規則層的 `siege` 讀 `generals`（`SHARED_PENDING` 的 siege → generals）。這一批把 `generals` 搬進決戰包之前，先把 siege 讀的那一塊改成核心或共用層的服務（或把那幾個純規則的函式留在共用層），不然「共用規則層不 import 包」的邊界測試會紅；寫進計畫第一節。\n- 第 15 批合了之後，服務清單三、過渡與 `# shared` 重複的 12 個名字，這一批 Task 2 去重（以 `# shared` 為準），決戰包 README 的過渡處數照現行程式重寫。",
+  "check_steps": "註冊六個帳號（官軍、黃巾各二，散人、豪強各一）、管理者開季、開決戰、集結、投效、開打、推時鐘一回合一回合推到收場、每個人 /api/main 收補送、/api/reports；再開一場，打到一半時管理者收季、開下一季"
+ },
+ "17": {
+  "n": 17,
+  "title": "出陣三——序章雪恥（舊遊歷）、跟自己陣營的隊伍操練、守勢（`act:duty`）、遊歷推大勢的三個包裝，`act:train` 整格收進出陣包",
+  "pkg": "sortie",
+  "feature": "feature/sortie",
+  "dev": "dev/sortie-3",
+  "plan": "docs/superpowers/plans/2026-11-01-出陣包-第3批.md",
+  "prev_plan": "docs/superpowers/plans/2026-10-31-出陣包-第2批.md",
+  "host": "sortie3",
+  "reviewers": 2,
+  "body": "- 範圍照總表第 3.3 節乙表第 17 列（約 15 個方法、208 行）：序章雪恥（舊遊歷）、跟自己陣營的隊伍操練、守勢（`act:duty`、`_duty`、`_duty_option`）、遊歷推大勢的三個包裝；**`act:train` 那一格整格收進包**——第 11 批開了 `Verb`（act 子動詞）掛鉤，`act:train` 照 `Verb` 接（第 11 批計畫第五節第 1 條：「`act:train` 打的那一場（扣體力、並肩出陣在外面）與 `_fight_squad` 留給第 17 批，到時候 `Verb` 可能要多一格」——要多一格就在這一批加，寫進計畫，核心那一側改動算這一批的核心例外）。\n- 拿掉之前的委派：前兩批為這幾個方法留的過渡（`services.py` 過渡段標主人出陣的）這一批收掉。\n- Task 1 的情境：序章裡遊歷雪恥（打贏、打輸）、跟自家隊伍操練、守勢一天第一次記貢獻與第二次、遊歷推大勢（減法季開著與關著）、`act:train` 在五種設定各按一次（約戰季是出陣卡、weekend 與不帶是舊遊歷）；半舊半新切在序章遊歷打完、還沒領的時候（或守勢記到一半的那一天）。",
+  "check_steps": "註冊兩個帳號（一個新角色走序章、一個官軍）；序章裡遊歷一次；官軍跟自家隊伍操練、守勢兩次、按出陣那一格；weekend 與 season21 各走一次"
+ },
+ "22": {
+  "n": 22,
+  "title": "引導一——引導框、提示、新手目標、開局、入伍段、`/api/prologue`、`MAIN_ACTIONS` 的 7 個 op（`guide`、`hints`、`newbie`、`opening`、`enlist` 進新包 `guide`）",
+  "pkg": "guide",
+  "feature": "feature/guide",
+  "dev": "dev/guide-1",
+  "plan": "docs/superpowers/plans/2026-11-01-新手引導包-第1批.md",
+  "host": "guide1",
+  "reviewers": 3,
+  "body": "- 範圍照總表第 3.3 節乙表第 22 列（約 31 個方法、444 行；測試約 325 條）：引導框、碰到才說的提示、新手目標、開局（城門口三選一）、入伍段、`/api/prologue`、`MAIN_ACTIONS` 裡引導的 7 個 op；`guide`、`hints`、`newbie`、`opening`、`enlist` 五個模組進新包 `tianxia/features/guide/`（舊名留別名）。\n- **先做**：`content.py` 的提示檢查改成包的 `check_content`；出陣包叫的 `guide.note_action` 改走服務（核心不准 import 包、包對包也不准）；`_check_hints`、`_hint` 列進 services 的共用段（很多包在叫）。\n- `howto`（玩法說明，1,329 行）**不在這一批**，第 59 批。\n- Task 1 的情境：新角色從開局走：城門口三選一、第一封託付、引導框一步一步、碰到才說的提示各觸發一次、新手目標完成兩個、入伍段（投靠）、序章草廬（不帶設定）；五種設定都跑；半舊半新切在新手目標做到一半。",
+  "check_steps": "註冊三個新帳號（season21、week7 各一，再一個走不帶設定的序章）；開局三選一、看引導框、觸發兩三個提示、完成一個新手目標、投靠"
+ },
+ "23": {
+  "n": 23,
+  "title": "修練——改練、練成、意境裝卸、熔煉、絕學與破境丹、破境卡三段式、傳功、配點（`cultivation`、`chuangong`、`ascend` 進新包 `arts`）",
+  "pkg": "arts",
+  "feature": "feature/arts",
+  "dev": "dev/arts-1",
+  "plan": "docs/superpowers/plans/2026-11-01-修練包-第1批.md",
+  "host": "arts1",
+  "reviewers": 3,
+  "body": "- 範圍照總表第 3.3 節乙表第 23 列（約 32 個方法、294 行）：改練、練成、意境裝卸、熔煉（含批量）、絕學與破境丹、破境卡三段式、傳功、配點；`cultivation`、`chuangong`、`ascend` 進新包 `tianxia/features/arts/`（舊名留別名）；`learn:` 前綴。\n- **先做**：裝飾器 `_not_while_preparing`（22 個方法掛著）搬進核心。\n- 32 個方法裡約 31 個要留委派（測試、server、別包在叫）；驗收看「改 engine 挑到幾條」。\n- 武學、意境、合成的**規則模組**（martial_arts、arts、insight_fx、fusion……）照總表歸共用規則層，不搬；煉製與自創（`create`）是第 44 批、等鐵匠鋪那條線，不搬。\n- Task 1 的情境：改練、練成一成（成與受傷）、裝一個意境進槽再拆、熔煉一門與批量熔煉、破境丹衝絕學（成與敗）、破境卡三段式（模型擋著走退回）、傳功給同伴與部下、配一點屬性；半舊半新切在破境卡送出、還沒寫回的時候。\n- 第 15 批已合：武學、裝備的規則模組在 `registry.SHARED`，包直接 import 不算過渡。",
+  "check_steps": "註冊一個帳號、管理者開季；練成一成、裝卸意境、熔煉一門、批量熔煉兩門、配一點、用破境丹衝一次、傳功一次（給它同伴或部下）"
+ },
+ "24": {
+  "n": 24,
+  "title": "有所感與頓悟——`sensing`、`epiphany`、`glyph`、`insight_llm` 進新包 `sense`；`sense:`、`dunwu:` 前綴；`/api/sense` 三條路由進 `routes.py`",
+  "pkg": "sense",
+  "feature": "feature/sense",
+  "dev": "dev/sense-1",
+  "plan": "docs/superpowers/plans/2026-11-01-有所感包-第1批.md",
+  "host": "sense1",
+  "reviewers": 2,
+  "body": "- 範圍照總表第 3.3 節乙表第 24 列（約 10 個方法、101 行；四個模組 1,361 行）：有所感、自己畫字的意境、特殊頓悟（拷問、小試、心魔）；四個模組進新包 `tianxia/features/sense/`（舊名留別名）；`sense:`、`dunwu:` 前綴（`Feature.prefix` 收 tuple，第 11 批定了）；`/api/sense` 三條路由照商城的做法進包的 `routes.py`（server 那幾行變成包的路由，回應逐位元組一樣）。\n- **先做**：裝飾器 `_outing_watch` 搬進核心（探索包也掛著）。\n- 拿了前綴就把 `bot_policy.score` 的 `sense:`、`dunwu:` 那一段搬進包的 `bots.py`。\n- Task 1 的情境：有所感（探索撞上）、自己畫一筆字悟意境（模型擋著走退回；假判讀走一次成功）、特殊頓悟三種（拷問、小試、心魔：打贏、打輸、心魔未破卡）；半舊半新切在心魔未破卡掛著的時候。",
+  "check_steps": "註冊一個帳號；探索到有所感、畫一筆字（/api/sense 三條都打到）、觸發一次特殊頓悟並打一場心魔"
+ }
+}
