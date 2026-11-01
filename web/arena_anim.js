@@ -2,6 +2,7 @@
  *
  * 只演、不算：每按一招，伺服器回來的擂台畫面（shop.fight）已經是這一回合打完的樣子。兩邊出了哪一招（fight.picks）照招演：
  * 強攻衝上去劈、固守原地架住、奇襲先閃再補一下（Joy 2026-10-31）；只有被剋的那一邊受擊，出一樣的兩邊都受擊（Joy 11/1）。
+ * 招式動畫（買來的光效）只在綁了招式的那一門的戰法發動的那一回合疊（fight.bursts），絕招發動的那一下對手受擊、畫面一震（Joy 11/1）。
  * 不知道出了哪一招（放手一搏、舊的一場）照舊：掉血多的那一邊受擊、另一邊出招；都沒掉血就是閃身（氣勢往哪邊倒，另一邊閃）。打完了（shop.result）在收場卡上演最後一幕：
  * 大勝的輸家倒地、險勝的輸家跪地、僵持兩邊各出一招收手、落敗的你氣血見底倒地不然跪地。
  * 圖（web/img/arena/）是 Joy 10/31 生的斗笠小子：人畫空手，兵器另外一件一件畫，照每一格手的位置與角度疊上去（設計稿乙案）。
@@ -129,30 +130,34 @@
   // 一幕：兩個人各自的一串動作 [{sheet, at（第幾毫秒開始）, dur, keep（演完停在最後一格）, lunge（往前衝幾點，負的是往後退）}]；
   // 同一刻有兩個在演，後開始的那一個算（受擊蓋掉自己還沒演完的招）。之前、之後是站著（keep 的除外）
   const ringIdle = () => ({ sheet: "hero_bare_idle", loop: true });
-  const ringAct = (sheet, at, dur, keep = false, lunge = 0) => ({ sheet, at, dur, keep, lunge });
+  const ringAct = (sheet, at, dur, keep = false, lunge = 0, fx = false) => ({ sheet, at, dur, keep, lunge, fx });
   const RING_HIT = (at) => ringAct("hero_bare_hit", at, 380, false, -18);
-  function ringStrike(who, hurt) { // 不知道出了哪一招（舊的一場、放手一搏）：who 出手、另一邊受擊（hurt）或閃開
+  function ringStrike(who, hurt, burst = false) { // 不知道出了哪一招（舊的一場、放手一搏）：who 出手、另一邊受擊（hurt）或閃開
     const other = who === "me" ? "foe" : "me";
     const beat = { dur: 900 };
-    beat[who] = [ringAct(ringAtk(RA.looks[who]), 0, 560, false, 44)];
+    beat[who] = [ringAct(ringAtk(RA.looks[who]), 0, 560, false, 44, burst)];
     beat[other] = [hurt ? RING_HIT(300) : ringAct("hero_bare_dodge", 300, 440)];
     return beat;
   }
   // 照出的招演（Joy 2026-10-31「強攻固守奇襲應該對應不同的動作」）：強攻大步衝上去整套劈下；固守原地架住（打中他的是架開之後回的那一下）；
   // 奇襲先側身閃開、再貼近補一下快的。誰挨打照誰剋誰（ringPicked），出手那一下打到的時候挨打的那一邊受擊
-  function ringPlan(who, pick, deals) {
+  // burst：這一回合綁了招式的那一門的戰法發動了（伺服器的 bursts），出手那一下疊光效；固守也架開之後回一下
+  function ringPlan(who, pick, deals, burst = false) {
     const atk = ringAtk(RA.looks[who]);
-    if (pick === "強攻") return { acts: [ringAct(atk, 0, 640, false, 64)], hit: 330 };
-    if (pick === "奇襲") return { acts: [ringAct("hero_bare_dodge", 0, 360, false, -14), ringAct(atk, 360, 440, false, 52)], hit: 590 };
-    const guard = ringAct("hero_bare_block", 0, deals ? 520 : 760, false, -4); // 固守
-    return deals ? { acts: [guard, ringAct(atk, 520, 420, false, 34)], hit: 720 } : { acts: [guard], hit: -1 };
+    if (pick === "強攻") return { acts: [ringAct(atk, 0, 640, false, 64, burst)], hit: 330 };
+    if (pick === "奇襲") return { acts: [ringAct("hero_bare_dodge", 0, 360, false, -14), ringAct(atk, 360, 440, false, 52, burst)], hit: 590 };
+    const back = deals || burst;
+    const guard = ringAct("hero_bare_block", 0, back ? 520 : 760, false, -4); // 固守
+    return back ? { acts: [guard, ringAct(atk, 520, 420, false, 34, burst)], hit: 720 } : { acts: [guard], hit: -1 };
   }
   // 誰剋誰（同伺服器的 duel 規則：固守剋強攻、強攻剋奇襲、奇襲剋固守）
   const RING_BEATS = { "固守": "強攻", "強攻": "奇襲", "奇襲": "固守" };
-  function ringPicked(a, b, pick) { // 只有被剋的那一邊受擊；出一樣的兩邊都受擊（Joy 2026-11-01）——照招，不看這一回合誰掉了血
+  // 絕招發動的那一邊打中的那一下對手也受擊（絕招不落空）
+  function ringPicked(a, b, pick, burst = [0, 0]) { // 只有被剋的那一邊受擊；出一樣的兩邊都受擊（Joy 2026-11-01）——照招，不看這一回合誰掉了血
     const same = pick[0] === pick[1];
-    const hurt = { me: same || RING_BEATS[pick[1]] === pick[0], foe: same || RING_BEATS[pick[0]] === pick[1] };
-    const plan = { me: ringPlan("me", pick[0], hurt.foe), foe: ringPlan("foe", pick[1], hurt.me) };
+    const fx = { me: !!burst[0], foe: !!burst[1] };
+    const hurt = { me: same || RING_BEATS[pick[1]] === pick[0] || fx.foe, foe: same || RING_BEATS[pick[0]] === pick[1] || fx.me };
+    const plan = { me: ringPlan("me", pick[0], hurt.foe, fx.me), foe: ringPlan("foe", pick[1], hurt.me, fx.foe) };
     const beat = { dur: 1250 };
     for (const [side, other] of [["me", "foe"], ["foe", "me"]]) {
       const hit = hurt[side] ? plan[other].hit : -1;
@@ -163,24 +168,25 @@
     return [beat];
   }
   // 這一回合跟上一回合比：知道兩邊出了哪一招就照招演，不然照誰掉了血
-  function ringExchange(a, b, pick) {
-    if (pick && RING_PICKS.has(pick[0]) && RING_PICKS.has(pick[1])) return ringPicked(a, b, pick);
+  function ringExchange(a, b, pick, burst) {
+    const fx = [!!(burst && burst[0]), !!(burst && burst[1])];
+    if (pick && RING_PICKS.has(pick[0]) && RING_PICKS.has(pick[1])) return ringPicked(a, b, pick, fx);
     const dMe = a.me - b.me, dFoe = a.foe - b.foe, tol = 0.5;
-    if (dMe > tol && dFoe > tol) return dMe > dFoe ? [ringStrike("me", true), ringStrike("foe", true)] : [ringStrike("foe", true), ringStrike("me", true)];
-    if (dFoe > tol) return [ringStrike("me", true)];
-    if (dMe > tol) return [ringStrike("foe", true)];
+    if (dMe > tol && dFoe > tol) return dMe > dFoe ? [ringStrike("me", true, fx[0]), ringStrike("foe", true, fx[1])] : [ringStrike("foe", true, fx[1]), ringStrike("me", true, fx[0])];
+    if (dFoe > tol || fx[0]) return [ringStrike("me", true, fx[0])];
+    if (dMe > tol || fx[1]) return [ringStrike("foe", true, fx[1])];
     if (b.edge > a.edge) return [ringStrike("me", false)];
     if (b.edge < a.edge) return [ringStrike("foe", false)];
     return [];
   }
   const RING_PICKS = new Set(["強攻", "固守", "奇襲"]);
   // 收場：照結果演最後一幕，倒地、跪地的那一邊停在最後一格；贏的那一邊照最後一回合出的招出手
-  function ringFinale(tier, low, pick) {
+  function ringFinale(tier, low, pick, burst) {
     if (tier === "僵持") return [ringStrike("me", false), ringStrike("foe", false)];
     const won = tier === "大勝" || tier === "險勝", who = won ? "me" : "foe", loser = won ? "foe" : "me";
     const down = won ? tier === "大勝" : low;
     const mine = pick && RING_PICKS.has(pick[won ? 0 : 1]) ? pick[won ? 0 : 1] : "強攻";
-    const plan = ringPlan(who, mine, true);
+    const plan = ringPlan(who, mine, true, !!(burst && burst[won ? 0 : 1]));
     const beat = { dur: Math.max(1500, plan.hit + 1100) };
     beat[who] = plan.acts;
     beat[loser] = [ringAct(down ? "hero_bare_fall" : "hero_bare_kneel", plan.hit, down ? 900 : 640, true)];
@@ -197,14 +203,15 @@
       RA.looks = f.looks || { me: "", foe: "", me_look: "", foe_look: "" };
       const now = { id: f.id, round: f.round, me: f.me.hp, foe: f.foe_hp.hp, cap: f.me.cap, edge: f.edge };
       const p = RA.prev;
-      if (p && p.id === now.id && now.round > p.round) RA.q.push(...ringExchange(p, now, (f.picks || [])[now.round - 2]));
+      if (p && p.id === now.id && now.round > p.round) RA.q.push(...ringExchange(p, now, (f.picks || [])[now.round - 2], (f.bursts || [])[now.round - 2]));
       else if (!p || p.id !== now.id) { RA.q = []; RA.cur = null; RA.hold = null; }
       RA.prev = now;
     } else if (r && RA.finaleFor !== r.id) {
       RA.looks = r.looks || RA.looks;
       RA.finaleFor = r.id;
       const p = RA.prev && RA.prev.id === r.id ? RA.prev : null;
-      RA.q = ringFinale(r.tier, !p || p.me <= p.cap * 0.25, (r.picks || [])[(r.picks || []).length - 1]);
+      const last = (r.picks || []).length - 1;
+      RA.q = ringFinale(r.tier, !p || p.me <= p.cap * 0.25, (r.picks || [])[last], (r.bursts || [])[last]);
       RA.cur = null;
       RA.hold = null;
     }
@@ -253,7 +260,7 @@
     let jolt = 0; // 帶光效打中的那一下有多重
     for (const side of ["me", "foe"]) {
       const g = now2[side];
-      if (g && g.k < 1 && g.a.sheet.startsWith("hero_atk_") && ringFxImg(RA.looks[`${side}_fx`])) jolt = Math.max(jolt, ringImpact(g.k));
+      if (g && g.k < 1 && g.a.fx && ringFxImg(RA.looks[`${side}_fx`])) jolt = Math.max(jolt, ringImpact(g.k));
     }
     cx.save();
     if (jolt > 0) cx.translate(Math.sin(now * 0.09) * 7 * jolt, Math.cos(now * 0.13) * 4 * jolt);
@@ -276,7 +283,7 @@
         sheet = a.sheet;
         i = Math.min(RING_SHEETS[sheet] - 1, Math.floor(k * RING_SHEETS[sheet]));
         if (k < 1) lunge = Math.sin(k * Math.PI) * (a.lunge || 0);
-        if (sheet.startsWith("hero_atk_") && k < 1) fxAt = k;
+        if (a.fx && k < 1) fxAt = k; // 光效只在絕招發動的那一下疊（Joy 2026-11-01「我以為是招式發動的時候才會有」）
       } else if (RA.hold && RA.hold[side]) {
         sheet = RA.hold[side].sheet;
         i = RA.hold[side].i;

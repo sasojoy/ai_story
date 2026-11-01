@@ -310,6 +310,7 @@ class _Fight:
         self.lines: list[str] = []
         self.hp: dict[str, float] = {}
         self.fired: list[str] = []
+        self.skills: list[str] = []  # 發動過的戰法是哪一門武學帶的（Holder.skill，照先後；擂台動畫看綁了招式的那一門發動了沒）
         self.pending = pending if pending is not None else {}  # 蓄力中的戰法 → 第幾回合出手
         self.stacks = stacks if stacks is not None else {}
         self.planned: str | None = None  # 頭目戰、擂台、奪璽單挑：這一方這一回合自己挑好的招（夜襲只在出奇襲時發）
@@ -368,6 +369,7 @@ class _Fight:
             if steady:
                 self.us.told.append(mark)
         self.fired.append(h.tactic.name)
+        self.skills.append(h.skill)
         if h.key not in (PLAYER_KEY, FOE_KEY):
             self.ally_fires += 1
 
@@ -1299,6 +1301,8 @@ class Step(BaseModel):
     a_mod: float = 0.0  # 這一回合往 a 推的那一份推力多幾成（乘勝、悟招、斬將、青龍拖刀……減去對手的氣餒），見 scale_push
     b_mod: float = 0.0
     lines: list[str] = Field(default_factory=list)
+    a_skills: list[str] = Field(default_factory=list)  # 這一回合兩邊發動的戰法是哪一門武學帶的（Holder.skill）
+    b_skills: list[str] = Field(default_factory=list)
 
 
 def scale_push(push: float, step: Step | None) -> float:
@@ -1450,6 +1454,7 @@ def step(
         out.a_hit = False
     if g.veiled:
         out.b_hit = False
+    out.a_skills, out.b_skills = list(f.skills), list(g.skills)
     out.lines = list(lines)  # pydantic 建 Step 時抄了一份：之後加的句子要再放回去
     return out
 
@@ -1459,13 +1464,18 @@ def pool_push(hp: float, tuning: TacticTuning) -> float:
     return -hp * 100 * tuning.dot / max(1e-9, tuning.strike) * tuning.bout_strike
 
 
-def close_round(bout: Bout, push: float, tuning: TacticTuning, rng: random.Random) -> list[str]:
-    """回合結束（氣勢推好了）：祭天疊層、兩邊的狀態少一回合。回這時候多出來的句子。"""
+def close_round(bout: Bout, push: float, tuning: TacticTuning, rng: random.Random,
+                skills: tuple[list[str], list[str]] | None = None) -> list[str]:
+    """回合結束（氣勢推好了）：祭天疊層、兩邊的狀態少一回合。回這時候多出來的句子；給了 skills 就把這時候發動的戰法是哪一門帶的
+    加進（a 的, b 的）。"""
     f, g = _fights(bout, tuning, rng, bout.a.ctx.hp_ratio, bout.b.ctx.hp_ratio)
     lines: list[str] = []
     f.lines = g.lines = lines
     _after(f, push > 0)
     _after(g, push < 0)
+    if skills is not None:
+        skills[0].extend(f.skills)
+        skills[1].extend(g.skills)
     bout.a.status.tick()
     bout.b.status.tick()
     bout.round += 1
