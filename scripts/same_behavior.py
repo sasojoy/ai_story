@@ -2339,6 +2339,8 @@ main = _explore_entry(main)  # explore（第 3＋4 批）一行登記：多四�
 # ═══════════════════════════ battle：決戰一軌（主動搬六包第 5 批 dev/battle-1、全部拆包第 6 批 dev/battle-2） ═══════════════════════════
 # 全服決戰「看」那一半（畫面、戰報、補送、放手一搏補劇情）搬進 tianxia/features/battle/（計畫 docs/superpowers/plans/2026-10-31-決戰包-第1批.md）；
 # 第 6 批接著搬管理者的決戰工具與攻城（計畫 2026-11-01-決戰包-第2批.md：BattleScenario 加 admin、siege_*、resting 幾段）。
+# 第 7 批搬集結、投效、挑同伴（計畫 2026-11-01-決戰包-第3批.md：BattleScenario 加 muster_*、late、wander 幾段與 bots 那一段的大區外假人，
+# 同一套段落另外登記成 muster 一軌、切在集結中）。
 # 這一段整塊是決戰的：四條拆包線並行，接在檔尾、最後一行登記（_battle_register_track），PM 合的時候不跟別人的行穿插。
 
 
@@ -2390,7 +2392,14 @@ class BattleScenario(Scenario):
     admin（開戰之前按得到的被拒）、admin_trial（第 5 批那一場收場之後：開了再取消，與那時候按得到的被拒）——管理者的決戰工具一樣一樣按，
     成的與被拒的各一次；siege_*（地盤開著的 weekend、season21、week7：六場攻城，見 SIEGES；none、test 沒有地盤，那幾段什麼都不打）；
     resting（收季之後再按一輪，season 那一段裡）。前半照舊停在 gamble：同一刻兩場攻城（A、B）打了一兩回合、還沒收場（round 接一行
-    siege_round：決戰每一回合攻城的真人也各出一招）——後半由 head 打完兩場攻城、結算、補送。"""
+    siege_round：決戰每一回合攻城的真人也各出一招）——後半由 head 打完兩場攻城、結算、補送。
+
+    第 7 批（決戰「打」b：集結、投效、挑同伴，dev/battle-3；計畫 docs/superpowers/plans/2026-11-01-決戰包-第3批.md）插進來的段：muster_seat（六位新人
+    MUSTER_PLAYERS 直接建進資料庫再登入、擺位置；秦朗月、顧長風、莫問天名下各一位同伴）、muster_pick（挑同伴與「再想想」、臨時投效再改投、同一個
+    大區兩場打得進去時照 @流水號加入——潁汝多一場攻城 G、集結被拒的路）、muster_more（顧長風挑好同伴加入、江映雪投靠豪強之後集結名單跟著換邊）、
+    late（開打之後：停在挑同伴的才挑〔改成晚到〕、晚到、晚到臨時投效、再按另一邊被擋）、wander（參戰者走出大區、喊停）、muster_deliver（同伴回江湖、
+    情誼減半、再同步一次清記號）；bots 那一段多一位名下有同伴、站在大區外的官軍假人（趕路、挑同伴的分數）。這一軌照舊切在 gamble；同一套段落另外
+    登記成 muster 一軌（MusterScenario），切在 muster_pick 之後——舊程式寫到兩位按了加入、停在挑同伴（escort_pick 寫進存檔）就停，新程式接著挑。"""
 
     PLAYERS = {"秦朗月": "guan", "韓雲起": "huang", "柳青崖": "haoqiang", "葉寒舟": None}
     NEWBIE = "白小樓"  # Scenario.setup 註冊、不略過引導的那一位
@@ -2403,17 +2412,25 @@ class BattleScenario(Scenario):
     # 亂數），寫在這裡是情境走到哪幾支：守將守住、攻下易手、陣營守住、作罷、取消、季終收兵。每一場自己一個大區（D 在決戰收場之後才開）：同一個
     # 大區兩場以上一起集結的話加入鈕帶 @流水號，第 5 批那幾位的加入會被改掉
     SIEGES = {"A": ("guan", "nanyang_road"), "B": ("huang", "zhuo_county"), "C": ("huang", "xiaquyang"), "D": ("guan", "runan_wilds"),
-              "E": ("guan", "xinye"), "F": ("huang", "luoyang_road")}
+              "E": ("guan", "xinye"), "F": ("huang", "luoyang_road"),
+              "G": ("huang", "hilltop_wilds")}  # 第 7 批：決戰的大區（潁汝）裡多一場，黃巾與散人在那一區看得到兩場（加入鈕帶 @流水號）
     # 攻城的真人（名號：(陣營, 哪一場, 每一回合出哪一招)）：A 兩位官軍攻、一位散人助守【守軍】；B 黃巾一位攻（固守）、官軍一位守（強攻）；C 黃巾一位
     SIEGE_PLAYERS = {"程破軍": ("guan", "A", "強攻"), "方定遠": ("guan", "A", "奇襲"), "孟無涯": (None, "A", "固守"),
                      "杜飛沙": ("huang", "B", "固守"), "季長安": ("guan", "B", "強攻"), "譚小滿": ("huang", "C", "強攻")}
     SIEGE_BOT_SEATS = [("假壬", "guan"), ("假癸", "guan"), ("假子", "huang"), ("假丑", "huang")]  # E 那一場的假人：兩軍各二
     # 戰書緊接在開戰之後下（siege_open）、攻城的真人之後才建（siege_seat）：攻城的集結截止跟決戰的差不到一分鐘，siege_start 把時鐘推過攻城的截止時
     # 決戰才剛開打（season21 的長社火攻開季就開了集結、截止得更早，一樣在這一下開打）——決戰第一回合照第 5 批的樣子在 gamble 打
-    PHASES_FIRST = ["setup", "join", "seat", "look", "admin", "open", "siege_open", "siege_seat", "muster", "siege_muster", "siege_cancel",
-                    "siege_start", "start", "gamble"]
-    PHASES_SECOND = ["narrate", "fight", "siege_end", "deliver", "reports", "restore", "admin_trial", "siege_after", "bots", "siege_bots",
-                     "siege_shelve", "season"]
+    # 第 7 批：六位新人（名號：(陣營, 擺在哪)）。region＝那一場決戰的大區（spot）、hilltop＝荒丘（同一個大區，G 那一塊）、away＝大區外、也不在攻城的大區（away_spot）。
+    # 顧長風按加入、挑同伴、再想想、再按加入停在挑，後半才挑；莫問天按加入停在挑，開打了才挑（改成晚到）；江映雪（散人）臨時投效官軍再改投黃巾，
+    # 後半到曹氏莊院投靠豪強；石破浪在荒丘看得到兩場、照 @流水號加入決戰；嚴不悔、沐晚晴集結時在大區外，開打之後才到（晚到、晚到臨時投效）
+    MUSTER_PLAYERS = {"顧長風": ("guan", "region"), "莫問天": ("guan", "region"), "江映雪": (None, "region"), "石破浪": ("huang", "hilltop"),
+                      "嚴不悔": ("huang", "away"), "沐晚晴": (None, "away")}
+    ESCORTERS = ("秦朗月", "顧長風", "莫問天")  # 名下各一位同伴（秦朗月集結時照舊按「不派」：muster 那一段本來就這樣按）
+    AWAY_BOT = ("假寅", "guan")  # bots 那一段：名下一位同伴、站在大區外的官軍假人
+    PHASES_FIRST = ["setup", "join", "seat", "look", "admin", "open", "siege_open", "siege_seat", "muster_seat", "muster", "muster_pick",
+                    "muster_more", "siege_muster", "siege_cancel", "siege_start", "start", "late", "gamble"]
+    PHASES_SECOND = ["narrate", "wander", "fight", "siege_end", "deliver", "muster_deliver", "reports", "restore", "admin_trial", "siege_after",
+                     "bots", "siege_bots", "siege_shelve", "season"]
 
     def __init__(self, root: Path, profile: str, db: Path):
         super().__init__(root, profile, db)
@@ -2733,9 +2750,10 @@ class BattleScenario(Scenario):
             p.tutorial_step = len(self.c.tutorial.steps)
             p.joined_at = -1.0e9
             self.chars.save(g.state)
+        away = self.away_bot(battle_id, 41 + len(self.BOT_SEATS))  # 第 7 批：大區外、名下有同伴的那一位（趕路、挑同伴）
         runner = BotRunner(self.c, self.world, self.chars, rng=random.Random(7), clock=lambda: CLOCK[0])
         online = server_bots.is_online
-        seeds = {41 + i for i in range(len(self.BOT_SEATS))}
+        seeds = {41 + i for i in range(len(self.BOT_SEATS))} | away
         # 擺好的四個一直在線（作息照種子，可能正好不在）；一輪動不動照舊擲 act_chance（集結三十分鐘夠他們走到「加入」），出招照 battle_tick
         server_bots.is_online = lambda profile, now: profile.seed in seeds or online(profile, now)
         totals = Counter()
@@ -3193,6 +3211,288 @@ class BattleScenario(Scenario):
                 self.choose(self.GAMBLER, "battle:escort:none")
         self.siege_row("季終之前", ("D",))
 
+    # ── 第 7 批：集結、投效、挑同伴（MUSTER_PLAYERS、ESCORTERS、AWAY_BOT）──
+
+    def enroll(self, who: str, side: str | None) -> None:
+        """一位新人直接建進資料庫（同假人那一段：Game.new graduated、開局待選的事件選掉、過了新手期；兩軍的人直接記陣營）、綁一個帳號，
+        再照 API 登入——一位只花兩步，集結那 30 分鐘才放得下第 7 批的幾段（照 API 註冊、略過引導、投靠一位要十來步）。"""
+        from tianxia.accounts import AccountStore
+        from tianxia.engine import Game
+
+        self.begin()
+        g = Game.new(self.c, who, rng=random.Random(STEP[0]), world=self.world, graduated=True, sex="男")
+        g.client = None
+        g.sync(CLOCK[0])
+        for _ in range(6):  # 開局待選的事件：選掉
+            first = next((o.id for o in g.options(odds=False) if o.id.startswith("choice:") and o.enabled), None)
+            if first is None:
+                break
+            g.choose(first)
+        p = g.state.player
+        p.tutorial_step = len(self.c.tutorial.steps)
+        p.joined_at = -1.0e9
+        if side is not None and any(f.id == side for f in self.c.scenario.factions):
+            p.faction = side
+        self.passwords[who] = "pw-" + self.login_of(who)
+        store = AccountStore(self.world.db)
+        with self.world.db.transaction():
+            self.chars.save(g.state)
+            store.register(self.login_of(who), self.passwords[who])
+            store.bind_character(self.login_of(who), who)
+        emit(f"{who} 建進資料庫", {"faction": p.faction, "location": p.location})
+        self.clients[who] = self.TestClient(self.server.app)
+        self.call(who, "POST", "/api/login", {"login": self.login_of(who), "password": self.passwords[who]})
+
+    def mate_for(self, side: str | None) -> str | None:
+        """還沒有主的同伴裡挑一位（照 id 排第一個；不是大勢人物、陣營寫的是 side 或沒寫）；歷史武將同行關著（測試內容）是 None。"""
+        from tianxia import roster
+
+        if not roster.on(self.c):
+            return None
+        return next((cid for cid in sorted(self.c.characters) if cid not in self.c.figures and self.c.characters[cid].side in (None, side)
+                     and self.world.get_companion(cid).owner is None), None)
+
+    def give_mate(self, who: str, side: str | None) -> None:
+        """名下一位同伴（招進來、放進隊伍、情誼 80），同 tests/battle/test_companions_battle._ride_in。"""
+        cid = self.mate_for(side)
+        if cid is None:
+            emit(f"{who} 名下的同伴（歷史武將同行關著）", None)
+            return
+        ok = self.world.try_recruit(cid, who, cap=3)
+
+        def fn(p) -> None:
+            if cid not in p.team:
+                p.team.append(cid)
+            p.affinities[cid] = 80
+
+        self.edit(who, fn)
+        emit(f"{who} 名下的同伴", [cid, ok])
+
+    def mates(self, who: str, tag: str) -> None:
+        """同伴那幾格：隊伍、情誼、減過了沒（parted_done）、還在挑的那一下（escort_pick），全服那一份的主人與從誰身邊回江湖。"""
+        state = self.chars.load(who)
+        if state is None:
+            emit(f"{who} {tag}（沒有這個人）", None)
+            return
+        p = state.player
+        cids = sorted(set(p.team) | set(p.affinities) | {c for c, pr in self.world.companions().items() if who in (pr.owner, *pr.parted_from)})
+        emit(f"{who} 同伴 {tag}", {
+            "team": list(p.team), "affinities": {c: p.affinities.get(c) for c in cids}, "parted_done": list(p.parted_done),
+            "escort_pick": p.escort_pick,
+            "world": {c: [self.world.get_companion(c).owner, list(self.world.get_companion(c).parted_from)] for c in cids}})
+
+    def escorts_row(self, tag: str) -> None:
+        """那一場決戰上每一位隨你出陣的同伴（份量、氣血、敗走、回江湖了沒）與每個人站哪一邊、在不在場（away）。"""
+        b = self.world.get_battle()
+        emit(f"決戰的同伴與在場 {tag}", None if b is None else {
+            n: [q.faction, q.away, None if q.escort is None else [q.escort.cid, q.escort.score, round(q.escort.neili, 1), q.escort.fallen_round,
+                                                                   q.escort.released]]
+            for n, q in sorted(b.participants.items())})
+
+    def showdown_ref(self) -> int | None:
+        b = self.world.get_battle()
+        return None if b is None else b.record_id
+
+    def pick_of(self, ids: dict[str, dict], want: str) -> str | None:
+        """選單上那一顆（want 是不帶 @ 的 id）：同一個大區兩場以上時鈕帶「@流水號」，挑決戰那一場的；按不下去的不算。"""
+        rid = self.showdown_ref()
+        return next((i for i in sorted(ids) if i.split("@")[0] == want and ids[i].get("enabled")
+                     and ("@" not in i or i.endswith(f"@{rid}"))), None)
+
+    def press(self, who: str, want: str, tag: str) -> str | None:
+        ids = self.ids(self.main(who))
+        pick = self.pick_of(ids, want)
+        emit(f"{who} {tag}", pick)
+        if pick is not None:
+            self.choose(who, pick)
+        return pick
+
+    def away_spot(self) -> str | None:
+        """大區外的一處：照 id 排第一個，不在那一場決戰的大區、也不在任何一場攻城（SIEGES）的大區（不然集結時就加進了那一場攻城）。"""
+        from tianxia import atlas
+
+        def region(loc: str | None) -> str | None:
+            r = atlas.region_of(self.c, loc) if loc in self.c.locations else None
+            return None if r is None else r.id
+
+        d = self.c.battles.get(self.target()[1])
+        busy = {d.region if d is not None else None} | ({region(loc) for _, loc in self.SIEGES.values()} if self.siege_on() else set())
+        found = next((i for i in sorted(self.c.locations) if region(i) not in busy), None)
+        emit("大區外的一處", found)
+        return found
+
+    def muster_seat(self) -> None:
+        """第 7 批的六位新人建好、擺好（region：那一場決戰的大區；hilltop：荒丘，同一個大區；away：大區外、也不在攻城的大區）；秦朗月、顧長風、
+        莫問天名下各一位同伴（歷史武將同行開著的季）。"""
+        spots = {"region": self.spot(self.target()[1]), "hilltop": "hilltop_wilds", "away": self.away_spot()}
+        for who, (side, where) in self.MUSTER_PLAYERS.items():
+            self.enroll(who, side)
+            self.place(who, spots[where])
+        for who in self.ESCORTERS:
+            self.give_mate(who, self.PLAYERS.get(who, self.MUSTER_PLAYERS.get(who, (None,))[0]))
+
+    def muster_pick(self) -> None:
+        """集結中第 7 批的加入那幾種與被拒的路——攻城開著的季先在潁汝多開一場（G：黃巾攻中立的荒丘）：黃巾與散人站在那一區看得到兩場、
+        加入與投效的鈕帶 @流水號（_battle_menu），官軍那一格是守將、站不進去。
+        顧長風：按加入 → 挑同伴那一步（名下每一位一顆、「不派」「再想想」）→ 再想想 → 再按加入，停在挑；莫問天：按加入，停在挑。
+        江映雪（散人）：臨時投效官軍 → 改投黃巾。石破浪：先按一顆壞掉的 @，再照決戰那一場的 @ 加入。被拒：韓雲起按官軍的加入（不在選單上）、
+        沐晚晴在大區外按投效（看不到戰場）。集結一軌的前半停在這一段之後。"""
+        if self.siege_on():
+            side, loc = self.SIEGES["G"]
+            self.do(ADMIN, "admin_conquest_letter", {"id": loc, "side": side})
+            self.call(ADMIN, "GET", "/api/admin")  # 下一個同步的人把它開成集結
+            self.siege_row("潁汝多一場", ("G",))
+        who = "顧長風"
+        pick = self.press(who, "battle:join:guan", "集結時按的")
+        if pick is not None and "battle:escort:back" in self.ids(self.main(who)):
+            self.choose(who, "battle:escort:back")
+            self.main(who)
+            self.choose(who, pick)
+        self.mates(who, "按了加入、停在挑")
+        self.press("莫問天", "battle:join:guan", "集結時按的")
+        self.mates("莫問天", "按了加入、停在挑")
+        for want in ("battle:enlist:guan", "battle:enlist:huang"):
+            if self.press("江映雪", want, "集結時按的") is not None and "battle:escort:none" in self.ids(self.main("江映雪")):
+                self.choose("江映雪", "battle:escort:none")
+        who = "石破浪"
+        emit(f"{who} 看到的戰鬥鈕", sorted(i for i in self.ids(self.main(who)) if i.startswith("battle:")))
+        self.choose(who, "battle:join:huang@abc")  # 壞掉的流水號：不在選單上
+        self.press(who, "battle:join:huang", "集結時按的")
+        self.choose("韓雲起", "battle:join:guan")  # 只能站自己陣營那一邊：選單上沒有
+        self.main("沐晚晴")
+        self.choose("沐晚晴", "battle:enlist:guan")  # 人在大區外：看不到戰場、沒有投效鈕
+        self.battle_row("第 7 批的人加入之後")
+        self.escorts_row("集結中")
+
+    def muster_more(self) -> None:
+        """集結一軌的後半從這裡接（重新登入）：顧長風挑好同伴加入（集結中，照加入帶著那一位）；江映雪到曹氏莊院（同一個大區）投靠地方豪強，
+        豪強分屬兩軍的季挑了依附哪一軍、集結名單跟著換到那一邊（_ally_follows_battle，FB-273）；豪強不分屬兩軍的季照舊臨時投效著。"""
+        self.login_all()
+        who = "顧長風"
+        ids = self.ids(self.main(who))
+        pick = next((i for i in sorted(ids) if i.startswith("battle:escort:") and i not in ("battle:escort:none", "battle:escort:back")), None)
+        emit(f"{who} 挑的同伴", pick)
+        if pick is not None:
+            self.choose(who, pick)
+        self.mates(who, "挑好同伴之後")
+        who = "江映雪"
+        hq = next((f for f in self.c.scenario.factions if f.id == "haoqiang"), None)
+        if hq is None or "cao_manor" not in hq.join_at or not self.place(who, "cao_manor"):
+            emit("投靠豪強那一段略過（這份內容沒有地方豪強或曹氏莊院）", None)
+        else:
+            self.choose(who, "faction:haoqiang")
+            b = self.world.get_battle()
+            now_side = b.participants[who].faction if b is not None and who in b.participants else None
+            ally = next((i for i in sorted(self.ids(self.main(who))) if i.startswith("faction:ally:") and i.rpartition(":")[2] != now_side), None)
+            emit(f"{who} 選邊", ally)
+            if ally is not None:
+                self.choose(who, ally)
+            self.choose(who, "faction:confirm")
+            self.settle_choices(who)
+        self.battle_row("第 7 批後半的人加入之後")
+        self.escorts_row("集結中（後半）")
+
+    def late(self) -> None:
+        """開打之後才到：莫問天集結時按了加入、停在挑同伴，現在才挑（改成晚到、帶著那一位）；嚴不悔（黃巾）擺進決戰的大區，按「加入戰局」；
+        沐晚晴（散人）擺進大區，晚到臨時投效黃巾，再按官軍那一顆被擋（開打之後鈕上沒有改投）。"""
+        who = "莫問天"
+        ids = self.ids(self.main(who))
+        pick = next((i for i in sorted(ids) if i.startswith("battle:escort:") and i not in ("battle:escort:none", "battle:escort:back")), None)
+        emit(f"{who} 開打之後才挑的同伴", pick)
+        if pick is not None:
+            self.choose(who, pick)
+        self.mates(who, "開打之後挑了")
+        loc = self.spot(self.target()[1])
+        for who, want in (("嚴不悔", "battle:join_late"), ("沐晚晴", "battle:enlist:huang")):
+            self.place(who, loc)
+            if self.press(who, want, "開打之後按的") is not None and "battle:escort:none" in self.ids(self.main(who)):
+                self.choose(who, "battle:escort:none")
+        self.choose("沐晚晴", "battle:enlist:guan")
+        self.battle_row("晚到之後")
+        self.escorts_row("開打")
+
+    def wander(self) -> None:
+        """參戰者走出決戰的大區、再喊停（_sync_battle_presence：出發那一下記離開；喊停那一下這一趟只剩下一站，落回大區就不算離開；抵達時
+        再記一次）：顧長風（帶著同伴：主人離開大區時同伴也不在場上）往大區外的一處走（照 id 排、第一站還在大區裡的第一處），喊停。之後
+        照回合輪詢，抵達那一下照路程。"""
+        from tianxia import atlas
+
+        who = "顧長風"
+        b = self.world.get_battle()
+        d = self.c.battles.get(b.battle_id) if b is not None else None
+        if b is None or b.phase != "active" or d is None or d.region is None or who not in b.participants:
+            emit("走出大區那一段略過（沒有開打中、有大區的決戰）", None)
+            return
+        state = self.chars.load(who)
+        inside = {i for i in self.c.locations if (r := atlas.region_of(self.c, i)) is not None and r.id == d.region}
+        dest = None
+        for cand in sorted(i for i in self.c.locations if i not in inside):
+            route = atlas.way_to(state, self.c, cand)
+            if route is not None and len(route.path) >= 2 and route.path[0] in inside:
+                dest = cand
+                break
+        emit(f"{who} 往大區外走", dest)
+        if dest is None:
+            return
+        self.call(who, "POST", "/api/travel", {"place": dest, "mode": "walk"})
+        self.escorts_row("走出大區之後")
+        if "act:halt" in self.ids(self.main(who)):
+            self.choose(who, "act:halt")
+        self.escorts_row("喊停之後")
+
+    def muster_deliver(self) -> None:
+        """第 7 批的新人收補送（下一次同步）：帶著同伴的顧長風、莫問天——同伴打完回江湖（file_showdown → escort_home：拿出隊伍、一句、情誼減半），
+        再同步一次清掉全服的記號（settle_partings，FB-361）；秦朗月不派，沒有那一句。"""
+        for who in self.MUSTER_PLAYERS:
+            self.main(who)
+            self.me(who, "收補送之後")
+        for who in self.ESCORTERS:
+            self.mates(who, "收補送之後")
+            self.main(who)
+            self.mates(who, "再同步一次之後")
+
+    def away_bot(self, battle_id: str, seed: int) -> set[int]:
+        """假人那一場：一位官軍假人站在那一場的大區外、名下一位同伴（BotRunner 的 _toward_battle 照 rally_region 趕路，到了按加入、停在挑同伴：
+        battle:escort:* 照決戰包的分數〔None：不按〕）。回它的種子（一直在線），這份內容沒有那一場是空的。"""
+        from tianxia import atlas
+        from tianxia.engine import Game
+        from tianxia.state import BotProfile
+
+        d = self.c.battles.get(battle_id)
+        if d is None or d.region is None:
+            return set()
+        name, side = self.AWAY_BOT
+        inside = {i for i in self.c.locations if (r := atlas.region_of(self.c, i)) is not None and r.id == d.region}
+        start = self.c.scenario.start_location
+        loc = start if start not in inside else next(i for i in sorted(self.c.locations) if i not in inside)
+        self.begin()
+        g = Game.new(self.c, name, rng=random.Random(30), world=self.world, graduated=True)
+        g.client = None
+        g.sync(CLOCK[0])
+        for _ in range(6):
+            first = next((o.id for o in g.options(odds=False) if o.id.startswith("choice:") and o.enabled), None)
+            if first is None:
+                break
+            g.choose(first)
+        p = g.state.player
+        p.bot = BotProfile(personality="普通", seed=seed, faction=side, season_number=self.world.get_season_number())
+        p.faction, p.location, p.journey = side, loc, None
+        p.visited.add(loc)
+        p.tutorial_step = len(self.c.tutorial.steps)
+        p.joined_at = -1.0e9
+        self.chars.save(g.state)
+        emit(f"{name} 站在大區外", loc)
+        self.give_mate(name, side)
+        return {seed}
+
+
+class MusterScenario(BattleScenario):
+    """集結一軌（全部拆包第 7 批；--track muster）：決戰一軌同一套段落（整段一模一樣），半舊半新切在集結中——base 開了集結、幾位加入、
+    顧長風與莫問天按了加入停在挑同伴（PlayerState.escort_pick 寫進存檔）就停，head 接著挑、投效、投靠豪強換邊、開打、晚到、收場。"""
+
+    PHASES_FIRST = BattleScenario.PHASES_FIRST[:BattleScenario.PHASES_FIRST.index("muster_pick") + 1]
+    PHASES_SECOND = BattleScenario.PHASES_FIRST[BattleScenario.PHASES_FIRST.index("muster_pick") + 1:] + BattleScenario.PHASES_SECOND
+
 
 def _battle_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
     """再開一軌（TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記；同 dev/tavern-1 的 _register_track，名字分開免得兩塊都在時
@@ -3204,10 +3504,12 @@ def _battle_register_track(name: str, scenario: type, mutation: tuple, profile: 
     MUTANT_PROFILE[name] = profile
 
 
-# 改一個字（selftest）：第 6 批換成這一批搬的一句（取消決戰沒有進行中的那一場；搬之前在 engine.py、之後在 features/battle/admin.py）。
-# 第 5 批那一句（view.py 的「軍餉發下來了。」）在計畫第五節的單點突變裡照樣驗
-_battle_register_track("battle", BattleScenario, (("tianxia/features/battle/admin.py", "tianxia/engine.py"),
-                                                  ("（沒有進行中的決戰。）", "（沒有進行中的決戰！）")), "week7")
+# 改一個字（selftest）：第 7 批換成這一批搬的一句（晚到的人趕到戰場；搬之前在 engine.py、之後在 features/battle/muster.py）——決戰一軌
+# 前半走到（late）、集結一軌後半走到。第 5、6 批那兩句（view.py 的「軍餉發下來了。」、admin.py 的「（沒有進行中的決戰。）」）在計畫第五節
+# 的單點突變裡照樣驗
+_BATTLE_MUTATION = (("tianxia/features/battle/muster.py", "tianxia/engine.py"), ("你趕到了戰場，這一回合就能出手。", "你趕到了戰場，這一回合就能出手！"))
+_battle_register_track("battle", BattleScenario, _BATTLE_MUTATION, "week7")
+_battle_register_track("muster", MusterScenario, _BATTLE_MUTATION, "week7")  # 第 7 批：同一套段落，切在集結中
 
 
 # ═══════════════════════════ tavern：酒肆一軌（主動搬六包第 10 批，dev/tavern-1） ═══════════════════════════
