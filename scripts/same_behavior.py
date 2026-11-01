@@ -2438,7 +2438,7 @@ class BattleScenario(Scenario):
     # 戰書緊接在開戰之後下（siege_open）、攻城的真人之後才建（siege_seat）：攻城的集結截止跟決戰的差不到一分鐘，siege_start 把時鐘推過攻城的截止時
     # 決戰才剛開打（season21 的長社火攻開季就開了集結、截止得更早，一樣在這一下開打）——決戰第一回合照第 5 批的樣子在 gamble 打
     # （第 7 批插進來的段落照 still 不吃這段時間；gamble 開頭 expect 驗）
-    # 第 7 批：六位新人（名號：(陣營, 擺在哪)）。region＝那一場決戰的大區（spot）、hilltop＝荒丘（同一個大區，G 那一塊）、away＝大區外、也不在攻城的大區（away_spot）。
+    # 第 7 批：六位新人（名號：(陣營, 擺在哪)）。region＝那一場決戰的大區（spot）、hilltop＝荒丘（同一個大區，G 那一塊）、away＝那一場決戰的大區外（away_spot）。
     # 顧長風按加入、挑同伴、再想想、再按加入停在挑，後半才挑；莫問天按加入停在挑，開打了才挑（改成晚到）；江映雪（散人）臨時投效官軍再改投黃巾，
     # 後半到曹氏莊院投靠豪強；石破浪在荒丘看得到兩場、照 @流水號加入決戰；嚴不悔、沐晚晴集結時在大區外，開打之後才到（晚到、晚到臨時投效）
     MUSTER_PLAYERS = {"顧長風": ("guan", "region"), "莫問天": ("guan", "region"), "江映雪": (None, "region"), "石破浪": ("huang", "hilltop"),
@@ -3374,7 +3374,10 @@ class BattleScenario(Scenario):
         return pick
 
     def away_spot(self) -> str | None:
-        """大區外的一處：照 id 排第一個，不在那一場決戰的大區、也不在任何一場攻城（SIEGES）的大區（不然集結時就加進了那一場攻城）。"""
+        """大區外的一處：照 id 排第一個、不在那一場決戰的大區（審查 should：原本連每一場攻城的大區也避開，攻城開著的季五個大區全佔滿——
+        決戰與 G 在潁汝、A 南陽、B 幽州、C 冀州、F 洛陽——一處都找不到、照舊站在潁川〔潁汝〕，「集結時人在大區外」只有不帶設定走到）。
+        正式內容排第一的是冀州的白馬津：攻城開著的季那裡有 C 在集結（集結中就取消、不開打），嚴不悔、沐晚晴站在那裡不按 C 的鈕、不會加進 C
+        （集結截止不拉旁人進來，battle_instance.close_muster 只分已報名、沒選邊的人）。那一場決戰有大區、卻找不到大區外的一處就停（expect）。"""
         from tianxia import atlas
 
         def region(loc: str | None) -> str | None:
@@ -3382,14 +3385,15 @@ class BattleScenario(Scenario):
             return None if r is None else r.id
 
         d = self.c.battles.get(self.target()[1])
-        busy = {d.region if d is not None else None} | ({region(loc) for _, loc in self.SIEGES.values()} if self.siege_on() else set())
-        found = next((i for i in sorted(self.c.locations) if region(i) not in busy), None)
+        busy = d.region if d is not None else None
+        found = next((i for i in sorted(self.c.locations) if region(i) != busy), None)
         emit("大區外的一處", found)
+        self.expect(d is None or d.region is None or found is not None, "那一場決戰的大區外找得到一處（嚴不悔、沐晚晴集結時站在那裡）")
         return found
 
     @_still
     def muster_seat(self) -> None:
-        """第 7 批的六位新人建好、擺好（region：那一場決戰的大區；hilltop：荒丘，同一個大區；away：大區外、也不在攻城的大區）；秦朗月、顧長風、
+        """第 7 批的六位新人建好、擺好（region：那一場決戰的大區；hilltop：荒丘，同一個大區；away：那一場決戰的大區外）；秦朗月、顧長風、
         莫問天名下各一位同伴（歷史武將同行開著的季）。"""
         spots = {"region": self.spot(self.target()[1]), "hilltop": "hilltop_wilds", "away": self.away_spot()}
         for who, (side, where) in self.MUSTER_PLAYERS.items():
@@ -3428,7 +3432,9 @@ class BattleScenario(Scenario):
         self.press(who, "battle:join:huang", "集結時按的")
         self.choose("韓雲起", "battle:join:guan")  # 只能站自己陣營那一邊：選單上沒有
         self.main("沐晚晴")
-        self.choose("沐晚晴", "battle:enlist:guan")  # 人在大區外：看不到戰場、沒有投效鈕
+        # 人在大區外：看不到戰場、沒有決戰的投效鈕。按的是決戰那一顆在潁汝的 id（攻城開著的季潁汝有決戰與 G 兩場，鈕帶 @流水號）——她站的冀州
+        # 有 C 在集結，不帶 @ 的那一顆是 C 的，按了就加進 C
+        self.choose("沐晚晴", "battle:enlist:guan" + (f"@{self.showdown_ref()}" if self.siege_on() else ""))
         self.battle_row("第 7 批的人加入之後")
         self.escorts_row("集結中")
 
