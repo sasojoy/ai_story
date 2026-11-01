@@ -4232,8 +4232,9 @@
       <div class="art-card">${tenCells(a.card)}</div>
     </div>`;
   }
+  // 上品磨得慢（wear_note，鐵匠鋪與合成流程 3.6「上品的卡多一句」）接在鋒利度後面，同裝備庫那一列；神器原品、本命兵器一律上品
   function boardGearHtml(g) {
-    const bits = [g.what, `屬${g.attribute}`, g.grade, g.tempers ? `淬煉 ${g.tempers | 0}/${g.temper_max | 0}` : "", g.edge != null && g.wear_word ? `${g.wear_word} ${g.edge | 0}` : ""];
+    const bits = [g.what, `屬${g.attribute}`, g.grade, g.tempers ? `淬煉 ${g.tempers | 0}/${g.temper_max | 0}` : "", g.edge != null && g.wear_word ? `${g.wear_word} ${g.edge | 0}` : "", g.wear_note || ""];
     return `<div class="acard ro gear-ro">
       <div class="hd"><div><h3>${esc(g.name)}</h3><div class="sub">${bits.filter(Boolean).map(esc).join("・")}</div></div></div>
       ${(g.tactic || []).map((t) => `<p class="art-tactic">${tacticHtml(t)}</p>`).join("")}
