@@ -3394,7 +3394,8 @@ class BattleScenario(Scenario):
 
     def late(self) -> None:
         """開打之後才到：莫問天集結時按了加入、停在挑同伴，現在才挑（改成晚到、帶著那一位）；嚴不悔（黃巾）擺進決戰的大區，按「加入戰局」；
-        沐晚晴（散人）擺進大區，晚到臨時投效黃巾，再按官軍那一顆被擋（開打之後鈕上沒有改投）。"""
+        沐晚晴（散人）擺進大區，晚到臨時投效官軍——人多的那一邊（晚到照投效的那一軍記，不照「補人少的那一邊」分；Task 5 的單點突變抓到
+        原本投效黃巾時兩種一樣），再按黃巾那一顆被擋（開打之後鈕上沒有改投）。"""
         who = "莫問天"
         ids = self.ids(self.main(who))
         pick = next((i for i in sorted(ids) if i.startswith("battle:escort:") and i not in ("battle:escort:none", "battle:escort:back")), None)
@@ -3403,11 +3404,11 @@ class BattleScenario(Scenario):
             self.choose(who, pick)
         self.mates(who, "開打之後挑了")
         loc = self.spot(self.target()[1])
-        for who, want in (("嚴不悔", "battle:join_late"), ("沐晚晴", "battle:enlist:huang")):
+        for who, want in (("嚴不悔", "battle:join_late"), ("沐晚晴", "battle:enlist:guan")):
             self.place(who, loc)
             if self.press(who, want, "開打之後按的") is not None and "battle:escort:none" in self.ids(self.main(who)):
                 self.choose(who, "battle:escort:none")
-        self.choose("沐晚晴", "battle:enlist:guan")
+        self.choose("沐晚晴", "battle:enlist:huang")
         self.battle_row("晚到之後")
         self.escorts_row("開打")
 
