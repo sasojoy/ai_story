@@ -6,7 +6,7 @@
 接了這裡的討伐懸賞，這一趟就是遭遇（`weights` 的 `bounty_here`：遭遇 100、其餘 0），交了差回原表。
 
 cfg 是 `Config.jianfa`（`models.JianfaRules`，繼承 `jianfa_numbers.JianfaNumbers`；純規則的測試直接建後者）；地點只讀 `tags`、
-`danger` 與 `explore_mix`。不 import engine、不碰 Game.rng：開關、選單、結算在引擎（`Game._explore_one`，Task 2-3）；
+`danger` 與 `explore_mix`。不 import engine、不碰 Game.rng：開關、選單、結算在 explore_actions（`explore_one`，原本的 `Game._explore_one`；Task 2-3）；
 這裡另放鈕上的小字（`hint_of`，照比重算）與段落的寫法（`line`：照 content/outing_lines.json 抽句子、接成一段，結尾「得：…　失：…」）。
 """
 

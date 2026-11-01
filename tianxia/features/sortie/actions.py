@@ -80,6 +80,46 @@ def train_title(ctx: Game) -> str:
     return rules.PROLOGUE_FIGHT if prologue_rules.active(ctx.state, ctx.content) else rules.NAME
 
 
+# ── act:train 那一格（act 子動詞，全部拆包第 11 批：原本 Game._everyday_options、action_notes、_act、_action_title 裡出陣那幾行，照抄）──
+
+
+def train_cell(ctx: Game, loc: Location, cost: int, odds: bool) -> list[Option] | None:
+    """行動列出陣那一格：地盤開著時整格是出陣的——序章的雪恥照舊是遊歷那一套（不看出陣開關、不算次數），鈕上寫「雪恥」（出陣探索與地盤）；
+    序章以外是出陣那一顆（設計第二節）、散人站在戰線上灰的一顆寫真正的原因（FB-250）、領地爭奪別人的大本營與廣宗不給攻（裁決 18）；
+    都不是是 []（接了、一顆都沒有）。地盤關著是 None：核心照舊畫遊歷。"""
+    s, c = ctx.state, ctx.content
+    if not rules.on(c):
+        return None
+    if prologue_rules.active(s, c):
+        return [ctx._train_option(loc, cost, odds, name=rules.PROLOGUE_FIGHT)] if ctx._train_squad_ids(loc) else []
+    option = sortie_option(ctx, loc, cost, odds)  # 散人、不在戰線上的地點沒有
+    if option is not None:
+        return [option]
+    if rules.ranger_here(c, ctx._side(), loc.id, s.world):
+        return [Option(id="act:train", label=f"{rules.NAME}（{rules.RANGER_NOTE}）", enabled=False)]
+    if rules.out_of_contest(c, s.world, ctx._side(), loc.id):
+        return [Option(id="act:train", label=f"{rules.NAME}（{rules.OUT_NOTE}）", enabled=False)]
+    return []
+
+
+def train_note(ctx: Game, loc: Location) -> str | None:
+    """行動列底下出陣那一行：約戰開著寫約戰那一句（貼約戰或截糧，減法季批 3b）、出陣開著（序章以外）寫出陣那一行；都不是是 None
+    （核心照舊寫遊歷那一行）。"""
+    if duel_actions.duel_on(ctx):
+        return duel_actions.duel_line(ctx, loc)
+    if rules.on(ctx.content) and not prologue_rules.active(ctx.state, ctx.content):
+        return sortie_line(ctx, loc)
+    return None
+
+
+def train_run(ctx: Game, prepared) -> list[str] | None:
+    """按出陣那一格（Game._act 最前面）：約戰開著、不在序章時打開出陣前那張卡（不花體力；截糧的運糧隊經過時照舊攻打，體力在裡面扣）；
+    其餘是 None——出陣那一場（扣體力、並肩出陣的加成包在外面）照舊在核心的 _act 打（總表第 17 批把 act:train 整格收進包）。"""
+    if duel_actions.duel_on(ctx) and not prologue_rules.active(ctx.state, ctx.content):
+        return duel_actions.duel_entry(ctx)
+    return None
+
+
 def sorties_left(ctx: Game) -> int:
     """今天還能出陣幾次（Config.sortie.per_day；換日同回體丹，_pill_day）。約戰開著的季讀 jianfa_per_day（減法季批 3b）。"""
     if duel_actions.duel_on(ctx):

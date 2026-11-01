@@ -2614,10 +2614,53 @@ class BattleScenario(Scenario):
 
     def deliver(self) -> None:
         """收場之後每個人打 /api/main：下一次同步把那一場補到自己手上（江湖紀錄、戰報、軍餉、名望、行狀、戰功；「剛剛」是那一場的卡片與
-        收場那一刻的戰局條）。序章裡的那一位不在名單上，什麼都不補。"""
+        收場那一刻的戰局條）。序章裡的那一位不在名單上，什麼都不補。第一位要經同步才補到那一場的人（crossing_who）同步之前先擺 crossing
+        （核心收接縫，全部拆包第 11 批）。"""
+        who_x = self.crossing_who()
         for who in [*self.PLAYERS, self.NEWBIE]:
+            if who == who_x:
+                self.crossing(who)
             self.main(who)
             self.me(who, "收補送之後")
+
+    def crossing_who(self) -> str:
+        """名單上第一位還沒補到收場那一場的人：自己最後一手收了場的那一位在 _battle_choose 那一下就補了（_settle_showdown 叫補送，不經
+        sync；第 11 批審查：原本擺在秦朗月身上，他那一則「長社火攻」不是 deliver_results 那一格補的，挪動那一格比不出差），其餘參戰的人
+        要等自己下一次同步，才經 sync 的 deliver_results 補到。內容裡沒有決戰（測試內容）照舊是秦朗月。"""
+        b = self.world.get_battle()
+        if b is not None and b.phase == "ended":
+            for who in self.PLAYERS:
+                state = self.chars.load(who)
+                if who in b.participants and state is not None and b.record_id not in state.player.battle_results_seen:
+                    return who
+        return self.GAMBLER
+
+    def crossing(self, who: str) -> None:
+        """同一次同步收好幾包的補送（核心收接縫，全部拆包第 11 批；計畫 docs/superpowers/plans/2026-11-01-核心收接縫.md 1.3）：收場之後
+        這個人（crossing_who：還沒補到那一場、這一下同步才經 deliver_results 補到的那一位）同步之前，季上替他擺一筆護衛補帳（還在 engine
+        的 _deliver_guard_credits）、一則酒肆的風聲、一張他雇的過期殺手單。那一下同步依序補：決戰的補送（決戰包，deliver_results 的位置：
+        補份量快照之後、玉璽碎片之前）→ 護衛 → 風聲、殺手單（酒肆包，deliver_notices 的位置：護衛之後、領地爭奪換天之前）。deliver 那一行
+        me 的江湖紀錄標題看得出三格的先後：決戰的補送挪過護衛、挪到酒肆後面，酒肆那三個挪過護衛、挪到決戰前面，都抓得到；沒越過護衛的
+        看不出來（決戰的補送只在補份量快照與護衛之間挪、越過玉璽碎片與改名那幾格，它們這一下什麼都不寫）。三個 deliver 不看酒肆開關，
+        測試內容沒有酒肆也照擺照送；測試內容沒有決戰，只看得出護衛與酒肆兩格。"""
+        from tianxia import figure_aid
+        from tianxia.characters import name_key
+        from tianxia.state import TavernHit, Whisper
+
+        other = self.LATE_GAMBLER if who == self.GAMBLER else self.GAMBLER
+        state = self.chars.load(who)
+        place = state.player.location if state is not None else self.c.scenario.start_location
+        now = CLOCK0 + STEP[0] * self.STEP_SECONDS
+
+        def fn(s) -> None:
+            s.guard_credits.setdefault(who, []).append(figure_aid.CREDIT_LINE.format(name="某人", who=other))
+            s.tavern_whispers.setdefault(name_key(who), []).append(Whisper(kind="seek", who=other, place=place, time=s.time, named=True))
+            s.tavern_hit_seq += 1
+            s.tavern_hits.append(TavernHit(id=s.tavern_hit_seq, client=who, target=other, tier=0, price=20, place=place,
+                                           placed_real=now - 7200, until_real=now - 60))
+
+        self.world.mutate_season(fn)
+        emit(f"季上替{who}擺一筆護衛補帳、一則風聲、一張過期的殺手單（同一下同步收三個位置的補送）", place)
 
     def reports(self) -> None:
         """戰報頁：列表、預設那一筆（決戰的完整戰況與收場那一刻的戰局條）、再點最舊的那一筆——這時每個人只有那一場決戰一筆，點的就是
@@ -3216,7 +3259,8 @@ class TavernScenario(Scenario):
     FAME = {"丁鵬": 300, "孟星魂": 120, "郭大路": 0}
     BOT_SEATS = [("柳長街", "guan", "yingchuan"), ("卓東來", "huang", "wan_city"), ("王動", "guan", "runan"), ("鐵中棠", "huang", "zhuo_county")]
     PHASES_FIRST = ["setup", "seat", "enter", "ops", "keeper", "chatter", "board", "hire"]
-    PHASES_SECOND = ["resume", "whispers", "strike", "away", "streak", "lapse", "watch", "crossing", "trace", "closed", "bots", "season"]
+    PHASES_SECOND = ["resume", "whispers", "strike", "away", "streak", "lapse", "watch", "crossing", "trace", "depart", "closed", "bots",
+                     "season"]
 
     def __init__(self, root: Path, profile: str, db: Path):
         super().__init__(root, profile, db)
@@ -3601,6 +3645,33 @@ class TavernScenario(Scenario):
         self.choose("丁鵬", "act:tavern")
         self.choose("丁鵬", "tavern:trace")
         self.choose("丁鵬", "tavern:back")
+
+    def depart(self) -> None:
+        """坐在酒肆裡動身（核心收接縫，全部拆包第 11 批：Game._depart 收店那一行換成店面登記的收店，排在擂台之後）。丁鵬坐進潁川的酒肆：
+        從輿圖安排前往被擋（atlas.travel_block「還坐在酒肆裡」）；Game._depart 本身（輿圖、移動、折返、人物帶路都從它出發，坐在店裡的人
+        平常走不到這一行）在鎖裡直接叫一次：酒肆跟擂台、鐵匠鋪那幾間一起收起來、動身上路。之後擺回潁川。測試內容沒有潁川：同一串照打。"""
+        from tianxia import atlas
+        from tianxia.engine import Game
+
+        start = "yingchuan" if "yingchuan" in self.c.locations else self.c.scenario.start_location
+        dest = self.c.locations[start].connections[0] if self.c.locations[start].connections else start
+        self.place("丁鵬", start)
+        self.settle_choices("丁鵬")  # 前面出門碰上的事件還在待選：選掉（不然選單是那一則事件，沒有進酒肆那一顆）
+        self.place("丁鵬", start)
+        self.choose("丁鵬", "act:tavern")
+        self.me("丁鵬", "動身之前")
+        self.call("丁鵬", "POST", "/api/travel", {"place": dest, "mode": "walk"})
+        self.me("丁鵬", "從輿圖安排前往之後")
+        self.begin()
+        with self.world.action_lock():
+            game = Game(self.c, self.chars.load("丁鵬"), world=self.world)
+            game.sync(CLOCK[0])
+            route = atlas.way_to(game.state, self.c, dest)
+            emit("丁鵬 直接動身", game._depart(route, "walk") if route is not None else None)
+            self.chars.save(game.state)
+        self.me("丁鵬", "動身之後")
+        emit("丁鵬 動身之後的選單", sorted(self.ids(self.main("丁鵬"))))
+        self.place("丁鵬", start)
 
     def closed(self) -> None:
         """酒肆開關關掉（記憶體裡，做完開回來）。開著時郭大路先坐進潁川的酒肆、照那一刻建一份 Game（建的時候開著，沒有收店）；

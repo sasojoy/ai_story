@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 
 def grant(ctx: Game) -> None:
-    """封測發放（mall.grant_beta）：這個錢包還沒發過就發，寫一則「商城」江湖紀錄。own_turn_checks 叫。"""
+    """封測發放（mall.grant_beta）：這個錢包還沒發過就發，寫一則「商城」江湖紀錄。本人這一輪（Game.own_turn_checks 的 on_own_turn 掛鉤）叫。"""
     wallet = ctx._wallet()
     if wallet is None:
         return

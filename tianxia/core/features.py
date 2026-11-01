@@ -28,6 +28,26 @@
 - check_content：取代原本的 content.check_mall（載入時驗商品）。核心的 content.py 不能 import 包，3.3 的 content 那一列只宣告
   content.py 讀哪些檔、沒有「驗」，所以開一個讓包自己驗。
 
+**接縫掛鉤**（全部拆包第 11 批「核心收接縫」開的；計畫 docs/superpowers/plans/2026-11-01-核心收接縫.md）：第 1～10 批把功能搬進包時，
+先後會影響結果的接縫留在原位直接叫包（邊界測試的 GAME_DIRECT、GAME_DELEGATE_CALLERS）。這一批在原本那一行的位置開掛鉤：核心在那一行
+照清單問每一包，現在每一個位置都只有一包回答，順序一字不變；之後別的包接同一個位置，照 FEATURES 的順序排在前後。每一個位置夾在哪兩行
+之間寫在計畫 1.3。看不看 enabled：給選項的三樣（Shop.menu、Shop.entry、Verb.cell）照遊戲當下的掛鉤先問，關著的包不給選項；其餘的
+不問——原位那幾行本來就不看包的開關（酒肆的三個 deliver、決戰補送、收店、標題……），包把原位的判斷照搬過去。
+
+| 掛鉤 | 核心在哪裡問 |
+|---|---|
+| on_due(ctx) | Game.world_tick、sync、advance 結算到時的事那一行（約戰） |
+| on_away(ctx, away_from) | Game.sync 補算完本人下線那一段之後（殺手找上門） |
+| deliver_results(ctx) | Game.sync 收場補送那一格：補份量快照之後、玉璽碎片之前（決戰） |
+| deliver_notices(ctx) | Game.sync 別人捎來的那一格：護衛補帳之後、領地爭奪換天之前（酒肆的風聲、殺手單、託付留意） |
+| choose_unlisted(ctx, option_id) | Game.choose 查選單之前：不在選單上的動作（約戰的 sortie:*） |
+| after_action(ctx) | Game.choose 最後：本人做完一件事（殺手檢查） |
+| on_own_turn(ctx) | Game.own_turn_checks 最前面：本人這一輪（商城的封測發放） |
+| scene(ctx)、scene_over(ctx) | Game._own_scene_text 擂台之後（坐在宴席上）；Game.scene_text 最前面（蓋在畫面上的戰場） |
+| record_detail(ctx, record) | Game.battle_detail：戰報頁那一筆（決戰照 battles 表重讀完整戰況） |
+| shops()（Shop） | 店面登記：店裡那一串（_everyday_options）、進店那一顆、哪一間開著（_shop_open）、動身收店（_depart）、此地不開了收店（sync、_drop_stale_references） |
+| verbs()（Verb） | act 子動詞：_act 最前面、_action_title、行動列那一格（_everyday_options）、行動列底下那一行（action_notes）、只打開一張卡的回話（choose） |
+
 ctx 第一階就是 Game；功能包只准叫 services.py 那張清單上的方法。
 """
 from __future__ import annotations
@@ -40,8 +60,34 @@ from .option import Option
 
 if TYPE_CHECKING:
     from ..engine import Game
-    from ..models import Content
-    from ..state import GameState
+    from ..models import Content, Location
+    from ..state import BattleRecord, GameState
+
+
+@dataclass(frozen=True)
+class Shop:
+    """店面登記（第 11 批）：一間開在城裡、坐進去選單整個換成那間店的店。核心在七間店共用的那幾處照清單問（舊的六間還在 engine，
+    搬成包的店接在它們後面）。每一樣都拿 ctx（Game）。"""
+
+    key: str  # Game._shop_open 回的字（店面那一頁畫哪一間；server 的 main_view 照它）
+    inside: Callable[[Any], bool]  # 此刻坐在店裡（picking_*）
+    here: Callable[[Any], bool]  # 這裡此刻開著這間店（開關、地點、不在路上……）
+    close: Callable[[Any], None]  # 收起來（掌櫃那一句一併清）
+    menu: Callable[[Any], list[Option]]  # 坐在店裡時的整個選單
+    entry: Callable[[Any], Option | None]  # 「此地還能做」裡進店那一顆；這裡不開門是 None
+
+
+@dataclass(frozen=True)
+class Verb:
+    """act:<verb> 那一格的主人（act 子動詞；第 11 批先開給主人已經成包的三格，總表第 57 批其餘的接上同一張表）。每一樣都可以是 None，
+    回 None 也一樣：照舊由核心做（核心那一支還在：探索三選一、舊探索、遊歷……）。"""
+
+    verb: str
+    run: Callable[[Any, Any], list[str] | None] | None = None  # Game._act 最前面：按下去（ctx, prepared）
+    title: Callable[[Any], str | None] | None = None  # Game._action_title：這一下江湖紀錄的整個標題
+    cell: Callable[[Any, Any, int, bool], list[Option] | None] | None = None  # 行動列那一格（ctx, 地點, 體力, 寫不寫勝算）；[] 是接了、一顆都沒有
+    note: Callable[[Any, Any], str | None] | None = None  # 行動列底下那一行（ctx, 地點）
+    picks: tuple[str, ...] = ()  # 按了只打開一張卡的回話：不算做過、不寫江湖紀錄（Game.choose 的 picked_only、quiet）
 
 
 @dataclass(frozen=True)
@@ -67,7 +113,9 @@ class FeatureHooks(Protocol):
     之後要加先看這一張表，不多開；真的要加先過 PM。"""
 
     name: str  # 包名（資料夾名）
-    prefix: str | None  # 選項 id 的前綴（「feast」→ feast:join:3）；沒有選項的包是 None
+    # 選項 id 的前綴（「feast」→ feast:join:3）；沒有選項的包是 None。一包兩三個前綴寫 tuple（第 11 批，PM 定：單挑、銀兩出口、有所感、陣營都會用到），
+    # 分派照清單、照 tuple 的順序找第一個對上的（owner_of）；兩包不能宣告同一個前綴（tests/core/test_contract_features.py）
+    prefix: str | tuple[str, ...] | None
     web: tuple[str, ...]  # web/ 底下這一包的檔（index.html 照舊順序載入；第 3 階才由伺服器照它生成）
     content: tuple[str, ...]  # content/ 底下這一包的檔（第 1、2 階 content.py 照舊全部讀）
     bot_always: tuple[str, ...]  # 永遠按得下去的選項前綴：整季機器人（bot.pick）不按，不然「沒得按就推進時間」的訊號會失效
@@ -88,13 +136,26 @@ class FeatureHooks(Protocol):
     def admin_tools(self, shell: Any) -> dict[str, AdminTool]: ...
     def routes(self, shell: Any) -> Any: ...
     def check_content(self, content: Content, need: Callable[[bool, str], None]) -> None: ...
+    # ── 接縫掛鉤（第 11 批；不問 enabled，Shop.menu、Shop.entry、Verb.cell 除外）──
+    def on_due(self, ctx: Game) -> None: ...
+    def on_away(self, ctx: Game, away_from: float) -> None: ...
+    def deliver_results(self, ctx: Game) -> None: ...
+    def deliver_notices(self, ctx: Game) -> None: ...
+    def choose_unlisted(self, ctx: Game, option_id: str) -> list[str] | None: ...
+    def after_action(self, ctx: Game) -> list[str]: ...
+    def on_own_turn(self, ctx: Game) -> None: ...
+    def scene(self, ctx: Game) -> str | None: ...
+    def scene_over(self, ctx: Game) -> tuple[str, bool] | None: ...
+    def record_detail(self, ctx: Game, record: BattleRecord) -> BattleRecord | None: ...
+    def shops(self) -> tuple[Shop, ...]: ...
+    def verbs(self) -> tuple[Verb, ...]: ...
 
 
 class Feature:
     """FeatureHooks 的預設值：什麼都不做、一個選項都不給。每一包繼承它、只改用得到的那幾個。"""
 
     name = ""
-    prefix: str | None = None
+    prefix: str | tuple[str, ...] | None = None
     web: tuple[str, ...] = ()
     content: tuple[str, ...] = ()
     bot_always: tuple[str, ...] = ()
@@ -142,6 +203,42 @@ class Feature:
 
     def check_content(self, content: Content, need: Callable[[bool, str], None]) -> None:
         return None
+
+    def on_due(self, ctx: Game) -> None:
+        return None
+
+    def on_away(self, ctx: Game, away_from: float) -> None:
+        return None
+
+    def deliver_results(self, ctx: Game) -> None:
+        return None
+
+    def deliver_notices(self, ctx: Game) -> None:
+        return None
+
+    def choose_unlisted(self, ctx: Game, option_id: str) -> list[str] | None:
+        return None
+
+    def after_action(self, ctx: Game) -> list[str]:
+        return []
+
+    def on_own_turn(self, ctx: Game) -> None:
+        return None
+
+    def scene(self, ctx: Game) -> str | None:
+        return None
+
+    def scene_over(self, ctx: Game) -> tuple[str, bool] | None:
+        return None
+
+    def record_detail(self, ctx: Game, record: BattleRecord) -> BattleRecord | None:
+        return None
+
+    def shops(self) -> tuple[Shop, ...]:
+        return ()
+
+    def verbs(self) -> tuple[Verb, ...]:
+        return ()
 
     def __repr__(self) -> str:
         return f"<功能包 {self.name}>"
@@ -217,10 +314,19 @@ def on_drop_stale(ctx: Game) -> None:
         f.on_drop_stale(ctx)
 
 
+def prefixes(feature: Feature) -> tuple[str, ...]:
+    """這一包的選項前綴（Feature.prefix 收字串或 tuple，第 11 批）：一律攤成 tuple，沒有前綴是空的。"""
+    p = feature.prefix
+    if p is None:
+        return ()
+    return (p,) if isinstance(p, str) else tuple(p)
+
+
 def owner_of(option_id: str) -> Feature | None:
-    """哪一包的選項（照 id 的前綴）；不是任何一包的是 None。"""
+    """哪一包的選項（照 id 的前綴）；不是任何一包的是 None。照 FEATURES 的順序、每一包照它的前綴依序找，第一個對上的算
+    （兩包不能宣告同一個前綴，契約測試守，所以頂多一個對得上）。"""
     kind = option_id.partition(":")[0]
-    return next((f for f in registered() if f.prefix is not None and f.prefix == kind), None)
+    return next((f for f in registered() if kind in prefixes(f)), None)
 
 
 def bot_pick(ctx: Game, option: Option) -> tuple[bool, float | None]:
@@ -262,3 +368,167 @@ def web_files() -> list[str]:
     """各包登記的網頁檔（web/ 底下，照 FEATURES 的順序）。第 3 階才由伺服器照它生成 index.html；在那之前 index.html 與
     tests/kit/webharness.APP_FILES 是手寫的，tests/core/test_contract_features.py 照這一份對它們，店面的 CSS 測試照它讀包的樣式。"""
     return [name for f in registered() for name in f.web]
+
+
+# ── 接縫掛鉤（第 11 批；計畫 docs/superpowers/plans/2026-11-01-核心收接縫.md 1.3 寫每一個在哪兩行之間）──
+# 不問 enabled 的照清單問登記的每一包（registered）：原位那幾行本來就不看包的開關，包照搬原位的判斷。
+# 給選項的三樣（shop_menu、shop_entries、act_cell）照遊戲當下的掛鉤問開著的包（active）。
+
+
+def on_due(ctx: Game) -> None:
+    """到時的結算（world_tick、sync、advance 原本叫約戰結算的那一行）。"""
+    for f in registered():
+        f.on_due(ctx)
+
+
+def on_away(ctx: Game, away_from: float) -> None:
+    """本人補算完下線那一段（sync；有上一次同步才叫，away_from 是上一次同步的現實秒）。"""
+    for f in registered():
+        f.on_away(ctx, away_from)
+
+
+def deliver_results(ctx: Game) -> None:
+    """收場補送（sync：補份量快照之後、玉璽碎片之前）。"""
+    for f in registered():
+        f.deliver_results(ctx)
+
+
+def deliver_notices(ctx: Game) -> None:
+    """別人捎來的（sync：護衛補帳之後、領地爭奪換天之前）。"""
+    for f in registered():
+        f.deliver_notices(ctx)
+
+
+def choose_unlisted(ctx: Game, option_id: str) -> list[str] | None:
+    """不在選單上的動作（Game.choose 查選單、建紀錄之前）：第一個不是 None 的算；都不接是 None，核心照舊查選單。"""
+    for f in registered():
+        got = f.choose_unlisted(ctx, option_id)
+        if got is not None:
+            return got
+    return None
+
+
+def after_action(ctx: Game) -> list[str]:
+    """本人做完一件事（Game.choose 最後：記下陣營之後、存回季之前）：各包的回話照清單串起來。"""
+    out: list[str] = []
+    for f in registered():
+        out += f.after_action(ctx)
+    return out
+
+
+def on_own_turn(ctx: Game) -> None:
+    """本人這一輪（Game.own_turn_checks 最前面，暫停的檢查之前：暫停中照做）。"""
+    for f in registered():
+        f.on_own_turn(ctx)
+
+
+def scene(ctx: Game) -> str | None:
+    """自己眼前的場景卡（Game._own_scene_text：擂台之後、有所感之前）：第一個不是 None 的算。"""
+    for f in registered():
+        got = f.scene(ctx)
+        if got is not None:
+            return got
+    return None
+
+
+def scene_over(ctx: Game) -> tuple[str, bool] | None:
+    """蓋在畫面上的（Game.scene_text 最前面）：(那一段, 要不要整個取代自己眼前的事)；第一個不是 None 的算。"""
+    for f in registered():
+        got = f.scene_over(ctx)
+        if got is not None:
+            return got
+    return None
+
+
+def record_detail(ctx: Game, record: BattleRecord) -> BattleRecord:
+    """戰報頁那一筆（Game.battle_detail 找到之後）：第一個不是 None 的換掉它；都不換照原本那一筆。"""
+    for f in registered():
+        got = f.record_detail(ctx, record)
+        if got is not None:
+            return got
+    return record
+
+
+def _shops(ctx: Game, *, gated: bool) -> list[Shop]:
+    return [shop for f in (active(ctx) if gated else registered()) for shop in f.shops()]
+
+
+def shop_menu(ctx: Game) -> list[Option] | None:
+    """坐在店裡時的整個選單（Game._everyday_options：舊的六間店之後、伏筆答題之前）。給選項：只問開著的包。"""
+    for shop in _shops(ctx, gated=True):
+        if shop.inside(ctx):
+            return shop.menu(ctx)
+    return None
+
+
+def shop_entries(ctx: Game) -> list[Option]:
+    """「此地還能做」裡進店的那幾顆（Game._everyday_options：馬市之後、擂台入口之前）。給選項：只問開著的包。"""
+    return [option for shop in _shops(ctx, gated=True) if (option := shop.entry(ctx)) is not None]
+
+
+def shop_open(ctx: Game) -> str | None:
+    """哪一間店開著（Game._shop_open：舊的六間店之後）：坐在店裡、這裡也還開著是那一間的 key；坐在店裡、這裡已經不開門了是 None。"""
+    for shop in _shops(ctx, gated=False):
+        if shop.inside(ctx):
+            return shop.key if shop.here(ctx) else None
+    return None
+
+
+def close_shops(ctx: Game) -> None:
+    """動身了：坐著的店收起來（Game._depart：收擂台之後）。"""
+    for shop in _shops(ctx, gated=False):
+        if shop.inside(ctx):
+            shop.close(ctx)
+
+
+def drop_shops(ctx: Game) -> None:
+    """此地不開這間店了（開關關了、人被挪走、內容改版）：坐著的收起來（Game.sync、_drop_stale_references：收擂台之後）。"""
+    for shop in _shops(ctx, gated=False):
+        if shop.inside(ctx) and not shop.here(ctx):
+            shop.close(ctx)
+
+
+def _verbs(ctx: Game | None, verb: str) -> list[Verb]:
+    features = registered() if ctx is None else active(ctx)
+    return [v for f in features for v in f.verbs() if v.verb == verb]
+
+
+def act(ctx: Game, verb: str, prepared: Any) -> list[str] | None:
+    """act:<verb> 按下去（Game._act 最前面）：主人接了回那幾句；都不接是 None，核心照舊。"""
+    for v in _verbs(None, verb):
+        got = v.run(ctx, prepared) if v.run is not None else None
+        if got is not None:
+            return got
+    return None
+
+
+def act_title(ctx: Game, verb: str) -> str | None:
+    """act:<verb> 那一下江湖紀錄的標題（Game._action_title 那張表之前；表照 arg 查、不看 kind，這裡也一樣）。"""
+    for v in _verbs(None, verb):
+        got = v.title(ctx) if v.title is not None else None
+        if got is not None:
+            return got
+    return None
+
+
+def act_cell(ctx: Game, verb: str, loc: Location, cost: int, odds: bool) -> list[Option] | None:
+    """行動列那一格（Game._everyday_options）：開著的主人接了回那幾顆（[] 是接了、一顆都沒有）；都不接是 None，核心照舊。給選項：只問開著的包。"""
+    for v in _verbs(ctx, verb):
+        got = v.cell(ctx, loc, cost, odds) if v.cell is not None else None
+        if got is not None:
+            return got
+    return None
+
+
+def act_note(ctx: Game, verb: str, loc: Location) -> str | None:
+    """行動列底下那一行（Game.action_notes）：主人接了回那一句（可以是空字串）；都不接是 None，核心照舊。"""
+    for v in _verbs(None, verb):
+        got = v.note(ctx, loc) if v.note is not None else None
+        if got is not None:
+            return got
+    return None
+
+
+def pick_replies(verb: str | None = None) -> tuple[str, ...]:
+    """按了只打開一張卡的回話（Verb.picks；Game.choose 的 picked_only 照 verb 認、quiet 不看 verb）。"""
+    return tuple(r for f in registered() for v in f.verbs() if verb is None or v.verb == verb for r in v.picks)
