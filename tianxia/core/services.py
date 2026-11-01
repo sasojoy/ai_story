@@ -26,6 +26,10 @@
 - `ctx._record_exp(record, exp, source)`：本人的經驗寫進戰報（滿級換心得）；`ctx._file_battle(record, ...)`：存戰報、回那一行
 - `ctx._play_rounds(record, squad, tier, ...)`：排回合的演出；`ctx._deed_fame(kind)`：立功給名望
 - `ctx._load_kin(name)`、`ctx._save_kin(game)`：同一把鎖裡讀、寫別人的存檔（混戰、截殺）
+# battle（全部拆包第 7 批：集結、投效、挑同伴加入那一刻快照的份量；總表歸核心「戰力快照」）
+- 戰力快照：`ctx._battle_scores()`（三招的份量；測試換掉 `Game._battle_scores`）、`ctx._battle_power()`（威力；測試換掉）、`ctx._battle_gear()`
+  （坐騎、部下）、`ctx._battle_marks()`（新手、叛投、隨你出陣的同伴、玉璽碎片……）、`ctx._battle_role()`（職位）、`ctx._battle_road()`
+  （武學屬性）、`ctx._battle_neili_cap()`（決戰的氣血池上限）
 
 店面與戰報的補充（tavern：主動搬六包第 10 批酒肆加的）
 - `ctx._shop_say(key, problem=None)`、`ctx._shop_after(problem, done, keyer=None)`：掌櫃那一句（七間店共用，shop_lines.json 的情況）
@@ -68,6 +72,8 @@
 - `ctx._definition_of` 的本體搬進了包（`features/battle/sieges.py`），包裡照樣經 ctx 叫（測試直接叫 `Game._definition_of`）；
   `ctx._sieges()`（還沒收場的攻城戰，照開集結的先後；這一季沒開領地爭奪是空的、不讀資料庫）——本體也在 `sieges.py`，核心原位叫委派，
   別的包問「此刻有沒有攻城」叫它
+# battle（全部拆包第 7 批）
+- `ctx.battle_now()`（這個人看的那一場，同 `_battle_now`；假人的分數讀它，決戰包的 `bots.py`）
 
 explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._outing_on()`（主人 explore：減法季探索一顆開著、不在序章裡；出陣包問——散人那一行、出陣的字；出陣第 1 批原本列在
@@ -100,6 +106,11 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._timetable_event(event_id)`、`ctx._timetable_refusal(action)`（時刻表：這一季的那一件、時刻表類管理者動作的共同檢查；主人大勢人物與賽季）
 - `ctx.admin_battles()`、`ctx.admin_start_battle(battle_id, now)`、`ctx.cancelled_showdowns()`、`ctx._deliver_battle_results()`（決戰包自己的
   委派：測試直接叫〔前三個〕或換掉〔`Game._deliver_battle_results`，test_renown_cross〕，包裡經 ctx 叫才打得到；呼叫端改完就拿掉）
+# battle（全部拆包第 7 批：集結、投效、挑同伴）
+- `ctx._battle_status(tick)`（測試換掉、數它被叫幾次〔test_engine、test_hints〕）、`ctx._mutate_battle_now(fn)`、`ctx.battles_now()`（決戰「打」
+  那一半：此刻每一場、改自己參戰的那一場；第 8 批搬進決戰包之後改成包裡直接叫）
+- `ctx._backfill_battle_scores()`（出招之前補自己的份量快照；主人：總表第 12 批「決戰順便」）、`ctx._mandate_weight(definition, scores)`
+  （天命之爭手上有碎片的人份量加權；主人：玉璽，總表裁定這一批留原位）
 - `ctx._push_progress(loc_id, nominal, source, how)`（地盤：領地爭奪推、拉進度）
 - `ctx._order_credit(...)`（軍令；出陣約戰結算時也叫在攻方、應戰的人那兩份 Game 上——包裡的變數名 attacker、defender，邊界測試照樣掃）；
   `ctx._drill_gains(squad, share)`（操練）
@@ -132,6 +143,10 @@ explore（主動搬六包第 3＋4 批加的這一段；都是 Game.__init__ 起
 - `ctx.mall_bought`、`ctx.mall_already`（商城）：上一次 actions.buy 的結果（買成的商品 id；同一個編號早就買好的那一件），伺服器在鎖裡讀
 - `ctx._clash_won`、`ctx._sortie_marked`、`ctx._sortie_moved`、`ctx._sortie_flipped`（出陣）：Game.__init__ 起的、出陣那一下設、
   `_push_progress`（地盤，留在核心）寫與讀——混戰得勝的加成、記過一筆出陣沒、這一下推（拉）動了多少、推滿易手了沒（出陣回報讀）
+
+# battle（全部拆包第 7 批：Game.__init__ 起的，核心的 _battle_now〔第 8 批〕也讀 _battle_ref）
+- `ctx._battle_ref`（這一下按的鈕指定的那一場：加入鈕帶 @流水號）、`ctx._escort_picked`、`ctx._escort_now`（挑好了同伴、正要加入的那一下：
+  戰力快照照它帶那一位）
 
 tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由同上）
 - `ctx._tavern_seek_exact`、`ctx._tavern_reply`：查人那一下問得多清楚（託酒家留意看它；None 沒查成、True 確切地點、False 沒問清楚）、
