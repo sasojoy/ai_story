@@ -132,3 +132,19 @@ def test_png_and_webp_headers():
     data = (ART / "hero_bare_fall.webp").read_bytes()
     assert orders.image_size(data) == ("webp", 1320, 220)
     assert base64.b64encode(data)  # 網頁照 base64 送
+
+
+def test_every_sheet_prompt_tells_the_generator_to_keep_the_whole_character_in_frame():
+    """審圖的清單要求「每一格一個完整的人、不能被切半」（studio.CHECK_SHEET），所以生圖的提示詞一定要講明留白與不准殘影：
+    2026-11-02 第一張自建形象連七張都被擋下，理由全是頭頂被上緣裁掉、有一格模糊成殘影、臉與下襬褪色（要求跟指示對不上）。"""
+    from tianxia.features.looks import studio
+
+    order = orders.Order(pid=1, owner="甲", name="試", prompt="紅衣少女", status=orders.PENDING,
+                         reason="", look="u1", time=0.0)
+    prompts = orders.gen_prompts(order)
+    assert set(prompts) == set(orders.SHEETS)
+    for sheet, prompt in prompts.items():
+        assert "must not touch or cross the frame edge" in prompt, sheet
+        assert "margin" in prompt and "no motion blur" in prompt, sheet
+    # 定裝照那一張也要（清單寫 full body, nothing cut off）
+    assert "whole character must be inside the frame" in studio.PORTRAIT_PROMPT

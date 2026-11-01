@@ -273,10 +273,19 @@ def gen_prompts(order: Order) -> dict[str, str]:
 
 BASE_STYLE = ("Style: soft ink-wash watercolor with warm muted tints, hand-drawn ink outlines, same style as the attached reference "
               "image (Chinese wuxia, Three Kingdoms era).")
+# 審圖的清單（studio.CHECK_SHEET）要求「每一格一個完整的人，不能空、不能被切半」，所以這裡要把它講明白：
+# 2026-11-02 第一張自建形象連七張都被擋下，理由都是同一類——頭頂（髮髻、髮飾）被畫面上緣裁掉、有一格模糊成殘影、
+# 臉與下襬褪色泛白。生圖的提示詞只說了白底、無陰影、腳踩同一條地平線，從來沒說「整個人要留在畫面裡」，
+# 也沒禁止殘影與褪色，要求跟指示對不上。下面 FRAMING 就是補這一段（Joy 2026-11-02「我們自己補足玩家給的提示詞」）。
+FRAMING = ("The WHOLE character must be inside every frame: the top of the head — including hair, hair ornaments and headdress — "
+           "and the feet must not touch or cross the frame edge. Leave a clear empty margin of about one tenth of the frame above "
+           "the head and below the feet. Draw a complete, solid character in every frame: no motion blur, no ghosting or "
+           "afterimages, no fading, no transparency, no washed-out or half-drawn figures; the face and clothes keep their full "
+           "colour in every frame.")
 RULES = ("IMPORTANT: the character holds NO weapon and NO object. Hands are closed into loose fists as if gripping an invisible handle. "
          "Sprite sheet rules: pure white background, no ground shadow, no text, no numbers, no frame borders. Every frame is the same "
          "size and the character is the same size in every frame. Feet stand on the same horizontal ground line in every frame. "
-         "Side view, facing right.")
+         "Side view, facing right. " + FRAMING)
 ACTIONS = {
     "hero_bare_idle": "Idle fighting stance, gentle breathing loop: 4 frames, right fist held forward at waist height. Layout: 4 frames in one row. Aspect 4:1.",
     "hero_bare_hit": "Getting hit: 1 flinch, head snapping back, 2 knocked backward, arms flung out, 3 staggering to regain balance. Layout: 3 frames in one row. Aspect 3:1.",

@@ -93,7 +93,9 @@ PORTRAIT_PROMPT = (
     "{style}\nCharacter design (定裝照) for a 2D fighting sprite: ONE chibi child martial artist (big head about one third of body "
     "height), same proportions, size and drawing style as the attached reference sprite, described by the player as: \"{text}\".\n"
     "Full body, side view facing right, idle fighting stance, fists loosely closed, holding NO weapon and NO object. "
-    "Pure white background, no ground shadow, no text, no frame border."
+    "Pure white background, no ground shadow, no text, no frame border.\n"
+    # 清單（CHECK_PORTRAIT）要求「full body, nothing cut off」：定裝照也要講明留白，不然髮飾一高就被上緣裁掉
+    "The whole character must be inside the frame, with a clear empty margin above the hair and below the feet."
 )
 SHEET_EXTRA = ("The FIRST attached image is the layout and pose reference (same frame count, same poses, same character size). "
                "The SECOND attached image is this character's design: keep exactly the same face, hair, clothes and colors in every frame.")
