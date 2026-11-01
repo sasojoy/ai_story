@@ -315,3 +315,38 @@ def test_cancelling_before_paying_goes_straight(game):
     out = run(m, _CANCEL, S={"tab": "craft"}, menxia=server.menxia_view(game),
               responses={"/api/menxia/create_cancel": {"menxia": server.menxia_view(game), "main": m, "message": ""}})
     assert out["asked"] == "" and out["before"].count("/api/menxia/create_cancel") == 1  # 沒有損失：不問
+
+
+# ── 鐵匠鋪與合成流程 3.5（C 批）：合併的預覽卡在火候字後面寫「真意 N%」（skillview.forge_preview 的 grand_pct）──
+
+
+def _preview_card(game, v):
+    html = run(server.main_view(game), "return H.pageCraft();", S={"tab": "craft", "forgePreview": v,
+               "forgeSel": [{"type": "ins", "id": "feng"}, {"type": "ins", "id": "huo"}]}, menxia=server.menxia_view(game))
+    at = html.index('class="made-card preview"')
+    return html[at:html.index('class="mc-cost"', at)]
+
+
+def test_a_merge_preview_writes_the_true_meaning_percent_after_the_fire(made):
+    from conftest import real_content
+
+    from tianxia import skillview
+
+    game = made
+    game.content.traits.high.append(next(h for h in real_content().traits.high if h.attribute == "陽"))  # 同 tests/arts/test_fusion.py：風＋火合出陽、那一路有真意
+    v = skillview.forge_preview(game.state, game.content, game.world, ["feng", "huo"])
+    assert v["kind"] == "合併" and isinstance(v["grand_pct"], int)
+    card = _preview_card(game, v)
+    verdict = card[card.index('class="mc-verdict"'):]
+    assert f'<span class="mc-grand">真意 {v["grand_pct"]}%</span>' in verdict
+    assert verdict.index(f"<b>{v['fire']['word']}</b>") < verdict.index("真意 ")  # 火候字留著當形容，數字寫在它後面
+
+
+def test_no_percent_without_a_true_meaning_or_when_pondering(made):
+    from tianxia import skillview
+
+    game = made
+    v = skillview.forge_preview(game.state, game.content, game.world, ["feng", "huo"])
+    for case in ({**v, "grand_pct": None}, {**v, "kind": "揣摩", "grand_pct": None}):  # 那一路沒有真意、揣摩：不寫「真意 0%」
+        assert "mc-grand" not in _preview_card(game, case) and "真意 0%" not in _preview_card(game, case)
+    assert '<span class="mc-grand">真意 0%</span>' in _preview_card(game, {**v, "kind": "合併", "grand_pct": 0})  # 判斷是 != null：0 也照寫

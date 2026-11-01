@@ -2645,7 +2645,10 @@
     const sub = [v.attribute ? `屬${v.attribute}` : "", merge ? "" : v.gen, v.level > 1 ? `第${v.level}成` : ""].filter(Boolean);
     const badge = merge ? '<span class="qseal qi big">意</span>' : v.quality ? seal(v.quality, true) : '<span class="qseal q1 big">？</span>';
     const pair = merge || v.kind === "揣摩"; // 意境＋意境：品質照兩份裡好的，另寫真意機會
-    const verdict = pair ? `${fireHtml(v.fire)}${merge && v.depth ? `<span class="muted">${esc(v.depth)}</span>` : ""}`
+    // 真意幾成（鐵匠鋪與合成流程 3.5，企劃者 2026-10-29「寫百分比沒關係」）：合併而且那一路有真意時伺服器給 grand_pct，寫在火候字後面；
+    // 揣摩、那一路沒有真意是 null，不寫（不寫「真意 0%」）。字待 joy 潤
+    const grand = merge && v.grand_pct != null ? `<span class="mc-grand">真意 ${v.grand_pct | 0}%</span>` : "";
+    const verdict = pair ? `${fireHtml(v.fire)}${grand}${merge && v.depth ? `<span class="muted">${esc(v.depth)}</span>` : ""}`
       : v.quality ? `<b>${esc(v.quality)}</b>${v.why && v.why.length ? `<span class="muted">・${v.why.map(esc).join("；")}</span>` : ""}${v.near ? `<span class="near">・${esc(v.near)}</span>` : ""}`
       : `品質看造化：${esc(v.odds || "")}`;
     const tags = (v.traits || []).map((t) => t.grand ? `<i class="tr grand${t.maybe ? " maybe" : ""}">${esc(t.name)}<small>真意</small></i>`
