@@ -82,7 +82,8 @@ def test_a_module_also_picks_the_tests_of_the_modules_that_import_it():
 ])
 def test_a_shared_rules_module_picks_its_own_tests_smoke_and_the_boundary_test(module, own):
     """總表第六節第 5 條：共用規則層（registry.SHARED）的模組改了，只挑自己檔名的測試＋煙霧＋邊界測試——不跑核心測試、不照「誰 import 它」
-    挑也不往上找。以前 might 經 ascend、create 挑到 46 個檔（T-02）、timetable 往上挑到 133 個檔、tactics 走「太多」那一條帶核心測試；
+    挑也不往上找。以前 might 經 ascend、create 等 4 個模組往上挑到 46 個檔（T-02）、timetable 經 19 個模組往上挑到 109 個檔（連直接
+    import 它的一共 133）、tactics 走「太多」那一條帶核心測試；
     allied 沒有自己檔名的測試，只剩煙霧＋邊界。"""
     assert module in test_for.SHARED_MODULES
     picked = test_for.pick([f"tianxia/{module}.py"])
