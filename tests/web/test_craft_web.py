@@ -338,8 +338,9 @@ def test_a_merge_preview_writes_the_true_meaning_percent_after_the_fire(made):
     assert v["kind"] == "合併" and isinstance(v["grand_pct"], int)
     card = _preview_card(game, v)
     verdict = card[card.index('class="mc-verdict"'):]
-    assert f'<span class="mc-grand">真意 {v["grand_pct"]}%</span>' in verdict
-    assert verdict.index(f"<b>{v['fire']['word']}</b>") < verdict.index("真意 ")  # 火候字留著當形容，數字寫在它後面
+    # 火候字留著當形容，數字緊接在它後面、在爐火那一句前面（7201b686 實機修正：原本接在整排後面、撞上境界那幾個字）
+    assert f'<b>{v["fire"]["word"]}</b><span class="mc-grand">真意 {v["grand_pct"]}%</span><span>' in verdict
+    assert verdict.index("真意 ") < verdict.index(v["fire"]["line"])
 
 
 def test_no_percent_without_a_true_meaning_or_when_pondering(made):
