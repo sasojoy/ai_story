@@ -1,0 +1,295 @@
+"""畫坊（studio.py；Joy 2026-11-01「一步到位」、審圖選 Claude）：抓等圖的單、畫、切、審，不過照意見改、最多三張，過了照管理者上傳那一條收
+（到齊了變待審），還是不過停手寫在訂單上、管理者按「再畫一次」重來；畫的時候訂單被退回就不收。自建形象先畫定裝照、十張照它畫同一個人。
+生圖與審圖都是假的（不叫外部服務、不花錢）。"""
+from __future__ import annotations
+
+import pytest
+from test_looks import _game
+from test_looks_moves import ART, BUDDHA, _admin, _art, on  # noqa: F401  fixture
+
+from tianxia.features.looks import actions, moves, orders, studio
+from tianxia.wallet import Wallet
+
+SHEET = {s: (actions.WEB_IMG / "arena" / f"{s}.webp").read_bytes() for s in orders.SHEETS}  # 斗笠小子那一套：格數對的現成圖
+
+
+class Painter:
+    def __init__(self):
+        self.calls: list[tuple[str, int]] = []
+
+    def paint(self, prompt, images, aspect, size):
+        self.calls.append((prompt, len(images)))
+        return b"raw"
+
+
+class Critic:
+    def __init__(self, verdicts=()):
+        self.verdicts, self.seen = list(verdicts), []
+
+    def review(self, checklist, image, refs):
+        self.seen.append(checklist)
+        return self.verdicts.pop(0) if self.verdicts else studio.Verdict(True)
+
+
+def cut(job, raw):
+    """假的切圖：絕招那幾樣回一張小的去背圖，形象回那一張格數對的現成圖，定裝照原樣。"""
+    return ART if job.kind == "move" else raw if job.slot == studio.PORTRAIT else SHEET[job.slot]
+
+
+def _tick(game, painter, critic, **kw):
+    return studio.tick(game.content, game.world, actions.image_root(game), actions.WEB_IMG, painter, critic, cut, **kw)
+
+
+def _move_order(on, game):
+    _art(game)
+    actions.order_move(game, BUDDHA, "move-ref-001")
+    return actions.view(game)["moves"]["list"][0]["id"]
+
+
+def test_a_move_gets_both_drawings_and_waits_for_the_admin(on):
+    game = _game(on)
+    pid = _move_order(on, game)
+    painter, critic = Painter(), Critic()
+    lines = _tick(game, painter, critic)
+    assert lines == [f"#{pid} 大佛 收了"] and "「大佛」" in painter.calls[0][0] and "大佛" in critic.seen[0]
+    assert BUDDHA in critic.seen[0]  # 審圖看得到玩家寫的那一句（系統提示寫明那是資料）
+    assert _tick(game, painter, critic) == [f"#{pid} 佛掌 收了，到齊了等管理者上架"]
+    wallet = Wallet(game.world.db)
+    assert moves.of(wallet.purchase(pid)).status == orders.REVIEW
+    assert _tick(game, painter, critic) == []  # 沒有要畫的了
+    row = actions.admin_view(_admin(on, game.world))["moves"]["open"][0]
+    assert row["studio"] == {"painted": 2, "failed": ""} and row["have"]
+    assert "上架了" in actions.admin_move_release(_admin(on, game.world), pid)[-1]
+
+
+def test_a_failed_review_is_fixed_from_the_last_picture(on):
+    game = _game(on)
+    pid = _move_order(on, game)
+    painter = Painter()
+    critic = Critic([studio.Verdict(False, ["佛像多了一隻手"], "Remove the extra arm.")])
+    assert _tick(game, painter, critic) == [f"#{pid} 大佛 收了"]
+    fix, refs = painter.calls[1]
+    assert "Remove the extra arm." in fix and refs == 2  # 上一張＋參考圖
+    assert Wallet(game.world.db).purchase(pid).data["studio"]["painted"] == 2
+
+
+def test_three_misses_stop_until_the_admin_says_again(on):
+    game = _game(on)
+    pid = _move_order(on, game)
+    painter = Painter()
+    no = studio.Verdict(False, ["有字"], "Remove the text.")
+    lines = _tick(game, painter, Critic([no, no, no]))
+    assert len(painter.calls) == studio.MAX_TRIES and "停手等管理者" in lines[0] and "有字" in lines[0]
+    assert _tick(game, painter, Critic()) == []  # 停手了不再畫（不燒錢）
+    admin = _admin(on, game.world)
+    row = actions.admin_view(admin)["moves"]["open"][0]
+    assert row["studio"]["painted"] == 3 and "大佛：有字" in row["studio"]["failed"]
+    assert "交回畫坊" in actions.admin_studio_retry(admin, pid)[-1]
+    assert "沒有停手" in actions.admin_studio_retry(admin, pid)[-1]
+    assert _tick(game, painter, Critic()) == [f"#{pid} 大佛 收了"]
+    assert actions.admin_studio_retry(game, pid)[-1] == "（此刻無法這麼做。）"  # 不是管理者
+
+
+def test_a_cut_that_fails_counts_as_a_miss(on):
+    game = _game(on)
+    pid = _move_order(on, game)
+    tries = []
+
+    def bad_cut(job, raw):
+        tries.append(1)
+        if len(tries) == 1:
+            raise studio.CutError("去背之後什麼都不剩")
+        return ART
+
+    painter = Painter()
+    assert studio.tick(game.content, game.world, actions.image_root(game), actions.WEB_IMG, painter, Critic(), bad_cut) == [f"#{pid} 大佛 收了"]
+    assert "pure white background" in painter.calls[1][0]
+
+
+def test_blocked_and_busy(on):
+    game = _game(on)
+    pid = _move_order(on, game)
+
+    class Blocked(Painter):
+        def paint(self, *a):
+            raise studio.PaintBlocked("IMAGE_SAFETY")
+
+    class Busy(Painter):
+        def paint(self, *a):
+            raise studio.PaintBusy("HTTP 503")
+
+    assert "下一輪再來" in _tick(game, Busy(), Critic())[0]
+    assert "studio" not in Wallet(game.world.db).purchase(pid).data  # 忙不算
+    assert "生圖的拒畫（IMAGE_SAFETY）" in _tick(game, Blocked(), Critic())[0]
+
+
+def test_a_rejected_order_is_not_drawn_into(on, monkeypatch):
+    game = _game(on)
+    pid = _move_order(on, game)
+    admin = _admin(on, game.world)
+
+    class Rejecting(Painter):
+        def paint(self, *a):  # 畫的時候管理者退回了
+            if not self.calls:
+                actions.admin_move_reject(admin, pid, "不收")
+            return super().paint(*a)
+
+    assert "已經不在等圖" in _tick(game, Rejecting(), Critic())[0]
+    assert orders.sheet_file(actions.image_root(game), moves.move_id(pid), "art1") is None
+
+
+def test_a_wrong_size_from_the_cut_is_refused(on):
+    game = _game(on)
+    pid = _move_order(on, game)
+    big = SHEET["hero_atk_slash"][:30]  # 不是圖
+    lines = studio.tick(game.content, game.world, actions.image_root(game), actions.WEB_IMG, Painter(), Critic(), lambda j, r: big)
+    assert "格式不對" in lines[0] and Wallet(game.world.db).purchase(pid).data["studio"]["failed"]
+
+
+def test_a_look_starts_from_its_portrait_and_draws_ten_sheets(on):
+    game = _game(on)
+    actions.order(game, "雪衣", "長髮飄飄，仙氣十足的仙子", "look-ref-001")
+    pid = orders.mine(Wallet(game.world.db), game._mall_owner())[0].pid
+    painter, critic = Painter(), Critic()
+    PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 20
+
+    class PortraitPainter(Painter):
+        def paint(self, prompt, images, aspect, size):
+            super().paint(prompt, images, aspect, size)
+            return PNG
+
+    painter = PortraitPainter()
+    assert _tick(game, painter, critic) == [f"#{pid} 定裝照好了"]
+    assert "長髮飄飄" in painter.calls[0][0] and "定裝照" in painter.calls[0][0]
+    root = actions.image_root(game)
+    assert (orders.folder(root, orders.look_id(pid)) / "ref.png").read_bytes() == PNG
+    lines = []
+    for _ in orders.SHEETS:
+        lines += _tick(game, painter, critic)
+    assert lines[-1].endswith("到齊了等管理者上架") and len(lines) == len(orders.SHEETS)
+    assert all(refs == 2 for _, refs in painter.calls[1:])  # 每一張都附斗笠那一張＋定裝照
+    assert "same face, hair, clothes" in painter.calls[1][0]
+    assert orders.of(Wallet(game.world.db).purchase(pid)).status == orders.REVIEW
+    row = actions.admin_view(_admin(on, game.world))["open"][0]
+    assert row["studio"]["painted"] == 1 + len(orders.SHEETS)
+
+
+def test_budget_and_fake_orders_are_skipped(on, monkeypatch):
+    game = _game(on)
+    _move_order(on, game)
+    assert _tick(game, Painter(), Critic(), budget=0) == []
+    monkeypatch.setenv(actions.GEN_ENV, "fake")  # 假的生圖器當場抄好了：畫坊不碰
+    other = _game(on, "楚留香")
+    actions.order(other, "雪衣", "長髮飄飄", "look-ref-002")
+    jobs = studio.jobs(on, Wallet(game.world.db), actions.image_root(game), actions.WEB_IMG)
+    assert [j.kind for j in jobs] == ["move"]
+
+
+# ── 真的切圖（要 Pillow、numpy、scipy：畫坊程式才裝） ──
+
+
+def test_the_real_cut_keeps_one_subject_and_cuts_a_sheet():
+    pytest.importorskip("scipy")
+    import io
+
+    from PIL import Image
+
+    from tianxia.features.looks import cutting
+
+    im = Image.new("RGB", (1024, 1024), "white")
+    for x in range(300, 700):
+        for y in range(200, 800):
+            im.putpixel((x, y), (180, 120, 40))
+    im.putpixel((10, 10), (0, 0, 0))  # 雜點
+    raw = io.BytesIO()
+    im.save(raw, "PNG")
+    out = Image.open(io.BytesIO(cutting.art_bytes(raw.getvalue())))
+    assert out.mode == "RGBA" and out.size == (400, 600)
+    with pytest.raises(studio.CutError):
+        blank = io.BytesIO()
+        Image.new("RGB", (512, 512), "white").save(blank, "PNG")
+        cutting.art_bytes(blank.getvalue())
+    flat = Image.open(io.BytesIO(SHEET["hero_atk_slash"])).convert("RGBA")
+    white = Image.new("RGBA", flat.size, "white")
+    white.alpha_composite(flat)
+    src = Image.new("RGB", (660, 440), "white")  # 斗笠小子那六格排成 3×2 再切回來
+    for k in range(6):
+        src.paste(white.crop((k * 220, 0, k * 220 + 220, 220)).convert("RGB"), ((k % 3) * 220, (k // 3) * 220))
+    buf = io.BytesIO()
+    src.save(buf, "PNG")
+    strip = cutting.sheet_bytes(buf.getvalue(), "hero_atk_slash")
+    assert orders.sheet_problem("hero_atk_slash", strip) is None
+
+
+# ── 真的去叫的那兩家（假的連線：看送出去的長什麼樣、回來的怎麼讀） ──
+
+
+class _Resp:
+    def __init__(self, status, body):
+        self.status_code, self._body, self.text = status, body, str(body)
+
+    def json(self):
+        return self._body
+
+
+class _Session:
+    def __init__(self, resp):
+        self.resp, self.sent = resp, []
+
+    def post(self, url, headers, json, timeout):
+        self.sent.append((url, headers, json))
+        return self.resp
+
+
+def test_the_painter_sends_prompt_and_pictures_and_reads_the_last_image():
+    pytest.importorskip("PIL")
+    import base64
+
+    from tianxia.features.looks.studio_api import GeminiPainter
+
+    img = base64.b64encode(b"png!").decode()
+    ok = _Resp(200, {"candidates": [{"content": {"parts": [{"text": "draft"}, {"inlineData": {"data": base64.b64encode(b"a").decode()}},
+                                                         {"inlineData": {"mimeType": "image/png", "data": img}}]}}]})
+    session = _Session(ok)
+    painter = GeminiPainter(key="k", model="gemini-3.1-flash-image", session=session)
+    assert painter.paint("畫一尊大佛", [ART], "1:1", "1K") == b"png!"
+    url, headers, body = session.sent[0]
+    assert url.endswith("/gemini-3.1-flash-image:generateContent") and headers == {"x-goog-api-key": "k"}
+    parts = body["contents"][0]["parts"]
+    assert parts[0] == {"text": "畫一尊大佛"} and parts[1]["inlineData"]["mimeType"] == "image/png"
+    assert body["generationConfig"] == {"responseModalities": ["IMAGE"], "imageConfig": {"aspectRatio": "1:1", "imageSize": "1K"}}
+    with pytest.raises(studio.PaintBusy):
+        GeminiPainter(key="k", session=_Session(_Resp(503, {}))).paint("x", [], "1:1", "1K")
+    with pytest.raises(studio.PaintBlocked, match="SAFETY"):
+        GeminiPainter(key="k", session=_Session(_Resp(200, {"promptFeedback": {"blockReason": "SAFETY"}}))).paint("x", [], "1:1", "1K")
+    with pytest.raises(studio.PaintBlocked, match="IMAGE_SAFETY"):
+        GeminiPainter(key="k", session=_Session(_Resp(200, {"candidates": [{"finishReason": "IMAGE_SAFETY"}]}))).paint("x", [], "1:1", "1K")
+
+
+def test_the_critic_asks_for_a_verdict_and_reads_it():
+    pytest.importorskip("PIL")
+    from types import SimpleNamespace as NS
+
+    from tianxia.features.looks.studio_api import CRITIC_MODEL, ClaudeCritic
+
+    class Messages:
+        def __init__(self, replies):
+            self.replies, self.sent = list(replies), []
+
+        def create(self, **kw):
+            self.sent.append(kw)
+            return self.replies.pop(0)
+
+    text = lambda t, stop="end_turn": NS(stop_reason=stop, content=[NS(type="text", text=t)])  # noqa: E731
+    msgs = Messages([text('{"pass": false, "problems": ["有字"], "fix": "Remove the text."}'), text('{"pass": true, "problems": [], "fix": ""}'),
+                     NS(stop_reason="refusal", content=[]), text("not json")])
+    critic = ClaudeCritic(client=NS(beta=NS(messages=msgs)))
+    assert critic.review("checklist", ART, [ART]) == studio.Verdict(False, ["有字"], "Remove the text.")
+    sent = msgs.sent[0]
+    assert sent["model"] == CRITIC_MODEL and sent["extra_body"]["fallbacks"] == "default"
+    assert sent["extra_body"]["output_config"]["format"]["type"] == "json_schema"
+    kinds = [c["type"] for c in sent["messages"][0]["content"]]
+    assert kinds == ["text", "image", "text", "image", "text"] and "player" in sent["system"]
+    assert critic.review("c", ART, []).ok
+    assert not critic.review("c", ART, []).ok
+    assert critic.review("c", ART, []).problems == ["審圖的回答看不懂"]

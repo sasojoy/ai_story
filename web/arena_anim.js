@@ -168,7 +168,19 @@
     return [beat];
   }
   // 這一回合跟上一回合比：知道兩邊出了哪一招就照招演，不然照誰掉了血
+  // 一句話自創的絕招（arena_scene.js）：發動的那一邊有導演稿就整段照稿演，取代這一回合
+  function ringScenes(burst) {
+    if (typeof sceneFor !== "function") return [];
+    const out = [];
+    ["me", "foe"].forEach((who, k) => {
+      const mid = RA.looks[`${who}_fx`], sc = burst && burst[k] ? sceneFor(mid) : null;
+      if (sc) out.push({ dur: SCENE_LEN, scene: sc, who, mid });
+    });
+    return out;
+  }
   function ringExchange(a, b, pick, burst) {
+    const scenes = ringScenes(burst);
+    if (scenes.length) return scenes;
     const fx = [!!(burst && burst[0]), !!(burst && burst[1])];
     if (pick && RING_PICKS.has(pick[0]) && RING_PICKS.has(pick[1])) return ringPicked(a, b, pick, fx);
     const dMe = a.me - b.me, dFoe = a.foe - b.foe, tol = 0.5;
@@ -182,15 +194,16 @@
   const RING_PICKS = new Set(["強攻", "固守", "奇襲"]);
   // 收場：照結果演最後一幕，倒地、跪地的那一邊停在最後一格；贏的那一邊照最後一回合出的招出手
   function ringFinale(tier, low, pick, burst) {
-    if (tier === "僵持") return [ringStrike("me", false), ringStrike("foe", false)];
+    if (tier === "僵持") return [...ringScenes(burst), ringStrike("me", false), ringStrike("foe", false)];
     const won = tier === "大勝" || tier === "險勝", who = won ? "me" : "foe", loser = won ? "foe" : "me";
     const down = won ? tier === "大勝" : low;
     const mine = pick && RING_PICKS.has(pick[won ? 0 : 1]) ? pick[won ? 0 : 1] : "強攻";
-    const plan = ringPlan(who, mine, true, !!(burst && burst[won ? 0 : 1]));
+    const scenes = ringScenes(burst);
+    const plan = ringPlan(who, mine, true, !scenes.length && !!(burst && burst[won ? 0 : 1]));
     const beat = { dur: Math.max(1500, plan.hit + 1100) };
     beat[who] = plan.acts;
     beat[loser] = [ringAct(down ? "hero_bare_fall" : "hero_bare_kneel", plan.hit, down ? 900 : 640, true)];
-    return [beat];
+    return [...scenes, beat];
   }
 
   // 每次畫好畫面（render、renderShop）之後叫：看是不是有新的一回合或剛收場，排要演的幕
@@ -201,6 +214,7 @@
     const f = shop.fight, r = shop.result && shop.result.id !== S.arenaSeen ? shop.result : null;
     if (f) {
       RA.looks = f.looks || { me: "", foe: "", me_look: "", foe_look: "" };
+      if (typeof sceneFor === "function") { sceneFor(RA.looks.me_fx); sceneFor(RA.looks.foe_fx); } // 先抓好導演稿，發動那一回合才演得出來
       const now = { id: f.id, round: f.round, me: f.me.hp, foe: f.foe_hp.hp, cap: f.me.cap, edge: f.edge };
       const p = RA.prev;
       if (p && p.id === now.id && now.round > p.round) RA.q.push(...ringExchange(p, now, (f.picks || [])[now.round - 2], (f.bursts || [])[now.round - 2]));
@@ -245,9 +259,21 @@
     RA.raf = requestAnimationFrame(ringTick);
   }
 
+  // 場地：城裡的遠景與地面，加上一塊木台（絕招那一段也畫這一塊，arena_scene.js）
+  function ringGround(cx) {
+    const far = RA.imgs.bg0, ground = RA.imgs.bg1;
+    if (ringReady(far)) cx.drawImage(far, 0, 0, far.naturalWidth, far.naturalHeight, -60, -40, (far.naturalWidth * (RING_H + 40)) / far.naturalHeight, RING_H + 40);
+    if (ringReady(ground)) { const gh = 110, gw = (ground.naturalWidth * gh) / ground.naturalHeight; for (let x = 0; x < RING_W; x += gw) cx.drawImage(ground, x, RING_H - gh, gw, gh); }
+    cx.fillStyle = "rgba(96, 62, 34, 0.92)";
+    cx.fillRect(110, RING_GY - 4, RING_W - 220, 14);
+    cx.fillStyle = "rgba(60, 36, 18, 0.9)";
+    cx.fillRect(110, RING_GY + 10, RING_W - 220, 18);
+  }
+
   function ringPaint(cx, now, el) {
-    cx.clearRect(0, 0, RING_W, RING_H);
     const beat = RA.cur ? RA.cur.beat : null;
+    if (beat && beat.scene && typeof sceneOnRing === "function") { sceneOnRing(cx, beat.scene, el, beat.who, beat.mid); return; }
+    cx.clearRect(0, 0, RING_W, RING_H);
     const active = (side) => { // 這一刻在演的那一個（同一刻兩個在演，後開始的算）；演完了、keep 的停在最後一格
       let on = null, kept = null;
       for (const a of [].concat((beat && beat[side]) || [])) {
@@ -264,14 +290,7 @@
     }
     cx.save();
     if (jolt > 0) cx.translate(Math.sin(now * 0.09) * 7 * jolt, Math.cos(now * 0.13) * 4 * jolt);
-    const far = RA.imgs.bg0, ground = RA.imgs.bg1;
-    if (ringReady(far)) cx.drawImage(far, 0, 0, far.naturalWidth, far.naturalHeight, -60, -40, (far.naturalWidth * (RING_H + 40)) / far.naturalHeight, RING_H + 40);
-    if (ringReady(ground)) { const gh = 110, gw = (ground.naturalWidth * gh) / ground.naturalHeight; for (let x = 0; x < RING_W; x += gw) cx.drawImage(ground, x, RING_H - gh, gw, gh); }
-    // 擂台：一塊木台
-    cx.fillStyle = "rgba(96, 62, 34, 0.92)";
-    cx.fillRect(110, RING_GY - 4, RING_W - 220, 14);
-    cx.fillStyle = "rgba(60, 36, 18, 0.9)";
-    cx.fillRect(110, RING_GY + 10, RING_W - 220, 18);
+    ringGround(cx);
     const sides = [["me", RING_X[0], false], ["foe", RING_X[1], true]];
     // 出手的那一個畫在後面（蓋在上面）
     if (now2.me && now2.me.a.sheet.startsWith("hero_atk_")) sides.reverse();

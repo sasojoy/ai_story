@@ -183,3 +183,5 @@
 .look-sheets span { padding: 0 6px; border-radius: 6px; border: 1px solid var(--line, #ccc); opacity: 0.55; }
 .look-sheets span.ok { opacity: 1; border-color: #4f8a5b; }
 .look-gen { white-space: pre-wrap; word-break: break-word; margin: 4px 0; padding: 6px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.05); }
+.shop-layer.shop-mall .move-seal { display: grid; place-items: center; background: #b8322a; color: #fff4dc; font-weight: 900; font-size: 1.6rem; }
+.shop-layer.shop-mall .scene-preview { width: 100%; max-width: 100%; aspect-ratio: 720 / 320; border-radius: 8px; background: #000; display: block; margin-top: 8px; }

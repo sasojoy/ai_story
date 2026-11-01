@@ -20,7 +20,7 @@ from tianxia import speech  # 過渡：待搬（玩家寫的字過字表）
 from tianxia.models import Content, MallItem
 from tianxia.wallet import Purchase, Wallet
 
-from . import orders
+from . import orders, scenes
 
 EFFECT = "move_order"
 PREFIX = "m"
@@ -36,6 +36,8 @@ OPEN_ORDER = "你還有一張招式動畫在做，等它好了再下一張。"
 ALREADY = "「{art}」已經綁了招式。"
 SHORT = "元寶不夠：招式動畫要 {price}，你有 {balance}。"
 PLACED = "替「{art}」下單了招式動畫（{style}）：元寶 -{price}（還剩 {left}）。做好、審核過了會放進招式庫。"
+LEARNED = "「{art}」的絕招學成了（{style}）：元寶 -{price}（還剩 {left}）。擂台上這一招發動時就照這樣演。"
+WAIT_ART = "替「{art}」下單了絕招（{style}）：元寶 -{price}（還剩 {left}）。要畫的「{arts}」畫好、審過了就放進招式庫；沒過元寶全退。"
 DUPLICATE = "這一張已經下過單了。"
 BOUND = "把招式綁到「{art}」上了（這一季）。"
 NOT_MINE = "招式庫裡沒有這一招。"
@@ -69,6 +71,7 @@ class Move:
     bound_art: str
     bound_name: str
     bound_season: int
+    scene: dict | None = None  # 一句話自創的導演稿（scenes.clean）；舊的光效單（一張 fx）是 None
 
     @property
     def name(self) -> str:  # orders.reject 寫「退回了『…』」用
@@ -82,7 +85,8 @@ def of(b: Purchase) -> Move | None:
     status = orders.REJECTED if b.refunded is not None else str(d.get("status", orders.PENDING))
     return Move(pid=b.id, owner=b.owner, art=str(d.get("art", "")), art_name=str(d.get("art_name", "")), style=str(d.get("style", "fist")),
                 prompt=str(d.get("prompt", "")), status=status, reason=str(d.get("reason", "")), move=str(d.get("move_id", "")),
-                bound_art=str(d.get("bound_art", "")), bound_name=str(d.get("bound_name", "")), bound_season=int(d.get("bound_season", 0)))
+                bound_art=str(d.get("bound_art", "")), bound_name=str(d.get("bound_name", "")), bound_season=int(d.get("bound_season", 0)),
+                scene=d.get("scene") if isinstance(d.get("scene"), dict) else None)
 
 
 def mine(wallet: Wallet, owner: str) -> list[Move]:
@@ -99,9 +103,11 @@ def item_of(content: Content) -> MallItem | None:
 
 def place(
     content: Content, wallet: Wallet, owner: str, art: str, art_name: str, style: str, prompt: str, ref: str, *,
-    now: float, day: int, season: int,
+    now: float, day: int, season: int, move_name: str = "",
 ) -> tuple[int | None, str]:
-    """下單（同 orders.place 的那幾步）。art 是呼叫端驗過的、自己合成或自創的武功（空字串是沒有）。"""
+    """下單（同 orders.place 的那幾步）。art 是呼叫端驗過的、自己合成或自創的武功（空字串是沒有）。
+    prompt 是玩家寫的一句（scenes.MAX_TEXT 字內、只能中文），當場變成導演稿（scenes.direct）存在這一列；
+    稿裡沒有要畫的就當場上架（學成），有要畫的（法相、巨物）等管理者上傳那幾張、審過再上架。move_name 是落款寫的招名。"""
     item = item_of(content)
     if item is None:
         return None, NOT_SOLD
@@ -114,7 +120,7 @@ def place(
             return None, DUPLICATE
         if not prompt:
             return None, NO_PROMPT
-        problem = speech.word_problem(prompt, content, speech.MOTTO, orders.PROMPT_MAX)
+        problem = scenes.text_problem(prompt) or speech.word_problem(prompt, content, speech.MOTTO, scenes.MAX_TEXT)
         if problem:
             return None, problem
         moves = mine(wallet, owner)
@@ -125,13 +131,18 @@ def place(
         balance = wallet.balance(owner)
         if balance < item.price:
             return None, SHORT.format(price=item.price, balance=balance)
+        scene = scenes.direct(prompt, move_name or art_name)
+        arts = scenes.needs_art(scene)
         data = {EFFECT: 1, "art": art, "art_name": art_name, "style": style, "prompt": prompt, "status": orders.PENDING,
-                "bound_art": art, "bound_name": art_name, "bound_season": season}
+                "bound_art": art, "bound_name": art_name, "bound_season": season, "scene": scene}
         pid = wallet.add_purchase(owner, full, item.id, item.price, time=now, day=day, season=season, data=data)
         if not wallet.post(owner, -item.price, "buy", full, time=now, purchase_id=pid):
             raise RuntimeError(f"購買編號 {full} 已經記過帳，購買紀錄卻沒有")
+        if not arts:  # 不用畫：當場學成
+            wallet.update_data(pid, status=orders.MADE, move_id=move_id(pid))
         left = wallet.balance(owner)
-    return pid, PLACED.format(art=art_name, style=STYLES.get(style, style), price=item.price, left=left)
+    words = {"art": art_name, "style": STYLES.get(style, style), "price": item.price, "left": left}
+    return pid, (WAIT_ART.format(arts="」「".join(a["label"] for a in arts), **words) if arts else LEARNED.format(**words))
 
 
 def bind(wallet: Wallet, owner: str, pid: int, art: str, art_name: str, style: str, season: int) -> tuple[bool, str]:
@@ -177,10 +188,11 @@ def view(content: Content, wallet: Wallet, owner: str, art: str, art_name: str, 
         here = m.bound_season == season and bool(m.bound_art)
         return {"id": m.pid, "move": m.move, "art": m.art_name, "style": m.style, "style_text": STYLES.get(m.style, m.style),
                 "prompt": m.prompt, "status": m.status, "status_text": orders.STATUS_TEXT[m.status], "reason": m.reason,
+                "scene": m.scene is not None, "arts": [a["label"] for a in scenes.needs_art(m.scene or {})],
                 "bound": m.bound_name if here else "", "on_art": here and m.bound_art == art,
                 "bindable": m.status == orders.MADE and bool(art) and m.style == style and not (here and m.bound_art == art)}
     return {
-        "price": item.price, "prompt_max": orders.PROMPT_MAX, "art": art_name, "has_art": bool(art),
+        "price": item.price, "prompt_max": scenes.MAX_TEXT, "art": art_name, "has_art": bool(art),
         "style": style, "style_text": STYLES.get(style, style),
         "open": any(m.status in (orders.PENDING, orders.REVIEW) for m in moves),
         "bound": any(m.status == orders.MADE and m.bound_art == art and m.bound_season == season for m in moves) if art else False,
@@ -189,8 +201,14 @@ def view(content: Content, wallet: Wallet, owner: str, art: str, art_name: str, 
     }
 
 
+def missing(m: Move, root: Path) -> list[str]:
+    """這一招還缺哪幾張圖：一句話自創的是導演稿要畫的那幾樣（art1、art2），舊的光效單是那一張 fx。"""
+    need = [a["slot"] for a in scenes.needs_art(m.scene)] if m.scene is not None else [SHEET]
+    return [slot for slot in need if orders.sheet_file(root, move_id(m.pid), slot) is None]
+
+
 def mark(wallet: Wallet, m: Move, root: Path) -> Move:
-    if m.status == orders.PENDING and orders.sheet_file(root, move_id(m.pid), SHEET) is not None:
+    if m.status == orders.PENDING and not missing(m, root):
         wallet.update_data(m.pid, status=orders.REVIEW)
         return Move(**{**m.__dict__, "status": orders.REVIEW})
     return m
@@ -199,10 +217,30 @@ def mark(wallet: Wallet, m: Move, root: Path) -> Move:
 def release(wallet: Wallet, m: Move, root: Path) -> str:
     if m.status in (orders.MADE, orders.REJECTED):
         return f"（「{m.art_name}」的招式{orders.STATUS_TEXT[m.status]}了。）"
-    if orders.sheet_file(root, move_id(m.pid), SHEET) is None:
-        return f"（「{m.art_name}」的招式還沒有光效圖。）"
+    if missing(m, root):
+        return f"（「{m.art_name}」的招式還沒有圖。）"
     wallet.update_data(m.pid, status=orders.MADE, move_id=move_id(m.pid))
     return f"「{m.art_name}」的招式上架了。"
+
+
+ART_PX = 1024  # 法相、巨物那一張最大多少（邊長）
+
+
+def art_problem(m: Move, slot: str, data: bytes) -> str | None:
+    """一句話自創的那幾張：只收導演稿要的格子（art1、art2），PNG 或 WebP、邊長不超過 ART_PX。舊的光效單照 sheet_problem。"""
+    if m.scene is None:
+        return sheet_problem(slot, data)
+    want = {a["slot"]: a["label"] for a in scenes.needs_art(m.scene)}
+    if slot not in want:
+        return f"這一招只要{'、'.join(f'{k}（{v}）' for k, v in want.items()) or '不用畫圖'}。"
+    if len(data) > orders.MAX_BYTES:
+        return f"「{want[slot]}」太大了。"
+    size = orders.image_size(data)
+    if size is None:
+        return f"「{want[slot]}」要是 PNG 或 WebP。"
+    if max(size[1:]) > ART_PX:
+        return f"「{want[slot]}」邊長最多 {ART_PX}，這張是 {size[1]}×{size[2]}。"
+    return None
 
 
 def sheet_problem(sheet: str, data: bytes) -> str | None:
