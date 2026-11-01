@@ -28,7 +28,9 @@ class BattleFeature(Feature):
     # 補過的決戰（跨季照帶：決戰常把季收掉，下一季才回來的人也要補、而且只補一次）、這一季參戰幾場與首功幾次（玩家卡、名帖）。
     # showdowns_restored（補回被洗掉的戰報，一季查一次）也是這一包的，但每一季第一次同步就寫成那一季的編號：契約測試的「換季回到預設」
     # 對它不成立，不放進來（README 照列）
-    player_fields = ("battle_results_seen", "showdowns", "top_merits")
+    # 第 7 批（集結、挑同伴）再認兩格：escort_pick（按了加入、還在挑誰隨你上陣）、parted_done（同伴回江湖、情誼已經減半、全服的記號還沒清；
+    # muster.settle_partings 讀寫）——換季都跟著新角色重來
+    player_fields = ("battle_results_seen", "showdowns", "top_merits", "escort_pick", "parted_done")
     carried = ("battle_results_seen",)  # Game._reset_player_for_new_season 照帶（不看開關，同商城、出陣的 carried）
 
     def enabled(self, ctx) -> bool:
