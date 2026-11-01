@@ -632,6 +632,24 @@ def test_repair_and_temper_go_through_menxia_with_the_item_id(content, world):
     assert "修好了" in out["toast"]
 
 
+def test_working_a_rack_row_keeps_the_page_where_it_was(content, world):
+    """裝備庫那一列按修、淬煉（批量拆解、換上、單件拆解同一條 shopMx）之後，捲的那一層照原本的位置放回去（renderKeepingShop，
+    同酒肆 Joy 2026-10-19「操作沒兩下很容易就跑版了」）：不然一件上品淬七次，每按一下都捲回最上面找那一列。"""
+    m = server.main_view(_racked(content, world))
+    reply = {"menxia": None, "main": m, "message": ""}
+    out = _rack_page(m, """return (async () => {
+        H.render();
+        const body = { scrollTop: 0 };  // 重畫之後的那一層（新畫的，從頂上開始）
+        T.qs[".shop-layer"] = { className: "shop-layer shop-smith", querySelector: (s) => (s === ".shop-body" ? { scrollTop: 700 } : null), querySelectorAll: () => [] };
+        T.qs[".shop-layer .shop-body"] = body;
+        """ + _click('{ act: "rack-repair", id: "兵:1" }') + """
+        const repaired = body.scrollTop; body.scrollTop = 0;
+        """ + _click('{ act: "rack-temper", id: "兵:1" }') + """
+        return { repaired, tempered: body.scrollTop };
+      })();""", responses={"/api/menxia/repair_item": reply, "/api/menxia/temper_item": reply})
+    assert out == {"repaired": 700, "tempered": 700}
+
+
 _MELT = """return (async () => {
   T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
   H.render();

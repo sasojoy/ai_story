@@ -3761,14 +3761,15 @@
     return true;
   }
 
-  // 店裡的換上、拆解、神器定名：走修練頁那幾條（/api/menxia/…），回來照新的畫面畫、話用提示泡泡講
+  // 店裡的換上、拆解、神器定名，裝備庫那一列的修、淬煉、批量拆解（3.4）：走修練頁那幾條（/api/menxia/…），回來照新的畫面畫、話用提示泡泡講。
+  // 捲到哪裡照放回去（renderKeepingShop）：裝備庫往下捲到那一列按修、淬（上品淬七次），不能每按一下就跳回頂上
   async function shopMx(op, body) {
     let said = "";
     await busy(async () => {
       const r = await api(`/api/menxia/${op}`, body);
       if (r.menxia) S.menxia = r.menxia;
       setMain(r.main);
-      render();
+      renderKeepingShop();
       said = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
       if (said) toast(said);
     });
