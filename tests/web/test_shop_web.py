@@ -437,7 +437,7 @@ def test_closing_the_sheet_and_changing_the_pot_put_the_smith_line_back(content,
 
 def test_no_trade_no_grey_cells(content, world):
     """升階關著（shop.trade 是 None，或只開收購、upgrade 是空的）：打造頁照現在，一格灰格都不畫。"""
-    off = server.main_view(_brewing(content, world, {"gang_1": 4}, upgrade=False))
+    off = server.main_view(_brewing(content, world, {"gang_2": 1, "kuai_1": 2}, upgrade=False))  # 剛沒有一階：開著的話那一格會畫「無」
     assert off["shop"]["trade"] is None
     html = _forge_page(off, "H.render(); return T.els.app.innerHTML;")
     assert "shop-brew" not in html and "brew none" not in html
