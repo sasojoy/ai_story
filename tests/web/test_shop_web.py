@@ -453,11 +453,15 @@ def test_no_trade_no_grey_cells(content, world):
 
 
 def test_a_brewed_material_turns_into_a_real_cell(content, world):
-    """真的熬一次（Game.smith_upgrade，打造頁開著時按得下去）：灰格變實格、數字照背包。"""
+    """真的熬一次（Game.smith_upgrade，打造頁開著時按得下去）：灰格變實格、數字照背包。手上那一份這一爐的說法（S.shopLine）還是熬之前的
+    （沒有新的那一格；/api/smith_line 還沒回來）：素材格照背包（forge.materials）畫，說法裡沒有的那一格當放得進去（Review Focus 3）。"""
     game = _brewing(content, world, {"gang_1": 4})
+    stale = server.main_view(game)["shop"]["forge"]["line"]
     game.smith_upgrade("剛", 2)
     assert game.state.player.materials.get("gang_2") == 1
-    html = _forge_page(server.main_view(game), "H.render(); return T.els.app.innerHTML;")
+    m = server.main_view(game)
+    assert stale["kind"] == m["shop"]["forge"]["kind"] and not any(c["id"] == "gang_2" for c in stale["cells"])
+    html = _forge_page(m, "H.render(); return T.els.app.innerHTML;", S={"shopLine": stale})
     assert 'data-act="shop-cell" data-id="gang_2"' in html and 'data-attr="剛" data-tier="2"' not in html
 
 
