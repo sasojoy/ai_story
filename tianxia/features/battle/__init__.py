@@ -39,5 +39,29 @@ class BattleFeature(Feature):
         FB-027）。經 Game 叫：tests/core/test_renown_cross.py 換掉 Game._deliver_battle_results（服務清單三、過渡）。"""
         ctx._deliver_battle_results()
 
+    def scene_over(self, ctx):
+        """蓋在畫面上的（原本 Game.scene_text 最前面那幾行）：有全服戰鬥時大家都看得到戰場（序章裡不畫，_battle_for_me；tick=False：一次請求
+        只推進一次）；回（戰場那一段, 開打了在場上的人〔_fighting〕戰場整個取代畫面）。沒有是 None。"""
+        from . import view  # noqa: PLC0415
+
+        battle_status = ctx._battle_for_me(tick=False)
+        if battle_status is None:
+            return None
+        return view.battle_scene_text(ctx, *battle_status), ctx._fighting(*battle_status)
+
+    def record_detail(self, ctx, record):
+        """戰報頁那一筆（原本 Game.battle_detail 裡那幾行）：決戰那一筆照 battles 表重讀完整戰況（收場之後才補上的放手一搏劇情也在）；
+        不是決戰、表上沒有那一場、自己不在名單上、內容裡沒有那一場是 None（照原本那一筆）。"""
+        if record.battle_ref is None:
+            return None
+        from . import view  # noqa: PLC0415
+
+        battle = ctx.world.ended_battle(record.battle_ref)
+        me = battle.participants.get(ctx.state.player.name) if battle is not None else None
+        definition = ctx.content.battles.get(battle.battle_id) if battle is not None else None
+        if me is None or definition is None:
+            return None
+        return record.model_copy(update={"log": view.round_blocks(ctx, battle, definition, last=None, oldest_first=True, me=me)})
+
 
 FEATURE = BattleFeature()

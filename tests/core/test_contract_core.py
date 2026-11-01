@@ -357,6 +357,24 @@ def test_a_verb_owner_runs_titles_fills_the_cell_and_writes_the_note(game, seams
     assert g.action_notes(["act:explore"])["act:explore"] == "假的那一行" and g._act("fakeverb") == ["只打開一張卡。"]
 
 
+def test_the_scene_and_the_report_page_ask_the_packages(game, seams):
+    """場景卡：自己眼前的那一張問 scene（_own_scene_text 擂台之後）；蓋在畫面上的問 scene_over（scene_text 最前面：整個取代，或接在上面、
+    自己眼前的事接在底下）。戰報頁那一筆問 record_detail。三個都不問 enabled。"""
+    g = _made(game)
+    seams.open = False
+    seams.seated = True
+    assert g.scene_text() == "**假的宴席**"
+    seams.over = ("**假的戰場**", False)
+    assert g.scene_text() == "**假的戰場**\n\n---\n\n**假的宴席**"
+    seams.over = ("**假的戰場**", True)
+    assert g.scene_text() == "**假的戰場**"
+    from tianxia.state import BattleRecord
+
+    g.state.battles = [BattleRecord(id=1, time=0.0, location=g.state.player.location, kind="train", opponent="山賊", ours=[], tier="大勝",
+                                    our_power=1.0, difficulty=1.0)]
+    assert "換過的對手" in g.battle_detail(1) and "山賊" not in g.battle_detail(1)
+
+
 def test_the_own_turn_is_heard_even_when_the_package_is_closed(game, seams):
     """on_own_turn 在 own_turn_checks 最前面（暫停的檢查之前：原位的封測發放暫停中照發），關著的包照叫。"""
     g = _made(game)

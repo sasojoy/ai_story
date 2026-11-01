@@ -7544,12 +7544,6 @@ class Game:
     def _battle_scene_text(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:
         return battle_view.battle_scene_text(self, battle, definition)
 
-    def _round_blocks(
-        self, battle: battle_instance.BattleInstance, definition: BattleDef, *, last: int | None = ROUND_BLOCKS,
-        oldest_first: bool = False, me: battle_instance.BattleParticipant | None = None,
-    ) -> list[str]:
-        return battle_view.round_blocks(self, battle, definition, last=last, oldest_first=oldest_first, me=me)
-
     def _battle_spotlight(
         self, battle: battle_instance.BattleInstance, definition: BattleDef, p: battle_instance.BattleParticipant,
     ) -> list[str]:
@@ -12384,12 +12378,8 @@ class Game:
     def battle_detail(self, record_id: int | None = None) -> str:
         s = self.state
         record = battlelog.find(s, record_id) or (s.battles[0] if s.battles else None)
-        if record is not None and record.battle_ref is not None:  # 決戰：照 battles 表重讀完整戰況（收場之後才補上的放手一搏劇情也在）
-            battle = self.world.ended_battle(record.battle_ref)
-            me = battle.participants.get(s.player.name) if battle is not None else None
-            definition = self.content.battles.get(battle.battle_id) if battle is not None else None
-            if me is not None and definition is not None:
-                record = record.model_copy(update={"log": self._round_blocks(battle, definition, last=None, oldest_first=True, me=me)})
+        if record is not None:  # 戰報頁那一筆（接縫掛鉤，第 11 批）：決戰包——決戰照 battles 表重讀完整戰況（收場之後才補上的放手一搏劇情也在）
+            record = features_core.record_detail(self, record)
         return battlelog.detail_text(record, self.stamp) if record else battlelog.NO_RECORD
 
     def notice(self, text: str, title: str = "提醒") -> list[str]:
@@ -14031,12 +14021,13 @@ class Game:
 
     def scene_text(self) -> str:
         """有全服戰鬥時大家都看得到戰場；照常遊玩的人（集結中、只能觀戰、開打了還沒投效的散人，見 _fighting），自己眼前的事
-        （事件、對話、地點）接在戰場底下，不然遇到事件時只看得到選項、看不到事件本身。序章裡不畫戰場（_battle_for_me）。"""
-        battle_status = self._battle_for_me(tick=False)
-        if battle_status is None:
+        （事件、對話、地點）接在戰場底下，不然遇到事件時只看得到選項、看不到事件本身。序章裡不畫戰場（_battle_for_me）。
+        蓋在畫面上的問功能包（scene_over，接縫掛鉤，第 11 批）：決戰包回（戰場那一段, 要不要整個取代）。"""
+        over = features_core.scene_over(self)
+        if over is None:
             return self._own_scene_text()
-        battle_scene = self._battle_scene_text(*battle_status)
-        if self._fighting(*battle_status):
+        battle_scene, whole = over
+        if whole:
             return battle_scene  # 開打後在場上的人：戰場取代整個畫面；其餘照常遊玩，自己眼前的事接在底下（同 options）
         return f"{battle_scene}\n\n---\n\n{self._own_scene_text()}"
 
@@ -14053,7 +14044,7 @@ class Game:
             return self._duel_scene()
         if s.player.arena is not None:
             return self._arena_scene()
-        seat = feast_actions.scene(self)  # 坐在宴席上（宴客包；過渡：場景卡還沒有掛鉤）
+        seat = features_core.scene(self)  # 自己眼前的場景卡（接縫掛鉤，第 11 批）：宴客包——坐在宴席上那一張
         if seat is not None:
             return seat
         sense_card = sensing.scene_text(s, c) if s.player.sensing is not None else ""

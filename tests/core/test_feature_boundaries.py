@@ -240,8 +240,9 @@ GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
     # battle
     # 全服決戰「看」那一半（主動搬六包第 5 批；11 個私有）：server 叫的 12 個（main_view 的戰局條、攻城條、輸入框，reports_view，放手一搏與
     # 補劇情的三段式，_tales_waiting）、核心原位叫的 4 個（_battle_scene_text、_round_blocks、_round_wait、_deliver_battle_results），
-    # 只有測試直接叫的 6 個（_file_showdown、_annal_showdown、_showdown_pay、_showdown_credits、_showdown_tier4、_battle_spotlight）
-    "_battle_scene_text", "_round_blocks", "_round_wait", "_battle_spotlight", "battle_gauge", "siege_banner", "record_gauge", "card_gauge",
+    # 只有測試直接叫的 6 個（_file_showdown、_annal_showdown、_showdown_pay、_showdown_credits、_showdown_tier4、_battle_spotlight）。
+    # 第 11 批：戰報頁換成 record_detail 掛鉤，_round_blocks 沒人叫了，拿掉（_battle_scene_text 測試直接叫，留著）
+    "_battle_scene_text", "_round_wait", "_battle_spotlight", "battle_gauge", "siege_banner", "record_gauge", "card_gauge",
     "battle_on_screen", "_deliver_battle_results", "_file_showdown", "_annal_showdown", "_showdown_pay", "_showdown_credits", "_showdown_tier4",
     "battle_free_text_prompt", "battle_free_text_note", "battle_text_request", "submit_battle_custom_action", "battle_tale_request",
     "apply_battle_tales", "_tale_battles",
@@ -256,7 +257,7 @@ GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；�
     # explore（主動搬六包第 3＋4 批）：用到 outing 這個名字（現在是探索包 outing_rules 的別名）的只剩有所感
     "_sense": "有所感畫完那一筆擲特殊頓悟（epiphany.roll 的 boost＝outing_rules.rare_boost：走一趟段數越多越容易來）：sense:* 的分派"
               "留在核心；等探索包開「此刻稀有的乘多少」的查詢服務時改叫它",
-    "_own_scene_text": "坐在宴席上的場景卡（feast_actions.scene）：場景卡還沒有掛鉤；搬包之前也不看宴客開關",
+    # （_own_scene_text：坐在宴席上的場景卡第 11 批換成 scene 掛鉤，拿掉）
     # 出陣（主動搬六包第 1 批）：下面這些方法用到 sortie 這個名字（現在是出陣包 rules 的別名）——開關（sortie.on＝territory.on）、
     # 鈕上的字（NAME、USED_UP、LEFT_NOTE、OUT_NOTE……）、次數（spend）
     "_act": "act:train 打的那一場（出陣開著走 _sortie、序章與關著走 _train；扣體力、並肩出陣的加成、晉升奇遇包在外面）：act:train 整格"
@@ -304,9 +305,8 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("_map_foes", "duel_on"): "輿圖的地點卡：約戰開著時列貼約戰會迎戰的守軍那一路",
     ("_map_foes", "_duel_squad"): "同上：守軍那一路（經驗最高的那一路）",
     # battle
-    # 全服決戰「看」那一半（主動搬六包第 5 批）：會影響先後的接縫留在原位（批次表第二節，第 11 批一次收）
-    ("scene_text", "_battle_scene_text"): "場景卡：戰場蓋在畫面上或整個取代（開打了在場上的人），一次請求只推進一次（tick=False）；場景還沒有掛鉤",
-    ("battle_detail", "_round_blocks"): "戰報頁（核心的單打服務）：決戰那一筆照 battles 表重讀完整戰況（收場之後才補上的劇情也在）",
+    # 全服決戰「看」那一半（主動搬六包第 5 批）：會影響先後的接縫留在原位（批次表第二節，第 11 批一次收）。第 11 批：場景卡
+    # (scene_text, _battle_scene_text) 換成 scene_over 掛鉤、戰報頁 (battle_detail, _round_blocks) 換成 record_detail 掛鉤，拿掉
     ("_battle_options", "_round_wait"): "決戰「打」那一半（第 7 批搬）：已選了、等其他人那一顆灰鈕上寫已送出／在場",
     # （第 11 批：sync 的收場補送換成 deliver_results 掛鉤，拿掉 (sync, _deliver_battle_results)）
     ("_apply_battle_outcome", "_deliver_battle_results"): "決戰「打」那一半（第 8 批搬）：自己這一下把決戰推到收場，馬上補到自己手上",
