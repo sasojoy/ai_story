@@ -9,7 +9,7 @@ import pytest
 from conftest import next_season
 from tianxia.core import features as features_core
 from tianxia.core import registry
-from tianxia.core.features import AdminTool, Feature, Outcome
+from tianxia.core.features import AdminTool, Feature, Outcome, Shop, Verb
 from tianxia.core.option import Option
 from tianxia.engine import Game
 
@@ -188,3 +188,69 @@ def test_admin_tools_merge_and_refuse_the_same_name_twice(monkeypatch):
 def test_owner_of_goes_by_the_prefix(fake):
     assert features_core.owner_of("fake:do") is fake
     assert features_core.owner_of("fakeish:do") is None and features_core.owner_of("act:explore") is None
+
+
+# ── 接縫掛鉤（全部拆包第 11 批「核心收接縫」；計畫 docs/superpowers/plans/2026-11-01-核心收接縫.md 1.3）──
+# 另一個假的包：舊的 Fake 不動（test_a_closed_package_is_never_asked 照舊守遊戲當下的掛鉤），接縫掛鉤記在同一份 calls。
+
+
+class Seams(Fake):
+    """接縫掛鉤每一個都記；shop、verb 兩個宣告照旗標回答。"""
+
+    def __init__(self, open_=True):
+        super().__init__(open_)
+        self.in_shop, self.shop_here, self.seated, self.over = False, True, False, None
+
+    def on_due(self, ctx):
+        self._note("on_due")
+
+    def on_away(self, ctx, away_from):
+        self._note("on_away", away_from)
+
+    def deliver_results(self, ctx):
+        self._note("deliver_results")
+
+    def deliver_notices(self, ctx):
+        self._note("deliver_notices")
+
+    def choose_unlisted(self, ctx, option_id):
+        if option_id != "fake:raw":
+            return None
+        self._note("choose_unlisted", option_id)
+        return ["不在選單上的也接得到。"]
+
+    def after_action(self, ctx):
+        self._note("after_action")
+        return ["做完之後的那一句。"]
+
+    def on_own_turn(self, ctx):
+        self._note("on_own_turn")
+
+    def scene(self, ctx):
+        return "**假的宴席**" if self.seated else None
+
+    def scene_over(self, ctx):
+        return self.over
+
+    def record_detail(self, ctx, record):
+        return record.model_copy(update={"opponent": "換過的對手"})
+
+    def shops(self):
+        return (Shop(key="fakeshop", inside=lambda g: self.in_shop, here=lambda g: self.shop_here,
+                     close=lambda g: setattr(self, "in_shop", False) or self._note("close_shop"),
+                     menu=lambda g: [Option(id="fake:leave", label="出店")],
+                     entry=lambda g: Option(id="act:fakeshop", label="假的店") if self.shop_here else None),)
+
+    def verbs(self):
+        return (
+            Verb("fakeverb", run=lambda g, prepared: ["只打開一張卡。"], title=lambda g: "假的子動詞・此地", picks=("只打開一張卡。",)),
+            Verb("explore", cell=lambda g, loc, cost, odds: [Option(id="act:fakeverb", label="假的那一格")],
+                 note=lambda g, loc: "假的那一行"),
+        )
+
+
+@pytest.fixture
+def seams(monkeypatch):
+    f = Seams()
+    monkeypatch.setattr(registry, "FEATURES", [f])
+    return f

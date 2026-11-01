@@ -1,8 +1,10 @@
 """功能包的邊界（開發規範手冊 3.4 第 1 條、3.11）：用 ast 掃 import，幾毫秒。
 
-- 功能包（tianxia/features/<包>/，tests/ 不算）只能 import 核心（tianxia/core/ 與 CORE 那幾個模組）、自己這一包、標準庫與第三方；
-  不能 import 別的包。還沒搬的舊模組過渡期可以 import，那一行要註「# 過渡：待搬」（第一版只禁「包 import 包」與沒註的舊模組）。
-- 核心不 import 功能包：tianxia/core/ 只有 registry.py（FEATURES 登記）可以，CORE 那幾個模組都不行。
+- 功能包（tianxia/features/<包>/，tests/ 不算）只能 import 核心（tianxia/core/ 與 CORE 那幾個模組）、共用規則層（registry.SHARED，第 11 批）、
+  自己這一包、標準庫與第三方；不能 import 別的包。還沒搬的舊模組過渡期可以 import，那一行要註「# 過渡：待搬」（第一版只禁「包 import 包」
+  與沒註的舊模組）；註了的那一行要真的有一個還沒搬的舊模組（全是核心、共用規則層的就把註拿掉）。
+- 核心不 import 功能包：tianxia/core/ 只有 registry.py（FEATURES 登記）可以，CORE 那幾個模組都不行；共用規則層的模組也不行
+  （它們 import 的別的舊模組總表第 15 批登記進同一層之後再守「只 import 核心本體與同一層」）。
 - if TYPE_CHECKING: 底下的 import 只給型別看，不算。
 - 網頁框架（fastapi）只有功能包的 routes.py 可以 import，而且只在殼掛路由時延後 import；引擎、run_bots、假人不碰（PM 10/31）。
 """
@@ -23,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:  # 直接當腳本跑（PM 記過渡處數，見檔尾）時 repo 不在路徑上
     sys.path.insert(0, str(ROOT))
 from tianxia.core import MODULES as CORE_MODULES  # noqa: E402
+from tianxia.core.registry import SHARED  # noqa: E402  共用規則層（第 11 批）：模組名 → 為什麼在共用層
 TIANXIA = ROOT / "tianxia"
 FEATURES = TIANXIA / "features"
 MARK = "過渡：待搬"
@@ -123,7 +126,7 @@ def problems_of(source: str, module: str) -> list[str]:
     out: dict[tuple[int, str], str] = {}
     for line, name, marked in imports_of(source, module):
         parts = name.split(".")
-        if name == "tianxia" or parts[1] == "core" or parts[1] in CORE:
+        if name == "tianxia" or parts[1] == "core" or parts[1] in CORE or parts[1] in SHARED:
             continue
         if parts[1] in aliases():  # 舊名的別名就是那一包
             target = aliases()[parts[1]]
@@ -443,6 +446,16 @@ def test_the_core_never_imports_a_feature_package_except_the_registry():
     assert found == []
 
 
+def test_the_shared_rules_layer_is_real_old_modules_with_a_reason_and_never_imports_a_package():
+    """共用規則層（registry.SHARED，第 11 批 PM 定的格式）：每一個是 tianxia/ 底下真的有的模組、不是核心本體、不是包、不是舊名的別名，
+    寫了為什麼在共用層；跟核心一樣不 import 包（總表第六節第 5 條「兩層都不准 import 包」）。"""
+    assert SHARED and all(isinstance(why, str) and why.strip() for why in SHARED.values())
+    for name in SHARED:
+        assert (TIANXIA / f"{name}.py").exists(), name
+        assert name not in CORE and name not in aliases() and name not in _packages(), name
+    assert [f"{name}.py:{line} {mod}" for name in sorted(SHARED) for line, mod in _feature_imports(TIANXIA / f"{name}.py")] == []
+
+
 def test_the_game_reaches_the_packages_only_through_the_listed_methods():
     """Game 碰包的地方只有：一行的委派（3.10）、寫明了的過渡直連（GAME_DIRECT、GAME_DELEGATE_CALLERS）。其餘一律走 FEATURES 的掛鉤。"""
     imports, direct, callers = game_links()
@@ -472,21 +485,38 @@ def test_the_reverse_transitional_imports_come_from_old_modules():
 
 
 def transitional_imports() -> list[str]:
-    """過渡期的 import（包 import 還沒搬的舊模組）：PM 每搬一包在交接記還剩幾處（手冊 3.11）。"""
+    """過渡期的 import（包 import 還沒搬的舊模組）：PM 每搬一包在交接記還剩幾處（手冊 3.11）。共用規則層（SHARED）的不算：它們不搬。"""
     out = []
     for name in _packages():
         for path in _package_files(name):
             seen = {(line, ".".join(mod.split(".")[:2])) for line, mod, marked in imports_of(path.read_text(encoding="utf-8"), _modname(path))
-                    if marked and mod != "tianxia" and _module_exists(".".join(mod.split(".")[:2])) and mod.split(".")[1] not in aliases()}
+                    if marked and mod != "tianxia" and _module_exists(".".join(mod.split(".")[:2])) and mod.split(".")[1] not in aliases()
+                    and mod.split(".")[1] not in SHARED}
             out += [f"{_modname(path)}:{line} {mod}" for line, mod in sorted(seen)]
     return out
 
 
+def stale_marks(source: str, module: str) -> list[int]:
+    """註了「過渡：待搬」、可是 import 的 tianxia 模組裡沒有一個是還沒搬的舊模組（全是核心本體、共用規則層、包或 from tianxia import 名字）的那幾行。"""
+    lines: dict[int, bool] = {}
+    for line, name, marked in imports_of(source, module):
+        if not marked:
+            continue
+        parts = name.split(".")
+        old = (len(parts) > 1 and parts[1] not in CORE and parts[1] not in SHARED and parts[1] not in ("core", "features")
+               and parts[1] not in aliases() and _module_exists(".".join(parts[:2])))
+        lines[line] = lines.get(line, False) or old
+    return sorted(line for line, has_old in lines.items() if not has_old)
+
+
 def test_every_transitional_import_points_at_an_old_module_not_the_core_or_a_package():
-    """註了「過渡：待搬」的那一行真的是舊模組：搬完了（變成核心或包）就把註拿掉。"""
+    """註了「過渡：待搬」的那一行真的是舊模組：搬完了（變成核心或包）、登記進共用規則層，就把註拿掉。"""
     for entry in transitional_imports():
         mod = entry.rsplit(" ", 1)[1].split(".")
-        assert mod[1] not in CORE and mod[1] not in ("core", "features") and mod[1] not in aliases(), entry
+        assert mod[1] not in CORE and mod[1] not in ("core", "features") and mod[1] not in aliases() and mod[1] not in SHARED, entry
+    stale = [f"{_modname(path)}:{line}" for name in _packages() for path in _package_files(name)
+             for line in stale_marks(path.read_text(encoding="utf-8"), _modname(path))]
+    assert stale == []
 
 
 SERVICES = TIANXIA / "core" / "services.py"
@@ -655,8 +685,18 @@ def test_the_old_names_left_as_aliases_are_known():
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 
+def test_a_mark_with_no_old_module_left_is_caught():
+    """註了過渡、import 的卻都是核心本體或共用規則層（搬完了、登記了）：那一行的註要拿掉；同一行還有一個舊模組的照註（第 11 批）。"""
+    assert stale_marks("from tianxia import siege  # 過渡：待搬\n", "tianxia.features.battle.view") == [1]
+    assert stale_marks("from tianxia import journal, team  # 過渡：待搬\n", "tianxia.features.battle.view") == [1]
+    assert stale_marks("from tianxia import conquest, siege  # 過渡：待搬\n", "tianxia.features.battle.view") == []
+    assert stale_marks("from tianxia import siege\n", "tianxia.features.battle.view") == []
+
+
 @pytest.mark.parametrize("source", [
     "from tianxia import library  # 過渡：待搬\n",
+    "from tianxia import siege\n",  # 共用規則層（registry.SHARED，第 11 批）：不必註
+    "from tianxia.siege import title\n",
     "from tianxia.core.services import WalletService\n",
     "from tianxia import calendar, naming\n",
     "from tianxia.models import Content\n",
