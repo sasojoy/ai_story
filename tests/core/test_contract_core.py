@@ -381,3 +381,13 @@ def test_the_own_turn_is_heard_even_when_the_package_is_closed(game, seams):
     seams.open = False
     g.mark_seen(1000.0)
     assert ("on_own_turn",) in seams.calls
+
+
+def test_the_own_turn_is_heard_while_the_season_clock_is_paused(game, seams):
+    """賽季時鐘暫停中（own_turn_checks 在暫停的檢查那裡就回頭、不掛系統通緝）on_own_turn 照叫：它排在暫停的檢查之前（原位的封測元寶
+    暫停中照發，帳跟世界無關；第 11 批審查：挪到暫停的檢查後面，契約與商城包的測試原本都不紅）。"""
+    g = _made(game)
+    assert g.world.pause_clock(1000.0) and g.world.paused_at() is not None
+    seams.calls.clear()
+    g.mark_seen(1010.0)
+    assert seams.calls.count(("on_own_turn",)) == 1
