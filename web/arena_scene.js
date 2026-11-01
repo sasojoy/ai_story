@@ -30,7 +30,7 @@ function sceneArts(mid, sc) {
     const key = `${mid}/${a.slot}`;
     if (SC.art[key] || typeof Image !== "function") continue;
     const im = new Image();
-    im.src = `/api/looks/img/${mid}/${a.slot}`;
+    im.src = `/api/looks/img/${mid}/${a.slot}${window.LOOKS_VER ? `?v=${window.LOOKS_VER}` : ""}`;
     SC.art[key] = im;
   }
 }

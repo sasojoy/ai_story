@@ -54,18 +54,20 @@
     RING_BG.forEach((src, i) => add(`bg${i}`, src));
   }
   const ringReady = (im) => im && im.complete && im.naturalWidth > 0;
+  // 自建的圖換了（refit、重畫、退回重來）網址就換：舊快取不會擋住新圖（main.looks_ver）
+  const looksVer = () => (window.LOOKS_VER ? `?v=${window.LOOKS_VER}` : "");
   // 這一套形象的這一張（第一次用到才抓；還沒抓好或抓不到就先畫斗笠小子）
   function ringBody(look, sheet) {
     if (!look || !/^[a-z0-9_]+$/.test(look)) return RA.imgs[sheet];
     const key = `${look}/${sheet}`;
-    if (!RA.imgs[key]) RA.add(key, /^u\d+$/.test(look) ? `/api/looks/img/${look}/${sheet}` : `${RING_LOOKS}${look}/${sheet}.webp`); // 自建的由伺服器送
+    if (!RA.imgs[key]) RA.add(key, /^u\d+$/.test(look) ? `/api/looks/img/${look}/${sheet}${looksVer()}` : `${RING_LOOKS}${look}/${sheet}.webp`); // 自建的由伺服器送
     return ringReady(RA.imgs[key]) ? RA.imgs[key] : RA.imgs[sheet];
   }
   // 招式動畫（m<數字>，由伺服器送）：六格一張的光效，出招那幾格疊在出手的人身上（沒抓好就不疊）
   function ringFxImg(fx) {
     if (!fx || !/^m\d+$/.test(fx)) return null;
     const key = `fx/${fx}`;
-    if (!RA.imgs[key]) RA.add(key, `/api/looks/img/${fx}/fx`);
+    if (!RA.imgs[key]) RA.add(key, `/api/looks/img/${fx}/fx${looksVer()}`);
     return ringReady(RA.imgs[key]) ? RA.imgs[key] : null;
   }
   function ringFx(cx, fx, k, x, flip, lunge) {

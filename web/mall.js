@@ -228,7 +228,8 @@
   // ── 擂台形象（功能包 tianxia/features/looks/；Joy 2026-10-31）：萬寶閣「形象」那一頁。每一套一張卡：站著的那一格當預覽、名字、
   // 說明；穿著的寫「穿著」，買了的一顆「換上」，沒買的一顆「買（價錢）」（點了跟貨架同一條購買確認）。預設的斗笠小子永遠在最前 ──
   // 官方的在 /static/img/looks/<id>/，自建的（u<數字>）由伺服器從資料庫旁邊送（/api/looks/img/<id>/<張>）
-  const LOOK_IMG = (id) => (/^u\d+$/.test(id || "") ? `/api/looks/img/${id}/hero_bare_idle`
+  const LOOK_VER = () => (window.LOOKS_VER ? `?v=${window.LOOKS_VER}` : "");
+  const LOOK_IMG = (id) => (/^u\d+$/.test(id || "") ? `/api/looks/img/${id}/hero_bare_idle${LOOK_VER()}`
     : /^[a-z0-9_]+$/.test(id || "") ? `/static/img/looks/${id}/hero_bare_idle.webp` : "/static/img/arena/hero_bare_idle.webp");
   function lookFaceHtml(id) { // 站著那張的第一格（四格一張、880×220）裁成一個人
     return `<span class="look-face" aria-hidden="true" style="background-image:url('${LOOK_IMG(id)}')"></span>`;
@@ -285,7 +286,7 @@
   // 招式動畫（第三批）：替現在練的那一門（自己合成或自創的）寫一句樣子下單，做好放進招式庫；每一季綁到一門武功上（同打法免費改綁）。
   // 擂台上出招時疊那一張光效。範例那一格是 /static/img/arena/fx_sample.webp 的第四格
   const MOVE_NOTE = "替自己合成或自創的武功寫一句絕招長什麼樣子，例如「一劍寒光九萬里」「背後出現一座大佛擊出一掌」。擂台上這一招發動時就照這句演。先按「先看看」演給你看；要畫的（大佛、龍這種）畫好審過才上身，不用畫的買了當場學成。換季帶著走，武功重練再綁一次就好（同一種打法免費）。"; // 待 joy 潤
-  const MOVE_IMG = (id) => (/^m\d+$/.test(id || "") ? `/api/looks/img/${id}/fx` : "/static/img/arena/fx_sample.webp");
+  const MOVE_IMG = (id) => (/^m\d+$/.test(id || "") ? `/api/looks/img/${id}/fx${LOOK_VER()}` : "/static/img/arena/fx_sample.webp");
   function moveFxHtml(id) { return `<span class="move-fx" aria-hidden="true" style="background-image:url('${MOVE_IMG(id)}')"></span>`; }
   function moveHtml(m) {
     if (!m) return "";
