@@ -254,3 +254,38 @@ def seams(monkeypatch):
     f = Seams()
     monkeypatch.setattr(registry, "FEATURES", [f])
     return f
+
+
+TIME_SEAMS = ("on_due", "on_away", "deliver_results", "deliver_notices", "on_sync")
+
+
+def test_the_seams_in_sync_come_where_the_old_lines_were(game, seams):
+    """sync 裡的接縫掛鉤照原本那幾行的先後：到時的結算（追完共用賽季之後）→ 下線那一段（有上一次同步才有，away_from 是上一次的現實秒）
+    → 收場補送 → 別人捎來的 → 既有的 on_sync。第一次同步沒有上一次：不叫 on_away。"""
+    game.state.player.tutorial_step = len(game.content.tutorial.steps)
+    game.sync(1000.0)
+    assert [c[0] for c in seams.calls if c[0] in TIME_SEAMS] == ["on_due", "deliver_results", "deliver_notices", "on_sync"]
+    seams.calls.clear()
+    game.sync(1060.0)
+    assert [c for c in seams.calls if c[0] in TIME_SEAMS] == [
+        ("on_due",), ("on_away", 1000.0), ("deliver_results",), ("deliver_notices",), ("on_sync", round(60 * game.content.config.time_scale))]
+
+
+def test_the_due_hook_also_runs_on_fast_forward_and_the_world_tick(content, world, seams):
+    game = Game.new(content, "快轉客", rng=random.Random(0), world=world)
+    _made(game)
+    seams.calls.clear()
+    game.advance(60.0)
+    assert seams.calls.count(("on_due",)) == 1
+    seams.calls.clear()
+    Game.for_world(content, world).world_tick(2000.0)
+    assert seams.calls.count(("on_due",)) == 1
+
+
+def test_the_time_seams_are_asked_even_when_the_package_is_closed(game, seams):
+    """接縫掛鉤不問 enabled（原位那幾行本來就不看包的開關：酒肆的三個 deliver 關著照送、決戰補送照內容）；既有的 on_sync 照舊不叫。"""
+    seams.open = False
+    _made(game)
+    game.sync(1060.0)
+    assert [c[0] for c in seams.calls if c[0] in TIME_SEAMS] == [
+        "on_due", "deliver_results", "deliver_notices", "on_due", "on_away", "deliver_results", "deliver_notices"]

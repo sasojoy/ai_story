@@ -33,5 +33,12 @@ class SortieFeature(Feature):
 
         return territory.on(ctx.content)
 
+    def on_due(self, ctx) -> None:
+        """到時的結算（接縫掛鉤，全部拆包第 11 批；原本 Game.world_tick、sync、advance 三處叫 Game._sortie_duel_tick 的那一行）：窗滿了的
+        約戰照時結算（約戰關著、沒有到時的什麼都不做、不寫）。不問 enabled：原位本來就不看開關，duel_tick 自己看。"""
+        from . import duel_actions  # noqa: PLC0415
+
+        duel_actions.duel_tick(ctx)
+
 
 FEATURE = SortieFeature()

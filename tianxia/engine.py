@@ -121,7 +121,7 @@ from .world import (
     _season_vehicle, advance_world_state, check_thresholds, end_season, evaluate_ending, fire_by_id, open_waiting_showdown,
     resume_season_clock, settle_season_start, showdown_key, start_pending_battle,
 )
-from .world_state import SealDuel, SealSide, SortieDuel, WorldStateStore, season_length_days
+from .world_state import SealDuel, SealSide, WorldStateStore, season_length_days
 
 HOUR = 3600
 DAY = 86400
@@ -1007,7 +1007,7 @@ class Game:
         # 減法季批 4：痕跡過門檻的防漏（只發，不替任何人記行狀：排程那一份 Game 沒有自己的人；直接寫回、不經 _save_season）
         if jianfa(self.content, self.state.world, "marks_visible") and marks_rules.fire_due(self.state, self.content):
             self.world.save_season(self.state.world)
-        self._sortie_duel_tick()  # 減法季批 3b：窗滿了的約戰沒人在線也照時結算（關著、沒有到時的什麼都不做、不寫）
+        features_core.on_due(self)  # 到時的結算（接縫掛鉤，第 11 批；出陣包：窗滿了的約戰沒人在線也照時結算，關著、沒有到時的什麼都不做、不寫）
         msgs += self._conquest_tick()  # 領地爭奪：22:00 沒人在線也照時換天
         self._battle_status(tick=True)
         self._seal_tick()
@@ -1025,8 +1025,9 @@ class Game:
         self._reconcile_season()
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()  # 剛才的追趕可能進一步推進了賽季，拉回最新的一份
-        # 減法季批 3b：排程關著（或還沒輪到）時，下一個同步的人替窗滿了的約戰結算（只往前走；手上這一份季剛讀回來，結算改的進度當場存）
-        self._sortie_duel_tick()
+        # 到時的結算（接縫掛鉤，第 11 批）：排程關著（或還沒輪到）時，下一個同步的人替窗滿了的約戰結算（出陣包；只往前走、手上這一份季
+        # 剛讀回來，結算改的進度當場存）
+        features_core.on_due(self)
         self._stamp_join()  # 新角色、換季重來的角色：補算完賽季才記下加入的那一刻
         self._week_unlock_tick()  # 減法季 6.6：第 2 週的功能對這個人開了的那一刻，寫一則紀錄
         self._record_faction()
@@ -1038,9 +1039,8 @@ class Game:
             elapsed = max(0.0, now - self.state.last_real) * self.content.config.time_scale
             self.state.last_real = now
             msgs += self._advance_player_local(elapsed)
-            if away_from is not None and now - away_from >= self.content.config.tavern.hit_offline_minutes * 60:
-                if self._tavern_hit_check(away_from):  # 酒肆：下線那一段殺手找上門（站在城外下線的人）；戰報與紀錄自己寫，不併進江湖大事
-                    self._save_season()
+            # 下線那一段（接縫掛鉤，第 11 批）：酒肆包——離線夠久，殺手找上門（站在城外下線的人）；戰報與紀錄自己寫，不併進江湖大事
+            features_core.on_away(self, away_from)
         if self.state.player.picking_smith and not equipment.smith_open(self.state, self.content):
             equipment.close_smith(self.state.player)  # 開關關了、人不在城鎮了（內容改版、管理者挪人）：收起鐵匠鋪，單子與頁一起清
         if self.state.player.smith_draft is not None and not smithing.draft_here(self.state, self.content, self.state.player.smith_draft):
@@ -1064,14 +1064,13 @@ class Game:
             journal.add_entry(self.state, news, merge=True)
         self._deliver_big_events()  # 這一季的時刻表大事人人有份：沒看過的補上，推進的人也走這一條（FB-038）
         self._backfill_battle_scores()  # 場上沒有份量快照的自己（上線前就在決戰裡）：補上；排程的 world_tick 不走這裡
-        self._deliver_battle_results()  # 下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
+        features_core.deliver_results(self)  # 收場補送（接縫掛鉤，第 11 批）：決戰包——下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
         self._deliver_seal_results()  # 玉璽碎片：現世、單挑收場、隱沒（5.9），下線時發生的回來補
         self._deliver_renames()  # 手上的絕學被人定了名：下一次同步補一則紀錄（FB-083）
         self._deliver_echoes()  # 別人照著你首創的配方合了出來：補名望（首創名望回饋）
         self._deliver_guard_credits()  # 護衛：下線時替人物擋下的挑戰，回來補名望與心得
-        self._deliver_whispers()  # 酒肆：有人在酒肆打聽你（風聲），下線時的回來補
-        self._deliver_hits()  # 酒肆：自己雇的殺手得手、失手、到期退錢
-        self._deliver_watches()  # 酒肆：託酒家留意的人有了準信、或到期沒消息
+        # 別人捎來的（接縫掛鉤，第 11 批）：酒肆包——風聲（有人在酒肆打聽你）、自己雇的殺手得手失手或到期退錢、託酒家留意的人有了準信或到期
+        features_core.deliver_notices(self)
         self._conquest_tick()  # 領地爭奪：換天（22:00）的掛鉤（前一天沒開成的攻城作罷；第一個看到新的一天的人觸發）
         self._deliver_conquest()  # 領地爭奪：翻地的分紅、守城功（下線時易手的回來補）
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
@@ -1182,7 +1181,7 @@ class Game:
         arrived = self._arrivals()  # 同 sync：抵達自己寫紀錄
         msgs += self._conquest_tick(save=False)  # 領地爭奪：快轉跨過 22:00 也換天（下面一起存）
         self._deliver_conquest()  # 同 sync：快轉（與只 advance 的整季機器人）也補翻地的分紅
-        self._sortie_duel_tick()  # 減法季批 3b：快轉不動現實時刻，約戰的窗照現實時間；快轉到季末時還沒打的作廢、退次數
+        features_core.on_due(self)  # 到時的結算（接縫掛鉤，第 11 批；出陣包的約戰：快轉不動現實時刻，窗照現實時間；快轉到季末時還沒打的作廢、退次數）
         self._save_season()
         msgs += start_pending_battle(self.world, self.content, self.now)
         self.state.world = self.world.get_season()
@@ -2526,9 +2525,6 @@ class Game:
 
     def tavern_ask(self, text: str, reply: str | None, request: tavern_rules.AskRequest | None = None) -> list[str]:
         return tavern_actions.tavern_ask_reply(self, text, reply, request)
-
-    def _deliver_whispers(self) -> None:
-        return tavern_actions.deliver_whispers(self)
 
     def tavern_view(self) -> dict:
         return tavern_actions.tavern_view(self)
@@ -8382,9 +8378,6 @@ class Game:
 
     def sortie_card(self) -> dict | None:
         return sortie_duel_actions.sortie_card(self)
-
-    def _sortie_duel_tick(self) -> list[SortieDuel]:
-        return sortie_duel_actions.duel_tick(self)
 
     def sortie_duel_tick(self, now: float) -> int:
         return sortie_duel_actions.sortie_duel_tick(self, now)

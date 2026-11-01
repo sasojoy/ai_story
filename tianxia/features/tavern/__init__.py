@@ -46,5 +46,25 @@ class TavernFeature(Feature):
 
         return bots.score(option)
 
+    # ── 接縫掛鉤（全部拆包第 11 批：原本在 Game 原位直接叫這一包的那幾行；不問 enabled，原位本來就不看酒肆開關）──
+
+    def on_away(self, ctx, away_from) -> None:
+        """下線那一段殺手找上門（原本 Game.sync 補算完本人下線那一段之後的那幾行，照抄）：離線夠久（Config.tavern.hit_offline_minutes）
+        才擲；站在城外下線的人才會被找到（tavern_hit_check 自己看）；得手了改了共用賽季，存回。戰報與紀錄自己寫，不併進江湖大事。"""
+        from . import actions  # noqa: PLC0415
+
+        if away_from is not None and ctx.now - away_from >= ctx.content.config.tavern.hit_offline_minutes * 60:
+            if actions.tavern_hit_check(ctx, away_from):
+                ctx._save_season()
+
+    def deliver_notices(self, ctx) -> None:
+        """別人捎來的（原本 Game.sync 護衛補帳之後的那三行，照原順序）：有人在酒肆打聽你（風聲）、自己雇的殺手得手失手或到期退錢、
+        託酒家留意的人有了準信或到期。三個都不看酒肆開關（關著照送、照退）。"""
+        from . import actions  # noqa: PLC0415
+
+        actions.deliver_whispers(ctx)
+        actions.deliver_hits(ctx)
+        actions.deliver_watches(ctx)
+
 
 FEATURE = TavernFeature()

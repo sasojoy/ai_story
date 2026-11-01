@@ -184,7 +184,7 @@ def tavern_find(ctx: Game, target: str) -> tuple[str | None, Game | None]:
 
 
 def tavern_whisper(ctx: Game, kind: str, other: Game) -> None:
-    """被打聽的人收到風聲：記在季上，他下次同步時補（_deliver_whispers）。匿名行走的人只會是個生面孔。"""
+    """被打聽的人收到風聲：記在季上，他下次同步時補（deliver_whispers：sync 的 deliver_notices 掛鉤）。匿名行走的人只會是個生面孔。"""
     s, c = ctx.state, ctx.content
     w = tavern_rules.whisper(kind, s, c, s.player.location, s.world.time)
     if s.player.anonymous:

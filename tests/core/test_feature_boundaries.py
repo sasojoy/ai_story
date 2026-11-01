@@ -228,9 +228,10 @@ GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
     "_sortie_rewards", "_train_title", "_sortie_mode", "_sortie_option", "_sortie",
     # 出陣約戰（主動搬六包第 2 批；7 個私有）：server、假人、腳本、測試在叫的 11 個（duel_on、_duel_power、duel_convoy_here、_duel_squad、
     # sortie_go_problem、sortie_go、sortie_answer、sortie_join、sortie_cards、sortie_card、sortie_duel_tick），與只有核心原位在叫的 5 個
-    # （_duel_line、_duel_entry、_duel_choice、_sortie_duel_tick、_duty_credit；duel_on、_duel_squad 核心原位也叫）
+    # （_duel_line、_duel_entry、_duel_choice、_sortie_duel_tick、_duty_credit；duel_on、_duel_squad 核心原位也叫）。
+    # 第 11 批（核心收接縫）：三處結算換成 on_due 掛鉤，_sortie_duel_tick 沒人叫了，拿掉
     "duel_on", "_duel_power", "duel_convoy_here", "_duel_squad", "sortie_go_problem", "sortie_go", "sortie_answer", "sortie_join",
-    "sortie_cards", "sortie_card", "sortie_duel_tick", "_duel_line", "_duel_entry", "_duel_choice", "_sortie_duel_tick", "_duty_credit",
+    "sortie_cards", "sortie_card", "sortie_duel_tick", "_duel_line", "_duel_entry", "_duel_choice", "_duty_credit",
     # battle
     # 全服決戰「看」那一半（主動搬六包第 5 批；11 個私有）：server 叫的 12 個（main_view 的戰局條、攻城條、輸入框，reports_view，放手一搏與
     # 補劇情的三段式，_tales_waiting）、核心原位叫的 4 個（_battle_scene_text、_round_blocks、_round_wait、_deliver_battle_results），
@@ -298,11 +299,8 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("map_state", "_sortie_foes"): "輿圖（今天去哪裡出陣）：出陣那一格是哪一種；輿圖的線還在飛，這一輪不碰",
     ("map_state", "sorties_left"): "輿圖：今天還能出陣幾次",
     ("_map_foes", "_sortie_foes"): "輿圖的地點卡：約戰關著時出陣打的那一批",
-    # 出陣約戰（主動搬六包第 2 批）：核心叫約戰委派 17 對（搬之前約戰自己叫出陣委派的 8 對跟著進了包）
-    ("world_tick", "_sortie_duel_tick"): "伺服器排程那一下結算到時的約戰：追完共用賽季之後、領地爭奪換天之前（三處結算的位置算行為：作廢退體力"
-                                         f"與回體力誰先誰後夾上限的結果不同；這一輪不開「世界推進」的掛鉤）；{_SORTIE_SEAM}",
-    ("sync", "_sortie_duel_tick"): f"排程關著時下一個同步的人替窗滿了的約戰結算：追完共用賽季之後、_stamp_join 之前；同上；{_SORTIE_SEAM}",
-    ("advance", "_sortie_duel_tick"): f"快轉（管理者、整季機器人只 advance）：_deliver_conquest 之後、_save_season 之前；同上；{_SORTIE_SEAM}",
+    # 出陣約戰（主動搬六包第 2 批）：核心叫約戰委派 17 對（搬之前約戰自己叫出陣委派的 8 對跟著進了包）。第 11 批（核心收接縫）：三處結算
+    # （world_tick、sync、advance → _sortie_duel_tick）換成 on_due 掛鉤，拿掉
     ("choose", "duel_on"): "sortie:* 在查選單之前接走：約戰關著的季照舊當成不在選單上（見 GAME_DIRECT 的 choose）",
     ("choose", "_duel_choice"): "同上：貼、應戰、同去三個動詞",
     ("_act", "duel_on"): f"act:train 的分派：約戰開著（序章以外）出陣那一格只打開出陣前那張卡；{_SORTIE_SEAM}",
@@ -322,7 +320,7 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("scene_text", "_battle_scene_text"): "場景卡：戰場蓋在畫面上或整個取代（開打了在場上的人），一次請求只推進一次（tick=False）；場景還沒有掛鉤",
     ("battle_detail", "_round_blocks"): "戰報頁（核心的單打服務）：決戰那一筆照 battles 表重讀完整戰況（收場之後才補上的劇情也在）",
     ("_battle_options", "_round_wait"): "決戰「打」那一半（第 7 批搬）：已選了、等其他人那一顆灰鈕上寫已送出／在場",
-    ("sync", "_deliver_battle_results"): "收場補送在 sync 裡的位置算行為（緊接在 _deliver_big_events 後、_deliver_seal_results 前，江湖紀錄的先後）",
+    # （第 11 批：sync 的收場補送換成 deliver_results 掛鉤，拿掉 (sync, _deliver_battle_results)）
     ("_apply_battle_outcome", "_deliver_battle_results"): "決戰「打」那一半（第 8 批搬）：自己這一下把決戰推到收場，馬上補到自己手上",
     ("_settle_showdown", "_deliver_battle_results"): "決戰「打」那一半（第 8 批搬）：時刻表決戰收場，同上",
     ("_shelve_unfinished_battle", "_deliver_battle_results"): "決戰「打」那一半（第 8 批搬）：決戰季終收兵，同上",
@@ -357,13 +355,15 @@ GAME_IMPORTS |= {
     "tianxia.features.tavern.actions", "tianxia.tavern",
 }
 GAME_DELEGATES |= {  # 13 個私有：server、假人、腳本、測試在叫的，與核心原位在叫的（_tavern_options、_tavern_enter、_tavern_hit_check、三個 deliver、_tavern_sign）
+    # 第 11 批（核心收接縫）：sync 的三個 deliver 換成 deliver_notices 掛鉤，_deliver_whispers 沒人叫了，拿掉（_deliver_hits、_deliver_watches、
+    # _tavern_hit_check 測試直接叫，留著）
     "tavern_do", "tavern_view", "tavern_ask_request", "tavern_ask", "tavern_chatter_request", "apply_tavern_chatter",
     "_tavern_open", "_tavern_enter", "_tavern_price", "_tavern_options", "_tavern_sign", "_tavern_run", "_tavern_hit_problem",
-    "_tavern_hit_check", "_tavern_hit_fight", "_tavern_ask_facts", "_deliver_watches", "_deliver_hits", "_deliver_whispers",
+    "_tavern_hit_check", "_tavern_hit_fight", "_tavern_ask_facts", "_deliver_watches", "_deliver_hits",
 }
 GAME_DIRECT.update({  # 用到 tavern_rules 這個名字（現在是酒肆包 rules 的別名）的
-    "sync": "下線那一段的殺手（叫 _tavern_hit_check(away_from)）、人不在酒肆了就收店（tavern_rules.here、close）、三個 deliver（風聲、殺手單、"
-            "託付留意：放進 on_sync 會改江湖紀錄的先後、惡名排到 _marks_tick 之後，而且它們不看酒肆開關）；" + _TAVERN_SEAM,
+    "sync": "人不在酒肆了就收店（tavern_rules.here、close）；第 11 批換掉了下線那一段的殺手（on_away）與三個 deliver（deliver_notices）；"
+            + _TAVERN_SEAM,
     "_drop_stale_references": "人不在酒肆了就收店（tavern_rules.here、close）：放進 on_drop_stale 會排到清路程（journey）與序章收尾之後，"
                               "here() 看這兩樣，結果可能不同；" + _TAVERN_SEAM,
     "_hint_triggers": "碰到才說：有酒肆的城（tavern_rules.on、here）排 h_tavern 那一條；提示還沒有掛鉤",
@@ -379,11 +379,8 @@ GAME_DELEGATE_CALLERS.update({
     ("shop_view", "tavern_view"): "店面那一頁：鐵匠鋪那條線（feature/smithing-flow）緊貼著這一行改，這一輪不動；店面還沒有掛鉤",
     ("_action_title", "_tavern_sign"): "act:tavern 那一下的紀錄標題先算（act 是核心的前綴；同出陣的 _train_title）",
     # 呼叫端本身在 GAME_DIRECT 裡的另外 6 對：開發時那一版的掃描不記；合 develop（出陣第 2 批的掃描：GAME_DIRECT 的方法裡叫的也記，
-    # PM 10/31）之後掃得到，取消註解（核心叫酒肆委派一共 9 對）
-    ("sync", "_tavern_hit_check"): "下線那一段殺手找上門（站在城外下線的人）；" + _TAVERN_SEAM,
-    ("sync", "_deliver_whispers"): "風聲：下線時有人在酒肆打聽你，回來補；" + _TAVERN_SEAM,
-    ("sync", "_deliver_hits"): "雇主收殺手單的結果（得手、失手、到期退一半），不看酒肆開關；" + _TAVERN_SEAM,
-    ("sync", "_deliver_watches"): "託酒家留意的捎信與到期；" + _TAVERN_SEAM,
+    # PM 10/31）之後掃得到，取消註解（核心叫酒肆委派一共 9 對）。第 11 批：sync 那四對（下線的殺手、三個 deliver）換成 on_away、
+    # deliver_notices 掛鉤，拿掉
     ("_everyday_options", "_tavern_options"): "坐在酒肆裡時選單整個是酒肆那一串；" + _TAVERN_SEAM,
     ("_act", "_tavern_enter"): "act:tavern 打開酒肆（act 是核心的前綴）；" + _TAVERN_SEAM,
 })

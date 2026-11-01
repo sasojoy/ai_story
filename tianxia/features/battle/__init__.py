@@ -28,8 +28,16 @@ class BattleFeature(Feature):
     carried = ("battle_results_seen",)  # Game._reset_player_for_new_season 照帶（不看開關，同商城、出陣的 carried）
 
     def enabled(self, ctx) -> bool:
-        """內容裡有決戰（battles.json）就有：決戰本身沒有開關（beta、第一季、減法季都打）。這一包的掛鉤全是預設的空的，開著關著結果都一樣。"""
+        """內容裡有決戰（battles.json）就有：決戰本身沒有開關（beta、第一季、減法季都打）。遊戲當下的掛鉤全是預設的空的，開著關著結果都一樣；
+        第 11 批的接縫掛鉤不問它（下面）。"""
         return bool(ctx.content.battles)
+
+    # ── 接縫掛鉤（全部拆包第 11 批：原本在 Game 原位直接叫這一包的那幾行；不問 enabled）──
+
+    def deliver_results(self, ctx) -> None:
+        """收場補送（原本 Game.sync 補份量快照之後、玉璽碎片之前那一行）：下線時收場的決戰與攻城，回來第一次同步補上（休季、籌備中也一樣，
+        FB-027）。經 Game 叫：tests/core/test_renown_cross.py 換掉 Game._deliver_battle_results（服務清單三、過渡）。"""
+        ctx._deliver_battle_results()
 
 
 FEATURE = BattleFeature()
