@@ -38,6 +38,7 @@ FEATURES: list[Feature] = [
 # （tests/core/test_feature_boundaries.py 守）。核心本體（tianxia/core/__init__.py 的 MODULES）可以 import 這一層、這一層可以 import 核心
 # 本體與同一層。第 11 批放了主人已經寫成「共用規則層」的 siege；第 15 批（# shared 那一段）登記其餘 59 個。總表第 15 列寫了、這一批先不收的 8 個
 # （讀了之後成包的擂台、伏筆、有所感……）與這一層還碰到別的舊模組的 11 條（排定收進來的、之後成包的），在邊界測試的 SHARED_LATER、SHARED_PENDING。
+# scripts/test_for.py 照語法樹讀這一份（改這一層的模組只挑自己檔名的測試＋煙霧＋邊界測試）：值只寫字面的字串（相鄰的字串可以接）。
 SHARED: dict[str, str] = {
     "siege": "攻城的規則（攻城戰的名字、收場改季、誰贏）：決戰包的攻城與戰況、地盤都讀；總表附錄甲裁定不搬進任何一包",
     # shared（全部拆包第 15 批「共用規則層登記」，計畫 docs/superpowers/plans/2026-11-01-共用規則層登記.md 1.2）：只登記、不搬程式。
