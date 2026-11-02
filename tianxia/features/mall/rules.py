@@ -66,7 +66,8 @@ EFFECTS: dict[str, EffectSpec] = {
     # （looks.orders.place 自己記帳，同 buy 的那幾步）。審核過了那一列的 data 記 look_id＝u<購買 id>，就是買到的那一套；退回照退款
     "look_order": EffectSpec("look", "自建形象一套（寫一句樣子，審核過了上架）", 1),
     "look_market": EffectSpec("look", "市集上別人做的形象一套（價錢照上架的那一份）", 1),
-    "move_order": EffectSpec("look", "招式動畫一張（替自己的武功寫一句樣子，審核過了放進招式庫）", 1),
+    "move_order": EffectSpec("look", "獨門絕招一招（替自己的武功寫一句樣子，畫好審過放進招式庫）", 1),
+    "move_basic": EffectSpec("look", "通用絕招一招（替自己的武功寫一句樣子，用現成的光效，當場學成）", 1),
 }
 TICKET_NAMES = {"zhuan_art": "列傳插畫", "zhuan_seal": "紀念印", "zhuan_quote": "人物親筆評曰", "deep_slot": "深交名額", "inscribe": "題壁墨"}  # 退款那一句
 KIND_NAMES = {"look": "形象", "consumable": "消耗品", "card": "月卡", "pass": "通行證"}
@@ -130,7 +131,7 @@ LOOK_GOT = "形象「{name}」（到萬寶閣的「形象」換上）"
 LOOK_OWNED = "你已經有「{name}」這一套形象了。"
 LOOK_BACK = "形象「{name}」收回。"
 MOVE_BACK = "「{name}」的招式動畫收回。"
-ORDERED = ("look_order", "move_order", "look_market")  # 從形象包下單的（帶名字或武功與樣子），一般的購買、貨架都不賣
+ORDERED = ("look_order", "move_order", "move_basic", "look_market")  # 從形象包下單的（帶名字或武功與樣子），一般的購買、貨架都不賣
 
 
 
@@ -674,9 +675,10 @@ def item_problems(item: MallItem, content: Content) -> list[str]:
     elif item.effects.get("look_market"):
         if item.look or item.effects != {"look_market": 1}:
             out.append(f"{where}：形象市集的效果只寫 {{\"look_market\": 1}}、不寫 look")
-    elif item.effects.get("move_order"):
-        if item.look or item.effects != {"move_order": 1}:
-            out.append(f"{where}：招式動畫的效果只寫 {{\"move_order\": 1}}、不寫 look")
+    elif item.effects.get("move_order") or item.effects.get("move_basic"):
+        key = "move_order" if item.effects.get("move_order") else "move_basic"
+        if item.look or item.effects != {key: 1}:
+            out.append(f"{where}：絕招的效果只寫 {{\"{key}\": 1}}、不寫 look")
     elif item.kind == "look" or item.look:
         known = content.looks.get(item.look)
         if known is None:

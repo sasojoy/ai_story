@@ -218,6 +218,13 @@ def _from_draft(draft: dict, text: str, name: str) -> dict:
     return clean({"beats": beats, "glow": glow}, name)
 
 
+def plain(scene: dict) -> dict:
+    """把要畫的那幾樣拿掉（通用絕招 60 元寶：只用現成的光效，不另外畫圖）。
+    法相整拍略過、巨物飛擊換成一道光——clean 本來就這樣處理沒有名字的那兩拍，所以把 label 清掉再夾一次就好。"""
+    beats = [{**b, "label": ""} if b.get("op") in ("法相", "巨物飛擊") else dict(b) for b in scene.get("beats", [])]
+    return clean({"beats": beats, "glow": scene.get("glow")}, scene.get("name", ""))
+
+
 def direct(text: str, name: str = "", draft: dict | None = None) -> dict:
     """一句話 → 導演稿（夾過）。draft 是模型填的那張表（server.py 在鎖外問來的）；沒有就走關鍵字：
     認幾組字：法相（佛、龍、虎……）、丟出去的大東西（掌、拳、印……）、成群的劍、一道光、冷熱雷、雪花火星；

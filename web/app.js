@@ -5847,7 +5847,7 @@
         case "look-gear": await lookGear(el.dataset.id || ""); break; // 戴上、拿下一件飾品
         case "look-order": lookOrderAsk(); break; // 自建形象下單（先問一次）
         case "look-withdraw": lookWithdrawAsk(el); break; // 撤回還沒上架的單（先問一次，元寶全退）
-        case "move-order": moveOrderAsk(); break; // 招式動畫下單（先問一次）
+        case "move-order": moveOrderAsk(el.dataset.basic === "1"); break; // 絕招下單（先問一次）：通用 60 不畫圖、獨門 300 畫圖等審核
         case "move-preview": await movePreview(); break; // 一句話自創的絕招：先看看（不扣元寶）
         case "move-show": await moveShowTo(el.dataset.id || ""); break; // 招式庫做好了的那一招演一次
         case "look-show": lookShowTo(el.dataset.id || "", el.dataset.name || ""); break; // 一套形象看動作（再按一次收起）

@@ -352,7 +352,9 @@
     const form = !m.has_art || m.bound ? "" : m.open ? `<p class="mall-note">你還有一張在做：等它好了、或按「撤回」退掉，再下一張。</p>`
       : `<div class="look-order-form"><textarea class="input" id="move-prompt" maxlength="${m.prompt_max | 0}" rows="2" placeholder="這一招長什麼樣子（${m.prompt_max | 0} 字內，只能中文）">${esc(S.moveDraft || "")}</textarea>
         <button class="btn small" data-act="move-preview">先看看</button>
-        <button class="btn small primary" data-act="move-order">${ingotSvg()}${m.price | 0} 下單</button>
+        <button class="btn small" data-act="move-order" data-basic="1">${ingotSvg()}${m.price_basic | 0} 通用</button>
+        <button class="btn small primary" data-act="move-order">${ingotSvg()}${m.price | 0} 獨門</button>
+        <p class="mall-note">通用（${m.price_basic | 0}）用現成的光效演，當場學成；獨門（${m.price | 0}）照你寫的東西另外畫一張圖，送出之後可以先去忙，畫好審過才上身，沒通過元寶全退。</p>
         <p class="mall-note">${esc(m.order_style_note || "")}</p></div>${moveSceneHtml()}`;
     const show = S.moveShow ? `<canvas id="scene-preview" class="scene-preview" width="720" height="320" aria-label="絕招演一次"></canvas>` : "";
     return `<div class="mall-sub">絕招</div><p class="mall-note">${esc(MOVE_NOTE)}</p>${now}${S.moveShow ? "" : form}
@@ -365,7 +367,9 @@
     if (!p) return "";
     if (p.problem) return `<p class="mall-note bad">${esc(p.problem)}</p>`;
     const arts = (p.scene.arts || []).map((a) => a.label);
-    const note = arts.length ? `要畫「${arts.join("」「")}」：畫好、審過才上身（這裡先用剪影演）。` : "不用畫圖：下單當場學成。";
+    const note = arts.length
+      ? `獨門會畫「${arts.join("」「")}」：送出之後可以先去忙，畫好、審過才上身（這裡先用剪影演）。買通用的話這一樣改成一道光。`
+      : "這一句沒有看得出形狀的東西：買通用的就好（獨門會退回來叫你換一句）。";
     return `<canvas id="scene-preview" class="scene-preview" width="720" height="320" aria-label="絕招預覽"></canvas><p class="mall-note">${esc(note)}</p>`;
   }
   // 招式庫裡做好了的那一招：照它的稿和畫好的圖演一次（同擂台；再按一次收起，回到下單的表單）
@@ -385,17 +389,19 @@
     if (S.mallOpen) renderMall();
     if (S.movePreview.scene && typeof scenePreview === "function") scenePreview(S.movePreview.scene);
   }
-  function moveOrderAsk() {
+  function moveOrderAsk(basic) {
     const prompt = (document.getElementById("move-prompt")?.value || "").trim();
     S.moveDraft = prompt;
     const m = S.mallLooks && S.mallLooks.moves;
     if (!prompt) { S.mallSay = { text: "寫一句這一招長什麼樣子。", ok: false }; renderMall(); return; }
     const ref = mallRef();
-    ask(`花 ${m ? m.price | 0 : 0} 元寶替「${m ? m.art : ""}」下單招式動畫？審核沒過元寶全退。`, "下單", () => moveOrder(prompt, ref));
+    const price = (basic ? (m ? m.price_basic : 0) : (m ? m.price : 0)) | 0;
+    const tail = basic ? "用現成的光效，當場學成。" : "照你寫的東西畫一張圖，送出之後可以先去忙；審核沒過元寶全退。";
+    ask(`花 ${price} 元寶替「${m ? m.art : ""}」下單${basic ? "通用" : "獨門"}絕招？${tail}`, "下單", () => moveOrder(prompt, ref, basic));
   }
-  async function moveOrder(prompt, ref) {
+  async function moveOrder(prompt, ref, basic) {
     await busy(async () => {
-      const r = await api("/api/looks/move", { prompt, ref });
+      const r = await api("/api/looks/move", { prompt, ref, basic: !!basic });
       if (r.looks) S.mallLooks = r.looks;
       if (r.main) setMain(r.main);
       if (r.main && r.main.mall && S.mallData) S.mallData.balance = r.main.mall.balance;
