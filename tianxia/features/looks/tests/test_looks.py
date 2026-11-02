@@ -11,7 +11,7 @@ from tianxia.characters import CharacterStore
 from tianxia.core.registry import FEATURES
 from tianxia.engine import Game
 from tianxia.features.looks import actions as looks_actions
-from tianxia.features.looks import rules
+from tianxia.features.looks import orders, rules
 from tianxia.models import Look, MallItem
 from tianxia.wallet import Wallet
 
@@ -44,7 +44,7 @@ def _game(content, name="沈浪", world=None) -> Game:
 @pytest.mark.smoke
 def test_buy_wear_and_the_arena_records_the_look(on):
     game = _game(on)
-    assert game.arena_look() == ""
+    assert game.arena_look() == "" and "look" not in game.feature_status()
     game.mall_buy("look_moying", "ref-look-0001")
     assert Wallet(game.world.db).balance("沈浪") == 4400
     view = looks_actions.view(game)
@@ -53,6 +53,7 @@ def test_buy_wear_and_the_arena_records_the_look(on):
     msgs = looks_actions.wear(game, "moying")
     assert "墨影" in msgs[-1] and game.arena_look() == "moying"
     assert "形象" in [e.title for e in game.state.journal]
+    assert game.feature_status()["look"] == "moying"  # 走一趟照身上這一套畫（Joy 11/1）
 
 
 def test_cannot_wear_what_you_did_not_buy_and_cannot_buy_twice(on):
@@ -102,15 +103,16 @@ def test_closed_means_default_and_no_view(content):
     assert game.arena_look() == "" and looks_actions.view(game) is None
 
 
-def test_every_look_in_the_real_content_has_all_ten_sheets():
+def test_every_look_in_the_real_content_has_all_sheets():
+    """擂台十張加走一趟六張（Joy 11/1「探索那邊應該要一起換吧」）。"""
     from pathlib import Path
 
     from tianxia.content import load_content
 
     root = Path(__file__).resolve().parents[4]
     content = load_content(root / "content")
-    sheets = sorted(p.name for p in (root / "web/img/arena").glob("hero_*.webp"))
-    assert len(sheets) == 10  # 九張加格擋（Joy 11/1）
+    sheets = sorted(f"{s}.webp" for s in orders.SHEETS)
+    assert len(sheets) == 16  # 擂台九張加格擋（Joy 11/1），走一趟六張
     for look in content.looks:
         assert sorted(p.name for p in (root / "web/img/looks" / look).glob("hero_*.webp")) == sheets
     sold = {item.look for item in content.mall.values() if item.look}

@@ -311,7 +311,7 @@ def admin_upload(ctx: Game, pid: int, sheet: str, data: bytes) -> list[str]:
     orders.save_sheet(root, orders.look_id(pid), sheet, data)
     now = orders.mark(wallet, found, root)
     have = len(orders.present(root, orders.look_id(pid)))
-    return ctx._log([f"收到「{found.name}」的 {sheet}（{have}/{len(orders.SHEETS)}）" + ("，十張齊了，可以審核。" if now.status == orders.REVIEW else "。")])
+    return ctx._log([f"收到「{found.name}」的 {sheet}（{have}/{len(orders.SHEETS)}）" + ("，全套齊了，可以審核。" if now.status == orders.REVIEW else "。")])
 
 
 def admin_studio_retry(ctx: Game, pid: int) -> list[str]:

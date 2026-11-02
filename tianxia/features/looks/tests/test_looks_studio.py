@@ -10,7 +10,7 @@ from test_looks_moves import ART, BUDDHA, _admin, _art, on  # noqa: F401  fixtur
 from tianxia.features.looks import actions, moves, orders, studio
 from tianxia.wallet import Wallet
 
-SHEET = {s: (actions.WEB_IMG / "arena" / f"{s}.webp").read_bytes() for s in orders.SHEETS}  # 斗笠小子那一套：格數對的現成圖
+SHEET = {s: orders.reference(actions.WEB_IMG, s).read_bytes() for s in orders.SHEETS}  # 斗笠小子那一套：格數對的現成圖
 
 
 class Painter:
@@ -360,7 +360,7 @@ def test_frames_that_barely_move_are_sent_back_to_be_redrawn():
 
     # 預設的斗笠小子一張都不該被判（這張表就是照它量的）
     for sheet, frames in orders.SHEETS.items():
-        im = Image.open(actions.WEB_IMG / "arena" / f"{sheet}.webp")
+        im = Image.open(orders.reference(actions.WEB_IMG, sheet))
         bad, _ = cutting.sheet_problems(im, frames, sheet)
         assert not bad, (sheet, bad)
 
@@ -395,7 +395,7 @@ def test_a_sprite_that_never_moves_forward_is_sent_back():
     from tianxia.features.looks import cutting, orders
 
     for sheet, frames in orders.SHEETS.items():  # 預設的斗笠小子一張都不該被判（門檻就是照它的三分之一訂的）
-        bad, _ = cutting.sheet_problems(Image.open(actions.WEB_IMG / "arena" / f"{sheet}.webp"), frames, sheet)
+        bad, _ = cutting.sheet_problems(Image.open(orders.reference(actions.WEB_IMG, sheet)), frames, sheet)
         assert not bad, (sheet, bad)
 
     def strip(front_shift):
@@ -487,10 +487,11 @@ def test_the_sheet_checklist_judges_the_action_as_a_whole_not_frame_by_frame():
     check = studio.CHECK_SHEET
     assert "judge the action as a whole, not frame by frame" in check
     assert "small differences in limb position are fine" in check
-    assert "loose sleeves, ribbons, sashes and long hair are not objects" in check
+    assert "loose sleeves, ribbons, sashes and long hair are not objects" in studio.GEAR_NONE and "{gear}" in check
     # 去背留下的 1～2 px 白邊不算雜物（量過：佔實心像素 0.0～0.2%，斗笠小子的原圖也一樣）
     assert "ignore single-pixel fringes" in check and "the default " in check
-    for hard in ("exactly {frames} frames", "one whole character in each", "same character as reference 2",
+    check = check.format(frames=4, action="idle", gear=studio.GEAR_NONE)
+    for hard in ("exactly 4 frames", "one whole character in each", "same character as reference 2",
                  "holds no weapon or object", "side view facing right", "feet roughly on the same ground line"):
         assert hard in check, hard
 
@@ -575,3 +576,28 @@ def test_the_critic_asks_for_a_verdict_and_reads_it():
     assert critic.review("c", ART, []).ok
     assert not critic.review("c", ART, []).ok
     assert critic.review("c", ART, []).problems == ["審圖的回答看不懂"]
+
+
+def test_a_made_look_gets_the_outing_sheets_backfilled(on):
+    """形象早就做好上架了（只有擂台那十張），走一趟那六張畫坊補畫（Joy 11/1「探索那邊應該要一起換吧」）：
+    定裝照沒了就拿擂台那張站姿當參考，畫的時候附走一趟的斗笠小子（帶劍）那一張，收下之後還是上架的那一套。"""
+    game = _game(on)
+    actions.order(game, "雪衣", "長髮飄飄的仙子", "look-ref-009")
+    pid = orders.mine(Wallet(game.world.db), game._mall_owner())[0].pid
+    admin = _admin(on, game.world)
+    for sheet in orders.SHEETS:
+        actions.admin_upload(admin, pid, sheet, SHEET[sheet])
+    assert "上架了" in actions.admin_release(admin, pid)[-1]
+    folder = orders.folder(actions.image_root(game), orders.look_id(pid))
+    for sheet in orders.OUTING:
+        (folder / f"{sheet}.webp").unlink()
+    painter, critic = Painter(), Critic()
+    lines = []
+    for _ in orders.OUTING:
+        lines += _tick(game, painter, critic)
+    assert len(lines) == len(orders.OUTING) and _tick(game, painter, critic) == []
+    assert all(refs == 2 for _, refs in painter.calls)
+    assert all(studio.GEAR_SWORD in seen for seen in critic.seen)
+    assert "ONE plain straight sword" in painter.calls[0][0]
+    assert orders.of(Wallet(game.world.db).purchase(pid)).status == orders.MADE
+    assert len(orders.present(actions.image_root(game), orders.look_id(pid))) == len(orders.SHEETS)
