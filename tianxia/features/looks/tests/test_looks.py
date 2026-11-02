@@ -104,16 +104,22 @@ def test_closed_means_default_and_no_view(content):
 
 
 def test_every_look_in_the_real_content_has_all_sheets():
-    """擂台十張加走一趟六張（Joy 11/1「探索那邊應該要一起換吧」）。"""
+    """擂台那十張每一套都要有；走一趟那六張是全有或全無（Joy 11/1「探索那邊應該要一起換吧」）。
+
+    缺走一趟那六張的（2026-11-02 收的四套還沒畫），走一趟那邊整套退回預設的斗笠小子（web/outing.js 的
+    outingLookImg：少一張就不換）——看得過去，但擂台那十張不能缺，缺了擂台當場就穿幫。
+    「全有或全無」是因為少一張跟少六張畫面一樣（都退回預設），卻會讓人以為補齊了。"""
     from pathlib import Path
 
     from tianxia.content import load_content
 
     root = Path(__file__).resolve().parents[4]
     content = load_content(root / "content")
-    sheets = sorted(f"{s}.webp" for s in orders.SHEETS)
-    assert len(sheets) == 16  # 擂台九張加格擋（Joy 11/1），走一趟六張
+    assert len(orders.ARENA) == 10 and len(orders.OUTING) == 6
     for look in content.looks:
-        assert sorted(p.name for p in (root / "web/img/looks" / look).glob("hero_*.webp")) == sheets
+        have = {p.stem for p in (root / "web/img/looks" / look).glob("hero_*.webp")}
+        assert not set(orders.ARENA) - have, f"{look} 缺擂台的 {sorted(set(orders.ARENA) - have)}"
+        outing = have & set(orders.OUTING)
+        assert not outing or outing == set(orders.OUTING), f"{look} 走一趟那六張只有 {sorted(outing)}：要嘛全有、要嘛全無"
     sold = {item.look for item in content.mall.values() if item.look}
     assert sold == set(content.looks)

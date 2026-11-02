@@ -36,6 +36,7 @@ SHEETS = {  # 一套十張：檔名 → 格數（每格 220×220，腳底在 (10
 # 走一趟（探索）那幾個動作（Joy 2026-11-02「除了擂台換形象，探索那邊應該要一起換吧」）：檔名同 web/img/outing/ 的斗笠小子，
 # 腰上掛一把劍（走一趟的斗笠小子帶劍）。站著、挨打、跪地借擂台那三張（web/outing.js 的 OUTING_LOOK_SHEET），所以只多這六張
 OUTING = {"hero_run": 8, "hero_pickup": 6, "hero_lift": 3, "hero_slash": 6, "hero_meditate": 4, "hero_push": 4}
+ARENA = dict(SHEETS)  # 擂台那十張（手位表只有這幾張有：走一趟那六張沒有兵器）
 SHEETS.update(OUTING)
 NAME_MAX, PROMPT_MAX = 6, 120
 MAX_BYTES = 2_000_000  # 一張最大多少（上傳那一道）
@@ -241,12 +242,13 @@ def save_sheet(root: Path, look: str, sheet: str, data: bytes) -> None:
     for ext in ("webp", "png"):
         (target / f"{sheet}.{ext}").unlink(missing_ok=True)
     (target / f"{sheet}.{fmt}").write_bytes(data)
-    if sheet in SHEETS:
+    if sheet in ARENA:  # 走一趟那六張不掛兵器，沒有手位表
         save_hands(root, look, sheet, data)
 
 
 def fake_generate(root: Path, look: str, prompt: str, sources: list[Path]) -> None:
     """假的生圖器（開發與測試用；TIANXIA_LOOK_GEN=fake）：照樣子那一句的雜湊挑一套現成的圖抄過去。不叫任何外部服務。"""
+    sources = [p for p in sources if all((p / f"{s}.webp").is_file() or (p.parent / "outing" / f"{s}.webp").is_file() for s in SHEETS)]
     if not sources:
         return
     pick = sources[int.from_bytes(hashlib.sha256(prompt.encode()).digest()[:4], "big") % len(sources)]

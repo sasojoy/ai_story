@@ -46,7 +46,7 @@ def off_body(strip: bytes, name: str, row: list[list[int]]) -> list[str]:
 
 def one(look: str, write: bool) -> int:
     table, bad, n = {}, [], 0
-    for sheet in orders.SHEETS:
+    for sheet in orders.ARENA:  # 走一趟那六張不掛兵器
         path = orders.sheet_file(LOOKS, look, sheet)
         if path is None:
             continue

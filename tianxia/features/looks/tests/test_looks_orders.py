@@ -166,13 +166,13 @@ def test_the_hand_table_follows_each_looks_own_body():
         folder = ROOT / "web/img/looks" / look
         if not folder.is_dir():
             continue
-        for sheet in orders.SHEETS:
+        for sheet in orders.ARENA:  # 走一趟那六張不掛兵器
             path = orders.sheet_file(ROOT / "web/img/looks", look, sheet)
             if path is None:
                 continue
             data = path.read_bytes()
             row = cutting.hand_row(data, sheet)
-            assert len(row) == orders.SHEETS[sheet]
+            assert len(row) == orders.ARENA[sheet]
             a = np.asarray(Image.open(io.BytesIO(data)).convert("RGBA"))[..., 3] > 32
             for k, (x, y) in enumerate(row):
                 if cutting.HAND[sheet][k][3] == cutting.GROUND_LAYER:  # 掉在地上那幾格照舊
