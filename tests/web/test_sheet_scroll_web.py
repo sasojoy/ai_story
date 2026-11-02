@@ -2,7 +2,7 @@
 
 原因：抽屜（.sheet）在電腦上只有中間 640px 寬、從底部長上來、最高 88vh，自己捲；管理者工具排在一般設定之後，大半在第一屏之下。
 滑鼠滾輪只有指標正好在抽屜上才捲得動，兩旁的暗處（.sheet-bg）滾了不會捲抽屜；手機上抽屜滿版，怎麼滑都捲得到。
-修法：暗處的滾輪照樣捲抽屜（點暗處照舊關掉抽屜）；管理者的抽屜頂上多一顆「管理者工具 ↓」，按了捲到管理者工具。
+修法：暗處的滾輪照樣捲抽屜（點暗處照舊關掉抽屜）；管理者的抽屜頂上多一顆「管理者工具 ›」（2026-11-01 起連到自己一頁的管理頁 /admin）。
 審查 M-3：滾輪只掛在暗處（畫抽屜時），不掛整份文件；ctrl＋滾輪（縮放）不攔。審查 M-2：抽屜開著時重畫（查玩家、補抓資料）停在原地。
 
 照 tests/test_prologue_web.py 的做法把整支 app.js 放進 node 的假瀏覽器跑；沒有 node 就略過。"""
@@ -70,59 +70,45 @@ def test_a_wheel_with_no_sheet_open_does_nothing():
     assert out["bound"] == [] and out["document"] == 0 and out["backdrop"] is False
 
 
-# 抽屜開著時整個重畫（render 換掉 #app 的內容，抽屜是新畫的、捲動回到 0）：照原本捲到的地方放回去（審查 M-2）
+# 管理頁（/admin，admin.js；Joy 2026-11-01 管理者工具獨立一個網址）整頁重畫（查完一個人、做完一件事）：捲回原本捲到的地方（以前的審查 M-2
+# 是設定抽屜裡的管理者區，現在管理頁捲的是整頁）
+ADMIN = {"season_one": True, "showdowns": [], "battles": [], "events": [], "trends": [], "timetable": [], "results": [], "locks": []}
 KEEP = """return (async () => {
-  let sheet = { scrollTop: 480 };
-  Object.defineProperty(T.qs, ".sheet", { get: () => sheet, configurable: true, enumerable: true });
-  let html = "";
-  Object.defineProperty(T.els.app, "innerHTML", { get: () => html, set(v) { html = v; sheet = { scrollTop: 0 }; }, configurable: true });
+  const went = [];
+  T.ctx.window.scrollY = 480;
+  T.ctx.window.scrollTo = (x, y) => went.push([x, y]);
   T.ctx.FormData = function (form) { return Object.entries(form.data); };
   const note = { textContent: "", classList: { toggle() {} } };
   const form = { id: "ad-player-form", data: { name: "沈青衫" }, querySelector: (sel) => (sel === ".form-msg" ? note : null) };
   await T.docListeners.submit[0]({ preventDefault() {}, target: form });
-  const afterLookup = sheet.scrollTop;
-  // 打開設定：先畫一次（新開的抽屜在頂上），等管理者資料回來時人已經往下捲了 300，補抓完再畫一次
-  const fetch = T.ctx.fetch;
-  T.ctx.fetch = (url, opts) => { if (url === "/api/admin") sheet.scrollTop = 300; return fetch(url, opts); };
-  H.S.sheet = false;
-  const el = { dataset: { act: "sheet" }, classList: { contains: () => false } };
-  await T.docListeners.click[0]({ target: { closest: () => el } });
-  return { afterLookup, afterOpen: sheet.scrollTop, player: H.S.adPlayer && H.S.adPlayer.name };
+  return { went, player: H.S.adPlayer && H.S.adPlayer.name, page: T.els.app.innerHTML.includes('class="ad-shell"') };
 })();"""
 
 
-def test_a_redraw_keeps_the_drawer_where_it_was_scrolled():
+def test_a_redraw_keeps_the_admin_page_where_it_was_scrolled():
     view = {"name": "沈青衫", "line": "沈青衫：官軍・鄉勇，在長社", "summons": {"ok": True, "note": "會發第 2 階的召見"},
             "opportunities": [], "fragments": []}
-    out = run(_main(admin=True), KEEP, S={"sheet": True, "admin": {"season_one": True, "showdowns": [], "battles": [],
-                                                                     "events": [], "trends": [], "timetable": [],
-                                                                     "results": [], "locks": []}},
-              responses={"/api/admin/player": view, "/api/admin": {"season_one": True, "showdowns": [], "battles": [],
-                                                                   "events": [], "trends": [], "timetable": [],
-                                                                   "results": [], "locks": []},
-                         "/api/prologue": {"text": ""}})
-    assert out == {"afterLookup": 480, "afterOpen": 300, "player": "沈青衫"}
+    out = run(_main(admin=True), KEEP, S={"adminPage": True, "admin": ADMIN},
+              responses={"/api/admin/player": view, "/api/admin": ADMIN})
+    assert out == {"went": [[0, 480]], "player": "沈青衫", "page": True}
 
 
 def test_the_admin_link_is_drawn_only_for_admins():
-    admin = run(_main(admin=True), "return H.sheetHtml();", S={"sheet": True})
-    assert 'data-act="to-admin"' in admin and "管理者工具 ↓" in admin and 'id="admin-zone"' in admin
-    assert admin.index('data-act="to-admin"') < admin.index("匿名行走")  # 在抽屜頂上，第一屏就看得到
+    admin = run(_main(admin=True), "return H.sheetHtml();", S={"sheet": True, "admin": ADMIN})
+    assert 'href="/admin"' in admin and "管理者工具 ›" in admin
+    assert admin.index('href="/admin"') < admin.index("匿名行走")  # 在抽屜頂上，第一屏就看得到
+    assert 'data-op="open_season"' not in admin and 'id="reset-form"' not in admin  # 工具都搬到管理頁了
     player = run(_main(admin=False), "return H.sheetHtml();", S={"sheet": True})
-    assert "to-admin" not in player and "admin-zone" not in player
+    assert 'href="/admin"' not in player
 
 
-def test_the_admin_link_scrolls_the_admin_zone_into_view():
-    out = run(_main(admin=True), """return (async () => {
-      const seen = [];
-      const zone = { scrollIntoView(opts) { seen.push(opts); } };
-      const byId = T.ctx.document.getElementById;
-      T.ctx.document.getElementById = (id) => (id === "admin-zone" ? zone : byId(id));
-      const el = { dataset: { act: "to-admin" }, classList: { contains: () => false } };
-      await T.docListeners.click[0]({ target: { closest: () => el } });
-      return { seen, sheet: H.S.sheet };
-    })();""", S={"sheet": True})
-    assert out == {"seen": [{"behavior": "smooth", "block": "start"}], "sheet": True}
+DRAW = """H.render(); return { page: T.els.app.innerHTML.includes('class="ad-shell"'), still: H.S.adminPage };"""
+
+
+def test_the_admin_page_is_drawn_only_for_admins():
+    """網址是 /admin（S.adminPage）：管理者畫管理頁；不是管理者照常畫江湖、不再當成管理頁。"""
+    assert run(_main(admin=True), DRAW, S={"adminPage": True, "admin": ADMIN}) == {"page": True, "still": True}
+    assert run(_main(admin=False), DRAW, S={"adminPage": True, "admin": ADMIN}) == {"page": False, "still": False}
 
 
 def test_a_backdrop_click_still_closes_the_sheet():

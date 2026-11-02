@@ -5797,8 +5797,8 @@ def test_the_page_polls_the_queue_only_while_waiting_on_the_model():
     persuade = _js_function(js, "async function persuadeSay(")  # 託付的勸降（減法季批 6，FB-829）
     assert "watchQueue(submitBtn, PERSUADE_WAIT)" in persuade and "stop();" in persuade.split("finally")[1]
     assert js.count("watchQueue(") == 8  # 定義一個、使用七個（對話與大場面是同一個選項流程；有所感畫完送出、對話「自己說」、找素材「自己說」、勸降各另一個）
-    sheet = _js_function(js, "function sheetHtml(")
-    assert "a && a.llm_queue" in sheet and "模型佇列：處理中" in sheet
+    now = _js_function(js, "function adNowHtml(")  # 管理頁頂上「現在」那張卡（admin.js）
+    assert "a.llm_queue ?" in now and "模型佇列：處理中" in now
 
 
 def test_watch_queue_shows_the_count_ahead_only_while_someone_is_ahead():

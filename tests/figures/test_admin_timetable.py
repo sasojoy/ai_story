@@ -475,7 +475,7 @@ def test_the_drawer_shows_the_cancelled_wording(on_fb099):
     admin.admin_cancel_battle()
     m = server.main_view(admin)
     assert m["admin"] is True
-    drawer = run(m, "return H.sheetHtml();", S={"sheet": True, "admin": server.admin_choices(admin)})
+    drawer = run(m, "return H.adminHtml();", S={"admin": server.admin_choices(admin)})
     assert CANCELLED in drawer
     assert re.search(r'<span class="tt-name">第\d+週　長社火攻</span><span class="tt-state">開打後取消・待定結果</span>', drawer)
 
