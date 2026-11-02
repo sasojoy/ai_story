@@ -306,16 +306,19 @@
     if (!m) return "";
     const lib = (m.library || []).map((x) => `<li class="look-order-row move-row">${x.scene ? `<span class="move-fx move-seal" aria-hidden="true">絕</span>` : moveFxHtml(x.move)}<b>${esc(x.art)}</b><span class="look-st st-made">${esc(x.style_text)}</span>
         <small>${esc(x.prompt)}${x.bound ? `・這一季綁在「${esc(x.bound)}」` : "・這一季還沒綁"}</small>
+        ${x.asleep ? `<small class="bad">${esc(x.asleep_text)}</small>` : ""}
         ${x.scene ? `<button class="btn small ghost" data-act="move-show" data-id="${esc(x.move)}">${S.moveShow === x.move ? "收起" : "演一次"}</button>` : ""}
         ${x.bindable ? `<button class="btn small" data-act="move-bind" data-id="${x.id | 0}">綁到「${esc(m.art)}」</button>` : ""}</li>`).join("");
     const list = (m.list || []).map((x) => `<li class="look-order-row"><b>${esc(x.art)}</b><span class="look-st st-${esc(x.status)}">${esc(x.status_text)}</span>
         <small>${esc(x.style_text)}・${esc(x.prompt)}${moveArtsNote(x)}${x.reason ? `（${esc(x.reason)}）` : ""}</small></li>`).join("");
     const now = !m.has_art ? `<p class="mall-note">先練一門自己合成或自創的武功，才能替它畫招式。</p>`
-      : `<p class="mall-note">現在練的「${esc(m.art)}」・打法${esc(m.style_text)}${m.bound ? "・已經綁了招式" : ""}</p>`;
+      : `<p class="mall-note">現在練的「${esc(m.art)}」・打法${esc(m.style_text)}${m.bound ? "・已經綁了招式" : ""}</p>`
+        + (m.asleep_text ? `<p class="mall-note bad">${esc(m.asleep_text)}</p>` : "");
     const form = !m.has_art || m.bound ? "" : m.open ? `<p class="mall-note">你還有一張在做，等它好了再下一張。</p>`
       : `<div class="look-order-form"><textarea class="input" id="move-prompt" maxlength="${m.prompt_max | 0}" rows="2" placeholder="這一招長什麼樣子（${m.prompt_max | 0} 字內，只能中文）">${esc(S.moveDraft || "")}</textarea>
         <button class="btn small" data-act="move-preview">先看看</button>
-        <button class="btn small primary" data-act="move-order">${ingotSvg()}${m.price | 0} 下單</button></div>${moveSceneHtml()}`;
+        <button class="btn small primary" data-act="move-order">${ingotSvg()}${m.price | 0} 下單</button>
+        <p class="mall-note">${esc(m.order_style_note || "")}</p></div>${moveSceneHtml()}`;
     const show = S.moveShow ? `<canvas id="scene-preview" class="scene-preview" width="720" height="320" aria-label="絕招演一次"></canvas>` : "";
     return `<div class="mall-sub">絕招</div><p class="mall-note">${esc(MOVE_NOTE)}</p>${now}${S.moveShow ? "" : form}
       ${lib ? `<ul class="look-orders">${lib}</ul>${show}` : ""}${list ? `<ul class="look-orders">${list}</ul>` : ""}`;

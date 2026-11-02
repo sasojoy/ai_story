@@ -33,7 +33,7 @@ NOT_SOLD = "招式動畫還沒開賣。"
 NO_ART = "先練一門自己合成或自創的武功，才能替它畫招式。"
 NO_PROMPT = "寫一句這一招長什麼樣子。"
 OPEN_ORDER = "你還有一張招式動畫在做，等它好了再下一張。"
-ALREADY = "「{art}」已經綁了招式。"
+ALREADY = "「{art}」這一種打法已經綁了招式。"
 SHORT = "元寶不夠：招式動畫要 {price}，你有 {balance}。"
 PLACED = "替「{art}」下單了招式動畫（{style}）：元寶 -{price}（還剩 {left}）。做好、審核過了會放進招式庫。"
 LEARNED = "「{art}」的絕招學成了（{style}）：元寶 -{price}（還剩 {left}）。擂台上這一招發動時就照這樣演。"
@@ -42,6 +42,9 @@ DUPLICATE = "這一張已經下過單了。"
 BOUND = "把招式綁到「{art}」上了（這一季）。"
 NOT_MINE = "招式庫裡沒有這一招。"
 WRONG_STYLE = "這一招是{want}的，你手上的打法是{have}：換一樣兵器，或重新下單。"
+# 綁著、但手上的打法變了：擂台上不會演（出招的身體圖四種打法各一套，拳腳的光效疊在揮砍上對不準）
+ASLEEP = "這一招是{want}的，你現在的打法是{have}——擂台上不會演，換回{want}才演得出來。"
+ORDER_STYLE = "照你現在的打法（{style}）登記。換成別種兵器時這一招不會演，要另外下一張。"
 
 
 def style_of(kind: str) -> str:
@@ -126,7 +129,8 @@ def place(
         moves = mine(wallet, owner)
         if any(m.status in (orders.PENDING, orders.REVIEW) for m in moves):
             return None, OPEN_ORDER
-        if any(m.status == orders.MADE and m.bound_art == art and m.bound_season == season for m in moves):
+        # 同一門武功、同一種打法只能一招；不同打法各一招（換了兵器原本那一招不會演，要能再下一張，Joy 2026-11-02）
+        if any(m.status == orders.MADE and m.bound_art == art and m.bound_season == season and m.style == style for m in moves):
             return None, ALREADY.format(art=art_name)
         balance = wallet.balance(owner)
         if balance < item.price:
@@ -157,7 +161,7 @@ def bind(wallet: Wallet, owner: str, pid: int, art: str, art_name: str, style: s
         return False, WRONG_STYLE.format(want=STYLES.get(target.style, target.style), have=STYLES.get(style, style))
     with wallet.db.transaction():
         for m in moves:
-            if m.pid != pid and m.status == orders.MADE and m.bound_art == art and m.bound_season == season:
+            if m.pid != pid and m.status == orders.MADE and m.bound_art == art and m.bound_season == season and m.style == target.style:
                 wallet.update_data(m.pid, bound_art="", bound_name="", bound_season=0)
         wallet.update_data(pid, bound_art=art, bound_name=art_name, bound_season=season)
     return True, BOUND.format(art=art_name)
@@ -186,16 +190,27 @@ def view(content: Content, wallet: Wallet, owner: str, art: str, art_name: str, 
 
     def row(m: Move) -> dict:
         here = m.bound_season == season and bool(m.bound_art)
+        on_art = here and m.bound_art == art
+        # 綁在現在練的那一門上，但手上的打法對不上：擂台上根本不會演（actions.move_of → bound()），畫面要講明白
+        asleep = on_art and m.style != style
         return {"id": m.pid, "move": m.move, "art": m.art_name, "style": m.style, "style_text": STYLES.get(m.style, m.style),
                 "prompt": m.prompt, "status": m.status, "status_text": orders.STATUS_TEXT[m.status], "reason": m.reason,
                 "scene": m.scene is not None, "arts": [a["label"] for a in scenes.needs_art(m.scene or {})],
-                "bound": m.bound_name if here else "", "on_art": here and m.bound_art == art,
-                "bindable": m.status == orders.MADE and bool(art) and m.style == style and not (here and m.bound_art == art)}
+                "bound": m.bound_name if here else "", "on_art": on_art,
+                "plays": on_art and not asleep, "asleep": asleep,
+                "asleep_text": ASLEEP.format(want=STYLES.get(m.style, m.style), have=STYLES.get(style, style)) if asleep else "",
+                "bindable": m.status == orders.MADE and bool(art) and m.style == style and not on_art}
     return {
         "price": item.price, "prompt_max": scenes.MAX_TEXT, "art": art_name, "has_art": bool(art),
         "style": style, "style_text": STYLES.get(style, style),
         "open": any(m.status in (orders.PENDING, orders.REVIEW) for m in moves),
-        "bound": any(m.status == orders.MADE and m.bound_art == art and m.bound_season == season for m in moves) if art else False,
+        "order_style_note": ORDER_STYLE.format(style=STYLES.get(style, style)),
+        "asleep_text": next((ASLEEP.format(want=STYLES.get(m.style, m.style), have=STYLES.get(style, style))
+                             for m in moves
+                             if m.status == orders.MADE and art and m.bound_art == art
+                             and m.bound_season == season and m.style != style), ""),
+        "bound": any(m.status == orders.MADE and m.bound_art == art and m.bound_season == season and m.style == style
+                     for m in moves) if art else False,
         "library": [row(m) for m in moves if m.status == orders.MADE],
         "list": [row(m) for m in moves if m.status != orders.MADE],
     }

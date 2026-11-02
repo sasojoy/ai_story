@@ -119,6 +119,19 @@ def test_the_move_section_orders_and_binds(m_on):  # noqa: F811
     assert "把招式綁到「旋風腿」" in html
 
 
+def test_a_move_that_cannot_play_says_why(m_on):  # noqa: F811
+    """綁著、但手上的兵器換了打法：擂台上不會演，招式庫那一列與抬頭都要寫明（Joy 2026-11-02
+    「我那個絕招寒霜雪怎麼都還沒施放過」——空手下的單，後來拿了劍）。下單那一塊也先講明打法會鎖住。"""
+    asleep = "這一招是拳腳的，你現在的打法是揮砍——擂台上不會演，換回拳腳才演得出來。"
+    moves = {**MOVES, "style": "slash", "style_text": "揮砍", "bound": True, "asleep_text": asleep,
+             "order_style_note": "照你現在的打法（揮砍）登記。換成別種兵器時這一招不會演，要另外下一張。",
+             "library": [{**MOVES["library"][0], "bound": "旋風腿", "on_art": True, "bindable": False,
+                          "plays": False, "asleep": True, "asleep_text": asleep}]}
+    html = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }'), responses={"/api/looks": {**LOOKS, "moves": moves}})["app"]
+    assert html.count("擂台上不會演，換回拳腳才演得出來") == 2  # 抬頭一句、那一列一句
+    assert 'data-act="move-bind"' not in html  # 打法對不上，綁不了
+
+
 SCENE = {"v": 1, "name": "旋風腿", "glow": "#ffd27a", "length": 3300, "arts": [{"slot": "art1", "label": "大佛"}, {"slot": "art2", "label": "佛掌"}],
          "beats": [{"op": "暗場", "at": 0, "tone": "暖"}, {"op": "法相", "at": 350, "art": "art1", "label": "大佛"}, {"op": "落款", "at": 900},
                    {"op": "巨物飛擊", "at": 1500, "art": "art2", "label": "佛掌"}, {"op": "白光", "at": 2600}]}

@@ -119,6 +119,42 @@ def test_only_your_own_art_and_a_matching_style(on, monkeypatch):
     assert actions.bind_move(game, pid)[-1] == moves.WRONG_STYLE.format(want="拳腳", have="揮砍")
 
 
+def test_a_bound_move_that_cannot_play_says_so(on, monkeypatch):
+    """綁著、但手上的兵器換了打法：擂台上不會演（出招的身體圖四種打法各一套），畫面要講明白，不能讓人以為壞了。
+    Joy 2026-11-02：「我那個絕招寒霜雪怎麼都還沒施放過」——當時是空手下的單（拳腳），後來拿了劍。"""
+    game = _game(on)
+    _art(game)
+    pid = _made(on, game, "move-ref-020")
+    assert "把招式綁到" in actions.bind_move(game, pid)[-1]
+    view = actions.view(game)["moves"]
+    row = view["library"][0]
+    assert row["plays"] and not row["asleep"] and view["asleep_text"] == ""  # 空手：演得出來
+    monkeypatch.setattr(actions, "current_style", lambda ctx: "slash")  # 拿起劍
+    view = actions.view(game)["moves"]
+    row = view["library"][0]
+    assert game.arena_move() == ""  # 真的不會演
+    assert row["asleep"] and not row["plays"] and not row["bindable"]
+    assert row["asleep_text"] == moves.ASLEEP.format(want="拳腳", have="揮砍") == view["asleep_text"]
+    assert "揮砍" in view["order_style_note"]  # 下單那一塊也先講明打法會鎖住
+
+
+def test_another_style_for_the_same_art_can_be_ordered(on, monkeypatch):
+    """換了兵器，原本那一招不會演——要能再替同一門武功下一張對得上的（Joy 2026-11-02 配套）。
+    同一門同一種打法還是只能一招；兩張各管各的打法，綁新的不會把另一種打法那一張鬆開。"""
+    game = _game(on)
+    _art(game)
+    first = _made(on, game, "move-ref-021")
+    actions.bind_move(game, first)
+    assert "這一種打法已經綁了招式" in actions.order_move(game, "再一拳", "move-ref-022")[-1]  # 同打法：擋下
+    monkeypatch.setattr(actions, "current_style", lambda ctx: "slash")  # 拿起劍
+    second = _made(on, game, "move-ref-023")
+    rows = {r["id"]: r for r in actions.view(game)["moves"]["library"]}
+    assert rows[first]["asleep"] and rows[second]["plays"]  # 拳腳那一張睡著，揮砍那一張會演
+    monkeypatch.undo()  # 放下劍
+    rows = {r["id"]: r for r in actions.view(game)["moves"]["library"]}
+    assert rows[first]["plays"] and rows[second]["asleep"]  # 換回來，拳腳那一張又會演
+
+
 def test_a_new_season_keeps_the_move_and_rebinds_for_free(on, world):
     game = _game(on, world=world)
     _art(game)
