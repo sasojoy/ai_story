@@ -85,17 +85,19 @@
   const OUTING_HERO = ["hero_idle", "hero_run", "hero_pickup", "hero_lift", "hero_slash", "hero_hit", "hero_kneel", "hero_meditate", "hero_push"];
   function outingLookUrl(look, name) {
     const file = OUTING_LOOK_SHEET[name] || name;
-    if (/^u\d+$/.test(look)) return `/api/looks/img/${look}/${file}`;
+    const ver = globalThis.LOOKS_VER ? `?v=${globalThis.LOOKS_VER}` : ""; // 自建的圖換了（補畫走一趟那六張）網址就換（main.looks_ver）
+    if (/^u\d+$/.test(look)) return `/api/looks/img/${look}/${file}${ver}`;
     return /^[a-z0-9_]+$/.test(look) ? `/static/img/looks/${look}/${file}.webp` : "";
   }
   function outingLookImg(name) {
     const look = (S.main && S.main.look) || "";
     if (!look || !outingLookUrl(look, name)) return null;
-    if (!OW.look || OW.look.id !== look) {
-      OW.look = { id: look, imgs: {}, bad: false };
+    const key = `${look}?${globalThis.LOOKS_VER || ""}`; // 補畫好了版本就換：以前抓不齊的那一套重抓一次
+    if (!OW.look || OW.look.key !== key) {
+      OW.look = { id: look, key, imgs: {}, bad: false };
       for (const one of OUTING_HERO) {
         const img = new Image();
-        img.onerror = () => { if (OW.look && OW.look.id === look) OW.look.bad = true; };
+        img.onerror = () => { if (OW.look && OW.look.key === key) OW.look.bad = true; };
         img.src = outingLookUrl(look, one);
         OW.look.imgs[one] = img;
       }

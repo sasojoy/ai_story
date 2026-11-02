@@ -221,45 +221,6 @@ def test_the_real_cut_keeps_one_subject_and_cuts_a_sheet():
     assert orders.sheet_problem("hero_atk_slash", strip) is None
 
 
-def test_a_character_without_a_hat_is_not_scaled_until_its_head_is_cut_off():
-    """切格照斗笠寬定比例；自建形象不一定戴斗笠（2026-11-02「魔教聖女」連十張都被擋下，理由都是頭頂被裁掉）：
-    hat() 在沒有斗笠時量到的是頭髮或肩線，倍率算過大、整個人被放大出框。cutting.FIT 夾住它——
-    頭頂要留在格子裡，而且上緣要有空白。"""
-    pytest.importorskip("scipy")
-    import io
-
-    import numpy as np
-    from PIL import Image
-
-    from tianxia.features.looks import cutting
-
-    # 四格：一個「高瘦、沒有斗笠」的人形——頭很窄（會讓 hat() 量到窄寬度）、身子長
-    src = Image.new("RGB", (4 * 260, 400), "white")
-    for k in range(4):
-        ox = k * 260 + 130
-        for y in range(40, 110):  # 頭：窄
-            for x in range(ox - 18, ox + 18):
-                src.putpixel((x, y), (40, 40, 60))
-        for y in range(110, 360):  # 身子與腿：更窄
-            for x in range(ox - 26, ox + 26):
-                src.putpixel((x, y), (150, 40, 40))
-    buf = io.BytesIO()
-    src.save(buf, "PNG")
-
-    strip = cutting.sheet_bytes(buf.getvalue(), "hero_bare_idle")
-    assert orders.sheet_problem("hero_bare_idle", strip) is None
-    out = Image.open(io.BytesIO(strip)).convert("RGBA")
-    assert out.size == (4 * cutting.CELL, cutting.CELL)
-    alpha = np.asarray(out)[..., 3]
-    assert alpha[0].max() == 0, "最上面那一列有東西：頭被切到格子邊界了"
-    for k in range(4):
-        cell = alpha[:, k * cutting.CELL:(k + 1) * cutting.CELL]
-        rows = np.nonzero(cell.max(1))[0]
-        assert len(rows), f"第 {k + 1} 格是空的"
-        assert rows.min() >= 2, f"第 {k + 1} 格的頭貼到上緣（y={rows.min()}）"
-        assert rows.max() <= cutting.BY + 2, f"第 {k + 1} 格的腳超過地平線（y={rows.max()}）"
-
-
 def test_we_catch_the_bad_cuts_ourselves_before_paying_for_a_review():
     """切完自己先驗一遍（cutting.sheet_problems；Joy 2026-11-02「把能過的方法模組化」）：空格、腳下的地面線、
     貼到上緣這幾樣機器看得出來，就不要花一次審圖的錢——丟 CutProblem，畫坊照它帶的那一句英文重畫。
@@ -277,17 +238,21 @@ def test_we_catch_the_bad_cuts_ourselves_before_paying_for_a_review():
             draw(im, k * cutting.CELL)
         return im
 
-    def person(im, ox, top=60, bottom=cutting.BY):
+    def person(im, ox, top=60, bottom=cutting.BY, arm=None):
         for y in range(top, bottom):
             for x in range(ox + 80, ox + 140):
                 im.putpixel((x, y), (40, 40, 60, 255))
+        if arm is not None:  # 手伸到不同高度：每一格的形狀才不一樣（切格會把左右置中）
+            for y in range(arm, arm + 10):
+                for x in range(ox + 140, ox + 190):
+                    im.putpixel((x, y), (40, 40, 60, 255))
 
     def ground(im, ox):
         for x in range(ox + 4, ox + cutting.CELL - 4):
             for y in range(cutting.BY - 2, cutting.BY):
                 im.putpixel((x, y), (60, 60, 60, 255))
 
-    good = strip_of([lambda im, ox: person(im, ox)] * 3)
+    good = strip_of([lambda im, ox, a=a: person(im, ox, arm=a) for a in (80, 120, 160)])
     assert cutting.sheet_problems(good, 3) == ([], "")
 
     empty = strip_of([lambda im, ox: person(im, ox), lambda im, ox: None, lambda im, ox: person(im, ox)])
@@ -361,13 +326,106 @@ def test_cut_sheets_come_out_the_same_height_as_the_hat_boy_so_weapons_line_up()
     src = Image.new("RGB", (4 * 260, 400), "white")
     for k in range(4):
         ox = k * 260 + 130
-        for y in range(30, 370):
+        for y in range(30, 370):  # 身子：高瘦、沒有斗笠
             for x in range(ox - 22, ox + 22):
+                src.putpixel((x, y), (40, 40, 60))
+        arm = 80 + k * 60  # 手伸到不同高度：切格會把每一格水平置中，所以要改形狀才看得出動作
+        reach = 86 + (40 if k == 2 else 0)  # 第 3 格往前探（新的前後擺幅那一關）
+        for y in range(arm, arm + 16):
+            for x in range(ox + 22, ox + reach):
                 src.putpixel((x, y), (40, 40, 60))
     buf = io.BytesIO()
     src.save(buf, "PNG")
-    tall = heights(cutting.sheet_bytes(buf.getvalue(), "hero_bare_idle"), 4)
+    strip = cutting.sheet_bytes(buf.getvalue(), "hero_bare_idle")
+    tall = heights(strip, 4)
     assert max(tall) == pytest.approx(cutting.BODY["hero_bare_idle"], abs=2), tall
+    # 而且不准被切到：頭離上緣要有空白、腳不超過地平線（以前照斗笠寬縮放時，沒斗笠的頭會被上緣裁掉）
+    a = np.asarray(Image.open(io.BytesIO(strip)).convert("RGBA"))[..., 3]
+    assert a[0].max() == 0, "最上面那一列有東西：頭被切到格子邊界了"
+    for k in range(4):
+        rows = np.nonzero((a[:, k * cutting.CELL:(k + 1) * cutting.CELL] > 32).max(1))[0]
+        assert rows.min() >= 2 and rows.max() <= cutting.BY + 2, (k, rows.min(), rows.max())
+
+
+def test_frames_that_barely_move_are_sent_back_to_be_redrawn():
+    """動作幅度太小＝看起來不會動（Joy 2026-11-02「原版斗笠小子會一直前後晃動，新模型不會」）。
+    規則是「不准比斗笠小子更懶」：每一張照參考圖量出來的重疊率上限（cutting.MOVE_MAX）。
+    不能用單一門檻——hero_bare_fall 的第 5、6 格是躺著不動，本來就幾乎一樣。"""
+    pytest.importorskip("scipy")
+    import io
+
+    from PIL import Image
+
+    from tianxia.features.looks import cutting, orders
+
+    # 預設的斗笠小子一張都不該被判（這張表就是照它量的）
+    for sheet, frames in orders.SHEETS.items():
+        im = Image.open(orders.reference(actions.WEB_IMG, sheet))
+        bad, _ = cutting.sheet_problems(im, frames, sheet)
+        assert not bad, (sheet, bad)
+
+    def strip(shift, frames=4):
+        """每一格往右挪 shift 像素（shift 小＝幾乎沒動）；第 3 格另外往前探，免得先被「前後擺幅」那一關擋掉。"""
+        im = Image.new("RGBA", (frames * cutting.CELL, cutting.CELL), (0, 0, 0, 0))
+        for k in range(frames):
+            ox = k * cutting.CELL + 70 + k * shift + (45 if k == 2 else 0)
+            for y in range(cutting.BY - 150, cutting.BY):
+                for x in range(ox, ox + 60):
+                    im.putpixel((x, y), (40, 40, 60, 255))
+        return im
+
+    bad, fix = cutting.sheet_problems(strip(1), 4, "hero_bare_idle")
+    assert any("動作幅度太小" in b for b in bad) and "clearly different pose" in fix
+    assert cutting.sheet_problems(strip(30), 4, "hero_bare_idle")[0] == [], "動得夠多的不該被判"
+    # 躺著不動那一張不驗（不然收場那兩格永遠過不了）
+    assert cutting.sheet_problems(strip(1, 6), 6, "hero_bare_fall")[0] == []
+    # 沒給張名就不驗這一項（舊呼叫端）
+    assert cutting.sheet_problems(strip(1), 4)[0] == []
+
+
+def test_a_sprite_that_never_moves_forward_is_sent_back():
+    """側面視角的「前後晃動」是水平的：量過斗笠小子的待機——最前端擺 19 px、垂直只有 3 px，重疊率卻有 0.845。
+    所以光看重疊率擋不住「原地微動」（第一版重畫出來重疊 0.93 過關，實機看起來還是不動，Joy 2026-11-02
+    「斗笠小子有在前後移動，但是我們新的模型不會…最嚴重的就是他往前的那一下」）。cutting.SWAY_MIN 補這一關。"""
+    pytest.importorskip("scipy")
+    import io
+
+    from PIL import Image
+
+    from tianxia.features.looks import cutting, orders
+
+    for sheet, frames in orders.SHEETS.items():  # 預設的斗笠小子一張都不該被判（門檻就是照它的三分之一訂的）
+        bad, _ = cutting.sheet_problems(Image.open(orders.reference(actions.WEB_IMG, sheet)), frames, sheet)
+        assert not bad, (sheet, bad)
+
+    def strip(front_shift):
+        """四格：第 3 格整個往前 front_shift 像素（其餘同一個姿勢，但手的高度各不同，免得先被「動作幅度」那一關擋掉）。"""
+        im = Image.new("RGBA", (4 * cutting.CELL, cutting.CELL), (0, 0, 0, 0))
+        for k in range(4):
+            ox = k * cutting.CELL + 60 + (front_shift if k == 2 else 0)
+            for y in range(cutting.BY - 150, cutting.BY):
+                for x in range(ox, ox + 50):
+                    im.putpixel((x, y), (40, 40, 60, 255))
+            arm = cutting.BY - 120 + k * 12
+            for y in range(arm, arm + 10):
+                for x in range(ox + 50, ox + 110):
+                    im.putpixel((x, y), (40, 40, 60, 255))
+        return im
+
+    bad, fix = cutting.sheet_problems(strip(2), 4, "hero_bare_idle")
+    assert any("前後移動" in b for b in bad) and "forward and back" in fix
+    assert cutting.sheet_problems(strip(40), 4, "hero_bare_idle")[0] == [], "往前探夠多的不該被判"
+
+
+def test_the_idle_prompt_asks_for_the_forward_bob_not_a_vertical_breath():
+    """待機那一張要的是往前探（水平），不是上下呼吸——寫成「直上直下、不准前傾」那一版實機完全不動。"""
+    from tianxia.features.looks import orders
+
+    order = orders.Order(pid=1, owner="甲", name="試", prompt="紅衣少女", status=orders.PENDING,
+                         reason="", look="u1", time=0.0)
+    idle = orders.gen_prompts(order)["hero_bare_idle"]
+    assert "steps FORWARD" in idle and "frame 3" in idle
+    assert "do NOT lean forward" not in idle
 
 
 def test_refit_rescales_an_old_oversized_sheet_without_redrawing_it():
@@ -403,6 +461,8 @@ def test_the_sheet_checklist_judges_the_action_as_a_whole_not_frame_by_frame():
     assert "judge the action as a whole, not frame by frame" in check
     assert "small differences in limb position are fine" in check
     assert "loose sleeves, ribbons, sashes and long hair are not objects" in studio.GEAR_NONE and "{gear}" in check
+    # 去背留下的 1～2 px 白邊不算雜物（量過：佔實心像素 0.0～0.2%，斗笠小子的原圖也一樣）
+    assert "ignore single-pixel fringes" in check and "the default " in check
     check = check.format(frames=4, action="idle", gear=studio.GEAR_NONE)
     for hard in ("exactly 4 frames", "one whole character in each", "same character as reference 2",
                  "holds no weapon or object", "side view facing right", "feet roughly on the same ground line"):

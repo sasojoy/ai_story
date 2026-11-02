@@ -123,7 +123,9 @@ def test_a_stop_puts_the_choice_on_the_card():
 LOOK_DRIVER = r"""
 const code = ["OUTING_LOOK_SHEET"].map(konst).join("\n") + fn("outingLookUrl");
 const H = new Function(code + "\nreturn { outingLookUrl };")();
-finish(input.ask.map(([look, name]) => H.outingLookUrl(look, name)));
+const urls = input.ask.map(([look, name]) => H.outingLookUrl(look, name));
+globalThis.LOOKS_VER = "7f3a";
+finish({ urls, ver: H.outingLookUrl("u12", "hero_run") });
 """
 
 
@@ -132,5 +134,6 @@ def test_the_trip_wears_the_look_on_the_arena():
     站著、挨打、跪地借擂台的；自建的由伺服器送，認不得的不載（整趟照舊畫斗笠小子）。"""
     out = webharness.run(LOOK_DRIVER, {"ask": [["moying", "hero_run"], ["moying", "hero_idle"], ["u12", "hero_kneel"],
                                                ["u12", "hero_slash"], ["../x", "hero_run"]]})
-    assert out == ["/static/img/looks/moying/hero_run.webp", "/static/img/looks/moying/hero_bare_idle.webp",
+    assert out["ver"] == "/api/looks/img/u12/hero_run?v=7f3a"  # 補畫好了網址就換（main.looks_ver）
+    assert out["urls"] == ["/static/img/looks/moying/hero_run.webp", "/static/img/looks/moying/hero_bare_idle.webp",
                    "/api/looks/img/u12/hero_bare_kneel", "/api/looks/img/u12/hero_slash", ""]
