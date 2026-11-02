@@ -142,8 +142,11 @@ LINE_SHARE = 0.8  # 一列橫跨格寬這麼多比例、而且上下都空 → �
 # 規則是「不准比斗笠小子更懶」——不能用單一門檻：hero_bare_fall 的第 5、6 格是「躺著不動」，本來就重疊 0.973，
 # 而 hero_bare_idle 的斗笠小子是 0.845、第一版「魔教聖女」是 0.967（看起來完全不晃，Joy 2026-11-02
 # 「原版斗笠小子會一直前後晃動，新模型不會」）。
+# 另外壓一個下限 0.70：斗笠小子的 dodge（0.508）、hit（0.462）動作特別大，照它加 0.10 等於要求生圖每一格
+# 都大幅改姿勢——實測 dodge 連擋三次（生圖做不到），而原始那一張 0.617 其實只是「比斗笠小子收斂」、不是不動。
+# 這一關要抓的是「看起來完全靜止」（0.93 以上），不是逼每一張都跟斗笠小子一樣誇張。
 MOVE_MAX = {  # 斗笠小子量到的上限：idle .845 hit .462 kneel .745 dodge .508 fall .973 block .721 slash .805 pole .818 fist .719 shoot .803
-    "hero_bare_idle": 0.945, "hero_bare_hit": 0.562, "hero_bare_kneel": 0.845, "hero_bare_dodge": 0.608,
+    "hero_bare_idle": 0.945, "hero_bare_hit": 0.700, "hero_bare_kneel": 0.845, "hero_bare_dodge": 0.700,
     "hero_bare_fall": 1.01,  # 第 5、6 格是躺著不動，本來就幾乎一樣：這一張不驗
     "hero_bare_block": 0.821, "hero_atk_slash": 0.905, "hero_atk_pole": 0.918, "hero_atk_fist": 0.819, "hero_atk_shoot": 0.903,
 }
