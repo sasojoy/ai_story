@@ -84,7 +84,9 @@ def test_order_upload_release_and_the_arena_draws_it(on):
     assert actions.scene_of(game, moves.move_id(pid))["arts"][1]["label"] == "佛掌"
     lib = actions.view(game)["moves"]["library"]
     assert [(x["move"], x["bound"], x["on_art"]) for x in lib] == [(moves.move_id(pid), art.name, True)]
-    assert actions.order_move(game, "再一招", "move-ref-003")[-1] == moves.ALREADY.format(art=art.name)  # 這一門已經綁了
+    # 這一門已經有一招上場了，但照樣可以再創（企劃者 2026-11-02）：新的先進招式庫、不自動換上去
+    again = actions.order_move(game, "背後一尊金剛砸下巨拳", "move-ref-003")[-1]
+    assert "先放進招式庫" in again and game.arena_move() == moves.move_id(pid)
 
 
 def test_a_line_with_nothing_to_draw_is_learned_on_the_spot(on):
@@ -147,7 +149,8 @@ def test_another_style_for_the_same_art_can_be_ordered(on, monkeypatch):
     _art(game)
     first = _made(on, game, "move-ref-021")
     actions.bind_move(game, first)
-    assert "這一種打法已經綁了招式" in actions.order_move(game, "再一拳", "move-ref-022")[-1]  # 同打法：擋下
+    second = actions.order_move(game, "再一拳", "move-ref-022", basic=True)[-1]  # 同打法：照樣買得到
+    assert "學成了" in second and "已經有一招在用，這一招先放進招式庫" in second
     monkeypatch.setattr(actions, "current_style", lambda ctx: "slash")  # 拿起劍
     second = _made(on, game, "move-ref-023")
     rows = {r["id"]: r for r in actions.view(game)["moves"]["library"]}
@@ -229,3 +232,25 @@ def test_the_two_kinds_of_move(on):
     assert "通用絕招學成了" in msgs[-1] and wallet.balance("沈浪") == 4940
     scene = actions.scene_of(game, game.arena_move())
     assert scene["arts"] == [] and "光束" in [b["op"] for b in scene["beats"]] and "法相" not in [b["op"] for b in scene["beats"]]
+
+
+def test_you_can_keep_creating_and_only_one_plays_at_a_time(on):
+    """企劃者 2026-11-02「不應該有這種限制，應該可以一直創」：同一門武功同一種打法想買幾招就買幾招，
+    上場的只有一招——後買的先進招式庫，要換上去自己按（獨門還要等畫好審過，不能當場把能用的那一招鬆開）。"""
+    game = _game(on)
+    _art(game)
+    wallet = Wallet(game.world.db)
+    first = actions.order_move(game, "一劍寒光九萬里", "move-ref-050", basic=True)
+    assert "學成了" in first[-1] and "先放進招式庫" not in first[-1]  # 第一招：當場上場
+    playing = game.arena_move()
+    for n, line in enumerate(("風捲殘雲", "月落星沉"), start=51):
+        msgs = actions.order_move(game, line, f"move-ref-0{n}", basic=True)
+        assert "學成了" in msgs[-1] and "先放進招式庫" in msgs[-1]
+    view = actions.view(game)["moves"]
+    assert len(view["library"]) == 3 and sum(1 for r in view["library"] if r["plays"]) == 1  # 三招都在，只有一招上場
+    assert game.arena_move() == playing  # 上場的還是第一招
+    assert wallet.balance("沈浪") == 5000 - 60 * 3
+    newer = next(r["id"] for r in view["library"] if not r["plays"])
+    assert "把招式綁到" in actions.bind_move(game, newer)[-1]
+    assert game.arena_move() != playing  # 換上去了
+    assert sum(1 for r in actions.view(game)["moves"]["library"] if r["plays"]) == 1  # 還是只有一招上場

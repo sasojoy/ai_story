@@ -34,7 +34,8 @@ NOT_SOLD = "招式動畫還沒開賣。"
 NO_ART = "先練一門自己合成或自創的武功，才能替它畫招式。"
 NO_PROMPT = "寫一句這一招長什麼樣子。"
 OPEN_ORDER = "你還有一張招式動畫在做：等它好了、或按「撤回」退掉，再下一張。"
-ALREADY = "「{art}」這一種打法已經綁了招式。"
+ALREADY = "「{art}」這一種打法已經綁了招式。"  # 還留著：舊的訊息，現在不擋下單了
+NOT_BOUND = "（「{art}」這一種打法已經有一招在用，這一招先放進招式庫；要換上去到「形象」那一頁按一下。）"
 # 獨門絕招一定要畫一樣東西；那一句裡沒有看得出形狀的東西就不收錢（企劃者 2026-11-02 分兩種版本）
 NO_SUBJECT = "獨門絕招要畫一樣看得出形狀的東西（法相、巨掌、石碑……）；這一句裡沒有，換一句，或買通用絕招（{price} 元寶，用現成的光效、當場學成）。"
 LEARNED_BASIC = "「{art}」的通用絕招學成了（{style}）：元寶 -{price}（還剩 {left}）。擂台上這一招發動時就照這樣演。"
@@ -146,11 +147,13 @@ def place(
         if problem:
             return None, problem
         moves = mine(wallet, owner)
-        if any(m.status in (orders.PENDING, orders.REVIEW) for m in moves):
+        # 要畫的那種一次只能有一張在做（畫坊的量）；通用不畫圖、當場學成，不受這一條管，也不擋別人
+        if not basic and any(m.status in (orders.PENDING, orders.REVIEW) for m in moves):
             return None, OPEN_ORDER
-        # 同一門武功、同一種打法只能一招；不同打法各一招（換了兵器原本那一招不會演，要能再下一張，Joy 2026-11-02）
-        if any(m.status == orders.MADE and m.bound_art == art and m.bound_season == season and m.style == style for m in moves):
-            return None, ALREADY.format(art=art_name)
+        # 幾招都可以創（企劃者 2026-11-02「不應該有這種限制，應該可以一直創」）：買幾招隨你，
+        # 同一門武功同一種打法**同時只有一招上場**。這一門這一種打法已經有一招綁著，新的就先進招式庫、不自動綁上
+        # （獨門要等畫好審過才上得了身，當場把能用的那一招鬆開，等圖的那幾天就沒招可演了）。
+        taken = any(m.status == orders.MADE and m.bound_art == art and m.bound_season == season and m.style == style for m in moves)
         balance = wallet.balance(owner)
         if balance < item.price:
             return None, SHORT.format(price=item.price, balance=balance)
@@ -162,7 +165,8 @@ def place(
             other = item_of(content, True)
             return None, NO_SUBJECT.format(price=other.price if other is not None else 0)
         data = {EFFECT: 1, "art": art, "art_name": art_name, "style": style, "prompt": prompt, "status": orders.PENDING,
-                "bound_art": art, "bound_name": art_name, "bound_season": season, "scene": scene, "basic": basic}
+                "bound_art": "" if taken else art, "bound_name": "" if taken else art_name,
+                "bound_season": 0 if taken else season, "scene": scene, "basic": basic}
         pid = wallet.add_purchase(owner, full, item.id, item.price, time=now, day=day, season=season, data=data)
         if not wallet.post(owner, -item.price, "buy", full, time=now, purchase_id=pid):
             raise RuntimeError(f"購買編號 {full} 已經記過帳，購買紀錄卻沒有")
@@ -170,9 +174,9 @@ def place(
             wallet.update_data(pid, status=orders.MADE, move_id=move_id(pid))
         left = wallet.balance(owner)
     words = {"art": art_name, "style": STYLES.get(style, style), "price": item.price, "left": left}
-    if arts:
-        return pid, WAIT_ART.format(arts="」「".join(a["label"] for a in arts), **words)
-    return pid, (LEARNED_BASIC if basic else LEARNED).format(**words)
+    line = (WAIT_ART.format(arts="」「".join(a["label"] for a in arts), **words) if arts
+            else (LEARNED_BASIC if basic else LEARNED).format(**words))
+    return pid, (line + NOT_BOUND.format(art=art_name) if taken else line)
 
 
 def bind(wallet: Wallet, owner: str, pid: int, art: str, art_name: str, style: str, season: int) -> tuple[bool, str]:
@@ -233,14 +237,15 @@ def view(content: Content, wallet: Wallet, owner: str, art: str, art_name: str, 
         "price": item.price, "price_basic": cheap.price if cheap is not None else 0,
         "prompt_max": scenes.MAX_TEXT, "art": art_name, "has_art": bool(art),
         "style": style, "style_text": STYLES.get(style, style),
-        "open": any(m.status in (orders.PENDING, orders.REVIEW) for m in moves),
         "order_style_note": ORDER_STYLE.format(style=STYLES.get(style, style)),
         "asleep_text": next((ASLEEP.format(want=STYLES.get(m.style, m.style), have=STYLES.get(style, style))
                              for m in moves
                              if m.status == orders.MADE and art and m.bound_art == art
                              and m.bound_season == season and m.style != style), ""),
+        # 這一門這一種打法現在有沒有一招上場（只拿來寫字；下單不看它——幾招都可以創）
         "bound": any(m.status == orders.MADE and m.bound_art == art and m.bound_season == season and m.style == style
                      for m in moves) if art else False,
+        "open": any(m.status in (orders.PENDING, orders.REVIEW) for m in moves),  # 獨門一次只能有一張在做
         "library": [row(m) for m in moves if m.status == orders.MADE],
         "list": [row(m) for m in moves if m.status != orders.MADE],
     }

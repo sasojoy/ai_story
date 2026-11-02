@@ -333,11 +333,13 @@
     const now = !m.has_art ? `<p class="mall-note">先練一門自己合成或自創的武功，才能替它畫招式。</p>`
       : `<p class="mall-note">現在練的「${esc(m.art)}」・打法${esc(m.style_text)}${m.bound ? "・已經綁了招式" : ""}</p>`
         + (m.asleep_text ? `<p class="mall-note bad">${esc(m.asleep_text)}</p>` : "");
-    const form = !m.has_art || m.bound ? "" : m.open ? `<p class="mall-note">你還有一張在做：等它好了、或按「撤回」退掉，再下一張。</p>`
-      : `<div class="look-order-form"><textarea class="input" id="move-prompt" maxlength="${m.prompt_max | 0}" rows="2" placeholder="這一招長什麼樣子（${m.prompt_max | 0} 字內，只能中文）">${esc(S.moveDraft || "")}</textarea>
+    // 幾招都可以創：表單一直在。獨門一次只能有一張在做（畫坊的量），那顆鈕暫時收起來，通用照樣買得到
+    const waiting = m.open ? `<p class="mall-note">你還有一張獨門在做：等它好了、或按「撤回」退掉，才能再下一張獨門；通用的照樣可以買。</p>` : "";
+    const form = !m.has_art ? "" : waiting
+      + `<div class="look-order-form"><textarea class="input" id="move-prompt" maxlength="${m.prompt_max | 0}" rows="2" placeholder="這一招長什麼樣子（${m.prompt_max | 0} 字內，只能中文）">${esc(S.moveDraft || "")}</textarea>
         <button class="btn small" data-act="move-preview">先看看</button>
         <button class="btn small" data-act="move-order" data-basic="1">${ingotSvg()}${m.price_basic | 0} 通用</button>
-        <button class="btn small primary" data-act="move-order">${ingotSvg()}${m.price | 0} 獨門</button>
+        ${m.open ? "" : `<button class="btn small primary" data-act="move-order">${ingotSvg()}${m.price | 0} 獨門</button>`}
         <p class="mall-note">通用（${m.price_basic | 0}）用現成的光效演，當場學成；獨門（${m.price | 0}）照你寫的東西另外畫一張圖，送出之後可以先去忙，畫好審過才上身，沒通過元寶全退。</p>
         <p class="mall-note">${esc(m.order_style_note || "")}</p></div>${moveSceneHtml()}`;
     const show = S.moveShow ? `<canvas id="scene-preview" class="scene-preview" width="720" height="320" aria-label="絕招演一次"></canvas>` : "";
