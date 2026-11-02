@@ -150,11 +150,11 @@ def router(shell) -> APIRouter:
 
     @r.post("/api/looks/bind")
     def api_looks_bind(request: Request, body: dict = Body(...)):
-        """把招式庫的一招綁到現在練的那一門上：{id}；回 {message, looks}。"""
+        """換上招式庫裡的一招（id 0 是脫下來）：{id}；回 {message, looks}。網址留著舊名字，意思是「穿上」。"""
         gate()
         game = shell._game(request)
         pid = shell._int(body.get("id"), 0)
-        msgs = shell.act(game, lambda g: actions.bind_move(g, pid))
+        msgs = shell.act(game, lambda g: actions.wear_move(g, pid))
         return {"message": shell.joined(msgs), "looks": shell.look(game, lambda g: actions.view(g))}
 
     @r.post("/api/looks/market")

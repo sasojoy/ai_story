@@ -7,7 +7,8 @@
   同一種打法免費改綁（設計 v3），換打法要重畫（這一版不做，要重新下單）。
 - 擂台：上擂台那一刻（報名、更新分身、挑人），身上的武功綁了招式、手上的打法也對得上，出招就疊那一張光效。
 
-訂單的狀態同 orders.py（pending／review／made／rejected）；上架了 data 記 move_id＝m<購買 id>，綁定記 bound_art、bound_name、bound_season。
+訂單的狀態同 orders.py（pending／review／made／rejected）；上架了 data 記 move_id＝m<購買 id>。
+身上穿哪一招記在帳號那一側（mall_entitlements，同形象），跟練哪一門武功無關、換季也帶著走。
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ from tianxia.wallet import Purchase, Wallet
 from . import orders, scenes
 
 EFFECT = "move_order"  # 購買那一列的欄位（兩種絕招共用，差別記在 data 的 basic）
+WEAR_KIND, WEAR_KEY = "look", "move"  # 穿哪一招記在帳號那一側（同形象 rules.WEAR_*；換季也帶著走）
 EFFECT_BASIC = "move_basic"  # 通用絕招那件商品的效果（60 元寶、不另外畫圖、當場學成）
 PREFIX = "m"
 SHEET, FRAMES = "fx", 6
@@ -35,7 +37,7 @@ NO_ART = "先練一門自己合成或自創的武功，才能替它畫招式。"
 NO_PROMPT = "寫一句這一招長什麼樣子。"
 OPEN_ORDER = "你還有一張招式動畫在做：等它好了、或按「撤回」退掉，再下一張。"
 ALREADY = "「{art}」這一種打法已經綁了招式。"  # 還留著：舊的訊息，現在不擋下單了
-NOT_BOUND = "（「{art}」這一種打法已經有一招在用，這一招先放進招式庫；要換上去到「形象」那一頁按一下。）"
+NOT_WORN = "（你身上已經穿著一招，這一招先放進招式庫；要換上去到「形象」那一頁按一下。）"
 # 獨門絕招一定要畫一樣東西；那一句裡沒有看得出形狀的東西就不收錢（企劃者 2026-11-02 分兩種版本）
 NO_SUBJECT = "獨門絕招要畫一樣看得出形狀的東西（法相、巨掌、石碑……）；這一句裡沒有，換一句，或買通用絕招（{price} 元寶，用現成的光效、當場學成）。"
 LEARNED_BASIC = "「{art}」的通用絕招學成了（{style}）：元寶 -{price}（還剩 {left}）。擂台上這一招發動時就照這樣演。"
@@ -44,7 +46,9 @@ PLACED = "替「{art}」下單了招式動畫（{style}）：元寶 -{price}（�
 LEARNED = "「{art}」的絕招學成了（{style}）：元寶 -{price}（還剩 {left}）。擂台上這一招發動時就照這樣演。"
 WAIT_ART = "替「{art}」下單了絕招（{style}）：元寶 -{price}（還剩 {left}）。要畫的「{arts}」畫好、審過了就放進招式庫；沒過元寶全退。"
 DUPLICATE = "這一張已經下過單了。"
-BOUND = "把招式綁到「{art}」上了（這一季）。"
+WORN = "換上「{name}」了：擂台上出{style}的時候就照這一招演。"
+TAKEN_OFF = "把「{name}」脫下來了：擂台上照舊只演光效。"
+WEARING = "你身上就是「{name}」。"
 NOT_MINE = "招式庫裡沒有這一招。"
 WRONG_STYLE = "這一招是{want}的，你手上的打法是{have}：換一樣兵器，或重新下單。"
 # 綁著、但手上的打法變了：擂台上不會演（出招的身體圖四種打法各一套，拳腳的光效疊在揮砍上對不準）
@@ -76,9 +80,6 @@ class Move:
     status: str
     reason: str
     move: str  # 上架了的 id（m<購買 id>）
-    bound_art: str
-    bound_name: str
-    bound_season: int
     scene: dict | None = None  # 一句話自創的導演稿（scenes.clean）；舊的光效單（一張 fx）是 None
 
     @property
@@ -93,7 +94,6 @@ def of(b: Purchase) -> Move | None:
     status = orders.REJECTED if b.refunded is not None else str(d.get("status", orders.PENDING))
     return Move(pid=b.id, owner=b.owner, art=str(d.get("art", "")), art_name=str(d.get("art_name", "")), style=str(d.get("style", "fist")),
                 prompt=str(d.get("prompt", "")), status=status, reason=str(d.get("reason", "")), move=str(d.get("move_id", "")),
-                bound_art=str(d.get("bound_art", "")), bound_name=str(d.get("bound_name", "")), bound_season=int(d.get("bound_season", 0)),
                 scene=d.get("scene") if isinstance(d.get("scene"), dict) else None)
 
 
@@ -150,10 +150,10 @@ def place(
         # 要畫的那種一次只能有一張在做（畫坊的量）；通用不畫圖、當場學成，不受這一條管，也不擋別人
         if not basic and any(m.status in (orders.PENDING, orders.REVIEW) for m in moves):
             return None, OPEN_ORDER
-        # 幾招都可以創（企劃者 2026-11-02「不應該有這種限制，應該可以一直創」）：買幾招隨你，
-        # 同一門武功同一種打法**同時只有一招上場**。這一門這一種打法已經有一招綁著，新的就先進招式庫、不自動綁上
-        # （獨門要等畫好審過才上得了身，當場把能用的那一招鬆開，等圖的那幾天就沒招可演了）。
-        taken = any(m.status == orders.MADE and m.bound_art == art and m.bound_season == season and m.style == style for m in moves)
+        # 幾招都可以創（企劃者 2026-11-02）：買幾招隨你，身上同時只穿一招。
+        # 身上空著，做好的那一招自己會穿上（worn 的規則：沒自己動過就是最早做好的那一招）；
+        # 已經穿著別的，新的先進招式庫（獨門還要等畫好審過才上得了身，當場把能用的那一招脫掉，等圖那幾天就沒招可演）。
+        taken = bool(worn(wallet, owner))
         balance = wallet.balance(owner)
         if balance < item.price:
             return None, SHORT.format(price=item.price, balance=balance)
@@ -165,8 +165,7 @@ def place(
             other = item_of(content, True)
             return None, NO_SUBJECT.format(price=other.price if other is not None else 0)
         data = {EFFECT: 1, "art": art, "art_name": art_name, "style": style, "prompt": prompt, "status": orders.PENDING,
-                "bound_art": "" if taken else art, "bound_name": "" if taken else art_name,
-                "bound_season": 0 if taken else season, "scene": scene, "basic": basic}
+                "scene": scene, "basic": basic}
         pid = wallet.add_purchase(owner, full, item.id, item.price, time=now, day=day, season=season, data=data)
         if not wallet.post(owner, -item.price, "buy", full, time=now, purchase_id=pid):
             raise RuntimeError(f"購買編號 {full} 已經記過帳，購買紀錄卻沒有")
@@ -176,77 +175,91 @@ def place(
     words = {"art": art_name, "style": STYLES.get(style, style), "price": item.price, "left": left}
     line = (WAIT_ART.format(arts="」「".join(a["label"] for a in arts), **words) if arts
             else (LEARNED_BASIC if basic else LEARNED).format(**words))
-    return pid, (line + NOT_BOUND.format(art=art_name) if taken else line)
+    return pid, (line + NOT_WORN if taken else line)
 
 
-def bind(wallet: Wallet, owner: str, pid: int, art: str, art_name: str, style: str, season: int) -> tuple[bool, str]:
-    """把招式庫的一招綁到這一季的一門武功上（同一種打法免費）；同一門武功原本綁的那一招鬆開。"""
-    moves = mine(wallet, owner)
-    target = next((m for m in moves if m.pid == pid and m.status == orders.MADE), None)
-    if target is None:
+def worn(wallet: Wallet, owner: str) -> int:
+    """身上穿著哪一招（購買編號；沒有是 0）。同形象：記在帳號那一側，換季也帶著走、跟練哪一門武功無關
+    （企劃者 2026-11-02「你那個武學形象是用綁定的呀，這應該跟穿衣服一樣」）。
+    還認得舊資料：還沒穿過任何一招的人，拿舊的綁定當他穿著的那一招。"""
+    data = wallet.entitlement(owner, WEAR_KIND, WEAR_KEY) or {}
+    mine_ = [m for m in mine(wallet, owner) if m.status == orders.MADE]
+    if "move" in data:  # 自己穿過、脫過（0 就是脫了，不要再自動穿回去）
+        pid = int(data.get("move") or 0)
+        return pid if any(m.pid == pid for m in mine_) else 0
+    if not mine_:
+        return 0
+    # 還沒自己動過：舊的綁定優先（2026-11-03 以前的資料），不然就是最早做好的那一招（買了就穿上）
+    was_bound = {b.id for b in wallet.purchases(owner) if (b.data or {}).get("bound_art")}
+    older = sorted(m.pid for m in mine_ if m.pid in was_bound)
+    return older[-1] if older else min(m.pid for m in mine_)  # 最早做好的那一招（purchases 的順序不保證）
+
+
+def wear(wallet: Wallet, owner: str, pid: int) -> tuple[bool, str]:
+    """換上招式庫裡的一招（pid 0 是脫下來）；回（動了沒、那一句）。打法對不對不在這裡擋——
+    穿著不對的打法就是不演（view 的 asleep 會寫明白），同形象穿哪一套是自己的事。"""
+    now = worn(wallet, owner)
+    if pid == 0:
+        if not now:
+            return False, NOT_MINE
+        found = find_mine(wallet, owner, now)
+        wallet.set_entitlement(owner, WEAR_KIND, WEAR_KEY, {"move": 0})
+        return True, TAKEN_OFF.format(name=found.art_name if found else "")
+    found = find_mine(wallet, owner, pid)
+    if found is None or found.status != orders.MADE:
         return False, NOT_MINE
-    if not art:
-        return False, NO_ART
-    if target.style != style:
-        return False, WRONG_STYLE.format(want=STYLES.get(target.style, target.style), have=STYLES.get(style, style))
-    with wallet.db.transaction():
-        for m in moves:
-            if m.pid != pid and m.status == orders.MADE and m.bound_art == art and m.bound_season == season and m.style == target.style:
-                wallet.update_data(m.pid, bound_art="", bound_name="", bound_season=0)
-        wallet.update_data(pid, bound_art=art, bound_name=art_name, bound_season=season)
-    return True, BOUND.format(art=art_name)
+    if pid == now:
+        return False, WEARING.format(name=found.art_name)
+    wallet.set_entitlement(owner, WEAR_KIND, WEAR_KEY, {"move": pid})
+    return True, WORN.format(name=found.art_name, style=STYLES.get(found.style, found.style))
 
 
-def bound(wallet: Wallet, owner: str, art: str, style: str, season: int) -> str:
-    """這一季綁在 art 上、打法對得上的那一招（m<id>）；沒有是空字串。"""
-    if not art:
-        return ""
-    for m in mine(wallet, owner):
-        if m.status == orders.MADE and m.bound_art == art and m.bound_season == season and m.style == style:
-            return m.move
-    return ""
+def find_mine(wallet: Wallet, owner: str, pid: int) -> Move | None:
+    return next((m for m in mine(wallet, owner) if m.pid == pid), None)
+
+
+def playing(wallet: Wallet, owner: str, style: str) -> str:
+    """擂台上這一刻要疊哪一張（m<id>）：身上穿的那一招，而且打法對得上；不然是空字串。"""
+    pid = worn(wallet, owner)
+    found = find_mine(wallet, owner, pid) if pid else None
+    return found.move if found is not None and found.style == style else ""
 
 
 def find(wallet: Wallet, items, pid: int) -> Move | None:
     return next((m for m in every(wallet, items) if m.pid == pid), None)
 
 
-def view(content: Content, wallet: Wallet, owner: str, art: str, art_name: str, style: str, season: int) -> dict | None:
-    """萬寶閣「形象」那一頁的絕招：現在練的那一門（自己的才畫得了）、手上的打法、兩種版本的價錢
-    （通用 price_basic：不畫圖、當場學成；獨門 price：畫圖、送出等審核）、招式庫（上架了的，寫綁在哪）、訂單。"""
+def view(content: Content, wallet: Wallet, owner: str, art: str, art_name: str, style: str, season: int) -> dict | None:  # noqa: ARG001
+    """萬寶閣「形象」那一頁的絕招：現在練的那一門（自己的才畫得了，下單用）、手上的打法、兩種版本的價錢
+    （通用 price_basic：不畫圖、當場學成；獨門 price：畫圖、送出等審核）、招式庫（上架了的，寫身上穿的是哪一招）、訂單。
+    穿哪一招跟練哪一門武功無關、換季也帶著走（企劃者 2026-11-02「這應該跟穿衣服一樣」）。"""
     item = item_of(content)
     if item is None:
         return None
     moves = mine(wallet, owner)
+    on = worn(wallet, owner)
 
     def row(m: Move) -> dict:
-        here = m.bound_season == season and bool(m.bound_art)
-        on_art = here and m.bound_art == art
-        # 綁在現在練的那一門上，但手上的打法對不上：擂台上根本不會演（actions.move_of → bound()），畫面要講明白
-        asleep = on_art and m.style != style
+        mine_now = m.pid == on
+        asleep = mine_now and m.style != style  # 穿著，但手上的兵器換了打法：擂台上不會演
         return {"id": m.pid, "move": m.move, "art": m.art_name, "style": m.style, "style_text": STYLES.get(m.style, m.style),
                 "prompt": m.prompt, "status": m.status, "status_text": orders.STATUS_TEXT[m.status], "reason": m.reason,
                 "withdraw": m.status in orders.CAN_WITHDRAW,
                 "scene": m.scene is not None, "arts": [a["label"] for a in scenes.needs_art(m.scene or {})],
-                "bound": m.bound_name if here else "", "on_art": on_art,
-                "plays": on_art and not asleep, "asleep": asleep,
+                "worn": mine_now, "plays": mine_now and not asleep, "asleep": asleep,
                 "asleep_text": ASLEEP.format(want=STYLES.get(m.style, m.style), have=STYLES.get(style, style)) if asleep else "",
-                "bindable": m.status == orders.MADE and bool(art) and m.style == style and not on_art}
+                "wearable": m.status == orders.MADE and not mine_now}
     cheap = item_of(content, True)
+    rows = [row(m) for m in moves if m.status == orders.MADE]
     return {
         "price": item.price, "price_basic": cheap.price if cheap is not None else 0,
         "prompt_max": scenes.MAX_TEXT, "art": art_name, "has_art": bool(art),
         "style": style, "style_text": STYLES.get(style, style),
         "order_style_note": ORDER_STYLE.format(style=STYLES.get(style, style)),
-        "asleep_text": next((ASLEEP.format(want=STYLES.get(m.style, m.style), have=STYLES.get(style, style))
-                             for m in moves
-                             if m.status == orders.MADE and art and m.bound_art == art
-                             and m.bound_season == season and m.style != style), ""),
-        # 這一門這一種打法現在有沒有一招上場（只拿來寫字；下單不看它——幾招都可以創）
-        "bound": any(m.status == orders.MADE and m.bound_art == art and m.bound_season == season and m.style == style
-                     for m in moves) if art else False,
+        "asleep_text": next((r["asleep_text"] for r in rows if r["asleep"]), ""),
+        "worn": next((r["art"] for r in rows if r["worn"]), ""),  # 身上穿的那一招（寫字用）
         "open": any(m.status in (orders.PENDING, orders.REVIEW) for m in moves),  # 獨門一次只能有一張在做
-        "library": [row(m) for m in moves if m.status == orders.MADE],
+        "library": rows,
         "list": [row(m) for m in moves if m.status != orders.MADE],
     }
 

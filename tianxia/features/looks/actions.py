@@ -192,14 +192,13 @@ def current_style(ctx: Game) -> str:
 
 
 def move_of(ctx: Game) -> str:
-    """上擂台那一刻疊哪一張光效（m<id>；沒有是空字串）：現在練的那一門這一季綁了招式、手上的打法對得上。假人沒有。"""
+    """上擂台那一刻疊哪一張光效（m<id>；沒有是空字串）：身上穿著的那一招、而且手上的打法對得上。假人沒有。"""
     if not rules.on(ctx.content) or ctx.state.player.bot:
         return ""
     wallet = ctx._wallet()
     if wallet is None:
         return ""
-    art, _ = current_art(ctx)
-    return moves.bound(wallet, ctx._mall_owner(), art, current_style(ctx), ctx.world.get_season_number())
+    return moves.playing(wallet, ctx._mall_owner(), current_style(ctx))
 
 
 def moves_view(ctx: Game) -> dict | None:
@@ -231,13 +230,12 @@ def order_move(ctx: Game, prompt: str, ref: str, draft: dict | None = None, basi
     return ctx._log([line])
 
 
-def bind_move(ctx: Game, pid: int) -> list[str]:
-    """把招式庫的一招綁到現在練的武功上（這一季；同打法免費）。"""
+def wear_move(ctx: Game, pid: int) -> list[str]:
+    """換上招式庫裡的一招（pid 0 是脫下來）。同形象：穿哪一招是帳號的事，跟練哪一門武功無關、換季也帶著走。"""
     wallet = ctx._wallet()
     if wallet is None or not rules.on(ctx.content):
         return ctx._log([rules.OFF])
-    art, name = current_art(ctx)
-    done, line = moves.bind(wallet, ctx._mall_owner(), pid, art, name, current_style(ctx), ctx.world.get_season_number())
+    done, line = moves.wear(wallet, ctx._mall_owner(), pid)
     if done:
         journal.add_entry(ctx.state, JournalEntry(time=ctx.state.world.time, title=TITLE, lines=[line]))
     return ctx._log([line])

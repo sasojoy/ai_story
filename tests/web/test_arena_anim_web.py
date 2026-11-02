@@ -160,3 +160,42 @@ def test_each_look_hangs_the_weapon_on_its_own_hand():
     assert out[0] == [10, 20, base[0][2], base[0][3]]  # 位置照自己的，角度與層次照原本的
     assert out[1] == base[1]  # 表裡沒有這一張：照 RING_HAND
     assert out[2] == base[2] and out[3] == base[3]  # 沒有表的那一套、預設的斗笠小子：照 RING_HAND
+
+
+BODY_DRIVER = r"""
+const grab = (name) => { const a = src.indexOf(`\n  const ${name} = `); return src.slice(a, src.indexOf("\n  };", a) + 5); };
+const code = grab("RING_SHEETS")
+  + `
+const RING_IMG = "/static/img/arena/";
+const RING_LOOKS = "/static/img/looks/";
+const window = {};
+class Image { constructor() { this.complete = false; this.naturalWidth = 0; } }
+const RA = { imgs: {}, hands: {} };
+RA.add = (key, srcUrl) => { const im = new Image(); im.onerror = () => { im.bad = true; }; im.src = srcUrl; RA.imgs[key] = im; };
+for (const name of Object.keys(RING_SHEETS)) { const im = new Image(); im.complete = true; im.naturalWidth = 220; RA.imgs[name] = im; }
+const ringHands = () => null;
+`
+  + konst("looksVer") + konst("ringReady") + fn("ringBody") + fn("ringWarmLook");
+const H = new Function(code + `
+return { RA, ringBody, ringWarmLook, Image };`)();
+const out = {};
+out.loading = H.ringBody("xianv", "hero_bare_idle") === null;            // 還在抓：不畫
+H.RA.imgs["xianv/hero_bare_idle"].onerror();                             // 抓不到
+out.failed = H.ringBody("xianv", "hero_bare_idle") === H.RA.imgs.hero_bare_idle;  // 退回斗笠小子
+const im = H.RA.imgs["xianv/hero_bare_idle"]; im.complete = true; im.naturalWidth = 220; im.bad = false;
+out.ready = H.ringBody("xianv", "hero_bare_idle") === im;                // 抓好了就是它
+H.RA.imgs = {}; for (const name of Object.keys(H.RA.imgs)) void name;
+H.ringWarmLook("lishi");
+out.warmed = Object.keys(H.RA.imgs).filter((k) => k.startsWith("lishi/")).length;
+out.plain = H.ringBody("", "hero_bare_idle") !== null;                   // 預設的斗笠小子照舊
+finish(out);
+"""
+
+
+def test_a_look_that_is_still_loading_is_not_drawn_as_the_hat_boy():
+    """萬寶閣按「看動作」第一輪會一下書生一下斗笠小子（Joy 2026-11-03）：以前那一張還沒抓好就先畫預設的，
+    看起來像兩個人跳來跳去。改成還在抓就不畫（回 null），真的抓不到才退回斗笠小子；按下去先把十張抓齊。"""
+    out = webharness.run(BODY_DRIVER, {})
+    assert out["loading"] is True and out["failed"] is True and out["ready"] is True
+    assert out["plain"] is True
+    assert out["warmed"] == 10  # 一次抓齊十張

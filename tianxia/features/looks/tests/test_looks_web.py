@@ -102,7 +102,7 @@ def test_the_admin_box_lists_open_orders_with_prompts(m_on):  # noqa: F811
 
 MOVES = {"price": 300, "prompt_max": 120, "art": "旋風腿", "has_art": True, "style": "fist", "style_text": "拳腳", "open": False, "bound": False,
          "library": [{"id": 7, "move": "m7", "art": "流雲掌", "style": "fist", "style_text": "拳腳", "prompt": "青色劍氣", "status": "made",
-                      "status_text": "上架", "reason": "", "bound": "", "on_art": False, "bindable": True}],
+                      "status_text": "上架", "reason": "", "worn": False, "plays": False, "asleep": False, "wearable": True}],
          "list": []}
 
 
@@ -125,26 +125,27 @@ def test_the_move_section_orders_and_binds(m_on):  # noqa: F811
     """招式動畫（第三批）：寫現在練的那一門與打法、下單的表單、招式庫一列一顆「綁到」；綁送 /api/looks/bind。"""
     looks = {**LOOKS, "moves": MOVES}
     out = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "move-bind", id: "7" }'),
-                 responses={"/api/looks/bind": {"message": "把招式綁到「旋風腿」上了（這一季）。", "looks": looks}, "/api/looks": looks})
+                 responses={"/api/looks/bind": {"message": "換上「流雲掌」了：擂台上出拳腳的時候就照這一招演。", "looks": looks}, "/api/looks": looks})
     html = out["app"]
     assert "絕招" in html and "現在練的「旋風腿」・打法拳腳" in html
     assert 'id="move-prompt"' in html and 'data-act="move-order"' in html and 'data-act="move-preview"' in html
     assert "/api/looks/img/m7/fx" in html  # 舊的光效單照舊畫那一張
     assert any(c[0] == "/api/looks/bind" and c[1] == {"id": 7} for c in out["calls"])
-    assert "把招式綁到「旋風腿」" in html
+    assert "換上「流雲掌」了" in html
 
 
 def test_a_move_that_cannot_play_says_why(m_on):  # noqa: F811
-    """綁著、但手上的兵器換了打法：擂台上不會演，招式庫那一列與抬頭都要寫明（Joy 2026-11-02
+    """穿著、但手上的兵器換了打法：擂台上不會演，招式庫那一列與抬頭都要寫明（Joy 2026-11-02
     「我那個絕招寒霜雪怎麼都還沒施放過」——空手下的單，後來拿了劍）。下單那一塊也先講明打法會鎖住。"""
     asleep = "這一招是拳腳的，你現在的打法是揮砍——擂台上不會演，換回拳腳才演得出來。"
-    moves = {**MOVES, "style": "slash", "style_text": "揮砍", "bound": True, "asleep_text": asleep,
+    moves = {**MOVES, "style": "slash", "style_text": "揮砍", "worn": "流雲掌", "asleep_text": asleep,
              "order_style_note": "照你現在的打法（揮砍）登記。換成別種兵器時這一招不會演，要另外下一張。",
-             "library": [{**MOVES["library"][0], "bound": "旋風腿", "on_art": True, "bindable": False,
+             "library": [{**MOVES["library"][0], "worn": True, "wearable": False,
                           "plays": False, "asleep": True, "asleep_text": asleep}]}
     html = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }'), responses={"/api/looks": {**LOOKS, "moves": moves}})["app"]
     assert html.count("擂台上不會演，換回拳腳才演得出來") == 2  # 抬頭一句、那一列一句
-    assert 'data-act="move-bind"' not in html  # 打法對不上，綁不了
+    assert "身上穿著「流雲掌」" in html
+    assert 'data-act="move-bind" data-id="0"' in html  # 穿在身上：那一顆是「脫下」
 
 
 SCENE = {"v": 1, "name": "旋風腿", "glow": "#ffd27a", "length": 3300, "arts": [{"slot": "art1", "label": "大佛"}, {"slot": "art2", "label": "佛掌"}],
