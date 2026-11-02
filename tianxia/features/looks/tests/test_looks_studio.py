@@ -428,6 +428,33 @@ def test_the_idle_prompt_asks_for_the_forward_bob_not_a_vertical_breath():
     assert "do NOT lean forward" not in idle
 
 
+def test_idle_can_be_built_from_a_stance_frame_and_passes_our_own_checks():
+    """待機用合成的（Joy 2026-11-02 選的）：拿一張過關的站姿，第 3 格整個往前 19 px 再收回——
+    正是量斗笠小子量到的動作（前端擺 19 px、垂直 3 px）。合出來的要過得了我們自己那幾關。"""
+    pytest.importorskip("scipy")
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    from tianxia.features.looks import cutting, orders
+
+    src = (actions.WEB_IMG / "arena" / "hero_atk_slash.webp").read_bytes()
+    idle = cutting.idle_from_stance(src, frame=0)
+    assert orders.sheet_problem("hero_bare_idle", idle) is None
+    assert cutting.sheet_problems(Image.open(io.BytesIO(idle)), 4, "hero_bare_idle")[0] == []
+    a = np.asarray(Image.open(io.BytesIO(idle)).convert("RGBA"))[..., 3] > 32
+    fronts, feet = [], []
+    for k in range(4):
+        c = a[:, k * cutting.CELL:(k + 1) * cutting.CELL]
+        ys, xs = np.nonzero(c)
+        fronts.append(int(xs.max()))
+        feet.append(int(ys.max()))
+    assert max(fronts) - min(fronts) == max(cutting.IDLE_STEPS), fronts  # 往前探的幅度
+    assert fronts[2] == max(fronts), "第 3 格要在最前面"
+    assert len(set(feet)) == 1, "腳底要還在同一條地平線上"
+
+
 def test_refit_rescales_an_old_oversized_sheet_without_redrawing_it():
     """2026-11-02 之前切的自建形象高 190～200（照斗笠寬），生圖的原圖沒留著：refit 直接把成品縮回標準身高。"""
     pytest.importorskip("scipy")

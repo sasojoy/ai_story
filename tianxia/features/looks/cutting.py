@@ -239,6 +239,35 @@ def sheet_problems(strip: "Image.Image", frames: int, name: str | None = None) -
     return bad, " ".join(seen)
 
 
+IDLE_STEPS = (0, 3, 21, 2)  # 待機四格各往前幾像素：對齊 web/arena_anim.js 的 RING_HAND.hero_bare_idle
+# （那張表的手 x 是 132、132、153、134，位移 0、0、21、2——兵器掛在手上，身體走多少手就要走多少。
+#   第 2 格借 3 px，不然跟第 1 格一模一樣，過不了「四格要動」那一關。）
+
+
+def idle_from_stance(strip_bytes: bytes, frame: int = 0) -> bytes:
+    """拿一張已經過關的站姿，合成待機那一條（Joy 2026-11-02 選的做法）。
+
+    為什麼用合成的：待機要的就是「整個人往前探一下再收回」這個位移（量斗笠小子：前端擺 19 px、垂直只有 3 px），
+    位移我們自己做得準，生圖反而連七次畫不出乾淨的四格（七種不同的理由、56 次生圖）。把生圖的額度留給出招
+    那些真的需要重畫姿勢的動作。缺點講明：那一下是整個人平移，不是重畫的姿勢。
+
+    frame 是來源那一條的第幾格（0 起算）；回傳四格的待機條（webp）。
+    """
+    src = Image.open(io.BytesIO(strip_bytes)).convert('RGBA')
+    cell = src.crop((frame*CELL, 0, (frame+1)*CELL, CELL))
+    a = np.asarray(cell)[..., 3] > 32
+    if not a.any():
+        raise CutError("來源那一格是空的")
+    front = int(np.nonzero(a.max(0))[0].max())
+    room = CELL - 1 - front  # 往前推不能推出格子
+    out = Image.new('RGBA', (4*CELL, CELL), (0, 0, 0, 0))
+    for k, step in enumerate(IDLE_STEPS):
+        out.alpha_composite(cell, (k*CELL + min(step, room), 0))
+    buf = io.BytesIO()
+    out.save(buf, "WEBP", quality=82, method=6)
+    return buf.getvalue()
+
+
 def refit(strip_bytes: bytes, name: str) -> bytes:
     """把已經切好、但身高不對的一條重新排版到標準身高（BODY[name]），腳底照舊對到 BY、左右位置不動。
 
