@@ -183,10 +183,11 @@ def test_the_hand_table_follows_each_looks_own_body():
 
 
 def test_the_python_hand_table_is_the_same_as_the_one_the_page_draws_with():
-    """cutting.HAND 與 web/arena_anim.js 的 RING_HAND 是同一張表（兩邊各留一份，這一條盯著不要走掉）。"""
+    """hand_table.HAND（cutting 也用它）與 web/arena_anim.js 的 RING_HAND 是同一張表（兩邊各留一份，這一條盯著不要走掉）。
+    表單獨一支、不拉 numpy：沒裝 numpy 的環境這一條也要跑（PM 2026-11-02）。"""
     import re
 
-    from tianxia.features.looks import cutting
+    from tianxia.features.looks import hand_table
 
     js = (ROOT / "web/arena_anim.js").read_text(encoding="utf-8")
     block = js.split("const RING_HAND = {", 1)[1].split("};", 1)[0]
@@ -195,7 +196,7 @@ def test_the_python_hand_table_is_the_same_as_the_one_the_page_draws_with():
         m = re.match(r"\s*(\w+):\s*\[(.*?)\],?\s*(//.*)?$", line.strip())
         if m:
             table[m.group(1)] = tuple(tuple(int(x) for x in g.split(",")) for g in re.findall(r"\[([^\]]+)\]", m.group(2)))
-    assert table == {k: tuple(v) for k, v in cutting.HAND.items()}
+    assert table == {k: tuple(v) for k, v in hand_table.HAND.items()}
 
 
 def test_saving_a_sheet_writes_that_looks_hand_table(tmp_path):
