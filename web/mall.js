@@ -613,8 +613,13 @@
       const sheets = Object.keys(d.sheets || {});
       const faces = sheets.map((s) => `<span class="${have.has(s) ? "ok" : ""}">${esc(s.replace("hero_", ""))}</span>`).join("");
       const prompts = Object.entries(o.prompts || {}).map(([s, text]) => `<details><summary>${esc(s)}</summary><pre class="look-gen">${esc(text)}</pre></details>`).join("");
+      // 到了的那幾張畫成縮圖（點了開原圖）：上架前看得到畫成什麼樣子（管理頁獨立，Joy 2026-11-01）。網址帶抓訂單那一刻，重傳過的不吃舊快取
+      const thumbs = o.look && have.size ? `<div class="look-thumbs">${sheets.filter((s) => have.has(s)).map((s) => {
+        const src = `/api/looks/img/${encodeURIComponent(o.look)}/${encodeURIComponent(s)}?v=${S.adLooksAt | 0}`;
+        return `<a href="${src}" target="_blank" rel="noopener" title="${esc(s)}"><img loading="lazy" src="${src}" alt="${esc(s)}"></a>`;
+      }).join("")}</div>` : "";
       return `<div class="card look-admin"><b>#${o.id | 0}「${esc(o.name)}」</b>・${esc(o.owner)}・${esc(o.status_text)}${o.reason ? `（${esc(o.reason)}）` : ""}
-        <p>${esc(o.prompt)}</p>${studio(o)}${o.prompts && Object.keys(o.prompts).length ? `<div class="look-sheets">${faces}</div>${prompts}
+        <p>${esc(o.prompt)}</p>${thumbs}${studio(o)}${o.prompts && Object.keys(o.prompts).length ? `<div class="look-sheets">${faces}</div>${prompts}
         <div class="row wrap"><input type="file" id="ad-looks-file-${o.id | 0}" accept="image/png,image/webp" multiple aria-label="上傳十張">
         <button class="btn small" data-act="looks-admin" data-op="upload" data-id="${o.id | 0}">上傳</button>
         <button class="btn small primary" data-act="looks-admin" data-op="release" data-id="${o.id | 0}" ${have.size === sheets.length ? "" : "disabled"}>上架</button></div>
@@ -622,14 +627,18 @@
     };
     // 一句話自創的絕招：導演稿要畫的那一兩樣（法相、巨物）一樣一格——提示詞、選一張上傳；到齊了才按得下上架
     const srow = (m) => `<div class="card look-admin"><b>#${m.id | 0}「${esc(m.art)}」</b>・${esc(m.style_text)}・${esc(m.owner)}・${esc(m.status_text)}${m.reason ? `（${esc(m.reason)}）` : ""}
-        <p>${esc(m.prompt)}</p>${studio(m)}${(m.arts || []).some((a) => a.prompt) ? (m.arts || []).map((a) => `<div class="look-sheets"><span class="${a.have ? "ok" : ""}">${esc(a.slot)}・${esc(a.label)}</span></div>
+        <p>${esc(m.prompt)}</p>${moveThumbs(m, (m.arts || []).filter((a) => a.have).map((a) => a.slot))}${studio(m)}${(m.arts || []).some((a) => a.prompt) ? (m.arts || []).map((a) => `<div class="look-sheets"><span class="${a.have ? "ok" : ""}">${esc(a.slot)}・${esc(a.label)}</span></div>
         <details><summary>提示詞</summary><pre class="look-gen">${esc(a.prompt)}</pre></details>
         <div class="row wrap"><input type="file" id="ad-moves-file-${m.id | 0}-${esc(a.slot)}" accept="image/png,image/webp" aria-label="上傳${esc(a.label)}">
         <button class="btn small" data-act="looks-admin" data-op="move-upload" data-id="${m.id | 0}" data-slot="${esc(a.slot)}">上傳</button></div>`).join("")
         + `<div class="row wrap"><button class="btn small primary" data-act="looks-admin" data-op="move-release" data-id="${m.id | 0}" ${m.have ? "" : "disabled"}>上架</button></div>
         <div class="row"><input class="input" id="ad-moves-note-${m.id | 0}" placeholder="退回的原因（必填）" maxlength="100"><button class="btn warn small" data-act="looks-admin" data-op="move-reject" data-id="${m.id | 0}">退回</button></div>` : ""}</div>`;
+    const moveThumbs = (m, slots) => m.move && slots.length ? `<div class="look-thumbs">${slots.map((slot) => {
+      const src = `/api/looks/img/${encodeURIComponent(m.move)}/${encodeURIComponent(slot)}?v=${S.adLooksAt | 0}`;
+      return `<a href="${src}" target="_blank" rel="noopener" title="${esc(slot)}"><img loading="lazy" src="${src}" alt="${esc(slot)}"></a>`;
+    }).join("")}</div>` : "";
     const mv = d.moves, mrow = (m) => m.scene ? srow(m) : `<div class="card look-admin"><b>#${m.id | 0}「${esc(m.art)}」</b>・${esc(m.style_text)}・${esc(m.owner)}・${esc(m.status_text)}${m.reason ? `（${esc(m.reason)}）` : ""}
-        <p>${esc(m.prompt)}</p>${m.gen_prompt ? `<div class="look-sheets"><span class="${m.have ? "ok" : ""}">fx</span></div>
+        <p>${esc(m.prompt)}</p>${moveThumbs(m, m.have ? ["fx"] : [])}${m.gen_prompt ? `<div class="look-sheets"><span class="${m.have ? "ok" : ""}">fx</span></div>
         <details><summary>提示詞</summary><pre class="look-gen">${esc(m.gen_prompt)}</pre></details>
         <div class="row wrap"><input type="file" id="ad-moves-file-${m.id | 0}" accept="image/png,image/webp" aria-label="上傳光效">
         <button class="btn small" data-act="looks-admin" data-op="move-upload" data-id="${m.id | 0}">上傳</button>
@@ -638,6 +647,24 @@
     const moves = !mv ? "" : `<p class="muted">絕招（一句話自創的：法相、巨物一樣一張去背圖，邊長最多 1024；舊的光效單一張 ${esc(mv.size)}、六格、透明底）</p>`
       + (mv.open.length ? mv.open.map(mrow).join("") : `<p class="muted">沒有等著做的招式。</p>`) + mv.done.map(mrow).join("");
     return head + (d.open.length ? d.open.map(row).join("") : `<p class="muted">沒有等著做的訂單。</p>`) + d.done.map(row).join("") + moves;
+  }
+  // 上架、退回先問一次（以前按了就送；退回會把元寶全退給下單的人）。退回沒寫原因照舊由伺服器回那一句，不必問
+  function looksAdminAsk(op, id, slot) {
+    const d = S.adLooks || {};
+    const move = op.startsWith("move-");
+    const list = move ? [...((d.moves && d.moves.open) || []), ...((d.moves && d.moves.done) || [])] : [...(d.open || []), ...(d.done || [])];
+    const x = list.find((o) => String(o.id) === String(id));
+    const what = x ? `#${x.id | 0}「${move ? x.art : x.name}」（${x.owner}）` : `#${id}`;
+    const note = (document.getElementById(`ad-${move ? "moves" : "looks"}-note-${id}`)?.value || "").trim();
+    if ((op === "release" || op === "move-release") && x) {
+      ask(`上架${what}：${move ? "這一招的動畫照現在這幾張圖演" : "十張照現在這樣，下單的人就能換上"}，確定？`, "確定上架", () => looksAdminDo(op, id, slot));
+      return;
+    }
+    if ((op === "reject" || op === "move-reject") && x && note) {
+      ask(`退回${what}（原因：${note}）：元寶全退給下單的人、原因寫給他看，這一張單就結了，確定？`, "確定退回", () => looksAdminDo(op, id, slot));
+      return;
+    }
+    return looksAdminDo(op, id, slot);
   }
   async function looksAdminDo(op, id, slot) {
     const done = async (r) => {
@@ -677,6 +704,8 @@
         await done(await api("/api/do/looks_reject", { id: Number(id), note }));
       }
       S.adLooks = await api("/api/admin/looks");
+      S.adLooksAt = Math.floor(Date.now() / 1000);
+      if (S.adminPage && op !== "load" && S.adLooksMsg) S.adResult = { text: S.adLooksMsg, ok: !!S.adLooksOk }; // 管理頁：結果也釘在底下
       renderKeepingSheet();
     });
   }
@@ -691,6 +720,7 @@
       if (S.adMallOk) S.adMallNote = ""; // 成了：原因欄清掉，免得同一句誤送第二次
       S.adMallName = body.name;
       S.adMall = await api("/api/admin/mall", { name: body.name }); // 補完、退完重查一次那個人的帳
+      if (S.adminPage) S.adResult = { text: S.adMallMsg, ok: S.adMallOk }; // 管理頁：結果也釘在底下
       renderKeepingSheet();
     });
   }
