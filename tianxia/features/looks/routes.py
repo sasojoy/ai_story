@@ -3,6 +3,7 @@ import base64
 import binascii
 import re
 import secrets
+import time
 
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import FileResponse, Response
@@ -49,6 +50,21 @@ def admin_tools(shell) -> dict[str, AdminTool]:
         "looks_studio_retry": AdminTool(gate, lambda g, b: actions.admin_studio_retry(g, shell._int(b.get("id"), 0))),
         "looks_reject": AdminTool(gate, lambda g, b: actions.admin_reject(g, shell._int(b.get("id"), 0), str(b.get("note", ""))[:100])),
     }
+
+
+def _draft(shell, game, text: str) -> dict | None:
+    """請模型把玩家那一句拆成一張表（三段式的 B 段，**在行動鎖外**：慢的模型呼叫不進鎖）。
+    叫不動、逾時、排隊被擋都回 None，導演落回關鍵字——下單不會因為模型而失敗。"""
+    budget = float(getattr(game.content.config, "free_text_budget_seconds", 20) or 20)
+    started = time.monotonic()
+
+    def ask():
+        return scenes.model_draft(shell.within_budget(game.client, budget - (time.monotonic() - started)), text)
+
+    try:
+        return shell.model_call(game, ask, fallback=None, left=budget)
+    except Exception:  # noqa: BLE001  排隊被擋、模型那邊出事：照樣走關鍵字
+        return None
 
 
 def router(shell) -> APIRouter:
@@ -102,7 +118,9 @@ def router(shell) -> APIRouter:
         raw = body.get("ref")
         ref = raw if isinstance(raw, str) and REF.fullmatch(raw) else secrets.token_urlsafe(12)
         prompt = str(body.get("prompt", ""))[:300]
-        msgs = shell.act(game, lambda g: actions.order_move(g, prompt, ref))
+        problem = shell.look(game, lambda g: actions.scene_problem(g, prompt))  # A：先驗，壞句子不必叫模型
+        draft = None if problem else _draft(shell, game, prompt)  # B：鎖外問模型
+        msgs = shell.act(game, lambda g: actions.order_move(g, prompt, ref, draft))  # C：扣元寶、存稿
         shell._tell_tabs(game)
         return {"message": shell.joined(msgs), "looks": shell.look(game, lambda g: actions.view(g)),
                 "main": shell.look(game, shell.main_view)}
@@ -113,7 +131,11 @@ def router(shell) -> APIRouter:
         gate()
         game = shell._game(request)
         text = str(body.get("text", ""))[:120]
-        return shell.look(game, lambda g: actions.preview_scene(g, text))
+        problem = shell.look(game, lambda g: actions.scene_problem(g, text))  # A：鎖內只讀，先驗那一句
+        if problem:
+            return {"problem": problem}
+        draft = _draft(shell, game, text)  # B：鎖外問模型
+        return shell.look(game, lambda g: actions.preview_scene(g, text, draft))  # C：鎖內組稿（純規則）
 
     @r.get("/api/looks/scene/{mid}")
     def api_looks_scene(request: Request, mid: str):

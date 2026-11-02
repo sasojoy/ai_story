@@ -106,10 +106,11 @@ def item_of(content: Content) -> MallItem | None:
 
 def place(
     content: Content, wallet: Wallet, owner: str, art: str, art_name: str, style: str, prompt: str, ref: str, *,
-    now: float, day: int, season: int, move_name: str = "",
+    now: float, day: int, season: int, move_name: str = "", draft: dict | None = None,
 ) -> tuple[int | None, str]:
     """下單（同 orders.place 的那幾步）。art 是呼叫端驗過的、自己合成或自創的武功（空字串是沒有）。
     prompt 是玩家寫的一句（scenes.MAX_TEXT 字內、只能中文），當場變成導演稿（scenes.direct）存在這一列；
+    draft 是模型在行動鎖外填好的那一張表（server.py 的三段式；沒有就走關鍵字導演）；
     稿裡沒有要畫的就當場上架（學成），有要畫的（法相、巨物）等管理者上傳那幾張、審過再上架。move_name 是落款寫的招名。"""
     item = item_of(content)
     if item is None:
@@ -135,7 +136,7 @@ def place(
         balance = wallet.balance(owner)
         if balance < item.price:
             return None, SHORT.format(price=item.price, balance=balance)
-        scene = scenes.direct(prompt, move_name or art_name)
+        scene = scenes.direct(prompt, move_name or art_name, draft)
         arts = scenes.needs_art(scene)
         data = {EFFECT: 1, "art": art, "art_name": art_name, "style": style, "prompt": prompt, "status": orders.PENDING,
                 "bound_art": art, "bound_name": art_name, "bound_season": season, "scene": scene}

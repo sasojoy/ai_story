@@ -161,13 +161,20 @@ def current_move_name(ctx: Game) -> str:
     return (getattr(found, "move_name", "") or name) if found is not None else ""
 
 
-def preview_scene(ctx: Game, text: str) -> dict:
-    """一句話自創的預覽（不扣元寶、不存）：過字數、只能中文、字表，回導演稿（scenes.direct）或不行的那一句。"""
+def scene_problem(ctx: Game, text: str) -> str | None:
+    """這一句能不能導（字數、只能中文、字表）；None 是可以。預覽與下單在叫模型之前先問這一關（鎖內只讀）。"""
     text = moves.speech.clean(text)
-    problem = scenes.text_problem(text) or moves.speech.word_problem(text, ctx.content, moves.speech.MOTTO, scenes.MAX_TEXT)
+    return scenes.text_problem(text) or moves.speech.word_problem(text, ctx.content, moves.speech.MOTTO, scenes.MAX_TEXT)
+
+
+def preview_scene(ctx: Game, text: str, draft: dict | None = None) -> dict:
+    """一句話自創的預覽（不扣元寶、不存）：過字數、只能中文、字表，回導演稿或不行的那一句。
+    draft 是模型填的那張表（server.py 在鎖外問來的）；沒有就落回關鍵字導演。"""
+    text = moves.speech.clean(text)
+    problem = scene_problem(ctx, text)
     if problem:
         return {"problem": problem}
-    return {"scene": scenes.direct(text, current_move_name(ctx))}
+    return {"scene": scenes.direct(text, current_move_name(ctx), draft)}
 
 
 def scene_of(ctx: Game, mid: str) -> dict | None:
@@ -203,14 +210,15 @@ def moves_view(ctx: Game) -> dict | None:
     return moves.view(ctx.content, wallet, ctx._mall_owner(), art, name, current_style(ctx), ctx.world.get_season_number())
 
 
-def order_move(ctx: Game, prompt: str, ref: str) -> list[str]:
+def order_move(ctx: Game, prompt: str, ref: str, draft: dict | None = None) -> list[str]:
     """替現在練的武功下單招式動畫（moves.place）：成了寫一則「形象」江湖紀錄；生圖器是 fake 就當場抄範例、變成待審。"""
     wallet = ctx._wallet()
     if wallet is None or not rules.on(ctx.content):
         return ctx._log([rules.OFF])
     art, name = current_art(ctx)
     pid, line = moves.place(ctx.content, wallet, ctx._mall_owner(), art, name, current_style(ctx), prompt, ref,
-                            now=ctx.pill_now(), day=ctx._pill_day(), season=ctx.world.get_season_number(), move_name=current_move_name(ctx))
+                            now=ctx.pill_now(), day=ctx._pill_day(), season=ctx.world.get_season_number(),
+                            move_name=current_move_name(ctx), draft=draft)
     if pid is None:
         return ctx._log([line])
     item = moves.item_of(ctx.content)
