@@ -267,12 +267,31 @@
   function lookOrderHtml(o) {
     if (!o) return "";
     const list = (o.list || []).map((x) => `<li class="look-order-row"><b>${esc(x.name)}</b><span class="look-st st-${esc(x.status)}">${esc(x.status_text)}</span>
-        <small>${esc(x.prompt)}${x.reason ? `（${esc(x.reason)}）` : ""}</small></li>`).join("");
-    const form = o.open ? `<p class="mall-note">${esc("你還有一張在做，等它好了再下一張。")}</p>`
+        <small>${esc(x.prompt)}${x.reason ? `（${esc(x.reason)}）` : ""}</small>${withdrawBtn(x, "look", x.name)}</li>`).join("");
+    const form = o.open ? `<p class="mall-note">${esc("你還有一張在做：等它好了、或按「撤回」退掉，再下一張。")}</p>`
       : `<div class="look-order-form"><input class="input" id="look-name" maxlength="${o.name_max | 0}" placeholder="名字（${o.name_max | 0} 字內）" autocomplete="off" value="${esc(S.lookDraft ? S.lookDraft.name : "")}">
         <textarea class="input" id="look-prompt" maxlength="${o.prompt_max | 0}" rows="2" placeholder="長什麼樣子（${o.prompt_max | 0} 字內）">${esc(S.lookDraft ? S.lookDraft.prompt : "")}</textarea>
         <button class="btn small primary" data-act="look-order">${ingotSvg()}${o.price | 0} 下單</button></div>`;
     return `<div class="mall-sub">自建形象</div><p class="mall-note">${esc(LOOK_ORDER_NOTE)}</p>${form}${list ? `<ul class="look-orders">${list}</ul>` : ""}`;
+  }
+  // 撤回自己還沒上架的單（Joy 2026-11-02「審圖卡住，玩家也不能退回，會被卡死」）：等圖、審核中都能撤，元寶全退；先問一次
+  const withdrawBtn = (x, kind, name) => (x.withdraw
+    ? `<button class="btn small ghost" data-act="look-withdraw" data-kind="${kind}" data-id="${x.id | 0}" data-name="${esc(name)}">撤回</button>` : "");
+  function lookWithdrawAsk(el) {
+    const kind = el.dataset.kind === "move" ? "move" : "look", id = Number(el.dataset.id) || 0;
+    ask(`撤回「${el.dataset.name || ""}」？元寶全退，已經畫好的圖不留。`, "撤回", () => lookWithdraw(id, kind));
+  }
+  async function lookWithdraw(id, kind) {
+    await busy(async () => {
+      const r = await api("/api/looks/withdraw", { id, kind });
+      if (r.looks) S.mallLooks = r.looks;
+      if (r.main) setMain(r.main);
+      if (r.main && r.main.mall && S.mallData) S.mallData.balance = r.main.mall.balance;
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      S.mallSay = text ? { text, ok: !text.startsWith("（") } : null;
+      renderTop();
+      if (S.mallOpen) renderMall();
+    });
   }
   function lookOrderAsk() {
     const name = (document.getElementById("look-name")?.value || "").trim();
@@ -310,11 +329,11 @@
         ${x.scene ? `<button class="btn small ghost" data-act="move-show" data-id="${esc(x.move)}">${S.moveShow === x.move ? "收起" : "演一次"}</button>` : ""}
         ${x.bindable ? `<button class="btn small" data-act="move-bind" data-id="${x.id | 0}">綁到「${esc(m.art)}」</button>` : ""}</li>`).join("");
     const list = (m.list || []).map((x) => `<li class="look-order-row"><b>${esc(x.art)}</b><span class="look-st st-${esc(x.status)}">${esc(x.status_text)}</span>
-        <small>${esc(x.style_text)}・${esc(x.prompt)}${moveArtsNote(x)}${x.reason ? `（${esc(x.reason)}）` : ""}</small></li>`).join("");
+        <small>${esc(x.style_text)}・${esc(x.prompt)}${moveArtsNote(x)}${x.reason ? `（${esc(x.reason)}）` : ""}</small>${withdrawBtn(x, "move", x.art)}</li>`).join("");
     const now = !m.has_art ? `<p class="mall-note">先練一門自己合成或自創的武功，才能替它畫招式。</p>`
       : `<p class="mall-note">現在練的「${esc(m.art)}」・打法${esc(m.style_text)}${m.bound ? "・已經綁了招式" : ""}</p>`
         + (m.asleep_text ? `<p class="mall-note bad">${esc(m.asleep_text)}</p>` : "");
-    const form = !m.has_art || m.bound ? "" : m.open ? `<p class="mall-note">你還有一張在做，等它好了再下一張。</p>`
+    const form = !m.has_art || m.bound ? "" : m.open ? `<p class="mall-note">你還有一張在做：等它好了、或按「撤回」退掉，再下一張。</p>`
       : `<div class="look-order-form"><textarea class="input" id="move-prompt" maxlength="${m.prompt_max | 0}" rows="2" placeholder="這一招長什麼樣子（${m.prompt_max | 0} 字內，只能中文）">${esc(S.moveDraft || "")}</textarea>
         <button class="btn small" data-act="move-preview">先看看</button>
         <button class="btn small primary" data-act="move-order">${ingotSvg()}${m.price | 0} 下單</button>

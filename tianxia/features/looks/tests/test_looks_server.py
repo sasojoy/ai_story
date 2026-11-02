@@ -91,3 +91,19 @@ def test_the_market_endpoint_refuses_a_look_you_did_not_make():
     got = client.post("/api/looks/market", json={"op": "list", "look": "u3", "price": 600}).json()
     assert "不是你做的" in got["message"]
     assert client.post("/api/looks/market", json={"op": "sell"}).status_code == 400
+
+
+def test_the_player_can_withdraw_an_order_that_is_stuck():
+    """Joy 2026-11-02「審圖卡住，玩家也不能退回，會被卡死」：還沒上架的單下單的人自己撤回，元寶全退、可以再下一張；只能撤一次。"""
+    client = _player()
+    client.get("/api/main")
+    first = client.post("/api/looks/order", json={"name": "白衣書生", "prompt": "白衣書生", "ref": "web-order-0009"}).json()
+    row = first["looks"]["order"]["list"][0]
+    assert row["withdraw"] is True and first["looks"]["order"]["open"]
+    got = client.post("/api/looks/withdraw", json={"id": row["id"], "kind": "look"}).json()
+    assert "撤回了「白衣書生」" in got["message"] and got["main"]["mall"]["balance"] == 5000
+    row = got["looks"]["order"]["list"][0]
+    assert row["status"] == orders.REJECTED and row["reason"] == orders.WITHDRAWN and row["withdraw"] is False
+    assert not got["looks"]["order"]["open"]
+    again = client.post("/api/looks/withdraw", json={"id": row["id"], "kind": "look"}).json()
+    assert "撤不回來" in again["message"] and again["main"]["mall"]["balance"] == 5000

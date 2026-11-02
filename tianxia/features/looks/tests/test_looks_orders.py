@@ -210,3 +210,21 @@ def test_saving_a_sheet_writes_that_looks_hand_table(tmp_path):
     orders.save_sheet(tmp_path, "u9", "hero_bare_hit", (ART / "hero_bare_hit.webp").read_bytes())
     table = json.loads(orders.hands_file(tmp_path, "u9").read_text(encoding="utf-8"))
     assert sorted(table) == ["hero_bare_hit", "hero_bare_idle"]  # 併進去，不是蓋掉
+
+
+def test_only_the_owner_withdraws_and_not_after_release(on):
+    """撤回只認自己的單；審核中也能撤；上架了的撤不回來（照商城退款）。"""
+    game = _game(on)
+    actions.order(game, "白衣書生", "白衣書生", "order-ref-021")
+    pid = actions.view(game)["order"]["list"][0]["id"]
+    admin = _admin(on, game.world)
+    assert actions.withdraw(admin, pid, "look")[-1] == f"（沒有第 {pid} 號訂單。）"
+    _upload_all(admin, pid)
+    assert actions.view(game)["order"]["list"][0]["status"] == orders.REVIEW
+    assert "撤回了" in actions.withdraw(game, pid, "look")[-1] and Wallet(game.world.db).balance("沈浪") == 5000
+    assert any("撤回了" in e.lines[0] for e in game.state.journal if e.title == "形象")
+    actions.order(game, "第二套", "黑衣", "order-ref-022")
+    pid2 = actions.view(game)["order"]["list"][0]["id"]
+    _upload_all(admin, pid2)
+    actions.admin_release(admin, pid2)
+    assert "撤不回來" in actions.withdraw(game, pid2, "look")[-1]
