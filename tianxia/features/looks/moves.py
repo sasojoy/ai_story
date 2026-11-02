@@ -22,7 +22,8 @@ from tianxia.wallet import Purchase, Wallet
 
 from . import orders, scenes
 
-EFFECT = "move_order"
+EFFECT = "move_order"  # 購買那一列的欄位（兩種絕招共用，差別記在 data 的 basic）
+EFFECT_BASIC = "move_basic"  # 通用絕招那件商品的效果（60 元寶、不另外畫圖、當場學成）
 PREFIX = "m"
 SHEET, FRAMES = "fx", 6
 STYLES = {"slash": "揮砍", "pole": "長兵", "fist": "拳腳", "shoot": "射"}
@@ -34,6 +35,9 @@ NO_ART = "先練一門自己合成或自創的武功，才能替它畫招式。"
 NO_PROMPT = "寫一句這一招長什麼樣子。"
 OPEN_ORDER = "你還有一張招式動畫在做：等它好了、或按「撤回」退掉，再下一張。"
 ALREADY = "「{art}」這一種打法已經綁了招式。"
+# 獨門絕招一定要畫一樣東西；那一句裡沒有看得出形狀的東西就不收錢（企劃者 2026-11-02 分兩種版本）
+NO_SUBJECT = "獨門絕招要畫一樣看得出形狀的東西（法相、巨掌、石碑……）；這一句裡沒有，換一句，或買通用絕招（{price} 元寶，用現成的光效、當場學成）。"
+LEARNED_BASIC = "「{art}」的通用絕招學成了（{style}）：元寶 -{price}（還剩 {left}）。擂台上這一招發動時就照這樣演。"
 SHORT = "元寶不夠：招式動畫要 {price}，你有 {balance}。"
 PLACED = "替「{art}」下單了招式動畫（{style}）：元寶 -{price}（還剩 {left}）。做好、審核過了會放進招式庫。"
 LEARNED = "「{art}」的絕招學成了（{style}）：元寶 -{price}（還剩 {left}）。擂台上這一招發動時就照這樣演。"
@@ -96,23 +100,37 @@ def mine(wallet: Wallet, owner: str) -> list[Move]:
     return [m for m in (of(b) for b in wallet.purchases(owner)) if m is not None]
 
 
-def every(wallet: Wallet, item: str) -> list[Move]:
-    return [m for m in (of(b) for b in wallet.purchases_of(item)) if m is not None]
+def item_ids(content: Content) -> tuple[str, ...]:
+    """兩種絕招那兩件商品的 id（通用、獨門）：查某一招要兩件都看（購買那一列記的是買的那一件）。"""
+    return tuple(i.id for i in (item_of(content), item_of(content, True)) if i is not None)
 
 
-def item_of(content: Content) -> MallItem | None:
-    return next((i for i in content.mall.values() if i.effects.get(EFFECT)), None)
+def every(wallet: Wallet, items) -> list[Move]:
+    """這幾件商品賣出去的全部招式（items 可以是一個 id，也可以是 item_ids 那一串；舊的在前）。"""
+    names = (items,) if isinstance(items, str) else tuple(items)
+    out: list[Move] = []
+    for name in names:
+        out += [m for m in (of(b) for b in wallet.purchases_of(name)) if m is not None]
+    return sorted(out, key=lambda m: m.pid)
+
+
+def item_of(content: Content, basic: bool = False) -> MallItem | None:
+    """絕招那件商品：basic 是通用（60，不畫圖、當場學成），不然是獨門（300，一定畫圖、送出等審核）。"""
+    key = EFFECT_BASIC if basic else EFFECT
+    return next((i for i in content.mall.values() if i.effects.get(key)), None)
 
 
 def place(
     content: Content, wallet: Wallet, owner: str, art: str, art_name: str, style: str, prompt: str, ref: str, *,
-    now: float, day: int, season: int, move_name: str = "", draft: dict | None = None,
+    now: float, day: int, season: int, move_name: str = "", draft: dict | None = None, basic: bool = False,
 ) -> tuple[int | None, str]:
     """下單（同 orders.place 的那幾步）。art 是呼叫端驗過的、自己合成或自創的武功（空字串是沒有）。
     prompt 是玩家寫的一句（scenes.MAX_TEXT 字內、只能中文），當場變成導演稿（scenes.direct）存在這一列；
     draft 是模型在行動鎖外填好的那一張表（server.py 的三段式；沒有就走關鍵字導演）；
-    稿裡沒有要畫的就當場上架（學成），有要畫的（法相、巨物）等管理者上傳那幾張、審過再上架。move_name 是落款寫的招名。"""
-    item = item_of(content)
+    basic 是通用絕招（60 元寶，企劃者 2026-11-02）：不另外畫圖、只用現成的光效，當場上架（學成）；
+    獨門（300 元寶）一定要畫（法相、巨物），送出變等圖、畫好待審、管理者上架，那一句導不出東西就不收錢。
+    move_name 是落款寫的招名。"""
+    item = item_of(content, basic)
     if item is None:
         return None, NOT_SOLD
     if not art:
@@ -137,9 +155,14 @@ def place(
         if balance < item.price:
             return None, SHORT.format(price=item.price, balance=balance)
         scene = scenes.direct(prompt, move_name or art_name, draft)
+        if basic:  # 通用：要畫的那幾樣拿掉，只留現成的光效
+            scene = scenes.plain(scene)
         arts = scenes.needs_art(scene)
+        if not basic and not arts:  # 獨門卻沒東西可畫：不收錢（錢在下面才扣）
+            other = item_of(content, True)
+            return None, NO_SUBJECT.format(price=other.price if other is not None else 0)
         data = {EFFECT: 1, "art": art, "art_name": art_name, "style": style, "prompt": prompt, "status": orders.PENDING,
-                "bound_art": art, "bound_name": art_name, "bound_season": season, "scene": scene}
+                "bound_art": art, "bound_name": art_name, "bound_season": season, "scene": scene, "basic": basic}
         pid = wallet.add_purchase(owner, full, item.id, item.price, time=now, day=day, season=season, data=data)
         if not wallet.post(owner, -item.price, "buy", full, time=now, purchase_id=pid):
             raise RuntimeError(f"購買編號 {full} 已經記過帳，購買紀錄卻沒有")
@@ -147,7 +170,9 @@ def place(
             wallet.update_data(pid, status=orders.MADE, move_id=move_id(pid))
         left = wallet.balance(owner)
     words = {"art": art_name, "style": STYLES.get(style, style), "price": item.price, "left": left}
-    return pid, (WAIT_ART.format(arts="」「".join(a["label"] for a in arts), **words) if arts else LEARNED.format(**words))
+    if arts:
+        return pid, WAIT_ART.format(arts="」「".join(a["label"] for a in arts), **words)
+    return pid, (LEARNED_BASIC if basic else LEARNED).format(**words)
 
 
 def bind(wallet: Wallet, owner: str, pid: int, art: str, art_name: str, style: str, season: int) -> tuple[bool, str]:
@@ -178,12 +203,13 @@ def bound(wallet: Wallet, owner: str, art: str, style: str, season: int) -> str:
     return ""
 
 
-def find(wallet: Wallet, item: str, pid: int) -> Move | None:
-    return next((m for m in every(wallet, item) if m.pid == pid), None)
+def find(wallet: Wallet, items, pid: int) -> Move | None:
+    return next((m for m in every(wallet, items) if m.pid == pid), None)
 
 
 def view(content: Content, wallet: Wallet, owner: str, art: str, art_name: str, style: str, season: int) -> dict | None:
-    """萬寶閣「形象」那一頁的招式動畫：現在練的那一門（自己的才畫得了）、手上的打法、招式庫（上架了的，寫綁在哪）、訂單。"""
+    """萬寶閣「形象」那一頁的絕招：現在練的那一門（自己的才畫得了）、手上的打法、兩種版本的價錢
+    （通用 price_basic：不畫圖、當場學成；獨門 price：畫圖、送出等審核）、招式庫（上架了的，寫綁在哪）、訂單。"""
     item = item_of(content)
     if item is None:
         return None
@@ -202,8 +228,10 @@ def view(content: Content, wallet: Wallet, owner: str, art: str, art_name: str, 
                 "plays": on_art and not asleep, "asleep": asleep,
                 "asleep_text": ASLEEP.format(want=STYLES.get(m.style, m.style), have=STYLES.get(style, style)) if asleep else "",
                 "bindable": m.status == orders.MADE and bool(art) and m.style == style and not on_art}
+    cheap = item_of(content, True)
     return {
-        "price": item.price, "prompt_max": scenes.MAX_TEXT, "art": art_name, "has_art": bool(art),
+        "price": item.price, "price_basic": cheap.price if cheap is not None else 0,
+        "prompt_max": scenes.MAX_TEXT, "art": art_name, "has_art": bool(art),
         "style": style, "style_text": STYLES.get(style, style),
         "open": any(m.status in (orders.PENDING, orders.REVIEW) for m in moves),
         "order_style_note": ORDER_STYLE.format(style=STYLES.get(style, style)),

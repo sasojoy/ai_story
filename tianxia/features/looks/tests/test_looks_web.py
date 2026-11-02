@@ -161,7 +161,7 @@ def test_the_move_preview_shows_what_needs_drawing(m_on):  # noqa: F811
                  responses={"/api/looks/scene": {"scene": SCENE}, "/api/looks": looks})
     html = out["app"]
     assert any(c[0] == "/api/looks/scene" for c in out["calls"])
-    assert 'id="scene-preview"' in html and "要畫「大佛」「佛掌」" in html
+    assert 'id="scene-preview"' in html and "獨門會畫「大佛」「佛掌」" in html
     assert 'move-seal' in html and "/api/looks/img/m8/fx" not in html
     bad = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "move-preview" }'),
                  responses={"/api/looks/scene": {"problem": "只能寫中文。"}, "/api/looks": looks})["app"]

@@ -182,7 +182,7 @@ def scene_of(ctx: Game, mid: str) -> dict | None:
     wallet, item = ctx._wallet(), moves.item_of(ctx.content)
     if wallet is None or item is None or not moves.is_move(mid):
         return None
-    found = moves.find(wallet, item.id, int(mid[len(moves.PREFIX):]))
+    found = moves.find(wallet, moves.item_ids(ctx.content), int(mid[len(moves.PREFIX):]))
     return found.scene if found is not None and found.status == orders.MADE else None
 
 
@@ -210,20 +210,21 @@ def moves_view(ctx: Game) -> dict | None:
     return moves.view(ctx.content, wallet, ctx._mall_owner(), art, name, current_style(ctx), ctx.world.get_season_number())
 
 
-def order_move(ctx: Game, prompt: str, ref: str, draft: dict | None = None) -> list[str]:
-    """替現在練的武功下單招式動畫（moves.place）：成了寫一則「形象」江湖紀錄；生圖器是 fake 就當場抄範例、變成待審。"""
+def order_move(ctx: Game, prompt: str, ref: str, draft: dict | None = None, basic: bool = False) -> list[str]:
+    """替現在練的武功下單絕招（moves.place）：成了寫一則「形象」江湖紀錄；生圖器是 fake 就當場抄範例、變成待審。
+    basic 是通用絕招（60，用現成的光效、當場學成）；不然是獨門（300，照寫的東西畫圖、送出等審核）。"""
     wallet = ctx._wallet()
     if wallet is None or not rules.on(ctx.content):
         return ctx._log([rules.OFF])
     art, name = current_art(ctx)
     pid, line = moves.place(ctx.content, wallet, ctx._mall_owner(), art, name, current_style(ctx), prompt, ref,
                             now=ctx.pill_now(), day=ctx._pill_day(), season=ctx.world.get_season_number(),
-                            move_name=current_move_name(ctx), draft=draft)
+                            move_name=current_move_name(ctx), draft=draft, basic=basic)
     if pid is None:
         return ctx._log([line])
-    item = moves.item_of(ctx.content)
+    item = moves.item_of(ctx.content, basic)
     journal.add_entry(ctx.state, JournalEntry(time=ctx.state.world.time, title=TITLE, lines=[line], changes=[f"元寶 -{item.price}"]))
-    found = moves.find(wallet, item.id, pid)
+    found = moves.find(wallet, moves.item_ids(ctx.content), pid)
     if gen_mode() == "fake" and found.scene is None:  # 舊的光效單才抄範例；一句話自創要畫的等管理者上傳
         moves.fake_generate(image_root(ctx), moves.move_id(pid), FX_SAMPLE)
         moves.mark(wallet, found, image_root(ctx))
@@ -247,7 +248,7 @@ def _admin_move(ctx: Game, pid: int):
     item = moves.item_of(ctx.content)
     if wallet is None or item is None or not ctx.is_admin():
         return None, None, "（此刻無法這麼做。）"
-    found = moves.find(wallet, item.id, pid)
+    found = moves.find(wallet, moves.item_ids(ctx.content), pid)
     return wallet, found, None if found is not None else f"（沒有第 {pid} 號招式訂單。）"
 
 
@@ -288,7 +289,7 @@ def _admin_moves(ctx: Game, wallet) -> dict | None:
     if item is None:
         return None
     root = image_root(ctx)
-    every = moves.every(wallet, item.id)
+    every = moves.every(wallet, moves.item_ids(ctx.content))
     open_ = [m for m in every if m.status in (orders.PENDING, orders.REVIEW)]
     done = [m for m in reversed(every) if m.status not in (orders.PENDING, orders.REVIEW)][:10]
 

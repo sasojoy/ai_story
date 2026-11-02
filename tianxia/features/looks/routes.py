@@ -112,7 +112,7 @@ def router(shell) -> APIRouter:
 
     @r.post("/api/looks/move")
     def api_looks_move(request: Request, body: dict = Body(...)):
-        """招式動畫下單：{prompt, ref}（替現在練的那一門；打法照手上的兵器）；回 {message, looks, main}。"""
+        """絕招下單：{prompt, ref, basic}（替現在練的那一門；打法照手上的兵器。basic＝通用 60、不畫圖、當場學成；不帶就是獨門 300、一定畫圖、送出等審核）；回 {message, looks, main}。"""
         gate()
         game = shell._game(request)
         raw = body.get("ref")
@@ -120,7 +120,8 @@ def router(shell) -> APIRouter:
         prompt = str(body.get("prompt", ""))[:300]
         problem = shell.look(game, lambda g: actions.scene_problem(g, prompt))  # A：先驗，壞句子不必叫模型
         draft = None if problem else _draft(shell, game, prompt)  # B：鎖外問模型
-        msgs = shell.act(game, lambda g: actions.order_move(g, prompt, ref, draft))  # C：扣元寶、存稿
+        basic = bool(body.get("basic"))  # 通用絕招（60，不畫圖、當場學成）；不然是獨門（300，畫圖、送出等審核）
+        msgs = shell.act(game, lambda g: actions.order_move(g, prompt, ref, draft, basic))  # C：扣元寶、存稿
         shell._tell_tabs(game)
         return {"message": shell.joined(msgs), "looks": shell.look(game, lambda g: actions.view(g)),
                 "main": shell.look(game, shell.main_view)}

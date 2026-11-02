@@ -26,7 +26,8 @@ def on(content):
     content.looks = {"moying": Look(id="moying", name="墨影", bots=True)}
     content.mall = {i.id: i for i in (
         MallItem(id="look_order", name="自建形象", price=900, kind="look", effects={"look_order": 1}),
-        MallItem(id="move_order", name="招式動畫", price=300, kind="look", effects={"move_order": 1}),
+        MallItem(id="move_order", name="獨門絕招", price=300, kind="look", effects={"move_order": 1}),
+        MallItem(id="move_basic", name="通用絕招", price=60, kind="look", effects={"move_basic": 1}),
     )}
     content.config.admins = ["管理者"]
     return content
@@ -87,11 +88,12 @@ def test_order_upload_release_and_the_arena_draws_it(on):
 
 
 def test_a_line_with_nothing_to_draw_is_learned_on_the_spot(on):
-    """一句話自創（Joy 2026-11-01）：稿裡沒有要畫的（劍氣、光、冰……程式畫得出來）當場學成、上身，不用審核。"""
+    """通用絕招（60，企劃者 2026-11-02 分兩種）：用現成的光效演，當場學成、上身，不用審核。
+    同一句買獨門（300）會被退回來——沒有東西可畫，不收錢（見下一條）。"""
     game = _game(on)
     art = _art(game)
-    msgs = actions.order_move(game, "一劍寒光九萬里", "move-ref-010")
-    assert msgs[-1].startswith(f"「{art.name}」的絕招學成了") and Wallet(game.world.db).balance("沈浪") == 4700
+    msgs = actions.order_move(game, "一劍寒光九萬里", "move-ref-010", basic=True)
+    assert msgs[-1].startswith(f"「{art.name}」的通用絕招學成了") and Wallet(game.world.db).balance("沈浪") == 4940
     mid = game.arena_move()
     assert mid.startswith("m")
     scene = actions.scene_of(game, mid)
@@ -210,3 +212,20 @@ def test_bots_never_carry_a_move(on):
     game = _game(on, name="假人甲")
     game.state.player.bot = True
     assert game.arena_move() == ""
+
+
+def test_the_two_kinds_of_move(on):
+    """企劃者 2026-11-02：通用 60 不另外畫圖、當場學成；獨門 300 一定畫圖、送出等審核。
+    那一句導不出看得出形狀的東西就不准買獨門（也不收錢）；導得出來的買通用則把那一樣換成一道光。"""
+    game = _game(on)
+    _art(game)
+    wallet = Wallet(game.world.db)
+    # 沒東西可畫 → 獨門退回、一塊錢都不扣
+    msgs = actions.order_move(game, "一劍寒光九萬里", "move-ref-040")
+    assert "獨門絕招要畫一樣看得出形狀的東西" in msgs[-1] and "60" in msgs[-1]
+    assert wallet.balance("沈浪") == 5000
+    # 有東西可畫 → 買通用：那一樣換成一道光，當場學成、只扣 60
+    msgs = actions.order_move(game, "背後出現一座大佛擊出一掌", "move-ref-041", basic=True)
+    assert "通用絕招學成了" in msgs[-1] and wallet.balance("沈浪") == 4940
+    scene = actions.scene_of(game, game.arena_move())
+    assert scene["arts"] == [] and "光束" in [b["op"] for b in scene["beats"]] and "法相" not in [b["op"] for b in scene["beats"]]
