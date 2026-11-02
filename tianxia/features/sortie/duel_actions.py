@@ -146,7 +146,7 @@ def duel_option(ctx: Game, loc: Location) -> Option | None:
         return Option(id="act:train", label=f"{sortie.NAME}（{sortie.OUT_NOTE}）", enabled=False)  # 自家的大本營、廣宗
     problem = sortie_go_problem(ctx)
     if problem is not None and problem != sortie_duel.WHY_TIRED.format(n=cfg.jianfa_stamina):
-        # 格子只放得下四個字（FB-670）：整句在行動列底下那一行（_duel_line）與卡上的 why_not
+        # 格子只放得下四個字（FB-670）：整句在行動列底下那一行（duel_line）與卡上的 why_not
         return Option(id="act:train", label=f"{sortie.NAME}（{sortie_duel.cell_note(problem)}）", enabled=False)
     return ctx._cost_option("act:train", sortie.NAME, cfg.jianfa_stamina, note=sortie.LEFT_NOTE.format(n=left))  # 體力不夠照別格灰
 

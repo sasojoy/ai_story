@@ -1,7 +1,7 @@
 """管理者觸發鈕的伺服器路由與網頁（brief 2026-10-07-管理者觸發鈕）：
 
 - 路由：每一顆鈕走 /api/do/<op>（管理者以外 400「只有管理者能這麼做。」），查玩家個人劇情走 /api/admin/player（管理者以外 403）。
-- 網頁：設定抽屜的管理者工具只在管理者的畫面上畫新的鈕；按了先問一次，確定才送到對的路由（照 tests/test_prologue_web.py 的做法把整支
+- 網頁：管理頁（/admin，2026-11-01 從設定抽屜搬出來）畫新的鈕；按了先問一次，確定才送到對的路由（照 tests/test_prologue_web.py 的做法把整支
   app.js 放進 node 的假瀏覽器跑；沒有 node 就略過那幾個）。
 
 伺服器用正式內容的 7 天季（第一季的規則開著、軍令每天一道）、自己的一份（不碰別的測試的 server.CONTENT）。"""
@@ -147,16 +147,16 @@ def _views(client):
 @needs_node
 def test_the_new_controls_are_drawn_only_for_admins(client):
     _, main, admin = _views(client)
-    sheet = run(main, "return H.sheetHtml();", S={"admin": admin})
+    sheet = run(main, "return H.adminHtml();", S={"admin": admin})
     for text in ('data-op="issue_orders"', 'data-op="rotate_seats"', "立刻發今日軍令", "立刻輪替第 4 階席次",
                  'data-op="start_showdown" data-id="changshe_fire">立刻開這一場',
                  'data-op="start_showdown" data-id="wancheng" disabled>立刻開這一場', "要等張曼成攻殺南陽太守結算",
                  'data-op="start_showdown" data-id="guangzong">立刻開這一場'):
         assert text in sheet, text
-    player = run({**main, "admin": False}, "return H.sheetHtml();", S={"admin": admin})
+    player = run({**main, "admin": False}, "return H.sheetHtml();", S={"admin": admin})  # 設定抽屜：工具都在管理頁
     for text in ("管理者工具", "issue_orders", "rotate_seats", "start_showdown"):
         assert text not in player, text
-    beta = run(main, "return H.sheetHtml();", S={"admin": {**admin, "season_one": False, "showdowns": []}})
+    beta = run(main, "return H.adminHtml();", S={"admin": {**admin, "season_one": False, "showdowns": []}})
     assert "issue_orders" not in beta and "start_showdown" not in beta  # 開關關著：沒有每週的事、沒有三場大戲
 
 
@@ -166,11 +166,11 @@ def test_the_season_buttons_grey_out_by_the_seasons_phase(client):
     _, main, admin = _views(client)
     assert admin["phase"] == "running"
     for phase, live in (("running", "end_season"), ("preparing", "open_season"), ("resting", "next_season")):
-        sheet = run(main, "return H.sheetHtml();", S={"admin": {**admin, "phase": phase}})
+        sheet = run(main, "return H.adminHtml();", S={"admin": {**admin, "phase": phase}})
         for op in ("open_season", "end_season", "next_season"):
             grey = f'data-op="{op}" disabled>' in sheet
             assert grey == (op != live), (phase, op)
-    old = run(main, "return H.sheetHtml();", S={"admin": {k: v for k, v in admin.items() if k != "phase"}})
+    old = run(main, "return H.adminHtml();", S={"admin": {k: v for k, v in admin.items() if k != "phase"}})
     assert 'data-op="open_season">' in old  # 沒給階段（舊伺服器）：照舊按得下去
 
 
@@ -223,7 +223,7 @@ LOOKUP = """return (async () => {
   const note = { textContent: "", classList: { toggle() {} } };
   const form = { id: "ad-player-form", data: { name: " 沈青衫 " }, querySelector: (sel) => (sel === ".form-msg" ? note : null) };
   await T.docListeners.submit[0]({ preventDefault() {}, target: form });
-  const drawn = H.sheetHtml();
+  const drawn = H.adminHtml();
   const selects = {
     "ad-opp": { value: "guan_courier", selectedIndex: 0, options: [{ text: "官軍・第 3 階・荒丘的信使（天時地利型）" }] },
     "ad-frag": { value: "fs_changshe_guan:0", selectedIndex: 0, options: [{ text: "長社火攻・1／4（行動）" }] },
@@ -249,7 +249,7 @@ def test_the_player_lookup_draws_his_tools_and_each_button_posts_his_name(client
     _enlisted()
     _, main, admin = _views(client)
     view = client.post("/api/admin/player", json={"name": "沈青衫"}).json()
-    sheet = run(main, "return H.sheetHtml();", S={"admin": admin})
+    sheet = run(main, "return H.adminHtml();", S={"admin": admin})
     assert 'id="ad-player-form"' in sheet and "玩家個人劇情" in sheet and "立刻替他發召見" not in sheet  # 還沒查：只有欄位
     out = run(main, LOOKUP, S={"admin": admin, "sheet": True},
               responses={"/api/admin/player": view, "/api/do/": {"main": main, "message": "好了"}})
@@ -295,10 +295,100 @@ def test_the_bond_confirm_says_what_raising_affinity_also_does(client):
 def test_a_lookup_that_finds_nobody_says_so_in_the_form(client):
     _, main, admin = _views(client)
     refusal = client.post("/api/admin/player", json={"name": "沒這人"}).json()
-    sheet = run(main, "return H.sheetHtml();", S={"admin": admin, "adPlayer": refusal, "adPlayerName": "沒這人"})
+    sheet = run(main, "return H.adminHtml();", S={"admin": admin, "adPlayer": refusal, "adPlayerName": "沒這人"})
     assert "（江湖上沒有「沒這人」這個人。）" in sheet and "立刻替他發召見" not in sheet and 'value="沒這人"' in sheet
-    disabled = run(main, "return H.sheetHtml();", S={"admin": admin, "adPlayerName": "管", "adPlayer": {
+    disabled = run(main, "return H.adminHtml();", S={"admin": admin, "adPlayerName": "管", "adPlayer": {
         "name": "管", "line": "管：散人，在潁川", "summons": {"ok": False, "note": "（管是散人，沒有陣營可以召見他。）"},
         "opportunities": [], "fragments": []}})
     assert 'data-op="summon" disabled>立刻替他發召見' in disabled and "（管是散人，沒有陣營可以召見他。）" in disabled
     assert "沒有能給他的機緣" in disabled and "沒有能給他的伏筆片段" in disabled
+
+
+# ── 管理頁（/admin；Joy 2026-11-01「把管理員工具獨立一個網址」）─────────────
+
+
+def test_the_admin_page_has_its_own_address_and_a_now_card(client):
+    """/admin 回同一支網頁（網頁看網址畫管理頁）；/api/admin 多一份「現在」：第幾季、階段、季曆此刻、在打的決戰、各條大勢此刻的值。"""
+    assert client.get("/admin").status_code == 200 and client.get("/admin").text == client.get("/").text
+    game = _admin(client)
+    now = client.get("/api/admin").json()["now"]
+    assert now["season"] == game.world.get_season_number() and now["phase_text"] == "進行中" and now["when"]
+    assert now["battle"] is None
+    assert {t["id"] for t in now["trends"]} == {t.id for t in server.CONTENT.scenario.trends}
+    client.post("/api/do/start_showdown", json={"id": "changshe_fire"})
+    fight = client.get("/api/admin").json()["now"]["battle"]
+    assert fight["name"] == "長社火攻" and fight["phase"] == "集結中" and fight["people"] == 0
+
+
+def test_the_account_search_is_admin_only_and_matches_login_or_name(client):
+    player = TestClient(server.app)
+    _player(player)  # shen_01／沈青衫
+    _player(TestClient(server.app), login="lin_02", name="林小二")
+    assert player.post("/api/admin/accounts", json={"q": "shen"}).status_code == 403
+    _admin(client)
+    rows = client.post("/api/admin/accounts", json={"q": "SHEN"}).json()["rows"]
+    assert rows == [{"login": "shen_01", "character": "沈青衫"}]
+    assert client.post("/api/admin/accounts", json={"q": "小二"}).json()["rows"] == [{"login": "lin_02", "character": "林小二"}]
+    assert client.post("/api/admin/accounts", json={"q": "%"}).json()["rows"] == []  # % 是字，不是萬用字元
+    assert client.post("/api/admin/accounts", json={"q": "  "}).json()["rows"] == []
+
+
+ON_PAGE = """return (async () => {
+  T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
+  const target = (dataset) => ({ dataset, classList: { contains: () => false, add() {}, remove() {} } });
+  const click = (dataset) => T.docListeners.click[0]({ target: { closest: () => target(dataset) } });
+  await click({ act: "admin", op: "issue_orders" });
+  await click({ act: "ask-yes" });
+  return { result: H.S.adResult, tab: H.S.tab, page: T.els.app.innerHTML, calls: T.calls.map((c) => c[0]) };
+})();"""
+
+
+@needs_node
+def test_an_action_on_the_admin_page_stays_and_pins_the_result(client):
+    """做完一件事留在管理頁（不關抽屜、不回江湖），重抓管理資料，結果釘在畫面底下：成了的寫做的是哪一件，被拒的（括號開頭）紅字。"""
+    _, main, admin = _views(client)
+    out = run(main, ON_PAGE, S={"admin": admin, "adminPage": True},
+              responses={"/api/do/": {"main": main, "message": "<p>已照 00:00 的做法重發第 1 天的軍令。</p>"}, "/api/admin": admin})
+    assert out["result"] == {"title": "重發", "text": "已照 00:00 的做法重發第 1 天的軍令。", "ok": True}
+    assert "/api/admin" in out["calls"] and 'class="ad-result ok"' in out["page"] and "ad-shell" in out["page"]
+    refused = run(main, ON_PAGE, S={"admin": admin, "adminPage": True},
+                  responses={"/api/do/": {"main": main, "message": "（此刻無法這麼做。）"}, "/api/admin": admin})
+    assert refused["result"]["ok"] is False and 'class="ad-result bad"' in refused["page"] and "沒做成" in refused["page"]
+
+
+@needs_node
+def test_the_admin_page_shows_now_values_and_greys_what_cannot_be_done(client):
+    _, main, admin = _views(client)
+    page = run(main, "return H.adminHtml();", S={"admin": admin})
+    first = admin["trends"][0]
+    value = next(t["value"] for t in admin["now"]["trends"] if t["id"] == first["id"])
+    assert f'{first["label"]}（{value}）' in page and f'id="ad-value" type="number" value="{value}"' in page  # 定戰況先填現在的值
+    assert 'data-op="cancel_battle" disabled' in page and "沒有在打的決戰" in page  # 沒在打：取消決戰灰掉
+    assert 'data-act="ad-find"' in page and 'data-act="ad-gen"' in page  # 重設密碼：找帳號、產生臨時密碼
+    for title in ("賽季與時鐘", "決戰與時刻表", "大勢與事件", "玩家與帳號"):
+        assert f'<span class="ad-sec-title">{title}</span>' in page, title
+
+
+RESET = """return (async () => {
+  T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
+  T.ctx.FormData = function (form) { return Object.entries(form.data); };
+  const note = { textContent: "", classList: { toggle() {} } };
+  const form = { id: "reset-form", data: input.data, reset() {}, querySelector: (sel) => (sel === ".form-msg" ? note : null) };
+  await T.docListeners.submit[0]({ preventDefault() {}, target: form });
+  const asked = T.bodyHtml.length ? T.bodyHtml[T.bodyHtml.length - 1] : "";
+  if (asked) await T.docListeners.click[0]({ target: { closest: () => ({ dataset: { act: "ask-yes" }, classList: { contains: () => false } }) } });
+  return { note: note.textContent, asked, result: H.S.adResult, calls: T.calls.map((c) => c[0]) };
+})();"""
+
+
+@needs_node
+def test_reset_password_checks_the_length_first_and_pins_the_temp_password(client):
+    import json
+
+    _, main, admin = _views(client)
+    short = run(main, RESET.replace("input.data", json.dumps({"target": "shen_01", "temp": "abc"})), S={"admin": admin, "adminPage": True})
+    assert "至少 6 個字" in short["note"] and not short["asked"] and "/api/admin/reset_password" not in short["calls"]
+    done = run(main, RESET.replace("input.data", json.dumps({"target": "shen_01", "temp": "abcdefgh"})), S={"admin": admin, "adminPage": True},
+               responses={"/api/admin/reset_password": {"message": "已重設 shen_01 的密碼。"}})
+    assert "臨時密碼是「abcdefgh」" in done["asked"]
+    assert done["result"]["ok"] is True and "abcdefgh" in done["result"]["text"]

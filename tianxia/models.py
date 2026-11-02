@@ -3718,6 +3718,9 @@ class MallTuning(_Strict):
     card_daily_ingots: int = Field(default=0, ge=0)
     card_daily_pills: int = Field(default=0, ge=0)
     records_shown: int = Field(default=50, ge=1)  # 購買紀錄與帳的畫面、管理者查帳最多列幾筆【預設】
+    # 形象市集（功能包 looks 第四批）：只准用儲值的元寶買別人的形象（設計 v3：封測、月卡送的元寶不能變成別人的收入）。
+    # Joy 已同意只准儲值元寶買；還沒有金流、沒有儲值，所以先關著（封測元寶也買得了）。接上金流的那一刻一定要打開【預設】
+    market_paid_only: bool = False
 
 
 class MallLimit(_Strict):
@@ -3742,9 +3745,21 @@ class MallWindow(_Strict):
     from_week: int | None = Field(default=None, ge=1)
 
 
+class Look(_Strict):
+    """一套擂台形象（content/looks.json；功能包 tianxia/features/looks/）。圖在 web/img/looks/<id>/，檔名與張數照預設的斗笠小子
+    （web/img/arena/ 的 hero_*.webp，十張）。預設的斗笠小子不寫在這裡（id 是空字串）。"""
+
+    id: str
+    name: str  # 過 naming.name_problem
+    note: str = ""  # 一句說明（joy 寫）
+    bots: bool = False  # 假人也穿（照名號的雜湊挑；不然穿這一套的一定是真人，看得出來）
+    draft: str = ""  # 作者的備註；不給玩家看
+
+
 class MallItem(_Strict):
     """商城的一件商品（content/mall.json，joy 寫；4.3）。效果只能從 mall.EFFECTS（允許的效果表）挑、種類要對得上，載入時
-    content.check_mall 擋表外的。外觀（look）、通行證（pass）的種類留著，這一版允許表裡沒有它們的效果，所以寫不出來（4.3）。"""
+    content.check_mall 擋表外的。形象（look）賣 content/looks.json 的一套（look 寫那一套的 id）；通行證（pass）的種類留著，
+    這一版允許表裡沒有它的效果，所以寫不出來（4.3）。"""
 
     id: str
     name: str  # 過 naming.name_problem
@@ -3755,6 +3770,7 @@ class MallItem(_Strict):
     limit: MallLimit = Field(default_factory=MallLimit)
     on_sale: MallWindow = Field(default_factory=MallWindow)
     draft: str = ""  # 作者的備註（例「PM 佔位：名字、說明、價錢待 joy」）；不給玩家看
+    look: str = ""  # 形象（kind 是 look）賣的是 content/looks.json 的哪一套
 
 
 class Config(_Strict):
@@ -5200,11 +5216,12 @@ class Content(_Strict):
     shop_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)  # 店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4）：店 → 情況 → 句子；沒有這個檔就是空的
     seal: dict[str, ShardDef] = Field(default_factory=dict)  # 玉璽碎片（content/seal.json，照 id）；沒有這個檔就是空的（碎片關著）
     mall: dict[str, MallItem] = Field(default_factory=dict)  # 商城的商品（content/mall.json，照 id、照檔案的順序）；沒有這個檔就是空的
+    looks: dict[str, Look] = Field(default_factory=dict)  # 擂台形象（content/looks.json，照 id、照檔案的順序）；沒有這個檔就是空的（只有預設的斗笠小子）
     itineraries: list[Itinerary] = Field(default_factory=list)  # 人物的行程（content/itineraries.json，世界活起來）；沒有這個檔就是沒有
     relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有
     gather_branches: dict[str, GatherBranch] = Field(default_factory=dict)  # 找素材分支（content/gather_branches.json，照內容的順序）；沒有這個檔就是空的（分支關著）
     mark_rules: list[MarkRule] = Field(default_factory=list)  # 地方痕跡過門檻（content/mark_rules.json，減法季批 4）；沒有這個檔就是空的
-    # 探索一顆出門一趟的段落句子（content/outing_lines.json，減法季批 2；explore_one.paragraph 讀、content.check_outing_lines 驗）：
+    # 探索一顆出門一趟的段落句子（content/outing_lines.json，減法季批 2；explore_one.paragraph 讀、探索包 checks.check_outing_lines 驗）：
     # 拍的類 → 結果 → 句子；沒有這個檔就是空的（照 explore_one.FALLBACK 寫）
     outing_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     # 人物評曰的固定句（content/verdicts.json，減法季批 7b-2；模型叫不動時照它，待 joy 潤）：寫的理由（affinity／tier／bought）→ 句子，

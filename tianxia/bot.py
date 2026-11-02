@@ -514,14 +514,15 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     # 設伏、修工事、屯糧（ambush:、works:，後期體力玩法）：體力夠就一直按得下去、收伏一直按得下去；整季機器人只有一個人，劫不到誰，不做
     # 護衛、犒軍、探望（aid:，figure_aid）：體力夠就按得下去；整季機器人不做（同 works:）；宴客（feast:）不花體力、入席離席能一直按
 # （宴客搬進功能包：排除的前綴改由那一包宣告，features_core.bot_always）
-    # 酒肆（act:tavern、tavern:）同鐵匠鋪：在城裡一直按得下去；整季機器人只有一個人，打聽不到誰，不進
+    # 酒肆（act:tavern、tavern:）同鐵匠鋪：在城裡一直按得下去；整季機器人只有一個人，打聽不到誰，不進（tavern: 由酒肆包的 bot_always
+    # 宣告，第 11 批拿掉這裡重複的那一個；act:tavern 是核心 act 前綴的一顆，照留在下面那張清單）
     # 拜入門派（sect:，一類一顆）：不花體力、婉拒之後還在，同 act:rest；只在第一次看到那一則時按得下去（還是隨機挑，婉拒的就不再按）
     options = [o for o in options if not o.id.startswith("sect:") or o.id.partition(":")[2] not in s.player.seen_events]
     options = [
         o for o in options
         if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", "act:market", "act:heal", "act:arena", "act:donate", "act:dadian",
                         "act:tavern", DUEL_FLEE, ARENA_YIELD)
-        and not o.id.startswith(("road:", "defect:", "invite:", "smith:page:", "donate:", "dadian:", "ambush:", "works:", "aid:", "tavern:",
+        and not o.id.startswith(("road:", "defect:", "invite:", "smith:page:", "donate:", "dadian:", "ambush:", "works:", "aid:",
                                  "act:recruit:", "errand:", "faction:lean:") + features_core.bot_always())  # 功能包宣告的永遠按得下去
     ]  # 招募歷史武將（act:recruit:<id>，歷史武將同行第七節）：整季機器人不招。託付（errand:，減法季批 6）：機器人不收託付，萬一有也不按（勸降要寫字）。頭目戰的抽身退走（DUEL_FLEE）：打到一半一直按得下去，機器人照出招打完
     # 豪強改幫另一軍（faction:lean:，三陣營四勝利）：隨時按得下去、不花體力，同叛投排除（機器人不換邊）

@@ -59,10 +59,17 @@ def _stages(feature, game):
 
 
 def _own_ids(feature, game) -> list[str]:
+    """這一包在每一種局面給的選項（options、接管的選單，與坐在它的店裡時店裡那一串——店面登記，第 11 批）。行動列那一格（Verb.cell）
+    給的是核心 act: 前綴的 id，不算這一包的。"""
     ids = []
     for _ in _stages(feature, game):
         ids += [o.id for o in feature.options(game)] + [o.id for o in (feature.menu(game) or [])]
+        ids += [o.id for shop in feature.shops() if shop.inside(game) for o in shop.menu(game)]
     return ids
+
+
+def _starts(option_id: str, feature) -> bool:
+    return any(option_id.startswith(f"{p}:") for p in features_core.prefixes(feature))
 
 
 def test_each_folder_is_one_registered_package_with_a_readme():
@@ -70,8 +77,98 @@ def test_each_folder_is_one_registered_package_with_a_readme():
     assert sorted(f.name for f in FEATURES) == folders
     for f in FEATURES:
         assert (FEATURE_DIR / f.name / "README.md").exists(), f.name
-    prefixes = [f.prefix for f in FEATURES if f.prefix is not None]
-    assert len(prefixes) == len(set(prefixes))
+
+
+def test_no_two_packages_claim_the_same_prefix_verb_or_shop():
+    """前綴（Feature.prefix 收字串或 tuple，第 11 批 PM 定）攤開之後全部不重複：分派照第一個對上的，兩包同一個前綴就分不清了。
+    act 子動詞（Verb）一格只有一個主人、店面（Shop）的 key 不重複（同一個道理）。"""
+    prefixes = [p for f in FEATURES for p in features_core.prefixes(f)]
+    assert len(prefixes) == len(set(prefixes)), prefixes
+    assert all(p and ":" not in p for p in prefixes), prefixes
+    verbs = [v.verb for f in FEATURES for v in f.verbs()]
+    assert len(verbs) == len(set(verbs)), verbs
+    keys = [s.key for f in FEATURES for s in f.shops()]
+    assert len(keys) == len(set(keys)), keys
+
+
+def test_a_tuple_prefix_is_spread_and_dispatched_by_the_first_match(monkeypatch):
+    """一包兩三個前綴寫 tuple：prefixes 攤開，owner_of 照清單、照前綴找第一個對上的；字串照收、None 是沒有前綴。"""
+    from tianxia.core import registry
+    from tianxia.core.features import Feature
+
+    class Two(Feature):
+        name, prefix = "two", ("duel", "arena")
+
+    class One(Feature):
+        name, prefix = "one", "seal"
+
+    two, one = Two(), One()
+    monkeypatch.setattr(registry, "FEATURES", [one, two])
+    assert features_core.prefixes(two) == ("duel", "arena") and features_core.prefixes(one) == ("seal",)
+    assert features_core.prefixes(Feature()) == ()
+    assert features_core.owner_of("arena:fight:x") is two and features_core.owner_of("duel:強攻") is two
+    assert features_core.owner_of("seal:go") is one and features_core.owner_of("act:arena") is None
+
+
+def _held_functions(fn) -> list:
+    """fn 與它的閉包裡（一層層往下）存著的函式物件。"""
+    out, stack, seen = [], [fn], set()
+    while stack:
+        f = stack.pop()
+        if id(f) in seen or not hasattr(f, "__code__"):
+            continue
+        seen.add(id(f))
+        out.append(f)
+        for cell in getattr(f, "__closure__", None) or ():
+            try:
+                stack.append(cell.cell_contents)
+            except ValueError:  # 還沒賦值的格
+                continue
+    return out
+
+
+@pytest.mark.parametrize("feature", FEATURES, ids=lambda f: f.name)
+def test_declared_seams_look_up_the_package_functions_when_called(feature):
+    """店面登記（Shop）與 act 子動詞（Verb）建一次就留著（契約照同一個物件認），裡面每一格卻要在叫的那一下才去包的模組找函式
+    （批次表第二節「同一個模組物件，monkeypatch 照樣有效」；原本 Game 上的委派每次照模組屬性找）：宣告裡、它的閉包裡都不准存著
+    包裡別的模組的函式物件（`menu=actions.tavern_options`、`on = explore_actions.outing_on`）——存了的話，建好之後換掉模組上的函式打不到，
+    建之前就換的話還原之後還留著，漏到同一個行程後面的測試（第 11 批審查）。寫成在包的 __init__ 裡的 lambda、照模組屬性叫。"""
+    import dataclasses
+
+    home = type(feature).__module__
+    for decl in [*feature.shops(), *feature.verbs()]:
+        for field in dataclasses.fields(decl):
+            value = getattr(decl, field.name)
+            if not callable(value):
+                continue
+            held = [f"{f.__module__}.{f.__qualname__}" for f in _held_functions(value) if f.__module__ != home]
+            assert not held, (feature.name, type(decl).__name__, getattr(decl, "verb", getattr(decl, "key", None)), field.name, held)
+
+
+def test_a_patched_package_function_reaches_the_seam_before_and_after_the_first_call(monkeypatch):
+    """同上，照實際的路走一次：先照常問一次紀錄標題（宣告建好），再換掉酒肆的招牌、探索的開關，掛鉤要叫到換過的；宣告建之前就換、
+    換回來之後，掛鉤要跟著回到真的那一個（不留在閉包裡）。"""
+    from tianxia import journal
+    from tianxia.features.explore import FEATURE as explore
+    from tianxia.features.explore import explore_actions
+    from tianxia.features.tavern import actions as tavern_actions
+
+    game = _game()
+    game._action_title("act", "tavern")
+    game._action_title("act", "explore")
+    monkeypatch.setattr(tavern_actions, "tavern_sign", lambda ctx: "換過的招牌")
+    assert game._action_title("act", "tavern") == "換過的招牌"
+    real = bool(explore_actions.outing_on(game))
+    monkeypatch.setattr(explore_actions, "outing_on", lambda ctx: not real)
+    assert game._action_title("act", "explore").startswith(journal.OUTING) is (not real)
+    monkeypatch.undo()
+
+    monkeypatch.setattr(explore, "_verbs", None)  # 宣告還沒建（例：同一個 worker 裡這是第一個問它的測試）
+    with monkeypatch.context() as m:
+        m.setattr(explore_actions, "outing_on", lambda ctx: not real)
+        assert game._action_title("act", "explore").startswith(journal.OUTING) is (not real)
+    assert bool(explore_actions.outing_on(game)) is real
+    assert game._action_title("act", "explore").startswith(journal.OUTING) is real
 
 
 def test_every_package_web_file_is_loaded_by_the_page_and_the_web_harness():
@@ -104,8 +201,8 @@ def test_options_carry_the_package_prefix(feature):
     ids = _own_ids(feature, game)
     if feature.prefix is None:
         assert ids == []
-    assert all(i.startswith(f"{feature.prefix}:") for i in ids), ids
-    assert all(p.startswith(f"{feature.prefix}:") for p in feature.bot_always), feature.bot_always
+    assert all(_starts(i, feature) for i in ids), ids
+    assert all(_starts(p, feature) for p in feature.bot_always), feature.bot_always
 
 
 @pytest.mark.parametrize("feature", FEATURES, ids=lambda f: f.name)
@@ -131,9 +228,15 @@ def test_a_closed_package_gives_nothing(feature, monkeypatch):
     assert staged and feature not in features_core.active(game)
     assert features_core.menu(game) is None
     assert not shown & set(game.feature_status())
+    # 給選項的接縫掛鉤（第 11 批）也不給：店裡那一串、進店那一顆、行動列那一格（一格只有一個主人，主人關著就沒人接）
+    assert not any(s in features_core._shops(game, gated=True) for s in feature.shops())
+    entries = features_core.shop_entries(game)
+    assert not any((e := s.entry(game)) is not None and e in entries for s in feature.shops())
+    loc = game.content.locations[game.state.player.location]
+    assert all(features_core.act_cell(game, v.verb, loc, 0, False) is None for v in feature.verbs() if v.cell is not None)
     if feature.prefix is not None:
-        assert not any(o.id.startswith(f"{feature.prefix}:") for o in features_core.options(game))
-        assert not any(o.id.startswith(f"{feature.prefix}:") for o in game.options())
+        assert not any(_starts(o.id, feature) for o in features_core.options(game))
+        assert not any(_starts(o.id, feature) for o in game.options())
     for option_id in own:
         kind, _, arg = option_id.partition(":")
         assert features_core.choose(game, kind, arg) is None

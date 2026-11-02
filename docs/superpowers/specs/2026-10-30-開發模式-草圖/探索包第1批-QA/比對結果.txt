@@ -1,0 +1,161 @@
+探索包第 1 批（主動搬六包第 3＋4 批）QA：BASE origin/feature/explore 6d926c17 對 HEAD dev/explore-1 a6f6f432，同一份快照、凍住的時鐘與亂數（serve.py），
+逐鏡比「藏了走一趟畫布與提示泡泡」的那一張的像素、DOM、看得到的元素的位置與算好的樣式（畫布是動畫、粒子用 Math.random，原樣那一張另存給人看）；跑完的資料庫逐表比。
+== cmp-season21-bb.txt
+﻿m375l-30-o-say-dirty: 像素 一樣；DOM/字 一樣；樣式與位置 2 行不同；橫捲 [375, 375, 375, 375]
+    sig -div|這話說得太難聽，江湖人也聽不下去。換句話吧。|94,682,188,66|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|0|none|-apple-system, BlinkMacSystemFont, "Ping|visible
+    sig +div.show|這話說得太難聽，江湖人也聽不下去。換句話吧。|94,662,188,66|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|1|none|-apple-system, BlinkMacSystemFont, "Ping|visible
+base 對 base2：165 鏡，藏了畫布與提示泡泡之後完全一樣 164 鏡（連畫布也一樣 69 鏡）
+== db-season21-bb.txt
+﻿accounts: 一樣（25 列）
+action_counts: 一樣（25 列）
+action_firsts: 一樣（4 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（25 列）
+chronicle: 一樣（4 列）
+faction_rolls: 一樣（0 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（25 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（16 列）
+mall_purchases: 一樣（12 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumors: 一樣（22 列）
+seasons: 一樣（1 列）
+sessions: 一樣（49 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== cmp-season21-bh.txt
+﻿m375l-29-o-say-fake: 像素 一樣；DOM/字 一樣；樣式與位置 2 行不同；橫捲 [375, 375, 375, 375]
+    sig -div.show|這話說得太難聽，江湖人也聽不下去。換句話吧。|94,662,188,66|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|1|none|-apple-system, BlinkMacSystemFont, "Ping|visible
+    sig +div|這話說得太難聽，江湖人也聽不下去。換句話吧。|94,682,188,66|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|0|none|-apple-system, BlinkMacSystemFont, "Ping|visible
+m375l-30-o-say-dirty: 像素 一樣；DOM/字 一樣；樣式與位置 2 行不同；橫捲 [375, 375, 375, 375]
+    sig -div|這話說得太難聽，江湖人也聽不下去。換句話吧。|94,682,188,66|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|0|none|-apple-system, BlinkMacSystemFont, "Ping|visible
+    sig +div.show|這話說得太難聽，江湖人也聽不下去。換句話吧。|94,662,188,66|14px|400|23.1px|rgb(244, 237, 224)|rgb(42, 36, 29)|none|rgb(244, 237, 224)|0px|12px|10px 16px|0px|block|none|1|none|-apple-system, BlinkMacSystemFont, "Ping|visible
+base 對 head：165 鏡，藏了畫布與提示泡泡之後完全一樣 163 鏡（連畫布也一樣 68 鏡）
+== db-season21-bh.txt
+﻿accounts: 一樣（25 列）
+action_counts: 一樣（25 列）
+action_firsts: 一樣（4 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（25 列）
+chronicle: 一樣（4 列）
+faction_rolls: 一樣（0 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（25 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（16 列）
+mall_purchases: 一樣（12 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumors: 一樣（22 列）
+seasons: 一樣（1 列）
+sessions: 一樣（49 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== cmp-week7.txt
+﻿base 對 head：28 鏡，藏了畫布與提示泡泡之後完全一樣 28 鏡（連畫布也一樣 15 鏡）
+== db-week7.txt
+﻿accounts: 一樣（25 列）
+action_counts: 一樣（25 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（25 列）
+chronicle: 一樣（2 列）
+faction_rolls: 一樣（0 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（25 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（41 列）
+mall_purchases: 一樣（12 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumors: 一樣（10 列）
+seasons: 一樣（1 列）
+sessions: 一樣（29 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== cmp-none.txt
+﻿base 對 head：32 鏡，藏了畫布與提示泡泡之後完全一樣 32 鏡（連畫布也一樣 32 鏡）
+== db-none.txt
+﻿accounts: 一樣（25 列）
+action_counts: 一樣（25 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（25 列）
+chronicle: 一樣（0 列）
+faction_rolls: 一樣（0 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（25 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（16 列）
+mall_purchases: 一樣（12 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumors: 一樣（1 列）
+seasons: 一樣（1 列）
+sessions: 一樣（33 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0
+== cmp-weekend.txt
+﻿base 對 head：32 鏡，藏了畫布與提示泡泡之後完全一樣 32 鏡（連畫布也一樣 32 鏡）
+== db-weekend.txt
+﻿accounts: 一樣（25 列）
+action_counts: 一樣（25 列）
+action_firsts: 一樣（0 列）
+battle_rounds: 一樣（0 列）
+battles: 一樣（0 列）
+biographies: 一樣（0 列）
+character_backups: 一樣（0 列）
+characters: 一樣（25 列）
+chronicle: 一樣（1 列）
+faction_rolls: 一樣（0 列）
+gear_recipes: 一樣（0 列）
+insight_firsts: 一樣（0 列）
+insight_recipes: 一樣（0 列）
+insights: 一樣（0 列）
+logins: 一樣（25 列）
+mall_entitlements: 一樣（0 列）
+mall_ledger: 一樣（16 列）
+mall_purchases: 一樣（12 列）
+masters: 一樣（0 列）
+recipes: 一樣（0 列）
+rumors: 一樣（8 列）
+seasons: 一樣（1 列）
+sessions: 一樣（33 列）
+skill_aliases: 一樣（0 列）
+skills: 一樣（0 列）
+world: 一樣（1 列）
+不一樣的表： 0

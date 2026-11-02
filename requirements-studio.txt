@@ -1,0 +1,6 @@
+# 畫坊（run_studio.py：自動生圖、審圖、修圖）才要裝；伺服器、假人程式不用。主機：.venv/Scripts/python.exe -m pip install -r requirements-studio.txt
+-r requirements.txt
+anthropic>=1.0
+pillow>=10
+numpy>=1.26
+scipy>=1.11

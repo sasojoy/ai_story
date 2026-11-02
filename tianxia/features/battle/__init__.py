@@ -1,0 +1,67 @@
+"""全服決戰（官軍、黃巾兩軍在一個大區集結、一回合一回合打；收場之後每個人下一次同步補戰報、江湖紀錄、軍餉、行狀）。功能包，開發規範手冊 3.2；
+主動搬六包第 5 批搬進「看」的那一半。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
+
+- rules.py：決戰畫面與戰報的字、常數，鎖外三段式的兩張單子（放手一搏評分、補劇情）
+- view.py：原本 Game 上「看」那一半的 31 個方法——場景、戰局條、攻城條、一回合一段的戰況、收場補送（戰報、江湖紀錄、軍餉、行狀、戰功）、
+  補回被洗掉的戰報、放手一搏的輸入框與三段式、補劇情（Game 留 22 個一行委派）
+- admin.py：全部拆包第 6 批，管理者的決戰工具 7 個方法——立刻開戰的選單、立刻開戰、取消決戰、三場大戲那三顆鈕（Game 留 6 個一行委派）
+- sieges.py：全部拆包第 6 批，攻城 7 個方法——還沒收場的那一串、這一場的定義、推一場、收兵、取消、收場與守城軍令（Game 留 6 個一行委派；
+  攻城的規則本身在 tianxia/siege.py，共用規則層）
+
+這一批（第 6 批也是）不拿選項前綴（prefix 是 None）：battle: 的分派（集結、投效、挑同伴、出招）是「打」那一半，還在 Game（第 7、8 批），第 7 批搬集結時
+拿前綴、同時把 bot_policy.score 的 battle: 那一段搬進這一包的 bots.py。所以這一包現在只接 enabled 與欄位，假人照舊走 bot_policy。
+換季照帶補過的決戰（carried 那一格）照舊寫在 Game._reset_player_for_new_season、不掛 on_season_start（同出陣第 1 批審查之後的做法）。
+"""
+from __future__ import annotations
+
+from tianxia.core.features import Feature
+
+
+class BattleFeature(Feature):
+    name = "battle"
+    prefix: str | None = None  # 第 7 批（集結）拿 battle:；這一批搬的「看」那一半沒有選項
+    content = ("battles.json",)  # 決戰與攻城範本（content.py 照舊讀；攻城的規則在 siege.py，共用規則層）
+    # 補過的決戰（跨季照帶：決戰常把季收掉，下一季才回來的人也要補、而且只補一次）、這一季參戰幾場與首功幾次（玩家卡、名帖）。
+    # showdowns_restored（補回被洗掉的戰報，一季查一次）也是這一包的，但每一季第一次同步就寫成那一季的編號：契約測試的「換季回到預設」
+    # 對它不成立，不放進來（README 照列）
+    player_fields = ("battle_results_seen", "showdowns", "top_merits")
+    carried = ("battle_results_seen",)  # Game._reset_player_for_new_season 照帶（不看開關，同商城、出陣的 carried）
+
+    def enabled(self, ctx) -> bool:
+        """內容裡有決戰（battles.json）就有：決戰本身沒有開關（beta、第一季、減法季都打）。遊戲當下的掛鉤全是預設的空的，開著關著結果都一樣；
+        第 11 批的接縫掛鉤不問它（下面）。"""
+        return bool(ctx.content.battles)
+
+    # ── 接縫掛鉤（全部拆包第 11 批：原本在 Game 原位直接叫這一包的那幾行；不問 enabled）──
+
+    def deliver_results(self, ctx) -> None:
+        """收場補送（原本 Game.sync 補份量快照之後、玉璽碎片之前那一行）：下線時收場的決戰與攻城，回來第一次同步補上（休季、籌備中也一樣，
+        FB-027）。經 Game 叫：tests/core/test_renown_cross.py 換掉 Game._deliver_battle_results（服務清單三、過渡）。"""
+        ctx._deliver_battle_results()
+
+    def scene_over(self, ctx):
+        """蓋在畫面上的（原本 Game.scene_text 最前面那幾行）：有全服戰鬥時大家都看得到戰場（序章裡不畫，_battle_for_me；tick=False：一次請求
+        只推進一次）；回（戰場那一段, 開打了在場上的人〔_fighting〕戰場整個取代畫面）。沒有是 None。"""
+        from . import view  # noqa: PLC0415
+
+        battle_status = ctx._battle_for_me(tick=False)
+        if battle_status is None:
+            return None
+        return view.battle_scene_text(ctx, *battle_status), ctx._fighting(*battle_status)
+
+    def record_detail(self, ctx, record):
+        """戰報頁那一筆（原本 Game.battle_detail 裡那幾行）：決戰那一筆照 battles 表重讀完整戰況（收場之後才補上的放手一搏劇情也在）；
+        不是決戰、表上沒有那一場、自己不在名單上、內容裡沒有那一場是 None（照原本那一筆）。"""
+        if record.battle_ref is None:
+            return None
+        from . import view  # noqa: PLC0415
+
+        battle = ctx.world.ended_battle(record.battle_ref)
+        me = battle.participants.get(ctx.state.player.name) if battle is not None else None
+        definition = ctx.content.battles.get(battle.battle_id) if battle is not None else None
+        if me is None or definition is None:
+            return None
+        return record.model_copy(update={"log": view.round_blocks(ctx, battle, definition, last=None, oldest_first=True, me=me)})
+
+
+FEATURE = BattleFeature()

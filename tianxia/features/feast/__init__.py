@@ -51,5 +51,12 @@ class FeastFeature(Feature):
 
         return bots.score(option)
 
+    def scene(self, ctx):
+        """自己眼前的場景卡（接縫掛鉤，全部拆包第 11 批；原本 Game._own_scene_text 擂台之後那一行）：坐在宴席上時是主人、地方、最近三句
+        敬酒詞那一張；沒坐著是 None。不問 enabled：原位本來就不看宴客開關。"""
+        from . import actions  # noqa: PLC0415
+
+        return actions.scene(ctx)
+
 
 FEATURE = FeastFeature()

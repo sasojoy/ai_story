@@ -877,7 +877,7 @@ def m():
 
 
 def _sheet(m, admin):
-    return webharness.run(DRIVER, {"m": {**m, "admin": True}, "script": "return H.sheetHtml();", "S": {"admin": admin},
+    return webharness.run(DRIVER, {"m": {**m, "admin": True}, "script": "return H.adminHtml();", "S": {"admin": admin},
                                    "menxia": None, "stored": {}, "responses": {}})
 
 

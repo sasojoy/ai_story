@@ -1618,9 +1618,10 @@
   // 第一次（每一次打開輿圖）看哪裡：選了一處以它為中心、放到 MV_PICK_Z；不然以你為中心、MV_OPEN_Z
   function camFirst(g) {
     const st = S.mapState, base = S.mapBase;
-    // 選了一處：連另一頭（護糧的終點，不然是你）一起框進露出來的那一塊（留邊給字），最多放到 MV_PICK_Z；
-    // 兩頭太遠、框進來字就看不到了（拉遠到只剩大區）才只看選了的那一處
-    const leg = mapLeg(), a = S.mapSel && placeXY(S.mapSel), b = leg ? placeXY(leg.to) : st && !st.journey && youXY(base, st);
+    // 選了一處：以它為中心、放到 MV_PICK_Z（從你這裡過去的路照畫）。不連你一起框：框進來鏡頭停在兩地中間，
+    // 看起來像沒跳到目標（Joy 2026-11-01「點下去不是應該直接地圖在南陽郊野嗎」）。
+    // 護糧那種有終點的才兩點一起框（留邊給字），兩頭太遠、框進來字就看不到了才只看選了的那一處
+    const leg = mapLeg(), a = S.mapSel && placeXY(S.mapSel), b = leg && placeXY(leg.to);
     if (a && b) {
       const room = mapRoom(g), w = Math.abs(a[0] - b[0]) + 320, h = Math.abs(a[1] - b[1]) + 160;
       const z = Math.min(MV_PICK_Z, (g.vw - 16) / w, (room.bottom - room.top - 16) / h);

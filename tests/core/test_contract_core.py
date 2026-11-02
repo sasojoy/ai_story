@@ -9,7 +9,7 @@ import pytest
 from conftest import next_season
 from tianxia.core import features as features_core
 from tianxia.core import registry
-from tianxia.core.features import AdminTool, Feature, Outcome
+from tianxia.core.features import AdminTool, Feature, Outcome, Shop, Verb
 from tianxia.core.option import Option
 from tianxia.engine import Game
 
@@ -188,3 +188,206 @@ def test_admin_tools_merge_and_refuse_the_same_name_twice(monkeypatch):
 def test_owner_of_goes_by_the_prefix(fake):
     assert features_core.owner_of("fake:do") is fake
     assert features_core.owner_of("fakeish:do") is None and features_core.owner_of("act:explore") is None
+
+
+# ── 接縫掛鉤（全部拆包第 11 批「核心收接縫」；計畫 docs/superpowers/plans/2026-11-01-核心收接縫.md 1.3）──
+# 另一個假的包：舊的 Fake 不動（test_a_closed_package_is_never_asked 照舊守遊戲當下的掛鉤），接縫掛鉤記在同一份 calls。
+
+
+class Seams(Fake):
+    """接縫掛鉤每一個都記；shop、verb 兩個宣告照旗標回答。"""
+
+    def __init__(self, open_=True):
+        super().__init__(open_)
+        self.in_shop, self.shop_here, self.seated, self.over = False, True, False, None
+
+    def on_due(self, ctx):
+        self._note("on_due")
+
+    def on_away(self, ctx, away_from):
+        self._note("on_away", away_from)
+
+    def deliver_results(self, ctx):
+        self._note("deliver_results")
+
+    def deliver_notices(self, ctx):
+        self._note("deliver_notices")
+
+    def choose_unlisted(self, ctx, option_id):
+        if option_id != "fake:raw":
+            return None
+        self._note("choose_unlisted", option_id)
+        return ["不在選單上的也接得到。"]
+
+    def after_action(self, ctx):
+        self._note("after_action")
+        return ["做完之後的那一句。"]
+
+    def on_own_turn(self, ctx):
+        self._note("on_own_turn")
+
+    def scene(self, ctx):
+        return "**假的宴席**" if self.seated else None
+
+    def scene_over(self, ctx):
+        return self.over
+
+    def record_detail(self, ctx, record):
+        return record.model_copy(update={"opponent": "換過的對手"})
+
+    def shops(self):
+        return (Shop(key="fakeshop", inside=lambda g: self.in_shop, here=lambda g: self.shop_here,
+                     close=lambda g: setattr(self, "in_shop", False) or self._note("close_shop"),
+                     menu=lambda g: [Option(id="fake:leave", label="出店")],
+                     entry=lambda g: Option(id="act:fakeshop", label="假的店") if self.shop_here else None),)
+
+    def verbs(self):
+        return (
+            Verb("fakeverb", run=lambda g, prepared: ["只打開一張卡。"], title=lambda g: "假的子動詞・此地", picks=("只打開一張卡。",)),
+            Verb("explore", cell=lambda g, loc, cost, odds: [Option(id="act:fakeverb", label="假的那一格")],
+                 note=lambda g, loc: "假的那一行"),
+        )
+
+
+@pytest.fixture
+def seams(monkeypatch):
+    f = Seams()
+    monkeypatch.setattr(registry, "FEATURES", [f])
+    return f
+
+
+TIME_SEAMS = ("on_due", "on_away", "deliver_results", "deliver_notices", "on_sync")
+
+
+def test_the_seams_in_sync_come_where_the_old_lines_were(game, seams):
+    """sync 裡的接縫掛鉤照原本那幾行的先後：到時的結算（追完共用賽季之後）→ 下線那一段（有上一次同步才有，away_from 是上一次的現實秒）
+    → 收場補送 → 別人捎來的 → 既有的 on_sync。第一次同步沒有上一次：不叫 on_away。"""
+    game.state.player.tutorial_step = len(game.content.tutorial.steps)
+    game.sync(1000.0)
+    assert [c[0] for c in seams.calls if c[0] in TIME_SEAMS] == ["on_due", "deliver_results", "deliver_notices", "on_sync"]
+    seams.calls.clear()
+    game.sync(1060.0)
+    assert [c for c in seams.calls if c[0] in TIME_SEAMS] == [
+        ("on_due",), ("on_away", 1000.0), ("deliver_results",), ("deliver_notices",), ("on_sync", round(60 * game.content.config.time_scale))]
+
+
+def test_the_due_hook_also_runs_on_fast_forward_and_the_world_tick(content, world, seams):
+    game = Game.new(content, "快轉客", rng=random.Random(0), world=world)
+    _made(game)
+    seams.calls.clear()
+    game.advance(60.0)
+    assert seams.calls.count(("on_due",)) == 1
+    seams.calls.clear()
+    Game.for_world(content, world).world_tick(2000.0)
+    assert seams.calls.count(("on_due",)) == 1
+
+
+def test_the_time_seams_are_asked_even_when_the_package_is_closed(game, seams):
+    """接縫掛鉤不問 enabled（原位那幾行本來就不看包的開關：酒肆的三個 deliver 關著照送、決戰補送照內容）；既有的 on_sync 照舊不叫。"""
+    seams.open = False
+    _made(game)
+    game.sync(1060.0)
+    assert [c[0] for c in seams.calls if c[0] in TIME_SEAMS] == [
+        "on_due", "deliver_results", "deliver_notices", "on_due", "on_away", "deliver_results", "deliver_notices"]
+
+
+def test_a_shop_takes_over_the_menu_opens_its_page_and_closes(game, seams):
+    """店面登記：此地還能做裡有進店那一顆；坐進去選單整個是那間店的、店面那一頁是它；這裡不開門了同步就收（_drop_stale_references 也收）；
+    動身也收（Game._depart）。"""
+    g = _made(game)
+    assert [o.id for o in g.options()].count("act:fakeshop") == 1 and g._shop_open() is None  # 進店那一顆只有一顆（第 11 批審查）
+    seams.in_shop = True
+    assert [o.id for o in g.options()] == ["fake:leave"] and g._shop_open() == "fakeshop"
+    seams.shop_here = False
+    assert g._shop_open() is None
+    g.sync(1060.0)
+    assert not seams.in_shop and ("close_shop",) in seams.calls
+    seams.in_shop, seams.shop_here = True, False
+    Game(g.content, g.state, world=g.world)  # 建 Game 就清失效參照：此地不開了，收
+    assert not seams.in_shop
+    seams.in_shop, seams.shop_here = True, True
+    loc = g.content.locations[g.state.player.location]
+    g.travel(next(d for d in loc.connections if d in g.content.locations))
+    assert not seams.in_shop
+
+
+def test_a_closed_shop_gives_no_menu_or_entry_but_still_opens_its_page_and_closes(game, seams):
+    """給選項的兩樣（店裡那一串、進店那一顆）關著的包不給；哪一間開著、收店照舊看坐在店裡沒（原位本來就不看開關：酒肆的 enabled 在
+    坐著的時候一定是 True）。"""
+    seams.open = False
+    seams.in_shop = True
+    g = _made(game)
+    ids = [o.id for o in g.options()]
+    assert "fake:leave" not in ids and "act:fakeshop" not in ids
+    assert g._shop_open() == "fakeshop"
+    seams.shop_here = False
+    g.sync(1060.0)
+    assert not seams.in_shop
+
+
+def test_choose_takes_the_unlisted_ones_first_and_hears_the_package_after_each_action(game, seams):
+    """choose_unlisted 在查選單、建紀錄之前問（不在選單上的也接得到、不寫江湖紀錄、不走做完一件事那一下）；after_action 在每個動作的
+    最後（記下陣營之後、存回季之前），回的話接在動作的話後面。兩個都不問 enabled。"""
+    g = _made(game)
+    journal = len(g.state.journal)
+    assert g.choose("fake:raw") == ["不在選單上的也接得到。"]
+    assert len(g.state.journal) == journal and ("after_action",) not in seams.calls
+    assert g.choose("fake:do") == ["做了do。", "做完之後的那一句。"]
+    assert seams.calls.index(("run", "do")) < seams.calls.index(("after_action",))
+    seams.open = False
+    assert g.choose("fake:raw") == ["不在選單上的也接得到。"]
+    seams.calls.clear()
+    g.choose("fake:do")  # 關著：fake:do 不在選單上，「此刻無法這麼做」那一下不走到最後
+    assert ("after_action",) not in seams.calls
+
+
+def test_a_verb_owner_runs_titles_fills_the_cell_and_writes_the_note(game, seams):
+    """act 子動詞的主人（Verb）：行動列那一格（探索那一格換成它給的那幾顆）、底下那一行、按下去（_act 最前面）、紀錄的標題（照 arg 問、
+    不看 kind，同原本那張表）；按了只打開一張卡的回話不寫江湖紀錄（Verb.picks）。行動列那一格給選項：關著的主人不接；其餘不問 enabled。"""
+    g = _made(game)
+    assert g.options()[0].id == "act:fakeverb"
+    assert g.action_notes(["act:explore"])["act:explore"] == "假的那一行"
+    assert g._action_title("act", "fakeverb") == "假的子動詞・此地" and g._action_title("xyz", "fakeverb") == "假的子動詞・此地"
+    journal = len(g.state.journal)
+    assert g.choose("act:fakeverb") == ["只打開一張卡。", "做完之後的那一句。"]  # 做完一件事那一下照樣接在後面（同約戰那張卡之後的殺手檢查）
+    assert len(g.state.journal) == journal
+    assert g._act("fakeverb") == ["只打開一張卡。"]
+    seams.open = False
+    assert "act:fakeverb" not in [o.id for o in g.options()]
+    assert g.action_notes(["act:explore"])["act:explore"] == "假的那一行" and g._act("fakeverb") == ["只打開一張卡。"]
+
+
+def test_the_scene_and_the_report_page_ask_the_packages(game, seams):
+    """場景卡：自己眼前的那一張問 scene（_own_scene_text 擂台之後）；蓋在畫面上的問 scene_over（scene_text 最前面：整個取代，或接在上面、
+    自己眼前的事接在底下）。戰報頁那一筆問 record_detail。三個都不問 enabled。"""
+    g = _made(game)
+    seams.open = False
+    seams.seated = True
+    assert g.scene_text() == "**假的宴席**"
+    seams.over = ("**假的戰場**", False)
+    assert g.scene_text() == "**假的戰場**\n\n---\n\n**假的宴席**"
+    seams.over = ("**假的戰場**", True)
+    assert g.scene_text() == "**假的戰場**"
+    from tianxia.state import BattleRecord
+
+    g.state.battles = [BattleRecord(id=1, time=0.0, location=g.state.player.location, kind="train", opponent="山賊", ours=[], tier="大勝",
+                                    our_power=1.0, difficulty=1.0)]
+    assert "換過的對手" in g.battle_detail(1) and "山賊" not in g.battle_detail(1)
+
+
+def test_the_own_turn_is_heard_even_when_the_package_is_closed(game, seams):
+    """on_own_turn 在 own_turn_checks 最前面（暫停的檢查之前：原位的封測發放暫停中照發），關著的包照叫。"""
+    g = _made(game)
+    seams.open = False
+    g.mark_seen(1000.0)
+    assert ("on_own_turn",) in seams.calls
+
+
+def test_the_own_turn_is_heard_while_the_season_clock_is_paused(game, seams):
+    """賽季時鐘暫停中（own_turn_checks 在暫停的檢查那裡就回頭、不掛系統通緝）on_own_turn 照叫：它排在暫停的檢查之前（原位的封測元寶
+    暫停中照發，帳跟世界無關；第 11 批審查：挪到暫停的檢查後面，契約與商城包的測試原本都不紅）。"""
+    g = _made(game)
+    assert g.world.pause_clock(1000.0) and g.world.paused_at() is not None
+    seams.calls.clear()
+    g.mark_seen(1010.0)
+    assert seams.calls.count(("on_own_turn",)) == 1

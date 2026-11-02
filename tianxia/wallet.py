@@ -147,6 +147,19 @@ class Wallet:
             data["used"] = time
             conn.execute("UPDATE mall_purchases SET data = ? WHERE id = ?", (json.dumps(data, ensure_ascii=False), pid))
 
+    def update_data(self, pid: int, **fields) -> None:
+        """改一筆購買 data 裡的幾個欄位（自建形象的訂單照它換狀態）；其餘照舊。"""
+        with self.db.transaction() as conn:
+            r = conn.execute("SELECT data FROM mall_purchases WHERE id = ?", (pid,)).fetchone()
+            data = json.loads(r["data"]) if r is not None else {}
+            data.update(fields)
+            conn.execute("UPDATE mall_purchases SET data = ? WHERE id = ?", (json.dumps(data, ensure_ascii=False), pid))
+
+    def purchases_of(self, item: str) -> list[Purchase]:
+        """全部錢包買過這一件的紀錄（舊的在前）：管理者看自建形象的訂單用。"""
+        with self.db.snapshot() as conn:
+            return [_purchase(r) for r in conn.execute("SELECT * FROM mall_purchases WHERE item = ? ORDER BY id", (item,))]
+
     def mark_refunded(self, pid: int, time: float) -> None:
         with self.db.transaction() as conn:
             conn.execute("UPDATE mall_purchases SET refunded = ? WHERE id = ?", (time, pid))
@@ -169,7 +182,38 @@ class Wallet:
                 (owner, key, start, end),
             )
 
+    def entitlement(self, owner: str, kind: str, key: str) -> dict | None:
+        """mall_entitlements 那一格的 data（例：形象穿哪一套，kind 'look'、key 'wear'）；沒有這一格是 None。"""
+        with self.db.snapshot() as conn:
+            r = conn.execute(
+                "SELECT data FROM mall_entitlements WHERE owner = ? AND kind = ? AND key = ?", (owner, kind, key),
+            ).fetchone()
+        return None if r is None else json.loads(r["data"])
+
+    def set_entitlement(self, owner: str, kind: str, key: str, data: dict) -> None:
+        with self.db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO mall_entitlements (owner, kind, key, data) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT (owner, kind, key) DO UPDATE SET data = excluded.data",
+                (owner, kind, key, json.dumps(data, ensure_ascii=False)),
+            )
+
     # ── 對帳 ────────────────────────────────────
+
+    def entitlements(self, kind: str) -> list[tuple[str, str, dict]]:
+        """全服這一種的每一格（主人、key、data），舊的在前（例：形象市集上架的，kind 'market'）。"""
+        with self.db.snapshot() as conn:
+            rows = conn.execute("SELECT owner, key, data FROM mall_entitlements WHERE kind = ? ORDER BY rowid", (kind,)).fetchall()
+        return [(r["owner"], r["key"], json.loads(r["data"] or "{}")) for r in rows]
+
+    def drop_entitlement(self, owner: str, kind: str, key: str) -> None:
+        with self.db.transaction() as conn:
+            conn.execute("DELETE FROM mall_entitlements WHERE owner = ? AND kind = ? AND key = ?", (owner, kind, key))
+
+    def reason_total(self, owner: str, reason: str) -> int:
+        """這個錢包某一種帳的加總（例：儲值 topup 一共進來多少）。"""
+        with self.db.snapshot() as conn:
+            return conn.execute("SELECT COALESCE(SUM(delta), 0) FROM mall_ledger WHERE owner = ? AND reason = ?", (owner, reason)).fetchone()[0]
 
     def character_name(self, owner: str) -> str | None:
         """這個錢包的角色名號（characters 表的原寫法）；沒有這個角色是 None。管理者查帳找人用（真人假人一樣查）。"""

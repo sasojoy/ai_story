@@ -144,6 +144,21 @@ class AccountStore:
             return normalize(text)
         return self.owner_of(text)
 
+    def search(self, text: str | None, limit: int = 10) -> list[dict]:
+        """管理頁重設密碼的搜尋：帳號或名號含這幾個字的（不分大小寫），最多 limit 筆 {login, character}；空字串回空的。"""
+        q = (text or "").strip().lower()
+        if not q:
+            return []
+        like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        with self.db.snapshot() as conn:
+            rows = conn.execute(
+                "SELECT l.display, a.character FROM logins l JOIN accounts a ON a.id = l.account_id "
+                "WHERE l.provider = 'password' AND (l.subject LIKE ? ESCAPE '\\' OR lower(COALESCE(a.character, '')) LIKE ? ESCAPE '\\') "
+                "ORDER BY l.subject LIMIT ?",
+                (like, like, limit),
+            ).fetchall()
+        return [{"login": r["display"], "character": r["character"] or ""} for r in rows]
+
     # ── 註冊、登入、角色 ──────────────────────────
 
     def register(self, login: str | None, password: str | None) -> Account:

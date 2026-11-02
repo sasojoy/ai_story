@@ -5478,6 +5478,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "ascend_line",  # 破境卡那一句（招式與絕學稿案第三節）：三段同 create_intent
         "persuade_text",  # 託付的勸降（減法季批 6）：三段同 gather_text，模型只評那一句
         "epiphany_think",  # 特殊頓悟的靜心思名：三段同 prepare_forge，模型一次取三個名字
+        "_draft",  # 一句話自創的導演稿（功能包 looks 的 routes）：A 鎖內驗那一句 → B 鎖外請模型填表 → C 鎖內組稿／扣元寶
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
@@ -5797,8 +5798,8 @@ def test_the_page_polls_the_queue_only_while_waiting_on_the_model():
     persuade = _js_function(js, "async function persuadeSay(")  # 託付的勸降（減法季批 6，FB-829）
     assert "watchQueue(submitBtn, PERSUADE_WAIT)" in persuade and "stop();" in persuade.split("finally")[1]
     assert js.count("watchQueue(") == 8  # 定義一個、使用七個（對話與大場面是同一個選項流程；有所感畫完送出、對話「自己說」、找素材「自己說」、勸降各另一個）
-    sheet = _js_function(js, "function sheetHtml(")
-    assert "a && a.llm_queue" in sheet and "模型佇列：處理中" in sheet
+    now = _js_function(js, "function adNowHtml(")  # 管理頁頂上「現在」那張卡（admin.js）
+    assert "a.llm_queue ?" in now and "模型佇列：處理中" in now
 
 
 def test_watch_queue_shows_the_count_ahead_only_while_someone_is_ahead():
@@ -6204,6 +6205,7 @@ def test_only_the_action_endpoints_tell_other_tabs():
         "api_mingtie_do",  # 名帖定稿、檢舉（Joy 2026-10-19）
         "api_mall_buy",  # 商城的購買（2026-10-20）：手上的回體丹變了，其他分頁跟著刷新
         "api_mall_claim", "api_mall_rename",  # 月卡每日領、易名帖（萬寶閣販賣清單定案 2026-10-21）
+        "api_looks_order", "api_looks_move", "api_looks_market", "api_looks_withdraw",  # 自建形象、招式動畫下單、市集購買（擂台形象第二～四批）：扣了元寶，其他分頁的錠子鈕跟著刷新
     }
 
 
