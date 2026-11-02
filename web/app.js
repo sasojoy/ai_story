@@ -6052,6 +6052,8 @@
         case "look-order": lookOrderAsk(); break; // 自建形象下單（先問一次）
         case "move-order": moveOrderAsk(); break; // 招式動畫下單（先問一次）
         case "move-preview": await movePreview(); break; // 一句話自創的絕招：先看看（不扣元寶）
+        case "move-show": await moveShowTo(el.dataset.id || ""); break; // 招式庫做好了的那一招演一次
+        case "look-show": lookShowTo(el.dataset.id || "", el.dataset.name || ""); break; // 一套形象看動作（再按一次收起）
         case "market-buy": lookMarketAsk(el.dataset.id, el.dataset.name || "", Number(el.dataset.price) || 0); break; // 形象市集買一套（先問一次）
         case "market-list": await lookMarketList(el.dataset.id); break; // 自己做的一套掛上市集（照框裡的價錢）
         case "market-unlist": await lookMarketDo({ op: "unlist", look: el.dataset.id }); break;

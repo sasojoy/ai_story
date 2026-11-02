@@ -33,6 +33,10 @@ SHEETS = {  # 一套十張：檔名 → 格數（每格 220×220，腳底在 (10
     "hero_bare_idle": 4, "hero_bare_hit": 3, "hero_bare_kneel": 4, "hero_bare_dodge": 4, "hero_bare_fall": 6, "hero_bare_block": 4,
     "hero_atk_slash": 6, "hero_atk_pole": 6, "hero_atk_fist": 6, "hero_atk_shoot": 6,
 }
+# 走一趟（探索）那幾個動作（Joy 2026-11-02「除了擂台換形象，探索那邊應該要一起換吧」）：檔名同 web/img/outing/ 的斗笠小子，
+# 腰上掛一把劍（走一趟的斗笠小子帶劍）。站著、挨打、跪地借擂台那三張（web/outing.js 的 OUTING_LOOK_SHEET），所以只多這六張
+OUTING = {"hero_run": 8, "hero_pickup": 6, "hero_lift": 3, "hero_slash": 6, "hero_meditate": 4, "hero_push": 4}
+SHEETS.update(OUTING)
 NAME_MAX, PROMPT_MAX = 6, 120
 MAX_BYTES = 2_000_000  # 一張最大多少（上傳那一道）
 PENDING, REVIEW, MADE, REJECTED = "pending", "review", "made", "rejected"
@@ -250,6 +254,8 @@ def fake_generate(root: Path, look: str, prompt: str, sources: list[Path]) -> No
     target.mkdir(parents=True, exist_ok=True)
     for sheet in SHEETS:
         src = pick / f"{sheet}.webp"
+        if not src.is_file():  # 斗笠小子那一套擂台與走一趟分兩個資料夾
+            src = pick.parent / "outing" / f"{sheet}.webp"
         if src.is_file():
             shutil.copyfile(src, target / f"{sheet}.webp")
 
@@ -303,7 +309,12 @@ def gen_prompts(order: Order) -> dict[str, str]:
     生好的圖要切成 220 格、腳底對齊（scripts/cut_look.py）再上傳。"""
     character = (f"Character: a chibi child martial artist (big head about one third of body height) described by the player as: "
                  f"\"{order.prompt}\". Keep the same proportions, size and poses as the attached reference sprite sheet.")
-    return {sheet: f"{BASE_STYLE}\n{character}\n{RULES}\n\n{ACTIONS[sheet]}" for sheet in SHEETS}
+    return {sheet: f"{BASE_STYLE}\n{character}\n{OUTING_RULES if sheet in OUTING else RULES}\n\n{ACTIONS[sheet]}" for sheet in SHEETS}
+
+
+def reference(web_img: Path, sheet: str) -> Path:
+    """斗笠小子的那一張（生圖的格式參考）：擂台的在 web/img/arena/，走一趟的在 web/img/outing/。"""
+    return web_img / ("outing" if sheet in OUTING else "arena") / f"{sheet}.webp"
 
 
 BASE_STYLE = ("Style: soft ink-wash watercolor with warm muted tints, hand-drawn ink outlines, same style as the attached reference "
@@ -322,6 +333,10 @@ RULES = ("IMPORTANT: the character holds NO weapon and NO object. Hands are clos
          "no text, no numbers, no frame borders. Every frame is the same "
          "size and the character is the same size in every frame. Feet stand on the same horizontal ground line in every frame. "
          "Side view, facing right. " + FRAMING)
+OUTING_RULES = RULES.replace(
+    "IMPORTANT: the character holds NO weapon and NO object. Hands are closed into loose fists as if gripping an invisible handle. ",
+    "The character carries ONE plain straight sword exactly like in the attached reference sheet: sheathed at the hip unless the "
+    "action draws it. No other weapon. ")
 ACTIONS = {
                       # 待機＝往前探一下再收回（量過斗笠小子：前端水平擺 19 px、垂直只有 3 px）。
                       # 2026-11-02 一度寫成「直上直下、不准前傾」，等於把要的那個動作禁掉了，實機看起來完全不動。
@@ -339,4 +354,10 @@ ACTIONS = {
     "hero_atk_pole": "Long-weapon attack with an invisible spear, fists one behind the other at hip height: 1 low stance, 2 pulling back, 3 lunging thrust, arms extended, 4 recovering, 5 wide horizontal sweep, 6 back to stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_atk_fist": "Unarmed attack (real fists): 1 stance, fists up, 2 stepping in, 3 straight right punch, 4 pulling back, 5 high front kick, 6 landing back into stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_atk_shoot": "Shooting an invisible crossbow: 1 stance, 2 raising fists to the right shoulder, 3 aiming, 4 the shot with small recoil, 5 lowering, 6 back in stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
+    "hero_run": "Running to the right, one full run cycle, sword sheathed at the hip, arms swinging: 8 frames. Layout: 8 frames in a 4x2 grid. Aspect 2:1.",
+    "hero_pickup": "Picking something up from the ground: 1 standing, 2 bending the knees, 3 crouching low, 4 reaching to the ground, 5 still crouched, hand at the ground, 6 standing up again. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
+    "hero_lift": "Showing a found treasure (a small glowing pearl): 1 holding it in both hands at the chest, smiling, 2 raising it with the right hand, 3 holding it high above the head, delighted. Layout: 3 frames in one row. Aspect 3:1.",
+    "hero_slash": "Drawing the sword and slashing to the right: 1 ready stance, sword held low in front, 2 sword raised over the head, 3 top of the swing, 4 fast downward slash, 5 follow-through low in front, 6 back to the ready stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
+    "hero_meditate": "Sitting cross-legged on the ground, eyes closed, meditating, hands resting on the knees, gentle breathing loop: 4 frames, sword laid across the lap or at the side. Layout: 4 frames in one row. Aspect 4:1.",
+    "hero_push": "Pushing hard with both palms forward against something heavy on the right (a stuck cart or a boulder, not drawn), legs braced, leaning in: 4 frames, sword sheathed at the hip. Layout: 4 frames in one row. Aspect 4:1.",
 }
