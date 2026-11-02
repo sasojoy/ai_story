@@ -334,7 +334,10 @@ RULES = ("IMPORTANT: the character holds NO weapon and NO object. Hands are clos
          "Sprite sheet rules: pure white background, no ground shadow, NO ground line, no horizon line, no floor or platform, "
          "no text, no numbers, no frame borders. Every frame is the same "
          "size and the character is the same size in every frame. Feet stand on the same horizontal ground line in every frame. "
-         "Side view, facing right. " + FRAMING)
+         "Side view, facing right. "
+         # 2026-11-02 本機 klein 實測：最常見的壞法是身體畫過格線，切出來的那一格少一塊、或兩格黏在一起。
+         "Keep each frame fully inside its own equal-width column with wide white gaps; nothing crosses into the next column. "
+         + FRAMING)
 OUTING_RULES = RULES.replace(
     "IMPORTANT: the character holds NO weapon and NO object. Hands are closed into loose fists as if gripping an invisible handle. ",
     "The character carries ONE plain straight sword exactly like in the attached reference sheet: sheathed at the hip unless the "
@@ -346,12 +349,13 @@ ACTIONS = {
                       "frames 1, 2 and 4 are the settled stance, and in frame 3 the WHOLE body leans and steps FORWARD toward the "
                       "right edge (lead fist pushed out, front foot advanced), clearly further forward than the other frames — about "
                       "a tenth of the frame width — then back. No two frames are the same drawing. Same character and clothes, feet "
-                      "on the same ground line; do not stretch or squash the body, no motion blur. Layout: 4 frames in one row. Aspect 4:1.",
-    "hero_bare_hit": "Getting hit: 1 flinch, head snapping back, 2 knocked backward, arms flung out, 3 staggering to regain balance. Layout: 3 frames in one row. Aspect 3:1.",
+                      "on the same ground line; both feet stay on the ground in every frame, no kicking; do not stretch or squash the body, no motion blur. "
+                      "Layout: 4 frames in one row. Aspect 4:1.",
+    "hero_bare_hit": "Getting hit: 1 flinching, head snapped back, eyes shut, arms in; 2 thrown backward with arms flung wide and one foot off the ground, body tilted far back; 3 stumbling forward, one leg raised, regaining balance. Three very different silhouettes. Layout: 3 frames in one row. Aspect 3:1.",
     "hero_bare_kneel": "Losing and dropping to one knee: 1 wobbling, 2 one knee bending, 3 kneeling, right fist planted on the ground, head down, 4 same pose, breathing hard. Layout: 4 frames in one row. Aspect 4:1.",
-    "hero_bare_dodge": "Dodging: 1 stance, 2 quick lean back and sidestep, 3 deepest point of the dodge, low and leaning back, 4 springing back into stance. Layout: 4 frames in one row. Aspect 4:1.",
+    "hero_bare_dodge": "Dodging. Strict side profile in every frame: the face and body always point to the right, the face is always visible, never show the back, never turn away from the viewer. Frames: 1 stance; 2 leaning far back to the left, weight on the back foot, hands pulled to the chest; 3 knees bent low, leaning back, face still visible in profile looking right; 4 springing back into stance. Each frame clearly different and the body visibly shifts left and right. Layout: 4 frames in one row. Aspect 4:1.",
     "hero_bare_block": "Guarding / blocking: 1 settling into a low, wide defensive stance, 2 both fists raised crossed in front of the chest as if holding a blade sideways to block, 3 bracing against an impact, body pushed slightly back, back foot sliding, 4 holding the guard firmly, eyes on the opponent. Layout: 4 frames in one row. Aspect 4:1.",
-    "hero_bare_fall": "Knocked down: 1 big hit, flinching back, 2 knocked back with arms up, 3 stumbling backward, 4 falling backward, 5 lying on the back, 6 lying still (knocked out, no blood). Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
+    "hero_bare_fall": "Knocked down: 1 big hit, flinching back, 2 knocked back with arms up, 3 stumbling backward, 4 falling backward, 5 lying on the back, 6 lying still (knocked out, no blood). The same clothes in every frame, including lying down; no armour, no hat. In the last two frames nothing lies on the ground beside the head. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_atk_slash": "Two-handed overhead slash with an invisible blade: 1 stance, fists together at waist, 2 fists raised over the right shoulder, 3 fists at the top, 4 fast downward diagonal swing, 5 follow-through low in front, 6 returning to stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_atk_pole": "Long-weapon attack with an invisible spear, fists one behind the other at hip height: 1 low stance, 2 pulling back, 3 lunging thrust, arms extended, 4 recovering, 5 wide horizontal sweep, 6 back to stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_atk_fist": "Unarmed attack (real fists): 1 stance, fists up, 2 stepping in, 3 straight right punch, 4 pulling back, 5 high front kick, 6 landing back into stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
