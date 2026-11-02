@@ -113,13 +113,19 @@ def sheet(path, cols, rows, kind='hero', scale_from=None, ref_h=None):
         ref = scale_from if scale_from else [i[3] for i in info[:4]]
         s = 190 / float(np.median(ref))
     strip = Image.new('RGBA', (CELL*len(fr), CELL), (0, 0, 0, 0))
+    src_w, grid_cols = im.width, cols  # 原圖那一格的中線（水平對齊用，見下面）
     for k, ((x0, y0, x1, y1, keep, cx0, cy0), (w, ax, by, hh)) in enumerate(zip(fr, info)):
         m = Image.fromarray((keep*255).astype(np.uint8), 'L')
         piece = rgba.crop((cx0, cy0, cx0+keep.shape[1], cy0+keep.shape[0]))
         pa = np.asarray(piece).copy(); pa[..., 3] = np.minimum(pa[..., 3], np.asarray(m))
         piece = Image.fromarray(pa, 'RGBA')
         piece = piece.resize((max(1, int(piece.width*s)), max(1, int(piece.height*s))), Image.LANCZOS)
-        px = int(round(AX - (ax-cx0)*s)); py = int(round(BY - (by-cy0)*s))
+        # 水平：對齊「原圖那一格的中線」，不是每一格各自把人置中——各自置中會把整個人往前探的位移抹掉
+        # （2026-11-02 量到的：拿斗笠小子的 hero_bare_idle 重切，前端擺幅 19 px → 2 px，實機就看不到前後晃動了，
+        #  Joy「斗笠小子有在前後移動，但是我們新的模型不會…最嚴重的就是他往前的那一下」）。
+        # 垂直照舊每一格各自把腳底對到 BY（腳要站在同一條地平線上）。
+        grid_cx = ((k % grid_cols) + 0.5) * src_w / grid_cols
+        px = int(round(AX - (grid_cx-cx0)*s)); py = int(round(BY - (by-cy0)*s))
         tmp = Image.new('RGBA', (CELL, CELL), (0, 0, 0, 0)); tmp.alpha_composite(piece, (max(px, -10**6), py)) if px >= 0 and py >= 0 else tmp.paste(piece, (px, py), piece)
         strip.alpha_composite(tmp, (k*CELL, 0))
     return strip
@@ -149,6 +155,17 @@ MOVE_MAX = {  # 斗笠小子量到的上限：idle .845 hit .462 kneel .745 dodg
     "hero_bare_idle": 0.945, "hero_bare_hit": 0.700, "hero_bare_kneel": 0.845, "hero_bare_dodge": 0.700,
     "hero_bare_fall": 1.01,  # 第 5、6 格是躺著不動，本來就幾乎一樣：這一張不驗
     "hero_bare_block": 0.821, "hero_atk_slash": 0.905, "hero_atk_pole": 0.918, "hero_atk_fist": 0.819, "hero_atk_shoot": 0.903,
+}
+
+
+# 前後擺幅：一條裡「最前端」的 x 在各格之間要差多少（側面視角的前後＝水平）。照斗笠小子量到的三分之一。
+# 為什麼要分開驗（Joy 2026-11-02 看實機：「斗笠小子有在前後移動，但是我們新的模型不會…最嚴重的就是他往前的那一下」）：
+# 斗笠小子的待機是「第 3 格整個往前探一下再收回」——前端擺 19 px、垂直只有 3 px，重疊率卻有 0.845，
+# 所以光看重疊率擋不住「原地抖兩下」那種（第一版重畫出來 0.93 過了關，看起來還是不動）。
+# 斗笠小子量到的前端擺幅：idle 19 hit 52 kneel 44 dodge 20 fall 41 block 10 slash 19 pole 28 fist 39 shoot 32
+SWAY_MIN = {
+    "hero_bare_idle": 6, "hero_bare_hit": 17, "hero_bare_kneel": 14, "hero_bare_dodge": 6, "hero_bare_fall": 13,
+    "hero_bare_block": 3, "hero_atk_slash": 6, "hero_atk_pole": 9, "hero_atk_fist": 13, "hero_atk_shoot": 10,
 }
 
 
@@ -200,6 +217,18 @@ def sheet_problems(strip: "Image.Image", frames: int, name: str | None = None) -
                 fixes.append("every frame must be a clearly different pose — move the body, arms and legs between frames "
                              "as much as in the reference animation; do not redraw almost the same picture")
                 break
+    # 前後擺幅：整個人要像斗笠小子那樣往前探再收回，不是原地微動
+    if not bad and name in SWAY_MIN:
+        fronts = []
+        for k in range(frames):
+            cols = np.nonzero((alpha[:, k * CELL:(k + 1) * CELL] > 32).max(0))[0]
+            if len(cols):
+                fronts.append(int(cols.max()))
+        if fronts and max(fronts) - min(fronts) < SWAY_MIN[name]:
+            bad.append(f"整串幾乎沒有前後移動（最前端只差 {max(fronts) - min(fronts)} 像素，至少要 {SWAY_MIN[name]}）")
+            fixes.append("the character must clearly move forward and back along the ground between frames — "
+                         "in at least one frame the whole body leans or steps toward the right edge, lead fist pushed out, "
+                         "then returns; moving only up and down is not enough")
     seen: list[str] = []
     for f in fixes:  # 同一句只留一次（一條十格很容易每格都中同一樣）
         if f not in seen:

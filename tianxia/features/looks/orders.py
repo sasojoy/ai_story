@@ -288,11 +288,13 @@ RULES = ("IMPORTANT: the character holds NO weapon and NO object. Hands are clos
          "size and the character is the same size in every frame. Feet stand on the same horizontal ground line in every frame. "
          "Side view, facing right. " + FRAMING)
 ACTIONS = {
-    "hero_bare_idle": "Idle fighting stance, gentle breathing loop: 4 frames, right fist held forward at waist height. "
-                      "Breathing means the WHOLE body moves straight up and down by roughly a tenth of its height: frame 1 lowest, "
-                      "frames 2 and 3 higher, frame 4 back down, so no two frames are the same drawing. Keep exactly the same "
-                      "stance, the same facing and the feet in the same place — do NOT lean forward, do not step, do not stretch "
-                      "or squash the body, no motion blur. Layout: 4 frames in one row. Aspect 4:1.",
+                      # 待機＝往前探一下再收回（量過斗笠小子：前端水平擺 19 px、垂直只有 3 px）。
+                      # 2026-11-02 一度寫成「直上直下、不准前傾」，等於把要的那個動作禁掉了，實機看起來完全不動。
+    "hero_bare_idle": "Idle fighting stance: 4 frames, right fist held forward at waist height. The loop is a small forward bob — "
+                      "frames 1, 2 and 4 are the settled stance, and in frame 3 the WHOLE body leans and steps FORWARD toward the "
+                      "right edge (lead fist pushed out, front foot advanced), clearly further forward than the other frames — about "
+                      "a tenth of the frame width — then back. No two frames are the same drawing. Same character and clothes, feet "
+                      "on the same ground line; do not stretch or squash the body, no motion blur. Layout: 4 frames in one row. Aspect 4:1.",
     "hero_bare_hit": "Getting hit: 1 flinch, head snapping back, 2 knocked backward, arms flung out, 3 staggering to regain balance. Layout: 3 frames in one row. Aspect 3:1.",
     "hero_bare_kneel": "Losing and dropping to one knee: 1 wobbling, 2 one knee bending, 3 kneeling, right fist planted on the ground, head down, 4 same pose, breathing hard. Layout: 4 frames in one row. Aspect 4:1.",
     "hero_bare_dodge": "Dodging: 1 stance, 2 quick lean back and sidestep, 3 deepest point of the dodge, low and leaning back, 4 springing back into stance. Layout: 4 frames in one row. Aspect 4:1.",

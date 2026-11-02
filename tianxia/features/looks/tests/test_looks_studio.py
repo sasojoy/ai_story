@@ -330,8 +330,9 @@ def test_cut_sheets_come_out_the_same_height_as_the_hat_boy_so_weapons_line_up()
             for x in range(ox - 22, ox + 22):
                 src.putpixel((x, y), (40, 40, 60))
         arm = 80 + k * 60  # 手伸到不同高度：切格會把每一格水平置中，所以要改形狀才看得出動作
+        reach = 86 + (40 if k == 2 else 0)  # 第 3 格往前探（新的前後擺幅那一關）
         for y in range(arm, arm + 16):
-            for x in range(ox + 22, ox + 86):
+            for x in range(ox + 22, ox + reach):
                 src.putpixel((x, y), (40, 40, 60))
     buf = io.BytesIO()
     src.save(buf, "PNG")
@@ -364,10 +365,10 @@ def test_frames_that_barely_move_are_sent_back_to_be_redrawn():
         assert not bad, (sheet, bad)
 
     def strip(shift, frames=4):
-        """每一格往右挪 shift 像素（shift 小＝幾乎沒動）。"""
+        """每一格往右挪 shift 像素（shift 小＝幾乎沒動）；第 3 格另外往前探，免得先被「前後擺幅」那一關擋掉。"""
         im = Image.new("RGBA", (frames * cutting.CELL, cutting.CELL), (0, 0, 0, 0))
         for k in range(frames):
-            ox = k * cutting.CELL + 70 + k * shift
+            ox = k * cutting.CELL + 70 + k * shift + (45 if k == 2 else 0)
             for y in range(cutting.BY - 150, cutting.BY):
                 for x in range(ox, ox + 60):
                     im.putpixel((x, y), (40, 40, 60, 255))
@@ -380,6 +381,51 @@ def test_frames_that_barely_move_are_sent_back_to_be_redrawn():
     assert cutting.sheet_problems(strip(1, 6), 6, "hero_bare_fall")[0] == []
     # 沒給張名就不驗這一項（舊呼叫端）
     assert cutting.sheet_problems(strip(1), 4)[0] == []
+
+
+def test_a_sprite_that_never_moves_forward_is_sent_back():
+    """側面視角的「前後晃動」是水平的：量過斗笠小子的待機——最前端擺 19 px、垂直只有 3 px，重疊率卻有 0.845。
+    所以光看重疊率擋不住「原地微動」（第一版重畫出來重疊 0.93 過關，實機看起來還是不動，Joy 2026-11-02
+    「斗笠小子有在前後移動，但是我們新的模型不會…最嚴重的就是他往前的那一下」）。cutting.SWAY_MIN 補這一關。"""
+    pytest.importorskip("scipy")
+    import io
+
+    from PIL import Image
+
+    from tianxia.features.looks import cutting, orders
+
+    for sheet, frames in orders.SHEETS.items():  # 預設的斗笠小子一張都不該被判（門檻就是照它的三分之一訂的）
+        bad, _ = cutting.sheet_problems(Image.open(actions.WEB_IMG / "arena" / f"{sheet}.webp"), frames, sheet)
+        assert not bad, (sheet, bad)
+
+    def strip(front_shift):
+        """四格：第 3 格整個往前 front_shift 像素（其餘同一個姿勢，但手的高度各不同，免得先被「動作幅度」那一關擋掉）。"""
+        im = Image.new("RGBA", (4 * cutting.CELL, cutting.CELL), (0, 0, 0, 0))
+        for k in range(4):
+            ox = k * cutting.CELL + 60 + (front_shift if k == 2 else 0)
+            for y in range(cutting.BY - 150, cutting.BY):
+                for x in range(ox, ox + 50):
+                    im.putpixel((x, y), (40, 40, 60, 255))
+            arm = cutting.BY - 120 + k * 12
+            for y in range(arm, arm + 10):
+                for x in range(ox + 50, ox + 110):
+                    im.putpixel((x, y), (40, 40, 60, 255))
+        return im
+
+    bad, fix = cutting.sheet_problems(strip(2), 4, "hero_bare_idle")
+    assert any("前後移動" in b for b in bad) and "forward and back" in fix
+    assert cutting.sheet_problems(strip(40), 4, "hero_bare_idle")[0] == [], "往前探夠多的不該被判"
+
+
+def test_the_idle_prompt_asks_for_the_forward_bob_not_a_vertical_breath():
+    """待機那一張要的是往前探（水平），不是上下呼吸——寫成「直上直下、不准前傾」那一版實機完全不動。"""
+    from tianxia.features.looks import orders
+
+    order = orders.Order(pid=1, owner="甲", name="試", prompt="紅衣少女", status=orders.PENDING,
+                         reason="", look="u1", time=0.0)
+    idle = orders.gen_prompts(order)["hero_bare_idle"]
+    assert "steps FORWARD" in idle and "frame 3" in idle
+    assert "do NOT lean forward" not in idle
 
 
 def test_refit_rescales_an_old_oversized_sheet_without_redrawing_it():
