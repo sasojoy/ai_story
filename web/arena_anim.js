@@ -47,7 +47,8 @@
   function ringLoad() {
     if (RA.imgs) return;
     RA.imgs = {};
-    const add = (key, src) => { const im = new Image(); im.src = src; RA.imgs[key] = im; };
+    // 抓不到的那一張記一筆（im.bad）：載入中與抓不到要分開——載入中先不畫，抓不到才退回預設的斗笠小子
+    const add = (key, src) => { const im = new Image(); im.onerror = () => { im.bad = true; }; im.src = src; RA.imgs[key] = im; };
     for (const name of Object.keys(RING_SHEETS)) add(name, `${RING_IMG}${name}.webp`);
     RA.add = add;
     for (const w of Object.keys(RING_WEAPON)) add(`weapon_${w}`, `${RING_IMG}weapon_${w}.webp`);
@@ -57,13 +58,15 @@
   // 兩邊的形象一確定就把十張抓齊（2026-11-02）：以前是第一次用到那一張才抓，抓好之前 ringBody 回傳預設圖，
   // 所以每換一個動作就閃一次斗笠小子（Joy「有時候動畫中間又會變成斗笠小子」）。帶 ?v= 之後十張都是新網址，更明顯。
   function ringWarm(looks) {
-    for (const side of ["me", "foe"]) {
-      const sk = skinParts(looks && looks[`${side}_look`]), look = sk.look;
-      sk.gear.forEach(gearImg);
-      if (!look) continue;
-      ringHands(look);
-      for (const sheet of Object.keys(RING_SHEETS)) ringBody(look, sheet);
-    }
+    for (const side of ["me", "foe"]) ringWarmLook(looks && looks[`${side}_look`]);
+  }
+  // 這一套十張與手位表一次抓齊（萬寶閣按「看動作」也叫，arena_scene.js 的 lookShow）；皮是「形象~飾品」，飾品也一起抓
+  function ringWarmLook(skin) {
+    const sk = skinParts(skin), look = sk.look;
+    sk.gear.forEach(gearImg);
+    if (!look) return;
+    ringHands(look);
+    for (const sheet of Object.keys(RING_SHEETS)) ringBody(look, sheet);
   }
   // ── 疊圖飾品（功能包 looks；Joy 2026-11-02 選「疊圖飾品」）──
   // 「皮」是形象 id，戴了飾品再接「~頭.臉.腰」（tianxia/features/looks/rules.py 的 skin）。飾品的 id 以位置開頭（head_、face_、waist_），
@@ -189,12 +192,15 @@
     const pt = own && own[i];
     return pt && base ? [pt[0], pt[1], base[2], base[3]] : base;
   }
-  // 這一套形象的這一張（第一次用到才抓；還沒抓好或抓不到就先畫斗笠小子）
+  // 這一套形象的這一張（第一次用到才抓）：抓好了就是它，還在抓先不畫，真的抓不到才退回斗笠小子
   function ringBody(look, sheet) {
     if (!look || !/^[a-z0-9_]+$/.test(look)) return RA.imgs[sheet];
     const key = `${look}/${sheet}`;
     if (!RA.imgs[key]) RA.add(key, /^u\d+$/.test(look) ? `/api/looks/img/${look}/${sheet}${looksVer()}` : `${RING_LOOKS}${look}/${sheet}.webp`); // 自建的由伺服器送
-    return ringReady(RA.imgs[key]) ? RA.imgs[key] : RA.imgs[sheet];
+    // 還在抓：先不畫（回 null，ringFigure 這一格就跳過）。以前回預設的斗笠小子，第一輪看起來是兩個人跳來跳去
+    // （Joy 2026-11-03 在萬寶閣按「看動作」看到的）。真的抓不到（im.bad）才退回斗笠小子，不然整個人會消失。
+    if (ringReady(RA.imgs[key])) return RA.imgs[key];
+    return RA.imgs[key].bad ? RA.imgs[sheet] : null;
   }
   // 招式動畫（m<數字>，由伺服器送）：六格一張的光效，出招那幾格疊在出手的人身上（沒抓好就不疊）
   function ringFxImg(fx) {

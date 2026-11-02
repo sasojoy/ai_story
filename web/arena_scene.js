@@ -318,6 +318,8 @@ function lookShowAt(t) {
 function lookShow(look) {
   LSP.look = look || ""; LSP.t0 = 0;
   if (typeof ringLoad === "function") ringLoad();
+  // 先把這一套十張抓齊再演：以前是用到哪一張才抓，第一輪會一下書生一下斗笠小子（Joy 2026-11-03）
+  if (typeof ringWarmLook === "function") ringWarmLook(LSP.look);
   if (!LSP.raf && typeof requestAnimationFrame === "function") LSP.raf = requestAnimationFrame(lookShowTick);
 }
 function lookShowTick(now) {

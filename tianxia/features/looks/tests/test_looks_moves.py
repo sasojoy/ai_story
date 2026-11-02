@@ -83,8 +83,10 @@ def test_order_upload_release_and_the_arena_draws_it(on):
     assert game.arena_move() == moves.move_id(pid)
     assert actions.scene_of(game, moves.move_id(pid))["arts"][1]["label"] == "佛掌"
     lib = actions.view(game)["moves"]["library"]
-    assert [(x["move"], x["bound"], x["on_art"]) for x in lib] == [(moves.move_id(pid), art.name, True)]
-    assert actions.order_move(game, "再一招", "move-ref-003")[-1] == moves.ALREADY.format(art=art.name)  # 這一門已經綁了
+    assert [(x["move"], x["worn"], x["plays"]) for x in lib] == [(moves.move_id(pid), True, True)]  # 做好了就穿在身上
+    # 這一門已經有一招上場了，但照樣可以再創（企劃者 2026-11-02）：新的先進招式庫、不自動換上去
+    again = actions.order_move(game, "背後一尊金剛砸下巨拳", "move-ref-003")[-1]
+    assert "先放進招式庫" in again and game.arena_move() == moves.move_id(pid)
 
 
 def test_a_line_with_nothing_to_draw_is_learned_on_the_spot(on):
@@ -113,62 +115,60 @@ def test_the_line_is_checked_before_charging(on):
 
 def test_only_your_own_art_and_a_matching_style(on, monkeypatch):
     game = _game(on)
-    assert actions.order_move(game, "劍氣", "move-ref-004")[-1] == moves.NO_ART  # 內容裡的武功、或沒練
+    assert actions.order_move(game, "劍氣", "move-ref-004")[-1] == moves.NO_ART  # 下單要自己合成或自創的武功
     _art(game)
     pid = _made(on, game, "move-ref-005")
+    assert game.arena_move() == moves.move_id(pid)  # 買第一招：身上空著，順手穿上
     monkeypatch.setattr(actions, "current_style", lambda ctx: "slash")
-    assert game.arena_move() == ""  # 換了兵器、打法對不上：不疊
-    assert actions.bind_move(game, pid)[-1] == moves.WRONG_STYLE.format(want="拳腳", have="揮砍")
+    assert game.arena_move() == ""  # 換了兵器、打法對不上：不疊（穿著照舊，只是不演）
+    assert moves.worn(Wallet(game.world.db), "沈浪") == pid
 
 
-def test_a_bound_move_that_cannot_play_says_so(on, monkeypatch):
-    """綁著、但手上的兵器換了打法：擂台上不會演（出招的身體圖四種打法各一套），畫面要講明白，不能讓人以為壞了。
+def test_a_worn_move_that_cannot_play_says_so(on, monkeypatch):
+    """穿著、但手上的兵器換了打法：擂台上不會演（出招的身體圖四種打法各一套），畫面要講明白，不能讓人以為壞了。
     Joy 2026-11-02：「我那個絕招寒霜雪怎麼都還沒施放過」——當時是空手下的單（拳腳），後來拿了劍。"""
     game = _game(on)
     _art(game)
     pid = _made(on, game, "move-ref-020")
-    assert "把招式綁到" in actions.bind_move(game, pid)[-1]
     view = actions.view(game)["moves"]
     row = view["library"][0]
-    assert row["plays"] and not row["asleep"] and view["asleep_text"] == ""  # 空手：演得出來
+    assert row["worn"] and row["plays"] and not row["asleep"] and view["asleep_text"] == ""  # 空手：演得出來
     monkeypatch.setattr(actions, "current_style", lambda ctx: "slash")  # 拿起劍
     view = actions.view(game)["moves"]
     row = view["library"][0]
     assert game.arena_move() == ""  # 真的不會演
-    assert row["asleep"] and not row["plays"] and not row["bindable"]
+    assert row["asleep"] and not row["plays"] and row["worn"]  # 還穿在身上，只是不演
     assert row["asleep_text"] == moves.ASLEEP.format(want="拳腳", have="揮砍") == view["asleep_text"]
     assert "揮砍" in view["order_style_note"]  # 下單那一塊也先講明打法會鎖住
 
 
 def test_another_style_for_the_same_art_can_be_ordered(on, monkeypatch):
-    """換了兵器，原本那一招不會演——要能再替同一門武功下一張對得上的（Joy 2026-11-02 配套）。
-    同一門同一種打法還是只能一招；兩張各管各的打法，綁新的不會把另一種打法那一張鬆開。"""
+    """換了兵器，身上那一招不會演——再創一招對得上的，換穿過去就好（企劃者 2026-11-02 配套）。"""
     game = _game(on)
     _art(game)
     first = _made(on, game, "move-ref-021")
-    actions.bind_move(game, first)
-    assert "這一種打法已經綁了招式" in actions.order_move(game, "再一拳", "move-ref-022")[-1]  # 同打法：擋下
+    second = actions.order_move(game, "再一拳", "move-ref-022", basic=True)[-1]  # 幾招都可以創
+    assert "學成了" in second and "身上已經穿著一招，這一招先放進招式庫" in second
     monkeypatch.setattr(actions, "current_style", lambda ctx: "slash")  # 拿起劍
-    second = _made(on, game, "move-ref-023")
+    second = _made(on, game, "move-ref-023")  # 揮砍那一招
     rows = {r["id"]: r for r in actions.view(game)["moves"]["library"]}
-    assert rows[first]["asleep"] and rows[second]["plays"]  # 拳腳那一張睡著，揮砍那一張會演
-    monkeypatch.undo()  # 放下劍
+    assert rows[first]["asleep"] and not rows[second]["worn"]  # 身上還是第一招，而且睡著了
+    assert "換上" in actions.wear_move(game, second)[-1]
     rows = {r["id"]: r for r in actions.view(game)["moves"]["library"]}
-    assert rows[first]["plays"] and rows[second]["asleep"]  # 換回來，拳腳那一張又會演
+    assert rows[second]["plays"] and not rows[first]["worn"]  # 換穿過去，揮砍那一招上場
 
 
-def test_a_new_season_keeps_the_move_and_rebinds_for_free(on, world):
+def test_a_new_season_keeps_the_move_on(on, world):
+    """換季：穿在身上的那一招照穿（企劃者 2026-11-02「這應該跟穿衣服一樣」——跟練哪一門武功無關，不必重綁）。"""
     game = _game(on, world=world)
     _art(game)
     pid = _made(on, game, "move-ref-006")
+    assert game.arena_move() == moves.move_id(pid)
     next_season(on, world, game)
-    assert game.arena_move() == ""  # 武功歸零了、這一季還沒綁
-    art = _art(game, "流雲掌")
-    view = actions.view(game)["moves"]
-    assert view["library"][0]["bindable"] and view["library"][0]["bound"] == ""
     before = Wallet(world.db).balance("沈浪")
-    assert actions.bind_move(game, pid)[-1] == moves.BOUND.format(art=art.name)
-    assert game.arena_move() == moves.move_id(pid) and Wallet(world.db).balance("沈浪") == before
+    assert game.arena_move() == moves.move_id(pid)  # 武功歸零了，招照樣穿在身上
+    row = actions.view(game)["moves"]["library"][0]
+    assert row["worn"] and row["plays"] and Wallet(world.db).balance("沈浪") == before
 
 
 def test_reject_refunds(on):
@@ -229,3 +229,25 @@ def test_the_two_kinds_of_move(on):
     assert "通用絕招學成了" in msgs[-1] and wallet.balance("沈浪") == 4940
     scene = actions.scene_of(game, game.arena_move())
     assert scene["arts"] == [] and "光束" in [b["op"] for b in scene["beats"]] and "法相" not in [b["op"] for b in scene["beats"]]
+
+
+def test_you_can_keep_creating_and_only_one_plays_at_a_time(on):
+    """企劃者 2026-11-02「不應該有這種限制，應該可以一直創」：同一門武功同一種打法想買幾招就買幾招，
+    上場的只有一招——後買的先進招式庫，要換上去自己按（獨門還要等畫好審過，不能當場把能用的那一招鬆開）。"""
+    game = _game(on)
+    _art(game)
+    wallet = Wallet(game.world.db)
+    first = actions.order_move(game, "一劍寒光九萬里", "move-ref-050", basic=True)
+    assert "學成了" in first[-1] and "先放進招式庫" not in first[-1]  # 第一招：當場上場
+    playing = game.arena_move()
+    for n, line in enumerate(("風捲殘雲", "月落星沉"), start=51):
+        msgs = actions.order_move(game, line, f"move-ref-0{n}", basic=True)
+        assert "學成了" in msgs[-1] and "先放進招式庫" in msgs[-1]
+    view = actions.view(game)["moves"]
+    assert len(view["library"]) == 3 and sum(1 for r in view["library"] if r["plays"]) == 1  # 三招都在，只有一招上場
+    assert game.arena_move() == playing  # 上場的還是第一招
+    assert wallet.balance("沈浪") == 5000 - 60 * 3
+    newer = next(r["id"] for r in view["library"] if not r["plays"])
+    assert "換上" in actions.wear_move(game, newer)[-1]
+    assert game.arena_move() != playing  # 換上去了
+    assert sum(1 for r in actions.view(game)["moves"]["library"] if r["plays"]) == 1  # 還是只有一招上場

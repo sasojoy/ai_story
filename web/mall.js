@@ -334,26 +334,29 @@
   }
   // 招式動畫（第三批）：替現在練的那一門（自己合成或自創的）寫一句樣子下單，做好放進招式庫；每一季綁到一門武功上（同打法免費改綁）。
   // 擂台上出招時疊那一張光效。範例那一格是 /static/img/arena/fx_sample.webp 的第四格
-  const MOVE_NOTE = "替自己合成或自創的武功寫一句絕招長什麼樣子，例如「一劍寒光九萬里」「背後出現一座大佛擊出一掌」。擂台上這一招發動時就照這句演。先按「先看看」演給你看；要畫的（大佛、龍這種）畫好審過才上身，不用畫的買了當場學成。換季帶著走，武功重練再綁一次就好（同一種打法免費）。"; // 待 joy 潤
+  const MOVE_NOTE = "替自己合成或自創的武功寫一句絕招長什麼樣子，例如「一劍寒光九萬里」「背後出現一座大佛擊出一掌」。擂台上這一招發動時就照這句演。先按「先看看」演給你看。想創幾招就創幾招，招式庫裡隨時換穿，換季也帶著走。"; // 待 joy 潤
   const MOVE_IMG = (id) => (/^m\d+$/.test(id || "") ? `/api/looks/img/${id}/fx${LOOK_VER()}` : "/static/img/arena/fx_sample.webp");
   function moveFxHtml(id) { return `<span class="move-fx" aria-hidden="true" style="background-image:url('${MOVE_IMG(id)}')"></span>`; }
   function moveHtml(m) {
     if (!m) return "";
     const lib = (m.library || []).map((x) => `<li class="look-order-row move-row">${x.scene ? `<span class="move-fx move-seal" aria-hidden="true">絕</span>` : moveFxHtml(x.move)}<b>${esc(x.art)}</b><span class="look-st st-made">${esc(x.style_text)}</span>
-        <small>${esc(x.prompt)}${x.bound ? `・這一季綁在「${esc(x.bound)}」` : "・這一季還沒綁"}</small>
+        <small>${esc(x.prompt)}${x.worn ? "・身上穿著這一招" : ""}</small>
         ${x.asleep ? `<small class="bad">${esc(x.asleep_text)}</small>` : ""}
         ${x.scene ? `<button class="btn small ghost" data-act="move-show" data-id="${esc(x.move)}">${S.moveShow === x.move ? "收起" : "演一次"}</button>` : ""}
-        ${x.bindable ? `<button class="btn small" data-act="move-bind" data-id="${x.id | 0}">綁到「${esc(m.art)}」</button>` : ""}</li>`).join("");
+        ${x.wearable ? `<button class="btn small" data-act="move-bind" data-id="${x.id | 0}">換上</button>`
+          : x.worn ? `<button class="btn small ghost" data-act="move-bind" data-id="0">脫下</button>` : ""}</li>`).join("");
     const list = (m.list || []).map((x) => `<li class="look-order-row"><b>${esc(x.art)}</b><span class="look-st st-${esc(x.status)}">${esc(x.status_text)}</span>
         <small>${esc(x.style_text)}・${esc(x.prompt)}${moveArtsNote(x)}${x.reason ? `（${esc(x.reason)}）` : ""}</small>${withdrawBtn(x, "move", x.art)}</li>`).join("");
     const now = !m.has_art ? `<p class="mall-note">先練一門自己合成或自創的武功，才能替它畫招式。</p>`
-      : `<p class="mall-note">現在練的「${esc(m.art)}」・打法${esc(m.style_text)}${m.bound ? "・已經綁了招式" : ""}</p>`
+      : `<p class="mall-note">現在練的「${esc(m.art)}」・打法${esc(m.style_text)}${m.worn ? `・身上穿著「${esc(m.worn)}」` : "・身上沒穿絕招"}</p>`
         + (m.asleep_text ? `<p class="mall-note bad">${esc(m.asleep_text)}</p>` : "");
-    const form = !m.has_art || m.bound ? "" : m.open ? `<p class="mall-note">你還有一張在做：等它好了、或按「撤回」退掉，再下一張。</p>`
-      : `<div class="look-order-form"><textarea class="input" id="move-prompt" maxlength="${m.prompt_max | 0}" rows="2" placeholder="這一招長什麼樣子（${m.prompt_max | 0} 字內，只能中文）">${esc(S.moveDraft || "")}</textarea>
+    // 幾招都可以創：表單一直在。獨門一次只能有一張在做（畫坊的量），那顆鈕暫時收起來，通用照樣買得到
+    const waiting = m.open ? `<p class="mall-note">你還有一張獨門在做：等它好了、或按「撤回」退掉，才能再下一張獨門；通用的照樣可以買。</p>` : "";
+    const form = !m.has_art ? "" : waiting
+      + `<div class="look-order-form"><textarea class="input" id="move-prompt" maxlength="${m.prompt_max | 0}" rows="2" placeholder="這一招長什麼樣子（${m.prompt_max | 0} 字內，只能中文）">${esc(S.moveDraft || "")}</textarea>
         <button class="btn small" data-act="move-preview">先看看</button>
         <button class="btn small" data-act="move-order" data-basic="1">${ingotSvg()}${m.price_basic | 0} 通用</button>
-        <button class="btn small primary" data-act="move-order">${ingotSvg()}${m.price | 0} 獨門</button>
+        ${m.open ? "" : `<button class="btn small primary" data-act="move-order">${ingotSvg()}${m.price | 0} 獨門</button>`}
         <p class="mall-note">通用（${m.price_basic | 0}）用現成的光效演，當場學成；獨門（${m.price | 0}）照你寫的東西另外畫一張圖，送出之後可以先去忙，畫好審過才上身，沒通過元寶全退。</p>
         <p class="mall-note">${esc(m.order_style_note || "")}</p></div>${moveSceneHtml()}`;
     const show = S.moveShow ? `<canvas id="scene-preview" class="scene-preview" width="720" height="320" aria-label="絕招演一次"></canvas>` : "";
@@ -419,7 +422,7 @@
       const r = await api("/api/looks/bind", { id: Number(id) });
       if (r.looks) S.mallLooks = r.looks;
       const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-      S.mallSay = text ? { text, ok: text.startsWith("把招式綁") } : null;
+      S.mallSay = text ? { text, ok: text.startsWith("換上") || text.startsWith("把「") } : null;
       if (S.mallOpen) renderMall();
     });
   }
