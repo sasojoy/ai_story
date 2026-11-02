@@ -42,7 +42,7 @@
   const RING_W = 720, RING_H = 320, RING_GY = 292, RING_X = [252, 468], RING_CELL = 220, RING_AX = 100, RING_BY = 212, RING_SCALE = 1.05;
 
   // 這一塊自己的狀態（不放進 S：每一格動畫都會改，不該讓整頁重畫）
-  const RA = { imgs: null, prev: null, q: [], cur: null, raf: 0, looks: { me: "", foe: "", me_look: "", foe_look: "", me_fx: "", foe_fx: "" }, hold: null, finaleFor: null };
+  const RA = { imgs: null, hands: {}, prev: null, q: [], cur: null, raf: 0, looks: { me: "", foe: "", me_look: "", foe_look: "", me_fx: "", foe_fx: "" }, hold: null, finaleFor: null };
 
   function ringLoad() {
     if (RA.imgs) return;
@@ -60,11 +60,32 @@
     for (const side of ["me", "foe"]) {
       const look = looks && looks[`${side}_look`];
       if (!look) continue;
+      ringHands(look);
       for (const sheet of Object.keys(RING_SHEETS)) ringBody(look, sheet);
     }
   }
   // 自建的圖換了（refit、重畫、退回重來）網址就換：舊快取不會擋住新圖（main.looks_ver）
   const looksVer = () => (window.LOOKS_VER ? `?v=${window.LOOKS_VER}` : "");
+  // 這一套形象自己的手位表（hands.json；tianxia/features/looks/cutting.py 的 hand_row 算的）：
+  // RING_HAND 是照斗笠小子量的，換一套形象手就不在同一個地方，兵器會懸在空中（Joy 2026-11-02）。
+  // 抓得到就用它的位置，角度與層次照舊讀 RING_HAND；沒有（舊的一套、還沒抓到）就整個照 RING_HAND。
+  function ringHands(look) {
+    if (!look || !/^[a-z0-9_]+$/.test(look)) return null;
+    if (!(look in RA.hands)) {
+      RA.hands[look] = null;  // 先佔位：只抓一次
+      const url = /^u\d+$/.test(look) ? `/api/looks/img/${look}/hands${looksVer()}` : `${RING_LOOKS}${look}/hands.json`;
+      if (typeof fetch === "function") {
+        fetch(url).then((r) => (r.ok ? r.json() : null)).then((t) => { if (t) RA.hands[look] = t; }).catch(() => {});
+      }
+    }
+    return RA.hands[look];
+  }
+  function ringHand(look, sheet, i) {
+    const base = (RING_HAND[sheet] || [])[i];
+    const own = (ringHands(look) || {})[sheet];
+    const pt = own && own[i];
+    return pt && base ? [pt[0], pt[1], base[2], base[3]] : base;
+  }
   // 這一套形象的這一張（第一次用到才抓；還沒抓好或抓不到就先畫斗笠小子）
   function ringBody(look, sheet) {
     if (!look || !/^[a-z0-9_]+$/.test(look)) return RA.imgs[sheet];
@@ -108,7 +129,7 @@
     if (!ringReady(img)) return;
     const n = RING_SHEETS[sheet];
     i = Math.max(0, Math.min(n - 1, i));
-    const hand = (RING_HAND[sheet] || [])[i];
+    const hand = ringHand(look, sheet, i);
     const wname = ringArms(kind)[0], wimg = wname ? RA.imgs[`weapon_${wname}`] : null, spec = wname ? RING_WEAPON[wname] : null;
     cx.save();
     cx.translate(x + (flip ? -lunge : lunge), RING_GY);

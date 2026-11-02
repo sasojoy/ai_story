@@ -157,9 +157,15 @@ def router(shell) -> APIRouter:
     def api_looks_img(request: Request, look: str, sheet: str):
         """自建形象與招式動畫的圖（資料庫旁邊的 looks/<id>/）：擂台上別人也看得到，所以不看登入；只認 u<數字> 配十張的檔名、m<數字> 配 fx。"""
         gate()
-        if not ((orders.is_custom(look) and sheet in orders.SHEETS) or (moves.is_move(look) and sheet in (moves.SHEET, *scenes.ART_SLOTS))):
+        if not ((orders.is_custom(look) and (sheet in orders.SHEETS or sheet == orders.HANDS))
+                or (moves.is_move(look) and sheet in (moves.SHEET, *scenes.ART_SLOTS))):
             raise HTTPException(404)
-        path = orders.sheet_file(actions.images_beside(default_path()), look, sheet)
+        root = actions.images_beside(default_path())
+        if sheet == orders.HANDS:  # 這一套自己的手位表（兵器掛在哪）：沒有就回 404，網頁照斗笠小子那張表
+            path = orders.hands_file(root, look)
+            path = path if path.is_file() else None
+        else:
+            path = orders.sheet_file(root, look, sheet)
         if path is None:
             raise HTTPException(404)
         # 每次都向伺服器確認，沒換就回 304（Starlette 1.7 的 FileResponse 不處理條件請求，這幾行自己做）。
@@ -171,7 +177,7 @@ def router(shell) -> APIRouter:
         tag = f'"{int(stat.st_mtime)}-{stat.st_size}"'  # 檔案換了（mtime 或大小變了）這個就變
         if request.headers.get("if-none-match") == tag:
             return Response(status_code=304, headers={"ETag": tag, "Cache-Control": "no-cache"})
-        return FileResponse(path, media_type=f"image/{path.suffix[1:]}",
-                            headers={"Cache-Control": "no-cache", "ETag": tag})
+        media = "application/json" if path.suffix == ".json" else f"image/{path.suffix[1:]}"
+        return FileResponse(path, media_type=media, headers={"Cache-Control": "no-cache", "ETag": tag})
 
     return r

@@ -302,6 +302,64 @@ def refit(strip_bytes: bytes, name: str) -> bytes:
     return buf.getvalue()
 
 
+# ── 兵器掛在哪一隻手 ────────────────────────────
+
+HAND = {  # 斗笠小子每一格的手：(x, y, 角度, 疊第幾層)；同 web/arena_anim.js 的 RING_HAND（測試盯著兩邊一樣）
+    "hero_bare_idle": ((132, 136, -45, 1), (132, 136, -45, 1), (153, 136, -45, 1), (134, 136, -45, 1)),
+    "hero_bare_hit": ((119, 120, -70, 1), (161, 119, -20, 1), (157, 134, 10, 1)),
+    "hero_bare_kneel": ((129, 152, 20, 1), (155, 150, 30, 1), (102, 165, 80, 1), (100, 162, 80, 1)),
+    "hero_bare_dodge": ((131, 136, -40, 1), (147, 105, -60, 1), (149, 107, -60, 1), (134, 136, -40, 1)),
+    "hero_bare_block": ((128, 149, -40, 1), (141, 107, -70, 1), (150, 105, -72, 1), (130, 110, -70, 1)),
+    "hero_bare_fall": ((142, 127, -30, 1), (157, 109, -60, 1), (175, 115, 70, 2), (150, 207, -3, 3), (150, 207, -3, 3), (150, 207, -3, 3)),
+    "hero_atk_slash": ((128, 145, -40, 1), (67, 95, -125, 0), (87, 98, -165, 0), (147, 133, -5, 1), (158, 133, 25, 1), (123, 147, -30, 1)),
+    "hero_atk_pole": ((131, 147, -15, 1), (120, 150, -10, 1), (162, 131, 0, 1), (148, 114, -35, 1), (160, 132, 10, 1), (124, 147, -15, 1)),
+    "hero_atk_fist": ((139, 129, 0, 1), (144, 150, 0, 1), (157, 130, 0, 1), (148, 114, 0, 1), (146, 122, 0, 1), (124, 147, 0, 1)),
+    "hero_atk_shoot": ((131, 147, 10, 1), (69, 92, -20, 0), (161, 124, 0, 1), (153, 124, -8, 1), (165, 132, 5, 1), (124, 147, 10, 1)),
+}
+HAND_NEAR = 45  # 找手時往外找幾像素（超過就不動：那一格的姿勢差太多，猜了反而更糟）
+HAND_IN = 4  # 貼到輪廓上之後再往身體裡收幾像素，免得兵器掛在邊緣
+GROUND_LAYER = 3  # 兵器掉在地上那幾格（倒地的最後三格）：本來就不在手上，不要動
+
+
+def hand_row(strip_bytes: bytes, name: str) -> list[list[int]]:
+    """這一條 sheet 每一格的手在哪（照這一套形象自己的身體算）。
+
+    為什麼要算：HAND 是照斗笠小子量的，全遊戲共用一張表。換一套形象手就不在同一個地方——
+    2026-11-02 量四套新形象，49 格裡有 7～11 格的手位落在身體以外，兵器就懸在空中（Joy 看出來的）。
+    做法：從斗笠小子那一點往外找最近的身體像素（最多 HAND_NEAR），再往身體裡收 HAND_IN；
+    找不到就原封不動。角度與層次照舊讀 HAND，這裡只動位置。
+    """
+    base = HAND.get(name)
+    if base is None:
+        raise CutError(f"沒有「{name}」這一張")
+    im = Image.open(io.BytesIO(strip_bytes)).convert('RGBA')
+    a = np.asarray(im)[..., 3] > 32
+    out = []
+    for k, pt in enumerate(base):
+        x, y = int(pt[0]), int(pt[1])
+        cell = a[:, k * CELL:(k + 1) * CELL]
+        ys, xs = np.nonzero(cell)
+        if (len(pt) > 3 and pt[3] == GROUND_LAYER) or not len(xs):
+            out.append([x, y])
+            continue
+        d2 = (xs - x) ** 2 + (ys - y) ** 2
+        i = int(np.argmin(d2))
+        if d2[i] == 0 or d2[i] > HAND_NEAR ** 2:  # 已經在身上，或差太遠
+            out.append([x, y])
+            continue
+        nx, ny = int(xs[i]), int(ys[i])
+        y0, x0 = max(0, ny - 12), max(0, nx - 12)
+        win = cell[y0:ny + 13, x0:nx + 13]
+        wy, wx = np.nonzero(win)
+        if len(wx):
+            vx, vy = x0 + wx.mean() - nx, y0 + wy.mean() - ny
+            n = (vx * vx + vy * vy) ** 0.5
+            if n > 0.5:
+                nx, ny = int(round(nx + vx / n * HAND_IN)), int(round(ny + vy / n * HAND_IN))
+        out.append([nx, ny])
+    return out
+
+
 def sheet_bytes(raw: bytes, name: str) -> bytes:
     """生圖工具給的一張原圖 → 擂台用的一條（webp，格數照 LAYOUT）。切完自己驗一遍（sheet_problems）：
     機器看得出來的壞法直接丟 CutProblem，畫坊照它帶的那一句重畫，不叫審圖。"""

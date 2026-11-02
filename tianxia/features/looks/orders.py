@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import shutil
 from dataclasses import dataclass
@@ -196,14 +197,48 @@ def sheet_problem(sheet: str, data: bytes) -> str | None:
     return None
 
 
+HANDS = "hands"  # 這一套自己的手位表（hands.json）：兵器掛在哪，見 cutting.hand_row
+
+
+def hands_file(root: Path, look: str) -> Path:
+    return folder(root, look) / f"{HANDS}.json"
+
+
+def save_hands(root: Path, look: str, sheet: str, data: bytes) -> None:
+    """把這一張的手位併進這一套的 hands.json（算不出來就跳過，圖照收）。
+
+    手位要照每一套形象自己的身體算（web/arena_anim.js 的 RING_HAND 是斗笠小子的，共用會讓兵器懸空）。
+    這支在存圖之後叫；cutting 延後 import（orders 不拉 numpy：伺服器的管理者頁也讀這一支）。
+    """
+    try:
+        from . import cutting  # noqa: PLC0415
+    except ImportError:  # pragma: no cover - 沒裝 numpy／scipy 的環境
+        return
+    try:
+        row = cutting.hand_row(data, sheet)
+    except Exception:  # noqa: BLE001  手位算不出來不該擋住收圖
+        return
+    path = hands_file(root, look)
+    table = {}
+    if path.is_file():
+        try:
+            table = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            table = {}
+    table[sheet] = row
+    path.write_text(json.dumps(table, ensure_ascii=False), encoding="utf-8")
+
+
 def save_sheet(root: Path, look: str, sheet: str, data: bytes) -> None:
-    """存一張（同一張的另一種格式先刪掉，免得送出去的是舊的）。呼叫端先過 sheet_problem。"""
+    """存一張（同一張的另一種格式先刪掉，免得送出去的是舊的），順手更新這一套的手位表。呼叫端先過 sheet_problem。"""
     fmt = image_size(data)[0]
     target = folder(root, look)
     target.mkdir(parents=True, exist_ok=True)
     for ext in ("webp", "png"):
         (target / f"{sheet}.{ext}").unlink(missing_ok=True)
     (target / f"{sheet}.{fmt}").write_bytes(data)
+    if sheet in SHEETS:
+        save_hands(root, look, sheet, data)
 
 
 def fake_generate(root: Path, look: str, prompt: str, sources: list[Path]) -> None:

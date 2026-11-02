@@ -131,3 +131,32 @@ def test_a_written_ultimate_replaces_the_round_when_it_fires():
     })
     assert out["raw"] == [["me:m1"], ["plain"], ["plain"]]  # 分身那一招（m2）的稿還沒抓到：照舊演
     assert out["rawFin"] == [["me:m1", "plain"]]
+
+
+HAND_DRIVER = r"""
+const grab = (name) => { const a = src.indexOf(`\n  const ${name} = `); return src.slice(a, src.indexOf("\n  };", a) + 5); };
+const code = grab("RING_HAND")
+  + `
+const RING_LOOKS = "/static/img/looks/";
+const RA = { hands: {} };
+const window = {};
+`
+  + konst("looksVer") + fn("ringHands") + fn("ringHand");
+const H = new Function(code + `
+return { RA, RING_HAND, ringHand };`)();
+H.RA.hands = input.hands;
+finish({ out: input.ask.map(([look, sheet, i]) => H.ringHand(look, sheet, i)),
+         base: input.ask.map(([look, sheet, i]) => H.RING_HAND[sheet][i]) });
+"""
+
+
+def test_each_look_hangs_the_weapon_on_its_own_hand():
+    """兵器的位置照那一套形象自己的手位表（hands.json）；角度與層次照舊讀 RING_HAND。
+    沒有表的（舊的一套、還沒抓到）整個照 RING_HAND——以前全部共用斗笠小子那一張，新形象的兵器會懸在空中（Joy 2026-11-02）。"""
+    ask = [["xianv", "hero_bare_idle", 0], ["xianv", "hero_atk_slash", 1], ["moying", "hero_bare_idle", 0], ["", "hero_bare_idle", 0]]
+    hands = {"xianv": {"hero_bare_idle": [[10, 20], [11, 21], [12, 22], [13, 23]]}}
+    got = webharness.run(HAND_DRIVER, {"ask": ask, "hands": hands})
+    out, base = got["out"], got["base"]
+    assert out[0] == [10, 20, base[0][2], base[0][3]]  # 位置照自己的，角度與層次照原本的
+    assert out[1] == base[1]  # 表裡沒有這一張：照 RING_HAND
+    assert out[2] == base[2] and out[3] == base[3]  # 沒有表的那一套、預設的斗笠小子：照 RING_HAND

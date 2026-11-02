@@ -19,6 +19,8 @@
 | `market.py` | 形象市集（第四批）：自建形象定價上架、撤下、別人買一份、分成五五押七天才入帳、儲值限定的開關 |
 | `tests/` | `test_looks.py`（買、換上、換季、退款、假人、關著）、`test_looks_orders.py`（自建形象）、`test_looks_moves.py`（招式動畫）、`test_looks_scenes.py`（導演稿）、`test_looks_studio.py`（畫坊，生圖審圖都是假的）、`test_looks_market.py`（市集）、`test_looks_server.py`、`test_looks_web.py`（萬寶閣「形象」那一頁、管理者區）、`looks_stage.py` |
 
+兵器掛在哪：`web/arena_anim.js` 的 `RING_HAND` 是照斗笠小子量的，共用會讓別套形象的兵器懸在空中（Joy 2026-11-02 看出來的，量四套新形象，49 格裡各有 7～11 格落在身體以外）。每一套自己的手位表存在圖旁邊的 `hands.json`（`cutting.hand_row` 算：從斗笠小子那一點往外找最近的身體像素；官方形象跑 `scripts/look_hands.py`，自建的在 `orders.save_sheet` 存圖時順手算），網頁抓得到就用它的位置、角度與層次照舊讀 `RING_HAND`，抓不到整個照 `RING_HAND`。
+
 切圖：`scripts/cut_look.py`（開發機或主機；Pillow、numpy、scipy）。畫坊：根目錄 `run_studio.py`（主機，跟 `server.py`、`run_bots.py` 一起開；裝 `requirements-studio.txt`）。
 
 **賣是商城包的事**：商品 `kind` 寫 `look`、`look` 寫哪一套、效果只寫 `{"look": 1}`（`mall.item_problems` 驗）；購買那一列 `data` 多記 `look_id`（商品下架了也認得）；同一套買過了不再賣（`LOOK_OWNED`）。

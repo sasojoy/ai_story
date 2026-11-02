@@ -148,3 +148,65 @@ def test_every_sheet_prompt_tells_the_generator_to_keep_the_whole_character_in_f
         assert "margin" in prompt and "no motion blur" in prompt, sheet
     # 定裝照那一張也要（清單寫 full body, nothing cut off）
     assert "whole character must be inside the frame" in studio.PORTRAIT_PROMPT
+
+
+def test_the_hand_table_follows_each_looks_own_body():
+    """兵器掛在哪：web/arena_anim.js 的 RING_HAND 是照斗笠小子量的，換一套形象手就不在同一個地方
+    （2026-11-02 量新收的四套，49 格裡各有 7～11 格落在身體以外，兵器懸在空中）。
+    cutting.hand_row 照每一套自己的身體算，算完每一格都要落在人身上；倒地那幾格兵器本來就在地上，不動。"""
+    pytest.importorskip("scipy")
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    from tianxia.features.looks import cutting
+
+    for look in ("moying", "xianv"):
+        folder = ROOT / "web/img/looks" / look
+        if not folder.is_dir():
+            continue
+        for sheet in orders.SHEETS:
+            path = orders.sheet_file(ROOT / "web/img/looks", look, sheet)
+            if path is None:
+                continue
+            data = path.read_bytes()
+            row = cutting.hand_row(data, sheet)
+            assert len(row) == orders.SHEETS[sheet]
+            a = np.asarray(Image.open(io.BytesIO(data)).convert("RGBA"))[..., 3] > 32
+            for k, (x, y) in enumerate(row):
+                if cutting.HAND[sheet][k][3] == cutting.GROUND_LAYER:  # 掉在地上那幾格照舊
+                    assert [x, y] == list(cutting.HAND[sheet][k][:2])
+                    continue
+                cell = a[:, k * cutting.CELL:(k + 1) * cutting.CELL]
+                assert cell[max(0, y - 2):y + 3, max(0, x - 2):x + 3].any(), f"{look} {sheet}#{k + 1} 手位落空"
+
+
+def test_the_python_hand_table_is_the_same_as_the_one_the_page_draws_with():
+    """cutting.HAND 與 web/arena_anim.js 的 RING_HAND 是同一張表（兩邊各留一份，這一條盯著不要走掉）。"""
+    import re
+
+    from tianxia.features.looks import cutting
+
+    js = (ROOT / "web/arena_anim.js").read_text(encoding="utf-8")
+    block = js.split("const RING_HAND = {", 1)[1].split("};", 1)[0]
+    table = {}
+    for line in block.strip().splitlines():
+        m = re.match(r"\s*(\w+):\s*\[(.*?)\],?\s*(//.*)?$", line.strip())
+        if m:
+            table[m.group(1)] = tuple(tuple(int(x) for x in g.split(",")) for g in re.findall(r"\[([^\]]+)\]", m.group(2)))
+    assert table == {k: tuple(v) for k, v in cutting.HAND.items()}
+
+
+def test_saving_a_sheet_writes_that_looks_hand_table(tmp_path):
+    """存一張圖就順手更新 hands.json（網頁照它掛兵器；自建形象不必另外跑腳本）。"""
+    pytest.importorskip("scipy")
+    import json
+
+    data = (ART / "hero_bare_idle.webp").read_bytes()
+    orders.save_sheet(tmp_path, "u9", "hero_bare_idle", data)
+    table = json.loads(orders.hands_file(tmp_path, "u9").read_text(encoding="utf-8"))
+    assert list(table) == ["hero_bare_idle"] and len(table["hero_bare_idle"]) == 4
+    orders.save_sheet(tmp_path, "u9", "hero_bare_hit", (ART / "hero_bare_hit.webp").read_bytes())
+    table = json.loads(orders.hands_file(tmp_path, "u9").read_text(encoding="utf-8"))
+    assert sorted(table) == ["hero_bare_hit", "hero_bare_idle"]  # 併進去，不是蓋掉
