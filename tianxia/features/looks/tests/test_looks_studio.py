@@ -618,3 +618,102 @@ def test_a_move_withdrawn_while_painting_is_not_drawn_into(on):
     assert orders.sheet_file(actions.image_root(game), moves.move_id(pid), "art1") is None
     assert Wallet(game.world.db).purchase(pid).data["reason"] == orders.WITHDRAWN
     assert _tick(game, Painter(), Critic()) == []
+
+
+# ── 本機生圖（studio_local.LocalPainter；主機的 ComfyUI 跑 FLUX.2 klein）─────────
+
+
+class FakeComfy:
+    """假的 ComfyUI：收上傳、收節點圖、回一張圖。記下送出去的東西讓測試看。"""
+
+    def __init__(self, png: bytes, fail: str = ""):
+        self.png, self.fail, self.graphs, self.uploads = png, fail, [], []
+
+    class R:
+        def __init__(self, data=None, content=b""):
+            self._data, self.content = data, content
+
+        def json(self):
+            return self._data
+
+        def raise_for_status(self):
+            return None
+
+    def post(self, url, json=None, timeout=None, files=None, data=None):  # noqa: A002
+        if url.endswith("/upload/image"):
+            self.uploads.append(files["image"][1])
+            return self.R({"name": files["image"][0]})
+        self.graphs.append(json["prompt"])
+        return self.R({"prompt_id": "p1"})
+
+    def get(self, url, timeout=None, params=None):
+        if "/history/" in url:
+            if self.fail:
+                return self.R({"p1": {"status": {"status_str": "error", "messages": [["execution_error", {"exception_message": self.fail}]]}}})
+            return self.R({"p1": {"status": {"completed": True}, "outputs": {"save": {"images": [{"filename": "a.png"}]}}}})
+        return self.R(content=self.png)
+
+
+def _png(size=(32, 32)) -> bytes:
+    import io
+
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.new("RGBA", size, (10, 20, 30, 255)).save(out, "PNG")
+    return out.getvalue()
+
+
+def test_the_local_painter_sends_the_klein_graph_and_returns_the_image():
+    """本機生圖（企劃者 2026-11-02）：參考圖走 ComfyUI 的上傳 API、節點圖是實際跑出四套形象的那一份
+    （Flux2Scheduler＋BasicGuider，參考圖各縮到 1 MP 用 ReferenceLatent 串），畫布照長寬比。"""
+    from tianxia.features.looks.studio_local import LocalPainter
+
+    comfy = FakeComfy(_png())
+    painter = LocalPainter(session=comfy, sleep=0)
+    got = painter.paint("畫一個紅衣俠女", [_png(), _png()], "4:1", "2K")
+    assert got == comfy.png
+    g = comfy.graphs[0]
+    assert g["sched"]["inputs"]["width"] == 2048 and g["sched"]["inputs"]["height"] == 512  # 4:1 的畫布
+    assert g["sched"]["class_type"] == "Flux2Scheduler" and g["sampler"]["inputs"]["sampler_name"] == "euler"
+    assert g["pos"]["inputs"]["text"] == "畫一個紅衣俠女"
+    assert len(comfy.uploads) == 2 and g["guider"]["inputs"]["conditioning"] == ["rf1", 0]  # 兩張參考圖串起來
+    assert painter.tries == 10  # 本機重畫不要錢：上限比雲端的 3 高
+
+
+def test_a_broken_comfy_is_busy_not_a_failed_sheet():
+    """ComfyUI 沒開、節點圖對不上：算「那邊忙」（這一張不算、下一輪再來），不要記成這一張畫壞了。"""
+    from tianxia.features.looks.studio_local import LocalPainter
+
+    with pytest.raises(studio.PaintBusy):
+        LocalPainter(session=FakeComfy(_png(), fail="no such node"), sleep=0).paint("x", [], "3:2", "1K")
+
+    class Dead(FakeComfy):
+        def post(self, *a, **k):
+            raise OSError("connection refused")
+
+    with pytest.raises(studio.PaintBusy):
+        LocalPainter(session=Dead(_png()), sleep=0).paint("x", [], "3:2", "1K")
+
+
+def test_the_redraw_limit_comes_from_the_painter(on):
+    """重畫上限由呼叫端給（雲端 3、本機 10）：work 照它數，停手那一筆也記那個數。"""
+    game = _game(on)
+    _move_order(on, game)
+    jobs = studio.jobs(on, Wallet(game.world.db), actions.image_root(game), actions.WEB_IMG)
+    assert jobs, "要有一張等著畫的"
+    painted = []
+
+    class Never:
+        def paint(self, prompt, images, aspect, size):
+            painted.append(1)
+            return ART
+
+    class No:
+        def review(self, checklist, image, refs):
+            return studio.Verdict(False, ["不行"], "redraw")
+
+    out = studio.work(jobs[0], Never(), No(), cut, tries=5)
+    assert not out.ok and out.painted == 5 and len(painted) == 5
+    out = studio.work(jobs[0], Never(), No(), cut)  # 不給就是雲端那個上限
+    assert out.painted == studio.MAX_TRIES == 3

@@ -228,3 +228,39 @@ def test_only_the_owner_withdraws_and_not_after_release(on):
     _upload_all(admin, pid2)
     actions.admin_release(admin, pid2)
     assert "撤不回來" in actions.withdraw(game, pid2, "look")[-1]
+
+
+def test_a_white_hole_in_the_body_is_dropped_but_a_white_robe_is_not():
+    """本機生圖常把手臂與身體圍住的那一塊白底留下來，疊在擂台背景上就是一塊白斑（Joy 2026-11-02 的本機評估）。
+    挖掉它，但角色本來就穿白衣的不能挖——照定裝照上「封閉白塊佔身體幾 %」判（量到的：白衣書生 17.6%、
+    其他三套 0.4～2.2%、斗笠小子 0.0%，所以門檻 5% 兩邊都離八倍遠）。"""
+    pytest.importorskip("scipy")
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    from tianxia.features.looks import cutting
+
+    # 斗笠小子自己：身上沒有封閉白塊，判定不是白衣，挖不挖都一樣
+    hat = (ROOT / "web/img/arena/hero_bare_idle.webp").read_bytes()
+    assert cutting.white_share(Image.open(io.BytesIO(hat)).convert("RGBA")) < 1.0
+    assert not cutting.wears_white(hat)
+
+    # 在他身上戳一塊 20×20 的不透明白：挖得掉
+    im = Image.open(io.BytesIO(hat)).convert("RGBA")
+    a = np.asarray(im).copy()
+    ys, xs = np.nonzero(a[..., 3] > 32)
+    cy, cx = int(np.median(ys)), int(np.median(xs))
+    a[cy:cy + 20, cx:cx + 20] = (255, 255, 255, 255)
+    holed = Image.fromarray(a, "RGBA")
+    assert cutting.white_share(holed) > 1.0
+    after = np.asarray(cutting.drop_white_holes(holed))
+    assert after[cy + 5, cx + 5, 3] == 0  # 白斑變透明了
+    assert after[..., 3].sum() < np.asarray(holed)[..., 3].sum()
+
+    # 穿白衣的那一套（本機產的白衣書生）：判成白衣，sheet_bytes 的 keep_white 會留著它
+    white = ROOT / "web/img/looks/shusheng/hero_bare_idle.webp"
+    if white.is_file():
+        share = cutting.white_share(Image.open(white).convert("RGBA"))
+        assert share > cutting.WHITE_SHARE, f"白衣書生量到 {share:.1f}%，應該高過門檻 {cutting.WHITE_SHARE}%"

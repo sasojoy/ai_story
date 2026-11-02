@@ -90,6 +90,7 @@ class Job:
     aspect: str
     size: str
     refs: tuple[Path, ...]
+    portrait: Path | None = None  # 這一套的定裝照（cut_for 照它判斷角色穿不穿白衣，見 cutting.wears_white）
 
 
 @dataclass(frozen=True)
@@ -216,7 +217,7 @@ def jobs(content: Content, wallet: Wallet, root: Path, web_img: Path) -> list[Jo
             sheet = next((s for s in orders.SHEETS if s not in have and (o.status == orders.PENDING or s in orders.OUTING)), None)
             if sheet is None:
                 continue
-            out.append(Job(kind="look", pid=o.pid, folder=look, slot=sheet, label=sheet,
+            out.append(Job(kind="look", pid=o.pid, folder=look, slot=sheet, label=sheet, portrait=portrait,
                            prompt=f"{orders.gen_prompts(o)[sheet]}\n{SHEET_EXTRA}",
                            checklist=CHECK_SHEET.format(frames=orders.SHEETS[sheet], action=orders.ACTIONS[sheet],
                                                         gear=GEAR_SWORD if sheet in orders.OUTING else GEAR_NONE),
@@ -234,15 +235,18 @@ def cut_for(job: Job, raw: bytes, cutting) -> bytes:
         return raw
     if job.kind == "move":
         return cutting.art_bytes(raw)
-    return cutting.sheet_bytes(raw, job.slot)
+    # 手臂與身體圍住的那一塊白底要挖掉，但角色本來就穿白衣的不能挖（照定裝照判，cutting.wears_white）
+    white = bool(job.portrait and job.portrait.is_file() and cutting.wears_white(job.portrait.read_bytes()))
+    return cutting.sheet_bytes(raw, job.slot, keep_white=white)
 
 
-def work(job: Job, painter: Painter, critic: Critic, cut: Callable[[Job, bytes], bytes]) -> Result:
-    """畫、切、審，沒過照意見改，最多 MAX_TRIES 張。生圖那邊忙（PaintBusy）照丟出去：這一張不算，下一輪再來。"""
+def work(job: Job, painter: Painter, critic: Critic, cut: Callable[[Job, bytes], bytes], *, tries: int = MAX_TRIES) -> Result:
+    """畫、切、審，沒過照意見改，最多 tries 張（雲端生圖要錢所以是 MAX_TRIES＝3；本機生圖不要錢，畫坊程式會給大一點的數）。
+    生圖那邊忙（PaintBusy）照丟出去：這一張不算，下一輪再來。"""
     refs = [p.read_bytes() for p in job.refs if p.is_file()]
     raw = b""
     problems: list[str] = []
-    for n in range(1, MAX_TRIES + 1):
+    for n in range(1, max(1, tries) + 1):
         try:
             if n == 1:
                 raw = painter.paint(job.prompt, refs, job.aspect, job.size)
@@ -264,7 +268,7 @@ def work(job: Job, painter: Painter, critic: Critic, cut: Callable[[Job, bytes],
             if verdict.ok:
                 return Result(ok=True, image=image, raw=raw, painted=n)
         problems = verdict.problems or ["審圖沒過"]
-    return Result(ok=False, raw=raw, painted=MAX_TRIES, problems=problems)
+    return Result(ok=False, raw=raw, painted=max(1, tries), problems=problems)
 
 
 # ── 收 ───────────────────────────────────────
@@ -335,14 +339,14 @@ def note(data: dict) -> dict:
 
 
 def tick(content: Content, store, root: Path, web_img: Path, painter: Painter, critic: Critic,
-         cut: Callable[[Job, bytes], bytes], *, budget: int = 1) -> list[str]:
-    """畫坊巡一輪：做最多 budget 張（每張最多叫 MAX_TRIES 次生圖）。畫在鎖外（慢），收在行動鎖裡（同伺服器的一個動作）。
+         cut: Callable[[Job, bytes], bytes], *, budget: int = 1, tries: int = MAX_TRIES) -> list[str]:
+    """畫坊巡一輪：做最多 budget 張（每張最多叫 tries 次生圖）。畫在鎖外（慢），收在行動鎖裡（同伺服器的一個動作）。
     store 是 open_world() 那個（有 db、action_lock）。回幾句給主控台。"""
     wallet = Wallet(store.db)
     lines: list[str] = []
     for job in jobs(content, wallet, root, web_img)[:max(0, budget)]:
         try:
-            result = work(job, painter, critic, cut)
+            result = work(job, painter, critic, cut, tries=tries)
         except PaintBusy as exc:
             lines.append(f"#{job.pid} {job.label} 生圖的那邊忙，下一輪再來（{exc}）")
             continue

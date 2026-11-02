@@ -363,14 +363,60 @@ def hand_row(strip_bytes: bytes, name: str) -> list[list[int]]:
     return out
 
 
-def sheet_bytes(raw: bytes, name: str) -> bytes:
+# ── 封閉白塊（手臂與身體圍住的那一塊白底）────────────
+
+WHITE_MIN = 238  # RGB 三色最小值到這裡算「白底的白」
+WHITE_BLOB = 30  # 連通這麼多點才算一塊（更小的是線條之間的縫）
+WHITE_SHARE = 5.0  # 定裝照上封閉白塊佔身體這麼多 % 以上＝這個角色穿白衣，整套都不挖
+
+
+def _white_blobs(rgba: "Image.Image"):
+    """（這張圖的身體遮罩, 夠大的封閉白塊遮罩）。cutout 只去掉跟外框相連的白，手臂圍住的那一塊會留下來。"""
+    a = np.asarray(rgba)
+    ink = a[..., 3] > 32
+    white = (a[..., :3].min(axis=2) >= WHITE_MIN) & (a[..., 3] > 0)
+    lab, n = ndimage.label(white)
+    if not n:
+        return ink, np.zeros_like(white)
+    sizes = ndimage.sum(white, lab, range(1, n + 1))
+    big = np.isin(lab, [i + 1 for i, v in enumerate(sizes) if v >= WHITE_BLOB])
+    return ink, big
+
+
+def white_share(rgba: "Image.Image") -> float:
+    """封閉白塊佔身體的百分比。2026-11-02 量四套本機產的形象：白衣書生的定裝照 17.6%，
+    其他三套 0.4～2.2%，斗笠小子 0.0%——所以 WHITE_SHARE 5% 兩邊都離門檻八倍遠。"""
+    ink, big = _white_blobs(rgba)
+    return 100.0 * float(big.sum()) / max(1, int(ink.sum()))
+
+
+def wears_white(portrait: bytes) -> bool:
+    """這個角色是不是穿白衣（照定裝照判；穿白衣就不挖封閉白塊，不然衣服會被挖成洞）。"""
+    rgba, _ = cutout(Image.open(io.BytesIO(portrait)))
+    return white_share(rgba) >= WHITE_SHARE
+
+
+def drop_white_holes(strip: "Image.Image") -> "Image.Image":
+    """把封閉白塊設成透明（本機生圖常把手臂與身體之間留成白底，疊在擂台背景上就是一塊白斑）。"""
+    _, big = _white_blobs(strip)
+    if not big.any():
+        return strip
+    a = np.asarray(strip).copy()
+    a[big, 3] = 0
+    return Image.fromarray(a, "RGBA")
+
+
+def sheet_bytes(raw: bytes, name: str, keep_white: bool = False) -> bytes:
     """生圖工具給的一張原圖 → 擂台用的一條（webp，格數照 LAYOUT）。切完自己驗一遍（sheet_problems）：
-    機器看得出來的壞法直接丟 CutProblem，畫坊照它帶的那一句重畫，不叫審圖。"""
+    機器看得出來的壞法直接丟 CutProblem，畫坊照它帶的那一句重畫，不叫審圖。
+    keep_white 是「這個角色穿白衣」：封閉白塊不挖（呼叫端用 wears_white 照定裝照判）。"""
     cols, rows = LAYOUT[name]
     try:
         strip = sheet(io.BytesIO(raw), cols, rows, ref_h=BODY[name])  # 跟預設的斗笠小子一樣高，兵器才掛得準
     except (ValueError, IndexError) as exc:  # 去背之後什麼都不剩、某一格是空的
         raise CutError(f"切不出 {cols * rows} 格：{exc}") from exc
+    if not keep_white:
+        strip = drop_white_holes(strip)
     bad, fix = sheet_problems(strip, cols * rows, name)
     if bad:
         raise CutProblem(bad, fix)
