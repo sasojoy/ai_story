@@ -83,6 +83,17 @@ def router(shell) -> APIRouter:
         return {"message": shell.joined(msgs), "looks": shell.look(game, lambda g: actions.view(g)),
                 "main": shell.look(game, shell.main_view)}
 
+    @r.post("/api/looks/withdraw")
+    def api_looks_withdraw(request: Request, body: dict = Body(...)):
+        """撤回自己還沒上架的單：{id, kind}（kind "look" 自建形象、"move" 招式動畫），元寶全退；回 {message, looks, main}。"""
+        gate()
+        game = shell._game(request)
+        pid, kind = shell._int(body.get("id"), 0), "move" if body.get("kind") == "move" else "look"
+        msgs = shell.act(game, lambda g: actions.withdraw(g, pid, kind))
+        shell._tell_tabs(game)
+        return {"message": shell.joined(msgs), "looks": shell.look(game, lambda g: actions.view(g)),
+                "main": shell.look(game, shell.main_view)}
+
     @r.post("/api/looks/move")
     def api_looks_move(request: Request, body: dict = Body(...)):
         """招式動畫下單：{prompt, ref}（替現在練的那一門；打法照手上的兵器）；回 {message, looks, main}。"""

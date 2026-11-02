@@ -48,7 +48,7 @@ NO_NAME = "先替這一套取個名字。"
 NAME_LONG = "名字最多 {n} 個字。"
 NAME_TAKEN = "已經有一套叫「{name}」的形象了，換個名字。"
 NO_PROMPT = "寫一句這一套長什麼樣子。"
-OPEN_ORDER = "你還有一張自建形象在做，等它好了再下一張。"
+OPEN_ORDER = "你還有一張自建形象在做：等它好了、或按「撤回」退掉，再下一張。"
 SHORT = "元寶不夠：自建形象要 {price}，你有 {balance}。"
 PLACED = "下單了「{name}」：元寶 -{price}（還剩 {left}）。圖做好、審核過了，就會出現在「形象」這一頁。"
 DUPLICATE = "這一張已經下過單了。"
@@ -304,6 +304,27 @@ def reject(wallet: Wallet, order: Order, *, now: float, admin: str, note: str) -
         wallet.mark_refunded(order.pid, now)
         wallet.update_data(order.pid, status=REJECTED, reason=note)
     return f"退回了「{order.name}」：元寶 +{bought.price} 退給{order.owner}。"
+
+
+WITHDRAWN = "自己撤回"
+CAN_WITHDRAW = (PENDING, REVIEW)
+
+
+def withdraw(wallet: Wallet, order: Order, *, now: float) -> str:
+    """下單的人自己撤回（Joy 2026-11-02「審圖卡住，玩家也不能退回，會被卡死」）：上架以前（等圖、審核中）隨時可以，
+    元寶全退（同管理者退回：編號 refund:<購買>，只退得了一次），那一列記退回、原因「自己撤回」。畫坊正在畫的那一張回來時
+    看到不是等圖就不收（studio.apply）。狀態在交易裡重讀：同一刻管理者剛上架的不能再撤。"""
+    with wallet.db.transaction():
+        now_status = str((wallet.purchase(order.pid).data or {}).get("status", ""))
+        if now_status not in CAN_WITHDRAW:
+            return f"（「{order.name}」{STATUS_TEXT.get(now_status, now_status)}了，撤不回來。）"
+        bought = wallet.purchase(order.pid)
+        if not wallet.post(order.owner, bought.price, "refund", f"refund:{order.pid}", time=now, note=WITHDRAWN,
+                           purchase_id=order.pid):
+            return "（這一筆已經退過了。）"
+        wallet.mark_refunded(order.pid, now)
+        wallet.update_data(order.pid, status=REJECTED, reason=WITHDRAWN)
+    return f"撤回了「{order.name}」：元寶 +{bought.price} 退回來了。"
 
 
 def gen_prompts(order: Order) -> dict[str, str]:

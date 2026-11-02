@@ -32,7 +32,7 @@ KIND_STYLE = {"劍": "slash", "刀": "slash", "槍": "pole", "棍": "pole", "弓
 NOT_SOLD = "招式動畫還沒開賣。"
 NO_ART = "先練一門自己合成或自創的武功，才能替它畫招式。"
 NO_PROMPT = "寫一句這一招長什麼樣子。"
-OPEN_ORDER = "你還有一張招式動畫在做，等它好了再下一張。"
+OPEN_ORDER = "你還有一張招式動畫在做：等它好了、或按「撤回」退掉，再下一張。"
 ALREADY = "「{art}」這一種打法已經綁了招式。"
 SHORT = "元寶不夠：招式動畫要 {price}，你有 {balance}。"
 PLACED = "替「{art}」下單了招式動畫（{style}）：元寶 -{price}（還剩 {left}）。做好、審核過了會放進招式庫。"
@@ -195,6 +195,7 @@ def view(content: Content, wallet: Wallet, owner: str, art: str, art_name: str, 
         asleep = on_art and m.style != style
         return {"id": m.pid, "move": m.move, "art": m.art_name, "style": m.style, "style_text": STYLES.get(m.style, m.style),
                 "prompt": m.prompt, "status": m.status, "status_text": orders.STATUS_TEXT[m.status], "reason": m.reason,
+                "withdraw": m.status in orders.CAN_WITHDRAW,
                 "scene": m.scene is not None, "arts": [a["label"] for a in scenes.needs_art(m.scene or {})],
                 "bound": m.bound_name if here else "", "on_art": on_art,
                 "plays": on_art and not asleep, "asleep": asleep,

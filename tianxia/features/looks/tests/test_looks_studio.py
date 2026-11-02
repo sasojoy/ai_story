@@ -603,6 +603,23 @@ def test_a_made_look_gets_the_outing_sheets_backfilled(on):
     assert len(orders.present(actions.image_root(game), orders.look_id(pid))) == len(orders.SHEETS)
 
 
+def test_a_move_withdrawn_while_painting_is_not_drawn_into(on):
+    """畫坊三張都不過停手了（卡住），或正在畫的時候，下單的人自己撤回：元寶全退、畫回來的那一張不收（Joy 11/2）。"""
+    game = _game(on)
+    pid = _move_order(on, game)
+
+    class Withdrawing(Painter):
+        def paint(self, *a):
+            if not self.calls:
+                assert "撤回了" in actions.withdraw(game, pid, "move")[-1]
+            return super().paint(*a)
+
+    assert "已經不在等圖" in _tick(game, Withdrawing(), Critic())[0]
+    assert orders.sheet_file(actions.image_root(game), moves.move_id(pid), "art1") is None
+    assert Wallet(game.world.db).purchase(pid).data["reason"] == orders.WITHDRAWN
+    assert _tick(game, Painter(), Critic()) == []
+
+
 # ── 本機生圖（studio_local.LocalPainter；主機的 ComfyUI 跑 FLUX.2 klein）─────────
 
 

@@ -106,6 +106,21 @@ MOVES = {"price": 300, "prompt_max": 120, "art": "旋風腿", "has_art": True, "
          "list": []}
 
 
+def test_a_stuck_order_can_be_withdrawn(m_on):  # noqa: F811
+    """Joy 2026-11-02「審圖卡住，玩家也不能退回，會被卡死」：還沒上架的單一顆「撤回」，先問一次，送 /api/looks/withdraw。"""
+    open_ = {**ORDER, "open": True, "list": [{**ORDER["list"][0], "status": "review", "status_text": "審核中", "reason": "", "withdraw": True}]}
+    done = {**ORDER, "list": [{**ORDER["list"][0], "reason": "自己撤回", "withdraw": False}]}
+    out = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }')
+                 + 'const before = T.els.app.innerHTML;'
+                 + _click('{ act: "look-withdraw", kind: "look", id: "3", name: "黑衣客" }') + 'const asked = T.bodyHtml.join("");'
+                 + _click('{ act: "ask-yes" }') + 'return { before, asked, app: T.els.app.innerHTML, calls: T.calls };',
+                 responses={"/api/looks": {**LOOKS, "order": open_},
+                            "/api/looks/withdraw": {"message": "撤回了「黑衣客」：元寶 +900 退回來了。", "looks": {**LOOKS, "order": done}}})
+    assert 'data-act="look-withdraw" data-kind="look" data-id="3"' in out["before"] and "按「撤回」退掉" in out["before"]
+    assert "撤回「黑衣客」？元寶全退" in out["asked"]
+    assert any(c[0] == "/api/looks/withdraw" and c[1] == {"id": 3, "kind": "look"} for c in out["calls"])
+
+
 def test_the_move_section_orders_and_binds(m_on):  # noqa: F811
     """招式動畫（第三批）：寫現在練的那一門與打法、下單的表單、招式庫一列一顆「綁到」；綁送 /api/looks/bind。"""
     looks = {**LOOKS, "moves": MOVES}

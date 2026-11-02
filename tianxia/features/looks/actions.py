@@ -114,6 +114,23 @@ def order(ctx: Game, name: str, prompt: str, ref: str) -> list[str]:
     return ctx._log([line])
 
 
+def withdraw(ctx: Game, pid: int, kind: str) -> list[str]:
+    """下單的人自己撤回還沒上架的自建形象（kind "look"）或招式動畫（"move"）：元寶全退（orders.withdraw），寫一則「形象」江湖紀錄。
+    只認自己的單。"""
+    wallet = ctx._wallet()
+    if wallet is None or not rules.on(ctx.content):
+        return ctx._log([rules.OFF])
+    mod = moves if kind == "move" else orders
+    item = mod.item_of(ctx.content)
+    found = None if item is None else mod.find(wallet, item.id, pid)
+    if found is None or found.owner != ctx._mall_owner():
+        return ctx._log([f"（沒有第 {pid} 號訂單。）"])
+    line = orders.withdraw(wallet, found, now=ctx.pill_now())
+    if not line.startswith("（"):
+        journal.add_entry(ctx.state, JournalEntry(time=ctx.state.world.time, title=TITLE, lines=[line], changes=[f"元寶 +{item.price}"]))
+    return ctx._log([line])
+
+
 def _admin_order(ctx: Game, pid: int):
     wallet = ctx._wallet()
     item = orders.item_of(ctx.content)
