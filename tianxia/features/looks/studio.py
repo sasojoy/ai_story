@@ -28,10 +28,11 @@ MAX_TRIES = 3  # 一張最多畫幾次（第一次＋照審圖的意見改兩次
 PORTRAIT = "ref"  # 自建形象的定裝照（十張都照它畫同一個人；放在那一套的資料夾，不是十張之一，不上架）
 GRAY = (128, 128, 128)  # 給審圖看的時候透明的地方鋪成灰的
 
-ASPECT = {(4, 1): "4:1", (3, 1): "21:9", (3, 2): "3:2"}  # 一張的排法（cutting.LAYOUT）→ 生圖的長寬比
+ASPECT = {(4, 1): "4:1", (3, 1): "21:9", (3, 2): "3:2", (4, 2): "16:9"}  # 一張的排法（cutting.LAYOUT）→ 生圖的長寬比
 LAYOUT = {  # 同 cutting.LAYOUT（這支不 import cutting：伺服器的管理者頁也讀 studio，不能拉進 numpy）
     "hero_bare_idle": (4, 1), "hero_bare_hit": (3, 1), "hero_bare_kneel": (4, 1), "hero_bare_dodge": (4, 1), "hero_bare_fall": (3, 2),
     "hero_bare_block": (4, 1), "hero_atk_slash": (3, 2), "hero_atk_pole": (3, 2), "hero_atk_fist": (3, 2), "hero_atk_shoot": (3, 2),
+    "hero_run": (4, 2), "hero_pickup": (3, 2), "hero_lift": (3, 1), "hero_slash": (3, 2), "hero_meditate": (4, 1), "hero_push": (4, 1),
 }
 
 
@@ -134,13 +135,29 @@ CHECK_PORTRAIT = (
     "third of the height) like the reference sprite; it matches the description; holds no weapon or object; soft ink-wash watercolor "
     "style like the reference. " + CHECK_COMMON
 )
+# 動作比對放寬（Joy 2026-11-02 選的）：原本要求「逐格照參考圖的姿勢」，出招那四張因此一直過不了——
+# 2026-11-02 #3 的理由是「第2格雙拳未併攏舉至右肩上方」「第5格不是低位收勢」這種逐格手部位置，
+# 而六格的出招圖要生圖穩定對準手的位置本來就做不到。硬規則全留（格數、整個人在框內、同一個人、
+# 沒有武器、側面向右、腳在同一條線），只把姿勢那一句改成「整串讀起來是那個動作、順序對」。
+# 「沒有武器」也補一句：寬袖、飄帶、長髮不算東西——魔教聖女的紅袖一揚就被判成「手持紅布或刀刃」。
+GEAR_NONE = "holds no weapon or object (loose sleeves, ribbons, sashes and long hair are not objects)"
+GEAR_SWORD = ("carries one plain straight sword like reference 1 (at the hip, or in hand when the action draws it) and no other "
+              "weapon; a small found item in the hands is fine where reference 1 has one")
 CHECK_SHEET = (
     "This is an animation strip for a 2D fighting game: {frames} frames side by side, each 220×220, cut out from the background "
     "(cut-out areas are flat gray). The action should be: {action}\n"
-    "Reference 1 is the same animation drawn for another character (poses and layout to follow). Reference 2 is this character's "
-    "design.\nPass it only if: exactly {frames} frames, one whole character in each (no frame empty, cut in half, or holding two "
-    "characters); it is the same character as reference 2 in every frame (face, hair, clothes, colors); the poses follow reference 1 "
-    "in order; side view facing right; holds no weapon or object; feet roughly on the same ground line. " + CHECK_COMMON
+    "Reference 1 is the same animation drawn for another character (layout and overall action to follow). Reference 2 is this "
+    "character's design.\nPass it only if: exactly {frames} frames, one whole character in each (no frame empty, cut in half, or "
+    "holding two characters); it is the same character as reference 2 in every frame (face, hair, clothes, colors); the frames read "
+    "as the action above and run in the same order as reference 1 — small differences in limb position are fine, judge the action as "
+    "a whole, not frame by frame; side view facing right; {gear}; feet roughly on the same ground line.\n"
+    # 校準（2026-11-02）：審圖連去背留下的 1～2 像素白邊都當成「白色毛絨狀雜物」擋下來，但量過了——
+    # 那種邊緣佔實心像素的 0.0～0.2%，預設的斗笠小子（同一條去背管線切的）與這一套已經過審的六張
+    # 都在同一個量級。所以要寫明比較的基準是斗笠小子，不是乾淨的向量圖。
+    "The strip was cut out automatically, so a one or two pixel pale edge along the outline is normal — the default "
+    "hat-boy sprites have the same. Judge it at normal viewing size: ignore single-pixel fringes and faint edge "
+    "halos, and only fail the cut-out if a whole limb or a large area is missing, see-through or buried in leftover "
+    "background. " + CHECK_COMMON
 )
 
 
@@ -180,24 +197,30 @@ def jobs(content: Content, wallet: Wallet, root: Path, web_img: Path) -> list[Jo
     if look_item is not None:
         for b in wallet.purchases_of(look_item.id):
             o = orders.of(b)
-            if o is None or o.status != orders.PENDING or _failed(b.data):
+            # 等圖的照順序畫；審核中、上架了的只補走一趟那幾張（2026-11-02 加的，之前做好的少這幾張）
+            if o is None or o.status not in (orders.PENDING, orders.REVIEW, orders.MADE) or _failed(b.data):
                 continue
             look = orders.look_id(o.pid)
             portrait = orders.folder(root, look) / f"{PORTRAIT}.png"
+            if not portrait.is_file():  # 沒有定裝照（管理者手動上傳的那幾套）：拿它自己站著那一張當這個人的樣子
+                portrait = orders.sheet_file(root, look, "hero_bare_idle") or portrait
             if not portrait.is_file():
+                if o.status != orders.PENDING:
+                    continue
                 out.append(Job(kind="look", pid=o.pid, folder=look, slot=PORTRAIT, label="定裝照",
                                prompt=PORTRAIT_PROMPT.format(style=orders.BASE_STYLE, text=o.prompt),
                                checklist=CHECK_PORTRAIT.format(text=o.prompt), aspect="3:4", size="1K",
                                refs=(arena / "hero_bare_idle.webp",)))
                 continue
             have = orders.present(root, look)
-            sheet = next((s for s in orders.SHEETS if s not in have), None)
+            sheet = next((s for s in orders.SHEETS if s not in have and (o.status == orders.PENDING or s in orders.OUTING)), None)
             if sheet is None:
                 continue
             out.append(Job(kind="look", pid=o.pid, folder=look, slot=sheet, label=sheet,
                            prompt=f"{orders.gen_prompts(o)[sheet]}\n{SHEET_EXTRA}",
-                           checklist=CHECK_SHEET.format(frames=orders.SHEETS[sheet], action=orders.ACTIONS[sheet]),
-                           aspect=ASPECT[LAYOUT[sheet]], size="2K", refs=(arena / f"{sheet}.webp", portrait)))
+                           checklist=CHECK_SHEET.format(frames=orders.SHEETS[sheet], action=orders.ACTIONS[sheet],
+                                                        gear=GEAR_SWORD if sheet in orders.OUTING else GEAR_NONE),
+                           aspect=ASPECT[LAYOUT[sheet]], size="2K", refs=(orders.reference(web_img, sheet), portrait)))
     return out
 
 
@@ -254,7 +277,8 @@ def apply(content: Content, wallet: Wallet, root: Path, job: Job, result: Result
     if b is None:
         return f"#{job.pid} 不見了"
     found = moves.of(b) if job.kind == "move" else orders.of(b)
-    if found is None or found.status != orders.PENDING:
+    backfill = job.kind == "look" and job.slot in orders.OUTING and found is not None and found.status in (orders.REVIEW, orders.MADE)
+    if found is None or (found.status != orders.PENDING and not backfill):
         return f"#{job.pid} 已經不在等圖（{orders.STATUS_TEXT.get(found.status, '') if found else ''}）"
     studio = dict(b.data.get("studio") or {})
     studio["painted"] = int(studio.get("painted", 0)) + result.painted

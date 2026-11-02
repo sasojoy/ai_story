@@ -28,9 +28,29 @@ def test_custom_images_are_served_from_beside_the_database():
     orders.save_sheet(root, "u7", "hero_bare_idle", (ART / "hero_bare_idle.webp").read_bytes())
     got = client.get("/api/looks/img/u7/hero_bare_idle")
     assert got.status_code == 200 and got.headers["content-type"] == "image/webp"
+    # 圖換了網址不會換（上架之後還會 refit、重畫、退回重來），所以不能讓瀏覽器釘死：
+    # 每次都要回來問，靠 ETag 省流量（照 server.NO_CACHE 那條家規）。2026-11-02 之前寫 max-age=86400，
+    # 把十張 refit 回標準身高之後畫面上還是舊的大號身體。
+    assert got.headers["cache-control"] == "no-cache"
+    assert got.headers.get("etag"), "要有 ETag，不然每次都得重傳整張"
+    again = client.get("/api/looks/img/u7/hero_bare_idle", headers={"If-None-Match": got.headers["etag"]})
+    assert again.status_code == 304, "沒換就回 304"
     assert client.get("/api/looks/img/u7/hero_bare_hit").status_code == 404
     assert client.get("/api/looks/img/moying/hero_bare_idle").status_code == 404
     assert client.get("/api/looks/img/u7/..%2Fsecret").status_code == 404
+
+
+def test_main_sends_a_version_for_the_custom_images_so_phones_see_new_art():
+    """main.looks_ver：網頁把它接在圖網址後面當 ?v=（同 server.versioned_page 對自家檔案那一套）。
+    圖換了版本就換，之前快取過舊圖的手機也會抓到新的（Joy 2026-11-02「我手機現在看還是大的圖」）。"""
+    client = _player()
+    root = actions.images_beside(default_path())
+    before = client.get("/api/main").json()["looks_ver"]
+    orders.save_sheet(root, "u9", "hero_bare_idle", (ART / "hero_bare_idle.webp").read_bytes())
+    after = client.get("/api/main").json()["looks_ver"]
+    assert before and after and after != before, "多一張圖，版本就要換"
+    orders.save_sheet(root, "u9", "hero_bare_idle", (ART / "hero_bare_hit.webp").read_bytes())
+    assert client.get("/api/main").json()["looks_ver"] != after, "同一張換了內容，版本也要換"
 
 
 def test_move_effects_are_served_as_fx_only():

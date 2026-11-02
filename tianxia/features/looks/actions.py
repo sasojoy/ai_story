@@ -1,6 +1,7 @@
 """擂台形象的動作（功能包 tianxia/features/looks/）。ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。"""
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -69,6 +70,30 @@ def image_root(ctx: Game) -> Path:
 
 def images_beside(db_path) -> Path:
     return Path(db_path).resolve().parent / "looks"
+
+
+def images_version() -> str:
+    """自建的圖此刻的版本（main.looks_ver）：網頁拿它當圖網址的 ?v=，圖一換網址就換。
+
+    為什麼要這一個（Joy 2026-11-02「我手機現在看還是大的圖」）：那一條路由改成 no-cache ＋ ETag 之後，
+    新抓的客戶端都會回來驗；但在那之前抓過的，手上那筆帶著舊的 max-age=86400，整天都不會回來問。
+    網址帶版本就不受影響——新網址就是新的快取鍵（同 server.versioned_page 對自家檔案那一套）。
+    照每個檔的修改時刻與大小算，所以 refit、重畫、退回重來都會換；幾十個檔，一次 stat 不花時間。
+    """
+    from tianxia.database import default_path  # noqa: PLC0415  伺服器才知道資料庫在哪
+
+    root = images_beside(default_path())
+    if not root.is_dir():
+        return "0"
+    parts: list[str] = []
+    for folder in sorted(root.iterdir()):
+        if not folder.is_dir():
+            continue
+        for f in sorted(folder.iterdir()):
+            if f.is_file():
+                st = f.stat()
+                parts.append(f"{folder.name}/{f.name}:{int(st.st_mtime)}:{st.st_size}")
+    return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:10] if parts else "0"
 
 
 def order(ctx: Game, name: str, prompt: str, ref: str) -> list[str]:
@@ -286,7 +311,7 @@ def admin_upload(ctx: Game, pid: int, sheet: str, data: bytes) -> list[str]:
     orders.save_sheet(root, orders.look_id(pid), sheet, data)
     now = orders.mark(wallet, found, root)
     have = len(orders.present(root, orders.look_id(pid)))
-    return ctx._log([f"收到「{found.name}」的 {sheet}（{have}/{len(orders.SHEETS)}）" + ("，十張齊了，可以審核。" if now.status == orders.REVIEW else "。")])
+    return ctx._log([f"收到「{found.name}」的 {sheet}（{have}/{len(orders.SHEETS)}）" + ("，全套齊了，可以審核。" if now.status == orders.REVIEW else "。")])
 
 
 def admin_studio_retry(ctx: Game, pid: int) -> list[str]:

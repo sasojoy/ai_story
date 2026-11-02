@@ -82,7 +82,20 @@ def hat(mask_crop):
     return best
 
 CELL, AX, BY = 220, 100, 212
-FIT = 200  # 沒戴斗笠的角色照斗笠寬會被放大到出框：縮完最高那一格不超過這個高度（BY 之上還留得下頭與一點空白）
+# 一張一個「標準身高」：照 web/img/arena 的斗笠小子量出來的（最高那一格；2026-11-02 量）。
+# 為什麼不照斗笠寬（舊規則 s = 104 ÷ hat()）：
+#   1. 自建形象不一定戴斗笠，量到的是頭髮或肩線，倍率失準——「魔教聖女」第一版高 190～200，
+#      比預設的 155 大了四分之一，而 web/arena_anim.js 的 RING_HAND（每一格的手部座標）是照
+#      155 高的身體寫死的，兵器就掛在錯的位置（Joy 2026-11-02「兵器套用上去就破圖了」）。
+#   2. 連預設的圖都量不準：拿斗笠小子的 hero_bare_idle 重切，斗笠寬算出來是 199～200 高，原圖是 154。
+# 照身高正規化則完全重現原圖（154/155、156/157，驗過），而且不管戴不戴斗笠都一樣準。
+BODY = {
+    "hero_bare_idle": 155, "hero_bare_hit": 161, "hero_bare_kneel": 154, "hero_bare_dodge": 168, "hero_bare_fall": 156,
+    "hero_bare_block": 162, "hero_atk_slash": 157, "hero_atk_pole": 153, "hero_atk_fist": 154, "hero_atk_shoot": 154,
+    # 走一趟那六張（web/img/outing 的斗笠小子，2026-11-02 量；舉手、拔劍的那幾格比較高）
+    "hero_run": 155, "hero_pickup": 161, "hero_lift": 182, "hero_slash": 174, "hero_meditate": 177, "hero_push": 153,
+}
+BODY_SLACK = 1.18  # 躺著、縮著的那幾格可能比最高的那一格矮：倍率照最高那一格算，這個數只給驗收用
 def sheet(path, cols, rows, kind='hero', scale_from=None, ref_h=None):
     im = Image.open(path)
     rgba, mask = cutout(im)
@@ -94,26 +107,27 @@ def sheet(path, cols, rows, kind='hero', scale_from=None, ref_h=None):
             w, cx = hat(crop); info.append((w, x0+cx, y1, y1-y0))
         else:
             ys, xs = np.nonzero(crop); info.append((0, x0+xs.mean(), y1, y1-y0))
-    if ref_h:
-        s = ref_h / info[0][3]
+    if ref_h:  # 照身高：最高那一格對到標準身高（看 BODY 那一段為什麼不照斗笠寬）
+        s = ref_h / float(max(i[3] for i in info))
     elif kind == 'hero':
-        # 照斗笠寬定比例（斗笠小子那一套的慣例）。但自建形象不一定戴斗笠：2026-11-02 第一張「魔教聖女」
-        # 連十張都被審圖擋下，理由都是「四格的頭頂被裁掉」——hat() 取的是上半部最寬的一條橫列，
-        # 沒有斗笠時量到的是頭髮或肩線（窄得多），104÷窄寬度 算出來的倍率過大，整個人被放大，
-        # 腳底釘在 BY=212、格子只有 CELL=220 高，頭就被切掉。所以再夾一次：最高那一格也要塞得進格子。
-        s = 104 / float(np.median([i[0] for i in info]))
-        s = min(s, FIT / float(max(i[3] for i in info)))
+        s = 104 / float(np.median([i[0] for i in info]))  # 沒給標準身高時照舊（舊腳本 scripts/cut_look.py）
     else:
         ref = scale_from if scale_from else [i[3] for i in info[:4]]
         s = 190 / float(np.median(ref))
     strip = Image.new('RGBA', (CELL*len(fr), CELL), (0, 0, 0, 0))
+    src_w, grid_cols = im.width, cols  # 原圖那一格的中線（水平對齊用，見下面）
     for k, ((x0, y0, x1, y1, keep, cx0, cy0), (w, ax, by, hh)) in enumerate(zip(fr, info)):
         m = Image.fromarray((keep*255).astype(np.uint8), 'L')
         piece = rgba.crop((cx0, cy0, cx0+keep.shape[1], cy0+keep.shape[0]))
         pa = np.asarray(piece).copy(); pa[..., 3] = np.minimum(pa[..., 3], np.asarray(m))
         piece = Image.fromarray(pa, 'RGBA')
         piece = piece.resize((max(1, int(piece.width*s)), max(1, int(piece.height*s))), Image.LANCZOS)
-        px = int(round(AX - (ax-cx0)*s)); py = int(round(BY - (by-cy0)*s))
+        # 水平：對齊「原圖那一格的中線」，不是每一格各自把人置中——各自置中會把整個人往前探的位移抹掉
+        # （2026-11-02 量到的：拿斗笠小子的 hero_bare_idle 重切，前端擺幅 19 px → 2 px，實機就看不到前後晃動了，
+        #  Joy「斗笠小子有在前後移動，但是我們新的模型不會…最嚴重的就是他往前的那一下」）。
+        # 垂直照舊每一格各自把腳底對到 BY（腳要站在同一條地平線上）。
+        grid_cx = ((k % grid_cols) + 0.5) * src_w / grid_cols
+        px = int(round(AX - (grid_cx-cx0)*s)); py = int(round(BY - (by-cy0)*s))
         tmp = Image.new('RGBA', (CELL, CELL), (0, 0, 0, 0)); tmp.alpha_composite(piece, (max(px, -10**6), py)) if px >= 0 and py >= 0 else tmp.paste(piece, (px, py), piece)
         strip.alpha_composite(tmp, (k*CELL, 0))
     return strip
@@ -122,6 +136,7 @@ def sheet(path, cols, rows, kind='hero', scale_from=None, ref_h=None):
 LAYOUT = {  # 十張 → (每排幾格, 幾排)；格數同 tianxia/features/looks/orders.py 的 SHEETS
     "hero_bare_idle": (4, 1), "hero_bare_hit": (3, 1), "hero_bare_kneel": (4, 1), "hero_bare_dodge": (4, 1), "hero_bare_fall": (3, 2), "hero_bare_block": (4, 1),
     "hero_atk_slash": (3, 2), "hero_atk_pole": (3, 2), "hero_atk_fist": (3, 2), "hero_atk_shoot": (3, 2),
+    "hero_run": (4, 2), "hero_pickup": (3, 2), "hero_lift": (3, 1), "hero_slash": (3, 2), "hero_meditate": (4, 1), "hero_push": (4, 1),
 }
 
 
@@ -130,9 +145,34 @@ LAYOUT = {  # 十張 → (每排幾格, 幾排)；格數同 tianxia/features/loo
 MIN_INK = 600  # 一格至少要有這麼多不透明的點，不然算空的（220×220 的格子，一個小人大概四五千點）
 EDGE = 2  # 上下緣留白至少幾列
 LINE_SHARE = 0.8  # 一列橫跨格寬這麼多比例、而且上下都空 → 當成畫出來的地面線
+# 相鄰兩格最多能有多像（形狀重疊率）：照 web/img/arena 的斗笠小子量出來的上限加 0.10 餘裕（2026-11-02 量）。
+# 餘裕給 0.10 不給 0.05：0.05 連差一點的（block 0.785 對上限 0.78）都擋，重畫的次數與錢都要多花；
+# 0.10 只擋明顯的——第一版「魔教聖女」的 idle 0.967、kneel 0.948、shoot 0.936 照樣擋得下來。
+# 規則是「不准比斗笠小子更懶」——不能用單一門檻：hero_bare_fall 的第 5、6 格是「躺著不動」，本來就重疊 0.973，
+# 而 hero_bare_idle 的斗笠小子是 0.845、第一版「魔教聖女」是 0.967（看起來完全不晃，Joy 2026-11-02
+# 「原版斗笠小子會一直前後晃動，新模型不會」）。
+# 另外壓一個下限 0.70：斗笠小子的 dodge（0.508）、hit（0.462）動作特別大，照它加 0.10 等於要求生圖每一格
+# 都大幅改姿勢——實測 dodge 連擋三次（生圖做不到），而原始那一張 0.617 其實只是「比斗笠小子收斂」、不是不動。
+# 這一關要抓的是「看起來完全靜止」（0.93 以上），不是逼每一張都跟斗笠小子一樣誇張。
+MOVE_MAX = {  # 斗笠小子量到的上限：idle .845 hit .462 kneel .745 dodge .508 fall .973 block .721 slash .805 pole .818 fist .719 shoot .803
+    "hero_bare_idle": 0.945, "hero_bare_hit": 0.700, "hero_bare_kneel": 0.845, "hero_bare_dodge": 0.700,
+    "hero_bare_fall": 1.01,  # 第 5、6 格是躺著不動，本來就幾乎一樣：這一張不驗
+    "hero_bare_block": 0.821, "hero_atk_slash": 0.905, "hero_atk_pole": 0.918, "hero_atk_fist": 0.819, "hero_atk_shoot": 0.903,
+}
 
 
-def sheet_problems(strip: "Image.Image", frames: int) -> tuple[list[str], str]:
+# 前後擺幅：一條裡「最前端」的 x 在各格之間要差多少（側面視角的前後＝水平）。照斗笠小子量到的三分之一。
+# 為什麼要分開驗（Joy 2026-11-02 看實機：「斗笠小子有在前後移動，但是我們新的模型不會…最嚴重的就是他往前的那一下」）：
+# 斗笠小子的待機是「第 3 格整個往前探一下再收回」——前端擺 19 px、垂直只有 3 px，重疊率卻有 0.845，
+# 所以光看重疊率擋不住「原地抖兩下」那種（第一版重畫出來 0.93 過了關，看起來還是不動）。
+# 斗笠小子量到的前端擺幅：idle 19 hit 52 kneel 44 dodge 20 fall 41 block 10 slash 19 pole 28 fist 39 shoot 32
+SWAY_MIN = {
+    "hero_bare_idle": 6, "hero_bare_hit": 17, "hero_bare_kneel": 14, "hero_bare_dodge": 6, "hero_bare_fall": 13,
+    "hero_bare_block": 3, "hero_atk_slash": 6, "hero_atk_pole": 9, "hero_atk_fist": 13, "hero_atk_shoot": 10,
+}
+
+
+def sheet_problems(strip: "Image.Image", frames: int, name: str | None = None) -> tuple[list[str], str]:
     """切完的那一條自己先驗一遍（Joy 2026-11-02「把能過的方法模組化」）：這幾樣機器看得出來，
     不必花一次審圖的錢，也不會每次都要人重新判是生圖畫壞還是我們切壞。
     回（寫給管理者的中文問題, 丟回生圖的英文改法）；都沒問題回 ([], "")。
@@ -158,7 +198,7 @@ def sheet_problems(strip: "Image.Image", frames: int) -> tuple[list[str], str]:
         if rows_with.min() < EDGE:
             bad.append(f"第 {k + 1} 格的人貼到上緣（第 {int(rows_with.min())} 列就有東西）")
             fixes.append("the whole character must be inside the frame, with empty space above the head")
-        if rows_with.max() > BY:
+        if rows_with.max() > BY + 2:  # 2 px 容差：縮放的四捨五入會讓腳底落在 BY+1
             bad.append(f"第 {k + 1} 格的人超過地平線（畫到第 {int(rows_with.max())} 列）")
             fixes.append("keep the feet on the ground line, nothing below it")
         # 地面線：那一列橫跨整格，但它上面幾列窄得多（人站在線上，所以要比「寬度」而不是「點數」）
@@ -168,6 +208,30 @@ def sheet_problems(strip: "Image.Image", frames: int) -> tuple[list[str], str]:
         if flat:
             bad.append(f"第 {k + 1} 格腳下有一條橫跨整格的線（第 {flat[0]} 列）")
             fixes.append("do NOT draw any ground line, horizon line, floor or platform")
+    # 動得夠不夠：相鄰兩格的形狀重疊率不能比斗笠小子還高（MOVE_MAX）。比形狀（alpha）不比顏色——
+    # 同一個人同一件衣服，顏色本來就幾乎一樣。name 是哪一張（sheet_bytes 一定會給；沒給就不驗這一項）。
+    if not bad and name in MOVE_MAX:
+        masks = [(alpha[:, k * CELL:(k + 1) * CELL] > 32) for k in range(frames)]
+        for k in range(1, frames):
+            a1, a2 = masks[k - 1], masks[k]
+            union = int((a1 | a2).sum())
+            if union and int((a1 & a2).sum()) / union > MOVE_MAX[name]:
+                bad.append(f"第 {k} 與第 {k + 1} 格幾乎一樣（動作幅度太小）")
+                fixes.append("every frame must be a clearly different pose — move the body, arms and legs between frames "
+                             "as much as in the reference animation; do not redraw almost the same picture")
+                break
+    # 前後擺幅：整個人要像斗笠小子那樣往前探再收回，不是原地微動
+    if not bad and name in SWAY_MIN:
+        fronts = []
+        for k in range(frames):
+            cols = np.nonzero((alpha[:, k * CELL:(k + 1) * CELL] > 32).max(0))[0]
+            if len(cols):
+                fronts.append(int(cols.max()))
+        if fronts and max(fronts) - min(fronts) < SWAY_MIN[name]:
+            bad.append(f"整串幾乎沒有前後移動（最前端只差 {max(fronts) - min(fronts)} 像素，至少要 {SWAY_MIN[name]}）")
+            fixes.append("the character must clearly move forward and back along the ground between frames — "
+                         "in at least one frame the whole body leans or steps toward the right edge, lead fist pushed out, "
+                         "then returns; moving only up and down is not enough")
     seen: list[str] = []
     for f in fixes:  # 同一句只留一次（一條十格很容易每格都中同一樣）
         if f not in seen:
@@ -175,15 +239,139 @@ def sheet_problems(strip: "Image.Image", frames: int) -> tuple[list[str], str]:
     return bad, " ".join(seen)
 
 
+IDLE_STEPS = (0, 3, 21, 2)  # 待機四格各往前幾像素：對齊 web/arena_anim.js 的 RING_HAND.hero_bare_idle
+# （那張表的手 x 是 132、132、153、134，位移 0、0、21、2——兵器掛在手上，身體走多少手就要走多少。
+#   第 2 格借 3 px，不然跟第 1 格一模一樣，過不了「四格要動」那一關。）
+
+
+def idle_from_stance(strip_bytes: bytes, frame: int = 0) -> bytes:
+    """拿一張已經過關的站姿，合成待機那一條（Joy 2026-11-02 選的做法）。
+
+    為什麼用合成的：待機要的就是「整個人往前探一下再收回」這個位移（量斗笠小子：前端擺 19 px、垂直只有 3 px），
+    位移我們自己做得準，生圖反而連七次畫不出乾淨的四格（七種不同的理由、56 次生圖）。把生圖的額度留給出招
+    那些真的需要重畫姿勢的動作。缺點講明：那一下是整個人平移，不是重畫的姿勢。
+
+    frame 是來源那一條的第幾格（0 起算）；回傳四格的待機條（webp）。
+    """
+    src = Image.open(io.BytesIO(strip_bytes)).convert('RGBA')
+    cell = src.crop((frame*CELL, 0, (frame+1)*CELL, CELL))
+    a = np.asarray(cell)[..., 3] > 32
+    if not a.any():
+        raise CutError("來源那一格是空的")
+    front = int(np.nonzero(a.max(0))[0].max())
+    room = CELL - 1 - front  # 往前推不能推出格子
+    out = Image.new('RGBA', (4*CELL, CELL), (0, 0, 0, 0))
+    for k, step in enumerate(IDLE_STEPS):
+        out.alpha_composite(cell, (k*CELL + min(step, room), 0))
+    buf = io.BytesIO()
+    out.save(buf, "WEBP", quality=82, method=6)
+    return buf.getvalue()
+
+
+def refit(strip_bytes: bytes, name: str) -> bytes:
+    """把已經切好、但身高不對的一條重新排版到標準身高（BODY[name]），腳底照舊對到 BY、左右位置不動。
+
+    給 2026-11-02 之前切的自建形象用：那時照斗笠寬縮放，沒戴斗笠的角色被放大（「魔教聖女」高 190～200，
+    預設是 155），web/arena_anim.js 的 RING_HAND 按 155 寫死，兵器就掛歪。生圖的原圖沒留著，
+    所以不重畫、直接把成品縮回標準身高（多一次重取樣，看不出來）。本來就對的那一條原樣回傳。
+    """
+    im = Image.open(io.BytesIO(strip_bytes)).convert('RGBA')
+    frames = im.width // CELL
+    a = np.asarray(im)[..., 3]
+    tall = 0
+    for k in range(frames):
+        ys = np.nonzero((a[:, k*CELL:(k+1)*CELL] > 32).max(1))[0]
+        if len(ys):
+            tall = max(tall, int(ys.max() - ys.min() + 1))
+    if not tall or abs(tall - BODY[name]) <= 1:
+        return strip_bytes
+    s = BODY[name] / float(tall)
+    out = Image.new('RGBA', im.size, (0, 0, 0, 0))
+    for k in range(frames):
+        cell = im.crop((k*CELL, 0, (k+1)*CELL, CELL))
+        m = np.asarray(cell)[..., 3] > 32
+        if not m.any():
+            continue
+        ys, xs = np.nonzero(m)
+        box = (int(xs.min()), int(ys.min()), int(xs.max())+1, int(ys.max())+1)
+        piece = cell.crop(box)
+        piece = piece.resize((max(1, int(round(piece.width*s))), max(1, int(round(piece.height*s)))), Image.LANCZOS)
+        cx = (box[0] + box[2]) / 2
+        px = int(round(k*CELL + cx - piece.width/2))
+        py = int(round(BY - (box[3] - box[1])*s)) if box[3] >= BY - 2 else int(round(k*0 + box[1]*s))
+        out.alpha_composite(piece, (max(0, px), max(0, py)))
+    buf = io.BytesIO()
+    out.save(buf, "WEBP", quality=82, method=6)
+    return buf.getvalue()
+
+
+# ── 兵器掛在哪一隻手 ────────────────────────────
+
+HAND = {  # 斗笠小子每一格的手：(x, y, 角度, 疊第幾層)；同 web/arena_anim.js 的 RING_HAND（測試盯著兩邊一樣）
+    "hero_bare_idle": ((132, 136, -45, 1), (132, 136, -45, 1), (153, 136, -45, 1), (134, 136, -45, 1)),
+    "hero_bare_hit": ((119, 120, -70, 1), (161, 119, -20, 1), (157, 134, 10, 1)),
+    "hero_bare_kneel": ((129, 152, 20, 1), (155, 150, 30, 1), (102, 165, 80, 1), (100, 162, 80, 1)),
+    "hero_bare_dodge": ((131, 136, -40, 1), (147, 105, -60, 1), (149, 107, -60, 1), (134, 136, -40, 1)),
+    "hero_bare_block": ((128, 149, -40, 1), (141, 107, -70, 1), (150, 105, -72, 1), (130, 110, -70, 1)),
+    "hero_bare_fall": ((142, 127, -30, 1), (157, 109, -60, 1), (175, 115, 70, 2), (150, 207, -3, 3), (150, 207, -3, 3), (150, 207, -3, 3)),
+    "hero_atk_slash": ((128, 145, -40, 1), (67, 95, -125, 0), (87, 98, -165, 0), (147, 133, -5, 1), (158, 133, 25, 1), (123, 147, -30, 1)),
+    "hero_atk_pole": ((131, 147, -15, 1), (120, 150, -10, 1), (162, 131, 0, 1), (148, 114, -35, 1), (160, 132, 10, 1), (124, 147, -15, 1)),
+    "hero_atk_fist": ((139, 129, 0, 1), (144, 150, 0, 1), (157, 130, 0, 1), (148, 114, 0, 1), (146, 122, 0, 1), (124, 147, 0, 1)),
+    "hero_atk_shoot": ((131, 147, 10, 1), (69, 92, -20, 0), (161, 124, 0, 1), (153, 124, -8, 1), (165, 132, 5, 1), (124, 147, 10, 1)),
+}
+HAND_NEAR = 45  # 找手時往外找幾像素（超過就不動：那一格的姿勢差太多，猜了反而更糟）
+HAND_IN = 4  # 貼到輪廓上之後再往身體裡收幾像素，免得兵器掛在邊緣
+GROUND_LAYER = 3  # 兵器掉在地上那幾格（倒地的最後三格）：本來就不在手上，不要動
+
+
+def hand_row(strip_bytes: bytes, name: str) -> list[list[int]]:
+    """這一條 sheet 每一格的手在哪（照這一套形象自己的身體算）。
+
+    為什麼要算：HAND 是照斗笠小子量的，全遊戲共用一張表。換一套形象手就不在同一個地方——
+    2026-11-02 量四套新形象，49 格裡有 7～11 格的手位落在身體以外，兵器就懸在空中（Joy 看出來的）。
+    做法：從斗笠小子那一點往外找最近的身體像素（最多 HAND_NEAR），再往身體裡收 HAND_IN；
+    找不到就原封不動。角度與層次照舊讀 HAND，這裡只動位置。
+    """
+    base = HAND.get(name)
+    if base is None:
+        raise CutError(f"沒有「{name}」這一張")
+    im = Image.open(io.BytesIO(strip_bytes)).convert('RGBA')
+    a = np.asarray(im)[..., 3] > 32
+    out = []
+    for k, pt in enumerate(base):
+        x, y = int(pt[0]), int(pt[1])
+        cell = a[:, k * CELL:(k + 1) * CELL]
+        ys, xs = np.nonzero(cell)
+        if (len(pt) > 3 and pt[3] == GROUND_LAYER) or not len(xs):
+            out.append([x, y])
+            continue
+        d2 = (xs - x) ** 2 + (ys - y) ** 2
+        i = int(np.argmin(d2))
+        if d2[i] == 0 or d2[i] > HAND_NEAR ** 2:  # 已經在身上，或差太遠
+            out.append([x, y])
+            continue
+        nx, ny = int(xs[i]), int(ys[i])
+        y0, x0 = max(0, ny - 12), max(0, nx - 12)
+        win = cell[y0:ny + 13, x0:nx + 13]
+        wy, wx = np.nonzero(win)
+        if len(wx):
+            vx, vy = x0 + wx.mean() - nx, y0 + wy.mean() - ny
+            n = (vx * vx + vy * vy) ** 0.5
+            if n > 0.5:
+                nx, ny = int(round(nx + vx / n * HAND_IN)), int(round(ny + vy / n * HAND_IN))
+        out.append([nx, ny])
+    return out
+
+
 def sheet_bytes(raw: bytes, name: str) -> bytes:
     """生圖工具給的一張原圖 → 擂台用的一條（webp，格數照 LAYOUT）。切完自己驗一遍（sheet_problems）：
     機器看得出來的壞法直接丟 CutProblem，畫坊照它帶的那一句重畫，不叫審圖。"""
     cols, rows = LAYOUT[name]
     try:
-        strip = sheet(io.BytesIO(raw), cols, rows)
+        strip = sheet(io.BytesIO(raw), cols, rows, ref_h=BODY[name])  # 跟預設的斗笠小子一樣高，兵器才掛得準
     except (ValueError, IndexError) as exc:  # 去背之後什麼都不剩、某一格是空的
         raise CutError(f"切不出 {cols * rows} 格：{exc}") from exc
-    bad, fix = sheet_problems(strip, cols * rows)
+    bad, fix = sheet_problems(strip, cols * rows, name)
     if bad:
         raise CutProblem(bad, fix)
     out = io.BytesIO()
