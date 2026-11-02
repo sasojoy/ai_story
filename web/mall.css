@@ -69,6 +69,7 @@
   border: 1px solid #6b4a2e; background: rgba(43, 22, 22, 0.85); text-align: center; font: 12px/1.45 var(--sans); color: #c9b28a; }
 .shop-layer.shop-mall .look-card.on { border-color: #f2c46a; box-shadow: 0 0 0 2px rgba(242, 196, 106, 0.25); }
 .shop-layer.shop-mall .look-card .look-face { width: 84px; height: 84px; }
+.shop-layer.shop-mall .look-face.gear-face { background-size: contain; background-position: center; } /* 飾品：整張縮進框裡 */
 .shop-layer.shop-mall .look-card b { font: 600 15px var(--serif); color: #f2e5c6; }
 .shop-layer.shop-mall .look-card small { font-size: 11px; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .shop-layer.shop-mall .look-card .btn .ingot { width: 14px; height: 10px; margin-right: 3px; }

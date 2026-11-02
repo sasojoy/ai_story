@@ -232,8 +232,24 @@
   const LOOK_VER = () => (window.LOOKS_VER ? `?v=${window.LOOKS_VER}` : "");
   const LOOK_IMG = (id) => (/^u\d+$/.test(id || "") ? `/api/looks/img/${id}/hero_bare_idle${LOOK_VER()}`
     : /^[a-z0-9_]+$/.test(id || "") ? `/static/img/looks/${id}/hero_bare_idle.webp` : "/static/img/arena/hero_bare_idle.webp");
-  function lookFaceHtml(id) { // 站著那張的第一格（四格一張、880×220）裁成一個人
+  const GEAR_ID = /^(head|face|waist)_[a-z0-9_]+$/; // 疊圖飾品（id 以位置開頭）：疊的是 acc.webp，貨架、卡片畫 icon.webp
+  function lookFaceHtml(id) { // 站著那張的第一格（四格一張、880×220）裁成一個人；飾品整張縮進框裡
+    if (GEAR_ID.test(id || "")) return `<span class="look-face gear-face" aria-hidden="true" style="background-image:url('/static/img/looks/${id}/icon.webp')"></span>`; // 戴在一個人身上的那一小塊
     return `<span class="look-face" aria-hidden="true" style="background-image:url('${LOOK_IMG(id)}')"></span>`;
+  }
+  // 疊圖飾品（Joy 2026-11-02）：頭、臉、腰各戴一件，任何一套形象都戴得上；戴著的再按一次拿下。看動作照身上那一套戴這一件演
+  function gearHtml(d) {
+    const list = d.gear || [];
+    if (!list.length) return "";
+    const shelf = (S.mallData && S.mallData.items) || [];
+    const card = (g) => {
+      const it = g.item ? shelf.find((one) => one.id === g.item) : null;
+      const btn = g.owned ? `<button class="btn small${g.worn ? "" : " primary"}" data-act="look-gear" data-id="${esc(g.id)}">${g.worn ? "拿下" : "戴上"}</button>`
+        : it ? `<button class="btn small" data-act="mall-pick" data-id="${esc(it.id)}">${ingotSvg()}${it.price | 0}</button>` : "";
+      return `<div class="look-card${g.worn ? " on" : ""}">${lookFaceHtml(g.id)}<b>${esc(g.name)}</b><small>${esc(g.slot_text)}${g.note ? `・${esc(g.note)}` : ""}</small>
+        ${lookShowBtn(`${d.worn || ""}~${g.id}`, g.name)}${btn}</div>`;
+    };
+    return `<div class="mall-sub">飾品</div><p class="mall-note">頭、臉、腰各戴一件，換哪一套形象都戴著。</p><div class="mall-grid look-grid">${list.map(card).join("")}</div>`;
   }
   function mallLooksHtml(d) {
     if (!d) return mallFailHtml();
@@ -246,7 +262,7 @@
       return `<div class="look-card${lk.id === d.worn ? " on" : ""}">${lookFaceHtml(lk.id)}<b>${esc(lk.name)}</b>
         ${lk.note ? `<small>${esc(lk.note)}</small>` : ""}${lookShowBtn(lk.id, lk.name)}${btn}</div>`; // 說明照字折行（三欄一格窄，切成不折行的小段會撐出格子）
     };
-    return `<div class="mall-sub">擂台形象</div>${lookShowHtml()}<div class="mall-grid look-grid">${d.looks.map(card).join("")}</div>${lookMarketHtml(d.market)}${lookOrderHtml(d.order)}${moveHtml(d.moves)}`;
+    return `<div class="mall-sub">擂台形象</div>${lookShowHtml()}<div class="mall-grid look-grid">${d.looks.map(card).join("")}</div>${gearHtml(d)}${lookMarketHtml(d.market)}${lookOrderHtml(d.order)}${moveHtml(d.moves)}`;
   }
 
   // 看動作（Joy 2026-11-01「已經做好的形象跟絕招也要能展示」）：按了在格子上面那塊畫布把這一套十張一張一張演（arena_scene.js 的 lookShow）
@@ -446,10 +462,21 @@
     } catch (e) { S.mallFail = true; }
     if (S.mallOpen && S.mallTab === "look") renderMall();
   }
+  async function lookGear(id) { // 戴上或拿下一件飾品
+    await busy(async () => {
+      const r = await api("/api/looks/gear", { id });
+      if (r.looks) S.mallLooks = r.looks;
+      if (r.looks && S.main) S.main.look = r.looks.skin || ""; // 走一趟馬上照新的這一身畫
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      S.mallSay = text ? { text, ok: true } : null;
+      if (S.mallOpen) renderMall();
+    });
+  }
   async function lookWear(id) {
     await busy(async () => {
       const r = await api("/api/looks/wear", { look: id });
       if (r.looks) S.mallLooks = r.looks;
+      if (r.looks && S.main && "skin" in r.looks) S.main.look = r.looks.skin || "";
       const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
       S.mallSay = text ? { text, ok: true } : null;
       if (S.mallOpen) renderMall();

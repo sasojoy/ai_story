@@ -117,6 +117,9 @@ def test_every_look_in_the_real_content_has_all_sheets():
     content = load_content(root / "content")
     assert len(orders.ARENA) == 10 and len(orders.OUTING) == 6
     for look in content.looks:
+        if content.looks[look].slot:  # 疊圖飾品：一張 acc.webp
+            assert (root / "web/img/looks" / look / "acc.webp").exists() and (root / "web/img/looks" / look / "icon.webp").exists(), look
+            continue
         have = {p.stem for p in (root / "web/img/looks" / look).glob("hero_*.webp")}
         assert not set(orders.ARENA) - have, f"{look} 缺擂台的 {sorted(set(orders.ARENA) - have)}"
         outing = have & set(orders.OUTING)

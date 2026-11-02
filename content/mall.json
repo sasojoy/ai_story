@@ -222,6 +222,42 @@
     "draft": "本機模型畫的四套（Joy 2026-11-02）；名字、說明、價錢待 joy"
   },
   {
+    "id": "gear_head_red_band",
+    "name": "紅頭巾",
+    "note": "額前紮一條紅布。任何一套形象都戴得上，換季也帶著走；到萬寶閣的「形象」戴上。",
+    "price": 150,
+    "kind": "look",
+    "look": "head_red_band",
+    "effects": {
+      "gear": 1
+    },
+    "draft": "疊圖飾品（Joy 2026-11-02）：名字、說明、價錢待 joy"
+  },
+  {
+    "id": "gear_face_scar",
+    "name": "刀疤",
+    "note": "臉上添一道舊傷。任何一套形象都戴得上，換季也帶著走；到萬寶閣的「形象」戴上。",
+    "price": 150,
+    "kind": "look",
+    "look": "face_scar",
+    "effects": {
+      "gear": 1
+    },
+    "draft": "疊圖飾品（Joy 2026-11-02）：名字、說明、價錢待 joy"
+  },
+  {
+    "id": "gear_waist_jade",
+    "name": "玉佩",
+    "note": "腰間掛一枚青玉。任何一套形象都戴得上，換季也帶著走；到萬寶閣的「形象」戴上。",
+    "price": 150,
+    "kind": "look",
+    "look": "waist_jade",
+    "effects": {
+      "gear": 1
+    },
+    "draft": "疊圖飾品（Joy 2026-11-02）：名字、說明、價錢待 joy"
+  },
+  {
     "id": "look_order",
     "name": "自建形象",
     "note": "寫一句樣子，替你畫一套擂台形象；審核過了就是你的，換季也帶著走。沒通過元寶全退。",

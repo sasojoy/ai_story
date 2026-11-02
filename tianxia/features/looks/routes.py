@@ -86,6 +86,15 @@ def router(shell) -> APIRouter:
         msgs = shell.act(game, lambda g: actions.wear(g, look))
         return {"message": shell.joined(msgs), "looks": shell.look(game, lambda g: actions.view(g))}
 
+    @r.post("/api/looks/gear")
+    def api_looks_gear(request: Request, body: dict = Body(...)):
+        """戴上或拿下一件飾品：{id}；回 {message, looks}。"""
+        gate()
+        game = shell._game(request)
+        gid = str(body.get("id", ""))[:40]
+        msgs = shell.act(game, lambda g: actions.wear_gear(g, gid))
+        return {"message": shell.joined(msgs), "looks": shell.look(game, lambda g: actions.view(g))}
+
     @r.post("/api/looks/order")
     def api_looks_order(request: Request, body: dict = Body(...)):
         """自建形象下單：{name, prompt, ref}（ref 是網頁按下確認那一刻產的編號，重送不會扣兩次）；回 {message, looks, main}。"""

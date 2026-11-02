@@ -213,3 +213,39 @@ def test_the_market_buys_lists_and_unlists(m_on):  # noqa: F811
     sent = [c[1] for c in out["calls"] if c[0] == "/api/looks/market"]
     assert sent[0]["op"] == "buy" and sent[0]["look"] == "u5" and sent[0]["ref"]
     assert sent[1] == {"op": "list", "look": "u9", "price": 600} and sent[2] == {"op": "unlist", "look": "u11"}
+
+
+GEAR_DRIVER = r"""
+const code = ["GEAR_ORDER"].map(konst).join("\n") + fn("skinParts") + fn("gearFrame");
+const H = new Function(code + "\nreturn { skinParts, gearFrame };")();
+// 一個假的人：220×220 一格，頭是 60×60 的方塊、身子 40×100、細細的一隻手（侵蝕掉）；躺下的那一格整個轉 90 度，頭朝右
+const W = 440, Hh = 220, px = new Uint8ClampedArray(W * Hh * 4);
+const fill = (x0, y0, w, h) => { for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) px[(y * W + x) * 4 + 3] = 255; };
+fill(70, 40, 60, 60); fill(80, 100, 40, 100); fill(120, 120, 60, 3);
+fill(220 + 140, 80, 60, 60); fill(220 + 40, 90, 100, 40);
+finish({ parts: input.skins.map((s) => H.skinParts(s)), up: H.gearFrame(px, W, Hh, 0, 220), down: H.gearFrame(px, W, Hh, 220, 220) });
+"""
+
+
+def test_gear_finds_the_head_and_waist_in_every_frame():
+    """飾品疊在哪：每一格現算（侵蝕掉手腳，頭取頭頂往下 30%、腰取 55～65%）；躺下的照主軸轉、頭在大的那一頭。皮照「形象~飾品」拆。"""
+    out = webharness.run(GEAR_DRIVER, {"skins": ["moying~head_red_band.waist_jade", "~face_scar", "u12", "x~bad.head_a"]})
+    assert [p["look"] for p in out["parts"]] == ["moying", "", "u12", "x"]
+    assert [p["gear"] for p in out["parts"]] == [["waist_jade", "head_red_band"], ["face_scar"], [], ["head_a"]]  # 腰先畫、頭最後
+    up, down = out["up"], out["down"]
+    assert up["ang"] == pytest.approx(0) and 90 < up["head"][0] < 110 and 50 < up["head"][1] < 85
+    assert 85 < up["waist"][0] < 115 and 120 < up["waist"][1] < 160
+    assert abs(down["ang"]) == pytest.approx(1.5708, abs=0.05) and down["head"][0] > 150  # 躺著、頭朝右
+
+
+def test_the_gear_cards_wear_and_take_off(m_on):  # noqa: F811
+    looks = {**LOOKS, "skin": "moying", "gear": [
+        {"id": "head_red_band", "name": "紅頭巾", "note": "", "slot": "head", "slot_text": "頭", "owned": True, "item": None, "worn": True},
+        {"id": "waist_jade", "name": "玉佩", "note": "", "slot": "waist", "slot_text": "腰", "owned": False, "item": "look_jinshen", "worn": False},
+    ]}
+    out = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "look-gear", id: "head_red_band" }'),
+                 responses={"/api/looks": looks, "/api/looks/gear": {"message": "拿下了「紅頭巾」。", "looks": looks}})
+    html = out["app"]
+    assert "飾品" in html and "/static/img/looks/head_red_band/icon.webp" in html and 'data-act="look-gear" data-id="head_red_band"' in html
+    assert "拿下" in html and 'data-act="look-show" data-id="moying~head_red_band"' in html  # 看動作：身上那一套戴這一件
+    assert any(c[0] == "/api/looks/gear" and c[1] == {"id": "head_red_band"} for c in out["calls"])

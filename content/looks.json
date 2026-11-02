@@ -40,5 +40,29 @@
     "note": "苗疆打扮，銀飾叮噹，笑起來不像會下蠱。",
     "bots": true,
     "draft": "本機模型畫的四套（Joy 2026-11-02 上傳）；名字、說明待 joy"
+  },
+  {
+    "id": "head_red_band",
+    "name": "紅頭巾",
+    "note": "一條紅布紮在額前，兩條尾巴在腦後飄。",
+    "bots": true,
+    "slot": "head",
+    "draft": "佔位（Joy 2026-11-02 選疊圖飾品）：程式畫的示範，正式圖待 joy 或畫坊"
+  },
+  {
+    "id": "face_scar",
+    "name": "刀疤",
+    "note": "臉頰上一道舊傷，縫過的針腳還看得見。",
+    "bots": true,
+    "slot": "face",
+    "draft": "佔位：程式畫的示範，正式圖待 joy 或畫坊"
+  },
+  {
+    "id": "waist_jade",
+    "name": "玉佩",
+    "note": "腰間掛一枚青玉，底下垂著紅穗子。",
+    "bots": true,
+    "slot": "waist",
+    "draft": "佔位：程式畫的示範，正式圖待 joy 或畫坊"
   }
 ]

@@ -11917,8 +11917,8 @@ class Game:
         return [arena.JOINED.format(rank=entry.rank, arts=text)]
 
     def arena_look(self) -> str:
-        """擂台形象：這個人此刻穿哪一套（功能包 looks；空字串＝斗笠小子）。"""
-        return looks_actions.look_of(self)
+        """擂台形象：這個人此刻穿哪一套（功能包 looks；空字串＝斗笠小子），戴了飾品接「~飾品」（looks.rules.skin）。"""
+        return looks_actions.skin_of(self)
 
     def arena_move(self) -> str:
         """招式動畫：這個人此刻出招疊哪一張光效（功能包 looks；空字串＝沒有）。"""

@@ -58,12 +58,115 @@
   // 所以每換一個動作就閃一次斗笠小子（Joy「有時候動畫中間又會變成斗笠小子」）。帶 ?v= 之後十張都是新網址，更明顯。
   function ringWarm(looks) {
     for (const side of ["me", "foe"]) {
-      const look = looks && looks[`${side}_look`];
+      const sk = skinParts(looks && looks[`${side}_look`]), look = sk.look;
+      sk.gear.forEach(gearImg);
       if (!look) continue;
       ringHands(look);
       for (const sheet of Object.keys(RING_SHEETS)) ringBody(look, sheet);
     }
   }
+  // ── 疊圖飾品（功能包 looks；Joy 2026-11-02 選「疊圖飾品」）──
+  // 「皮」是形象 id，戴了飾品再接「~頭.臉.腰」（tianxia/features/looks/rules.py 的 skin）。飾品的 id 以位置開頭（head_、face_、waist_），
+  // 圖 /static/img/looks/<id>/acc.webp 的正中央對準那個位置。位置每一張動作圖、每一格現算（gearMarks），所以任何一套形象都戴得上
+  // 畫的順序：腰在最底、頭在最上
+  const GEAR_ORDER = ["waist", "face", "head"];
+  const GEAR = { imgs: {}, marks: {} };
+  function skinParts(skin) {
+    const [look = "", rest = ""] = String(skin || "").split("~");
+    const gear = rest.split(".").filter((id) => /^(head|face|waist)_[a-z0-9_]+$/.test(id));
+    gear.sort((a, b) => GEAR_ORDER.indexOf(a.split("_")[0]) - GEAR_ORDER.indexOf(b.split("_")[0]));
+    return { look, gear };
+  }
+  function gearImg(id) {
+    if (!GEAR.imgs[id] && typeof Image === "function") { const im = new Image(); im.src = `/static/img/looks/${id}/acc.webp`; GEAR.imgs[id] = im; }
+    return GEAR.imgs[id];
+  }
+  // 一格裡頭、腰在哪，身體轉了幾度（弧度；0 是站直）：先把細的東西（手、腳、兵器）侵蝕掉，只剩頭和身子。
+  // 寬比高大 1.4 倍的是躺下的：照主軸轉，頭在大的那一頭（Q 版頭大）。頭是頭頂往下 30% 那一段的中心，腰是 55～65% 那一段
+  // （scratchpad 先拿四套形象、四張動作量過：紅點落在臉上、藍點落在腰帶上，躺下的那幾格也對）
+  function gearFrame(px, W, H, x0, cw) {
+    const r = 5, k2 = (2 * r + 1) * (2 * r + 1), S = new Int32Array((cw + 1) * (H + 1));
+    for (let y = 0; y < H; y++) {
+      let row = 0;
+      for (let x = 0; x < cw; x++) {
+        row += px[(y * W + x0 + x) * 4 + 3] > 32 ? 1 : 0;
+        S[(y + 1) * (cw + 1) + x + 1] = S[y * (cw + 1) + x + 1] + row;
+      }
+    }
+    const pts = [], raw = [];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < cw; x++) {
+        if (px[(y * W + x0 + x) * 4 + 3] <= 32) continue;
+        raw.push(x, y);
+        if (x < r || y < r || x + r >= cw || y + r >= H) continue;
+        const a = (y - r) * (cw + 1) + (x - r), b = (y + r + 1) * (cw + 1) + (x + r + 1);
+        if (S[b] - S[(y + r + 1) * (cw + 1) + (x - r)] - S[(y - r) * (cw + 1) + (x + r + 1)] + S[a] === k2) pts.push(x, y);
+      }
+    }
+    const p = pts.length >= 100 ? pts : raw;
+    const n = p.length / 2;
+    if (n < 20) return null;
+    let x1 = Infinity, x2 = -Infinity, y1 = Infinity, y2 = -Infinity, mx = 0, my = 0;
+    for (let j = 0; j < p.length; j += 2) { x1 = Math.min(x1, p[j]); x2 = Math.max(x2, p[j]); y1 = Math.min(y1, p[j + 1]); y2 = Math.max(y2, p[j + 1]); mx += p[j]; my += p[j + 1]; }
+    mx /= n; my /= n;
+    let vx = 0, vy = -1;
+    if (x2 - x1 + 1 > 1.4 * (y2 - y1 + 1)) {
+      let sxx = 0, syy = 0, sxy = 0;
+      for (let j = 0; j < p.length; j += 2) { const dx = p[j] - mx, dy = p[j + 1] - my; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; }
+      const th = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+      vx = Math.cos(th); vy = Math.sin(th);
+      let lo = Infinity, hi = -Infinity;
+      for (let j = 0; j < p.length; j += 2) { const t = (p[j] - mx) * vx + (p[j + 1] - my) * vy; lo = Math.min(lo, t); hi = Math.max(hi, t); }
+      let a = 0, b = 0;
+      for (let j = 0; j < p.length; j += 2) { const t = (p[j] - mx) * vx + (p[j + 1] - my) * vy; if (t > hi - 0.35 * (hi - lo)) a++; if (t < lo + 0.35 * (hi - lo)) b++; }
+      if (b > a) { vx = -vx; vy = -vy; }
+    }
+    let lo = Infinity, hi = -Infinity;
+    for (let j = 0; j < p.length; j += 2) { const t = p[j] * vx + p[j + 1] * vy; lo = Math.min(lo, t); hi = Math.max(hi, t); }
+    const L = hi - lo, head = [0, 0, 0], waist = [0, 0, 0];
+    for (let j = 0; j < p.length; j += 2) {
+      const t = p[j] * vx + p[j + 1] * vy;
+      if (t > hi - 0.3 * L) { head[0] += p[j]; head[1] += p[j + 1]; head[2]++; }
+      if (t < hi - 0.55 * L && t > hi - 0.65 * L) { waist[0] += p[j]; waist[1] += p[j + 1]; waist[2]++; }
+    }
+    const at = (s) => (s[2] ? [s[0] / s[2], s[1] / s[2]] : null);
+    const h = at(head);
+    return { head: h, waist: at(waist) || h, ang: Math.atan2(vx, -vy) };
+  }
+  function gearMarks(img, frames) {
+    const key = `${img.src}#${frames}`;
+    if (key in GEAR.marks) return GEAR.marks[key];
+    if (typeof document === "undefined" || !img.complete || !img.naturalWidth) return null;
+    let out = [];
+    try {
+      const W = img.naturalWidth, H = img.naturalHeight, cw = Math.round(W / frames);
+      const c = document.createElement("canvas");
+      c.width = W; c.height = H;
+      const g = c.getContext("2d", { willReadFrequently: true });
+      g.drawImage(img, 0, 0);
+      const px = g.getImageData(0, 0, W, H).data;
+      for (let k = 0; k < frames; k++) out.push(gearFrame(px, W, H, k * cw, cw));
+    } catch (e) { out = []; } // 讀不到像素（不同來源的圖）就不疊
+    GEAR.marks[key] = out;
+    return out;
+  }
+  // 在「一格」的座標裡（呼叫的人已經把原點移到那一格的左上角、照那一格的大小）疊上戴著的飾品
+  function gearDraw(cx, img, frames, i, gear) {
+    if (!gear || !gear.length || !img) return;
+    const marks = gearMarks(img, frames), m = marks && marks[i];
+    if (!m || !m.head) return;
+    for (const id of gear) {
+      const im = gearImg(id);
+      if (!im || !im.complete || !im.naturalWidth) continue;
+      const at = id.startsWith("waist_") ? m.waist : m.head;
+      cx.save();
+      cx.translate(at[0], at[1]);
+      cx.rotate(m.ang);
+      cx.drawImage(im, -im.naturalWidth / 2, -im.naturalHeight / 2);
+      cx.restore();
+    }
+  }
+
   // 自建的圖換了（refit、重畫、退回重來）網址就換：舊快取不會擋住新圖（main.looks_ver）
   const looksVer = () => (window.LOOKS_VER ? `?v=${window.LOOKS_VER}` : "");
   // 這一套形象自己的手位表（hands.json；tianxia/features/looks/cutting.py 的 hand_row 算的）：
@@ -124,7 +227,8 @@
   const ringStill = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // 一個人的一格：身體，加上手上那一件（劍在身前就再把拳頭那一小圈蓋回去，看起來是握著）
-  function ringFigure(cx, sheet, i, x, flip, kind, lunge, look) {
+  function ringFigure(cx, sheet, i, x, flip, kind, lunge, skin) {
+    const sk = skinParts(skin), look = sk.look; // 戴了飾品的皮：形象~飾品
     const img = ringBody(look, sheet);
     if (!ringReady(img)) return;
     const n = RING_SHEETS[sheet];
@@ -136,7 +240,7 @@
     if (flip) cx.scale(-1, 1);
     cx.scale(RING_SCALE, RING_SCALE);
     cx.translate(-RING_AX, -RING_BY);
-    const body = () => cx.drawImage(img, i * RING_CELL, 0, RING_CELL, RING_CELL, 0, 0, RING_CELL, RING_CELL);
+    const body = () => { cx.drawImage(img, i * RING_CELL, 0, RING_CELL, RING_CELL, 0, 0, RING_CELL, RING_CELL); gearDraw(cx, img, n, i, sk.gear); };
     const arm = () => {
       if (!hand || !ringReady(wimg)) return;
       const s = spec.len / wimg.naturalWidth, w = wimg.naturalWidth * s, h = wimg.naturalHeight * s;

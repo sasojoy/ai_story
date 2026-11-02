@@ -90,7 +90,7 @@
     return /^[a-z0-9_]+$/.test(look) ? `/static/img/looks/${look}/${file}.webp` : "";
   }
   function outingLookImg(name) {
-    const look = (S.main && S.main.look) || "";
+    const look = typeof skinParts === "function" ? skinParts(S.main && S.main.look).look : ""; // 皮是「形象~飾品」（arena_anim.js）
     if (!look || !outingLookUrl(look, name)) return null;
     const key = `${look}?${globalThis.LOOKS_VER || ""}`; // 補畫好了版本就換：以前抓不齊的那一套重抓一次
     if (!OW.look || OW.look.key !== key) {
@@ -105,10 +105,14 @@
     if (OW.look.bad || !OUTING_HERO.every((one) => OW.look.imgs[one].complete && OW.look.imgs[one].naturalWidth)) return null;
     return OW.look.imgs[name] || null;
   }
+  function outingGear() { // 戴著的飾品（皮的「~」後面那一段）
+    return typeof skinParts === "function" ? skinParts(S.main && S.main.look).gear : [];
+  }
   // 動作圖一開就全載；背景只載這一處那一套（outingBg 第一次畫到時才載）
   function outingImages() {
     for (const name of Object.keys(OUTING_SHEETS)) outingImg(name);
     outingLookImg("hero_idle"); // 穿的那一套也一開就載
+    if (typeof gearImg === "function") outingGear().forEach(gearImg);
     for (const [layer] of [...OUTING_LAYERS, OUTING_FRONT]) outingBg(layer);
     return OW.imgs;
   }
@@ -570,6 +574,11 @@
     cx.translate(x, opt.y == null ? OUTING_GY : opt.y);
     if (opt.flip) cx.scale(-1, 1);
     cx.drawImage(src, sx, 0, OUTING_CELL, OUTING_CELL, -OUTING_AX * k, -OUTING_BY * k, OUTING_CELL * k, OUTING_CELL * k);
+    if (opt.gear && opt.gear.length && typeof gearDraw === "function") { // 戴著的飾品：疊在這一格自己的頭、腰上（arena_anim.js）
+      cx.translate(-OUTING_AX * k, -OUTING_BY * k);
+      cx.scale(k, k);
+      gearDraw(cx, img, n, i, opt.gear);
+    }
     cx.restore();
   }
 
@@ -638,7 +647,7 @@
       }
     }
     const [name, i] = outingHeroFrame();
-    outingSprite(cx, name, i, OUTING_HX + H.kx, { tint: "#ffe9e0", tintA: H.red * 0.6, img: outingLookImg(name) }); // 挨打閃一下淡色，不把整個人塗紅
+    outingSprite(cx, name, i, OUTING_HX + H.kx, { tint: "#ffe9e0", tintA: H.red * 0.6, img: outingLookImg(name), gear: outingGear() }); // 挨打閃一下淡色，不把整個人塗紅
     if (H.bubble) {
       const x = OUTING_HX + H.kx + 38, y = OUTING_GY - 204;
       cx.fillStyle = "#fffaf0";

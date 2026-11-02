@@ -60,6 +60,8 @@ EFFECTS: dict[str, EffectSpec] = {
     # 擂台形象（功能包 looks；Joy 2026-10-31「預設形象就是斗笠小子」、買的東西不能不見）：商品的 look 寫哪一套，購買那一列的 data 記
     # look_id，那一列就是這一套（帳號的，換季也帶著走）；穿哪一套在萬寶閣的「形象」那一頁換
     "look": EffectSpec("look", "擂台形象一套（換季也帶著走）", 1),
+    # 疊圖飾品（功能包 looks；Joy 2026-11-02）：商品的 look 寫 content/looks.json 裡寫了 slot 的那一件，購買那一列一樣記 look_id
+    "gear": EffectSpec("look", "擂台飾品一件（換季也帶著走；任何一套形象都戴得上）", 1),
     # 自建形象（功能包 looks 第二批）：寫一句樣子下單，那一列購買就是訂單（data 記 name、prompt、status）；不上貨架，在「形象」那一頁下單
     # （looks.orders.place 自己記帳，同 buy 的那幾步）。審核過了那一列的 data 記 look_id＝u<購買 id>，就是買到的那一套；退回照退款
     "look_order": EffectSpec("look", "自建形象一套（寫一句樣子，審核過了上架）", 1),
@@ -676,9 +678,12 @@ def item_problems(item: MallItem, content: Content) -> list[str]:
         if item.look or item.effects != {"move_order": 1}:
             out.append(f"{where}：招式動畫的效果只寫 {{\"move_order\": 1}}、不寫 look")
     elif item.kind == "look" or item.look:
-        if item.look not in content.looks:
+        known = content.looks.get(item.look)
+        if known is None:
             out.append(f"{where}：形象要寫 content/looks.json 裡的一套（寫了「{item.look}」）")
-        if item.effects != {"look": 1}:
+        elif known.slot and item.effects != {"gear": 1}:
+            out.append(f"{where}：飾品的效果只寫 {{\"gear\": 1}}（寫了 {item.effects}）")
+        elif not known.slot and item.effects != {"look": 1}:
             out.append(f"{where}：形象的效果只寫 {{\"look\": 1}}（寫了 {item.effects}）")
     if item.effects.get("card_rebate", 0) >= item.price:
         out.append(f"{where}：當場回的元寶（{item.effects['card_rebate']}）要比價錢（{item.price}）少")

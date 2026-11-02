@@ -28,3 +28,5 @@
 
 **賣是商城包的事**：商品 `kind` 寫 `look`、`look` 寫哪一套、效果只寫 `{"look": 1}`（`mall.item_problems` 驗）；購買那一列 `data` 多記 `look_id`（商品下架了也認得）；同一套買過了不再賣（`LOOK_OWNED`）。
 **認領的欄位**：沒有角色上的欄位；`ArenaEntry.look`、`ArenaFight.skins`、`ArenaResult.skins` 是擂台的（`tianxia/state.py`），網頁的 `looks.me_look`／`foe_look`。
+
+疊圖飾品（2026-11-02）：`rules.py` 的 `owned_gear`、`gear_worn`、`wear_gear`、`skin`、`bot_gear`；`actions.py` 的 `gear_of`、`skin_of`、`wear_gear`；`POST /api/looks/gear`；網頁 `web/arena_anim.js` 的 `skinParts`、`gearFrame`、`gearDraw`（擂台、看動作、走一趟共用）。導覽：`docs/guide/商城.md`「疊圖飾品」。

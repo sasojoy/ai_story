@@ -27,6 +27,21 @@ def look_of(ctx: Game) -> str:
     return rules.DEFAULT if wallet is None else rules.worn(ctx.content, wallet, ctx._mall_owner())
 
 
+def gear_of(ctx: Game) -> list[str]:
+    """這個人戴著哪幾件飾品（同 look_of：假人照名號挑）。"""
+    if not rules.on(ctx.content):
+        return []
+    if ctx.state.player.bot:
+        return rules.bot_gear(ctx.content, ctx.state.player.name)
+    wallet = ctx._wallet()
+    return [] if wallet is None else rules.gear_worn(ctx.content, wallet, ctx._mall_owner())
+
+
+def skin_of(ctx: Game) -> str:
+    """擂台、走一趟畫的那一身：形象加飾品（rules.skin）。"""
+    return rules.skin(look_of(ctx), gear_of(ctx))
+
+
 def _shop(ctx: Game) -> dict[str, str]:
     """哪一套此刻在萬寶閣賣（look id → 商品 id）：照商品表裡寫了 look 的那幾件。"""
     return {item.look: item.id for item in ctx.content.mall.values() if item.look}
@@ -48,6 +63,17 @@ def wear(ctx: Game, look: str) -> list[str]:
     if wallet is None or not rules.on(ctx.content):
         return ctx._log([rules.OFF])
     done, line = rules.wear(ctx.content, wallet, ctx._mall_owner(), look)
+    if done:
+        journal.add_entry(ctx.state, JournalEntry(time=ctx.state.world.time, title=TITLE, lines=[line]))
+    return ctx._log([line])
+
+
+def wear_gear(ctx: Game, gid: str) -> list[str]:
+    """戴上或拿下一件飾品（萬寶閣「形象」那一頁）；動了寫一則「形象」江湖紀錄。"""
+    wallet = ctx._wallet()
+    if wallet is None or not rules.on(ctx.content):
+        return ctx._log([rules.OFF])
+    done, line = rules.wear_gear(ctx.content, wallet, ctx._mall_owner(), gid)
     if done:
         journal.add_entry(ctx.state, JournalEntry(time=ctx.state.world.time, title=TITLE, lines=[line]))
     return ctx._log([line])

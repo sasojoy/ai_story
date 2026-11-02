@@ -3754,6 +3754,9 @@ class Look(_Strict):
     note: str = ""  # 一句說明（joy 寫）
     bots: bool = False  # 假人也穿（照名號的雜湊挑；不然穿這一套的一定是真人，看得出來）
     draft: str = ""  # 作者的備註；不給玩家看
+    # 疊圖飾品（Joy 2026-11-02 選「疊圖飾品」）：寫了 slot 的不是一整套，是一件飾品，圖一張 web/img/looks/<id>/acc.webp，
+    # 圖的正中央對準頭（head、face）或腰（waist）。id 要以 slot 開頭（head_…）：網頁照 id 認位置，不必另外送一張表
+    slot: Literal["", "head", "face", "waist"] = ""
 
 
 class MallItem(_Strict):

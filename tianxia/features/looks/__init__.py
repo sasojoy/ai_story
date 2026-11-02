@@ -30,7 +30,7 @@ class LooksFeature(Feature):
         out: dict = {"looks_ver": actions.images_version()}
         if ctx.is_admin() and orders.item_of(ctx.content) is not None:
             out["looks_admin"] = True
-        look = actions.look_of(ctx)
+        look = actions.skin_of(ctx)  # 戴了飾品的接「~飾品」（rules.skin）
         if look != rules.DEFAULT:
             out["look"] = look
         return out
@@ -47,11 +47,15 @@ class LooksFeature(Feature):
 
     def check_content(self, content, need) -> None:
         from . import rules  # noqa: PLC0415
+        from .actions import WEB_IMG  # noqa: PLC0415
         from tianxia import naming  # noqa: PLC0415
 
         for problem in rules.problems(content):
             need(False, problem)
         for look in content.looks.values():
+            if look.slot:
+                for f in ("acc.webp", "icon.webp"):  # 疊的那一張、貨架與卡片的小圖
+                    need((WEB_IMG / "looks" / look.id / f).exists(), f"飾品 {look.id}：缺 web/img/looks/{look.id}/{f}")
             problem = naming.name_problem(look.name, content)
             need(problem is None, f"形象 {look.id}：名字「{look.name}」{problem}")
 
