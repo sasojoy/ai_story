@@ -3824,31 +3824,39 @@
   }
   // 爐子中間的火（內嵌 SVG，水墨暖色；Joy 之後有正式的圖可以換）
   const FLAME_SVG = '<svg viewBox="0 0 60 60" aria-hidden="true"><path class="fl-out" d="M30 4 C40 18 50 26 46 40 C43 52 34 56 30 56 C24 56 14 50 14 38 C14 28 22 22 26 12 C28 20 31 24 34 26 C34 18 32 10 30 4Z"/><path class="fl-in" d="M30 24 C36 32 40 38 37 46 C35 51 32 52 30 52 C26 52 22 48 23 42 C24 36 28 32 30 24Z"/></svg>';
-  // 看火候搬進打造頁（鐵匠鋪與合成流程 3.2，企劃者 2026-10-29 選「乙 點爐火、就地熬」）：爐子中間的火可以點，爐子底下一行鐵匠的話照
-  // forge.furnace 寫——還沒看（價錢＋「看」）、看過了還沒開爐（火畫旺）、今天用掉了、看不了（錢不夠、序章：照 silver.furnace_problem 的原因）。
-  // 價錢、一天一次、下一爐用掉全照伺服器；跟打點帳簿那一格是同一個狀態。銀兩出口關著（furnace 是 None）這一行不畫、火不可點。字待 joy 潤
+  // 看火候搬進打造頁（鐵匠鋪與合成流程 3.2，企劃者 2026-10-29 選「乙 點爐火、就地熬」）：爐子中間的火可以點，火上掛一枚小籤照
+  // forge.furnace 寫（企劃者 2026-11-03 從三張對比圖挑「丙 火上一枚小籤」，原本是爐子底下一行＋「看」鈕）——還沒看寫價錢（金籤）、
+  // 看過了還沒開爐（火畫旺）、今天用掉了、看不了（錢不夠、序章：照 silver.furnace_problem 的原因）。小籤放不下長原因：看不了的那幾種
+  // 只寫幾個字、灰掉，點那一團火用提示泡泡講整句（同打造頁的灰格），讀螢幕的人聽整句（aria-label）。
+  // 價錢、一天一次、下一爐用掉全照伺服器；跟打點帳簿那一格是同一個狀態。銀兩出口關著（furnace 是 None）小籤不畫、火不可點。字待 joy 潤
   const FURNACE_SAY = {
     open: "看火候 {price} 兩，今天還沒看。", // 待 joy 潤
     ready: "火候看過了，下一爐照新基準。", // 待 joy 潤
     used: "今天看過了，明日再來。", // 待 joy 潤
     no: "看火候 {price} 兩・{why}", // 待 joy 潤：看不了（原因照伺服器）
   };
-  const FURNACE_LOOK = "看"; // 待 joy 潤
+  const FURNACE_TAG = { open: "看火候 {price} 兩", ready: "火候看過了", used: "明日再來" }; // 待 joy 潤：火上的小籤（看不了的寫 open 那幾個字、灰掉）
   function furnaceOk(fu) { return !!fu && !fu.ready && !fu.used_today && !fu.problem; }
-  function furnaceSayHtml(fu) {
-    if (!fu) return "";
+  // 這一刻爐火的整句（點不下去時的提示泡泡、讀螢幕的人聽的）與小籤：[整句, 小籤的字, 小籤的 class]
+  function furnaceWords(fu) {
     const price = String(fu.price | 0);
-    if (fu.ready) return `<p class="fu-say hot">${FURNACE_SAY.ready}</p>`;
-    if (fu.used_today) return `<p class="fu-say off">${FURNACE_SAY.used}</p>`;
-    if (fu.problem) return `<p class="fu-say off">${esc(FURNACE_SAY.no.replace("{price}", price).replace("{why}", fu.problem))}</p>`;
-    return `<p class="fu-say"><span>${FURNACE_SAY.open.replace("{price}", price)}</span><button class="btn small fu-look" data-act="shop-furnace">${FURNACE_LOOK}</button></p>`;
+    if (fu.ready) return [FURNACE_SAY.ready, FURNACE_TAG.ready, " hot"];
+    if (fu.used_today) return [FURNACE_SAY.used, FURNACE_TAG.used, " off"];
+    const tag = FURNACE_TAG.open.replace("{price}", price);
+    if (fu.problem) return [FURNACE_SAY.no.replace("{price}", price).replace("{why}", fu.problem), tag, " off"];
+    return [FURNACE_SAY.open.replace("{price}", price), tag, ""];
+  }
+  function furnaceFireHtml(fu) {
+    const [say, tag, cls] = furnaceWords(fu);
+    return `<button class="flame fu-fire" data-act="shop-furnace" aria-label="${esc(say)}"${furnaceOk(fu) ? "" : ' aria-disabled="true"'} title="${esc(say)}">${FLAME_SVG}<span class="fu-tag${cls}">${esc(tag)}</span></button>`;
   }
   // 看（/api/do/<furnace.id>，MAIN_ACTIONS smith_furnace）：回來照新的畫面畫、話用提示泡泡講，再問一次這一爐（機率那一行換成新基準）。
-  // 熬過的結果那一句收起：鐵匠那一句伺服器這一下換了新的，不能還被上一下的結果蓋著
+  // 熬過的結果那一句收起：鐵匠那一句伺服器這一下換了新的，不能還被上一下的結果蓋著。看不了的只講整句、不送
   async function smithFurnace() {
     const shop = S.main && S.main.shop;
     const fu = shop && shop.forge ? shop.forge.furnace : null;
-    if (!furnaceOk(fu)) return;
+    if (!fu) return;
+    if (!furnaceOk(fu)) { toast(furnaceWords(fu)[0]); return; }
     await busy(async () => {
       const r = await api(`/api/do/${fu.id}`, {});
       setMain(r.main);
@@ -3895,12 +3903,12 @@
       else rows.push({ attribute: mat.attribute, cells: [[mat.tier | 0, cell]] });
     }
     const cells = rows.map((r) => brewRowHtml(shop, r)).join("");
-    // 爐火（3.2）：銀兩出口開著（forge.furnace 有東西）時中間的火是一顆鈕，看過了還沒開爐火畫旺；關著照舊是畫
+    // 爐火（3.2）：銀兩出口開著（forge.furnace 有東西）時中間的火是一顆鈕、上面掛一枚小籤，看過了還沒開爐火畫旺；關著照舊是畫
     const fu = f.furnace;
-    const fire = fu ? `<button class="flame fu-fire" data-act="shop-furnace" aria-label="看火候"${furnaceOk(fu) ? "" : " disabled"}>${FLAME_SVG}</button>` : `<div class="flame">${FLAME_SVG}</div>`;
+    const fire = fu ? furnaceFireHtml(fu) : `<div class="flame">${FLAME_SVG}</div>`;
     return `${kinds}
       <div class="furnace${S.shopFiring ? " firing" : ""}${fu && fu.ready ? " hot" : ""}">${slot("main", pot.main)}${fire}${slot("aux", pot.aux)}</div>
-      ${furnaceSayHtml(fu)}${out}<div class="shop-gorow">${go}<button class="btn small ghost shop-book" data-act="book-open" data-book="forge">鑄譜</button></div>
+      ${out}<div class="shop-gorow">${go}<button class="btn small ghost shop-book" data-act="book-open" data-book="forge">鑄譜</button></div>
       ${line.rack_full ? `<p class="shop-warn">${esc(line.rack_full)}</p>` : ""}
       <p class="shop-cap">背包的素材（點一下放進爐裡）</p><div class="cells${shop.four ? " four" : ""}">${cells || '<p class="shop-empty">背包裡沒有素材。</p>'}</div>`;
   }

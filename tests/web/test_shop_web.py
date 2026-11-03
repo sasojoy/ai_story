@@ -465,7 +465,8 @@ def test_a_brewed_material_turns_into_a_real_cell(content, world):
     assert 'data-act="shop-cell" data-id="gang_2"' in html and 'data-attr="剛" data-tier="2"' not in html
 
 
-# ── 鐵匠鋪與合成流程 3.2（C 批）：打造頁的爐火可以點、火旁一行鐵匠的話（forge.furnace、MAIN_ACTIONS smith_furnace）──
+# ── 鐵匠鋪與合成流程 3.2（C 批）：打造頁的爐火可以點、火上一枚小籤（forge.furnace、MAIN_ACTIONS smith_furnace；
+#    企劃者 2026-11-03 從三張對比圖挑「丙 火上一枚小籤」，原本做的是爐子底下一行）──
 
 
 def _fired(**set_):
@@ -483,53 +484,79 @@ def _fired(**set_):
     return game, server.main_view(game)
 
 
-def _say(html):
-    at = html.index('class="fu-say')
-    return html[at:html.index("</p>", at)]
+def _fire(html):
+    """爐子中間那團火（一顆鈕，連掛在上面的小籤）。"""
+    at = html.index('class="flame fu-fire"')
+    start = html.rindex("<button", 0, at)
+    return html[start:html.index("</button>", at) + len("</button>")]
 
 
-def test_an_unlooked_furnace_says_its_price_and_the_fire_can_be_tapped():
+def _tag(html):
+    """火上那一枚小籤（企劃者 2026-11-03 從爐火那一行的三張對比圖挑「丙 火上一枚小籤」）。"""
+    at = html.index('<span class="fu-tag')
+    return html[at:html.index("</span>", at) + len("</span>")]
+
+
+def test_an_unlooked_furnace_hangs_a_price_tag_on_the_fire():
+    """還沒看：火上一枚金色小籤寫價錢，整團火（連小籤）是一顆鈕；爐子底下不再另起一行、沒有另一顆「看」（開爐鈕跟著往上）。"""
     _game, m = _fired()
     fu = m["shop"]["forge"]["furnace"]
     assert fu["problem"] is None and not fu["ready"]
     html = _forge_page(m, "H.render(); return T.els.app.innerHTML;")
-    say = _say(html)
-    assert f"看火候 {fu['price']} 兩，今天還沒看。" in say and 'data-act="shop-furnace"' in say and ">看</button>" in say
-    fire = html[html.index('class="flame fu-fire"') - 8:]
-    assert fire.startswith("<button ") and 'data-act="shop-furnace"' in fire[:120] and "disabled" not in fire[:fire.index(">")]
-    assert 'class="furnace"' in html  # 還沒看：火照平常的樣子
+    fire = _fire(html)
+    assert _tag(html) == f'<span class="fu-tag">看火候 {fu["price"]} 兩</span>' and _tag(html) in fire  # 小籤掛在火上
+    assert 'data-act="shop-furnace"' in fire and "disabled" not in fire and "aria-disabled" not in fire
+    assert f'aria-label="看火候 {fu["price"]} 兩，今天還沒看。"' in fire  # 讀螢幕的人聽整句
+    assert "fu-say" not in html and ">看</button>" not in html
+    assert html.index('class="furnace"') < html.index("fu-tag") < html.index('class="shop-gorow"')  # 還沒看：火照平常的樣子
 
 
-def test_a_looked_furnace_burns_hot_and_says_the_next_pot_uses_it():
+def test_a_looked_furnace_burns_hot_and_its_tag_says_so():
     _game, m = _fired(looked=True)
     assert m["shop"]["forge"]["furnace"]["ready"]
     html = _forge_page(m, "H.render(); return T.els.app.innerHTML;")
-    assert 'class="furnace hot"' in html and "火候看過了，下一爐照新基準。" in _say(html) and " hot" in _say(html)
-    assert ">看</button>" not in html and 'class="flame fu-fire" data-act="shop-furnace" aria-label="看火候" disabled' in html
+    assert 'class="furnace hot"' in html and _tag(html) == '<span class="fu-tag hot">火候看過了</span>'
+    assert 'aria-label="火候看過了，下一爐照新基準。" aria-disabled="true"' in _fire(html) and "fu-say" not in html
 
 
 def test_a_furnace_used_today_is_grey_until_tomorrow():
     _game, m = _fired(used=True)
     assert m["shop"]["forge"]["furnace"]["used_today"]
     html = _forge_page(m, "H.render(); return T.els.app.innerHTML;")
-    assert "今天看過了，明日再來。" in _say(html) and " off" in _say(html) and "hot" not in html.split('class="furnace', 1)[1][:6]
+    assert _tag(html) == '<span class="fu-tag off">明日再來</span>' and "hot" not in html.split('class="furnace', 1)[1][:6]
+    assert 'aria-label="今天看過了，明日再來。" aria-disabled="true"' in _fire(html)
 
 
-def test_a_furnace_you_cannot_afford_says_why_in_grey():
+@pytest.mark.slow  # 提示泡泡的計時器（約 3 秒）
+def test_a_furnace_you_cannot_afford_is_grey_and_says_why_when_tapped():
+    """錢不夠（序章也是）：小籤照舊寫價錢、灰掉；點那一團火只說整句原因（小籤放不下長原因，同打造頁的灰格），什麼都不送。"""
     _game, m = _fired(silver=10)
     fu = m["shop"]["forge"]["furnace"]
     assert fu["problem"] and "還差" in fu["problem"]
-    html = _forge_page(m, "H.render(); return T.els.app.innerHTML;")
-    say = _say(html)
-    assert f"看火候 {fu['price']} 兩・{fu['problem']}" in say and " off" in say and "data-act" not in say
-    assert 'class="flame fu-fire" data-act="shop-furnace" aria-label="看火候" disabled' in html  # 中間的火也按不下去
+    why = f"看火候 {fu['price']} 兩・{fu['problem']}"
+    out = _forge_page(m, "return (async () => { H.render(); const html = T.els.app.innerHTML; " + _click('{ act: "shop-furnace" }')
+                      + " return { html, toast: T.els.toast.textContent, calls: T.calls.length }; })();")
+    assert _tag(out["html"]) == f'<span class="fu-tag off">看火候 {fu["price"]} 兩</span>'
+    assert f'aria-label="{why}" aria-disabled="true"' in _fire(out["html"])
+    assert out["toast"] == why and out["calls"] == 0
 
 
 def test_the_furnace_is_not_tappable_when_the_silver_outlets_are_off(m):
-    """銀兩出口關著（測試內容；週末、14 天季也是）：forge.furnace 是 None，爐火不可點、那一行不畫，打造頁跟以前一樣。"""
+    """銀兩出口關著（測試內容；週末、14 天季也是）：forge.furnace 是 None，爐火不可點、小籤不畫，打造頁跟以前一樣。"""
     assert m["shop"]["forge"]["furnace"] is None
     html = _forge_page(m, "H.render(); return T.els.app.innerHTML;")
-    assert "shop-furnace" not in html and "fu-say" not in html and '<div class="flame">' in html
+    assert "shop-furnace" not in html and "fu-tag" not in html and "fu-say" not in html and '<div class="flame">' in html
+
+
+def test_the_tag_hangs_on_the_fire():
+    """小籤是火那一顆鈕裡的一段，絕對定位掛在火的下緣（不佔一行）；字級寫 em（店面那一層照寬度放大），不寫死 px。"""
+    import re
+
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    assert re.search(r"\.shop-layer \.furnace \.fu-fire \{[^}]*position: relative", css)
+    tag = re.search(r"\.shop-layer \.fu-tag \{([^}]*)\}", css)
+    assert tag and "position: absolute" in tag.group(1) and "white-space: nowrap" in tag.group(1)
+    assert re.search(r"font: 600 [0-9.]+em", tag.group(1))
 
 
 @pytest.mark.slow  # 提示泡泡的計時器（約 3 秒）
@@ -548,7 +575,7 @@ def test_looking_posts_the_op_and_asks_the_line_again():
 
 
 def test_looking_at_the_fire_puts_the_smith_line_back_after_a_brew():
-    """熬完的結果句蓋著鐵匠那一句（3.3）；同一頁按「看」看火候，回話是提示泡泡、鐵匠那一句伺服器換了新的：結果句收起，換回鐵匠那一句。"""
+    """熬完的結果句蓋著鐵匠那一句（3.3）；同一頁點爐火看火候，回話是提示泡泡、鐵匠那一句伺服器換了新的：結果句收起，換回鐵匠那一句。"""
     game, m = _fired()
     game.smith_furnace()
     after = server.main_view(game)
@@ -580,10 +607,14 @@ def test_a_poll_with_a_new_smith_line_puts_it_back_after_a_brew(m):
     assert same_line["note"] == "熬出來了"
 
 
-def test_tapping_a_furnace_that_cannot_look_sends_nothing():
-    _game, m = _fired(looked=True)
-    out = _forge_page(m, "return (async () => { H.render(); " + _click('{ act: "shop-furnace" }') + " return T.calls.length; })();")
-    assert out == 0
+@pytest.mark.slow  # 提示泡泡的計時器（約 3 秒）
+def test_tapping_a_furnace_that_cannot_look_says_the_whole_line_and_sends_nothing():
+    """看過了還沒開爐、今天用掉了：小籤只寫幾個字，點那一團火用提示泡泡講整句（原本爐子底下那一行），不送。"""
+    for state, line in ((dict(looked=True), "火候看過了，下一爐照新基準。"), (dict(used=True), "今天看過了，明日再來。")):
+        _game, m = _fired(**state)
+        out = _forge_page(m, "return (async () => { H.render(); " + _click('{ act: "shop-furnace" }')
+                          + " return { calls: T.calls.length, toast: T.els.toast.textContent }; })();")
+        assert out == {"calls": 0, "toast": line}
 
 
 def test_the_hot_fire_stops_for_reduced_motion():
