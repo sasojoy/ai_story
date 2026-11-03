@@ -420,7 +420,8 @@ for _pair in (("admin_end_season", "_sieges"), ("admin_end_season", "_shelve_sie
 # 推進與結算 20 個方法搬進 features/battle/progress.py（14 個一行委派）；engine 不再 import 舊名 escorts（收場放回同伴進了 progress.apply_battle_outcome）
 GAME_IMPORTS -= {"tianxia.escorts"}
 GAME_IMPORTS |= {"tianxia.features.battle.progress"}
-GAME_DELEGATES -= {"_shelve_siege", "_settle_siege", "_in_region"}  # 叫它們的 _battle_status、收季、_apply_battle_outcome、_battle_now 進了包：沒人叫，拿掉
+GAME_DELEGATES -= {"_shelve_siege", "_in_region"}  # 叫它們的 _battle_status、收季、_battle_now 進了包：沒人叫，拿掉
+# （_settle_siege 留著：叫它的 _apply_battle_outcome 進了包，可是 features/battle/tests/test_siege_settle.py 直接叫 game._settle_siege）
 GAME_DELEGATES |= {
     # 核心原位與別的功能在叫的：options 的戰鬥選單（_battle_for_me、_watching_battle、_fighting）、world_tick 與引導（_battle_status：測試換掉、
     # 數次數；_watching_battle）、叛投（_battle_now）、玉璽（_showdown_status）、場景圖（_battle_for_me）、事件分級（_battle_for_me，CORE_DELEGATE_CALLERS）；

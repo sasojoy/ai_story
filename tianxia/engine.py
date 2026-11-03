@@ -6152,6 +6152,9 @@ class Game:
     def _cancel_siege(self, record_id: int, text: str) -> None:
         battle_sieges.cancel_siege(self, record_id, text)
 
+    def _settle_siege(self, battle: battle_instance.BattleInstance) -> None:
+        battle_sieges.settle_siege(self, battle)
+
     # 本體在 tianxia/features/battle/progress.py（全部拆包第 8 批：推進與結算），這裡留一行委派
     def _battle_status(self, tick: bool = True) -> tuple[battle_instance.BattleInstance, BattleDef] | None:
         return battle_progress.battle_status(self, tick)
