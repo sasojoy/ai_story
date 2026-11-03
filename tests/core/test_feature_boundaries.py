@@ -272,8 +272,7 @@ GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
 _MAP_LINE = "輿圖的線（feature/map-view）還在飛，這一輪不碰；輿圖成包（總表第 46～50 批）時改叫出陣、探索的查詢服務"
 GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；過渡）
     # explore（主動搬六包第 3＋4 批）：用到 outing 這個名字（現在是探索包 outing_rules 的別名）的只剩有所感
-    "_sense": "有所感畫完那一筆擲特殊頓悟（epiphany.roll 的 boost＝outing_rules.rare_boost：走一趟段數越多越容易來）：有所感還沒成包"
-              "（總表第 24 批）；成包時探索包開「此刻稀有的乘多少」的查詢服務，改叫它",
+    # （_sense：有所感擲特殊頓悟的 boost＝outing_rules.rare_boost——全部拆包第 24 批探索包開了查詢服務 _rare_boost〔# sense 那一段〕，改叫它，拿掉）
     # （_own_scene_text：坐在宴席上的場景卡第 11 批換成 scene 掛鉤，拿掉）
     # 出陣（主動搬六包第 1 批）：下面這些方法用到 sortie 這個名字（現在是出陣包 rules 的別名）——開關（sortie.on＝territory.on）、
     # 鈕上的字（NAME、USED_UP、LEFT_NOTE、OUT_NOTE……）、次數（spend）
@@ -494,6 +493,21 @@ CORE_DELEGATE_CALLERS_GUIDE = {  # 事件檢定（核心本體）經 ctx 叫的�
     ("event_check.answer_branch", "_begin_enlistment"): "分岔的隨口應對：同 answer_event",
     ("event_check.answer_branch", "_greet_rejoin"): "同上",
     ("event_check.answer_branch", "_check_hints"): "同上",
+}
+# sense（全部拆包第 24 批「有所感與頓悟」：新包 tianxia/features/sense/；計畫 docs/superpowers/plans/2026-11-01-有所感包-第1批.md 1.4、1.5）：
+# 四張名單的有所感那幾筆集中在這一段（並行的拆包線不跟別人的行穿插；拿掉的在原處）。核心原位碰有所感的那幾處，能接第 11 批掛鉤的接上
+# （choose 掛鉤接 sense:、scene 掛鉤接場景卡），接不了的改叫 Game 上一行的服務委派、記進 GAME_DELEGATE_CALLERS 寫理由（不新增 GAME_DIRECT）
+GAME_DELEGATES |= {
+    # 探索包回答有所感包的查詢服務（主人 explore）：擲特殊頓悟的 boost（原本 Game._sense 直接讀 outing_rules 那一筆 GAME_DIRECT 換成它）
+    "_rare_boost",
+}
+GAME_DELEGATE_CALLERS.update({
+    ("_sense", "_rare_boost"): "有所感選對、擲中之後擲特殊頓悟乘走一趟的稀有倍數（Task 2 這一刻 _sense 還在 Game；Task 3 搬進有所感包，經 ctx 叫）",
+})
+CORE_DELEGATE_CALLERS_SENSE = {  # 核心本體經 ctx 叫包的委派
+    ("services.outing_watch", "_outing_watched"): "走一趟停在要選的事上時這一下選完的得失（探索包的委派）：裝飾器原本是 engine.py 模組層的 "
+                                                  "_outing_watch，掛在 Game.choose、answer_event 與有所感包的 sense_draw、epiphany_names 上；"
+                                                  "包不能 import engine，第 24 批搬進核心的共用小函式。「做完一件事」的事件是總表第 26 批",
 }
 
 
@@ -797,6 +811,8 @@ CORE_DELEGATE_CALLERS: dict[tuple[str, str], str] = {}
 # guide（全部拆包第 22 批）：上面註解裡寫好的 features/guide 那 6 對（answer_event、answer_branch × _begin_enlistment、_greet_rejoin、_check_hints）
 # 新手引導搬成包、它們成了委派，照註解記進來（理由在 # guide 那一段的 CORE_DELEGATE_CALLERS_GUIDE）
 CORE_DELEGATE_CALLERS.update(CORE_DELEGATE_CALLERS_GUIDE)
+# sense（全部拆包第 24 批）：核心的裝飾器 outing_watch 經 ctx 叫探索包的委派（理由在 # sense 那一段的 CORE_DELEGATE_CALLERS_SENSE）
+CORE_DELEGATE_CALLERS.update(CORE_DELEGATE_CALLERS_SENSE)
 
 
 def ctx_delegate_callers(source: str, name: str, delegates: set[str] | None = None) -> set[tuple[str, str]]:

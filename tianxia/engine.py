@@ -92,6 +92,10 @@ from .core.option import IDLE_MARK, Option  # 選單上的一顆（搬進核心�
 from .core.services import NO_SUCH_PLAYER, PAUSED_TEXT, WalletService, drill_share, wallet_on  # 共用的字與小函式、錢包服務（3.10）
 from .core.services import BIG_FIGHT_WAIT  # sortie（全部拆包第 17 批）：大場面按鈕上的字搬進核心的共用的字（出陣包的遊歷鈕也用）
 from .core.services import HutReward  # guide（全部拆包第 22 批）：序章步驟的獎勵那一行的記號（原本 import 自 guide）
+# sense（全部拆包第 24 批）：籌備中那兩句與走一趟的裝飾器搬進核心的共用的字與小函式（engine 照舊用：`from tianxia.engine import PREPARING_REFUSAL`
+# 兩個測試檔在拿；choose、answer_event 照舊掛 @_outing_watch）
+from .core.services import PREPARING_REFUSAL, PREPARING_TEXT  # noqa: F401
+from .core.services import outing_watch as _outing_watch
 # explore
 from .features.explore import explore_actions  # 過渡：Game 上探索一顆的 9 個一行委派（主動搬六包第 3＋4 批）
 from .features.explore import outing_actions  # 過渡：Game 上走一趟的 9 個一行委派（主動搬六包第 3＋4 批）
@@ -306,9 +310,7 @@ class Refused(list):
     不放在 Game 的欄位裡：同一個角色的兩個分頁共用同一個 Game，鎖放掉之後別的請求可能已經改掉欄位；回傳值跟著這一次請求走。"""
 
 
-# 賽季籌備中（管理者還沒開季）：選單上那一顆灰的、安排前往被擋的原因寫 PREPARING_TEXT；動作被擋回一句 PREPARING_REFUSAL
-PREPARING_TEXT = "賽季籌備中，等待管理者開季"
-PREPARING_REFUSAL = f"（{PREPARING_TEXT}。）"
+# （賽季籌備中的 PREPARING_TEXT、PREPARING_REFUSAL 搬進核心的共用的字〔tianxia/core/services.py，全部拆包第 24 批〕：上面 import 回來）
 # 測試期間一鍵補滿體力（Config.beta_free_refill，企劃者 2026-10-07）。以下四句與鈕上的字（Config.beta_free_refill_label）全是新寫的，待 joy 潤：
 REFILL_TITLE = "補滿體力"  # 江湖紀錄那一則的標題（joy 的丹是「服下回體丹」）
 REFILL_LINE = "你運了口氣，體力回滿了。"  # 補滿成功時寫進紀錄的那一句
@@ -359,12 +361,7 @@ SHOP_ACTS = frozenset({"smith", "bounties", "market", "arena"})  # 初入江湖�
 # 出店的那一顆。酒肆的寫字面（＝ features/tavern/rules.BACK_ID）：酒肆搬成包之後模組層不碰包（主動搬六包第 10 批）
 LEAVE_SHOP_IDS = frozenset({"bounty:back", "smith:back", mounts.BACK, arena.BACK_ID, "tavern:back"})
 
-def _outing_watch(fn):
-    """走一趟停在要選的事上時，這一下選完的得失記在那一段（outing_actions.outing_watched，Game 上留一行委派）。"""
-    @functools.wraps(fn)
-    def run(self, *args, **kwargs):
-        return self._outing_watched(fn, *args, **kwargs)
-    return run
+# （走一趟的裝飾器 _outing_watch 搬進核心〔tianxia/core/services.py 的 outing_watch，全部拆包第 24 批〕：上面 import 回來，同一個名字）
 
 
 class Game:
@@ -740,7 +737,7 @@ class Game:
         self._top_up_pills()
         self._drop_old_zhuifeng()
         s.player.resting_since = None  # 打坐 2026-10-12 拿掉了：存檔時坐著的人讀檔就起身（只是不再回得比較快，沒有別的帳要算）
-        sensing.drop_stale(s, c)  # 有所感的場景被拿掉、人不在那裡了：作廢（悟意境設計第零節）
+        self._sense_drop_stale()  # 有所感的場景被拿掉、人不在那裡了：作廢（悟意境設計第零節；有所感包，第 24 批：後面的收店讀它，不放 on_drop_stale）
         if p.pending_companion and p.pending_companion not in c.characters:
             p.pending_companion = None
         if p.pending_faction and p.pending_faction not in {f.id for f in c.scenario.factions}:
@@ -1231,12 +1228,11 @@ class Game:
                            enabled=move not in held) for move in MOVES] + [
                 Option(id=ARENA_YIELD, label=arena.YIELD),
             ]
-        if s.player.sensing is not None:  # 有所感（悟意境設計第零節）：卡上的做法，或感悟狀態的「畫下來／順其自然」
-            menu = sensing.menu(s, c)
-            if menu:
-                return [Option(id=option_id, label=label) for option_id, label in menu]
-        if s.player.god_naming is not None:  # 特殊頓悟心魔過了：先取名（三個候選＋自己寫），取了才收進意境
-            return [Option(id=option_id, label=label) for option_id, label in epiphany.menu(s)]
+        # 有所感（卡上的做法，或感悟狀態的「畫下來／順其自然」）、特殊頓悟心魔過了先取名（三個候選＋自己寫）：有所感包（第 24 批；
+        # menu 掛鉤在擂台那一支前面，這一格在擂台之後，接不了）
+        sense_menu = self._sense_menu()
+        if sense_menu is not None:
+            return sense_menu
         if s.player.story_open is not None:  # 一條線的答題（storyline.quiz_menu）：只有這一題的答案與「先擱著」
             menu = storyline.quiz_menu(s, c)
             if menu:
@@ -1802,7 +1798,7 @@ class Game:
         sense = explore_modes.option_id(explore_modes.SENSE)
         if not insights.explore_gives(loc, c):
             opts.append(Option(id=sense, label=f"{name[explore_modes.SENSE]}（{explore_modes.NO_SENSE}）", enabled=False))
-        elif sensing.missed_today(self.state, c, loc):
+        elif self._sense_missed(loc):
             opts.append(Option(id=sense, label=f"{name[explore_modes.SENSE]}（{explore_modes.SENSE_LATER}）", enabled=False))
         else:
             opts.append(self._cost_option(sense, name[explore_modes.SENSE], cost))
@@ -2103,7 +2099,7 @@ class Game:
         句尾補一句什麼時候才悟得出（howto.explore_line）。"""
         c = self.content
         return (
-            sensing.missed_today(self.state, c, loc)
+            self._sense_missed(loc)
             and c.config.explore_mix_of(loc.tags).weights.get("insight", 0) > 0 and bool(insights.explore_gives(loc, c))
         )
 
@@ -2508,8 +2504,9 @@ class Game:
             return self._log([f"（寫下你的做法，{FREE_TEXT_MAX} 字以內。）"])  # 選項本身只叫出輸入框，不消耗事件
         if kind == "errand" and arg.startswith("persuade:") and self._persuade_said is None:
             return self._log([errand_rules.PERSUADE_ASK])  # 勸降（減法季批 6）：選項本身只叫出輸入框，送出走 persuade_request／persuade
-        if option_id == sensing.DRAW:
-            return self._log(["（在畫布上一筆畫下心中的形。）"])  # 只叫出畫布；畫完送出走 sense_request／sense_draw
+        canvas = self._sense_canvas(option_id)  # 有所感的「畫下來」只叫出畫布（有所感包，第 24 批）；畫完送出走 sense_request／sense_draw
+        if canvas is not None:
+            return self._log(canvas)
         if option_id == explore_modes.SAY_ID and self._gather_said is None:
             return self._log([explore_modes.SAY_BAD])  # 找素材的「自己說」：選項本身只叫出輸入框，送出走 gather_text_request／gather_say
         said = say_text(text, self.say_max()) if option_id in TEXT_TALKS else None
@@ -2581,7 +2578,7 @@ class Game:
                 msgs = self._errand_act(arg)
             elif kind == storyline.OPTION:
                 msgs = self._story_act(arg)
-            elif kind == epiphany.OPTION:
+            elif kind == "dunwu":  # 特殊頓悟取名（有所感包，第 24 批；choose 掛鉤不帶 text——自己寫的名字在 text——留原位叫委派）
                 msgs = self._epiphany_name(arg, text)
             else:
                 msgs = self._choose(int(arg))
@@ -2914,7 +2911,7 @@ class Game:
             return ["（此刻無法這麼做。）"]
         msgs = sensing.choose(s, c, int(arg), rng)
         sense = s.player.sensing
-        if not prologue and sense is not None and sense.stage == "draw" and epiphany.roll(s, c, self.rng, boost=outing_rules.rare_boost(s, c)):  # 特殊頓悟：不畫那一筆，開一條頓悟的線
+        if not prologue and sense is not None and sense.stage == "draw" and epiphany.roll(s, c, self.rng, boost=self._rare_boost()):  # 特殊頓悟：不畫那一筆，開一條頓悟的線
             msgs += self._epiphany_begin(sense.method or "", c.locations[sense.location].name)
         return msgs
 
@@ -2995,6 +2992,43 @@ class Game:
             msgs.append(f"江湖上還沒有人在{c.locations[req.location].name}這樣悟過——你是第一個。")
         msgs += self._guide(self._note_action("sense"))
         return msgs
+
+    # ── 有所感的服務（全部拆包第 24 批）：核心原位（選單、清失效參照、舊探索與三選一、choose、紀錄標題）與別的包（探索、新手引導）叫的；
+    # 探索包的查詢服務 _rare_boost（有所感擲特殊頓悟乘它）。Task 2 先叫舊模組，Task 3 換成叫有所感包 ──
+
+    def _rare_boost(self) -> float:
+        return outing_rules.rare_boost(self.state, self.content)
+
+    def _sense_missed(self, loc: Location) -> bool:
+        return sensing.missed_today(self.state, self.content, loc)
+
+    def _sense_drop_stale(self) -> None:
+        sensing.drop_stale(self.state, self.content)
+
+    def _sense_menu(self) -> list[Option] | None:
+        s, c = self.state, self.content
+        if s.player.sensing is not None:
+            menu = sensing.menu(s, c)
+            if menu:
+                return [Option(id=option_id, label=label) for option_id, label in menu]
+        if s.player.god_naming is not None:
+            return [Option(id=option_id, label=label) for option_id, label in epiphany.menu(s)]
+        return None
+
+    def _sense_start(self, scene_id: str, rng: random.Random) -> list[str]:
+        return sensing.start(self.state, self.content, self.content.insight_scenes[scene_id], rng)
+
+    def _sense_canvas(self, option_id: str) -> list[str] | None:
+        return ["（在畫布上一筆畫下心中的形。）"] if option_id == sensing.DRAW else None
+
+    def _epiphany_title(self) -> str:
+        return epiphany.TITLE
+
+    def _sense_prologue_choice(self) -> str:
+        s, c = self.state, self.content
+        if s.player.sensing.stage == "choose":
+            return f"{sensing.PREFIX}{self.rng.randrange(len(sensing.current(s, c)[1].methods))}"
+        return sensing.LET_GO
 
     def _action_title(self, kind: str, arg: str) -> str:
         s, c = self.state, self.content
@@ -3084,8 +3118,8 @@ class Game:
             progress = s.player.storylines.get(arg.partition(":")[0])
             line = storyline.definition(c, progress) if progress is not None else None
             return line.title if line is not None else "奇事"
-        if kind == epiphany.OPTION:  # 特殊頓悟取名
-            return epiphany.TITLE
+        if kind == "dunwu":  # 特殊頓悟取名（有所感包，第 24 批）
+            return self._epiphany_title()
         if kind == "act" and arg.startswith("challenge:"):
             return f"挑戰・{figures.name_of(c, arg.partition(':')[2])}"
         if kind == "act" and arg.startswith("bribe:"):  # 銀兩出口的打點門路（21 天季）
@@ -3664,7 +3698,7 @@ class Game:
             return self._present(c.events[sight], "explore")
         scene = prologue_rules.explore_scene(s, c)
         if scene is not None:  # 序章第 3 步的有所感版（悟意境設計第七節）：草廬四景就是四個做法，都對、必中
-            return sensing.start(s, c, c.insight_scenes[scene], self.rng)
+            return self._sense_start(scene, self.rng)
         boss = duel_rules.available(s, c)  # 單人頭目戰：只有這裡有頭目時才擲（沒有頭目的地點、測試內容，亂數序列一個都不動）
         # 名聲 4.4：名望高、頭目找上門的機會乘 renown.duel_chance（只放大門檻，擲的還是同一顆骰）
         if boss is not None and self.rng.random() < c.config.duel.explore_chance * renown.duel_chance(s, c):
@@ -3675,11 +3709,8 @@ class Game:
         if not weighted:
             return ["你四處走走，一無所獲。"]
         branch = self.rng.choices([b for b, _ in weighted], weights=[w for _, w in weighted])[0]
-        if branch == "insight":
-            if sensing.can_sense(s, c, loc):  # 有場景：有所感，要選做法、畫一筆才悟得到（悟意境設計第零節）
-                return sensing.start(s, c, sensing.pick_scene(loc, c, self.rng), self.rng)
-            found = insights.roll_explore(loc, c, self.rng)  # 沒有場景的內容（測試內容）照舊直接悟
-            return [f"你在{loc.name}靜下心來，看了好一陣。"] + insights.learn(s, c, self.world, found, at=loc)
+        if branch == "insight":  # 有場景：有所感，要選做法、畫一筆才悟得到（悟意境設計第零節）；沒有場景的內容（測試內容）照舊直接悟
+            return self._sense_here(loc, self.rng)  # 就是靜心感悟那四行（有所感包，第 24 批）
         if branch == "wild":
             squad = min(self._wild_foes(loc), key=lambda foe: foe.difficulty)  # 同分取這裡列的第一路
             return [f"你在{loc.name}走著，{squad.name}突然殺出！"] + self._squad_encounter(squad.id, wild=True)
@@ -3701,7 +3732,7 @@ class Game:
     def _explore_can(self, branch: ExploreBranch, loc: Location) -> bool:
         """探索三選一的這一支在這裡做不做得了。"""
         if branch == "insight":
-            if sensing.missed_today(self.state, self.content, loc):
+            if self._sense_missed(loc):
                 return False  # 這個遊戲日在這裡選錯過做法：換日之前這裡悟不出什麼（Q2）
             return bool(insights.explore_gives(loc, self.content))  # 輿圖詳情欄「這裡能悟」用同一個判斷（W3）
         if branch == "wild":
