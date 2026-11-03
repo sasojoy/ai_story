@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
 from tianxia import calendar, naming
-from tianxia import library  # 過渡：待搬（功法庫上限 cap_of，開發規範手冊 3.10）
+from tianxia import library  # 共用規則層（功法庫上限 cap_of，開發規範手冊 3.10）
 from tianxia.characters import name_key
 # 票的庫存、月卡加的上限、哪一件賣這種效果搬進核心的錢包服務（開發規範手冊 3.10）；這裡照舊叫得到（mall.tokens……）
 from tianxia.core.services import CARD_KEY, card_bonus, item_for, look_ids, tokens  # noqa: F401

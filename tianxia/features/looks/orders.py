@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from tianxia import naming
-from tianxia import speech  # 過渡：待搬（玩家寫的字過字表；名帖、挑釁同一道）
+from tianxia import speech  # 共用規則層（玩家寫的字過字表；名帖、挑釁同一道）
 from tianxia.models import Content, MallItem
 from tianxia.wallet import Purchase, Wallet
 

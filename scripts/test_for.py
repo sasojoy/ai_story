@@ -21,6 +21,9 @@
   sqlite_world、world_state、characters、accounts、database、team、gender、naming，3.10 的 wallet，PM 10/31 的 journal；
   邊界測試照同一份）：核心測試＋煙霧＋檔名是 test_<模組>… 的。
   state.py、models.py 另外看 hunk 落在哪個類別、哪個欄位：類別名或欄位名帶功能前綴的（mall_tokens → mall）再加那一群。
+- 共用規則層（tianxia/core/registry.py 的 SHARED，全部拆包第 15 批登記；照語法樹讀、跟邊界測試同一份）：自己檔名的測試（同核心）
+  ＋煙霧＋邊界測試 test_feature_boundaries.py，不跑核心測試、不照「誰 import 它」挑也不往上找（總表第六節第 5 條；依賴它的測試
+  留給合併閘門與每日整套，要當場驗就直接給那幾個測試檔或 --all）。
 - tianxia/engine.py：hunk 落在 Game 的哪個方法 → 方法名第一個認得的字當功能群（tavern_seek → tavern；_deliver_seal_results
   → seal）→ 那一群的測試檔。落在 choose、_everyday_options、sync、status_data、__init__、換季重設、清失效參照這幾個共用方法
   （SHARED_METHODS）、方法以外、或方法名認不出功能 → 看 hunk 裡提到哪些功能前綴；都沒有 → 核心測試＋煙霧。
@@ -121,6 +124,33 @@ def _rel_root(p: Path) -> str:
 # 核心（手冊 3.1、4.2、4.3）：改了跑核心測試＋煙霧＋自己檔名的測試，不照「誰 import 它」挑（team、models、state 被一兩百個
 # 測試檔 import）。只有一份，在 tianxia/core/__init__.py（test_test_for 守它跟邊界測試的 CORE 一樣）
 CORE_MODULES = core_modules()
+
+# shared（全部拆包第 15 批「共用規則層登記」，計畫 docs/superpowers/plans/2026-11-01-共用規則層登記.md 1.6）
+REGISTRY = ROOT / "tianxia" / "core" / "registry.py"
+
+
+def shared_modules(registry: Path = REGISTRY) -> frozenset[str]:
+    """共用規則層的模組：tianxia/core/registry.py 的 SHARED（模組名 → 理由），跟邊界測試同一份。照語法樹讀、不 import（registry 會
+    import 每一包：包寫壞了 test_for 照樣挑得出來）；讀不出來（語法錯、沒有 SHARED、值不是字面的）在 stderr 說一聲、當成沒有——
+    那些模組就照一般的舊模組挑（挑得多，不會漏）。"""
+    try:
+        tree = ast.parse(registry.read_text(encoding="utf-8"))
+        for node in tree.body:
+            target = node.target if isinstance(node, ast.AnnAssign) else node.targets[0] if isinstance(node, ast.Assign) else None
+            if isinstance(target, ast.Name) and target.id == "SHARED" and node.value is not None:
+                return frozenset(ast.literal_eval(node.value))
+        problem = "沒有 SHARED"
+    except (OSError, SyntaxError, ValueError) as e:
+        problem = f"{type(e).__name__}: {e}"
+    print(f"test_for：{_rel_root(registry)} 讀不出共用規則層的模組（{problem}），這一次照一般的舊模組挑", file=sys.stderr)
+    return frozenset()
+
+
+# 共用規則層（總表第六節第 5 條；手冊 4.3 沒有這一種，第 15 批定成「核心那一種拿掉核心測試」）：改了跑自己檔名的測試＋煙霧＋邊界測試，
+# 不跑核心測試、不照「誰 import 它」挑也不往上找（timetable 以前挑到 5,195 條、tactics 走「太多」那一條帶核心測試 1,800 條）。
+# 邊界測試另外帶：「共用規則層只 import 核心本體與同一層」只有它守（同 engine.py 有 hunk 一律帶邊界）。
+SHARED_MODULES = shared_modules()
+BOUNDARY_TEST = "test_feature_boundaries.py"
 # 核心模組裡、自己檔名的測試不收進「核心測試」的：江湖紀錄的 test_journal（76 條）。PM 10/31 定的核心測試是手冊 3.1 那十三個
 # 自己的測試＋test_engine＋契約、邊界、錢包（CORE_GLOBS），journal 算核心是同一天邊界測試那一條定的；收進來改 models.py 一個
 # 欄位的底數從 1,517 再漲到約 1,593，要不要收等 PM 跟 < 1,500 一起定。改 journal.py 照舊跑它（自己檔名的測試）。
@@ -1072,6 +1102,12 @@ def pick(files: list[str], base: str | None = None,
             core_and_smoke()
             result.files |= own_named(path.stem)
             result.why.append(f"{f}：核心 → 核心測試＋煙霧＋test_{path.stem}…")
+            continue
+        # shared（第 15 批）：共用規則層 → 自己檔名的測試＋煙霧＋邊界測試（不跑核心測試、不往上找）
+        if path.suffix == ".py" and f == f"tianxia/{path.name}" and path.stem in SHARED_MODULES:
+            result.smoke = True
+            result.files |= own_named(path.stem) | {t for t in tests if t.name == BOUNDARY_TEST}
+            result.why.append(f"{f}：共用規則層 → 自己檔名的測試＋煙霧＋邊界測試（不跑核心測試、不往上找；總表第六節第 5 條）")
             continue
         if path.suffix == ".py" and (f.startswith("tianxia/") or f.startswith("scripts/") or "/" not in f):
             mod = path.stem
