@@ -1919,12 +1919,11 @@
     if (look && typeof ringWarmLook === "function") ringWarmLook(look);
     if (typeof scenePreview === "function") scenePreview(r.scene, mid);
   }
-  // 「換一招」：萬寶閣絕招那一頁（介面那一串的 openMallMoves 進得到招式庫那一種打法的分頁；還沒有它時開形象那一頁）。
+  // 「換一招」：萬寶閣絕招那一頁、招式庫開那一種打法的分頁（mall.js 的 openMallMoves）。
   // 萬寶閣也用 #scene-preview 那一塊畫布：先把俠客頁這一塊收起來
   async function heroMoveGo(style) {
     S.heroMoveShow = null;
-    if (typeof openMallMoves === "function") { await openMallMoves(style); return; }
-    await openMall(); await mallTabTo("look");
+    await openMallMoves(style);
   }
   // 「屬性」那一段（以前在狀態列與點名號攤開的那一塊，整合設計 6.2）：五項一格一欄（名字、數字），有點可配時每格底下一顆「＋」、
   // 小標題右邊寫「可配 N 點」、格子底下一行五項各管什麼（statUsesHtml）；再一行名望、善名、惡名；心得一行在最底下（序章照舊點名號配）
