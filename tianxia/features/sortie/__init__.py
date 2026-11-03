@@ -31,7 +31,7 @@ class SortieFeature(Feature):
 
     def enabled(self, ctx) -> bool:
         """出陣開著：地盤（＝領地爭奪）開著就有，沒有自己的開關（rules.on 就是 territory.on，只看內容）。"""
-        from tianxia import territory  # noqa: PLC0415  過渡：待搬（地盤；出陣沒有自己的開關）
+        from tianxia import territory  # noqa: PLC0415  共用規則層（地盤；出陣沒有自己的開關）
 
         return territory.on(ctx.content)
 

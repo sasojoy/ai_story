@@ -51,3 +51,22 @@ def test_two_templates_on_one_path_and_form_are_refused(tmp_path):
     path.write_text(json.dumps(book, ensure_ascii=False), encoding="utf-8")
     with pytest.raises(ContentError, match="一路一型"):
         load_content(root)
+
+
+def test_every_god_template_shows_numbers_not_braces():
+    """正式站「柔攻神品」那一行寫著 {stun_pct}、{turns}（Joy 2026-11-01）：四十個模板畫出來都不能留下大括號。"""
+    from types import SimpleNamespace
+
+    from tianxia import skillview, tactics
+    from tianxia.state import InsightFx
+
+    c = real_content()
+    rou = next(g for g in c.traits.god if g.id == "god_rou_gong")
+    assert "{" not in rou.desc and "%" in rou.desc
+    for g in c.traits.god:
+        fx = InsightFx(quality="上品", general={g.general: 3}, grand=g.id)
+        shown = [g.desc, tactics.desc_text(g.tactic), *(e["desc"] for e in insight_fx.effects(c, fx))]
+        assert not any("{" in t or "}" in t for t in shown), (g.id, shown)
+        # 修好之前悟成的，存檔裡的說明是模板：畫的時候照模板重寫
+        saved = SimpleNamespace(note=g.tactic.desc)
+        assert skillview.insight_note(c, saved, fx) == g.desc

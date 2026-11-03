@@ -78,9 +78,37 @@
     }
     return OW.imgs[name];
   }
+  // 穿的那一套形象（伺服器的 main.look；Joy 2026-11-02「除了擂台換形象，探索那邊應該要一起換吧」）：官方的在 /static/img/looks/<id>/，
+  // 自建的（u<數字>）由伺服器送。走一趟那六張（跑、撿、舉、拔劍、打坐、推）每一套都有自己的；站著、挨打、跪地借擂台那三張。
+  // 一套要全部載好才換上，有一張抓不到（以前做的少了走一趟那幾張）整趟照舊畫斗笠小子：不要跑著跑著換了一個人
+  const OUTING_LOOK_SHEET = { hero_idle: "hero_bare_idle", hero_hit: "hero_bare_hit", hero_kneel: "hero_bare_kneel" };
+  const OUTING_HERO = ["hero_idle", "hero_run", "hero_pickup", "hero_lift", "hero_slash", "hero_hit", "hero_kneel", "hero_meditate", "hero_push"];
+  function outingLookUrl(look, name) {
+    const file = OUTING_LOOK_SHEET[name] || name;
+    const ver = globalThis.LOOKS_VER ? `?v=${globalThis.LOOKS_VER}` : ""; // 自建的圖換了（補畫走一趟那六張）網址就換（main.looks_ver）
+    if (/^u\d+$/.test(look)) return `/api/looks/img/${look}/${file}${ver}`;
+    return /^[a-z0-9_]+$/.test(look) ? `/static/img/looks/${look}/${file}.webp` : "";
+  }
+  function outingLookImg(name) {
+    const look = (S.main && S.main.look) || "";
+    if (!look || !outingLookUrl(look, name)) return null;
+    const key = `${look}?${globalThis.LOOKS_VER || ""}`; // 補畫好了版本就換：以前抓不齊的那一套重抓一次
+    if (!OW.look || OW.look.key !== key) {
+      OW.look = { id: look, key, imgs: {}, bad: false };
+      for (const one of OUTING_HERO) {
+        const img = new Image();
+        img.onerror = () => { if (OW.look && OW.look.key === key) OW.look.bad = true; };
+        img.src = outingLookUrl(look, one);
+        OW.look.imgs[one] = img;
+      }
+    }
+    if (OW.look.bad || !OUTING_HERO.every((one) => OW.look.imgs[one].complete && OW.look.imgs[one].naturalWidth)) return null;
+    return OW.look.imgs[name] || null;
+  }
   // 動作圖一開就全載；背景只載這一處那一套（outingBg 第一次畫到時才載）
   function outingImages() {
     for (const name of Object.keys(OUTING_SHEETS)) outingImg(name);
+    outingLookImg("hero_idle"); // 穿的那一套也一開就載
     for (const [layer] of [...OUTING_LAYERS, OUTING_FRONT]) outingBg(layer);
     return OW.imgs;
   }
@@ -517,7 +545,7 @@
 
   let outingOff = null;
   function outingSprite(cx, name, i, x, opt = {}) {
-    const img = OW.imgs[name];
+    const img = opt.img || OW.imgs[name]; // opt.img：穿的那一套形象的這一張（格數同斗笠小子）
     if (!img || !img.complete || !img.naturalWidth) return;
     const n = OUTING_SHEETS[name];
     i = ((i % n) + n) % n;
@@ -610,7 +638,7 @@
       }
     }
     const [name, i] = outingHeroFrame();
-    outingSprite(cx, name, i, OUTING_HX + H.kx, { tint: "#ffe9e0", tintA: H.red * 0.6 }); // 挨打閃一下淡色，不把整個人塗紅
+    outingSprite(cx, name, i, OUTING_HX + H.kx, { tint: "#ffe9e0", tintA: H.red * 0.6, img: outingLookImg(name) }); // 挨打閃一下淡色，不把整個人塗紅
     if (H.bubble) {
       const x = OUTING_HX + H.kx + 38, y = OUTING_GY - 204;
       cx.fillStyle = "#fffaf0";
