@@ -40,4 +40,11 @@
 
 ## 測試
 
-- 這一包的：見 `tests/`（Task 4 寫）。
+- 這一包的（整檔屬於這一包、第 22 批搬進來的）：`tests/test_guide.py`（23 條：說書人的步驟、下一步、任務卡；原 `tests/core/`）、`test_guide_box.py`（20：對話框；`parents[2]` 改 `parents[4]`）、`test_enlist.py`（53：入伍段）、`test_opening.py`（9：開局第一分鐘）、`test_guide_smoke.py`（1，smoke：week7 新角色在城門口選了一顆、託付送到、任務卡亮新手目標）。`pytest tianxia/features/guide/tests -n 4 -m "slow or not slow"`：106 條約 14 秒。
+- **`test_for` 挑不到的、另外要跑的**（這一輪不搬、不拆）：
+  - 測的是共用規則層 `prologue`（序章與初入江湖）的：`tests/core/test_prologue.py`（106 條，連假人走序章 `_graduate`）、`tests/core/test_onboard.py`（17）；共用規則層 `roster` 的新手期：`tests/core/test_newbie_hours.py`（3）。
+  - 碰到才說的觸發看遍各包（決戰換掉 `_battle_status`、酒肆的 `h_tavern`、同伴、事件）：`tests/arts/test_hints.py`（122 條；搬進來的話改包的檔會挑到 347 條，超過 300）。
+  - 網頁（第 3 階跟網頁檔一起搬）：`tests/web/test_prologue_web.py`（107）、`test_hints_web.py`（8）、`test_enlist_web.py`（21）、`test_opening_web.py`（3）。
+  - 換掉 `tianxia.engine.note_action` 的 `tests/core/test_engine.py`；`_newbie_go` 的 `tests/acts/test_training.py`；本週卡「你這一步」的 `tests/bots/test_step.py`；開局擋簽到的 `tests/figures/test_checkin.py`；入伍段與軍令的 `tests/figures/test_orders.py`、`test_promotions_high.py`、`test_gentry_allied.py`；任務卡的 `tests/core/test_world.py`、`tests/figures/test_calendar.py`、`test_finale.py`、`test_season21_frame.py`、`tests/ranger/test_season21_daily.py`；提示與玩法說明的 `tests/core/test_explain.py`；探索包的 `test_explore_one_polish.py`（`hints`）、`test_explore_one_fix.py`（`newbie_view`）；`tests/season/test_real_content.py`、`tests/server/test_server.py`。
+  - 改這一包時連它們一起跑：`python scripts/test_for.py --base HEAD tianxia/features/guide/actions.py tests/core/test_prologue.py tests/core/test_onboard.py tests/core/test_newbie_hours.py tests/arts/test_hints.py tests/web/test_prologue_web.py tests/web/test_hints_web.py tests/web/test_enlist_web.py tests/web/test_opening_web.py tests/core/test_engine.py tests/acts/test_training.py tests/bots/test_step.py tests/figures/test_checkin.py tests/figures/test_orders.py tests/core/test_explain.py tests/server/test_server.py`（`--slow` 連整檔 slow 的那幾個）。
+- 前後一字不變：`scripts/same_behavior.py` 的 `guide` 一軌（`--tracks guide`）。
