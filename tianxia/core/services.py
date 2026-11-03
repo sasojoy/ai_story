@@ -62,7 +62,7 @@
 # docs/superpowers/plans/2026-11-01-共用規則層登記.md 1.5）。主人都是核心：本體留在 Game 上（第一階 ctx 就是 Game），之後的包直接叫，
 # 不必再一個一個加。上面已經列了的照列一次名字（同上）；三、過渡裡寫成別的主人的 12 個（`odds`、`_squad_encounter`、`_pill_find`、
 # `_scrap_find`、`_push_progress`、`_conquest_side`、`_spar_power`、`_spar_mirror`、`_raid_key`、`_drill_gains`、`_drills_with`、
-# `place_minutes`）照五區調查與總表附錄甲是核心的共用服務，以這一段為準；那幾行留著（前面幾批寫的，PM 合的時候去重）。
+# `place_minutes`）照五區調查與總表附錄甲是核心的共用服務，以這一段為準；那幾行第 16 批合進 develop 時去重了（三、過渡留一句記它們原本寫的用法）。
 共用規則層的函式怎麼寫（第 6 批的 `siege.title`、`siege.settle`、`siege.verdict` 那一條一起定）：**不列在這張清單**。這張清單只管 Game 上的
 `ctx.<名字>`（邊界測試只認這個寫法）；共用規則層有哪些模組看 `tianxia/core/registry.SHARED`，包直接 import 那個模組、不註過渡。
 單打服務（戰鬥區；打一場的每一包都用）
@@ -99,6 +99,11 @@
 - 閒著：`ctx._idle()`（同上）、`ctx.is_idle()`（切磋、論武問的那一個）
 名聲（總表附錄甲：名聲服務是核心，`_log` 每一下都叫）
 - `ctx._deed_fame(kind)`（同上）、`ctx._renown_after(synced=False, fresh=None)`、`ctx._deliver_echoes()`（首創名望回饋）、`ctx._famed_news(place, foe, tier)`
+# core-events（全部拆包第 16 批：事件檢定搬進核心本體 tianxia/core/event_check.py，Game 留一行委派）
+事件檢定（核心本體）
+- `ctx._present(event, action)`：把一則事件端到眼前（action 是抽中它的行動：記進防重複的輪替、人物心意；記看過、寫那一則的結果標記與
+  場景那一句、片段事件的伏筆）。探索包抽到事件時叫。三、過渡 explore 那一段原本也列了它（主人寫「事件」）：主人現在是核心本體，
+  第 16 批合進 develop 時去重、只留這一行
 
 ## 二、查詢服務
 
@@ -132,15 +137,15 @@ explore（主動搬六包第 3＋4 批加的這一段）
 explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._boss_face(boss)`、`ctx._home_gather(loc, mids)`、`ctx._sense_here(loc, rng)`、`ctx._wild_foes(loc)`、`ctx._practice_tier(loc)`
   （探索三選一：企劃者 10/31 定不搬、留在 engine——批次表第 9 批不做，三選一整套拿掉之前一直掛在 Game 上）
-- `ctx._present(event, action)`（事件：端出一則）、`ctx._story_begin(strand)`（一條線）、`ctx._duel_start(boss)`（頭目戰）、
-  `ctx.odds(squad_id)`（勝算：鈕上寫的同一個；測試換掉 game.odds）、`ctx._drills_with(squad)`（那一路是不是自己這一邊）
-- 收尾的掉落：`ctx._pill_find(rng)`（回體丹）、`ctx._scrap_find()`（鐵匠鋪：殘譜）、`ctx._legend_find(rng)`（破境丹）、
-  `ctx._seal_find(loc_id)`（玉璽碎片）——照原本的順序在原位叫，不收成事件
+- `ctx._story_begin(strand)`（一條線）、`ctx._duel_start(boss)`（頭目戰）
+- 收尾的掉落：`ctx._legend_find(rng)`（破境丹）、`ctx._seal_find(loc_id)`（玉璽碎片）——照原本的順序在原位叫，不收成事件（同一串的
+  回體丹 `_pill_find`、殘譜 `_scrap_find` 在一、共用服務）
 - `ctx._outing_plan(loc)`、`ctx.outing_plan()`（探索包自己的委派：測試換掉 game._outing_plan 之後按探索，包裡經 ctx 叫，換掉的才打得到；
   呼叫端改完就拿掉）
-- `ctx._squad_encounter(squad_id, wild=True)` 也是探索一顆的遭遇那一場（戰鬥；扣氣血減半、不問模型、不推大勢）
+（第 16 批合進 develop 時去重：這一段原本還列了 `_present`（主人是核心本體，見一、共用服務 `# core-events`）與 `odds`（勝算：鈕上寫的
+同一個；測試換掉 game.odds）、`_drills_with`（那一路是不是自己這一邊）、`_pill_find`、`_scrap_find`、`_squad_encounter`（wild=True：探索一顆的
+遭遇那一場，扣氣血減半、不問模型、不推大勢）——以一、共用服務 `# shared` 那一段為準。）
 
-- `ctx._squad_encounter(squad_id, as_sortie=True)`（戰鬥：打一場隊伍，出陣攻打）
 - `ctx._train_option(...)`、`ctx._train_pick(loc)`、`ctx._big_trip(loc)`（舊遊歷：勝算與必敗先問的鈕、大場面挑哪一路）
 # battle（主動搬六包第 5 批；擺在這兩行之間：別條拆包線與 develop 改的是段頭、_order_credit、_outing_on 以下與段尾，不跟它們貼在一起）
 - `ctx._mutate_battle_of(battle, fn)`（決戰「打」那一半：改共用狀態裡的那一場；第 8 批搬進決戰包之後改成包裡直接叫。第 7 批：放手一搏送出、
@@ -158,15 +163,12 @@ explore（主動搬六包第 3＋4 批加的這一段）
   那一半：此刻每一場、改自己參戰的那一場；第 8 批搬進決戰包之後改成包裡直接叫）
 - `ctx._backfill_battle_scores()`（出招之前補自己的份量快照；主人：總表第 12 批「決戰順便」）、`ctx._mandate_weight(definition, scores)`
   （天命之爭手上有碎片的人份量加權；主人：玉璽，總表裁定這一批留原位）
-- `ctx._push_progress(loc_id, nominal, source, how)`（地盤：領地爭奪推、拉進度）
-- `ctx._order_credit(...)`（軍令；出陣約戰結算時也叫在攻方、應戰的人那兩份 Game 上——包裡的變數名 attacker、defender，邊界測試照樣掃）；
-  `ctx._drill_gains(squad, share)`（操練）
-- `ctx._spar_power(a, b)`、`ctx._spar_mirror(result, power)`（切磋：本人對本人的威力、從另一邊看同一場）
-- `ctx._raid_key(a, b)`（截殺：截殺與混戰共用的冷卻帳 WorldState.raids 的鍵）
-- `ctx._conquest_side()`（地盤：領地爭奪算哪一邊，豪強依附的那一軍；出陣約戰用）
-- `ctx.place_minutes(loc_id)`（輿圖與移動：走到那裡要現實幾分鐘；出陣約戰卡上別區的「前往 N 分」）
-（這三個原本列在共用段——照規劃者 plan.json 第 1 批的分法；dev/sortie-1 審查照批次表第二節「過渡＝別的功能還沒搬的方法、標主人」
-搬到這裡：在 engine 裡分別定義在截殺、地盤、輿圖與移動那幾段。）
+- `ctx._order_credit(...)`（軍令；出陣約戰結算時也叫在攻方、應戰的人那兩份 Game 上——包裡的變數名 attacker、defender，邊界測試照樣掃）
+（第 16 批合進 develop 時去重：這一段原本還列了出陣包用的 `_squad_encounter`（as_sortie=True：打一場隊伍，出陣攻打）、`_push_progress`
+（地盤：領地爭奪推、拉進度）、`_drill_gains`（操練）、`_spar_power`、`_spar_mirror`（切磋：本人對本人的威力、從另一邊看同一場）、
+`_raid_key`（截殺與混戰共用的冷卻帳 WorldState.raids 的鍵）、`_conquest_side`（領地爭奪算哪一邊；出陣約戰用）、`place_minutes`（出陣約戰卡上
+別區的「前往 N 分」）；後面三個出陣第 1 批審查從共用段搬到這裡，第 15 批照五區調查與總表附錄甲裁回核心的共用服務——以一、共用服務
+`# shared` 那一段為準。）
 - `ctx.sorties_left()`、`ctx._sortie_hold(loc, how)`（出陣包自己的委派：測試換掉 Game.sorties_left〔test_bot_policy_conquest〕、
   腳本換掉 Game._sortie_hold〔sim_trend_sources〕，包裡經 ctx 叫，換掉的才打得到；呼叫端改完就拿掉）
 （原本這裡還有 `duel_on`、`_duel_option`：第 1 批替出陣約戰留的；第 2 批約戰搬進同一包，包裡直接叫 duel_actions，拿掉了。）
