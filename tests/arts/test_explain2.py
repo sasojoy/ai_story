@@ -275,14 +275,15 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
         ("engine.py", 'return renown.gain(self.state, c, "fame", n)'),  # 立功（名聲 3.1：出陣、挑戰本人、決戰參戰，Game._deed_fame）
         ("engine.py", 'lines += renown.gain(s, c, "fame", pay.fame)'),  # 領地爭奪的分紅與守城功（翻地與爭搶，Game._deliver_conquest）
         ("engine.py", 'out += renown.gain(s, c, "fame", cfg.guard_fame * n)'),  # 護衛替人物擋下挑戰（figure_aid，Game._deliver_guard_credits）
-        ("engine.py", 'record.changes += renown.gain(s, c, "fame", boss.fame)'),  # 打贏頭目（單人頭目戰，content/duels.json）
-        ("engine.py", 'record.changes += renown.gain(s, c, "fame", cfg.highlight_fame)'),  # 擂台上成了的最險一搏
-        ("engine.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台每天的俸（Game._deliver_arena）
-        ("engine.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台賽季末前三名（Game._deliver_arena）
         # battle：決戰收場補送搬進決戰包（主動搬六包第 5 批；這三行原本在 engine.py 那一段的中間，字一個沒變）
         ("features/battle/view.py", 'highlight_changes += renown.gain(s, c, "fame", fame)'),  # 決戰最有戲的那一搏與首功
         ("features/battle/view.py", 'changes += renown.gain(s, c, "fame", c.config.seal.mandate.fame)'),  # 得天命的那一軍（玉璽二）
         ("features/battle/view.py", 'changes += renown.gain(s, c, "fame", c.config.battle.generals.slay_fame)'),  # 決戰陣前擊退對面的龍頭（generals）
+        # bout：頭目戰與擂台搬進單挑包（全部拆包第 12 批；這四行原本在 engine.py 護衛那一行後面，字一個沒變，路徑換成單挑包、照路徑排在決戰包後面）
+        ("features/bout/arena_actions.py", 'record.changes += renown.gain(s, c, "fame", cfg.highlight_fame)'),  # 擂台上成了的最險一搏（arena_finish）
+        ("features/bout/arena_actions.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台每天的俸（deliver_arena）
+        ("features/bout/arena_actions.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台賽季末前三名（deliver_arena）
+        ("features/bout/duel_actions.py", 'record.changes += renown.gain(s, c, "fame", boss.fame)'),  # 打贏頭目（單人頭目戰，content/duels.json；duel_finish）
         ("features/feast/rules.py", 'out += renown.gain(state, content, "fame", amount)'),  # 宴客散席時最好的那一句敬酒（feasts.deliver；宴客搬進功能包）
         # 酒肆搬進功能包（主動搬六包第 10 批）：同兩行，路徑從 engine.py 換成 features/tavern/actions.py（照路徑排在宴客後面）
         ("features/tavern/actions.py", 'return [tavern_rules.TREAT_DONE] + renown.gain(s, c, "fame", cfg.treat_fame)'),  # 酒肆請全店喝酒（tavern_treat）

@@ -10,7 +10,7 @@ import json
 import re
 
 from . import arena, armor, bounties, economy, equipment, forge_secrets, four_tiers, mounts, rules, silver, skillview, smithing, tactics, team, territory, weapons
-from . import duel as duel_rules
+from .core import duel_base as duel_rules  # 單挑底層（全部拆包第 12 批進核心）：氣勢的一句話、選單上的一招
 from .characters import name_key
 from .models import MOVES, WEAPON_KINDS, Content
 from .state import Equipment, GameState, GearFind

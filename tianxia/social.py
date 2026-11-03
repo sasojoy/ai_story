@@ -16,8 +16,9 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from . import prologue as prologue_rules
-from . import allied, arena, four_tiers, gender, invites, ranger, ranks, renown, team, yuedan
+from . import allied, four_tiers, gender, invites, ranger, ranks, renown, team, yuedan
 from .characters import CharacterStore, name_key
+from .core import arena_ranks  # 擂台的稱號（核心的查詢服務；擂台本身在單挑包）
 from .rules import day_turn
 from .state import GameState
 
@@ -131,7 +132,7 @@ def affiliation(state: GameState, content: Content) -> str:
     sect = content.sects[p.sect].name if p.sect else None
     faction = allied.label_of(state, content) or None  # 豪強分屬兩軍的季寫「地方豪強（依附官軍）」
     named = ranger.title(content, state)
-    ring = arena.title_of(state.world, p.name) if arena.on(content) else None  # 擂台的稱號照此刻的名次，掉出就沒了（PM 2026-10-14）
+    ring = arena_ranks.title_of(state.world, p.name) if arena_ranks.on(content) else None  # 擂台的稱號照此刻的名次，掉出就沒了（PM 2026-10-14）
     if faction is None and named is not None:
         base = f"{sect or '散人'}・{named}"
     else:

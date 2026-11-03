@@ -886,6 +886,69 @@ def core_delegates(src: str) -> dict[str, tuple[str, str]]:
     return {method: (local[alias], func) for method, (alias, func) in _game_one_liners(src).items() if alias in local}
 
 
+def _import_target(node: ast.ImportFrom, path: Path) -> str:
+    """`from … import` 的模組全名（相對的照檔案的位置算：tianxia/features/bout/x.py 的 `from ..core.a import b` → tianxia.core.a）。"""
+    if not node.level:
+        return node.module or ""
+    package = list(path.relative_to(ROOT).with_suffix("").parts[:-1])
+    base = package[:len(package) - (node.level - 1)]
+    return ".".join(base + ([node.module] if node.module else []))
+
+
+@functools.lru_cache(maxsize=None)
+def old_aliases() -> dict[str, frozenset[str]]:
+    """舊名的別名（開發規範手冊 3.11：tianxia/<舊名>.py 只寫 `from tianxia.features.<包> import <模組> as _x` 與
+    `sys.modules[__name__] = _x`）：包裡的模組全名 → 指到它的舊名（{"tianxia.features.bout.duel_rules": {"duel"}, …}；出陣包也有一個
+    duel_rules，舊名是 sortie_duel，所以照全名分）。照語法樹讀、不 import。"""
+    found: dict[str, set[str]] = collections.defaultdict(set)
+    for path in sorted(TIANXIA.glob("*.py")):
+        src = path.read_text(encoding="utf-8")
+        if "sys.modules[__name__]" not in src:
+            continue
+        tree = _parse(src)
+        for node in (tree.body if tree else []):
+            if isinstance(node, ast.ImportFrom) and _import_target(node, path).startswith("tianxia.features."):
+                for a in node.names:
+                    found[f"{_import_target(node, path)}.{a.name}"].add(path.stem)
+    return {k: frozenset(v) for k, v in found.items()}
+
+
+@functools.lru_cache(maxsize=None)
+def core_reexports(module: str) -> dict[str, frozenset[str]]:
+    """tianxia/core/<module>.py 的名字被別的模組照抄出去（`from tianxia.core.<module> import 名字`：包把留在核心的那一半 re-export
+    同一批函式物件，例：單挑包的 duel_rules、arena_rules 照抄 duel_base、arena_ranks）→ {名字: {照抄的模組名, 指到它的舊名別名}}。
+    測試經這幾個字寫（duel.push_of、arena.title_for、`from tianxia import duel as duel_rules`）也算寫到核心的那個名字（全部拆包第 12 批
+    審查修正）。整個模組 import 進來的（`from .core import duel_base as duel_rules`）不算：那一份寫得到模組名。照語法樹讀、不 import。"""
+    found: dict[str, set[str]] = collections.defaultdict(set)
+    target = f"tianxia.core.{module}"
+    for path in sorted(TIANXIA.rglob("*.py")):
+        if "tests" in path.relative_to(TIANXIA).parts or path.parent == TIANXIA / "core":
+            continue
+        src = path.read_text(encoding="utf-8")
+        if module not in src:
+            continue
+        tree = _parse(src)
+        for node in (tree.body if tree else []):
+            if isinstance(node, ast.ImportFrom) and _import_target(node, path) == target:
+                for a in node.names:
+                    if a.name != "*" and (a.asname or a.name) == a.name:
+                        dotted = ".".join(path.relative_to(ROOT).with_suffix("").parts)
+                        found[a.name] |= {path.stem} | old_aliases().get(dotted, frozenset())
+    return {k: frozenset(v) for k, v in found.items()}
+
+
+def names_through(words, name: str, text: str) -> bool:
+    """這一份原始碼經照抄的模組（words：duel_rules、duel……）寫到 name：寫成 `<字>.<name>`，或從那個模組 import 了 name。
+    只看兩個字寫在同一個檔裡不算：duel、arena 是到處都有的字（p.duel、config.arena）。"""
+    alt = "|".join(re.escape(w) for w in sorted(words))
+    if not alt:
+        return False
+    if re.search(rf"\b(?:{alt})\.{re.escape(name)}\b", text):
+        return True
+    return any(re.search(rf"\b{re.escape(name)}\b", m.group(1))
+               for m in re.finditer(rf"from\s+[\w.]*\b(?:{alt})\s+import\s+(\([^)]*\)|[^\n]*)", text))
+
+
 def _core_spans(src: str) -> list[tuple[str, int, int, object]]:
     """核心模組最外層的 def、class 與常數（FREE_TEXT_OPTION = …，照第一個名字；同 conftest_picks）：（名字, 起, 迄, 節點）。"""
     tree = _parse(src)
@@ -906,7 +969,8 @@ def core_module_callers(module: str, hunk_list: list[Hunk], old_src: str,
     hunk 落在哪個最外層的函式、類別、常數 → 連模組裡直接叫它、用到它的（一路往上：只有 answer_event 在叫的 answer_branch、
     deed_credit 沒留委派，照 answer_event 挑；經 ctx.<委派> 叫的不算）→ 每一個的：
     - 函式：Game 上委派給它的方法名（_present、_choose、answer_event；照 engine.py 認，core_delegates），加上模組名與函式名寫在
-      同一個檔裡的（函式名本身太常見：present、apply）；
+      同一個檔裡的（函式名本身太常見：present、apply），再加經照抄它的模組或那個模組的舊名寫的（`duel.push_of`、`arena.title_for`：
+      core_reexports、names_through；全部拆包第 12 批審查修正）；
     - 類別、常數：那個識別字（EVIL_ANNAL、FreeTextRequest：engine 照名字 import 回來，測試從 engine 拿）。
     跟 base 沒有差（指名了這個檔）照整個檔算；挑到的超過 IMPORT_CAP 個檔不一個一個挑（只剩核心測試＋煙霧）。說明、import 這種
     函式以外的行不挑。經 choose、探索走、不寫名字的混合檔（test_explore、test_real_content）照第 11 批認定 4 列在模組的說明。"""
@@ -929,6 +993,7 @@ def core_module_callers(module: str, hunk_list: list[Hunk], old_src: str,
     seeds = sorted(refs) if whole else sorted(n for n in _split(
         hunk_list, old_src, new_src, lambda s: [x[:3] for x in _core_spans(s)]) if n is not None)
     by_text = _index()[1]
+    reexported = core_reexports(module)
     files: set[Path] = set()
     why: list[str] = []
     for seed in seeds:
@@ -949,6 +1014,11 @@ def core_module_callers(module: str, hunk_list: list[Hunk], old_src: str,
                 if qualified:
                     terms.add(f"{module}.{n}")
                     hit |= qualified
+                words = reexported.get(n)
+                through = {t for t in by_text.get(n, frozenset()) if words and names_through(words, n, _text(t))}
+                if through:
+                    terms.add(f"{'／'.join(sorted(words))}.{n}（照抄）")
+                    hit |= through
             elif by_text.get(n):
                 terms.add(n)
                 hit |= by_text[n]
@@ -1162,6 +1232,10 @@ def pick(files: list[str], base: str | None = None,
                 if (ROOT / f).exists():
                     result.files.add(ROOT / f)
                     result.own.add(ROOT / f)
+            elif (f.startswith("tianxia/features/") and len(path.parts) == 5
+                  and path.name == f"{path.parts[2]}_stage.py"):  # 包的擺局面檔：只有契約測試照路徑載入（_stages），沒有人 import 它
+                result.files |= contract_tests()
+                result.why.append(f"{f}：{path.parts[2]} 這一包擺局面的檔（契約測試照路徑載入）→ 核心契約")
             elif path.suffix == ".py":  # 測試共用的小工具：import 它的測試檔
                 result.files |= {t for t in tests if path.stem in imported(t)}
             continue
