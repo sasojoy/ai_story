@@ -5076,9 +5076,29 @@ class TrainScenario(Scenario):
             self.edit("官甲", lambda p, plan=plan, day=day: setattr(p, "parley_backing", ParleyBacking(figure=figure, region=None, day=day, plan=plan)))
             self.train("官甲", f"並肩出陣（打法 {plan}）")
 
+    @contextlib.contextmanager
+    def judge_calls(self, tag: str):
+        """這一段伺服器在鎖外叫了哪幾路大場面判讀（server.prepare_fight → fight_llm.judge），段落結束寫出來。修正輪加的：操練、
+        約戰開著時那張卡都不寫判讀的字（判讀回來之後操練照樣操練、約戰照樣只回卡），JudgeClient 又是立刻回，叫沒叫光看回應與資料庫
+        看不出來——train_squad 的約戰那道關拿掉、操練那道關拿掉都比不出差（審查員量的）。"""
+        from tianxia import fight_llm
+
+        real, calls = fight_llm.judge, []
+
+        def judge(client, request, *args, **kwargs):
+            calls.append(request.squad_id)
+            return real(client, request, *args, **kwargs)
+
+        fight_llm.judge = judge
+        try:
+            yield
+        finally:
+            fight_llm.judge = real
+            emit(f"{tag} 叫了大場面判讀", calls)
+
     def judge(self) -> None:
         """大場面判讀（server.may_judge_fight → prepare_fight → Game._fight_squad）：舊遊歷照 _train_pick 挑的那一路判；操練不判；
-        約戰開著時出陣那一格是卡、不判；出陣照判。"""
+        約戰開著時出陣那一格是卡、不判；出陣照判。每一下寫叫了哪幾路（judge_calls）。"""
         from tianxia import territory
 
         self.c.config.big_fight_difficulty = 1
@@ -5086,17 +5106,21 @@ class TrainScenario(Scenario):
         try:
             if not territory.on(self.c):
                 if self.place(self.RANGER, "yingshui"):
-                    self.train(self.RANGER, "大場面的舊遊歷")
+                    with self.judge_calls("大場面的舊遊歷"):
+                        self.train(self.RANGER, "大場面的舊遊歷")
                 if self.profile == "none" and self.place("官乙", "guan_camp"):
-                    self.train("官乙", "大場面的操練")
+                    with self.judge_calls("大場面的操練"):
+                        self.train("官乙", "大場面的操練")
             else:
                 if self.profile in DUEL_PROFILES:
                     self.set_duel(True)
                     if self.place("官甲", "runan_wilds"):
-                        self.train("官甲", "大場面、約戰開著")
+                        with self.judge_calls("大場面、約戰開著"):
+                            self.train("官甲", "大場面、約戰開著")
                 self.set_duel(False)
                 if self.place("官甲", "runan_wilds"):
-                    self.train("官甲", "大場面的出陣")
+                    with self.judge_calls("大場面的出陣"):
+                        self.train("官甲", "大場面的出陣")
         finally:
             MODEL["judge"] = False
             self.c.config.big_fight_difficulty = self.big_default
