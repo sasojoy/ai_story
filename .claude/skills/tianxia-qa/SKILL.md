@@ -25,6 +25,12 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
     - **進鎖的種子帶上凍住的時刻**（固定種子＋`int(假時鐘)`）：種子每一步都一樣的話，有兩路可挑的地方永遠挑同一路，走不到另一路。
     - **旁白改寫的背景執行緒**（season21、week7）：每 20 現實秒叫一次模型，打到死埠要等約 2 秒，`/api/admin` 的 `llm_queue.running` 會隨現實時刻 0／1 跳。把 `server.narration_round` 換成什麼都不做。
     - **`server._monotonic` 也要凍住**，模型的斷路器兩台才一致。
+  - 第 8 批 QA 補的（2026-11-04，決戰的推進與收季；外殼在舊 PM scratchpad 的 `b8-chk\s\`，含 `dbcmp.py`、`mkmut.py`）：
+    - **換季會把傳聞與回合紀錄搬進 `<db>-archive.sqlite`**：逐表比一定要連這個檔一起比（那一次改一個字的突變，主檔的 rumors 一樣，只有 archive 抓得到）。
+    - **`server.world_step` 不經 `_locked`**：進去之前要對 `server.WORLD_GAME.rng` 與 `random` 重設種子，兩台才一致（包成 `/__qa/world_step`）。
+    - **攻城戰書要有人同步才開成集結**：`admin_conquest_letter` 之後 `GET /api/admin` 不會同步，要打一次 `/api/main` 或任何 `/api/do`；認哪一場照 `siege_<大區>`，不要照「新多出來的那一場」。
+    - **要走回合逾時的路，得留人掛機**：所有參戰者都出完招時，回合在最後一個人按下去那一下就結算，排程與輪詢逾時那兩條走不到。
+    - 比對有沒有牙：HEAD 改一個字（例「論功：」→「論功！」）對 HEAD 跑同一串，要抓得到不同。
   - 第 22 批 QA 補的（2026-11-04；外殼在舊 PM scratchpad 的 `b22-chk\s\`，含 `crossrun.py`）：
     - **擺局面的 `/__qa/edit` 只改呼叫時給的那幾格**：第 17 批那一版每次都補滿體力、把 `joined_at` 擺成 -1e9，新手期就沒了，新手目標卡（`newbie_view`）直接變 None。驗引導、新手目標、新手期的批特別要注意。
     - **便宜的第二道穩定性證明**：「HEAD 對 HEAD」那一輪的 HEAD 回應，跟「HEAD 對 BASE」那一輪的 HEAD 回應逐檔比；分開跑兩次一樣，才證明局面真的凍住。
