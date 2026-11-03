@@ -11,7 +11,7 @@ from tianxia.models import Content
 
 
 def check_hints(c: Content, need: Callable[[bool, str], None]) -> None:
-    from tianxia import hints as hint_rules  # noqa: PLC0415  過渡：待搬
+    from . import hints as hint_rules  # noqa: PLC0415
     from tianxia.zh import to_traditional  # noqa: PLC0415
 
     faction_ids = [f.id for f in c.scenario.factions]

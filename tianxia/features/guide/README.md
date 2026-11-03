@@ -1,5 +1,43 @@
 # 新手引導（`tianxia/features/guide/`）
 
-- 做什麼：草廬之後的引導框（說書人、初入江湖的老周）、碰到才說的提示、新手目標、開局第一分鐘（城門口三選一與第一封託付）、入伍段（引薦人帶兩步）。全部拆包第 22 批（引導一）搬進來；玩法說明（`howto`）是第 59 批。
-- 導覽：`docs/guide/核心與存檔.md` 的「新手引導」那一節
-- 設計稿：（Task 4 寫）
+草廬之後的引導框（說書人、初入江湖的老周）、碰到才說的提示、新手目標、開局第一分鐘（城門口三選一與第一封託付）、入伍段（引薦人帶兩步）、序章的畫面與重看。全部拆包第 22 批（引導一）搬進來（計畫 `docs/superpowers/plans/2026-11-01-新手引導包-第1批.md`）；玩法說明（`howto`）是第 59 批（引導二）。網頁那一半（`web/app.js` 的 `onb`、`guideGlow`、`watchOrders` 那幾個）第 3 階再切。
+
+- 導覽：`docs/guide/核心與存檔.md` 的「新手引導（功能包 `tianxia/features/guide/`）」那一節。
+- 設計稿：沒有版本號——新手引導重做設計（Joy 2026-10-22，https://claude.ai/artifact/Eb25MwPveJMYSf5Ge4mDyx：第四節入伍段、第五節碰到才說、第六節新手目標、第七節略過與換季、8.1 對話框）；新手引導計畫一～三（`docs/superpowers/plans/2026-10-06-新手引導-1-序章.md`、`-2-入伍段.md`、`-3-碰到才說.md`）；開局第一分鐘：減法季整合設計 6.7。
+
+## 裡面有什麼
+
+- `rules.py`（原 `tianxia/guide.py`：說書人的步驟、任務卡、下一步）、`hints.py`、`newbie.py`、`opening.py`、`enlist.py`（原名）：五個舊名都留成 `sys.modules` 別名（同一個模組物件），`from tianxia import guide`、`from tianxia.guide import note_action`（engine）、舊模組 `weekcard`（`opening`）與測試照舊拿得到。
+- `actions.py`：原本 `Game` 上的 31 個方法（名字去掉前導底線），加上核心原位叫的 11 個服務的本體（`opening_on`……`enlist_expire`；`Game._note_action` 叫 engine 模組層的 `note_action`，見下）。
+- `checks.py`：內容檢查（`check_content`）——碰到才說（`hints.json`）那一塊原本在 `content.validate`，核心不准 import 包，搬進這裡、句子照抄。
+- `HutReward`（序章步驟的獎勵那一行的記號）搬進核心 `tianxia/core/services.py`：核心的 `Game._guide`、`_menxia_entry` 認它；`rules.HutReward` 是同一個類別。
+- 掛鉤：`enabled` 一直是 True（引導、提示、新手目標、開局各有自己的開關）、`check_content`、`player_fields`／`carried`。**沒有選項前綴**：動作走 `server.MAIN_ACTIONS`（`hints_off`、`skip_tutorial`、`view_map`、`view_orders`、`view_tab`、`guide_ack`、`newbie_drifter`）與 `/api/prologue`（`server.py` 一行沒動，照舊叫 Game 的委派）；選單上的那幾顆是別人的（`act:rest` 是核心 `act:` 的子動詞、開局三選一是事件的 `choice:`、投靠是 `faction:`），所以沒有 `bots.py`、`bot_policy` 不動。
+
+## 認領的欄位（手冊 3.5：留在原地）
+
+- `player_fields`：`guide_done`、`guide_outro`、`enlist_end`、`enlist_since`、`hint_queue`（換季跟著新角色重來）；`hints_seen`、`hints_off`、`newbie_marks`、`newbie_done`（`carried`：換季照帶，照舊在 `Game._reset_player_for_new_season` 原位帶）。
+- 另外是這一包的、可是「做到才帶」的：`tutorial_step`（做到不分季的那幾步才帶）、`guide_skipped`（同上）、`enlist_step`（走完才帶）——契約測試的換季那一條擺不出這種條件，不列進 `player_fields`。`onboarding`（引導照哪一版記的）是核心的版本章。
+- 內容：`content/tutorial.json`、`hints.json`、`opening.json`（`content` 宣告；`content.py` 照舊讀）。
+
+## 委派與留在原位的接縫
+
+`Game` 留 24 個一行委派（公開 14：`enlist_glow`、`guide_box`、`newbie_view`、`newbie_drifter`、`set_hints_off`、`guide_ack`、`skip_tutorial`、`view_orders`、`view_map`、`view_tab`、`prologue_view`、`onboard_view`、`prologue_recap`、`quest_text`；私有 10：`_note_gift`、`_graduate`、`_begin_enlistment`、`_greet_rejoin`、`_hint`、`_hint_triggers`、`_check_hints`、`_nearest_to`、`_newbie_go`、`_rest`），加上核心原位與出陣包叫的服務 12 個（`_note_action`、`_opening_on`、`_opening_begin`、`_opening_pending`、`_opening_deliver`、`_opening_gate`、`_tutorial_intro`、`_base_step_count`、`_guide_speakers`、`_enlist_done`、`_mark_veteran`、`_enlist_expire`）與酒肆的查詢服務 3 個（`_tavern_on`、`_tavern_here`、`_tavern_at`：引導包問酒肆，包不能 import 包）。
+
+核心原位碰引導的那幾處都沒有第 11 批的掛鉤，改叫上面的服務、記進邊界測試的 `GAME_DELEGATE_CALLERS`（36 對）與 `CORE_DELEGATE_CALLERS`（事件檢定 6 對），**沒有新增 `GAME_DIRECT`**（原本兩筆 `_hint_triggers`、`_newbie_go` 讀酒肆的拿掉）：
+
+- 做完一件事引導跟著走（`_note_action`）：`choose` 七處、`_sense_apply`、`_order_credit`、`_duty`、`_faction_step`、`_arrive`、`take_stamina_pill`、`allocate_stat`、`_menxia_entry`——總表第 26 批的事件。
+- 碰到才說（`_check_hints`、`_hint`）：`choose`、`sync`、`travel`、`allocate_stat`、`sense_draw`、`_menxia_entry`、`_act`、`_brush_off`、`_open_dialogue`、`_town_drill`，與核心 `event_check.answer_event`、`answer_branch`（連 `_begin_enlistment`、`_greet_rejoin`）。
+- 開局（`_opening_*`）：`choose`、`check_in`、`_auto_checkin`、`checkin_view`、`now_entry_html`、`Game.new`。
+- 換季照帶（`_reset_player_for_new_season`：`_enlist_done`、`_base_step_count`、`_tutorial_intro`）、清失效參照一開頭（`_mark_veteran`）、`sync` 的引薦人結語（`_enlist_expire`）、核心的引導框服務（`_note_guide` 的 `_guide_speakers`）、狀態列的任務卡（`status_data` 的 `newbie_view`）、`act:rest`（`_act` 的 `_rest`）。
+- 掃描看不到的：`Game.new`（classmethod，用 `game.` 叫）的 `_opening_on`、`_opening_begin`、`_tutorial_intro`、`_graduate`、`_note_gift`；舊模組 `step.py` 叫 `game._nearest_to`。
+
+**`note_action` 被測試換掉的那一層**：`tests/core/test_engine.py` 換的是 `tianxia.engine.note_action`（看 `args[3]`／`args[-1]`），所以 `Game._note_action` 的本體叫 engine 模組層那個名字（`from .guide import note_action`：別名）；包裡的 `view_orders`、`view_map`、`view_tab` 與出陣包的四處都經 `ctx._note_action`。包裡互相叫直接叫函式，只有被測試換掉的 `_hint_triggers`（`test_hints` 換掉 `game._hint_triggers`）經 `ctx`。
+
+## 過渡（手冊 3.11）
+
+- 包 → 還沒搬的舊模組：`rules.py` 2 行（`explore_modes`、`ranks`；`world`）、`opening.py` 1（`bounties`）、`enlist.py` 1（`orders`）、`actions.py` 1（`atlas`、`create`、`figures`、`howto`、`sensing`、`training`）。
+- 服務清單（`tianxia/core/services.py`）這一包加的：一、共用 `_check_hints`、`_hint`、`_note_action`、`_preparing`、`_journal_guide`、`_free_text_of`、`HutReward`；二、查詢 `_at_battle`（決戰）、`_tavern_on`、`_tavern_here`、`_tavern_at`（酒肆）；三、過渡 `_recruit_target`、`_recruitable_here`（同伴）、`slot_insight`、`switch_art`、`practice`、`allocate_stat`、`melt_art`（武學）、`forge`（煉製）、`_hint_triggers`（自己的委派）。
+
+## 測試
+
+- 這一包的：見 `tests/`（Task 4 寫）。
