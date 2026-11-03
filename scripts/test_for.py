@@ -1232,6 +1232,10 @@ def pick(files: list[str], base: str | None = None,
                 if (ROOT / f).exists():
                     result.files.add(ROOT / f)
                     result.own.add(ROOT / f)
+            elif (f.startswith("tianxia/features/") and len(path.parts) == 5
+                  and path.name == f"{path.parts[2]}_stage.py"):  # 包的擺局面檔：只有契約測試照路徑載入（_stages），沒有人 import 它
+                result.files |= contract_tests()
+                result.why.append(f"{f}：{path.parts[2]} 這一包擺局面的檔（契約測試照路徑載入）→ 核心契約")
             elif path.suffix == ".py":  # 測試共用的小工具：import 它的測試檔
                 result.files |= {t for t in tests if path.stem in imported(t)}
             continue

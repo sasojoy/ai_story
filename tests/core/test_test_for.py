@@ -986,6 +986,17 @@ def test_a_reexported_name_counts_only_when_written_after_the_module_word():
     assert not test_for.names_through(["arena"], "title_for", "c.config.arena.enabled = True\nleaderboard.title_for\n")
 
 
+@pytest.mark.parametrize("package", ["bout", "battle", "feast", "looks"])
+def test_a_package_stage_file_picks_the_contract_test_that_loads_it(package):
+    """tianxia/features/<包>/tests/<包>_stage.py 只有契約測試載入（test_contract_features 的 _stages 用 importlib 照路徑讀），沒有測試檔
+    import 它：改了挑核心契約（同改包的檔），不是「import 它的測試檔」那一條（第 12 批審查：以前四包的 *_stage.py 一條都不挑）。"""
+    rel = f"tianxia/features/{package}/tests/{package}_stage.py"
+    assert (ROOT / rel).is_file(), rel
+    picked = test_for.pick([rel])
+    assert {p.name for p in picked.files} >= {"test_contract_features.py", "test_feature_boundaries.py"}
+    assert any("契約" in w for w in picked.why), picked.why
+
+
 def test_a_core_pick_that_names_too_many_files_falls_back_to_core_and_smoke(monkeypatch):
     """寫到那幾個名字的檔超過 IMPORT_CAP 個（同 tianxia/<模組>.py 往上找的那一條）：不一個一個挑，只剩核心測試＋煙霧。"""
     monkeypatch.setattr(test_for, "IMPORT_CAP", 1)
