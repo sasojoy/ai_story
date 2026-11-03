@@ -386,6 +386,45 @@ def wears_white(portrait: bytes) -> bool:
 ART_HOLE_SHARE = 12.0  # 法相那一張：一個封閉淺色區塊「單獨」佔主體這麼多 % 以上才挖（量過的數字見 drop_white_holes）
 
 
+BG_VOTE = 0.5  # 一塊封閉淺色裡，BiRefNet 的前景機率平均低於這個 → 模型說那是背景，挖掉
+
+
+def _vote_out_background(rgba: "Image.Image", mask, vote):
+    """每一塊封閉淺色各問一次 BiRefNet：平均前景機率低於 `BG_VOTE` 就挖掉（回新的 rgba 與輪廓）。
+
+    逐塊問、不是整張換成模型的輪廓：輪廓留給白底法（細枝條才留得住），
+    「是不是背景」才是模型的強項。量過的數字見 `art_bytes` 的說明。
+    """
+    _, big = _white_blobs(rgba)
+    if not big.any():
+        return rgba, mask
+    prob = vote.astype(np.float32) / 255.0
+    lab, n = ndimage.label(big)
+    kill = np.zeros_like(big)
+    for i in range(1, n + 1):
+        one = lab == i
+        if float(prob[one].mean()) < BG_VOTE:
+            kill |= one
+    if not kill.any():
+        return rgba, mask
+    a = np.asarray(rgba).copy()
+    a[kill, 3] = 0
+    return Image.fromarray(a, "RGBA"), mask & ~kill
+
+
+def given_alpha(im: "Image.Image"):
+    """這張圖自己帶了可用的遮罩就回它（numpy 的 alpha），沒有就回 None。
+
+    畫坊走本機生圖時，法相那一張會先經過 BiRefNet（`studio_local.LocalPainter.matte`），
+    alpha 就是前景遮罩——那比白底推測準得多，拿到了就不要再自己猜。
+    全不透明＝沒有遮罩（白底的原圖、或遮罩那一步失敗原樣回傳的）。
+    """
+    if im.mode != "RGBA":
+        return None
+    a = np.asarray(im)[..., 3]
+    return None if int(a.min()) == 255 else a
+
+
 def drop_white_holes(strip: "Image.Image", min_share: float = 0.0) -> "Image.Image":
     """把封閉白塊設成透明（本機生圖常把手臂與身體之間留成白底，疊在擂台背景上就是一塊白斑）。
 
@@ -446,13 +485,25 @@ MIN_PX = 64
 def art_bytes(raw: bytes, max_px: int = ART_PX) -> bytes:
     """法相、巨物那一張：去白底、挖掉圍出來的那一大塊背景、只留大塊的（雜點丟掉）、裁到東西的邊，PNG。
 
-    挖白塊這件事 2026-11-03 一天內走了三步（別再往回走）：
+    挖白塊這件事 2026-11-03 一天內走了四步（別再往回走）：
     1. 原本不挖 → 正式站 #480 的盤龍十次全掛在「龍身下方盤繞處內側殘留一大塊白色背景」。
     2. 照 `sheet_bytes` 無條件挖 → 同一張單的菊花立刻被挖穿（「花瓣內部有多處被誤挖成灰色破洞」）。
-    3. 量了 12 張真實輸出，改成只挖「單獨佔主體 `ART_HOLE_SHARE`% 以上」的那一塊（判準與數字見 `drop_white_holes`）。
+    3. 量了 12 張真實輸出，改成只挖「單獨佔主體 `ART_HOLE_SHARE`% 以上」的那一塊。但門檻會被新題材推著跑——
+       #481 梨花的花叢中央就漏掉了（量到 14～19%，離「不准挖」的劍扇 5.42% 只剩不到 3 倍）。
+    4. **現在這一版**（企劃者 2026-11-03 選 BiRefNet）：輪廓照舊用白底法（像素法對細枝條敏感，花叢的枝留得住），
+       但「這一塊封閉淺色是不是背景」交給 BiRefNet 的遮罩逐塊投票（`BG_VOTE`），不再用面積門檻。
+       沒有遮罩時（雲端生圖、模型沒放、節點失敗）退回第 3 步的門檻。
+
+    為什麼不乾脆拿 BiRefNet 當輪廓：量過同樣 16 張，純用它當輪廓會把稀疏題材的細枝當背景修掉
+    （梨花叢 −43%、梅花叢 −29%）；混合法只掉 5～14%，而殘白還更低（劍扇 16.14→2.92、梨花叢 11.85→7.24），
+    本來就沒問題的 12 張**跟舊版一模一樣**（0% 變化）。
     擂台那邊能無條件挖是因為有定裝照可以判 `wears_white` 整張豁免，法相沒有可比的參考圖。
     """
-    rgba, mask = cutout(Image.open(io.BytesIO(raw)))
+    im = Image.open(io.BytesIO(raw))
+    vote = given_alpha(im)  # BiRefNet 的前景機率（沒有就 None）；只拿來投票，不當輪廓
+    rgba, mask = cutout(im)  # 輪廓一律照白底法（cutout 自己 convert('RGB')，不看 alpha）
+    if vote is not None:
+        rgba, mask = _vote_out_background(rgba, mask, vote)
     lab, n = ndimage.label(mask)
     if n == 0:
         raise CutError("去背之後什麼都不剩")
@@ -464,7 +515,8 @@ def art_bytes(raw: bytes, max_px: int = ART_PX) -> bytes:
     a = np.asarray(rgba).copy()
     a[..., 3] = np.where(keep, a[..., 3], 0)
     piece = Image.fromarray(a, "RGBA").crop((int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1))
-    piece = drop_white_holes(piece, min_share=ART_HOLE_SHARE)  # 切完才挖：不跟上面算大小、算邊界的 mask 糾纏
+    if vote is None:  # 沒有遮罩可以投票才退回面積門檻（切完才挖：不跟上面算大小、算邊界的 mask 糾纏）
+        piece = drop_white_holes(piece, min_share=ART_HOLE_SHARE)
     if max(piece.size) > max_px:
         s = max_px / max(piece.size)
         piece = piece.resize((max(1, int(piece.width * s)), max(1, int(piece.height * s))), Image.LANCZOS)
