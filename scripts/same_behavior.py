@@ -5168,6 +5168,31 @@ class TrainScenario(Scenario):
 TRAIN_BOT_PROFILES = ("none", "weekend", "week7")
 TRAIN_SEATS = [("操兵甲", "guan", "guan_camp"), ("操兵乙", "guan", "changshe"), ("操兵丙", "huang", "huangjin_camp"),
                ("操兵丁", "huang", "nanyang_wilds"), ("操兵戊", "guan", "zhuo_county")]
+# 修正輪：weekend（地盤開著、約戰關著）照原樣擺，BotRunner 336 次行動一則出陣、守勢都沒有（只有城裡操練），三軌的假人也沒有一個按過非約戰的
+# 守勢。這兩位那一顆照原本的分數再加一道軍令的分（bot_policy.ORDER_SCORE；原本是 None〔不會按〕的照舊不按）：涿郡（官軍自家的區塊）的守勢走
+# 非約戰那一支（佔出陣次數、推線、記守城、次數用完灰掉），南陽郊野的黃巾出陣經 train_fight。兩份程式同一套。
+TRAIN_FOCUS = {"weekend": {"操兵戊": "act:duty", "操兵丁": "act:train"}}
+
+
+@contextlib.contextmanager
+def _train_focus(profile: str):
+    from tianxia import bot_policy
+
+    focus = TRAIN_FOCUS.get(profile, {})
+    real = bot_policy.score
+
+    def score(game, option, bot_profile):
+        value = real(game, option, bot_profile)
+        if value is not None and focus.get(game.state.player.name) == option.id:
+            value += bot_policy.ORDER_SCORE
+        return value
+
+    if focus:
+        bot_policy.score = score
+    try:
+        yield
+    finally:
+        bot_policy.score = real
 
 
 def train_bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
@@ -5235,10 +5260,12 @@ def train_bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
     clock = [CLOCK0]
     runner = BotRunner(content, world, chars, rng=random.Random(7), clock=lambda: clock[0])
     totals = Counter()
-    for _ in range(int(os.environ.get("SB_RUNNER_TICKS", "120"))):
-        clock[0] += 300.0
-        report = runner.tick()
-        totals.update(acted=report.acted, added=report.added, skipped=report.skipped, failed=report.failed, online=report.online)
+    emit("出陣三假人 偏好", TRAIN_FOCUS.get(profile, {}))
+    with _train_focus(profile):
+        for _ in range(int(os.environ.get("SB_RUNNER_TICKS", "120"))):
+            clock[0] += 300.0
+            report = runner.tick()
+            totals.update(acted=report.acted, added=report.added, skipped=report.skipped, failed=report.failed, online=report.online)
     states = chars.all(bots_only=True)
     emit("出陣三假人 一輪一輪", dict(sorted(totals.items())))
     emit("出陣三假人 紀錄標題", titles(states))
