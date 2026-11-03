@@ -38,15 +38,17 @@
 |---|---|
 | on_due(ctx) | Game.world_tick、sync、advance 結算到時的事那一行（約戰） |
 | on_away(ctx, away_from) | Game.sync 補算完本人下線那一段之後（殺手找上門） |
-| deliver_results(ctx) | Game.sync 收場補送那一格：補份量快照之後、玉璽碎片之前（決戰） |
+| deliver_results(ctx) | Game.sync 收場補送那一格：時刻表大事之後、玉璽碎片之前（決戰：先補份量快照〔全部拆包第 8 批把原本緊接著的前一行併進來〕、再補送） |
 | deliver_notices(ctx) | Game.sync 別人捎來的那一格：護衛補帳之後、領地爭奪換天之前（酒肆的風聲、殺手單、託付留意） |
 | choose_unlisted(ctx, option_id) | Game.choose 查選單之前：不在選單上的動作（約戰的 sortie:*） |
 | after_action(ctx) | Game.choose 最後：本人做完一件事（殺手檢查） |
 | on_own_turn(ctx) | Game.own_turn_checks 最前面：本人這一輪（商城的封測發放） |
 | scene(ctx)、scene_over(ctx) | Game._own_scene_text 擂台之後（坐在宴席上）；Game.scene_text 最前面（蓋在畫面上的戰場） |
 | record_detail(ctx, record) | Game.battle_detail：戰報頁那一筆（決戰照 battles 表重讀完整戰況） |
+| on_season_close(ctx, reread) | Game.admin_end_season 讀回收季那一份季之後、補大事之前（reread=False）；Game.admin_next_season 休季時、開下一季之前（reread=True：收兵之前讀回手上那一份季）——收季的收兵（決戰；全部拆包第 8 批） |
 | shops()（Shop） | 店面登記：店裡那一串（_everyday_options）、進店那一顆、哪一間開著（_shop_open）、動身收店（_depart）、此地不開了收店（sync、_drop_stale_references） |
-| verbs()（Verb） | act 子動詞：_act 最前面、_action_title、行動列那一格（_everyday_options）、行動列底下那一行（action_notes）、只打開一張卡的回話（choose） |
+| verbs()（Verb） | act 子動詞：_act 最前面、_action_title、行動列那一格（_everyday_options）、行動列底下那一行（action_notes）、只打開一張卡的回話（choose）；
+  這一下打哪一路（_fight_squad 最前面：大場面判讀問；sortie：全部拆包第 17 批多開的一格 squad） |
 
 ctx 第一階就是 Game；功能包只准叫 services.py 那張清單上的方法。
 """
@@ -60,7 +62,7 @@ from .option import Option
 
 if TYPE_CHECKING:
     from ..engine import Game
-    from ..models import Content, Location
+    from ..models import Content, Location, Squad
     from ..state import BattleRecord, GameState
 
 
@@ -88,6 +90,9 @@ class Verb:
     cell: Callable[[Any, Any, int, bool], list[Option] | None] | None = None  # 行動列那一格（ctx, 地點, 體力, 寫不寫勝算）；[] 是接了、一顆都沒有
     note: Callable[[Any, Any], str | None] | None = None  # 行動列底下那一行（ctx, 地點）
     picks: tuple[str, ...] = ()  # 按了只打開一張卡的回話：不算做過、不寫江湖紀錄（Game.choose 的 picked_only、quiet）
+    # sortie（全部拆包第 17 批「出陣三」多開的一格；第 11 批計畫第五節第 1 條預告的「這一下打不打仗」）：Game._fight_squad 最前面，
+    # 這一格按下去會打哪一路（大場面判讀、鎖外 A 段與鎖內 C 段的重驗都問它）；不打仗是 None（核心照舊往下，act: 那幾格往下也是 None）
+    squad: Callable[[Any], Squad | None] | None = None
 
 
 @dataclass(frozen=True)
@@ -147,6 +152,8 @@ class FeatureHooks(Protocol):
     def scene(self, ctx: Game) -> str | None: ...
     def scene_over(self, ctx: Game) -> tuple[str, bool] | None: ...
     def record_detail(self, ctx: Game, record: BattleRecord) -> BattleRecord | None: ...
+    # battle（全部拆包第 8 批：收季的收兵；第 11 批 PM 認定第 7 條「兩段要一起進收季的位置」）
+    def on_season_close(self, ctx: Game, reread: bool) -> None: ...
     def shops(self) -> tuple[Shop, ...]: ...
     def verbs(self) -> tuple[Verb, ...]: ...
 
@@ -232,6 +239,9 @@ class Feature:
         return None
 
     def record_detail(self, ctx: Game, record: BattleRecord) -> BattleRecord | None:
+        return None
+
+    def on_season_close(self, ctx: Game, reread: bool) -> None:
         return None
 
     def shops(self) -> tuple[Shop, ...]:
@@ -388,7 +398,7 @@ def on_away(ctx: Game, away_from: float) -> None:
 
 
 def deliver_results(ctx: Game) -> None:
-    """收場補送（sync：補份量快照之後、玉璽碎片之前）。"""
+    """收場補送（sync：時刻表大事之後、玉璽碎片之前；決戰包在這一格先補份量快照，全部拆包第 8 批）。"""
     for f in registered():
         f.deliver_results(ctx)
 
@@ -447,6 +457,14 @@ def record_detail(ctx: Game, record: BattleRecord) -> BattleRecord:
         if got is not None:
             return got
     return record
+
+
+# battle（全部拆包第 8 批）
+def on_season_close(ctx: Game, reread: bool = False) -> None:
+    """收季的收兵（Game.admin_end_season：讀回收季那一份季之後、補大事之前；Game.admin_next_season：休季時、開下一季之前，reread=True）：
+    沒打完的仗收起來、不算勝負。不問 enabled（原位那兩段本來就不看包的開關）。"""
+    for f in registered():
+        f.on_season_close(ctx, reread)
 
 
 def _shops(ctx: Game, *, gated: bool) -> list[Shop]:
@@ -532,3 +550,16 @@ def act_note(ctx: Game, verb: str, loc: Location) -> str | None:
 def pick_replies(verb: str | None = None) -> tuple[str, ...]:
     """按了只打開一張卡的回話（Verb.picks；Game.choose 的 picked_only 照 verb 認、quiet 不看 verb）。"""
     return tuple(r for f in registered() for v in f.verbs() if verb is None or v.verb == verb for r in v.picks)
+
+
+# sortie（全部拆包第 17 批「出陣三」）
+
+
+def act_squad(ctx: Game, verb: str) -> Squad | None:
+    """act:<verb> 按下去會打哪一路（Game._fight_squad 最前面；Verb.squad）：主人回那一路；不打仗、都不接是 None，核心照舊往下。
+    不問 enabled（原位那一支本來就不看開關，同 run、title、note）。"""
+    for v in _verbs(None, verb):
+        got = v.squad(ctx) if v.squad is not None else None
+        if got is not None:
+            return got
+    return None

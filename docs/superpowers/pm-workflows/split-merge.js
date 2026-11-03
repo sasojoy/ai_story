@@ -32,7 +32,7 @@ const COMMON = `
 - 測試一律 \`-n 4\`、\`TIANXIA_DB\` 指到 ${SP}\\${DIR}\\ 底下的暫存檔。本機伺服器只用埠 ${PORTS}、\`-u\` 分離啟動、記 PID、模型網址指到 127.0.0.1:9（絕不打 11434）、收的時候 \`taskkill /PID <pid> /T /F\`。
 - **不下載、不安裝任何東西**。絕不碰 7861、C:\\Ray\\tianxia-play、線上資料庫、Tunnel、server_push.py；資料庫結構（develop 第 9 版）不改。不要動 ${ROOT}\\.claude\\worktrees\\ 底下別人的工作樹。
 - 主機也是企劃者的遊戲電腦：跑完伺服器與測試都收乾淨，解出來的 base／head 與暫存大檔刪掉（企劃者 11/01：磁碟被用光過）。
-- 同時有別的拆包線在跑、也可能有別的合併在排隊：推 develop 前一定先明確 fetch、確認 ancestor；develop 動了就再合一次、重跑不含 slow 的整套與 same_behavior 才推。
+- 同時有別的拆包線在跑、也可能有別的合併在排隊：推 develop 前一定先明確 fetch、確認 ancestor；develop 動了就再合一次、重跑不含 slow 的整套與 same_behavior 才推。**例外**（PM 11/04，第 17 批合併的教訓）：develop 多出來的提交只動 \`docs/\` 或 \`.claude/\`（\`git diff --stat <上次合的> origin/develop\` 看得出來；全 repo 沒有程式或測試讀它們）時，再合一次、確認沒撞就好，不必重跑，紀錄寫一句。
 - 不開子代理、不開工作流程。回報用繁體中文。
 `
 

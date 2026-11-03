@@ -200,6 +200,7 @@ class Seams(Fake):
     def __init__(self, open_=True):
         super().__init__(open_)
         self.in_shop, self.shop_here, self.seated, self.over = False, True, False, None
+        self.fights = True  # sortie（第 17 批）：fakeverb 那一格按下去打不打仗（Verb.squad）
 
     def on_due(self, ctx):
         self._note("on_due")
@@ -235,6 +236,9 @@ class Seams(Fake):
     def record_detail(self, ctx, record):
         return record.model_copy(update={"opponent": "換過的對手"})
 
+    def on_season_close(self, ctx, reread):  # battle（全部拆包第 8 批）
+        self._note("on_season_close", reread)
+
     def shops(self):
         return (Shop(key="fakeshop", inside=lambda g: self.in_shop, here=lambda g: self.shop_here,
                      close=lambda g: setattr(self, "in_shop", False) or self._note("close_shop"),
@@ -243,7 +247,8 @@ class Seams(Fake):
 
     def verbs(self):
         return (
-            Verb("fakeverb", run=lambda g, prepared: ["只打開一張卡。"], title=lambda g: "假的子動詞・此地", picks=("只打開一張卡。",)),
+            Verb("fakeverb", run=lambda g, prepared: ["只打開一張卡。"], title=lambda g: "假的子動詞・此地", picks=("只打開一張卡。",),
+                 squad=lambda g: g.content.squads["thug"] if self.fights else None),
             Verb("explore", cell=lambda g, loc, cost, odds: [Option(id="act:fakeverb", label="假的那一格")],
                  note=lambda g, loc: "假的那一行"),
         )
@@ -357,6 +362,22 @@ def test_a_verb_owner_runs_titles_fills_the_cell_and_writes_the_note(game, seams
     assert g.action_notes(["act:explore"])["act:explore"] == "假的那一行" and g._act("fakeverb") == ["只打開一張卡。"]
 
 
+# sortie（全部拆包第 17 批「出陣三」：Verb 多開的一格 squad）
+
+
+def test_a_verb_owner_names_the_squad_its_press_fights(game, seams):
+    """這一下打哪一路（Verb.squad）：Game._fight_squad 最前面問 act:<verb> 的主人（大場面判讀、鎖外 A 段、鎖內 C 段的重驗都問它）；
+    主人回 None 照舊往下（act: 的其餘幾格往下也是 None）。不問 enabled（同 run、title、note：原位那一支本來就不看開關）。"""
+    g = _made(game)
+    thug = g.content.squads["thug"]
+    assert g._fight_squad("act:fakeverb") is thug
+    seams.fights = False
+    assert g._fight_squad("act:fakeverb") is None
+    seams.fights, seams.open = True, False
+    assert g._fight_squad("act:fakeverb") is thug
+    assert g._fight_squad("act:challenge:nobody") is None and g._fight_squad("act:nobody") is None  # 沒有主人的照舊往下
+
+
 def test_the_scene_and_the_report_page_ask_the_packages(game, seams):
     """場景卡：自己眼前的那一張問 scene（_own_scene_text 擂台之後）；蓋在畫面上的問 scene_over（scene_text 最前面：整個取代，或接在上面、
     自己眼前的事接在底下）。戰報頁那一筆問 record_detail。三個都不問 enabled。"""
@@ -381,6 +402,24 @@ def test_the_own_turn_is_heard_even_when_the_package_is_closed(game, seams):
     seams.open = False
     g.mark_seen(1000.0)
     assert ("on_own_turn",) in seams.calls
+
+
+# battle（全部拆包第 8 批：收季的收兵）
+def test_closing_the_season_asks_the_packages_where_the_old_lines_were(game, seams):
+    """收季的收兵（on_season_close）：管理者立刻收季叫一次（reread=False：呼叫端剛讀回收季那一份季）；開下一季只在休季時叫（reread=True：
+    收兵之前讀回手上那一份季），季還在進行中按開下一季不叫。不問 enabled（原位那兩段本來就不看包的開關：決戰照內容、攻城照這一季的地盤）。"""
+    g = _made(game)
+    g.content.config.admins = [g.state.player.name]
+    seams.open = False
+    seams.calls.clear()
+    g.admin_next_season(now=1010.0)  # 還在進行中：不收兵、也開不了下一季
+    assert [c for c in seams.calls if c[0] == "on_season_close"] == []
+    g.admin_end_season(now=1020.0)
+    assert [c for c in seams.calls if c[0] == "on_season_close"] == [("on_season_close", False)]
+    seams.calls.clear()
+    g.admin_next_season(now=1030.0)
+    assert [c for c in seams.calls if c[0] == "on_season_close"] == [("on_season_close", True)]
+    assert g.world.get_season_number() == 2
 
 
 def test_the_own_turn_is_heard_while_the_season_clock_is_paused(game, seams):

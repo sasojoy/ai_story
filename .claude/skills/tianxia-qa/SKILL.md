@@ -20,6 +20,28 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - BASE（這一批開出來的那一點，派工單給 SHA）與 HEAD 各 `git archive` 解一份（只要 `tianxia content web server.py server_push.py zhuan_html.py llm_queue.py console.py scripts run_bots.py`），各開一台真伺服器：各自的埠與 `<名字>.localhost`、各自的新暫存資料庫、同一個 `TIANXIA_PROFILE`、`ollama_url` 指死埠。
   - 同一串步驟用真的 HTTP 打兩台（建帳號與角色、管理者開季、這一批搬的那幾個動作；步驟照派工單與那一區調查的 `same_behavior` 清單），每個回應存下來，逐位元組比；收場後兩邊的資料庫轉成文字（每張表、每一列照 repr 排序，帳號的 salt／hash 與 `sessions.token_hash` 抹掉）逐位元組比。
   - 兩台都要先固定亂數與時鐘，照 `scripts/same_behavior.py` 開頭那幾層的做法（包一支啟動腳本在 `import server` 前換掉；固定不了的現實時刻先換成記號再比，見下一條的兩版對照）；同一份跑兩次先確認一樣，再比 BASE 對 HEAD。這一套是第 5 批起才有的，第一次做的人把腳本留在自己的 scratchpad 子資料夾、做法寫進回報的「學到的」，PM 收進這裡。
+  - 啟動外殼要固定的另外四樣（2026-11-04 第 17 批 QA；現成的外殼在舊 PM scratchpad 的 `b17-chk\s\serve.py`、`drive.py`）：
+    - **玉璽密鹽**：`seal.ensure_salt` 用 `secrets`，每次開都不一樣，資料庫的 world 表會差 salt 和由它算出的快取。外殼裡把 `seal.secrets.token_hex` 換成回固定值。
+    - **進鎖的種子帶上凍住的時刻**（固定種子＋`int(假時鐘)`）：種子每一步都一樣的話，有兩路可挑的地方永遠挑同一路，走不到另一路。
+    - **旁白改寫的背景執行緒**（season21、week7）：每 20 現實秒叫一次模型，打到死埠要等約 2 秒，`/api/admin` 的 `llm_queue.running` 會隨現實時刻 0／1 跳。把 `server.narration_round` 換成什麼都不做。
+    - **`server._monotonic` 也要凍住**，模型的斷路器兩台才一致。
+  - 第 8 批 QA 補的（2026-11-04，決戰的推進與收季；外殼在舊 PM scratchpad 的 `b8-chk\s\`，含 `dbcmp.py`、`mkmut.py`）：
+    - **換季會把傳聞與回合紀錄搬進 `<db>-archive.sqlite`**：逐表比一定要連這個檔一起比（那一次改一個字的突變，主檔的 rumors 一樣，只有 archive 抓得到）。
+    - **`server.world_step` 不經 `_locked`**：進去之前要對 `server.WORLD_GAME.rng` 與 `random` 重設種子，兩台才一致（包成 `/__qa/world_step`）。
+    - **攻城戰書要有人同步才開成集結**：`admin_conquest_letter` 之後 `GET /api/admin` 不會同步，要打一次 `/api/main` 或任何 `/api/do`；認哪一場照 `siege_<大區>`，不要照「新多出來的那一場」。
+    - **要走回合逾時的路，得留人掛機**：所有參戰者都出完招時，回合在最後一個人按下去那一下就結算，排程與輪詢逾時那兩條走不到。
+    - 比對有沒有牙：HEAD 改一個字（例「論功：」→「論功！」）對 HEAD 跑同一串，要抓得到不同。
+  - 第 12 批 QA 補的（2026-11-04，頭目戰與擂台；外殼在舊 PM scratchpad 的 `b12-chk\`）：
+    - **流程最後有換季（`end_season`＋`next_season`）時，收場那一刻的資料庫抓不到角色層的字**：換季把角色重開了。要在季中用 sqlite backup 留快照，逐表比快照。
+    - **`server.boards_now` 的榜單快取照真的 `time.monotonic` 過期**：外殼裡每次清掉 `BOARDS_CACHE`（同 same_behavior 的 `begin`）。
+    - 擂台的場邊事件要 `chance` 設成 1、**還要有一件合條件的事**（最省事：挑一個已經打過一場的天下第一）；放手一搏的「離譜」要模型判，叫不到模型走不到。
+    - 要撞上頭目：`/__qa/force` 把 `explore_one.draw` 換成抽到「遭遇」、`/__qa/tweak` 把 `duel.explore_chance` 設成 1；勝負靠 `/__qa/edit` 把 `duel.edge`／`arena.edge` 擺在 89 或 11（越過提前大勝、落敗的門檻）。
+    - 截圖用的伺服器是新起的，記憶體裡改過的設定會回預設：擂台的週解鎖要在開好之後再 tweak 一次。
+  - 第 22 批 QA 補的（2026-11-04；外殼在舊 PM scratchpad 的 `b22-chk\s\`，含 `crossrun.py`）：
+    - **擺局面的 `/__qa/edit` 只改呼叫時給的那幾格**：第 17 批那一版每次都補滿體力、把 `joined_at` 擺成 -1e9，新手期就沒了，新手目標卡（`newbie_view`）直接變 None。驗引導、新手目標、新手期的批特別要注意。
+    - **便宜的第二道穩定性證明**：「HEAD 對 HEAD」那一輪的 HEAD 回應，跟「HEAD 對 BASE」那一輪的 HEAD 回應逐檔比；分開跑兩次一樣，才證明局面真的凍住。
+    - PowerShell 的 `Start-Process -RedirectStandardOutput` 指到還不存在的資料夾時照樣回 PID，但行程根本沒跑、也沒有輸出檔：先建好資料夾。
+  - 引導的畫面（截圖時用）：碰到才說的框在江湖頁排在眼下要事與懸賞卡下面，375 寬第一屏看不到；框上沒有寫「知道了」的按鈕（收起是右上的 ✕），要找 `p.guide-text` 的字。season21、week7 的新角色一建好 `tutorial_step` 就是 18（走完）、站在城門口，初入江湖 e1～e7 只有草廬的季才有；`h_event_reveal` 建角色時就排進去，選完三選一才上框。
   - 位元組一樣之後再拍三張圖做 sanity（375 淺、375 深、1280）。動到 `web/`、server 的路由分派、第 3 階的批照舊完整實機 QA（並排截圖＋逐像素）。
 - **兩版對照（BASE 對 HEAD）的局面要凍得住**（2026-10-31 第 1 階 QA）：week7 的管理者「繼續」會把季曆對回現實的日子，暫停凍不住時刻；管理者快轉時時刻表事件的成敗用沒種子的亂數，每次跑都不一樣。比較點放在快轉之前，時刻先換成記號再比。逐鏡記「看得到的元素的位置＋算好的樣式」再 diff，比只比像素好分辨是字還是版面真的動了。
 - 無頭 Chromium 開 mobile 模擬時，CDP `Input.dispatchMouseEvent` 照樣點得到按鈕、`mouseWheel` 捲得動；點之前 `scrollIntoView({block:'center'})`，再用 `elementFromPoint` 確認點到的是那個元素（2026-10-31）。

@@ -77,7 +77,12 @@ function sceneGlyph(cx, x, y, size, a, glow, text) {
   cx.shadowColor = sceneRgba(glow, 0.95); cx.shadowBlur = 36; cx.fillStyle = "#ffe7a6"; cx.fillText(text, x, y); cx.restore();
 }
 // 法相、巨物：有圖畫圖（照高度縮），沒有就畫剪影
-function sceneThing(cx, img, label, x, y, h, a, glow, kind) {
+function sceneThing(cx, img, label, x, y, h, a, glow, kind, rot) {
+  if (rot) { // 轉：繞著那一樣的中心轉（畫的時候底邊在 y）
+    cx.save(); cx.translate(x, y - h / 2); cx.rotate(rot); cx.translate(-x, -(y - h / 2));
+    sceneThing(cx, img, label, x, y, h, a, glow, kind, 0); cx.restore();
+    return;
+  }
   if (sceneOk(img)) {
     const w = (img.naturalWidth * h) / img.naturalHeight;
     cx.save(); cx.globalAlpha = a; cx.shadowColor = sceneRgba(glow, 0.9); cx.shadowBlur = 30;
@@ -87,6 +92,44 @@ function sceneThing(cx, img, label, x, y, h, a, glow, kind) {
   if (kind === "法相" && /佛|菩薩|羅漢|金剛|明王/.test(label)) sceneBuddha(cx, x, y, h / 270, a, glow);
   else if (kind === "巨物" && /掌|拳|指|爪|印/.test(label)) scenePalm(cx, x, y - h / 2, h / 130, a, glow);
   else sceneGlyph(cx, x, y - h / 2, h * 0.8, a, glow, (label || "").slice(-1));
+}
+
+// 異狀（可以兩樣：kind 與 also）有沒有這一種
+const sceneMarked = (mark, kind) => !!mark && (mark.kind === kind || mark.also === kind);
+// 主攻走的路（path；Joy 2026-11-03「由上往下 或是從後方 或是下往上」）：k 從 0 到 1，回 {x, y}。
+// 平推：從出手的人推過去；天降：從對手頭頂砸下；背後：從對手身後打回來；地湧：從對手腳下竄上來；迴旋：繞一道大弧過去
+function sceneRoute(path, env, sx, sy, tgt, k) {
+  const { dir, GY } = env;
+  if (path === "天降") return { x: tgt[0], y: -180 + (tgt[1] + 180) * k };
+  if (path === "背後") { const bx = tgt[0] + 300 * dir; return { x: bx + (tgt[0] - bx) * k, y: 110 + (tgt[1] - 110) * k }; }
+  if (path === "地湧") return { x: tgt[0], y: GY + 200 - (GY + 200 - tgt[1]) * k };
+  if (path === "迴旋") {
+    const cxp = (sx + tgt[0]) / 2, cyp = -140, u = 1 - k;
+    return { x: u * u * sx + 2 * u * k * cxp + k * k * tgt[0], y: u * u * sy + 2 * u * k * cyp + k * k * tgt[1] };
+  }
+  return { x: sx + (tgt[0] - sx) * k, y: sy + (tgt[1] - sy) * k };
+}
+// 光束沿著那一條路畫到 reach（0～1）為止：粗的一道光色、細的一道白
+function sceneBeam(env, path, casterX, tgt, reach, th, fade, glow) {
+  const { cx, dir, W, GY } = env;
+  const pts = [];
+  const N = 24;
+  for (let j = 0; j <= N; j++) {
+    const u = (j / N) * reach;
+    let x, y;
+    if (path === "天降") { x = tgt[0]; y = -30 + (GY + 20 + 30) * u; }
+    else if (path === "地湧") { x = tgt[0]; y = GY + 20 - (GY + 60) * u; }
+    else if (path === "背後") { const bx = tgt[0] + 420 * dir; x = bx + (casterX - 40 * dir - bx) * u; y = 196; }
+    else if (path === "迴旋") { const sx = casterX + 60 * dir, ex = tgt[0] + 80 * dir, cxp = (sx + ex) / 2, a = 1 - u; x = a * a * sx + 2 * a * u * cxp + u * u * ex; y = a * a * 196 + 2 * a * u * -60 + u * u * 196; }
+    else { const x0 = casterX + 60 * dir; x = x0 + dir * (W + 400) * u; y = 196; }
+    pts.push([x, y]);
+  }
+  cx.save(); cx.lineCap = "round"; cx.shadowColor = sceneRgba(glow, 1); cx.shadowBlur = 30;
+  for (const [col, w] of [[sceneRgba(glow, 0.95 * fade), th], [`rgba(255,255,255,${fade})`, th / 3]]) {
+    cx.strokeStyle = col; cx.lineWidth = Math.max(1, w);
+    cx.beginPath(); pts.forEach(([x, y], j) => (j ? cx.lineTo(x, y) : cx.moveTo(x, y))); cx.stroke();
+  }
+  cx.restore();
 }
 
 // 一整段：env 給畫布、出手的人與對手的位置、怎麼畫人與地面（arena_anim.js 的 ringFigure、場地）
@@ -103,6 +146,8 @@ function scenePaint(env, sc, t) {
   let shake = quake && t >= 200 && t < 900 ? 0.35 : 0;
   if (t >= hit && t < hit + 350) shake += 1.4 * (1 - sceneSeg(t, hit, hit + 350));
   if (t >= 2600 && t < 2850) shake += 1.2 * (1 - sceneSeg(t, 2600, 2850));
+  if (sceneMarked(mark, "爆炸") && t >= hit && t < hit + 600) shake += 2 * (1 - sceneSeg(t, hit, hit + 600));
+  if (figure && figure.motion === "天降" && t >= 900 && t < 1300) shake += 1.6 * (1 - sceneSeg(t, 900, 1300));
   cx.save();
   if (shake > 0) cx.translate(Math.sin(t * 0.11) * 8 * shake, Math.cos(t * 0.17) * 5 * shake);
   env.ground();
@@ -123,8 +168,34 @@ function scenePaint(env, sc, t) {
   // 法相：在出手的人背後升起
   const out = sceneSeg(t, 2700, 3300);
   if (figure) {
-    const rise = sceneEase(sceneSeg(t, 350, 1100));
-    if (rise > 0) sceneThing(cx, img(figure.art), figure.label, casterX - 20 * dir, GY + 40 + (1 - rise) * 160 - (sceneOk(img(figure.art)) ? 40 : 0), 300, 0.75 * rise * (1 - out), glow, "法相");
+    // 法相怎麼出來（motion；Joy 2026-11-03「法相浮現可以旋轉或是其他動畫」）：升起（從地下浮上來）、旋轉（轉著升起、背後一圈光輪）、
+    // 天降（從天上砸下來，落地一震）、分身（左右再浮出兩尊）、脈動（升起之後一脹一縮、一圈一圈光往外推）
+    const motion = figure.motion || "升起", art = img(figure.art), base = GY + 40 - (sceneOk(art) ? 40 : 0);
+    const rise = sceneEase(sceneSeg(t, 350, motion === "天降" ? 900 : 1100)), a = 0.75 * rise * (1 - out), fx = casterX - 20 * dir;
+    if (rise > 0) {
+      if (motion === "天降") {
+        sceneThing(cx, art, figure.label, fx, base - (1 - rise) * 520, 300, a, glow, "法相");
+        const land = sceneSeg(t, 900, 1500);
+        if (land > 0 && land < 1) { cx.strokeStyle = sceneRgba(glow, 0.8 * (1 - land)); cx.lineWidth = 5 * (1 - land) + 1; cx.beginPath(); cx.ellipse(fx, GY + 4, 40 + 260 * sceneEase(land), 10 + 30 * land, 0, 0, Math.PI * 2); cx.stroke(); }
+      } else if (motion === "旋轉") {
+        const halo = sceneSeg(t, 500, 1000) * (1 - out);
+        cx.save(); cx.translate(fx, base - 170); cx.rotate(t / 260); cx.strokeStyle = sceneRgba(glow, 0.7 * halo); cx.lineWidth = 3;
+        for (let j = 0; j < 12; j++) { cx.beginPath(); cx.arc(0, 0, 150, (j * Math.PI) / 6, (j * Math.PI) / 6 + 0.32); cx.stroke(); }
+        cx.restore();
+        sceneThing(cx, art, figure.label, fx, base + (1 - rise) * 160, 300, a, glow, "法相", (1 - rise) * Math.PI * 2 + Math.sin(t / 300) * 0.06);
+      } else if (motion === "分身") {
+        const split = sceneEase(sceneSeg(t, 800, 1300));
+        for (const side of [-1, 1]) if (split > 0) sceneThing(cx, art, figure.label, fx + side * 120 * split, base + 20 + (1 - rise) * 160, 240, a * 0.45 * split, glow, "法相");
+        sceneThing(cx, art, figure.label, fx, base + (1 - rise) * 160, 300, a, glow, "法相");
+      } else if (motion === "脈動") {
+        const beat = t > 1100 ? Math.sin((t - 1100) / 140) * 0.07 : 0;
+        for (let j = 0; j < 3; j++) {
+          const k = (((t - 1100) / 700 + j / 3) % 1 + 1) % 1;
+          if (t > 1100) { cx.strokeStyle = sceneRgba(glow, 0.5 * (1 - k) * (1 - out)); cx.lineWidth = 3; cx.beginPath(); cx.arc(fx, base - 150, 60 + 200 * k, 0, Math.PI * 2); cx.stroke(); }
+        }
+        sceneThing(cx, art, figure.label, fx, base + (1 - rise) * 160, 300 * (1 + beat), a, glow, "法相");
+      } else sceneThing(cx, art, figure.label, fx, base + (1 - rise) * 160, 300, a, glow, "法相");
+    }
   }
   // 蓄勢的光
   const aura = sceneSeg(t, 250, 700) * (1 - sceneSeg(t, hit, hit + 300));
@@ -140,9 +211,21 @@ function scenePaint(env, sc, t) {
   const meI = t < 250 ? 0 : t < release ? 1 : 3 + Math.floor(sceneSeg(t, release, release + 400) * 2.99);
   env.body("me", "atk", meI, t >= release && t < release + 500 ? Math.sin(sceneSeg(t, release, release + 500) * Math.PI) * 30 : 0, "");
   // 對手：打中了受擊，最後跪倒
-  const frost = mark && mark.kind === "冰封" ? sceneSeg(t, 2050, 2300) * (1 - sceneSeg(t, 2600, 2700)) : 0;
-  const tint = frost > 0 ? `saturate(${1 - 0.8 * frost}) brightness(${1 + 0.4 * frost}) hue-rotate(${170 * frost}deg)` : "";
-  if (t >= 2600) env.body("foe", "hero_bare_kneel", Math.floor(sceneSeg(t, 2600, 3000) * 3.99), 0, "");
+  const frost = sceneMarked(mark, "冰封") ? sceneSeg(t, 2050, 2300) * (1 - sceneSeg(t, 2600, 2700)) : 0;
+  // 對手身上的顏色：冰封發白發青、火焚燒紅、雷擊一閃一閃、中毒發綠
+  let tint = frost > 0 ? `saturate(${1 - 0.8 * frost}) brightness(${1 + 0.4 * frost}) hue-rotate(${170 * frost}deg)` : "";
+  if (!tint && t >= hit && t < 3000) {
+    if (sceneMarked(mark, "火焚")) tint = `sepia(0.7) saturate(2.6) hue-rotate(-25deg) brightness(${1.05 + 0.15 * Math.sin(t / 60)})`;
+    else if (sceneMarked(mark, "雷擊") && Math.floor(t / 70) % 2 === 0) tint = "brightness(2.2) saturate(0.3)";
+    else if (sceneMarked(mark, "中毒")) tint = "sepia(0.5) saturate(2.2) hue-rotate(60deg)";
+  }
+  const fly = sceneMarked(mark, "擊飛") || sceneMarked(mark, "爆炸"); // 被打飛出去、摔在地上
+  if (fly && t >= hit) {
+    const k = sceneEase(sceneSeg(t, hit, hit + 650)), up = Math.sin(sceneSeg(t, hit, hit + 650) * Math.PI) * 70;
+    cx.save(); cx.translate(0, -up);
+    env.body("foe", "hero_bare_fall", Math.floor(sceneSeg(t, hit, hit + 900) * 5.99), -70 * k, tint);
+    cx.restore();
+  } else if (t >= 2600) env.body("foe", "hero_bare_kneel", Math.floor(sceneSeg(t, 2600, 3000) * 3.99), 0, "");
   else if (t >= hit) env.body("foe", "hero_bare_hit", Math.floor((t - hit) / 90) % 3, -10, tint);
   else env.body("foe", "hero_bare_idle", Math.floor(t / 230) % 4, 0, "");
   // 飛劍
@@ -150,19 +233,31 @@ function scenePaint(env, sc, t) {
   // 光束：從出手那一帶一路貫出畫面
   if (beam && t >= 1300 && t < 2700) {
     const grow = sceneEase(sceneSeg(t, 1300, 1700)), fade = 1 - sceneSeg(t, 2200, 2700);
-    const x0 = casterX + 60 * dir, reach = sceneEase(sceneSeg(t, 1650, 1950)) * (W + 400);
-    const len = Math.max(40 * grow, reach), th = 3 + 20 * grow * fade;
-    cx.save(); cx.shadowColor = sceneRgba(glow, 1); cx.shadowBlur = 30;
-    cx.fillStyle = sceneRgba(glow, 0.95 * fade); cx.fillRect(dir > 0 ? x0 : x0 - len, 196 - th / 2, len, th);
-    cx.fillStyle = `rgba(255,255,255,${fade})`; cx.fillRect(dir > 0 ? x0 : x0 - len, 196 - th / 6, len, th / 3);
-    cx.restore();
+    const path = beam.path || "平推", th = 3 + 20 * grow * fade;
+    if (path === "平推") {
+      const x0 = casterX + 60 * dir, reach = sceneEase(sceneSeg(t, 1650, 1950)) * (W + 400);
+      const len = Math.max(40 * grow, reach);
+      cx.save(); cx.shadowColor = sceneRgba(glow, 1); cx.shadowBlur = 30;
+      cx.fillStyle = sceneRgba(glow, 0.95 * fade); cx.fillRect(dir > 0 ? x0 : x0 - len, 196 - th / 2, len, th);
+      cx.fillStyle = `rgba(255,255,255,${fade})`; cx.fillRect(dir > 0 ? x0 : x0 - len, 196 - th / 6, len, th / 3);
+      cx.restore();
+    } else sceneBeam(env, path, casterX, tgt, Math.max(0.03 * grow, sceneEase(sceneSeg(t, 1650, 1950))), th * (path === "天降" || path === "地湧" ? 2 : 1), fade, glow);
   }
   // 巨物飛擊：從法相胸前（沒有法相就是出手的人）推出去，越飛越大
   if (thrown && t >= 1500 && t < 2500) {
-    const k = sceneEase(sceneSeg(t, 1500, 2250)), sx = casterX + 40 * dir, sy = figure ? 130 : 160;
-    const x = sx + (tgt[0] - sx) * k, y = sy + (tgt[1] - sy) * k, h = 90 + 120 * k, a = 1 - sceneSeg(t, 2300, 2500);
-    for (let j = 1; j <= 3; j++) sceneThing(cx, img(thrown.art), thrown.label, x - j * 40 * k * dir, y + h / 2, h * (1 - j * 0.08), a * 0.18, glow, "巨物");
-    sceneThing(cx, img(thrown.art), thrown.label, x, y + h / 2, h, a, glow, "巨物");
+    const path = thrown.path || "平推", raw = sceneSeg(t, 1500, 2250), k = path === "天降" ? raw * raw : sceneEase(raw);
+    const sx = casterX + 40 * dir, sy = figure ? 130 : 160, a = 1 - sceneSeg(t, 2300, 2500), h = 90 + 120 * k;
+    const spin = path === "迴旋" ? raw * Math.PI * 4 : 0;
+    if (path === "天降" || path === "地湧") { // 地上先出現影子／裂縫
+      cx.fillStyle = path === "天降" ? `rgba(0,0,0,${0.35 * k})` : sceneRgba(glow, 0.5 * (1 - raw));
+      cx.beginPath(); cx.ellipse(tgt[0], GY + 4, 30 + 70 * k, 8 + 8 * k, 0, 0, Math.PI * 2); cx.fill();
+    }
+    for (let j = 3; j >= 1; j--) { // 拖影：沿著同一條路往回取幾個點
+      const p = sceneRoute(path, env, sx, sy, tgt, Math.max(0, k - j * 0.07));
+      sceneThing(cx, img(thrown.art), thrown.label, p.x, p.y + h / 2, h * (1 - j * 0.08), a * 0.18, glow, "巨物", spin - j * 0.3);
+    }
+    const p = sceneRoute(path, env, sx, sy, tgt, k);
+    sceneThing(cx, img(thrown.art), thrown.label, p.x, p.y + h / 2, h, a, glow, "巨物", spin);
   }
   if (thrown && t >= 2250 && t < 3300) {
     const k = sceneSeg(t, 2250, 3300);
@@ -174,20 +269,42 @@ function scenePaint(env, sc, t) {
     cx.strokeStyle = `rgba(220,245,255,${0.9 * frost})`; cx.lineWidth = 2;
     for (let j = 0; j < 14; j++) { const a = j * 0.9, r = 30 + (j % 4) * 14; cx.beginPath(); cx.moveTo(tgt[0], tgt[1] + 10); cx.lineTo(tgt[0] + Math.cos(a) * r, tgt[1] + 10 + Math.sin(a) * r * 1.2); cx.stroke(); }
   }
-  if (mark && mark.kind === "雷擊" && t >= 2050 && t < 2600 && Math.floor(t / 70) % 2 === 0) {
-    cx.strokeStyle = "rgba(230,215,255,0.95)"; cx.lineWidth = 3; cx.shadowColor = sceneRgba(glow, 1); cx.shadowBlur = 20;
-    cx.beginPath(); let x = tgt[0] + ((t / 70) % 3 - 1) * 20, y = 0; cx.moveTo(x, y);
-    while (y < tgt[1] + 40) { y += 26; x += ((y * 7) % 3 - 1) * 14; cx.lineTo(x, y); }
-    cx.stroke(); cx.shadowBlur = 0;
+  if (sceneMarked(mark, "爆炸") && t >= hit && t < hit + 1100) { // 爆炸：一團火光炸開、碎屑四散、煙往上散
+    const k = sceneSeg(t, hit, hit + 1100), r = 30 + 170 * sceneEase(Math.min(1, k * 1.6));
+    const g = cx.createRadialGradient(tgt[0], tgt[1], 4, tgt[0], tgt[1], r);
+    g.addColorStop(0, `rgba(255,250,220,${0.95 * (1 - k)})`); g.addColorStop(0.4, `rgba(255,170,60,${0.8 * (1 - k)})`); g.addColorStop(1, "rgba(200,40,20,0)");
+    cx.fillStyle = g; cx.beginPath(); cx.arc(tgt[0], tgt[1], r, 0, Math.PI * 2); cx.fill();
+    for (let j = 0; j < 22; j++) {
+      const a = j * 2.39, d = 20 + 240 * sceneEase(k) * (0.5 + (j % 4) / 6);
+      cx.fillStyle = j % 3 ? `rgba(255,${140 + (j % 5) * 20},60,${1 - k})` : `rgba(80,70,60,${0.8 * (1 - k)})`;
+      cx.fillRect(tgt[0] + Math.cos(a) * d, tgt[1] + Math.sin(a) * d * 0.7 + 120 * k * k, 5, 5);
+    }
+    for (let j = 0; j < 6; j++) { cx.fillStyle = `rgba(60,55,50,${0.35 * (1 - k)})`; cx.beginPath(); cx.arc(tgt[0] + (j - 2.5) * 30, tgt[1] - 40 - 90 * k - (j % 2) * 20, 26 + 30 * k, 0, Math.PI * 2); cx.fill(); }
   }
-  if (mark && mark.kind === "火焚" && t >= 2050 && t < 2900) {
-    const k = sceneSeg(t, 2050, 2900);
+  if (sceneMarked(mark, "中毒") && t >= hit && t < 3300) { // 中毒：綠泡泡一直往上冒
+    const k = sceneSeg(t, hit, 3300);
+    for (let j = 0; j < 18; j++) {
+      const y = tgt[1] + 70 - ((t * 0.09 + j * 37) % 140), x = tgt[0] + Math.sin(j * 1.7 + t / 200) * 30;
+      cx.strokeStyle = `rgba(150,240,120,${0.8 * (1 - k)})`; cx.lineWidth = 2; cx.beginPath(); cx.arc(x, y, 4 + (j % 3) * 3, 0, Math.PI * 2); cx.stroke();
+    }
+  }
+  if (sceneMarked(mark, "雷擊") && t >= 2050 && t < 2700 && Math.floor(t / 70) % 2 === 0) { // 雷擊：三道雷劈下來
+    cx.strokeStyle = "rgba(230,215,255,0.95)"; cx.lineWidth = 3; cx.shadowColor = sceneRgba(glow, 1); cx.shadowBlur = 20;
+    for (let b = 0; b < 3; b++) {
+      cx.beginPath(); let x = tgt[0] + (b - 1) * 34 + ((t / 70 + b) % 3 - 1) * 16, y = 0; cx.moveTo(x, y);
+      while (y < tgt[1] + 40) { y += 26; x += (((y + b * 13) * 7) % 3 - 1) * 14; cx.lineTo(x, y); }
+      cx.stroke();
+    }
+    cx.shadowBlur = 0;
+  }
+  if (sceneMarked(mark, "火焚") && t >= 2050 && t < 3200) { // 火焚：身上一直燒
+    const k = sceneSeg(t, 2050, 3200);
     for (let j = 0; j < 26; j++) {
       const y = tgt[1] + 60 - ((t * 0.12 + j * 23) % 110), x = tgt[0] + Math.sin(j * 2.1 + t / 90) * 26;
       cx.fillStyle = `rgba(255,${120 + (j % 4) * 30},60,${0.75 * (1 - k)})`; cx.beginPath(); cx.arc(x, y, 5 + (j % 3) * 2, 0, Math.PI * 2); cx.fill();
     }
   }
-  if (mark && mark.kind === "冰封" && t >= 2600 && t < 3300) {
+  if (sceneMarked(mark, "冰封") && t >= 2600 && t < 3300) {
     const k = sceneSeg(t, 2600, 3300); cx.fillStyle = `rgba(220,245,255,${1 - k})`;
     for (let j = 0; j < 40; j++) { const a = j * 2.4, r = 10 + 200 * sceneEase(k) * ((j % 5) / 5 + 0.3); cx.fillRect(tgt[0] + Math.cos(a) * r, tgt[1] + Math.sin(a) * r * 0.7 + 60 * k * k, 6, 3); }
   }

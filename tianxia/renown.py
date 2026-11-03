@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 
 from . import calendar, four_tiers, gender
@@ -420,9 +422,34 @@ def _choice_perks(content: Content, way: str, tier: int, world: WorldState | Non
     """俠寇選項（5.3）：內容裡有要這一條路、這一段的選項才寫；virtue_choices 關著不寫。"""
     if not on(content, "virtue_choices"):
         return []
-    has = any(ch.needs is not None and ch.needs.path == way and ch.needs.tier == tier
-              for ev in content.events.values() for ch in ev.choices)
-    return [CHOICE_PERK.format(way=way)] if has else []
+    return [CHOICE_PERK.format(way=way)] if (way, tier) in _choice_needs(content) else []
+
+
+# 一次畫面建構裡記住「內容裡哪些（路, 段）有選項」（needs_memo）：名聲說明卡的兩條路各四段，每段都要掃一遍全部事件的選項。
+_NEEDS_MEMO: ContextVar[dict | None] = ContextVar("needs_memo", default=None)
+
+
+@contextmanager
+def needs_memo() -> Iterator[None]:
+    """這一段裡 _choice_needs 只掃一次內容；巢狀時用最外層那一份，出了範圍就丟掉。"""
+    if _NEEDS_MEMO.get() is not None:
+        yield
+        return
+    token = _NEEDS_MEMO.set({})
+    try:
+        yield
+    finally:
+        _NEEDS_MEMO.reset(token)
+
+
+def _choice_needs(content: Content) -> set[tuple[str, int]]:
+    memo = _NEEDS_MEMO.get()
+    if memo is not None and id(content) in memo:
+        return memo[id(content)]
+    needs = {(ch.needs.path, ch.needs.tier) for ev in content.events.values() for ch in ev.choices if ch.needs is not None}
+    if memo is not None:
+        memo[id(content)] = needs
+    return needs
 
 
 VIRTUE_PERKS.append(_choice_perks)
