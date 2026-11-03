@@ -1,6 +1,7 @@
 """推進與結算（progress.py，全部拆包第 8 批）——dev/battle-4 審查補的（should、nit）：改這一包時 test_for 挑到的只有包的 tests/ 與核心契約，
 搬進來的這幾樣原本只有雜燴檔（tests/core/test_engine.py、test_prologue.py、test_mounts.py……）守，改包的檔挑不到它們。正式內容 week7：
-- 份量快照補上（backfill_battle_scores，經 deliver_results 那一格、排在補送前面）：上線前就在場上、沒有份量的人自己同步時補上。
+- 份量快照補上（backfill_battle_scores，經 deliver_results 那一格、排在補送前面）：上線前就在場上、沒有份量的人自己同步時補上；看那一場經
+  ctx._battle_status（測試換掉 Game._battle_status 的那幾條才打得到；換成「沒有決戰」就不補）。
 - 序章裡沒有戰場（battle_for_me，FB-113）：站在草廬、序章還沒走完的人看不到那一場，出了草廬就看得到。
 - 收場（apply_battle_outcome）：天下大事多一則「<決戰>論功：」（merit_line），時間到了在等前一場打完的那一場一收場就開（open_waiting_showdown）；
   不在時刻表上的決戰（黃巾決戰）結果的世界旗標記立旗的那一刻（apply_outcome_trends_and_flags）。
@@ -51,7 +52,7 @@ def _wipe_scores(game):
     assert game.world.get_battle().participants[name].scores == {}
 
 
-def test_a_fighter_with_no_snapshot_gets_it_back_on_his_own_sync():
+def test_a_fighter_with_no_snapshot_gets_it_back_on_his_own_sync(monkeypatch):
     game = _game()
     _joined(game)
     name = game.state.player.name
@@ -61,6 +62,11 @@ def test_a_fighter_with_no_snapshot_gets_it_back_on_his_own_sync():
     _wipe_scores(game)
     game.sync(game.now + 1)  # 同步的 deliver_results 那一格：先補份量快照、再補送
     assert game.world.get_battle().participants[name].scores == taken
+
+    _wipe_scores(game)  # 看那一場經 Game._battle_status（審查 nit：換掉它的測試才打得到）：換成「沒有決戰」就不補，直接叫包裡的 battle_status 會繞過去
+    monkeypatch.setattr(Game, "_battle_status", lambda self, tick=True: None)
+    progress.backfill_battle_scores(game)
+    assert game.world.get_battle().participants[name].scores == {}
 
 
 def test_nobody_in_the_prologue_sees_the_battle():
