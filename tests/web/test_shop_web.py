@@ -864,8 +864,10 @@ def test_only_ticks_on_rows_you_can_see_count(content, world):
     assert "拆解勾選的 1 件" in out["again"] and f'aria-checked="true" aria-label="勾選【{m["shop"]["rack"]["rows"][8]["name"]}】"' in out["again"]
 
 
-def test_rack_rows_keep_words_whole_and_the_buttons_get_their_own_line(content, world):
-    """375 寬（FB-297 的做法）：鈕上的小字切成不折行的小段（「精鐵砂×1＋」「5 兩」），四顆鈕一整行、一樣寬，不擠在名字旁邊。"""
+def test_rack_rows_keep_words_whole_and_the_buttons_sit_two_by_two_on_the_right(content, world):
+    """企劃者 2026-11-03 從三張對比圖挑「乙 右邊二乘二」（原本做的是名字一行、四顆鈕一整行）：勾選框｜名字與那一行數字｜右邊四顆鈕
+    二乘二（換上、修／淬煉、拆解）。鈕上的小字切成不折行的小段（FB-297：「精鐵砂×1＋」「5 兩」），右邊那一欄寫 em（小字跟著字級放大，
+    375 寬一顆 82px：最長的灰鈕原因「本命兵器不能拆」放得下）；320 這種窄的放不下，二乘二改排在名字底下（≤359px）。"""
     import re
 
     m = server.main_view(_racked(content, world))
@@ -873,9 +875,16 @@ def test_rack_rows_keep_words_whole_and_the_buttons_get_their_own_line(content, 
     small = dull[dull.index("<b>修</b>"):]
     small = small[:small.index("</button>")]
     assert small.count('<span class="nb">') >= 2 and "＋" in small
+    assert dull.index('class="rk-pick') < dull.index('class="winfo"') < dull.index('class="rk-btns"')  # 二乘二照這個順序排：換上、修／淬煉、拆解
+    assert [a for a in re.findall(r'data-act="([\w-]+)"', dull[dull.index('class="rk-btns"'):])][:4] == [
+        "shop-wield", "rack-repair", "rack-temper", "shop-dismantle"]
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
-    assert re.search(r"\.shop-layer \.rk-btns \{ grid-column: 1 / -1; display: grid; grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);", css)
+    assert re.search(r"\.shop-layer \.rk-row \{ display: grid; grid-template-columns: auto minmax\(0, 1fr\) [0-9.]+em;", css)
+    assert re.search(r"\.shop-layer \.rk-btns \{ grid-column: 3; grid-row: 1; display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);", css)
     assert re.search(r"\.shop-layer \.rk-btn \{ flex-direction: column;", css)
+    narrow = re.search(r"@media \(max-width: 359px\) \{([^@]*?)\n\}", css[css.index(".shop-layer .rk-btns {"):])
+    assert narrow and ".shop-layer .rk-row { grid-template-columns: auto minmax(0, 1fr); }" in narrow.group(1)
+    assert ".shop-layer .rk-btns { grid-column: 1 / -1; grid-row: auto; }" in narrow.group(1)
 
 
 # ── 鐵匠鋪與合成流程 3.6（E 批）：「淬煉 N/M」照這一件的上限（上品 7）、上品「磨得慢」──

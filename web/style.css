@@ -3603,11 +3603,12 @@ svg.fig .blade.bow { stroke-width: 3; }
   animation: fu-hot 1.6s ease-in-out infinite; }
 @keyframes fu-hot { 0%, 100% { transform: scale(1.14); } 50% { transform: scale(1.24) translateY(-2px); } }
 @media (prefers-reduced-motion: reduce) { .shop-layer .furnace.hot:not(.firing) .flame svg { animation: none; } }
-/* 裝備庫一列（3.4）：勾選框｜名字與那一行數字；底下一整行四顆一樣寬的鈕（換上、修、淬煉、拆解），鈕上的小字只在小段之間換行
-   （FB-297、FB-305：375 寬四顆擠在名字旁邊會把字擠成直排）。勾了的那一列左邊一條金線；拆不得的不給勾。
-   「拆解勾選的 N 件」排在最底下，勾了至少一件才黏在捲的那一層底下（勾完不用捲回最底下找；沒勾時不擋著列表） */
+/* 裝備庫一列（3.4；企劃者 2026-11-03 從三張對比圖挑「乙 右邊二乘二」，原本是名字一行、四顆鈕一整行）：勾選框｜名字與那一行數字｜
+   右邊四顆鈕二乘二（換上、修／淬煉、拆解），鈕上的小字只在小段之間換行（FB-297）。右邊那一欄寫 em：小字跟著字級放大，375 寬一顆 82px，
+   最長的灰鈕原因「本命兵器不能拆」（約 71px）放得下；比 359px 窄（320）放不下，二乘二改排在名字底下。勾了的那一列左邊一條金線；
+   拆不得的不給勾。「拆解勾選的 N 件」排在最底下，勾了至少一件才黏在捲的那一層底下（勾完不用捲回最底下找；沒勾時不擋著列表） */
 .shop-layer .rk-cap { margin-top: 14px; }
-.shop-layer .rk-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; align-items: start; padding: 10px 4px; }
+.shop-layer .rk-row { display: grid; grid-template-columns: auto minmax(0, 1fr) 11.4em; gap: 6px 10px; align-items: start; padding: 10px 4px; }
 .shop-layer .rk-row.on { background: rgba(242, 196, 106, 0.08); box-shadow: inset 3px 0 0 #f2c46a; }
 .shop-layer .rk-pick { position: relative; width: 1.47em; height: 1.47em; margin-top: 0.1em; padding: 0; border: 1.5px solid #b7862b; border-radius: 4px;
   background: transparent; cursor: pointer; }
@@ -3616,7 +3617,11 @@ svg.fig .blade.bow { stroke-width: 3; }
   transform: rotate(45deg); }
 .shop-layer .rk-pick:disabled { opacity: 0.3; cursor: default; }
 .shop-layer .rk-pick:focus-visible { outline: 2px solid #f2c46a; outline-offset: 2px; }
-.shop-layer .rk-btns { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.shop-layer .rk-btns { grid-column: 3; grid-row: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+@media (max-width: 359px) {
+  .shop-layer .rk-row { grid-template-columns: auto minmax(0, 1fr); }
+  .shop-layer .rk-btns { grid-column: 1 / -1; grid-row: auto; }
+}
 .shop-layer .rk-btn { flex-direction: column; gap: 0; min-height: 2.9em; padding: 4px 3px; line-height: 1.25; }
 .shop-layer .rk-btn b { font-size: 0.93em; }
 .shop-layer .rk-btn small { font-size: 0.75em; font-weight: 400; opacity: 0.9; }
