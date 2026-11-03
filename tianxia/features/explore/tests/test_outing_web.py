@@ -137,3 +137,23 @@ def test_the_trip_wears_the_look_on_the_arena():
     assert out["ver"] == "/api/looks/img/u12/hero_run?v=7f3a"  # 補畫好了網址就換（main.looks_ver）
     assert out["urls"] == ["/static/img/looks/moying/hero_run.webp", "/static/img/looks/moying/hero_bare_idle.webp",
                    "/api/looks/img/u12/hero_bare_kneel", "/api/looks/img/u12/hero_slash", ""]
+
+
+HURRY_DRIVER = r"""
+const code = fn("outingHurry");
+const one = (OW) => { let synced = 0; const hurry = new Function("OW", "outingSync", code + "\nreturn outingHurry;")(OW, () => { synced += 1; }); hurry(); return { turbo: OW.turbo, hold: OW.hold, synced }; };
+finish({
+  walking: one({ cur: { t: 0 }, tasks: [], turbo: false, hold: 0 }),
+  holding: one({ cur: null, tasks: [], turbo: false, hold: Date.now() + 2000, holdT: setTimeout(() => {}, 5000) }),
+  idle: one({ cur: null, tasks: [], turbo: false, hold: 0 }),
+});
+"""
+
+
+def test_a_tap_on_the_scene_hurries_to_the_next_stop():
+    """Joy 2026-11-03「探索的選項選完都要等 3～5 秒」：伺服器只花 0.1 秒，等的是「果」停的 2.2 秒與走路動畫。點畫面一下：
+    正在走就快轉（同略過），「果」停著就不等了、直接接著走；沒在演的時候點了什麼都不做。"""
+    out = webharness.run(HURRY_DRIVER, {})
+    assert out["walking"] == {"turbo": True, "hold": 0, "synced": 0}
+    assert out["holding"] == {"turbo": False, "hold": 0, "synced": 1}
+    assert out["idle"] == {"turbo": False, "hold": 0, "synced": 0}
