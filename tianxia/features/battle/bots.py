@@ -7,7 +7,7 @@ tests/season/test_real_content.py 直接叫；指到這裡同一個函式、同�
 """
 from __future__ import annotations
 
-from tianxia import battle_instance  # 過渡：待搬（戰鬥規則核心：招的份量、氣血狀態）
+from tianxia import battle_instance  # 共用規則層（戰鬥規則核心：招的份量、氣血狀態）
 from tianxia.core.option import Option
 
 JOIN_BATTLE_SCORE = 100.0

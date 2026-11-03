@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import battle_instance, roster  # 過渡：待搬（戰鬥規則核心、同伴）
+from tianxia import battle_instance, roster  # 共用規則層（戰鬥規則核心、同伴）
 from tianxia.models import Content
 
 if TYPE_CHECKING:
