@@ -96,6 +96,13 @@
 名聲（總表附錄甲：名聲服務是核心，`_log` 每一下都叫）
 - `ctx._deed_fame(kind)`（同上）、`ctx._renown_after(synced=False, fresh=None)`、`ctx._deliver_echoes()`（首創名望回饋）、`ctx._famed_news(place, foe, tier)`
 
+# sortie（全部拆包第 17 批「出陣三」：舊遊歷、操練、守勢、遊歷推大勢搬進出陣包要叫的；主人都是核心，總表附錄乙 final_owner.json）
+推大勢（玩家自己造成的大勢推動一律走這裡）
+- `ctx.push_trend(trend_id, delta, source=)`（人數緩衝、每人每日上限、貢獻、季長縮放與盡頭阻力）、`ctx._goals()`（自己那一邊各線的目標方向）、
+  `ctx.season_scale()`（季長倍數）、`ctx._carry(trend_id, amount)`（不足一點的零頭記進全服的 trend_accum，回滿了的整數）、
+  `ctx._push_room(trend_id)`（今天在這條線上還推得動多少；第一季規則關著是無限）
+- 共用的字：`BIG_FIGHT_WAIT`（大場面按下去、等模型判讀時按鈕上的字；事件的戰鬥選項、挑戰本人、遊歷與出陣都用，從這個模組 import）
+
 ## 二、查詢服務
 
 # battle（主動搬六包第 5 批；主人：決戰包。本體還在 Game——「打」那一半，第 6～8 批搬——決戰包「看」那一半經 ctx 叫；搬完由決戰包經
@@ -162,6 +169,12 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 - `ctx._fighting(battle, definition)`（決戰包蓋在畫面上的戰場要不要整個取代自己眼前的事：開打了在場上的人；主人：決戰「打」那一半，
   第 7、8 批搬進決戰包之後改成包裡直接叫）
 
+# sortie（全部拆包第 17 批「出陣三」）
+- `ctx._parley_backing_here()`（並肩出陣：今天答應陪你、你在他那一帶的那位人物；act:train 打的那一場包在外面；主人人物情誼〔總表第 19～20 批〕）
+- `ctx._train()`、`ctx._sortie()`、`ctx.train_trend_push(loc_id=None)`、`ctx._train_push(trend_id, delta)`（出陣包自己的委派：
+  tests/figures/test_parley_two.py 換掉實例上的 `_train`、`_sortie`，tests/core/test_explain.py 換掉 `Game.train_trend_push`，
+  scripts/sim_trend_sources.py 換掉 `Game._train_push`——包裡經 ctx 叫，換掉的才打得到；呼叫端改完就拿掉）
+
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 
 explore（主動搬六包第 3＋4 批加的這一段；都是 Game.__init__ 起的）
@@ -194,6 +207,8 @@ if TYPE_CHECKING:
 # 共用的字（原本寫在 engine.py；功能包要用、又不能 import engine，搬到這裡，engine 照舊叫得到）
 PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，畫面照常可看"
 NO_SUCH_PLAYER = "（江湖上沒有「{name}」這個人。）"  # 管理者查不到名號（玩家個人劇情、商城查帳；只有管理者看得到）
+# sortie（全部拆包第 17 批：原本寫在 engine.py；出陣包的遊歷鈕要用、又不能 import engine，搬到這裡，engine 照舊叫得到）
+BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
 
 
 def drill_share(amount: int, share: float) -> int:

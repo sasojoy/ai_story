@@ -93,6 +93,7 @@ from .wallet import Wallet
 from .core import features as features_core  # 核心照 FEATURES 問每一包（開發規範手冊 3.3）
 from .core.option import IDLE_MARK, Option  # 選單上的一顆（搬進核心：功能包要做選項）；閒著的選單一定有的那一顆（走一趟要認它）
 from .core.services import NO_SUCH_PLAYER, PAUSED_TEXT, WalletService, drill_share, wallet_on  # 共用的字與小函式、錢包服務（3.10）
+from .core.services import BIG_FIGHT_WAIT  # sortie（全部拆包第 17 批）：大場面按鈕上的字搬進核心的共用的字（出陣包的遊歷鈕也用）
 # explore
 from .features.explore import explore_actions  # 過渡：Game 上探索一顆的 9 個一行委派（主動搬六包第 3＋4 批）
 from .features.explore import outing_actions  # 過渡：Game 上走一趟的 9 個一行委派（主動搬六包第 3＋4 批）
@@ -222,7 +223,6 @@ def say_text(text: str | None, limit: int = SAY_MAX) -> str | None:
 # 騎著馬時改用 TRAIN_CONFIRM_RIDING（裝備四欄 5.11），TRAIN_CONFIRM 本身不動（三個測試檔拿它比全等）
 TRAIN_CONFIRM = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩。還是要打？"
 TRAIN_CONFIRM_RIDING = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩（騎著馬，{odds}能保住）。還是要打？"  # 待 joy 潤
-BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
 # 歷史武將同行第五節（待 joy 潤）：加入決戰時挑一位隨你上陣（決戰畫面上自己的那一位：features/battle/rules.py 的 ESCORT_MUSTER 那三句）
 ESCORT_PICK = "挑一位隨你出陣的同伴，或不派、自己上陣（開打之後不能換）。"
 ESCORT_OPTION = "派{name}隨你出陣（份量 {score}・氣血 {pool}）"
@@ -2548,6 +2548,10 @@ class Game:
         隨口應對（choice:free）不是數字，不是仗。"""
         s, c = self.state, self.content
         kind, _, arg = option_id.partition(":")
+        # act 子動詞的主人說這一下打哪一路（Verb.squad，全部拆包第 17 批多開的一格）；不打仗、沒有主人照舊往下
+        owned = features_core.act_squad(self, arg) if kind == "act" else None
+        if owned is not None:
+            return owned
         if option_id == "act:train" and self.duel_on():
             return None  # 約戰開著：出陣那一格是貼約戰（或截糧，不判大場面）
         if option_id == "act:train":
