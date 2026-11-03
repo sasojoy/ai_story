@@ -4326,11 +4326,13 @@ class EventScenario(ExploreScenario):
         server_bots.is_online = lambda profile, now: profile.seed in seeds or online(profile, now)  # 擺好的四個一直在線
         totals = Counter()
         try:
-            for _ in range(int(os.environ.get("SB_EVENT_TICKS", "40"))):
+            for n in range(int(os.environ.get("SB_EVENT_TICKS", "40"))):
                 STEP[0] += 4
                 self.begin()
                 report = runner.tick()
                 totals.update(acted=report.acted, added=report.added, skipped=report.skipped, failed=report.failed, online=report.online)
+                if n == 0:  # 第一輪之後就寫：四十輪跑完，第一輪那一則早被擠出江湖紀錄（只留 30 則），卡直接寫進存檔、不在看過的事件裡
+                    emit("事件假人 第一輪答了眼前的卡", self.answered(names, cards))
         finally:
             self.c.config.bot_tick_seconds, server_bots.is_online = tick, online
         states = self.chars.all(bots_only=True)
@@ -4338,6 +4340,17 @@ class EventScenario(ExploreScenario):
         emit("事件假人 紀錄標題", dict(sorted(Counter(e.title for s in states for e in s.journal).items())))
         emit("事件假人 看過的事件", {s.player.name: sorted(s.player.seen_events) for s in states})
         emit("事件假人 存檔", {s.player.name: hashlib.sha256(s.model_dump_json().encode("utf-8")).hexdigest() for s in states})
+
+    def answered(self, names: list[str], cards: list[str | None]) -> dict:
+        """擺好的那幾個假人眼前那一張卡答了沒（dev/core-events-1 審查：輸出本身看不出四個假人答了卡）：卡還在不在眼前、
+        江湖紀錄裡那一則事件的標題（「狼頭鐵牌・扶他起身，順手摸走鐵牌」：事件名・選了哪一顆）。只讀存檔。"""
+        out = {}
+        for name, card in zip(names, cards):
+            s = self.chars.load(name)
+            title = self.c.events[card].title if card in self.c.events else str(card)
+            out[name] = {"卡": card, "還在眼前": s.pending_event == card,
+                         "紀錄": [e.title for e in s.journal if e.title == title or e.title.startswith(title + "・")]}
+        return out
 
     def season(self) -> None:
         """收季、開下一季：眼前擺著一張事件卡的人（休季時選單只剩休季那一顆、隨口應對被擋；開下一季之後那一張照換季的規矩）。"""
