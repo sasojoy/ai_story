@@ -1875,13 +1875,55 @@
     const lib = x.holdings ? `<button class="linkish" data-act="self-sec" data-sec="lib">功法庫 ${x.holdings.count | 0}/${x.holdings.cap | 0}・意境 ${(x.insights || []).length} ›</button>` : "";
     const head = `<div class="self-hd"><h3>武學</h3>${lib}</div>`;
     if (!worn.length) return `<section class="self-sec" aria-label="武學">${head}<p class="muted">你身上還沒有武學。</p></section>`;
+    const hm = S.main && S.main.hero_move;
     return `<section class="self-sec" aria-label="武學">${head}<div class="self-arts">${worn.map((a) => {
       const lv = Math.max(0, Math.min(10, a.level | 0)), top = a.quality === "絕學";
       const note = top ? (a.cultivate && (a.cultivate.legend ? a.cultivate.legend.note : a.cultivate.note)) || "" : "";
-      return `<button class="self-art${top ? " q4" : ""}" data-act="hero-node" data-kind="art" data-key="${esc(a.kind)}">${top ? '<span class="qseal q4 big">絕</span>' : ""}`
+      const card = `<button class="self-art${top ? " q4" : ""}" data-act="hero-node" data-kind="art" data-key="${esc(a.kind)}">${top ? '<span class="qseal q4 big">絕</span>' : ""}`
         + `<span class="sa-body"><span class="sa-hd"><b>${esc(a.name)}</b><small>${top ? "絕學" : esc(a.kind)}・第${CN_TENTHS[lv]}成</small></span>`
         + `${note ? `<small class="sa-note">${esc(note)}</small>` : ""}<i class="sa-ten" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${lv}" aria-label="${esc(a.name)}第${lv}成">${Array.from({ length: 10 }, (_, k) => `<i${k < lv ? ' class="on"' : ""}></i>`).join("")}</i></span></button>`;
+      // 絕招掛在「武學」那一門底下（跟著手上的打法走；內功不掛）
+      return a.kind === "武學" && hm ? `<div class="self-art-wrap${top ? " q4" : ""}">${card}${heroMoveHtml(hm, a)}</div>` : card;
     }).join("")}</div></section>`;
+  }
+  // 俠客頁武學卡底下的絕招（Joy 2026-11-03「俠客頁面的武學那邊，是不是應該跟絕招動畫做聯動」，示意稿 CZbfm371…；main.hero_move）：
+  // 穿著、打法對得上：「演一次」在卡上直接演（arena_scene.js 的 scenePreview，同萬寶閣那一塊畫布），旁邊「換一招」去萬寶閣絕招那一頁；
+  // 穿著、打法不對：寫一句擂台上不會演、連過去換；沒穿：招式庫有招的叫你去換上，沒有的叫你去寫一招
+  function heroMoveHtml(hm, a) {
+    const w = hm.worn, go = (text) => `<button class="linkish hm-go" data-act="hero-move-go" data-style="${esc(hm.style || "")}">${esc(text)} ›</button>`;
+    if (!w) {
+      const say = hm.count ? `招式庫有 ${hm.count | 0} 招，身上沒穿` : "寫一句長什麼樣子，擂台與決戰放手一搏就照它演";
+      const link = hm.count ? "去換上" : hm.has_art ? `替「${hm.art || a.name}」寫一招` : "去萬寶閣看看";
+      return `<div class="hm-strip empty"><span class="hm-seal" aria-hidden="true">絕</span><span class="hm-main"><b>還沒有絕招</b><small>${esc(say)}</small></span></div>
+        <div class="hm-foot">${go(link)}</div>`;
+    }
+    const on = S.heroMoveShow === w.id;
+    const play = w.show ? `<button class="btn small ${on ? "primary" : "ghost"} hm-play" data-act="hero-move-show" data-id="${esc(w.id)}">${on ? "收起 ■" : "演一次 ▶"}</button>` : "";
+    const sub = w.plays ? `${esc(w.style_text)}・擂台與決戰放手一搏都演這一招` : `${esc(w.style_text)}・你現在的打法是${esc(hm.style_text)}，擂台上不會演`;
+    return `<div class="hm-strip"><span class="hm-seal on" aria-hidden="true">絕</span><span class="hm-main"><b>絕招「${esc(w.name)}」</b><small>${sub}</small></span>${play}</div>
+      ${on ? `<div class="hm-stage"><canvas id="scene-preview" class="scene-preview" width="720" height="320" aria-label="絕招「${esc(w.name)}」演一次"></canvas></div>` : ""}
+      ${w.asleep_text ? `<p class="hm-warn">${esc(w.asleep_text)}</p>` : ""}
+      <div class="hm-foot">${go(w.plays ? "換一招" : `換一招${hm.style_text}的`)}</div>`;
+  }
+  async function heroMoveShow(mid) {
+    if (!mid || S.heroMoveShow === mid) { S.heroMoveShow = null; render(); return; }
+    const r = await api(`/api/looks/scene/${mid}`).catch(() => null);
+    if (!r || !r.scene) { toast("這一招演不出來，等一下再試。"); return; }
+    S.heroMoveShow = mid;
+    render();
+    // 台上站的是自己：穿的那一套、拿那一招的打法的兵器（擂台開打時 arena_anim 會照那一場重設）
+    const hm = S.main && S.main.hero_move, look = (S.main && S.main.look) || "";
+    const kind = { slash: "劍", pole: "槍", fist: "拳腳", shoot: "弓弩" }[hm && hm.worn ? hm.worn.style : ""] || "";
+    if (typeof RA !== "undefined") RA.looks = { ...RA.looks, me: kind, me_look: look };
+    if (typeof ringLoad === "function") ringLoad();
+    if (look && typeof ringWarmLook === "function") ringWarmLook(look);
+    if (typeof scenePreview === "function") scenePreview(r.scene, mid);
+  }
+  // 「換一招」：萬寶閣絕招那一頁、招式庫開那一種打法的分頁（mall.js 的 openMallMoves）。
+  // 萬寶閣也用 #scene-preview 那一塊畫布：先把俠客頁這一塊收起來
+  async function heroMoveGo(style) {
+    S.heroMoveShow = null;
+    await openMallMoves(style);
   }
   // 「屬性」那一段（以前在狀態列與點名號攤開的那一塊，整合設計 6.2）：五項一格一欄（名字、數字），有點可配時每格底下一顆「＋」、
   // 小標題右邊寫「可配 N 點」、格子底下一行五項各管什麼（statUsesHtml）；再一行名望、善名、惡名；心得一行在最底下（序章照舊點名號配）
@@ -5734,6 +5776,8 @@
         case "fronts-help": frontsTap(); break; // 點戰況圖卡：底下攤開／收起這一季在打什麼、亂局、怎麼推（explain-2）
         case "checkin": await doMain("checkin", el.dataset.attr ? { attribute: el.dataset.attr } : {}); break; // 「簽到」小標攤開的領取鈕（四階的日子帶屬性）
         case "pill": await doMain("pill"); break; // 體力條上的「丹 N」：服一顆回體丹（測試期間一鍵補滿打開時同一顆鈕寫「補滿」，同一條路由）
+        case "hero-move-show": await heroMoveShow(el.dataset.id || ""); break; // 俠客頁武學卡底下的絕招演一次
+        case "hero-move-go": await heroMoveGo(el.dataset.style || ""); break; // 換一招：萬寶閣絕招那一頁
         case "hero-node": heroTap(el); break; // 修練頁人物面板的光點：開那一樣的抽屜
         case "self-sec": { // 俠客頁「功法庫・意境 ›」那一顆：攤開底下那個摺疊、捲到它
           (S.selfOpen || (S.selfOpen = {}))[el.dataset.sec] = true;

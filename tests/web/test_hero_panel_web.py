@@ -112,3 +112,28 @@ def test_the_bottom_news_tab_brings_back_the_news_tabs_after_the_hero_record(vie
     assert "‹ 俠客" in hero and "news-seg" not in hero
     assert "news-seg" in back and "‹ 俠客" not in back
     assert 'class="on" data-act="news" data-news="boards"' in back
+
+
+def test_the_worn_move_hangs_under_the_martial_art_card(views):
+    """俠客頁武學聯動絕招（Joy 2026-11-03，main.hero_move）：絕招那一條只掛在「武學」那一張底下；演一次、換一招、打法不對、沒穿。"""
+    m, x = views
+    x["owned_arts"] = [{"id": "a1", "name": "驚濤掌", "kind": "武學", "worn": True, "level": 4, "quality": "下品", "card": ""},
+                       {"id": "a2", "name": "太虛吐納", "kind": "內功", "worn": True, "level": 6, "quality": "下品", "card": ""}]
+    worn = {"id": "m7", "name": "怒濤擎天", "style": "fist", "style_text": "拳腳", "plays": True, "show": True, "asleep_text": ""}
+    m["hero_move"] = {"count": 1, "style": "fist", "style_text": "拳腳", "art": "驚濤掌", "has_art": True, "worn": worn}
+    page = run(m, "return H.pagePractice();", menxia=x)
+    wrap = page.split('class="self-art-wrap')[1]
+    assert page.count('class="self-art-wrap') == 1 and 'data-key="武學"' in wrap.split("hm-strip")[0]
+    assert "絕招「怒濤擎天」" in wrap and 'data-act="hero-move-show" data-id="m7"' in wrap and 'data-act="hero-move-go"' in wrap
+    assert "scene-preview" not in page  # 還沒按演一次：不放畫布
+    shown = run(m, "return H.pagePractice();", menxia=x, S={"heroMoveShow": "m7"})
+    assert 'id="scene-preview"' in shown and "收起" in shown
+    m["hero_move"]["style"], m["hero_move"]["style_text"] = "slash", "揮砍"
+    m["hero_move"]["worn"] = dict(worn, plays=False, asleep_text="這一招是拳腳的，你現在的打法是揮砍——擂台上不會演，換回拳腳才演得出來。")
+    asleep = run(m, "return H.pagePractice();", menxia=x)
+    assert "擂台上不會演" in asleep and "換一招揮砍的" in asleep
+    m["hero_move"] = {"count": 0, "style": "fist", "style_text": "拳腳", "art": "驚濤掌", "has_art": True}
+    none = run(m, "return H.pagePractice();", menxia=x)
+    assert "還沒有絕招" in none and "替「驚濤掌」寫一招" in none and 'data-act="hero-move-show"' not in none
+    del m["hero_move"]
+    assert "self-art-wrap" not in run(m, "return H.pagePractice();", menxia=x)  # 沒開賣：照舊

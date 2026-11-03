@@ -251,3 +251,29 @@ def test_you_can_keep_creating_and_only_one_plays_at_a_time(on):
     assert "換上" in actions.wear_move(game, newer)[-1]
     assert game.arena_move() != playing  # 換上去了
     assert sum(1 for r in actions.view(game)["moves"]["library"] if r["plays"]) == 1  # 還是只有一招上場
+
+
+def test_the_hero_page_shows_the_worn_move_under_the_martial_art(on, monkeypatch):
+    """俠客頁武學卡底下那一條（main.hero_move；Joy 2026-11-03 俠客頁武學聯動絕招動畫）：沒穿、穿著演得出、打法不對三種。"""
+    game = _game(on)
+    hm = game.feature_status()["hero_move"]
+    assert hm["count"] == 0 and "worn" not in hm and not hm["has_art"]
+    art = _art(game)
+    pid = _made(on, game)
+    worn = game.feature_status()["hero_move"]["worn"]
+    assert worn["id"] == moves.move_id(pid) and worn["plays"] and worn["show"] and worn["name"] and not worn["asleep_text"]
+    assert game.feature_status()["hero_move"]["art"] == art.name
+    monkeypatch.setattr(actions, "current_style", lambda ctx: "slash")  # 手上換成劍：擂台上不會演
+    worn = game.feature_status()["hero_move"]["worn"]
+    assert not worn["plays"] and "揮砍" in worn["asleep_text"]
+    monkeypatch.undo()
+    wallet = game._wallet()
+    moves.wear(wallet, game._mall_owner(), 0)  # 脫下來：招式庫還有一招
+    hm = game.feature_status()["hero_move"]
+    assert "worn" not in hm and hm["count"] == 1
+
+
+def test_the_hero_page_has_no_move_strip_when_moves_are_not_sold(on):
+    on.mall.pop("move_order")
+    on.mall.pop("move_basic")
+    assert "hero_move" not in _game(on).feature_status()
