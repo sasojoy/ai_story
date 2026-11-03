@@ -413,8 +413,8 @@ def admin_upload(ctx: Game, pid: int, sheet: str, data: bytes) -> list[str]:
     now = orders.mark(wallet, found, root)
     have = len(orders.present(root, orders.look_id(pid)))
     tail = "。"
-    if now.status == orders.REVIEW:  # 擂台那十張齊了就能審（FB-8001）；走一趟還缺的之後補
-        tail = "，全套齊了，可以審核。" if have == len(orders.SHEETS) else "，擂台那十張齊了，可以審核（走一趟那幾張之後補）。"
+    if now.status == orders.REVIEW and have == len(orders.SHEETS):  # 十六張齊了才待審（企劃者 2026-11-04）
+        tail = "，全套齊了，可以審核。"
     return ctx._log([f"收到「{found.name}」的 {sheet}（{have}/{len(orders.SHEETS)}）{tail}"])
 
 

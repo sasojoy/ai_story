@@ -106,7 +106,7 @@ def test_bad_uploads_are_refused(on):
     assert "要 880×220" in actions.admin_upload(admin, pid, "hero_bare_idle", (ART / "hero_bare_hit.webp").read_bytes())[-1]
     assert "PNG 或 WebP" in actions.admin_upload(admin, pid, "hero_bare_idle", b"GIF89a....")[-1]
     assert "沒有「cape」" in actions.admin_upload(admin, pid, "cape", b"")[-1]
-    assert f"還缺 {len(orders.ARENA)} 張" in actions.admin_release(admin, pid)[-1]
+    assert f"還缺 {len(orders.SHEETS)} 張" in actions.admin_release(admin, pid)[-1]
     assert actions.admin_upload(game, pid, "hero_bare_idle", b"")[-1] == "（此刻無法這麼做。）"  # 不是管理者
 
 
@@ -267,13 +267,18 @@ def test_a_white_hole_in_the_body_is_dropped_but_a_white_robe_is_not():
         assert share > cutting.WHITE_SHARE, f"白衣書生量到 {share:.1f}%，應該高過門檻 {cutting.WHITE_SHARE}%"
 
 
-def test_the_arena_ten_are_enough_to_release_and_the_outing_six_come_later(on):
-    """FB-8001：擂台那十張齊了就待審、能上架；走一趟那六張缺著不擋（網頁照預設的斗笠小子畫，畫坊之後補）。"""
+def test_a_look_is_complete_only_with_all_sixteen_sheets(on):
+    """企劃者 2026-11-04「改成十六張全齊才算」（推翻 FB-8001）：擂台十張齊了還在等圖、不能上架；走一趟六張也齊了才待審。"""
     game = _game(on)
     actions.order(game, "白衣書生", "白衣書生，背著竹簍", "order-ref-801")
     pid = actions.view(game)["order"]["list"][0]["id"]
     admin = _admin(on, game.world)
     for sheet in orders.ARENA:
         last = actions.admin_upload(admin, pid, sheet, (ART / f"{sheet}.webp").read_bytes())[-1]
-    assert "擂台那十張齊了" in last
+    assert "（10/16）。" in last and "齊了" not in last
+    assert actions.view(game)["order"]["list"][0]["status"] == orders.PENDING
+    assert f"還缺 {len(orders.OUTING)} 張" in actions.admin_release(admin, pid)[-1]
+    for sheet in orders.OUTING:
+        last = actions.admin_upload(admin, pid, sheet, (ART / f"{sheet}.webp").read_bytes())[-1]
+    assert "全套齊了" in last
     assert "上架了" in actions.admin_release(admin, pid)[-1]

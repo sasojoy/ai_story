@@ -339,7 +339,9 @@ def apply(content: Content, wallet: Wallet, root: Path, job: Job, result: Result
     wallet.update_data(job.pid, studio=studio)
     now = moves.mark(wallet, moves.of(wallet.purchase(job.pid)), root) if job.kind == "move" else \
         orders.mark(wallet, orders.of(wallet.purchase(job.pid)), root)
-    return f"#{job.pid} {job.label} 收了" + ("，到齊了等管理者上架" if now.status == orders.REVIEW else "")
+    # 「到齊了」只在真的齊了才說：以前就待審、正在補走一趟的那幾張，每收一張都還是待審（企劃者 2026-11-04 十六張全齊才算）
+    done = now.status == orders.REVIEW and (job.kind == "move" or len(orders.present(root, job.folder)) == len(orders.SHEETS))
+    return f"#{job.pid} {job.label} 收了" + ("，到齊了等管理者上架" if done else "")
 
 
 def _png(raw: bytes) -> bytes:
