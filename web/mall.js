@@ -92,7 +92,7 @@
     return "tie";
   }
   // 每一件的圖：畫好的放 web/img/mall/<id>.webp、id 列進 MALL_PICS；還沒畫的用一張線稿（照 id，沒有就照分類）
-  const MALL_PICS = new Set([]);
+  const MALL_PICS = new Set(["card_30", "pills_5", "pills_30", "legend_1", "rename", "reroll_1", "inscribe_ink", "holding_15", "rewrite_zhuan", "zhuan_art", "zhuan_seal", "zhuan_quote"]); // Joy 2026-11-03 畫的
   const MALL_ART = {
     card_30: '<rect x="14" y="8" width="52" height="64" rx="6" fill="#b8352a" stroke="#f0cf7a" stroke-width="3"/><rect x="20" y="14" width="40" height="52" rx="3" fill="none" stroke="#f0cf7a" stroke-width="1.2" stroke-dasharray="3 2"/><circle cx="40" cy="36" r="13" fill="#f6d77f"/><circle cx="46" cy="32" r="11" fill="#b8352a"/><path d="M26 58h28" stroke="#f0cf7a" stroke-width="2"/>',
     pills_5: '<path d="M40 10c-6 0-9 4-9 8 0 3 2 5 2 7-8 3-14 11-14 21 0 13 10 22 21 22s21-9 21-22c0-10-6-18-14-21 0-2 2-4 2-7 0-4-3-8-9-8z" fill="#c79a4a" stroke="#f0cf7a" stroke-width="2"/><rect x="34" y="6" width="12" height="6" rx="2" fill="#b8352a"/><circle cx="16" cy="66" r="6" fill="#e04b33" stroke="#f6d77f" stroke-width="1.5"/><circle cx="64" cy="66" r="6" fill="#e04b33" stroke="#f6d77f" stroke-width="1.5"/><circle cx="58" cy="72" r="5" fill="#e04b33" stroke="#f6d77f" stroke-width="1.5"/>',
@@ -109,7 +109,7 @@
   };
   const MALL_ART_CAT = { card: "card_30", dan: "pills_5", tie: "rename", zhuan: "rewrite_zhuan" };
   function mallPicHtml(it) {
-    if (MALL_PICS.has(it.id)) return `<span class="mall-pic"><img src="/static/img/mall/${esc(it.id)}.webp" alt="" loading="lazy"></span>`;
+    if (MALL_PICS.has(it.id)) return `<span class="mall-pic has-img"><img src="/static/img/mall/${esc(it.id)}.webp" alt="" loading="lazy"></span>`;
     const art = MALL_ART[it.id] || MALL_ART[MALL_ART_CAT[mallCat(it)]];
     return `<span class="mall-pic"><svg viewBox="0 0 80 80" aria-hidden="true">${art}</svg></span>`;
   }

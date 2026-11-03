@@ -71,6 +71,8 @@
   background: radial-gradient(circle at 50% 55%, rgba(240, 190, 90, 0.3), rgba(120, 40, 20, 0) 62%), linear-gradient(180deg, #4a2a1c, #2b1811); }
 .shop-layer.shop-mall .mall-pic svg { width: 78px; height: 78px; }
 .shop-layer.shop-mall .mall-pic img { width: 100%; height: 100%; object-fit: cover; }
+.shop-layer.shop-mall .mall-pic.has-img { height: auto; aspect-ratio: 4 / 3; overflow: hidden; } /* 畫好的方圖：格子改 4:3、上下裁一點 */
+.shop-layer.shop-mall .mall-card .mall-pic.has-img { height: 84px; aspect-ratio: auto; }
 .shop-layer.shop-mall .mall-item .mi { display: flex; flex-direction: column; gap: 3px; flex: 1; padding: 9px 10px 0; }
 .shop-layer.shop-mall .mall-item b { font: 900 16px var(--serif); color: #fbefd6; }
 .shop-layer.shop-mall .mall-item .gain { color: #e5c98e; }
@@ -271,6 +273,7 @@
   .shop-layer.shop-mall .mall-pic { height: 140px; }
   .shop-layer.shop-mall .mall-pic svg { width: 100px; height: 100px; }
   .shop-layer.shop-mall .mall-card .mall-pic { width: 110px; height: 110px; }
+  .shop-layer.shop-mall .mall-card .mall-pic.has-img { height: 110px; }
   .shop-layer.shop-mall .look-stage { height: 300px; }
   .shop-layer.shop-mall .look-stage > .look-face { width: 240px; height: 240px; margin-left: -120px; }
   .shop-layer.shop-mall .look-tile .look-pad { height: 110px; }
