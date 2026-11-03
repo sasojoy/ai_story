@@ -104,6 +104,15 @@
 - `ctx._present(event, action)`：把一則事件端到眼前（action 是抽中它的行動：記進防重複的輪替、人物心意；記看過、寫那一則的結果標記與
   場景那一句、片段事件的伏筆）。探索包抽到事件時叫。三、過渡 explore 那一段原本也列了它（主人寫「事件」）：主人現在是核心本體，
   第 16 批合進 develop 時去重、只留這一行
+# guide（全部拆包第 22 批「引導一」；計畫 docs/superpowers/plans/2026-11-01-新手引導包-第1批.md 1.3、1.4）
+新手引導（主人：新手引導包，Game 上一行的委派；很多包在叫，派工單定列在共用段）
+- `ctx._check_hints()`：做完一件事看一遍碰到才說（新手目標發獎勵、該說的排一條、輪到的上框；記在這一則紀錄的引導那幾行）
+- `ctx._hint(hint_id)`：碰到某個玩法、排一條提示（事件型的：被名將打發、玉璽碎片的秘密揭開、第一次交友或談話、操練練完）
+- `ctx._note_action(action)`：做完一個行動，引導（說書人的步驟、入伍段）看這一步完成了沒，回那幾行（交給 `ctx._guide`）——出陣包的
+  「出一次力」叫它（原本 import `tianxia.guide.note_action`：包 import 包）；本體叫 engine 模組層的 `note_action`（測試換的是那個名字）
+- 核心的：`ctx._preparing()`（籌備中）、`ctx._journal_guide(notes)`（引導的話記進這一則江湖紀錄的引導那幾行）、`ctx._free_text_of(event)`
+  （這一則事件有沒有隨口應對：事件檢定的委派）
+- 共用的字：`HutReward`（序章步驟的獎勵那一行的記號，核心的 `_guide` 認它；原本在 `tianxia/guide.py`，搬到這個模組，引導包 re-export）
 
 ## 二、查詢服務
 
@@ -131,6 +140,12 @@ explore（主動搬六包第 3＋4 批加的這一段）
 # looks（主人：形象包）
 - `ctx._battle_ult()`：放手一搏送出那一刻身上的絕招（move、name、look、weapon；沒穿、沒有導演稿是 None）。決戰包送出放手一搏時記進
   `BattleRound.ults`，回合首功從這裡挑（Joy 2026-11-03；純展示，不動數字）
+
+# guide（全部拆包第 22 批：新手引導包問別的包）
+- `ctx._at_battle(definition)`（主人決戰：人到了決戰的大區沒；碰到才說的 h_spectator）
+- `ctx._tavern_on()`、`ctx._tavern_here()`、`ctx._tavern_at(loc_id)`（主人酒肆：酒肆開著沒、人此刻在酒肆、這個地點有沒有酒肆；碰到才說的
+  h_tavern、新手目標「去酒肆」指哪幾處。Game 上一行的委派叫 `tavern_rules.on`／`here`／`tavern_at`——原本 `_hint_triggers`、`_newbie_go`
+  直接讀酒肆的那兩筆 `GAME_DIRECT` 換成它們）
 
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
@@ -180,6 +195,13 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 - `ctx._fighting(battle, definition)`（決戰包蓋在畫面上的戰場要不要整個取代自己眼前的事：開打了在場上的人；主人：決戰「打」那一半，
   第 7、8 批搬進決戰包之後改成包裡直接叫）
 
+# guide（全部拆包第 22 批：新手引導包叫的、主人還沒搬的）
+- `ctx._recruit_target()`、`ctx._recruitable_here()`（主人同伴 features/companions：碰到才說的 h_recruit）
+- 假人走序章（`_graduate`）照每一步的完成條件做的那幾下：`ctx.slot_insight(art, insight)`、`ctx.switch_art(art)`、`ctx.practice(kind)`、
+  `ctx.allocate_stat(stat)`、`ctx.melt_art(art)`（主人武學 features/arts）、`ctx.forge(main, aux)`（主人煉製 features/craft）
+- `ctx._hint_triggers(only)`（這一包自己的委派：tests/arts/test_hints.py 換掉 game._hint_triggers，包裡經 ctx 叫，換掉的才打得到；
+  呼叫端改完就拿掉）
+
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 
 explore（主動搬六包第 3＋4 批加的這一段；都是 Game.__init__ 起的）
@@ -216,6 +238,12 @@ if TYPE_CHECKING:
 # 共用的字（原本寫在 engine.py；功能包要用、又不能 import engine，搬到這裡，engine 照舊叫得到）
 PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，畫面照常可看"
 NO_SUCH_PLAYER = "（江湖上沒有「{name}」這個人。）"  # 管理者查不到名號（玩家個人劇情、商城查帳；只有管理者看得到）
+
+
+# guide（全部拆包第 22 批）：原本寫在 tianxia/guide.py；核心的 Game._guide、_menxia_entry 照它把序章步驟的獎勵（這一下的結果）跟對話框
+# 那幾行分開，新手引導包產生它——核心不能 import 包，型別搬到這裡，引導包（tianxia.guide.HutReward 照舊是同一個類別）re-export
+class HutReward(str):
+    """序章步驟的獎勵那一行（出師的盤纏）：不進對話框，當這次行動的結果寫進「剛剛」（Game._guide 認這個型別，T7 審查 M4）。"""
 
 
 def drill_share(amount: int, share: float) -> int:

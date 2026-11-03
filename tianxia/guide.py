@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from . import calendar, enlist, explore_modes, library, prologue, ranks
+# 序章步驟的獎勵那一行的記號（HutReward）：核心的 Game._guide 認它，型別在核心（全部拆包第 22 批），這裡照舊叫得到
+from .core.services import HutReward  # noqa: F401
 from .martial_arts import QUALITIES
 from .models import Content, Ending, TutorialGoal, TutorialStep
 from .rules import apply_effect, check_condition, pending_event_title, season_one, season_one_off
@@ -80,9 +82,6 @@ def goal_met(state: GameState, content: Content, world: WorldStateStore, goal: T
         return False
     return check_condition(goal.condition, state, content)
 
-
-class HutReward(str):
-    """序章步驟的獎勵那一行（出師的盤纏）：不進對話框，當這次行動的結果寫進「剛剛」（Game._guide 認這個型別，T7 審查 M4）。"""
 
 
 def note_action(state: GameState, content: Content, world: WorldStateStore, action: str) -> list[str]:
