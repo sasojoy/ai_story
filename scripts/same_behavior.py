@@ -4782,7 +4782,8 @@ _events_register_track("events", EventScenario, (("tianxia/core/event_check.py",
 # ═══════════════════════════ bout：單挑兩軌（全部拆包第 12 批，dev/bout-1） ═══════════════════════════
 # 單人頭目戰、擂台（含看台的場邊事件）搬進 tianxia/features/bout/（計畫 docs/superpowers/plans/2026-11-03-單挑包-第1批.md）。這一段整塊是這一批的：
 # 接在檔尾、最後兩行登記（_bout_register_track），PM 合的時候不跟別人的行穿插。同一套段落登記兩軌：bout 切在擂台報名之後、被挑之前
-# （WorldState.arena 有人守擂、還沒人來挑；同一刻江小魚的頭目戰打到第二回合），boss 切在頭目戰打到一半（第一回合出過招、DuelState 寫進存檔）。
+# （WorldState.arena 有人守擂、還沒人來挑；同一刻江小魚的頭目戰第一回合出過招、DuelState 寫進存檔），ring 切在擂台寫到一半（擂台打到一半、
+# 場邊那一句等著重寫、守擂的那一筆沒補、坐在擂台邊、記下的俸沒領；審查修正，取代原本切在頭目戰打到一半、跟 bout 重複的 boss 那一軌）。
 # 打法照 ExploreScenario 的小工具：抽到哪一類（探索一顆）、頭目的機率（Config.duel.explore_chance 換成 1）在要的那幾步換掉；勝負靠把
 # 這一場的氣勢擺在門檻上（直接改資料庫）再出招，打的照真的算。模型：放手一搏的成功率與兩版劇情、台下觀眾的反應、場邊那一句的重寫
 # 換成假的（MODEL["bout"] 開著時），其餘照舊不連網路。
@@ -4817,7 +4818,7 @@ def _bout_client(base: type) -> type:
 
 
 class BoutScenario(ExploreScenario):
-    """單挑（全部拆包第 12 批；--track bout、--track boss，各自一個資料庫）。照調查 area_combat.json 的 features/bout 那一段與派工：
+    """單挑（全部拆包第 12 批；--track bout、--track ring，各自一個資料庫）。照調查 area_combat.json 的 features/bout 那一段與派工：
     頭目戰——撞上頭目（不帶設定的舊探索、weekend 的三選一練功與找素材、week7／season21 的探索一顆）、場景與輸入框、出招、放手一搏
     （/api/do/duel_text 鎖外三段式，假模型）、打贏（戰報、掉落、名望、破境丹的擲骰）、打輸、抽身、冷卻中與次數用完（三選一的練功鈕與
     行動列那一行）、穿防具開打（快照的減損、打完照磨）；擂台——打開（名次那一句）、報名、更新分身、挑一場、灰掉的挑擂鈕回原因、出招、
@@ -4834,7 +4835,7 @@ class BoutScenario(ExploreScenario):
              "憐星": "yingchuan"}
     BOT_SEATS = [("錦衣客", "changshe"), ("黑衣客", "yingchuan"), ("白衣客", "yingchuan"), ("灰衣客", "runan")]
     ALL = ["setup", "seat", "meet", "arena_join", "resume", "duel_more", "duel_lose", "duel_flee", "duel_old", "boss_gate", "arena_fight",
-           "arena_refuse", "arena_yield", "defend", "wages", "titles", "depart", "closed", "bots", "season"]
+           "arena_more", "arena_refuse", "arena_yield", "defend", "wages", "titles", "depart", "closed", "bots", "season"]
     PHASES_FIRST = ALL[:ALL.index("arena_join") + 1]  # bout：切在擂台報名之後、被挑之前
     PHASES_SECOND = ALL[ALL.index("arena_join") + 1:]
 
@@ -5001,7 +5002,7 @@ class BoutScenario(ExploreScenario):
                                          "note": (view.get("action_notes") or {}).get("act:explore")})
 
     def meet(self) -> None:
-        """江小魚在長社撞上頭目（穿著甲：減損快照進這一場）：場景卡、三招與抽身、輸入框；出一招（第一回合）。boss 那一軌切在這裡。"""
+        """江小魚在長社撞上頭目（穿著甲：減損快照進這一場）：場景卡、三招與抽身、輸入框；出一招（第一回合）：頭目戰打到一半，bout 那一軌的切點（arena_join 之後）跨過它。"""
         if not self.encounter("江小魚"):
             return
         view = self.main("江小魚")
@@ -5095,8 +5096,8 @@ class BoutScenario(ExploreScenario):
             self.encounter(who)
 
     def arena_fight(self) -> None:
-        """江小魚報名（排第四）、挑燕南天（第三）：看台的場邊事件機率換成 1；放手一搏（假模型 70、台下叫好）、氣勢擺在 89 出招到收場
-        （大勝：交換名次、留一筆給燕南天、收場卡）；伺服器在鎖外重寫場邊那一句（server.crowd_once）。"""
+        """江小魚報名（排第四）、挑燕南天（第三）：看台的場邊事件機率換成 1；放手一搏（假模型 70、台下「離譜」）——打到一半
+        （ArenaFight 第一回合寫進存檔、場邊那一句等著鎖外重寫）。ring 那一軌切在這裡（審查修正：拆成兩段，arena_more 接著打）。"""
         self.place("江小魚", None)
         self.choose("江小魚", "act:arena")
         self.choose("江小魚", "arena:join")
@@ -5105,6 +5106,12 @@ class BoutScenario(ExploreScenario):
         with self.tweak(self.c.config.arena.crowd, chance=1.0, outrage_chance=1.0):
             self.choose("江小魚", self.fight_id("燕南天"))
             self.gamble("江小魚", crowd="離譜")  # 台下看不下去：場邊事件擲中「離譜」那一種
+        self.me("江小魚", "放手一搏之後（擂台打到一半）")
+
+    def arena_more(self) -> None:
+        """江小魚接著打燕南天（ring 那一軌是新程式接手舊程式打到一半的那一場）：氣勢擺在 89 出招到收場（大勝：交換名次、留一筆給燕南天、
+        收場卡）；伺服器在鎖外重寫場邊那一句（server.crowd_once：ring 那一軌重寫的是舊程式記下的單子）。"""
+        with self.tweak(self.c.config.arena.crowd, chance=1.0, outrage_chance=1.0):
             self.bout("江小魚", "arena", 89.0)
         self.me("江小魚", "挑完燕南天")
         self.begin()
@@ -5145,10 +5152,32 @@ class BoutScenario(ExploreScenario):
         """換日（現實時間，同回體丹）：時鐘推過一天，第一個同步的人記前幾名的俸，每個人同步時領。"""
         STEP[0] += 1440
         emit("時鐘推過一天", None)
+        self.wages_collect()
+
+    def wages_collect(self) -> None:
         for who in ("花無缺", "鐵心蘭", "江小魚", "燕南天"):
             self.main(who)
             self.me(who, "換日之後")
         self.ladder("換日之後")
+
+    # ── ring 那一軌（審查修正）切點前多走的兩段：bout 那一軌不走 ──
+
+    def ring_yield(self) -> None:
+        """鐵心蘭（第二）挑花無缺（第一），一開打就認輸（落敗：名次不動、留一筆給花無缺、兩人都打過一場）；不按返回，坐在擂台邊。"""
+        self.place("鐵心蘭", None)
+        self.choose("鐵心蘭", "act:arena")
+        self.choose("鐵心蘭", self.fight_id("花無缺"))
+        if self.chars.load("鐵心蘭").player.arena is not None:
+            self.choose("鐵心蘭", "arena:yield")
+        self.me("鐵心蘭", "挑花無缺認輸之後")
+        self.ladder("鐵心蘭認輸之後")
+
+    def wages_roll(self) -> None:
+        """換日（同 wages 那一步，挪到切點前）：時鐘推過一天，邀月（沒上擂台）先同步，記下打過一場的前幾名的俸（還沒領）。"""
+        STEP[0] += 1440
+        emit("時鐘推過一天", None)
+        self.main("邀月")
+        self.ladder("換日記俸之後")
 
     def titles(self) -> None:
         """稱號被讀：花無缺（天下第一）的狀態列與名帖匣；邀月在潁川看他的玩家卡、看榜單、在酒肆打聽他（名氣）。"""
@@ -5302,11 +5331,17 @@ class BoutScenario(ExploreScenario):
         self.ladder("換季之後")
 
 
-class BossScenario(BoutScenario):
-    """同一套段落，切在頭目戰打到一半（江小魚第一回合出過招；--track boss）。"""
+class RingScenario(BoutScenario):
+    """同一套段落換個先後，切在擂台寫到一半（--track ring；審查修正，取代切在頭目戰打到一半的 boss 那一軌：那一刻 bout 那一軌的切點
+    本來就跨過了）。切的那一刻，舊程式寫下、新程式接手的：江小魚挑燕南天放手一搏過一招（ArenaFight 打到一半）、場邊那一句等著鎖外
+    重寫（arena_crowd_note；燕南天那邊的場邊帳記在季上）；鐵心蘭挑花無缺認輸（花無缺守擂的那一筆還沒補）、坐在擂台邊（picking_arena）；
+    換過日、邀月同步時記下的俸還沒領（花無缺、鐵心蘭：打過一場的才有）。後半由新程式接著打完、重寫那一句、補戰報、領俸、收店。
+    擂台那幾段多走 ring_yield、wages_roll（換日挪到切點前，後半的領俸不再推一天：一軌只推一天，週末季 2.5 天跑不完）。"""
 
-    PHASES_FIRST = BoutScenario.ALL[:BoutScenario.ALL.index("meet") + 1]
-    PHASES_SECOND = ["resume"] + [n for n in BoutScenario.ALL[BoutScenario.ALL.index("meet") + 1:] if n != "resume"]
+    PHASES_FIRST = [n for n in BoutScenario.ALL[:BoutScenario.ALL.index("arena_fight")] if n != "resume"] + [
+        "ring_yield", "wages_roll", "arena_fight"]
+    PHASES_SECOND = ["resume", "arena_more", "arena_refuse", "arena_yield", "defend", "wages_collect", "titles", "depart", "closed",
+                     "bots", "season"]
 
 
 def _bout_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
@@ -5318,11 +5353,11 @@ def _bout_register_track(name: str, scenario: type, mutation: tuple, profile: st
     MUTANT_PROFILE[name] = profile
 
 
-# 改一個字（selftest）：bout 改擂台報名那一句（搬之前在 tianxia/arena.py、之後在包裡的 arena_rules.py），boss 改撞上頭目那一句
+# 改一個字（selftest）：bout 改擂台報名那一句（搬之前在 tianxia/arena.py、之後在包裡的 arena_rules.py），ring 改撞上頭目那一句
 # （搬之前在 engine.py 的 _duel_start、之後在包裡的 duel_actions.py）
 _bout_register_track("bout", BoutScenario, (("tianxia/features/bout/arena_rules.py", "tianxia/arena.py"),
                                              ("別人隨時可以來挑。", "別人隨時可以來挑！")), "week7")
-_bout_register_track("boss", BossScenario, (("tianxia/features/bout/duel_actions.py", "tianxia/engine.py"),
+_bout_register_track("ring", RingScenario, (("tianxia/features/bout/duel_actions.py", "tianxia/engine.py"),
                                              ("攔住了去路！", "攔住了去路。")), "weekend")
 
 
