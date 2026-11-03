@@ -144,7 +144,7 @@
   function mallTileHtml(it) {
     const cls = `mall-item${it.can ? "" : " off"}${S.mallPick === it.id ? " on" : ""}`;
     return `<button class="${cls}" data-act="mall-pick" data-id="${esc(it.id)}"${it.can ? "" : ' aria-disabled="true"'}>
-        ${mallPicHtml(it)}<span class="mi"><b>${esc(it.name)}</b>${it.effects ? `<span class="fx">${nbHtml(it.effects, MALL_NB)}</span>` : ""}
+        ${mallPicHtml(it)}<span class="mi"><b>${esc(it.name)}</b>${it.effects ? `<span class="gain">${nbHtml(it.effects, MALL_NB)}</span>` : ""}
         ${it.limit ? `<small>${nbHtml(it.limit, MALL_NB)}</small>` : ""}</span>
         <span class="price">${ingotSvg()}${it.price | 0}</span></button>`;
   }
