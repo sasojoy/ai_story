@@ -235,6 +235,22 @@ class BattleRound(BaseModel):
     auto_picked: list[str] = Field(default_factory=list)  # 這回合逾時、由系統代選行動的人（fill_timed_out_actions
     # 記下）：resolve_round 不把他們這回合算成自己出手（BattleParticipant.acted_rounds）
     sexes: dict[str, str] = Field(default_factory=dict)  # 名號 → 放手一搏的人的性別（回合結算後補劇情用，GambleTale.sex）
+    ults: dict[str, dict[str, str]] = Field(default_factory=dict)  # 名號 → 放手一搏送出那一刻身上的絕招（功能包 looks 的 mvp.snapshot：
+    # move、name、look、weapon）；沒穿絕招、沒放手一搏的人沒有。回合 MVP 只從這裡挑（Joy 2026-11-03），純展示、不碰數字
+
+
+class BattleMvp(BaseModel):
+    """一回合的 MVP（Joy 2026-11-03「在放手一搏成功的人裡面且他有絕招動畫的挑一個當這回合的MVP，播放他的絕招」）：
+    這一回合放手一搏成了、送出那一刻身上穿著絕招的人裡挑一位（功能包 looks 的 mvp.crown）。只給畫面演，不讀回結算。"""
+
+    round: int  # 整場的第幾回合（1 起算）
+    name: str
+    faction: str
+    move: str  # 絕招（m<購買 id>）：網頁照 /api/looks/scene/<move> 抓導演稿
+    move_name: str = ""  # 絕招的名字（導演稿的 name）
+    look: str = ""  # 送出那一刻穿的形象
+    weapon: str = ""  # 送出那一刻手上兵器的種類（劍、槍……；空的是空手）
+    text: str = ""  # 他這一搏寫的那一句
 
 
 class BattleRoundRecord(BaseModel):
@@ -251,6 +267,7 @@ class BattleRoundRecord(BaseModel):
     messages: list[str] = Field(default_factory=list)  # 系統判定的結算訊息
     narration: str = ""  # 以前 LLM 潤色的敘事（2026-10-08 起回合不再叫模型，新的回合是空字串；舊資料留著）
     trend_after: int  # 結算後的戰局
+    mvp: str = ""  # 這一回合的 MVP（名號；功能包 looks 的 mvp.crown）：沒人符合、舊資料是空的
 
 
 class RoundSwing(BaseModel):
@@ -469,6 +486,8 @@ class BattleInstance(BaseModel):
     seal_holder_side: str | None = None  # 上一欄是交戰兩方之一就記那一方，否則 None（旁觀）
     seal_notes: list[str] = Field(default_factory=list)  # 收場時寫進每個參戰者戰報的那一兩行（下戰書、現世的得主）
     rounds: list[BattleRoundRecord] = Field(default_factory=list)  # 這次讀出來之後才結算、還沒寫進資料庫的回合
+    mvps: list[BattleMvp] = Field(default_factory=list)  # 每一回合的 MVP（有人符合的那幾回合才有；功能包 looks 的 mvp.crown）：
+    # 決戰畫面播他的絕招。純展示，戰局、戰功一個數字都不動；舊資料沒有是空的
     # 龍頭上陣（GeneralTuning）：開集結那一刻上陣的大勢人物、這一回合每一方喊的那一招；舊資料、開關關著是空的
     commanders: list[Commander] = Field(default_factory=list)
     orders: dict[str, str] = Field(default_factory=dict)
@@ -482,6 +501,8 @@ class BattleInstance(BaseModel):
         data = handler(self)
         if isinstance(data, dict) and "front_note" in data and data["front_note"] is None:
             del data["front_note"]
+        if isinstance(data, dict) and data.get("mvps") == []:  # 回合 MVP 同理：沒人當過的場，JSON 跟加這一欄之前一樣
+            del data["mvps"]
         return data
 
 

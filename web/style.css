@@ -796,6 +796,13 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* 決戰的即時戰局條（Joy 2026-10-10，web/app.js 的 gaugeHtml）：拔河，左邊是自己那一邊，旗子被拉向佔上風的那一頭；
    淺色兩截是大勝、兩道細線是當場分勝負、條上的色帶是上一回合怎麼移的、底下一格一回合。顏色照陣營（同戰況圖卡：官軍石青、黃巾金） */
 .gauge { margin: 6px 0 10px; }
+/* 決戰的回合 MVP（Joy 2026-11-03）：戰局條底下一塊，播他的絕招 */
+.battle-mvp { margin: 4px 0 12px; padding: 8px; border-radius: 10px; background: rgba(120, 84, 20, 0.12); border: 1px solid rgba(200, 150, 60, 0.45); }
+.battle-mvp.mine { border-color: rgba(220, 170, 60, 0.85); }
+.battle-mvp .mvp-head { font-size: 15px; margin-bottom: 6px; }
+.battle-mvp .mvp-head b { color: #b8862a; }
+.battle-mvp .mvp-stage { width: 100%; max-width: 100%; aspect-ratio: 720 / 320; border-radius: 8px; background: #000; display: block; }
+.battle-mvp .mvp-text { margin: 6px 0 4px; font-size: 14px; opacity: 0.85; }
 .gauge .side-guan { --c: var(--kuai); }
 .gauge .side-huang { --c: var(--gold); }
 .gauge .side-haoqiang { --c: var(--rou); }

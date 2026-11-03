@@ -340,3 +340,38 @@ function lookShowTick(now) {
   showCx.restore();
   LSP.raf = requestAnimationFrame(lookShowTick);
 }
+
+// ── 決戰的回合 MVP（Joy 2026-11-03「我們的目的是展示，玩家也會想要炫……挑一個當這回合的MVP，播放他的絕招」）──
+// 伺服器挑好（main.battle_mvp：剛結算完的那一回合放手一搏成了、穿著絕招的那一位；每個看的人同一位），這裡在決戰畫面
+// #mvp-stage 那一塊畫布照他的稿演一次（站在台上的是他的樣子、手上他的兵器），演完停在打中的那一刻；「再演一次」從頭演。
+// 每次輪詢重畫整頁畫布會換一塊：演完了也接得上（換了一塊就把停住的那一格再畫一次）
+const MVP = { id: "", mid: "", look: null, t0: 0, raf: 0, cv: null, done: false };
+function mvpPlay(v, again) {
+  if (!v || !v.move) return;
+  if (!again && MVP.id === v.id) { if (!MVP.raf && typeof requestAnimationFrame === "function") MVP.raf = requestAnimationFrame(mvpTick); return; }
+  MVP.id = v.id; MVP.mid = v.move; MVP.t0 = 0; MVP.done = false; MVP.cv = null;
+  MVP.look = { me: v.weapon || "", foe: "", me_look: v.look || "", foe_look: "" };
+  if (typeof ringLoad === "function") ringLoad();
+  if (typeof ringWarmLook === "function") ringWarmLook(v.look || "");
+  sceneFor(v.move);
+  if (!MVP.raf && typeof requestAnimationFrame === "function") MVP.raf = requestAnimationFrame(mvpTick);
+}
+function mvpTick(now) {
+  MVP.raf = 0;
+  const mvpCv = typeof document !== "undefined" ? document.getElementById("mvp-stage") : null;
+  if (!mvpCv) return; // 離開決戰畫面：不演了（回來時 mvpPlay 接著排）
+  const mvpSc = sceneFor(MVP.mid);
+  if (!mvpSc && MVP.mid in SC.cache) return; // 抓不到這一招的稿：不演
+  if (mvpSc && !(MVP.done && mvpCv === MVP.cv)) {
+    if (!MVP.t0) MVP.t0 = now;
+    const el = now - MVP.t0, hold = sceneImpact(mvpSc) + 300;
+    if (el >= SCENE_LEN) MVP.done = true;
+    const keep = RA.looks; // 台上是 MVP 的樣子（sceneOnRing 照 RA.looks 畫）；畫完換回來，擂台照舊
+    RA.looks = MVP.look;
+    sceneOnRing(mvpCv.getContext("2d"), mvpSc, MVP.done ? hold : el, "me", MVP.mid);
+    RA.looks = keep;
+    MVP.cv = mvpCv;
+  }
+  if (typeof requestAnimationFrame === "function") MVP.raf = requestAnimationFrame(mvpTick);
+}
+function mvpAgain() { if (MVP.id) { MVP.t0 = 0; MVP.done = false; MVP.cv = null; if (!MVP.raf && typeof requestAnimationFrame === "function") MVP.raf = requestAnimationFrame(mvpTick); } }

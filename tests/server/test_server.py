@@ -6445,6 +6445,7 @@ NOT_IN_THE_FINGERPRINT = {
         "rounds": "還沒寫進資料庫的回合緩衝，不是畫面",
         "trend_start": "開打時就定了，跟 phase 一起寫入",
         "swings": "每回合戰局怎麼走，一回合結算才加一筆，那一下 round_number 也變了",
+        "mvps": "每回合的 MVP（looks 的 mvp.crown），一回合結算才加一筆，那一下 round_number 也變了",
         "marked": "誰在這一幕顯眼，只在回合結算時改，那一下 round_number 也變了",
         "last_targets": "上一回合誰被點名，只在回合結算時改，那一下 round_number 也變了",
         "outcome_reason": "收場時跟 phase 一起寫入",

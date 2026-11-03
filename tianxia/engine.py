@@ -6646,7 +6646,8 @@ class Game:
         if not battle_instance.round_is_complete(battle, timed_out=timed_out):  # 只剩掛機的人：逾時代選完就結算（FB-173）
             return []
         battle_instance.fill_idle_actions(battle, definition, tuning=tuning)  # 不等掛機的人：其他人送齊了，替他們代選
-        msgs = battle_instance.resolve_round(battle, definition, self.rng, now=now, tuning=tuning, tactic=self.content.config.tactics)
+        msgs = self._round_mvp(battle, lambda: battle_instance.resolve_round(  # 回合 MVP 包在外面（looks；純展示，數字一個不動）
+            battle, definition, self.rng, now=now, tuning=tuning, tactic=self.content.config.tactics))
         if battle.phase == "ended":
             battle.end_time = self.state.world.time
         # 每回合最前面那一行出招比例只留在回合紀錄（戰報）裡，場景上的比例只由「對面上一回合」那一段寫一次（審查 I1）。
@@ -7800,9 +7801,12 @@ class Game:
         如果結算完變成 ended，一定是這次送出的行動剛好造成的，不用再跟「結算前是不是
         已經 ended」比對。"""
         captured: dict[str, list[str]] = {"msgs": []}
+        ult = self._battle_ult() if success_rate is not None and name == self.state.player.name else None  # 回合 MVP 用（looks）
 
         def _apply(b: battle_instance.BattleInstance) -> None:
             battle_instance.submit_action(b, name, tag, text, success_rate, stories, sex=sex)
+            if ult and name in b.round.success_rates:  # 這一搏真的送進去了，記下身上的絕招
+                b.round.ults[name] = ult
             captured["msgs"] = self._advance_battle_round(b, definition)
 
         battle = self._mutate_battle_now(_apply)  # 有攻城戰時是自己參戰的那一場（領地爭奪第二批）
@@ -11923,6 +11927,14 @@ class Game:
     def arena_move(self) -> str:
         """招式動畫：這個人此刻出招疊哪一張光效（功能包 looks；空字串＝沒有）。"""
         return looks_actions.move_of(self)
+
+    def _battle_ult(self) -> dict[str, str] | None:
+        """決戰放手一搏送出那一刻身上的絕招（功能包 looks；回合 MVP 演它）：沒穿、沒有導演稿是 None。"""
+        return looks_actions.battle_ult(self)
+
+    def _round_mvp(self, battle: battle_instance.BattleInstance, resolve: Callable[[], list[str]]) -> list[str]:
+        """回合 MVP（功能包 looks）：包著回合結算，結算完挑一位、回合紀錄多一行。"""
+        return looks_actions.round_mvp(battle, resolve)
 
     def _arena_move_art(self, move: str) -> str:
         """招式動畫綁在哪一門上：疊得上光效（move 不是空的）就是現在練的那一門（looks 只在現在練的那一門綁了招式時才給 move）。"""
