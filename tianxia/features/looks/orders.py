@@ -399,5 +399,7 @@ ACTIONS = {
     # 走一趟的揮砍本來寫「拔劍」：空手之後照擂台已經在用的寫法改成隱形刀刃（同 hero_atk_slash），手是鬆握的拳
     "hero_slash": "Slashing to the right with an invisible blade: 1 ready stance, fists together low in front, 2 fists raised over the head, 3 top of the swing, 4 fast downward slash, 5 follow-through low in front, 6 back to the ready stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_meditate": "Sitting cross-legged on the ground, eyes closed, meditating, hands resting on the knees, gentle breathing loop: 4 frames. Layout: 4 frames in one row. Aspect 4:1.",
-    "hero_push": "Pushing hard with both palms forward against something heavy on the right (a stuck cart or a boulder, not drawn), legs braced, leaning in: 4 frames. Layout: 4 frames in one row. Aspect 4:1.",
+    # 不寫推的是什麼（2026-11-04 量：寫了「推車或巨石，不要畫」，關羽十次裡八次畫出巨石或車輪——提到的東西 klein 就會畫；
+    # 只寫手腳身體 0/10 → 3/6）
+    "hero_push": "Pushing hard to the right with both open palms: arms stretched forward at chest height, palms flat and facing right, legs braced in a long stance, body leaning far forward, straining: 4 frames. Layout: 4 frames in one row. Aspect 4:1.",
 }
