@@ -35,6 +35,14 @@ URL_ENV, STEPS_ENV = "TIANXIA_COMFY_URL", "TIANXIA_COMFY_STEPS"
 DEFAULT_URL, DEFAULT_STEPS = "http://127.0.0.1:8188", 4
 TRIES = 10  # 本機重畫不要錢：上限拉高（實測 40 張裡，上限 3 只有 34 張過、上限 10 有 37 張過）
 UNET, CLIP, VAE = "flux-2-klein-4b.safetensors", "qwen_3_4b_fp4_flux2.safetensors", "flux2-vae.safetensors"
+# 法相、巨物那一張的去背改用 BiRefNet（企劃者 2026-11-03 選的；ComfyUI 內建節點，模型 MIT 可商用，
+# 放在 ComfyUI 的 models/background_removal/）。為什麼不自己算：白底法分不開「圍起來的那一塊白」與
+# 「主體本身的白」——量過 16 張，面積比、合計、純度都分不開，門檻會被新題材推著跑（#481 梨花就是漏掉的那一次）。
+# 實測同樣 16 張：盤龍殘留 29.3%→2.3%、梅花叢 25.3%→2.1%、咬尾蛇 31.4%→4.6%；
+# 而菊花 23.0%→22.9%、蓮花座 16.2%→16.3% 幾乎不動——那兩個的淺色「本來就是主體」（白花瓣），
+# 模型把它們留在前景才是對的。像素門檻兩邊不可能同時答對，這才是換模型的理由。
+MATTE_ENV = "TIANXIA_BIREFNET"
+DEFAULT_MATTE = "birefnet.safetensors"
 # 長寬比 → 畫布（studio.ASPECT 送進來的那幾種；都約 1 MP，klein 的甜蜜點）
 SIZES = {"4:1": (2048, 512), "21:9": (1536, 512), "3:2": (1248, 832), "16:9": (1536, 768), "3:4": (896, 1152), "1:1": (1024, 1024)}
 
@@ -62,6 +70,7 @@ class LocalPainter:
         self.timeout = timeout  # 單一次 HTTP
         self.wait = wait  # 一張最多等多久（12～24 秒是常態；冷啟動載模型要久一點）
         self.sleep = sleep
+        self.matte_model = os.environ.get(MATTE_ENV, "") or DEFAULT_MATTE  # 法相去背的模型（BiRefNet）
         self.model = f"klein（本機 ComfyUI {self.url}）"  # 主控台那一行印得出來
 
     # ── HTTP ──
@@ -117,6 +126,30 @@ class LocalPainter:
         except (requests.RequestException, OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
             # ComfyUI 沒開、忙不過來、節點圖對不上：這一張不算，下一輪再來（同雲端那邊忙的處理）
             raise PaintBusy(f"{type(exc).__name__}：{exc}") from exc
+
+    def matte(self, raw: bytes) -> bytes:
+        """同一張圖，alpha 換成 BiRefNet 的前景遮罩（PNG，RGBA）。法相、巨物那一張用，見 MATTE_ENV 上面那段。
+
+        模型沒放、節點叫不動時原樣回傳（`cutting.art_bytes` 看到沒有 alpha 就走白底那條舊路）——
+        去背換方法不該讓整張單畫不出來。
+        """
+        try:
+            name = self._upload(_flat_png(raw))
+            graph = {
+                "img": {"class_type": "LoadImage", "inputs": {"image": name}},
+                "bg": {"class_type": "LoadBackgroundRemovalModel", "inputs": {"bg_removal_name": self.matte_model}},
+                "rm": {"class_type": "RemoveBackground", "inputs": {"bg_removal_model": ["bg", 0], "image": ["img", 0]}},
+                # 兩個節點的慣例相反，中間一定要反轉（實測漏了這一步，切出來留下的是背景那一片白、主體全透明）：
+                # RemoveBackground 回的是「前景」遮罩，JoinImageWithAlpha 卻做 alpha = 1.0 - mask
+                # （comfy_extras/nodes_compositing.py 第 207 行，它把 MASK 當「要遮掉的區域」）。
+                "inv": {"class_type": "InvertMask", "inputs": {"mask": ["rm", 0]}},
+                "join": {"class_type": "JoinImageWithAlpha", "inputs": {"image": ["img", 0], "alpha": ["inv", 0]}},
+                "save": {"class_type": "SaveImage", "inputs": {"images": ["join", 0], "filename_prefix": "tianxia_matte"}},
+            }
+            pid = self._post("/prompt", {"prompt": graph})["prompt_id"]
+            return self._fetch(self._wait(pid))
+        except (requests.RequestException, OSError, KeyError, ValueError, TimeoutError, json.JSONDecodeError):
+            return raw
 
     def _wait(self, pid: str) -> dict:
         """等這一張畫完，回 history 裡那一筆的 outputs。"""
