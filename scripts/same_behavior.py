@@ -5009,8 +5009,9 @@ class GuideScenario(Scenario):
 
     def hut_on(self) -> None:
         """草廬後四步：雪恥、配點、熔蠻牛拳、出師（去潁川、一路同步到抵達）；初入江湖的頭幾步（療傷、操練、看地圖）；重看序章。
-        測試內容：去湖邊（第二步）、看地圖（第三步）、結語按「知道了」。開局的季寫「沒有」。"""
+        測試內容：去湖邊（第二步）、看地圖（第三步）、結語按「知道了」。開局的季寫「沒有」。一開頭在鎖裡直接叫一次調息（rest_direct）。"""
         who = self.WALKER
+        self.rest_direct(who)
         if self.in_hut(who):
             self.choose(who, "act:train")
             self.do(who, "allocate", {"stat": "str"})
@@ -5110,6 +5111,27 @@ class GuideScenario(Scenario):
         self.me(late, "一週沒做完")
         self.do(late, "guide_ack")
         self.me(late, "結語按掉")
+
+    def rest_direct(self, who: str) -> None:
+        """act:rest 背後的 _rest（序章教體力那一步的調息）：正式內容的草廬已經沒有那一步，選單上不會有這一顆（序章裡選單只給這一步的
+        動作，草廬外 choose 先擋「此刻無法這麼做」），公開的路走不到——在鎖裡直接叫，不存（同酒肆一軌在鎖裡直接叫 _depart，第 11 批
+        PM 認定第 5 條）。在草廬裡：眼前這一步暫時寫成「一坐就回滿」（TutorialStep.instant_rest，叫完就拿掉）、體力擺到 0，叫一次（回滿、
+        說那一句）；接著不寫，再叫一次（打坐已經拿掉那一句）。"""
+        from tianxia import prologue
+        from tianxia.engine import Game
+
+        with self.world.action_lock():
+            state = self.chars.load(who)
+            step = prologue.step(state, self.c)
+            if step is not None:
+                g = Game(self.c, state, random.Random(0), self.world)
+                g.state.player.stamina = 0.0
+                step.instant_rest = "（調息：一坐就回滿。）"
+                try:
+                    emit(f"{who} 直接叫調息（這一步一坐就回滿）", [g._rest(), g.state.player.stamina])
+                finally:
+                    step.instant_rest = ""
+            emit(f"{who} 直接叫調息", Game(self.c, self.chars.load(who), random.Random(0), self.world)._rest())
 
     def skip_on(self) -> None:
         """略過新手引導（草廬裡略過：站到起點、出師的盤纏；入伍段也算走完）、再按一次（沒有好略過的）、打開提示、知道了。"""
