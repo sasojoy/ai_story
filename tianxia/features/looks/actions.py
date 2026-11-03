@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from tianxia import journal  # 核心（江湖紀錄）
+from tianxia.characters import name_key
 from tianxia.state import JournalEntry
 
-from . import market, moves, orders, rules, scenes, studio
+from . import market, moves, mvp, orders, rules, scenes, studio
 
 if TYPE_CHECKING:
     from tianxia.engine import Game
@@ -199,6 +200,37 @@ def move_of(ctx: Game) -> str:
     if wallet is None:
         return ""
     return moves.playing(wallet, ctx._mall_owner(), current_style(ctx))
+
+
+def battle_ult(ctx: Game) -> dict[str, str] | None:
+    """決戰放手一搏送出那一刻身上的絕招（回合 MVP 演它，mvp.py）：穿著、打法對得上、而且有導演稿才給；假人、沒有是 None。"""
+    mid = move_of(ctx)
+    scene = scene_of(ctx, mid) if mid else None
+    if not scene:
+        return None
+    weapon = ctx.state.player.weapon
+    return {"move": mid, "name": str(scene.get("name") or ""), "look": look_of(ctx), "weapon": weapon.kind if weapon is not None else ""}
+
+
+def look_of_name(ctx: Game, name: str, bot: bool) -> str:
+    """別人（決戰裡被點名的那一位）穿哪一套：同 look_of，只是照名號查（假人照名號挑、真人照他自己的錢包換上的）。"""
+    if not rules.on(ctx.content):
+        return rules.DEFAULT
+    if bot:
+        return rules.bot_look(ctx.content, name)
+    wallet = ctx._wallet()
+    return rules.DEFAULT if wallet is None else rules.worn(ctx.content, wallet, name_key(name))
+
+
+def round_mvp(ctx: Game, battle, resolve) -> list[str]:
+    """Game._advance_battle_round 包著回合結算叫：結算完挑這一回合的 MVP（mvp.crowned）；點名了對面的人，記下他穿的形象。"""
+    return mvp.crowned(battle, resolve, lambda q: look_of_name(ctx, q.name, q.is_bot))
+
+
+def battle_mvp(ctx: Game) -> dict | None:
+    """決戰畫面要演的那一位（main.battle_mvp）：看的這一場剛結算完的那一回合有 MVP 才給。只讀，不推進。"""
+    status = ctx._battle_for_me(tick=False)
+    return mvp.latest(status[0]) if status is not None else None
 
 
 def moves_view(ctx: Game) -> dict | None:

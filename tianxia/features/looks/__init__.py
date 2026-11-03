@@ -24,7 +24,8 @@ class LooksFeature(Feature):
         """管理者的設定頁多一組「自建形象」（main.looks_admin）：賣自建形象、而且是管理者才有。
         另外送 main.looks_ver：自建的圖（looks/ 底下）此刻的版本，網頁把它接在圖的網址後面當 ?v=，
         圖一換網址就換、手機不必清快取（同 server.versioned_page 對自家檔案那一套）。
-        穿的不是預設那一套時多一個 main.look：走一趟照它畫（Joy 2026-11-02「探索那邊應該要一起換吧」；擂台照擂台自己記的）。"""
+        穿的不是預設那一套時多一個 main.look：走一趟照它畫（Joy 2026-11-02「探索那邊應該要一起換吧」；擂台照擂台自己記的）。
+        看的那一場決戰剛結算完的那一回合有 MVP 時多一個 main.battle_mvp（mvp.py；網頁播他的絕招）。"""
         from . import actions, orders, rules  # noqa: PLC0415
 
         out: dict = {"looks_ver": actions.images_version()}
@@ -33,6 +34,9 @@ class LooksFeature(Feature):
         look = actions.look_of(ctx)
         if look != rules.DEFAULT:
             out["look"] = look
+        shown = actions.battle_mvp(ctx)  # 決戰的回合 MVP：剛結算完的那一回合有人當選才送（網頁播他的絕招）
+        if shown is not None:
+            out["battle_mvp"] = shown
         return out
 
     def admin_tools(self, shell) -> dict:
