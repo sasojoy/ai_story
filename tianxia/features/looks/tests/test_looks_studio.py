@@ -839,6 +839,21 @@ def test_the_redraw_limit_comes_from_the_painter(on):
     assert out.painted == studio.MAX_TRIES == 3
 
 
+def test_the_local_painter_redraws_from_scratch_instead_of_copying_the_failed_picture(on):
+    """本機 klein 沒過就重新畫（同一份提示詞與參考圖），不把失敗的那張當第一張參考圖（2026-11-03 量：它會照抄，
+    十次綁在一起；正式站 #494 的 hero_bare_fall 部署剪影之後還是十連掛）。雲端照舊照意見改。"""
+    from tianxia.features.looks.studio_local import LocalPainter
+
+    game = _game(on)
+    _move_order(on, game)
+    job = studio.jobs(on, Wallet(game.world.db), actions.image_root(game), actions.WEB_IMG)[0]
+    critic = Critic([studio.Verdict(False, ["佛像多了一隻手"], "Remove the extra arm.")])
+    painter = Painter()
+    assert studio.work(job, painter, critic, cut, tries=3, fresh=True).ok
+    assert painter.calls[1] == painter.calls[0] == (job.prompt, 1)  # 第二次跟第一次一模一樣：沒有上一張、沒有改法
+    assert LocalPainter.fresh_retries is True and not getattr(Painter, "fresh_retries", False)
+
+
 def test_the_outing_six_are_empty_handed_too(on):
     """企劃者 2026-11-03「走一趟不能不帶佩劍嗎」：十六張一律空手（定裝照、擂台十張、走一趟六張都是）。
     FB-8003 原本讓走一趟那六張加一把腰間佩劍，#29 的 hero_pickup 因此又十連掛（「有的格有劍、有的格沒有」）；

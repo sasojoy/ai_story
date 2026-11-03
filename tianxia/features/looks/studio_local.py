@@ -61,6 +61,10 @@ class LocalPainter:
     """這台機器上的 ComfyUI：一段提示詞＋幾張參考圖 → 一張圖（bytes）。介面同 GeminiPainter。"""
 
     tries = TRIES
+    # 重畫一律重新畫，不照意見改上一張（2026-11-03 量：klein 不是改圖的模型，把失敗的那張當第一張參考圖，它就照抄——
+    # 照意見改的單次通過率 dodge 1/15、fall 0/15，不比重新畫的 2/32 好；而且十次彼此綁在一起，第一張歪了後面跟著歪。
+    # 正式站 #494 的 hero_bare_fall 部署剪影之後還是十連掛，就是這樣）。雲端的 Nano Banana 真的會改圖，照舊。
+    fresh_retries = True
 
     def __init__(self, url: str | None = None, steps: int | None = None, session=None,
                  timeout: float = 30.0, wait: float = 300.0, sleep: float = 1.0):

@@ -268,8 +268,10 @@ def cut_for(job: Job, raw: bytes, cutting) -> bytes:
     return cutting.sheet_bytes(raw, job.slot, keep_white=white)
 
 
-def work(job: Job, painter: Painter, critic: Critic, cut: Callable[[Job, bytes], bytes], *, tries: int = MAX_TRIES) -> Result:
+def work(job: Job, painter: Painter, critic: Critic, cut: Callable[[Job, bytes], bytes], *, tries: int = MAX_TRIES,
+         fresh: bool = False) -> Result:
     """畫、切、審，沒過照意見改，最多 tries 張（雲端生圖要錢所以是 MAX_TRIES＝3；本機生圖不要錢，畫坊程式會給大一點的數）。
+    fresh：沒過就重新畫一張（同一份提示詞與參考圖），不照意見改上一張——本機 klein 用（見 studio_local.LocalPainter.fresh_retries）。
     生圖那邊忙（PaintBusy）照丟出去：這一張不算，下一輪再來。"""
     refs = [p.read_bytes() for p in job.refs if p.is_file()]
     # 畫圖用的：有姿勢剪影就代替第一張（斗笠小子的彩色原圖）；審圖照舊看 refs（見 POSE）
@@ -278,7 +280,7 @@ def work(job: Job, painter: Painter, critic: Critic, cut: Callable[[Job, bytes],
     problems: list[str] = []
     for n in range(1, max(1, tries) + 1):
         try:
-            if n == 1:
+            if n == 1 or fresh:
                 raw = painter.paint(job.prompt, paint_refs, job.aspect, job.size)
             else:
                 raw = painter.paint(FIX_PROMPT.format(fix=verdict.fix or "redraw it following the instructions", prompt=job.prompt),
@@ -369,14 +371,14 @@ def note(data: dict) -> dict:
 
 
 def tick(content: Content, store, root: Path, web_img: Path, painter: Painter, critic: Critic,
-         cut: Callable[[Job, bytes], bytes], *, budget: int = 1, tries: int = MAX_TRIES) -> list[str]:
+         cut: Callable[[Job, bytes], bytes], *, budget: int = 1, tries: int = MAX_TRIES, fresh: bool = False) -> list[str]:
     """畫坊巡一輪：做最多 budget 張（每張最多叫 tries 次生圖）。畫在鎖外（慢），收在行動鎖裡（同伺服器的一個動作）。
     store 是 open_world() 那個（有 db、action_lock）。回幾句給主控台。"""
     wallet = Wallet(store.db)
     lines: list[str] = []
     for job in jobs(content, wallet, root, web_img)[:max(0, budget)]:
         try:
-            result = work(job, painter, critic, cut, tries=tries)
+            result = work(job, painter, critic, cut, tries=tries, fresh=fresh)
         except PaintBusy as exc:
             lines.append(f"#{job.pid} {job.label} 生圖的那邊忙，下一輪再來（{exc}）")
             continue
