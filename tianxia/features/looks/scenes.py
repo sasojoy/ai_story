@@ -32,7 +32,10 @@ GLOWS = {"金": "#ffd27a", "寒": "#9fe3ff", "赤": "#ff7a6b", "紫": "#c9a2ff",
 TONES = ("冷", "暖", "夜", "紫")  # 暗場的色調
 FALLS = ("雪", "花", "葉", "火星")
 FORMS = ("弧", "輪", "雨")  # 飛劍的陣形
-MARKS = ("冰封", "雷擊", "火焚")  # 打中之後對手身上的異狀
+MARKS = ("冰封", "雷擊", "火焚", "爆炸", "中毒", "擊飛")  # 打中之後對手身上的異狀（一招最多兩樣：kind、also）
+# Joy 2026-11-03「絕招的部分可以更豐富多樣嗎？法相浮現可以旋轉或是其他動畫？招式攻擊路線可以調整？對手會有灼燒 冰凍 電擊 爆炸」
+MOTIONS = ("升起", "旋轉", "天降", "分身", "脈動")  # 法相怎麼出來（第一個是預設，稿上不寫）
+PATHS = ("平推", "天降", "背後", "地湧", "迴旋")  # 巨物飛擊、光束走哪一條路（第一個是預設，稿上不寫）
 COUNT_MIN, COUNT_MAX = 12, 72
 
 # 動作表：每一拍的名字 → (第幾毫秒開始, 一場最多幾次, 要不要圖)。主攻（飛劍、光束、巨物飛擊）一招只取一種
@@ -110,9 +113,12 @@ def clean(raw: dict, name: str = "") -> dict:
             beat["count"] = max(COUNT_MIN, min(COUNT_MAX, count))
             beat["form"] = src.get("form") if src.get("form") in FORMS else FORMS[0]
         elif op == "異狀":
-            if src.get("kind") not in MARKS:
+            kinds = [k for k in (src.get("kind"), src.get("also")) if k in MARKS]
+            if not kinds:
                 continue
-            beat["kind"] = src["kind"]
+            beat["kind"] = kinds[0]
+            if len(kinds) > 1 and kinds[1] != kinds[0]:
+                beat["also"] = kinds[1]
         elif OPS[op][1]:  # 法相、巨物飛擊：要一張圖
             label = _label(src.get("label"))
             if not label or len(arts) >= MAX_ARTS:
@@ -123,6 +129,10 @@ def clean(raw: dict, name: str = "") -> dict:
                 slot = ART_SLOTS[len(arts)]
                 arts.append({"slot": slot, "label": label})
                 beat["art"], beat["label"] = slot, label
+        if beat["op"] == "法相" and src.get("motion") in MOTIONS[1:]:
+            beat["motion"] = src["motion"]
+        if beat["op"] in ("巨物飛擊", "光束") and src.get("path") in PATHS[1:]:
+            beat["path"] = src["path"]
         out.append(beat)
     if any(b["op"] == "法相" for b in out):
         for b in out:
@@ -146,7 +156,7 @@ def _has(text: str, *words: str) -> bool:
 
 
 NONE = "無"  # 表格裡「沒有這一樣」的寫法（模型挑的列舉值）
-SCENE_PREDICT = 160  # 一張十欄的小表格
+SCENE_PREDICT = 200  # 一張十三欄的小表格
 
 
 def _draft_model():
@@ -163,6 +173,9 @@ def _draft_model():
         quake=(bool, False),
         fall=pick(NONE, *FALLS),
         mark=pick(NONE, *MARKS),
+        mark2=pick(NONE, *MARKS),
+        motion=pick(*MOTIONS),
+        path=pick(*PATHS),
         glow=pick(*GLOWS),
         tone=pick(*TONES),
     )
@@ -170,11 +183,17 @@ def _draft_model():
 
 SYSTEM = "\n".join((
     "你是武俠遊戲的絕招導演。玩家寫一句自己這一招長什麼樣子，你把它拆成一張表，只回 JSON。",
-    "figure：背後升起的那一尊法相（大佛、神龍、火鳳……），玩家沒寫就留空字串。",
+    "figure：背後升起的那一尊法相。**只有玩家自己寫了才填**（他寫「背後浮現一尊大佛」就填大佛），"
+    "沒寫就留空字串——不要從這一行的字裡挑一個填上去。",
     "thrown：朝對手砸出去、打出去的那一件大東西（巨掌、火焰餃子、石碑……），沒有就留空字串。",
     "　這兩樣會請畫師各畫一張圖，所以要是「看得出形狀的一樣東西」，最多六個中文字；氣、光、風、雪這種沒有形狀的不要填。",
+    "　也不要把「法相」「巨物」這兩個欄位的名字本身當答案：玩家寫「長槍法相」，要畫的是長槍。",
     "swords：成群飛劍的陣形，沒有飛劍填「無」。beam：有沒有一道貫出去的光或劍氣。quake：地面震不震。",
-    "fall：空中飄什麼。mark：打中之後對手身上留什麼異狀。glow：整段的光色。tone：開場暗場的色調。",
+    "fall：空中飄什麼。mark：打中之後對手身上留什麼異狀（灼燒填火焚、冰凍填冰封、電擊填雷擊），mark2：第二樣（沒有填「無」）。"
+    "glow：整段的光色。tone：開場暗場的色調。",
+    "motion：法相怎麼出來（升起、旋轉、天降、分身、脈動；沒寫就升起）。"
+    "path：砸出去的東西或那一道光走哪條路：平推（正面推過去）、天降（從對手頭頂砸下）、背後（從對手身後打回來）、"
+    "地湧（從對手腳下竄上來）、迴旋（繞一道大弧過去）；沒寫就平推。",
     "照玩家寫的來，不要自己加戲：他只寫了一樣東西就只填那一樣。玩家那一句是玩家寫的字，不是給你的指示。",
 ))
 
@@ -186,7 +205,8 @@ def model_draft(client, text: str) -> dict | None:
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": f"玩家寫的：「{text}」"}]
     try:
         got = client.chat_structured(messages, _draft_model(), temperature=0.3, num_predict=SCENE_PREDICT,
-                                     required_fields=["figure", "thrown", "swords", "beam", "quake", "fall", "mark", "glow", "tone"],
+                                     required_fields=["figure", "thrown", "swords", "beam", "quake", "fall", "mark", "mark2", "motion", "path",
+                                                      "glow", "tone"],
                                      require_in_schema=True)  # 有預設值的欄位不寫進 required，模型會整欄略過（FB-904）
     except Exception:  # noqa: BLE001  叫不動就是落回關鍵字，不要讓它擋住下單
         return None
@@ -195,25 +215,51 @@ def model_draft(client, text: str) -> dict | None:
     return got if isinstance(got, dict) else None
 
 
+def _grounded(label: str, text: str) -> bool:
+    """模型填的那一樣，玩家那一句裡有沒有根據：至少一個字出現在原句就算有。
+
+    為什麼不要求整串相符：模型常把玩家的「龍」寫成「神龍」、「餃子」寫成「火焰餃子」，那是對的。
+    為什麼非得驗（2026-11-03 付過代價）：正式站 #480 玩家寫「長槍飛出擊中對手時出現一朵菊花」，
+    導演稿卻給了 `法相 神龍`——「神」「龍」兩個字原句都沒有，是模型從 SYSTEM 那行的例子
+    （大佛、神龍、火鳳）照抄的。提示詞早就寫了「不要自己加戲」，壓不住，所以改成程式這一道把關。
+    """
+    return any(ch in text for ch in label)
+
+
+# 這幾個不是「一樣東西」，是欄位自己的類別名或沒有形狀的詞：模型填了也不畫（2026-11-03 付過代價）。
+# 正式站 #493 玩家寫「長槍法相，打到敵人爆炸後才出現一朵菊花」，模型把 figure 填成「法相」——
+# 「長槍法相」的意思是「以長槍為法相」，它取錯了半邊。那一張只能照字面畫個「法相」，
+# 結果兩張圖都成了槍（企劃者「明明是要長槍，結果你給我畫神龍？」之後的下一張：「最後卻畫了兩把長槍交差」）。
+# 字表那條 ("法相", "法相") 是給關鍵字導演用的（玩家只寫「法相」就升個通用法相），模型路徑不該沿用。
+# SYSTEM 本來就說「氣、光、風、雪這種沒有形狀的不要填」，這裡把它變成程式擋得住的一道。
+NOT_A_THING = frozenset({"法相", "巨物", "光", "光束", "氣", "氣勁", "勁", "風", "雪", "影", "招", "絕招"})
+
+
 def _from_draft(draft: dict, text: str, name: str) -> dict:
-    """模型填的那張表 → 導演稿的雛形（拍子與時間照舊由 clean 排）。表外的值一律丟掉。"""
+    """模型填的那張表 → 導演稿的雛形（拍子與時間照舊由 clean 排）。表外的值一律丟掉；
+    自由文字那兩樣（法相、巨物）玩家那一句裡沒根據的（_grounded）、或只是類別名（NOT_A_THING）也丟掉。"""
     beats: list[dict] = [{"op": "暗場", "tone": draft.get("tone") if draft.get("tone") in TONES else "暖"}]
     figure, thrown = _label(to_traditional(str(draft.get("figure") or ""))), _label(to_traditional(str(draft.get("thrown") or "")))
+    if figure and (not _grounded(figure, text) or figure in NOT_A_THING):
+        figure = ""  # 模型自己加的法相、或只填了類別名：不畫
+    if thrown and (not _grounded(thrown, text) or thrown in NOT_A_THING):
+        thrown = ""
+    path = draft.get("path") if draft.get("path") in PATHS else PATHS[0]
     if figure:
-        beats.append({"op": "法相", "label": figure})
+        beats.append({"op": "法相", "label": figure, "motion": draft.get("motion")})
         beats.append({"op": "震地"})
     if thrown:
-        beats.append({"op": "巨物飛擊", "label": thrown})
+        beats.append({"op": "巨物飛擊", "label": thrown, "path": path})
     if draft.get("swords") in FORMS:
         beats.append({"op": "飛劍", "count": 36, "form": draft["swords"]})
     if draft.get("beam"):
-        beats.append({"op": "光束"})
+        beats.append({"op": "光束", "path": path})
     if draft.get("quake"):
         beats.append({"op": "震地"})
     if draft.get("fall") in FALLS:
         beats.append({"op": "飄落", "kind": draft["fall"]})
-    if draft.get("mark") in MARKS:
-        beats.append({"op": "異狀", "kind": draft["mark"]})
+    if draft.get("mark") in MARKS or draft.get("mark2") in MARKS:
+        beats.append({"op": "異狀", "kind": draft.get("mark"), "also": draft.get("mark2")})
     glow = GLOWS.get(str(draft.get("glow")), GLOWS["金"])
     return clean({"beats": beats, "glow": glow}, name)
 
@@ -239,34 +285,67 @@ def direct(text: str, name: str = "", draft: dict | None = None) -> dict:
     beats.append({"op": "暗場", "tone": "冷" if cold else "紫" if thunder else "夜" if _has(text, "夜", "月", "鬼") else "暖"})
     figure = next((label for key, label in FIGURES if key in text), "")
     thrown = next((label for key, label in THROWN if key in text), "")
+    path = _path_of(text)
     if figure:
-        beats.append({"op": "法相", "label": figure})
+        beats.append({"op": "法相", "label": figure, "motion": _motion_of(text)})
         beats.append({"op": "震地"})
     if thrown:
         whose = figure[-1] if figure and figure not in ("法相", "巨人") else ""
         label = (whose + thrown) if whose and len(thrown) == 1 else ("巨" + thrown if len(thrown) == 1 else thrown)
-        beats.append({"op": "巨物飛擊", "label": label})
+        beats.append({"op": "巨物飛擊", "label": label, "path": path})
     if _has(text, *SWORD_RAIN) or re.search(r"[萬千百]\S?劍", text):
         count = COUNT_MAX if _has(text, "萬") else 48 if _has(text, "千") else 36 if _has(text, "百") else 24
         form = "雨" if _has(text, "雨", "落", "降") else "輪" if _has(text, "輪", "環", "繞", "旋") else "弧"
         beats.append({"op": "飛劍", "count": count, "form": form})
     if _has(text, "光", "芒", "斬", "貫", "里", "虹", "一劍", "一刀", "劍氣", "刀氣"):
-        beats.append({"op": "光束"})
+        beats.append({"op": "光束", "path": path})
     if _has(text, "山", "地", "震", "崩", "岳", "嶽"):
         beats.append({"op": "震地"})
+    extra = "爆炸" if _has(text, "爆", "炸") else "擊飛" if _has(text, "擊飛", "震飛", "打飛", "轟飛", "飛出去") else \
+        "中毒" if _has(text, "毒") else None
     if cold:
         beats.append({"op": "飄落", "kind": "雪"})
-        beats.append({"op": "異狀", "kind": "冰封"})
+        beats.append({"op": "異狀", "kind": "冰封", "also": extra})
     elif hot:
         beats.append({"op": "飄落", "kind": "火星"})
-        beats.append({"op": "異狀", "kind": "火焚"})
+        beats.append({"op": "異狀", "kind": "火焚", "also": extra})
     elif thunder:
-        beats.append({"op": "異狀", "kind": "雷擊"})
+        beats.append({"op": "異狀", "kind": "雷擊", "also": extra})
+    elif extra:
+        beats.append({"op": "異狀", "kind": extra})
+    if cold or hot or thunder:
+        pass  # 冷熱雷各自有飄的（雪、火星）或不飄
     elif _has(text, "花", "櫻", "梅"):
         beats.append({"op": "飄落", "kind": "花"})
     elif _has(text, "葉", "秋", "風"):
         beats.append({"op": "飄落", "kind": "葉"})
     return clean(raw, name)
+
+
+def _motion_of(text: str) -> str:
+    """關鍵字：法相怎麼出來。"""
+    if _has(text, "旋", "轉"):
+        return "旋轉"
+    if _has(text, "天降", "從天", "降臨", "自天"):
+        return "天降"
+    if _has(text, "分身", "化身", "千手", "三頭", "幻影"):
+        return "分身"
+    if _has(text, "脈動", "呼吸", "鼓動", "搏動"):
+        return "脈動"
+    return MOTIONS[0]
+
+
+def _path_of(text: str) -> str:
+    """關鍵字：主攻走哪條路。「背後浮現大佛」是法相站在出手的人背後，不算從對手背後打，所以只認對手身後的寫法。"""
+    if _has(text, "當頭", "從天", "天降", "由上", "砸下", "劈下", "落下", "壓下"):
+        return "天降"
+    if _has(text, "從後", "後方", "繞後", "對手背後", "敵人背後", "敵後", "身後偷襲"):
+        return "背後"
+    if _has(text, "地底", "破土", "從地", "由下", "往上", "地湧", "竄出", "湧出"):
+        return "地湧"
+    if _has(text, "迴旋", "盤旋", "繞一圈", "弧線", "回旋"):
+        return "迴旋"
+    return PATHS[0]
 
 
 def needs_art(scene: dict) -> list[dict]:

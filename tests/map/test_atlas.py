@@ -523,3 +523,24 @@ def test_on_the_road_you_can_arrange_travel_from_where_you_are(state, content):
     assert travel_refusal(state, content, "town", "walk") is None
     detail = detail_text(state, content, "town", no_odds)
     assert detail.startswith("### 小鎮　") and "**路線**　步行約 1 分鐘" in detail  # 在路上沒有所在地
+
+
+def test_one_view_works_out_the_same_routes_once(state, content, monkeypatch):
+    """一次畫面建構（route_memo）裡一樣的起點、一樣能走的地點只算一次最短路；換了能走的地點、出了範圍都重算（view 省時，2026-11-03）。"""
+    from tianxia import atlas
+
+    legs = []
+    real = atlas.leg_minutes
+    monkeypatch.setattr(atlas, "leg_minutes", lambda c, a, b: legs.append((a, b)) or real(c, a, b))
+    with atlas.route_memo():
+        first = routes(state, content)
+        n = len(legs)
+        assert routes(state, content) == first and len(legs) == n  # 記住了
+        first.pop("lake")  # 拿到的是副本：呼叫端改了不影響記住的那一份
+        assert "lake" in routes(state, content)
+        state.world.flags.add("cave_open")  # 能走的地點變了：重算
+        assert "cave" in routes(state, content) and len(legs) > n
+    n = len(legs)
+    routes(state, content)
+    routes(state, content)
+    assert len(legs) > n  # 範圍外照舊每次算
