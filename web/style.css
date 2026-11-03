@@ -3579,18 +3579,13 @@ svg.fig .blade.bow { stroke-width: 3; }
    確認框是紙底，照主題變數 ── */
 .ask-list { margin: -6px 0 14px; padding: 8px 10px 8px 26px; max-height: 40vh; overflow-y: auto; border-radius: 10px; background: var(--card-2);
   font-size: 14px; line-height: 1.6; } /* 批量拆解：一件一行拆成什麼（3.4） */
-/* 打造頁缺料的灰格與熬的小單（3.3）：虛線框、暗一點；點開的那一格金框，小單接在那一排底下（排頭那一欄空著對齊格子）。
-   鐵匠那一句換成熬的結果時左邊那條線換成亮金 */
+/* 打造頁缺料的灰格（3.3）：虛線框、暗一點；點了的那一格金框，熬的小單從畫面底下浮上來（企劃者 2026-11-03 挑「乙 從畫面底下浮一張」：
+   同確認框那一層，問句底下一行淡字寫機率與上限）。鐵匠那一句換成熬的結果時左邊那條線換成亮金 */
 .shop-layer .cell.brew { border-style: dashed; background: rgba(0, 0, 0, 0.22); color: #d9c394; }
 .shop-layer .cell.brew .nm { font-size: 1.1em; font-weight: 600; }
 .shop-layer .cell.brew.none { justify-content: center; padding-top: 6px; opacity: 0.4; }
 .shop-layer .cell.brew.on { border-style: solid; border-color: #f2c46a; box-shadow: 0 0 0 1px #f2c46a inset; }
-.shop-layer .brew-sheet { margin: -2px 0 2px calc(1.84em + 6px); padding: 0.55em 0.7em; border: 1px solid #b7862b; border-radius: 10px;
-  background: rgba(242, 196, 106, 0.1); font-size: 0.87em; line-height: 1.55; }
-.shop-layer .brew-sheet p { margin: 0 0 0.3em; }
-.shop-layer .brew-sheet .brew-odds { color: #c9b28a; font-size: 0.92em; }
-.shop-layer .brew-btns { display: flex; gap: 8px; justify-content: flex-end; }
-.shop-layer .brew-btns .btn { width: auto; min-width: 5em; }
+.ask .ask-sub { margin-top: -8px; font-size: 14px; }
 .shop-layer .shop-line.brewed { border-left-color: #f2c46a; color: #f2e5c6; }
 /* 打造頁的爐火（3.2）：中間的火是一顆鈕（不畫框），看過了還沒開爐時爐子整座亮一點、火大一圈、慢慢晃（開爐竄火那一下照舊優先）；
    減少動態效果的人不晃。火的下緣掛一枚小籤（企劃者 2026-11-03 挑「丙 火上一枚小籤」）：不佔一行、開爐鈕不被往下推；

@@ -3915,7 +3915,7 @@
 
   // 缺料的灰格（鐵匠鋪與合成流程 3.3，企劃者 2026-10-29 選「乙 點爐火、就地熬」）：素材格每一排補齊一階到三階（四階開著到四階）。背包沒有的
   // 那一階：一階畫「無」（沒有零換一，不可點）；二階以上照素材頁那一筆（shop.trade.upgrade，同屬性同階）畫「熬」＋要幾個低一階，按不下去的
-  // 灰掉、格上寫素材頁同一句短原因（點了只說整句），按得下去的點了在那一排底下彈小單，熬送現成的 smith_upgrade（需求、工錢、上限、屬性機率
+  // 灰掉、格上寫素材頁同一句短原因（點了只說整句），按得下去的點了從畫面底下浮一張小單，熬送現成的 smith_upgrade（需求、工錢、上限、屬性機率
   // 全照素材頁）。升階關著（shop.trade 是 None，或只開收購、upgrade 是空的）一格都不畫，打造頁照舊；內容裡沒有那一階的素材（換不出來）不畫。
   // 灰格只說「這一格你沒有、怎麼熬」，不說熬了會打中什麼（企劃者 2026-10-10「不替玩家列出合得出來的組合」）。字待 joy 潤
   const SHOP_TIER = ["", "一階", "二階", "三階", "四階"];
@@ -3932,18 +3932,19 @@
     return `<button class="cell t${tier} brew${up.problem ? " off" : ""}${brewOpen(attr, tier) ? " on" : ""}" data-act="shop-brew" data-attr="${esc(attr)}" data-tier="${tier}" data-why="${esc(up.problem || "")}">
         <span class="nm">${BREW_WORD}</span><small>${up.need | 0} 個${SHOP_TIER[tier - 1]}</small>${up.problem ? `<span class="why">${esc(up.short || up.problem)}</span>` : ""}</button>`; // 待 joy 潤：「3 個一階」
   }
-  // 小單：「用 3 個一階剛熬一個二階剛，5 兩？」、素材頁那一句機率（「五成出流雲絮，其餘隨機」）與上限字（二換三今天、三換四這一季）、熬與取消
-  function brewSheetHtml(up) {
-    const ask = `用 ${up.need | 0} 個${SHOP_TIER[up.tier - 1]}${esc(up.attribute)}熬一個${SHOP_TIER[up.tier]}${esc(up.attribute)}，${up.cost | 0} 兩${dealHtml(up.cost_note || "")}？`; // 待 joy 潤
-    return `<div class="brew-sheet" role="group" aria-label="${BREW_WORD}">
-        <p class="brew-ask">${ask}</p><p class="brew-odds">${esc(up.odds || "")}${up.left_text ? `・<span class="nb">${esc(up.left_text)}</span>` : ""}</p>
-        <div class="brew-btns"><button class="btn small ghost" data-act="shop-brew-close">取消</button><button class="btn small primary" data-act="shop-brew-go" data-attr="${esc(up.attribute)}" data-tier="${up.tier | 0}">${BREW_WORD}</button></div>
-      </div>`;
+  // 小單（企劃者 2026-11-03 從兩張對比圖挑「乙 從畫面底下浮一張」，原本是那一排底下展開）：同確認框那一層（ask）從畫面底下浮上來——
+  // 「用 3 個一階剛熬一個二階剛，5 兩？」（工錢後面的折扣原因切成小段）、底下一行素材頁那一句機率（「五成出流雲絮，其餘隨機」）與
+  // 上限字（二換三今天、三換四這一季）、「取消」「熬」
+  function brewAskHtml(up) {
+    return `用 ${up.need | 0} 個${SHOP_TIER[up.tier - 1]}${esc(up.attribute)}熬一個${SHOP_TIER[up.tier]}${esc(up.attribute)}，${up.cost | 0} 兩${dealHtml(up.cost_note || "")}？`; // 待 joy 潤
   }
-  // 一排素材格（forgePageHtml 交過來的 {attribute, cells: [[階, 標記]]}）：升階開著時補齊灰格，點開的那一格的小單接在這一排底下
+  function brewOddsHtml(up) {
+    return `${esc(up.odds || "")}${up.left_text ? `・<span class="nb">${esc(up.left_text)}</span>` : ""}`;
+  }
+  // 一排素材格（forgePageHtml 交過來的 {attribute, cells: [[階, 標記]]}）：升階開著時補齊灰格
   function brewRowHtml(shop, row) {
     const ups = brewUps(shop);
-    let list = row.cells, sheet = "";
+    let list = row.cells;
     if (ups) {
       const have = new Set(list.map(([t]) => t));
       for (let t = 1; t <= (shop.four ? 4 : 3); t += 1) {
@@ -3951,22 +3952,45 @@
         const up = t > 1 ? ups.find((u) => u.attribute === row.attribute && u.tier === t) : null;
         const html = brewCellHtml(up, row.attribute, t);
         if (html) list = [...list, [t, html]];
-        if (up && !up.problem && brewOpen(row.attribute, t)) sheet = brewSheetHtml(up);
       }
       list = list.slice().sort((p, q) => p[0] - q[0]);
     }
-    return `<div class="cell-row"><span class="row-attr ${SHOP_ATTR[row.attribute] || ""}">${esc(row.attribute)}</span>${list.map((pair) => pair[1]).join("")}</div>${sheet}`;
+    return `<div class="cell-row"><span class="row-attr ${SHOP_ATTR[row.attribute] || ""}">${esc(row.attribute)}</span>${list.map((pair) => pair[1]).join("")}</div>`;
   }
-  // 點灰格：按不下去的只說原因；按得下去的打開（再點一次收起）小單，鐵匠那一句換回平常的
+  // 點灰格：按不下去的只說原因；按得下去的那一格框起來、小單從畫面底下浮上來（按「熬」送小單問的那一筆），鐵匠那一句換回平常的
   function shopBrew(attr, tier, why) {
     if (why) { toast(why); return; }
-    S.shopBrew = brewOpen(attr, tier) ? null : { attr, tier };
+    const shop = S.main && S.main.shop;
+    const up = shop && (brewUps(shop) || []).find((u) => u.attribute === attr && u.tier === tier);
+    if (!up || up.problem) return;
+    S.shopBrew = { attr, tier };
     S.shopNote = null;
     renderShop();
+    ask(brewAskHtml(up), BREW_WORD, () => smithBrew(up.attribute, up.tier), { rich: true, sub: brewOddsHtml(up) });
+    brewCellShow();
   }
-  // 熬（同素材頁的升階，MAIN_ACTIONS smith_upgrade）：結果那一句（S.shopNote）在打造頁換掉鐵匠那一句，再問一次這一爐（素材格跟著變）
+  // 小單蓋住點的那一格時（矮的螢幕點底下幾排：320×700 點柔的二階，那一格底 567、小單頂 521）：把捲的那一層往上推到那一格露在小單上面
+  // （底下留一點空；推到底推不動就算了）。小單照它最後停的位置算（視窗高 − 小單高）：浮上來的動畫還在半路，量到的頂會偏低
+  const BREW_ROOM = 8;
+  function brewCellShow() {
+    const body = document.querySelector(".shop-layer .shop-body");
+    const cell = body && body.querySelector ? body.querySelector(".cell.brew.on") : null;
+    const sheet = document.querySelector(".ask");
+    if (!cell || !sheet) return;
+    const below = cell.getBoundingClientRect().bottom + BREW_ROOM - (window.innerHeight - sheet.offsetHeight);
+    if (below > 0) body.scrollTop += below;
+  }
+  // 小單收起（「取消」、旁邊的暗處、Esc）：那一格不再框著
+  function brewShut() {
+    if (!S.shopBrew) return;
+    S.shopBrew = null;
+    renderShop();
+  }
+  // 熬（同素材頁的升階，MAIN_ACTIONS smith_upgrade）：結果那一句（S.shopNote）在打造頁換掉鐵匠那一句，再問一次這一爐（素材格跟著變）。
+  // 被拒（api() 提示過原因，shopDo 不重畫）：小單已經收了，那一格也收起框
   async function smithBrew(attribute, tier) {
     await shopDo("smith_upgrade", { attribute, tier }, () => { S.shopBrew = null; });
+    brewShut();
     await updateSmithLine();
   }
 
@@ -4975,18 +4999,20 @@
 
   // 管理者動作的確認框（G3）：每一項按了都先問一次、問句說出後果。疊在設定抽屜上面、不重畫抽屜，
   // 選好的下拉選單、填好的重設密碼欄位都留著；按「取消」或旁邊的暗處就關掉，什麼都不送
-  // opts.no：取消那一顆的字（自創作罷寫「再想想」，鐵匠鋪與合成流程 3.1）；opts.lines：問句底下一行一件的清單（批量拆解，3.4）
+  // opts.no：取消那一顆的字（自創作罷寫「再想想」，鐵匠鋪與合成流程 3.1）；opts.lines：問句底下一行一件的清單（批量拆解，3.4）；
+  // opts.rich：text 是呼叫的人跳脫好的 HTML、opts.sub：問句底下一行淡字的 HTML（打造頁熬的小單：工錢後面的折扣原因、機率與上限，3.3）
   let askGo = null;
   function ask(text, yes, go, opts = {}) {
     closeAsk();
     askGo = go;
     // 清單一行切成不折行的小段（nbHtml，切在「→」後與「（」前）：320 寬「（淬過 3 次一起沒了）」會折在「一｜起」中間（FB-297 同一類）
     const lines = (opts.lines || []).length ? `<ul class="ask-list">${opts.lines.map((l) => `<li>${nbHtml(l)}</li>`).join("")}</ul>` : "";
+    const sub = opts.sub ? `<p class="muted ask-sub">${opts.sub}</p>` : "";
     document.body.insertAdjacentHTML("beforeend", `
       <div class="ask-layer">
         <div class="ask-bg" data-act="ask-no"></div>
         <div class="ask" role="alertdialog" aria-modal="true" aria-labelledby="ask-text">
-          <p id="ask-text">${esc(text)}</p>${lines}
+          <p id="ask-text">${opts.rich ? text : esc(text)}</p>${sub}${lines}
           <div class="row"><button class="btn" data-act="ask-no">${esc(opts.no || "取消")}</button><button class="btn danger" data-act="ask-yes">${esc(yes)}</button></div>
         </div>
       </div>`);
@@ -6298,6 +6324,7 @@
         case "ask-no":
           closeAsk();
           if (S.mallOpen && S.mallPick) { S.mallPick = null; renderMall(); } // 商城的購買確認按了再想想：那一格不再框著
+          brewShut(); // 打造頁熬的小單按了取消：那一格灰格不再框著（3.3）
           break;
         // 商城（商城第二批）：齒輪旁的錠子鈕與底部第六格都打開那一層（不換頁）
         case "mall-open": await openMall(); break;
@@ -6435,9 +6462,7 @@
         case "shop-leave": await boardLeave(el); break; // 第三層開著時出店
         case "shop-kind": setPot({ kind: el.dataset.kind }); break;
         case "shop-cell": shopCell(el.dataset.id, el.dataset.why); break;
-        case "shop-brew": shopBrew(el.dataset.attr, Number(el.dataset.tier), el.dataset.why); break; // 打造頁的灰格（3.3）：點了彈小單
-        case "shop-brew-close": S.shopBrew = null; renderShop(); break;
-        case "shop-brew-go": await smithBrew(el.dataset.attr, Number(el.dataset.tier)); break;
+        case "shop-brew": shopBrew(el.dataset.attr, Number(el.dataset.tier), el.dataset.why); break; // 打造頁的灰格（3.3）：點了從底下浮小單
         case "shop-slot": setPot(el.dataset.role === "main" ? { main: null, aux: null } : { aux: null }); break; // 拿掉主料，輔料跟著出來（伺服器也這樣修）
         case "shop-go": await smithForge(); break;
         case "shop-furnace": await smithFurnace(); break; // 打造頁的爐火（3.2）：看火候
@@ -6632,7 +6657,7 @@
     if (keyboard) document.querySelector(".who")?.focus();
   }
   document.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape" && askGo) { closeAsk(); return; } // 管理者確認框：Esc 等於取消
+    if (ev.key === "Escape" && askGo) { closeAsk(); brewShut(); return; } // 管理者確認框：Esc 等於取消（打造頁熬的小單也是，那一格不再框著）
     if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.who[data-act="toggle-more"]')) {
       ev.preventDefault();
       toggleMore(true);

@@ -343,7 +343,8 @@ def test_a_refused_divine_name_on_the_forged_card_stays_in_the_box(m):
     assert out["after"] == ""
 
 
-# ── 鐵匠鋪與合成流程 3.3（A 批）：打造頁缺料的灰格就地熬（只用現成的 shop.trade 與 smith_upgrade）──
+# ── 鐵匠鋪與合成流程 3.3（A 批）：打造頁缺料的灰格就地熬（只用現成的 shop.trade 與 smith_upgrade；
+#    小單企劃者 2026-11-03 挑「乙 從畫面底下浮一張」，原本做的是那一排底下展開）──
 
 
 def _brewing(content, world, bag, upgrade=True):
@@ -391,51 +392,91 @@ def test_a_brew_cell_that_cannot_brew_only_says_why(content, world):
     out = _forge_page(m, """return (async () => {
         H.render();
         """ + _click('{ act: "shop-brew", attr: "剛", tier: "3", why: %s }' % json.dumps(why)) + """
-        return { brew: H.S.shopBrew, toast: T.els.toast.textContent, html: T.els.app.innerHTML, calls: T.calls.length };
+        return { brew: H.S.shopBrew, toast: T.els.toast.textContent, html: T.els.app.innerHTML, calls: T.calls.length, asked: T.bodyHtml.join("") };
       })();""")
-    assert out["brew"] is None and out["toast"] == why and "brew-sheet" not in out["html"] and out["calls"] == 0
+    assert out["brew"] is None and out["toast"] == why and out["calls"] == 0
+    assert "ask-layer" not in out["asked"] and "brew on" not in out["html"]  # 不浮小單、那一格不框
 
 
-def test_tapping_a_brew_cell_opens_the_sheet_and_brewing_posts_the_upgrade(content, world):
+_BREW_ASK = """return (async () => {
+    T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
+    H.render();
+    """ + _click('{ act: "shop-brew", attr: "剛", tier: "2", why: "" }') + """
+    const shop = T.els.app.innerHTML, asked = T.bodyHtml.join("");
+    %s
+    await new Promise((ok) => setTimeout(ok, 5));
+    return { shop, asked, after: T.els.app.innerHTML, calls: T.calls.map((c) => c), brew: H.S.shopBrew, note: H.S.shopNote };
+  })();"""
+
+
+def test_tapping_a_brew_cell_floats_a_sheet_from_the_bottom_and_brewing_posts_the_upgrade(content, world):
+    """企劃者 2026-11-03 從灰格小單的兩張對比圖挑「乙 從畫面底下浮一張」（原本做的是那一排底下展開）：點得了的灰格，小單從畫面底下
+    浮上來（同確認框那一層，ask），問句、素材頁那一句機率、「取消」「熬」；點的那一格框起來。按「熬」送 smith_upgrade（屬性與階照小單
+    問的那一筆），收起之後那一格不再框著、結果句換掉鐵匠那一句，再問一次這一爐（素材格跟著變）。"""
     game = _brewing(content, world, {"gang_1": 4})
     m = server.main_view(game)
     up = next(u for u in m["shop"]["trade"]["upgrade"] if u["tier"] == 2)
-    out = _forge_page(m, """return (async () => {
-        H.render();
-        """ + _click('{ act: "shop-brew", attr: "剛", tier: "2", why: "" }') + """
-        const sheet = T.els.app.innerHTML;
-        // 「熬」那一顆照畫出來的鈕自己帶的 data 點（不手寫）：鈕上的屬性或階寫錯，送出去的就跟小單寫的不一樣
-        const at = sheet.indexOf('data-act="shop-brew-go"'), tag = sheet.slice(sheet.lastIndexOf("<button", at), sheet.indexOf(">", at));
-        const own = (k) => (new RegExp(` data-${k}="([^"]*)"`).exec(tag) || [])[1];
-        """ + _click('{ act: "shop-brew-go", attr: own("attr"), tier: own("tier") }') + """
-        await new Promise((ok) => setTimeout(ok, 5));
-        return { sheet, after: T.els.app.innerHTML, calls: T.calls.map((c) => c), brew: H.S.shopBrew };
-      })();""", responses={"/api/do/smith_upgrade": {"main": m, "message": "<p>你用 3 個精鐵砂熬出了一個玄鋼骨。</p>"},
-                           "/api/smith_line": m["shop"]["forge"]["line"]})
-    sheet = out["sheet"][out["sheet"].index('class="brew-sheet"'):]
-    assert f"用 3 個一階剛熬一個二階剛，{up['cost']} 兩？" in sheet and up["odds"] in sheet  # 設計稿 3.3 的那一句與素材頁的機率
-    assert 'data-act="shop-brew-go" data-attr="剛" data-tier="2"' in sheet and 'data-act="shop-brew-close"' in sheet  # 熬的就是小單寫的那一格
-    assert out["sheet"].index('class="row-attr gang"') < out["sheet"].index('class="brew-sheet"')  # 彈在那一排底下
+    out = _forge_page(m, _BREW_ASK % _click('{ act: "ask-yes" }'),
+                      responses={"/api/do/smith_upgrade": {"main": m, "message": "<p>你用 3 個精鐵砂熬出了一個玄鋼骨。</p>"},
+                                 "/api/smith_line": m["shop"]["forge"]["line"]})
+    assert "brew-sheet" not in out["shop"] and "shop-brew-go" not in out["shop"]  # 不在那一排底下展開
+    assert 'class="cell t2 brew on" data-act="shop-brew" data-attr="剛" data-tier="2"' in out["shop"]  # 點的那一格框起來
+    asked = out["asked"]
+    assert 'class="ask-layer"' in asked and f"用 3 個一階剛熬一個二階剛，{up['cost']} 兩？" in _text(asked)  # 設計稿 3.3 的那一句
+    assert f'<p class="muted ask-sub">{up["odds"]}' in asked  # 素材頁的機率，問句底下一行淡字
+    assert '<button class="btn" data-act="ask-no">取消</button><button class="btn danger" data-act="ask-yes">熬</button>' in asked
     posted = [c for c in out["calls"] if c[0] == "/api/do/smith_upgrade"]
-    assert posted == [["/api/do/smith_upgrade", {"attribute": "剛", "tier": 2}]]
-    assert out["calls"][-1][0] == "/api/smith_line"  # 熬完再問一次這一爐（素材格跟著變）
-    assert out["brew"] is None and "brew-sheet" not in out["after"]
+    assert posted == [["/api/do/smith_upgrade", {"attribute": "剛", "tier": 2}]]  # 熬的就是小單問的那一格
+    assert out["calls"][-1][0] == "/api/smith_line"
+    assert out["brew"] is None and "brew on" not in out["after"]
     assert '<p class="shop-line brewed" role="status">你用 3 個精鐵砂熬出了一個玄鋼骨。</p>' in out["after"]  # 鐵匠那一句換成結果句
 
 
-def test_closing_the_sheet_and_changing_the_pot_put_the_smith_line_back(content, world):
+_BREW_SCROLL = """return (async () => {
+    T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
+    // 小單在畫面底下（812 高、小單 %(sheet)s 高）；點的那一格畫上框了才找得到（%(top)s～%(bottom)s）
+    const cell = { getBoundingClientRect: () => ({ top: %(top)s, bottom: %(bottom)s }) };
+    const body = { scrollTop: 40, querySelector: (s) => (s === ".cell.brew.on" && T.els.app.innerHTML.includes("brew on") ? cell : null) };
+    T.qs[".shop-layer .shop-body"] = body;
+    T.qs[".ask"] = { offsetHeight: %(sheet)s };
+    H.render();
+    """ + _click('{ act: "shop-brew", attr: "剛", tier: "2", why: "" }') + """
+    return body.scrollTop;
+  })();"""
+
+
+@pytest.mark.parametrize(("top", "bottom", "scrolled"), [(560, 630, 40 + 630 + 8 - (812 - 220)), (400, 470, 40)])
+def test_the_framed_cell_is_scrolled_above_the_sheet(content, world, top, bottom, scrolled):
+    """小單從畫面底下浮上來會蓋住底下幾排（320×700 點柔的二階：那一格底 567、小單頂 521）：浮上來之後把捲的那一層往上推，
+    點的那一格露在小單上面（留 8px）；本來就看得到的不動。小單的頂照它最後停的位置算（視窗高 − 小單高），不量浮上來的半路。"""
+    game = _brewing(content, world, {"gang_1": 4})
+    out = _forge_page(server.main_view(game), _BREW_SCROLL % {"top": top, "bottom": bottom, "sheet": 220})
+    assert out == scrolled
+
+
+@pytest.mark.slow  # 提示泡泡的計時器（約 3 秒）
+def test_a_refused_brew_still_unframes_the_cell(content, world):
+    """伺服器拒了（例：今天熬滿了；api() 提示原因、shopDo 不重畫）：小單已經收了，那一格也不能一直框著。"""
     game = _brewing(content, world, {"gang_1": 4})
     m = server.main_view(game)
-    out = _forge_page(m, """return (async () => {
-        H.render();
-        """ + _click('{ act: "shop-brew", attr: "剛", tier: "2", why: "" }') + """
-        """ + _click('{ act: "shop-brew-close" }') + """
-        const closed = T.els.app.innerHTML;
+    refuse = ('T.ctx.fetch = ((orig) => (url, opts) => (url.startsWith("/api/do/") ? Promise.resolve({ ok: false, status: 400, '
+              'json: () => Promise.resolve({ detail: "今天熬滿了" }) }) : orig(url, opts)))(T.ctx.fetch);\n')
+    out = _forge_page(m, refuse + _BREW_ASK % _click('{ act: "ask-yes" }'), responses={"/api/smith_line": m["shop"]["forge"]["line"]})
+    assert out["brew"] is None and "brew on" not in out["after"] and 'class="cell t2 brew" data-act="shop-brew"' in out["after"]
+
+
+@pytest.mark.parametrize("close", ['{ act: "ask-no" }', "escape"])
+def test_closing_the_sheet_unframes_the_cell_and_changing_the_pot_puts_the_smith_line_back(content, world, close):
+    """「取消」、點旁邊的暗處（同一個 ask-no）、Esc：小單收起、那一格不再框著、什麼都不送；之後放料，熬的結果句收起（鐵匠那一句換回來）。"""
+    game = _brewing(content, world, {"gang_1": 4})
+    m = server.main_view(game)
+    shut = ('T.docListeners.keydown.forEach((f) => f({ key: "Escape", target: {} }));' if close == "escape" else _click(close))
+    out = _forge_page(m, _BREW_ASK % (shut + """
+        const closed = T.els.app.innerHTML, sent = T.calls.length, brew = H.S.shopBrew;
         H.S.shopNote = "熬出來了";
         """ + _click('{ act: "shop-cell", id: "gang_1", why: "" }') + """
-        return { closed, note: H.S.shopNote };
-      })();""", responses={"/api/smith_line": m["shop"]["forge"]["line"]})
-    assert "brew-sheet" not in out["closed"] and out["note"] is None
+        return { closed, sent, brew, note: H.S.shopNote };"""), responses={"/api/smith_line": m["shop"]["forge"]["line"]})
+    assert out["brew"] is None and "brew on" not in out["closed"] and out["sent"] == 0 and out["note"] is None
 
 
 def test_no_trade_no_grey_cells(content, world):
