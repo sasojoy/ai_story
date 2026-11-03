@@ -141,6 +141,13 @@ CHECK_PORTRAIT = (
 # 而六格的出招圖要生圖穩定對準手的位置本來就做不到。硬規則全留（格數、整個人在框內、同一個人、
 # 沒有武器、側面向右、腳在同一條線），只把姿勢那一句改成「整串讀起來是那個動作、順序對」。
 # 「沒有武器」也補一句：寬袖、飄帶、長髮不算東西——魔教聖女的紅袖一揚就被判成「手持紅布或刀刃」。
+# 動作比對再放寬（企劃者 2026-11-03）：11/02 那一次改了「判整串、不要逐格」，但審圖照舊逐格擋
+# （#28、#29 的 hero_bare_idle 各畫十次全掛，理由都是「第3格前傾不明顯」「第4格出現跨步」
+# 「與參考圖的動作順序不符」）。漏掉的是：交給審圖的 {action} 就是 orders.ACTIONS 那段**給生圖的
+# 逐格編舞稿**（「frames 1, 2 and 4 是站定，frame 3 整個身體往右前傾約一成畫面寬」），審圖讀到
+# 逐格數字自然當成逐格規格驗，寫在後面的「judge as a whole」壓不過它。所以這一次把不算過不了的
+# 項目逐條點名（哪一格是極點、傾多遠、手腳位置、格的順序），並說明那段文字是給生圖的 brief。
+# 硬規則照舊全留：格數、整個人在框內、同一個人、沒有武器、側面向右、腳在同一條線、去背乾淨。
 GEAR_NONE = "holds no weapon or object (loose sleeves, ribbons, sashes and long hair are not objects)"
 GEAR_SWORD = ("carries one plain straight sword like reference 1 (at the hip, or in hand when the action draws it) and no other "
               "weapon; a small found item in the hands is fine where reference 1 has one")
@@ -149,9 +156,12 @@ CHECK_SHEET = (
     "(cut-out areas are flat gray). The action should be: {action}\n"
     "Reference 1 is the same animation drawn for another character (layout and overall action to follow). Reference 2 is this "
     "character's design.\nPass it only if: exactly {frames} frames, one whole character in each (no frame empty, cut in half, or "
-    "holding two characters); it is the same character as reference 2 in every frame (face, hair, clothes, colors); the frames read "
-    "as the action above and run in the same order as reference 1 — small differences in limb position are fine, judge the action as "
-    "a whole, not frame by frame; side view facing right; {gear}; feet roughly on the same ground line.\n"
+    "holding two characters); it is the same character as reference 2 in every frame (face, hair, clothes, colors); the strip as a "
+    "whole reads as that kind of action, and not every frame is the same drawing — the action text above is the brief given to the "
+    "image model, NOT a per-frame checklist for you: which frame carries the extreme of the motion, how far a frame leans, steps or "
+    "shifts, exact limb and hand positions, and the frame order are NOT pass criteria. Fail the action only if the strip reads as a "
+    "different action altogether, or if the frames are all identical; side view facing right; {gear}; feet roughly on the same "
+    "ground line.\n"
     # 校準（2026-11-02）：審圖連去背留下的 1～2 像素白邊都當成「白色毛絨狀雜物」擋下來，但量過了——
     # 那種邊緣佔實心像素的 0.0～0.2%，預設的斗笠小子（同一條去背管線切的）與這一套已經過審的六張
     # 都在同一個量級。所以要寫明比較的基準是斗笠小子，不是乾淨的向量圖。

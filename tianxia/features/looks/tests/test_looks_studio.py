@@ -483,10 +483,19 @@ def test_refit_rescales_an_old_oversized_sheet_without_redrawing_it():
 
 def test_the_sheet_checklist_judges_the_action_as_a_whole_not_frame_by_frame():
     """Joy 2026-11-02 定的標準：出招那四張不要求逐格對準手的位置（六格動作圖生圖做不到，#3 一直卡在
-    「第2格雙拳未併攏舉至右肩上方」這種理由），但硬規則全留。寬袖、飄帶也不算「手上拿著東西」。"""
+    「第2格雙拳未併攏舉至右肩上方」這種理由），但硬規則全留。寬袖、飄帶也不算「手上拿著東西」。
+
+    企劃者 2026-11-03 再放寬（#28、#29 的 hero_bare_idle 各十次全掛在「第3格前傾不明顯」「第4格出現跨步」
+    「與參考圖的動作順序不符」）：{action} 那段是給生圖的 brief，不是給審圖的逐格清單，所以不算過不了的
+    項目要逐條點名——哪一格是極點、傾多遠、手腳位置、格的順序。硬規則照舊全留。"""
     check = studio.CHECK_SHEET
-    assert "judge the action as a whole, not frame by frame" in check
-    assert "small differences in limb position are fine" in check
+    assert "the strip as a whole reads as that kind of action" in check
+    assert "NOT a per-frame checklist for you" in check
+    for not_a_criterion in ("which frame carries the extreme of the motion", "how far a frame leans, steps or "
+                            "shifts", "exact limb and hand positions", "the frame order are NOT pass criteria"):
+        assert not_a_criterion in check, not_a_criterion
+    # 唯一還擋得下來的動作理由：整串讀起來是別的動作、或每一格都一樣
+    assert "reads as a different action altogether" in check and "the frames are all identical" in check
     assert "loose sleeves, ribbons, sashes and long hair are not objects" in studio.GEAR_NONE and "{gear}" in check
     # 去背留下的 1～2 px 白邊不算雜物（量過：佔實心像素 0.0～0.2%，斗笠小子的原圖也一樣）
     assert "ignore single-pixel fringes" in check and "the default " in check
