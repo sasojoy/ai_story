@@ -137,7 +137,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
   （這一隻對你露的那一面的名字，照陣營）、`ctx._duel_start(boss)`（撞上頭目、開打）：探索包的出門一趟撞上頭目時問。原本列在三、過渡
   explore 那一段（主人寫頭目戰，`_boss_ready` 那時是探索包直接 import `tianxia.duel` 叫 `available`），單挑成包時照總表第六節第 4 條改成查詢服務
 - `ctx.arena_look()`、`ctx.arena_move()`（主人：形象包）：擂台報名、開打那一刻記這個人穿哪一套、出招疊哪一張光效（擂台搬進單挑包之後由包經 ctx
-  問；`tests/battle/test_arena.py` 換掉 `Game.arena_look`）
+  問；`tianxia/features/bout/tests/test_arena.py` 換掉 `Game.arena_look`）
 
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
