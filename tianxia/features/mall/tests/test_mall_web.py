@@ -385,11 +385,15 @@ def test_a_poll_while_the_mall_is_open_reloads_it_only_when_the_balance_moved(m_
     assert out["same"] == out["before"] and out["after"] == out["before"] + 1
 
 
-# ── 設定頁的管理者區 ─────────────────────────────
+# ── 管理頁的商城一塊（admin.js；以前在設定抽屜最底下）─────────────────────────────
+
+# 管理頁要有一份管理資料才畫各塊（/api/admin 的最少那幾格）；商城那一塊不靠它
+ADMIN = {"phase": "running", "battles": [], "events": [], "trends": [], "timetable": [], "results": [], "locks": [],
+         "season_one": False, "showdowns": [], "now": {}}
 
 
 def _sheet(m, S=None):
-    return run(m, "return H.sheetHtml();", S={"admin": None, **(S or {})})
+    return run(m, "return H.adminHtml();", S={"admin": ADMIN, **(S or {})})
 
 
 def test_admin_mall_tools_show_only_for_an_admin_with_the_mall_on(m_on, m_off):
@@ -397,7 +401,8 @@ def test_admin_mall_tools_show_only_for_an_admin_with_the_mall_on(m_on, m_off):
     html = _sheet(admin)
     assert 'id="ad-mall-form"' in html and 'data-op="mall_reissue"' in html and 'data-op="mall_revoke"' in html
     assert 'id="ad-mall-amount"' in html and 'id="ad-mall-note"' in html
-    assert 'id="ad-mall-form"' not in _sheet(m_on)  # 不是管理者
+    assert 'id="ad-mall-form"' not in run(m_on, "return H.sheetHtml();", S={"admin": None})  # 設定抽屜不再有（管理頁只有管理者進得去）
+    assert 'id="ad-mall-form"' not in run(admin, "return H.sheetHtml();", S={"admin": None})
     assert 'id="ad-mall-form"' not in _sheet({**m_off, "admin": True})  # 商城關著
 
 
@@ -443,8 +448,8 @@ def _admin_result(m_on, op, message):
       T.ctx.document.getElementById = (id) => fields[id] || orig(id);
       T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
       """ + _click('{ act: "mall-admin", op: "' + op + '" }') + _click('{ act: "ask-yes" }') + """
-      return H.sheetHtml();"""),
-        S={"sheet": True, "admin": None},
+      return H.adminHtml();"""),
+        S={"sheet": True, "admin": ADMIN},
         responses={f"/api/do/{op}": {"main": admin, "message": message},
                    "/api/admin/mall": {"name": "沈浪", "balance": 400, "card": None, "ledger": [], "purchases": []}})
 
@@ -656,6 +661,21 @@ def test_the_ask_has_a_quantity_and_sends_it(m_on):
     assert len(post) == 1 and post[0][1]["qty"] == 3
     picks = [c for c in out["calls"] if c[0] == "/api/mall/buy"]
     assert REF.match(picks[0][1]["ref"])
+
+
+def test_the_quantity_swaps_in_place_without_reopening_the_layer(m_on):
+    """按 −／＋ 換數量：同一張紙就地換內容，不拆掉整層再插一次（每插一次暗處淡入、紙滑上來的動畫就重播＝閃；Joy 2026-11-03）。"""
+    out = run(m_on, _async(_click('{ act: "mall-open" }') + _click('{ act: "mall-pick", id: "pills_5" }') + """
+      const paper = { innerHTML: "", querySelector: () => null, querySelectorAll: () => [] };
+      T.qs[".ask.mall-ask"] = paper;
+      const before = T.bodyHtml.length;
+      """ + _click('{ act: "mall-qty", n: "3" }') + _click('{ act: "ask-yes" }') + """
+      return { calls: T.calls, added: T.bodyHtml.length - before, paper: paper.innerHTML };"""),
+              responses={"/api/mall/buy": {"message": "", "bought": "pills_5", "mall": _many_view()}, "/api/mall": _many_view()})
+    assert out["added"] == 0
+    assert "買下【回體丹五顆】×3？" in out["paper"] and "買下（300）" in out["paper"] and 'class="ask-layer"' not in out["paper"]
+    post = [c for c in out["calls"] if c[0] == "/api/mall/buy"]
+    assert len(post) == 1 and post[0][1]["qty"] == 3
 
 
 def test_one_left_means_no_quantity_row(m_on):

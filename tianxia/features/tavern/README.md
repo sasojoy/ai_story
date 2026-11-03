@@ -31,7 +31,7 @@
 
 ## 過渡（手冊 3.11）
 
-- 包 → 還沒搬的舊模組 24 處：`actions.py` 9（`annals`、`battlelog`、`bounties`、`encounter`、`equipment`、`renown`、`roster`、`shopview`、`social`）、`rules.py` 14（`annals`、`atlas`、`figures`、`renown`、`territory`、`treasures`，函式裡的 `prologue`、`arena`、`figure_life` 三處、`allied`、`zh` 兩處）、`ask.py` 1（`figures`）。
+- 包 → 還沒搬的舊模組 12 處：`actions.py` 4（`annals`、`bounties`、`shopview`、`social`）、`rules.py` 7（`annals`、`atlas`、`figures`，函式裡的 `arena`、`figure_life` 三處）、`ask.py` 1（`figures`）。原本 24 處；`battlelog`、`encounter`、`equipment`、`renown`、`roster`、`territory`、`treasures`、`prologue`、`allied`、`zh` 全部拆包第 15 批登記進共用規則層（`tianxia/core/registry.py` 的 `SHARED`），那幾行行尾改註「共用規則層」，不算過渡。
 - 服務清單（`tianxia/core/services.py`）這一包加的：`_shop_say`、`_shop_after`、`_idle`、`_last_wear`（共用）、`_battle_now`（過渡，決戰）、`_tavern_seek_exact`、`_tavern_reply`（寄放）。
 
 ## 測試

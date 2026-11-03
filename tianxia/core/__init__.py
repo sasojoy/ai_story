@@ -5,6 +5,9 @@
 - features.py：掛鉤（Protocol 與有預設值的基底）、核心照 FEATURES 彙整選項、分派、狀態、換日、換季、清失效參照。
 - registry.py：FEATURES（有順序）；核心唯一 import 功能包的地方。
 - swap.py：JSON 裡整個字串相等的換字（易名帖、資料庫改名共用）。
+- event_check.py（core-events：全部拆包第 16 批）：事件檢定——端出事件卡、固定選項的檢定與結果、效果套用、事件裡打一場、隨口應對的
+  三段式；本體從 Game 搬來，Game 留一行委派。核心本體的一部分（tianxia/core/ 底下的檔本來就算核心：功能包可以 import、它不 import 包），
+  不進 MODULES（那一份是 tianxia/<名字>.py 頂層的核心模組）、不進 FEATURES（它不是包、沒有掛鉤與前綴）。
 
 第一階 ctx 就是 Game 本身，不另包一層（手冊 3.3）。
 """

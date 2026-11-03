@@ -954,6 +954,24 @@ def test_choosing_an_option_plays_it_and_saves(client, monkeypatch):
     assert open_characters().exists("沈青衫")
 
 
+def test_api_answers_say_where_the_time_went(client):
+    """Joy 2026-11-03「探索選完、果出來前就等 5 秒」（雲端量不到）：/api/ 的回應帶 Server-Timing——等鎖幾次與幾毫秒、重讀角色、
+    重組畫面、拿著鎖多久、量表那一筆、整個請求，主機用 curl 或開發者工具就看得到。只有數字；推送的長連線不帶。"""
+    _player(client)
+    timing = client.post("/api/choose", json={"id": "act:explore"}).headers["server-timing"]
+    names = [part.split(";")[0] for part in timing.split(", ")]
+    assert names[-1] == "total" and {"lock", "reload", "view", "hold"} <= set(names)
+    lock = next(part for part in timing.split(", ") if part.startswith("lock;"))
+    assert 'desc="n=' in lock and ";dur=" in lock
+    assert "server-timing" in client.get("/api/main").headers
+    assert "server-timing" not in client.get("/").headers  # 只有 /api/
+
+
+def test_server_timing_lists_only_what_was_measured():
+    assert server.server_timing({}, 0.0123) == "total;dur=12.3"
+    assert server.server_timing({"lock": 0.5, "lock_n": 3, "view": 0.02}, 1.0) == 'lock;desc="n=3";dur=500.0, view;dur=20.0, total;dur=1000.0'
+
+
 def test_an_option_that_is_not_on_the_menu_does_nothing(client):
     _player(client)
     before = client.get("/api/main").json()["status"]["stamina"]
@@ -5478,6 +5496,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "ascend_line",  # 破境卡那一句（招式與絕學稿案第三節）：三段同 create_intent
         "persuade_text",  # 託付的勸降（減法季批 6）：三段同 gather_text，模型只評那一句
         "epiphany_think",  # 特殊頓悟的靜心思名：三段同 prepare_forge，模型一次取三個名字
+        "_draft",  # 一句話自創的導演稿（功能包 looks 的 routes）：A 鎖內驗那一句 → B 鎖外請模型填表 → C 鎖內組稿／扣元寶
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
@@ -5493,8 +5512,8 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
                                          "narration_round",  # 事件旁白每週改寫（減法季批 10）：背景一則一則，當假人排，名號 NARRATION_KEY
                                          "verdict_text",  # 人物評曰（減法季批 7b-2）：zhuan_job 寫完正文後在鎖外逐條叫，當假人排在真人後面
                                          "tale_round"}  # 戰記（Joy 2026-10-29）：決戰收場後在背景寫一篇，當假人排，名號 TALE_OWNER_KEY
-    importers = [
-        p.name for p in (server.ROOT / "tianxia").glob("*.py")
+    importers = [  # 核心本體 tianxia/core/ 也掃（事件檢定搬進 core/event_check.py，dev/core-events-1 審查）
+        p.name for p in [*(server.ROOT / "tianxia").glob("*.py"), *(server.ROOT / "tianxia" / "core").glob("*.py")]
         if re.search(r"^\s*(import|from)\s+llm_queue\b", p.read_text(encoding="utf-8"), re.M)
     ]
     assert importers == []
@@ -5797,8 +5816,8 @@ def test_the_page_polls_the_queue_only_while_waiting_on_the_model():
     persuade = _js_function(js, "async function persuadeSay(")  # 託付的勸降（減法季批 6，FB-829）
     assert "watchQueue(submitBtn, PERSUADE_WAIT)" in persuade and "stop();" in persuade.split("finally")[1]
     assert js.count("watchQueue(") == 8  # 定義一個、使用七個（對話與大場面是同一個選項流程；有所感畫完送出、對話「自己說」、找素材「自己說」、勸降各另一個）
-    sheet = _js_function(js, "function sheetHtml(")
-    assert "a && a.llm_queue" in sheet and "模型佇列：處理中" in sheet
+    now = _js_function(js, "function adNowHtml(")  # 管理頁頂上「現在」那張卡（admin.js）
+    assert "a.llm_queue ?" in now and "模型佇列：處理中" in now
 
 
 def test_watch_queue_shows_the_count_ahead_only_while_someone_is_ahead():
@@ -6204,7 +6223,7 @@ def test_only_the_action_endpoints_tell_other_tabs():
         "api_mingtie_do",  # 名帖定稿、檢舉（Joy 2026-10-19）
         "api_mall_buy",  # 商城的購買（2026-10-20）：手上的回體丹變了，其他分頁跟著刷新
         "api_mall_claim", "api_mall_rename",  # 月卡每日領、易名帖（萬寶閣販賣清單定案 2026-10-21）
-        "api_looks_order", "api_looks_move", "api_looks_market",  # 自建形象、招式動畫下單、市集購買（擂台形象第二～四批）：扣了元寶，其他分頁的錠子鈕跟著刷新
+        "api_looks_order", "api_looks_move", "api_looks_market", "api_looks_withdraw",  # 自建形象、招式動畫下單、市集購買（擂台形象第二～四批）：扣了元寶，其他分頁的錠子鈕跟著刷新
     }
 
 
@@ -6444,6 +6463,7 @@ NOT_IN_THE_FINGERPRINT = {
         "rounds": "還沒寫進資料庫的回合緩衝，不是畫面",
         "trend_start": "開打時就定了，跟 phase 一起寫入",
         "swings": "每回合戰局怎麼走，一回合結算才加一筆，那一下 round_number 也變了",
+        "mvps": "每回合的 MVP（looks 的 mvp.crown），一回合結算才加一筆，那一下 round_number 也變了",
         "marked": "誰在這一幕顯眼，只在回合結算時改，那一下 round_number 也變了",
         "last_targets": "上一回合誰被點名，只在回合結算時改，那一下 round_number 也變了",
         "outcome_reason": "收場時跟 phase 一起寫入",

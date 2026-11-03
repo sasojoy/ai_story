@@ -350,6 +350,33 @@ def _model_guard(game: Game):
             _pause_model()
 
 
+# ── 每個請求的時間花在哪裡（Server-Timing 回應標頭；Joy 2026-11-03「探索選完、果出來前就等 5 秒」，雲端量不到，主機用 curl -I
+# 或瀏覽器開發者工具看）：等鎖幾次、共等幾毫秒（lock）、拿著鎖多久（hold，含 reload 重讀角色、view 重組畫面）、量表那一筆小交易
+# （log）、整個請求（total）。只有數字，玩家看不到；一個請求一份（_server_timing 放進來），請求以外（排程、背景執行緒）的不記。
+TIMING: contextvars.ContextVar[dict[str, float] | None] = contextvars.ContextVar("timing", default=None)
+TIMING_KEYS = ("lock", "reload", "view", "hold", "log")
+
+
+def _timed(key: str, seconds: float, count: bool = False) -> None:
+    got = TIMING.get()
+    if got is None:
+        return
+    got[key] = got.get(key, 0.0) + seconds
+    if count:
+        got[f"{key}_n"] = got.get(f"{key}_n", 0.0) + 1
+
+
+def server_timing(got: dict[str, float], total: float) -> str:
+    """Server-Timing 標頭的值（毫秒，一位小數）：沒記到的那一樣不寫；等鎖另寫次數。"""
+    parts = []
+    for key in TIMING_KEYS:
+        if key in got:
+            desc = f';desc="n={int(got[key + "_n"])}"' if f"{key}_n" in got else ""
+            parts.append(f"{key}{desc};dur={got[key] * 1000:.1f}")
+    parts.append(f"total;dur={total * 1000:.1f}")
+    return ", ".join(parts)
+
+
 @contextlib.contextmanager
 def _locked(game: Game):
     """拿行動鎖，並先重讀角色（見 _reload）。這支程式裡每一個要用 game.state 的地方都從這裡進鎖
@@ -360,13 +387,19 @@ def _locked(game: Game):
     這一次拿鎖裡觸發的江湖大事（S-09）：鎖內只寫固定的原文，放鎖之後才開背景執行緒請模型潤色（write_flavor）。"""
     _used(game)
     jobs: list[FlavorJob] = []
+    asked, got = time.perf_counter(), None
     try:
         with game.world.action_lock(), _model_guard(game):
+            got = time.perf_counter()
+            _timed("lock", got - asked, count=True)  # 等鎖（Server-Timing，見 TIMING）
             _reload(game)
+            _timed("reload", time.perf_counter() - got)
             game.set_move_mode(MOVE_MODE.get())  # 這次請求選的走法（見 MOVE_MODE）：之後的選單與 choose() 都照它
             yield
             jobs = game.take_flavor_jobs()  # 動作丟例外就不拿：那一下整筆撤回，下一次拿鎖 reset_model_budget 會清掉
     finally:
+        if got is not None:
+            _timed("hold", time.perf_counter() - got)  # 拿著鎖多久（含重讀、動作、重組畫面、存檔）
         _used(game)
     if jobs and TALE_THREADS and game.client is not None:
         write_flavor(game, jobs)
@@ -407,10 +440,12 @@ def _play_did(game: Game, button: str, first: str | None = None) -> None:
     if where is None:
         return
     owner, season, day = where
+    started = time.perf_counter()
     log = PlayLog(game.world.db)
     log.press(owner, season, day, button)
     if first is not None:
         log.first(owner, season, first, day, game.now)
+    _timed("log", time.perf_counter() - started)
 
 
 def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
@@ -1954,8 +1989,12 @@ def patch_notes(path: Path | None = None) -> list[dict]:
 
 def main_view(game: Game) -> dict:
     """江湖畫面與頂上的狀態列；每次動作、每次計時器都回這一份。呼叫端要拿著行動鎖。"""
-    with game.phase_memo():  # 這一次建構裡「籌備中嗎」只讀一次共用狀態（見 Game.phase_memo）
-        return _main_view_body(game)
+    started = time.perf_counter()
+    try:
+        with game.phase_memo():  # 這一次建構裡「籌備中嗎」只讀一次共用狀態（見 Game.phase_memo）
+            return _main_view_body(game)
+    finally:
+        _timed("view", time.perf_counter() - started)
 
 
 def _main_view_body(game: Game) -> dict:
@@ -2300,6 +2339,34 @@ def admin_choices(game: Game) -> dict:
         "divine_out": divine.EXHAUSTED if divine.exhausted_now(game.world.divine_state(), game.world.get_season_number()) else "",
         # 模型佇列的總數（正在跑幾件、在排幾件，真人與假人算在一起，不分開數）；不列名號，也看不出有沒有假人（審查 M4）。開關關著是 None
         "llm_queue": None if QUEUE is None else QUEUE.snapshot(),
+        # 管理頁頂上「現在」那一塊（管理頁獨立，Joy 2026-11-01）：第幾季、季曆此刻、在打的決戰、各條大勢線此刻的值
+        "now": admin_now(game),
+    }
+
+
+PHASE_WORDS = {"preparing": "籌備中", "running": "進行中", "resting": "休季"}
+BATTLE_PHASE_WORDS = {"muster": "集結中", "active": "開打了"}
+
+
+def admin_now(game: Game) -> dict:
+    """管理頁頂上的現況：按鈕按下去之前先看得到此刻的樣子（定戰況、推大勢、救場之前知道現在是多少）。呼叫端拿著行動鎖。"""
+    world = game.state.world
+    battle = game.world.get_battle()
+    fight = None
+    if battle is not None and battle.phase != "ended":
+        definition = CONTENT.battles.get(battle.battle_id)
+        fight = {
+            "name": definition.name if definition is not None else battle.battle_id,
+            "phase": BATTLE_PHASE_WORDS.get(battle.phase, battle.phase),
+            "people": len(battle.participants), "round": battle.round_number, "trend": battle.trend,
+        }
+    return {
+        "season": game.world.get_season_number(),
+        "phase_text": PHASE_WORDS.get(game.world.season_phase(), ""),
+        "when": game.stamp(world.time),
+        "battle": fight,
+        "trends": [{"id": t.id, "label": t.name, "value": rules.world_trend_value(world, CONTENT, t.id)}
+                   for t in CONTENT.scenario.trends],
     }
 
 
@@ -2478,6 +2545,23 @@ def reset_password(game: Game, target: str, temp: str) -> str:
 app = FastAPI(title="天下大勢", docs_url=None, redoc_url=None, openapi_url=None)
 
 
+@app.middleware("http")
+async def _server_timing(request: Request, call_next):
+    """/api/ 的回應帶 Server-Timing（見 TIMING）。推送的長連線（/api/events）不包：那是串流，量總時間沒有意義。"""
+    path = request.url.path
+    if not path.startswith("/api/") or path == "/api/events":
+        return await call_next(request)
+    got: dict[str, float] = {}
+    token = TIMING.set(got)  # 端點在執行緒池裡跑時拿到的是複製的 context，裡面是同一個 dict：記的會回到這裡
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    finally:
+        TIMING.reset(token)
+    response.headers["Server-Timing"] = server_timing(got, time.perf_counter() - started)
+    return response
+
+
 @app.exception_handler(GameError)
 def _game_error(request: Request, exc: GameError):
     return JSONResponse({"error": str(exc)}, status_code=400)
@@ -2618,6 +2702,13 @@ class WebFiles(StaticFiles):
 
 @app.get("/")
 def index():
+    return HTMLResponse(PAGE, headers=NO_CACHE)
+
+
+@app.get("/admin")
+def admin_page():
+    """管理頁自己的網址（Joy 2026-11-01「把管理員工具獨立一個網址」）：同一支網頁，網頁看網址畫管理頁；不是管理者的人打開，
+    網頁照常回到江湖（資料都在 /api/admin* 那幾條，那邊才擋人）。"""
     return HTMLResponse(PAGE, headers=NO_CACHE)
 
 
@@ -3672,6 +3763,15 @@ def api_admin_player(request: Request, body: dict = Body(...)):
         raise HTTPException(403)
     name = str(body.get("name", ""))
     return look(game, lambda g: g.admin_player_choices(name))
+
+
+@app.post("/api/admin/accounts")
+def api_admin_accounts(request: Request, body: dict = Body(...)):
+    """管理頁「重設密碼」的帳號搜尋（管理頁獨立，Joy 2026-11-01）：帳號或名號含這幾個字的，最多 10 筆 {login, character}。只讀、管理者以外 403。"""
+    game = _game(request)
+    if not game.is_admin():
+        raise HTTPException(403)
+    return {"rows": account_store().search(str(body.get("q", "")))}
 
 
 @app.post("/api/admin/reset_password")

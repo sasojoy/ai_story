@@ -782,7 +782,7 @@ def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> 
                 # 裝在身上哪一格最強、戰力會到多少（might.best_place；Joy 2026-10-21「合出來我根本看不懂這是不是好的」）；裝著的不算
                 "best": None if arts_mod.where_slotted(state, insight_id) else might.best_place(state, content, world, insight_id),
                 "piece": insight_fx.pieces(state, insight_fx.base_id(insight_id)).index(insight_id) + 1 if not insights.is_own(insight_id) else 1,
-                "note": insight.note, "melt": content.config.melt_insight_xinde, "blocked": blocked,
+                "note": insight_note(content, insight, fx), "melt": content.config.melt_insight_xinde, "blocked": blocked,
                 # 感悟悟來的私有意境（悟意境設計 0.2b）：在哪裡悟的、畫的那一筆（修練頁畫小縮圖）
                 "own": insights.is_own(insight_id), "place": insight.place, "glyph": insight.glyph,
             }
@@ -804,6 +804,15 @@ SCORE_NOTE = "秘方特效只算會發動的那一條"  # Joy 2026-10-28
 def score_note(state: GameState, content: Content, world: WorldStateStore, art) -> str:
     """槽裡有不發動的秘方特效時，評分旁邊寫一句（arts.idle_specials）；沒有是空字串。"""
     return SCORE_NOTE if arts_mod.idle_specials(state, content, world, art) else ""
+
+
+def insight_note(content: Content, insight, fx) -> str:
+    """意境的說明。頓悟悟成的神品意境，修好之前存檔記的是沒換數字的模板（{stun_pct}），照它的模板重寫一次。"""
+    if "{" in (insight.note or "") and fx is not None:
+        god = insight_fx.grand(content, fx.grand)
+        if god is not None:
+            return god.desc
+    return insight.note
 
 
 def _idle_why(state: GameState, content: Content, world: WorldStateStore, insight_id: str) -> str:

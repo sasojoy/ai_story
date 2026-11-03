@@ -62,13 +62,69 @@ def test_a_module_picks_the_tests_that_import_it():
 
 def test_a_module_also_picks_the_tests_of_the_modules_that_import_it():
     """10/31 測試自檢 T-02：might.py 沒有測試檔直接 import，以前挑 0 個；把 might.now 改成回 0，透過 ascend、create 用到它的
-    test_ascend、test_create_ritual 會紅。現在照 tianxia/ 模組之間的 import 往上找。"""
-    picked = test_for.pick(["tianxia/might.py"])
-    assert {"test_ascend.py", "test_create_ritual.py"} <= {p.name for p in picked.files}
+    test_ascend、test_create_ritual 會紅。現在照 tianxia/ 模組之間的 import 往上找。
+    （shared：might 第 15 批進了共用規則層，改共用規則層照下面那一條挑；這一條換成還是舊模組的 ascend——經 cultivation 挑到
+    只 import cultivation 的 test_cultivation。）"""
+    picked = test_for.pick(["tianxia/ascend.py"])
+    assert {"test_ascend.py", "test_cultivation.py"} <= {p.name for p in picked.files}
     assert not picked.core and not picked.smoke
-    ups = test_for.dependents("might")
-    assert {"ascend", "create"} <= ups
+    ups = test_for.dependents("ascend")
+    assert {"cultivation"} <= ups
     assert not ups & test_for.DRIVERS and not ups & test_for.CORE_MODULES  # engine、假人、核心不往上走
+
+
+# shared（全部拆包第 15 批「共用規則層登記」）
+@pytest.mark.parametrize("module, own", [
+    ("might", {"test_might.py"}),
+    ("tactics", {"test_tactics.py", "test_tactics_bouts.py"}),
+    ("timetable", {"test_timetable.py"}),
+    ("allied", set()),
+])
+def test_a_shared_rules_module_picks_its_own_tests_smoke_and_the_boundary_test(module, own):
+    """總表第六節第 5 條：共用規則層（registry.SHARED）的模組改了，只挑自己檔名的測試＋煙霧＋邊界測試——不跑核心測試、不照「誰 import 它」
+    挑也不往上找。以前 might 經 ascend、create 等 4 個模組往上挑到 46 個檔（T-02）、timetable 經 19 個模組往上挑到 109 個檔（連直接
+    import 它的一共 133）、tactics 走「太多」那一條帶核心測試；
+    allied 沒有自己檔名的測試，只剩煙霧＋邊界。"""
+    assert module in test_for.SHARED_MODULES
+    picked = test_for.pick([f"tianxia/{module}.py"])
+    names = {p.name for p in picked.files}
+    assert own <= names and "test_feature_boundaries.py" in names
+    assert all(n == "test_feature_boundaries.py" or n.startswith(f"test_{module}") for n in names), names
+    assert picked.smoke and not picked.core
+    assert any("共用規則層" in w for w in picked.why)
+    assert "test_ascend.py" not in _names(["tianxia/might.py"])
+
+
+def test_the_shared_rules_layer_is_one_list_for_the_picker_and_the_boundary_test():
+    """共用規則層只有一份：tianxia/core/registry.py 的 SHARED。test_for 照語法樹讀它（不 import：registry 會 import 每一包）、
+    邊界測試 import 它；兩邊一樣，也都不跟核心本體重疊。"""
+    from tianxia.core import MODULES, registry
+    import test_feature_boundaries
+    assert {"tactics", "timetable", "renown", "siege", "zh"} <= set(registry.SHARED)
+    assert test_for.SHARED_MODULES == set(registry.SHARED) == set(test_feature_boundaries.SHARED)
+    assert not test_for.SHARED_MODULES & MODULES
+
+
+def test_the_shared_rules_layer_is_read_from_the_syntax_tree_and_a_broken_file_says_so(tmp_path, capsys):
+    """照語法樹讀（SHARED: dict[str, str] = {...}，相鄰的字串照接）；讀不出來在 stderr 說一聲、當成沒有，那些模組照一般的舊模組挑。"""
+    good = tmp_path / "good.py"
+    good.write_text('from .features import Feature\nFEATURES = []\nSHARED: dict[str, str] = {\n    "a": "甲"\n         "乙",\n'
+                    '    "b": "丙",  # 註解\n}\n', encoding="utf-8")
+    assert test_for.shared_modules(good) == {"a", "b"}
+    plain = tmp_path / "plain.py"
+    plain.write_text('SHARED = {"c": "丁"}\n', encoding="utf-8")
+    assert test_for.shared_modules(plain) == {"c"}
+    broken = tmp_path / "broken.py"
+    broken.write_text("SHARED = {\n", encoding="utf-8")
+    assert test_for.shared_modules(broken) == frozenset()
+    computed = tmp_path / "computed.py"
+    computed.write_text('WHY = "x"\nSHARED = {"d": WHY}\n', encoding="utf-8")
+    assert test_for.shared_modules(computed) == frozenset()
+    missing = tmp_path / "none.py"
+    missing.write_text("OTHER = 1\n", encoding="utf-8")
+    assert test_for.shared_modules(missing) == frozenset()
+    err = capsys.readouterr().err
+    assert err.count("讀不出共用規則層的模組") == 3 and "沒有 SHARED" in err
 
 
 def test_the_import_graph_skips_type_checking_and_imports_inside_functions():
@@ -105,8 +161,9 @@ def test_an_aggregator_is_picked_but_not_walked_through(monkeypatch):
 
 
 def test_a_low_module_with_too_many_dependents_runs_core_and_smoke_instead():
-    """tactics、zh 這種底層模組往上找會挑到兩、三百個檔：超過 IMPORT_CAP 只挑直接 import 的，加核心測試＋煙霧。"""
-    picked = test_for.pick(["tianxia/zh.py"])
+    """tactics、zh 這種底層模組往上找會挑到兩、三百個檔：超過 IMPORT_CAP 只挑直接 import 的，加核心測試＋煙霧。
+    （shared：tactics、zh 第 15 批進了共用規則層，照上面那一條挑；這一條換成還是舊模組的 seal_acts——經 conquest、atlas 往上兩百多個檔。）"""
+    picked = test_for.pick(["tianxia/seal_acts.py"])
     assert picked.core and picked.smoke
     assert len(picked.files) < test_for.IMPORT_CAP
     assert any("太多" in w for w in picked.why)
@@ -461,7 +518,24 @@ def test_the_journal_and_the_wallet_pick_like_the_rest_of_the_core(module):
     assert {p.name for p in picked.files} == {f"test_{module}.py"}
 
 
-def test_a_feature_package_picks_its_own_tests_and_the_contract(tmp_path, monkeypatch):
+# shared（第 15 批審查修正）：test_for 的 lru_cache（_all_tests、_candidates、smoke_ids、feature_web……）照當時的 FEATURES 記，
+# monkeypatch 還原了 FEATURES、快取還是暫存資料夾那一份：同一個行程後面跑的 test_the_smoke_set_covers_every_block 就少了 mall
+# （-p no:xdist 照這個先後跑兩條，base a242343b 也紅；-n 4 分到同一個行程時才踩到）。換掉 FEATURES 的測試前後都清。
+def _clear_test_for_caches() -> None:
+    for obj in vars(test_for).values():
+        clear = getattr(obj, "cache_clear", None)
+        if callable(clear):
+            clear()
+
+
+@pytest.fixture
+def fresh_test_for_caches():
+    _clear_test_for_caches()
+    yield
+    _clear_test_for_caches()
+
+
+def test_a_feature_package_picks_its_own_tests_and_the_contract(tmp_path, monkeypatch, fresh_test_for_caches):
     pkg = tmp_path / "mall" / "tests"
     pkg.mkdir(parents=True)
     (pkg / "test_mall_pkg.py").write_text("def test_x():\n    pass\n", encoding="utf-8")
@@ -780,3 +854,108 @@ def test_the_long_tests_are_spread_to_the_head_of_each_workers_first_chunk():
     heads = [out[k * chunk:(k + 1) * chunk] for k in range(3)]
     assert [[i for i in h if i in longs] for h in heads] == [[longs[0], longs[5]], [longs[1], longs[4]], [longs[2], longs[3]]]
     assert [i for i in out if i not in longs] == rest  # 其餘照原本的順序
+
+
+# ── core-events（全部拆包第 16 批修正，PM 2026-11-03）：改核心裡掛鉤、清單以外的模組（tianxia/core/event_check.py……）──
+# 以前一律只挑核心測試＋煙霧：事件檢定從 Game 搬進核心之後，搬之前照方法名挑得到的隨口應對、端出事件的回歸挑不到了（審查 M1、M4、M8、M9）。
+# 照第 11 批修正輪的做法再並上寫到改到的函式名或 Game 委派名的測試檔。
+
+def _core_hunk(module: str, name: str) -> dict:
+    """假裝改了 tianxia/core/<module>.py 裡最外層 name（函式、類別、常數）的最後一行；位置照這一份真的原始碼找。"""
+    rel = f"tianxia/core/{module}.py"
+    src = (ROOT / rel).read_text(encoding="utf-8")
+    end = next(e for n, _, e, _ in test_for._core_spans(src) if n == name)
+    return _added(rel, src, end)
+
+
+def _core_pick(name: str):
+    return test_for.pick(["tianxia/core/event_check.py"], hunks_of=_core_hunk("event_check", name))
+
+
+def test_the_game_delegates_to_the_core_are_read_from_the_engine():
+    """Game 上委派給核心本體的一行委派（`return event_check.<函式>(self, …)`）照 engine.py 的語法樹認，跟邊界測試的
+    CORE_EVENT_DELEGATES 是同一批方法（那一份另外守張數與「只有一行」）。"""
+    import test_feature_boundaries
+    found = test_for.core_delegates((ROOT / "tianxia" / "engine.py").read_text(encoding="utf-8"))
+    assert {"_present": ("event_check", "present"), "_choose": ("event_check", "resolve_choice"),
+            "answer_event": ("event_check", "answer_event"), "_tale_clue": ("event_check", "tale_clue")}.items() <= found.items()
+    assert {m for m, (mod, _) in found.items() if mod == "event_check"} == set(test_feature_boundaries.CORE_EVENT_DELEGATES)
+    assert not set(found) & set(test_for.engine_delegates((ROOT / "tianxia" / "engine.py").read_text(encoding="utf-8")))
+
+
+@pytest.mark.parametrize("name, delegate, expected", [
+    ("tale_clue", "_tale_clue", {"test_secret_recipes.py", "test_forge_secrets.py"}),  # 審查 M9：以前 test_for 挑的 1,599 條 0 紅
+    ("present", "_present", {"test_stances_fix6.py", "test_seats.py", "test_event_rotation.py"}),  # 人物心意那一則（審查第一條）
+    ("event_battle", "_event_battle", {"test_terrain_arts.py"}),
+    ("resolve_choice", "_choose", {"test_drill_push.py"}),
+    ("add_gamble_narration", "add_gamble_narration", {"test_free_text_and_marks.py"}),  # 審查 M4
+])
+def test_a_core_function_also_picks_the_tests_that_name_its_game_delegate(name, delegate, expected):
+    picked = _core_pick(name)
+    names = {p.name for p in picked.files}
+    assert picked.core and picked.smoke
+    assert expected <= names and _writes(delegate) <= names
+    assert not names & {"test_tavern.py", "test_mall.py"}
+    assert any(delegate in w for w in picked.why), picked.why
+
+
+def test_a_core_function_name_alone_counts_only_with_the_module_name():
+    """函式名照字面算太寬（present、apply 是一般的字：test_admin_triggers、test_fusion 寫到它們、跟事件檢定無關）：
+    函式名要跟模組名（event_check）寫在同一個檔裡才算；委派名、類別、常數照識別字算。present 模組裡沒有人直接叫
+    （都經 ctx._present），挑到的就是寫到 _present 的＋同時寫到 event_check 與 present 的，不多不少。"""
+    names = {p.name for p in _core_pick("present").files}
+    assert names == _writes("_present") | (_writes("event_check") & _writes("present"))
+    assert "test_admin_triggers.py" in _writes("present") and "test_admin_triggers.py" not in names
+    assert "test_fusion.py" not in {p.name for p in _core_pick("apply").files}
+
+
+def test_a_core_helper_without_a_delegate_picks_through_the_functions_that_call_it():
+    """answer_branch、deed_credit 只有模組裡的 answer_event 在叫（沒留委派）：一路往上找模組裡直接叫它的函式，照那幾個的
+    名字與委派名挑。審查 M8：answer_branch 拿掉 cost_problem，test_outcomes_answer 紅、test_for 以前挑的 0 紅。"""
+    for name in ("answer_branch", "deed_credit"):
+        picked = _core_pick(name)
+        names = {p.name for p in picked.files}
+        assert {"test_outcomes_answer.py", "test_free_text_and_marks.py", "test_outcomes_server.py"} <= names, name
+        assert any("answer_event" in w for w in picked.why), (name, picked.why)
+    # 模組裡經 ctx 叫的（apply 經 ctx._present 串下一則）不算「叫它的」：照的是函式之間直接的呼叫
+    assert "test_seal_mandate.py" not in {p.name for p in _core_pick("present").files}
+
+
+def test_a_core_constant_picks_the_tests_that_name_it_and_the_functions_that_use_it():
+    """模組層的常數與類別（EVIL_ANNAL、FreeTextRequest）照識別字挑（engine 照名字 import 回來，測試寫 from tianxia.engine import …），
+    再加模組裡用到它的函式（往上找）的委派名。"""
+    names = {p.name for p in _core_pick("EVIL_ANNAL").files}
+    assert _writes("EVIL_ANNAL") <= names and _writes("answer_event") <= names
+    request = {p.name for p in _core_pick("FreeTextRequest").files}
+    assert _writes("FreeTextRequest") <= request and _writes("free_text_request") <= request
+
+
+def test_a_core_module_named_without_a_change_counts_the_whole_file():
+    """指名了、可是跟 base 沒有差（`test_for.py tianxia/core/event_check.py --base HEAD`）：照整個檔算，每一個函式、類別、常數都算。"""
+    rel = "tianxia/core/event_check.py"
+    src = (ROOT / rel).read_text(encoding="utf-8")
+    picked = test_for.pick([rel], hunks_of={rel: ([], src, src)})
+    names = {p.name for p in picked.files}
+    assert picked.core and picked.smoke
+    for name in ("tale_clue", "present", "answer_branch", "EVIL_ANNAL"):
+        assert {p.name for p in _core_pick(name).files} <= names, name
+    assert any("整個檔" in w for w in picked.why)
+
+
+def test_a_core_pick_that_names_too_many_files_falls_back_to_core_and_smoke(monkeypatch):
+    """寫到那幾個名字的檔超過 IMPORT_CAP 個（同 tianxia/<模組>.py 往上找的那一條）：不一個一個挑，只剩核心測試＋煙霧。"""
+    monkeypatch.setattr(test_for, "IMPORT_CAP", 1)
+    picked = _core_pick("answer_branch")
+    assert picked.core and picked.smoke and not picked.files
+    assert any("太多" in w for w in picked.why)
+
+
+@pytest.mark.parametrize("module", sorted(test_for.CORE_LISTS))
+def test_the_core_hooks_and_lists_still_pick_only_the_core_tests_and_smoke(module):
+    """掛鉤（features.py）與清單（services.py 服務清單、registry.py 的 FEATURES、__init__.py 的 MODULES）改了照舊只跑核心測試＋煙霧：
+    名字（options、choose、FEATURES）到處都寫得到，照名字挑等於整套。"""
+    assert (ROOT / "tianxia" / "core" / f"{module}.py").is_file(), module
+    rel = f"tianxia/core/{module}.py"
+    src = (ROOT / rel).read_text(encoding="utf-8")
+    picked = test_for.pick([rel], hunks_of=_added(rel, src, *range(1, len(src.splitlines()) + 1)))
+    assert picked.core and picked.smoke and not picked.files

@@ -532,6 +532,8 @@ class ArenaFight(BaseModel):
     skins: list[str] = Field(default_factory=list)  # 擂台形象：[挑的人, 分身] 穿哪一套（content/looks.json 的 id；空字串＝斗笠小子）；舊的一場沒有
     fx: list[str] = Field(default_factory=list)  # 招式動畫：[挑的人, 分身] 出招疊哪一張光效（m<購買 id>；空字串＝沒有）；舊的一場沒有
     picks: list[list[str]] = Field(default_factory=list)  # 擂台動畫：每回合 [你出的, 他出的]（強攻／固守／奇襲；出不了手是空字串；放手一搏是 ["搏", ""]）；只給畫面
+    fx_arts: list[str] = Field(default_factory=list)  # 招式動畫：[挑的人, 分身] 綁了招式的那一門武學 id（fx 是空的那一邊是空字串）
+    bursts: list[list[int]] = Field(default_factory=list)  # 招式動畫：每回合 [你, 他] 綁了招式的那一門的戰法發動了沒（1／0）；光效只在發動的那一回合疊（Joy 2026-11-01）
 
 
 class ArenaResult(BaseModel):
@@ -546,6 +548,7 @@ class ArenaResult(BaseModel):
     skins: list[str] = Field(default_factory=list)  # 擂台形象：照 ArenaFight.skins 抄
     fx: list[str] = Field(default_factory=list)  # 招式動畫：照 ArenaFight.fx 抄
     picks: list[list[str]] = Field(default_factory=list)  # 擂台動畫：照 ArenaFight.picks 抄（收場那一幕照最後一回合演）
+    bursts: list[list[int]] = Field(default_factory=list)  # 招式動畫：照 ArenaFight.bursts 抄
 
 
 class ArenaReport(BaseModel):
@@ -581,6 +584,7 @@ class ArenaEntry(BaseModel):
     weapon: str = ""  # 擂台動畫：報名、更新分身那一刻手上兵器的種類（空字串＝空手；舊存檔也是）
     look: str = ""  # 擂台形象：報名、更新分身那一刻穿哪一套（空字串＝斗笠小子；舊存檔也是）
     move: str = ""  # 招式動畫：報名、更新分身那一刻出招疊哪一張光效（m<購買 id>；空字串＝沒有）
+    move_art: str = ""  # 招式動畫：那一張綁在哪一門武學上（那一門的戰法發動了才疊）
     joined: float = 0.0  # 第一次報名的世界秒
     rank: int = 0  # 名次（1 是天下第一）；報名排到榜尾，挑的人贏了兩人交換（arena.swap）
     wins: int = 0

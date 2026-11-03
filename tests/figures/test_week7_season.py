@@ -613,7 +613,7 @@ def test_admin_view_labels_and_lines(profile, monkeypatch):
 # 輿圖第三版第 4 批：總覽（overviewHtml）挪到卡底下（cardExtras）、地點的卡換成 placeCard、「天下」那一條（hudHtml）拿掉了，
 # 比第幾段改看版圖變化那一格（timelineHtml 的處數底下）
 NAMES = ["S", "ordersHtml", "trendsTopHtml", "resultHtml", "timelineHtml", "cardExtras", "placeCard", "mapChrome",
-         "sheetHtml", "adminAsk"]
+         "adminHtml", "adminAsk"]
 
 
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
@@ -670,7 +670,7 @@ def _render(game, monkeypatch, app=None):
         place: H.placeCard(base, st, fb.place),
         hud: H.timelineHtml(base, st, 2),
         chrome: H.mapChrome(),
-        sheet: H.sheetHtml(),
+        sheet: H.adminHtml(),  // 管理頁（admin.js）
         open: H.adminAsk("open_season", {})[0],
         next: H.adminAsk("next_season", {})[0],
         pause: H.adminAsk("pause_clock", {})[0],

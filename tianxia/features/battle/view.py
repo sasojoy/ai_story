@@ -1,7 +1,7 @@
 """全服決戰「看」那一半（主動搬六包第 5 批）：原本 Game 上的 31 個方法，本體照抄、self 換成 ctx（第一階 ctx 就是 Game，開發規範手冊 3.3），
 包裡互相叫直接叫函式，模組層的字在 rules.py；「打」那一半（集結、投效、挑同伴、推進、結算、攻城、管理者——還在 Game，第 6～8 批搬）與別的功能
 一律經 ctx.<名>（tianxia/core/services.py 的清單：測試換掉的 Game 方法才打得到）。Game 留 22 個一行委派（server、核心原位、測試在叫），
-另外 9 個只有這裡叫。
+另外 9 個只有這裡叫。第 7 批之後集結、投效、挑同伴（在不在場、臨時投效、隨你出陣的同伴回江湖、送出一招）在 muster.py，直接叫。
 
 - 場景：battle_scene_text（集結中、開打的畫面）、chief_lines（龍頭上陣）、round_blocks／fold_war_lines（一回合一段、一軍的戰法摺成一列）、
   idle_note（掛機）、battle_spotlight（點名與顯眼）、round_wait（已送出／在場）、escort_line（隨你出陣的同伴）、watch_text（只能觀戰的原因）
@@ -18,17 +18,17 @@ import random
 
 from tianxia import calendar, gender, journal, team
 from tianxia import annals  # 過渡：待搬（行狀）
-from tianxia import battle_instance, battlelog, tactics  # 過渡：待搬（戰鬥規則核心；共用規則層的名單第 15 批登記）
-from tianxia import conquest, siege  # 過渡：待搬（地盤；siege 是共用規則層 registry.SHARED，不算過渡）
+from tianxia import battle_instance, battlelog, tactics  # 共用規則層（戰鬥規則核心）
+from tianxia import conquest, siege  # 共用規則層（地盤與攻城）
 from tianxia import cultivation, four_tiers, materials, mounts, renown, roster  # 過渡：待搬（絕學的契機、四階料、素材、坐騎、名聲、同伴）
 from tianxia import figure_life, front_lines, generals, seal, wins  # 過渡：待搬（人物風聞、戰線、龍頭上陣、玉璽、三陣營四勝利）
-from tianxia import prologue as prologue_rules  # 過渡：待搬（序章；照 engine 的叫法）
+from tianxia import prologue as prologue_rules  # 共用規則層（序章；照 engine 的叫法）
 from tianxia.core.services import PAUSED_TEXT
 from tianxia.models import MOVES, BattleDef
 from tianxia.rules import can_draw_side_change, front_text, resolve_trends, season_one
 from tianxia.state import BattleRecord, JournalEntry
 
-from . import rules
+from . import muster, rules  # muster：集結、投效、挑同伴（第 7 批；它也 import 這一檔，都在函式裡用）
 
 
 def escort_line(ctx, e: battle_instance.Escort) -> str:
@@ -93,7 +93,7 @@ def restore_showdowns(ctx) -> None:
         lines, *_ = showdown_lines(ctx, battle, me, side, sides)
         s.battle_seq += 1
         s.battles.append(BattleRecord(
-            id=s.battle_seq, time=time, location=ctx._battle_region_name(definition) if definition.region else definition.name,
+            id=s.battle_seq, time=time, location=muster.battle_region_name(ctx, definition) if definition.region else definition.name,
             kind="siege" if battle.siege is not None else "showdown", event=definition.name, opponent=foes, ours=[], tier=battle.outcome_title or "收場", our_power=0.0,
             difficulty=0.0, side=side, notes=[*lines, rules.RESTORED_NOTE], gauge=gauge_of(ctx, battle, definition, me.faction),
             log=round_blocks(ctx, battle, definition, last=None, oldest_first=True, me=me), battle_ref=battle.record_id,
@@ -154,7 +154,7 @@ def file_showdown(
     name = definition.name if definition is not None else battle.battle_id
     side = sides.get(me.faction, me.faction)
     foes = "、".join(n for fid, n in armies.items() if fid != me.faction) or "敵軍"
-    where = ctx._battle_region_name(definition) if definition is not None and definition.region else name
+    where = muster.battle_region_name(ctx, definition) if definition is not None and definition.region else name
     outcome = battle.outcome_title or "收場"
     label = "" if earlier is None else f"第 {earlier} 季・"
     time = battle.end_time if battle.end_time is not None else s.world.time
@@ -169,7 +169,7 @@ def file_showdown(
     fame = 0
     highlight_changes = showdown_pay(ctx, battle, me, lines) if earlier is None else []
     if earlier is None and me.escort is not None and roster.on(c) and battle.siege is None:  # 歷史武將同行：隨你上陣的那一位回江湖了（攻城戰不放，裁決 14）
-        lines += ctx._escort_home(me.escort)
+        lines += muster.escort_home(ctx, me.escort)
     if earlier is None:
         s.player.showdowns += 1
         if h is not None and h.name == me.name and h.won and tuning.highlight_fame:  # 這一場最有戲的那一搏是自己的、而且成了
@@ -251,7 +251,7 @@ def annal_showdown(
     if me.fell_round is not None:
         parts.append(f"第 {me.fell_round} 回合倒下")
     parts.append(f"結果{battle.outcome_title or '收場'}")
-    place = ctx._battle_region_name(c.battles[battle.battle_id]) if battle.battle_id in c.battles and c.battles[battle.battle_id].region else ""
+    place = muster.battle_region_name(ctx, c.battles[battle.battle_id]) if battle.battle_id in c.battles and c.battles[battle.battle_id].region else ""
     won = bool(battle.outcome_side) and battle.outcome_side == me.faction
     entries = [annals.entry(
         s, c, annals.SHOWDOWN, "，".join(parts) + "。", 5 if won or (top is not None and top.name == me.name) else 4,
@@ -343,11 +343,11 @@ def showdown_credits(ctx, me: battle_instance.BattleParticipant) -> bool:
 def watch_text(ctx, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:
     """只能觀戰時，場景上說明為什麼：參戰後離開了大區、或還沒到戰場。"""
     if ctx.state.player.name in battle.participants:
-        region = ctx._battle_region_name(definition)
+        region = muster.battle_region_name(ctx, definition)
         return f"你離開了{region}，這回合不出手；人回到{region}就能再出手。"
     if battle.siege is not None and not siege.slots(battle.siege, ctx._conquest_side()):
         return siege.watch_line(ctx.content, battle.siege)  # 攻城戰：另一軍站不進守將那一格（裁決 8）
-    return f"{ctx._absent_reason(definition)}。"
+    return f"{muster.absent_reason(ctx, definition)}。"
 
 
 def gauge_of(ctx, battle: battle_instance.BattleInstance, definition: BattleDef, side: str | None) -> dict:
@@ -432,7 +432,7 @@ def battle_scene_text(ctx, battle: battle_instance.BattleInstance, definition: B
         if me is not None:
             side = names.get(me.faction, me.faction)
             leaving = "；走出這一區就不算在場" if definition.region is not None else ""
-            joined = "臨時投效" if ctx._free_agent(definition) else "加入"
+            joined = "臨時投效" if muster.free_agent(ctx, definition) else "加入"
             if me.faction == battle_instance.neutral_guard(battle):
                 joined = siege.HELP_GUARD_TITLE  # 「你已助守【守軍】」（FB-540）
             role = battle_instance.role_text(ctx.content.config.battle, me.role)
@@ -441,8 +441,8 @@ def battle_scene_text(ctx, battle: battle_instance.BattleInstance, definition: B
             ride += rules.TROOPS_LINE.format(names=me.troops, pct=mounts.pct(me.troop_bonus)) + "。" if me.troops else ""  # 帶著部下
             ride += rules.ESCORT_MUSTER.format(name=me.escort.name) if me.escort is not None else ""  # 隨你出陣的同伴（歷史武將同行）
             return f"{header}\n\n你已{joined}【{side}】，集結還剩現實 {left}。{role}{ride}集結結束就開打，在那之前照常行動{leaving}。"
-        if ctx._free_agent(definition):
-            who = "你是散人" if ctx.state.player.faction is None else f"你是{ctx._own_side_name()}，不是交戰的兩軍"
+        if muster.free_agent(ctx, definition):
+            who = "你是散人" if ctx.state.player.faction is None else f"你是{muster.own_side_name(ctx)}，不是交戰的兩軍"
             can = "可以臨時投效其中一方，只算這一場"
             if battle_instance.neutral_guard(battle) is not None:  # 單方攻中立地：一邊是攻方、一邊是助守（FB-540）
                 can = siege.FREE_AGENT_GUARD.format(
@@ -721,8 +721,8 @@ def submit_battle_custom_action(
             ctx._quick_client(), act, faction_name, text, ctx.state.player.name, target=target, sex=gender.of(ctx.state),
         )
         llm_rate, stories = verdict.rate, (verdict.win, verdict.lose)
-    return ctx._submit_battle_action(
-        ctx.state.player.name, definition, tag, text, llm_rate, stories, sex=gender.of(ctx.state),
+    return muster.submit_battle_action(
+        ctx, ctx.state.player.name, definition, tag, text, llm_rate, stories, sex=gender.of(ctx.state),
     )
 
 

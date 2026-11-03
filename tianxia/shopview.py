@@ -895,6 +895,7 @@ def _fight_view(state: GameState, content: Content) -> dict:
         "id": fight.id,  # 擂台動畫：認是不是同一場（換一場從頭演）
         "looks": arena.looks_view(fight.looks, fight.skins, fight.fx),  # 擂台動畫：兩邊手上的兵器種類與形象
         "picks": [list(x) for x in fight.picks],  # 擂台動畫：每回合兩邊出的招（照招演）
+        "bursts": [list(x) for x in fight.bursts],  # 招式動畫：每回合兩邊綁了招式的那一門發動了沒（發動了才疊光效）
         "foe": fight.foe.name,
         "arts": list((state.world.arena.get(fight.foe_key).arts if state.world.arena.get(fight.foe_key) else [])),
         "round": fight.round + 1,
@@ -981,5 +982,5 @@ def arena_view(state: GameState, content: Content, world: WorldStateStore, power
         "wages": WAGES_NOTE.format(silver=top_silver, fame=top_fame, n=len(cfg.wages)) if cfg.wages else "",
         "fight": _fight_view(state, content) if p.arena is not None else None,
         "result": {"id": result.id, "foe": result.foe, "tier": result.tier, "lines": list(result.lines),
-                   "changes": list(result.changes), "looks": arena.looks_view(result.looks, result.skins, result.fx), "picks": [list(x) for x in result.picks]} if result is not None and p.arena is None else None,
+                   "changes": list(result.changes), "looks": arena.looks_view(result.looks, result.skins, result.fx), "picks": [list(x) for x in result.picks], "bursts": [list(x) for x in result.bursts]} if result is not None and p.arena is None else None,
     }

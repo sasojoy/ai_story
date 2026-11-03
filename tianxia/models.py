@@ -980,8 +980,15 @@ class GodTrait(_Strict):
     form: GodForm
     name: str
     general: str  # 帶的一般功效（GeneralTrait.key，要是同一個屬性的），三重
-    desc: str
+    desc: str  # 內容寫的是模板（{stun_pct}、{turns}），讀進來時照 tactic.params 換成數字，到處直接用
     tactic: TacticDef
+
+    @model_validator(mode="after")
+    def _fill_desc(self) -> GodTrait:
+        from .tactics import value_text  # noqa: PLC0415
+
+        self.desc = self.desc.format(**{k: value_text(k, v) for k, v in self.tactic.params.items()})
+        return self
 
 
 class TraitBook(_Strict):

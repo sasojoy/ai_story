@@ -36,8 +36,9 @@ KNOWN = {
 
 def _calls():
     """每一個 chat_structured 呼叫：(檔名, 行號, 回答類別的寫法, required_fields, require_in_schema, 模組)。"""
-    # 功能包（tianxia/features/<包>/，開發規範手冊 3.2）也掃：檔名記相對 tianxia/ 的路徑、模組照點分的名字
-    for path in sorted(ROOT.glob("*.py")) + sorted((ROOT / "features").glob("*/*.py")):
+    # 功能包（tianxia/features/<包>/，開發規範手冊 3.2）也掃：檔名記相對 tianxia/ 的路徑、模組照點分的名字；核心本體 tianxia/core/
+    # 也掃（事件檢定搬進 core/event_check.py，dev/core-events-1 審查）
+    for path in sorted(ROOT.glob("*.py")) + sorted((ROOT / "core").glob("*.py")) + sorted((ROOT / "features").glob("*/*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if not (isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "chat_structured" and len(node.args) > 1):

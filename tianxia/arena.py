@@ -337,6 +337,7 @@ class Exchange(NamedTuple):
     mine: str | None
     his: str | None
     lines: list[str]
+    skills: tuple[list[str], list[str]] = ((), ())  # 這一回合兩邊發動的戰法是哪一門武學帶的（擂台動畫：綁了招式的那一門發動了才疊光效）
 
 
 def exchange(fight: ArenaFight, move: str, content: Content, rng: random.Random, trng: random.Random | None = None,
@@ -370,7 +371,9 @@ def exchange_full(fight: ArenaFight, move: str, content: Content, rng: random.Ra
     my_hp = duel_rules.blow_taken(my_hp, me.cut, step.a_cut if step is not None else 0.0, cap)
     foe_hp = duel_rules.blow_taken(foe_hp, foe.cut, step.b_cut if step is not None else 0.0, cap)
     lines: list[str] = []
+    skills: tuple[list[str], list[str]] = ([], [])
     if step is not None:
+        skills = (list(step.a_skills), list(step.b_skills))
         push += round(step.push)
         my_hp = (my_hp if step.a_hit else 0) - round(step.a_hp * me.hp_cap)
         foe_hp = (foe_hp if step.b_hit else 0) - round(step.b_hp * foe.hp_cap)
@@ -385,12 +388,12 @@ def exchange_full(fight: ArenaFight, move: str, content: Content, rng: random.Ra
     before = fight.edge
     fight.edge = _clamp(fight.edge + push)
     if step is not None:
-        lines += tactics.close_round(fight.bout, fight.edge - before, tt, trng)
-    return Exchange(round(fight.edge - before), my_hp, foe_hp, beat, move, his, lines)
+        lines += tactics.close_round(fight.bout, fight.edge - before, tt, trng, skills)
+    return Exchange(round(fight.edge - before), my_hp, foe_hp, beat, move, his, lines, skills)
 
 
 def gamble(fight: ArenaFight, rate: int, content: Content, rng: random.Random, trng: random.Random | None = None,
-           lines: list[str] | None = None) -> tuple[bool, int, int, int]:
+           lines: list[str] | None = None, skills: tuple[list[str], list[str]] | None = None) -> tuple[bool, int, int, int]:
     """放手一搏（同頭目戰：分身這一回合的招不算、他不扣血）：（成了沒有, 氣勢推了多少, 你掉多少, 實際的成功率）。
     fight.bout 在時戰法照打這一回合（回氣血、援兵、焚身這類），失手時神上使有機會改成功；句子加進 lines。"""
     me, foe = fight.me, fight.foe
@@ -407,6 +410,9 @@ def gamble(fight: ArenaFight, rate: int, content: Content, rng: random.Random, t
                 out.append(tactics.divine_line(saved))
         step = tactics.step(fight.bout, tactics.GAMBLE, fight.move, fight.edge, tt, trng, a_ratio=me.hp / max(1.0, me.hp_cap),
                             b_ratio=foe.hp / max(1.0, foe.hp_cap))
+        if skills is not None:
+            skills[0].extend(step.a_skills)
+            skills[1].extend(step.b_skills)
         delta += round(step.push)
         hp -= round(step.a_hp * me.hp_cap)
         guarded, said = tactics.guard_pool(fight.bout, "a", me.hp, hp, me.hp_cap)
@@ -418,7 +424,7 @@ def gamble(fight: ArenaFight, rate: int, content: Content, rng: random.Random, t
     before = fight.edge
     fight.edge = _clamp(fight.edge + delta)
     if step is not None:
-        out += tactics.close_round(fight.bout, fight.edge - before, tt, trng)
+        out += tactics.close_round(fight.bout, fight.edge - before, tt, trng, skills)
     if lines is not None:
         lines += out
     return won, round(fight.edge - before), hp, rate

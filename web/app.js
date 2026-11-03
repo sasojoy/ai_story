@@ -216,6 +216,10 @@
     showMore: false,
     sheet: false,
     admin: null,
+    adminPage: onAdminPath(), // 網址是 /admin：畫管理頁（admin.js）；不是管理者就回江湖、網址換回 /
+    adResult: null, // 管理頁最近一件做完的事 {text, ok}（釘在畫面底下）
+    adAccounts: null, // 管理頁重設密碼「找」到的帳號 [{login, character}]；null 是還沒找
+    adResetTarget: "", // 重設密碼那一格填的（找、點選之後重畫照樣在）
     adPlayerName: "", // 管理者區「玩家個人劇情」查的名號與查到的那份（/api/admin/player）；登出清掉
     adPlayer: null,
     unseen: false,
@@ -376,14 +380,15 @@
       closeEvents();
     }
     render();
-    if (S.stage === "game" && S.tab === "map") loadMap().catch(() => {}); // 停在輿圖分頁登入：這個人的疊層與底圖（輪詢在沒有疊層時不抓）
+    if (S.stage === "game" && S.tab === "map" && !S.adminPage) loadMap().catch(() => {}); // 停在輿圖分頁登入：這個人的疊層與底圖（輪詢在沒有疊層時不抓）
   }
 
   function setMain(main) {
     // 破境卡：動作回來的與輪詢拿到的都走這裡（S.main 換好之後才畫）。測試只抽 setMain 出來跑，沒有 ascendCard 就不畫
-    if (typeof ascendCard === "function") setTimeout(ascendCard, 0);
-    if (typeof storyCard === "function") setTimeout(storyCard, 0); // 特殊事件的跳顯框：同上
-    if (typeof outingSync === "function") setTimeout(outingSync, 0); // 走一趟停在要選的事上、選完了：接著走（outing.js）
+    // 管理頁上不跳這三樣（破境、特殊事件、走一趟都是江湖頁的；回江湖那一下再跳）
+    if (!S.adminPage && typeof ascendCard === "function") setTimeout(ascendCard, 0);
+    if (!S.adminPage && typeof storyCard === "function") setTimeout(storyCard, 0); // 特殊事件的跳顯框：同上
+    if (!S.adminPage && typeof outingSync === "function") setTimeout(outingSync, 0); // 走一趟停在要選的事上、選完了：接著走（outing.js）
     if (main.event_free_text == null) S.answering = false; // 事件過去了，輸入框跟著收起
     if (!(main.options || []).some((o) => o.id === sayingId())) S.saying = false; // 交談結束了（或那一顆沒了），輸入框跟著收起
     if (S.persuading && !(main.options || []).some((o) => o.id === S.persuading)) S.persuading = false; // 走開了、那一件辦完了：勸降的輸入框收起
@@ -413,6 +418,8 @@
       if (shopKind(main) !== "smith") { S.shopReveal = null; S.shopOpened = false; }
     }
     S.main = main;
+    // 自建形象的圖版本（main.looks_ver）：那幾支組圖網址時接成 ?v=，圖一換網址就換，手機不必清快取
+    window.LOOKS_VER = main.looks_ver || "";
     // 決戰這一回合幾時逾時（引擎給還剩幾秒，battle_gauge.due）：tickDue 照它每秒倒數（Joy 2026-10-13）
     S.dueAt = main.battle_gauge && main.battle_gauge.due != null ? Date.now() + main.battle_gauge.due * 1000 : null;
     S.duePolled = false;
@@ -437,11 +444,16 @@
   // ── 整體 ──
   function render() {
     if (S.mallOpen && !(S.main && S.main.mall)) S.mallOpen = false; // 商城關了（主機關掉開關）：那一層跟著收
-    if (S.stage !== "game" || (!S.sheet && !S.peer && !S.mallOpen)) closeAsk(); // 確認框疊在設定抽屜、玩家卡或商城上；抽屜關了、被登出就一起收掉
+    if (S.stage !== "game" || (!S.sheet && !S.peer && !S.mallOpen && !S.adminPage)) closeAsk(); // 管理頁的確認框也是 // 確認框疊在設定抽屜、玩家卡或商城上；抽屜關了、被登出就一起收掉
     if (S.stage !== "game") hideMapHost(true); // 登出、換帳號：常駐的輿圖那一層整個清掉
     if (S.stage === "gate") return renderGate();
     if (S.stage === "create") return renderCreate();
     if (S.stage !== "game") return;
+    if (S.adminPage) { // 管理頁（admin.js）：只有管理者畫得出來；不是的話照常回江湖、網址換回 /
+      if (S.main && S.main.admin) return renderAdmin();
+      S.adminPage = false;
+      try { history.replaceState(null, "", "/"); } catch (e) { /* 換不了網址也照常畫江湖 */ }
+    }
     if (S.tab !== "jianghu" && !shown(`tab:${S.tab}`)) S.tab = "jianghu"; // 序章重來（換季）：藏起來的分頁不能還停在那一頁
     S.prologueKey = prologueKey();
     const top = topHtml();
@@ -482,6 +494,12 @@
   // 抽屜開著時整個重畫（查玩家、打開設定時補抓回來的管理者資料、序章回顧）：抽屜是新畫的、捲動回到頂；照原本捲到的地方放回去，
   // 查到的玩家才不會被丟回「設定」那一行之下好幾屏（審查 M-2）。抽屜原本沒開（剛打開）就照常從頂上開始
   function renderKeepingSheet() {
+    if (S.adminPage) { // 管理頁捲的是整頁：重畫完捲回原處（做完一件事、查完一個人，不被丟回頂上）
+      const y = typeof window.scrollY === "number" ? window.scrollY : 0;
+      render();
+      if (typeof window.scrollTo === "function") window.scrollTo(0, y);
+      return;
+    }
     const top = document.querySelector(".sheet")?.scrollTop;
     render();
     const sheet = document.querySelector(".sheet");
@@ -1861,13 +1879,55 @@
     const lib = x.holdings ? `<button class="linkish" data-act="self-sec" data-sec="lib">功法庫 ${x.holdings.count | 0}/${x.holdings.cap | 0}・意境 ${(x.insights || []).length} ›</button>` : "";
     const head = `<div class="self-hd"><h3>武學</h3>${lib}</div>`;
     if (!worn.length) return `<section class="self-sec" aria-label="武學">${head}<p class="muted">你身上還沒有武學。</p></section>`;
+    const hm = S.main && S.main.hero_move;
     return `<section class="self-sec" aria-label="武學">${head}<div class="self-arts">${worn.map((a) => {
       const lv = Math.max(0, Math.min(10, a.level | 0)), top = a.quality === "絕學";
       const note = top ? (a.cultivate && (a.cultivate.legend ? a.cultivate.legend.note : a.cultivate.note)) || "" : "";
-      return `<button class="self-art${top ? " q4" : ""}" data-act="hero-node" data-kind="art" data-key="${esc(a.kind)}">${top ? '<span class="qseal q4 big">絕</span>' : ""}`
+      const card = `<button class="self-art${top ? " q4" : ""}" data-act="hero-node" data-kind="art" data-key="${esc(a.kind)}">${top ? '<span class="qseal q4 big">絕</span>' : ""}`
         + `<span class="sa-body"><span class="sa-hd"><b>${esc(a.name)}</b><small>${top ? "絕學" : esc(a.kind)}・第${CN_TENTHS[lv]}成</small></span>`
         + `${note ? `<small class="sa-note">${esc(note)}</small>` : ""}<i class="sa-ten" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${lv}" aria-label="${esc(a.name)}第${lv}成">${Array.from({ length: 10 }, (_, k) => `<i${k < lv ? ' class="on"' : ""}></i>`).join("")}</i></span></button>`;
+      // 絕招掛在「武學」那一門底下（跟著手上的打法走；內功不掛）
+      return a.kind === "武學" && hm ? `<div class="self-art-wrap${top ? " q4" : ""}">${card}${heroMoveHtml(hm, a)}</div>` : card;
     }).join("")}</div></section>`;
+  }
+  // 俠客頁武學卡底下的絕招（Joy 2026-11-03「俠客頁面的武學那邊，是不是應該跟絕招動畫做聯動」，示意稿 CZbfm371…；main.hero_move）：
+  // 穿著、打法對得上：「演一次」在卡上直接演（arena_scene.js 的 scenePreview，同萬寶閣那一塊畫布），旁邊「換一招」去萬寶閣絕招那一頁；
+  // 穿著、打法不對：寫一句擂台上不會演、連過去換；沒穿：招式庫有招的叫你去換上，沒有的叫你去寫一招
+  function heroMoveHtml(hm, a) {
+    const w = hm.worn, go = (text) => `<button class="linkish hm-go" data-act="hero-move-go" data-style="${esc(hm.style || "")}">${esc(text)} ›</button>`;
+    if (!w) {
+      const say = hm.count ? `招式庫有 ${hm.count | 0} 招，身上沒穿` : "寫一句長什麼樣子，擂台與決戰放手一搏就照它演";
+      const link = hm.count ? "去換上" : hm.has_art ? `替「${hm.art || a.name}」寫一招` : "去萬寶閣看看";
+      return `<div class="hm-strip empty"><span class="hm-seal" aria-hidden="true">絕</span><span class="hm-main"><b>還沒有絕招</b><small>${esc(say)}</small></span></div>
+        <div class="hm-foot">${go(link)}</div>`;
+    }
+    const on = S.heroMoveShow === w.id;
+    const play = w.show ? `<button class="btn small ${on ? "primary" : "ghost"} hm-play" data-act="hero-move-show" data-id="${esc(w.id)}">${on ? "收起 ■" : "演一次 ▶"}</button>` : "";
+    const sub = w.plays ? `${esc(w.style_text)}・擂台與決戰放手一搏都演這一招` : `${esc(w.style_text)}・你現在的打法是${esc(hm.style_text)}，擂台上不會演`;
+    return `<div class="hm-strip"><span class="hm-seal on" aria-hidden="true">絕</span><span class="hm-main"><b>絕招「${esc(w.name)}」</b><small>${sub}</small></span>${play}</div>
+      ${on ? `<div class="hm-stage"><canvas id="scene-preview" class="scene-preview" width="720" height="320" aria-label="絕招「${esc(w.name)}」演一次"></canvas></div>` : ""}
+      ${w.asleep_text ? `<p class="hm-warn">${esc(w.asleep_text)}</p>` : ""}
+      <div class="hm-foot">${go(w.plays ? "換一招" : `換一招${hm.style_text}的`)}</div>`;
+  }
+  async function heroMoveShow(mid) {
+    if (!mid || S.heroMoveShow === mid) { S.heroMoveShow = null; render(); return; }
+    const r = await api(`/api/looks/scene/${mid}`).catch(() => null);
+    if (!r || !r.scene) { toast("這一招演不出來，等一下再試。"); return; }
+    S.heroMoveShow = mid;
+    render();
+    // 台上站的是自己：穿的那一套、拿那一招的打法的兵器（擂台開打時 arena_anim 會照那一場重設）
+    const hm = S.main && S.main.hero_move, look = (S.main && S.main.look) || "";
+    const kind = { slash: "劍", pole: "槍", fist: "拳腳", shoot: "弓弩" }[hm && hm.worn ? hm.worn.style : ""] || "";
+    if (typeof RA !== "undefined") RA.looks = { ...RA.looks, me: kind, me_look: look };
+    if (typeof ringLoad === "function") ringLoad();
+    if (look && typeof ringWarmLook === "function") ringWarmLook(look);
+    if (typeof scenePreview === "function") scenePreview(r.scene, mid);
+  }
+  // 「換一招」：萬寶閣絕招那一頁、招式庫開那一種打法的分頁（mall.js 的 openMallMoves）。
+  // 萬寶閣也用 #scene-preview 那一塊畫布：先把俠客頁這一塊收起來
+  async function heroMoveGo(style) {
+    S.heroMoveShow = null;
+    await openMallMoves(style);
   }
   // 「屬性」那一段（以前在狀態列與點名號攤開的那一塊，整合設計 6.2）：五項一格一欄（名字、數字），有點可配時每格底下一顆「＋」、
   // 小標題右邊寫「可配 N 點」、格子底下一行五項各管什麼（statUsesHtml）；再一行名望、善名、惡名；心得一行在最底下（序章照舊點名號配）
@@ -4846,23 +4906,15 @@
       <div class="row"><button class="btn small primary" data-act="push-yes">開啟通知</button><button class="btn small ghost" data-act="push-no">不用</button></div></section>`;
   }
 
-  // 管理者「每週的事」那一行在 7 天濃縮季的寫法（軍令每天、第 4 階席次每段；FB-501，待 joy 潤）
-  const ADMIN_DAILY_WEEK7 = "每天、每段的事（照 00:00 的做法立刻再做一次；之後照常）";
-  // 21 天季：軍令每天、第 4 階席次照舊每週一（FB-502，待 joy 潤）
-  const ADMIN_DAILY_SEASON21 = "每天、每週的事（軍令照 00:00、席次照週一的做法立刻再做一次；之後照常）";
   function sheetHtml() {
     if (S.pushHow) return pushHowHtml(); // 「怎麼收到手機通知」自己一頁
     const s = S.main.status;
-    const a = S.admin;
-    const opts = (list) => list.map((x) => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join("");
-    // 開季、立刻收季、開啟下一季照賽季的階段（S.admin.phase）灰掉不對的那幾顆（手機介面自檢 U-19）；管理者資料還沒到（或舊伺服器沒給）照舊都能按
-    const seasonOff = (want) => (a && a.phase && a.phase !== want ? " disabled" : "");
     // 「匿名行走」那一句是傳聞分層一新寫的說明（待 joy 潤）；測試只比對這一句（tests/figures/test_rumor_layers.py）
     return `
       <div class="sheet-bg" data-act="sheet-close"></div>
       <div class="sheet" role="dialog" aria-label="設定">
         <div class="grip"></div>
-        <div class="top-row"><h3 style="flex:1">設定</h3>${S.main.admin ? `<button class="btn small ghost" data-act="to-admin">管理者工具 ↓</button>` : ""}<button class="btn small ghost" data-act="sheet-close">關閉</button></div>
+        <div class="top-row"><h3 style="flex:1">設定</h3>${S.main.admin ? `<a class="btn small ghost ad-entry" href="/admin">管理者工具 ›</a>` : ""}<button class="btn small ghost" data-act="sheet-close">關閉</button></div>
         ${genderRow(s)}
         ${renameRow()}
         ${pushRow()}
@@ -4886,123 +4938,7 @@
         </form></details>
         <div class="label">帳號</div>
         <button class="btn ghost" data-act="logout">登出</button>
-        ${S.main.admin ? `
-          <section class="admin-zone stack" id="admin-zone" aria-label="管理者工具">
-            <h4>管理者工具（只有你看得到）</h4>
-            ${a && a.llm_queue ? `<p class="muted">模型佇列：處理中 ${a.llm_queue.running}、在排 ${a.llm_queue.waiting}</p>` : ""}
-            ${a && a.divine_out ? `<p class="muted">${esc(a.divine_out)}</p>` : ""}
-            <p class="muted">每一項按了都會先問一次才送出；做完會關掉設定、回到江湖頁。</p>
-            <div class="row seasons"><button class="btn" data-act="admin" data-op="open_season"${seasonOff("preparing")}>開季</button><button class="btn warn" data-act="admin" data-op="end_season"${seasonOff("running")}>⚠ 立刻收季</button><button class="btn warn" data-act="admin" data-op="next_season"${seasonOff("resting")}>⚠ 開啟下一季</button></div>
-            <p class="muted">時間快轉（全服一起快轉，只在測試時用；小時是現實小時，季曆會跳得更多）</p>
-            <div class="row">${[1, 8, 24].map((h) => `<button class="btn small" data-act="admin" data-op="fast_forward" data-hours="${h}">+${h} 小時</button>`).join("")}</div>
-            <p class="muted">賽季時鐘（停機維護前按「暫停」，開回來按「繼續」；暫停中全服不能行動，畫面照常可看）</p>
-            <div class="row">${S.main.paused != null
-              ? `<span class="muted">已暫停 ${S.main.paused} 分鐘</span><button class="btn" data-act="admin" data-op="resume_clock">▶ 繼續</button>`
-              : `<button class="btn warn" data-act="admin" data-op="pause_clock">⏸ 暫停賽季時鐘</button>`}</div>
-            ${a ? `
-              <p class="muted">觸發（人少、大勢推不到門檻時用；效果跟自然發生一樣）</p>
-              <div class="row ad-row"><span class="ad-tag">決戰</span><select class="input" id="ad-battle" aria-label="決戰">${opts(a.battles)}</select><button class="btn small" data-act="admin" data-op="start_battle">立刻開戰</button></div>
-              <div class="row ad-row"><span class="ad-tag">事件</span><select class="input" id="ad-fire" aria-label="事件">${opts(a.events)}</select><button class="btn small" data-act="admin" data-op="fire">觸發</button></div>
-              <div class="row ad-row"><span class="ad-tag">大勢</span><select class="input" id="ad-trend" aria-label="大勢">${opts(a.trends)}</select><input class="input" id="ad-amount" type="number" value="10" aria-label="推動量" style="max-width:76px"><button class="btn small" data-act="admin" data-op="push_trend">推動</button></div>
-              ${a.season_one ? `
-                <p class="muted">${wk7() ? ADMIN_DAILY_WEEK7 : ordersDaily() ? ADMIN_DAILY_SEASON21 : "每週的事（照週一的做法立刻再做一次；下週一照常）"}</p>
-                <div class="row wrap"><button class="btn small" data-act="admin" data-op="issue_orders">立刻發${wkWord("order_this", "本週")}軍令</button><button class="btn small" data-act="admin" data-op="rotate_seats">立刻輪替第 4 階席次</button></div>` : ""}
-              ${a.xingshi ? `
-                <p class="muted">天下形勢（每天 22:00 自動開一篇；測試時立刻照上一篇以來的事開一篇）</p>
-                <div class="row wrap"><button class="btn small" data-act="admin" data-op="xingshi_now">現在就開一篇天下形勢</button></div>` : ""}
-              ${a.showdowns && a.showdowns.length ? `
-                <p class="muted">三場大戲（照時刻表開集結；開過就算這一場開過了，排定的時間到了不會再開）</p>
-                ${a.showdowns.map((s) => `<div class="row ad-row"><span class="ad-tag">${esc(s.label)}</span>${s.note ? `<span class="muted ad-note">${esc(s.note)}</span>` : ""}<button class="btn small" data-act="admin" data-op="start_showdown" data-id="${esc(s.id)}"${s.enabled ? "" : " disabled"}>立刻開這一場</button></div>`).join("")}` : ""}
-              ${a.season_one ? `
-                <p class="muted">玩家個人劇情（填名號查一次，再挑要給他的；效果跟自然發生一樣）</p>
-                <form id="ad-player-form"><div class="row"><input class="input" name="name" placeholder="名號" aria-label="玩家名號" value="${esc(S.adPlayerName || "")}"><button class="btn small" type="submit">查</button></div><p class="form-msg" role="alert">${esc((S.adPlayer && S.adPlayer.refusal) || "")}</p></form>
-                ${S.adPlayer && !S.adPlayer.refusal ? adminPlayerHtml(S.adPlayer) : ""}` : ""}
-              ${a.timetable.length ? timetableHtml(a) : ""}
-              <p class="muted">救場</p>
-              <div class="row ad-row"><span class="ad-tag">戰況</span><select class="input" id="ad-front" aria-label="定戰況的線">${opts(a.trends)}</select><input class="input" id="ad-value" type="number" value="50" min="0" max="100" aria-label="戰況" style="max-width:76px"><button class="btn small" data-act="admin" data-op="set_trend">定戰況</button></div>
-              ${a.results.length ? `<div class="row ad-row"><span class="ad-tag">結果</span><select class="input" id="ad-result" aria-label="定結果">${a.results.map((x) => `<option value="${esc(x.value)}">${esc(x.label)}</option>`).join("")}</select><button class="btn small" data-act="admin" data-op="resolve_event">定結果</button></div>` : ""}
-              ${a.locks.length ? `<div class="row ad-row"><span class="ad-tag">鎖定</span><select class="input" id="ad-lock" aria-label="清鎖定">${opts(a.locks)}</select><button class="btn small" data-act="admin" data-op="clear_lock">清鎖定</button></div>` : ""}
-              ${a.fallen && a.fallen.length ? `<div class="row ad-row"><span class="ad-tag">人物</span><select class="input" id="ad-fallen" aria-label="叫回人物">${opts(a.fallen)}</select><button class="btn small" data-act="admin" data-op="revive_figure">叫他回來</button></div>` : ""}
-              <div class="row"><button class="btn warn" data-act="admin" data-op="cancel_battle">⚠ 取消決戰</button></div>
-              ${a.conquest ? conquestAdminHtml(a.conquest) : ""}
-              ${a.seal ? sealAdminHtml(a.seal) : ""}
-              ${a.mingtie && a.mingtie.length ? mingtieAdminHtml(a.mingtie) : ""}
-              <p class="muted">重設密碼（朋友忘記密碼時用；臨時密碼私下告訴他）</p>
-              <form id="reset-form"><div class="row"><input class="input" name="target" placeholder="帳號或名號"><input class="input" name="temp" placeholder="臨時密碼"><button class="btn small" type="submit">重設</button></div><p class="form-msg" role="alert"></p></form>` : ""}
-            ${S.main.mall ? mallAdminHtml() : ""}
-            ${S.main.mall && S.main.looks_admin ? looksAdminHtml() : ""}
-          </section>` : ""}
       </div>`;
-  }
-
-  // 管理者區「玩家個人劇情」查到的那個人（/api/admin/player，Game.admin_player_choices）：他是誰、召見（發不了的灰掉、寫為什麼）、
-  // 能給他的機緣與伏筆片段（沒有就寫一句）。按了照舊先問一次，送的是查到的那個名號（不是欄位裡後來改過的字）
-  // 管理者「玉璽」一組（玉璽碎片設計第十二節，admin_choices.seal；碎片關著是 null，不畫）：七片與狀態、強制現世與璽動（下一場）、
-  // 指定持有者、強制開單挑（正式伺服器只能掛在剛收場的時刻表決戰上，QA 開關開著才不必）、定結果、取消、隱沒判斷。按了照舊先問一次。字待 joy 潤
-  const SEAL_STATES = { held: "懷中", hidden: "未現世", sunk: "不知所蹤" };
-  // 被檢舉的名帖（檢舉夠多次、大家都看不到的在前）：撤下＝畫與題字清掉、他再做一張；放回＝照舊給大家看。待 joy 潤
-  function mingtieAdminHtml(rows) {
-    return `<p class="muted">名帖檢舉</p><div class="mt-admin">${rows.map((x) => `<div class="mt-admin-row">${mtCardHtml(x.card, x.name, "thumb")}
-      <div><b>${esc(x.name)}</b><p class="muted">第 ${x.version} 版・${x.count} 人檢舉</p>
-      <div class="row wrap"><button class="btn warn small" data-act="admin" data-op="mingtie_remove" data-name="${esc(x.name)}" data-version="${x.version}">撤下</button><button class="btn small" data-act="admin" data-op="mingtie_restore" data-name="${esc(x.name)}" data-version="${x.version}">放回</button></div></div></div>`).join("")}</div>`;
-  }
-
-  // 管理者「領地爭奪」一組（打開領地爭奪，PM 2026-10-22；admin_choices.conquest，領地爭奪關著、季收了是 null，不畫）：一塊定給哪一軍或放回中立、
-  // 定一軍在那一塊的進度（到 100 照推滿當場易手）、立刻替一軍下戰書、取消一場攻城。照 Game.admin_conquest_* 實際做的事；按了照舊先問一次。字待 joy 潤
-  function conquestAdminHtml(q) {
-    const opts = (list) => list.map((x) => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join("");
-    return `<p class="muted">領地爭奪（救場；易手的天下大事照自然發生寫，不寫管理者）</p>
-      <div class="row ad-row"><span class="ad-tag">區塊</span><select class="input" id="ad-cq-block" aria-label="區塊">${opts(q.blocks)}</select></div>
-      <div class="row ad-row"><span class="ad-tag">陣營</span><select class="input" id="ad-cq-side" aria-label="陣營">${opts(q.sides)}</select><button class="btn small" data-act="admin" data-op="conquest_set">定歸這一邊</button><button class="btn small" data-act="admin" data-op="conquest_set" data-neutral="1">放回中立</button></div>
-      <div class="row ad-row"><span class="ad-tag">進度</span><input class="input" id="ad-cq-value" type="number" value="60" min="0" max="100" aria-label="進度" style="max-width:76px"><button class="btn small" data-act="admin" data-op="conquest_progress">定進度</button><button class="btn small" data-act="admin" data-op="admin_conquest_letter">立刻下戰書</button></div>
-      ${q.sieges.length ? `<div class="row ad-row"><span class="ad-tag">攻城</span><select class="input" id="ad-cq-siege" aria-label="攻城">${opts(q.sieges)}</select><button class="btn warn small" data-act="admin" data-op="conquest_cancel">⚠ 取消這一場</button></div>` : ""}`;
-  }
-
-  function sealAdminHtml(s) {
-    const label = (x) => (x.state === "held" ? `${x.name}（${x.holder}懷中）` : `${x.name}（${SEAL_STATES[x.state] || x.state}）`);
-    const canDuel = s.hung || s.qa;
-    const off = s.duel ? "" : " disabled";
-    return `<p class="muted">玉璽（效果跟自然發生一樣，公告不寫管理者）</p>
-      <div class="row ad-row"><span class="ad-tag">碎片</span><select class="input" id="ad-seal" aria-label="碎片">${s.shards.map((x) => `<option value="${esc(x.id)}">${esc(label(x))}</option>`).join("")}</select></div>
-      <div class="row wrap"><button class="btn small" data-act="admin" data-op="seal_emerge"${s.hide ? ' data-hide="1"' : ""}>${s.hide ? "現在藏一片" : "強制現世（下一場）"}</button><button class="btn small" data-act="admin" data-op="seal_stir">強制璽動（下一場）</button></div>
-      <div class="row ad-row"><span class="ad-tag">名號</span><input class="input" id="ad-seal-name" placeholder="名號" aria-label="持有者名號"><select class="input" id="ad-seal-state" aria-label="狀態"><option value="held">有主</option><option value="hidden">未現世</option><option value="sunk">隱沒</option></select><button class="btn small" data-act="admin" data-op="seal_assign">指定持有者</button></div>
-      <div class="row ad-row"><span class="ad-tag">單挑</span><input class="input" id="ad-seal-factor" type="number" value="1" step="0.1" min="0" max="1" aria-label="局勢係數" style="max-width:76px"><button class="btn small" data-act="admin" data-op="seal_duel"${canDuel ? "" : " disabled"}>強制開單挑</button>${
-        !canDuel ? '<span class="muted ad-note">沒有剛收場的決戰可掛</span>' : s.hung ? `<span class="muted ad-note">掛在「${esc(s.where)}」</span>` : ""}</div>
-      <div class="row wrap"><button class="btn small" data-act="admin" data-op="seal_fix" data-take="1"${off}>定結果：易主</button><button class="btn small" data-act="admin" data-op="seal_fix" data-take="0"${off}>定結果：不易主</button><button class="btn warn small" data-act="admin" data-op="seal_cancel"${off}>⚠ 取消單挑</button><button class="btn small" data-act="admin" data-op="seal_sink_check">隱沒判斷</button></div>
-      ${s.mandate_ok ? `<div class="row wrap"><button class="btn small" data-act="admin" data-op="seal_mandate" data-when="next"${s.mandate ? " disabled" : ""}>蓋天命之季（下一季）</button><button class="btn warn small" data-act="admin" data-op="seal_mandate" data-when="now"${s.mandate === "now" ? " disabled" : ""}>⚠ 這一季立刻蓋章</button>${s.mandate === "next"
-        ? '<button class="btn small" data-act="admin" data-op="seal_mandate" data-when="cancel">收回下一季的章</button>' : ""}${
-        s.mandate === "now" ? '<span class="muted ad-note">這一季是天命之季</span>' : s.mandate === "next" ? '<span class="muted ad-note">下一季蓋章</span>' : ""}</div>` : ""}`;
-  }
-
-  function adminPlayerHtml(p) {
-    const opts = (list) => list.map((x) => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join("");
-    return `
-      <p class="muted">${esc(p.line)}</p>
-      <div class="row ad-row"><span class="ad-tag">召見</span><span class="muted ad-note">${esc(p.summons.note)}</span><button class="btn small" data-act="admin" data-op="summon"${p.summons.ok ? "" : " disabled"}>立刻替他發召見</button></div>
-      <div class="row ad-row"><span class="ad-tag">機緣</span>${p.opportunities.length
-        ? `<select class="input" id="ad-opp" aria-label="給他的機緣">${opts(p.opportunities)}</select><button class="btn small" data-act="admin" data-op="give_opportunity">給他</button>`
-        : '<span class="muted ad-note">沒有能給他的機緣</span>'}</div>
-      <div class="row ad-row"><span class="ad-tag">伏筆</span>${p.fragments.length
-        ? `<select class="input" id="ad-frag" aria-label="給他的伏筆片段">${opts(p.fragments)}</select><button class="btn small" data-act="admin" data-op="give_fragment">給他</button>`
-        : '<span class="muted ad-note">沒有能給他的伏筆片段</span>'}</div>`;
-  }
-
-  // 設定頁的「時刻表」（計畫 T10）：十二件照順序、標狀態；三場決戰與季末還沒結算的有日期時間欄位與「排定」
-  // （欄位是這台裝置的當地時間，送出時換成秒數）；最後是「跳到下一件大事」
-  function localInput(sec) {
-    const d = new Date(sec * 1000);
-    const p = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-  }
-  function timetableHtml(a) {
-    return `
-      <p class="muted">時刻表（三場大戲與季末可以排時間，時間欄是現實時間；時間到了自動開集結，季末就是收季）</p>
-      <div class="tt-list">${a.timetable.map((r) => `
-        <div class="tt-row">
-          <div class="tt-head"><span class="tt-name">${esc(r.label)}</span><span class="tt-state">${esc(r.result ? `${r.state_text}・${r.result}` : r.state_text)}</span></div>
-          ${r.schedulable ? `<div class="tt-real">現實時間（這台裝置的當地時間）</div><div class="row"><input class="input" type="datetime-local" id="tt-at-${esc(r.id)}" value="${localInput(r.at_real)}" aria-label="${esc(r.label)}的時間"><button class="btn small" data-act="admin" data-op="schedule" data-id="${esc(r.id)}">排定</button></div>` : ""}
-        </div>`).join("")}</div>
-      <div class="row"><button class="btn" data-act="admin" data-op="jump_next">跳到下一件大事</button></div>`;
   }
 
   // 管理者動作的確認框（G3）：每一項按了都先問一次、問句說出後果。疊在設定抽屜上面、不重畫抽屜，
@@ -5029,98 +4965,6 @@
   function closeAsk() {
     document.querySelector(".ask-layer")?.remove();
     askGo = null;
-  }
-
-  // 管理者動作的問句與確認鈕（照抽屜裡選好的下拉選單）
-  function adminAsk(op, body) {
-    const picked = (id) => { const el = document.getElementById(id); return el && el.selectedIndex >= 0 ? el.options[el.selectedIndex].text : ""; };
-    const amount = `${body.amount >= 0 ? "+" : ""}${body.amount}`;
-    // 21 天季的「繼續」（PM 2026-10-19，跟 world.RESUME_SKIP_REAL 一致）；待 joy 潤
-    // 季長與對回什麼照季寫（S.admin.realign，同 world.realign_line；FB-501：7 天的季「對回現實的日子」），沒給照 21 天季那一句
-    const R = (S.admin && S.admin.realign) || { days: "21", unit: "星期" };
-    const RESUME_21 = `讓賽季時鐘繼續走：${R.days} 天的季的季曆對回現實的${R.unit}，暫停期間的大事在這一刻一起發生，季末照原本的日期；排好的決戰照原本的時間開，時間在暫停裡過了的馬上開始集結，確定？`;
-    // 三場大戲與季末的預設時間：7 天濃縮季照時刻表寫（S.admin.default_dates，timetable.default_dates_note；FB-501），其他季照原本那一句
-    const DATES = (S.admin && S.admin.default_dates) || "預設在第 6、9、11 週中、第 12 週末";
-    const week7 = wk7(), daily = ordersDaily(); // 7 天濃縮季：第 4 階席次每段（FB-501）；21 天季、7 天季：軍令每天一道（FB-502）
-    return {
-      open_season: [`開季：賽季從籌備中正式開始，全服玩家都能行動了。記得排三場大戲與季末的時間（${DATES}），確定？`, "確定開季"],
-      // 照 Game.admin_end_season 實際做的事寫（只在進行中有效）
-      end_season: ["立刻收季：這一季馬上結束、算出結局與武學榜，全服進入休季（之後再按「開啟下一季」）；沒打完的決戰直接收掉、不算結果，確定？", "確定收季"],
-      // 照 SqliteWorldStore.next_season 實際做的事寫（只在休季有效）
-      next_season: [`開啟下一季（休季才有效）：新的一季立刻開始，同伴全部重獲自由、武學與意境的名字全部釋出（絕學定的名也是）、合成與合併的配方清空、鐵匠鋪的隱藏鑄法換一批、鑄譜與神器重來（神器譜留著）、天機 +1，沒打完的決戰清掉。${
-        S.admin && S.admin.next_has_timetable ? `記得排三場大戲與季末的時間（${DATES}）。` : ""}確定？`, "確定開啟下一季"],  // FB-050
-      fast_forward: [`時間快轉現實 ${body.hours} 小時的份（全服一起，季曆會跳得更多），確定？`, `快轉 ${body.hours} 小時`],
-      // 公告停機時賽季時鐘暫停（Game.admin_pause_clock／admin_resume_clock）；問句待 S1／joy 潤
-      // 21 天季（S.admin.season21）多一句、繼續換一句（PM 2026-10-19：季曆對回現實的星期，跟 world.RESUME_SKIP_REAL 一致）；待 joy 潤
-      pause_clock: [`暫停賽季時鐘（停機維護前按）：季的時間不走、決戰不推，全服暫時不能行動，畫面照常可看；${
-        S.admin && S.admin.season21 ? `${R.days} 天的季：繼續時季曆會對回現實的${R.unit}，暫停期間的大事在繼續那一刻一起發生。` : ""}做完記得按「繼續」，確定？`, "確定暫停"],
-      resume_clock: [S.admin && S.admin.season21 ? RESUME_21 : "讓賽季時鐘繼續走：停的這一段照整個季曆鐘頭往下取整，扣掉的不算進賽季、季末往後延一樣長；停不到一個季曆鐘頭的話什麼都不扣、季末不動；排好的決戰照原本的時間開，時間在暫停裡過了的馬上開始集結，確定？", "確定繼續"],  // 待 joy 潤；跟 world.resume_skip_text 說的一致
-      start_battle: [`立刻開戰「${picked("ad-battle")}」：全服一起進入集結，確定？`, "確定開戰"],
-      fire: [`觸發「${picked("ad-fire")}」：效果跟自然發生一樣，全服都受影響，確定？`, "確定觸發"],
-      push_trend: [`推動大勢「${picked("ad-trend")}」${amount}：全服一起，確定？`, "確定推動"],
-      // 時刻表與救場（計畫 T10）
-      schedule: [`把「${body.title}」排在現實 ${body.when}：時間到了自動開集結（季末就是收季），確定？`, "確定排定"],
-      jump_next: ["跳到下一件大事：全服的季時間一起往前推，到了的大事立刻結算（決戰直接開集結），確定？", "確定跳過去"],
-      set_trend: [`把「${picked("ad-front")}」定成 ${body.value}：全服一起，推過門檻照常觸發，確定？`, "確定定戰況"],
-      resolve_event: [`定下「${picked("ad-result")}」：照時刻表結算、全服公告，之後不再擲骰，確定？`, "確定定結果"],
-      clear_lock: [`清掉「${picked("ad-lock")}」的鎖定：結算時照沒人鎖定擲骰，確定？`, "確定清掉"],
-      revive_figure: [`叫「${picked("ad-fallen")}」回來：以一半聲威回到原本的戰線，全服看得到一句天下大事，確定？`, "確定叫回"],
-      cancel_battle: ["取消正在集結或開打的決戰：不算勝負，參戰者都會收到通知；時刻表的決戰不會自己再開，要用「定結果」收尾，確定？", "確定取消"],
-      // 管理者觸發鈕（企劃者 2026-10-07）：照 Game.admin_issue_orders／admin_rotate_seats 實際做的事寫
-      issue_orders: [daily // 軍令每天一道的季（21 天、7 天；FB-501、FB-502，待 joy 潤）
-        ? "立刻發今日軍令：今天還沒達成的軍令照 00:00 的做法重挑、換掉（它們的進度不算了），各陣營發一則軍情；已經達成的照舊留著、不會再達成一次；明天 00:00 照常發令，確定？"
-        : "立刻發本週軍令：這一週還沒達成的軍令照週一的做法重挑、換掉（它們的進度不算了），各陣營發一則軍情；已經達成的照舊留著、不會再達成一次；下週一照常發令，確定？", "確定重發"],
-      rotate_seats: [week7 // 7 天濃縮季的席次每段輪替（FB-501，待 joy 潤）
-        ? "立刻輪替第 4 階席次：照上一段的貢獻重排各陣營在任的人、發一則名單軍情；下一段第一天 00:00 照常再排，確定？"
-        : "立刻輪替第 4 階席次：照上一週的貢獻重排各陣營在任的人、發一則名單軍情；下週一照常再排，確定？", "確定輪替"],
-      // 照 Game.admin_xingshi_now 實際做的事寫（領地爭奪第三批 A；待 joy 潤）
-      xingshi_now: ["現在就開一篇〈天下形勢〉：照上一篇以來的事開一張單，伺服器在背景請模型寫（寫不出來照固定段），收下那一刻發一則天下大事、記一筆江湖史；還在等的那一篇先照固定段收。每天 22:00 照常再開，確定？", "確定開一篇"],
-      start_showdown: [`立刻開「${body.title}」：照時刻表開集結（起點照此刻的戰況），這一場算開過了，排定的時間到了不會再開，確定？`, "確定開戰"],
-      // 領地爭奪救場（打開領地爭奪，PM 2026-10-22；照 Game.admin_conquest_set／progress／letter／cancel 實際做的事寫，待 joy 潤）
-      conquest_set: body.side
-        ? [`把「${body.place}」定給${body.sideName}：天下大事照易手寫一句（落入／收復）、記一筆江湖史，三條戰線當場重算；不分紅、不起冷卻，${body.sideName}在那裡的進度拿掉、別一邊的照留，確定？`, "確定定歸"]
-        : [`把「${body.place}」放回中立（沒人佔）：不發天下大事，三條戰線當場重算，進度照留，確定？`, "確定放回中立"],
-      conquest_progress: [`把「${body.place}」${body.sideName}那一條進度定成 ${body.value}：到 100 照推滿當場易手（這一輪推過的人分紅、冷卻起算、天下大事一句），定成 0 就拿掉那一條；不看推不推得動、不記是誰推的，確定？`, "確定定進度"],
-      admin_conquest_letter: [`替${body.sideName}立刻對「${body.place}」下一張戰書：不看第 4 階、門檻與一天一張，集結馬上開、集結完就開打，那一塊凍結到打完或作罷；天下大事照戰書寫、不寫管理者，確定？`, "確定下戰書"],
-      conquest_cancel: [`取消「${picked("ad-cq-siege")}」這一場攻城：照作罷處理，那一塊解凍、進度照留，天下大事一句（不寫管理者）；已經開了集結的照決戰的取消收兵（不算勝負、不發軍餉、不易手），確定？`, "確定取消"],
-      summon: [`立刻替 ${body.name} 發召見（${(S.adPlayer && S.adPlayer.summons && S.adPlayer.summons.note) || "下一階"}；不看貢獻與機緣的門檻，其餘照自然發召見的做法），確定？`, "確定發召見"],
-      // 情誼型多一句（伺服器算好的 note：情誼補到幾、招募成算、其他話題、換季帶幾成，審查 M-5）
-      give_opportunity: [`給 ${body.name} 機緣「${picked("ad-opp")}」：放到這個機緣自然送上門之後的樣子，下一步他就做得了。${
-        body.note ? `${body.note}。` : ""}確定？`, "確定給他"],
-      give_fragment: [`給 ${body.name} 伏筆片段「${picked("ad-frag")}」：跟自然聽到一樣，記進他的個人線索，確定？`, "確定給他"],
-      // 玉璽碎片（玉璽碎片設計第十二節；照 Game.admin_seal_* 實際做的事寫，待 joy 潤）
-      seal_emerge: body.hide
-        ? ["現在藏一片：略過開季的機率，把選的那一片（還沒現世才行，沒選的照亂數挑）藏進一塊開季中立的區塊；藏在哪裡不公開，要有人在那裡探索才撿得到。這一季已經藏著、或已經現世過一片就不藏，確定？", "確定藏"]
-        : ["下一場標了現世的決戰，碎片必定現世（選的那一片還沒現世就是它，否則照亂數挑；得主照常從勝方抽），確定？", "確定"],
-      seal_stir: [`下一場標了璽動的決戰，必定牽動「${picked("ad-seal")}」（略過機率、新主保護與次數上限；那一片要有主），確定？`, "確定"],
-      seal_assign: [`把「${picked("ad-seal")}」改成${body.state === "held" ? `${body.name}懷中（這一季有新主保護）` : body.state === "sunk" ? "隱沒" : "未現世"}：只改登記，他回來同步時補給他，確定？`, "確定指定"],
-      seal_duel: [`立刻對「${picked("ad-seal")}」開一場奪璽單挑，挑戰者 ${body.name}、局勢係數 ${body.factor}（上限照舊）：三分鐘後開打，確定？`, "確定開單挑"],
-      seal_fix: [`正在打的奪璽單挑收場時${body.take ? "易主" : "懷璽不失"}（公告照常），確定？`, "確定"],
-      seal_cancel: ["取消正在打（或下戰書中）的奪璽單挑：記成未分勝負，碎片留在原主，確定？", "確定取消"],
-      mingtie_remove: [`撤下 ${body.name} 的第 ${body.version} 版名帖：畫與自題那一句清掉（頭銜照留），他的江湖紀錄會寫一句，收過這一張的人也看不到了，確定？`, "確定撤下"],
-      mingtie_restore: [`放回 ${body.name} 的第 ${body.version} 版名帖：檢舉清掉、大家照舊看得到（檢舉過的人自己那裡照樣藏著），確定？`, "確定放回"],
-      seal_sink_check: ["照隱沒的條件現在判一次：只列出下一次換季會沉哪幾片，不改，確定？", "確定"],
-      // 蓋章的後果要寫明（審查 I2）：天命之季過後再換季，七片全部散去、每一位持有者都失去碎片
-      seal_mandate: body.when === "cancel"
-        ? ["收回下一季的天命之季章：七片這一輪都現世過的話，換季時照樣會蓋，確定？", "確定收回"]
-        : [body.when === "now"
-          // 天命之爭的時刻：7 天濃縮季照時刻表寫（S.admin.mandate_at，timetable.mandate_note；FB-503），其他季照原本那一句
-          ? `這一季立刻蓋上天命之季的章：還沒打的標了璽動的決戰必定牽動碎片、不提前收季，天命之爭排在${(S.admin && S.admin.mandate_at) || "第 12 週週一 20:00"}（現實時間落在半夜會盡量挪開，前後的大事擋著挪不開就照原時間、蓋完會說；已經過了就馬上開集結）。這一季的章蓋了就收不回：收季之後再換季，七片全部散去、每一位持有者都失去碎片，確定？`
-          : "下一季蓋天命之季的章（不看七片現世過沒）。那一季過後再換季，七片全部散去、每一位持有者都失去碎片；換季之前還收得回，確定？", "確定蓋章"],
-    }[op] || ["確定要這麼做？", "確定"];
-  }
-
-  // 確認過的管理者動作：做完關掉抽屜、回到江湖頁看結果，結果照舊用提示泡泡講（G4）。
-  // 請求本身沒成（連不上、伺服器出錯）就留在抽屜裡，api() 已經提示過原因
-  async function adminDo(op, body) {
-    await busy(async () => {
-      const r = await api(`/api/do/${op}`, body);
-      S.sheet = false;
-      setMain(r.main);
-      await goTab("jianghu");
-      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-      toast(text || "已完成。");
-    });
   }
 
   // ── 載入各頁 ──
@@ -6146,11 +5990,6 @@
           render();
           pushRefresh(); // 手機通知：這台裝置訂著沒有（不等它）
           loadRecap(); // 有序章的內容才有「重看序章」鈕；同一次載入只問一次
-          if (S.main.admin) { // 每次打開都重抓：時刻表與可以定的結果會變；查過的玩家也重查（給過的機緣、片段就不再列）
-            S.admin = await api("/api/admin");
-            if (S.adPlayerName) S.adPlayer = await api("/api/admin/player", { name: S.adPlayerName });
-            renderKeepingSheet(); // 等資料的時候人可能已經往下捲了
-          }
           break;
         case "peer": await openPeer(el.dataset.name); break;
         case "peer-close": S.peer = null; render(); break;
@@ -6195,13 +6034,13 @@
           render();
           loadRecap();
           await refreshHowto();
-          if (S.main.admin) { // 跟齒輪打開時一樣：管理者的時刻表與可以定的結果會變，重抓；查過的玩家也重查（審查 Nit）
-            S.admin = await api("/api/admin");
-            if (S.adPlayerName) S.adPlayer = await api("/api/admin/player", { name: S.adPlayerName });
-            renderKeepingSheet();
-          }
           break;
-        case "to-admin": document.getElementById("admin-zone")?.scrollIntoView({ behavior: "smooth", block: "start" }); break; // 抽屜頂上那顆「管理者工具 ↓」
+        // 管理頁（admin.js；Joy 2026-11-01 管理者工具獨立一個網址）：設定抽屜頂上那顆「管理者工具 ›」是一般的連結（/admin），這幾顆是管理頁上的
+        case "ad-refresh": await adminReload(true); break;
+        case "ad-result-close": S.adResult = null; renderKeepingSheet(); break;
+        case "ad-find": await adminFind(); break;
+        case "ad-pick": adminPick(el.dataset.login); break;
+        case "ad-gen": adminGenTemp(); break;
         case "recap": S.recapOpen = !S.recapOpen; render(); break;
         case "guide-shut": shutGuide(S.main.guide); renderPage(); break;
         case "guide-open": openGuide(S.main.guide); renderPage(); break;
@@ -6236,6 +6075,8 @@
         case "fronts-help": frontsTap(); break; // 點戰況圖卡：底下攤開／收起這一季在打什麼、亂局、怎麼推（explain-2）
         case "checkin": await doMain("checkin", el.dataset.attr ? { attribute: el.dataset.attr } : {}); break; // 「簽到」小標攤開的領取鈕（四階的日子帶屬性）
         case "pill": await doMain("pill"); break; // 體力條上的「丹 N」：服一顆回體丹（測試期間一鍵補滿打開時同一顆鈕寫「補滿」，同一條路由）
+        case "hero-move-show": await heroMoveShow(el.dataset.id || ""); break; // 俠客頁武學卡底下的絕招演一次
+        case "hero-move-go": await heroMoveGo(el.dataset.style || ""); break; // 換一招：萬寶閣絕招那一頁
         case "hero-node": heroTap(el); break; // 修練頁人物面板的光點：開那一樣的抽屜
         case "self-sec": { // 俠客頁「功法庫・意境 ›」那一顆：攤開底下那個摺疊、捲到它
           (S.selfOpen || (S.selfOpen = {}))[el.dataset.sec] = true;
@@ -6318,7 +6159,7 @@
             if (op === "give_fragment") body.id = document.getElementById("ad-frag").value;
           }
           const [text, yes] = adminAsk(op, body);
-          ask(text, yes, () => adminDo(op, body)); // 先問一次（G3），按了確定才送
+          ask(text, yes, () => adminDo(op, body, yes.replace(/^確定/, ""))); // 先問一次（G3），按了確定才送；結果條上寫做的是哪一件
           break;
         }
         case "ask-yes": {
@@ -6336,10 +6177,23 @@
           break;
         // 商城（商城第二批）：齒輪旁的錠子鈕與底部第六格都打開那一層（不換頁）
         case "mall-open": await openMall(); break;
+        case "mall-moves": await openMallMoves(el.dataset.style || ""); break; // 直接進萬寶閣的絕招那一頁（data-style 開那一種打法）
         case "mall-goto": await openMall(); mallPick(el.dataset.id); break; // 別頁引過來買某一件（修練頁沒丹時的破境丹）
         case "mall-close": closeMall(); break;
         case "mall-tab": await mallTabTo(el.dataset.tab); break;
         case "mall-pick": mallPick(el.dataset.id); break;
+        case "mall-cat": mallCatTo(el.dataset.cat); break; // 貨架的分類
+        case "look-sub": lookSubTo(el.dataset.sub || ""); break; // 形象那一頁裡的自建形象、絕招那一頁（空的回形象）
+        case "prompt-ex": promptExample(el.dataset.for || "", el.dataset.text || ""); break; // 想不到就點：把例句填進框裡
+        case "look-pick": lookPickTo(el.dataset.id || ""); break; // 形象那一頁點一套：台子上換成它
+        case "look-seg": lookSegTo(el.dataset.seg || "mine"); break; // 我的／官方／市集
+        case "look-filter": lookFilterTo(el.dataset.filter || "all"); break; // 我的那一頁篩哪一類
+        case "look-more": lookMore(); break; // 再看一頁
+        case "look-fold": lookFold(el.dataset.what); break; // 摺起來的展開（沒掛的、更早退回的）
+        case "look-sell": lookSellTo(el.dataset.id || ""); break; // 那一套跳出定價框
+        case "look-redo": lookRedo(el.dataset.id); break; // 退回的改一改再送
+        case "move-tab": moveTabTo(el.dataset.tab || ""); break; // 招式庫的打法分頁
+        case "move-form": moveFormOpen(); break; // 寫一招新的（展開）
         case "mall-qty": { // 購買確認那張紙的數量：同一件、同一個編號重畫
           const now = S.mallAskNow, it = now && S.mallData && S.mallData.items.find((one) => one.id === now.id);
           if (it) mallAsk(it, S.mallData, Number(el.dataset.n), now.ref);
@@ -6348,12 +6202,19 @@
         case "mall-claim": await mallClaim(); break;
         case "look-wear": await lookWear(el.dataset.id || ""); break; // 萬寶閣「形象」那一頁換上一套
         case "look-order": lookOrderAsk(); break; // 自建形象下單（先問一次）
-        case "move-order": moveOrderAsk(); break; // 招式動畫下單（先問一次）
+        case "look-withdraw": lookWithdrawAsk(el); break; // 撤回還沒上架的單（先問一次，元寶全退）
+        case "move-order": moveOrderAsk(el.dataset.basic === "1"); break; // 絕招下單（先問一次）：通用 60 不畫圖、獨門 300 畫圖等審核
+        case "move-preview": await movePreview(); break; // 一句話自創的絕招：先看看（不扣元寶）
+        case "move-show": await moveShowTo(el.dataset.id || ""); break; // 招式庫做好了的那一招演一次
+        case "mvp-replay": if (typeof mvpReopen === "function") mvpReopen(); break; // 決戰的回合 MVP：戰場底下那一行「再看一次」重新跳出視窗
+        case "mvp-again": if (typeof mvpAgain === "function") mvpAgain(); break; // MVP 視窗裡：絕招從頭再演一次
+        case "mvp-close": if (typeof mvpClose === "function") mvpClose(); break; // MVP 視窗收起
+        case "look-show": lookShowTo(el.dataset.id || "", el.dataset.name || ""); break; // 一套形象看動作（再按一次收起）
         case "market-buy": lookMarketAsk(el.dataset.id, el.dataset.name || "", Number(el.dataset.price) || 0); break; // 形象市集買一套（先問一次）
         case "market-list": await lookMarketList(el.dataset.id); break; // 自己做的一套掛上市集（照框裡的價錢）
         case "market-unlist": await lookMarketDo({ op: "unlist", look: el.dataset.id }); break;
-        case "move-bind": await moveBind(el.dataset.id); break; // 招式庫的一招綁到現在練的那一門
-        case "looks-admin": await looksAdminDo(el.dataset.op, el.dataset.id); break; // 管理者區「自建形象」
+        case "move-bind": await moveBind(el.dataset.id); break; // 招式庫的一招換上身（id 0 是脫下來）
+        case "looks-admin": await looksAdminAsk(el.dataset.op, el.dataset.id, el.dataset.slot); break; // 管理頁「自建形象」：上架、退回先問一次
         case "mall-retry": await (S.mallTab === "log" ? loadMallLog() : loadMall()); break;
         case "mall-admin": mallAdminAsk(el.dataset.op, el.dataset.id); break;
         case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); forgetHowto(); S.sheet = false; S.peer = null; S.adPlayer = null; S.adPlayerName = ""; S.stage = "gate"; S.main = null; forgetMap(); forgetMall(); render(); break;
@@ -6639,6 +6500,10 @@
 
   document.addEventListener("change", async (ev) => {
     if (ev.target.id === "anon") await doMain("anonymous", { value: ev.target.checked });
+    if (ev.target.id === "ad-front") { // 管理頁定戰況：換了一條線，數字欄換成那一條此刻的值
+      const v = adTrendNow(ev.target.value), box = document.getElementById("ad-value");
+      if (box && v != null) box.value = v;
+    }
     if (ev.target.id === "push-on") await (ev.target.checked ? pushEnable() : pushDisable()); // 手機通知（減法季批 9）
     if (ev.target.classList && ev.target.classList.contains("push-kind")) await pushKind(ev.target.dataset.kind, ev.target.checked); // 五種各一個開關
     if (ev.target.id === "hints-off") await doMain("hints_off", { value: ev.target.checked }); // 碰到才說的小提醒（新手引導計畫三）；打開時排著的清掉
@@ -6825,10 +6690,14 @@
         formMsg(form, r.message, ok);
         if (ok) form.reset();
       } else if (form.id === "reset-form") {
-        // 重設密碼也先問一次（G3）。結果照舊寫在表單那一行、抽屜不關（失敗時欄位留著改，跟改密碼一樣）
+        // 重設密碼也先問一次（G3）。結果寫在表單那一行、也釘在管理頁底下（成了的那一條連臨時密碼一起寫，私下告訴他之前不必再找一次）；
+        // 失敗時欄位留著改，跟改密碼一樣
         const target = (data.target || "").trim();
+        const temp = String(data.temp || "");
+        S.adResetTarget = target;
         if (!target) { formMsg(form, "先填要重設的帳號或名號。"); return; }
-        ask(`重設 ${target} 的密碼，確定？`, "確定重設", async () => {
+        if (temp.length < AD_PW_MIN) { formMsg(form, `臨時密碼至少 ${AD_PW_MIN} 個字（可以按「產生一組」）。`); return; }
+        ask(`重設 ${target} 的密碼，臨時密碼是「${temp}」：他原本的密碼不能再用，確定？`, "確定重設", async () => {
           // 結果寫進「那時候」畫面上的表單：問的期間抽屜可能被重畫過（例如前一個動作剛回來），按下時抓到的那個已經不在了；
           // 抽屜整個關了就改用提示泡泡講
           const say = (text, ok = false) => {
@@ -6841,6 +6710,11 @@
           try {
             const r = await api("/api/admin/reset_password", data);
             const ok = /^已重設 .+ 的密碼。$/.test(r.message || "");
+            if (S.adminPage) {
+              S.adResult = { text: ok ? `${r.message}臨時密碼：${temp}（私下告訴他，登入後到設定改掉）` : r.message, ok };
+              if (ok) { S.adResetTarget = ""; S.adAccounts = null; }
+              renderKeepingSheet();
+            }
             const now = say(r.message, ok);
             if (ok && now) now.reset();
           } catch (e) {
@@ -6859,7 +6733,7 @@
   // 卡住的 /api/main 不能每 10 秒再疊一個，把伺服器的執行緒池用光
   let pollInFlight = false;
   async function poll() {
-    if (pollInFlight || S.stage !== "game" || S.busy || (document.hidden && !sealWatched())) return; // 背景分頁不輪詢，奪璽例外（sealWatched）
+    if (pollInFlight || S.stage !== "game" || S.busy || S.adminPage || (document.hidden && !sealWatched())) return; // 管理頁不輪詢：重畫會把填到一半的欄位洗掉，要新的按「重新整理」 // 背景分頁不輪詢，奪璽例外（sealWatched）
     pollInFlight = true;
     lastPoll = Date.now();
     const was = S.main;
@@ -7142,6 +7016,8 @@
       const open = S.foldOpen || (S.foldOpen = new Set());
       if (box.open) open.add(box.dataset.fold); else open.delete(box.dataset.fold);
     }
+    // 管理頁的一塊攤開、收起（admin.js）：這台裝置記著；「形象與招式訂單」第一次攤開時抓訂單
+    else if (box instanceof Element && box.matches("details.ad-sec")) adminSecToggled(box);
     // 見聞「形勢」攤開、收起哪一篇（xingshiHtml）：記篇次，重畫照樣（最新那一篇收起來也記得）
     else if (box instanceof Element && box.matches("details.xs-essay")) {
       (S.xingshiOpen || (S.xingshiOpen = new Map())).set(Number(box.dataset.n), box.open);
