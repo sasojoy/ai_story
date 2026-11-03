@@ -25,6 +25,11 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
     - **進鎖的種子帶上凍住的時刻**（固定種子＋`int(假時鐘)`）：種子每一步都一樣的話，有兩路可挑的地方永遠挑同一路，走不到另一路。
     - **旁白改寫的背景執行緒**（season21、week7）：每 20 現實秒叫一次模型，打到死埠要等約 2 秒，`/api/admin` 的 `llm_queue.running` 會隨現實時刻 0／1 跳。把 `server.narration_round` 換成什麼都不做。
     - **`server._monotonic` 也要凍住**，模型的斷路器兩台才一致。
+  - 第 22 批 QA 補的（2026-11-04；外殼在舊 PM scratchpad 的 `b22-chk\s\`，含 `crossrun.py`）：
+    - **擺局面的 `/__qa/edit` 只改呼叫時給的那幾格**：第 17 批那一版每次都補滿體力、把 `joined_at` 擺成 -1e9，新手期就沒了，新手目標卡（`newbie_view`）直接變 None。驗引導、新手目標、新手期的批特別要注意。
+    - **便宜的第二道穩定性證明**：「HEAD 對 HEAD」那一輪的 HEAD 回應，跟「HEAD 對 BASE」那一輪的 HEAD 回應逐檔比；分開跑兩次一樣，才證明局面真的凍住。
+    - PowerShell 的 `Start-Process -RedirectStandardOutput` 指到還不存在的資料夾時照樣回 PID，但行程根本沒跑、也沒有輸出檔：先建好資料夾。
+  - 引導的畫面（截圖時用）：碰到才說的框在江湖頁排在眼下要事與懸賞卡下面，375 寬第一屏看不到；框上沒有寫「知道了」的按鈕（收起是右上的 ✕），要找 `p.guide-text` 的字。season21、week7 的新角色一建好 `tutorial_step` 就是 18（走完）、站在城門口，初入江湖 e1～e7 只有草廬的季才有；`h_event_reveal` 建角色時就排進去，選完三選一才上框。
   - 位元組一樣之後再拍三張圖做 sanity（375 淺、375 深、1280）。動到 `web/`、server 的路由分派、第 3 階的批照舊完整實機 QA（並排截圖＋逐像素）。
 - **兩版對照（BASE 對 HEAD）的局面要凍得住**（2026-10-31 第 1 階 QA）：week7 的管理者「繼續」會把季曆對回現實的日子，暫停凍不住時刻；管理者快轉時時刻表事件的成敗用沒種子的亂數，每次跑都不一樣。比較點放在快轉之前，時刻先換成記號再比。逐鏡記「看得到的元素的位置＋算好的樣式」再 diff，比只比像素好分辨是字還是版面真的動了。
 - 無頭 Chromium 開 mobile 模擬時，CDP `Input.dispatchMouseEvent` 照樣點得到按鈕、`mouseWheel` 捲得動；點之前 `scrollIntoView({block:'center'})`，再用 `elementFromPoint` 確認點到的是那個元素（2026-10-31）。
