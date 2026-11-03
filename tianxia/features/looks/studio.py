@@ -149,20 +149,19 @@ CHECK_PORTRAIT = (
 # 項目逐條點名（哪一格是極點、傾多遠、手腳位置、格的順序），並說明那段文字是給生圖的 brief。
 # 硬規則照舊全留：格數、整個人在框內、同一個人、沒有武器、側面向右、腳在同一條線、去背乾淨。
 GEAR_NONE = "holds no weapon or object (loose sleeves, ribbons, sashes and long hair are not objects)"
-GEAR_SWORD = ("carries one plain straight sword like reference 1 (at the hip, or in hand when the action draws it) and no other "
-              "weapon; a small found item in the hands is fine where reference 1 has one")
-# 佩劍（FB-8003，Joy 2026-11-03 選「定裝照不帶劍，走一趟另加劍」）：定裝照一律空手（PORTRAIT_PROMPT、CHECK_PORTRAIT），擂台十張照舊空手；
-# 走一趟那六張在定裝照的人身上加一把腰間佩劍。比對「同一個人」時不看兵器，不然定裝照沒劍、這六張有劍，永遠過不了
-SAME_NOTE_SWORD = (" — reference 2 is drawn with no weapon on purpose: the sword is added for this animation and is NOT a "
-                   "difference; compare only face, hair, clothes and colors")
-SHEET_EXTRA_SWORD = (" The design has no weapon on purpose: ADD one plain straight sword like the one in the first image "
-                     "(sheathed at the hip unless the action draws it). The sword is the only thing you add.")
+# 走一趟那六張也空手（企劃者 2026-11-03「走一趟不能不帶佩劍嗎」）：FB-8003 原本讓這六張在定裝照的人身上加一把腰間佩劍
+# （斗笠小子的走一趟原畫佩了劍，提示詞與清單照它寫），結果 #29 的 hero_pickup 又十連掛，理由跟修之前幾乎一字不差：
+# 「第1、2、4格手持出鞘長劍，第3、5、6格看不到劍」「撿拾動作不需拔劍，劍應佩在腰間」——klein 每一格獨立生成，
+# 一把沒有依據的配件做不到六格一致。而這把劍沒有任何東西在用：手位表只算擂台那十張（orders.sheet_saved 的
+# `if sheet in ARENA`），web/outing.js 從不疊兵器（整個檔沒有 RING_HAND／hands／weapon／sword）。
+# 反過來，留著它更不一致：web/outing.js 的 OUTING_LOOK_SHEET 讓站著、挨打、跪地借用擂台那三張（空手），
+# 所以同一個走一趟場景裡劍會憑空出現又消失。六張一律空手之後兩個死因一起消失，難度跟擂台十張一樣。
 CHECK_SHEET = (
     "This is an animation strip for a 2D fighting game: {frames} frames side by side, each 220×220, cut out from the background "
     "(cut-out areas are flat gray). The action should be: {action}\n"
     "Reference 1 is the same animation drawn for another character (layout and overall action to follow). Reference 2 is this "
     "character's design.\nPass it only if: exactly {frames} frames, one whole character in each (no frame empty, cut in half, or "
-    "holding two characters); it is the same character as reference 2 in every frame (face, hair, clothes, colors){same_note}; the strip as a "
+    "holding two characters); it is the same character as reference 2 in every frame (face, hair, clothes, colors); the strip as a "
     "whole reads as that kind of action, and not every frame is the same drawing — the action text above is the brief given to the "
     "image model, NOT a per-frame checklist for you: which frame carries the extreme of the motion, how far a frame leans, steps or "
     "shifts, exact limb and hand positions, and the frame order are NOT pass criteria. Fail the action only if the strip reads as a "
@@ -233,12 +232,10 @@ def jobs(content: Content, wallet: Wallet, root: Path, web_img: Path) -> list[Jo
             sheet = next((s for s in orders.SHEETS if s not in have and (o.status == orders.PENDING or s in orders.OUTING)), None)
             if sheet is None:
                 continue
-            sword = sheet in orders.OUTING  # 走一趟那六張帶劍（定裝照空手，FB-8003）
             out.append(Job(kind="look", pid=o.pid, folder=look, slot=sheet, label=sheet, portrait=portrait,
-                           prompt=f"{orders.gen_prompts(o)[sheet]}\n{SHEET_EXTRA}{SHEET_EXTRA_SWORD if sword else ''}",
+                           prompt=f"{orders.gen_prompts(o)[sheet]}\n{SHEET_EXTRA}",
                            checklist=CHECK_SHEET.format(frames=orders.SHEETS[sheet], action=orders.ACTIONS[sheet],
-                                                        gear=GEAR_SWORD if sword else GEAR_NONE,
-                                                        same_note=SAME_NOTE_SWORD if sword else ""),
+                                                        gear=GEAR_NONE),  # 十六張一律空手（見 GEAR_NONE 上面那段）
                            aspect=ASPECT[LAYOUT[sheet]], size="2K", refs=(orders.reference(web_img, sheet), portrait)))
     return out
 

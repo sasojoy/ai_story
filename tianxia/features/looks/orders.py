@@ -357,14 +357,20 @@ RULES = ("IMPORTANT: the character holds NO weapon and NO object. Hands are clos
          "Sprite sheet rules: pure white background, no ground shadow, NO ground line, no horizon line, no floor or platform, "
          "no text, no numbers, no frame borders. Every frame is the same "
          "size and the character is the same size in every frame. Feet stand on the same horizontal ground line in every frame. "
-         "Side view, facing right. "
+         # 朝向（2026-11-03 實測）：審圖的硬規則有「側面向右」，但提示詞只在這裡講一次，蹲下、彎身那幾格
+         # klein 會把人鏡像過去（#29 的 hero_pickup 十次全掛，理由只剩「第3格與第6格角色面向左方」）。
+         # 同 FRAMING 的辦法：把它講死、並點名最常翻掉的那幾種姿勢。
+         "Side view, facing right. EVERY frame faces the SAME way — to the right: the face, chest and toes all point at the "
+         "right edge of the frame. Never mirror or flip the character, not even while crouching, bending, kneeling, sitting "
+         "or reaching down. "
          # 2026-11-02 本機 klein 實測：最常見的壞法是身體畫過格線，切出來的那一格少一塊、或兩格黏在一起。
          "Keep each frame fully inside its own equal-width column with wide white gaps; nothing crosses into the next column. "
          + FRAMING)
-OUTING_RULES = RULES.replace(
-    "IMPORTANT: the character holds NO weapon and NO object. Hands are closed into loose fists as if gripping an invisible handle. ",
-    "The character carries ONE plain straight sword exactly like in the attached reference sheet: sheathed at the hip unless the "
-    "action draws it. No other weapon. ")
+# 走一趟那六張也空手（企劃者 2026-11-03「走一趟不能不帶佩劍嗎」；原本照斗笠小子的原畫要求佩一把劍，見 studio.GEAR_NONE 上面那段）。
+# 這六張的參考圖（web/img/outing/，斗笠小子）身上有劍，所以不能只說「不准持武器」——要明講那把劍不要抄，
+# 不然生圖看著眼前的參考圖照畫，又變成有的格有劍、有的格沒有。
+OUTING_RULES = RULES + (" The character in the attached reference sheet wears a sword at the hip: do NOT copy it. This character "
+                        "carries no weapon in any frame — follow the reference only for the layout, the poses and the frame count.")
 ACTIONS = {
                       # 待機＝往前探一下再收回（量過斗笠小子：前端水平擺 19 px、垂直只有 3 px）。
                       # 2026-11-02 一度寫成「直上直下、不准前傾」，等於把要的那個動作禁掉了，實機看起來完全不動。
@@ -383,10 +389,11 @@ ACTIONS = {
     "hero_atk_pole": "Long-weapon attack with an invisible spear, fists one behind the other at hip height: 1 low stance, 2 pulling back, 3 lunging thrust, arms extended, 4 recovering, 5 wide horizontal sweep, 6 back to stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_atk_fist": "Unarmed attack (real fists): 1 stance, fists up, 2 stepping in, 3 straight right punch, 4 pulling back, 5 high front kick, 6 landing back into stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_atk_shoot": "Shooting an invisible crossbow: 1 stance, 2 raising fists to the right shoulder, 3 aiming, 4 the shot with small recoil, 5 lowering, 6 back in stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
-    "hero_run": "Running to the right, one full run cycle, sword sheathed at the hip, arms swinging: 8 frames. Layout: 8 frames in a 4x2 grid. Aspect 2:1.",
+    "hero_run": "Running to the right, one full run cycle, arms swinging: 8 frames. Layout: 8 frames in a 4x2 grid. Aspect 2:1.",
     "hero_pickup": "Picking something up from the ground: 1 standing, 2 bending the knees, 3 crouching low, 4 reaching to the ground, 5 still crouched, hand at the ground, 6 standing up again. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_lift": "Showing a found treasure (a small glowing pearl): 1 holding it in both hands at the chest, smiling, 2 raising it with the right hand, 3 holding it high above the head, delighted. Layout: 3 frames in one row. Aspect 3:1.",
-    "hero_slash": "Drawing the sword and slashing to the right: 1 ready stance, sword held low in front, 2 sword raised over the head, 3 top of the swing, 4 fast downward slash, 5 follow-through low in front, 6 back to the ready stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
-    "hero_meditate": "Sitting cross-legged on the ground, eyes closed, meditating, hands resting on the knees, gentle breathing loop: 4 frames, sword laid across the lap or at the side. Layout: 4 frames in one row. Aspect 4:1.",
-    "hero_push": "Pushing hard with both palms forward against something heavy on the right (a stuck cart or a boulder, not drawn), legs braced, leaning in: 4 frames, sword sheathed at the hip. Layout: 4 frames in one row. Aspect 4:1.",
+    # 走一趟的揮砍本來寫「拔劍」：空手之後照擂台已經在用的寫法改成隱形刀刃（同 hero_atk_slash），手是鬆握的拳
+    "hero_slash": "Slashing to the right with an invisible blade: 1 ready stance, fists together low in front, 2 fists raised over the head, 3 top of the swing, 4 fast downward slash, 5 follow-through low in front, 6 back to the ready stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
+    "hero_meditate": "Sitting cross-legged on the ground, eyes closed, meditating, hands resting on the knees, gentle breathing loop: 4 frames. Layout: 4 frames in one row. Aspect 4:1.",
+    "hero_push": "Pushing hard with both palms forward against something heavy on the right (a stuck cart or a boulder, not drawn), legs braced, leaning in: 4 frames. Layout: 4 frames in one row. Aspect 4:1.",
 }
