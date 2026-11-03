@@ -54,6 +54,12 @@
 - `ctx.options(odds=False, tick=False)`：此刻的選單（走一趟問「探索按不按得下去、這一段端出要選的事沒」）；`ctx.choose(id)`：按一顆
   （走一趟每一段叫一次 act:explore，各寫各的江湖紀錄）。閒著的那一顆是 `tianxia.core.option.IDLE_MARK`
 
+# core-events（全部拆包第 16 批：事件檢定搬進核心本體 tianxia/core/event_check.py，Game 留一行委派）
+事件檢定（核心本體）
+- `ctx._present(event, action)`：把一則事件端到眼前（action 是抽中它的行動：記進防重複的輪替、人物心意；記看過、寫那一則的結果標記與
+  場景那一句、片段事件的伏筆）。探索包抽到事件時叫。三、過渡 explore 那一段也列了它（主人寫「事件」）：主人現在是核心本體，那一行
+  留給 PM 合併時去重（第 15 批同時在改這一份，不動別人的行）
+
 ## 二、查詢服務
 
 # battle（主動搬六包第 5 批；主人：決戰包。本體還在 Game——「打」那一半，第 6～8 批搬——決戰包「看」那一半經 ctx 叫；搬完由決戰包經
