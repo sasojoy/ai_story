@@ -731,7 +731,8 @@ SHARED_PENDING = {
 del SHARED_PENDING[("siege", "generals")]
 SHARED_PENDING.update({
     ("chiefs", "atlas"): "排定：大區（atlas.region_of）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層。atlas 最外層 import 出陣包"
-                         "（舊名 sortie；函式裡還有 sortie_duel），也經 world 帶進宴客包 feast、決戰包 battle：切開之前 import chiefs 會連帶載入那幾包",
+                         "（舊名 sortie；函式裡還有 sortie_duel），也經 world 帶進宴客包 feast、單挑包 bout（第 12 批；world 函式裡另有舊名 generals，"
+                         "叫到才載入決戰包 battle）：切開之前 import chiefs 會連帶載入 sortie、feast、bout 三包（第 12 批合進 develop 時量的）",
     ("chiefs", "figures"): "排定：大勢人物（figures.state_of、line_of）——總表第 40 批收進共用規則層",
 })
 SHARED_PENDING[("siege", "world")] += "；world 函式裡也 import 舊名 generals（決戰包 battle 的別名：開集結那一下派龍頭上陣），叫到它就連帶載入 battle"
@@ -766,7 +767,7 @@ def test_the_shared_rules_layer_only_imports_the_core_and_itself():
 
 def test_a_pending_target_that_imports_a_package_says_it_drags_the_package_in():
     """SHARED_PENDING 的對象自己 import 了包的（atlas 經舊名 sortie import 出陣包、world import 宴客包）：import 那個共用規則層的模組，
-    包就跟著載進來（import clinic、siege 實際載入出陣、宴客兩包——第 12 批之後加上經 world 的單挑包，三包；其餘 58 個一包都不載）。上面那幾條只看共用規則層自己的 import，
+    包就跟著載進來（import clinic、siege、chiefs〔第 8 批〕實際載入出陣、宴客兩包——第 12 批之後加上經 world 的單挑包，三包；其餘 58 個一包都不載）。上面那幾條只看共用規則層自己的 import，
     看不到這一層，所以理由要寫明「連帶載入」與那幾包的名字；對象不再 import 包了，「連帶載入」那句也拿掉（第 15 批審查修正）。
     只驗對象直接的 import；經對象再往下一層的（atlas 經 world 載宴客包）寫在理由裡，這裡不驗。"""
     for (name, old), why in SHARED_PENDING.items():
