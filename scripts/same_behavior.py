@@ -5339,7 +5339,7 @@ class BoutScenario(ExploreScenario):
             p = g.state.player
             p.location, p.journey = loc, None
             p.visited.add(loc)
-            boss = duel.available(g.state, self.c)
+            boss = duel.available(g.state, self.c)  # 經舊名 duel：base（搬包之前）沒有 Game._boss_ready
             emit(f"{name} 撞上的頭目（整季機器人）", None if boss is None else boss.id)
             picks: list[str | None] = []
             if boss is not None:
