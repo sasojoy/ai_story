@@ -590,10 +590,13 @@ def test_the_furnace_is_not_tappable_when_the_silver_outlets_are_off(m):
 
 
 def test_the_tag_hangs_on_the_fire():
-    """小籤是火那一顆鈕裡的一段，絕對定位掛在火的下緣（不佔一行）；字級寫 em（店面那一層照寬度放大），不寫死 px。"""
+    """小籤是火那一顆鈕裡的一段，絕對定位掛在火的下緣（不佔一行）；字級寫 em（店面那一層照寬度放大），不寫死 px。
+    有小籤時中間那一欄也寫 em：照舊 72px 的話電腦寬（字級 ×1.3）小籤壓到兩邊料格的下角 11px（實機量的）；沒有小籤（銀兩出口關著）照舊。"""
     import re
 
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    assert re.search(r"\.shop-layer \.furnace:has\(> \.fu-fire\) \{ grid-template-columns: 1fr [0-9.]+em 1fr; \}", css)
+    assert "grid-template-columns: 1fr 72px 1fr;" in css  # 沒有小籤的爐子照舊
     assert re.search(r"\.shop-layer \.furnace \.fu-fire \{[^}]*position: relative", css)
     tag = re.search(r"\.shop-layer \.fu-tag \{([^}]*)\}", css)
     assert tag and "position: absolute" in tag.group(1) and "white-space: nowrap" in tag.group(1)
