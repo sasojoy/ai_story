@@ -13,8 +13,9 @@ from __future__ import annotations
 import hashlib
 from typing import TYPE_CHECKING
 
-from . import arena, calendar, library, ranks, renown, tactics
+from . import calendar, library, ranks, renown, tactics
 from .characters import name_key
+from .core import arena_ranks  # 擂台的稱號（核心的查詢服務；擂台本身在單挑包）
 from .models import Content
 from .state import GameState, Mingtie, MingtieCopy
 
@@ -129,8 +130,8 @@ def earned(state: GameState, content: Content, world=None, board: dict | None = 
         out.append(f"{faction}・{rank}" if rank else faction)
     if p.sect and p.sect in c.sects:
         out.append(f"{c.sects[p.sect].name}門下")
-    if arena.on(c):
-        ring = arena.title_of(state.world, p.name)
+    if arena_ranks.on(c):
+        ring = arena_ranks.title_of(state.world, p.name)
         if ring:
             out.append(ring)
     out += _board_titles(state, board)

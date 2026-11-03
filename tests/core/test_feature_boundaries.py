@@ -469,6 +469,16 @@ GAME_DELEGATE_CALLERS.update({
     ("_boss_away", "_boss_used_up"): "同上",
     ("_boss_away", "_boss_face"): "同上",
 })
+# 只讀擂台名次與稱號的舊模組（名帖 mingtie、玩家卡 social、榜單 leaderboard：on、title_of、ladder、title_for、record_text 都在核心
+# arena_ranks）讀核心那一份，不經舊名 arena 連帶載入單挑包（手冊 3.11「能走服務就走服務」；第 12 批審查修正）。tiers 照舊經別名：
+# tests/core/test_event_tiers.py 換掉 tianxia.arena.entry_of，改讀核心之後那一條打不到（SHARED_LATER 的 tiers）
+ARENA_RANK_READERS = ("mingtie", "social", "leaderboard")
+
+
+def test_the_old_modules_that_only_read_the_arena_ranks_read_the_core_not_the_bout_package():
+    for name in ARENA_RANK_READERS:
+        assert "bout" not in {feature_target(mod) for _, mod in _feature_imports(TIANXIA / f"{name}.py")}, name
+        assert "arena_ranks" in (TIANXIA / f"{name}.py").read_text(encoding="utf-8"), name
 
 
 @functools.lru_cache(maxsize=None)
@@ -594,9 +604,12 @@ SHARED_LATER = {
     "shopview": "店面的畫面資料（彙整）：讀擂台 arena（第 12 批）、懸賞 bounties（第 45 批）、鐵匠鋪 smithing（第 41 批）、單挑 duel 的底層；"
                 "那幾包成包之後再收",
     "events": "事件抽選：讀伏筆 foreshadow（軍情第 34 批成包）與心意 stances（第 19 批）；伏筆改成查詢服務、事件檢定搬進核心（第 16 批）之後再看",
-    "tiers": "事件分級：讀擂台的名次 arena.entry_of（單挑第 12 批成包）；第 12 批把擂台的稱號與名次留在核心當查詢服務之後再收（總表第 12 列）",
+    "tiers": "事件分級：讀擂台的名次 arena.entry_of，經舊名 arena（單挑包的別名）：名次已經是核心的查詢服務 arena_ranks（第 12 批），"
+             "可是 tests/core/test_event_tiers.py 換掉 tianxia.arena.entry_of，改讀核心之後那一條打不到；那一條改成換掉核心那一份"
+             "（改核心測試，PM 定）之後再收",
     "narration": "事件旁白每週改寫：讀伏筆 foreshadow.event_ids（軍情第 34 批）；那時改成查詢服務再收",
-    "leaderboard": "賽季榜單：讀擂台榜 arena（第 12 批）、本命兵器 signature_arms（裝備第 42 批）；擂台的名次改成查詢服務、裝備成包之後再收",
+    "leaderboard": "賽季榜單：讀本命兵器 signature_arms（裝備第 42 批）與門下頁的說明 skillview（函式裡）；擂台榜第 12 批審查修正改讀核心的"
+                   "查詢服務 arena_ranks；裝備成包、skillview 收進來之後再收",
     "rumor_view": "傳聞分層的畫面：讀伏筆 foreshadow、機緣 opportunities（軍情第 34 批）與軍令 orders（第 40 批）；軍情成包時改成查詢服務再收",
 }
 
