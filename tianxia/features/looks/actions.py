@@ -359,9 +359,29 @@ def _admin_moves(ctx: Game, wallet) -> dict | None:
     return {"sheet": moves.SHEET, "size": f"{moves.FRAMES * orders.CELL}×{orders.CELL}", "open": [row(m) for m in open_], "done": [row(m) for m in done]}
 
 
+def _gallery(ctx: Game, wallet) -> dict:
+    """全服**已上架**的成品（企劃者 2026-11-03「我是管理員，我需要能看到所有玩家做的成品動畫」）。
+
+    只收 `MADE`：零件到齊才演得出來（等圖中的缺一塊就是空的，形象還會整組退回斗笠小子）。
+    新的在前。這裡只回「哪一套、誰做的、叫什麼」——真的播是網頁的事，用現成的兩個播放器
+    （`arena_scene.js` 的 `lookShow` 演形象十六張、`scenePreview` 照導演稿演招式），
+    圖與導演稿走本來就對所有登入者開放的那兩條路（擂台上要演別人的招）。
+    """
+    item = orders.item_of(ctx.content)
+    looks = [] if item is None else [
+        {"id": o.pid, "owner": wallet.character_name(o.owner) or o.owner, "name": o.name, "look": orders.look_id(o.pid)}
+        for o in reversed(orders.every(wallet, item.id)) if o.status == orders.MADE]
+    mv = moves.item_of(ctx.content)
+    mvs = [] if mv is None else [
+        {"id": m.pid, "owner": wallet.character_name(m.owner) or m.owner, "name": m.art_name,
+         "move": moves.move_id(m.pid), "prompt": m.prompt}
+        for m in reversed(moves.every(wallet, moves.item_ids(ctx.content))) if m.status == orders.MADE]
+    return {"looks": looks, "moves": mvs}
+
+
 def admin_view(ctx: Game) -> dict | None:
     """管理者那一頁：還沒做完的訂單（等圖、待審）在前，最近做完的十張在後。每張寫下單的人、名字、樣子、十張到了哪幾張、
-    給生圖工具的提示詞。"""
+    給生圖工具的提示詞。另外 `gallery` 是全服已上架的成品（_gallery）。"""
     wallet = ctx._wallet()
     item = orders.item_of(ctx.content)
     if wallet is None or item is None or not ctx.is_admin():
@@ -376,7 +396,7 @@ def admin_view(ctx: Game) -> dict | None:
                 "status": o.status, "status_text": orders.STATUS_TEXT[o.status], "reason": o.reason, "look": orders.look_id(o.pid),
                 "have": orders.present(root, orders.look_id(o.pid)), "studio": studio.note(wallet.purchase(o.pid).data), "prompts": orders.gen_prompts(o) if o in open_ else {}}
     return {"sheets": orders.SHEETS, "gen": gen_mode(), "open": [row(o) for o in open_], "done": [row(o) for o in done],
-            "moves": _admin_moves(ctx, wallet)}
+            "moves": _admin_moves(ctx, wallet), "gallery": _gallery(ctx, wallet)}
 
 
 def admin_upload(ctx: Game, pid: int, sheet: str, data: bytes) -> list[str]:
