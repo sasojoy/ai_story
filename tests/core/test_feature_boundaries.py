@@ -495,6 +495,51 @@ CORE_DELEGATE_CALLERS_GUIDE = {  # 事件檢定（核心本體）經 ctx 叫的�
     ("event_check.answer_branch", "_greet_rejoin"): "同上",
     ("event_check.answer_branch", "_check_hints"): "同上",
 }
+# battle（全部拆包第 8 批：推進與結算、generals 進包、收季的收兵；計畫 docs/superpowers/plans/2026-11-01-決戰包-第4批.md 1.5）：四張名單的
+# 決戰第 8 批那幾筆集中在這一段（四條拆包線並行，PM 合的時候不跟別人的行穿插），改前面的名單用 del、|=、update，不改那幾行的原文
+for _pair in (("admin_end_season", "_sieges"), ("admin_end_season", "_shelve_siege"),
+              ("admin_next_season", "_sieges"), ("admin_next_season", "_shelve_siege")):
+    del GAME_DELEGATE_CALLERS[_pair]  # 收季的收兵換成 on_season_close 接縫掛鉤（決戰包照原本那兩段做，第 11 批 PM 認定第 7 條）
+# 推進與結算 20 個方法搬進 features/battle/progress.py（14 個一行委派）；engine 不再 import 舊名 escorts（收場放回同伴進了 progress.apply_battle_outcome）
+GAME_IMPORTS -= {"tianxia.escorts"}
+GAME_IMPORTS |= {"tianxia.features.battle.progress"}
+GAME_DELEGATES -= {"_shelve_siege", "_in_region"}  # 叫它們的 _battle_status、收季、_battle_now 進了包：沒人叫，拿掉
+# （_settle_siege 留著：叫它的 _apply_battle_outcome 進了包，可是 features/battle/tests/test_siege_settle.py 直接叫 game._settle_siege）
+GAME_DELEGATES |= {
+    # 核心原位與別的功能在叫的：options 的戰鬥選單（_battle_for_me、_watching_battle、_fighting）、world_tick 與引導（_battle_status：測試換掉、
+    # 數次數；_watching_battle）、叛投（_battle_now）、玉璽（_showdown_status）、場景圖（_battle_for_me）、事件分級（_battle_for_me，CORE_DELEGATE_CALLERS）；
+    # 假人程式與 bot_policy、決戰包的 bots.py（battle_now）；測試直接叫或換掉的 battles_now、_shelve_unfinished_battle、_advance_battle_round、
+    # _run_battle_tick、_apply_battle_outcome（tests/server/test_server.py 換掉）、_apply_outcome_trends_and_flags、_merit_line。
+    # 其餘 6 個（_backfill_battle_scores、_mutate_battle_of、_mutate_battle_now、_highlight_line、_settle_showdown、_open_waiting_showdown）只有包裡叫
+    "_battle_status", "_showdown_status", "_battle_for_me", "_battle_now", "battle_now", "battles_now", "_shelve_unfinished_battle",
+    "_advance_battle_round", "_run_battle_tick", "_apply_battle_outcome", "_apply_outcome_trends_and_flags", "_watching_battle", "_fighting",
+    "_merit_line",
+}
+del GAME_DIRECT["_apply_battle_outcome"]  # escorts.due、after_battle 進了包裡直接叫（第 7 批 PM 認定第 3 條：第 8 批收）
+for _pair in (
+    ("_advance_battle_round", "_round_mvp"),  # 回合首功那一層跟著推一回合進了包（經 ctx._round_mvp：服務清單二、查詢服務）
+    ("_apply_battle_outcome", "_deliver_battle_results"), ("_settle_showdown", "_deliver_battle_results"),
+    ("_shelve_unfinished_battle", "_deliver_battle_results"),  # 收場、時刻表決戰收場、收兵：補送進了包（經 ctx：測試換掉）
+    ("_battle_status", "_sieges"), ("_battle_status", "_tick_siege"), ("_battle_status", "_shelve_siege"), ("_battle_status", "_definition_of"),
+    ("_battle_now", "_sieges"), ("_battle_now", "_joinable"), ("_battle_now", "_in_region"), ("battles_now", "_sieges"),
+    ("_apply_battle_outcome", "_settle_siege"), ("_watching_battle", "_at_battle"), ("_fighting", "_free_agent"),  # 呼叫端進了包、包裡直接叫
+):
+    del GAME_DELEGATE_CALLERS[_pair]
+_LATER_PROGRESS = "；位置固定、沒有對應的掛鉤（全部拆包第 8 批計畫 1.4）"
+GAME_DELEGATE_CALLERS.update({
+    ("options", "_battle_for_me"): "選單推一次決戰（誰輪詢誰推，一次請求只推一次；奪璽單挑之後、暫停那一顆之前）：選單的先後算行為，"
+                                   "總表第 55～57 批「選單」" + _LATER_PROGRESS,
+    ("options", "_watching_battle"): "選單的戰鬥那一段：只能觀戰的人照常給平常的選單；同上",
+    ("options", "_fighting"): "選單的戰鬥那一段：開打了在場上的人戰鬥選單整個取代、其餘接在平常的選單前面；同上",
+    ("world_tick", "_battle_status"): "排程的那一下推一次決戰：領地爭奪換天之後、奪璽單挑之前，on_due 在換天之前（先後算行為）" + _LATER_PROGRESS,
+    # （開發時這裡還有 (_hint_triggers, _battle_status)、(_hint_triggers, _watching_battle) 兩對：第 22 批先合進 develop、把 _hint_triggers
+    # 搬進引導包、改經 ctx 問〔服務清單〕，Game._hint_triggers 成了一行委派，合進 develop 時拿掉）
+    ("_defect_step", "_battle_now"): "叛投：決戰裡的人不能叛投（defection.refusal 讀此刻的那一場）：陣營還沒成包（總表第 35 批）",
+    ("_defect_targets", "_battle_now"): "叛投：投得過去的那幾個（defection.slots_here 讀此刻的那一場）：同上",
+    ("seal_view", "_showdown_status"): "玉璽碎片卡：這一片被璽動的那一場時刻表決戰（攻城戰不璽動）：玉璽還沒成包（總表第 27、28 批）",
+    ("seal_watch", "_showdown_status"): "玉璽碎片：背景也要輪詢（持有者或參戰者）：同上",
+    ("scene_art", "_battle_for_me"): "場景卡的圖：全服戰鬥蓋著場景時沒有圖（序章裡不算）：殼的場景卡（總表第 64～67 批）" + _LATER_PROGRESS,
+})
 
 
 @functools.lru_cache(maxsize=None)
@@ -608,6 +653,16 @@ SHARED_PENDING = {
     ("siege", "generals"): "之後成包：攻城的留守挑龍頭（generals.on、pick）——決戰第 8 批 generals 進包之前，先改成查詢服務或把挑法留在共用規則層"
                            "（siege 第 11 批就登記了）",
 }
+# battle（全部拆包第 8 批）：generals 進了決戰包（舊名 tianxia/generals.py 是別名），siege 讀的挑法（on、pick）留在共用規則層的 chiefs
+# （registry.SHARED）——siege → generals 那一條收掉；chiefs 照原本 generals 那樣 import 大區與大勢人物，多兩條排定的（同 siege → atlas、
+# timetable → figures）；world 函式裡 import 舊名 generals（開集結那一下派龍頭上陣），叫到它就連帶載入決戰包
+del SHARED_PENDING[("siege", "generals")]
+SHARED_PENDING.update({
+    ("chiefs", "atlas"): "排定：大區（atlas.region_of）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層。atlas 最外層 import 出陣包"
+                         "（舊名 sortie；函式裡還有 sortie_duel），也經 world 帶進宴客包 feast、決戰包 battle：切開之前 import chiefs 會連帶載入那幾包",
+    ("chiefs", "figures"): "排定：大勢人物（figures.state_of、line_of）——總表第 40 批收進共用規則層",
+})
+SHARED_PENDING[("siege", "world")] += "；world 函式裡也 import 舊名 generals（決戰包 battle 的別名：開集結那一下派龍頭上陣），叫到它就連帶載入 battle"
 
 # 總表第 15 列寫了、這一批先不收的（派工：import 了包的「先改成查詢服務，或者先不收」；讀的都是還沒成包的舊模組，還沒有包可以回答查詢）：
 # 模組 → 卡在哪、哪一批之後收。包 import 它們的那幾行照舊註「過渡：待搬」。
@@ -783,7 +838,7 @@ CORE_EVENT_DELEGATES = {  # Game 上本體只有一行 `return event_check.<名>
 # 搬進 tianxia/core/ 之前，這些呼叫在 Game 上，主人搬成包、留下委派的那一批照批次表第二節記進 GAME_DELEGATE_CALLERS；搬進核心之後記這裡。
 # 現在是空的：event_check 經 ctx 叫的 Game 方法都還不是包的委派。總表（final_owner.json）把其中 8 個歸給包，那一包搬的批把它換成委派時
 # 這條守門會紅——照下面取消註解、附上理由（或照第 11 批開掛鉤、拿掉那一處），不要拿掉守門：
-#   ("event_check.event_tier", "_battle_for_me")：features/battle（決戰「打」，第 8 批）：全服戰鬥蓋著場景時不寫分級那一行
+#   ("event_check.event_tier", "_battle_for_me")：features/battle（決戰「打」，第 8 批）：全服戰鬥蓋著場景時不寫分級那一行（第 8 批接上了，見下面）
 #   ("event_check.answer_event", "_begin_enlistment")、("event_check.answer_event", "_greet_rejoin")、
 #   ("event_check.answer_event", "_check_hints")：features/guide（新手引導）：隨口應對的結果也可能拜入門派、碰到新玩法
 #   ("event_check.answer_event", "_general_gifts")、("event_check.answer_event", "_signature_arms")、
@@ -797,6 +852,11 @@ CORE_DELEGATE_CALLERS: dict[tuple[str, str], str] = {}
 # guide（全部拆包第 22 批）：上面註解裡寫好的 features/guide 那 6 對（answer_event、answer_branch × _begin_enlistment、_greet_rejoin、_check_hints）
 # 新手引導搬成包、它們成了委派，照註解記進來（理由在 # guide 那一段的 CORE_DELEGATE_CALLERS_GUIDE）
 CORE_DELEGATE_CALLERS.update(CORE_DELEGATE_CALLERS_GUIDE)
+# battle（全部拆包第 8 批）：_battle_for_me 換成決戰包的委派，上面預留的第一條接上（寫理由）
+CORE_DELEGATE_CALLERS.update({
+    ("event_check.event_tier", "_battle_for_me"): "事件分級那一行：全服戰鬥蓋著場景時不寫（tick=False）；事件檢定是核心本體、決戰包回答「此刻蓋著的那一場」，"
+                                                  "位置固定、沒有對應的掛鉤（總表第 55～57 批再看要不要改成查詢服務的掛鉤）",
+})
 
 
 def ctx_delegate_callers(source: str, name: str, delegates: set[str] | None = None) -> set[tuple[str, str]]:
@@ -991,14 +1051,14 @@ def test_the_scanner_catches_a_crossing(source, expected):
 
 def test_the_old_names_left_as_aliases_are_known():
     """tianxia/mall.py、tianxia/feasts.py、tianxia/sortie.py、tianxia/sortie_duel.py、tianxia/outing.py、tianxia/explore_one.py、
-    tianxia/tavern.py、tianxia/tavern_ask.py、tianxia/escorts.py 是指到包裡同一個模組的別名（給還沒改的測試與舊模組）：掃描照它們指到的那一包算，不算舊模組。"""
+    tianxia/tavern.py、tianxia/tavern_ask.py、tianxia/escorts.py、tianxia/generals.py 是指到包裡同一個模組的別名（給還沒改的測試與舊模組）：掃描照它們指到的那一包算，不算舊模組。"""
     assert aliases() == {"feasts": "feast", "mall": "mall", "sortie": "sortie", "sortie_duel": "sortie",
                          # explore
                          "outing": "explore", "explore_one": "explore",
                          # tavern
                          "tavern": "tavern", "tavern_ask": "tavern",
-                         # battle（全部拆包第 7 批：tianxia/escorts.py）
-                         "escorts": "battle",
+                         # battle（全部拆包第 7 批：tianxia/escorts.py；第 8 批：tianxia/generals.py）
+                         "escorts": "battle", "generals": "battle",
                          # guide（全部拆包第 22 批：tianxia/guide.py、hints.py、newbie.py、opening.py、enlist.py）
                          "guide": "guide", "hints": "guide", "newbie": "guide", "opening": "guide", "enlist": "guide"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]

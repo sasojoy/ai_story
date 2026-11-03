@@ -2341,6 +2341,8 @@ main = _explore_entry(main)  # explore（第 3＋4 批）一行登記：多四�
 # 第 6 批接著搬管理者的決戰工具與攻城（計畫 2026-11-01-決戰包-第2批.md：BattleScenario 加 admin、siege_*、resting 幾段）。
 # 第 7 批搬集結、投效、挑同伴（計畫 2026-11-01-決戰包-第3批.md：BattleScenario 加 muster_*、late、wander 幾段與 bots 那一段的大區外假人，
 # 同一套段落另外登記成 muster 一軌、切在集結中）。
+# 第 8 批搬推進與結算、generals、收季的收兵（計畫 2026-11-01-決戰包-第4批.md：三軌的放手一搏穿著絕招〔回合首功〕；另開 progress 一軌
+# ProgressScenario：三場決戰三種收場、時間到了在排隊的那一場、假人出招、份量快照補上、管理者收季、季自然收掉、開下一季時收兵，切在打到第三回合）。
 # 這一段整塊是決戰的：四條拆包線並行，接在檔尾、最後一行登記（_battle_register_track），PM 合的時候不跟別人的行穿插。
 
 
@@ -2350,6 +2352,8 @@ main = _explore_entry(main)  # explore（第 3＋4 批）一行登記：多四�
 
 BATTLE_RATE = 60  # 假模型評的放手一搏成功率（server.battle_text 的 B 段，battle_instance.score_gamble）
 BATTLE_STORY = "{name}一聲長嘯，提刀衝進陣中。"  # 假模型補的劇情（server.narrate_once 的 B 段；不寫數字、成敗都是這一句）
+BATTLE_ULT = {"move": "m7", "name": "大佛一掌", "look": "moying", "weapon": "劍"}  # 第 8 批：放手一搏的人身上那一招（回合首功演它）
+BATTLE_SURE = "一擊必中"  # 第 8 批：放手一搏那一句有這幾個字，假模型評 100（推進一軌第三回合那一搏；決戰、集結兩軍的那兩句沒有，照舊 BATTLE_RATE）
 _BATTLE_CLIENTS: dict[type, type] = {}
 
 
@@ -2365,8 +2369,8 @@ def _battle_client(base: type) -> type:
             def chat_structured(self, messages, schema, *a, **k):
                 if schema.__name__ in ("GambleScore", "TaleBatch"):
                     emit(f"模型單子 {schema.__name__}", {"messages": messages, "rest": repr((a, sorted(k.items())))})
-                if schema.__name__ == "GambleScore":
-                    return schema(success_rate=BATTLE_RATE)
+                if schema.__name__ == "GambleScore":  # 第 8 批：那一句寫了 BATTLE_SURE 的評 100（一定成：回合首功那一回合走得到）
+                    return schema(success_rate=100 if BATTLE_SURE in messages[-1]["content"] else BATTLE_RATE)
                 if schema.__name__ == "TaleBatch":
                     names = re.findall(r"^\d+\. (.+?)（", messages[-1]["content"], re.M)
                     return schema(lines=[{"name": n, "story": BATTLE_STORY.format(name=n)} for n in names])
@@ -2463,6 +2467,12 @@ class BattleScenario(Scenario):
             return client
 
         ollama_client.OllamaClient.from_config = classmethod(from_config)
+        # 第 8 批：放手一搏送出那一刻身上穿著絕招（形象包 actions.battle_ult；同 test_looks_mvp 換掉它的做法）——兩位放手一搏的人有一招，
+        # 成了的那一回合挑回合首功（Game._advance_battle_round 包著 _round_mvp：回合紀錄多一行、畫面多 battle_mvp）。兩份程式都換同一個
+        from tianxia.features.looks import actions as looks_actions
+
+        wearers = {self.GAMBLER, self.LATE_GAMBLER}
+        looks_actions.battle_ult = lambda ctx: dict(BATTLE_ULT) if ctx.state.player.name in wearers else None
         self.late_done = False
         self.stills = 0  # still() 疊了幾層：大於 0 時每一個請求都是第 7 批插進來的（begin 先挪期限）
 
@@ -3594,6 +3604,502 @@ class MusterScenario(BattleScenario):
     PHASES_SECOND = BattleScenario.PHASES_FIRST[BattleScenario.PHASES_FIRST.index("muster_pick") + 1:] + BattleScenario.PHASES_SECOND
 
 
+class ProgressScenario(BattleScenario):
+    """推進與結算一軌（全部拆包第 8 批；--track progress，自己一個資料庫；計畫 docs/superpowers/plans/2026-11-01-決戰包-第4批.md 第三節 Task 1）。
+    同一班人（PLAYERS、序章裡的 NEWBIE）與決戰一軌的小工具，段落自己一套：
+    - 第一季 A（target：時刻表的季是長社火攻，不帶設定與測試內容是黃巾決戰）：四位與兩位伺服器假人（PACE_BOTS：直接照 Game 按加入；每一回合
+      真人出完招 BotRunner.battle_tick 一次——bot_policy.battle_move → game.battle_now()、決戰包的 bots.score）加入、開打；第一回合官軍放手一搏
+      （身上那一招：回合首功）、韓雲起的份量快照擦掉（決戰打到一半上線那一版：他下一次同步補上，_backfill_battle_scores）、再打兩回合（第三回合
+      韓雲起放手一搏）、第四回合秦朗月先出招——**這裡切一半**（第四回合收了一部分的招、還沒結算，expect 驗）。後半：補劇情、收齊第四回合的招、打到收場（第五回合起擺一位龍頭上陣的人物陣前敗走、
+      最後一擊記在秦朗月身上：收場扣聲威、天下大事、他的補送多名望）、每個人與兩位假人收補送（戰報、紀錄、軍餉、天下大事的最有戲與論功、時間軸）。
+    - 第一季 B（時刻表的季：照張曼成那一件定宛城的版本、開宛城；不帶設定：再開黃巾決戰）：秦朗月、韓雲起加入。時刻表的季替官軍擺伏筆鎖定
+      （WorldState.locks：收場那一下才讀，戰場上輸了照樣官軍勝、敗因寫鎖定那一句），開打之後廣宗擺進排隊（showdowns_waiting：時間到了、前一場
+      還在打），宛城一收場就開（_open_waiting_showdown，expect 驗）；不帶設定開打之後把戰局擺到官軍那一邊（官軍勝）。
+    - 第一季 C（時刻表的季：排隊開成的廣宗；不帶設定：再開一場）：秦朗月加入；攻城開著的季管理者替黃巾對汝南荒野下戰書（SIEGES 的 S），韓雲起加入；
+      管理者收季——決戰與攻城一起收兵（admin_end_season），兩位收「不算勝負」。
+    - 第二季（開下一季、重新投靠）：長社（不帶設定是黃巾決戰）沒人加入——集結截止那一下開打、這一回合逾時那一下保底收場（end_without_fighters：
+      時刻表決戰照起點判、不帶設定是兩軍膠著，expect 驗收場了）；再開一場（宛城或黃巾決戰）秦朗月加入、攻城韓雲起加入，時鐘推過季末、這段時間
+      **沒人輪詢**，第一個輪詢的人（葉寒舟，沒參戰）那一下補算到季收了、決戰與攻城收兵（_battle_status 季收了那一支；不帶設定沒有攻城，
+      _showdown_status 那一支）。
+    - 第三季：開一場（長社或黃巾決戰：攻城開著的季跟汝南荒野那一場在同一個大區，鈕帶 @流水號）、秦朗月加入、攻城韓雲起加入，時鐘推過季末、
+      沒人輪詢，管理者直接按開下一季（admin_next_season：他那一下同步補算到季收了，看到休季、決戰沒打完——讀回季、收兵；攻城——讀回季、收兵；
+      再開下一季）；之後每個人輪詢，收上一季的那一則。
+    測試內容沒有決戰（也沒有攻城）：同一串 API 照打，決戰那幾步略過；不帶設定沒有時刻表與攻城。"""
+
+    PACE_BOTS = [("假卯", "guan"), ("假辰", "huang")]  # A 那一場的伺服器假人：兩軍各一
+    SIEGES = {**BattleScenario.SIEGES, "S": ("huang", "runan_wilds")}  # 收兵的那幾場攻城：黃巾攻中立的汝南荒野（每一季一場，集結中就收兵）
+    SIEGE_PLAYERS = {"韓雲起": ("huang", "S", "強攻")}  # siege_pick 照這一張挑（韓雲起按黃巾那一顆）
+    FELL_ROUND = 5  # A 那一場這一回合起擺一位龍頭上陣的人物陣前敗走
+    PHASES_FIRST = ["setup", "join", "seat", "pace_bots", "open", "muster", "start", "gamble", "pace"]
+    PHASES_SECOND = ["narrate", "finish", "paid", "lock_open", "lock_fight", "close_open", "close", "next_one", "bare", "natural_open",
+                     "natural", "next_two", "quiet_open", "quiet", "after"]
+
+    # ── 小工具 ──
+
+    def call(self, who: str, method: str, url: str, body: dict | None = None):
+        """同 Scenario.call，另外驗登入沒過期（審查 should：season21 第三季那兩段原本全是 401，開下一季收兵與之後的補送都沒走到，比對是 401 對 401）。"""
+        status, data = super().call(who, method, url, body)
+        self.expect(status != 401, f"{who} 的登入過期了（{method} {url}）")
+        return status, data
+
+    def shelved(self, tag: str, rid: int | None) -> None:
+        """那一場收兵了（battles 表裡是沒打完的那一種）；這份內容沒有那一場（rid 是 None）不驗。"""
+        b = None if rid is None else self.world.ended_battle(rid)
+        self.expect(rid is None or (b is not None and b.unfinished), f"{tag}收兵了（沒打完）")
+
+    def live(self):
+        """此刻還沒收場的那一場決戰；收場了、沒有是 None。"""
+        b = self.world.get_battle()
+        return b if b is not None and b.phase != "ended" else None
+
+    def timetabled(self, b) -> bool:
+        d = self.c.battles.get(b.battle_id) if b is not None else None
+        return d is not None and d.timetable_event is not None
+
+    def season_row(self, tag: str) -> None:
+        """季上收場動到的那幾格：天下大事、江湖史最後幾則、時間軸、伏筆鎖定、排隊與開過的決戰、大勢、旗標、大勢人物此刻的聲威。"""
+        s = self.world.get_season()
+        emit(f"季 {tag}", {
+            "number": self.world.get_season_number(), "phase": self.world.season_phase(), "ended": s.ended, "time": s.time,
+            "rumors": [r.text for r in s.rumors][-8:], "chronicle": [r.text for r in s.chronicle][-4:],
+            "timeline": {k: [v.key, v.text, v.locked_by] for k, v in sorted(s.timeline.items())},
+            "locks": {k: v.side for k, v in sorted(s.locks.items())}, "waiting": list(s.showdowns_waiting),
+            "opened": dict(sorted(s.showdowns_opened.items())), "cancelled": list(s.showdowns_cancelled),
+            "trends": dict(sorted(s.trends.items())), "flags": sorted(s.flags),
+            "figures": {fid: [f.status, f.prestige] for fid, f in sorted(s.figures.items())}})
+
+    def ended_row(self, tag: str, rid: int | None) -> None:
+        """battles 表裡那一場（收場、收兵之後從共用狀態拿掉的也讀得到）：結果、沒打完、收兵那一句、收場的季時間、名單與整份的雜湊。"""
+        b = None if rid is None else self.world.ended_battle(rid)
+        emit(f"那一場 {tag}", None if b is None else {
+            "id": b.battle_id, "record": b.record_id, "phase": b.phase, "round": b.round_number, "trend": b.trend,
+            "outcome": [b.outcome_title, b.outcome_side, b.outcome_margin, b.outcome_reason], "unfinished": b.unfinished,
+            "text": b.unfinished_text, "end": b.end_time, "who": sorted(b.participants),
+            "mvps": [[m.round, m.name, m.move] for m in b.mvps],
+            "commanders": [[c.fid, c.fallen_round, c.felled_by, c.settled] for c in b.commanders],
+            "sha": hashlib.sha256(b.model_dump_json().encode("utf-8")).hexdigest()})
+
+    def join_live(self, who: str, tag: str) -> str | None:
+        """這個人按那一場決戰的加入（自己陣營那一顆；同一個大區兩場時鈕帶 @，照決戰那一場的）；有挑同伴那一步就不派。"""
+        pick = self.pick_of(self.ids(self.main(who)), f"battle:join:{self.PLAYERS.get(who)}")
+        emit(f"{who} {tag}", pick)
+        if pick is not None:
+            self.choose(who, pick)
+            self.no_escort(who)
+        return pick
+
+    def siege_join(self, tag: str) -> None:
+        """攻城開著的季：管理者替黃巾對汝南荒野下戰書（下一個同步的人把它開成集結），韓雲起擺過去按加入（siege_pick；同一個大區兩場時照 @）。"""
+        if not self.siege_on():
+            return
+        side, loc = self.SIEGES["S"]
+        self.place(self.LATE_GAMBLER, loc)
+        self.do(ADMIN, "admin_conquest_letter", {"id": loc, "side": side})
+        self.call(ADMIN, "GET", "/api/admin")
+        pick = self.siege_pick(self.LATE_GAMBLER, self.ids(self.main(self.LATE_GAMBLER)))
+        emit(f"{self.LATE_GAMBLER} {tag}按的攻城", pick)
+        if pick is not None:
+            self.choose(self.LATE_GAMBLER, pick)
+            self.no_escort(self.LATE_GAMBLER)
+        self.siege_row(tag, ("S",))
+
+    def open_b(self) -> None:
+        """B 那一場：時刻表的季照張曼成那一件定宛城的版本（GET /api/admin「定結果」的第一個；已經結算了就不定）、開宛城；不帶設定再開黃巾決戰。"""
+        op, battle_id = self.target()
+        if op == "start_battle":
+            self.do(ADMIN, op, {"id": battle_id})
+            return
+        from tianxia import timetable
+
+        event = timetable.find(self.c, "wancheng")
+        _, data = self.call(ADMIN, "GET", "/api/admin")
+        value = next((r["value"] for r in data.get("results", []) if r["value"].startswith(f"{event.version_from}|")), None)
+        if value is not None and event.version_from not in self.world.get_season().timeline:
+            eid, key = value.split("|", 1)
+            self.do(ADMIN, "resolve_event", {"id": eid, "key": key})
+        self.do(ADMIN, "start_showdown", {"id": event.id})
+
+    def skip_season(self) -> None:
+        """時鐘推過季末（world.season_end_time；照最後一次補算的季時間算剩多少，多推 30 步）：這段時間沒有請求。"""
+        from tianxia.world import season_end_time
+
+        s = self.world.get_season()
+        left = max(0.0, season_end_time(s, self.c) - s.time) / self.c.config.time_scale
+        self.skip(int(left // self.STEP_SECONDS) + 30)
+
+    def bot_act(self, name: str, want: str, tag: str) -> None:
+        """照假人程式的做法替一位假人按一顆（鎖裡讀存檔、建 Game、同步、按、存回去）：選單上 id（不看 @）是 want 的那一顆。"""
+        from tianxia.engine import Game
+
+        self.begin()
+        pick = None
+        with self.world.action_lock():
+            state = self.chars.load(name)
+            if state is None:
+                emit(f"{name} {tag}（沒有這個人）", None)
+                return
+            g = Game(self.c, state, random.Random(STEP[0]), self.world)
+            g.client = None
+            g.sync(CLOCK[0])
+            pick = next((o.id for o in g.options(odds=False) if o.enabled and o.id.split("@")[0] == want), None)
+            if pick is not None:
+                g.choose(pick)
+            self.chars.save(g.state)
+        emit(f"{name} {tag}", pick)
+
+    def bot_sync(self, name: str, tag: str) -> None:
+        """照假人程式的做法同步一位假人（收補送），存檔那幾格寫進輸出。"""
+        from tianxia.engine import Game
+
+        self.begin()
+        with self.world.action_lock():
+            state = self.chars.load(name)
+            if state is None:
+                return
+            g = Game(self.c, state, random.Random(STEP[0]), self.world)
+            g.client = None
+            g.sync(CLOCK[0])
+            self.chars.save(g.state)
+        self.me(name, tag)
+
+    def bot_tick(self) -> None:
+        """BotRunner.battle_tick 一次（在場還沒出招的假人出招；真人都送出了就不等 BATTLE_DELAY）：每一下新建一份 runner、亂數照步數（前半＋後半是兩個行程）。"""
+        from tianxia.bot_runner import BotRunner
+
+        self.begin()
+        runner = BotRunner(self.c, self.world, self.chars, rng=random.Random(STEP[0]), clock=lambda: CLOCK[0])
+        report = runner.battle_tick()
+        emit("假人出招", {"acted": report.acted, "online": report.online, "skipped": report.skipped, "failed": report.failed})
+
+    def round(self, gamblers: dict[str, str]) -> None:
+        """同決戰一軌的 round（gamblers 放手一搏、掛機的那一位不按、其餘照回合數挑三招之一；回合沒結就推過期限再輪詢一次），只是真人出完招之後
+        假人在場的話 BotRunner.battle_tick 一次；不打攻城（這一軌的攻城都在集結中就收兵）。"""
+        b = self.live()
+        if b is None or b.phase != "active":
+            return
+        n = b.round_number
+        for who in self.PLAYERS:
+            if who == self.IDLER:
+                continue
+            if who in gamblers:
+                self.do(who, "battle_text", {"text": gamblers[who]})
+                continue
+            moves = sorted(i for i, o in self.ids(self.main(who)).items() if i.startswith("battle:act:") and o.get("enabled"))
+            if moves:
+                self.choose(who, moves[n % len(moves)])
+        if any(name in b.participants for name, _ in self.PACE_BOTS):
+            self.bot_tick()
+        b = self.world.get_battle()
+        if b is not None and b.phase == "active" and b.round_number == n:
+            self.skip_past(b.round.opened_real + self.c.battles[b.battle_id].round_seconds)
+            self.main(self.GAMBLER)
+        self.battle_row(f"第 {n + 1} 回合之後")
+
+    def fight_out(self, tag: str, fell: bool = False) -> None:
+        """打到收場（最多 40 回合）；fell：第 FELL_ROUND 回合起、還沒有人敗走時擺一位龍頭上陣的人物陣前敗走（最後一擊記在秦朗月身上）；有等著補的劇情就補。"""
+        for _ in range(40):
+            b = self.live()
+            if b is None or b.phase != "active":
+                break
+            if fell and b.round_number >= self.FELL_ROUND and b.commanders and all(c.fallen_round is None for c in b.commanders):
+                fid, n = b.commanders[0].fid, b.round_number
+
+                def down(x, fid=fid, n=n) -> None:
+                    for c in x.commanders:
+                        if c.fid == fid:
+                            c.fallen_round, c.felled_by = n, self.GAMBLER
+
+                self.world.mutate_battle(down)
+                emit("龍頭上陣的人物陣前敗走", [fid, n])
+            self.round({})
+            b = self.world.get_battle()
+            if b is not None and b.tales:
+                self.tell(f"{tag}第 {b.round_number} 回合補劇情")
+        self.battle_row(f"{tag}收場")
+
+    def new_season(self, tag: str) -> None:
+        """管理者開下一季；每個人同步（換成新的角色）、開局待選的事件選掉、重新投靠（join：體力補滿、過了新手期）。"""
+        self.do(ADMIN, "next_season")
+        for who in [*self.PLAYERS, self.NEWBIE]:
+            self.main(who)
+        for who in self.PLAYERS:
+            self.settle_choices(who)
+        self.join()
+        self.season_row(tag)
+
+    # ── 情境（前半）──
+
+    def pace_bots(self) -> None:
+        """兩位伺服器假人（兩軍各一）建進資料庫、擺在 A 那一場的大區（同決戰一軌 bots 那一段的做法）。測試內容沒有決戰：略過。"""
+        from tianxia.engine import Game
+        from tianxia.state import BotProfile
+
+        loc = self.spot(self.target()[1])
+        if loc is None:
+            emit("這份內容沒有決戰：假人那一段略過", None)
+            return
+        for i, (name, side) in enumerate(self.PACE_BOTS):
+            self.begin()
+            g = Game.new(self.c, name, rng=random.Random(50 + i), world=self.world, graduated=True)
+            g.client = None
+            g.sync(CLOCK[0])
+            for _ in range(6):  # 開局待選的事件：選掉
+                first = next((o.id for o in g.options(odds=False) if o.id.startswith("choice:") and o.enabled), None)
+                if first is None:
+                    break
+                g.choose(first)
+            p = g.state.player
+            p.bot = BotProfile(personality="普通", seed=71 + i, faction=side, season_number=self.world.get_season_number())
+            p.faction, p.location, p.journey = side, loc, None
+            p.visited.add(loc)
+            p.tutorial_step = len(self.c.tutorial.steps)
+            p.joined_at = -1.0e9
+            self.chars.save(g.state)
+            emit(f"{name} 擺在 A 那一場的大區", [side, loc])
+
+    def muster(self) -> None:
+        """同決戰一軌的集結（四位按加入、再看一次），之後兩位假人照 Game 按自己那一軍的加入。"""
+        super().muster()
+        if self.live() is None:
+            return
+        for name, side in self.PACE_BOTS:
+            self.bot_act(name, f"battle:join:{side}", "集結時按的")
+        self.battle_row("假人加入之後")
+
+    def pace(self) -> None:
+        """前半的最後一段：韓雲起的份量快照擦掉，他下一次同步就補上（_backfill_battle_scores：只在自己的請求路徑補）；再打兩回合（第三回合韓雲起
+        放手一搏，身上那一招）；第四回合秦朗月先出招（同 round 的挑法），別人還沒按。前半停在這裡：第三回合結算過了、第四回合收了一部分的招
+        （BattleRound.pending_actions 寫在資料庫裡；不成立就停）——後半由新程式接著收齊、結算這一回合（審查 nit：原本切在第四回合剛開、
+        一招都還沒收，接手的只有補劇情）。"""
+        b = self.live()
+        if b is None:
+            emit("沒有開打中的決戰：前半那兩回合略過", None)
+            return
+        name = self.LATE_GAMBLER
+        if name in b.participants:
+            self.world.mutate_battle(lambda x: setattr(x.participants[name], "scores", {}))
+            emit(f"{name} 的份量快照擦掉", None)
+        self.main(name)
+        self.battle_row("補上份量快照之後")
+        self.round({})
+        self.round({name: f"{BATTLE_SURE}：繞到敵後，放火燒糧"})  # 評 100、一定成，身上那一招：這一回合挑回合首功
+        b = self.live()
+        if b is not None and b.phase == "active":
+            first = self.GAMBLER
+            moves = sorted(i for i, o in self.ids(self.main(first)).items() if i.startswith("battle:act:") and o.get("enabled"))
+            if moves:
+                self.choose(first, moves[b.round_number % len(moves)])
+        b = self.world.get_battle()
+        pending = [] if b is None else sorted(b.round.pending_actions)
+        emit("前半停在這裡：這一回合已經出招的", pending)
+        self.battle_row("前半停下")
+        self.expect(b is not None and b.phase == "active" and b.round_number >= 3 and self.GAMBLER in pending
+                    and len(pending) < sum(1 for q in b.participants.values() if not q.eliminated),
+                    "前半停在一回合收了一部分的招" + ("" if b is None else f"（此刻 {b.phase}、打過 {b.round_number} 回合、已出招 {pending}）"))
+
+    # ── 情境（後半）──
+
+    def finish(self) -> None:
+        """A 打到收場（第五回合起一位龍頭陣前敗走）；季上那幾格。"""
+        rid = None if self.live() is None else self.live().record_id
+        self.fight_out("A ", fell=True)
+        self.ended_row("A 收場", rid)
+        self.season_row("A 收場之後")
+
+    def paid(self) -> None:
+        """收場之後每個人與兩位假人（照假人程式的做法同步一次）收補送；秦朗月的戰報頁與最上面那一筆。"""
+        for who in [*self.PLAYERS, self.NEWBIE]:
+            self.main(who)
+            self.me(who, "A 收補送之後")
+        if self.c.battles:
+            for name, _ in self.PACE_BOTS:
+                self.bot_sync(name, "A 收補送之後")
+        _, data = self.call(self.GAMBLER, "GET", "/api/reports")
+        rows = [r["id"] for r in data.get("list", [])] if isinstance(data, dict) else []
+        for rid in rows[:1]:
+            self.call(self.GAMBLER, "GET", f"/api/reports?id={rid}")
+
+    def lock_open(self) -> None:
+        """B：開宛城（不帶設定是黃巾決戰）、秦朗月與韓雲起擺過去加入、集結截止開打；時刻表的季替官軍擺伏筆鎖定、廣宗擺進排隊；不帶設定把戰局
+        擺到官軍那一邊。"""
+        if not self.c.battles:
+            emit("這份內容沒有決戰：B、C 那兩場略過", None)
+            return
+        self.open_b()
+        b = self.live()
+        if b is None:
+            emit("B 那一場沒開成", None)
+            return
+        loc = self.spot(b.battle_id)
+        for who in (self.GAMBLER, self.LATE_GAMBLER):
+            self.place(who, loc)
+            self.join_live(who, "B 那一場按的")
+        if self.timetabled(b):
+            from tianxia.state import Lock
+
+            event = self.c.battles[b.battle_id].timetable_event
+
+            def lock(s) -> None:
+                s.locks[event] = Lock(side="guan", name=self.GAMBLER, time=s.time)
+
+            self.world.mutate_season(lock)
+            emit("伏筆鎖定", [event, "guan"])
+        self.start()
+        b = self.live()
+        if b is not None and b.phase == "active":
+            if self.timetabled(b):
+                def wait(s) -> None:
+                    if "guangzong" not in s.showdowns_waiting and "guangzong" not in s.showdowns_opened and "guangzong" not in s.timeline:
+                        s.showdowns_waiting.append("guangzong")
+
+                self.world.mutate_season(wait)
+                emit("廣宗擺進排隊", list(self.world.get_season().showdowns_waiting))
+            # 戰局擺到一邊：時刻表的季擺到黃巾那一邊（戰場上黃巾佔上風，收場照伏筆鎖定官軍勝、敗因寫鎖定那一句）；不帶設定擺到官軍那一邊（官軍勝）
+            trend = 30 if self.timetabled(b) else 88
+            self.world.mutate_battle(lambda x: setattr(x, "trend", trend))
+            emit("戰局擺到一邊", trend)
+        self.battle_row("B 開打")
+
+    def lock_fight(self) -> None:
+        """B 打到收場：時刻表的季照伏筆鎖定官軍勝（戰場上輸了是險勝、敗因寫鎖定那一句），收場那一下開排隊的廣宗（expect 驗）；兩位收補送。"""
+        b = self.live()
+        if b is None:
+            return
+        rid, timed = b.record_id, self.timetabled(b)
+        self.fight_out("B ")
+        self.ended_row("B 收場", rid)
+        self.season_row("B 收場之後")
+        for who in (self.GAMBLER, self.LATE_GAMBLER):
+            self.main(who)
+            self.me(who, "B 收補送之後")
+        nxt = self.live()
+        emit("B 收場之後開的那一場", None if nxt is None else [nxt.battle_id, nxt.phase, nxt.record_id])
+        self.expect(not timed or (nxt is not None and nxt.battle_id == "guangzong"), "宛城一收場就開了排隊的廣宗")
+
+    def close_open(self) -> None:
+        """C：時刻表的季是排隊開成的廣宗（不帶設定再開一場黃巾決戰）；秦朗月擺過去加入。攻城那一場韓雲起加入。"""
+        if self.c.battles and self.live() is None and self.target()[0] == "start_battle":
+            self.do(ADMIN, "start_battle", {"id": self.target()[1]})
+        b = self.live()
+        if b is not None:
+            self.place(self.GAMBLER, self.spot(b.battle_id))
+            self.join_live(self.GAMBLER, "C 那一場按的")
+        self.siege_join("收季之前")
+        self.battle_row("收季之前")
+
+    def close(self) -> None:
+        """管理者收季（admin_end_season：讀回收季那一份季之後，沒打完的決戰與每一場攻城收兵，再補大事）；四位收「不算勝負」。"""
+        b = self.live()
+        rid = None if b is None else b.record_id
+        slot = self.slot_of("S") if self.siege_on() else None
+        self.do(ADMIN, "end_season")
+        self.ended_row("收季收兵的決戰", rid)
+        self.ended_row("收季收兵的攻城", None if slot is None else slot.record_id)
+        self.shelved("管理者收季：決戰", rid)
+        self.shelved("管理者收季：攻城", None if slot is None else slot.record_id)
+        self.siege_row("收季之後", ("S",))
+        self.season_row("收季之後")
+        for who in self.PLAYERS:
+            self.main(who)
+            self.me(who, "收季之後")
+
+    def next_one(self) -> None:
+        self.new_season("第二季開季")
+
+    def bare(self) -> None:
+        """第二季：長社（不帶設定是黃巾決戰）沒人加入——集結截止那一下開打（場上一個人都沒有）、這一回合逾時那一下保底收場（不成立就停）。"""
+        if not self.c.battles:
+            emit("這份內容沒有決戰：沒人加入的那一場略過", None)
+            return
+        op, battle_id = self.target()
+        if self.live() is None:
+            self.do(ADMIN, op, {"id": battle_id})
+        b = self.live()
+        if b is None:
+            emit("沒人加入的那一場沒開成", None)
+            return
+        rid = b.record_id
+        if b.phase == "muster":
+            self.skip_past(b.muster_deadline_real)
+            self.main(self.IDLER)
+        b = self.live()
+        if b is not None and b.phase == "active":
+            self.skip_past(b.round.opened_real + self.c.battles[b.battle_id].round_seconds)
+            self.main(self.IDLER)
+        self.ended_row("沒人加入的那一場", rid)
+        self.season_row("保底收場之後")
+        self.expect(self.live() is None, "沒人加入的那一場保底收場了")
+
+    def natural_open(self) -> None:
+        """第二季再開一場（宛城；不帶設定黃巾決戰），秦朗月加入；攻城那一場韓雲起加入。"""
+        if self.c.battles and self.live() is None:
+            self.open_b()
+        b = self.live()
+        if b is not None:
+            self.place(self.GAMBLER, self.spot(b.battle_id))
+            self.join_live(self.GAMBLER, "季末之前按的")
+        self.siege_join("季末之前")
+        self.battle_row("季末之前")
+
+    def natural(self) -> None:
+        """時鐘推過季末、沒人輪詢；第一個輪詢的人（葉寒舟，沒有參戰）那一下補算到季收了，選單推決戰時看到季收了：沒打完的決戰與每一場攻城收兵
+        （_battle_status 季收了那一支；沒有攻城的季走 _showdown_status）。之後兩位收「不算勝負」。"""
+        b = self.live()
+        rid = None if b is None else b.record_id
+        slot = self.slot_of("S") if self.siege_on() else None
+        self.skip_season()
+        self.battle_row("推過季末、還沒人輪詢")
+        self.main(self.IDLER)
+        self.ended_row("季收了收兵的決戰", rid)
+        self.ended_row("季收了收兵的攻城", None if slot is None else slot.record_id)
+        self.shelved("季自然收掉：決戰", rid)
+        self.shelved("季自然收掉：攻城", None if slot is None else slot.record_id)
+        self.season_row("季自然收掉之後")
+        for who in (self.GAMBLER, self.LATE_GAMBLER):
+            self.main(who)
+            self.me(who, "季自然收掉之後")
+
+    def next_two(self) -> None:
+        self.new_season("第三季開季")
+
+    def quiet_open(self) -> None:
+        """第三季開一場（長社；不帶設定黃巾決戰），秦朗月加入；攻城那一場韓雲起加入（攻城開著的季跟長社在同一個大區，鈕帶 @）。
+        開之前每個人重新登入一次：登入狀態認 accounts.SESSION_SECONDS（30 天，照登入那一刻算），後半開頭那一次登入到第三季季末，season21
+        已經超過了（審查 should：原本 quiet、after 兩段全是 401）。放在季末之前：登入會輪詢一次，季末之後才登入就變成「第一個輪詢的人收兵」，
+        不是管理者開下一季那一下收。"""
+        self.login_all()
+        op, battle_id = self.target()
+        if self.c.battles and self.live() is None:
+            self.do(ADMIN, op, {"id": battle_id})
+        b = self.live()
+        if b is not None:
+            self.place(self.GAMBLER, self.spot(b.battle_id))
+            self.join_live(self.GAMBLER, "第三季按的")
+        self.siege_join("第三季")
+        self.battle_row("第三季季末之前")
+
+    def quiet(self) -> None:
+        """時鐘推過季末、沒人輪詢；管理者直接按開下一季（admin_next_season：他那一下同步補算到季收了，看到休季、決戰沒打完——讀回季、收兵；攻城——讀回季、
+        收兵；再開下一季）。"""
+        b = self.live()
+        rid = None if b is None else b.record_id
+        slot = self.slot_of("S") if self.siege_on() else None
+        self.skip_season()
+        self.battle_row("推過季末、還沒人輪詢")
+        self.do(ADMIN, "next_season")
+        self.ended_row("開下一季收兵的決戰", rid)
+        self.ended_row("開下一季收兵的攻城", None if slot is None else slot.record_id)
+        self.shelved("開下一季：決戰", rid)
+        self.shelved("開下一季：攻城", None if slot is None else slot.record_id)
+        self.season_row("第四季開季")
+
+    def after(self) -> None:
+        """每個人輪詢：收上一季的那一則（不算勝負；上一季那一支）。"""
+        for who in [*self.PLAYERS, self.NEWBIE]:
+            self.main(who)
+            self.me(who, "第四季開季之後")
+
+
 def _battle_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
     """再開一軌（TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記；同 dev/tavern-1 的 _register_track，名字分開免得兩塊都在時
     互相蓋掉）：之後的批照這一行接，不改上面那幾張表的原文。"""
@@ -3610,6 +4116,11 @@ def _battle_register_track(name: str, scenario: type, mutation: tuple, profile: 
 _BATTLE_MUTATION = (("tianxia/features/battle/muster.py", "tianxia/engine.py"), ("你趕到了戰場，這一回合就能出手。", "你趕到了戰場，這一回合就能出手！"))
 _battle_register_track("battle", BattleScenario, _BATTLE_MUTATION, "week7")
 _battle_register_track("muster", MusterScenario, _BATTLE_MUTATION, "week7")  # 第 7 批：同一套段落，切在集結中
+# 第 8 批：推進一軌（ProgressScenario），改一個字是論功那一則（搬之前在 engine.py 的 _merit_line、之後在 features/battle/progress.py）——
+# 後半 A 收場那一下寫進天下大事（season_row 寫出來）。找的那一句要連 f-string 的尾巴（`name}論功：" + `）：progress.py 的模組說明也有
+# 「收場與論功：」，只寫「論功：」在搬完的檔裡有兩處、_mutant 找不到剛好一處就停（第 8 批審查）
+_PROGRESS_MUTATION = (("tianxia/features/battle/progress.py", "tianxia/engine.py"), ('name}論功：" + ', 'name}論功！" + '))
+_battle_register_track("progress", ProgressScenario, _PROGRESS_MUTATION, "week7")
 
 
 # ═══════════════════════════ tavern：酒肆一軌（主動搬六包第 10 批，dev/tavern-1） ═══════════════════════════
