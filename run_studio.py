@@ -89,7 +89,8 @@ def main(argv: list[str]) -> int:
                 try:
                     before = _painted(store)
                     for line in studio.tick(content, store, root, actions.WEB_IMG, painter, critic,
-                                            lambda job, raw: studio.cut_for(job, raw, cutting), tries=tries):
+                                            lambda job, raw: studio.cut_for(job, _matted(painter, job, raw), cutting),
+                                            tries=tries):
                         print(line, flush=True)
                     spent += max(0, _painted(store) - before)
                 except Exception as exc:  # 一輪出錯只記一筆就繼續（同 run_bots）
@@ -100,6 +101,20 @@ def main(argv: list[str]) -> int:
     except KeyboardInterrupt:
         print("畫坊結束", flush=True)
         return 0
+
+
+def _matted(painter, job, raw: bytes) -> bytes:
+    """法相、巨物那一張（kind "move"）走本機生圖時，先讓 BiRefNet 產一次前景遮罩再切。
+
+    為什麼只給這一張：擂台那十六張的去背是照白底算的、已經校準過（而且有定裝照可以判 wears_white 豁免），
+    而法相沒有可比的參考圖，白底法分不開「圍起來的那一塊白」與「主體本身的白」（量過 16 張都分不開）。
+    這裡刻意不動 Painter 的介面（雲端那支與所有測試假人都吃 paint(prompt, images, aspect, size)）：
+    有 matte 才叫，沒有就照舊。遮罩那一步自己會在失敗時原樣回傳。
+    """
+    if job.kind != "move":
+        return raw
+    fn = getattr(painter, "matte", None)
+    return fn(raw) if callable(fn) else raw
 
 
 def _painted(store) -> int:

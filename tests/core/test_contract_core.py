@@ -200,6 +200,7 @@ class Seams(Fake):
     def __init__(self, open_=True):
         super().__init__(open_)
         self.in_shop, self.shop_here, self.seated, self.over = False, True, False, None
+        self.fights = True  # sortie（第 17 批）：fakeverb 那一格按下去打不打仗（Verb.squad）
 
     def on_due(self, ctx):
         self._note("on_due")
@@ -246,7 +247,8 @@ class Seams(Fake):
 
     def verbs(self):
         return (
-            Verb("fakeverb", run=lambda g, prepared: ["只打開一張卡。"], title=lambda g: "假的子動詞・此地", picks=("只打開一張卡。",)),
+            Verb("fakeverb", run=lambda g, prepared: ["只打開一張卡。"], title=lambda g: "假的子動詞・此地", picks=("只打開一張卡。",),
+                 squad=lambda g: g.content.squads["thug"] if self.fights else None),
             Verb("explore", cell=lambda g, loc, cost, odds: [Option(id="act:fakeverb", label="假的那一格")],
                  note=lambda g, loc: "假的那一行"),
         )
@@ -358,6 +360,22 @@ def test_a_verb_owner_runs_titles_fills_the_cell_and_writes_the_note(game, seams
     seams.open = False
     assert "act:fakeverb" not in [o.id for o in g.options()]
     assert g.action_notes(["act:explore"])["act:explore"] == "假的那一行" and g._act("fakeverb") == ["只打開一張卡。"]
+
+
+# sortie（全部拆包第 17 批「出陣三」：Verb 多開的一格 squad）
+
+
+def test_a_verb_owner_names_the_squad_its_press_fights(game, seams):
+    """這一下打哪一路（Verb.squad）：Game._fight_squad 最前面問 act:<verb> 的主人（大場面判讀、鎖外 A 段、鎖內 C 段的重驗都問它）；
+    主人回 None 照舊往下（act: 的其餘幾格往下也是 None）。不問 enabled（同 run、title、note：原位那一支本來就不看開關）。"""
+    g = _made(game)
+    thug = g.content.squads["thug"]
+    assert g._fight_squad("act:fakeverb") is thug
+    seams.fights = False
+    assert g._fight_squad("act:fakeverb") is None
+    seams.fights, seams.open = True, False
+    assert g._fight_squad("act:fakeverb") is thug
+    assert g._fight_squad("act:challenge:nobody") is None and g._fight_squad("act:nobody") is None  # 沒有主人的照舊往下
 
 
 def test_the_scene_and_the_report_page_ask_the_packages(game, seams):

@@ -112,14 +112,30 @@ def router(shell) -> APIRouter:
 
     @r.post("/api/looks/move")
     def api_looks_move(request: Request, body: dict = Body(...)):
-        """絕招下單：{prompt, ref, basic}（替現在練的那一門；打法照手上的兵器。basic＝通用 60、不畫圖、當場學成；不帶就是獨門 300、一定畫圖、送出等審核）；回 {message, looks, main}。"""
+        """絕招下單：{prompt, ref, basic, draft}（替現在練的那一門；打法照手上的兵器。basic＝通用 60、不畫圖、
+        當場學成；不帶就是獨門 300、一定畫圖、送出等審核）；回 {message, looks, main}。
+
+        draft 是**預覽那一次**模型填的那張表（/api/looks/scene 回的）：帶了就照它組稿，不再問第二次模型。
+        企劃者 2026-11-03 指出的不一致（正式站 #493）：「我送審前，頁面顯示說會做『槍』跟『菊花』兩個，
+        但是最後只有兩把槍」——預覽與下單各自問一次模型（temperature 0.3），兩次答案不同，
+        玩家核准的那一份跟真的做出來的那一份根本不是同一份，而他已經付了 300 元寶。
+        帶回來的表照舊整張過引擎的關（`scenes._from_draft` 只認表上的值、`_label` 只留中文裁六字、
+        `_grounded` 要原句有根據、`NOT_A_THING` 擋類別名、`clean` 排拍子與時間），所以不必信任客戶端：
+        那一句被改過的話，對不上的標籤自己會被丟掉。
+        """
         gate()
         game = shell._game(request)
         raw = body.get("ref")
         ref = raw if isinstance(raw, str) and REF.fullmatch(raw) else secrets.token_urlsafe(12)
         prompt = str(body.get("prompt", ""))[:300]
         problem = shell.look(game, lambda g: actions.scene_problem(g, prompt))  # A：先驗，壞句子不必叫模型
-        draft = None if problem else _draft(shell, game, prompt)  # B：鎖外問模型
+        shown = body.get("draft")
+        if problem:
+            draft = None
+        elif isinstance(shown, dict):
+            draft = shown  # 預覽給玩家看過的那一份：照它做，看到的＝做出來的
+        else:
+            draft = _draft(shell, game, prompt)  # B：沒預覽過（或舊版網頁）才問模型
         basic = bool(body.get("basic"))  # 通用絕招（60，不畫圖、當場學成）；不然是獨門（300，畫圖、送出等審核）
         msgs = shell.act(game, lambda g: actions.order_move(g, prompt, ref, draft, basic))  # C：扣元寶、存稿
         shell._tell_tabs(game)
@@ -128,7 +144,11 @@ def router(shell) -> APIRouter:
 
     @r.post("/api/looks/scene")
     def api_looks_scene_preview(request: Request, body: dict = Body(...)):
-        """一句話自創的預覽：{text}；回 {scene}（導演稿）或 {problem}。不扣元寶、不存。"""
+        """一句話自創的預覽：{text}；回 {scene}（導演稿）、{draft}（模型填的那張表）或 {problem}。不扣元寶、不存。
+
+        draft 要回給網頁，下單時原樣帶回來（見 /api/looks/move）：不然下單會再問一次模型，
+        玩家看到的跟做出來的就不是同一份。
+        """
         gate()
         game = shell._game(request)
         text = str(body.get("text", ""))[:120]
@@ -136,7 +156,8 @@ def router(shell) -> APIRouter:
         if problem:
             return {"problem": problem}
         draft = _draft(shell, game, text)  # B：鎖外問模型
-        return shell.look(game, lambda g: actions.preview_scene(g, text, draft))  # C：鎖內組稿（純規則）
+        got = shell.look(game, lambda g: actions.preview_scene(g, text, draft))  # C：鎖內組稿（純規則）
+        return {**got, "draft": draft} if isinstance(draft, dict) else got
 
     @r.get("/api/looks/scene/{mid}")
     def api_looks_scene(request: Request, mid: str):

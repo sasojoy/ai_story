@@ -16,6 +16,8 @@ from ..features import sortie  # 出陣：主動搬六包第 1 批（沒有選�
 # battle
 from ..features import battle  # 全服決戰：主動搬六包第 5 批（「看」那一半；沒有選項、選單、狀態，排在哪裡結果都一樣）
 from ..features import looks  # 擂台形象
+# guide
+from ..features import guide  # 新手引導：全部拆包第 22 批（沒有選項、選單、狀態，排在哪裡結果都一樣；check_content 的錯誤排在別包之後）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -30,6 +32,8 @@ FEATURES: list[Feature] = [
     # battle
     battle.FEATURE,
     looks.FEATURE,
+    # guide
+    guide.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 
