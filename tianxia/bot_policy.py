@@ -16,12 +16,14 @@ from . import tavern as tavern_rules  # 酒肆殺手：失手加價
 from .bot import allocate_points, can_practise, wants_heal
 from .core import features as features_core
 from .engine import FREE_TEXT_OPTION, Game, Option
+# 決戰（battle:）的分數搬進決戰包的 bots.py（全部拆包第 7 批；score 先問那一包）：這兩個名字照舊在這裡（tests/bots/test_bot_policy.py、
+# tests/season/test_real_content.py 直接叫，同一個函式、同一個數）
+from .features.battle.bots import JOIN_BATTLE_SCORE, battle_score as _battle_score  # noqa: F401
 from .models import MOVES, Content, Effect, SkillDef
 from .state import BotProfile, Invite
 
 REWARD_STATS = ("str", "agi", "con", "wis", "silver", "fame", "xinde")  # 博聞不在內：它只靠升級的點數增加，事件不給
 TREND_WEIGHT = 10.0  # 推大勢一點，抵得過十點獎勵
-JOIN_BATTLE_SCORE = 100.0
 ACT_SCORES = {"explore": 1.0, "socialize": 0.8}
 TRAIN_SCORE = 0.6  # 遊歷本身的分數（低於探索）；對自己陣營有利的地點再加上大勢分
 HOME_MOVE_SCORE = 0.3  # 往自己陣營的地盤走（投靠點一帶；第一季濃縮版是輸得最多的那條戰線，離得還遠時是往那邊的下一站）
@@ -818,8 +820,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return value
     if kind == "opp":
         return None  # 機緣：假人不做（正式版乙一）；對話裡的 talk:opp: 落在下面 talk 的 None
-    if kind == "battle":
-        return _battle_score(game, arg)
+    # 決戰（battle:）搬進功能包：假人的分數在 features/battle/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 7 批）
     if kind == "seal":
         return None  # 奪璽單挑：假人一律被代打（玉璽碎片設計 14.1），選單上就算出現也不按；在不在場只看 last_seen，假人永遠不記
     if kind == "duel":
@@ -1066,28 +1067,6 @@ def _toward_faction(game: Game, faction_id: str, ids: list[str]) -> str | None:
         return f"faction:{faction_id}"
     hop = next_hop(game, game.content.scenario.faction(faction_id).join_at)
     return f"move:{hop}" if hop is not None and f"move:{hop}" in ids else None
-
-
-def _battle_score(game: Game, arg: str) -> float | None:
-    """集結或晚到時加入（一定站自己陣營那邊，引擎只給這個選項）；交戰中照自己每招的份量（乘這一場的氣血狀態）打分數，
-    扣血相對剩下的氣血越重扣分越多（決戰改版一）。沒有招的選項一律 0。
-    沒有快照（份量全 0）時只剩扣血的差別，損耗最低的固守分數最高。"""
-    kind, _, tag = arg.partition(":")
-    if kind in ("join", "join_late"):
-        return JOIN_BATTLE_SCORE
-    if kind != "act":
-        return None
-    battle = game.battle_now()  # 自己參戰的那一場（決戰或攻城，領地爭奪第二批）
-    definition = game.content.battles[battle.battle_id]
-    me = battle.participants.get(game.state.player.name)
-    if me is None:
-        return 0.0
-    tuning = game.content.config.battle
-    hp = max(me.neili, 1.0)
-    option = battle_instance.option_of(definition, battle.act_index, me.faction, tag)
-    if option is None or option.move is None:  # 放手一搏等沒有招的：假人不選（free_text 本來就排除）
-        return 0.0
-    return me.scores.get(option.move, 0.0) * battle_instance.condition(me) / 100 - tuning.damage[option.move] / hp
 
 
 def _goals(game: Game, profile: BotProfile) -> dict[str, int]:

@@ -499,7 +499,7 @@ def test_the_sheet_checklist_judges_the_action_as_a_whole_not_frame_by_frame():
     assert "loose sleeves, ribbons, sashes and long hair are not objects" in studio.GEAR_NONE and "{gear}" in check
     # 去背留下的 1～2 px 白邊不算雜物（量過：佔實心像素 0.0～0.2%，斗笠小子的原圖也一樣）
     assert "ignore single-pixel fringes" in check and "the default " in check
-    check = check.format(frames=4, action="idle", gear=studio.GEAR_NONE)
+    check = check.format(frames=4, action="idle", gear=studio.GEAR_NONE, same_note="")
     for hard in ("exactly 4 frames", "one whole character in each", "same character as reference 2",
                  "holds no weapon or object", "side view facing right", "feet roughly on the same ground line"):
         assert hard in check, hard
@@ -580,8 +580,11 @@ def test_the_critic_asks_for_a_verdict_and_reads_it():
     sent = msgs.sent[0]
     assert sent["model"] == CRITIC_MODEL and sent["extra_body"]["fallbacks"] == "default"
     assert sent["extra_body"]["output_config"]["format"]["type"] == "json_schema"
-    kinds = [c["type"] for c in sent["messages"][0]["content"]]
-    assert kinds == ["text", "image", "text", "image", "text"] and "player" in sent["system"]
+    content = sent["messages"][0]["content"]
+    assert [c["type"] for c in content] == ["text", "image", "text", "text", "image"] and "player" in sent["system"]
+    # FB-8002：清單排在要審的圖前面、斷點下在清單上——同一張重畫時說明、參考圖、清單從快取讀，只有要審的那一張是新的
+    marked = [i for i, c in enumerate(content) if "cache_control" in c]
+    assert marked == [2] and content[2]["text"].startswith("Checklist:") and content[-1]["type"] == "image"
     assert critic.review("c", ART, []).ok
     assert not critic.review("c", ART, []).ok
     assert critic.review("c", ART, []).problems == ["審圖的回答看不懂"]
@@ -726,3 +729,21 @@ def test_the_redraw_limit_comes_from_the_painter(on):
     assert not out.ok and out.painted == 5 and len(painted) == 5
     out = studio.work(jobs[0], Never(), No(), cut)  # 不給就是雲端那個上限
     assert out.painted == studio.MAX_TRIES == 3
+
+
+def test_the_outing_six_add_a_sword_to_an_empty_handed_design(on):
+    """FB-8003（Joy 2026-11-03 選「定裝照不帶劍，走一趟另加劍」）：定裝照空手；擂台十張照舊空手、比對同一個人照舊；
+    走一趟那六張提示詞要在定裝照的人身上加腰間佩劍，審圖比對同一個人時不看兵器。"""
+    assert "holding NO weapon" in studio.PORTRAIT_PROMPT and "holds no weapon" in studio.CHECK_PORTRAIT
+    game = _game(on)
+    actions.order(game, "雪衣", "長髮飄飄的仙子", "look-ref-803")
+    pid = orders.mine(Wallet(game.world.db), game._mall_owner())[0].pid
+    admin = _admin(on, game.world)
+    for sheet in orders.ARENA:
+        actions.admin_upload(admin, pid, sheet, SHEET[sheet])
+    (job,) = [j for j in studio.jobs(on, Wallet(game.world.db), actions.image_root(game), actions.WEB_IMG) if j.pid == pid]
+    assert job.slot in orders.OUTING
+    assert studio.SHEET_EXTRA_SWORD in job.prompt and studio.GEAR_SWORD in job.checklist
+    assert studio.SAME_NOTE_SWORD in job.checklist and "NOT a difference" in job.checklist
+    arena = studio.CHECK_SHEET.format(frames=4, action="x", gear=studio.GEAR_NONE, same_note="")
+    assert "sword" not in arena and studio.GEAR_NONE in arena

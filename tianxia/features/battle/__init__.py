@@ -7,9 +7,13 @@
 - admin.py：全部拆包第 6 批，管理者的決戰工具 7 個方法——立刻開戰的選單、立刻開戰、取消決戰、三場大戲那三顆鈕（Game 留 6 個一行委派）
 - sieges.py：全部拆包第 6 批，攻城 7 個方法——還沒收場的那一串、這一場的定義、推一場、收兵、取消、收場與守城軍令（Game 留 6 個一行委派；
   攻城的規則本身在 tianxia/siege.py，共用規則層）
+- muster.py：全部拆包第 7 批，集結、加入、晚到、臨時投效、改投、挑同伴、在不在場、假人趕路、出招的分派 29 個方法（Game 留 13 個一行委派）
+- escorts.py：全部拆包第 7 批整個從 tianxia/escorts.py 搬來（隨你出陣的同伴打完回江湖；舊名是別名）
+- bots.py：全部拆包第 7 批，假人看到 battle: 的選項怎麼按（原本 bot_policy.score 的 battle 那一段）
 
-這一批（第 6 批也是）不拿選項前綴（prefix 是 None）：battle: 的分派（集結、投效、挑同伴、出招）是「打」那一半，還在 Game（第 7、8 批），第 7 批搬集結時
-拿前綴、同時把 bot_policy.score 的 battle: 那一段搬進這一包的 bots.py。所以這一包現在只接 enabled 與欄位，假人照舊走 bot_policy。
+全部拆包第 7 批拿了 battle: 前綴：假人看到 battle: 的選項怎麼按問這一包（bot_pick → bots.py，原本是 bot_policy.score 的 battle 那一段）。
+battle: 的分派照舊在 Game.choose 原位（查完選單、清掉「剛剛」與引導之後、建紀錄之前那一支，叫 Game._battle_choose 的委派）：choose_unlisted
+在查選單之前、choose 掛鉤會建紀錄，都不是那個位置（計畫 2026-11-01-決戰包-第3批.md 1.4），所以 choose 掛鉤照預設回 None。
 換季照帶補過的決戰（carried 那一格）照舊寫在 Game._reset_player_for_new_season、不掛 on_season_start（同出陣第 1 批審查之後的做法）。
 """
 from __future__ import annotations
@@ -19,18 +23,27 @@ from tianxia.core.features import Feature
 
 class BattleFeature(Feature):
     name = "battle"
-    prefix: str | None = None  # 第 7 批（集結）拿 battle:；這一批搬的「看」那一半沒有選項
+    prefix: str | None = "battle"  # 全部拆包第 7 批拿的：battle:join／enlist／escort／act……（選項照舊由 Game 的 _battle_menu 委派給，分派照舊在 Game.choose 原位）
     content = ("battles.json",)  # 決戰與攻城範本（content.py 照舊讀；攻城的規則在 siege.py，共用規則層）
     # 補過的決戰（跨季照帶：決戰常把季收掉，下一季才回來的人也要補、而且只補一次）、這一季參戰幾場與首功幾次（玩家卡、名帖）。
     # showdowns_restored（補回被洗掉的戰報，一季查一次）也是這一包的，但每一季第一次同步就寫成那一季的編號：契約測試的「換季回到預設」
     # 對它不成立，不放進來（README 照列）
-    player_fields = ("battle_results_seen", "showdowns", "top_merits")
+    # 第 7 批（集結、挑同伴）再認兩格：escort_pick（按了加入、還在挑誰隨你上陣）、parted_done（同伴回江湖、情誼已經減半、全服的記號還沒清；
+    # muster.settle_partings 讀寫）——換季都跟著新角色重來
+    player_fields = ("battle_results_seen", "showdowns", "top_merits", "escort_pick", "parted_done")
     carried = ("battle_results_seen",)  # Game._reset_player_for_new_season 照帶（不看開關，同商城、出陣的 carried）
 
     def enabled(self, ctx) -> bool:
         """內容裡有決戰（battles.json）就有：決戰本身沒有開關（beta、第一季、減法季都打）。遊戲當下的掛鉤全是預設的空的，開著關著結果都一樣；
         第 11 批的接縫掛鉤不問它（下面）。"""
         return bool(ctx.content.battles)
+
+    def bot_pick(self, ctx, option):
+        """假人看到 battle: 那一顆的分數（全部拆包第 7 批：原本 bot_policy.score 的 battle 那一段）。關著（內容沒有決戰）核心不問、
+        回 None——那時選單上本來就沒有 battle: 的選項。"""
+        from . import bots  # noqa: PLC0415
+
+        return bots.score(ctx, option)
 
     # ── 接縫掛鉤（全部拆包第 11 批：原本在 Game 原位直接叫這一包的那幾行；不問 enabled）──
 

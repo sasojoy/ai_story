@@ -270,8 +270,10 @@ def find(wallet: Wallet, item: str, pid: int) -> Order | None:
 
 
 def mark(wallet: Wallet, order: Order, root: Path) -> Order:
-    """十張齊了而且還在等圖：換成待審。回最新的那一張。"""
-    if order.status == PENDING and len(present(root, look_id(order.pid))) == len(SHEETS):
+    """擂台那十張齊了而且還在等圖：換成待審。回最新的那一張。走一趟那六張不擋（FB-8001）：缺的走一趟照預設的斗笠小子畫
+    （web/outing.js 抓不齊就退回預設），畫坊之後照樣補（studio.jobs 對待審、上架了的只補這幾張）。"""
+    have = present(root, look_id(order.pid))
+    if order.status == PENDING and all(s in have for s in ARENA):
         wallet.update_data(order.pid, status=REVIEW)
         return Order(**{**order.__dict__, "status": REVIEW})
     return order
@@ -282,7 +284,7 @@ def release(wallet: Wallet, order: Order, root: Path) -> str:
         return f"（「{order.name}」已經上架了。）"
     if order.status == REJECTED:
         return f"（「{order.name}」已經退回了。）"
-    missing = [s for s in SHEETS if s not in present(root, look_id(order.pid))]
+    missing = [s for s in ARENA if s not in present(root, look_id(order.pid))]  # 走一趟那六張不擋上架（FB-8001，同 mark）
     if missing:
         return f"（「{order.name}」還缺 {len(missing)} 張：{'、'.join(missing)}。）"
     wallet.update_data(order.pid, status=MADE, look_id=look_id(order.pid))
