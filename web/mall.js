@@ -887,7 +887,44 @@
         <div class="row"><input class="input" id="ad-moves-note-${m.id | 0}" placeholder="退回的原因（必填）" maxlength="100"><button class="btn warn small" data-act="looks-admin" data-op="move-reject" data-id="${m.id | 0}">退回</button></div>` : ""}</div>`;
     const moves = !mv ? "" : `<p class="muted">絕招（一句話自創的：法相、巨物一樣一張去背圖，邊長最多 1024；舊的光效單一張 ${esc(mv.size)}、六格、透明底）</p>`
       + (mv.open.length ? mv.open.map(mrow).join("") : `<p class="muted">沒有等著做的招式。</p>`) + mv.done.map(mrow).join("");
-    return head + (d.open.length ? d.open.map(row).join("") : `<p class="muted">沒有等著做的訂單。</p>`) + d.done.map(row).join("") + moves;
+    return head + (d.open.length ? d.open.map(row).join("") : `<p class="muted">沒有等著做的訂單。</p>`)
+      + d.done.map(row).join("") + moves + galleryHtml(d.gallery);
+  }
+  // 全服成品動畫牆（企劃者 2026-11-03「我是管理員，我需要能看到所有玩家做的成品動畫」）：
+  // 只列已上架的（零件到齊才演得出來），點了在上面那塊畫布演。播放器是現成的兩支（arena_scene.js）：
+  // 形象用 lookShow（十六張一張一張演，畫布 id 要 look-show），招式用 scenePreview（照導演稿演，畫布 id 要 scene-preview）。
+  function galleryHtml(g) {
+    if (!g || (!(g.looks || []).length && !(g.moves || []).length)) return `<p class="muted">全服還沒有已上架的成品。</p>`;
+    const stage = S.adShow && S.adShow.kind === "look"
+      ? `<canvas id="look-show" class="look-show" width="${typeof RING_W === "number" ? RING_W : 720}" height="${typeof RING_H === "number" ? RING_H : 320}" aria-label="形象動作"></canvas>`
+      : S.adShow && S.adShow.kind === "move"
+        ? `<canvas id="scene-preview" class="scene-preview" width="720" height="320" aria-label="絕招動畫"></canvas>` : "";
+    const on = (kind, id) => S.adShow && S.adShow.kind === kind && String(S.adShow.id) === String(id);
+    const btn = (kind, id, label, who) => `<button class="btn small ${on(kind, id) ? "primary" : "ghost"}"
+        data-act="ad-show" data-kind="${kind}" data-id="${esc(id)}">${esc(label)}<small>・${esc(who)}</small></button>`;
+    const looks = (g.looks || []).map((x) => btn("look", x.look, x.name || x.look, x.owner)).join("");
+    const mvs = (g.moves || []).map((x) => btn("move", x.move, x.name || x.move, x.owner)).join("");
+    return `<p class="muted">全服成品（已上架）：形象 ${(g.looks || []).length} 套、絕招 ${(g.moves || []).length} 招。點一個就在這裡演。</p>
+      ${S.adShow ? `<div class="hm-stage">${stage}</div>` : ""}
+      ${looks ? `<div class="row wrap">${looks}</div>` : ""}
+      ${mvs ? `<div class="row wrap">${mvs}</div>` : ""}`;
+  }
+  // 點一個成品：再點同一個就收起。形象直接演；招式要先抓它的導演稿（/api/looks/scene/<m…>，上架了的才有）
+  async function adShow(kind, id) {
+    if (!id || (S.adShow && S.adShow.kind === kind && String(S.adShow.id) === String(id))) {
+      S.adShow = null; if (typeof renderAdmin === "function") renderAdmin(); return;
+    }
+    if (kind === "move") {
+      const r = await api(`/api/looks/scene/${id}`).catch(() => null);
+      if (!r || !r.scene) { S.adLooksMsg = "這一招演不出來，等一下再試。"; S.adLooksOk = false; if (typeof renderAdmin === "function") renderAdmin(); return; }
+      S.adShow = { kind, id, scene: r.scene };
+      if (typeof renderAdmin === "function") renderAdmin();
+      if (typeof scenePreview === "function") scenePreview(r.scene, id);
+      return;
+    }
+    S.adShow = { kind, id };
+    if (typeof renderAdmin === "function") renderAdmin();
+    if (typeof lookShow === "function") lookShow(id);
   }
   // 上架、退回先問一次（以前按了就送；退回會把元寶全退給下單的人）。退回沒寫原因照舊由伺服器回那一句，不必問
   function looksAdminAsk(op, id, slot) {
