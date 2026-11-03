@@ -54,7 +54,7 @@ def test_crowned_adds_the_line_and_latest_only_shows_the_round_just_settled():
         return ["這一回合官軍佔了上風。"]
 
     msgs = mvp.crowned(b, resolve)
-    assert msgs[-1] == "★ 本回合 MVP：甲，絕招「大佛一掌」" and b.rounds[-1].messages[-1] == msgs[-1]
+    assert msgs[-1] == "★ 本回合首功：甲，絕招「大佛一掌」" and b.rounds[-1].messages[-1] == msgs[-1]
     shown = mvp.latest(b)
     assert shown["name"] == "甲" and shown["move"] == "m7" and shown["look"] == "moying" and shown["text"] == "一掌拍下"
     b.round_number = 4  # 下一回合沒人當選：不再演舊的
@@ -94,7 +94,7 @@ def test_a_won_gamble_in_a_real_showdown_crowns_the_player(monkeypatch):
     shown = game.feature_status()["battle_mvp"]
     assert shown["move"] == "m7" and shown["round"] == battle.round_number and shown["faction"] == "guan"
     (record,) = game.world.battle_rounds(battle.record_id)
-    assert record.mvp == "甲客" and record.messages[-1] == "★ 本回合 MVP：甲客，絕招「大佛一掌」"
+    assert record.mvp == "甲客" and record.messages[-1] == "★ 本回合首功：甲客，絕招「大佛一掌」"
 
 
 def test_a_named_foe_is_recorded_for_the_duel_scene():

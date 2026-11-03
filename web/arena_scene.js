@@ -385,9 +385,9 @@ function mvpOpen() {
   pop.id = "mvp-pop";
   pop.className = `mvp-pop side-${mvpEsc(v.faction)}${side.mine ? " mine" : ""}`;
   pop.setAttribute("role", "dialog");
-  pop.setAttribute("aria-label", `第 ${v.round | 0} 回合 MVP：${v.name}`);
+  pop.setAttribute("aria-label", `第 ${v.round | 0} 回合首功：${v.name}`);
   pop.innerHTML = `<div class="mvp-card">
-    <div class="mvp-ribbon">第 ${v.round | 0} 回合　<span>★ MVP ★</span></div>
+    <div class="mvp-ribbon">第 ${v.round | 0} 回合　<span>★ 首功 ★</span></div>
     <canvas id="mvp-stage" class="mvp-stage" width="720" height="320" aria-hidden="true"></canvas>
     <div class="mvp-who">${mvpSideName ? `<span class="mvp-side">${mvpEsc(mvpSideName)}${side.mine ? "・我方" : ""}</span>` : ""}<b>${mvpEsc(v.name)}</b>${v.target ? `點名 <b>${mvpEsc(v.target)}</b>，` : ""}${mvpMoveText}</div>
     ${v.text ? `<p class="mvp-text">「${mvpEsc(v.text)}」</p>` : ""}

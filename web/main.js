@@ -479,7 +479,7 @@
     const who = side ? `（${esc(side.name)}${side.mine ? "・我方" : ""}）` : "";
     const move = v.move_name ? `・絕招「${esc(v.move_name)}」` : "";
     if (typeof mvpPlay === "function") setTimeout(() => mvpPlay(v, names), 0); // 整頁畫完再跳（視窗掛在 body 上）
-    return `<div class="battle-mvp${side && side.mine ? " mine" : ""}"><span class="mvp-head">★ 第 ${v.round | 0} 回合 MVP　<b>${esc(v.name)}</b>${who}${move}</span>`
+    return `<div class="battle-mvp${side && side.mine ? " mine" : ""}"><span class="mvp-head">★ 第 ${v.round | 0} 回合首功　<b>${esc(v.name)}</b>${who}${move}</span>`
       + `<button class="btn small ghost" data-act="mvp-replay">再看一次</button></div>`;
   }
   // 攻城戰畫面（領地爭奪第三批 A，企劃者挑甲）：沿用決戰畫面，最上面那一行換成一條「攻城・地點｜守方：某某（或守將）」（main.siege，

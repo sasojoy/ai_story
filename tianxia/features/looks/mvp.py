@@ -15,8 +15,8 @@ from collections.abc import Callable
 
 from tianxia.battle_instance import BattleInstance, BattleMvp, BattleParticipant  # 過渡：待搬（決戰的共用狀態；總表第 54 批拆兩半）
 
-LINE = "★ 本回合 MVP：{name}，絕招「{move}」"  # 待 joy 潤
-LINE_BARE = "★ 本回合 MVP：{name}"  # 導演稿沒有招名時（舊稿）
+LINE = "★ 本回合首功：{name}，絕招「{move}」"  # 待 joy 潤
+LINE_BARE = "★ 本回合首功：{name}"  # 導演稿沒有招名時（舊稿）
 
 
 def _order(instance: BattleInstance, round_no: int, name: str) -> str:
