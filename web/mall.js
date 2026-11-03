@@ -325,7 +325,7 @@
   // 台子：大的那一張、這一套是什麼（穿著中／官方／自建／市集買的／誰做的）、名字、看動作，與換上／穿著中／價錢（官方的走貨架同一條購買確認，市集的先問一次）
   function lookStageHtml(x, d, shelf) {
     const id = x.look || x.id, on = id === d.worn;
-    const what = on ? "穿著中" : x.look ? `${esc(x.seller)}做的・市集` : { made: "自建", bought: "市集買的", official: "官方" }[lookKind(x)];
+    const what = x.look ? `${esc(x.seller)}做的・市集` : { made: "自建", bought: "市集買的", official: "官方" }[lookKind(x)];
     const it = !x.look && !x.owned && x.item ? shelf.find((one) => one.id === x.item) : null;
     const act = on ? `<span class="look-on">穿著中</span>`
       : x.look ? `<button class="btn small buy" data-act="market-buy" data-id="${esc(id)}" data-name="${esc(x.name)}" data-price="${x.price | 0}">${ingotSvg()}${x.price | 0}</button>`
@@ -483,8 +483,8 @@
     const row = (x) => `<div class="look-line move-line${x.worn ? " on" : ""}"><span class="look-pad">${x.scene ? `<span class="move-fx move-seal" aria-hidden="true">絕</span>` : moveFxHtml(x.move)}</span>
         <span class="lo-main"><b>${esc(x.prompt)}</b><small>${esc(x.art)}</small></span>
         ${x.scene ? `<button class="btn small ghost play" data-act="move-show" data-id="${esc(x.move)}" aria-label="${S.moveShow === x.move ? "收起" : "演一次"}">${S.moveShow === x.move ? "■" : "▶"}</button>` : "<span></span>"}
-        ${x.wearable ? `<button class="btn small primary" data-act="move-bind" data-id="${x.id | 0}">換上</button>`
-          : x.worn ? `<button class="btn small ghost" data-act="move-bind" data-id="0">脫下</button>` : "<span></span>"}</div>`;
+        ${x.worn ? `<button class="btn small ghost" data-act="move-bind" data-id="0">脫下</button>`
+          : x.wearable ? `<button class="btn small primary" data-act="move-bind" data-id="${x.id | 0}">換上</button>` : "<span></span>"}</div>`;
     const inTab = lib.filter((x) => x.style === tab);
     const library = lib.length ? `<div class="mall-sub">招式庫<small>共 ${lib.length} 招・換季也帶著走</small></div>
       <div class="look-segs" role="tablist">${tabs.map(([k, name, n]) => `<button class="${tab === k ? "on" : ""}" role="tab" aria-selected="${tab === k}" data-act="move-tab" data-tab="${k}">${name} ${n}</button>`).join("")}</div>
