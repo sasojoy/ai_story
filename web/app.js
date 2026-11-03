@@ -5915,7 +5915,7 @@
         case "market-unlist": await lookMarketDo({ op: "unlist", look: el.dataset.id }); break;
         case "move-bind": await moveBind(el.dataset.id); break; // 招式庫的一招換上身（id 0 是脫下來）
         case "looks-admin": await looksAdminAsk(el.dataset.op, el.dataset.id, el.dataset.slot); break; // 管理頁「自建形象」：上架、退回先問一次
-        case "ad-show": await adShow(el.dataset.kind, el.dataset.id); break; // 管理頁的全服成品動畫牆：點一個就演（再點收起）
+        case "ad-show": await adShow(el.dataset.kind, el.dataset.id, el.dataset.look); break; // 管理頁的全服成品動畫牆：點一個就演（再點收起）
         case "mall-retry": await (S.mallTab === "log" ? loadMallLog() : loadMall()); break;
         case "mall-admin": mallAdminAsk(el.dataset.op, el.dataset.id); break;
         case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); forgetHowto(); S.sheet = false; S.peer = null; S.adPlayer = null; S.adPlayerName = ""; S.stage = "gate"; S.main = null; forgetMap(); forgetMall(); render(); break;

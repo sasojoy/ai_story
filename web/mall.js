@@ -900,19 +900,25 @@
       : S.adShow && S.adShow.kind === "move"
         ? `<canvas id="scene-preview" class="scene-preview" width="720" height="320" aria-label="絕招動畫"></canvas>` : "";
     const on = (kind, id) => S.adShow && S.adShow.kind === kind && String(S.adShow.id) === String(id);
-    const btn = (kind, id, label, who) => `<button class="btn small ${on(kind, id) ? "primary" : "ghost"}"
-        data-act="ad-show" data-kind="${kind}" data-id="${esc(id)}">${esc(label)}<small>・${esc(who)}</small></button>`;
+    const btn = (kind, id, label, who, look) => `<button class="btn small ${on(kind, id) ? "primary" : "ghost"}"
+        data-act="ad-show" data-kind="${kind}" data-id="${esc(id)}"${look ? ` data-look="${esc(look)}"` : ""}>${esc(label)}<small>・${esc(who)}</small></button>`;
     const looks = (g.looks || []).map((x) => btn("look", x.look, x.name || x.look, x.owner)).join("");
-    const mvs = (g.moves || []).map((x) => btn("move", x.move, x.name || x.move, x.owner)).join("");
+    const mvs = (g.moves || []).map((x) => btn("move", x.move, x.name || x.move, x.owner, x.look)).join("");
     return `<p class="muted">全服成品（已上架）：形象 ${(g.looks || []).length} 套、絕招 ${(g.moves || []).length} 招。點一個就在這裡演。</p>
       ${S.adShow ? `<div class="hm-stage">${stage}</div>` : ""}
       ${looks ? `<div class="row wrap">${looks}</div>` : ""}
       ${mvs ? `<div class="row wrap">${mvs}</div>` : ""}`;
   }
   // 點一個成品：再點同一個就收起。形象直接演；招式要先抓它的導演稿（/api/looks/scene/<m…>，上架了的才有）
-  async function adShow(kind, id) {
+  async function adShow(kind, id, look) {
     if (!id || (S.adShow && S.adShow.kind === kind && String(S.adShow.id) === String(id))) {
       S.adShow = null; if (typeof renderAdmin === "function") renderAdmin(); return;
+    }
+    // 出招的人要是下單那位玩家的成品形象：sceneOnRing 的出招者是從擂台狀態讀的，管理頁沒有擂台、那是空的，
+    // 不設的話演出來是預設斗笠小子（看起來就像「沒上圖片的 demo 版」）
+    if (kind === "move" && typeof RA === "object" && RA && RA.looks) {
+      RA.looks.me = look || ""; RA.looks.me_look = look || "";
+      if (typeof ringWarmLook === "function" && look) ringWarmLook(look);
     }
     if (kind === "move") {
       const r = await api(`/api/looks/scene/${id}`).catch(() => null);

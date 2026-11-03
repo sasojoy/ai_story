@@ -372,9 +372,11 @@ def _gallery(ctx: Game, wallet) -> dict:
         {"id": o.pid, "owner": wallet.character_name(o.owner) or o.owner, "name": o.name, "look": orders.look_id(o.pid)}
         for o in reversed(orders.every(wallet, item.id)) if o.status == orders.MADE]
     mv = moves.item_of(ctx.content)
+    # `look` 是下單的人身上穿的那一套：演招式時出招的人要是**他的成品形象**，不然畫出來是預設斗笠小子
+    # （`arena_scene.sceneOnRing` 的出招者是從擂台狀態 `RA.looks` 讀的，管理頁沒有擂台、那是空的）
     mvs = [] if mv is None else [
         {"id": m.pid, "owner": wallet.character_name(m.owner) or m.owner, "name": m.art_name,
-         "move": moves.move_id(m.pid), "prompt": m.prompt}
+         "move": moves.move_id(m.pid), "prompt": m.prompt, "look": rules.worn(ctx.content, wallet, m.owner)}
         for m in reversed(moves.every(wallet, moves.item_ids(ctx.content))) if m.status == orders.MADE]
     return {"looks": looks, "moves": mvs}
 
