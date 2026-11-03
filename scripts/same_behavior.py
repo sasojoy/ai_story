@@ -4970,6 +4970,17 @@ class BoutScenario(ExploreScenario):
 
         return f"arena:fight:{name_key(foe)}"
 
+    def lock_sync(self, name: str) -> None:
+        """沒有帳號的人（bots 那一段補的假人）同步一次：照 BotRunner 在行動鎖裡建一份 Game（不叫模型）、sync、存回去。"""
+        from tianxia.engine import Game
+
+        self.begin()
+        with self.world.action_lock():
+            game = Game(self.c, self.chars.load(name), world=self.world)
+            game.client = None
+            game.sync(CLOCK[0])
+            self.chars.save(game.state)
+
     def boss_note(self, who: str, tag: str) -> None:
         """三選一的練功鈕與行動列底下那一行（頭目在不在、冷卻中、次數用完都寫在這兩處；別的季沒有這一顆，寫探索那一格）。"""
         from tianxia import explore_modes
@@ -5308,8 +5319,9 @@ class BoutScenario(ExploreScenario):
         self.ladder("假人之後")
 
     def season(self) -> None:
-        """收季：江小魚挑花無缺打到一半（出一招）就收季——前三名排好、江湖史記擂主；江小魚同步時那一場作廢；前三名休季同步領季末的獎勵；
-        江湖史的歷屆擂主。開下一季：單挑那十個欄位跟著新角色重來、季上的擂台是空的。"""
+        """收季：江小魚挑花無缺打到一半（出一招）就收季——前三名排好、江湖史記擂主；江小魚同步時那一場作廢；前三名休季同步領季末的獎勵
+        （名次被 bots 那一段的假人搶走的，照 BotRunner 在鎖裡同步一次：審查修正，以前只走到第三名）；江湖史的歷屆擂主。開下一季：
+        單挑那十個欄位跟著新角色重來、季上的擂台是空的。"""
         self.place("江小魚", None)
         view = self.choose("江小魚", "act:arena")
         fights = [i for i, o in self.ids(view).items() if i.startswith("arena:fight:") and o.get("enabled")]
@@ -5320,9 +5332,16 @@ class BoutScenario(ExploreScenario):
         self.me("江小魚", "收季之前打到一半")
         self.do(ADMIN, "end_season")
         self.ladder("收季之後")
-        for who in ("江小魚", "花無缺", "鐵心蘭", "燕南天"):
+        players = ("江小魚", "花無缺", "鐵心蘭", "燕南天")
+        for who in players:
             view = self.main(who)
             self.me(who, "休季同步之後")
+        placed = sorted((e.place, e.name) for e in self.world.get_season().arena.values() if e.place)
+        emit("收季之後的前三名", placed)
+        for _, name in placed:
+            if name not in players:
+                self.lock_sync(name)
+                self.me(name, "休季同步之後")
         emit("江湖史", view.get("chronicle"))
         self.do(ADMIN, "next_season")
         for who in ("江小魚", "花無缺"):
