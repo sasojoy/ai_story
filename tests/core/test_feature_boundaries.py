@@ -451,6 +451,9 @@ GAME_DELEGATE_CALLERS.update({
     ("shop_view", "arena_left"): "店面那一頁的擂台（今天還能挑幾次）：同 (shop_view, tavern_view)，店面那一頁接店面登記是總表第 41 批",
     ("_battle_gear", "_duel_cut"): "戰力快照（核心的單打服務）抄奪璽單挑吃的防具減損（鐵匠鋪與合成流程 3.9）：_duel_cut 照總表第六節第 12 條歸單挑，"
                                    "_battle_gear 在核心",
+    # 另外兩處叫 _duel_cut 的在別人的 Game 上（_seal_spectators 的 kin._duel_cut()、_seal_side_of 的 game._duel_cut()：奪璽單挑的參戰者與
+    # 沒參戰的持有者），game_links 只掃 self.<名>，這裡記不到。第 28 批把那兩個方法搬進玉璽包時，先把 _duel_cut 登記成服務清單的查詢服務
+    # （主人：單挑包），不然玉璽包叫它就是過渡外的 Game 方法（審查修正記下）
     ("seal_text_request", "_duel_side"): "奪璽單挑的放手一搏寫這個人是哪一邊（陣營名）：玉璽還沒成包（總表第 28 批）",
     ("_explore_outcome", "_boss_ready"): "舊探索（不帶設定的季）撞上頭目：總表第 18 批拿掉舊探索",
     ("_explore_outcome", "_duel_start"): "同上",
