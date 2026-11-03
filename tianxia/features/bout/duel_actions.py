@@ -2,7 +2,8 @@
 （第一階 ctx 就是 Game，開發規範手冊 3.3）；名字去掉前導底線。頭目戰與擂台共用的幾樣（放手一搏的輸入框與重驗、本命戰法那幾行、
 戰法的亂數、陣營名）也在這裡，擂台那一份（arena_actions）直接叫。
 
-- 撞上與收場：duel_start、duel_act、duel_after、duel_finish；場景：duel_scene、bout_lines；放手一搏（頭目戰、擂台共用的鎖外三段式）：
+- 撞上與收場：duel_start、duel_act、duel_after、duel_finish；打到一半的選單：duel_menu（審查修正：原本留在 Game._everyday_options 的
+  那一段，Game 留一行委派 _duel_menu）；場景：duel_scene、bout_lines；放手一搏（頭目戰、擂台共用的鎖外三段式）：
   duel_free_text_prompt、duel_free_text_note、duel_text_check、duel_text_request、duel_gamble、stale_duel_request；戰法的亂數 bout_rng、
   陣營名 duel_side；防具的減損快照 duel_cut（戰力快照 Game._battle_gear 也叫它的委派：奪璽單挑吃防具）
 - 頭目的查詢：boss_face（那一面的名字）、boss_here、boss_ready、boss_wait_text、boss_used_up——探索包、三選一的練功、舊探索經 Game 的委派問
@@ -17,6 +18,8 @@ import random
 from tianxia import annals  # 過渡：待搬（行狀）
 from tianxia import battle_instance, battlelog, encounter, materials, renown, rise, rounds, tactics, treasures
 from tianxia import gender, team
+from tianxia.core import duel_base
+from tianxia.core.option import Option
 from tianxia.core.services import PAUSED_TEXT
 from tianxia.models import FREE_TEXT_MAX, MOVES, DuelBoss, Squad
 from tianxia.state import PLAYER, DuelState
@@ -25,6 +28,8 @@ from . import arena_actions
 from . import arena_rules as arena
 from . import duel_rules
 from .duel_rules import DUEL_GAMBLE_NOTE, DuelTextRequest
+
+FLEE_ID = "duel:flee"  # 抽身退走（＝ engine.DUEL_FLEE：整季機器人不按它，bot.pick 從 engine 拿）
 
 
 def duel_start(ctx, boss: DuelBoss) -> list[str]:
@@ -60,6 +65,16 @@ def duel_start(ctx, boss: DuelBoss) -> list[str]:
     return [f"你在{c.locations[p.location].name}走著，{foe.title}{foe.name}攔住了去路！", foe.intro] + (
         [f"你以{role}的架勢迎上去。"] if role else []
     ) + ([meet] if meet else [])
+
+
+def duel_menu(ctx) -> list[Option]:
+    """頭目戰打到一半的選單（原本 Game._everyday_options 在 features_core.menu 前面一行那一支；審查修正搬進來，Game 留一行委派
+    _duel_menu）：三招與抽身；放手一搏走輸入框（duel_free_text_prompt），選單上沒有。"""
+    held = tactics.locks(ctx.state.player.duel.bout).no_moves  # 本命戰法：卸勁出不了強攻、只攻不守出不了固守
+    return [Option(id=f"duel:{move}", label=duel_base.move_label(move) + (tactics.lock_note(move) if move in held else ""),
+                   enabled=move not in held) for move in MOVES] + [
+        Option(id=FLEE_ID, label="抽身退走（不分勝負，掉的氣血不回）"),
+    ]
 
 
 def duel_scene(ctx) -> str:

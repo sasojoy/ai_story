@@ -419,12 +419,12 @@ GAME_IMPORTS |= {
     # `from . import duel as duel_rules` 拿掉了：剩下的改叫核心的 tianxia/core/duel_base、arena_ranks（單挑底層、擂台的名次與稱號）或委派
     "tianxia.features.bout.duel_actions", "tianxia.features.bout.arena_actions", "tianxia.features.bout.duel_rules",
 }
-GAME_DELEGATES |= {  # 19 個私有
+GAME_DELEGATES |= {  # 20 個私有
     # 頭目戰：server 的輸入框與鎖外三段式（duel_free_text_prompt、duel_free_text_note、duel_text_request、duel_gamble）、腳本換掉的 _duel_finish、
     # 核心原位與別的功能叫的 _duel_start（舊探索、三選一，探索包經 ctx）、_duel_scene（場景卡）、_duel_act（choose）、_duel_side（奪璽單挑）、
-    # _duel_cut（戰力快照、奪璽單挑的參戰者）
+    # _duel_cut（戰力快照、奪璽單挑的參戰者）、_duel_menu（打到一半的三招與抽身：審查修正，原本那一段留在 _everyday_options）
     "_duel_start", "_duel_scene", "duel_free_text_prompt", "duel_free_text_note", "duel_text_request", "_duel_side", "duel_gamble",
-    "_duel_act", "_duel_finish", "_duel_cut",
+    "_duel_act", "_duel_finish", "_duel_cut", "_duel_menu",
     # 頭目的查詢：_boss_face 是附錄甲歸單挑、搬進包的那一個；其餘四個是這一批新開的一行查詢（原位叫 duel_rules 的 here、available、
     # cooldown_left、used_up 那幾處：三選一的練功、舊探索在叫，探索包經 ctx 問 _boss_ready）
     "_boss_face", "_boss_here", "_boss_ready", "_boss_wait_text", "_boss_used_up",
@@ -436,6 +436,8 @@ GAME_DELEGATES |= {  # 19 個私有
 }
 _LATER_13 = "三選一（探索三選一、練功、找素材）：總表第 13 批連三選一整套拿掉（_boss_away 照派工不搬，一起拿掉）"
 GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_duel_menu"): "頭目戰打到一半的三招與抽身（審查修正：本體原本留在 _everyday_options）：排在 features_core.menu 前面一行，"
+                                         "menu 掛鉤照 FEATURES 問、單挑包排在宴客後面，接上去會排到宴客的席位後面",
     ("_everyday_options", "_arena_entry"): "閉關中、在路上的擂台入口（PM 轉述 Joy 2026-10-14「不一定要鎖死在城鎮」）：那兩支不是「此地還能做」，"
                                            "店面登記沒有這兩格（Shop.entry 只在 shop_entries）",
     ("choose", "_arena_fight_problem"): "按到灰掉的挑擂鈕（兩個分頁、畫面還沒重抓）回為什麼不成、還要等多久：在查完選單之後、「此刻無法」之前，"

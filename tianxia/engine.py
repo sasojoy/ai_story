@@ -1295,12 +1295,8 @@ class Game:
                     outcomes=outcome_rules.tags(branches) if branches else None,
                 ))
             return opts
-        if s.player.duel is not None:  # 單人頭目戰：三招與抽身；放手一搏走輸入框（duel_free_text_prompt），選單上沒有
-            held = tactics.locks(s.player.duel.bout).no_moves  # 本命戰法：卸勁出不了強攻、只攻不守出不了固守
-            return [Option(id=f"duel:{move}", label=duel_base.move_label(move) + (tactics.lock_note(move) if move in held else ""),
-                           enabled=move not in held) for move in MOVES] + [
-                Option(id=DUEL_FLEE, label="抽身退走（不分勝負，掉的氣血不回）"),
-            ]
+        if s.player.duel is not None:  # 單人頭目戰：三招與抽身（本體在單挑包 duel_actions.duel_menu；排在 menu 掛鉤前面，見 _duel_menu）
+            return self._duel_menu()
         # 功能包此刻接管整個選單（開發規範手冊 3.3）：坐在宴席上的敬酒詞與離席（宴客包）、擂台打到一半的三招與認輸（單挑包，全部拆包第 12 批：
         # 原本是下一行的那一支，單挑包排在宴客後面；放手一搏同頭目戰走輸入框）
         taken = features_core.menu(self)
@@ -10647,10 +10643,14 @@ class Game:
 
     # ── 單人頭目戰（Joy 2026-10-10：「有種打小 boss 的感覺，也可以算是大事件的單人體驗版，可以放手一搏自訂行動」）：本體在功能包
     # tianxia/features/bout/duel_actions.py（全部拆包第 12 批），這裡留一行委派——server 的輸入框與鎖外三段式、腳本、測試，與核心原位的
-    # choose（出招不建紀錄）、場景卡、探索撞上頭目、奪璽單挑的陣營名；只有包裡叫的那幾個（_duel_after、_bout_rng……）不留 ──
+    # choose（出招不建紀錄）、打到一半的選單（_everyday_options）、場景卡、探索撞上頭目、奪璽單挑的陣營名；只有包裡叫的那幾個
+    # （_duel_after、_bout_rng……）不留 ──
 
     def _duel_start(self, boss: DuelBoss) -> list[str]:
         return bout_duel.duel_start(self, boss)
+
+    def _duel_menu(self) -> list[Option]:
+        return bout_duel.duel_menu(self)
 
     def _duel_scene(self) -> str:
         return bout_duel.duel_scene(self)
