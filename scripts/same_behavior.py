@@ -4795,7 +4795,8 @@ class GuideScenario(Scenario):
     花無缺新手目標：就當散人（第一條，**切在這裡**），後半升到第 5 級（第二條）。燕南天、鐵心蘭入伍段：投靠、看軍令卡（**前半停在第一道
     軍令**），後半燕南天照選單發光的那一顆出一次力、按掉結尾；鐵心蘭一週沒做完被收。蘇櫻：不再提示、看地圖、看修練頁（序章外）、
     重看序章，後半略過新手引導（草廬裡略過拿出師的盤纏）、再按一次、打開提示、知道了。假人：Game.new(graduated=True)（草廬的季走
-    _graduate、開局的季站在城門口挑一顆）＋BotRunner 三十輪。最後收季、開下一季（開季那一句 s_return、再投靠的 s_rejoin）。
+    _graduate、開局的季站在城門口挑一顆；標成假人才同步，第一位交友一次）＋BotRunner 三十輪。最後收季、開下一季（開季那一句 s_return、
+    再投靠的 s_rejoin）。
     沒有開局、草廬、陣營、入伍段、提示的設定寫「沒有」略過，同一串 API 照打。"""
 
     WALKER, ENLIST, LATE, HINTS, GOALS, SKIP = "葉孤城", "燕南天", "鐵心蘭", "江小魚", "花無缺", "蘇櫻"
@@ -5124,7 +5125,9 @@ class GuideScenario(Scenario):
     def bots(self) -> None:
         """伺服器假人：Game.new(graduated=True)（內容有草廬的走 _graduate：真的走一遍草廬；開局的季站在城門口，挑第一顆）三個，
         BotRunner＋bot_policy.take_turn 三十輪（random.Random(13)、時鐘一輪推四步）。假人的新手目標照拿、提示不排；整季機器人在城門口挑哪一顆
-        也寫下來。"""
+        也寫下來。照 bot_runner._add_bot 的先後：建好就標成假人（BotProfile、陣營、季數），才同步——先同步的話那一下排的狀態提示沒被
+        「假人不排」擋住，佇列裡一直排著一條，之後的檢查走不到假人那道擋（審查 dev/guide-1 第 1 條）。第一位另外交友一次（_act 交友之後
+        叫 _hint("h_bond")：事件型的碰到才說，只有 hints.queue_note 擋假人）。"""
         from collections import Counter
 
         from tianxia import bot, server_bots
@@ -5136,6 +5139,9 @@ class GuideScenario(Scenario):
         for i, name in enumerate(self.BOT_SEATS):
             self.begin()
             g = Game.new(self.c, name, rng=random.Random(i), world=self.world, graduated=True)
+            p = g.state.player
+            p.bot = BotProfile(personality="普通", seed=61 + i, faction=sides[i % len(sides)] if sides else None,
+                               season_number=self.world.get_season_number())
             g.client = None
             g.sync(CLOCK[0])
             if i == 0:
@@ -5145,9 +5151,8 @@ class GuideScenario(Scenario):
                 if first is None:
                     break
                 g.choose(first)
-            p = g.state.player
-            p.bot = BotProfile(personality="普通", seed=61 + i, faction=sides[i % len(sides)] if sides else None,
-                               season_number=self.world.get_season_number())
+            if i == 0:
+                self.bot_socialize(g, name)
             p.stats["silver"] = 200
             self.chars.save(g.state)
             emit(f"假人 {name} 建好", {"step": p.tutorial_step, "loc": p.location, "newbie": sorted(p.newbie_done),
@@ -5174,6 +5179,37 @@ class GuideScenario(Scenario):
                                     "newbie": [sorted(p.newbie_marks), sorted(p.newbie_done)], "seen": sorted(p.hints_seen),
                                     "queue": [n.id for n in p.hint_queue], "guide": p.guide_done,
                                     "state": hashlib.sha256(s.model_dump_json().encode("utf-8")).hexdigest()})
+
+    def bot_socialize(self, g, name: str) -> None:
+        """假人交友一次（不經伺服器：假人只走 Game 的公開行動）：站到江小魚交友的那一城（有酒肆、老周沒教過的最後一城，同 hints_on），
+        交友、告辭或了結接著的事件，寫下說過與排著的提示（假人兩樣都該是空的）。"""
+        from tianxia import prologue
+
+        p = g.state.player
+        towns = [i for i, loc in sorted(self.c.locations.items()) if "酒肆" in (loc.tags or []) and i not in prologue.onboard_towns(self.c)]
+        if towns:
+            p.location = towns[-1]
+            p.visited.add(towns[-1])
+        on = {o.id for o in g.options(odds=False) if o.enabled}
+        if "act:socialize" in on:
+            emit(f"假人 {name} 交友", g.choose("act:socialize"))
+        elif "act:call" in on:  # 探索三選一的季（不帶、weekend）：交友是打開求見名單，挑第一位見得到的（_open_dialogue 也叫 h_bond）
+            g.choose("act:call")
+            first = next((o.id for o in g.options(odds=False) if o.id.startswith("call:") and o.enabled), None)
+            emit(f"假人 {name} 求見", [first, g.choose(first) if first is not None else None])
+        else:
+            emit(f"假人 {name} 此地不能交友", [p.location, sorted(on)])
+            return
+        for _ in range(3):
+            opts = [o.id for o in g.options(odds=False) if o.enabled]
+            if "talk:leave" in opts:
+                g.choose("talk:leave")
+            elif any(i.startswith("choice:") for i in opts):
+                g.choose(next(i for i in opts if i.startswith("choice:")))
+            else:
+                break
+        emit(f"假人 {name} 交友之後", {"seen": sorted(p.hints_seen), "queue": [n.id for n in p.hint_queue],
+                                    "journal": [e.title for e in g.state.journal[:2]]})
 
     def season(self) -> None:
         """收季、開下一季：每個人換季之後的引導（做完的步數、略過、入伍段走完、說過的提示、新手目標照帶；開季那一句 s_return）；
