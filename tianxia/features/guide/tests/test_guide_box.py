@@ -165,7 +165,7 @@ def test_skipping_stays_skipped_into_the_next_season():
     from tianxia.guide import base_step_count
     from tianxia.sqlite_world import open_world
 
-    root = Path(__file__).parents[2] / "content"
+    root = Path(__file__).parents[4] / "content"  # 測試檔搬進 tianxia/features/guide/tests/（全部拆包第 22 批）：repo 根往上四層
     beta = load_content(root)
     beta.config.auto_open_first_season, beta.config.admins = True, ["管"]
     chars = open_characters()
