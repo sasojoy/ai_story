@@ -5,12 +5,14 @@ docs/superpowers/plans/2026-11-03-單挑包-第1批.md）。README.md 寫這一�
 （酒肆、名帖、玩家卡、榜單都讀）在核心 tianxia/core/arena_ranks.py——這一包的規則模組從那兩份 re-export。
 
 - duel_rules.py、arena_rules.py、arena_crowd.py：純規則（原 tianxia/duel.py、arena.py、arena_crowd.py；那三個名字留成指到這裡的別名）
-- duel_actions.py、arena_actions.py：原本 Game 上頭目戰 16 個、擂台 22 個方法（Game 留 27 個一行委派，含 5 個新開的查詢）
+- duel_actions.py、arena_actions.py：原本 Game 上頭目戰 16 個、擂台 22 個方法（Game 留 28 個一行委派，含 5 個新開的查詢與審查修正
+  補的 _duel_menu）
 - bots.py：假人的分數（原本 bot_policy.score 的 duel、arena 那兩段）
 
 拿 duel、arena 兩個前綴：假人看到這兩種選項怎麼按問這一包（bot_pick）。原位接上第 11 批掛鉤的：坐在擂台邊與進擂台那一顆、收店
 （店面登記 shops）、打開擂台與那一下的標題（act 子動詞 verbs）、報名與挑人（choose）、擂台打到一半的三招與認輸（menu）、
-場邊事件的內容檢查（check_content）。沒有對應掛鉤、留在 Game 原位叫一行委派的（choose 不建紀錄的出招、灰掉的挑擂鈕、場景卡、
+場邊事件的內容檢查（check_content）。沒有對應掛鉤、留在 Game 原位叫一行委派的（choose 不建紀錄的出招、灰掉的挑擂鈕、頭目戰打到一半的
+選單、場景卡、
 sync 的補送、閉關中與路上的入口、店面那一頁、戰力快照抄防具、奪璽單挑的陣營名、三選一與舊探索撞上頭目）寫在 README。
 """
 from __future__ import annotations
@@ -39,8 +41,8 @@ class BoutFeature(Feature):
 
     def menu(self, ctx):
         """擂台打到一半（原本 Game._everyday_options 在 features_core.menu 下一行那一支；這一包排在宴客後面＝原本那一行的位置）：
-        選單整個是三招與認輸（arena_actions.fight_menu）；放手一搏同頭目戰走輸入框。頭目戰的三招還在 _everyday_options 前段原位
-        （排在決戰、奪璽單挑那幾支中間，沒有掛鉤）。"""
+        選單整個是三招與認輸（arena_actions.fight_menu）；放手一搏同頭目戰走輸入框。頭目戰的三招與抽身排在 features_core.menu 前面一行
+        （接上這個掛鉤會排到宴客的席位後面）：本體在 duel_actions.duel_menu，_everyday_options 原位叫 Game._duel_menu 一行委派。"""
         if ctx.state.player.arena is None:
             return None
         from . import arena_actions  # noqa: PLC0415

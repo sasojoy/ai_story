@@ -414,7 +414,7 @@ GAME_DELEGATE_CALLERS.update({
 # _everyday_options 坐在擂台邊與此地還能做的入口、_shop_open／_depart／sync／_drop_stale_references 的收店、_act 的 act:arena、_action_title
 # 的 arena 兩支、choose 的 arena:join／fight／back、擂台打到一半的三招與認輸。下面是沒有對應掛鉤、留在原位叫委派的。GAME_DIRECT 不加
 GAME_IMPORTS |= {
-    # 27 個一行委派（頭目戰 duel_actions 14 個、擂台 arena_actions 13 個）；duel_rules 給委派的型別註記（DuelTextRequest）與 Game 的類別屬性
+    # 28 個一行委派（頭目戰 duel_actions 16 個〔含審查修正補的 _duel_menu〕、擂台 arena_actions 12 個）；duel_rules 給委派的型別註記（DuelTextRequest）與 Game 的類別屬性
     # DUEL_GAMBLE_NOTE（類別本體不是方法，game_links 掃不到那一行，記在這裡）。原本那幾行 `from . import (..., arena, arena_crowd, ...)`、
     # `from . import duel as duel_rules` 拿掉了：剩下的改叫核心的 tianxia/core/duel_base、arena_ranks（單挑底層、擂台的名次與稱號）或委派
     "tianxia.features.bout.duel_actions", "tianxia.features.bout.arena_actions", "tianxia.features.bout.duel_rules",
