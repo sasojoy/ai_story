@@ -580,8 +580,11 @@ def test_the_critic_asks_for_a_verdict_and_reads_it():
     sent = msgs.sent[0]
     assert sent["model"] == CRITIC_MODEL and sent["extra_body"]["fallbacks"] == "default"
     assert sent["extra_body"]["output_config"]["format"]["type"] == "json_schema"
-    kinds = [c["type"] for c in sent["messages"][0]["content"]]
-    assert kinds == ["text", "image", "text", "image", "text"] and "player" in sent["system"]
+    content = sent["messages"][0]["content"]
+    assert [c["type"] for c in content] == ["text", "image", "text", "text", "image"] and "player" in sent["system"]
+    # FB-8002：清單排在要審的圖前面、斷點下在清單上——同一張重畫時說明、參考圖、清單從快取讀，只有要審的那一張是新的
+    marked = [i for i, c in enumerate(content) if "cache_control" in c]
+    assert marked == [2] and content[2]["text"].startswith("Checklist:") and content[-1]["type"] == "image"
     assert critic.review("c", ART, []).ok
     assert not critic.review("c", ART, []).ok
     assert critic.review("c", ART, []).problems == ["審圖的回答看不懂"]
@@ -606,8 +609,8 @@ def test_a_made_look_gets_the_outing_sheets_backfilled(on):
         lines += _tick(game, painter, critic)
     assert len(lines) == len(orders.OUTING) and _tick(game, painter, critic) == []
     assert all(refs == 2 for _, refs in painter.calls)
-    assert all(studio.GEAR_SWORD in seen for seen in critic.seen)
-    assert "ONE plain straight sword" in painter.calls[0][0]
+    assert all(studio.GEAR_NONE in seen for seen in critic.seen)  # 補畫的走一趟也空手（企劃者 2026-11-03）
+    assert "do NOT copy it" in painter.calls[0][0]  # 參考圖那把劍不要抄
     assert orders.of(Wallet(game.world.db).purchase(pid)).status == orders.MADE
     assert len(orders.present(actions.image_root(game), orders.look_id(pid))) == len(orders.SHEETS)
 
@@ -726,3 +729,25 @@ def test_the_redraw_limit_comes_from_the_painter(on):
     assert not out.ok and out.painted == 5 and len(painted) == 5
     out = studio.work(jobs[0], Never(), No(), cut)  # 不給就是雲端那個上限
     assert out.painted == studio.MAX_TRIES == 3
+
+
+def test_the_outing_six_are_empty_handed_too(on):
+    """企劃者 2026-11-03「走一趟不能不帶佩劍嗎」：十六張一律空手（定裝照、擂台十張、走一趟六張都是）。
+    FB-8003 原本讓走一趟那六張加一把腰間佩劍，#29 的 hero_pickup 因此又十連掛（「有的格有劍、有的格沒有」）；
+    那把劍沒有任何東西在用（手位表只算擂台，web/outing.js 不疊兵器），拿掉之後兩個死因一起消失。
+    唯一要留的是：走一趟的參考圖身上有劍，生圖提示詞得明講那把劍不要抄。"""
+    assert "holding NO weapon" in studio.PORTRAIT_PROMPT and "holds no weapon" in studio.CHECK_PORTRAIT
+    game = _game(on)
+    actions.order(game, "雪衣", "長髮飄飄的仙子", "look-ref-803")
+    pid = orders.mine(Wallet(game.world.db), game._mall_owner())[0].pid
+    admin = _admin(on, game.world)
+    for sheet in orders.ARENA:
+        actions.admin_upload(admin, pid, sheet, SHEET[sheet])
+    (job,) = [j for j in studio.jobs(on, Wallet(game.world.db), actions.image_root(game), actions.WEB_IMG) if j.pid == pid]
+    assert job.slot in orders.OUTING
+    assert studio.GEAR_NONE in job.checklist  # 走一趟的清單也是空手
+    assert "do NOT copy it" in job.prompt and "carries no weapon in any frame" in job.prompt
+    assert not hasattr(studio, "GEAR_SWORD") and not hasattr(studio, "SAME_NOTE_SWORD")  # 佩劍那三段拿掉了
+    for sheet in (*orders.ARENA, *orders.OUTING):  # 十六張的清單一個「劍」字都不該有
+        check = studio.CHECK_SHEET.format(frames=orders.SHEETS[sheet], action=orders.ACTIONS[sheet], gear=studio.GEAR_NONE)
+        assert "sword" not in check and studio.GEAR_NONE in check, sheet

@@ -542,9 +542,12 @@ def submit_battle_action(
     如果結算完變成 ended，一定是這次送出的行動剛好造成的，不用再跟「結算前是不是
     已經 ended」比對。"""
     captured: dict[str, list[str]] = {"msgs": []}
+    ult = ctx._battle_ult() if success_rate is not None and name == ctx.state.player.name else None  # 回合首功用（looks）
 
     def _apply(b: battle_instance.BattleInstance) -> None:
         battle_instance.submit_action(b, name, tag, text, success_rate, stories, sex=sex)
+        if ult and name in b.round.success_rates:  # 這一搏真的送進去了，記下身上的絕招
+            b.round.ults[name] = ult
         captured["msgs"] = ctx._advance_battle_round(b, definition)
 
     battle = ctx._mutate_battle_now(_apply)  # 有攻城戰時是自己參戰的那一場（領地爭奪第二批）
