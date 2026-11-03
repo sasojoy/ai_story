@@ -125,3 +125,19 @@ def test_rank_actions_do_not_spend_sorties():
     cfg = game.content.config
     assert p.stamina == before - cfg.rank2_stamina - 20  # 兩下都真的做了
     assert game.sorties_left() == 5 and p.sortie_day == -1
+
+
+def test_duty_greys_once_the_sorties_are_used_up_m13():
+    """第 17 批突變 M13（train_actions.duty_option 的 `left <= 0` 換成 `< 0`，次數用完不灰）：出陣開著、約戰關著的季，
+    守勢跟出陣共用每日的次數（PM 2026-10-14）。還剩一次照常給、鈕上寫還能幾次；用完灰掉、寫跟出陣同一句，按下去什麼都不扣。"""
+    game = _game(faction="guan", at="changshe")  # 長社：官軍自家的區塊（裁決 24：守勢只守自家的地方）
+    p, per_day = game.state.player, game.content.config.sortie.per_day
+    p.sortie_day, p.sorties_today = game._pill_day(), per_day - 1
+    option = _duty(game)
+    assert option.enabled and sortie.LEFT_NOTE.format(n=1) in option.label
+    p.sorties_today = per_day
+    option = _duty(game)
+    assert option is not None and not option.enabled and sortie.USED_UP.format(n=per_day) in option.label
+    before = (p.stamina, p.sorties_today, p.contrib, dict(game.state.world.trends))
+    assert game.choose("act:duty") == ["（此刻無法這麼做。）"]
+    assert (p.stamina, p.sorties_today, p.contrib, dict(game.state.world.trends)) == before
