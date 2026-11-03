@@ -5259,7 +5259,8 @@ class BoutScenario(ExploreScenario):
     def bots(self) -> None:
         """伺服器假人（BotRunner＋bot_policy.take_turn，random.Random(13)、時鐘一輪推四分）：同一個資料庫補四個假人——錦衣客在長社撞上頭目
         （打到一半：take_turn 照架勢出招）、黑衣客坐在擂台邊（bot_policy.score 問單挑包「返回」那一顆）、另兩位閒著；bot_policy.ARENA_CHANCE
-        換成 1（照舊是 bot_policy 的模組屬性，_arena 那一步照舊在 bot_policy）。整季機器人（bot.pick）在頭目戰的選單上挑一顆。
+        換成 1（照舊是 bot_policy 的模組屬性，_arena 那一步照舊在 bot_policy）。整季機器人（bot.pick）在錦衣客的頭目戰選單上挑一顆（不按：
+        那一場留給 BotRunner 照架勢打完）；灰衣客走到汝南荒野撞上黃巾小帥，那一場由整季機器人從頭按到尾（season_bot_duel，BotRunner 之前）。
         測試內容沒有頭目、擂台關著：只擺人、照跑。"""
         from collections import Counter
 
@@ -5300,6 +5301,7 @@ class BoutScenario(ExploreScenario):
                         emit("錦衣客 開打", g._duel_start(boss))
                         emit("整季機器人在頭目戰的選單上挑", bot.pick(g, g.options(odds=False), random.Random(0)))
                     self.chars.save(g.state)
+        self.season_bot_duel("灰衣客", "runan_wilds")  # BotRunner 之前：閒著的那一位（打完的冷卻與氣血照帶進 BotRunner）
         runner = BotRunner(self.c, self.world, self.chars, rng=random.Random(13), clock=lambda: CLOCK[0])
         chance, tick, online = bot_policy.ARENA_CHANCE, self.c.config.bot_tick_seconds, server_bots.is_online
         seeds = {41 + i for i in range(len(self.BOT_SEATS))}
@@ -5319,6 +5321,39 @@ class BoutScenario(ExploreScenario):
         emit("單挑假人 紀錄標題", dict(sorted(Counter(e.title for s in states for e in s.journal).items())))
         emit("單挑假人 存檔", {s.player.name: hashlib.sha256(s.model_dump_json().encode("utf-8")).hexdigest() for s in states})
         self.ladder("假人之後")
+
+    def season_bot_duel(self, name: str, loc: str) -> None:
+        """整季機器人把一場頭目戰從頭打到尾（審查修正：以前只挑一顆、沒按下去）：name（剛補的、閒著的假人）走到 loc 撞上頭目，每一招照
+        bot.pick 挑、照 Game.choose 按（同 bot.play_season），打到收場。在行動鎖裡、固定種子；測試內容沒有這個地點、沒有頭目：只寫一行。"""
+        from tianxia import bot, duel
+        from tianxia.engine import Game
+
+        if loc not in self.c.locations:
+            emit(f"{name} 整季機器人的頭目戰（這份內容沒有 {loc}）", None)
+            return
+        self.begin()
+        with self.world.action_lock():
+            g = Game(self.c, self.chars.load(name), rng=random.Random(7), world=self.world)
+            g.client = None
+            g.sync(CLOCK[0])
+            p = g.state.player
+            p.location, p.journey = loc, None
+            p.visited.add(loc)
+            boss = duel.available(g.state, self.c)
+            emit(f"{name} 撞上的頭目（整季機器人）", None if boss is None else boss.id)
+            picks: list[str | None] = []
+            if boss is not None:
+                g._duel_start(boss)
+                rng = random.Random(0)
+                while g.state.player.duel is not None and len(picks) < 20:
+                    pick = bot.pick(g, g.options(odds=False), rng)
+                    picks.append(pick)
+                    if pick is None:
+                        break
+                    g.choose(pick)
+            emit(f"{name} 整季機器人按的招", picks)
+            self.chars.save(g.state)
+        self.me(name, "整季機器人打完頭目")
 
     def season(self) -> None:
         """收季：江小魚挑花無缺打到一半（出一招）就收季——前三名排好、江湖史記擂主；江小魚同步時那一場作廢；前三名休季同步領季末的獎勵
