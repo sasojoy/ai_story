@@ -28,7 +28,7 @@
 - 包裡互相叫直接叫函式（出陣本體、約戰的 `sortie_mode_of`、`sortie_foes`、`sortie_host`、`duel_on`、`duty_credit` 也直接叫）；**只有**測試、腳本換掉的經 `ctx`：`ctx._train()`、`ctx._sortie()`、`ctx.train_trend_push(…)`、`ctx._train_push(…)`、`ctx._parley_backing_here()`（並肩出陣，主人人物情誼）、`ctx.sorties_left()`（服務清單三、過渡的 `# sortie` 那一段）。推大勢的共用服務（`push_trend`、`_goals`、`season_scale`、`_carry`、`_push_room`）與共用的字 `BIG_FIGHT_WAIT` 在一、共用服務。
 
 **還留在原位的**（不是核心的接縫，`tests/core/test_feature_boundaries.py` 逐條寫為什麼、哪一批收）：
-- 核心的單打服務 `_squad_encounter`：遇上自家隊伍改操練（`self._drill`）、遊歷打贏推大勢（`self.train_trend_push`，行尾標「過渡：第 26 批」）、序章那一場戰報標題寫「雪恥」（`sortie.on`、`PROLOGUE_FIGHT`：戰報在單打服務裡建、裡面就存檔，從包外改不到；要拿掉得在單打服務開「這一場戰報叫什麼」的位置，交 PM）。軍情 `_order_options` 叫 `_duty_option`（總表第 33 批）。`_action_title` 那張表的 `train`（`Verb.title` 先答，表那一格只是沒有主人時的字）、`duty`（陣營自己的名字，總表第 57 批）兩格。
+- 核心的單打服務 `_squad_encounter`：遇上自家隊伍改操練（`self._drill`）、遊歷打贏推大勢（`self.train_trend_push`，行尾標「# 過渡：第 26 批」）、序章那一場戰報標題寫「雪恥」（`sortie.on`、`PROLOGUE_FIGHT`：戰報在單打服務裡建、裡面就存檔，從包外改不到；要拿掉得在單打服務開「這一場戰報叫什麼」的位置，交 PM）。軍情 `_order_options` 叫 `_duty_option`（總表第 33 批）。`_action_title` 那張表的 `train`（`Verb.title` 先答，表那一格只是沒有主人時的字）、`duty`（陣營自己的名字，總表第 57 批）兩格。
 - 「打完之後」（PM 定第 11 批不開掛鉤，第 26 批的事件）：`_squad_encounter` 的 as_sortie 打贏回頭叫 `_sortie_rewards`、約戰開著時不推進度（原位行尾標「# 過渡：第 26 批」）。
 - `_push_progress`（地盤）寫、`_sortie` 讀的四個旗標（`_clash_won`、`_sortie_marked`、`_sortie_moved`、`_sortie_flipped`，服務清單的寄放段）；輿圖（`map_state`、`_map_foes`：輿圖的線還在飛）。
 - `server`：`main_view` 的 `sortie`、`front`、`sortie_card`、`sorties` 四個鍵（鍵的順序算行為）、`may_judge_fight`、`MAIN_ACTIONS` 的 `sortie_go`、`sortie_answer`、`sortie_join` 與 `_moves`、通知 `current_notices(..., world.sortie_duels())`。
