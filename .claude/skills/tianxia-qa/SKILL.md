@@ -31,6 +31,12 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
     - **攻城戰書要有人同步才開成集結**：`admin_conquest_letter` 之後 `GET /api/admin` 不會同步，要打一次 `/api/main` 或任何 `/api/do`；認哪一場照 `siege_<大區>`，不要照「新多出來的那一場」。
     - **要走回合逾時的路，得留人掛機**：所有參戰者都出完招時，回合在最後一個人按下去那一下就結算，排程與輪詢逾時那兩條走不到。
     - 比對有沒有牙：HEAD 改一個字（例「論功：」→「論功！」）對 HEAD 跑同一串，要抓得到不同。
+  - 第 12 批 QA 補的（2026-11-04，頭目戰與擂台；外殼在舊 PM scratchpad 的 `b12-chk\`）：
+    - **流程最後有換季（`end_season`＋`next_season`）時，收場那一刻的資料庫抓不到角色層的字**：換季把角色重開了。要在季中用 sqlite backup 留快照，逐表比快照。
+    - **`server.boards_now` 的榜單快取照真的 `time.monotonic` 過期**：外殼裡每次清掉 `BOARDS_CACHE`（同 same_behavior 的 `begin`）。
+    - 擂台的場邊事件要 `chance` 設成 1、**還要有一件合條件的事**（最省事：挑一個已經打過一場的天下第一）；放手一搏的「離譜」要模型判，叫不到模型走不到。
+    - 要撞上頭目：`/__qa/force` 把 `explore_one.draw` 換成抽到「遭遇」、`/__qa/tweak` 把 `duel.explore_chance` 設成 1；勝負靠 `/__qa/edit` 把 `duel.edge`／`arena.edge` 擺在 89 或 11（越過提前大勝、落敗的門檻）。
+    - 截圖用的伺服器是新起的，記憶體裡改過的設定會回預設：擂台的週解鎖要在開好之後再 tweak 一次。
   - 第 22 批 QA 補的（2026-11-04；外殼在舊 PM scratchpad 的 `b22-chk\s\`，含 `crossrun.py`）：
     - **擺局面的 `/__qa/edit` 只改呼叫時給的那幾格**：第 17 批那一版每次都補滿體力、把 `joined_at` 擺成 -1e9，新手期就沒了，新手目標卡（`newbie_view`）直接變 None。驗引導、新手目標、新手期的批特別要注意。
     - **便宜的第二道穩定性證明**：「HEAD 對 HEAD」那一輪的 HEAD 回應，跟「HEAD 對 BASE」那一輪的 HEAD 回應逐檔比；分開跑兩次一樣，才證明局面真的凍住。
