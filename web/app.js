@@ -5840,6 +5840,15 @@
         case "mall-cat": mallCatTo(el.dataset.cat); break; // 貨架的分類
         case "look-sub": lookSubTo(el.dataset.sub || ""); break; // 形象那一頁裡的自建形象、絕招那一頁（空的回形象）
         case "prompt-ex": promptExample(el.dataset.for || "", el.dataset.text || ""); break; // 想不到就點：把例句填進框裡
+        case "look-pick": lookPickTo(el.dataset.id || ""); break; // 形象那一頁點一套：台子上換成它
+        case "look-seg": lookSegTo(el.dataset.seg || "mine"); break; // 我的／官方／市集
+        case "look-filter": lookFilterTo(el.dataset.filter || "all"); break; // 我的那一頁篩哪一類
+        case "look-more": lookMore(); break; // 再看一頁
+        case "look-fold": lookFold(el.dataset.what); break; // 摺起來的展開（沒掛的、更早退回的）
+        case "look-sell": lookSellTo(el.dataset.id || ""); break; // 那一套跳出定價框
+        case "look-redo": lookRedo(el.dataset.id); break; // 退回的改一改再送
+        case "move-tab": moveTabTo(el.dataset.tab || ""); break; // 招式庫的打法分頁
+        case "move-form": moveFormOpen(); break; // 寫一招新的（展開）
         case "mall-qty": { // 購買確認那張紙的數量：同一件、同一個編號重畫
           const now = S.mallAskNow, it = now && S.mallData && S.mallData.items.find((one) => one.id === now.id);
           if (it) mallAsk(it, S.mallData, Number(el.dataset.n), now.ref);

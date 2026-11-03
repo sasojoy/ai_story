@@ -47,7 +47,7 @@
   function forgetMall() {
     S.mallOpen = false; S.mallTab = "shelf"; S.mallData = null; S.mallLog = null; S.mallLooks = null; S.mallSay = null; S.mallPick = null; S.mallPending = null; S.mallFail = false;
     S.adMall = null; S.adMallName = ""; S.adMallNote = ""; S.adMallMsg = ""; S.adMallOk = false;
-    S.lookShow = null; S.moveShow = null; S.movePreview = null; S.mallCat = "all"; S.lookSub = "";
+    S.lookShow = null; S.moveShow = null; S.movePreview = null; S.mallCat = "all"; S.lookSub = ""; lookReset();
   }
 
   // 交給 shopHtml 的那一份：招牌、掌櫃那一句（剛買成了的、買不了的原因蓋過平常那一句）、餘額（紀錄頁照紀錄那一份，其餘照貨架、還沒抓到照狀態列）
@@ -278,53 +278,79 @@
   function lookFaceHtml(id) { // 站著那張的第一格（四格一張、880×220）裁成一個人
     return `<span class="look-face" aria-hidden="true" style="background-image:url('${LOOK_IMG(id)}')"></span>`;
   }
-  // 形象那一頁（Joy 2026-11-03「形象頁那邊的排版也是亂七八糟」，示意稿「新・形象頁」）：最上面一塊台子站著身上穿的那一套（看動作），
-  // 底下擂台形象兩張一排、每張一樣高（台子、名字、兩行說明、底下一排：看動作＋換上／穿著中／價錢），最後一張是「自建形象」的入口；
-  // 再來形象市集（別人做的），最底絕招一張（通用、獨門兩列，按了進絕招那一頁）。自建形象、絕招各自一頁（S.lookSub），左上回形象
+  // 形象那一頁（Joy 2026-11-03「形象頁那邊的排版也是亂七八糟」「建立了一大堆形象跟絕招…會變得很難用」，示意稿「新・形象頁」）：
+  // 最上面一塊台子站著點了的那一套（沒點就是身上穿的），台子上「看動作」與換上／價錢；底下分三頁（我的／官方／市集），
+  // 我的再用小標籤篩（官方、自建、市集買的）；每套一張小格、一排三格，一次最多 LOOK_PAGE 格，多的按「再看」。最底一張絕招連過去。
+  // 自建形象、絕招各自一頁（S.lookSub），左上回形象
   const LOOKSUB_NAMES = { make: "自建形象", move: "絕招" };
+  const LOOK_PAGE = 18;
+  const LOOK_SEGS = [["mine", "我的"], ["shop", "官方"], ["market", "市集"]];
+  const LOOK_FILTERS = [["all", "全部"], ["official", "官方"], ["made", "自建"], ["bought", "市集買的"]];
+  const lookKind = (lk) => (lk.mine ? "made" : /^u\d+$/.test(lk.id) ? "bought" : "official");
   function mallLooksHtml(d) {
     if (!d) return mallFailHtml();
     if (S.lookSub === "make" && d.order) return lookSubHtml("make", lookShowHtml() + lookOrderHtml(d.order, d));
     if (S.lookSub === "move" && d.moves) return lookSubHtml("move", moveHtml(d.moves));
     const shelf = (S.mallData && S.mallData.items) || [];
-    const worn = d.looks.find((lk) => lk.id === d.worn) || d.looks[0];
-    const stage = worn ? `<div class="look-stage">${lookFaceHtml(worn.id)}<div class="look-stage-bar"><span><small>擂台上穿的是</small><b>${esc(worn.name)}</b></span>
-        <button class="btn small ghost" data-act="look-show" data-id="${esc(worn.id)}" data-name="${esc(worn.name)}">看動作 ▶</button></div></div>` : "";
-    const card = (lk) => {
-      const it = lk.item ? shelf.find((one) => one.id === lk.item) : null;
-      const on = lk.id === d.worn;
-      const btn = on ? `<span class="look-on">穿著中</span>`
-        : lk.owned ? `<button class="btn small primary" data-act="look-wear" data-id="${esc(lk.id)}">換上</button>`
-        : it ? `<button class="btn small buy" data-act="mall-pick" data-id="${esc(it.id)}">${ingotSvg()}${it.price | 0}</button>` : "<span></span>";
-      const tag = on ? `<span class="look-tag on">穿著</span>` : lk.owned ? `<span class="look-tag">已有</span>` : "";
-      return `<div class="look-card${on ? " on" : ""}"><span class="look-pad">${tag}${lookFaceHtml(lk.id)}</span><b>${esc(lk.name)}</b>
-        <small>${esc(lk.note || "")}</small><span class="look-row">${lookShowBtn(lk.id, lk.name)}${btn}</span></div>`;
+    const market = (d.market && d.market.shelf) || [];
+    const mine = d.looks.filter((lk) => lk.owned);
+    const shop = d.looks.filter((lk) => !lk.owned);
+    const lists = { mine, shop, market };
+    const seg = LOOK_SEGS.some(([k]) => k === S.lookSeg) && (S.lookSeg !== "market" || d.market) ? S.lookSeg : "mine";
+    // 台子：點了的那一套（三頁裡找），沒點就是身上穿的
+    const pick = d.looks.find((lk) => lk.id === S.lookPick) || market.find((x) => x.look === S.lookPick) || d.looks.find((lk) => lk.id === d.worn) || d.looks[0];
+    const stage = pick ? lookStageHtml(pick, d, shelf) : "";
+    const filters = LOOK_FILTERS.filter(([k]) => k === "all" || mine.some((lk) => lookKind(lk) === k));
+    const filter = seg === "mine" && filters.some(([k]) => k === S.lookFilter) ? S.lookFilter : "all";
+    const shown = seg === "mine" ? mine.filter((lk) => filter === "all" || lookKind(lk) === filter) : lists[seg];
+    const limit = Math.max(LOOK_PAGE, S.lookLimit | 0);
+    const tile = (x) => {
+      const id = x.look || x.id, on = id === d.worn, sel = pick && id === (pick.look || pick.id);
+      const tag = x.look ? `<span class="look-tag2">${x.price | 0}</span>` : lookKind(x) === "made" ? `<span class="look-tag2">自建</span>`
+        : lookKind(x) === "bought" ? `<span class="look-tag2">市集</span>` : !x.owned && x.item ? `<span class="look-tag2">${(shelf.find((one) => one.id === x.item) || {}).price | 0}</span>` : "";
+      return `<button class="look-tile${on ? " on" : ""}${sel ? " sel" : ""}" data-act="look-pick" data-id="${esc(id)}" aria-pressed="${!!sel}">
+          <span class="look-pad">${lookFaceHtml(id)}${on ? `<span class="look-tag">穿著</span>` : ""}${tag}</span><b>${esc(x.name)}</b></button>`;
     };
     const o = d.order;
-    const make = o ? `<button class="look-card look-make" data-act="look-sub" data-sub="make"><span class="look-pad"><span class="plus" aria-hidden="true">＋</span></span>
-        <b>自建形象</b><small>${o.open ? "有一套正在畫" : "寫一句樣子，替你畫一套"}</small><span class="price">${ingotSvg()}${o.price | 0}　寫一套</span></button>` : "";
-    return `${stage}${lookShowHtml()}<div class="mall-sub">擂台形象<small>${d.looks.length} 套</small></div>
-      <div class="mall-grid look-grid">${d.looks.map(card).join("")}${make}</div>${lookMarketHtml(d.market)}${moveEntryHtml(d.moves)}`;
+    const make = seg === "mine" && o ? `<button class="look-tile look-make" data-act="look-sub" data-sub="make"><span class="look-pad"><span class="plus" aria-hidden="true">＋</span></span>
+        <b>${o.open ? "有一套在畫" : "自建一套"}</b></button>` : "";
+    const empty = !shown.length && !make ? `<p class="mall-note">${seg === "market" ? "別的玩家自建、上架的形象會擺在這裡。現在還沒有人上架。" : seg === "shop" ? "官方的形象你都有了。" : "這一類還沒有。"}</p>` : "";
+    const more = shown.length > limit ? `<button class="btn ghost look-more" data-act="look-more">再看 ${Math.min(LOOK_PAGE, shown.length - limit)} 套（還有 ${shown.length - limit} 套）</button>` : "";
+    const segs = `<div class="look-segs" role="tablist">${LOOK_SEGS.filter(([k]) => k !== "market" || d.market).map(([k, name]) =>
+      `<button class="${seg === k ? "on" : ""}" role="tab" aria-selected="${seg === k}" data-act="look-seg" data-seg="${k}">${name} ${lists[k].length}</button>`).join("")}</div>`;
+    const chips = seg === "mine" && filters.length > 2 ? `<div class="mall-cats">${filters.map(([k, name]) =>
+      `<button class="mall-cat${filter === k ? " on" : ""}" data-act="look-filter" data-filter="${k}">${name}</button>`).join("")}</div>` : "";
+    return `${stage}${lookShowHtml()}${segs}${chips}<div class="look-tiles">${make}${shown.slice(0, limit).map(tile).join("")}</div>${empty}${more}${moveEntryHtml(d.moves)}`;
   }
-  // 自建形象、絕招那一頁的頂上：回形象一顆、標題、四步（走到哪一步亮到哪）
-  const LOOKSUB_STEPS = { make: ["寫樣子", "畫坊作畫", "審核", "換上・上市集"], move: ["寫一句", "先看看", "通用或獨門", "招式庫換上"] };
+  // 台子：大的那一張、這一套是什麼（穿著中／官方／自建／市集買的／誰做的）、名字、看動作，與換上／穿著中／價錢（官方的走貨架同一條購買確認，市集的先問一次）
+  function lookStageHtml(x, d, shelf) {
+    const id = x.look || x.id, on = id === d.worn;
+    const what = on ? "穿著中" : x.look ? `${esc(x.seller)}做的・市集` : { made: "自建", bought: "市集買的", official: "官方" }[lookKind(x)];
+    const it = !x.look && !x.owned && x.item ? shelf.find((one) => one.id === x.item) : null;
+    const act = on ? `<span class="look-on">穿著中</span>`
+      : x.look ? `<button class="btn small buy" data-act="market-buy" data-id="${esc(id)}" data-name="${esc(x.name)}" data-price="${x.price | 0}">${ingotSvg()}${x.price | 0}</button>`
+      : x.owned ? `<button class="btn small primary" data-act="look-wear" data-id="${esc(id)}">換上</button>`
+      : it ? `<button class="btn small buy" data-act="mall-pick" data-id="${esc(it.id)}">${ingotSvg()}${it.price | 0}</button>` : "";
+    return `<div class="look-stage">${lookFaceHtml(id)}<div class="look-stage-bar"><span><small>${what}</small><b>${esc(x.name)}</b></span>
+        ${lookShowBtn(id, x.name)}${act}</div></div>${x.note ? `<p class="mall-note look-stage-note">${esc(x.note)}</p>` : ""}`;
+  }
+  // 自建形象、絕招那一頁的頂上：回形象一顆、標題；自建形象多一排四步（走到哪一步亮到哪）
+  const LOOKSUB_STEPS = ["寫樣子", "畫坊作畫", "審核", "進「我的」"];
   function lookSubHtml(sub, body) {
-    const lit = sub === "move" ? (S.movePreview ? 2 : 1) : 1;
-    const steps = LOOKSUB_STEPS[sub].map((t, i) => `<li class="${i < lit ? "on" : ""}"><span>${"一二三四"[i]}</span>${t}</li>`).join("");
-    return `<div class="look-subbar"><button class="btn small ghost" data-act="look-sub" data-sub="">‹ 形象</button><b>${LOOKSUB_NAMES[sub]}</b></div>
-      <ol class="look-steps">${steps}</ol>${body}`;
+    const o = S.mallLooks && S.mallLooks.order;
+    const at = o && (o.list || []).some((x) => x.status === "review") ? 3 : o && o.open ? 2 : 1;
+    const steps = sub === "make" ? `<ol class="look-steps">${LOOKSUB_STEPS.map((t, i) => `<li class="${i < at ? "on" : ""}"><span>${"一二三四"[i]}</span>${t}</li>`).join("")}</ol>` : "";
+    return `<div class="look-subbar"><button class="btn small ghost" data-act="look-sub" data-sub="">‹ 形象</button><b>${LOOKSUB_NAMES[sub]}</b></div>${steps}${body}`;
   }
-  // 形象頁最底那一張絕招：兩列（通用、獨門）各寫一句與價錢，按哪裡都進絕招那一頁
+  // 形象頁最底那一張絕招：身上穿哪一招、招式庫幾招，按了進絕招那一頁
   function moveEntryHtml(m) {
     if (!m) return "";
-    const row = (cls, name, say, price) => `<span class="move-pick ${cls}"><span class="move-ico" aria-hidden="true"></span><span><b>${name}</b><small>${say}</small></span>
-        <span class="price">${ingotSvg()}${price | 0}</span></span>`;
-    const now = !m.has_art ? "先練一門自己合成或自創的武功，才能替它畫招式。" : m.worn ? `身上穿著「${esc(m.worn)}」` : `替「${esc(m.art)}」寫一招`;
-    return `<div class="mall-sub">絕招<small>擂台上演出來</small></div>
-      <button class="move-entry" data-act="look-sub" data-sub="move">${row("basic", "通用絕招", "現成光效，當場學成", m.price_basic)}${row("own", "獨門絕招", "照你寫的另外畫一張", m.price)}
-        <span class="move-now">${now}<b>›</b></span></button>`;
+    const n = (m.library || []).length;
+    const say = !m.has_art && !n ? "先練一門自己合成或自創的武功，才能替它畫招式。" : "換招、寫新的一招都在這裡";
+    return `<div class="mall-sub">絕招<small>${n ? `招式庫 ${n} 招` : "擂台上演出來"}</small></div>
+      <button class="move-entry" data-act="look-sub" data-sub="move"><span class="move-ico" aria-hidden="true"></span>
+        <span><b>${m.worn ? `身上穿著「${esc(m.worn)}」` : "身上沒穿絕招"}</b><small>${say}</small></span><span class="go" aria-hidden="true">›</span></button>`;
   }
-
   // 看動作（Joy 2026-11-01「已經做好的形象跟絕招也要能展示」）：按了在格子上面那塊畫布把這一套十張一張一張演（arena_scene.js 的 lookShow）
   const lookShowBtn = (id, name) => `<button class="btn small ghost look-show-btn" data-act="look-show" data-id="${esc(id)}" data-name="${esc(name)}">看動作</button>`;
   function lookShowHtml() {
@@ -338,55 +364,57 @@
     if (S.mallOpen) renderMall();
     if (S.lookShow && typeof lookShow === "function") lookShow(S.lookShow.id);
   }
-  // 自建形象（第二批；Joy 2026-11-03 要完整流程，示意稿「自建形象：從下單到上市集」）：寫名字與一句樣子下單（先扣元寶），
-  // 圖做好、管理者看過才上架；退回的元寶全退。一次一張。底下「我的自建」一張一張：作畫中、審核中（撤得回來）、做好了
-  // （看動作、換上；定價掛到市集，掛著的寫賣出幾份、撤下）、退回（原因、元寶已退、改一改再送）
-  const LOOK_ORDER_NOTE = "畫好、審過才上身。沒通過的話，元寶全部退回。"; // 待 joy 潤
+  // 自建形象（第二批；Joy 2026-11-03 要完整流程、要裝得下很多，示意稿「自建形象」）：正在畫的那一張（一次一張，撤得回來）；
+  // 沒有在畫才有「寫一套」（名字、一句樣子、想不到就點、下單）；做好的直接進形象頁「我的」，這裡只管市集上架（總共賣了幾份、
+  // 入帳多少、押著多少；掛著的排前面，沒掛的摺起來，按「掛上去」才跳出定價）；退回的摺起來，留最新一張（改一改再送）
+  const LOOK_ORDER_NOTE = "畫好、審過就放進「我的」。沒通過的話，元寶全部退回。"; // 待 joy 潤
   const LOOK_EXAMPLES = ["白衣書生，背著竹簍", "黑甲將軍，手持長槍", "紅衣女刀客"]; // 想不到就點；待 joy 潤
   const MOVE_EXAMPLES = ["一劍寒光九萬里", "背後出現一座大佛擊出一掌", "巨掌從天而降"];
   const exampleHtml = (list, target) => `<div class="look-ex"><span>想不到就點：</span>${list.map((t) =>
     `<button class="btn small ghost" data-act="prompt-ex" data-for="${target}" data-text="${esc(t)}">${esc(t)}</button>`).join("")}</div>`;
-  const ORDER_ICON = { pending: '<span class="look-wait" aria-hidden="true"></span>', review: '<span class="look-wait" aria-hidden="true"></span>',
-    rejected: '<span class="look-no" aria-hidden="true">✕</span>' };
+  const waitIcon = '<span class="look-wait" aria-hidden="true"></span>';
   function lookOrderHtml(o, d) {
     if (!o) return "";
-    const form = o.open ? `<p class="mall-note">${esc("你還有一套在畫：等它好了、或按「撤回」退掉，再下一張。")}</p>`
-      : `<div class="look-order-form"><label for="look-name">名字（${o.name_max | 0} 字內）</label><input class="input" id="look-name" maxlength="${o.name_max | 0}" autocomplete="off" value="${esc(S.lookDraft ? S.lookDraft.name : "")}">
+    const list = o.list || [];
+    const open = list.filter((x) => x.status === "pending" || x.status === "review");
+    const drawing = open.map((x) => `<div class="look-line wait">${waitIcon}<span class="lo-main"><b>${esc(x.name)}</b>
+        <small>${x.status === "review" ? "圖畫好了，等看過就放進「我的」。" : "畫好會通知你，可以先去忙。"}</small></span>
+        <span class="look-st st-${esc(x.status)}">${esc(x.status_text)}</span>${withdrawBtn(x, "look", x.name)}</div>`).join("");
+    const form = o.open ? "" : `<div class="mall-sub">寫一套</div><div class="look-order-form">
+        <label for="look-name">名字（${o.name_max | 0} 字內）</label><input class="input" id="look-name" maxlength="${o.name_max | 0}" autocomplete="off" value="${esc(S.lookDraft ? S.lookDraft.name : "")}">
         <label for="look-prompt">長什麼樣子（${o.prompt_max | 0} 字內）</label><textarea class="input" id="look-prompt" maxlength="${o.prompt_max | 0}" rows="3">${esc(S.lookDraft ? S.lookDraft.prompt : "")}</textarea>
         ${exampleHtml(LOOK_EXAMPLES, "look-prompt")}
         <button class="btn primary buy" data-act="look-order">${ingotSvg()}${o.price | 0}　下單</button><p class="mall-note">${esc(LOOK_ORDER_NOTE)}</p></div>`;
-    const market = (d && d.market) || null;
-    const worn = d ? d.worn : "";
-    const row = (x) => {
-      const look = `u${x.id | 0}`; // 自建的一套就是 u<購買 id>（orders.look_id）
-      const made = x.status === "made";
-      const face = made ? lookFaceHtml(look) : ORDER_ICON[x.status] || "";
-      const use = made ? `<span class="look-row">${lookShowBtn(look, x.name)}${look === worn ? `<span class="look-on">穿著中</span>`
-        : `<button class="btn small primary" data-act="look-wear" data-id="${esc(look)}">換上</button>`}</span>` : "";
-      const sell = made ? lookSellHtml(market, look) : "";
-      const back = x.status === "rejected" ? `<small class="ok">${esc(`${o.price | 0} 元寶已經退給你。`)}</small>` : "";
-      return `<li class="look-order st-${esc(x.status)}"><span class="look-pad">${face}</span><span class="lo-main">
-          <span class="lo-head"><b>${esc(x.name)}</b><span class="look-st st-${esc(x.status)}">${esc(x.status_text)}</span></span>
-          <small>${esc(x.prompt)}</small>${x.reason ? `<small class="bad">原因：${esc(x.reason)}</small>` : ""}${back}
-          ${x.status === "pending" ? `<small>畫好會通知你，可以先去忙。</small>` : x.status === "review" ? `<small>圖畫好了，等看過就上架。</small>` : ""}
-          ${use}${withdrawBtn(x, "look", x.name)}</span>${sell}</li>`;
-    };
-    const list = (o.list || []).slice().reverse().map(row).join(""); // 新的在上
-    return `<div class="mall-sub">寫一套<small>一次一張</small></div>${form}
-      ${list ? `<div class="mall-sub">我的自建</div><ul class="look-orders">${list}</ul>` : ""}`;
+    const rejected = list.filter((x) => x.status === "rejected").reverse();
+    const rej = (x) => `<div class="look-line no"><span class="look-no" aria-hidden="true">✕</span><span class="lo-main"><b>${esc(x.name)}</b>
+        <small>${x.reason ? `${esc(x.reason)}・` : ""}${o.price | 0} 元寶已退</small></span>
+        ${o.open ? "" : `<button class="btn small ghost" data-act="look-redo" data-id="${x.id | 0}">改一改再送</button>`}</div>`;
+    const rejs = rejected.length ? `<div class="mall-sub">退回的<small>${rejected.length} 張</small></div><div class="look-lines">${rejected.slice(0, S.lookRejAll ? rejected.length : 1).map(rej).join("")}
+        ${rejected.length > 1 && !S.lookRejAll ? `<button class="look-fold" data-act="look-fold" data-what="rej">看更早的 ${rejected.length - 1} 張 ▾</button>` : ""}</div>` : "";
+    return `${drawing ? `<div class="mall-sub">正在畫<small>一次一張</small></div><div class="look-lines">${drawing}</div>` : ""}${form}
+      ${lookSellHtml(d && d.market, list.filter((x) => x.status === "made"))}${rejs}`;
   }
-  // 做好了的那一套擺到市集：沒掛的寫價錢掛上去；掛著的寫賣出幾份、撤下（入帳、押著是全部加起來的，寫在最後一行）
-  function lookSellHtml(m, look) {
-    if (!m) return "";
-    const x = (m.mine || []).find((one) => one.look === look);
-    if (!x) return "";
+  // 市集上架：做好的那幾套一行一套，掛著的排前面、沒掛的摺起來；按「掛上去」那一行才跳出定價框
+  function lookSellHtml(m, made) {
+    if (!m || !made.length) return "";
+    const price = (look) => ((m.mine || []).find((one) => one.look === look) || {}).price;
+    const rows = made.map((x) => ({ x, look: `u${x.id | 0}`, p: price(`u${x.id | 0}`) })); // 自建的一套就是 u<購買 id>（orders.look_id）
+    const on = rows.filter((r) => r.p != null), off = rows.filter((r) => r.p == null);
     const pct = Math.round((m.share || 0) * 100);
-    return x.price != null
-      ? `<span class="look-sell"><span>市集上架中・一份 ${x.price | 0}</span><button class="btn small ghost" data-act="market-unlist" data-id="${esc(look)}">撤下</button>
-          <small>全部賣出 ${m.sold | 0} 份・入帳 ${m.paid | 0}・押著 ${m.held | 0}</small></span>`
-      : `<span class="look-sell"><label for="market-price-${esc(look)}">擺到市集，定價</label><input class="input" type="number" id="market-price-${esc(look)}" min="${m.min | 0}" max="${m.max | 0}" value="${m.default | 0}">
-          <button class="btn small" data-act="market-list" data-id="${esc(look)}">掛上去</button>
-          <small>${m.min | 0}～${m.max | 0} 元寶。賣出一份你拿 ${pct}%，押 ${m.hold_days | 0} 天才入帳。</small></span>`;
+    const row = (r) => `<div class="look-line"><span class="look-pad">${lookFaceHtml(r.look)}</span><span class="lo-main"><b>${esc(r.x.name)}</b>
+        <small>${r.p != null ? `掛著・一份 ${r.p | 0}` : "沒掛"}</small></span>
+        ${r.p != null ? `<button class="btn small ghost" data-act="market-unlist" data-id="${esc(r.look)}">撤下</button>`
+          : S.lookSell === r.look ? "" : `<button class="btn small" data-act="look-sell" data-id="${esc(r.look)}">掛上去</button>`}
+        ${S.lookSell === r.look && r.p == null ? `<span class="market-set"><label for="market-price-${esc(r.look)}">定價</label>
+          <input class="input" type="number" id="market-price-${esc(r.look)}" min="${m.min | 0}" max="${m.max | 0}" value="${m.default | 0}">
+          <button class="btn small primary" data-act="market-list" data-id="${esc(r.look)}">掛上去</button></span>` : ""}</div>`;
+    const shown = S.lookSellAll ? rows : on.concat(off.filter((r) => r.look === S.lookSell));
+    const folded = off.length - (S.lookSellAll ? off.length : off.filter((r) => r.look === S.lookSell).length);
+    return `<div class="mall-sub">市集上架<small>${made.length} 套做好的・${on.length} 套掛著</small></div>
+      <div class="look-stats"><span><small>賣出</small><b>${m.sold | 0} 份</b></span><span><small>已入帳</small><b>${m.paid | 0}</b></span><span><small>押著</small><b>${m.held | 0}</b></span></div>
+      <div class="look-lines">${(S.lookSellAll ? on.concat(off) : shown).map(row).join("")}
+        ${folded > 0 ? `<button class="look-fold" data-act="look-fold" data-what="sell">還有 ${folded} 套沒掛　展開 ▾</button>` : ""}</div>
+      <p class="mall-note">${m.min | 0}～${m.max | 0} 元寶。賣出一份你拿 ${pct}%，押 ${m.hold_days | 0} 天才入帳。</p>`;
   }
   // 撤回自己還沒上架的單（Joy 2026-11-02「審圖卡住，玩家也不能退回，會被卡死」）：等圖、審核中都能撤，元寶全退；先問一次
   const withdrawBtn = (x, kind, name) => (x.withdraw
@@ -430,40 +458,52 @@
       if (S.mallOpen) renderMall();
     });
   }
-  // 招式動畫（第三批；Joy 2026-11-03 要完整流程，示意稿「絕招：從寫一句到招式庫」）：最上面寫現在練哪一門、什麼打法、身上穿哪一招；
-  // 寫一句 → 先看看（伺服器把這一句變成導演稿，畫布照稿演，不扣元寶）→ 通用或獨門二選一 → 招式庫（穿著的、換得上的、作畫中的、
-  // 這一季演不出來的）。每一季綁到一門武功上（同打法免費改綁）；擂台上出招時疊那一張光效。範例那一格是 /static/img/arena/fx_sample.webp 的第四格
+  // 招式動畫（第三批；Joy 2026-11-03 要完整流程、要裝得下很多，示意稿「絕招」）：最上面現在練哪一門、什麼打法、身上穿哪一招；
+  // 正在畫的獨門一條（撤得回來）；招式庫照打法分頁（先開現在的打法），一招一行（演一次、換上／穿著）；「寫一招新的」平常收著
+  // （招式庫空的就直接展開）：寫一句 → 先看看（伺服器把這一句變成導演稿，畫布照稿演，不扣元寶）→ 通用或獨門。
+  // 每一季綁到一門武功上（同打法免費改綁）；擂台上出招時疊那一張光效。範例那一格是 /static/img/arena/fx_sample.webp 的第四格
   const MOVE_IMG = (id) => (/^m\d+$/.test(id || "") ? `/api/looks/img/${id}/fx${LOOK_VER()}` : "/static/img/arena/fx_sample.webp");
+  const MOVE_STYLES = [["slash", "揮砍"], ["pole", "長兵"], ["fist", "拳腳"], ["shoot", "射"]];
   function moveFxHtml(id) { return `<span class="move-fx" aria-hidden="true" style="background-image:url('${MOVE_IMG(id)}')"></span>`; }
   function moveHtml(m) {
     if (!m) return "";
+    const lib = m.library || [];
+    const wornRow = lib.find((x) => x.worn);
     const now = !m.has_art ? `<p class="mall-note">先練一門自己合成或自創的武功，才能替它畫招式。</p>`
-      : `<div class="move-now-card"><span><small>現在練的</small><b>${esc(m.art)}</b><small>打法 ${esc(m.style_text)}・${m.worn ? `身上穿著「${esc(m.worn)}」` : "身上沒穿絕招"}</small></span></div>`
+      : `<div class="move-now-card"><span><small>現在練的</small><b>${esc(m.art)}<em>・打法 ${esc(m.style_text)}</em></b><small>${m.worn ? `身上穿著「${esc(m.worn)}」` : "身上沒穿絕招"}</small></span>
+          ${wornRow && wornRow.scene ? `<button class="btn small ghost" data-act="move-show" data-id="${esc(wornRow.move)}">${S.moveShow === wornRow.move ? "收起" : "演一次 ▶"}</button>` : ""}</div>`
         + (m.asleep_text ? `<p class="mall-note bad">${esc(m.asleep_text)}</p>` : "");
-    // 幾招都可以創：表單一直在。獨門一次只能有一張在做（畫坊的量），那一格暫時灰掉，通用照樣買得到
-    const own = m.open ? `<span class="move-opt off"><b>獨門</b><small>你還有一張獨門在畫：等它好了、或撤回，才能再下一張。</small></span>`
+    const pending = (m.list || []).map((x) => `<div class="look-line ${x.status === "rejected" ? "no" : "wait"}">${x.status === "rejected" ? '<span class="look-no" aria-hidden="true">✕</span>' : waitIcon}
+        <span class="lo-main"><b>${esc(x.prompt)}</b><small>${esc(x.art)}・${esc(x.style_text)}${moveArtsNote(x)}${x.reason ? `（${esc(x.reason)}）` : ""}</small></span>
+        <span class="look-st st-${esc(x.status)}">${esc(x.status_text)}</span>${withdrawBtn(x, "move", x.art)}</div>`).join("");
+    const show = S.moveShow ? `<canvas id="scene-preview" class="scene-preview" width="720" height="320" aria-label="絕招演一次"></canvas>` : "";
+    // 招式庫：照打法分頁，先開現在的打法（沒有就開第一個有招的）；別的打法那一頁寫一句這一季演不出來
+    const tabs = MOVE_STYLES.map(([k, name]) => [k, name, lib.filter((x) => x.style === k).length]);
+    const tab = tabs.some(([k]) => k === S.moveTab) ? S.moveTab : (tabs.find(([k, , n]) => k === m.style && n) || tabs.find(([, , n]) => n) || [m.style])[0];
+    const row = (x) => `<div class="look-line move-line${x.worn ? " on" : ""}"><span class="look-pad">${x.scene ? `<span class="move-fx move-seal" aria-hidden="true">絕</span>` : moveFxHtml(x.move)}</span>
+        <span class="lo-main"><b>${esc(x.prompt)}</b><small>${esc(x.art)}</small></span>
+        ${x.scene ? `<button class="btn small ghost play" data-act="move-show" data-id="${esc(x.move)}" aria-label="${S.moveShow === x.move ? "收起" : "演一次"}">${S.moveShow === x.move ? "■" : "▶"}</button>` : "<span></span>"}
+        ${x.wearable ? `<button class="btn small primary" data-act="move-bind" data-id="${x.id | 0}">換上</button>`
+          : x.worn ? `<button class="btn small ghost" data-act="move-bind" data-id="0">脫下</button>` : "<span></span>"}</div>`;
+    const inTab = lib.filter((x) => x.style === tab);
+    const library = lib.length ? `<div class="mall-sub">招式庫<small>共 ${lib.length} 招・換季也帶著走</small></div>
+      <div class="look-segs" role="tablist">${tabs.map(([k, name, n]) => `<button class="${tab === k ? "on" : ""}" role="tab" aria-selected="${tab === k}" data-act="move-tab" data-tab="${k}">${name} ${n}</button>`).join("")}</div>
+      ${tab !== m.style && m.has_art ? `<p class="mall-note">這一頁的招，這一季換回${esc((MOVE_STYLES.find(([k]) => k === tab) || [, ""])[1])}的兵器才演得出來。</p>` : ""}
+      ${show}<div class="look-lines">${inTab.map(row).join("") || `<p class="mall-note">這一種打法還沒有招。</p>`}</div>` : show;
+    // 寫一招新的：平常收著（招式庫空的直接展開）。獨門一次只能有一張在做（畫坊的量），那一格暫時灰掉，通用照樣買得到
+    const formOpen = S.moveForm || !lib.length;
+    const own = m.open ? `<span class="move-opt off"><b>獨門</b><small>還有一張獨門在畫：等它好了、或撤回，才能再下一張。</small></span>`
       : `<span class="move-opt own"><b>獨門</b><small>照你寫的另外畫，畫好審過才上身；沒過全退。</small>
           <button class="btn small primary buy" data-act="move-order">${ingotSvg()}${m.price | 0}</button></span>`;
-    const form = !m.has_art ? "" : `<div class="mall-sub">寫一句<small>${m.prompt_max | 0} 字內・只能中文</small></div>
+    const form = !m.has_art || S.moveShow ? "" : !formOpen ? `<button class="btn primary buy move-new" data-act="move-form">＋ 寫一招新的</button>`
+      : `<div class="move-form"><div class="mall-sub">寫一句<small>${m.prompt_max | 0} 字內・只能中文</small></div>
       <div class="look-order-form"><label for="move-prompt">這一招長什麼樣子</label><textarea class="input" id="move-prompt" maxlength="${m.prompt_max | 0}" rows="2">${esc(S.moveDraft || "")}</textarea>
         ${exampleHtml(MOVE_EXAMPLES, "move-prompt")}
         <button class="btn ghost" data-act="move-preview">先看看 ▶（不花錢）</button></div>${moveSceneHtml()}
-      <div class="mall-sub">選一種</div>
       <div class="move-opts"><span class="move-opt"><b>通用</b><small>用現成的光效演，當場學成。</small>
           <button class="btn small buy" data-act="move-order" data-basic="1">${ingotSvg()}${m.price_basic | 0}</button></span>${own}</div>
-      <p class="mall-note">${esc(m.order_style_note || "")}</p>`;
-    const show = S.moveShow ? `<canvas id="scene-preview" class="scene-preview" width="720" height="320" aria-label="絕招演一次"></canvas>` : "";
-    const lib = (m.library || []).map((x) => `<li class="look-order move-row${x.worn ? " on" : ""}${x.asleep ? " asleep" : ""}"><span class="look-pad">${x.scene ? `<span class="move-fx move-seal" aria-hidden="true">絕</span>` : moveFxHtml(x.move)}</span>
-        <span class="lo-main"><span class="lo-head"><b>${esc(x.art)}</b>${x.worn ? `<span class="look-st st-made">穿著</span>` : x.asleep ? `<span class="look-st">這一季演不出來</span>` : x.wearable ? `<span class="look-st st-made">可以換上</span>` : ""}</span>
-        <small>${esc(x.style_text)}・${esc(x.prompt)}</small>${x.asleep ? `<small class="bad">${esc(x.asleep_text)}</small>` : ""}
-        <span class="look-row">${x.scene ? `<button class="btn small ghost" data-act="move-show" data-id="${esc(x.move)}">${S.moveShow === x.move ? "收起" : "演一次 ▶"}</button>` : ""}
-        ${x.wearable ? `<button class="btn small primary" data-act="move-bind" data-id="${x.id | 0}">換上</button>`
-          : x.worn ? `<button class="btn small ghost" data-act="move-bind" data-id="0">脫下</button>` : ""}</span></span></li>`).join("");
-    const list = (m.list || []).map((x) => `<li class="look-order st-${esc(x.status)}"><span class="look-pad">${ORDER_ICON[x.status] || ""}</span>
-        <span class="lo-main"><span class="lo-head"><b>${esc(x.art)}</b><span class="look-st st-${esc(x.status)}">${esc(x.status_text)}</span></span>
-        <small>${esc(x.style_text)}・${esc(x.prompt)}${moveArtsNote(x)}${x.reason ? `（${esc(x.reason)}）` : ""}</small>${withdrawBtn(x, "move", x.art)}</span></li>`).join("");
-    return `${now}${S.moveShow ? "" : form}
-      ${lib || list ? `<div class="mall-sub">招式庫<small>換季也帶著走</small></div>${show}<ul class="look-orders">${lib}${list}</ul>` : ""}`;
+      <p class="mall-note">${esc(m.order_style_note || "")}</p></div>`;
+    return `${now}${pending ? `<div class="look-lines">${pending}</div>` : ""}${library}${form}`;
   }
   const moveArtsNote = (row) => { const need = row.arts || []; return need.length ? `・要畫「${esc(need.join("」「"))}」` : ""; }; // 一句話自創要畫的那幾樣
   // 先看看：伺服器把這一句變成導演稿（不扣元寶），在下面那塊畫布照稿演（arena_scene.js 的 scenePreview）
@@ -528,14 +568,6 @@
       if (S.mallOpen) renderMall();
     });
   }
-  // 形象市集（第四批）：別人做的一套一張卡（預覽、名字、誰做的、價錢一顆）。自己做好的那幾套怎麼掛、賣了多少，寫在自建形象那一頁（lookSellHtml）
-  function lookMarketHtml(m) {
-    if (!m) return "";
-    const card = (x) => `<div class="look-card"><span class="look-pad">${lookFaceHtml(x.look)}</span><b>${esc(x.name)}</b><small>${esc(x.seller)}做的</small>
-        <span class="look-row">${lookShowBtn(x.look, x.name)}<button class="btn small buy" data-act="market-buy" data-id="${esc(x.look)}" data-name="${esc(x.name)}" data-price="${x.price | 0}">${ingotSvg()}${x.price | 0}</button></span></div>`;
-    const shelf = m.shelf.length ? `<div class="mall-grid look-grid">${m.shelf.map(card).join("")}</div>` : `<p class="mall-note">別的玩家自建、上架的形象會擺在這裡。現在還沒有人上架。</p>`;
-    return `<div class="mall-sub">形象市集</div>${shelf}`;
-  }
   function lookMarketAsk(look, name, price) {
     const ref = mallRef();
     ask(`花 ${price | 0} 元寶買下市集上的「${name}」？`, "買", () => lookMarketDo({ op: "buy", look, ref }));
@@ -549,6 +581,7 @@
     await busy(async () => {
       const r = await api("/api/looks/market", body);
       if (r.looks) S.mallLooks = r.looks;
+      S.lookSell = null;
       if (r.main) setMain(r.main);
       if (r.main && r.main.mall && S.mallData) S.mallData.balance = r.main.mall.balance;
       const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -584,6 +617,26 @@
   function lookSubTo(sub) {
     S.lookSub = LOOKSUB_NAMES[sub] ? sub : "";
     S.lookShow = null; S.moveShow = null; S.mallSay = null;
+    renderMall(false);
+  }
+  // 形象那一頁自己記的：點了哪一套、在哪一頁、篩哪一類、看了幾格、展開了什麼（換帳號、出店都清掉）
+  function lookReset() {
+    S.lookPick = null; S.lookSeg = "mine"; S.lookFilter = "all"; S.lookLimit = 0; S.lookSell = null; S.lookSellAll = false; S.lookRejAll = false;
+    S.moveTab = null; S.moveForm = false;
+  }
+  function lookPickTo(id) { S.lookPick = id; S.lookShow = null; renderMall(); }
+  function lookSegTo(seg) { S.lookSeg = seg; S.lookLimit = 0; S.lookShow = null; renderMall(); }
+  function lookFilterTo(f) { S.lookFilter = f; S.lookLimit = 0; renderMall(); }
+  function lookMore() { S.lookLimit = Math.max(LOOK_PAGE, S.lookLimit | 0) + LOOK_PAGE; renderMall(); }
+  function lookFold(what) { if (what === "rej") S.lookRejAll = true; else S.lookSellAll = true; renderMall(); }
+  function lookSellTo(look) { S.lookSell = S.lookSell === look ? null : look; renderMall(); }
+  function moveTabTo(tab) { S.moveTab = tab; S.moveShow = null; renderMall(); }
+  function moveFormOpen() { S.moveForm = true; renderMall(); }
+  // 退回的那一張「改一改再送」：名字、樣子填回寫一套的框
+  function lookRedo(id) {
+    const o = S.mallLooks && S.mallLooks.order;
+    const x = o && (o.list || []).find((one) => (one.id | 0) === (Number(id) | 0));
+    if (x) S.lookDraft = { name: x.name, prompt: x.prompt };
     renderMall(false);
   }
   // 「想不到就點」：把那一句填進框裡（自建形象、絕招各一個框），草稿跟著記，重畫也還在
