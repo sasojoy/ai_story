@@ -5704,22 +5704,28 @@ class ArtsScenario(Scenario):
         emit("同伴的進度", self.world.get_companion(mate).model_dump())
         self.state_of(who, "傳功之後")
 
-    def milestone(self) -> None:
-        """境界卡（減法季屬性五段：兩種現役設定都關著，season21、week7 在記憶體裡打開；兩份程式同一套）：卡、配兩點（配點那一句）、配完收卡。"""
-        who = self.TEACHER
+    @contextlib.contextmanager
+    def milestones_on(self):
+        """減法季屬性五段：兩種現役設定（season21、week7）都關著，在記憶體裡打開（兩份程式同一套），做完擺回來。"""
         jf = getattr(self.c.config, "jianfa", None)
         before = getattr(jf, "stat_milestones", None)
         if jf is not None and self.profile in DUEL_PROFILES:
             jf.stat_milestones = True
         try:
+            yield
+        finally:
+            if jf is not None:
+                jf.stat_milestones = before
+
+    def milestone(self) -> None:
+        """境界卡（減法季屬性五段，milestones_on）：卡、配兩點（配點那一句）、配完收卡。"""
+        who = self.TEACHER
+        with self.milestones_on():
             emit("境界卡", self.main(who).get("milestone"))
             self.do(who, "allocate", {"stat": "str"})
             emit("境界卡（配了一點）", self.main(who).get("milestone"))
             self.do(who, "allocate", {"stat": "con"})
             emit("境界卡（配完）", self.main(who).get("milestone"))
-        finally:
-            if jf is not None:
-                jf.stat_milestones = before
         self.state_of(who, "境界卡之後")
 
     def seize(self) -> None:
@@ -5751,6 +5757,10 @@ class ArtsScenario(Scenario):
         emit("契機的破境卡", (self.main(who).get("status") or {}).get("ascension"))
         self.do(who, "ascend_line")
         emit("契機的破境卡（寫回之後）", (self.main(who).get("status") or {}).get("ascension"))
+        with self.milestones_on():  # 單點突變補的（Task 5）：打過幾場、威力夠大，配點那一句才寫全隊前後；身法不動威力、不寫那一段
+            self.do(who, "allocate", {"stat": "str"})
+            self.do(who, "allocate", {"stat": "agi"})
+        self.state_of(who, "契機之後配點")
 
     def seize_sure(self, who: str, loc: str) -> None:
         """打一場必中的契機：機會在記憶體裡擺成必中、難度比不設門檻（兩份程式同一套），做完擺回來。"""
@@ -5780,11 +5790,19 @@ class ArtsScenario(Scenario):
                 "tier": record.tier, "difficulty": record.difficulty, "our_power": record.our_power, "notes": record.notes})
 
     def zhuifeng(self) -> None:
-        """追風步的舊品質（中間一版寫成了絕學）：讀檔時拿掉（_drop_stale_references → _drop_old_zhuifeng），按一下存回去。"""
+        """追風步的舊品質（中間一版寫成了絕學）：讀檔時拿掉（_drop_stale_references → _drop_old_zhuifeng），按一下存回去。
+        手上要真的有追風步（單點突變補的，Task 5）：不在手上的那一門，品質讀檔時本來就照「手上有的」清掉，拿不拿掉看不出來。"""
         who = self.PRACTICE
-        self.edit(who, lambda p: p.art_quality.__setitem__("zhuifeng", "絕學"))
+
+        def fn(p) -> None:
+            if "zhuifeng" not in p.arts:
+                p.arts.append("zhuifeng")
+            p.art_quality["zhuifeng"] = "絕學"
+
+        self.edit(who, fn)
         self.mx(who, "ascend_dismiss")
-        emit("追風步的品質", self.chars.load(who).player.art_quality.get("zhuifeng"))
+        p = self.chars.load(who).player
+        emit("追風步的品質", {"held": "zhuifeng" in p.arts, "quality": p.art_quality.get("zhuifeng")})
 
     def pages(self) -> None:
         """每個人最後的修練頁（唯讀那十一個：名冊、功法卡、背包、持有數、功法庫、意境、等著定名的、傳功鈕……）與江湖畫面。"""
