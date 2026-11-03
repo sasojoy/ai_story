@@ -38,7 +38,7 @@
 |---|---|
 | on_due(ctx) | Game.world_tick、sync、advance 結算到時的事那一行（約戰） |
 | on_away(ctx, away_from) | Game.sync 補算完本人下線那一段之後（殺手找上門） |
-| deliver_results(ctx) | Game.sync 收場補送那一格：補份量快照之後、玉璽碎片之前（決戰） |
+| deliver_results(ctx) | Game.sync 收場補送那一格：時刻表大事之後、玉璽碎片之前（決戰：先補份量快照〔全部拆包第 8 批把原本緊接著的前一行併進來〕、再補送） |
 | deliver_notices(ctx) | Game.sync 別人捎來的那一格：護衛補帳之後、領地爭奪換天之前（酒肆的風聲、殺手單、託付留意） |
 | choose_unlisted(ctx, option_id) | Game.choose 查選單之前：不在選單上的動作（約戰的 sortie:*） |
 | after_action(ctx) | Game.choose 最後：本人做完一件事（殺手檢查） |
@@ -394,7 +394,7 @@ def on_away(ctx: Game, away_from: float) -> None:
 
 
 def deliver_results(ctx: Game) -> None:
-    """收場補送（sync：補份量快照之後、玉璽碎片之前）。"""
+    """收場補送（sync：時刻表大事之後、玉璽碎片之前；決戰包在這一格先補份量快照，全部拆包第 8 批）。"""
     for f in registered():
         f.deliver_results(ctx)
 
