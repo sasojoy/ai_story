@@ -251,6 +251,9 @@ class BattleMvp(BaseModel):
     look: str = ""  # 送出那一刻穿的形象
     weapon: str = ""  # 送出那一刻手上兵器的種類（劍、槍……；空的是空手）
     text: str = ""  # 他這一搏寫的那一句
+    target: str = ""  # 這一搏點名的對面參戰者（Joy 2026-11-03「點名敵對玩家，變成兩位玩家單挑的場景」）；沒點名是空的
+    target_faction: str = ""
+    target_look: str = ""  # 被點名的人穿的形象（畫面上受擊的是他的樣子）
 
 
 class BattleRoundRecord(BaseModel):

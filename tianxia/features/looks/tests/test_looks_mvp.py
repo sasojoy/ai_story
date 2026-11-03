@@ -95,3 +95,23 @@ def test_a_won_gamble_in_a_real_showdown_crowns_the_player(monkeypatch):
     assert shown["move"] == "m7" and shown["round"] == battle.round_number and shown["faction"] == "guan"
     (record,) = game.world.battle_rounds(battle.record_id)
     assert record.mvp == "甲客" and record.messages[-1] == "★ 本回合 MVP：甲客，絕招「大佛一掌」"
+
+
+def test_a_named_foe_is_recorded_for_the_duel_scene():
+    """點名了對面的人（Joy 2026-11-03「變成兩位玩家單挑的場景，被點名成功的玩家受擊」）：記下那一位與他穿的形象。"""
+    b = _instance(["甲"], {"甲": 0})
+    b.participants["乙"] = BattleParticipant(name="乙", faction="huang", neili=100, neili_cap=100, is_bot=True)
+    b.round_number = 2
+    b.round.ults["甲"] = ULT
+
+    def resolve():
+        b.round_number = 3
+        b.participants["甲"].gambles_won = 1
+        b.last_targets = {"乙": ["甲"]}
+        return []
+
+    mvp.crowned(b, resolve, lambda q: f"look-of-{q.name}")
+    shown = mvp.latest(b)
+    assert (shown["target"], shown["target_faction"], shown["target_look"]) == ("乙", "huang", "look-of-乙")
+    b2 = _instance(["甲"], {"甲": 1})
+    assert mvp.crown(b2, {"甲": ULT}, {}, {}).target == ""  # 沒點名：周圍的敵軍

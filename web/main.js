@@ -467,19 +467,20 @@
     const cut = muster >= 0 ? muster + "</div></div>\n".length : html.startsWith("<p>") ? html.indexOf("</p>") + 4 : 0;
     return html.slice(0, cut) + gaugeHtml(g) + extra + html.slice(cut);
   }
-  // 決戰的回合 MVP（Joy 2026-11-03「在放手一搏成功的人裡面且他有絕招動畫的挑一個當這回合的MVP，播放他的絕招」）：伺服器挑好的
-  // main.battle_mvp（剛結算完的那一回合才有），排在戰局條底下：誰、哪一軍、絕招的名字、他這一搏寫的那一句，畫布照他的稿演一次
-  // （arena_scene.js 的 mvpPlay；同一位不重演，「再演一次」從頭演）。只切 main.js 的網頁測試沒有 mvpPlay：照樣畫字、不演
+  // 決戰的回合 MVP（Joy 2026-11-03「每當一回合結束時，結算時有一個跳顯視窗華麗的展示絕招」）：伺服器挑好的 main.battle_mvp
+  // （剛結算完的那一回合才有）。新的一位第一次看到時跳出視窗演他的絕招（arena_scene.js 的 mvpPlay；看過的不再自己跳），
+  // 戰局條底下留一行：誰、哪一軍、絕招的名字，加一顆「再看一次」。只切 main.js 的網頁測試沒有 mvpPlay：照樣畫字、不跳
   function battleMvpHtml(m) {
     const v = m.battle_mvp, g = m.battle_gauge;
     if (!v || !g) return "";
-    const side = [g.left, g.right].find((w) => w && w.id === v.faction);
+    const names = {};
+    for (const w of [g.left, g.right]) if (w && w.id) names[w.id] = { name: w.name, mine: !!w.mine };
+    const side = names[v.faction];
     const who = side ? `（${esc(side.name)}${side.mine ? "・我方" : ""}）` : "";
     const move = v.move_name ? `・絕招「${esc(v.move_name)}」` : "";
-    if (typeof mvpPlay === "function") mvpPlay(v);
-    return `<div class="battle-mvp${side && side.mine ? " mine" : ""}"><div class="mvp-head">★ 第 ${v.round | 0} 回合 MVP　<b>${esc(v.name)}</b>${who}${move}</div>`
-      + `<canvas id="mvp-stage" class="mvp-stage" width="720" height="320" aria-label="${esc(`${v.name}的絕招`)}"></canvas>`
-      + `${v.text ? `<p class="mvp-text">「${esc(v.text)}」</p>` : ""}<button class="btn small ghost" data-act="mvp-replay">再演一次</button></div>`;
+    if (typeof mvpPlay === "function") setTimeout(() => mvpPlay(v, names), 0); // 整頁畫完再跳（視窗掛在 body 上）
+    return `<div class="battle-mvp${side && side.mine ? " mine" : ""}"><span class="mvp-head">★ 第 ${v.round | 0} 回合 MVP　<b>${esc(v.name)}</b>${who}${move}</span>`
+      + `<button class="btn small ghost" data-act="mvp-replay">再看一次</button></div>`;
   }
   // 攻城戰畫面（領地爭奪第三批 A，企劃者挑甲）：沿用決戰畫面，最上面那一行換成一條「攻城・地點｜守方：某某（或守將）」（main.siege，
   // engine.siege_banner；三方混戰、轉回單方、兩軍相爭的字是伺服器給的）。引擎場景第一行是 **攻城・地點**：把那一行換成這一條（不多佔一行；

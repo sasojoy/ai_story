@@ -11934,7 +11934,7 @@ class Game:
 
     def _round_mvp(self, battle: battle_instance.BattleInstance, resolve: Callable[[], list[str]]) -> list[str]:
         """回合 MVP（功能包 looks）：包著回合結算，結算完挑一位、回合紀錄多一行。"""
-        return looks_actions.round_mvp(battle, resolve)
+        return looks_actions.round_mvp(self, battle, resolve)
 
     def _arena_move_art(self, move: str) -> str:
         """招式動畫綁在哪一門上：疊得上光效（move 不是空的）就是現在練的那一門（looks 只在現在練的那一門綁了招式時才給 move）。"""

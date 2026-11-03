@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 
-from tianxia.battle_instance import BattleInstance, BattleMvp  # 過渡：待搬（決戰的共用狀態；總表第 54 批拆兩半）
+from tianxia.battle_instance import BattleInstance, BattleMvp, BattleParticipant  # 過渡：待搬（決戰的共用狀態；總表第 54 批拆兩半）
 
 LINE = "★ 本回合 MVP：{name}，絕招「{move}」"  # 待 joy 潤
 LINE_BARE = "★ 本回合 MVP：{name}"  # 導演稿沒有招名時（舊稿）
@@ -23,9 +23,21 @@ def _order(instance: BattleInstance, round_no: int, name: str) -> str:
     return hashlib.sha256(f"決戰|{instance.battle_id}|{instance.record_id}|{round_no}|{name}".encode()).hexdigest()
 
 
-def crown(instance: BattleInstance, ults: dict[str, dict[str, str]], rates: dict[str, int], won: dict[str, int]) -> BattleMvp | None:
+def target_of(instance: BattleInstance, name: str) -> BattleParticipant | None:
+    """這一回合他點名的對面參戰者（resolve_round 結算完把「被點名的人 → 點名他的人」記在 last_targets）；沒點名是 None。"""
+    for target, by in instance.last_targets.items():
+        if name in by and (q := instance.participants.get(target)) is not None:
+            return q
+    return None
+
+
+def crown(
+    instance: BattleInstance, ults: dict[str, dict[str, str]], rates: dict[str, int], won: dict[str, int],
+    look_for: Callable[[BattleParticipant], str] | None = None,
+) -> BattleMvp | None:
     """剛結算完的那一回合（instance.round_number）挑 MVP；ults、rates、won 是結算前拍的（這一回合記的絕招、評的成功率、
-    每個人到上一回合為止成了幾次）。挑到了記進 instance.mvps 與最後一筆回合紀錄，回傳那一位；沒人符合回 None。"""
+    每個人到上一回合為止成了幾次）。挑到了記進 instance.mvps 與最後一筆回合紀錄，回傳那一位；沒人符合回 None。
+    他點名了對面的人就記下那一位（畫面演兩人單挑）；look_for 給被點名的人穿的形象（沒給是空的，畫預設那一套）。"""
     round_no = instance.round_number
     if not ults or not round_no:
         return None
@@ -38,9 +50,12 @@ def crown(instance: BattleInstance, ults: dict[str, dict[str, str]], rates: dict
     name = min(hits, key=lambda n: (rates.get(n, 100), _order(instance, round_no, n)))
     ult, p = ults[name], instance.participants[name]
     record = instance.rounds[-1] if instance.rounds and instance.rounds[-1].round_number == round_no else None
+    target = target_of(instance, name)
     mvp = BattleMvp(
         round=round_no, name=name, faction=p.faction, move=ult["move"], move_name=ult.get("name", ""),
         look=ult.get("look", ""), weapon=ult.get("weapon", ""), text=record.custom_texts.get(name, "") if record is not None else "",
+        target=target.name if target is not None else "", target_faction=target.faction if target is not None else "",
+        target_look=look_for(target) if target is not None and look_for is not None else "",
     )
     instance.mvps.append(mvp)
     if record is not None:
@@ -52,13 +67,15 @@ def line(mvp: BattleMvp) -> str:
     return LINE.format(name=mvp.name, move=mvp.move_name) if mvp.move_name else LINE_BARE.format(name=mvp.name)
 
 
-def crowned(instance: BattleInstance, resolve: Callable[[], list[str]]) -> list[str]:
+def crowned(
+    instance: BattleInstance, resolve: Callable[[], list[str]], look_for: Callable[[BattleParticipant], str] | None = None,
+) -> list[str]:
     """包著 battle_instance.resolve_round：結算前拍下這一回合記的絕招與成了幾次，結算完挑 MVP，挑到了回合紀錄最後多一行。"""
     ults = {n: dict(u) for n, u in instance.round.ults.items()}
     rates = dict(instance.round.success_rates)
     won = {n: p.gambles_won for n, p in instance.participants.items()}
     msgs = resolve()
-    mvp = crown(instance, ults, rates, won)
+    mvp = crown(instance, ults, rates, won, look_for)
     if mvp is not None:
         msgs = [*msgs, line(mvp)]
         record = instance.rounds[-1] if instance.rounds else None
@@ -77,5 +94,6 @@ def latest(instance: BattleInstance) -> dict | None:
     return {
         "id": f"{instance.record_id or 0}-{mvp.round}", "round": mvp.round, "name": mvp.name, "faction": mvp.faction,
         "move": mvp.move, "move_name": mvp.move_name, "look": mvp.look, "weapon": mvp.weapon, "text": mvp.text,
+        "target": mvp.target, "target_faction": mvp.target_faction, "target_look": mvp.target_look,
     }
 

@@ -341,37 +341,139 @@ function lookShowTick(now) {
   LSP.raf = requestAnimationFrame(lookShowTick);
 }
 
-// ── 決戰的回合 MVP（Joy 2026-11-03「我們的目的是展示，玩家也會想要炫……挑一個當這回合的MVP，播放他的絕招」）──
-// 伺服器挑好（main.battle_mvp：剛結算完的那一回合放手一搏成了、穿著絕招的那一位；每個看的人同一位），這裡在決戰畫面
-// #mvp-stage 那一塊畫布照他的稿演一次（站在台上的是他的樣子、手上他的兵器），演完停在打中的那一刻；「再演一次」從頭演。
-// 每次輪詢重畫整頁畫布會換一塊：演完了也接得上（換了一塊就把停住的那一格再畫一次）
-const MVP = { id: "", mid: "", look: null, t0: 0, raf: 0, cv: null, done: false };
-function mvpPlay(v, again) {
-  if (!v || !v.move) return;
-  if (!again && MVP.id === v.id) { if (!MVP.raf && typeof requestAnimationFrame === "function") MVP.raf = requestAnimationFrame(mvpTick); return; }
-  MVP.id = v.id; MVP.mid = v.move; MVP.t0 = 0; MVP.done = false; MVP.cv = null;
-  MVP.look = { me: v.weapon || "", foe: "", me_look: v.look || "", foe_look: "" };
+// ── 決戰的回合 MVP（Joy 2026-11-03「每當一回合結束時，結算時有一個跳顯視窗華麗的展示絕招，說明那個陣營的誰做了什麼，成功，
+// 官軍/黃巾軍士氣大振……搭配周圍敵軍被絕招打倒；如果玩家的放手一搏是點名敵對玩家，變成兩位玩家單挑的場景，被點名成功的玩家受擊」）──
+// 伺服器挑好（main.battle_mvp：剛結算完的那一回合放手一搏成了、穿著絕招的那一位；每個看的人同一位）。新的一位第一次看到時
+// 跳出視窗（#mvp-pop，掛在 body 上、不跟著整頁重畫），在營地前照他的稿演一次：沒點名是對面一排小兵被打倒（走一趟的小兵圖），
+// 點名了對面的人就是兩人單挑、被點名的人受擊跪倒。打中那一刻寫「成功！」，接著「某軍士氣大振！」。演完停在最後一格；
+// 「再演一次」從頭演、「收起」關掉；戰場名字底下那一行「再看一次」重新打開。系統設定「減少動態」的人直接看最後一格。
+const MVP = { v: null, names: {}, t0: 0, raf: 0, imgs: {}, shown: "", step: 0 };
+const MVP_SEEN_KEY = "mvp-seen";
+const MVP_ME_X = 200, MVP_FOE_X = 520;
+// 對面的小兵（走一趟的圖：每格 220×220、腳底 (100, 212)；黃巾那一套臉朝右要翻、官兵那一套臉朝左）。前排兩個、後排三個
+const MVP_CROWD = [[430, 0], [560, 0], [495, 1], [625, 1], [370, 1]];
+const MVP_CHEER = ["士氣大振", "軍心大振", "歡聲雷動", "氣勢如虹"]; // 待 joy 潤
+function mvpSheet(name) {
+  if (!MVP.imgs[name] && typeof Image === "function") { const im = new Image(); im.src = `/static/img/outing/${name}.webp`; MVP.imgs[name] = im; }
+  return MVP.imgs[name];
+}
+function mvpHash(s) { let h = 0; for (const ch of s) h = (h * 31 + ch.codePointAt(0)) >>> 0; return h; }
+function mvpSeen(id) { try { return localStorage.getItem(MVP_SEEN_KEY) === id; } catch (e) { return MVP.shown === id; } }
+function mvpMarkSeen(id) { MVP.shown = id; try { localStorage.setItem(MVP_SEEN_KEY, id); } catch (e) { /* 私密視窗：這一次記著就好 */ } }
+const mvpPopEl = () => (typeof document !== "undefined" ? document.getElementById("mvp-pop") : null);
+const mvpStill = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+const mvpEsc = (t) => String(t == null ? "" : t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// names：陣營 id → { name, mine }（決戰畫面戰局條的兩邊）。新的一位才自己跳出來；force 是「再看一次」
+function mvpPlay(v, names, force) {
+  if (!v || !v.move || typeof document === "undefined") return;
+  MVP.v = v; MVP.names = names || {};
+  if (!force && (mvpSeen(v.id) || document.getElementById("mvp-pop"))) return;
+  mvpMarkSeen(v.id);
   if (typeof ringLoad === "function") ringLoad();
-  if (typeof ringWarmLook === "function") ringWarmLook(v.look || "");
+  if (typeof ringWarmLook === "function") { ringWarmLook(v.look || ""); ringWarmLook(v.target_look || ""); }
   sceneFor(v.move);
+  ["bg_camp_far", "bg_camp_ground", "foe_idle_attack", "foe_hit_fall", "foe_guan_idle_attack", "foe_guan_hit_fall"].forEach(mvpSheet);
+  mvpOpen();
+}
+function mvpOpen() {
+  const { v } = MVP, side = MVP.names[v.faction] || {}, foe = MVP.names[v.target_faction] || {};
+  const mvpSideName = side.name || "", cheer = MVP_CHEER[mvpHash(`${v.id}|${v.name}`) % MVP_CHEER.length];
+  const mvpMoveText = v.move_name ? `使出絕招「${mvpEsc(v.move_name)}」` : "使出絕招";
+  const mvpHitLine = v.target ? `<div class="mvp-hit">${foe.name ? `${mvpEsc(foe.name)} ` : ""}<b>${mvpEsc(v.target)}</b> 中招！</div>` : "";
+  if (mvpPopEl()) mvpPopEl().remove();
+  const mvpNew = document.createElement("div"), pop = mvpNew;
+  pop.id = "mvp-pop";
+  pop.className = `mvp-pop side-${mvpEsc(v.faction)}${side.mine ? " mine" : ""}`;
+  pop.setAttribute("role", "dialog");
+  pop.setAttribute("aria-label", `第 ${v.round | 0} 回合 MVP：${v.name}`);
+  pop.innerHTML = `<div class="mvp-card">
+    <div class="mvp-ribbon">第 ${v.round | 0} 回合　<span>★ MVP ★</span></div>
+    <canvas id="mvp-stage" class="mvp-stage" width="720" height="320" aria-hidden="true"></canvas>
+    <div class="mvp-who">${mvpSideName ? `<span class="mvp-side">${mvpEsc(mvpSideName)}${side.mine ? "・我方" : ""}</span>` : ""}<b>${mvpEsc(v.name)}</b>${v.target ? `點名 <b>${mvpEsc(v.target)}</b>，` : ""}${mvpMoveText}</div>
+    ${v.text ? `<p class="mvp-text">「${mvpEsc(v.text)}」</p>` : ""}
+    <div class="mvp-result">放手一搏・成功！</div>${mvpHitLine}
+    <div class="mvp-cheer">${mvpEsc(mvpSideName)}${cheer}！</div>
+    <div class="mvp-btns"><button class="btn small ghost" data-act="mvp-again">再演一次</button><button class="btn small" data-act="mvp-close">收起</button></div>
+  </div>`;
+  pop.addEventListener("click", (e) => { if (e.target === pop) mvpClose(); }); // 點視窗外面也收起（兩顆鈕走 app.js 的 data-act）
+  document.body.appendChild(pop);
+  mvpAgain();
+}
+function mvpClose() {
+  if (mvpPopEl()) mvpPopEl().remove();
+  if (MVP.raf && typeof cancelAnimationFrame === "function") cancelAnimationFrame(MVP.raf);
+  MVP.raf = 0;
+}
+function mvpAgain() {
+  if (!mvpPopEl()) { if (MVP.v) mvpOpen(); return; }
+  mvpPopEl().classList.remove("hit", "cheer");
+  MVP.t0 = 0; MVP.step = 0;
   if (!MVP.raf && typeof requestAnimationFrame === "function") MVP.raf = requestAnimationFrame(mvpTick);
 }
+// 「再看一次」：戰場名字底下那一行按了重開
+function mvpReopen() { if (MVP.v) mvpPlay(MVP.v, MVP.names, true); }
 function mvpTick(now) {
   MVP.raf = 0;
-  const mvpCv = typeof document !== "undefined" ? document.getElementById("mvp-stage") : null;
-  if (!mvpCv) return; // 離開決戰畫面：不演了（回來時 mvpPlay 接著排）
-  const mvpSc = sceneFor(MVP.mid);
-  if (!mvpSc && MVP.mid in SC.cache) return; // 抓不到這一招的稿：不演
-  if (mvpSc && !(MVP.done && mvpCv === MVP.cv)) {
-    if (!MVP.t0) MVP.t0 = now;
-    const el = now - MVP.t0, hold = sceneImpact(mvpSc) + 300;
-    if (el >= SCENE_LEN) MVP.done = true;
-    const keep = RA.looks; // 台上是 MVP 的樣子（sceneOnRing 照 RA.looks 畫）；畫完換回來，擂台照舊
-    RA.looks = MVP.look;
-    sceneOnRing(mvpCv.getContext("2d"), mvpSc, MVP.done ? hold : el, "me", MVP.mid);
-    RA.looks = keep;
-    MVP.cv = mvpCv;
+  const [pop, cv, sc] = [mvpPopEl(), document.getElementById("mvp-stage"), MVP.v && sceneFor(MVP.v.move)];
+  if (!pop || !cv || !MVP.v) return;
+  if (!sc) { // 稿還在抓：等一下；抓不到就只寫字
+    if (MVP.v.move in SC.cache) { pop.classList.add("hit", "cheer"); return; }
+    MVP.raf = requestAnimationFrame(mvpTick); return;
   }
-  if (typeof requestAnimationFrame === "function") MVP.raf = requestAnimationFrame(mvpTick);
+  if (!MVP.t0) MVP.t0 = now;
+  const mvpT = mvpStill() ? SCENE_LEN : Math.min(SCENE_LEN, now - MVP.t0), mvpHitAt = sceneImpact(sc);
+  mvpPaint(cv.getContext("2d"), sc, mvpT);
+  if (MVP.step < 1 && mvpT >= mvpHitAt) { pop.classList.add("hit"); MVP.step = 1; }
+  if (MVP.step < 2 && mvpT >= mvpHitAt + 700) { pop.classList.add("cheer"); MVP.step = 2; }
+  // 停在最後一格之前還在抓圖：多畫幾格（圖到了才畫得出來）
+  if (mvpT < SCENE_LEN || now - MVP.t0 < SCENE_LEN + 1500) MVP.raf = requestAnimationFrame(mvpTick);
 }
-function mvpAgain() { if (MVP.id) { MVP.t0 = 0; MVP.done = false; MVP.cv = null; if (!MVP.raf && typeof requestAnimationFrame === "function") MVP.raf = requestAnimationFrame(mvpTick); } }
+function mvpGround(cx) {
+  const [far, ground] = [mvpSheet("bg_camp_far"), mvpSheet("bg_camp_ground")];
+  cx.fillStyle = "#1c1712"; cx.fillRect(0, 0, RING_W, RING_H);
+  if (sceneOk(far)) { // 蓋滿整塊（遠景那一張比畫布窄時照寬放大，右邊不留白邊）
+    const k = Math.max((RING_H + 40) / far.naturalHeight, (RING_W + 60) / far.naturalWidth);
+    cx.drawImage(far, 0, 0, far.naturalWidth, far.naturalHeight, -60, -40, far.naturalWidth * k, far.naturalHeight * k);
+  }
+  if (sceneOk(ground)) { const gh = 110, gw = (ground.naturalWidth * gh) / ground.naturalHeight; for (let x = 0; x < RING_W; x += gw) cx.drawImage(ground, x, RING_H - gh, gw, gh); }
+}
+// 一個小兵的一格（走一趟那一套的格子）
+function mvpSoldier(cx, sheet, i, x, y, scale, flip, flash) {
+  const [img] = [mvpSheet(sheet)];
+  if (!sceneOk(img)) return;
+  cx.save(); cx.translate(x, y); if (flip) cx.scale(-1, 1); cx.scale(scale, scale); cx.translate(-100, -212);
+  if (flash > 0) cx.filter = `brightness(${1 + 2 * flash})`;
+  cx.drawImage(img, i * 220, 0, 220, 220, 0, 0, 220, 220);
+  cx.restore();
+}
+// 對面一排小兵：打中那一刻起由近到遠一個一個中招、往後倒下，倒了就躺著
+function mvpCrowd(cx, sc, t) {
+  const [huang] = [MVP.v.faction === "guan"]; // MVP 是官軍：打倒的是黃巾
+  const [idle, fall] = huang ? ["foe_idle_attack", "foe_hit_fall"] : ["foe_guan_idle_attack", "foe_guan_hit_fall"];
+  const [hit, order] = [sceneImpact(sc), MVP_CROWD.map((p, k) => [p, k]).sort((a, b) => a[0][0] - b[0][0])];
+  const [draw] = [[...order].sort((a, b) => b[0][1] - a[0][1])]; // 後排先畫
+  for (const [[x, row], k] of draw) {
+    const rank = order.findIndex((o) => o[1] === k), at = hit + rank * 110;
+    const y = RING_GY - (row ? 22 : 0), scale = row ? 0.72 : 0.86;
+    if (t < at) { mvpSoldier(cx, idle, (Math.floor(t / 180) + k) % 4, x, y, scale, huang, 0); continue; }
+    const since = t - at, back = 46 * sceneEase(sceneSeg(since, 0, 500));
+    if (since < 140) mvpSoldier(cx, fall, 0, x + back, y, scale, huang, 1 - since / 140);
+    else mvpSoldier(cx, fall, 1 + Math.min(4, Math.floor(((since - 140) / 450) * 5)), x + back, y, scale, huang, 0);
+  }
+}
+function mvpPaint(cx, sc, t) {
+  const { v } = MVP, duel = !!v.target;
+  cx.clearRect(0, 0, RING_W, RING_H);
+  scenePaint({
+    cx, W: RING_W, H: RING_H, GY: RING_GY, dir: 1, me: MVP_ME_X, foe: MVP_FOE_X, mid: v.move, sword: RA.imgs && RA.imgs.weapon_sword,
+    ground: () => mvpGround(cx),
+    body: (role, sheet, i, lunge, filter) => {
+      if (role === "foe" && !duel) { mvpCrowd(cx, sc, t); return; }
+      const me = role === "me", kind = me ? v.weapon || "" : "";
+      const name = sheet === "atk" ? ringAtk(kind) : sheet;
+      if (filter) { cx.save(); cx.filter = filter; }
+      ringFigure(cx, name, i, me ? MVP_ME_X : MVP_FOE_X, !me, kind, lunge, me ? v.look || "" : v.target_look || "");
+      if (filter) cx.restore();
+    },
+  }, sc, t);
+}

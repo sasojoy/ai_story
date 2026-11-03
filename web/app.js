@@ -5849,7 +5849,9 @@
         case "move-order": moveOrderAsk(el.dataset.basic === "1"); break; // 絕招下單（先問一次）：通用 60 不畫圖、獨門 300 畫圖等審核
         case "move-preview": await movePreview(); break; // 一句話自創的絕招：先看看（不扣元寶）
         case "move-show": await moveShowTo(el.dataset.id || ""); break; // 招式庫做好了的那一招演一次
-        case "mvp-replay": if (typeof mvpAgain === "function") mvpAgain(); break; // 決戰的回合 MVP：絕招再演一次
+        case "mvp-replay": if (typeof mvpReopen === "function") mvpReopen(); break; // 決戰的回合 MVP：戰場底下那一行「再看一次」重新跳出視窗
+        case "mvp-again": if (typeof mvpAgain === "function") mvpAgain(); break; // MVP 視窗裡：絕招從頭再演一次
+        case "mvp-close": if (typeof mvpClose === "function") mvpClose(); break; // MVP 視窗收起
         case "look-show": lookShowTo(el.dataset.id || "", el.dataset.name || ""); break; // 一套形象看動作（再按一次收起）
         case "market-buy": lookMarketAsk(el.dataset.id, el.dataset.name || "", Number(el.dataset.price) || 0); break; // 形象市集買一套（先問一次）
         case "market-list": await lookMarketList(el.dataset.id); break; // 自己做的一套掛上市集（照框裡的價錢）
