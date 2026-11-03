@@ -663,6 +663,21 @@ def test_the_ask_has_a_quantity_and_sends_it(m_on):
     assert REF.match(picks[0][1]["ref"])
 
 
+def test_the_quantity_swaps_in_place_without_reopening_the_layer(m_on):
+    """按 −／＋ 換數量：同一張紙就地換內容，不拆掉整層再插一次（每插一次暗處淡入、紙滑上來的動畫就重播＝閃；Joy 2026-11-03）。"""
+    out = run(m_on, _async(_click('{ act: "mall-open" }') + _click('{ act: "mall-pick", id: "pills_5" }') + """
+      const paper = { innerHTML: "", querySelector: () => null, querySelectorAll: () => [] };
+      T.qs[".ask.mall-ask"] = paper;
+      const before = T.bodyHtml.length;
+      """ + _click('{ act: "mall-qty", n: "3" }') + _click('{ act: "ask-yes" }') + """
+      return { calls: T.calls, added: T.bodyHtml.length - before, paper: paper.innerHTML };"""),
+              responses={"/api/mall/buy": {"message": "", "bought": "pills_5", "mall": _many_view()}, "/api/mall": _many_view()})
+    assert out["added"] == 0
+    assert "買下【回體丹五顆】×3？" in out["paper"] and "買下（300）" in out["paper"] and 'class="ask-layer"' not in out["paper"]
+    post = [c for c in out["calls"] if c[0] == "/api/mall/buy"]
+    assert len(post) == 1 and post[0][1]["qty"] == 3
+
+
 def test_one_left_means_no_quantity_row(m_on):
     out = _layer(m_on, _click('{ act: "mall-pick", id: "pills_5" }'))
     assert 'data-act="mall-qty"' not in out["asks"][-1]
