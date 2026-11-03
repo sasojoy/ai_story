@@ -412,6 +412,11 @@ GAME_DELEGATE_CALLERS.update({
     # deliver_notices 掛鉤，拿掉；(_everyday_options, _tavern_options) 換成店面登記，拿掉；(_act, _tavern_enter)、
     # (_action_title, _tavern_sign) 換成 act 子動詞的掛鉤，拿掉
 })
+# battle（全部拆包第 8 批：推進與結算、generals 進包、收季的收兵；計畫 docs/superpowers/plans/2026-11-01-決戰包-第4批.md 1.5）：四張名單的
+# 決戰第 8 批那幾筆集中在這一段（四條拆包線並行，PM 合的時候不跟別人的行穿插），改前面的名單用 del、|=、update，不改那幾行的原文
+for _pair in (("admin_end_season", "_sieges"), ("admin_end_season", "_shelve_siege"),
+              ("admin_next_season", "_sieges"), ("admin_next_season", "_shelve_siege")):
+    del GAME_DELEGATE_CALLERS[_pair]  # 收季的收兵換成 on_season_close 接縫掛鉤（決戰包照原本那兩段做，第 11 批 PM 認定第 7 條）
 
 
 @functools.lru_cache(maxsize=None)

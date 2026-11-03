@@ -26,10 +26,10 @@
 - `ctx._record_exp(record, exp, source)`：本人的經驗寫進戰報（滿級換心得）；`ctx._file_battle(record, ...)`：存戰報、回那一行
 - `ctx._play_rounds(record, squad, tier, ...)`：排回合的演出；`ctx._deed_fame(kind)`：立功給名望
 - `ctx._load_kin(name)`、`ctx._save_kin(game)`：同一把鎖裡讀、寫別人的存檔（混戰、截殺）
-# battle（全部拆包第 7 批：集結、投效、挑同伴加入那一刻快照的份量；總表歸核心「戰力快照」）
-- 戰力快照：`ctx._battle_scores()`（三招的份量；測試換掉 `Game._battle_scores`）、`ctx._battle_power()`（威力；測試換掉）、`ctx._battle_gear()`
-  （坐騎、部下）、`ctx._battle_marks()`（新手、叛投、隨你出陣的同伴、玉璽碎片……）、`ctx._battle_role()`（職位）、`ctx._battle_road()`
-  （武學屬性）、`ctx._battle_neili_cap()`（決戰的氣血池上限）
+# battle（全部拆包第 7 批：集結、投效、挑同伴加入那一刻快照的份量；總表歸核心「戰力快照」）：這裡原本列的戰力快照 7 個，第 8 批去重——
+# 以下面 `# shared` 那一段的「戰力快照」為準（第 16 批合併時 PM 定：第 8 批做；`_battle_scores`、`_battle_power` 測試換掉，包裡經 ctx 叫）
+# battle（全部拆包第 8 批：推進與結算；時刻表決戰收場那一下，總表歸核心）
+- `ctx._deliver_big_events()`：這一季的時刻表大事人人有份，沒看過的補進自己的江湖紀錄（FB-038；決戰包的時刻表決戰收場之後叫）
 
 店面與戰報的補充（tavern：主動搬六包第 10 批酒肆加的）
 - `ctx._shop_say(key, problem=None)`、`ctx._shop_after(problem, done, keyer=None)`：掌櫃那一句（七間店共用，shop_lines.json 的情況）
@@ -122,6 +122,8 @@
   別的包問「此刻有沒有攻城」叫它
 # battle（全部拆包第 7 批）
 - `ctx.battle_now()`（這個人看的那一場，同 `_battle_now`；假人的分數讀它，決戰包的 `bots.py`）
+# battle（全部拆包第 8 批）
+- `ctx._round_mvp(battle, resolve)`（主人：形象包；決戰包推一回合時包著回合結算叫：結算完挑回合首功、回合紀錄多一行。決戰包不 import 形象包）
 
 explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._outing_on()`（主人 explore：減法季探索一顆開著、不在序章裡；出陣包問——散人那一行、出陣的字；出陣第 1 批原本列在
@@ -163,6 +165,9 @@ explore（主動搬六包第 3＋4 批加的這一段）
   那一半：此刻每一場、改自己參戰的那一場；第 8 批搬進決戰包之後改成包裡直接叫）
 - `ctx._backfill_battle_scores()`（出招之前補自己的份量快照；主人：總表第 12 批「決戰順便」）、`ctx._mandate_weight(definition, scores)`
   （天命之爭手上有碎片的人份量加權；主人：玉璽，總表裁定這一批留原位）
+# battle（全部拆包第 8 批：推進與結算；主人：玉璽，總表附錄甲）
+- `ctx._seal_bare()`（補份量快照時不含碎片的那一份）、`ctx._seal_settle(battle, definition, result)`（時刻表決戰收場：先挑挑戰者、再挑現世的得主）、
+  `ctx._deliver_seal_results()`（玉璽碎片的事補送到自己手上）
 - `ctx._order_credit(...)`（軍令；出陣約戰結算時也叫在攻方、應戰的人那兩份 Game 上——包裡的變數名 attacker、defender，邊界測試照樣掃）
 （第 16 批合進 develop 時去重：這一段原本還列了出陣包用的 `_squad_encounter`（as_sortie=True：打一場隊伍，出陣攻打）、`_push_progress`
 （地盤：領地爭奪推、拉進度）、`_drill_gains`（操練）、`_spar_power`、`_spar_mirror`（切磋：本人對本人的威力、從另一邊看同一場）、

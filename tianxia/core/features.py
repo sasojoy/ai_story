@@ -45,6 +45,7 @@
 | on_own_turn(ctx) | Game.own_turn_checks 最前面：本人這一輪（商城的封測發放） |
 | scene(ctx)、scene_over(ctx) | Game._own_scene_text 擂台之後（坐在宴席上）；Game.scene_text 最前面（蓋在畫面上的戰場） |
 | record_detail(ctx, record) | Game.battle_detail：戰報頁那一筆（決戰照 battles 表重讀完整戰況） |
+| on_season_close(ctx, reread) | Game.admin_end_season 讀回收季那一份季之後、補大事之前（reread=False）；Game.admin_next_season 休季時、開下一季之前（reread=True：收兵之前讀回手上那一份季）——收季的收兵（決戰；全部拆包第 8 批） |
 | shops()（Shop） | 店面登記：店裡那一串（_everyday_options）、進店那一顆、哪一間開著（_shop_open）、動身收店（_depart）、此地不開了收店（sync、_drop_stale_references） |
 | verbs()（Verb） | act 子動詞：_act 最前面、_action_title、行動列那一格（_everyday_options）、行動列底下那一行（action_notes）、只打開一張卡的回話（choose） |
 
@@ -147,6 +148,8 @@ class FeatureHooks(Protocol):
     def scene(self, ctx: Game) -> str | None: ...
     def scene_over(self, ctx: Game) -> tuple[str, bool] | None: ...
     def record_detail(self, ctx: Game, record: BattleRecord) -> BattleRecord | None: ...
+    # battle（全部拆包第 8 批：收季的收兵；第 11 批 PM 認定第 7 條「兩段要一起進收季的位置」）
+    def on_season_close(self, ctx: Game, reread: bool) -> None: ...
     def shops(self) -> tuple[Shop, ...]: ...
     def verbs(self) -> tuple[Verb, ...]: ...
 
@@ -232,6 +235,9 @@ class Feature:
         return None
 
     def record_detail(self, ctx: Game, record: BattleRecord) -> BattleRecord | None:
+        return None
+
+    def on_season_close(self, ctx: Game, reread: bool) -> None:
         return None
 
     def shops(self) -> tuple[Shop, ...]:
@@ -447,6 +453,14 @@ def record_detail(ctx: Game, record: BattleRecord) -> BattleRecord:
         if got is not None:
             return got
     return record
+
+
+# battle（全部拆包第 8 批）
+def on_season_close(ctx: Game, reread: bool = False) -> None:
+    """收季的收兵（Game.admin_end_season：讀回收季那一份季之後、補大事之前；Game.admin_next_season：休季時、開下一季之前，reread=True）：
+    沒打完的仗收起來、不算勝負。不問 enabled（原位那兩段本來就不看包的開關）。"""
+    for f in registered():
+        f.on_season_close(ctx, reread)
 
 
 def _shops(ctx: Game, *, gated: bool) -> list[Shop]:

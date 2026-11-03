@@ -76,5 +76,22 @@ class BattleFeature(Feature):
             return None
         return record.model_copy(update={"log": view.round_blocks(ctx, battle, definition, last=None, oldest_first=True, me=me)})
 
+    # ── 接縫掛鉤（全部拆包第 8 批：收季的收兵；第 11 批 PM 認定第 7 條）──
+
+    def on_season_close(self, ctx, reread: bool) -> None:
+        """收季的收兵（原本 Game.admin_end_season 讀回收季那一份季之後、Game.admin_next_season 休季時那兩段；不問 enabled）：沒打完的決戰收掉
+        （reread：開下一季，收之前讀回手上那一份季）、每一場攻城收掉（reread 同上）——不算勝負，參戰者各補一則（FB-015、FB-035）。"""
+        from . import sieges  # noqa: PLC0415
+
+        battle = ctx.world.get_battle()
+        if battle is not None and battle.phase != "ended":
+            if reread:
+                ctx.state.world = ctx.world.get_season()
+            ctx._shelve_unfinished_battle()
+        if reread:
+            ctx.state.world = ctx.world.get_season()
+        for siege_battle in sieges.sieges(ctx):
+            sieges.shelve_siege(ctx, siege_battle)
+
 
 FEATURE = BattleFeature()

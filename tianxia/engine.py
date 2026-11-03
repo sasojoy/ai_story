@@ -60,7 +60,6 @@ from .models import FreeTextChoice, Outcome, StoryDef, StoryStage
 from .rules import jianfa
 from . import step as step_rules  # 本週卡「你這一步」（減法季批 3c）；叫 step_rules：這個檔裡有區域變數叫 step
 from . import wins  # 三陣營四勝利（減法季批 3c）：豪強兩本帳、傾向、季末四階
-from .accounts import AccountStore
 from .characters import CharacterStore, name_key
 from .events import (
     event_candidates, free_text_note, has_events_here, pick_event, visible_choices,
@@ -115,7 +114,7 @@ from .features.battle.rules import (  # noqa: F401  過渡：測試從 engine �
     ESCORT_PICK,  # 第 7 批：挑同伴那一句（test_companions_battle 從 engine 讀）
 )
 from .state import (
-    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, FrontReport, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong, TimelineResult,
+    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong, TimelineResult,
     StoryCard, StoryProgress, TierResult, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
     new_game_state,
 )
@@ -11942,14 +11941,10 @@ class Game:
             lambda s: msgs.extend(end_season(_season_vehicle(self.content, s), self.content, self.world))
         )
         self.state.world = self.world.get_season()  # 讀回完整的一份（mutate_season 回傳的不含傳聞與江湖史）
-        # 沒打完的決戰直接收掉、不套用結果（這一季勝負已經定了，跟自然收季一樣，見 _battle_status，FB-015），
-        # 參戰者各補一則「不算勝負」的江湖紀錄（FB-035）。放在 mutate_season 外面：mutate 不能巢狀，
+        # 收季的收兵（接縫掛鉤，全部拆包第 8 批；決戰包：沒打完的決戰與每一場攻城直接收掉、不套用結果——這一季勝負已經定了，跟自然收季
+        # 一樣，FB-015——參戰者各補一則「不算勝負」的江湖紀錄，FB-035）。放在 mutate_season 外面：mutate 不能巢狀，
         # 內層寫的會被外層整份存檔蓋掉；放在讀回賽季之後：收場時間記的是收季那一刻的季時間
-        battle = self.world.get_battle()
-        if battle is not None and battle.phase != "ended":
-            self._shelve_unfinished_battle()
-        for siege_battle in self._sieges():  # 攻城戰同上（領地爭奪第二批）
-            self._shelve_siege(siege_battle)
+        features_core.on_season_close(self, reread=False)
         # 收季前結算的、從沒開成的決戰（world.settle_waiting_showdowns）：公告跟別的大事一樣走 _deliver_big_events，
         # 收季那一則不再重複一次
         self._deliver_big_events()
@@ -11960,16 +11955,10 @@ class Game:
         """管理者開下一季：只在休季時有效；管理者自己的角色跟著換季（其他玩家下次同步時換）。"""
         if not self.is_admin():
             return self._log(["（只有管理者能開啟下一季。）"])
-        battle = self.world.get_battle()
-        if self.world.season_phase() == "resting" and battle is not None and battle.phase != "ended":
-            # 季自然結束之後沒有人同步過、沒人走到 _battle_status 收掉它：換季會直接清掉，先收起來，
-            # 參戰者才補得到「不算勝負」那一則（FB-035）。收場時間記收掉的那一季的時間，所以先讀回賽季
-            self.state.world = self.world.get_season()
-            self._shelve_unfinished_battle()
         if self.world.season_phase() == "resting":
-            self.state.world = self.world.get_season()
-            for siege_battle in self._sieges():  # 攻城戰同上（領地爭奪第二批）：換季前收起來，參戰者補得到交代
-                self._shelve_siege(siege_battle)
+            # 收季的收兵（接縫掛鉤，全部拆包第 8 批；決戰包）：季自然結束之後沒有人同步過、沒人走到 _battle_status 收掉的決戰與攻城，
+            # 換季會直接清掉——先收起來，參戰者才補得到「不算勝負」那一則（FB-035）。收場時間記收掉的那一季的時間（reread：收兵之前讀回賽季）
+            features_core.on_season_close(self, reread=True)
         if not self.world.next_season(self.content, now):
             return self._log(["（這一季還沒結束，無法開啟下一季。）"])
         self._reconcile_season()
