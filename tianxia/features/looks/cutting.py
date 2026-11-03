@@ -383,11 +383,38 @@ def wears_white(portrait: bytes) -> bool:
     return white_share(rgba) >= WHITE_SHARE
 
 
-def drop_white_holes(strip: "Image.Image") -> "Image.Image":
-    """把封閉白塊設成透明（本機生圖常把手臂與身體之間留成白底，疊在擂台背景上就是一塊白斑）。"""
-    _, big = _white_blobs(strip)
+ART_HOLE_SHARE = 12.0  # 法相那一張：一個封閉淺色區塊「單獨」佔主體這麼多 % 以上才挖（量過的數字見 drop_white_holes）
+
+
+def drop_white_holes(strip: "Image.Image", min_share: float = 0.0) -> "Image.Image":
+    """把封閉白塊設成透明（本機生圖常把手臂與身體之間留成白底，疊在擂台背景上就是一塊白斑）。
+
+    `min_share` > 0：只挖「單獨」佔主體這麼多百分比以上的區塊。擂台十六張不用（有定裝照可以判
+    `wears_white` 來整張豁免）；法相那一張沒有可比的參考圖，要靠這個分「圍出來的背景」與「主體內部」。
+
+    門檻怎麼來的（2026-11-03 拿 klein 真實輸出量 12 張，`scratchpad/measure_holes.py`）——
+    看的是**單一最大塊**，不是合計：
+      該挖：盤龍 27.71%、盤龍二 28.39%、咬尾蛇 28.20%
+      不准挖：劍扇 5.42%、餃子 4.07%、蓮花座 2.09%、佛手 1.32%、菊花 1.26%、鳳 0.70%、掌 0.68%、鐘 0.37%、山 0.04%
+    合計會騙人：菊花 80 塊合計 23.03%、盤龍 29.31%，幾乎一樣——上一版就是拿「有沒有大塊」當判準，
+    把花瓣之間挖穿（審圖寫「花瓣內部有多處被誤挖成灰色破洞」）。
+    純度也不能用：大鐘（不准挖）那一塊是 254／標準差 1.9，跟盤龍 254／0.7～2.0 分不開。
+    12% 是 5.42 與 27.71 的幾何中點，兩邊各留 2.2 倍。寧可漏挖（審圖擋下來重畫）也不要挖穿（收下去就毀了）。
+    """
+    ink, big = _white_blobs(strip)
     if not big.any():
         return strip
+    if min_share > 0:
+        body = max(1, int(ink.sum()))
+        lab, n = ndimage.label(big)
+        keep = np.zeros_like(big)
+        for i in range(1, n + 1):
+            one = lab == i
+            if 100.0 * int(one.sum()) / body >= min_share:
+                keep |= one
+        big = keep
+        if not big.any():
+            return strip
     a = np.asarray(strip).copy()
     a[big, 3] = 0
     return Image.fromarray(a, "RGBA")
@@ -417,15 +444,13 @@ MIN_PX = 64
 
 
 def art_bytes(raw: bytes, max_px: int = ART_PX) -> bytes:
-    """法相、巨物那一張：去白底、只留大塊的（雜點丟掉）、裁到東西的邊，邊長不超過 max_px，PNG。
+    """法相、巨物那一張：去白底、挖掉圍出來的那一大塊背景、只留大塊的（雜點丟掉）、裁到東西的邊，PNG。
 
-    這裡**刻意不挖封閉白塊**（2026-11-03 試過又退回）：
-    `cutout` 只去掉跟外框相連的白，形狀自己圍起來的那一塊會留下，所以正式站 #480 的盤龍十次全掛在
-    「龍身下方盤繞處內側殘留一大塊白色背景」。照 `sheet_bytes` 那樣補一次 `drop_white_holes` 之後，
-    同一張單的下一樣（菊花）立刻反咬：「花瓣內部有多處被誤挖成灰色破洞」——花瓣之間本來就有封閉的淺色區塊。
-    擂台那邊能挖是因為有定裝照可以判 `wears_white` 來豁免，法相沒有可比的參考圖。
-    要再做就得先量：殘留背景（少、大、純白）跟主體內部（多、小、有筆觸）怎麼分，拿真實的 klein 輸出當樣本定門檻，
-    不要靠猜。在那之前寧可留著白塊讓審圖擋下來重畫，也不要把主體挖穿。
+    挖白塊這件事 2026-11-03 一天內走了三步（別再往回走）：
+    1. 原本不挖 → 正式站 #480 的盤龍十次全掛在「龍身下方盤繞處內側殘留一大塊白色背景」。
+    2. 照 `sheet_bytes` 無條件挖 → 同一張單的菊花立刻被挖穿（「花瓣內部有多處被誤挖成灰色破洞」）。
+    3. 量了 12 張真實輸出，改成只挖「單獨佔主體 `ART_HOLE_SHARE`% 以上」的那一塊（判準與數字見 `drop_white_holes`）。
+    擂台那邊能無條件挖是因為有定裝照可以判 `wears_white` 整張豁免，法相沒有可比的參考圖。
     """
     rgba, mask = cutout(Image.open(io.BytesIO(raw)))
     lab, n = ndimage.label(mask)
@@ -439,6 +464,7 @@ def art_bytes(raw: bytes, max_px: int = ART_PX) -> bytes:
     a = np.asarray(rgba).copy()
     a[..., 3] = np.where(keep, a[..., 3], 0)
     piece = Image.fromarray(a, "RGBA").crop((int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1))
+    piece = drop_white_holes(piece, min_share=ART_HOLE_SHARE)  # 切完才挖：不跟上面算大小、算邊界的 mask 糾纏
     if max(piece.size) > max_px:
         s = max_px / max(piece.size)
         piece = piece.resize((max(1, int(piece.width * s)), max(1, int(piece.height * s))), Image.LANCZOS)
