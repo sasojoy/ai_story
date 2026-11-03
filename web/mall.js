@@ -281,7 +281,7 @@
   // 形象那一頁（Joy 2026-11-03「形象頁那邊的排版也是亂七八糟」，示意稿「新・形象頁」）：最上面一塊台子站著身上穿的那一套（看動作），
   // 底下擂台形象兩張一排、每張一樣高（台子、名字、兩行說明、底下一排：看動作＋換上／穿著中／價錢），最後一張是「自建形象」的入口；
   // 再來形象市集（別人做的），最底絕招一張（通用、獨門兩列，按了進絕招那一頁）。自建形象、絕招各自一頁（S.lookSub），左上回形象
-  const LOOK_SUBS = { make: "自建形象", move: "絕招" };
+  const LOOKSUB_NAMES = { make: "自建形象", move: "絕招" };
   function mallLooksHtml(d) {
     if (!d) return mallFailHtml();
     if (S.lookSub === "make" && d.order) return lookSubHtml("make", lookShowHtml() + lookOrderHtml(d.order, d));
@@ -307,11 +307,11 @@
       <div class="mall-grid look-grid">${d.looks.map(card).join("")}${make}</div>${lookMarketHtml(d.market)}${moveEntryHtml(d.moves)}`;
   }
   // 自建形象、絕招那一頁的頂上：回形象一顆、標題、四步（走到哪一步亮到哪）
-  const LOOK_STEPS = { make: ["寫樣子", "畫坊作畫", "審核", "換上・上市集"], move: ["寫一句", "先看看", "通用或獨門", "招式庫換上"] };
+  const LOOKSUB_STEPS = { make: ["寫樣子", "畫坊作畫", "審核", "換上・上市集"], move: ["寫一句", "先看看", "通用或獨門", "招式庫換上"] };
   function lookSubHtml(sub, body) {
     const lit = sub === "move" ? (S.movePreview ? 2 : 1) : 1;
-    const steps = LOOK_STEPS[sub].map((t, i) => `<li class="${i < lit ? "on" : ""}"><span>${"一二三四"[i]}</span>${t}</li>`).join("");
-    return `<div class="look-subbar"><button class="btn small ghost" data-act="look-sub" data-sub="">‹ 形象</button><b>${LOOK_SUBS[sub]}</b></div>
+    const steps = LOOKSUB_STEPS[sub].map((t, i) => `<li class="${i < lit ? "on" : ""}"><span>${"一二三四"[i]}</span>${t}</li>`).join("");
+    return `<div class="look-subbar"><button class="btn small ghost" data-act="look-sub" data-sub="">‹ 形象</button><b>${LOOKSUB_NAMES[sub]}</b></div>
       <ol class="look-steps">${steps}</ol>${body}`;
   }
   // 形象頁最底那一張絕招：兩列（通用、獨門）各寫一句與價錢，按哪裡都進絕招那一頁
@@ -582,7 +582,7 @@
   }
   // 形象那一頁裡的自建形象、絕招那一頁（空字串回形象）：換頁時收起正在演的、從頂上開始
   function lookSubTo(sub) {
-    S.lookSub = LOOK_SUBS[sub] ? sub : "";
+    S.lookSub = LOOKSUB_NAMES[sub] ? sub : "";
     S.lookShow = null; S.moveShow = null; S.mallSay = null;
     renderMall(false);
   }
