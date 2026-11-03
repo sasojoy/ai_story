@@ -78,6 +78,42 @@ def test_the_scene_preview_charges_nothing_and_unknown_scenes_404():
     assert client.get("/api/main").json()["mall"]["balance"] == 5000
 
 
+def test_the_order_uses_the_draft_the_preview_showed(monkeypatch):
+    """企劃者 2026-11-03：「我送審前，頁面顯示說會做『槍』跟『菊花』兩個，但是最後只有兩把槍，所以是不一致的問題」。
+
+    正式站 #493 的真因：預覽（/api/looks/scene）與下單（/api/looks/move）各自問一次模型
+    （temperature 0.3），兩次答案不同——玩家付 300 元寶核准的那一份，跟真的畫出來的不是同一份。
+    所以預覽要把模型填的那張表回給網頁，下單原樣帶回來就不再問第二次。
+    """
+    from tianxia.features.looks import scenes
+    calls = []
+    answers = [{"figure": "長槍", "thrown": "菊花", "swords": scenes.NONE, "beam": False, "quake": False,
+                "fall": scenes.NONE, "mark": scenes.NONE, "glow": "金", "tone": "夜"},
+               {"figure": "法相", "thrown": "長槍", "swords": scenes.NONE, "beam": False, "quake": False,
+                "fall": scenes.NONE, "mark": scenes.NONE, "glow": "金", "tone": "夜"}]
+
+    def fake(client, text):  # 第一次給「長槍＋菊花」，第二次給 #493 真的拿到的那一份
+        calls.append(text)
+        return answers[min(len(calls) - 1, len(answers) - 1)]
+
+    monkeypatch.setattr(scenes, "model_draft", fake)
+    client = _player()
+    client.get("/api/main")
+    text = "長槍法相，打到敵人爆炸後才出現一朵菊花"
+    shown = client.post("/api/looks/scene", json={"text": text}).json()
+    assert [a["label"] for a in shown["scene"]["arts"]] == ["長槍", "菊花"], "預覽給玩家看的那一份"
+    assert isinstance(shown.get("draft"), dict), "預覽要把那張表回給網頁"
+    assert len(calls) == 1
+
+    got = client.post("/api/looks/move", json={"prompt": text, "ref": "web-move-0493", "draft": shown["draft"]})
+    assert len(calls) == 1, "帶了預覽那一份就不該再問模型（不然答案會變）"
+    assert "先練一門自己合成或自創的武功" in got.json()["message"]  # 這個角色沒有自己的武功，到這裡就被擋
+
+    # 沒帶（舊版網頁、或那一句被改過）才會再問一次
+    client.post("/api/looks/move", json={"prompt": text, "ref": "web-move-0494"})
+    assert len(calls) == 2
+
+
 def test_move_order_without_an_own_art_is_refused_and_charges_nothing():
     client = _player()
     client.get("/api/main")

@@ -95,12 +95,48 @@ def test_the_model_only_fills_a_table_and_the_engine_still_clamps_it():
     """模型只填一張表，拍子、時間、張數照舊是引擎的事：亂回也夾得住（名字裁到六個字、表外的值丟掉、最多兩樣要畫的）。"""
     bad = {"figure": "火龍" * 9, "thrown": "<script>", "swords": "亂寫", "beam": "yes", "quake": 1,
            "fall": "石頭", "mark": "x", "glow": "彩虹", "tone": "q"}
-    scene = scenes.direct("亂七八糟", "某招", bad)
+    # 原句要寫得出那一樣（_grounded）：這一條測的是「夾得住」，不是「有沒有根據」
+    scene = scenes.direct("亂七八糟的火龍", "某招", bad)
     arts = scenes.needs_art(scene)
     assert len(arts) == 1 and arts[0]["label"] == "火龍" * 3  # 裁到 LABEL_MAX；<script> 不是中文，整個丟掉
     assert set(ops(scene)) <= set(scenes.OPS) and scene["glow"] == scenes.GLOWS["金"]  # 表外的光色換成預設
     assert all(b["op"] != "飄落" and b["op"] != "異狀" for b in scene["beats"])  # 表外的飄落、異狀丟掉
-    assert len(scenes.needs_art(scenes.direct("都要", "某招", {**bad, "figure": "大佛", "thrown": "巨掌"}))) == scenes.MAX_ARTS
+    both = scenes.direct("都要大佛和巨掌", "某招", {**bad, "figure": "大佛", "thrown": "巨掌"})
+    assert len(scenes.needs_art(both)) == scenes.MAX_ARTS
+
+
+def test_the_engine_drops_anything_the_player_never_wrote():
+    """企劃者 2026-11-03「明明是要長槍，結果你給我畫神龍？」：正式站 #480 玩家寫
+    「長槍飛出擊中對手時出現一朵菊花」，導演稿卻給了 `法相 神龍`——SYSTEM 那行的例子（大佛、神龍、火鳳）
+    被模型照抄進來。提示詞早就寫了「不要自己加戲」壓不住，所以自由文字那兩樣要在原句裡找得到根據。"""
+    text = "長槍飛出擊中對手時出現一朵菊花"
+    draft = {"figure": "神龍", "thrown": "菊花", "swords": scenes.NONE, "beam": False, "quake": True,
+             "fall": scenes.NONE, "mark": scenes.NONE, "glow": "寒", "tone": "夜"}
+    scene = scenes.direct(text, "一點寒芒", draft)
+    labels = [a["label"] for a in scenes.needs_art(scene)]
+    assert labels == ["菊花"], "玩家寫的菊花要留著，模型自己加的神龍不畫"
+    assert "法相" not in ops(scene)
+    # 模型把玩家的字擴寫成更完整的名字照舊算有根據（「龍」→「神龍」、「餃子」→「火焰餃子」）
+    assert scenes._grounded("神龍", "背後升起一條龍") and scenes._grounded("火焰餃子", "丟一個餃子")
+    assert not scenes._grounded("神龍", text) and not scenes._grounded("大佛", "一劍寒光")
+
+
+def test_the_engine_refuses_the_field_names_themselves():
+    """企劃者 2026-11-03「明明是要長槍，結果最後卻畫了兩把長槍交差」：正式站 #493 玩家寫
+    「長槍法相，打到敵人爆炸後才出現一朵菊花」，模型把 figure 填成「法相」——那是欄位自己的類別名，
+    「長槍法相」的意思是「以長槍為法相」。只能照字面畫，兩張圖都成了槍。
+    類別名與沒有形狀的詞一律不採用（_grounded 擋不住它：法、相兩個字原句都有）。"""
+    text = "長槍法相，打到敵人爆炸後才出現一朵菊花"
+    base = {"swords": scenes.NONE, "beam": False, "quake": False, "fall": scenes.NONE,
+            "mark": scenes.NONE, "glow": "金", "tone": "夜"}
+    bad = scenes.direct(text, "寒芒訣", {**base, "figure": "法相", "thrown": "長槍"})
+    assert [a["label"] for a in scenes.needs_art(bad)] == ["長槍"], "類別名那一張不畫，長槍留著"
+    assert "法相" not in ops(bad)
+    good = scenes.direct(text, "寒芒訣", {**base, "figure": "長槍", "thrown": "菊花"})
+    assert [a["label"] for a in scenes.needs_art(good)] == ["長槍", "菊花"]  # 取對半邊就兩樣都畫
+    for word in ("法相", "巨物", "光", "氣"):
+        assert word in scenes.NOT_A_THING
+    assert "不要把「法相」「巨物」這兩個欄位的名字本身當答案" in scenes.SYSTEM
 
 
 def test_a_model_that_cannot_be_reached_falls_back_to_the_word_list():

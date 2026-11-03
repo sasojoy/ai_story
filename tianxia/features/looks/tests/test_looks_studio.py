@@ -205,6 +205,26 @@ def test_the_real_cut_keeps_one_subject_and_cuts_a_sheet():
     im.save(raw, "PNG")
     out = Image.open(io.BytesIO(cutting.art_bytes(raw.getvalue())))
     assert out.mode == "RGBA" and out.size == (400, 600)
+    # 法相只挖「單獨佔主體 ART_HOLE_SHARE% 以上」的那一塊（2026-11-03 量 12 張真實輸出定的；
+    # 無條件挖會把菊花的花瓣之間挖穿〔實測挖掉 23%〕，不挖則盤龍圍住的背景留著、審圖十次全擋）。
+    def _art(pale_box):
+        im = Image.new("RGB", (1024, 1024), "white")
+        for x in range(300, 700):
+            for y in range(200, 800):
+                im.putpixel((x, y), (180, 120, 40))
+        x0, y0, x1, y1 = pale_box
+        for x in range(x0, x1):
+            for y in range(y0, y1):
+                im.putpixel((x, y), (255, 255, 255))
+        b = io.BytesIO()
+        im.save(b, "PNG")
+        return Image.open(io.BytesIO(cutting.art_bytes(b.getvalue())))
+
+    big = _art((400, 350, 600, 650))  # 圍出來的一大塊背景（佔主體三成，同盤龍）
+    assert big.getpixel((200, 300))[3] == 0, "圍出來的那一大塊背景要挖掉"
+    assert big.getpixel((20, 300))[3] > 0, "主體本身不能被挖掉"
+    small = _art((450, 450, 510, 510))  # 主體內部的小塊淺色（花瓣之間、指縫，佔主體 1.5%）
+    assert small.getpixel((180, 180))[3] > 0, "主體內部的小塊淺色不准被挖成破洞"
     with pytest.raises(studio.CutError):
         blank = io.BytesIO()
         Image.new("RGB", (512, 512), "white").save(blank, "PNG")
