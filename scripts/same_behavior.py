@@ -5196,11 +5196,19 @@ def train_bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
     def titles(states) -> dict:
         return dict(sorted(Counter(e.title.partition("・")[0] for s in states for e in s.journal).items()))
 
+    def tagged(states) -> dict:
+        """這一包的那幾種紀錄照（標題頭、標籤）數（修正輪）：標題頭分不出兩種操練——城裡操練（act:drill，training 那一包）是標題頭「操練」、
+        標籤「校場過招」，這一包跟自家隊伍操練是標題頭「遊歷」或「出陣」、標籤「操練」；打仗的標籤是勝負加對手。"""
+        heads = ("遊歷", "出陣", "雪恥", "操練", "巡哨", "傳道", "保境安民")
+        found = Counter(f"{e.title.partition('・')[0]}／{e.tag}" for s in states for e in s.journal if e.title.partition("・")[0] in heads)
+        return dict(sorted(found.items()))
+
     content = content_of()
     world = open_world(tmp / "play.db")
     game = bot.play_season(content, seed=3, max_steps=int(os.environ.get("SB_PLAY_STEPS", "700")), world=world, now=CLOCK0)
     emit("出陣三整季機器人 存檔", hashlib.sha256(game.state.model_dump_json().encode("utf-8")).hexdigest())
     emit("出陣三整季機器人 紀錄標題", titles([game.state]))
+    emit("出陣三整季機器人 這一包的紀錄（標題頭／標籤）", tagged([game.state]))
     emit("出陣三整季機器人 戰報", hashlib.sha256(json.dumps([r.model_dump(mode="json") for r in game.state.battles], ensure_ascii=False)
                                                .encode("utf-8")).hexdigest())
     emit("出陣三整季機器人 大勢", dict(sorted(world.get_season().trends.items())))
@@ -5234,13 +5242,14 @@ def train_bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
     states = chars.all(bots_only=True)
     emit("出陣三假人 一輪一輪", dict(sorted(totals.items())))
     emit("出陣三假人 紀錄標題", titles(states))
+    emit("出陣三假人 這一包的紀錄（標題頭／標籤）", tagged(states))
     emit("出陣三假人 戰報", {s.player.name: hashlib.sha256(json.dumps([r.model_dump(mode="json") for r in s.battles], ensure_ascii=False)
                                                            .encode("utf-8")).hexdigest() for s in states})
     emit("出陣三假人 存檔", {s.player.name: hashlib.sha256(s.model_dump_json().encode("utf-8")).hexdigest() for s in states})
     emit("出陣三假人 大勢", dict(sorted(world.get_season().trends.items())))
     emit("出陣三假人 資料庫", hashlib.sha256(db_text(tmp / "runner.db").encode("utf-8")).hexdigest())
     out.write_text(BUF.getvalue(), encoding="utf-8", newline="\n")
-    print(profile, "出陣三假人", dict(totals), titles(states))
+    print(profile, "出陣三假人", dict(totals), tagged(states), "整季機器人", tagged([game.state]))
 
 
 _sortie3_bot_runs = _bot_runs
