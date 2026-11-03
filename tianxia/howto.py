@@ -102,7 +102,7 @@ def train_line(foes: bool, gains: Sequence[str], drops: bool, push: bool, drill_
     """遊歷打完會拿到什麼。foes：這裡有會打的對手（不是自己陣營的）；gains：打贏給的（銀兩、心得、經驗，照會打的對手有沒有
     這一項）；drops：打贏有機會掉素材；push：打贏或操練會推大勢（Game.train_trend_push 不是空的）；drill_gains：跟自己人操練
     給的（只有心得、經驗，照 Config.drill_reward_share 算出來不是 0 的）；drills：這裡也有自己陣營的隊伍。沒有會打的對手＝操練。
-    沒有會打的對手時，行動列那一格本身就寫「操練」（Game._train_option），這一行接在它後面：不再開頭寫一次「操練」（FB-101）。"""
+    沒有會打的對手時，行動列那一格本身就寫「操練」（出陣包 train_actions.train_option），這一行接在它後面：不再開頭寫一次「操練」（FB-101）。"""
     pushed = f"，{PUSH_WORD}" if push else ""
     if not foes:
         got = f"得{'、'.join(drill_gains)}" if drill_gains else "沒什麼賞"

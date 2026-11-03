@@ -531,6 +531,9 @@
     S.moveDraft = text;
     const r = await api("/api/looks/scene", { text });
     S.movePreview = r && (r.scene || r.problem) ? r : { problem: "預覽不出來，等一下再試。" };
+    // 預覽那一份要記住、下單時原樣帶回去（看到的＝做出來的）：不然伺服器會再問一次模型，
+    // 兩次答案不同，玩家核准的跟真的畫出來的就不是同一份（#493：預覽說槍＋菊花，結果兩把槍）
+    S.moveShown = r && r.draft ? { text, draft: r.draft } : null;
     if (S.mallOpen) renderMall();
     if (S.movePreview.scene && typeof scenePreview === "function") scenePreview(S.movePreview.scene);
   }
@@ -546,14 +549,16 @@
   }
   async function moveOrder(prompt, ref, basic) {
     await busy(async () => {
-      const r = await api("/api/looks/move", { prompt, ref, basic: !!basic });
+      // 帶上預覽那一份（只有那一句一字沒改才算同一份；改過就讓伺服器重新問，不要拿舊的充數）
+      const shown = S.moveShown && S.moveShown.text === prompt ? S.moveShown.draft : null;
+      const r = await api("/api/looks/move", { prompt, ref, basic: !!basic, draft: shown });
       if (r.looks) S.mallLooks = r.looks;
       if (r.main) setMain(r.main);
       if (r.main && r.main.mall && S.mallData) S.mallData.balance = r.main.mall.balance;
       const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
       const mv = r.looks && r.looks.moves;
       const ok = !!(mv && (mv.open || mv.bound)); // 要畫的在等圖、不用畫的當場學成（綁上了）
-      if (ok) { S.moveDraft = null; S.movePreview = null; }
+      if (ok) { S.moveDraft = null; S.movePreview = null; S.moveShown = null; }
       S.mallSay = text ? { text, ok } : null;
       renderTop();
       if (S.mallOpen) renderMall();

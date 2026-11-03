@@ -36,6 +36,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import contextvars
+import functools
 import hashlib
 import json
 import os
@@ -197,7 +198,13 @@ class GameError(Exception):
 
 
 def md(text: str | None) -> str:
-    return _MD.render(text or "")
+    return _md(text or "")
+
+
+@functools.lru_cache(maxsize=1024)
+def _md(text: str) -> str:
+    """同一段文字轉出來的 HTML 一樣：狀態列、主線、場景每次畫面都轉一次，多半跟上一次一字不差（主機實測，2026-11-03）。"""
+    return _MD.render(text)
 
 
 def account_store() -> AccountStore:

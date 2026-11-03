@@ -23,15 +23,15 @@
 
 `Game` 留 24 個一行委派（公開 14：`enlist_glow`、`guide_box`、`newbie_view`、`newbie_drifter`、`set_hints_off`、`guide_ack`、`skip_tutorial`、`view_orders`、`view_map`、`view_tab`、`prologue_view`、`onboard_view`、`prologue_recap`、`quest_text`；私有 10：`_note_gift`、`_graduate`、`_begin_enlistment`、`_greet_rejoin`、`_hint`、`_hint_triggers`、`_check_hints`、`_nearest_to`、`_newbie_go`、`_rest`），加上核心原位與出陣包叫的服務 12 個（`_note_action`、`_opening_on`、`_opening_begin`、`_opening_pending`、`_opening_deliver`、`_opening_gate`、`_tutorial_intro`、`_base_step_count`、`_guide_speakers`、`_enlist_done`、`_mark_veteran`、`_enlist_expire`）與酒肆的查詢服務 3 個（`_tavern_on`、`_tavern_here`、`_tavern_at`：引導包問酒肆，包不能 import 包）。
 
-核心原位碰引導的那幾處都沒有第 11 批的掛鉤，改叫上面的服務、記進邊界測試的 `GAME_DELEGATE_CALLERS`（36 對）與 `CORE_DELEGATE_CALLERS`（事件檢定 6 對），**沒有新增 `GAME_DIRECT`**（原本兩筆 `_hint_triggers`、`_newbie_go` 讀酒肆的拿掉）：
+核心原位碰引導的那幾處都沒有第 11 批的掛鉤，改叫上面的服務、記進邊界測試的 `GAME_DELEGATE_CALLERS`（35 對）與 `CORE_DELEGATE_CALLERS`（事件檢定 6 對），**沒有新增 `GAME_DIRECT`**（原本兩筆 `_hint_triggers`、`_newbie_go` 讀酒肆的拿掉）：
 
-- 做完一件事引導跟著走（`_note_action`）：`choose` 七處、`_sense_apply`、`_order_credit`、`_duty`、`_faction_step`、`_arrive`、`take_stamina_pill`、`allocate_stat`、`_menxia_entry`——總表第 26 批的事件。
+- 做完一件事引導跟著走（`_note_action`）：`choose` 七處、`_sense_apply`、`_order_credit`、`_faction_step`、`_arrive`、`take_stamina_pill`、`allocate_stat`、`_menxia_entry`——總表第 26 批的事件。
 - 碰到才說（`_check_hints`、`_hint`）：`choose`、`sync`、`travel`、`allocate_stat`、`sense_draw`、`_menxia_entry`、`_act`、`_brush_off`、`_open_dialogue`、`_town_drill`，與核心 `event_check.answer_event`、`answer_branch`（連 `_begin_enlistment`、`_greet_rejoin`）。
 - 開局（`_opening_*`）：`choose`、`check_in`、`_auto_checkin`、`checkin_view`、`now_entry_html`、`Game.new`。
 - 換季照帶（`_reset_player_for_new_season`：`_enlist_done`、`_base_step_count`、`_tutorial_intro`）、清失效參照一開頭（`_mark_veteran`）、`sync` 的引薦人結語（`_enlist_expire`）、核心的引導框服務（`_note_guide` 的 `_guide_speakers`）、狀態列的任務卡（`status_data` 的 `newbie_view`）、`act:rest`（`_act` 的 `_rest`）。
 - 掃描看不到的：`Game.new`（classmethod，用 `game.` 叫）的 `_opening_on`、`_opening_begin`、`_tutorial_intro`、`_graduate`、`_note_gift`；舊模組 `step.py` 叫 `game._nearest_to`。
 
-**`note_action` 被測試換掉的那一層**：`tests/core/test_engine.py` 換的是 `tianxia.engine.note_action`（看 `args[3]`／`args[-1]`），所以 `Game._note_action` 的本體叫 engine 模組層那個名字（`from .guide import note_action`：別名）；包裡的 `view_orders`、`view_map`、`view_tab` 與出陣包的四處都經 `ctx._note_action`。包裡互相叫直接叫函式，只有被測試換掉的 `_hint_triggers`（`test_hints` 換掉 `game._hint_triggers`）經 `ctx`。
+**`note_action` 被測試換掉的那一層**：`tests/core/test_engine.py` 換的是 `tianxia.engine.note_action`（看 `args[3]`／`args[-1]`），所以 `Game._note_action` 的本體叫 engine 模組層那個名字（`from .guide import note_action`：別名）；包裡的 `view_orders`、`view_map`、`view_tab` 與出陣包的六處（`actions.py`、`duel_actions.py` 四處；守勢 `train_actions.duty` 兩處：原本的 `Game._duty` 第 17 批進了出陣包，這一批合進 develop 時改）都經 `ctx._note_action`。包裡互相叫直接叫函式，只有被測試換掉的 `_hint_triggers`（`test_hints` 換掉 `game._hint_triggers`）經 `ctx`。
 
 ## 過渡（手冊 3.11）
 
