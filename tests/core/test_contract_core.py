@@ -235,6 +235,9 @@ class Seams(Fake):
     def record_detail(self, ctx, record):
         return record.model_copy(update={"opponent": "換過的對手"})
 
+    def on_season_close(self, ctx, reread):  # battle（全部拆包第 8 批）
+        self._note("on_season_close", reread)
+
     def shops(self):
         return (Shop(key="fakeshop", inside=lambda g: self.in_shop, here=lambda g: self.shop_here,
                      close=lambda g: setattr(self, "in_shop", False) or self._note("close_shop"),
@@ -381,6 +384,24 @@ def test_the_own_turn_is_heard_even_when_the_package_is_closed(game, seams):
     seams.open = False
     g.mark_seen(1000.0)
     assert ("on_own_turn",) in seams.calls
+
+
+# battle（全部拆包第 8 批：收季的收兵）
+def test_closing_the_season_asks_the_packages_where_the_old_lines_were(game, seams):
+    """收季的收兵（on_season_close）：管理者立刻收季叫一次（reread=False：呼叫端剛讀回收季那一份季）；開下一季只在休季時叫（reread=True：
+    收兵之前讀回手上那一份季），季還在進行中按開下一季不叫。不問 enabled（原位那兩段本來就不看包的開關：決戰照內容、攻城照這一季的地盤）。"""
+    g = _made(game)
+    g.content.config.admins = [g.state.player.name]
+    seams.open = False
+    seams.calls.clear()
+    g.admin_next_season(now=1010.0)  # 還在進行中：不收兵、也開不了下一季
+    assert [c for c in seams.calls if c[0] == "on_season_close"] == []
+    g.admin_end_season(now=1020.0)
+    assert [c for c in seams.calls if c[0] == "on_season_close"] == [("on_season_close", False)]
+    seams.calls.clear()
+    g.admin_next_season(now=1030.0)
+    assert [c for c in seams.calls if c[0] == "on_season_close"] == [("on_season_close", True)]
+    assert g.world.get_season_number() == 2
 
 
 def test_the_own_turn_is_heard_while_the_season_clock_is_paused(game, seams):
