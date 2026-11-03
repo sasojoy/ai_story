@@ -118,3 +118,22 @@ def test_a_stop_puts_the_choice_on_the_card():
     assert "林中傳來一聲狼嚎。" in html
     assert 'data-act="outing-choose" data-id="choice:0" >' in html and 'data-id="choice:1" disabled' in html
     assert "去看看" not in html and 'data-act="choose"' not in html
+
+
+LOOK_DRIVER = r"""
+const code = ["OUTING_LOOK_SHEET"].map(konst).join("\n") + fn("outingLookUrl");
+const H = new Function(code + "\nreturn { outingLookUrl };")();
+const urls = input.ask.map(([look, name]) => H.outingLookUrl(look, name));
+globalThis.LOOKS_VER = "7f3a";
+finish({ urls, ver: H.outingLookUrl("u12", "hero_run") });
+"""
+
+
+def test_the_trip_wears_the_look_on_the_arena():
+    """走一趟穿身上那一套（Joy 11/1「除了擂台換形象，探索那邊應該要一起換吧」）：走一趟那六張每套自己有，
+    站著、挨打、跪地借擂台的；自建的由伺服器送，認不得的不載（整趟照舊畫斗笠小子）。"""
+    out = webharness.run(LOOK_DRIVER, {"ask": [["moying", "hero_run"], ["moying", "hero_idle"], ["u12", "hero_kneel"],
+                                               ["u12", "hero_slash"], ["../x", "hero_run"]]})
+    assert out["ver"] == "/api/looks/img/u12/hero_run?v=7f3a"  # 補畫好了網址就換（main.looks_ver）
+    assert out["urls"] == ["/static/img/looks/moying/hero_run.webp", "/static/img/looks/moying/hero_bare_idle.webp",
+                   "/api/looks/img/u12/hero_bare_kneel", "/api/looks/img/u12/hero_slash", ""]

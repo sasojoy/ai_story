@@ -2300,6 +2300,34 @@ def admin_choices(game: Game) -> dict:
         "divine_out": divine.EXHAUSTED if divine.exhausted_now(game.world.divine_state(), game.world.get_season_number()) else "",
         # 模型佇列的總數（正在跑幾件、在排幾件，真人與假人算在一起，不分開數）；不列名號，也看不出有沒有假人（審查 M4）。開關關著是 None
         "llm_queue": None if QUEUE is None else QUEUE.snapshot(),
+        # 管理頁頂上「現在」那一塊（管理頁獨立，Joy 2026-11-01）：第幾季、季曆此刻、在打的決戰、各條大勢線此刻的值
+        "now": admin_now(game),
+    }
+
+
+PHASE_WORDS = {"preparing": "籌備中", "running": "進行中", "resting": "休季"}
+BATTLE_PHASE_WORDS = {"muster": "集結中", "active": "開打了"}
+
+
+def admin_now(game: Game) -> dict:
+    """管理頁頂上的現況：按鈕按下去之前先看得到此刻的樣子（定戰況、推大勢、救場之前知道現在是多少）。呼叫端拿著行動鎖。"""
+    world = game.state.world
+    battle = game.world.get_battle()
+    fight = None
+    if battle is not None and battle.phase != "ended":
+        definition = CONTENT.battles.get(battle.battle_id)
+        fight = {
+            "name": definition.name if definition is not None else battle.battle_id,
+            "phase": BATTLE_PHASE_WORDS.get(battle.phase, battle.phase),
+            "people": len(battle.participants), "round": battle.round_number, "trend": battle.trend,
+        }
+    return {
+        "season": game.world.get_season_number(),
+        "phase_text": PHASE_WORDS.get(game.world.season_phase(), ""),
+        "when": game.stamp(world.time),
+        "battle": fight,
+        "trends": [{"id": t.id, "label": t.name, "value": rules.world_trend_value(world, CONTENT, t.id)}
+                   for t in CONTENT.scenario.trends],
     }
 
 
@@ -2618,6 +2646,13 @@ class WebFiles(StaticFiles):
 
 @app.get("/")
 def index():
+    return HTMLResponse(PAGE, headers=NO_CACHE)
+
+
+@app.get("/admin")
+def admin_page():
+    """管理頁自己的網址（Joy 2026-11-01「把管理員工具獨立一個網址」）：同一支網頁，網頁看網址畫管理頁；不是管理者的人打開，
+    網頁照常回到江湖（資料都在 /api/admin* 那幾條，那邊才擋人）。"""
     return HTMLResponse(PAGE, headers=NO_CACHE)
 
 
@@ -3664,6 +3699,15 @@ def api_admin_player(request: Request, body: dict = Body(...)):
         raise HTTPException(403)
     name = str(body.get("name", ""))
     return look(game, lambda g: g.admin_player_choices(name))
+
+
+@app.post("/api/admin/accounts")
+def api_admin_accounts(request: Request, body: dict = Body(...)):
+    """管理頁「重設密碼」的帳號搜尋（管理頁獨立，Joy 2026-11-01）：帳號或名號含這幾個字的，最多 10 筆 {login, character}。只讀、管理者以外 403。"""
+    game = _game(request)
+    if not game.is_admin():
+        raise HTTPException(403)
+    return {"rows": account_store().search(str(body.get("q", "")))}
 
 
 @app.post("/api/admin/reset_password")

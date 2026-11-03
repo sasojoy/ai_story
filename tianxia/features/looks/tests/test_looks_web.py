@@ -84,25 +84,110 @@ def test_the_admin_box_lists_open_orders_with_prompts(m_on):  # noqa: F811
     assert "白衣書生，背著竹簍" in html and "Style: idle" in html
     assert 'id="ad-looks-file-5"' in html and 'data-op="reject"' in html
     assert 'data-op="release" data-id="5" disabled' in html  # 十張還沒齊：上架按不下去
+    moves = {"sheet": "fx", "size": "1320×220", "done": [], "open": [
+        {"id": 9, "owner": "沈浪", "art": "旋風腿", "style_text": "拳腳", "prompt": "背後出現一座大佛擊出一掌", "status": "pending",
+         "status_text": "等圖中", "reason": "", "move": "m9", "scene": True, "missing": ["art2"], "have": False, "gen_prompt": "",
+         "arts": [{"slot": "art1", "label": "大佛", "have": True, "prompt": "Draw ONE subject only: 「大佛」"},
+                  {"slot": "art2", "label": "佛掌", "have": False, "prompt": "Draw ONE subject only: 「佛掌」"}]}]}
+    script = f"H.S.adLooks = {json.dumps({**admin, 'open': [], 'moves': moves}, ensure_ascii=False)}; return H.looksAdminHtml();"
+    html = webharness.run(driver, {"m": m_on, "script": script, "S": {}, "menxia": None, "stored": {}, "responses": {}})
+    assert "art1・大佛" in html and "「佛掌」" in html  # 一句話自創：要畫的一樣一格，附提示詞
+    assert 'data-slot="art2"' in html and 'id="ad-moves-file-9-art2"' in html
+    assert 'data-op="move-release" data-id="9" disabled' in html  # 還缺佛掌：上架按不下去
+    stopped = {**moves["open"][0], "studio": {"painted": 3, "failed": "佛掌：有字"}}  # 畫坊停手：寫原因、給「再畫一次」
+    script = f"H.S.adLooks = {json.dumps({**admin, 'gen': 'api', 'open': [], 'moves': {**moves, 'open': [stopped]}}, ensure_ascii=False)}; return H.looksAdminHtml();"
+    html = webharness.run(driver, {"m": m_on, "script": script, "S": {}, "menxia": None, "stored": {}, "responses": {}})
+    assert "畫坊：畫了 3 張・停手了：佛掌：有字" in html and 'data-op="studio-retry" data-id="9"' in html and "畫坊自動畫" in html
 
 
 MOVES = {"price": 300, "prompt_max": 120, "art": "旋風腿", "has_art": True, "style": "fist", "style_text": "拳腳", "open": False, "bound": False,
          "library": [{"id": 7, "move": "m7", "art": "流雲掌", "style": "fist", "style_text": "拳腳", "prompt": "青色劍氣", "status": "made",
-                      "status_text": "上架", "reason": "", "bound": "", "on_art": False, "bindable": True}],
+                      "status_text": "上架", "reason": "", "worn": False, "plays": False, "asleep": False, "wearable": True}],
          "list": []}
+
+
+def test_a_stuck_order_can_be_withdrawn(m_on):  # noqa: F811
+    """Joy 2026-11-02「審圖卡住，玩家也不能退回，會被卡死」：還沒上架的單一顆「撤回」，先問一次，送 /api/looks/withdraw。"""
+    open_ = {**ORDER, "open": True, "list": [{**ORDER["list"][0], "status": "review", "status_text": "審核中", "reason": "", "withdraw": True}]}
+    done = {**ORDER, "list": [{**ORDER["list"][0], "reason": "自己撤回", "withdraw": False}]}
+    out = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }')
+                 + 'const before = T.els.app.innerHTML;'
+                 + _click('{ act: "look-withdraw", kind: "look", id: "3", name: "黑衣客" }') + 'const asked = T.bodyHtml.join("");'
+                 + _click('{ act: "ask-yes" }') + 'return { before, asked, app: T.els.app.innerHTML, calls: T.calls };',
+                 responses={"/api/looks": {**LOOKS, "order": open_},
+                            "/api/looks/withdraw": {"message": "撤回了「黑衣客」：元寶 +900 退回來了。", "looks": {**LOOKS, "order": done}}})
+    assert 'data-act="look-withdraw" data-kind="look" data-id="3"' in out["before"] and "按「撤回」退掉" in out["before"]
+    assert "撤回「黑衣客」？元寶全退" in out["asked"]
+    assert any(c[0] == "/api/looks/withdraw" and c[1] == {"id": 3, "kind": "look"} for c in out["calls"])
 
 
 def test_the_move_section_orders_and_binds(m_on):  # noqa: F811
     """招式動畫（第三批）：寫現在練的那一門與打法、下單的表單、招式庫一列一顆「綁到」；綁送 /api/looks/bind。"""
     looks = {**LOOKS, "moves": MOVES}
     out = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "move-bind", id: "7" }'),
-                 responses={"/api/looks/bind": {"message": "把招式綁到「旋風腿」上了（這一季）。", "looks": looks}, "/api/looks": looks})
+                 responses={"/api/looks/bind": {"message": "換上「流雲掌」了：擂台上出拳腳的時候就照這一招演。", "looks": looks}, "/api/looks": looks})
     html = out["app"]
-    assert "招式動畫" in html and "現在練的「旋風腿」・打法拳腳" in html
-    assert 'id="move-prompt"' in html and 'data-act="move-order"' in html
-    assert "/api/looks/img/m7/fx" in html and "/static/img/arena/fx_sample.webp" in html
+    assert "絕招" in html and "現在練的「旋風腿」・打法拳腳" in html
+    assert 'id="move-prompt"' in html and 'data-act="move-order"' in html and 'data-act="move-preview"' in html
+    assert "/api/looks/img/m7/fx" in html  # 舊的光效單照舊畫那一張
     assert any(c[0] == "/api/looks/bind" and c[1] == {"id": 7} for c in out["calls"])
-    assert "把招式綁到「旋風腿」" in html
+    assert "換上「流雲掌」了" in html
+
+
+def test_a_move_that_cannot_play_says_why(m_on):  # noqa: F811
+    """穿著、但手上的兵器換了打法：擂台上不會演，招式庫那一列與抬頭都要寫明（Joy 2026-11-02
+    「我那個絕招寒霜雪怎麼都還沒施放過」——空手下的單，後來拿了劍）。下單那一塊也先講明打法會鎖住。"""
+    asleep = "這一招是拳腳的，你現在的打法是揮砍——擂台上不會演，換回拳腳才演得出來。"
+    moves = {**MOVES, "style": "slash", "style_text": "揮砍", "worn": "流雲掌", "asleep_text": asleep,
+             "order_style_note": "照你現在的打法（揮砍）登記。換成別種兵器時這一招不會演，要另外下一張。",
+             "library": [{**MOVES["library"][0], "worn": True, "wearable": False,
+                          "plays": False, "asleep": True, "asleep_text": asleep}]}
+    html = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }'), responses={"/api/looks": {**LOOKS, "moves": moves}})["app"]
+    assert html.count("擂台上不會演，換回拳腳才演得出來") == 2  # 抬頭一句、那一列一句
+    assert "身上穿著「流雲掌」" in html
+    assert 'data-act="move-bind" data-id="0"' in html  # 穿在身上：那一顆是「脫下」
+
+
+SCENE = {"v": 1, "name": "旋風腿", "glow": "#ffd27a", "length": 3300, "arts": [{"slot": "art1", "label": "大佛"}, {"slot": "art2", "label": "佛掌"}],
+         "beats": [{"op": "暗場", "at": 0, "tone": "暖"}, {"op": "法相", "at": 350, "art": "art1", "label": "大佛"}, {"op": "落款", "at": 900},
+                   {"op": "巨物飛擊", "at": 1500, "art": "art2", "label": "佛掌"}, {"op": "白光", "at": 2600}]}
+
+
+def test_the_move_preview_shows_what_needs_drawing(m_on):  # noqa: F811
+    """一句話自創（Joy 2026-11-01）：按「先看看」送 /api/looks/scene、不扣元寶，下面多一塊畫布照稿演，寫要畫哪幾樣；
+    招式庫裡一句話自創的那一招蓋一個「絕」字印（沒有光效圖）。"""
+    lib = [{**MOVES["library"][0], "id": 8, "move": "m8", "scene": True, "arts": []}]
+    looks = {**LOOKS, "moves": {**MOVES, "library": lib}}
+    out = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "move-preview" }'),
+                 responses={"/api/looks/scene": {"scene": SCENE}, "/api/looks": looks})
+    html = out["app"]
+    assert any(c[0] == "/api/looks/scene" for c in out["calls"])
+    assert 'id="scene-preview"' in html and "獨門會畫「大佛」「佛掌」" in html
+    assert 'move-seal' in html and "/api/looks/img/m8/fx" not in html
+    bad = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "move-preview" }'),
+                 responses={"/api/looks/scene": {"problem": "只能寫中文。"}, "/api/looks": looks})["app"]
+    assert "只能寫中文。" in bad and 'id="scene-preview"' not in bad
+
+
+def test_made_looks_and_moves_can_be_shown(m_on):  # noqa: F811
+    """做好了的也要能看（Joy 2026-11-01「形象頁那邊，已經做好的形象跟絕招也要能展示」）：每一套一顆「看動作」，按了格子上面多一塊畫布
+    （arena_scene.js 的 lookShow 一張一張演），再按收起；招式庫裡一句話自創的那一招一顆「演一次」，抓 /api/looks/scene/m<id> 照稿演、
+    表單先收起來。"""
+    lib = [{**MOVES["library"][0], "id": 8, "move": "m8", "scene": True, "arts": ["大佛"]}]
+    looks = {**LOOKS, "moves": {**MOVES, "library": lib}}
+    out = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "look-show", id: "moying", name: "墨影" }'),
+                 responses={"/api/looks": looks})
+    html = out["app"]
+    assert 'data-act="look-show" data-id="jinshen"' in html  # 沒買的也看得到
+    assert 'id="look-show"' in html and "<b>墨影</b>" in html and 'data-act="look-show" data-id=""' in html
+    closed = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "look-show", id: "moying", name: "墨影" }')
+                    + _click('{ act: "look-show", id: "" }'), responses={"/api/looks": looks})["app"]
+    assert 'id="look-show"' not in closed
+    out = _layer(m_on, _click('{ act: "mall-tab", tab: "look" }') + _click('{ act: "move-show", id: "m8" }'),
+                 responses={"/api/looks/scene/m8": {"scene": SCENE}, "/api/looks": looks})
+    html = out["app"]
+    assert any(c[0] == "/api/looks/scene/m8" for c in out["calls"])
+    assert 'id="scene-preview"' in html and 'id="move-prompt"' not in html and ">收起</button>" in html
 
 
 def test_no_art_no_move_form(m_on):  # noqa: F811

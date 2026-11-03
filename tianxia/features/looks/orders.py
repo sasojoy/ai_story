@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import shutil
 from dataclasses import dataclass
@@ -32,6 +33,11 @@ SHEETS = {  # 一套十張：檔名 → 格數（每格 220×220，腳底在 (10
     "hero_bare_idle": 4, "hero_bare_hit": 3, "hero_bare_kneel": 4, "hero_bare_dodge": 4, "hero_bare_fall": 6, "hero_bare_block": 4,
     "hero_atk_slash": 6, "hero_atk_pole": 6, "hero_atk_fist": 6, "hero_atk_shoot": 6,
 }
+# 走一趟（探索）那幾個動作（Joy 2026-11-02「除了擂台換形象，探索那邊應該要一起換吧」）：檔名同 web/img/outing/ 的斗笠小子，
+# 腰上掛一把劍（走一趟的斗笠小子帶劍）。站著、挨打、跪地借擂台那三張（web/outing.js 的 OUTING_LOOK_SHEET），所以只多這六張
+OUTING = {"hero_run": 8, "hero_pickup": 6, "hero_lift": 3, "hero_slash": 6, "hero_meditate": 4, "hero_push": 4}
+ARENA = dict(SHEETS)  # 擂台那十張（手位表只有這幾張有：走一趟那六張沒有兵器）
+SHEETS.update(OUTING)
 NAME_MAX, PROMPT_MAX = 6, 120
 MAX_BYTES = 2_000_000  # 一張最大多少（上傳那一道）
 PENDING, REVIEW, MADE, REJECTED = "pending", "review", "made", "rejected"
@@ -42,7 +48,7 @@ NO_NAME = "先替這一套取個名字。"
 NAME_LONG = "名字最多 {n} 個字。"
 NAME_TAKEN = "已經有一套叫「{name}」的形象了，換個名字。"
 NO_PROMPT = "寫一句這一套長什麼樣子。"
-OPEN_ORDER = "你還有一張自建形象在做，等它好了再下一張。"
+OPEN_ORDER = "你還有一張自建形象在做：等它好了、或按「撤回」退掉，再下一張。"
 SHORT = "元寶不夠：自建形象要 {price}，你有 {balance}。"
 PLACED = "下單了「{name}」：元寶 -{price}（還剩 {left}）。圖做好、審核過了，就會出現在「形象」這一頁。"
 DUPLICATE = "這一張已經下過單了。"
@@ -196,18 +202,53 @@ def sheet_problem(sheet: str, data: bytes) -> str | None:
     return None
 
 
+HANDS = "hands"  # 這一套自己的手位表（hands.json）：兵器掛在哪，見 cutting.hand_row
+
+
+def hands_file(root: Path, look: str) -> Path:
+    return folder(root, look) / f"{HANDS}.json"
+
+
+def save_hands(root: Path, look: str, sheet: str, data: bytes) -> None:
+    """把這一張的手位併進這一套的 hands.json（算不出來就跳過，圖照收）。
+
+    手位要照每一套形象自己的身體算（web/arena_anim.js 的 RING_HAND 是斗笠小子的，共用會讓兵器懸空）。
+    這支在存圖之後叫；cutting 延後 import（orders 不拉 numpy：伺服器的管理者頁也讀這一支）。
+    """
+    try:
+        from . import cutting  # noqa: PLC0415
+    except ImportError:  # pragma: no cover - 沒裝 numpy／scipy 的環境
+        return
+    try:
+        row = cutting.hand_row(data, sheet)
+    except Exception:  # noqa: BLE001  手位算不出來不該擋住收圖
+        return
+    path = hands_file(root, look)
+    table = {}
+    if path.is_file():
+        try:
+            table = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            table = {}
+    table[sheet] = row
+    path.write_text(json.dumps(table, ensure_ascii=False), encoding="utf-8")
+
+
 def save_sheet(root: Path, look: str, sheet: str, data: bytes) -> None:
-    """存一張（同一張的另一種格式先刪掉，免得送出去的是舊的）。呼叫端先過 sheet_problem。"""
+    """存一張（同一張的另一種格式先刪掉，免得送出去的是舊的），順手更新這一套的手位表。呼叫端先過 sheet_problem。"""
     fmt = image_size(data)[0]
     target = folder(root, look)
     target.mkdir(parents=True, exist_ok=True)
     for ext in ("webp", "png"):
         (target / f"{sheet}.{ext}").unlink(missing_ok=True)
     (target / f"{sheet}.{fmt}").write_bytes(data)
+    if sheet in ARENA:  # 走一趟那六張不掛兵器，沒有手位表
+        save_hands(root, look, sheet, data)
 
 
 def fake_generate(root: Path, look: str, prompt: str, sources: list[Path]) -> None:
     """假的生圖器（開發與測試用；TIANXIA_LOOK_GEN=fake）：照樣子那一句的雜湊挑一套現成的圖抄過去。不叫任何外部服務。"""
+    sources = [p for p in sources if all((p / f"{s}.webp").is_file() or (p.parent / "outing" / f"{s}.webp").is_file() for s in SHEETS)]
     if not sources:
         return
     pick = sources[int.from_bytes(hashlib.sha256(prompt.encode()).digest()[:4], "big") % len(sources)]
@@ -215,6 +256,8 @@ def fake_generate(root: Path, look: str, prompt: str, sources: list[Path]) -> No
     target.mkdir(parents=True, exist_ok=True)
     for sheet in SHEETS:
         src = pick / f"{sheet}.webp"
+        if not src.is_file():  # 斗笠小子那一套擂台與走一趟分兩個資料夾
+            src = pick.parent / "outing" / f"{sheet}.webp"
         if src.is_file():
             shutil.copyfile(src, target / f"{sheet}.webp")
 
@@ -263,29 +306,85 @@ def reject(wallet: Wallet, order: Order, *, now: float, admin: str, note: str) -
     return f"退回了「{order.name}」：元寶 +{bought.price} 退給{order.owner}。"
 
 
+WITHDRAWN = "自己撤回"
+CAN_WITHDRAW = (PENDING, REVIEW)
+
+
+def withdraw(wallet: Wallet, order: Order, *, now: float) -> str:
+    """下單的人自己撤回（Joy 2026-11-02「審圖卡住，玩家也不能退回，會被卡死」）：上架以前（等圖、審核中）隨時可以，
+    元寶全退（同管理者退回：編號 refund:<購買>，只退得了一次），那一列記退回、原因「自己撤回」。畫坊正在畫的那一張回來時
+    看到不是等圖就不收（studio.apply）。狀態在交易裡重讀：同一刻管理者剛上架的不能再撤。"""
+    with wallet.db.transaction():
+        now_status = str((wallet.purchase(order.pid).data or {}).get("status", ""))
+        if now_status not in CAN_WITHDRAW:
+            return f"（「{order.name}」{STATUS_TEXT.get(now_status, now_status)}了，撤不回來。）"
+        bought = wallet.purchase(order.pid)
+        if not wallet.post(order.owner, bought.price, "refund", f"refund:{order.pid}", time=now, note=WITHDRAWN,
+                           purchase_id=order.pid):
+            return "（這一筆已經退過了。）"
+        wallet.mark_refunded(order.pid, now)
+        wallet.update_data(order.pid, status=REJECTED, reason=WITHDRAWN)
+    return f"撤回了「{order.name}」：元寶 +{bought.price} 退回來了。"
+
+
 def gen_prompts(order: Order) -> dict[str, str]:
     """給生圖工具的提示詞（一張一段）：畫風、十張的動作照斗笠小子那一套（擂台圖提示表），人物換成下單的人寫的那一句。
     生好的圖要切成 220 格、腳底對齊（scripts/cut_look.py）再上傳。"""
     character = (f"Character: a chibi child martial artist (big head about one third of body height) described by the player as: "
                  f"\"{order.prompt}\". Keep the same proportions, size and poses as the attached reference sprite sheet.")
-    return {sheet: f"{BASE_STYLE}\n{character}\n{RULES}\n\n{ACTIONS[sheet]}" for sheet in SHEETS}
+    return {sheet: f"{BASE_STYLE}\n{character}\n{OUTING_RULES if sheet in OUTING else RULES}\n\n{ACTIONS[sheet]}" for sheet in SHEETS}
+
+
+def reference(web_img: Path, sheet: str) -> Path:
+    """斗笠小子的那一張（生圖的格式參考）：擂台的在 web/img/arena/，走一趟的在 web/img/outing/。"""
+    return web_img / ("outing" if sheet in OUTING else "arena") / f"{sheet}.webp"
 
 
 BASE_STYLE = ("Style: soft ink-wash watercolor with warm muted tints, hand-drawn ink outlines, same style as the attached reference "
               "image (Chinese wuxia, Three Kingdoms era).")
+# 審圖的清單（studio.CHECK_SHEET）要求「每一格一個完整的人，不能空、不能被切半」，所以這裡要把它講明白：
+# 2026-11-02 第一張自建形象連七張都被擋下，理由都是同一類——頭頂（髮髻、髮飾）被畫面上緣裁掉、有一格模糊成殘影、
+# 臉與下襬褪色泛白。生圖的提示詞只說了白底、無陰影、腳踩同一條地平線，從來沒說「整個人要留在畫面裡」，
+# 也沒禁止殘影與褪色，要求跟指示對不上。下面 FRAMING 就是補這一段（Joy 2026-11-02「我們自己補足玩家給的提示詞」）。
+FRAMING = ("The WHOLE character must be inside every frame: the top of the head — including hair, hair ornaments and headdress — "
+           "and the feet must not touch or cross the frame edge. Leave a clear empty margin of about one tenth of the frame above "
+           "the head and below the feet. Draw a complete, solid character in every frame: no motion blur, no ghosting or "
+           "afterimages, no fading, no transparency, no washed-out or half-drawn figures; the face and clothes keep their full "
+           "colour in every frame.")
 RULES = ("IMPORTANT: the character holds NO weapon and NO object. Hands are closed into loose fists as if gripping an invisible handle. "
-         "Sprite sheet rules: pure white background, no ground shadow, no text, no numbers, no frame borders. Every frame is the same "
+         "Sprite sheet rules: pure white background, no ground shadow, NO ground line, no horizon line, no floor or platform, "
+         "no text, no numbers, no frame borders. Every frame is the same "
          "size and the character is the same size in every frame. Feet stand on the same horizontal ground line in every frame. "
-         "Side view, facing right.")
+         "Side view, facing right. "
+         # 2026-11-02 本機 klein 實測：最常見的壞法是身體畫過格線，切出來的那一格少一塊、或兩格黏在一起。
+         "Keep each frame fully inside its own equal-width column with wide white gaps; nothing crosses into the next column. "
+         + FRAMING)
+OUTING_RULES = RULES.replace(
+    "IMPORTANT: the character holds NO weapon and NO object. Hands are closed into loose fists as if gripping an invisible handle. ",
+    "The character carries ONE plain straight sword exactly like in the attached reference sheet: sheathed at the hip unless the "
+    "action draws it. No other weapon. ")
 ACTIONS = {
-    "hero_bare_idle": "Idle fighting stance, gentle breathing loop: 4 frames, right fist held forward at waist height. Layout: 4 frames in one row. Aspect 4:1.",
-    "hero_bare_hit": "Getting hit: 1 flinch, head snapping back, 2 knocked backward, arms flung out, 3 staggering to regain balance. Layout: 3 frames in one row. Aspect 3:1.",
+                      # 待機＝往前探一下再收回（量過斗笠小子：前端水平擺 19 px、垂直只有 3 px）。
+                      # 2026-11-02 一度寫成「直上直下、不准前傾」，等於把要的那個動作禁掉了，實機看起來完全不動。
+    "hero_bare_idle": "Idle fighting stance: 4 frames, right fist held forward at waist height. The loop is a small forward bob — "
+                      "frames 1, 2 and 4 are the settled stance, and in frame 3 the WHOLE body leans and steps FORWARD toward the "
+                      "right edge (lead fist pushed out, front foot advanced), clearly further forward than the other frames — about "
+                      "a tenth of the frame width — then back. No two frames are the same drawing. Same character and clothes, feet "
+                      "on the same ground line; both feet stay on the ground in every frame, no kicking; do not stretch or squash the body, no motion blur. "
+                      "Layout: 4 frames in one row. Aspect 4:1.",
+    "hero_bare_hit": "Getting hit: 1 flinching, head snapped back, eyes shut, arms in; 2 thrown backward with arms flung wide and one foot off the ground, body tilted far back; 3 stumbling forward, one leg raised, regaining balance. Three very different silhouettes. Layout: 3 frames in one row. Aspect 3:1.",
     "hero_bare_kneel": "Losing and dropping to one knee: 1 wobbling, 2 one knee bending, 3 kneeling, right fist planted on the ground, head down, 4 same pose, breathing hard. Layout: 4 frames in one row. Aspect 4:1.",
-    "hero_bare_dodge": "Dodging: 1 stance, 2 quick lean back and sidestep, 3 deepest point of the dodge, low and leaning back, 4 springing back into stance. Layout: 4 frames in one row. Aspect 4:1.",
+    "hero_bare_dodge": "Dodging. Strict side profile in every frame: the face and body always point to the right, the face is always visible, never show the back, never turn away from the viewer. Frames: 1 stance; 2 leaning far back to the left, weight on the back foot, hands pulled to the chest; 3 knees bent low, leaning back, face still visible in profile looking right; 4 springing back into stance. Each frame clearly different and the body visibly shifts left and right. Layout: 4 frames in one row. Aspect 4:1.",
     "hero_bare_block": "Guarding / blocking: 1 settling into a low, wide defensive stance, 2 both fists raised crossed in front of the chest as if holding a blade sideways to block, 3 bracing against an impact, body pushed slightly back, back foot sliding, 4 holding the guard firmly, eyes on the opponent. Layout: 4 frames in one row. Aspect 4:1.",
-    "hero_bare_fall": "Knocked down: 1 big hit, flinching back, 2 knocked back with arms up, 3 stumbling backward, 4 falling backward, 5 lying on the back, 6 lying still (knocked out, no blood). Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
+    "hero_bare_fall": "Knocked down: 1 big hit, flinching back, 2 knocked back with arms up, 3 stumbling backward, 4 falling backward, 5 lying on the back, 6 lying still (knocked out, no blood). The same clothes in every frame, including lying down; no armour, no hat. In the last two frames nothing lies on the ground beside the head. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_atk_slash": "Two-handed overhead slash with an invisible blade: 1 stance, fists together at waist, 2 fists raised over the right shoulder, 3 fists at the top, 4 fast downward diagonal swing, 5 follow-through low in front, 6 returning to stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_atk_pole": "Long-weapon attack with an invisible spear, fists one behind the other at hip height: 1 low stance, 2 pulling back, 3 lunging thrust, arms extended, 4 recovering, 5 wide horizontal sweep, 6 back to stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_atk_fist": "Unarmed attack (real fists): 1 stance, fists up, 2 stepping in, 3 straight right punch, 4 pulling back, 5 high front kick, 6 landing back into stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_atk_shoot": "Shooting an invisible crossbow: 1 stance, 2 raising fists to the right shoulder, 3 aiming, 4 the shot with small recoil, 5 lowering, 6 back in stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
+    "hero_run": "Running to the right, one full run cycle, sword sheathed at the hip, arms swinging: 8 frames. Layout: 8 frames in a 4x2 grid. Aspect 2:1.",
+    "hero_pickup": "Picking something up from the ground: 1 standing, 2 bending the knees, 3 crouching low, 4 reaching to the ground, 5 still crouched, hand at the ground, 6 standing up again. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
+    "hero_lift": "Showing a found treasure (a small glowing pearl): 1 holding it in both hands at the chest, smiling, 2 raising it with the right hand, 3 holding it high above the head, delighted. Layout: 3 frames in one row. Aspect 3:1.",
+    "hero_slash": "Drawing the sword and slashing to the right: 1 ready stance, sword held low in front, 2 sword raised over the head, 3 top of the swing, 4 fast downward slash, 5 follow-through low in front, 6 back to the ready stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
+    "hero_meditate": "Sitting cross-legged on the ground, eyes closed, meditating, hands resting on the knees, gentle breathing loop: 4 frames, sword laid across the lap or at the side. Layout: 4 frames in one row. Aspect 4:1.",
+    "hero_push": "Pushing hard with both palms forward against something heavy on the right (a stuck cart or a boulder, not drawn), legs braced, leaning in: 4 frames, sword sheathed at the hip. Layout: 4 frames in one row. Aspect 4:1.",
 }
