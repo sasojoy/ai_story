@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from tianxia import territory  # 過渡：待搬（地盤：出陣的開關就是地盤的，territory.on）
+from tianxia import territory  # 共用規則層（地盤：出陣的開關就是地盤的，territory.on）
 from tianxia.models import Content
 from tianxia.state import FrontChip, FrontReport, FrontRow, PlayerState, WorldState
 
@@ -60,7 +60,7 @@ def ranger_here(content: Content, faction: str | None, loc_id: str, world: World
     """散人站在區塊上（FB-250）：投靠了陣營的人在這裡會有出陣，散人沒有——那一格寫原因，不寫「不在戰線」。"""
     if faction is not None or not on(content):
         return False
-    from tianxia import conquest  # noqa: PLC0415  過渡：待搬（conquest → territory → rules：在函式裡 import）
+    from tianxia import conquest  # noqa: PLC0415  共用規則層（conquest → territory → rules：在函式裡 import）
 
     return loc_id in conquest.blocks(content)
 
@@ -70,7 +70,7 @@ def out_of_contest(content: Content, world: WorldState | None, faction: str | No
     （截糧的運糧隊經過時例外，那時 mode 是攻），那一格灰著寫 OUT_NOTE。"""
     if faction is None or not on(content):
         return False
-    from tianxia import conquest  # noqa: PLC0415  過渡：待搬（conquest → territory → rules：在函式裡 import）
+    from tianxia import conquest  # noqa: PLC0415  共用規則層（conquest → territory → rules：在函式裡 import）
 
     return (loc_id in conquest.blocks(content) and not conquest.capturable(content, loc_id)
             and conquest.holder(world, content, loc_id) != faction)
@@ -82,7 +82,7 @@ def duty_problem(content: Content, world: WorldState | None, faction: str | None
     side（Game._side：豪強分屬兩軍的季是依附的那一軍）。不是區塊的地點（南華觀、豪強三處投靠點）誰也不佔，這一版不動。"""
     if faction is None:
         return ""
-    from tianxia import conquest  # noqa: PLC0415  過渡：待搬（conquest → territory → rules：在函式裡 import）
+    from tianxia import conquest  # noqa: PLC0415  共用規則層（conquest → territory → rules：在函式裡 import）
 
     if not on(content) or loc_id not in conquest.blocks(content):
         return ""
@@ -108,7 +108,7 @@ def mode(content: Content, world: WorldState, faction: str | None, loc_id: str, 
     領地爭奪（計畫 Task 6）：每一塊區塊都有出陣；自家的守（有截糧的運糧隊照打），別人的、中立的攻。"""
     if faction is None or not on(content):
         return None
-    from tianxia import conquest  # noqa: PLC0415  過渡：待搬（conquest → territory → rules：在函式裡 import）
+    from tianxia import conquest  # noqa: PLC0415  共用規則層（conquest → territory → rules：在函式裡 import）
 
     if loc_id not in conquest.blocks(content):
         return None
@@ -163,7 +163,7 @@ def report(
 ) -> FrontReport:
     """出陣回報（FrontReport）：before 是這一下之前每一條進度（攻方 → 值），world 是這一下之後；moved 是這一下自己推（拉）動了多少；
     why 是這一下之前推不推得動（conquest.push_problem）；used 是今天已出陣幾次（含這一下）；orders 是（軍令種類名, 陣營完成次數, 額度, 達成了沒）。"""
-    from tianxia import conquest  # noqa: PLC0415  過渡：待搬（conquest → territory → rules：在函式裡 import）
+    from tianxia import conquest  # noqa: PLC0415  共用規則層（conquest → territory → rules：在函式裡 import）
 
     place = content.locations[loc_id].name
     name = lambda f: content.scenario.faction_name(f, f)  # noqa: E731

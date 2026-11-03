@@ -17,7 +17,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from tianxia import speech  # 過渡：待搬（玩家寫的字過字表）
+from tianxia import speech  # 共用規則層（玩家寫的字過字表）
 from tianxia.models import Content, MallItem
 from tianxia.wallet import Purchase, Wallet
 

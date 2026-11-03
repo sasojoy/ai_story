@@ -331,7 +331,7 @@ def tale_messages(req: TaleRequest) -> list[dict[str, str]]:
 
 def tale_clean(raw: str, req: TaleRequest) -> str | None:
     """模型寫的遊記驗過才用：轉繁體、去掉標記與換行；有數字、太長、提到遊戲的丟掉（回 None）。"""
-    from tianxia import zh  # noqa: PLC0415  過渡：待搬（繁體）
+    from tianxia import zh  # noqa: PLC0415  共用規則層（繁體）
 
     text = zh.to_traditional(str(raw or ""))
     text = re.sub(r"[*#>`_]+", "", text)

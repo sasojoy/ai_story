@@ -150,7 +150,7 @@ def settle(state: GameState, content: Content) -> None:
 
 def deliver(state: GameState, content: Content) -> list[str]:
     """同步時叫：散席時我那一句是席間最佳、還沒領過，名望 +feast_fame。回傳江湖紀錄的句子（標題 TITLE）。"""
-    from tianxia import renown  # noqa: PLC0415  過渡：待搬（renown → rules …：延後載入）
+    from tianxia import renown  # noqa: PLC0415  共用規則層（renown → rules …：延後載入）
 
     p = state.player
     out: list[str] = []
