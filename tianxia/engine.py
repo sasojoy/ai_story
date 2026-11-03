@@ -8652,7 +8652,9 @@ class Game:
         if outermost:
             self._preparing_memo = []  # 空的＝範圍開了、還沒讀過
         try:
-            yield
+            # 同一個範圍順便記住純粹照內容與輸入算的東西（最短路、名聲說明卡的選項），一次畫面建構不重算（主機實測 view 0.13～0.2 秒，2026-11-03）
+            with atlas.route_memo(), renown.needs_memo():
+                yield
         finally:
             if outermost:
                 self._preparing_memo = None

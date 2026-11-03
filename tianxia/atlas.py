@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import heapq
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 
 from . import allied, conquest, figures, insights, mounts, orders, prologue, sortie, terrain, territory
@@ -583,6 +585,24 @@ class Route:
         return self.path[:-1]
 
 
+# 一次畫面建構裡記住的最短路（route_memo）：狀態列、行動說明、新手指引、本週卡建一次畫面要從同一個地方算二十次左右，
+# 一樣的起點、一樣能走的地點，答案一樣。只活在 route_memo 的範圍裡（server.main_view 經 Game.phase_memo 開），範圍外照舊每次算。
+_ROUTE_MEMO: ContextVar[dict | None] = ContextVar("route_memo", default=None)
+
+
+@contextmanager
+def route_memo() -> Iterator[None]:
+    """這一段裡 shortest_routes 一樣的輸入只算一次；巢狀時用最外層那一份，出了範圍就丟掉。"""
+    if _ROUTE_MEMO.get() is not None:
+        yield
+        return
+    token = _ROUTE_MEMO.set({})
+    try:
+        yield
+    finally:
+        _ROUTE_MEMO.reset(token)
+
+
 def shortest_routes(
     state: GameState, content: Content, allowed: set[str] | None = None, start: str | None = None,
 ) -> dict[str, Route]:
@@ -591,6 +611,10 @@ def shortest_routes(
     if allowed is None:
         allowed = {loc_id for loc_id, loc in content.locations.items() if is_unlocked(loc, state, content)}
     begin = state.player.location if start is None else start
+    memo = _ROUTE_MEMO.get()
+    key = (id(content), begin, frozenset(allowed)) if memo is not None else None
+    if key is not None and key in memo:
+        return dict(memo[key])
     best: dict[str, Route] = {}
     heap: list[tuple[float, int, tuple[str, ...], tuple[float, ...], str]] = [(0.0, 0, (), (), begin)]
     while heap:
@@ -604,6 +628,8 @@ def shortest_routes(
                 leg = leg_minutes(content, here, dest_id)
                 # 分鐘數取到小數第 6 位再比，免得一樣長的路因為浮點誤差分出先後
                 heapq.heappush(heap, (round(minutes + leg, 6), hops + 1, path + (dest_id,), legs + (leg,), dest_id))
+    if key is not None:
+        memo[key] = dict(best)
     return best
 
 
