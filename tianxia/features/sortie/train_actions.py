@@ -27,7 +27,7 @@ from tianxia import territory  # 共用規則層（地盤：站的照控制方�
 from tianxia.core.option import Option
 from tianxia.core.services import BIG_FIGHT_WAIT, drill_share
 from tianxia.events import pick_event  # 過渡：待搬（遊歷打完的戰後事件）
-from tianxia.guide import note_action  # 過渡：待搬（入伍段的「出一次力」）
+from tianxia.guide import note_action  # 過渡：待搬（入伍段的「出一次力」；第 22 批新手引導成包時改叫 ctx._note_action，見 README）
 from tianxia.models import Location, Squad
 from tianxia.rules import front_of, resolve_trend
 
