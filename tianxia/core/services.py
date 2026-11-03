@@ -114,10 +114,9 @@
   也記了一行，第 11 批去重，留這一行）。第 8 批兩個本體搬進 `features/battle/progress.py`、決戰包裡直接叫；酒肆包、形象包、核心的
   事件檢定照舊經 Game 的委派問
 - `ctx._definition_of(battle)`（那一場的定義：攻城戰是「攻城・地點」）
-- `ctx._free_agent(definition)`（散人、豪強：只能臨時投效；本體第 7 批搬進 `features/battle/muster.py`，決戰包裡直接叫，別的包問它叫
-  Game 的委派）。（第 7 批：決戰的大區叫什麼、還沒到戰場的原因、臨時投效的人打完照樣是誰三個本體搬進 `muster.py`、只有決戰包裡叫，
-  Game 上不留，從這裡拿掉。第 8 批：只能在一旁看 `_watching_battle` 的本體搬進 `progress.py`、只有決戰包經 ctx 叫過，改成包裡直接叫，
-  從這裡拿掉；Game 上的委派留給 options 與引導）
+- `ctx._watching_battle(battle, definition)`（此刻只能在一旁看）、`ctx._free_agent(definition)`（散人、豪強：只能臨時投效；本體第 7 批搬進
+  `features/battle/muster.py`，決戰包裡直接叫，別的包問它叫 Game 的委派）。（第 7 批：決戰的大區叫什麼、還沒到戰場的原因、臨時投效的人
+  打完照樣是誰三個本體搬進 `muster.py`、只有決戰包裡叫，Game 上不留，從這裡拿掉）
 # battle（全部拆包第 6 批）
 - `ctx._definition_of` 的本體搬進了包（`features/battle/sieges.py`），包裡照樣經 ctx 叫（測試直接叫 `Game._definition_of`）；
   `ctx._sieges()`（還沒收場的攻城戰，照開集結的先後；這一季沒開領地爭奪是空的、不讀資料庫）——本體也在 `sieges.py`，核心原位叫委派，
@@ -126,6 +125,9 @@
 - `ctx.battle_now()`（這個人看的那一場，同 `_battle_now`；假人的分數讀它，決戰包的 `bots.py`）
 # battle（全部拆包第 8 批）
 - `ctx._round_mvp(battle, resolve)`（主人：形象包；決戰包推一回合時包著回合結算叫：結算完挑回合首功、回合紀錄多一行。決戰包不 import 形象包）
+- 上面那一行的 `ctx._watching_battle` 第 8 批本體搬進 `features/battle/progress.py`、決戰包裡改直接叫，清單上照舊留著：Game 上的委派
+  回答別的包（Game 原位的 options、引導的 `_hint_triggers`；第 22 批把 `_hint_triggers` 搬進引導包之後，引導包經 ctx 問它。審查：拿掉的話
+  兩條線合起來 git 不報衝突、邊界測試卻紅）
 
 explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._outing_on()`（主人 explore：減法季探索一顆開著、不在序章裡；出陣包問——散人那一行、出陣的字；出陣第 1 批原本列在
