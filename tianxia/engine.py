@@ -14,8 +14,6 @@ import random
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
-from pydantic import BaseModel
-
 from . import arts as arts_mod
 from . import ascend  # 破境卡（招式與絕學稿案第三節）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
@@ -118,7 +116,7 @@ from .features.bout import duel_actions as bout_duel  # 過渡：Game 上頭目�
 from .features.bout import arena_actions as bout_arena  # 過渡：Game 上擂台的一行委派（全部拆包第 12 批）
 from .features.bout import duel_rules as bout_rules  # 過渡：Game.DUEL_GAMBLE_NOTE 類別屬性、委派的型別註記（DuelTextRequest）
 from .state import (
-    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, FrontReport, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong, TimelineResult,
+    ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, CrowdNote, Equipment, Feast, FrontReport, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong, TimelineResult,
     StoryCard, StoryProgress, TierResult, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
     new_game_state,
 )
@@ -3734,7 +3732,8 @@ class Game:
     def _act(self, what: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
         # act 子動詞的主人是功能包的（接縫掛鉤，第 11 批；計畫 docs/superpowers/plans/2026-11-01-核心收接縫.md 1.3）：探索包——減法季探索一顆的
         # 出門一趟（體力在裡面扣）；酒肆包——進店（不花體力）；出陣包——約戰開著、不在序章時出陣那一格打開出陣前那張卡（不花體力；截糧的
-        # 運糧隊經過時照舊攻打，體力在裡面扣）。後兩支原本在中段：前面那幾支只比 what、只讀，子動詞互斥，挪到最前面結果一樣
+        # 運糧隊經過時照舊攻打，體力在裡面扣）；單挑包——打開擂台（不花體力，頭一句是名次；全部拆包第 12 批）。後三支原本在中段：前面那幾支
+        # 只比 what、只讀，子動詞互斥，挪到最前面結果一樣
         got = features_core.act(self, what, prepared)
         if got is not None:
             return got
@@ -3778,10 +3777,7 @@ class Game:
             p.picking_market, p.shop_clue = True, ""  # 打開馬市（見 _market_options），不花體力
             self._shop_say("enter")  # 店面上馬販那一句（1.4）
             return [mounts.ENTERED]
-        if what == "arena":
-            self.state.player.picking_arena = True  # 打開擂台（見 _arena_options），不花體力
-            self.state.player.arena_last = None
-            return arena.standing(self.state.world, self.state.player.name, self.content.config.arena)
+        # （act:arena：打開擂台由單挑包的 act 子動詞接走，最上面 features_core.act 那一行；全部拆包第 12 批）
         if what == "heal":  # 醫館療傷（企劃者 2026-10-12）：同修練頁的療傷鈕，不花體力
             return self._heal_msgs()
         if what == "dadian":  # 打點（銀兩出口收成一間店，第 9 批畫面乙）：打開那一間店（見 options 的 picking_dadian），不花體力
@@ -4025,7 +4021,7 @@ class Game:
         scene = prologue_rules.explore_scene(s, c)
         if scene is not None:  # 序章第 3 步的有所感版（悟意境設計第七節）：草廬四景就是四個做法，都對、必中
             return sensing.start(s, c, c.insight_scenes[scene], self.rng)
-        boss = duel_rules.available(s, c)  # 單人頭目戰：只有這裡有頭目時才擲（沒有頭目的地點、測試內容，亂數序列一個都不動）
+        boss = self._boss_ready()  # 單人頭目戰：只有這裡有頭目時才擲（沒有頭目的地點、測試內容，亂數序列一個都不動）
         # 名聲 4.4：名望高、頭目找上門的機會乘 renown.duel_chance（只放大門檻，擲的還是同一顆骰）
         if boss is not None and self.rng.random() < c.config.duel.explore_chance * renown.duel_chance(s, c):
             return self._duel_start(boss)
@@ -4134,7 +4130,7 @@ class Game:
                 if sensed is not None:
                     msgs += [explore_modes.DEEP_LINE] + insights.learn(s, c, self.world, sensed, at=loc)
             return msgs
-        boss = None if sure else duel_rules.available(s, c)
+        boss = None if sure else self._boss_ready()
         if boss is not None and rng.random() < c.config.duel.explore_chance * renown.duel_chance(s, c):  # 名聲 4.4
             return self._duel_start(boss)
         msgs = [explore_modes.GATHER_LINE.format(place=loc.name)]
@@ -4182,7 +4178,7 @@ class Game:
         """練功（正式季整合 2.5）：一定打一場。有頭目時先擲頭目戰（5% × 名聲倍數，renown.duel_chance）；這裡只有頭目、沒有一般對手時
         直接對上他（次數與冷卻在鈕上擋）。否則打 _gather_foe 那一路，照找素材以前撞上的那一場打（_gather_fight），不接戰後事件。"""
         s, c = self.state, self.content
-        boss = duel_rules.available(s, c)
+        boss = self._boss_ready()
         foe = self._gather_foe(loc)
         if boss is not None and (foe is None or rng.random() < c.config.duel.explore_chance * renown.duel_chance(s, c)):
             return self._duel_start(boss)
@@ -5066,8 +5062,7 @@ class Game:
         p = s.player
         if p.arena is not None:  # 擂台打到一半：擂台那一頁就是這一場（Joy 2026-10-14「擂台應該要是獨立的一頁」）
             return "arena"
-        if p.picking_arena:
-            return "arena" if arena.here(s, c) else None
+        # （坐在擂台邊：單挑包的店面登記，最後那一行 features_core.shop_open；全部拆包第 12 批）
         if p.picking_bounty:
             return "board" if bounties.board_here(s, c) else None
         if p.picking_smith:
@@ -5078,7 +5073,8 @@ class Game:
             return "donate" if self._at_own_base() else None
         if p.picking_dadian:  # 打點（21 天季的銀兩出口，第 9 批畫面乙）
             return "dadian" if self._silver_options() else None
-        return features_core.shop_open(self)  # 搬成包的店（店面登記，第 11 批；酒肆，企劃者 2026-10-18）：坐在店裡、這裡也還開著
+        # 搬成包的店（店面登記，第 11 批；酒肆，企劃者 2026-10-18；擂台邊，全部拆包第 12 批）：坐在店裡、這裡也還開著
+        return features_core.shop_open(self)
 
     def _shop_live(self, option_ids=None, shop: str = "smith") -> bool:
         """這間店那一串此刻真的是眼前的選單（店面與直接開爐都問它）：選單上有這間店的離開鈕（shopview.BACKS：鐵匠鋪 smith:back、
@@ -6060,9 +6056,10 @@ class Game:
         troops, bonus = self._battle_troops()
         return {"mount": horse, "cavalry": cavalry, "troops": troops, "troop_bonus": bonus, "cut": self._duel_cut()}
 
+    # 本體在 tianxia/features/bout/duel_actions.py（全部拆包第 12 批：單挑類的仗此刻要抄的防具減損），這裡留一行委派——戰力快照
+    # （_battle_gear）、奪璽單挑的參戰者與沒參戰的持有者（kin、game）在叫
     def _duel_cut(self) -> float:
-        """單挑類的仗（頭目戰、擂台、奪璽單挑）此刻要抄的防具減損（team.duel_armor_cut）。"""
-        return team.duel_armor_cut(self.state, self.content, self.world)
+        return bout_duel.duel_cut(self)
 
     def _battle_marks(self) -> dict:
         """快照進 BattleParticipant 的「這一季叛投過」與「新手期」（玉璽碎片設計 4.6：挑挑戰者只讀快照），
@@ -8383,8 +8380,7 @@ class Game:
             economy.close_donate(s)  # 軍需官那一串也收起來（素材與經濟設計第六節）
         if s.player.picking_dadian:
             self._close_dadian()  # 打點那一間店也收起來
-        s.player.picking_arena = False  # 擂台也收起來
-        features_core.close_shops(self)  # 搬成包的店也收起來（店面登記，第 11 批；酒肆）
+        features_core.close_shops(self)  # 搬成包的店也收起來（店面登記，第 11 批；酒肆、擂台〔全部拆包第 12 批〕）
         rerouting = s.player.journey is not None
         start = None if rerouting else s.player.location
         parted = self._part_ways() if s.player.tagalong is not None and not rerouting else []  # 答應了結伴卻自己先走：散了
@@ -10649,108 +10645,26 @@ class Game:
             msgs.append(f"貢獻 +{contrib}")
         return msgs
 
-    # ── 單人頭目戰（tianxia/duel.py；Joy 2026-10-10：「有種打小 boss 的感覺，也可以算是大事件的單人體驗版，可以放手一搏自訂行動」）──
+    # ── 單人頭目戰（Joy 2026-10-10：「有種打小 boss 的感覺，也可以算是大事件的單人體驗版，可以放手一搏自訂行動」）：本體在功能包
+    # tianxia/features/bout/duel_actions.py（全部拆包第 12 批），這裡留一行委派——server 的輸入框與鎖外三段式、腳本、測試，與核心原位的
+    # choose（出招不建紀錄）、場景卡、探索撞上頭目、奪璽單挑的陣營名；只有包裡叫的那幾個（_duel_after、_bout_rng……）不留 ──
 
     def _duel_start(self, boss: DuelBoss) -> list[str]:
-        """探索遇上頭目：快照份量、職位與氣血池（同加入決戰），記這一季遇上幾次與冷卻，擲他第一回合的招。"""
-        s, c = self.state, self.content
-        p, cfg = s.player, c.config.duel
-        now, cap = self._player_hp_and_cap()
-        key = duel_rules.season_key(s, boss.id)
-        power = self._battle_power()
-        duel = DuelState(
-            boss=boss.id, foe=duel_rules.foe_index(boss, p.faction), edge=cfg.start, hp=now, hp_cap=cap, hp_start=now,
-            power=power, scores=self._battle_scores(mounted=False), role=self._battle_role(),
-            # 頭目戰不算騎兵：設計 2.1 的三個用途沒有頭目戰
-            # 江湖水漲：照你的武學威力浮上來；玉璽碎片的戰力不浮上去（改版 PM 五之一 2），沒碎片時跟 power 一樣
-            difficulty=rise.duel(c, boss.difficulty, self._battle_power(seal=False), p.duel_tally.get(key, 0)),
-            cut=self._duel_cut(),  # 防具（鐵匠鋪與合成流程 3.9）：開打這一刻身上那件的減損抄下來，他打中你的那一下乘 1 − 它；頭目沒有防具
-        )
-        p.duel_tally[key] = p.duel_tally.get(key, 0) + 1
-        if cfg.per_boss_week:  # 21 天季另記這一週的帳（正式季整合 2.5）；季的帳照記，江湖水漲照它算
-            week = duel_rules.week_key(s, c, boss.id)
-            p.duel_tally[week] = p.duel_tally.get(week, 0) + 1
-        p.duel_last = [float(p.season_number), s.world.time]
-        foe = boss.foes[duel.foe]
-        duel.bout = tactics.open_bout(  # 本命戰法（第二批）：只算你身上的兩門；頭目沒有本命戰法
-            team.self_side(s, c, self.world), None, "你", foe.name, a_faction=p.faction, b_faction=foe.side,
-            b_agility=rounds.foe_agility(duel_rules.foe_difficulty(duel, boss)),
-        )
-        duel_rules.roll_next(duel, foe, cfg, self.rng)
-        p.duel = duel
-        self._outcome(f"遇上{foe.title}{foe.name}", "")
-        role = battle_instance.role_name(c.config.battle, duel.role)
-        meet = renown.duel_meet_line(s, c)  # 名聲 4.4：名望高、攔路的也多，說出原因
-        return [f"你在{c.locations[p.location].name}走著，{foe.title}{foe.name}攔住了去路！", foe.intro] + (
-            [f"你以{role}的架勢迎上去。"] if role else []
-        ) + ([meet] if meet else [])
+        return bout_duel.duel_start(self, boss)
 
     def _duel_scene(self) -> str:
-        duel = self.state.player.duel
-        boss, foe = duel_rules.foe_of(self.content, duel)
-        lines = [
-            f"**{foe.title}・{foe.name}**（頭目戰 第 {duel.round + 1}／{boss.rounds} 回合）",
-            foe.intro if duel.round == 0 else duel.lines[-1],
-            f"氣勢：{duel_rules.edge_words(duel.edge)}（{duel.edge:.0f}／100）　你的氣血：{duel.hp:.0f}／{duel.hp_cap:.0f}",
-            *self._bout_lines(duel.bout),
-            f"{duel.tell}{tactics.SEEN_NOTE if tactics.locks(duel.bout).sees else '（架勢不一定是真的。）'}",
-            "固守剋強攻、強攻剋奇襲、奇襲剋固守；也可以在下面寫一句，放手一搏。",
-        ]
-        return "\n\n".join(lines)
+        return bout_duel.duel_scene(self)
 
     def duel_free_text_prompt(self) -> str | None:
-        """頭目戰打到一半時輸入框的提示語，否則 None（server.py 照它決定輸入框，送出走 duel_text）。"""
-        if self.state.player.arena is not None:
-            return arena.PROMPT
-        return "放手一搏：寫下你要怎麼對付他（20 字以內）" if self.state.player.duel is not None else None
+        return bout_duel.duel_free_text_prompt(self)
 
-    DUEL_GAMBLE_NOTE = "寫得越險，成了越能扭轉局面；失手時氣勢倒退，重傷的是你自己。這一回合他的招不算。"
+    DUEL_GAMBLE_NOTE = bout_rules.DUEL_GAMBLE_NOTE  # 頭目戰、擂台的輸入框底下那一句（tests/server/test_server 從 game. 讀；字在單挑包）
 
     def duel_free_text_note(self) -> str | None:
-        return self.DUEL_GAMBLE_NOTE if self.state.player.duel is not None or self.state.player.arena is not None else None
+        return bout_duel.duel_free_text_note(self)
 
-    def _duel_text_check(self, text: str) -> str | list[str]:
-        if self.world.paused_at() is not None:
-            return [f"（{PAUSED_TEXT}。）"]
-        if self.state.player.duel is None and self.state.player.arena is None:
-            return ["（此刻無法這麼做。）"]
-        text = text.strip()[:FREE_TEXT_MAX]
-        if not text:
-            return ["（請先輸入你想做的事。）"]
-        p = self.state.player
-        if tactics.locks(p.arena.bout if p.arena is not None else p.duel.bout).no_gamble:
-            return [tactics.NO_GAMBLE]
-        return text
-
-    def _bout_lines(self, bout: tactics.Bout | None) -> list[str]:
-        """頭目戰、擂台的場景：兩邊身上的本命戰法狀態各一行（沒有就不寫）。"""
-        return [line for line in (tactics.status_text(bout, "a"), tactics.status_text(bout, "b")) if line]
-
-    def _bout_rng(self, kind: str, key: object, round_: int) -> random.Random:
-        """本命戰法這一回合的亂數（不碰 Game.rng）：種類｜季數｜名號｜哪一場｜第幾回合。"""
-        p = self.state.player
-        return random.Random(f"{kind}|{p.season_number}|{p.name}|{key}|{round_}|戰法")
-
-    def duel_text_request(self, text: str) -> DuelTextRequest | list[str]:
-        """頭目戰放手一搏的 A 段（鎖內、只讀）：送得出去回傳要在鎖外送模型的單子，不行回傳那一句話。"""
-        checked = self._duel_text_check(text)
-        if isinstance(checked, list):
-            return checked
-        s, c = self.state, self.content
-        fight = s.player.arena
-        if fight is not None:  # 擂台：對手那一行寫分身的身手（同奪璽單挑），場合寫擂台
-            here = arena.scene(fight)
-            return DuelTextRequest(
-                boss=f"arena:{fight.id}", round=fight.round, text=checked, name=s.player.name, faction_name=self._duel_side(),
-                title=here.title, scene=here.text, sex=gender.of(s), target=arena.foe_line(fight.me, fight.foe, c),
-                setting=arena.SETTING, place=arena.PLACE,
-            )
-        duel = s.player.duel
-        here = duel_rules.scene(c, duel)
-        return DuelTextRequest(
-            boss=duel.boss, round=duel.round, text=checked, name=s.player.name, faction_name=self._duel_side(),
-            title=here.title, scene=here.text, sex=gender.of(s),
-        )
+    def duel_text_request(self, text: str) -> bout_rules.DuelTextRequest | list[str]:
+        return bout_duel.duel_text_request(self, text)
 
     def seal_free_text_prompt(self) -> str | None:
         """奪璽單挑的放手一搏輸入框（5.7）：自己是一方、這一回合在場、還沒出手、這一場還沒搏滿兩次才有。"""
@@ -10936,263 +10850,45 @@ class Game:
         return seal.key(battle.seal_holder) == seal.key(me) or me in battle.participants
 
     def _duel_side(self) -> str:
-        faction = self.state.player.faction
-        return self.content.scenario.faction_name(faction, faction) if faction else "散人"
+        return bout_duel.duel_side(self)
 
     def duel_gamble(
         self, text: str, llm_rate: int | None = None, stories: tuple[str, str] | None = None,
-        request: DuelTextRequest | None = None, crowd: str = "",
+        request: bout_rules.DuelTextRequest | None = None, crowd: str = "",
     ) -> list[str]:
-        """頭目戰放手一搏的 C 段（擂台也走這裡：crowd 是鎖外判的觀眾反應，arena_crowd.judge_gamble）：llm_rate 是鎖外評好的成功率，request 是當時開的單子——還是同一隻、同一回合、同一句才用；
-        對不上（這一回合已經出過招、換了一場）回「這一回合已經結算」、句子不同回「請再送一次」，不重評、不套用（同 seal_gamble：
-        鎖內重評會把第 r 回合寫的那一句套到第 r＋1 回合，還佔住全服的鎖；M-05）。沒給 request（假人不寫自由文字；腳本、測試）
-        而且沒給分數，在這裡用 _quick_client 評，評不到是保底的 40。擲骰、推進、損耗全在 duel.gamble。"""
-        checked = self._duel_text_check(text)
-        if isinstance(checked, list):
-            return self._log(checked)
-        s, c = self.state, self.content
-        if s.player.arena is not None:
-            return self._log(self._arena_gamble(checked, llm_rate, stories, request, crowd))
-        duel = s.player.duel
-        stale = self._stale_duel_request(request, duel.boss, duel.round, checked)
-        if stale:
-            return self._log(stale)
-        if llm_rate is None:
-            verdict = battle_instance.assess_gamble(
-                self._quick_client(), duel_rules.scene(c, duel), self._duel_side(), checked, s.player.name,
-                setting=duel_rules.SETTING, place=duel_rules.PLACE, sex=gender.of(s),
-            )
-            llm_rate, stories = verdict.rate, (verdict.win, verdict.lose)
-        s.battle_card = None
-        s.player.guide_done = []
-        boss, _ = duel_rules.foe_of(c, duel)
-        fired: list[str] = []
-        won, delta, hp, _ = duel_rules.gamble(duel, int(llm_rate), c.config.duel, c.config.battle, self.rng,
-                                              c.config.tactics, self._bout_rng("頭目戰", duel.boss, duel.round), fired)
-        story = (stories or ("", ""))[0 if won else 1]
-        if not story:
-            story = f"你放手一搏：「{checked}」——{'成了！' if won else '沒成，反倒露了破綻。'}"
-        line = tactics.round_line(f"第 {duel.round + 1} 回合：{story}（氣勢 {delta:+d}，你氣血 {-hp:+d}）", fired)
-        return self._log(self._duel_after(line))
-
-    @staticmethod
-    def _stale_duel_request(request: DuelTextRequest | None, boss: str, round_: int, text: str) -> list[str]:
-        """頭目戰、擂台 C 段的重驗：單子是別一場、別一回合的回 duel.STALE，同一回合換了一句回 duel.RESEND；沒給單子或對得上是 []。"""
-        if request is None:
-            return []
-        if (request.boss, request.round) != (boss, round_):
-            return [f"（{duel_rules.STALE}）"]
-        if request.text != text:
-            return [f"（{duel_rules.RESEND}）"]
-        return []
+        return bout_duel.duel_gamble(self, text, llm_rate, stories, request, crowd)
 
     def _duel_act(self, arg: str) -> list[str]:
-        """選單上的一招，或抽身退走。"""
-        s, c = self.state, self.content
-        duel = s.player.duel
-        if duel is None:
-            return ["（此刻無法這麼做。）"]
-        boss, foe = duel_rules.foe_of(c, duel)
-        if arg == "flee":
-            return self._duel_finish(None, "你虛晃一招，抽身退走。")
-        if arg not in MOVES:
-            return ["（此刻無法這麼做。）"]
-        if arg in tactics.locks(duel.bout).no_moves:
-            return [tactics.NO_MOVE.format(move=arg)]
-        out = duel_rules.exchange_full(duel, boss, arg, c.config.duel, c.config.battle, self.rng,
-                                       c.config.tactics, self._bout_rng("頭目戰", duel.boss, duel.round), c.config.armor.total_cap)
-        line = tactics.round_line(
-            f"第 {duel.round + 1} 回合：你{out.mine or '出不了手'}，{foe.name}{out.his or '出不了手'}——{duel_rules.COUNTER_WORDS[out.beat]}。"
-            f"（氣勢 {out.delta:+d}，你氣血 {-out.hp:+d}）", out.lines,
-        )
-        return self._duel_after(line)
-
-    def _duel_after(self, line: str) -> list[str]:
-        """出完一招（或放手一搏）之後：記這一回合，分出勝負就收場，否則擲他下一回合的招。"""
-        s, c = self.state, self.content
-        duel = s.player.duel
-        boss, foe = duel_rules.foe_of(c, duel)
-        duel.lines.append(line)
-        duel.round += 1
-        tier = duel_rules.verdict(duel, boss, c.config.duel)
-        if tier is not None:
-            return self._duel_finish(tier, line)
-        duel_rules.roll_next(duel, foe, c.config.duel, self.rng)
-        return [line]
+        return bout_duel.duel_act(self, arg)
 
     def _duel_finish(self, tier: str | None, line: str) -> list[str]:
-        """收場：池子掉的氣血扣回本人（兩成變內傷，根骨減，同遊歷）、照結果發獎勵、一份戰報與一則江湖紀錄。tier 是 None 是抽身退走
-        （不寫戰報，沒有獎勵）。"""
-        s, c = self.state, self.content
-        p, cfg = s.player, c.config.duel
-        duel = p.duel
-        boss, foe = duel_rules.foe_of(c, duel)
-        p.duel = None
-        lost = max(0.0, duel.hp_start - duel.hp)
-        now, _ = self._player_hp_and_cap()
-        if lost > 0:
-            con = team.con_of(s, c, self.world, PLAYER)
-            injury = treasures.amount(s, c, "injury")  # 螭首（玉璽碎片改版）：變成內傷的減半；沒帶是 1
-            p.member.injury += lost * c.config.injury_share * max(0.0, 1 - team.stat_bonus(c, con, s.world)) * injury
-            p.member.neili = max(0.0, now - lost)
-        title = f"頭目戰・{foe.name}"
-        if tier is None:
-            msgs = [line] + ([f"氣血 -{round(lost)}"] if round(lost) else [])
-            self._write(title, msgs, tag="抽身退走")
-            return msgs
-        level = duel_rules.foe_difficulty(duel, boss)
-        squad = Squad(id=f"duel:{boss.id}", name=f"{foe.title}{foe.name}", difficulty=level, attribute=boss.attribute)
-        result = encounter.EncounterResult(tier=tier, margin=duel.edge - cfg.start, our_power=duel.power, difficulty=level)
-        record = battlelog.new_record(s, c, self.world, squad, result, "duel", event=title)
-        record.ours = record.ours[:1]  # 同伴不上場：比的是你一個人
-        record.rounds = list(duel.lines)
-        won = tier in team.WIN_TIERS
-        record.notes.append(foe.win if won else foe.lose if tier == "落敗" else f"{foe.name}見討不了好，虛晃一招退走了。")
-        share = cfg.reward_share.get(tier, 0.0)
-        extra: list[str] = []
-        more = renown.duel_reward(s, c) if won else 1.0  # 名聲 4.4：名動一方以上打贏，經驗、銀兩、心得多兩成（名望、素材照舊）
-        share *= more
-        if more > 1.0:
-            record.notes.append(renown.duel_paid_line(s, c))
-        exp = round(boss.exp * share)
-        if exp:  # 同伴不上場：只給本人；升級給屬性點同決戰的軍餉
-            before = p.member.level
-            # 滿級換心得（先換，升到滿級那一下剩下的不換）：extra 會進戰報敘事、紀錄另接得失（已含換來的那一份），所以只留那一句，
-            # 「心得 +N」不接（同切磋；FB-453：以前紀錄寫心得 +39、實際 +27）
-            extra += [n for n in self._record_exp(record, exp, "boss") if not n.startswith("心得 +")]
-            extra += team.add_exp(c, p.member, exp, p.name, "boss")  # 頭目戰是仗（減法季 45 級以後照算）
-            if p.member.level > before:
-                points = team.level_points(self.state, c, before, p.member.level)
-                p.stat_points += points
-                if points:
-                    extra.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
-        silver = round(boss.silver * share)
-        if silver:
-            p.stats["silver"] = p.stats.get("silver", 0) + silver
-            record.silver = silver
-        xinde = round(boss.xinde * share)
-        if xinde:
-            p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
-            record.xinde = (record.xinde or 0) + xinde  # 滿級換來的那一份已經在裡面（_record_exp，FB-450）
-        if won:
-            for material_id in boss.drops:
-                if materials.grant(s, c, material_id) is not None:
-                    materials.add_cell(record.materials, c, material_id)  # 同一種合成一格（FB-140）
-            if boss.fame:
-                record.changes += renown.gain(s, c, "fame", boss.fame)  # 名聲設計 3.2
-            chance = cfg.legend_chance.get(tier, 0.0)
-            if chance > 0 and self.rng.random() < chance:
-                p.legend_items += 1
-                record.changes.append(f"{c.config.legend_item_name} +1")
-                extra.append(f"他身上掉出一枚【{c.config.legend_item_name}】——{c.config.legend_item_note}")
-        if round(lost):
-            record.changes.append(f"氣血 -{round(lost)}")
-        record.notes += extra
-        summary = self._file_battle(record)
-        msgs = [line, summary, *record.notes, *battlelog.gains_list(record)]
-        self._write(title, msgs, tag=battlelog.outcome_text(record))
-        annals.note(s, c, annals.FIGHT, f"獨力對上{foe.title}{foe.name}，{tier}。", 3 if won else 2)
-        return msgs
+        return bout_duel.duel_finish(self, tier, line)
 
-    # ── 擂台（tianxia/arena.py；Joy 2026-10-14 選「隨時挑擂」：報名留分身，別人隨時來挑，照積分排名，只算本季）──
-
-    def _arena_side(self) -> ArenaSide:
-        """此刻的身手（同頭目戰的快照：威力、不算騎兵與部下的份量、職位）；池子從滿的開始。"""
-        _, cap = self._player_hp_and_cap()
-        return ArenaSide(
-            name=self.state.player.name, power=self._battle_power(), scores=self._battle_scores(mounted=False),
-            role=self._battle_role(), hp=cap, hp_cap=cap, bare=self._arena_bare(),
-            cut=self._duel_cut(),  # 防具減損（鐵匠鋪與合成流程 3.9）：開打、報名這一刻身上那件的
-        )
+    # ── 擂台（Joy 2026-10-14 選「隨時挑擂」：報名留分身，別人隨時來挑，照積分排名，只算本季）：本體在功能包
+    # tianxia/features/bout/arena_actions.py（全部拆包第 12 批），這裡留一行委派——server 的看台三段式、假人、測試，與核心原位的
+    # choose（灰掉的挑擂鈕、出招不建紀錄）、閉關中與路上的入口、場景卡、sync 的補送、店面那一頁。坐在擂台邊的選單、此地還能做的入口、
+    # 收店、打開擂台、報名與挑人換成單挑包的店面登記、act 子動詞與 choose 掛鉤；擂台的名次與稱號在核心 tianxia/core/arena_ranks.py ──
 
     def _arena_bare(self) -> float | None:
-        """戴著玉璽碎片（改版開著，treasures.power_scale 不是 1）時，不含碎片戰力的威力；沒有是 None（威力本身就是給別人看的那一份）。
-        擂台挑人的「身手」與四種戰報的「對手威力」照它寫（FB-625、FB-615）；打起來照 power（含碎片）。"""
-        if treasures.power_scale(self.state, self.content) == 1.0:
-            return None
-        return self._battle_power(seal=False)
-
-    def _arena_arts(self) -> list[str]:
-        s, c, m = self.state, self.content, self.state.player.member
-        arts = (team.player_art(s, c, self.world, m.wugong_id), team.player_art(s, c, self.world, m.neigong_id))
-        return [a.name for a in arts if a is not None]
+        return bout_arena.arena_bare(self)
 
     def arena_power(self) -> float:
-        """此刻上擂台的威力（假人照它決定報名、更新分身；bot_policy._arena）。"""
-        return self._battle_power()
+        return bout_arena.arena_power(self)
 
     def arena_left(self) -> int:
-        """今天還能挑幾次擂（ArenaTuning.per_day；同回體丹的現實時間換日）。"""
-        return arena.left_today(self.state, self.content.config.arena, self._pill_day())
+        return bout_arena.arena_left(self)
+
+    def _arena_fight_problem(self, option_id: str) -> str | None:
+        return bout_arena.arena_fight_problem(self, option_id)
 
     def _arena_entry(self) -> list[Option]:
-        """「擂台」那一顆：哪裡都有（地點上、路上、閉關中），只是打開第二層選單，不花體力。"""
-        return [Option(id="act:arena", label=arena.ARENA)] if arena.here(self.state, self.content) else []
+        return bout_arena.arena_entry(self)
 
     def _arena_options(self) -> list[Option]:
-        """擂台的第二層選單：報名（報過了是更新分身）、排在你前面 reach 名內的人一人一顆（挑不了的灰掉寫為什麼）、返回。都不花體力，
-        挑擂一天 per_day 次。"""
-        s, c, p = self.state, self.content, self.state.player
-        cfg = c.config.arena
-        mine = arena.entry_of(s.world, p.name)
-        power = self._battle_power()
-        shown = self._battle_power(seal=False)  # 身手兩邊都照不含玉璽碎片的算（FB-625）：自己看自己也一樣，畫面才跟別人看到的對得上
-        left = self.arena_left()
-        opts = [Option(id=arena.JOIN_ID, label=arena.UPDATE if mine is not None else arena.JOIN, enabled=power > 0)]
-        others = arena.challengers(s.world, c, p.name, left)
-        for e, problem in others:
-            note = problem or arena.LEFT.format(n=left)
-            title = arena.title_for(e.rank)
-            label = (f"挑{e.name}（第 {e.rank} 名{'・' + title if title else ''}・{arena.record_text(e)}・"
-                     f"身手{arena.strength_words(c, shown, e.shown)}・{note}）")
-            opts.append(Option(id=f"arena:fight:{name_key(e.name)}", label=label, enabled=problem is None))
-        if mine is not None and not others:
-            opts.append(Option(id="arena:none", label=arena.NOBODY if mine.rank == 1 else arena.NOBODY_AHEAD, enabled=False))
-        opts.append(Option(id=arena.BACK_ID, label=arena.BACK))
-        return opts
-
-    def _arena(self, arg: str) -> list[str]:
-        """擂台第二層的選擇：報名或更新分身、挑一個人（開打）、返回（收起選單）。"""
-        verb, _, rest = arg.partition(":")
-        if verb == "back":
-            self.state.player.picking_arena = False
-            self.state.player.arena_last = None
-            return ["你離開了擂台。"]
-        if verb == "join":
-            return self._arena_join()
-        if verb == "fight":
-            return self._arena_start(rest)
-        return ["（此刻無法這麼做。）"]
+        return bout_arena.arena_options(self)
 
     def _arena_join(self) -> list[str]:
-        s, p = self.state, self.state.player
-        side = self._arena_side()
-        if side.power <= 0:
-            return [arena.NO_ARTS]
-        arts = self._arena_arts()
-        text = "、".join(arts)
-        entry = arena.entry_of(s.world, p.name)
-        famed = renown.arena_famed(s, self.content)  # 名聲 4.7
-        if entry is not None:
-            entry.name, entry.power, entry.scores, entry.role, entry.hp_cap, entry.arts, entry.famed = (
-                p.name, side.power, side.scores, side.role, side.hp_cap, arts, famed)
-            entry.bare = side.bare  # 碎片沒了再更新分身：不含碎片的那一份跟著清掉
-            entry.cut = side.cut  # 防具也換成此刻身上那件的（含耐久；沒穿就是 0），鐵匠鋪與合成流程 3.9
-            entry.kit = team.self_side(s, self.content, self.world)
-            entry.crowd = arena_crowd.snapshot(s, self.content, self.world)  # 場邊事件看的底細（照更新這一刻）
-            entry.weapon = arena.held_kind(p)  # 擂台動畫：分身手上拿什麼
-            entry.look = self.arena_look()  # 擂台形象：分身穿哪一套
-            entry.move = self.arena_move()  # 招式動畫：分身出招疊哪一張
-            entry.move_art = self._arena_move_art(entry.move)
-            return [arena.UPDATED.format(arts=text)]
-        entry = arena.join(s.world, ArenaEntry(
-            name=p.name, power=side.power, bare=side.bare, scores=side.scores, role=side.role, hp_cap=side.hp_cap, arts=arts, joined=s.world.time,
-            kit=team.self_side(s, self.content, self.world), famed=famed, crowd=arena_crowd.snapshot(s, self.content, self.world),
-            cut=side.cut,  # 分身留下報名那一刻的防具減損（3.9）
-            weapon=arena.held_kind(p), look=self.arena_look(), move=self.arena_move(),
-        ))
-        entry.move_art = self._arena_move_art(entry.move)
-        return [arena.JOINED.format(rank=entry.rank, arts=text)]
+        return bout_arena.arena_join(self)
 
     def arena_look(self) -> str:
         """擂台形象：這個人此刻穿哪一套（功能包 looks；空字串＝斗笠小子）。"""
@@ -11210,304 +10906,20 @@ class Game:
         """回合 MVP（功能包 looks）：包著回合結算，結算完挑一位、回合紀錄多一行。"""
         return looks_actions.round_mvp(self, battle, resolve)
 
-    def _arena_move_art(self, move: str) -> str:
-        """招式動畫綁在哪一門上：疊得上光效（move 不是空的）就是現在練的那一門（looks 只在現在練的那一門綁了招式時才給 move）。"""
-        return (self.state.player.member.wugong_id or "") if move else ""
-
-    def _arena_burst(self, fight: ArenaFight, skills) -> None:
-        """招式動畫：這一回合兩邊綁了招式的那一門的戰法發動了沒（光效只在發動的那一回合疊，Joy 2026-11-01）。"""
-        arts = (list(fight.fx_arts) + ["", ""])[:2]
-        fight.bursts.append([int(bool(art) and art in fired) for art, fired in zip(arts, skills)])
-
-    def _arena_start(self, key: str) -> list[str]:
-        """挑一個守擂的人：記今天挑了幾次、冷卻與他今天被挑了幾場，快照兩邊，擲分身第一回合的招。不花體力。"""
-        s, c, p = self.state, self.content, self.state.player
-        cfg = c.config.arena
-        foe = s.world.arena.get(key)
-        if foe is None or name_key(foe.name) == name_key(p.name):
-            return ["（此刻無法這麼做。）"]
-        problem = arena.challenge_problem(s.world, p.name, foe, cfg, self.arena_left(), c.config.time_scale)
-        if problem is not None:
-            return [f"（{problem}。）"]
-        arena.spend(s, self._pill_day())
-        arena.note_challenge(s.world, p.name, foe)
-        p.newbie_marks.add("arena")  # 新手目標：上一次擂台
-        s.world.arena_seq += 1
-        fight = ArenaFight(
-            id=s.world.arena_seq, foe_key=key, me=self._arena_side(), rounds=cfg.rounds,
-            foe=ArenaSide(name=foe.name, power=foe.power, scores=dict(foe.scores), role=foe.role, hp=foe.hp_cap, hp_cap=foe.hp_cap,
-                          bare=foe.bare, cut=foe.cut),  # 分身的防具是他報名、更新那一刻的（3.9）
-            edge=c.config.duel.start,
-            crowd_me=arena_crowd.snapshot(s, c, self.world), crowd_foe=foe.crowd,  # 場邊事件看的底細（arena_crowd）
-            looks=[arena.held_kind(p), foe.weapon],  # 擂台動畫：兩邊手上的兵器（分身的照報名那一刻）
-            skins=[self.arena_look(), foe.look],  # 擂台形象：兩邊穿哪一套（分身的照報名那一刻）
-            fx=[self.arena_move(), foe.move],  # 招式動畫：兩邊出招疊哪一張（同上）
-            fx_arts=[self._arena_move_art(self.arena_move()), foe.move_art if foe.move else ""],
-        )
-        p.arena_crowd_note = None
-        arena.roll_next(fight, arena.rng_for(p.season_number, p.name, fight, "招"), cfg, c.config.duel)
-        p.arena = fight
-        p.picking_arena = False
-        p.arena_last = None
-        lines = [arena.OPENING.format(foe=foe.name)]
-        if foe.arts:
-            lines.append(arena.FOE_ARTS.format(arts="、".join(foe.arts)))
-        fight.bout = tactics.open_bout(  # 本命戰法（第二批）：兩邊身上的兩門（他的是報名那一刻的）
-            team.self_side(s, c, self.world), foe.kit, "你", foe.name, a_faction=p.faction, pvp=True,
-        )
-        return lines
-
     def _arena_scene(self) -> str:
-        fight = self.state.player.arena
-        lines = [
-            f"**{arena.ARENA}・{fight.foe.name}的分身**（第 {fight.round + 1}／{fight.rounds} 回合）",
-            arena.OPENING.format(foe=fight.foe.name) if fight.round == 0 else "\n\n".join(self._arena_last_round()),
-            f"氣勢：{duel_rules.edge_words(fight.edge)}（{fight.edge:.0f}／100）　"
-            f"你的氣血：{fight.me.hp:.0f}／{fight.me.hp_cap:.0f}　他：{fight.foe.hp:.0f}／{fight.foe.hp_cap:.0f}",
-            *self._bout_lines(fight.bout),
-            f"{fight.tell}{tactics.SEEN_NOTE if tactics.locks(fight.bout).sees else arena.TELL_NOTE}",
-            arena.HOWTO,
-        ]
-        return "\n\n".join(lines)
-
-    def _arena_last_round(self) -> list[str]:
-        """上一回合那一行，後面跟著那一回合的場邊事件（有的話）。"""
-        lines = self.state.player.arena.lines
-        if len(lines) >= 2 and lines[-1].startswith(arena_crowd.PREFIX):
-            return lines[-2:]
-        return lines[-1:]
-
-    def _arena_crowd(self, label: str = "", move: str = "", his: str = "") -> str | None:
-        """這一回合有沒有場邊事件（tianxia/arena_crowd.py）：一場最多一件，擲中了套效果、記這一種今天落在誰身上，回那一行（〔場邊〕…）。
-        模型叫得到時（伺服器）記一張單子，伺服器在鎖外重寫那一句（Game.apply_arena_crowd）。亂數另開用途「場邊」，不碰 Game.rng。"""
-        s, c, p = self.state, self.content, self.state.player
-        fight = p.arena
-        if fight is None or not arena_crowd.on(c):
-            return None
-        cfg = c.config.arena.crowd
-        today = self._pill_day()
-        foe = s.world.arena.get(fight.foe_key)
-        rng = arena.rng_for(p.season_number, p.name, fight, "場邊")
-        happening = arena_crowd.roll(fight, s.world, p.name, cfg, today, p.arena_crowd_seen,
-                                     foe.crowd_seen if foe is not None else {}, rng, label)
-        if happening is None:
-            return None
-        applied = arena_crowd.apply(fight, happening, cfg)
-        if happening.side == "me":
-            p.arena_crowd_seen[happening.kind] = today
-        elif foe is not None:
-            foe.crowd_seen[happening.kind] = today
-            self._save_season()  # 守的人那一本帳在這一季的 WorldState
-        name, rival = arena_crowd.names(fight, p.name, happening.side)
-        text = arena_crowd.fixed_text(c, happening, name, rival, rng)
-        line = arena_crowd.line_of(text, applied)
-        p.arena_crowd_note = CrowdNote(
-            fight_id=fight.id, round=fight.round, kind=happening.kind, side=happening.side, name=name, rival=rival,
-            helper=happening.helper, title=happening.title, battle=happening.battle, move=move, his=his, fixed=line, text=text,
-        ) if self.client is not None else None
-        return line
+        return bout_arena.arena_scene(self)
 
     def arena_crowd_request(self) -> CrowdNote | None:
-        """還等著模型重寫的那一句場邊事件（server 鎖外寫；A 段，只讀）。"""
-        return self.state.player.arena_crowd_note
+        return bout_arena.arena_crowd_request(self)
 
     def apply_arena_crowd(self, note: CrowdNote, text: str) -> bool:
-        """C 段：還是同一張單子才換。句子那一截換成模型寫的（括號的數字照舊），擂台這一場、收場卡、戰報、江湖紀錄裡的那一行都換；
-        寫不出來（空字串）就收掉單子、照固定句。換了是 True。"""
-        p = self.state.player
-        if p.arena_crowd_note is None or p.arena_crowd_note != note:
-            return False
-        p.arena_crowd_note = None
-        if not text:
-            return False
-        new = note.fixed.replace(note.text, text, 1)
-
-        def swap(lines: list[str]) -> None:
-            for i, line in enumerate(lines):
-                if line == note.fixed:
-                    lines[i] = new
-
-        if p.arena is not None and p.arena.id == note.fight_id:
-            swap(p.arena.lines)
-        if p.arena_last is not None and p.arena_last.id == note.fight_id:
-            swap(p.arena_last.lines)
-        for record in self.state.battles[-3:]:
-            if record.kind == "arena":
-                swap(record.rounds)
-        for entry in self.state.journal[-5:]:
-            swap(entry.lines)
-        return True
+        return bout_arena.apply_arena_crowd(self, note, text)
 
     def _arena_act(self, arg: str) -> list[str]:
-        """擂台上的一招，或認輸。"""
-        s, c, p = self.state, self.content, self.state.player
-        fight = p.arena
-        if fight is None:
-            return ["（此刻無法這麼做。）"]
-        if arg == "yield":
-            return self._arena_finish("落敗", arena.YIELDED)
-        if arg not in MOVES:
-            return ["（此刻無法這麼做。）"]
-        if arg in tactics.locks(fight.bout).no_moves:
-            return [tactics.NO_MOVE.format(move=arg)]
-        out = arena.exchange_full(fight, arg, c, arena.rng_for(p.season_number, p.name, fight, "交手"),
-                                  arena.rng_for(p.season_number, p.name, fight, "戰法"))
-        line = tactics.round_line(
-            f"第 {fight.round + 1} 回合：你{out.mine or '出不了手'}，他{out.his or '出不了手'}——{duel_rules.COUNTER_WORDS[out.beat]}。"
-            f"（氣勢 {out.delta:+d}，你氣血 {-out.mine_hp:+d}，他氣血 {-out.foe_hp:+d}）", out.lines,
-        )
-        fight.picks.append([out.mine or "", out.his or ""])  # 擂台動畫：兩邊照出的招演
-        self._arena_burst(fight, out.skills)
-        return self._arena_after(line, self._arena_crowd(move=out.mine or "", his=out.his or ""))
-
-    def _arena_gamble(
-        self, text: str, rate: int | None, stories: tuple[str, str] | None, request: DuelTextRequest | None, crowd: str = "",
-    ) -> list[str]:
-        """擂台的放手一搏（C 段）：同一場、同一回合、同一句才用鎖外評好的分，對不上就回原因、不重評、不套用（同頭目戰）。"""
-        s, c, p = self.state, self.content, self.state.player
-        fight = p.arena
-        stale = self._stale_duel_request(request, f"arena:{fight.id}", fight.round, text)
-        if stale:
-            return stale
-        if rate is None:
-            verdict = battle_instance.assess_gamble(
-                self._quick_client(), arena.scene(fight), self._duel_side(), text, p.name,
-                setting=arena.SETTING, place=arena.PLACE, target=arena.foe_line(fight.me, fight.foe, c), sex=gender.of(s),
-            )
-            rate, stories = verdict.rate, (verdict.win, verdict.lose)
-        s.battle_card = None
-        p.guide_done = []
-        fired: list[str] = []
-        skills: tuple[list[str], list[str]] = ([], [])
-        won, delta, hp, _ = arena.gamble(fight, int(rate), c, arena.rng_for(p.season_number, p.name, fight, "搏"),
-                                         arena.rng_for(p.season_number, p.name, fight, "戰法"), fired, skills)
-        story = (stories or ("", ""))[0 if won else 1]
-        moment = battle_instance.GambleMoment(name=p.name, faction=self._duel_side(), text=text, story=story, rate=int(rate), won=won)
-        old = (battle_instance.GambleMoment(name=p.name, faction="", text=fight.best_text, rate=fight.best_rate, won=fight.best_won)
-               if fight.best_set else None)
-        if battle_instance.more_dramatic(moment, old):
-            fight.best_text, fight.best_story, fight.best_rate, fight.best_won, fight.best_set = text, story, int(rate), won, True
-        if not story:
-            story = f"你放手一搏：「{text}」——{'成了！' if won else '沒成，反倒露了破綻。'}"
-        line = tactics.round_line(f"第 {fight.round + 1} 回合：{story}（氣勢 {delta:+d}，你氣血 {-hp:+d}）", fired)
-        fight.picks.append(["搏", ""])  # 擂台動畫：放手一搏照氣勢與氣血演
-        self._arena_burst(fight, skills)
-        return self._arena_after(line, self._arena_crowd(label=crowd, move=text))
-
-    def _arena_after(self, line: str, crowd: str | None = None) -> list[str]:
-        """出完一招（或放手一搏）之後：記這一回合（與這一回合的場邊事件），分出勝負就收場，否則擲分身下一回合的招。"""
-        s, c, p = self.state, self.content, self.state.player
-        fight = p.arena
-        fight.lines.append(line)
-        if crowd:
-            fight.lines.append(crowd)
-        fight.round += 1
-        tier = arena.verdict(fight, c.config.duel)
-        if tier is not None:
-            msgs = self._arena_finish(tier, line)
-            return msgs[:1] + [crowd] + msgs[1:] if crowd else msgs
-        arena.roll_next(fight, arena.rng_for(p.season_number, p.name, fight, "招"), c.config.arena, c.config.duel)
-        return [line, crowd] if crowd else [line]
-
-    def _arena_finish(self, tier: str, line: str) -> list[str]:
-        """收場：兩邊的積分與戰績、留給守的人一筆（他下次同步補戰報）、挑的人的戰報與一則江湖紀錄、天下大事（爆冷、連勝、最精彩的一搏）。
-        不扣氣血、不磨兵器防具（池子是快照）。"""
-        s, c, p = self.state, self.content, self.state.player
-        cfg, w = c.config.arena, s.world
-        fight = p.arena
-        p.arena = None
-        mine, foe = arena.entry_of(w, p.name), w.arena.get(fight.foe_key)
-        score = arena.SCORES[tier]
-        squad = Squad(id=f"arena:{fight.foe_key}", name=f"{fight.foe.name}的分身", difficulty=fight.foe.power)
-        result = encounter.EncounterResult(tier=tier, margin=fight.edge - c.config.duel.start, our_power=fight.me.power,
-                                           difficulty=fight.foe.shown)  # 戰報的「對手威力」不含玉璽碎片（FB-615）；打是照 power 打的
-        title = f"{arena.ARENA}・{fight.foe.name}"
-        record = battlelog.new_record(s, c, self.world, squad, result, "arena", event=title)
-        record.ours = record.ours[:1]
-        record.rounds = list(fight.lines)
-        news: list[str] = []
-        if mine is not None and foe is not None:
-            before_me, before_foe = mine.rank, foe.rank
-            was_first = foe.rank == 1
-            moved = score >= 1 and arena.swap(mine, foe)
-            arena.note_result(mine, score)
-            arena.note_result(foe, 1 - score)
-            record.changes.append(arena.SWAPPED.format(before=before_me, after=mine.rank) if moved else arena.KEPT.format(rank=mine.rank))
-            foe.inbox.append(ArenaReport(
-                challenger=p.name, tier=arena.defender_tier(tier, fight.edge, c.config.duel), time=w.time,
-                rank=foe.rank, before=before_foe, power=fight.me.power, bare=fight.me.bare,
-            ))
-            if moved and was_first:
-                news.append(arena.NEW_FIRST.format(winner=p.name, loser=foe.name))
-            for who in (mine, foe):
-                if who.streak and who.streak % cfg.streak_news == 0 and (who is mine) == (score >= 1):
-                    news.append(arena.STREAK.format(name=who.name, n=who.streak))
-        if fight.best_set and fight.best_won and fight.best_rate <= cfg.highlight_rate:
-            news.append(arena.HIGHLIGHT.format(name=p.name, text=fight.best_text))
-            record.changes += renown.gain(s, c, "fame", cfg.highlight_fame)  # 名聲設計 3.2
-        for text in news:
-            add_rumor(s, text, content=c, layer="world")
-        summary = self._file_battle(record, wear=False, armor_wear=False)
-        msgs = [line, summary, *battlelog.gains_list(record)]
-        self._write(title, msgs, tag=battlelog.outcome_text(record))
-        # 收場之後回到擂台那一頁（擂台獨立一頁，Joy 2026-10-14「擂台應該要是獨立的一頁」）：收場卡照 arena_last 畫
-        p.arena_last = ArenaResult(id=fight.id, foe=fight.foe.name, tier=tier, lines=list(fight.lines), changes=list(record.changes),
-                                   looks=list(fight.looks), skins=list(fight.skins), fx=list(fight.fx),
-                                   picks=list(fight.picks), bursts=[list(x) for x in fight.bursts])
-        p.picking_arena = arena.here(s, c)
-        won = tier in team.WIN_TIERS
-        annals.note(s, c, annals.FIGHT, f"上擂台挑{fight.foe.name}，{tier}。", 2 if won else 1, keep=[fight.foe.name])
-        self._save_season()  # 名次、戰績、留給守的人那一筆都在這一季的 WorldState
-        return msgs
+        return bout_arena.arena_act(self, arg)
 
     def _deliver_arena(self) -> None:
-        """同步時補擂台的事：季收了還沒打完的那一場作廢；換日記俸（arena.roll_day）；被挑了的每一場一份戰報與一則「守擂・挑的人」；
-        領俸；休季時季末前三名的獎勵。"""
-        s, c, p = self.state, self.content, self.state.player
-        w, cfg = s.world, c.config.arena
-        if p.arena is not None and w.ended:
-            p.arena = None
-            self._write(arena.ARENA, [arena.UNSETTLED])
-        rolled = arena.on(c) and arena.roll_day(w, cfg, self._pill_day())  # 擂台關著不動 WorldState（同步什麼都沒有時不存季）
-        entry = arena.entry_of(w, p.name)
-        if entry is not None and not w.ended and entry.famed != renown.arena_famed(s, c):  # 名聲 4.7：照此刻的名望段重寫
-            entry.famed = not entry.famed
-            rolled = True
-        if entry is None or not (entry.inbox or entry.wages or (w.ended and entry.place and not entry.prized)):
-            if rolled:
-                self._save_season()
-            return
-        for report in entry.inbox:
-            squad = Squad(id=f"arena:{name_key(report.challenger)}", name=report.challenger, difficulty=report.power)
-            result = encounter.EncounterResult(tier=report.tier, margin=0.0, our_power=entry.power, difficulty=report.shown)  # 不含碎片（FB-615）
-            title = f"守擂・{report.challenger}"
-            record = battlelog.new_record(s, c, self.world, squad, result, "arena", event=title)
-            record.time = report.time
-            record.ours = record.ours[:1]
-            record.notes.append(arena.DEFENDED.format(name=report.challenger))
-            record.changes.append(arena.SWAPPED.format(before=report.before, after=report.rank) if report.rank != report.before
-                                  else arena.KEPT.format(rank=report.rank))
-            battlelog.add_record(s, record)
-            self._write(title, [arena.DEFENDED.format(name=report.challenger), battlelog.summary_line(record),
-                                *battlelog.gains_list(record)], tag=battlelog.outcome_text(record))
-        entry.inbox = []
-        for _, rank in entry.wages:
-            if not 1 <= rank <= len(cfg.wages):
-                continue
-            silver, fame = cfg.wages[rank - 1]
-            p.stats["silver"] = p.stats.get("silver", 0) + silver
-            renown.gain(s, c, "fame", fame)  # 名聲設計 3.2；俸那一句自己寫了名望
-            self._write(arena.ARENA, [arena.WAGE.format(rank=rank, title=arena.title_for(rank) or "", silver=silver, fame=fame)])
-        entry.wages = []
-        if w.ended and entry.place and not entry.prized:
-            entry.prized = True
-            fame = cfg.prizes[entry.place - 1]
-            renown.gain(s, c, "fame", fame)  # 名聲設計 3.2；季末那一句自己寫了名望
-            lines = [arena.PRIZE.format(place=entry.place, fame=fame)]
-            if cfg.prize_treasure:
-                lines += treasures.arena_prize(s, c, p.season_number, entry.place)
-            self._write(arena.ARENA, lines)
-        self._save_season()
+        return bout_arena.deliver_arena(self)
 
     def _xinde(self) -> int:
         return self.state.player.stats.get("xinde", 0)
