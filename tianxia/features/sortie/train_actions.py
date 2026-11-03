@@ -27,7 +27,6 @@ from tianxia import territory  # 共用規則層（地盤：站的照控制方�
 from tianxia.core.option import Option
 from tianxia.core.services import BIG_FIGHT_WAIT, drill_share
 from tianxia.events import pick_event  # 過渡：待搬（遊歷打完的戰後事件）
-from tianxia.guide import note_action  # 過渡：待搬（入伍段的「出一次力」；第 22 批新手引導成包時改叫 ctx._note_action，見 README）
 from tianxia.models import Location, Squad
 from tianxia.rules import front_of, resolve_trend
 
@@ -297,7 +296,7 @@ def duty(ctx: Game) -> list[str]:
         if host is not None:
             msgs += ctx._drill_gains(host, 1.0)
     if duel:  # 守城軍令改成應戰守住才記（計畫 4.0 之三第 17 條）；入伍段「出一次力」照舊認它
-        return msgs + duel_actions.duty_credit(ctx) + ctx._guide(note_action(s, c, ctx.world, "order"))
+        return msgs + duel_actions.duty_credit(ctx) + ctx._guide(ctx._note_action("order"))
     credit = ctx._order_credit(kind="duty", location=loc.id, front=front)  # 地點：領地爭奪的守城認自家被推得最高的那一塊（裁決 11、翻地與爭搶）
     # 入伍段第 2 步「出一次力」：守勢行動不在這週軍令裡也算（FB-094：豪強第一週只有打擊，新人打不過；FB-093：巡哨、傳道就在營裡）
-    return msgs + (credit or ctx._guide(note_action(s, c, ctx.world, "order")))
+    return msgs + (credit or ctx._guide(ctx._note_action("order")))

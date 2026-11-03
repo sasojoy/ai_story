@@ -33,7 +33,6 @@ from tianxia import treasures  # 共用規則層（寶物：多掉一個素材�
 from tianxia.characters import name_key
 from tianxia.core.option import Option
 from tianxia.core.services import drill_share
-from tianxia.guide import note_action  # 過渡：待搬（入伍段的「出一次力」）
 from tianxia.models import Location, Squad
 from tianxia.state import FrontReport
 
@@ -310,7 +309,7 @@ def sortie(ctx: Game) -> list[str]:
     finally:
         ctx._clash_won, ctx._sortie_marked = False, False
         ctx._sortie_moved, ctx._sortie_flipped = 0.0, False
-    return msgs + ctx._guide(note_action(s, c, ctx.world, "order"))
+    return msgs + ctx._guide(ctx._note_action("order"))
 
 
 def front_report(ctx: Game, loc: Location, how: str, before: dict[str, float], why: str | None) -> FrontReport:
