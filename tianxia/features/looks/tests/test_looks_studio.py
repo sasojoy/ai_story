@@ -214,6 +214,25 @@ def test_dodge_and_fall_are_painted_from_a_gray_silhouette_but_reviewed_against_
         assert (studio.POSE_DIR / f"{sheet}.png").is_file(), sheet
 
 
+def test_the_run_silhouette_drops_the_hat_boys_sword():
+    """跑步的剪影去掉斗笠小子腰間的劍（2026-11-04 #495：留著劍的剪影六張都被判「帶兵器」）：細長的拿掉，身體一點不少。"""
+    import importlib.util
+    from pathlib import Path
+
+    import numpy as np
+
+    path = Path(__file__).resolve().parents[4] / "scripts" / "make_pose_refs.py"
+    spec = importlib.util.spec_from_file_location("make_pose_refs", path)
+    pose = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pose)
+    assert "hero_run" in studio.POSE and "hero_run" in pose.NO_PROPS
+    cell = np.zeros((220, 220), dtype=bool)
+    cell[60:200, 80:140] = True  # 身體
+    cell[150:155, 20:80] = True  # 劍：五列粗、往後伸出去
+    out = pose.no_props(cell)
+    assert out[60:200, 80:140].all() and not out[150:155, 20:70].any()  # 貼著身體的那幾點會留著，不要緊
+
+
 def test_budget_and_fake_orders_are_skipped(on, monkeypatch):
     game = _game(on)
     _move_order(on, game)

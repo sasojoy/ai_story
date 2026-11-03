@@ -120,10 +120,12 @@ SHEET_EXTRA = ("The FIRST attached image is the layout and pose reference (same 
 # 姿勢剪影（2026-11-03 畫坊量測，正式站 #494、#495 都卡在這兩張）：畫圖時第一張參考圖不給斗笠小子的彩色原圖，
 # 給同一套姿勢塗成一片灰的剪影（scripts/make_pose_refs.py 產的）。彩色原圖會被 klein 當成要畫的人——
 # 審圖擋下最多的理由是「穿斗笠小子的格紋護甲、深色褲子」「頭上冒出斗笠」；剪影只留姿勢與排法。
-# 量到的第一次就過的比例（兩套角色合計）：dodge 6% → 31%、fall 6% → 17%。其他八張沒量過、現在也過得去，照舊。
+# 量到的第一次就過的比例（兩套角色合計）：dodge 6% → 31%、fall 6% → 17%。
+# hero_run（2026-11-04 正式站 #495 十連掛）：斗笠小子沒戴面罩、腰間掛劍，蒙面客照抄成「面罩不見」「帶兵器」——
+# 彩色原圖 0/6，留著劍的剪影 0/6（六張都被判帶兵器），去掉劍的剪影 2/6。其他張沒量過、現在也過得去，照舊。
 # 審圖照舊看彩色原圖（量的時候就是這樣審的）：剪影只換畫圖那一邊。
 POSE_DIR = Path(__file__).parent / "pose"
-POSE = {"hero_bare_dodge", "hero_bare_fall"}
+POSE = {"hero_bare_dodge", "hero_bare_fall", "hero_run"}
 POSE_EXTRA = ("The FIRST attached image shows ONLY the poses, as flat gray silhouettes (same frame count, same poses, same size and "
               "position in each frame) — copy the poses, not the gray color or the shapes on the head. "
               "The SECOND attached image is this character's design: keep exactly the same face, hair, clothes and colors in every frame.")

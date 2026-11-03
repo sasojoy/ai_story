@@ -7,7 +7,8 @@
 dodge 6% → 31%（去掉斗笠）、fall 6% → 17%（留著斗笠）。
 - dodge 去斗笠：斗笠的輪廓會被畫成「金色尖塔頭飾」。
 - fall 留斗笠：踉蹌、倒地那幾格靠帽沿看得出臉朝哪邊；去掉之後第 3 格一半畫成朝左。
-其他八張沒量過、現在也過得去，所以不產（studio.POSE 沒有的照舊用彩色原圖）。
+- run 留斗笠、去掉腰間的劍（2026-11-04 #495）：剪影留著劍，六張都被判「帶兵器」；去掉之後 0/6 → 2/6。
+其他張沒量過、現在也過得去，所以不產（studio.POSE 沒有的照舊用彩色原圖）。
 
     .venv/Scripts/python.exe scripts/make_pose_refs.py
 要 Pillow、numpy、scipy（requirements-studio.txt）。斗笠小子的圖改了才要重產。
@@ -30,7 +31,9 @@ from tianxia.features.looks import orders, studio  # noqa: E402
 CELL = orders.CELL
 WEB_IMG = ROOT / "web" / "img"
 GRAY = 128
-HATLESS = {"hero_bare_dodge": True, "hero_bare_fall": False}  # 哪幾張要產、要不要去斗笠（見上面）
+HATLESS = {"hero_bare_dodge": True, "hero_bare_fall": False, "hero_run": False}  # 哪幾張要產、要不要去斗笠（見上面）
+NO_PROPS = {"hero_run"}  # 要去掉斗笠小子身上掛的兵器（細長的棍、劍）的那幾張
+PROP_R = 4  # 比這個粗的留著：手腳、披風都比它粗，劍鞘比它細（2026-11-04 試 3～6，4 剛好整把拿掉、手腳都在）
 
 
 def no_hat(cell: np.ndarray) -> np.ndarray:
@@ -64,6 +67,16 @@ def no_hat(cell: np.ndarray) -> np.ndarray:
     return out
 
 
+def no_props(cell: np.ndarray) -> np.ndarray:
+    """一格剪影去掉細長的東西（腰間的劍）：開運算拿掉比 PROP_R 細的部分，只留最大的那一塊，再把輪廓補回來。"""
+    st = ndimage.iterate_structure(ndimage.generate_binary_structure(2, 1), PROP_R)
+    body = ndimage.binary_opening(cell, st)
+    lab, n = ndimage.label(body)
+    if n > 1:
+        body = lab == (int(np.argmax(ndimage.sum(body, lab, range(1, n + 1)))) + 1)
+    return cell & ndimage.binary_dilation(body, st)
+
+
 def silhouette(sheet: str, hatless: bool) -> bytes:
     """斗笠小子那一條照這一張的排法（studio.LAYOUT）重排，人塗成一片灰、白底，PNG。"""
     cols, rows = studio.LAYOUT[sheet]
@@ -72,6 +85,7 @@ def silhouette(sheet: str, hatless: bool) -> bytes:
     for k in range(orders.SHEETS[sheet]):
         cell = a[:, k * CELL:(k + 1) * CELL]
         y, x = (k // cols) * CELL, (k % cols) * CELL
+        cell = no_props(cell) if sheet in NO_PROPS else cell
         alpha[y:y + CELL, x:x + CELL] = no_hat(cell) if hatless else cell
     out = np.full((*alpha.shape, 3), 255, dtype=np.uint8)
     out[alpha] = GRAY
