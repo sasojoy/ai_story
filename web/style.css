@@ -2178,6 +2178,23 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .self-art { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 14px; border: 1px solid var(--line); border-left: 4px solid var(--gold); border-radius: var(--radius);
   background: var(--card); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
 .self-art.q4 { border: 2px solid var(--gold); background: color-mix(in srgb, var(--gold) 8%, var(--card)); }
+/* 武學卡底下掛絕招（Joy 2026-11-03，示意稿 CZbfm371…）：卡與絕招那一條包成一張（.self-art-wrap），卡本身的框拿掉 */
+.self-art-wrap { border: 1px solid var(--line); border-left: 4px solid var(--gold); border-radius: var(--radius); background: var(--card); overflow: hidden; }
+.self-art-wrap.q4 { border: 2px solid var(--gold); }
+.self-art-wrap > .self-art { border: 0; border-radius: 0; background: transparent; }
+.hm-strip { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px dashed var(--line); background: var(--card-2); }
+.hm-seal { flex: none; width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  font: 700 18px var(--serif); color: var(--gold); border: 1.5px dashed var(--gold); }
+.hm-seal.on { background: var(--accent); color: var(--accent-ink); border: 0; }
+.hm-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.hm-main b { font: 600 15px var(--serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-main small { color: var(--ink-2); font-size: 12px; }
+.hm-play { flex: none; min-height: 40px; }
+.hm-stage { margin: 0 12px; padding-top: 10px; }
+.hm-stage canvas { display: block; width: 100%; height: auto; border-radius: 10px; background: #1e1a15; }
+.hm-warn { margin: 0; padding: 8px 12px; font-size: 12px; line-height: 1.6; color: var(--ink); background: color-mix(in srgb, var(--stam) 14%, var(--card)); border-top: 1px solid var(--line); }
+.hm-foot { display: flex; justify-content: flex-end; padding: 2px 12px 4px; }
+.hm-go { min-height: 40px; font-size: 13px; }
 .sa-body { flex: 1; min-width: 0; display: grid; gap: 4px; }
 .sa-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .sa-hd b { font: 600 16px var(--serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

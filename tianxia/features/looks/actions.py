@@ -233,6 +233,31 @@ def battle_mvp(ctx: Game) -> dict | None:
     return mvp.latest(status[0]) if status is not None else None
 
 
+def hero_move(ctx: Game) -> dict | None:
+    """俠客頁「武學」那一張卡底下的絕招（main.hero_move；Joy 2026-11-03「俠客頁面的武學那邊，是不是應該跟絕招動畫做聯動」，
+    示意稿 CZbfm371…）：身上穿哪一招、打法對不對得上、能不能演一次；沒穿時招式庫有幾招、能不能替現在練的那一門寫一招。
+    招式動畫沒開賣、假人、沒有錢包是 None（俠客頁不畫那一條）。只讀。"""
+    if not rules.on(ctx.content) or ctx.state.player.bot or moves.item_of(ctx.content) is None:
+        return None
+    wallet = ctx._wallet()
+    if wallet is None:
+        return None
+    owner, style = ctx._mall_owner(), current_style(ctx)
+    made = [m for m in moves.mine(wallet, owner) if m.status == orders.MADE]
+    art, art_name = current_art(ctx)
+    out = {"count": len(made), "style": style, "style_text": moves.STYLES.get(style, style), "art": art_name, "has_art": bool(art)}
+    pid = moves.worn(wallet, owner)
+    found = next((m for m in made if m.pid == pid), None) if pid else None
+    if found is None:
+        return out
+    scene = found.scene or {}
+    asleep = found.style != style
+    out["worn"] = {"id": found.move, "name": str(scene.get("name") or found.art_name), "style": found.style,
+                   "style_text": moves.STYLES.get(found.style, found.style), "plays": not asleep, "show": found.scene is not None,
+                   "asleep_text": moves.ASLEEP.format(want=moves.STYLES.get(found.style, found.style), have=moves.STYLES.get(style, style)) if asleep else ""}
+    return out
+
+
 def moves_view(ctx: Game) -> dict | None:
     wallet = ctx._wallet()
     if wallet is None or not rules.on(ctx.content):
