@@ -5830,7 +5830,7 @@ def _sense_client(base: type) -> type:
 
 
 def _sense_test_scene():
-    """測試內容沒有有所感的場景：湖邊補一段（同 tests/arts/test_sensing.py 的湖風；湖邊悟得到柔〔水〕與快〔風〕）。"""
+    """測試內容沒有有所感的場景：湖邊補一段（同 tianxia/features/sense/tests/test_sensing.py 的湖風；湖邊悟得到柔〔水〕與快〔風〕）。"""
     from tianxia.models import InsightScene, SenseMethod
 
     return InsightScene(
@@ -6003,7 +6003,7 @@ class SenseScenario(ExploreScenario):
 
     @contextlib.contextmanager
     def trial(self, name: str):
-        """這一次頓悟的小試照寫好的那一種（epiphany._trial 換掉；同 tests/arts/test_epiphany.py 的 _begin）。"""
+        """這一次頓悟的小試照寫好的那一種（epiphany._trial 換掉；同 tianxia/features/sense/tests/test_epiphany.py 的 _begin）。"""
         from tianxia import epiphany
 
         real = epiphany._trial
