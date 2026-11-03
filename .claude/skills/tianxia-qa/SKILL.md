@@ -157,8 +157,12 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - **同一支腳本跑不同的季＝不同的設定檔 + 不同的複本**：`TIANXIA_PROFILE`（`week7`、`weekend`、`season21`、空字串＝14 天）各一個暫存資料庫、各一組 `set_password.py` 帳號；`.ps1` 傳空字串引數會被吃掉，用 `default` 這種記號再在腳本裡換回空字串；`"-"` 也不行（被當成參數名）。要驗的開關不在設定檔切得到時，另解一份複本、只改複本的 `content/config.json`（在最上面加一行，例 `{"precise_actions": false,` 或把 `"conquest": {"enabled": false}` 換成 true；領地爭奪開著才有「出陣（不在爭奪之列）」，一類一顆關著才有四格行動列）。新舊對照：兩份複本各跑一次，比量測 JSON（格子鍵、文字、寬高、底下每一行的文字）與伺服器掃描（`/api/main` 的選項標籤、`action_notes`）。
   - **PowerShell 的 `| Select-Object -First N` 也會砍掉子行程**：`& powershell -File start_variant.ps1 ... | Select-Object -First 3` 拿到 3 行就把整串（包括後面要跑的 node）收掉、exit 255，工作被標成 failed、但伺服器（`Start-Process` 起的）還活著。要截輸出就導進檔案再讀。前台最多 600 秒，再久的（變體整輪約 5～10 分鐘）一律 `Start-Process powershell -File` 丟背景、`Wait-Process -Timeout` 等。
 
+  - **driver.mjs 的帳號密碼資料夾是啟動時寫死的**（2026-11-03 鐵匠鋪網頁 QA）：換資料庫或換季要重開 driver，而且要等舊的 Chrome 放開設定檔，不然會 EBUSY。
+  - **320 寬某一輪跑歪時，先量 `innerWidth` 對 `scrollWidth`**：有東西把整頁撐寬之後（例 FB-9210「剛剛」那張卡的小章），照座標點會點到別的鈕（那一次把短劍換上了）。
+  - **決戰集結中，懸賞榜的店面那一層不出現**：要比店面，先 `cancel_battle`。
+
 ## 存檔、資料庫與假人
-- 換季之後、玩家第一次同步之前改的存檔，會被換季重設洗掉。要等他同步完再改。
+- 換季之後、玩家第一次同步之前改的存檔，會被換季重設洗掉。要等他同步完再改。擺角色的銀兩也一樣：在第一次同步之前改，同步後對不上（2026-11-03：擺 3 兩，同步後變 33）。
 - **在路上做「擋路」（`travel_block`）**：`player.picking_*` 旗標同步時會被收掉；改 `GameState.pending_event = <任何事件 id>`（`state` 那一層，不是 player）就會擋，畫面寫「先回江湖頁處理「事件名」」，驗完設回 None（2026-10-22，FB-649 複驗）。
 - **改存檔不驗型別**：list 欄位寫成 None（例 `duel_last = None`），`CharacterStore.save` 照樣存進去，讀的時候才炸：伺服器 `_reload` 回 500，網頁掉回登入頁。清空一律用欄位的預設值（`[]`、`{}`）；已經壞了，就直接改 `characters` 那一列的 JSON。
 - **讀資料庫只開唯讀**：`sqlite3.connect("file:<db>?mode=ro", uri=True)`。`characters` 有 `is_bot` 和 `data`（JSON，`player`、`journal`），江湖紀錄只留最近 30 則。
