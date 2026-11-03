@@ -173,17 +173,6 @@
     outingGo(0).finally(() => { OW.going = false; });
   }
 
-  // 點畫面一下就接著走（Joy 2026-11-03「選完都要等 3～5 秒」：伺服器只花 0.1 秒，等的是「果」停的 2.2 秒與走到下一站的動畫）：
-  // 正在走就快轉到下一站（同「略過」）；「果」那一行停著的時候不等了，直接出發。不點的人照舊慢慢演
-  function outingHurry() {
-    if (OW.cur || OW.tasks.length) { OW.turbo = true; return; }
-    if (OW.hold > Date.now()) {
-      OW.hold = 0;
-      if (OW.holdT) { clearTimeout(OW.holdT); OW.holdT = null; }
-      outingSync();
-    }
-  }
-
   // 要在江湖頁寫字或畫圖的選項（那個框只畫在江湖頁上）。隨口應對不在裡面：輸入框直接畫在這張卡上（outingChoiceHtml）
   function outingNeedsPage(id) {
     return id === SENSE_DRAW || SAY_OPTIONS.includes(id) || id.startsWith(PERSUADE_PREFIX) || id === OWN_NAME_ID || id === GATHER_SAY_ID;
@@ -240,7 +229,7 @@
       box.className = "outing-wrap";
       box.innerHTML = `<div class="outing-card" role="dialog" aria-label="走一趟">
         <p class="outing-head"><b class="outing-place"></b><span class="outing-step"></span></p>
-        <div class="outing-scene" data-act="outing-tap"><canvas class="outing-cv" width="${OUTING_W}" height="${OUTING_H}" aria-label="走一趟"></canvas>
+        <div class="outing-scene"><canvas class="outing-cv" width="${OUTING_W}" height="${OUTING_H}" aria-label="走一趟"></canvas>
           <button class="outing-stele" data-act="outing-stele" hidden></button><div class="outing-stele-all" hidden></div></div>
         <div class="outing-foot"></div>
         <div class="outing-log" aria-live="polite"></div></div>`;
@@ -710,7 +699,6 @@
       case "outing-go": await outingGo(Number(el.dataset.n)); return true;
       case "outing-speed": OW.speed = OW.speed === 2 ? 1 : 2; outingSaveSpeed(OW.speed); outingFoot(); return true;
       case "outing-skip": OW.turbo = true; return true;
-      case "outing-tap": outingHurry(); return true;
       case "outing-choose": {
         const id = el.dataset.id;
         if (id === FREE_TEXT_OPTION) {
