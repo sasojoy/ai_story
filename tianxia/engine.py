@@ -21,7 +21,7 @@ from . import ascend  # 破境卡（招式與絕學稿案第三節）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import chapters  # 章回主線（企劃者 2026-10-29）
 from . import (
-    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, create, cultivation, defection, divine, economy, encounter, enlist, equipment, explore_modes, escorts,
+    allied, annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, create, cultivation, defection, divine, economy, encounter, enlist, equipment, explore_modes, escorts,
     deeds, fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, plans,
     materials, mounts, naming, newbie, opportunities, orders, parley, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, siege, signature, signature_arms, silver, skillview, smithing,
@@ -36,7 +36,6 @@ from . import outing as outing_rules  # 走一趟（企劃者 2026-10-29～30）
 from . import growth  # 減法季批 2：三道閘、屬性五段的純規則（開關走 rules.jianfa；探索一顆搬進了探索包）
 from . import zhuan_end  # 減法季批 7b：列傳為終點（票、深交上限、人物評曰）
 from . import ambush as ambush_rules  # 設伏劫道（後期體力玩法第一批）；叫 ambush_rules：這個檔裡有區域變數叫 ambush
-from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
 from . import opening as opening_rules  # 開局第一分鐘（減法季批 7；叫 opening_rules：避免跟戰法的 opening 混）
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）
 from . import raid as _raid_card  # noqa: F401  截殺登記進玩家卡的動作表（social.ACTIONS）
@@ -114,6 +113,10 @@ from .features.battle.rules import (  # noqa: F401  過渡：測試從 engine �
     ESCORT_MUSTER, ESCORT_SCENE, RESTORED_NOTE, ROUND_BLOCKS, TROOPS_LINE, TROOPS_REPORT,  # test_showdown_full_report、test_battle_round_blocks）
     ESCORT_PICK,  # 第 7 批：挑同伴那一句（test_companions_battle 從 engine 讀）
 )
+# bout
+from .features.bout import duel_actions as bout_duel  # 過渡：Game 上頭目戰的一行委派（全部拆包第 12 批）
+from .features.bout import arena_actions as bout_arena  # 過渡：Game 上擂台的一行委派（全部拆包第 12 批）
+from .features.bout import duel_rules as bout_rules  # 過渡：Game.DUEL_GAMBLE_NOTE 類別屬性、委派的型別註記（DuelTextRequest）
 from .state import (
     ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, FrontReport, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong, TimelineResult,
     StoryCard, StoryProgress, TierResult, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
@@ -212,7 +215,7 @@ PLAN_OPTION = "talk:plan"
 ROAD_SAY = "parley:road"
 TEXT_TALKS = (SAY_OPTION, PLAN_OPTION, ROAD_SAY)
 DUEL_FLEE = "duel:flee"  # 頭目戰的抽身退走（整季機器人不按它：bot.pick）
-ARENA_YIELD = arena.YIELD_ID  # 擂台的認輸下台（整季機器人不按它：bot.pick）
+ARENA_YIELD = "arena:yield"  # 擂台的認輸下台（整季機器人不按它：bot.pick）；寫字面（＝ features/bout/arena_rules.YIELD_ID）：單挑搬成包之後模組層不碰包
 SAY_MAX = 20  # 「自己說」最多幾個字（跟隨口應對一樣）
 
 
@@ -341,28 +344,14 @@ def _not_while_preparing(action: Callable) -> Callable:
     return guarded
 
 
-class DuelTextRequest(BaseModel):
-    """頭目戰放手一搏鎖外評估的單子（server.duel_text 的 A 段拿到、B 段送模型、C 段交回 duel_gamble 重驗：同一隻、同一回合、同一句才用）。"""
-    boss: str
-    round: int
-    text: str
-    name: str
-    faction_name: str
-    title: str
-    scene: str
-    sex: str = "男"  # 性別（gender）：模型寫劇情時的稱呼
-    # 擂台（tianxia/arena.py）也走這張單子：boss 寫「arena:場次」，多帶對手那一行與擂台的場合（assess_gamble 的 target、setting、place）；
-    # 頭目戰空著，server.duel_text 照舊用 duel.SETTING、duel.PLACE
-    target: str = ""
-    setting: str = ""
-    place: str = ""
-
+# 頭目戰放手一搏鎖外評估的單子 DuelTextRequest 搬進單挑包（features/bout/duel_rules.py，全部拆包第 12 批）
 
 ONBOARD_SEGMENT = 4  # 初入江湖上線的版本章（ONBOARDING_VERSION 升到 4 的那一版）：比它小、已經走出草廬的存檔讀檔時蓋成引導走完
 ONBOARD_SEVEN = 5  # 新手引導重做（老周七步、草廬第 7 步改服丹）的版本章：章是 4 的存檔讀檔時照 prologue.seven_step 換步數
 SHOP_ACTS = frozenset({"smith", "bounties", "market", "arena"})  # 初入江湖「進城裡的鋪子看看」認的幾間（act:<這些>）
-# 出店的那一顆。酒肆的寫字面（＝ features/tavern/rules.BACK_ID）：酒肆搬成包之後模組層不碰包（主動搬六包第 10 批）
-LEAVE_SHOP_IDS = frozenset({"bounty:back", "smith:back", mounts.BACK, arena.BACK_ID, "tavern:back"})
+# 出店的那一顆。酒肆的寫字面（＝ features/tavern/rules.BACK_ID）：酒肆搬成包之後模組層不碰包（主動搬六包第 10 批）；擂台同
+# （＝ features/bout/arena_rules.BACK_ID，全部拆包第 12 批）
+LEAVE_SHOP_IDS = frozenset({"bounty:back", "smith:back", mounts.BACK, "arena:back", "tavern:back"})
 
 def _outing_watch(fn):
     """走一趟停在要選的事上時，這一下選完的得失記在那一段（outing_actions.outing_watched，Game 上留一行委派）。"""
@@ -862,9 +851,8 @@ class Game:
             economy.close_donate(s)  # 捐軍備關了、人不在自家大本營了（叛投、管理者挪人）：收起軍需官那一串
         if p.picking_dadian and not self._silver_options():
             self._close_dadian()  # 銀兩出口關了、這裡一樣都做不了了：收起打點那一間店
-        if p.picking_arena and not arena.here(s, c):
-            p.picking_arena = False  # 擂台關了、季收了：收起擂台
-        features_core.drop_shops(self)  # 搬成包的店（店面登記，第 11 批；酒肆）：關了、人不在那裡了就收起來（接在舊的六間店後面）
+        # 搬成包的店（店面登記，第 11 批；酒肆，與全部拆包第 12 批的擂台〔擂台關了、季收了〕）：關了、人不在那裡了就收起來（接在舊的五間店後面）
+        features_core.drop_shops(self)
         treasures.refresh_names(p, c)  # 寶物、名駒的名字照內容讀（裝備四欄 3.1）：joy 改了名字，存檔裡的跟著改；內容拿掉了留著舊名字
         forge_secrets.refresh_names(p, c, self.world)  # 名器的名字照內容讀（4.2）、神器的名字照全服那一列讀（5.2、5.3：原品定了名，仿品跟著改）
         signature_arms.refresh_names(p, c)  # 本命兵器的名字照內容讀（打造第三批）：joy 改了名，手上的跟著改
@@ -1031,9 +1019,8 @@ class Game:
             economy.close_donate(self.state)  # 捐軍備關了、人不在自家大本營了：收起軍需官那一串
         if self.state.player.picking_dadian and not self._silver_options():
             self._close_dadian()  # 銀兩出口關了、這裡一樣都做不了了：收起打點那一間店
-        if self.state.player.picking_arena and not arena.here(self.state, self.content):
-            self.state.player.picking_arena = False  # 擂台關了、季收了：收起擂台
-        features_core.drop_shops(self)  # 搬成包的店（店面登記，第 11 批；酒肆）：關了、人被挪走了就收起來（接在舊的六間店後面）
+        # 搬成包的店（店面登記，第 11 批；酒肆，與全部拆包第 12 批的擂台〔擂台關了、季收了〕）：關了、人被挪走了就收起來（接在舊的五間店後面）
+        features_core.drop_shops(self)
         self._ambush_expire()  # 守著的埋伏到時刻了、或季上那一筆已經沒了（被打退、換季）：收起來
         arrived = self._arrivals()  # 抵達的站自己寫一則江湖紀錄（途中觸發的大事也寫在那裡），不併進下面的「江湖大事」
         if arrived:
@@ -1316,15 +1303,11 @@ class Game:
                            enabled=move not in held) for move in MOVES] + [
                 Option(id=DUEL_FLEE, label="抽身退走（不分勝負，掉的氣血不回）"),
             ]
-        taken = features_core.menu(self)  # 功能包此刻接管整個選單（坐在宴席上的敬酒詞與離席；開發規範手冊 3.3）
+        # 功能包此刻接管整個選單（開發規範手冊 3.3）：坐在宴席上的敬酒詞與離席（宴客包）、擂台打到一半的三招與認輸（單挑包，全部拆包第 12 批：
+        # 原本是下一行的那一支，單挑包排在宴客後面；放手一搏同頭目戰走輸入框）
+        taken = features_core.menu(self)
         if taken is not None:
             return taken
-        if s.player.arena is not None:  # 擂台（tianxia/arena.py）：三招與認輸；放手一搏同頭目戰走輸入框
-            held = tactics.locks(s.player.arena.bout).no_moves
-            return [Option(id=f"arena:{move}", label=duel_base.move_label(move) + (tactics.lock_note(move) if move in held else ""),
-                           enabled=move not in held) for move in MOVES] + [
-                Option(id=ARENA_YIELD, label=arena.YIELD),
-            ]
         if s.player.sensing is not None:  # 有所感（悟意境設計第零節）：卡上的做法，或感悟狀態的「畫下來／順其自然」
             menu = sensing.menu(s, c)
             if menu:
@@ -1374,9 +1357,8 @@ class Game:
             return self._donate_options()  # 大本營的捐軍備（素材與經濟設計第六節）
         if s.player.picking_dadian:
             return self._silver_options() + [Option(id="dadian:back", label=silver.SHOP_BACK)]  # 打點（銀兩出口）：這裡做得了的幾樣與離開
-        if s.player.picking_arena:
-            return self._arena_options()
-        shop_taken = features_core.shop_menu(self)  # 坐在搬成包的店裡（店面登記，第 11 批；酒肆，企劃者 2026-10-18）：選單整個是那間店的
+        # 坐在搬成包的店裡（店面登記，第 11 批；酒肆，企劃者 2026-10-18；擂台邊，全部拆包第 12 批）：選單整個是那間店的
+        shop_taken = features_core.shop_menu(self)
         if shop_taken is not None:
             return shop_taken
         if s.player.fs_asking is not None:
@@ -1504,8 +1486,9 @@ class Game:
             opts.append(Option(id="act:smith", label=weapons.SMITH))
         if mounts.market_here(s, c):  # 馬市（裝備四欄 5.5，帶「馬市」標籤的城鎮）：只是打開第二層選單，不花體力
             opts.append(Option(id="act:market", label=mounts.MARKET))
-        opts += features_core.shop_entries(self)  # 搬成包的店的入口（店面登記，第 11 批；酒肆：帶「酒肆」標籤的城鎮，只是打開酒肆，不花體力）
-        opts += self._arena_entry()
+        # 搬成包的店的入口（店面登記，第 11 批；酒肆：帶「酒肆」標籤的城鎮，只是打開酒肆，不花體力；擂台：哪裡都有，全部拆包第 12 批——
+        # 原本是下一行的 _arena_entry，單挑包排在酒肆後面）
+        opts += features_core.shop_entries(self)
         opts += self._stamina_play_options()  # 後期體力玩法：設伏劫道、修築工事、屯糧練兵
         heal = self._heal_option()
         if heal is not None:
@@ -1955,31 +1938,44 @@ class Game:
             if tier is not None:  # 城外尋敵分級（Config.training）：「尋敵（體力 6・宵小出沒・河灘潑皮・穩勝）」
                 note = f"{training.TIER_WORDS[tier]}・{note}"
             return self._cost_option(oid, name, cost, note=note)
-        bosses = duel_rules.here(s, c)
+        bosses = self._boss_here()
         if not bosses:
             route = self._nearest_practice()
             place = explore_modes.NO_FOE_NEAR.format(place=c.locations[route.path[-1]].name) if route is not None else ""
             # note：行動列練功那一格的小字（FB-670，PM 2026-10-22）：城鎮「城外才有」、城外沒有對手的地方「這裡沒有」——網頁照它寫，不自己判斷
             cell = explore_modes.NO_FOE_CELL_TOWN if explore_modes.is_town(c, loc) else explore_modes.NO_FOE_CELL
             return Option(id=oid, label=f"{name}（{explore_modes.NO_FOE}{place}）", enabled=False, note=cell)
-        boss = duel_rules.available(s, c)
+        boss = self._boss_ready()
         if boss is not None:
             return self._cost_option(oid, name, cost, note=f"{self._boss_face(boss)}・{explore_modes.BOSS_NOTE}")
         return Option(id=oid, label=f"{name}（{self._boss_away()}）", enabled=False)
 
+    # 頭目的查詢（本體在 tianxia/features/bout/duel_actions.py，全部拆包第 12 批）：三選一的練功、舊探索在原位叫，探索包經 ctx 問
     def _boss_face(self, boss: DuelBoss) -> str:
-        """這一隻頭目對你露的那一面（照你的陣營，duel_rules.foe_index）的名字：練功鈕與行動列底下那一行同一個。"""
-        return boss.foes[duel_rules.foe_index(boss, self.state.player.faction)].name
+        return bout_duel.boss_face(self, boss)
+
+    def _boss_here(self) -> list[DuelBoss]:
+        return bout_duel.boss_here(self)
+
+    def _boss_ready(self) -> DuelBoss | None:
+        return bout_duel.boss_ready(self)
+
+    def _boss_wait_text(self) -> str:
+        return bout_duel.boss_wait_text(self)
+
+    def _boss_used_up(self, boss_id: str) -> bool:
+        return bout_duel.boss_used_up(self, boss_id)
 
     def _boss_away(self) -> str:
         """這裡只有頭目、他此刻遇不上的原因（練功鈕括號裡與行動列底下那一行同一句）：冷卻中寫還要等多久，次數用完寫哪一位頭目不再現身
-        （FB-672：帶名字，名字跟「這裡只有頭目某某」同一個，_boss_face；這裡不只一位時寫次數用完的第一位）。"""
+        （FB-672：帶名字，名字跟「這裡只有頭目某某」同一個，_boss_face；這裡不只一位時寫次數用完的第一位）。三選一的練功才叫，不搬：
+        第 13 批連三選一一起拿掉（全部拆包第 12 批派工）；冷卻、次數、名字問單挑包的委派。"""
         s, c = self.state, self.content
-        wait = duel_rules.cooldown_left(s, c.config.duel)
-        if wait > 0:
-            return explore_modes.BOSS_COOLING.format(wait=arena.wait_text(wait / c.config.time_scale))
-        bosses = duel_rules.here(s, c)
-        gone = next((b for b in bosses if duel_rules.used_up(s, c, b.id)), bosses[0])
+        wait = self._boss_wait_text()
+        if wait:
+            return explore_modes.BOSS_COOLING.format(wait=wait)
+        bosses = self._boss_here()
+        gone = next((b for b in bosses if self._boss_used_up(b.id)), bosses[0])
         return explore_modes.boss_gone(s, c, self._boss_face(gone))  # 7 天濃縮季寫「這一段…第 N 天 00:00 再來」（FB-501）
 
     def _practice_line(self, loc: Location) -> str:
@@ -1991,14 +1987,14 @@ class Game:
         foe = self._gather_foe(loc)
         if foe is not None:
             return howto.PRACTICE_NOTE.format(foe=foe.name)
-        if not duel_rules.here(s, c):
+        if not self._boss_here():
             head = howto.PRACTICE_TOWN_NOTE if explore_modes.is_town(c, loc) else explore_modes.NO_FOE
             route = self._nearest_practice()
             if route is None:
                 return head
             place = explore_modes.NO_FOE_NEAR.format(place=c.locations[route.path[-1]].name)
             return f"{head}{place}（{atlas.route_text(s, c, route, 'walk')}）"
-        boss = duel_rules.available(s, c)
+        boss = self._boss_ready()
         if boss is not None:
             return howto.PRACTICE_BOSS_NOTE.format(foe=self._boss_face(boss))
         return self._boss_away()
@@ -2643,9 +2639,8 @@ class Game:
                 return Refused(self._log([roster.TAKEN.format(name=self.content.characters[cid].name, owner=owner)]))
         if option is not None and not option.enabled and option_id.startswith("arena:fight:"):
             # Joy 2026-10-16「看不出還有多久才能打」：按到灰掉的挑擂鈕（兩個分頁、畫面還沒重抓）回為什麼不成、還要等多久，不寫江湖紀錄
-            foe = self.state.world.arena.get(option_id.removeprefix("arena:fight:"))
-            problem = foe and arena.challenge_problem(self.state.world, self.state.player.name, foe, self.content.config.arena,
-                                                      self.arena_left(), self.content.config.time_scale)
+            # （為什麼不成問單挑包：全部拆包第 12 批）
+            problem = self._arena_fight_problem(option_id)
             if problem:
                 return Refused([f"（{problem}。）"])
         if option is None or not option.enabled:
@@ -2718,8 +2713,7 @@ class Game:
                 msgs = self._market(arg)
             elif kind == "donate":
                 msgs = self._donate_choice(arg)
-            elif kind == "arena":
-                msgs = self._arena(arg)
+            # （arena:join／fight／back：單挑包的 choose 掛鉤接走，上面 taken 那一支；全部拆包第 12 批）
             elif kind == "explore":
                 msgs = self._explore_mode(arg)
             elif kind == "sect":  # 拜入門派（一類一顆，_sect_options）：端出那一則事件，不花體力
@@ -3228,9 +3222,7 @@ class Game:
         if kind == "errand":  # 託付（減法季批 6）：「交信・盧植」
             e = errand_rules.find(s, arg.partition(":")[2])
             return f"{errand_rules.LABELS[e.kind]}・{errand_rules.who(c, e)}" if e is not None else "託付"
-        if kind == "arena":
-            foe = arena.entry_of(s.world, arg.partition(":")[2]) if arg.startswith("fight:") else None
-            return f"{arena.ARENA}・{foe.name}" if foe is not None else arena.ARENA
+        # （kind == "arena"：報名、挑人的標題由單挑包的 choose 掛鉤給，全部拆包第 12 批）
         if kind == "invite":
             inv = invites.find(s.world, arg.partition(":")[2])
             if inv is None:
@@ -3262,7 +3254,7 @@ class Game:
         duty = c.orders.duties.get(s.player.faction or "")  # 守勢行動的標題寫陣營自己的名字（巡哨、傳道、保境安民）
         action2 = opportunities.rank2_action(s, c)  # 第 2 階行動的標題也寫它自己的名字（招降黃巾散兵、施符水收人心）
         # act 子動詞的主人是功能包的那幾格（接縫掛鉤，第 11 批）：探索包「出門一趟・某地」（探索一顆開著）、出陣包「出陣／雪恥／遊歷・某地」、
-        # 酒肆包的招牌。下面那張表照 arg 查、不看 kind，這裡也照 arg 問；主人不接照舊查表
+        # 酒肆包的招牌、單挑包的「擂台・某地」（全部拆包第 12 批）。下面那張表照 arg 查、不看 kind，這裡也照 arg 問；主人不接照舊查表
         owned = features_core.act_title(self, arg)
         if owned is not None:
             return owned
@@ -3274,7 +3266,7 @@ class Game:
             "bounties": f"{bounties.BOARD}・{here}",
             "smith": f"{weapons.SMITH}・{here}",
             "market": f"{mounts.MARKET}・{here}",
-            "arena": f"{arena.ARENA}・{here}",
+            # （arena：「擂台・此地」由單挑包的 act 子動詞給，上面 owned 那一行；全部拆包第 12 批）
             "heal": f"療傷・{here}",
             "donate": f"{economy.DONATE_TITLE}・{here}",
             "dadian": f"{silver.SHOP}・{here}",
