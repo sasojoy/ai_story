@@ -21,7 +21,7 @@ from . import ascend  # 破境卡（招式與絕學稿案第三節）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import chapters  # 章回主線（企劃者 2026-10-29）
 from . import (
-    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, create, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
+    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, create, cultivation, defection, divine, economy, encounter, enlist, equipment, explore_modes, escorts,
     deeds, fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, plans,
     materials, mounts, naming, newbie, opportunities, orders, parley, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, siege, signature, signature_arms, silver, skillview, smithing,
@@ -63,7 +63,7 @@ from . import wins  # 三陣營四勝利（減法季批 3c）：豪強兩本帳�
 from .accounts import AccountStore
 from .characters import CharacterStore, name_key
 from .events import (
-    choice_label, event_candidates, free_text_note, has_events_here, pick_event, stamina_note, visible_choices,
+    event_candidates, free_text_note, has_events_here, pick_event, visible_choices,
 )
 from . import training
 from .guide import HutReward, base_step_count, note_action, pending_line, quest_text, step_text, tutorial_active, tutorial_intro
@@ -80,8 +80,8 @@ from .models import (
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
     HUANGJIN, add_chronicle, add_marks, add_rumor, add_season_rumor, add_world_flags, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
-    check_gap, check_result_line,
-    day_turn, ears_of, evil_success, failed, fill_marks, free_text_rate, game_day, here_regions,
+    check_result_line,
+    day_turn, ears_of, fill_marks, game_day, here_regions,
     chaos_fronts, front_chip, front_ids, front_of, humanize,
     is_revealed, learn_skill, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stance_rule_note, stance_sum_note, stances, stat_rate, trend_name, trend_shown, trend_value,
