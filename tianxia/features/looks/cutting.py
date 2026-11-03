@@ -417,14 +417,15 @@ MIN_PX = 64
 
 
 def art_bytes(raw: bytes, max_px: int = ART_PX) -> bytes:
-    """法相、巨物那一張：去白底、挖掉封閉白塊、只留大塊的（雜點丟掉）、裁到東西的邊，邊長不超過 max_px，PNG。
+    """法相、巨物那一張：去白底、只留大塊的（雜點丟掉）、裁到東西的邊，邊長不超過 max_px，PNG。
 
-    封閉白塊也要挖（2026-11-03 付過代價）：`cutout` 只去掉跟外框相連的白，形狀自己圍起來的那一塊會留下。
-    正式站 #480「長槍飛出擊中對手時出現一朵菊花」的法相十次全掛，理由每次都是
-    「龍身下方盤繞處內側殘留一大塊白色背景，去背不乾淨」——盤龍、圓環、蓮花座中間、手臂與身體的縫都會中。
-    `drop_white_holes` 本來只有 `sheet_bytes` 在叫（擂台那十六張），法相這條路徑整個漏掉，所以不管重畫幾次都過不了。
-    白色主體（白龍、白蓮）理論上有被挖穿的風險；擂台那邊是拿定裝照判 `wears_white` 來豁免，法相沒有可比的參考圖，
-    所以先靠 `drop_white_holes` 自己的大小門檻（`WHITE_BLOB`）擋小的高光，真遇到白色主體再量。
+    這裡**刻意不挖封閉白塊**（2026-11-03 試過又退回）：
+    `cutout` 只去掉跟外框相連的白，形狀自己圍起來的那一塊會留下，所以正式站 #480 的盤龍十次全掛在
+    「龍身下方盤繞處內側殘留一大塊白色背景」。照 `sheet_bytes` 那樣補一次 `drop_white_holes` 之後，
+    同一張單的下一樣（菊花）立刻反咬：「花瓣內部有多處被誤挖成灰色破洞」——花瓣之間本來就有封閉的淺色區塊。
+    擂台那邊能挖是因為有定裝照可以判 `wears_white` 來豁免，法相沒有可比的參考圖。
+    要再做就得先量：殘留背景（少、大、純白）跟主體內部（多、小、有筆觸）怎麼分，拿真實的 klein 輸出當樣本定門檻，
+    不要靠猜。在那之前寧可留著白塊讓審圖擋下來重畫，也不要把主體挖穿。
     """
     rgba, mask = cutout(Image.open(io.BytesIO(raw)))
     lab, n = ndimage.label(mask)
@@ -438,7 +439,6 @@ def art_bytes(raw: bytes, max_px: int = ART_PX) -> bytes:
     a = np.asarray(rgba).copy()
     a[..., 3] = np.where(keep, a[..., 3], 0)
     piece = Image.fromarray(a, "RGBA").crop((int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1))
-    piece = drop_white_holes(piece)  # 切完才挖：不跟上面算大小、算邊界的 mask 糾纏（見這支的說明）
     if max(piece.size) > max_px:
         s = max_px / max(piece.size)
         piece = piece.resize((max(1, int(piece.width * s)), max(1, int(piece.height * s))), Image.LANCZOS)
