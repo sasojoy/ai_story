@@ -14,21 +14,21 @@ import random
 from typing import TYPE_CHECKING
 
 from tianxia import gender, team
-from tianxia import allied  # 過渡：待搬（豪強依附的那一軍：混戰撞不撞得上）
+from tianxia import allied  # 共用規則層（豪強依附的那一軍：混戰撞不撞得上）
 from tianxia import annals  # 過渡：待搬（行狀：混戰那一筆交手）
-from tianxia import battlelog  # 過渡：待搬（戰報）
-from tianxia import conquest  # 過渡：待搬（地盤：區塊、進度、推不推得動、混戰的對象）
-from tianxia import encounter  # 過渡：待搬（單次判定：混戰）
-from tianxia import four_tiers  # 過渡：待搬（素材四階：打贏照掉落表掉素材）
+from tianxia import battlelog  # 共用規則層（戰報）
+from tianxia import conquest  # 共用規則層（地盤：區塊、進度、推不推得動、混戰的對象）
+from tianxia import encounter  # 共用規則層（單次判定：混戰）
+from tianxia import four_tiers  # 共用規則層（素材四階：打贏照掉落表掉素材）
 from tianxia import howto  # 過渡：待搬（行動列底下那一行的句子）
-from tianxia import materials  # 過渡：待搬（素材的掉落與發放）
+from tianxia import materials  # 共用規則層（素材的掉落與發放）
 from tianxia import orders  # 過渡：待搬（軍令：截糧的運糧隊、出陣回報的軍令小籤）
-from tianxia import precise  # 過渡：待搬（一類一顆：打贏的獎勵怎麼算）
-from tianxia import prologue as prologue_rules  # 過渡：待搬（序章：雪恥、不掉東西）
-from tianxia import ranger  # 過渡：待搬（遊俠名號：經驗倍數）
-from tianxia import roster  # 過渡：待搬（截殺的新手期：混戰照它）
-from tianxia import territory  # 過渡：待搬（地盤：誰控制、這裡駐著哪幾路）
-from tianxia import treasures  # 過渡：待搬（寶物：多掉一個素材、出陣的稀有掉落）
+from tianxia import precise  # 共用規則層（一類一顆：打贏的獎勵怎麼算）
+from tianxia import prologue as prologue_rules  # 共用規則層（序章：雪恥、不掉東西）
+from tianxia import ranger  # 共用規則層（遊俠名號：經驗倍數）
+from tianxia import roster  # 共用規則層（截殺的新手期：混戰照它）
+from tianxia import territory  # 共用規則層（地盤：誰控制、這裡駐著哪幾路）
+from tianxia import treasures  # 共用規則層（寶物：多掉一個素材、出陣的稀有掉落）
 from tianxia.characters import name_key
 from tianxia.core.option import Option
 from tianxia.core.services import drill_share
@@ -78,6 +78,46 @@ def train_title(ctx: Game) -> str:
     if not rules.on(ctx.content):
         return "遊歷"
     return rules.PROLOGUE_FIGHT if prologue_rules.active(ctx.state, ctx.content) else rules.NAME
+
+
+# ── act:train 那一格（act 子動詞，全部拆包第 11 批：原本 Game._everyday_options、action_notes、_act、_action_title 裡出陣那幾行，照抄）──
+
+
+def train_cell(ctx: Game, loc: Location, cost: int, odds: bool) -> list[Option] | None:
+    """行動列出陣那一格：地盤開著時整格是出陣的——序章的雪恥照舊是遊歷那一套（不看出陣開關、不算次數），鈕上寫「雪恥」（出陣探索與地盤）；
+    序章以外是出陣那一顆（設計第二節）、散人站在戰線上灰的一顆寫真正的原因（FB-250）、領地爭奪別人的大本營與廣宗不給攻（裁決 18）；
+    都不是是 []（接了、一顆都沒有）。地盤關著是 None：核心照舊畫遊歷。"""
+    s, c = ctx.state, ctx.content
+    if not rules.on(c):
+        return None
+    if prologue_rules.active(s, c):
+        return [ctx._train_option(loc, cost, odds, name=rules.PROLOGUE_FIGHT)] if ctx._train_squad_ids(loc) else []
+    option = sortie_option(ctx, loc, cost, odds)  # 散人、不在戰線上的地點沒有
+    if option is not None:
+        return [option]
+    if rules.ranger_here(c, ctx._side(), loc.id, s.world):
+        return [Option(id="act:train", label=f"{rules.NAME}（{rules.RANGER_NOTE}）", enabled=False)]
+    if rules.out_of_contest(c, s.world, ctx._side(), loc.id):
+        return [Option(id="act:train", label=f"{rules.NAME}（{rules.OUT_NOTE}）", enabled=False)]
+    return []
+
+
+def train_note(ctx: Game, loc: Location) -> str | None:
+    """行動列底下出陣那一行：約戰開著寫約戰那一句（貼約戰或截糧，減法季批 3b）、出陣開著（序章以外）寫出陣那一行；都不是是 None
+    （核心照舊寫遊歷那一行）。"""
+    if duel_actions.duel_on(ctx):
+        return duel_actions.duel_line(ctx, loc)
+    if rules.on(ctx.content) and not prologue_rules.active(ctx.state, ctx.content):
+        return sortie_line(ctx, loc)
+    return None
+
+
+def train_run(ctx: Game, prepared) -> list[str] | None:
+    """按出陣那一格（Game._act 最前面）：約戰開著、不在序章時打開出陣前那張卡（不花體力；截糧的運糧隊經過時照舊攻打，體力在裡面扣）；
+    其餘是 None——出陣那一場（扣體力、並肩出陣的加成包在外面）照舊在核心的 _act 打（總表第 17 批把 act:train 整格收進包）。"""
+    if duel_actions.duel_on(ctx) and not prologue_rules.active(ctx.state, ctx.content):
+        return duel_actions.duel_entry(ctx)
+    return None
 
 
 def sorties_left(ctx: Game) -> int:

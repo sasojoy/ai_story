@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -61,13 +62,69 @@ def test_a_module_picks_the_tests_that_import_it():
 
 def test_a_module_also_picks_the_tests_of_the_modules_that_import_it():
     """10/31 測試自檢 T-02：might.py 沒有測試檔直接 import，以前挑 0 個；把 might.now 改成回 0，透過 ascend、create 用到它的
-    test_ascend、test_create_ritual 會紅。現在照 tianxia/ 模組之間的 import 往上找。"""
-    picked = test_for.pick(["tianxia/might.py"])
-    assert {"test_ascend.py", "test_create_ritual.py"} <= {p.name for p in picked.files}
+    test_ascend、test_create_ritual 會紅。現在照 tianxia/ 模組之間的 import 往上找。
+    （shared：might 第 15 批進了共用規則層，改共用規則層照下面那一條挑；這一條換成還是舊模組的 ascend——經 cultivation 挑到
+    只 import cultivation 的 test_cultivation。）"""
+    picked = test_for.pick(["tianxia/ascend.py"])
+    assert {"test_ascend.py", "test_cultivation.py"} <= {p.name for p in picked.files}
     assert not picked.core and not picked.smoke
-    ups = test_for.dependents("might")
-    assert {"ascend", "create"} <= ups
+    ups = test_for.dependents("ascend")
+    assert {"cultivation"} <= ups
     assert not ups & test_for.DRIVERS and not ups & test_for.CORE_MODULES  # engine、假人、核心不往上走
+
+
+# shared（全部拆包第 15 批「共用規則層登記」）
+@pytest.mark.parametrize("module, own", [
+    ("might", {"test_might.py"}),
+    ("tactics", {"test_tactics.py", "test_tactics_bouts.py"}),
+    ("timetable", {"test_timetable.py"}),
+    ("allied", set()),
+])
+def test_a_shared_rules_module_picks_its_own_tests_smoke_and_the_boundary_test(module, own):
+    """總表第六節第 5 條：共用規則層（registry.SHARED）的模組改了，只挑自己檔名的測試＋煙霧＋邊界測試——不跑核心測試、不照「誰 import 它」
+    挑也不往上找。以前 might 經 ascend、create 等 4 個模組往上挑到 46 個檔（T-02）、timetable 經 19 個模組往上挑到 109 個檔（連直接
+    import 它的一共 133）、tactics 走「太多」那一條帶核心測試；
+    allied 沒有自己檔名的測試，只剩煙霧＋邊界。"""
+    assert module in test_for.SHARED_MODULES
+    picked = test_for.pick([f"tianxia/{module}.py"])
+    names = {p.name for p in picked.files}
+    assert own <= names and "test_feature_boundaries.py" in names
+    assert all(n == "test_feature_boundaries.py" or n.startswith(f"test_{module}") for n in names), names
+    assert picked.smoke and not picked.core
+    assert any("共用規則層" in w for w in picked.why)
+    assert "test_ascend.py" not in _names(["tianxia/might.py"])
+
+
+def test_the_shared_rules_layer_is_one_list_for_the_picker_and_the_boundary_test():
+    """共用規則層只有一份：tianxia/core/registry.py 的 SHARED。test_for 照語法樹讀它（不 import：registry 會 import 每一包）、
+    邊界測試 import 它；兩邊一樣，也都不跟核心本體重疊。"""
+    from tianxia.core import MODULES, registry
+    import test_feature_boundaries
+    assert {"tactics", "timetable", "renown", "siege", "zh"} <= set(registry.SHARED)
+    assert test_for.SHARED_MODULES == set(registry.SHARED) == set(test_feature_boundaries.SHARED)
+    assert not test_for.SHARED_MODULES & MODULES
+
+
+def test_the_shared_rules_layer_is_read_from_the_syntax_tree_and_a_broken_file_says_so(tmp_path, capsys):
+    """照語法樹讀（SHARED: dict[str, str] = {...}，相鄰的字串照接）；讀不出來在 stderr 說一聲、當成沒有，那些模組照一般的舊模組挑。"""
+    good = tmp_path / "good.py"
+    good.write_text('from .features import Feature\nFEATURES = []\nSHARED: dict[str, str] = {\n    "a": "甲"\n         "乙",\n'
+                    '    "b": "丙",  # 註解\n}\n', encoding="utf-8")
+    assert test_for.shared_modules(good) == {"a", "b"}
+    plain = tmp_path / "plain.py"
+    plain.write_text('SHARED = {"c": "丁"}\n', encoding="utf-8")
+    assert test_for.shared_modules(plain) == {"c"}
+    broken = tmp_path / "broken.py"
+    broken.write_text("SHARED = {\n", encoding="utf-8")
+    assert test_for.shared_modules(broken) == frozenset()
+    computed = tmp_path / "computed.py"
+    computed.write_text('WHY = "x"\nSHARED = {"d": WHY}\n', encoding="utf-8")
+    assert test_for.shared_modules(computed) == frozenset()
+    missing = tmp_path / "none.py"
+    missing.write_text("OTHER = 1\n", encoding="utf-8")
+    assert test_for.shared_modules(missing) == frozenset()
+    err = capsys.readouterr().err
+    assert err.count("讀不出共用規則層的模組") == 3 and "沒有 SHARED" in err
 
 
 def test_the_import_graph_skips_type_checking_and_imports_inside_functions():
@@ -104,8 +161,9 @@ def test_an_aggregator_is_picked_but_not_walked_through(monkeypatch):
 
 
 def test_a_low_module_with_too_many_dependents_runs_core_and_smoke_instead():
-    """tactics、zh 這種底層模組往上找會挑到兩、三百個檔：超過 IMPORT_CAP 只挑直接 import 的，加核心測試＋煙霧。"""
-    picked = test_for.pick(["tianxia/zh.py"])
+    """tactics、zh 這種底層模組往上找會挑到兩、三百個檔：超過 IMPORT_CAP 只挑直接 import 的，加核心測試＋煙霧。
+    （shared：tactics、zh 第 15 批進了共用規則層，照上面那一條挑；這一條換成還是舊模組的 seal_acts——經 conquest、atlas 往上兩百多個檔。）"""
+    picked = test_for.pick(["tianxia/seal_acts.py"])
     assert picked.core and picked.smoke
     assert len(picked.files) < test_for.IMPORT_CAP
     assert any("太多" in w for w in picked.why)
@@ -235,6 +293,113 @@ def test_the_pickers_own_test_is_in_no_feature_group():
     assert me in test_for.pick(["scripts/test_for.py"]).files
 
 
+def test_the_contract_and_boundary_tests_follow_the_core_not_a_feature_group():
+    """核心契約與邊界測試（全部拆包第 11 批）：內文寫滿各包的委派名，照「內文叫最多」歸群會跟著名單翻（b1eeb4ec 時邊界測試在 sortie 群、
+    契約的假包在 pill 群）。它們不在任何一群；改核心照核心測試挑到、改包照核心契約挑到。"""
+    names = {"test_feature_boundaries.py", "test_contract_core.py", "test_contract_features.py"}
+    assert sorted((w, p.name) for w, files in test_for._dominant().items() for p in files if p.name in names) == []
+    for word in ("sortie", "pill", "tavern", "battle", "explore", "duel", "siege"):  # 內文寫得最多的那幾群
+        assert not names & {p.name for p in test_for.group_files(word)}, word
+    assert names <= {p.name for p in test_for.core_tests()} and names <= {p.name for p in test_for.contract_tests()}
+
+
+DELEGATE_ENGINE = (
+    "from .features.tavern import actions as tavern_actions\n"
+    "from .features.battle import sieges as battle_sieges\n"
+    "class Game:\n"
+    "    def _tavern_price(self, base):\n"
+    "        return tavern_actions.tavern_price(self, base)\n"
+    "\n"
+    "    def _settle_siege(self, battle):\n"
+    "        \"\"\"說明字不算本體。\"\"\"\n"
+    "        return battle_sieges.settle_siege(self, battle)\n"
+    "\n"
+    "    def _tavern_close(self):\n"
+    "        x = 1\n"
+    "        return tavern_actions.close(self, x)\n"
+)
+
+
+def test_an_engine_delegate_picks_its_package_and_the_contract():
+    """改 engine 上一行委派（本體只有 return <包的模組>.<函式>(self, …)，第 11 批）：照那一包挑（那一包的 tests/＋核心契約），不照方法名的
+    第一個字——_settle_siege 以前算 siege 群（第 6 批量到 105 條），現在是決戰包；本體不只一句的不算委派，照舊照名字分群。"""
+    assert test_for.engine_delegates(DELEGATE_ENGINE) == {"_tavern_price": "tavern", "_settle_siege": "battle"}
+    siege = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", DELEGATE_ENGINE, 9))
+    names = {p.name for p in siege.files}
+    battle_pkg = {p.name for p in (test_for.FEATURES / "battle" / "tests").rglob("test_*.py")}
+    assert battle_pkg <= names and {p.name for p in test_for.contract_tests()} <= names
+    assert not siege.core
+    assert any("battle 這一包的一行委派" in w for w in siege.why)
+    tavern = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", DELEGATE_ENGINE, 5))
+    assert {p.name for p in (test_for.FEATURES / "tavern" / "tests").rglob("test_*.py")} <= {p.name for p in tavern.files}
+    plain = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", DELEGATE_ENGINE, 13))
+    assert not any("一行委派" in w for w in plain.why)
+
+
+def _writes(name: str) -> set[str]:
+    """內文寫到這個識別字的測試檔（不照內文歸群的 TEXT_BLIND 不算）。"""
+    word = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])")
+    return {t.name for t in test_for.all_tests() if t.name not in test_for.TEXT_BLIND and word.search(test_for._text(t))}
+
+
+SCENE_ENGINE = (
+    "from .features.battle import view as battle_view\n"
+    "class Game:\n"
+    "    def _battle_scene_text(self, battle, definition):\n"
+    "        return battle_view.battle_scene_text(self, battle, definition)\n"
+)
+
+
+def test_an_engine_delegate_also_picks_the_tests_that_call_it_by_name():
+    """一行委派也挑內文寫到那個方法名的測試檔（第 11 批審查）：包外直接叫它的混合檔（_battle_scene_text 有 test_engine、test_seal、
+    test_conquest_siege、test_companions_battle 直接叫）不在那一包的 tests/ 裡，只照包挑會掉。挑到的就是那一包的 tests/＋核心契約
+    ＋寫到那個名字的，不多不少。"""
+    scene = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", SCENE_ENGINE, 4))
+    battle_pkg = {p.name for p in (test_for.FEATURES / "battle" / "tests").rglob("test_*.py")}
+    callers = _writes("_battle_scene_text")
+    assert {"test_engine.py", "test_seal.py", "test_conquest_siege.py", "test_companions_battle.py"} <= callers
+    assert {p.name for p in scene.files} == battle_pkg | {p.name for p in test_for.contract_tests()} | callers
+    assert any("寫到 _battle_scene_text 的" in w for w in scene.why) and not scene.core
+
+
+MOVED_OLD = (
+    "from .features.sortie import actions as sortie_actions\n"
+    "class Game:\n"
+    "    def _train_squad_ids(self, loc):\n"
+    "        ids = [s for s in loc.squads]\n"
+    "        return ids\n"
+)
+MOVED_NEW = (
+    "from .features.sortie import actions as sortie_actions\n"
+    "class Game:\n"
+    "    def _train_squad_ids(self, loc):\n"
+    "        return sortie_actions.train_squad_ids(self, loc)\n"
+)
+
+
+def test_a_method_that_becomes_a_delegate_is_still_picked_by_its_name():
+    """往後的搬包批把胖方法換成一行委派（第 11 批審查）：那一筆照「舊檔裡是不是委派」認——舊檔是胖方法，照舊照方法名分群，守那段舊本體的
+    混合檔（test_train_variety）才挑得到；那一包的 tests/ 由同改包裡的檔挑到。舊檔沒有、新加的委派照新檔認。"""
+    old_lines, new_lines = MOVED_OLD.splitlines(), MOVED_NEW.splitlines()
+    moved = {"tianxia/engine.py": ([([(4, old_lines[3]), (5, old_lines[4])], [(4, new_lines[3])])], MOVED_OLD, MOVED_NEW)}
+    picked = test_for.pick(["tianxia/engine.py"], hunks_of=moved)
+    assert not any("一行委派" in w for w in picked.why), picked.why
+    assert {p.name for p in test_for.group_files("train")} <= {p.name for p in picked.files}
+    assert "test_train_variety.py" in {p.name for p in picked.files}
+    fresh = {"tianxia/engine.py": ([([], [(3, new_lines[2]), (4, new_lines[3])])], MOVED_NEW.replace("_train_squad_ids", "_x"),
+                                   MOVED_NEW)}
+    assert any("sortie 這一包的一行委派" in w for w in test_for.pick(["tianxia/engine.py"], hunks_of=fresh).why)
+
+
+def test_any_engine_hunk_picks_the_contract_and_boundary_tests():
+    """改 engine 上不是核心、也不是委派的方法（第 11 批審查）：邊界測試的 GAME_* 名單只有它守（Game 新叫了一個包的名字就該紅），可是
+    它不照內文歸群了（TEXT_BLIND），以前碰巧在 sortie 群才挑得到（_squad_encounter）。engine.py 有 hunk 就一律帶核心契約。"""
+    picked = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", FAKE_ENGINE, 6))
+    assert {p.name for p in test_for.contract_tests()} <= {p.name for p in picked.files}
+    assert not picked.core and not picked.smoke
+    assert any("核心契約與邊界測試" in w for w in picked.why)
+
+
 def test_a_verb_first_method_name_goes_to_the_feature_after_the_verb():
     """_deliver_seal_results 的 deliver 是動詞：照後面的 seal 分群。"""
     picked = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", FAKE_ENGINE, 9))
@@ -353,7 +518,24 @@ def test_the_journal_and_the_wallet_pick_like_the_rest_of_the_core(module):
     assert {p.name for p in picked.files} == {f"test_{module}.py"}
 
 
-def test_a_feature_package_picks_its_own_tests_and_the_contract(tmp_path, monkeypatch):
+# shared（第 15 批審查修正）：test_for 的 lru_cache（_all_tests、_candidates、smoke_ids、feature_web……）照當時的 FEATURES 記，
+# monkeypatch 還原了 FEATURES、快取還是暫存資料夾那一份：同一個行程後面跑的 test_the_smoke_set_covers_every_block 就少了 mall
+# （-p no:xdist 照這個先後跑兩條，base a242343b 也紅；-n 4 分到同一個行程時才踩到）。換掉 FEATURES 的測試前後都清。
+def _clear_test_for_caches() -> None:
+    for obj in vars(test_for).values():
+        clear = getattr(obj, "cache_clear", None)
+        if callable(clear):
+            clear()
+
+
+@pytest.fixture
+def fresh_test_for_caches():
+    _clear_test_for_caches()
+    yield
+    _clear_test_for_caches()
+
+
+def test_a_feature_package_picks_its_own_tests_and_the_contract(tmp_path, monkeypatch, fresh_test_for_caches):
     pkg = tmp_path / "mall" / "tests"
     pkg.mkdir(parents=True)
     (pkg / "test_mall_pkg.py").write_text("def test_x():\n    pass\n", encoding="utf-8")
@@ -487,8 +669,9 @@ def test_the_web_scripts_are_the_ones_every_web_test_loads():
     package_js = {name for name in test_for.feature_web() if name.endswith(".js")}
     assert package_js and not package_js & test_for.WEB_SCRIPTS
     assert test_for.WEB_SCRIPTS | package_js == app_files
+    # 走一趟的 outing.js 主動搬六包第 3＋4 批登記成探索包的網頁檔：照那一包挑（寫到它的 test_outing_web 照樣在），不再照 app.js 一大批
     outing = _names(["web/outing.js"])
-    assert {"test_server.py", "test_outing_web.py"} < outing and _names(["web/app.js"]) <= outing
+    assert "test_outing_web.py" in outing and "test_server.py" not in outing and test_for.feature_web()["outing.js"] == "explore"
 
 
 def test_feature_web_is_what_the_packages_register():

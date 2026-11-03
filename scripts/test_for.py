@@ -21,6 +21,9 @@
   sqlite_world、world_state、characters、accounts、database、team、gender、naming，3.10 的 wallet，PM 10/31 的 journal；
   邊界測試照同一份）：核心測試＋煙霧＋檔名是 test_<模組>… 的。
   state.py、models.py 另外看 hunk 落在哪個類別、哪個欄位：類別名或欄位名帶功能前綴的（mall_tokens → mall）再加那一群。
+- 共用規則層（tianxia/core/registry.py 的 SHARED，全部拆包第 15 批登記；照語法樹讀、跟邊界測試同一份）：自己檔名的測試（同核心）
+  ＋煙霧＋邊界測試 test_feature_boundaries.py，不跑核心測試、不照「誰 import 它」挑也不往上找（總表第六節第 5 條；依賴它的測試
+  留給合併閘門與每日整套，要當場驗就直接給那幾個測試檔或 --all）。
 - tianxia/engine.py：hunk 落在 Game 的哪個方法 → 方法名第一個認得的字當功能群（tavern_seek → tavern；_deliver_seal_results
   → seal）→ 那一群的測試檔。落在 choose、_everyday_options、sync、status_data、__init__、換季重設、清失效參照這幾個共用方法
   （SHARED_METHODS）、方法以外、或方法名認不出功能 → 看 hunk 裡提到哪些功能前綴；都沒有 → 核心測試＋煙霧。
@@ -41,8 +44,8 @@
   （social.register(CardAction(id=KIND))：wanted、mingtie）挑寫到 "wanted" 的測試檔＋那一群（registered_actions）。
 - content/：test_content.py ＋ test_real_content.py ＋ 寫到那個檔名的測試檔，照舊不含 slow：test_real_content.py 用真實內容
   跑整季的那幾條是 slow（--slow 才跑、每日整套會跑），其他的（事件難度帶 DIFFICULTY_BANDS 的鎖、地點走得到……）每次都跑。
-- web/：寫到那個檔名的測試檔（main.js、map.js、outing.js 照 app.js 挑），加上 test_server.py。功能包登記的網頁檔
-  （各包 __init__.py 的 web，例 web/mall.js、web/mall.css；feature_web）→ 那一包的 tests/＋核心契約（CONTRACT_GLOBS）
+- web/：寫到那個檔名的測試檔（main.js、map.js 照 app.js 挑），加上 test_server.py。功能包登記的網頁檔
+  （各包 __init__.py 的 web，例 web/mall.js、web/mall.css、web/outing.js；feature_web）→ 那一包的 tests/＋核心契約（CONTRACT_GLOBS）
   ＋寫到那個檔名的（店面的 CSS 守門），不照 app.js 挑、不加 test_server.py（PM 2026-10-31）。包的 js 另外：包裡用假瀏覽器
   （webharness）跑整支頁面、真的執行它的網頁測試（test_mall_web）連 slow 一起跑，跟改到的測試檔一樣（runs_js）。
 - tests/ 裡的測試檔：跑它自己，連 slow 一起（改了就是要跑它；挑到的其他檔照舊不含 slow，所以分兩次跑）；
@@ -77,8 +80,9 @@ FEATURES = ROOT / "tianxia" / "features"
 PARALLEL_FROM = 3  # 挑到這麼多個檔以上才開 xdist（開工作行程本身要幾秒）
 WORKERS = "4"  # 開發規範手冊 4.5：同一台同時最多兩份測試在跑，各自 -n 4
 # 殼的網頁檔：網頁測試每一條都載入（tests/kit/webharness.py 的 APP_FILES 扣掉功能包的 js），改哪一個都照 app.js 挑。
-# 功能包的 js（mall.js）也在 APP_FILES 裡，可是照那一包挑（feature_web）；test_test_for 守 WEB_SCRIPTS ∪ 各包的 js == APP_FILES
-WEB_SCRIPTS = {"main.js", "map.js", "outing.js", "arena_anim.js", "app.js"}
+# 功能包的 js（mall.js；outing.js 主動搬六包第 3＋4 批登記成探索包的）也在 APP_FILES 裡，可是照那一包挑（feature_web）；
+# test_test_for 守 WEB_SCRIPTS ∪ 各包的 js == APP_FILES
+WEB_SCRIPTS = {"main.js", "map.js", "arena_anim.js", "arena_scene.js", "admin.js", "app.js"}
 SETUP_FILES = {"pyproject.toml", "requirements.txt", "requirements-dev.txt"}  # conftest.py 另外照 hunk 挑（conftest_picks）
 CONFTEST_CAP = 50  # conftest 改到的名字有超過這麼多個測試檔在用（content、game、real_content）：不一個一個挑，跑煙霧
 # 跟哪一條分支比：PM 2026-10-31 起預設 origin/develop（大家從 develop 開）；環境變數 TIANXIA_TEST_BASE 蓋過預設、
@@ -120,6 +124,33 @@ def _rel_root(p: Path) -> str:
 # 核心（手冊 3.1、4.2、4.3）：改了跑核心測試＋煙霧＋自己檔名的測試，不照「誰 import 它」挑（team、models、state 被一兩百個
 # 測試檔 import）。只有一份，在 tianxia/core/__init__.py（test_test_for 守它跟邊界測試的 CORE 一樣）
 CORE_MODULES = core_modules()
+
+# shared（全部拆包第 15 批「共用規則層登記」，計畫 docs/superpowers/plans/2026-11-01-共用規則層登記.md 1.6）
+REGISTRY = ROOT / "tianxia" / "core" / "registry.py"
+
+
+def shared_modules(registry: Path = REGISTRY) -> frozenset[str]:
+    """共用規則層的模組：tianxia/core/registry.py 的 SHARED（模組名 → 理由），跟邊界測試同一份。照語法樹讀、不 import（registry 會
+    import 每一包：包寫壞了 test_for 照樣挑得出來）；讀不出來（語法錯、沒有 SHARED、值不是字面的）在 stderr 說一聲、當成沒有——
+    那些模組就照一般的舊模組挑（挑得多，不會漏）。"""
+    try:
+        tree = ast.parse(registry.read_text(encoding="utf-8"))
+        for node in tree.body:
+            target = node.target if isinstance(node, ast.AnnAssign) else node.targets[0] if isinstance(node, ast.Assign) else None
+            if isinstance(target, ast.Name) and target.id == "SHARED" and node.value is not None:
+                return frozenset(ast.literal_eval(node.value))
+        problem = "沒有 SHARED"
+    except (OSError, SyntaxError, ValueError) as e:
+        problem = f"{type(e).__name__}: {e}"
+    print(f"test_for：{_rel_root(registry)} 讀不出共用規則層的模組（{problem}），這一次照一般的舊模組挑", file=sys.stderr)
+    return frozenset()
+
+
+# 共用規則層（總表第六節第 5 條；手冊 4.3 沒有這一種，第 15 批定成「核心那一種拿掉核心測試」）：改了跑自己檔名的測試＋煙霧＋邊界測試，
+# 不跑核心測試、不照「誰 import 它」挑也不往上找（timetable 以前挑到 5,195 條、tactics 走「太多」那一條帶核心測試 1,800 條）。
+# 邊界測試另外帶：「共用規則層只 import 核心本體與同一層」只有它守（同 engine.py 有 hunk 一律帶邊界）。
+SHARED_MODULES = shared_modules()
+BOUNDARY_TEST = "test_feature_boundaries.py"
 # 核心模組裡、自己檔名的測試不收進「核心測試」的：江湖紀錄的 test_journal（76 條）。PM 10/31 定的核心測試是手冊 3.1 那十三個
 # 自己的測試＋test_engine＋契約、邊界、錢包（CORE_GLOBS），journal 算核心是同一天邊界測試那一條定的；收進來改 models.py 一個
 # 欄位的底數從 1,517 再漲到約 1,593，要不要收等 PM 跟 < 1,500 一起定。改 journal.py 照舊跑它（自己檔名的測試）。
@@ -177,7 +208,10 @@ DOMINANT_MIN = 3
 # 內文是假的原始碼、不是在叫那一群的測試檔：不照內文歸群（_dominant 與 group_files 的備案都不算它）。test_test_for 的
 # 假 engine 寫了 _tavern_price、_pill_day……，照「內文叫最多」會算進酒肆、pill、season（10/31 審查：每一列多它 31 條）。
 # 改 scripts/test_for.py 照舊挑到它（檔名 test_<模組>）。
-TEXT_BLIND = frozenset({"test_test_for.py"})
+# 核心契約與邊界測試（CONTRACT_GLOBS 那幾個）也不照內文歸群（全部拆包第 11 批）：邊界測試的名單寫滿了各包的委派名，照「內文叫最多」
+# 歸到哪一群跟著名單翻（develop b1eeb4ec 時是 sortie 群），契約的假包叫 _pill_day 被算進 pill 群。它們固定跟著核心走：改核心照核心測試
+# 挑到（CORE_GLOBS）、改包與包的委派照核心契約挑到（contract_tests）。
+TEXT_BLIND = frozenset({"test_test_for.py", "test_feature_boundaries.py", "test_contract_core.py", "test_contract_features.py"})
 
 
 @dataclass
@@ -737,8 +771,41 @@ def _split(hunk_list: list[Hunk], old_src: str, new_src: str, spans_of) -> dict:
     return groups
 
 
-def engine_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[set[str], bool, list[str]]:
-    """engine.py 的 hunk → （功能群, 要不要核心測試＋煙霧, 為什麼）。"""
+def engine_delegates(src: str) -> dict[str, str]:
+    """engine.py 裡 Game 上的一行委派 → 它委派給哪一包（全部拆包第 11 批）：方法的本體（說明字之後）只有一句
+    `return <名字>.<函式>(self, …)`（或不 return 的那一句），<名字> 是最外層 `from .features.<包> import <模組> [as <名字>]` 進來的。
+    邊界測試的 GAME_DELEGATES 是同一批方法（那一份另外記理由；這裡照原始碼認，不必兩邊同步）。"""
+    tree = _parse(src)
+    if tree is None:
+        return {}
+    local: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.level == 1 and (node.module or "").startswith("features."):
+            pkg = node.module.split(".")[1]
+            local.update({a.asname or a.name: pkg for a in node.names})
+    out: dict[str, str] = {}
+    for node in tree.body:
+        if not (isinstance(node, ast.ClassDef) and node.name == "Game"):
+            continue
+        for f in node.body:
+            if not isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            body = [s for s in f.body if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant)
+                                              and isinstance(s.value.value, str))]
+            call = body[0].value if len(body) == 1 and isinstance(body[0], (ast.Return, ast.Expr)) else None
+            if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name)
+                    and call.func.value.id in local and call.args and isinstance(call.args[0], ast.Name) and call.args[0].id == "self"):
+                out[f.name] = local[call.func.value.id]
+    return out
+
+
+def engine_groups(hunk_list: list[Hunk], old_src: str,
+                  new_src: str) -> tuple[set[str], bool, list[str], set[str], set[Path]]:
+    """engine.py 的 hunk → （功能群, 要不要核心測試＋煙霧, 為什麼, 委派到的包, 寫到那幾個委派名的測試檔）。hunk 落在一行委派
+    （engine_delegates）上照那一包挑（那一包的 tests/＋核心契約，同改那一包的檔；第 11 批：以前照方法名的第一個字分群，_settle_siege 算
+    siege、admin_start_battle 算 admin），再加內文寫到那個方法名的測試檔（包外直接叫它的混合檔：_battle_scene_text 的 test_engine、
+    test_seal……；第 11 批審查）。是不是委派照舊檔認：舊檔裡是胖方法、這一次換成委派的（往後的搬包批）照舊照方法名分群，守那段舊本體的
+    混合檔才挑得到（第 11 批審查：照新舊兩份的聯集認，test_train_variety 就掉了）；舊檔沒有這個方法的才照新檔認。"""
     def spans_of(src: str):
         methods = _game_methods(src)
         tops = [(name, start, end) for name, start, end, node in _top_level(src)
@@ -748,8 +815,20 @@ def engine_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[se
     found: set[str] = set()
     core = False
     why: list[str] = []
+    packages: set[str] = set()
+    callers: set[Path] = set()
+    old_methods = {name for name, _, _ in _game_methods(old_src)}
+    delegates = {**{n: p for n, p in engine_delegates(new_src).items() if n not in old_methods}, **engine_delegates(old_src)}
+    by_text = _index()[1]
     for name, (removed, added) in _split(hunk_list, old_src, new_src, spans_of).items():
         label = name or "方法以外"
+        if name in delegates:
+            packages.add(delegates[name])
+            named = set(by_text.get(name, frozenset()))
+            callers |= named
+            why.append(f"{label}：{delegates[name]} 這一包的一行委派 → 那一包的 tests/＋核心契約"
+                       + (f"＋寫到 {name} 的 {len(named)} 個檔" if named else ""))
+            continue
         if name in CORE_METHODS:
             hits = scan(removed + added)
             core = True
@@ -770,7 +849,7 @@ def engine_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[se
         else:
             core = True
             why.append(f"{label} 沒提到功能前綴 → 核心測試＋煙霧")
-    return found, core, why
+    return found, core, why, packages, callers
 
 
 def fields_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[set[str], list[str]]:
@@ -998,7 +1077,17 @@ def pick(files: list[str], base: str | None = None,
                 result.why.append(f"{f}：跟 base 沒有差異，照整個檔算 → 核心測試＋煙霧")
                 continue
             if mod == "engine":
-                found, core, why = engine_groups(hunk_list, old_src, new_src)
+                found, core, why, packages, callers = engine_groups(hunk_list, old_src, new_src)
+                for pkg in sorted(packages):  # 一行委派（第 11 批）：同改那一包的檔
+                    pkg_tests = FEATURES / pkg / "tests"
+                    result.files |= set(pkg_tests.rglob("test_*.py")) if pkg_tests.is_dir() else set()
+                result.files |= callers
+                # 核心契約與邊界測試一律帶（第 11 批審查）：Game 新叫了一個包的名字，只有邊界測試的 GAME_* 名單抓得到；它們不照內文歸群了
+                # （TEXT_BLIND），改 engine 上非核心、非委派的方法以前碰巧在 sortie 群才挑得到（_squad_encounter）。要跑核心測試時不另加
+                # （核心測試本來就含它們，CORE_GLOBS）。
+                if not core:
+                    result.files |= contract_tests()
+                    why = [*why, "engine.py 有改動 → 核心契約與邊界測試（GAME_* 名單只有邊界測試守）"]
             elif mod == "server":
                 found, core, why = server_groups(hunk_list, old_src, new_src)
             else:
@@ -1013,6 +1102,12 @@ def pick(files: list[str], base: str | None = None,
             core_and_smoke()
             result.files |= own_named(path.stem)
             result.why.append(f"{f}：核心 → 核心測試＋煙霧＋test_{path.stem}…")
+            continue
+        # shared（第 15 批）：共用規則層 → 自己檔名的測試＋煙霧＋邊界測試（不跑核心測試、不往上找）
+        if path.suffix == ".py" and f == f"tianxia/{path.name}" and path.stem in SHARED_MODULES:
+            result.smoke = True
+            result.files |= own_named(path.stem) | {t for t in tests if t.name == BOUNDARY_TEST}
+            result.why.append(f"{f}：共用規則層 → 自己檔名的測試＋煙霧＋邊界測試（不跑核心測試、不往上找；總表第六節第 5 條）")
             continue
         if path.suffix == ".py" and (f.startswith("tianxia/") or f.startswith("scripts/") or "/" not in f):
             mod = path.stem
@@ -1070,7 +1165,7 @@ def pick(files: list[str], base: str | None = None,
         if f.startswith("web/"):
             if SERVER_TEST in named:
                 result.files.add(named[SERVER_TEST])
-            # 江湖頁（main.js）、輿圖（map.js）、走一趟（outing.js）是從 app.js 切出來的：測試照舊寫「app.js」，也算寫到它們
+            # 江湖頁（main.js）、輿圖（map.js）是從 app.js 切出來的：測試照舊寫「app.js」，也算寫到它們（走一趟的 outing.js 是探索包的，上面那一支）
             names = {path.name, "app.js"} if path.name in WEB_SCRIPTS else {path.name}
             result.files |= {t for t in tests if any(n in _text(t) for n in names)}
             continue

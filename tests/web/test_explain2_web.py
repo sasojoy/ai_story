@@ -220,12 +220,12 @@ def test_the_xinde_hint_left_the_status_bar():
         assert hint not in run(m, "return H.topHtml();")
 
 
-def test_the_newbie_entry_refreshes_the_admin_view_like_the_gear():
-    """審查 Nit：管理者從入口打開抽屜，跟按齒輪一樣重抓 /api/admin 與查過的那位玩家（/api/admin/player）。"""
+def test_the_newbie_entry_no_longer_fetches_the_admin_view():
+    """管理者工具搬到自己一頁（/admin，Joy 2026-11-01）之後，從入口打開抽屜跟按齒輪一樣不再抓 /api/admin 與查過的那位玩家。"""
     m = _season_one(admin=True)
     out = run(m, f"""return (async () => {{
       {_click("howto-open")}
       return T.calls.map((c) => c[0]);
     }})();""", S={"adPlayerName": "沈青衫"}, responses={"/api/howto": {"text": "<p>x</p>"}, "/api/admin/player": {"name": "沈青衫"},
                                                     "/api/admin": {}})
-    assert "/api/admin" in out and "/api/admin/player" in out
+    assert "/api/admin" not in out and "/api/admin/player" not in out

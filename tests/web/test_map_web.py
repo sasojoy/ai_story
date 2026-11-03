@@ -544,3 +544,16 @@ return { fab, labs: [...html.matchAll(/class="mv-lab[^"]*" style="left:([-\\d.]+
     assert out["labs"]
     for x, y in out["labs"]:
         assert not (fx0 < x + 40 and x < fx1 and fy0 < y + 18 and y < fy1)  # 名字左上角那一截不落在圓鈕那一塊
+
+
+def test_go_to_map_from_far_away_centres_on_the_target():
+    """從遠處（人在廣宗）按「去輿圖」：鏡頭以目標（南陽郊野）為中心、放到選點的倍率，不停在兩地中間
+    （Joy 2026-11-01「點下去不是應該直接地圖在南陽郊野嗎」）。"""
+    game = _game(at="guangzong")
+    out = run(game, """H.mapGoto('nanyang_wilds');
+const g = { vw: 402, vh: 760 }, c = H.camFirst(g), b = H.S.mapBase.places.find((x) => x.id === 'nanyang_wilds');
+const want = H.camClamp({ z: c.z, x: g.vw / 2 - b.x * c.z, y: 0 }, g);
+return { z: c.z, x: c.x + b.x * c.z, y: c.y + b.y * c.z, clampedX: want.x + b.x * c.z, vw: g.vw, vh: g.vh };""")
+    assert out["z"] == 1.4
+    assert abs(out["x"] - out["clampedX"]) < 1  # 橫向在正中（貼著地圖邊時照夾住的位置）
+    assert 0 < out["x"] < out["vw"] and 0 < out["y"] < out["vh"]

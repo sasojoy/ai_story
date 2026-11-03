@@ -21,6 +21,13 @@ class MallFeature(Feature):
     def enabled(self, ctx) -> bool:
         return ctx.content.config.mall.enabled
 
+    def on_own_turn(self, ctx) -> None:
+        """本人這一輪（接縫掛鉤，全部拆包第 11 批；原本 Game.own_turn_checks 最前面叫 Game._mall_grant 的那一行）：封測元寶——錢包第一次
+        進來的那一下發，真人假人一樣；暫停中照發（帳跟世界無關）。不問 enabled：原位本來就不看，商城關著時錢包是 None、什麼都不做。"""
+        from . import actions  # noqa: PLC0415
+
+        actions.grant(ctx)
+
     def status(self, ctx) -> dict:
         from . import actions  # noqa: PLC0415
 

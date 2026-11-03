@@ -18,10 +18,10 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
 from tianxia import calendar, naming
-from tianxia import library  # 過渡：待搬（功法庫上限 cap_of，開發規範手冊 3.10）
+from tianxia import library  # 共用規則層（功法庫上限 cap_of，開發規範手冊 3.10）
 from tianxia.characters import name_key
 # 票的庫存、月卡加的上限、哪一件賣這種效果搬進核心的錢包服務（開發規範手冊 3.10）；這裡照舊叫得到（mall.tokens……）
-from tianxia.core.services import CARD_KEY, card_bonus, item_for, tokens  # noqa: F401
+from tianxia.core.services import CARD_KEY, card_bonus, item_for, look_ids, tokens  # noqa: F401
 from tianxia.models import Content, MallItem
 from tianxia.state import GameState
 from tianxia.wallet import Wallet
@@ -57,13 +57,22 @@ EFFECTS: dict[str, EffectSpec] = {
     # 題壁墨（走一趟，Joy 2026-10-29～30「任意留言需要消耗商城道具」「題壁墨都先只能元寶買」）：不改角色，那一列購買就是一張；
     # 走完一趟自己寫一句時用掉一張（data 記 used、place、inscription；outing.INK）。換季也帶著走
     "inscribe": EffectSpec("consumable", "題壁墨 {n} 張", 99),
+    # 擂台形象（功能包 looks；Joy 2026-10-31「預設形象就是斗笠小子」、買的東西不能不見）：商品的 look 寫哪一套，購買那一列的 data 記
+    # look_id，那一列就是這一套（帳號的，換季也帶著走）；穿哪一套在萬寶閣的「形象」那一頁換
+    "look": EffectSpec("look", "擂台形象一套（換季也帶著走）", 1),
+    # 自建形象（功能包 looks 第二批）：寫一句樣子下單，那一列購買就是訂單（data 記 name、prompt、status）；不上貨架，在「形象」那一頁下單
+    # （looks.orders.place 自己記帳，同 buy 的那幾步）。審核過了那一列的 data 記 look_id＝u<購買 id>，就是買到的那一套；退回照退款
+    "look_order": EffectSpec("look", "自建形象一套（寫一句樣子，審核過了上架）", 1),
+    "look_market": EffectSpec("look", "市集上別人做的形象一套（價錢照上架的那一份）", 1),
+    "move_order": EffectSpec("look", "獨門絕招一招（替自己的武功寫一句樣子，畫好審過放進招式庫）", 1),
+    "move_basic": EffectSpec("look", "通用絕招一招（替自己的武功寫一句樣子，用現成的光效，當場學成）", 1),
 }
 TICKET_NAMES = {"zhuan_art": "列傳插畫", "zhuan_seal": "紀念印", "zhuan_quote": "人物親筆評曰", "deep_slot": "深交名額", "inscribe": "題壁墨"}  # 退款那一句
-KIND_NAMES = {"look": "外觀", "consumable": "消耗品", "card": "月卡", "pass": "通行證"}
+KIND_NAMES = {"look": "形象", "consumable": "消耗品", "card": "月卡", "pass": "通行證"}
 REASONS = {"grant": "封測發放", "buy": "購買", "refund": "退款", "reissue": "補發", "revoke": "扣回", "topup": "儲值"}
 # 月卡的元寶照舊記成 grant（帳本的原因有 CHECK，加原因要改結構；不改結構版本），照編號的開頭認是月卡的哪一份：
 # 當場回的 card:rebate:<購買 id>、每天領的 card:daily:<主人>:<日>；退款時扣回當場回的那一份 refund:rebate:<購買 id>（revoke）
-CARD_REFS = {"card:rebate:": "月卡回饋", "card:daily:": "月卡每日", "refund:rebate:": "扣回月卡回饋"}
+CARD_REFS = {"card:rebate:": "月卡回饋", "card:daily:": "月卡每日", "refund:rebate:": "扣回月卡回饋", "sale:": "市集分成"}  # sale：形象市集賣出的分成（looks.market）
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _EPOCH = date(1970, 1, 1)
 
@@ -115,6 +124,13 @@ RENAME_BUSY = "決戰或奪璽單挑還沒打完，先別改名。"
 RENAME_ADMIN = "管理者的名號不能用易名帖改。"
 RENAMED = "你從此改名「{new}」。"
 RENAMED_CHRONICLE = "{old}改名{new}。"
+# 擂台形象（功能包 looks）：待 joy 潤
+LOOK_GOT = "形象「{name}」（到萬寶閣的「形象」換上）"
+LOOK_OWNED = "你已經有「{name}」這一套形象了。"
+LOOK_BACK = "形象「{name}」收回。"
+MOVE_BACK = "「{name}」的招式動畫收回。"
+ORDERED = ("look_order", "move_order", "move_basic", "look_market")  # 從形象包下單的（帶名字或武功與樣子），一般的購買、貨架都不賣
+
 
 
 @dataclass(frozen=True)
@@ -253,6 +269,8 @@ def buy_problem(item: MallItem, wallet: Wallet, owner: str, day: int, season: in
     problem = limit_problem(item, wallet, owner, day, season)
     if problem:
         return problem
+    if item.look and item.look in look_ids(wallet, owner):
+        return LOOK_OWNED.format(name=item.name)
     unfit = moment.blocked.get(item.id)
     if unfit:
         return unfit
@@ -282,8 +300,8 @@ def buy(
             known = content.mall.get(done.item)
             return DUPLICATE.format(name=known.name if known else done.item)
         item = content.mall.get(item_id)
-        if item is None or not on_sale(item, day, season, moment):
-            return NO_ITEM
+        if item is None or not on_sale(item, day, season, moment) or any(item.effects.get(k) for k in ORDERED):
+            return NO_ITEM  # 自建形象只從形象包下單那一條買（looks.orders.place 帶名字與樣子），一般的購買不賣它
         problem = buy_problem(item, wallet, owner, day, season, moment)
         if problem:
             return problem
@@ -297,7 +315,8 @@ def buy(
         changes: list[str] = []
         for k in range(1, n + 1):
             unit = full if k == 1 else f"{full}#{k}"
-            pid = wallet.add_purchase(owner, unit, item.id, item.price, time=now, day=day, season=season, data=dict(item.effects))
+            data = dict(item.effects) | ({"look_id": item.look} if item.look else {})  # 形象：那一列記是哪一套（商品下架了也認得）
+            pid = wallet.add_purchase(owner, unit, item.id, item.price, time=now, day=day, season=season, data=data)
             if not wallet.post(owner, -item.price, "buy", unit, time=now, purchase_id=pid):
                 raise RuntimeError(f"購買編號 {unit} 已經記過帳，購買紀錄卻沒有")  # 兩張表對不上：整筆撤回，不發貨
             changes += _deliver(state, content, wallet, owner, item, day, pid, now)
@@ -372,6 +391,9 @@ def _deliver(
     if rerolls:
         state.player.create_rerolls += rerolls
         changes.append(f"重悟帖 +{rerolls}")
+    if item.look:
+        look = content.looks.get(item.look)
+        changes.append(LOOK_GOT.format(name=look.name if look else item.look))
     for key, name in TICKET_NAMES.items():  # 列傳的四件（批 7b）：不改角色，那一列購買就是票
         if item.effects.get(key, 0):
             changes.append(f"{name} +{item.effects[key]}")
@@ -487,8 +509,8 @@ def view(content: Content, wallet: Wallet, owner: str, day: int, season: int, mo
     span = wallet.card(owner, CARD_KEY)
     items = []
     for item in content.mall.values():
-        if not on_sale(item, day, season, moment):
-            continue
+        if not on_sale(item, day, season, moment) or any(item.effects.get(k) for k in ORDERED):
+            continue  # 自建形象不上貨架（在「形象」那一頁下單）
         why = buy_problem(item, wallet, owner, day, season, moment)
         days = item.effects.get("card_days", 0)
         room = limit_left(item, wallet, owner, day, season)
@@ -502,10 +524,12 @@ def view(content: Content, wallet: Wallet, owner: str, day: int, season: int, mo
             "card_to": day_text(card_span(span, day, days)[1] - 1) if days else None,
             "perks": perks(item, content) if days else [],
             "max": most,
+            "look": item.look or None,  # 形象：哪一套（貨架那一格畫那一套站著的樣子）
         })
     ingots, pills = daily_amounts(content)
     daily = {"ingots": ingots, "pills": pills} if ingots or pills else None  # 月卡每天領的份（購買確認那一列）
-    return {"balance": balance, "card": card_view(content, wallet, owner, day), "items": items, "daily": daily}
+    return {"balance": balance, "card": card_view(content, wallet, owner, day), "items": items, "daily": daily,
+            "looks": bool(content.looks)}  # 有擂台形象（功能包 looks）：萬寶閣多一頁「形象」
 
 
 def records(
@@ -618,6 +642,11 @@ def refund(
         for key, name in TICKET_NAMES.items():  # 列傳的四件（批 7b）：退了那一列就不算票（沒用的不能用、用過的列傳不再畫、名額少一位）
             if bought.data.get(key):
                 took.append(TICKET_BACK.format(name=name))
+        if bought.data.get("look_id"):  # 形象：退了那一列就不算買到（正穿著的換回預設的斗笠小子，形象包讀的時候照 look_ids 看）
+            look = content.looks.get(bought.data["look_id"])
+            took.append(LOOK_BACK.format(name=look.name if look else bought.data.get("name") or bought.data["look_id"]))
+        if bought.data.get("move_id"):  # 招式動畫：退了就不算（擂台上不再疊那一張）
+            took.append(MOVE_BACK.format(name=bought.data.get("art_name") or bought.data["move_id"]))
         left = wallet.balance(owner)
     known = content.mall.get(bought.item)
     return REFUNDED.format(name=shown, item=known.name if known else bought.item, price=bought.price, left=left, took="".join(took))
@@ -638,6 +667,21 @@ def item_problems(item: MallItem, content: Content) -> list[str]:
             out.append(f"{where}：效果 {key} 是{KIND_NAMES[spec.kind]}的，這件的種類寫{KIND_NAMES[item.kind]}")
         if not 1 <= n <= spec.max:
             out.append(f"{where}：{key} 的數量要 1～{spec.max}（寫了 {n}）")
+    if item.effects.get("look_order"):
+        if item.look or item.effects != {"look_order": 1}:
+            out.append(f"{where}：自建形象的效果只寫 {{\"look_order\": 1}}、不寫 look")
+    elif item.effects.get("look_market"):
+        if item.look or item.effects != {"look_market": 1}:
+            out.append(f"{where}：形象市集的效果只寫 {{\"look_market\": 1}}、不寫 look")
+    elif item.effects.get("move_order") or item.effects.get("move_basic"):
+        key = "move_order" if item.effects.get("move_order") else "move_basic"
+        if item.look or item.effects != {key: 1}:
+            out.append(f"{where}：絕招的效果只寫 {{\"{key}\": 1}}、不寫 look")
+    elif item.kind == "look" or item.look:
+        if item.look not in content.looks:
+            out.append(f"{where}：形象要寫 content/looks.json 裡的一套（寫了「{item.look}」）")
+        if item.effects != {"look": 1}:
+            out.append(f"{where}：形象的效果只寫 {{\"look\": 1}}（寫了 {item.effects}）")
     if item.effects.get("card_rebate", 0) >= item.price:
         out.append(f"{where}：當場回的元寶（{item.effects['card_rebate']}）要比價錢（{item.price}）少")
     if item.effects.get("card_rebate") and not item.effects.get("card_days"):

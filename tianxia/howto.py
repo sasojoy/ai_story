@@ -62,7 +62,7 @@ EXPLORE_CALM = "（這裡不會撞上怪）"
 EXPLORE_NO_SENSE = "（這裡悟不出什麼）"
 
 
-# 減法季探索一顆（整合設計 4.1，批 2）：行動列底下探索那一行。照擲骰用的那一份比重（Game._outing_weights）排，不寫百分比；都待 joy 潤
+# 減法季探索一顆（整合設計 4.1，批 2）：行動列底下探索那一行。照擲骰用的那一份比重（探索包 explore_actions.outing_weights）排，不寫百分比；都待 joy 潤
 OUTING_WORDS = explore_one.BEAT_WORDS
 OUTING_HEAD = "出門一趟只碰上一件事"  # 2d（企劃者 2026-10-26「只抽一件事情」）：以前寫「出門一趟走三拍」
 OUTING_FOE = {"town": "；城裡遇敵是街上的地痞，給得少", "spar": "；自家營寨遇敵是跟同袍比劃，不掉東西"}

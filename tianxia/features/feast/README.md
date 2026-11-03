@@ -13,4 +13,4 @@
 | `tests/` | `test_feast.py`（原 `tests/figures/test_figure_life_batch3.py` 的「宴客」那一段）、`feast_stage.py`（契約測試擺局面） |
 
 **認領的欄位**（3.5，留在原地）：`PlayerState.feasting`、`feasts_paid`（換季跟著新角色重來）；`WorldState.feasts`、`feast_seq`（這一季的宴席）；`Config.figure_life.feasts`、`feast_*`。`models.py` 序章不出現的前綴 `feast:join:`。
-**還沒接掛鉤的（過渡）**：`world.py` 散席（季的推進）、`figure_life.py` 設宴、`letters.py` 邀宴，都 import 這一包；`server.feast_text`（三段式、鎖外評分）與 `main_view` 的 `free_text`／`free_op` 叫 `Game.feast_*`；`Game.scene_text` 坐在席上的場景卡叫 `actions.scene`。`rules.py` import `figure_life`、`seal_acts`、`renown`（註「過渡：待搬」）。
+**還沒接掛鉤的（過渡）**：`world.py` 散席（季的推進）、`figure_life.py` 設宴、`letters.py` 邀宴，都 import 這一包；`server.feast_text`（三段式、鎖外評分）與 `main_view` 的 `free_text`／`free_op` 叫 `Game.feast_*`；`Game.scene_text` 坐在席上的場景卡全部拆包第 11 批（核心收接縫）換成 `scene` 接縫掛鉤（`_own_scene_text` 擂台之後那一行，不問 `enabled`；`__init__.py` 的 `scene` 叫 `actions.scene`）。`rules.py` import `figure_life`、`seal_acts`（註「過渡：待搬」；`renown` 全部拆包第 15 批登記進共用規則層，行尾改註「共用規則層」，不算過渡）。

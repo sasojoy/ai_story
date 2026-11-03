@@ -525,6 +525,11 @@ class ArenaFight(BaseModel):
     crowd_foe: CrowdSide | None = None
     crowd_done: bool = False  # 這一場已經有過一件場邊事件（一場最多一件）
     looks: list[str] = Field(default_factory=list)  # 擂台動畫：[挑的人, 分身] 手上兵器的種類（models.WEAPON_KINDS；空字串＝空手）；舊的一場沒有
+    skins: list[str] = Field(default_factory=list)  # 擂台形象：[挑的人, 分身] 穿哪一套（content/looks.json 的 id；空字串＝斗笠小子）；舊的一場沒有
+    fx: list[str] = Field(default_factory=list)  # 招式動畫：[挑的人, 分身] 出招疊哪一張光效（m<購買 id>；空字串＝沒有）；舊的一場沒有
+    picks: list[list[str]] = Field(default_factory=list)  # 擂台動畫：每回合 [你出的, 他出的]（強攻／固守／奇襲；出不了手是空字串；放手一搏是 ["搏", ""]）；只給畫面
+    fx_arts: list[str] = Field(default_factory=list)  # 招式動畫：[挑的人, 分身] 綁了招式的那一門武學 id（fx 是空的那一邊是空字串）
+    bursts: list[list[int]] = Field(default_factory=list)  # 招式動畫：每回合 [你, 他] 綁了招式的那一門的戰法發動了沒（1／0）；光效只在發動的那一回合疊（Joy 2026-11-01）
 
 
 class ArenaResult(BaseModel):
@@ -536,6 +541,10 @@ class ArenaResult(BaseModel):
     lines: list[str] = Field(default_factory=list)  # 每回合一行
     changes: list[str] = Field(default_factory=list)  # 戰報的得失（積分、名望）
     looks: list[str] = Field(default_factory=list)  # 擂台動畫：照 ArenaFight.looks 抄（收場卡演最後一幕）
+    skins: list[str] = Field(default_factory=list)  # 擂台形象：照 ArenaFight.skins 抄
+    fx: list[str] = Field(default_factory=list)  # 招式動畫：照 ArenaFight.fx 抄
+    picks: list[list[str]] = Field(default_factory=list)  # 擂台動畫：照 ArenaFight.picks 抄（收場那一幕照最後一回合演）
+    bursts: list[list[int]] = Field(default_factory=list)  # 招式動畫：照 ArenaFight.bursts 抄
 
 
 class ArenaReport(BaseModel):
@@ -568,6 +577,9 @@ class ArenaEntry(BaseModel):
     arts: list[str] = Field(default_factory=list)  # 身上兩門武學的名字（選單上寫他守擂用什麼）
     kit: BoutSide | None = None  # 報名那一刻身上的本命戰法（team.self_side）；沒有是 None，舊存檔也是
     weapon: str = ""  # 擂台動畫：報名、更新分身那一刻手上兵器的種類（空字串＝空手；舊存檔也是）
+    look: str = ""  # 擂台形象：報名、更新分身那一刻穿哪一套（空字串＝斗笠小子；舊存檔也是）
+    move: str = ""  # 招式動畫：報名、更新分身那一刻出招疊哪一張光效（m<購買 id>；空字串＝沒有）
+    move_art: str = ""  # 招式動畫：那一張綁在哪一門武學上（那一門的戰法發動了才疊）
     joined: float = 0.0  # 第一次報名的世界秒
     rank: int = 0  # 名次（1 是天下第一）；報名排到榜尾，挑的人贏了兩人交換（arena.swap）
     wins: int = 0
@@ -933,7 +945,7 @@ class PlayerState(BaseModel):
     # 處理過的收場決戰（BattleInstance.record_id）：自己參戰、已經補進江湖紀錄與戰報的，以及看過不是自己參戰的
     # （FB-027，見 Game._deliver_battle_results）。跨季保留：決戰常常把季收掉，下一季才回來的人也要補、而且只補一次
     battle_results_seen: list[int] = Field(default_factory=list)
-    # 補回被洗掉的決戰戰報（Game._restore_showdowns）做過的那一季：一季只查一次 battles 表。舊存檔沒有是 0
+    # 補回被洗掉的決戰戰報（決戰包 features/battle/view.restore_showdowns）做過的那一季：一季只查一次 battles 表。舊存檔沒有是 0
     showdowns_restored: int = 0
     # 這一季參戰幾場、當過幾次首功（Joy 2026-10-10 個人戰功；玩家卡寫）。角色每季重來，跟著清空；舊存檔沒有就是 0
     showdowns: int = 0
@@ -1862,7 +1874,7 @@ class WorldState(BaseModel):
     stops_done: dict[str, bool] = Field(default_factory=dict)
     deeds: list[Deed] = Field(default_factory=list)
     deed_seq: int = 0
-    # 走一趟的留言（tianxia/outing.py）：每一處留最近 outing_keep 則；換季時預設句清掉、題壁墨寫的帶到下一季（outing.carry）
+    # 走一趟的留言（tianxia/outing.py）：每一處留最近 outing_keep 則；換季時預設句清掉、題壁墨寫的帶到下一季（sqlite_world.next_season）
     inscriptions: list[Inscription] = Field(default_factory=list)
     inscription_seq: int = 0
     yuedan: list[YuedanEntry] = Field(default_factory=list)

@@ -37,42 +37,166 @@
 .shop-layer.shop-mall .shop-silver { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .shop-layer.shop-mall .ingot { width: 18px; height: 12px; flex: none; fill: #f2c46a; }
 .shop-layer.shop-mall .ingot .shine { fill: #fff; opacity: 0.35; }
-.shop-layer.shop-mall .shop-line.said.ok { border-left-color: #9fd0a8; } /* 買成了的那一句 */
-.shop-layer.shop-mall .shop-line.said.no { border-left-color: #e0a08a; color: #f6d9cc; } /* 買不了的原因 */
+.shop-layer.shop-mall > .shop-line { border: 0; border-radius: 12px; background: #f3e6cc; color: #3a1d08; }
+.shop-layer.shop-mall .shop-line.said.ok { background: #e2f1e0; } /* 買成了的那一句 */
+.shop-layer.shop-mall .shop-line.said.no { background: #f6d9cc; color: #5a1c0c; } /* 買不了的原因 */
 .shop-layer.shop-mall .mall-status { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 2px 0 4px; }
 .shop-layer.shop-mall .mall-status > div { padding: 6px 10px; border-radius: 10px; border: 1px solid #6b4a2e; background: rgba(0, 0, 0, 0.22);
   font-size: 12px; line-height: 1.45; color: #c9b28a; }
 .shop-layer.shop-mall .mall-status b { display: block; font: 600 14px var(--serif); color: #f2e5c6; }
-.shop-layer.shop-mall .mall-sub { display: flex; align-items: baseline; gap: 8px; margin: 12px 2px 6px; font: 600 13px var(--serif); color: #f2c46a; letter-spacing: 0.2em; }
+.shop-layer.shop-mall .mall-sub { display: flex; align-items: baseline; gap: 8px; margin: 18px 2px 10px; font: 900 18px var(--serif); color: #f0cf7a; letter-spacing: 0.25em; }
 .shop-layer.shop-mall .mall-sub small { font: 400 12px var(--sans); color: #c9b28a; letter-spacing: 0; }
-.shop-layer.shop-mall .mall-sub::after { content: ""; flex: 1; border-top: 1px solid #5a3030; }
-.shop-layer.shop-mall .mall-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-/* 比 360 窄時三欄一格只剩 93px，六個字的名字（回體丹三十顆）斷成「回體丹三十／顆」：改兩欄，字一個不改 */
-@media (max-width: 359px) { .shop-layer.shop-mall .mall-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.shop-layer.shop-mall .mall-item { display: grid; justify-items: center; align-content: start; gap: 2px; padding: 10px 6px 9px; border-radius: 10px;
-  border: 1px solid #6b4a2e; background: rgba(43, 22, 22, 0.85); color: inherit; text-align: center; font: 12px/1.45 var(--sans); cursor: pointer; }
-.shop-layer.shop-mall .mall-item b { font: 600 15px var(--serif); color: #f2e5c6; }
-.shop-layer.shop-mall .mall-item .price, .shop-layer.shop-mall .mall-card .price { display: inline-flex; align-items: center; gap: 3px; color: #f2c46a;
-  font: 600 14px var(--sans); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.shop-layer.shop-mall .mall-item .price { margin-top: 3px; }
-.shop-layer.shop-mall .price .ingot { width: 14px; height: 10px; }
-.shop-layer.shop-mall .mall-item small { color: #c9b28a; font-size: 11px; }
-.shop-layer.shop-mall .mall-item.on, .shop-layer.shop-mall .mall-card.on { border-color: #f2c46a; box-shadow: 0 0 0 2px rgba(242, 196, 106, 0.25); }
+.shop-layer.shop-mall .mall-sub::after { content: ""; flex: 1; align-self: center; height: 1px; background: linear-gradient(90deg, #8a6526, transparent); }
+/* 貨架（Joy 2026-11-03「很陽春沒有萬寶閣的感覺」，示意稿「新・貨架」）：招牌（燈籠、匾額、一句）、分類一排、兩件一排的商品卡（上面一格圖、
+   底下名字與給什麼、最底一條金色價錢）、月卡一張金框大卡（好處兩欄一格一條）、最底一張連到「形象」那一頁 */
+.shop-layer.shop-mall:has(.mall-hero) .shop-sign { visibility: hidden; } /* 貨架上有大招牌：頂上那一塊小的讓位 */
+.shop-layer.shop-mall .mall-hero { position: relative; display: grid; justify-items: center; gap: 4px; margin: 2px 0 10px; padding: 12px 40px 2px; }
+.shop-layer.shop-mall .mall-hero .plaque { padding: 6px 18px 6px 28px; border: 3px double #d9a441; border-radius: 6px; background: linear-gradient(180deg, #2a120c, #160907);
+  box-shadow: 0 0 0 4px #3b1a10, 0 10px 24px rgba(0, 0, 0, 0.5); color: #f6d77f; font: 900 32px var(--serif); letter-spacing: 0.35em;
+  text-shadow: 0 2px 0 #6b3b0c, 0 0 18px rgba(246, 215, 127, 0.35); }
+.shop-layer.shop-mall .mall-hero .motto { margin: 6px 0 0; color: #d9a441; font: 13px var(--serif); letter-spacing: 0.4em; }
+.shop-layer.shop-mall .mall-hero .lantern { position: absolute; top: 0; width: 26px; height: 38px; border-radius: 50% / 46%;
+  background: radial-gradient(circle at 42% 38%, #f07a4a, #b8261a 62%, #7a140c); box-shadow: 0 0 16px rgba(232, 85, 58, 0.45); }
+.shop-layer.shop-mall .mall-hero .lantern:first-child { left: 2px; }
+.shop-layer.shop-mall .mall-hero .lantern:nth-child(3) { right: 2px; }
+.shop-layer.shop-mall .mall-cats { display: flex; gap: 8px; overflow-x: auto; margin: 10px 0 0; padding: 2px 0; scrollbar-width: none; }
+.shop-layer.shop-mall .mall-cat { flex: none; min-height: 38px; padding: 0 14px; border-radius: 999px; border: 1px solid #6b4a2e; background: #24140f; color: #e6d3b0;
+  font: 14px var(--sans); cursor: pointer; }
+.shop-layer.shop-mall .mall-cat.on { background: #f0cf7a; border-color: #f0cf7a; color: #3a1d08; font-weight: 700; }
+.shop-layer.shop-mall .mall-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.shop-layer.shop-mall .mall-item { display: flex; flex-direction: column; padding: 0; border-radius: 14px; overflow: hidden; border: 1px solid #6b4a2e;
+  background: linear-gradient(180deg, #3a2219, #24140f); box-shadow: inset 0 1px 0 rgba(240, 207, 122, 0.18), 0 6px 14px rgba(0, 0, 0, 0.35);
+  color: #d6c3a2; text-align: left; font: 12px/1.45 var(--sans); cursor: pointer; }
+.shop-layer.shop-mall .mall-pic { display: flex; align-items: center; justify-content: center; height: 108px; border-bottom: 1px solid #6b4a2e;
+  background: radial-gradient(circle at 50% 55%, rgba(240, 190, 90, 0.3), rgba(120, 40, 20, 0) 62%), linear-gradient(180deg, #4a2a1c, #2b1811); }
+.shop-layer.shop-mall .mall-pic svg { width: 78px; height: 78px; }
+.shop-layer.shop-mall .mall-pic img { width: 100%; height: 100%; object-fit: cover; }
+.shop-layer.shop-mall .mall-pic.has-img { height: auto; aspect-ratio: 4 / 3; overflow: hidden; } /* 畫好的方圖：格子改 4:3、上下裁一點 */
+.shop-layer.shop-mall .mall-card .mall-pic.has-img { height: 84px; aspect-ratio: auto; }
+.shop-layer.shop-mall .mall-item .mi { display: flex; flex-direction: column; gap: 3px; flex: 1; padding: 9px 10px 0; }
+.shop-layer.shop-mall .mall-item b { font: 900 16px var(--serif); color: #fbefd6; }
+.shop-layer.shop-mall .mall-item .gain { color: #e5c98e; }
+.shop-layer.shop-mall .mall-item .price, .shop-layer.shop-mall .mall-card .price { display: flex; align-items: center; justify-content: center; gap: 5px; min-height: 40px;
+  margin: 8px 10px 10px; border-radius: 10px; border: 1px solid #e3b55a; background: linear-gradient(180deg, #f2cf7c, #c9932f); color: #3a1d08;
+  font: 700 15px var(--sans); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.shop-layer.shop-mall .price .ingot { width: 16px; height: 11px; fill: #7a4a0c; }
+.shop-layer.shop-mall .price .ingot .shine { opacity: 0.2; }
+.shop-layer.shop-mall .mall-item small { color: #bfa57d; font-size: 11px; }
+.shop-layer.shop-mall .mall-item.on, .shop-layer.shop-mall .mall-card.on { border-color: #f2c46a; box-shadow: 0 0 0 3px rgba(242, 196, 106, 0.35); }
 .shop-layer.shop-mall .mall-item.off, .shop-layer.shop-mall .mall-card.off { opacity: 0.55; } /* 買不了的畫淡，照樣點得到：點了掌櫃講原因 */
-.shop-layer.shop-mall .dan { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; margin-bottom: 2px;
-  background: radial-gradient(circle at 35% 30%, #f6d58a 0%, #c98a2a 55%, #7a4a14 100%); color: #3a1e08; font: 700 15px var(--serif);
-  box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.3); }
-.shop-layer.shop-mall .mall-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; margin: 0 0 8px;
-  padding: 10px 12px; border-radius: 12px; border: 1px solid #f2c46a; background: linear-gradient(135deg, rgba(242, 196, 106, 0.14), rgba(43, 22, 22, 0.85) 55%);
-  color: inherit; text-align: left; cursor: pointer; }
-.shop-layer.shop-mall .moon { width: 38px; height: 38px; border-radius: 4px; display: grid; place-items: center; background: #a8322a; color: #fff6e6;
-  font: 700 18px var(--serif); transform: rotate(-5deg); }
-.shop-layer.shop-mall .mall-card b { font: 600 15px var(--serif); color: #f2e5c6; }
-.shop-layer.shop-mall .mall-card .mt > span { display: block; font-size: 12px; line-height: 1.5; color: #c9b28a; }
-/* 月卡的好處逐條（萬寶閣販賣清單定案）：每一條自己一行、前面一個金點，折行對齊字不對齊點 */
-.shop-layer.shop-mall .mall-card .mall-perks { display: block; margin: 4px 0 2px; }
-.shop-layer.shop-mall .mall-card .perk { position: relative; display: block; padding-left: 12px; font-size: 13px; line-height: 1.55; color: #ead9b4; }
-.shop-layer.shop-mall .mall-card .perk::before { content: ""; position: absolute; left: 2px; top: 0.62em; width: 5px; height: 5px; border-radius: 50%; background: #f2c46a; }
+.shop-layer.shop-mall .mall-to-look { display: block; width: 100%; margin: 18px 0 0; min-height: 48px; border-radius: 14px; border: 1px dashed #8a6526;
+  background: transparent; color: #f0cf7a; font: 700 15px var(--serif); cursor: pointer; }
+/* 擂台形象（功能包 looks；2026-11-03 改版，Joy「排版亂七八糟」「一大堆形象跟絕招會很難用」）：站著那張的第一格裁成一個人（四格一張，880×220）。
+   形象那一頁：最上面一塊台子（點了的那一套）、我的／官方／市集三頁、一排三格的小格；自建形象、絕招各自一頁，一行一件的清單 */
+.shop-layer.shop-mall .look-face { width: 56px; height: 56px; background-size: 400% 100%; background-position: 0 0; background-repeat: no-repeat; }
+.shop-layer.shop-mall .look-pad { position: relative; display: flex; align-items: flex-end; justify-content: center; overflow: hidden;
+  background: linear-gradient(180deg, #e9dcc2, #cdb48a); }
+.shop-layer.shop-mall .look-stage { position: relative; height: 232px; margin: 2px 0 0; border-radius: 16px; overflow: hidden; border: 1px solid #8a6526;
+  background: linear-gradient(180deg, #e9dcc2 0%, #d8c39c 64%, #7a4a2a 64%, #5a3420 100%); }
+.shop-layer.shop-mall .look-stage > .look-face { position: absolute; left: 50%; top: 4px; width: 180px; height: 180px; margin-left: -90px; }
+.shop-layer.shop-mall .look-stage-bar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+  background: linear-gradient(0deg, rgba(20, 8, 6, 0.94), rgba(20, 8, 6, 0.6)); }
+.shop-layer.shop-mall .look-stage-bar > span { flex: 1; min-width: 0; }
+.shop-layer.shop-mall .look-stage-bar small { display: block; font-size: 11px; color: #e5c98e; }
+.shop-layer.shop-mall .look-stage-bar b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 900 18px var(--serif); color: #fbefd6; }
+.shop-layer.shop-mall .look-stage-bar .btn { flex: none; }
+.shop-layer.shop-mall .look-stage-note { margin-top: 6px; }
+.shop-layer.shop-mall .look-segs { display: flex; margin: 14px 0 0; border-radius: 12px; border: 1px solid #8a6526; overflow: hidden; }
+.shop-layer.shop-mall .look-segs button { flex: 1; min-height: 44px; border: 0; background: #24140f; color: #d6c3a2; font: 14px var(--sans); cursor: pointer; }
+.shop-layer.shop-mall .look-segs button.on { background: #f0cf7a; color: #3a1d08; font-weight: 700; }
+.shop-layer.shop-mall .look-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0 0; }
+.shop-layer.shop-mall .look-tile { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 0 0 8px; border-radius: 12px; overflow: hidden;
+  border: 1px solid #6b4a2e; background: #2a1812; color: #f3e6cc; text-align: center; cursor: pointer; }
+.shop-layer.shop-mall .look-tile .look-pad { height: 84px; }
+.shop-layer.shop-mall .look-tile .look-face { width: 80px; height: 80px; }
+.shop-layer.shop-mall .look-tile b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; font: 700 14px var(--serif); }
+.shop-layer.shop-mall .look-tile.on { border: 2px solid #f0cf7a; }
+.shop-layer.shop-mall .look-tile.sel { box-shadow: 0 0 0 3px rgba(240, 207, 122, 0.5); }
+.shop-layer.shop-mall .look-make { border-style: dashed; border-color: #b58a3a; background: transparent; }
+.shop-layer.shop-mall .look-make .look-pad { align-items: center; background: #24140f; }
+.shop-layer.shop-mall .look-make .plus { color: #f0cf7a; font: 700 34px var(--sans); }
+.shop-layer.shop-mall .look-tag, .shop-layer.shop-mall .look-tag2 { position: absolute; top: 5px; padding: 1px 6px; border-radius: 999px; font: 700 11px var(--sans); }
+.shop-layer.shop-mall .look-tag { left: 5px; background: #f0cf7a; color: #3a1d08; }
+.shop-layer.shop-mall .look-tag2 { right: 5px; background: rgba(20, 8, 6, 0.75); color: #f0cf7a; }
+.shop-layer.shop-mall .look-more { display: block; width: 100%; margin: 12px 0 0; }
+.shop-layer.shop-mall .look-on { align-self: center; color: #f2c46a; font: 600 13px var(--serif); letter-spacing: 0.2em; }
+.shop-layer.shop-mall .btn.buy { display: inline-flex; align-items: center; gap: 4px; border-color: #e3b55a; background: linear-gradient(180deg, #f2cf7c, #c9932f); color: #3a1d08; font-weight: 700; }
+.shop-layer.shop-mall .move-entry { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px; border-radius: 14px; border: 1px solid #6b4a2e;
+  background: linear-gradient(180deg, #3a2219, #24140f); color: #d6c3a2; text-align: left; cursor: pointer; }
+.shop-layer.shop-mall .move-entry b { display: block; font: 900 16px var(--serif); color: #fbefd6; }
+.shop-layer.shop-mall .move-entry small { display: block; font-size: 12px; }
+.shop-layer.shop-mall .move-entry > span:nth-child(2) { flex: 1; min-width: 0; }
+.shop-layer.shop-mall .move-ico { flex: none; width: 48px; height: 48px; border-radius: 12px; background: radial-gradient(circle, rgba(240, 190, 90, 0.55), transparent 70%), #2b1811; }
+.shop-layer.shop-mall .move-entry .go { color: #f0cf7a; font: 700 22px var(--sans); }
+/* 自建形象、絕招那一頁：頂上回形象＋標題、四步；一行一件的清單（圖、名字與一句、狀態、鈕）、摺起來的那一行 */
+.shop-layer.shop-mall .look-subbar { display: flex; align-items: center; gap: 12px; margin: 2px 0 8px; }
+.shop-layer.shop-mall .look-subbar b { font: 900 20px var(--serif); color: #f6d77f; letter-spacing: 0.2em; }
+.shop-layer.shop-mall .look-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 6px 0 4px; padding: 0; list-style: none; text-align: center;
+  font-size: 12px; color: #c9b391; }
+.shop-layer.shop-mall .look-steps span { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: 0 auto 4px; border-radius: 50%;
+  border: 1.5px solid #8a6526; color: #e5c98e; font: 900 14px var(--serif); }
+.shop-layer.shop-mall .look-steps li.on { color: #f0cf7a; }
+.shop-layer.shop-mall .look-steps li.on span { border-color: #f0cf7a; background: #f0cf7a; color: #3a1d08; }
+.shop-layer.shop-mall .look-lines { border-radius: 14px; border: 1px solid #6b4a2e; background: #24140f; overflow: hidden; }
+.shop-layer.shop-mall .look-line { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto auto; gap: 4px 10px; align-items: center; padding: 8px 10px;
+  border-top: 1px solid #3d2618; color: #c9b391; }
+.shop-layer.shop-mall .look-line:first-child { border-top: 0; }
+.shop-layer.shop-mall .look-line.on { background: rgba(240, 207, 122, 0.1); }
+.shop-layer.shop-mall .look-line .look-pad { width: 44px; height: 44px; border-radius: 8px; }
+.shop-layer.shop-mall .look-line .look-face { width: 44px; height: 44px; }
+.shop-layer.shop-mall .look-line .lo-main { min-width: 0; }
+.shop-layer.shop-mall .look-line .lo-main b, .shop-layer.shop-mall .look-line .lo-main small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shop-layer.shop-mall .look-line .lo-main b { font: 700 15px var(--serif); color: #fbefd6; }
+.shop-layer.shop-mall .look-line .lo-main small { font-size: 12px; }
+.shop-layer.shop-mall .look-line .btn.play { min-width: 40px; padding: 0; }
+.shop-layer.shop-mall .look-wait, .shop-layer.shop-mall .look-no { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 8px; }
+.shop-layer.shop-mall .look-wait { border: 3px solid #6b4a2e; border-top-color: #f0cf7a; border-radius: 50%; box-sizing: border-box; width: 36px; height: 36px; margin: 4px;
+  animation: lookspin 1.4s linear infinite; }
+@keyframes lookspin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .shop-layer.shop-mall .look-wait { animation: none; } }
+.shop-layer.shop-mall .look-no { background: #2b1811; color: #e0806a; font: 700 18px var(--sans); }
+.shop-layer.shop-mall .look-fold { display: block; width: 100%; min-height: 42px; border: 0; border-top: 1px solid #3d2618; background: transparent; color: #e5c98e; font: 14px var(--sans); cursor: pointer; }
+.shop-layer.shop-mall .look-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0 0 10px; text-align: center; }
+.shop-layer.shop-mall .look-stats span { padding: 8px 2px; border-radius: 10px; border: 1px solid #6b4a2e; background: rgba(0, 0, 0, 0.3); }
+.shop-layer.shop-mall .look-stats small { display: block; font-size: 11px; color: #c9b391; }
+.shop-layer.shop-mall .look-stats b { color: #f6d77f; font: 700 17px var(--sans); }
+.shop-layer.shop-mall .look-st { white-space: nowrap; color: #f2c46a; font-size: 12px; }
+.shop-layer.shop-mall .look-st.st-made { color: #9fd0a8; }
+.shop-layer.shop-mall .look-st.st-rejected { color: #e0a08a; }
+.shop-layer.shop-mall .look-order-form { display: grid; gap: 6px; padding: 14px; border-radius: 14px; border: 1px solid #6b4a2e; background: linear-gradient(180deg, #3a2219, #24140f); }
+.shop-layer.shop-mall .look-order-form label { font-size: 13px; color: #e5c98e; }
+.shop-layer.shop-mall .look-order-form .btn.buy, .shop-layer.shop-mall .move-new { justify-content: center; min-height: 46px; }
+.shop-layer.shop-mall .move-new { width: 100%; margin: 16px 0 0; }
+.shop-layer.shop-mall .look-ex { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: #c9b391; }
+.shop-layer.shop-mall .look-ex .btn { border-style: dashed; }
+.shop-layer.shop-mall .market-set { grid-column: 1 / -1; display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+.shop-layer.shop-mall .market-set .input { width: 96px; }
+.shop-layer.shop-mall .move-now-card { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; border: 1px solid #6b4a2e;
+  background: linear-gradient(180deg, #3a2219, #24140f); }
+.shop-layer.shop-mall .move-now-card > span { flex: 1; min-width: 0; }
+.shop-layer.shop-mall .move-now-card small { display: block; font-size: 12px; color: #c9b391; }
+.shop-layer.shop-mall .move-now-card b { display: block; font: 900 17px var(--serif); color: #fbefd6; }
+.shop-layer.shop-mall .move-now-card em { font-style: normal; font-weight: 500; color: #e5c98e; }
+.shop-layer.shop-mall .move-now-card + .look-lines { margin-top: 10px; }
+.shop-layer.shop-mall .move-fx { width: 44px; height: 44px; background: #2b1d14 no-repeat 60% 0 / 600% 100%; border-radius: 8px; }
+.shop-layer.shop-mall .move-form { margin: 16px 0 0; padding: 0 12px 12px; border-radius: 16px; border: 1px solid #8a6526; background: rgba(0, 0, 0, 0.18); }
+.shop-layer.shop-mall .move-opts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0 0; }
+.shop-layer.shop-mall .move-opt { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 12px; border: 1px solid #6b4a2e; background: rgba(0, 0, 0, 0.25); }
+.shop-layer.shop-mall .move-opt.own { border-color: #f0cf7a; }
+.shop-layer.shop-mall .move-opt.off { opacity: 0.6; }
+.shop-layer.shop-mall .move-opt b { font: 900 16px var(--serif); color: #fbefd6; }
+.shop-layer.shop-mall .move-opt small { flex: 1; font-size: 12px; line-height: 1.5; color: #d6c3a2; }
+.shop-layer.shop-mall .move-opt .btn { justify-content: center; min-height: 40px; }
+/* 月卡：一張金框大卡（圖、名字、限購；好處兩欄一格一條；最底一條價錢） */
+.shop-layer.shop-mall .mall-card { display: flex; flex-direction: column; gap: 10px; width: 100%; margin: 0 0 8px; padding: 14px; border-radius: 16px;
+  border: 2px solid #d9a441; background: linear-gradient(160deg, #5a1c12, #2a0f0a 70%); color: inherit; text-align: left; cursor: pointer; }
+.shop-layer.shop-mall .mall-card .mc-head { display: flex; align-items: center; gap: 12px; }
+.shop-layer.shop-mall .mall-card .mall-pic { flex: none; width: 84px; height: 84px; border: 0; border-radius: 12px; background: radial-gradient(circle, rgba(246, 215, 127, 0.4), transparent 70%); }
+.shop-layer.shop-mall .mall-card b { display: block; font: 900 21px var(--serif); color: #fbefd6; }
+.shop-layer.shop-mall .mall-card .mt > span, .shop-layer.shop-mall .mall-card .mc-note { display: block; font-size: 12px; line-height: 1.5; color: #e5c98e; }
+.shop-layer.shop-mall .mall-card .mall-perks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.shop-layer.shop-mall .mall-card .perk { padding: 8px 10px; border-radius: 10px; border: 1px solid #6b4a2e; background: rgba(0, 0, 0, 0.28); font-size: 13px; line-height: 1.5; color: #f3e6cc; }
+.shop-layer.shop-mall .mall-card .price { margin: 0; min-height: 46px; font: 700 16px var(--sans); }
 .shop-layer.shop-mall .mall-status .mall-daily { display: block; margin-top: 6px; }
 .shop-layer.shop-mall .mall-status button.mall-daily { width: 100%; min-height: 36px; }
 .shop-layer.shop-mall .mall-status small.mall-daily { color: #9fd18b; }
@@ -94,22 +218,49 @@
   .shop-layer.shop-mall {
     background-color: var(--paper); background-size: min(100%, 640px) 100%; background-position: 50% 0; background-repeat: no-repeat;
   }
-  /* 商城那一層（商城第二批）：同一個選擇器、字級 ×1.3 */
+  /* 商城那一層（商城第二批；2026-11-03 改版）：同一個選擇器、字級 ×1.3（照手機那一段的先後，tests/core/test_desktop_type.py） */
   .shop-layer.shop-mall .mall-status > div { font-size: 15.5px; }
   .shop-layer.shop-mall .mall-status b { font: 600 18px var(--serif); }
-  .shop-layer.shop-mall .mall-sub { font: 600 17px var(--serif); }
+  .shop-layer.shop-mall .mall-sub { font: 900 23.5px var(--serif); }
   .shop-layer.shop-mall .mall-sub small { font: 400 15.5px var(--sans); }
+  .shop-layer.shop-mall .mall-hero .plaque { font: 900 41.5px var(--serif); }
+  .shop-layer.shop-mall .mall-hero .motto { font: 17px var(--serif); }
+  .shop-layer.shop-mall .mall-cat { font: 18px var(--sans); }
   .shop-layer.shop-mall .mall-item { font: 15.5px/1.45 var(--sans); }
-  .shop-layer.shop-mall .mall-item b { font: 600 19.5px var(--serif); }
-  .shop-layer.shop-mall .mall-item .price, .shop-layer.shop-mall .mall-card .price { font: 600 18px var(--sans); }
+  .shop-layer.shop-mall .mall-item b { font: 900 21px var(--serif); }
+  .shop-layer.shop-mall .mall-item .price, .shop-layer.shop-mall .mall-card .price { font: 700 19.5px var(--sans); }
   .shop-layer.shop-mall .mall-item small { font-size: 14.5px; }
-  .shop-layer.shop-mall .dan { width: 44px; height: 44px; font: 700 19.5px var(--serif); } /* 圖示跟著字放大 */
-  .shop-layer.shop-mall .moon { width: 49px; height: 49px; font: 700 23.5px var(--serif); }
-  .shop-layer.shop-mall .ingot { width: 23px; height: 15.5px; }
-  .shop-layer.shop-mall .price .ingot { width: 18px; height: 13px; }
-  .shop-layer.shop-mall .mall-card b { font: 600 19.5px var(--serif); }
-  .shop-layer.shop-mall .mall-card .mt > span { font-size: 15.5px; }
+  .shop-layer.shop-mall .mall-to-look { font: 700 19.5px var(--serif); }
+  .shop-layer.shop-mall .look-stage-bar small { font-size: 14.5px; }
+  .shop-layer.shop-mall .look-stage-bar b { font: 900 23.5px var(--serif); }
+  .shop-layer.shop-mall .look-segs button { font: 18px var(--sans); }
+  .shop-layer.shop-mall .look-tile b { font: 700 18px var(--serif); }
+  .shop-layer.shop-mall .look-make .plus { font: 700 44px var(--sans); }
+  .shop-layer.shop-mall .look-tag, .shop-layer.shop-mall .look-tag2 { font: 700 14.5px var(--sans); }
+  .shop-layer.shop-mall .look-on { font: 600 17px var(--serif); }
+  .shop-layer.shop-mall .move-entry b { font: 900 21px var(--serif); }
+  .shop-layer.shop-mall .move-entry small { font-size: 15.5px; }
+  .shop-layer.shop-mall .move-entry .go { font: 700 28.5px var(--sans); }
+  .shop-layer.shop-mall .look-subbar b { font: 900 26px var(--serif); }
+  .shop-layer.shop-mall .look-steps { font-size: 15.5px; }
+  .shop-layer.shop-mall .look-steps span { font: 900 18px var(--serif); }
+  .shop-layer.shop-mall .look-line .lo-main b { font: 700 19.5px var(--serif); }
+  .shop-layer.shop-mall .look-line .lo-main small { font-size: 15.5px; }
+  .shop-layer.shop-mall .look-no { font: 700 23.5px var(--sans); }
+  .shop-layer.shop-mall .look-fold { font: 18px var(--sans); }
+  .shop-layer.shop-mall .look-stats small { font-size: 14.5px; }
+  .shop-layer.shop-mall .look-stats b { font: 700 22px var(--sans); }
+  .shop-layer.shop-mall .look-st { font-size: 15.5px; }
+  .shop-layer.shop-mall .look-order-form label { font-size: 17px; }
+  .shop-layer.shop-mall .look-ex { font-size: 15.5px; }
+  .shop-layer.shop-mall .move-now-card small { font-size: 15.5px; }
+  .shop-layer.shop-mall .move-now-card b { font: 900 22px var(--serif); }
+  .shop-layer.shop-mall .move-opt b { font: 900 21px var(--serif); }
+  .shop-layer.shop-mall .move-opt small { font-size: 15.5px; }
+  .shop-layer.shop-mall .mall-card b { font: 900 27.5px var(--serif); }
+  .shop-layer.shop-mall .mall-card .mt > span, .shop-layer.shop-mall .mall-card .mc-note { font-size: 15.5px; }
   .shop-layer.shop-mall .mall-card .perk { font-size: 17px; }
+  .shop-layer.shop-mall .mall-card .price { font: 700 21px var(--sans); }
   .shop-layer.shop-mall .mall-note { font-size: 15.5px; }
   .shop-layer.shop-mall .mall-log-head { font-size: 15.5px; }
   .shop-layer.shop-mall .mall-log-head b { font: 600 23.5px var(--sans); }
@@ -117,6 +268,16 @@
   .shop-layer.shop-mall .mall-log-row b { font: 600 18px var(--serif); }
   .shop-layer.shop-mall .mall-log-row .amt { font: 600 18px var(--sans); }
   .shop-layer.shop-mall .mall-tag { font: 400 14.5px var(--sans); }
+  .shop-layer.shop-mall .ingot { width: 23px; height: 15.5px; } /* 圖示跟著字放大 */
+  .shop-layer.shop-mall .price .ingot { width: 21px; height: 14.5px; }
+  .shop-layer.shop-mall .mall-pic { height: 140px; }
+  .shop-layer.shop-mall .mall-pic svg { width: 100px; height: 100px; }
+  .shop-layer.shop-mall .mall-card .mall-pic { width: 110px; height: 110px; }
+  .shop-layer.shop-mall .mall-card .mall-pic.has-img { height: 110px; }
+  .shop-layer.shop-mall .look-stage { height: 300px; }
+  .shop-layer.shop-mall .look-stage > .look-face { width: 240px; height: 240px; margin-left: -120px; }
+  .shop-layer.shop-mall .look-tile .look-pad { height: 110px; }
+  .shop-layer.shop-mall .look-tile .look-face { width: 104px; height: 104px; }
 }
 /* 商城的購買確認在電腦寬：疊在店面那一層上面，字跟店面一樣 ×1.3（FB-305；這張紙掛在 body 上，不在店面那一段） */
 @media (min-width: 641px) {
@@ -137,3 +298,16 @@
 .card.mall-today .moon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-family: var(--serif); }
 .card.mall-today b { display: block; font-family: var(--serif); }
 .card.mall-today .mt > span { display: block; font-size: 13px; color: var(--ink-2); }
+
+/* 設定頁管理者區的「自建形象」（第二批） */
+.look-admin { display: grid; gap: 6px; margin: 6px 0; }
+.look-admin p { margin: 0; }
+.look-sheets { display: flex; flex-wrap: wrap; gap: 4px; }
+.look-sheets span { padding: 0 6px; border-radius: 6px; border: 1px solid var(--line, #ccc); opacity: 0.55; }
+.look-sheets span.ok { opacity: 1; border-color: #4f8a5b; }
+.look-gen { white-space: pre-wrap; word-break: break-word; margin: 4px 0; padding: 6px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.05); }
+.shop-layer.shop-mall .move-seal { display: grid; place-items: center; background: #b8322a; color: #fff4dc; font-weight: 900; font-size: 1.6rem; }
+.shop-layer.shop-mall .scene-preview { width: 100%; max-width: 100%; aspect-ratio: 720 / 320; border-radius: 8px; background: #000; display: block; margin-top: 8px; }
+.shop-layer.shop-mall .look-show { margin: 6px 0 10px; }
+.shop-layer.shop-mall .look-show .row { justify-content: space-between; align-items: center; margin-top: 6px; }
+.shop-layer.shop-mall .look-show .row .btn { flex: 0 0 auto; width: auto; }

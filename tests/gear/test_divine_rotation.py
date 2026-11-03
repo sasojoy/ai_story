@@ -125,7 +125,7 @@ def test_the_settings_page_warns_when_new_divines_run_out():
     admin, _ = _admin_rolls(c, w)
     choices = server.admin_choices(admin)
     assert choices["divine_out"] == divine.EXHAUSTED
-    drawer = run(server.main_view(admin), "return H.sheetHtml();", S={"sheet": True, "admin": choices})
+    drawer = run(server.main_view(admin), "return H.adminHtml();", S={"admin": choices})
     assert f'<p class="muted">{divine.EXHAUSTED}</p>' in drawer
 
 
