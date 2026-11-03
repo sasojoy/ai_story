@@ -3,6 +3,8 @@
 共用規則層（tianxia/core/registry.py 的 SHARED）：決戰包開集結那一刻派人上陣（tianxia/features/battle/generals.py 的 on_muster）與共用規則層的
 攻城留守（siege.commanders）都讀這一份。全部拆包第 8 批把 generals 搬進決戰包時，siege 讀的這一塊（原本 generals 的 on、_in_battle、pick，
 本體一字不改）留在這一層（第 15 批 PM 認定第 2 條：不然共用規則層 import 包）；決戰包的 generals 照舊 re-export on、pick（同一個函式物件）。
+**測試要換挑法請換這裡的 chiefs.on、chiefs.pick**：換掉 generals.on／generals.pick（或舊名 tianxia.generals 的）只改到決戰包開集結派人上陣
+（on_muster 叫的是包裡那個名字），攻城的留守（siege.commanders 叫 chiefs）照舊——搬之前兩處都讀 generals，換一個名字兩處都變（第 8 批審查 nit）。
 只 import models、state、figures、atlas、battle_instance。
 """
 from __future__ import annotations
