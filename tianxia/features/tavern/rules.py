@@ -24,10 +24,10 @@ from tianxia import annals  # 過渡：待搬（行狀：名氣、近況、近�
 from tianxia import atlas  # 過渡：待搬（大區：遠近）
 from tianxia import figures  # 過渡：待搬（大勢人物：名氣、心事）
 from tianxia import gender
-from tianxia import renown  # 過渡：待搬（名望段、善惡稱號）
+from tianxia import renown  # 共用規則層（名望段、善惡稱號）
 from tianxia import rules
-from tianxia import territory  # 過渡：待搬（地盤：誰控制、地頭熟、大勢線）
-from tianxia import treasures  # 過渡：待搬（玉璽碎片改版開著沒）
+from tianxia import territory  # 共用規則層（地盤：誰控制、地頭熟、大勢線）
+from tianxia import treasures  # 共用規則層（玉璽碎片改版開著沒）
 from pydantic import BaseModel
 
 from tianxia.characters import name_key
@@ -122,7 +122,7 @@ def tavern_at(content: Content, loc_id: str) -> bool:
 
 def here(state: GameState, content: Content) -> bool:
     """人在酒肆：開關開著、不在路上、不在序章、這個地點帶「酒肆」標籤。季收了照樣開門（休季也能喝酒、題壁），雇殺手另外擋。"""
-    from tianxia import prologue as prologue_rules  # noqa: PLC0415  過渡：待搬（prologue → … → tavern：在函式裡 import）
+    from tianxia import prologue as prologue_rules  # noqa: PLC0415  共用規則層（prologue → … → tavern：在函式裡 import）
 
     p = state.player
     return (content.config.tavern.enabled and p.journey is None and tavern_at(content, p.location)
@@ -468,7 +468,7 @@ def ties_player_lines(state: GameState, content: Content, other: GameState, mate
                       wanted: set[str] | None = None) -> tuple[list[str], bool]:
     """打聽一個玩家跟誰走得近：照打聽度，2 以上說陣營與稱號，3 以上加身邊的同伴，4 以上加近來的三件事（行狀份量 3 以上、最新的在前；
     起用碎片那一筆不列，annals.heard，FB-643）；1 以下沒人聽過（退一半）。"""
-    from tianxia import allied  # noqa: PLC0415  過渡：待搬（豪強依附的那一軍）
+    from tianxia import allied  # noqa: PLC0415  共用規則層（豪強依附的那一軍）
 
     score = person_reach(state, content, other, wanted)
     p = other.player
@@ -761,7 +761,7 @@ def chatter_write(client, req: ChatterRequest) -> list[str]:
 
 def chatter_clean(raw: list, req: ChatterRequest) -> list[str]:
     """每一句轉繁體、去標記，拆成「誰：「說的話」」重組；一句不合用就丟那一句，剩不到兩句整段不用。數字只能是話頭裡有的。"""
-    from tianxia import zh  # noqa: PLC0415  過渡：待搬（繁體、英文字）
+    from tianxia import zh  # noqa: PLC0415  共用規則層（繁體、英文字）
 
     known = "".join(req.facts)
     out: list[str] = []
@@ -1000,7 +1000,7 @@ def ask_write(client, req: AskRequest) -> str | None:
 
 
 def ask_clean(raw: str, req: AskRequest) -> str | None:
-    from tianxia import zh  # noqa: PLC0415  過渡：待搬（繁體、英文字）
+    from tianxia import zh  # noqa: PLC0415  共用規則層（繁體、英文字）
 
     text = zh.to_traditional(str(raw or ""))
     text = re.sub(r"[*#>`_]+", "", text)

@@ -13,7 +13,7 @@ timetable_choices 與測試在叫），showdown_refusal 只有這裡叫。
 """
 from __future__ import annotations
 
-from tianxia import timetable  # 過渡：待搬（時刻表）
+from tianxia import timetable  # 共用規則層（時刻表）
 from tianxia.models import BattleDef, TimetableEvent
 from tianxia.rules import add_rumor, season_one, season_one_off
 from tianxia.world import open_showdown, showdown_battle  # 過渡：待搬（開時刻表決戰、照版本挑那一場）

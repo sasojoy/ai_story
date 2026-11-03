@@ -11452,12 +11452,14 @@ class Game:
             entry.weapon = arena.held_kind(p)  # 擂台動畫：分身手上拿什麼
             entry.look = self.arena_look()  # 擂台形象：分身穿哪一套
             entry.move = self.arena_move()  # 招式動畫：分身出招疊哪一張
+            entry.move_art = self._arena_move_art(entry.move)
             return [arena.UPDATED.format(arts=text)]
         entry = arena.join(s.world, ArenaEntry(
             name=p.name, power=side.power, bare=side.bare, scores=side.scores, role=side.role, hp_cap=side.hp_cap, arts=arts, joined=s.world.time,
             kit=team.self_side(s, self.content, self.world), famed=famed, crowd=arena_crowd.snapshot(s, self.content, self.world),
             weapon=arena.held_kind(p), look=self.arena_look(), move=self.arena_move(),
         ))
+        entry.move_art = self._arena_move_art(entry.move)
         return [arena.JOINED.format(rank=entry.rank, arts=text)]
 
     def arena_look(self) -> str:
@@ -11467,6 +11469,15 @@ class Game:
     def arena_move(self) -> str:
         """招式動畫：這個人此刻出招疊哪一張光效（功能包 looks；空字串＝沒有）。"""
         return looks_actions.move_of(self)
+
+    def _arena_move_art(self, move: str) -> str:
+        """招式動畫綁在哪一門上：疊得上光效（move 不是空的）就是現在練的那一門（looks 只在現在練的那一門綁了招式時才給 move）。"""
+        return (self.state.player.member.wugong_id or "") if move else ""
+
+    def _arena_burst(self, fight: ArenaFight, skills) -> None:
+        """招式動畫：這一回合兩邊綁了招式的那一門的戰法發動了沒（光效只在發動的那一回合疊，Joy 2026-11-01）。"""
+        arts = (list(fight.fx_arts) + ["", ""])[:2]
+        fight.bursts.append([int(bool(art) and art in fired) for art, fired in zip(arts, skills)])
 
     def _arena_start(self, key: str) -> list[str]:
         """挑一個守擂的人：記今天挑了幾次、冷卻與他今天被挑了幾場，快照兩邊，擲分身第一回合的招。不花體力。"""
@@ -11491,6 +11502,7 @@ class Game:
             looks=[arena.held_kind(p), foe.weapon],  # 擂台動畫：兩邊手上的兵器（分身的照報名那一刻）
             skins=[self.arena_look(), foe.look],  # 擂台形象：兩邊穿哪一套（分身的照報名那一刻）
             fx=[self.arena_move(), foe.move],  # 招式動畫：兩邊出招疊哪一張（同上）
+            fx_arts=[self._arena_move_art(self.arena_move()), foe.move_art if foe.move else ""],
         )
         p.arena_crowd_note = None
         arena.roll_next(fight, arena.rng_for(p.season_number, p.name, fight, "招"), cfg, c.config.duel)
@@ -11605,6 +11617,7 @@ class Game:
             f"（氣勢 {out.delta:+d}，你氣血 {-out.mine_hp:+d}，他氣血 {-out.foe_hp:+d}）", out.lines,
         )
         fight.picks.append([out.mine or "", out.his or ""])  # 擂台動畫：兩邊照出的招演
+        self._arena_burst(fight, out.skills)
         return self._arena_after(line, self._arena_crowd(move=out.mine or "", his=out.his or ""))
 
     def _arena_gamble(
@@ -11625,8 +11638,9 @@ class Game:
         s.battle_card = None
         p.guide_done = []
         fired: list[str] = []
+        skills: tuple[list[str], list[str]] = ([], [])
         won, delta, hp, _ = arena.gamble(fight, int(rate), c, arena.rng_for(p.season_number, p.name, fight, "搏"),
-                                         arena.rng_for(p.season_number, p.name, fight, "戰法"), fired)
+                                         arena.rng_for(p.season_number, p.name, fight, "戰法"), fired, skills)
         story = (stories or ("", ""))[0 if won else 1]
         moment = battle_instance.GambleMoment(name=p.name, faction=self._duel_side(), text=text, story=story, rate=int(rate), won=won)
         old = (battle_instance.GambleMoment(name=p.name, faction="", text=fight.best_text, rate=fight.best_rate, won=fight.best_won)
@@ -11637,6 +11651,7 @@ class Game:
             story = f"你放手一搏：「{text}」——{'成了！' if won else '沒成，反倒露了破綻。'}"
         line = tactics.round_line(f"第 {fight.round + 1} 回合：{story}（氣勢 {delta:+d}，你氣血 {-hp:+d}）", fired)
         fight.picks.append(["搏", ""])  # 擂台動畫：放手一搏照氣勢與氣血演
+        self._arena_burst(fight, skills)
         return self._arena_after(line, self._arena_crowd(label=crowd, move=text))
 
     def _arena_after(self, line: str, crowd: str | None = None) -> list[str]:
@@ -11698,7 +11713,7 @@ class Game:
         # 收場之後回到擂台那一頁（擂台獨立一頁，Joy 2026-10-14「擂台應該要是獨立的一頁」）：收場卡照 arena_last 畫
         p.arena_last = ArenaResult(id=fight.id, foe=fight.foe.name, tier=tier, lines=list(fight.lines), changes=list(record.changes),
                                    looks=list(fight.looks), skins=list(fight.skins), fx=list(fight.fx),
-                                   picks=list(fight.picks))
+                                   picks=list(fight.picks), bursts=[list(x) for x in fight.bursts])
         p.picking_arena = arena.here(s, c)
         won = tier in team.WIN_TIERS
         annals.note(s, c, annals.FIGHT, f"上擂台挑{fight.foe.name}，{tier}。", 2 if won else 1, keep=[fight.foe.name])

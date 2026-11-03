@@ -90,7 +90,7 @@ def view(content: Content, wallet: Wallet, owner: str, shop: dict[str, str]) -> 
         "price": item.price, "name_max": orders.NAME_MAX, "prompt_max": orders.PROMPT_MAX,
         "open": any(o.status in (orders.PENDING, orders.REVIEW) for o in mine),
         "list": [{"id": o.pid, "name": o.name, "prompt": o.prompt, "status": o.status, "status_text": orders.STATUS_TEXT[o.status],
-                  "reason": o.reason} for o in mine],
+                  "reason": o.reason, "withdraw": o.status in orders.CAN_WITHDRAW} for o in mine],
     }
     return {"worn": worn(content, wallet, owner), "looks": items, "order": order}
 
