@@ -1,14 +1,15 @@
-"""單挑包接上第 11 批掛鉤的那幾處（收店、假人在擂台邊只按返回、坐著的時候開關被關掉照樣開著）與核心兩個小規則（勝負的門檻、
-戰績那一句）。搬包的時候只有 scripts/same_behavior.py 守這幾樣（全部拆包第 12 批審查的變異 M14、M6、M7、C3、C4：包加 26 個混合檔
-一條都不紅）；第 12 批審查修正補的，不是從別處搬來的。擂台照 test_arena 的 _ring 開（測試內容，沒有頭目）。"""
+"""單挑包接上第 11 批掛鉤的那幾處（收店、假人在擂台邊只按返回、坐著的時候開關被關掉照樣開著）、更新分身的形象，與核心兩個小規則
+（勝負的門檻、戰績那一句）。搬包的時候只有 scripts/same_behavior.py 守這幾樣（全部拆包第 12 批審查的變異 M14、M6、M7、M8、C3、C4：
+包加 26 個混合檔一條都不紅）；第 12 批審查修正補的，不是從別處搬來的。擂台照 test_arena 的 _ring 開（測試內容，沒有頭目）。"""
 from __future__ import annotations
 
 import pytest
-from test_arena import _do, _ring
+from test_arena import _do, _join, _ring
 
 from tianxia import atlas
 from tianxia.core import arena_ranks, duel_base
 from tianxia.core.option import Option
+from tianxia.engine import Game
 from tianxia.features import bout
 from tianxia.features.bout import bots
 from tianxia.models import DuelTuning
@@ -62,6 +63,19 @@ def test_setting_out_puts_the_ring_away(content, world):
 
     _, game = _do(content, world, "甲", go)
     assert not game.state.player.picking_arena
+
+
+def test_signing_up_again_takes_the_look_worn_now(content, world, monkeypatch):
+    """更新分身（報名之後再按一次報名）：分身穿哪一套照此刻的重記（形象包的 arena_look，包裡經 ctx 叫；原本 _arena_join 更新那一支）。
+    審查 M8：更新那一支不記，test_arena 只驗了第一次報名。"""
+    content, world = _ring(content, world, ("甲",))
+    look = ["moying"]
+    monkeypatch.setattr(Game, "arena_look", lambda self: look[0])
+    _join(content, world, "甲")
+    assert world.get_season().arena["甲"].look == "moying"
+    look[0] = "qingshan"
+    _join(content, world, "甲")
+    assert world.get_season().arena["甲"].look == "qingshan"
 
 
 def test_the_bout_verdict_at_its_thresholds():
