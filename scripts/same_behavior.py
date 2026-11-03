@@ -3610,7 +3610,7 @@ class ProgressScenario(BattleScenario):
     - 第一季 A（target：時刻表的季是長社火攻，不帶設定與測試內容是黃巾決戰）：四位與兩位伺服器假人（PACE_BOTS：直接照 Game 按加入；每一回合
       真人出完招 BotRunner.battle_tick 一次——bot_policy.battle_move → game.battle_now()、決戰包的 bots.score）加入、開打；第一回合官軍放手一搏
       （身上那一招：回合首功）、韓雲起的份量快照擦掉（決戰打到一半上線那一版：他下一次同步補上，_backfill_battle_scores）、再打兩回合（第三回合
-      韓雲起放手一搏）——**這裡切一半**（打到第三回合、還沒收場，expect 驗）。後半：補劇情、打到收場（第五回合起擺一位龍頭上陣的人物陣前敗走、
+      韓雲起放手一搏）、第四回合秦朗月先出招——**這裡切一半**（第四回合收了一部分的招、還沒結算，expect 驗）。後半：補劇情、收齊第四回合的招、打到收場（第五回合起擺一位龍頭上陣的人物陣前敗走、
       最後一擊記在秦朗月身上：收場扣聲威、天下大事、他的補送多名望）、每個人與兩位假人收補送（戰報、紀錄、軍餉、天下大事的最有戲與論功、時間軸）。
     - 第一季 B（時刻表的季：照張曼成那一件定宛城的版本、開宛城；不帶設定：再開黃巾決戰）：秦朗月、韓雲起加入。時刻表的季替官軍擺伏筆鎖定
       （WorldState.locks：收場那一下才讀，戰場上輸了照樣官軍勝、敗因寫鎖定那一句），開打之後廣宗擺進排隊（showdowns_waiting：時間到了、前一場
@@ -3868,7 +3868,9 @@ class ProgressScenario(BattleScenario):
 
     def pace(self) -> None:
         """前半的最後一段：韓雲起的份量快照擦掉，他下一次同步就補上（_backfill_battle_scores：只在自己的請求路徑補）；再打兩回合（第三回合韓雲起
-        放手一搏，身上那一招）。前半停在這裡：打到第三回合、還沒收場（不成立就停）。"""
+        放手一搏，身上那一招）；第四回合秦朗月先出招（同 round 的挑法），別人還沒按。前半停在這裡：第三回合結算過了、第四回合收了一部分的招
+        （BattleRound.pending_actions 寫在資料庫裡；不成立就停）——後半由新程式接著收齊、結算這一回合（審查 nit：原本切在第四回合剛開、
+        一招都還沒收，接手的只有補劇情）。"""
         b = self.live()
         if b is None:
             emit("沒有開打中的決戰：前半那兩回合略過", None)
@@ -3881,9 +3883,19 @@ class ProgressScenario(BattleScenario):
         self.battle_row("補上份量快照之後")
         self.round({})
         self.round({name: f"{BATTLE_SURE}：繞到敵後，放火燒糧"})  # 評 100、一定成，身上那一招：這一回合挑回合首功
+        b = self.live()
+        if b is not None and b.phase == "active":
+            first = self.GAMBLER
+            moves = sorted(i for i, o in self.ids(self.main(first)).items() if i.startswith("battle:act:") and o.get("enabled"))
+            if moves:
+                self.choose(first, moves[b.round_number % len(moves)])
         b = self.world.get_battle()
-        self.expect(b is not None and b.phase == "active" and b.round_number >= 3,
-                    "前半停在打到一半" + ("" if b is None else f"（此刻 {b.phase}、打過 {b.round_number} 回合）"))
+        pending = [] if b is None else sorted(b.round.pending_actions)
+        emit("前半停在這裡：這一回合已經出招的", pending)
+        self.battle_row("前半停下")
+        self.expect(b is not None and b.phase == "active" and b.round_number >= 3 and self.GAMBLER in pending
+                    and len(pending) < sum(1 for q in b.participants.values() if not q.eliminated),
+                    "前半停在一回合收了一部分的招" + ("" if b is None else f"（此刻 {b.phase}、打過 {b.round_number} 回合、已出招 {pending}）"))
 
     # ── 情境（後半）──
 
