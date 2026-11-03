@@ -205,6 +205,20 @@ def test_the_real_cut_keeps_one_subject_and_cuts_a_sheet():
     im.save(raw, "PNG")
     out = Image.open(io.BytesIO(cutting.art_bytes(raw.getvalue())))
     assert out.mode == "RGBA" and out.size == (400, 600)
+    # 封閉白塊也要挖（正式站 #480：盤龍身體圍住的那一塊白底留著，審圖十次都判「去背不乾淨」）
+    coil = Image.new("RGB", (1024, 1024), "white")
+    for x in range(300, 700):
+        for y in range(200, 800):
+            coil.putpixel((x, y), (180, 120, 40))
+    for x in range(400, 600):  # 身體中間圍出一塊白（生圖留下的背景）
+        for y in range(350, 650):
+            coil.putpixel((x, y), (255, 255, 255))
+    buf = io.BytesIO()
+    coil.save(buf, "PNG")
+    holed = Image.open(io.BytesIO(cutting.art_bytes(buf.getvalue())))
+    assert holed.size == (400, 600)
+    assert holed.getpixel((200, 300))[3] == 0, "圍起來的那一塊白底要變透明"
+    assert holed.getpixel((20, 300))[3] > 0, "龍身本身不能被挖掉"
     with pytest.raises(studio.CutError):
         blank = io.BytesIO()
         Image.new("RGB", (512, 512), "white").save(blank, "PNG")

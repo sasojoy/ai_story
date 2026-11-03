@@ -170,7 +170,8 @@ def _draft_model():
 
 SYSTEM = "\n".join((
     "你是武俠遊戲的絕招導演。玩家寫一句自己這一招長什麼樣子，你把它拆成一張表，只回 JSON。",
-    "figure：背後升起的那一尊法相（大佛、神龍、火鳳……），玩家沒寫就留空字串。",
+    "figure：背後升起的那一尊法相。**只有玩家自己寫了才填**（他寫「背後浮現一尊大佛」就填大佛），"
+    "沒寫就留空字串——不要從這一行的字裡挑一個填上去。",
     "thrown：朝對手砸出去、打出去的那一件大東西（巨掌、火焰餃子、石碑……），沒有就留空字串。",
     "　這兩樣會請畫師各畫一張圖，所以要是「看得出形狀的一樣東西」，最多六個中文字；氣、光、風、雪這種沒有形狀的不要填。",
     "swords：成群飛劍的陣形，沒有飛劍填「無」。beam：有沒有一道貫出去的光或劍氣。quake：地面震不震。",
@@ -195,10 +196,26 @@ def model_draft(client, text: str) -> dict | None:
     return got if isinstance(got, dict) else None
 
 
+def _grounded(label: str, text: str) -> bool:
+    """模型填的那一樣，玩家那一句裡有沒有根據：至少一個字出現在原句就算有。
+
+    為什麼不要求整串相符：模型常把玩家的「龍」寫成「神龍」、「餃子」寫成「火焰餃子」，那是對的。
+    為什麼非得驗（2026-11-03 付過代價）：正式站 #480 玩家寫「長槍飛出擊中對手時出現一朵菊花」，
+    導演稿卻給了 `法相 神龍`——「神」「龍」兩個字原句都沒有，是模型從 SYSTEM 那行的例子
+    （大佛、神龍、火鳳）照抄的。提示詞早就寫了「不要自己加戲」，壓不住，所以改成程式這一道把關。
+    """
+    return any(ch in text for ch in label)
+
+
 def _from_draft(draft: dict, text: str, name: str) -> dict:
-    """模型填的那張表 → 導演稿的雛形（拍子與時間照舊由 clean 排）。表外的值一律丟掉。"""
+    """模型填的那張表 → 導演稿的雛形（拍子與時間照舊由 clean 排）。表外的值一律丟掉；
+    自由文字那兩樣（法相、巨物）玩家那一句裡沒根據的也丟掉（_grounded）。"""
     beats: list[dict] = [{"op": "暗場", "tone": draft.get("tone") if draft.get("tone") in TONES else "暖"}]
     figure, thrown = _label(to_traditional(str(draft.get("figure") or ""))), _label(to_traditional(str(draft.get("thrown") or "")))
+    if figure and not _grounded(figure, text):
+        figure = ""  # 模型自己加的法相：不畫（玩家沒寫就不該有）
+    if thrown and not _grounded(thrown, text):
+        thrown = ""
     if figure:
         beats.append({"op": "法相", "label": figure})
         beats.append({"op": "震地"})
