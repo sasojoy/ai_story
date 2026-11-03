@@ -954,6 +954,24 @@ def test_choosing_an_option_plays_it_and_saves(client, monkeypatch):
     assert open_characters().exists("沈青衫")
 
 
+def test_api_answers_say_where_the_time_went(client):
+    """Joy 2026-11-03「探索選完、果出來前就等 5 秒」（雲端量不到）：/api/ 的回應帶 Server-Timing——等鎖幾次與幾毫秒、重讀角色、
+    重組畫面、拿著鎖多久、量表那一筆、整個請求，主機用 curl 或開發者工具就看得到。只有數字；推送的長連線不帶。"""
+    _player(client)
+    timing = client.post("/api/choose", json={"id": "act:explore"}).headers["server-timing"]
+    names = [part.split(";")[0] for part in timing.split(", ")]
+    assert names[-1] == "total" and {"lock", "reload", "view", "hold"} <= set(names)
+    lock = next(part for part in timing.split(", ") if part.startswith("lock;"))
+    assert 'desc="n=' in lock and ";dur=" in lock
+    assert "server-timing" in client.get("/api/main").headers
+    assert "server-timing" not in client.get("/").headers  # 只有 /api/
+
+
+def test_server_timing_lists_only_what_was_measured():
+    assert server.server_timing({}, 0.0123) == "total;dur=12.3"
+    assert server.server_timing({"lock": 0.5, "lock_n": 3, "view": 0.02}, 1.0) == 'lock;desc="n=3";dur=500.0, view;dur=20.0, total;dur=1000.0'
+
+
 def test_an_option_that_is_not_on_the_menu_does_nothing(client):
     _player(client)
     before = client.get("/api/main").json()["status"]["stamina"]
