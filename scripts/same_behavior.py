@@ -3636,6 +3636,17 @@ class ProgressScenario(BattleScenario):
 
     # ── 小工具 ──
 
+    def call(self, who: str, method: str, url: str, body: dict | None = None):
+        """同 Scenario.call，另外驗登入沒過期（審查 should：season21 第三季那兩段原本全是 401，開下一季收兵與之後的補送都沒走到，比對是 401 對 401）。"""
+        status, data = super().call(who, method, url, body)
+        self.expect(status != 401, f"{who} 的登入過期了（{method} {url}）")
+        return status, data
+
+    def shelved(self, tag: str, rid: int | None) -> None:
+        """那一場收兵了（battles 表裡是沒打完的那一種）；這份內容沒有那一場（rid 是 None）不驗。"""
+        b = None if rid is None else self.world.ended_battle(rid)
+        self.expect(rid is None or (b is not None and b.unfinished), f"{tag}收兵了（沒打完）")
+
     def live(self):
         """此刻還沒收場的那一場決戰；收場了、沒有是 None。"""
         b = self.world.get_battle()
@@ -3972,6 +3983,8 @@ class ProgressScenario(BattleScenario):
         self.do(ADMIN, "end_season")
         self.ended_row("收季收兵的決戰", rid)
         self.ended_row("收季收兵的攻城", None if slot is None else slot.record_id)
+        self.shelved("管理者收季：決戰", rid)
+        self.shelved("管理者收季：攻城", None if slot is None else slot.record_id)
         self.siege_row("收季之後", ("S",))
         self.season_row("收季之後")
         for who in self.PLAYERS:
@@ -4027,6 +4040,8 @@ class ProgressScenario(BattleScenario):
         self.main(self.IDLER)
         self.ended_row("季收了收兵的決戰", rid)
         self.ended_row("季收了收兵的攻城", None if slot is None else slot.record_id)
+        self.shelved("季自然收掉：決戰", rid)
+        self.shelved("季自然收掉：攻城", None if slot is None else slot.record_id)
         self.season_row("季自然收掉之後")
         for who in (self.GAMBLER, self.LATE_GAMBLER):
             self.main(who)
@@ -4036,7 +4051,11 @@ class ProgressScenario(BattleScenario):
         self.new_season("第三季開季")
 
     def quiet_open(self) -> None:
-        """第三季開一場（長社；不帶設定黃巾決戰），秦朗月加入；攻城那一場韓雲起加入（攻城開著的季跟長社在同一個大區，鈕帶 @）。"""
+        """第三季開一場（長社；不帶設定黃巾決戰），秦朗月加入；攻城那一場韓雲起加入（攻城開著的季跟長社在同一個大區，鈕帶 @）。
+        開之前每個人重新登入一次：登入狀態認 accounts.SESSION_SECONDS（30 天，照登入那一刻算），後半開頭那一次登入到第三季季末，season21
+        已經超過了（審查 should：原本 quiet、after 兩段全是 401）。放在季末之前：登入會輪詢一次，季末之後才登入就變成「第一個輪詢的人收兵」，
+        不是管理者開下一季那一下收。"""
+        self.login_all()
         op, battle_id = self.target()
         if self.c.battles and self.live() is None:
             self.do(ADMIN, op, {"id": battle_id})
@@ -4058,6 +4077,8 @@ class ProgressScenario(BattleScenario):
         self.do(ADMIN, "next_season")
         self.ended_row("開下一季收兵的決戰", rid)
         self.ended_row("開下一季收兵的攻城", None if slot is None else slot.record_id)
+        self.shelved("開下一季：決戰", rid)
+        self.shelved("開下一季：攻城", None if slot is None else slot.record_id)
         self.season_row("第四季開季")
 
     def after(self) -> None:
