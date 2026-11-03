@@ -3713,10 +3713,18 @@
     const owner = DV_OWNER.replace("{owner}", r.owner || "").replace("{copies}", r.copies | 0);
     return `<div class="dv-row${r.mine ? " mine" : ""}"><div class="dv-who"><b>【${esc(r.name)}】</b><small>${esc(owner)}</small></div><span class="dv-tag${r.mine ? " on" : ""}">${DV_MINE[r.mine] || DV_NOT_MINE}</span></div>`;
   }
+  // 收藏冊一件一枚圓印（企劃者 2026-11-03 從三張對比圖挑「乙 圓印」，原本是寫名字的方格）。圓裡一行放三個字：四個字以上的名字
+  // （玩家定名最多六個字）折成兩行、前一行多一個字，不縮字（店面字級下限 12px）；三個字以內一行
+  function divineSealHtml(name) {
+    const chars = [...String(name)];
+    if (chars.length <= 3) return esc(name);
+    const cut = Math.ceil(chars.length / 2);
+    return `${esc(chars.slice(0, cut).join(""))}<br>${esc(chars.slice(cut).join(""))}`;
+  }
   // 這一季打出的那一格是 dv-now，不是 now：江湖頁「剛剛」那張卡的 .now 沒加範圍、帶淡入動畫，格子掛上它每次重畫都淡入一次
   function divineCellHtml(cell) {
     if (!cell.forged || !cell.id || !cell.name) return `<span class="dv-cell unknown">${DV_UNKNOWN}</span>`;
-    return `<button class="dv-cell${cell.have ? " have" : ""}${cell.now ? " dv-now" : ""}${S.divinePick === cell.id ? " on" : ""}" data-act="dv-cell" data-id="${esc(cell.id)}">${esc(cell.name)}</button>`;
+    return `<button class="dv-cell${cell.have ? " have" : ""}${cell.now ? " dv-now" : ""}${S.divinePick === cell.id ? " on" : ""}" data-act="dv-cell" data-id="${esc(cell.id)}">${divineSealHtml(cell.name)}</button>`;
   }
   // 點著那一格在神器譜（見聞・榜單的那一張，/api/boards）裡的那一行：「第 N 季・劍・屬快・原品在甲手上」；還沒抓到、找不到是 null
   function divineBookLine(id) {

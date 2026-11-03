@@ -3627,7 +3627,8 @@ svg.fig .blade.bow { stroke-width: 3; }
 .shop-layer .rk-btn small { font-size: 0.75em; font-weight: 400; opacity: 0.9; }
 .shop-layer .rk-btn:disabled { opacity: 0.6; }
 /* 神器頁（3.8）：架上頁鐵匠那一句底下一行連過去；上半「江湖已見」一件一列（你手上有的那一枚標籤亮），鑄譜上有、還沒人打出的虛線框；
-   下半收藏冊一件一格（375 寬一排四格、電腦寬五格）：你有的亮、這一季打出的框粗、點著的外圈一道，沒人打出過的「？」虛線、淡 */
+   下半收藏冊一件一枚圓印（企劃者 2026-11-03 挑「乙 圓印」，原本是方格）：一排五枚，你有的亮、這一季打出的框粗、點著的外圈一道，
+   沒人打出過的「？」虛線、淡。圓寫 em（電腦寬跟著放大），4.4 倍字級裝得下三字兩行（六個字的定名）；欄比圓窄（320 寬）就照欄寬 */
 /* 左右邊照鐵匠那一句（.shop-line）：手機 14px，電腦寬對齊遊戲那一欄（50% − 306px 在手機上是負的，max 取 14px，不必另開 641px 的 media） */
 .shop-layer .dv-link { display: block; width: auto; margin: 0 max(14px, calc(50% - 306px)) 4px; padding: 6px 10px; border: 1px solid #6b4a2e; border-radius: 8px;
   background: rgba(242, 196, 106, 0.06); color: #f2c46a; font: 0.87em/1.4 var(--serif); text-align: left; cursor: pointer; }
@@ -3641,9 +3642,9 @@ svg.fig .blade.bow { stroke-width: 3; }
 .shop-layer .dv-who small, .shop-layer .dv-row.solved small { font-size: 0.8em; color: #c9b28a; }
 .shop-layer .dv-tag { flex: none; padding: 2px 8px; border: 1px solid #6b4a2e; border-radius: 10px; font-size: 0.8em; color: #a08a6a; white-space: nowrap; }
 .shop-layer .dv-tag.on { border-color: #f2c46a; background: #f2c46a; color: #1e1510; }
-.shop-layer .dv-album { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.4em, 1fr)); gap: 6px; align-items: start; } /* 格子（鈕與「？」）一樣高：鈕不跟著拉、不帶通用的下邊距 */
-.shop-layer .dv-cell { display: flex; align-items: center; justify-content: center; min-height: 3.2em; margin: 0; padding: 4px; border: 1px solid #6b4a2e;
-  border-radius: 8px; background: rgba(43, 26, 16, 0.6); color: #c9b28a; font: 0.8em/1.3 var(--serif); text-align: center; opacity: 0.6; }
+.shop-layer .dv-album { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px 6px; justify-items: center; align-items: center; } /* 印（鈕與「？」）一樣大：鈕不跟著拉、不帶通用的下邊距 */
+.shop-layer .dv-cell { display: flex; align-items: center; justify-content: center; width: min(4.4em, 100%); min-height: 0; aspect-ratio: 1; margin: 0; padding: 2px;
+  border: 1px solid #6b4a2e; border-radius: 50%; background: rgba(43, 26, 16, 0.6); color: #c9b28a; font: 0.8em/1.25 var(--serif); text-align: center; opacity: 0.6; }
 .shop-layer button.dv-cell { cursor: pointer; }
 .shop-layer .dv-cell.have { opacity: 1; color: #f2e5c6; border-color: #b7862b; background: rgba(242, 196, 106, 0.14); }
 .shop-layer .dv-cell.dv-now { border-width: 2px; border-color: #f2c46a; } /* 不叫 .now：江湖頁那一條沒加範圍、帶淡入動畫 */

@@ -200,6 +200,51 @@ def test_no_album_cell_class_hits_a_site_wide_rule():
     assert ".shop-layer .dv-cell.dv-now {" in (server.WEB / "style.css").read_text(encoding="utf-8")
 
 
+# ── 收藏冊的樣子：企劃者 2026-11-03 從三張對比圖挑「乙 圓印」（原本做的是寫名字的方格）──
+
+
+def test_the_album_is_round_seals_five_a_row():
+    """一排五枚圓印；圓的大小寫 em（電腦寬跟著店面字級放大），字級不低於店面的下限（0.8em＝手機 12px）；
+    有的亮、這一季打出的框粗、點著的外圈一道、沒人打出過的「？」虛線淡（照舊那幾個 class）。"""
+    import re
+
+    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    album = re.search(r"\.shop-layer \.dv-album \{([^}]*)\}", css)
+    assert album and "grid-template-columns: repeat(5, minmax(0, 1fr))" in album.group(1) and "justify-items: center" in album.group(1)
+    cell = re.search(r"\.shop-layer \.dv-cell \{([^}]*)\}", css)
+    assert cell and "border-radius: 50%" in cell.group(1) and "aspect-ratio: 1" in cell.group(1)
+    size = re.search(r"width: min\(([0-9.]+)em, 100%\)", cell.group(1))
+    font = re.search(r"font: ([0-9.]+)em/", cell.group(1))
+    assert size and font and float(font.group(1)) >= 0.8  # 店面字級最低 12px（FB-305）
+
+
+def test_a_long_name_folds_into_two_lines_in_its_seal():
+    """圓裡一行放三個字：四個字以上的名字折成兩行（前一行多一個字），不縮字；三個字以內照舊一行、不多任何標記。
+    名字照伺服器那一格給的（定名或譜名），網頁只決定在哪裡折。"""
+    c, w = _divine_ctx()
+    m = _shop_of(_smith(c, w, "甲"))
+    cells = m["shop"]["divine"]["collected"]["cells"]
+    names = ["寒星", "玄晶劍", "斷水流雲", "斷水流雲客", "千峰暮雪孤鴻"]
+    for cell, name in zip(cells, names):
+        cell.update({"id": f"wd_{len(name)}", "name": name, "forged": True})
+    page = _layer(_page(m))
+    want = {"寒星": "寒星", "玄晶劍": "玄晶劍", "斷水流雲": "斷水<br>流雲", "斷水流雲客": "斷水流<br>雲客", "千峰暮雪孤鴻": "千峰暮<br>雪孤鴻"}
+    for name, html in want.items():
+        assert f'data-id="wd_{len(name)}">{html}</button>' in page
+
+
+def test_a_six_character_divine_name_folds_in_the_real_album():
+    """真的引擎：原品定名六個字（玩家取名最多六個字，naming.NAME_MAX_CHARS），收藏冊那一枚折成三字兩行。"""
+    from tianxia import forge_secrets
+
+    c, w = _divine_ctx()
+    jia = _smith(c, w, "甲")
+    _forge_sword(c, w, jia)
+    assert w.name_divine(forge_secrets.key_for(SWORD), "甲", "千峰暮雪孤鴻") is None
+    page = _layer(_page(_shop_of(jia)))
+    assert f'data-act="dv-cell" data-id="{SWORD}">千峰暮<br>雪孤鴻</button>' in page
+
+
 def test_the_divine_tab_comes_last_and_has_no_weapon_armor_switch():
     c, w = _divine_ctx()
     m = _shop_of(_smith(c, w, "甲"))
