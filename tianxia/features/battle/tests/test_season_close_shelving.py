@@ -84,6 +84,23 @@ def test_the_admin_closing_the_season_shelves_the_showdown_and_the_siege():
     _got_the_note(game, NOW + 10)
 
 
+def test_the_first_poll_after_the_season_ended_shelves_the_showdown_and_the_siege():
+    """季自然收了、還沒人推過：第一個輪詢的人（這裡是攻城的參戰者）那一下兩場都收兵（battle_status 季收了那一支），攻城那一則當場補到
+    自己手上。"""
+    game, _ = _game()
+    sid = _siege(game)
+    bid = _showdown(game)
+    game.state.world.ended = True
+
+    assert game._battle_status(tick=True) is None
+
+    assert game.world.get_sieges() == [] and game.world.get_battle() is None
+    at = game.state.world.time
+    _shelved(game, bid, at)
+    _shelved(game, sid, at)
+    assert any(battle_instance.UNFINISHED_TITLE in e.title for e in game.state.journal)
+
+
 @pytest.mark.parametrize("with_showdown", [False, True], ids=["只有攻城", "決戰與攻城"])
 def test_opening_the_next_season_shelves_what_the_natural_end_left_at_that_seasons_time(with_showdown):
     game, admin = _game()
