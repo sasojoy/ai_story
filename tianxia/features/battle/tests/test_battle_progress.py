@@ -5,6 +5,8 @@
 - 序章裡沒有戰場（battle_for_me，FB-113）：站在草廬、序章還沒走完的人看不到那一場，出了草廬就看得到。
 - 收場（apply_battle_outcome）：天下大事多一則「<決戰>論功：」（merit_line），時間到了在等前一場打完的那一場一收場就開（open_waiting_showdown）；
   不在時刻表上的決戰（黃巾決戰）結果的世界旗標記立旗的那一刻（apply_outcome_trends_and_flags）。
+- 搬之前就沒有測試守、連 slow 也抓不到的三處（審查 nit；base 的寫法一樣）：只剩掛機的人沒出手時替他代選（fill_idle_actions，FB-173）、
+  季收了第一個輪詢的參戰者收兵那一下當場補到自己手上（shelve_unfinished_battle 最後那一行）、龍頭上陣那一行寫「敗走」（generals.lineup）。
 """
 from __future__ import annotations
 
@@ -111,6 +113,62 @@ def test_the_close_names_the_first_merit_and_opens_the_showdown_waiting_for_it()
     nxt = game.world.get_battle()
     assert nxt is not None and nxt.battle_id == WAITING and nxt.phase == "muster"  # 一收場就開排隊的那一場
     assert WAITING not in season.showdowns_waiting
+
+
+def test_a_round_does_not_wait_for_an_idler_and_holds_for_him():
+    """只剩掛機的人沒出手：其他人送齊就結算，掛機的人照逾時代為固守（advance_battle_round 的 fill_idle_actions，FB-173）。"""
+    a = _game("甲客")
+    b = _game("乙客", world=a.world)
+    open_showdown(a.world, a.content, BATTLE, a.now)
+    for g in (a, b):
+        g.choose("battle:join:guan")
+        if any(o.id == "battle:escort:none" for o in g.options()):
+            g.choose("battle:escort:none")
+    a.world.mutate_battle(lambda x: setattr(x, "muster_deadline_real", -1.0))
+    a.options()
+    definition = a.content.battles[BATTLE]
+    move = next(o.id for o in a.options() if o.enabled and o.id.startswith("battle:act:"))
+    a.choose(move)  # 乙不出手：第一回合等到逾時，乙被代為固守、成了掛機的人
+    a.now = a.world.get_battle().round.opened_real + definition.round_seconds + 1
+    a.options()
+    battle = a.world.get_battle()
+    assert battle.round_number == 1 and battle.participants["乙客"].idle_streak == 1
+    assert battle.participants["乙客"].held_rounds == 1
+
+    a.choose(next(o.id for o in a.options() if o.enabled and o.id.startswith("battle:act:")))  # 甲一出手就結算，不等乙
+
+    battle = a.world.get_battle()
+    assert battle.round_number == 2
+    assert battle.participants["乙客"].held_rounds == 2  # 這一回合也替他代為固守
+
+
+def test_the_first_poll_after_the_season_ended_shelves_the_showdown_and_tells_the_poller():
+    """季收了、還沒人推過那一場：第一個輪詢的參戰者那一下收兵（showdown_status 季收了那一支），當場就補到自己手上
+    （shelve_unfinished_battle 最後補給自己，不必等下一次同步）。"""
+    game = _game()
+    battle = _joined(game)
+    game.state.world.ended = True
+
+    assert game._battle_status(tick=True) is None
+
+    assert game.world.get_battle() is None
+    ended = game.world.ended_battle(battle.record_id)
+    assert ended is not None and ended.unfinished
+    assert any("未分勝負" in e.title for e in game.state.journal)
+
+
+def test_the_lineup_marks_a_routed_commander():
+    """龍頭上陣那一行（generals.lineup）：還在陣上的寫氣血，敗走的寫「敗走」。"""
+    from tianxia.features.battle import generals
+
+    game = _game()
+    open_showdown(game.world, game.content, BATTLE, game.now)
+    battle = game.world.get_battle()
+    assert battle.commanders  # 開集結那一刻派人上陣
+    first = battle.commanders[0]
+    assert "敗走" not in generals.lineup(battle, first.faction) and f"{first.name}（氣血" in generals.lineup(battle, first.faction)
+    first.fallen_round = 1
+    assert f"{first.name}（敗走）" in generals.lineup(battle, first.faction)
 
 
 def test_a_plain_showdown_sets_its_world_flags_with_the_time():
