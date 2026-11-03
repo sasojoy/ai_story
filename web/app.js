@@ -5837,6 +5837,9 @@
         case "mall-close": closeMall(); break;
         case "mall-tab": await mallTabTo(el.dataset.tab); break;
         case "mall-pick": mallPick(el.dataset.id); break;
+        case "mall-cat": mallCatTo(el.dataset.cat); break; // 貨架的分類
+        case "look-sub": lookSubTo(el.dataset.sub || ""); break; // 形象那一頁裡的自建形象、絕招那一頁（空的回形象）
+        case "prompt-ex": promptExample(el.dataset.for || "", el.dataset.text || ""); break; // 想不到就點：把例句填進框裡
         case "mall-qty": { // 購買確認那張紙的數量：同一件、同一個編號重畫
           const now = S.mallAskNow, it = now && S.mallData && S.mallData.items.find((one) => one.id === now.id);
           if (it) mallAsk(it, S.mallData, Number(el.dataset.n), now.ref);
