@@ -5070,7 +5070,9 @@ class TrainScenario(Scenario):
             if not self.place("官甲", loc):
                 return
             self.main("官甲")
-            day = game_day(self.c, self.chars.load("官甲").world)
+            # 這一季此刻是第幾天：讀全服的季（同 Game.for_world）。角色檔裡的 world 是殘根（time 0、season21 的章 False），
+            # 照它算永遠是第 1 天——season21 開季那天是第 7 天，並肩那一支在 season21 一次都走不到（修正輪）
+            day = game_day(self.c, self.world.get_season())
             self.edit("官甲", lambda p, plan=plan, day=day: setattr(p, "parley_backing", ParleyBacking(figure=figure, region=None, day=day, plan=plan)))
             self.train("官甲", f"並肩出陣（打法 {plan}）")
 
