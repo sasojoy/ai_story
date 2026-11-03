@@ -127,6 +127,7 @@ from .world_state import SealDuel, SealSide, WorldStateStore, season_length_days
 # core-events：事件檢定是核心本體（tianxia/core/event_check.py，全部拆包第 16 批）。排在上面的 import 都做完之後：那一份 import 的模組這時都已經
 # 載入，載入的先後一個都不變；模組層的四個名字照名字拿回來（server、假人、測試 `from tianxia.engine import FREE_TEXT_OPTION` 照舊）
 from .core import event_check  # 事件檢定的本體（Game 上留一行委派）
+from .core import arena_ranks, duel_base  # 擂台的名次與稱號、單挑底層（全部拆包第 12 批：留核心；擂台、頭目戰本身在單挑包）
 from .core.event_check import EVIL_ANNAL, FREE_TEXT_OPTION, FreeTextOutcome, FreeTextRequest
 
 HOUR = 3600
@@ -1182,7 +1183,7 @@ class Game:
         """第 2 週才開的功能裡這一季真的有的（減法季 6.6；week_unlock.WEEK2 的順序）：擂台、懸賞榜。
         紀錄那一行、本週卡那一句照它列；一樣都沒有是空的。"""
         s, c = self.state, self.content
-        have = {"arena": arena.on(c), "bounties": bounties.active(s, c)}
+        have = {"arena": arena_ranks.on(c), "bounties": bounties.active(s, c)}
         return [name for key, name in week_unlock.WEEK2.items() if have.get(key)]
 
     def _week_unlock_tick(self) -> None:
@@ -1311,7 +1312,7 @@ class Game:
             return opts
         if s.player.duel is not None:  # 單人頭目戰：三招與抽身；放手一搏走輸入框（duel_free_text_prompt），選單上沒有
             held = tactics.locks(s.player.duel.bout).no_moves  # 本命戰法：卸勁出不了強攻、只攻不守出不了固守
-            return [Option(id=f"duel:{move}", label=duel_rules.move_label(move) + (tactics.lock_note(move) if move in held else ""),
+            return [Option(id=f"duel:{move}", label=duel_base.move_label(move) + (tactics.lock_note(move) if move in held else ""),
                            enabled=move not in held) for move in MOVES] + [
                 Option(id=DUEL_FLEE, label="抽身退走（不分勝負，掉的氣血不回）"),
             ]
@@ -1320,7 +1321,7 @@ class Game:
             return taken
         if s.player.arena is not None:  # 擂台（tianxia/arena.py）：三招與認輸；放手一搏同頭目戰走輸入框
             held = tactics.locks(s.player.arena.bout).no_moves
-            return [Option(id=f"arena:{move}", label=duel_rules.move_label(move) + (tactics.lock_note(move) if move in held else ""),
+            return [Option(id=f"arena:{move}", label=duel_base.move_label(move) + (tactics.lock_note(move) if move in held else ""),
                            enabled=move not in held) for move in MOVES] + [
                 Option(id=ARENA_YIELD, label=arena.YIELD),
             ]
@@ -6850,7 +6851,7 @@ class Game:
             return [Option(id="seal:waiting", label=label, enabled=False)]
         late = f"（{problem}）" if problem else ""
         held = tactics.locks(duel.bout, seal_duel.BOUT_SIDE[who]).no_moves  # 本命戰法：卸勁、只攻不守
-        return [Option(id=f"seal:{m}", label=duel_rules.move_label(m) + late + (tactics.lock_note(m) if m in held else ""),
+        return [Option(id=f"seal:{m}", label=duel_base.move_label(m) + late + (tactics.lock_note(m) if m in held else ""),
                        enabled=problem is None and m not in held) for m in MOVES]
 
     def _seal_act(self, move: str) -> list[str]:
@@ -10803,7 +10804,7 @@ class Game:
                 return self._log(request)
         if rate is None:
             verdict = battle_instance.assess_gamble(
-                self._quick_client(), duel_rules.Scene(request.title, request.scene), request.faction_name, request.text, request.name,
+                self._quick_client(), duel_base.Scene(request.title, request.scene), request.faction_name, request.text, request.name,
                 setting=seal_duel.SETTING, place=seal_duel.PLACE, target=request.target, sex=request.sex,
             )
             rate, stories = verdict.rate, (verdict.win, verdict.lose)
@@ -14044,7 +14045,7 @@ class Game:
         past = self.world.chronicle_before(number)
         parts = [f"### 第 {number} 季（本季）\n\n{current}" if past else current]
         parts += [f"### 第 {n} 季\n\n{_timeline(entries, calendar.day_text)}" for n, entries in past]  # 上一季照舊寫「第N天」
-        champs = arena.champions([(number, [e.text for e in self.state.world.chronicle])]
+        champs = arena_ranks.champions([(number, [e.text for e in self.state.world.chronicle])]
                                  + [(n, [e.text for e in entries]) for n, entries in past])  # 歷屆擂主（跨季）
         if champs:
             parts.append(champs)

@@ -24,6 +24,9 @@ from . import battle_instance, tactics
 from . import prologue as prologue_rules
 from . import duel as duel_rules
 from .characters import name_key
+from .core.arena_ranks import (  # noqa: F401  擂台的名次與稱號留在核心當查詢服務（全部拆包第 12 批）：同一批函式物件與字，arena.title_of 這些照舊拿得到
+    CHAMPION, CHAMPION_HEAD, CHAMPIONS_TITLE, TITLES, board, champions, entry_of, ladder, on, record_text, title_for, title_of,
+)
 from .models import MOVES, ArenaTuning, Content, DuelTuning
 from .state import ArenaEntry, ArenaFight, ArenaSide, GameState, PlayerState, WorldState
 
@@ -31,7 +34,6 @@ DAY = 86400
 WIN_TIERS = ("大勝", "險勝")
 SCORES = {"大勝": 1.0, "險勝": 1.0, "僵持": 0.5, "落敗": 0.0}
 FLIP = {"大勝": "落敗", "險勝": "落敗", "僵持": "僵持", "落敗": "險勝"}  # 守的人那一邊（挑的人落敗時守的人照氣勢再分，見 defender_tier）
-TITLES = ((1, "天下第一"), (3, "擂台三甲"), (10, "擂台十傑"))  # （到第幾名, 稱號）：PM 2026-10-14 定，字句不必問 Joy
 
 JOIN_ID = "arena:join"
 BACK_ID = "arena:back"
@@ -77,9 +79,6 @@ HIGHLIGHT = "擂台上最令人印象深刻的一幕：{name}放手一搏——�
 DEFENDED = "{name}上擂台挑你留下的分身。"
 UNSETTLED = "這一季收了，擂台上沒打完的那一場不算。"
 SEASON_TOP = "本季擂台前三名：{names}。"
-CHAMPION = "本季擂主：{name}。"  # 江湖史跨季保留；歷屆擂主照這個開頭找（champions）
-CHAMPION_HEAD = "本季擂主："
-CHAMPIONS_TITLE = "### 歷屆擂主"
 WAGE = "擂台第 {rank} 名（{title}）的俸發下來了：銀兩 +{silver}、名望 +{fame}。"
 PRIZE = "本季擂台第 {place} 名：名望 +{fame}。"
 
@@ -97,37 +96,12 @@ def looks_view(looks: list[str], skins: list[str] | None = None, fx: list[str] |
     return {"me": me, "foe": foe, "me_look": me_look, "foe_look": foe_look, "me_fx": me_fx, "foe_fx": foe_fx}
 
 
-def on(content: Content) -> bool:
-    return content.config.arena.enabled
-
-
 def here(state: GameState, content: Content) -> bool:
     """此刻打得開擂台：開關開著、季在跑、不在序章、這一季走到開擂台的那一週（減法季 6.6 第 2 週，week_unlock.open；規則關著一律開）。
     哪裡都行（路上、閉關中也行；PM 轉述 Joy 2026-10-14「不一定要鎖死在城鎮」）。"""
     from . import week_unlock  # week_unlock → rules → … 繞回來，呼叫時才取
 
     return on(content) and not state.world.ended and not prologue_rules.active(state, content) and week_unlock.open(state, content, "arena")
-
-
-def entry_of(world: WorldState, name: str) -> ArenaEntry | None:
-    return world.arena.get(name_key(name))
-
-
-def ladder(world: WorldState) -> list[ArenaEntry]:
-    """守擂的人照名次排（第一名在前）。"""
-    return sorted(world.arena.values(), key=lambda e: (e.rank, e.joined, name_key(e.name)))
-
-
-def title_of(world: WorldState, name: str) -> str | None:
-    """此刻的稱號（TITLES）：沒報名、十名以外是 None。"""
-    entry = entry_of(world, name)
-    if entry is None:
-        return None
-    return next((title for last, title in TITLES if entry.rank <= last), None)
-
-
-def title_for(rank: int) -> str | None:
-    return next((title for last, title in TITLES if rank <= last), None)
 
 
 def pair_key(me: str, foe: str) -> str:
@@ -223,22 +197,6 @@ def swap(mine: ArenaEntry, foe: ArenaEntry) -> bool:
     return True
 
 
-def record_text(entry: ArenaEntry) -> str:
-    if not entry.bouts:
-        return "還沒打過"
-    text = f"{entry.wins} 勝 {entry.losses} 負" + (f" {entry.draws} 和" if entry.draws else "")
-    return text + (f"・連勝 {entry.streak}" if entry.streak >= 2 else "")
-
-
-def board(world: WorldState, cfg: ArenaTuning) -> list[dict]:
-    """擂台榜（擂台那一頁、見聞「榜單」分頁）：名次、名號、稱號、勝、負、和、連勝。"""
-    return [
-        {"rank": e.rank, "name": e.name, "title": title_for(e.rank), "wins": e.wins, "losses": e.losses, "draws": e.draws,
-         "streak": e.streak}
-        for e in ladder(world)[:cfg.board_size]
-    ]
-
-
 def standing(world: WorldState, name: str, cfg: ArenaTuning) -> list[str]:
     """打開擂台時的頭一句：你的名次、稱號與戰績，加上前三名。"""
     me = entry_of(world, name)
@@ -271,16 +229,6 @@ def roll_day(world: WorldState, cfg: ArenaTuning, today: int) -> bool:
                 e.wages.append([today, e.rank])
     world.arena_day = today
     return True
-
-
-def champions(chronicles: list[tuple[int, list[str]]]) -> str:
-    """歷屆擂主（江湖史底下一段，跨季）：各季江湖史裡「本季擂主：」那一句。chronicles 是（季, 那一季江湖史的句子），新的一季在前。"""
-    rows = []
-    for number, texts in chronicles:
-        for text in texts:
-            if text.startswith(CHAMPION_HEAD):
-                rows.append(f"- 第 {number} 季：{text.removeprefix(CHAMPION_HEAD).rstrip('。')}")
-    return f"{CHAMPIONS_TITLE}\n\n" + "\n".join(rows) if rows else ""
 
 
 def strength_words(content: Content, mine: float, theirs: float) -> str:

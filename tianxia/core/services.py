@@ -132,12 +132,19 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._battle_ult()`：放手一搏送出那一刻身上的絕招（move、name、look、weapon；沒穿、沒有導演稿是 None）。決戰包送出放手一搏時記進
   `BattleRound.ults`，回合首功從這裡挑（Joy 2026-11-03；純展示，不動數字）
 
+# bout（全部拆包第 12 批；主人：單挑包。本體在 tianxia/features/bout/，Game 留一行委派回答別的包）
+- `ctx._boss_ready()`（此刻在這裡遇得上的頭目：不在序章、沒在打、不在冷卻、這一隻的次數還沒用完；沒有是 None）、`ctx._boss_face(boss)`
+  （這一隻對你露的那一面的名字，照陣營）、`ctx._duel_start(boss)`（撞上頭目、開打）：探索包的出門一趟撞上頭目時問。原本列在三、過渡
+  explore 那一段（主人寫頭目戰，`_boss_ready` 那時是探索包直接 import `tianxia.duel` 叫 `available`），單挑成包時照總表第六節第 4 條改成查詢服務
+- `ctx.arena_look()`、`ctx.arena_move()`（主人：形象包）：擂台報名、開打那一刻記這個人穿哪一套、出招疊哪一張光效（擂台搬進單挑包之後由包經 ctx
+  問；`tests/battle/test_arena.py` 換掉 `Game.arena_look`）
+
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
 explore（主動搬六包第 3＋4 批加的這一段）
-- `ctx._boss_face(boss)`、`ctx._home_gather(loc, mids)`、`ctx._sense_here(loc, rng)`、`ctx._wild_foes(loc)`、`ctx._practice_tier(loc)`
-  （探索三選一：企劃者 10/31 定不搬、留在 engine——批次表第 9 批不做，三選一整套拿掉之前一直掛在 Game 上）
-- `ctx._story_begin(strand)`（一條線）、`ctx._duel_start(boss)`（頭目戰）
+- `ctx._home_gather(loc, mids)`、`ctx._sense_here(loc, rng)`、`ctx._wild_foes(loc)`、`ctx._practice_tier(loc)`
+  （探索三選一：企劃者 10/31 定不搬、留在 engine——批次表第 9 批不做，三選一整套拿掉之前一直掛在 Game 上；`_boss_face` 第 12 批改成二、查詢服務）
+- `ctx._story_begin(strand)`（一條線；`_duel_start` 第 12 批改成二、查詢服務）
 - 收尾的掉落：`ctx._legend_find(rng)`（破境丹）、`ctx._seal_find(loc_id)`（玉璽碎片）——照原本的順序在原位叫，不收成事件（同一串的
   回體丹 `_pill_find`、殘譜 `_scrap_find` 在一、共用服務）
 - `ctx._outing_plan(loc)`、`ctx.outing_plan()`（探索包自己的委派：測試換掉 game._outing_plan 之後按探索，包裡經 ctx 叫，換掉的才打得到；
@@ -179,6 +186,10 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 - `ctx._train_squad_ids(loc)`（出陣包行動列那一格的序章雪恥：此地有沒有遊歷的對手；主人：舊遊歷與出陣共用的對手池，總表第 17 批）
 - `ctx._fighting(battle, definition)`（決戰包蓋在畫面上的戰場要不要整個取代自己眼前的事：開打了在場上的人；主人：決戰「打」那一半，
   第 7、8 批搬進決戰包之後改成包裡直接叫）
+
+# bout（全部拆包第 12 批：單挑包自己的委派，被測試或腳本換掉的，包裡經 ctx 叫才打得到；呼叫端改完就拿掉）
+- `ctx._arena_bare()`（擂台挑人的身手不含玉璽碎片的那一份；`tests/seal/test_seal_revamp_hidden.py` 換掉 `Game._arena_bare`）、
+  `ctx._duel_finish(tier, line)`（頭目戰收場；`scripts/sim_season_one.py` 換掉 `Game._duel_finish` 數頭目戰打成怎樣）
 
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 

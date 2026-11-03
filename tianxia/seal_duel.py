@@ -19,7 +19,7 @@ import re
 from typing import NamedTuple
 
 from . import battle_instance, seal, tactics
-from . import duel as duel_rules
+from .core import duel_base as duel_rules  # 單挑底層（全部拆包第 12 批進核心：頭目戰、擂台在單挑包，奪璽單挑之後進玉璽包，不能 import 單挑包）
 from .battle_instance import CAVALRY_MOVES, DEFAULT_FREE_TEXT_SUCCESS_RATE, BattleParticipant
 from .models import MOVES, Content, DuelTuning, SealTuning
 from .world_state import SealDuel, SealEvent, SealSide, SharedWorldState
