@@ -461,11 +461,26 @@
     return `<div class="g-merit"><p class="g-mtitle">本場戰功</p><div class="g-mcols">${col(g.left, b.left)}${col(g.right, b.right)}</div>${me}</div>`;
   }
   // 場景卡裡把戰局條放在戰場名字那一行底下（集結時名字那一行連著投效的鈕，見 musterScene）；收成一行的觀戰（battleScene）不放
-  function withGauge(html, g) {
+  function withGauge(html, g, extra = "") {
     if (!g || html.startsWith('<p class="battle-fold"')) return html;
     const muster = html.startsWith('<div class="muster-head">') ? html.indexOf("</div></div>\n") : -1;
     const cut = muster >= 0 ? muster + "</div></div>\n".length : html.startsWith("<p>") ? html.indexOf("</p>") + 4 : 0;
-    return html.slice(0, cut) + gaugeHtml(g) + html.slice(cut);
+    return html.slice(0, cut) + gaugeHtml(g) + extra + html.slice(cut);
+  }
+  // 決戰的回合 MVP（Joy 2026-11-03「每當一回合結束時，結算時有一個跳顯視窗華麗的展示絕招」）：伺服器挑好的 main.battle_mvp
+  // （剛結算完的那一回合才有）。新的一位第一次看到時跳出視窗演他的絕招（arena_scene.js 的 mvpPlay；看過的不再自己跳），
+  // 戰局條底下留一行：誰、哪一軍、絕招的名字，加一顆「再看一次」。只切 main.js 的網頁測試沒有 mvpPlay：照樣畫字、不跳
+  function battleMvpHtml(m) {
+    const v = m.battle_mvp, g = m.battle_gauge;
+    if (!v || !g) return "";
+    const names = {};
+    for (const w of [g.left, g.right]) if (w && w.id) names[w.id] = { name: w.name, mine: !!w.mine };
+    const side = names[v.faction];
+    const who = side ? `（${esc(side.name)}${side.mine ? "・我方" : ""}）` : "";
+    const move = v.move_name ? `・絕招「${esc(v.move_name)}」` : "";
+    if (typeof mvpPlay === "function") setTimeout(() => mvpPlay(v, names), 0); // 整頁畫完再跳（視窗掛在 body 上）
+    return `<div class="battle-mvp${side && side.mine ? " mine" : ""}"><span class="mvp-head">★ 第 ${v.round | 0} 回合首功　<b>${esc(v.name)}</b>${who}${move}</span>`
+      + `<button class="btn small ghost" data-act="mvp-replay">再看一次</button></div>`;
   }
   // 攻城戰畫面（領地爭奪第三批 A，企劃者挑甲）：沿用決戰畫面，最上面那一行換成一條「攻城・地點｜守方：某某（或守將）」（main.siege，
   // engine.siege_banner；三方混戰、轉回單方、兩軍相爭的字是伺服器給的）。引擎場景第一行是 **攻城・地點**：把那一行換成這一條（不多佔一行；
@@ -1524,7 +1539,7 @@
     const scene = masterTalks ? ""
       : m.on_road
         ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
-        : `<section class="card scene${m.art ? " has-art" : ""}${tierClass(m)}">${m.art ? sceneArtHtml(m.art) : ""}${tierTag(m)}${siegeStrip(withGauge(musterScene(m, roundBlocks(battleScene(sceneUnderArt(m)), m.battle_gauge)), m.battle_gauge), m.siege)}${myTurn ? "" : people}</section>`;
+        : `<section class="card scene${m.art ? " has-art" : ""}${tierClass(m)}">${m.art ? sceneArtHtml(m.art) : ""}${tierTag(m)}${siegeStrip(withGauge(musterScene(m, roundBlocks(battleScene(sceneUnderArt(m)), m.battle_gauge)), m.battle_gauge, battleMvpHtml(m)), m.siege)}${myTurn ? "" : people}</section>`;
     const peopleAfter = myTurn && people && !masterTalks && !m.on_road ? `<section class="card people-after">${people}</section>` : "";
     const week = peekWeek(m);
     // 本週卡（減法季批 1，整合設計 6.1）排在最上面、「剛剛」之前（在路上排到選項底下，FB-055）：吃掉以前那一排小標。來信到了換成來信（回了信或收起來才換回本週卡）；

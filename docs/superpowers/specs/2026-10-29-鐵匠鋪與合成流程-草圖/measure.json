@@ -1,0 +1,863 @@
+{
+ "1280": {
+  "scroll": true,
+  "width": 1280,
+  "docW": 1265,
+  "bodyW": [
+   1235,
+   1235
+  ],
+  "rows": [
+   {
+    "name": "【鐵拳套】",
+    "nb": 8,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     148,
+     148,
+     148,
+     148
+    ],
+    "rowH": 133
+   },
+   {
+    "name": "【裂空】",
+    "nb": 12,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     148,
+     148,
+     148,
+     148
+    ],
+    "rowH": 133
+   },
+   {
+    "name": "【仿・寒星】",
+    "nb": 11,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     148,
+     148,
+     148,
+     148
+    ],
+    "rowH": 133
+   },
+   {
+    "name": "【斬馬刀】",
+    "nb": 11,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     148,
+     148,
+     148,
+     148
+    ],
+    "rowH": 133
+   },
+   {
+    "name": "【蛇矛】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     148,
+     148,
+     148,
+     148
+    ],
+    "rowH": 133
+   },
+   {
+    "name": "【哨棒】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     148,
+     148,
+     148,
+     148
+    ],
+    "rowH": 133
+   },
+   {
+    "name": "【柳葉刀】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     148,
+     148,
+     148,
+     148
+    ],
+    "rowH": 133
+   },
+   {
+    "name": "【鐵胎弓】",
+    "nb": 10,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     148,
+     148,
+     148,
+     148
+    ],
+    "rowH": 133
+   }
+  ]
+ },
+ "375淺": {
+  "scroll": true,
+  "width": 375,
+  "docW": 375,
+  "bodyW": [
+   375,
+   375
+  ],
+  "rows": [
+   {
+    "name": "【鐵拳套】",
+    "nb": 8,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     81,
+     81,
+     81,
+     81
+    ],
+    "rowH": 109
+   },
+   {
+    "name": "【裂空】",
+    "nb": 12,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     81,
+     81,
+     81,
+     81
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【仿・寒星】",
+    "nb": 11,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     81,
+     81,
+     81,
+     81
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【斬馬刀】",
+    "nb": 11,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     81,
+     81,
+     81,
+     81
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【蛇矛】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     81,
+     81,
+     81,
+     81
+    ],
+    "rowH": 121
+   },
+   {
+    "name": "【哨棒】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     81,
+     81,
+     81,
+     81
+    ],
+    "rowH": 121
+   },
+   {
+    "name": "【柳葉刀】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     81,
+     81,
+     81,
+     81
+    ],
+    "rowH": 121
+   },
+   {
+    "name": "【鐵胎弓】",
+    "nb": 10,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     81,
+     81,
+     81,
+     81
+    ],
+    "rowH": 121
+   }
+  ]
+ },
+ "375淺-360": {
+  "scroll": true,
+  "width": 360,
+  "docW": 360,
+  "bodyW": [
+   360,
+   360
+  ],
+  "rows": [
+   {
+    "name": "【鐵拳套】",
+    "nb": 8,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     78,
+     78,
+     78,
+     78
+    ],
+    "rowH": 129
+   },
+   {
+    "name": "【裂空】",
+    "nb": 12,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     78,
+     78,
+     78,
+     78
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【仿・寒星】",
+    "nb": 11,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     78,
+     78,
+     78,
+     78
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【斬馬刀】",
+    "nb": 11,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     78,
+     78,
+     78,
+     78
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【蛇矛】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     78,
+     78,
+     78,
+     78
+    ],
+    "rowH": 121
+   },
+   {
+    "name": "【哨棒】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     78,
+     78,
+     78,
+     78
+    ],
+    "rowH": 121
+   },
+   {
+    "name": "【柳葉刀】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     78,
+     78,
+     78,
+     78
+    ],
+    "rowH": 121
+   },
+   {
+    "name": "【鐵胎弓】",
+    "nb": 10,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     78,
+     78,
+     78,
+     78
+    ],
+    "rowH": 121
+   }
+  ]
+ },
+ "375淺-320": {
+  "scroll": true,
+  "width": 320,
+  "docW": 320,
+  "bodyW": [
+   320,
+   320
+  ],
+  "rows": [
+   {
+    "name": "【鐵拳套】",
+    "nb": 8,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     68,
+     68,
+     68,
+     68
+    ],
+    "rowH": 129
+   },
+   {
+    "name": "【裂空】",
+    "nb": 12,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     68,
+     68,
+     68,
+     68
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【仿・寒星】",
+    "nb": 11,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     68,
+     68,
+     68,
+     68
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【斬馬刀】",
+    "nb": 11,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     68,
+     68,
+     68,
+     68
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【蛇矛】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     68,
+     68,
+     68,
+     68
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【哨棒】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     68,
+     68,
+     68,
+     68
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【柳葉刀】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     68,
+     68,
+     68,
+     68
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【鐵胎弓】",
+    "nb": 10,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     68,
+     68,
+     68,
+     68
+    ],
+    "rowH": 141
+   }
+  ]
+ },
+ "375深": {
+  "scroll": true,
+  "width": 375,
+  "docW": 375,
+  "bodyW": [
+   375,
+   375
+  ],
+  "rows": [
+   {
+    "name": "【鐵拳套】",
+    "nb": 8,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     81,
+     81,
+     81,
+     81
+    ],
+    "rowH": 109
+   },
+   {
+    "name": "【裂空】",
+    "nb": 12,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     81,
+     81,
+     81,
+     81
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【仿・寒星】",
+    "nb": 11,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     81,
+     81,
+     81,
+     81
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【斬馬刀】",
+    "nb": 11,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     81,
+     81,
+     81,
+     81
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【蛇矛】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     81,
+     81,
+     81,
+     81
+    ],
+    "rowH": 121
+   },
+   {
+    "name": "【哨棒】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     81,
+     81,
+     81,
+     81
+    ],
+    "rowH": 121
+   },
+   {
+    "name": "【柳葉刀】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     81,
+     81,
+     81,
+     81
+    ],
+    "rowH": 121
+   },
+   {
+    "name": "【鐵胎弓】",
+    "nb": 10,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     81,
+     81,
+     81,
+     81
+    ],
+    "rowH": 121
+   }
+  ]
+ },
+ "375深-360": {
+  "scroll": true,
+  "width": 360,
+  "docW": 360,
+  "bodyW": [
+   360,
+   360
+  ],
+  "rows": [
+   {
+    "name": "【鐵拳套】",
+    "nb": 8,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     78,
+     78,
+     78,
+     78
+    ],
+    "rowH": 129
+   },
+   {
+    "name": "【裂空】",
+    "nb": 12,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     78,
+     78,
+     78,
+     78
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【仿・寒星】",
+    "nb": 11,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     78,
+     78,
+     78,
+     78
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【斬馬刀】",
+    "nb": 11,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     78,
+     78,
+     78,
+     78
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【蛇矛】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     78,
+     78,
+     78,
+     78
+    ],
+    "rowH": 121
+   },
+   {
+    "name": "【哨棒】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     78,
+     78,
+     78,
+     78
+    ],
+    "rowH": 121
+   },
+   {
+    "name": "【柳葉刀】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     78,
+     78,
+     78,
+     78
+    ],
+    "rowH": 121
+   },
+   {
+    "name": "【鐵胎弓】",
+    "nb": 10,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     78,
+     78,
+     78,
+     78
+    ],
+    "rowH": 121
+   }
+  ]
+ },
+ "375深-320": {
+  "scroll": true,
+  "width": 320,
+  "docW": 320,
+  "bodyW": [
+   320,
+   320
+  ],
+  "rows": [
+   {
+    "name": "【鐵拳套】",
+    "nb": 8,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     68,
+     68,
+     68,
+     68
+    ],
+    "rowH": 129
+   },
+   {
+    "name": "【裂空】",
+    "nb": 12,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     68,
+     68,
+     68,
+     68
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【仿・寒星】",
+    "nb": 11,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     68,
+     68,
+     68,
+     68
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【斬馬刀】",
+    "nb": 11,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     68,
+     68,
+     68,
+     68
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【蛇矛】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     68,
+     68,
+     68,
+     68
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【哨棒】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     68,
+     68,
+     68,
+     68
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【柳葉刀】",
+    "nb": 9,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     68,
+     68,
+     68,
+     68
+    ],
+    "rowH": 141
+   },
+   {
+    "name": "【鐵胎弓】",
+    "nb": 10,
+    "nbSplit": [],
+    "btnRows": 1,
+    "clipped": [],
+    "btnW": [
+     68,
+     68,
+     68,
+     68
+    ],
+    "rowH": 141
+   }
+  ]
+ }
+}

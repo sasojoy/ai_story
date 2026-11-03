@@ -38,6 +38,7 @@
   const OUTING_WAIT = "路上碰到要選的事。";
   const OUTING_AFTER = "果";
   const OUTING_AFTER_HOLD = 2200; // 「果」寫出來之後停多久才接著走（毫秒）
+  const OUTING_GO_ON = "接著走 ›";
   const OUTING_CLOSE = "收起";
   const OUTING_AGAIN = "再走一趟";
   const OUTING_TIRED = "體力不夠再走 {n} 段，挑短一點的。";
@@ -125,7 +126,7 @@
     await busy(async () => {
       const r = await api("/api/do/outing", n ? { n } : {});
       const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-      if (n) { OW.shown = 0; OW.away = false; }
+      if (n) { OW.shown = 0; OW.away = false; OW.result = null; }
       S.wheelSel = null;
       applyMain(r.main);
       if (text) toast(text);
@@ -162,15 +163,31 @@
     }
     if (!OW.away && !OW.open) return;
     if (OW.open && (OW.cur || OW.tasks.length)) return; // 還在演
-    if (OW.waitKey && (trip.end || trip.can_go)) { outingAfter(); OW.hold = Date.now() + (OW.turbo ? 300 : OUTING_AFTER_HOLD); }
+    if (OW.waitKey && (trip.end || trip.can_go)) {
+      outingAfter();
+      OW.hold = Date.now() + (OW.turbo ? 300 : OUTING_AFTER_HOLD);
+      if (!trip.end) outingFoot(); // 選項馬上換成果那一則（走完了的那一則照舊進結算卡）
+    }
     if (trip.end) { OW.away = false; outingOpen(); return; }
     if (!trip.can_go) { outingFoot(); return; }
     // 「果」那一行先停一下讓人看清楚得失（Joy 10/31「很快就跳掉」），再接著走
     if (OW.hold > Date.now()) { if (!OW.holdT) OW.holdT = setTimeout(() => { OW.holdT = null; outingSync(); }, OW.hold - Date.now()); return; }
     OW.hold = 0;
+    OW.result = null;
     OW.going = true;
     OW.away = false;
     outingGo(0).finally(() => { OW.going = false; });
+  }
+
+  // 點畫面一下就接著走（Joy 2026-11-03「選完都要等 3～5 秒」：伺服器只花 0.1 秒，等的是「果」停的 2.2 秒與走到下一站的動畫）：
+  // 正在走就快轉到下一站（同「略過」）；「果」那一行停著的時候不等了，直接出發。不點的人照舊慢慢演
+  function outingHurry() {
+    if (OW.cur || OW.tasks.length) { OW.turbo = true; return; }
+    if (OW.hold > Date.now()) {
+      OW.hold = 0;
+      if (OW.holdT) { clearTimeout(OW.holdT); OW.holdT = null; }
+      outingSync();
+    }
   }
 
   // 要在江湖頁寫字或畫圖的選項（那個框只畫在江湖頁上）。隨口應對不在裡面：輸入框直接畫在這張卡上（outingChoiceHtml）
@@ -197,6 +214,15 @@
     const log = box.querySelector(".outing-log");
     log.appendChild(outingAfterRow(text, beat ? beat.after : ""));
     log.scrollTop = log.scrollHeight;
+    OW.result = { text, after: beat ? beat.after : "" }; // 選項那一塊先換成這一則（outingNowHtml），接著走時收起
+  }
+
+  // 選完了、停著讓人看的那幾秒：原本的選項一下子換成「果」這一則（大字、得失），底下一顆「接著走」從左到右填滿＝停多久，
+  // 填滿就自己走、點了馬上走（Joy 2026-11-03「果出現在屏幕下面滿不明顯」「選項閃的跟等待系統回應一模一樣，以為是卡住」）
+  function outingNowHtml(r, ms) {
+    return `<div class="outing-now" role="status"><p class="outing-now-head"><span class="k">${OUTING_AFTER}</span></p>
+      <p class="outing-now-text">${esc(r.text)}</p>${r.after ? outingLedgerHtml(r.after) : ""}
+      <button class="btn outing-now-go" data-act="outing-tap"><i class="outing-now-bar" style="animation-duration:${Math.max(0, ms)}ms"></i><span>${OUTING_GO_ON}</span></button></div>`;
   }
 
   // 「果」那一行：選完那件事的結果（一句）＋得失（伺服器記在那一段的 after，數字由引擎給）
@@ -229,7 +255,7 @@
       box.className = "outing-wrap";
       box.innerHTML = `<div class="outing-card" role="dialog" aria-label="走一趟">
         <p class="outing-head"><b class="outing-place"></b><span class="outing-step"></span></p>
-        <div class="outing-scene"><canvas class="outing-cv" width="${OUTING_W}" height="${OUTING_H}" aria-label="走一趟"></canvas>
+        <div class="outing-scene" data-act="outing-tap"><canvas class="outing-cv" width="${OUTING_W}" height="${OUTING_H}" aria-label="走一趟"></canvas>
           <button class="outing-stele" data-act="outing-stele" hidden></button><div class="outing-stele-all" hidden></div></div>
         <div class="outing-foot"></div>
         <div class="outing-log" aria-live="polite"></div></div>`;
@@ -329,6 +355,8 @@
       foot.dataset.key = "";
       foot.innerHTML = `<div class="outing-ctl"><button class="btn" data-act="outing-speed">速度 ${OW.speed}×</button>
         <button class="btn" data-act="outing-skip">${OUTING_SKIP}</button></div>`;
+    } else if (OW.result && !trip.end && trip.can_go) {
+      if (foot.dataset.key !== "now") { foot.dataset.key = "now"; foot.innerHTML = outingNowHtml(OW.result, OW.hold - Date.now()); foot.scrollTop = 0; }
     } else if (!trip.end) {
       // 輪詢每幾秒重畫一次：選項沒變就不動（捲到一半、按到一半的不被打斷）
       const key = JSON.stringify([S.main.scene, (S.main.options || []).map((o) => [o.id, o.label, o.enabled])]);
@@ -699,6 +727,7 @@
       case "outing-go": await outingGo(Number(el.dataset.n)); return true;
       case "outing-speed": OW.speed = OW.speed === 2 ? 1 : 2; outingSaveSpeed(OW.speed); outingFoot(); return true;
       case "outing-skip": OW.turbo = true; return true;
+      case "outing-tap": outingHurry(); return true;
       case "outing-choose": {
         const id = el.dataset.id;
         if (id === FREE_TEXT_OPTION) {

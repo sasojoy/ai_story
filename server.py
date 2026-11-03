@@ -350,6 +350,33 @@ def _model_guard(game: Game):
             _pause_model()
 
 
+# ── 每個請求的時間花在哪裡（Server-Timing 回應標頭；Joy 2026-11-03「探索選完、果出來前就等 5 秒」，雲端量不到，主機用 curl -I
+# 或瀏覽器開發者工具看）：等鎖幾次、共等幾毫秒（lock）、拿著鎖多久（hold，含 reload 重讀角色、view 重組畫面）、量表那一筆小交易
+# （log）、整個請求（total）。只有數字，玩家看不到；一個請求一份（_server_timing 放進來），請求以外（排程、背景執行緒）的不記。
+TIMING: contextvars.ContextVar[dict[str, float] | None] = contextvars.ContextVar("timing", default=None)
+TIMING_KEYS = ("lock", "reload", "view", "hold", "log")
+
+
+def _timed(key: str, seconds: float, count: bool = False) -> None:
+    got = TIMING.get()
+    if got is None:
+        return
+    got[key] = got.get(key, 0.0) + seconds
+    if count:
+        got[f"{key}_n"] = got.get(f"{key}_n", 0.0) + 1
+
+
+def server_timing(got: dict[str, float], total: float) -> str:
+    """Server-Timing 標頭的值（毫秒，一位小數）：沒記到的那一樣不寫；等鎖另寫次數。"""
+    parts = []
+    for key in TIMING_KEYS:
+        if key in got:
+            desc = f';desc="n={int(got[key + "_n"])}"' if f"{key}_n" in got else ""
+            parts.append(f"{key}{desc};dur={got[key] * 1000:.1f}")
+    parts.append(f"total;dur={total * 1000:.1f}")
+    return ", ".join(parts)
+
+
 @contextlib.contextmanager
 def _locked(game: Game):
     """拿行動鎖，並先重讀角色（見 _reload）。這支程式裡每一個要用 game.state 的地方都從這裡進鎖
@@ -360,13 +387,19 @@ def _locked(game: Game):
     這一次拿鎖裡觸發的江湖大事（S-09）：鎖內只寫固定的原文，放鎖之後才開背景執行緒請模型潤色（write_flavor）。"""
     _used(game)
     jobs: list[FlavorJob] = []
+    asked, got = time.perf_counter(), None
     try:
         with game.world.action_lock(), _model_guard(game):
+            got = time.perf_counter()
+            _timed("lock", got - asked, count=True)  # 等鎖（Server-Timing，見 TIMING）
             _reload(game)
+            _timed("reload", time.perf_counter() - got)
             game.set_move_mode(MOVE_MODE.get())  # 這次請求選的走法（見 MOVE_MODE）：之後的選單與 choose() 都照它
             yield
             jobs = game.take_flavor_jobs()  # 動作丟例外就不拿：那一下整筆撤回，下一次拿鎖 reset_model_budget 會清掉
     finally:
+        if got is not None:
+            _timed("hold", time.perf_counter() - got)  # 拿著鎖多久（含重讀、動作、重組畫面、存檔）
         _used(game)
     if jobs and TALE_THREADS and game.client is not None:
         write_flavor(game, jobs)
@@ -407,10 +440,12 @@ def _play_did(game: Game, button: str, first: str | None = None) -> None:
     if where is None:
         return
     owner, season, day = where
+    started = time.perf_counter()
     log = PlayLog(game.world.db)
     log.press(owner, season, day, button)
     if first is not None:
         log.first(owner, season, first, day, game.now)
+    _timed("log", time.perf_counter() - started)
 
 
 def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
@@ -1954,8 +1989,12 @@ def patch_notes(path: Path | None = None) -> list[dict]:
 
 def main_view(game: Game) -> dict:
     """江湖畫面與頂上的狀態列；每次動作、每次計時器都回這一份。呼叫端要拿著行動鎖。"""
-    with game.phase_memo():  # 這一次建構裡「籌備中嗎」只讀一次共用狀態（見 Game.phase_memo）
-        return _main_view_body(game)
+    started = time.perf_counter()
+    try:
+        with game.phase_memo():  # 這一次建構裡「籌備中嗎」只讀一次共用狀態（見 Game.phase_memo）
+            return _main_view_body(game)
+    finally:
+        _timed("view", time.perf_counter() - started)
 
 
 def _main_view_body(game: Game) -> dict:
@@ -2506,6 +2545,23 @@ def reset_password(game: Game, target: str, temp: str) -> str:
 app = FastAPI(title="天下大勢", docs_url=None, redoc_url=None, openapi_url=None)
 
 
+@app.middleware("http")
+async def _server_timing(request: Request, call_next):
+    """/api/ 的回應帶 Server-Timing（見 TIMING）。推送的長連線（/api/events）不包：那是串流，量總時間沒有意義。"""
+    path = request.url.path
+    if not path.startswith("/api/") or path == "/api/events":
+        return await call_next(request)
+    got: dict[str, float] = {}
+    token = TIMING.set(got)  # 端點在執行緒池裡跑時拿到的是複製的 context，裡面是同一個 dict：記的會回到這裡
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    finally:
+        TIMING.reset(token)
+    response.headers["Server-Timing"] = server_timing(got, time.perf_counter() - started)
+    return response
+
+
 @app.exception_handler(GameError)
 def _game_error(request: Request, exc: GameError):
     return JSONResponse({"error": str(exc)}, status_code=400)
@@ -2722,6 +2778,8 @@ MAIN_ACTIONS = {
     # 鐵匠鋪的素材買賣（素材與經濟設計第四、五節）：收購一次賣 count 個、升階一次換一個
     "smith_sell": lambda g, b: g.smith_sell(str(b.get("material", "")), max(1, _int(b.get("count"), 1))),
     "smith_upgrade": lambda g, b: g.smith_upgrade(str(b.get("attribute", "")), _int(b.get("tier"), 0)),
+    # 打造頁爐火上的「看火候」（鐵匠鋪與合成流程 3.2）：叫同一支 silver.furnace；店開著時選單上沒有 act:furnace，所以另開這一個
+    "smith_furnace": lambda g, b: g.smith_furnace(),
     # 自家大本營捐軍備（素材與經濟設計第六節）：一次捐一種素材 count 個（上限切一半：收得下的收）；軍需帳那一頁送 items
     # （[{material, count}, …]，挑好的幾種一起捐、一則紀錄）
     "donate": lambda g, b: g.donate_items(donate_items(b)) if "items" in b else g.donate(str(b.get("material", "")), max(1, _int(b.get("count"), 1))),
@@ -2972,6 +3030,12 @@ MENXIA_ACTIONS = {
     "wield": lambda g, b: g.wield_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件換到身上它那一欄（兵器設計 2.2、裝備四欄 2.3）：武器、防具、坐騎、寶物都走這裡，網頁照舊送 weapon 這個鍵
     "dismantle": lambda g, b: g.dismantle_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件拆成一個素材（兵器設計 4.7.1、裝備四欄 4.8）：坐騎、寶物不能拆
     "feed": lambda g, b: g.feed_mount(),
+    # 裝備庫那一列的「修」「淬煉」（鐵匠鋪與合成流程 3.4）：item 是裝備庫那一件的 id（兵:N、甲:N；舊網頁送 weapon 也收），修好淬完還在裝備庫、不換上；
+    # 擋法同店裡的直接開爐（鐵匠鋪開著、那一串是眼前的選單）。身上那件照舊送選項 id（smith:repair 等），不走這裡
+    "repair_item": lambda g, b: g.repair_item(str(b.get("item") or b.get("weapon") or "")),
+    "temper_item": lambda g, b: g.temper_item(str(b.get("item") or b.get("weapon") or "")),
+    # 裝備庫勾好的一次拆完（鐵匠鋪與合成流程 3.4）：items 是 id 的串列（不是串列的當沒勾）；不擋地點、拆不了的跳過寫原因、一則修練紀錄
+    "dismantle_many": lambda g, b: g.dismantle_many(_id_list(b.get("items"))),
     # 傳功門下（Config.chuangong）：名冊上點的那個人（person）練一項（what：neigong／wugong／str／agi／con）；引擎照 lessons 驗
     "chuangong": lambda g, b: g.chuangong(str(b.get("person") or ""), str(b.get("what") or "")),  # 身上那匹餵一個一階素材（裝備四欄 5.4）：閒著時哪裡都能餵
 }

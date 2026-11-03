@@ -1019,6 +1019,14 @@ def armor_cut(state: GameState, content: Content, world: WorldStateStore) -> flo
     return armor.cut(state.player.armor, player_art(state, content, world, state.player.member.neigong_id), content)
 
 
+def duel_armor_cut(state: GameState, content: Content, world: WorldStateStore) -> float:
+    """單挑類的仗（頭目戰、擂台、奪璽單挑）開打那一刻抄下的防具減損（鐵匠鋪與合成流程 3.9）：身上那件防具現在一場少扣幾成
+    （armor_cut：含耐久、對上內功的 ±），夾在 Config.armor.total_cap；沒穿、防具關著是 0。抄進 DuelState／ArenaSide／ArenaEntry／
+    BattleParticipant 的 cut，之後怎麼換都不回頭查。化勁不抄在這裡：單挑裡化勁本來就是戰法（tactics.Step.a_cut），乘的那一刻再跟它相加
+    （duel.blow_taken），抄兩次會重複算。"""
+    return min(content.config.armor.total_cap, armor_cut(state, content, world))
+
+
 def take_encounter_toll(
     state: GameState, content: Content, world: WorldStateStore, tier: str, *, wild: bool = False, share: float = 1.0,
 ) -> list[str]:

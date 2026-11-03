@@ -8,7 +8,7 @@ import random
 import pytest
 
 from conftest import real_content
-from tianxia import team, weapons
+from tianxia import equipment, team, weapons
 from tianxia.models import WEAPON_KINDS
 from tianxia.state import Weapon
 
@@ -594,16 +594,16 @@ def test_two_tabs_forging_the_same_order_charge_once(server_ready):
 # ── Task 7：淬煉 ──
 
 
-def test_temper_uses_the_cheapest_material_at_or_above_the_weapon_tier(content, world):
+def test_temper_adds_one_step_of_bonus_and_writes_the_journal_title(content, world):
+    """淬煉的料與工錢（一個一階料＋照裝備的階）見 3.7 那幾條；這一條看結果：加成 +1%、訊息、江湖紀錄標題。"""
     game = _smithy(content, world)
     p = game.state.player
     p.weapon = _blade(tier=2)  # 二階、柔，配身上的流雲劍（柔）
     p.materials = {"gang_1": 5, "gang_2": 1, "gang_3": 1}
-    assert smithing.temper_material(game.state, content) == "gang_2"  # 一階不夠格；二階比三階便宜
     opt = _ids(game)[smithing.TEMPER]
-    assert opt.enabled and "第 1/5 次" in opt.label and "玄鋼骨×1＋30 兩" in opt.label
+    assert opt.enabled and "第 1/5 次" in opt.label
     msgs = game.choose(smithing.TEMPER)
-    assert p.weapon.tempers == 1 and p.materials == {"gang_1": 5, "gang_3": 1} and p.stats["silver"] == 170
+    assert p.weapon.tempers == 1 and p.materials == {"gang_1": 4, "gang_2": 1, "gang_3": 1} and p.stats["silver"] == 170
     assert weapons.bonus(p.weapon, _art(game, content, world), content, world) == pytest.approx(0.10 + 0.01 + 0.05)
     assert any("淬" in m for m in msgs) and game.state.journal[0].title == smithing.TEMPER_TITLE
 
@@ -625,14 +625,99 @@ def test_temper_stops_at_five_and_refuses_without_a_fitting_material_or_silver(c
     opt = _ids(game)[smithing.TEMPER]
     assert not opt.enabled and smithing.FULL in opt.label
     assert smithing.temper(game.state, content) == [f"（{smithing.FULL}。）"] and p.materials == {"gang_1": 3}
-    p.weapon = _blade(tier=3)
-    assert smithing.temper_problem(game.state, content) == "沒有三階以上的素材"
-    p.weapon, p.materials, p.stats["silver"] = _blade(tier=2), {"gang_2": 1}, 10
+    p.weapon, p.materials = _blade(tier=3), {"gang_2": 1, "gang_3": 1}
+    assert smithing.temper_problem(game.state, content) == "沒有一階的料"  # 二階、三階的料不收（3.7）
+    p.weapon, p.materials, p.stats["silver"] = _blade(tier=2), {"gang_1": 1}, 10
     assert smithing.temper_problem(game.state, content) == "還差 20 兩"
     p.weapon = None
     assert smithing.TEMPER not in _ids(game)  # 空手沒有淬煉鈕
     p.weapon, p.location = _blade(), "lake"
     assert smithing.temper_problem(game.state, content) == weapons.NOT_HERE
+
+
+# ── 鐵匠鋪與合成流程 3.4（B 批）：修與淬煉裝備庫裡的那一件（item_id；None＝身上那把，舊呼叫端一字不改）──
+
+
+def _two(content, world, **kw):
+    """身上一把（兵:1，一階、刀口鈍到 40）、裝備庫一把（兵:2，二階、鈍到 30）；背包精鐵砂 ×3、玄鋼骨 ×2、驚羽 ×2。"""
+    game = _forger(content, world, **kw)
+    p = game.state.player
+    p.weapon = _blade(edge=40)
+    p.rack = [_blade(tier=2, edge=30, wid="兵:2", name="庫刃")]
+    return game
+
+
+def test_the_worn_weapons_own_id_is_the_same_as_no_id(content, world):
+    """None 與身上那把自己的 id 走同一條路：問題、花的料與錢、訊息、結果一個字不差（舊呼叫端不寫 item_id）。"""
+    a, b = _two(content, world, name="甲"), _two(content, world, name="乙")
+    assert weapons.repair_problem(a.state, content) == weapons.repair_problem(b.state, content, "兵:1") is None
+    assert smithing.temper_problem(a.state, content) == smithing.temper_problem(b.state, content, "weapon", "兵:1") is None
+    assert smithing.temper_material(a.state, content) == smithing.temper_material(b.state, content, "weapon", "兵:1") == "gang_1"
+    assert weapons.repair(a.state, content) == weapons.repair(b.state, content, "兵:1")
+    assert smithing.temper(a.state, content) == smithing.temper(b.state, content, "weapon", "兵:1")
+    sa, sb = a.state.player, b.state.player
+    assert (sa.weapon, sa.rack, sa.materials, sa.stats["silver"]) == (sb.weapon, sb.rack, sb.materials, sb.stats["silver"])
+
+
+def test_repairing_a_rack_weapon_leaves_the_worn_one_and_its_warning_alone(content, world):
+    game = _two(content, world)
+    p = game.state.player
+    p.edge_warned = True  # 身上那把已經提醒過鈍了：修的是裝備庫那把，這個旗標不能被洗掉
+    msgs = weapons.repair(game.state, content, "兵:2")
+    assert [w.id for w in p.rack] == ["兵:2"] and p.rack[0].edge == 100  # 還在裝備庫、沒有換上
+    assert p.weapon.id == "兵:1" and p.weapon.edge == 40 and p.edge_warned is True
+    assert p.stats["silver"] == 195 and p.materials == {"gang_1": 2, "gang_2": 2, "kuai_1": 2}  # 一個一階素材（數量最多的）＋5 兩
+    assert msgs == ["鐵匠拿精鐵砂把【庫刃】重新磨利了（銀兩 -5）。"]
+    weapons.repair(game.state, content, "兵:1")  # 身上那把修了，旗標才歸零
+    assert p.weapon.edge == 100 and p.edge_warned is False
+
+
+def test_a_rack_weapon_is_repaired_only_when_it_needs_it_and_can_be_paid_for(content, world):
+    game = _two(content, world)
+    p, s = game.state.player, game.state
+    p.rack[0].edge = 100
+    assert weapons.repair_problem(s, content, "兵:2") == weapons.KEEN["劍"]  # 還利，不用修
+    p.rack[0].edge = 30
+    assert weapons.repair_problem(s, content, "兵:2") is None
+    assert weapons.repair_problem(s, content, "兵:9") == equipment.RACK_MISSING  # 沒有這一件
+    assert weapons.repair_problem(s, content, "甲:1") == equipment.RACK_MISSING  # 防具的 id 不歸兵器管
+    p.stats["silver"] = 3
+    assert weapons.repair_problem(s, content, "兵:2") == "還差 2 兩"
+    p.stats["silver"], p.materials = 200, {"gang_2": 2}
+    assert weapons.repair_problem(s, content, "兵:2") == equipment.NO_REPAIR_MATERIAL
+    p.materials, p.location = {"gang_1": 3}, "lake"
+    assert weapons.repair_problem(s, content, "兵:2") == weapons.NOT_HERE
+    before = (p.stats["silver"], dict(p.materials), p.rack[0].edge)
+    assert weapons.repair(s, content, "兵:2") == [f"（{weapons.NOT_HERE}。）"]
+    assert (p.stats["silver"], dict(p.materials), p.rack[0].edge) == before  # 被拒絕什麼都不動
+
+
+def test_tempering_a_rack_weapon_pays_the_wage_of_that_very_weapon_not_the_worn_one(content, world):
+    game = _two(content, world)
+    p, s = game.state.player, game.state
+    p.materials = {"gang_1": 5, "gang_2": 1, "gang_3": 1}
+    assert smithing.temper_material(s, content) == smithing.temper_material(s, content, "weapon", "兵:2") == "gang_1"  # 料一律一階（3.7）
+    assert smithing.temper_price(s, content) == 0  # 身上那把一階：不收錢
+    assert smithing.temper_price(s, content, "weapon", "兵:2") == 30  # 裝備庫那把二階：工錢照它的階
+    assert smithing.temper_problem(s, content, "weapon", "兵:2") is None
+    msgs = smithing.temper(s, content, "weapon", "兵:2")
+    assert p.rack[0].tempers == 1 and p.weapon.tempers == 0 and p.weapon.id == "兵:1"
+    assert p.materials == {"gang_1": 4, "gang_2": 1, "gang_3": 1} and p.stats["silver"] == 170
+    assert msgs[0] == "鐵匠拿精鐵砂把【庫刃】淬了一回，這是第 1 次。" and "銀兩 -30" in msgs and "精鐵砂 -1" in msgs
+    assert [w.id for w in p.rack] == ["兵:2"]  # 淬完還在裝備庫
+
+
+def test_a_rack_weapon_stops_tempering_at_the_cap_and_unknown_ids_are_refused(content, world):
+    game = _two(content, world)
+    p, s = game.state.player, game.state
+    p.rack[0].tempers = content.config.weapons.temper_max
+    assert smithing.temper_problem(s, content, "weapon", "兵:2") == smithing.FULL
+    assert smithing.temper_problem(s, content, "weapon", "兵:9") == equipment.RACK_MISSING
+    assert smithing.temper_problem(s, content, "weapon", "甲:1") == equipment.RACK_MISSING
+    assert smithing.temper_material(s, content, "weapon", "兵:9") is None
+    before = (p.stats["silver"], dict(p.materials), p.rack[0].tempers)
+    assert smithing.temper(s, content, "weapon", "兵:2") == [f"（{smithing.FULL}。）"]
+    assert (p.stats["silver"], dict(p.materials), p.rack[0].tempers) == before
 
 
 # ── Task 8：畫面 ──
@@ -863,3 +948,197 @@ def test_the_server_forges_in_one_trip_through_the_lock(server_ready, lock_event
     saved = open_characters().load("鍛刀人").player
     assert saved.weapon is not None and saved.weapon.name == weapons.table_name(server.CONTENT, "拳腳", "gang_1", "kuai_1")
     assert not hasattr(server, "prepare_smith_forge")
+
+
+# ── 鐵匠鋪與合成流程 3.6（D 批）：品質有「質」的差別（淬煉上限照品質）──
+
+
+def _graded(content):
+    """稿的佔位值：淬煉上限下品 5、中品 6、上品 7；上品每場少扣 1。測試內容沒寫那一組，要用的測試自己打開。"""
+    content.config.weapons.temper_max_by_quality = {"下品": 5, "中品": 6, "上品": 7}
+    content.config.weapons.wear_less_by_quality = {"上品": 1}
+    return content
+
+
+def test_the_temper_cap_follows_the_quality_and_falls_back_to_temper_max(content):
+    low, mid, top = (_blade(quality=q) for q in ("下品", "中品", "上品"))
+    assert content.config.weapons.temper_max_by_quality == {}  # 模型預設是空的：設定沒寫那一組，跟以前一字不差
+    assert content.config.weapons.wear_less_by_quality == {} and equipment.wear_note(top, content) == ""
+    assert [smithing.temper_cap(w, content) for w in (low, mid, top)] == [5, 5, 5]
+    _graded(content)
+    assert [smithing.temper_cap(w, content) for w in (low, mid, top)] == [5, 6, 7]
+    assert smithing.temper_cap(_blade(quality=""), content) == content.config.weapons.temper_max  # 沒寫的品質照 temper_max
+    content.config.weapons.temper_max = 4
+    assert smithing.temper_cap(_blade(quality=""), content) == 4 and smithing.temper_cap(top, content) == 7
+    assert smithing.temper_cap is equipment.temper_cap  # weapons／armor 的列不能 import smithing：同一支放在 equipment
+    assert [equipment.wear_note(w, content) for w in (low, mid, top)] == ["", "", "磨得慢"] and equipment.SLOW_WEAR == "磨得慢"
+
+
+def test_the_real_content_writes_the_placeholder_numbers():
+    """稿第四節的佔位值（等玩家玩過再調）寫在 content/config.json，兵器與防具各一份；測試內容沒寫（上面幾條靠它守「沒寫跟以前一字不差」）。"""
+    c = real_content()
+    for rule in (c.config.weapons, c.config.armor):
+        assert rule.temper_max_by_quality == {"下品": 5, "中品": 6, "上品": 7} and rule.wear_less_by_quality == {"上品": 1}
+        assert rule.temper_material_tier == 1  # 3.7
+
+
+# ── 鐵匠鋪與合成流程 3.7（D 批）：淬煉的料固定收一階，工錢照這一件的階 ──
+
+
+def test_temper_takes_one_tier_one_material_and_charges_by_the_gear_tier(content, world):
+    game = _smithy(content, world)
+    p = game.state.player
+    p.weapon = _blade(tier=2)  # 二階、柔，配身上的流雲劍（柔）
+    p.materials = {"gang_1": 5, "gang_2": 1, "gang_3": 1}
+    assert smithing.temper_material(game.state, content) == "gang_1"  # 一律一個一階，二、三階的料不動
+    assert smithing.temper_price(game.state, content) == 30  # 工錢照裝備的階（二階 30），不看用了哪一階的料
+    opt = _ids(game)[smithing.TEMPER]
+    assert opt.enabled and "第 1/5 次" in opt.label and "精鐵砂×1＋30 兩" in opt.label
+    game.choose(smithing.TEMPER)
+    assert p.weapon.tempers == 1 and p.materials == {"gang_1": 4, "gang_2": 1, "gang_3": 1} and p.stats["silver"] == 170
+
+
+def test_the_temper_wage_follows_the_gear_tier_and_a_tier_three_blade_fills_up_on_seven_tier_one_materials(content, world):
+    game = _smithy(content, world)
+    p, s = game.state.player, game.state
+    p.materials, p.stats["silver"] = {"gang_1": 1}, 700
+    prices = []
+    for tier in (1, 2, 3, 4):
+        p.weapon = _blade(tier=tier)
+        prices.append(smithing.temper_price(s, content))
+    assert prices == [0, 30, 80, 150]
+    assert smithing.temper_price(s, content, "weapon", "兵:9") == 0  # 沒有這一件，沒有價錢可算
+    _graded(content)
+    p.weapon, p.materials = _blade(tier=3, quality="上品"), {"gang_1": 9}
+    for _ in range(7):
+        game.choose(smithing.TEMPER)
+    assert p.weapon.tempers == 7 and p.materials == {"gang_1": 2} and p.stats["silver"] == 700 - 7 * 80  # 7 個一階素材＋560 兩（3.7：鐵匠鋪裡真的銀兩出口）
+    assert smithing.temper_problem(s, content) == smithing.FULL
+
+
+def test_temper_refuses_without_a_tier_one_material_and_asks_nothing_of_the_higher_tiers(content, world):
+    game = _smithy(content, world)
+    p, s = game.state.player, game.state
+    p.weapon, p.materials = _blade(tier=3), {"gang_2": 4, "gang_3": 2}
+    assert smithing.temper_material(s, content) is None
+    assert smithing.temper_problem(s, content) == "沒有一階的料"
+    before = (p.stats["silver"], dict(p.materials), p.weapon.tempers)
+    assert smithing.temper(s, content) == ["（沒有一階的料。）"] and (p.stats["silver"], dict(p.materials), p.weapon.tempers) == before
+    p.weapon, p.materials = _blade(tier=4), {"gang_1": 1}  # 四階裝備也不再要三階的料：一個一階＋150 兩
+    assert smithing.temper_problem(s, content) is None and smithing.temper_price(s, content) == 150
+    assert not hasattr(smithing, "temper_floor")
+
+
+def test_the_temper_material_tier_is_a_setting(content, world):
+    game = _smithy(content, world)
+    p, s = game.state.player, game.state
+    assert content.config.weapons.temper_material_tier == 1 and content.config.armor.temper_material_tier == 1
+    p.weapon, p.materials = _blade(tier=2), {"gang_1": 5, "gang_2": 1, "gang_3": 1}
+    content.config.weapons.temper_material_tier = 2
+    assert smithing.temper_material(s, content) == "gang_2"
+    p.materials = {"gang_1": 5}
+    assert smithing.temper_problem(s, content) == "沒有二階的料"
+
+
+def test_top_quality_weapons_wear_one_less_but_never_below_one(content, world):
+    game = _forger(content, world)
+    p, s = game.state.player, game.state
+    rule = content.config.weapons
+    tiers = ("大勝", "險勝", "僵持", "落敗")
+    assert rule.wear == {"大勝": 2, "險勝": 2, "僵持": 3, "落敗": 5}
+
+    def lost(quality, tier):
+        p.weapon = _blade(quality=quality)
+        weapons.wear(s, content, tier)
+        return 100 - p.weapon.edge
+
+    assert [lost(q, t) for q in ("下品", "中品", "上品") for t in tiers] == [2, 2, 3, 5] * 3  # 沒寫那一組：跟以前一字不差
+    _graded(content)
+    assert [lost(q, t) for q in ("下品", "中品") for t in tiers] == [2, 2, 3, 5] * 2  # 中品、下品照舊
+    assert [lost("上品", t) for t in tiers] == [1, 1, 2, 4]
+    rule.wear_less_by_quality = {"上品": 9}
+    assert [lost("上品", t) for t in tiers] == [1, 1, 1, 1]  # 少扣再多也最少扣 1
+    assert lost("上品", "平手") == 0  # 本來就不扣的那一場，照舊不扣（不會被最少扣 1 拉成 1）
+    rule.wear["平手"] = 0
+    assert lost("上品", "平手") == 0
+
+
+def test_each_quality_tempers_up_to_its_own_cap_and_then_is_full(content, world):
+    _graded(content)
+    for quality, cap in (("下品", 5), ("中品", 6), ("上品", 7)):
+        game = _smithy(content, world, name=f"淬{quality}")
+        p = game.state.player
+        p.weapon, p.materials, p.stats["silver"] = _blade(quality=quality), {"gang_1": 9}, 500
+        for n in range(1, cap + 1):
+            opt = _ids(game)[smithing.TEMPER]
+            assert opt.enabled and f"第 {n}/{cap} 次" in opt.label
+            game.choose(smithing.TEMPER)
+        assert p.weapon.tempers == cap
+        opt = _ids(game)[smithing.TEMPER]
+        assert not opt.enabled and smithing.FULL in opt.label
+        assert smithing.temper_problem(game.state, content) == smithing.FULL
+        assert smithing.temper(game.state, content) == [f"（{smithing.FULL}。）"] and p.weapon.tempers == cap and p.materials == {"gang_1": 9 - cap}
+
+
+def test_a_rack_weapon_tempers_up_to_its_own_cap_too(content, world):
+    _graded(content)
+    game = _forger(content, world)
+    p, s = game.state.player, game.state
+    p.weapon = _blade()
+    p.rack = [_blade(quality="上品", wid="兵:2", name="庫刃")]
+    p.rack[0].tempers = 6
+    assert smithing.temper_problem(s, content, "weapon", "兵:2") is None  # 下品的 5 次早就滿了，上品的庫刃還有第 7 次
+    smithing.temper(s, content, "weapon", "兵:2")
+    assert p.rack[0].tempers == 7 and smithing.temper_problem(s, content, "weapon", "兵:2") == smithing.FULL
+
+
+def test_originals_copies_and_signature_arms_count_as_top_quality(content, world):
+    from tianxia import signature_arms
+    from tianxia.models import SignatureArmDef
+    _graded(content)
+    game = _forger(content, world)
+    original = _blade(quality="上品", tier=3, wid="兵:3", name="原品")
+    original.original = True
+    copy = _blade(quality="上品", tier=3, wid="兵:4", name="仿品")
+    copy.copy_of = "鑄|t_star"
+    arm = signature_arms.new_arm(game.state, SignatureArmDef(character="mate", name="鐵脊長刀", kind="刀", attribute="剛"))
+    assert arm.quality == "上品" and arm.original and arm.signature == "mate"
+    assert [smithing.temper_cap(w, content) for w in (original, copy, arm)] == [7, 7, 7]
+    named = _blade(quality="中品", tier=2, wid="兵:5", name="名器")
+    named.secret = "w2_something"
+    assert smithing.temper_cap(named, content) == 6  # 名器照擲到的品質
+
+
+def test_rows_and_cards_write_the_cap_of_that_very_item(content, world):
+    _graded(content)
+    game = _forger(content, world)
+    p, s = game.state.player, game.state
+    art = _art(game, content, world)
+    p.weapon = _blade(quality="上品")
+    p.rack = [_blade(quality="中品", wid="兵:2", name="庫刃"), _blade(quality="下品", wid="兵:3", name="庫鈍")]
+    data = weapons.rows(s, content, world, art)
+    assert data["worn"]["temper_max"] == 7 and [r["temper_max"] for r in data["rack"]] == [6, 5]
+    assert data["worn"]["wear_note"] == "磨得慢" and [r["wear_note"] for r in data["rack"]] == ["", ""]  # 只有上品卡多一句
+    from tianxia import shopview
+    view = shopview.smith_view(s, content, world)
+    assert view["worn"]["item"]["temper_max"] == 7 and view["worn"]["item"]["wear_note"] == "磨得慢"
+    assert {row["id"]: row["temper_max"] for row in view["rack"]["rows"]} == {"兵:2": 6, "兵:3": 5}
+    assert {row["id"]: row["wear_note"] for row in view["rack"]["rows"]} == {"兵:2": "", "兵:3": ""}
+    from tianxia import skillview
+    assert skillview.shown_gear(content, p.weapon)["temper_max"] == 7 and skillview.shown_gear(content, p.weapon)["wear_note"] == "磨得慢"
+    assert skillview.shown_gear(content, p.rack[1], live=False)["temper_max"] == 5
+
+
+def test_the_whole_season_bot_tempers_a_top_quality_blade_seven_times(content, world, monkeypatch):
+    from tianxia import bot
+    _graded(content)
+    game = _smithy(content, world)
+    p = game.state.player
+    p.weapon, p.materials, p.stats["silver"] = _blade(quality="上品"), {"gang_1": 9}, 500
+    p.weapon.edge = 100
+    monkeypatch.setattr(smithing, "forge_plan", lambda *a, **k: None)  # 只看淬煉：不讓它先拿素材去打一把
+    assert smithing.temper_wanted(game.state, content, world, _art(game, content, world))
+    game.choose("smith:back")  # visit_smith 自己進門
+    bot.visit_smith(game)
+    assert p.weapon.tempers == 7 and p.materials == {"gang_1": 2}
+    assert not smithing.temper_wanted(game.state, content, world, _art(game, content, world))

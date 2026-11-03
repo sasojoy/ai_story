@@ -137,3 +137,40 @@ def test_the_trip_wears_the_look_on_the_arena():
     assert out["ver"] == "/api/looks/img/u12/hero_run?v=7f3a"  # 補畫好了網址就換（main.looks_ver）
     assert out["urls"] == ["/static/img/looks/moying/hero_run.webp", "/static/img/looks/moying/hero_bare_idle.webp",
                    "/api/looks/img/u12/hero_bare_kneel", "/api/looks/img/u12/hero_slash", ""]
+
+
+HURRY_DRIVER = r"""
+const code = fn("outingHurry");
+const one = (OW) => { let synced = 0; const hurry = new Function("OW", "outingSync", code + "\nreturn outingHurry;")(OW, () => { synced += 1; }); hurry(); return { turbo: OW.turbo, hold: OW.hold, synced }; };
+finish({
+  walking: one({ cur: { t: 0 }, tasks: [], turbo: false, hold: 0 }),
+  holding: one({ cur: null, tasks: [], turbo: false, hold: Date.now() + 2000, holdT: setTimeout(() => {}, 5000) }),
+  idle: one({ cur: null, tasks: [], turbo: false, hold: 0 }),
+});
+"""
+
+
+def test_a_tap_on_the_scene_hurries_to_the_next_stop():
+    """Joy 2026-11-03「探索的選項選完都要等 3～5 秒」：伺服器只花 0.1 秒，等的是「果」停的 2.2 秒與走路動畫。點畫面一下：
+    正在走就快轉（同略過），「果」停著就不等了、直接接著走；沒在演的時候點了什麼都不做。"""
+    out = webharness.run(HURRY_DRIVER, {})
+    assert out["walking"] == {"turbo": True, "hold": 0, "synced": 0}
+    assert out["holding"] == {"turbo": False, "hold": 0, "synced": 1}
+    assert out["idle"] == {"turbo": False, "hold": 0, "synced": 0}
+
+
+NOW_DRIVER = r"""
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const code = ["OUTING_AFTER", "OUTING_GO_ON"].map(konst).join("\n") + fn("outingLedgerHtml") + fn("outingNowHtml");
+const H = new Function("esc", code + "\nreturn { outingNowHtml };")(esc);
+finish({ html: H.outingNowHtml({ text: "你咬牙把車身頂起一尺。", after: "得：銀兩 +15" }, 2200) });
+"""
+
+
+def test_the_choice_turns_into_the_result_right_away():
+    """Joy 2026-11-03「果出現在屏幕下面滿不明顯」「選項閃的跟等待系統回應一模一樣，以為是卡住」：選完了選項那一塊換成果這一則
+    （大字、得失），底下「接著走」照停的時間填滿、點了就走（同點畫面）。"""
+    html = webharness.run(NOW_DRIVER, {})["html"]
+    assert "你咬牙把車身頂起一尺。" in html and "銀兩 +15" in html
+    assert 'data-act="outing-tap"' in html and "接著走" in html and "animation-duration:2200ms" in html
+    assert 'data-act="outing-choose"' not in html

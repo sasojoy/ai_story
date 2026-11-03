@@ -114,9 +114,11 @@ class ClaudeCritic:
         for i, ref in enumerate(refs, 1):
             content.append({"type": "text", "text": f"Reference {i}:"})
             content.append({"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": _b64(_flat(ref, GRAY))}})
-        content.append({"type": "text", "text": "Image to review:"})
+        # 快取（FB-8002：主機實跑 cache_read = 0）：同一張重畫（最多 MAX_TRIES 次）每一次送的說明、參考圖、清單都一樣，只有要審的
+        # 那一張不同。所以清單排在要審的圖前面，斷點下在清單上：系統說明＋參考圖＋清單這一段第二次起從快取讀。
+        content.append({"type": "text", "text": f"Checklist:\n{checklist}", "cache_control": {"type": "ephemeral"}})
+        content.append({"type": "text", "text": "Image to review (judge this one against the checklist above):"})
         content.append({"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": _b64(_flat(image, GRAY))}})
-        content.append({"type": "text", "text": f"Checklist:\n{checklist}"})
         response = self.client.beta.messages.create(
             model=self.model,
             max_tokens=4000,

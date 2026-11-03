@@ -170,3 +170,21 @@ def test_the_card_has_no_buttons_but_the_close():
     assert "【斬月】" in html and "在甲手上" in html and "鋒利度" not in html
     html = _run("return H.boardCardHtml();", {"boardCard": {"loading": False, "board": "武學", "card": None}})
     assert "看不到了" in html
+
+
+@needs_node
+def test_a_top_grade_card_says_it_wears_slowly(divine_content, world):  # noqa: F811
+    """鐵匠鋪與合成流程 3.6「上品的卡多一句『磨得慢』」：神器原品一律上品，神器譜點開的卡照 shown_gear 的 wear_note 寫；沒有的不寫。"""
+    divine_content.config.weapons.wear_less_by_quality = {"上品": 1}  # 正式內容的佔位（測試內容沒寫）
+    owner = _forger(divine_content, world, name="甲")
+    original, _ = smithing.forge(owner.state, divine_content, world, "劍", "gang_3", "gang_3")
+    original.tempers = 2
+    open_characters().save(owner.state)
+    row = next(r for r in owner.divine_book_view() if r["ref"].endswith(original.secret))
+    card = leaderboard.gear_card(divine_content, world, row["season"], row["ref"])
+    assert card["wear_note"] == "磨得慢"
+    html = _run("return H.boardCardHtml();", {"boardCard": {"loading": False, "board": "神器", "card": card}})
+    sub = html[html.index('class="sub"'):]
+    assert f"淬煉 2/{card['temper_max']}・鋒利度 {card['edge']}・磨得慢</div>" in sub[:sub.index("</div>") + 6]
+    plain = _run("return H.boardCardHtml();", {"boardCard": {"loading": False, "board": "神器", "card": {**card, "wear_note": ""}}})
+    assert "磨得慢" not in plain

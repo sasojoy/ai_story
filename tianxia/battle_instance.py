@@ -192,6 +192,9 @@ class BattleParticipant(BaseModel):
     # 玉璽碎片改版：加入那一刻身上有碎片（改版開著）時，不含碎片戰力的那一份（奪璽單挑的快照用，seal_duel.side_from_participant）；
     # 沒碎片、改版關著、舊資料是 None（單挑照 power、scores）
     seal_bare: SealBare | None = None
+    # 鐵匠鋪與合成流程 3.9：加入那一刻的防具減損（含耐久，夾在 Config.armor.total_cap；team.duel_armor_cut），照坐騎的先例快照；
+    # 奪璽單挑（seal_duel.side_from_participant）帶過去，對手打中他的那一下乘 1 − 它。決戰本身不吃（一個字不改）。舊資料沒有＝0
+    cut: float = 0.0
 
 
 # 跟按鈕一樣的字（battles.json 三幕的放手一搏按鈕）：只照按鈕抄一遍的不算寫了什麼（長社火攻那一場「最令人印象深刻的一幕」
@@ -235,6 +238,25 @@ class BattleRound(BaseModel):
     auto_picked: list[str] = Field(default_factory=list)  # 這回合逾時、由系統代選行動的人（fill_timed_out_actions
     # 記下）：resolve_round 不把他們這回合算成自己出手（BattleParticipant.acted_rounds）
     sexes: dict[str, str] = Field(default_factory=dict)  # 名號 → 放手一搏的人的性別（回合結算後補劇情用，GambleTale.sex）
+    ults: dict[str, dict[str, str]] = Field(default_factory=dict)  # 名號 → 放手一搏送出那一刻身上的絕招（功能包 looks 的 mvp.snapshot：
+    # move、name、look、weapon）；沒穿絕招、沒放手一搏的人沒有。回合 MVP 只從這裡挑（Joy 2026-11-03），純展示、不碰數字
+
+
+class BattleMvp(BaseModel):
+    """一回合的 MVP（Joy 2026-11-03「在放手一搏成功的人裡面且他有絕招動畫的挑一個當這回合的MVP，播放他的絕招」）：
+    這一回合放手一搏成了、送出那一刻身上穿著絕招的人裡挑一位（功能包 looks 的 mvp.crown）。只給畫面演，不讀回結算。"""
+
+    round: int  # 整場的第幾回合（1 起算）
+    name: str
+    faction: str
+    move: str  # 絕招（m<購買 id>）：網頁照 /api/looks/scene/<move> 抓導演稿
+    move_name: str = ""  # 絕招的名字（導演稿的 name）
+    look: str = ""  # 送出那一刻穿的形象
+    weapon: str = ""  # 送出那一刻手上兵器的種類（劍、槍……；空的是空手）
+    text: str = ""  # 他這一搏寫的那一句
+    target: str = ""  # 這一搏點名的對面參戰者（Joy 2026-11-03「點名敵對玩家，變成兩位玩家單挑的場景」）；沒點名是空的
+    target_faction: str = ""
+    target_look: str = ""  # 被點名的人穿的形象（畫面上受擊的是他的樣子）
 
 
 class BattleRoundRecord(BaseModel):
@@ -251,6 +273,7 @@ class BattleRoundRecord(BaseModel):
     messages: list[str] = Field(default_factory=list)  # 系統判定的結算訊息
     narration: str = ""  # 以前 LLM 潤色的敘事（2026-10-08 起回合不再叫模型，新的回合是空字串；舊資料留著）
     trend_after: int  # 結算後的戰局
+    mvp: str = ""  # 這一回合的 MVP（名號；功能包 looks 的 mvp.crown）：沒人符合、舊資料是空的
 
 
 class RoundSwing(BaseModel):
@@ -469,6 +492,8 @@ class BattleInstance(BaseModel):
     seal_holder_side: str | None = None  # 上一欄是交戰兩方之一就記那一方，否則 None（旁觀）
     seal_notes: list[str] = Field(default_factory=list)  # 收場時寫進每個參戰者戰報的那一兩行（下戰書、現世的得主）
     rounds: list[BattleRoundRecord] = Field(default_factory=list)  # 這次讀出來之後才結算、還沒寫進資料庫的回合
+    mvps: list[BattleMvp] = Field(default_factory=list)  # 每一回合的 MVP（有人符合的那幾回合才有；功能包 looks 的 mvp.crown）：
+    # 決戰畫面播他的絕招。純展示，戰局、戰功一個數字都不動；舊資料沒有是空的
     # 龍頭上陣（GeneralTuning）：開集結那一刻上陣的大勢人物、這一回合每一方喊的那一招；舊資料、開關關著是空的
     commanders: list[Commander] = Field(default_factory=list)
     orders: dict[str, str] = Field(default_factory=dict)
@@ -482,6 +507,8 @@ class BattleInstance(BaseModel):
         data = handler(self)
         if isinstance(data, dict) and "front_note" in data and data["front_note"] is None:
             del data["front_note"]
+        if isinstance(data, dict) and data.get("mvps") == []:  # 回合 MVP 同理：沒人當過的場，JSON 跟加這一欄之前一樣
+            del data["mvps"]
         return data
 
 
@@ -583,20 +610,20 @@ def join_faction(
     scores: dict[str, float] | None = None, attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0,
     troops: str = "", troop_bonus: float = 0.0, turncoat: bool = False, newbie: bool = False,
     kit: tactics.BoutSide | None = None, renown: list[str] | None = None, escort: Escort | None = None,
-    seal_bare: SealBare | None = None,
+    seal_bare: SealBare | None = None, cut: float = 0.0,
 ) -> None:
     """集結期選陣營；已經選過的人再選一次視為改選（還沒進入 active 都還能換）。escort 是隨他上陣的歷史武將（沒給＝沒派）。
     scores 是這個人此刻每招的份量快照（move_scores），之後戰局只讀這份；沒給＝每招 0。
     mount、cavalry 是加入那一刻騎的馬與騎兵加成（裝備四欄 5.9）；沒給＝沒騎馬。troops、troop_bonus 是帶的部下與份量加成（沒給＝沒帶）。
     turncoat、newbie 是加入那一刻的快照（玉璽碎片設計 4.6）；沒給＝都不是。renown 是加入那一刻的稱號（名聲 2.5；沒給＝沒有）。
-    seal_bare 是不含玉璽碎片戰力的那一份（改版；沒給＝沒有碎片）。"""
+    seal_bare 是不含玉璽碎片戰力的那一份（改版；沒給＝沒有碎片）。cut 是加入那一刻的防具減損（鐵匠鋪與合成流程 3.9；沒給＝沒穿）。"""
     if instance.phase != "muster":
         return
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
         scores=dict(scores or {}), attribute=attribute, role=role, mount=mount, cavalry=cavalry,
         troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie, kit=kit, renown=list(renown or []),
-        escort=escort, seal_bare=seal_bare,
+        escort=escort, seal_bare=seal_bare, cut=cut,
     )
 
 
@@ -623,10 +650,10 @@ def auto_assign_latecomer(
     power: float = 0.0, is_bot: bool = False, faction: str | None = None, scores: dict[str, float] | None = None,
     attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0, troops: str = "", troop_bonus: float = 0.0,
     turncoat: bool = False, newbie: bool = False, kit: tactics.BoutSide | None = None, renown: list[str] | None = None,
-    escort: Escort | None = None, seal_bare: SealBare | None = None,
+    escort: Escort | None = None, seal_bare: SealBare | None = None, cut: float = 0.0,
 ) -> None:
     """集結期結束後才出現的人（包含機器人）：有指定陣營（劇本分陣營時的玩家、臨時投效的人投效的那一軍）就站自己那邊，
-    否則塞進兩軍裡人數較少的一方，維持陣營平衡。scores、mount、cavalry、troops、troop_bonus、turncoat、newbie、renown、seal_bare
+    否則塞進兩軍裡人數較少的一方，維持陣營平衡。scores、mount、cavalry、troops、troop_bonus、turncoat、newbie、renown、seal_bare、cut
     同 join_faction。三方混戰助守的人（GUARD）照站守軍那一格。"""
     if faction not in sides(definition) and not (faction == GUARD and melee(instance)):
         armies = sides(definition)
@@ -636,7 +663,7 @@ def auto_assign_latecomer(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
         scores=dict(scores or {}), attribute=attribute, role=role, mount=mount, cavalry=cavalry,
         troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie, kit=kit, renown=list(renown or []),
-        escort=escort, seal_bare=seal_bare,
+        escort=escort, seal_bare=seal_bare, cut=cut,
     )
 
 

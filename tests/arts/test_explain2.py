@@ -254,8 +254,10 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
     """名望的來源只有六條：事件的效果（rules.apply_effect 照內容的 stats 加減）、第一季的首創回饋（Game._deliver_echoes）、
     決戰最有戲的那一搏（Game._file_showdown）、打贏頭目（Game._duel_finish）、奪璽單挑（Game._file_seal，玉璽碎片設計 5.9）、得天命的那一軍（Game._showdown_pay，玉璽二）、擂台賽（Game._arena_finish 的最險一搏、Game._deliver_arena 的每日俸與季末前三名）、決戰陣前擊退龍頭（Game._showdown_pay）、護衛擋下挑戰（Game._deliver_guard_credits）、領地爭奪的分紅與守城功（Game._deliver_conquest，玩法說明 howto._fame_sources 那一句）。程式裡直接寫名望的只有後面這幾條的那幾行；內容裡給名望的效果只在 content/events。多了一條來源，玩法說明「名望」那一節要跟著寫。"""
     writes = []
-    # 功能包（tianxia/features/<包>/，開發規範手冊 3.2）也是程式：一起掃，包裡的檔照相對 tianxia/ 的路徑記
-    code = sorted((ROOT / "tianxia").glob("*.py")) + sorted((ROOT / "tianxia" / "features").glob("*/*.py"))
+    # 功能包（tianxia/features/<包>/，開發規範手冊 3.2）也是程式：一起掃，包裡的檔照相對 tianxia/ 的路徑記；核心本體 tianxia/core/
+    # 也是（事件檢定搬進 core/event_check.py，dev/core-events-1 審查）
+    code = (sorted((ROOT / "tianxia").glob("*.py")) + sorted((ROOT / "tianxia" / "core").glob("*.py"))
+            + sorted((ROOT / "tianxia" / "features").glob("*/*.py")))
     label = lambda path: path.relative_to(ROOT / "tianxia").as_posix()  # noqa: E731
     for path in code:
         for line in path.read_text(encoding="utf-8").splitlines():

@@ -209,11 +209,15 @@ GAME_IMPORTS = {
     "tianxia.features.battle.view", "tianxia.features.battle.rules",
     # 決戰「打」那一半之一（全部拆包第 6 批）：管理者的決戰工具 6 個、攻城 6 個一行委派
     "tianxia.features.battle.admin", "tianxia.features.battle.sieges",
+    # 決戰「打」那一半之二（全部拆包第 7 批）：集結、投效、挑同伴 13 個一行委派；原本那一行 `from . import (..., escorts, ...)` 現在是別名
+    # （engine 照舊叫 escorts.due、after_battle，見 GAME_DIRECT 的 _apply_battle_outcome）
+    "tianxia.features.battle.muster", "tianxia.escorts",
     "tianxia.features.looks.actions",  # 擂台形象：Game.arena_look、arena_move 一行委派（擂台報名、開打記穿哪一套、疊哪一張光效）
 }
 GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
     "arena_look",  # 擂台形象（looks）
     "arena_move",  # 招式動畫（looks）
+    "_battle_ult", "_round_mvp",  # 決戰的回合 MVP（looks；Joy 11/3「決戰現在做，改動壓到最少」）：放手一搏送出記絕招、回合結算包一層挑人
     # explore（主動搬六包第 3＋4 批）：走一趟 9 個（1 個私有）——server、bot、bot_policy、測試在叫的 8 個，與 engine 模組層的 _outing_watch
     # （套在 choose、answer_event、epiphany_names、sense_draw 上；不是 Game 的方法，掃描看不到）叫的 _outing_watched
     "outing_go", "outing_view", "outing_can_go", "_outing_watched", "outing_say", "outing_tale_request", "outing_set_tale",
@@ -254,6 +258,12 @@ GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
     # _tick_siege 測試也直接叫）。_showdown_refusal、_siege_guards 只有包裡叫，沒有委派
     "admin_battles", "admin_start_battle", "admin_cancel_battle", "admin_showdowns", "cancelled_showdowns", "admin_start_showdown",
     "_sieges", "_definition_of", "_tick_siege", "_shelve_siege", "_cancel_siege", "_settle_siege",
+    # 決戰「打」那一半之二（全部拆包第 7 批；11 個私有）：核心原位與別的功能在叫的——options 的戰鬥選單（_battle_menu）、choose 的 battle 那一支
+    # （_battle_choose）、sync 與招募的同伴回江湖（_settle_partings）、戰力快照帶同伴（_escort_carry）、選邊與改幫（_ally_follows_battle，測試換掉）、
+    # 移動記在不在場（_sync_battle_presence）、引導與「打」c 問到了戰場沒（_at_battle）、「打」c 的我在哪一場（_joinable、_in_region，地盤畫面也問
+    # _joinable）、只能臨時投效（_free_agent）、假人趕路（rally_region）；測試直接叫的 _battle_options、_battle_choose_in。其餘 16 個只有包裡叫
+    "_battle_menu", "_battle_options", "_battle_choose", "_battle_choose_in", "_escort_carry", "_settle_partings", "_ally_follows_battle",
+    "_free_agent", "_at_battle", "_sync_battle_presence", "rally_region", "_joinable", "_in_region",
 }
 # 第 11 批（全部拆包「核心收接縫」，計畫 docs/superpowers/plans/2026-11-01-核心收接縫.md 1.2）之後留下的直連：核心的接縫（選單、補算時間、
 # 行動列與 act 子動詞、choose 前後段、本人這一輪、場景卡、戰報頁、店面）都換成了接縫掛鉤（tianxia/core/features.py），留下的都不是核心
@@ -278,6 +288,9 @@ GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；�
     "map_state": "輿圖（今天去哪裡出陣：sortie.on、叫 _sortie_foes、sorties_left）：" + _MAP_LINE,
     "_map_foes": "輿圖的地點卡（出陣打誰：sortie.on、叫 _sortie_foes）：" + _MAP_LINE,
     # （choose：用到 sortie_duel 這個名字的 PREFIX、PICK 第 11 批換成 choose_unlisted 與 Verb.picks，拿掉）
+    # battle（全部拆包第 7 批：tianxia/escorts.py 整個搬進決戰包，舊名是別名）
+    "_apply_battle_outcome": "收場那一刻全服放回隨你出陣的同伴（escorts.due、after_battle，排在龍頭上陣的 generals.after_battle 之後，先後算行為）："
+                             "決戰「打」那一半還在 Game（總表第 8 批搬 _apply_battle_outcome 時變成包裡直接叫）",
 }
 GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_DIRECT 的方法裡叫的也列（PM 10/31 答覆出陣第 1 批，第 2 批起）
     # explore（主動搬六包第 3＋4 批；審查修正：獨立一段放最前面，不夾在出陣那幾行中間）：核心叫探索委派一共 9 對。開發時掃描只看得到
@@ -293,6 +306,7 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("_arena_start", "arena_look"): "擂台形象：挑人開打時記挑的人穿哪一套（同上）",
     ("_arena_join", "arena_move"): "招式動畫：報名、更新分身時記出招疊哪一張（同上）",
     ("_arena_start", "arena_move"): "招式動畫：挑人開打時記挑的人出招疊哪一張（同上）",
+    ("_advance_battle_round", "_round_mvp"): "決戰的回合 MVP：回合結算包一層、結算完挑一位（同上，第 8 批）",
     # 出陣（主動搬六包第 1 批）：核心叫出陣委派 13 對（第 1 批時一共 21 對、掃描只看得到 6 對；約戰自己叫的 8 對第 2 批跟著進了包）
     # （第 11 批：_action_title、_everyday_options、action_notes 叫 _train_title、_sortie_option、_sortie_line 那 3 對換成 act 子動詞的掛鉤，拿掉）
     # （第 17 批：(_act, _sortie)、(_train_squad_ids, _sortie_mode|_sortie_foes)、(_duty_option, sorties_left)、(_duty, _sortie_host) 那 5 對
@@ -313,7 +327,7 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     # battle
     # 全服決戰「看」那一半（主動搬六包第 5 批）：叫它的都是「打」那一半（第 7、8 批搬進同一包之後變成包裡互相叫）。第 11 批：場景卡
     # (scene_text, _battle_scene_text) 換成 scene_over 掛鉤、戰報頁 (battle_detail, _round_blocks) 換成 record_detail 掛鉤，拿掉
-    ("_battle_options", "_round_wait"): "決戰「打」那一半（第 7 批搬）：已選了、等其他人那一顆灰鈕上寫已送出／在場",
+    # （(_battle_options, _round_wait)：第 7 批 _battle_options 搬進包、包裡直接叫 view.round_wait，拿掉）
     # （第 11 批：sync 的收場補送換成 deliver_results 掛鉤，拿掉 (sync, _deliver_battle_results)）
     ("_apply_battle_outcome", "_deliver_battle_results"): "決戰「打」那一半（第 8 批搬）：自己這一下把決戰推到收場，馬上補到自己手上",
     ("_settle_showdown", "_deliver_battle_results"): "決戰「打」那一半（第 8 批搬）：時刻表決戰收場，同上",
@@ -325,13 +339,8 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("_battle_status", "_shelve_siege"): "同上：季收了，每一場攻城收兵",
     ("_battle_status", "_definition_of"): "同上：回這個人看的那一場與它的定義",
     ("_battle_now", "_sieges"): "這個人看的那一場（按鈕指定、自己參戰、站得進去、自己大區裡的）：決戰「打」那一半，第 8 批",
-    ("_joinable", "_sieges"): "自己大區裡加得進去的那幾場（決戰在前）：集結，第 7 批",
-    ("_joinable", "_definition_of"): "同上：那一場在哪個大區、看不看得進去",
-    ("_in_region", "_definition_of"): "這幾場裡在自己大區的：集結，第 7 批",
-    ("_battle_menu", "_definition_of"): "同一個大區兩場以上時每一場一組加入鈕（字前面寫是哪一場）：集結，第 7 批",
-    ("_rally_any", "_sieges"): "假人趕路：有攻城戰時每一場都看（rally_region 那一支）：集結，第 7 批",
-    ("_rally_any", "_definition_of"): "同上：那一場的大區",
-    ("rally_region", "_sieges"): "假人趕路：有攻城戰時走 _rally_any（bot_runner 在叫）：集結，第 7 批",
+    # （_joinable、_in_region、_battle_menu、_rally_any、rally_region 叫 _sieges、_definition_of 那 7 對：第 7 批那幾個搬進包、包裡直接叫
+    # sieges.sieges、sieges.definition_of，拿掉）
     ("battles_now", "_sieges"): "全服此刻的每一場（假人程式、bot_policy 讀）：決戰「打」那一半，第 8 批",
     ("_siege_live", "_sieges"): "地盤畫面（conquest_view）的集結・交戰中那一場加不加得進去（FB-690）；地盤搬成包（第 46 批）時改叫決戰包的查詢服務",
     ("_apply_battle_outcome", "_settle_siege"): "收場分進攻城那一支（易手、作罷、時程表另外收）：決戰「打」那一半，第 8 批",
@@ -341,6 +350,28 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("admin_next_season", "_sieges"): "開下一季：季自然結束、沒人同步過的攻城換季前收起來（參戰者補得到交代）；同上",
     ("admin_next_season", "_shelve_siege"): "同上",
     ("admin_conquest_cancel", "_cancel_siege"): "地盤的救場工具「取消一場攻城」：已經開了集結的那一場照收兵收起來；地盤搬成包（第 46 批）時改叫決戰包",
+    # 決戰「打」那一半之二（全部拆包第 7 批）：核心與別的功能叫集結、投效、挑同伴的委派 17 對——這幾個位置都沒有第 11 批的掛鉤
+    # （計畫 docs/superpowers/plans/2026-11-01-決戰包-第3批.md 1.4）
+    ("options", "_battle_menu"): "選單的戰鬥那一段：集結時接在平常的選單前面、開打了整個取代（再接別人前綴的 defect:cancel）；menu 掛鉤在 "
+                                 "_everyday_options 裡、位置太後，前後的 _battle_for_me、_watching_battle、_fighting 是第 8 批",
+    ("choose", "_battle_choose"): "choose 查完選單、清掉「剛剛」與引導之後、建紀錄之前的 battle 那一支（出招不寫紀錄）：choose_unlisted 在查選單之前、"
+                                  "choose 掛鉤會建紀錄，都不是這個位置；同一個位置還有 seal:、duel:、arena:（第 12、28 批），「選單上、不建紀錄」那一格"
+                                  "留給核心批（總表第 57 批）",
+    ("sync", "_settle_partings"): "同步的同伴回江湖（簽到之後、退押金之前）：on_sync 在寄放之前、還問 enabled，江湖紀錄的先後算行為；同伴還沒成包",
+    ("_recruit_one", "_settle_partings"): "按招募之前先把回江湖的那一位情誼減半：同伴還沒成包",
+    ("_battle_marks", "_escort_carry"): "戰力快照（核心的單打服務）帶這一次加入的同伴：沒有掛鉤，總表第 15 批登記戰力快照時再看",
+    ("_faction_step", "_ally_follows_battle"): "投靠豪強、選邊之後集結名單跟著換邊（FB-273）：陣營還沒成包（總表第 35 批）",
+    ("_join_lean", "_ally_follows_battle"): "三陣營四勝利：拜入門派照所在地給傾向之後同上；同上",
+    ("_lean_step", "_ally_follows_battle"): "三陣營四勝利：改幫另一軍之後同上；同上",
+    ("_arrivals", "_sync_battle_presence"): "抵達時記人還在不在決戰的大區：移動還沒成包（總表第 47 批）",
+    ("_depart", "_sync_battle_presence"): "出發時同上；同上",
+    ("_halt", "_sync_battle_presence"): "喊停時同上（這一趟縮短了）；同上",
+    ("_hint_triggers", "_at_battle"): "碰到才說：人到了決戰的大區才排那一條提示：引導還沒成包（總表第 22 批）",
+    ("_watching_battle", "_at_battle"): "此刻只能在一旁看（還沒參戰的人不在那個大區）：決戰「打」那一半，第 8 批",
+    ("_fighting", "_free_agent"): "開打了還沒投效的散人與豪強不整個取代畫面：決戰「打」那一半，第 8 批",
+    ("_battle_now", "_joinable"): "這個人看的那一場：自己站得進去的那一場先（FB-566）；決戰「打」那一半，第 8 批",
+    ("_battle_now", "_in_region"): "同上：自己大區裡的那一場；同上",
+    ("_siege_live", "_joinable"): "地盤畫面（conquest_view）的集結・交戰中那一場加不加得進去（FB-690）：地盤搬成包（第 46 批）時改叫決戰包的查詢服務",
 }
 # tavern（主動搬六包第 10 批：酒肆的引擎那一半）：四張名單的酒肆那幾筆集中在這一段（三條拆包線並行，PM 合的時候不跟別人的行穿插）
 GAME_IMPORTS |= {
@@ -659,6 +690,104 @@ def test_feature_packages_only_touch_the_service_list_on_the_game():
     assert found == []
 
 
+# core-events（全部拆包第 16 批「事件檢定進核心」，計畫 docs/superpowers/plans/2026-11-01-事件檢定進核心.md）：事件檢定的本體從 Game 搬進
+# 核心本體 tianxia/core/event_check.py。以前那幾個方法在 Game 上，叫包的委派會被 game_links 記成 GAME_DELEGATE_CALLERS；搬進 tianxia/core/
+# 之後 game_links（只掃 engine.py）看不到，所以這裡補兩條：核心模組經 ctx 叫的不准是包的委派；Game 上叫 event_check 的只有那幾個一行的委派。
+CORE_EVENT_DELEGATES = {  # Game 上本體只有一行 `return event_check.<名>(self, …)` 的方法：server、假人、測試、探索包與 Game 原位在叫的 15 個
+    # （只有 event_check 自己叫的 _answer_branch、_deed_credit 不留委派）
+    "_present", "_event_text", "event_tier", "event_option_view", "_choice_label",  # 事件卡
+    "_choose", "_tale_clue", "_event_battle", "_apply",  # 固定選項
+    "_free_text_of", "_branches", "event_free_text_prompt", "free_text_request", "answer_event", "add_gamble_narration",  # 隨口應對
+}
+
+
+# 核心模組經 ctx 叫包的委派（過渡；同 GAME_DELEGATE_CALLERS 的格式與規矩：(模組.函式, 委派) → 為什麼留、哪一批收）。dev/core-events-1 審查補的：
+# 搬進 tianxia/core/ 之前，這些呼叫在 Game 上，主人搬成包、留下委派的那一批照批次表第二節記進 GAME_DELEGATE_CALLERS；搬進核心之後記這裡。
+# 現在是空的：event_check 經 ctx 叫的 Game 方法都還不是包的委派。總表（final_owner.json）把其中 8 個歸給包，那一包搬的批把它換成委派時
+# 這條守門會紅——照下面取消註解、附上理由（或照第 11 批開掛鉤、拿掉那一處），不要拿掉守門：
+#   ("event_check.event_tier", "_battle_for_me")：features/battle（決戰「打」，第 8 批）：全服戰鬥蓋著場景時不寫分級那一行
+#   ("event_check.answer_event", "_begin_enlistment")、("event_check.answer_event", "_greet_rejoin")、
+#   ("event_check.answer_event", "_check_hints")：features/guide（新手引導）：隨口應對的結果也可能拜入門派、碰到新玩法
+#   ("event_check.answer_event", "_general_gifts")、("event_check.answer_event", "_signature_arms")、
+#   ("event_check.answer_event", "_gift_entry")：features/gear：效果加了情誼，另起一則贈禮
+#   ("event_check.answer_event", "_report_seat")：features/orders：效果推了大勢、記了貢獻，第四階席次的帳也抄
+#   answer_branch 叫同樣那 7 個（一共 15 對）。
+# import 那一向沒有名單：event_check 第 37 行 import 的 bounties（總表歸 features/bounties）、foreshadow（歸 features/orders）成包、
+# 舊名留成別名時，test_the_core_never_imports_a_feature_package_except_the_registry 會抓到（核心只准 engine.py 的 GAME_IMPORTS）；
+# 那一批交 PM 定：開一張核心的 import 名單，或那一包開查詢服務、event_check 改經 ctx 叫。
+CORE_DELEGATE_CALLERS: dict[tuple[str, str], str] = {}
+
+
+def ctx_delegate_callers(source: str, name: str, delegates: set[str] | None = None) -> set[tuple[str, str]]:
+    """核心模組（source 是原文、name 是模組名，例 event_check）經 ctx.<名> 叫的、而且是包的委派（預設 GAME_DELEGATES）的
+    (模組.函式, 委派)；函式以外的記成 (模組, 委派)。巢狀的函式算在最外層那一個。"""
+    delegates = GAME_DELEGATES if delegates is None else delegates
+    out: set[tuple[str, str]] = set()
+    for top in ast.parse(source).body:
+        where = f"{name}.{top.name}" if isinstance(top, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) else name
+        out |= {(where, node.attr) for node in ast.walk(top)
+                if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "ctx" and node.attr in delegates}
+    return out
+
+
+def test_the_core_modules_reach_no_package_delegate_through_ctx():
+    """tianxia/core/ 底下（registry.py 以外）經 ctx 叫回 Game 的，是包的委派的只有 CORE_DELEGATE_CALLERS 列的過渡（附理由）；
+    新的要用包的東西照第 11 批開掛鉤（接縫掛鉤、Shop、Verb）。"""
+    found: set[tuple[str, str]] = set()
+    for path in sorted((TIANXIA / "core").glob("*.py")):
+        if path.name != "registry.py":
+            found |= ctx_delegate_callers(path.read_text(encoding="utf-8"), path.stem)
+    assert found == set(CORE_DELEGATE_CALLERS)
+    assert all(isinstance(why, str) and why.strip() for why in CORE_DELEGATE_CALLERS.values())
+    assert ctx_delegate_callers("def f(ctx):\n    return ctx._tavern_price(1)\n", "m") == {("m.f", "_tavern_price")}  # 掃描抓得到
+    assert ctx_delegate_callers("def f(ctx):\n    return ctx._present(e)\n", "m") == set()
+    # 主人搬成包的那一批：委派多一個，掃描報出 (模組.函式, 委派) 這一對（記進名單就過，見上面的註解）
+    assert ctx_delegate_callers("def f(ctx):\n    def g():\n        return ctx._x()\n    return g\n", "m", {"_x"}) == {("m.f", "_x")}
+
+
+def event_check_delegates() -> set[str]:
+    """engine.Game 上本體（說明字以外）只有一行 `return event_check.<名>(self, …)` 的方法。"""
+    game = next(n for n in _engine_tree().body if isinstance(n, ast.ClassDef) and n.name == "Game")
+    out = set()
+    for f in game.body:
+        if not isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        body = [n for n in f.body if not (isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant))]
+        call = body[0].value if len(body) == 1 and isinstance(body[0], ast.Return) else None
+        if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name)
+                and call.func.value.id == "event_check" and call.args and isinstance(call.args[0], ast.Name) and call.args[0].id == "self"):
+            out.add(f.name)
+    return out
+
+
+def test_the_game_reaches_the_event_check_only_through_its_one_line_delegates():
+    """Game 上叫 event_check 的只有 CORE_EVENT_DELEGATES 那幾個一行的委派（多一處就是把事件檢定的邏輯寫回 Game、或委派加了邏輯）。"""
+    game = next(n for n in _engine_tree().body if isinstance(n, ast.ClassDef) and n.name == "Game")
+    users = {f.name for f in game.body if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))
+             and any(isinstance(n, ast.Name) and n.id == "event_check" for n in ast.walk(f))}
+    assert event_check_delegates() == CORE_EVENT_DELEGATES
+    assert users == CORE_EVENT_DELEGATES
+
+
+# 被測試換掉的 Game 方法（手冊第十五節「換掉的才打得到」）：event_check 裡叫它們一律經 ctx，不直接叫模組裡的本體。
+# 模組裡的函式 → Game 上的委派、誰換掉它
+EVENT_CHECK_VIA_CTX = {
+    "present": ("_present", "tests/bots/test_event_rotation.py 換掉 Game._present：只有端出事件那一下記輪替"),
+    "apply": ("_apply", "tests/figures/test_seats.py 換掉 Game._apply：效果裡記的貢獻要排在抄帳之前"),
+    "free_text_request": ("free_text_request", "tests/server/test_server.py 換掉 Game.free_text_request：暫停中不問引擎"),
+}
+
+
+def test_the_event_check_calls_the_patched_game_methods_through_ctx():
+    tree = ast.parse((TIANXIA / "core" / "event_check.py").read_text(encoding="utf-8"))
+    direct = sorted(f"{node.lineno} {node.func.id}" for node in ast.walk(tree)
+                    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in EVENT_CHECK_VIA_CTX)
+    assert direct == []
+    via = {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "ctx"}
+    assert {name for name, _ in EVENT_CHECK_VIA_CTX.values()} <= via
+    assert {name for name, _ in EVENT_CHECK_VIA_CTX.values()} <= CORE_EVENT_DELEGATES
+
+
 # ── 網頁框架（docs/guide/核心與存檔.md「tianxia/ 不得 import 任何網頁框架」的例外，PM 10/31）──
 # 只有 tianxia/features/<包>/routes.py 可以 import fastapi，而且只在殼掛路由時延後 import（包的 __init__ 在 routes()、
 # admin_tools() 裡面才 from . import routes）；引擎、run_bots、假人不碰。
@@ -781,12 +910,14 @@ def test_the_scanner_catches_a_crossing(source, expected):
 
 def test_the_old_names_left_as_aliases_are_known():
     """tianxia/mall.py、tianxia/feasts.py、tianxia/sortie.py、tianxia/sortie_duel.py、tianxia/outing.py、tianxia/explore_one.py、
-    tianxia/tavern.py、tianxia/tavern_ask.py 是指到包裡同一個模組的別名（給還沒改的測試與舊模組）：掃描照它們指到的那一包算，不算舊模組。"""
+    tianxia/tavern.py、tianxia/tavern_ask.py、tianxia/escorts.py 是指到包裡同一個模組的別名（給還沒改的測試與舊模組）：掃描照它們指到的那一包算，不算舊模組。"""
     assert aliases() == {"feasts": "feast", "mall": "mall", "sortie": "sortie", "sortie_duel": "sortie",
                          # explore
                          "outing": "explore", "explore_one": "explore",
                          # tavern
-                         "tavern": "tavern", "tavern_ask": "tavern"}
+                         "tavern": "tavern", "tavern_ask": "tavern",
+                         # battle（全部拆包第 7 批：tianxia/escorts.py）
+                         "escorts": "battle"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 

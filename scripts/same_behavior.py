@@ -2339,6 +2339,8 @@ main = _explore_entry(main)  # explore（第 3＋4 批）一行登記：多四�
 # ═══════════════════════════ battle：決戰一軌（主動搬六包第 5 批 dev/battle-1、全部拆包第 6 批 dev/battle-2） ═══════════════════════════
 # 全服決戰「看」那一半（畫面、戰報、補送、放手一搏補劇情）搬進 tianxia/features/battle/（計畫 docs/superpowers/plans/2026-10-31-決戰包-第1批.md）；
 # 第 6 批接著搬管理者的決戰工具與攻城（計畫 2026-11-01-決戰包-第2批.md：BattleScenario 加 admin、siege_*、resting 幾段）。
+# 第 7 批搬集結、投效、挑同伴（計畫 2026-11-01-決戰包-第3批.md：BattleScenario 加 muster_*、late、wander 幾段與 bots 那一段的大區外假人，
+# 同一套段落另外登記成 muster 一軌、切在集結中）。
 # 這一段整塊是決戰的：四條拆包線並行，接在檔尾、最後一行登記（_battle_register_track），PM 合的時候不跟別人的行穿插。
 
 
@@ -2374,6 +2376,17 @@ def _battle_client(base: type) -> type:
     return _BATTLE_CLIENTS[base]
 
 
+def _still(phase):
+    """第 7 批插進來的段落（BattleScenario.still）：這一段裡的每一個請求，決戰與攻城的期限都跟著時鐘往後挪那一步。"""
+
+    def run(self, *a, **k):
+        with self.still():
+            return phase(self, *a, **k)
+
+    run.__name__, run.__doc__ = phase.__name__, phase.__doc__
+    return run
+
+
 class BattleScenario(Scenario):
     """全服決戰「看」那一半（主動搬六包第 5 批；--track battle，自己一個資料庫）。照 plan.json order 4 的 behavior_check：管理者開季、
     開戰（不帶設定：start_battle 黃巾決戰；weekend、season21、week7：start_showdown 長社火攻）；官軍、黃巾、豪強、散人各一人擺在決戰的大區，
@@ -2390,7 +2403,20 @@ class BattleScenario(Scenario):
     admin（開戰之前按得到的被拒）、admin_trial（第 5 批那一場收場之後：開了再取消，與那時候按得到的被拒）——管理者的決戰工具一樣一樣按，
     成的與被拒的各一次；siege_*（地盤開著的 weekend、season21、week7：六場攻城，見 SIEGES；none、test 沒有地盤，那幾段什麼都不打）；
     resting（收季之後再按一輪，season 那一段裡）。前半照舊停在 gamble：同一刻兩場攻城（A、B）打了一兩回合、還沒收場（round 接一行
-    siege_round：決戰每一回合攻城的真人也各出一招）——後半由 head 打完兩場攻城、結算、補送。"""
+    siege_round：決戰每一回合攻城的真人也各出一招）——後半由 head 打完兩場攻城、結算、補送。
+
+    第 7 批（決戰「打」b：集結、投效、挑同伴，dev/battle-3；計畫 docs/superpowers/plans/2026-11-01-決戰包-第3批.md）插進來的段：muster_seat（六位新人
+    MUSTER_PLAYERS 直接建進資料庫再登入、擺位置；秦朗月、顧長風、莫問天、石破浪名下各一位同伴）、muster_pick（挑同伴與「再想想」、臨時投效再改投、同一個
+    大區兩場打得進去時照 @流水號加入——潁汝多一場攻城 G、集結被拒的路）、muster_more（顧長風挑好同伴加入、江映雪投靠豪強之後集結名單跟著換邊）、
+    late（開打之後：停在挑同伴的才挑〔改成晚到〕、晚到、晚到臨時投效、再按另一邊被擋）、wander（參戰者走出大區、喊停）、muster_deliver（同伴回江湖、
+    情誼減半、同一次同步清記號）；bots 那一段多一位名下有同伴、站在大區外的官軍假人（趕路、挑同伴的分數）。這一軌照舊切在 gamble；同一套段落另外
+    登記成 muster 一軌（MusterScenario），切在 muster_pick 之後——舊程式寫到兩位按了加入、停在挑同伴（escort_pick 寫進存檔）就停，新程式接著挑。
+    第 7 批插進來的請求不吃決戰與攻城的時間（審查 should：原本吃掉集結那 30 分鐘與第一回合的 180 秒——season21 的長社火攻在 muster_more 裡就開打、
+    第一幕全是逾時；weekend、week7 的第一回合在 late 裡逾時，放手一搏落到第二回合）：上面那幾段（_still）、narrate 裡新人的重新登入、名下有第 7 批
+    給的同伴的人按「不派」那一下，每一步之前把決戰與攻城的期限往後挪那一步（still、hold），G 在 muster_more 最後取消；第 5、6 批的集結截止、
+    開打那一刻與每一回合的逾時照那幾段原本的請求算，跟第 6 批的情境一樣（有決戰的四種設定逐回合比過：哪幾回合逾時、第幾回合換幕、兩次放手一搏
+    落在哪一回合、第九回合收場，都跟第 6 批那一版一樣；收場的勝負照多出來的參戰者變了）。第 7 批的人加入之後不出招（第一回合逾時代為固守，之後不再等他們），出招的照舊是第 5 批那三位與攻城的真人。gamble 開頭、
+    siege_start 開頭、muster_more 最後各驗一次（expect）：放手一搏打的是第一回合、攻城截止之前決戰還在集結，不成立就停。"""
 
     PLAYERS = {"秦朗月": "guan", "韓雲起": "huang", "柳青崖": "haoqiang", "葉寒舟": None}
     NEWBIE = "白小樓"  # Scenario.setup 註冊、不略過引導的那一位
@@ -2403,17 +2429,27 @@ class BattleScenario(Scenario):
     # 亂數），寫在這裡是情境走到哪幾支：守將守住、攻下易手、陣營守住、作罷、取消、季終收兵。每一場自己一個大區（D 在決戰收場之後才開）：同一個
     # 大區兩場以上一起集結的話加入鈕帶 @流水號，第 5 批那幾位的加入會被改掉
     SIEGES = {"A": ("guan", "nanyang_road"), "B": ("huang", "zhuo_county"), "C": ("huang", "xiaquyang"), "D": ("guan", "runan_wilds"),
-              "E": ("guan", "xinye"), "F": ("huang", "luoyang_road")}
+              "E": ("guan", "xinye"), "F": ("huang", "luoyang_road"),
+              "G": ("huang", "hilltop_wilds")}  # 第 7 批：決戰的大區（潁汝）裡多一場，黃巾與散人在那一區看得到兩場（加入鈕帶 @流水號）
     # 攻城的真人（名號：(陣營, 哪一場, 每一回合出哪一招)）：A 兩位官軍攻、一位散人助守【守軍】；B 黃巾一位攻（固守）、官軍一位守（強攻）；C 黃巾一位
     SIEGE_PLAYERS = {"程破軍": ("guan", "A", "強攻"), "方定遠": ("guan", "A", "奇襲"), "孟無涯": (None, "A", "固守"),
                      "杜飛沙": ("huang", "B", "固守"), "季長安": ("guan", "B", "強攻"), "譚小滿": ("huang", "C", "強攻")}
     SIEGE_BOT_SEATS = [("假壬", "guan"), ("假癸", "guan"), ("假子", "huang"), ("假丑", "huang")]  # E 那一場的假人：兩軍各二
     # 戰書緊接在開戰之後下（siege_open）、攻城的真人之後才建（siege_seat）：攻城的集結截止跟決戰的差不到一分鐘，siege_start 把時鐘推過攻城的截止時
     # 決戰才剛開打（season21 的長社火攻開季就開了集結、截止得更早，一樣在這一下開打）——決戰第一回合照第 5 批的樣子在 gamble 打
-    PHASES_FIRST = ["setup", "join", "seat", "look", "admin", "open", "siege_open", "siege_seat", "muster", "siege_muster", "siege_cancel",
-                    "siege_start", "start", "gamble"]
-    PHASES_SECOND = ["narrate", "fight", "siege_end", "deliver", "reports", "restore", "admin_trial", "siege_after", "bots", "siege_bots",
-                     "siege_shelve", "season"]
+    # （第 7 批插進來的段落照 still 不吃這段時間；gamble 開頭 expect 驗）
+    # 第 7 批：六位新人（名號：(陣營, 擺在哪)）。region＝那一場決戰的大區（spot）、hilltop＝荒丘（同一個大區，G 那一塊）、away＝那一場決戰的大區外（away_spot）。
+    # 顧長風按加入、挑同伴、再想想、再按加入停在挑，後半才挑；莫問天按加入停在挑，開打了才挑（改成晚到）；江映雪（散人）臨時投效官軍再改投黃巾，
+    # 後半到曹氏莊院投靠豪強；石破浪在荒丘看得到兩場、先按 G 那一場的 @ 停在挑同伴、再想想，照 @流水號加入決戰；嚴不悔、沐晚晴集結時在大區外，開打之後才到（晚到、晚到臨時投效）
+    MUSTER_PLAYERS = {"顧長風": ("guan", "region"), "莫問天": ("guan", "region"), "江映雪": (None, "region"), "石破浪": ("huang", "hilltop"),
+                      "嚴不悔": ("huang", "away"), "沐晚晴": (None, "away")}
+    # 名下各一位同伴（秦朗月集結時照舊按「不派」：muster 那一段本來就這樣按；石破浪是審查之後加的：先按 G 那一場停在挑、再想想）
+    ESCORTERS = ("秦朗月", "顧長風", "莫問天", "石破浪")
+    AWAY_BOT = ("假寅", "guan")  # bots 那一段：名下一位同伴、站在大區外的官軍假人
+    PHASES_FIRST = ["setup", "join", "seat", "look", "admin", "open", "siege_open", "siege_seat", "muster_seat", "muster", "muster_pick",
+                    "muster_more", "siege_muster", "siege_cancel", "siege_start", "start", "late", "gamble"]
+    PHASES_SECOND = ["narrate", "wander", "fight", "siege_end", "deliver", "muster_deliver", "reports", "restore", "admin_trial", "siege_after",
+                     "bots", "siege_bots", "siege_shelve", "season"]
 
     def __init__(self, root: Path, profile: str, db: Path):
         super().__init__(root, profile, db)
@@ -2428,6 +2464,7 @@ class BattleScenario(Scenario):
 
         ollama_client.OllamaClient.from_config = classmethod(from_config)
         self.late_done = False
+        self.stills = 0  # still() 疊了幾層：大於 0 時每一個請求都是第 7 批插進來的（begin 先挪期限）
 
     # ── 小工具 ──
 
@@ -2435,8 +2472,10 @@ class BattleScenario(Scenario):
 
     def begin(self) -> None:
         """同 Scenario.begin，只是一步 STEP_SECONDS（十秒）；同約戰那一軌，每個請求換一份空的勝算記憶（前半＋後半是兩個行程，集結中那幾位
-        選單上的勝算字才對得上）。"""
+        選單上的勝算字才對得上）。第 7 批插進來的請求（still 裡）先把決戰與攻城的期限往後挪這一步（hold）。"""
         STEP[0] += 1
+        if self.stills:
+            self.hold()
         CLOCK[0] = CLOCK0 + STEP[0] * self.STEP_SECONDS
         random.seed(STEP[0])
         self.server.GAMES.clear()
@@ -2447,6 +2486,49 @@ class BattleScenario(Scenario):
     def skip(self, steps: int) -> None:
         STEP[0] += steps
         emit(f"時鐘推過 {steps} 步", None)
+
+    def expect(self, ok: bool, what: str) -> None:
+        """情境自己驗的前提：不成立就停、不往下比（審查 should：第 7 批插進來的段落吃掉了集結的時間，第 5、6 批決戰那一段的節奏悄悄變了，
+        base 與 head 跑同一套段落，比對照樣相等，看不出來）。"""
+        if not ok:
+            raise RuntimeError(f"情境的前提不成立（第 {STEP[0]} 步）：{what}")
+
+    @contextlib.contextmanager
+    def still(self):
+        """這一段裡的請求是第 7 批插進來的（審查 should）：決戰與攻城的時鐘不走——每一步之前把期限往後挪那一步（hold），集結截止與每一回合的
+        逾時照第 5、6 批那幾段的請求算，跟沒有這幾段時一樣（集結那 30 分鐘、一回合 180 秒放不下第 7 批的幾十個請求：season21 的長社火攻
+        開季就開了集結、截止最早，原本在第 7 批的段落裡就開打了；late 那九個請求排在開打與放手一搏之間，第一回合在 late 裡逾時）。"""
+        self.stills += 1
+        try:
+            yield
+        finally:
+            self.stills -= 1
+
+    def hold(self) -> None:
+        """還沒收場的決戰與攻城：期限往後挪一步（battle_instance.shift_deadlines，管理者暫停再繼續的同一個做法：集結中挪集結截止、開打了挪這一回合
+        開放的時間）。賽季的時鐘照走。都收場了（或還沒開）什麼都不寫。"""
+        from tianxia import battle_instance
+
+        b = self.world.get_battle()
+        if (b is None or b.phase == "ended") and all(s.phase == "ended" for s in self.world.get_sieges()):
+            return
+
+        def fn(state) -> None:
+            for x in ([state.active_battle] if state.active_battle is not None else []) + list(state.sieges):
+                battle_instance.shift_deadlines(x, self.STEP_SECONDS)
+
+        self.world.mutate(fn)
+
+    def relogin(self, who: str) -> None:
+        """同 Scenario.relogin；第 7 批的新人（MUSTER_PLAYERS）重新登入那一下照第 7 批插進來的請求算（still：narrate 那一段的 login_all）。"""
+        with self.still() if who in self.MUSTER_PLAYERS else contextlib.nullcontext():
+            super().relogin(who)
+
+    def no_escort(self, who: str) -> None:
+        """有挑同伴那一步就按「不派」。名下的同伴是第 7 批給的（ESCORTERS）：那一下照第 7 批插進來的請求算（still）。"""
+        if "battle:escort:none" in self.ids(self.main(who)):
+            with self.still() if who in self.ESCORTERS else contextlib.nullcontext():
+                self.choose(who, "battle:escort:none")
 
     def skip_past(self, deadline: float) -> None:
         """時鐘推到下一個請求剛過 deadline（begin 的時刻是 CLOCK0 + 步數 × STEP_SECONDS）。"""
@@ -2572,8 +2654,7 @@ class BattleScenario(Scenario):
             if pick is None:
                 continue
             self.choose(who, pick)
-            if "battle:escort:none" in self.ids(self.main(who)):
-                self.choose(who, "battle:escort:none")
+            self.no_escort(who)  # 秦朗月名下有第 7 批給的同伴：按「不派」那一下照第 7 批插進來的請求算
         for who in [*self.PLAYERS, self.NEWBIE]:
             self.main(who)
         self.battle_row("集結中")
@@ -2589,7 +2670,10 @@ class BattleScenario(Scenario):
 
     def gamble(self) -> None:
         """第一回合：官軍放手一搏、散人掛機（回合等到逾時、代為固守）、其餘出招；這一回合結算之後劇情還沒補（場景上是固定句，等
-        narrate_once）——前半停在這裡。"""
+        narrate_once）——前半停在這裡。這一回合是第一回合（第一幕、還沒有一回合逾時），不然就停。"""
+        b = self.world.get_battle()
+        self.expect(b is None or (b.phase == "active" and b.round_number == 0 and b.act_index == 0),
+                    "放手一搏打的是第一回合" + ("" if b is None else f"（此刻 {b.phase}、第 {b.round_number + 1} 回合、第 {b.act_index + 1} 幕）"))
         self.round({self.GAMBLER: "火燒連營，直搗敵陣"})
         self.main(self.GAMBLER)
 
@@ -2733,9 +2817,10 @@ class BattleScenario(Scenario):
             p.tutorial_step = len(self.c.tutorial.steps)
             p.joined_at = -1.0e9
             self.chars.save(g.state)
+        away = self.away_bot(battle_id, 41 + len(self.BOT_SEATS))  # 第 7 批：大區外、名下有同伴的那一位（趕路、挑同伴）
         runner = BotRunner(self.c, self.world, self.chars, rng=random.Random(7), clock=lambda: CLOCK[0])
         online = server_bots.is_online
-        seeds = {41 + i for i in range(len(self.BOT_SEATS))}
+        seeds = {41 + i for i in range(len(self.BOT_SEATS))} | away
         # 擺好的四個一直在線（作息照種子，可能正好不在）；一輪動不動照舊擲 act_chance（集結三十分鐘夠他們走到「加入」），出招照 battle_tick
         server_bots.is_online = lambda profile, now: profile.seed in seeds or online(profile, now)
         totals = Counter()
@@ -2906,8 +2991,7 @@ class BattleScenario(Scenario):
             emit(f"{joiner} 試開那一場按的", pick)
             if pick is not None:
                 self.choose(joiner, pick)
-                if "battle:escort:none" in self.ids(self.main(joiner)):
-                    self.choose(joiner, "battle:escort:none")
+                self.no_escort(joiner)
         self.battle_row("試開")
         self.do(ADMIN, "start_battle", {"id": trial})
         if op == "start_showdown":
@@ -3048,8 +3132,7 @@ class BattleScenario(Scenario):
             if pick is None:
                 continue
             self.choose(who, pick)
-            if "battle:escort:none" in self.ids(self.main(who)):
-                self.choose(who, "battle:escort:none")
+            self.no_escort(who)
         for who in self.SIEGE_PLAYERS:
             self.main(who)
         self.siege_row("集結中", ("A", "B", "C"))
@@ -3071,7 +3154,10 @@ class BattleScenario(Scenario):
 
     def siege_start(self) -> None:
         """攻城的集結截止（戰書比決戰晚幾步下，截止也晚幾步）：時鐘推過最晚的那一場，攻城的真人各看一次——第一個同步的人把決戰與每一場攻城都
-        推到開打（_battle_status：先決戰、再每一場攻城各推一次，_tick_siege；沒人到的作罷）；start 那一段接著看決戰開打的畫面。"""
+        推到開打（_battle_status：先決戰、再每一場攻城各推一次，_tick_siege；沒人到的作罷）；start 那一段接著看決戰開打的畫面。
+        到這裡為止決戰還在集結（season21 的長社火攻開季就開了集結、截止最早：集結那幾段要放得進去），不然就停。"""
+        b = self.world.get_battle()
+        self.expect(b is None or b.phase == "muster", f"攻城截止之前決戰還在集結（此刻 {None if b is None else b.phase}）")
         if not self.siege_on():
             return
         mustering = [b for b in self.world.get_sieges() if b.phase == "muster"]
@@ -3189,9 +3275,323 @@ class BattleScenario(Scenario):
         emit(f"{self.GAMBLER} 季終之前加入的", pick)
         if pick is not None:
             self.choose(self.GAMBLER, pick)
-            if "battle:escort:none" in self.ids(self.main(self.GAMBLER)):
-                self.choose(self.GAMBLER, "battle:escort:none")
+            self.no_escort(self.GAMBLER)
         self.siege_row("季終之前", ("D",))
+
+    # ── 第 7 批：集結、投效、挑同伴（MUSTER_PLAYERS、ESCORTERS、AWAY_BOT）──
+
+    def enroll(self, who: str, side: str | None) -> None:
+        """一位新人直接建進資料庫（同假人那一段：Game.new graduated、開局待選的事件選掉、過了新手期；兩軍的人直接記陣營）、綁一個帳號，
+        再照 API 登入——一位只花兩步，集結那 30 分鐘才放得下第 7 批的幾段（照 API 註冊、略過引導、投靠一位要十來步）。"""
+        from tianxia.accounts import AccountStore
+        from tianxia.engine import Game
+
+        self.begin()
+        g = Game.new(self.c, who, rng=random.Random(STEP[0]), world=self.world, graduated=True, sex="男")
+        g.client = None
+        g.sync(CLOCK[0])
+        for _ in range(6):  # 開局待選的事件：選掉
+            first = next((o.id for o in g.options(odds=False) if o.id.startswith("choice:") and o.enabled), None)
+            if first is None:
+                break
+            g.choose(first)
+        p = g.state.player
+        p.tutorial_step = len(self.c.tutorial.steps)
+        p.joined_at = -1.0e9
+        if side is not None and any(f.id == side for f in self.c.scenario.factions):
+            p.faction = side
+        self.passwords[who] = "pw-" + self.login_of(who)
+        store = AccountStore(self.world.db)
+        with self.world.db.transaction():
+            self.chars.save(g.state)
+            store.register(self.login_of(who), self.passwords[who])
+            store.bind_character(self.login_of(who), who)
+        emit(f"{who} 建進資料庫", {"faction": p.faction, "location": p.location})
+        self.clients[who] = self.TestClient(self.server.app)
+        self.call(who, "POST", "/api/login", {"login": self.login_of(who), "password": self.passwords[who]})
+
+    def mate_for(self, side: str | None) -> str | None:
+        """還沒有主的同伴裡挑一位（照 id 排第一個；不是大勢人物、陣營寫的是 side 或沒寫）；歷史武將同行關著（測試內容）是 None。"""
+        from tianxia import roster
+
+        if not roster.on(self.c):
+            return None
+        return next((cid for cid in sorted(self.c.characters) if cid not in self.c.figures and self.c.characters[cid].side in (None, side)
+                     and self.world.get_companion(cid).owner is None), None)
+
+    def give_mate(self, who: str, side: str | None) -> None:
+        """名下一位同伴（招進來、放進隊伍、情誼 80），同 tests/battle/test_companions_battle._ride_in。"""
+        cid = self.mate_for(side)
+        if cid is None:
+            emit(f"{who} 名下的同伴（歷史武將同行關著）", None)
+            return
+        ok = self.world.try_recruit(cid, who, cap=3)
+
+        def fn(p) -> None:
+            if cid not in p.team:
+                p.team.append(cid)
+            p.affinities[cid] = 80
+
+        self.edit(who, fn)
+        emit(f"{who} 名下的同伴", [cid, ok])
+
+    def mates(self, who: str, tag: str) -> None:
+        """同伴那幾格：隊伍、情誼、減過了沒（parted_done）、還在挑的那一下（escort_pick），全服那一份的主人與從誰身邊回江湖。"""
+        state = self.chars.load(who)
+        if state is None:
+            emit(f"{who} {tag}（沒有這個人）", None)
+            return
+        p = state.player
+        cids = sorted(set(p.team) | set(p.affinities) | {c for c, pr in self.world.companions().items() if who in (pr.owner, *pr.parted_from)})
+        emit(f"{who} 同伴 {tag}", {
+            "team": list(p.team), "affinities": {c: p.affinities.get(c) for c in cids}, "parted_done": list(p.parted_done),
+            "escort_pick": p.escort_pick,
+            "world": {c: [self.world.get_companion(c).owner, list(self.world.get_companion(c).parted_from)] for c in cids}})
+
+    def escorts_row(self, tag: str) -> None:
+        """那一場決戰上每一位隨你出陣的同伴（份量、氣血、敗走、回江湖了沒）與每個人站哪一邊、在不在場（away）。"""
+        b = self.world.get_battle()
+        emit(f"決戰的同伴與在場 {tag}", None if b is None else {
+            n: [q.faction, q.away, None if q.escort is None else [q.escort.cid, q.escort.score, round(q.escort.neili, 1), q.escort.fallen_round,
+                                                                   q.escort.released]]
+            for n, q in sorted(b.participants.items())})
+
+    def showdown_ref(self) -> int | None:
+        b = self.world.get_battle()
+        return None if b is None else b.record_id
+
+    def pick_of(self, ids: dict[str, dict], want: str) -> str | None:
+        """選單上那一顆（want 是不帶 @ 的 id）：同一個大區兩場以上時鈕帶「@流水號」，挑決戰那一場的；按不下去的不算。"""
+        rid = self.showdown_ref()
+        return next((i for i in sorted(ids) if i.split("@")[0] == want and ids[i].get("enabled")
+                     and ("@" not in i or i.endswith(f"@{rid}"))), None)
+
+    def press(self, who: str, want: str, tag: str) -> str | None:
+        ids = self.ids(self.main(who))
+        pick = self.pick_of(ids, want)
+        emit(f"{who} {tag}", pick)
+        if pick is not None:
+            self.choose(who, pick)
+        return pick
+
+    def away_spot(self) -> str | None:
+        """大區外的一處：照 id 排第一個、不在那一場決戰的大區（審查 should：原本連每一場攻城的大區也避開，攻城開著的季五個大區全佔滿——
+        決戰與 G 在潁汝、A 南陽、B 幽州、C 冀州、F 洛陽——一處都找不到、照舊站在潁川〔潁汝〕，「集結時人在大區外」只有不帶設定走到）。
+        正式內容排第一的是冀州的白馬津：攻城開著的季那裡有 C 在集結（集結中就取消、不開打），嚴不悔、沐晚晴站在那裡不按 C 的鈕、不會加進 C
+        （集結截止不拉旁人進來，battle_instance.close_muster 只分已報名、沒選邊的人）。那一場決戰有大區、卻找不到大區外的一處就停（expect）。"""
+        from tianxia import atlas
+
+        def region(loc: str | None) -> str | None:
+            r = atlas.region_of(self.c, loc) if loc in self.c.locations else None
+            return None if r is None else r.id
+
+        d = self.c.battles.get(self.target()[1])
+        busy = d.region if d is not None else None
+        found = next((i for i in sorted(self.c.locations) if region(i) != busy), None)
+        emit("大區外的一處", found)
+        self.expect(d is None or d.region is None or found is not None, "那一場決戰的大區外找得到一處（嚴不悔、沐晚晴集結時站在那裡）")
+        return found
+
+    @_still
+    def muster_seat(self) -> None:
+        """第 7 批的六位新人建好、擺好（region：那一場決戰的大區；hilltop：荒丘，同一個大區；away：那一場決戰的大區外）；秦朗月、顧長風、
+        莫問天、石破浪名下各一位同伴（歷史武將同行開著的季）。"""
+        spots = {"region": self.spot(self.target()[1]), "hilltop": "hilltop_wilds", "away": self.away_spot()}
+        for who, (side, where) in self.MUSTER_PLAYERS.items():
+            self.enroll(who, side)
+            self.place(who, spots[where])
+        for who in self.ESCORTERS:
+            self.give_mate(who, self.PLAYERS.get(who, self.MUSTER_PLAYERS.get(who, (None,))[0]))
+
+    @_still
+    def muster_pick(self) -> None:
+        """集結中第 7 批的加入那幾種與被拒的路——攻城開著的季先在潁汝多開一場（G：黃巾攻中立的荒丘）：黃巾與散人站在那一區看得到兩場、
+        加入與投效的鈕帶 @流水號（_battle_menu），官軍那一格是守將、站不進去。
+        顧長風：按加入 → 挑同伴那一步（名下每一位一顆、「不派」「再想想」）→ 再想想 → 再按加入，停在挑；莫問天：按加入，停在挑。
+        江映雪（散人）：臨時投效官軍 → 改投黃巾。石破浪：先按一顆壞掉的 @，再按 G 那一場的 @（名下有同伴：停在挑、escort_pick 記著 @G）→
+        再想想，再照決戰那一場的 @ 加入（不派）。被拒：韓雲起按官軍的加入（不在選單上）、
+        沐晚晴在大區外按投效（看不到戰場）。集結一軌的前半停在這一段之後。"""
+        if self.siege_on():
+            side, loc = self.SIEGES["G"]
+            self.do(ADMIN, "admin_conquest_letter", {"id": loc, "side": side})
+            self.call(ADMIN, "GET", "/api/admin")  # 下一個同步的人把它開成集結
+            self.siege_row("潁汝多一場", ("G",))
+        who = "顧長風"
+        pick = self.press(who, "battle:join:guan", "集結時按的")
+        if pick is not None and "battle:escort:back" in self.ids(self.main(who)):
+            self.choose(who, "battle:escort:back")
+            self.main(who)
+            self.choose(who, pick)
+        self.mates(who, "按了加入、停在挑")
+        self.press("莫問天", "battle:join:guan", "集結時按的")
+        self.mates("莫問天", "按了加入、停在挑")
+        for want in ("battle:enlist:guan", "battle:enlist:huang"):
+            if self.press("江映雪", want, "集結時按的") is not None and "battle:escort:none" in self.ids(self.main("江映雪")):
+                self.choose("江映雪", "battle:escort:none")
+        who = "石破浪"
+        emit(f"{who} 看到的戰鬥鈕", sorted(i for i in self.ids(self.main(who)) if i.startswith("battle:")))
+        self.choose(who, "battle:join:huang@abc")  # 壞掉的流水號：不在選單上
+        g = self.slot_of("G") if self.siege_on() else None
+        if g is not None and g.record_id is not None:
+            # 照 @流水號按 G 那一場（不是排第一的決戰：審查 nit，按 @1 的話不帶流水號也落在同一場，@ 整個被忽略也比不出來）——名下有同伴，
+            # 停在挑，記下的那一下帶著 @G（PlayerState.escort_pick）；再想想，回頭照決戰那一場的 @ 加入
+            self.choose(who, f"battle:join:huang@{g.record_id}")
+            self.mates(who, "按了 G 那一場的加入、停在挑")
+            self.choose(who, "battle:escort:back")
+        self.press(who, "battle:join:huang", "集結時按的")
+        self.no_escort(who)
+        self.choose("韓雲起", "battle:join:guan")  # 只能站自己陣營那一邊：選單上沒有
+        self.main("沐晚晴")
+        # 人在大區外：看不到戰場、沒有決戰的投效鈕。按的是決戰那一顆在潁汝的 id（攻城開著的季潁汝有決戰與 G 兩場，鈕帶 @流水號）——她站的冀州
+        # 有 C 在集結，不帶 @ 的那一顆是 C 的，按了就加進 C
+        self.choose("沐晚晴", "battle:enlist:guan" + (f"@{self.showdown_ref()}" if self.siege_on() else ""))
+        self.battle_row("第 7 批的人加入之後")
+        self.escorts_row("集結中")
+
+    @_still
+    def muster_more(self) -> None:
+        """集結一軌的後半從這裡接（重新登入）：顧長風挑好同伴加入（集結中，照加入帶著那一位）；江映雪到曹氏莊院（同一個大區）投靠地方豪強，
+        豪強分屬兩軍的季挑了依附哪一軍、集結名單跟著換到那一邊（_ally_follows_battle，FB-273）；豪強不分屬兩軍的季照舊臨時投效著。
+        最後管理者取消 G（同 C：admin_conquest_cancel）——G 只為了集結時潁汝有兩場，留著的話 siege_start 要把時鐘推過它的截止（比 A、B、F 晚
+        將近一個集結），第 5、6 批的決戰與攻城就晚那麼久才開打。"""
+        self.login_all()
+        who = "顧長風"
+        ids = self.ids(self.main(who))
+        pick = next((i for i in sorted(ids) if i.startswith("battle:escort:") and i not in ("battle:escort:none", "battle:escort:back")), None)
+        emit(f"{who} 挑的同伴", pick)
+        if pick is not None:
+            self.choose(who, pick)
+        self.mates(who, "挑好同伴之後")
+        who = "江映雪"
+        hq = next((f for f in self.c.scenario.factions if f.id == "haoqiang"), None)
+        if hq is None or "cao_manor" not in hq.join_at or not self.place(who, "cao_manor"):
+            emit("投靠豪強那一段略過（這份內容沒有地方豪強或曹氏莊院）", None)
+        else:
+            self.choose(who, "faction:haoqiang")
+            b = self.world.get_battle()
+            now_side = b.participants[who].faction if b is not None and who in b.participants else None
+            ally = next((i for i in sorted(self.ids(self.main(who))) if i.startswith("faction:ally:") and i.rpartition(":")[2] != now_side), None)
+            emit(f"{who} 選邊", ally)
+            if ally is not None:
+                self.choose(who, ally)
+            self.choose(who, "faction:confirm")
+            self.settle_choices(who)
+        self.battle_row("第 7 批後半的人加入之後")
+        self.escorts_row("集結中（後半）")
+        b = self.world.get_battle()
+        self.expect(b is None or b.phase == "muster", f"第 7 批集結那幾段做完時決戰還在集結（此刻 {None if b is None else b.phase}）")
+        slot = self.slot_of("G") if self.siege_on() else None
+        if slot is not None:
+            self.do(ADMIN, "conquest_cancel", {"id": slot.id})
+            self.siege_row("G 取消之後", ("G",))
+
+    @_still
+    def late(self) -> None:
+        """開打之後才到：莫問天集結時按了加入、停在挑同伴，現在才挑（改成晚到、帶著那一位）；嚴不悔（黃巾）擺進決戰的大區，按「加入戰局」；
+        沐晚晴（散人）擺進大區，晚到臨時投效官軍——人多的那一邊（晚到照投效的那一軍記，不照「補人少的那一邊」分；Task 5 的單點突變抓到
+        原本投效黃巾時兩種一樣），再按黃巾那一顆被擋（開打之後鈕上沒有改投）。"""
+        who = "莫問天"
+        ids = self.ids(self.main(who))
+        pick = next((i for i in sorted(ids) if i.startswith("battle:escort:") and i not in ("battle:escort:none", "battle:escort:back")), None)
+        emit(f"{who} 開打之後才挑的同伴", pick)
+        if pick is not None:
+            self.choose(who, pick)
+        self.mates(who, "開打之後挑了")
+        loc = self.spot(self.target()[1])
+        for who, want in (("嚴不悔", "battle:join_late"), ("沐晚晴", "battle:enlist:guan")):
+            self.place(who, loc)
+            if self.press(who, want, "開打之後按的") is not None and "battle:escort:none" in self.ids(self.main(who)):
+                self.choose(who, "battle:escort:none")
+        self.choose("沐晚晴", "battle:enlist:huang")
+        self.battle_row("晚到之後")
+        self.escorts_row("開打")
+
+    @_still
+    def wander(self) -> None:
+        """參戰者走出決戰的大區、再喊停（_sync_battle_presence：出發那一下記離開；喊停那一下這一趟只剩下一站，落回大區就不算離開；抵達時
+        再記一次）：顧長風（帶著同伴：主人離開大區時同伴也不在場上）往大區外的一處走（照 id 排、第一站還在大區裡的第一處），喊停。之後
+        照回合輪詢，抵達那一下照路程。"""
+        from tianxia import atlas
+
+        who = "顧長風"
+        b = self.world.get_battle()
+        d = self.c.battles.get(b.battle_id) if b is not None else None
+        if b is None or b.phase != "active" or d is None or d.region is None or who not in b.participants:
+            emit("走出大區那一段略過（沒有開打中、有大區的決戰）", None)
+            return
+        state = self.chars.load(who)
+        inside = {i for i in self.c.locations if (r := atlas.region_of(self.c, i)) is not None and r.id == d.region}
+        dest = None
+        for cand in sorted(i for i in self.c.locations if i not in inside):
+            route = atlas.way_to(state, self.c, cand)
+            if route is not None and len(route.path) >= 2 and route.path[0] in inside:
+                dest = cand
+                break
+        emit(f"{who} 往大區外走", dest)
+        if dest is None:
+            return
+        self.call(who, "POST", "/api/travel", {"place": dest, "mode": "walk"})
+        self.escorts_row("走出大區之後")
+        if "act:halt" in self.ids(self.main(who)):
+            self.choose(who, "act:halt")
+        self.escorts_row("喊停之後")
+
+    @_still
+    def muster_deliver(self) -> None:
+        """第 7 批的新人收補送（下一次同步）：帶著同伴的顧長風、莫問天——同伴打完回江湖（file_showdown → escort_home：拿出隊伍、一句、情誼減半，
+        settle_partings(write=False) 那一句併進決戰那一則紀錄），同一次同步後段的 settle_partings 看到 parted_done、清掉全服的記號（FB-361）；
+        再同步一次什麼都不變（照實寫，審查 nit：另起一則「同伴回江湖」、同步時才減半的那一支——收場在輪詢組畫面時、角色沒存——四種設定都沒走到）。
+        秦朗月、石破浪不派，沒有那一句。"""
+        for who in self.MUSTER_PLAYERS:
+            self.main(who)
+            self.me(who, "收補送之後")
+        for who in self.ESCORTERS:
+            self.mates(who, "收補送之後")
+            self.main(who)
+            self.mates(who, "再同步一次之後")
+
+    @_still
+    def away_bot(self, battle_id: str, seed: int) -> set[int]:
+        """假人那一場：一位官軍假人站在那一場的大區外、名下一位同伴（BotRunner 的 _toward_battle 照 rally_region 趕路，到了按加入、停在挑同伴：
+        battle:escort:* 照決戰包的分數〔None：不按〕）。回它的種子（一直在線），這份內容沒有那一場是空的。"""
+        from tianxia import atlas
+        from tianxia.engine import Game
+        from tianxia.state import BotProfile
+
+        d = self.c.battles.get(battle_id)
+        if d is None or d.region is None:
+            return set()
+        name, side = self.AWAY_BOT
+        inside = {i for i in self.c.locations if (r := atlas.region_of(self.c, i)) is not None and r.id == d.region}
+        start = self.c.scenario.start_location
+        loc = start if start not in inside else next(i for i in sorted(self.c.locations) if i not in inside)
+        self.begin()
+        g = Game.new(self.c, name, rng=random.Random(30), world=self.world, graduated=True)
+        g.client = None
+        g.sync(CLOCK[0])
+        for _ in range(6):
+            first = next((o.id for o in g.options(odds=False) if o.id.startswith("choice:") and o.enabled), None)
+            if first is None:
+                break
+            g.choose(first)
+        p = g.state.player
+        p.bot = BotProfile(personality="普通", seed=seed, faction=side, season_number=self.world.get_season_number())
+        p.faction, p.location, p.journey = side, loc, None
+        p.visited.add(loc)
+        p.tutorial_step = len(self.c.tutorial.steps)
+        p.joined_at = -1.0e9
+        self.chars.save(g.state)
+        emit(f"{name} 站在大區外", loc)
+        self.give_mate(name, side)
+        return {seed}
+
+
+class MusterScenario(BattleScenario):
+    """集結一軌（全部拆包第 7 批；--track muster）：決戰一軌同一套段落（整段一模一樣），半舊半新切在集結中——base 開了集結、幾位加入、
+    顧長風與莫問天按了加入停在挑同伴（PlayerState.escort_pick 寫進存檔）就停，head 接著挑、投效、投靠豪強換邊、開打、晚到、收場。"""
+
+    PHASES_FIRST = BattleScenario.PHASES_FIRST[:BattleScenario.PHASES_FIRST.index("muster_pick") + 1]
+    PHASES_SECOND = BattleScenario.PHASES_FIRST[BattleScenario.PHASES_FIRST.index("muster_pick") + 1:] + BattleScenario.PHASES_SECOND
 
 
 def _battle_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
@@ -3204,10 +3604,12 @@ def _battle_register_track(name: str, scenario: type, mutation: tuple, profile: 
     MUTANT_PROFILE[name] = profile
 
 
-# 改一個字（selftest）：第 6 批換成這一批搬的一句（取消決戰沒有進行中的那一場；搬之前在 engine.py、之後在 features/battle/admin.py）。
-# 第 5 批那一句（view.py 的「軍餉發下來了。」）在計畫第五節的單點突變裡照樣驗
-_battle_register_track("battle", BattleScenario, (("tianxia/features/battle/admin.py", "tianxia/engine.py"),
-                                                  ("（沒有進行中的決戰。）", "（沒有進行中的決戰！）")), "week7")
+# 改一個字（selftest）：第 7 批換成這一批搬的一句（晚到的人趕到戰場；搬之前在 engine.py、之後在 features/battle/muster.py）——決戰一軌
+# 前半走到（late）、集結一軌後半走到。第 5、6 批那兩句（view.py 的「軍餉發下來了。」、admin.py 的「（沒有進行中的決戰。）」）在計畫第五節
+# 的單點突變裡照樣驗
+_BATTLE_MUTATION = (("tianxia/features/battle/muster.py", "tianxia/engine.py"), ("你趕到了戰場，這一回合就能出手。", "你趕到了戰場，這一回合就能出手！"))
+_battle_register_track("battle", BattleScenario, _BATTLE_MUTATION, "week7")
+_battle_register_track("muster", MusterScenario, _BATTLE_MUTATION, "week7")  # 第 7 批：同一套段落，切在集結中
 
 
 # ═══════════════════════════ tavern：酒肆一軌（主動搬六包第 10 批，dev/tavern-1） ═══════════════════════════
@@ -3809,6 +4211,572 @@ def _register_track(name: str, scenario: type, mutation: tuple, profile: str) ->
 
 
 _register_track("tavern", TavernScenario, (("tianxia/features/tavern/rules.py", "tianxia/tavern.py"), ("滿堂叫好。", "滿堂叫好！")), "week7")
+
+
+# ═══════════════════════════ core-events：事件檢定一軌（全部拆包第 16 批，dev/core-events-1） ═══════════════════════════
+# 事件檢定（端出事件卡、選項的檢定與結果、效果套用、事件裡打一場、隨口應對的三段式）的本體從 engine.py 搬進核心本體
+# tianxia/core/event_check.py（計畫 docs/superpowers/plans/2026-11-01-事件檢定進核心.md）。這一段整塊是這一批的：接在檔尾、最後一行登記
+# （_events_register_track），PM 合的時候不跟別人的行穿插。探索那一軌（ExploreScenario）已經走到的：各種地點按探索、事件卡等回答
+# （半舊半新）、分級事件經探索抽出來、隨口應對的分岔（假模型、第一種）——這一軌補它沒走到的：檢定成與敗（rules.check_chance 定死）、
+# 串接（成了串、敗了串）、付錢的選項、事件裡打一場（贏、輸、大場面判讀）、一次性事件不再出現、走一趟途中的事件、隨口應對（模型擋著退回、
+# 假模型成與敗、潤色插回、判成惡行、分岔四條、錢不夠）、第二階事件的那一行、說書的口訣、交友碰上事件、伺服器假人在事件卡上挑、換季。
+
+EVENT_NARRATION = "你照著心裡的盤算行事，旁人看得目瞪口呆。"  # 假模型的潤色（server.answer_event 的 D 段；不寫數字、成敗都是這一句）
+EVENT_TEXT = "我上前好言相勸，請他先把話說清楚。"  # 隨口應對寫的那一句（20 字以內）
+_EVENT_CLIENTS: dict[type, type] = {}
+
+
+def _event_client(base: type) -> type:
+    """隨口應對的假模型（base 是 _setup_child 那一層換好的 client 類別）：MODEL["event"] 給了（{rate, moral, outcome, narrate}）時，
+    評分回 rate、判善惡回 moral、歸類回 outcome（不在清單上回第一種）、潤色回 narrate；其餘照 base（丟連線錯誤、大場面判讀）。"""
+    if base not in _EVENT_CLIENTS:
+        class EventClient(base):
+            def chat_structured(self, messages, schema, *a, **k):
+                say = MODEL.get("event")
+                fields = getattr(schema, "model_fields", {})
+                if say is not None and "outcome" in fields:
+                    ids = (fields["outcome"].json_schema_extra or {}).get("enum") or [""]
+                    return schema(outcome=say["outcome"] if say.get("outcome") in ids else ids[0], success_rate=say["rate"])
+                if say is not None and schema.__name__ == "SuccessRateJudgment":
+                    return schema(success_rate=say["rate"])
+                if say is not None and schema.__name__ == "MoralJudgment":
+                    return schema(moral=say["moral"])
+                return super().chat_structured(messages, schema, *a, **k)
+
+            def chat_text(self, messages, *a, **k):
+                say = MODEL.get("event")
+                if say is not None and say.get("narrate"):
+                    return say["narrate"]
+                return super().chat_text(messages, *a, **k)
+
+        _EVENT_CLIENTS[base] = EventClient
+    return _EVENT_CLIENTS[base]
+
+
+class EventScenario(ExploreScenario):
+    """事件檢定（全部拆包第 16 批；--track events，自己一個資料庫）。小工具借探索那一軌的（draws、fights、tweak、settle、walk、
+    kind_places、first_event、edit_state）。事件多半直接擺到眼前（pending_event 寫進存檔，伺服器每次進鎖重讀；選項、檢定、效果、
+    串接、打一場、隨口應對都是真的走 /api/choose、/api/answer），端出來那一下（_present）走探索、串接、序章、交友、走一趟。
+    正式內容四種設定挑同一批事件（醉漢、乞丐、壇前講道、寒山鐘、逃卒、租債、白馬津押鏢、茶館）；測試內容沒有的（付錢、隨口應對、
+    第二階、說書）寫「沒有」略過，同一串 API 照打。
+    半舊半新切在 half 之後：五張事件卡等回答（舊程式串出來的、舊程式探索端出來的、有分岔的隨口應對、要打的、沒有分岔的隨口應對），
+    後半第一件事（answer）是新程式接著回答。"""
+
+    PLAYERS = {"沈勝衣": None, "白玉京": None, "風四娘": None, "連城璧": None, "柳若松": None, "司馬超群": "guan", "謝曉峰": None,
+               "蕭秋雨": None}
+    NEWBIE = "孫小紅"  # 不略過引導（不帶、weekend 走草廬；season21、week7 是開局第一分鐘）
+    BOT_SEATS = [("事甲", "yingshui"), ("事乙", "julu_altar"), ("事丙", "guangzong"), ("事丁", "market_town")]
+    PHASES_FIRST = ["setup", "prologue", "cards", "check", "pay", "fight", "once", "trip", "dead", "half"]
+    PHASES_SECOND = ["resume", "answer", "said", "evil", "branches", "tiered", "tale", "social", "bots", "season"]
+
+    def __init__(self, root: Path, profile: str, db: Path):
+        super().__init__(root, profile, db)
+        from tianxia import ollama_client
+
+        inner = ollama_client.OllamaClient.from_config.__func__  # _setup_child 換好的那一層（不連網路、大場面判讀）
+
+        def from_config(cls, cfg):
+            client = inner(cls, cfg)
+            if MODEL.get("event") is not None:
+                client.__class__ = _event_client(type(client))
+            return client
+
+        ollama_client.OllamaClient.from_config = classmethod(from_config)
+
+    # ── 小工具 ──
+
+    def begin(self) -> None:
+        """同酒肆那一軌：每個請求換一份空的勝算記憶（前半＋後半是兩個行程，事件卡上動手那一顆的勝算字才對得上）。"""
+        super().begin()
+        from tianxia import team
+
+        self.server.ODDS_MEMO = team.OddsMemo()
+
+    def event_of(self, prefer: str, test) -> str | None:
+        """正式內容挑 prefer 那一則（合 test 的話），否則照 id 排第一則合 test 的（探索抽得到的優先）；都沒有是 None。"""
+        if prefer in self.c.events and test(self.c.events[prefer]):
+            return prefer
+        return self.first_event(test)
+
+    def card(self, who: str, eid: str | None) -> bool:
+        """把這則事件直接擺到他眼前（等回答）：站到事件的地點（沒寫地點的照舊站著），體力補滿。"""
+        if eid is None:
+            emit(f"{who}：這份內容沒有合適的事件", None)
+            return False
+        event = self.c.events[eid]
+        if not self.place(who, event.locations[0] if event.locations else None):
+            return False
+        self.edit_state(who, lambda s: setattr(s, "pending_event", eid))
+        return True
+
+    def press(self, who: str, test, tag: str) -> bool:
+        """眼前那一則照內容的順序，第一顆合 test、選單上有而且按得下去的按下去；沒有就寫下選單上有哪幾顆。"""
+        state = self.chars.load(who)
+        eid = state.pending_event if state is not None else None
+        opts = self.options(who)
+        if eid is None:
+            emit(f"{who} {tag}：眼前沒有事件", None)
+            return False
+        for i, ch in enumerate(self.c.events[eid].choices):
+            oid = f"choice:{i}"
+            if test(ch) and opts.get(oid, {}).get("enabled"):
+                self.choose(who, oid)
+                return True
+        emit(f"{who} {tag}：沒有合的那一顆", sorted(opts))
+        return False
+
+    def say(self, who: str, text: str = EVENT_TEXT):
+        """隨口應對（/api/answer：server.answer_event 的 A、B、C 段，擲完骰有潤色的再 D、E 段）。"""
+        return self.call(who, "POST", "/api/answer", {"text": text})
+
+    def seek(self, who: str) -> None:
+        """按一下探索：探索一顆開著就是出門一趟；三選一的季（weekend）按「找事件」那一顆；舊探索照它自己擲。"""
+        self.choose(who, "act:explore")
+        modes = [i for i, o in self.options(who).items() if i.startswith("explore:") and o.get("enabled")]
+        if modes:
+            self.choose(who, "explore:seek" if "explore:seek" in modes else modes[0])
+
+    @contextlib.contextmanager
+    def odds(self, value: float):
+        """這幾下事件檢定的成功率定死（rules.check_chance 換成 value：roll_check 照樣用掉 Game.rng 那一顆骰，比的門檻換掉；
+        選項上寫的心裡話照 check_gap，不動）。"""
+        from tianxia import rules
+
+        real = rules.check_chance
+        rules.check_chance = lambda *a, **k: value
+        try:
+            yield
+        finally:
+            rules.check_chance = real
+
+    @contextlib.contextmanager
+    def model(self, **say):
+        """這幾下的隨口應對換成假模型（_event_client）：預設 70 分、判「中」、歸類回第一種、潤色回 EVENT_NARRATION。"""
+        MODEL["event"] = {"rate": 70, "moral": "中", "outcome": None, "narrate": EVENT_NARRATION, **say}
+        try:
+            yield
+        finally:
+            MODEL["event"] = None
+
+    @contextlib.contextmanager
+    def judged(self):
+        """大場面判讀（同出陣那一軌的 judge）：難度門檻調低、模型換成回固定判讀的。"""
+        self.c.config.big_fight_difficulty = 1
+        MODEL["judge"] = True
+        try:
+            yield
+        finally:
+            MODEL["judge"] = False
+            self.c.config.big_fight_difficulty = self.big_default
+
+    def me(self, who: str, tag: str) -> None:
+        """存檔裡事件檢定碰得到的那幾格：眼前的事件、看過的事件、體力、數值、旗標、戰報幾份、文字的事那一本的帳、最新三則紀錄的標題、
+        最後三則行狀。"""
+        state = self.chars.load(who)
+        if state is None:
+            emit(f"{who} {tag}（沒有這個人）", None)
+            return
+        p = state.player
+        emit(f"{who} {tag}", {
+            "pending": state.pending_event, "seen": sorted(p.seen_events), "stamina": p.stamina, "stats": dict(sorted(p.stats.items())),
+            "flags": sorted(p.flags), "battles": len(state.battles), "deed": [p.deed_day, p.deed_today],
+            "journal": [e.title for e in state.journal[:3]], "annals": [a.text for a in p.annals[-3:]]})
+
+    def plain_free(self) -> str | None:
+        return self.event_of("jz_gz_deserter", lambda e: e.free_text is not None and not e.free_text.outcomes
+                             and not e.free_text.outcomes_only)
+
+    def branch_free(self) -> str | None:
+        return self.event_of("jz_hz_rentdebt", lambda e: e.free_text is not None and len({o.kind for o in e.free_text.outcomes}) >= 3)
+
+    def checked(self) -> str | None:
+        return self.event_of("drunk_token", lambda e: any(ch.check and not ch.combat for ch in e.choices) and bool(e.actions))
+
+    def combat(self) -> str | None:
+        return self.event_of("jizhou_altar_sermon", lambda e: any(ch.combat for ch in e.choices) and bool(e.actions))
+
+    @staticmethod
+    def paid(ch) -> bool:
+        return bool(ch.condition.min_stats.get("silver")) and ch.effect.stats.get("silver", 0) < 0 and ch.check is None and ch.combat is None
+
+    # ── 前半 ──
+
+    def setup(self) -> None:
+        Scenario.setup(self)
+        if self.c.scenario.factions:
+            self.place("司馬超群", None, faction="guan")  # 分岔成了要記貢獻（_deed_credit：散人不記）
+
+    def prologue(self) -> None:
+        """序章的草廬（不帶、weekend 才有）：開頭兩則事件選第一個（序章的 _apply 把「你悟得了…」那一句藏起來）、草廬四景
+        （舊探索端出的事件，_present）選掉；season21、week7 是開局第一分鐘的事件卡（settle_choices 選掉）。"""
+        who = self.NEWBIE
+        view = self.main(who)
+        if not view.get("prologue"):
+            emit("這一季沒有序章", None)
+            self.settle_choices(who)
+        else:
+            self.choose(who, "choice:0")
+            self.choose(who, "choice:0")
+            self.do(who, "view_tab", {"tab": "practice"})
+            self.choose(who, "act:explore")
+            self.settle(who)
+        self.me(who, "序章之後")
+
+    def cards(self) -> None:
+        """探索一顆碰到事件卡（各種地點：城、寺、渡、野、山、營，各抽一次事件）：端出來那一下的選單、事件卡的樣子（event_opts）、
+        隨口應對的提示語、分級的那一行（/api/main）；照第一顆選掉。舊探索與三選一照它自己擲（找事件那一顆）。"""
+        explore_one = _explore_rules()
+
+        names = ["沈勝衣", "白玉京", "風四娘", "連城璧", "柳若松", "謝曉峰"]
+        for i, (kind, loc) in enumerate(self.kind_places()):
+            who = names[i % len(names)]
+            if not self.place(who, loc):
+                continue
+            with self.draws(explore_one.EVENT):
+                self.seek(who)
+            self.me(who, f"{kind} {loc} 端出來的")
+            self.settle(who)
+            self.me(who, f"{kind} {loc} 選完")
+
+    def check(self) -> None:
+        """要檢定的選項：成（rules.check_chance 定成 1）、敗（定成 0）各一次；成了串到下一則（effect.next_event：_apply 端出來）、
+        敗了串到下一則（fail_effect.next_event）也各一次（醉漢那一則兩條都有）。"""
+        ev = self.checked()
+        emit("要檢定的事件", ev)
+        alone = lambda ch: ch.check is not None and ch.combat is None and not ch.effect.next_event and not ch.fail_effect.next_event  # noqa: E731
+        for who, value, tag in (("沈勝衣", 1.0, "成"), ("白玉京", 0.0, "敗")):
+            if self.card(who, ev):
+                with self.odds(value):
+                    self.press(who, alone, f"檢定{tag}")
+                self.me(who, f"檢定{tag}之後")
+        for who, value, test, tag in (("風四娘", 1.0, lambda ch: ch.check is not None and bool(ch.effect.next_event), "成了串下去"),
+                                      ("連城璧", 0.0, lambda ch: ch.check is not None and bool(ch.fail_effect.next_event), "敗了串下去")):
+            if self.card(who, ev):
+                with self.odds(value):
+                    self.press(who, test, tag)
+                self.me(who, tag)
+                self.settle(who)
+
+    def pay(self) -> None:
+        """付錢的選項（condition.min_stats.silver＝價錢、effect 扣銀兩）：錢剛好夠，那一顆在、按下去扣錢；少一兩，那幾顆不在選單上，
+        只按得到不花錢的。"""
+        ev = self.event_of("beggar", lambda e: any(self.paid(ch) for ch in e.choices) and bool(e.actions))
+        emit("付錢的事件", ev)
+        if ev is None:
+            return
+        price = next(ch.condition.min_stats["silver"] for ch in self.c.events[ev].choices if self.paid(ch))
+        for who, silver in (("謝曉峰", price), ("蕭秋雨", price - 1)):
+            if self.card(who, ev):
+                self.edit(who, lambda p, silver=silver: p.stats.__setitem__("silver", silver))
+                if not self.press(who, self.paid, f"付錢（身上 {silver} 兩）"):
+                    self.press(who, lambda ch: ch.check is None and ch.combat is None, "錢不夠，按不花錢的那一顆")
+                self.me(who, f"付錢之後（原本 {silver} 兩）")
+
+    def fight(self) -> None:
+        """事件裡打一場（固定選項的 combat：_event_battle）：打贏、打輸各一次（team.fight 照 tier）；再一次大場面判讀（server.may_judge_fight
+        認 choice:N → prepare_fight → 鎖內 _judged 用掉、_narrate 照勝負挑一版）。第三場照真的打（不定結果），那一位身法擺到 60
+        （閃避的機會夾成 1，打完擺回 5）：劇情戰不閃（dodge=False；定了結果的那兩場 team.fight 在閃避之前就回了，看不出來），
+        閃了的話落敗一定變僵持。"""
+        ev = self.combat()
+        emit("打一場的事件", ev)
+        hit = lambda ch: ch.combat is not None  # noqa: E731
+        self.edit("蕭秋雨", lambda p: p.stats.__setitem__("agi", 60))
+        for who, tier in (("白玉京", "大勝"), ("風四娘", "落敗"), ("蕭秋雨", None)):
+            if self.card(who, ev):
+                with self.fights(tier):
+                    self.press(who, hit, f"事件裡打一場（{tier or '照真的打'}）")
+                self.me(who, f"打一場之後（{tier or '照真的打'}）")
+        self.edit("蕭秋雨", lambda p: p.stats.__setitem__("agi", 5))
+        with self.judged():
+            if self.card("連城璧", ev):
+                with self.fights("大勝"):
+                    self.press("連城璧", hit, "大場面判讀")
+                self.me("連城璧", "大場面之後")
+
+    def once(self) -> None:
+        """一次性事件（Event.once）：一次性奇遇必中（rare_explore_chance 換成 1）站在它的地點出門兩趟——第一趟端出來、選掉
+        （_present 記進 seen_events、效果帶 once 推大勢），第二趟它不再出現（pick_event 跳過看過的一次性事件）。"""
+        explore_one = _explore_rules()
+
+        ev = self.event_of("hanshan_bell", lambda e: e.once and "explore" in e.actions and bool(e.locations))
+        emit("一次性事件", ev)
+        if ev is None:
+            return
+        for k in range(2):
+            if not self.place("蕭秋雨", self.c.events[ev].locations[0]):
+                return
+            with self.draws(explore_one.EVENT), self.tweak(self.c.config, rare_explore_chance=1.0):
+                self.seek("蕭秋雨")
+            self.me("蕭秋雨", f"一次性事件那一處第 {k + 1} 趟")
+            self.settle("蕭秋雨")
+        emit("一次性事件看過了", ev in self.chars.load("蕭秋雨").player.seen_events)
+
+    def trip(self) -> None:
+        """走一趟途中的事件（探索一顆開著的季）：三段，第二段停在事件上（waiting），檢定定成 1、選掉，接著走完；關著的季回「此刻無法」。"""
+        explore_one = _explore_rules()
+
+        if not self.place("沈勝衣", "yingshui"):
+            return
+        with self.draws(explore_one.MATERIAL, explore_one.EVENT, explore_one.MATERIAL), self.odds(1.0):
+            self.walk("沈勝衣", 3)
+        self.me("沈勝衣", "走一趟之後")
+
+    def dead(self) -> None:
+        """隨口應對、模型擋著（DeadClient：評分、歸類、判善惡、潤色全丟連線錯誤）：沒有分岔的那一則退回 40、照屬性修正擲；有分岔的
+        （分岔開著的季）退回最後一種、必成，關著的季照舊用 stat 擲。被擋下來的：寫太長（21 字）、眼前沒有事件、這一則沒有隨口應對。"""
+        plain, branch = self.plain_free(), self.branch_free()
+        emit("隨口應對的事件", {"plain": plain, "branch": branch})
+        for who, ev in (("謝曉峰", plain), ("蕭秋雨", branch)):
+            if self.card(who, ev):
+                self.say(who, "一" * 21)
+                self.say(who)
+                self.me(who, "隨口應對（模型擋著）之後")
+        self.edit_state("沈勝衣", lambda s: setattr(s, "pending_event", None))
+        self.say("沈勝衣")
+        if self.card("沈勝衣", self.event_of("beggar", lambda e: e.free_text is None)):
+            self.say("沈勝衣")
+            self.settle("沈勝衣")
+
+    def half(self) -> None:
+        """前半的最後一段（半舊半新的切點）：五張事件卡等回答——白玉京是舊程式串出來的（要檢定的那一顆成了、effect.next_event 由 _apply
+        端出來；測試內容沒有的話擺不必檢定的串接）、柳若松是舊程式出門一趟抽到事件端出來的（_present）、風四娘有分岔的隨口應對、
+        連城璧要打一場、謝曉峰沒有分岔的隨口應對（後三張直接擺上）。"""
+        explore_one = _explore_rules()
+
+        chain = self.event_of("drunk_token", lambda e: any(ch.check is not None and ch.effect.next_event for ch in e.choices)) or \
+            self.first_event(lambda e: any(ch.effect.next_event for ch in e.choices))
+        if self.card("白玉京", chain):
+            with self.odds(1.0):
+                self.press("白玉京", lambda ch: bool(ch.effect.next_event), "串出下一則")
+        ev = self.combat()
+        if self.place("柳若松", self.c.events[ev].locations[0] if ev and self.c.events[ev].locations else None):
+            with self.draws(explore_one.EVENT):
+                self.seek("柳若松")
+        self.card("風四娘", self.branch_free())
+        self.card("連城璧", self.combat())
+        self.card("謝曉峰", self.plain_free())
+        for who in ("白玉京", "柳若松", "風四娘", "連城璧", "謝曉峰"):
+            self.me(who, "等回答")
+
+    # ── 後半 ──
+
+    def resume(self) -> None:
+        self.login_all()
+
+    def answer(self) -> None:
+        """新程式接手前半留下的五張卡：串出來的那一則照第一顆選（檢定定成 0：敗）、探索端出來的照第一顆選、有分岔的那一則寫一句
+        （假模型歸到掏錢那一種、身上錢夠）、要打的那一則打一場大場面（判讀、打贏）、沒有分岔的那一則寫一句（假模型 100 分、潤色）。"""
+        with self.odds(0.0):
+            self.settle("白玉京")
+        self.me("白玉京", "新程式選完串出來的")
+        self.settle("柳若松")
+        self.me("柳若松", "新程式選完探索端出來的")
+        self.edit("風四娘", lambda p: p.stats.__setitem__("silver", 40))
+        branch = self.branch_free()
+        cost = next((o.id for o in self.c.events[branch].free_text.outcomes if o.kind == "cost"), None) if branch else None
+        with self.model(rate=70, outcome=cost):
+            self.say("風四娘")
+        self.me("風四娘", "新程式回答分岔")
+        with self.judged(), self.fights("大勝"):
+            self.press("連城璧", lambda ch: ch.combat is not None, "新程式打那一場")
+        self.me("連城璧", "新程式打完")
+        with self.model(rate=100):
+            self.say("謝曉峰")
+        self.me("謝曉峰", "新程式回答隨口應對")
+
+    def said(self) -> None:
+        """沒有分岔的隨口應對（假模型）：100 分（夾成 85）、0 分（夾成 5），潤色接在「你：「…」」後面；潤色把結果句整句寫進去了
+        （FB-124：潤色＝固定的那一句＋成功的結果句）就拿掉引擎那一行。"""
+        plain = self.plain_free()
+        if plain is None:
+            emit("這份內容沒有隨口應對", None)
+            return
+        told = EVENT_NARRATION + self.c.events[plain].free_text.effect.text
+        for who, rate, narrate in (("沈勝衣", 100, EVENT_NARRATION), ("白玉京", 0, EVENT_NARRATION), ("柳若松", 100, told)):
+            if self.card(who, plain):
+                with self.model(rate=rate, narrate=narrate):
+                    self.say(who)
+                self.me(who, f"隨口應對 {rate} 分之後")
+
+    def evil(self) -> None:
+        """判成惡行而且擲中了（FB-223）：沒有分岔的那一則，假模型 100 分、判「惡」——成功效果換成惡行的版本、行狀寫「行了一件惡事」、
+        潤色照惡行寫、換掉 EVIL_DONE 那一句；有分岔的那一則歸到最後一種（走開）、判「惡」（分岔關著的季照舊用 stat 擲）。"""
+        from tianxia import event_llm
+
+        plain, branch = self.plain_free(), self.branch_free()
+        leave = self.c.events[branch].free_text.outcomes[-1].id if branch else None
+        for who, ev, outcome in (("連城璧", plain, None), ("蕭秋雨", branch, leave)):
+            if self.card(who, ev):
+                with self.model(rate=100, moral=event_llm.MORAL_EVIL, outcome=outcome):
+                    self.say(who)
+                self.me(who, "判成惡行之後")
+
+    def branches(self) -> None:
+        """隨口應對的分岔四條（分岔開著的季；關著照舊用 stat 擲）：司馬超群（官軍：成了記貢獻 _deed_credit）——掏錢那一種身上錢不夠
+        （回 NOT_ENOUGH_SILVER、事件還停著）、錢夠（必成）；檢定那一種 100 分、0 分；打仗那一種打贏、打輸。"""
+        branch = self.branch_free()
+        emit("分岔的事件", branch)
+        if branch is None:
+            return
+        kinds = {}
+        for o in self.c.events[branch].free_text.outcomes:
+            kinds.setdefault(o.kind, o.id)
+        who = "司馬超群"
+        for silver in (0, 40):
+            if self.card(who, branch):
+                self.edit(who, lambda p, silver=silver: p.stats.__setitem__("silver", silver))
+                with self.model(rate=70, outcome=kinds.get("cost")):
+                    self.say(who)
+                self.me(who, f"掏錢那一種（身上 {silver} 兩）")
+        for rate in (100, 0):
+            if self.card(who, branch):
+                with self.model(rate=rate, outcome=kinds.get("check")):
+                    self.say(who)
+                self.me(who, f"檢定那一種（{rate} 分）")
+        for tier in ("大勝", "落敗"):
+            if self.card(who, branch):
+                with self.model(rate=70, outcome=kinds.get("combat")), self.fights(tier):
+                    self.say(who)
+                self.me(who, f"打仗那一種（{tier}）")
+
+    def tiered(self) -> None:
+        """第二階事件（州郡大事）擺到眼前：/api/main 的 event_tier 寫那一行與框色；要檢定的那一顆成（check 的 tier 是 2：不吃減法季的放寬）。"""
+        ev = self.event_of("t2_baima_escort", lambda e: e.tier == 2)
+        emit("第二階事件", ev)
+        if self.card("連城璧", ev):
+            with self.odds(1.0):
+                self.press("連城璧", lambda ch: ch.check is not None, "第二階的檢定")
+            self.me("連城璧", "第二階之後")
+
+    def tale(self) -> None:
+        """說書的事件了結時多一句口訣（_tale_clue：Config.secrets.tale_chance、鑄器那一句 Config.forge_secrets.tale_chance 都換成 1，
+        擲的是自己的雜湊、不動 Game.rng）。"""
+        tales = [e for e in self.c.config.secrets.tale_events if e in self.c.events]
+        ev = next((e for e in tales if any(ch.check for ch in self.c.events[e].choices)), tales[0] if tales else None)
+        emit("說書的事件", ev)
+        if self.card("風四娘", ev):
+            with self.tweak(self.c.config.secrets, tale_chance=1.0), self.tweak(self.c.config.forge_secrets, tale_chance=1.0), \
+                    self.odds(1.0):
+                self.press("風四娘", lambda ch: ch.combat is None and not ch.condition.min_stats, "說書")
+            self.me("風四娘", "說書之後")
+
+    def social(self) -> None:
+        """交友（舊的 _encounter 沒碰上人物、一類一顆的「一次性」「結識」那兩種 → _present(事件, "socialize")）：在四處按交友，
+        端出事件就選掉、開了對話就告辭；按不了的寫下來（一類一顆的季，這裡沒有能說上話的人是灰的）。"""
+        for who, loc in (("謝曉峰", "yingchuan"), ("蕭秋雨", "market_town"), ("沈勝衣", "zhuo_county"), ("白玉京", "wan_city"),
+                         ("柳若松", "yingshui")):
+            if not self.place(who, loc):
+                continue
+            if not self.options(who).get("act:socialize", {}).get("enabled"):
+                emit(f"{who} 在 {loc} 按不了交友", None)
+                continue
+            self.choose(who, "act:socialize")
+            for _ in range(4):
+                opts = self.options(who)
+                if "talk:leave" in opts:
+                    self.choose(who, "talk:leave")
+                elif any(i.startswith("choice:") for i in opts):
+                    self.settle(who)
+                else:
+                    break
+            self.me(who, f"{loc} 交友之後")
+
+    def bots(self) -> None:
+        """伺服器假人（BotRunner＋bot_policy.take_turn，random.Random(11)、時鐘一輪推五分）：同一個資料庫補四個假人，眼前各擺一張
+        事件卡（要檢定的、付錢的、要打的、有隨口應對的：假人照 bot_policy.score 的 choice 那一段挑、不寫字），站在事件多的地點，
+        跑 SB_EVENT_TICKS 輪（探索端出來的事件也一樣選）。整季機器人的 bot.pick 在事件卡上挑哪一顆也寫下來。"""
+        from collections import Counter
+
+        from tianxia import bot, server_bots
+        from tianxia.bot_runner import BotRunner
+        from tianxia.engine import Game
+        from tianxia.state import BotProfile
+
+        paid = self.event_of("beggar", lambda e: any(self.paid(ch) for ch in e.choices) and bool(e.actions))
+        cards = [self.checked(), paid, self.combat(), self.plain_free()]
+        sides = [f.id for f in self.c.scenario.factions]
+        spare = sorted(self.c.locations)
+        names = [name for name, _ in self.BOT_SEATS]
+        for i, (name, loc) in enumerate(self.BOT_SEATS):
+            loc = loc if loc in self.c.locations else spare[i % len(spare)]
+            self.begin()
+            g = Game.new(self.c, name, rng=random.Random(i), world=self.world, graduated=True)
+            g.client = None
+            g.sync(CLOCK[0])
+            for _ in range(6):  # 開局待選的事件：選掉
+                first = next((o.id for o in g.options(odds=False) if o.id.startswith("choice:") and o.enabled), None)
+                if first is None:
+                    break
+                g.choose(first)
+            p = g.state.player
+            side = sides[i % len(sides)] if sides else None
+            p.bot = BotProfile(personality="普通", seed=41 + i, faction=side, season_number=self.world.get_season_number())
+            p.faction, p.location, p.journey = side, loc, None
+            p.visited.add(loc)
+            p.tutorial_step = len(self.c.tutorial.steps)
+            p.joined_at = -1.0e9
+            p.stats["silver"] = 200
+            g.state.pending_event = cards[i]
+            self.chars.save(g.state)
+        self.begin()
+        first = Game(self.c, self.chars.load(names[0]), world=self.world)
+        emit("整季機器人在事件卡上挑", bot.pick(first, first.options(odds=False), random.Random(0)))
+        runner = BotRunner(self.c, self.world, self.chars, rng=random.Random(11), clock=lambda: CLOCK[0])
+        tick, online = self.c.config.bot_tick_seconds, server_bots.is_online
+        seeds = {41 + i for i in range(len(self.BOT_SEATS))}
+        self.c.config.bot_tick_seconds = 10 ** 6  # 在線的假人每一輪都動
+        server_bots.is_online = lambda profile, now: profile.seed in seeds or online(profile, now)  # 擺好的四個一直在線
+        totals = Counter()
+        try:
+            for n in range(int(os.environ.get("SB_EVENT_TICKS", "40"))):
+                STEP[0] += 4
+                self.begin()
+                report = runner.tick()
+                totals.update(acted=report.acted, added=report.added, skipped=report.skipped, failed=report.failed, online=report.online)
+                if n == 0:  # 第一輪之後就寫：四十輪跑完，第一輪那一則早被擠出江湖紀錄（只留 30 則），卡直接寫進存檔、不在看過的事件裡
+                    emit("事件假人 第一輪答了眼前的卡", self.answered(names, cards))
+        finally:
+            self.c.config.bot_tick_seconds, server_bots.is_online = tick, online
+        states = self.chars.all(bots_only=True)
+        emit("事件假人 一輪一輪", dict(sorted(totals.items())))
+        emit("事件假人 紀錄標題", dict(sorted(Counter(e.title for s in states for e in s.journal).items())))
+        emit("事件假人 看過的事件", {s.player.name: sorted(s.player.seen_events) for s in states})
+        emit("事件假人 存檔", {s.player.name: hashlib.sha256(s.model_dump_json().encode("utf-8")).hexdigest() for s in states})
+
+    def answered(self, names: list[str], cards: list[str | None]) -> dict:
+        """擺好的那幾個假人眼前那一張卡答了沒（dev/core-events-1 審查：輸出本身看不出四個假人答了卡）：卡還在不在眼前、
+        江湖紀錄裡那一則事件的標題（「狼頭鐵牌・扶他起身，順手摸走鐵牌」：事件名・選了哪一顆）。只讀存檔。"""
+        out = {}
+        for name, card in zip(names, cards):
+            s = self.chars.load(name)
+            title = self.c.events[card].title if card in self.c.events else str(card)
+            out[name] = {"卡": card, "還在眼前": s.pending_event == card,
+                         "紀錄": [e.title for e in s.journal if e.title == title or e.title.startswith(title + "・")]}
+        return out
+
+    def season(self) -> None:
+        """收季、開下一季：眼前擺著一張事件卡的人（休季時選單只剩休季那一顆、隨口應對被擋；開下一季之後那一張照換季的規矩）。"""
+        self.card("沈勝衣", self.checked())
+        self.do(ADMIN, "end_season")
+        self.main("沈勝衣")
+        self.say("沈勝衣")
+        self.do(ADMIN, "next_season")
+        self.main("沈勝衣")
+        self.me("沈勝衣", "換季之後")
+
+
+def _events_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
+    """再開一軌（TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記；同 _register_track，名字分開免得幾塊都在時互相蓋掉）。"""
+    global TRACK_NAMES
+    TRACKS[name] = scenario
+    TRACK_NAMES = (*TRACK_NAMES, name)
+    MUTATIONS[name] = mutation
+    MUTANT_PROFILE[name] = profile
+
+
+# 改一個字（selftest）：事件選項按下去那一行（_choose；搬之前在 engine.py、之後在 tianxia/core/event_check.py）
+_events_register_track("events", EventScenario, (("tianxia/core/event_check.py", "tianxia/engine.py"),
+                                                  ('msgs = [f"▸ {choice.text}"]', 'msgs = [f"▸ {choice.text}！"]')), "week7")
 
 
 # ═══════════════════════════ sortie（全部拆包第 17 批「出陣三」，dev/sortie-3）：train 一軌 ═══════════════════════════
