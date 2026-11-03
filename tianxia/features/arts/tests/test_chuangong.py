@@ -12,7 +12,7 @@ from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.state import PLAYER
 
-CONTENT_DIR = Path(__file__).parents[2] / "content"
+CONTENT_DIR = Path(__file__).parents[4] / "content"  # 全部拆包第 23 批整檔搬進 tianxia/features/arts/tests/（原本 tests/arts/ 是 parents[2]）
 
 
 def _with_mate(game, xinde=10_000):

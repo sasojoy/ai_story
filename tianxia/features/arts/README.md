@@ -1,7 +1,41 @@
 # 修練 `tianxia/features/arts/`
 
-- **做什麼**：修練頁的動作——改練（功法庫換上身）、練成（身上這一門加深一成，花心得、累積受傷）、意境裝卸（意境裝進武學的槽、拆下來）、熔煉（功法庫的一門、一個意境化成心得，批量熔煉）、絕學（上品練到第十成：打一場硬仗等契機、或服破境丹閉門衝關；練成那一刻跳破境卡，卡上那一句三段式請模型寫）與舊存檔的絕學定名、傳功門下（用心得替同伴、部下練武學加屬性）、配點（升級的屬性點，減法季屬性五段的境界卡）；拜師學藝（`learn:`，在教的地點學一門基礎武學）。全部拆包第 23 批搬進來。
-- **導覽**：`docs/guide/武學與成長.md`；核心與功能包的關係見 `docs/guide/核心與存檔.md` 的「核心、功能包、FEATURES、掛鉤、服務清單」。
-- **設計稿**：沒有版本號（Task 4 補齊）。
+- **做什麼**：修練頁的動作——改練（功法庫的一門換上身）、練成（身上這一門加深一成，花心得、累積受傷）、意境裝卸（意境裝進武學的槽、拆下來）、熔煉（功法庫的一門、一個意境化成心得，批量熔煉）、絕學（上品練到第十成：打一場硬仗等契機、或服破境丹閉門衝關，沒衝開下一次機會多一成；自創的那一門練成那一刻跳破境卡，卡上那一句三段式請模型寫、叫不動照套句）與舊存檔的絕學定名（第一個練成的人替全服取正式名字，手上有同一門的人下一次同步補一則）、傳功門下（用心得替同伴、部下練武學加屬性）、配點（升級的屬性點；減法季屬性五段的境界卡）；拜師學藝（`learn:`，在教的地點學一門基礎武學）。修練頁的唯讀資料（功法卡、名冊、背包、持有數、功法庫、意境、等著定名的那一門）。全部拆包第 23 批搬進來（計畫 `docs/superpowers/plans/2026-11-01-修練包-第1批.md`）。
+- **導覽**：`docs/guide/武學與成長.md`（「模組」那一節的 `features/arts/`：`cultivation.py`、`ascend.py`、`chuangong.py`；「屬性、威力與氣血」的傳功門下；「武學與成長」那一節的練成、熔煉、配點、拜師學藝、絕學與破境丹）；籌備中的裝飾器與服務清單在 `docs/guide/核心與存檔.md` 的「核心、功能包、FEATURES、掛鉤、服務清單」。
+- **設計稿**：沒有版本號，都在 `docs/superpowers/specs/`：`2026-10-05-武學與成長-design.md`（第 4 節練成與熔煉、第 6 節配點、附錄 B 拜師學藝）；武學重構（Joy 2026-10-20～22：品級不靠修練、意境槽、破境丹、同一門逐次上升；導覽「武學與成長」那一節照實記）；招式與絕學稿案第三輪（破境、破境卡；導覽記在 `ascend.py` 那一條）；傳功門下（企劃者 2026-10-14 決策卡）；`2026-10-24-減法季-整合設計.md` 4.5（屬性五段、境界卡）。
 
-（第 23 批進行中：Task 3 把方法與三個模組搬進來，Task 4 寫齊這一份。）
+| 檔 | 是什麼 |
+|---|---|
+| `__init__.py` | 登記（`ArtsFeature`）：`enabled` 一直是 True（修練與學藝每一季都有；傳功、破境丹、境界卡各自先問自己的設定）；`prefix`＝`learn`，`choose` 只吃 `learn:<武學 id>`（標題「學藝・<武學名>」在動作之前先拿，同原本 `Game._action_title` 那一格；照模組屬性叫 `actions.learn_title`、`actions.learn`）；`player_fields`（下面）。學藝的鈕照舊在 `Game._everyday_options` 原位畫（移動鈕之後、投靠之前：位置算行為，只叫共用規則層的 `library`）。假人：`bot_policy.score` 沒有 `learn` 那一段（落到最後的 `return None`），拿了前綴之後 `bot_pick` 照預設回 None＝不按，跟原本一樣；學藝是 `bot_policy.tend_arts` 的 `_learn_here` 直接 `game.choose("learn:…")`。沒有 `bots.py` |
+| `cultivation.py` | 絕學的門檻 `ready`、契機 `seize`、服丹衝關 `cultivate`／`force_odds`（同一門逐次上升 `fails_of`）、修練頁那一格的拒絕 `cultivate_problem`／`needs_pill`、衝絕學的倍數 `peak_scale`（寶物、頒詔）、舊存檔的定名 `master_request`（假人的 A 段）／`name_mastered`（原 `tianxia/cultivation.py`；那個名字留成別名） |
+| `ascend.py` | 破境：招升為絕招、破境卡（`PlayerState.ascension`）、江湖史、傳聞、行狀；卡上那一句的三段式 `request`（A）、`read`／`fallback`（B，殼 `server.ascend_line` 在鎖外叫）、`set_line`（C）、`dismiss`、`view`（原 `tianxia/ascend.py`；別名） |
+| `chuangong.py` | 傳功門下的規則：`lessons`（一個人的傳功鈕）、`teach`、`cheapest`（假人挑最便宜的）（原 `tianxia/chuangong.py`；別名） |
+| `actions.py` | 原本 `Game` 上的 19 個修練頁動作：`switch_art`、`practice`、`practice_refusal`、`slot_insight`、`unslot_insight`、`melt_art`、`melt_many`、`melt_insight`、`cultivate`、`mastery_request`、`name_mastered`、`ascend_request`、`ascend_line`、`ascend_dismiss`、`chuangong`、`chuangong_lessons`、`allocate_stat`、`allocate_line`（原 `_allocate_line`，只有 `allocate_stat` 叫，`Game` 上不留）、`milestone_card`；核心原位叫的兩個私有 `drop_old_zhuifeng`（原 `_drop_old_zhuifeng`）、`deliver_renames`（原 `_deliver_renames`）；新的兩個查詢 `seize_chance`（`ctx._seize_chance`）、`ascend_view`；學藝 `learn`、`learn_title`；序章裡批量熔煉那一句 `MELT_MANY_PROLOGUE`（engine 照舊 import 回去：`tests/core/test_prologue.py` 從 engine 拿）。籌備中被擋的 11 個掛核心的 `@not_while_preparing`（`tianxia/core/services.py`） |
+| `view.py` | 原本 `Game` 上「門下頁面」的 11 個唯讀資料：`skill_detail`、`art_detail`、`member_card`、`roster_cards`、`menxia_rules`、`attribute_note`、`bag_text`、`holdings`、`art_rows`、`insight_rows`、`naming_row`（說明那一層照舊在 `skillview`） |
+| `tests/` | `test_arts_smoke.py`（煙霧一條：week7 到潁水河畔學一門、練成一成、裝意境）、`test_chuangong.py`（15 條，原 `tests/arts/`：傳功門下）、`test_legend_xinde.py`（4 條，原 `tests/arts/`：心得不能換破境丹、假人有丹才衝）。整檔搬過來（`test_chuangong` 的 `Path(__file__).parents` 照層數改）；`test_legend_xinde` 照舊從 `tests/arts/test_cultivation.py`、`tests/battle/test_practice_hardening.py` 拿輔助函式（`tests/conftest.py` 把兩邊都放上 `sys.path`）。連 slow 20 條約 9 秒（`-n 4`） |
+
+**包名跟共用規則層同名**：`tianxia/arts.py`（武學的評分、裝卸、意境格，第 15 批登記的共用規則層）跟這一包同名（包名是總表定的）。包裡要共用層那一個一律寫 `from tianxia import arts as arts_mod`（`from . import arts` 在包裡指到包自己）；邊界測試的 `SHARED_NAMED_LIKE_A_PACKAGE` 記這一對。
+
+**認領的欄位**（3.5，留在原地）：`PlayerState.naming`（等著定名的那一門）、`renames_told`（定名通知過的）、`ascension`（剛破境、還沒看過的破境卡）、`legend_fails`（每一門服丹沒衝開幾次）、`milestone_due`（境界卡記的那一級）；換季都跟著新角色重來（`carried` 空的）。其餘修練用到的（`art_quality`、`art_slots`、`art_levels`、`insights`、`stat_points`、`follower_drill`……）是武學、意境、隊伍的共用欄位，不認領；破境丹 `legend_items` 是商城包認領的（`carried`）。`WorldState` 沒有；全服的武學、改名、宗師榜在核心的 `sqlite_world`。`Config.chuangong`、`breakthrough`、`legend_*`、`cultivate_*`、`stat_*`、`JianfaRules.stat_milestones` 在 `models.py`。
+
+**Game 上留的一行委派**（33 個；server 的 `MENXIA_ACTIONS`、`menxia_view`、`main_view` 的境界卡、`/api/do/allocate`、`ascend_line` 三段式，假人 `bot`、`bot_policy`，測試與核心原位還在叫）：動作 22 個（上面 `actions.py` 那 18 個 `Game` 方法名、`_drop_old_zhuifeng`、`_deliver_renames`、`_seize_chance`、`ascend_view`）、唯讀資料 11 個（`view.py`）。包裡互相叫直接叫函式；**經 `ctx` 的**：服務清單上的共用服務（`_log`、`_xinde`、`_menxia_entry`、`_save_season`、`_guide`、`_solved_secrets`、`_note_solved`、`_preparing`、`_art_name`）、過渡 `ctx._check_hints()`（主人新手引導；`tests/arts/test_hints.py` 換掉實例上的）、寄放 `ctx.forged`、`forged_thing`、`secret_solved`。絕學的規則照模組屬性叫（`cultivation.seize`、`cultivate_problem`……：`tests/figures/test_figures.py` 的 `mock.patch("tianxia.cultivation.seize")`、`test_hints` 換掉 `cultivate`、決戰包的 `test_showdown_delivery` 換掉 `seize`，照樣打得到）。
+
+**接到掛鉤的**：`Game.choose` 的 `learn` 那一支與 `_action_title` 的那一格 → `choose` 掛鉤（`Outcome(title, run)`）。
+
+**還留在原位的**（不是核心的接縫，`tests/core/test_feature_boundaries.py` 的 `GAME_DELEGATE_CALLERS` 逐條寫理由，9 對）：
+- `_drop_stale_references` 叫 `_drop_old_zhuifeng`（在 `arts.migrate` 之前：槽數照品質算；`on_drop_stale` 在最後、位置不對）。
+- `sync` 叫 `_deliver_renames`（玉璽補送之後、首創名望回饋之前：江湖紀錄的先後算行為）。
+- 核心的單打服務 `_seize` 叫 `_seize_chance`（打贏一場之後修練包跟著擲：總表第 26 批的事件，原位行尾標「# 過渡：第 26 批」）；決戰包的收場補送經 `ctx._seize_chance`（服務清單二、查詢服務；原本 `view.py` import `cultivation`，第 23 批改掉、那一行的過渡註拿掉）。
+- `status_data` 的 `ascension` 那一格叫 `ascend_view`（狀態列的鍵順序，總表第 66 批）。
+- 序章 `_graduate_pass`（假人與腳本照步驟按）叫 `slot_insight`、`switch_art`、`practice`、`allocate_stat`、`melt_art`（第 22 批〔`dev/guide-1`〕把它搬進引導包、改經 `ctx` 叫，合併時拿掉這 5 對）。
+- server 一行不動（`MENXIA_ACTIONS`、`menxia_view`、`ascend_line` 的 B 段 `ascend.read`／`fallback` 照舊經別名）；`web/` 一行不動；`bot.py`（`chuangong.cheapest`、`cultivation.ready`、`cultivate_problem`）、`bot_policy`（`tend_arts`、`_learn_here`、`_master`、`apply_job`）、`skillview`（`cultivation.cultivate_problem`、`needs_pill`、`force_odds`、`fails_of`）、`scripts/measure_challenge.py` 照舊經別名。
+
+**改這一包時 `test_for` 挑不到、要另外跑的**（混在別人檔裡的測試，這一輪不拆，批次表第二節）：改包的檔只挑這一包的 `tests/` 與核心契約，下面這幾個蓋著搬過來的程式卻不在包裡——
+- 絕學與服丹、定名：`tests/arts/test_cultivation.py`（70 條；最後三條 FB-069 是全服名號表 `world.is_character_name` 與開爐取名 `fusion.merge`，`test_the_season_firsts_…` 走合成與換季，所以整檔不搬）、`tests/battle/test_practice_hardening.py`（13 條；練成價 `team.practice_price` 是核心的）、`tests/arts/test_ascend.py`（8 條；兩條測 `moves.ascend`、`tactics._after`〔共用規則層〕）。
+- 修練頁：`tests/arts/test_arts_pages_two.py`（70 條，連煉製頁與網頁）、`tests/web/test_arts_pages.py`（18 條，網頁；這一批不切網頁）、`tests/arts/test_ultimates.py`（14 條，連鑄器配招 `smithing`）。
+- 配點與境界卡：`tests/battle/test_stat_milestones_engine.py`（10 條，整檔 slow；連假人配點、江湖水漲、戰報那一句）；純規則 `test_stat_milestones.py`（12）、`test_drill_gates.py`（14）、`test_level_cap.py`（8）測的是共用規則層 `growth` 與核心 `team`，總表附錄甲把這四個歸修練，可是不是這一包搬進來的程式，留在 `tests/battle/`。
+- 追風步：`tests/battle/test_zhuifeng_quality.py`（6 條；一半是核心的內容驗證）。
+- 大的混合檔（叫到這一包 33 個委派的）：`tests/core/test_engine.py`、`tests/core/test_prologue.py`、`tests/core/test_journal.py`、`tests/arts/test_hints.py`、`tests/arts/test_skillview.py`、`tests/arts/test_library.py`、`tests/arts/test_fusion.py`、`tests/arts/test_pr21_merge.py`、`tests/seal/test_seal_acts.py`、`tests/seal/test_seal_revamp.py`、`tests/figures/test_figures.py`（契機）、`tests/server/test_server.py`、`tests/bots/test_bot.py`、`tests/bots/test_bot_policy.py`、`tests/season/test_real_content.py`、決戰包的 `test_showdown_delivery.py`（收場的契機）。
+- 一起跑：`scripts/test_for.py --base <分支> <改的包檔> tests/arts/test_cultivation.py tests/battle/test_practice_hardening.py tests/arts/test_ascend.py tests/arts/test_arts_pages_two.py tests/arts/test_ultimates.py tests/battle/test_zhuifeng_quality.py tests/battle/test_stat_milestones_engine.py`（直接給的測試檔連 slow 一起跑）；要不要讓 `test_for` 把混合檔算進包，照第 1、17 批的答，交 PM 定。
+
+**過渡 import**（註「過渡：待搬」）：`actions.py` 3 行（`annals`、`skillview`〔共用規則層 `SHARED_LATER`〕、`guide` 的 `note_action`）、`view.py` 1 行（`skillview`）、`cultivation.py` 1 行（`seal_acts`）、`ascend.py` 1 行（`annals`）——6 處。`guide` 那一行跟第 22 批（新手引導包，`dev/guide-1`）撞：guide-1 把 `tianxia/guide.py` 換成新手引導包的別名、序章的「出一次力」改叫核心的 `ctx._note_action`；兩條誰後合，誰就把 `allocate_stat` 那一處照改、拿掉這一行（見計畫第七節）。核心本體（`journal`、`team`、`naming`、`rules`、`state`、`models`、`world_state`）與共用規則層（`arts`、`library`、`growth`、`prologue`、`martial_arts`、`silver`、`treasures`、`traits`、`might`、`moves`、`tactics`、`zh`、`ollama_client`、`roster`）不算過渡。舊模組 → 包多 3 個別名（`tianxia/cultivation.py`、`chuangong.py`、`ascend.py`）與 engine 委派的兩行。
