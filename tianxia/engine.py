@@ -109,8 +109,10 @@ from .features.battle import rules as battle_rules  # 過渡：決戰的字（Ga
 from .features.battle import view as battle_view  # 過渡：Game 上決戰「看」那一半的 22 個一行委派（主動搬六包第 5 批）
 from .features.battle import admin as battle_admin  # 過渡：Game 上管理者的決戰工具 6 個一行委派（全部拆包第 6 批）
 from .features.battle import sieges as battle_sieges  # 過渡：Game 上攻城的 6 個一行委派（全部拆包第 6 批）
+from .features.battle import muster as battle_muster  # 過渡：Game 上集結、投效、挑同伴的 13 個一行委派（全部拆包第 7 批）
 from .features.battle.rules import (  # noqa: F401  過渡：測試從 engine 拿（test_companions_battle、test_followers_matter、
     ESCORT_MUSTER, ESCORT_SCENE, RESTORED_NOTE, ROUND_BLOCKS, TROOPS_LINE, TROOPS_REPORT,  # test_showdown_full_report、test_battle_round_blocks）
+    ESCORT_PICK,  # 第 7 批：挑同伴那一句（test_companions_battle 從 engine 讀）
 )
 from .state import (
     ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, FrontReport, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong, TimelineResult,
@@ -223,12 +225,6 @@ def say_text(text: str | None, limit: int = SAY_MAX) -> str | None:
 TRAIN_CONFIRM = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩。還是要打？"
 TRAIN_CONFIRM_RIDING = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩（騎著馬，{odds}能保住）。還是要打？"  # 待 joy 潤
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
-# 歷史武將同行第五節（待 joy 潤）：加入決戰時挑一位隨你上陣（決戰畫面上自己的那一位：features/battle/rules.py 的 ESCORT_MUSTER 那三句）
-ESCORT_PICK = "挑一位隨你出陣的同伴，或不派、自己上陣（開打之後不能換）。"
-ESCORT_OPTION = "派{name}隨你出陣（份量 {score}・氣血 {pool}）"
-ESCORT_NONE = "不派，自己上陣"
-ESCORT_BACK = "再想想"
-ESCORT_BACK_LINE = "你還沒加入，再想想。"
 # 領地爭奪：戰書（翻地與爭搶，輿圖簡化設計 4.4；投票與 22:00 公告結算拿掉了，PM 2026-10-20）。待 joy 潤
 LETTER_TITLE = "下戰書"
 LETTER_DONE = "你替{side}下了戰書：{time} 攻{place}。這一塊的進度凍結到那一場打完。"
@@ -6117,30 +6113,9 @@ class Game:
         p.ally = wins.join_lean(c, p.faction, sect.location if sect is not None else p.location)
         return [allied.ALLY_DONE.format(ally=c.scenario.faction_name(p.ally, p.ally))] + self._ally_follows_battle()
 
+    # 本體在 tianxia/features/battle/muster.py（全部拆包第 7 批：集結、投效、挑同伴），這裡留一行委派
     def _ally_follows_battle(self) -> list[str]:
-        """選邊的那一刻（豪強分屬兩軍），人已經在這一場決戰的參戰名單上、站的是另一邊（先臨時投效了，FB-273）：集結時照新選的
-        那一邊換過去（同改選：份量照這一刻重新快照），開打了照決戰的規則不能改投（同 _enlist），這一場照舊站原來那一邊；兩種都說一句。
-        沒有決戰、不在名單上、本來就站這一邊，什麼都不做。"""
-        status = self._battle_for_me(tick=False)
-        if status is None:
-            return []
-        battle, definition = status
-        name, side, sides = self.state.player.name, self._side(), self._sides(definition)
-        me = battle.participants.get(name)
-        if me is None or me.faction == side or side not in sides:
-            return []
-        if battle.phase != "muster":
-            return [allied.ALLY_STAYS.format(battle=definition.name, ally=sides[side], old=sides.get(me.faction, me.faction))]
-        scores = self._mandate_weight(definition, self._battle_scores())
-        gear, marks = self._battle_gear(), self._battle_marks()
-        self._mutate_battle_of(
-            battle,
-            lambda b: battle_instance.join_faction(
-                b, name, side, self._battle_neili_cap(), self._battle_power(), scores=scores, attribute=self._battle_road(),
-                role=self._battle_role(), **gear, **marks,
-            ),
-        )
-        return [allied.ALLY_REJOINED.format(battle=definition.name, ally=sides[side])]
+        return battle_muster.ally_follows_battle(self)
 
     def _defect_step(self, arg: str) -> list[str]:
         """叛投分兩步（同投靠）：按「叛投某陣營」先出確認畫面（寫明代價、一季一次、三方人數），「確定」才真的叛投。
@@ -6290,96 +6265,12 @@ class Game:
             return None
         return battle_instance.SealBare(power=self._battle_power(seal=False), scores=self._battle_scores(seal=False))
 
-    def _escort_choices(self) -> list[str]:
-        """加入決戰時挑得到的同伴：名下的（歷史武將同行第五節）。開關關著是空的（照舊一下就加入）。"""
-        if not roster.on(self.content):
-            return []
-        return [cid for cid in roster.owned_companions(self.world, self.state.player.name) if cid in self.content.characters]
-
-    def _escort_of(self, cid: str) -> battle_instance.Escort:
-        """派他上陣的那一刻快照（第五節【預設】）：份量＝strength(他的威力) × escort_share（不吃你的職位、坐騎、部下），
-        池子是他的氣血上限，戰法是他自己身上的兩門。"""
-        s, c, w = self.state, self.content, self.world
-        pool = team.mate_pool(s, c, w, cid)
-        score = battle_instance.strength(c.config.battle, team.mate_power(s, c, w, cid)) * c.config.battle.generals.escort_share
-        return battle_instance.Escort(
-            cid=cid, name=c.characters[cid].name, score=round(score, 1), neili=pool, neili_cap=pool, kit=team.mate_side(s, c, w, cid),
-        )
-
+    # 本體在 tianxia/features/battle/muster.py（全部拆包第 7 批：集結、投效、挑同伴），這裡留一行委派
     def _escort_carry(self) -> battle_instance.Escort | None:
-        """這一次加入要帶的同伴：剛在挑的那一位（_escort_step）；不然是已經在參戰名單上的那一位（集結時改選、依附那一軍重新快照，照舊跟著）。"""
-        if self._escort_picked:
-            return self._escort_now
-        battle = self._battle_now()
-        me = battle.participants.get(self.state.player.name) if battle is not None else None
-        return me.escort if me is not None else None
-
-    def _escort_options(self) -> list[Option]:
-        """按了加入、還在挑誰隨你上陣：名下每一位一顆（寫份量與氣血），加上「不派」「再想想」。"""
-        out = []
-        for cid in self._escort_choices():
-            e = self._escort_of(cid)
-            out.append(Option(id=f"battle:escort:{cid}", label=ESCORT_OPTION.format(name=e.name, score=round(e.score), pool=round(e.neili_cap))))
-        return out + [Option(id="battle:escort:none", label=ESCORT_NONE), Option(id="battle:escort:back", label=ESCORT_BACK)]
-
-    def _escort_step(self, battle: battle_instance.BattleInstance, arg: str) -> list[str]:
-        """挑好了（battle:escort:<id>／none）或「再想想」（back）：照記下的那一下（PlayerState.escort_pick）加入，帶著挑的那一位。
-        集結時按的、挑的時候已經開打了，改成晚到（join_late）。"""
-        p = self.state.player
-        pick, p.escort_pick = p.escort_pick, ""
-        if not pick:
-            return ["（此刻無法這麼做。）"]
-        if arg == "back":
-            return [ESCORT_BACK_LINE]
-        if arg != "none" and arg not in self._escort_choices():
-            return ["（此刻無法這麼做。）"]
-        pick, at, ref = pick.partition("@")  # 同一個大區兩場以上時記著是哪一場（領地爭奪第二批）
-        kind, _, rest = pick.partition(":")
-        if kind == "join" and battle.phase != "muster":
-            kind, rest = "join_late", ""
-        self._escort_picked, self._escort_now = True, (self._escort_of(arg) if arg != "none" else None)
-        try:
-            return self._battle_choose(f"{kind}:{rest}{at}{ref}")
-        finally:
-            self._escort_picked, self._escort_now = False, None
-
-    def _escort_home(self, e: battle_instance.Escort) -> list[str]:
-        """補這一場戰報時（_file_showdown）：他回江湖了——拿出出戰隊伍、寫一句，情誼照 _settle_partings 減半（同一則紀錄裡說）。"""
-        team.remove_from_team(self.state, e.cid)
-        line = (escorts.FELL_RETURN_LINE if e.fallen_round is not None else escorts.RETURN_LINE).format(name=e.name)
-        return [line] + self._settle_partings(write=False)
+        return battle_muster.escort_carry(self)
 
     def _settle_partings(self, write: bool = True) -> list[str]:
-        """歷史武將同行 9.6：決戰收場時從你身邊回江湖的人（CompanionProgress.parted_from 有你的名號），情誼乘 parted_keep（無條件捨去）。
-        同步、按招募之前與補戰報時叫；write 時另起一則「同伴回江湖」紀錄（補戰報時併進那一則，不另寫）。開關關著什麼都不做。
-        全服的記號不在減半那一下清（FB-361）：減了記進 PlayerState.parted_done，記號留到之後再叫到這裡、看到這一份角色已經減過才清
-        （同一次同步裡補戰報先減、後面那一次清；收場在輪詢組畫面時發生、角色沒存的話，下一次同步照存檔裡沒減過的那一份再減一次）。"""
-        c, p = self.content, self.state.player
-        if not roster.on(c):
-            return []
-        keep = c.config.companions.parted_keep
-        lines = []
-        marked = set()
-        for cid, progress in self.world.companions().items():
-            if cid not in c.characters or not any(roster.owns(n, p.name) for n in progress.parted_from):
-                continue
-            marked.add(cid)
-            if cid in p.parted_done:  # 這一份角色已經減過：清記號
-                self.world.update_companion(
-                    cid, lambda pr: setattr(pr, "parted_from", [n for n in pr.parted_from if not roster.owns(n, p.name)]),
-                )
-                p.parted_done.remove(cid)
-                continue
-            p.parted_done.append(cid)
-            before = p.affinities.get(cid, 0)
-            after = math.floor(before * keep)
-            p.affinities[cid] = after
-            if after != before:
-                lines.append(escorts.PARTED_LINE.format(name=c.characters[cid].name, before=before, after=after))
-        p.parted_done = [cid for cid in p.parted_done if cid in marked]  # 記號已經不在的（換季清掉了）不留
-        if write and lines:
-            journal.add_entry(self.state, JournalEntry(time=self.state.world.time, title=escorts.PARTED_TITLE, tag="", lines=lines))
-        return lines
+        return battle_muster.settle_partings(self, write)
 
     def _mandate_weight(self, definition: BattleDef | None, scores: dict[str, float]) -> dict[str, float]:
         """天命之爭：手上有碎片的人到場，份量 × Config.seal.mandate.holder_weight（玉璽碎片設計 8.3；只在這一場，碎片本身不加威力）。
@@ -6474,33 +6365,12 @@ class Game:
         here = self._in_region(live)
         return here[0] if here else showdown
 
+    # 本體在 tianxia/features/battle/muster.py（全部拆包第 7 批：集結、投效、挑同伴），這裡留一行委派
     def _in_region(self, battles: list[battle_instance.BattleInstance]) -> list[battle_instance.BattleInstance]:
-        """這幾場裡，人此刻所在（在路上看最後一站）的大區就是它的大區的；不限地點的那一場也算。"""
-        loc = self.state.player.location
-        found = atlas.region_of(self.content, loc) if loc in self.content.locations else None
-        out = []
-        for b in battles:
-            d = self._definition_of(b)
-            if d is not None and (d.region is None or (found is not None and found.id == d.region)):
-                out.append(b)
-        return out
+        return battle_muster.in_region(self, battles)
 
     def _joinable(self) -> list[battle_instance.BattleInstance]:
-        """自己大區裡集結中或開打、加得進去的那幾場（決戰在前）：自己已經在某一場的名單上、或沒有攻城戰時是空的。"""
-        sieges = self._sieges()
-        if not sieges:
-            return []
-        showdown = self.world.get_battle()
-        live = ([showdown] if showdown is not None and showdown.phase != "ended" else []) + sieges
-        name = self.state.player.name
-        if any(name in b.participants for b in live):
-            return []
-        out = []
-        for b in live:
-            d = self._definition_of(b)
-            if d is not None and self._at_battle(d) and not self._watching_battle(b, d):
-                out.append(b)
-        return out
+        return battle_muster.joinable(self)
 
     def _definition_of(self, battle: battle_instance.BattleInstance) -> BattleDef | None:
         return battle_sieges.definition_of(self, battle)
@@ -7398,135 +7268,18 @@ class Game:
             return False  # 拜入曹氏莊院還沒挑一邊（FB-273）：先挑，選單只剩那兩顆
         return not (self._free_agent(definition) and self.state.player.name not in battle.participants)
 
-    def _sides(self, definition: BattleDef) -> dict[str, str]:
-        """這場決戰能站的每一方（id → 名字）：交戰的兩軍。"""
-        return {f.id: f.name for f in definition.factions}
-
+    # 本體在 tianxia/features/battle/muster.py（全部拆包第 7 批：集結、投效、挑同伴），這裡留一行委派
     def _free_agent(self, definition: BattleDef) -> bool:
-        """劇本分陣營、自己不是交戰兩軍的人（散人、地方豪強）：決戰時可以臨時投效交戰的兩軍之一，只算這一場
-        （散人：試玩回饋 2026-10-08；豪強：Joy 2026-10-13「豪強在大決戰還是要加入某一陣營，主軸還是官兵跟黃巾」）——
-        不寫進投靠名冊、不改自己的陣營、不算叛投、不記貢獻。
-        豪強分屬兩軍的季（企劃者 2026-10-15），豪強是依附那一軍的人（_side），跟兩軍的人一樣加入，不是臨時投效；
-        拜入曹氏莊院還沒挑一邊（allied.needs_ally）也不給臨時投效，先挑一邊（FB-273）。"""
-        if allied.needs_ally(self.state, self.content):
-            return False
-        return bool(self.content.scenario.factions) and self._side() not in self._sides(definition)
-
-    def _own_side_name(self) -> str:
-        """臨時投效的人打完照樣是誰：散人，或自己陣營的名字（豪強）。"""
-        faction = self.state.player.faction
-        return "散人" if faction is None else f"{self.content.scenario.faction_name(faction, faction)}的人"
-
-    def _enlist_options(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[Option]:
-        """散人的臨時投效按鈕（兩軍各一顆）：集結時已經投效的那一邊是灰的「已投效」、還能改投另一邊；開打了還沒參戰的照樣能投效。
-        單方攻中立地時守將那一格（battle_instance.neutral_guard）寫「助守【守軍】」，不寫那一格的陣營（FB-540；鈕 id 照舊是那一格的 id）。"""
-        me = battle.participants.get(self.state.player.name)
-        guard, names = battle_instance.neutral_guard(battle), battle_instance.side_names(battle, definition)
-        out = []
-        for fid in battle_instance.fields(battle, definition):  # 三方混戰（裁決 22）多一顆助守【守軍】（GUARD）
-            done = me is not None and me.faction == fid
-            if fid == guard:
-                label = (siege.HELPED_GUARD if done else siege.HELP_GUARD).format(side=names[fid])
-            else:
-                label = f"已臨時投效【{names[fid]}】" if done else f"臨時投效【{names[fid]}】（只算這一場）"
-            out.append(Option(id=f"battle:enlist:{fid}", label=label, enabled=not done))
-        return out
-
-    def _enlist_sides(self, battle: battle_instance.BattleInstance | None, definition: BattleDef) -> dict[str, str]:
-        """臨時投效站得了的格（id → 名字）：交戰的兩軍，三方混戰再加助守【守軍】（GUARD，裁決 22）。"""
-        sides = self._sides(definition)
-        if battle is not None and battle_instance.melee(battle):
-            sides[battle_instance.GUARD] = battle_instance.GUARD_SIDE
-        return sides
+        return battle_muster.free_agent(self, definition)
 
     def _at_battle(self, definition: BattleDef) -> bool:
-        """人在這場決戰的大區、而且不在路上，才算到了戰場（地圖擴充設計第六節）；決戰不限地點時只看在不在路上。
-        這是「加入」的條件，也是還沒參戰的人算不算在場；已經參戰的人看 _in_battle_region。"""
-        if self.state.player.journey is not None:
-            return False
-        if definition.region is None:
-            return True
-        region = atlas.region_of(self.content, self.state.player.location)
-        return region is not None and region.id == definition.region
-
-    def _in_battle_region(self, definition: BattleDef) -> bool:
-        """參戰者還算不算在戰場（地圖擴充設計第六節：只有「離開大區」才讓人這回合不出手）：決戰不限地點時
-        一律算在場；有大區時，所在地和這一趟還沒走到的站都在那個大區才算——在區內站與站之間走動仍在場上，
-        要走出區外的路一出發就算離開。"""
-        if definition.region is None:
-            return True
-        j = self.state.player.journey
-        stops = [self.state.player.location] + ([] if j is None else j.path[j.reached:j.last + 1])
-        return all(
-            (region := atlas.region_of(self.content, stop)) is not None and region.id == definition.region for stop in stops
-        )
-
-    def _battle_region_name(self, definition: BattleDef) -> str:
-        return next((r.name for r in self.content.map.regions if r.id == definition.region), "戰場")
-
-    def _absent_reason(self, definition: BattleDef) -> str:
-        """還沒到戰場、不能加入的原因（不含括號與句號）。"""
-        if definition.region is None:
-            return "你還在路上，到了才能加入戰局"
-        return f"這場決戰在{self._battle_region_name(definition)}，人要到了那裡、不在路上才能加入"
+        return battle_muster.at_battle(self, definition)
 
     def _sync_battle_presence(self) -> None:
-        """參戰者出發或抵達時，把「人還在不在決戰的大區」記到戰鬥上：離開大區的這回合不出手。"""
-        status = self._battle_status(tick=False)
-        if status is None:
-            return
-        battle, definition = status
-        name = self.state.player.name
-        me = battle.participants.get(name)
-        if me is None:
-            return
-        away = not self._in_battle_region(definition)
-        if me.away != away:
-            self._mutate_battle_of(battle, lambda b: battle_instance.set_away(b, name, away))
+        return battle_muster.sync_battle_presence(self)
 
     def rally_region(self) -> str | None:
-        """自己這一方正在集結或開打的全服決戰、而自己人不在現場時，回傳那場決戰的大區 id，給伺服器假人決定要不要
-        趕路（地圖擴充設計 3.4）。不在現場的意思：還沒參戰的人不在那個大區或在路上；參戰者離開了大區
-        （見 _in_battle_region）。沒有這種決戰、決戰不限地點、打不了這場、已經在場上或倒下了，都是 None。
-        有攻城戰時（領地爭奪第二批）每一場都看（決戰在前、再照開集結的先後）：攻城認自己那一邊的攻方、守方（守將那一格不算，裁決 8）。"""
-        if self._sieges():
-            return self._rally_any()
-        status = self._battle_status(tick=False)
-        if status is None:
-            return None
-        battle, definition = status
-        if definition.region is None:
-            return None
-        me = battle.participants.get(self.state.player.name)
-        if me is None and self.state.player.faction is None and self._free_agent(definition):
-            # 散人沒有自己的一方：不會為了投效趕過去，投效了才算自己這一方。豪強照樣趕過去臨時投效（bot.enlist_pick）
-            return None
-        if me is not None:
-            return definition.region if me.away and not me.eliminated else None
-        return None if self._at_battle(definition) else definition.region
-
-    def _rally_any(self) -> str | None:
-        """rally_region 在有攻城戰時：自己已經在某一場的名單上就只看那一場（離開了大區、還沒倒下才回它的大區）；不然照先後找第一場
-        自己這一方打得進去、自己人又不在現場的那一場的大區。散人不為了投效趕過去（同決戰）；攻城戰另照 siege.slots。"""
-        name = self.state.player.name
-        showdown = self.world.get_battle()
-        live = ([showdown] if showdown is not None and showdown.phase != "ended" else []) + self._sieges()
-        mine = next((b for b in live if name in b.participants), None)
-        if mine is not None:
-            d = self._definition_of(mine)
-            me = mine.participants[name]
-            return d.region if d is not None and d.region is not None and me.away and not me.eliminated else None
-        for b in live:
-            d = self._definition_of(b)
-            if d is None or d.region is None:
-                continue
-            if self.state.player.faction is None and self._free_agent(d):
-                continue  # 散人沒有自己的一方：不會為了投效趕過去
-            if b.siege is not None and not siege.slots(b.siege, self._conquest_side()):
-                continue
-            if not self._at_battle(d):
-                return d.region
-        return None
+        return battle_muster.rally_region(self)
 
     # ── 全服決戰的畫面（戰局條、攻城條、場景、一回合一段的戰況、點名、已送出／在場）：本體在 tianxia/features/battle/view.py，這裡留一行委派 ──
 
@@ -7553,62 +7306,12 @@ class Game:
     def _round_wait(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:
         return battle_view.round_wait(self, battle, definition)
 
+    # 本體在 tianxia/features/battle/muster.py（全部拆包第 7 批：集結、投效、挑同伴），這裡留一行委派
     def _battle_menu(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[Option]:
-        """戰鬥那一段選單：自己大區裡打得進去的只有一場（或已經在名單上、在挑同伴）照舊（_battle_options，鈕 id 一字不變）；
-        兩場以上（攻城戰與決戰、或兩場攻城，領地爭奪第二批 Review Focus 4）每一場各一組加入鈕，id 帶「@流水號」、字前面寫是哪一場。"""
-        joinable = self._joinable()
-        if len(joinable) < 2 or self.state.player.escort_pick:
-            return self._battle_options(battle, definition)
-        out = []
-        for b in joinable:
-            d = self._definition_of(b)
-            for o in self._battle_options(b, d):
-                out.append(o.model_copy(update={"id": f"{o.id}@{b.record_id}", "label": f"{d.name}：{o.label}"}))
-        return out
+        return battle_muster.battle_menu(self, battle, definition)
 
     def _battle_options(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[Option]:
-        """打得了這場仗的人的戰鬥選項（只能觀戰的人不會走到這裡，見 _watching_battle）。"""
-        name = self.state.player.name
-        p = battle.participants.get(name)
-        if p is None and allied.needs_ally(self.state, self.content):  # 拜入曹氏莊院還沒挑一邊（FB-273）：先挑一邊，不給加入也不給投效
-            return []
-        if p is None and self.state.player.escort_pick and self._escort_choices():  # 按了加入、在挑誰隨你上陣（歷史武將同行）
-            return self._escort_options()
-        if self._free_agent(definition):  # 散人、豪強：集結時、或開打了還沒參戰，給臨時投效的兩顆
-            if battle.phase == "muster" or p is None:
-                return self._enlist_options(battle, definition)
-        if battle.phase == "muster":
-            sides = list(self._sides(definition).items())  # 兩軍（id, 名字）
-            if self.content.scenario.factions:  # 劇本分陣營：只能站在自己陣營那邊
-                sides = [(fid, fname) for fid, fname in sides if fid == self._side()]  # 豪強分屬兩軍：依附那一軍
-            return [  # 已經加入的那一邊換成灰的「已加入」；不分陣營的劇本集結時還能換到另一邊
-                Option(id=f"battle:join:{fid}", label=f"已加入【{fname}】", enabled=False)
-                if p is not None and p.faction == fid else Option(id=f"battle:join:{fid}", label=f"加入【{fname}】")
-                for fid, fname in sides
-            ]
-        if p is None:
-            return [Option(id="battle:join_late", label="加入戰局")]
-        if p.eliminated:
-            return [Option(id="battle:spectate", label="（觀戰中，無法行動）", enabled=False)]
-        if name in battle.round.pending_actions:
-            return [Option(id="battle:waiting", label=f"（已選擇，等其他人：{self._round_wait(battle, definition)}）", enabled=False)]
-        out = []
-        for o in battle_instance.options_for(battle, definition, name):
-            if o.free_text:
-                continue
-            label = o.text
-            ordered = o.move is not None and o.move == battle.orders.get(p.faction) and battle_instance.caller(battle, p.faction) is not None
-            if p.faction == battle_instance.GUARD and o.move is not None:  # 三方混戰助守的人：份量不推戰線，不寫分數與將令（裁決 22）
-                label = f"{o.text}（{o.move}）"
-            elif o.move is not None and p.scores:  # 三招：寫招與這個人現在的份量（設計 3.4：按鈕上直接寫）
-                score = p.scores.get(o.move, 0.0) * battle_instance.condition(p)
-                if ordered:  # 照將令出招（龍頭上陣）：份量照算進去
-                    score *= 1 + self.content.config.battle.generals.order_bonus
-                label = f"{o.text}（{o.move}・{round(score)} 分{battle_instance.ORDER_MARK if ordered else ''}）"
-            elif o.move is not None:  # 還沒有份量快照（上線前就在場上、下一次同步才補）：不寫「0 分」，那是假的
-                label = f"{o.text}（{o.move}）"
-            out.append(Option(id=f"battle:act:{o.tag}", label=label))
-        return out
+        return battle_muster.battle_options(self, battle, definition)
 
     def event_free_text_prompt(self) -> str | None:
         """眼前的事件可以隨口應對時回傳提示語（選單上那一顆的標籤），否則 None；server.py 用它決定輸入框。"""
@@ -7646,169 +7349,12 @@ class Game:
     def _tale_battles(self) -> list[battle_instance.BattleInstance]:
         return battle_view.tale_battles(self)
 
+    # 本體在 tianxia/features/battle/muster.py（全部拆包第 7 批：集結、投效、挑同伴），這裡留一行委派
     def _battle_choose(self, arg: str) -> list[str]:
-        """choose() 分派進這裡之前，已經透過自己開頭那次 self.options(odds=False) 呼叫
-        推進過一次了（options() 內部會 tick），這裡用 tick=False 只讀，避免同一次請求裡
-        重複推進兩次。序章裡一律擋下（_battle_for_me，FB-113）：選單上本來就沒有，直接送也不行。
-        鈕 id 帶「@流水號」（同一個大區有兩場以上打得進去，領地爭奪第二批 Review Focus 4）：這一下照那一場；已經在別場的名單上不收。"""
-        arg, at, ref = arg.partition("@")
-        if not at:
-            return self._battle_choose_in(arg)
-        if not ref.isdigit():
-            return ["（此刻無法這麼做。）"]
-        name = self.state.player.name
-        if any(name in b.participants and b.record_id != int(ref) for b in self.battles_now() if b.phase != "ended"):
-            return ["（你已經在另一場戰局裡。）"]
-        self._battle_ref = int(ref)
-        try:
-            return self._battle_choose_in(arg)
-        finally:
-            self._battle_ref = None
+        return battle_muster.battle_choose(self, arg)
 
     def _battle_choose_in(self, arg: str) -> list[str]:
-        """_battle_choose 的本體（看的那一場已經照 @流水號 定好）。"""
-        status = self._battle_for_me(tick=False)
-        if status is None:
-            return ["（此刻無法這麼做。）"]
-        battle, definition = status
-        name = self.state.player.name
-        kind, _, rest = arg.partition(":")
-        # 已經報名的人在區內走動時改選陣營不是「加入」，不用再驗人在不在戰場（_at_battle 在路上一律是否）
-        changing_sides = kind == "join" and name in battle.participants
-        if kind == "enlist":
-            changing_sides = name in battle.participants
-        if kind in ("join", "join_late", "enlist") and not changing_sides and not self._at_battle(definition):
-            return [f"（{self._absent_reason(definition)}。）"]
-        if kind == "escort":
-            return self._escort_step(battle, rest)
-        guarding = kind == "enlist" and rest.partition("@")[0] == battle_instance.GUARD  # 三方混戰助守：同伴只在兩軍那兩格上陣（裁決 22）
-        if (kind in ("join", "join_late", "enlist") and not changing_sides and not self._escort_picked and not guarding
-                and self._escort_choices()):
-            # 名下有同伴：先挑誰隨你上陣（或不派），挑了才加入（歷史武將同行 9.3：沒有預設值）
-            refusal = self._join_refusal(kind, rest, definition, battle)
-            if refusal is not None:
-                return refusal
-            self.state.player.escort_pick = f"{kind}:{rest}" + (f"@{self._battle_ref}" if self._battle_ref is not None else "")
-            return [ESCORT_PICK]
-        if kind == "enlist":
-            return self._enlist(battle, definition, rest, changing_sides)
-        if kind == "join":
-            if self.content.scenario.factions and rest != self._side():
-                return ["（你只能站在自己陣營這一邊。）"]
-            if battle.siege is not None and (problem := siege.join_problem(self.content, battle.siege, self._conquest_side(), rest)):
-                return [problem]
-            scores = self._mandate_weight(definition, self._battle_scores())  # 在 mutate_battle 之前算好：快照的是加入這一刻、這個玩家自己的份量
-            gear, marks = self._battle_gear(), self._battle_marks()
-            self._mutate_battle_of(
-                battle,
-                lambda b: battle_instance.join_faction(
-                    b, name, rest, self._battle_neili_cap(), self._battle_power(), scores=scores, attribute=self._battle_road(),
-                    role=self._battle_role(), **gear, **marks,
-                ),
-            )
-            msgs = ["你加入了這場戰局。"]
-            side = self._sides(definition).get(rest, rest)
-            self._write(f"{definition.name}・{'改選' if changing_sides else '加入'}{side}", msgs)  # 加入與改選各留一則（FB-030）
-            return msgs
-        if kind == "join_late":
-            own = self._side() if self.content.scenario.factions else None
-            if battle.siege is not None and (problem := siege.join_problem(self.content, battle.siege, self._conquest_side(), own or "")):
-                return [problem]
-            scores = self._mandate_weight(definition, self._battle_scores())
-            gear, marks = self._battle_gear(), self._battle_marks()
-            self._mutate_battle_of(
-                battle,
-                lambda b: battle_instance.auto_assign_latecomer(
-                    b, definition, name, self._battle_neili_cap(), self.rng, self._battle_power(), faction=own,
-                    scores=scores, attribute=self._battle_road(), role=self._battle_role(), **gear, **marks,
-                ),
-            )
-            msgs = ["你趕到了戰場，這一回合就能出手。"]  # 晚到的人當回合就能出招（FB-028）
-            self._write(f"{definition.name}・趕到戰場", msgs)  # 趕到也留一則（FB-030）；每回合的出招不寫，太吵
-            return msgs
-        if kind == "act":
-            self._backfill_battle_scores()  # 還沒有份量快照的自己，出招之前先補（結算要讀）
-            return self._submit_battle_action(name, definition, rest)
-        return ["（此刻無法這麼做。）"]
-
-    def _join_refusal(
-        self, kind: str, rest: str, definition: BattleDef, battle: battle_instance.BattleInstance | None = None,
-    ) -> list[str] | None:
-        """加入、臨時投效這一下本身就不成的那一句（同 _battle_choose、_enlist 的擋法）：挑同伴之前先擋，免得挑完了才說不行。
-        攻城戰（領地爭奪第二批）另照 siege.join_problem（另一軍站不進守將那一格）。"""
-        if kind == "join" and self.content.scenario.factions and rest != self._side():
-            return ["（你只能站在自己陣營這一邊。）"]
-        if kind == "enlist" and (not self._free_agent(definition) or rest not in self._enlist_sides(battle, definition)):
-            return ["（此刻無法這麼做。）"]
-        if battle is not None and battle.siege is not None:
-            slot = rest if kind != "join_late" else (self._side() or "")
-            problem = siege.join_problem(self.content, battle.siege, self._conquest_side(), slot)
-            if problem is not None:
-                return [problem]
-        return None
-
-    def _enlist(
-        self, battle: battle_instance.BattleInstance, definition: BattleDef, side: str, changing_sides: bool,
-    ) -> list[str]:
-        """散人、豪強臨時投效交戰的一方（_free_agent）：集結時跟加入一樣（還能改投另一邊），開打了照晚到的人算、當回合就能出手。
-        參戰名單上記投效的那一方，自己的陣營照舊（散人照舊是散人、豪強照舊是豪強）。"""
-        name = self.state.player.name
-        armies = self._enlist_sides(battle, definition)  # 三方混戰多一格助守【守軍】（裁決 22）
-        if not self._free_agent(definition) or side not in armies:
-            return ["（此刻無法這麼做。）"]
-        if battle.siege is not None and (problem := siege.join_problem(self.content, battle.siege, self._conquest_side(), side)):
-            return [problem]
-        if changing_sides and battle.phase != "muster":
-            return ["（開打之後就不能改投了。）"]
-        scores, cap, power, road = self._mandate_weight(definition, self._battle_scores()), self._battle_neili_cap(), self._battle_power(), self._battle_road()
-        role = self._battle_role()
-        gear, marks = self._battle_gear(), self._battle_marks()
-        if side == battle_instance.GUARD:  # 三方混戰助守：同伴只在兩軍那兩格上陣，這一場不帶（裁決 22）
-            marks["escort"] = None
-        if battle.phase == "muster":
-            self._mutate_battle_of(
-                battle,
-                lambda b: battle_instance.join_faction(
-                    b, name, side, cap, power, scores=scores, attribute=road, role=role, **gear, **marks,
-                ),
-            )
-            msgs = [f"你臨時投效了{armies[side]}，只算這一場：打完你照樣是{self._own_side_name()}。"]
-        else:
-            self._mutate_battle_of(
-                battle,
-                lambda b: battle_instance.auto_assign_latecomer(
-                    b, definition, name, cap, self.rng, power, faction=side, scores=scores, attribute=road, role=role,
-                    **gear, **marks,
-                ),
-            )
-            msgs = [f"你臨時投效了{armies[side]}，趕到了戰場，這一回合就能出手；打完你照樣是{self._own_side_name()}。"]
-        if side == battle_instance.neutral_guard(battle):  # 助守中立地的守將：不寫那一格的陣營（FB-540）
-            place = self.content.locations[battle.siege.loc].name
-            line = siege.HELP_GUARD_LINE if battle.phase == "muster" else siege.HELP_GUARD_LATE
-            msgs = [line.format(place=place, own=self._own_side_name())]
-            self._write(f"{definition.name}・{siege.HELP_GUARD_SWITCH if changing_sides else siege.HELP_GUARD_TITLE}", msgs)
-            return msgs
-        self._write(f"{definition.name}・{'改投' if changing_sides else '臨時投效'}{armies[side]}", msgs)
-        return msgs
-
-    def _submit_battle_action(
-        self, name: str, definition: BattleDef, tag: str, text: str | None = None, success_rate: int | None = None,
-        stories: tuple[str, str] | None = None, sex: str | None = None,
-    ) -> list[str]:
-        """送出一個行動（按鈕選的固定 tag，或自訂輸入框的 free_text 選項，連同 LLM 先評好
-        的成功率）並嘗試結算這回合；呼叫端已經確認過戰鬥還在進行（還沒結束），所以這裡
-        如果結算完變成 ended，一定是這次送出的行動剛好造成的，不用再跟「結算前是不是
-        已經 ended」比對。"""
-        captured: dict[str, list[str]] = {"msgs": []}
-
-        def _apply(b: battle_instance.BattleInstance) -> None:
-            battle_instance.submit_action(b, name, tag, text, success_rate, stories, sex=sex)
-            captured["msgs"] = self._advance_battle_round(b, definition)
-
-        battle = self._mutate_battle_now(_apply)  # 有攻城戰時是自己參戰的那一場（領地爭奪第二批）
-        if battle is not None and battle.phase == "ended":
-            self._apply_battle_outcome(battle)
-        return captured["msgs"] or ["你選擇了行動，等待其他人……"]
+        return battle_muster.battle_choose_in(self, arg)
 
     def _recruit(self) -> list[str]:
         target = self._recruit_target()
