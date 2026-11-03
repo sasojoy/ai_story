@@ -458,7 +458,8 @@ GAME_DELEGATE_CALLERS.update({
     ("choose", "_note_action"): "選項做完、出門、交友、進出店面……七處：" + _NOTE_HOOK,
     ("_sense_apply", "_note_action"): "有所感悟到意境（序章的悟）：有所感還沒成包（總表第 24 批）；" + _NOTE_HOOK,
     ("_order_credit", "_note_action"): "替軍令記到功（入伍段的「出一次力」）：軍情還沒成包（總表第 33、34 批）；" + _NOTE_HOOK,
-    ("_duty", "_note_action"): "守勢行動算出一次力（出陣三，總表第 17 批）；" + _NOTE_HOOK,
+    # 守勢（_duty，act:duty）照舊叫 engine 模組層的 note_action、不經 _note_action：第 17 批正在把它搬進出陣包（批次表「搬包中」），
+    # 這一批不改它（計畫第六節「跟第 17 批」）
     ("_faction_step", "_note_action"): "投靠那一下（序章、引導的 join）：陣營還沒成包（總表第 35 批）；" + _NOTE_HOOK,
     ("_arrive", "_note_action"): "抵達（出師去潁川、離開城鎮）：移動還沒成包（總表第 47 批）；" + _NOTE_HOOK,
     ("take_stamina_pill", "_note_action"): "服回體丹（序章那一步）：回體丹是核心；" + _NOTE_HOOK,

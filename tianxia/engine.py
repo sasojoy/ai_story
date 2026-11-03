@@ -4254,10 +4254,10 @@ class Game:
             if host is not None:
                 msgs += self._drill_gains(host, 1.0)
         if duel:  # 守城軍令改成應戰守住才記（計畫 4.0 之三第 17 條）；入伍段「出一次力」照舊認它
-            return msgs + self._duty_credit() + self._guide(self._note_action("order"))
+            return msgs + self._duty_credit() + self._guide(note_action(s, c, self.world, "order"))
         credit = self._order_credit(kind="duty", location=loc.id, front=front)  # 地點：領地爭奪的守城認自家被推得最高的那一塊（裁決 11、翻地與爭搶）
         # 入伍段第 2 步「出一次力」：守勢行動不在這週軍令裡也算（FB-094：豪強第一週只有打擊，新人打不過；FB-093：巡哨、傳道就在營裡）
-        return msgs + (credit or self._guide(self._note_action("order")))
+        return msgs + (credit or self._guide(note_action(s, c, self.world, "order")))
 
     def _duty_credit(self) -> list[str]:
         return sortie_duel_actions.duty_credit(self)  # 出陣約戰（主動搬六包第 2 批）：本體在 tianxia/features/sortie/duel_actions.py
