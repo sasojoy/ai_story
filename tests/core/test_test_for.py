@@ -986,7 +986,17 @@ def test_a_reexported_name_counts_only_when_written_after_the_module_word():
     assert not test_for.names_through(["arena"], "title_for", "c.config.arena.enabled = True\nleaderboard.title_for\n")
 
 
-@pytest.mark.parametrize("package", ["bout", "battle", "feast", "looks"])
+STAGE_PACKAGES = ["bout", "battle", "feast", "guide", "looks"]  # 有 <包>_stage.py 的包（引導是第 22 批合進 develop 的，第 12 批合併時補上）
+
+
+def test_the_stage_packages_are_every_package_with_a_stage_file():
+    """下面兩條照這張表參數化：新的一包放了 <包>_stage.py 就要加進來（不然那一包的擺局面檔沒有人驗挑不挑得到）。"""
+    found = sorted(p.parent.parent.name for p in (ROOT / "tianxia" / "features").glob("*/tests/*_stage.py")
+                   if p.name == f"{p.parent.parent.name}_stage.py")
+    assert found == sorted(STAGE_PACKAGES)
+
+
+@pytest.mark.parametrize("package", STAGE_PACKAGES)
 def test_a_package_stage_file_picks_the_contract_test_that_loads_it(package):
     """tianxia/features/<包>/tests/<包>_stage.py 只有契約測試載入（test_contract_features 的 _stages 用 importlib 照路徑讀），沒有測試檔
     import 它：改了挑核心契約（同改包的檔），不是「import 它的測試檔」那一條（第 12 批審查：以前四包的 *_stage.py 一條都不挑）。"""
@@ -995,6 +1005,18 @@ def test_a_package_stage_file_picks_the_contract_test_that_loads_it(package):
     picked = test_for.pick([rel])
     assert {p.name for p in picked.files} >= {"test_contract_features.py", "test_feature_boundaries.py"}
     assert any("契約" in w for w in picked.why), picked.why
+
+
+@pytest.mark.parametrize("package", STAGE_PACKAGES)
+def test_a_package_stage_file_also_picks_its_own_package_tests(package):
+    """擺局面檔算成那一包（第 22 批 PM 認定第 1 條、第 12 批合併時補）：挑那一包的 tests/ 加核心契約，同改包裡的任一檔——擺錯局面時
+    契約測試會紅，那一包自己的測試也要跟著跑（修正輪只挑了核心契約）。"""
+    rel = f"tianxia/features/{package}/tests/{package}_stage.py"
+    own = set((ROOT / "tianxia" / "features" / package / "tests").rglob("test_*.py"))
+    assert own, package
+    picked = test_for.pick([rel])
+    assert own <= set(picked.files), sorted(p.name for p in own - set(picked.files))
+    assert picked.files == test_for.pick([f"tianxia/features/{package}/__init__.py"]).files
 
 
 def test_a_core_pick_that_names_too_many_files_falls_back_to_core_and_smoke(monkeypatch):
