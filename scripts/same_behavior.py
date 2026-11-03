@@ -5323,16 +5323,20 @@ _register_track("train", TrainScenario, (("tianxia/features/sortie/train_actions
 class ArtsScenario(Scenario):
     """修練（--track arts，自己一個資料庫）：修練頁的每一顆（/api/menxia/<op>、/api/do/allocate、/api/do/ascend_line）與 learn:。
     - 籌備中（管理者還沒開季）：修練頁的動作一律回「賽季籌備中」那一句（裝飾器 _not_while_preparing 搬進核心）。
-    - 學藝（learn:）：付不起灰著、學兩門、學過的不在選單上、再按一次被擋；改練、換回、沒有這一門。
-    - 練成：心得不足、練到第十成（一路有受傷的）、練無可練、內功；裝意境（不指定格、指定格、沒有這個意境、沒有這門武學）、拆下、拆不在槽上的。
-    - 熔煉：身上的熔不掉、庫裡沒有、熔一門、熔一個意境、批量熔煉；配點：沒有點、配兩點、沒有這一項、到頂。
-    - 破境丹衝絕學：自創一門上品（三段式立意，模型擋著走關鍵字表）、還沒到極處、等契機、沒有丹、體力不足、下品的、沒有這門；服丹衝到衝開為止（成與敗）。
+    - 學藝（learn:）：書院那幾門灰著（書院弟子、俠名）、付不起灰著（按了被擋）、兩處各學一門、學過的不在選單上、再按一次被擋；
+      改練（換上庫裡學來的那一門）、換回、沒有這一門。
+    - 練成：心得不足、練到第十成（第一下受傷：機率在記憶體裡擺成 1）、練無可練、內功；裝意境（不指定格、指定格、沒有這個意境、沒有這門武學）、
+      拆下、拆不在槽上的。
+    - 熔煉：身上的熔不掉、庫裡沒有、熔庫裡學來的一門、熔一個意境、批量熔煉（一門武學與一個意境）；配點：沒有點、配兩點、沒有這一項、到頂。
+    - 破境丹衝絕學：自創一門上品（三段式立意，模型擋著走關鍵字表）、還沒到極處、等契機、沒有丹、體力不足、下品的、沒有這門；
+      敗的那一下（機會在記憶體裡壓到 1%：撞回來、下一次多一成），再服丹衝到衝開為止。
       **前半停在這裡**：破境卡寫好了、那一句還沒寫回（PlayerState.ascension.line 是空的）。同一刻另有一位等著定名的舊存檔（PlayerState.naming，
       手上的是自己自創、自己第一個練成的那一門）、一位手上有同一門的人、一位境界卡沒配完的人、一位走到裝意境那一步的序章新人。
     - 後半第一件事：新程式走破境卡三段式（A 開單、B 模型擋著走套句、C 存回）、再按一次（卡上已經有那一句）、收掉。
       接著定名（名字不行、被用掉、定成）與手上同一門的人下一次同步補一則（_deliver_renames）；序章新人接著練成、熔煉（序章的拒絕）；
       傳功給同伴與部下（心得不足、每一項、本人、名冊上沒有）；境界卡（屬性五段在記憶體裡打開：season21、week7）與配點那一句；
-      絕學的契機（打贏一場、身上那一門上品第十成：核心的單打服務 _seize）；追風步的舊品質讀檔時拿掉；最後每個人的修練頁。"""
+      絕學的契機（核心的單打服務 _seize：基礎武學擺成上品第十成，照原本的機會打五場、必中一場〔照舊一句升品〕；自創一門換上、必中一場
+      〔破境卡、卡上那一句 via seize〕）；追風步的舊品質讀檔時拿掉；最後每個人的修練頁。"""
 
     PRACTICE, PILL, NAMER, HOLDER, TEACHER, FIGHTER = "墨池", "寒江", "竹影", "松風", "石泉", "雲岫"
     PUPIL = "初學"
@@ -5440,23 +5444,30 @@ class ArtsScenario(Scenario):
 
     # ── 前半 ──
 
+    def lesson_spots(self) -> list[str]:
+        """學藝的地方：書院（只教書院弟子、要俠名的，散人都灰著）、潁水與樓桑村（散人學得了、要學費）；測試內容是湖邊。"""
+        return ["lake"] if self.profile == "test" else [self.academy(), "yingshui", "loushang_village"]
+
     def learn(self) -> None:
-        """拜師學藝（learn:，修練包的前綴）：付不起灰著；學兩門；學過的不在選單上、再按一次被擋。"""
+        """拜師學藝（learn:，修練包的前綴）：書院那幾門灰著（書院弟子、俠名）；付不起灰著、按了被擋；學兩門（兩處各一門）；
+        學過的不在選單上、再按一次被擋。"""
         who = self.PRACTICE
-        if not self.place(who, self.academy()):
-            return
-        self.edit(who, lambda p: p.stats.__setitem__("silver", 0))
-        view = self.main(who)
-        emit("學藝的鈕（付不起）", {i: o for i, o in self.ids(view).items() if i.startswith("learn:")})
-        self.edit(who, lambda p: p.stats.__setitem__("silver", 2000))
-        view = self.main(who)
-        lessons = [i for i, o in self.ids(view).items() if i.startswith("learn:") and o.get("enabled")]
-        emit("學藝的鈕", lessons)
-        for option_id in lessons[:2]:
-            self.choose(who, option_id)
-        if lessons:
-            emit("學過之後的鈕", [i for i in self.ids(self.main(who)) if i.startswith("learn:")])
-            self.choose(who, lessons[0])  # 已經不在選單上：被擋
+        for loc in self.lesson_spots():
+            if not self.place(who, loc):
+                continue
+            self.edit(who, lambda p: p.stats.__setitem__("silver", 0))
+            view = self.main(who)
+            shown = {i: o for i, o in self.ids(view).items() if i.startswith("learn:")}
+            emit(f"{loc} 學藝的鈕（沒錢）", shown)
+            if shown:
+                self.choose(who, next(iter(shown)))  # 灰著的照樣按（書院弟子、付不起）：被擋
+            self.edit(who, lambda p: p.stats.__setitem__("silver", 2000))
+            lessons = [i for i, o in self.ids(self.main(who)).items() if i.startswith("learn:") and o.get("enabled")]
+            emit(f"{loc} 學藝的鈕", lessons)
+            if lessons:
+                self.choose(who, lessons[0])
+                emit(f"{loc} 學過之後的鈕", [i for i in self.ids(self.main(who)) if i.startswith("learn:")])
+                self.choose(who, lessons[0])  # 已經不在選單上：被擋
         self.state_of(who, "學藝之後")
 
     def switch(self) -> None:
@@ -5473,12 +5484,18 @@ class ArtsScenario(Scenario):
         self.state_of(who, "改練之後")
 
     def practice(self) -> None:
-        """練成：心得不足、一路練到第十成（受傷照擲）、練無可練、內功兩成。"""
+        """練成：心得不足、一路練到第十成（受傷照擲；第一下受傷的機率在記憶體裡擺成 1，兩份程式同一套）、練無可練、內功兩成。"""
         who = self.PRACTICE
         self.xinde(who, 0)
         self.mx(who, "practice", {"kind": "武學"})
         self.xinde(who, 5000)
-        for _ in range(10):
+        cfg = self.c.config
+        before, cfg.practice_injury_chance = cfg.practice_injury_chance, 1.0
+        try:
+            self.mx(who, "practice", {"kind": "武學"})  # 這一番苦練傷了氣血
+        finally:
+            cfg.practice_injury_chance = before
+        for _ in range(9):
             self.mx(who, "practice", {"kind": "武學"})
         for _ in range(2):
             self.mx(who, "practice", {"kind": "內功"})
@@ -5559,6 +5576,13 @@ class ArtsScenario(Scenario):
             self.mx(who, "cultivate", {"art": neigong, "use_legend": True})  # 下品：品級不靠修練
         self.mx(who, "cultivate", {"art": "沒有這門", "use_legend": True})
         self.edit(who, lambda p: setattr(p, "legend_items", 12))
+        cfg = self.c.config
+        before, cfg.legend_item_bonus = cfg.legend_item_bonus, 0  # 敗的那一下：機會在記憶體裡壓到 1%（兩份程式同一套），撞回來、下一次多一成
+        try:
+            self.place(who, None)
+            self.mx(who, "cultivate", {"art": own, "use_legend": True})
+        finally:
+            cfg.legend_item_bonus = before
         for _ in range(12):
             self.place(who, None)
             self.mx(who, "cultivate", {"art": own, "use_legend": True})
@@ -5688,18 +5712,20 @@ class ArtsScenario(Scenario):
         if jf is not None and self.profile in DUEL_PROFILES:
             jf.stat_milestones = True
         try:
-            emit("境界卡", (self.main(who).get("main") or {}).get("milestone"))
+            emit("境界卡", self.main(who).get("milestone"))
             self.do(who, "allocate", {"stat": "str"})
-            emit("境界卡（配了一點）", (self.main(who).get("main") or {}).get("milestone"))
+            emit("境界卡（配了一點）", self.main(who).get("milestone"))
             self.do(who, "allocate", {"stat": "con"})
-            emit("境界卡（配完）", (self.main(who).get("main") or {}).get("milestone"))
+            emit("境界卡（配完）", self.main(who).get("milestone"))
         finally:
             if jf is not None:
                 jf.stat_milestones = before
         self.state_of(who, "境界卡之後")
 
     def seize(self) -> None:
-        """絕學的契機（核心的單打服務 _seize → 修練包）：身上那一門擺成上品第十成，照寫好的打贏幾場；出陣開著的季在汝南荒野出陣，關著的在長社遊歷。"""
+        """絕學的契機（核心的單打服務 _seize → 修練包）：身上那一門（基礎武學）擺成上品第十成，照寫好的打贏幾場；出陣開著的季在
+        汝南荒野出陣，關著的在長社遊歷。再自創一門換上、擺到第十成，打一場必中的：自創的那一門破境（破境卡、江湖史、傳聞），
+        卡上那一句走三段式（via seize 的套句）。"""
         from tianxia import territory
 
         who = self.FIGHTER
@@ -5710,7 +5736,34 @@ class ArtsScenario(Scenario):
             self.edit(who, lambda pl: setattr(pl.member, "wugong_id", art))
         self.edit(who, lambda pl: (pl.art_quality.__setitem__(art, "上品"), setattr(pl.member, "wugong_level", 10)))
         loc = "runan_wilds" if territory.on(self.c) else ("lake" if self.profile == "test" else "changshe")
-        for i in range(6):
+        self.set_duel(False)  # 約戰開著的季按出陣只打開那張卡（不打）：契機要的是真的打一場（同出陣一軌的攻）
+        try:
+            self.seize_fights(who, loc, 5)  # 照原本的機會擲（難度比夠的季摸到了又滑走；none、test 的對手太弱，不到 min_ratio 不擲）
+            self.seize_sure(who, loc)  # 基礎武學（不是自創的）：照舊一句升品，沒有破境卡
+            own = self.create_art(who, "雲岫腿")
+            if own is not None and own in self.chars.load(who).player.arts:
+                self.mx(who, "switch", {"art": own})
+                self.edit(who, lambda pl: setattr(pl.member, "wugong_level", 10))
+                self.seize_sure(who, loc)  # 自創的那一門：破境
+        finally:
+            self.set_duel(True)
+        self.state_of(who, "契機之後")
+        emit("契機的破境卡", (self.main(who).get("status") or {}).get("ascension"))
+        self.do(who, "ascend_line")
+        emit("契機的破境卡（寫回之後）", (self.main(who).get("status") or {}).get("ascension"))
+
+    def seize_sure(self, who: str, loc: str) -> None:
+        """打一場必中的契機：機會在記憶體裡擺成必中、難度比不設門檻（兩份程式同一套），做完擺回來。"""
+        rule = self.c.config.breakthrough
+        before = rule.chance, rule.max_chance, rule.min_ratio
+        rule.chance, rule.max_chance, rule.min_ratio = 10 ** 6, 100, 0.0
+        try:
+            self.seize_fights(who, loc, 1)
+        finally:
+            rule.chance, rule.max_chance, rule.min_ratio = before
+
+    def seize_fights(self, who: str, loc: str, times: int) -> None:
+        for i in range(times):
             if not self.place(who, loc):
                 return
             self.edit(who, lambda pl: setattr(pl, "sorties_today", 0))
@@ -5725,7 +5778,6 @@ class ArtsScenario(Scenario):
             record = state.battles[0] if state.battles else None
             emit(f"契機那一場（第 {i + 1} 場）", None if record is None else {
                 "tier": record.tier, "difficulty": record.difficulty, "our_power": record.our_power, "notes": record.notes})
-        self.state_of(who, "契機之後")
 
     def zhuifeng(self) -> None:
         """追風步的舊品質（中間一版寫成了絕學）：讀檔時拿掉（_drop_stale_references → _drop_old_zhuifeng），按一下存回去。"""
@@ -5762,6 +5814,7 @@ def arts_bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
     from tianxia.characters import open_characters
     from tianxia.content import load_content
     from tianxia.engine import Game
+    from tianxia.ollama_client import OllamaClient
     from tianxia.sqlite_world import open_world
     from tianxia.state import BotProfile
 
@@ -5828,7 +5881,9 @@ def arts_bots_run(root: Path, profile: str, out: Path, tmp: Path) -> None:
             world.try_recruit(mate, name)
         chars.save(g.state)
     clock = [CLOCK0]
-    runner = BotRunner(content, world, chars, rng=random.Random(7), clock=lambda: clock[0])
+    # 假人程式照 run_bots 帶一個 client（_setup_child 換成叫不動的那一個）：絕學定名的 B 段請模型、模型擋著，C 段照字表另組（bot_policy.apply_job）
+    client = OllamaClient.from_config(content.config) if content.config.bot_naming else None
+    runner = BotRunner(content, world, chars, rng=random.Random(7), clock=lambda: clock[0], client=client)
     totals = Counter()
     for _ in range(int(os.environ.get("SB_RUNNER_TICKS", "120"))):
         clock[0] += 300.0
