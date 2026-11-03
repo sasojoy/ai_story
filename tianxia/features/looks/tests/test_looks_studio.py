@@ -174,6 +174,44 @@ def test_a_look_starts_from_its_portrait_and_draws_ten_sheets(on):
     assert row["studio"]["painted"] == 1 + len(orders.SHEETS)
 
 
+def test_the_players_words_are_painted_as_an_english_description(on):
+    """2026-11-04 畫坊量測：玩家那一句中文原封不動塞進提示詞，「女版斗笠小子」十次都畫成參考圖的男孩；換成英文描述第一次就過。
+    定裝照照那一句寫；十六張照定裝照寫（畫的是定裝照上那個人），一套只問一次、記在訂單上；審圖的照舊看玩家那一句。"""
+    game = _game(on)
+    actions.order(game, "雪衣", "女版斗笠小子", "look-ref-804")
+    pid = orders.mine(Wallet(game.world.db), game._mall_owner())[0].pid
+    PNG = b"\x89PNG\r\n\x1a\n" + b"1" * 20
+
+    class PortraitPainter(Painter):
+        def paint(self, prompt, images, aspect, size):
+            super().paint(prompt, images, aspect, size)
+            return PNG
+
+    class Words(Critic):
+        texts, images = [], []
+
+        def describe_text(self, text):
+            self.texts.append(text)
+            return "a girl with two long braids under a conical straw hat"
+
+        def describe_image(self, image):
+            self.images.append(image)
+            return "a girl in a tan plaid vest and a grey scarf"
+
+    painter, critic = PortraitPainter(), Words()
+    assert _tick(game, painter, critic) == [f"#{pid} 定裝照好了"]
+    assert critic.texts == ["女版斗笠小子"]
+    assert "two long braids" in painter.calls[0][0] and "女版斗笠小子" not in painter.calls[0][0]
+    assert "女版斗笠小子" in critic.seen[0]  # 審圖照舊對玩家那一句
+    _tick(game, painter, critic)
+    _tick(game, painter, critic)
+    assert critic.images == [PNG]  # 兩張只描述一次（記在訂單上，照定裝照的指紋）
+    assert all("tan plaid vest" in p and "女版斗笠小子" not in p for p, _ in painter.calls[1:3])
+    studio_data = Wallet(game.world.db).purchase(pid).data["studio"]
+    assert studio_data["design"]["text"] == "a girl in a tan plaid vest and a grey scarf"
+    # 審圖的沒有這兩個本事（測試假人）就照舊用玩家那一句：上一條測試就是這樣
+
+
 def test_dodge_and_fall_are_painted_from_a_gray_silhouette_but_reviewed_against_the_hat_boy(on):
     """閃避、被擊倒兩張畫圖時第一張參考圖換成灰色剪影（studio.POSE；2026-11-03 量：彩色原圖會被當成要畫的人，
     斗笠、格紋護甲漏到玩家的角色身上，第一次就過的比例 dodge 6%→31%、fall 6%→17%）。審圖照舊看彩色原圖，其他張照舊。"""

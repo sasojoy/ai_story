@@ -15,8 +15,10 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import hashlib
+from dataclasses import dataclass, field, replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Callable, Protocol
 
 from tianxia.models import Content
@@ -92,6 +94,7 @@ class Job:
     refs: tuple[Path, ...]
     portrait: Path | None = None  # 這一套的定裝照（cut_for 照它判斷角色穿不穿白衣，見 cutting.wears_white）
     pose: Path | None = None  # 畫圖時拿來代替 refs[0] 的姿勢剪影（見 POSE）；審圖照舊看 refs
+    text: str = ""  # 自建形象：玩家寫的那一句（畫之前換成英文的外觀描述，見 described）
 
 
 @dataclass(frozen=True)
@@ -239,7 +242,7 @@ def jobs(content: Content, wallet: Wallet, root: Path, web_img: Path) -> list[Jo
                 out.append(Job(kind="look", pid=o.pid, folder=look, slot=PORTRAIT, label="定裝照",
                                prompt=PORTRAIT_PROMPT.format(style=orders.BASE_STYLE, text=o.prompt),
                                checklist=CHECK_PORTRAIT.format(text=o.prompt), aspect="3:4", size="1K",
-                               refs=(arena / "hero_bare_idle.webp",)))
+                               refs=(arena / "hero_bare_idle.webp",), text=o.prompt))
                 continue
             have = orders.present(root, look)
             sheet = next((s for s in orders.SHEETS if s not in have and (o.status == orders.PENDING or s in orders.OUTING)), None)
@@ -251,7 +254,8 @@ def jobs(content: Content, wallet: Wallet, root: Path, web_img: Path) -> list[Jo
                            prompt=f"{orders.gen_prompts(o)[sheet]}\n{POSE_EXTRA if pose else SHEET_EXTRA}",
                            checklist=CHECK_SHEET.format(frames=orders.SHEETS[sheet], action=orders.ACTIONS[sheet],
                                                         gear=GEAR_NONE),  # 十六張一律空手（見 GEAR_NONE 上面那段）
-                           aspect=ASPECT[LAYOUT[sheet]], size="2K", refs=(orders.reference(web_img, sheet), portrait)))
+                           aspect=ASPECT[LAYOUT[sheet]], size="2K", refs=(orders.reference(web_img, sheet), portrait),
+                           text=o.prompt))
     return out
 
 
@@ -374,6 +378,37 @@ def note(data: dict) -> dict:
     return {"painted": int(studio.get("painted", 0)), "failed": str(studio.get("failed", ""))}
 
 
+# 玩家寫的中文換成英文的外觀描述再畫（2026-11-04 畫坊量測）：玩家那一句原封不動塞進英文提示詞，klein 讀不懂——
+# 「女版斗笠小子」「貓咪勇士」的定裝照各畫十次全掛，理由都是「跟參考圖的男孩一模一樣」（「斗笠小子」正好是參考圖那個人）。
+# 先請審圖的那一家把它寫成具體的英文（性別、髮型、每件衣服與顏色），同一張「女版斗笠小子」第一次就過。
+# 十六張改照「定裝照」寫的描述（不是照玩家那一句）：要畫的是定裝照上那個人——#495 寫「神秘兮兮的感覺」，
+# 定裝照卻是斗笠加蒙面，照那一句寫的描述會畫成另一個人。描述記在訂單上（studio.design，照定裝照的指紋），一套只問一次。
+# 審圖的沒有這兩個本事（測試假人、雲端以外的）就照舊用玩家那一句。
+def described(job: Job, critic: Critic, wallet: Wallet) -> tuple[Job, dict | None]:
+    """這一張要畫的提示詞換成英文的外觀描述。回（換好的 job, 要記在訂單上的描述或 None）。"""
+    if job.kind != "look" or not job.text:
+        return job, None
+    if job.slot == PORTRAIT:
+        fn = getattr(critic, "describe_text", None)
+        words = fn(job.text) if callable(fn) else ""
+        return (replace(job, prompt=PORTRAIT_PROMPT.format(style=orders.BASE_STYLE, text=words)) if words else job), None
+    fn = getattr(critic, "describe_image", None)
+    if not callable(fn) or job.portrait is None or not job.portrait.is_file():
+        return job, None
+    image = job.portrait.read_bytes()
+    of = hashlib.sha1(image).hexdigest()[:16]
+    b = wallet.purchase(job.pid)
+    known = ((b.data.get("studio") or {}).get("design") or {}) if b is not None else {}
+    words, fresh = (known.get("text") or "") if known.get("of") == of else "", None
+    if not words:
+        words = fn(image)
+        fresh = {"text": words, "of": of} if words else None
+    if not words:
+        return job, None
+    prompt = f"{orders.gen_prompts(SimpleNamespace(prompt=words))[job.slot]}\n{POSE_EXTRA if job.pose else SHEET_EXTRA}"
+    return replace(job, prompt=prompt), fresh
+
+
 def tick(content: Content, store, root: Path, web_img: Path, painter: Painter, critic: Critic,
          cut: Callable[[Job, bytes], bytes], *, budget: int = 1, tries: int = MAX_TRIES, fresh: bool = False) -> list[str]:
     """畫坊巡一輪：做最多 budget 張（每張最多叫 tries 次生圖）。畫在鎖外（慢），收在行動鎖裡（同伺服器的一個動作）。
@@ -381,11 +416,15 @@ def tick(content: Content, store, root: Path, web_img: Path, painter: Painter, c
     wallet = Wallet(store.db)
     lines: list[str] = []
     for job in jobs(content, wallet, root, web_img)[:max(0, budget)]:
+        job, design = described(job, critic, wallet)
         try:
             result = work(job, painter, critic, cut, tries=tries, fresh=fresh)
         except PaintBusy as exc:
             lines.append(f"#{job.pid} {job.label} 生圖的那邊忙，下一輪再來（{exc}）")
             continue
         with store.action_lock():
+            b = wallet.purchase(job.pid) if design else None
+            if b is not None:
+                wallet.update_data(job.pid, studio={**(b.data.get("studio") or {}), "design": design})
             lines.append(apply(content, wallet, root, job, result))
     return lines
