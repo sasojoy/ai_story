@@ -4789,7 +4789,8 @@ class TrainScenario(Scenario):
     - 序章雪恥（none、weekend 有序章）：照寫好的險勝；另一個新人把那一步的結果在記憶體裡換成落敗（打輸那一支）。
     - 舊遊歷（地盤關著的 none、test）：散人在長社（必敗先問、打輸、照寫好的打贏推大勢與戰後事件）、潁水河畔（不推大勢）；地盤開著的季是灰格。
     - 跟自家隊伍操練：none 的官軍大營（全是自己人「操練・零風險」）、南陽郊野（兩種都有）、黃巾別部營寨；test 把湖邊的水寇記憶體裡換成官軍；
-      地盤開著的季（weekend 倍數 1、season21、week7 小於 1）把汝南荒野的對手記憶體裡換成自家的，出陣攻打撞上自己人改操練（推大勢走 _drill_push）。
+      地盤開著的季（weekend 倍數 1、season21、week7 小於 1）把汝南荒野的對手記憶體裡換成自家的，出陣攻打撞上自己人改操練（推大勢走 _drill_push）；
+      兩種都有：汝南荒野的中立駐軍在記憶體裡多塞一路自家的（原本那一路照舊是外人）。
     - 遊歷推大勢：官軍照寫好的打贏兩下（減法季關著的 none、test；減法季開著的 season21、week7 由上面的操練推），每一下寫各線與零頭。
     - 並肩出陣（_act 的 train 那一支包在外面的）：沒商量、商量沒成、商量成了。
     - 大場面判讀：舊遊歷的 _train_pick、操練不判、約戰開著不判、出陣照判。
@@ -5043,10 +5044,35 @@ class TrainScenario(Scenario):
             with self.factions_of(**{sid: "guan" for sid in foes}):
                 if self.place("官乙", "runan_wilds"):
                     self.train("官乙", "汝南荒野全是自己人（出陣）", times=2)
-            with self.factions_of(**{sid: "guan" for sid in foes[:1]}):
+            # 兩種都有（修正輪）：汝南荒野只站一路（nz_kuibing），換第一路就是全部，跟「全是自己人」一模一樣、鈕上沒有「或與自己人操練」。
+            # 改成 nz_kuibing 照舊是外人，中立駐軍那一格在記憶體裡多塞一路自家的（官軍最弱、不是大場面的那一路）：出陣攻打的池子兩路，
+            # rng 在自己人與外人之間挑。（不能拿站兩路的區塊換一路的陣營：Location.enemies 裡的換了陣營就不算中立的流寇，
+            # conquest.neutral_squads 把它濾掉，池子又剩一路。）
+            with self.neutral_plus("runan_wilds", self.weakest("guan")):
                 if self.place("官乙", "runan_wilds"):
-                    self.train("官乙", "汝南荒野兩種都有（出陣）", times=3)
+                    self.train("官乙", "汝南荒野兩種都有（出陣）", times=8)
         self.trends("操練之後")
+
+    def weakest(self, side: str) -> str:
+        """這一邊最弱、不是大場面的那一路隊伍（兩份程式同一份內容，挑到的一樣）。"""
+        from tianxia import styles
+
+        return min((q.difficulty, sid) for sid, q in self.c.squads.items() if q.faction == side and not styles.is_big(self.c, q))[1]
+
+    @contextlib.contextmanager
+    def neutral_plus(self, loc: str, sid: str):
+        """記憶體裡在開季中立的這一塊的中立駐軍（Scenario.territory.neutral_garrison）多塞一路（做完拿掉；兩份程式同一套）。"""
+        garrison = self.c.scenario.territory.neutral_garrison
+        before = garrison.get(loc)
+        garrison[loc] = [*(before or []), sid]
+        emit(f"{loc} 的中立駐軍多一路", {"squad": sid, "garrison": garrison[loc]})
+        try:
+            yield
+        finally:
+            if before is None:
+                garrison.pop(loc, None)
+            else:
+                garrison[loc] = before
 
     def push(self) -> None:
         """遊歷推大勢（減法季關著：none、test）：官甲照寫好的打贏兩下，長社（test 是湖邊）推往自己陣營的目標（test 沒有陣營：照地點的方向）。"""
