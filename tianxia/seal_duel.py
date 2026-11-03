@@ -96,20 +96,21 @@ def unmounted(p: BattleParticipant, scores: dict[str, float] | None = None) -> d
 
 def side_from_participant(p: BattleParticipant, faction: str | None) -> SealSide:
     """參戰者的快照（5.3 前兩列）：威力、份量、職位、氣血上限；池子從滿血開始（決戰裡那一份池子不帶進來）。
-    加入時戴著碎片（改版）的人用不含碎片戰力的那一份（p.seal_bare；奪璽單挑不吃戰力，企劃者第 7 條）。"""
+    加入時戴著碎片（改版）的人用不含碎片戰力的那一份（p.seal_bare；奪璽單挑不吃戰力，企劃者第 7 條）。
+    防具減損（鐵匠鋪與合成流程 3.9）帶加入決戰那一刻快照的 p.cut，兩邊各吃自己的。"""
     kit = p.kit.model_copy(update={"ctx": p.kit.ctx.model_copy(update={"mount_tier": 0, "followers": 0})}) if p.kit else None
     bare = p.seal_bare
     power, scores = (p.power, unmounted(p)) if bare is None else (bare.power, unmounted(p, bare.scores))
     return SealSide(name=p.name, faction=faction, power=power, scores=scores, role=p.role, hp=p.neili_cap, hp_cap=p.neili_cap,
-                    kit=kit)
+                    kit=kit, cut=p.cut)
 
 
 def side_from(name: str, faction: str | None, power: float, scores: dict[str, float], role: str, hp_cap: float, fresh: bool = False,
-              kit: tactics.BoutSide | None = None) -> SealSide:
+              kit: tactics.BoutSide | None = None, cut: float = 0.0) -> SealSide:
     """沒參戰的那一邊（持有者、小伺服器補上的旁觀散人）：engine 照他的 Game 算好給（_battle_power、_battle_scores(mounted=False)、
-    team.self_side…）。"""
+    team.self_side、team.duel_armor_cut…）。"""
     return SealSide(name=name, faction=faction, power=power, scores=dict(scores), role=role, hp=hp_cap, hp_cap=hp_cap, fresh=fresh,
-                    kit=kit)
+                    kit=kit, cut=cut)
 
 
 def open_duel(
@@ -254,9 +255,13 @@ def resolve(duel: SealDuel, content: Content, salt: str, tianji: int) -> str:
         push = round(tactics.scale_push(duel_rules.push_of(sc, sh, beat, c.role, tuning, battle_t, luck, foe_role=h.role), step))
         harm["challenger"] = duel_rules.harm_of(c.hp_cap, sc, sh, beat, tuning)
         harm["holder"] = duel_rules.harm_of(h.hp_cap, sh, sc, -beat, tuning)
+        # 打中的那一下乘過兩邊各自的防具與戰法的化勁（鐵匠鋪與合成流程 3.9；沒穿甲的跟以前一字不差）；放手一搏失手扣的在下面那一支，不吃
+        cap = content.config.armor.total_cap
+        harm["challenger"] = duel_rules.blow_taken(harm["challenger"], c.cut, step.a_cut if step is not None else 0.0, cap)
+        harm["holder"] = duel_rules.blow_taken(harm["holder"], h.cut, step.b_cut if step is not None else 0.0, cap)
         if step is not None:
-            harm["challenger"] = round(harm["challenger"] * (1 - step.a_cut)) * step.a_hit
-            harm["holder"] = round(harm["holder"] * (1 - step.b_cut)) * step.b_hit
+            harm["challenger"] *= step.a_hit
+            harm["holder"] *= step.b_hit
         lead = f"{c.name}{mc or '定在原地'}，{h.name}" + (f"以{mh}相迎" if mh else "定在原地")
     else:
         parts = []

@@ -13,7 +13,7 @@ from . import arena, armor, bounties, economy, equipment, forge_secrets, four_ti
 from . import duel as duel_rules
 from .characters import name_key
 from .models import MOVES, WEAPON_KINDS, Content
-from .state import Equipment, GameState
+from .state import Equipment, GameState, GearFind
 from .world_state import WorldStateStore
 
 # ── 掌櫃的話（1.4）──
@@ -204,35 +204,51 @@ def _worn(state: GameState, content: Content, world: WorldStateStore, slot: str,
     item = equipment.worn(state.player, slot)
     if item is None:
         return {"item": None, "empty": armor.EMPTY if slot == "armor" else weapons.EMPTY}
-    if slot == "armor":
-        problem, silver, rid = armor.repair_problem(state, content), content.config.armor.repair_silver, armor.REPAIR
-    else:
-        problem, silver, rid = weapons.repair_problem(state, content), content.config.weapons.repair_silver, "smith:repair"
-    material = equipment.repair_material(state, content)
-    use = f"{content.materials[material].name}×1" if material is not None else "一個一階素材"
-    tmid = smithing.temper_material(state, content, slot)
-    tcost = smithing.temper_price(content, content.materials[tmid], slot) if tmid is not None else 0
-    tuse = (f"{content.materials[tmid].name}×1" + (f"＋{tcost} 兩" if tcost else "")) if tmid is not None else ""
+    rid = armor.REPAIR if slot == "armor" else "smith:repair"
+    problem = (armor if slot == "armor" else weapons).repair_problem(state, content)
     tproblem = smithing.temper_problem(state, content, slot)
     unfit = weapons.unfit_note(item).lstrip("・") if slot == "weapon" and weapons.worn_unfit(state, art, content, world) else ""
     return {
         "item": {"id": item.id, "name": item.name, "grade": equipment.grade(item), "wear_word": equipment.WEAR_WORDS[slot],
-                 "wear": item.edge, "tempers": item.tempers, "temper_max": smithing.rules_of(content, slot).temper_max},
+                 "wear": item.edge, "tempers": item.tempers, "temper_max": equipment.temper_cap(item, content),  # 照這一件的品質（3.6）
+                 "wear_note": equipment.wear_note(item, content)},
         "empty": "",
-        "repair": {"id": rid, "use": f"{use}＋{silver} 兩", "enabled": problem is None, "why": problem},
-        "temper": {"id": smithing.ARMOR_TEMPER if slot == "armor" else smithing.TEMPER, "use": tuse, "enabled": tproblem is None,
-                   "why": tproblem},
+        "repair": {"id": rid, "use": _repair_use(state, content, slot), "enabled": problem is None, "why": problem},
+        "temper": {"id": smithing.ARMOR_TEMPER if slot == "armor" else smithing.TEMPER, "use": _temper_use(state, content, slot),
+                   "enabled": tproblem is None, "why": tproblem},
         "unfit": unfit,
     }
 
 
+def _repair_use(state: GameState, content: Content, slot: str) -> str:
+    """修那一顆的小字（身上那張卡與裝備庫每一列共用）：用哪一種一階素材＋工錢；背包裡沒有一階素材寫「一個一階素材」。"""
+    material = equipment.repair_material(state, content)
+    use = f"{content.materials[material].name}×1" if material is not None else "一個一階素材"
+    return f"{use}＋{smithing.rules_of(content, slot).repair_silver} 兩"
+
+
+def _temper_use(state: GameState, content: Content, slot: str, item_id: str | None = None) -> str:
+    """淬煉那一顆的小字：自動挑的那一種一階素材（鐵匠鋪與合成流程 3.7，料固定一階，數量多的先）＋工錢（照這一件的階，item_id 是裝備庫那一件
+    的 id 時照那一件；一階的裝備不收錢就不寫）；沒有料是空字串（原因在 why）。"""
+    mid = smithing.temper_material(state, content, slot, item_id)
+    if mid is None:
+        return ""
+    cost = smithing.temper_price(state, content, slot, item_id)
+    return f"{content.materials[mid].name}×1" + (f"＋{cost} 兩" if cost else "")
+
+
 def _rack(state: GameState, content: Content, world: WorldStateStore, slot: str, art, neigong) -> dict:
     """裝備庫那一頁（2.5）：這一欄裝備庫裡的每一件，列的寫法同修練頁（skillview.gear_rows 那一欄：keep、confirm、divine）。
-    排法：等著定名的原品最前面，再照修好之後好的在前（防具 armor.fresh_cut；兵器照刀口磨利之後的加成，配不上的是 0）。"""
+    排法：等著定名的原品最前面，再照修好之後好的在前（防具 armor.fresh_cut；兵器照刀口磨利之後的加成，配不上的是 0）。
+    每一列多四樣（鐵匠鋪與合成流程 3.4，裝備庫併頁；網頁不自己判斷規則）：
+    repair／temper：{ok, why, use}，這一件現在修、淬煉得了嗎（照 weapons／armor.repair_problem、smithing.temper_problem 的 item_id 版，
+    原因同身上那張卡：錢不夠、沒有一階的料、淬滿、還不用修）、鈕上小字 use（「精鐵砂×1＋5 兩」「精鐵砂×1＋80 兩」；淬煉的料固定一階、工錢照裝備的階，一階的裝備淬煉不收錢就沒有「＋」）；
+    into：{name, count}，拆了得什麼（equipment.dismantle_material，一件一個；拆不得的原品、本命兵器是 None），批量拆解確認單每一行用；
+    tempers 本來就在列上（淬過幾次，確認單寫「淬過 N 次一起沒了」）。"""
     gear = skillview.gear_rows(state, content, world)
     block = next((b for b in gear["slots"] if b["slot"] == slot), None)
-    rows = list(block["rack"]) if block is not None else []
     items = {item.id: item for item in equipment.in_slot(state.player, slot)}
+    gear_rules = armor if slot == "armor" else weapons
 
     def fresh(row) -> float:
         item = items[row["id"]]
@@ -240,6 +256,16 @@ def _rack(state: GameState, content: Content, world: WorldStateStore, slot: str,
             return armor.fresh_cut(item, neigong, content)
         return weapons.bonus(item.model_copy(update={"edge": 100}), art, content, world)
 
+    def buttons(row: dict) -> dict:
+        item = items[row["id"]]
+        repair, temper = gear_rules.repair_problem(state, content, item.id), smithing.temper_problem(state, content, slot, item.id)
+        into = None if equipment.kept(item) else {"name": equipment.dismantle_material(content, item).name, "count": 1}
+        return {**row,
+                "repair": {"ok": repair is None, "why": repair, "use": _repair_use(state, content, slot)},
+                "temper": {"ok": temper is None, "why": temper, "use": _temper_use(state, content, slot, item.id)},
+                "into": into}
+
+    rows = [buttons(row) for row in (block["rack"] if block is not None else [])]
     rows.sort(key=lambda row: (row["divine"] is None, -fresh(row)))
     return {"rows": rows, "used": gear["used"], "cap": gear["cap"]}
 
@@ -334,11 +360,82 @@ def smith_line(state: GameState, content: Content, world: WorldStateStore, kind:
     return out
 
 
-def smith_view(state: GameState, content: Content, world: WorldStateStore) -> dict:
-    """鐵匠鋪的店面（第一、二節）：招牌、銀兩、掌櫃的話、出店與兵器防具切換的選項 id，四頁的資料。"""
+FURNACE_OP = "smith_furnace"  # 爐火上「看火候」那一顆叫的 op（/api/do/smith_furnace；店開著時選單上沒有 act:furnace，不能送那個 id）
+
+
+def furnace_view(state: GameState, content: Content, day: int | None, prologue: bool = False) -> dict | None:
+    """打造頁爐火那一塊（鐵匠鋪與合成流程 3.2；smith_view 的 forge.furnace）：price 一次幾兩、ready 看過了還沒開爐（下一爐照新基準）、
+    used_today 今天看過而且已經用掉了、problem 此刻看不了的原因（照 silver.furnace_problem：序章、看過了還沒開爐、今天用掉了、錢不夠；
+    看得了是 None）、id 按下去叫的 op（FURNACE_OP）。價錢、一天一次全照 silver.furnace，跟打點帳簿同一個 furnace_ready。
+    銀兩出口關著（silver.on 是 False：週末、14 天季、設定關）是 None：網頁不畫那一塊，打造頁照舊。day 是回體丹的換日（Game._pill_day）；
+    沒給（只讀的直接呼叫）也是 None。"""
+    if day is None or not silver.on(content, state.world):
+        return None
+    p = state.player
+    return {
+        "price": content.config.silver_outlets.furnace_silver, "ready": p.furnace_ready,
+        "used_today": not p.furnace_ready and p.furnace_day == day,
+        "problem": silver.furnace_problem(state, content, day, prologue), "id": FURNACE_OP,
+    }
+
+
+DIVINE_YOU = "你"  # 待 joy 潤（鐵匠鋪與合成流程 3.8）：神器頁「原品在誰手上」那一格，原品在你手上寫這一個字，別人寫名號
+
+
+def divine_view(state: GameState, content: Content, world: WorldStateStore) -> dict | None:
+    """鐵匠鋪的「神器」頁（鐵匠鋪與合成流程 3.8；smith_view 的 divine）。不是輪替季（WorldState.divine_lineup 是 None）整包 None。
+    只讀、不碰亂數；神器紀錄（world.divine_records）只在輪替季讀、一次一份。
+
+    seen（頁面上半「江湖已見」）：**這一季**已經有人打出原品的神器，每一件一列 {id, name, owner, copies, mine, solved_only}——
+    name 定了名寫定名、沒定寫譜名（同神器譜）；owner 是原品主人（名號，是你寫 DIVINE_YOU）；copies 全服仿品幾把；mine 是你手上有的那一把
+    （"original" 原品在手、"copy" 仿品在手、None 未有，照 forge_secrets.held_divine）；solved_only 是你自己鑄譜上打中過
+    （PlayerState.divine_solved，跨季帶著走）、這一季又現世、還沒人打出的那一件——只有你自己看得到（正式季整合 5.10 的例外：你的鑄譜本來
+    就寫「這一季已現世」），owner、copies 是空的。
+    collected（下半「收藏 M／N」）：內容裡全部的神器各一格（N 照內容數）{id, name, have, forged, now}——forged 是任何一季有人打出過原品
+    （divine_records：全服登記的加上線前照季分的），有了才給 id 與名字（沒打出過的 id、name 都是 None，網頁畫「？」、不可點）；have 是你手上有；
+    now 是這一季打出的。
+
+    **守 5.10**：這一季輪到、還沒人打出、自己也沒打中過的神器，整包裡不出現它的 id 與名字——所以不用全服登記的 seen（開季蓋章就寫），
+    收藏冊沒打出過的格子連 id 都不給（不然「哪幾格有 id」就是名單），江湖已見只列這一季才打出原品的（之前季打出的只在收藏冊）。
+    假人跟真人一樣：原品主人照神器譜現在的寫法寫名號。"""
+    lineup = state.world.divine_lineup
+    if lineup is None:
+        return None
+    p = state.player
+    season = world.get_season_number()
+    latest: dict[str, tuple[int, GearFind]] = {}
+    for found_in, find in world.divine_records():  # 照季排好的：同一件隔了好幾季才有新的一筆時，後面的蓋掉前面的
+        latest[find.secret] = (found_in, find)
+    seen: list[dict] = []
+    solved: list[dict] = []
+    cells: list[dict] = []
+    for recipe in (r for r in content.forge_secrets.values() if r.divine):
+        held = forge_secrets.held_divine(p, recipe.id)
+        mine = None if held is None else "original" if held.original else "copy"
+        record = latest.get(recipe.id)
+        if record is None:
+            if recipe.id in lineup and recipe.id in p.divine_solved:
+                solved.append({"id": recipe.id, "name": recipe.name, "owner": None, "copies": 0, "mine": None, "solved_only": True})
+            known = held is not None  # 手上有就一定有人打出過（資料對不上時也不把自己手上的畫成「？」）
+            cells.append({"id": recipe.id if known else None, "name": recipe.name if known else None, "have": known, "forged": known, "now": False})
+            continue
+        found_in, find = record
+        name = find.divine_name or find.title
+        if found_in == season:
+            owner = DIVINE_YOU if find.owner is not None and name_key(find.owner) == name_key(p.name) else find.master_shown or find.owner
+            seen.append({"id": recipe.id, "name": name, "owner": owner, "copies": find.copies, "mine": mine, "solved_only": False})
+        cells.append({"id": recipe.id, "name": name, "have": held is not None, "forged": True, "now": found_in == season})
+    return {"seen": seen + solved, "collected": {"have": sum(1 for cell in cells if cell["have"]), "total": len(cells), "cells": cells}}
+
+
+def smith_view(state: GameState, content: Content, world: WorldStateStore, day: int | None = None, prologue: bool = False) -> dict:
+    """鐵匠鋪的店面（第一、二節）：招牌、銀兩、掌櫃的話、出店與兵器防具切換的選項 id，四頁的資料（輪替季多一頁神器，divine，見 divine_view）。
+    day、prologue 是 Game 給的（回體丹的換日、在不在序章），forge.furnace 要用；沒給 day 的直接呼叫 forge.furnace 是 None。"""
     p = state.player
     art, neigong = _arts(state, content, world)
     page = equipment.page(p, content)
+    forge = _forge(state, content, world, page, art)
+    forge["furnace"] = furnace_view(state, content, day, prologue)
     return {
         "shop": "smith",
         "sign": f"{content.locations[p.location].name}{SMITH_SIGN}",
@@ -353,7 +450,8 @@ def smith_view(state: GameState, content: Content, world: WorldStateStore) -> di
         "worn": _worn(state, content, world, page, art),
         "rack": _rack(state, content, world, page, art, neigong),
         "pending": forge_secrets.unnamed_originals(state, world),
-        "forge": _forge(state, content, world, page, art),
+        "forge": forge,
+        "divine": divine_view(state, content, world),  # 神器頁（3.8）：輪替季才有，其餘 None（鐵匠鋪照四頁）
     }
 
 
