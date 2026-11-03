@@ -4084,8 +4084,9 @@ _BATTLE_MUTATION = (("tianxia/features/battle/muster.py", "tianxia/engine.py"), 
 _battle_register_track("battle", BattleScenario, _BATTLE_MUTATION, "week7")
 _battle_register_track("muster", MusterScenario, _BATTLE_MUTATION, "week7")  # 第 7 批：同一套段落，切在集結中
 # 第 8 批：推進一軌（ProgressScenario），改一個字是論功那一則（搬之前在 engine.py 的 _merit_line、之後在 features/battle/progress.py）——
-# 後半 A 收場那一下寫進天下大事（season_row 寫出來）
-_PROGRESS_MUTATION = (("tianxia/features/battle/progress.py", "tianxia/engine.py"), ("論功：", "論功！"))
+# 後半 A 收場那一下寫進天下大事（season_row 寫出來）。找的那一句要連 f-string 的尾巴（`name}論功：" + `）：progress.py 的模組說明也有
+# 「收場與論功：」，只寫「論功：」在搬完的檔裡有兩處、_mutant 找不到剛好一處就停（第 8 批審查）
+_PROGRESS_MUTATION = (("tianxia/features/battle/progress.py", "tianxia/engine.py"), ('name}論功：" + ', 'name}論功！" + '))
 _battle_register_track("progress", ProgressScenario, _PROGRESS_MUTATION, "week7")
 
 
