@@ -161,6 +161,17 @@ def test_the_move_section_orders_and_binds(m_on):  # noqa: F811
     assert 'id="move-prompt"' in form and 'data-act="move-order"' in form and 'data-act="move-preview"' in form
 
 
+def test_other_pages_can_jump_straight_into_the_move_page(m_on):  # noqa: F811
+    """俠客頁的武學卡「去綁招」（data-act="mall-moves"，data-style 選打法分頁）：直接開萬寶閣的絕招那一頁、抓貨架與形象。"""
+    looks = {**LOOKS, "moves": MOVES}
+    out = run(m_on, _async(_click('{ act: "mall-moves", style: "fist" }') + """
+      return { app: T.els.app.innerHTML, calls: T.calls };"""), responses={"/api/mall": _shelf(), "/api/looks": looks})
+    html = out["app"]
+    assert "現在練的" in html and 'data-act="look-sub" data-sub=""' in html
+    assert 'aria-selected="true" data-act="move-tab" data-tab="fist"' in html
+    assert {c[0] for c in out["calls"]} >= {"/api/mall", "/api/looks"}
+
+
 def test_a_move_that_cannot_play_says_why(m_on):  # noqa: F811
     """穿著、但手上的兵器換了打法：擂台上不會演，抬頭要寫明，那一頁打法也寫明（Joy 2026-11-02
     「我那個絕招寒霜雪怎麼都還沒施放過」——空手下的單，後來拿了劍）。下單那一塊也先講明打法會鎖住。"""

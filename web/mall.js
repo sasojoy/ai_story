@@ -613,6 +613,15 @@
     S.mallPick = null; S.mallSay = null;
     renderMall(false);
   }
+  // 從別的頁直接進萬寶閣的絕招那一頁（俠客頁武學卡「去綁招」）：style 給了就開那一種打法的招式庫分頁（slash/pole/fist/shoot）
+  async function openMallMoves(style) {
+    if (!S.main || !S.main.mall) return;
+    S.mallOpen = true; S.mallTab = "look"; S.mallSay = null; S.mallPick = null; S.mallLog = null; S.mallFail = false;
+    lookReset(); S.lookSub = "move"; S.lookShow = null; S.moveShow = null;
+    if (MOVE_STYLES.some(([k]) => k === style)) S.moveTab = style;
+    render();
+    await Promise.all([loadMall(), loadLooks()]);
+  }
   // 形象那一頁裡的自建形象、絕招那一頁（空字串回形象）：換頁時收起正在演的、從頂上開始
   function lookSubTo(sub) {
     S.lookSub = LOOKSUB_NAMES[sub] ? sub : "";

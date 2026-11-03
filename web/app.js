@@ -5833,6 +5833,7 @@
           break;
         // 商城（商城第二批）：齒輪旁的錠子鈕與底部第六格都打開那一層（不換頁）
         case "mall-open": await openMall(); break;
+        case "mall-moves": await openMallMoves(el.dataset.style || ""); break; // 直接進萬寶閣的絕招那一頁（data-style 開那一種打法）
         case "mall-goto": await openMall(); mallPick(el.dataset.id); break; // 別頁引過來買某一件（修練頁沒丹時的破境丹）
         case "mall-close": closeMall(); break;
         case "mall-tab": await mallTabTo(el.dataset.tab); break;
