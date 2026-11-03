@@ -117,6 +117,9 @@ from .features.battle.rules import (  # noqa: F401  過渡：測試從 engine �
     ESCORT_MUSTER, ESCORT_SCENE, RESTORED_NOTE, ROUND_BLOCKS, TROOPS_LINE, TROOPS_REPORT,  # test_showdown_full_report、test_battle_round_blocks）
     ESCORT_PICK,  # 第 7 批：挑同伴那一句（test_companions_battle 從 engine 讀）
 )
+# arts（全部拆包第 23 批「修練」）：籌備中那兩句與裝飾器搬進核心的共用的字與小函式（還掛在 Game 上的動作照舊掛 @_not_while_preparing）
+from .core.services import PREPARING_REFUSAL, PREPARING_TEXT  # noqa: F401  PREPARING_REFUSAL：兩個測試檔從 engine 拿
+from .core.services import not_while_preparing as _not_while_preparing
 from .state import (
     ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, FrontReport, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong, TimelineResult,
     StoryCard, StoryProgress, TierResult, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
@@ -307,9 +310,8 @@ class Refused(list):
     不放在 Game 的欄位裡：同一個角色的兩個分頁共用同一個 Game，鎖放掉之後別的請求可能已經改掉欄位；回傳值跟著這一次請求走。"""
 
 
-# 賽季籌備中（管理者還沒開季）：選單上那一顆灰的、安排前往被擋的原因寫 PREPARING_TEXT；動作被擋回一句 PREPARING_REFUSAL
-PREPARING_TEXT = "賽季籌備中，等待管理者開季"
-PREPARING_REFUSAL = f"（{PREPARING_TEXT}。）"
+# 賽季籌備中的 PREPARING_TEXT、PREPARING_REFUSAL 與裝飾器 _not_while_preparing 搬進核心的共用的字與小函式（tianxia/core/services.py，
+# 全部拆包第 23 批）：上面 import 回來，`from tianxia.engine import PREPARING_REFUSAL` 照舊拿得到
 # 測試期間一鍵補滿體力（Config.beta_free_refill，企劃者 2026-10-07）。以下四句與鈕上的字（Config.beta_free_refill_label）全是新寫的，待 joy 潤：
 REFILL_TITLE = "補滿體力"  # 江湖紀錄那一則的標題（joy 的丹是「服下回體丹」）
 REFILL_LINE = "你運了口氣，體力回滿了。"  # 補滿成功時寫進紀錄的那一句
@@ -325,17 +327,6 @@ def _cn_count(n: int) -> str:
 
 
 REFILL_HUT = "草廬裡先照師父說的做，體力等出了草廬再補。"  # 序章裡不能補（序章的體力是照步驟算好的），跟丹的「出了草廬再吃」同一個道理
-
-
-def _not_while_preparing(action: Callable) -> Callable:
-    """Game 的動作：籌備中什麼都不能做，只回一句 PREPARING_REFUSAL（照一般的拒絕寫進紀錄，_log）；不然照常做。"""
-    @functools.wraps(action)
-    def guarded(self: Game, *args, **kwargs):
-        if self._preparing():
-            return self._log([PREPARING_REFUSAL])
-        return action(self, *args, **kwargs)
-
-    return guarded
 
 
 class DuelTextRequest(BaseModel):
@@ -2623,8 +2614,7 @@ class Game:
                 msgs = self._call(arg, prepared)
             elif kind == "road":
                 msgs = self._road(arg)
-            elif kind == "learn":
-                msgs = library.learn(self.state, self.content, arg)
+            # （learn：拜師學藝，全部拆包第 23 批換成修練包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             elif kind == "opp":
                 msgs = opportunities.act(self.state, self.content, self.world, arg, self.rng)
             elif kind == "fs":
@@ -3115,8 +3105,7 @@ class Game:
         if kind == "sense":
             scene = c.insight_scenes.get(s.player.sensing.scene) if s.player.sensing else None
             return f"有所感・{scene.title}" if scene else "有所感"
-        if kind == "learn":
-            return f"學藝・{c.skills[arg].name}"
+        # （learn：「學藝・<武學名>」，全部拆包第 23 批換成修練包 choose 掛鉤的 Outcome.title，拿掉）
         if kind == "fs":
             here = c.locations[s.player.location].name
             return "作罷" if arg == "leave" else f"{foreshadow.trip_label(s, c, arg.partition(':')[0])}・{here}"
