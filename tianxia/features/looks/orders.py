@@ -357,7 +357,12 @@ RULES = ("IMPORTANT: the character holds NO weapon and NO object. Hands are clos
          "Sprite sheet rules: pure white background, no ground shadow, NO ground line, no horizon line, no floor or platform, "
          "no text, no numbers, no frame borders. Every frame is the same "
          "size and the character is the same size in every frame. Feet stand on the same horizontal ground line in every frame. "
-         "Side view, facing right. "
+         # 朝向（2026-11-03 實測）：審圖的硬規則有「側面向右」，但提示詞只在這裡講一次，蹲下、彎身那幾格
+         # klein 會把人鏡像過去（#29 的 hero_pickup 十次全掛，理由只剩「第3格與第6格角色面向左方」）。
+         # 同 FRAMING 的辦法：把它講死、並點名最常翻掉的那幾種姿勢。
+         "Side view, facing right. EVERY frame faces the SAME way — to the right: the face, chest and toes all point at the "
+         "right edge of the frame. Never mirror or flip the character, not even while crouching, bending, kneeling, sitting "
+         "or reaching down. "
          # 2026-11-02 本機 klein 實測：最常見的壞法是身體畫過格線，切出來的那一格少一塊、或兩格黏在一起。
          "Keep each frame fully inside its own equal-width column with wide white gaps; nothing crosses into the next column. "
          + FRAMING)
