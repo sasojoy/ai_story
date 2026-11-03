@@ -942,6 +942,50 @@ def test_a_core_module_named_without_a_change_counts_the_whole_file():
     assert any("整個檔" in w for w in picked.why)
 
 
+# bout（全部拆包第 12 批審查修正）：單挑底層 duel_base、擂台的名次 arena_ranks 被單挑包的 duel_rules、arena_rules 照抄出去
+# （re-export 同一批函式物件），測試照舊經舊名寫（`from tianxia import duel`、`duel.blow_taken`、`arena.title_for`、
+# `from tianxia import duel as duel_rules`）。以前「模組名與函式名寫在同一個檔」只認 duel_base、arena_ranks 這兩個字，一個都並不上
+# （審查 C1、C2、C5：改了核心那一份，test_for 挑的全綠、包與奪璽單挑的測試紅）。
+
+def _core_pick_in(module: str, name: str):
+    return test_for.pick([f"tianxia/core/{module}.py"], hunks_of=_core_hunk(module, name))
+
+
+def test_the_core_names_a_package_reexports_are_read_with_the_package_module_and_its_old_name():
+    """照語法樹讀出：名字 → 照抄它的模組名（duel_rules、arena_rules）與指到那一份的舊名別名（duel、arena）。只看 from … import 名字
+    （整個模組 import 進來的 `from tianxia.core import duel_base as duel_rules` 不算照抄：那一份寫得到 duel_base 這個字）。"""
+    duel_words = test_for.core_reexports("duel_base")
+    assert {"duel_rules", "duel"} <= duel_words["push_of"] and {"duel_rules", "duel"} <= duel_words["blow_taken"]
+    assert {"arena_rules", "arena"} <= test_for.core_reexports("arena_ranks")["title_for"]
+    assert "shopview" not in set().union(*duel_words.values()) and "seal_duel" not in set().union(*duel_words.values())
+    assert "present" not in test_for.core_reexports("event_check")  # 沒有人照抄的函式：照舊只認模組名與委派名
+    aliases = test_for.old_aliases()
+    assert aliases["tianxia.features.bout.duel_rules"] == {"duel"} and aliases["tianxia.features.bout.arena_rules"] == {"arena"}
+    assert aliases["tianxia.features.sortie.duel_rules"] == {"sortie_duel"}  # 同名的模組照全名分開
+
+
+@pytest.mark.parametrize("module, name, expected", [
+    ("duel_base", "push_of", {"test_seal_duel.py"}),  # 審查 C1（參謀減半拿掉）：寫 duel_rules.push_of（from tianxia import duel as duel_rules）
+    ("duel_base", "blow_taken", {"test_duel.py"}),  # 審查 C2（不算防具）：寫 duel.blow_taken
+    ("arena_ranks", "title_for", {"test_arena.py"}),  # 審查 C5（<= 改成 <）：寫 arena.title_for
+])
+def test_a_core_function_also_picks_the_tests_that_name_it_through_a_package_reexport(module, name, expected):
+    picked = _core_pick_in(module, name)
+    names = {p.name for p in picked.files}
+    assert picked.core and picked.smoke
+    assert expected <= names, picked.why
+    assert any("照抄" in w for w in picked.why), picked.why
+
+
+def test_a_reexported_name_counts_only_when_written_after_the_module_word():
+    """經照抄的模組寫的要寫成 `<模組名>.<名字>`（或從那個模組 import 那個名字）才算：duel、arena 是到處都有的字（p.duel、config.arena），
+    只看兩個字寫在同一個檔裡會把一大半的測試都挑進來。"""
+    assert test_for.names_through(["duel", "duel_rules"], "push_of", "from tianxia import duel as duel_rules\nduel_rules.push_of(1)\n")
+    assert test_for.names_through(["duel"], "blow_taken", "from tianxia.duel import blow_taken, counter\n")
+    assert not test_for.names_through(["duel"], "counter", "p.duel = None\ncounter = 3\n")
+    assert not test_for.names_through(["arena"], "title_for", "c.config.arena.enabled = True\nleaderboard.title_for\n")
+
+
 def test_a_core_pick_that_names_too_many_files_falls_back_to_core_and_smoke(monkeypatch):
     """寫到那幾個名字的檔超過 IMPORT_CAP 個（同 tianxia/<模組>.py 往上找的那一條）：不一個一個挑，只剩核心測試＋煙霧。"""
     monkeypatch.setattr(test_for, "IMPORT_CAP", 1)
