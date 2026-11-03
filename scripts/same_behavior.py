@@ -4819,7 +4819,8 @@ def _bout_client(base: type) -> type:
 
 class BoutScenario(ExploreScenario):
     """單挑（全部拆包第 12 批；--track bout、--track ring，各自一個資料庫）。照調查 area_combat.json 的 features/bout 那一段與派工：
-    頭目戰——撞上頭目（不帶設定的舊探索、weekend 的三選一練功與找素材、week7／season21 的探索一顆）、場景與輸入框、出招、放手一搏
+    頭目戰——撞上頭目（不帶設定的舊探索、weekend 的三選一練功、week7／season21 的探索一顆；三選一的找素材在正式內容裡撞不上頭目——
+    一類一顆開著時一定給料、不擲頭目，有分支層時按了只展開分支——Game._gather 改叫 _boss_ready() 那一行這裡走不到）、場景與輸入框、出招、放手一搏
     （/api/do/duel_text 鎖外三段式，假模型）、打贏（戰報、掉落、名望、破境丹的擲骰）、打輸、抽身、冷卻中與次數用完（三選一的練功鈕與
     行動列那一行）、穿防具開打（快照的減損、打完照磨）；擂台——打開（名次那一句）、報名、更新分身、挑一場、灰掉的挑擂鈕回原因、出招、
     放手一搏與看台的反應、場邊事件與鎖外重寫那一句（server.crowd_once）、認輸、名次交換、收場卡（店面那一頁）、守的人補戰報、
@@ -5059,19 +5060,20 @@ class BoutScenario(ExploreScenario):
 
     def duel_lose(self) -> None:
         """花無缺在南陽荒野撞上山匪頭子，氣勢擺在 11 一路出招：打輸（掉的氣血扣回本人、兩成變內傷）。三選一的找素材在正式內容裡撞不上頭目
-        （一類一顆開著時一定給料、不擲頭目；有分支層時按了只展開分支），那一支只寫鈕。"""
+        （一類一顆開著時一定給料、不擲頭目；有分支層時按了只展開分支）：Game._gather 撞頭目那一行這裡走不到。"""
         if self.encounter("花無缺"):
             self.bout("花無缺", "duel", 11.0)
         self.me("花無缺", "打輸頭目")
 
     def duel_flee(self) -> None:
-        """鐵心蘭在燕山腳下撞上河北豪強的門客：放手一搏（模型叫不到：評 40、固定句），再抽身退走（不寫戰報、掉的氣血不回）。"""
+        """鐵心蘭在燕山腳下撞上河北豪強的門客：放手一搏（模型叫不到：評 40、固定句），再抽身退走（不寫戰報、掉的氣血不回）；走到黃巾大營
+        （沒有頭目）看練功鈕與行動列那一行。"""
         if self.encounter("鐵心蘭"):
             self.do("鐵心蘭", "duel_text", {"text": "閉眼亂揮一通。"})
             self.choose("鐵心蘭", "duel:flee")
         self.me("鐵心蘭", "抽身之後")
-        self.place("鐵心蘭", "huangjin_camp" if "huangjin_camp" in self.c.locations else None)  # 找素材那一支：鈕上寫什麼（三選一的季）
-        self.boss_note("鐵心蘭", "找素材那一顆")
+        self.place("鐵心蘭", "huangjin_camp" if "huangjin_camp" in self.c.locations else None)  # 沒有頭目的地方：練功鈕與行動列寫什麼
+        self.boss_note("鐵心蘭", "沒有頭目的地方的練功鈕與行動列")
 
     def duel_old(self) -> None:
         """舊探索撞上頭目（三選一的開關在記憶體裡關掉：不帶設定與 weekend 的 act:explore 走 _explore 那一條；探索一顆的季照樣是出門一趟）：
