@@ -1,7 +1,9 @@
 """全服決戰「打」那一半之一：攻城（全部拆包第 6 批；計畫 docs/superpowers/plans/2026-11-01-決戰包-第2批.md）。原本 Game 上的 7 個方法，
 本體照抄、self 換成 ctx（第一階 ctx 就是 Game，開發規範手冊 3.3）。攻城的規則本身在 tianxia/siege.py（共用規則層，總表附錄甲：不搬）；
 這裡是 Game 那一側——好幾場並存時的那一串、推一場、收兵、取消、收場。Game 留 6 個一行委派（核心原位在叫：_battle_status 每一場推一次、
-收季與開下一季收兵、取消一場攻城、收場分進攻城那一支、選單與「我在哪一場」問定義），siege_guards 只有這裡叫。
+收季與開下一季收兵、取消一場攻城、收場分進攻城那一支、選單與「我在哪一場」問定義），siege_guards 只有這裡叫。第 8 批推進與結算搬進
+progress.py、收季的收兵換成接縫掛鉤之後，_shelve_siege、_settle_siege 沒人叫了、拿掉，Game 上剩 4 個（_sieges、_definition_of、_tick_siege、
+_cancel_siege）。
 
 - sieges：還沒收場的攻城戰（這一季沒開領地爭奪是空的、不讀資料庫）
 - definition_of：這一場的定義（決戰照內容；攻城戰是那個大區的範本，名字換成「攻城・地點」）——view.py 與這裡都經 ctx 叫（測試直接叫）
@@ -11,16 +13,18 @@
   戰鬥那一列寫上結果、補送給自己
 
 包裡叫 definition_of 經 ctx（測試直接叫 Game._definition_of）、補送經 ctx._deliver_battle_results（test_renown_cross 換掉它）；「打」那一半
-還在 Game 的（_advance_battle_round、_apply_battle_outcome、_highlight_line、_merit_line）與讀別人的存檔（_load_kin）也經 ctx；
-sieges、shelve_siege、siege_guards 直接叫。
+被測試換掉的 _apply_battle_outcome（tests/server/test_server.py）與讀別人的存檔（_load_kin）也經 ctx；sieges、shelve_siege、siege_guards 與
+第 8 批搬進 progress.py 的 advance_battle_round、highlight_line、merit_line（第 6 批時還在 Game、經 ctx 叫）、搬進這一包的 generals 直接叫。
 """
 from __future__ import annotations
 
-from tianxia import allied, battle_instance, conquest, generals, orders, siege  # 過渡：待搬（豪強依附、戰鬥規則核心、地盤、龍頭上陣、軍令；siege 是共用規則層 registry.SHARED）
+from tianxia import allied, battle_instance, conquest, orders, siege  # 過渡：待搬（豪強依附、戰鬥規則核心、地盤、軍令；siege 是共用規則層 registry.SHARED）
 from tianxia.characters import name_key
 from tianxia.models import BattleDef
 from tianxia.state import Rumor, WorldState
 from tianxia.world import _season_vehicle  # 過渡：待搬（季的事用的空殼玩家）
+
+from . import generals, progress  # 龍頭上陣、推進與結算（第 8 批搬進這一包；progress 也 import 這一檔，都在函式裡用）
 
 
 def sieges(ctx) -> list[battle_instance.BattleInstance]:
@@ -43,7 +47,7 @@ def tick_siege(ctx, battle: battle_instance.BattleInstance) -> None:
     definition = ctx._definition_of(battle)
     if definition is None:
         return
-    after = ctx.world.mutate_siege(battle.record_id, lambda b: ctx._advance_battle_round(b, definition))
+    after = ctx.world.mutate_siege(battle.record_id, lambda b: progress.advance_battle_round(ctx, b, definition))
     if after is not None and after.phase == "ended":
         ctx._apply_battle_outcome(after)
 
@@ -88,7 +92,7 @@ def settle_siege(ctx, battle: battle_instance.BattleInstance) -> None:
         if any(x.fallen_round is not None and not x.settled and x.fid in c.figures for x in battle.commanders):
             generals.after_battle(ctx.world, c, battle, where=definition.name,
                                   mutate=lambda fn: ctx.world.mutate_siege(battle.record_id, fn))
-        for line in (ctx._highlight_line(battle, definition), ctx._merit_line(battle, definition)):
+        for line in (progress.highlight_line(battle, definition), progress.merit_line(ctx, battle, definition)):
             if line:
                 ctx.world.mutate_season(lambda season, line=line: season.rumors.append(Rumor(time=season.time, text=line, layer="world")))
     result: dict = {}

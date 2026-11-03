@@ -10,6 +10,10 @@
 - muster.py：全部拆包第 7 批，集結、加入、晚到、臨時投效、改投、挑同伴、在不在場、假人趕路、出招的分派 29 個方法（Game 留 13 個一行委派）
 - escorts.py：全部拆包第 7 批整個從 tianxia/escorts.py 搬來（隨你出陣的同伴打完回江湖；舊名是別名）
 - bots.py：全部拆包第 7 批，假人看到 battle: 的選項怎麼按（原本 bot_policy.score 的 battle 那一段）
+- progress.py：全部拆包第 8 批，推進與結算 20 個方法——我在哪一場、一回合一回合推（回合首功包在外面）、收兵（季終、取消、收季）、收場與論功、
+  只能觀戰與整個取代畫面、份量快照補上（Game 留 14 個一行委派）
+- generals.py：全部拆包第 8 批整個從 tianxia/generals.py 搬來（龍頭上陣：開集結派人上陣、陣前那一行、收場扣聲威；舊名是別名）——挑法 on、pick
+  留在共用規則層 tianxia/chiefs.py（siege 也讀），這裡 re-export
 
 全部拆包第 7 批拿了 battle: 前綴：假人看到 battle: 的選項怎麼按問這一包（bot_pick → bots.py，原本是 bot_policy.score 的 battle 那一段）。
 battle: 的分派照舊在 Game.choose 原位（查完選單、清掉「剛剛」與引導之後、建紀錄之前那一支，叫 Game._battle_choose 的委派）：choose_unlisted
@@ -49,18 +53,23 @@ class BattleFeature(Feature):
 
     def deliver_results(self, ctx) -> None:
         """收場補送（原本 Game.sync 補份量快照之後、玉璽碎片之前那一行）：下線時收場的決戰與攻城，回來第一次同步補上（休季、籌備中也一樣，
-        FB-027）。經 Game 叫：tests/core/test_renown_cross.py 換掉 Game._deliver_battle_results（服務清單三、過渡）。"""
+        FB-027）。經 Game 叫：tests/core/test_renown_cross.py 換掉 Game._deliver_battle_results（服務清單三、過渡）。
+        全部拆包第 8 批把緊接著的前一行（補份量快照：場上沒有份量快照的自己，上線前就在決戰裡；排程的 world_tick 不走這裡）併進這一格、
+        排在補送前面（登記的包只有這一包有這個掛鉤，先後一個不變）。"""
+        from . import progress  # noqa: PLC0415
+
+        progress.backfill_battle_scores(ctx)
         ctx._deliver_battle_results()
 
     def scene_over(self, ctx):
-        """蓋在畫面上的（原本 Game.scene_text 最前面那幾行）：有全服戰鬥時大家都看得到戰場（序章裡不畫，_battle_for_me；tick=False：一次請求
-        只推進一次）；回（戰場那一段, 開打了在場上的人〔_fighting〕戰場整個取代畫面）。沒有是 None。"""
-        from . import view  # noqa: PLC0415
+        """蓋在畫面上的（原本 Game.scene_text 最前面那幾行）：有全服戰鬥時大家都看得到戰場（序章裡不畫，battle_for_me；tick=False：一次請求
+        只推進一次）；回（戰場那一段, 開打了在場上的人〔fighting〕戰場整個取代畫面）。沒有是 None。"""
+        from . import progress, view  # noqa: PLC0415
 
-        battle_status = ctx._battle_for_me(tick=False)
+        battle_status = progress.battle_for_me(ctx, tick=False)
         if battle_status is None:
             return None
-        return view.battle_scene_text(ctx, *battle_status), ctx._fighting(*battle_status)
+        return view.battle_scene_text(ctx, *battle_status), progress.fighting(ctx, *battle_status)
 
     def record_detail(self, ctx, record):
         """戰報頁那一筆（原本 Game.battle_detail 裡那幾行）：決戰那一筆照 battles 表重讀完整戰況（收場之後才補上的放手一搏劇情也在）；
@@ -80,18 +89,11 @@ class BattleFeature(Feature):
 
     def on_season_close(self, ctx, reread: bool) -> None:
         """收季的收兵（原本 Game.admin_end_season 讀回收季那一份季之後、Game.admin_next_season 休季時那兩段；不問 enabled）：沒打完的決戰收掉
-        （reread：開下一季，收之前讀回手上那一份季）、每一場攻城收掉（reread 同上）——不算勝負，參戰者各補一則（FB-015、FB-035）。"""
-        from . import sieges  # noqa: PLC0415
+        （reread：開下一季，收之前讀回手上那一份季）、每一場攻城收掉（reread 同上）——不算勝負，參戰者各補一則（FB-015、FB-035）。本體在
+        progress.close_season。"""
+        from . import progress  # noqa: PLC0415
 
-        battle = ctx.world.get_battle()
-        if battle is not None and battle.phase != "ended":
-            if reread:
-                ctx.state.world = ctx.world.get_season()
-            ctx._shelve_unfinished_battle()
-        if reread:
-            ctx.state.world = ctx.world.get_season()
-        for siege_battle in sieges.sieges(ctx):
-            sieges.shelve_siege(ctx, siege_battle)
+        progress.close_season(ctx, reread)
 
 
 FEATURE = BattleFeature()
