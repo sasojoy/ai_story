@@ -5878,10 +5878,23 @@
           break;
         // 商城（商城第二批）：齒輪旁的錠子鈕與底部第六格都打開那一層（不換頁）
         case "mall-open": await openMall(); break;
+        case "mall-moves": await openMallMoves(el.dataset.style || ""); break; // 直接進萬寶閣的絕招那一頁（data-style 開那一種打法）
         case "mall-goto": await openMall(); mallPick(el.dataset.id); break; // 別頁引過來買某一件（修練頁沒丹時的破境丹）
         case "mall-close": closeMall(); break;
         case "mall-tab": await mallTabTo(el.dataset.tab); break;
         case "mall-pick": mallPick(el.dataset.id); break;
+        case "mall-cat": mallCatTo(el.dataset.cat); break; // 貨架的分類
+        case "look-sub": lookSubTo(el.dataset.sub || ""); break; // 形象那一頁裡的自建形象、絕招那一頁（空的回形象）
+        case "prompt-ex": promptExample(el.dataset.for || "", el.dataset.text || ""); break; // 想不到就點：把例句填進框裡
+        case "look-pick": lookPickTo(el.dataset.id || ""); break; // 形象那一頁點一套：台子上換成它
+        case "look-seg": lookSegTo(el.dataset.seg || "mine"); break; // 我的／官方／市集
+        case "look-filter": lookFilterTo(el.dataset.filter || "all"); break; // 我的那一頁篩哪一類
+        case "look-more": lookMore(); break; // 再看一頁
+        case "look-fold": lookFold(el.dataset.what); break; // 摺起來的展開（沒掛的、更早退回的）
+        case "look-sell": lookSellTo(el.dataset.id || ""); break; // 那一套跳出定價框
+        case "look-redo": lookRedo(el.dataset.id); break; // 退回的改一改再送
+        case "move-tab": moveTabTo(el.dataset.tab || ""); break; // 招式庫的打法分頁
+        case "move-form": moveFormOpen(); break; // 寫一招新的（展開）
         case "mall-qty": { // 購買確認那張紙的數量：同一件、同一個編號重畫
           const now = S.mallAskNow, it = now && S.mallData && S.mallData.items.find((one) => one.id === now.id);
           if (it) mallAsk(it, S.mallData, Number(el.dataset.n), now.ref);
