@@ -3655,7 +3655,7 @@ class Game:
         except companion_agent.DialogueUnavailable:
             self.state.player.stamina += self.content.config.action_cost["socialize"]  # 生成不出對話：這次不花體力
             return self._dialogue_unavailable(companion_id)
-        self._hint("h_bond")  # 第一次跟人物談話（求見也算）：情誼有什麼用（explain-1）；對話還開著，框等告辭之後才上（_hint_box）
+        self._hint("h_bond")  # 第一次跟人物談話（求見也算）：情誼有什麼用（explain-1）；對話還開著，框等告辭之後才上（features/guide/actions.hint_box）
         return msgs + self._overhear(companion_id, msgs)
 
     def _explore(self) -> list[str]:

@@ -166,7 +166,7 @@ def guide_box(ctx: Game) -> dict | None:
     pending 標這一句是不是「先把眼前的「…」了結」：它只是重複底下事件卡片已經寫的話，展開時事件的最後一個選項被擠出第一屏，
     所以網頁預設把這一句收成一行（玩家沒按過「收起」也一樣；框上有要看的完成列〔done〕時不收；只有這一句，新的一步照舊展開，
     玩家仍可點開，FB-076）。結語永遠是 False。
-    碰到才說（新手引導計畫三）排在最後：步驟 → 結語 → 入伍段（進行中或結尾）→ 提示，一次一條（_hint_box）。略過新手引導的人
+    碰到才說（新手引導計畫三）排在最後：步驟 → 結語 → 入伍段（進行中或結尾）→ 提示，一次一條（hint_box）。略過新手引導的人
     不畫前面那三段，但提示照樣有（設計 7.3：「不再提示」是另一個開關）。"""
     s, c, p = ctx.state, ctx.content, ctx.state.player
     t = c.tutorial
@@ -248,7 +248,7 @@ def drop_stale_hints(ctx: Game) -> None:
 
 def hint(ctx: Game, hint_id: str) -> None:
     """碰到某個玩法：排一條提示（序章裡不排，序章本身在教；新手引導計畫三）。說過的、已經排著的、關了提示的、假人都不排；
-    輪得到上框就當場上框（_surface_hint）。"""
+    輪得到上框就當場上框（surface_hint）。"""
     if not prologue_rules.active(ctx.state, ctx.content):
         hint_rules.queue(ctx.state, ctx.content, [hint_id])
         surface_hint(ctx)
@@ -344,7 +344,7 @@ def queue_triggered_hints(ctx: Game) -> None:
 
 
 def check_hints(ctx: Game) -> None:
-    """每次行動、修練頁與配點的動作、出發、同步做完之後看一遍（新手引導計畫三）：該說的排進佇列，輪到的上框（_surface_hint）。
+    """每次行動、修練頁與配點的動作、出發、同步做完之後看一遍（新手引導計畫三）：該說的排進佇列，輪到的上框（surface_hint）。
     呼叫的位置都在記進江湖紀錄之前，說的話才記在這一次行動那一則。"""
     check_newbie(ctx)
     queue_triggered_hints(ctx)
@@ -418,7 +418,7 @@ def set_hints_off(ctx: Game, value: bool) -> None:
 def guide_ack(ctx: Game) -> list[str]:
     """對話框的「知道了」：只收框上看得到的那一個（順序見 guide_box）——提示就是排著的第一條（接著下一條上框）；結語還沒按、入伍段
     已經走完時，按下去是結語，入伍段的結尾留到下一個框（F8）；引導的步驟還在框上時沒有「知道了」可按，什麼都不收。
-    收之前先讓框上的提示上框（_surface_hint）：框是別的狀態改變（引導走完、事件了結）讓它輪到的、還沒有任何呼叫把它記成說過時，
+    收之前先讓框上的提示上框（surface_hint）：框是別的狀態改變（引導走完、事件了結）讓它輪到的、還沒有任何呼叫把它記成說過時，
     不能憑空吞掉一條（記說過、記進江湖紀錄都要在它被收掉之前）。"""
     p = ctx.state.player
     surface_hint(ctx)

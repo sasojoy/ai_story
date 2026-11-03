@@ -4,7 +4,7 @@
 做到一條給一點小獎勵（回體丹或銀兩）。規則都在這裡、照角色的狀態判斷，假人做到同樣的事也照拿（畫面上看不出誰是假人）。
 有幾條看「做過了沒」的記號（PlayerState.newbie_marks，在做那件事的地方記：合出新意境、在二級以上打贏練功、酒肆花錢打聽、
 上擂台、選「就當散人」）；其餘照現有的狀態（等級、自創門數、懸賞交差數、陣營）。拿過獎勵的記在 newbie_done，一條只給一次。
-純函式：引擎（Game._check_newbie、Game.newbie_view）接線。"""
+純函式：這一包的 actions（check_newbie）與引擎（Game.newbie_view）接線。"""
 from __future__ import annotations
 
 from dataclasses import dataclass

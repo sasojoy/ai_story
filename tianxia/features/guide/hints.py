@@ -1,7 +1,7 @@
 """碰到才說（新手引導重做設計第五節）：第一次碰到某個玩法時，對話框說一兩句。每一條整個遊戲只說一次。
 
 這裡只管「這一條此刻由誰說、說什麼」與佇列的規矩；什麼時候碰到（觸發）、對話框怎麼出、記進江湖紀錄，在 Game
-（_hint、_surface_hint、guide_box、guide_ack）。純函式、不碰時鐘與模型。
+（_hint、guide_box、guide_ack）與這一包的 actions（surface_hint）。純函式、不碰時鐘與模型。
 
 「說過」是**提示上框的那一刻**（show），不是排進佇列的那一刻（控制者裁示 N1）：排著還沒上框就被清掉（不再提示、換季）的，
 之後碰到還有機會聽到；佇列照 id 去重（同一條不會排兩次）。"""
@@ -26,7 +26,7 @@ KNOWN = frozenset({
 
 
 # 不看狀態、由事件發生時自己叫 Game._hint 的三條（被名將打發、玉璽碎片的秘密揭開、第一次交友或談話）；其餘都是狀態提示（Game._hint_triggers 看角色此刻的狀態）。
-# 排隊的限速只管狀態提示：同一時間最多一條在框上或排著（Game._queue_triggered_hints）；事件型的當場排，不吃限速
+# 排隊的限速只管狀態提示：同一時間最多一條在框上或排著（actions.queue_triggered_hints）；事件型的當場排，不吃限速
 EVENT_ONLY = frozenset({"h_snubbed", "h_mandate", "h_bond", "h_drill_done"})
 STATE = KNOWN - EVENT_ONLY
 
