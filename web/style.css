@@ -3288,7 +3288,7 @@ svg.fig .blade.bow { stroke-width: 3; }
 .outing-step { font: 500 12px var(--sans); color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .outing-step .d { display: inline-block; width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--gold); margin-left: 3px; vertical-align: 1px; }
 .outing-step .d.on { background: var(--gold); }
-.outing-scene { flex: none; position: relative; border-radius: 12px; overflow: hidden; background: #efe6d2; }
+.outing-scene { flex: none; position: relative; border-radius: 12px; overflow: hidden; background: #efe6d2; cursor: pointer; } /* 點一下就接著走（outingHurry） */
 .outing-cv { display: block; width: 100%; aspect-ratio: 2 / 1; max-width: 100%; }
 .outing-stele { position: absolute; top: 6px; right: 6px; max-width: 42%; display: grid; gap: 0; text-align: left; cursor: pointer;
   padding: 3px 8px 4px; border: 1px solid #3e2a17; border-radius: 4px 4px 6px 6px; background: linear-gradient(#7a5532, #5e4024); color: #f6ead2;
