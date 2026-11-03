@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import re
 
-from tianxia.zh import to_traditional  # 過渡：待搬
+from tianxia.zh import to_traditional  # 共用規則層
 
 MAX_TEXT = 30  # 一句最多幾個字
 MAX_ARTS = 2

@@ -23,9 +23,9 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from tianxia import conquest  # 過渡：待搬（地盤：推不推得動、自家的塊）
-from tianxia import encounter  # 過渡：待搬（單次判定：三回合每回合一次）
-from tianxia import tactics  # 過渡：待搬（戰法：三招的相剋）
+from tianxia import conquest  # 共用規則層（地盤：推不推得動、自家的塊）
+from tianxia import encounter  # 共用規則層（單次判定：三回合每回合一次）
+from tianxia import tactics  # 共用規則層（戰法：三招的相剋）
 from tianxia.characters import name_key
 from tianxia.models import MOVES, Content, SortieRules
 from tianxia.state import PlayerState, WorldState

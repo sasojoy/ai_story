@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from tianxia import content as content_mod
 from tianxia.models import Content
-from tianxia.zh import to_traditional  # 過渡：待搬（繁體）
+from tianxia.zh import to_traditional  # 共用規則層（繁體）
 
 from . import explore_rules
 

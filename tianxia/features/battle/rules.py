@@ -1,12 +1,12 @@
 """全服決戰「看」那一半的字、常數與鎖外三段式的兩張單子（主動搬六包第 5 批；原本寫在 engine.py 的模組層與 Game 的類別屬性）。
 純資料，不碰存檔、不碰 Game。engine 照舊留著測試從那裡拿的幾個名字（ESCORT_MUSTER、ESCORT_SCENE、RESTORED_NOTE、ROUND_BLOCKS、
-TROOPS_LINE、TROOPS_REPORT）與 Game.BATTLE_GAMBLE_NOTE／BATTLE_GAMBLE_LAST，都指到這裡同一個值。
+TROOPS_LINE、TROOPS_REPORT、第 7 批的 ESCORT_PICK）與 Game.BATTLE_GAMBLE_NOTE／BATTLE_GAMBLE_LAST，都指到這裡同一個值。
 """
 from __future__ import annotations
 
 from pydantic import BaseModel
 
-from tianxia import battle_instance  # 過渡：待搬（戰鬥規則核心：補劇情的單子用它的 TaleItem）
+from tianxia import battle_instance  # 共用規則層（戰鬥規則核心：補劇情的單子用它的 TaleItem）
 
 ROUND_BLOCKS = 5  # 決戰場景上留最近幾段戰況（開打那一句也算一段）
 GAMBLE_SAID = "放手一搏：「"  # battle_instance.resolve_round 寫「某某放手一搏：「…」（評估成功率 N%）」那一行的認法
@@ -29,10 +29,16 @@ WAR_FOLD_KINDS = {
 WAR_FOLD_MIN = 2  # 一軍這一回合至少幾句才摺（只有一句照舊一行）
 MY_MOVE = "**你**　{move}"  # 決戰戰報的完整戰況：每一回合最後一條，自己這一回合出了什麼（BattleParticipant.moves）
 SLAY_LINE = "你陣前擊退了{name}，這一戰的頭功傳遍兩軍。"  # 待 joy 潤：龍頭上陣，最後一擊的人（戰報與紀錄）
-# 歷史武將同行第五節（待 joy 潤）：決戰畫面上自己的那一位（加入時挑一位隨你上陣那幾句是「打」那一半，還在 engine）
+# 歷史武將同行第五節（待 joy 潤）：決戰畫面上自己的那一位
 ESCORT_MUSTER = "{name}隨你出陣。"
 ESCORT_SCENE = "隨你出陣：{name}（氣血 {hp}/{cap}）"
 ESCORT_FELL = "隨你出陣：{name}（敗走）"
+# 加入決戰時挑一位隨你上陣（待 joy 潤；muster.py，全部拆包第 7 批從 engine 模組層搬來，engine 照舊 re-export ESCORT_PICK 給測試）
+ESCORT_PICK = "挑一位隨你出陣的同伴，或不派、自己上陣（開打之後不能換）。"
+ESCORT_OPTION = "派{name}隨你出陣（份量 {score}・氣血 {pool}）"
+ESCORT_NONE = "不派，自己上陣"
+ESCORT_BACK = "再想想"
+ESCORT_BACK_LINE = "你還沒加入，再想想。"
 TROOPS_LINE = "你帶著{names}上陣，強攻、奇襲多 {pct}"  # 待 joy 潤（PM 2026-10-12）：決戰畫面，接在騎兵那一句後面（加入時的快照）
 TROOPS_REPORT = "{names}跟著你衝陣"  # 待 joy 潤（PM 2026-10-12）：決戰的戰報
 SHOWDOWN_TIER4 = "論功行賞，另得四階料【{name}】一個。"  # 待 joy 潤：時刻表決戰得勝那一方出手夠的人（正式季整合 4.5）
