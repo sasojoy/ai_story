@@ -513,19 +513,33 @@
         <b aria-live="polite">${n}</b><span>件</span>
         <button class="btn small" data-act="mall-qty" data-n="${n + 1}" ${n >= most ? "disabled" : ""} aria-label="多一件">＋</button>
         <button class="btn small ghost" data-act="mall-qty" data-n="${most}" ${n >= most ? "disabled" : ""}>最多 ${most}</button></div>` : "";
+    const inner = `
+          <h4 id="ask-text">買下【${esc(it.name)}】${n > 1 ? `×${n}` : ""}？</h4>
+          ${again ? `<p class="mall-ask-again">${nbHtml(MALL_AGAIN.replace("{name}", it.name), MALL_SAY_AFTER)}</p>` : ""}
+          ${qtyRow}
+          <dl class="mall-sum">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
+          ${note ? `<p class="mall-ask-note">${note}</p>` : ""}
+          <div class="row"><button class="btn" data-act="ask-no">再想想</button><button class="btn primary" data-act="ask-yes">${again ? "再送一次" : "買下"}（${cost}）</button></div>`;
+    // 按 −／＋ 換數量：同一張紙就地換內容，不拆掉整層再插一次（以前每按一下暗處淡入、紙從下緣滑上來的動畫都重播一次，看起來就是閃；
+    // Joy 2026-11-03「點數量那邊畫面還是會閃爍」）。焦點留在剛按的那一顆（同一個 aria-label／字），最多那一顆灰掉了就落到「買下」
+    const open = qty != null && S.mallAskNow && S.mallAskNow.id === it.id ? document.querySelector(".ask.mall-ask") : null;
+    if (open) {
+      const was = document.activeElement && document.activeElement.closest && document.activeElement.closest(".mall-qty [data-act]");
+      const key = was ? was.getAttribute("aria-label") || was.textContent : null;
+      open.innerHTML = inner;
+      askGo = () => mallBuy(it.id, ref, n);
+      S.mallAskNow = { id: it.id, ref };
+      const back = key && [...open.querySelectorAll(".mall-qty [data-act]")].find((b) => (b.getAttribute("aria-label") || b.textContent) === key && !b.disabled);
+      (back || open.querySelector('[data-act="ask-yes"]'))?.focus?.();
+      return;
+    }
     closeAsk();
     S.mallAskNow = { id: it.id, ref };
     askGo = () => mallBuy(it.id, ref, n);
     document.body.insertAdjacentHTML("beforeend", `
       <div class="ask-layer">
         <div class="ask-bg" data-act="ask-no"></div>
-        <div class="ask mall-ask" role="alertdialog" aria-modal="true" aria-labelledby="ask-text">
-          <h4 id="ask-text">買下【${esc(it.name)}】${n > 1 ? `×${n}` : ""}？</h4>
-          ${again ? `<p class="mall-ask-again">${nbHtml(MALL_AGAIN.replace("{name}", it.name), MALL_SAY_AFTER)}</p>` : ""}
-          ${qtyRow}
-          <dl class="mall-sum">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
-          ${note ? `<p class="mall-ask-note">${note}</p>` : ""}
-          <div class="row"><button class="btn" data-act="ask-no">再想想</button><button class="btn primary" data-act="ask-yes">${again ? "再送一次" : "買下"}（${cost}）</button></div>
+        <div class="ask mall-ask" role="alertdialog" aria-modal="true" aria-labelledby="ask-text">${inner}
         </div>
       </div>`);
     document.querySelector('.ask [data-act="ask-no"]')?.focus?.();
