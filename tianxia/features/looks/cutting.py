@@ -41,12 +41,37 @@ def pick(rs, weights, k):
     rs=sorted(zip(rs,weights), key=lambda t:-t[1])[:k]
     return sorted(r for r,_ in rs)
 
+ROW_SEARCH = 0.2  # 兩排之間的切線：在等分線上下各找這麼多排高，挑最空的那一列
+
+
+def row_cuts(clean, rows):
+    """兩排之間從哪一列切（回 rows+1 個邊界）。
+
+    為什麼不照等分線切（2026-11-03 畫坊量測，正式站 #495 hero_bare_fall 卡死的那一關）：klein 畫 3×2 的圖時
+    第一排的人常常畫得比半張高，腳伸過中線（量到的一張腳底在 y≈460、中線 416）。照等分線切，第一排三格
+    的腳被切掉、切線被當成腳底對到地平線；切下來的那雙腳留在第二排的格子上面，審圖寫「第5、6格上方出現
+    多餘的另一雙腳」——十次全掛，但那是我們切壞的，不是生圖畫壞的。
+    挑法：等分線上下 ROW_SEARCH 排高之內，墨最少的那幾列裡離等分線最近的一列。等分線本來就落在空白裡的圖
+    （斗笠小子、之前過關的那些）切線不變，切出來一模一樣。"""
+    H = clean.shape[0]
+    ink = clean.sum(1)
+    cuts = [0]
+    for r in range(1, rows):
+        mid = r*H//rows
+        lo, hi = max(cuts[-1]+1, mid-int(H/rows*ROW_SEARCH)), min(H-1, mid+int(H/rows*ROW_SEARCH))
+        best = ink[lo:hi+1].min()
+        cands = [y for y in range(lo, hi+1) if ink[y] == best]
+        cuts.append(min(cands, key=lambda y: abs(y-mid)))
+    return cuts + [H]
+
+
 def frames(mask, cols, rows):
     H, W = mask.shape
     clean = ndimage.binary_opening(mask, iterations=1)
+    cuts = row_cuts(clean, rows)
     out = []
     for r in range(rows):
-        y0, y1 = r*H//rows, (r+1)*H//rows
+        y0, y1 = cuts[r], cuts[r+1]
         band = clean[y0:y1]
         proj = band.sum(0).astype(float)
         cr = runs(ndimage.binary_dilation(proj > 2, iterations=4))
@@ -144,6 +169,12 @@ LAYOUT = {  # 十張 → (每排幾格, 幾排)；格數同 tianxia/features/loo
 
 
 MIN_INK = 600  # 一格至少要有這麼多不透明的點，不然算空的（220×220 的格子，一個小人大概四五千點）
+# 一格只能有一塊（2026-11-03 量：斗笠小子擂台十張、走一趟九張、#494／#495 過關的七張，一百多格全部剛好一塊
+# 大於 BLOB_PX 的連通塊；被審圖擋下的「多一個人」「上方多出另一雙腳」「頭和手的碎片」都是 2～4 塊）。
+# 這幾樣以前要等審圖才擋得下來，一次一份錢。
+BLOB_PX = 300
+# 一格的墨點不能比整條的中位數少太多：只剩一雙被切斷的腳那一格是 0.13；好的最低是斗笠小子躺著的 0.68
+INK_SHARE_MIN = 0.35
 EDGE = 2  # 上下緣留白至少幾列
 LINE_SHARE = 0.8  # 一列橫跨格寬這麼多比例、而且上下都空 → 當成畫出來的地面線
 # 相鄰兩格最多能有多像（形狀重疊率）：照 web/img/arena 的斗笠小子量出來的上限加 0.10 餘裕（2026-11-02 量）。
@@ -188,13 +219,25 @@ def sheet_problems(strip: "Image.Image", frames: int, name: str | None = None) -
     alpha = a[..., 3]
     bad: list[str] = []
     fixes: list[str] = []
+    inks = [int((alpha[:, k * CELL:(k + 1) * CELL] > 32).sum()) for k in range(frames)]
+    median = float(np.median(inks)) if inks else 0.0
     for k in range(frames):
         cell = alpha[:, k * CELL:(k + 1) * CELL]
-        ink = int((cell > 32).sum())
+        ink = inks[k]
         if ink < MIN_INK:
             bad.append(f"第 {k + 1} 格幾乎是空的（只有 {ink} 點）")
             fixes.append(f"frame {k + 1} is empty — draw the whole character in every frame")
             continue
+        if median and ink < median * INK_SHARE_MIN:
+            bad.append(f"第 {k + 1} 格只剩一小塊（墨點只有其他格的 {ink / median:.0%}）")
+            fixes.append("draw ONE whole character in every frame, each fully inside its own cell, with wide white gaps "
+                         "between the rows and the columns")
+            continue
+        lab, n = ndimage.label(cell > 32)
+        if n > 1 and int((ndimage.sum(cell > 32, lab, range(1, n + 1)) > BLOB_PX).sum()) > 1:
+            bad.append(f"第 {k + 1} 格不只一塊（多一個人，或別格的手腳碎片）")
+            fixes.append("draw exactly ONE character in every frame, each fully inside its own cell, with wide white gaps "
+                         "between the rows and the columns; nothing else in the picture")
         rows_with = np.nonzero((cell > 32).max(1))[0]
         if rows_with.min() < EDGE:
             bad.append(f"第 {k + 1} 格的人貼到上緣（第 {int(rows_with.min())} 列就有東西）")

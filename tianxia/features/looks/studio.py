@@ -91,6 +91,7 @@ class Job:
     size: str
     refs: tuple[Path, ...]
     portrait: Path | None = None  # 這一套的定裝照（cut_for 照它判斷角色穿不穿白衣，見 cutting.wears_white）
+    pose: Path | None = None  # 畫圖時拿來代替 refs[0] 的姿勢剪影（見 POSE）；審圖照舊看 refs
 
 
 @dataclass(frozen=True)
@@ -116,6 +117,16 @@ PORTRAIT_PROMPT = (
 )
 SHEET_EXTRA = ("The FIRST attached image is the layout and pose reference (same frame count, same poses, same character size). "
                "The SECOND attached image is this character's design: keep exactly the same face, hair, clothes and colors in every frame.")
+# 姿勢剪影（2026-11-03 畫坊量測，正式站 #494、#495 都卡在這兩張）：畫圖時第一張參考圖不給斗笠小子的彩色原圖，
+# 給同一套姿勢塗成一片灰的剪影（scripts/make_pose_refs.py 產的）。彩色原圖會被 klein 當成要畫的人——
+# 審圖擋下最多的理由是「穿斗笠小子的格紋護甲、深色褲子」「頭上冒出斗笠」；剪影只留姿勢與排法。
+# 量到的第一次就過的比例（兩套角色合計）：dodge 6% → 31%、fall 6% → 17%。其他八張沒量過、現在也過得去，照舊。
+# 審圖照舊看彩色原圖（量的時候就是這樣審的）：剪影只換畫圖那一邊。
+POSE_DIR = Path(__file__).parent / "pose"
+POSE = {"hero_bare_dodge", "hero_bare_fall"}
+POSE_EXTRA = ("The FIRST attached image shows ONLY the poses, as flat gray silhouettes (same frame count, same poses, same size and "
+              "position in each frame) — copy the poses, not the gray color or the shapes on the head. "
+              "The SECOND attached image is this character's design: keep exactly the same face, hair, clothes and colors in every frame.")
 FIX_PROMPT = ("Edit the attached image (the first one) to fix these problems: {fix}\n"
               "Keep everything else the same. The original instructions were:\n{prompt}")
 
@@ -232,8 +243,10 @@ def jobs(content: Content, wallet: Wallet, root: Path, web_img: Path) -> list[Jo
             sheet = next((s for s in orders.SHEETS if s not in have and (o.status == orders.PENDING or s in orders.OUTING)), None)
             if sheet is None:
                 continue
-            out.append(Job(kind="look", pid=o.pid, folder=look, slot=sheet, label=sheet, portrait=portrait,
-                           prompt=f"{orders.gen_prompts(o)[sheet]}\n{SHEET_EXTRA}",
+            pose = POSE_DIR / f"{sheet}.png" if sheet in POSE else None
+            pose = pose if pose is not None and pose.is_file() else None
+            out.append(Job(kind="look", pid=o.pid, folder=look, slot=sheet, label=sheet, portrait=portrait, pose=pose,
+                           prompt=f"{orders.gen_prompts(o)[sheet]}\n{POSE_EXTRA if pose else SHEET_EXTRA}",
                            checklist=CHECK_SHEET.format(frames=orders.SHEETS[sheet], action=orders.ACTIONS[sheet],
                                                         gear=GEAR_NONE),  # 十六張一律空手（見 GEAR_NONE 上面那段）
                            aspect=ASPECT[LAYOUT[sheet]], size="2K", refs=(orders.reference(web_img, sheet), portrait)))
@@ -259,15 +272,17 @@ def work(job: Job, painter: Painter, critic: Critic, cut: Callable[[Job, bytes],
     """畫、切、審，沒過照意見改，最多 tries 張（雲端生圖要錢所以是 MAX_TRIES＝3；本機生圖不要錢，畫坊程式會給大一點的數）。
     生圖那邊忙（PaintBusy）照丟出去：這一張不算，下一輪再來。"""
     refs = [p.read_bytes() for p in job.refs if p.is_file()]
+    # 畫圖用的：有姿勢剪影就代替第一張（斗笠小子的彩色原圖）；審圖照舊看 refs（見 POSE）
+    paint_refs = [job.pose.read_bytes(), *refs[1:]] if job.pose is not None and job.pose.is_file() and refs else refs
     raw = b""
     problems: list[str] = []
     for n in range(1, max(1, tries) + 1):
         try:
             if n == 1:
-                raw = painter.paint(job.prompt, refs, job.aspect, job.size)
+                raw = painter.paint(job.prompt, paint_refs, job.aspect, job.size)
             else:
                 raw = painter.paint(FIX_PROMPT.format(fix=verdict.fix or "redraw it following the instructions", prompt=job.prompt),
-                                    [raw, *refs], job.aspect, job.size)
+                                    [raw, *paint_refs], job.aspect, job.size)
         except PaintBlocked as exc:
             problems = [f"生圖的拒畫（{exc}）"]
             return Result(ok=False, painted=n, problems=problems)

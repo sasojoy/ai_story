@@ -16,7 +16,8 @@
 | `studio.py` | 畫坊的流程（2026-11-01）：抓等圖的單（絕招的法相巨物、自建形象的定裝照與擂台十張、走一趟六張；做好的形象缺走一趟那六張也補畫）、畫、切、審、不過照意見改最多三張、收或停手、管理者「再畫一次」 |
 | `studio_local.py` | 本機生圖（2026-11-02）：這台的 ComfyUI 跑 FLUX.2 klein 4B。不要錢，所以重畫上限 10（雲端是 3）；只有 `run_studio.py --local`／`TIANXIA_STUDIO_BACKEND=local` 用 |
 | `studio_api.py` | 畫坊真的去叫的：Nano Banana（Gemini 生圖，`GEMINI_API_KEY`）、Claude 審圖（`ANTHROPIC_API_KEY`）；只有 `run_studio.py` 用 |
-| `cutting.py` | 去背、切格（畫坊與 `scripts/cut_look.py` 共用；Pillow、numpy、scipy，伺服器不 import） |
+| `cutting.py` | 去背、切格（畫坊與 `scripts/cut_look.py` 共用；Pillow、numpy、scipy，伺服器不 import）。3×2 的圖切在兩排之間的空白（`row_cuts`）；切完自己先驗（`sheet_problems`：空格、貼邊、地面線、一格不只一塊、只剩一小塊、動得太少） |
+| `pose/` | 畫坊畫圖用的姿勢剪影（2026-11-03）：閃避、被擊倒兩張的第一張參考圖換成斗笠小子塗灰的剪影（`studio.POSE`），彩色原圖會被當成要畫的人。`scripts/make_pose_refs.py` 產；量測用 `scripts/studio_bench.py` |
 | `hand_table.py` | 斗笠小子每一格的手（兵器掛在哪的基準表，同 `web/arena_anim.js` 的 `RING_HAND`）；單獨一支、不用 numpy，沒裝的環境也讀得到（PM 2026-11-02） |
 | `market.py` | 形象市集（第四批）：自建形象定價上架、撤下、別人買一份、分成五五押七天才入帳、儲值限定的開關 |
 | `tests/` | `test_looks.py`（買、換上、換季、退款、假人、關著）、`test_looks_orders.py`（自建形象）、`test_looks_moves.py`（招式動畫）、`test_looks_scenes.py`（導演稿）、`test_looks_studio.py`（畫坊，生圖審圖都是假的）、`test_looks_market.py`（市集）、`test_looks_server.py`、`test_looks_web.py`（萬寶閣「形象」那一頁、管理者區）、`looks_stage.py` |
