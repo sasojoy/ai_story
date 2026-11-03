@@ -193,7 +193,7 @@ def box(state: GameState, content: Content) -> dict | None:
 
 def glow(state: GameState, content: Content, option_ids: list[str]) -> list[str]:
     """入伍段停在「出一次力」那一步時，選單上能完成它的那幾顆（FB-093）：守勢行動（巡哨、傳道、保境安民；不在軍令裡也算，
-    見出陣包 train_actions.duty）、接糧車、挑戰這週打擊的那位人物、在算得上攻城或截糧的地方遊歷。網頁讓它們發光，收在「此地還能做」裡的會攤開。
+    見 Game._duty）、接糧車、挑戰這週打擊的那位人物、在算得上攻城或截糧的地方遊歷。網頁讓它們發光，收在「此地還能做」裡的會攤開。
     不在這一步是空的。"""
     if not active(state, content):
         return []
