@@ -157,3 +157,20 @@ def test_a_tap_on_the_scene_hurries_to_the_next_stop():
     assert out["walking"] == {"turbo": True, "hold": 0, "synced": 0}
     assert out["holding"] == {"turbo": False, "hold": 0, "synced": 1}
     assert out["idle"] == {"turbo": False, "hold": 0, "synced": 0}
+
+
+NOW_DRIVER = r"""
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const code = ["OUTING_AFTER", "OUTING_GO_ON"].map(konst).join("\n") + fn("outingLedgerHtml") + fn("outingNowHtml");
+const H = new Function("esc", code + "\nreturn { outingNowHtml };")(esc);
+finish({ html: H.outingNowHtml({ text: "你咬牙把車身頂起一尺。", after: "得：銀兩 +15" }, 2200) });
+"""
+
+
+def test_the_choice_turns_into_the_result_right_away():
+    """Joy 2026-11-03「果出現在屏幕下面滿不明顯」「選項閃的跟等待系統回應一模一樣，以為是卡住」：選完了選項那一塊換成果這一則
+    （大字、得失），底下「接著走」照停的時間填滿、點了就走（同點畫面）。"""
+    html = webharness.run(NOW_DRIVER, {})["html"]
+    assert "你咬牙把車身頂起一尺。" in html and "銀兩 +15" in html
+    assert 'data-act="outing-tap"' in html and "接著走" in html and "animation-duration:2200ms" in html
+    assert 'data-act="outing-choose"' not in html

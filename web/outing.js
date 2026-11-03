@@ -38,6 +38,7 @@
   const OUTING_WAIT = "路上碰到要選的事。";
   const OUTING_AFTER = "果";
   const OUTING_AFTER_HOLD = 2200; // 「果」寫出來之後停多久才接著走（毫秒）
+  const OUTING_GO_ON = "接著走 ›";
   const OUTING_CLOSE = "收起";
   const OUTING_AGAIN = "再走一趟";
   const OUTING_TIRED = "體力不夠再走 {n} 段，挑短一點的。";
@@ -125,7 +126,7 @@
     await busy(async () => {
       const r = await api("/api/do/outing", n ? { n } : {});
       const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-      if (n) { OW.shown = 0; OW.away = false; }
+      if (n) { OW.shown = 0; OW.away = false; OW.result = null; }
       S.wheelSel = null;
       applyMain(r.main);
       if (text) toast(text);
@@ -162,12 +163,17 @@
     }
     if (!OW.away && !OW.open) return;
     if (OW.open && (OW.cur || OW.tasks.length)) return; // 還在演
-    if (OW.waitKey && (trip.end || trip.can_go)) { outingAfter(); OW.hold = Date.now() + (OW.turbo ? 300 : OUTING_AFTER_HOLD); }
+    if (OW.waitKey && (trip.end || trip.can_go)) {
+      outingAfter();
+      OW.hold = Date.now() + (OW.turbo ? 300 : OUTING_AFTER_HOLD);
+      if (!trip.end) outingFoot(); // 選項馬上換成果那一則（走完了的那一則照舊進結算卡）
+    }
     if (trip.end) { OW.away = false; outingOpen(); return; }
     if (!trip.can_go) { outingFoot(); return; }
     // 「果」那一行先停一下讓人看清楚得失（Joy 10/31「很快就跳掉」），再接著走
     if (OW.hold > Date.now()) { if (!OW.holdT) OW.holdT = setTimeout(() => { OW.holdT = null; outingSync(); }, OW.hold - Date.now()); return; }
     OW.hold = 0;
+    OW.result = null;
     OW.going = true;
     OW.away = false;
     outingGo(0).finally(() => { OW.going = false; });
@@ -208,6 +214,15 @@
     const log = box.querySelector(".outing-log");
     log.appendChild(outingAfterRow(text, beat ? beat.after : ""));
     log.scrollTop = log.scrollHeight;
+    OW.result = { text, after: beat ? beat.after : "" }; // 選項那一塊先換成這一則（outingNowHtml），接著走時收起
+  }
+
+  // 選完了、停著讓人看的那幾秒：原本的選項一下子換成「果」這一則（大字、得失），底下一顆「接著走」從左到右填滿＝停多久，
+  // 填滿就自己走、點了馬上走（Joy 2026-11-03「果出現在屏幕下面滿不明顯」「選項閃的跟等待系統回應一模一樣，以為是卡住」）
+  function outingNowHtml(r, ms) {
+    return `<div class="outing-now" role="status"><p class="outing-now-head"><span class="k">${OUTING_AFTER}</span></p>
+      <p class="outing-now-text">${esc(r.text)}</p>${r.after ? outingLedgerHtml(r.after) : ""}
+      <button class="btn outing-now-go" data-act="outing-tap"><i class="outing-now-bar" style="animation-duration:${Math.max(0, ms)}ms"></i><span>${OUTING_GO_ON}</span></button></div>`;
   }
 
   // 「果」那一行：選完那件事的結果（一句）＋得失（伺服器記在那一段的 after，數字由引擎給）
@@ -340,6 +355,8 @@
       foot.dataset.key = "";
       foot.innerHTML = `<div class="outing-ctl"><button class="btn" data-act="outing-speed">速度 ${OW.speed}×</button>
         <button class="btn" data-act="outing-skip">${OUTING_SKIP}</button></div>`;
+    } else if (OW.result && !trip.end && trip.can_go) {
+      if (foot.dataset.key !== "now") { foot.dataset.key = "now"; foot.innerHTML = outingNowHtml(OW.result, OW.hold - Date.now()); foot.scrollTop = 0; }
     } else if (!trip.end) {
       // 輪詢每幾秒重畫一次：選項沒變就不動（捲到一半、按到一半的不被打斷）
       const key = JSON.stringify([S.main.scene, (S.main.options || []).map((o) => [o.id, o.label, o.enabled])]);
