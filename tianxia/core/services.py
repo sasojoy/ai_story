@@ -137,7 +137,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._squad_encounter(squad_id, wild=True)` 也是探索一顆的遭遇那一場（戰鬥；扣氣血減半、不問模型、不推大勢）
 
 - `ctx._squad_encounter(squad_id, as_sortie=True)`（戰鬥：打一場隊伍，出陣攻打）
-- `ctx._train_option(...)`、`ctx._train_pick(loc)`、`ctx._big_trip(loc)`（舊遊歷：勝算與必敗先問的鈕、大場面挑哪一路）
+（原本這裡還有 `_train_option`、`_train_pick`、`_big_trip`：舊遊歷的鈕與大場面挑哪一路，第 17 批搬進同一包，包裡直接叫 train_actions，拿掉了。）
 # battle（主動搬六包第 5 批；擺在這兩行之間：別條拆包線與 develop 改的是段頭、_order_credit、_outing_on 以下與段尾，不跟它們貼在一起）
 - `ctx._submit_battle_action(...)`、`ctx._mutate_battle_of(battle, fn)`、`ctx._escort_home(escort)`（決戰「打」那一半：放手一搏送出、改共用狀態裡的
   那一場、隨你出陣的同伴回江湖；第 7、8 批搬進決戰包之後改成包裡直接叫）
@@ -165,7 +165,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 （酒肆第 10 批在這裡記的 `_battle_now` 第 11 批去重：只留二、查詢服務那一行。）
 
 core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡包要叫回 Game 的）
-- `ctx._train_squad_ids(loc)`（出陣包行動列那一格的序章雪恥：此地有沒有遊歷的對手；主人：舊遊歷與出陣共用的對手池，總表第 17 批）
+（`ctx._train_squad_ids(loc)`：出陣包行動列那一格的序章雪恥，第 17 批舊遊歷與出陣共用的對手池搬進同一包，包裡直接叫，拿掉了。）
 - `ctx._fighting(battle, definition)`（決戰包蓋在畫面上的戰場要不要整個取代自己眼前的事：開打了在場上的人；主人：決戰「打」那一半，
   第 7、8 批搬進決戰包之後改成包裡直接叫）
 
@@ -213,7 +213,7 @@ BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時
 
 def drill_share(amount: int, share: float) -> int:
     """跟自己人操練拿對手那一項獎勵的幾成（Config.drill_reward_share），四捨五入（round 是銀行家進位）。
-    操練真的給的（Game._drill）與行動列底下說會給什麼（Game._train_line）都算這一個；出陣的守與打贏（出陣包）、探索也用。
+    操練真的給的（出陣包 train_actions.drill）與行動列底下說會給什麼（train_actions.train_line）都算這一個；出陣的守與打贏（出陣包）、探索也用。
     （原本寫在 engine.py；出陣包要用、又不能 import engine，搬到這裡，`from tianxia.engine import drill_share` 照舊拿得到。）"""
     return int(amount * share + 0.5)
 

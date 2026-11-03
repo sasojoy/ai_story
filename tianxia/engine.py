@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import contextlib
 import functools
-import hashlib
 import math
 import random
 from collections.abc import Callable, Iterable
@@ -105,6 +104,9 @@ from .features.tavern import actions as tavern_actions  # 過渡：Game 上酒�
 from .features.sortie import actions as sortie_actions  # 過渡：Game 上出陣的 13 個一行委派（主動搬六包第 1 批）
 from .features.sortie import duel_actions as sortie_duel_actions  # 過渡：Game 上出陣約戰的 16 個一行委派（主動搬六包第 2 批）
 from .features.sortie.rules import CLASH_OPEN, CLASH_THEIRS_WON, CLASH_WON  # noqa: F401  過渡：tests/ranger/test_raid.py 從 engine 拿
+# sortie（全部拆包第 17 批）：舊遊歷、操練、守勢的 8 個一行委派；必敗先問的那兩句搬進包（test_orders、test_mounts、test_prologue_web 從 engine 拿）
+from .features.sortie import train_actions as sortie_train_actions  # 過渡：Game 上舊遊歷、操練、守勢的 8 個一行委派（全部拆包第 17 批）
+from .features.sortie.rules import TRAIN_CONFIRM, TRAIN_CONFIRM_RIDING  # noqa: F401  過渡：三個測試檔從 engine 拿
 # battle
 from .features.battle import rules as battle_rules  # 過渡：決戰的字（Game.BATTLE_GAMBLE_* 類別屬性、委派的型別註記）
 from .features.battle import view as battle_view  # 過渡：Game 上決戰「看」那一半的 22 個一行委派（主動搬六包第 5 批）
@@ -219,10 +221,6 @@ def say_text(text: str | None, limit: int = SAY_MAX) -> str | None:
     if not text or len(text) > limit:
         return None
     return zh.to_traditional(text)
-# 必敗的遊歷按下去先問一次（FB-095；待 joy 潤）：「一成銀兩」跟 _lose_silver 的 silver // 10 是同一件事。
-# 騎著馬時改用 TRAIN_CONFIRM_RIDING（裝備四欄 5.11），TRAIN_CONFIRM 本身不動（三個測試檔拿它比全等）
-TRAIN_CONFIRM = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩。還是要打？"
-TRAIN_CONFIRM_RIDING = "這裡的對手你現在打不過。輸了要掉氣血、受內傷，還要丟一成銀兩（騎著馬，{odds}能保住）。還是要打？"  # 待 joy 潤
 # 歷史武將同行第五節（待 joy 潤）：加入決戰時挑一位隨你上陣（決戰畫面上自己的那一位：features/battle/rules.py 的 ESCORT_MUSTER 那三句）
 ESCORT_PICK = "挑一位隨你出陣的同伴，或不派、自己上陣（開打之後不能換）。"
 ESCORT_OPTION = "派{name}隨你出陣（份量 {score}・氣血 {pool}）"
@@ -1431,20 +1429,9 @@ class Game:
             opts = [self._cost_option("act:explore", "探索", cost["explore"])]
         if training.on(c, s.world) and not prologue_rules.active(s, c) and not outing:  # 新手引導重做：城裡操練、城外練功，行動列自成一格
             opts.append(self._training_option(loc, cost["explore"], odds))
-        # 出陣那一格（act 子動詞的主人，接縫掛鉤，第 11 批）：出陣包——地盤開著時整格是它的（序章的雪恥、出陣、散人與不在爭奪之列的灰格；
-        # 出陣探索與地盤設計第二節、FB-250、裁決 18）；接了一顆都沒有是 []。地盤關著照舊是遊歷
-        train_cell = features_core.act_cell(self, "train", loc, cost["train"], odds)
-        if train_cell is not None:
-            opts += train_cell
-        elif self._train_squad_ids(loc):
-            # 遊歷：這個地點的敵人，必定開打（見 _train）。sanguo-companions 合併時這個行動被
-            # 整個拿掉，於是 Location.enemies／action_cost["train"]／train_event_chance 三個設定
-            # 一起變成死的，而遭遇戰只剩劇情事件的 combat 選項——實測整季只打 3 場。
-            #
-            # 標籤要顯示勝算（跟劇情戰的選項同一套慣例，見 _choice_label）：實機試玩發現
-            # 新角色沒有武學時威力是 0，在任何地點遊歷都**必敗**，而落敗現在真的要付氣血與
-            # 內傷的代價——不顯示勝算的話，玩家會在開局連輸三場、氣血見底才知道自己不該打。
-            opts.append(self._train_option(loc, cost["train"], odds, name="遊歷"))
+        # 出陣那一格（act 子動詞的主人，接縫掛鉤，第 11 批）：出陣包——整格是它的（第 17 批起連地盤關著的舊遊歷一起：序章的雪恥、出陣、
+        # 散人與不在爭奪之列的灰格、舊遊歷；出陣探索與地盤設計第二節、FB-250、裁決 18）；接了一顆都沒有是 []
+        opts += features_core.act_cell(self, "train", loc, cost["train"], odds) or []
         opts += self._challenge_options(odds)  # 挑戰本人（T4；每季都有，figures.challenge_on）：有陣營、這裡站著敵方的大勢人物時才有
         if ranks.summons_event(s, c) is not None:
             # 晉升奇遇（計畫 T5）：人在召見的地點才有，不花體力。一類一顆開著時網頁畫成行動列上面一條金框橫幅（設計 9.1 第 1 組乙），
@@ -2167,37 +2154,6 @@ class Game:
             return Option(id="act:socialize", label=f"交友（{SNUB_NOTE}）", enabled=False)
         return self._cost_option("act:socialize", "交友", cost)
 
-    def _train_option(self, loc: Location, cost: int, odds: bool, name: str = "遊歷", tail: str = "") -> Option:
-        """遊歷的按鈕（name：出陣的攻寫「出陣・攻」、序章寫「雪恥」；tail：出陣的「今日還能 N 次」，接在體力後面）。遇上自己陣營的隊伍是操練、不會輸（見 _drill），所以只有自己人的地盤寫成「操練・零風險」，
-        不拿自己人去算勝算「必敗」（試玩回饋 FB-008）；自己人與外人都有的地方，勝算只看真的會打的那幾路。
-        這一趟會是大場面（備料挑到的那一路，見 _train_pick）時，按下去要等模型判讀：wait 寫「兩人對峙……」。"""
-        squads = [self.content.squads[sid] for sid in self._train_squad_ids(loc)]
-        foes = [squad for squad in squads if not self._drills_with(squad)]
-        if not foes:
-            return self._cost_option("act:train", "操練", cost, note="零風險")
-        note = self._train_note(foes, odds and prologue_rules.fight_tier(self.state, self.content) is None)  # 序章的勝負寫好了，不標勝算
-        if len(foes) < len(squads):
-            note += "・或與自己人操練"
-        option = self._cost_option("act:train", name, cost, note=f"{tail}・{note}" if tail else note)
-        if "必敗" in note.split("・"):  # FB-095：剛出師的人疾行到敵營按遊歷，三場就掉三分之一的銀兩
-            ride = mounts.escape(self.state, self.content)  # 騎著馬策馬脫身的機會（5.11）：_lose_silver 擲的就是它
-            option.confirm = TRAIN_CONFIRM_RIDING.format(odds=mounts.odds_text(ride)) if ride > 0 else TRAIN_CONFIRM
-        pick = self._train_pick(loc)
-        if (pick is not None and not self._drills_with(pick) and self.is_big(pick)
-                and prologue_rules.fight_tier(self.state, self.content) is None):  # 寫好的那一場不等模型
-            option.wait = BIG_FIGHT_WAIT
-        return option
-
-    def _train_note(self, squads: list[Squad], odds: bool) -> str:
-        """遊歷按鈕上的補充說明：對手是誰、勝算多少（勝算的計算比較貴，所以照既有慣例吃 odds 旗標）。"""
-        who = squads[0].name if len(squads) == 1 else f"{len(squads)} 路對手"
-        if not odds:
-            return who
-        # 多路對手時以**最強的**那個當參考（真的開打平常是用 Game.rng 隨機挑；池子裡有大場面對手的地方照 _train_pick 挑，
-        # 見 _train）：這個標籤的用途是警告玩家，寧可低估也不要給出過度樂觀的承諾。
-        hardest = max(squads, key=lambda s: s.difficulty)
-        return f"{who}・{self.odds(hardest.id)}"
-
     def action_notes(self, option_ids: Iterable[str]) -> dict[str, str]:
         """江湖頁行動列底下那幾行（explain-1）：選單上的探索、練功（FB-670，_practice_line）、遊歷、交友、求見這一下會怎樣，句子在 howto，事實照引擎的規則：
         探索的比重是擲骰用的那一份（_explore_weights），遊歷照這裡的對手與操練（_train_line），交友照會不會直接開口談話
@@ -2225,9 +2181,10 @@ class Game:
         practice = explore_modes.option_id(explore_modes.PRACTICE)
         if practice in ids:  # 練功在行動列自己一格（FB-670）：灰著的城鎮寫最近的在哪、步行多久
             notes[practice] = self._practice_line(loc)
-        if "act:train" in ids:  # 出陣那一行（act 子動詞的主人，接縫掛鉤，第 11 批）：出陣包——約戰開著寫約戰那一句、出陣開著寫出陣那一行；都不是照舊遊歷
+        if "act:train" in ids:  # 出陣那一行（act 子動詞的主人，接縫掛鉤，第 11 批）：出陣包——約戰開著寫約戰那一句、出陣開著寫出陣那一行；都不是寫舊遊歷那一行（第 17 批收進包）
             train_note = features_core.act_note(self, "train", loc)
-            notes["act:train"] = train_note if train_note is not None else self._train_line(loc)
+            if train_note is not None:
+                notes["act:train"] = train_note
         if "act:socialize" in ids:
             figure = self._socialize_figure()
             notes["act:socialize"] = howto.social_line(
@@ -2260,25 +2217,6 @@ class Game:
             sensing.missed_today(self.state, c, loc)
             and c.config.explore_mix_of(loc.tags).weights.get("insight", 0) > 0 and bool(insights.explore_gives(loc, c))
         )
-
-    def _train_line(self, loc: Location) -> str:
-        """遊歷那一行：這裡會打的對手打贏給什麼（Game._battle_rewards：銀兩、心得、經驗、掉素材），遇上自己人是操練
-        （Game._drill：對手的 drill_reward_share、不給銀兩素材），打贏或操練推不推大勢：train_trend_push 會推的線裡，有一條今天
-        還推得動（_push_room，跟 push_trend 同一個上限的算法；審查 M1：推滿了那一行就不說推動戰局）。第一季的規則沒開時沒有上限。"""
-        c = self.content
-        squads = [c.squads[sid] for sid in self._train_squad_ids(loc)]
-        foes = [squad for squad in squads if not self._drills_with(squad)]
-        own = [squad for squad in squads if self._drills_with(squad)]
-        share = c.config.drill_reward_share
-        gains = [word for word, on in (
-            ("銀兩", any(q.reward_silver for q in foes)), ("心得", any(q.reward_xinde for q in foes)), ("經驗", any(q.exp for q in foes)),
-        ) if on]
-        drill_gains = [word for word, on in (
-            ("心得", any(drill_share(q.reward_xinde, share) for q in own)), ("經驗", any(drill_share(q.exp, share) for q in own)),
-        ) if on]
-        drops = any(materials.may_drop(q, c) for q in foes)
-        push = any(delta and self._push_room(line) > 0 for line, delta in self.train_trend_push(loc.id).items())
-        return howto.train_line(bool(foes), gains, drops, push, drill_gains, bool(own))
 
     def _sortie_line(self, loc: Location) -> str:
         return sortie_actions.sortie_line(self, loc)
@@ -2526,37 +2464,19 @@ class Game:
         劇情戰從來不操練（_event_battle 不看陣營），黃巾的人打黃巾的頭目照樣是大場面（Task 2 審查修正 1）。"""
         return styles.is_big(self.content, squad)
 
-    def _big_trip(self, loc: Location) -> bool:
-        """這裡遊歷可能撞上大場面：池子（_train_squad_ids）裡有不是自己人的大場面對手。這種地點的遊歷一律照 _train_pick 挑對手
-        （Task 2 審查修正 3）；正式內容目前沒有這種地點，所以每一處遊歷照舊用 Game.rng 挑。"""
-        squads = (self.content.squads[sid] for sid in self._train_squad_ids(loc))
-        return any(self.is_big(squad) and not self._drills_with(squad) for squad in squads)
-
     def _train_pick(self, loc: Location) -> Squad | None:
-        """池子裡有大場面對手（_big_trip）的地點，這一趟遊歷遇上哪一路（計畫三 G1、Task 2 審查修正 3）：照（名號、地點、戰報流水號）
-        雜湊，從 _train_squad_ids 挑一路；沒有對手是 None。按鈕的「兩人對峙」、備料（A 段）、套用（C 段）、判讀失敗照平常打，
-        看的都是它：A、C 之間流水號不動（模型那一分鐘裡沒有打別的仗），兩邊挑到同一路；打過一場流水號就變，對手照樣輪替。
-        池子裡沒有大場面對手的地點不用它，照舊用 Game.rng 隨機挑（亂數序列、整季模擬與好玩度量表的對手組成都不變）。"""
-        ids = self._train_squad_ids(loc)
-        if not ids:
-            return None
-        key = f"{self.state.player.name}|{loc.id}|{self.state.battle_seq}".encode()
-        return self.content.squads[ids[int.from_bytes(hashlib.sha256(key).digest()[:4], "big") % len(ids)]]
+        return sortie_train_actions.train_pick(self, loc)  # 出陣三（全部拆包第 17 批）：本體在 tianxia/features/sortie/train_actions.py
 
     def _fight_squad(self, option_id: str) -> Squad | None:
         """這個選項按下去會打哪一路（遊歷、挑戰大勢人物本人、劇情戰的戰鬥選項）；不會打仗是 None。
         隨口應對（choice:free）不是數字，不是仗。"""
         s, c = self.state, self.content
         kind, _, arg = option_id.partition(":")
-        # act 子動詞的主人說這一下打哪一路（Verb.squad，全部拆包第 17 批多開的一格）；不打仗、沒有主人照舊往下
+        # act 子動詞的主人說這一下打哪一路（Verb.squad，全部拆包第 17 批多開的一格）：出陣包——遊歷、出陣那一格（約戰開著不打仗、遇上自己人
+        # 是操練，不打架）；不打仗、沒有主人照舊往下
         owned = features_core.act_squad(self, arg) if kind == "act" else None
         if owned is not None:
             return owned
-        if option_id == "act:train" and self.duel_on():
-            return None  # 約戰開著：出陣那一格是貼約戰（或截糧，不判大場面）
-        if option_id == "act:train":
-            pick = self._train_pick(c.locations[s.player.location])
-            return None if pick is None or self._drills_with(pick) else pick  # 遇上自己人是操練，不打架
         if option_id.startswith("act:challenge:"):
             fid = option_id.removeprefix("act:challenge:")
             return self._figure_squad(fid) if fid in c.figures else None  # 難度照他此刻的聲威（T4）與江湖水漲
@@ -3996,7 +3916,8 @@ class Game:
     def _act(self, what: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
         # act 子動詞的主人是功能包的（接縫掛鉤，第 11 批；計畫 docs/superpowers/plans/2026-11-01-核心收接縫.md 1.3）：探索包——減法季探索一顆的
         # 出門一趟（體力在裡面扣）；酒肆包——進店（不花體力）；出陣包——約戰開著、不在序章時出陣那一格打開出陣前那張卡（不花體力；截糧的
-        # 運糧隊經過時照舊攻打，體力在裡面扣）。後兩支原本在中段：前面那幾支只比 what、只讀，子動詞互斥，挪到最前面結果一樣
+        # 運糧隊經過時照舊攻打，體力在裡面扣），其餘打那一場（第 17 批：扣體力、並肩出陣的加成、出陣或遊歷，體力在裡面扣），與守勢（act:duty，
+        # 第 17 批，體力在裡面扣）。後幾支原本在中段：前面那幾支只比 what、只讀（ranks.summons_event 只讀），子動詞互斥，挪到最前面結果一樣
         got = features_core.act(self, what, prepared)
         if got is not None:
             return got
@@ -4014,8 +3935,6 @@ class Game:
             return self._recruit_one(what.partition(":")[2])
         if what == "rest":
             return self._rest()
-        if what == "duty":
-            return self._duty()
         if what == "rank2":
             return self._rank2()
         action_id = _rank_action_id(what)  # 第 3、4 階的行動（正式版戊一）
@@ -4076,18 +3995,7 @@ class Game:
             return self._present(self.content.events[promotion])
         if what == "explore":
             return self._explore()
-        if what == "train":  # 出陣（出陣探索與地盤設計第二節）；序章的雪恥照舊是遊歷
-            backing = self._parley_backing_here()  # NPC 智能 2.0的並肩出陣：今天答應陪你的人在這一帶，這一仗本人威力多幾成
-            share = self.content.config.parley.backing_share
-            plan = self.state.player.parley_backing.plan if backing else None  # 第二批：商量過打法，成了加倍、沒成打空
-            share = share * 2 if plan else 0.0 if plan is False else share
-            with team.backed(1 + share if backing else 1.0):
-                msgs = self._sortie() if sortie.on(self.content) and not prologue_rules.active(self.state, self.content) else self._train()
-            if backing:
-                self.state.player.parley_backing = None
-                name = self.content.characters[backing].name
-                msgs.insert(0, parley.BACKED_LINE.format(name=name, pct=round(share * 100)) if share else parley.PLAN_MISS.format(name=name))
-            return msgs
+        # （act:train 打的那一場：出陣、序章的雪恥與舊遊歷，第 17 批收進出陣包的 Verb.run，在最前面接走）
         msgs = self._socialize(prepared)
         self._hint("h_bond")  # 第一次交友：情誼有什麼用（explain-1，碰到才說；說過就不再說，眼前有事件、對話時排著等）
         return msgs
@@ -4575,47 +4483,10 @@ class Game:
         return IDLE_MARK in {o.id for o in self.options(odds=False, tick=False)}
 
     def _train(self) -> list[str]:
-        """遊歷：找這個地點的敵人打一場，**必定開打**；打完有機率接一段戰後的餘韻事件。
-
-        這個行動在 sanguo-companions 合併時被整個移除，後果是整條隨機遭遇戰的路斷掉：
-        `pick_event()` 只在「完全沒有合格候選」時才回 None，而有三個事件是「任何地點、
-        可重複、探索觸發」，所以實測 22 個地點探索都是 100% 撞到事件，掛在 explore 後面的
-        遭遇戰分支一次都沒執行過（整季只有劇情事件的 combat 選項那 3 場）。
-
-        打完之後的 `train_event_chance` 機率是給 `actions: ["train"]` 的事件用的——「拆招頓悟」
-        與「錦衣少年」的文字本來就是戰後餘韻（「一番苦戰之後…」「打鬥剛歇…」），合併時被改掛
-        到 explore，於是在集市散步也會冒出來。現在它們回到正確的位置。
-        """
-        loc = self.content.locations[self.state.player.location]
-        # 池子裡有大場面的對手：照 _train_pick 挑，跟按鈕、備料、套用、判讀失敗的退路都是同一路（鎖外判讀過的單子就是它，
-        # _squad_encounter 照對手對上判讀）；沒有就照舊用 Game.rng 隨機挑——正式內容每一處都是這樣（Task 2 審查修正 3）
-        if self._big_trip(loc):
-            squad = self._train_pick(loc)
-        else:
-            squad = self.content.squads[self.rng.choice(self._train_squad_ids(loc))]
-        msgs = self._squad_encounter(squad.id)
-        if prologue_rules.active(self.state, self.content):
-            return msgs  # 序章裡打完不接戰後事件（新手引導計畫一）
-        if self._drills_with(squad):
-            return msgs  # 操練沒有打架，不接「一番苦戰之後」這類戰後事件（試玩回饋 FB-001）
-        if self.rng.random() < self.content.config.train_event_chance:
-            event = pick_event(self.state, self.content, "train", self.rng)
-            if event is not None:
-                msgs += self._present(event, "train")
-        return msgs
+        return sortie_train_actions.train(self)  # 出陣三（全部拆包第 17 批）：本體在 tianxia/features/sortie/train_actions.py
 
     def _train_squad_ids(self, loc: Location) -> list[str]:
-        """遊歷可能遇上的對手：地點的敵人，加上軍令帶來的（截糧時那一帶的敵方運糧隊，計畫 T6）。
-        開關關著、沒有截糧軍令時就是 loc.enemies 本身，亂數的抽法跟以前一樣。
-        序章（新手引導計畫一）：只有這一步寫的對手（雪恥那一步才有斷眉），草廬自己沒有敵人。"""
-        if prologue_rules.active(self.state, self.content):
-            return prologue_rules.enemies(self.state, self.content)
-        if sortie.on(self.content):  # 出陣：只有攻才打，對手是 _sortie_foes；守、散人沒有對手
-            loc_mode = self._sortie_mode(loc)
-            return self._sortie_foes(loc) if loc_mode == "attack" else []
-        base = territory.squads_at(self.state.world, self.content, loc.id)  # 地盤易手：站的照控制方（關著時就是 loc.enemies）
-        extra = orders.extra_enemies(self.state, self.content, loc.id, self._side())
-        return base + [sid for sid in extra if sid not in base] if extra else base
+        return sortie_train_actions.train_squad_ids(self, loc)  # 出陣三（全部拆包第 17 批）：本體在 tianxia/features/sortie/train_actions.py
 
     def _order_options(self, loc: Location) -> list[Option]:
         """軍令的兩個行動（計畫 T6）：在有戰線的地方做第 1 階守勢行動；在護糧的起點接糧車。開關關著、散人沒有。"""
@@ -4645,20 +4516,7 @@ class Game:
         return opts
 
     def _duty_option(self, name: str) -> Option:
-        """守勢行動的鈕。出陣開著時每用一次扣一次出陣次數（PM 2026-10-14：跟攻、守共用每日的次數），鈕上寫今天還能幾次、
-        用完灰掉、寫跟出陣同一句；關著照舊。領地爭奪在這一季生效時，站在不是自家的區塊（別人的、沒佔下的中立地）灰掉寫原因，
-        按下去不扣體力與次數、不推線、不記守城（裁決 24；choose 照選單驗，灰的按不下去）。"""
-        c = self.content
-        cost = c.config.duty_stamina
-        problem = sortie.duty_problem(c, self.state.world, self._side(), self.state.player.location)
-        if problem:
-            return Option(id="act:duty", label=f"{name}（{problem}）", enabled=False)
-        if not sortie.on(c) or self.duel_on():  # 約戰開著（減法季批 3b）：收進此地、不佔出陣的次數
-            return self._cost_option("act:duty", name, cost)
-        left = self.sorties_left()
-        if left <= 0:
-            return Option(id="act:duty", label=f"{name}（{sortie.USED_UP.format(n=c.config.sortie.per_day)}）", enabled=False)
-        return self._cost_option("act:duty", name, cost, note=sortie.LEFT_NOTE.format(n=left))
+        return sortie_train_actions.duty_option(self, name)  # 出陣三（全部拆包第 17 批）：本體在 tianxia/features/sortie/train_actions.py
 
     def _rank2_options(self, loc: Location) -> list[Option]:
         """第 2 階行動（設計 5.5；正式版乙一）：第 2 階以上、在有戰線的地方；今天做滿了就變灰、寫明。"""
@@ -4763,38 +4621,6 @@ class Game:
         if msgs:
             msgs += self._guide(note_action(s, c, self.world, "order"))
         return msgs
-
-    def _duty(self) -> list[str]:
-        """第 1 階守勢行動（官軍巡哨、黃巾傳道、豪強保境安民；軍令文件 3.2、濃縮版內容表 2.6）：體力 duty_stamina，
-        往己方推所在戰線 1 點（豪強照依附那一軍），算守城的個人部分。推力走 push_trend
-        （緩衝、上限、貢獻）。"""
-        s, c = self.state, self.content
-        p = s.player
-        loc = c.locations[p.location]
-        duty = c.orders.duties[p.faction]
-        front = front_of(c, loc.id)
-        p.stamina -= c.config.duty_stamina
-        duel = self.duel_on()  # 約戰開著（減法季批 3b；企劃者 2026-10-24 第 2 件）：收進此地——不佔出陣、不推線、不算守城，一天記一點貢獻
-        if sortie.on(c) and not duel:  # 出陣開著：守勢行動算一次出陣（PM 2026-10-14，_duty_option）
-            sortie.spend(p, self._pill_day())
-        text = duty.text.replace("{地點}", loc.name)
-        msgs = [text]
-        goals = {} if duel else self._goals()  # 約戰開著：線只在約戰結算、軍令、大勢人物、事件的痕跡這幾處動（設計 4.3）
-        if goals.get(front):
-            msgs += self.push_trend(front, goals[front], source="duty")
-        msgs += opportunities.after_success(s, c, "duty", loc.id, self.rng)  # 收容流民（正式版乙一）
-        if precise.on(c, s.world):  # 一類一顆（正式季整合 2.6）：再加跟守一樣的經驗心得（這裡自家那一路的全額；沒有自家隊伍不給，只推線）
-            host = self._sortie_host(loc)
-            if host is not None:
-                msgs += self._drill_gains(host, 1.0)
-        if duel:  # 守城軍令改成應戰守住才記（計畫 4.0 之三第 17 條）；入伍段「出一次力」照舊認它
-            return msgs + self._duty_credit() + self._guide(note_action(s, c, self.world, "order"))
-        credit = self._order_credit(kind="duty", location=loc.id, front=front)  # 地點：領地爭奪的守城認自家被推得最高的那一塊（裁決 11、翻地與爭搶）
-        # 入伍段第 2 步「出一次力」：守勢行動不在這週軍令裡也算（FB-094：豪強第一週只有打擊，新人打不過；FB-093：巡哨、傳道就在營裡）
-        return msgs + (credit or self._guide(note_action(s, c, self.world, "order")))
-
-    def _duty_credit(self) -> list[str]:
-        return sortie_duel_actions.duty_credit(self)  # 出陣約戰（主動搬六包第 2 批）：本體在 tianxia/features/sortie/duel_actions.py
 
     def _take_convoy(self) -> list[str]:
         """接下糧車（護糧，軍令文件 3.4）：交出 convoy_grain 份糧草（從低階的慢屬性素材用起，多的不找），記下要送到哪裡。
@@ -7896,7 +7722,7 @@ class Game:
         loc = c.locations[p.location]
         squad = c.squads[squad_id]
         if self._drills_with(squad):
-            return self._drill(squad)
+            return self._drill(squad)  # 遇上自家隊伍改操練：操練是出陣包的（第 17 批），打不打在這個單打服務裡定
         scripted = prologue_rules.fight_tier(s, c)  # 序章雪恥那一場：結果照寫好的，不吃模型的判讀
         judged = None if wild or scripted is not None else self._judged(squad)
         result = self._fight_with(squad, judged, tier=scripted)
@@ -7913,7 +7739,7 @@ class Game:
             extra: list[str] = []
             if not wild and not prologue_rules.active(s, c):  # 序章打贏不推大勢、不抽伏筆、不記軍令
                 if not as_sortie:  # 出陣不推線（領地爭奪：推那一塊的進度，下面 _push_progress）
-                    for trend_id, delta in self.train_trend_push(loc.id).items():  # 換算過的線，照舊交給 T3 的 push_trend
+                    for trend_id, delta in self.train_trend_push(loc.id).items():  # 換算過的線，照舊交給 T3 的 push_trend；過渡：第 26 批（打贏之後遊歷推大勢）
                         extra += self.push_trend(trend_id, delta, source="train")
                 credit: list[str] | None = None
                 # 領地爭奪：出陣攻打贏推這一塊的進度、不推線（設計 3.7）；約戰開著時這裡只剩截糧（減法季批 3b：進度只在約戰結算動）
@@ -7996,10 +7822,7 @@ class Game:
         return amount * share, share < 1
 
     def drill_scale(self) -> float:
-        """操練推大勢的倍數：季長倍數；季長倍數小於 1 時再乘 Config.drill_long_season_share（0.5，PM 2026-10-12：操練給的聲勢
-        不該佔那麼大）——14 天的季約 0.09；週末設定照舊 1。"""
-        scale = self.season_scale()
-        return scale * self.content.config.drill_long_season_share if scale < 1 else scale
+        return sortie_train_actions.drill_scale(self)  # 出陣三（全部拆包第 17 批）：本體在 tianxia/features/sortie/train_actions.py
 
     def _carry(self, trend_id: str, amount: float) -> int:
         """把縮放後的推力 amount 加進這一季這條線的零頭（WorldState.trend_accum，同一條線一個值、正負抵銷），回傳滿了的整數點數。
@@ -8012,32 +7835,8 @@ class Game:
             w.trend_accum.pop(trend_id, None)
         return whole
 
-    def _drill_push(self, trend_id: str, delta: int) -> list[str]:
-        """操練推一條線：照 drill_scale 縮放。倍數是 1（週末設定）時照舊交給 push_trend，一個字都不變；
-        第一季的規則開著時縮放後的量照舊經過 push_trend 的人數緩衝、每人每曆日上限與零頭累積；規則關著的季零頭記在這一季的
-        trend_accum（_carry），滿一點才真的推、才回推動那一行，沒推到整點的這一下什麼都不寫。"""
-        scale = self.drill_scale()
-        if scale >= 1:
-            return self.push_trend(trend_id, delta, source="drill")
-        amount = delta * scale
-        if calendar.season_one_on(self.state.world, self.content):
-            return self.push_trend(trend_id, amount, source="drill")
-        whole = self._carry(trend_id, amount)
-        return self.push_trend(trend_id, whole, source="drill") if whole else []
-
     def _drill(self, squad: Squad) -> list[str]:
-        """在自己陣營的地方遊歷：不打自己人，一起操軍擺陣（企劃者 2026-10-02 決定）。不會輸、不扣氣血；
-        給經驗與心得，但只給對手的三成（Config.drill_reward_share，戰鬥系統第八節）；不給銀兩、不掉素材（不搶自己人）；
-        地點的大勢推動往自己陣營有利的方向推，推的量照季長縮放（_drill_push，FB-165）。"""
-        s, c = self.state, self.content
-        p = s.player
-        loc = c.locations[p.location]
-        msgs = [f"你與{squad.name}一同操軍擺陣，軍心為之一振。"]
-        self._outcome("操練", msgs[0])
-        msgs += self._drill_gains(squad)
-        for trend_id, delta in self.train_trend_push(loc.id).items():
-            msgs += self._drill_push(trend_id, delta)
-        return msgs
+        return sortie_train_actions.drill(self, squad)  # 出陣三（全部拆包第 17 批）：本體在 tianxia/features/sortie/train_actions.py
 
     def _drill_gains(self, squad: Squad, share: float | None = None, source: str = "hold", echo: bool = True) -> list[str]:
         """跟這一路一起操練拿的：對手心得與經驗的 share（預設 drill_reward_share；不給銀兩、素材）；經驗本人與帶著的同伴都拿（FB-002）。
@@ -8742,10 +8541,7 @@ class Game:
         return sum(n for mid, n in self.state.player.materials.items() if n > 0 and mid in mats and mats[mid].tier == 3)
 
     def _train_push(self, trend_id: str, delta: int) -> int:
-        """遊歷（打贏或操練）推大勢：量照地點設定；自己陣營對這條線有目標就往目標方向推，散人和
-        沒有這條線目標的陣營照地點原本的方向（企劃者 2026-10-02 決定）。trend_id 是換算過、真的會動的那條線。"""
-        goal = self._goals().get(trend_id, 0)
-        return abs(delta) * goal if goal else delta
+        return sortie_train_actions.train_push(self, trend_id, delta)  # 出陣三（全部拆包第 17 批）：本體在 tianxia/features/sortie/train_actions.py
 
     def _goals(self) -> dict[str, int]:
         """自己陣營的目標，照 rules.resolve_goals 換過鍵（開關關著時三條戰線都算黃巾聲勢）；散人是空的。
@@ -8754,16 +8550,7 @@ class Game:
         return resolve_goals(self.content, self.state.world, faction.goals) if faction is not None else {}
 
     def train_trend_push(self, loc_id: str | None = None) -> dict[str, int]:
-        """在這個地點（預設所在地）遊歷打贏或操練時，各條大勢線會被推多少（照自己的陣營，見 _train_push）。
-        鍵是真的會動的那條線：內容寫的戰線或 front 先照 rules.resolve_trend 換過（開關關著時一律是黃巾聲勢）。
-        豪強照依附那一軍（_goals）；推割據 2026-10-31 連豪強第三方一起拿掉。"""
-        loc = self.content.locations[loc_id or self.state.player.location]
-        pushes: dict[str, int] = {}
-        for key, delta in loc.train_trend.items():
-            target = resolve_trend(self.content, self.state.world, key, loc.id)
-            if target is not None:
-                pushes[target] = pushes.get(target, 0) + self._train_push(target, delta)
-        return pushes
+        return sortie_train_actions.train_trend_push(self, loc_id)  # 出陣三（全部拆包第 17 批）：本體在 tianxia/features/sortie/train_actions.py
 
     def push_trend(self, trend_id: str, delta: float, *, source: str) -> list[str]:
         """玩家自己造成的大勢推動一律走這裡（遊歷、出陣、操練、事件效果；sim_tick、時刻表、決戰、管理者不是個人推動，不走）。
