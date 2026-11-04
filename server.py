@@ -3244,7 +3244,10 @@ TALES_CLIENT = None  # 寫戰記用的 client（main() 照設定建；測試塞�
 TALES_STOP = threading.Event()
 TALES_THREAD: threading.Thread | None = None
 TALE_ROUND_SECONDS = 30.0  # 看一次的間隔（一季頂多十來場，寫完就閒著）
-TALE_BUDGET_SECONDS = 180.0  # 一篇的模型預算
+# 一篇的模型預算。2026-11-04 改成一幕一趟之後實測（第 8 季廣宗，3 幕 17 拍＋8 人的名錄，gemma4:12b）：
+# 四趟共 227 秒，180 秒會在名錄那一趟前就用完、名錄整段退回引擎那幾句。單趟還是最多 120 秒
+# （within_budget 取 min(client.timeout, 剩下的一半)），所以真人要等的上限沒變。
+TALE_BUDGET_SECONDS = 420.0
 TALE_OWNER_KEY = "戰記"  # 佇列裡的名號（不是任何角色）
 
 
