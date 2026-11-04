@@ -11146,9 +11146,16 @@ class ZhuanScenario(Scenario):
                     annals.note(s, self.c, annals.DEED, f"{who}在城外守了一夜。", 3)
                     annals.note(s, self.c, annals.DEED, f"{who}替路過的商旅解了圍。", 2)
                 p.contrib = 0 if who == self.EMPTY else 60 - 9 * i
+                if who == self.LAPSED:
+                    p.contrib = 60  # 到 min_contribution（40）以上才有階，換季補論功才走得到
                 p.affinities.update(affinity.get(who, {}))
             self.edit_state(who, fn)
             self.me(who, "擺好行狀")
+        # 〈天下形勢〉一篇寫到岑書瀾與屈懷瑾（同步時記一則；屈懷瑾要換季才補，走 xingshi_notes 的換季那一條）
+        from tianxia.state import XingshiEssay
+
+        names = f"{self.RULE}與{self.LAPSED}"
+        self.world.mutate_season(lambda s: s.xingshi.append(XingshiEssay(key=1, time=1000, n=1, essay=f"潁川一帶，{names}連日奔走。", line="是日：兩軍相持。")))
 
     def close(self) -> None:
         """管理者收季；除了屈懷瑾，每個人同步一次進休季（季末論功、〈天下形勢〉各記一則行狀）並看行狀頁。"""
