@@ -240,6 +240,12 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         return False
     if mine & set(cond.factions_none):
         return False
+    if cond.place_state or cond.place_state_none:  # 地點會變樣：此刻所在地的樣子（關著、沒給 content 當太平）
+        from . import place_state  # noqa: PLC0415  place_state → deeds：在函式裡 import，跟 territory 同一個做法
+
+        kind = place_state.kind_at(state.world, content, state.player.location) if content is not None else place_state.PEACE
+        if (cond.place_state and kind not in cond.place_state) or kind in cond.place_state_none:
+            return False
     if cond.controlled_by:  # 這裡此刻歸誰控制（地盤易手）：沒有 content、開關關著、不是戰線地點都不成立
         from . import territory  # noqa: PLC0415  territory → rules：在函式裡 import，避免循環
 

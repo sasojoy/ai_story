@@ -26,7 +26,7 @@ from .front_lines import BAND_KEYS
 from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
     ArtBook, Itinerary, Check, StatDef,
-    BEST_OF, FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
+    BEST_OF, FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, PLACE_KINDS, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
     GiftDef, Hints, MingtieContent, InsightDef, Location, Look, MallItem, MarkRule, MarkText, OppDef,
     InsightScene, Opening, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
@@ -2059,6 +2059,15 @@ def check_territory(c: Content, need, known, front_ids: list[str]) -> None:
     from . import territory  # noqa: PLC0415  延後 import（同 validate 的 atlas）
 
     table = [*c.timetable, *c.mandate_timetable]
+    factions_all = {f.id for f in c.scenario.factions}
+    for event in table:  # 地點會變樣（place_state.py）：TimetableOutcome.places 的地點認得、值是 war、famine、retake 或 fallen:<陣營>
+        for key, outcome in event.outcomes.items():
+            for loc_id, how in outcome.places.items():
+                where = f"時刻表 {event.id} 結果 {key} 的 places"
+                known(where, [loc_id], c.locations, "地點")
+                kind, _, side = how.partition(":")
+                need(how in ("war", "famine", "retake") or (kind == "fallen" and side in factions_all),
+                     f"{where}：{loc_id} 寫成 {how}（要是 war、famine、retake 或 fallen:<陣營>）")
     t = c.scenario.territory
     if t is None:
         need(not any(o.control for e in table for o in e.outcomes.values()), "時刻表寫了 control，劇本卻沒有 territory")
@@ -2410,6 +2419,7 @@ def validate(c: Content) -> None:
         known(where, cond.factions, faction_ids, "陣營")
         known(where, cond.factions_none, faction_ids, "陣營")
         known(where, cond.controlled_by, faction_ids, "陣營")
+        known(where, [*cond.place_state, *cond.place_state_none], PLACE_KINDS, "地點的樣子")
         known(where, cond.clue_items, item_ids, "伏筆物品")
         weekly = cond.week_min is not None or cond.week_max is not None
         if _week7(c) and weekly:  # 7 天濃縮季同 21 天季照天數，寫 7 天的那一份（cal_day_*7，1～7 在模型裡驗）

@@ -1,0 +1,189 @@
+[
+  {
+    "id": "ps_war_wounded",
+    "title": "焦土邊的傷兵",
+    "image": "refugees",
+    "condition": {"place_state": ["war"]},
+    "text": "仗才打過兩天，燒黑的屋梁還冒著細煙。一個斷了腿的兵靠在牆根，身上的號衣分不出是哪一邊的，旁邊蹲著個小女孩，拿破碗替他接雨水。",
+    "choices": [
+      {
+        "text": "撕下衣襟，替他把腿上的傷紮好",
+        "check": {"stat": "wis", "grade": "easy"},
+        "effect": {"text": "你把斷骨對正、用木片夾住。那兵咬著牙沒出聲，等你紮完，才啞著嗓子說了句謝。小女孩把碗裡最後一口水遞給你。", "stats": {"good": 2, "xinde": 6}},
+        "fail_effect": {"text": "你手忙腳亂，紮得太緊，血反倒滲了出來。那兵擺擺手，叫你別再碰了。", "stats": {"xinde": 2}}
+      },
+      {
+        "text": "問他這一仗是怎麼打的",
+        "check": {"stat": "wis", "grade": "normal", "by": "self"},
+        "effect": {"text": "他斷斷續續說起那一夜：火從城南燒起，兩邊的人在巷子裡撞上，誰也看不清誰。你把他說的幾條巷子記在心裡。", "stats": {"xinde": 10}},
+        "fail_effect": {"text": "他只是搖頭，說記不得了，什麼都記不得了。", "stats": {"xinde": 2}}
+      },
+      {
+        "text": "留幾個錢給那孩子",
+        "condition": {"min_stats": {"silver": 5}},
+        "effect": {"text": "小女孩把錢攥在手心，不說話，一直看著你走遠。", "stats": {"silver": -5, "good": 1}}
+      }
+    ]
+  },
+  {
+    "id": "ps_war_looters",
+    "title": "趁火打劫",
+    "image": "night",
+    "condition": {"place_state": ["war"]},
+    "text": "天剛擦黑，幾個人影摸進一間燒了半邊的鋪子，把還沒燒壞的布匹往外搬。鋪子的主人跪在門口哭，街上沒有一個人敢出聲。",
+    "choices": [
+      {
+        "text": "上前喝住他們",
+        "check": {"stat": "str", "grade": "normal"},
+        "effect": {"text": "領頭的那個掂了掂你的架勢，啐了一口，帶著人散了。掌櫃把一捆布塞給你，你推了回去，他硬是包了幾個錢。", "stats": {"good": 2, "silver": 8}, "stamina": -5},
+        "fail_effect": {"text": "他們人多，推搡之間你挨了幾拳，布匹還是被搬走了大半。", "stamina": -12}
+      },
+      {
+        "text": "悄悄跟在後面，看他們把東西藏在哪",
+        "check": {"stat": "agi", "grade": "easy"},
+        "effect": {"text": "他們把布匹藏進城隍廟後的枯井。你回頭告訴了掌櫃，第二天他帶著街坊把東西起了回來。", "stats": {"good": 1, "xinde": 6}},
+        "fail_effect": {"text": "轉過兩條巷子，人影就不見了。", "stats": {"xinde": 2}}
+      },
+      {
+        "text": "這種時候，誰也顧不了誰",
+        "effect": {"text": "你轉身走開。身後的哭聲一直跟到街口。"}
+      }
+    ]
+  },
+  {
+    "id": "ps_fallen_curfew",
+    "title": "城門口的盤查",
+    "image": "fort",
+    "condition": {"place_state": ["fallen"]},
+    "text": "城門口換了新的守卒，一個一個搜身盤問，過不去的就被推到一邊蹲著。排在你前面的老漢挑著兩筐菜，守卒把菜倒了一地，說要找夾帶的書信。",
+    "choices": [
+      {
+        "text": "替老漢說幾句好話",
+        "check": {"stat": "wis", "grade": "normal"},
+        "effect": {"text": "你陪著笑臉說老漢是城外種菜的，天天打這裡過。守卒罵了兩句，揮手放了他。老漢撿起菜，塞了兩根蘿蔔給你。", "stats": {"good": 2, "xinde": 4}},
+        "fail_effect": {"text": "守卒瞪了你一眼，連你也一起推到牆邊蹲了半個時辰。", "stamina": -8}
+      },
+      {
+        "text": "趁亂從水門那邊繞進去",
+        "check": {"stat": "agi", "grade": "normal"},
+        "effect": {"text": "水門的柵欄缺了一根，你側身擠了過去，順手記下了換崗的時辰。", "stats": {"xinde": 8}},
+        "fail_effect": {"text": "你踩進淤泥裡，弄得一身臭，最後還是得回去排隊。", "stamina": -6}
+      },
+      {
+        "text": "老老實實排隊",
+        "effect": {"text": "輪到你時天已經黑了。守卒摸遍你全身，沒找到什麼，放你進了城。", "stamina": -3}
+      }
+    ]
+  },
+  {
+    "id": "ps_fallen_hidden_school",
+    "title": "地窖裡的讀書聲",
+    "image": "academy",
+    "condition": {"place_state": ["fallen"]},
+    "text": "城裡的私塾封了門，你卻在一間米舖的地窖口聽見有人小聲念書。掀開草簾，十來個孩子擠在一盞油燈下，先生是個瘸了腿的書生，看見你，臉色一下白了。",
+    "choices": [
+      {
+        "text": "說你不是來抓人的，坐下聽一會兒",
+        "check": {"stat": "wis", "grade": "easy", "by": "self"},
+        "effect": {"text": "先生講的是《孟子》，講到「民為貴」那一段，聲音壓得很低。你聽完，替他把快沒油的燈撥亮了些，悄悄退了出去。", "stats": {"xinde": 10, "good": 1}},
+        "fail_effect": {"text": "孩子們嚇得不敢出聲，先生一直盯著你。你只好退了出去。", "stats": {"xinde": 2}}
+      },
+      {
+        "text": "替他們在上面望風",
+        "effect": {"text": "你在米舖門口坐到天黑，有巡邏的人走過，你咳了兩聲，地窖裡的聲音就停了。", "stats": {"good": 2}, "stamina": -5}
+      }
+    ]
+  },
+  {
+    "id": "ps_famine_granary",
+    "title": "米舖前的長龍",
+    "image": "market",
+    "condition": {"place_state": ["famine"]},
+    "text": "米舖門口排了上百人，掌櫃把門板只開一條縫，一人一升，價錢寫在門板上，一天改三次。隊伍後面有人推擠起來，眼看要鬧出事。",
+    "choices": [
+      {
+        "text": "站出來，叫大家照先後排好",
+        "check": {"stat": "str", "grade": "normal"},
+        "effect": {"text": "你一聲吼，前後的人都靜了下來。你守在門口，一直到米賣完，沒有一個人被踩倒。", "stats": {"good": 2, "xinde": 4}, "stamina": -8},
+        "fail_effect": {"text": "人群一湧，你被擠到牆邊，好不容易才脫身，門板也被擠破了。", "stamina": -12}
+      },
+      {
+        "text": "去問掌櫃，倉裡到底還有多少米",
+        "check": {"stat": "wis", "grade": "easy"},
+        "effect": {"text": "掌櫃被你問得支支吾吾，終於承認後倉還壓著幾十石，是城裡大戶寄放的。你把這事記下了。", "stats": {"xinde": 8}},
+        "fail_effect": {"text": "掌櫃說一粒都沒有了，把你請了出去。", "stats": {"xinde": 2}}
+      },
+      {
+        "text": "把自己的乾糧分給排在最後的人",
+        "condition": {"min_stats": {"silver": 6}},
+        "effect": {"text": "一個抱著孩子的婦人接過乾糧，先撕了一小塊塞進孩子嘴裡。", "stats": {"silver": -6, "good": 2}}
+      }
+    ]
+  },
+  {
+    "id": "ps_famine_roots",
+    "title": "挖草根的人",
+    "image": "field",
+    "condition": {"place_state": ["famine"]},
+    "text": "城外的田埂上蹲滿了人，拿著瓦片、樹枝在地裡刨，刨出來的草根連泥一起往嘴裡送。一個少年刨到一窩田鼠，幾個大人立刻撲了過去。",
+    "choices": [
+      {
+        "text": "教他們認哪些野菜能吃",
+        "check": {"stat": "wis", "grade": "normal", "by": "self"},
+        "effect": {"text": "你在河溝邊找到一大片馬齒莧，又指給他們看哪幾種蘑菇碰不得。天黑前，田埂上升起了好幾縷炊煙。", "stats": {"good": 2, "xinde": 6}},
+        "fail_effect": {"text": "你認得的那幾樣，早就被人挖光了。", "stats": {"xinde": 2}}
+      },
+      {
+        "text": "拉開搶田鼠的人",
+        "check": {"stat": "str", "grade": "easy"},
+        "effect": {"text": "你把那窩田鼠還給了少年。他看了看你，又看了看那幾個大人，最後還是分了一半出去。", "stats": {"good": 1, "xinde": 4}, "stamina": -5},
+        "fail_effect": {"text": "混亂中田鼠全跑了，誰也沒吃上。", "stamina": -5}
+      }
+    ]
+  },
+  {
+    "id": "ps_rebuild_beam",
+    "title": "上梁",
+    "image": "town",
+    "condition": {"place_state": ["rebuild"]},
+    "text": "街口那間燒塌的客棧正在重蓋，七八個漢子扛著一根大梁，喊著號子往上抬，抬到一半，繩子吱吱作響，底下的人臉都白了。",
+    "choices": [
+      {
+        "text": "衝上去搭一把手",
+        "check": {"stat": "str", "grade": "easy"},
+        "effect": {"text": "你頂住梁的一頭，大夥一鼓作氣，梁落進了榫口。工頭請你喝了碗上梁酒，說客棧開張那天給你留一間房。", "stats": {"good": 1, "xinde": 4, "silver": 5}, "stamina": -8},
+        "fail_effect": {"text": "梁還是滑了下來，砸碎了一地瓦片。好在沒傷到人，你的肩膀卻腫了好幾天。", "stamina": -12}
+      },
+      {
+        "text": "看出繩結打錯了，出聲提醒",
+        "check": {"stat": "wis", "grade": "normal", "by": "self"},
+        "effect": {"text": "他們把梁放下來，照你說的重新打了結，第二次一口氣抬了上去。工頭拍著你的肩膀說你是行家。", "stats": {"xinde": 8}},
+        "fail_effect": {"text": "工頭看了一眼，說繩結沒錯，叫你別在這裡礙事。", "stats": {"xinde": 2}}
+      }
+    ]
+  },
+  {
+    "id": "ps_rebuild_market",
+    "title": "重開的市集",
+    "image": "market",
+    "condition": {"place_state": ["rebuild"]},
+    "text": "市集的空地上重新擺起了攤子，賣的東西不多，吆喝聲倒是比從前大。一個賣陶碗的老頭說，碗是他從瓦礫堆裡一隻一隻挖出來的，沒破的就拿來賣。",
+    "choices": [
+      {
+        "text": "買兩隻碗，聽他說說城破那幾天",
+        "condition": {"min_stats": {"silver": 4}},
+        "effect": {"text": "老頭說起城破那一夜，說起後來收復時街上的人是怎麼哭的。說到最後，他把一隻碗底寫著字的碗也送給了你。", "stats": {"silver": -4, "xinde": 8}}
+      },
+      {
+        "text": "替攤販們搭個遮雨的棚子",
+        "check": {"stat": "str", "grade": "easy"},
+        "effect": {"text": "棚子搭好時正好下起雨，攤販們擠在棚下，有人塞給你一個熱餅。", "stats": {"good": 1, "xinde": 4}, "stamina": -6},
+        "fail_effect": {"text": "竹竿不夠長，棚子搭了一半就塌了。", "stamina": -6}
+      },
+      {
+        "text": "隨便逛逛",
+        "effect": {"text": "你在市集上走了一圈，有幾個攤子已經掛起了新的招牌。"}
+      }
+    ]
+  }
+]
