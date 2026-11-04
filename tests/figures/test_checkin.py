@@ -260,11 +260,18 @@ def test_an_outing_drops_a_pill():
     assert p.stamina_pills == pills + 1 and "回體丹 +1" in msgs
 
 
-def test_no_pill_drop_outside_season21():
-    game = _game(None, setup=_sure_drop)  # 14 天的季：沒有簽到
-    pills = game.state.player.stamina_pills
+def test_no_pill_drop_with_checkin_off():
+    def setup(c):
+        _sure_drop(c)
+        c.config.checkin.enabled = False
+
+    # week7 的簽到開著（season21 也是）：這裡關掉，走探索一顆的素材拍才問得到 _pill_find 那道閘；舊探索本來就不擲丹，問不到
+    game = _game("week7", setup=setup)
+    p = game.state.player
+    pills, seq = p.stamina_pills, p.explore_seq
     _explore(game)
-    assert game.state.player.stamina_pills == pills
+    assert p.explore_seq == seq + 1  # 真的走到探索一顆
+    assert p.stamina_pills == pills
 
 
 def test_pill_drop_uses_its_own_dice():
