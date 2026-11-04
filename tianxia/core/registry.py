@@ -33,6 +33,8 @@ from ..features import checkin  # 簽到：全部拆包第 30 批（沒有選項
 from ..features import socialize  # 交友求見：全部拆包第 21 批（只接 call: 的 choose 與假人分數，照前綴認，排在哪裡結果都一樣）
 # bout
 from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。排最後：擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）
+# figure_acts
+from ..features import figure_acts  # 大勢人物的行動：全部拆包第 31 批（只接 aid:、plan: 的 choose 與假人分數，照前綴認，排在哪裡結果都一樣；同步補名望 _deliver_guard_credits 不接 deliver_notices，留 Game 的委派原位）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -63,6 +65,8 @@ FEATURES: list[Feature] = [
     socialize.FEATURE,
     # bout（排最後：店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4）
     bout.FEATURE,
+    # figure_acts
+    figure_acts.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 
