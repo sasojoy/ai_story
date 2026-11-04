@@ -11,7 +11,7 @@
         "text": "領著鄉勇正面衝下去",
         "check": {
           "stat": "str",
-          "difficulty": 11
+          "grade": "harsh"
         },
         "effect": {
           "text": "你頭一個衝進窪地，鄉勇跟著吶喊，截糧的黃巾丟下車子跑了。校尉把你的名字報了上去。",
@@ -39,7 +39,7 @@
         "text": "繞到後頭放火燒他們的營",
         "check": {
           "stat": "agi",
-          "difficulty": 10
+          "grade": "harsh", "shift": -1
         },
         "effect": {
           "text": "後頭火一起，窪地裡的黃巾以為被抄了後路，一哄而散。十幾車糧一車沒少。",
@@ -64,7 +64,7 @@
         "text": "扮成黃巾傳令，騙他們撤",
         "check": {
           "stat": "wis",
-          "difficulty": 12
+          "grade": "harsh", "shift": 1
         },
         "effect": {
           "text": "你撕了一條黃布纏在頭上，喊說波才渠帥要人回營。那夥人將信將疑地拉著空車走了，糧車原地不動。",
@@ -126,7 +126,7 @@
         "text": "在灘頭守一整夜",
         "check": {
           "stat": "con",
-          "difficulty": 10
+          "grade": "harsh", "shift": -1
         },
         "effect": {
           "text": "你在冰冷的河灘上站了一夜，黃巾三次試渡都被你帶人頂回去。天亮時鄉勇都喊你的名字。",
@@ -148,7 +148,7 @@
         "text": "摸黑游過去斬纜",
         "check": {
           "stat": "agi",
-          "difficulty": 11
+          "grade": "harsh"
         },
         "effect": {
           "text": "你咬著短刀游過河，一刀斬斷了纜。對岸的船在河心打轉，再也靠不過來。",
@@ -210,7 +210,7 @@
         "text": "貼著壕溝一路數過去",
         "check": {
           "stat": "agi",
-          "difficulty": 11
+          "grade": "harsh"
         },
         "effect": {
           "text": "你在壕溝裡趴了半夜，把東西兩營的火堆一個一個記清楚。盧植聽完，只說了一句「好」。",
@@ -235,7 +235,7 @@
         "text": "看灶煙算人數",
         "check": {
           "stat": "wis",
-          "difficulty": 10
+          "grade": "harsh", "shift": -1
         },
         "effect": {
           "text": "你沒靠太近，只在山坡上看了一早的炊煙，照煙數算出城裡大約多少人吃飯。盧植把你的數寫進了軍報。",
@@ -257,7 +257,7 @@
         "text": "找城裡逃出來的人問",
         "check": {
           "stat": "wis",
-          "difficulty": 12
+          "grade": "harsh", "shift": 1
         },
         "effect": {
           "text": "你在逃難的人裡找到一個廣宗的糧吏，他把城裡每天出多少糧說得清清楚楚。",
@@ -297,7 +297,7 @@
         "text": "扛石頭把缺口填起來",
         "check": {
           "stat": "str",
-          "difficulty": 10
+          "grade": "harsh", "shift": -1
         },
         "effect": {
           "text": "你和幾十個弟兄扛了一夜的石頭，缺口在天亮前補上了。渠帥拍著你的肩說要報給趙弘將軍。",
@@ -319,7 +319,7 @@
         "text": "堵在缺口上頂一夜",
         "check": {
           "stat": "con",
-          "difficulty": 11
+          "grade": "harsh"
         },
         "effect": {
           "text": "你在缺口上站到天亮，腳下的屍首疊了半人高。官軍收兵的鼓響了。",
@@ -381,7 +381,7 @@
         "text": "把扣船的家丁一個個扔下水",
         "check": {
           "stat": "str",
-          "difficulty": 11
+          "grade": "harsh"
         },
         "effect": {
           "text": "你把守船的家丁丟進河裡，船一條一條放了出來。軍候在冊子上記了你一筆。",
@@ -403,7 +403,7 @@
         "text": "跟鄉豪算清那筆船錢",
         "check": {
           "stat": "wis",
-          "difficulty": 10
+          "grade": "harsh", "shift": -1
         },
         "effect": {
           "text": "你翻了他的帳，指出官府欠的錢早就從他的租裡扣過了。鄉豪臉紅脖子粗，船放了。",
@@ -425,7 +425,7 @@
         "text": "夜裡把船一條條偷出來",
         "check": {
           "stat": "agi",
-          "difficulty": 12
+          "grade": "harsh", "shift": 1
         },
         "effect": {
           "text": "你帶著兵卒摸黑解了纜，天亮時二十條船都泊在對岸。",
@@ -481,7 +481,7 @@
         "text": "不拆信，原封送到",
         "check": {
           "stat": "con",
-          "difficulty": 10
+          "grade": "harsh", "shift": -1
         },
         "effect": {
           "text": "一路上兩撥人攔你問信，你一個字都沒說。陳留那頭收了信，回了一句「荀氏有人」。",
@@ -506,7 +506,7 @@
         "text": "不拆封，隔著燈影看信裡寫了什麼",
         "check": {
           "stat": "wis",
-          "difficulty": 12
+          "grade": "harsh", "shift": 1
         },
         "effect": {
           "text": "你隔著燈影讀出了大半：潁川士人兩邊都不押。你把信送到，心裡多了一盤棋。",
@@ -569,7 +569,7 @@
         "text": "引經據典，跟他論一論天下",
         "check": {
           "stat": "wis",
-          "difficulty": 11
+          "grade": "harsh"
         },
         "effect": {
           "text": "你和許劭論了一個時辰，他最後說你「可與議事」。堂下一陣騷動。",
@@ -594,7 +594,7 @@
         "text": "一句話都不說，等他先開口",
         "check": {
           "stat": "wis",
-          "difficulty": 12
+          "grade": "harsh", "shift": 1
         },
         "effect": {
           "text": "許劭看了你許久，說：「此人難測。」這三個字比什麼都好用。",
@@ -616,7 +616,7 @@
         "text": "把自己做過的事一件件說出來",
         "check": {
           "stat": "con",
-          "difficulty": 10
+          "grade": "harsh", "shift": -1
         },
         "effect": {
           "text": "你說得平實，沒有一句誇口。許劭說你「實」，寫進了這個月的評。",
@@ -667,7 +667,7 @@
         "text": "照兵書說，再說哪裡不合今天的仗",
         "check": {
           "stat": "wis",
-          "difficulty": 10
+          "grade": "harsh", "shift": -1
         },
         "effect": {
           "text": "長史聽完把兵書收了起來，在名冊上你的名字旁畫了一個圈。",
@@ -689,7 +689,7 @@
         "text": "說京裡的事：宦官與外戚",
         "check": {
           "stat": "wis",
-          "difficulty": 11
+          "grade": "harsh"
         },
         "effect": {
           "text": "你只說了三句，長史就把左右屏退了。走的時候他塞給你一封大將軍的帖子。",
@@ -714,7 +714,7 @@
         "text": "不說話，在校場上演一趟刀",
         "check": {
           "stat": "str",
-          "difficulty": 12
+          "grade": "harsh", "shift": 1
         },
         "effect": {
           "text": "你一刀劈斷了靶樁。府裡的武人都出來看，長史把你的名字報上去了。",
@@ -752,7 +752,7 @@
         "text": "兩邊各敬一杯，各套一句話",
         "check": {
           "stat": "wis",
-          "difficulty": 10
+          "grade": "harsh", "shift": -1
         },
         "effect": {
           "text": "散席時你把兩邊開的價都摸清了。塢堡主人送你出門，一路送到了堡外。",
@@ -774,7 +774,7 @@
         "text": "說清楚：冀州的糧該歸誰",
         "check": {
           "stat": "wis",
-          "difficulty": 12
+          "grade": "harsh", "shift": 1
         },
         "effect": {
           "text": "你把冀州幾年的收成與賦稅一筆筆擺出來，兩邊都說不出話。塢堡主人決定先誰都不給。",
@@ -793,7 +793,7 @@
         "text": "陪著喝，喝到他們說真話",
         "check": {
           "stat": "con",
-          "difficulty": 11
+          "grade": "harsh"
         },
         "effect": {
           "text": "三巡之後兩邊都醉了，真話一句句漏出來。你記得清清楚楚。",
@@ -841,7 +841,7 @@
         "text": "說黃巾起事的根，在豪強兼併",
         "check": {
           "stat": "wis",
-          "difficulty": 11
+          "grade": "harsh"
         },
         "effect": {
           "text": "你說得有根有據，在座的人都沉默了。散席時有人說要把你的話寫下來。",
@@ -860,7 +860,7 @@
         "text": "勸他們少說話，京裡耳目多",
         "check": {
           "stat": "wis",
-          "difficulty": 10
+          "grade": "harsh", "shift": -1
         },
         "effect": {
           "text": "你這一句讓幾個人醒了酒。後來真有人因議論被捕，這幾位都平安。",
@@ -909,7 +909,7 @@
         "text": "翻縣衙的帳，查糧去了哪",
         "check": {
           "stat": "wis",
-          "difficulty": 10
+          "grade": "harsh", "shift": -1
         },
         "effect": {
           "text": "帳上一筆一筆都對得上，就是少了三千石。你把帳攤在縣吏面前，他當晚就叫豪族把糧吐了一半出來。",
@@ -928,7 +928,7 @@
         "text": "帶饑民去豪族門口鬧",
         "check": {
           "stat": "str",
-          "difficulty": 11
+          "grade": "harsh"
         },
         "effect": {
           "text": "幾百人圍著豪族的宅門，你一腳踹開了糧倉的門。豪族不敢鬧大，開倉放了糧。",
@@ -948,7 +948,7 @@
         "text": "找城裡的糧商合夥平糶",
         "check": {
           "stat": "wis",
-          "difficulty": 12
+          "grade": "harsh", "shift": 1
         },
         "effect": {
           "text": "你說動兩個糧商按平價賣糧，豪族囤的糧一下子不值錢了。",
@@ -996,7 +996,7 @@
         "text": "揹著老弱，陪他們走完",
         "check": {
           "stat": "con",
-          "difficulty": 10
+          "grade": "harsh", "shift": -1
         },
         "effect": {
           "text": "你走了三天，背過七八個孩子。到潁川時一百多人一個沒少。",
@@ -1015,7 +1015,7 @@
         "text": "先一步去探路，避開亂兵",
         "check": {
           "stat": "agi",
-          "difficulty": 11
+          "grade": "harsh"
         },
         "effect": {
           "text": "你在前頭跑了一夜，找到一條沒人走的舊河道。流民平安過去了。",
@@ -1064,7 +1064,7 @@
         "text": "找證人，翻這個案",
         "check": {
           "stat": "wis",
-          "difficulty": 11
+          "grade": "harsh"
         },
         "effect": {
           "text": "你找到三個證人，當堂把縣吏的話一句句駁倒。人放了，縣吏被郡裡記了一過。",
@@ -1084,7 +1084,7 @@
         "text": "翻律條，找出這案的破綻",
         "check": {
           "stat": "wis",
-          "difficulty": 12
+          "grade": "harsh", "shift": 1
         },
         "effect": {
           "text": "你翻出一條：通敵要有實證。縣吏拿不出來，只好放人。",
@@ -1103,7 +1103,7 @@
         "text": "夜裡劫獄",
         "check": {
           "stat": "str",
-          "difficulty": 10
+          "grade": "harsh", "shift": -1
         },
         "effect": {
           "text": "你把人從牢裡揹了出來，連夜送出了涿郡。縣裡貼出了你的畫像。",
@@ -1152,7 +1152,7 @@
         "text": "留下來收屍、燒衣",
         "check": {
           "stat": "con",
-          "difficulty": 11
+          "grade": "harsh"
         },
         "effect": {
           "text": "你和幾個膽大的鄉人收了三天的屍，城牆根乾淨了，疫也慢了下來。",
@@ -1171,7 +1171,7 @@
         "text": "照老大夫的方子配藥",
         "check": {
           "stat": "wis",
-          "difficulty": 10
+          "grade": "harsh", "shift": -1
         },
         "effect": {
           "text": "你照方子配了三百帖藥，城裡的哭聲少了。",
@@ -1206,7 +1206,7 @@
         "text": "趁他們不備，一個一個解繩子",
         "check": {
           "stat": "agi",
-          "difficulty": 10
+          "grade": "harsh", "shift": -1
         },
         "effect": {
           "text": "你在河灘的蘆葦裡摸過去，解開了繩子，孩子們鑽進蘆葦蕩跑回了家。",
@@ -1263,7 +1263,7 @@
         "text": "跟他談分成",
         "check": {
           "stat": "wis",
-          "difficulty": 10,
+          "grade": "harsh", "shift": -1,
           "practice": "evil"
         },
         "effect": {
@@ -1283,7 +1283,7 @@
         "text": "夜裡押船闖過鹽丁的卡子",
         "check": {
           "stat": "agi",
-          "difficulty": 11,
+          "grade": "harsh",
           "practice": "evil"
         },
         "effect": {
@@ -1338,7 +1338,7 @@
         "text": "喝了，跟寨主比一比臂力",
         "check": {
           "stat": "str",
-          "difficulty": 11,
+          "grade": "harsh",
           "practice": "evil"
         },
         "effect": {
@@ -1358,7 +1358,7 @@
         "text": "喝了，連喝十碗不倒",
         "check": {
           "stat": "con",
-          "difficulty": 10
+          "grade": "harsh", "shift": -1
         },
         "effect": {
           "text": "你喝到第十碗，堂下的人都站起來了。寨主把你排進了頭領。",
@@ -1406,7 +1406,7 @@
         "text": "混上船，夜裡把箱子換掉",
         "check": {
           "stat": "agi",
-          "difficulty": 10,
+          "grade": "harsh", "shift": -1,
           "practice": "evil"
         },
         "effect": {
@@ -1455,7 +1455,7 @@
         "text": "替他們估價，抽一成",
         "check": {
           "stat": "wis",
-          "difficulty": 11,
+          "grade": "harsh",
           "practice": "evil"
         },
         "effect": {
@@ -1475,7 +1475,7 @@
         "text": "聽他們說話，把消息賣給別人",
         "check": {
           "stat": "wis",
-          "difficulty": 12,
+          "grade": "harsh", "shift": 1,
           "practice": "evil"
         },
         "effect": {
@@ -1524,7 +1524,7 @@
         "text": "收錢，去嚇一嚇那個鄉嗇夫",
         "check": {
           "stat": "agi",
-          "difficulty": 11,
+          "grade": "harsh",
           "practice": "evil"
         },
         "effect": {
@@ -1544,7 +1544,7 @@
         "text": "收錢，轉頭把這事告訴鄉嗇夫",
         "check": {
           "stat": "wis",
-          "difficulty": 10,
+          "grade": "harsh", "shift": -1,
           "practice": "evil"
         },
         "effect": {
@@ -1599,7 +1599,7 @@
         "text": "請他喝酒，聽他說說自己的刀",
         "check": {
           "stat": "wis",
-          "difficulty": 11
+          "grade": "harsh"
         },
         "effect": {
           "text": "酒過三巡，他說起自己的師門，你聽出了刀法的破綻，他也聽出來了。兩人大笑一場，各自散去。",
@@ -1618,7 +1618,7 @@
         "text": "只出一招，讓他自己看",
         "check": {
           "stat": "agi",
-          "difficulty": 12
+          "grade": "harsh", "shift": 1
         },
         "effect": {
           "text": "你一招就削下了他刀穗上的一顆珠子。他看了很久，收刀走了。",
@@ -1666,7 +1666,7 @@
         "text": "硬碰硬，拳對拳",
         "check": {
           "stat": "str",
-          "difficulty": 11
+          "grade": "harsh"
         },
         "effect": {
           "text": "三十招後老拳師退了一步，笑著說：「後生可畏。」滿堂叫好。",
@@ -1688,7 +1688,7 @@
         "text": "繞著他打，耗他的氣",
         "check": {
           "stat": "agi",
-          "difficulty": 10
+          "grade": "harsh", "shift": -1
         },
         "effect": {
           "text": "你繞了他半個時辰，老拳師的氣喘了，自己收了手。",
@@ -1707,7 +1707,7 @@
         "text": "站著不動，讓他打",
         "check": {
           "stat": "con",
-          "difficulty": 12
+          "grade": "harsh", "shift": 1
         },
         "effect": {
           "text": "他打了你十拳，你一步沒退。老拳師嘆了口氣，把自己的護腕送給了你。",
@@ -1761,7 +1761,7 @@
         "text": "看他的刀，看出路數再說",
         "check": {
           "stat": "con",
-          "difficulty": 11
+          "grade": "harsh"
         },
         "effect": {
           "text": "你看了他三天，第四天才去。他只出了兩刀就停了：「你看過了。」他留下一把刀走了。",
@@ -1814,7 +1814,7 @@
         "text": "考他三天，看是不是塊料",
         "check": {
           "stat": "wis",
-          "difficulty": 10
+          "grade": "harsh", "shift": -1
         },
         "effect": {
           "text": "三天裡你看出他心性穩。你沒收他，卻把入門的功夫教了，他磕了三個頭走了。",
@@ -1834,7 +1834,7 @@
         "text": "跟他講你這一路是怎麼過來的",
         "check": {
           "stat": "wis",
-          "difficulty": 11
+          "grade": "harsh"
         },
         "effect": {
           "text": "你講了一夜，他聽了一夜。後來城裡都說擂上那位肯教人。",
@@ -1882,7 +1882,7 @@
         "text": "縋城而下，摸進草營",
         "check": {
           "stat": "agi",
-          "difficulty": 13
+          "grade": "legend", "shift": -1
         },
         "effect": {
           "text": "你在大風裡點著了第一把火。火借風勢，連營燒成一片，城裡的鼓聲響了，皇甫嵩帶兵殺了出來。",
@@ -1914,7 +1914,7 @@
         "text": "看風向，教城裡什麼時候放火箭",
         "check": {
           "stat": "wis",
-          "difficulty": 14
+          "grade": "legend"
         },
         "effect": {
           "text": "你算準了風轉的那一刻，城頭的火箭齊發，黃巾的草營一片火海。",
@@ -2006,7 +2006,7 @@
         "text": "一架一架推倒雲梯",
         "check": {
           "stat": "str",
-          "difficulty": 13
+          "grade": "legend", "shift": -1
         },
         "effect": {
           "text": "你推倒了第九架雲梯，官軍收兵了。張梁把自己的佩刀解下來給了你。",
@@ -2038,7 +2038,7 @@
         "text": "守在最險的那一段，寸步不退",
         "check": {
           "stat": "con",
-          "difficulty": 14
+          "grade": "legend"
         },
         "effect": {
           "text": "你在城頭站了一天一夜，那一段牆一個官兵也沒上來。",
@@ -2104,7 +2104,7 @@
         "text": "跟著孫堅，第一個爬上城頭",
         "check": {
           "stat": "str",
-          "difficulty": 14
+          "grade": "legend"
         },
         "effect": {
           "text": "你和孫堅幾乎同時翻上了城頭。城破之後，兩個人背靠背殺到了天亮。",
@@ -2137,7 +2137,7 @@
         "text": "從城的另一面翻上去，分他們的兵",
         "check": {
           "stat": "agi",
-          "difficulty": 13
+          "grade": "legend", "shift": -1
         },
         "effect": {
           "text": "你從北面翻上城，守軍兩頭顧不過來，孫堅那邊一舉破了城。",
@@ -2208,7 +2208,7 @@
         "text": "寫一篇文章，說黨人與黃巾不同路",
         "check": {
           "stat": "wis",
-          "difficulty": 13
+          "grade": "legend", "shift": -1
         },
         "effect": {
           "text": "你的文章抄遍了洛陽。三天後，赦令下來了。",
@@ -2232,7 +2232,7 @@
         "text": "託人把話遞到天子身邊",
         "check": {
           "stat": "wis",
-          "difficulty": 14
+          "grade": "legend"
         },
         "effect": {
           "text": "你的話經了三個人的手，最後到了天子耳裡。赦令下來那天，有人在宮門口對你拱了拱手。",
@@ -2284,7 +2284,7 @@
         "text": "兩邊都去，誰也不許",
         "check": {
           "stat": "wis",
-          "difficulty": 14
+          "grade": "legend"
         },
         "effect": {
           "text": "你在大將軍府喝了酒，又在張讓的宅子裡吃了飯，兩邊都以為你是自己人。",
@@ -2311,7 +2311,7 @@
         "text": "把宦官跟黃巾往來的證據交給何進",
         "check": {
           "stat": "wis",
-          "difficulty": 13
+          "grade": "legend", "shift": -1
         },
         "effect": {
           "text": "你交出的書信讓何進在朝上大大露臉。張讓從此恨你入骨。",
@@ -2352,7 +2352,7 @@
         "text": "去跟守卡的將領理論",
         "check": {
           "stat": "wis",
-          "difficulty": 14
+          "grade": "legend"
         },
         "effect": {
           "text": "你跟守卡的將領談了一夜。天亮時卡開了，饑民一個個領著一碗粥過去。",
@@ -2372,7 +2372,7 @@
         "text": "用自己的錢在卡前施粥",
         "check": {
           "stat": "con",
-          "difficulty": 13
+          "grade": "legend", "shift": -1
         },
         "effect": {
           "text": "你在卡前支了三口大鍋，煮了半個月的粥。來往的人都記得你。",
@@ -2393,7 +2393,7 @@
         "text": "查出誰在囤糧，逼他放出來",
         "check": {
           "stat": "wis",
-          "difficulty": 15
+          "grade": "legend", "shift": 1
         },
         "effect": {
           "text": "你查出郡裡的豪族囤了上萬石，一封信寄到盧植營裡，糧放出來了。",
@@ -2446,7 +2446,7 @@
         "text": "把人販子全打下山",
         "check": {
           "stat": "str",
-          "difficulty": 13
+          "grade": "legend", "shift": -1
         },
         "effect": {
           "text": "你把那夥人販子打得滾下了山，又在廟裡住了半個月，直到洛陽的白馬寺派人來接。",
@@ -2466,7 +2466,7 @@
         "text": "連夜把孩子們送下山",
         "check": {
           "stat": "agi",
-          "difficulty": 14
+          "grade": "legend"
         },
         "effect": {
           "text": "你分三趟把孩子們揹下山，天亮時一個不少地到了白馬寺。",
@@ -2502,7 +2502,7 @@
         "text": "扮成驛卒，騙開押車的",
         "check": {
           "stat": "agi",
-          "difficulty": 14,
+          "grade": "legend",
           "practice": "evil"
         },
         "effect": {
@@ -2575,7 +2575,7 @@
         "text": "上山，在聚義的場子上鎮住眾人",
         "check": {
           "stat": "str",
-          "difficulty": 13,
+          "grade": "legend", "shift": -1,
           "practice": "evil"
         },
         "effect": {
@@ -2602,7 +2602,7 @@
         "text": "上山，跟張燕談條件",
         "check": {
           "stat": "wis",
-          "difficulty": 14
+          "grade": "legend"
         },
         "effect": {
           "text": "你和張燕談了一夜。你不入夥，可黑山的路從此對你敞開。",
@@ -2663,7 +2663,7 @@
         "text": "回帖：天下第一不是比出來的",
         "check": {
           "stat": "wis",
-          "difficulty": 14
+          "grade": "legend"
         },
         "effect": {
           "text": "你的回帖傳遍了江湖。南華觀那邊再也沒有派人來。",
@@ -2714,7 +2714,7 @@
         "text": "先一步翻上屋頂",
         "check": {
           "stat": "agi",
-          "difficulty": 14
+          "grade": "legend"
         },
         "effect": {
           "text": "你在屋頂上截住了刺客，逼出了雇主的名字。第二天，那個名字在城裡傳開了。",
@@ -2737,7 +2737,7 @@
         "text": "裝睡，等他下來",
         "check": {
           "stat": "con",
-          "difficulty": 13
+          "grade": "legend", "shift": -1
         },
         "effect": {
           "text": "刺客的刀落下時，你一把扣住了他的手腕。他看了你一眼，把雇主的名字說了出來。",

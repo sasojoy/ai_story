@@ -12,7 +12,7 @@
         "text": "進席應對，聽憑品評",
         "check": {
           "stat": "wis",
-          "difficulty": 5,
+          "grade": "normal",
           "by": "self"
         },
         "effect": {
@@ -32,7 +32,7 @@
         "text": "替門生搬酒甕、在席外站一整天",
         "check": {
           "stat": "con",
-          "difficulty": 3,
+          "grade": "easy", "shift": -1,
           "by": "self"
         },
         "effect": {
@@ -71,7 +71,7 @@
         "text": "挑起擔子，一口氣走到城東",
         "check": {
           "stat": "con",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "一擔竹簡沉得像石頭，你一路沒歇腳。老管事點清了數目，多賞了你一串錢。",
@@ -92,7 +92,7 @@
         "text": "幫他把簡牘的篇目重新編次",
         "check": {
           "stat": "wis",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "你把散亂的篇目理得井井有條。老管事對你另眼相看，說府裡的門客也未必做得這麼細。",
@@ -129,7 +129,7 @@
         "text": "一個人把石碑扶正",
         "check": {
           "stat": "str",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你蹲身扛住碑腳，硬是把石碑推回車上。兩邊的人都看傻了，吵也吵不下去了。",
@@ -147,7 +147,7 @@
         "text": "把兩邊帶頭的人拉開說理",
         "check": {
           "stat": "wis",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "你讓碑址往後挪三步，兩家都有臺階下。帶頭的佃戶塞給你一把炒豆，說你比縣裡的嗇夫公道。",
@@ -203,7 +203,7 @@
         "text": "起身陳說自己的看法",
         "check": {
           "stat": "wis",
-          "difficulty": 5,
+          "grade": "normal",
           "by": "self"
         },
         "effect": {
@@ -224,7 +224,7 @@
         "text": "連夜把兩派的議論抄錄下來",
         "check": {
           "stat": "con",
-          "difficulty": 3,
+          "grade": "easy", "shift": -1,
           "by": "self"
         },
         "effect": {
@@ -263,7 +263,7 @@
         "text": "攀上屋頂把瓦補好",
         "check": {
           "stat": "agi",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "你踩著濕滑的屋脊把瓦片一片片壓回去，雨水不漏了。老書吏請你喝了碗熱湯，還塞給你一些錢。",
@@ -281,7 +281,7 @@
         "text": "把書箱一箱箱扛到乾處",
         "check": {
           "stat": "str",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "你來回搬了二十幾趟，一箱也沒泡壞。書吏讓你隨意借閱一卷兵書作謝。",
@@ -337,7 +337,7 @@
         "text": "下壕溝幫他們一起挖",
         "check": {
           "stat": "con",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "你挖到後半夜，雙手磨出血泡。漢子們分了你幾塊還能回爐的鐵料，說這些拿去鐵匠鋪能換口糧。",
@@ -355,7 +355,7 @@
         "text": "看看夯土的層次，指點他們往哪挖",
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你看出營壘的兵器庫該在背風的一側。他們照著挖，果然掘出一捆還算完好的矛頭，硬分了你一份錢。",
@@ -427,7 +427,7 @@
         },
         "check": {
           "stat": "agi",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你站在臺頂，看見東南幾股煙柱正往同一個方向移動，那是黃巾散部在聚攏。你把方向記牢，下去報給了路過的亭長。",
@@ -448,7 +448,7 @@
         "text": "搬開堵住臺門的亂石",
         "check": {
           "stat": "str",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "亂石後面是當年守卒的小屋，牆角還壓著一塊沉甸甸的黑石，摸上去冰涼。",
@@ -477,7 +477,7 @@
         },
         "check": {
           "stat": "agi",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你站在臺頂，看見西北一隊哨騎正往汝南城去。你把方向記牢，下山報給了營裡的人。",
@@ -509,7 +509,7 @@
         "text": "替他拔箭敷藥",
         "check": {
           "stat": "wis",
-          "difficulty": 4,
+          "grade": "easy",
           "by": "self"
         },
         "effect": {
@@ -527,7 +527,7 @@
         "text": "背他到汝南城外的鄉亭",
         "check": {
           "stat": "con",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你背著他走了二十里，鄉亭的亭長認得他，答應替他說情。",
@@ -573,7 +573,7 @@
           "tag": "療傷：拔箭、敷藥",
           "check": {
             "stat": "wis",
-            "difficulty": 4
+            "grade": "easy"
           },
           "effect": {
             "text": "你按住傷口，一下把箭頭剜了出來，又嚼了草藥敷上。他緩過氣來，拉著你的手說來世做牛做馬。",
@@ -595,7 +595,7 @@
           "tag": "背人：背他到鄉亭",
           "check": {
             "stat": "con",
-            "difficulty": 5
+            "grade": "normal"
           },
           "effect": {
             "text": "你背著他走了二十里，鄉亭的亭長認得他，答應替他說情。",
@@ -635,7 +635,7 @@
           "tag": "趁危：翻他的行囊、摸走他的錢",
           "check": {
             "stat": "agi",
-            "difficulty": 4
+            "grade": "easy"
           },
           "effect": {
             "text": "你假意替他找水，手往他的行囊裡一探，摸走了幾串錢。他看見了，沒力氣說話，只是把臉轉向壕壁。",
@@ -678,7 +678,7 @@
         "text": "盯著傭工量米，看他的斗有沒有鬼",
         "check": {
           "stat": "wis",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "你一把搶過斗來比給大家看，斗底墊高了一指。百姓一擁而上，米商只好按平價賣了。",
@@ -698,7 +698,7 @@
         "text": "擠進人群護住被推倒的老婦",
         "check": {
           "stat": "str",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "你用肩膀頂開人潮，把老婦扶到牆邊。她的米袋破了，你幫她把米一把把捧回去。",
@@ -733,7 +733,7 @@
         },
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你抓起那隻斗往秤上一放，足足少了兩成。圍觀的人一陣譁然，米商只好照舊價開倉，排隊的鄉民朝你連連作揖。",
@@ -774,7 +774,7 @@
           "tag": "揭穿：驗斗、量米、當眾拆穿",
           "check": {
             "stat": "wis",
-            "difficulty": 5
+            "grade": "normal"
           },
           "effect": {
             "text": "你抓起那隻斗往秤上一放，足足少了兩成。圍觀的人一陣譁然，米商只好照舊價開倉。",
@@ -799,7 +799,7 @@
           "tag": "護人：擠進去護住被推倒的人",
           "check": {
             "stat": "str",
-            "difficulty": 3
+            "grade": "easy", "shift": -1
           },
           "effect": {
             "text": "你用肩膀頂開人潮，把老婦扶到牆邊。她的米袋破了，你幫她一把把捧回去。",
@@ -856,7 +856,7 @@
         "text": "捲起袖子扛到天黑",
         "check": {
           "stat": "con",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "你扛了上百匹，肩膀腫得老高。布商點清了數，給的錢比說好的還多。",
@@ -877,7 +877,7 @@
         "text": "盯住那個瘦小子",
         "check": {
           "stat": "agi",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "瘦小子剛抽出一匹絹要跑，你一個箭步追上按住。布商大喜，賞你半匹料子，你轉手賣了。",
@@ -914,7 +914,7 @@
         "text": "脫了外衣下場",
         "check": {
           "stat": "str",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你抱住他的腰，一聲大喝把他摔出圈外。四周一片叫好，莊家只得掏錢。",
@@ -935,7 +935,7 @@
         "text": "看出莊家和大個子是一夥的",
         "check": {
           "stat": "wis",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "你看出每回賭注一大，大個子就故意輸。你跟著反著押，贏了一小筆就走。",
@@ -971,7 +971,7 @@
         "text": "借一張弓，連射三箭",
         "check": {
           "stat": "agi",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你算準了風，三箭都釘在靶心。門客們紛紛拱手，說要把你的名字報上去。",
@@ -990,7 +990,7 @@
         "text": "替他們把靶子扛到百步之外",
         "check": {
           "stat": "str",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "你一手一個扛著靶子走到百步外插好，門客們嘖嘖稱奇，請你喝了一壺酒。",
@@ -1025,7 +1025,7 @@
         "text": "跳下水去撈人",
         "check": {
           "stat": "con",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "河水冰涼刺骨，你憋著氣潛下去，抓住孩子的衣領把他拖上了岸。他吐了幾口水，哇地哭出聲來。",
@@ -1044,7 +1044,7 @@
         "text": "沿岸奔跑，拋繩過去",
         "check": {
           "stat": "agi",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "你追著竹竿跑了一段，看準時機把繩子拋過去，孩子死死抓住，被你拉了回來。",
@@ -1085,7 +1085,7 @@
           "tag": "下水：跳下去撈人",
           "check": {
             "stat": "con",
-            "difficulty": 5
+            "grade": "normal"
           },
           "effect": {
             "text": "河水冰涼刺骨，你憋著氣潛下去，抓住孩子的衣領把他拖上了岸。他吐了幾口水，哇地哭出聲來。",
@@ -1108,7 +1108,7 @@
           "tag": "拋繩：沿岸追、拋繩或竹竿",
           "check": {
             "stat": "agi",
-            "difficulty": 3
+            "grade": "easy", "shift": -1
           },
           "effect": {
             "text": "你追著竹竿跑了一段，看準時機把繩子拋過去，孩子死死抓住，被你拉了回來。",
@@ -1148,7 +1148,7 @@
         "text": "扛起郵袋，替他送進城",
         "check": {
           "stat": "str",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "郵袋裡全是竹簡，沉得很。你一路扛到曹家門口，門房接了信，給了你一串賞錢。",
@@ -1167,7 +1167,7 @@
         "text": "看看馬是怎麼了",
         "check": {
           "stat": "wis",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "你看出馬是吃了路邊的毒草，灌了些鹽水和泥漿，馬竟慢慢站了起來。驛卒千恩萬謝。",
@@ -1202,7 +1202,7 @@
         "text": "站定了硬接三棍",
         "check": {
           "stat": "str",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "三棍砸在你架起的木棒上，震得虎口發麻，你一步沒退。頭領哈哈大笑，把幾個練力氣的法子教給了你。",
@@ -1223,7 +1223,7 @@
         "text": "繞著他遊走閃避",
         "check": {
           "stat": "agi",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "你左閃右躲，三棍都落了空。家丁們看得直叫好，頭領也拱手說你腳下乾淨。",
@@ -1262,7 +1262,7 @@
         },
         "check": {
           "stat": "agi",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你在粟田裡追上那人，搜出一條寫著暗號的黃布。管事連夜派人去報了縣尉。",
@@ -1282,7 +1282,7 @@
         "text": "留在牆下細看他的腳印",
         "check": {
           "stat": "wis",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "腳印一深一淺，是個跛子，還沾著南邊黃泥。管事順著這條線，第二天就把莊裡通風報信的佃戶揪了出來。",
@@ -1311,7 +1311,7 @@
         },
         "check": {
           "stat": "agi",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你在粟田裡追上那人，低聲對了一句暗號，指給他一條沒有莊丁的田埂。回莊時你只說人跑了。",
@@ -1342,7 +1342,7 @@
         "text": "陪他一碗一碗喝到底",
         "check": {
           "stat": "con",
-          "difficulty": 5,
+          "grade": "normal",
           "by": "self"
         },
         "effect": {
@@ -1364,7 +1364,7 @@
         "text": "在席間替兩家塢主調停分攤",
         "check": {
           "stat": "wis",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "你替幾家算清了築塢各出多少人、多少糧，曹家管事很滿意，封了一份禮給你。",
@@ -1400,7 +1400,7 @@
         "text": "替佃戶算一筆帳，勸管事減租",
         "check": {
           "stat": "wis",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "你算給管事看，逼死了佃戶明年就沒人種地。管事想了想，減了兩成。佃戶們跪著向你道謝。",
@@ -1419,7 +1419,7 @@
         "text": "幫著把交上來的糧扛進倉",
         "check": {
           "stat": "str",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "你扛了一下午糧袋，管事給了你一份工錢，佃戶們看你的眼神卻有些冷。",
@@ -1482,7 +1482,7 @@
         "text": "把受傷的人一個個背出來，送往汝南",
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "grade": "normal", "shift": 1,
           "by": "self"
         },
         "effect": {
@@ -1506,7 +1506,7 @@
         },
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "一個老婦告訴你，那夥人往北邊的河灣去了，帶著搶來的牛。你把消息報給了巡路的鄉勇。",
@@ -1559,7 +1559,7 @@
         },
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你在河灣追上那夥人，報出自己的來歷，罵他們壞了大賢良師的規矩。為首的低著頭把牛趕了回來。",
@@ -1600,7 +1600,7 @@
           "tag": "搬運：把受傷的背出來、送到汝南",
           "check": {
             "stat": "con",
-            "difficulty": 6
+            "grade": "normal", "shift": 1
           },
           "effect": {
             "text": "你來回背了好幾趟，雙腿像灌了鉛。汝南城外的鄉亭收留了他們。",
@@ -1622,7 +1622,7 @@
           "tag": "安撫：好言相勸、問清散部去向",
           "check": {
             "stat": "wis",
-            "difficulty": 5
+            "grade": "normal"
           },
           "effect": {
             "text": "一個老婦告訴你，那夥人往北邊的河灣去了，帶著搶來的牛。你把消息報給了巡路的鄉勇。",
@@ -1692,7 +1692,7 @@
         },
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "grade": "normal", "shift": 1,
           "by": "self"
         },
         "effect": {
@@ -1718,7 +1718,7 @@
         },
         "check": {
           "stat": "con",
-          "difficulty": 5,
+          "grade": "normal",
           "by": "self"
         },
         "effect": {
@@ -1770,7 +1770,7 @@
         },
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "grade": "normal", "shift": 1
         },
         "effect": {
           "text": "三長一短是三天後聚眾。你照竹枝找到窪地裡的弟兄，替他們把散在附近的人一個個找了回來。",
@@ -1808,7 +1808,7 @@
         "text": "幫著把病人抬進營邊的草棚，熬一夜",
         "check": {
           "stat": "con",
-          "difficulty": 7,
+          "grade": "hard",
           "by": "self"
         },
         "effect": {
@@ -1830,7 +1830,7 @@
         "text": "嘗一口符水，看看裡面是什麼",
         "check": {
           "stat": "wis",
-          "difficulty": 8,
+          "grade": "hard", "shift": 1,
           "by": "self"
         },
         "effect": {
@@ -1876,7 +1876,7 @@
         },
         "check": {
           "stat": "agi",
-          "difficulty": 8
+          "grade": "hard", "shift": 1
         },
         "effect": {
           "text": "你摸進營裡，數清了糧倉和馬廄的位置，天亮前翻了出來，把這些畫在一塊木片上交給了官軍的斥候。",
@@ -1902,7 +1902,7 @@
         },
         "check": {
           "stat": "con",
-          "difficulty": 6,
+          "grade": "normal", "shift": 1,
           "by": "self"
         },
         "effect": {
@@ -1954,7 +1954,7 @@
         },
         "check": {
           "stat": "con",
-          "difficulty": 6
+          "grade": "normal", "shift": 1
         },
         "effect": {
           "text": "霧裡果然有人摸近柵欄，你一聲喊，巡哨的人圍過去，抓到一個官軍的斥候。渠帥第二天親自來看你。",
@@ -1999,7 +1999,7 @@
           "tag": "潛入：翻柵欄、摸進營裡",
           "check": {
             "stat": "agi",
-            "difficulty": 8
+            "grade": "hard", "shift": 1
           },
           "effect": {
             "text": "你摸進營裡，數清了糧倉和馬廄的位置，天亮前翻了出來，把這些畫在一塊木片上交給了斥候。",
@@ -2022,7 +2022,7 @@
           "tag": "守望：趴在溝裡數哨、看換班",
           "check": {
             "stat": "con",
-            "difficulty": 6
+            "grade": "normal", "shift": 1
           },
           "effect": {
             "text": "你在冰冷的泥溝裡趴了半夜，把巡哨的班次記得清清楚楚。",
@@ -2089,7 +2089,7 @@
         },
         "check": {
           "stat": "str",
-          "difficulty": 7
+          "grade": "hard"
         },
         "effect": {
           "text": "你把拒馬樁往肩上一甩，一口氣扛到寨門。渠帥大喜，硬塞給你一包錢，叫你考慮考慮入夥。",
@@ -2112,7 +2112,7 @@
         "text": "站在一旁看他怎麼排陣",
         "check": {
           "stat": "wis",
-          "difficulty": 7,
+          "grade": "hard",
           "by": "self"
         },
         "effect": {

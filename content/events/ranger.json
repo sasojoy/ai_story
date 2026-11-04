@@ -19,7 +19,7 @@
         "text": "上前喝止",
         "check": {
           "stat": "str",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你一聲斷喝，搶過為首那人的棍子折成兩截。地痞們一哄而散，老漢千恩萬謝，圍觀的人把這件事傳了好幾條街。",
@@ -74,7 +74,7 @@
         "text": "上山赴宴",
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "寨主想劫一支過路的商隊，請你壓陣。你看準時機，只取了一份最輕的就走，寨主反倒更敬你三分。",

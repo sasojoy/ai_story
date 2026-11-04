@@ -76,6 +76,60 @@ def stat_factor(content: Content, value: float, season=None) -> float:
     return max(encounter.BOOST_FLOOR, 1 + stat_bonus(content, value, season))
 
 
+# ── 屬性的讀法（屬性與跨季架構 v2 第二節 2.1；第十節 ① 骨架）──────────────────────────────────────────
+# 任何模組要「屬性換成效果」一律走 attr_effect（或沒有存檔的部下、量表走 hook_effect）：效果表在 Config.attributes.effects，
+# 有哪幾個鉤子寫在 ATTR_HOOKS。新功能要讀屬性：在這裡加一個鉤子、在效果表掛一條，不在程式裡寫死公式。
+# tests/core/test_attributes.py 掃 tianxia/ 直接讀屬性鍵的地方（只准少、不准多）。
+
+ATTR_HOOKS = {
+    "outer": "外功的加成（encounter.Boost.outer）",
+    "inner": "內功的加成（encounter.Boost.inner）",
+    "dodge": "落敗閃成僵持的機會（dodge_chance，寶物另外加、最後夾在 0～1）",
+}
+
+
+def attr_value(state: GameState, content: Content, world: WorldStateStore, key: str, attr: str) -> float:
+    """名冊上這個人（key：PLAYER 或同伴的 id）的一項屬性：本人照存檔（沒有這一項當 BASE_STAT），同伴照 member_stats。"""
+    if key == PLAYER:
+        return state.player.stats.get(attr, BASE_STAT)
+    return member_stats(state, content, world, key)[attr]
+
+
+def _curve(content: Content, row, value: float, rival: float | None, season) -> float:
+    if row.curve == "linear":
+        rate = per_point(content, season, row.per) if isinstance(row.per, str) else row.per
+        return rate * (value - row.origin)
+    if row.curve == "contest":
+        return row.cap * math.tanh((value - (row.origin if rival is None else rival)) / row.scale)
+    got = 0.0
+    for threshold, amount in row.steps:  # tiers：門檻由小到大（content 驗），到了哪一格給哪一格
+        if value >= threshold:
+            got = amount
+    return got
+
+
+def hook_effect(content: Content, hook: str, values, rivals=None, season=None) -> float:
+    """效果表上掛在 hook 的每一條相加：values 是這個人的屬性（鍵 → 值；缺的當 BASE_STAT），rivals 是對手的（contest 用；
+    沒給時對上 origin）。season（這一季的 WorldState）照 per_point：減法季每點加倍；None 一律舊數字。沒掛任何一條是 0。"""
+    total = None
+    for row in content.config.attributes.effects:
+        if row.hook != hook:
+            continue
+        rival = None if rivals is None else rivals.get(row.attr, BASE_STAT)
+        got = _curve(content, row, values.get(row.attr, BASE_STAT), rival, season)
+        total = got if total is None else total + got  # 只掛一條時就是那一條，一個位元都不多動
+    return 0.0 if total is None else total
+
+
+def attr_effect(state: GameState, content: Content, world: WorldStateStore, key: str, hook: str, rival=None) -> float:
+    """名冊上這個人在 hook 這一個讀點的效果（第二節 2.1「team.attr_effect(誰, 鉤子, 對手)」）：照效果表、照這一季的每點效果。
+    rival 是對手的屬性（鍵 → 值），contest 曲線才用得到。"""
+    attrs = {row.attr for row in content.config.attributes.effects if row.hook == hook}
+    values = {attr: (con_of(state, content, world, key) if attr == "con" else attr_value(state, content, world, key, attr))
+              for attr in attrs}  # 根骨照舊只從 con_of 讀
+    return hook_effect(content, hook, values, rival, getattr(state, "world", None))
+
+
 def con_of(state: GameState, content: Content, world: WorldStateStore, key: str) -> float:
     """名冊上這個人（key：PLAYER 或同伴的 id）的根骨，只從這裡讀：氣血四個函式的 con、內功的加成、一場的內傷。
     本人照存檔；同伴照 member_stats（內容的起始值加每級成長，人物資質設計 14.2；原本一律是基準）。
@@ -953,7 +1007,7 @@ def player_boost(state: GameState, content: Content, world: WorldStateStore, *, 
     正邪共鳴（5.1、7.4）。搭配至少是 BOOST_FLOOR、共鳴至少是 1，所以乘出來的 factor 不會低於下限。
     再乘身上兵器的加成（兵器設計第三節）與玉璽碎片的戰力（改版第三章，treasures.power_scale：沒碎片、開關關著是 1）。
     seal=False 不乘碎片：奪璽單挑的快照與江湖水漲的浮動難度照這一份（改版：碎片搶得走、強者的 +10% 不被對手同步吃掉）。"""
-    stats, member = state.player.stats, state.player.member
+    member = state.player.member
     wugong = player_art(state, content, world, member.wugong_id)
     neigong = player_art(state, content, world, member.neigong_id)
     factor = (pairing(content, wugong, neigong) * resonance(state, content, wugong) * resonance(state, content, neigong)
@@ -963,9 +1017,9 @@ def player_boost(state: GameState, content: Content, world: WorldStateStore, *, 
         factor *= scale
     if _BACKED.get() != 1.0:  # 並肩出陣：同上，沒有人陪的仗一個位元也不動
         factor *= _BACKED.get()
-    return encounter.Boost(  # 每一點的效果照這一季（stat_bonus 的 season：減法季每點加倍）
-        outer=stat_bonus(content, stats.get("str", BASE_STAT), state.world),
-        inner=stat_bonus(content, con_of(state, content, world, PLAYER), state.world),
+    return encounter.Boost(  # 每一點的效果照這一季（效果表的 per：減法季每點加倍）
+        outer=attr_effect(state, content, world, PLAYER, "outer"),
+        inner=attr_effect(state, content, world, PLAYER, "inner"),
         factor=factor,
     )
 
@@ -977,8 +1031,8 @@ def mate_boost(state: GameState, content: Content, world: WorldStateStore, key: 
     wugong = resolve_art(progress.wugong_id, content, world)
     neigong = resolve_art(progress.neigong_id, content, world)
     return encounter.Boost(
-        outer=stat_bonus(content, member_stats(state, content, world, key)["str"], state.world),
-        inner=stat_bonus(content, con_of(state, content, world, key), state.world),  # 根骨只從 con_of 讀
+        outer=attr_effect(state, content, world, key, "outer"),
+        inner=attr_effect(state, content, world, key, "inner"),  # 根骨只從 con_of 讀（attr_effect 裡）
         factor=pairing(content, wugong, neigong),
     )
 
@@ -991,7 +1045,7 @@ def follower_strength(content: Content, follower: FollowerDef, drill: FollowerDr
 def follower_boost(content: Content, follower: FollowerDef, drill: FollowerDrill | None = None, season=None) -> encounter.Boost:
     """部下的加成（人物資質設計 14.3）：只有一門武學，吃模板的臂力（加傳功傳的）；沒有內功、不算搭配與共鳴。部下以前完全沒有加成。
     season 見 stat_bonus（減法季每點加倍）。"""
-    return encounter.Boost(outer=stat_bonus(content, follower_strength(content, follower, drill), season))
+    return encounter.Boost(outer=hook_effect(content, "outer", {"str": follower_strength(content, follower, drill)}, season=season))
 
 
 def team_boosts(state: GameState, content: Content, world: WorldStateStore, *, seal: bool = True) -> list[encounter.Boost]:
@@ -1008,9 +1062,10 @@ def team_boosts(state: GameState, content: Content, world: WorldStateStore, *, s
 def dodge_chance(state: GameState, content: Content) -> float:
     """本人的身法讓落敗有機會閃成僵持（人物資質設計 14.4）：比 5 每多一點 dodge_per_point，夾在 0～1；同伴不另外算。
     金角 +3 個百分點（玉璽碎片設計 7.1）。每一點照這一季（per_point：減法季每點加倍）。"""
-    agi = float(state.player.stats.get("agi", BASE_STAT))
-    rate = per_point(content, getattr(state, "world", None), "dodge_per_point")
-    return min(1.0, max(0.0, (agi - BASE_STAT) * rate + treasures.amount(state, content, "dodge")))
+    mine = {row.attr: float(state.player.stats.get(row.attr, BASE_STAT))  # 只有本人：不經 world（量表與純函式也叫得到）
+            for row in content.config.attributes.effects if row.hook == "dodge"}
+    return min(1.0, max(0.0, hook_effect(content, "dodge", mine, season=getattr(state, "world", None))
+                        + treasures.amount(state, content, "dodge")))
 
 
 def armor_cut(state: GameState, content: Content, world: WorldStateStore) -> float:
