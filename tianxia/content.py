@@ -26,7 +26,7 @@ from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
     DIALOGUE_TAGS, ArtBook, Itinerary,
     BEST_OF, FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
-    CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
+    CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GearBook,
     GiftDef, Hints, MingtieContent, InsightDef, Location, Look, MallItem, MarkRule, MarkText, OppDef,
     InsightScene, Opening, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
     SimRumor, SkillDef,
@@ -143,7 +143,6 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         looks=_index(Look, _read(root / "looks.json")) if (root / "looks.json").exists() else {},  # 擂台形象（功能包 looks）
         relations=[_build(RelationDef, raw) for raw in _read(root / "relations.json")] if (root / "relations.json").exists() else [],
         itineraries=[_build(Itinerary, raw) for raw in _read(root / "itineraries.json")] if (root / "itineraries.json").exists() else [],
-        gather_branches=_index(GatherBranch, _read(root / "gather_branches.json")) if (root / "gather_branches.json").exists() else {},
         mark_rules=[_build(MarkRule, raw) for raw in _read(root / "mark_rules.json")] if (root / "mark_rules.json").exists() else [],
         outing_lines=_read(root / "outing_lines.json") if (root / "outing_lines.json").exists() else {},  # 探索一顆的段落（減法季批 2）
         verdicts=_read(root / "verdicts.json") if (root / "verdicts.json").exists() else {},  # 人物評曰的固定句（減法季批 7b-2）
@@ -1939,37 +1938,12 @@ def check_bounties(c: Content, need) -> None:
 
 
 def check_core_loop(c: Content, need) -> None:
-    """出陣探索與地盤的設定（Config.push_resistance、explore_modes）：阻力的兩段照大小排、二階素材的機會只寫危險度 1～3。"""
+    """出陣探索與地盤的設定（Config.push_resistance、jianfa.second_tier）：阻力的兩段照大小排、二階素材的機會只寫危險度 1～3。"""
     r = c.config.push_resistance
     need(r.full_within <= r.half_within,
          f"Config.push_resistance：full_within 不能大於 half_within（{r.full_within}、{r.half_within}）")
-    need(set(c.config.explore_modes.second_tier) <= {1, 2, 3},
-         f"Config.explore_modes.second_tier 的鍵是危險度 1～3：{sorted(c.config.explore_modes.second_tier)}")
-
-
-GATHER_BRANCH_FIELDS = {"place"}  # 分支第一句能用的佔位（GatherBranch.line）
-
-
-def check_gather_branches(c: Content, need) -> None:
-    """找素材分支（content/gather_branches.json，第 32 項）：id 不能是「自己說」那一顆的 say；屬性只能是素材表裡有的；
-    不是深入的要寫 attributes；標籤要有地點用；深入最多一條；第一句只能用 {place}。開關開著卻有城外地點一條都沒有不擋
-    （那裡照舊直接找素材，PM）。id 重複在載入時（_index）就擋。"""
-    from .explore_modes import SAY  # noqa: PLC0415  延後 import（同 validate 的 atlas）
-
-    attributes = {m.attribute for m in c.materials.values()}
-    tags = {tag for loc in c.locations.values() for tag in loc.tags}
-    where = "content/gather_branches.json"
-    need(sum(b.deep for b in c.gather_branches.values()) <= 1, f"{where}：深入（deep）最多一條")
-    for b in c.gather_branches.values():
-        need(b.id != SAY, f"{where}：id 不能是 {SAY}（「自己說」那一顆用掉了）")
-        need(b.deep or bool(b.attributes), f"{where}：{b.id} 不是深入，要寫 attributes")
-        known_attrs = [a for a in b.attributes if a not in attributes]
-        need(not known_attrs, f"{where}：{b.id} 的屬性 {known_attrs} 不在素材表裡")
-        need(len(set(b.attributes)) == len(b.attributes), f"{where}：{b.id} 的屬性重複")
-        unused = [t for t in b.tags if t not in tags]
-        need(bool(b.tags) and not unused, f"{where}：{b.id} 的標籤 {unused or '（空的）'} 沒有地點用")
-        fields = set(STEP_PLACEHOLDER.findall(b.line))
-        need(fields <= GATHER_BRANCH_FIELDS, f"{where}：{b.id} 的第一句只能用 {{place}}：{sorted(fields)}")
+    need(set(c.config.jianfa.second_tier) <= {1, 2, 3},
+         f"Config.jianfa.second_tier 的鍵是危險度 1～3：{sorted(c.config.jianfa.second_tier)}")
 
 
 def check_territory(c: Content, need, known, front_ids: list[str]) -> None:
@@ -3226,7 +3200,6 @@ def validate(c: Content) -> None:
     check_signature_arms(c, need, known)
     check_bounties(c, need)
     check_core_loop(c, need)
-    check_gather_branches(c, need)
     check_territory(c, need, known, front_ids)
     check_conquest_blocks(c, need, known, front_ids)
     check_siege_templates(c, need)

@@ -6,7 +6,7 @@
   那一段，Game 留一行委派 _duel_menu）；場景：duel_scene、bout_lines；放手一搏（頭目戰、擂台共用的鎖外三段式）：
   duel_free_text_prompt、duel_free_text_note、duel_text_check、duel_text_request、duel_gamble、stale_duel_request；戰法的亂數 bout_rng、
   陣營名 duel_side；防具的減損快照 duel_cut（戰力快照 Game._battle_gear 也叫它的委派：奪璽單挑吃防具）
-- 頭目的查詢：boss_face（那一面的名字）、boss_here、boss_ready、boss_wait_text、boss_used_up——探索包、三選一的練功、舊探索經 Game 的委派問
+- 頭目的查詢：boss_face（那一面的名字）、boss_ready——探索包、舊探索經 Game 的委派問
 
 留在 Game 的經 ctx：單打服務（_player_hp_and_cap、_battle_power、_battle_scores、_battle_role、_record_exp、_file_battle）、記錄（_log、_write、
 _outcome）、模型（_quick_client）；這一包被換掉的委派 _duel_finish（scripts/sim_season_one.py 換掉它數頭目戰的結果）也經 ctx。
@@ -326,23 +326,8 @@ def duel_cut(ctx) -> float:
 # ── 頭目的查詢（全部拆包第 12 批：原位叫 duel_rules 的那幾處改叫 Game 的一行委派，別的包經 ctx 問）──
 
 
-def boss_here(ctx) -> list[DuelBoss]:
-    """站在這裡的頭目（照 id 排），不管冷卻與次數（duel_rules.here）。"""
-    return duel_rules.here(ctx.state, ctx.content)
-
-
 def boss_ready(ctx) -> DuelBoss | None:
     """此刻在這裡遇得上的頭目（duel_rules.available）：不在序章、沒有正在打的、不在冷卻、這一隻的次數還沒用完。"""
     return duel_rules.available(ctx.state, ctx.content)
 
 
-def boss_wait_text(ctx) -> str:
-    """頭目冷卻還要等多久（現實的倒數，arena.wait_text：世界秒 ÷ time_scale）；不在冷卻是空字串（三選一的 Game._boss_away 讀）。"""
-    c = ctx.content
-    wait = duel_rules.cooldown_left(ctx.state, c.config.duel)
-    return arena.wait_text(wait / c.config.time_scale) if wait > 0 else ""
-
-
-def boss_used_up(ctx, boss_id: str) -> bool:
-    """這一隻的次數用完了沒（duel_rules.used_up：21 天季照這一週、其餘照這一季）。"""
-    return duel_rules.used_up(ctx.state, ctx.content, boss_id)

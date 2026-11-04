@@ -28,7 +28,6 @@ KNOWN = {
     ("battle_instance.py", "SuccessRateJudgment"): "放手一搏的評分：同上一類，分數帶要主機重量才能動",
     ("battle_instance.py", "GambleScore"): "大場面放手一搏的評分：同上",
     ("features/feast/rules.py", "ToastScore"): "敬酒評分：同上（宴客搬進功能包 tianxia/features/feast/）",
-    ("gather_llm.py", "reply_model"): "找素材的評分（create_model 動態組的類別，enum 照地點換）：同上",
     ("features/companions/companion_agent.py", "DriftSynthesis"): "人物心境整理：背景執行、失敗不影響玩家，還沒實測",
     ("yuedan.py", "YuedanBatch"): "月旦評：背景執行、有固定段退路，還沒實測",
 }

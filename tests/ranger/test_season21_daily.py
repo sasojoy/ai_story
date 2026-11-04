@@ -327,7 +327,7 @@ def test_season21_events_follow_the_same_speed():
     c = game.content
     c.config.season21_daily.push_speed = 0.5
     line, d = _back_to_middle(game)
-    share = c.config.explore_modes.event_trend_share if c.config.explore_modes.enabled else 1.0
+    share = c.config.event_trend_share
     assert game._shaped(line, d, "event")[0] == d * share * 0.5
     assert game._shaped(line, d, "event_once")[0] == d
 

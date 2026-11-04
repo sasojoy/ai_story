@@ -13,8 +13,8 @@ from tianxia.models import BlockDef
 from conquest_kit import conquest_game, plain_game
 from tianxia import conquest, rules, territory
 from tianxia import conquest, territory
-import random
-from tianxia import conquest, explore_modes, sensing, territory
+from tianxia import conquest, sensing, territory
+from tianxia.features.explore import explore_rules
 import calendar as pycal
 from datetime import datetime
 from tianxia import conquest, conquest_day
@@ -46,7 +46,7 @@ from tianxia import world as world_mod
 from conquest_kit import _new, conquest_rules, go, join
 from conftest import next_season, real_content
 from jianfa_kit import no_jianfa
-from tianxia import atlas, conquest, explore_modes, library, seal
+from tianxia import atlas, conquest, library, seal
 from tianxia import world as world_rules
 from tianxia.world_state import SealCache, SealRegistry
 
@@ -449,17 +449,17 @@ def test_newbie_heals_at_home_price_in_enemy_land():
 def _found_count(game, loc_id):
     s = game.state
     before = sum(s.player.materials.values())
-    game._gather(game.content.locations[loc_id], random.Random(7))
+    game._home_gather(game.content.locations[loc_id], [])
     return sum(s.player.materials.values()) - before
 
 
 def _lucky_seq(game, hit):
-    """找一個這一下「領地」那顆骰擲中（hit）或沒中的探索流水號（_explore_mode 擲之前先加一，所以回的是擲那一下的流水號）。"""
+    """找一個這一下「領地」那顆骰擲中（hit）或沒中的探索流水號。"""
     p = game.state.player
     season = game.world.get_season_number()
     chance = game.content.config.conquest.gather_bonus_chance
     for seq in range(1, 200):
-        if (explore_modes.rng_for(season, p.name, seq, "領地").random() < chance) == hit:
+        if (explore_rules.find_rng(season, p.name, seq, "領地").random() < chance) == hit:
             return seq
     raise AssertionError("找不到")
 
@@ -1250,7 +1250,7 @@ NAME = "沈浪"
 
 def _content(hide: float = 1.0, find: float = 1.0, profile: str = "season21"):
     """正式內容（21 天季）、領地爭奪打開；hide／find 是這一批的兩個機率（1.0＝一定藏、一定撿到，好測）。"""
-    c = no_jianfa(conquest_rules(real_content(profile)))  # 這一份測探索三選一撿碎片（explore:*）；出門一趟撿碎片在 tests/test_explore_one.py
+    c = no_jianfa(conquest_rules(real_content(profile)))  # 這一份直接問探索撿碎片那一下（_explore_here）；出門一趟撿碎片在 tests/test_explore_one.py
     c.config.seal.cache.hide_chance, c.config.seal.cache.find_chance = hide, find
     return c
 
@@ -1277,13 +1277,10 @@ def _stand(game, loc_id: str, faction: str | None = None):
     return game
 
 
-def _mode_for(game, mode: str) -> str:
-    """explore_modes 的四種：找素材有分支層時要指一條分支（不然只回 GATHER_PICK、不花體力）。"""
-    if mode != "gather":
-        return mode
-    loc = game.content.locations[game.state.player.location]
-    layers = explore_modes.layered(game.content, game.state.world, loc)
-    return f"gather:{layers[0].id}" if layers else "gather"
+def _explore_here(game):
+    """探索擲碎片那一下：流水號加一、問 Game._seal_find（探索一顆的收尾叫它）。"""
+    game.state.player.explore_seq += 1
+    return game._seal_find(game.state.player.location)
 
 
 def _move_cache(game, loc_id: str) -> None:
@@ -1399,19 +1396,17 @@ def test_the_mandate_season_hides_nothing_and_the_one_after_hides_again():
 # ── 撿 ──────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("mode", ["gather", "seek", "sense", "practice"])
-def test_find_only_at_the_cache_and_all_four_explore_modes_roll(mode):
-    """只在藏碎片的那一塊擲；探索的四種（找素材、找事件、靜心感悟、練功，計畫第八章裁決 13）都擲。別處探索一百次也撿不到。"""
+def test_find_only_at_the_cache():
+    """只在藏碎片的那一塊擲。別處探索一百次也撿不到。"""
     game = _game_seal()
     cache = _cache(game)
     away = next(loc for loc in _neutral_seal(game.content) if loc != cache.loc)
     _stand(game, away)
     for _ in range(6):
-        game._explore_mode(_mode_for(game, mode))
-        game.state.player.stamina = 250.0
+        _explore_here(game)
     assert seal.shard_of(_reg(game), NAME) is None and _cache(game) == cache  # 沒藏碎片的塊：不擲、藏處紋風不動
     go(game, cache.loc)
-    game._explore_mode(_mode_for(game, mode))
+    _explore_here(game)
     reg = _reg(game)
     shard = seal.shard_of(reg, NAME)
     assert shard is not None and shard.id == cache.shard and shard.since_season == 1 and shard.emerged_round == reg.round
@@ -1425,7 +1420,7 @@ def test_the_finder_gets_the_heirloom_and_learns_the_emerge_skill():
     game = _game_seal()
     _stand(game, _cache(game).loc)
     assert "hunyuan" not in library.owned_arts(game.state)
-    game.choose(f"explore:{_mode_for(game, 'seek')}")
+    _explore_here(game)
     p = game.state.player
     assert p.heirloom is not None and p.heirloom.template == seal.shard_of(_reg(game), NAME).id
     assert "hunyuan" in library.owned_arts(game.state)
@@ -1438,12 +1433,11 @@ def test_one_shard_per_season_and_nobody_else_finds_it():
     game = _game_seal()
     loc = _cache(game).loc
     _stand(game, loc)
-    game._explore_mode(_mode_for(game, "seek"))
+    _explore_here(game)
     other = _new(game.content, "旁人", game.world)
     _stand(other, loc)
     for _ in range(5):
-        other._explore_mode(_mode_for(other, "seek"))
-        other.state.player.stamina = 250.0
+        _explore_here(other)
     assert seal.shard_of(_reg(other), "旁人") is None
     assert len(seal.holders(_reg(other))) == 1 and _cache(other) is None
 
@@ -1460,7 +1454,7 @@ def test_someone_who_already_holds_a_shard_does_not_find_a_second():
 
     game.world.mutate(_hold)
     _stand(game, cache.loc)
-    game._explore_mode(_mode_for(game, "seek"))
+    _explore_here(game)
     assert _cache(game) == cache and seal.shard_of(_reg(game), NAME).id == held
 
 
@@ -1474,14 +1468,14 @@ def test_no_find_while_the_block_is_cooling():
     game._save_season()
     assert conquest.cooling(game.state.world, c, cache.loc)
     for _ in range(3):
-        game._explore_mode(_mode_for(game, "seek"))
+        _explore_here(game)
         game.state.player.stamina = 250.0
     assert conquest.cooling(game.state.world, c, cache.loc)
     assert seal.shard_of(_reg(game), NAME) is None and _cache(game) == cache  # 修前冷卻期照擲（find_chance 1.0：一定撿到）
     fight = game.state.world.conquest.fights[cache.loc]
     fight.flipped_at -= conquest._seconds(c, c.config.conquest.cooldown_minutes) + 1  # 冷卻過了
     game._save_season()
-    game._explore_mode(_mode_for(game, "seek"))
+    _explore_here(game)
     assert seal.shard_of(_reg(game), NAME) is not None
 
 
@@ -1501,11 +1495,11 @@ def test_the_find_roll_scales_for_the_holding_side(monkeypatch):
     calls = []
     monkeypatch.setattr(seal, "find", lambda reg_, tianji, name, seq, own_, cfg_: calls.append(own_) or False)
     _stand(game, loc, "guan")
-    game._explore_mode(_mode_for(game, "seek"))  # 沒人佔的中立地：不算自家
+    _explore_here(game)  # 沒人佔的中立地：不算自家
     conquest.set_control(game.state.world, game.content, loc, "guan")
-    game._explore_mode(_mode_for(game, "seek"))  # 官軍佔下了：官軍的人算自家
+    _explore_here(game)  # 官軍佔下了：官軍的人算自家
     game.state.player.faction = "huang"
-    game._explore_mode(_mode_for(game, "seek"))  # 黃巾的人在官軍佔的地方：不算
+    _explore_here(game)  # 黃巾的人在官軍佔的地方：不算
     assert calls == [False, True, False]
 
 
@@ -1520,20 +1514,20 @@ def test_a_gentry_follower_gets_the_scale_on_the_side_he_follows_and_a_ranger_ne
     p = game.state.player
     assert rules.haoqiang_allied(game.content, game.state.world)
     p.ally = "guan"
-    game._explore_mode(_mode_for(game, "seek"))  # 沒人佔：不算
+    _explore_here(game)  # 沒人佔：不算
     conquest.set_control(game.state.world, game.content, loc, "guan")
-    game._explore_mode(_mode_for(game, "seek"))  # 他依附的官軍佔下了：算自家
+    _explore_here(game)  # 他依附的官軍佔下了：算自家
     conquest.set_control(game.state.world, game.content, loc, "huang")
-    game._explore_mode(_mode_for(game, "seek"))  # 另一軍佔著：不算
+    _explore_here(game)  # 另一軍佔著：不算
     p.ally = "huang"
-    game._explore_mode(_mode_for(game, "seek"))  # 改依附黃巾：算
+    _explore_here(game)  # 改依附黃巾：算
     assert calls == [False, True, False, True]
     calls.clear()
     p.faction, p.ally = None, None  # 散人
     conquest.set_control(game.state.world, game.content, loc, None)
-    game._explore_mode(_mode_for(game, "seek"))  # 沒人佔（控制方 None）：散人也不算
+    _explore_here(game)  # 沒人佔（控制方 None）：散人也不算
     conquest.set_control(game.state.world, game.content, loc, "guan")
-    game._explore_mode(_mode_for(game, "seek"))
+    _explore_here(game)
     assert calls == [False, False]
 
 
@@ -1562,7 +1556,7 @@ def test_stamping_the_mandate_mid_season_clears_the_cache():
     assert game.world.get_season().mandate and any("天命之季" in line for line in out)
     assert _cache(game) is None
     _stand(game, cache.loc)
-    game._explore_mode(_mode_for(game, "seek"))
+    _explore_here(game)
     reg = _reg(game)
     assert seal.shard_of(reg, NAME) is None and reg.shards[cache.shard].state == "hidden" and reg.emerge_season is None
 
@@ -1615,7 +1609,7 @@ def test_the_hiding_place_is_not_observable_from_outside():
     assert _snapshot(a) == _snapshot(b)
     for game in (a, b):
         _stand(game, here)
-        game.choose(f"explore:{_mode_for(game, 'seek')}")
+        _explore_here(game)
     assert _snapshot(a) == _snapshot(b)
     assert a.state.player.model_dump_json() == b.state.player.model_dump_json()
     assert a.rng.getstate() == b.rng.getstate()
@@ -1627,7 +1621,7 @@ def test_the_find_is_announced_without_naming_the_place():
     loc = _cache(game).loc
     place = game.content.locations[loc].name
     _stand(game, loc)
-    game._explore_mode(_mode_for(game, "seek"))
+    _explore_here(game)
     season = game.world.get_season()
     said = [r.text for r in season.rumors if r.layer == "world"] + [r.text for r in season.chronicle] + [game.chronicle_text()]
     assert any(NAME in line and "傳國玉璽" in line for line in said)

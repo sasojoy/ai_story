@@ -122,7 +122,7 @@ SHARED: dict[str, str] = {
               "（讀輿圖的路線 atlas 記在 SHARED_PENDING：第 50 批那一半進這一層）",
     "ranger": "遊俠名號（散人的成長階梯、經驗倍數）：核心的 rules 讀，Game 的戰後獎勵與狀態列也叫；出陣包與懸賞（bounties）、同伴招募（roster）、"
               "玩家卡（social）、行狀（annals：列傳讀它記下的名號）都叫",
-    "precise": "一類一顆（每一顆行動鈕只給一類東西）：出陣包的獎勵與懸賞、有所感、玩法說明讀（讀三選一的開關與 is_town 記在 SHARED_PENDING：第 13 批）",
+    "precise": "一類一顆（每一顆行動鈕只給一類東西）與算不算城鎮（is_town）：出陣、探索、引導三包的獎勵與懸賞、有所感、玩法說明讀",
     # 其餘（12 個；總表寫 20 個，events、tiers、narration、leaderboard、rumor_view 先不收：讀擂台、伏筆、機緣，理由在 SHARED_LATER）
     "renown": "名聲（名望、善惡稱號、跨段）：核心的 rules、team、world_state 讀；決戰、探索、宴客、酒肆四包與十幾個舊模組都叫（總表附錄甲裁定）",
     "speech": "玩家寫給別人看的一句話（擋髒話）：探索包的題壁、形象包的招式名與名帖、挑釁共用（總表附錄甲裁定）",
