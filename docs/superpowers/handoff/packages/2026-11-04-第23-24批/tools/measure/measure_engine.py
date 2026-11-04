@@ -1,5 +1,6 @@
 """量「改 engine.py 一個方法的最後一行」test_for 挑到幾條：臨時在那個方法最後一行行尾加一個註解，跑 --count（不含／含 slow），
-寫回原本的位元組（finally），確認一個位元組都沒變。"""
+寫回原本的位元組（finally），確認一個位元組都沒變。
+用法：python measure_engine.py <git 工作樹> <Game 方法名…>。test_for 要問 git，所以要量 base 用 git worktree add --detach，不能用 git archive 解出來的。"""
 import ast
 import io
 import os

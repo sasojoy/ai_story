@@ -1,6 +1,7 @@
-"""三張圖（sanity）：drive.py season21 hb snap 留下的三個快照（boss、ring、titles），各自起兩台（HEAD 8169 bout1chk.localhost、
-BASE 8170 127.0.0.1，時鐘凍在快照那一刻；ring、titles 照 drive 那一刻把擂台的週解鎖關掉），無頭 Chromium 375×812 淺色各拍一張，
-再並排（上面一條寫是哪一版、png 的 sha256 前 12 碼）、印逐像素差幾個。python shots.py"""
+"""截圖：drive.py <設定> hb snap 留下的快照，各自起兩台（埠照 QA_PORTS、HEAD 用 <QA_HOST>.localhost、BASE 用 127.0.0.1，時鐘凍在快照那一刻），
+無頭 Chromium 各拍一張，再並排（上面一條寫是哪一版、png 的 sha256 前 12 碼）、印逐像素差幾個。python shots.py
+PHASES 是第 12 批的三個場景（ring、titles 照 drive 那一刻把擂台的週解鎖關掉），換成你這一批的；標籤要跟 drive.py 的 X.backup、shots.mjs 的 phase 一致。
+視窗與配色看 QA_W、QA_H、QA_SCHEME（shots.mjs 讀）；CDP 埠是 QA_PORTS 各加 1200。"""
 import hashlib
 import io
 import os
@@ -24,8 +25,13 @@ PHASES = {"boss": ("qa12boss", "1-boss", "江湖頁：頭目戰打到一半（�
           "ring": ("qa12ring2", "2-arena", "擂台：挑范映雪打到一半（放手一搏之後；柯遠帆）", True),
           "titles": ("qa12ring2", "3-board", "見聞・榜單：擂台榜（天下第一；柯遠帆）", True)}
 PORTS = tuple(int(x) for x in os.environ.get("QA_PORTS", "8161,8162").split(","))
-SIDES = {"head": (CHK / "HEAD", PORTS[0], f"http://{os.environ.get('QA_HOST', 'qachk')}.localhost:{PORTS[0]}/", 9369, "A"),
-         "base": (CHK / "BASE", PORTS[1], f"http://127.0.0.1:{PORTS[1]}/", 9370, "B")}
+SIDES = {"head": (CHK / "HEAD", PORTS[0], f"http://{os.environ.get('QA_HOST', 'qachk')}.localhost:{PORTS[0]}/", PORTS[0] + 1200, "A"),
+         "base": (CHK / "BASE", PORTS[1], f"http://127.0.0.1:{PORTS[1]}/", PORTS[1] + 1200, "B")}
+
+
+def _short(side: str) -> str:
+    """並排圖上標的版本：照 $QA_DIR 底下那份工作樹現在的 commit。"""
+    return subprocess.check_output(["git", "-C", str(CHK / side), "rev-parse", "--short=8", "HEAD"], text=True).strip()
 
 
 def backup(src: Path, dst: Path) -> None:
@@ -65,7 +71,7 @@ for phase, (login, key, title, unlock) in PHASES.items():
                        PYTHONIOENCODING="utf-8", PYTHONHASHSEED="0", TIANXIA_PROFILE=PROFILE)
             env.pop("TIANXIA_PUBLIC_URL", None)
             log = open(CHK / "logs" / f"shot-{phase}-{side}.log", "w", encoding="utf-8")
-            procs.append((subprocess.Popen([PY, "-u", "-X", "utf8", str(CHK / "s" / "serve.py")], cwd=str(root), env=env,
+            procs.append((subprocess.Popen([PY, "-u", "-X", "utf8", str(Path(__file__).with_name("serve.py"))], cwd=str(root), env=env,
                                            stdout=log, stderr=subprocess.STDOUT), log))
         for side, (root, port, url, cdp, ab) in SIDES.items():
             assert listening(port), port
@@ -73,7 +79,7 @@ for phase, (login, key, title, unlock) in PHASES.items():
                 print(phase, side, requests.post(f"http://127.0.0.1:{port}/__qa/tweak", json={"path": "jianfa.week_unlock", "value": False},
                                                  timeout=30).json(), flush=True)
         for side, (root, port, url, cdp, ab) in SIDES.items():
-            r = subprocess.run(["node", "--no-warnings", str(CHK / "s" / "shots.mjs"), url, side, phase, str(SHOTS), str(cdp), login],
+            r = subprocess.run(["node", "--no-warnings", str(Path(__file__).with_name("shots.mjs")), url, side, phase, str(SHOTS), str(cdp), login],
                                capture_output=True, text=True, encoding="utf-8", timeout=180)
             print(phase, side, r.stdout.strip()[:900], r.stderr.strip()[:300], flush=True)
     finally:
@@ -96,7 +102,7 @@ for phase, (login, key, title, unlock) in PHASES.items():
     gap, band = 24, 84
     out = Image.new("RGB", (w * 2 + gap, h + band), (255, 255, 255))
     d = ImageDraw.Draw(out)
-    for i, (side, label) in enumerate((("head", "HEAD 7857b79e"), ("base", "BASE c4a838f2"))):
+    for i, (side, label) in enumerate((("head", "HEAD " + _short("HEAD")), ("base", "BASE " + _short("BASE")))):
         x = i * (w + gap)
         out.paste(imgs[side], (x, band))
         d.text((x + 12, 6), f"{label}　png {sha[side]}", fill=(30, 30, 30), font=font)

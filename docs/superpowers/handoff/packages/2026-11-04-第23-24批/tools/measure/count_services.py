@@ -1,3 +1,4 @@
+"""印服務清單（services.py 說明字裡寫成 `ctx.<名字>` 的）與共用規則層的數量。用法：python count_services.py <樹…>"""
 import ast
 import io
 import re

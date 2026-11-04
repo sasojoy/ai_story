@@ -1,4 +1,4 @@
-"""Start the merged tree's server with the model pointed at 127.0.0.1:9 (never 11434): serve.py <tree> <port>."""
+"""Start the merged tree's server with the model pointed at 127.0.0.1:9 (never 11434): boot_server.py <tree> <port>."""
 import sys
 
 sys.path.insert(0, sys.argv[1])

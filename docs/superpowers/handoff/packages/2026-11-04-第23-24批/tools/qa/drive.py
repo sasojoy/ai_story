@@ -3,7 +3,7 @@
 要換成你這一批的：flow()、帳號名單、/__qa/peek 讀的欄位。用法看工作包的「共用-環境與做法.md」第六節。"""
 """單挑包第 1 批（全部拆包第 12 批：單人頭目戰、擂台、場邊事件）QA：兩台真伺服器逐位元組比（照 b8-chk/s/drive.py、b22-chk/s/drive.py 改）。
 python drive.py <season21|week7> <hb|hh|bb|mh> [snap]
-  hb：A＝HEAD（埠 8169、Host bout1chk.localhost:8169）、B＝BASE（埠 8170、Host 127.0.0.1:8170）；hh／bb：同一份跑兩台（看凍不凍得住）；
+  hb：A＝HEAD（QA_PORTS 第一個埠、Host <QA_HOST>.localhost）、B＝BASE（第二個埠、Host 127.0.0.1）；hh／bb：同一份跑兩台（看凍不凍得住）；
   mh：A＝MUT（HEAD 改一個字，看比對有沒有牙）、B＝HEAD。
   snap：在三個點（頭目戰打到一半、擂台收場之後、收季之前看稱號）把 A 的資料庫備份下來（B 也備），給截圖用。
 每一步：兩台的假時鐘各往前推 DT 秒，同一個請求（同帳號各自的 cookie）先打 A 再打 B，等鎖外的背景執行緒停了，狀態碼與內容逐位元組比。

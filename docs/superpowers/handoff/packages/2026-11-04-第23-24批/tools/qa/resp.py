@@ -1,4 +1,4 @@
-"""看存下來的回應：python resp.py <run 資料夾名> <步數…> [--keys]：印頂層鍵、message、latest、main.scene 的前幾百字。"""
+"""看存下來的回應：python resp.py <run 資料夾名> [re=<正規式>] <步數…>：印頂層鍵、message、latest、main.scene 的前幾百字。"""
 import os
 import io
 import json

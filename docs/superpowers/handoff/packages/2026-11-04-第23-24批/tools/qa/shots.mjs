@@ -1,4 +1,5 @@
-// 單挑包第 1 批（全部拆包第 12 批）QA 的三張圖（sanity；照 b8-chk/s/shots.mjs 改）：無頭 Chromium＋CDP，375×812 淺色、動畫關掉。
+// QA 的截圖：無頭 Chromium＋CDP，動畫關掉。視窗與配色看環境變數 QA_W、QA_H、QA_SCHEME（預設 375、812、light）；回應 4xx、5xx 與 /api/sense* 記進 notes。
+// boss、ring、titles 是第 12 批的場景，canvas 是第 24 批畫一筆（**沒有實際跑過**，第一次跑要驗）。換成你這一批的。
 // node shots.mjs <網址> <標籤 head|base> <boss|ring|titles> <輸出資料夾> <CDP 埠> <帳號>
 //   boss：江湖頁的頭目戰場景卡（打到一半）；ring：擂台那一層（打到一半）；titles：見聞 → 榜單，捲到擂台榜
 import { spawn } from "node:child_process";
@@ -9,6 +10,7 @@ const [URL, tag, phase, outDir, cdpPort, login] = process.argv.slice(2);
 const QA = process.env.QA_DIR;
 const CHROME = process.env.QA_CHROME || path.join(process.env.LOCALAPPDATA || "", "ms-playwright", "chromium-1208", "chrome-win64", "chrome.exe");  // 別的系統設 QA_CHROME
 const CDP = Number(cdpPort);
+const W = Number(process.env.QA_W || 375), H = Number(process.env.QA_H || 812), SCHEME = process.env.QA_SCHEME || "light";
 fs.mkdirSync(outDir, { recursive: true });
 const profileDir = path.join(QA, "chrome", `${tag}-${phase}`);
 fs.rmSync(profileDir, { recursive: true, force: true });
@@ -32,6 +34,11 @@ try {
   ws.addEventListener("message", (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.id && waiting.has(msg.id)) { waiting.get(msg.id)(msg); waiting.delete(msg.id); return; }
+    if (msg.method === "Network.responseReceived") {
+      const { status, url } = msg.params.response;
+      if (status >= 400) NOTES.push({ httpError: status, url: url.slice(0, 200) });
+      if (url.includes("/api/sense")) NOTES.push({ route: new globalThis.URL(url).pathname, status });
+    }
     if (msg.method === "Runtime.exceptionThrown") NOTES.push({ exception: ((msg.params.exceptionDetails.exception || {}).description || "").slice(0, 300) });
     if (msg.method === "Runtime.consoleAPICalled" && msg.params.type === "error") NOTES.push({ consoleError: (msg.params.args || []).map((a) => a.value ?? a.description).join(" ").slice(0, 300) });
   });
@@ -43,9 +50,12 @@ try {
   };
   await send("Page.enable");
   await send("Runtime.enable");
+  await send("Network.enable");
   await send("Network.setCacheDisabled", { cacheDisabled: true });
-  await send("Emulation.setDeviceMetricsOverride", { width: 375, height: 812, deviceScaleFactor: 2, mobile: true });
-  await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }, { name: "prefers-reduced-motion", value: "reduce" }] });
+  // 畫一筆的點位帶 performance.now() 的毫秒，外殼凍不住；兩台換成同一顆計數，不然 /api/sense 的回應比不了
+  if (phase === "canvas") await send("Page.addScriptToEvaluateOnNewDocument", { source: "(() => { let t = 1000; performance.now = () => (t += 16); })();" });
+  await send("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: 2, mobile: W < 768 });
+  await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: SCHEME }, { name: "prefers-reduced-motion", value: "reduce" }] });
   const NO_MOTION = `if (!document.getElementById("qa-nomotion")) { const st = document.createElement("style"); st.id = "qa-nomotion"; st.textContent = "*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}"; document.head.appendChild(st); } return 1;`;
   const waitFor = async (js, ms = 10000) => {
     const t0 = Date.now();
@@ -84,7 +94,23 @@ try {
     if (!hit) break;
     await sleep(1500);
   }
-  if (phase === "boss") {
+  if (phase === "canvas") {
+    // 第 24 批：進了感悟狀態（快照停在那一刻）。canvas 用 setPointerCapture，合成的 PointerEvent 會丟錯，一定要用 CDP 的真事件。
+    NOTES.push({ open: await clickSel('[data-act="choose"][data-id="sense:draw"]') });  // 打 /api/sense_warm
+    await waitFor(`document.querySelector("#sense-canvas")`);
+    const r = await run(`document.querySelector("#sense-canvas").scrollIntoView(); const b = document.querySelector("#sense-canvas").getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height };`);
+    const mouse = (type, x, y, buttons) => send("Input.dispatchMouseEvent", { type, x, y, button: "left", buttons, clickCount: 1 });
+    // 一筆：左上到右下再折回來（讀不出來就照 tianxia/features/sense/glyph.py 的 SAMPLES 換點位，兩台要同一組）
+    const pts = Array.from({ length: 24 }, (_, i) => { const t = i / 23; return [r.x + r.w * (0.2 + 0.6 * (t < 0.5 ? t * 2 : 2 - t * 2)), r.y + r.h * (0.2 + 0.6 * t)]; });
+    await mouse("mousePressed", pts[0][0], pts[0][1], 1);
+    for (const [x, y] of pts.slice(1)) { await mouse("mouseMoved", x, y, 1); await sleep(30); }
+    await mouse("mouseReleased", pts[23][0], pts[23][1], 0);  // pointerup 打 /api/sense_read
+    await sleep(1500);
+    await shot("canvas", "#sense-canvas");
+    NOTES.push({ send: await clickSel('[data-act="sense-send"]') });  // 打 /api/sense
+    await sleep(3000);
+    await shot("after");
+  } else if (phase === "boss") {
     await shot("1-boss", "#page section.card.scene");
   } else if (phase === "ring") {
     NOTES.push({ arenaLayer: await run(`return !!document.querySelector(".shop-layer.shop-arena");`) });
