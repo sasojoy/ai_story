@@ -4009,9 +4009,10 @@ class AttrV2Rules(_Strict):
         AttrEffect(attr="str", hook="outer", curve="contest", cap=0.6, scale=40, origin=50),
         AttrEffect(attr="int", hook="inner", curve="contest", cap=0.6, scale=40, origin=50),
         AttrEffect(attr="spd", hook="dodge", curve="contest", cap=0.25, scale=40, origin=50),
+        AttrEffect(attr="lead", hook="guard", curve="contest", cap=0.3, scale=40, origin=50),  # 統御對他的武力：一場少掉幾成氣血
     ])
     # 對抗式的「他」：outer 對上的是對手的哪一項（武力打統御）；沒寫的對上同一項
-    against: dict[str, str] = Field(default_factory=lambda: {"str": "lead"})
+    against: dict[str, str] = Field(default_factory=lambda: {"str": "lead", "lead": "str"})
     # 對手（散兵、野怪、劇情戰、頭目）沒寫等級時照難度換等級（[難度, 等級]，中間照直線；量自整季機器人的威力，2026-11-04）【草】
     foe_levels: list[tuple[float, float]] = Field(default_factory=lambda: [
         (9, 1), (30, 8), (200, 12), (400, 17), (600, 21), (1200, 30), (3000, 45), (6000, 60)])

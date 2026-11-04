@@ -200,3 +200,24 @@ def test_figures_grow_with_the_calendar_instead_of_rise():
     assert attrset.foe_level(c, attrset.foe_difficulty(c, 25)) == pytest.approx(25)
     old = _game(False)
     assert old._figure_squad(fid).level is None
+
+
+def test_command_cuts_the_hp_lost_against_their_force():
+    g = _game()
+    c = g.content
+    _level(g, 21)
+    weak = c.squads[min(c.squads, key=lambda k: c.squads[k].difficulty)]
+    brute = weak.model_copy(update={"level": 21, "aptitude": {"str": 9}})
+
+    def lost(preset, squad):
+        g.pick_growth(preset)
+        m = g.state.player.member
+        m.neili, m.injury = None, 0.0
+        before, cap = g._player_hp_and_cap()
+        team.take_encounter_toll(g.state, c, g.world, "落敗", squad=squad)
+        return (before - g._player_hp()) / cap  # 照上限的比例（根骨〔統御〕也拉高上限）
+
+    assert lost("warrior", weak) < lost("strategist", weak)  # 統御每級 3 對 2、身法一樣：同一隊少掉的比例小
+    assert lost("warrior", weak) < lost("warrior", brute)  # 他的武力越高，擋掉的越少
+    old = _game(False)
+    assert team._guard(old.state, old.content, old.world, weak) == 0.0

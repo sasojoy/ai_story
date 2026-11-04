@@ -85,7 +85,17 @@ ATTR_HOOKS = {
     "outer": "外功的加成（encounter.Boost.outer）",
     "inner": "內功的加成（encounter.Boost.inner）",
     "dodge": "落敗閃成僵持的機會（dodge_chance，寶物另外加、最後夾在 0～1）",
+    "guard": "一場少掉幾成氣血（take_encounter_toll；五項屬性的季才有：統御對他的武力）",
 }
+
+
+def _guard(state: GameState, content: Content, world: WorldStateStore, squad) -> float:
+    """本人這一場少掉幾成氣血（屬性與跨季架構 v2 第三節：統御管防禦）：五項屬性的季照效果表的 guard 對這一隊（squad）的屬性；
+    舊的季是 0（一個字都不變）。"""
+    if not attrset.on(content, getattr(state, "world", None)):
+        return 0.0
+    with facing(state, content, squad):
+        return attr_effect(state, content, world, PLAYER, "guard")
 
 
 def stat_keys(state: GameState, content: Content) -> tuple[str, ...]:
@@ -1145,6 +1155,7 @@ def duel_armor_cut(state: GameState, content: Content, world: WorldStateStore) -
 
 def take_encounter_toll(
     state: GameState, content: Content, world: WorldStateStore, tier: str, *, wild: bool = False, share: float = 1.0,
+    squad=None,
 ) -> list[str]:
     """一場遭遇戰打完的氣血代價（氣血設計 §1.3）：按結果扣氣血，其中一部分變成內傷。
 
@@ -1160,6 +1171,7 @@ def take_encounter_toll(
     `Config.armor.total_cap`；同伴不吃防具。
     share：對手真的打到你的回合佔幾成（本命戰法讓他定身、打空、打到自己、化影的回合不算，tactics.Clash.blocked_share）；平常是 1。
     本人帶螭首（玉璽碎片改版，treasures.amount 的 injury）時變成內傷的那一份再乘它；同伴不吃。
+    squad：這一場的對手。五項屬性的季本人照統御對他的武力少掉幾成（_guard）；舊的季不看。
     """
     cfg = content.config
     fraction = cfg.encounter_neili_loss.get(tier, 0.0) * (cfg.wild_neili_loss_factor if wild else 1.0) * max(0.0, share)
@@ -1167,13 +1179,14 @@ def take_encounter_toll(
         return []
     stats = state.player.stats
     msgs = []
+    guard = _guard(state, content, world, squad)
     for key in team_keys(state):
         if key == PLAYER:
             lo = traits.loadout(state, content, world)
             # 化勁（13.2）＋防具（裝備四欄 4.3），合計夾在 total_cap；防具關著時 armor_cut 是 0、化勁上限 50% 本來就低於 60%，數字不變
             cut = min(cfg.armor.total_cap, traits.amount(content, lo, "toll_cut") + armor_cut(state, content, world))
             lost, hurt = _apply_toll(
-                content, state.player.member, fraction * (1 - cut),
+                content, state.player.member, fraction * (1 - cut) * (1 - guard),
                 agi=v1_stat(state, content, "agi"), con=con_of(state, content, world, PLAYER),
                 injury=treasures.amount(state, content, "injury"),  # 螭首（玉璽碎片改版）：變成內傷的減半；沒帶是 1
                 season=state.world,
@@ -1193,6 +1206,7 @@ def take_encounter_toll(
 
 def toll_saved(
     state: GameState, content: Content, world: WorldStateStore, tier: str, *, wild: bool = False, share: float = 1.0,
+    squad=None,
 ) -> tuple[int, int]:
     """（化勁少扣的氣血, 不動免掉的內傷）（FB-084）：這一場本人真的扣的，跟拿掉那一個功效照一般算的差。
     各自只拿掉它自己那一個（化勁看氣血、不動看內傷），所以兩個數字不互相混。防具（裝備四欄設計 4.3）不是功效、一直留著：
@@ -1202,6 +1216,7 @@ def toll_saved(
     沒有這兩個功效（只有防具也算沒有）、或這個結果不扣氣血，是 (0, 0)。"""
     cfg = content.config
     fraction = cfg.encounter_neili_loss.get(tier, 0.0) * (cfg.wild_neili_loss_factor if wild else 1.0) * max(0.0, share)
+    fraction *= 1 - _guard(state, content, world, squad)  # 五項屬性的季：統御少掉的那一份兩邊都算（舊的季是 0）
     lo = traits.loadout(state, content, world)
     cut, still = traits.amount(content, lo, "toll_cut"), False  # 不動以前免內傷；第三批起改成不受定身、卸勁（tactics.py），這裡恆為 False
     if fraction <= 0 or (cut <= 0 and not still):

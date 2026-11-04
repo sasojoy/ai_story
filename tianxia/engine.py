@@ -6478,7 +6478,7 @@ class Game:
             msgs += extra
         elif result.tier == "落敗":
             msgs += self._lose_silver(record)
-        toll, hp_lost, facts = self._take_toll(result.tier, wild=wild, clash=result.clash)
+        toll, hp_lost, facts = self._take_toll(result.tier, wild=wild, clash=result.clash, squad=squad)
         record.changes += toll
         msgs += toll
         self._play_rounds(record, squad, result.tier, hp_lost, facts, clash=result.clash)
@@ -6895,7 +6895,8 @@ class Game:
         now, cap = self._player_hp_and_cap()
         return TollFacts(wounded=now < cap, low_hp=now <= LOW_HP_RATIO * cap, healed=healed)
 
-    def _take_toll(self, tier: str, *, wild: bool = False, clash: tactics.Clash | None = None) -> tuple[list[str], int, TollFacts]:
+    def _take_toll(self, tier: str, *, wild: bool = False, clash: tactics.Clash | None = None, squad: Squad | None = None,
+                   ) -> tuple[list[str], int, TollFacts]:
         """照結果扣這一場的氣血（team.take_encounter_toll），回傳（訊息, 本人真的掉了多少氣血, 寫演出句要的事實）。掉的量緊貼著
         扣氣血的前後量（計畫三 G4）：打贏升級會讓上限變高，開打前量的話回合裡寫的跟戰報「氣血 -N」對不上。四捨五入跟訊息的
         「:.0f」是同一個數（兩者都對同一個浮點數做銀行家捨入）。
@@ -6907,8 +6908,8 @@ class Game:
         本命戰法回的與自扣的氣血（Clash.hp：本人與同伴）在最後改。"""
         before, cap = self._player_hp_and_cap()
         share = 1 - clash.blocked_share() if clash is not None else 1.0
-        saved, spared = team.toll_saved(self.state, self.content, self.world, tier, wild=wild, share=share)  # 扣之前量：化勁、不動這一場改了多少
-        toll = team.take_encounter_toll(self.state, self.content, self.world, tier, wild=wild, share=share)
+        saved, spared = team.toll_saved(self.state, self.content, self.world, tier, wild=wild, share=share, squad=squad)  # 扣之前量：化勁、不動這一場改了多少
+        toll = team.take_encounter_toll(self.state, self.content, self.world, tier, wild=wild, share=share, squad=squad)
         hp_lost = round(before - self._player_hp())  # 回血之前量：回合裡寫的扣血不受吸取與回春影響
         healed: list[str] = []  # 吸取、回春以前在這裡打完回血；本命戰法第三批起在回合裡回（Clash.hp）
         gained: list[tuple[str, int]] = []
@@ -7097,7 +7098,7 @@ class Game:
             msgs += self._challenge_draw(fid, squad, record)
         elif result.tier == "落敗":
             msgs += self._lose_silver(record)
-        toll, hp_lost, facts = self._take_toll(result.tier, clash=result.clash)
+        toll, hp_lost, facts = self._take_toll(result.tier, clash=result.clash, squad=squad)
         record.changes += toll
         msgs += toll
         self._play_rounds(record, squad, result.tier, hp_lost, facts, clash=result.clash)  # squad 是照聲威的那一份：對手的身法跟著難度走
