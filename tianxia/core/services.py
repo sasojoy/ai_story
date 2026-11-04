@@ -114,7 +114,8 @@
   （這一則事件有沒有隨口應對：事件檢定的委派）
 - 共用的字：`HutReward`（序章步驟的獎勵那一行的記號，核心的 `_guide` 認它；原本在 `tianxia/guide.py`，搬到這個模組，引導包 re-export）
 # sense（全部拆包第 24 批「有所感與頓悟」：搬進有所感包的動作要掛、要回的；原本在 engine.py 模組層，包不能 import engine，搬到這裡，engine 照舊叫得到）
-- 共用的小函式：`outing_watch`（裝飾器：走一趟停在要選的事上時，這一下選完的得失記在那一段——經 `ctx._outing_watched`〔探索包的委派〕；
+- 共用的小函式：`outing_watch`（裝飾器：走一趟停在要選的事上時，這一下選完的得失記在那一段——經 Game 上探索包的委派 `_outing_watched`
+  〔核心叫它，記在邊界測試的 CORE_DELEGATE_CALLERS；包不必直接叫〕；
   掛在 `Game.choose`、`answer_event` 與有所感包的 `sense_draw`、`epiphany_names` 上。原本是 engine.py 的 `_outing_watch`，engine 照舊用同一個）
 - 共用的字：`PREPARING_TEXT`、`PREPARING_REFUSAL`（賽季籌備中：選單上那一顆灰的、動作被擋回的那一句；有所感包的 `sense_request` 籌備中回它。
   **第 23 批〔dev/arts-1〕同時把同樣的兩句〔連裝飾器 `not_while_preparing`〕搬進這個檔的 `# arts` 那一段**：兩批都合了之後留一份）
