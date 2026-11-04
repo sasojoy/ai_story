@@ -224,6 +224,11 @@ explore（主動搬六包第 3＋4 批加的這一段）
   `auto_checkin`、`checkin_view` 問）
 - 共用的字與小函式（從這個模組 import，簽到包 re-export）：`PILL_FOUND`（找素材、練功掉回體丹那一句）、`checkin_on(content, world)`（簽到開著沒；
   核心的 `Game._pill_find` 掉回體丹也問，回體丹那一套歸核心；原本是 `tianxia/checkin.py` 的 `PILL_FOUND` 與 `on`）
+# figure_acts（全部拆包第 31 批「大勢人物」；主人：大勢人物的行動包。計畫 docs/superpowers/plans/2026-11-04-大勢人物包-第1批.md 1.3）
+- `ctx._snubbed_character(companion_id)`（這位對話人物剛被你打敗、還在對你閉門不見嗎；交友、求見的按鈕與動作都問。總表附錄甲把挑戰本人 13 個
+  〔含 `_snubbed`、`_snubbed_character`〕裁給大勢人物；本體在 `features/figure_acts/challenge.py`，Game 留一行委派回答別的包。原本列在三、過渡 socialize 那一段）
+- `ctx.challenge_odds(fid)`（挑戰這位人物的勝算：這一包自己的 options 也經 ctx 叫它，tests/figures、tests/core/test_challenge_season.py、tests/figures/test_orders.py
+  換掉 `Game.challenge_odds`，包裡經 ctx 叫才打得到）
 
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
@@ -295,9 +300,9 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 
 # companions（全部拆包第 20 批：人物對話叫的、主人還沒搬的）
 - `ctx._depart(route, mode, pace=None)`（主人移動 features/travel：帶路答應之後他親自帶你動身，步調照他的腳程；總表第 56 批前一直是 Game 的方法）
-# socialize（全部拆包第 21 批：交友求見包問別的功能、主人還沒搬的）
-- `ctx._snubbed_character(companion_id)`（主人大勢人物 features/figures，第 31 批；總表附錄甲把挑戰本人 13 個〔含 `_snubbed`、`_snubbed_character`〕裁給大勢人物：
-  這位人物剛被你打敗、還在對你閉門不見嗎；交友、求見的按鈕與動作都問。本體留在 Game 上，主人成包時改成二、查詢服務）
+# figure_acts（全部拆包第 31 批：大勢人物的行動包叫的、主人還沒搬的；原本這裡還有 socialize 那一段的 `ctx._snubbed_character`，第 31 批大勢人物成包，改列二、查詢服務 `# figure_acts`）
+- `ctx._signature_arms(record, beaten=None, later=None)`（主人裝備〔本命兵器 signature_arms，第 42 批〕：打贏本人的那一刻他讓你奪走本命兵器，寫進這一場戰報的
+  「得失」；挑戰本人打贏的那一串叫它。本體留在 Game 上，主人成包時改成二、查詢服務）
 
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 
