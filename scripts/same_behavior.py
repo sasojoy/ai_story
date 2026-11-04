@@ -9649,8 +9649,7 @@ _talk_register_track("talk", TalkScenario, (("tianxia/features/companions/parley
 
 class SocializeScenario(CompanionsScenario):
     """交友求見（全部拆包第 21 批；--track socialize，自己一個資料庫）。
-    交友（act:socialize）：人物在（只有一位的地點，名望夠〔開口、模型回了〕、名望不夠〔被打發或灰掉〕）、人物不在（幾處沒有大勢人物的地點：抽交友事件、
-    沒有就是「此地無人可訪」）。求見（act:call → call:<人物>）：兩位以上的地點打開名單，名望夠〔開口〕、名望不夠〔被打發，一類一顆開著時灰掉、結識事件走結識〕、
+    交友（act:socialize）：人物在（只有一位的地點，名望夠〔開口、模型回了〕、名望不夠〔被打發或灰掉〕）、人物不在（幾處沒有大勢人物的地點：抽到交友事件就是事件；抽不到才是「此地無人可訪」，那一支這條軌讀不出走到沒有，pytest 換掉 pick_event 才守）。求見（act:call → call:<人物>）：兩位以上的地點打開名單，名望夠〔開口〕、名望不夠〔被打發，一類一顆開著時灰掉、結識事件走結識〕、
     返回、清單外的 id；只有一位時選單上直接列的「求見某某」。次數：前半談過一輪，後半把每日輪數調成 1（談滿，鈕灰掉、寫換日那一刻）、調成 2（談第二輪時自動告辭）。
     結識奇遇：福緣到了交友先發（入門的同伴），到期自己送上門，沒有同伴可給時送賀禮（心得）。**前半停在挑對象挑到一半**（picking_audience：求見名單開著、還沒按）：
     後半一位按人物、一位按返回、一位按了名望不夠的被打發。假人（BotRunner 十輪；bot_policy.score 問 call:、act:call、act:socialize；bot.pick 看求見名單）；換季。
@@ -9739,6 +9738,13 @@ class SocializeScenario(CompanionsScenario):
         if state is not None and state.player.pending_companion:
             self.choose(who, "talk:leave")
 
+    def reach(self, who: str, cid: str) -> None:
+        """只有一位的地點找他說話：選單上有直接的「求見某某」就按它；一類一顆開著時沒有（單人求見併進交友那一顆），改按交友。"""
+        if f"call:{cid}" in self.ids(self.main(who)):
+            self.press(who, f"call:{cid}")
+        else:
+            self.press(who, "act:socialize")
+
     def open_list(self, who: str) -> None:
         """打開求見的名單：行動列上有 act:call（兩位以上的地點）就按它，沒有（舊存檔、改版後）直接擺成挑到一半。"""
         if "act:call" in self.ids(self.main(who)):
@@ -9767,6 +9773,12 @@ class SocializeScenario(CompanionsScenario):
         if cid is None:
             emit("這份內容沒有只有一位大勢人物的地點", None)
             return
+        # 模型叫不動：開口退回體力（先做：之後名望夠的那位要談滿一輪，後半次數用完那一段才真的談滿）
+        self.place(self.GREETER, loc)
+        self.fame(self.GREETER, 9999)
+        self.reach(self.GREETER, cid)
+        self.you(self.GREETER, "求見・模型叫不動")
+        self.leave(self.GREETER)
         MODEL["talk"] = {"stance": "suzhan"}
         for who, value, tag in ((self.GREETER, 9999, "名望夠"), (self.LOWFAME, 0, "名望不夠")):
             self.place(who, loc)
@@ -9775,26 +9787,22 @@ class SocializeScenario(CompanionsScenario):
             self.asks(who, f"交友・{tag}", [cid])
             self.press(who, "act:socialize")
             self.you(who, f"交友・{tag}之後")
+            if self.chars.load(who).player.pending_companion:
+                self.choose(who, "talk:0")  # 談一輪：記一輪（後半次數用完那一段看它）
             self.leave(who)
         # 選單上直接列的「求見某某」：名望夠，按下去開口（今天談過一輪，後半看次數）
         self.place(self.CALLER2, loc)
         self.fame(self.CALLER2, 9999)
-        self.main(self.CALLER2)
-        self.press(self.CALLER2, f"call:{cid}")
+        self.reach(self.CALLER2, cid)
         self.you(self.CALLER2, "直接求見")
         if self.chars.load(self.CALLER2).player.pending_companion:
             self.choose(self.CALLER2, "talk:0")  # 談一輪：記一輪（後半看次數）
         self.you(self.CALLER2, "直接求見・談了一輪")
         self.leave(self.CALLER2)
         MODEL["talk"] = None
-        # 模型叫不動：開口退回體力
-        self.place(self.GREETER, loc)
-        self.edit(self.GREETER, lambda p: p.talks_today.clear())
-        self.press(self.GREETER, f"call:{cid}")
-        self.you(self.GREETER, "求見・模型叫不動")
 
     def absent(self) -> None:
-        """交友，人物不在：幾處沒有大勢人物的地點（抽交友事件，沒有就是「此地無人可訪」）。"""
+        """交友，人物不在：幾處沒有大勢人物的地點（抽到交友事件就是事件；「此地無人可訪」那一支只有抽不到時才出現，這裡不保證走到）。"""
         for loc in ("runan_wilds", "nanyang_road", "yu_river", "town"):
             if not self.place(self.ABSENT, loc):
                 continue
@@ -9844,6 +9852,14 @@ class SocializeScenario(CompanionsScenario):
         from tianxia import figures
 
         spot, lone = self.alone_spot()
+        # 閉門名單只蓋得到大勢人物（figures.of_character）：兩位以上的地點挑「有兩位以上大勢人物」的那一處；找不到就照原本的
+        real = {loc: [cid for cid in fs if figures.of_character(self.c, cid) is not None] for loc, fs in self.layout().items()}
+        halls = {loc: fs for loc, fs in real.items() if len(fs) >= 2}
+        if halls:
+            hall = sorted(halls, key=lambda x: (-len(halls[x]), x))[0]
+            figs = halls[hall]
+        if lone is not None and figures.of_character(self.c, lone) is None:
+            lone = None
         names = [cid for cid in [*figs, lone] if cid is not None]
         until = {figures.of_character(self.c, cid): 1.0e12 for cid in names if figures.of_character(self.c, cid) is not None}
         self.edit(self.SNUB, lambda p: p.snubbed_until.update(until))
@@ -9853,6 +9869,7 @@ class SocializeScenario(CompanionsScenario):
         self.open_list(self.SNUB)
         self.press(self.SNUB, f"call:{figs[0]}")
         self.you(self.SNUB, "閉門不見・名單")
+        self.leave(self.SNUB)  # 沒灰掉的話他開口了：告辭，後面的按鈕才不被談話擋住
         self.press(self.SNUB, "call:back")
         if lone is not None:
             self.place(self.SNUB, spot)
@@ -9861,6 +9878,7 @@ class SocializeScenario(CompanionsScenario):
             self.press(self.SNUB, f"call:{lone}")
             self.press(self.SNUB, "act:socialize")
             self.you(self.SNUB, "閉門不見・只有一位")
+            self.leave(self.SNUB)
 
     def fortune(self) -> None:
         """結識奇遇：福緣到了（第 0 天起必定先觸發）交友先發入門的同伴；到期沒發生的自己送上門（同步）。"""
@@ -9929,9 +9947,8 @@ class SocializeScenario(CompanionsScenario):
             loc, cid = self.alone_spot()
             if cid is not None:
                 self.place(self.CALLER2, loc)
-                self.main(self.CALLER2)
                 self.asks(self.CALLER2, "次數用完・只有一位", [cid])
-                self.press(self.CALLER2, f"call:{cid}")
+                self.reach(self.CALLER2, cid)
                 self.you(self.CALLER2, "次數用完・只有一位")
                 self.place(self.GREETER, loc)
                 self.main(self.GREETER)
