@@ -871,10 +871,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     # 酒肆（tavern:）搬進功能包：假人的分數在 features/tavern/bots.py，上面的 features_core.bot_pick 問它（主動搬六包第 10 批）
     if kind == "market":  # 馬市上：照 bot.market_want 按那一顆（換、買、餵），沒事就離開
         return MARKET_SCORE if option.id == bot.market_want(game) else 0.0 if arg == "back" else None
-    if kind == "call":
-        # 假人不求見大勢人物（不呼叫模型）；名望不夠的求見永遠按得下去（只是被打發，武學與成長設計 9.1），更不能給分；
-        # 萬一停在求見選單上，只會按返回
-        return 0.0 if arg == "back" else None
+    # 求見（call:）搬進功能包：假人只按返回，分數在 features/socialize/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 21 批）
     if kind == "move":
         base = HOME_MOVE_SCORE if arg == _front_hop(game, profile) or arg in _home(game, profile) else AWAY_MOVE_SCORE
         order_hop = ORDER_MOVE_SCORE if arg.partition(":")[0] == _order_hop(game) else 0.0  # 往軍令要去的地方（計畫 T6）

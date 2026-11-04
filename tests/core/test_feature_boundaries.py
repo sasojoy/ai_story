@@ -449,7 +449,7 @@ GAME_DELEGATE_CALLERS.update({
     # （(sense_draw, _check_hints)：有所感畫完那一筆——全部拆包第 24 批 sense_draw 搬進有所感包、包裡經 ctx 叫，拿掉）
     ("_menxia_entry", "_check_hints"): "修練頁、煉製頁的動作寫進紀錄（核心的修練頁紀錄服務）：說的話接在這一則",
     ("_act", "_hint"): "act 子動詞裡碰到的事件型提示（操練練完 h_drill_done…）：其餘子動詞還沒分給各包（總表第 57 批）",
-    ("_brush_off", "_hint"): "求見被名將打發（h_snubbed）：交友求見還沒成包（總表第 21 批）",
+    # （原本這裡有 ("_brush_off", "_hint")：第 21 批 _brush_off 搬進交友求見包，包裡經 ctx._hint 問，核心原位不再叫它）
     # （原本這裡有 ("_open_dialogue", "_hint")：第 20 批 _open_dialogue 搬進人物情誼包，包裡經 ctx._hint 問，核心原位不再叫它）
     ("_town_drill", "_hint"): "城裡操練練完（h_drill_done）：三選一的城裡操練（總表第 13 批拿掉）",
     ("choose", "_begin_enlistment"): "這一下才投靠（或拜入陣營名下的門派）的人開始入伍段：陣營還沒成包（總表第 35 批）、要知道動作之前的陣營",
@@ -666,9 +666,7 @@ GAME_DELEGATE_CALLERS.update({
                                             "與「有所感開著就讓路」兩道守衛，位置算行為，這一批的軌證明不了兩者永不並存，所以維持委派",
     ("_own_scene_text", "affinity_text"): "談話畫面名字旁的「情誼 N」：同上一筆（場景文字的一部分，不接 scene 掛鉤）",
     ("scene_art", "affinity_text"): "談話那張人物卡（scene_art）的副標也寫「情誼 N」：與 _own_scene_text 同一個詞，兩處不能各拼一份",
-    ("_socialize", "_open_dialogue"): "交友碰上人物開口對話：交友求見第 21 批搬進 socialize 包，到時候改經 ctx",
-    ("_precise_socialize", "_open_dialogue"): "一類一顆的交友開口：同上",
-    ("_call", "_open_dialogue"): "求見開口：同上",
+    # （原本這裡有 ("_socialize", "_open_dialogue")、("_precise_socialize", ...)、("_call", ...) 三筆：第 21 批交友求見搬進 socialize 包，包裡經 ctx._open_dialogue 問，拿掉）
     ("_defect_step", "_parley_forsake"): "叛投之後欠著的都算食言（NPC 智能 2.1）：接在 defection.defect 與 _leave_behind 之後，回話的先後算行為；叛投第 36 批再看",
 })
 # sense（全部拆包第 24 批「有所感與頓悟」：新包 tianxia/features/sense/；計畫 docs/superpowers/plans/2026-11-01-有所感包-第1批.md 1.4、1.5）：
@@ -737,6 +735,47 @@ GAME_DELEGATE_CALLERS.update({
     ("status_data", "ascend_view"): "狀態列的破境卡（status 的 ascension 那一格）：status 掛鉤合進 main_view 的頂層、不是這一格，鍵的順序算行為"
                                     "（狀態列順序，總表第 66 批）",
     # （_graduate_pass 叫 slot_insight、switch_art、practice、allocate_stat、melt_art 那 5 對：第 22 批把 _graduate_pass 搬進引導包、經 ctx 叫，合併時拿掉）
+})
+
+# socialize（全部拆包第 21 批「交友求見」：新包 tianxia/features/socialize/；計畫 docs/superpowers/plans/2026-11-04-交友求見包-第1批.md 1.1、1.4）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。31 個方法搬進包，留 21 個一行委派（10 個只有包裡叫，沒有委派）；
+# `call:` 的 choose 與 _action_title 的那一格接了掛鉤（Outcome），`bot_policy.score` 的 call 那一段搬進包的 bots.py
+GAME_IMPORTS |= {"tianxia.features.socialize.actions", "tianxia.features.socialize.menus", "tianxia.features.socialize.rules"}
+GAME_DELEGATES |= {
+    # 核心原位叫的：選單（_precise_social_option、_socialize_option、_audience_options）、行動列說明（_socialize_figure、_audience_hall、_fame_gap、_can_meet、
+    # _talked_out_note）、_act 的 act:socialize（_socialize）、sync（_audience_hall）、補算時間（_deliver_fortune）、場景文字（_audience_intro）
+    "_precise_social_option", "_socialize_option", "_audience_options", "_socialize_figure", "_audience_hall", "_fame_gap", "_can_meet",
+    "_talked_out_note", "_socialize", "_deliver_fortune", "_audience_intro", "_talks_left",
+    # 別的包經 ctx 問的（服務清單二、查詢）：_can_meet、_socialize_figure、_count_talk（人物對話的 A 段與每一輪收尾）、_social_plan、_brush_off（開口與開單）
+    "_social_plan", "_count_talk", "_brush_off",
+    # server、假人、腳本、測試在叫的：can_meet_figure（bot.py）、socialize_starts_dialogue、socialize_is_futile（bot_policy）、_talk_cap（玉璽測試）、
+    # _talks_used（tests/core/test_engine.py、tests/server/test_server.py）、_deep_interaction_target（tests/season/test_real_content.py）
+    "can_meet_figure", "socialize_starts_dialogue", "socialize_is_futile", "_talk_cap", "_talks_used", "_deep_interaction_target",
+}
+_ACT_VERB = "act:socialize、act:call 是 act 子動詞（總表第 57 批才接 Verb.cell、Verb.note、Verb.run）：行動列那一格、底下那一行、按下去，留在核心原位叫這一包的委派"
+_AUDIENCE_ONE = "單人地點的「求見某某」（call:<人物>）那一顆：選單上直接列的求見，是 act 子動詞那一格旁邊的選項建構（總表第 57 批），四個分支問閉門不見、見不見得到、差多少、談滿了沒"
+GAME_DELEGATE_CALLERS.update({
+    ("_act", "_socialize"): _ACT_VERB + "（act:socialize 的動作；最後一行）",
+    ("_everyday_options", "_precise_social_option"): _ACT_VERB + "（一類一顆的交友那一顆）",
+    ("_everyday_options", "_socialize_option"): _ACT_VERB + "（交友那一顆）",
+    ("_everyday_options", "socialize_is_futile"): _ACT_VERB + "（交友撲空時灰掉的判斷）",
+    ("_everyday_options", "_can_meet"): _AUDIENCE_ONE,
+    ("_everyday_options", "_fame_gap"): _AUDIENCE_ONE,
+    ("_everyday_options", "_talks_left"): _AUDIENCE_ONE,
+    ("_everyday_options", "_talked_out_note"): _AUDIENCE_ONE,
+    # 求見名單的選單：`menu` 掛鉤坐在 sense_menu、一條線答題、談著、選邊、投靠確認、叛投確認這幾個 picking_* 之前（選單的順序算行為，同 _TALK_MENU），
+    # 名單這一行夾在叛投確認與懸賞榜中間，接成掛鉤就改了它們並存時誰先；所以留委派
+    ("_everyday_options", "_audience_options"): "求見名單（picking_audience）：" + _MENU_ORDER,
+    # 場景文字同理：`scene` 掛鉤坐在談話、選邊、投靠、叛投那幾段之前，求見畫面夾在叛投之後、伏筆答題之前，位置算行為，留委派
+    ("_own_scene_text", "_audience_intro"): "求見畫面的說明（picking_audience）：場景文字夾在叛投確認與伏筆答題之間，`scene` 掛鉤坐在更前面，位置算行為",
+    ("_drop_stale_references", "_audience_hall"): "內容改版後這裡不再有兩位以上的人物：收起求見名單（一串 picking_* 收起來的判斷之一）",
+    ("_advance_player_local", "_deliver_fortune"): "福緣到期自己送上門：夾在閉關收尾與別的補算中間，on_sync 沒有對應的位置",
+    ("action_notes", "_socialize_figure"): _ACT_VERB + "（交友那一行說明）",
+    ("action_notes", "_audience_hall"): _ACT_VERB + "（求見那一行說明）",
+    ("action_notes", "_can_meet"): _ACT_VERB + "（單人求見那一行說明）",
+    ("action_notes", "_fame_gap"): _ACT_VERB + "（同上）",
+    ("action_notes", "_talks_left"): _ACT_VERB + "（同上）",
+    ("action_notes", "_talked_out_note"): _ACT_VERB + "（同上）",
 })
 
 

@@ -10011,7 +10011,7 @@ def _social_register_track(name: str, scenario: type, mutation: tuple, profile: 
 
 # 改一個字（selftest）：談滿了的鈕括號裡那一句（「已經談滿 N 輪，…」；搬之前在 engine.py 的 Game._talked_out_note，搬之後在包裡），week7 次數用完那一段抓到
 _social_register_track("socialize", SocializeScenario, (("tianxia/engine.py", "tianxia/features/socialize/actions.py", "tianxia/features/socialize/rules.py"),
-                                                       ('return f"已經談滿 {self._talk_cap()} 輪，{when}"', 'return f"已經談滿 {self._talk_cap()} 輪！{when}"')), "week7")
+                                                       ('輪，{when}"', '輪！{when}"')), "week7")  # 只改「輪，」那一小段：搬之前是 self._talk_cap()、搬之後是 talk_cap(ctx)，前面的字不同、這一段一樣
 
 
 if __name__ == "__main__":
