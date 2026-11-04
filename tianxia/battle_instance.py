@@ -2161,6 +2161,19 @@ class GambleVerdict(NamedTuple):
 STORY_LIMIT = 60  # 劇情要模型寫 40 字內；多給一點餘裕，超過的整段不用（截斷的半句話比固定句難看）
 _DIGITS = re.compile(r"[0-9０-９]")
 
+# 放手一搏「成了」只代表引擎把戰線推過去、傷害算下去——**不代表玩家喊的那件事真的做到了**。
+# 企劃者 2026-11-04 在第 8 季廣宗抓到：玩家喊「取其首級讓她下班！」判成功，戰報就寫對方被斬首，
+# 可是她整場沒倒下（倒下只看氣血歸零，engine 另外記 fell_round）。誰死誰活一律由引擎決定，
+# 寫到死人的那一句要有引擎這一回合真的放倒的人才算數，不然整句不用、照固定句播。
+# 只挑不會誤傷的詞：「死戰」「拚死」「死守」裡的單字「死」不算，「倒下」「倒地」也不算（被打倒不是死）。
+KILL_WORDS = ("首級", "斬首", "斬殺", "梟首", "斃命", "氣絕", "斷氣", "殞命", "殞落", "身亡", "喪命", "命喪",
+              "陣亡", "戰死", "伏誅", "屍", "血泊", "取其性命", "一命嗚呼", "送命", "死於")
+
+
+def claims_a_kill(story: str) -> bool:
+    """這一句有沒有寫死人。"""
+    return any(word in story for word in KILL_WORDS)
+
 
 def clean_story(raw: str, name: str, known: Sequence[str] = ()) -> str:
     """模型寫的一版劇情整理成能播的一句：轉繁體、去掉換行與 markdown、引號；有阿拉伯數字（數字只能是引擎的）、太長、
@@ -2230,8 +2243,13 @@ def assess_gamble(
     except Exception:
         return GambleVerdict(DEFAULT_FREE_TEXT_SUCCESS_RATE)
     rate = max(0, min(100, int(result.success_rate)))
-    return GambleVerdict(rate, clean_story(_real_name(result.win, who, real), real, (text, target)),
-                         clean_story(_real_name(result.lose, who, real), real, (text, target)))
+    # 這兩版是**擲骰之前**寫的，這時候誰會倒下還不知道：寫到死人的那一版不用（claims_a_kill 上面那段）。
+    # 不用＝這一搏沒有現成劇情，引擎先播固定句、記一筆等回合結算後再寫（write_tales 那條路知道這一回合誰真的倒了）。
+    def ok(raw) -> str:
+        story = clean_story(_real_name(raw, who, real), real, (text, target))
+        return "" if claims_a_kill(story) else story
+
+    return GambleVerdict(rate, ok(result.win), ok(result.lose))
 
 
 def _real_name(story, safe: str, name: str) -> str:
@@ -2310,7 +2328,7 @@ def foe_names(items: list[TaleItem], sides: Sequence[str] = ()) -> dict[str, set
 
 def write_tales(
     client: OllamaClient | None, act: BattleAct, items: list[TaleItem], setting: str = "漢末兩軍交戰的戰場",
-    sides: Sequence[str] = (),
+    sides: Sequence[str] = (), fallen: Sequence[str] = (),
 ) -> dict[str, str]:
     """回合結算後，把這一回合等著補劇情的放手一搏一次批給模型寫（Joy 2026-10-13：評分與劇情拆開，二十人同時搏也撐得住）：
     成敗已經擲好了，一搏一句、照成敗寫，以名號開頭、第三人稱，不寫數字。回傳 名號 → 整理過的一句（clean_story）；
@@ -2334,9 +2352,14 @@ def write_tales(
             "不可以寫成對手受損、中計、倒地、吃虧，也不可以寫成對他有利——那會跟引擎算出來的結果矛盾"
             "（實例：一位黃巾玩家失手，卻被寫成「官軍吸入異味嘔吐倒地」，玩家看起來是贏了，數字卻是自己退了一截）。"
             "不要寫任何數字、不要寫戰局推進多少或扣多少氣血。"
+            # 成功＝引擎把戰線推過去，不等於玩家喊的那件事真的做到了（claims_a_kill 上面那段）
+            "**誰死誰活不是你決定的**：成功只代表他占了上風，不代表他喊的那件事全做到了。"
+            "除了下面寫明「這一回合倒下的」那幾位，不准寫任何人被斬首、取下首級、斃命、陣亡、倒在血泊——"
+            "哪怕玩家自己寫的那句話就是要取對方性命，也只能寫到逼退、重創、打得對方狼狽為止。"
             "標了女子的玩家用「她」稱呼。回傳 lines：每一位一筆，name 照抄名號，story 是那一句。"
         )},
-        {"role": "user", "content": f"戰場情境：【{act.title}】{act.text}\n這一回合的放手一搏：\n{listing}"},
+        {"role": "user", "content": f"戰場情境：【{act.title}】{act.text}\n這一回合的放手一搏：\n{listing}"
+                                    + (f"\n這一回合倒下的：{'、'.join(fallen)}" if fallen else "\n這一回合沒有人倒下。")},
     ]
     try:
         result = client.chat_structured(
@@ -2360,6 +2383,10 @@ def write_tales(
             # 文字看起來贏了、數字是自己退了一截）。提示詞本來就禁止拿陣營名當代名詞，這裡只是確定性地攔下來；
             # 攔掉的照舊播固定句（「X這一搏失敗了，付出了慘痛代價：…」），寧可平淡也不要跟數字矛盾。
             if story and name in lost and any(foe in story for foe in foes.get(name, ())):
+                story = ""
+            # 寫到死人的那一句，要指名這一回合引擎真的放倒的人才算數（claims_a_kill 上面那段）；
+            # 提示詞已經交代過，這裡確定性地攔下來，攔掉的照舊播固定句。
+            if story and claims_a_kill(story) and not any(who in story for who in fallen):
                 story = ""
             if story:
                 out[name] = story

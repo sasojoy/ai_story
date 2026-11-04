@@ -1410,7 +1410,8 @@ def narrate_once(game: Game) -> int | None:
     def ask() -> dict[str, str]:
         client = within_budget(game.client, budget - (_monotonic() - started))
         sides = [f.name for f in definition.factions]  # 兩軍的名字：失手那一句不准寫敵方受損（守門用）
-        return battle_instance.write_tales(client, act_, request.items, sides=sides)
+        # fallen 是引擎這一回合真的放倒的人：寫到死人的那一句要指名他們其中一位才算數（守門用）
+        return battle_instance.write_tales(client, act_, request.items, sides=sides, fallen=request.fallen)
 
     if QUEUE is None:
         stories = ask()

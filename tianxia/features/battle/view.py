@@ -743,6 +743,8 @@ def battle_tale_request(ctx) -> rules.BattleTaleRequest | None:
             name=t.name, faction_name=names.get(t.faction, t.faction), text=t.text, won=t.won, target=t.target, sex=t.sex,
         ) for t in due],
         done=[(t.round, t.name) for t in due],
+        # 這一回合引擎真的放倒的人：寫到死人的那一句要指名他們其中一位才算數（battle_instance.claims_a_kill）
+        fallen=[p.name for p in battle.participants.values() if p.fell_round and p.fell_round == due[0].round],
     )
 
 
