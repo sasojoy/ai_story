@@ -410,13 +410,15 @@ _INLINE_HEAD = re.compile(r"^[\s]*[【〔]([^】〕\n]{1,10})[】〕][\s　]*")
 
 
 def _head_out(head: str, text: str) -> tuple[str, str]:
-    """小標寫進散文開頭了就挖出來（2026-11-04 第 8 季廣宗實測：head 欄 17 拍全空，模型把小標寫成散文第一行的
-    「【雙軍對峙】」）。head 有預設值＝可省略，模型就用自己的方式給；提示詞講幾次都一樣，所以在這裡收。
-    挖在 clean 之前：不然【小標】會一起算進那一拍的字數上限。"""
-    if head.strip():
-        return head, text
+    """散文開頭的「【雙軍對峙】」一律拆掉；head 是空的才拿它當小標。
+
+    2026-11-04 第 8 季廣宗實測，同一篇裡兩種壞法都有：一幕的 head 欄全空、小標寫進散文第一行（16/17 拍），
+    另一幕 head 有填、散文開頭**又寫一次**（5 拍）。head 有預設值＝模型可以合法省略，提示詞講幾次都一樣，
+    所以在這裡收。拆在 clean 之前：不然【小標】會一起算進那一拍的字數上限、把該留的拍擠掉。"""
     m = _INLINE_HEAD.match(text or "")
-    return (m.group(1), text[m.end():]) if m else (head, text)
+    if m is None:
+        return head, text
+    return (head if head.strip() else m.group(1)), text[m.end():]
 
 
 def _write_act(client, material: Material, act: ActFacts, names: Sequence[str],

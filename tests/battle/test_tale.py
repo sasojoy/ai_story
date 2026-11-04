@@ -268,10 +268,13 @@ def test_a_subtitle_written_into_the_prose_is_moved_into_the_head():
     long = "城" * (tale.SCENE_MAX - 4)  # 加上【四字】就超過上限，挖出來剛好不超過
     scenes, _ = tale.write(_Client({"scenes": [{"id": beat.id, "text": f"【雙軍對峙】\n{long}"}], "cast": []}), m)
     assert scenes[beat.id] == ("雙軍對峙", long)
-    # head 本來就有就不動它
-    scenes, _ = tale.write(_Client({"scenes": [{"id": beat.id, "head": "暮色", "text": "【雙軍對峙】城下塵土飛揚。"}],
+    # head 有填、散文開頭又寫一次（同一篇裡的另一幕就是這樣）：開頭那一段一律拆掉，小標照 head 欄的
+    scenes, _ = tale.write(_Client({"scenes": [{"id": beat.id, "head": "暮色", "text": "【雙軍對峙】\n城下塵土飛揚。"}],
                                     "cast": []}), m)
-    assert scenes[beat.id] == ("暮色", "【雙軍對峙】城下塵土飛揚。")
+    assert scenes[beat.id] == ("暮色", "城下塵土飛揚。")
+    # 沒有這種開頭的一個字都不動
+    scenes, _ = tale.write(_Client({"scenes": [{"id": beat.id, "head": "暮色", "text": "城下塵土飛揚。"}], "cast": []}), m)
+    assert scenes[beat.id] == ("暮色", "城下塵土飛揚。")
 
 
 def test_the_same_text_on_two_beats_falls_back_on_both():
