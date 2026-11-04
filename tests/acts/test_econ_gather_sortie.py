@@ -6,6 +6,7 @@ import random
 from decimal import ROUND_HALF_UP, Decimal
 from types import SimpleNamespace
 
+import pytest
 from test_sortie import _fight, _game
 
 from conftest import real_content
@@ -23,6 +24,7 @@ def test_gather_second_tier_odds_are_unchanged():
     assert 0.45 < got / 2000 < 0.55
 
 
+@pytest.mark.smoke
 def test_winning_an_attack_pays_a_third_of_the_silver():
     game = _game(faction="guan")
     p = game.state.player
