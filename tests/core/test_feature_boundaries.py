@@ -712,6 +712,28 @@ GAME_DELEGATE_CALLERS.update({
     # （_graduate_pass 叫 slot_insight、switch_art、practice、allocate_stat、melt_art 那 5 對：第 22 批把 _graduate_pass 搬進引導包、經 ctx 叫，合併時拿掉）
 })
 
+# story（全部拆包第 30 批「一條線」：新包 tianxia/features/story/；計畫 docs/superpowers/plans/2026-11-04-一條線簽到-第30批.md 1.5、1.6）：這一批加的集中在這一段
+# （並行的拆包線不跟別人的行穿插）。核心原位碰一條線的幾處，能接第 11 批掛鉤的接上（choose 掛鉤接 story:，標題一起帶），接不了的改叫 Game 上一行的委派、
+# 記進 GAME_DELEGATE_CALLERS 寫理由（不新增 GAME_DIRECT）。原本那行 `from . import storyline`、`chapters` 拿掉：JOURNAL、場景圖、題目文字、線的定義
+# 改讀共用規則層 story_base（不算過渡）；章回主線 chapters 的模組層 import 搬到包的 actions.py（載入時登記 storyline.TASKS）
+GAME_IMPORTS |= {"tianxia.features.story.actions"}
+GAME_DELEGATES |= {
+    # 搬進包的 10 個方法留 10 個一行委派：server（MAIN_ACTIONS 的 story_seen、main_view 的 story_cards）、假人與腳本（story_start）、測試（story_cards、
+    # _story_begin、_story_tick、_mirror_squad）、探索包（ctx._story_begin）、核心原位（_story_tick）在叫的；_story_act、_story_fight、_story_bout 只有包裡叫
+    "story_start", "story_cards", "story_seen", "story_card_view", "_story_begin", "_story_tick", "_mirror_squad",
+    # 核心原位叫的 3 個（本體在 actions）：答題的選單、「未了之事」那一顆、換季收線
+    "_story_menu", "_story_options", "_story_close_season",
+}
+GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_story_menu"): "選單：一條線的答題在有所感的選單之後、此地有人要談的選單之前；接 menu 掛鉤的位置不對（menu 掛鉤在有所感的 _sense_menu 之前，"
+                                          "同時成立時先後會變），/api/main 的選項順序算行為",
+    ("_everyday_options", "_story_options"): "選單：「未了之事」那一顆在應召之後、此地的人之前；options 掛鉤在體力玩法之後（最後面），順序算行為",
+    ("_reset_player_for_new_season", "_story_close_season"): "換季：還沒收的線要在 world.save_annals 存上一季的行狀之前寫「此事未了」進傳；on_season_end 在 save_annals 之後，來不及",
+    ("sync", "_story_tick"): "同步：不在線時過了的期限、休季時還沒收的線在召見之後、席次之前走一步；紀錄先後算行為，on_sync 在召見之前",
+    ("choose", "_story_tick"): "每個動作結束那一格（事件了結之後、召見之前）：不是任何掛鉤的位置",
+    ("_event_progress", "_story_tick"): "事件了結的推進：段落事件了結了，照記下的那一步往下走；同上",
+})
+
 
 @functools.lru_cache(maxsize=None)
 def _engine_tree() -> ast.Module:
@@ -841,8 +863,12 @@ SHARED_PENDING.update({
 SHARED_PENDING.update({
     ("story_base", "atlas"): "排定：大區（atlas.region_of）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層（同 chiefs → atlas：atlas 最外層 import "
                              "出陣包 sortie，也經 world 帶進宴客包 feast、單挑包 bout）：切開之前 import story_base 會連帶載入 sortie（原本 import storyline 就是這樣）",
-    ("story_base", "chapters"): "排定：章回的大事結果（chapters.outcome_mark，vary 函式裡延後 import）——第 40 批收進共用規則層",
+    ("story_base", "chapters"): "排定：章回的大事結果（chapters.outcome_mark，vary 函式裡延後 import）——第 40 批收進共用規則層"
+                                "；章回自己 import 舊名 storyline（一條線包 story 的別名），叫到才連帶載入 story",
 })
+# chapters 載入時 import 舊名 storyline（章回登記 TASKS，storyline.active、start 這些）：第 30 批 storyline 成了一條線包 story 的別名，
+# 所以另外兩條指到 chapters 的排定項（timetable 的擲骰修正）叫到它也連帶載入 story
+SHARED_PENDING[("timetable", "chapters")] += "；章回自己 import 舊名 storyline（一條線包 story 的別名），叫到才連帶載入 story（第 30 批）"
 SHARED_PENDING[("siege", "world")] += "；world 函式裡也 import 舊名 generals（決戰包 battle 的別名：開集結那一下派龍頭上陣），叫到它就連帶載入 battle"
 
 # 總表第 15 列寫了、這一批先不收的（派工：import 了包的「先改成查詢服務，或者先不收」；讀的都是還沒成包的舊模組，還沒有包可以回答查詢）：
@@ -1260,7 +1286,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # sense（全部拆包第 24 批：tianxia/sensing.py、epiphany.py、glyph.py、insight_llm.py）
                          "sensing": "sense", "epiphany": "sense", "glyph": "sense", "insight_llm": "sense",
                          # cultivation（全部拆包第 23 批：tianxia/cultivation.py、chuangong.py、ascend.py）
-                         "cultivation": "cultivation", "chuangong": "cultivation", "ascend": "cultivation"}
+                         "cultivation": "cultivation", "chuangong": "cultivation", "ascend": "cultivation",
+                         # story（全部拆包第 30 批：tianxia/storyline.py）
+                         "storyline": "story"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 

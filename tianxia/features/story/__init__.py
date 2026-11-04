@@ -4,14 +4,14 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 
 - storyline.py：一條線自己的走法（選單、答題、打一場、結算、收尾、餘波；原 tianxia/storyline.py 的後半，舊名留成別名）。
   底座〔登記鉤子的字典、開線、換字、題目文字〕在共用規則層 tianxia/story_base.py（核心的 rules、事件檢定與探索包、有所感包也讀），storyline.py re-export 它的每個名字
-- actions.py：原本 Game 上的 10 個方法（Game 留 9 個一行委派）與核心原位叫的 4 個（答題選單、「未了之事」那一顆、換季收線、標題）的本體
+- actions.py：原本 Game 上的 10 個方法（Game 留 10 個一行委派）與核心原位叫的 4 個（答題選單、「未了之事」那一顆、換季收線、標題）的本體
 
 掛鉤：choose（只吃 story:；enabled 一直是 True，線自己看 Config.jianfa.storylines）。沒有路由（/api/do/story_seen 在殼的 MAIN_ACTIONS，照舊叫 Game）、
 沒有假人分數（story: 原本在 bot_policy.score 就沒有處理，落到預設的 None）。
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature
+from tianxia.core.features import Feature, Outcome
 
 
 class StoryFeature(Feature):
@@ -28,6 +28,15 @@ class StoryFeature(Feature):
         """一直開著：原本 choose 的 story: 那一支與標題、選單都不看任何開關（線自己看 Config.jianfa.storylines〔storyline.on〕；關著時選單上沒有 story: 的選項，
         按舊的 id 也走原本那條路）。灰掉的包不會接 choose，落到 else 當成事件選項炸掉，所以要一直是 True。"""
         return True
+
+    def choose(self, ctx, kind, arg):
+        """story:<線>（按「未了之事」那一顆、答題的答案、先擱著；原本 Game.choose 的 storyline.OPTION 那一支叫 Game._story_act）：標題照原本 Game._action_title
+        的那一支（線的名字，動作之前先拿）。"""
+        if kind != "story":
+            return None
+        from . import actions  # noqa: PLC0415
+
+        return Outcome(title=actions.story_title(ctx, arg), run=lambda: actions.story_act(ctx, arg))
 
 
 FEATURE = StoryFeature()
