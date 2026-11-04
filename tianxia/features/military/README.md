@@ -33,3 +33,20 @@
 - `_convoy_arrives`：`_arrive` 走到地點那一刻先交糧車、再接懸賞榜護送交差。`_order_credit`：核心的單打服務（`_squad_encounter`）打贏之後記功；出陣、決戰、大勢人物也經 `ctx._order_credit` 叫。
 - `server.py` 的 `orders`、`convoy` 兩個鍵（`/api/main`）與管理者三顆鈕（`ADMIN_ACTIONS` 的順序算行為）照舊叫 Game 的委派。
 - `orders.py`（軍令規則）、`ranks.py`、`seats.py`、`opportunities.py`、`foreshadow.py` 不在這一包（共用規則層，總表第 40 批；機緣、伏筆第 34 批）。
+
+## 測試
+
+- 這一包的 `tests/`：`test_rank_actions.py`（第 3、4 階行動：內容表、選單、做一次、做滿、推滿，67 個函式，原 `tests/core/`，整檔搬）、
+  `test_military_smoke.py`（煙霧一條：黃巾第 3 階煽動起事）。沒有 `military_stage.py`：這一包沒有掛鉤給選項，契約測試擺「平常」就夠（`STAGE_PACKAGES` 只列有擺局面檔的包）。
+- `test_admin_triggers.py`（31 個函式）**留在 `tests/figures/`**：14 個是管理者的軍令、席次、召見（這一包），其餘是開戰、機緣、碎片，混合檔不拆。
+
+## 另外要跑的混合檔
+
+混著別的功能、留在原處的（`條數＝碰到這一包的／全檔`，用語法樹數過，函式為單位，數字是粗的）；改這一包時連它們一起跑：
+
+- 軍令卡、記功、押糧、席次抄帳：`tests/figures/test_orders.py`（20／85，`orders_view`、`_order_credit`、糧車）、`tests/figures/test_seats.py`（`_report_seat`）、
+  `tests/figures/test_defection.py`（2／41）、`tests/figures/test_gentry_allied.py`（`_summons_plan`）、`tests/ranger/test_season21_daily.py`（2／29）、`tests/figures/test_week7_season.py`
+- 第 2 階行動與召見：`tests/figures/test_opportunities.py`（18／93，`act:rank2`、`_rank2`）、`tests/figures/test_admin_triggers.py`（14／31）
+- 引導與網頁：`tianxia/features/guide/tests/test_opening.py`（2／9，`orders_view`）、`tests/map/test_weekcard.py`、`tests/core/test_prologue.py`（2／101）、`tests/web/test_prologue_web.py`（3／81）、`tests/web/test_jianghu_page_web.py`（1／134）
+- 別包叫進來的：`tianxia/features/sortie/tests/test_sortie.py`（出陣不花出陣次數）、`tests/server/test_server.py`（2／385）
+- 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/military/order_actions.py`
