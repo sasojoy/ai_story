@@ -55,4 +55,12 @@
 
 ## 測試
 
-見 Task 4 補。
+- 這一包的（`tianxia/features/socialize/tests/`，14 條，全部不是 slow，`-n 4` 約 7 秒）：`test_socialize_variety.py`（4：城鎮的交友不能每次都抽到茶館說書，補寫的事件在
+  `content/events/social_*.json`；第 21 批整檔從 `tests/core/` 搬進來，只改了 `CONTENT_DIR` 的路徑層數）、`test_socialize_smoke.py`（1，`smoke`：week7 的官軍在長社按交友打開名單、
+  點皇甫嵩，沒有模型他無心多談、名單收起）、`test_socialize_bots.py`（`call:back` 0.0、`call:<人物>` 不按、policy 問這一包）、`socialize_stage.py`（契約測試擺局面：平常）。
+- **`test_for` 挑不到的、另外要跑的**（混著別的功能，這一輪不搬、不拆）：`tests/core/test_precise_actions.py`（`_social_plan`、`_deliver_fortune`）、`tests/figures/test_day_scale.py`
+  （`_talks_left`、`_talked_out_note`、`_audience_intro`）、`tests/figures/test_promotions_high.py`（`_brush_off`）、`tests/arts/test_hints.py`、`tests/arts/test_renown_explain.py`、
+  `tests/core/test_engine.py`（`call:`、`can_meet_figure`、`_talks_used`、抽不到事件的打發話）、`tests/figures/test_admin_timetable.py`、`tests/bots/test_bot_policy.py`
+  （`socialize_*`）、`tests/figures/test_figures.py`、`tests/server/test_server.py`、`tests/seal/test_seal.py`／`test_seal_revamp.py`（`_talk_cap`）、`tests/core/test_explain.py`、
+  `tests/core/test_social.py`、`tests/season/test_real_content.py`（`_deep_interaction_target`）。網頁測試（`tests/web/test_explain_web.py`、`test_jianghu_page_web.py`）第 3 階。
+- 前後一字不變：`scripts/same_behavior.py` 的 `socialize` 軌（`--tracks socialize,companions,talk,guide`）。
