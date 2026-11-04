@@ -146,6 +146,13 @@
   行動列說明都讀）、`SNUB_NOTE`（剛吃了敗仗，閉門不見：挑戰本人那一側的按鈕也寫它）、`SOCIAL_NO_ONE`（一類一顆的交友沒有人也沒有結識事件時，
   鈕上那一句；網頁測試讀）。原本在 engine.py，engine 照舊 import 回來（`from tianxia.engine import SNUB_NOTE, SOCIAL_NO_ONE` 照舊拿得到）
 
+# military（全部拆包第 33 批「軍情一」：軍令卡、押糧、第 2 階與第 3／4 階行動、席次抄帳與輪替、召見搬進軍情包；計畫 docs/superpowers/plans/2026-11-05-軍情包-第1批.md 1.2）
+- `ctx._order_credit(*, side=None, **kw)`（替自己記一次軍令〔orders.credit〕，真的記到了就推新手引導的「完成一次軍令的個人部分」；出陣、大勢人物的挑戰本人、
+  決戰包的約戰結算都叫它，出陣約戰結算時也叫在攻方、應戰的人那兩份 Game 上——包裡的變數名 attacker、defender，邊界測試照樣掃。原本記在三、過渡 battle 那一段，
+  軍情成包，改列這裡：本體在 `features/military/order_actions.py`，Game 留一行委派）
+- 共用的字（從這個模組 import）：`RANK_ACTION_PREFIX`（第 3、4 階行動的選項 id 前綴 `act:rank:`；核心的 `_act`、`_action_title` 認它，軍情包的選單產生它。原本在 engine.py，
+  engine 照舊 import 回來，`from tianxia.engine import RANK_ACTION_PREFIX` 照舊拿得到）
+
 ## 二、查詢服務
 
 # battle（主動搬六包第 5 批；主人：決戰包。本體還在 Game——「打」那一半，第 6～8 批搬——決戰包「看」那一半經 ctx 叫；搬完由決戰包經
@@ -242,6 +249,10 @@ explore（主動搬六包第 3＋4 批加的這一段）
   （商城：這一季用不上的插畫票不賣）、`illustration_for(state, content, season)`（行狀 annals.standing 的插畫圖庫鍵）、`Writer`、`writers(...)`、
   `AFFINITY／TIER／BOUGHT／REASONS`（行狀 annals.standing 的評曰寫手）；原本是 `tianxia/zhuan_end.py` 的
 
+# military（全部拆包第 33 批「軍情一」；主人：軍情包）
+- `ctx._duty_option(name)`（主人：出陣包 features/sortie；軍令卡上第 1 階守勢行動那一顆的鈕，共用出陣的次數與字；軍情的 `order_options` 在有戰線的地方叫它。
+  原本核心的 `_order_options` 直接叫 `self._duty_option`，記在邊界測試 GAME_DELEGATE_CALLERS 的 `(_order_options, _duty_option)`，軍情成包改經 ctx 叫）
+
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
 explore（主動搬六包第 3＋4 批加的這一段）
@@ -277,7 +288,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 # battle（全部拆包第 8 批：推進與結算；主人：玉璽，總表附錄甲）
 - `ctx._seal_bare()`（補份量快照時不含碎片的那一份）、`ctx._seal_settle(battle, definition, result)`（時刻表決戰收場：先挑挑戰者、再挑現世的得主）、
   `ctx._deliver_seal_results()`（玉璽碎片的事補送到自己手上）
-- `ctx._order_credit(...)`（軍令；出陣約戰結算時也叫在攻方、應戰的人那兩份 Game 上——包裡的變數名 attacker、defender，邊界測試照樣掃）
+（`ctx._order_credit(...)`：全部拆包第 33 批軍情成包，改列一、共用服務 `# military` 那一段）
 （第 16 批合進 develop 時去重：這一段原本還列了出陣包用的 `_squad_encounter`（as_sortie=True：打一場隊伍，出陣攻打）、`_push_progress`
 （地盤：領地爭奪推、拉進度）、`_drill_gains`（操練）、`_spar_power`、`_spar_mirror`（切磋：本人對本人的威力、從另一邊看同一場）、
 `_raid_key`（截殺與混戰共用的冷卻帳 WorldState.raids 的鍵）、`_conquest_side`（領地爭奪算哪一邊；出陣約戰用）、`place_minutes`（出陣約戰卡上
@@ -363,6 +374,8 @@ if TYPE_CHECKING:
 # 共用的字（原本寫在 engine.py；功能包要用、又不能 import engine，搬到這裡，engine 照舊叫得到）
 PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，畫面照常可看"
 NO_SUCH_PLAYER = "（江湖上沒有「{name}」這個人。）"  # 管理者查不到名號（玩家個人劇情、商城查帳；只有管理者看得到）
+# military（全部拆包第 33 批：原本寫在 engine.py；軍情包的第 3、4 階行動選單要產生它、又不能 import engine，搬到這裡，engine 照舊叫得到）
+RANK_ACTION_PREFIX = "act:rank:"  # 第 3、4 階行動的選項 id 前綴（act:rank:<行動 id>，正式版戊一）；models.ALLOW_FAMILIES 也列它，原始碼裡要真的有
 # sortie（全部拆包第 17 批：原本寫在 engine.py；出陣包的遊歷鈕要用、又不能 import engine，搬到這裡，engine 照舊叫得到）
 BIG_FIGHT_WAIT = "兩人對峙……"  # 大場面按下去、等模型判讀時按鈕上的字（武學與成長設計 8.3）
 

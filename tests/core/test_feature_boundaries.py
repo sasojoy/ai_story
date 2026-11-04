@@ -414,7 +414,7 @@ GAME_DELEGATE_CALLERS.update({
                                     "打不打在單打服務裡定；單打服務的「遇上自己人」沒有對應的掛鉤。68 批裡沒有排：總表 3.4 可選的"
                                     "「戰鬥單打服務收進核心」（戰鬥調查 C1）那一次在 core/combat.py 開這一格、改叫掛鉤；不做 C1 就一直留著",
     ("_squad_encounter", "train_trend_push"): "戰鬥（不是出陣的那一支）打贏之後遊歷推大勢：總表第 26 批的事件（打贏一場；原位行尾標「# 過渡：第 26 批」）",
-    ("_order_options", "_duty_option"): "軍令的兩個行動（軍情，總表第 33 批）：守勢那一顆的鈕是出陣包的（共用出陣的次數與字）；軍情成包時改叫出陣包的查詢服務",
+    # （("_order_options", "_duty_option")：軍情第 33 批成包，_order_options 搬進軍情包，經 ctx._duty_option 叫出陣包的委派〔服務清單二、查詢服務 # military〕，拿掉）
 })
 # guide（全部拆包第 22 批「引導一」：新手引導包；計畫 docs/superpowers/plans/2026-11-01-新手引導包-第1批.md 1.4、1.5）：四張名單的引導那幾筆
 # 集中在這一段。核心原位碰引導的那幾處都沒有第 11 批的掛鉤，改叫 Game 上一行的服務委派（不新增 GAME_DIRECT）
@@ -459,7 +459,7 @@ GAME_DELEGATE_CALLERS.update({
     # 核心原位與別的功能叫引導的服務（Task 2 把 note_action、opening、enlist、guide 的幾個名字換成這幾個一行的委派）
     ("choose", "_note_action"): "選項做完、出門、交友、進出店面……七處：" + _NOTE_HOOK,
     # （(_sense_apply, _note_action)：有所感悟到意境——全部拆包第 24 批 _sense_apply 搬進有所感包、包裡經 ctx 叫，拿掉）
-    ("_order_credit", "_note_action"): "替軍令記到功（入伍段的「出一次力」）：軍情還沒成包（總表第 33、34 批）；" + _NOTE_HOOK,
+    # （(_order_credit, _note_action)：軍情第 33 批成包，_order_credit 搬進軍情包，經 ctx._note_action 叫引導，拿掉）
     # 守勢（原 Game._duty，act:duty）：這一批開發時第 17 批正在把它搬進出陣包，開發時不改它（計畫第六節「跟第 17 批」）；第 17 批先合進
     # develop、搬成 train_actions.duty，這一批合進 develop 時那兩處改叫 ctx._note_action（包裡叫，不在這張名單；計畫第七節）
     ("_faction_step", "_note_action"): "投靠那一下（序章、引導的 join）：陣營還沒成包（總表第 35 批）；" + _NOTE_HOOK,
@@ -853,6 +853,39 @@ GAME_DELEGATE_CALLERS.update({
     ("_act", "_challenge"): _ACT_CHALLENGE + "（按下去）",
     ("sync", "_deliver_guard_credits"): "同步補名望與心得：夾在 _deliver_echoes 與 deliver_notices 之間，FEATURES 新包排在最後，酒肆的 deliver_notices 會跑在它前面，行狀順序會變",
 })
+# military（全部拆包第 33 批「軍情一」：新包 tianxia/features/military/；計畫 docs/superpowers/plans/2026-11-05-軍情包-第1批.md 1.4、1.5）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。17 個方法搬進包，留 15 個一行委派（`_check_cost_note`、`_rank_action_line` 只有包裡自己叫，沒有委派）。
+# 沒有選項前綴、沒有掛鉤可接：`act:rank2`、`act:convoy`、`act:summons`、`act:rank:<行動>` 是核心 `_act` 的 act 子動詞（行動列，總表第 57 批才接 Verb），
+# 選單三段夾在 `_everyday_options` 的 act 那些之間（順序算行為）。`bot_policy.score` 的 act 分支原位不動。
+GAME_IMPORTS |= {
+    "tianxia.features.military.order_actions", "tianxia.features.military.convoy_actions", "tianxia.features.military.step_actions",
+    "tianxia.features.military.seat_actions", "tianxia.features.military.admin_actions",
+}
+GAME_DELEGATES |= {
+    # 核心原位叫的：選單三段、按下去三個（_rank2、_rank_action、_take_convoy）、走到終點交糧車（_convoy_arrives）、軍令記功（_order_credit：出陣、決戰、大勢人物也經它）、
+    # 席次抄帳（_report_seat）、管理者召見的規劃（_summons_plan）
+    "_order_options", "_rank2_options", "_rank_action_options", "_rank2", "_rank_action", "_take_convoy", "_convoy_arrives", "_order_credit",
+    "_report_seat", "_summons_plan",
+    # server 與測試在叫的：江湖頁的軍令卡與押糧那一行（/api/main）、管理者三顆鈕（/api/admin）
+    "orders_view", "convoy_line", "admin_issue_orders", "admin_rotate_seats", "admin_summon",
+}
+_ACT_RANK = "act:rank2／act:convoy／act:rank:<行動> 是核心 act 子動詞（行動列），總表第 57 批才擴 Verb：選單那一段、按下去都留在核心原位叫這一包的委派"
+GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_order_options"): _ACT_RANK + "（選單：軍令的守勢與糧車，排在第 2 階之前；順序算行為）",
+    ("_everyday_options", "_rank2_options"): _ACT_RANK + "（選單：第 2 階行動）",
+    ("_everyday_options", "_rank_action_options"): _ACT_RANK + "（選單：第 3、4 階行動）",
+    ("_act", "_rank2"): _ACT_RANK + "（按下去：第 2 階行動）",
+    ("_act", "_rank_action"): _ACT_RANK + "（按下去：第 3、4 階行動）",
+    ("_act", "_take_convoy"): _ACT_RANK + "（按下去：接下糧車）",
+    ("_arrive", "_convoy_arrives"): "走到地點那一刻交糧車（路過也算）：先交糧車、再接懸賞榜的護送交差，位置固定、沒有對應的掛鉤（移動成包時，總表第 56 批再看）",
+    ("_squad_encounter", "_order_credit"): "戰鬥（核心的單打服務）打贏之後替軍令記功：位置固定在推線與地盤進度之間（出陣攻打的記功排在推進度之前），沒有對應的掛鉤",
+    ("sync", "_report_seat"): "同步的第四階席次抄帳與補缺（回話的最後一段，在 summons 之後）：on_sync 在更後面，回話的先後算行為",
+    ("choose", "_report_seat"): "做完一個動作之後抄帳、補缺（這個動作結束時 _save_season 一起存）：位置在 after_action 之前，先後算行為",
+    ("travel", "_report_seat"): "走完一趟之後抄帳（同 choose：正式版丁）；賽季時鐘暫停時什麼都不做這一句在委派的本體裡",
+    ("admin_player_choices", "_summons_plan"): "管理者的玩家選單（發召見那一顆灰不灰、為什麼）與 admin_summon 共用同一個規劃（_summons_plan）",
+})
+
+
 @functools.lru_cache(maxsize=None)
 def _engine_tree() -> ast.Module:
     return ast.parse((TIANXIA / "engine.py").read_text(encoding="utf-8"))  # 一萬七千行，parse 一次一秒多：大家共用這一份
@@ -1200,6 +1233,11 @@ CORE_DELEGATE_CALLERS.update({
     ("event_check.event_tier", "_battle_for_me"): "事件分級那一行：全服戰鬥蓋著場景時不寫（tick=False）；事件檢定是核心本體、決戰包回答「此刻蓋著的那一場」，"
                                                   "位置固定、沒有對應的掛鉤（總表第 55～57 批再看要不要改成查詢服務的掛鉤）",
 })
+# military（全部拆包第 33 批）：上面預留的 features/orders 那一對（answer_event、answer_branch × _report_seat）接上
+CORE_DELEGATE_CALLERS.update({
+    ("event_check.answer_event", "_report_seat"): "隨口應對的結果也可能推大勢、記貢獻：第四階席次的帳在這裡也抄（正式版丁）；事件檢定是核心本體、席次抄帳在軍情包，位置固定、沒有對應的掛鉤",
+    ("event_check.answer_branch", "_report_seat"): "同上（隨口應對的分岔那一支）",
+})
 
 
 def ctx_delegate_callers(source: str, name: str, delegates: set[str] | None = None) -> set[tuple[str, str]]:
@@ -1421,7 +1459,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # figure_acts（全部拆包第 31 批：tianxia/figure_aid.py、yuedan.py）
                          "figure_aid": "figure_acts", "yuedan": "figure_acts",
                          # zhuan（全部拆包第 29 批：tianxia/biography.py、zhuan_end.py）
-                         "biography": "zhuan", "zhuan_end": "zhuan"}
+                         "biography": "zhuan", "zhuan_end": "zhuan",
+                         # military（全部拆包第 33 批：tianxia/rank_actions.py）
+                         "rank_actions": "military"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 
