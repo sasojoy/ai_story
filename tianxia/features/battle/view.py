@@ -20,7 +20,7 @@ from tianxia import calendar, gender, journal, team
 from tianxia import annals  # 過渡：待搬（行狀）
 from tianxia import battle_instance, battlelog, tactics  # 共用規則層（戰鬥規則核心）
 from tianxia import conquest, siege  # 共用規則層（地盤與攻城）
-from tianxia import cultivation, four_tiers, materials, mounts, renown, roster  # 過渡：待搬（絕學的契機、四階料、素材、坐騎、名聲、同伴）
+from tianxia import four_tiers, materials, mounts, renown, roster  # 共用規則層（四階料、素材、坐騎、名聲、同伴；絕學的契機第 23 批改叫 ctx._seize_chance）
 from tianxia import figure_life, front_lines, generals, seal, wins  # 過渡：待搬（人物風聞、戰線、龍頭上陣、玉璽、三陣營四勝利）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章；照 engine 的叫法）
 from tianxia.core.services import PAUSED_TEXT
@@ -190,7 +190,7 @@ def file_showdown(
                                         text=f"在{name}立了戰功", region=definition.region)
     rule = c.config.breakthrough
     if earlier is None and me.acted_rounds >= rule.showdown_rounds:  # 絕學的契機（方案 C）：這一季的決戰裡真的出過手
-        lines += cultivation.seize(s, c, ctx.world, rule.showdown_ratio, ctx.rng)
+        lines += ctx._seize_chance(rule.showdown_ratio)  # 修練包的查詢服務（全部拆包第 23 批；原本 cultivation.seize，同一份 state、content、rng）
     trends = {t.id: t.name for t in c.scenario.trends}
     moved = resolve_trends(c, s.world, battle.outcome_trend_delta)  # 開關關著時戰線都寫成黃巾聲勢
     # 第一季規則開著時，戰線的增減不寫數字（FB-064，同 change_trend）：這一季的是機器可讀的標籤，畫在戰鬥卡片

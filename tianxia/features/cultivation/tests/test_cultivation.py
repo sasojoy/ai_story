@@ -674,6 +674,19 @@ def test_the_practice_row_only_offers_the_pill_on_the_last_step(adept):
     assert not row["cultivate"]["ok"] and row["cultivate"]["note"] == cultivation.NO_RANK_LINE
 
 
+def test_slot_insight_goes_into_the_named_slot(game):
+    """修練頁按「裝」一律帶格子（web/app.js 的 slot-in → MENXIA_ACTIONS["slot"]）：Game.slot_insight 那一行委派要把 index 傳到底。
+    第一格空著時指定第二格才分得出來（不傳會落到第一格）；第 23 批審查：同一份情境先裝滿第一格再指定第二格，委派丟掉 index 也全綠。"""
+    p = game.state.player
+    p.member.wugong_id, p.insights = "basic_fist", ["feng", "huo"]
+    msgs = game.slot_insight("basic_fist", "feng", 1)
+    assert msgs[0] == arts_mod.SLOTTED_LINE.format(insight="風", art="粗淺拳腳", i=2)
+    assert p.art_slots["basic_fist"] == [None, "feng"]
+    assert game.slot_insight("basic_fist", "huo", 1) == [arts_mod.TAKEN_SLOT.format(i=2)]  # 指定的那一格有了：不改放別格
+    game.slot_insight("basic_fist", "huo")  # 沒指定：照舊挑空的那一格
+    assert p.art_slots["basic_fist"] == ["huo", "feng"]
+
+
 # ── FB-069：絕學的正式名字不能取成江湖上任何一個角色的名號 ──────────────────
 
 

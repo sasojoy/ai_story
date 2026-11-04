@@ -418,6 +418,38 @@ GAME_DELEGATE_CALLERS.update({
     ("_squad_encounter", "train_trend_push"): "戰鬥（不是出陣的那一支）打贏之後遊歷推大勢：總表第 26 批的事件（打贏一場；原位行尾標「# 過渡：第 26 批」）",
     ("_order_options", "_duty_option"): "軍令的兩個行動（軍情，總表第 33 批）：守勢那一顆的鈕是出陣包的（共用出陣的次數與字）；軍情成包時改叫出陣包的查詢服務",
 })
+# cultivation（全部拆包第 23 批「修練」：改練、練成、意境裝卸、熔煉、絕學與破境丹、破境卡、傳功、配點搬進修練包 tianxia/features/cultivation/；計畫
+# docs/superpowers/plans/2026-11-01-修練包-第1批.md 1.6）：這一批加的集中在這一段（並行的拆包線不跟別人的行穿插；拿掉的在原處）
+# 22 個動作（actions）、11 個修練頁的唯讀資料（view）的一行委派；原本那兩行 `from . import ascend`、`from . import (..., chuangong, ...,
+# cultivation, ...)` 現在是別名，engine 不再用，拿掉。MELT_MANY_PROLOGUE（序章裡批量熔煉那一句）搬進包，tests/core/test_prologue.py 照舊從 engine 拿
+GAME_IMPORTS |= {"tianxia.features.cultivation.actions", "tianxia.features.cultivation.view"}
+GAME_DELEGATES |= {
+    # server（MENXIA_ACTIONS、menxia_view、main_view 的境界卡、/api/do/allocate、破境卡那一句的三段式）、假人（bot、bot_policy）、測試在叫的：
+    # 改練、練成、意境裝卸、熔煉、服丹衝關、舊存檔的定名（A 段與 C 段）、破境卡、傳功、配點與境界卡（20 個）、修練頁的唯讀資料（11 個）
+    "switch_art", "practice", "practice_refusal", "slot_insight", "unslot_insight", "melt_art", "melt_many", "melt_insight", "cultivate",
+    "mastery_request", "name_mastered", "ascend_request", "ascend_line", "ascend_dismiss", "chuangong", "chuangong_lessons", "allocate_stat",
+    "milestone_card",
+    "skill_detail", "art_detail", "member_card", "roster_cards", "menxia_rules", "attribute_note", "bag_text", "holdings", "art_rows",
+    "insight_rows", "naming_row",
+    # 核心原位叫的 2 個私有（_drop_stale_references、sync；_drop_old_zhuifeng 測試也直接叫）與兩個新的查詢（絕學的契機：核心的單打服務 _seize、
+    # 決戰包的收場補送經 ctx 叫；破境卡：status_data）。_allocate_line 只有 allocate_stat 叫，包裡直接叫 actions.allocate_line，不留
+    "_drop_old_zhuifeng", "_deliver_renames", "_seize_chance", "ascend_view",
+}
+GAME_DELEGATE_CALLERS.update({
+    ("_drop_stale_references", "_drop_old_zhuifeng"): "讀檔清失效參照：追風步的舊品質要在 arts.migrate（槽數照品質算）之前拿掉；on_drop_stale 在最後、"
+                                                      "位置不對（先後算行為）",
+    ("sync", "_deliver_renames"): "同步時補別人定名的那一則：玉璽補送之後、首創名望回饋之前（江湖紀錄的先後算行為）；deliver_notices 在名望回饋與"
+                                  "護衛補帳之後、on_sync 還問 enabled 且在寄放之前，都不是這個位置",
+    ("_seize", "_seize_chance"): "核心的單打服務打贏一場之後擲絕學的契機：總表第 26 批的事件（打贏一場；原位行尾標「# 過渡：第 26 批」）",
+    ("status_data", "ascend_view"): "狀態列的破境卡（status 的 ascension 那一格）：status 掛鉤合進 main_view 的頂層、不是這一格，鍵的順序算行為"
+                                    "（狀態列順序，總表第 66 批）",
+    ("_graduate_pass", "slot_insight"): "假人與腳本走序章照步驟按（裝師父點名的那一門）：新手引導還沒成包（第 22 批 dev/guide-1 把 _graduate_pass"
+                                        "搬進引導包、改經 ctx 叫，合併時拿掉這 5 對）",
+    ("_graduate_pass", "switch_art"): "同上（把裝了意境的那一門換上）",
+    ("_graduate_pass", "practice"): "同上（練一成）",
+    ("_graduate_pass", "allocate_stat"): "同上（配一點）",
+    ("_graduate_pass", "melt_art"): "同上（熔師父說的那一門）",
+})
 
 
 @functools.lru_cache(maxsize=None)
@@ -918,7 +950,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # tavern
                          "tavern": "tavern", "tavern_ask": "tavern",
                          # battle（全部拆包第 7 批：tianxia/escorts.py）
-                         "escorts": "battle"}
+                         "escorts": "battle",
+                         # cultivation（全部拆包第 23 批：tianxia/cultivation.py、chuangong.py、ascend.py）
+                         "cultivation": "cultivation", "chuangong": "cultivation", "ascend": "cultivation"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 

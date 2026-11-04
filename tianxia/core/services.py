@@ -112,6 +112,15 @@
   `ctx._push_room(trend_id)`（今天在這條線上還推得動多少；第一季規則關著是無限）
 - 共用的字：`BIG_FIGHT_WAIT`（大場面按下去、等模型判讀時按鈕上的字；事件的戰鬥選項、挑戰本人、遊歷與出陣都用，從這個模組 import）
 
+# cultivation（全部拆包第 23 批「修練」：改練、練成、意境裝卸、熔煉、絕學與破境丹、破境卡、傳功、配點搬進修練包要叫的；主人都是核心，
+# 總表附錄乙 final_owner.json；計畫 docs/superpowers/plans/2026-11-01-修練包-第1批.md 1.3）
+籌備中與絕學的名字
+- `ctx._preparing()`：賽季籌備中（管理者還沒開季）；定名的 A 段（假人用）籌備中回 None。動作被擋的裝飾器不經這張清單（下面那一行，從這個模組 import）
+- `ctx._art_name(art_id)`：武學此刻在江湖上的名字（定名之後是新名；絕學定名那一則江湖史寫它）
+- 共用的字與小函式：`PREPARING_TEXT`（選單上灰的那一顆、安排前往被擋的原因）、`PREPARING_REFUSAL`（動作被擋回的那一句）、
+  `not_while_preparing`（裝飾器：籌備中什麼都不能做，只回 PREPARING_REFUSAL、照一般的拒絕寫進紀錄〔`ctx._log`〕；原本是 engine.py 的
+  `_not_while_preparing`，engine 照舊用同一個函式掛在還沒搬的那些動作上）
+
 ## 二、查詢服務
 
 # battle（主動搬六包第 5 批；主人：決戰包。本體還在 Game——「打」那一半，第 6～8 批搬——決戰包「看」那一半經 ctx 叫；搬完由決戰包經
@@ -138,6 +147,10 @@ explore（主動搬六包第 3＋4 批加的這一段）
 # looks（主人：形象包）
 - `ctx._battle_ult()`：放手一搏送出那一刻身上的絕招（move、name、look、weapon；沒穿、沒有導演稿是 None）。決戰包送出放手一搏時記進
   `BattleRound.ults`，回合首功從這裡挑（Joy 2026-11-03；純展示，不動數字）
+
+# cultivation（全部拆包第 23 批；主人：修練包）
+- `ctx._seize_chance(ratio)`：絕學的契機——剛打贏一場難度比 ratio 的仗，身上到了門檻的那一門擲一次頓悟（cultivation.seize），回寫給玩家看的
+  那幾句（沒擲、沒成是空的或一句摸到又滑走）。核心的單打服務 `_seize` 與決戰包的收場補送叫它（本體在 `features/cultivation/actions.py`）
 
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
@@ -193,6 +206,9 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
   tests/figures/test_parley_two.py 換掉實例上的 `_train`、`_sortie`，tests/core/test_explain.py 換掉 `Game.train_trend_push`，
   scripts/sim_trend_sources.py 換掉 `Game._train_push`——包裡經 ctx 叫，換掉的才打得到；呼叫端改完就拿掉）
 
+# cultivation（全部拆包第 23 批）
+- `ctx._check_hints()`（碰到才說：配點配成了之後看一遍，博聞加了持有上限會變；主人新手引導〔總表第 22 批，`dev/guide-1` 列在共用段，合併時去重〕）
+
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 
 explore（主動搬六包第 3＋4 批加的這一段；都是 Game.__init__ 起的）
@@ -213,6 +229,10 @@ explore（主動搬六包第 3＋4 批加的這一段；都是 Game.__init__ 起
 tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由同上）
 - `ctx._tavern_seek_exact`、`ctx._tavern_reply`：查人那一下問得多清楚（託酒家留意看它；None 沒查成、True 確切地點、False 沒問清楚）、
   問酒家 B 段寫好的那一句（tavern_ask 放、問完清掉）
+
+# cultivation（全部拆包第 23 批；Game.__init__ 起的）
+- `ctx.forged`、`ctx.forged_thing`、`ctx.secret_solved`：這一下裝成了沒、合出了什麼、解開了哪一份口訣秘方（裝意境寫，server 的
+  api_menxia_do 在鎖裡讀；煉製 `Game.forge`、自創 `create_name` 也寫——煉製第 44 批）
 
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """
@@ -314,3 +334,24 @@ class WalletService:
 
     def item_for(self, effect: str) -> str | None:
         return item_for(self._game.content, effect)
+
+
+# cultivation（全部拆包第 23 批「修練」：原本寫在 engine.py；修練包的動作要掛、又不能 import engine，搬到這裡，engine 照舊叫得到——
+# tests/bots/test_stamina_refill.py、tests/gear/test_shop.py 從 engine 拿 PREPARING_REFUSAL；還在 Game 上的動作照舊掛同一個裝飾器）
+import functools  # noqa: E402  （這一段自己的 import：接在檔尾，不跟別段穿插）
+
+# 賽季籌備中（管理者還沒開季）：選單上那一顆灰的、安排前往被擋的原因寫 PREPARING_TEXT；動作被擋回一句 PREPARING_REFUSAL
+PREPARING_TEXT = "賽季籌備中，等待管理者開季"
+PREPARING_REFUSAL = f"（{PREPARING_TEXT}。）"
+
+
+def not_while_preparing(action):
+    """Game 的動作（與修練包裡同一種動作）：籌備中什麼都不能做，只回一句 PREPARING_REFUSAL（照一般的拒絕寫進紀錄，ctx._log）；
+    不然照常做。第一個參數是 ctx（第一階就是 Game 本身）。"""
+    @functools.wraps(action)
+    def guarded(ctx: Game, *args, **kwargs):
+        if ctx._preparing():
+            return ctx._log([PREPARING_REFUSAL])
+        return action(ctx, *args, **kwargs)
+
+    return guarded
