@@ -112,7 +112,7 @@ ${DEV_JOB}
 
 ${ONE('計畫與 Task 1')}
 做法：先照 superpowers:writing-plans 寫計畫 ${PLAN}（第一節「現行程式對照」照現行程式重量：要搬的方法與模組、要留的委派、留在原位的、接到第 11 批掛鉤的、核心直接碰包的各幾處、選項前綴在 choose／bot_policy／bot.py／bot_runner 的每一處）。**後面的子代理只看得到這份計畫與 commit，不必也不該再重量一次**：要搬的方法與行號範圍、委派寫法、掛鉤、每一處前綴、順序與坑都寫清楚。然後做 Task 1，一個 commit（不開子代理）：
-- **Task 1：證明的情境**：same_behavior 加這一包的一軌或在相關那一軌加情境（上面寫的情境；五種設定 none、weekend、season21、week7、test；整段、半舊半新〔切在這一包有「寫到一半」狀態的那一刻〕、假人〔BotRunner 碰得到這一包的選項〕）。先在 base 上跑兩次證明穩、改一個字抓得到，commit、推。
+- **Task 1：證明的情境**：same_behavior 加這一包的一軌或在相關那一軌加情境（上面寫的情境；三種設定 week7、season21、test（第 14 批起 none、weekend 不比）；整段、半舊半新〔切在這一包有「寫到一半」狀態的那一刻〕、假人〔BotRunner 碰得到這一包的選項〕）。先在 base 上跑兩次證明穩、改一個字抓得到，commit、推。
 測試：Task 1 只跑上面那一軌的 selftest。
 ${DEV_REPORT}`
 const DEVP2 = (prev) => `${DEV_HEAD}
@@ -132,7 +132,7 @@ ${NEXT('proof', prev)}
 ${DEV_JOB}
 
 ${ONE('Task 5')}
-- **Task 5：證明與驗收**：same_behavior base（${BASE}）對 head，**這一批只跑這一次，跑在最後的程式上**：${A.all_tracks ? '這一批動到核心，**所有軌**' : '**這一包的軌，加上這一批搬的方法直接叫到、或直接叫它們的那幾包的軌**（計畫第一節列出來；探索只有碰到才跑 `explore-compare`）'}，五種設定、整段、半舊半新、假人全部逐位元組一樣。量：包的測試時間、改包任一檔挑到幾條（≤ 300，不算核心契約）、過渡處數、委派數、GAME_DIRECT 與 GAME_DELEGATE_CALLERS、engine.py 行數。寫進計畫第五節，導覽跟著改。commit、推。
+- **Task 5：證明與驗收**：same_behavior base（${BASE}）對 head，**這一批只跑這一次，跑在最後的程式上**：${A.all_tracks ? '這一批動到核心，**所有軌**' : '**這一包的軌，加上這一批搬的方法直接叫到、或直接叫它們的那幾包的軌**（計畫第一節列出來；探索只有碰到才跑 `explore-compare`）'}，三種設定、整段、半舊半新、假人全部逐位元組一樣。量：包的測試時間、改包任一檔挑到幾條（≤ 300，不算核心契約）、過渡處數、委派數、GAME_DIRECT 與 GAME_DELEGATE_CALLERS、engine.py 行數。寫進計畫第五節，導覽跟著改。commit、推。
 測試：做的過程中只跑改到的那幾條；Task 5 跑一次 \`scripts/test_for.py --base origin/${FEAT}\`（照改到的檔挑包的測試、核心契約、import 到的；挑到幾條記下來）。**相關的 slow、整套、別包的軌都不跑。**
 ${DEV_REPORT}`
 
@@ -171,7 +171,7 @@ const findings = reviews.filter(Boolean).flatMap(r => r.findings || [])
 let head = dev.head, fix = null
 if (findings.some(f => f.severity !== 'nit')) {
   phase('Fix')
-  fix = await agent(`你是《天下大勢》的開發子代理，修 ${DEV}（現在 ${dev.head}）上審查員的發現。\n${COMMON}\n分支：明確 fetch，\`git switch -c ${DEV}-fix origin/${DEV}\`（同名已存在就加 -work），推回 origin/${DEV}（快轉）。每修一條一個 commit、修一條推一次；先寫會紅的測試（或讓 same_behavior 先抓到）再修；屬實的才修，不屬實的寫進 rejected 附證據；**nit 不修**，寫進計畫的審查那一節就好（PM 11/04：額度是拆完的瓶頸）。修完只跑修到的那幾條測試；改了 \`tianxia/\` 的程式或情境才重比這一包那一軌（五種，不跑別的軌）；只改測試、文件的不重比。要開伺服器用埠 ${P.fix}、${HOST}fix.localhost。暫存 ${SP}\\${SCRATCH}-fix\\，做完刪大檔。\n開發回報（摘要）：${dev.report.slice(0, 5000)}\n發現：\n${JSON.stringify(findings, null, 1)}\n審查摘要：${reviews.filter(Boolean).map(r => r.summary).join('\n---\n')}\n回報 head、修了哪些、駁回哪些、測試、學到的。`, { label: `fix:b${N}`, phase: 'Fix', schema: FIX_SCHEMA, isolation: 'worktree', ...DEV_OPTS })
+  fix = await agent(`你是《天下大勢》的開發子代理，修 ${DEV}（現在 ${dev.head}）上審查員的發現。\n${COMMON}\n分支：明確 fetch，\`git switch -c ${DEV}-fix origin/${DEV}\`（同名已存在就加 -work），推回 origin/${DEV}（快轉）。每修一條一個 commit、修一條推一次；先寫會紅的測試（或讓 same_behavior 先抓到）再修；屬實的才修，不屬實的寫進 rejected 附證據；**nit 不修**，寫進計畫的審查那一節就好（PM 11/04：額度是拆完的瓶頸）。修完只跑修到的那幾條測試；改了 \`tianxia/\` 的程式或情境才重比這一包那一軌（三種，不跑別的軌）；只改測試、文件的不重比。要開伺服器用埠 ${P.fix}、${HOST}fix.localhost。暫存 ${SP}\\${SCRATCH}-fix\\，做完刪大檔。\n開發回報（摘要）：${dev.report.slice(0, 5000)}\n發現：\n${JSON.stringify(findings, null, 1)}\n審查摘要：${reviews.filter(Boolean).map(r => r.summary).join('\n---\n')}\n回報 head、修了哪些、駁回哪些、測試、學到的。`, { label: `fix:b${N}`, phase: 'Fix', schema: FIX_SCHEMA, isolation: 'worktree', ...DEV_OPTS })
   if (fix && fix.head) head = fix.head
 }
 if (!WEB) return { n: N, dev, reviews, fix, head, check: null }
