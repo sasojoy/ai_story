@@ -3356,6 +3356,56 @@ class TierRules(_Strict):
         return self
 
 
+class LegacyTier(_Strict):
+    """傳承的一道門路（tianxia/features/legacy）：值到 at 就給 flag（玩家旗標，內容的條件 flags_all 讀它開門路）；text 是季初那一則
+    「這一季給了你什麼」的那一句（待 joy 潤）。只給門路、不給屬性或威力（架構方向 v2 第六節「給廣度、不給高度」）。"""
+
+    at: float = Field(gt=0)
+    flag: str
+    text: str
+
+
+def _legacy_tiers() -> dict[str, list[LegacyTier]]:
+    # 【草】門檻與給的門路：第 ③ 階段量完給 Joy 挑（設計稿第十三節第 6 題）；旗標先開好，內容還沒有讀它的條件
+    words = {"zheng": "正派", "xie": "綠林", "luck": "奇遇"}
+    return {
+        key: [LegacyTier(at=at, flag=f"legacy_{key}_{n}", text=f"{word}的門路開了第 {n} 道") for n, at in enumerate((5.0, 10.0, 20.0), start=1)]
+        for key, word in words.items()
+    }
+
+
+class LegacyRules(_Strict):
+    """傳承（tianxia/features/legacy；設計 docs/superpowers/specs/2026-11-04-屬性與跨季-架構方向v2.md 第六、七節）：正氣、邪氣、機緣三項
+    只在換季那一刻照上一季的傳結算一次（季中不動），識海帶一份神品意境到下一季、解封才用得到。預設關：關著一個位元組都不變。
+    數字都是【草】：權重先一律同值，量過（scripts/measure_legacy.py）再給 Joy 挑。"""
+
+    enabled: bool = False
+    keep: float = Field(default=0.7, ge=0, le=1)  # 上一季的值先留幾成，再加這一季的增量
+    curve: Literal["sqrt", "log"] = "sqrt"  # 增量怎麼換算：平方根，或 log(1 + x)；遞減，認真玩的人領先但差距不會無限拉開
+    # 評比的每一樣乘多少（先一律 1）：tasks 懸賞與託付辦成幾件、merit 陣營貢獻＋決戰場數＋首功、fame 名望、relations 跟人物的好感合計、
+    # good／evil 善名／惡名。正氣看 good、邪氣看 evil、機緣看其餘四樣的合計（legacy/rules.py 的 gains）
+    weights: dict[str, float] = Field(default_factory=lambda: dict.fromkeys(("tasks", "merit", "fame", "relations", "good", "evil"), 1.0))
+    tiers: dict[str, list[LegacyTier]] = Field(default_factory=_legacy_tiers)  # zheng／xie／luck → 門路（照 at 由小到大）
+    # 識海（第七節；Joy 11/4 定：開季後一天＋心得＋15 級）
+    shihai_after: float = Field(default=86400.0, ge=0)  # 開季後多少世界秒才解得開（WorldState.time，不讀電腦時鐘）
+    shihai_level: int = Field(default=15, ge=1)
+    shihai_xinde: int = Field(default=100, ge=0)  # 【草】解封花的心得
+    # 機緣的門路：立了這個旗標的人，頓悟（epiphany.roll）沒中再擲一次【草】；空字串是不給
+    luck_reroll_flag: str = "legacy_luck_1"
+
+    @model_validator(mode="after")
+    def _check(self) -> LegacyRules:
+        unknown = set(self.weights) - {"tasks", "merit", "fame", "relations", "good", "evil"}
+        if unknown:
+            raise ValueError(f"legacy.weights 不認得：{sorted(unknown)}")
+        if set(self.tiers) - {"zheng", "xie", "luck"}:
+            raise ValueError("legacy.tiers 只有 zheng、xie、luck")
+        for key, tiers in self.tiers.items():
+            if [t.at for t in tiers] != sorted(t.at for t in tiers):
+                raise ValueError(f"legacy.tiers.{key} 要照 at 由小到大")
+        return self
+
+
 class EpiphanyRules(_Strict):
     """特殊頓悟（tianxia/epiphany.py；企劃者 2026-10-26 設計稿 https://claude.ai/artifact/EBUqqzK3dPMpjwYTdRzLs3）：有所感選對做法、擲中進感悟狀態的那一刻
     再擲一次，中了不畫那一筆，改走一條「頓悟」的線（storyline，kind「頓悟」）：心靈拷問 → 心境小試 → 心魔，過了從四十個神品意境模板
@@ -3968,6 +4018,7 @@ class Config(_Strict):
     conquest: ConquestRules = Field(default_factory=ConquestRules)  # 領地爭奪（見 ConquestRules）
     jianfa: JianfaRules = Field(default_factory=JianfaRules)  # 減法季（見 JianfaRules；暫名）
     epiphany: EpiphanyRules = Field(default_factory=EpiphanyRules)  # 特殊頓悟（見 EpiphanyRules）
+    legacy: LegacyRules = Field(default_factory=LegacyRules)  # 傳承：正氣、邪氣、機緣與識海（見 LegacyRules；features/legacy）
     xingshi: XingshiTuning = Field(default_factory=XingshiTuning)  # 〈天下形勢〉：領地爭奪每天一篇的旁白（見 XingshiTuning）
     ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）
     figure_aid: FigureAidRules = Field(default_factory=FigureAidRules)  # 護衛、犒軍、探望大勢人物（見 FigureAidRules）

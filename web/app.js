@@ -790,10 +790,20 @@
       ${S.showMore ? `<div class="more-stats">
         ${s.renown ? "" : `${s.minor.map(([k, v]) => `${esc(k)} ${v}`).join("　")}　｜　`}${s.attrs.map(([k, v]) => `${esc(k)} ${v}`).join("　")}
         ${s.stat_points ? `<div class="pts-label"><b class="pts">可配 ${s.stat_points} 點</b></div><div class="row alloc">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" data-glow="allocate" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>${statUsesHtml(s)}` : ""}
+        ${S.main && S.main.legacy ? legacyHtml(S.main.legacy) : ""}
         ${team ? `<br>${team}` : ""}
         ${s.stances && shown("stances") ? stancesHtml(s.stances, s.stance_notes) : ""}
       </div>` : ""}
     `;
+  }
+
+  // 傳承（features/legacy；main.legacy）：正氣、邪氣、機緣三項（季初結算，這一季加了多少寫在括號裡）、這一季開了的門路、識海封著的那一份
+  function legacyHtml(g) {
+    const names = { zheng: "正氣", xie: "邪氣", luck: "機緣" };
+    const vals = Object.keys(names).map((k) => `${names[k]} ${g.values[k]}${g.gains[k] > 0 ? `（+${g.gains[k]}）` : ""}`).join("　");
+    const opened = g.opened && g.opened.length ? `<div class="legacy-doors">${g.opened.map((t) => esc(t)).join("；")}</div>` : "";
+    const sealed = g.sealed ? `<div class="legacy-sealed">識海封著：${esc(g.sealed)}</div>` : "";
+    return `<div class="legacy-line">傳承　${vals}</div>${opened}${sealed}`;
   }
 
   // 狀態列的名號那一塊（FB-071）。收起來是一行：名號、頭銜（小字，放不下加「…」）、可配 N 點、▾——「可配」放在會省略的 <span>
