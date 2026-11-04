@@ -1417,7 +1417,8 @@ def narrate_once(game: Game) -> int | None:
     def ask() -> dict[str, str]:
         client = within_budget(game.client, budget - (_monotonic() - started))
         sides = [f.name for f in definition.factions]  # 兩軍的名字：失手那一句不准寫敵方受損（守門用）
-        return battle_instance.write_tales(client, act_, request.items, sides=sides)
+        # fallen 是引擎這一回合真的放倒的人：寫到死人的那一句要指名他們其中一位才算數（守門用）
+        return battle_instance.write_tales(client, act_, request.items, sides=sides, fallen=request.fallen)
 
     if QUEUE is None:
         stories = ask()
@@ -3259,7 +3260,10 @@ TALES_CLIENT = None  # 寫戰記用的 client（main() 照設定建；測試塞�
 TALES_STOP = threading.Event()
 TALES_THREAD: threading.Thread | None = None
 TALE_ROUND_SECONDS = 30.0  # 看一次的間隔（一季頂多十來場，寫完就閒著）
-TALE_BUDGET_SECONDS = 180.0  # 一篇的模型預算
+# 一篇的模型預算。2026-11-04 改成一幕一趟之後實測（第 8 季廣宗，3 幕 17 拍＋8 人的名錄，gemma4:12b）：
+# 四趟共 227 秒，180 秒會在名錄那一趟前就用完、名錄整段退回引擎那幾句。單趟還是最多 120 秒
+# （within_budget 取 min(client.timeout, 剩下的一半)），所以真人要等的上限沒變。
+TALE_BUDGET_SECONDS = 420.0
 TALE_OWNER_KEY = "戰記"  # 佇列裡的名號（不是任何角色）
 
 
@@ -3328,8 +3332,11 @@ def tale_round(clock: Callable[[], float] = time.time) -> int | None:
         return None
     budget, started = TALE_BUDGET_SECONDS, _monotonic()
 
+    def fresh():  # 一幕一趟：每一趟照「還剩多少」重算預算，用完回 None（剩下的幕照引擎那一句，不是整篇垮掉）
+        return within_budget(TALES_CLIENT, budget - (_monotonic() - started))
+
     def ask() -> tuple[dict, dict]:
-        return tale.write(within_budget(TALES_CLIENT, budget - (_monotonic() - started)), material)
+        return tale.write(fresh(), material, next_client=fresh)
 
     if QUEUE is None:
         scenes, cast = ask()

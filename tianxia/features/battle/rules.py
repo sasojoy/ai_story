@@ -4,7 +4,7 @@ TROOPS_LINE、TROOPS_REPORT、第 7 批的 ESCORT_PICK）與 Game.BATTLE_GAMBLE_
 """
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from tianxia import battle_instance  # 共用規則層（戰鬥規則核心：補劇情的單子用它的 TaleItem）
 
@@ -71,3 +71,6 @@ class BattleTaleRequest(BaseModel):
     act_index: int
     items: list[battle_instance.TaleItem]
     done: list[tuple[int, str]]
+    # 這一回合引擎真的放倒的人（氣血歸零，fell_round）：寫到死人的那一句要指名他們其中一位才算數，
+    # 不然整句不用、照固定句播（battle_instance.claims_a_kill；企劃者 2026-11-04 第 8 季廣宗）
+    fallen: list[str] = Field(default_factory=list)

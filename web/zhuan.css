@@ -129,3 +129,7 @@
 .zh-bamboo.zh-entry { --zh-entry-bg: linear-gradient(135deg, #3a2a1c, #22180f); --zh-entry-ink: #efdcae; --zh-seal: #e7a25a; }
 .zh-books { display: flex; flex-direction: column; gap: 8px; margin: 0 0 12px; }
 .zh-books h3 { margin: 4px 2px 0; letter-spacing: 0.1em; font-size: 15px; }
+
+/* 列傳開頭那一幅水墨（列傳插畫票）：跟公開分享頁同一條（zhuan_html 的 EXTRA_CSS） */
+.zh-art { max-width: 640px; margin: 0 auto 18px; padding: 0 16px; }
+.zh-art img { display: block; width: 100%; height: auto; border-radius: 6px; }

@@ -4356,8 +4356,13 @@
            <p class="muted">拿到網址的人不用登入就能讀；收回之後網址就失效。</p>`
         : `<button class="btn" data-act="zhuan-share" data-public="1">公開分享</button>
            <p class="muted">預設只有你看得到。公開之後會有一個網址，可以貼到 LINE、FB，隨時能收回。</p>`;
+      // 開頭那一幅水墨（列傳插畫票，減法季批 7b）：公開分享頁早就畫了（zhuan_html 的 .zh-art），
+      // 遊戲裡這一層以前漏了，買了的人在遊戲裡看不到（企劃者 2026-11-04 轉的玩家問「水墨在哪？」）。
+      // 伺服器圖檔不在就不給 illustration_src（zhuan_art_src），所以這裡有才畫。
+      const art = v.illustration_src
+        ? `<figure class="zh-art"><img src="${esc(v.illustration_src)}" alt="${esc(head)}的插畫" loading="lazy"></figure>` : "";
       body = `<div class="zh-tools"><button data-act="zhuan-vertical" aria-pressed="${vertical}">直書</button></div>
-        <div class="zh-body"><article class="zh-text${vertical ? " vertical" : ""}">${paras}</article><div class="zh-seals">${zhuanSeal(head.replace(/傳$/, ""))}</div>
+        <div class="zh-body">${art}<article class="zh-text${vertical ? " vertical" : ""}">${paras}</article><div class="zh-seals">${zhuanSeal(head.replace(/傳$/, ""))}</div>
         <section class="zh-panel">${share}</section>
         ${v.can_rewrite ? '<button class="zh-again" data-act="zhuan-rewrite">請史官重寫一次</button>' : ""}</div>`;
     }
@@ -6344,6 +6349,7 @@
         case "market-unlist": await lookMarketDo({ op: "unlist", look: el.dataset.id }); break;
         case "move-bind": await moveBind(el.dataset.id); break; // 招式庫的一招換上身（id 0 是脫下來）
         case "looks-admin": await looksAdminAsk(el.dataset.op, el.dataset.id, el.dataset.slot); break; // 管理頁「自建形象」：上架、退回先問一次
+        case "ad-show": await adShow(el.dataset.kind, el.dataset.id); break; // 管理頁的全服成品動畫牆：點一個就演（再點收起）
         case "mall-retry": await (S.mallTab === "log" ? loadMallLog() : loadMall()); break;
         case "mall-admin": mallAdminAsk(el.dataset.op, el.dataset.id); break;
         case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); forgetHowto(); S.sheet = false; S.peer = null; S.adPlayer = null; S.adPlayerName = ""; S.stage = "gate"; S.main = null; forgetMap(); forgetMall(); render(); break;
