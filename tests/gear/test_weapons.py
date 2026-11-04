@@ -5,7 +5,6 @@ import pytest
 
 from conftest import real_content
 from tianxia import weapons
-from tianxia.features.figure_acts import challenge as figure_challenge
 from tianxia.martial_arts import MartialArt
 from tianxia.models import WEAPON_KINDS
 import random
@@ -1418,7 +1417,7 @@ def test_fb147_the_challenge_tier3_merges_with_the_table_drop(content, world, mo
     materials.add_cell(record.materials, content, "gang_3", 1)  # 預設掉落表那一個
     monkeypatch.setattr(materials, "tier3_pick", lambda *a, **k: "gang_3")
     squad = next(iter(content.squads.values()))
-    msgs = figure_challenge.tier3(game, "bocai", squad, record)
+    msgs = game._figure_tier3("bocai", squad, record)
     assert record.materials == [f"隕鐵膽 ×2（{materials.CHALLENGE_SOURCE} +1）"]
     assert msgs == [materials.extra_line(content, "gang_3", 1, materials.CHALLENGE_SOURCE)]
 

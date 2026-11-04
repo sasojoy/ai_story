@@ -145,7 +145,7 @@ from .features.story import actions as story_actions  # 過渡：Game 上一條�
 # figure_acts（全部拆包第 31 批）：大勢人物的行動（挑戰本人、護衛犒軍探望、盤算、月旦評、管理者救回人物）的 14 個一行委派
 from .features.figure_acts import admin_actions as figure_admin_actions  # 過渡：Game 上管理者救回人物的 2 個一行委派
 from .features.figure_acts import aid_actions as figure_aid_actions  # 過渡：Game 上護衛犒軍探望的 2 個一行委派
-from .features.figure_acts import challenge as figure_challenge  # 過渡：Game 上挑戰本人的 6 個一行委派
+from .features.figure_acts import challenge as figure_challenge  # 過渡：Game 上挑戰本人的一行委派
 from .features.figure_acts import plan_actions as figure_plan_actions  # 過渡：Game 上盤算的 3 個一行委派
 from .features.figure_acts import yuedan_actions as figure_yuedan_actions  # 過渡：Game 上月旦評的 2 個一行委派
 # checkin（全部拆包第 30 批）：每日簽到的 3 個一行委派
@@ -5354,6 +5354,15 @@ class Game:
 
     def _rout(self, fid: str) -> list[str]:
         return figure_challenge.rout(self, fid)
+
+    def _challenge_reward(self, fid: str, squad: Squad) -> Squad:
+        return figure_challenge.win_reward(self, fid, squad)
+
+    def _figure_tier3(self, fid: str, squad: Squad, record) -> list[str]:
+        return figure_challenge.tier3(self, fid, squad, record)
+
+    def _figure_tier4(self, fid: str, squad: Squad, record) -> list[str]:
+        return figure_challenge.tier4(self, fid, squad, record)
 
     def _story_squad(self, squad: Squad) -> Squad:
         """劇情戰的對手：大場面（is_big）照江湖水漲浮上來（全隊威力 × big_scale，不看打贏幾次：劇情戰多半一次性）；
