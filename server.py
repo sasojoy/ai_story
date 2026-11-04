@@ -63,7 +63,6 @@ from starlette.concurrency import run_in_threadpool
 
 import console
 import server_push
-import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
     arena_crowd, ascend, battle_instance, flavor, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, fight_llm, foreshadow, gender, insight_llm, leaderboard, letters, mapdata, might,
@@ -3365,11 +3364,7 @@ def api_mingtie_do(op: str, request: Request, body: dict = Body(default={})):
     return {"mingtie": look(game, lambda g: g.mingtie_view(board)), "message": joined(msgs)}
 
 
-@app.get("/api/annals")
-def api_annals(request: Request):
-    """見聞的「行狀」：這一季至今記下的事（玩家傳第一批；不叫模型）。"""
-    game = _game(request)
-    return look(game, lambda g: g.annals_view())
+# （/api/annals：全部拆包第 29 批搬進列傳包 tianxia/features/zhuan/routes.py，殼照 FEATURES 掛）
 
 
 @app.get("/api/xingshi")
@@ -3479,46 +3474,8 @@ def _season_arg(value) -> int:
         raise GameError("哪一季？") from None
 
 
-@app.get("/api/zhuan")
-def api_zhuan(request: Request, season: int):
-    """那一季的傳（還沒寫成時 written 是 False、can_write 說寫不寫得了；正在寫時 writing 是 True）。"""
-    game = _game(request)
-    return look(game, lambda g: zhuan_view(g, season, request))
-
-
-@app.post("/api/zhuan/write")
-def api_zhuan_write(request: Request, body: dict = Body(default={})):
-    """請史官寫（或重寫一次）那一季的傳：在背景寫，馬上回目前的樣子（writing 是 True）。寫不了丟 GameError。"""
-    game = _game(request)
-    season, rewrite = _season_arg(body.get("season")), body.get("rewrite") is True
-    if look(game, lambda g: g.biography_request(season, rewrite)) is None:
-        raise GameError("這一篇現在不能再寫了。" if rewrite else "這一季還不能寫傳。")
-    write_zhuan(game, season, rewrite)
-    return look(game, lambda g: zhuan_view(g, season, request))
-
-
-@app.post("/api/zhuan/share")
-def api_zhuan_share(request: Request, body: dict = Body(default={})):
-    """公開或收回那一季的傳：公開時回分享網址（不用登入的唯讀頁 /zhuan/<代碼>）。"""
-    game = _game(request)
-    season, public = _season_arg(body.get("season")), body.get("public") is True
-    code = look(game, lambda g: g.share_biography(season, public, secrets.token_urlsafe(6)))
-    if code is None:
-        raise GameError("傳還沒寫成，不能分享。")
-    return look(game, lambda g: zhuan_view(g, season, request))
-
-
-@app.get("/zhuan/{code}")
-def zhuan_page(code: str, request: Request):
-    """公開的傳（不用登入、唯讀）：只認公開中的分享代碼，其餘一律 404（不說是沒有、還是收回了）。
-    帶 Open Graph，LINE、FB 貼上去有預覽（題簽圖是 web/zhuan-og.png，所有的傳共用一張）。"""
-    store = open_world()
-    row = store.biography_by_code(code)
-    if row is None:
-        return HTMLResponse(zhuan_html.missing(), status_code=404)
-    base = public_base(request)
-    return HTMLResponse(zhuan_html.page(row, CONTENT.scenario.name, f"{base}/zhuan/{code}", f"{base}/static/zhuan-og.png",
-                                        extras=zhuan_extras(store, row)))
+# （/api/zhuan、/api/zhuan/write、/api/zhuan/share、/zhuan/{code}：全部拆包第 29 批搬進列傳包 tianxia/features/zhuan/routes.py，殼照 FEATURES 掛；
+# 寫傳的鎖外三段式 write_zhuan、verdict_text、傳的畫面 zhuan_view、公開頁的 zhuan_extras 留在殼——test_server 掃鎖外叫模型的函式認這幾個名字）
 
 
 def zhuan_extras(store, row: dict) -> dict:
