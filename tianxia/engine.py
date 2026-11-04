@@ -151,6 +151,8 @@ from .features.figure_acts import plan_actions as figure_plan_actions  # 過渡�
 from .features.figure_acts import yuedan_actions as figure_yuedan_actions  # 過渡：Game 上月旦評的 2 個一行委派
 # checkin（全部拆包第 30 批）：每日簽到的 3 個一行委派
 from .features.checkin import actions as checkin_actions  # 過渡：Game 上簽到的 3 個一行委派
+# military（全部拆包第 33 批）：第 3、4 階行動的選項 id 前綴搬進核心的共用的字（軍情包的選單產生它；`_rank_action_id` 與 `_act` 在核心原位認它）
+from .core.services import RANK_ACTION_PREFIX
 from .state import (
     ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, CrowdNote, Equipment, GameState, HintNote, JournalEntry, Journey, Mingtie, Rumor, Tagalong,
     StoryCard, StoryProgress, TierResult, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
@@ -231,7 +233,7 @@ def _points(lines: list[str]) -> int:
 
 LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣血見底」：厚的那一句「氣血見底，……硬撐」（battlelog.LOW_HP_MARKS）才挑得到
 
-RANK_ACTION_PREFIX = "act:rank:"  # 第 3、4 階行動的選項 id 前綴（act:rank:<行動 id>，正式版戊一）；models.ALLOW_FAMILIES 也列它，原始碼裡要真的有
+# （RANK_ACTION_PREFIX 搬進核心的共用的字 core/services.py，全部拆包第 33 批；上面 import 回來，`from tianxia.engine import RANK_ACTION_PREFIX` 照舊）
 # （FREE_TEXT_OPTION、EVIL_ANNAL 與 FreeTextRequest、FreeTextOutcome 搬進核心的事件檢定 tianxia/core/event_check.py，全部拆包第 16 批；
 # 上面 import 回來，`from tianxia.engine import FREE_TEXT_OPTION` 照舊拿得到）
 # （SAY_OPTION、PLAN_OPTION、ROAD_SAY、TEXT_TALKS、SAY_MAX、say_text 搬進核心的共用的字與小函式 tianxia/core/services.py，全部拆包第 20 批；
