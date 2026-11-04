@@ -5841,7 +5841,7 @@ def _sense_test_scene():
 
 class SenseScenario(ExploreScenario):
     """有所感與頓悟（全部拆包第 24 批；--track sense，自己一個資料庫）。小工具借探索那一軌的（draws、fights、tweak、edit_state）。
-    十四個網頁上建的散人與一個走草廬的新人（林聽松）：
+    二十三個網頁上建的散人與一個走草廬的新人（林聽松）：
     - 草廬（不帶、weekend）：序章第 3 步的有所感版（舊探索 _explore_outcome 開卡、做法都對、必中，做法底下沒有小字），順其自然悟到。
     - 探索撞上有所感（探索一顆開著抽到感悟；三選一按靜心感悟；舊探索只留悟意境那一支；測試內容補一段湖邊的場景）：石觀潮選對、擲中、
       順其自然（落回這一處的基本意境、紀錄「有所感・場景」）；晏棲遲選錯（這一處到換日之前悟不出：三選一的灰鈕、舊探索那一行；一類一顆
@@ -5856,16 +5856,24 @@ class SenseScenario(ExploreScenario):
       自己寫一個這一季已經有人用掉的、換一個。溫行簡：拷問答了一題，到季末沒了結（此事未了）。
     - 寫到一半的有所感：紀守拙停在選做法、裴映雪停在感悟狀態（前半停下）；後半紀守拙選對擲中順其自然；裴映雪先在鎖裡直接開單、人走開再
       交回（C 段重驗對不上），再照常畫一筆。
+    - 走一趟停在有所感的卡上（season21、week7 開著；其餘寫「沒有」。審查補的：搬了 outing_watch，以前這一軌沒有 /api/do/outing）：
+      岑望舒選對擲中、**前半停在感悟狀態**，後半畫一筆、接著走；杜聽瀾**前半停在卡上**，後半選對、畫一筆要取名的（假模型）；辛遠岫順其自然；
+      俞照川保底中了頓悟、拷問、心魔打贏、**前半停在等著取名**，後半靜心思名、挑第一個、接著走。一般的一筆沒有數值變化、beat.after 是空的，
+      所以計南枝、盧半溪再各走一次，讓悟的那一下（sensing.finish）、思名的那一下（epiphany.fill）多帶一行料：得失要記在那一段。
+      method 每一次都把擲特殊頓悟乘多少寫進輸出（走一趟照這一趟幾段、不在路上是 1）。
+    - 清失效參照與畫完清掉的（審查補的）：褚臨風**前半停在卡上**，後半人被帶走、下一次讀檔清掉；費疏影畫完清掉 guide_done 與 battle_card
+      （畫之前擺一筆真的戰報，不然讀檔就清了、看不出差別）；籌備中（Game._preparing 換成真）阮晴川畫一筆被擋、涂松聲靜心思名不開單。
     - 假人：BotRunner 四個（一個停在有所感的卡、一個停在感悟狀態、一個等著取名〔頓悟開著的季〕、一個閒著），假模型接取名的 B 段
       （SenseJob、EpiphanyJob）；整季機器人在卡上挑哪一顆也寫下來。
     - 收季、開下一季：石觀潮又撞上一張卡沒了結、溫行簡的頓悟沒了結；換季之後看每個人。"""
 
     PLAYERS = {name: None for name in ("石觀潮", "晏棲遲", "穆青梧", "韋寒汀", "江照晚", "祁問山", "賀知秋", "顧折柳", "蘇停雲", "陸聞箏",
-                                       "紀守拙", "裴映雪", "溫行簡")}
+                                       "紀守拙", "裴映雪", "溫行簡",
+                                       "岑望舒", "杜聽瀾", "辛遠岫", "俞照川", "計南枝", "盧半溪", "褚臨風", "費疏影", "阮晴川", "涂松聲")}
     NEWBIE = "林聽松"
     BOT_SEATS = ["悟甲", "悟乙", "悟丙", "悟丁"]
-    PHASES_FIRST = ["setup", "prologue", "meet", "miss", "canvas", "named", "epiphany", "demon_lost", "pending", "half"]
-    PHASES_SECOND = ["resume", "pending_on", "demon_on", "naming_on", "bots", "season"]
+    PHASES_FIRST = ["setup", "prologue", "meet", "miss", "canvas", "named", "epiphany", "demon_lost", "pending", "trip_first", "half"]
+    PHASES_SECOND = ["resume", "pending_on", "demon_on", "naming_on", "trip_on", "trip_gains", "stale_on", "clears", "preparing", "bots", "season"]
 
     def __init__(self, root: Path, profile: str, db: Path):
         super().__init__(root, profile, db)
@@ -5959,12 +5967,59 @@ class SenseScenario(ExploreScenario):
             emit(f"{who} 卡上沒有{'對' if right else '錯'}的做法可選", None)
             return
         with contextlib.ExitStack() as stack:
+            stack.enter_context(self.roll_boost(who))
             if hit is not None:
                 stack.enter_context(self.tweak(self.c.config, sense_rate_range=(100, 100) if hit else (0, 0), sense_marks_bonus=0))
             if hit:
                 stack.enter_context(self.tweak(self.c.config.epiphany, chances=[1e-9] * 3))
             self.choose(who, oid)
         self.me(who, "選了做法之後")
+
+    @contextlib.contextmanager
+    def roll_boost(self, who: str):
+        """擲特殊頓悟乘多少寫進輸出（epiphany.roll 包一層，兩份程式同一步換、同一步換回；骰子照常擲）。"""
+        from tianxia import epiphany
+
+        real = epiphany.roll
+
+        def roll(state, content, rng, boost: float = 1.0):
+            emit(f"{who} 擲特殊頓悟的倍數", boost)
+            return real(state, content, rng, boost=boost)
+
+        epiphany.roll = roll
+        try:
+            yield
+        finally:
+            epiphany.roll = real
+
+    def seen(self, who: str, tag: str) -> None:
+        """走一趟那一份（每一段的 after 在裡面）與有所感碰得到的那幾格。"""
+        self.player_view(who, tag)
+        self.me(who, tag)
+
+    def trip_out(self, who: str) -> bool:
+        """走一趟三段出發、第一段就撞上有所感停下來（抽到感悟；奇遇與頭目這一下不擲）。沒有走一趟的季寫「沒有」、回假。"""
+        if self.main(who).get("outing") is None:
+            emit(f"{who} 這一季沒有走一趟", None)
+            return False
+        self.place(who, self.spot)
+        with self.draws(_explore_rules().INSIGHT), self.tweak(self.c.config, rare_explore_chance=0.0), \
+                self.tweak(self.c.config.duel, explore_chance=0.0):
+            self.do(who, "outing", {"n": 3})
+        self.seen(who, "出發之後")
+        return True
+
+    def god_waiting(self, who: str, start) -> None:
+        """start（站到有場景的那一處、撞上卡）之後保底中了特殊頓悟、拷問四題、靜候、心魔打贏，停在等著取名（還沒按靜心思名）。"""
+        pity = self.c.config.epiphany.pity
+        self.edit(who, lambda p: setattr(p, "epiphany_dry", pity))
+        start(who)
+        with self.trial("wait"):
+            self.method(who, right=True, hit=True)
+        with self.tweak(self.c.config.epiphany, trial_wait_days=0.0):
+            self.answers(who)
+            self.main(who)
+        self.demon(who, "大勝")
 
     def stroke(self, who: str, name: bool) -> list | None:
         """畫哪一筆（glyph.SAMPLES 照屬性排第一個合的）：name 是要悟一個自己的新意境（要取名），否則落回這一處的基本意境。A 段只讀。"""
@@ -6184,6 +6239,18 @@ class SenseScenario(ExploreScenario):
             self.answers(who, 1)
         self.me(who, "答了一題")
 
+    def trip_first(self) -> None:
+        """走一趟寫到一半（舊程式存下那一趟、新程式接著做完）：岑望舒選對擲中停在感悟狀態、杜聽瀾停在卡上、俞照川等著取名（頓悟開著的季）；
+        褚臨風閒著撞上一張卡停著（後半人被帶走）。"""
+        if self.trip_out("岑望舒"):
+            self.method("岑望舒", right=True, hit=True)
+            self.seen("岑望舒", "選了做法")
+        self.trip_out("杜聽瀾")
+        if self.main("俞照川").get("outing") is not None and self.epiphany_on():
+            self.god_waiting("俞照川", self.trip_out)
+            self.seen("俞照川", "心魔之後")
+        self.sensed("褚臨風")
+
     def half(self) -> None:
         for who in [self.NEWBIE, *self.PLAYERS]:
             self.me(who, "前半停下")
@@ -6192,6 +6259,140 @@ class SenseScenario(ExploreScenario):
 
     def resume(self) -> None:
         self.login_all()
+
+    def trip_on(self) -> None:
+        """新程式接手停著的一趟：畫一筆（sense_draw）、畫一筆要取名的（假模型）、順其自然、靜心思名（epiphany_names）；做完接著走。"""
+        from tianxia import sensing
+
+        who = "岑望舒"
+        if self.main(who).get("outing") is None:
+            emit("這一季沒有走一趟", None)
+            return
+        self.paint(who, name=False)
+        self.seen(who, "畫完")
+        self.do(who, "outing", {})
+        self.seen(who, "接著走")
+        who = "杜聽瀾"
+        self.method(who, right=True, hit=True)
+        MODEL["sense"] = True
+        try:
+            self.paint(who, name=True)
+        finally:
+            MODEL["sense"] = False
+        self.seen(who, "畫完要取名")
+        who = "辛遠岫"
+        self.trip_out(who)
+        self.method(who, right=True, hit=True)
+        self.choose(who, sensing.LET_GO)
+        self.seen(who, "順其自然")
+        who = "俞照川"
+        if not self.epiphany_on():
+            emit("這一季沒有特殊頓悟", None)
+            return
+        MODEL["sense"] = True
+        try:
+            self.choose(who, "dunwu:think")
+        finally:
+            MODEL["sense"] = False
+        self.seen(who, "思名之後")
+        self.choose(who, "dunwu:0")
+        self.seen(who, "取名之後")
+        self.do(who, "outing", {})
+        self.seen(who, "接著走")
+
+    def trip_gains(self) -> None:
+        """走一趟停在卡上，悟的那一下與思名的那一下多帶一行料（sensing.finish、epiphany.fill 包一層，兩份程式同一步換、同一步換回）：
+        outing_watch 要把它記在那一段（beat.after）。沒有這一行的話一般的一筆與思名什麼都不記，看不出那一層在不在。"""
+        from tianxia import epiphany, journal, materials, sensing
+
+        who = "計南枝"
+        if self.main(who).get("outing") is None:
+            emit("這一季沒有走一趟", None)
+            return
+        self.trip_out(who)
+        self.method(who, right=True, hit=True)
+        real_finish = sensing.finish
+
+        def finish(*args, **kwargs):
+            msgs, own, by_model = real_finish(*args, **kwargs)
+            return [*msgs, f"{materials.GRANT_PREFIX}寒鐵屑 ×1"], own, by_model
+
+        sensing.finish = finish
+        try:
+            self.paint(who, name=False)
+        finally:
+            sensing.finish = real_finish
+        self.seen(who, "畫完帶料")
+        who = "盧半溪"
+        if not self.epiphany_on():
+            emit("這一季沒有特殊頓悟", None)
+            return
+        self.god_waiting(who, self.trip_out)
+        real_fill = epiphany.fill
+
+        def fill(state, *args, **kwargs):
+            msgs = real_fill(state, *args, **kwargs)
+            journal.add_entry(state, journal.Draft("思名").entry(state.world.time, [f"{materials.GRANT_PREFIX}寒鐵屑 ×1"]))
+            return msgs
+
+        epiphany.fill = fill
+        MODEL["sense"] = True
+        try:
+            self.choose(who, "dunwu:think")
+        finally:
+            MODEL["sense"] = False
+            epiphany.fill = real_fill
+        self.seen(who, "思名帶料")
+
+    def stale_on(self) -> None:
+        """褚臨風手上一張卡（舊程式存下的）、人被帶走：下一次讀檔清掉作廢的卡（_drop_stale_references 中段），選單不卡。"""
+        who = "褚臨風"
+        other = next(i for i in sorted(self.c.locations) if i != self.spot)
+        self.edit(who, lambda p: setattr(p, "location", other))
+        self.main(who)
+        self.me(who, "人被帶走之後")
+
+    def clears(self) -> None:
+        """費疏影畫完那一筆清掉上一次的引導行與戰報卡（這條路不走 choose）。戰報擺一筆真的（id 不在戰報裡的話讀檔就清掉了，看不出差別）。"""
+        from tianxia.state import BattleRecord
+
+        who = "費疏影"
+        self.sensed(who)
+        self.method(who, right=True, hit=True)
+
+        def dirty(state) -> None:
+            state.player.guide_done = ["上一次的引導行"]
+            state.battles.insert(0, BattleRecord(id=987654, time=state.world.time, location="河畔", kind="wild", opponent="流寇", ours=[],
+                                                 tier="大勝", our_power=1, difficulty=1))
+            state.battle_card = 987654
+
+        self.edit_state(who, dirty)
+        self.paint(who, name=False)
+        state = self.chars.load(who)
+        emit(f"{who} 畫完清掉", {"guide_done": list(state.player.guide_done), "battle_card": state.battle_card})
+
+    def preparing(self) -> None:
+        """賽季籌備中（Game._preparing 換成真，兩份程式同一步換、同一步換回）：阮晴川畫一筆被擋（sense_request）、涂松聲靜心思名不開單（epiphany_request）。"""
+        from tianxia import glyph
+        from tianxia.engine import Game
+
+        who, namer = "阮晴川", "涂松聲"
+        self.sensed(who)
+        self.method(who, right=True, hit=True)
+        waiting = self.epiphany_on()
+        if waiting:
+            self.god_waiting(namer, self.sensed)
+        real = Game._preparing
+        Game._preparing = lambda game: True
+        try:
+            self.call(who, "POST", "/api/sense", {"points": glyph.SAMPLES[sorted(glyph.SAMPLES)[0]], "png": ""})
+            if waiting:
+                self.choose(namer, "dunwu:think")
+        finally:
+            Game._preparing = real
+        self.me(who, "籌備中畫")
+        if waiting:
+            self.me(namer, "籌備中思名")
 
     def pending_on(self) -> None:
         """新程式接手寫到一半的：紀守拙選對、擲中、順其自然；裴映雪先在鎖裡直接開單、人走開再交回（C 段重驗對不上，不存），再照常畫一筆。"""
