@@ -133,7 +133,8 @@
 - 共用的字與小函式（從這個模組 import）：`note_cheer`、`CHEERS_KEEP`（等著寫道賀信的那一格：舊模組 figure_life.spread 寫、書信讀；原本在 tianxia/letters.py）
 # companions（全部拆包第 20 批「人物情誼二」：人物對話與 NPC 智能 2.0 搬進人物情誼包要叫的；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第2批.md 1.3）
 - 共用的字與小函式（從這個模組 import）：`SAY_OPTION`、`PLAN_OPTION`、`ROAD_SAY`、`TEXT_TALKS`、`SAY_MAX`、`say_text`（「自己說」「商量打法」「帶路的路上說一句」
-  這三顆要打一句話的選項 id，與那句話能不能送；原本寫在 engine.py，server、假人、核心的 choose 都讀，engine 照舊 import 回來）
+  這三顆要打一句話的選項 id，與那句話能不能送；原本寫在 engine.py，server、假人、核心的 choose 都讀，engine 照舊 import 回來）、`BACKED_LINE`、`PLAN_MISS`
+  （並肩出陣的兩句：出陣包 act:train 打那一場前面那一句；原本寫在 parley.py）
 # cultivation（全部拆包第 23 批「修練」：改練、練成、意境裝卸、熔煉、絕學與破境丹、破境卡、傳功、配點搬進修練包要叫的；主人都是核心，
 # 總表附錄乙 final_owner.json；計畫 docs/superpowers/plans/2026-11-01-修練包-第1批.md 1.3）
 籌備中與絕學的名字（`ctx._preparing()` 列在 `# guide` 那一段；定名的 A 段〔假人用〕籌備中回 None。動作被擋的裝飾器不經這張清單：下面那一行，從這個模組 import）
@@ -348,6 +349,10 @@ PLAN_OPTION = "talk:plan"
 ROAD_SAY = "parley:road"
 TEXT_TALKS = (SAY_OPTION, PLAN_OPTION, ROAD_SAY)
 SAY_MAX = 20  # 「自己說」最多幾個字（跟隨口應對一樣）
+# 並肩出陣（NPC 智能 2.0）：出陣包的 act:train 打那一場前面那一句——陪他出陣的人部曲出力加成，與商量打法沒談攏、這一仗他幫不上忙
+# （原本寫在 tianxia/parley.py，出陣包 import 它；parley 搬進人物情誼包之後包不能 import 包，搬到這裡，parley re-export）
+BACKED_LINE = "〔{name}的部曲與你並肩，這一仗威力 +{pct}%〕"
+PLAN_MISS = "（打法沒談攏：這一仗他的部曲幫不上忙。）"
 
 
 def say_text(text: str | None, limit: int = SAY_MAX) -> str | None:

@@ -450,7 +450,7 @@ GAME_DELEGATE_CALLERS.update({
     ("_menxia_entry", "_check_hints"): "修練頁、煉製頁的動作寫進紀錄（核心的修練頁紀錄服務）：說的話接在這一則",
     ("_act", "_hint"): "act 子動詞裡碰到的事件型提示（操練練完 h_drill_done…）：其餘子動詞還沒分給各包（總表第 57 批）",
     ("_brush_off", "_hint"): "求見被名將打發（h_snubbed）：交友求見還沒成包（總表第 21 批）",
-    ("_open_dialogue", "_hint"): "第一次跟人物談話（h_bond）：人物情誼還沒成包（總表第 20 批）",
+    # （原本這裡有 ("_open_dialogue", "_hint")：第 20 批 _open_dialogue 搬進人物情誼包，包裡經 ctx._hint 問，核心原位不再叫它）
     ("_town_drill", "_hint"): "城裡操練練完（h_drill_done）：三選一的城裡操練（總表第 13 批拿掉）",
     ("choose", "_begin_enlistment"): "這一下才投靠（或拜入陣營名下的門派）的人開始入伍段：陣營還沒成包（總表第 35 批）、要知道動作之前的陣營",
     ("choose", "_greet_rejoin"): "第二季起再投靠：引薦人打個招呼（同上）",
@@ -617,10 +617,10 @@ GAME_IMPORTS |= {"tianxia.features.companions.actions"}
 GAME_DELEGATES |= {
     # 搬進包的 29 個方法留 26 個（9 個私有）：server、假人、測試在叫的 17 個（roster_lines、owned_companions、add_to_team、remove_from_team、release_companion、
     # release_view、voice_stance、figure_view、errands_view、persuade_request、persuade、letter_view、read_letter、decline_letter、morning_mail、letter_request、
-    # apply_letter），核心原位叫的 _recruit、_recruit_one、_stance_before、_stance_credit、_stance_annals、_errand_options，引導包（ctx）與測試問的 _recruit_target、
+    # apply_letter），核心原位叫的 _recruit、_recruit_one、_stance_annals、_errand_options，引導包（ctx）與測試問的 _recruit_target、
     # _recruitable_here，測試直接叫的 _recruit_targets。_errand_act、_errand_reward、_errand_persuade 只有包裡叫（choose 改走掛鉤）
     "_recruit_target", "_recruit_targets", "_recruitable_here", "_recruit", "_recruit_one", "roster_lines", "owned_companions", "add_to_team",
-    "remove_from_team", "release_companion", "release_view", "_stance_before", "_stance_credit", "voice_stance", "figure_view", "errands_view",
+    "remove_from_team", "release_companion", "release_view", "voice_stance", "figure_view", "errands_view",
     "_errand_options", "persuade_request", "persuade", "_stance_annals", "letter_view", "read_letter", "decline_letter", "morning_mail",
     "letter_request", "apply_letter",
     # 原位那幾行的本體一起搬進包（選單招募那一段、同步書信那一格、勸降只叫出輸入框）
@@ -630,19 +630,40 @@ del GAME_DELEGATE_CALLERS[("_recruit_one", "_settle_partings")]  # _recruit_one 
 GAME_DELEGATE_CALLERS[("sync", "_settle_partings")] = ("同步的同伴回江湖（簽到之後、退押金之前）：on_sync 在寄放之前、還問 enabled，江湖紀錄的先後算行為；"
                                                        "本體在決戰包 muster，核心原位叫查詢服務（總表第 19 列「先做」）")
 _MENU_ORDER = "選單的順序算行為（/api/main 的選項一顆一顆逐位元組）；options 掛鉤在體力玩法之後、位置不對。選單照包排是總表第 55～57 批"
-_TALKS = "人物對話第 20 批搬進同一包，變成包裡互相叫"
 GAME_DELEGATE_CALLERS.update({
     ("_everyday_options", "_recruit_options"): "招募那一段（求見之後、前往之前）：" + _MENU_ORDER,
     ("_everyday_options", "_errand_options"): "託付那一顆（伏筆之後、邀請之前）：" + _MENU_ORDER,
     ("sync", "_stance_annals"): "同步記心意的行狀（痕跡 _marks_tick 之後、列傳 _zhuan_tick 之前，三樣都寫行狀，先後算行為）；on_sync 在更後面、還問 enabled",
-    ("sync", "_deliver_mail"): "同步書信那一格（欠人物的事 parley.lapse 之後，一則「書信」併著寫，先後算行為）：deliver_notices 在領地爭奪換天之前、位置不對；parley 第 20 批搬進同一包再看",
+    ("sync", "_deliver_mail"): "同步書信那一格（欠人物的事過了期限〔parley.lapse，第 20 批搬進同一包、併進 deliver_mail〕、人物來信、過期的委託作罷，一則「書信」併著寫，先後算行為）：deliver_notices 在領地爭奪換天之前、位置不對",
     ("_act", "_recruit"): "act:recruit：核心 act: 的子動詞，總表第 57 批接進 Verb（同第 22 批 PM 認定第 4 條的 act:rest）",
     ("_act", "_recruit_one"): "act:recruit:<id>：同上；Verb 照 verb == 比，這一格第 57 批要照前綴認",
     ("choose", "_errand_ask"): "勸降按下去只叫出輸入框：查完選單、建紀錄之前，同 battle: 那一支的位置（第 7 批 PM 認定第 1 條）；第 57 批「選單上、不建紀錄」那一格一起接",
-    ("_talk", "_stance_before"): "這一輪對話之前今天記過沒：" + _TALKS,
-    ("_talk", "_stance_credit"): "這一輪記到一筆就給貢獻：" + _TALKS,
-    ("_road_say", "_stance_before"): "帶路的路上說一句（同上）：" + _TALKS,
-    ("_road_say", "_stance_credit"): "同上：" + _TALKS,
+})
+# companions（全部拆包第 20 批「人物情誼二」：人物對話、NPC 智能 2.0；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第2批.md 1.5、1.6）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。_stance_before、_stance_credit 兩個委派只有搬走的 _talk、_road_say 在叫，包裡互相叫之後拿掉了（上面）
+GAME_IMPORTS |= {"tianxia.features.companions.talk_actions", "tianxia.features.companions.parley_actions"}
+GAME_DELEGATES |= {
+    # 搬進包的 29 個方法留 12 個（8 個私有）：server 與測試在叫的 dialogue_request、say_max、_checked_prepared、_parley_lists、_parley_prompt、_parley_options；
+    # 核心原位叫的 _open_dialogue（交友與求見開口，第 21 批）、_talk 與 _road_say（choose）、_last_talk_line（場景文字）、_parley_road_option（路上的選單）；
+    # 出陣包經 ctx 問的 _parley_backing_here。其餘 17 個（_dialogue_unavailable、_annal_talk、_prepared_turn、_parley_finish……）只有包裡叫，沒有委派
+    "dialogue_request", "say_max", "_checked_prepared", "_parley_lists", "_parley_prompt", "_parley_options", "_open_dialogue", "_talk", "_road_say",
+    "_last_talk_line", "_parley_road_option", "_parley_backing_here",
+    # 原位那幾行的本體一起搬進包（選單上談著的那一整段、叛投之後欠著的都算食言）
+    "_talk_options", "_parley_forsake",
+}
+_TALK_MENU = "選單的順序算行為（/api/main 的選項一顆一顆逐位元組）；談著的時候整個選單是對話的，`menu` 掛鉤要照包排，是總表第 55～57 批"
+GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_talk_options"): "跟人物談著：" + _TALK_MENU,
+    ("_everyday_options", "_parley_road_option"): "路上跟他說一句那一顆（折返之後、喊停之前）：" + _TALK_MENU,
+    ("choose", "_checked_prepared"): "進鎖後重驗鎖外生成的一輪對話（查完選單、建紀錄之前）：choose 前段，第 57 批「選單上、不建紀錄」那一格再看",
+    ("choose", "_talk"): "talk:<N>、say、leave……按下去：要帶鎖外生成好的一輪 prepared 與驗過的那句話，choose 掛鉤的簽名放不下；第 57 批再看",
+    ("choose", "_road_say"): "parley:road 按下去：同上",
+    ("choose", "say_max"): "「自己說」最多幾個字：choose 前段驗那句話",
+    ("_own_scene_text", "_last_talk_line"): "談話畫面名字底下的「上回」那一行：場景文字（_own_scene_text）的一部分，位置算行為；場景接縫掛鉤總表第 57 批",
+    ("_socialize", "_open_dialogue"): "交友碰上人物開口對話：交友求見第 21 批搬進 socialize 包，到時候改經 ctx",
+    ("_precise_socialize", "_open_dialogue"): "一類一顆的交友開口：同上",
+    ("_call", "_open_dialogue"): "求見開口：同上",
+    ("_defect_step", "_parley_forsake"): "叛投之後欠著的都算食言（NPC 智能 2.1）：接在 defection.defect 與 _leave_behind 之後，回話的先後算行為；叛投第 36 批再看",
 })
 # sense（全部拆包第 24 批「有所感與頓悟」：新包 tianxia/features/sense/；計畫 docs/superpowers/plans/2026-11-01-有所感包-第1批.md 1.4、1.5）：
 # 四張名單的有所感那幾筆集中在這一段（並行的拆包線不跟別人的行穿插；拿掉的在原處）。核心原位碰有所感的那幾處，能接第 11 批掛鉤的接上
@@ -1250,6 +1271,8 @@ def test_the_old_names_left_as_aliases_are_known():
                          "duel": "bout", "arena": "bout", "arena_crowd": "bout",
                          # companions（全部拆包第 19 批：tianxia/stances.py、errands.py、letters.py）
                          "stances": "companions", "errands": "companions", "letters": "companions",
+                         # companions（全部拆包第 20 批：tianxia/companion_agent.py、parley.py）
+                         "companion_agent": "companions", "parley": "companions",
                          # sense（全部拆包第 24 批：tianxia/sensing.py、epiphany.py、glyph.py、insight_llm.py）
                          "sensing": "sense", "epiphany": "sense", "glyph": "sense", "insight_llm": "sense",
                          # cultivation（全部拆包第 23 批：tianxia/cultivation.py、chuangong.py、ascend.py）
