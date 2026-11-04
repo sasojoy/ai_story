@@ -39,6 +39,7 @@ const SCRATCH = 'b' + N
 const COMMON = `
 共通的規矩（這台機器）：
 - repo ${ROOT}。這份 clone 的 \`git fetch origin\` 不更新 dev/*、feature/*、qa/*、develop：一律明確 fetch（例 \`git fetch origin +refs/heads/${FEAT}:refs/remotes/origin/${FEAT}\`）。推完明確 fetch 再 \`git merge-base --is-ancestor HEAD origin/<分支>\` 確認，也看 \`git ls-remote\`。**每做完一個 Task 就推一次**。
+- **不准改共用 clone 的 git 設定**：中文路徑印成八進位時，用單次的 \`git -c core.quotepath=off ...\`，不要 \`git config\`。
 - **在 Git Bash 裡給 git 的路徑寫 Windows 格式**（\`C:/Users/...\`），不要寫 \`/c/Users/...\`。scratch 資料夾裡的 .py 不要取標準函式庫的名字。隔離工作樹裡 Bash 可能擋 venv 的 python、含變數的 cp/tar、cd 再接 git：python 用 PowerShell 跑 ${PY}（PowerShell 5.1 會把沒有 BOM 的 UTF-8 .ps1 當 ANSI 讀，含中文路徑的指令直接寫在指令裡）；改檔腳本用 Write 工具寫成 .py 再跑或直接用 Edit（Bash heredoc 會吃掉反斜線）；Write 寫出 LF，工作樹是 CRLF，寫完自己轉，提交前 \`git cat-file blob\` 確認 git 裡是 LF。PowerShell 5.1 傳含雙引號的 commit 訊息會壞：訊息寫成檔案用 \`git commit -F\`。commit 訊息英文，結尾一行 \`Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\`。
 - 規矩：開發規範手冊 ${BOOK}（第三節是包的規矩，**第十五節是落地補註與各批的 PM 認定，跟原文不同時照它**）；批次表 ${BATCH}（**第二節「每一批都照這些做」逐條照做**；第一節「並行」那一條也照做）；全部拆包總表 ${MASTER}（第三節這一批那一列、第六節、附錄甲與丙的歸屬裁定）；分區調查 ${SURVEYDIR}/（\`area_*.json\` 是每一個方法、模組歸誰）。技能用 Read 直接讀 .claude/skills/<名字>/SKILL.md（開發看 tianxia-dev）。**技能檔、CLAUDE.md、手冊、批次表、總表只有 PM 改**——學到的寫在回報。
 - 暫存檔放 ${SP}\\${SCRATCH}* 底下（下面寫明），TIANXIA_DB 也指到那裡；不碰這份 clone 的 saves/；不要刪 .local/nightly/checkout；**做完把自己的暫存大檔（解出來的 base/head、資料庫、截圖以外的副本）刪掉**——企劃者 11/01：磁碟被用光過。

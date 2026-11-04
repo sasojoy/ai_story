@@ -28,6 +28,7 @@ const DIR = 'merge' + N
 const COMMON = `
 共通的規矩（這台機器）：
 - repo ${ROOT}。這份 clone 的 \`git fetch origin\` 不更新 dev/*、feature/*、qa/*、develop：一律明確 fetch。推完明確 fetch 再 \`git merge-base --is-ancestor HEAD origin/<分支>\` 確認，也看 \`git ls-remote\`。
+- **不准改共用 clone 的 git 設定**：中文路徑印成八進位時，用單次的 \`git -c core.quotepath=off ...\`，不要 \`git config\`。
 - 在 Git Bash 裡給 git 的路徑寫 Windows 格式（\`C:/Users/...\`）。python 用 PowerShell 跑 ${PY}（含中文路徑的指令直接寫在指令裡）。改檔用 Edit，或用 Write 寫成 .py 再跑（Bash heredoc 會吃反斜線）。工作樹是 CRLF、git 裡存 LF：Write 寫出 LF，寫完自己轉；提交前 \`git ls-files --eol <檔>\` 確認 \`i/lf\`。commit 訊息英文寫成檔案用 \`git commit -F\`，結尾一行 \`Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\`。
 - 測試一律 \`-n 4\`、\`TIANXIA_DB\` 指到 ${SP}\\${DIR}\\ 底下的暫存檔。本機伺服器只用埠 ${PORTS}、\`-u\` 分離啟動、記 PID、模型網址指到 127.0.0.1:9（絕不打 11434）、收的時候 \`taskkill /PID <pid> /T /F\`。
 - **不下載、不安裝任何東西**。絕不碰 7861、C:\\Ray\\tianxia-play、線上資料庫、Tunnel、server_push.py；資料庫結構（develop 第 9 版）不改。不要動 ${ROOT}\\.claude\\worktrees\\ 底下別人的工作樹。
