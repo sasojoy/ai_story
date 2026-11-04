@@ -29,6 +29,8 @@ from ..features import cultivation  # 修練：全部拆包第 23 批（只接 l
 from ..features import story  # 一條線：全部拆包第 30 批（只接 story:* 的 choose，照前綴認，排在哪裡結果都一樣）
 # checkin
 from ..features import checkin  # 簽到：全部拆包第 30 批（沒有選項、選單；排在哪裡結果都一樣）
+# socialize
+from ..features import socialize  # 交友求見：全部拆包第 21 批（只接 call: 的 choose 與假人分數，照前綴認，排在哪裡結果都一樣）
 # bout
 from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。排最後：擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）
 # ── import（new_feature.py 接在這一行前面）──
@@ -57,6 +59,8 @@ FEATURES: list[Feature] = [
     story.FEATURE,
     # checkin
     checkin.FEATURE,
+    # socialize
+    socialize.FEATURE,
     # bout（排最後：店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4）
     bout.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──

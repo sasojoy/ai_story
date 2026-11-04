@@ -141,6 +141,10 @@
 - `ctx._art_name(art_id)`：武學此刻在江湖上的名字（定名之後是新名；絕學定名那一則江湖史寫它）
 - 共用的小函式：`not_while_preparing`（裝飾器：籌備中什麼都不能做，只回 PREPARING_REFUSAL、照一般的拒絕寫進紀錄〔`ctx._log`〕；原本是 engine.py 的
   `_not_while_preparing`，engine 照舊用同一個函式掛在還沒搬的那些動作上；`PREPARING_TEXT`、`PREPARING_REFUSAL` 第 24 批先搬了，見 `# sense` 那一段）
+# socialize（全部拆包第 21 批「交友求見」；計畫 docs/superpowers/plans/2026-11-04-交友求見包-第1批.md 1.3）
+- 共用的字（從這個模組 import）：`AUDIENCE_HALL_FIGURES`（一個地點有幾位以上的大勢人物，交友就不直接找人、改按「求見」指名；核心的選單、`sync`、
+  行動列說明都讀）、`SNUB_NOTE`（剛吃了敗仗，閉門不見：挑戰本人那一側的按鈕也寫它）、`SOCIAL_NO_ONE`（一類一顆的交友沒有人也沒有結識事件時，
+  鈕上那一句；網頁測試讀）。原本在 engine.py，engine 照舊 import 回來（`from tianxia.engine import SNUB_NOTE, SOCIAL_NO_ONE` 照舊拿得到）
 
 ## 二、查詢服務
 
@@ -203,6 +207,13 @@ explore（主動搬六包第 3＋4 批加的這一段）
 # cultivation（全部拆包第 23 批；主人：修練包）
 - `ctx._seize_chance(ratio)`：絕學的契機——剛打贏一場難度比 ratio 的仗，身上到了門檻的那一門擲一次頓悟（cultivation.seize），回寫給玩家看的
   那幾句（沒擲、沒成是空的或一句摸到又滑走）。核心的單打服務 `_seize` 與決戰包的收場補送叫它（本體在 `features/cultivation/actions.py`）
+# socialize（全部拆包第 21 批：交友求見的本體搬進 features/socialize，Game 留一行委派回答別的包；第 20 批原本列在三、過渡 companions 那一段）
+- `ctx._can_meet(companion_id)`（見不見得到他：名望到了門檻、或結識過）、`ctx._socialize_figure()`（交友會直接開口的那位人物）、
+  `ctx._count_talk(companion_id)`（記一輪，聊滿了自動告辭）：人物對話的 A 段 dialogue_request 與每一輪收尾問它們
+- `ctx._social_plan()`（一類一顆的交友這一下會做什麼：選單、動作、對話備料、假人讀同一份）、`ctx._brush_off(companion_id)`（名望不夠被打發的那一句）：
+  人物對話的 open_dialogue 與 dialogue_request 問
+- `ctx._open_dialogue(companion_id, prepared)`（主人人物情誼，第 20 批已搬、Game 留一行委派：交友碰上人物、指名求見之後開口對話；
+  原本是 Game 的方法，交友求見成包之前核心原位直接叫，記在邊界測試的 GAME_DELEGATE_CALLERS）
 # story（全部拆包第 30 批「一條線」；主人：一條線包。計畫 docs/superpowers/plans/2026-11-04-一條線簽到-第30批.md 1.3）
 - `ctx._story_begin(strand, custom=False)`（開一條線、端出第一段：探索包的探索擲中了叫它；原本列在三、過渡 explore 那一段，主人現在是一條線包，
   本體在 `features/story/actions.py`，Game 留一行委派）
@@ -283,9 +294,10 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
   `ctx._duel_finish(tier, line)`（頭目戰收場；`scripts/sim_season_one.py` 換掉 `Game._duel_finish` 數頭目戰打成怎樣）
 
 # companions（全部拆包第 20 批：人物對話叫的、主人還沒搬的）
-- `ctx._can_meet(companion_id)`、`ctx._socialize_figure()`、`ctx._count_talk(companion_id)`（主人交友求見 features/socialize，總表第 21 批：見不見得到他、
-  交友會直接開口的那位人物、記一輪並在聊滿時自動告辭；對話的 A 段 dialogue_request 與每一輪收尾問它們。第 21 批搬走時改成那一包的查詢服務）
 - `ctx._depart(route, mode, pace=None)`（主人移動 features/travel：帶路答應之後他親自帶你動身，步調照他的腳程；總表第 56 批前一直是 Game 的方法）
+# socialize（全部拆包第 21 批：交友求見包問別的功能、主人還沒搬的）
+- `ctx._snubbed_character(companion_id)`（主人大勢人物 features/figures，第 31 批；總表附錄甲把挑戰本人 13 個〔含 `_snubbed`、`_snubbed_character`〕裁給大勢人物：
+  這位人物剛被你打敗、還在對你閉門不見嗎；交友、求見的按鈕與動作都問。本體留在 Game 上，主人成包時改成二、查詢服務）
 
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 
@@ -499,6 +511,13 @@ def not_while_preparing(action):
         return action(ctx, *args, **kwargs)
 
     return guarded
+
+
+# socialize（全部拆包第 21 批「交友求見」）：原本寫在 engine.py；交友求見搬進包要用、核心的選單與挑戰本人也讀、又不能 import engine，搬到這裡，
+# engine 照舊 import 回來（`from tianxia.engine import SNUB_NOTE, SOCIAL_NO_ONE` 照舊拿得到：tests/core/test_social.py、tests/web/test_jianghu_page_web.py）
+AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交友就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
+SOCIAL_NO_ONE = "這裡沒有能說上話的人"  # 待 joy 潤：一類一顆的交友沒有人物、也沒有結識事件時（鈕上不帶句號）
+SNUB_NOTE = "剛吃了敗仗，閉門不見"  # 挑戰本人打贏之後，他對打贏的人關上門（軍令文件 4.5）：求見、交友、挑戰的按鈕寫這一句
 
 
 # checkin（全部拆包第 30 批「簽到」）：原本寫在 tianxia/checkin.py；回體丹那一套（Game._pill_find 掉回體丹）歸核心，要問簽到開著沒、說那一句，
