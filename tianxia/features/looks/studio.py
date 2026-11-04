@@ -207,6 +207,25 @@ def _failed(data: dict) -> bool:
     return bool((data.get("studio") or {}).get("failed"))
 
 
+# 自建形象某一張十次都沒畫好：先跳過、把這一套其他張畫完，全部輪過了才停手等管理者（企劃者 2026-11-04 選的）。
+# 以前第一張掛就整張單停住——#495 卡在走一趟揮砍，排在後面的打坐、推一直輪不到。跳過的記在 data.studio.skipped
+# （張名 → 理由），管理者按「再畫一次」連它一起清掉，從那幾張重來。
+def _skipped(data: dict) -> dict:
+    return dict((data.get("studio") or {}).get("skipped") or {})
+
+
+def _todo(o: orders.Order, have, skipped) -> list[str]:
+    """這一套還要畫的張（等圖的十六張都要；待審、上架了的只補走一趟那幾張），跳過的不算。"""
+    return [s for s in orders.SHEETS if s not in have and s not in skipped
+            and (o.status == orders.PENDING or s in orders.OUTING)]
+
+
+def _gave_up(skipped: dict) -> str:
+    """其他張都輪過了、只剩跳過的那幾張：寫給管理者看的停手原因。"""
+    first = next(iter(skipped))
+    return f"沒畫好的 {len(skipped)} 張：{'、'.join(skipped)}。{first}：{skipped[first]}"[:300]
+
+
 def jobs(content: Content, wallet: Wallet, root: Path, web_img: Path) -> list[Job]:
     """每張還在等圖、畫坊沒放棄的訂單，下一張要畫的（舊的訂單在前）。"""
     out: list[Job] = []
@@ -244,8 +263,7 @@ def jobs(content: Content, wallet: Wallet, root: Path, web_img: Path) -> list[Jo
                                checklist=CHECK_PORTRAIT.format(text=o.prompt), aspect="3:4", size="1K",
                                refs=(arena / "hero_bare_idle.webp",), text=o.prompt))
                 continue
-            have = orders.present(root, look)
-            sheet = next((s for s in orders.SHEETS if s not in have and (o.status == orders.PENDING or s in orders.OUTING)), None)
+            sheet = next(iter(_todo(o, orders.present(root, look), _skipped(b.data))), None)
             if sheet is None:
                 continue
             pose = POSE_DIR / f"{sheet}.png" if sheet in POSE else None
@@ -325,7 +343,16 @@ def apply(content: Content, wallet: Wallet, root: Path, job: Job, result: Result
     studio = dict(b.data.get("studio") or {})
     studio["painted"] = int(studio.get("painted", 0)) + result.painted
     if not result.ok:
-        studio["failed"] = f"{job.label}：{'；'.join(result.problems)}"[:300]
+        why = '；'.join(result.problems)
+        if job.kind == "look" and job.slot != PORTRAIT:  # 先跳過這一張，其他張照畫（見 _skipped）
+            skipped = {**_skipped(b.data), job.slot: why[:300]}
+            studio["skipped"] = skipped
+            if _todo(found, orders.present(root, job.folder), skipped):
+                wallet.update_data(job.pid, studio=studio)
+                return f"#{job.pid} {job.label} 沒畫好，先跳過、畫其他張：{why}"[:400]
+            studio["failed"] = _gave_up(skipped)
+        else:
+            studio["failed"] = f"{job.label}：{why}"[:300]
         wallet.update_data(job.pid, studio=studio)
         return f"#{job.pid} {job.label} 沒畫好，停手等管理者：{studio['failed']}"
     if job.slot == PORTRAIT:
@@ -345,6 +372,11 @@ def apply(content: Content, wallet: Wallet, root: Path, job: Job, result: Result
         orders.mark(wallet, orders.of(wallet.purchase(job.pid)), root)
     # 「到齊了」只在真的齊了才說：以前就待審、正在補走一趟的那幾張，每收一張都還是待審（企劃者 2026-11-04 十六張全齊才算）
     done = now.status == orders.REVIEW and (job.kind == "move" or len(orders.present(root, job.folder)) == len(orders.SHEETS))
+    skipped = _skipped(b.data) if job.kind == "look" else {}
+    if skipped and not _todo(now, orders.present(root, job.folder), skipped):  # 這是最後一張能畫的：剩下的都是跳過的
+        studio["failed"] = _gave_up(skipped)
+        wallet.update_data(job.pid, studio=studio)
+        return f"#{job.pid} {job.label} 收了；其他張都畫完了，停手等管理者：{studio['failed']}"
     return f"#{job.pid} {job.label} 收了" + ("，到齊了等管理者上架" if done else "")
 
 
@@ -362,12 +394,13 @@ def _png(raw: bytes) -> bytes:
 
 
 def retry(wallet: Wallet, pid: int) -> bool:
-    """管理者按「再畫一次」：清掉畫坊的放棄，下一輪從缺的那一張重來（花了多少照記著）。"""
+    """管理者按「再畫一次」：清掉畫坊的放棄與跳過的那幾張，下一輪從缺的那一張重來（花了多少照記著）。"""
     b = wallet.purchase(pid)
-    if b is None or not _failed(b.data):
+    if b is None or not (_failed(b.data) or _skipped(b.data)):
         return False
     studio = dict(b.data.get("studio") or {})
     studio.pop("failed", None)
+    studio.pop("skipped", None)
     wallet.update_data(pid, studio=studio)
     return True
 

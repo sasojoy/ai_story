@@ -90,6 +90,39 @@ def test_three_misses_stop_until_the_admin_says_again(on):
     assert actions.admin_studio_retry(game, pid)[-1] == "（此刻無法這麼做。）"  # 不是管理者
 
 
+def test_a_look_sheet_that_never_passes_is_skipped_and_the_rest_are_painted(on):
+    """企劃者 2026-11-04：某一張十次都沒畫好就先跳過、把其他張畫完，全部輪過了才停手等管理者
+    （#495 卡在走一趟揮砍，排在後面的打坐、推一直輪不到）。「再畫一次」連跳過的一起清掉。"""
+    game = _game(on)
+    actions.order(game, "雪衣", "長髮飄飄的仙子", "look-ref-805")
+    pid = orders.mine(Wallet(game.world.db), game._mall_owner())[0].pid
+    root = actions.image_root(game)
+    folder = orders.folder(root, orders.look_id(pid))
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "ref.png").write_bytes(b"portrait")
+
+    class NoHit(Critic):
+        def review(self, checklist, image, refs):
+            self.seen.append(checklist)
+            hit = orders.ACTIONS["hero_bare_hit"] in checklist
+            return studio.Verdict(False, ["挨打那張讀不出來"], "redo") if hit else studio.Verdict(True)
+
+    painter, critic = Painter(), NoHit()
+    lines = []
+    for _ in range(len(orders.SHEETS) + 2):
+        lines += _tick(game, painter, critic, tries=2)
+    assert any("hero_bare_hit 沒畫好，先跳過、畫其他張" in line for line in lines)
+    assert "停手等管理者" in lines[-1] and "hero_bare_hit" in lines[-1]
+    assert set(orders.SHEETS) - set(orders.present(root, orders.look_id(pid))) == {"hero_bare_hit"}  # 其他十五張都畫了
+    data = Wallet(game.world.db).purchase(pid).data["studio"]
+    assert list(data["skipped"]) == ["hero_bare_hit"] and "沒畫好的 1 張" in data["failed"]
+    assert orders.of(Wallet(game.world.db).purchase(pid)).status == orders.PENDING  # 十六張沒齊，不會待審
+    assert _tick(game, painter, critic) == []  # 停手了不再畫
+    assert studio.retry(Wallet(game.world.db), pid)
+    assert "skipped" not in Wallet(game.world.db).purchase(pid).data["studio"]
+    assert _tick(game, painter, Critic())[0].startswith(f"#{pid} hero_bare_hit 收了")
+
+
 def test_a_cut_that_fails_counts_as_a_miss(on):
     game = _game(on)
     pid = _move_order(on, game)
