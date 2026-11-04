@@ -142,8 +142,8 @@ def talked_out_note(ctx) -> str:
 def starts_dialogue(ctx) -> bool:
     """在這裡交友會直接跟大勢人物對話（伺服器假人不閒聊大勢人物，見 bot_policy）。在召見的地點不會：交友端出晉升奇遇。"""
     if precise.on(ctx.content, ctx.state.world):
-        return socialize_figure(ctx) is not None
-    return ranks.summons_event(ctx.state, ctx.content) is None and socialize_figure(ctx) is not None
+        return ctx._socialize_figure() is not None  # 經 ctx：測試與腳本換掉 Game._socialize_figure，換掉的才打得到
+    return ranks.summons_event(ctx.state, ctx.content) is None and ctx._socialize_figure() is not None
 
 
 def is_futile(ctx) -> bool:
@@ -154,6 +154,6 @@ def is_futile(ctx) -> bool:
         return social_plan(ctx)[0] is None
     return (
         not has_events_here(c, c.locations[s.player.location], "socialize")
-        and socialize_figure(ctx) is None
+        and ctx._socialize_figure() is None
         and not roster.fortune_due(s, c)
     )

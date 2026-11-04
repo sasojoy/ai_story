@@ -38,3 +38,14 @@ def test_a_bot_stuck_on_the_audience_list_would_only_press_back():
     profile = BotProfile(personality="普通", seed=3, faction="guan", season_number=1)
     scored = {o.id: bot_policy.score(g, o, profile) for o in g.options(odds=False)}
     assert "call:huangfusong" in scored and {oid for oid, value in scored.items() if value is not None} == {"call:back"}
+
+
+def test_the_bot_questions_go_through_game_so_a_swapped_figure_is_heard(monkeypatch):
+    """starts_dialogue、is_futile 問的人物經 ctx._socialize_figure（測試與腳本換掉 Game 方法，換掉的才打得到）。"""
+    from tianxia.engine import Game
+
+    g = real_game("week7", location="changshe")
+    monkeypatch.setattr(Game, "_socialize_figure", lambda self: "sage")
+    assert g.socialize_starts_dialogue() is True
+    monkeypatch.setattr("tianxia.precise.on", lambda content, world: False)  # 舊寫法那一支才直接問人物
+    assert g.socialize_is_futile() is False
