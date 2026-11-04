@@ -14,7 +14,6 @@ from tianxia.characters import CharacterStore
 from tianxia.content import ContentError, load_content
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
-from tianxia.features.figure_acts import challenge as figure_challenge
 from tianxia.models import GearBook, SignatureArmDef
 from tianxia.state import FigureState, GameState, GearFind, SignatureClaim, Weapon, WorldState
 
@@ -248,7 +247,7 @@ def _beat_sun(game, times):
     """連打孫堅 times 場、場場險勝；不讓他敗走（_rout 回空的：不扣聲威、不閉門不見），同一位連打得下去。回最後一場的話。"""
     p = game.state.player
     msgs = []
-    with mock.patch.object(team, "fight", return_value=_won()), mock.patch.object(figure_challenge, "rout", return_value=[]):
+    with mock.patch.object(team, "fight", return_value=_won()), mock.patch.object(Game, "_rout", return_value=[]):
         for _ in range(times):
             p.snubbed_until.clear()
             p.stamina = 250.0

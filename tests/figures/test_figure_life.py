@@ -11,7 +11,6 @@ import pytest
 from conftest import no_plans, real_content
 from tianxia import figure_life, figures, team, world
 from tianxia.engine import Game
-from tianxia.features.figure_acts import challenge as figure_challenge
 from tianxia.state import GameState, PlayerState
 from tianxia.world_state import fresh_season
 
@@ -186,7 +185,7 @@ def test_routing_a_figure_in_the_engine_spreads_the_word(c):
     p = game.state.player
     p.faction = "guan"
     p.location = "huangjin_camp"
-    msgs = figure_challenge.rout(game, "bocai")
+    msgs = game._rout("bocai")
     assert any("聽說了這件事" in m for m in msgs)
     assert p.hearsay["liupi"][0].endswith("打退了波才")  # 同一區的劉辟聽說了
 

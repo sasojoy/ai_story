@@ -15,7 +15,6 @@ from test_forge_secrets import BLADE, CLEAVER, JACKET
 from test_treasures import _challenger, _won
 from tianxia import armor, battlelog, bot, bot_policy, equipment, forge_secrets, fusion, materials, naming, rules, skillview, smithing, team, weapons
 from tianxia.content import validate
-from tianxia.features.figure_acts import challenge as figure_challenge
 from tianxia.models import Drop, ForgeSecret, ForgeSide
 from tianxia.sqlite_world import open_world
 from tianxia.state import COPY_NAME, DIVINE_UNNAMED, Equipment, GearFind, Weapon
@@ -434,7 +433,7 @@ def test_beating_a_great_figure_drops_a_tier_three_of_his_attribute_on_the_first
     assert (rule.challenge_tier3, rule.tier3_per_figure, rule.big_tier3) == (1.0, 1, 0.25)  # 「要 PM 定的」第 2 條；每位一次是丁 (c)
     p = game.state.player
     got = []
-    with mock.patch.object(team, "fight", return_value=_won()), mock.patch.object(materials, "roll_squad_drops", return_value=[]),             mock.patch.object(figure_challenge, "rout", return_value=[]):  # 不讓他敗走退場：同一位連打三場
+    with mock.patch.object(team, "fight", return_value=_won()), mock.patch.object(materials, "roll_squad_drops", return_value=[]),             mock.patch.object(Game, "_rout", return_value=[]):  # 不讓他敗走退場：同一位連打三場
         for _ in range(3):
             p.snubbed_until.clear()
             p.stamina = 250.0

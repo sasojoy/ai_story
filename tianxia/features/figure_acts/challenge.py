@@ -3,7 +3,7 @@
 
 `challenge` 的先後（扣體力 → 護衛那一關 → 判讀 → 打 → 戰報 → 贏了才有的一串 → 僵持／落敗 → 扣血 → 回合 → 頓悟 → 戰報 → 名聲 → 行狀）逐字照搬，
 `msgs.insert(0, …)`、`msgs.insert(1, …)` 的位置也算行為。`act:challenge:<人物>` 是 act 子動詞（總表第 57 批才接 Verb），按下去、選單那一格、標題都還在核心原位叫
-Game 的委派。被測試換掉的 odds（Game.challenge_odds）在 options 裡經 ctx 叫才打得到；被測試換掉的 rout 在 challenge 裡經本模組的名字叫。
+Game 的委派。被測試換掉的 odds（Game.challenge_odds）在 options 裡經 ctx 叫才打得到；被測試換掉的 _rout 也經 ctx 叫（Game 留一行委派）。
 """
 from __future__ import annotations
 
@@ -122,7 +122,7 @@ def challenge(ctx, fid: str) -> list[str]:
         fame = ctx._deed_fame("challenge")  # 名聲 3.1：挑戰本人打贏 +2（推翻挑戰每季都有設計的「不給」）
         record.changes += fame
         msgs += fame
-        extra = rout(ctx, fid)
+        extra = ctx._rout(fid)
         changes, notes = battlelog.split_changes(extra, for_record=True)
         record.changes += changes
         record.notes += notes

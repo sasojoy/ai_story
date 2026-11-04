@@ -816,6 +816,8 @@ GAME_DELEGATES |= {
     # 核心原位叫的：選單（_challenge_options、_aid_options、_plan_options）、閉門不見（_snubbed_character）、挑戰的對手隊伍（_figure_squad）、
     # 按下去（_challenge）、同步補名望（_deliver_guard_credits）
     "_challenge_options", "_aid_options", "_plan_options", "_snubbed_character", "_figure_squad", "_challenge", "_deliver_guard_credits",
+    # 被測試換掉的：_rout（challenge 經 ctx._rout 叫，批次表第二節）
+    "_rout",
     # server、假人、腳本、測試在叫的：challenge_odds（bot.py、bot_policy、測試換掉它）、plan_view、place_deeds_view（main_view）、yuedan_request、apply_yuedan（月旦評三段式）、
     # admin_fallen、admin_revive_figure（管理頁）
     "challenge_odds", "plan_view", "place_deeds_view", "yuedan_request", "apply_yuedan", "admin_fallen", "admin_revive_figure",

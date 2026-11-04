@@ -229,6 +229,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
   〔含 `_snubbed`、`_snubbed_character`〕裁給大勢人物；本體在 `features/figure_acts/challenge.py`，Game 留一行委派回答別的包。原本列在三、過渡 socialize 那一段）
 - `ctx.challenge_odds(fid)`（挑戰這位人物的勝算：這一包自己的 options 也經 ctx 叫它，tests/figures、tests/core/test_challenge_season.py、tests/figures/test_orders.py
   換掉 `Game.challenge_odds`，包裡經 ctx 叫才打得到）
+- `ctx._rout(fid)`（打贏他敗走：tests/gear/test_signature_arms、test_forge_divine 換掉 `Game._rout`，`challenge` 經 ctx 叫才打得到；批次表第二節）
 
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 

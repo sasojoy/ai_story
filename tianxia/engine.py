@@ -5352,6 +5352,9 @@ class Game:
     def _figure_squad(self, fid: str) -> Squad:
         return figure_challenge.figure_squad(self, fid)
 
+    def _rout(self, fid: str) -> list[str]:
+        return figure_challenge.rout(self, fid)
+
     def _story_squad(self, squad: Squad) -> Squad:
         """劇情戰的對手：大場面（is_big）照江湖水漲浮上來（全隊威力 × big_scale，不看打贏幾次：劇情戰多半一次性）；
         其餘、序章照內容寫的。勝算（_choice_label）、備料（_fight_squad）、打起來（_event_battle）都照這一份。"""
