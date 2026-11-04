@@ -4537,6 +4537,9 @@ class Game:
     def _talk(self, arg: str, prepared: companion_agent.PreparedTurn | None = None, said: str | None = None) -> list[str]:
         return companions_talk.talk(self, arg, prepared, said)
 
+    def _annal_talk(self, companion_id: str, delta: int, said: str | None) -> None:
+        companions_talk.annal_talk(self, companion_id, delta, said)
+
     # ── NPC 智能 2.0（parley.py；Joy 2026-10-23「先做看看」）────────────
 
     _parley_decision: parley.Decision | None = None  # 這一輪「自己說」擲出來的結果（_parley_decide 記、_talk 收尾時拿去做事）

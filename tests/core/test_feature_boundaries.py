@@ -643,11 +643,12 @@ GAME_DELEGATE_CALLERS.update({
 # 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。_stance_before、_stance_credit 兩個委派只有搬走的 _talk、_road_say 在叫，包裡互相叫之後拿掉了（上面）
 GAME_IMPORTS |= {"tianxia.features.companions.talk_actions", "tianxia.features.companions.parley_actions"}
 GAME_DELEGATES |= {
-    # 搬進包的 29 個方法留 12 個（8 個私有）：server 與測試在叫的 dialogue_request、say_max、_checked_prepared、_parley_lists、_parley_prompt、_parley_options；
+    # 搬進包的 29 個方法留 13 個（9 個私有）：server 與測試在叫的 dialogue_request、say_max、_checked_prepared、_parley_lists、_parley_prompt、_parley_options、
+    # _annal_talk（tests/core/test_annals.py 直接叫）；
     # 核心原位叫的 _open_dialogue（交友與求見開口，第 21 批）、_talk 與 _road_say（choose）、_last_talk_line（場景文字）、_parley_road_option（路上的選單）；
-    # 出陣包經 ctx 問的 _parley_backing_here。其餘 17 個（_dialogue_unavailable、_annal_talk、_prepared_turn、_parley_finish……）只有包裡叫，沒有委派
-    "dialogue_request", "say_max", "_checked_prepared", "_parley_lists", "_parley_prompt", "_parley_options", "_open_dialogue", "_talk", "_road_say",
-    "_last_talk_line", "_parley_road_option", "_parley_backing_here",
+    # 出陣包經 ctx 問的 _parley_backing_here。其餘 16 個（_dialogue_unavailable、_prepared_turn、_parley_finish……）只有包裡叫，沒有委派
+    "dialogue_request", "say_max", "_checked_prepared", "_parley_lists", "_parley_prompt", "_parley_options", "_annal_talk", "_open_dialogue", "_talk",
+    "_road_say", "_last_talk_line", "_parley_road_option", "_parley_backing_here",
     # 原位那幾行的本體一起搬進包（選單上談著的那一整段、叛投之後欠著的都算食言）
     "_talk_options", "_parley_forsake",
 }
