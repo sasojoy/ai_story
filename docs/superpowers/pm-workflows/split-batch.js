@@ -114,14 +114,14 @@ const LENSES_ALL = [
 ]
 const LENSES = LENSES_ALL.slice(0, LENSES_N)
 
-const CHECKP = (head) => WEB ? `你是《天下大勢》的 QA 子代理，驗**全部拆包第 ${N} 批：${TITLE}**（${DEV} ${head}）。這一批動到 web/，照 .claude/skills/tianxia-qa/SKILL.md 做**完整實機 QA**：HEAD 對 BASE（origin/${FEAT} ${BASE}）同一個局面並排截圖（375 淺、375 深、1280）、逐像素比、主控台 0 錯誤、網路沒有 4xx／5xx、資料庫逐表比。
+const CHECKP = (head) => (WEB || A.full_qa) ? `你是《天下大勢》的 QA 子代理，驗**全部拆包第 ${N} 批：${TITLE}**（${DEV} ${head}）。${WEB ? '這一批動到 web/' : '這一批動到 server 的路由分派（web/ 沒動）'}，照 .claude/skills/tianxia-qa/SKILL.md 做**完整實機 QA**：HEAD 對 BASE（origin/${FEAT} ${BASE}）同一個局面並排截圖（375 淺、375 深、1280）、逐像素比、主控台 0 錯誤、網路沒有 4xx／5xx、資料庫逐表比。
 ${COMMON}
-做法照 ${SP}\\qa-sortie1\\s\\ 的 serve.py（時鐘凍住、固定亂數、排程不開），複製到 ${SP}\\${SCRATCH}-qa\\ 改著用；兩份 worktree 的 .local/webpush_vapid.pem 用同一把。埠 ${P.head}（HEAD，${HOST}qa.localhost）、${P.base}（BASE，127.0.0.1）。要點的：${STEPS}
+做法照 ${SP}\\b12-chk\\s\\ 的 serve.py、drive.py（第 12 批那一版，最新）（時鐘凍住、固定亂數、排程不開），複製到 ${SP}\\${SCRATCH}-qa\\ 改著用；兩份 worktree 的 .local/webpush_vapid.pem 用同一把。埠 ${P.head}（HEAD，${HOST}qa.localhost）、${P.base}（BASE，127.0.0.1）。要點的：${STEPS}
 有問題寫成回饋單 ${FB}（docs/superpowers/feedback/試玩回饋.md）；報告、回饋單、挑過的並排圖推到 ${QA}（從 origin/${DEV} ${head} 開）。沒有問題就寫「沒有問題」。收的時候伺服器 taskkill /T、刪暫存大檔。
 回報：same、走了哪些步驟、差異、FB、截圖路徑、qa 分支 head。` : `你是《天下大勢》的驗收子代理，驗**全部拆包第 ${N} 批：${TITLE}**（${DEV} ${head}）。純搬、web/ 一個字沒動的批，實機 QA 照總表 5.0 做「兩台真伺服器逐位元組比」：網頁檔沒變、伺服器回的位元組一樣，畫面就一定一樣；只拍三張圖做 sanity。
 ${COMMON}
 開發與審查已經跑過測試與 same_behavior：**不要重跑**。
-做法：照 ${SP}\\qa-sortie1\\s\\ 的 serve.py（時鐘凍住只在 /__qa/clock 往前推、每次進行動鎖重設 game.rng 與 random、沒給種子的 Random 用固定種子、世界排程執行緒不開、/__qa/edit 擺位），複製到 ${SP}\\${SCRATCH}-chk\\ 改著用。明確 fetch ${DEV}、${FEAT}；開兩份 detached worktree：HEAD＝${head}、BASE＝origin/${FEAT}（${BASE}）；兩份的 .local/webpush_vapid.pem 用同一把。兩台伺服器開在埠 ${P.head}（HEAD，${HOST}chk.localhost）與 ${P.base}（BASE，127.0.0.1），season21（再加 week7 走一遍主要的幾步）：用真的 HTTP（帶 cookie）照同一串步驟打兩台——${STEPS}——**每一個回應的狀態碼與內容逐位元組比**（凍住時鐘之後帶時間戳的欄位應該一樣；真的不一樣的列出來分清楚是雜訊還是程式）；收場後兩個資料庫逐表比。再用 headless 瀏覽器各拍 375×812 淺色的三張相關畫面並排。收的時候 taskkill /T、刪兩份 worktree 與暫存大檔。
+做法：照 ${SP}\\b12-chk\\s\\ 的 serve.py、drive.py（第 12 批那一版，最新）（時鐘凍住只在 /__qa/clock 往前推、每次進行動鎖重設 game.rng 與 random、沒給種子的 Random 用固定種子、世界排程執行緒不開、/__qa/edit 擺位），複製到 ${SP}\\${SCRATCH}-chk\\ 改著用。明確 fetch ${DEV}、${FEAT}；開兩份 detached worktree：HEAD＝${head}、BASE＝origin/${FEAT}（${BASE}）；兩份的 .local/webpush_vapid.pem 用同一把。兩台伺服器開在埠 ${P.head}（HEAD，${HOST}chk.localhost）與 ${P.base}（BASE，127.0.0.1），season21（再加 week7 走一遍主要的幾步）：用真的 HTTP（帶 cookie）照同一串步驟打兩台——${STEPS}——**每一個回應的狀態碼與內容逐位元組比**（凍住時鐘之後帶時間戳的欄位應該一樣；真的不一樣的列出來分清楚是雜訊還是程式）；收場後兩個資料庫逐表比。再用 headless 瀏覽器各拍 375×812 淺色的三張相關畫面並排。收的時候 taskkill /T、刪兩份 worktree 與暫存大檔。
 回報：same（全部一樣才是 true）、走了哪些步驟、差異清單、截圖路徑。有問題寫成回饋單 ${FB}（docs/superpowers/feedback/試玩回饋.md）並推到 ${QA}（從 origin/${DEV} 開；只放報告、回饋單、圖）；沒有問題就不必開 qa 分支。`
 
 phase('Build')
@@ -133,9 +133,9 @@ const devText = `開發回報：\n${dev.report}\nsame_behavior：${dev.same_beha
 const reviews = await parallel(LENSES.map(l => () => agent(`你是《天下大勢》的唯讀審查員（不改檔、不提交、不推）。\n${COMMON}\n審 ${DEV} 的 ${dev.head}（明確 fetch），base 是 ${FEAT} ${BASE}。這一批：${TITLE}。\n${devText}\n你的鏡頭：${l.text}\n每一條發現寫 severity（blocker＝合了會壞、或行為變了、或違反手冊／批次表／總表／PM 定的；should；nit）、在哪裡、證據（指令與輸出）。沒有就回空陣列，不要湊。`, { label: `review:b${N}-${l.key}`, phase: 'Review', schema: REVIEW_SCHEMA })))
 const findings = reviews.filter(Boolean).flatMap(r => r.findings || [])
 let head = dev.head, fix = null
-if (findings.some(f => f.severity !== 'nit') || findings.length > 2) {
+if (findings.some(f => f.severity !== 'nit')) {
   phase('Fix')
-  fix = await agent(`你是《天下大勢》的開發子代理，修 ${DEV}（現在 ${dev.head}）上審查員的發現。\n${COMMON}\n分支：明確 fetch，\`git switch -c ${DEV}-fix origin/${DEV}\`（同名已存在就加 -work），推回 origin/${DEV}（快轉）。每修一條一個 commit、修一條推一次；先寫會紅的測試（或讓 same_behavior 先抓到）再修；屬實的才修，不屬實的寫進 rejected 附證據；nit 能順手就修。修完重跑 same_behavior 的 base 對 head（所有軌、五種）與相關測試。要開伺服器用埠 ${P.fix}、${HOST}fix.localhost。暫存 ${SP}\\${SCRATCH}-fix\\，做完刪大檔。\n開發回報（摘要）：${dev.report.slice(0, 5000)}\n發現：\n${JSON.stringify(findings, null, 1)}\n審查摘要：${reviews.filter(Boolean).map(r => r.summary).join('\n---\n')}\n回報 head、修了哪些、駁回哪些、測試、學到的。`, { label: `fix:b${N}`, phase: 'Fix', schema: FIX_SCHEMA })
+  fix = await agent(`你是《天下大勢》的開發子代理，修 ${DEV}（現在 ${dev.head}）上審查員的發現。\n${COMMON}\n分支：明確 fetch，\`git switch -c ${DEV}-fix origin/${DEV}\`（同名已存在就加 -work），推回 origin/${DEV}（快轉）。每修一條一個 commit、修一條推一次；先寫會紅的測試（或讓 same_behavior 先抓到）再修；屬實的才修，不屬實的寫進 rejected 附證據；**nit 不修**，寫進計畫的審查那一節就好（PM 11/04：額度是拆完的瓶頸）。修完重跑 same_behavior 的 base 對 head（所有軌、五種）與相關測試。要開伺服器用埠 ${P.fix}、${HOST}fix.localhost。暫存 ${SP}\\${SCRATCH}-fix\\，做完刪大檔。\n開發回報（摘要）：${dev.report.slice(0, 5000)}\n發現：\n${JSON.stringify(findings, null, 1)}\n審查摘要：${reviews.filter(Boolean).map(r => r.summary).join('\n---\n')}\n回報 head、修了哪些、駁回哪些、測試、學到的。`, { label: `fix:b${N}`, phase: 'Fix', schema: FIX_SCHEMA })
   if (fix && fix.head) head = fix.head
 }
 phase('Check')
