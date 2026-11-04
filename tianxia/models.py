@@ -10,6 +10,7 @@ from .jianfa_numbers import ExploreMix, JianfaNumbers
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
 ActionKind = Literal["explore", "train", "socialize"]
+PLACE_KINDS = ("peace", "war", "fallen", "famine", "rebuild")  # 地點的五種樣子（place_state.py）：太平、戰火、淪陷、饑荒、重建
 TravelMode = Literal["walk", "hurry", "dash"]  # 步行／趕路／疾行（地圖擴充設計 3.2）；趕路 2026-10-12 拿掉，只留給拿掉之前出發、還在路上的那一趟
 # sanguo-companions 合併：同伴不再分天地玄黃品階，改成「龍頭人物」（劇情鎖定，不可招募，
 # 見設計文件四.4）跟「可招募」兩種，決定要不要出現在招募流程裡。
@@ -75,6 +76,10 @@ class Condition(_Strict):
     factions: list[str] = Field(default_factory=list)  # 玩家的陣營在裡面才成立；空的＝不限（散人也行）
     # 玩家的陣營在裡面就不成立（散人一律成立）：替有立場的事件選項分邊用——黃巾的人看不到「打黃巾」那一顆（企劃者 2026-10-08）
     factions_none: list[str] = Field(default_factory=list)
+    # 地點會變樣（place_state.py）：此刻所在地的樣子（peace 太平、war 戰火、fallen 淪陷、famine 饑荒、rebuild 重建）在裡面才成立／在裡面就不成立；
+    # 沒給 content、「地點會變樣」關著時一律當太平
+    place_state: list[str] = Field(default_factory=list)
+    place_state_none: list[str] = Field(default_factory=list)
     controlled_by: list[str] = Field(default_factory=list)  # 這裡此刻歸誰控制（territory.controller）在裡面才成立；空的＝不限（出陣探索與地盤設計 4.3 第 4 點）
     # 遊俠名號（ranger.py）：散人、劇本有陣營、名號到這一階才成立（投靠了陣營一律不成立；每季都有）；ranger_path 是「俠」或「寇」（不寫＝不限）
     ranger_min: int | None = None
@@ -1119,6 +1124,10 @@ class PlanContest(_Strict):
     trends_lose: dict[str, int] = Field(default_factory=dict)
     flag_win: str | None = None  # 成了立的世界旗標
     lose_place: str | None = None  # 不成時他退到哪（沒寫就留在原地）
+    # 地點會變樣（place_state.py）：成了、不成時 place 變成什麼樣子。war 打過一仗（預設）、famine 鬧饑荒、fallen 落入贏的那一方之手、none 不變
+    # （搜書信、築城防這種不打仗的）。打過一仗時，淪陷的地方被另一方打贏就算收復
+    place_win: Literal["war", "famine", "fallen", "none"] = "war"
+    place_lose: Literal["war", "famine", "fallen", "none"] = "war"
 
 
 class ItineraryStop(_Strict):
@@ -3084,6 +3093,19 @@ class PlanTuning(_Strict):
     deeds_keep: int = Field(default=300, ge=10)  # 世界記事全服留幾筆（舊的先丟）
     deeds_prompt: int = Field(default=3, ge=0)  # 人物對話提示最多帶幾筆跟玩家有關的記事
     deeds_place: int = Field(default=3, ge=0)  # 此地舊事最多列幾筆
+    # 第二批「地點會變樣」（tianxia/place_state.py；設計稿第二節，Joy 2026-11-04 選「兩個都做」）：地點有太平、戰火、淪陷、饑荒、重建五種樣子，
+    # 盤算的結果、時刻表大事（TimetableOutcome.places）、領地易手會改它；會改這裡抽得到的事件（Condition.place_state）、店家的價錢、
+    # 馬市開不開、人物會不會晃過來、到達時那一句。天數照 7 天季寫，別的季長照比例。淪陷的地方一直淪陷，直到有人收復（Joy 10/29「可以」）
+    places: bool = True
+    war_days7: float = Field(default=1.0, gt=0)  # 戰火燒多久
+    famine_days7: float = Field(default=1.5, gt=0)  # 饑荒多久（戰火還沒熄又打一仗、或盤算寫了 famine）
+    rebuild_days7: float = Field(default=1.0, gt=0)  # 戰火、饑荒過了、或收復之後，重建多久才回太平
+    fall_to: list[str] = Field(default_factory=lambda: ["huang"])  # 落入這幾方之手算淪陷（領地易手；百姓眼裡是城破了）
+    price: dict[str, float] = Field(default_factory=lambda: {"war": 1.2, "fallen": 1.3, "famine": 1.5, "rebuild": 1.1})  # 店家價錢的倍數
+    market_closed: list[str] = Field(default_factory=lambda: ["war", "fallen"])  # 這幾種樣子時馬市不開
+    # 第二批「上線邸報」（rumor_view.gazette_lines）：「你不在的時候」改成三段——你去過的地方、你認識的人、誰提起了你；每段最多 gazette_rows 行
+    gazette: bool = True
+    gazette_rows: int = Field(default=3, ge=1)
 
 
 class ParleyTuning(_Strict):
@@ -4710,6 +4732,8 @@ class TimetableOutcome(_Strict):
     chance_mods: dict[str, float] = Field(default_factory=dict)  # 之後那件大事的成功率修正（寫進 event_bonus，不佔 ±0.20 上限）
     world_flags_add: list[str] = Field(default_factory=list)
     control: dict[str, str] = Field(default_factory=dict)  # 這個結果讓哪幾處易手：地點 → 陣營（設計 4.2 第 3 點；只能是可易手或 fixed 的地點）
+    # 地點會變樣（place_state.py）：這個結果讓哪幾處變樣：地點 → war、famine、retake（收復）或「fallen:<陣營>」（落入那一方之手）
+    places: dict[str, str] = Field(default_factory=dict)
 
 
 class RealSlot(_Strict):

@@ -19,7 +19,7 @@ from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import chapters  # 章回主線（企劃者 2026-10-29）
 from . import (
     allied, annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, create, cultivation, defection, divine, economy, encounter, equipment, explore_modes,
-    deeds, fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, forge_secrets, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, plans,
+    deeds, fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, forge_secrets, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, place_state, plans,
     materials, mounts, naming, opportunities, orders, parley, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skillview, smithing,
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, xingshi, zh, yuedan,
@@ -1027,10 +1027,12 @@ class Game:
             return
         if self.now - away_from < c.config.away_hours * HOUR:
             return
-        lines, total = rumor_view.away_lines(s, c, since, self.stamp)
+        gazette = rumor_view.gazette_on(c)  # 世界活起來第二批：上線邸報（你去過的地方、你認識的人、誰提起了你）；關著照舊那一長串
+        lines, total = (rumor_view.gazette_lines if gazette else rumor_view.away_lines)(s, c, since, self.stamp)
         if lines:
             tag = rumor_view.AWAY_TAG.format(n=total)
-            journal.add_entry(s, JournalEntry(time=s.world.time, title=journal.AWAY, tag=tag, lines=lines))
+            title = journal.GAZETTE if gazette else journal.AWAY
+            journal.add_entry(s, JournalEntry(time=s.world.time, title=title, tag=tag, lines=lines))
 
     def advance(self, seconds: float) -> list[str]:
         """玩家主動「等待」固定一段遊戲時間（快轉按鈕）：進行中時，直接在 self.state.world
@@ -3321,6 +3323,13 @@ class Game:
         for act in view["acts"]:  # 卡上的鈕跟「此地還能做」那一顆同一個字（帶體力）
             act["label"] = f"{act['label']}（體力 {c.config.plans.stamina}）"
         return view
+
+    def place_state_view(self) -> dict | None:
+        """地點會變樣（main.place_state）：此刻所在地的樣子 {kind, name, line}；太平、在路上、關著是 None。"""
+        s = self.state
+        if s.player.journey is not None:
+            return None
+        return place_state.view(s.world, self.content, s.player.location)
 
     def place_deeds_view(self) -> list[dict] | None:
         """此地舊事（main.place_deeds）：這裡最近的幾筆世界記事；在路上、沒有、開關關著是 None。"""
@@ -11786,9 +11795,13 @@ class Game:
 
     def location_text(self) -> str:
         loc = self.content.locations[self.state.player.location]
+        # 地點會變樣（世界活起來第二批）：不是太平的地方，地名那一行底下多一段「〔戰火〕這一帶剛打過仗……」；地名那一行不動
+        # （有畫時網頁照 scene_art 的 head 把它拿掉、疊在畫上）。太平、關著一個字都不變
+        mood = place_state.view(self.state.world, self.content, loc.id)
+        head = f"【{loc.name}】危險 {'★' * loc.danger}" + (f"\n\n〔{place_state.NAMES[mood['kind']]}〕{mood['line']}" if mood is not None else "")
         if jianfa(self.content, self.state.world, "marks_visible"):  # 減法季批 4：痕跡過了門檻，描寫多接一段（marks.describe）
-            return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{marks_rules.describe(loc, self.state.world, self.content)}"
-        return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{loc.describe(self.state.world.flags)}"  # 宛城的描寫隨版本換
+            return f"{head}\n\n{marks_rules.describe(loc, self.state.world, self.content)}"
+        return f"{head}\n\n{loc.describe(self.state.world.flags)}"  # 宛城的描寫隨版本換
 
     def scene_art(self) -> dict | None:
         """江湖頁場景卡上面那張圖（減法季批 8 圖像版；減法季整合設計第八章、第一批圖提示單）。回 {kind, path, title, sub, head}：
@@ -11824,7 +11837,12 @@ class Game:
         else:
             region = atlas.region_of(c, loc.id)
             path = f"places/{region.id}" if region is not None else "places/world"
-        return {"kind": "place", "path": path, "title": loc.name, "sub": f"危險 {'★' * loc.danger}", "head": f"【{loc.name}】危險 {'★' * loc.danger}"}
+        art = {"kind": "place", "path": path, "title": loc.name, "sub": f"危險 {'★' * loc.danger}", "head": f"【{loc.name}】危險 {'★' * loc.danger}"}
+        mood = place_state.view(s.world, c, loc.id)  # 地點會變樣：疊在畫上的那一行多寫此刻的樣子，畫照樣子換色調（網頁的 mood-<kind>）
+        if mood is not None:
+            art["sub"] += f"・{mood['name']}"
+            art["mood"] = mood["kind"]
+        return art
 
     def method_help(self, option_ids: Iterable[str]) -> dict | None:
         """有所感選做法那一步，網頁畫在做法鈕底下的兩行小字（explain-2，sensing.method_help；鈕上的心意審查 I1 起預設不給）；

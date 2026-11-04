@@ -540,6 +540,11 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .card.scene > .scene-art { position: relative; margin: -12px -14px 10px; height: clamp(150px, 33vh, 300px); overflow: hidden; border-radius: var(--radius) var(--radius) 0 0; background: var(--card-2); }
 .scene-art img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 35%; }
 .scene-art.figure img { object-position: center top; }
+/* 地點會變樣（世界活起來第二批）：戰火偏紅、淪陷灰暗、饑荒枯黃、重建偏暖；太平沒有 mood，一字不變 */
+.scene-art.mood-war img { filter: sepia(0.35) saturate(1.3) hue-rotate(-12deg) brightness(0.9); }
+.scene-art.mood-fallen img { filter: grayscale(0.7) brightness(0.78); }
+.scene-art.mood-famine img { filter: sepia(0.55) saturate(0.7) brightness(0.92); }
+.scene-art.mood-rebuild img { filter: sepia(0.18) saturate(1.05) brightness(1.02); }
 .scene-art figcaption { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 34px 14px 9px; color: #fff; background: linear-gradient(to top, rgba(0, 0, 0, 0.74), rgba(0, 0, 0, 0.35) 55%, rgba(0, 0, 0, 0)); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); }
 .scene-art figcaption b { font: 600 17px var(--serif); }
 .scene-art figcaption .sub { font-size: 13px; opacity: 0.94; }

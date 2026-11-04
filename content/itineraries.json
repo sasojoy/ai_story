@@ -72,7 +72,7 @@
   {"who": "wangyun", "stops": [
     {"id": "wangyun_raise", "day": 2.5, "place": "runan", "text": "{name}以豫州刺史之名在{place}募兵討賊。"},
     {"id": "wangyun_letters", "day": 4.0, "place": "runan_market", "contest": {
-      "side": "guan", "announce": "{name}要在{place}搜查黃巾往來的書信，聽說裡面有宮中的人。",
+      "side": "guan", "place_win": "none", "place_lose": "none", "announce": "{name}要在{place}搜查黃巾往來的書信，聽說裡面有宮中的人。",
       "win": "{name}在{place}搜出張讓賓客與黃巾往來的書信，連夜封好送往洛陽。",
       "lose": "{name}的人趕到{place}時，那批書信已經被人燒了。",
       "flag_win": "zhangrang_letters_found"}},
@@ -94,7 +94,7 @@
   {"who": "zhangbao", "stops": [
     {"id": "zhangbao_altar", "day": 2.0, "place": "julu_altar", "text": "{name}在{place}前招集信眾，說天公將軍的病就快好了。"},
     {"id": "zhangbao_walls", "day": 5.8, "place": "xiaquyang", "contest": {
-      "side": "huang", "announce": "{name}要趕在官軍到之前加築{place}的城防。",
+      "side": "huang", "place_win": "none", "place_lose": "none", "announce": "{name}要趕在官軍到之前加築{place}的城防。",
       "win": "{name}把{place}的城牆加高了三尺，城外挖了兩道深溝。",
       "lose": "{place}的城防趕工不及，北面的城牆還塌著一角。",
       "trends_win": {"jizhou": 2}}}
@@ -109,7 +109,7 @@
       "lose": "{place}城防堅固，{name}圍城不成，退回營寨。",
       "trends_win": {"yingru": 3}, "lose_place": "huangjin_camp"}},
     {"id": "bocai_yangdi", "day": 3.7, "place": "yingchuan", "if_lost": ["huangfusong_runan"], "contest": {
-      "side": "huang", "announce": "{name}收攏殘部，要在{place}陳兵反撲。",
+      "side": "huang", "place_win": "fallen", "announce": "{name}收攏殘部，要在{place}陳兵反撲。",
       "win": "{name}在{place}反撲得手，潁川又亂了起來。",
       "lose": "{name}在{place}再敗，殘部散入汝南荒野。",
       "trends_win": {"yingru": 3}, "trends_lose": {"yingru": -1}, "lose_place": "runan_wilds"}},
@@ -117,7 +117,7 @@
   ]},
   {"who": "zhangmancheng", "stops": [
     {"id": "zhangmancheng_grain", "day": 2.6, "place": "nanyang_huangjin_camp", "contest": {
-      "side": "huang", "announce": "{name}派人從{place}四出徵糧，要撐過官軍的圍城。",
+      "side": "huang", "place_win": "famine", "place_lose": "none", "announce": "{name}派人從{place}四出徵糧，要撐過官軍的圍城。",
       "win": "{name}的人馬徵足了糧，{place}裡堆滿了糧袋。",
       "lose": "徵糧的隊伍在半路被鄉勇截了，{place}只運回一半。",
       "trends_win": {"nanyang": 2}}}
@@ -128,7 +128,7 @@
   {"who": "zhangyan", "stops": [
     {"id": "zhangyan_gather", "day": 2.2, "place": "lulin_zhai", "text": "{name}在{place}聚眾，自號黑山。"},
     {"id": "zhangyan_grain", "day": 4.2, "place": "yanshan_foot", "contest": {
-      "side": "huang", "announce": "{name}要帶人下山，在{place}劫官軍北上的糧車。",
+      "side": "huang", "place_win": "famine", "announce": "{name}要帶人下山，在{place}劫官軍北上的糧車。",
       "win": "{name}在{place}劫下官軍糧車，車上的糧一夜之間搬進了山裡。",
       "lose": "劫糧的人馬在{place}被護糧的官軍打了回去。",
       "trends_win": {"jizhou": 2}, "lose_place": "lulin_zhai"}}
@@ -139,7 +139,7 @@
   {"who": "tangzhou", "stops": [
     {"id": "tangzhou_flee", "day": 1.2, "place": "luoyang_road", "text": "{name}告密之後一路往洛陽逃，有人在{place}見到他，頭都不敢抬。"},
     {"id": "tangzhou_hunted", "day": 5.0, "place": "baima_temple", "contest": {
-      "side": "guan", "announce": "黃巾派了刺客，要在{place}取{name}的性命。",
+      "side": "guan", "place_win": "none", "place_lose": "none", "announce": "黃巾派了刺客，要在{place}取{name}的性命。",
       "win": "{name}在{place}躲過了刺客，寺裡的僧人把他藏進了經閣。",
       "lose": "{name}在{place}被刺客砍傷，連夜逃進洛陽。",
       "base": 0.5, "lose_place": "luoyang_road"}}
@@ -147,7 +147,7 @@
   {"who": "xuchu", "stops": [
     {"id": "xuchu_hold", "day": 3.0, "place": "haozu_fort", "text": "{name}聚了宗族少年千餘家，在{place}堅守。"},
     {"id": "xuchu_siege", "day": 4.5, "place": "haozu_fort", "contest": {
-      "side": "guan", "announce": "黃巾要攻{place}，{name}帶著宗族少年上了牆。",
+      "side": "guan", "place_lose": "fallen", "announce": "黃巾要攻{place}，{name}帶著宗族少年上了牆。",
       "win": "黃巾攻{place}，{name}在牆上飛石退敵，賊人不敢再近。",
       "lose": "{place}的外牆被黃巾攻破，{name}退守內堡。",
       "trends_lose": {"yingru": 1}}}

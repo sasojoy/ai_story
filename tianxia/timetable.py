@@ -522,6 +522,22 @@ def _version(state: GameState, event: TimetableEvent) -> str | None:
     return next(iter(event.versions.values()))
 
 
+
+def _winner(content: Content, event: TimetableEvent, full_key: str) -> str | None:
+    """這一檔是哪一方贏（地點會變樣的收復看它）：決戰的鍵寫著陣營（guan:大勝、甲:huang:險勝）；擲骰的「成」是 roll_side、
+    「不成」是另一方；固定的是 None。"""
+    parts = full_key.split(":")
+    sides = [f.id for f in content.scenario.factions]
+    named = next((x for x in parts if x in sides), None)
+    if named is not None:
+        return named
+    side = event.roll_side
+    if parts[-1] == "成":
+        return side
+    if parts[-1] == "不成" and side is not None:
+        return next((x for x in ("guan", "huang") if x != side and x in sides), None)
+    return None
+
 def _full_key(state: GameState, event: TimetableEvent, key: str) -> str:
     version = _version(state, event)
     if version is None or any(key.startswith(f"{v}:") for v in event.versions.values()):  # 已經帶版本的照用
@@ -606,6 +622,12 @@ def resolve(
             continue
         text += "".join(figures.apply(state, content, fid, change)) + note
     territory.assign(w, content, outcome.control)  # 大事指定易手（設計 4.2 第 3 點）：戰況推完、人物改完之後
+    if outcome.places:  # 地點會變樣（世界活起來第二批）：這件大事讓哪幾處燃起戰火、淪陷、收復
+        from . import place_state  # noqa: PLC0415
+
+        winner = _winner(content, event, full_key)
+        for loc_id, how in outcome.places.items():
+            place_state.apply(w, content, loc_id, how, winner)
     for target, mod in outcome.chance_mods.items():
         w.event_bonus[target] = w.event_bonus.get(target, 0.0) + mod
     add_world_flags(state, outcome.world_flags_add)
