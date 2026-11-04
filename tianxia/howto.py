@@ -412,11 +412,6 @@ def sortie_lines(content: Content, allied: bool = False, season: WorldState | No
     ]
 
 
-def explore_lines(content: Content, season: WorldState | None = None) -> list[str]:
-    """玩法說明「行動」裡探索那一條（減法季探索一顆開著時取代照地點比例那一條；待 joy 潤）。"""
-    return outing_lines(content, season) + jianfa_growth_lines(content, season)
-
-
 def _pct(share: float) -> str:
     return f"{share * 10:g} 成"
 
@@ -1140,14 +1135,15 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         f"得對手 {cfg.drill_reward_share * 10:g} 成的心得與經驗，不給銀兩、素材。兩種都有的地方，遇上誰看運氣。"
         f"有些地方打贏或操練還會{PUSH_WORD}（行動列底下那一行寫著這裡、今天還推不推得動）。",  # 審查 M4：不是「多半」（SOME_PLACES），待 joy 潤
     ]
-    # 舊探索（照地點比例自動抽；探索一顆開著時換成 explore_lines）
+    # 舊探索（照地點比例自動抽；探索一顆開著時換成 outing_lines）
     old_explore = [f"- **探索**（體力 {cost['explore']}）：照地點三選一：悟意境、遇野怪、碰上事件。{mix_sentence(content)}。偶有奇遇。{legend}"]
     outing = rules.jianfa(content, season, "explore_one")
     sense_when = "靜心感悟" if outing else "探索落在悟意境"
     lines = [
         *_section("這一季在打什麼", season_page_lines(content, season, rule)),
         "#### 行動",
-        *(explore_lines(content, season) if outing else old_explore),
+        *(outing_lines(content, season) if outing else old_explore),
+        *jianfa_growth_lines(content, season),
         *(sortie_lines(content, allied, season) if sortie.on(content) else old_train),
         f"- **交友**（體力 {cost['socialize']}）：見這裡的人物談話（每輪體力 {cfg.talk_stamina}，同一位人物{day_every(content, season)}最多 "
         + (f"{cfg.talk_turns_per_day} 輪）。名望不夠的人物在名單上灰著，寫還差多少；交友的事在探索的{SEEK_NAME}裡。"

@@ -16,9 +16,8 @@ from tianxia import rules
 from tianxia.engine import SOCIAL_NO_ONE, Game
 from conftest import classic_rules, real_content
 from jianfa_kit import no_jianfa
-from test_prologue_web import run as run_prologue_web, with_reveal
-from tianxia import explore_modes, sortie
-from tianxia.models import REVEAL_KEYS
+from test_prologue_web import run as run_prologue_web
+from tianxia import sortie
 from tianxia.sqlite_world import open_world
 
 
@@ -2322,7 +2321,7 @@ def test_the_other_grey_reasons_keep_their_cells_and_notes():
 # FB-670（企劃者 2026-10-22 選練功入口「丙」，PM 給號）：練功藏在探索卡最下面、城裡灰著看不到。行動列多一格「練功」，五格：
 # 探索、練功、出陣、交友、移動。野外亮著寫「不限次數」、第二行照勝算上色；城裡灰著寫「城外才有」（城外沒有對手的地方寫「這裡沒有」，
 # PM 2026-10-22；照伺服器給的 note），整句（最近的在哪、
-# 步行多久）在行動列底下那一行，照伺服器的 action_notes（Game._practice_line，見 tests/test_practice_spots.py），網頁不另寫判斷；
+# 步行多久）在行動列底下那一行，照伺服器的 action_notes，網頁不另寫判斷（練功的鈕與那一行第 13 批拿掉）；
 # 不帶路（按不下去）。探索卡回到真的三選一。五格每格約 62 px（320 寬約 51 px）：灰格小字最多四個字，長的原因格子寫短的、整句在底下那一行
 # （同 FB-664）；出陣的名字（「出陣・攪局」）只在「・」後面換行。序章與初入江湖照 reveal 的鍵（act:practice）亮，教學沒寫的步驟不畫。
 # node 排不了版：這裡看畫了什麼；375／320 寬切不切字在瀏覽器裡量，數字寫在試玩回饋 FB-670 那一列。沒有 node 就略過。
@@ -2341,8 +2340,7 @@ NOW = MON + 10 * HOUR
 PRACTICE = "explore:practice"
 
 
-# 城裡操練（新手引導重做，Config.training）開著時城裡那一格是操練、城外練功寫級數（tests/test_training.py）；
-# 這一份測的是練功一格本身（操練關著），內容一律把它關掉
+# 這一份只留行動列四格還成立的幾條，內容照舊把分級與減法季關掉
 
 def _content(profile):
     c = real_content(profile)
@@ -2385,15 +2383,6 @@ def _width_fb670(text):
 
 
 # ── 四格（減法季批 1） ─────────────────────────────────
-
-
-@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-@pytest.mark.slow
-def test_outside_the_guide_practice_waits_in_the_here_fold():
-    bar = _bar_fb670(server.main_view(_game_fb670("yingshui")))
-    assert _keys(bar) == ["explore", "train", "social", "move"] and "--cells:4" in bar
-    fold = bar[bar.index("此地還能做"):]
-    assert f'data-id="{PRACTICE}"' in fold
 
 
 PLACES = [  # (陣營, 地點)：城裡、野外、戰線、自家大營、頭目、名望不夠、散人站在戰線上
@@ -2446,56 +2435,14 @@ def test_an_old_season_without_practice_keeps_four_cells():
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 @pytest.mark.slow
-def test_practice_is_a_reveal_key_of_its_own():
-    assert "act:practice" in REVEAL_KEYS
-    m = server.main_view(_game_fb670("yingshui"))
-    others = ["act:explore", "act:train", "act:social", "act:move"]
-    assert "practice" not in _keys(_bar_fb670(with_reveal(m, others)))
-    assert _keys(_bar_fb670(with_reveal(m, [*others, "act:practice"]))) == ["explore", "practice", "train", "social", "move"]
-    assert "practice" in _keys(_bar_fb670(with_reveal(m, ["all"])))
-
-
-@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-@pytest.mark.slow
-def test_the_tutorial_only_draws_the_cell_from_a_step_that_reveals_it():
-    """序章（草廬）與初入江湖（出了草廬那四步）照教學內容的 reveal：寫了 act:practice 的那一步起才畫，沒寫就不畫，
-    也不掉進「此地還能做」。初入江湖走完（onboard 是 None）才全亮。照正式內容的每一步算，教學改了也抓得到。"""
-    c = _content("week7")
-    store = open_world()
-    store.seed_first_season(c)
-    store.open_season(c, NOW)
-    game = Game.new(c, "沈浪", rng=random.Random(0), world=store)
-    game.client = None
-    game.sync(NOW)
-    p = game.state.player
-    p.location, p.stamina = "yingchuan", 250.0
-    t = c.tutorial
-    lit = False
-    for step in range(t.prologue_steps, len(t.steps)):
-        p.tutorial_step = step
-        lit = lit or "act:practice" in t.steps[step].reveal or "all" in t.steps[step].reveal
-        m = server.main_view(game)
-        assert m["onboard"] and any(o["id"] == PRACTICE for o in m["options"]), t.steps[step].id
-        bar = _bar_fb670(m)
-        assert ("practice" in _keys(bar)) is lit, t.steps[step].id
-        assert PRACTICE not in bar.replace(_cell(bar, "practice"), "") if lit else PRACTICE not in bar, t.steps[step].id
-    p.tutorial_step = len(t.steps)
-    m = server.main_view(game)
-    bar = _bar_fb670(m)
-    assert m["onboard"] is None and "practice" not in _keys(bar) and PRACTICE in bar  # 走完：收進「此地還能做」
-
-
-@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-@pytest.mark.slow
 def test_the_hut_never_has_a_practice_option():
-    """草廬裡（序章）探索不展開、也沒有練功（_explore_mode_options 在序章是空的）：格子不會在序章冒出來。"""
+    """草廬裡（序章）沒有練功：格子不會在序章冒出來。"""
     c = _content("week7")
     c.config.jianfa.enabled = False  # 減法季的新角色不進草廬（開局第一分鐘）：這一條測的是草廬本身
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world(), prologue=True)
     game.client = None
     m = server.main_view(game)
     assert m["prologue"] is not None and PRACTICE not in [o["id"] for o in m["options"]]
-    assert explore_modes.option_id(explore_modes.PRACTICE) == PRACTICE
 
 
 # ── 原 test_fb671_ink_name_spacing.py（整檔搬進來） ──

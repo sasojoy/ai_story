@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import random
+from unittest import mock
 
 from conftest import real_content
-from jianfa_kit import no_jianfa
 
-from tianxia import checkin, opening
+from tianxia import checkin, explore_one, opening
 from tianxia.content import _material_sources
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -240,51 +240,39 @@ def test_four_tiers_off():
     assert p.stats["silver"] == silver + 30 and not any(k.endswith("_4") for k in p.materials)
 
 
-def _explore(game, mode):
-    """按探索的那一種（explore:gather|seek|practice），體力先補滿。"""
+def _explore(game):
+    """按一下探索（素材那一拍；舊探索不抽拍），體力先補滿。"""
     game.state.player.stamina = game.content.config.stamina_max
-    ids = {o.id for o in game.options() if o.enabled}
-    assert f"explore:{mode}" in ids, sorted(ids)
-    return game.choose(f"explore:{mode}")
+    with mock.patch.object(explore_one, "draw", return_value="material"):
+        return game.choose("act:explore")
 
 
 def _sure_drop(c):
-    """一定掉丹；測的是探索三選一的找素材、練功、找事件（減法季探索一顆開著時選單上沒有這幾顆），減法季關掉（jianfa_kit.no_jianfa）。"""
+    """一定掉丹。"""
     c.config.checkin.pill_drop = 1.0
-    no_jianfa(c)
 
 
-def test_gather_and_practice_drop_a_pill():
+def test_an_outing_drops_a_pill():
     game = _game(setup=_sure_drop)
     p = game.state.player
     pills = p.stamina_pills
-    msgs = _explore(game, "gather")
+    msgs = _explore(game)
     assert p.stamina_pills == pills + 1 and "回體丹 +1" in msgs
-    p.location = "changshe"  # 練功要有對手：城鎮沒有
-    msgs = _explore(game, "practice")
-    assert p.stamina_pills == pills + 2 and "回體丹 +1" in msgs
-
-
-def test_seek_does_not_drop():
-    game = _game(setup=_sure_drop)
-    pills = game.state.player.stamina_pills
-    _explore(game, "seek")
-    assert game.state.player.stamina_pills == pills
 
 
 def test_no_pill_drop_outside_season21():
     game = _game(None, setup=_sure_drop)  # 14 天的季：沒有簽到
     pills = game.state.player.stamina_pills
-    _explore(game, "gather")
+    _explore(game)
     assert game.state.player.stamina_pills == pills
 
 
 def test_pill_drop_uses_its_own_dice():
     found = []
     for chance in (0.0, 1.0):
-        game = _game(setup=lambda c, chance=chance: (setattr(c.config.checkin, "pill_drop", chance), no_jianfa(c)))  # 找素材：同 _sure_drop
+        game = _game(setup=lambda c, chance=chance: setattr(c.config.checkin, "pill_drop", chance))
         bag = dict(game.state.player.materials)
-        _explore(game, "gather")
+        _explore(game)
         found.append({k: v - bag.get(k, 0) for k, v in game.state.player.materials.items() if v != bag.get(k, 0)})
     assert found[0] == found[1] and found[0]
 

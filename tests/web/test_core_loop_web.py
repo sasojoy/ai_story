@@ -1,5 +1,4 @@
-"""行動列：出陣那一格寫今日剩幾次、探索那一格點了展開三顆（出陣探索與地盤設計第七節）。沒有 node 就略過。
-這一份先放出陣那一半（PM 2026-10-14：Task 4 另外平行做，探索展開的部分等它合進來再補）。"""
+"""行動列：出陣那一格寫今日剩幾次（出陣探索與地盤設計第七節）。沒有 node 就略過。"""
 from __future__ import annotations
 
 import random
@@ -19,7 +18,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 
 def _game(faction, at, classic=False):
     c = real_content("week7")  # 出陣推線的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
-    classic_explore(c)  # 探索三選一（減法季探索一顆開著時只剩一顆）
+    classic_explore(c)  # 舊探索（減法季探索一顆之前）
     c.config.auto_open_first_season = True
     if classic:
         classic_rules(c)
@@ -32,16 +31,6 @@ def _game(faction, at, classic=False):
 
 def _bar(game, **S):
     return run(server.main_view(game), "return H.actionBar(H.S.main);", S=S)
-
-
-def test_the_explore_cell_unfolds_three_ways():
-    game = _game(None, "yingshui")
-    bar = _bar(game)
-    assert 'data-act="wheel" data-key="explore"' in bar and "act-explore" not in bar
-    assert 'data-id="explore:gather"' not in bar  # 收著時三顆不畫，也不掉進「此地還能做」（行動列底下那一行會提到「找素材」）
-    bar = _bar(game, wheelSel="explore")
-    assert 'class="card act-explore"' in bar
-    assert all(f'data-id="explore:{m}"' in bar for m in ("gather", "seek", "sense"))
 
 
 def test_a_tired_explorer_sees_the_cell_greyed():

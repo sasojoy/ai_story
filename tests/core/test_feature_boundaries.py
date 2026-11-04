@@ -640,7 +640,7 @@ GAME_DELEGATES |= {
     # 探索包回答有所感包的查詢服務（主人 explore）：擲特殊頓悟的 boost（原本 Game._sense 直接讀 outing_rules 那一筆 GAME_DIRECT 換成它）
     "_rare_boost",
     # 搬進包的 10 個方法留 8 個（3 個私有）：server 與假人叫的 epiphany_request、epiphany_names、sense_request、sense_draw、method_help，
-    # 測試直接叫的 _epiphany_begin，choose 原位叫的 _epiphany_name（dunwu:），探索包與 _explore_mode、_explore_outcome 叫的 _sense_here。
+    # 測試直接叫的 _epiphany_begin，choose 原位叫的 _epiphany_name（dunwu:），探索包與 _explore_outcome 叫的 _sense_here。
     # _sense（sense: 由 choose 掛鉤接走）、_sense_apply 只有包裡叫
     "_epiphany_begin", "_epiphany_name", "epiphany_request", "epiphany_names", "sense_request", "sense_draw", "_sense_here", "method_help",
     # 核心原位與探索、引導兩包叫的服務 7 個（Task 2 開的；本體在 actions）

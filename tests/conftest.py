@@ -97,11 +97,11 @@ def old_explore(cfg, setter=setattr) -> None:
 
 
 def classic_rules(content: Content) -> Content:
-    """出陣探索與地盤（2026-10-14）之前的規則：探索三選一、盡頭阻力兩個開關關掉，回傳同一份內容（出陣與地盤 2026-10-27 起沒有開關）。
+    """出陣探索與地盤（2026-10-14）之前的規則：三選一的開關以前連帶關掉的那三樣（old_explore）與盡頭阻力關掉，回傳同一份內容（出陣與地盤 2026-10-27 起沒有開關）。
     測的是舊規則本身、或只是拿探索／推大勢當手段的舊測試用它；新規則的測試不要叫。"""
     cfg = content.config
     old_explore(cfg)
-    cfg.explore_modes.enabled = cfg.push_resistance.enabled = False
+    cfg.push_resistance.enabled = False
     return content
 
 
