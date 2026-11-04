@@ -66,6 +66,8 @@ BATCHES = {
         body=[
             "- 範圍照總表 3.3 第 14 列（0 個方法）：**甲，只關門**。拿掉 `profiles/weekend.json`；`server.py`、`run_bots.py` 沒帶 `TIANXIA_PROFILE` 時套 season21，啟動時照舊印出來；用 weekend 的腳本與測試改用 week7。`config.json` 的值不動。`calendar`、`figures`、`timetable` 照季長分岔的幾段，只拿專給 weekend 的那幾支（開工時量），14 天的留著。",
             "- **承諾**：week7、season21、test 三種設定 same_behavior 一個字不變；none、weekend 不再是可以選的設定，`same_behavior.py` 的 `PROFILES` 跟著改，計畫寫清楚。",
+            "- `same_behavior.py` 的假人軌寫死帶 none、weekend（train、arts、sortie）：改成只跑 `PROFILES` 裡的，`--profiles` 給什麼就跑什麼。`docs/superpowers/pm-workflows/trunk_daily.py` 的 `BOTS` 改回 `[]`、`PROFILES` 拿掉。",
+            "- 第 13 批留給這一批的清單在總表第 14 列（初入江湖兩步的字、新手目標 field2、`h_field_lose`、序章與懸賞的「尋敵」「操練」字）：none、weekend 關門之後走不到的一起清，week7、season21 走得到的一字不動。拿掉型的批刪之前看斷言，不要只看名字（第 13 批把活規則的測試刪掉過）；用 `scratchpad\\b13\\removed_names.py`、`mark_diff.py` 靜態掃。",
             "- CLAUDE.md 與導覽裡寫週末設定的段落，計畫第五節列出來交 PM 改（你不改 CLAUDE.md）。",
         ]),
     "18": dict(

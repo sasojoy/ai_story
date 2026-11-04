@@ -25,6 +25,10 @@ import tempfile
 from pathlib import Path
 
 BRANCH = "split/trunk"
+# 只剩 7 天與 21 天兩種季（企劃者 10/31），none、weekend 第 13 批起照拿掉的範圍變、第 14 批關門。
+# 假人軌在 same_behavior 裡寫死帶 none、weekend，第 14 批修好之前先不比假人（BOTS 改回 []）。
+PROFILES = ["--profiles", "week7,season21,test"]
+BOTS = ["--no-bots"]
 ANCHOR = "split-anchor-20261104"
 FLAGS = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
 
@@ -91,8 +95,8 @@ def main() -> int:
     py = sys.executable
     script = str(work / "head" / "scripts" / "same_behavior.py")
     both = ["--base", str(work / "base"), "--head", str(work / "head")]
-    compare = step([py, script, "compare", *both, "--tmp", str(work / "tmp" / "cmp")], work / "head", env, log, "所有軌比對")
-    explore = step([py, script, "explore-compare", *both, "--tmp", str(work / "tmp" / "exp")], work / "head", env, log, "探索比對")
+    compare = step([py, script, "compare", *both, "--tmp", str(work / "tmp" / "cmp"), *PROFILES, *BOTS], work / "head", env, log, "所有軌比對")
+    explore = step([py, script, "explore-compare", *both, "--tmp", str(work / "tmp" / "exp"), *PROFILES, *BOTS], work / "head", env, log, "探索比對")
     shutil.rmtree(work / "base", ignore_errors=True)
     suite = step([py, "-m", "pytest", "-q", "-n", "4", "-m", "slow or not slow", "-p", "no:cacheprovider"],
                  work / "head", env, log, "整套含 slow")
