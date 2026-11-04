@@ -176,7 +176,7 @@ def scene(ctx: Game) -> str | None:
 
 
 def sense_missed(ctx: Game, loc: Location) -> bool:
-    """這個遊戲日在這一處選錯過做法（sensing.missed_today）：探索包算這一處感悟的比重、三選一的灰鈕、舊探索那一行與比重。"""
+    """這個遊戲日在這一處選錯過做法（sensing.missed_today）：探索包算這一處感悟的比重、舊探索那一行與比重。"""
     return sensing.missed_today(ctx.state, ctx.content, loc)
 
 

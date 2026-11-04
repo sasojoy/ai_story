@@ -28,8 +28,7 @@ KNOWN = {
     ("battle_instance.py", "SuccessRateJudgment"): "放手一搏的評分：同上一類，分數帶要主機重量才能動",
     ("battle_instance.py", "GambleScore"): "大場面放手一搏的評分：同上",
     ("features/feast/rules.py", "ToastScore"): "敬酒評分：同上（宴客搬進功能包 tianxia/features/feast/）",
-    ("gather_llm.py", "reply_model"): "找素材的評分（create_model 動態組的類別，enum 照地點換）：同上",
-    ("companion_agent.py", "DriftSynthesis"): "人物心境整理：背景執行、失敗不影響玩家，還沒實測",
+    ("features/companions/companion_agent.py", "DriftSynthesis"): "人物心境整理：背景執行、失敗不影響玩家，還沒實測",
     ("yuedan.py", "YuedanBatch"): "月旦評：背景執行、有固定段退路，還沒實測",
 }
 
@@ -62,7 +61,7 @@ def _model(module_name: str, expr: str):
 def test_the_scan_finds_the_call_sites():
     names = {(f, m) for f, _, m, *_ in _calls()}
     # companions（全部拆包第 19 批：letters.py 搬進功能包，檔名記相對 tianxia/ 的路徑；改路徑字串的例外照批次表第二節）
-    assert ("companion_agent.py", "CompanionTurn") in names and ("features/companions/letters.py", "LetterText") in names
+    assert ("features/companions/companion_agent.py", "CompanionTurn") in names and ("features/companions/letters.py", "LetterText") in names
 
 
 def test_required_fields_are_written_into_the_schema_or_known():

@@ -40,6 +40,7 @@ from unittest import mock  # noqa: E402
 from tianxia import companion_agent, figure_life, parley  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import PLAN_OPTION, Game, say_text  # noqa: E402
+from tianxia.features.companions import parley_actions  # noqa: E402  （全部拆包第 20 批：這幾個清單與提示搬進人物情誼包，Game 沒有留委派）
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.state import ParleyBacking  # noqa: E402
 
@@ -223,8 +224,8 @@ def _plea(game, content, client, cid, args) -> None:
     """他主動開口：把他的心事當成 args.mood，看開場那一輪挑的 want／reward 與他開口的話。"""
     name = content.characters[cid].name
     with mock.patch.object(figure_life, "mood_any", return_value=args.mood):
-        extra = game._parley_plea_prompt(cid)
-        wanted, rewards = game._parley_plea_lists(cid)
+        extra = parley_actions.plea_prompt(game, cid)
+        wanted, rewards = parley_actions.plea_lists(game, cid)
     if not extra:
         print(f"══ {name}主動開口：他此刻不會開口（心事不是 {'、'.join(content.config.parley.plea_moods)}，或兩份清單是空的），跳過\n")
         return
@@ -253,7 +254,7 @@ def _plan(game, content, client, cid, args) -> None:
     p = game.state.player
     p.parley_backing = ParleyBacking(figure=cid, region=parley.region_of(game.state, content, cid),
                                      day=parley.game_day(content, game.state.world))
-    extra = game._parley_plan_prompt(cid)
+    extra = parley_actions.plan_prompt(game, cid)
     cfg = content.config.parley
     dice = random.Random(1)
     for line in PLAN_LINES:

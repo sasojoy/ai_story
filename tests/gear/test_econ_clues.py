@@ -116,7 +116,6 @@ def _explorer(scrap_every_mode=True):
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     c.config.duel.explore_chance = 0.0
-    c.config.explore_modes.encounter_chance = 0.0
     c.config.secrets.scrap_chance = 1.0
     c.config.forge_secrets.scrap_chance = 1.0
     c.config.forge_secrets.scrap_every_mode = scrap_every_mode
@@ -133,18 +132,11 @@ def _scraps(msgs, c):
     return [m for m in msgs if m.startswith(frames)]
 
 
-def test_scraps_turn_up_in_all_three_ways_of_exploring():
-    """殘譜（武學口訣、半張鑄譜）找素材、找事件、靜心感悟都擲（素材與經濟設計第三節第 2 條）。"""
-    for mode in ("explore:gather", "explore:seek", "explore:sense"):
-        game = _explorer()
-        msgs = game.choose(mode)
-        assert len(_scraps(msgs, game.content)) == 2, (mode, msgs)
-
-
-def test_with_the_switch_off_only_seeking_finds_scraps():
-    for mode, want in (("explore:gather", 0), ("explore:seek", 2), ("explore:sense", 0)):
-        game = _explorer(scrap_every_mode=False)
-        assert len(_scraps(game.choose(mode), game.content)) == want, mode
+def test_scraps_turn_up_on_an_old_explore():
+    """殘譜（武學口訣、半張鑄譜）舊探索也擲（素材與經濟設計第三節第 2 條）。"""
+    game = _explorer()
+    msgs = game.choose("act:explore")
+    assert len(_scraps(msgs, game.content)) == 2, msgs
 
 
 def test_an_unstamped_season_keeps_the_verses():

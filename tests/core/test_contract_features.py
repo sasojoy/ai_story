@@ -30,8 +30,9 @@ from tianxia.state import PlayerState
 
 ROOT = Path(__file__).resolve().parents[2]
 FEATURE_DIR = ROOT / "tianxia" / "features"
+# companions（第 20 批審查）：原本的 "talk:leave" 這一批拿了前綴之後是人物情誼包的 id，換成核心的 "road:back"。
 # battle（全部拆包第 8 批）：原本的 "battle:join:guan" 第 7 批拿了前綴之後其實是決戰包的 id（第 7 批 PM 認定第 6 條），換成核心的 "season:paused"
-CORE_IDS = ["act:explore", "act:train", "move:yingshui", "choice:0", "talk:leave", "season:paused", "season:resting", "x"]
+CORE_IDS = ["act:explore", "act:train", "move:yingshui", "choice:0", "road:back", "season:paused", "season:resting", "x"]
 
 
 def _game() -> Game:
@@ -270,12 +271,14 @@ def _dirty(annotation, default):
         value = typing.get_args(annotation)[-1]
         if isinstance(value, type) and issubclass(value, BaseModel):  # story（全部拆包第 30 批）：一條線的進度 StoryProgress，必填的 line 擺一個內容裡沒有的 id
             return {"x": value(**{n: "x" for n, f in value.model_fields.items() if f.is_required()})}
+        if len(args) == 2 and typing.get_origin(args[1]) is list:  # 值是清單的（人物情誼包的 dialogue_history）：換季會對值取長度，擺 7 會壞
+            return {"x": []}
         return {"x": 7}
     raise AssertionError(f"契約測試還不會擺 {annotation} 這種欄位，補 _dirty")
 
 
 @pytest.mark.parametrize("field", ["sortie_cooldown_until", "hidden_until", "escort_pick", "outing_last", "outing", "sorties_today",
-                                   "picking_audience", "visited", "team", "affinities", "sect"])  # sect 是 str | None（dev/sortie-2 審查補）
+                                   "picking_audience", "visited", "team", "affinities", "sect", "dialogue_history"])  # dialogue_history 值是清單（第 20 批審查補）；sect 是 str | None（dev/sortie-2 審查補）
 def test_dirty_moves_every_kind_of_field_off_its_default(field):
     """_dirty 每一種都真的擺得出跟預設不一樣的值（還沒有包認領的那幾種也擺一次：不然補了永遠沒跑過）。只挑型別定義在 PlayerState 前面的欄位：
     寫在後面的（letters 的 Letter）在 PlayerState 第一次建出來之前，model_fields 裡還是 ForwardRef（xdist 分到這一條先跑的那個 worker 就紅過）；

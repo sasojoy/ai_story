@@ -21,8 +21,8 @@ from dataclasses import dataclass
 
 from tianxia import battlelog  # 共用規則層（戰報：出門一趟・遭遇的標籤、拆得失）
 from tianxia import bounties  # 過渡：待搬（懸賞榜：討伐那一路、打探交差、打贏交差）
+from tianxia import conquest  # 共用規則層（站在自家領地多給的那一個）
 from tianxia import events as event_rules  # 過渡：待搬（事件：抽不抽得到、藏起來的、照輪替抽）
-from tianxia import explore_modes  # 過渡：待搬（探索三選一，企劃者 10/31 定不搬：找素材那一套 gather_finds、補料 one_of）
 from tianxia import growth  # 共用規則層（三道閘：今天第幾場、疲勞、對手的檔）
 from tianxia import insights  # 共用規則層（悟不悟得出）
 from tianxia import journal, team
@@ -61,13 +61,13 @@ class OutingPlan:
 
 def outing_on(ctx) -> bool:
     """探索一顆在這一季開著（Config.jianfa 的 explore_one＋開季的章，rules.jianfa），而且不在序章裡（序章照舊按「探索」走寫好的那幾步）。
-    開著時選單上只剩一顆「探索」（act:explore，出門一趟），不畫三選一（explore:*）、尋敵、城裡操練。"""
+    開著時選單上只剩一顆「探索」（act:explore，出門一趟）。"""
     return jianfa(ctx.content, ctx.state.world, "explore_one") and not prologue_rules.active(ctx.state, ctx.content)
 
 
 def outing_foe(ctx, loc: Location, kind: str) -> tuple[str | None, Squad | None]:
-    """遭遇拍打誰（設計 4.1，PM 2026-10-25 第 3 件）：手上有這裡的討伐懸賞、那一路不是自己人，就是它（bounty；易手了也找得到，同
-    _gather_foe）；**可是對那一路的勝算是必敗時不算**（2e，FB-880，企劃者 2026-10-26「勝算是必敗時不強制打懸賞，照原本的表抽」）：
+    """遭遇拍打誰（設計 4.1，PM 2026-10-25 第 3 件）：手上有這裡的討伐懸賞、那一路不是自己人，就是它（bounty；易手了也找得到）；
+    **可是對那一路的勝算是必敗時不算**（2e，FB-880，企劃者 2026-10-26「勝算是必敗時不強制打懸賞，照原本的表抽」）：
     問的是鈕上寫勝算的同一個函式（odds，固定種子、不碰 Game.rng），必敗就當這一處沒有這張懸賞，往下照沒有懸賞時挑；變強到不再必敗
     就又是它。自家營寨（營類、此刻歸自己這一邊、有自家的隊伍）是跟同袍比劃（spar，_sortie_host 那一路）；否則這裡此刻站的、
     不是自家的隊伍裡最弱的一路（foe）；城類的地點自己沒有對手才換成地痞（town，Config.jianfa.town_foes 的第一路）。都沒有是 (None, None)。"""
@@ -176,13 +176,30 @@ def outing_option(ctx, loc: Location) -> Option:
 
 def outing_note(ctx, loc: Location) -> str | None:
     """行動列底下探索那一行（act 子動詞，第 11 批從 Game.action_notes 搬來）：探索一顆開著時寫這一處多半給什麼，比重照擲骰用的那一份
-    （經 ctx._outing_plan：測試換掉它）；關著是 None（核心照舊寫三選一、舊探索那一行）。"""
+    （經 ctx._outing_plan：測試換掉它）；關著是 None（核心照舊寫舊探索那一行）。"""
     if not outing_on(ctx):
         return None
     from tianxia import howto  # noqa: PLC0415  過渡：待搬（行動列底下那一行的句子；函式裡 import：howto 照舊 import explore_one 的舊名）
 
     plan = ctx._outing_plan(loc)
     return howto.outing_line(plan.weights, plan.foe_note)
+
+
+def home_gather(ctx, loc: Location, mids: list[str]) -> list[str]:
+    """領地爭奪：人站在自家領地找素材，Config.conquest.gather_bonus_chance 的機會多一個同屬性的一階（設計 4.5；散人在開季中立的區塊也算）。
+    屬性照這一下找到的第一個素材，沒找到照地點寫的第一種素材；擲骰用這一次探索自己的亂數（用途「領地」），不碰 Game.rng。
+    開關關著、不在自家是空的，一個字都不變。"""
+    s, c = ctx.state, ctx.content
+    if not conquest.home(s, c):
+        return []
+    rng = explore_rules.find_rng(ctx.world.get_season_number(), s.player.name, s.player.explore_seq, "領地")
+    if rng.random() >= c.config.conquest.gather_bonus_chance:
+        return []
+    pool = [m for m in [*mids, *loc.materials] if m in c.materials]
+    attribute = c.materials[pool[0]].attribute if pool else None
+    mid = explore_rules.one_of(c, {attribute} if attribute else set(), 1, rng)
+    line = materials.grant(s, c, mid) if mid is not None else None
+    return [conquest.HOME_GATHER_LINE, line] if line else []
 
 
 def explore_one(ctx) -> list[str]:
@@ -223,7 +240,7 @@ def explore_one(ctx) -> list[str]:
     ctx._beat = {"kind": beat, "rare": strand is not None, "won": None}  # 走一趟讀這一段是什麼（_outing_walk）
     rng = roll("結算")
     if beat == explore_rules.MATERIAL:  # 素材：找素材一定給的那一套（不展開分支；屬性照這裡的素材）
-        mids = explore_modes.gather_finds(c, loc, rng, sure=True, boost=boost)
+        mids = explore_rules.gather_finds(c, loc, rng, boost=boost)
         ctx._beat["rare"] = any(c.materials[m].tier >= 2 for m in mids if m in c.materials)
         top = next((c.materials[m].name for m in mids if m in c.materials and c.materials[m].tier >= outing_rules.FEAT_TIER), "")
         if top:  # 稀世的素材：這一趟收的時候記一則行狀（outing.FEAT_ANNAL）
@@ -263,7 +280,7 @@ def explore_one(ctx) -> list[str]:
         out += ctx._duel_start(boss)
     if not got_any:  # 這一趟沒收穫（素材找不到料、遭遇打輸或沒對手）：補一個一階素材（設計 4.1【PM】）
         kinds = {c.materials[m].attribute for m in loc.materials if m in c.materials}
-        mid = explore_modes.one_of(c, kinds, 1, roll("補"))
+        mid = explore_rules.one_of(c, kinds, 1, roll("補"))
         granted = materials.grant(s, c, mid) if mid is not None else None
         if granted:
             story.append(explore_rules.line(lines, "close", "empty", say, place=loc.name,

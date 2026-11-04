@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import FixedRandom, no_territory, renown_unscaled
+from conftest import FixedRandom, no_territory, old_explore, renown_unscaled
 from tianxia import calendar, foreshadow, rules, team, timetable
 from tianxia.content import load_content
 from tianxia.encounter import EncounterResult
@@ -191,7 +191,7 @@ def meet(c, game: Game, event_id: str, monkeypatch) -> None:
     monkeypatch.setattr(c, "events", {event_id: ALL_EVENTS[event_id]})
     monkeypatch.setattr(c.config, "rare_explore_chance", 0.0)
     monkeypatch.setattr(c, "duels", {})  # 長社、鉅鹿道壇有頭目：FixedRandom(0.0) 一定擲中
-    monkeypatch.setattr(c.config.explore_modes, "enabled", False)  # 照比例自動抽的舊探索（出陣探索與地盤之前，同 classic_rules）
+    old_explore(c.config, monkeypatch.setattr)  # 照比例自動抽的舊探索（出陣探索與地盤之前，同 classic_rules）
     monkeypatch.setattr(c.config.jianfa, "explore_one", False)  # 減法季探索一顆之前的那一套（出門一趟不一定抽到事件拍）
     for mix in c.config.explore_mix:
         monkeypatch.setattr(mix, "weights", {"event": 1})
@@ -444,7 +444,7 @@ def test_low_fame_overhears_talk_fragment(fs_content, world):
 def test_overheard_in_a_real_action_goes_into_the_journal(fs_content, world, monkeypatch):
     """真的在冀州探索一次（花體力）：偷聽到的那一句寫進這次行動的江湖紀錄，不發傳聞。"""
     c = fs_content
-    monkeypatch.setattr(c.config.explore_modes, "enabled", False)  # 舊探索當手段（同 classic_rules；三選一開著時按「探索」不花體力）
+    old_explore(c.config, monkeypatch.setattr)  # 舊探索當手段（同 classic_rules）
     game = fs_game(c, world, "甲", "huang", "guangzong", rng=FixedRandom(0.0))
     leave_unheard(game, c, ("fs_changshe_huang", 3))
     rumors = list(world.get_season().rumors)

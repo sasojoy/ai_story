@@ -39,12 +39,10 @@ def test_only_the_switched_on_parts_are_written():
     assert "一階一個 2 兩" in page and "三個換一個" not in page and "糧秣" not in page
 
 
-def test_sortie_and_gathering_say_the_new_numbers():
+def test_sortie_says_the_new_numbers():
     c = real_content("week7")
     attack = howto.sortie_line("attack", 5, c)
     assert "銀兩也是 3 成" in attack and "不給銀兩" not in attack
-    assert any("一階約 7 成" in line for line in howto.explore_lines(c))
     assert any("銀兩" in line and "3 成" in line for line in howto.sortie_lines(c))
-    c.config.economy.sortie_silver = c.config.economy.gather_cut = False
+    c.config.economy.sortie_silver = False
     assert "不給銀兩、不掉東西" in howto.sortie_line("attack", 5, c)
-    assert not any("一階約" in line for line in howto.explore_lines(c))

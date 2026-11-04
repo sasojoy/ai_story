@@ -18,7 +18,7 @@ import llm_queue
 import server
 import server_push
 import webharness
-from conftest import at, season_one_events
+from conftest import at, old_explore, season_one_events
 from tianxia import (
     atlas, battle_instance, calendar, companion_agent, cultivation, database, fight_llm, fusion, insights, journal, naming, renown, skillview, social,
     sqlite_world, tale, team,
@@ -188,7 +188,7 @@ def test_now_card_does_not_repeat_the_big_event_on_the_bulletin(monkeypatch):
     monkeypatch.setattr(content.config, "season_one", True)
     monkeypatch.setattr(content.config, "season_days", 2.5)
     monkeypatch.setattr(content, "timetable", [_fixed("甲", 1)])
-    monkeypatch.setattr(content.config.explore_modes, "enabled", False)  # 舊探索當手段（同 classic_rules；三選一開著時按「探索」不寫紀錄）
+    old_explore(content.config, monkeypatch.setattr)  # 舊探索當手段（同 classic_rules）
     game = Game.new(content, "測試")
     view = server.main_view(game)
     assert "賽季開始" in view["now"] and view["now"] == view["latest"]
@@ -947,7 +947,7 @@ def test_register_and_change_password_never_hash_while_holding_the_write_lock(cl
 
 
 def test_choosing_an_option_plays_it_and_saves(client, monkeypatch):
-    monkeypatch.setattr(server.CONTENT.config.explore_modes, "enabled", False)  # 舊探索當手段（同 classic_rules；三選一開著時按「探索」不花體力）
+    old_explore(server.CONTENT.config, monkeypatch.setattr)  # 舊探索當手段（同 classic_rules）
     _player(client)
     out = client.post("/api/choose", json={"id": "act:explore"}).json()
     assert out["main"]["status"]["stamina"] < out["main"]["status"]["stamina_max"]
@@ -989,7 +989,7 @@ def _play_rows():
 def test_the_play_log_counts_what_a_real_player_pressed_and_nothing_else(client, monkeypatch):
     """真人量表（減法季批 0）：自己的請求記「這一天上線了」，做成的選項記一次（照 playlog.button_of 歸類），
     不在選單上的不記；交友、求見、對話記第一次跟人物說話。畫面上一個字都沒有（不露給玩家）。"""
-    monkeypatch.setattr(server.CONTENT.config.explore_modes, "enabled", False)  # 舊探索當手段（同上一個測試）
+    old_explore(server.CONTENT.config, monkeypatch.setattr)  # 舊探索當手段（同上一個測試）
     _player(client)
     out = client.post("/api/choose", json={"id": "act:explore"}).json()
     client.post("/api/choose", json={"id": "act:nonsense"})
@@ -3689,7 +3689,7 @@ def test_socializing_at_the_generals_mansion_reaches_yuanshaos_meeting(game):
 
 
 def test_a_non_dialogue_option_takes_the_lock_once_and_never_asks_the_model(game, lock_events, monkeypatch):
-    monkeypatch.setattr(server.CONTENT.config.explore_modes, "enabled", False)  # 舊探索當手段（同 classic_rules；三選一開著時按「探索」不花體力）
+    old_explore(server.CONTENT.config, monkeypatch.setattr)  # 舊探索當手段（同 classic_rules）
     with mock.patch.object(companion_agent, "generate_turn", side_effect=AssertionError("不該呼叫模型")):
         server.choose(game, "act:explore")
     assert lock_events == ["enter", "exit"]  # 只拿一次鎖，沒有多餘的備料那一趟
@@ -5489,12 +5489,11 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "screen_text",  # 挑釁附的一句、名帖自題一句：鎖外請模型審（speech.judge），結果交給 C 段
         "tavern_ask",  # 酒肆問酒家：三段同 duel_text，模型只寫酒家那一句
         "feast_text",  # 宴客自己寫的那一句敬酒（大勢人物擴充第三批）：三段同 answer_event
-        "gather_text",  # 找素材的「自己說」（第 32 項）：三段同 feast_text
         "create_intent",  # 自創武學的形意那一句（武學重構）：鎖外請模型評分（create.score），結果交給 C 段
         "create_reread",  # 重悟帖重讀這句意：三段同 create_intent
         "outing_tale",  # 走一趟的遊記：三段同 tavern_ask，模型只寫那三四句
         "ascend_line",  # 破境卡那一句（招式與絕學稿案第三節）：三段同 create_intent
-        "persuade_text",  # 託付的勸降（減法季批 6）：三段同 gather_text，模型只評那一句
+        "persuade_text",  # 託付的勸降（減法季批 6）：三段同 feast_text，模型只評那一句
         "epiphany_think",  # 特殊頓悟的靜心思名：三段同 prepare_forge，模型一次取三個名字
         "_draft",  # 一句話自創的導演稿（功能包 looks 的 routes）：A 鎖內驗那一句 → B 鎖外請模型填表 → C 鎖內組稿／扣元寶
     }

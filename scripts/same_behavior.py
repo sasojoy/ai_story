@@ -1548,6 +1548,17 @@ EXPLORE_MUTATIONS = {
 
 
 
+def _gather_finds_hosts() -> list:
+    """gather_finds 住在哪幾個模組：第 13 批之前是 tianxia/explore_modes.py，之後是探索包的 explore_rules（舊名 explore_one 是它的別名）；
+    第 13 批做到一半（探索一顆已經改叫 explore_rules、三選一還在）是兩個都有。"""
+    hosts = [_explore_rules()] if hasattr(_explore_rules(), "gather_finds") else []
+    try:
+        from tianxia import explore_modes
+    except ImportError:
+        return hosts
+    return [*hosts, explore_modes] if hasattr(explore_modes, "gather_finds") else hosts
+
+
 def _explore_rules():
     """探索一顆的純規則模組：base 是 tianxia/explore_one.py，head 是指到探索包 explore_rules 的別名（同一個模組物件；換掉它的屬性兩邊都打得到）。"""
     from tianxia import explore_one
@@ -1616,24 +1627,29 @@ class ExploreScenario(Scenario):
 
     @contextlib.contextmanager
     def finds(self, *mids: str):
-        """素材拍這幾下找到的照 mids（一下一顆；用完了照真的找）：explore_modes.gather_finds 換掉（模組屬性；探索三選一不搬，
-        兩份程式叫的是同一個模組的同一個名字），每一次都寫進輸出。"""
-        from tianxia import explore_modes
+        """素材拍這幾下找到的照 mids（一下一顆；用完了照真的找）：gather_finds 換掉（模組屬性；第 13 批之前在 explore_modes、
+        之後在探索包的 explore_rules，兩份程式各換自己有的那幾個，同一條佇列），每一次都寫進輸出。"""
+        hosts = _gather_finds_hosts()
+        reals = [(host, host.gather_finds) for host in hosts]
+        queue = list(mids)
 
-        real, queue = explore_modes.gather_finds, list(mids)
+        def patched(real):
+            def gather_finds(*args, **kwargs):
+                if not queue:
+                    return real(*args, **kwargs)
+                found = [queue.pop(0)]
+                emit("找到", found)
+                return found
 
-        def gather_finds(*args, **kwargs):
-            if not queue:
-                return real(*args, **kwargs)
-            found = [queue.pop(0)]
-            emit("找到", found)
-            return found
+            return gather_finds
 
-        explore_modes.gather_finds = gather_finds
+        for host, real in reals:
+            host.gather_finds = patched(real)
         try:
             yield
         finally:
-            explore_modes.gather_finds = real
+            for host, real in reals:
+                host.gather_finds = real
 
     @contextlib.contextmanager
     def tweak(self, obj, **values):
@@ -6452,14 +6468,12 @@ class BoutScenario(ExploreScenario):
 
     def encounter(self, who: str, mode: str = "PRACTICE") -> bool:
         """在這裡探索、撞上頭目（探索一顆抽到遭遇、頭目的機率換成 1；三選一的季按 mode 那一顆；舊探索照擲）。撞上了是 True。"""
-        from tianxia import explore_modes
-
         explore_one = _explore_rules()
         self.place(who, None)  # 體力補滿
         with self.draws(explore_one.ENCOUNTER), self.tweak(self.c.config.duel, explore_chance=1.0):
             self.choose(who, "act:explore")
             opts = self.options(who)
-            oid = explore_modes.option_id(getattr(explore_modes, mode))
+            oid = f"explore:{mode.lower()}"  # 第 13 批之前 explore_modes.option_id(getattr(explore_modes, mode))：同一個字
             if any(i.startswith("explore:") for i in opts):
                 emit(f"{who} 三選一的 {oid}", opts.get(oid))
                 if (opts.get(oid) or {}).get("enabled"):
@@ -6517,10 +6531,8 @@ class BoutScenario(ExploreScenario):
 
     def boss_note(self, who: str, tag: str) -> None:
         """三選一的練功鈕與行動列底下那一行（頭目在不在、冷卻中、次數用完都寫在這兩處；別的季沒有這一顆，寫探索那一格）。"""
-        from tianxia import explore_modes
-
         view = self.main(who)
-        oid = explore_modes.option_id(explore_modes.PRACTICE)
+        oid = "explore:practice"  # 第 13 批之前 explore_modes.option_id(explore_modes.PRACTICE)：同一個字
         emit(f"{who} {tag}", {"practice": self.ids(view).get(oid), "explore": self.ids(view).get("act:explore"),
                               "notes": dict(sorted((view.get("action_notes") or {}).items()))})
 
@@ -6608,11 +6620,28 @@ class BoutScenario(ExploreScenario):
         self.place("鐵心蘭", "huangjin_camp" if "huangjin_camp" in self.c.locations else None)  # 沒有頭目的地方：練功鈕與行動列寫什麼
         self.boss_note("鐵心蘭", "沒有頭目的地方的練功鈕與行動列")
 
+    @contextlib.contextmanager
+    def explore_modes_off(self):
+        """舊探索：三選一的開關在記憶體裡關掉（第 13 批之前）；第 13 批之後沒有那個開關，換成它關著時連帶關掉的那幾樣
+        （一類一顆、事件五折、觀山石的加成；計畫 2026-11-04-拿掉一-第13批.md 2.1），兩份程式走的是同一條路。
+        event_trend_share 搬出來了就是「之後」（Task 2 做完、三選一還在的那一刻兩邊都關）。"""
+        cfg = self.c.config
+        if not hasattr(cfg, "event_trend_share"):
+            with self.tweak(cfg.explore_modes, enabled=False):
+                yield
+            return
+        with self.tweak(cfg, precise_actions=False, event_trend_share=1.0, sense_treasure_points=0):
+            if hasattr(cfg, "explore_modes"):
+                with self.tweak(cfg.explore_modes, enabled=False):
+                    yield
+            else:
+                yield
+
     def duel_old(self) -> None:
         """舊探索撞上頭目（三選一的開關在記憶體裡關掉：不帶設定與 weekend 的 act:explore 走 _explore 那一條；探索一顆的季照樣是出門一趟）：
         憐星在汝南荒野撞上黃巾小帥，抽身退走。"""
         self.place("憐星", "runan_wilds")
-        with self.tweak(self.c.config.explore_modes, enabled=False):
+        with self.explore_modes_off():
             if self.encounter("憐星"):
                 self.choose("憐星", "duel:flee")
         self.me("憐星", "舊探索的頭目之後")
@@ -9122,6 +9151,913 @@ main = _arts_entry(main)
 # 改一個字（selftest）：配點沒有點那一句（搬之前在 engine.py 的 allocate_stat、之後在 features/cultivation/actions.py），week7 墨池配點那一下抓到
 _register_track("arts", ArtsScenario, (("tianxia/features/cultivation/actions.py", "tianxia/engine.py"),
                                        ("沒有可以分配的屬性點，升級才會有。", "沒有可以分配的屬性點，升級才會有！")), "week7")
+
+
+# ═══════════════════════════ talk：人物對話二軌（全部拆包第 20 批，dev/companions-2） ═══════════════════════════
+# 人物對話（鎖外三段式 A、B、C：dialogue_request／prepare_dialogue／choose 的重驗）、NPC 智能 2.0（開口求人、開條件、先做後付與食言、
+# 他主動開口求你、帶路、陪你出陣與商量打法）的本體從 engine.py 與 tianxia/companion_agent.py、parley.py 搬進 tianxia/features/companions/
+# （舊名留成別名；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第2批.md）。這一段整塊是這一批的：接在檔尾、最後一行登記
+# （_talk_register_track），PM 合的時候不跟別人的行穿插。角色的名字都是原創的（第 22 批 PM 認定第 3 條）。
+
+TALK_REPLY = "他沉吟了一會，緩緩開口。"
+TALK_TERMS = "他想了想：「這事不難，只是你得先拿出一點誠意。」"
+TALK_NO = "他搖了搖頭：「這件事，恕我難以從命。」"
+TALK_PLAN_NO = "他皺起眉頭：「這個打法行不通。」"
+_TALK_CLIENTS: dict[type, type] = {}
+
+
+def _talk_block(text: str, head: str) -> list[tuple[str, int]]:
+    """提示裡「【…head】」底下的一串「- id：說明（份量 N）」→ [(id, 份量)]。"""
+    i = text.find(head)
+    if i < 0:
+        return []
+    rows = []
+    for line in text[i + len(head):].split("\n")[1:]:
+        if not line.startswith("- "):
+            break
+        ident, _, rest = line[2:].partition("：")
+        weight = rest.rsplit("份量 ", 1)[-1].rstrip("）") if "份量" in rest else "0"
+        rows.append((ident, int(weight) if weight.isdigit() else 0))
+    return rows
+
+
+def _talk_pick(spec: str, rows: list[tuple[str, int]]) -> str:
+    """MODEL["parley"] 裡的 id：寫 'escort:*' 這種星號結尾的取清單上第一個對得上的，其餘照字面（寫清單外的 id 也是一種測法）。"""
+    if spec.endswith("*"):
+        return next((ident for ident, _ in rows if ident.startswith(spec[:-1])), "")
+    return spec
+
+
+def _talk_client(base: type) -> type:
+    """人物對話二軌的假模型（疊在 _companions_client 上）：MODEL["parley"] 給了（{ask、willing、condition、narrative_terms、narrative_no、want、reward…}）
+    時，那一輪 CompanionTurn 的 NPC 智能 2.0 欄位換成它；ask、condition、want 的 id 可以寫 'escort:*' 這種星號結尾（照提示裡的清單取第一個）。"""
+    if base not in _TALK_CLIENTS:
+        class TalkClient(base):
+            def chat_structured(self, messages, schema, *a, **k):
+                got = super().chat_structured(messages, schema, *a, **k)
+                spec = MODEL.get("parley")
+                if spec is None or not hasattr(got, "ask"):
+                    return got
+                text = messages[-1]["content"]
+                asks, conds = _talk_block(text, "此刻做得到的事】"), _talk_block(text, "可以開的條件】")
+                wants, rewards = _talk_block(text, "想請玩家做的事】"), _talk_block(text, "可以回報的事】")
+                update: dict = {}
+                for key, value in spec.items():
+                    if key == "ask":
+                        update[key] = _talk_pick(value, asks)
+                    elif key == "condition":
+                        update[key] = _talk_pick(value, conds)
+                    elif key == "want":
+                        update[key] = _talk_pick(value, wants)
+                    elif key == "reward":  # 'fit'：第一個份量不比請託大的回報
+                        weight = dict(wants).get(update.get("want", ""), 0)
+                        update[key] = next((ident for ident, w in rewards if w <= weight), "") if value == "fit" else value
+                    else:
+                        update[key] = value
+                return got.model_copy(update=update)
+
+        _TALK_CLIENTS[base] = TalkClient
+    return _TALK_CLIENTS[base]
+
+
+class TalkScenario(CompanionsScenario):
+    """人物對話（全部拆包第 20 批；--track talk，自己一個資料庫）。
+    沈鶴年在談盧植（直接擺成上一輪給了選項）：選選項、自己說，**前半停在還在談**。顧映雪模型叫不動：選選項、自己說都結束對話（「無心多談」）。
+    葉知秋求見（call:）開口兩種（模型回了、模型叫不動退回體力），交友（act:socialize）一次（在只有秦頡一位的宛城：盧植營兩位以上、交友是名單，不開口）。
+    言半山求「指點一招」、模型開條件（交銀）：**前半停在條件還沒答覆**（接、不接兩顆）。後半：接了（交銀、當場做）。
+    紀行雲：照擲出來的結果一件一件求（指點、說說敵情、贈物當場做；婉拒；開條件不接；開條件接了打探掛成委託；欠他的那一件請他兌現）。
+    燕回聲求贈物、先做後付（模型開條件、擲中）：**前半停在約定還欠著**；後半還他。霍斷橋同一件，後半過了期限（食言：情誼扣、那幾句併進書信）。
+    路修遠求帶路（動身，一路不花體力）：**前半停在帶路的路上**；後半每到一站跟他說一句（parley:road）。衛承光求陪你出陣：**前半停在答應了**；
+    後半商量打法（talk:plan）、在盧植那一帶（冀州）出陣。葉聽雪交友焦慮的秦頡（他主動開口求你）：**前半停在他開的請託還沒答覆**；後半接下，再去黃巾的投靠點叛投（欠著的都算食言）。冷千山是黃巾，求官軍的盧植（敵對）。
+    假人（BotRunner 十輪；bot_policy.score 問 talk:、parley: 的各幾顆）；換季。這份內容沒有盧植的設定用第一位人物，同一串 API 照打。"""
+
+    TALKER, BLOCKED, OPENER, ASKER, DOER = "沈鶴年", "顧映雪", "葉知秋", "言半山", "紀行雲"
+    PAYER, LATE, WALKER, BACKER, PLEADER, FOE = "燕回聲", "霍斷橋", "路修遠", "衛承光", "葉聽雪", "冷千山"
+    BACKER2 = "宗政遠"
+    PLAYERS = {TALKER: "guan", BLOCKED: "guan", OPENER: "guan", ASKER: "guan", DOER: "guan", PAYER: "guan", LATE: "guan", WALKER: "guan",
+               BACKER: "guan", BACKER2: "guan", PLEADER: "guan", FOE: "huang"}
+    PLEAD_FIG = "qinjie"
+    PHASES_FIRST = ["setup", "seat", "opening", "plain", "terms_open", "owe_open", "road_open", "backing_open", "plea_open", "half"]
+    PHASES_SECOND = ["resume", "plain_on", "terms_on", "doer", "owe_on", "road_on", "backing_on", "plea_on", "forsake", "foe", "bots", "season"]
+
+    def __init__(self, root: Path, profile: str, db: Path):
+        super().__init__(root, profile, db)
+        from tianxia import ollama_client
+
+        inner = ollama_client.OllamaClient.from_config.__func__  # 上一層（人物情誼一軌的假模型）換好的那一層
+
+        def from_config(cls, cfg):
+            client = inner(cls, cfg)
+            client.__class__ = _talk_client(type(client))
+            return client
+
+        ollama_client.OllamaClient.from_config = classmethod(from_config)
+
+    # ── 小工具 ──
+
+    @property
+    def fig(self) -> str | None:
+        if self.LUZHI in self.c.characters:
+            return self.LUZHI
+        return sorted(self.c.characters)[0] if self.c.characters else None
+
+    @contextlib.contextmanager
+    def parley_on(self, **values):
+        """NPC 智能 2.0 開著（正式內容本來就開；測試內容關著，這一下打開）、一天最多求九件、一天最多聊九輪，再加這幾個值（擲骰的 floor 等）。"""
+        parley = self.c.config.parley
+        with self.tuned(parley, enabled=True, asks_per_day=9, **values), self.tuned(self.c.config, talk_turns_per_day=9):
+            yield
+
+    def stand(self, who: str, cid: str | None = None) -> None:
+        cid = cid or self.fig
+        try:
+            self.beside(who, cid)
+        except Exception as e:  # noqa: BLE001  （測試內容的人物沒有住處）
+            emit(f"{who} 站不到 {cid}", type(e).__name__)
+            self.place(who, None)
+
+    def talking(self, who: str, cid: str | None = None, affinity: int = 45) -> None:
+        """直接擺成「正在跟他談、上一輪給了選項」（tests/kit/stances_kit.talking 同一個擺法），今天談過的輪數清掉。"""
+        cid = cid or self.fig
+
+        def fn(p) -> None:
+            p.pending_companion = cid
+            p.last_offered_dialogue[cid] = [["勸他速攻", "勸他持重", "告辭"], ["真誠請教", "坦誠相待", "尋常寒暄"]]
+            p.affinities[cid] = affinity
+            p.talks_today.pop(cid, None)
+
+        self.edit(who, fn)
+
+    def open_call(self, who: str, cid: str | None = None) -> None:
+        """求見：站到他那裡、名望夠、打開求見的名單、按他的名字。"""
+        cid = cid or self.fig
+        self.stand(who, cid)
+
+        def fn(p) -> None:
+            p.stats["fame"] = 9999
+            p.picking_audience = True
+
+        self.edit(who, fn)
+        self.choose(who, f"call:{cid}")
+
+    def open_social(self, who: str, cid: str) -> None:
+        """交友（act:socialize）：站到他那裡、按交友。只有他一位的地點才直接開口（兩位以上的地點交友是名單，按的是 call:，那一條走 open_call）。"""
+        self.stand(who, cid)
+        self.edit(who, lambda p: p.stats.update({"fame": 9999}))  # 名望夠才見得到（同 open_call）
+        emit("交友那一顆", self.buttons(who, "act:socialize"))
+        view = self.choose(who, "act:socialize")
+        if any(i.startswith("choice:") for i in self.ids(view)):  # 先碰上一件留在交友的事（福緣之類）：了結它，再按一次
+            self.settle_choices(who)
+            self.choose(who, "act:socialize")
+
+    def you(self, who: str, tag: str) -> None:
+        """存檔裡對話與 NPC 智能 2.0 碰得到的格子：談話對象與上一輪的選項、情誼、今天聊了幾輪、開的條件、欠的、欠你的、今天求了什麼、守約紀錄、陪你出陣、
+        帶路的路、體力銀兩心得、書信、行狀與最新兩則紀錄、對話記錄的尾巴。"""
+        state = self.chars.load(who)
+        if state is None:
+            emit(f"{who} {tag}（沒有這個人）", None)
+            return
+        p = state.player
+        emit(f"{who} {tag}", {
+            "pending": p.pending_companion, "offered": p.last_offered_dialogue, "affinities": dict(sorted(p.affinities.items())),
+            "talks_today": dict(sorted(p.talks_today.items())), "terms": {k: v.model_dump(mode="json") for k, v in sorted(p.parley_terms.items())},
+            "debts": {k: v.model_dump(mode="json") for k, v in sorted(p.parley_debts.items())}, "owed": dict(sorted(p.parley_owed.items())),
+            "days": {k: v.model_dump(mode="json") for k, v in sorted(p.parley_days.items())},
+            "records": {k: v.model_dump(mode="json") for k, v in sorted(p.parley_records.items())},
+            "backing": p.parley_backing.model_dump(mode="json") if p.parley_backing is not None else None,
+            "escort": [p.parley_escort, p.parley_road_leg], "journey": p.journey.model_dump(mode="json") if p.journey is not None else None,
+            "location": p.location, "stamina": p.stamina, "silver": p.stats.get("silver", 0), "xinde": p.stats.get("xinde", 0),
+            "materials": dict(sorted(p.materials.items())) if hasattr(p, "materials") else None,
+            "letters": [x.model_dump(mode="json") for x in p.letters], "annals": [[a.kind, a.text, a.figure] for a in p.annals],
+            "journal": [[e.title, e.tag, list(e.lines)] for e in state.journal[:2]],
+            "memos": {k: v.model_dump(mode="json") for k, v in sorted(p.talk_memos.items())},
+            "history": {k: v[-2:] for k, v in sorted(p.dialogue_history.items())}, "stance_notes": {k: v.model_dump(mode="json") for k, v in sorted(p.stance_notes.items())}})
+
+    def say(self, who: str, text: str, option: str = "talk:say") -> None:
+        self.call(who, "POST", "/api/say", {"text": text, "option": option})
+
+    def ask(self, who: str, text: str, tag: str, spec: dict | None, option: str = "talk:say", **tuning) -> None:
+        """說一句話，模型的 NPC 智能 2.0 欄位是 spec（None 就是閒聊）；tuning 是這一下擲骰的設定（floor=100 一定中、floor=0 且 willing 0 一定不中）。"""
+        MODEL["talk"], MODEL["parley"] = {"stance": "suzhan"}, spec
+        try:
+            with self.parley_on(**tuning):
+                self.say(who, text, option)
+        finally:
+            MODEL["talk"] = MODEL["parley"] = None
+        self.you(who, tag)
+
+    # ── 前半 ──
+
+    def opening(self) -> None:
+        """求見開口兩種、交友一次：模型回了（對話開始、選項三顆）、模型叫不動（退回體力、「無心多談」）。"""
+        cid = self.fig
+        if cid is None:
+            emit("這份內容沒有人物", None)
+            return
+        MODEL["talk"] = None
+        self.open_call(self.BLOCKED, cid)
+        self.you(self.BLOCKED, "求見、模型叫不動")
+        MODEL["talk"] = {"stance": "suzhan"}
+        self.open_call(self.OPENER, cid)
+        self.you(self.OPENER, "求見、模型回了")
+        emit("談話的選單", sorted(self.ids(self.main(self.OPENER))))
+        self.choose(self.OPENER, "talk:leave")
+        self.edit(self.OPENER, lambda p: setattr(p, "talks_today", {}))
+        alone = self.PLEAD_FIG if self.PLEAD_FIG in self.c.characters else cid  # 宛城只有秦頡一位：交友直接開口（盧植營兩位以上、是求見名單）
+        self.open_social(self.OPENER, alone)
+        self.you(self.OPENER, "交友")
+        self.choose(self.OPENER, "talk:leave")
+        MODEL["talk"] = None
+
+    def plain(self) -> None:
+        """沈鶴年選選項、自己說（前半停在還在談）；顧映雪模型叫不動：選選項、自己說都結束對話。"""
+        cid = self.fig
+        if cid is None:
+            return
+        self.stand(self.TALKER, cid)
+        self.talking(self.TALKER, cid)
+        MODEL["talk"] = {"stance": "suzhan"}
+        view = self.main(self.TALKER)
+        emit("談話中的人物頁（main.figure）與選單", [view.get("figure") if isinstance(view, dict) else None, sorted(self.ids(view))])
+        with self.tuned(self.c.config, talk_turns_per_day=9):
+            self.choose(self.TALKER, "talk:0")
+            self.you(self.TALKER, "選了第一顆")
+            self.say(self.TALKER, "願聞其詳")
+        self.you(self.TALKER, "自己說了一句（停在還在談）")
+        MODEL["talk"] = None
+        for who, how in ((self.BLOCKED, "選項"), (self.BLOCKED, "自己說")):
+            self.stand(who, cid)
+            self.talking(who, cid)
+            if how == "選項":
+                self.choose(who, "talk:0")
+            else:
+                self.say(who, "請問近況如何")
+            self.you(who, f"模型叫不動、{how}")
+        self.call(self.BLOCKED, "POST", "/api/say", {"text": "x" * 80})  # 太長
+        self.call(self.BLOCKED, "POST", "/api/say", {"text": "沒有談話對象"})
+
+    def terms_open(self) -> None:
+        """言半山求指點一招、模型開條件（交銀）、擲不中：條件還沒答覆（前半停在接、不接兩顆）。"""
+        cid = self.fig
+        if cid is None:
+            return
+        self.stand(self.ASKER, cid)
+        self.talking(self.ASKER, cid)
+        self.ask(self.ASKER, "請你指點我一招", "開了條件", {"ask": "spar", "willing": 0, "condition": "silver", "narrative_terms": TALK_TERMS,
+                                                        "narrative_no": TALK_NO}, floor=0)
+        emit("接、不接兩顆", self.buttons(self.ASKER, "talk:terms"))
+
+    def owe_open(self) -> None:
+        """燕回聲、霍斷橋求贈物、模型開條件（交銀）、擲中：先做後付，他先給，你欠他一件（前半停在約定還欠著）。"""
+        cid = self.fig
+        if cid is None:
+            return
+        for who in (self.PAYER, self.LATE):
+            self.stand(who, cid)
+            self.talking(who, cid)
+            self.ask(who, "能否送我些盤纏", "先做後付", {"ask": "gift", "willing": 100, "condition": "silver", "narrative": TALK_REPLY,
+                                                        "narrative_terms": TALK_TERMS}, floor=100)
+            emit("還他那一顆", self.buttons(who, "talk:repay"))
+
+    def road_open(self) -> None:
+        """路修遠求帶路：他親自帶你走一趟（體力不扣、走得慢一點讓前半停在路上）。"""
+        cid = self.fig
+        if cid is None:
+            return
+        self.stand(self.WALKER, cid)
+        self.talking(self.WALKER, cid)
+        self.ask(self.WALKER, "請帶我去別處", "帶路", {"ask": "escort:*", "willing": 100, "condition": "", "narrative": TALK_REPLY}, floor=100, escort_pace=40.0)
+        view = self.main(self.WALKER)
+        emit("在路上的選單", sorted(self.ids(view)))
+
+    def backing_open(self) -> None:
+        """衛承光求陪你出陣：他答應今天在他那一帶陪你出陣一回（前半停在答應了、還在談）。"""
+        cid = self.fig
+        if cid is None:
+            return
+        for who in (self.BACKER, self.BACKER2):
+            self.stand(who, cid)
+            self.talking(who, cid)
+            self.ask(who, "陪我出陣一回", "答應陪你出陣", {"ask": "sortie", "willing": 100, "condition": "", "narrative": TALK_REPLY}, floor=100)
+            emit("商量打法那一顆", self.buttons(who, "talk:plan"))
+
+    def plea_open(self) -> None:
+        """葉聽雪求見焦慮的秦頡：他主動開口求你（模型挑了請託與回報）：他開的請託還沒答覆（前半停在接、不接兩顆）。"""
+        from tianxia import figures
+
+        cid = self.PLEAD_FIG if self.PLEAD_FIG in self.c.characters else self.fig
+        if cid is None:
+            return
+        if cid == self.PLEAD_FIG:
+            self.world.mutate_season(lambda s: setattr(figures._ensure(GameStateHolder(s), self.c, cid), "prestige", 1))
+            from tianxia import figure_life
+
+            emit("他此刻的心事", figure_life.mood_any(GameStateHolder(self.world.get_season()), self.c, cid))
+        MODEL["talk"], MODEL["parley"] = {"stance": "suzhan"}, {"want": "*", "reward": "fit", "narrative": TALK_TERMS}
+        try:
+            with self.parley_on():
+                if cid == self.PLEAD_FIG:  # 只有他一位的地點：求見名單收起來了，開口走交友（act:socialize）
+                    self.open_social(self.PLEADER, cid)
+                else:
+                    self.open_call(self.PLEADER, cid)
+        finally:
+            MODEL["talk"] = MODEL["parley"] = None
+        self.you(self.PLEADER, "他先開口")
+        emit("接下、不接", self.buttons(self.PLEADER, "talk:terms"))
+
+    def half(self) -> None:
+        for who in self.PLAYERS:
+            self.you(who, "前半停在這裡")
+        self.season_view("前半停在這裡")
+
+    # ── 後半 ──
+
+    def plain_on(self) -> None:
+        """沈鶴年接著談（選下一顆）、告辭。"""
+        if self.fig is None:
+            return
+        MODEL["talk"] = {"stance": "xumin"}
+        with self.tuned(self.c.config, talk_turns_per_day=9):
+            self.choose(self.TALKER, "talk:1")
+            self.you(self.TALKER, "接著談")
+            self.say(self.TALKER, "不如持重些")
+        MODEL["talk"] = None
+        self.you(self.TALKER, "又說了一句")
+        self.choose(self.TALKER, "talk:leave")
+        self.you(self.TALKER, "告辭")
+
+    def terms_on(self) -> None:
+        """言半山接了條件：交銀（手頭不夠先試一次）、當場指點。"""
+        cid = self.fig
+        if cid is None:
+            return
+        with self.parley_on():
+            self.edit(self.ASKER, lambda p: p.stats.update({"silver": 0}))
+            self.choose(self.ASKER, "talk:terms:yes")
+            self.you(self.ASKER, "手頭不夠")
+            self.edit(self.ASKER, lambda p: p.stats.update({"silver": 500}))
+            self.choose(self.ASKER, "talk:terms:yes")
+            self.you(self.ASKER, "交了銀兩")
+            self.choose(self.ASKER, "talk:terms:yes")  # 沒有條件可接了
+            self.choose(self.ASKER, "talk:leave")
+
+    def doer(self) -> None:
+        """紀行雲一件一件求：指點、說說敵情、贈物（都當場做）；婉拒；開條件不接；開條件接了打探掛成委託；欠他的那一件請他兌現；清單外的事當婉拒。"""
+        cid = self.fig
+        who = self.DOER
+        if cid is None:
+            return
+        self.stand(who, cid)
+        self.talking(who, cid)
+        for text, ask in (("請指點我一招", "spar"), ("說說敵情吧", "intel"), ("送我點東西", "gift")):
+            self.ask(who, text, f"求{ask}、當場做", {"ask": ask, "willing": 100, "condition": "", "narrative": TALK_REPLY}, floor=100)
+        self.ask(who, "再指點我一招", "婉拒", {"ask": "spar", "willing": 0, "condition": "", "narrative_no": TALK_NO}, floor=0)
+        self.ask(who, "天下大勢如何", "只是閒聊", {"ask": "", "willing": 0, "condition": "", "narrative": TALK_REPLY}, floor=0)
+        self.ask(who, "把你的刀給我", "清單外的事", {"ask": "refuse", "willing": 100, "condition": "", "narrative_no": TALK_NO}, floor=100)
+        self.choose(who, "talk:leave")
+        self.edit(who, lambda p: p.talks_today.clear())
+        self.talking(who, cid)
+        self.ask(who, "指點我一招，我替你辦事", "開條件、打探", {"ask": "gift", "willing": 0, "condition": "scout:*", "narrative_terms": TALK_TERMS}, floor=0)
+        self.choose(who, "talk:terms:no")
+        self.you(who, "不接條件")
+        self.ask(who, "送我些盤纏，我替你辦事", "又開條件", {"ask": "gift", "willing": 0, "condition": "scout:*", "narrative_terms": TALK_TERMS}, floor=0)
+        self.choose(who, "talk:terms:yes")
+        self.you(who, "接了打探（掛成委託）")
+        self.edit(who, lambda p: p.parley_owed.update({cid: "gift"}))  # 今天還做得到的一件（指點今天婉拒過了：那一件只會回「改日」）
+        emit("請他兌現那一顆", self.buttons(who, "talk:owed"))
+        self.choose(who, "talk:owed")
+        self.you(who, "他兌現了")
+        self.choose(who, "talk:owed")  # 沒有欠了
+        self.choose(who, "talk:leave")
+
+    def owe_on(self) -> None:
+        """燕回聲還他欠的銀兩（手頭不夠先試一次）；霍斷橋過了期限：食言（情誼扣、那幾句併進書信）。"""
+        cid = self.fig
+        if cid is None:
+            return
+        with self.parley_on():
+            self.edit(self.PAYER, lambda p: p.stats.update({"silver": 0}))
+            self.choose(self.PAYER, "talk:repay")
+            self.you(self.PAYER, "手頭不夠")
+            self.edit(self.PAYER, lambda p: p.stats.update({"silver": 500}))
+            self.choose(self.PAYER, "talk:repay")
+            self.you(self.PAYER, "還了")
+            self.choose(self.PAYER, "talk:repay")  # 沒有債了
+            self.choose(self.PAYER, "talk:leave")
+
+            def expire(s) -> None:
+                for debt in s.player.parley_debts.values():
+                    debt.due = s.world.time - 1
+
+            self.edit_state(self.LATE, expire)
+            self.main(self.LATE)  # 同步：欠的過了期限
+            self.you(self.LATE, "食言")
+
+    def road_on(self) -> None:
+        """路修遠在路上每到一站跟他說一句（parley:road）；同一站不能說兩次。"""
+        if self.fig is None:
+            return
+        view = self.main(self.WALKER)
+        emit("在路上的選單", sorted(self.ids(view)))
+        for text in ("一路有勞", "再問一句"):
+            self.ask(self.WALKER, text, "路上說一句", {"ask": "intel", "willing": 100, "condition": "", "narrative": TALK_REPLY}, "parley:road", floor=100)
+        self.edit(self.WALKER, lambda p: setattr(p, "parley_road_leg", -1))
+        MODEL["talk"] = None
+        self.say(self.WALKER, "模型叫不動", "parley:road")
+        self.you(self.WALKER, "路上模型叫不動")
+
+    def backing_on(self) -> None:
+        """衛承光商量打法（成、不成各一次〔雖然第二次打法已經商量過〕）、出陣。"""
+        cid = self.fig
+        if cid is None:
+            return
+        self.ask(self.BACKER, "我想從側翼包抄", "商量打法", {"willing": 100, "narrative": TALK_REPLY, "narrative_no": TALK_PLAN_NO}, "talk:plan", plan_floor=100)
+        self.ask(self.BACKER2, "那就正面強攻", "商量不成", {"willing": 0, "narrative": TALK_REPLY, "narrative_no": TALK_PLAN_NO}, "talk:plan", plan_floor=0, plan_cap=0)
+        self.ask(self.BACKER2, "再換個打法", "已經商量過了", {"willing": 100, "narrative": TALK_REPLY}, "talk:plan", plan_floor=100)
+        self.set_duel(False)
+        for who in (self.BACKER, self.BACKER2):
+            self.choose(who, "talk:leave")
+            self.place(who, self.backing_spot(who))
+            emit("出陣那一顆", self.ids(self.main(who)).get("act:train"))
+            with self.winning():
+                self.choose(who, "act:train")
+            self.you(who, "出陣之後")
+
+    def backing_spot(self, who: str) -> str:
+        """他那一帶（答應陪你出陣的那一區）裡出得了陣的地方：並肩那一句（BACKED_LINE）只在他那一帶出陣才有；找不到就退回中立地汝南荒野。"""
+        from tianxia import figure_life
+
+        state = self.chars.load(who)
+        b = state.player.parley_backing if state is not None else None
+        for spot in sorted(loc for loc in self.c.locations if b is not None and b.region is not None and figure_life._region(self.c, loc) == b.region):
+            self.place(who, spot)
+            if self.ids(self.main(who)).get("act:train", {}).get("enabled"):
+                emit("他那一帶出陣的地方", spot)
+                return spot
+        emit("他那一帶沒有出得了陣的地方", None)
+        return "runan_wilds"
+
+    def plea_on(self) -> None:
+        """葉聽雪接下他的請託：記成你欠他的一件（到期沒做是食言）；再不接的另一位（冷千山沒開口，這裡略）。"""
+        if self.fig is None:
+            return
+        with self.parley_on():
+            self.choose(self.PLEADER, "talk:terms:yes")
+            self.you(self.PLEADER, "接下請託")
+            self.choose(self.PLEADER, "talk:leave")
+
+    def forsake(self) -> None:
+        """葉聽雪還欠著秦頡的請託，去黃巾的投靠點叛投（defect:<陣營> → defect:confirm）：欠著的都算食言（情誼扣、那幾句併進書信）。"""
+        if self.fig is None:
+            return
+        who = self.PLEADER
+        target = next((f for f in self.c.scenario.factions if f.id != self.PLAYERS[who] and f.join_at), None)
+        if target is None:
+            emit("沒有別的陣營可叛投", None)
+            return
+        self.place(who, target.join_at[0])
+        ids = [i for i in self.ids(self.main(who)) if i.startswith("defect:")]
+        emit("叛投那幾顆", ids)
+        if ids:
+            self.choose(who, ids[0])
+            self.choose(who, "defect:confirm")
+        self.you(who, "叛投之後")
+
+    def foe(self) -> None:
+        """冷千山（黃巾）求官軍的人物：敵對（意願的天花板再減）；擲中、擲不中各一次。"""
+        cid = self.fig
+        if cid is None:
+            return
+        self.stand(self.FOE, cid)
+        self.talking(self.FOE, cid)
+        self.ask(self.FOE, "請指點我一招", "敵對、擲不中", {"ask": "spar", "willing": 100, "condition": "", "narrative": TALK_REPLY, "narrative_no": TALK_NO}, floor=0)
+        self.ask(self.FOE, "說說敵情吧", "敵對、擲中", {"ask": "intel", "willing": 100, "condition": "", "narrative": TALK_REPLY}, floor=100)
+        self.choose(self.FOE, "talk:leave")
+
+    def bots(self) -> None:
+        """假人（人物情誼一軌的 BotRunner 十輪與整季機器人）；加上 bot_policy.score 問 talk:、parley: 的各幾顆（假人只按告辭，其餘不按）。"""
+        super().bots()
+        from tianxia import bot_policy
+        from tianxia.core.option import Option
+        from tianxia.state import BotProfile
+
+        self.begin()
+        game = self.server.game_for(self.TALKER)
+        profile = BotProfile(personality="普通", seed=3, faction="guan", season_number=self.world.get_season_number())
+        emit("假人眼中的分數", {oid: bot_policy.score(game, Option(id=oid, label=oid), profile) for oid in (
+            "talk:0", "talk:say", "talk:leave", "talk:plan", "talk:terms:yes", "talk:terms:no", "talk:repay", "talk:owed", "talk:clue:a:0",
+            "talk:opp:x", "parley:road")})
+
+    def season(self) -> None:
+        """收季、開下一季：談話、條件、欠的都跟著新角色重來。"""
+        self.do(ADMIN, "end_season")
+        self.main(self.TALKER)
+        self.do(ADMIN, "next_season")
+        for who in self.PLAYERS:
+            self.main(who)
+            self.you(who, "換季之後")
+        self.season_view("換季之後")
+
+
+def _talk_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
+    """再開一軌（TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記；同 _companions_register_track，名字分開免得幾塊都在時互相蓋掉）。"""
+    global TRACK_NAMES
+    TRACKS[name] = scenario
+    TRACK_NAMES = (*TRACK_NAMES, name)
+    MUTATIONS[name] = mutation
+    MUTANT_PROFILE[name] = profile
+
+
+# 改一個字（selftest）：指點一招那一句（parley.SPAR_LINE；搬之前在 tianxia/parley.py、之後在包裡），week7 紀行雲求指點、當場做那一下抓到
+_talk_register_track("talk", TalkScenario, (("tianxia/features/companions/parley.py", "tianxia/parley.py"),
+                                            ('SPAR_LINE = "{name}陪你拆了幾招，隨手點出你的破綻。"', 'SPAR_LINE = "{name}陪你拆了幾招，隨手點出你的破綻！"')), "week7")
+
+
+# ═══════════════════════════ strip（全部拆包第 13 批「拿掉一」，dev/strip-1）：strip 一軌 ═══════════════════════════
+# 探索三選一、找素材「自己說」、城裡操練拿掉（計畫 docs/superpowers/plans/2026-11-04-拿掉一-第13批.md）。這一批不是純搬：week7、season21、test
+# 三種設定要一個字都不變，none、weekend 只照拿掉的範圍變。這一軌盯的是「三選一的開關關掉之前還有人在讀」的那幾處（總表第 13 列「先做」）：
+# 一類一顆（precise.on）、可重複的事件推大勢的五折、捐軍備推大勢、觀山石（擲中加成與卡上那一句）、討伐懸賞的說法、玩法說明的探索那幾行，
+# 活著的小工具（找素材 gather_finds、補料 one_of、領地多給一份的亂數、is_town）、尋敵分級（training 留著的那一半），與舊的 id
+# 按下去的回話。名字一律原創（第 22 批認定第 3 條）。這一段整塊是這一批的：接在檔尾、最後一行登記，PM 合的時候不跟別人的行穿插。
+
+
+class StripScenario(EventScenario):
+    """拿掉一（全部拆包第 13 批；--track strip，自己一個資料庫）。小工具借事件那一軌的（card、press）與探索那一軌的（draws、tweak、settle、
+    kind_places、first_event、edit_state）。半舊半新切在 half 之後：三張牌寫到一半——舊程式端出來的事件卡（等回答）、有所感（等選做法）、
+    今天按過一次操練（只有不帶設定與 weekend 按得到，存檔留著 drill_day、drills_today）；後半第一件事（answer）是新程式接著答完。"""
+
+    PLAYERS = {"韓墨川": "guan", "蘇映秋": "huang", "杜遠山": None, "程聽雪": None, "裴寒舟": "guan", "顧行之": None, "沈晚舟": None}
+    NEWBIE = "阮青禾"
+    BOT_SEATS = [("寒甲", "yingshui"), ("寒乙", "yingchuan"), ("寒丙", "julu_altar"), ("寒丁", "guangzong")]
+    PHASES_FIRST = ["setup", "howto", "menus", "old_ids", "precise", "push_event", "donate", "stone", "strike", "tiers", "home", "half"]
+    PHASES_SECOND = ["resume", "answer", "again", "bots", "season"]
+
+    # ── 小工具 ──
+
+    def game(self, who: str):
+        """這個人此刻的 Game（只讀：算完不存，同伺服器每個請求重建）。"""
+        from tianxia.engine import Game
+
+        self.begin()
+        return Game(self.c, self.chars.load(who), world=self.world)
+
+    def side(self, who: str) -> str | None:
+        want = self.PLAYERS.get(who)
+        return want if want in {f.id for f in self.c.scenario.factions} else None
+
+    def base_of(self, who: str) -> str | None:
+        """這個人陣營的大本營（第一個投靠點）；沒有陣營是 None。"""
+        side = self.side(who)
+        faction = next((f for f in self.c.scenario.factions if f.id == side), None)
+        return faction.join_at[0] if faction is not None and faction.join_at else None
+
+    def field(self) -> str | None:
+        """城外、有對手的地方（照 id 排第一處）；這份內容沒有是 None。"""
+        from tianxia.engine import Game
+
+        game = Game(self.c, self.chars.load("杜遠山"), world=self.world)
+        cfg = self.c.config
+        spots = [i for i, x in sorted(self.c.locations.items()) if cfg.explore_mix_of(x.tags).kind != "town" and game._wild_foes(x)]
+        return "yingshui" if "yingshui" in spots else spots[0] if spots else None
+
+    def town(self) -> str | None:
+        cfg = self.c.config
+        spots = [i for i, x in sorted(self.c.locations.items()) if cfg.explore_mix_of(x.tags).kind == "town"]
+        return "yingchuan" if "yingchuan" in spots else spots[0] if spots else None
+
+    def look_here(self, who: str, tag: str) -> None:
+        """選單、行動列底下那幾行、四格那一格、main.training（尋敵分級開著沒）、輿圖詳情的那一句與分級。"""
+        view = self.main(who)
+        emit(f"{who} {tag}", {"options": view.get("options"), "notes": view.get("action_notes"), "training": view.get("training"),
+                              "mostly": view.get("mostly")})
+        game = self.game(who)
+        loc = game.content.locations[game.state.player.location]
+        emit(f"{who} {tag} 分級與詳情", {"tier": game._practice_tier(loc), "fierce": game._fierce_line(loc), "detail": game.place_detail(loc.id)})
+
+    # ── 前半 ──
+
+    def setup(self) -> None:
+        Scenario.setup(self)
+        for who in self.PLAYERS:
+            self.place(who, None, faction=self.side(who))
+        self.begin()
+
+    def howto(self) -> None:
+        """玩法說明（探索那幾行、殘譜、有所感的「靜心感悟」、交友的事在哪）：有陣營的與散人各看一次；序章裡的新人也看一次。"""
+        for who in ("韓墨川", "杜遠山", self.NEWBIE):
+            self.call(who, "GET", "/api/howto")
+
+    def menus(self) -> None:
+        """各種地點的選單：地點種類各站一次（有陣營的、散人）。"""
+        for kind, loc in self.kind_places():
+            for who in ("韓墨川", "杜遠山"):
+                self.place(who, loc)
+                self.look_here(who, f"在{kind}")
+
+    def old_ids(self) -> None:
+        """舊的 id 按下去：三選一的幾顆、分支、自己說、操練（week7、season21、test 本來就不在選單上，照 choose 既有的回法回；
+        不帶設定與 weekend 的 base 真的做事，head 同樣照 choose 既有的回法回）。"""
+        who = "顧行之"
+        for spot in (self.field(), self.town()):
+            self.place(who, spot)
+            for oid in ("explore:gather", "explore:gather:mine", "explore:gather:say", "explore:seek", "explore:sense", "explore:practice",
+                        "explore:", "act:drill"):
+                self.place(who, spot)
+                self.choose(who, oid)
+                self.settle(who)
+        self.me(who, "按過舊的 id")
+
+    def me(self, who: str, tag: str) -> None:
+        state = self.chars.load(who)
+        p = state.player
+        latest = state.journal[0] if state.journal else None
+        emit(f"{who} {tag}", {
+            "stamina": p.stamina, "silver": p.stats.get("silver"), "xinde": p.stats.get("xinde"), "exp": p.member.exp, "level": p.member.level,
+            "materials": dict(sorted(p.materials.items())), "explore_seq": p.explore_seq, "drill": [p.drill_day, p.drills_today],
+            "pending": state.pending_event, "sensing": p.sensing is not None, "marks": sorted(p.newbie_marks),
+            "latest": None if latest is None else latest.model_dump(mode="json"),
+        })
+
+    def precise(self) -> None:
+        """一類一顆還開著（precise.on 不再看三選一的開關）：交友只談話、拜入門派另成一顆、找事件的併池看得出來的地方（選單、紀錄）。"""
+        who = "沈晚舟"
+        town = self.town()
+        self.place(who, town)
+        self.look_here(who, "城裡的交友")
+        opts = self.options(who)
+        for oid in ("act:socialize", "act:call"):
+            if opts.get(oid, {}).get("enabled"):
+                self.choose(who, oid)
+                self.settle(who)
+                break
+        self.me(who, "交友之後")
+        sect = self.first_event(lambda e: any(ch.effect.join_sect for ch in e.choices) and bool(e.locations))
+        if sect is not None:
+            self.place(who, self.c.events[sect].locations[0])
+            self.look_here(who, "門派所在地")
+        game = self.game(who)
+        from tianxia import events as event_rules
+        from tianxia import precise as precise_rules
+
+        emit("這一季一類一顆", {"on": precise_rules.on(self.c, game.state.world),
+                              "explore_common": sorted(e.id for e in event_rules.event_candidates(game.state, self.c, "explore", "common"))[:30],
+                              "social_common": sorted(e.id for e in event_rules.event_candidates(game.state, self.c, "socialize", "common"))[:30]})
+
+    def push_event(self) -> None:
+        """事件推大勢的五折：可重複的打折、一次性的全額（/api/choose 真的按；另外直接問 _shaped 每一條線、每一種來源的量）。"""
+        self.trends("事件之前")
+        repeat = self.first_event(lambda e: not e.once and not e.qiyu and any(ch.effect.trend for ch in e.choices))
+        once = self.first_event(lambda e: e.once and any(ch.effect.trend for ch in e.choices))
+        for who, eid in (("韓墨川", repeat), ("蘇映秋", once)):
+            if self.card(who, eid):
+                self.press(who, lambda ch: bool(ch.effect.trend), f"{eid} 推大勢那一顆")
+                self.settle_choices(who)
+                self.trends(f"{eid} 之後")
+        game = self.game("韓墨川")
+        lines = sorted(game._resisted_lines())
+        emit("每一條線的量", {line: {src: list(game._shaped(line, 2.0, src)) for src in ("event", "event_once", "donate", "sortie", "duty")}
+                             for line in lines})
+
+    def trends(self, tag: str) -> None:
+        s = self.world.get_season()
+        emit(f"大勢 {tag}", {"trends": dict(sorted(s.trends.items())), "accum": dict(sorted(s.trend_accum.items()))})
+
+    def donate(self) -> None:
+        """捐軍備推大勢（economy.donate_push 也乘事件那一折）：自家大本營按軍需官那一串。沒有陣營的內容寫沒有。"""
+        from tianxia import economy
+
+        emit("捐十點推多少", economy.donate_push(self.c, 10))
+        who = "裴寒舟"
+        base = self.base_of(who)
+        if base is None:
+            emit("這份內容沒有大本營", None)
+            return
+        first = next((m for m in sorted(self.c.materials.values(), key=lambda m: (m.tier, m.id)) if economy.donate_points(self.c, m.id) > 0), None)
+        if first is None:
+            emit("這份內容沒有捐得了的素材", None)
+            return
+        self.place(who, base)
+
+        def fn(p):
+            p.materials[first.id] = 12
+        self.edit(who, fn)
+        self.trends("捐之前")
+        opts = self.options(who)
+        if opts.get("act:donate", {}).get("enabled"):
+            opts = self.ids(self.choose(who, "act:donate"))
+            pick = next((i for i, o in opts.items() if i.startswith("donate:") and o.get("enabled") and i != "donate:back"), None)
+            if pick is not None:
+                self.choose(who, pick)
+            self.choose(who, "donate:back")
+        self.trends("捐之後")
+        self.me(who, "捐之後")
+
+    def stone(self) -> None:
+        """觀山石：卡上那一句、靜心感悟擲中多幾個百分點（寶物表裡沒有它的內容照效果直接換 treasures.amount）、真的戴上看修練頁與探索。"""
+        from tianxia import sensing, treasures
+        from tianxia.state import Equipment
+
+        who = "程聽雪"
+        spot = self.field()
+        self.place(who, spot)
+        emit("觀山石那一句", treasures.effect_text(self.c, "insight"))
+        game = self.game(who)
+        loc = game.content.locations[game.state.player.location]
+        emit("沒戴的擲中", sensing.rate(game.state, self.c, loc))
+        fake = lambda st, ct, key: 1.5 if key == "insight" else 1.0  # noqa: E731
+        with self.tweak(treasures, amount=fake):
+            emit("戴著的擲中", sensing.rate(game.state, self.c, loc))
+        stone = next((g for g in self.c.gear.treasures.values() if g.effect == "insight"), None)
+        if stone is None:
+            emit("這份內容沒有觀山石", None)
+            return
+
+        def fn(p):
+            p.treasure = Equipment(id="寶:觀山", slot="treasure", name=stone.name, template=stone.id)
+        self.edit(who, fn)
+        self.call(who, "GET", "/api/menxia")
+        game = self.game(who)
+        emit("真的戴著的擲中", {"rate": sensing.rate(game.state, self.c, loc), "weights": game._explore_weights(loc)})
+
+    def strike(self) -> None:
+        """討伐懸賞的說法：有陣營的、散人；一類一顆關著的那一支（沒蓋章的舊季）。"""
+        from tianxia import bounties
+        from tianxia.state import Bounty
+
+        spot = self.field()
+        game = self.game("韓墨川")
+        squad = next((f.id for f in game._wild_foes(self.c.locations[spot])), None) if spot else None
+        if squad is None:
+            emit("這份內容沒有討伐得了的", None)
+            return
+        strike = Bounty(id="b-strike", kind="strike", faction=None, week=1, expires=1e12, silver=20, deeds=1, location=spot, squad=squad)
+        scout = Bounty(id="b-scout", kind="scout", faction=None, week=1, expires=1e12, silver=20, deeds=1, location=spot)
+        for who in ("韓墨川", "杜遠山"):
+            state = self.game(who).state  # Game 上那一份才接著這一季（chars.load 的 world 是空的、沒蓋章）
+            emit(f"{who} 討伐怎麼交差", bounties.how(self.c, strike, state))
+            emit(f"{who} 打探怎麼交差", bounties.how(self.c, scout, state))
+        world = self.world.get_season()
+        emit("傳聞的說法", bounties.how(self.c, strike, None, world))
+        with self.tweak(self.c.config, precise_actions=False):
+            emit("一類一顆關著的說法", {who: bounties.how(self.c, strike, self.game(who).state) for who in ("韓墨川", "杜遠山")})
+
+    def tiers(self) -> None:
+        """尋敵分級留著的那一半（training.on、tier_of、TIER_WORDS、PLACE_LINE）：輿圖的舊 API、探索一顆打贏的 field2、新手目標「去做」帶去哪。"""
+        who = "杜遠山"
+        status, view = self.call(who, "GET", f"/api/map?place={self.field() or ''}")
+        emit("輿圖詳情", view.get("detail") if isinstance(view, dict) else status)
+        game = self.game(who)
+        emit("每一處的分級", {i: game._practice_tier(x) for i, x in sorted(self.c.locations.items())})
+        emit("新手目標去哪", {go: game._newbie_go(go) for go in ("practice0", "practice1", "practice2", "bounties", "tavern")})
+        emit("新手目標", game.newbie_view())
+
+    def home(self) -> None:
+        """領地多給一份（_home_gather 用三選一那一顆亂數的名字「探索|…|領地」）、素材那一拍（gather_finds、one_of）：站自家領地，機會定成必中。"""
+        explore_one = _explore_rules()
+
+        who = "韓墨川"
+        spot = self.base_of(who) or self.field()
+        if spot is None:
+            return
+        self.place(who, spot)
+        game = self.game(who)
+        with self.tweak(self.c.config.conquest, gather_bonus_chance=1.0):
+            emit("領地多給的", game._home_gather(self.c.locations[spot], []))
+        from tianxia import conquest
+
+        block = next((i for i, x in sorted(self.c.locations.items()) if conquest.home(self._at(who, i), self.c)), None)
+        emit("自家領地", block)
+        for where in filter(None, (block, self.field(), self.town())):
+            self.place(who, where)
+            with self.tweak(self.c.config.conquest, gather_bonus_chance=1.0), self.draws(explore_one.MATERIAL):
+                self.explore(who)
+            self.me(who, f"在 {where} 探索之後")
+        self.place("沈晚舟", self.field())
+        with self.draws(explore_one.ENCOUNTER), self.fights("大勝"):
+            self.explore("沈晚舟")
+        self.me("沈晚舟", "遭遇打贏之後")
+
+    def _at(self, who: str, loc: str):
+        state = self.chars.load(who)
+        state.player.location = loc
+        return state
+
+    def half(self) -> None:
+        """切點：蘇映秋等著回答一張事件卡（舊程式探索端出來的）、裴寒舟等著選有所感的做法、杜遠山今天按過一次操練（不帶設定、weekend）。"""
+        explore_one = _explore_rules()
+
+        self.place("蘇映秋", self.field())
+        with self.draws(explore_one.EVENT):
+            self.seek("蘇映秋")
+        self.me("蘇映秋", "切點")
+        self.place("裴寒舟", self.field())
+        with self.draws(explore_one.INSIGHT):
+            self.choose("裴寒舟", "act:explore")
+            opts = self.options("裴寒舟")
+            if opts.get("explore:sense", {}).get("enabled"):
+                self.choose("裴寒舟", "explore:sense")
+        self.me("裴寒舟", "切點")
+        self.place("杜遠山", self.town())
+        opts = self.options("杜遠山")
+        if opts.get("act:drill", {}).get("enabled"):
+            self.choose("杜遠山", "act:drill")
+        self.me("杜遠山", "切點")
+
+    # ── 後半 ──
+
+    def resume(self) -> None:
+        self.login_all()
+
+    def answer(self) -> None:
+        for who in ("蘇映秋", "裴寒舟"):
+            self.settle(who)
+            self.me(who, "答完")
+        self.main("杜遠山")
+        self.me("杜遠山", "接手之後")
+
+    def again(self) -> None:
+        """接手之後再走一遍：說明、選單、舊的 id。"""
+        self.howto()
+        for who in ("韓墨川", "杜遠山"):
+            self.place(who, self.field())
+            self.look_here(who, "接手之後")
+            self.explore(who)
+            self.me(who, "接手之後探索")
+
+    def bots(self) -> None:
+        """假人：BotRunner＋bot_policy.take_turn（random.Random(17)，時鐘一輪推四分）四個擺在城外、城裡、兩軍的地方；整季機器人讀的那兩處
+        （bot.explore_choice、bot.pick）在真的選單上問一次。"""
+        from collections import Counter
+
+        from tianxia import bot, bot_policy, server_bots
+        from tianxia.bot_runner import BotRunner
+        from tianxia.engine import Game
+        from tianxia.state import BotProfile
+
+        sides = [f.id for f in self.c.scenario.factions]
+        spare = sorted(self.c.locations)
+        names = [name for name, _ in self.BOT_SEATS]
+        for i, (name, loc) in enumerate(self.BOT_SEATS):
+            loc = loc if loc in self.c.locations else spare[i % len(spare)]
+            self.begin()
+            g = Game.new(self.c, name, rng=random.Random(i), world=self.world, graduated=True)
+            g.client = None
+            g.sync(CLOCK[0])
+            for _ in range(6):
+                first = next((o.id for o in g.options(odds=False) if o.id.startswith("choice:") and o.enabled), None)
+                if first is None:
+                    break
+                g.choose(first)
+            p = g.state.player
+            side = sides[i % len(sides)] if sides else None
+            p.bot = BotProfile(personality="普通", seed=61 + i, faction=side, season_number=self.world.get_season_number())
+            p.faction, p.location, p.journey = side, loc, None
+            p.visited.add(loc)
+            p.tutorial_step = len(self.c.tutorial.steps)
+            p.joined_at = -1.0e9
+            p.stats["silver"] = 200
+            self.chars.save(g.state)
+        for name in names:
+            self.begin()
+            g = Game(self.c, self.chars.load(name), world=self.world)
+            opts = g.options(odds=False)
+            ids = [o.id for o in opts]
+            emit(f"{name} 整季機器人", {"choice": bot.explore_choice(ids), "exp": bot.explore_choice(ids, "exp"),
+                                     "pick": bot.pick(g, opts, random.Random(0))})
+            emit(f"{name} 假人的分數", {o.id: bot_policy.score(g, o, g.state.player.bot) for o in opts
+                                     if o.id.startswith(("act:explore", "act:train", "act:drill", "explore:"))})
+        runner = BotRunner(self.c, self.world, self.chars, rng=random.Random(17), clock=lambda: CLOCK[0])
+        tick, online = self.c.config.bot_tick_seconds, server_bots.is_online
+        seeds = {61 + i for i in range(len(self.BOT_SEATS))}
+        self.c.config.bot_tick_seconds = 10 ** 6
+        server_bots.is_online = lambda profile, now: profile.seed in seeds or online(profile, now)
+        totals = Counter()
+        try:
+            for _ in range(int(os.environ.get("SB_STRIP_TICKS", "30"))):
+                STEP[0] += 3
+                self.begin()
+                report = runner.tick()
+                totals.update(acted=report.acted, added=report.added, skipped=report.skipped, failed=report.failed, online=report.online)
+        finally:
+            self.c.config.bot_tick_seconds, server_bots.is_online = tick, online
+        states = [s for s in self.chars.all(bots_only=True) if s.player.name in names]
+        emit("假人 一輪一輪", dict(sorted(totals.items())))
+        emit("假人 紀錄標題", {s.player.name: sorted(Counter(e.title for e in s.journal).items()) for s in states})
+        emit("假人 第幾次探索", {s.player.name: s.player.explore_seq for s in states})
+        emit("假人 存檔", {s.player.name: hashlib.sha256(s.model_dump_json().encode("utf-8")).hexdigest() for s in states})
+
+    def season(self) -> None:
+        """收季、開下一季：操練的記號照帶（舊季）、新的一季蓋章（一類一顆、減法季）之後的說明與選單。"""
+        self.do(ADMIN, "end_season")
+        self.main("杜遠山")
+        self.do(ADMIN, "next_season")
+        self.me("杜遠山", "換季之後")
+        for who in ("杜遠山", "韓墨川"):
+            self.look_here(who, "換季之後")
+            self.call(who, "GET", "/api/howto")
+
+
+_events_register_track("strip", StripScenario, (("tianxia/treasures.py",), ("靜心感悟擲中的機會 +", "靜心感悟擲中的機會＋")), "week7")
 
 
 # ═══════════════════════════ story：一條線＋簽到一軌（全部拆包第 30 批，dev/story-1） ═══════════════════════════

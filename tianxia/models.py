@@ -1054,6 +1054,23 @@ class Sect(_Strict):
     desc: str = ""
 
 
+# 好感度 tag 查表（設計文件七.1／五.1 一貫原則：好感度變化只信任封閉分類查表，不信任 LLM 自報數字）。目前是全部人物共用同一張表，
+# 之後如果要每位歷史人物有不同的個性化反應強度，可以在 CharacterDef 加一個對應欄位覆寫，這裡先給一個通用版本。
+# （全部拆包第 20 批「先做」：原本寫在 companion_agent.py；核心的 content.py 驗內容要讀 DIALOGUE_TAGS、不能 import 包，搬到這裡，
+# 人物情誼包的 companion_agent 從這裡拿）
+AFFINITY_TAG_DELTAS: dict[str, int] = {
+    "雪中送炭": 8,
+    "坦誠相待": 7,
+    "真誠請教": 6,
+    "由衷讚賞": 5,
+    "尋常寒暄": 1,
+    "冷漠敷衍": -2,
+    "言語冒犯": -6,
+    "強人所難": -5,
+}
+DIALOGUE_TAGS = list(AFFINITY_TAG_DELTAS.keys())
+
+
 class CharacterDef(_Strict):
     """人物（同伴或敵人）。stats 是第 1 級的屬性，growth 是每升一級增加的量，仍給 Check
     系統（辦事/修行類事件選項的屬性判定）使用，跟遭遇/劇情戰的判定（encounter.py）無關。"""
@@ -1391,7 +1408,7 @@ ALLOW_FIXED = frozenset({
 # act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）
 ALLOW_FAMILIES = (
     "act:challenge:", "act:rank:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:",
-    "explore:",  # 探索三選一的三顆（explore_modes.PREFIX；序章裡不出現）
+    "explore:",  # 探索三選一的三顆（第 13 批拿掉；初入江湖的 glow、allow 還寫到，第 14 批連這幾步一起清）
     "sect:",  # 拜入門派（一類一顆開著時從交友搬出來，sect:<事件 id>；序章裡不出現）
     "ambush:set:",  # 設伏劫道（ambush:set:<另一頭>；序章裡不出現）
     "aid:guard:", "aid:rally:", "aid:visit:",  # 護著大勢人物（figure_aid；序章裡沒有陣營，不出現）
@@ -3194,32 +3211,12 @@ class SortieRules(_Strict):
         return self
 
 
-class ExploreModes(_Strict):
-    """探索三選一（設計第三節）：找素材、找事件、靜心感悟。enabled 關掉回到照地點比例自動抽的探索（Config.explore_mix），
-    事件推戰線也不再打折。"""
-
-    enabled: bool = True
-    encounter_chance: float = Field(default=0.35, ge=0, le=1)  # 找素材撞上怪（城鎮不撞）
-    second_tier: dict[int, float] = Field(default_factory=lambda: {1: 0.0, 2: 0.25, 3: 0.5})  # 照危險度：再一個二階的機會
-    town_chance: float = Field(default=0.5, ge=0, le=1)  # 城鎮找素材撿到一個一階的機會
-    event_trend_share: float = Field(default=0.5, ge=0, le=1)  # 可重複的事件推戰線的量（設計 3.2、5.3；一次性的事照全額）
-    sense_treasure_points: int = Field(default=15, ge=0)  # 寶物「探索悟意境」：靜心感悟擲中機率多幾個百分點（夾在 sense_rate_range 的上限）
-
-
 class Training(_Strict):
-    """城裡操練與城外練功分級（新手引導重做，Joy 2026-10-22 同意設計稿 https://claude.ai/artifact/Eb25MwPveJMYSf5Ge4mDyx）。
-    一類一顆（precise.on）開著才有：城鎮裡行動列那一格是「操練」（act:drill），零風險、一天 drill_per_day 次（同回體丹的現實
-    00:00 換日）、主要給心得；城外那一格是「練功」（explore:practice），照這裡最弱的對手分一、二、三級（tier_bounds），心得與銀兩
-    乘 tier_loot（經驗不加成：50 級的升級速度是量好的）。enabled 關掉回到練功收在探索裡、沒有操練。"""
+    """城外分級（新手引導重做，Joy 2026-10-22 同意設計稿 https://claude.ai/artifact/Eb25MwPveJMYSf5Ge4mDyx；城裡操練與尋敵鈕全部拆包第 13 批拿掉）。
+    一類一顆（precise.on）開著才有：照這裡最弱的對手分一、二、三級（tier_bounds），寫在輿圖的地點詳情。"""
 
     enabled: bool = True
-    drill_per_day: int = Field(default=5, ge=1)
-    drill_xinde_base: int = Field(default=4, ge=0)  # 操練一次的心得：drill_xinde_base ＋ 等級 × drill_xinde_per_level
-    drill_xinde_per_level: float = Field(default=1.0, ge=0)
-    drill_exp_base: int = Field(default=1, ge=0)  # 操練一次的經驗：drill_exp_base ＋ 等級 // drill_exp_level_div
-    drill_exp_level_div: int = Field(default=5, ge=1)
     tier_bounds: list[int] = Field(default_factory=lambda: [10, 30])  # 最弱的對手難度 ≤ 第一個是一級、≤ 第二個是二級，再上去三級
-    tier_loot: list[float] = Field(default_factory=lambda: [1.0, 1.25, 1.5])  # 一、二、三級練功打贏的心得與銀兩倍數
     # 新手目標（tianxia/newbie.py）：引導走完、新手期裡任務卡上的那一塊；做到一條給 goal_pill 顆回體丹或 goal_silver 兩
     goals: bool = True
     goal_pill: int = Field(default=1, ge=0)
@@ -3229,35 +3226,7 @@ class Training(_Strict):
     def _shape(self) -> Training:
         if len(self.tier_bounds) != 2 or self.tier_bounds[0] >= self.tier_bounds[1]:
             raise ValueError("training.tier_bounds 要寫兩個由小到大的難度")
-        if len(self.tier_loot) != 3:
-            raise ValueError("training.tier_loot 要寫一、二、三級三個倍數")
         return self
-
-
-class GatherBranch(_Strict):
-    """找素材的一條分支（第 32 項，企劃者 10/18「往深山可能探索到的就是山或者風之類的意境」「素材可能就能分狩獵、挖礦」；
-    content/gather_branches.json）：地點帶 tags 其中一個、危險度到 min_danger 就有這條。給 attributes 這幾種屬性的素材
-    （數量照找素材一定給的那一套，explore_modes.gather_finds），deep（深入）照地點的 Location.materials、另外擲一次悟意境。
-    line 是紀錄的第一句（{place} 換地點名）；名字與句子待 joy 潤。"""
-
-    id: str
-    name: str
-    tags: list[str]
-    attributes: list[str] = Field(default_factory=list)
-    line: str
-    min_danger: int = Field(default=1, ge=1, le=3)
-    deep: bool = False
-
-
-class GatherBranches(_Strict):
-    """找素材分支（第 32 項；tianxia/explore_modes.py 的 branches_*）：按「找素材」先展開這裡的幾條路，每條一定給素材、差在屬性；
-    最後一顆「自己說…」寫 20 字的找法，模型評成算、引擎擲骰。另要探索三選一與一類一顆（precise.on）都開著、內容有
-    content/gather_branches.json 才生效；不蓋章（只影響給哪種屬性，正在跑的季中途打開沒有壞處，PM）。測試內容關著。"""
-
-    enabled: bool = True
-    deep_insight_chance: float = Field(default=0.10, ge=0, le=1)  # 【預設】「深入」另擲一次悟意境：附帶的小驚喜（同殘譜、破境丹），不取代素材
-    say_enabled: bool = True  # 「自己說」單獨的緊急開關（模型壞了只關它）
-    say_bonus_second: bool = True  # 【預設】「自己說」寫得好：多一個同屬性一階之外，再照危險度擲一次二階（企劃者 2026-10-19 照 PM 先定的做）
 
 
 class InsightStrong(_Strict):
@@ -3653,9 +3622,10 @@ class EconomyRules(_Strict):
     donate: bool = True  # 自家陣營的大本營捐軍備（第六節）
     donate_points: dict[int, int] = Field(default_factory=lambda: {1: 1, 2: 3, 3: 9})  # 階 → 貢獻（糧草的份量）
     donate_daily_cap: int = Field(default=100, ge=0)  # 每人每天捐的貢獻最多幾點（回體丹的換日）
-    # 每一點貢獻推大勢多少（PM 2026-10-15 同意專職開發的定法）：再打事件五折（Config.explore_modes.event_trend_share）、
+    # 每一點貢獻推大勢多少（PM 2026-10-15 同意專職開發的定法）：再打五折（donate_trend_share）、
     # 季長倍數、盡頭阻力，跟出陣共用每人每日推力上限，不另記推力的貢獻（貢獻照捐的份量記）
     donate_push_per_point: float = Field(default=0.05, ge=0)
+    donate_trend_share: float = Field(default=0.5, ge=0, le=1)  # 捐軍備推大勢的折數（跟 Config.event_trend_share 同值、不同欄：測試內容事件不打折、捐軍備照打）
     armaments: dict[str, str] = Field(  # 素材屬性 → 陣營軍備的名字（第六節第 3 點；存量照份量累積）
         default_factory=lambda: {"慢": "糧秣", "快": "箭矢", "剛": "甲冑", "柔": "戰馬"}
     )
@@ -3845,12 +3815,11 @@ class Config(_Strict):
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
     sortie: SortieRules = Field(default_factory=SortieRules)  # 出陣（見 SortieRules）
-    explore_modes: ExploreModes = Field(default_factory=ExploreModes)  # 探索三選一（見 ExploreModes）
-    gather_branches: GatherBranches = Field(default_factory=GatherBranches)  # 找素材分支（見 GatherBranches；內容在 content/gather_branches.json）
-    training: Training = Field(default_factory=Training)  # 城裡操練、城外練功分級（見 Training）
+    training: Training = Field(default_factory=Training)  # 城外分級（見 Training）
     # 一類一顆（正式季整合第二章；tianxia/precise.py）：每一顆鈕只給一類、按了一定拿到那一類。預設開、測試內容關；照開季蓋章
-    # （WorldState.precise_actions，12.3 第 13 條：正在跑的季不變、下一個開季起生效）；探索三選一也開著時才生效
+    # （WorldState.precise_actions，12.3 第 13 條：正在跑的季不變、下一個開季起生效）
     precise_actions: bool = True
+    event_trend_share: float = Field(default=0.5, ge=0, le=1)  # 可重複的事件推戰線的量（設計 3.2、5.3；一次性的事照全額；Game._shaped 讀）
     # 借進找事件的戰後事件（內容寫 train 的九則）在一處池子裡合起來最多佔幾成（PM 2026-10-19：QA 量到潁川郊野佔七成）；
     # 當地自己的事件都抽不到時照舊補上，池子裡只有這幾則時不受上限（events.pick_event）
     precise_aftermath_share: float = Field(default=0.3, ge=0, le=1)
@@ -4209,6 +4178,7 @@ class Config(_Strict):
     sense_rate: int = 70  # 有所感選對做法之後，進入感悟狀態的成功率（%）
     sense_rate_per_wis: int = 3  # 悟性比基準 5 每多一點 +3%（少一點 −3%）
     sense_rate_range: tuple[int, int] = (40, 95)  # 夾在這之間（痕跡的加成另外加在上面，見 sense_marks_bonus）
+    sense_treasure_points: int = Field(default=15, ge=0)  # 寶物「探索悟意境」：感悟擲中機率多幾個百分點（夾在 sense_rate_range 的上限；0 是沒有這一支，寶物字走舊的那一句）
     sense_miss_xinde: int = 3  # 選對了但沒擲中：「差一點就抓到了」給的心得
     sense_marks_bonus: int = 3  # 這一處悟成過的人每多一檔模糊人數（一兩個人、幾個人、十來個人），成功率 +3%……
     sense_marks_cap: int = 9  # ……最多 +9%
@@ -5227,7 +5197,6 @@ class Content(_Strict):
     looks: dict[str, Look] = Field(default_factory=dict)  # 擂台形象（content/looks.json，照 id、照檔案的順序）；沒有這個檔就是空的（只有預設的斗笠小子）
     itineraries: list[Itinerary] = Field(default_factory=list)  # 人物的行程（content/itineraries.json，世界活起來）；沒有這個檔就是沒有
     relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有
-    gather_branches: dict[str, GatherBranch] = Field(default_factory=dict)  # 找素材分支（content/gather_branches.json，照內容的順序）；沒有這個檔就是空的（分支關著）
     mark_rules: list[MarkRule] = Field(default_factory=list)  # 地方痕跡過門檻（content/mark_rules.json，減法季批 4）；沒有這個檔就是空的
     # 探索一顆出門一趟的段落句子（content/outing_lines.json，減法季批 2；explore_one.paragraph 讀、探索包 checks.check_outing_lines 驗）：
     # 拍的類 → 結果 → 句子；沒有這個檔就是空的（照 explore_one.FALLBACK 寫）

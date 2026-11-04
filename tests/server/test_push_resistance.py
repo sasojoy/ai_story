@@ -70,7 +70,7 @@ def test_repeatable_events_push_the_fronts_at_half_and_one_off_events_in_full():
     assert w.trends["yingru"] == 51
     game.push_trend("yingru", 2, source="event_once")
     assert w.trends["yingru"] == 53
-    game.content.config.explore_modes.enabled = False
+    game.content.config.event_trend_share = 1.0
     game.push_trend("yingru", 2, source="event")
     assert w.trends["yingru"] == 55
 

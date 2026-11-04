@@ -356,7 +356,7 @@ def check_newbie(ctx: Game) -> None:
 
 
 def nearest_to(ctx: Game, targets: set[str]) -> str | None:
-    """離這裡最近的那一個地點（先照摸清的路，都走不到照所有開放的地點，同 _nearest_practice）；這裡就是的話回這裡。"""
+    """離這裡最近的那一個地點（先照摸清的路，都走不到照所有開放的地點，同 clinic.nearest）；這裡就是的話回這裡。"""
     s, c = ctx.state, ctx.content
     if s.player.location in targets:
         return s.player.location

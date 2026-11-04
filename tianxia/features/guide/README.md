@@ -26,7 +26,7 @@
 核心原位碰引導的那幾處都沒有第 11 批的掛鉤，改叫上面的服務、記進邊界測試的 `GAME_DELEGATE_CALLERS`（35 對；全部拆包第 24 批有所感的 `_sense_apply`、`sense_draw` 搬進有所感包、包裡經 ctx 叫，剩 33 對）與 `CORE_DELEGATE_CALLERS`（事件檢定 6 對），**沒有新增 `GAME_DIRECT`**（原本兩筆 `_hint_triggers`、`_newbie_go` 讀酒肆的拿掉）：
 
 - 做完一件事引導跟著走（`_note_action`）：`choose` 七處、`_order_credit`、`_faction_step`、`_arrive`、`take_stamina_pill`、`_menxia_entry`——總表第 26 批的事件（配點 `allocate_stat` 第 23 批進修練包，那裡的 `_note_action`、`_check_hints` 都經 `ctx` 叫）。
-- 碰到才說（`_check_hints`、`_hint`）：`choose`、`sync`、`travel`、`_menxia_entry`、`_act`、`_brush_off`、`_open_dialogue`、`_town_drill`，與核心 `event_check.answer_event`、`answer_branch`（連 `_begin_enlistment`、`_greet_rejoin`）。
+- 碰到才說（`_check_hints`、`_hint`）：`choose`、`sync`、`travel`、`_menxia_entry`、`_act`、`_brush_off`、`_open_dialogue`，與核心 `event_check.answer_event`、`answer_branch`（連 `_begin_enlistment`、`_greet_rejoin`）。
 - 開局（`_opening_*`）：`choose`、`check_in`、`_auto_checkin`、`checkin_view`、`now_entry_html`、`Game.new`。
 - 換季照帶（`_reset_player_for_new_season`：`_enlist_done`、`_base_step_count`、`_tutorial_intro`）、清失效參照一開頭（`_mark_veteran`）、`sync` 的引薦人結語（`_enlist_expire`）、核心的引導框服務（`_note_guide` 的 `_guide_speakers`）、狀態列的任務卡（`status_data` 的 `newbie_view`）、`act:rest`（`_act` 的 `_rest`）。
 - 掃描看不到的：`Game.new`（classmethod，用 `game.` 叫）的 `_opening_on`、`_opening_begin`、`_tutorial_intro`、`_graduate`、`_note_gift`；舊模組 `step.py` 叫 `game._nearest_to`。
@@ -35,7 +35,7 @@
 
 ## 過渡（手冊 3.11）
 
-- 包 → 還沒搬的舊模組：`rules.py` 2 行（`explore_modes`、`ranks`；`world`）、`opening.py` 1（`bounties`）、`enlist.py` 1（`orders`）、`actions.py` 1（`atlas`、`create`、`figures`、`howto`、`training`；`sensing` 全部拆包第 24 批有所感成包時拿掉：假人走序章那一下改問有所感包的查詢服務 `ctx._sense_prologue_choice()`）。
+- 包 → 還沒搬的舊模組：`rules.py` 2 行（`ranks`；`world`）、`opening.py` 1（`bounties`）、`enlist.py` 1（`orders`）、`actions.py` 1（`atlas`、`create`、`figures`、`howto`、`training`；`sensing` 全部拆包第 24 批有所感成包時拿掉：假人走序章那一下改問有所感包的查詢服務 `ctx._sense_prologue_choice()`）。
 - 服務清單（`tianxia/core/services.py`）這一包加的：一、共用 `_check_hints`、`_hint`、`_note_action`、`_preparing`、`_journal_guide`、`_free_text_of`、`HutReward`；二、查詢 `_at_battle`（決戰）、`_tavern_on`、`_tavern_here`、`_tavern_at`（酒肆）、`_recruit_target`、`_recruitable_here`（人物情誼；第 19 批成包，從過渡改成查詢服務）；三、過渡 `slot_insight`、`switch_art`、`practice`、`allocate_stat`、`melt_art`（武學）、`forge`（煉製）、`_hint_triggers`（自己的委派）。
 
 ## 測試
