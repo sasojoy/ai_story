@@ -4494,9 +4494,7 @@ class Game:
         return companions_talk.last_talk_line(self, companion_id)
 
     def affinity_text(self, companion_id: str) -> str:
-        """「情誼 N」：你跟這位人物的情誼（PlayerState.affinities，0～100）。談話畫面、求見名單、輿圖的人物都寫這個詞（explain-1：
-        玩家看得到的只叫「情誼」，程式裡照舊叫 affinity）。深交不限人數（企劃者 2026-10-28「不要限制深交名額」），不再接「已深交三位」。"""
-        return f"情誼 {self.state.player.affinities.get(companion_id, 0)}"
+        return companions_talk.affinity_text(self, companion_id)
 
     def _no_audience_line(self) -> str:
         """交友時見不到這裡的大勢人物時的說明；這裡沒有大勢人物就是原本的「此地無人可訪」；

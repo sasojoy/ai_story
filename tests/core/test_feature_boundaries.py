@@ -651,6 +651,8 @@ GAME_DELEGATES |= {
     "_road_say", "_last_talk_line", "_parley_road_option", "_parley_backing_here",
     # 原位那幾行的本體一起搬進包（選單上談著的那一整段、叛投之後欠著的都算食言）
     "_talk_options", "_parley_forsake",
+    # 審查補搬：總表附錄甲點名第 20 批的 affinity_text（談話畫面名字底下的「情誼 N」；server 的人物頁、場景卡、測試在叫）
+    "affinity_text",
 }
 _TALK_MENU = "選單的順序算行為（/api/main 的選項一顆一顆逐位元組）；談著的時候整個選單是對話的，`menu` 掛鉤要照包排，是總表第 55～57 批"
 GAME_DELEGATE_CALLERS.update({
@@ -660,7 +662,11 @@ GAME_DELEGATE_CALLERS.update({
     ("choose", "_talk"): "talk:<N>、say、leave……按下去：要帶鎖外生成好的一輪 prepared 與驗過的那句話，choose 掛鉤的簽名放不下；第 57 批再看",
     ("choose", "_road_say"): "parley:road 按下去：同上",
     ("choose", "say_max"): "「自己說」最多幾個字：choose 前段驗那句話",
-    ("_own_scene_text", "_last_talk_line"): "談話畫面名字底下的「上回」那一行：場景文字（_own_scene_text）的一部分，位置算行為；場景接縫掛鉤總表第 57 批",
+    ("_own_scene_text", "_last_talk_line"): "談話畫面名字底下的「上回」那一行：場景文字（_own_scene_text）的一部分。不接 scene 掛鉤的理由（第 20 批審查）：掛鉤坐在一條線的答題"
+                                            "（storyline.question_text）之前，談話這一段在答題之後；包的登記順序又是人物情誼排在有所感前面，接成掛鉤得替它補「答題開著就讓路」"
+                                            "與「有所感開著就讓路」兩道守衛，位置算行為，這一批的軌證明不了兩者永不並存，所以維持委派",
+    ("_own_scene_text", "affinity_text"): "談話畫面名字旁的「情誼 N」：同上一筆（場景文字的一部分，不接 scene 掛鉤）",
+    ("scene_art", "affinity_text"): "談話那張人物卡（scene_art）的副標也寫「情誼 N」：與 _own_scene_text 同一個詞，兩處不能各拼一份",
     ("_socialize", "_open_dialogue"): "交友碰上人物開口對話：交友求見第 21 批搬進 socialize 包，到時候改經 ctx",
     ("_precise_socialize", "_open_dialogue"): "一類一顆的交友開口：同上",
     ("_call", "_open_dialogue"): "求見開口：同上",

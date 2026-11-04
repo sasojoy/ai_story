@@ -238,3 +238,10 @@ def talk_options(ctx) -> list[Option]:
     opts += parley_actions.options(ctx, s.player.pending_companion)  # NPC 智能 2.0：他開的條件、欠你的那一件（不花體力）
     opts.append(Option(id="talk:leave", label="告辭"))
     return opts
+
+
+def affinity_text(ctx, companion_id: str) -> str:
+    """「情誼 N」：你跟這位人物的情誼（PlayerState.affinities，0～100）。談話畫面、求見名單、輿圖的人物都寫這個詞（explain-1：
+    玩家看得到的只叫「情誼」，程式裡照舊叫 affinity）。深交不限人數（企劃者 2026-10-28「不要限制深交名額」），不再接「已深交三位」。
+    （總表附錄甲點名第 20 批；第 20 批審查補搬。）"""
+    return f"情誼 {ctx.state.player.affinities.get(companion_id, 0)}"
