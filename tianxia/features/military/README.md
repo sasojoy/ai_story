@@ -22,17 +22,28 @@
 
 ## 認領的欄位（`PlayerState`，換季全部跟著新角色重來，沒有帶走的）
 
-`convoy`（押著的糧車；只有這一包寫）、`rank2_days`（第 2 階行動今天做了幾次）、`rank_action_weeks`（第 3、4 階行動這週做了幾次；`rank_rules.count` 寫）。
+`convoy`（押著的糧車；這一包寫，叛投也會清成 None）、`rank2_days`（第 2 階行動今天做了幾次）、`rank_action_weeks`（第 3、4 階行動這週做了幾次；`rank_rules.count` 寫）。
 `donations`（押糧與捐糧效果都寫）、`summons`、`qualified`、`rank`、`contrib_weeks`、`rank_hinted` 是共用或階級、席次規則層的，不認領。
 
 ## 還留在核心原位的接縫（理由在 `tests/core/test_feature_boundaries.py` 的 `# military` 那一段）
 
 - `act:rank2`、`act:convoy`、`act:rank:<行動>`：核心 `_act` 的 act 子動詞（總表第 57 批才擴 `Verb`），選單三段（`_everyday_options`，順序算行為）和按下去（`_act`）留在核心原位叫 Game 的委派。
-- `act:summons`（往召見的地點）、`bot_policy.score` 的 `rank2`、`convoy`、`summons` 分數、`_summons_hop`：假人行動列的分數，留原位。
+- `act:summons`（人已在召見地點時按的應召）、`_summons_hop`（往召見地點）、`bot_policy.score` 的 `rank2`、`convoy`、`summons` 分數、`_summons_hop`：假人行動列的分數，留原位。
 - `_report_seat`：`sync`、`choose`、`travel` 與事件檢定的兩處（`answer_event`、`answer_branch`）叫，位置固定（回話與紀錄的先後算行為），沒有掛鉤可接。
 - `_convoy_arrives`：`_arrive` 走到地點那一刻先交糧車、再接懸賞榜護送交差。`_order_credit`：核心的單打服務（`_squad_encounter`）打贏之後記功；出陣、決戰、大勢人物也經 `ctx._order_credit` 叫。
-- `server.py` 的 `orders`、`convoy` 兩個鍵（`/api/main`）與管理者三顆鈕（`ADMIN_ACTIONS` 的順序算行為）照舊叫 Game 的委派。
+- `server.py` 的 `orders`、`convoy` 兩個鍵（`/api/main`）與管理者三顆鈕（`/api/do` 的路由留原位，批次表第二節；`ADMIN_ACTIONS` 只是查表用的 dict，照包分是第 68 批）照舊叫 Game 的委派。
 - `orders.py`（軍令規則）、`ranks.py`、`seats.py`、`opportunities.py`、`foreshadow.py` 不在這一包（共用規則層，總表第 40 批；機緣、伏筆第 34 批）。
+
+## 過渡（手冊 3.11）
+
+過渡 import 共 8 處（`test_feature_boundaries.py` 數）：`admin_actions`→`orders`、`ranks`；`convoy_actions`→`orders`；`order_actions`→`atlas`、`orders`；`rank_rules`→`ranks`；`step_actions`→`events`、`opportunities`。
+`orders`、`ranks` 是共用規則層（第 40 批收進 `SHARED`），`atlas`、`events`、`opportunities` 等後面的批。
+服務清單（`tianxia/core/services.py`）這一包加的：`_order_credit`（共用服務，出陣、決戰、大勢人物也經 `ctx` 叫）、`RANK_ACTION_PREFIX`、`_duty_option`（出陣包的委派，`order_options` 叫它）。
+叛投（`tianxia/defection.py:163`）也寫 `p.convoy = None`（押著的糧車留給舊陣營）：第 32 批搬叛投時要記得這一個欄位的另一個寫入者。
+
+## 內容歸屬
+
+`content/promotions.json`、`content/events/promotion.json`（第 2 階晉升奇遇）歸這一包，`__init__.py` 的 `content` 宣告；`opportunities.json`、`foreshadows.json` 是第 34 批的。
 
 ## 測試
 

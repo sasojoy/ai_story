@@ -19,6 +19,7 @@ class MilitaryFeature(Feature):
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：押著的糧車、第 2 階今天做了幾次、第 3／4 階這週做了幾次。換季全部跟著新角色重來
     player_fields = ("convoy", "rank2_days", "rank_action_weeks")
     carried: tuple[str, ...] = ()
+    content = ("promotions.json", "events/promotion.json")  # 第 2 階晉升奇遇與晉升表（總表附錄甲）；content.py 照舊讀（第 62 批起照它載）；檔名照舊
 
     def enabled(self, ctx) -> bool:
         return True
