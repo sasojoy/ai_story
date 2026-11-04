@@ -8,7 +8,7 @@ from conftest import real_content
 from tianxia import bounties, calendar, figure_life, figures, letters, relations
 from tianxia.content import ContentError, validate
 from tianxia.models import RelationDef
-from tianxia.state import GameState, PlayerState
+from tianxia.state import Feast, GameState, PlayerState, Toast
 from tianxia.world_state import fresh_season
 
 
@@ -177,6 +177,40 @@ def test_hearsay_that_pleases_a_friend_brings_a_congratulation(c):
     letters.deliver(s, c)
     letter = s.player.letters[-1]
     assert letter.kind == "道賀" and "打退了張曼成" in letter.text and letter.task is None
+
+
+def _hosting(s: GameState, c) -> Feast:
+    """許劭此刻在別處擺著一場宴、你的情誼夠他寫信。"""
+    place = next(x for x in c.locations if x != s.player.location)
+    s.world.feasts.append(Feast(id=1, host="xushao", place=place, start=s.world.time, end=s.world.time + 2 * 3600))
+    s.player.affinities["xushao"] = 40
+    return s.world.feasts[-1]
+
+
+def test_no_invitation_to_a_feast_you_already_toasted(c):
+    """敬過酒的那一場不再邀（figure_life.feast_invites；第 19 批改寫的那一個讀法）：同一場、同一個人，只差敬過酒沒。"""
+    s = _season(c)
+    feast = _hosting(s, c)
+    feast.toasts.append(Toast(name=s.player.name, text="敬主人一杯", score=40, at=s.world.time))
+    letters.deliver(s, c)
+    assert "邀宴" not in {x.kind for x in s.player.letters}
+    feast.toasts.clear()
+    s.player.letter_day = -1
+    letters.deliver(s, c)
+    assert s.player.letters[-1].kind == "邀宴"
+
+
+def test_no_invitation_with_feasts_switched_off(c):
+    """宴客關著不寄邀宴（Config.figure_life.feasts）：同一場、同一個人，只差開關。"""
+    s = _season(c)
+    _hosting(s, c)
+    c.config.figure_life.feasts = False
+    letters.deliver(s, c)
+    assert "邀宴" not in {x.kind for x in s.player.letters}
+    c.config.figure_life.feasts = True
+    s.player.letter_day = -1
+    letters.deliver(s, c)
+    assert s.player.letters[-1].kind == "邀宴"
 
 
 def test_the_card_shows_the_newest_unread_letter(c):

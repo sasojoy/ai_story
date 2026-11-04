@@ -6775,9 +6775,10 @@ class CompanionsScenario(Scenario):
         self.me(who, "過了期限")
 
     def letters_on(self) -> None:
-        """柳聽泉：鎖外重寫信（server.letter_once，假模型）、收起、婉拒委託、委託過期；道賀（figure_life.spread 記 cheers）、邀宴；09:00 的看守替他送信。"""
+        """柳聽泉：鎖外重寫信（server.letter_once，假模型）、收起、婉拒委託、委託過期；道賀（figure_life.spread 記 cheers）、邀宴；09:00 的看守替他送信；
+        敬過酒的宴不邀、宴客關著不邀（審查 M04：之前沒有人敬過酒，這兩個判斷沒有人走到）。"""
         from tianxia import figure_life, letters
-        from tianxia.state import Feast
+        from tianxia.state import Feast, Toast
 
         who = self.MAILER
         if not letters.on(self.c) or "qinjie" not in self.c.characters:
@@ -6838,6 +6839,28 @@ class CompanionsScenario(Scenario):
         self.edit_state(who, expire)
         self.main(who)
         self.me(who, "委託過期")
+
+        def toasted_feast(s) -> None:  # 再擺一場、你已經敬過酒：不邀；拿掉那一杯，宴客關著也不邀，開著才邀（_feast_letter 那兩個判斷，第 19 批改寫成 figure_life.feast_invites）
+            s.feast_seq += 1
+            s.feasts.append(Feast(id=s.feast_seq, host="xushao", place="yingchuan", start=s.time, end=s.time + 2 * 3600,
+                                  toasts=[Toast(name=who, text="敬主人一杯", score=40, at=s.time)]))
+
+        def no_toasts(s) -> None:
+            for f in s.feasts:
+                f.toasts.clear()
+
+        self.world.mutate_season(toasted_feast)
+        self.edit(who, lambda p: setattr(p, "letter_day", -1))
+        self.main(who)
+        self.me(who, "敬過酒的宴不邀")
+        self.world.mutate_season(no_toasts)
+        self.edit(who, lambda p: setattr(p, "letter_day", -1))
+        with self.tuned(self.c.config.figure_life, feasts=False):
+            self.main(who)
+            self.me(who, "宴客關著不邀")
+        self.edit(who, lambda p: setattr(p, "letter_day", -1))
+        self.main(who)
+        self.me(who, "拿掉那一杯才邀")
 
     def figure_page(self) -> None:
         """人物頁：有心意有託付的、沒有的、不認得的、太長的、沒帶 id。"""
