@@ -10111,7 +10111,12 @@ class RoamScenario(StripScenario):
         self.place(who, loc)
         game = self.game(who)
         here = self.c.locations[game.state.player.location]
-        squads = game._here_squads(here.id)
+        # base 上是 Game 的方法，搬進包之後 Game 不留（只有包裡自己叫）：沒有就叫包裡那一支，兩邊算的是同一件事
+        if hasattr(game, "_here_squads"):
+            squads = game._here_squads(here.id)
+        else:
+            from tianxia.features.explore import explore_base
+            squads = explore_base.here_squads(game, here.id)
         emit(f"{who} {tag} {here.id}", {
             "squads": squads, "own": [sid for sid in squads if game._drills_with(self.c.squads[sid])],
             "wild": [f.id for f in game._wild_foes(here)], "weights": game._explore_weights(here),
