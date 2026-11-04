@@ -503,12 +503,29 @@ FORMER_RECRUITABLE = ["caocao", "liubei", "guanyu", "zhangfei", "sunjian", "yuan
 def test_all_eighteen_historical_figures_are_locked(content):
     """第一季設計第一節：大勢人物這一季都不開放招募（人物誌補遺加了波才、張曼成、趙弘，共 18 位；大勢人物擴充〔Joy 2026-10-17〕
     再加 13 位，共 31 位）。"""
-    assert len(content.characters) == 31
-    assert all(ch.kind == "locked" for ch in content.characters.values())
+    people = _figures_only(content)  # 一般 NPC 同伴（content/hirelings.json，features/hire）另外算
+    assert len(people) == 31
+    assert all(ch.kind == "locked" for ch in people)
+
+
+def _figures_only(content):
+    return [ch for ch in content.characters.values() if ch.hire_type is None]
+
+
+def test_hirelings_file_matches_the_generator():
+    """content/hirelings.json 是 scripts/make_hirelings.py 照 Config.hire 生的：改了型或酒肆要重跑（--check 比對）。"""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    out = subprocess.run([sys.executable, str(root / "scripts" / "make_hirelings.py"), "--check"], capture_output=True, text=True,
+                         encoding="utf-8", cwd=root)
+    assert out.returncode == 0, out.stdout + out.stderr
 
 
 def test_every_figure_has_a_place_to_talk_and_nobody_has_a_recruit_location(content):
-    for ch in content.characters.values():
+    for ch in _figures_only(content):
         assert ch.talk_at in content.locations, ch.id
         assert ch.recruit_at is None, ch.id
 
@@ -522,12 +539,13 @@ def test_the_former_recruitable_seven_keep_their_signature_skills(content):
 def test_every_figure_opts_into_deep_dialogue(content):
     """設計文件四.3：這一期黃巾之亂人物全部開放深度 LLM 對話（鎖定的龍頭人物也一樣，
     只是還沒有 recruit_at 讓玩家在地圖上找到他們，見 engine.py::_deep_interaction_target）。"""
-    assert all(ch.deep_interaction for ch in content.characters.values())
+    assert all(ch.deep_interaction for ch in _figures_only(content))
 
 
 def test_every_figure_has_three_brush_off_lines(content):
     """設計 9.1、內容表《打發話與回合句型》第一節：每位名將三句他自己口吻的打發話，不寫數字（名望與階級的落差由程式接在後面）。"""
-    for cid, ch in content.characters.items():
+    for ch in _figures_only(content):
+        cid = ch.id
         assert len(ch.brush_off) == 3 and len(set(ch.brush_off)) == 3, cid
         for line in ch.brush_off:
             assert line.strip() and len(line) <= 40 and not re.search(r"\d", line), (cid, line)

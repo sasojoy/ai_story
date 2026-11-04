@@ -1104,6 +1104,10 @@ class CharacterDef(_Strict):
     # 歷史武將同行（Config.companions）：開關開著時招得進名下（kind 照舊 locked：深度對話、走動、贈禮、本命都不變）。十六位大勢人物
     # 不准標（content.validate）；寫了 side 的只有投靠了那個陣營的人招得到，沒寫的誰都招得到
     recruitable: bool = False
+    # 一般 NPC 同伴（features/hire，屬性與跨季架構 v2 第九節；企劃者 2026-11-04 照建議）：content/hirelings.json 生的，
+    # 五型（刀客、槍手、弓手、醫者、謀士）之一、在哪間酒肆招得到；不是對話人物（不寫 kind、recruit_at、talk_at），只在那裡花銀兩招
+    hire_type: str | None = None
+    hire_at: str | None = None
 
 
 class PlanContest(_Strict):
@@ -3392,6 +3396,43 @@ def _legacy_doors() -> dict[str, str]:
     }
 
 
+class HireType(_Strict):
+    """一般 NPC 同伴的一型（features/hire）：資質照五項屬性的鍵（2～9），起始武學與內功；scripts/make_hirelings.py 照它生人。"""
+
+    key: str
+    name: str
+    aptitude: dict[str, int]
+    wugong: str
+    neigong: str
+    blurbs: list[str] = Field(default_factory=list)  # 一人一句來歷（{place} 換成酒肆所在）
+
+
+class HireRules(_Strict):
+    """一般 NPC 同伴（features/hire；屬性與跨季架構 v2 第九節）：五項屬性的季（attrset.on）才開，在城裡的酒肆花銀兩招。
+    名下最多幾位照歷史武將同行的 max_owned；換季跟其他同伴一樣重獲自由。【草】"""
+
+    enabled: bool = True
+    cost: int = Field(default=100, ge=0)  # 招一位要幾兩銀子
+    per_tavern: int = Field(default=2, ge=1)  # 每一間酒肆每一型生幾位（make_hirelings 讀）
+    types: list[HireType] = Field(default_factory=lambda: [
+        HireType(key="dao", name="刀客", aptitude={"str": 8, "lead": 5, "int": 3, "spd": 5, "cha": 3},
+                 wugong="xingwu_dao", neigong="xingwu_lianqi",
+                 blurbs=["在{place}替商隊押過幾趟貨的刀客。", "{place}一帶的鄉勇出身，一口刀使得紮實。"]),
+        HireType(key="qiang", name="槍手", aptitude={"str": 6, "lead": 8, "int": 3, "spd": 4, "cha": 3},
+                 wugong="xingwu_qiang", neigong="wubao_zhuanggong",
+                 blurbs=["在{place}的塢堡守過幾年門的槍手。", "{place}的部曲散了以後，一桿槍到處找主人。"]),
+        HireType(key="gong", name="弓手", aptitude={"str": 5, "lead": 3, "int": 4, "spd": 8, "cha": 4},
+                 wugong="qiangnu", neigong="xiaolin_gong",
+                 blurbs=["在{place}山裡打獵為生，箭不虛發。", "{place}的獵戶，腳程快、眼力好。"]),
+        HireType(key="yi", name="醫者", aptitude={"str": 2, "lead": 4, "int": 7, "spd": 4, "cha": 7},
+                 wugong="yujia_quan", neigong="chanzuo_tiaoxi",
+                 blurbs=["在{place}走街串巷替人看病的郎中。", "{place}藥鋪的學徒，懂一點接骨止血。"]),
+        HireType(key="mou", name="謀士", aptitude={"str": 2, "lead": 5, "int": 8, "spd": 3, "cha": 6},
+                 wugong="shusheng_jian", neigong="yanghao_jue",
+                 blurbs=["在{place}替人寫狀紙、算帳目的讀書人。", "{place}的落第書生，肚子裡有些兵書。"]),
+    ])
+
+
 class LegacyRules(_Strict):
     """傳承（tianxia/features/legacy；設計 docs/superpowers/specs/2026-11-04-屬性與跨季-架構方向v2.md 第六、七節）：正氣、邪氣、機緣三項
     只在換季那一刻照上一季的傳結算一次（季中不動），識海帶一份神品意境到下一季、解封才用得到。預設關：關著一個位元組都不變。
@@ -4114,6 +4155,7 @@ class Config(_Strict):
     conquest: ConquestRules = Field(default_factory=ConquestRules)  # 領地爭奪（見 ConquestRules）
     jianfa: JianfaRules = Field(default_factory=JianfaRules)  # 減法季（見 JianfaRules；暫名）
     epiphany: EpiphanyRules = Field(default_factory=EpiphanyRules)  # 特殊頓悟（見 EpiphanyRules）
+    hire: HireRules = Field(default_factory=HireRules)  # 一般 NPC 同伴：五項屬性的季在酒肆花銀兩招（見 HireRules；features/hire）
     legacy: LegacyRules = Field(default_factory=LegacyRules)  # 傳承：正氣、邪氣、機緣與識海（見 LegacyRules；features/legacy）
     xingshi: XingshiTuning = Field(default_factory=XingshiTuning)  # 〈天下形勢〉：領地爭奪每天一篇的旁白（見 XingshiTuning）
     ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）

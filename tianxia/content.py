@@ -187,7 +187,8 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         front_lines=_front_lines(root / "front_lines.json"),
         banned_names=_read(root / "banned_names.json"),
         sects=_index(Sect, _read(root / "sects.json")),
-        characters=_index(CharacterDef, _read(root / "characters.json")),
+        characters=_index(CharacterDef, _read(root / "characters.json")
+                          + (_read(root / "hirelings.json") if (root / "hirelings.json").exists() else [])),  # 一般 NPC 同伴（features/hire）
         squads=_index(Squad, _read(root / "squads.json")),
         battles=_index(BattleDef, _read(root / "battles.json")) if (root / "battles.json").exists() else {},
         road_sights=_index(RoadSight, _read(root / "road_sights.json")),
@@ -3284,9 +3285,14 @@ def validate(c: Content) -> None:
             if ch.starting_neigong in c.skills:
                 need(c.skills[ch.starting_neigong].kind == "內功", f"{where}：starting_neigong 要指向 kind=內功 的武學")
         need(
-            ch.kind is not None or ch.starting_wugong is None,
+            ch.kind is not None or ch.hire_type is not None or ch.starting_wugong is None,
             f"{where}：敵人（kind 沒填）不需要 starting_wugong，那是同伴才有的欄位",
         )
+        if ch.hire_type is not None or ch.hire_at is not None:  # 一般 NPC 同伴（features/hire；content/hirelings.json）
+            need(ch.kind is None and not ch.recruitable, f"{where}：一般 NPC 同伴不寫 kind、recruitable（只在酒肆花銀兩招）")
+            need(ch.hire_type in {t.key for t in c.config.hire.types}, f"{where}：hire_type {ch.hire_type} 不是 Config.hire.types 的任何一型")
+            need(ch.hire_at is not None, f"{where}：一般 NPC 同伴要寫 hire_at（在哪間酒肆招）")
+            known(where, [ch.hire_at] if ch.hire_at else [], c.locations, "地點")
         if ch.recruit_at:
             known(where, [ch.recruit_at], c.locations, "地點")
             need(ch.kind == "recruitable", f"{where}：只有 kind=recruitable 的同伴需要 recruit_at")
