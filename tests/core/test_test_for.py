@@ -55,9 +55,10 @@ def _added(path, src, *lines):
 
 
 def test_a_module_picks_the_tests_that_import_it():
-    picked = test_for.pick(["tianxia/glyph.py"])
-    assert "test_sensing.py" in {p.name for p in picked.files} and not picked.core
-    assert any("sensing" in w for w in picked.why)  # 經 import 它的 sensing 再挑（T-02）
+    # sense（全部拆包第 24 批）：原本的例子 glyph ← sensing 搬進了有所感包（tianxia/glyph.py 成了別名），換一對還是舊模組的 chapters ← weekcard
+    picked = test_for.pick(["tianxia/chapters.py"])
+    assert "test_chapters.py" in {p.name for p in picked.files} and not picked.core
+    assert any("weekcard" in w for w in picked.why)  # 經 import 它的 weekcard 再挑（T-02）
 
 
 def test_a_module_also_picks_the_tests_of_the_modules_that_import_it():

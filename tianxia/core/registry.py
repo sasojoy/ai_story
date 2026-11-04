@@ -18,6 +18,8 @@ from ..features import battle  # 全服決戰：主動搬六包第 5 批（「�
 from ..features import looks  # 擂台形象
 # guide
 from ..features import guide  # 新手引導：全部拆包第 22 批（沒有選項、選單、狀態，排在哪裡結果都一樣；check_content 的錯誤排在別包之後）
+# sense
+from ..features import sense  # 有所感與頓悟：全部拆包第 24 批（choose 只吃 sense:、scene 接在宴客之後——原本那一行就在宴客那一行後面）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -34,6 +36,8 @@ FEATURES: list[Feature] = [
     looks.FEATURE,
     # guide
     guide.FEATURE,
+    # sense
+    sense.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 
