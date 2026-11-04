@@ -57,6 +57,7 @@ def test_the_allow_lists_only_name_ids_the_code_really_makes():
 
     package, found = Path(models.__file__).parent, set()
     names = ["engine.py", "foreshadow.py", "opportunities.py", "plans.py"]  # 盤算在 plans.options
+    names += ["core/services.py"]  # 搬進核心的共用的字（第 3、4 階行動的前綴 act:rank:，全部拆包第 33 批）
     # 功能包做的選項（開發規範手冊 3.2；宴客的 feast:join: 在 features/feast/actions.py）也是原始碼
     names += [p.relative_to(package).as_posix() for p in sorted((package / "features").glob("*/*.py"))]
     for name in names:

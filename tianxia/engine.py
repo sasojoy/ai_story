@@ -19,7 +19,7 @@ from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
     allied, annals, armor, atlas, battle_instance, battlelog, bounties, calendar, clinic, conquest, conquest_day, create, defection, divine, economy, encounter, equipment,
     fight_llm, figure_life, figures, foreshadow, four_tiers, forge_secrets, fusion, gender, howto, insight_fx, insights, invites, journal, library, mapdata, martial_arts, plans,
-    materials, mounts, naming, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
+    materials, mounts, naming, opportunities, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skillview, smithing,
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, xingshi, zh,
 )
@@ -151,6 +151,14 @@ from .features.figure_acts import plan_actions as figure_plan_actions  # 過渡�
 from .features.figure_acts import yuedan_actions as figure_yuedan_actions  # 過渡：Game 上月旦評的 2 個一行委派
 # checkin（全部拆包第 30 批）：每日簽到的 3 個一行委派
 from .features.checkin import actions as checkin_actions  # 過渡：Game 上簽到的 3 個一行委派
+# military（全部拆包第 33 批）：第 3、4 階行動的選項 id 前綴搬進核心的共用的字（軍情包的選單產生它；`_rank_action_id` 與 `_act` 在核心原位認它）
+from .core.services import RANK_ACTION_PREFIX
+# 軍令卡、押糧、第 2 階與第 3／4 階行動、席次抄帳、管理者的軍令與召見的 15 個一行委派
+from .features.military import admin_actions as military_admin_actions  # 過渡：Game 上管理者重發軍令、輪替席次、發召見的 4 個一行委派
+from .features.military import convoy_actions as military_convoy_actions  # 過渡：Game 上押糧的 2 個一行委派
+from .features.military import order_actions as military_order_actions  # 過渡：Game 上軍令卡與記功的 4 個一行委派
+from .features.military import seat_actions as military_seat_actions  # 過渡：Game 上席次抄帳的一行委派
+from .features.military import step_actions as military_step_actions  # 過渡：Game 上第 2 階與第 3、4 階行動的 4 個一行委派
 from .state import (
     ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, CrowdNote, Equipment, GameState, HintNote, JournalEntry, Journey, Mingtie, Rumor, Tagalong,
     StoryCard, StoryProgress, TierResult, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
@@ -231,7 +239,7 @@ def _points(lines: list[str]) -> int:
 
 LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣血見底」：厚的那一句「氣血見底，……硬撐」（battlelog.LOW_HP_MARKS）才挑得到
 
-RANK_ACTION_PREFIX = "act:rank:"  # 第 3、4 階行動的選項 id 前綴（act:rank:<行動 id>，正式版戊一）；models.ALLOW_FAMILIES 也列它，原始碼裡要真的有
+# （RANK_ACTION_PREFIX 搬進核心的共用的字 core/services.py，全部拆包第 33 批；上面 import 回來，`from tianxia.engine import RANK_ACTION_PREFIX` 照舊）
 # （FREE_TEXT_OPTION、EVIL_ANNAL 與 FreeTextRequest、FreeTextOutcome 搬進核心的事件檢定 tianxia/core/event_check.py，全部拆包第 16 批；
 # 上面 import 回來，`from tianxia.engine import FREE_TEXT_OPTION` 照舊拿得到）
 # （SAY_OPTION、PLAN_OPTION、ROAD_SAY、TEXT_TALKS、SAY_MAX、say_text 搬進核心的共用的字與小函式 tianxia/core/services.py，全部拆包第 20 批；
@@ -280,16 +288,7 @@ RESUME_LINE = (  # 待 S1／joy 潤；{skip} 是實際扣了多少（world.resum
     "排好的決戰照原本的時間開，時間在暫停裡過了的現在就開始集結。"
 )
 PAUSED_REFUSAL = "（賽季時鐘暫停中，先按「繼續」。）"  # 暫停中的管理者動作；待 S1／joy 潤
-# 管理者「立刻發軍令」的回話照軍令多久一道（orders.daily：照週一發、每天 00:00 發；FB-502，待 joy 潤）
-ADMIN_REISSUE_HOW = {False: "週一", True: " 00:00 "}  # 「已照週一的做法重發」「已照 00:00 的做法重發」
-ADMIN_REISSUE_NONE = {False: "這一週沒有要重挑的軍令", True: "今天沒有要重挑的軍令"}
-# 管理者「立刻輪替第 4 階席次」的回話：7 天濃縮季照段（calendar.week7_on；FB-503，待 joy 潤）
-ADMIN_ROTATE_FIRST = {
-    False: "（第 1 週沒有上一週的貢獻可排；空缺照常由有資格的人補上。）",
-    True: "（第 1 段沒有上一段的貢獻可排；空缺照常由有資格的人補上。）",
-}
-ADMIN_ROTATE_AGAIN = {False: "下週一照常再排", True: "下一段第一天 00:00 照常再排"}
-ADMIN_ROTATE_LAST = "這是最後一段，季末之前不再排"  # 7 天濃縮季的最後一段沒有下一段
+# （管理者「立刻發軍令」「立刻輪替席次」回話用的 ADMIN_REISSUE_*、ADMIN_ROTATE_* 五個常數，全部拆包第 33 批搬進 tianxia/features/military/admin_actions.py）
 
 
 @dataclass(frozen=True)
@@ -969,11 +968,7 @@ class Game:
         return self._log(msgs + arrived + settled + summons + seated)
 
     def _report_seat(self) -> list[str]:
-        """第四階席次的抄帳與補缺（seats.report）：賽季時鐘暫停中不做（丁 N5 的裁決：暫停凍結世界的變化，
-        不補缺、不發軍情、帳也不抄；繼續之後的第一次同步補上，只補一次）。暫停時畫面照常可看、同步照常走，所以這裡要自己擋。"""
-        if self.world.paused_at() is not None:
-            return []
-        return seats.report(self.state, self.content)
+        return military_seat_actions.report_seat(self)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/seat_actions.py
 
     def _settle_plots(self) -> list[str]:
         """集體密謀的結算（正式版乙二；opportunities.settle）：賽季時鐘暫停中不結算。暫停時畫面照常可看、計時器的同步照常走
@@ -2885,100 +2880,19 @@ class Game:
         return sortie_train_actions.train_squad_ids(self, loc)  # 出陣三（全部拆包第 17 批）：本體在 tianxia/features/sortie/train_actions.py
 
     def _order_options(self, loc: Location) -> list[Option]:
-        """軍令的兩個行動（計畫 T6）：在有戰線的地方做第 1 階守勢行動；在護糧的起點接糧車。開關關著、散人沒有。"""
-        s, c = self.state, self.content
-        p = s.player
-        if not orders.active(s, c) or p.faction is None:
-            return []
-        opts: list[Option] = []
-        duty = c.orders.duties.get(p.faction)
-        if duty is not None and front_of(c, loc.id) is not None:
-            opts.append(self._duty_option(duty.name))
-        escort = orders.escort_at(s, c, self._side(), loc.id)  # 豪強分屬兩軍：依附那一軍的護糧
-        if escort is not None and p.convoy is not None:  # 一次押一車：寫明手上那一車要送去哪（T6 審查 I3）
-            dest = c.locations[p.convoy.to_loc].name
-            opts.append(Option(id="act:convoy", enabled=False, label=f"接下糧車（你還押著一車糧，要送到{dest}）"))
-        elif escort is not None:
-            need, have = c.config.convoy_grain, materials.grain_of(s, c)
-            dest = c.locations[escort.end].name
-            if have < need:
-                opts.append(Option(
-                    id="act:convoy", enabled=False,
-                    label=f"接下糧車（送到{dest}・糧草不夠：要 {need} 份，你有 {have} 份；糧草是慢屬性的素材）",
-                ))
-            else:
-                used = "、".join(f"{c.materials[mid].name} ×{n}" for mid, n in materials.grain_plan(s, c, need))
-                opts.append(Option(id="act:convoy", label=f"接下糧車（送到{dest}・交出糧草 {need} 份：{used}）"))
-        return opts
+        return military_order_actions.order_options(self, loc)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/order_actions.py
 
     def _duty_option(self, name: str) -> Option:
         return sortie_train_actions.duty_option(self, name)  # 出陣三（全部拆包第 17 批）：本體在 tianxia/features/sortie/train_actions.py
 
     def _rank2_options(self, loc: Location) -> list[Option]:
-        """第 2 階行動（設計 5.5；正式版乙一）：第 2 階以上、在有戰線的地方；今天做滿了就變灰、寫明。"""
-        s, c = self.state, self.content
-        action = opportunities.rank2_action(s, c)
-        if action is None or front_of(c, loc.id) is None:
-            return []
-        if opportunities.rank2_left(s, c) <= 0:
-            return [Option(id="act:rank2", enabled=False, label=f"{action.name}（今天已經做滿 {c.config.rank2_daily} 次）")]
-        note = self._check_cost_note(action.check, c.config.rank2_stamina)
-        return [self._cost_option("act:rank2", action.name, c.config.rank2_stamina, note=note)]
-
-    def _check_cost_note(self, check: Check | None, cost: int) -> str:
-        """有檢定的行動（第 2 階行動、第 3 階煽動起事）括號裡體力後面接的那一段：照事件選項的寫法寫檢定（企劃者裁決 E5.3：
-        「{行動}（體力 N・{屬性名} {數值}：{心裡話}）」，標籤的樣子待 joy 潤）。體力不夠時不寫（審查 I1）：這些行動在「此地還能做」
-        裡，網頁照原文印灰掉的標籤，帶著心裡話會讀成是屬性不夠才灰的，所以照舊只寫「{行動}（體力 N）」。沒有檢定是空字串。"""
-        if check is None or self.state.player.stamina < cost:
-            return ""
-        return event_rules.check_note(check, self.state, self.content, self.world)
+        return military_step_actions.rank2_options(self, loc)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/step_actions.py
 
     def _rank2(self) -> list[str]:
-        """做一次第 2 階行動：扣體力、記今天一次；過檢定才成功——成功往己方推所在戰線 rank2_push 點（push_trend），
-        再替累積型的機緣記一次。軍令的記功是計畫戊的事。"""
-        s, c = self.state, self.content
-        p = s.player
-        action = opportunities.rank2_action(s, c)
-        loc = c.locations[p.location]
-        front = front_of(c, loc.id)
-        p.stamina -= c.config.rank2_stamina
-        opportunities.count_rank2(s, c)
-        if not roll_check(action.check, s, c, self.world, self.rng):
-            return [action.fail.replace("{地點}", loc.name)]
-        msgs = [action.ok.replace("{地點}", loc.name)]
-        goal = self._goals().get(front)
-        if goal:
-            msgs += self.push_trend(front, goal * c.config.rank2_push, source="rank2")
-        return msgs + opportunities.after_success(s, c, "rank2", loc.id, self.rng)
+        return military_step_actions.rank2(self)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/step_actions.py
 
     def _rank_action_options(self, loc: Location) -> list[Option]:
-        """第 3、4 階的行動（正式版戊一）：做得了（陣營、階；第 4 階是這一週在任）、這裡做得了（戰線、標籤、亂局）才出現，
-        不是按了才說不行；這週做滿就灰掉、寫明。這個行動推的那條線今天已經推滿（每人每曆日上限，按下去只會推 +0）也灰掉、
-        寫明（企劃者裁決 E1）；一次只寫一個原因，這週做滿先寫。還推得動一點的照常按、照常付。choose 照這份選單重驗，
-        所以推滿之前拿到的舊選單按下去也一樣被拒絕、不扣體力、不記次數。"""
-        s, c = self.state, self.content
-        opts: list[Option] = []
-        line = self._rank_action_line(loc.id)
-        for action in rank_actions.mine(s, c):
-            if not rank_actions.where_ok(s, c, action, loc.id):
-                continue
-            option_id = f"{RANK_ACTION_PREFIX}{action.id}"
-            if rank_actions.left(s, c, action) <= 0:  # 7 天濃縮季照段記、寫「這一段」（calendar.week_word，FB-503）
-                this = calendar.week_word("this_short", c, s.world)
-                opts.append(Option(id=option_id, enabled=False, label=f"{action.name}（{this}已經做滿 {action.weekly} 次）"))
-            elif line is not None and self._push_room(line) <= 0:
-                opts.append(Option(id=option_id, enabled=False, label=f"{action.name}（今天這條線已經推滿）"))  # 新寫，待 joy 潤
-            else:  # 有檢定的（煽動起事）照事件選項的寫法接在體力後面，體力不夠時不寫（裁決 E5.3、審查 I1，同 _rank2_options）
-                note = self._check_cost_note(action.check, action.stamina)
-                opts.append(self._cost_option(option_id, action.name, action.stamina, note=note))
-        return opts
-
-    def _rank_action_line(self, loc_id: str) -> str | None:
-        """第 3、4 階行動在這裡推哪一條線：所在的戰線（照 _goals：豪強分屬兩軍，照依附那一軍的目標）；沒有目標是 None（不推）。
-        選單看推滿了沒、_rank_action 真的推，都照這一個判斷（推割據 2026-10-31 連豪強第三方一起拿掉）。"""
-        goals = self._goals()
-        front = front_of(self.content, loc_id)
-        return front if front is not None and goals.get(front) else None
+        return military_step_actions.rank_action_options(self, loc)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/step_actions.py
 
     def _push_room(self, trend_id: str) -> float:
         """自己今天在這條線上還推得動多少（每人每曆日上限，緩衝後的量）：跟 push_trend 走 push.py 的同一個算法（push.room）。
@@ -2990,70 +2904,16 @@ class Game:
         return push.room(s.player.pushed, day, trend_id, self.daily_push_cap())
 
     def _rank_action(self, action_id: str) -> list[str]:
-        """做一次第 3、4 階的行動：扣體力、記這週一次（不論成敗）；有檢定的過了才算——推動走 push_trend（推所在戰線往己方，
-        乘自己那一邊的目標），再替軍令記功（第 3 階 5 次、第 4 階 10 次；收哪幾種由計畫戊二定，現在沒有軍令收，記不到）。
-        choose 已經驗過選項在選單上，所以 mine 裡一定找得到。"""
-        s, c = self.state, self.content
-        p = s.player
-        action = next(a for a in rank_actions.mine(s, c) if a.id == action_id)
-        loc = c.locations[p.location]
-        front = front_of(c, loc.id)
-        p.stamina -= action.stamina
-        rank_actions.count(s, c, action)
-        if action.check is not None and not roll_check(action.check, s, c, self.world, self.rng):
-            return [action.fail.replace("{地點}", loc.name)]
-        msgs = [action.ok.replace("{地點}", loc.name)]
-        line = self._rank_action_line(loc.id)
-        if line is not None:
-            msgs += self.push_trend(line, self._goals()[line] * action.push, source="rank")
-        return msgs + self._order_credit(kind=action.id, location=loc.id, front=front, weight=rank_actions.weight(action))
+        return military_step_actions.rank_action(self, action_id)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/step_actions.py
 
     def _order_credit(self, *, side: str | None = None, **kw) -> list[str]:
-        """替自己記一次軍令（orders.credit）；真的記到了就推新手引導的「完成一次軍令的個人部分」（計畫 T6 Task 8）。
-        達成時陣營軍情列的前三名一律寫名號（傳聞分層第七節：陣營軍情一律具名），所以不給 shown。
-        side 不給就是此刻的陣營；約戰結算（FB-856）給貼（應）約戰那一刻替哪一軍出力，豪強窗內改幫也不搬帳。"""
-        s, c = self.state, self.content
-        msgs = orders.credit(s, c, side or self._side(), s.player.name, **kw)  # 豪強分屬兩軍：記在依附那一軍的軍令上
-        if msgs:
-            msgs += self._guide(self._note_action("order"))
-        return msgs
+        return military_order_actions.order_credit(self, side=side, **kw)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/order_actions.py
 
     def _take_convoy(self) -> list[str]:
-        """接下糧車（護糧，軍令文件 3.4）：交出 convoy_grain 份糧草（從低階的慢屬性素材用起，多的不找），記下要送到哪裡。
-        不花體力；抵達終點才算數（見 _convoy_arrives）。"""
-        s, c = self.state, self.content
-        p = s.player
-        escort = orders.escort_at(s, c, self._side(), p.location)
-        need = c.config.convoy_grain
-        if escort is None or p.convoy is not None or not materials.take_grain(s, c, need):
-            return ["（這裡沒有糧車可接。）"]
-        p.convoy = Convoy(order=escort.id, grain=need, from_loc=p.location, to_loc=escort.end)
-        text = f"你把 {need} 份糧草裝上車，要送到{c.locations[escort.end].name}。路上當心截糧的。"
-        return [text]
+        return military_convoy_actions.take_convoy(self)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/convoy_actions.py
 
     def _convoy_arrives(self, loc_id: str) -> list[str]:
-        """糧車到了終點（路過也算）：先有 convoy_ambush_chance 機率撞上敵方截糧隊（探索撞上野怪的打法：不推大勢、
-        扣氣血打折），打輸糧車被劫、不算數；打贏或沒遇上就交進營中——記捐獻（軍備文件 4.1）、記一次推動的貢獻、
-        替它自己那一道護糧記一次（RF4：已經換週清掉就不算）。"""
-        s, c = self.state, self.content
-        p = s.player
-        convoy = p.convoy
-        if convoy is None or convoy.to_loc != loc_id:
-            return []
-        p.convoy = None
-        msgs: list[str] = []
-        enemy = orders.ambusher(c, self._side())
-        if enemy is not None and self.rng.random() < c.config.convoy_ambush_chance:
-            msgs.append("快到營門時，半路殺出一隊截糧的人馬！")
-            msgs += self._squad_encounter(enemy, wild=True)
-            if s.battles[0].tier not in team.WIN_TIERS:
-                return msgs + ["糧車被劫走了，這一趟不算數。"]
-        key = f"{loc_id}:糧草"
-        p.donations[key] = p.donations.get(key, 0) + convoy.grain
-        # 護糧沒有推動，另記一次第 1 階推動的貢獻（總計畫 T6）
-        wins.credit(p, c, s.world, orders.week_of(s, c), c.config.contrib_per_push)
-        msgs.append(f"糧車送進了{c.locations[loc_id].name}，一粒不少。")
-        return msgs + self._order_credit(kind="convoy", location=loc_id, front=front_of(c, loc_id), order=convoy.order)
+        return military_convoy_actions.convoy_arrives(self, loc_id)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/convoy_actions.py
 
     # 本體在 tianxia/features/guide/actions.py（全部拆包第 22 批：新手引導），這裡留一行委派
     def _rest(self) -> list[str]:
@@ -8831,61 +8691,10 @@ class Game:
         return out
 
     def admin_issue_orders(self) -> list[str]:
-        """立刻發本週軍令：這一週還沒達成的軍令換成照週一的做法（orders.issue，週一掛鉤用的同一個函式，redraw）此刻重新挑的一批，
-        各陣營照常發「本週軍令：…」的陣營軍情。換掉的那幾道進度不算了；已經達成的原封不動、不會再達成一次（審查 I-1：重挑的 id
-        是決定性的，不留著的話同一道會達成兩次、效果套兩次）。不動 hooked_week：下週一照常發令。"""
-        refusal = self._admin_refusal(f"發{calendar.week_word('order_this', self.content, self.state.world)}軍令")
-        if refusal:
-            return self._log(refusal)
-        s, c = self.state, self.content
-        if not orders.active(s, c):
-            return self._log(["（這一季沒有軍令。）"])
-        week = orders.period_of(s, c)  # 21 天季是季曆第幾天（每天一期）
-        daily = orders.daily(s, c)
-        replaced = sum(1 for o in s.world.orders if o.week == week and not o.done)
-        kept = {o.id for o in s.world.orders if o.week == week and o.done}
-        if daily:
-            orders.issue_day(s, c, week, self.rng, redraw=True)
-        else:
-            orders.issue(s, c, week, self.rng, redraw=True)
-        self._save_season()
-        issued = [o for o in s.world.orders if o.week == week and o.id not in kept]
-        listing = "；".join(
-            f"{f.name}：{'、'.join(orders.title(c, o) for o in issued if o.faction == f.id)}"
-            for f in c.scenario.factions if any(o.faction == f.id for o in issued)
-        ) or ADMIN_REISSUE_NONE[daily]
-        label = f"第 {week} 天" if daily else f"第 {week} 週"
-        msg = (f"已照{ADMIN_REISSUE_HOW[daily]}的做法重發{label}的軍令，換掉沒達成的 {replaced} 道（進度不算了；已達成的 {len(kept)} 道照舊）"
-               f"——{listing}。")
-        self._write("重發軍令", [msg], tag="管理者")
-        return self._log([msg])
+        return military_admin_actions.issue_orders(self)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/admin_actions.py
 
     def admin_rotate_seats(self) -> list[str]:
-        """立刻輪替第 4 階席次：照上一週的貢獻重排各陣營在任的人、發一則名單軍情（seats.rotate，週一掛鉤用的同一個函式）。
-        不動 hooked_week：下週一照常再排。賽季時鐘暫停中不排（_admin_refusal；自然的路暫停時也不補缺、不輪替）；
-        第 1 週沒有上一週可排（seats.rotate 自己也什麼都不做），說一聲。"""
-        refusal = self._admin_refusal("輪替第 4 階席次")
-        if refusal:
-            return self._log(refusal)
-        s, c = self.state, self.content
-        if not season_one(c, s.world):
-            return self._log(["（這一季沒有第 4 階席次。）"])
-        week = calendar.point(s.world.time, c, s.world).week
-        segments = calendar.week7_on(s.world, c)  # 7 天濃縮季照段寫（FB-503，待 joy 潤）
-        if week < 2:
-            return self._log([ADMIN_ROTATE_FIRST[segments]])
-        seats.rotate(s, c, week)
-        self._save_season()
-        held = s.world.seats
-        listing = "；".join(
-            f"{f.name}{ranks.TITLES[f.id][seats.SEAT_RANK]}：{'、'.join(held.get(f.id, [])) or '沒有人'}"
-            for f in c.scenario.factions if f.id in s.world.seat_ledger and f.id in ranks.TITLES
-        ) or "帳上還沒有人有第 4 階的資格"
-        last = segments and week >= len(c.config.season_segments)
-        again = ADMIN_ROTATE_LAST if last else ADMIN_ROTATE_AGAIN[segments]
-        msg = f"已照{calendar.week_label(week - 1, c, s.world)}的貢獻輪替第 4 階席次（{again}）——{listing}。"
-        self._write("輪替席次", [msg], tag="管理者")
-        return self._log([msg])
+        return military_admin_actions.rotate_seats(self)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/admin_actions.py
 
     # ── 管理者：三場大戲（管理者觸發鈕第 3 組）──────────────────────
     # 「立刻開戰」（admin_start_battle）早就照時刻表開時刻表決戰（world.open_showdown：照版本挑那一筆、照前線戰況定起點、
@@ -9379,46 +9188,10 @@ class Game:
         self.state.world = self.world.get_season()
 
     def _summons_plan(self, target: Game) -> tuple[str | None, PromotionDef | None]:
-        """「立刻替他發召見」：（拒絕的原因, 要發的那一階）。發的是下一階（rank_of + 1）；不看貢獻門檻、也不看那一階的機緣做了沒
-        （控制者裁決：測試要跳過的就是這兩樣）。散人、手上已經有召見、已經取得第 4 階資格、到頂、第 3、4 階第一段此刻沒有人能出面
-        （企劃者裁決 E3 那一句的情況），都不發。"""
-        s, c, p = target.state, self.content, target.state.player
-        if p.faction is None:
-            return f"（{p.name}是散人，沒有陣營可以召見{gender.pronoun(p)}。）", None
-        if p.summons is not None:
-            return f"（{p.name}手上已經有一張第 {p.summons.rank} 階的召見了。）", None
-        if p.qualified:
-            return f"（{p.name}已經取得第 {ranks.SEAT_RANK} 階的資格了。）", None
-        promo = ranks.promotion_for(c, p.faction, ranks.rank_of(s) + 1)
-        cap = allied.rank_cap(s, c)  # 豪強分屬兩軍：豪強第 3 階就到頂
-        if promo is None or (cap is not None and promo.rank > cap):
-            return f"（{p.name}已經升到頂了。）", None
-        if promo.legs and ranks.current_cast(s, c, promo, 0, None) is None:
-            line = ranks.NO_PRESENTER.get(p.faction, ranks.NO_PRESENTER["guan"])
-            return f"（第 {promo.rank} 階此刻沒有人能出面召見{p.name}：{line}）", None
-        return None, promo
+        return military_admin_actions.summons_plan(self, target)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/admin_actions.py
 
     def admin_summon(self, name: str) -> list[str]:
-        """立刻替他發召見：下一階的召見照 ranks.issue_summons（check_summons 過了門檻之後的同一條：召見地點、出面的人、摸清路、那一句），
-        第 3、4 階從第一段起。他的江湖紀錄記一則「召見」（同步時發的召見也是這個標題）。"""
-        refusal = self._admin_refusal("發召見")
-        if refusal:
-            return self._log(refusal)
-        if not season_one(self.content, self.state.world):
-            return self._log(["（這一季沒有陣營的階級，發不了召見。）"])
-        target = self._admin_target(name)
-        if target is None:
-            return self._log([NO_SUCH_PLAYER.format(name=name.strip())])
-        why, promo = self._summons_plan(target)
-        lines = [] if promo is None else ranks.issue_summons(target.state, self.content, promo)
-        if lines:
-            target._write("召見", lines)  # 同步時自然發的召見也是這個標題；不標管理者（審查 M-1）
-        self._save_target(target)
-        if why is not None:
-            return self._log([why])
-        msg = f"已替{target.state.player.name}發第 {promo.rank} 階的召見：{lines[0]}"
-        self._write("發召見", [msg], tag="管理者")
-        return self._log([msg])
+        return military_admin_actions.summon(self, name)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/admin_actions.py
 
     def admin_give_opportunity(self, name: str, opp_id: str) -> list[str]:
         """給他一個機緣：放到這一種機緣自然送上門那一刻之後的樣子（opportunities.offer，每一種用自然那條路的同一個函式；
@@ -9804,34 +9577,10 @@ class Game:
         return shown
 
     def convoy_line(self) -> str | None:
-        """押著的糧車要送去哪（江湖頁軍令卡上的一行；T6 審查 I3）：那一道軍令已經達成或換週清掉了也照樣寫，
-        送到了照樣記捐獻與貢獻。沒有押車、或這一季已經收了（休季，FB-045）時是 None。"""
-        convoy = self.state.player.convoy
-        if convoy is None or self.state.world.ended:
-            return None
-        return f"你押著一車糧（{convoy.grain} 份），要送到{self.content.locations[convoy.to_loc].name}。"
+        return military_order_actions.convoy_line(self)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/order_actions.py
 
     def orders_view(self) -> list[dict]:
-        """江湖頁的「本週軍令」卡（計畫 T6）：自己陣營這週的軍令，只給自己陣營看；散人、開關關著是空的。
-        截止是下週一 00:00（最後一週寫成季末那一刻，calendar.point 會夾住）。休季時也是空的（FB-045）：
-        收季那一週的軍令截止已經過了，休季什麼都不能做，結算畫面底下不該還有一張叫人去做事的卡。
-        沒達成的軍令多一個 how：怎麼出力（atlas.order_how，FB-093；打擊另寫他在哪，FB-072）；打完的沒有這個鍵。"""
-        s, c = self.state, self.content
-        if s.world.ended:
-            return []
-        name = s.player.name
-        views = []
-        for o in orders.current(s, c, self._side()):  # 豪強分屬兩軍：看依附那一軍的軍令
-            total = sum(o.progress.values())
-            view = {
-                "id": o.id, "title": orders.title(c, o), "text": o.text, "mine": o.progress.get(name, 0),
-                "progress": min(total, o.quota), "quota": o.quota, "done": o.done,
-                "deadline": self.stamp(orders.deadline(s, c, o)),  # 下週一 00:00；21 天季是隔天 00:00
-            }
-            if not o.done and (o.template != "strike" or o.figure is not None):
-                view["how"] = atlas.order_how(s, c, o)  # 怎麼出力（FB-093；打擊另寫他在哪，FB-072）；打完的沒有這個鍵
-            views.append(view)
-        return views
+        return military_order_actions.orders_view(self)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/order_actions.py
 
     def season_result(self) -> dict | None:
         """休季時江湖頁最上面的結算卡（計畫 T9）：結局與季末公告、最終三方態勢與三條戰況、時刻表每一件的結果（誰改寫的）、
