@@ -502,17 +502,57 @@ def drop_white_holes(strip: "Image.Image", min_share: float = 0.0) -> "Image.Ima
     return Image.fromarray(a, "RGBA")
 
 
+# 穿白衣的角色雙腿之間的白底（企劃者 2026-11-04「身穿白色衣服的幾個角色……雙腿中間的白色沒有去背，請針對這種案件做處理」）：
+# keep_white 整套不挖封閉白塊，腿縫也一起留下來，疊在擂台上是兩腿之間一塊白。腿縫長這樣：站著的那一格、碰到地面、
+# 夠大、矮胖。2026-11-04 量正式站七套（小龍女、功夫貓、錦袍槍客、白袍銀槍、閉月舞姬、聖誕老人，加白衣書生）逐格看過：
+#   真的腿縫 137 塊：寬高比最小 0.78、填滿比最小 0.35
+#   白衣書生的衣襬（不准挖）兩塊：寬高比 0.68／填滿 0.20、寬高比 0.33／填滿 0.45
+#   小龍女倒地（躺著，身體寬大於高）、跪地第 4 格（褲子，身體幾乎方的）不算站著
+GAP_UPRIGHT = 1.15  # 那一格身體高至少是寬的這麼多倍才算站著
+GAP_NEAR = 14  # 白塊最低點離地面線（BY）這麼近以內才算碰到地
+GAP_MIN = 150  # 像素
+GAP_ASPECT = 0.75  # 寬／高
+GAP_FILL = 0.30  # 面積／外框
+
+
+def leg_gaps(strip: "Image.Image"):
+    """穿白衣的角色那一條裡，雙腿之間的白底（遮罩）。條件見上面的量測。"""
+    ink, big = _white_blobs(strip)
+    lab, n = ndimage.label(big)
+    gaps = np.zeros_like(big)
+    for i in range(1, n + 1):
+        one = lab == i
+        ys, xs = np.nonzero(one)
+        h, w = int(ys.max() - ys.min()) + 1, int(xs.max() - xs.min()) + 1
+        if len(ys) < GAP_MIN or ys.max() < BY - GAP_NEAR or w < GAP_ASPECT * h or len(ys) < GAP_FILL * h * w:
+            continue
+        k = int(xs.mean()) // CELL
+        cy, cx = np.nonzero(ink[:, k * CELL:(k + 1) * CELL])
+        if not len(cy) or (cy.max() - cy.min() + 1) < GAP_UPRIGHT * (cx.max() - cx.min() + 1):
+            continue
+        gaps |= one
+    return gaps
+
+
+def drop_leg_gaps(strip: "Image.Image") -> "Image.Image":
+    gaps = leg_gaps(strip)
+    if not gaps.any():
+        return strip
+    a = np.asarray(strip).copy()
+    a[gaps, 3] = 0
+    return Image.fromarray(a, "RGBA")
+
+
 def sheet_bytes(raw: bytes, name: str, keep_white: bool = False) -> bytes:
     """生圖工具給的一張原圖 → 擂台用的一條（webp，格數照 LAYOUT）。切完自己驗一遍（sheet_problems）：
     機器看得出來的壞法直接丟 CutProblem，畫坊照它帶的那一句重畫，不叫審圖。
-    keep_white 是「這個角色穿白衣」：封閉白塊不挖（呼叫端用 wears_white 照定裝照判）。"""
+    keep_white 是「這個角色穿白衣」：封閉白塊不挖、只挖雙腿之間的白底（leg_gaps；呼叫端用 wears_white 照定裝照判）。"""
     cols, rows = LAYOUT[name]
     try:
         strip = sheet(io.BytesIO(raw), cols, rows, ref_h=BODY[name])  # 跟預設的斗笠小子一樣高，兵器才掛得準
     except (ValueError, IndexError) as exc:  # 去背之後什麼都不剩、某一格是空的
         raise CutError(f"切不出 {cols * rows} 格：{exc}") from exc
-    if not keep_white:
-        strip = drop_white_holes(strip)
+    strip = drop_leg_gaps(strip) if keep_white else drop_white_holes(strip)
     bad, fix = sheet_problems(strip, cols * rows, name)
     if bad:
         raise CutProblem(bad, fix)

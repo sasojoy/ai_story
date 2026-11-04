@@ -128,7 +128,7 @@ SHEET_EXTRA = ("The FIRST attached image is the layout and pose reference (same 
 # 彩色原圖 0/6，留著劍的剪影 0/6（六張都被判帶兵器），去掉劍的剪影 2/6。其他張沒量過、現在也過得去，照舊。
 # 審圖照舊看彩色原圖（量的時候就是這樣審的）：剪影只換畫圖那一邊。
 POSE_DIR = Path(__file__).parent / "pose"
-POSE = {"hero_bare_dodge", "hero_bare_fall", "hero_run"}
+POSE = {"hero_bare_dodge", "hero_bare_fall", "hero_run", "hero_slash"}
 POSE_EXTRA = ("The FIRST attached image shows ONLY the poses, as flat gray silhouettes (same frame count, same poses, same size and "
               "position in each frame) — copy the poses, not the gray color or the shapes on the head. "
               "The SECOND attached image is this character's design: keep exactly the same face, hair, clothes and colors in every frame.")

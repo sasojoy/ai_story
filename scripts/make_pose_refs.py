@@ -31,8 +31,8 @@ from tianxia.features.looks import orders, studio  # noqa: E402
 CELL = orders.CELL
 WEB_IMG = ROOT / "web" / "img"
 GRAY = 128
-HATLESS = {"hero_bare_dodge": True, "hero_bare_fall": False, "hero_run": False}  # 哪幾張要產、要不要去斗笠（見上面）
-NO_PROPS = {"hero_run"}  # 要去掉斗笠小子身上掛的兵器（細長的棍、劍）的那幾張
+HATLESS = {"hero_bare_dodge": True, "hero_bare_fall": False, "hero_run": False, "hero_slash": False}  # 哪幾張要產、要不要去斗笠（見上面）
+NO_PROPS = {"hero_run": 4, "hero_slash": 6}  # 要去掉斗笠小子身上掛的兵器的那幾張：張 → 半徑（揮砍手上的刀比腰間的劍粗，6 才整把拿掉）
 PROP_R = 4  # 比這個粗的留著：手腳、披風都比它粗，劍鞘比它細（2026-11-04 試 3～6，4 剛好整把拿掉、手腳都在）
 
 
@@ -67,9 +67,9 @@ def no_hat(cell: np.ndarray) -> np.ndarray:
     return out
 
 
-def no_props(cell: np.ndarray) -> np.ndarray:
+def no_props(cell: np.ndarray, r: int = PROP_R) -> np.ndarray:
     """一格剪影去掉細長的東西（腰間的劍）：開運算拿掉比 PROP_R 細的部分，只留最大的那一塊，再把輪廓補回來。"""
-    st = ndimage.iterate_structure(ndimage.generate_binary_structure(2, 1), PROP_R)
+    st = ndimage.iterate_structure(ndimage.generate_binary_structure(2, 1), r)
     body = ndimage.binary_opening(cell, st)
     lab, n = ndimage.label(body)
     if n > 1:
@@ -85,7 +85,7 @@ def silhouette(sheet: str, hatless: bool) -> bytes:
     for k in range(orders.SHEETS[sheet]):
         cell = a[:, k * CELL:(k + 1) * CELL]
         y, x = (k // cols) * CELL, (k % cols) * CELL
-        cell = no_props(cell) if sheet in NO_PROPS else cell
+        cell = no_props(cell, NO_PROPS[sheet]) if sheet in NO_PROPS else cell
         alpha[y:y + CELL, x:x + CELL] = no_hat(cell) if hatless else cell
     out = np.full((*alpha.shape, 3), 255, dtype=np.uint8)
     out[alpha] = GRAY

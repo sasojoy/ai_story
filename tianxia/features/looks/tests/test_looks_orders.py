@@ -267,6 +267,39 @@ def test_a_white_hole_in_the_body_is_dropped_but_a_white_robe_is_not():
         assert share > cutting.WHITE_SHARE, f"白衣書生量到 {share:.1f}%，應該高過門檻 {cutting.WHITE_SHARE}%"
 
 
+def test_a_white_dressed_look_still_loses_the_white_between_its_legs():
+    """企劃者 2026-11-04：穿白衣的角色（keep_white）整套不挖封閉白塊，雙腿之間的白底也跟著留下來。
+    站著的那一格碰到地面、矮胖的白塊挖掉；細長的（白衣書生的衣襬）、躺著的那一格不動。"""
+    pytest.importorskip("scipy")
+    import numpy as np
+    from PIL import Image
+
+    from tianxia.features.looks import cutting
+
+    def frame(lying=False):
+        a = np.zeros((220, 220, 4), dtype=np.uint8)
+        if lying:
+            a[150:212, 20:200] = (60, 60, 60, 255)
+        else:
+            a[50:212, 70:150] = (60, 60, 60, 255)
+        return a
+
+    stand = frame()
+    stand[186:206, 95:125] = (255, 255, 255, 255)  # 兩腿之間的白底：碰地、30×20
+    stand[120:200, 140:146] = (255, 255, 255, 255)  # 衣襬上一條細長的白：6×80
+    lying = frame(lying=True)
+    lying[186:206, 95:125] = (255, 255, 255, 255)  # 躺著那一格同樣的白（白衣服貼地）
+    strip = Image.fromarray(np.concatenate([stand, lying], axis=1), "RGBA")
+    after = np.asarray(cutting.drop_leg_gaps(strip))
+    assert after[195, 110, 3] == 0  # 腿縫挖掉了
+    assert after[160, 143, 3] == 255  # 衣襬留著
+    assert after[195, 220 + 110, 3] == 255  # 躺著那一格不動
+
+    # 白衣書生（正式內容）：衣襬一塊都不能挖
+    for f in sorted((ROOT / "web/img/looks/shusheng").glob("hero_*.webp")):
+        assert not cutting.leg_gaps(Image.open(f).convert("RGBA")).any(), f.name
+
+
 def test_a_look_is_complete_only_with_all_sixteen_sheets(on):
     """企劃者 2026-11-04「改成十六張全齊才算」（推翻 FB-8001）：擂台十張齊了還在等圖、不能上架；走一趟六張也齊了才待審。"""
     game = _game(on)
