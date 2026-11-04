@@ -791,6 +791,7 @@
       ${S.showMore ? `<div class="more-stats">
         ${s.renown ? "" : `${s.minor.map(([k, v]) => `${esc(k)} ${v}`).join("　")}　｜　`}${s.attrs.map(([k, v]) => `${esc(k)} ${v}`).join("　")}
         ${s.stat_points ? `<div class="pts-label"><b class="pts">可配 ${s.stat_points} 點</b></div><div class="row alloc">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" data-glow="allocate" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>${statUsesHtml(s)}` : ""}
+        ${s.growth ? growthHtml(s.growth) : ""}
         ${S.main && S.main.legacy ? legacyHtml(S.main.legacy) : ""}
         ${team ? `<br>${team}` : ""}
         ${s.stances && shown("stances") ? stancesHtml(s.stances, s.stance_notes) : ""}
@@ -997,6 +998,15 @@
 
   // ＋鈕底下一行：五項各管什麼（計畫二最終審查 M2）。點數配了收不回來，按之前要讀得到；文字是引擎給的（status.stat_uses），
   // 一項一個 inline-block：手機上整項一起換行，不會把「根骨：內功威力…」從中間折斷，也不會撐出橫向捲動
+  // 成長配比（五項屬性的季才有 s.growth）：還沒挑時列五套預設，挑了寫現在怎麼長、照樣能改（回溯）
+  function growthHtml(g) {
+    const row = (split) => split.map(([k, v]) => `${esc(k)} ${v}`).join("・");
+    const chosen = g.presets.find((p) => p.key === g.chosen);
+    const head = chosen ? `成長：${esc(chosen.name)}（每級 ${row(g.now)}）` : g.chosen === "custom" ? `成長：自己配（每級 ${row(g.now)}）` : "挑這一季的成長（每級合計 " + g.per_level + " 點，之後改也照現在的等級重算）";
+    return `<div class="growth"><div class="pts-label">${head}</div><div class="row alloc">${g.presets.map((p) =>
+      `<button class="btn small" data-act="growth" data-preset="${esc(p.key)}" title="${esc(row(p.split))}" ${p.key === g.chosen ? "disabled" : ""}>${esc(p.name)}</button>`).join("")}</div></div>`;
+  }
+
   function statUsesHtml(s) {
     if (!s.stat_uses) return "";
     const items = s.stat_uses.map(([k, use]) => `<span>${esc(k)}：${esc(use)}</span>`);
@@ -4356,8 +4366,13 @@
            <p class="muted">拿到網址的人不用登入就能讀；收回之後網址就失效。</p>`
         : `<button class="btn" data-act="zhuan-share" data-public="1">公開分享</button>
            <p class="muted">預設只有你看得到。公開之後會有一個網址，可以貼到 LINE、FB，隨時能收回。</p>`;
+      // 開頭那一幅水墨（列傳插畫票，減法季批 7b）：公開分享頁早就畫了（zhuan_html 的 .zh-art），
+      // 遊戲裡這一層以前漏了，買了的人在遊戲裡看不到（企劃者 2026-11-04 轉的玩家問「水墨在哪？」）。
+      // 伺服器圖檔不在就不給 illustration_src（zhuan_art_src），所以這裡有才畫。
+      const art = v.illustration_src
+        ? `<figure class="zh-art"><img src="${esc(v.illustration_src)}" alt="${esc(head)}的插畫" loading="lazy"></figure>` : "";
       body = `<div class="zh-tools"><button data-act="zhuan-vertical" aria-pressed="${vertical}">直書</button></div>
-        <div class="zh-body"><article class="zh-text${vertical ? " vertical" : ""}">${paras}</article><div class="zh-seals">${zhuanSeal(head.replace(/傳$/, ""))}</div>
+        <div class="zh-body">${art}<article class="zh-text${vertical ? " vertical" : ""}">${paras}</article><div class="zh-seals">${zhuanSeal(head.replace(/傳$/, ""))}</div>
         <section class="zh-panel">${share}</section>
         ${v.can_rewrite ? '<button class="zh-again" data-act="zhuan-rewrite">請史官重寫一次</button>' : ""}</div>`;
     }
@@ -6216,6 +6231,7 @@
         }
         case "drawer-close": S.pdrawer = false; S.artOpen = null; S.insOpen = null; S.slotPick = null; renderPage(); break;
         case "ins-filter": S.insFilter = el.dataset.filter; renderPage(); break;
+        case "growth": await doMain("growth", { preset: el.dataset.preset }); break; // 五項屬性的季：挑成長配比
         case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
         case "letter-open": {
@@ -6344,6 +6360,7 @@
         case "market-unlist": await lookMarketDo({ op: "unlist", look: el.dataset.id }); break;
         case "move-bind": await moveBind(el.dataset.id); break; // 招式庫的一招換上身（id 0 是脫下來）
         case "looks-admin": await looksAdminAsk(el.dataset.op, el.dataset.id, el.dataset.slot); break; // 管理頁「自建形象」：上架、退回先問一次
+        case "ad-show": await adShow(el.dataset.kind, el.dataset.id); break; // 管理頁的全服成品動畫牆：點一個就演（再點收起）
         case "mall-retry": await (S.mallTab === "log" ? loadMallLog() : loadMall()); break;
         case "mall-admin": mallAdminAsk(el.dataset.op, el.dataset.id); break;
         case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); forgetHowto(); S.sheet = false; S.peer = null; S.adPlayer = null; S.adPlayerName = ""; S.stage = "gate"; S.main = null; forgetMap(); forgetMall(); render(); break;

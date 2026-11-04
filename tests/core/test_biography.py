@@ -511,6 +511,19 @@ def test_the_reader_draws_each_state():
     assert 'data-act="zhuan-open" data-season="3"' in entry and "立傳 ›" in entry
 
 
+@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
+def test_the_reader_draws_the_illustration_at_the_top():
+    """列傳插畫（減法季批 7b）：公開分享頁早就畫了（zhuan_html 的 .zh-art），遊戲裡這一層以前漏了——
+    買了票的人在遊戲裡看不到（企劃者 2026-11-04 轉的玩家問「水墨在哪？」）。圖檔不在時伺服器不給
+    illustration_src，那就一個字都不多畫。"""
+    written = {"season": 1, "title": "沈浪傳", "written": True, "paragraphs": ["沈浪者。"], "public": False}
+    none = _web(z={"season": 1, "view": written})
+    assert "zh-art" not in none
+    html = _web(z={"season": 1, "view": {**written, "illustration_src": "img/zhuan/guan_win.webp?v=<x>"}})
+    assert '<figure class="zh-art">' in html and 'src="img/zhuan/guan_win.webp?v=&lt;x&gt;"' in html
+    assert html.index("zh-art") < html.index("zh-text")  # 在內文前面（同公開頁）
+
+
 def test_the_page_wires_the_entries_and_the_handlers():
     src = webharness.app_source()
     for needle in ('case "zhuan-open"', 'case "zhuan-write"', 'case "zhuan-share"', 'case "zhuan-send"', 'case "zhuan-rewrite"',

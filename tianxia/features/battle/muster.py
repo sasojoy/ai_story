@@ -57,7 +57,7 @@ def ally_follows_battle(ctx) -> list[str]:
 
 def escort_choices(ctx) -> list[str]:
     """加入決戰時挑得到的同伴：名下的（歷史武將同行第五節）。開關關著是空的（照舊一下就加入）。"""
-    if not roster.on(ctx.content):
+    if not roster.on(ctx.content, ctx.state.world):
         return []
     return [cid for cid in roster.owned_companions(ctx.world, ctx.state.player.name) if cid in ctx.content.characters]
 

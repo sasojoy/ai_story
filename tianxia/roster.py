@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import random
 
-from . import calendar, ranger, rules, team
+from . import attrset, calendar, ranger, rules, team
 from .characters import name_key
 from .models import Content
 from .state import MAX_TEAM_COMPANIONS, GameState
@@ -38,9 +38,15 @@ def left_behind(state: GameState, content: Content, world: WorldStateStore, side
     ]
 
 
-def on(content: Content) -> bool:
-    """歷史武將同行開著沒（Config.companions）：招募開放、名下上限、放走、決戰助陣、叛投帶不走都看它。"""
-    return content.config.companions.enabled
+def on(content: Content, world=None) -> bool:
+    """歷史武將同行開著沒（Config.companions）：招募開放、名下上限、放走、決戰助陣、叛投帶不走都看它。
+    五項屬性的季（attrset.on；world 給了才看）歷史武將不再同行（Joy 11/4，屬性與跨季架構 v2 第九節：換季那一刻關）。"""
+    return content.config.companions.enabled and not attrset.on(content, world)
+
+
+def historical_closed(state: GameState, content: Content, char_id: str) -> bool:
+    """這一季歷史武將不同行（五項屬性的季），而這一位是標了 recruitable 的歷史武將：劇情送人、招募都不收。"""
+    return attrset.on(content, state.world) and content.characters[char_id].recruitable
 
 
 def cap(content: Content) -> int:
@@ -140,6 +146,10 @@ def recruit(state: GameState, content: Content, world: WorldStateStore, char_id:
     """劇情事件（結識/福緣）想直接送一位同伴：對方是自由之身就直接收入隊伍；已經有主的話
     （被別的玩家搶先招走了）改給一筆心得當安慰，不會覆蓋別人的招募結果。"""
     ch = content.characters[char_id]
+    if historical_closed(state, content, char_id):  # 這一季歷史武將不同行：照「已經有主」那一句的規矩給心得
+        amount = content.config.recruit_consolation_xinde
+        state.player.stats["xinde"] = state.player.stats.get("xinde", 0) + amount
+        return [f"【{ch.name}】有自己的大事要辦，不會跟你走；這份緣分化為心得。", f"心得 +{amount}"]
     owner = owned_by(world, char_id)
     if owns(owner, state.player.name):
         amount = content.config.recruit_consolation_xinde

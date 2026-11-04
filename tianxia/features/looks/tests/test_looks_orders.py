@@ -106,7 +106,7 @@ def test_bad_uploads_are_refused(on):
     assert "要 880×220" in actions.admin_upload(admin, pid, "hero_bare_idle", (ART / "hero_bare_hit.webp").read_bytes())[-1]
     assert "PNG 或 WebP" in actions.admin_upload(admin, pid, "hero_bare_idle", b"GIF89a....")[-1]
     assert "沒有「cape」" in actions.admin_upload(admin, pid, "cape", b"")[-1]
-    assert f"還缺 {len(orders.ARENA)} 張" in actions.admin_release(admin, pid)[-1]
+    assert f"還缺 {len(orders.SHEETS)} 張" in actions.admin_release(admin, pid)[-1]
     assert actions.admin_upload(game, pid, "hero_bare_idle", b"")[-1] == "（此刻無法這麼做。）"  # 不是管理者
 
 
@@ -267,13 +267,73 @@ def test_a_white_hole_in_the_body_is_dropped_but_a_white_robe_is_not():
         assert share > cutting.WHITE_SHARE, f"白衣書生量到 {share:.1f}%，應該高過門檻 {cutting.WHITE_SHARE}%"
 
 
-def test_the_arena_ten_are_enough_to_release_and_the_outing_six_come_later(on):
-    """FB-8001：擂台那十張齊了就待審、能上架；走一趟那六張缺著不擋（網頁照預設的斗笠小子畫，畫坊之後補）。"""
+def test_a_white_dressed_look_still_loses_the_white_between_its_legs():
+    """企劃者 2026-11-04：穿白衣的角色（keep_white）整套不挖封閉白塊，雙腿之間的白底也跟著留下來。
+    站著的那一格碰到地面、矮胖的白塊挖掉；細長的（白衣書生的衣襬）、躺著的那一格不動。"""
+    pytest.importorskip("scipy")
+    import numpy as np
+    from PIL import Image
+
+    from tianxia.features.looks import cutting
+
+    def frame(lying=False):
+        a = np.zeros((220, 220, 4), dtype=np.uint8)
+        if lying:
+            a[150:212, 20:200] = (60, 60, 60, 255)
+        else:
+            a[50:212, 70:150] = (60, 60, 60, 255)
+        return a
+
+    stand = frame()
+    stand[186:206, 95:125] = (255, 255, 255, 255)  # 兩腿之間的白底：碰地、30×20
+    stand[120:200, 140:146] = (255, 255, 255, 255)  # 衣襬上一條細長的白：6×80
+    lying = frame(lying=True)
+    lying[186:206, 95:125] = (255, 255, 255, 255)  # 躺著那一格同樣的白（白衣服貼地）
+    strip = Image.fromarray(np.concatenate([stand, lying], axis=1), "RGBA")
+    after = np.asarray(cutting.drop_leg_gaps(strip))
+    assert after[195, 110, 3] == 0  # 腿縫挖掉了
+    assert after[160, 143, 3] == 255  # 衣襬留著
+    assert after[195, 220 + 110, 3] == 255  # 躺著那一格不動
+
+    # 白衣書生（正式內容）：衣襬一塊都不能挖
+    for f in sorted((ROOT / "web/img/looks/shusheng").glob("hero_*.webp")):
+        assert not cutting.leg_gaps(Image.open(f).convert("RGBA")).any(), f.name
+
+
+def test_the_pale_shadow_under_the_feet_is_dropped_but_white_boots_stay():
+    """企劃者 2026-11-04「腳的中間都還是會有沒去背成功的白色」：klein 在腳底畫的淺灰白影子挖掉；
+    白靴子在鞋底那條深色線上面，不動；斗笠小子本來就沒有影子，幾乎不變。"""
+    pytest.importorskip("scipy")
+    import numpy as np
+    from PIL import Image
+
+    from tianxia.features.looks import cutting
+
+    a = np.zeros((220, 220, 4), dtype=np.uint8)
+    a[60:200, 80:140] = (60, 60, 60, 255)  # 身體
+    a[185:206, 85:105] = (245, 245, 245, 255)  # 白靴子
+    a[206:208, 85:105] = (30, 30, 30, 255)  # 鞋底的線
+    a[208:214, 50:180] = (225, 225, 222, 255)  # 腳底一攤淺灰白的影子
+    after = np.asarray(cutting.drop_ground_shadow(Image.fromarray(a, "RGBA")))
+    assert after[211, 60, 3] == 0 and after[211, 150, 3] == 0  # 影子沒了
+    assert after[195, 95, 3] == 255 and after[207, 95, 3] == 255  # 靴子與鞋底留著
+
+    hat = Image.open(ROOT / "web/img/arena/hero_bare_idle.webp").convert("RGBA")
+    assert cutting.ground_shadow(hat).sum() < 50
+
+
+def test_a_look_is_complete_only_with_all_sixteen_sheets(on):
+    """企劃者 2026-11-04「改成十六張全齊才算」（推翻 FB-8001）：擂台十張齊了還在等圖、不能上架；走一趟六張也齊了才待審。"""
     game = _game(on)
     actions.order(game, "白衣書生", "白衣書生，背著竹簍", "order-ref-801")
     pid = actions.view(game)["order"]["list"][0]["id"]
     admin = _admin(on, game.world)
     for sheet in orders.ARENA:
         last = actions.admin_upload(admin, pid, sheet, (ART / f"{sheet}.webp").read_bytes())[-1]
-    assert "擂台那十張齊了" in last
+    assert "（10/16）。" in last and "齊了" not in last
+    assert actions.view(game)["order"]["list"][0]["status"] == orders.PENDING
+    assert f"還缺 {len(orders.OUTING)} 張" in actions.admin_release(admin, pid)[-1]
+    for sheet in orders.OUTING:
+        last = actions.admin_upload(admin, pid, sheet, (ART / f"{sheet}.webp").read_bytes())[-1]
+    assert "全套齊了" in last
     assert "上架了" in actions.admin_release(admin, pid)[-1]

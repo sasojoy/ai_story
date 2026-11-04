@@ -19,7 +19,7 @@ from types import SimpleNamespace
 
 from pydantic import BaseModel, Field
 
-from . import gender, glyph, insight_fx, insight_llm, insights, mounts, naming, precise, seal_acts, treasures
+from . import attrset, gender, glyph, insight_fx, insight_llm, insights, mounts, naming, precise, seal_acts, treasures
 from .martial_arts import Insight
 from .models import Content, InsightScene, Location
 from .ollama_client import OllamaClient
@@ -134,7 +134,7 @@ def rate(state: GameState, content: Content, loc: Location, method: str | None =
     method 是選的做法的屬性：等於這一處最濃那一種的屬性時，基本值再加 Config.insight_strong.sense_points（意境提示設計第二節），
     跟寶物一樣夾在上限。卡上不寫這個數字（Q4：只有場景線索，不寫成算）。"""
     cfg = content.config
-    wis = state.player.stats.get("wis", 5)
+    wis = attrset.legacy(state, content, "wis", 5)
     low, high = cfg.sense_rate_range
     from . import team  # noqa: PLC0415  延後 import（team → … 一路載入）
 

@@ -1420,7 +1420,8 @@ def narrate_once(game: Game) -> int | None:
     def ask() -> dict[str, str]:
         client = within_budget(game.client, budget - (_monotonic() - started))
         sides = [f.name for f in definition.factions]  # 兩軍的名字：失手那一句不准寫敵方受損（守門用）
-        return battle_instance.write_tales(client, act_, request.items, sides=sides)
+        # fallen 是引擎這一回合真的放倒的人：寫到死人的那一句要指名他們其中一位才算數（守門用）
+        return battle_instance.write_tales(client, act_, request.items, sides=sides, fallen=request.fallen)
 
     if QUEUE is None:
         stories = ask()
@@ -2810,6 +2811,8 @@ MAIN_ACTIONS = {
     "view_tab": lambda g, b: g.view_tab(str(b.get("tab", ""))),  # 序章裡打開修練、煉製頁（新手引導計畫一）
     "guide_ack": lambda g, b: g.guide_ack(),  # 對話框的結語按「知道了」
     "allocate": lambda g, b: g.allocate_stat(str(b.get("stat", ""))),  # 狀態列的配點鈕：升級得到的屬性點加到一項
+    # 五項屬性的季的成長配比（屬性與跨季架構 v2 3.1）：preset 是五套之一或 custom（custom 帶 split：鍵 → 每級幾點）
+    "growth": lambda g, b: g.pick_growth(str(b.get("preset", "")), b.get("split") if isinstance(b.get("split"), dict) else None),
     "newbie_drifter": lambda g, b: g.newbie_drifter(),  # 任務卡「新手目標」的「就當散人」（新手引導重做）
     "pill": lambda g, b: g.take_stamina_pill(),  # 狀態列體力條上的「丹」：吃一顆回體丹（企劃者 2026-10-07 內測贈送）
     # 江湖頁「簽到」小標攤開的領取鈕（21 天季，正式季整合 6.2）：四階的日子帶 attribute（剛柔快慢）
@@ -3265,7 +3268,10 @@ TALES_CLIENT = None  # 寫戰記用的 client（main() 照設定建；測試塞�
 TALES_STOP = threading.Event()
 TALES_THREAD: threading.Thread | None = None
 TALE_ROUND_SECONDS = 30.0  # 看一次的間隔（一季頂多十來場，寫完就閒著）
-TALE_BUDGET_SECONDS = 180.0  # 一篇的模型預算
+# 一篇的模型預算。2026-11-04 改成一幕一趟之後實測（第 8 季廣宗，3 幕 17 拍＋8 人的名錄，gemma4:12b）：
+# 四趟共 227 秒，180 秒會在名錄那一趟前就用完、名錄整段退回引擎那幾句。單趟還是最多 120 秒
+# （within_budget 取 min(client.timeout, 剩下的一半)），所以真人要等的上限沒變。
+TALE_BUDGET_SECONDS = 420.0
 TALE_OWNER_KEY = "戰記"  # 佇列裡的名號（不是任何角色）
 
 
@@ -3334,8 +3340,11 @@ def tale_round(clock: Callable[[], float] = time.time) -> int | None:
         return None
     budget, started = TALE_BUDGET_SECONDS, _monotonic()
 
+    def fresh():  # 一幕一趟：每一趟照「還剩多少」重算預算，用完回 None（剩下的幕照引擎那一句，不是整篇垮掉）
+        return within_budget(TALES_CLIENT, budget - (_monotonic() - started))
+
     def ask() -> tuple[dict, dict]:
-        return tale.write(within_budget(TALES_CLIENT, budget - (_monotonic() - started)), material)
+        return tale.write(fresh(), material, next_client=fresh)
 
     if QUEUE is None:
         scenes, cast = ask()

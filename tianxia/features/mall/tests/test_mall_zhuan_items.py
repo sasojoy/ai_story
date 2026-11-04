@@ -693,3 +693,16 @@ def test_the_real_content_note_uses_the_slot():
     content = jianfa_game().content
     assert "{上架}" in content.mall["zhuan_art"].note and "第三週" not in content.mall["zhuan_art"].note
     assert not any("zhuan_art" in line for item in content.mall.values() for line in mall.item_problems(item, content))
+
+
+def test_every_faction_has_both_illustrations_on_disk():
+    """六張水墨真的在 web/img/zhuan/（企劃者 2026-11-04 轉的玩家問「水墨在哪？」：功能整條都接好了，
+    只有圖沒放——server.zhuan_art_src 檔案不在就回 None，玩家花了三百元寶看到一片空白）。
+    劇本多一方時這一條會紅：提醒那一方的兩張也要畫。"""
+    from pathlib import Path
+
+    content = jianfa_game().content
+    web = Path(__file__).resolve().parents[4] / "web" / "img" / "zhuan"
+    missing = [f"{f.id}_{r}" for f in content.scenario.factions for r in ("win", "lose")
+               if not (web / f"{f.id}_{r}.webp").is_file()]
+    assert not missing, f"少了這幾張列傳插畫：{'、'.join(missing)}（放進 {web}）"

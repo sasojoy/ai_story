@@ -7,7 +7,7 @@ import re
 from collections.abc import Callable
 from typing import Literal, NamedTuple
 
-from . import calendar, front_lines, gender, insights, library, materials, renown, rise, roster, seal_acts, team, treasures  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
+from . import attrset, calendar, front_lines, gender, insights, library, materials, renown, rise, roster, seal_acts, team, treasures  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .allied import on as haoqiang_allied  # noqa: F401  豪強分屬兩軍：設計寫 rules.haoqiang_allied、rules.side_of，其他模組照這兩個名字讀
 from .allied import side_of  # noqa: F401
 from .martial_arts import content_art
@@ -328,6 +328,8 @@ def check_outlook(check: Check, state: GameState, content: Content, world: World
     本人的熟練加成（Check.practice，joy #15）照舊加上。差值每 +1，成功率 +10%；範圍 5%～95%。
     擲骰（roll_check）與選項括號裡的數值、心裡話那一檔（events.choice_label）都出自這一個函式的同一個差值，
     所以標籤講的和實際擲出來的不會對不起來。江湖水漲（rise.event_bump）：本人等級高了，難度在這裡多加幾點，內容寫的不動。"""
+    if attrset.on(content, state.world):
+        return _v2_outlook(check, state, content, world)
     stat_value = check_stat_value(check, state, content, world)
     bonus = team.practice_bonus(state, content, check)
     gap = stat_value + bonus - check.difficulty - check_expect(check, state, content)  # 相對檢定：減掉這個等級的人該有的
@@ -335,6 +337,63 @@ def check_outlook(check: Check, state: GameState, content: Content, world: World
         gap += content.config.jianfa.event_ease  # 第二、三階事件的檢定不放寬（事件分級設計稿）；關著一個字都不變
     cfg = content.config.checks  # 成功率的換算（屬性與跨季架構 v2 5.1）：現在的數字是 0.5 ＋ 0.1 × 差值，夾在 5%～95%
     return CheckOutlook(stat_value, bonus, gap, min(cfg.ceil, max(cfg.floor, cfg.base_rate + gap * cfg.per_point)))
+
+
+def _season_stats(effect: Effect, state: GameState, content: Content):
+    """效果給的數值照這一季走：舊的季原樣；五項屬性的季（attrset.on）事件不再直接給屬性點（屬性與跨季架構 v2 第三節），
+    加的屬性點改給心得（每點 attr_xinde），扣的不扣；跟原本寫的心得合在一起、照原本的順序。"""
+    rewards = content.config.rewards
+    if not attrset.on(content, state.world) or not any(k in team.COMBAT_STATS or k in rewards.amounts for k in effect.stats):
+        return effect.stats.items()
+    out: dict[str, int] = {}
+    per = content.config.attributes.v2.attr_xinde
+    scale = 1 + rewards.per_level * (state.player.member.level - 1)
+    for key, delta in effect.stats.items():
+        if key in team.COMBAT_STATS:
+            if delta > 0 and per:
+                out["xinde"] = out.get("xinde", 0) + delta * per
+        elif key in rewards.amounts and delta > 0:  # 獎勵等級（v2 5.2）：照最近的那一級、跟著等級走；扣的（花費）照原樣
+            row = rewards.amounts[key]
+            grade = min(range(len(row)), key=lambda i: (abs(math.log(row[i]) - math.log(delta)), i))
+            out[key] = out.get(key, 0) + round(row[grade] * scale)
+        else:
+            out[key] = out.get(key, 0) + delta
+    return out.items()
+
+
+def grade_of(check: Check, content: Content) -> tuple[str, int]:
+    """這個檢定的難度等級與微調：寫了 grade 照寫的；舊寫法照 Config.checks.grades 的 low（Joy 11/4 的帶子）分級，微調＝難度 − dc。"""
+    if check.grade is not None:
+        return check.grade, check.shift
+    grades = content.config.checks.grades
+    chosen = next((g for g in reversed(grades) if check.difficulty >= g.low), grades[0])
+    return chosen.key, check.difficulty - chosen.dc
+
+
+def _v2_outlook(check: Check, state: GameState, content: Content, world: WorldStateStore) -> CheckOutlook:
+    """五項屬性的季（attrset.on）：成功率＝難度等級的底 ＋ slope ×（值 − 期望值）÷ 期望值 − 微調 × shift_step ＋ 熟練 × practice_step，
+    夾在 Config.checks 的 floor～ceil（屬性與跨季架構 v2 5.1）。期望值照本人的等級（attrset.expect），所以內容寫的等級不必跟著改版。
+    gap 換回舊的「差幾點」（每 0.1 一點），選項上的心裡話照舊挑檔。"""
+    v2, rules_ = content.config.attributes.v2, content.config.checks
+    names = [attrset.key_of(content, k) for k in (check.stats if check.stat == BEST_OF else [check.stat])]
+    level = state.player.member.level
+    expect = attrset.expect(content, level)
+    value = max((attrset.value(state, content, k) if k else expect) for k in names)
+    bonus = team.practice_bonus(state, content, check)
+    grade, shift = grade_of(check, content)
+    raw = v2.grade_rates[grade] + v2.slope * (value - expect) / expect - shift * v2.shift_step + bonus * v2.practice_step
+    if jianfa(content, state.world) and check.tier == 1:  # 減法季第一階事件放寬：照舊的每點一成
+        raw += content.config.jianfa.event_ease * rules_.per_point
+    gap = (raw - rules_.base_rate) / rules_.per_point
+    return CheckOutlook(value, bonus, gap, min(rules_.ceil, max(rules_.floor, raw)))
+
+
+def check_stat_name(check: Check, content: Content, world) -> str:
+    """選項上寫的屬性名：五項屬性的季照新的名字（臂力的檢定寫「武力」、根骨的寫「統御」），其餘照 stat_names。"""
+    if attrset.on(content, world):
+        key = attrset.key_of(content, check.stat)
+        return attrset.names(content, world).get(key or check.stat, check.stat)
+    return content.config.stat_names.get(check.stat, check.stat)
 
 
 def check_expect(check: Check, state: GameState, content: Content) -> float:
@@ -1056,7 +1115,7 @@ def apply_effect(
     msgs: list[str] = []
     if effect.text:
         msgs.append(fill_marks(effect.text, state))
-    for key, delta in effect.stats.items():  # 照實際動了多少寫、沒動就不寫（跟下面的情誼一樣）
+    for key, delta in _season_stats(effect, state, content):  # 照實際動了多少寫、沒動就不寫（跟下面的情誼一樣）
         before = p.stats.get(key, 0)
         after = max(0, before + delta)
         capped = key in team.COMBAT_STATS and delta > 0 and after > content.config.stat_cap

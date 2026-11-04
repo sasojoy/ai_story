@@ -44,7 +44,7 @@ def duel_start(ctx, boss: DuelBoss) -> list[str]:
         power=power, scores=ctx._battle_scores(mounted=False), role=ctx._battle_role(),
         # 頭目戰不算騎兵：設計 2.1 的三個用途沒有頭目戰
         # 江湖水漲：照你的武學威力浮上來；玉璽碎片的戰力不浮上去（改版 PM 五之一 2），沒碎片時跟 power 一樣
-        difficulty=rise.duel(c, boss.difficulty, ctx._battle_power(seal=False), p.duel_tally.get(key, 0)),
+        difficulty=rise.duel(c, boss.difficulty, ctx._battle_power(seal=False), p.duel_tally.get(key, 0), world=s.world),
         cut=duel_cut(ctx),  # 防具（鐵匠鋪與合成流程 3.9）：開打這一刻身上那件的減損抄下來，他打中你的那一下乘 1 − 它；頭目沒有防具
     )
     p.duel_tally[key] = p.duel_tally.get(key, 0) + 1

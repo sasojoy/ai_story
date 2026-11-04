@@ -59,6 +59,27 @@ def _made(on, game, ref="move-ref-001") -> int:
     return pid
 
 
+def test_the_admin_sees_every_released_thing_in_the_gallery(on):
+    """企劃者 2026-11-03「我是管理員，我需要能看到所有玩家做的成品動畫」：管理頁的 gallery 收全服**已上架**的
+    形象與招式（別人做的也要有），新的在前。還在等圖、停手、退回的不收——零件沒到齊演不出來。"""
+    from test_looks import _game
+    mine = _game(on)
+    _art(mine)  # 下單前要先有自己合成／自創的武功
+    pid = _made(on, mine)  # 這個角色做的一招，已上架
+    other = _game(on, "楚留香")
+    _art(other, "踏雪無痕")
+    actions.order_move(other, BUDDHA, "move-ref-gallery")  # 還在等圖的那一張
+    waiting = actions.view(other)["moves"]["list"][0]["id"]
+
+    admin = _admin(on, mine.world)
+    g = actions.admin_view(admin)["gallery"]
+    assert [m["id"] for m in g["moves"]] == [pid], "只收已上架的，等圖中的不收"
+    row = g["moves"][0]
+    assert row["move"] == moves.move_id(pid) and row["owner"] and row["name"]
+    assert waiting not in [m["id"] for m in g["moves"]]
+    assert isinstance(g["looks"], list)
+
+
 @pytest.mark.smoke
 def test_order_upload_release_and_the_arena_draws_it(on):
     game = _game(on)
