@@ -1548,13 +1548,15 @@ EXPLORE_MUTATIONS = {
 
 
 
-def _gather_finds_host():
-    """gather_finds 住在哪個模組：第 13 批之前是 tianxia/explore_modes.py，之後是探索包的 explore_rules（舊名 explore_one 是它的別名）。"""
+def _gather_finds_hosts() -> list:
+    """gather_finds 住在哪幾個模組：第 13 批之前是 tianxia/explore_modes.py，之後是探索包的 explore_rules（舊名 explore_one 是它的別名）；
+    第 13 批做到一半（探索一顆已經改叫 explore_rules、三選一還在）是兩個都有。"""
+    hosts = [_explore_rules()] if hasattr(_explore_rules(), "gather_finds") else []
     try:
         from tianxia import explore_modes
     except ImportError:
-        return _explore_rules()
-    return explore_modes
+        return hosts
+    return [*hosts, explore_modes] if hasattr(explore_modes, "gather_finds") else hosts
 
 
 def _explore_rules():
@@ -1626,23 +1628,28 @@ class ExploreScenario(Scenario):
     @contextlib.contextmanager
     def finds(self, *mids: str):
         """素材拍這幾下找到的照 mids（一下一顆；用完了照真的找）：gather_finds 換掉（模組屬性；第 13 批之前在 explore_modes、
-        之後在探索包的 explore_rules，兩份程式各換自己的那一個），每一次都寫進輸出。"""
-        host = _gather_finds_host()
+        之後在探索包的 explore_rules，兩份程式各換自己有的那幾個，同一條佇列），每一次都寫進輸出。"""
+        hosts = _gather_finds_hosts()
+        reals = [(host, host.gather_finds) for host in hosts]
+        queue = list(mids)
 
-        real, queue = host.gather_finds, list(mids)
+        def patched(real):
+            def gather_finds(*args, **kwargs):
+                if not queue:
+                    return real(*args, **kwargs)
+                found = [queue.pop(0)]
+                emit("找到", found)
+                return found
 
-        def gather_finds(*args, **kwargs):
-            if not queue:
-                return real(*args, **kwargs)
-            found = [queue.pop(0)]
-            emit("找到", found)
-            return found
+            return gather_finds
 
-        host.gather_finds = gather_finds
+        for host, real in reals:
+            host.gather_finds = patched(real)
         try:
             yield
         finally:
-            host.gather_finds = real
+            for host, real in reals:
+                host.gather_finds = real
 
     @contextlib.contextmanager
     def tweak(self, obj, **values):
@@ -6613,13 +6620,22 @@ class BoutScenario(ExploreScenario):
         self.place("鐵心蘭", "huangjin_camp" if "huangjin_camp" in self.c.locations else None)  # 沒有頭目的地方：練功鈕與行動列寫什麼
         self.boss_note("鐵心蘭", "沒有頭目的地方的練功鈕與行動列")
 
+    @contextlib.contextmanager
     def explore_modes_off(self):
         """舊探索：三選一的開關在記憶體裡關掉（第 13 批之前）；第 13 批之後沒有那個開關，換成它關著時連帶關掉的那幾樣
-        （一類一顆、事件五折、觀山石的加成），兩份程式走的是同一條路。"""
+        （一類一顆、事件五折、觀山石的加成；計畫 2026-11-04-拿掉一-第13批.md 2.1），兩份程式走的是同一條路。
+        event_trend_share 搬出來了就是「之後」（Task 2 做完、三選一還在的那一刻兩邊都關）。"""
         cfg = self.c.config
-        if hasattr(cfg, "explore_modes") and hasattr(cfg.explore_modes, "enabled"):
-            return self.tweak(cfg.explore_modes, enabled=False)
-        return self.tweak(cfg, precise_actions=False, event_trend_share=1.0, sense_treasure_points=0)
+        if not hasattr(cfg, "event_trend_share"):
+            with self.tweak(cfg.explore_modes, enabled=False):
+                yield
+            return
+        with self.tweak(cfg, precise_actions=False, event_trend_share=1.0, sense_treasure_points=0):
+            if hasattr(cfg, "explore_modes"):
+                with self.tweak(cfg.explore_modes, enabled=False):
+                    yield
+            else:
+                yield
 
     def duel_old(self) -> None:
         """舊探索撞上頭目（三選一的開關在記憶體裡關掉：不帶設定與 weekend 的 act:explore 走 _explore 那一條；探索一顆的季照樣是出門一趟）：
@@ -9358,13 +9374,13 @@ class StripScenario(EventScenario):
         strike = Bounty(id="b-strike", kind="strike", faction=None, week=1, expires=1e12, silver=20, deeds=1, location=spot, squad=squad)
         scout = Bounty(id="b-scout", kind="scout", faction=None, week=1, expires=1e12, silver=20, deeds=1, location=spot)
         for who in ("韓墨川", "杜遠山"):
-            state = self.chars.load(who)
+            state = self.game(who).state  # Game 上那一份才接著這一季（chars.load 的 world 是空的、沒蓋章）
             emit(f"{who} 討伐怎麼交差", bounties.how(self.c, strike, state))
             emit(f"{who} 打探怎麼交差", bounties.how(self.c, scout, state))
         world = self.world.get_season()
         emit("傳聞的說法", bounties.how(self.c, strike, None, world))
         with self.tweak(self.c.config, precise_actions=False):
-            emit("一類一顆關著的說法", {who: bounties.how(self.c, strike, self.chars.load(who)) for who in ("韓墨川", "杜遠山")})
+            emit("一類一顆關著的說法", {who: bounties.how(self.c, strike, self.game(who).state) for who in ("韓墨川", "杜遠山")})
 
     def tiers(self) -> None:
         """尋敵分級留著的那一半（training.on、tier_of、TIER_WORDS、PLACE_LINE）：輿圖的舊 API、探索一顆打贏的 field2、新手目標「去做」帶去哪。"""
