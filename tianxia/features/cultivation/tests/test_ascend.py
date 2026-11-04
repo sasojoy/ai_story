@@ -10,7 +10,7 @@ from tianxia import ascend, create, cultivation, moves, skillview, tactics, team
 from tianxia.content import load_content
 from tianxia.engine import Game
 
-ROOT = Path(__file__).parents[2]
+ROOT = Path(__file__).parents[4]
 
 
 @pytest.fixture(scope="module")
