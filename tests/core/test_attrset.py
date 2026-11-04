@@ -223,3 +223,52 @@ def test_command_cuts_the_hp_lost_against_their_force():
     assert lost("warrior", weak) < lost("warrior", brute)  # 他的武力越高，擋掉的越少
     old = _game(False)
     assert team._guard(old.state, old.content, old.world, weak) == 0.0
+
+
+def _pvp_pair(level: int = 30):
+    """兩個同武學同等級的人：甲全點武力（上限 4，另一項 3 給身法、送點全給武力），乙全點統御（送點全給統御）。"""
+    a, b = _game(), _game()
+    for g, split, bonus in ((a, {"str": 4, "lead": 1, "int": 1, "spd": 3, "cha": 1}, "str"),
+                            (b, {"str": 3, "lead": 4, "int": 1, "spd": 1, "cha": 1}, "lead")):
+        _level(g, level)
+        g.pick_growth("custom", split)
+        g.state.player.attr_alloc = {bonus: 30}
+    return a, b
+
+
+def _alone(g: Game) -> float:
+    from tianxia import encounter
+    s, c, w = g.state, g.content, g.world
+    return encounter.member_power(s.player.member, team.team_arts(s, c, w), boost=team.player_boost(s, c, w))
+
+
+def test_player_fights_face_the_real_opponents_attributes():
+    """企劃者 2026-11-04「全部點武力 會不會沒人打得過他」：玩家對玩家照對手本人的五項（他的統御擋你的武力），不是同等級的平均人。"""
+    brute, wall = _pvp_pair()
+    assert Game._spar_power(brute, wall) < _alone(brute)  # 對上統御高的人，武力的加成縮了
+    assert Game._spar_power(wall, brute) > Game._spar_power(brute, wall)
+    # 快照（擂台的分身、奪璽單挑）照卡重算，跟兩邊都活著算的一樣
+    ca, cb = (team.pvp_card(g.state, g.content, g.world) for g in (brute, wall))
+    with team.facing_player(brute.content, brute.state, wall.state):
+        live = _alone(brute)
+    faced, _, _ = team.pvp_faced(brute.content, _alone(brute), {}, ca, cb)
+    assert faced == pytest.approx(live, rel=1e-6)
+
+
+def test_arena_rescales_both_snapshots_against_each_other():
+    from tianxia.features.bout import arena_actions
+    brute, wall = _pvp_pair()
+    me, foe = arena_actions.arena_side(brute), arena_actions.arena_side(wall)
+    before = (me.power, foe.power, dict(me.scores))
+    arena_actions.faced(brute.content, me, foe)
+    assert me.power / before[0] < foe.power / before[1] and foe.power > me.power  # 全武力撞上全統御：前者縮得多、後者反而比較強
+    assert all(me.scores[m] <= before[2][m] for m in me.scores)
+    old = _game(False)
+    assert team.pvp_card(old.state, old.content, old.world) is None  # 舊的季沒有卡，擂台、奪璽一個字不變
+
+
+def test_custom_growth_is_capped_per_attribute():
+    g = _game()
+    cap = g.content.config.attributes.v2.custom_max
+    assert attrset.growth_problem(g.content, "custom", {"str": cap + 1, "lead": 1, "int": 1, "spd": 1, "cha": 10 - cap - 4})
+    assert attrset.view(g.state, g.content)["custom_max"] == cap

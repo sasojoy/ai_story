@@ -195,6 +195,7 @@ class BattleParticipant(BaseModel):
     # 鐵匠鋪與合成流程 3.9：加入那一刻的防具減損（含耐久，夾在 Config.armor.total_cap；team.duel_armor_cut），照坐騎的先例快照；
     # 奪璽單挑（seal_duel.side_from_participant）帶過去，對手打中他的那一下乘 1 − 它。決戰本身不吃（一個字不改）。舊資料沒有＝0
     cut: float = 0.0
+    card: dict | None = None  # 五項屬性的季：加入那一刻的五項與加成（team.pvp_card），奪璽單挑照對手重算；舊的季、舊資料 None
 
 
 # 跟按鈕一樣的字（battles.json 三幕的放手一搏按鈕）：只照按鈕抄一遍的不算寫了什麼（長社火攻那一場「最令人印象深刻的一幕」
@@ -610,7 +611,7 @@ def join_faction(
     scores: dict[str, float] | None = None, attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0,
     troops: str = "", troop_bonus: float = 0.0, turncoat: bool = False, newbie: bool = False,
     kit: tactics.BoutSide | None = None, renown: list[str] | None = None, escort: Escort | None = None,
-    seal_bare: SealBare | None = None, cut: float = 0.0,
+    seal_bare: SealBare | None = None, cut: float = 0.0, card: dict | None = None,
 ) -> None:
     """集結期選陣營；已經選過的人再選一次視為改選（還沒進入 active 都還能換）。escort 是隨他上陣的歷史武將（沒給＝沒派）。
     scores 是這個人此刻每招的份量快照（move_scores），之後戰局只讀這份；沒給＝每招 0。
@@ -623,7 +624,7 @@ def join_faction(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
         scores=dict(scores or {}), attribute=attribute, role=role, mount=mount, cavalry=cavalry,
         troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie, kit=kit, renown=list(renown or []),
-        escort=escort, seal_bare=seal_bare, cut=cut,
+        escort=escort, seal_bare=seal_bare, cut=cut, card=card,
     )
 
 
@@ -650,7 +651,7 @@ def auto_assign_latecomer(
     power: float = 0.0, is_bot: bool = False, faction: str | None = None, scores: dict[str, float] | None = None,
     attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0, troops: str = "", troop_bonus: float = 0.0,
     turncoat: bool = False, newbie: bool = False, kit: tactics.BoutSide | None = None, renown: list[str] | None = None,
-    escort: Escort | None = None, seal_bare: SealBare | None = None, cut: float = 0.0,
+    escort: Escort | None = None, seal_bare: SealBare | None = None, cut: float = 0.0, card: dict | None = None,
 ) -> None:
     """集結期結束後才出現的人（包含機器人）：有指定陣營（劇本分陣營時的玩家、臨時投效的人投效的那一軍）就站自己那邊，
     否則塞進兩軍裡人數較少的一方，維持陣營平衡。scores、mount、cavalry、troops、troop_bonus、turncoat、newbie、renown、seal_bare、cut
@@ -663,7 +664,7 @@ def auto_assign_latecomer(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
         scores=dict(scores or {}), attribute=attribute, role=role, mount=mount, cavalry=cavalry,
         troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie, kit=kit, renown=list(renown or []),
-        escort=escort, seal_bare=seal_bare, cut=cut,
+        escort=escort, seal_bare=seal_bare, cut=cut, card=card,
     )
 
 

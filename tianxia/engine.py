@@ -5625,6 +5625,9 @@ class Game:
         bare = self._seal_bare()
         if bare is not None:  # 玉璽碎片改版：只有戴著碎片才多這一鍵（沒碎片、改版關著時這一包一個字不變）
             marks["seal_bare"] = bare
+        card = team.pvp_card(self.state, self.content, self.world)
+        if card is not None:  # 五項屬性的季才多這一鍵（奪璽單挑照對手重算）；舊的季一個字不變
+            marks["card"] = card
         return marks
 
     def _seal_bare(self) -> battle_instance.SealBare | None:
@@ -5964,6 +5967,7 @@ class Game:
         guarded = me is not None and me.acted_rounds >= need  # 護璽：自己出手滿門檻（臨時投效的散人也算，只多這一條，4.5）
         keeper = seal_duel.side_from_participant(me, battle.seal_holder_faction) if me is not None else self._seal_side_of(holder)
         cap = min(cfg.cap, cfg.cap * cfg.side_factor.get(tier, 0.0) * (cfg.guard if guarded else 1.0))
+        seal_duel.faced(self.content, challenger, keeper)  # 五項屬性的季：兩邊照對方真正的五項重算；舊的季不動
         return seal_duel.open_duel(
             f"{battle.record_id}:{shard.id}", shard.id, battle.record_id, definition.timetable_event, definition.name, tier, cap,
             challenger, keeper, self.now, cfg,
@@ -6006,6 +6010,7 @@ class Game:
                 out.append((name, 0, seal_duel.side_from(  # 不含玉璽碎片的戰力（改版：奪璽單挑不吃；手上有碎片的本來就擋掉了）
                     name, None, kin._battle_power(seal=False), kin._battle_scores(mounted=False, seal=False), kin._battle_role(),
                     kin._battle_neili_cap(), kit=team.self_side(kin.state, self.content, kin.world), cut=kin._duel_cut(),  # 防具照他的存檔現算（3.9）
+                    card=team.pvp_card(kin.state, self.content, kin.world),
                 )))
         return out
 
@@ -6023,6 +6028,7 @@ class Game:
             name, self.world.faction_of(name), game._battle_power(seal=False), game._battle_scores(mounted=False, seal=False),
             game._battle_role(), game._battle_neili_cap(), fresh=fresh, kit=team.self_side(game.state, self.content, game.world),
             cut=game._duel_cut(),  # 沒參戰的持有者：防具照他的存檔現算（鐵匠鋪與合成流程 3.9；fresh 的是新角色，沒穿＝0）
+            card=team.pvp_card(game.state, self.content, game.world),
         )
 
     def _my_seal_duel(self) -> tuple[SealDuel | None, str | None]:
@@ -9227,7 +9233,8 @@ class Game:
         """這個人切磋時的威力：只算本人（同伴、部下不上場），照對手身上那一門武學的屬性算相剋，吃自己的氣血係數與加成。
         seal=False 不含玉璽碎片的戰力（買兇的殺手照它浮上來，同江湖水漲）。"""
         s, c, w = who.state, who.content, who.world
-        members, conditions, boosts = team._fighters(s, c, w, seal=seal)
+        with team.facing_player(c, s, against.state):  # 五項屬性的季：照對手本人的五項對抗（他的統御擋你的武力）
+            members, conditions, boosts = team._fighters(s, c, w, seal=seal)
         return encounter.member_power(
             members[0], team.team_arts(s, c, w), team.worn_attribute(against.state, c, against.world), conditions[0], boosts[0],
         )
@@ -11023,9 +11030,11 @@ class Game:
         self.now = now
         cap = min(cfg.cap, cfg.cap * max(0.0, min(1.0, factor)))
         duel_id = f"{reg.last_showdown}:{shard_id}" if hung else f"qa{reg.seq + 1}:{shard_id}"
+        a, b = self._seal_side_of(challenger), self._seal_side_of(shard.holder)
+        seal_duel.faced(c, a, b)  # 五項屬性的季：兩邊照對方真正的五項重算；舊的季不動
         duel = seal_duel.open_duel(
             duel_id, shard_id, reg.last_showdown if hung else None, None, reg.last_showdown_where if hung else "", "旁觀", cap,
-            self._seal_side_of(challenger), self._seal_side_of(shard.holder), now, cfg,
+            a, b, now, cfg,
         )
         line = (seal_duel.CALL if hung else seal_duel.CALL_QA).format(
             challenger=duel.challenger.name, holder=duel.holder.name, shard=c.seal[shard_id].name)

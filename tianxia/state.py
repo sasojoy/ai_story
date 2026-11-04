@@ -520,6 +520,7 @@ class ArenaSide(BaseModel):
     hp_cap: float
     bare: float | None = None  # 不含玉璽碎片戰力的威力（改版，FB-615）：只有戴著碎片才記；None＝power 本身就是給別人看的那一份
     cut: float = 0.0  # 這一邊的防具減損（挑的人是開打那一刻的、守的人是分身 ArenaEntry.cut）：對面打中這一邊的那一下乘 1 − 它（鐵匠鋪與合成流程 3.9）；舊存檔 0
+    card: dict | None = None  # 五項屬性的季：重算對上真正的對手要的東西（team.pvp_card）；舊的季、舊存檔 None
 
     @property
     def shown(self) -> float:
@@ -603,6 +604,7 @@ class ArenaEntry(BaseModel):
     arts: list[str] = Field(default_factory=list)  # 身上兩門武學的名字（選單上寫他守擂用什麼）
     kit: BoutSide | None = None  # 報名那一刻身上的本命戰法（team.self_side）；沒有是 None，舊存檔也是
     cut: float = 0.0  # 報名或更新分身那一刻的防具減損（含耐久，team.duel_armor_cut）：別人來挑時這一邊挨的打乘 1 − 它（鐵匠鋪與合成流程 3.9）；舊的分身沒有＝0
+    card: dict | None = None  # 五項屬性的季：報名、更新分身那一刻的五項與加成（team.pvp_card），開打時照挑的人重算；舊的季 None
     weapon: str = ""  # 擂台動畫：報名、更新分身那一刻手上兵器的種類（空字串＝空手；舊存檔也是）
     look: str = ""  # 擂台形象：報名、更新分身那一刻穿哪一套（空字串＝斗笠小子；舊存檔也是）
     move: str = ""  # 招式動畫：報名、更新分身那一刻出招疊哪一張光效（m<購買 id>；空字串＝沒有）

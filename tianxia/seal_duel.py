@@ -102,15 +102,25 @@ def side_from_participant(p: BattleParticipant, faction: str | None) -> SealSide
     bare = p.seal_bare
     power, scores = (p.power, unmounted(p)) if bare is None else (bare.power, unmounted(p, bare.scores))
     return SealSide(name=p.name, faction=faction, power=power, scores=scores, role=p.role, hp=p.neili_cap, hp_cap=p.neili_cap,
-                    kit=kit, cut=p.cut)
+                    kit=kit, cut=p.cut, card=p.card)
 
 
 def side_from(name: str, faction: str | None, power: float, scores: dict[str, float], role: str, hp_cap: float, fresh: bool = False,
-              kit: tactics.BoutSide | None = None, cut: float = 0.0) -> SealSide:
+              kit: tactics.BoutSide | None = None, cut: float = 0.0, card: dict | None = None) -> SealSide:
     """沒參戰的那一邊（持有者、小伺服器補上的旁觀散人）：engine 照他的 Game 算好給（_battle_power、_battle_scores(mounted=False)、
     team.self_side、team.duel_armor_cut…）。"""
     return SealSide(name=name, faction=faction, power=power, scores=dict(scores), role=role, hp=hp_cap, hp_cap=hp_cap, fresh=fresh,
-                    kit=kit, cut=cut)
+                    kit=kit, cut=cut, card=card)
+
+
+def faced(content, a: SealSide, b: SealSide) -> None:
+    """五項屬性的季：兩邊的威力與份量照對方真正的五項重算（team.pvp_faced；企劃者 2026-11-04）。任一邊沒卡（舊的季）不動。"""
+    if a.card is None or b.card is None:
+        return
+    from . import team  # 延後 import：只有這裡用得到
+    ca, cb = a.card, b.card
+    a.power, a.scores, _ = team.pvp_faced(content, a.power, a.scores, ca, cb)
+    b.power, b.scores, _ = team.pvp_faced(content, b.power, b.scores, cb, ca)
 
 
 def open_duel(

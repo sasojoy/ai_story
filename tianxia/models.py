@@ -4012,6 +4012,8 @@ class AttrV2Rules(_Strict):
         AttrEffect(attr="spd", hook="dodge", curve="contest", cap=0.25, scale=40, origin=50),
         AttrEffect(attr="lead", hook="guard", curve="contest", cap=0.3, scale=40, origin=50),  # 統御對他的武力：一場少掉幾成氣血
     ])
+    pvp_scale: float = Field(default=0.5, ge=0)  # 玩家對玩家（兩邊都是配出來的人，只差屬性）時效果表再乘這個（量表 scripts/measure_pvp_attrs.py）【草】
+    contest_relative: bool = False  # 對 NPC 的對抗式也照比例算差距（team._v2_curve；玩家對玩家一律照比例）；False 照絕對差（第 ② 階段量好的）
     # 對抗式的「他」：outer 對上的是對手的哪一項（武力打統御）；沒寫的對上同一項
     against: dict[str, str] = Field(default_factory=lambda: {"str": "lead", "lead": "str"})
     # 對手（散兵、野怪、劇情戰、頭目）沒寫等級時照難度換等級（[難度, 等級]，中間照直線；量自整季機器人的威力，2026-11-04）【草】

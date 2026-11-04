@@ -144,6 +144,7 @@ def hook_effect(content: Content, hook: str, values, rivals=None, season=None) -
 
 
 _FOE: ContextVar[dict | None] = ContextVar("foe", default=None)
+_PVP: ContextVar[bool] = ContextVar("pvp", default=False)  # 對手是玩家（facing_player）：效果再乘 pvp_scale
 
 
 @contextmanager
@@ -167,6 +168,16 @@ def v2_values(state: GameState, content: Content, world: WorldStateStore, key: s
     return attrset.from_v1(content, progress.level, member_stats(state, content, world, key))
 
 
+def _v2_curve(content: Content, row, mine: float, other: float, pvp: bool = False) -> float:
+    """新尺度的一條效果（我 − 他）。玩家對玩家（pvp）與 contest_relative 開著時差距照兩邊的平均換成比例（尺度跟著等級長：
+    第 1 級 50 對 50 跟原本一樣，第 30 級差同樣幾成就是同樣的效果），不然等級一高，每級差一兩點就整條拉滿（企劃者 2026-11-04
+    擔心全點武力的平衡；對 NPC 的照第 ② 階段量好的絕對差，contest_relative 預設關）。"""
+    if row.curve != "contest" or not (pvp or content.config.attributes.v2.contest_relative):
+        return _curve(content, row, mine, other, None)
+    mid = max(1.0, (mine + other) / 2)
+    return row.cap * math.tanh((mine - other) / (row.scale * mid / row.origin))
+
+
 def _v2_effect(state: GameState, content: Content, world: WorldStateStore, key: str, hook: str, rival) -> float | None:
     """五項屬性的季、效果表（v2）寫了這個鉤子：照新尺度對抗（我 − 他）；他沒給時照這一仗的對手（facing），再沒有就是同等級的平均人。"""
     rows = [r for r in content.config.attributes.v2.effects if r.hook == hook]
@@ -178,11 +189,73 @@ def _v2_effect(state: GameState, content: Content, world: WorldStateStore, key: 
         flat = attrset.expect(content, state.player.member.level)
         foe = {k: flat for k in attrset.keys(content)}
     against = content.config.attributes.v2.against
+    pvp = _PVP.get() and rival is None
     total = 0.0
     for row in rows:
         other = foe.get(against.get(row.attr, row.attr), row.origin)
-        total += _curve(content, row, mine.get(row.attr, row.origin), other, None)
-    return total
+        total += _v2_curve(content, row, mine.get(row.attr, row.origin), other, pvp)
+    return total * content.config.attributes.v2.pvp_scale if pvp else total
+
+
+@contextmanager
+def facing_player(content: Content, me: GameState, them: GameState):
+    """玩家對玩家、兩邊都是活的（切磋、論武、截殺）：仗裡算加成的地方照對手本人的五項對抗（企劃者 2026-11-04「全部點武力
+    會不會沒人打得過他」：對手的統御才擋得住你的武力）。舊的季什麼都不做。"""
+    if not attrset.on(content, getattr(me, "world", None)):
+        yield
+        return
+    token, pvp = _FOE.set(attrset.values(them, content)), _PVP.set(True)
+    try:
+        yield
+    finally:
+        _FOE.reset(token)
+        _PVP.reset(pvp)
+
+
+def pvp_card(state: GameState, content: Content, world: WorldStateStore) -> dict | None:
+    """快照上場的玩家對玩家（擂台的分身、奪璽單挑）：快照那一刻的威力是對上同等級的平均人算的；這張卡記著重算要的東西
+    （五項、當時的外功內功加成、內功那一項的份量），開打時再照真正的對手換一次（pvp_faced）。舊的季是 None。"""
+    if not attrset.on(content, getattr(state, "world", None)):
+        return None
+    member = state.player.member
+    arts = team_arts(state, content, world)
+    neigong = arts.get(member.neigong_id) if member.neigong_id else None
+    share = power_at(neigong, member.neigong_level) / encounter.NEIGONG_BONUS_DIVISOR if neigong is not None else 0.0
+    return {"attrs": attrset.values(state, content), "outer": attr_effect(state, content, world, PLAYER, "outer"),
+            "inner": attr_effect(state, content, world, PLAYER, "inner"), "share": share}
+
+
+def _v2_from(content: Content, hook: str, mine: dict, foe: dict) -> float:
+    """玩家對玩家的一個鉤子（照比例的差距，pvp_ratio 用；還沒乘 pvp_scale）。"""
+    against = content.config.attributes.v2.against
+    return sum(_v2_curve(content, row, mine.get(row.attr, row.origin), foe.get(against.get(row.attr, row.attr), row.origin), True)
+               for row in content.config.attributes.v2.effects if row.hook == hook)
+
+
+def pvp_ratio(content: Content, card: dict | None, foe: dict | None) -> float:
+    """這張卡的威力對上 foe（對手的卡）該乘幾倍：外功、內功的加成換成對上他的那一份（member_power 的形狀：
+    (1＋外)×(1＋內功份量×(1＋內))）。任一邊沒卡（舊的季、舊的快照）是 1。"""
+    if not card or not foe:
+        return 1.0
+    floor, pvp = encounter.BOOST_FLOOR, content.config.attributes.v2.pvp_scale
+    outer = _v2_from(content, "outer", card["attrs"], foe["attrs"]) * pvp
+    inner = _v2_from(content, "inner", card["attrs"], foe["attrs"]) * pvp
+    share = card["share"]
+    return (max(floor, 1 + outer) / max(floor, 1 + card["outer"])
+            * (1 + share * max(floor, 1 + inner)) / (1 + share * max(floor, 1 + card["inner"])))
+
+
+def pvp_faced(content: Content, power: float, scores: dict[str, float], card: dict | None, foe: dict | None,
+              bare: float | None = None) -> tuple[float, dict[str, float], float | None]:
+    """快照的威力、份量（還有不含碎片的那一份）照真正的對手重算（pvp_ratio）；份量照實力（battle_instance.strength）的比例。"""
+    ratio = pvp_ratio(content, card, foe)
+    if ratio == 1.0:
+        return power, scores, bare
+    from . import battle_instance  # 延後 import：只有這裡用得到
+    tuning = content.config.battle
+    new = power * ratio
+    step = battle_instance.strength(tuning, new) / max(1e-9, battle_instance.strength(tuning, power))
+    return new, {m: round(v * step, 1) for m, v in scores.items()}, None if bare is None else bare * ratio
 
 
 def attr_effect(state: GameState, content: Content, world: WorldStateStore, key: str, hook: str, rival=None) -> float:
