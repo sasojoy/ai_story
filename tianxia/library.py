@@ -111,7 +111,7 @@ def learn_problem(state: GameState, content: Content, skill: SkillDef) -> str | 
         if rule.title is not None:  # 名聲 5.1：正邪武學看善惡稱號（走那條路、到那一段）
             if not renown.on(content, "lessons"):
                 return LESSON_CLOSED
-            if not renown.meets(state, content, rule.title.path, rule.title.tier):
+            if not renown.open_to(state, content, "lessons", rule.title.path, rule.title.tier):  # 傳承的門路也開得了第一段
                 return TITLE_NEED.format(title=renown.named(renown.VIRTUE_TITLES[rule.title.path][rule.title.tier], state))
         need = int(rule.fame * renown.scale(state.world) + 0.5)  # 名聲 2.4：拜師的名望門檻跟求見同一個理由乘季長倍數
         if p.stats.get("fame", 0) < need:

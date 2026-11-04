@@ -178,9 +178,10 @@ def roll(state: GameState, content: Content, rng, boost: float = 1.0) -> bool:
 
 
 def _luck_reroll(state: GameState, content: Content) -> bool:
-    """傳承開著、季初結算到了機緣那一道門路（Config.legacy.luck_reroll_flag）：頓悟沒中再擲一次。關著不擲（不動 rng）。"""
-    cfg = content.config.legacy
-    return cfg.enabled and bool(cfg.luck_reroll_flag) and cfg.luck_reroll_flag in state.player.flags
+    """傳承開著、季初結算到了機緣那一道門路（Config.legacy.doors["epiphany"]）：頓悟沒中再擲一次。關著不擲（不動 rng）。"""
+    from .renown import legacy_door  # noqa: PLC0415
+
+    return legacy_door(state, content, "epiphany")
 
 
 # ── 組線 ──────────────────────────────────────────────

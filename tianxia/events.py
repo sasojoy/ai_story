@@ -128,6 +128,14 @@ def _fresh_among(state: GameState, candidates: list[Event], action: str) -> list
     return fresh
 
 
+def qiyu_multiplier(state: GameState, content: Content) -> float:
+    """奇遇的權重乘幾倍：Config.qiyu_weight_multiplier；傳承開了機緣「奇遇」那一道門路的人再乘 1 + Config.legacy.qiyu_boost。"""
+    from .renown import legacy_door  # noqa: PLC0415
+
+    boost = 1.0 + content.config.legacy.qiyu_boost if legacy_door(state, content, "qiyu") else 1.0
+    return content.config.qiyu_weight_multiplier * boost
+
+
 def pick_event(
     state: GameState, content: Content, action: str, rng: random.Random, pool: EventPool | None = None,
 ) -> Event | None:
@@ -140,7 +148,7 @@ def pick_event(
     fresh = _fresh_among(state, _capped_group(state, content, candidates, action, rng), action)
     if not fresh:
         return None
-    multiplier = content.config.qiyu_weight_multiplier
+    multiplier = qiyu_multiplier(state, content)
     weights = [event.weight * (multiplier if event.qiyu else 1.0) for event in fresh]
     return rng.choices(fresh, weights=weights)[0]
 
@@ -151,7 +159,7 @@ def pick_from(state: GameState, content: Content, candidates: list[Event], actio
     fresh = _fresh_among(state, tiers.narrow(state, content, candidates, rng), action)  # 事件分級：先挑一階
     if not fresh:
         return None
-    multiplier = content.config.qiyu_weight_multiplier
+    multiplier = qiyu_multiplier(state, content)
     return rng.choices(fresh, weights=[event.weight * (multiplier if event.qiyu else 1.0) for event in fresh])[0]
 
 
