@@ -1644,7 +1644,7 @@ PLAYER = "沈青衫"
 
 
 # /api/do 在查 MAIN_ACTIONS 之前先接走的那幾個（server.api_do）：管理者的動作也不能叫這幾個名字
-SPECIAL_OPS = {"battle_text", "seal_text", "duel_text", "tavern_ask", "feast_text", "gather_text"}
+SPECIAL_OPS = {"battle_text", "seal_text", "duel_text", "tavern_ask", "feast_text"}
 
 
 @pytest.fixture(autouse=True)

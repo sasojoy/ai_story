@@ -99,10 +99,10 @@ def effect_of(content: Content, item: Equipment | None) -> str | None:
 
 def effect_text(content: Content, key: str) -> str:
     """「求見門檻 −3」「打贏的心得 +20%」（待 joy 潤）：數字照 Config.treasures.effects；百分比 .5 進位（不用 round／:.0%，同 mounts.pct）。
-    探索悟意境（觀山石）照探索三選一的開關寫（PM 2026-10-16）：開著時是靜心感悟擲中的機會多幾個百分點（Config.explore_modes.sense_treasure_points），
-    關著才是探索悟意境那一支的比重 ×{x}。"""
-    if key == "insight" and content.config.explore_modes.enabled:
-        return INSIGHT_SENSE_TEXT.format(n=f"{content.config.explore_modes.sense_treasure_points:g}")
+    探索悟意境（觀山石；PM 2026-10-16）：Config.sense_treasure_points 不是 0 時是感悟擲中的機會多幾個百分點，
+    0（測試內容）才是探索悟意境那一支的比重 ×{x}。"""
+    if key == "insight" and content.config.sense_treasure_points:
+        return INSIGHT_SENSE_TEXT.format(n=f"{content.config.sense_treasure_points:g}")
     value = content.config.treasures.effects.get(key, 0.0)
     return EFFECT_TEXT.get(key, "").format(
         x=f"{value:g}", pct=f"{math.floor(value * 100 + 0.5)}%", n=f"{value:g}", item=content.config.legend_item_name,

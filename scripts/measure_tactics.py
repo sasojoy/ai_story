@@ -721,11 +721,11 @@ def gear_rows(content):
 
 
 def _source(content, key, field, value):
-    """（數字, 它出自哪個欄位）：照遊戲裡真的用的那一個。探索悟意境（觀山石）在探索三選一開著時是 sensing.rate 加的
-    Config.explore_modes.sense_treasure_points（effects 那個倍數只拿來比 > 1，同 treasures.effect_text 照開關寫的那一句；FB-455），
+    """（數字, 它出自哪個欄位）：照遊戲裡真的用的那一個。探索悟意境（觀山石）不是 0 時是 sensing.rate 加的
+    Config.sense_treasure_points（effects 那個倍數只拿來比 > 1，同 treasures.effect_text 寫的那一句；FB-455），
     其餘照 effects。"""
-    if key == "insight" and content.config.explore_modes.enabled:
-        return content.config.explore_modes.sense_treasure_points, "Config.explore_modes.sense_treasure_points"
+    if key == "insight" and content.config.sense_treasure_points:
+        return content.config.sense_treasure_points, "Config.sense_treasure_points"
     return value, field
 
 
@@ -921,13 +921,13 @@ def _indirect(content, r):
         return (f"衝絕學的機會 ×{amt:g}：服丹衝關 {min(hi, base):g}% → {min(hi, base * amt):g}%，契機頓悟同一個倍數"
                 f"（悟性 5；夾在 Config.breakthrough.max_chance {hi:g}%）")
     if r.key == "insight":
-        if cfg.explore_modes.enabled:
+        if cfg.sense_treasure_points:
             loc = next(iter(content.locations.values()))
             a = sensing.rate(wearing(content, None), content, loc)
             b = sensing.rate(wearing(content, "insight"), content, loc)
-            return (f"探索三選一開著：靜心感悟擲中 {a}% → {b}%（悟性 5；+Config.explore_modes.sense_treasure_points，"
+            return (f"感悟擲中 {a}% → {b}%（悟性 5；+Config.sense_treasure_points，"
                     f"夾在 sense_rate_range 上限 {cfg.sense_rate_range[1]}%；Config.treasures.effects[insight]＝"
-                    f"{cfg.treasures.effects.get('insight', 1.0):g} 只在三選一關著時用）")
+                    f"{cfg.treasures.effects.get('insight', 1.0):g} 只在 sense_treasure_points 是 0 時用）")
         return f"探索悟意境那一支的比重 ×{amt:g}（跟悟性疊乘，_explore_weights）"
     if r.key in ("win_xinde_pct", "win_exp_pct"):
         what = "心得" if r.key == "win_xinde_pct" else "經驗"

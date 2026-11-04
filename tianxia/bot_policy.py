@@ -10,7 +10,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, epiphany, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, outing, precise, rules, sensing, server_bots, social, sortie, stances, team
+from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, epiphany, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, outing, precise, rules, sensing, server_bots, social, sortie, stances, team
 from . import sortie_duel  # 出陣約戰（減法季批 3b）
 from . import tavern as tavern_rules  # 酒肆殺手：失手加價
 from .bot import allocate_points, can_practise, wants_heal
@@ -38,14 +38,9 @@ CHALLENGE_ODDS = bot.CHALLENGE_ODDS  # 假人只挑這兩種勝算的人物（�
 ORDER_SCORE = 30.0
 ORDER_MOVE_SCORE = 12.0
 DUTY_SCORE = 0.5  # 守勢行動本身（不替軍令記功時）：低於探索，不然假人整天巡哨
-GATHER_SCORE = 1.0  # 探索三選一（出陣探索與地盤設計第七節）：找素材是練功的主要來源，跟以前的探索一樣
-SEEK_SCORE = 0.9  # 閒著找事件
-SENSE_SCORE = 0.5  # 悟得到的地方偶爾靜心感悟
-# 一類一顆（正式季整合 9.2）：想要經驗按練功，缺素材才按找素材；出陣照舊排在練功前面（出陣的分數另加 PRACTICE_SCORE）
+# 一類一顆（正式季整合 9.2）：出陣照舊排在閒著的探索前面（出陣的分數另加 PRACTICE_SCORE）；出門一趟也是這個底分（OUTING_SCORE）
 PRACTICE_SCORE = 1.0
-DRILL_SCORE = 0.9  # 城裡操練（新手引導重做，tianxia/training.py）：零風險、一天幾次，比練功低一點；用完了是灰的，不會被挑
-PRECISE_GATHER_SCORE = 0.4  # 找素材不再打仗、不給經驗：缺素材時再加 NEED_MATERIAL_SCORE
-# 背包裡的一階素材少於 NEED_MATERIAL_BELOW 個：找素材再加這一份。計畫寫 0.5，那樣缺素材的找素材（1.5）會跟挑戰本人（CHALLENGE_SCORE 1.5）
+# 背包裡的一階素材少於 NEED_MATERIAL_BELOW 個：多半給素材的那一趟再加這一份。計畫寫 0.5，那樣缺素材的探索（1.5）會跟挑戰本人（CHALLENGE_SCORE 1.5）
 # 打平，挑戰本人該比探索高（見 CHALLENGE_SCORE 的說明），所以壓在 0.3
 NEED_MATERIAL_SCORE = 0.3
 NEED_MATERIAL_BELOW = 6
@@ -831,33 +826,6 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         effect = event.choices[int(arg)].effect
         moved = rules.resolve_trends(game.content, game.state.world, effect.trend, game.state.player.location)
         return effect_score(effect, _goals(game, profile), moved)
-    if kind == "explore":  # 探索三選一：缺素材找素材、閒著找事件、悟得到的地方偶爾靜心感悟；打探懸賞三種都算
-        scout = BOUNTY_SCORE if _bounty_here(game, "scout") else 0.0
-        if arg == explore_modes.PRACTICE:  # 練功（一類一顆）：一定打一場，不算打探；討伐懸賞在這裡交差
-            if _crippled(game):
-                return None
-            return PRACTICE_SCORE + (BOUNTY_SCORE if _bounty_here(game, "strike") else 0.0)
-        gather, _, branch = arg.partition(":")
-        if gather == explore_modes.GATHER and branch:  # 找素材分支（第 32 項）：「自己說」不寫（不寫自由文字）；缺料時照缺的屬性挑
-            if branch != _gather_branch(game):
-                return None  # 只給一條打分：找素材的份量跟沒有分支層時一樣（隨便挑的那一半不會因為多了幾條路而多去找素材）
-            return PRECISE_GATHER_SCORE + scout + (NEED_MATERIAL_SCORE if _short_of_materials(game) else 0.0)
-        if arg == explore_modes.GATHER and explore_modes.layered(game.content, game.state.world,
-                                                                 game.content.locations[game.state.player.location]):
-            return None  # 有分支層時「找素材」只是展開分支的入口，按了不做事（同 act:explore）
-        if arg == explore_modes.GATHER and precise.on(game.content, game.state.world):  # 一定給素材、不打仗
-            return PRECISE_GATHER_SCORE + scout + (NEED_MATERIAL_SCORE if _short_of_materials(game) else 0.0)
-        if arg == explore_modes.GATHER:
-            if _crippled(game):
-                return None  # 找素材可能撞上怪：內傷重又付不起醫館的不去
-            need = NEED_MATERIAL_SCORE if _short_of_materials(game) else 0.0
-            strike = BOUNTY_SCORE if _bounty_here(game, "strike") else 0.0  # 討伐懸賞靠找素材撞上的那一場（散人不出陣）
-            return GATHER_SCORE + scout + need + strike
-        if arg == explore_modes.SEEK:
-            return SEEK_SCORE + scout
-        if arg == explore_modes.SENSE:
-            return SENSE_SCORE + scout
-        return None
     if kind == "talk":
         return 0.0 if arg == "leave" else None
     if kind == "bounty":  # 懸賞榜上：揭得下的去揭，揭滿了或沒得揭就返回；不放棄手上的
@@ -891,8 +859,6 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         plan = game.outing_plan() if arg == "explore" else None
         if plan is not None:  # 減法季探索一顆：「探索」就是出門一趟（有體力才按得下去）
             return _outing_score(game, plan)
-        if arg == "explore" and explore_modes.on(game.content):
-            return None  # 三選一開著：「探索」只是展開的入口，按了不做事
         if arg.startswith("challenge:") and _crippled(game):
             return None
         if arg.startswith("challenge:"):  # 挑戰本人：打得贏才去（打不贏的、閉門不見的按不下去，本來就不在候選裡）
@@ -934,8 +900,6 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             bonus += BOUNTY_SCORE if _bounty_here(game, "strike") else 0.0
             bonus += PRACTICE_SCORE if precise.on(c, s.world) else 0.0  # 一類一顆：出陣照舊排在練功前面（9.2）
             return TRAIN_SCORE + _train_value(game, profile) + bonus
-        if arg == "drill":  # 城裡操練：真人一樣按（不扣氣血、內傷重的也能練）
-            return DRILL_SCORE
         if arg == "duty":  # 守勢行動（計畫 T6）：替守城記功才值得做；約戰開著時不算守城（減法季批 3b：守是應戰）
             s = game.state
             counts = not game.duel_on() and orders.duty_counts(s, game.content, game._side(), s.player.location)
@@ -1143,35 +1107,6 @@ def _short_of_materials(game: Game) -> bool:
     """背包裡的一階素材少於 NEED_MATERIAL_BELOW 個（修兵器、餵馬、糧草都吃一階）。"""
     mats = game.content.materials
     return sum(n for mid, n in game.state.player.materials.items() if mid in mats and mats[mid].tier == 1) < NEED_MATERIAL_BELOW
-
-
-def _scarce_attributes(game: Game) -> set[str]:
-    """背包裡一階素材最少的那幾種屬性（找素材分支照它挑：缺剛的去挖礦，第 32 項）。素材表裡一種一階都沒有的屬性不算。"""
-    mats = game.content.materials
-    have = game.state.player.materials
-    counts: dict[str, int] = {}
-    for m in mats.values():
-        if m.tier == 1:
-            counts[m.attribute] = counts.get(m.attribute, 0) + have.get(m.id, 0)
-    if not counts:
-        return set()
-    low = min(counts.values())
-    return {attr for attr, n in counts.items() if n == low}
-
-
-def _gather_branch(game: Game) -> str | None:
-    """假人這一下找素材走哪一條分支（第 32 項）：缺料時挑給得出背包裡一階最少那幾種屬性的分支（缺剛的去挖礦），不缺（或沒有一條給得出）
-    就這裡的每一條；幾條都行時照 explore_seq 輪（不擲骰，同一輪打分前後一致）。這裡沒有分支層是 None。
-    只有這一條打分（bot_policy.score）：pick 有一半是從會按的選項裡隨便挑，幾條路都打分的話假人在這些地方會多去找素材好幾倍。"""
-    c, p = game.content, game.state.player
-    loc = c.locations[p.location]
-    here = explore_modes.layered(c, game.state.world, loc)
-    if not here:
-        return None
-    if _short_of_materials(game):
-        scarce = _scarce_attributes(game)
-        here = [b for b in here if scarce & set(explore_modes.branch_attributes(c, loc, b))] or here
-    return here[p.explore_seq % len(here)].id
 
 
 def _bounty_here(game: Game, kind: str) -> bool:

@@ -88,11 +88,20 @@ def real_content(profile=None) -> Content:
     return cached_content(REAL_CONTENT, profile)
 
 
+def old_explore(cfg, setter=setattr) -> None:
+    """三選一的開關以前關著時連帶關掉的三樣：一類一顆、可重複事件推大勢的五折、觀山石的加成（第 13 批拿掉那個開關）。
+    `monkeypatch` 的地方 `old_explore(cfg, monkeypatch.setattr)`。"""
+    setter(cfg, "precise_actions", False)
+    setter(cfg, "event_trend_share", 1.0)
+    setter(cfg, "sense_treasure_points", 0)
+
+
 def classic_rules(content: Content) -> Content:
-    """出陣探索與地盤（2026-10-14）之前的規則：探索三選一、盡頭阻力兩個開關關掉，回傳同一份內容（出陣與地盤 2026-10-27 起沒有開關）。
+    """出陣探索與地盤（2026-10-14）之前的規則：三選一的開關以前連帶關掉的那三樣（old_explore）與盡頭阻力關掉，回傳同一份內容（出陣與地盤 2026-10-27 起沒有開關）。
     測的是舊規則本身、或只是拿探索／推大勢當手段的舊測試用它；新規則的測試不要叫。"""
     cfg = content.config
-    cfg.explore_modes.enabled = cfg.push_resistance.enabled = False
+    old_explore(cfg)
+    cfg.push_resistance.enabled = False
     return content
 
 
