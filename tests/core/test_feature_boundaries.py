@@ -666,13 +666,13 @@ GAME_DELEGATES |= {
     # 探索包回答有所感包的查詢服務（主人 explore）：擲特殊頓悟的 boost（原本 Game._sense 直接讀 outing_rules 那一筆 GAME_DIRECT 換成它）
     "_rare_boost",
     # 搬進包的 10 個方法留 8 個（3 個私有）：server 與假人叫的 epiphany_request、epiphany_names、sense_request、sense_draw、method_help，
-    # 測試直接叫的 _epiphany_begin，choose 原位叫的 _epiphany_name（dunwu:），探索包與 _explore_outcome 叫的 _sense_here。
+    # 測試直接叫的 _epiphany_begin，choose 原位叫的 _epiphany_name（dunwu:），探索包與 explore_base.explore_outcome 叫的 _sense_here。
     # _sense（sense: 由 choose 掛鉤接走）、_sense_apply 只有包裡叫
     "_epiphany_begin", "_epiphany_name", "epiphany_request", "epiphany_names", "sense_request", "sense_draw", "_sense_here", "method_help",
     # 核心原位與探索、引導兩包叫的服務 7 個（Task 2 開的；本體在 actions）
     "_sense_missed", "_sense_drop_stale", "_sense_menu", "_sense_start", "_sense_canvas", "_epiphany_title", "_sense_prologue_choice",
 }
-_LATER_18 = "舊探索（留給序章與測試內容，總表第 18 批）"
+_LATER_18 = "舊探索（留給序章與測試內容；總表第七節第 1 題選甲，沒有下一批要收）"
 GAME_DELEGATE_CALLERS.update({
     ("_drop_stale_references", "_sense_drop_stale"): "清失效參照中段（收店之前）：後面的收店（features_core.drop_shops → 酒肆 Shop.here → _idle）讀 "
                                                      "player.sensing，on_drop_stale 在最後、還只問開著的包",
