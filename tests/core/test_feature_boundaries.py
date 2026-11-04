@@ -445,7 +445,7 @@ GAME_DELEGATE_CALLERS.update({
     ("choose", "_check_hints"): "choose 最後、記進江湖紀錄之前：這一下碰到的新玩法排一條、排著的上框；after_action 之後才存回季、紀錄已經寫了",
     ("sync", "_check_hints"): "sync 的最後幾行（引薦人的結語之後、結伴逾時之前）：抵達、大事揭曉這些不靠行動的改變；on_sync 在更前面",
     ("travel", "_check_hints"): "出發那一下（移動還沒成包，總表第 47 批）",
-    ("allocate_stat", "_check_hints"): "配點之後（武學還沒成包，總表 features/arts）",
+    # （(allocate_stat, _check_hints)：配點之後——全部拆包第 23 批 allocate_stat 搬進修練包、包裡經 ctx 叫，拿掉）
     # （(sense_draw, _check_hints)：有所感畫完那一筆——全部拆包第 24 批 sense_draw 搬進有所感包、包裡經 ctx 叫，拿掉）
     ("_menxia_entry", "_check_hints"): "修練頁、煉製頁的動作寫進紀錄（核心的修練頁紀錄服務）：說的話接在這一則",
     ("_act", "_hint"): "act 子動詞裡碰到的事件型提示（操練練完 h_drill_done…）：其餘子動詞還沒分給各包（總表第 57 批）",
@@ -465,7 +465,7 @@ GAME_DELEGATE_CALLERS.update({
     ("_faction_step", "_note_action"): "投靠那一下（序章、引導的 join）：陣營還沒成包（總表第 35 批）；" + _NOTE_HOOK,
     ("_arrive", "_note_action"): "抵達（出師去潁川、離開城鎮）：移動還沒成包（總表第 47 批）；" + _NOTE_HOOK,
     ("take_stamina_pill", "_note_action"): "服回體丹（序章那一步）：回體丹是核心；" + _NOTE_HOOK,
-    ("allocate_stat", "_note_action"): "配點（序章那一步）：武學還沒成包；" + _NOTE_HOOK,
+    # （(allocate_stat, _note_action)：配點（序章那一步）——全部拆包第 23 批同上，拿掉）
     ("_menxia_entry", "_note_action"): "修練頁、煉製頁的動作（序章的練功、熔煉）：核心的修練頁紀錄服務；" + _NOTE_HOOK,
     ("choose", "_opening_pending"): _OPENING + "：選完那一下人物的信接在這一下的回話裡（位置算行為）",
     ("choose", "_opening_deliver"): "同上：那位人物的信與護送委託",
@@ -684,6 +684,33 @@ CORE_DELEGATE_CALLERS_SENSE = {  # 核心本體經 ctx 叫包的委派
                                                   "_outing_watch，掛在 Game.choose、answer_event 與有所感包的 sense_draw、epiphany_names 上；"
                                                   "包不能 import engine，第 24 批搬進核心的共用小函式。「做完一件事」的事件是總表第 26 批",
 }
+# cultivation（全部拆包第 23 批「修練」：改練、練成、意境裝卸、熔煉、絕學與破境丹、破境卡、傳功、配點搬進修練包 tianxia/features/cultivation/；計畫
+# docs/superpowers/plans/2026-11-01-修練包-第1批.md 1.6）：這一批加的集中在這一段（並行的拆包線不跟別人的行穿插；拿掉的在原處）
+# 22 個動作（actions）、11 個修練頁的唯讀資料（view）的一行委派；原本那兩行 `from . import ascend`、`from . import (..., chuangong, ...,
+# cultivation, ...)` 現在是別名，engine 不再用，拿掉。MELT_MANY_PROLOGUE（序章裡批量熔煉那一句）搬進包，tests/core/test_prologue.py 照舊從 engine 拿
+GAME_IMPORTS |= {"tianxia.features.cultivation.actions", "tianxia.features.cultivation.view"}
+GAME_DELEGATES |= {
+    # server（MENXIA_ACTIONS、menxia_view、main_view 的境界卡、/api/do/allocate、破境卡那一句的三段式）、假人（bot、bot_policy）、測試在叫的：
+    # 改練、練成、意境裝卸、熔煉、服丹衝關、舊存檔的定名（A 段與 C 段）、破境卡、傳功、配點與境界卡（20 個）、修練頁的唯讀資料（11 個）
+    "switch_art", "practice", "practice_refusal", "slot_insight", "unslot_insight", "melt_art", "melt_many", "melt_insight", "cultivate",
+    "mastery_request", "name_mastered", "ascend_request", "ascend_line", "ascend_dismiss", "chuangong", "chuangong_lessons", "allocate_stat",
+    "milestone_card",
+    "skill_detail", "art_detail", "member_card", "roster_cards", "menxia_rules", "attribute_note", "bag_text", "holdings", "art_rows",
+    "insight_rows", "naming_row",
+    # 核心原位叫的 2 個私有（_drop_stale_references、sync；_drop_old_zhuifeng 測試也直接叫）與兩個新的查詢（絕學的契機：核心的單打服務 _seize、
+    # 決戰包的收場補送經 ctx 叫；破境卡：status_data）。_allocate_line 只有 allocate_stat 叫，包裡直接叫 actions.allocate_line，不留
+    "_drop_old_zhuifeng", "_deliver_renames", "_seize_chance", "ascend_view",
+}
+GAME_DELEGATE_CALLERS.update({
+    ("_drop_stale_references", "_drop_old_zhuifeng"): "讀檔清失效參照：追風步的舊品質要在 arts.migrate（槽數照品質算）之前拿掉；on_drop_stale 在最後、"
+                                                      "位置不對（先後算行為）",
+    ("sync", "_deliver_renames"): "同步時補別人定名的那一則：玉璽補送之後、首創名望回饋之前（江湖紀錄的先後算行為）；deliver_notices 在名望回饋與"
+                                  "護衛補帳之後、on_sync 還問 enabled 且在寄放之前，都不是這個位置",
+    ("_seize", "_seize_chance"): "核心的單打服務打贏一場之後擲絕學的契機：總表第 26 批的事件（打贏一場；原位行尾標「# 過渡：第 26 批」）",
+    ("status_data", "ascend_view"): "狀態列的破境卡（status 的 ascension 那一格）：status 掛鉤合進 main_view 的頂層、不是這一格，鍵的順序算行為"
+                                    "（狀態列順序，總表第 66 批）",
+    # （_graduate_pass 叫 slot_insight、switch_art、practice、allocate_stat、melt_art 那 5 對：第 22 批把 _graduate_pass 搬進引導包、經 ctx 叫，合併時拿掉）
+})
 
 
 @functools.lru_cache(maxsize=None)
@@ -1224,7 +1251,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # companions（全部拆包第 19 批：tianxia/stances.py、errands.py、letters.py）
                          "stances": "companions", "errands": "companions", "letters": "companions",
                          # sense（全部拆包第 24 批：tianxia/sensing.py、epiphany.py、glyph.py、insight_llm.py）
-                         "sensing": "sense", "epiphany": "sense", "glyph": "sense", "insight_llm": "sense"}
+                         "sensing": "sense", "epiphany": "sense", "glyph": "sense", "insight_llm": "sense",
+                         # cultivation（全部拆包第 23 批：tianxia/cultivation.py、chuangong.py、ascend.py）
+                         "cultivation": "cultivation", "chuangong": "cultivation", "ascend": "cultivation"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 

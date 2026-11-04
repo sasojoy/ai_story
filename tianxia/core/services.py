@@ -117,8 +117,8 @@
 - 共用的小函式：`outing_watch`（裝飾器：走一趟停在要選的事上時，這一下選完的得失記在那一段——經 Game 上探索包的委派 `_outing_watched`
   〔核心叫它，記在邊界測試的 CORE_DELEGATE_CALLERS；包不必直接叫〕；
   掛在 `Game.choose`、`answer_event` 與有所感包的 `sense_draw`、`epiphany_names` 上。原本是 engine.py 的 `_outing_watch`，engine 照舊用同一個）
-- 共用的字：`PREPARING_TEXT`、`PREPARING_REFUSAL`（賽季籌備中：選單上那一顆灰的、動作被擋回的那一句；有所感包的 `sense_request` 籌備中回它。
-  **第 23 批〔dev/arts-1〕同時把同樣的兩句〔連裝飾器 `not_while_preparing`〕搬進這個檔的 `# arts` 那一段**：兩批都合了之後留一份）
+- 共用的字：`PREPARING_TEXT`、`PREPARING_REFUSAL`（賽季籌備中：選單上那一顆灰的、安排前往被擋的原因；動作被擋回的那一句：有所感包的 `sense_request` 籌備中回它，
+  裝飾器 `not_while_preparing`〔`# cultivation` 那一段〕擋下來也回它）
 
 # sortie（全部拆包第 17 批「出陣三」：舊遊歷、操練、守勢、遊歷推大勢搬進出陣包要叫的；主人都是核心，總表附錄乙 final_owner.json）
 推大勢（玩家自己造成的大勢推動一律走這裡）
@@ -131,6 +131,12 @@
 - `ctx._deed_points(points, capped=True)`（「文字的事」那一本的貢獻帳：記到心意、託付辦成了；第 16 批 PM 認定第 1 條留在 Game）、`ctx._apply(effect)`（效果套用：
   勸降成了立痕跡；事件檢定的委派）
 - 共用的字與小函式（從這個模組 import）：`note_cheer`、`CHEERS_KEEP`（等著寫道賀信的那一格：舊模組 figure_life.spread 寫、書信讀；原本在 tianxia/letters.py）
+# cultivation（全部拆包第 23 批「修練」：改練、練成、意境裝卸、熔煉、絕學與破境丹、破境卡、傳功、配點搬進修練包要叫的；主人都是核心，
+# 總表附錄乙 final_owner.json；計畫 docs/superpowers/plans/2026-11-01-修練包-第1批.md 1.3）
+籌備中與絕學的名字（`ctx._preparing()` 列在 `# guide` 那一段；定名的 A 段〔假人用〕籌備中回 None。動作被擋的裝飾器不經這張清單：下面那一行，從這個模組 import）
+- `ctx._art_name(art_id)`：武學此刻在江湖上的名字（定名之後是新名；絕學定名那一則江湖史寫它）
+- 共用的小函式：`not_while_preparing`（裝飾器：籌備中什麼都不能做，只回 PREPARING_REFUSAL、照一般的拒絕寫進紀錄〔`ctx._log`〕；原本是 engine.py 的
+  `_not_while_preparing`，engine 照舊用同一個函式掛在還沒搬的那些動作上；`PREPARING_TEXT`、`PREPARING_REFUSAL` 第 24 批先搬了，見 `# sense` 那一段）
 
 ## 二、查詢服務
 
@@ -188,6 +194,9 @@ explore（主動搬六包第 3＋4 批加的這一段）
   新手引導包的假人走序章〔`graduate_pass`〕叫它，原本 import 有所感）
 - `ctx._rare_boost()`（主人 explore：走一趟的稀有倍數 `outing_rules.rare_boost`——有所感包擲特殊頓悟乘它；原本 `Game._sense` 直接讀探索包的
   別名，那一筆 `GAME_DIRECT` 換成它）
+# cultivation（全部拆包第 23 批；主人：修練包）
+- `ctx._seize_chance(ratio)`：絕學的契機——剛打贏一場難度比 ratio 的仗，身上到了門檻的那一門擲一次頓悟（cultivation.seize），回寫給玩家看的
+  那幾句（沒擲、沒成是空的或一句摸到又滑走）。核心的單打服務 `_seize` 與決戰包的收場補送叫它（本體在 `features/cultivation/actions.py`）
 
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
@@ -249,7 +258,7 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 
 # guide（全部拆包第 22 批：新手引導包叫的、主人還沒搬的）
 - 假人走序章（`_graduate`）照每一步的完成條件做的那幾下：`ctx.slot_insight(art, insight)`、`ctx.switch_art(art)`、`ctx.practice(kind)`、
-  `ctx.allocate_stat(stat)`、`ctx.melt_art(art)`（主人武學 features/arts）、`ctx.forge(main, aux)`（主人煉製 features/craft）
+  `ctx.allocate_stat(stat)`、`ctx.melt_art(art)`（主人修練 features/cultivation）、`ctx.forge(main, aux)`（主人煉製 features/craft）
 - `ctx._hint_triggers(only)`（這一包自己的委派：tests/arts/test_hints.py 換掉 game._hint_triggers，包裡經 ctx 叫，換掉的才打得到；
   呼叫端改完就拿掉）
 
@@ -280,6 +289,9 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 
 # companions（全部拆包第 19 批：Game 的類別屬性，choose 前段〔按勸降只叫出輸入框〕與包都讀）
 - `ctx._persuade_said`（勸降的 C 段交給 choose 的單子與模型的分數；不是 None 才真的擲骰）
+# cultivation（全部拆包第 23 批；Game.__init__ 起的）
+- `ctx.forged`、`ctx.forged_thing`、`ctx.secret_solved`：這一下裝成了沒、合出了什麼、解開了哪一份口訣秘方（裝意境寫，server 的
+  api_menxia_do 在鎖裡讀；煉製 `Game.forge`、自創 `create_name` 也寫——煉製第 44 批）
 
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """
@@ -332,7 +344,6 @@ def note_cheer(state: GameState, content: Content, cid: str, text: str) -> None:
 
 # sense（全部拆包第 24 批「有所感與頓悟」）：原本寫在 engine.py；搬進有所感包的動作要掛裝飾器、要回籌備中那一句，又不能 import engine，
 # 搬到這裡，engine 照舊叫得到（`from tianxia.engine import PREPARING_REFUSAL`：tests/bots/test_stamina_refill.py、tests/gear/test_shop.py）。
-# 第 23 批（dev/arts-1）同時把 PREPARING_TEXT、PREPARING_REFUSAL 搬進這個檔檔尾的 # arts 那一段：兩批都合了之後留一份
 # 賽季籌備中（管理者還沒開季）：選單上那一顆灰的、安排前往被擋的原因寫 PREPARING_TEXT；動作被擋回一句 PREPARING_REFUSAL
 PREPARING_TEXT = "賽季籌備中，等待管理者開季"
 PREPARING_REFUSAL = f"（{PREPARING_TEXT}。）"
@@ -422,3 +433,17 @@ class WalletService:
 
     def item_for(self, effect: str) -> str | None:
         return item_for(self._game.content, effect)
+
+
+# cultivation（全部拆包第 23 批「修練」：原本寫在 engine.py；修練包的動作要掛、又不能 import engine，搬到這裡，engine 照舊叫得到——
+# 還在 Game 上的動作照舊掛同一個裝飾器；它回的 PREPARING_REFUSAL 第 24 批先搬了，寫在上面 # sense 那一段）
+def not_while_preparing(action):
+    """Game 的動作（與修練包裡同一種動作）：籌備中什麼都不能做，只回一句 PREPARING_REFUSAL（照一般的拒絕寫進紀錄，ctx._log）；
+    不然照常做。第一個參數是 ctx（第一階就是 Game 本身）。"""
+    @functools.wraps(action)
+    def guarded(ctx: Game, *args, **kwargs):
+        if ctx._preparing():
+            return ctx._log([PREPARING_REFUSAL])
+        return action(ctx, *args, **kwargs)
+
+    return guarded
