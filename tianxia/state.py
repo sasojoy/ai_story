@@ -820,6 +820,10 @@ class PlayerState(BaseModel):
     own_insights: dict[str, Insight] = Field(default_factory=dict)
     own_serial: int = 0  # 私有意境的流水號
     stat_points: int = 0  # 升級得到、還沒分配的屬性點（武學與成長設計 6.2）
+    # ── 五項屬性（屬性與跨季架構 v2 第三節；attrset，新的季才用）──
+    growth_preset: str | None = None  # 這一季挑的成長配比（Config.attributes.v2.presets 的 key，或 "custom"）；None 照預設那一套
+    growth_custom: dict[str, int] = Field(default_factory=dict)  # 自己配的每級成長（growth_preset 是 "custom" 時）
+    attr_alloc: dict[str, int] = Field(default_factory=dict)  # 送點自己配到哪幾項（鍵 → 點數）
     art_quality: dict[str, str] = Field(default_factory=dict)  # 功法 id → 自己那一份的品質（沒記＝全服登記的品質）
     art_mastery: dict[str, int] = Field(default_factory=dict)  # 功法 id → 修練往下一品失敗了幾次（熟練度）
     naming: str | None = None  # 第一個修到絕學、等著取正式名字的功法 id
@@ -1135,6 +1139,7 @@ QUIET_DEFAULTS = (
     "storylines", "story_open", "story_cards",  # 一條線（特殊事件）
     "epiphanies", "epiphany_dry", "god_naming",  # 特殊頓悟
     "keepsakes", "lasting",  # 長篇奇事
+    "growth_preset", "growth_custom", "attr_alloc",  # 五項屬性（屬性與跨季架構 v2）
     "legacy",  # 傳承（features/legacy）
 )
 
@@ -1891,7 +1896,7 @@ class WorldState(BaseModel):
         if isinstance(data, dict):
             for key in ("marks_fired", "mark_helpers", "final_tiers", "stance_counts", "stance_week", "stance_active", "god_names", "god_firsts",
                         "chapter_weights", "chapter_done", "plans", "stops_done", "deeds", "deed_seq",
-                        "inscriptions", "inscription_seq"):
+                        "inscriptions", "inscription_seq", "attrs_v2"):
                 if key in data and not data[key]:
                     del data[key]
         return data
@@ -1964,6 +1969,7 @@ class WorldState(BaseModel):
     renown_scale: float | None = None  # 名聲的門檻乘幾倍（開季時蓋章，world_state.stamp_season）；None＝沒有章，倍數 1
     territory: TerritoryState | None = None  # 地盤易手（出陣探索與地盤設計第四節）；None＝還沒算過
     conquest_on: bool = False  # 舊的開季章（領地爭奪 2026-10-27 起沒有開關、不看章，conquest.on）；只留著讓舊存檔讀得進來
+    attrs_v2: bool = False  # 這一季開季時五項屬性（Config.attributes.v2）是不是開著（attrset.on）；舊季讀檔是 False，False 不寫進存檔
     jianfa_on: bool = False  # 這一季開季時減法季的規則是不是開著（Config.jianfa；rules.jianfa 還要設定也開著）；舊季讀檔是 False
     conquest: ConquestState | None = None  # 領地爭奪（tianxia/conquest.py）；None＝這一季還沒算過
     # 〈天下形勢〉（領地爭奪第三批 A，tianxia/xingshi.py）：這一季收下的每一篇（照先後，最多 Config.xingshi.keep 篇）、還在等模型的那一張單、

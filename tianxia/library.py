@@ -51,7 +51,7 @@ def holding_cap(content: Content, level: int, lore: float, season=None) -> int:
 def cap_of(state: GameState, content: Content) -> int:
     """這個人現在的持有上限：照自己的等級與博聞，加上萬寶閣買的擴充（PlayerState.holding_bonus，只這一季）。"""
     p = state.player
-    return holding_cap(content, p.member.level, p.stats.get(team.LORE, team.BASE_STAT), state.world) + p.holding_bonus
+    return holding_cap(content, p.member.level, team.v1_stat(state, content, team.LORE), state.world) + p.holding_bonus
 
 
 def full(state: GameState, content: Content) -> bool:

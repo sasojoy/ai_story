@@ -67,6 +67,10 @@ def stat_uses(content: Content, state: GameState | None = None) -> list[tuple[st
     減法季屬性五段開著（state 給了、這一季 Config.jianfa 的 stat_milestones）：用途換成「現在給你什麼」的數字（stat_lines，設計 4.5「看得見」）；
     關著照舊只寫用途。"""
     names = content.config.stat_names
+    from . import attrset  # noqa: PLC0415
+
+    if state is not None and attrset.on(content, state.world):  # 五項屬性的季：名字與一句說明照 content/attributes_v2.json
+        return [(a.name, a.blurb) for a in content.attributes_v2]
     if state is not None and _milestones(state, content):
         lines = stat_lines(state, content)
         return [(names.get(key, key), lines[key]) for key in team.COMBAT_STATS]

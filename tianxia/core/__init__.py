@@ -20,8 +20,8 @@
 # CLAUDE.md 區塊表把它列在「核心與存檔」，每個功能都寫江湖紀錄；手冊 3.1 由 PM 補）。用到它的有兩處，都照這一份：
 # - tests/core/test_feature_boundaries.py：功能包能 import 的就是這幾個（加上 tianxia/core/），這幾個都不能 import 功能包；
 # - scripts/test_for.py：改了這幾個跑核心測試＋煙霧＋自己檔名的測試（照語法樹讀這一行、不 import；test_test_for 守兩邊一樣）。
-# 只寫字面的名字（test_for 用 ast.literal_eval 讀）。
+# 只寫字面的名字（test_for 用 ast.literal_eval 讀）。attrset（五項屬性，屬性與跨季架構 v2 第三節）跟 team 一起算核心：team、rules 讀它。
 MODULES = frozenset({
     "state", "sqlite_world", "world_state", "characters", "accounts", "database", "rules", "calendar", "models", "content",
-    "team", "gender", "naming", "wallet", "journal",
+    "team", "gender", "naming", "wallet", "journal", "attrset",
 })
