@@ -1463,7 +1463,7 @@ class Toast(BaseModel):
 
 class Deed(BaseModel):
     """世界記事的一筆（tianxia/deeds.py；世界活起來）：誰、在哪、做了什麼。kind：plan（盤算的結果）、move（人物照行程走到哪）、
-    beat（玩家打退大勢人物）、figure_fell（大勢人物退場或重創）；章回主線另寫 chapter。figures 是對話人物 id，actors 是玩家名號，
+    beat（玩家打退大勢人物）、figure_fell（大勢人物退場或重創）、place（地點變樣，place_state.py）；章回主線另寫 chapter。figures 是對話人物 id，actors 是玩家名號，
     side 是這件事算哪一方的（沒有是 None）。人物對話、此地舊事、章回都讀它。"""
 
     id: int
@@ -1474,6 +1474,17 @@ class Deed(BaseModel):
     actors: list[str] = Field(default_factory=list)
     side: str | None = None
     time: float = 0.0
+
+
+class PlaceMark(BaseModel):
+    """一個地點此刻的樣子（tianxia/place_state.py；世界活起來第二批「地點會變樣」）：kind 是 war 戰火、fallen 淪陷、famine 饑荒、
+    rebuild 重建；at 是哪一刻變的、until 是這一段到哪一刻（世界秒；None＝一直這樣，淪陷要有人收復才回來）。戰火、饑荒過了 until
+    接著重建 Config.plans.rebuild_days7，再之後就是太平（照時間算，不另外記）。side 是淪陷落入哪一方之手。"""
+
+    kind: str
+    at: float = 0.0
+    until: float | None = None
+    side: str | None = None
 
 
 class Plan(BaseModel):
@@ -1895,7 +1906,7 @@ class WorldState(BaseModel):
         data = handler(self)
         if isinstance(data, dict):
             for key in ("marks_fired", "mark_helpers", "final_tiers", "stance_counts", "stance_week", "stance_active", "god_names", "god_firsts",
-                        "chapter_weights", "chapter_done", "plans", "stops_done", "deeds", "deed_seq",
+                        "chapter_weights", "chapter_done", "plans", "stops_done", "deeds", "deed_seq", "places",
                         "inscriptions", "inscription_seq", "attrs_v2"):
                 if key in data and not data[key]:
                     del data[key]
@@ -1910,6 +1921,8 @@ class WorldState(BaseModel):
     stops_done: dict[str, bool] = Field(default_factory=dict)
     deeds: list[Deed] = Field(default_factory=list)
     deed_seq: int = 0
+    # 地點會變樣（tianxia/place_state.py）：地點 id → 此刻的樣子；沒寫的地點是太平。換季整個重來
+    places: dict[str, PlaceMark] = Field(default_factory=dict)
     # 走一趟的留言（tianxia/outing.py）：每一處留最近 outing_keep 則；換季時預設句清掉、題壁墨寫的帶到下一季（sqlite_world.next_season）
     inscriptions: list[Inscription] = Field(default_factory=list)
     inscription_seq: int = 0

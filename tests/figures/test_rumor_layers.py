@@ -1037,3 +1037,75 @@ def test_with_nothing_to_say_no_summary_entry_is_written_at_all(slow, world):
     jia.sync(T0 + 3 * HOUR)
     assert not any(entry.title == journal.AWAY for entry in jia.state.journal)
     assert _away(jia) is None
+
+
+# ── 上線邸報（世界活起來第二批，rumor_view.gazette_lines）───────────────
+
+
+def _gazette_state():
+    from tianxia.state import GameState, PlayerState
+    from tianxia.world_state import fresh_season
+
+    c = real_content()  # Config.plans 開著：世界記事與邸報都開
+    c.config.season_one = True
+    p = PlayerState(name="韓當", location="changshe", stats={}, stamina=100, faction="guan")
+    p.visited = {"changshe", "yingchuan"}
+    p.affinities = {"huangfusong": 10}
+    return c, GameState(player=p, world=fresh_season(c))
+
+
+def test_the_gazette_has_three_parts_places_people_and_you():
+    from tianxia import deeds
+
+    c, s = _gazette_state()
+    s.world.time = 10.0
+    deeds.record(s, c, "place", "長社燃起戰火。", place="changshe")
+    deeds.record(s, c, "move", "皇甫嵩到了官軍大營。", place="guan_camp", figures=["huangfusong"])
+    deeds.record(s, c, "plan", "曹操在長社那件事成了。", place="changshe", figures=["caocao"], actors=["韓當"])
+    deeds.record(s, c, "move", "張角到了廣宗。", place="guangzong", figures=["zhangjiao"])  # 沒去過、不認識：不列
+    rules.add_rumor(s, "韓當在長社截下了糧車。", "changshe", content=c, layer="world")
+    lines, total = rumor_view.gazette_lines(s, c, 0.0, lambda t: "某時")
+    assert lines[:2] == [rumor_view.GAZETTE_PLACES, "某時　長社燃起戰火。"]
+    assert lines[2:4] == [rumor_view.GAZETTE_PEOPLE, "某時　皇甫嵩到了官軍大營。"]
+    assert lines[4] == rumor_view.GAZETTE_YOU and set(lines[5:7]) == {"某時　曹操在長社那件事成了。", "某時　韓當在長社截下了糧車。"}
+    assert lines[-1].startswith("另有") and total >= 4
+
+
+def test_the_gazette_keeps_the_newest_rows_and_only_what_came_after_you_left():
+    from tianxia import deeds
+
+    c, s = _gazette_state()
+    c.config.plans.gazette_rows = 2
+    for i in range(5):
+        s.world.time = float(i)
+        deeds.record(s, c, "place", f"長社事{i}。", place="changshe")
+    lines, _ = rumor_view.gazette_lines(s, c, 1.0, lambda t: "某時")
+    assert lines[:3] == [rumor_view.GAZETTE_PLACES, "某時　長社事3。", "某時　長社事4。"]
+
+
+def test_with_nothing_about_you_the_gazette_falls_back_to_the_old_summary():
+    c, s = _gazette_state()
+    rules.add_rumor(s, "天下事甲。", None, content=c, layer="world")
+    assert rumor_view.gazette_lines(s, c, None, lambda t: "某時") == rumor_view.away_lines(s, c, None, lambda t: "某時")
+
+
+def test_the_gazette_switch_off_uses_the_old_title():
+    c, _ = _gazette_state()
+    assert rumor_view.gazette_on(c)
+    c.config.plans.gazette = False
+    assert not rumor_view.gazette_on(c)
+    assert journal.GAZETTE != journal.AWAY and journal.is_world_entry(journal.JournalEntry(time=0, title=journal.GAZETTE, lines=[]))
+
+
+def test_coming_back_with_the_world_alive_gets_the_gazette(slow, world):
+    from tianxia.state import Deed
+
+    slow.config.plans.enabled = True  # 世界記事與邸報開著（slow 那一份是 no_plans 的）
+    slow.itineraries = []  # 只看測試放進去的記事
+    jia = _game(slow, "甲", "guan", world=world)
+    jia.state.player.visited.add("changshe")
+    jia.sync(T0)
+    world.mutate_season(lambda season: season.deeds.append(Deed(id=1, kind="place", text="長社燃起戰火。", place="changshe", time=1.0)))
+    jia.sync(T0 + HOUR)
+    head = jia.state.journal[0]
+    assert head.title == journal.GAZETTE and head.lines[:2] == [rumor_view.GAZETTE_PLACES, f"{jia.stamp(1.0)}　長社燃起戰火。"]

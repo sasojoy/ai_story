@@ -18,7 +18,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-from . import calendar, rules, seal_acts, territory
+from . import calendar, place_state, rules, seal_acts, territory
 from .battle_instance import CENTER, FrontNote
 from .characters import name_key
 from .models import BattleDef, BlockDef, Content
@@ -871,6 +871,7 @@ def _announce(world: WorldState, content: Content, t: TerritoryState, before: di
             if fight is not None:  # 新的主人在自己的地方沒有攻的那一條（管理者、時刻表指定易手時；推滿與攻城戰在 flip 整本清掉）
                 fight.bars.pop(side, None)
             seal_acts.hold_lapse(world, loc_id, side)  # 替原主鎮著的鎮地（玉璽碎片改版第 3 批）當場結束
+            place_state.flipped(world, content, loc_id, side)  # 地點會變樣（世界活起來第二批）：落入黃巾之手算淪陷、拿回來算收復
     territory._remember(t)
 
 

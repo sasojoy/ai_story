@@ -258,6 +258,10 @@ def market_here(state: GameState, content: Content) -> bool:
     """這裡有開著的馬市：坐騎開著、人不在路上、地點有「馬市」標籤。"""
     if not on(content) or state.player.journey is not None:
         return False
+    from . import place_state  # noqa: PLC0415  地點會變樣：戰火、淪陷時馬市不開
+
+    if place_state.market_closed(state.world, content, state.player.location):
+        return False
     return MARKET_TAG in (content.locations[state.player.location].tags or [])
 
 
