@@ -10110,7 +10110,7 @@ class ShutScenario(StripScenario):
         emit("季曆", {"weeks": calendar.weeks(self.c, season), "days": calendar.total_days(self.c, season),
                       "weekend_style": calendar.weekend_style(season, self.c), "warning": calendar.profile_warning(self.c, season),
                       "orders_daily": calendar.orders_daily(season, self.c), "words": calendar.week_words(self.c, season)})
-        emit("每個時刻", [calendar.stamp_text(CLOCK0 + d * 86400 + h * 3600, self.c, season) for d in (0, 1, 2, 3, 5, 8, 13, 20) for h in (2, 15)])
+        emit("每個時刻", [calendar.stamp_text(d * 86400 + h * 3600, self.c, season) for d in (0, 1, 2, 3, 5, 8, 13, 20) for h in (2, 15)])
         emit("每一週的字", [calendar.week_label(w, self.c, season) for w in range(1, calendar.weeks(self.c, season) + 1)])
         emit("時刻表", [(e.id, e.kind, e.week, round(timetable.when_in(season, self.c, e) - CLOCK0, 1)) for e in timetable.events(season, self.c)])
         emit("時刻表說明", [timetable.default_dates_note(self.c), timetable.mandate_note(self.c, season)])
@@ -10126,7 +10126,7 @@ class ShutScenario(StripScenario):
             old = season.model_copy(update=update)
             emit(f"{tag} 季曆", {"weekend_style": calendar.weekend_style(old, self.c), "weeks": calendar.weeks(self.c, old),
                                 "days": calendar.total_days(self.c, old), "warning": calendar.profile_warning(self.c, old)})
-            emit(f"{tag} 每個時刻", [calendar.stamp_text(CLOCK0 + d * 86400, self.c, old) for d in (0, 1, 3, 6, 9, 14)])
+            emit(f"{tag} 每個時刻", [calendar.stamp_text(d * 86400, self.c, old) for d in (0, 1, 3, 6, 9, 14)])
             emit(f"{tag} 時刻表", [(e.id, round(timetable.happened_at(old, self.c, e) - CLOCK0, 1), timetable.happened_week(old, self.c, e))
                                  for e in timetable.events(old, self.c)])
 
@@ -10135,16 +10135,17 @@ class ShutScenario(StripScenario):
         emit("引導的步驟", [(s.id, getattr(s, "kind", None)) for s in self.c.tutorial.steps])
         emit("提示", sorted(self.c.hints) if isinstance(self.c.hints, dict) else [h.id for h in self.c.hints.hints] if hasattr(self.c.hints, "hints")
              else None)
-        self.fresh(self.NEWBIE)
-        self.call(self.NEWBIE, "GET", "/api/howto")
+        who = "新客"  # NEWBIE 在 setup 註冊過了，再註冊會 400、後面全 401
+        self.fresh(who)
+        self.call(who, "GET", "/api/howto")
         for step in range(8):
-            opts = self.ids(self.main(self.NEWBIE))
+            opts = self.ids(self.main(who))
             pick = next((i for i, o in sorted(opts.items()) if o.get("enabled") and not i.startswith(("act:rest", "move", "map"))), None)
             if pick is None:
                 break
-            self.choose(self.NEWBIE, pick)
-            self.settle_choices(self.NEWBIE)
-        self.me(self.NEWBIE, "走了幾步")
+            self.choose(who, pick)
+            self.settle_choices(who)
+        self.me(who, "走了幾步")
 
     def goals(self) -> None:
         """新手目標：什麼都沒做、做了 field2、全做了；任務卡（/api/main 的 newbie）與 newbie_view 的字。"""
@@ -10192,7 +10193,7 @@ class ShutScenario(StripScenario):
                 self.look_here(who, f"在{where}")
 
     def half(self) -> None:
-        """切點：三位新人初入江湖寫到一半（舊步數 12 對到 e2_drill、e4_field、e6_shops 之後的一步），只看第一眼；後半再往下走。"""
+        """切點：三位新人把 tutorial_step 手擺到 e2_drill、e4_field、e3_cultivate（步數 13）寫到一半，只看第一眼；後半再往下走。舊步數對應表（onboarding < 5）這一軌沒走到，真的新人建角色直接是 18。"""
         steps = [s.id for s in self.c.tutorial.steps]
         picks = [12, steps.index("e4_field") if "e4_field" in steps else len(steps) - 1, 13]
         for who, step in zip(self.NEWBIES, picks):
