@@ -26,10 +26,10 @@
 - `ctx._record_exp(record, exp, source)`：本人的經驗寫進戰報（滿級換心得）；`ctx._file_battle(record, ...)`：存戰報、回那一行
 - `ctx._play_rounds(record, squad, tier, ...)`：排回合的演出；`ctx._deed_fame(kind)`：立功給名望
 - `ctx._load_kin(name)`、`ctx._save_kin(game)`：同一把鎖裡讀、寫別人的存檔（混戰、截殺）
-# battle（全部拆包第 7 批：集結、投效、挑同伴加入那一刻快照的份量；總表歸核心「戰力快照」）
-- 戰力快照：`ctx._battle_scores()`（三招的份量；測試換掉 `Game._battle_scores`）、`ctx._battle_power()`（威力；測試換掉）、`ctx._battle_gear()`
-  （坐騎、部下）、`ctx._battle_marks()`（新手、叛投、隨你出陣的同伴、玉璽碎片……）、`ctx._battle_role()`（職位）、`ctx._battle_road()`
-  （武學屬性）、`ctx._battle_neili_cap()`（決戰的氣血池上限）
+# battle（全部拆包第 7 批：集結、投效、挑同伴加入那一刻快照的份量；總表歸核心「戰力快照」）：這裡原本列的戰力快照 7 個，第 8 批去重——
+# 以下面 `# shared` 那一段的「戰力快照」為準（第 16 批合併時 PM 定：第 8 批做；`_battle_scores`、`_battle_power` 測試換掉，包裡經 ctx 叫）
+# battle（全部拆包第 8 批：推進與結算；時刻表決戰收場那一下，總表歸核心）
+- `ctx._deliver_big_events()`：這一季的時刻表大事人人有份，沒看過的補進自己的江湖紀錄（FB-038；決戰包的時刻表決戰收場之後叫）
 
 店面與戰報的補充（tavern：主動搬六包第 10 批酒肆加的）
 - `ctx._shop_say(key, problem=None)`、`ctx._shop_after(problem, done, keyer=None)`：掌櫃那一句（七間店共用，shop_lines.json 的情況）
@@ -127,13 +127,19 @@
   `ctx._push_room(trend_id)`（今天在這條線上還推得動多少；第一季規則關著是無限）
 - 共用的字：`BIG_FIGHT_WAIT`（大場面按下去、等模型判讀時按鈕上的字；事件的戰鬥選項、挑戰本人、遊歷與出陣都用，從這個模組 import）
 
+# companions（全部拆包第 19 批「人物情誼一」：主人都是核心，留在 Game 上；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第1批.md 1.3）
+- `ctx._deed_points(points, capped=True)`（「文字的事」那一本的貢獻帳：記到心意、託付辦成了；第 16 批 PM 認定第 1 條留在 Game）、`ctx._apply(effect)`（效果套用：
+  勸降成了立痕跡；事件檢定的委派）
+- 共用的字與小函式（從這個模組 import）：`note_cheer`、`CHEERS_KEEP`（等著寫道賀信的那一格：舊模組 figure_life.spread 寫、書信讀；原本在 tianxia/letters.py）
+
 ## 二、查詢服務
 
 # battle（主動搬六包第 5 批；主人：決戰包。本體還在 Game——「打」那一半，第 6～8 批搬——決戰包「看」那一半經 ctx 叫；搬完由決戰包經
 # Game 的委派回答別的包）
 - `ctx._battle_for_me(tick)`：場景上畫著的那一場（戰鬥, 定義），序章裡、沒有是 None；tick 照原位（畫面是 False、放手一搏送出是 True：
   一次請求只推進一次）。`ctx._battle_now()`：此刻自己參戰（或看）的那一場（酒肆也在用：殺手不找決戰裡的人；酒肆第 10 批在三、過渡
-  也記了一行，第 11 批去重，留這一行）
+  也記了一行，第 11 批去重，留這一行）。第 8 批兩個本體搬進 `features/battle/progress.py`、決戰包裡直接叫；酒肆包、形象包、核心的
+  事件檢定照舊經 Game 的委派問
 - `ctx._definition_of(battle)`（那一場的定義：攻城戰是「攻城・地點」）
 - `ctx._watching_battle(battle, definition)`（此刻只能在一旁看）、`ctx._free_agent(definition)`（散人、豪強：只能臨時投效；本體第 7 批搬進
   `features/battle/muster.py`，決戰包裡直接叫，別的包問它叫 Game 的委派）。（第 7 批：決戰的大區叫什麼、還沒到戰場的原因、臨時投效的人
@@ -144,6 +150,11 @@
   別的包問「此刻有沒有攻城」叫它
 # battle（全部拆包第 7 批）
 - `ctx.battle_now()`（這個人看的那一場，同 `_battle_now`；假人的分數讀它，決戰包的 `bots.py`）
+# battle（全部拆包第 8 批）
+- `ctx._round_mvp(battle, resolve)`（主人：形象包；決戰包推一回合時包著回合結算叫：結算完挑回合首功、回合紀錄多一行。決戰包不 import 形象包）
+- 上面那一行的 `ctx._watching_battle` 第 8 批本體搬進 `features/battle/progress.py`、決戰包裡改直接叫，清單上照舊留著：Game 上的委派
+  回答別的包（Game 原位的 options、引導的 `_hint_triggers`；第 22 批把 `_hint_triggers` 搬進引導包之後，引導包經 ctx 問它。審查：拿掉的話
+  兩條線合起來 git 不報衝突、邊界測試卻紅）
 
 explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._outing_on()`（主人 explore：減法季探索一顆開著、不在序章裡；出陣包問——散人那一行、出陣的字；出陣第 1 批原本列在
@@ -160,6 +171,15 @@ explore（主動搬六包第 3＋4 批加的這一段）
   h_tavern、新手目標「去酒肆」指哪幾處。Game 上一行的委派叫 `tavern_rules.on`／`here`／`tavern_at`——原本 `_hint_triggers`、`_newbie_go`
   直接讀酒肆的那兩筆 `GAME_DIRECT` 換成它們）
 
+# bout（全部拆包第 12 批；主人：單挑包。本體在 tianxia/features/bout/，Game 留一行委派回答別的包）
+- `ctx._boss_ready()`（此刻在這裡遇得上的頭目：不在序章、沒在打、不在冷卻、這一隻的次數還沒用完；沒有是 None）、`ctx._boss_face(boss)`
+  （這一隻對你露的那一面的名字，照陣營）、`ctx._duel_start(boss)`（撞上頭目、開打）：探索包的出門一趟撞上頭目時問。原本列在三、過渡
+  explore 那一段（主人寫頭目戰，`_boss_ready` 那時是探索包直接 import `tianxia.duel` 叫 `available`），單挑成包時照總表第六節第 4 條改成查詢服務
+- `ctx.arena_look()`、`ctx.arena_move()`（主人：形象包）：擂台報名、開打那一刻記這個人穿哪一套、出招疊哪一張光效（擂台搬進單挑包之後由包經 ctx
+  問；`tianxia/features/bout/tests/test_arena.py` 換掉 `Game.arena_look`）
+# companions（全部拆包第 19 批）
+- `ctx._settle_partings(write=True)`（主人決戰：決戰收場時從你身邊回江湖的人，情誼乘 parted_keep；按招募之前先結清。本體第 7 批在 `features/battle/muster.py`，總表第 19 列「先做」列成查詢服務）
+- `ctx._recruit_target()`、`ctx._recruitable_here()`（主人人物情誼：此地有沒有招得了的人；新手引導碰到才說的 h_recruit 問。第 22 批原本記在三、過渡）
 # sense（全部拆包第 24 批：有所感包回答別的包、有所感包問探索包）
 - `ctx._sense_here(loc, rng)`（主人有所感：靜心感悟——這一處有場景就跳有所感的卡，沒有場景的內容照舊直接悟；探索包的探索一顆抽到感悟叫它。
   第 3＋4 批記在三、過渡 explore 那一段，主人成包了，改列這裡）
@@ -172,10 +192,10 @@ explore（主動搬六包第 3＋4 批加的這一段）
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
 explore（主動搬六包第 3＋4 批加的這一段）
-- `ctx._boss_face(boss)`、`ctx._home_gather(loc, mids)`、`ctx._wild_foes(loc)`、`ctx._practice_tier(loc)`
-  （探索三選一：企劃者 10/31 定不搬、留在 engine——批次表第 9 批不做，三選一整套拿掉之前一直掛在 Game 上）
+- `ctx._home_gather(loc, mids)`、`ctx._wild_foes(loc)`、`ctx._practice_tier(loc)`
+  （探索三選一：企劃者 10/31 定不搬、留在 engine——批次表第 9 批不做，三選一整套拿掉之前一直掛在 Game 上；`_boss_face` 第 12 批改成二、查詢服務）
   （`ctx._sense_here(loc, rng)`：全部拆包第 24 批有所感成包，改列二、查詢服務 `# sense` 那一段）
-- `ctx._story_begin(strand)`（一條線）、`ctx._duel_start(boss)`（頭目戰）
+- `ctx._story_begin(strand)`（一條線；`_duel_start` 第 12 批改成二、查詢服務）
 - 收尾的掉落：`ctx._legend_find(rng)`（破境丹）、`ctx._seal_find(loc_id)`（玉璽碎片）——照原本的順序在原位叫，不收成事件（同一串的
   回體丹 `_pill_find`、殘譜 `_scrap_find` 在一、共用服務）
 - `ctx._outing_plan(loc)`、`ctx.outing_plan()`（探索包自己的委派：測試換掉 game._outing_plan 之後按探索，包裡經 ctx 叫，換掉的才打得到；
@@ -186,21 +206,24 @@ explore（主動搬六包第 3＋4 批加的這一段）
 
 （原本這裡還有 `_train_option`、`_train_pick`、`_big_trip`：舊遊歷的鈕與大場面挑哪一路，第 17 批搬進同一包，包裡直接叫 train_actions，拿掉了。）
 # battle（主動搬六包第 5 批；擺在這兩行之間：別條拆包線與 develop 改的是段頭、_order_credit、_outing_on 以下與段尾，不跟它們貼在一起）
-- `ctx._mutate_battle_of(battle, fn)`（決戰「打」那一半：改共用狀態裡的那一場；第 8 批搬進決戰包之後改成包裡直接叫。第 7 批：放手一搏送出、
-  隨你出陣的同伴回江湖兩個本體搬進 `muster.py`、包裡直接叫，從這裡拿掉）
+- （`_mutate_battle_of`：改共用狀態裡的那一場——第 8 批本體搬進 `features/battle/progress.py`、包裡直接叫，從這裡拿掉。第 7 批：
+  放手一搏送出、隨你出陣的同伴回江湖兩個本體搬進 `muster.py`、包裡直接叫，從這裡拿掉）
 - `ctx._four_wins()`（三陣營四勝利：這一季開著沒；決戰的軍餉記不記豪強的貢獻）
 # battle（全部拆包第 6 批：管理者的決戰工具、攻城）
-- `ctx._shelve_unfinished_battle(text)`、`ctx._advance_battle_round(battle, definition)`、`ctx._apply_battle_outcome(battle)`（測試換掉
-  `Game._apply_battle_outcome`〔test_server〕）、`ctx._highlight_line(battle, definition)`、`ctx._merit_line(battle, definition)`（決戰「打」
-  那一半：取消決戰收兵、推一回合、收場套結果、最有戲與首功那兩則；第 8 批搬進決戰包之後改成包裡直接叫）
+- `ctx._apply_battle_outcome(battle)`（收場套結果：第 8 批本體搬進 `features/battle/progress.py`，包裡照舊經 ctx 叫——測試換掉
+  `Game._apply_battle_outcome`〔test_server〕。同一行原本的 `_shelve_unfinished_battle`、`_advance_battle_round`、`_highlight_line`、`_merit_line`
+  第 8 批搬進 `progress.py`、包裡直接叫，從這裡拿掉）
 - `ctx._timetable_event(event_id)`、`ctx._timetable_refusal(action)`（時刻表：這一季的那一件、時刻表類管理者動作的共同檢查；主人大勢人物與賽季）
 - `ctx.admin_battles()`、`ctx.admin_start_battle(battle_id, now)`、`ctx.cancelled_showdowns()`、`ctx._deliver_battle_results()`（決戰包自己的
   委派：測試直接叫〔前三個〕或換掉〔`Game._deliver_battle_results`，test_renown_cross〕，包裡經 ctx 叫才打得到；呼叫端改完就拿掉）
 # battle（全部拆包第 7 批：集結、投效、挑同伴）
-- `ctx._battle_status(tick)`（測試換掉、數它被叫幾次〔test_engine、test_hints〕）、`ctx._mutate_battle_now(fn)`、`ctx.battles_now()`（決戰「打」
-  那一半：此刻每一場、改自己參戰的那一場；第 8 批搬進決戰包之後改成包裡直接叫）
-- `ctx._backfill_battle_scores()`（出招之前補自己的份量快照；主人：總表第 12 批「決戰順便」）、`ctx._mandate_weight(definition, scores)`
-  （天命之爭手上有碎片的人份量加權；主人：玉璽，總表裁定這一批留原位）
+- `ctx._battle_status(tick)`（測試換掉、數它被叫幾次〔test_engine、test_hints〕：第 8 批本體搬進 `features/battle/progress.py`，包裡照舊經 ctx 叫。
+  同一行原本的 `_mutate_battle_now`、`battles_now` 第 8 批搬進 `progress.py`、包裡直接叫，從這裡拿掉）
+- `ctx._mandate_weight(definition, scores)`（天命之爭手上有碎片的人份量加權；主人：玉璽，總表裁定這一批留原位）。（同一行原本的
+  `_backfill_battle_scores` 第 8 批搬進 `progress.py`〔PM 11/03 從第 12 批挪來〕、包裡直接叫，從這裡拿掉）
+# battle（全部拆包第 8 批：推進與結算；主人：玉璽，總表附錄甲）
+- `ctx._seal_bare()`（補份量快照時不含碎片的那一份）、`ctx._seal_settle(battle, definition, result)`（時刻表決戰收場：先挑挑戰者、再挑現世的得主）、
+  `ctx._deliver_seal_results()`（玉璽碎片的事補送到自己手上）
 - `ctx._order_credit(...)`（軍令；出陣約戰結算時也叫在攻方、應戰的人那兩份 Game 上——包裡的變數名 attacker、defender，邊界測試照樣掃）
 （第 16 批合進 develop 時去重：這一段原本還列了出陣包用的 `_squad_encounter`（as_sortie=True：打一場隊伍，出陣攻打）、`_push_progress`
 （地盤：領地爭奪推、拉進度）、`_drill_gains`（操練）、`_spar_power`、`_spar_mirror`（切磋：本人對本人的威力、從另一邊看同一場）、
@@ -215,8 +238,8 @@ explore（主動搬六包第 3＋4 批加的這一段）
 
 core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡包要叫回 Game 的）
 （原本這裡還有 `_train_squad_ids`：出陣包行動列那一格的序章雪恥，第 17 批舊遊歷與出陣共用的對手池搬進同一包，包裡直接叫，拿掉了。）
-- `ctx._fighting(battle, definition)`（決戰包蓋在畫面上的戰場要不要整個取代自己眼前的事：開打了在場上的人；主人：決戰「打」那一半，
-  第 7、8 批搬進決戰包之後改成包裡直接叫）
+- （`_fighting`：決戰包蓋在畫面上的戰場要不要整個取代自己眼前的事——第 8 批本體搬進 `features/battle/progress.py`、`scene_over` 掛鉤直接叫，
+  從這裡拿掉；Game 上的委派留給 options）
 
 # sortie（全部拆包第 17 批「出陣三」）
 - `ctx._parley_backing_here()`（並肩出陣：今天答應陪你、你在他那一帶的那位人物；act:train 打的那一場包在外面；主人人物情誼〔總表第 19～20 批〕）
@@ -225,11 +248,14 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
   scripts/sim_trend_sources.py 換掉 `Game._train_push`——包裡經 ctx 叫，換掉的才打得到；呼叫端改完就拿掉）
 
 # guide（全部拆包第 22 批：新手引導包叫的、主人還沒搬的）
-- `ctx._recruit_target()`、`ctx._recruitable_here()`（主人同伴 features/companions：碰到才說的 h_recruit）
 - 假人走序章（`_graduate`）照每一步的完成條件做的那幾下：`ctx.slot_insight(art, insight)`、`ctx.switch_art(art)`、`ctx.practice(kind)`、
   `ctx.allocate_stat(stat)`、`ctx.melt_art(art)`（主人武學 features/arts）、`ctx.forge(main, aux)`（主人煉製 features/craft）
 - `ctx._hint_triggers(only)`（這一包自己的委派：tests/arts/test_hints.py 換掉 game._hint_triggers，包裡經 ctx 叫，換掉的才打得到；
   呼叫端改完就拿掉）
+
+# bout（全部拆包第 12 批：單挑包自己的委派，被測試或腳本換掉的，包裡經 ctx 叫才打得到；呼叫端改完就拿掉）
+- `ctx._arena_bare()`（擂台挑人的身手不含玉璽碎片的那一份；`tests/seal/test_seal_revamp_hidden.py` 換掉 `Game._arena_bare`）、
+  `ctx._duel_finish(tier, line)`（頭目戰收場；`scripts/sim_season_one.py` 換掉 `Game._duel_finish` 數頭目戰打成怎樣）
 
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 
@@ -252,6 +278,9 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 - `ctx._tavern_seek_exact`、`ctx._tavern_reply`：查人那一下問得多清楚（託酒家留意看它；None 沒查成、True 確切地點、False 沒問清楚）、
   問酒家 B 段寫好的那一句（tavern_ask 放、問完清掉）
 
+# companions（全部拆包第 19 批：Game 的類別屬性，choose 前段〔按勸降只叫出輸入框〕與包都讀）
+- `ctx._persuade_said`（勸降的 C 段交給 choose 的單子與模型的分數；不是 None 才真的擲骰）
+
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """
 from __future__ import annotations
@@ -264,6 +293,7 @@ from ..wallet import Purchase, Wallet
 
 if TYPE_CHECKING:
     from ..engine import Game
+    from ..state import GameState  # companions（note_cheer 的型別）
 
 # 共用的字（原本寫在 engine.py；功能包要用、又不能 import engine，搬到這裡，engine 照舊叫得到）
 PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，畫面照常可看"
@@ -283,6 +313,21 @@ def drill_share(amount: int, share: float) -> int:
     操練真的給的（出陣包 train_actions.drill）與行動列底下說會給什麼（train_actions.train_line）都算這一個；出陣的守與打贏（出陣包）、探索也用。
     （原本寫在 engine.py；出陣包要用、又不能 import engine，搬到這裡，`from tianxia.engine import drill_share` 照舊拿得到。）"""
     return int(amount * share + 0.5)
+
+
+# companions（全部拆包第 19 批「先做」：figure_life 讀來信改走核心）：PlayerState.cheers 那一格——舊模組 figure_life.spread 寫（他欣賞你做的事）、
+# 書信（人物情誼包 letters._cheer_letter）讀；原本寫在 tianxia/letters.py，letters re-export（tianxia.letters.note_cheer 照舊是同一個函式）
+CHEERS_KEEP = 5
+
+
+def note_cheer(state: GameState, content: Content, cid: str, text: str) -> None:
+    """figure_life.spread 讓 cid 的情誼往上動、情誼到了 letter_affinity：記下來，等著寫道賀信（最多 CHEERS_KEEP 件，舊的先丟）。
+    開關同 letters.on（人物活起來開著、書信開著）。"""
+    tuning = content.config.figure_life
+    if not (tuning.enabled and tuning.letters) or state.player.affinities.get(cid, 0) < tuning.letter_affinity:
+        return
+    state.player.cheers = [c for c in state.player.cheers if not c.startswith(f"{cid}|")] + [f"{cid}|{text}"]
+    del state.player.cheers[:-CHEERS_KEEP]
 
 
 # sense（全部拆包第 24 批「有所感與頓悟」）：原本寫在 engine.py；搬進有所感包的動作要掛裝飾器、要回籌備中那一句，又不能 import engine，

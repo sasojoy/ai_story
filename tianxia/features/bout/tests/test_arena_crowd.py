@@ -17,7 +17,8 @@ from tianxia.state import CrowdNote
 
 from test_arena import NOW, _do, _join, ring  # noqa: F401 — ring 是 fixture
 
-LINES = json.loads((Path(__file__).resolve().parents[2] / "content" / "arena_crowd.json").read_text(encoding="utf-8"))
+# repo 的根：tianxia/features/bout/tests/ 往上四層（全部拆包第 12 批從 tests/battle/ 搬進包，以前是 parents[2]）
+LINES = json.loads((Path(__file__).resolve().parents[4] / "content" / "arena_crowd.json").read_text(encoding="utf-8"))
 
 
 class _Fake:

@@ -4,10 +4,12 @@
 婉拒不扣。假人不收託付。正式內容的 season21（盧植、波才、皇甫嵩各三件）；模型一律是假的。"""
 from __future__ import annotations
 
+import random
+
 import pytest
 
 from stances_kit import BOCAI, DAY, HUANGFU, LUZHI, at, real_game
-from tianxia import annals, errands, letters, rules, stances
+from tianxia import annals, bot, errands, letters, rules, stances
 from tianxia.state import BotProfile
 
 
@@ -72,6 +74,28 @@ def test_bots_get_no_errands():
     _friend(g)
     at(g, g.now + 60)
     assert not g.state.player.errands
+
+
+def test_the_season_bot_never_presses_an_errand_button():
+    """整季機器人（bot.pick）站在託付的地點也不按 errand:（這一包的 bot_always；原本寫在 bot.pick 的排除清單）。"""
+    g = real_game()
+    _friend(g)
+    e = _give(g, LUZHI, "luzhi_letter")
+    g.state.player.location = e.target
+    opts = g.options(odds=False)
+    button = f"errand:deliver:{e.id}"
+    assert button in {o.id for o in opts}
+    assert all(bot.pick(g, opts, random.Random(k)) != button for k in range(40))
+
+
+def test_the_journal_entry_is_titled_with_the_errand_and_the_figure():
+    """託付那一下江湖紀錄的標題（choose 掛鉤的 Outcome.title；原本在 Game._action_title）。"""
+    g = real_game()
+    _friend(g)
+    e = _give(g, LUZHI, "luzhi_letter")
+    g.state.player.location = e.target
+    _press(g, f"errand:deliver:{e.id}")
+    assert g.state.journal[0].title == "交信・盧植"
 
 
 def test_delivering_the_letter_pays_affinity_contribution_a_stance_and_an_annal():

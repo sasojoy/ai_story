@@ -11,8 +11,9 @@
 """
 from __future__ import annotations
 
-from . import arena, arts, library, martial_arts, team
+from . import arts, library, martial_arts, team
 from .characters import CharacterStore, open_characters
+from .core import arena_ranks  # 擂台榜的名次與稱號（核心的查詢服務；擂台本身在單挑包）
 from .models import Content
 from .world_state import WorldStateStore
 
@@ -79,10 +80,10 @@ def compute_boards(
         made = firsts.get(p.name, 0)
         if mastered or made:
             board["宗師"].append((p.name, (mastered, made), f"絕學 {mastered} 門・首創 {made} 樣"))
-    if arena.on(content):  # 擂台榜（tianxia/arena.py）：照名次，不掃角色；報了名就上榜，跟擂台那一頁的擂台榜一樣
-        for e in arena.ladder(world.get_season()):
-            title = arena.title_for(e.rank)
-            board["擂台"].append((e.name, (-e.rank,), "・".join(t for t in (title, arena.record_text(e)) if t)))
+    if arena_ranks.on(content):  # 擂台榜（tianxia/core/arena_ranks.py）：照名次，不掃角色；報了名就上榜，跟擂台那一頁的擂台榜一樣
+        for e in arena_ranks.ladder(world.get_season()):
+            title = arena_ranks.title_for(e.rank)
+            board["擂台"].append((e.name, (-e.rank,), "・".join(t for t in (title, arena_ranks.record_text(e)) if t)))
     for kind, rows in board.items():
         if kind in ("武學", "內功"):
             rows.sort(key=lambda row: (-row[4], -row[3], row[0]))
