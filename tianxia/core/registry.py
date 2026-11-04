@@ -35,10 +35,10 @@ from ..features import socialize  # 交友求見：全部拆包第 21 批（只�
 from ..features import figure_acts  # 大勢人物的行動：全部拆包第 31 批（只接 aid:、plan: 的 choose 與假人分數，照前綴認，排在哪裡結果都一樣；同步補名望 _deliver_guard_credits 不接 deliver_notices，留 Game 的委派原位）
 # zhuan
 from ..features import zhuan  # 列傳：全部拆包第 29 批（只接 zhuan: 的 choose 與 5 條路由，照前綴、路徑認，排在哪裡結果都一樣）
-# bout
-from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。排最後：擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）
 # military
 from ..features import military  # 軍情：全部拆包第 33 批（沒有選項、選單、狀態、掛鉤，排在哪裡結果都一樣；選單那幾顆和按下去都在核心原位叫 Game 的委派）
+# bout
+from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。排最後：擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -71,10 +71,10 @@ FEATURES: list[Feature] = [
     figure_acts.FEATURE,
     # zhuan
     zhuan.FEATURE,
-    # bout（排最後：店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4）
-    bout.FEATURE,
     # military
     military.FEATURE,
+    # bout（排最後：店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4）
+    bout.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 
