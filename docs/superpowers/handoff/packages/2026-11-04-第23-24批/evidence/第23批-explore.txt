@@ -1,0 +1,9 @@
+跑完 268 秒
+explore none      整段 base 747 行 3833550 位元組 7c3c26c141d09961｜head 7c3c26c141d09961 一樣｜base 前半＋head 後半 7c3c26c141d09961 一樣
+explore weekend   整段 base 777 行 7309762 位元組 b6ea60ba10a6aed4｜head b6ea60ba10a6aed4 一樣｜base 前半＋head 後半 b6ea60ba10a6aed4 一樣
+explore season21  整段 base 929 行 10929538 位元組 8ace50e197a2493c｜head 8ace50e197a2493c 一樣｜base 前半＋head 後半 8ace50e197a2493c 一樣
+explore week7     整段 base 892 行 9476065 位元組 76713b028e0510cc｜head 76713b028e0510cc 一樣｜base 前半＋head 後半 76713b028e0510cc 一樣
+explore test      整段 base 585 行 1364337 位元組 fc105a76b5c68e19｜head fc105a76b5c68e19 一樣｜base 前半＋head 後半 fc105a76b5c68e19 一樣
+探索假人 season21  16 行 6464 位元組 base 7d9ff88e0644a349｜head 7d9ff88e0644a349 一樣
+探索假人 week7     16 行 6076 位元組 base 399af9df017b82e5｜head 399af9df017b82e5 一樣
+全部一樣
