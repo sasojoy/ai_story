@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from . import bounties, calendar, errands, figure_life, gender, prologue, rules, zh
 from .calendar import DAY
+from .core.services import CHEERS_KEEP, note_cheer  # noqa: F401  等著寫道賀信的那一格走核心（figure_life.spread 寫，全部拆包第 19 批）；舊名照舊讀得到
 from .models import Content
 from .state import Bounty, GameState, Letter
 
@@ -35,21 +36,12 @@ CHEER_TEXT = "{hero}台鑒：聽說你{about}，我拍案叫好。他日相見�
 FEAST_TEXT = "{hero}台鑒：我在{place}略備薄酒，{hero}若得閒，務請光臨。"  # 待 joy 潤：邀宴的固定句（第三批）
 THANK_TEXT = "{hero}台鑒：{task}一事，多虧{hero}出手相助，此情銘記於心。"  # 待 joy 潤：求援委託辦成了的道謝（第三批）
 HELP_MOODS = ("焦慮", "悲憤")
-CHEERS_KEEP = 5
 WRITE_LIMIT = 120  # 模型寫的信最多幾個字（超過照固定句）
 _DIGITS = re.compile(r"[0-9０-９]")
 
 
 def on(content: Content) -> bool:
     return figure_life.on(content) and content.config.figure_life.letters
-
-
-def note_cheer(state: GameState, content: Content, cid: str, text: str) -> None:
-    """figure_life.spread 讓 cid 的情誼往上動、情誼到了 letter_affinity：記下來，等著寫道賀信（最多 CHEERS_KEEP 件，舊的先丟）。"""
-    if not on(content) or state.player.affinities.get(cid, 0) < content.config.figure_life.letter_affinity:
-        return
-    state.player.cheers = [c for c in state.player.cheers if not c.startswith(f"{cid}|")] + [f"{cid}|{text}"]
-    del state.player.cheers[:-CHEERS_KEEP]
 
 
 def mail_day(content: Content, world, real_now: float | None) -> int | None:
@@ -127,14 +119,10 @@ def _cheer_letter(state: GameState, content: Content) -> Letter | None:
 
 
 def _feast_letter(state: GameState, content: Content) -> Letter | None:
-    """情誼夠的人物正在擺宴、這一場還沒邀過你、你還沒敬過酒：寫一封邀宴（第三批，feasts.py）。"""
-    from .features.feast import rules as feasts  # noqa: PLC0415  宴客（功能包）→ figure_life：延後載入
-
-    if not feasts.on(content):
-        return None
+    """情誼夠的人物正在擺宴、這一場還沒邀過你、你還沒敬過酒：寫一封邀宴（第三批，feasts.py；宴客是別的包，經 figure_life.feast_invites 問）。"""
     p = state.player
-    for f in feasts.open_feasts(state):
-        if feasts.toasted(state, f) or not _reachable(state, content, f.host):
+    for f in figure_life.feast_invites(state, content):
+        if not _reachable(state, content, f.host):
             continue
         if any(x.kind == "邀宴" and x.sender == f.host and x.at >= f.start for x in p.letters):
             continue

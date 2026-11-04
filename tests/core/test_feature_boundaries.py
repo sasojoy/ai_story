@@ -680,6 +680,12 @@ SHARED_LATER = {
 }
 
 
+# companions（全部拆包第 19 批；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第1批.md 1.2、1.6）：stances 的世界那一半進了共用規則層 stance_world。
+# 事件抽選 events 讀的也是世界那一半（不再碰包）：理由改成只剩伏筆
+SHARED_PENDING[("stance_world", "figures")] = "排定：大勢人物（figures.state_of，函式裡，持重拉進度找他在哪條線）——總表第 40 批收進共用規則層"
+SHARED_LATER["events"] = "事件抽選：讀伏筆 foreshadow（軍情第 34 批成包）；伏筆改成查詢服務之後再看（心意第 19 批換成共用規則層 stance_world）"
+
+
 def test_the_shared_rules_layer_only_imports_the_core_and_itself():
     """共用規則層只 import 核心本體與同一層（總表第六節第 5 條）：碰到別的舊模組的就是 SHARED_PENDING 那幾條，多一條、少一條都紅
     （新碰到的要寫理由、收掉的要拿掉）；對象沒有一個是核心本體、同一層或別名，理由開頭寫是哪一種。"""

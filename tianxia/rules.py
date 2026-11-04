@@ -436,12 +436,12 @@ def add_marks(marks: dict[str, int], state: GameState, content: Content) -> None
 
 
 def _stance_mark_scale(key: str, state: GameState, content: Content) -> int:
-    """人物心意（減法季批 6，恤民）讓這一條痕跡記一筆算幾筆；關著是 1（先問開關：關著連 stances 都不載）。stances → rules：延後 import。"""
+    """人物心意（減法季批 6，恤民）讓這一條痕跡記一筆算幾筆；關著是 1（先問開關：關著連 stance_world 都不載）。stance_world → rules：延後 import。"""
     if not jianfa(content, state.world, "stances"):
         return 1
-    from . import stances  # noqa: PLC0415
+    from . import stance_world  # noqa: PLC0415
 
-    return stances.mark_scale(state, content, key)
+    return stance_world.mark_scale(state, content, key)
 
 
 def _note_mark_helper(key: str, state: GameState, content: Content) -> None:

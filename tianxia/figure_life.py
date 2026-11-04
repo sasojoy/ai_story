@@ -16,6 +16,7 @@ import random
 
 from . import calendar, figures, push, relations, renown, seal_acts
 from .calendar import DAY
+from .core.services import note_cheer  # 全部拆包第 19 批「先做」：等著寫道賀信的那一格走核心（書信搬進人物情誼包，舊模組不必為了它 import 包）
 from .models import Content
 from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value, world_day
 from .state import GameState, WorldState
@@ -409,10 +410,18 @@ def spread(state: GameState, content: Content, kind: str, target: str, *, at: st
         if moved:
             deltas.setdefault(moved, []).append(ch.name)
         if moved > 0:  # 第二批：他欣賞你做的事，情誼夠的話會寫信道賀
-            from . import letters  # noqa: PLC0415  letters → figure_life
-
-            letters.note_cheer(state, content, cid, text)
+            note_cheer(state, content, cid, text)
     return [HEARD.format(names="、".join(names), delta=d) for d, names in sorted(deltas.items())]
+
+
+def feast_invites(state: GameState, content: Content) -> list:
+    """此刻開著、你還沒敬過酒的宴（書信的邀宴問，letters._feast_letter）；宴客關著是空的。書信是人物情誼包的、宴客是宴客包的，包不能互相 import：
+    經這裡問（全部拆包第 19 批；舊模組 → 包，這個檔本來就延後 import 宴客包設宴，第 40 批 figure_life 收進共用規則層時一起處理）。只讀。"""
+    from .features.feast import rules as feasts  # noqa: PLC0415  宴客（功能包）→ figure_life：延後載入
+
+    if not feasts.on(content):
+        return []
+    return [f for f in feasts.open_feasts(state) if not feasts.toasted(state, f)]
 
 
 def prompt_lines(state: GameState, content: Content, cid: str) -> str:
