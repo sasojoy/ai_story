@@ -17,7 +17,7 @@ from . import arts as arts_mod
 # （cultivation：破境卡 ascend 全部拆包第 23 批搬進修練包，engine 不再用，拿掉）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
-    allied, annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, clinic, companion_agent, conquest, conquest_day, create, defection, divine, economy, encounter, equipment, explore_modes,
+    allied, annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, clinic, companion_agent, conquest, conquest_day, create, defection, divine, economy, encounter, equipment, explore_modes,
     deeds, fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, forge_secrets, fusion, gender, howto, insight_fx, insights, invites, journal, library, mapdata, martial_arts, plans,
     materials, mounts, naming, opportunities, orders, parley, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skillview, smithing,
@@ -132,6 +132,8 @@ from .core.services import PILL_FOUND, checkin_on
 # story（全部拆包第 30 批）：一條線的底座（共用規則層：JOURNAL、場景圖、題目文字、線的定義）；10 個一行委派（章回 chapters 的模組層 import 搬到包的 actions.py：載入時登記 TASKS）
 from . import story_base
 from .features.story import actions as story_actions  # 過渡：Game 上一條線的 10 個一行委派
+# checkin（全部拆包第 30 批）：每日簽到的 3 個一行委派
+from .features.checkin import actions as checkin_actions  # 過渡：Game 上簽到的 3 個一行委派
 from .state import (
     ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, CrowdNote, Equipment, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong,
     StoryCard, StoryProgress, TierResult, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
@@ -7787,44 +7789,17 @@ class Game:
         rewards = self._guide(self._note_action("pill"))  # 序章「服一顆回體丹」（新手引導重做）
         return self._log(msgs + [f"體力 +{round(p.stamina - before)}（{name}還剩 {p.stamina_pills} 顆）"] + rewards)
 
+    # ── 每日簽到：本體在 tianxia/features/checkin/actions.py（全部拆包第 30 批），這裡留一行委派 ──
+
     @_not_while_preparing
     def check_in(self, attribute: str = "") -> list[str]:
-        """每日簽到（21 天季，正式季整合 6.2；tianxia/checkin.py）：領今天的份，四階的日子帶 attribute（剛柔快慢）。草廬序章裡不簽
-        （同回體丹）；關著、簽過了、沒挑或挑錯四階都只回一句、什麼都不動。成了寫一則「簽到」江湖紀錄（數值變化寫丹、銀兩、素材）。"""
-        s, c = self.state, self.content
-        if checkin.on(c, s.world) and self._opening_pending():  # 開局第一分鐘：三選一還沒選，福利之後寫進紀錄、不當第一張卡
-            return self._log([self._opening_gate()])
-        if checkin.on(c, s.world) and prologue_rules.active(s, c):
-            return self._log([checkin.HUT])
-        result = checkin.claim(s, c, s.world, attribute)
-        if isinstance(result, str):
-            return self._log([result])
-        lines, changes = result
-        journal.add_entry(s, JournalEntry(time=s.world.time, title=checkin.TITLE, lines=lines, changes=changes))
-        return self._log(lines + changes)
+        return checkin_actions.check_in(self, attribute)
 
     def _auto_checkin(self) -> None:
-        """每日簽到自動領（減法季批 1；Joy 2026-10-24 挑了江湖頁乙案：簽到不放鈕）：每天第一次同步時，今天的份不必挑的就直接領、
-        寫一則「簽到」江湖紀錄（同 check_in，「剛剛」那一行會寫出來）；要挑四階的日子不動，江湖頁冒一張挑屬性的小卡（status.checkin.pick），
-        挑了才領（check_in）。草廬序章裡不簽（同 check_in）。假人照舊在 bot.check_in 自己簽，先同步到的這裡順手領了也只是同一份。"""
-        s, c = self.state, self.content
-        if prologue_rules.active(s, c) or self._opening_pending():
-            return
-        day = checkin.due(s, c, s.world)
-        if day is None or checkin.needs_pick(c, day):
-            return
-        result = checkin.claim(s, c, s.world)
-        if isinstance(result, str):
-            return
-        lines, changes = result
-        journal.add_entry(s, JournalEntry(time=s.world.time, title=checkin.TITLE, lines=lines, changes=changes))
+        return checkin_actions.auto_checkin(self)
 
     def checkin_view(self) -> dict | None:
-        """江湖頁「簽到」小標的資料（checkin.view）：簽到關著、草廬序章裡、過了這一季最後一天（管理者把季末往後排）是 None。"""
-        s, c = self.state, self.content
-        if not checkin.on(c, s.world) or not checkin.in_season(c, s.world) or prologue_rules.active(s, c) or self._opening_pending():
-            return None
-        return checkin.view(s, c, s.world)
+        return checkin_actions.checkin_view(self)
 
     # ── 領地爭奪：翻地與爭搶（輿圖簡化設計第四章）——戰書、換天的掛鉤、分紅送到、畫面資料。投票與 22:00 公告結算拿掉了（PM 2026-10-20）──
 

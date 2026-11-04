@@ -734,6 +734,22 @@ GAME_DELEGATE_CALLERS.update({
     ("_event_progress", "_story_tick"): "事件了結的推進：段落事件了結了，照記下的那一步往下走；同上",
 })
 
+# checkin（全部拆包第 30 批「簽到」：新包 tianxia/features/checkin/；計畫 1.5、1.6）：核心原位碰簽到的兩處沒有第 11 批掛鉤可接，改叫 Game 上一行的委派。
+# 原本那行 import 的 checkin 拿掉：回體丹那一套（Game._pill_find）改叫核心 core/services.py 的 checkin_on、PILL_FOUND。
+# 引導那一段（# guide）原本記的 (check_in／_auto_checkin／checkin_view, _opening_pending／_opening_gate) 四對，呼叫端搬進簽到包、經 ctx 叫，在 CORE_DELEGATE_CALLERS_CHECKIN
+GAME_IMPORTS |= {"tianxia.features.checkin.actions"}
+GAME_DELEGATES |= {
+    # server（MAIN_ACTIONS["checkin"]）、假人（bot.check_in 叫 checkin_view、check_in）、測試在叫的 check_in、checkin_view，與核心原位 sync 叫的 _auto_checkin
+    "check_in", "_auto_checkin", "checkin_view",
+}
+GAME_DELEGATE_CALLERS.update({
+    ("sync", "_auto_checkin"): "同步的每日簽到自動領：在補送裝備（_deliver_held_gear）之後；on_sync 掛鉤在它前面，不能接，紀錄先後算行為",
+    ("status_data", "checkin_view"): "狀態列的簽到小標（status 的 checkin 那一格）：在 howto_entry 之後、fronts 之前，鍵的順序算行為；feature_status 是 main 的頂層、位置不對",
+})
+# 簽到的三個方法搬進簽到包，不再是 Game 上的呼叫端：它們問引導的 _opening_pending／_opening_gate 改成包裡經 ctx 叫（服務清單二、查詢服務 # checkin）
+for _pair in (("check_in", "_opening_pending"), ("check_in", "_opening_gate"), ("_auto_checkin", "_opening_pending"), ("checkin_view", "_opening_pending")):
+    del GAME_DELEGATE_CALLERS[_pair]
+
 
 @functools.lru_cache(maxsize=None)
 def _engine_tree() -> ast.Module:
@@ -1288,7 +1304,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # cultivation（全部拆包第 23 批：tianxia/cultivation.py、chuangong.py、ascend.py）
                          "cultivation": "cultivation", "chuangong": "cultivation", "ascend": "cultivation",
                          # story（全部拆包第 30 批：tianxia/storyline.py）
-                         "storyline": "story"}
+                         "storyline": "story",
+                         # checkin（全部拆包第 30 批：tianxia/checkin.py）
+                         "checkin": "checkin"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 
