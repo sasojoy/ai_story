@@ -103,10 +103,13 @@ def scene_art(game: Game, status: dict) -> dict | None:
         return None
     cal = status.get("calendar")
     when = cal["text"] if cal and cal.get("text") else f"第{status['day']}天 {status['clock']}"
-    return {
+    art = {
         "kind": got["kind"], "src": f"/static/img/{got['path']}.webp", "title": got["title"], "sub": got["sub"],
         "time": when if got["kind"] == "place" else "", "head": md(got["head"]),
     }
+    if got.get("mood"):  # 地點會變樣：戰火、淪陷、饑荒、重建的地點，畫換色調（網頁的 mood-<kind>）；太平沒有這個鍵
+        art["mood"] = got["mood"]
+    return art
 
 
 def story_cards(game: Game) -> list[dict]:
@@ -2152,6 +2155,9 @@ def _main_view_body(game: Game) -> dict:
     plan = game.plan_view()  # 世界活起來：全服開著的盤算裡最切身的一件（江湖頁行動列底下一張卡）；沒有開著的就沒有這個鍵
     if plan is not None:
         view["plan"] = plan
+    place_mood = game.place_state_view()  # 地點會變樣（世界活起來第二批）：此刻所在地的樣子；太平沒有這個鍵
+    if place_mood is not None:
+        view["place_state"] = place_mood
     place_deeds = game.place_deeds_view()  # 世界活起來：此地舊事（場景卡底下最近的幾筆世界記事）；沒有就沒有這個鍵
     if place_deeds is not None:
         view["place_deeds"] = place_deeds
