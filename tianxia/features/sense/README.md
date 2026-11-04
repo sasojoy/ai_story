@@ -39,7 +39,7 @@
 
 ## 測試
 
-- 這一包的（整檔屬於這一包、第 24 批搬進來的）：`tests/test_sensing.py`（36 條：讀筆畫、看圖取名、有所感的流程、私有意境在合成與修練裡、首悟、機器人；原 `tests/arts/`）、`test_epiphany.py`（26：擲中、保底、拷問、小試、心魔、取名、神品的限制；原 `tests/arts/`）、`test_insight_strong.py`（20：每個地點最濃的意境；原 `tests/arts/`）、`test_sense_smoke.py`（1，smoke：week7 散人在潁水河畔有所感、選對擲中、順其自然）、`sense_stage.py`（契約測試擺局面：平常）。`pytest tianxia/features/sense/tests -n 4 -m "slow or not slow"`：83 條約 7 秒。改這一包任一檔 `test_for` 挑到 208／209 條（包＋核心契約與邊界）。
+- 這一包的（整檔屬於這一包、第 24 批搬進來的）：`tests/test_sensing.py`（36 條：讀筆畫、看圖取名、有所感的流程、私有意境在合成與修練裡、首悟、機器人；原 `tests/arts/`）、`test_epiphany.py`（26：擲中、保底、拷問、小試、心魔、取名、神品的限制；原 `tests/arts/`）、`test_insight_strong.py`（20：每個地點最濃的意境；原 `tests/arts/`）、`test_sense_smoke.py`（1，smoke：week7 散人在潁水河畔有所感、選對擲中、順其自然）、`test_sense_seams.py`（8，第 24 批審查補的：走一趟停在卡上畫一筆、思名的得失記在那一段，讀檔清掉作廢的卡，畫完清掉引導與戰報卡，籌備中不開單，擲特殊頓悟乘走一趟的倍數——以前拿掉這幾行包的測試與混合檔都不會紅）、`sense_stage.py`（契約測試擺局面：平常）。`pytest tianxia/features/sense/tests -n 4 -m "slow or not slow"`：91 條約 8 秒。改這一包任一檔 `test_for` 挑到 216／217 條（包＋核心契約與邊界）。
 - **`test_for` 挑不到的、另外要跑的**（這一輪不搬、不拆）：
   - 網頁（第 3 階跟網頁檔一起搬）：`tests/web/test_epiphany_name_web.py`（神品自己取名的輸入框；整檔 slow）、`test_explain2_web.py`（做法底下的小字）、`test_prologue_web.py`、`test_jianghu_page_web.py`。
   - 路由與殼的三段式：`tests/server/test_server.py`（`/api/sense` 三條、看圖取名的 B 段、靜心思名、`_tell_tabs`）。
