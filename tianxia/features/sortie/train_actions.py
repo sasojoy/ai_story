@@ -20,12 +20,11 @@ from tianxia import materials  # 共用規則層（素材：打贏會不會掉�
 from tianxia import mounts  # 共用規則層（坐騎：必敗先問的那一句寫策馬脫身的機會）
 from tianxia import opportunities  # 過渡：待搬（守勢之後的收容流民，正式版乙一）
 from tianxia import orders  # 過渡：待搬（軍令：截糧時那一帶的敵方運糧隊）
-from tianxia import parley  # 過渡：待搬（並肩出陣：那一仗前面那一句）
 from tianxia import precise  # 共用規則層（一類一顆：守勢再加跟守一樣的經驗心得）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章：雪恥那一步的對手與寫好的結果）
 from tianxia import territory  # 共用規則層（地盤：站的照控制方）
 from tianxia.core.option import Option
-from tianxia.core.services import BIG_FIGHT_WAIT, drill_share
+from tianxia.core.services import BACKED_LINE, BIG_FIGHT_WAIT, PLAN_MISS, drill_share  # 並肩出陣的兩句（第 20 批：原本 import parley）
 from tianxia.events import pick_event  # 過渡：待搬（遊歷打完的戰後事件）
 from tianxia.models import Location, Squad
 from tianxia.rules import front_of, resolve_trend
@@ -56,7 +55,7 @@ def train_fight(ctx: Game, prepared) -> list[str]:
     if backing:
         ctx.state.player.parley_backing = None
         name = ctx.content.characters[backing].name
-        msgs.insert(0, parley.BACKED_LINE.format(name=name, pct=round(share * 100)) if share else parley.PLAN_MISS.format(name=name))
+        msgs.insert(0, BACKED_LINE.format(name=name, pct=round(share * 100)) if share else PLAN_MISS.format(name=name))
     return msgs
 
 

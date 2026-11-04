@@ -12,15 +12,16 @@ import math
 import random
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from . import arts as arts_mod
 # （cultivation：破境卡 ascend 全部拆包第 23 批搬進修練包，engine 不再用，拿掉）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import chapters  # 章回主線（企劃者 2026-10-29）
 from . import (
-    allied, annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, clinic, companion_agent, conquest, conquest_day, create, defection, divine, economy, encounter, equipment, explore_modes,
+    allied, annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, clinic, conquest, conquest_day, create, defection, divine, economy, encounter, equipment, explore_modes,
     deeds, fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, forge_secrets, fusion, gender, howto, insight_fx, insights, invites, journal, library, mapdata, martial_arts, plans,
-    materials, mounts, naming, opportunities, orders, parley, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
+    materials, mounts, naming, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skillview, smithing,
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, xingshi, zh, yuedan,
 )
@@ -85,6 +86,7 @@ from .core import features as features_core  # 核心照 FEATURES 問每一包�
 from .core.option import IDLE_MARK, Option  # 選單上的一顆（搬進核心：功能包要做選項）；閒著的選單一定有的那一顆（走一趟要認它）
 from .core.services import NO_SUCH_PLAYER, PAUSED_TEXT, WalletService, drill_share, wallet_on  # 共用的字與小函式、錢包服務（3.10）
 from .core.services import BIG_FIGHT_WAIT  # sortie（全部拆包第 17 批）：大場面按鈕上的字搬進核心的共用的字（出陣包的遊歷鈕也用）
+from .core.services import PLAN_OPTION, ROAD_SAY, SAY_MAX, SAY_OPTION, TEXT_TALKS, say_text  # noqa: F401  companions（全部拆包第 20 批）：「自己說」那三顆的 id 與那句話能不能送，搬進核心的共用的字
 from .core.services import HutReward  # guide（全部拆包第 22 批）：序章步驟的獎勵那一行的記號（原本 import 自 guide）
 # sense（全部拆包第 24 批）：籌備中那兩句與走一趟的裝飾器搬進核心的共用的字與小函式（engine 照舊用：`from tianxia.engine import PREPARING_REFUSAL`
 # 兩個測試檔在拿；choose、answer_event 照舊掛 @_outing_watch）
@@ -122,6 +124,12 @@ from .features.bout import arena_actions as bout_arena  # 過渡：Game 上擂�
 from .features.bout import duel_rules as bout_rules  # 過渡：Game.DUEL_GAMBLE_NOTE 類別屬性、委派的型別註記（DuelTextRequest）
 # companions（全部拆包第 19 批：人物情誼一）
 from .features.companions import actions as companions_actions  # 過渡：Game 上人物情誼的 29 個一行委派（招募、名下、心意、託付、書信）
+# companions（全部拆包第 20 批：人物情誼二）
+from .features.companions import parley_actions as companions_parley  # 過渡：Game 上 NPC 智能 2.0 的一行委派（條件與清單、路上的選項、並肩出陣）
+from .features.companions import talk_actions as companions_talk  # 過渡：Game 上人物對話的一行委派（A 段開單、C 段重驗、開口、一輪、帶路的路上說一句）
+
+if TYPE_CHECKING:  # 型別註記用（companion_agent、parley 搬進人物情誼包之後 engine 不再 import 它們；Game 上的委派只轉手）
+    from .features.companions import companion_agent, parley
 # cultivation（全部拆包第 23 批「修練」）：裝飾器搬進核心的共用的小函式（還掛在 Game 上的動作照舊掛 @_not_while_preparing；籌備中那兩句第 24 批先搬了，
 # `# sense` 那一行 import）；
 # 修練頁的 33 個一行委派（原本 engine 那兩行 import 的 cultivation、chuangong 與 `from . import ascend` 現在是修練包的別名，engine 不再用，拿掉）
@@ -130,7 +138,7 @@ from .features.cultivation import actions as cultivation_actions  # 過渡：Gam
 from .features.cultivation import view as cultivation_view  # 過渡：Game 上修練頁唯讀資料的 11 個一行委派（全部拆包第 23 批）
 from .features.cultivation.actions import MELT_MANY_PROLOGUE  # noqa: F401  過渡：tests/core/test_prologue.py 從 engine 拿
 from .state import (
-    ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, CrowdNote, Equipment, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong,
+    ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, CrowdNote, Equipment, GameState, HintNote, JournalEntry, Journey, Mingtie, Rumor, Tagalong,
     StoryCard, StoryProgress, TierResult, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
     new_game_state,
 )
@@ -219,26 +227,10 @@ LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣�
 RANK_ACTION_PREFIX = "act:rank:"  # 第 3、4 階行動的選項 id 前綴（act:rank:<行動 id>，正式版戊一）；models.ALLOW_FAMILIES 也列它，原始碼裡要真的有
 # （FREE_TEXT_OPTION、EVIL_ANNAL 與 FreeTextRequest、FreeTextOutcome 搬進核心的事件檢定 tianxia/core/event_check.py，全部拆包第 16 批；
 # 上面 import 回來，`from tianxia.engine import FREE_TEXT_OPTION` 照舊拿得到）
-# 跟人物對話時的「自己說」（企劃者 2026-10-08）：按下去只是叫出輸入框，真正送出帶著那句話走 choose(SAY_OPTION, text=…)（server.say）
-SAY_OPTION = "talk:say"
-# NPC 智能 2.1（parley.py）：同「自己說」要打一句話的兩顆——對話裡跟答應陪你出陣的人商量打法、他帶路的路上跟他說一句
-PLAN_OPTION = "talk:plan"
-ROAD_SAY = "parley:road"
-TEXT_TALKS = (SAY_OPTION, PLAN_OPTION, ROAD_SAY)
+# （SAY_OPTION、PLAN_OPTION、ROAD_SAY、TEXT_TALKS、SAY_MAX、say_text 搬進核心的共用的字與小函式 tianxia/core/services.py，全部拆包第 20 批；
+# 上面 import 回來，`from tianxia.engine import SAY_OPTION` 照舊拿得到）
 DUEL_FLEE = "duel:flee"  # 頭目戰的抽身退走（整季機器人不按它：bot.pick）
 ARENA_YIELD = "arena:yield"  # 擂台的認輸下台（整季機器人不按它：bot.pick）；寫字面（＝ features/bout/arena_rules.YIELD_ID）：單挑搬成包之後模組層不碰包
-SAY_MAX = 20  # 「自己說」最多幾個字（跟隨口應對一樣）
-
-
-def say_text(text: str | None, limit: int = SAY_MAX) -> str | None:
-    """「自己說」那句話能不能送：先去頭尾空白、中間連著的空白併成一個，1～limit 字才算數，再轉繁體（zh.to_traditional）；
-    不行就是 None。長度在轉繁體之前量（轉換不改字數，量的是玩家打的）。limit 平常是 SAY_MAX，NPC 智能 2.0開著時照 Game.say_max。"""
-    if text is None:
-        return None
-    text = " ".join(text.split())
-    if not text or len(text) > limit:
-        return None
-    return zh.to_traditional(text)
 # 領地爭奪：戰書（翻地與爭搶，輿圖簡化設計 4.4；投票與 22:00 公告結算拿掉了，PM 2026-10-20）。待 joy 潤
 LETTER_TITLE = "下戰書"
 LETTER_DONE = "你替{side}下了戰書：{time} 攻{place}。這一塊的進度凍結到那一場打完。"
@@ -938,8 +930,7 @@ class Game:
         self._marks_tick()  # 減法季批 4：痕跡過門檻的防漏、替自己記出過力的行狀（關著什麼都不做）
         self._stance_annals()  # 減法季批 6：這一週勸過的心意到了門檻，記一則行狀（關著什麼都不做）
         self._zhuan_tick()  # 減法季批 7b：〈天下形勢〉寫到名號、季末論功各記一則行狀（關著什麼都不做）
-        mail = parley.lapse(self.state, self.content)  # NPC 智能 2.1：欠人物的事過了期限是食言（附的委託先作罷，書信不再補一句）
-        self._deliver_mail(now, mail)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷（人物情誼包；有字就寫一則）
+        self._deliver_mail(now)  # 欠人物的事過了期限是食言（NPC 智能 2.1）、書信（大勢人物擴充第二批）：人物來信、過期的委託作罷，併成一則（人物情誼包；有字就寫一則）
         settled = plans.deliver(self.state, self.content)  # 世界活起來：我插過手的盤算有了結果
         if settled:
             self._write(plans.TITLE, settled)
@@ -1206,17 +1197,8 @@ class Game:
             menu = storyline.quiz_menu(s, c)
             if menu:
                 return [Option(id=option_id, label=label) for option_id, label in menu]
-        if s.player.pending_companion:
-            dialogue_options, _ = companion_agent.offered(s, s.player.pending_companion)
-            talk_cost = c.config.talk_stamina
-            opts = [self._cost_option(f"talk:{i}", text, talk_cost) for i, text in enumerate(dialogue_options)]
-            if dialogue_options:  # 模型寫的選項之外，自己打一句話（企劃者 2026-10-08）：價錢、輪數跟按選項一樣
-                opts.append(self._cost_option(SAY_OPTION, "自己說…", talk_cost))
-            opts += foreshadow.talk_options(s, c, s.player.pending_companion)  # 伏筆的片段：固定文字、不花體力（計畫 T7）
-            opts += opportunities.talk_options(s, c, s.player.pending_companion)  # 機緣的話題（正式版乙一）：不花體力
-            opts += self._parley_options(s.player.pending_companion)  # NPC 智能 2.0：他開的條件、欠你的那一件（不花體力）
-            opts.append(Option(id="talk:leave", label="告辭"))
-            return opts
+        if s.player.pending_companion:  # 跟人物談著：整個選單是對話的（人物情誼包 talk_options）
+            return self._talk_options()
         if allied.needs_ally(s, c):  # 拜入要依附的門派之後還沒挑一邊（豪強分屬兩軍）：只剩選邊
             return self._ally_options(cancel=False)
         if s.player.pending_faction:
@@ -2122,93 +2104,12 @@ class Game:
         return True
 
     def dialogue_request(self, option_id: str, text: str | None = None) -> companion_agent.DialogueRequest | None:
-        """鎖外生成的階段 A（server.py 在行動鎖內、很快地呼叫）：現在選這個選項，會不會生成一輪對話？
-        會就回傳要送給模型的單子（選項、人物、玩家這一步、messages），不會就是 None。只讀、不改狀態。
-        - `talk:N`：N 是上一輪提供的選項、手上有對話、選項沒停用；`talk:leave` 不生成。
-        - `act:socialize`：選項沒停用、福緣還沒到（福緣先發，見 _act）、這裡只有一位大勢人物而且見得到
-          （兩位以上的地點交友不開口，見 _socialize_figure）；玩家這一步固定是 GENERIC_OPENING。
-        - `call:<人物>`：求見選單上按得下去、而且見得到（名望或階級夠、或結識過）的那位人物（這個遊戲日還沒談滿、體力夠）；
-          名望不夠的求見也按得下去，但那是被打發、不生成。玩家這一步固定是 GENERIC_OPENING。`call:back` 不生成。
-        - `talk:say`（SAY_OPTION，「自己說」）：手上有對話、選項沒停用、text 過得了 say_text；玩家這一步就是那句話。
-        其他選項都不呼叫對話模型。
-        只讀：選單用 tick=False 取，不推進戰鬥（推進可能結算一回合並呼叫 LLM 潤色，而且備料與
-        進鎖重驗各會呼叫這個方法一次；一次請求的那一次推進留給 choose() 開頭）。"""
-        option = {o.id: o for o in self.options(odds=False, tick=False)}.get(option_id)
-        if option is None or not option.enabled:
-            return None
-        kind, _, arg = option_id.partition(":")
-        if option_id in (SAY_OPTION, PLAN_OPTION):
-            companion_id, said = self.state.player.pending_companion, say_text(text, self.say_max())
-            if companion_id is None or said is None:
-                return None
-            extra = self._parley_prompt(companion_id) if option_id == SAY_OPTION else self._parley_plan_prompt(companion_id)
-            fields = parley.ASK_FIELDS if option_id == SAY_OPTION else parley.PLAN_FIELDS
-            return companion_agent.build_request(self.state, self.content, self.world, companion_id, option_id, said, free=True,
-                                                 extra=extra, required=fields if extra else ())
-        if option_id == ROAD_SAY:  # NPC 智能 2.1：他帶路的路上跟他說一句（可以是閒談，也可以求他沿路做得到的事）
-            companion_id, said = self.state.player.parley_escort, say_text(text, self.say_max())
-            if companion_id is None or said is None:
-                return None
-            extra = self._parley_prompt(companion_id, road=True)
-            return companion_agent.build_request(self.state, self.content, self.world, companion_id, option_id, said, free=True,
-                                                 extra=extra, required=parley.ASK_FIELDS if extra else ())
-        if kind == "talk":
-            companion_id = self.state.player.pending_companion
-            if companion_id is None or not arg.isdecimal():
-                return None
-            shown, _ = companion_agent.offered(self.state, companion_id)
-            if int(arg) >= len(shown):
-                return None
-            player_action = shown[int(arg)]
-        elif option_id == "act:socialize" and precise.on(self.content, self.state.world):
-            companion_id = self._socialize_figure()  # 一類一顆：只有 _social_plan 是 talk 才開口
-            if companion_id is None:
-                return None
-            player_action = companion_agent.GENERIC_OPENING
-        elif option_id == "act:socialize":
-            if roster.fortune_due(self.state, self.content) or ranks.summons_event(self.state, self.content) is not None:
-                return None  # 福緣先發；在召見的地點交友端出晉升奇遇（計畫 T5，審查 I1）——都不開口對話
-            companion_id = self._socialize_figure()
-            if companion_id is None:
-                return None
-            player_action = companion_agent.GENERIC_OPENING
-        elif kind == "call" and arg != "back":
-            if not self._can_meet(arg):
-                return None  # 門檻不夠：被打發，不叫模型（見 _call、_brush_off）
-            companion_id, player_action = arg, companion_agent.GENERIC_OPENING
-        else:
-            return None
-        extra = self._parley_plea_prompt(companion_id) if player_action == companion_agent.GENERIC_OPENING else ""
-        return companion_agent.build_request(
-            self.state, self.content, self.world, companion_id, option_id, player_action,
-            extra=extra, required=parley.PLEA_FIELDS if extra else (),
-        )
+        return companions_talk.dialogue_request(self, option_id, text)
 
     def _checked_prepared(
         self, option_id: str, prepared: companion_agent.PreparedTurn | None, text: str | None = None,
     ) -> companion_agent.PreparedTurn | None:
-        """進鎖後重驗鎖外生成的結果：選項、人物、玩家這一步都要跟「現在」重算出來的單子一致才採用；
-        對不上（連點兩下、選項清單已換）就當沒給，走一般路徑在鎖內生成——很少發生，慢一點可以接受。
-        對不上時連它的失敗（turn=None）一起丟掉，不能讓別張單子的失敗結束現在這段對話。"""
-        if prepared is None:
-            return None
-        request = self.dialogue_request(option_id, text)
-        if request is None:
-            return None
-        same = (prepared.option_id, prepared.companion_id, prepared.player_action) == (
-            request.option_id, request.companion_id, request.player_action,
-        )
-        return prepared if same else None
-
-    @staticmethod
-    def _prepared_turn(prepared: companion_agent.PreparedTurn | None) -> companion_agent.CompanionTurn | None:
-        """採用鎖外生成的結果：有 turn 就交給 companion_agent 套用；生成失敗（turn=None）等同鎖內的
-        DialogueUnavailable；沒有 prepared 就回 None（讓 companion_agent 自己在鎖內生成）。"""
-        if prepared is None:
-            return None
-        if prepared.turn is None:
-            raise companion_agent.DialogueUnavailable("鎖外生成失敗")
-        return prepared.turn
+        return companions_talk.checked_prepared(self, option_id, prepared, text)
 
     # ── 酒肆（企劃者 2026-10-18）：本體在功能包 tianxia/features/tavern/actions.py（主動搬六包第 10 批），這裡留一行委派——server 的
     # MAIN_ACTIONS 與鎖外三段式、假人、腳本、測試，與核心原位的 shop_view（tavern_view）。選單接管那一格、act:tavern、sync 的下線殺手與
@@ -2468,6 +2369,7 @@ class Game:
         self._fight = self._checked_fight(option_id, fight)
         was_opening = kind == "choice" and self._opening_pending()  # 開局三選一（減法季批 7）：選完人物的信到
         # 搬成包的功能：那一包接走（只吃自己前綴的 id；這一下江湖紀錄的標題在動作之前先拿，同 _action_title；開發規範手冊 3.3）
+        self._talk_turn, self._talk_said = prepared, said  # 談話與帶路的路上一句（人物情誼包 choose 掛鉤）要的：鎖外生成好的一輪與驗過的那句話（寄放，同 _persuade_said）
         taken = features_core.choose(self, kind, arg)
         self._draft = Draft(taken.title if taken is not None else self._action_title(kind, arg))
         self._affinity_before = dict(self.state.player.affinities)
@@ -2479,10 +2381,7 @@ class Game:
                 msgs = self._act(arg, prepared)
             elif kind == "move":
                 msgs = self._move(arg)
-            elif kind == "talk":
-                msgs = self._talk(arg, prepared, said)
-            elif option_id == ROAD_SAY:
-                msgs = self._road_say(prepared, said)
+            # （talk：談話；parley:road：帶路的路上說一句，第 20 批審查換成人物情誼包的 choose 掛鉤〔上面 taken 那一支；prepared 與 said 經 _talk_turn、_talk_said 寄放〕，拿掉）
             elif kind == "faction":
                 msgs = self._faction_step(arg)
             elif kind == "defect":
@@ -2677,12 +2576,6 @@ class Game:
 
     # ── 人物心意（減法季批 6）：本體在 tianxia/features/companions/actions.py（全部拆包第 19 批），這裡留一行委派 ────────────
 
-    def _stance_before(self, cid: str) -> str | None:
-        return companions_actions.stance_before(self, cid)
-
-    def _stance_credit(self, cid: str, before: str | None) -> None:
-        companions_actions.stance_credit(self, cid, before)
-
     def voice_stance(self, fid: str, sid: str) -> bool:
         return companions_actions.voice_stance(self, fid, sid)
 
@@ -2692,6 +2585,8 @@ class Game:
     # ── 託付與勸降（減法季批 6）：本體同上 ────────────
 
     _persuade_said: tuple | None = None  # 勸降的 C 段（人物情誼包 actions.persuade）交給 choose 的單子與模型的分數（服務清單四、寄放）
+    _talk_turn: companion_agent.PreparedTurn | None = None  # choose 前段驗過的那一輪對話（鎖外生成好的）與那句話，交給人物情誼包的 choose 掛鉤（服務清單四、寄放）
+    _talk_said: str | None = None
 
     def errands_view(self) -> list[dict] | None:
         return companions_actions.errands_view(self)
@@ -2790,11 +2685,7 @@ class Game:
         if kind == "choice":
             event = c.events[s.pending_event]
             return f"{event.title}・{event.choices[int(arg)].text}"
-        if kind == "talk":
-            character = c.characters[s.player.pending_companion]
-            return f"交談・{character.name}"
-        if kind == "parley" and s.player.parley_escort in c.characters:  # NPC 智能 2.1：帶路的路上跟他說一句
-            return f"同行・{c.characters[s.player.parley_escort].name}"
+        # （talk：「交談・某人」、parley:road：「同行・某人」，第 20 批審查換成人物情誼包 choose 掛鉤的 Outcome.title，拿掉）
         if kind == "call":
             return "收回名帖" if arg == "back" else f"求見・{c.characters[arg].name}"
         # （sense：「有所感・場景」，全部拆包第 24 批換成有所感包 choose 掛鉤的 Outcome.title，拿掉）
@@ -3032,8 +2923,8 @@ class Game:
     def decline_letter(self, letter_id: int) -> list[str]:
         return companions_actions.decline_letter(self, letter_id)
 
-    def _deliver_mail(self, now: float, mail: list[str]) -> None:
-        companions_actions.deliver_mail(self, now, mail)
+    def _deliver_mail(self, now: float) -> None:
+        companions_actions.deliver_mail(self, now)
 
     def morning_mail(self, now: float) -> bool:
         return companions_actions.morning_mail(self, now)
@@ -3293,19 +3184,7 @@ class Game:
         return self._open_dialogue(arg, prepared)
 
     def _open_dialogue(self, companion_id: str, prepared: companion_agent.PreparedTurn | None) -> list[str]:
-        """跟一位大勢人物開口對話（呼叫端已經扣了交友的體力）：生成不出對話時退回那份體力，對話不開始。"""
-        extra = self._parley_plea_prompt(companion_id)
-        try:
-            msgs = companion_agent.start_dialogue(
-                self._quick_client(), self.state, self.content, self.world, companion_id, self.rng,
-                turn=self._prepared_turn(prepared), extra=extra,
-                decide=lambda turn: self._parley_plea(companion_id, turn), required=parley.PLEA_FIELDS if extra else (),
-            )
-        except companion_agent.DialogueUnavailable:
-            self.state.player.stamina += self.content.config.action_cost["socialize"]  # 生成不出對話：這次不花體力
-            return self._dialogue_unavailable(companion_id)
-        self._hint("h_bond")  # 第一次跟人物談話（求見也算）：情誼有什麼用（explain-1）；對話還開著，框等告辭之後才上（features/guide/actions.hint_box）
-        return msgs + self._overhear(companion_id, msgs)
+        return companions_talk.open_dialogue(self, companion_id, prepared)
 
     def _explore(self) -> list[str]:
         """探索三選一（FB-013，docs/superpowers/specs/2026-10-03-探索三選一-design.md）。
@@ -4608,18 +4487,10 @@ class Game:
         )
 
     def _last_talk_line(self, companion_id: str) -> str:
-        """談話畫面名字底下的「上回」那一行（人物記得上次談了什麼，Joy 2026-10-23）：時刻、地點、談了什麼；第一次見面是空的。待 joy 潤"""
-        memo = companion_agent.last_talk(self.state, companion_id)
-        if memo is None:
-            return ""
-        loc = self.content.locations.get(memo.place)
-        where = f"・{loc.name}" if loc is not None else ""
-        return f"*上回（{self.stamp(memo.at)}{where}）：{memo.text}*\n\n"
+        return companions_talk.last_talk_line(self, companion_id)
 
     def affinity_text(self, companion_id: str) -> str:
-        """「情誼 N」：你跟這位人物的情誼（PlayerState.affinities，0～100）。談話畫面、求見名單、輿圖的人物都寫這個詞（explain-1：
-        玩家看得到的只叫「情誼」，程式裡照舊叫 affinity）。深交不限人數（企劃者 2026-10-28「不要限制深交名額」），不再接「已深交三位」。"""
-        return f"情誼 {self.state.player.affinities.get(companion_id, 0)}"
+        return companions_talk.affinity_text(self, companion_id)
 
     def _no_audience_line(self) -> str:
         """交友時見不到這裡的大勢人物時的說明；這裡沒有大勢人物就是原本的「此地無人可訪」；
@@ -4657,437 +4528,40 @@ class Game:
             and not roster.fortune_due(s, c)
         )
 
-    def _dialogue_unavailable(self, companion_id: str) -> list[str]:
-        """這一輪生成不出對話（模型叫不動）：這輪不算數、對話結束（企劃者決定：不要卡在同一句
-        保底反應裡白扣體力）。"""
-        self.state.player.pending_companion = None
-        return [f"{self.content.characters[companion_id].name}似乎無心多談，你只好先行告辭。"]
 
-    def _talk(self, arg: str, prepared: companion_agent.PreparedTurn | None = None, said: str | None = None) -> list[str]:
-        companion_id = self.state.player.pending_companion
-        if companion_id is None:
-            return ["（此刻無法這麼做。）"]
-        if arg == "leave":
-            return companion_agent.leave_dialogue(self.state)
-        if arg.startswith("clue:"):  # 伏筆的片段：固定文字，不經模型、不扣體力、不算對話輪數（計畫 T7）
-            chain_id, _, index = arg.removeprefix("clue:").rpartition(":")
-            heard = foreshadow.hear_talk(self.state, self.content, companion_id, chain_id, int(index), self.world)
-            return heard or ["（此刻無法這麼做。）"]
-        if arg.startswith("opp:"):  # 機緣的話題：固定文字，不經模型、不扣體力、不算對話輪數（正式版乙一）
-            heard = opportunities.hear_topic(self.state, self.content, companion_id, arg.removeprefix("opp:"))
-            return heard or ["（此刻無法這麼做。）"]
-        if arg in ("terms:yes", "terms:no", "owed", "repay"):  # NPC 智能 2.0：接不接他的條件、請他兌現、還他（固定文字，不經模型、不扣體力、不算輪數）
-            return self._parley_answer(companion_id, arg)
-        if arg == "plan":  # NPC 智能 2.1：出陣前跟他商量打法（模型評成功率，不扣體力、不算輪數）
-            return self._parley_plan(companion_id, prepared, said)
-        affinity = self.state.player.affinities.get(companion_id, 0)
-        heard = self._stance_before(companion_id)
-        self._parley_decision = None
-        try:
-            if arg == "say":  # 自己說：said 是 choose 驗過、轉過繁體的那一句；江湖紀錄先寫你說了什麼（同隨口應對的「你：「…」」）
-                extra = self._parley_prompt(companion_id)
-                msgs = [f"你：「{said}」"] + companion_agent.say_dialogue(
-                    self._quick_client(), self.state, self.content, self.world, companion_id, said,
-                    turn=self._prepared_turn(prepared), extra=extra, required=parley.ASK_FIELDS if extra else (),
-                    decide=lambda turn: self._parley_decide(companion_id, turn, said=said or ""),
-                )
-            else:
-                msgs = companion_agent.continue_dialogue(
-                    self._quick_client(), self.state, self.content, self.world, companion_id, int(arg), self.rng,
-                    turn=self._prepared_turn(prepared),
-                )
-        except companion_agent.DialogueUnavailable:
-            return self._dialogue_unavailable(companion_id)
-        self._stance_credit(companion_id, heard)
-        self._annal_talk(companion_id, self.state.player.affinities.get(companion_id, 0) - affinity, said)
-        msgs += self._overhear(companion_id, msgs)
-        self.state.player.stamina -= self.content.config.talk_stamina  # 每一輪對話都要花體力（伺服器假人設計第八節第 4 項）；生成不出來的那輪不算
-        msgs += self._count_talk(companion_id)
-        decision, self._parley_decision = self._parley_decision, None
-        return msgs + self._parley_finish(companion_id, decision)
-
-    def _parley_finish(self, cid: str, decision: parley.Decision | None) -> list[str]:
-        """NPC 智能 2.0那一輪的收尾：結果那一句，答應了就當場做（帶路會在這裡動身）；先做後付另外記下你欠他的那一件。"""
-        if decision is None or decision.kind is None:
-            return []
-        if decision.kind != "owe":
-            msgs = [parley.result_line(self.content, cid, decision)]
-            return msgs + (self._parley_do(cid, decision.ask.id) if decision.kind == "do" else [])
-        due = self._parley_owe(cid, decision.condition, decision.ask)
-        msgs = [parley.result_line(self.content, cid, decision, parley.due_text(self.state, self.content, due))]
-        return msgs + self._parley_do(cid, decision.ask.id)
-
-    def _parley_owe(self, cid: str, condition: parley.Item, ask: parley.Item, kind: str = "owe") -> float:
-        """記下你欠他的一件（先做後付 owe、接了他的請託 plea）：打探、討伐掛成一件委託（書信小卡、懸賞卡上看得到），
-        交銀、交素材等你見面「還他」。回期限（世界秒）。"""
-        s, c = self.state, self.content
-        p = s.player
-        due = parley.due_of(s, c, ask.weight if kind == "owe" else condition.weight)
-        task_id = None
-        if condition.id.partition(":")[0] in ("scout", "strike"):
-            p.letter_seq += 1
-            task = parley.commission(s, c, cid, condition, ask if kind == "plea" else parley.Item("", ""), p.letter_seq)
-            if task is not None:
-                task.expires = due
-                task.parley_ask = ask.id if kind == "plea" else None
-                p.letters.append(Letter(id=p.letter_seq, kind="條件", sender=cid, at=s.world.time,
-                                        text=c.characters[cid].name + "託你的事：" + condition.label, read=True, task=task))
-                p.letters = p.letters[-c.config.figure_life.letters_keep:]
-                task_id = task.id
-        p.parley_debts[cid] = ParleyDebt(kind=kind, condition=condition.id, weight=condition.weight if kind == "plea" else ask.weight,
-                                         due=due, task=task_id)
-        parley.record(s, cid).promised += 1
-        return due
 
     def _annal_talk(self, companion_id: str, delta: int, said: str | None) -> None:
-        """對話的一輪寫進行狀（玩家傳）：自己說的那一句一律記（原句與他回的頭一兩句）；挑選項的只在情誼動得多時記。"""
-        c, p = self.content, self.state.player
-        history = p.dialogue_history.get(companion_id, [])
-        reply = history[-1]["content"] if history and history[-1].get("role") == "assistant" else ""
-        asked = history[-2]["content"] if len(history) >= 2 and history[-2].get("role") == "user" else ""
-        name = annals.figure_name(c, companion_id)
-        mood = f"，情誼 {delta:+d}" if delta else ""
-        if said is not None:
-            weight = 3 if abs(delta) >= c.config.biography.talk_swing else 2
-            annals.note(self.state, c, annals.FIGURE, f"對{name}說了一句自己的話{mood}。", weight,
-                        figure=companion_id, quote=said, reply=annals.first_sentence(reply))
-        elif abs(delta) >= c.config.biography.talk_swing:
-            how = "談得投機" if delta > 0 else "話不投機"
-            annals.note(self.state, c, annals.FIGURE, f"跟{name}{how}{mood}。", 2,
-                        figure=companion_id, quote=asked, reply=annals.first_sentence(reply))
+        companions_talk.annal_talk(self, companion_id, delta, said)
 
     # ── NPC 智能 2.0（parley.py；Joy 2026-10-23「先做看看」）────────────
 
     _parley_decision: parley.Decision | None = None  # 這一輪「自己說」擲出來的結果（_parley_decide 記、_talk 收尾時拿去做事）
 
     def say_max(self) -> int:
-        """「自己說」最多幾個字：NPC 智能 2.0開著時照 Config.parley.say_max（要講得清楚一點），關著照舊 SAY_MAX。"""
-        return self.content.config.parley.say_max if parley.on(self.content) else SAY_MAX
+        return companions_talk.say_max(self)
 
     def _parley_lists(self, cid: str, road: bool = False) -> tuple[list[parley.Item], list[parley.Item]]:
-        """他此刻做得到的事、他可以開的條件（A 段放進提示、C 段拿來驗，兩次要一樣：條件的亂數只看名號、人物、今天）。
-        road：帶路的路上，只列沿路做得到的事（parley.road_items）。"""
-        s, c = self.state, self.content
-        asks = parley.ask_items(s, c, cid, self._side(), can_sortie=not prologue_rules.active(s, c))
-        rng = random.Random(f"條件|{s.player.name}|{cid}|{game_day(c, s.world)}")
-        return (parley.road_items(asks) if road else asks), parley.condition_items(s, c, cid, rng)
+        return companions_parley.lists(self, cid, road)
 
     def _parley_prompt(self, cid: str, road: bool = False) -> str:
-        """「自己說」那一輪接在玩家原話後面的一段（NPC 智能 2.0）：關著、今天求滿了是空的，模型就只是談話。"""
-        s, c = self.state, self.content
-        if not parley.on(c) or parley.asks_left(s, c, cid) <= 0:
-            return ""
-        asks, conditions = self._parley_lists(cid, road)
-        hostile = parley.enemy(s, c, cid, self._side())
-        gift = parley.gift_text(parley.gift_of(s, c, cid)) if any(a.id == "gift" for a in asks) else ""
-        return parley.prompt_block(c, cid, asks, conditions, s.player.affinities.get(cid, 0), hostile, gift)
-
-    def _parley_decide(self, cid: str, turn: companion_agent.CompanionTurn, road: bool = False, said: str = "") -> companion_agent.CompanionTurn:
-        """C 段：驗模型挑的那一件、夾意願、擲骰，記今天求了幾件／婉拒了哪件／開了什麼條件，換上那一版回話。
-        關著、今天求滿了、模型沒挑事（只是閒聊）時原樣回去。贈物那一版話跟他真的給的對不上（parley.gift_slip）換固定句；said 是玩家那一句。"""
-        s, c = self.state, self.content
-        if not parley.on(c) or parley.asks_left(s, c, cid) <= 0 or not (turn.ask or "").strip():
-            return turn
-        asks, conditions = self._parley_lists(cid, road)
-        hostile = parley.enemy(s, c, cid, self._side())
-        decision = parley.decide(c, asks, conditions, turn.ask.strip(), turn.willing, (turn.condition or "").strip(),
-                                 s.player.affinities.get(cid, 0), hostile, parley.roll(s, cid),
-                                 broken=parley.broken_of(s, cid), can_owe=parley.can_owe(s, c, cid))
-        record = parley.touch(s, c, cid)
-        record.asks += 1
-        self._parley_decision = decision
-        name = c.characters[cid].name
-        if decision.kind == "owe":  # 先做後付：他答應了、也說了要你之後做什麼——給玩家看開條件那一版（說得出條件）
-            text = self._parley_gift_check(cid, decision, said, (turn.narrative_terms or "").strip() or turn.narrative)
-            return turn.model_copy(update={"narrative": text})
-        if decision.kind == "terms":
-            cond = parley.condition_text(c, decision.condition, decision.ask.weight)
-            text = (turn.narrative_terms or "").strip() or parley.TERMS_FALLBACK.format(name=name, cond=cond)
-            text = self._parley_gift_check(cid, decision, said, text)
-            s.player.parley_terms[cid] = ParleyTerms(ask=decision.ask.id, condition=decision.condition.id, text=text, at=s.world.time)
-            return turn.model_copy(update={"narrative": text})
-        if decision.kind == "no":
-            if decision.ask.id not in record.refused:
-                record.refused.append(decision.ask.id)
-            text = (turn.narrative_no or "").strip() or parley.NO_FALLBACK.format(name=name)
-            return turn.model_copy(update={"narrative": text})
-        text = self._parley_gift_check(cid, decision, said, turn.narrative)
-        return turn if text == turn.narrative else turn.model_copy(update={"narrative": text})
-
-    def _parley_gift_check(self, cid: str, decision: parley.Decision, said: str, text: str) -> str:
-        """贈物答應了（當場、先做後付、開條件）：話裡給的要是他真的給得出的那一樣，對不上換固定句。別的事原樣回去。"""
-        if decision.ask is None or decision.ask.id != "gift":
-            return text
-        gift = parley.gift_of(self.state, self.content, cid)
-        wanted = parley.gift_slip(self.content, gift, said, text)
-        if wanted is None:
-            return text
-        cond = parley.condition_text(self.content, decision.condition, decision.ask.weight) if decision.condition is not None else ""
-        return parley.gift_fix(self.content, cid, gift, wanted, decision.kind, cond)
-
-    def _parley_do(self, cid: str, ask_id: str) -> list[str]:
-        """他答應的那一件，引擎真的去做（模型只說了話，這裡才動數字與位置）。"""
-        s, c = self.state, self.content
-        name = c.characters[cid].name
-        kind, _, rest = ask_id.partition(":")
-        tuning = c.config.parley
-        if kind == "escort":
-            route = atlas.way_to(s, c, rest)
-            if route is None or not parley.can_leave(s, c):
-                return [parley.OWED_LATER.format(name=name)]
-            s.player.pending_companion = None  # 跟他上路了：這段交談到此為止
-            cost = atlas.route_stamina(s, c, route, "walk")
-            msgs = [parley.ESCORT_LINE.format(name=name, place=c.locations[rest].name)] + self._depart(route, "walk", pace=tuning.escort_pace)
-            s.player.stamina += cost  # 他帶的路：照他的腳程走（比步行快），體力一分不扣
-            if self._draft is not None and f"體力 -{cost}" in self._draft.changes:
-                self._draft.changes.remove(f"體力 -{cost}")
-            if s.player.journey is not None:  # 第二批：路上每到一站可以跟他說一句（_parley_road_option）
-                s.player.parley_escort, s.player.parley_road_leg = cid, -1
-            return msgs
-        if kind == "sortie":
-            region = parley.region_of(s, c, cid)
-            s.player.parley_backing = ParleyBacking(figure=cid, region=region, day=game_day(c, s.world))
-            return [parley.BACKING_LINE.format(name=name, region=parley._region_name(c, region))]
-        if kind == "spar":
-            parley.touch(s, c, cid).spar = True
-            s.player.stats["xinde"] = s.player.stats.get("xinde", 0) + tuning.spar_xinde
-            return [parley.SPAR_LINE.format(name=name), f"心得 +{tuning.spar_xinde}"]
-        if kind == "intel":
-            facts = parley.intel_facts(s, c, cid)
-            return [parley.INTEL_HEAD.format(name=name, facts="；".join(facts))] if facts else []
-        if kind == "gift":  # 給的就是提示裡寫給模型的那一樣（parley.gift_of）
-            gift = parley.gift_of(s, c, cid)
-            line = materials.grant(s, c, gift.material, gift.count) if gift.material else None
-            if line:
-                return [parley.GIFT_LINE.format(name=name, gift=parley.gift_text(gift)), line]
-            s.player.stats["silver"] = s.player.stats.get("silver", 0) + tuning.gift_silver
-            return [parley.GIFT_LINE.format(name=name, gift=f"{tuning.gift_silver} 兩銀子"), f"銀兩 +{tuning.gift_silver}"]
-        return []
+        return companions_parley.prompt(self, cid, road)
 
     def _parley_options(self, cid: str) -> list[Option]:
-        """對話選單上NPC 智能 2.0的鈕：他開了條件、還沒答覆（接、不接）；辦成委託之後他欠你的那一件（請他兌現）。"""
-        s, c = self.state, self.content
-        if not parley.on(c):
-            return []
-        opts: list[Option] = []
-        terms = s.player.parley_terms.get(cid)
-        if terms is not None and terms.plea:  # 他主動開口求你（第二批）：接不接
-            opts.append(Option(id="talk:terms:yes", label=parley.PLEA_ACCEPT.format(
-                cond=self._parley_cond_label(terms.condition), what=parley.ask_label(c, terms.ask))))
-            opts.append(Option(id="talk:terms:no", label=parley.PLEA_DECLINE))
-        elif terms is not None:
-            weight = next((a.weight for a in self._parley_lists(cid)[0] if a.id == terms.ask), 1)
-            cond = parley.condition_text(c, parley.Item(terms.condition, self._parley_cond_label(terms.condition)), weight)
-            opts.append(Option(id="talk:terms:yes", label=parley.TERMS_ACCEPT.format(cond=cond)))
-            opts.append(Option(id="talk:terms:no", label=parley.TERMS_DECLINE))
-        debt = s.player.parley_debts.get(cid)
-        if debt is not None and debt.task is None:  # 欠他銀兩、素材（第二批）：見面還
-            opts.append(Option(id="talk:repay", label=parley.REPAY_BUTTON.format(name=c.characters[cid].name, cond=parley.debt_text(c, debt))))
-        if self._parley_plan_open(cid):  # 答應陪你出陣了（第二批）：出陣前跟他商量打法
-            opts.append(Option(id=PLAN_OPTION, label=parley.PLAN_BUTTON.format(name=c.characters[cid].name)))
-        owed = s.player.parley_owed.get(cid)
-        if owed:
-            opts.append(Option(id="talk:owed", label=parley.OWED_BUTTON.format(name=c.characters[cid].name, what=parley.ask_label(c, owed))))
-        return opts
-
-    def _parley_cond_label(self, condition_id: str) -> str:
-        """條件 id 給玩家看的字（存檔裡只存 id；清單換了也寫得出來）。"""
-        kind, _, rest = condition_id.partition(":")
-        c = self.content
-        if kind == "material":
-            return f"交三份{c.materials[rest].name}" if rest in c.materials else "交三份素材"
-        if kind in ("scout", "strike"):
-            loc = rest.partition(":")[0]
-            place = c.locations[loc].name if loc in c.locations else loc
-            return f"替他{'打探' if kind == 'scout' else '討伐'}{place}"
-        return "交一筆銀兩"
-
-    def _parley_answer(self, cid: str, arg: str) -> list[str]:
-        """接不接他的條件（terms:yes／terms:no）、請他兌現欠你的那一件（owed）、還他欠著的銀兩素材（repay，第二批）。
-        你求他、他開條件：交銀、交素材當場付、當場做；打探、討伐掛成一件委託（同書信的委託），辦成了他欠你那一件
-        （bounties._complete_commission 記 parley_owed）。他主動開口求你（plea）：接了是一件委託、記成你欠他的（到期沒做是食言）。"""
-        s, c = self.state, self.content
-        p = s.player
-        name = c.characters[cid].name
-        if arg == "owed":
-            owed = p.parley_owed.get(cid)
-            if not owed:
-                return ["（此刻無法這麼做。）"]
-            asks = {a.id for a in parley.ask_items(s, c, cid, self._side(), can_sortie=not prologue_rules.active(s, c))}
-            if owed not in asks:
-                return [parley.OWED_LATER.format(name=name)]
-            p.parley_owed.pop(cid)
-            return [parley.OWED_DONE.format(name=name)] + self._parley_do(cid, owed)
-        if arg == "repay":
-            debt = p.parley_debts.get(cid)
-            if debt is None or debt.task is not None:
-                return ["（此刻無法這麼做。）"]
-            paid = self._parley_pay(debt.condition, debt.weight)
-            if paid is None:
-                return [parley.TERMS_SHORT]
-            del p.parley_debts[cid]
-            text = parley.debt_text(c, debt)
-            parley.keep(s, c, cid, text)
-            return paid + [parley.REPAID.format(name=name, cond=text)]
-        terms = p.parley_terms.pop(cid, None)
-        if terms is None:
-            return ["（此刻無法這麼做。）"]
-        if arg == "terms:no":
-            return [(parley.PLEA_DECLINED if terms.plea else parley.TERMS_DECLINED).format(name=name)]
-        if terms.plea:
-            want = parley.Item(terms.condition, self._parley_cond_label(terms.condition),
-                               2 if terms.condition.startswith("strike:") else 1)
-            due = self._parley_owe(cid, want, parley.Item(terms.ask, parley.ask_label(c, terms.ask)), kind="plea")
-            return [parley.PLEA_TAKEN.format(name=name, cond=want.label, due=parley.due_text(s, c, due),
-                                             what=parley.ask_label(c, terms.ask))]
-        weight = next((a.weight for a in self._parley_lists(cid)[0] if a.id == terms.ask), 1)
-        kind = terms.condition.partition(":")[0]
-        if kind in ("silver", "material"):
-            paid = self._parley_pay(terms.condition, weight)
-            if paid is None:
-                p.parley_terms[cid] = terms
-                return [parley.TERMS_SHORT]
-            found = parley.record(s, cid)
-            found.promised += 1
-            parley.keep(s, c, cid, parley.debt_text(c, ParleyDebt(kind="terms", condition=terms.condition, weight=weight, due=0)))
-            return paid + self._parley_do(cid, terms.ask)
-        item = parley.Item(terms.condition, self._parley_cond_label(terms.condition))
-        p.letter_seq += 1
-        task = parley.commission(s, c, cid, item, parley.Item(terms.ask, parley.ask_label(c, terms.ask), weight), p.letter_seq)
-        if task is None:
-            return ["（此刻無法這麼做。）"]
-        p.letters.append(Letter(id=p.letter_seq, kind="條件", sender=cid, at=s.world.time, text=terms.text, read=True, task=task))
-        p.letters = p.letters[-c.config.figure_life.letters_keep:]
-        parley.record(s, cid).promised += 1
-        return [f"你答應了{name}：{item.label}。辦成了，下回見到他，他兌現答應你的事。"]
-
-    def _parley_pay(self, condition: str, weight: int) -> list[str] | None:
-        """當場交銀、交素材（條件、還債共用）：手頭不夠回 None、什麼都不動；夠就扣掉，回那幾行變化。"""
-        s, c = self.state, self.content
-        p = s.player
-        kind, _, rest = condition.partition(":")
-        if kind == "silver":
-            price = parley.silver_of(c, weight)
-            if p.stats.get("silver", 0) < price:
-                return None
-            p.stats["silver"] -= price
-            return [f"銀兩 -{price}"]
-        need = c.config.parley.material_terms
-        if rest not in c.materials or materials.held(s, rest) < need:
-            return None
-        materials.take(s, rest, need)
-        return [f"{c.materials[rest].name} -{need}"]
-
-    def _parley_plea_lists(self, cid: str) -> tuple[list[parley.Item], list[parley.Item]]:
-        """他主動開口時的兩份清單：他想請你做的事、他可以回報的事（A、C 兩次要一樣：亂數只看名號、人物、今天）。"""
-        s, c = self.state, self.content
-        rng = random.Random(f"請託|{s.player.name}|{cid}|{game_day(c, s.world)}")
-        rewards = [a for a in self._parley_lists(cid)[0] if a.id != "sortie"]  # 陪你出陣要你先開口，回報不給它
-        return parley.wants(s, c, cid, rng), rewards
-
-    def _parley_plea_prompt(self, cid: str) -> str:
-        """求見開場那一輪接在提示後面的一段（他主動開口求你）：他此刻沒心事、今天開口過、你跟他還有沒了的事是空的。
-        假人（client 是 None）不叫模型，這段放了也用不到。"""
-        s, c = self.state, self.content
-        if cid not in c.characters or prologue_rules.active(s, c):
-            return ""
-        mood = parley.pleading(s, c, cid)
-        if mood is None:
-            return ""
-        wanted, rewards = self._parley_plea_lists(cid)
-        if not wanted or not rewards:
-            return ""
-        return parley.plea_prompt(c, cid, mood, wanted, rewards)
-
-    def _parley_plea(self, cid: str, turn: companion_agent.CompanionTurn) -> companion_agent.CompanionTurn:
-        """C 段：開場那一輪模型挑了請託與回報，驗過了記成他開的條件（plea），對話選單上多「接下／不接」。今天開口過了就不再開。"""
-        s, c = self.state, self.content
-        if not self._parley_plea_prompt(cid):
-            return turn
-        wanted, rewards = self._parley_plea_lists(cid)
-        picked = parley.plea_pick(wanted, rewards, turn.want, turn.reward)
-        parley.touch(s, c, cid).plea = True
-        if picked is None:
-            return turn
-        want, reward = picked
-        s.player.parley_terms[cid] = ParleyTerms(ask=reward.id, condition=want.id, text=turn.narrative, at=s.world.time, plea=True)
-        return turn
-
-    def _parley_plan_open(self, cid: str) -> bool:
-        """對話選單上「跟他商量打法…」：今天答應陪你出陣的就是他、這一仗還沒打、還沒商量過。"""
-        b = self.state.player.parley_backing
-        return (parley.on(self.content) and b is not None and b.figure == cid and b.plan is None
-                and b.day == game_day(self.content, self.state.world))
-
-    def _parley_plan_prompt(self, cid: str) -> str:
-        b = self.state.player.parley_backing
-        return parley.plan_prompt(self.content, cid, b.region if b is not None else None) if self._parley_plan_open(cid) else ""
-
-    def _parley_plan(self, cid: str, prepared: companion_agent.PreparedTurn | None, said: str | None) -> list[str]:
-        """出陣前跟他商量打法（同放手一搏）：模型只評成功率、寫成敗兩版，引擎夾在 plan_floor～plan_cap、自己擲。
-        成了這一仗他的部曲出力加倍、沒成這一仗他幫不上忙（Game._act 的 train 那一支照 parley_backing.plan 算）。不扣體力、不算輪數。"""
-        s, c = self.state, self.content
-        if not self._parley_plan_open(cid) or said is None:
-            return ["（此刻無法這麼做。）"]
-        try:
-            turn = self._prepared_turn(prepared)
-            if turn is None:
-                request = companion_agent.build_request(s, c, self.world, cid, PLAN_OPTION, said, free=True,
-                                                        extra=self._parley_plan_prompt(cid), required=parley.PLAN_FIELDS)
-                turn = companion_agent.generate_turn(self._quick_client(), request.messages, request.required)
-        except companion_agent.DialogueUnavailable:
-            return [f"{c.characters[cid].name}沉吟不語。"]
-        if turn.willing is None:  # 模型沒評（schema 已經不准，以防萬一）：當這一輪沒談成、打法照舊可以再商量，不默默夾到 plan_floor
-            return [f"{c.characters[cid].name}沉吟不語。"]
-        cfg = c.config.parley
-        chance = max(cfg.plan_floor, min(cfg.plan_cap, int(turn.willing)))
-        hit = parley.plan_roll(s, cid) <= chance
-        s.player.parley_backing.plan = hit
-        name = c.characters[cid].name
-        text = turn.narrative if hit else ((turn.narrative_no or "").strip() or f"{name}搖了搖頭，沒有照你說的布置。")
-        companion_agent._record_turn(s, cid, said, turn.model_copy(update={"narrative": text}))  # 談話畫面寫他這一句、下一輪記得談過打法
-        return [f"你：「{said}」", text, (parley.PLAN_HIT if hit else parley.PLAN_MISS).format(name=name)]
+        return companions_parley.options(self, cid)
 
     def _parley_road_option(self, j: Journey) -> Option | None:
-        """他帶你走的這一趟（parley_escort）：每到一站一次，「跟他說…」。"""
-        s, c = self.state, self.content
-        cid = s.player.parley_escort
-        if not parley.on(c) or cid is None or cid not in c.characters or s.player.parley_road_leg == j.reached:
-            return None
-        return Option(id=ROAD_SAY, label=parley.ROAD_BUTTON.format(name=c.characters[cid].name))
+        return companions_parley.road_option(self, j)
 
-    def _road_say(self, prepared: companion_agent.PreparedTurn | None, said: str | None) -> list[str]:
-        """帶路的路上跟他說一句（第二批）：一輪不花體力的對話；也可以求他沿路做得到的事（parley.road_items），走同一套夾、擲。"""
-        s, c = self.state, self.content
-        cid, j = s.player.parley_escort, s.player.journey
-        if cid is None or j is None or said is None or s.player.parley_road_leg == j.reached:
-            return ["（此刻無法這麼做。）"]
-        affinity = s.player.affinities.get(cid, 0)
-        heard = self._stance_before(cid)
-        self._parley_decision = None
-        extra = self._parley_prompt(cid, road=True)
-        try:
-            msgs = [f"你：「{said}」"] + companion_agent.say_dialogue(
-                self._quick_client(), s, c, self.world, cid, said, turn=self._prepared_turn(prepared),
-                extra=extra, decide=lambda turn: self._parley_decide(cid, turn, road=True, said=said or ""),
-                required=parley.ASK_FIELDS if extra else (),
-            )
-        except companion_agent.DialogueUnavailable:
-            return [f"{c.characters[cid].name}沉吟不語。"]
-        self._stance_credit(cid, heard)
-        s.player.parley_road_leg = j.reached
-        self._annal_talk(cid, s.player.affinities.get(cid, 0) - affinity, said)
-        decision, self._parley_decision = self._parley_decision, None
-        return msgs + self._parley_finish(cid, decision)
+
 
     def _parley_backing_here(self) -> str | None:
-        """今天答應陪你出陣、而且你此刻就在他那一帶：回那位人物的 id。"""
-        s, c = self.state, self.content
-        b = s.player.parley_backing
-        if b is None or b.day != game_day(c, s.world):
-            return None
-        here = figure_life._region(c, s.player.location)
-        return b.figure if b.region is None or here == b.region else None
+        return companions_parley.backing_here(self)
+
+    def _parley_forsake(self) -> list[str]:
+        return companions_parley.forsake_all(self)
+
+    def _talk_options(self) -> list[Option]:
+        return companions_talk.talk_options(self)
 
     def _side(self) -> str | None:
         """敵我的一個讀法（allied.side_of）：豪強分屬兩軍的季，豪強是依附的那一軍；其他人是自己的陣營（散人 None）。"""
@@ -5232,7 +4706,7 @@ class Game:
                     self._draft.title = "叛投不成"
                 return [f"（{reason}）"]
             return (defection.defect(self.state, self.content, target, ally) + self._leave_behind(target.id)
-                    + parley.forsake_all(self.state, self.content))  # NPC 智能 2.1：接了又叛投，欠著的都算食言
+                    + self._parley_forsake())  # NPC 智能 2.1：接了又叛投，欠著的都算食言
         fid, _, ally = arg.partition(":")
         target = self.content.scenario.faction(fid)
         p.pending_defect, p.pending_ally = target.id, ally or None
