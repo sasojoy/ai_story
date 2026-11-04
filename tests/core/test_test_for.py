@@ -854,3 +854,185 @@ def test_the_long_tests_are_spread_to_the_head_of_each_workers_first_chunk():
     heads = [out[k * chunk:(k + 1) * chunk] for k in range(3)]
     assert [[i for i in h if i in longs] for h in heads] == [[longs[0], longs[5]], [longs[1], longs[4]], [longs[2], longs[3]]]
     assert [i for i in out if i not in longs] == rest  # 其餘照原本的順序
+
+
+# ── core-events（全部拆包第 16 批修正，PM 2026-11-03）：改核心裡掛鉤、清單以外的模組（tianxia/core/event_check.py……）──
+# 以前一律只挑核心測試＋煙霧：事件檢定從 Game 搬進核心之後，搬之前照方法名挑得到的隨口應對、端出事件的回歸挑不到了（審查 M1、M4、M8、M9）。
+# 照第 11 批修正輪的做法再並上寫到改到的函式名或 Game 委派名的測試檔。
+
+def _core_hunk(module: str, name: str) -> dict:
+    """假裝改了 tianxia/core/<module>.py 裡最外層 name（函式、類別、常數）的最後一行；位置照這一份真的原始碼找。"""
+    rel = f"tianxia/core/{module}.py"
+    src = (ROOT / rel).read_text(encoding="utf-8")
+    end = next(e for n, _, e, _ in test_for._core_spans(src) if n == name)
+    return _added(rel, src, end)
+
+
+def _core_pick(name: str):
+    return test_for.pick(["tianxia/core/event_check.py"], hunks_of=_core_hunk("event_check", name))
+
+
+def test_the_game_delegates_to_the_core_are_read_from_the_engine():
+    """Game 上委派給核心本體的一行委派（`return event_check.<函式>(self, …)`）照 engine.py 的語法樹認，跟邊界測試的
+    CORE_EVENT_DELEGATES 是同一批方法（那一份另外守張數與「只有一行」）。"""
+    import test_feature_boundaries
+    found = test_for.core_delegates((ROOT / "tianxia" / "engine.py").read_text(encoding="utf-8"))
+    assert {"_present": ("event_check", "present"), "_choose": ("event_check", "resolve_choice"),
+            "answer_event": ("event_check", "answer_event"), "_tale_clue": ("event_check", "tale_clue")}.items() <= found.items()
+    assert {m for m, (mod, _) in found.items() if mod == "event_check"} == set(test_feature_boundaries.CORE_EVENT_DELEGATES)
+    assert not set(found) & set(test_for.engine_delegates((ROOT / "tianxia" / "engine.py").read_text(encoding="utf-8")))
+
+
+@pytest.mark.parametrize("name, delegate, expected", [
+    ("tale_clue", "_tale_clue", {"test_secret_recipes.py", "test_forge_secrets.py"}),  # 審查 M9：以前 test_for 挑的 1,599 條 0 紅
+    ("present", "_present", {"test_stances_fix6.py", "test_seats.py", "test_event_rotation.py"}),  # 人物心意那一則（審查第一條）
+    ("event_battle", "_event_battle", {"test_terrain_arts.py"}),
+    ("resolve_choice", "_choose", {"test_drill_push.py"}),
+    ("add_gamble_narration", "add_gamble_narration", {"test_free_text_and_marks.py"}),  # 審查 M4
+])
+def test_a_core_function_also_picks_the_tests_that_name_its_game_delegate(name, delegate, expected):
+    picked = _core_pick(name)
+    names = {p.name for p in picked.files}
+    assert picked.core and picked.smoke
+    assert expected <= names and _writes(delegate) <= names
+    assert not names & {"test_tavern.py", "test_mall.py"}
+    assert any(delegate in w for w in picked.why), picked.why
+
+
+def test_a_core_function_name_alone_counts_only_with_the_module_name():
+    """函式名照字面算太寬（present、apply 是一般的字：test_admin_triggers、test_fusion 寫到它們、跟事件檢定無關）：
+    函式名要跟模組名（event_check）寫在同一個檔裡才算；委派名、類別、常數照識別字算。present 模組裡沒有人直接叫
+    （都經 ctx._present），挑到的就是寫到 _present 的＋同時寫到 event_check 與 present 的，不多不少。"""
+    names = {p.name for p in _core_pick("present").files}
+    assert names == _writes("_present") | (_writes("event_check") & _writes("present"))
+    assert "test_admin_triggers.py" in _writes("present") and "test_admin_triggers.py" not in names
+    assert "test_fusion.py" not in {p.name for p in _core_pick("apply").files}
+
+
+def test_a_core_helper_without_a_delegate_picks_through_the_functions_that_call_it():
+    """answer_branch、deed_credit 只有模組裡的 answer_event 在叫（沒留委派）：一路往上找模組裡直接叫它的函式，照那幾個的
+    名字與委派名挑。審查 M8：answer_branch 拿掉 cost_problem，test_outcomes_answer 紅、test_for 以前挑的 0 紅。"""
+    for name in ("answer_branch", "deed_credit"):
+        picked = _core_pick(name)
+        names = {p.name for p in picked.files}
+        assert {"test_outcomes_answer.py", "test_free_text_and_marks.py", "test_outcomes_server.py"} <= names, name
+        assert any("answer_event" in w for w in picked.why), (name, picked.why)
+    # 模組裡經 ctx 叫的（apply 經 ctx._present 串下一則）不算「叫它的」：照的是函式之間直接的呼叫
+    assert "test_seal_mandate.py" not in {p.name for p in _core_pick("present").files}
+
+
+def test_a_core_constant_picks_the_tests_that_name_it_and_the_functions_that_use_it():
+    """模組層的常數與類別（EVIL_ANNAL、FreeTextRequest）照識別字挑（engine 照名字 import 回來，測試寫 from tianxia.engine import …），
+    再加模組裡用到它的函式（往上找）的委派名。"""
+    names = {p.name for p in _core_pick("EVIL_ANNAL").files}
+    assert _writes("EVIL_ANNAL") <= names and _writes("answer_event") <= names
+    request = {p.name for p in _core_pick("FreeTextRequest").files}
+    assert _writes("FreeTextRequest") <= request and _writes("free_text_request") <= request
+
+
+def test_a_core_module_named_without_a_change_counts_the_whole_file():
+    """指名了、可是跟 base 沒有差（`test_for.py tianxia/core/event_check.py --base HEAD`）：照整個檔算，每一個函式、類別、常數都算。"""
+    rel = "tianxia/core/event_check.py"
+    src = (ROOT / rel).read_text(encoding="utf-8")
+    picked = test_for.pick([rel], hunks_of={rel: ([], src, src)})
+    names = {p.name for p in picked.files}
+    assert picked.core and picked.smoke
+    for name in ("tale_clue", "present", "answer_branch", "EVIL_ANNAL"):
+        assert {p.name for p in _core_pick(name).files} <= names, name
+    assert any("整個檔" in w for w in picked.why)
+
+
+# bout（全部拆包第 12 批審查修正）：單挑底層 duel_base、擂台的名次 arena_ranks 被單挑包的 duel_rules、arena_rules 照抄出去
+# （re-export 同一批函式物件），測試照舊經舊名寫（`from tianxia import duel`、`duel.blow_taken`、`arena.title_for`、
+# `from tianxia import duel as duel_rules`）。以前「模組名與函式名寫在同一個檔」只認 duel_base、arena_ranks 這兩個字，一個都並不上
+# （審查 C1、C2、C5：改了核心那一份，test_for 挑的全綠、包與奪璽單挑的測試紅）。
+
+def _core_pick_in(module: str, name: str):
+    return test_for.pick([f"tianxia/core/{module}.py"], hunks_of=_core_hunk(module, name))
+
+
+def test_the_core_names_a_package_reexports_are_read_with_the_package_module_and_its_old_name():
+    """照語法樹讀出：名字 → 照抄它的模組名（duel_rules、arena_rules）與指到那一份的舊名別名（duel、arena）。只看 from … import 名字
+    （整個模組 import 進來的 `from tianxia.core import duel_base as duel_rules` 不算照抄：那一份寫得到 duel_base 這個字）。"""
+    duel_words = test_for.core_reexports("duel_base")
+    assert {"duel_rules", "duel"} <= duel_words["push_of"] and {"duel_rules", "duel"} <= duel_words["blow_taken"]
+    assert {"arena_rules", "arena"} <= test_for.core_reexports("arena_ranks")["title_for"]
+    assert "shopview" not in set().union(*duel_words.values()) and "seal_duel" not in set().union(*duel_words.values())
+    assert "present" not in test_for.core_reexports("event_check")  # 沒有人照抄的函式：照舊只認模組名與委派名
+    aliases = test_for.old_aliases()
+    assert aliases["tianxia.features.bout.duel_rules"] == {"duel"} and aliases["tianxia.features.bout.arena_rules"] == {"arena"}
+    assert aliases["tianxia.features.sortie.duel_rules"] == {"sortie_duel"}  # 同名的模組照全名分開
+
+
+@pytest.mark.parametrize("module, name, expected", [
+    ("duel_base", "push_of", {"test_seal_duel.py"}),  # 審查 C1（參謀減半拿掉）：寫 duel_rules.push_of（from tianxia import duel as duel_rules）
+    ("duel_base", "blow_taken", {"test_duel.py"}),  # 審查 C2（不算防具）：寫 duel.blow_taken
+    ("arena_ranks", "title_for", {"test_arena.py"}),  # 審查 C5（<= 改成 <）：寫 arena.title_for
+])
+def test_a_core_function_also_picks_the_tests_that_name_it_through_a_package_reexport(module, name, expected):
+    picked = _core_pick_in(module, name)
+    names = {p.name for p in picked.files}
+    assert picked.core and picked.smoke
+    assert expected <= names, picked.why
+    assert any("照抄" in w for w in picked.why), picked.why
+
+
+def test_a_reexported_name_counts_only_when_written_after_the_module_word():
+    """經照抄的模組寫的要寫成 `<模組名>.<名字>`（或從那個模組 import 那個名字）才算：duel、arena 是到處都有的字（p.duel、config.arena），
+    只看兩個字寫在同一個檔裡會把一大半的測試都挑進來。"""
+    assert test_for.names_through(["duel", "duel_rules"], "push_of", "from tianxia import duel as duel_rules\nduel_rules.push_of(1)\n")
+    assert test_for.names_through(["duel"], "blow_taken", "from tianxia.duel import blow_taken, counter\n")
+    assert not test_for.names_through(["duel"], "counter", "p.duel = None\ncounter = 3\n")
+    assert not test_for.names_through(["arena"], "title_for", "c.config.arena.enabled = True\nleaderboard.title_for\n")
+
+
+STAGE_PACKAGES = ["bout", "battle", "feast", "guide", "looks", "legacy"]  # 有 <包>_stage.py 的包（引導是第 22 批合進 develop 的，第 12 批合併時補上）
+
+
+def test_the_stage_packages_are_every_package_with_a_stage_file():
+    """下面兩條照這張表參數化：新的一包放了 <包>_stage.py 就要加進來（不然那一包的擺局面檔沒有人驗挑不挑得到）。"""
+    found = sorted(p.parent.parent.name for p in (ROOT / "tianxia" / "features").glob("*/tests/*_stage.py")
+                   if p.name == f"{p.parent.parent.name}_stage.py")
+    assert found == sorted(STAGE_PACKAGES)
+
+
+@pytest.mark.parametrize("package", STAGE_PACKAGES)
+def test_a_package_stage_file_picks_the_contract_test_that_loads_it(package):
+    """tianxia/features/<包>/tests/<包>_stage.py 只有契約測試載入（test_contract_features 的 _stages 用 importlib 照路徑讀），沒有測試檔
+    import 它：改了挑核心契約（同改包的檔），不是「import 它的測試檔」那一條（第 12 批審查：以前四包的 *_stage.py 一條都不挑）。"""
+    rel = f"tianxia/features/{package}/tests/{package}_stage.py"
+    assert (ROOT / rel).is_file(), rel
+    picked = test_for.pick([rel])
+    assert {p.name for p in picked.files} >= {"test_contract_features.py", "test_feature_boundaries.py"}
+    assert any("契約" in w for w in picked.why), picked.why
+
+
+@pytest.mark.parametrize("package", STAGE_PACKAGES)
+def test_a_package_stage_file_also_picks_its_own_package_tests(package):
+    """擺局面檔算成那一包（第 22 批 PM 認定第 1 條、第 12 批合併時補）：挑那一包的 tests/ 加核心契約，同改包裡的任一檔——擺錯局面時
+    契約測試會紅，那一包自己的測試也要跟著跑（修正輪只挑了核心契約）。"""
+    rel = f"tianxia/features/{package}/tests/{package}_stage.py"
+    own = set((ROOT / "tianxia" / "features" / package / "tests").rglob("test_*.py"))
+    assert own, package
+    picked = test_for.pick([rel])
+    assert own <= set(picked.files), sorted(p.name for p in own - set(picked.files))
+    assert picked.files == test_for.pick([f"tianxia/features/{package}/__init__.py"]).files
+
+
+def test_a_core_pick_that_names_too_many_files_falls_back_to_core_and_smoke(monkeypatch):
+    """寫到那幾個名字的檔超過 IMPORT_CAP 個（同 tianxia/<模組>.py 往上找的那一條）：不一個一個挑，只剩核心測試＋煙霧。"""
+    monkeypatch.setattr(test_for, "IMPORT_CAP", 1)
+    picked = _core_pick("answer_branch")
+    assert picked.core and picked.smoke and not picked.files
+    assert any("太多" in w for w in picked.why)
+
+
+@pytest.mark.parametrize("module", sorted(test_for.CORE_LISTS))
+def test_the_core_hooks_and_lists_still_pick_only_the_core_tests_and_smoke(module):
+    """掛鉤（features.py）與清單（services.py 服務清單、registry.py 的 FEATURES、__init__.py 的 MODULES）改了照舊只跑核心測試＋煙霧：
+    名字（options、choose、FEATURES）到處都寫得到，照名字挑等於整套。"""
+    assert (ROOT / "tianxia" / "core" / f"{module}.py").is_file(), module
+    rel = f"tianxia/core/{module}.py"
+    src = (ROOT / rel).read_text(encoding="utf-8")
+    picked = test_for.pick([rel], hunks_of=_added(rel, src, *range(1, len(src.splitlines()) + 1)))
+    assert picked.core and picked.smoke and not picked.files

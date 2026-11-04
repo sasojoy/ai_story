@@ -10,6 +10,7 @@ import pytest
 
 from tianxia.content import load_content
 from tianxia.models import Condition
+from grade_kit import raw_difficulty
 
 CONTENT_DIR = Path(__file__).parents[2] / "content"
 
@@ -41,4 +42,4 @@ def test_added_train_checks_suit_a_new_character():
     for e in json.loads((CONTENT_DIR / "events" / "train_aftermath.json").read_text(encoding="utf-8")):
         for c in e["choices"]:
             if "check" in c:
-                assert 3 <= c["check"]["difficulty"] <= 5, e["id"]
+                assert 3 <= raw_difficulty(c["check"]) <= 5, e["id"]

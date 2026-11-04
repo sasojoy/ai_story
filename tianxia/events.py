@@ -8,7 +8,7 @@ from typing import Literal
 from . import foreshadow, precise, tiers
 from . import stances as stance_rules
 from .models import Check, Choice, Content, Event, FreeTextChoice, Location
-from .rules import check_condition, check_outlook, fail_stamina, practice_line, season_one_off
+from .rules import check_condition, check_outlook, check_stat_name, fail_stamina, practice_line, season_one_off
 from .state import GameState
 from .world_state import WorldStateStore
 
@@ -128,6 +128,14 @@ def _fresh_among(state: GameState, candidates: list[Event], action: str) -> list
     return fresh
 
 
+def qiyu_multiplier(state: GameState, content: Content) -> float:
+    """奇遇的權重乘幾倍：Config.qiyu_weight_multiplier；傳承開了機緣「奇遇」那一道門路的人再乘 1 + Config.legacy.qiyu_boost。"""
+    from .renown import legacy_door  # noqa: PLC0415
+
+    boost = 1.0 + content.config.legacy.qiyu_boost if legacy_door(state, content, "qiyu") else 1.0
+    return content.config.qiyu_weight_multiplier * boost
+
+
 def pick_event(
     state: GameState, content: Content, action: str, rng: random.Random, pool: EventPool | None = None,
 ) -> Event | None:
@@ -140,7 +148,7 @@ def pick_event(
     fresh = _fresh_among(state, _capped_group(state, content, candidates, action, rng), action)
     if not fresh:
         return None
-    multiplier = content.config.qiyu_weight_multiplier
+    multiplier = qiyu_multiplier(state, content)
     weights = [event.weight * (multiplier if event.qiyu else 1.0) for event in fresh]
     return rng.choices(fresh, weights=weights)[0]
 
@@ -151,7 +159,7 @@ def pick_from(state: GameState, content: Content, candidates: list[Event], actio
     fresh = _fresh_among(state, tiers.narrow(state, content, candidates, rng), action)  # 事件分級：先挑一階
     if not fresh:
         return None
-    multiplier = content.config.qiyu_weight_multiplier
+    multiplier = qiyu_multiplier(state, content)
     return rng.choices(fresh, weights=[event.weight * (multiplier if event.qiyu else 1.0) for event in fresh])[0]
 
 
@@ -198,7 +206,7 @@ def check_note(check: Check, state: GameState, content: Content, world: WorldSta
     心裡話前面。事件選項（choice_label）與有檢定的行動（第 2 階行動、第 3 階煽動起事，企劃者裁決 E5.3：
     「{行動}（體力 N・{屬性名} {數值}：{心裡話}）」）都用這一個，只有這一份寫法。只是檢定那一段：體力的代價各自另寫。"""
     outlook = check_outlook(check, state, content, world)
-    stat = content.config.stat_names.get(check.stat, check.stat)
+    stat = check_stat_name(check, content, state.world)
     value = f"{round(outlook.stat_value, 1):g}" + (f"＋{outlook.bonus}" if outlook.bonus else "")
     line = voice_line(check.stat, outlook.gap, content)
     practiced = practice_line(check, state, content, world)

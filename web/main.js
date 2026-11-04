@@ -1454,7 +1454,8 @@
   function sceneArtHtml(a) {
     const sub = a.sub ? `<span class="sub">${esc(a.sub)}</span>` : "";
     const time = a.time ? `<span class="time">${esc(a.time)}</span>` : "";
-    return `<figure class="scene-art ${esc(a.kind)}"><img src="${esc(a.src)}" alt="" decoding="async"><figcaption><b>${esc(a.title)}</b>${sub}${time}</figcaption></figure>`;
+    // 地點會變樣（世界活起來第二批）：戰火、淪陷、饑荒、重建的地點多一個 mood-<kind>，畫換色調（太平沒有 mood，一字不變）
+    return `<figure class="scene-art ${esc(a.kind)}${a.mood ? ` mood-${esc(a.mood)}` : ""}"><img src="${esc(a.src)}" alt="" decoding="async"><figcaption><b>${esc(a.title)}</b>${sub}${time}</figcaption></figure>`;
   }
   function sceneUnderArt(m) {
     if (!m.art || !m.art.head || !(m.scene || "").startsWith(m.art.head)) return m;

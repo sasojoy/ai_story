@@ -16,6 +16,12 @@ from ..features import sortie  # 出陣：主動搬六包第 1 批（沒有選�
 # battle
 from ..features import battle  # 全服決戰：主動搬六包第 5 批（「看」那一半；沒有選項、選單、狀態，排在哪裡結果都一樣）
 from ..features import looks  # 擂台形象
+# guide
+from ..features import guide  # 新手引導：全部拆包第 22 批（沒有選項、選單、狀態，排在哪裡結果都一樣；check_content 的錯誤排在別包之後——
+# 第 12 批合進 develop 時單挑包接在它後面，只有碰到才說與場邊事件同時寫壞時錯誤的先後不同）
+# bout
+from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。排最後：擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）
+from ..features import legacy  # 傳承
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -30,6 +36,11 @@ FEATURES: list[Feature] = [
     # battle
     battle.FEATURE,
     looks.FEATURE,
+    # guide
+    guide.FEATURE,
+    # bout（排最後：店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4）
+    bout.FEATURE,
+    legacy.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 
@@ -89,6 +100,8 @@ SHARED: dict[str, str] = {
     "wins": "三陣營四勝利（豪強兩本帳、季末四階）：核心的 content、rules 讀；決戰、出陣兩包與列傳、軍情都叫",
     "relations": "人物之間的關係：大勢人物、人物活起來、懸賞、人物對話讀",
     "deeds": "世界記事（你做的事被世界記住）：探索包的走一趟、人物活起來、章回都讀",
+    "place_state": "地點會變樣（太平、戰火、淪陷、饑荒、重建；世界活起來第二批）：核心的 rules 讀（事件條件），地盤、領地爭奪、時刻表、"
+                   "坐騎（馬市開不開）、人物活起來、盤算都改它或讀它",
     "seats": "第四階席次與每週輪替：叛投、晉升、世界一步讀（讀 ranks 的稱號記在 SHARED_PENDING：第 40 批收進這一層）",
     "factions": "陣營規模的換算：席次 seats 讀；陣營成包（第 35 批）之後還要",
     "week_unlock": "功能照週解鎖與三週主題：擂台、懸賞、輿圖、本週卡讀",
@@ -115,4 +128,6 @@ SHARED: dict[str, str] = {
     "flavor": "重複內容的模型潤色（世界事件傳聞全服只潤一次）：核心的 sqlite_world 讀；世界一步也叫（模型服務）",
     "playlog": "真人量表（每個帳號每天按了哪幾顆）：只 import 核心的 database；殼記帳、量表腳本讀",
     "prologue": "序章（草廬那幾步）：決戰、探索、出陣、酒肆四包都問「還在序章裡」，引導、開局、輿圖也讀",
+    # battle（全部拆包第 8 批：generals 進決戰包時，共用規則層的 siege 讀的那一塊留在這一層；第 15 批 PM 認定第 2 條）
+    "chiefs": "龍頭上陣的挑法（誰上陣、份量、池子；原本 generals 的 on、pick）：決戰包開集結派人上陣、共用規則層 siege 的攻城留守都讀",
 }

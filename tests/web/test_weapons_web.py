@@ -231,6 +231,19 @@ def test_rack_rows_show_tempers_and_the_recipe(views):
     assert "淬煉 0" not in plain and "配方 " not in plain
 
 
+def test_a_top_grade_row_writes_its_own_cap_and_slow_wear(views):
+    """鐵匠鋪與合成流程 3.6：「淬煉 N/M」的 M 照這一件（伺服器給的 temper_max，上品 7）；上品多「磨得慢」（wear_note），其餘不寫。"""
+    m, x = views
+    x["gear"] = _gear(weapon={"worn": _row(confirm="", grade="一階上品", quality="上品", tempers=2, temper_max=7, wear_note="磨得慢"), "rack": []},
+                      armor={"worn": {"id": "甲:1", "name": "上品甲", "attribute": "剛", "grade": "一階上品", "edge": 90, "wear_word": "耐久度", "cut": "6%",
+                                      "tempers": 1, "temper_max": 7, "wear_note": "磨得慢"}, "rack": []})
+    html = _practice(m, menxia=x)
+    assert "淬煉 2/7・鋒利度 80・磨得慢" in html and "淬煉 1/7・耐久度 90・磨得慢" in html
+    x["gear"] = _gear(weapon={"worn": _row(confirm="", grade="一階中品", tempers=2, temper_max=6, wear_note=""), "rack": []})
+    plain = _weapons_block(_practice(m, menxia=x))
+    assert "淬煉 2/6" in plain and "磨得慢" not in plain
+
+
 def test_the_armor_slot_draws_its_own_rows_with_durability_and_cut(views):
     m, x = views
     spare = _armor_row(id="甲:2", name="<i>鐵葉甲</i>", attribute="剛", cut="3%", fit="跟你的內功相剋",

@@ -192,7 +192,8 @@ def test_only_the_gatekeepers_read_the_mandate_timetable():
     root = Path(__file__).resolve().parents[2]
     allowed = {"tianxia/timetable.py", "tianxia/seal.py", "tianxia/content.py", "tianxia/models.py"}
     hits = [
-        f"{p.relative_to(root).as_posix()}:{n}" for p in [*root.glob("tianxia/*.py"), root / "server.py"]
+        f"{p.relative_to(root).as_posix()}:{n}"
+        for p in [*root.glob("tianxia/*.py"), *root.glob("tianxia/core/*.py"), root / "server.py"]  # 核心本體也掃（dev/core-events-1 審查）
         for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1)
         if "mandate_timetable" in line and p.relative_to(root).as_posix() not in allowed
     ]

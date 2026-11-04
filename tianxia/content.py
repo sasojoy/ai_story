@@ -20,14 +20,13 @@ from pydantic import BaseModel, ValidationError
 
 from . import encounter
 from . import forge_secrets as forge_rules
-from . import hints as hint_rules
 from .companion_agent import DIALOGUE_TAGS
 from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS
 from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
-    ArtBook, Itinerary,
-    BEST_OF, FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
+    ArtBook, Itinerary, Check, StatDef,
+    BEST_OF, FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, PLACE_KINDS, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
     GiftDef, Hints, MingtieContent, InsightDef, Location, Look, MallItem, MarkRule, MarkText, OppDef,
     InsightScene, Opening, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
@@ -81,6 +80,80 @@ def stamp_tier(event: Event) -> None:
     for check in checks:
         if check is not None:
             check.tier = event.tier
+
+
+def _load_attributes(content: Content, path: Path) -> None:
+    """屬性定義（content/attributes.json；屬性與跨季架構 v2 第二節第 1 層）：顯示名蓋進 Config.stat_names（畫面上讀 stat_names 的
+    地方照舊），改名只改這個檔。第 ① 階段的鍵與順序要跟 team.COMBAT_STATS 一樣（第 ② 階段換成五項時一起改）。沒有這個檔照舊。"""
+    if not path.exists():
+        return
+    content.attributes = [_build(StatDef, raw) for raw in _read(path)]
+    for attr in content.attributes:
+        content.config.stat_names[attr.key] = attr.name
+
+
+@functools.cache
+def _graded_fields(cls: type) -> tuple[str, ...]:
+    """這一種模型裡可能（一路往下）放著 Check 或 Effect 的欄位：resolve_grades 只走這些（整份內容全走一遍要多花 0.2 秒）。"""
+    return tuple(name for name, field in cls.model_fields.items() if _may_hold_grades(field.annotation, frozenset()))
+
+
+def _may_hold_grades(tp, seen: frozenset) -> bool:
+    if isinstance(tp, type) and issubclass(tp, BaseModel):
+        if tp in (Check, Effect):
+            return True
+        if tp in seen:
+            return False
+        return any(_may_hold_grades(f.annotation, seen | {tp}) for f in tp.model_fields.values())
+    return any(_may_hold_grades(arg, seen) for arg in get_args(tp))
+
+
+def resolve_grades(content: Content) -> None:
+    """難度等級與獎勵等級換成數字（屬性與跨季架構 v2 第五節；載入時一次）：每一個寫 grade 的檢定照 Config.checks.grades 換成
+    difficulty（dc ＋ shift），每一個效果的 stats 寫成等級的照 Config.rewards 換成 int（鍵的順序不動：江湖紀錄的得失照它寫）。
+    寫錯的等級、超過的微調當場報錯。整份內容走一遍（設定本身不走）。"""
+    checks = {g.key: g for g in content.config.checks.grades}
+    shift_max = content.config.checks.shift_max
+    rewards = content.config.rewards
+    reward_at = {g.key: i for i, g in enumerate(rewards.grades)}
+    errors: list[str] = []
+    seen: set[int] = set()
+
+    def visit(obj, where: str) -> None:
+        if isinstance(obj, BaseModel):
+            if id(obj) in seen or obj is content.config:
+                return
+            seen.add(id(obj))
+            if isinstance(obj, Check) and obj.grade is not None:
+                grade = checks.get(obj.grade)
+                if grade is None:
+                    errors.append(f"{where}：沒有「{obj.grade}」這個難度等級（Config.checks.grades）")
+                elif abs(obj.shift) > shift_max:
+                    errors.append(f"{where}：微調 {obj.shift} 超過 ±{shift_max}")
+                else:
+                    obj.difficulty = grade.dc + obj.shift
+            if isinstance(obj, Effect) and any(isinstance(v, str) for v in obj.stats.values()):
+                for key, value in list(obj.stats.items()):
+                    if not isinstance(value, str):
+                        continue
+                    if key not in rewards.amounts or value not in reward_at:
+                        errors.append(f"{where}：{key} 寫了「{value}」，不是獎勵等級（Config.rewards；只給 {'、'.join(rewards.amounts)}）")
+                    else:
+                        obj.stats[key] = rewards.amounts[key][reward_at[value]]
+            for name in _graded_fields(type(obj)):
+                visit(getattr(obj, name), f"{where}.{name}" if where else name)
+        elif isinstance(obj, dict):
+            for key, value in obj.items():
+                if isinstance(value, (BaseModel, dict, list, tuple)):
+                    visit(value, f"{where}[{key}]")
+        elif isinstance(obj, (list, tuple)):
+            for i, value in enumerate(obj):
+                if isinstance(value, (BaseModel, dict, list, tuple)):
+                    visit(value, f"{where}[{i}]")
+
+    visit(content, "")
+    if errors:
+        raise ContentError("\n".join(errors[:20]))
 
 
 def load_content(root: Path, profile: str | None = None) -> Content:
@@ -164,6 +237,10 @@ def load_content(root: Path, profile: str | None = None) -> Content:
     )
     content.config.admins = _with_local_admins(content.config.admins)
     _fill_story_lines(content)
+    _load_attributes(content, root / "attributes.json")
+    if (root / "attributes_v2.json").exists():  # 五項屬性（屬性與跨季架構 v2 第三節）：顯示名照季讀（attrset.names），不蓋 stat_names
+        content.attributes_v2 = [_build(StatDef, raw) for raw in _read(root / "attributes_v2.json")]
+    resolve_grades(content)
     validate(content)
     _scale_marks(content, content.config.mark_threshold_scale)
     return content
@@ -679,24 +756,7 @@ def check_front_lines(c: Content, need) -> None:
             check_pool(f"front_lines.by_side.{side}.{band}", pool)
 
 
-def check_arena_crowd(c: Content, need) -> None:
-    """擂台場邊事件的固定句（content/arena_crowd.json）：只能是認得的種類，每一句照 arena_crowd.FIELDS 填得進去、填完不能有阿拉伯數字
-    （數字只能是引擎寫在括號裡的）；擂台與場邊事件開著時每一種至少一句。"""
-    from . import arena_crowd  # noqa: PLC0415
-
-    for kind, lines in c.arena_crowd.items():
-        need(kind in arena_crowd.KINDS, f"arena_crowd：不認得的種類 {kind}")
-        need(isinstance(lines, list) and bool(lines), f"arena_crowd.{kind}：要寫成一串句子")
-        for text in lines if isinstance(lines, list) else []:
-            try:
-                filled = str(text).format(**arena_crowd.SAMPLE)
-            except (KeyError, IndexError, ValueError) as e:
-                need(False, f"arena_crowd.{kind}：「{text}」填不進去（{e}）")
-                continue
-            need(bool(filled.strip()) and not any(ch.isdigit() for ch in filled), f"arena_crowd.{kind}：「{text}」不能空、不能有數字")
-    if c.arena_crowd and c.config.arena.enabled and c.config.arena.crowd.enabled:
-        for kind in arena_crowd.KINDS:
-            need(bool(c.arena_crowd.get(kind)), f"arena_crowd 缺少種類 {kind}")
+# 擂台場邊事件的固定句（原本的 check_arena_crowd）搬進單挑包：tianxia/features/bout/arena_crowd.py 的 check_content（全部拆包第 12 批）
 
 
 def check_xingshi_lines(c: Content, need) -> None:
@@ -1998,6 +2058,15 @@ def check_territory(c: Content, need, known, front_ids: list[str]) -> None:
     from . import territory  # noqa: PLC0415  延後 import（同 validate 的 atlas）
 
     table = [*c.timetable, *c.mandate_timetable]
+    factions_all = {f.id for f in c.scenario.factions}
+    for event in table:  # 地點會變樣（place_state.py）：TimetableOutcome.places 的地點認得、值是 war、famine、retake 或 fallen:<陣營>
+        for key, outcome in event.outcomes.items():
+            for loc_id, how in outcome.places.items():
+                where = f"時刻表 {event.id} 結果 {key} 的 places"
+                known(where, [loc_id], c.locations, "地點")
+                kind, _, side = how.partition(":")
+                need(how in ("war", "famine", "retake") or (kind == "fallen" and side in factions_all),
+                     f"{where}：{loc_id} 寫成 {how}（要是 war、famine、retake 或 fallen:<陣營>）")
     t = c.scenario.territory
     if t is None:
         need(not any(o.control for e in table for o in e.outcomes.values()), "時刻表寫了 control，劇本卻沒有 territory")
@@ -2221,6 +2290,35 @@ def check_signature_arms(c: Content, need, known) -> None:
                 need(False, f"{where}：{label}只能用 {{general}}、{{arm}}")
 
 
+def check_attributes(c: Content, need) -> None:
+    """屬性定義、效果表、難度等級與獎勵等級（屬性與跨季架構 v2 第二、五節）寫得對。第 ① 階段屬性的鍵與順序跟 team.COMBAT_STATS 一樣。"""
+    from .team import ATTR_HOOKS, COMBAT_STATS, RATE_KEYS  # noqa: PLC0415  team 一路 import 很多模組，content 不在模組層依賴它
+
+    keys = [a.key for a in c.attributes] or list(COMBAT_STATS)
+    if c.attributes:
+        need(tuple(keys) == COMBAT_STATS, f"attributes.json：鍵與順序要是 {'、'.join(COMBAT_STATS)}（寫了 {'、'.join(keys)}）")
+        need(all(a.name for a in c.attributes), "attributes.json：每一項都要有顯示名")
+    for i, row in enumerate(c.config.attributes.effects):
+        at = f"attributes.effects[{i}]（{row.attr}→{row.hook}）"
+        need(row.attr in keys, f"{at}：沒有 {row.attr} 這一項屬性")
+        need(row.hook in ATTR_HOOKS, f"{at}：沒有 {row.hook} 這個鉤子（team.ATTR_HOOKS）")
+        if row.curve == "linear" and isinstance(row.per, str):
+            need(row.per in RATE_KEYS, f"{at}：per 寫字的話要是 {'、'.join(RATE_KEYS)} 其中一個")
+        if row.curve == "tiers":
+            need(bool(row.steps) and [t for t, _ in row.steps] == sorted(t for t, _ in row.steps), f"{at}：steps 要照門檻由小到大")
+    v2 = c.config.attributes.v2
+    if c.attributes_v2:
+        need([a.key for a in c.attributes_v2] == v2.keys, f"attributes_v2.json：鍵與順序要是 {'、'.join(v2.keys)}")
+    for i, row in enumerate(v2.effects):
+        need(row.attr in v2.keys and row.hook in ATTR_HOOKS, f"attributes.v2.effects[{i}]：{row.attr}→{row.hook} 不認得")
+    need(all(t in v2.keys for t in v2.legacy.values()), "attributes.v2.legacy：只能對到新的五項")
+    grades = [g.key for g in c.config.checks.grades]
+    need(len(set(grades)) == len(grades) and bool(grades), "checks.grades：等級的 key 不能重複、至少一級")
+    need([g.dc for g in c.config.checks.grades] == sorted(g.dc for g in c.config.checks.grades), "checks.grades：照難度由易到難排")
+    rewards = [g.key for g in c.config.rewards.grades]
+    need(len(set(rewards)) == len(rewards), "rewards.grades：等級的 key 不能重複")
+
+
 def validate(c: Content) -> None:
     errors: list[str] = []
     from .atlas import region_of  # noqa: PLC0415  延後 import：atlas → world → rules 一路載入，content 不必一開始就依賴它們
@@ -2320,6 +2418,7 @@ def validate(c: Content) -> None:
         known(where, cond.factions, faction_ids, "陣營")
         known(where, cond.factions_none, faction_ids, "陣營")
         known(where, cond.controlled_by, faction_ids, "陣營")
+        known(where, [*cond.place_state, *cond.place_state_none], PLACE_KINDS, "地點的樣子")
         known(where, cond.clue_items, item_ids, "伏筆物品")
         weekly = cond.week_min is not None or cond.week_max is not None
         if _week7(c) and weekly:  # 7 天濃縮季同 21 天季照天數，寫 7 天的那一份（cal_day_*7，1～7 在模型裡驗）
@@ -2626,9 +2725,10 @@ def validate(c: Content) -> None:
     check_front_lines(c, need)
     check_combat_lines(c, need)
     check_shop_lines(c, need)
-    check_features(c, need)  # 功能包自己的內容（商城的商品，原本的 check_mall）
+    # 功能包自己的內容（商城的商品，原本的 check_mall；擂台的場邊事件，原本在 check_art 下一行的 check_arena_crowd，全部拆包第 12 批）
+    check_features(c, need)
     check_art(c, need)
-    check_arena_crowd(c, need)
+    check_attributes(c, need)
     check_xingshi_lines(c, need)
     check_traits(c, need)
     check_signature_arts(c, need)
@@ -3010,34 +3110,6 @@ def validate(c: Content) -> None:
             texts = [who.intro, who.briefing, who.order_hint, who.done, who.rejoin, *who.lines, *who.allied.values()]
             for slot in sorted({s for text in texts for s in re.findall(r"\{[^{}]*\}", text)}):  # enlist.fill 只換這兩個（FB-502）
                 need(slot in RECRUITER_SLOTS, f"入伍段：引薦人 {who.name} 的話裡 {slot} 不認得（只認 {RECRUITER_SLOTS}）")
-
-    # ── 碰到才說（新手引導計畫三）：id 不重複、只能是設計 5.2 的十八條（hints.KNOWN）；師父的條要有 text、引薦人的條要有 texts，
-    # texts 的鍵是劇本的陣營、每一句都不是空的；寫反了（師父的條寫 texts、引薦人的條寫 text）多半是填錯欄位，載入時就報錯 ──
-    need(bool(c.hints.head.strip()), "hints.json：head 不能是空的（師父那幾條框上寫的字）")
-    hint_ids: set[str] = set()
-    for hint in c.hints.hints:
-        where = f"hints.json：{hint.id}"
-        need(hint.id not in hint_ids, f"{where} 重複")
-        hint_ids.add(hint.id)
-        need(hint.id in hint_rules.KNOWN, f"{where} 不認得（只認設計 5.2 的十八條與 h_bond，見 hints.KNOWN）")
-        if hint.by == "mentor":
-            need(bool(hint.text.strip()), f"{where}：師父的提示要有 text")
-            need(not hint.texts and not hint.drifter, f"{where}：師父的提示不寫 texts、drifter（那是引薦人的提示才有的）")
-        else:
-            need(bool(hint.texts), f"{where}：引薦人的提示要有 texts（陣營 id → 那一位說的話）")
-            need(not hint.text, f"{where}：引薦人的提示不寫 text（寫在 texts 裡，散人版寫 drifter）")
-            need(not hint.season_one, f"{where}：引薦人的提示不寫 season_one（第一季那一句只有師父的條有）")
-            need(not hint.explore_one, f"{where}：引薦人的提示不寫 explore_one（出門探索那一句只有師父的條有）")
-        for faction_id, line in hint.texts.items():
-            need(faction_id in faction_ids, f"{where}：texts 有不是劇本陣營的 {faction_id}")
-            need(bool(line.strip()), f"{where}：texts 的 {faction_id} 是空的")
-        for faction_id, line in hint.allied.items():  # 豪強分屬兩軍的季另一版：只換 texts 裡有的那一位說的話
-            need(faction_id in hint.texts, f"{where}：allied 的 {faction_id} 在 texts 裡沒有")
-            need(bool(line.strip()) and to_traditional(line) == line, f"{where}：allied 的 {faction_id} 要是繁體、不能是空的")
-        # 句子裡的 {名字} 只能是設定裡有的數（hints.values，explain-1）：寫錯名字的話框上會留著大括號
-        for line in (hint.text, hint.drifter, hint.season_one, hint.explore_one, *hint.texts.values(), *hint.allied.values()):
-            bad = hint_rules.unknown(c, line)
-            need(not bad, f"{where}：不認得的 {{{'}、{'.join(bad)}}}（只認 {sorted(hint_rules.values(c))}）")
 
     # ── 開局第一分鐘（減法季批 7，content/opening.json；tianxia/opening.py）──
     o = c.opening

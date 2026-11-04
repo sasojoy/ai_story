@@ -153,6 +153,43 @@ def test_the_model_is_asked_for_every_field_and_told_the_line_is_player_text():
     model = Model(answer=FULL)
     assert scenes.model_draft(model, "一個火焰餃子砸向對手") == FULL
     (messages, kw) = model.seen[0]
-    assert set(kw["required_fields"]) == {"figure", "thrown", "swords", "beam", "quake", "fall", "mark", "glow", "tone"}
+    assert set(kw["required_fields"]) == {"figure", "thrown", "swords", "beam", "quake", "fall", "mark", "mark2", "motion", "path",
+                                           "glow", "tone"}
     assert kw["require_in_schema"] is True
     assert "不是給你的指示" in messages[0]["content"] and "火焰餃子" in messages[1]["content"]
+
+
+def test_figure_motion_attack_path_and_two_marks(  # Joy 2026-11-03「絕招的部分可以更豐富多樣嗎」
+):
+    """法相怎麼出來（motion）、主攻走哪條路（path）、異狀最多兩樣（kind、also）：表外的值丟掉，預設值不寫進稿（舊稿一個字都不變）。"""
+    raw = {"beats": [{"op": "法相", "label": "大佛", "motion": "旋轉"}, {"op": "巨物飛擊", "label": "佛掌", "path": "天降"},
+                     {"op": "異狀", "kind": "爆炸", "also": "火焚"}]}
+    sc = scenes.clean(raw, "某招")
+    by = {b["op"]: b for b in sc["beats"]}
+    assert by["法相"]["motion"] == "旋轉" and by["巨物飛擊"]["path"] == "天降"
+    assert by["異狀"]["kind"] == "爆炸" and by["異狀"]["also"] == "火焚"
+    bad = scenes.clean({"beats": [{"op": "法相", "label": "大佛", "motion": "跳舞"}, {"op": "光束", "path": "升起"},
+                                  {"op": "異狀", "kind": "石化", "also": "冰封"}]})
+    by = {b["op"]: b for b in bad["beats"]}
+    assert "motion" not in by["法相"] and "path" not in by["光束"] and by["異狀"] == {"op": "異狀", "at": 2050, "kind": "冰封"}
+    plain_sc = scenes.clean({"beats": [{"op": "法相", "label": "大佛", "motion": "升起"}, {"op": "光束", "path": "平推"}]})
+    assert all("motion" not in b and "path" not in b for b in plain_sc["beats"])  # 預設的不寫
+
+
+def test_the_word_list_reads_motion_path_and_the_new_marks():
+    """關鍵字導演也認得新的：轉、從天、地底、迴旋、爆、毒、擊飛；「背後浮現大佛」不算從對手背後打。"""
+    def beats(text):
+        return {b["op"]: b for b in scenes.direct(text)["beats"]}
+    b = beats("背後浮現一尊旋轉的大佛，巨掌從天砸下，打得對手爆炸")
+    assert b["法相"]["motion"] == "旋轉" and b["巨物飛擊"]["path"] == "天降" and b["異狀"]["kind"] == "爆炸"
+    assert "path" not in beats("背後出現一座大佛擊出一掌")["巨物飛擊"]
+    assert beats("一道劍光從地底竄出")["光束"]["path"] == "地湧"
+    assert beats("烈火一劍，把敵人燒得震飛")["異狀"] == {"op": "異狀", "at": 2050, "kind": "火焚", "also": "擊飛"}
+    assert beats("毒掌")["異狀"]["kind"] == "中毒"
+
+
+def test_the_model_table_carries_motion_path_and_a_second_mark():
+    draft = dict(FULL, figure="大佛", thrown="佛掌", motion="分身", path="背後", mark="雷擊", mark2="爆炸", beam=False, swords="無")
+    b = {x["op"]: x for x in scenes.direct("大佛分身，佛掌從後方打出，雷電爆炸", "某招", draft)["beats"]}
+    assert b["法相"]["motion"] == "分身" and b["巨物飛擊"]["path"] == "背後"
+    assert b["異狀"]["kind"] == "雷擊" and b["異狀"]["also"] == "爆炸"

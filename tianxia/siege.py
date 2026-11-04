@@ -18,12 +18,13 @@
 - 留守（commanders）：守方是陣營時照龍頭上陣的挑法派那一區守方的大勢人物，沒有人物或中立地時是那裡最強的一路隊伍當守將（guard_squad）。
 - 收場（verdict）：攻方贏（大勝或險勝）就易手（conquest.flip：照推滿那樣分紅、冷卻）；否則原主人留著（中立還是中立）、攻方的條砍半。
   三方混戰照誰補上最後一刀。攻方一個人都沒到（集結結束時）作罷、進度照留。
-只 import models、state、battle_instance、generals、territory、conquest、conquest_day（作罷）、world_state 型別。"""
+只 import models、state、battle_instance、chiefs（龍頭上陣的挑法：全部拆包第 8 批 generals 進決戰包時留在共用規則層的那一塊）、territory、
+conquest、conquest_day（作罷）、world_state 型別。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import atlas, battle_instance, conquest, conquest_day, generals, territory
+from . import atlas, battle_instance, chiefs, conquest, conquest_day, territory
 from .battle_instance import GUARD, Commander, SiegeInfo
 from .models import BattleDef, Content
 from .state import DayNote, GameState, Rumor, SiegeSlot, WorldState
@@ -128,8 +129,8 @@ def commanders(state: GameState, content: Content, info: SiegeInfo, definition: 
     side = defender(info)
     if side is None:
         return []
-    if info.holder in conquest.SIDES and generals.on(content):
-        rows = [c for c in generals.pick(state, content, definition) if c.faction == side]
+    if info.holder in conquest.SIDES and chiefs.on(content):
+        rows = [c for c in chiefs.pick(state, content, definition) if c.faction == side]
         if rows:
             return rows
     guard = guard_squad(state.world, content, info.loc, side)

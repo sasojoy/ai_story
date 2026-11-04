@@ -42,7 +42,6 @@ from tianxia.calendar import DAY
 from tianxia.characters import CharacterStore, name_key
 from tianxia.core.option import Option
 from tianxia.core.services import PAUSED_TEXT, drill_share
-from tianxia.guide import note_action  # 過渡：待搬（入伍段的「出一次力」）
 from tianxia.journal import Draft
 from tianxia.models import Content, Location, Squad
 from tianxia.rules import front_of
@@ -172,7 +171,7 @@ def duel_entry(ctx: Game) -> list[str]:
     p.stamina -= c.config.sortie.jianfa_stamina
     sortie.spend(p, ctx._pill_day())
     squad = orders.extra_enemies(s, c, p.location, ctx._side())[0]
-    return ctx._squad_encounter(squad, as_sortie=True) + ctx._guide(note_action(s, c, ctx.world, "order"))
+    return ctx._squad_encounter(squad, as_sortie=True) + ctx._guide(ctx._note_action("order"))
 
 
 def duel_choice(ctx: Game, option_id: str) -> list[str]:
@@ -233,7 +232,7 @@ def sortie_go(ctx: Game, moves) -> list[str]:
     p.sortie_cooldown_until = max(p.sortie_cooldown_until or 0.0, ctx.now + cfg.cooldown_minutes * 60)
     line = sortie_duel.GO_LINE.format(place=loc.name, side=duel_who(ctx, side), moves="、".join(moves), window=f"{cfg.window_minutes:g}")
     ctx._write(sortie_duel.GO_TITLE.format(place=loc.name), [line], tag=sortie_duel.LABEL)
-    ctx._guide(note_action(s, c, ctx.world, "order"))  # 入伍段「出一次力」：貼一張約戰就算
+    ctx._guide(ctx._note_action("order"))  # 入伍段「出一次力」：貼一張約戰就算
     return ctx._log([line])
 
 
@@ -331,7 +330,7 @@ def sortie_join(ctx: Game, duel_id: str) -> list[str]:
     ctx._save_season()
     line = sortie_duel.JOIN_LINE.format(rival=duel.attacker.name, place=duel.place, side=duel_who(ctx, side))
     ctx._write(sortie_duel.GO_TITLE.format(place=duel.place), [line], tag=sortie_duel.LABEL)
-    ctx._guide(note_action(s, c, ctx.world, "order"))
+    ctx._guide(ctx._note_action("order"))
     return ctx._log([line])
 
 
@@ -683,7 +682,7 @@ def duel_toll(ctx: Game, share: float, lost: bool) -> list[str]:
     hurt = 0.0
     if share > 0:
         cut = min(c.config.armor.total_cap, team.armor_cut(s, c, ctx.world))
-        lost_hp, hurt = team._apply_toll(c, p.member, share * (1 - cut), agi=p.stats.get("agi", team.BASE_STAT),
+        lost_hp, hurt = team._apply_toll(c, p.member, share * (1 - cut), agi=team.v1_stat(s, c, "agi"),
                                          con=team.con_of(s, c, ctx.world, PLAYER), injury=treasures.amount(s, c, "injury"))
         if round(lost_hp) > 0:
             msgs.append(f"氣血 -{lost_hp:.0f}")

@@ -9,9 +9,10 @@ https://claude.ai/artifact/LFooPvhRw5NHosh3wDUKRV 第三節；數字在 Config.p
 from __future__ import annotations
 
 from .models import Content
-from .state import Deed, GameState
+from .state import Deed, GameState, WorldState
 
 PROMPT_HEAD = "【江湖上記得的事】"  # 對話提示那一段的開頭
+PLACE_KIND = "place"  # 地點變樣（place_state.py）那一種記事
 
 
 def on(content: Content) -> bool:
@@ -21,9 +22,14 @@ def on(content: Content) -> bool:
 def record(state: GameState, content: Content, kind: str, text: str, *, place: str | None = None,
            figures: list[str] | None = None, actors: list[str] | None = None, side: str | None = None) -> Deed | None:
     """記一筆（開關關著什麼都不記，回 None）。舊的照 deeds_keep 丟。"""
+    return record_world(state.world, content, kind, text, place=place, figures=figures, actors=actors, side=side)
+
+
+def record_world(w: WorldState, content: Content, kind: str, text: str, *, place: str | None = None,
+                 figures: list[str] | None = None, actors: list[str] | None = None, side: str | None = None) -> Deed | None:
+    """同 record，只拿季（地盤易手那幾處只有 WorldState：place_state 經這裡記「地點變樣」）。"""
     if not on(content):
         return None
-    w = state.world
     w.deed_seq += 1
     deed = Deed(id=w.deed_seq, kind=kind, text=text, place=place, figures=list(figures or []), actors=list(actors or []),
                 side=side, time=w.time)
@@ -61,8 +67,9 @@ def prompt_lines(state: GameState, content: Content, cid: str) -> str:
 
 
 def at_place(state: GameState, content: Content, loc: str | None) -> list[Deed]:
-    """此地舊事：發生在 loc 的最新 deeds_place 筆（新的在前）。"""
+    """此地舊事：發生在 loc 的最新 deeds_place 筆（新的在前）。地點變樣那幾筆（kind place）不列：場景上那個字已經寫著此刻的樣子，
+    列了只會把真的舊事擠掉；邸報讀它們。"""
     n = content.config.plans.deeds_place
     if not on(content) or not n or loc is None:
         return []
-    return [d for d in reversed(state.world.deeds) if d.place == loc][:n]
+    return [d for d in reversed(state.world.deeds) if d.place == loc and d.kind != PLACE_KIND][:n]

@@ -2,10 +2,11 @@
 
 ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx、sortie 模組換成 rules）。
 函式名＝原本的方法名去掉前導底線，兩個例外：`_sortie_mode(loc)` 是 `sortie_mode_of`（跟 `sortie_mode()` 分開）、`_clash` 是 `do_clash`
-（`sortie` 裡有區域變數叫 clash）。Game 上留 13 個一行委派（server、假人、測試、腳本與核心原位還在叫：選單那一格、`_act` 的
-act:train、行動列底下那一行、`_squad_encounter` 的 as_sortie、守勢行動、輿圖）。包裡互相叫直接叫這裡的函式（約戰，第 2 批的
-duel_actions，也直接叫 sortie_line、sortie_rewards；約戰開著時出陣那一格與次數，這裡直接叫 duel_actions）；只有
-`sorties_left`、`_sortie_hold` 經 ctx 叫（測試換掉 Game.sorties_left、腳本換掉 Game._sortie_hold，換掉的才打得到）。
+（`sortie` 裡有區域變數叫 clash）。Game 上留一行委派（server、假人、測試、腳本與核心原位還在叫：`_squad_encounter` 的 as_sortie、
+輿圖……；第 11 批起行動列那一格與底下那一行、按下去、紀錄標題走 act 子動詞的掛鉤〔下面的 train_*〕，第 17 批起舊遊歷、操練、守勢也在
+這一包的 train_actions）。包裡互相叫直接叫這裡的函式（約戰，第 2 批的 duel_actions，也直接叫 sortie_line、sortie_rewards；約戰開著時
+出陣那一格與次數，這裡直接叫 duel_actions；遊歷的鈕與大場面挑哪一路直接叫 train_actions）；只有 `sorties_left`、`_sortie_hold`
+經 ctx 叫（測試換掉 Game.sorties_left、腳本換掉 Game._sortie_hold，換掉的才打得到）。
 """
 from __future__ import annotations
 
@@ -32,13 +33,13 @@ from tianxia import treasures  # 共用規則層（寶物：多掉一個素材�
 from tianxia.characters import name_key
 from tianxia.core.option import Option
 from tianxia.core.services import drill_share
-from tianxia.guide import note_action  # 過渡：待搬（入伍段的「出一次力」）
 from tianxia.models import Location, Squad
 from tianxia.state import FrontReport
 
 from . import duel_actions  # 出陣約戰（第 2 批搬進同一包）：約戰開著時出陣那一格與次數
 from . import duel_rules as sortie_duel
 from . import rules
+from . import train_actions  # 舊遊歷、操練、守勢（第 17 批搬進同一包）：遊歷的鈕與那一行、打的那一場、大場面挑哪一路
 
 if TYPE_CHECKING:
     from tianxia.engine import Game
@@ -84,14 +85,22 @@ def train_title(ctx: Game) -> str:
 
 
 def train_cell(ctx: Game, loc: Location, cost: int, odds: bool) -> list[Option] | None:
-    """行動列出陣那一格：地盤開著時整格是出陣的——序章的雪恥照舊是遊歷那一套（不看出陣開關、不算次數），鈕上寫「雪恥」（出陣探索與地盤）；
-    序章以外是出陣那一顆（設計第二節）、散人站在戰線上灰的一顆寫真正的原因（FB-250）、領地爭奪別人的大本營與廣宗不給攻（裁決 18）；
-    都不是是 []（接了、一顆都沒有）。地盤關著是 None：核心照舊畫遊歷。"""
+    """行動列出陣那一格：整格是這一包的（全部拆包第 17 批：地盤關著的舊遊歷也收進來，出陣包一直開著）。地盤關著是舊遊歷；地盤開著時
+    序章的雪恥照舊是遊歷那一套（不看出陣開關、不算次數），鈕上寫「雪恥」（出陣探索與地盤）；序章以外是出陣那一顆（設計第二節）、
+    散人站在戰線上灰的一顆寫真正的原因（FB-250）、領地爭奪別人的大本營與廣宗不給攻（裁決 18）；都不是是 []（接了、一顆都沒有）。"""
     s, c = ctx.state, ctx.content
     if not rules.on(c):
-        return None
+        # 遊歷：這個地點的敵人，必定開打（見 train_actions.train）。sanguo-companions 合併時這個行動被
+        # 整個拿掉，於是 Location.enemies／action_cost["train"]／train_event_chance 三個設定
+        # 一起變成死的，而遭遇戰只剩劇情事件的 combat 選項——實測整季只打 3 場。
+        #
+        # 標籤要顯示勝算（跟劇情戰的選項同一套慣例，見 Game._choice_label）：實機試玩發現
+        # 新角色沒有武學時威力是 0，在任何地點遊歷都**必敗**，而落敗現在真的要付氣血與
+        # 內傷的代價——不顯示勝算的話，玩家會在開局連輸三場、氣血見底才知道自己不該打。
+        # （原本在 Game._everyday_options 出陣那一格的後面：這一包不接的時候核心畫；第 17 批收進來）
+        return [train_actions.train_option(ctx, loc, cost, odds, name="遊歷")] if train_actions.train_squad_ids(ctx, loc) else []
     if prologue_rules.active(s, c):
-        return [ctx._train_option(loc, cost, odds, name=rules.PROLOGUE_FIGHT)] if ctx._train_squad_ids(loc) else []
+        return [train_actions.train_option(ctx, loc, cost, odds, name=rules.PROLOGUE_FIGHT)] if train_actions.train_squad_ids(ctx, loc) else []
     option = sortie_option(ctx, loc, cost, odds)  # 散人、不在戰線上的地點沒有
     if option is not None:
         return [option]
@@ -103,21 +112,21 @@ def train_cell(ctx: Game, loc: Location, cost: int, odds: bool) -> list[Option] 
 
 
 def train_note(ctx: Game, loc: Location) -> str | None:
-    """行動列底下出陣那一行：約戰開著寫約戰那一句（貼約戰或截糧，減法季批 3b）、出陣開著（序章以外）寫出陣那一行；都不是是 None
-    （核心照舊寫遊歷那一行）。"""
+    """行動列底下出陣那一行：約戰開著寫約戰那一句（貼約戰或截糧，減法季批 3b）、出陣開著（序章以外）寫出陣那一行；都不是寫舊遊歷那一行
+    （train_actions.train_line；原本是核心接著寫，第 17 批收進來）。序章裡核心那一頭（Game.action_notes）就不問了。"""
     if duel_actions.duel_on(ctx):
         return duel_actions.duel_line(ctx, loc)
     if rules.on(ctx.content) and not prologue_rules.active(ctx.state, ctx.content):
         return sortie_line(ctx, loc)
-    return None
+    return train_actions.train_line(ctx, loc)
 
 
 def train_run(ctx: Game, prepared) -> list[str] | None:
     """按出陣那一格（Game._act 最前面）：約戰開著、不在序章時打開出陣前那張卡（不花體力；截糧的運糧隊經過時照舊攻打，體力在裡面扣）；
-    其餘是 None——出陣那一場（扣體力、並肩出陣的加成包在外面）照舊在核心的 _act 打（總表第 17 批把 act:train 整格收進包）。"""
+    其餘打那一場（train_actions.train_fight：扣體力、並肩出陣的加成包在外面、出陣或遊歷；原本在核心的 _act，第 17 批收進來）。"""
     if duel_actions.duel_on(ctx) and not prologue_rules.active(ctx.state, ctx.content):
         return duel_actions.duel_entry(ctx)
-    return None
+    return train_actions.train_fight(ctx, prepared)
 
 
 def sorties_left(ctx: Game) -> int:
@@ -265,7 +274,7 @@ def sortie_option(ctx: Game, loc: Location, cost: int, odds: bool) -> Option | N
     tail = rules.LEFT_NOTE.format(n=left)
     if how != "attack":
         return ctx._cost_option("act:train", name, cost, note=f"{tail}・零風險")
-    return ctx._train_option(loc, cost, odds, name=name, tail=tail)
+    return train_actions.train_option(ctx, loc, cost, odds, name=name, tail=tail)
 
 
 def sortie(ctx: Game) -> list[str]:
@@ -289,7 +298,7 @@ def sortie(ctx: Game) -> list[str]:
             msgs = list(clash)
             ctx._outcome(rules.CLASH_LOST_TAG, clash[-1] if clash else "")
         elif how == "attack":
-            squad = ctx._train_pick(loc) if ctx._big_trip(loc) else c.squads[ctx.rng.choice(sortie_foes(ctx, loc))]
+            squad = train_actions.train_pick(ctx, loc) if train_actions.big_trip(ctx, loc) else c.squads[ctx.rng.choice(sortie_foes(ctx, loc))]
             msgs = clash + ctx._squad_encounter(squad.id, as_sortie=True)
         else:
             msgs = clash + ctx._sortie_hold(loc, how)
@@ -300,7 +309,7 @@ def sortie(ctx: Game) -> list[str]:
     finally:
         ctx._clash_won, ctx._sortie_marked = False, False
         ctx._sortie_moved, ctx._sortie_flipped = 0.0, False
-    return msgs + ctx._guide(note_action(s, c, ctx.world, "order"))
+    return msgs + ctx._guide(ctx._note_action("order"))
 
 
 def front_report(ctx: Game, loc: Location, how: str, before: dict[str, float], why: str | None) -> FrontReport:

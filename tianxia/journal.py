@@ -29,6 +29,7 @@ WORLD_NEWS = "江湖大事"  # 時間流逝時發生的江湖大事那一則的�
 RENAMED = "絕學定名"  # 手上的武學被人定了正式的名字（FB-083，Game._deliver_renames；待 joy 潤）
 ECHO = "首創流傳"  # 別人照著你首創的配方合了出來，名望回饋（Game._deliver_echoes；待 joy 潤）
 AWAY = "你不在的時候"  # 離線一陣子再上線時的那一則摘要（傳聞分層設計第八節，Game._deliver_away；待 joy 潤）
+GAZETTE = "邸報"  # 同一則（is_world_entry 也算它），世界活起來第二批「上線邸報」開著時的標題（rumor_view.gazette_lines；待 joy 潤）
 SEASON_START = "賽季開始"  # 開場那一則（標題是劇本名）的標籤：Game.new 與換季重來都寫它
 GUIDE_ONLY = "新手引導"  # 沒有紀錄可接時，只放引導那幾行的那一則（add_guide）的標題
 NEWS_PREFIXES = ("【江湖大事】", "【主線】", "【主線改寫】")  # world.py 寫出的大勢門檻、世界事件、主線變化
@@ -236,7 +237,7 @@ def add_entry(
 def is_world_entry(entry: JournalEntry) -> bool:
     """不是這個人自己做的事：江湖大事、你不在的時候、賽季開場、只有引導幾行的那一則。草廬裡的「剛剛」不放這些
     （Game.now_entry_html）：新人一進來就被補了第一季已經發生的大事，它們不是新人這一步的結果，還會把選項擠出第一屏。"""
-    return entry.title in (WORLD_NEWS, AWAY, GUIDE_ONLY) or entry.tag == SEASON_START
+    return entry.title in (WORLD_NEWS, AWAY, GAZETTE, GUIDE_ONLY) or entry.tag == SEASON_START
 
 
 def add_guide(state: GameState, notes: list[str]) -> None:

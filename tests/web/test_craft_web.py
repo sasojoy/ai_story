@@ -269,3 +269,85 @@ def test_the_furnace_itself_holds_both_slots_and_the_forge_button_and_flashes_wh
     assert "⚠ 心得不夠。" in mini
     assert 'kiln-slot full r2 flash" data-act="unslot" data-i="1"' in out["drawn"]  # 放進右邊那一格，放進去那一下閃
     assert 'w-slot full r2 flash" data-act="unslot" data-i="1"' in out["drawn"]  # 大爐子那一格也閃
+
+
+# ── 鐵匠鋪與合成流程 3.1（A 批，FB-903）：付過心得之後按「作罷」先問一次；還沒付的直接作罷 ──
+
+_CANCEL = """return (async () => {
+  T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
+  const click = (dataset) => T.docListeners.click[0]({ target: { closest: () => ({ dataset, classList: { contains: () => false, add() {}, remove() {} }, isConnected: false }) } });
+  await click({ act: "create-cancel" });
+  const before = T.calls.map((c) => c[0]);
+  await click({ act: "ask-yes" });
+  return { asked: T.bodyHtml.join(""), before, after: T.calls.map((c) => c[0]) };
+})();"""
+
+
+def _drafted(game, intent=True):
+    """自創走到擺式（還沒付心得）或立意之後（付了，draft.paid 是實際收的那一筆）。"""
+    from tianxia import create
+
+    game.state.player.stats["xinde"] = 5000
+    assert game.create_begin("武學", "拳腳")
+    if intent:
+        game.create_pose(create.preset(game.content, "起手"))
+        game.create_intent("風過林梢，影不留痕", reading=create.IntentReading(score=60, attributes=["快"]))
+    return game
+
+
+def test_cancelling_a_paid_draft_asks_first_with_the_xinde_it_cost(game):
+    game = _drafted(game)
+    m = server.main_view(game)
+    paid = m["status"]["create"]["draft"]["paid"]
+    assert paid > 0
+    out = run(m, _CANCEL, S={"tab": "craft"}, menxia=server.menxia_view(game),
+              responses={"/api/menxia/create_cancel": {"menxia": server.menxia_view(game), "main": m, "message": ""}})
+    assert f"作罷？立意時收的 {paid} 心得不退。" in out["asked"] and "再想想" in out["asked"] and ">作罷</button>" in out["asked"]
+    assert "取消" not in out["asked"]  # 另一顆是「再想想」
+    assert "/api/menxia/create_cancel" not in out["before"]  # 問了才送
+    assert out["after"].count("/api/menxia/create_cancel") == 1
+
+
+def test_cancelling_before_paying_goes_straight(game):
+    game = _drafted(game, intent=False)
+    m = server.main_view(game)
+    assert not m["status"]["create"]["draft"]["paid"]
+    out = run(m, _CANCEL, S={"tab": "craft"}, menxia=server.menxia_view(game),
+              responses={"/api/menxia/create_cancel": {"menxia": server.menxia_view(game), "main": m, "message": ""}})
+    assert out["asked"] == "" and out["before"].count("/api/menxia/create_cancel") == 1  # 沒有損失：不問
+
+
+# ── 鐵匠鋪與合成流程 3.5（C 批）：合併的預覽卡在火候字後面寫「真意 N%」（skillview.forge_preview 的 grand_pct）──
+
+
+def _preview_card(game, v):
+    html = run(server.main_view(game), "return H.pageCraft();", S={"tab": "craft", "forgePreview": v,
+               "forgeSel": [{"type": "ins", "id": "feng"}, {"type": "ins", "id": "huo"}]}, menxia=server.menxia_view(game))
+    at = html.index('class="made-card preview"')
+    return html[at:html.index('class="mc-cost"', at)]
+
+
+def test_a_merge_preview_writes_the_true_meaning_percent_after_the_fire(made):
+    from conftest import real_content
+
+    from tianxia import skillview
+
+    game = made
+    game.content.traits.high.append(next(h for h in real_content().traits.high if h.attribute == "陽"))  # 同 tests/arts/test_fusion.py：風＋火合出陽、那一路有真意
+    v = skillview.forge_preview(game.state, game.content, game.world, ["feng", "huo"])
+    assert v["kind"] == "合併" and isinstance(v["grand_pct"], int)
+    card = _preview_card(game, v)
+    verdict = card[card.index('class="mc-verdict"'):]
+    # 火候字留著當形容，數字緊接在它後面、在爐火那一句前面（7201b686 實機修正：原本接在整排後面、撞上境界那幾個字）
+    assert f'<b>{v["fire"]["word"]}</b><span class="mc-grand">真意 {v["grand_pct"]}%</span><span>' in verdict
+    assert verdict.index("真意 ") < verdict.index(v["fire"]["line"])
+
+
+def test_no_percent_without_a_true_meaning_or_when_pondering(made):
+    from tianxia import skillview
+
+    game = made
+    v = skillview.forge_preview(game.state, game.content, game.world, ["feng", "huo"])
+    for case in ({**v, "grand_pct": None}, {**v, "kind": "揣摩", "grand_pct": None}):  # 那一路沒有真意、揣摩：不寫「真意 0%」
+        assert "mc-grand" not in _preview_card(game, case) and "真意 0%" not in _preview_card(game, case)
+    assert '<span class="mc-grand">真意 0%</span>' in _preview_card(game, {**v, "kind": "合併", "grand_pct": 0})  # 判斷是 != null：0 也照寫

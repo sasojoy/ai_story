@@ -119,7 +119,7 @@
         },
         "check": {
           "stat": "str",
-          "difficulty": 6,
+          "grade": "normal", "shift": 1,
           "practice": "evil"
         },
         "effect": {

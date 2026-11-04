@@ -77,11 +77,12 @@ def wears(kind: str, tier: str) -> bool:
 
 
 def wear(state: GameState, content: Content, tier: str) -> list[str]:
-    """打完一場，身上那件扣耐久度（4.5，照結果）；第一次低到 edge_warn 以下回一句提醒（只一次，修好或換一件才重設）。"""
+    """打完一場，身上那件扣耐久度（4.5，照結果）；第一次低到 edge_warn 以下回一句提醒（只一次，修好或換一件才重設）。
+    上品磨得慢（鐵匠鋪與合成流程 3.6）：本來會扣的那一場照 wear_less_by_quality 少扣、最少扣 1（equipment.wear_amount）；沒寫那一組跟以前一字不差。"""
     rule, p = content.config.armor, state.player
     if not rule.enabled or p.armor is None:
         return []
-    p.armor.edge = max(0, p.armor.edge - rule.wear.get(tier, 0))
+    p.armor.edge = max(0, p.armor.edge - equipment.wear_amount(rule.wear.get(tier, 0), p.armor, content))
     if p.armor.edge < rule.edge_warn and not p.armor_warned:
         p.armor_warned = True
         return [WORN_WARNING.format(name=p.armor.name)]
@@ -135,13 +136,16 @@ def buy(state: GameState, content: Content, attribute: str) -> list[str]:
     return [f"你花 {price} 兩買下一件【{item.name}】。", equipment.store(state, item)]  # 待 joy 潤
 
 
-def repair_problem(state: GameState, content: Content) -> str | None:
+def repair_problem(state: GameState, content: Content, item_id: str | None = None) -> str | None:
+    """修不了的原因（修得了是 None）。item_id 是 None＝身上那件；給了裝備庫那件的 id（「甲:N」）就問那一件（鐵匠鋪與合成流程 3.4，
+    equipment.target），找不到是 equipment.RACK_MISSING。"""
     p, rule = state.player, content.config.armor
     if not smith_here(state, content):
         return NOT_HERE
-    if p.armor is None:
-        return NO_ARMOR
-    if p.armor.edge >= 100:
+    item = equipment.target(p, "armor", item_id)
+    if item is None:
+        return NO_ARMOR if item_id is None else equipment.RACK_MISSING
+    if item.edge >= 100:
         return INTACT
     if repair_material(state, content) is None:
         return NO_REPAIR_MATERIAL
@@ -149,19 +153,23 @@ def repair_problem(state: GameState, content: Content) -> str | None:
     return f"還差 {short} 兩" if short > 0 else None
 
 
-def repair(state: GameState, content: Content) -> list[str]:
-    """修（4.5）：一個一階素材（屬性不限）＋工錢，耐久度回滿。只能在鐵匠鋪。"""
-    problem = repair_problem(state, content)
+def repair(state: GameState, content: Content, item_id: str | None = None) -> list[str]:
+    """修（4.5）：一個一階素材（屬性不限）＋工錢，耐久度回滿。只能在鐵匠鋪。item_id 同 repair_problem：裝備庫那件修好還在裝備庫，
+    不換上，也不動身上那件的提醒旗標（armor_warned）。"""
+    problem = repair_problem(state, content, item_id)
     if problem is not None:
         return [f"（{problem}。）"]
     p, rule = state.player, content.config.armor
+    item = equipment.target(p, "armor", item_id)
     material = repair_material(state, content)
     p.materials[material] -= 1
     if not p.materials[material]:
         del p.materials[material]
     p.stats["silver"] -= rule.repair_silver
-    p.armor.edge, p.armor_warned = 100, False
-    return [f"鐵匠拿{content.materials[material].name}把【{p.armor.name}】補好了（銀兩 -{rule.repair_silver}）。"]  # 待 joy 潤
+    item.edge = 100
+    if item is p.armor:
+        p.armor_warned = False
+    return [f"鐵匠拿{content.materials[material].name}把【{item.name}】補好了（銀兩 -{rule.repair_silver}）。"]  # 待 joy 潤
 
 
 def wield(state: GameState, content: Content, item_id: str) -> list[str]:
@@ -225,7 +233,8 @@ def _row(item: Equipment, neigong: MartialArt | None, content: Content, worn: bo
         "id": item.id, "name": item.name, "attribute": item.attribute, "tier": item.tier, "quality": item.quality,
         "grade": grade(item), "edge": item.edge, "wear_word": WEAR_WORD,  # 網頁照這個字寫「耐久度 N」（3.1 的字表，不在網頁寫死）
         "cut": pct(cut(item, neigong, content)), "fit": fit_note(item, neigong),
-        "tempers": item.tempers, "temper_max": content.config.armor.temper_max,  # 網頁寫「淬煉 N/M」（防具打造）
+        "tempers": item.tempers, "temper_max": equipment.temper_cap(item, content),  # 網頁寫「淬煉 N/M」（防具打造）；M 照這一件的品質（鐵匠鋪與合成流程 3.6）
+        "wear_note": equipment.wear_note(item, content),  # 上品寫「磨得慢」（待 joy 潤），其餘空字串
         "recipe": recipe_text(content, item.recipe),  # 自己打的那一件寫配方（主料＋輔料），買的是 None
         "confirm": "" if worn or item.original else equipment.dismantle_confirm(content, item),  # 身上那件、原品（5.4）不能拆，沒有問句
         "keep": equipment.ORIGINAL_KEPT if item.original else "",

@@ -466,7 +466,9 @@ def test_the_public_page_escapes_and_marks_the_verdict():
     row = {"name": "<b>沈</b>", "season": 2, "text": "<b>沈</b>者，<script>x</script>。\n\n評曰：好。"}
     html = zhuan_html.page(row, "黃巾之亂", "https://x/zhuan/a", "https://x/static/zhuan-og.png")
     assert "<script>x</script>" not in html and "&lt;script&gt;" in html
-    assert '<p class="ping">評曰：好。</p>' in html and "第 2 季・黃巾之亂" in html
+    assert '<aside class="zh-ping"><span class="chop">評</span><p>好。</p></aside>' in html and "第 2 季・黃巾之亂" in html
+    assert '<p class="first">&lt;b&gt;沈&lt;/b&gt;者' in html  # 第一段放大第一個字；評曰拆出正文（Joy 2026-11-04 改版）
+    assert 'class="zh zh-bamboo zh-play"' in html  # 載入那一下竹簡展開
     assert '<meta name="robots" content="noindex">' in html
 
 
@@ -480,7 +482,7 @@ def test_the_share_image_is_a_1200_by_630_png():
 
 DRIVER = r"""
 const S = { zhuanVertical: !!input.vertical };
-const parts = [konst("esc"), konst("ZHUAN_VERTICAL"), konst("slipSize"), fn("zhuanIcon"), fn("zhuanVertical"), fn("zhuanHead"), fn("zhuanSeal"), fn("zhuanHtml"), fn("zhuanEntry"),
+const parts = [konst("esc"), konst("ZHUAN_VERTICAL"), konst("slipSize"), fn("zhuanIcon"), fn("zhuanVertical"), fn("zhuanHead"), fn("zhuanSeal"), fn("zhuanText"), fn("zhuanHtml"), fn("zhuanEntry"),
   "return { zhuanHtml, zhuanEntry };"];
 const H = new Function("S", parts.join("\n"))(S);
 finish(input.entry ? H.zhuanEntry(input.entry, "副題") : H.zhuanHtml(input.z));
@@ -496,7 +498,8 @@ def test_the_reader_draws_each_state():
     written = {"season": 1, "title": "沈<浪>傳", "written": True, "paragraphs": ["沈浪者，<i>x</i>。", "評曰：好。"],
                "public": False, "can_rewrite": True, "scenario": "黃巾之亂"}
     html = _web(z={"season": 1, "view": written})
-    assert "沈&lt;浪&gt;傳" in html and "&lt;i&gt;x" in html and '<p class="ping">評曰：好。</p>' in html
+    assert "沈&lt;浪&gt;傳" in html and "&lt;i&gt;x" in html and '<aside class="zh-ping"><span class="chop">評</span><p>好。</p></aside>' in html
+    assert 'zh-bamboo zh-play' in html and '<p class="first">沈浪者' in html  # 第一次畫出寫成的傳：竹簡展開（Joy 2026-11-04）
     assert 'data-act="zhuan-share" data-public="1"' in html and 'data-act="zhuan-rewrite"' in html and "第 1 季・黃巾之亂" in html
     assert 'aria-pressed="false"' in html and "zh-text vertical" not in html
     shared = _web(z={"season": 1, "view": {**written, "public": True, "url": "https://x/zhuan/<a>", "can_rewrite": False}}, vertical=True)

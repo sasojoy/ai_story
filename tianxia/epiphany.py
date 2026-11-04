@@ -32,7 +32,7 @@ from types import SimpleNamespace
 
 from pydantic import BaseModel
 
-from . import annals, insight_fx, insights, naming, storyline
+from . import annals, attrset, insight_fx, insights, naming, storyline
 from .martial_arts import Insight
 from .models import (
     GOD_FORMS, Content, Effect, GodTrait, StoryAnswer, StoryDef, StoryEnding, StoryFail, StoryQuestion, StoryStage,
@@ -152,7 +152,7 @@ def chance(state: GameState, content: Content) -> float:
     n = state.player.epiphanies
     if n >= len(r.chances):
         return 0.0
-    wis = state.player.stats.get("wis", 5)
+    wis = attrset.legacy(state, content, "wis", 5)
     return min(1.0, r.chances[n] * min(r.wis_cap, (1 + r.wis_step) ** max(0, wis - r.wis_from)))
 
 
@@ -171,8 +171,17 @@ def roll(state: GameState, content: Content, rng, boost: float = 1.0) -> bool:
         return True
     if rng.random() < odds * boost:
         return True
+    if _luck_reroll(state, content) and rng.random() < odds * boost:  # 傳承的機緣：沒中再擲一次（features/legacy）
+        return True
     p.epiphany_dry += 1
     return False
+
+
+def _luck_reroll(state: GameState, content: Content) -> bool:
+    """傳承開著、季初結算到了機緣那一道門路（Config.legacy.doors["epiphany"]）：頓悟沒中再擲一次。關著不擲（不動 rng）。"""
+    from .renown import legacy_door  # noqa: PLC0415
+
+    return legacy_door(state, content, "epiphany")
 
 
 # ── 組線 ──────────────────────────────────────────────

@@ -12,7 +12,7 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import arts as arts_mod, allied, armor, bounties, checkin, chuangong, clinic, create, cultivation, economy, equipment, explore_modes, forge_secrets, four_tiers, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
+from . import arts as arts_mod, allied, attrset, armor, bounties, checkin, chuangong, clinic, create, cultivation, economy, equipment, explore_modes, forge_secrets, four_tiers, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
 from . import sortie_duel, tactics  # 出陣約戰（減法季批 3b）：封三招
 from . import growth  # 減法季屬性五段：假人照路配點（stat_path、plan_points）
@@ -115,6 +115,19 @@ def allocate_points(game: Game, rng: random.Random) -> None:
     迴圈有界：它在全服寫入鎖裡跑，空轉會凍住伺服器。最多試「手上有幾點」次；全到頂、或 allocate_stat
     拒絕了（賽季籌備中等，點數沒少）就停，剩下的點留著。"""
     p, cap = game.state.player, game.content.config.stat_cap
+    if attrset.on(game.content, game.state.world):
+        # 五項屬性的季（屬性與跨季架構 v2 3.1）：照名號挑一套配比（不擲骰，跟真人一樣按「成長」那一排），送的點全配在那一套最重的那一項
+        if p.growth_preset is None:
+            presets = game.content.config.attributes.v2.presets
+            game.pick_growth(presets[int(hashlib.md5(p.name.encode("utf-8")).hexdigest(), 16) % len(presets)].key)
+        split = attrset.split(game.state, game.content)
+        top = max(attrset.keys(game.content), key=lambda k: split.get(k, 0))
+        for _ in range(p.stat_points):
+            before = p.stat_points
+            game.allocate_stat(top)
+            if p.stat_points >= before:
+                return
+        return
     if jianfa(game.content, game.state.world, "stat_milestones"):
         # 減法季屬性五段（設計 4.5「配滿一項是一條路」）：照名號挑一條路（growth.stat_path：力、巧、韌、悟、博排個先後），第一項配滿再第二項；
         # 不擲骰。整季機器人與伺服器假人同一個（bot_policy.look_after 叫這裡）
@@ -860,7 +873,8 @@ def visit_smith(game: Game) -> None:
         better = smithing.better_in_rack(s, c, w, art())
         if better is not None and f"smith:wield:{better.id}" in enabled():
             game.choose(f"smith:wield:{better.id}")
-        for _ in range(c.config.weapons.temper_max):
+        weapon = s.player.weapon  # 淬煉最多幾次照這一把的品質（鐵匠鋪與合成流程 3.6）
+        for _ in range(smithing.temper_cap(weapon, c) if weapon is not None else 0):
             if not smithing.temper_wanted(s, c, w, art()) or smithing.TEMPER not in enabled():
                 break
             game.choose(smithing.TEMPER)
@@ -877,7 +891,8 @@ def visit_smith(game: Game) -> None:
                 game.choose(oid)
             finish_draft()
             press(lambda: armor.wanted(s, c, inner()))  # 打出來進了裝備庫、比身上那件好：換上
-        for _ in range(c.config.armor.temper_max):
+        worn_armor = s.player.armor
+        for _ in range(smithing.temper_cap(worn_armor, c) if worn_armor is not None else 0):
             if not smithing.armor_temper_wanted(s, c, w, inner()) or smithing.ARMOR_TEMPER not in enabled():
                 break
             game.choose(smithing.ARMOR_TEMPER)

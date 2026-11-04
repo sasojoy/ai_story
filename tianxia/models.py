@@ -10,6 +10,7 @@ from .jianfa_numbers import ExploreMix, JianfaNumbers
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
 ActionKind = Literal["explore", "train", "socialize"]
+PLACE_KINDS = ("peace", "war", "fallen", "famine", "rebuild")  # 地點的五種樣子（place_state.py）：太平、戰火、淪陷、饑荒、重建
 TravelMode = Literal["walk", "hurry", "dash"]  # 步行／趕路／疾行（地圖擴充設計 3.2）；趕路 2026-10-12 拿掉，只留給拿掉之前出發、還在路上的那一趟
 # sanguo-companions 合併：同伴不再分天地玄黃品階，改成「龍頭人物」（劇情鎖定，不可招募，
 # 見設計文件四.4）跟「可招募」兩種，決定要不要出現在招募流程裡。
@@ -75,6 +76,10 @@ class Condition(_Strict):
     factions: list[str] = Field(default_factory=list)  # 玩家的陣營在裡面才成立；空的＝不限（散人也行）
     # 玩家的陣營在裡面就不成立（散人一律成立）：替有立場的事件選項分邊用——黃巾的人看不到「打黃巾」那一顆（企劃者 2026-10-08）
     factions_none: list[str] = Field(default_factory=list)
+    # 地點會變樣（place_state.py）：此刻所在地的樣子（peace 太平、war 戰火、fallen 淪陷、famine 饑荒、rebuild 重建）在裡面才成立／在裡面就不成立；
+    # 沒給 content、「地點會變樣」關著時一律當太平
+    place_state: list[str] = Field(default_factory=list)
+    place_state_none: list[str] = Field(default_factory=list)
     controlled_by: list[str] = Field(default_factory=list)  # 這裡此刻歸誰控制（territory.controller）在裡面才成立；空的＝不限（出陣探索與地盤設計 4.3 第 4 點）
     # 遊俠名號（ranger.py）：散人、劇本有陣營、名號到這一階才成立（投靠了陣營一律不成立；每季都有）；ranger_path 是「俠」或「寇」（不寫＝不限）
     ranger_min: int | None = None
@@ -139,7 +144,9 @@ class StoryStep(_Strict):
 
 class Effect(_Strict):
     text: str = ""
-    stats: dict[str, int] = Field(default_factory=dict)
+    # 值可以寫獎勵等級（Config.rewards.grades 的 key，例 "medium"；只給 Config.rewards.amounts 有的那幾種，例銀兩、心得），
+    # 載入時照 Config.rewards 換成數字（content.resolve_grades；屬性與跨季架構 v2 5.2）。換算完一律是 int，引擎只看 int
+    stats: dict[str, int | str] = Field(default_factory=dict)
     stamina: int = 0
     flags_add: list[str] = Field(default_factory=list)
     flags_remove: list[str] = Field(default_factory=list)
@@ -245,7 +252,12 @@ BEST_OF = "best_of"  # Check.stat 寫它：看 Check.stats 裡最高的那一項
 
 class Check(_Strict):
     stat: str
-    difficulty: int
+    # 難度有兩種寫法（屬性與跨季架構 v2 第五節；骨架 2026-11-04）：內容寫 grade（難度等級，Config.checks.grades 的 key）＋ shift
+    # （同一級裡的微調，正負 Config.checks.shift_max 以內），載入時換成 difficulty（content.resolve_grades）；舊寫法直接寫 difficulty
+    # （程式裡臨時組的檢定、測試內容）。兩個只能寫一個。引擎一律讀 difficulty（換算好的那一格）。
+    difficulty: int | None = None
+    grade: str | None = None
+    shift: int = 0
     # 讀得進來、不再有作用（企劃者 2026-10-05「探索應該沒有本人跟夥伴之分了」）：以前 team 派隊伍中這項屬性最高的人、
     # self 只看本人；現在每一個事件檢定都看本人的屬性（rules.check_outlook）。留著這個欄位，舊內容與 joy 寫好的事件照樣載入。
     by: Literal["team", "self"] = "team"
@@ -258,6 +270,10 @@ class Check(_Strict):
 
     @model_validator(mode="after")
     def _best_of_names_its_stats(self) -> Check:
+        if self.grade is None and self.difficulty is None:
+            raise ValueError("檢定要寫 grade（難度等級）或 difficulty（舊寫法）其中一個")
+        if self.grade is None and self.shift:
+            raise ValueError("shift 只跟 grade 一起寫")
         if self.stat == BEST_OF and len(self.stats) < 2:
             raise ValueError(f"stat 是 {BEST_OF} 時，stats 要寫至少兩項屬性")
         if self.stat != BEST_OF and self.stats:
@@ -270,9 +286,14 @@ class Check(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        data = _drop_unset(handler(self), ("stats",))
+        data = _drop_unset(handler(self), ("stats", "shift"))
         if isinstance(data, dict) and data.get("tier") == 1:
             del data["tier"]
+        if isinstance(data, dict):  # 照內容寫的那一種寫回去：寫 grade 的不寫換算好的 difficulty，舊寫法不多一個 grade
+            if data.get("grade") is None:
+                data.pop("grade", None)
+            else:
+                data.pop("difficulty", None)
         return data
 
 
@@ -1103,6 +1124,10 @@ class PlanContest(_Strict):
     trends_lose: dict[str, int] = Field(default_factory=dict)
     flag_win: str | None = None  # 成了立的世界旗標
     lose_place: str | None = None  # 不成時他退到哪（沒寫就留在原地）
+    # 地點會變樣（place_state.py）：成了、不成時 place 變成什麼樣子。war 打過一仗（預設）、famine 鬧饑荒、fallen 落入贏的那一方之手、none 不變
+    # （搜書信、築城防這種不打仗的）。打過一仗時，淪陷的地方被另一方打贏就算收復
+    place_win: Literal["war", "famine", "fallen", "none"] = "war"
+    place_lose: Literal["war", "famine", "fallen", "none"] = "war"
 
 
 class ItineraryStop(_Strict):
@@ -1148,6 +1173,9 @@ class Squad(_Strict):
     exp: int = 0
     drops: list[Drop] = Field(default_factory=list)  # 留空則走 materials.py 依難度的預設掉落表
     faction: str | None = None  # 這支隊伍屬於哪個陣營（Scenario.factions 的 id）；自己陣營的人遇到時改成操練、不開打
+    # 五項屬性的季（attrset.foe_values）：這支隊伍的等級與資質（鍵 → 2～9）；沒寫照難度換等級、資質當 foe_aptitude
+    level: float | None = None
+    aptitude: dict[str, int] = Field(default_factory=dict)
     desc: str = ""  # 一句描述（運糧隊這類有特別來歷的對手才寫；遇上時接在戰鬥那一行後面，濃縮版內容表 3.3）
     boss: bool = False  # 頭目：遊歷、劇情戰遇上它算大場面，先請模型判讀（武學與成長設計 8.3）
 
@@ -2421,7 +2449,12 @@ class WeaponRules(_Strict):
     forge_silver: dict[str, int] = Field(default_factory=lambda: {"1": 20, "2": 60, "3": 150, "4": 300})  # 打造的工錢（4.2）：照主料的階；素材另算、不花體力心得（四階 300，正式季整合 5.1）
     quality: SmithQuality = Field(default_factory=SmithQuality)  # 打造的品質機率（見 SmithQuality）
     temper_max: int = Field(default=5, ge=0)  # 淬煉最多幾次（4.7）；每次 +temper_step
-    temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80, "4": 150})  # 淬煉一次的工錢，照用的那個素材的階（4.7；四階料 150，正式季整合 5.3）
+    # 淬煉上限照品質（鐵匠鋪與合成流程 3.6；佔位值寫在 content/config.json：下品 5、中品 6、上品 7）；沒寫的品質（整組沒寫也是）照 temper_max
+    temper_max_by_quality: dict[str, int] = Field(default_factory=dict)
+    # 每場少扣幾點鋒利度（3.6；佔位值上品 1）：本來會扣的那一場才套、最少扣 1；沒寫的品質少扣 0
+    wear_less_by_quality: dict[str, int] = Field(default_factory=dict)
+    temper_material_tier: int = Field(default=1, ge=1, le=4)  # 淬煉的料固定收哪一階，一次一個（鐵匠鋪與合成流程 3.7；佔位值一階，寫在 content/config.json）
+    temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80, "4": 150})  # 淬煉一次的工錢，照這一件裝備的階（3.7；以前照用的那個素材的階，4.7、正式季整合 5.3）
     named_bonus: float = Field(default=0.02, ge=0)  # 名器（照隱藏配方打出來的）的加成多這麼多（打造隱藏配方設計 4.2）
     copy_base: float = Field(default=0.19, ge=0)  # 神器仿品的基本加成，取代階那一格（打造隱藏配方設計 4.3；品質一律上品再 +4%，合計 23%）
     original_base: float = Field(default=0.22, ge=0)  # 神器原品的基本加成（同上；合計 26%）；不另加名器的 named_bonus
@@ -2451,7 +2484,10 @@ class ArmorRules(_Strict):
     forge_silver: dict[str, int] = Field(default_factory=lambda: {"1": 20, "2": 60, "3": 150, "4": 300})  # 打造的工錢（同兵器 4.2）：照主料的階
     quality: SmithQuality = Field(default_factory=SmithQuality)  # 打造的品質機率（同兵器 4.3；天時地利預設 0，正式值在 config.json）
     temper_max: int = Field(default=5, ge=0)  # 淬煉最多幾次（4.1）；每次 +temper_step
-    temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80, "4": 150})  # 淬煉一次的工錢，照用的那個素材的階（同兵器 4.7）
+    temper_max_by_quality: dict[str, int] = Field(default_factory=dict)  # 淬煉上限照品質（同兵器，鐵匠鋪與合成流程 3.6）；沒寫的品質照 temper_max
+    wear_less_by_quality: dict[str, int] = Field(default_factory=dict)  # 每場少扣幾點耐久度（同兵器 3.6）：本來會扣的那一場才套、最少扣 1
+    temper_material_tier: int = Field(default=1, ge=1, le=4)  # 淬煉的料固定收哪一階（同兵器，鐵匠鋪與合成流程 3.7）
+    temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80, "4": 150})  # 淬煉一次的工錢，照這一件裝備的階（同兵器 3.7）
     named_cut: float = Field(default=0.02, ge=0)  # 名器的減損多這麼多（同上）
     copy_cut: float = Field(default=0.22, ge=0)  # 神器仿品的基本減損，取代階那一格（打造隱藏配方設計 4.3、5.6；上品再 +4%，合計 26%）
     original_cut: float = Field(default=0.25, ge=0)  # 神器原品的基本減損（合計 29%）；不另加名器的 named_cut
@@ -3060,6 +3096,19 @@ class PlanTuning(_Strict):
     deeds_keep: int = Field(default=300, ge=10)  # 世界記事全服留幾筆（舊的先丟）
     deeds_prompt: int = Field(default=3, ge=0)  # 人物對話提示最多帶幾筆跟玩家有關的記事
     deeds_place: int = Field(default=3, ge=0)  # 此地舊事最多列幾筆
+    # 第二批「地點會變樣」（tianxia/place_state.py；設計稿第二節，Joy 2026-11-04 選「兩個都做」）：地點有太平、戰火、淪陷、饑荒、重建五種樣子，
+    # 盤算的結果、時刻表大事（TimetableOutcome.places）、領地易手會改它；會改這裡抽得到的事件（Condition.place_state）、店家的價錢、
+    # 馬市開不開、人物會不會晃過來、到達時那一句。天數照 7 天季寫，別的季長照比例。淪陷的地方一直淪陷，直到有人收復（Joy 10/29「可以」）
+    places: bool = True
+    war_days7: float = Field(default=1.0, gt=0)  # 戰火燒多久
+    famine_days7: float = Field(default=1.5, gt=0)  # 饑荒多久（戰火還沒熄又打一仗、或盤算寫了 famine）
+    rebuild_days7: float = Field(default=1.0, gt=0)  # 戰火、饑荒過了、或收復之後，重建多久才回太平
+    fall_to: list[str] = Field(default_factory=lambda: ["huang"])  # 落入這幾方之手算淪陷（領地易手；百姓眼裡是城破了）
+    price: dict[str, float] = Field(default_factory=lambda: {"war": 1.2, "fallen": 1.3, "famine": 1.5, "rebuild": 1.1})  # 店家價錢的倍數
+    market_closed: list[str] = Field(default_factory=lambda: ["war", "fallen"])  # 這幾種樣子時馬市不開
+    # 第二批「上線邸報」（rumor_view.gazette_lines）：「你不在的時候」改成三段——你去過的地方、你認識的人、誰提起了你；每段最多 gazette_rows 行
+    gazette: bool = True
+    gazette_rows: int = Field(default=3, ge=1)
 
 
 class ParleyTuning(_Strict):
@@ -3329,6 +3378,77 @@ class TierRules(_Strict):
             raise ValueError("第一、二階的比例不能大於第三階（第三階是累計的前幾成）")
         if set(self.start_shares) - {1, 2, 3, 4}:
             raise ValueError("start_shares 只有第 1～4 階")
+        return self
+
+
+class LegacyTier(_Strict):
+    """傳承的一道門路（tianxia/features/legacy）：值到 at 就給 flag（玩家旗標，內容的條件 flags_all 讀它開門路）；text 是季初那一則
+    「這一季給了你什麼」的那一句（待 joy 潤）。只給門路、不給屬性或威力（架構方向 v2 第六節「給廣度、不給高度」）。"""
+
+    at: float = Field(gt=0)
+    flag: str
+    text: str
+
+
+# 九道門路（Joy 11/4「照建議」）：每一道寫給玩家看的那一句（待 joy 潤）。門檻 5、10、20 是【草】
+LEGACY_DOOR_TEXT = {
+    "zheng": ("潁川書院不看你的惡名、正派武學第一段肯教你", "俠義的事多一種做法（第一段的俠選項不看路與段）", "敬重俠義的人物見你就多幾分情誼"),
+    "xie": ("綠林的門路：寇一路第一段的武學肯教你", "狠辣的事多一種做法（第一段的寇選項不看路與段）", "欣賞狠角色的人物見你就多幾分情誼"),
+    "luck": ("頓悟沒中，再擲一次", "奇遇比旁人容易撞上", "長篇奇事沒中，再擲一次"),
+}
+
+
+def _legacy_tiers() -> dict[str, list[LegacyTier]]:
+    return {
+        key: [LegacyTier(at=at, flag=f"legacy_{key}_{n}", text=text) for n, (at, text) in enumerate(zip((5.0, 10.0, 20.0), texts), start=1)]
+        for key, texts in LEGACY_DOOR_TEXT.items()
+    }
+
+
+def _legacy_doors() -> dict[str, str]:
+    # 門路 → 要哪一個旗標（rules.legacy_door 讀；潁川書院那一道寫在內容的條件裡，直接讀 legacy_zheng_1）
+    return {
+        "lessons_俠": "legacy_zheng_1", "choices_俠": "legacy_zheng_2", "regard_敬俠": "legacy_zheng_3",
+        "lessons_寇": "legacy_xie_1", "choices_寇": "legacy_xie_2", "regard_喜狠": "legacy_xie_3",
+        "epiphany": "legacy_luck_1", "qiyu": "legacy_luck_2", "storyline": "legacy_luck_3",
+    }
+
+
+class LegacyRules(_Strict):
+    """傳承（tianxia/features/legacy；設計 docs/superpowers/specs/2026-11-04-屬性與跨季-架構方向v2.md 第六、七節）：正氣、邪氣、機緣三項
+    只在換季那一刻照上一季的傳結算一次（季中不動），識海帶一份神品意境到下一季、解封才用得到。預設關：關著一個位元組都不變。
+    數字都是【草】：權重先一律同值，量過（scripts/measure_legacy.py）再給 Joy 挑。"""
+
+    enabled: bool = False
+    keep: float = Field(default=0.7, ge=0, le=1)  # 上一季的值先留幾成，再加這一季的增量
+    curve: Literal["sqrt", "log"] = "sqrt"  # 增量怎麼換算：平方根，或 log(1 + x)；遞減，認真玩的人領先但差距不會無限拉開
+    # 評比的每一樣乘多少（先一律 1）：tasks 懸賞與託付辦成幾件、merit 陣營貢獻＋決戰場數＋首功、fame 名望、relations 跟人物的好感合計、
+    # good／evil 善名／惡名。正氣看 good、邪氣看 evil、機緣看其餘四樣的合計（legacy/rules.py 的 gains）
+    # Joy 11/4「照建議」：機緣那四樣照正式站量表（60 個真人，九成位 tasks 4、merit 2075、fame 173、relations 210）對齊到同一個份量
+    weights: dict[str, float] = Field(default_factory=lambda: {
+        "tasks": 40.0, "merit": 0.1, "fame": 1.0, "relations": 1.0, "good": 1.0, "evil": 1.0})
+    tiers: dict[str, list[LegacyTier]] = Field(default_factory=_legacy_tiers)  # zheng／xie／luck → 門路（照 at 由小到大）
+    # 識海（第七節；Joy 11/4 定：開季後一天＋心得＋15 級）
+    shihai_after: float = Field(default=86400.0, ge=0)  # 開季後多少世界秒才解得開（WorldState.time，不讀電腦時鐘）
+    shihai_level: int = Field(default=15, ge=1)
+    shihai_xinde: int = Field(default=100, ge=0)  # 【草】解封花的心得
+    # 門路（Joy 11/4「照建議」）：哪一樣看哪一個旗標（rules.legacy_door）。只給廣度：俠寇的選項與正邪武學只開到 door_tier 段；
+    # 人物起始好感加 regard_bonus（換季那一刻、照人物的 regard）；奇遇的比重再乘 1 + qiyu_boost；頓悟、長篇奇事沒中再擲一次【草】
+    doors: dict[str, str] = Field(default_factory=_legacy_doors)
+    door_tier: int = Field(default=1, ge=1, le=4)
+    regard_bonus: int = Field(default=10, ge=0)
+    qiyu_boost: float = Field(default=0.5, ge=0)
+
+    @model_validator(mode="after")
+    def _check(self) -> LegacyRules:
+        unknown = set(self.weights) - {"tasks", "merit", "fame", "relations", "good", "evil"}
+        if unknown:
+            raise ValueError(f"legacy.weights 不認得：{sorted(unknown)}")
+        if set(self.tiers) - {"zheng", "xie", "luck"}:
+            raise ValueError("legacy.tiers 只有 zheng、xie、luck")
+        for key, tiers in self.tiers.items():
+            if [t.at for t in tiers] != sorted(t.at for t in tiers):
+                raise ValueError(f"legacy.tiers.{key} 要照 at 由小到大")
         return self
 
 
@@ -3773,6 +3893,170 @@ class MallItem(_Strict):
     look: str = ""  # 形象（kind 是 look）賣的是 content/looks.json 的哪一套
 
 
+# ── 屬性與跨季架構 v2（docs/superpowers/specs/2026-11-04-屬性與跨季-架構方向v2.md；第十節 ① 骨架）──────────────
+# 第 ① 階段：屬性定義、效果表、相對檢定與獎勵等級的骨架接上「現在的四項與現在的數字」，玩家看到的一個字都不變
+# （scripts/same_behavior.py 證明）。數字之後照第十三節的決定改這幾張表，程式不動。
+
+
+class StatDef(_Strict):
+    """一項屬性（content/attributes.json；第二節第 1 層）：鍵（程式與存檔認它）、顯示名（畫面上寫它；載入時蓋進
+    Config.stat_names，現有讀 stat_names 的地方照舊）、一句說明。排序照檔案。"""
+
+    key: str
+    name: str
+    blurb: str = ""
+
+
+class AttrEffect(_Strict):
+    """效果表的一條（第二節第 2 層、2.1）：哪一項屬性（attr）掛在哪一個鉤子（hook，team.ATTR_HOOKS）、用哪條曲線。
+    同一個鉤子掛好幾條就相加（team.attr_effect）。曲線：
+    - linear：per ×（值 − origin）。per 寫數字，或寫 team.RATE_KEYS 的鍵（照這一季讀：減法季每點加倍，team.per_point）。
+    - contest：cap × tanh（（我 − 他）÷ scale），有上下限的 S 形（第 ② 階段才有人用）。
+    - tiers：steps 是 [門檻, 效果]，值到了哪一格給哪一格（照門檻由小到大；第 ② 階段才有人用）。"""
+
+    attr: str
+    hook: str
+    curve: Literal["linear", "contest", "tiers"] = "linear"
+    origin: float = 5
+    per: float | str = 0.0
+    cap: float = 0.0
+    scale: float = Field(default=1.0, gt=0)
+    steps: list[tuple[float, float]] = Field(default_factory=list)
+
+
+class GrowthPreset(_Strict):
+    """季初挑的一套每級成長（第三節 3.1）：名字＋每一項每級長幾點（合計要等於 AttrV2Rules.per_level）。"""
+
+    key: str
+    name: str
+    split: dict[str, int]
+
+
+class AttrV2Rules(_Strict):
+    """第 ② 階段的五項屬性（屬性與跨季架構 v2 第三節；Joy 11/4 定顯示名混搭）。enabled 是主機的開關，加上開季時蓋的章
+    （WorldState.attrs_v2，attrset.on）才生效：正在跑的季不變。數字全是【草】，量完（第十一節）給 Joy 挑。
+    屬性不存進存檔的 stats：本人的值＝base ＋（等級 − 1）× 配比 ＋ 自己配的點（PlayerState.attr_alloc），讀的時候算（attrset.value），
+    所以季中改配比一律回溯、不用補帳。"""
+
+    enabled: bool = False
+    keys: list[str] = Field(default_factory=lambda: ["str", "lead", "int", "spd", "cha"])
+    base: int = Field(default=50, ge=1)  # 起始值（每一項）
+    per_level: int = Field(default=10, ge=1)  # 每升一級五項合計長幾點（照配比分）
+    bonus_every: int = Field(default=10, ge=1)  # 每幾級送一次點……
+    bonus_points: int = Field(default=10, ge=0)  # ……送幾點，自己配、沒有上限
+    default_preset: str = "balanced"  # 還沒挑的人照這一套長（挑了就照挑的回溯）
+    presets: list[GrowthPreset] = Field(default_factory=lambda: [
+        GrowthPreset(key="warrior", name="武將", split={"str": 4, "lead": 3, "int": 1, "spd": 1, "cha": 1}),
+        GrowthPreset(key="strategist", name="謀士", split={"str": 1, "lead": 2, "int": 4, "spd": 1, "cha": 2}),
+        GrowthPreset(key="ranger", name="遊俠", split={"str": 2, "lead": 1, "int": 1, "spd": 4, "cha": 2}),
+        GrowthPreset(key="envoy", name="說客", split={"str": 1, "lead": 1, "int": 3, "spd": 1, "cha": 4}),
+        GrowthPreset(key="balanced", name="均衡", split={"str": 2, "lead": 2, "int": 2, "spd": 2, "cha": 2}),
+    ])
+    custom_min: int = Field(default=1, ge=0)  # 自己配時每一項每級至少長幾點（挑輕的那一項還有基本的成長）
+    # 舊的鍵（內容的檢定、還沒改寫的讀點）在新的季對到哪一項；博聞拔掉（持有上限只靠等級）
+    legacy: dict[str, str] = Field(default_factory=lambda: {"str": "str", "agi": "spd", "con": "lead", "wis": "int"})
+    # 檢定（第五節 5.1）：成功率＝難度等級的底 ＋ slope ×（值 − 期望值）÷ 期望值 − 微調 × shift_step，夾在 floor～ceil
+    grade_rates: dict[str, float] = Field(default_factory=lambda: {
+        "easy": 0.9, "normal": 0.7, "hard": 0.55, "harsh": 0.4, "legend": 0.25})  # 企劃者 2026-11-04：草稿每級 +10%
+    slope: float = 1.0
+    shift_step: float = 0.05
+    practice_step: float = 0.05  # 熟練加成每一點加幾成（舊的是 0.1 一點，配上舊尺度）
+    attr_xinde: int = Field(default=3, ge=0)  # 事件寫的屬性點在新的季改給心得：每一點換幾點心得（第三節：一般事件不再直接給屬性）
+    # 效果表（新尺度，第四節「同一把尺」：我 − 他）。有寫的鉤子照這一份、對上對手的屬性（team.facing）；沒寫的鉤子照舊：
+    # 新的五項換回舊尺度（attrset.v1_value）餵舊的效果表。【草】：武力對統御管外功、悟性對悟性管內功、身法對身法管閃成僵持
+    effects: list[AttrEffect] = Field(default_factory=lambda: [
+        AttrEffect(attr="str", hook="outer", curve="contest", cap=0.6, scale=40, origin=50),
+        AttrEffect(attr="int", hook="inner", curve="contest", cap=0.6, scale=40, origin=50),
+        AttrEffect(attr="spd", hook="dodge", curve="contest", cap=0.25, scale=40, origin=50),
+    ])
+    # 對抗式的「他」：outer 對上的是對手的哪一項（武力打統御）；沒寫的對上同一項
+    against: dict[str, str] = Field(default_factory=lambda: {"str": "lead"})
+    # 對手（散兵、野怪、劇情戰、頭目）沒寫等級時照難度換等級（[難度, 等級]，中間照直線；量自整季機器人的威力，2026-11-04）【草】
+    foe_levels: list[tuple[float, float]] = Field(default_factory=lambda: [
+        (9, 1), (30, 8), (200, 12), (400, 17), (600, 21), (1200, 30), (3000, 45), (6000, 60)])
+    foe_aptitude: int = Field(default=5, ge=1)  # 沒寫資質的那一項當幾（人物表的資質 2～9，5 是平均）
+    # 挑戰大勢人物本人：等級跟著季曆長（企劃者 2026-11-04 照建議，取代江湖水漲）。季末比開季多幾級，中間照季曆天數直線；
+    # 難度與屬性都照長上去的等級（foe_levels 反過來換）【草】
+    figure_growth: float = Field(default=35.0, ge=0)
+
+    @model_validator(mode="after")
+    def _presets_add_up(self) -> AttrV2Rules:
+        for preset in self.presets:
+            if set(preset.split) != set(self.keys) or sum(preset.split.values()) != self.per_level:
+                raise ValueError(f"成長配比 {preset.key} 要寫齊 {'、'.join(self.keys)}、合計 {self.per_level}")
+        if self.default_preset not in {p.key for p in self.presets}:
+            raise ValueError(f"default_preset {self.default_preset} 不是任何一套配比")
+        if set(self.grade_rates) != {"easy", "normal", "hard", "harsh", "legend"}:
+            raise ValueError("grade_rates 要寫齊五個難度等級")
+        return self
+
+
+class AttributesRules(_Strict):
+    """屬性的效果表（第二節第 2 層）。預設值＝現在的數字：臂力管外功、根骨管內功、身法管落敗閃成僵持，每一點的量照舊讀
+    stat_bonus_per_point 與 dodge_per_point（減法季讀 jianfa.stat_rates）。"""
+
+    effects: list[AttrEffect] = Field(default_factory=lambda: [
+        AttrEffect(attr="str", hook="outer", per="bonus_per_point"),
+        AttrEffect(attr="con", hook="inner", per="bonus_per_point"),
+        AttrEffect(attr="agi", hook="dodge", per="dodge_per_point"),
+    ])
+    v2: AttrV2Rules = Field(default_factory=AttrV2Rules)  # 第 ② 階段的五項（見 AttrV2Rules）
+
+
+class CheckGrade(_Strict):
+    """一個難度等級：key（內容寫它）、顯示名、dc（現在的數字：這一級對到的舊難度；第 ② 階段改成期望值曲線上的位置）。"""
+
+    key: str
+    name: str
+    dc: int
+    low: int = 0  # 舊寫法（difficulty）從幾起算這一級（Joy 11/4：3～4 易、5～6 尋常、7～8 難、9～12 極難、13 以上傳說）
+
+
+class CheckRules(_Strict):
+    """相對檢定（第五節 5.1）：內容寫難度等級，引擎換成這一格的難度；成功率＝base_rate ＋ per_point ×（值＋熟練 − 難度 − 期望值），
+    夾在 floor～ceil。期望值現在就是江湖水漲的那幾點（rules.check_expect → rise.event_bump）。預設值＝現在的數字。"""
+
+    grades: list[CheckGrade] = Field(default_factory=lambda: [
+        CheckGrade(key="easy", name="易", dc=4, low=0),
+        CheckGrade(key="normal", name="尋常", dc=5, low=5),
+        CheckGrade(key="hard", name="難", dc=7, low=7),
+        CheckGrade(key="harsh", name="極難", dc=11, low=9),
+        CheckGrade(key="legend", name="傳說", dc=14, low=13),
+    ])
+    shift_max: int = Field(default=2, ge=0)  # 同一級裡的微調最多幾點（現有內容換過來只用到 ±1；9 這一格是 +2）
+    base_rate: float = 0.5
+    per_point: float = 0.1
+    floor: float = 0.05
+    ceil: float = 0.95
+
+
+class RewardGrade(_Strict):
+    key: str
+    name: str
+
+
+class RewardRules(_Strict):
+    """獎勵等級（第五節 5.2）：內容在 Effect.stats 寫等級的 key（例 {"silver": "medium"}），載入時照 amounts 換成數字。
+    amounts：哪一種 → 每一級多少（照 grades 的順序）。數字【草】，現有內容還沒換過來（scripts/convert_grades.py rewards 只出報告），
+    第 ② 階段跟經濟表一起定。"""
+
+    grades: list[RewardGrade] = Field(default_factory=lambda: [
+        RewardGrade(key="small", name="小"), RewardGrade(key="medium", name="中"),
+        RewardGrade(key="large", name="大"), RewardGrade(key="rich", name="厚"),
+    ])
+    amounts: dict[str, list[int]] = Field(default_factory=lambda: {"silver": [10, 20, 40, 80], "xinde": [3, 8, 15, 25]})
+    # 五項屬性的季（attrset.on）：內容寫的數字照最近的等級換成這一級的量，再乘（1 ＋ per_level ×（等級 − 1））——
+    # 獎勵跟著等級走，舊的季照原樣（rules._season_stats）。【草】
+    per_level: float = Field(default=0.05, ge=0)
+
+    @model_validator(mode="after")
+    def _one_amount_per_grade(self) -> RewardRules:
+        for kind, row in self.amounts.items():
+            if len(row) != len(self.grades):
+                raise ValueError(f"rewards.amounts.{kind} 要有 {len(self.grades)} 個數字（照 grades）")
+        return self
+
+
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
@@ -3852,6 +4136,7 @@ class Config(_Strict):
     conquest: ConquestRules = Field(default_factory=ConquestRules)  # 領地爭奪（見 ConquestRules）
     jianfa: JianfaRules = Field(default_factory=JianfaRules)  # 減法季（見 JianfaRules；暫名）
     epiphany: EpiphanyRules = Field(default_factory=EpiphanyRules)  # 特殊頓悟（見 EpiphanyRules）
+    legacy: LegacyRules = Field(default_factory=LegacyRules)  # 傳承：正氣、邪氣、機緣與識海（見 LegacyRules；features/legacy）
     xingshi: XingshiTuning = Field(default_factory=XingshiTuning)  # 〈天下形勢〉：領地爭奪每天一篇的旁白（見 XingshiTuning）
     ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）
     figure_aid: FigureAidRules = Field(default_factory=FigureAidRules)  # 護衛、犒軍、探望大勢人物（見 FigureAidRules）
@@ -3878,6 +4163,9 @@ class Config(_Strict):
     # 1 是不放慢；正式 0.7、週末設定 0.85。對話、事件、名聲起步、風聞都走它；名將贈禮、本命、招募的門檻不動，所以跟著晚一點拿到
     affinity_gain_scale: float = Field(default=1.0, gt=0, le=1)
     rise: RiseTuning = Field(default_factory=RiseTuning)  # 江湖水漲：大場面、頭目、事件檢定跟得上變強的人（見 RiseTuning）
+    attributes: AttributesRules = Field(default_factory=AttributesRules)  # 屬性的效果表（屬性與跨季架構 v2 第二節；見 AttributesRules）
+    checks: CheckRules = Field(default_factory=CheckRules)  # 相對檢定：難度等級與成功率（v2 5.1；見 CheckRules）
+    rewards: RewardRules = Field(default_factory=RewardRules)  # 獎勵等級（v2 5.2；見 RewardRules）
     treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
     renown: RenownTuning = Field(default_factory=RenownTuning)  # 名聲（兩個稱號與各段的效果，見 RenownTuning）
@@ -4540,6 +4828,8 @@ class TimetableOutcome(_Strict):
     chance_mods: dict[str, float] = Field(default_factory=dict)  # 之後那件大事的成功率修正（寫進 event_bonus，不佔 ±0.20 上限）
     world_flags_add: list[str] = Field(default_factory=list)
     control: dict[str, str] = Field(default_factory=dict)  # 這個結果讓哪幾處易手：地點 → 陣營（設計 4.2 第 3 點；只能是可易手或 fixed 的地點）
+    # 地點會變樣（place_state.py）：這個結果讓哪幾處變樣：地點 → war、famine、retake（收復）或「fallen:<陣營>」（落入那一方之手）
+    places: dict[str, str] = Field(default_factory=dict)
 
 
 class RealSlot(_Strict):
@@ -5175,6 +5465,9 @@ class ArtBook(_Strict):
 
 class Content(_Strict):
     config: Config
+    # 屬性定義（content/attributes.json，屬性與跨季架構 v2 第二節第 1 層）；沒有這個檔照 team.COMBAT_STATS 與 Config.stat_names
+    attributes: list[StatDef] = Field(default_factory=list)
+    attributes_v2: list[StatDef] = Field(default_factory=list)  # 五項屬性的定義（content/attributes_v2.json；attrset，新的季才用）
     scenario: Scenario
     locations: dict[str, Location]
     events: dict[str, Event]

@@ -104,11 +104,12 @@ EDGE_WARNING = "你的{name}{dull}，找間鐵匠鋪修一修。"  # 待 joy 潤
 
 def wear(state: GameState, content: Content, tier: str) -> list[str]:
     """打完一場，身上那把扣鋒利度（3.4，照結果）；第一次鈍到 edge_warn 以下回一句提醒（只一次，修好才重設）。
-    劇情戰與全服決戰不呼叫這裡（engine._file_battle 擋劇情戰；決戰不走 _file_battle）；頭目戰（kind=duel）、切磋、截殺雙方照磨（防具另有自己的條件，見 armor.wears）。"""
+    劇情戰與全服決戰不呼叫這裡（engine._file_battle 擋劇情戰；決戰不走 _file_battle）；頭目戰（kind=duel）、切磋、截殺雙方照磨（防具另有自己的條件，見 armor.wears）。
+    上品磨得慢（鐵匠鋪與合成流程 3.6）：本來會扣的那一場照 wear_less_by_quality 少扣、最少扣 1（equipment.wear_amount）；沒寫那一組跟以前一字不差。"""
     rule, p = content.config.weapons, state.player
     if not rule.enabled or p.weapon is None:
         return []
-    p.weapon.edge = max(0, p.weapon.edge - rule.wear.get(tier, 0))
+    p.weapon.edge = max(0, p.weapon.edge - equipment.wear_amount(rule.wear.get(tier, 0), p.weapon, content))
     if p.weapon.edge < rule.edge_warn and not p.edge_warned:
         p.edge_warned = True
         return [EDGE_WARNING.format(name=p.weapon.name, dull=DULL.get(p.weapon.kind, "鈍了"))]
@@ -314,33 +315,40 @@ def buy(state: GameState, content: Content, kind: str, art: MartialArt | None = 
     return [head, store(state, content, weapon)]
 
 
-def repair_problem(state: GameState, content: Content) -> str | None:
+def repair_problem(state: GameState, content: Content, item_id: str | None = None) -> str | None:
+    """修不了的原因（修得了是 None）。item_id 是 None＝身上那把；給了裝備庫那把的 id（「兵:N」）就問那一把（鐵匠鋪與合成流程 3.4，
+    equipment.target），找不到是 equipment.RACK_MISSING。"""
     p, rule = state.player, content.config.weapons
     if not smith_here(state, content):
         return NOT_HERE
-    if p.weapon is None:
-        return "手上沒有兵器"
-    if p.weapon.edge >= 100:
-        return KEEN.get(p.weapon.kind, "還不用修")
+    item = equipment.target(p, "weapon", item_id)
+    if item is None:
+        return "手上沒有兵器" if item_id is None else equipment.RACK_MISSING
+    if item.edge >= 100:
+        return KEEN.get(item.kind, "還不用修")
     if repair_material(state, content) is None:
         return NO_REPAIR_MATERIAL
     short = rule.repair_silver - p.stats.get("silver", 0)
     return f"還差 {short} 兩" if short > 0 else None
 
 
-def repair(state: GameState, content: Content) -> list[str]:
-    """修（4.7）：一個一階素材（屬性不限）＋工錢，鋒利度回滿。"""
-    problem = repair_problem(state, content)
+def repair(state: GameState, content: Content, item_id: str | None = None) -> list[str]:
+    """修（4.7）：一個一階素材（屬性不限）＋工錢，鋒利度回滿。item_id 同 repair_problem：裝備庫那把修好還在裝備庫，不換上，
+    也不動身上那把的「鈍了」提醒（edge_warned 是身上那把的旗標）。"""
+    problem = repair_problem(state, content, item_id)
     if problem is not None:
         return [f"（{problem}。）"]
     p, rule = state.player, content.config.weapons
+    item = equipment.target(p, "weapon", item_id)
     material = repair_material(state, content)
     p.materials[material] -= 1
     if not p.materials[material]:
         del p.materials[material]
     p.stats["silver"] -= rule.repair_silver
-    p.weapon.edge, p.edge_warned = 100, False
-    return [f"鐵匠拿{content.materials[material].name}把【{p.weapon.name}】重新磨利了（銀兩 -{rule.repair_silver}）。"]
+    item.edge = 100
+    if item is p.weapon:
+        p.edge_warned = False
+    return [f"鐵匠拿{content.materials[material].name}把【{item.name}】重新磨利了（銀兩 -{rule.repair_silver}）。"]
 
 
 def wield(state: GameState, content: Content, weapon_id: str) -> list[str]:
@@ -425,7 +433,8 @@ def _row(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateS
         "grade": grade(w),
         "confirm": "" if worn or w.original else dismantle_confirm(content, w),  # 身上那把不能拆，沒有問句（FB-125）；原品也拆不得（5.4）
         "keep": equipment.kept(w),  # 網頁照它把拆解鈕灰掉寫原因（神器原品、本命兵器）
-        "tempers": w.tempers, "temper_max": content.config.weapons.temper_max,
+        "tempers": w.tempers, "temper_max": equipment.temper_cap(w, content),  # 照這一把的品質（鐵匠鋪與合成流程 3.6）
+        "wear_note": equipment.wear_note(w, content),  # 上品寫「磨得慢」（待 joy 潤），其餘空字串
         "recipe": recipe_text(content, w.recipe),  # 自己打的那一把寫配方（主料＋輔料），買的、掉落的是 None
         "tactic": tactics.item_lines(content, w),  # 神器、名將本命兵器的特技與人器合一（本命戰法第三批），沒有是空的
     }

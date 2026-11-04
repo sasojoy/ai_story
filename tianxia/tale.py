@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextlib
 import json
 import re
+import secrets
 import sqlite3
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -44,6 +45,7 @@ _DIGITS = re.compile(r"[0-9０-９]")  # 模型不准寫阿拉伯數字（數字
 _BANNED = ("遊戲", "系統", "玩家", "伺服器", "假人", "機器人", "bot", "BOT", "Bot")  # 「假人」那幾個字任何地方都不准出現
 _ZH = ("零", "一", "兩", "三", "四", "五", "六", "七", "八", "九", "十")
 
+SHARE_CODE_BYTES = 6  # 分享代碼的長度（token_urlsafe 的位元組數，八個字）
 TITLE_SUFFIX = "戰記"  # 標題一律「<戰名>戰記」（Joy 2026-10-29 改名時定的）
 LEAD_LINE = "{side}壓了上去。"  # 待 joy 潤
 EVEN_LINE = "兩邊誰也沒佔到便宜。"
@@ -541,6 +543,8 @@ class TaleStore:
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS tales (record_id INTEGER PRIMARY KEY, season INTEGER NOT NULL, "
                 "data TEXT NOT NULL, made_at REAL NOT NULL)")
+            # 分享代碼（戰記分享頁 /zhanji/<代碼>，Joy 2026-11-04）：一篇一個亂碼，猜不到別篇；第一次有人要網址時才發
+            conn.execute("CREATE TABLE IF NOT EXISTS shares (code TEXT PRIMARY KEY, record_id INTEGER NOT NULL UNIQUE)")
 
     def _conn(self) -> sqlite3.Connection:
         return sqlite3.connect(self.path, timeout=5)
@@ -560,6 +564,21 @@ class TaleStore:
         with contextlib.closing(self._conn()) as conn, conn:
             conn.execute("INSERT OR IGNORE INTO tales VALUES (?, ?, ?, ?)",
                          (record_id, tale.season, tale.model_dump_json(), tale.made_at))
+
+    def share_code(self, record_id: int) -> str:
+        """這一篇的分享代碼：有就回原本那個，沒有就發一個新的（兩個請求同時發，以先寫進去的為準）。"""
+        with contextlib.closing(self._conn()) as conn, conn:
+            row = conn.execute("SELECT code FROM shares WHERE record_id = ?", (record_id,)).fetchone()
+            if row:
+                return row[0]
+            conn.execute("INSERT OR IGNORE INTO shares VALUES (?, ?)", (secrets.token_urlsafe(SHARE_CODE_BYTES), record_id))
+            return conn.execute("SELECT code FROM shares WHERE record_id = ?", (record_id,)).fetchone()[0]
+
+    def record_for(self, code: str) -> int | None:
+        """分享代碼 → 流水號；不認得是 None。"""
+        with contextlib.closing(self._conn()) as conn:
+            row = conn.execute("SELECT record_id FROM shares WHERE code = ?", (code,)).fetchone()
+        return row[0] if row else None
 
     def done(self, season: int) -> set[int]:
         with contextlib.closing(self._conn()) as conn:

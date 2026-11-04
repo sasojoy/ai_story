@@ -74,7 +74,9 @@ def main() -> None:
 
     def train_push(self, trend_id, delta):
         value = original_push(self, trend_id, delta)
-        training = _caller(TRAINING, 4)
+        # 出陣三（全部拆包第 17 批）：train_trend_push、_drill 的本體搬進出陣包、Game 留一行委派，堆疊上多兩層（包裡的 train_trend_push、
+        # drill），往上看 6 層（原本 4 層：train_trend_push 的上一層就是 _drill 或 _squad_encounter）
+        training = _caller(TRAINING, 6)
         if training is None or trend_id != TREND:
             return value  # 假人評估地點時也會呼叫，只有真的遊歷才算
         if training == "_drill" and args.variant == "zero":

@@ -19,7 +19,9 @@
   CONTRACT_GLOBS：手冊 4.1 第三級的核心契約含邊界測試，改包最容易踩的就是 import 了別的包）。
 - 核心（tianxia/core/**，與 tianxia/core/__init__.py 的 MODULES：手冊 3.1 的 state、models、content、rules、calendar、
   sqlite_world、world_state、characters、accounts、database、team、gender、naming，3.10 的 wallet，PM 10/31 的 journal；
-  邊界測試照同一份）：核心測試＋煙霧＋檔名是 test_<模組>… 的。
+  邊界測試照同一份）：核心測試＋煙霧＋檔名是 test_<模組>… 的。tianxia/core/ 底下掛鉤與清單（CORE_LISTS：features、services、
+  registry、__init__）以外的（event_check.py：第 16 批從 Game 搬來的事件檢定）再並上寫到改到的函式名（連模組名）、Game 委派名、
+  類別與常數的測試檔，模組裡直接叫它的函式一路往上算（core_module_callers；第 16 批修正，PM 11/03 照第 11 批修正輪的做法）。
   state.py、models.py 另外看 hunk 落在哪個類別、哪個欄位：類別名或欄位名帶功能前綴的（mall_tokens → mall）再加那一群。
 - 共用規則層（tianxia/core/registry.py 的 SHARED，全部拆包第 15 批登記；照語法樹讀、跟邊界測試同一份）：自己檔名的測試（同核心）
   ＋煙霧＋邊界測試 test_feature_boundaries.py，不跑核心測試、不照「誰 import 它」挑也不往上找（總表第六節第 5 條；依賴它的測試
@@ -771,6 +773,26 @@ def _split(hunk_list: list[Hunk], old_src: str, new_src: str, spans_of) -> dict:
     return groups
 
 
+def _game_one_liners(src: str) -> dict[str, tuple[str, str]]:
+    """Game 上本體（說明字之後）只有一句 `return <名字>.<函式>(self, …)`（或不 return 的那一句）的方法 → （<名字>, <函式>）。
+    engine_delegates（委派給包）與 core_delegates（委派給核心本體）照它認。"""
+    tree = _parse(src)
+    out: dict[str, tuple[str, str]] = {}
+    for node in (tree.body if tree else []):
+        if not (isinstance(node, ast.ClassDef) and node.name == "Game"):
+            continue
+        for f in node.body:
+            if not isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            body = [s for s in f.body if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant)
+                                              and isinstance(s.value.value, str))]
+            call = body[0].value if len(body) == 1 and isinstance(body[0], (ast.Return, ast.Expr)) else None
+            if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name)
+                    and call.args and isinstance(call.args[0], ast.Name) and call.args[0].id == "self"):
+                out[f.name] = (call.func.value.id, call.func.attr)
+    return out
+
+
 def engine_delegates(src: str) -> dict[str, str]:
     """engine.py 裡 Game 上的一行委派 → 它委派給哪一包（全部拆包第 11 批）：方法的本體（說明字之後）只有一句
     `return <名字>.<函式>(self, …)`（或不 return 的那一句），<名字> 是最外層 `from .features.<包> import <模組> [as <名字>]` 進來的。
@@ -783,20 +805,7 @@ def engine_delegates(src: str) -> dict[str, str]:
         if isinstance(node, ast.ImportFrom) and node.level == 1 and (node.module or "").startswith("features."):
             pkg = node.module.split(".")[1]
             local.update({a.asname or a.name: pkg for a in node.names})
-    out: dict[str, str] = {}
-    for node in tree.body:
-        if not (isinstance(node, ast.ClassDef) and node.name == "Game"):
-            continue
-        for f in node.body:
-            if not isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            body = [s for s in f.body if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant)
-                                              and isinstance(s.value.value, str))]
-            call = body[0].value if len(body) == 1 and isinstance(body[0], (ast.Return, ast.Expr)) else None
-            if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name)
-                    and call.func.value.id in local and call.args and isinstance(call.args[0], ast.Name) and call.args[0].id == "self"):
-                out[f.name] = local[call.func.value.id]
-    return out
+    return {method: local[alias] for method, (alias, _) in _game_one_liners(src).items() if alias in local}
 
 
 def engine_groups(hunk_list: list[Hunk], old_src: str,
@@ -850,6 +859,183 @@ def engine_groups(hunk_list: list[Hunk], old_src: str,
             core = True
             why.append(f"{label} 沒提到功能前綴 → 核心測試＋煙霧")
     return found, core, why, packages, callers
+
+
+# ── core-events（全部拆包第 16 批修正，PM 2026-11-03）：改核心本體裡掛鉤、清單以外的模組 ─────────────
+# tianxia/core/ 底下的掛鉤與清單（features.py 掛鉤、services.py 服務清單、registry.py 的 FEATURES、__init__.py 的 MODULES）改了照舊
+# 只跑核心測試＋煙霧：裡面的名字（options、choose、FEATURES）到處都寫得到，照名字挑等於整套。其餘的核心本體（event_check.py 這種
+# 從 Game 搬來的）照第 11 批修正輪的做法，再並上寫到改到的函式名或 Game 委派名的測試檔（core_module_callers）：搬之前照方法名
+# 挑得到的隨口應對、端出事件的回歸，搬進核心之後 test_for 一條都挑不到（dev/core-events-1 審查 M1、M4、M8、M9）。
+CORE_LISTS = frozenset({"__init__", "features", "services", "registry"})
+
+
+@functools.lru_cache(maxsize=None)
+def _engine_src() -> str:
+    engine = ROOT / "tianxia" / "engine.py"
+    return engine.read_text(encoding="utf-8") if engine.exists() else ""
+
+
+def core_delegates(src: str) -> dict[str, tuple[str, str]]:
+    """engine.py 裡 Game 上委派給核心本體的一行委派 → （核心的模組, 函式）：本體只有一句 `return <名字>.<函式>(self, …)`，
+    <名字> 是最外層 `from .core import <模組> [as <名字>]` 進來的（_present → ("event_check", "present")）。"""
+    tree = _parse(src)
+    local: dict[str, str] = {}
+    for node in (tree.body if tree else []):
+        if isinstance(node, ast.ImportFrom) and node.level == 1 and node.module == "core":
+            local.update({a.asname or a.name: a.name for a in node.names})
+    return {method: (local[alias], func) for method, (alias, func) in _game_one_liners(src).items() if alias in local}
+
+
+def _import_target(node: ast.ImportFrom, path: Path) -> str:
+    """`from … import` 的模組全名（相對的照檔案的位置算：tianxia/features/bout/x.py 的 `from ..core.a import b` → tianxia.core.a）。"""
+    if not node.level:
+        return node.module or ""
+    package = list(path.relative_to(ROOT).with_suffix("").parts[:-1])
+    base = package[:len(package) - (node.level - 1)]
+    return ".".join(base + ([node.module] if node.module else []))
+
+
+@functools.lru_cache(maxsize=None)
+def old_aliases() -> dict[str, frozenset[str]]:
+    """舊名的別名（開發規範手冊 3.11：tianxia/<舊名>.py 只寫 `from tianxia.features.<包> import <模組> as _x` 與
+    `sys.modules[__name__] = _x`）：包裡的模組全名 → 指到它的舊名（{"tianxia.features.bout.duel_rules": {"duel"}, …}；出陣包也有一個
+    duel_rules，舊名是 sortie_duel，所以照全名分）。照語法樹讀、不 import。"""
+    found: dict[str, set[str]] = collections.defaultdict(set)
+    for path in sorted(TIANXIA.glob("*.py")):
+        src = path.read_text(encoding="utf-8")
+        if "sys.modules[__name__]" not in src:
+            continue
+        tree = _parse(src)
+        for node in (tree.body if tree else []):
+            if isinstance(node, ast.ImportFrom) and _import_target(node, path).startswith("tianxia.features."):
+                for a in node.names:
+                    found[f"{_import_target(node, path)}.{a.name}"].add(path.stem)
+    return {k: frozenset(v) for k, v in found.items()}
+
+
+@functools.lru_cache(maxsize=None)
+def core_reexports(module: str) -> dict[str, frozenset[str]]:
+    """tianxia/core/<module>.py 的名字被別的模組照抄出去（`from tianxia.core.<module> import 名字`：包把留在核心的那一半 re-export
+    同一批函式物件，例：單挑包的 duel_rules、arena_rules 照抄 duel_base、arena_ranks）→ {名字: {照抄的模組名, 指到它的舊名別名}}。
+    測試經這幾個字寫（duel.push_of、arena.title_for、`from tianxia import duel as duel_rules`）也算寫到核心的那個名字（全部拆包第 12 批
+    審查修正）。整個模組 import 進來的（`from .core import duel_base as duel_rules`）不算：那一份寫得到模組名。照語法樹讀、不 import。"""
+    found: dict[str, set[str]] = collections.defaultdict(set)
+    target = f"tianxia.core.{module}"
+    for path in sorted(TIANXIA.rglob("*.py")):
+        if "tests" in path.relative_to(TIANXIA).parts or path.parent == TIANXIA / "core":
+            continue
+        src = path.read_text(encoding="utf-8")
+        if module not in src:
+            continue
+        tree = _parse(src)
+        for node in (tree.body if tree else []):
+            if isinstance(node, ast.ImportFrom) and _import_target(node, path) == target:
+                for a in node.names:
+                    if a.name != "*" and (a.asname or a.name) == a.name:
+                        dotted = ".".join(path.relative_to(ROOT).with_suffix("").parts)
+                        found[a.name] |= {path.stem} | old_aliases().get(dotted, frozenset())
+    return {k: frozenset(v) for k, v in found.items()}
+
+
+def names_through(words, name: str, text: str) -> bool:
+    """這一份原始碼經照抄的模組（words：duel_rules、duel……）寫到 name：寫成 `<字>.<name>`，或從那個模組 import 了 name。
+    只看兩個字寫在同一個檔裡不算：duel、arena 是到處都有的字（p.duel、config.arena）。"""
+    alt = "|".join(re.escape(w) for w in sorted(words))
+    if not alt:
+        return False
+    if re.search(rf"\b(?:{alt})\.{re.escape(name)}\b", text):
+        return True
+    return any(re.search(rf"\b{re.escape(name)}\b", m.group(1))
+               for m in re.finditer(rf"from\s+[\w.]*\b(?:{alt})\s+import\s+(\([^)]*\)|[^\n]*)", text))
+
+
+def _core_spans(src: str) -> list[tuple[str, int, int, object]]:
+    """核心模組最外層的 def、class 與常數（FREE_TEXT_OPTION = …，照第一個名字；同 conftest_picks）：（名字, 起, 迄, 節點）。"""
+    tree = _parse(src)
+    out = []
+    for n in (tree.body if tree else []):
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            out.append((n.name, *_span(n), n))
+        elif isinstance(n, (ast.Assign, ast.AnnAssign)):
+            names = [t.id for t in (n.targets if isinstance(n, ast.Assign) else [n.target]) if isinstance(t, ast.Name)]
+            if names:
+                out.append((names[0], n.lineno, n.end_lineno or n.lineno, n))
+    return out
+
+
+def core_module_callers(module: str, hunk_list: list[Hunk], old_src: str,
+                        new_src: str) -> tuple[set[Path], list[str]]:
+    """tianxia/core/<module>.py 的 hunk → （寫到改到的名字的測試檔, 為什麼）；核心測試＋煙霧另外一定加。
+    hunk 落在哪個最外層的函式、類別、常數 → 連模組裡直接叫它、用到它的（一路往上：只有 answer_event 在叫的 answer_branch、
+    deed_credit 沒留委派，照 answer_event 挑；經 ctx.<委派> 叫的不算）→ 每一個的：
+    - 函式：Game 上委派給它的方法名（_present、_choose、answer_event；照 engine.py 認，core_delegates），加上模組名與函式名寫在
+      同一個檔裡的（函式名本身太常見：present、apply），再加經照抄它的模組或那個模組的舊名寫的（`duel.push_of`、`arena.title_for`：
+      core_reexports、names_through；全部拆包第 12 批審查修正）；
+    - 類別、常數：那個識別字（EVIL_ANNAL、FreeTextRequest：engine 照名字 import 回來，測試從 engine 拿）。
+    跟 base 沒有差（指名了這個檔）照整個檔算；挑到的超過 IMPORT_CAP 個檔不一個一個挑（只剩核心測試＋煙霧）。說明、import 這種
+    函式以外的行不挑。經 choose、探索走、不寫名字的混合檔（test_explore、test_real_content）照第 11 批認定 4 列在模組的說明。"""
+    refs: dict[str, set[str]] = collections.defaultdict(set)
+    funcs: set[str] = set()
+    for src in (old_src, new_src):
+        for name, _, _, node in _core_spans(src):
+            refs[name] |= {n.id for n in ast.walk(node) if isinstance(n, ast.Name)} - {name}
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                funcs.add(name)
+    users: dict[str, set[str]] = collections.defaultdict(set)
+    for name, ids in refs.items():
+        for i in ids & set(refs):
+            users[i].add(name)
+    delegates: dict[str, set[str]] = collections.defaultdict(set)
+    for method, (mod, func) in core_delegates(_engine_src()).items():
+        if mod == module:
+            delegates[func].add(method)
+    whole = not hunk_list
+    seeds = sorted(refs) if whole else sorted(n for n in _split(
+        hunk_list, old_src, new_src, lambda s: [x[:3] for x in _core_spans(s)]) if n is not None)
+    by_text = _index()[1]
+    reexported = core_reexports(module)
+    files: set[Path] = set()
+    why: list[str] = []
+    for seed in seeds:
+        seen, todo = {seed}, [seed]
+        while todo:
+            for u in users.get(todo.pop(), ()):
+                if u not in seen:
+                    seen.add(u)
+                    todo.append(u)
+        terms: set[str] = set()
+        hit: set[Path] = set()
+        for n in seen:
+            if n in funcs:
+                for method in delegates.get(n, ()):
+                    terms.add(method)
+                    hit |= by_text.get(method, frozenset())
+                qualified = by_text.get(n, frozenset()) & by_text.get(module, frozenset())
+                if qualified:
+                    terms.add(f"{module}.{n}")
+                    hit |= qualified
+                words = reexported.get(n)
+                through = {t for t in by_text.get(n, frozenset()) if words and names_through(words, n, _text(t))}
+                if through:
+                    terms.add(f"{'／'.join(sorted(words))}.{n}（照抄）")
+                    hit |= through
+            elif by_text.get(n):
+                terms.add(n)
+                hit |= by_text[n]
+        files |= hit
+        if not whole:
+            via = sorted(seen - {seed})
+            shown = sorted(terms)
+            why.append(f"{seed}" + (f"（連模組裡叫它、用到它的 {'、'.join(via[:6])}{'……' if len(via) > 6 else ''}）" if via else "")
+                       + (f" → 寫到 {'、'.join(shown[:8])}{'……' if len(shown) > 8 else ''} 的 {len(hit)} 個檔" if hit
+                          else " → 沒有測試檔寫到它的名字或委派名"))
+    if whole:
+        why.append(f"跟 base 沒有差異，照整個檔算：寫到這一份的函式（連模組名）、Game 委派名、類別與常數的 {len(files)} 個檔")
+    elif not seeds:
+        why.append("改的是說明、import 這些（函式以外）→ 只有核心測試＋煙霧")
+    if len(files) > IMPORT_CAP:
+        return set(), [*why, f"寫到那幾個名字的測試檔有 {len(files)} 個，太多 → 只有核心測試＋煙霧（其他留給每日整套；要當場驗用 --all）"]
+    return files, why
 
 
 def fields_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[set[str], list[str]]:
@@ -1046,6 +1232,12 @@ def pick(files: list[str], base: str | None = None,
                 if (ROOT / f).exists():
                     result.files.add(ROOT / f)
                     result.own.add(ROOT / f)
+            elif (f.startswith("tianxia/features/") and len(path.parts) == 5
+                  and path.name == f"{path.parts[2]}_stage.py"):  # 包的擺局面檔：只有契約測試照路徑載入（_stages），沒有人 import 它
+                # 算成那一包（第 22 批 PM 認定第 1 條，第 12 批合併時補）：那一包的 tests/＋核心契約，同改包裡的任一檔
+                result.files |= set((FEATURES / path.parts[2] / "tests").rglob("test_*.py"))
+                result.files |= contract_tests()
+                result.why.append(f"{f}：{path.parts[2]} 這一包擺局面的檔（契約測試照路徑載入）→ {path.parts[2]} 這一包的 tests/＋核心契約")
             elif path.suffix == ".py":  # 測試共用的小工具：import 它的測試檔
                 result.files |= {t for t in tests if path.stem in imported(t)}
             continue
@@ -1062,6 +1254,14 @@ def pick(files: list[str], base: str | None = None,
             continue
         if f.startswith("tianxia/core/"):
             core_and_smoke()
+            # core-events（第 16 批修正）：掛鉤與清單以外的核心本體，再並上寫到改到的函式名或 Game 委派名的（core_module_callers）
+            if path.suffix == ".py" and f == f"tianxia/core/{path.name}" and path.stem not in CORE_LISTS:
+                given = (hunks_of or {}).get(f)
+                hunk_list, old_src, new_src = given if given is not None else hunks(f, base)
+                found, why = core_module_callers(path.stem, hunk_list, old_src, new_src)
+                result.files |= found
+                result.why.extend(f"{f}：{w}" for w in ["核心 → 核心測試＋煙霧", *why])
+                continue
             result.why.append(f"{f}：核心 → 核心測試＋煙霧")
             continue
         if f in HUNK_FILES:

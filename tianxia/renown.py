@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 
 from . import calendar, four_tiers, gender
@@ -107,6 +109,21 @@ def titles(state: GameState, content: Content, fame_from: int = 1) -> list[str]:
     if virtue:
         out.append(virtue)
     return out
+
+
+def legacy_door(state: GameState, content: Content, door: str) -> bool:
+    """傳承的門路（放在這裡：rules、library 都讀名聲，這一支不能放在 rules）（features/legacy；Config.legacy.doors）：開關開著、季初結算立了那一道的旗標。關著一律是假（不動亂數、一個字都不變）。"""
+    cfg = content.config.legacy
+    flag = cfg.doors.get(door) if cfg.enabled else None
+    return bool(flag) and flag in state.player.flags
+
+
+def open_to(state: GameState, content: Content, kind: str, way: str, tier: int) -> bool:
+    """俠寇選項（kind "choices"）、正邪武學（kind "lessons"）：照名聲走那條路、到那一段，或傳承開了那一道門路（只開到 Config.legacy.door_tier 段）。
+    官府通緝、黑市、醫館打折這些照舊只看 meets。"""
+    if meets(state, content, way, tier):
+        return True
+    return tier <= content.config.legacy.door_tier and legacy_door(state, content, f"{kind}_{way}")
 
 
 def meets(state: GameState, content: Content, way: str, tier: int) -> bool:
@@ -420,9 +437,34 @@ def _choice_perks(content: Content, way: str, tier: int, world: WorldState | Non
     """俠寇選項（5.3）：內容裡有要這一條路、這一段的選項才寫；virtue_choices 關著不寫。"""
     if not on(content, "virtue_choices"):
         return []
-    has = any(ch.needs is not None and ch.needs.path == way and ch.needs.tier == tier
-              for ev in content.events.values() for ch in ev.choices)
-    return [CHOICE_PERK.format(way=way)] if has else []
+    return [CHOICE_PERK.format(way=way)] if (way, tier) in _choice_needs(content) else []
+
+
+# 一次畫面建構裡記住「內容裡哪些（路, 段）有選項」（needs_memo）：名聲說明卡的兩條路各四段，每段都要掃一遍全部事件的選項。
+_NEEDS_MEMO: ContextVar[dict | None] = ContextVar("needs_memo", default=None)
+
+
+@contextmanager
+def needs_memo() -> Iterator[None]:
+    """這一段裡 _choice_needs 只掃一次內容；巢狀時用最外層那一份，出了範圍就丟掉。"""
+    if _NEEDS_MEMO.get() is not None:
+        yield
+        return
+    token = _NEEDS_MEMO.set({})
+    try:
+        yield
+    finally:
+        _NEEDS_MEMO.reset(token)
+
+
+def _choice_needs(content: Content) -> set[tuple[str, int]]:
+    memo = _NEEDS_MEMO.get()
+    if memo is not None and id(content) in memo:
+        return memo[id(content)]
+    needs = {(ch.needs.path, ch.needs.tier) for ev in content.events.values() for ch in ev.choices if ch.needs is not None}
+    if memo is not None:
+        memo[id(content)] = needs
+    return needs
 
 
 VIRTUE_PERKS.append(_choice_perks)

@@ -7,17 +7,20 @@
 只 import models、state。"""
 from __future__ import annotations
 
+from . import attrset
 from .models import Content
 from .state import GameState
 
 
-def on(content: Content) -> bool:
-    return content.config.rise.enabled
+def on(content: Content, world=None) -> bool:
+    """江湖水漲開著：設定開著，而且這一季不是五項屬性的季（屬性與跨季架構 v2 第四節：對手照等級長屬性，水漲那一層退掉）。
+    world（這一季的 WorldState）沒給照舊只看設定。"""
+    return content.config.rise.enabled and not attrset.on(content, world)
 
 
-def draw_floor(content: Content) -> float | None:
+def draw_floor(content: Content, world=None) -> float | None:
     """挑戰大勢人物本人的僵持下緣（encounter.Mods.draw_floor）：江湖水漲開著時收窄到 figure_draw，關著是 None（照一般的 −50%）。"""
-    return content.config.rise.figure_draw if on(content) else None
+    return content.config.rise.figure_draw if on(content, world) else None
 
 
 def scale(content: Content, wins: int = 0) -> float:
@@ -33,9 +36,9 @@ def big(content: Content, base: float, power: float, wins: int = 0) -> float:
     return max(base, power * scale(content, wins))
 
 
-def duel(content: Content, base: float, power: float, meets: int = 0) -> float:
+def duel(content: Content, base: float, power: float, meets: int = 0, world=None) -> float:
     """頭目的難度：內容寫的與「你的武學威力 × duel_scale（第二次遇上再多一截）」取大的。meets 是這一場之前這一季遇上他幾次。"""
-    if not on(content):
+    if not on(content, world):
         return base
     rule = content.config.rise
     return max(base, power * rule.duel_scale * (1 + rule.duel_per_meet * max(0, meets)))
@@ -44,7 +47,7 @@ def duel(content: Content, base: float, power: float, meets: int = 0) -> float:
 def event_bump(state: GameState, content: Content) -> float:
     """事件檢定加深幾點：本人第 event_from_level 級起每 event_per_levels 級 +1，最多 event_cap。
     減法季屬性五段開著（Config.jianfa 的 stat_milestones：點少了，事件檢定本來就更常失手，設計 4.5「連帶」）再乘 event_bump_scale。"""
-    if not on(content):
+    if not on(content, getattr(state, "world", None)):
         return 0
     rule = content.config.rise
     level = state.player.member.level
