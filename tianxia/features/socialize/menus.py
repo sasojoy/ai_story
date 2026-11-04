@@ -9,14 +9,14 @@ from tianxia.core.option import Option
 from tianxia.core.services import SNUB_NOTE
 from tianxia.events import has_events_here  # 過渡：待搬（事件：這個地點有沒有）
 
-from . import rules
-from .rules import AUDIENCE_MEET, SOCIAL_LIST_INTRO, SOCIAL_TALK
+from . import view
+from .view import AUDIENCE_MEET, SOCIAL_LIST_INTRO, SOCIAL_TALK
 
 
 def precise_social_option(ctx, cost: int) -> Option:
     """一類一顆的交友（正式季整合 2.8）：照 social_plan。兩位以上見得到的人物時是「交友」打開名單（act:call，不花體力）；
     一位就直接開口（act:socialize，鈕上寫跟誰說話）；福緣、留在交友的事件也走 act:socialize；沒有人可以說話時灰掉、寫原因、不扣體力。"""
-    kind, arg = rules.social_plan(ctx)
+    kind, arg = view.social_plan(ctx)
     if kind == "list":
         return Option(id="act:call", label="交友")
     if kind == "talk":
@@ -44,23 +44,23 @@ def audience_options(ctx) -> list[Option]:
     （談滿的寫換日的那一刻）；每個遊戲日的輪數上限是每位人物各算各的（talk_turns_per_day）。"""
     c = ctx.content
     cost = c.config.action_cost["socialize"]
-    per_day = rules.talk_cap(ctx)
+    per_day = view.talk_cap(ctx)
     opts = []
     for companion_id in ctx._figures_here():
         ch = c.characters[companion_id]
         option_id = f"call:{companion_id}"
-        left = rules.talks_left(ctx, companion_id)
+        left = view.talks_left(ctx, companion_id)
         if ctx._snubbed_character(companion_id):
             opts.append(Option(id=option_id, label=f"{ch.name}（{SNUB_NOTE}）", enabled=False))
-        elif not rules.figure_can_meet(ctx, companion_id) and precise.on(c, ctx.state.world):  # 一類一顆（2.8）：不再打發
-            if rules.meet_event(ctx, companion_id) is not None:
+        elif not view.figure_can_meet(ctx, companion_id) and precise.on(c, ctx.state.world):  # 一類一顆（2.8）：不再打發
+            if view.meet_event(ctx, companion_id) is not None:
                 opts.append(ctx._cost_option(option_id, ch.name, cost, note=AUDIENCE_MEET))
             else:
-                opts.append(Option(id=option_id, label=f"{ch.name}（名望還差 {rules.fame_gap(ctx, companion_id)}）", enabled=False))
-        elif not rules.figure_can_meet(ctx, companion_id):
-            opts.append(Option(id=option_id, label=f"{ch.name}（名望還差 {rules.fame_gap(ctx, companion_id)}）"))  # 按下去走打發，見 brush_off
+                opts.append(Option(id=option_id, label=f"{ch.name}（名望還差 {view.fame_gap(ctx, companion_id)}）", enabled=False))
+        elif not view.figure_can_meet(ctx, companion_id):
+            opts.append(Option(id=option_id, label=f"{ch.name}（名望還差 {view.fame_gap(ctx, companion_id)}）"))  # 按下去走打發，見 brush_off
         elif left == 0:
-            opts.append(Option(id=option_id, label=f"{ch.name}（{rules.talked_out_note(ctx)}）", enabled=False))
+            opts.append(Option(id=option_id, label=f"{ch.name}（{view.talked_out_note(ctx)}）", enabled=False))
         else:
             opts.append(ctx._cost_option(option_id, ch.name, cost, note=f"還能談 {left}/{per_day} 輪"))
     opts.append(Option(id="call:back", label="返回"))
@@ -70,10 +70,10 @@ def audience_options(ctx) -> list[Option]:
 def audience_intro(ctx) -> str:
     """求見畫面的說明（場景上的那一段）：挑一位拜會；每位人物各算各的，一個遊戲日最多談幾輪、什麼時候重新算起。"""
     here = ctx.content.locations[ctx.state.player.location].name
-    per_day = rules.talk_cap(ctx)
+    per_day = view.talk_cap(ctx)
     # 你跟這幾位的情誼（explain-1）：挑人之前看得到，跟談話時名字旁寫的是同一個數
     bonds = "、".join(f"{ctx.content.characters[cid].name} {ctx.state.player.affinities.get(cid, 0)}" for cid in ctx._figures_here())
-    kind, moment = rules.talks_reopen(ctx)
+    kind, moment = view.talks_reopen(ctx)
     again = f"到 {moment} 重新算起" if moment else "過一陣子重新算起" if kind == "later" else "這一季之內不再重算"  # FB-102
     if precise.on(ctx.content, ctx.state.world):  # 一類一顆：求見併進交友，名望不夠的灰著寫還差多少，不打發（FB-421）
         head = SOCIAL_LIST_INTRO.format(here=here, per_day=per_day, again=again)

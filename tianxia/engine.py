@@ -137,7 +137,7 @@ if TYPE_CHECKING:  # 型別註記用（companion_agent、parley 搬進人物情�
 from .core.services import not_while_preparing as _not_while_preparing
 from .features.socialize import actions as socialize_actions  # 過渡：Game 上交友求見的一行委派（全部拆包第 21 批）
 from .features.socialize import menus as socialize_menus  # 過渡：同上（選單、求見名單與畫面說明）
-from .features.socialize import rules as socialize_rules  # 過渡：同上（見不見得到、次數、交友會做什麼）
+from .features.socialize import view as socialize_view  # 過渡：同上（見不見得到、次數、交友會做什麼）
 from .features.cultivation import actions as cultivation_actions  # 過渡：Game 上修練頁動作的 22 個一行委派（全部拆包第 23 批）
 from .features.cultivation import view as cultivation_view  # 過渡：Game 上修練頁唯讀資料的 11 個一行委派（全部拆包第 23 批）
 from .features.cultivation.actions import MELT_MANY_PROLOGUE  # noqa: F401  過渡：tests/core/test_prologue.py 從 engine 拿
@@ -1094,7 +1094,7 @@ class Game:
         seal.copy_heirloom(self.state, self.content, reg)
 
     def _talk_cap(self) -> int:
-        return socialize_rules.talk_cap(self)
+        return socialize_view.talk_cap(self)
 
     def _advance_player_local(self, seconds: float) -> list[str]:
         """玩家自己的部分：體力／氣血回復、閉關出關、新立門戶福緣——
@@ -1896,7 +1896,7 @@ class Game:
         return socialize_menus.precise_social_option(self, cost)
 
     def _social_plan(self) -> tuple[str | None, str | None]:
-        return socialize_rules.social_plan(self)
+        return socialize_view.social_plan(self)
 
     def _sect_options(self) -> list[Option]:
         """拜入門派（一類一顆開著時從交友搬出來，正式季整合 2.7）：這裡抽得到的拜門派事件各一顆，不花體力（同投靠）。"""
@@ -3634,34 +3634,34 @@ class Game:
         ]
 
     def _can_meet(self, companion_id: str) -> bool:
-        return socialize_rules.figure_can_meet(self, companion_id)
+        return socialize_view.figure_can_meet(self, companion_id)
 
     def can_meet_figure(self, companion_id: str) -> bool:
-        return socialize_rules.public_can_meet(self, companion_id)
+        return socialize_view.public_can_meet(self, companion_id)
 
     def _fame_gap(self, companion_id: str) -> int:
-        return socialize_rules.fame_gap(self, companion_id)
+        return socialize_view.fame_gap(self, companion_id)
 
     def _brush_off(self, companion_id: str) -> list[str]:
         return socialize_actions.brush_off(self, companion_id)
 
     def _talks_used(self, companion_id: str) -> int:
-        return socialize_rules.talks_used(self, companion_id)
+        return socialize_view.talks_used(self, companion_id)
 
     def _talks_left(self, companion_id: str) -> int:
-        return socialize_rules.talks_left(self, companion_id)
+        return socialize_view.talks_left(self, companion_id)
 
     def _count_talk(self, companion_id: str) -> list[str]:
         return socialize_actions.count_talk(self, companion_id)
 
     def _deep_interaction_target(self) -> str | None:
-        return socialize_rules.deep_interaction_target(self)
+        return socialize_view.deep_interaction_target(self)
 
     def _audience_hall(self) -> bool:
-        return socialize_rules.audience_hall(self)
+        return socialize_view.audience_hall(self)
 
     def _socialize_figure(self) -> str | None:
-        return socialize_rules.socialize_figure(self)
+        return socialize_view.socialize_figure(self)
 
     def _audience_options(self) -> list[Option]:
         return socialize_menus.audience_options(self)
@@ -4252,7 +4252,7 @@ class Game:
         return msgs
 
     def _talked_out_note(self) -> str:
-        return socialize_rules.talked_out_note(self)
+        return socialize_view.talked_out_note(self)
 
     def _audience_intro(self) -> str:
         return socialize_menus.audience_intro(self)
@@ -4274,10 +4274,10 @@ class Game:
         return companions_talk.affinity_text(self, companion_id)
 
     def socialize_starts_dialogue(self) -> bool:
-        return socialize_rules.starts_dialogue(self)
+        return socialize_view.starts_dialogue(self)
 
     def socialize_is_futile(self) -> bool:
-        return socialize_rules.is_futile(self)
+        return socialize_view.is_futile(self)
 
 
 

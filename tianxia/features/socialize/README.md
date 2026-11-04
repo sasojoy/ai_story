@@ -8,12 +8,12 @@
 
 ## 裡面有什麼
 
-- `rules.py`：原本 `Game` 上的 19 個查詢與文字（純讀）——見不見得到 `figure_can_meet`（`Game._can_meet`）、`public_can_meet`（`can_meet_figure`）、差多少名望 `fame_gap`、
+- `view.py`：原本 `Game` 上的 18 個查詢與文字（讀存檔、第一個參數是 ctx；所以叫 `view` 不叫 `rules`——手冊 3.2 的 `rules.py` 純規則、不碰 Game，比照 `cultivation/view.py`、`battle/view.py`）——見不見得到 `figure_can_meet`（`Game._can_meet`）、`public_can_meet`（`can_meet_figure`）、差多少名望 `fame_gap`、
   這個遊戲日談幾輪 `talk_cap`、`talks_used`、`talks_left`、`talks_reopen`、談滿了怎麼寫 `talked_out_note`、一類一顆的交友這一下會做什麼 `social_plan`
-  （選單、動作、對話備料、假人讀同一份）、交友會直接開口的人物 `socialize_figure`、`deep_interaction_target`、`audience_hall`、`no_audience_line`、
+  （選單、動作、對話備料、假人讀同一份）、交友會直接開口的人物 `socialize_figure`、`deep_interaction_target`、`audience_hall`、
   假人判斷 `starts_dialogue`、`is_futile`；結識事件 `meet_event`、福緣送得出的人 `fortune_free`。核心的 `rules.can_meet`（伏筆偷聽也用）是另一個，這裡 import 成 `core_can_meet`。
 - `menus.py`：交友那一顆 `socialize_option`、一類一顆的交友 `precise_social_option`、求見的第二層名單 `audience_options`、求見畫面的說明 `audience_intro`。
-- `actions.py`：交友 `socialize`（舊寫法）與 `precise_socialize`（一類一顆）、指名求見 `call`、被打發 `brush_off`、記一輪 `count_talk`、福緣 `fortune_gift`、`deliver_fortune`、
+- `actions.py`：交友見不到人時的打發話 `no_audience_line`（會排提示、花亂數，不是純讀，所以不放 `view.py`）、交友 `socialize`（舊寫法）與 `precise_socialize`（一類一顆）、指名求見 `call`、被打發 `brush_off`、記一輪 `count_talk`、福緣 `fortune_gift`、`deliver_fortune`、
   沒碰上人物時抽事件 `encounter`、紀錄標題 `call_title`。
 - `bots.py`：假人看到 `call:` 的選項怎麼按（原本 `bot_policy.score` 的 call 那一段）——只按「返回」，`call:<人物>` 一律不按（名望不夠的求見永遠按得下去，不能給分）。
 - 掛鉤：`enabled` 一直是 True（一類一顆 `precise`、福緣 `roster` 各有自己的開關，包本身沒有總開關）；`prefix = "call"`；`choose` 接 `call:`（`Outcome.title` 在動作之前拿，
@@ -28,7 +28,7 @@
 - 內容：`content/events/social_nanyang_yingchuan.json`、`social_north.json`、`social_runan.json`（交友事件；`content` 宣告，`content.py` 照舊讀）。
   `recruit.json` 分區調查列在這一包，但招募（`_recruit*`）附錄甲裁給人物情誼，這一批不宣告，等 PM 定。
 - 共用的字：`AUDIENCE_HALL_FIGURES`、`SNUB_NOTE`、`SOCIAL_NO_ONE` 在核心 `core/services.py`（核心的選單、`sync`、挑戰本人也讀；`engine` 照舊 import 回來）；`SOCIAL_TALK`、
-  `SOCIAL_LIST_INTRO`、`AUDIENCE_MEET` 在 `rules.py`；`SOCIAL_LIST_TITLE` 留在 `engine.py`（場景文字讀）。
+  `SOCIAL_LIST_INTRO`、`AUDIENCE_MEET` 在 `view.py`；`SOCIAL_LIST_TITLE` 留在 `engine.py`（場景文字讀）。
 
 ## 委派與留在原位的接縫
 
@@ -48,7 +48,7 @@
 
 ## 過渡（手冊 3.11）
 
-- 包 → 還沒搬的舊模組：`events`（`rules.py`、`menus.py`、`actions.py`：候選、這個地點有沒有、抽一則）、`ranks`（階級，第 40 批；`rules.py`、`actions.py`）。
+- 包 → 還沒搬的舊模組：`events`（`view.py`、`menus.py`、`actions.py`：候選、這個地點有沒有、抽一則）、`ranks`（階級，第 40 批；`view.py`、`actions.py`）。
 - 服務清單（`tianxia/core/services.py`）這一包加的：一、共用 `_snubbed_character`、`AUDIENCE_HALL_FIGURES`、`SNUB_NOTE`、`SOCIAL_NO_ONE`；二、查詢 `_can_meet`、`_socialize_figure`、`_count_talk`、
   `_social_plan`、`_brush_off`（本體搬進這一包）與 `_open_dialogue`（本體在人物情誼包）。
 - 測試換 `tianxia.engine.pick_event` 的那幾條（抽不到事件才走打發話），改成換 `tianxia.features.socialize.actions.pick_event`——本體搬走，換的名字跟著走。

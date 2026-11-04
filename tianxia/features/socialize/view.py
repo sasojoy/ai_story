@@ -1,5 +1,5 @@
 """交友求見的查詢與文字（功能包 socialize；全部拆包第 21 批，計畫 docs/superpowers/plans/2026-11-04-交友求見包-第1批.md）：原本 Game 上的 19 個方法
-（見不見得到、這個遊戲日還能談幾輪、交友這一下會做什麼、談滿了怎麼寫、交友會不會開口），名字去掉前導底線、第一個參數是 ctx（第一階就是 Game）。純讀，不改狀態。
+（見不見得到、這個遊戲日還能談幾輪、交友這一下會做什麼、談滿了怎麼寫、交友會不會開口），名字去掉前導底線、第一個參數是 ctx（第一階就是 Game）。純讀，不改狀態（會排提示、花亂數的 `no_audience_line` 在 actions.py；檔名叫 view 不叫 rules：手冊 3.2 的 rules.py 不碰 Game，這裡第一個參數是 ctx）。
 
 核心的 `rules.can_meet`（伏筆的偷聽也用它）是另一回事，這裡 import 成 core_can_meet；包裡的 `figure_can_meet` 是 Game._can_meet 的本體。
 """
@@ -137,25 +137,6 @@ def talked_out_note(ctx) -> str:
     kind, moment = talks_reopen(ctx)
     when = f"{moment} 之後再來" if moment else "過一陣子再來" if kind == "later" else "這一季之內不能再來"  # 「過一陣子」：FB-102
     return f"已經談滿 {talk_cap(ctx)} 輪，{when}"
-
-
-def no_audience_line(ctx) -> str:
-    """交友時見不到這裡的大勢人物時的說明；這裡沒有大勢人物就是原本的「此地無人可訪」；
-    兩位以上大勢人物的地點交友不找人，提醒要按「求見」。"""
-    if audience_hall(ctx):
-        return "你四處結交了一番，沒遇上什麼事；想拜會此地的人物，請按「求見」指名。"
-    for companion_id in ctx._figures_here():
-        ch = ctx.content.characters[companion_id]
-        if ctx._snubbed_character(companion_id):
-            return f"{ch.name}{SNUB_NOTE}。"
-        if not figure_can_meet(ctx, companion_id):
-            return ctx._brush_off(companion_id)[0]  # 交友時遇上見不到的人物，用求見同一套打發的話
-        if talks_left(ctx, companion_id) == 0:  # 這個遊戲日談滿了：寫換日的那一刻（待 joy 潤）
-            kind, moment = talks_reopen(ctx)
-            if kind == "later":
-                return f"{ch.name}事忙，過一陣子才得空。"  # FB-102，待 joy 潤
-            return f"{ch.name}事忙，要到 {moment} 之後才得空。" if moment else f"{ch.name}事忙，這一季之內都不得空。"
-    return "此地無人可訪，你只好悻悻離去。"
 
 
 def starts_dialogue(ctx) -> bool:

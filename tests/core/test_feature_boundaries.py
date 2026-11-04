@@ -740,7 +740,7 @@ GAME_DELEGATE_CALLERS.update({
 # socialize（全部拆包第 21 批「交友求見」：新包 tianxia/features/socialize/；計畫 docs/superpowers/plans/2026-11-04-交友求見包-第1批.md 1.1、1.4）：
 # 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。31 個方法搬進包，留 21 個一行委派（10 個只有包裡叫，沒有委派）；
 # `call:` 的 choose 與 _action_title 的那一格接了掛鉤（Outcome），`bot_policy.score` 的 call 那一段搬進包的 bots.py
-GAME_IMPORTS |= {"tianxia.features.socialize.actions", "tianxia.features.socialize.menus", "tianxia.features.socialize.rules"}
+GAME_IMPORTS |= {"tianxia.features.socialize.actions", "tianxia.features.socialize.menus", "tianxia.features.socialize.view"}
 GAME_DELEGATES |= {
     # 核心原位叫的：選單（_precise_social_option、_socialize_option、_audience_options）、行動列說明（_socialize_figure、_audience_hall、_fame_gap、_can_meet、
     # _talked_out_note）、_act 的 act:socialize（_socialize）、sync（_audience_hall）、補算時間（_deliver_fortune）、場景文字（_audience_intro）

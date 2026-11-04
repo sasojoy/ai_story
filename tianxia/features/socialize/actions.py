@@ -10,12 +10,13 @@ from collections.abc import Callable
 from typing import Any
 
 from tianxia import journal, precise, renown, roster
+from tianxia.core.services import SNUB_NOTE
 from tianxia import ranks  # 過渡：待搬（階級 ranks 第 40 批）
 from tianxia.events import pick_event  # 過渡：待搬（事件：抽一則）
 from tianxia.journal import Draft
 from tianxia.rules import audience_hint, game_day, season_one
 
-from . import rules
+from . import view
 
 
 def call_title(ctx, arg: str) -> str:
@@ -42,7 +43,7 @@ def socialize(ctx, prepared: Any = None) -> list[str]:
     companion_id = ctx._socialize_figure()
     if companion_id is not None:
         return ctx._open_dialogue(companion_id, prepared)
-    return encounter(ctx, "socialize", lambda: rules.no_audience_line(ctx))  # 惰性：抽到事件就不挑打發話、不白花亂數
+    return encounter(ctx, "socialize", lambda: no_audience_line(ctx))  # 惰性：抽到事件就不挑打發話、不白花亂數
 
 
 def precise_socialize(ctx, prepared: Any) -> list[str]:
@@ -51,14 +52,14 @@ def precise_socialize(ctx, prepared: Any) -> list[str]:
     kind, arg = ctx._social_plan()
     if kind == "fortune":
         s.player.fortune = True
-        cid = rules.fortune_free(ctx)
+        cid = view.fortune_free(ctx)
         return [f"你新立門戶不久，【{c.characters[cid].name}】主動前來結識。"] + roster.recruit(s, c, ctx.world, cid)
     if kind == "once":
         return ctx._present(pick_event(s, c, "socialize", ctx.rng, "rare"), "socialize")
     if kind == "talk":
         return ctx._open_dialogue(arg, prepared)
     if kind == "meet":
-        return ctx._present(rules.meet_event(ctx), "socialize")
+        return ctx._present(view.meet_event(ctx), "socialize")
     s.player.stamina += c.config.action_cost["socialize"]
     if kind == "list":
         s.player.picking_audience = True
@@ -74,11 +75,11 @@ def call(ctx, arg: str, prepared: Any = None) -> list[str]:
     ctx.state.player.picking_audience = False
     if arg == "back":
         return ["你收回名帖，暫且不求見了。"]
-    if not rules.figure_can_meet(ctx, arg):
+    if not view.figure_can_meet(ctx, arg):
         if precise.on(ctx.content, ctx.state.world):  # 一類一顆（2.8）：不再打發；結識得到的走結識事件，見不到的在名單上是灰的
-            event = rules.meet_event(ctx, arg)
+            event = view.meet_event(ctx, arg)
             if event is None:
-                return [f"{rules.why_not_talk(ctx, arg)}。"]
+                return [f"{view.why_not_talk(ctx, arg)}。"]
             ctx.state.player.stamina -= ctx.content.config.action_cost["socialize"]
             return ctx._present(event, "socialize")
         return ctx._brush_off(arg)
@@ -96,7 +97,7 @@ def brush_off(ctx, companion_id: str) -> list[str]:
     ctx._hint("h_snubbed")  # 第一次被名將打發（新手引導計畫三）：不看狀態，打發的當下排；在行動裡，說的話記在這一則
     ch = c.characters[companion_id]
     line = ctx.rng.choice(ch.brush_off) if ch.brush_off else f"{ch.name}連見都不見你，門口的人把你請了出去。"
-    short = rules.fame_gap(ctx, companion_id)
+    short = view.fame_gap(ctx, companion_id)
     figure = next((f for f in c.figures.values() if f.character == companion_id), None)
     hint = audience_hint(s, c, companion_id)  # 名聲 explain 開著時另寫門檻與每一項折抵（設計 6.3）
     p = s.player
@@ -114,11 +115,11 @@ def brush_off(ctx, companion_id: str) -> list[str]:
 
 def count_talk(ctx, companion_id: str) -> list[str]:
     """記一輪；這個遊戲日聊滿了就自動告辭，寫明什麼時候再來（待 joy 潤）。"""
-    ctx.state.player.talks_today[companion_id] = [game_day(ctx.content, ctx.state.world), rules.talks_used(ctx, companion_id) + 1]
-    if rules.talks_left(ctx, companion_id) > 0:
+    ctx.state.player.talks_today[companion_id] = [game_day(ctx.content, ctx.state.world), view.talks_used(ctx, companion_id) + 1]
+    if view.talks_left(ctx, companion_id) > 0:
         return []
     ctx.state.player.pending_companion = None
-    name, (kind, moment) = ctx.content.characters[companion_id].name, rules.talks_reopen(ctx)
+    name, (kind, moment) = ctx.content.characters[companion_id].name, view.talks_reopen(ctx)
     if kind == "later":
         return [f"{name}起身送客，改日再敘：過一陣子再來拜會吧。"]  # FB-102，待 joy 潤
     if moment is None:
@@ -158,3 +159,22 @@ def encounter(ctx, action: str, nothing: str | Callable[[], str]) -> list[str]:
     if event:
         return ctx._present(event, action)
     return [nothing() if callable(nothing) else nothing]
+
+
+def no_audience_line(ctx) -> str:
+    """交友時見不到這裡的大勢人物時的說明；這裡沒有大勢人物就是原本的「此地無人可訪」；
+    兩位以上大勢人物的地點交友不找人，提醒要按「求見」。"""
+    if view.audience_hall(ctx):
+        return "你四處結交了一番，沒遇上什麼事；想拜會此地的人物，請按「求見」指名。"
+    for companion_id in ctx._figures_here():
+        ch = ctx.content.characters[companion_id]
+        if ctx._snubbed_character(companion_id):
+            return f"{ch.name}{SNUB_NOTE}。"
+        if not figure_can_meet(ctx, companion_id):
+            return ctx._brush_off(companion_id)[0]  # 交友時遇上見不到的人物，用求見同一套打發的話
+        if talks_left(ctx, companion_id) == 0:  # 這個遊戲日談滿了：寫換日的那一刻（待 joy 潤）
+            kind, moment = talks_reopen(ctx)
+            if kind == "later":
+                return f"{ch.name}事忙，過一陣子才得空。"  # FB-102，待 joy 潤
+            return f"{ch.name}事忙，要到 {moment} 之後才得空。" if moment else f"{ch.name}事忙，這一季之內都不得空。"
+    return "此地無人可訪，你只好悻悻離去。"
