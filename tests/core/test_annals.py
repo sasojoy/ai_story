@@ -272,5 +272,5 @@ def test_the_news_tabs_include_the_annals_and_the_server_serves_them():
 
     src = webharness.app_source()
     assert '{ id: "annals", name: "行狀" }' in src and 'api("/api/annals")' in src
-    server = (Path(__file__).parents[2] / "server.py").read_text(encoding="utf-8")
-    assert '@app.get("/api/annals")' in server
+    routes = (Path(__file__).parents[2] / "tianxia" / "features" / "zhuan" / "routes.py").read_text(encoding="utf-8")  # 全部拆包第 29 批：路由搬進列傳包
+    assert '@r.get("/api/annals")' in routes

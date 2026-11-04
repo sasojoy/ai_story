@@ -801,6 +801,20 @@ GAME_DELEGATE_CALLERS.update({
 for _pair in (("check_in", "_opening_pending"), ("check_in", "_opening_gate"), ("_auto_checkin", "_opening_pending"), ("checkin_view", "_opening_pending")):
     del GAME_DELEGATE_CALLERS[_pair]
 
+# zhuan（全部拆包第 29 批「列傳」：新包 tianxia/features/zhuan/；計畫 docs/superpowers/plans/2026-11-04-列傳包-第1批.md 1.1、1.5）：Game 上 20 個方法搬進包，
+# 留 9 個一行委派；休季用票的 choose 換成 choose_unlisted 掛鉤（兩行拿掉）。三處核心原位叫的委派沒有掛鉤可接（紀錄先後算行為）。
+GAME_IMPORTS |= {"tianxia.features.zhuan.actions"}
+GAME_DELEGATES |= {
+    # server（行狀頁、main_view 的讀傳入口、寫傳的 A、C 段、讀傳、分享）、測試在叫的；_zhuan_past、_zhuan_tick、_zhuan_options 是核心原位叫的（下）
+    "annals_view", "biography_entry", "biography_request", "write_biography", "biography_view", "share_biography",
+    "_zhuan_past", "_zhuan_tick", "_zhuan_options",
+}
+GAME_DELEGATE_CALLERS.update({
+    ("_reset_player_for_new_season", "_zhuan_past"): "換季那一刻補上一季的季末論功與〈天下形勢〉：在 _story_close_season 之前、最前面，紀錄先後算行為",
+    ("sync", "_zhuan_tick"): "同步記行狀（_stance_annals 之後、_deliver_mail 之前）：on_sync 在更後面、還問 enabled，紀錄先後算行為",
+    ("_everyday_options", "_zhuan_options"): "休季的行動列：用列傳的票排在休季那一支選單裡，不是店面也不是 menu 掛鉤的位置",
+})
+
 
 # strip（全部拆包第 13 批「拿掉一」：探索三選一、找素材「自己說」、城裡操練；計畫 docs/superpowers/plans/2026-11-04-拿掉一-第13批.md）：
 # 這一批多半是刪（刪的在原處），加的集中在這一段
@@ -1366,7 +1380,7 @@ def test_the_service_scanner_catches_a_game_method_off_the_list():
     ("from ..feast import rules\n", "別的包"),
     ("from tianxia import bounties\n", "舊模組"),  # shared：原本的例子 library 第 15 批登記進共用規則層，換一個還是舊模組的
     ("from tianxia import engine\n", "舊模組"),
-    ("import tianxia.zhuan_end\n", "舊模組"),
+    ("import tianxia.server_bots\n", "舊模組"),
     # 舊名留成的別名（tianxia/feasts.py 把 sys.modules 換成宴客包的 rules）就是那一包：註了過渡也擋
     ("from tianxia import feasts  # 過渡：待搬\n", "別的包 feast"),
     ("from tianxia.feasts import ToastRequest\n", "別的包 feast"),
@@ -1405,7 +1419,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # checkin（全部拆包第 30 批：tianxia/checkin.py）
                          "checkin": "checkin",
                          # figure_acts（全部拆包第 31 批：tianxia/figure_aid.py、yuedan.py）
-                         "figure_aid": "figure_acts", "yuedan": "figure_acts"}
+                         "figure_aid": "figure_acts", "yuedan": "figure_acts",
+                         # zhuan（全部拆包第 29 批：tianxia/biography.py、zhuan_end.py）
+                         "biography": "zhuan", "zhuan_end": "zhuan"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 

@@ -16,7 +16,7 @@ from conftest import next_season
 from tianxia import annals, biography, epiphany, gender
 from tianxia.engine import Game
 
-ROOT = Path(__file__).parents[2]
+ROOT = Path(__file__).parents[4]
 
 
 @pytest.fixture

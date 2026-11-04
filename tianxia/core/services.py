@@ -237,6 +237,11 @@ explore（主動搬六包第 3＋4 批加的這一段）
   換掉 `Game.challenge_odds`，包裡經 ctx 叫才打得到）
 - `ctx._rout(fid)`（打贏他敗走：tests/gear/test_signature_arms、test_forge_divine 換掉 `Game._rout`，`challenge` 經 ctx 叫才打得到；批次表第二節）
 
+# zhuan（全部拆包第 29 批「列傳」；主人：列傳包）
+- 共用的字與小函式（從這個模組 import，列傳包的 zhuan_end re-export）：`ART`（mall.EFFECTS 的列傳插畫鍵）、`ART_NO_SIDE`、`ART_FREE`、`art_problem(state, content, season)`
+  （商城：這一季用不上的插畫票不賣）、`illustration_for(state, content, season)`（行狀 annals.standing 的插畫圖庫鍵）、`Writer`、`writers(...)`、
+  `AFFINITY／TIER／BOUGHT／REASONS`（行狀 annals.standing 的評曰寫手）；原本是 `tianxia/zhuan_end.py` 的
+
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
 explore（主動搬六包第 3＋4 批加的這一段）
@@ -345,7 +350,7 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 from __future__ import annotations
 
 import functools  # sense（第 24 批）：outing_watch 用
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple  # zhuan（第 29 批）：Writer 用
 
 from .. import calendar  # checkin（第 30 批）：checkin_on 用
 from ..models import Content
@@ -540,3 +545,68 @@ PILL_FOUND = "獲得 【{name}】一顆——不知誰落下的，正好收著�
 def checkin_on(content: Content, world: WorldState | None) -> bool:
     """簽到開著沒：設定打開（只有 season21），這一季是 21 天季（開季時蓋的章），而且還沒收季。週末與 14 天一律關著。"""
     return content.config.checkin.enabled and calendar.season21_on(world, content) and not world.ended
+
+# zhuan（全部拆包第 29 批「列傳」）：原本寫在 tianxia/zhuan_end.py；核心的行狀（annals.standing 的插畫鍵與寫評曰的人物）與商城（插畫票用不上不賣）要用、
+# 列傳包又不能被核心與別包 import，搬到這裡，zhuan_end re-export（`zhuan_end.illustration_for is services.illustration_for`）
+ART = "zhuan_art"  # mall.EFFECTS 的鍵（列傳插畫票）
+ART_NO_SIDE = "沒投靠一方的人，列傳配不了插畫。"  # 插畫票不賣的原因（FB-845）
+ART_FREE = "你的列傳得了第一階，插畫白送，不必買。"
+AFFINITY, TIER, BOUGHT = "affinity", "tier", "bought"  # 誰替你寫：情誼 70 以上的、第一二階的主將或家主、買了親筆評曰請的
+REASONS = (AFFINITY, TIER, BOUGHT)
+
+
+class Writer(NamedTuple):
+    fid: str  # 人物 id（content.characters）
+    reason: str  # AFFINITY／TIER／BOUGHT
+
+
+def illustration_for(state: GameState, content: Content, season: WorldState) -> str:
+    """列傳插畫的圖庫鍵「<陣營>_<win|lose>」（第一批 6 張：三方各贏、各輸；設計第九章）。兩軍看結局贏的是不是自己；豪強看照哪一本論功
+    （那一本是贏的那一軍才算贏；沒論功照此刻幫的那一軍）；和局都是 lose。散人、季還沒收是空字串。"""
+    from ..wins import winner_of  # noqa: PLC0415
+
+    p = state.player
+    faction = content.scenario.find_faction(p.faction)
+    if faction is None or not season.ended:
+        return ""
+    winner = winner_of(season, content)
+    if faction.allies:
+        result = season.final_tiers.get(p.name)
+        side = result.ledger_used if result is not None and result.ledger_used in faction.allies else p.ally
+        won = winner is not None and side == winner
+    else:
+        won = winner == faction.id
+    return f"{faction.id}_{'win' if won else 'lose'}"
+
+
+def art_problem(state: GameState, content: Content, season: WorldState) -> str | None:
+    """列傳插畫票這一季用不用得上（FB-845）：用不上就不賣，回商城那一列灰掉要寫的原因；用得上是 None。
+    沒投靠劇本裡的陣營的人（散人）列傳配不了插畫；休季時已經得第一階的人插畫白送（Game._zhuan_options 也是這兩條），
+    季中看不出會是第幾階，照舊賣。"""
+    p = state.player
+    if content.scenario.find_faction(p.faction) is None:
+        return ART_NO_SIDE
+    result = season.final_tiers.get(p.name) if season.ended else None
+    return ART_FREE if result is not None and result.tier == 1 else None
+
+
+def writers(state: GameState, content: Content, season: WorldState) -> list[Writer]:
+    """這一季替你寫評曰的人物（不含買了請的，那幾位照票）：第一、二階由自己這一方 FactionDef.verdict_by 裡跟你情誼最高的那一位寫
+    （一樣高照寫的順序；官軍皇甫嵩或盧植、黃巾張角或波才、豪強曹操）；情誼到 signature_affinity（70）以上的人物各一位（情誼高的在前），
+    最多 Config.jianfa.verdict_affinity_max（3）位——深交不限人數之後（企劃者 2026-10-28），PM 定只取情誼最高的前三位，省模型呼叫、
+    固定句也不重複。同一位人物只寫一條。關著的季、散人沒有階也沒有 70 以上的人物是空的。"""
+    p, c = state.player, content
+    out: dict[str, str] = {}
+    result = season.final_tiers.get(p.name)
+    faction = c.scenario.find_faction(p.faction)
+    if result is not None and result.tier in (1, 2) and faction is not None and faction.verdict_by:
+        order = {cid: i for i, cid in enumerate(faction.verdict_by)}
+        out[min(faction.verdict_by, key=lambda cid: (-p.affinities.get(cid, 0), order[cid]))] = TIER
+    edge, room = c.config.signature_affinity, c.config.jianfa.verdict_affinity_max
+    for cid, value in sorted(p.affinities.items(), key=lambda x: (-x[1], x[0])):
+        if room <= 0:
+            break
+        if value >= edge and cid in c.characters and cid not in out:
+            out[cid] = AFFINITY
+            room -= 1
+    return [Writer(cid, reason) for cid, reason in out.items()]

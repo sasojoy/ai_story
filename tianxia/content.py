@@ -2846,12 +2846,9 @@ def validate(c: Content) -> None:
             from .wins import check as wins_check  # noqa: PLC0415  延後 import：wins → allied → calendar，content 不必一開始就依賴
 
             errors.extend(f"config.jianfa.{line}" for line in wins_check(c, jf))
-    # 列傳為終點（減法季批 7b-2）：寫評曰的人物要在 characters 裡；評曰的固定句照 zhuan_end.check_verdicts（理由、長度、沒有數字）
+    # 列傳為終點（減法季批 7b-2）：寫評曰的人物要在 characters 裡；評曰的固定句在列傳包的 check_content 驗（理由、長度、沒有數字）
     for faction in c.scenario.factions:
         need(all(cid in c.characters for cid in faction.verdict_by), f"陣營 {faction.id}：verdict_by 寫的人物不在 characters 裡（{faction.verdict_by}）")
-    from .zhuan_end import check_verdicts  # noqa: PLC0415
-
-    errors.extend(f"verdicts.json：{line}" for line in check_verdicts(c))
     # 輿圖上的一個字（輿圖第三版第 3 批，FactionInk.short）：天下圖大區名底下「官 N・巾 N」照它認是哪一方，兩方同一個字就分不出來
     shorts = [f.ink.short for f in c.scenario.factions if f.ink is not None and f.ink.short]
     need(len(shorts) == len(set(shorts)), f"劇本：陣營在輿圖上的一個字（ink.short）重複了：{'、'.join(shorts)}")

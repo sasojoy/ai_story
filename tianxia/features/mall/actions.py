@@ -11,10 +11,9 @@ from typing import TYPE_CHECKING
 from tianxia import calendar
 from tianxia import journal  # 核心（江湖紀錄，PM 10/31）：帶 changes 的那一則 ctx._write 寫不了
 from tianxia import server_bots  # 過渡：待搬（保留的名號：易名帖撞名照建角色）
-from tianxia import zhuan_end  # 過渡：待搬（這一季用不上的列傳插畫票不賣，FB-845）
 from tianxia.accounts import NAME_TAKEN as NAME_IN_USE, AccountStore
 from tianxia.characters import CharacterStore, name_key
-from tianxia.core.services import NO_SUCH_PLAYER
+from tianxia.core.services import ART as ZHUAN_ART, NO_SUCH_PLAYER, art_problem  # 這一季用不上的列傳插畫票不賣（FB-845；全部拆包第 29 批進核心服務）
 from tianxia.rules import jianfa
 from tianxia.state import GameState, JournalEntry, Rumor
 from tianxia.wallet import Wallet
@@ -73,8 +72,8 @@ def moment(ctx: Game) -> mall.Moment:
     rules_named = {item.on_sale.rule for item in c.mall.values() if item.on_sale.rule}
     rules = frozenset(part for part in rules_named if jianfa(c, w, part))
     blocked: dict[str, str] = {}
-    if "zhuan_end" in rules and (unfit := zhuan_end.art_problem(ctx.state, c, w)):  # 這一季用不上的插畫票不賣（FB-845）
-        blocked.update({item.id: unfit for item in c.mall.values() if item.effects.get(zhuan_end.ART)})
+    if "zhuan_end" in rules and (unfit := art_problem(ctx.state, c, w)):  # 這一季用不上的插畫票不賣（FB-845）
+        blocked.update({item.id: unfit for item in c.mall.values() if item.effects.get(ZHUAN_ART)})
     return mall.Moment(
         phase="resting" if phase == "resting" else "season",
         week=calendar.point(w.time, c, w).week if phase == "running" and not w.ended else None,

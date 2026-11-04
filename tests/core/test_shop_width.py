@@ -144,7 +144,7 @@ def test_reading_a_biography_in_game_follows_the_column_but_the_public_page_does
     assert rules[".zhuan-layer > .zh-bar, .zhuan-layer > .zh-head"] == f"margin-left: {side}; margin-right: {side};"
     for selector in ",".join(rules).split(","):
         assert selector.strip().startswith(".zhuan-layer"), selector
-    assert "zhuan-layer" not in (server.ROOT / "zhuan_html.py").read_text(encoding="utf-8")
+    assert "zhuan-layer" not in (server.ROOT / "tianxia" / "features" / "zhuan" / "zhuan_html.py").read_text(encoding="utf-8")
 
 
 def _shop_col(html: str) -> str:
