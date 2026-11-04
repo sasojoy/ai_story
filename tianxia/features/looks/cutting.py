@@ -41,12 +41,37 @@ def pick(rs, weights, k):
     rs=sorted(zip(rs,weights), key=lambda t:-t[1])[:k]
     return sorted(r for r,_ in rs)
 
+ROW_SEARCH = 0.2  # 兩排之間的切線：在等分線上下各找這麼多排高，挑最空的那一列
+
+
+def row_cuts(clean, rows):
+    """兩排之間從哪一列切（回 rows+1 個邊界）。
+
+    為什麼不照等分線切（2026-11-03 畫坊量測，正式站 #495 hero_bare_fall 卡死的那一關）：klein 畫 3×2 的圖時
+    第一排的人常常畫得比半張高，腳伸過中線（量到的一張腳底在 y≈460、中線 416）。照等分線切，第一排三格
+    的腳被切掉、切線被當成腳底對到地平線；切下來的那雙腳留在第二排的格子上面，審圖寫「第5、6格上方出現
+    多餘的另一雙腳」——十次全掛，但那是我們切壞的，不是生圖畫壞的。
+    挑法：等分線上下 ROW_SEARCH 排高之內，墨最少的那幾列裡離等分線最近的一列。等分線本來就落在空白裡的圖
+    （斗笠小子、之前過關的那些）切線不變，切出來一模一樣。"""
+    H = clean.shape[0]
+    ink = clean.sum(1)
+    cuts = [0]
+    for r in range(1, rows):
+        mid = r*H//rows
+        lo, hi = max(cuts[-1]+1, mid-int(H/rows*ROW_SEARCH)), min(H-1, mid+int(H/rows*ROW_SEARCH))
+        best = ink[lo:hi+1].min()
+        cands = [y for y in range(lo, hi+1) if ink[y] == best]
+        cuts.append(min(cands, key=lambda y: abs(y-mid)))
+    return cuts + [H]
+
+
 def frames(mask, cols, rows):
     H, W = mask.shape
     clean = ndimage.binary_opening(mask, iterations=1)
+    cuts = row_cuts(clean, rows)
     out = []
     for r in range(rows):
-        y0, y1 = r*H//rows, (r+1)*H//rows
+        y0, y1 = cuts[r], cuts[r+1]
         band = clean[y0:y1]
         proj = band.sum(0).astype(float)
         cr = runs(ndimage.binary_dilation(proj > 2, iterations=4))
@@ -144,6 +169,12 @@ LAYOUT = {  # 十張 → (每排幾格, 幾排)；格數同 tianxia/features/loo
 
 
 MIN_INK = 600  # 一格至少要有這麼多不透明的點，不然算空的（220×220 的格子，一個小人大概四五千點）
+# 一格只能有一塊（2026-11-03 量：斗笠小子擂台十張、走一趟九張、#494／#495 過關的七張，一百多格全部剛好一塊
+# 大於 BLOB_PX 的連通塊；被審圖擋下的「多一個人」「上方多出另一雙腳」「頭和手的碎片」都是 2～4 塊）。
+# 這幾樣以前要等審圖才擋得下來，一次一份錢。
+BLOB_PX = 300
+# 一格的墨點不能比整條的中位數少太多：只剩一雙被切斷的腳那一格是 0.13；好的最低是斗笠小子躺著的 0.68
+INK_SHARE_MIN = 0.35
 EDGE = 2  # 上下緣留白至少幾列
 LINE_SHARE = 0.8  # 一列橫跨格寬這麼多比例、而且上下都空 → 當成畫出來的地面線
 # 相鄰兩格最多能有多像（形狀重疊率）：照 web/img/arena 的斗笠小子量出來的上限加 0.10 餘裕（2026-11-02 量）。
@@ -188,13 +219,25 @@ def sheet_problems(strip: "Image.Image", frames: int, name: str | None = None) -
     alpha = a[..., 3]
     bad: list[str] = []
     fixes: list[str] = []
+    inks = [int((alpha[:, k * CELL:(k + 1) * CELL] > 32).sum()) for k in range(frames)]
+    median = float(np.median(inks)) if inks else 0.0
     for k in range(frames):
         cell = alpha[:, k * CELL:(k + 1) * CELL]
-        ink = int((cell > 32).sum())
+        ink = inks[k]
         if ink < MIN_INK:
             bad.append(f"第 {k + 1} 格幾乎是空的（只有 {ink} 點）")
             fixes.append(f"frame {k + 1} is empty — draw the whole character in every frame")
             continue
+        if median and ink < median * INK_SHARE_MIN:
+            bad.append(f"第 {k + 1} 格只剩一小塊（墨點只有其他格的 {ink / median:.0%}）")
+            fixes.append("draw ONE whole character in every frame, each fully inside its own cell, with wide white gaps "
+                         "between the rows and the columns")
+            continue
+        lab, n = ndimage.label(cell > 32)
+        if n > 1 and int((ndimage.sum(cell > 32, lab, range(1, n + 1)) > BLOB_PX).sum()) > 1:
+            bad.append(f"第 {k + 1} 格不只一塊（多一個人，或別格的手腳碎片）")
+            fixes.append("draw exactly ONE character in every frame, each fully inside its own cell, with wide white gaps "
+                         "between the rows and the columns; nothing else in the picture")
         rows_with = np.nonzero((cell > 32).max(1))[0]
         if rows_with.min() < EDGE:
             bad.append(f"第 {k + 1} 格的人貼到上緣（第 {int(rows_with.min())} 列就有東西）")
@@ -459,17 +502,105 @@ def drop_white_holes(strip: "Image.Image", min_share: float = 0.0) -> "Image.Ima
     return Image.fromarray(a, "RGBA")
 
 
+# 穿白衣的角色雙腿之間的白底（企劃者 2026-11-04「身穿白色衣服的幾個角色……雙腿中間的白色沒有去背，請針對這種案件做處理」）：
+# keep_white 整套不挖封閉白塊，腿縫也一起留下來，疊在擂台上是兩腿之間一塊白。腿縫長這樣：站著的那一格、碰到地面、
+# 夠大、矮胖。2026-11-04 量正式站七套（小龍女、功夫貓、錦袍槍客、白袍銀槍、閉月舞姬、聖誕老人，加白衣書生）逐格看過：
+#   真的腿縫 137 塊：寬高比最小 0.78、填滿比最小 0.35
+#   白衣書生的衣襬（不准挖）兩塊：寬高比 0.68／填滿 0.20、寬高比 0.33／填滿 0.45
+#   小龍女倒地（躺著，身體寬大於高，0.47）不算站著；跪地第 4 格（褲子）面積不到 GAP_MIN
+#   放寬到 0.8 多挖到的 16 格（跨步、蹲下撿東西）逐格看過都是腿縫；0.6～0.85 之間一格都沒有
+GAP_UPRIGHT = 0.8  # 那一格身體高至少是寬的這麼多倍才算站著（躺著的約 0.5；1.15 會漏掉跨大步、蹲著的那幾格，企劃者 2026-11-04 看線上錦袍槍客閃避第 3 格）
+GAP_NEAR = 14  # 白塊最低點離地面線（BY）這麼近以內才算碰到地
+GAP_MIN = 150  # 像素
+GAP_ASPECT = 0.75  # 寬／高
+GAP_FILL = 0.30  # 面積／外框
+
+
+def leg_gaps(strip: "Image.Image"):
+    """穿白衣的角色那一條裡，雙腿之間的白底（遮罩）。條件見上面的量測。"""
+    ink, big = _white_blobs(strip)
+    lab, n = ndimage.label(big)
+    gaps = np.zeros_like(big)
+    for i in range(1, n + 1):
+        one = lab == i
+        ys, xs = np.nonzero(one)
+        h, w = int(ys.max() - ys.min()) + 1, int(xs.max() - xs.min()) + 1
+        if len(ys) < GAP_MIN or ys.max() < BY - GAP_NEAR or w < GAP_ASPECT * h or len(ys) < GAP_FILL * h * w:
+            continue
+        k = int(xs.mean()) // CELL
+        cy, cx = np.nonzero(ink[:, k * CELL:(k + 1) * CELL])
+        if not len(cy) or (cy.max() - cy.min() + 1) < GAP_UPRIGHT * (cx.max() - cx.min() + 1):
+            continue
+        gaps |= one
+    return gaps
+
+
+# 地上的影子（企劃者 2026-11-04「腳的中間都還是會有沒去背成功的白色」）：klein 常在腳底畫一圈淺灰白的影子，
+# 斗笠小子與四套舊形象都沒有，疊在擂台上就是腳底一攤白。每一欄從底往上，地面線附近 SHADOW_BAND 列以內、
+# 淺而且沒顏色的點挖掉，碰到線條（深色）或透明就停——白靴子在鞋底那條線上面，挖不到；
+# 量過（2026-11-04）：斗笠小子、俠女每張 1～22 點，新八套每張 300～2300 點；白衣書生、小龍女躺著跪著坐著都沒傷到衣服。
+SHADOW_BAND = 12
+SHADOW_LIGHT = 180  # RGB 最小值
+SHADOW_SAT = 40  # RGB 最大減最小
+SPECK = 40  # 挖完之後地面線附近剩下比這小的碎點一起清掉
+
+
+def ground_shadow(strip: "Image.Image"):
+    a = np.asarray(strip)
+    rgb = a[..., :3].astype(np.int16)
+    lo, hi = rgb.min(axis=2), rgb.max(axis=2)
+    solid = a[..., 3] > 32
+    light = solid & (lo >= SHADOW_LIGHT) & (hi - lo <= SHADOW_SAT)
+    kill = np.zeros(a.shape[:2], dtype=bool)
+    top = max(0, BY - SHADOW_BAND)
+    for x in range(a.shape[1]):
+        for y in range(a.shape[0] - 1, top - 1, -1):
+            if not solid[y, x]:
+                if y < BY - 2:
+                    break
+                continue
+            if not light[y, x]:
+                break
+            kill[y, x] = True
+    if kill.any():
+        left = solid & ~kill
+        lab, n = ndimage.label(left)
+        if n:
+            sizes = ndimage.sum(left, lab, range(1, n + 1))
+            low = ndimage.maximum(np.indices(left.shape)[0], lab, range(1, n + 1))
+            kill |= np.isin(lab, [i + 1 for i in range(n) if sizes[i] < SPECK and low[i] >= top])
+    return kill
+
+
+def drop_ground_shadow(strip: "Image.Image") -> "Image.Image":
+    kill = ground_shadow(strip)
+    if not kill.any():
+        return strip
+    a = np.asarray(strip).copy()
+    a[kill, 3] = 0
+    return Image.fromarray(a, "RGBA")
+
+
+def drop_leg_gaps(strip: "Image.Image") -> "Image.Image":
+    gaps = leg_gaps(strip)
+    if not gaps.any():
+        return strip
+    a = np.asarray(strip).copy()
+    a[gaps, 3] = 0
+    return Image.fromarray(a, "RGBA")
+
+
 def sheet_bytes(raw: bytes, name: str, keep_white: bool = False) -> bytes:
     """生圖工具給的一張原圖 → 擂台用的一條（webp，格數照 LAYOUT）。切完自己驗一遍（sheet_problems）：
     機器看得出來的壞法直接丟 CutProblem，畫坊照它帶的那一句重畫，不叫審圖。
-    keep_white 是「這個角色穿白衣」：封閉白塊不挖（呼叫端用 wears_white 照定裝照判）。"""
+    keep_white 是「這個角色穿白衣」：封閉白塊不挖、只挖雙腿之間的白底（leg_gaps；呼叫端用 wears_white 照定裝照判）。"""
     cols, rows = LAYOUT[name]
     try:
         strip = sheet(io.BytesIO(raw), cols, rows, ref_h=BODY[name])  # 跟預設的斗笠小子一樣高，兵器才掛得準
     except (ValueError, IndexError) as exc:  # 去背之後什麼都不剩、某一格是空的
         raise CutError(f"切不出 {cols * rows} 格：{exc}") from exc
-    if not keep_white:
-        strip = drop_white_holes(strip)
+    strip = drop_leg_gaps(strip) if keep_white else drop_white_holes(strip)
+    strip = drop_ground_shadow(strip)
     bad, fix = sheet_problems(strip, cols * rows, name)
     if bad:
         raise CutProblem(bad, fix)

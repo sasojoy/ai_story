@@ -188,15 +188,16 @@ def test_the_server_writes_a_round_outside_the_lock(content, game, monkeypatch):
     _gambled_round(content, game)
     seen = []
 
-    def write(client, act, items, setting="漢末兩軍交戰的戰場", sides=()):
-        seen.append((game.world.db.writing(), [i.name for i in items], tuple(sides)))
+    def write(client, act, items, setting="漢末兩軍交戰的戰場", sides=(), fallen=()):
+        seen.append((game.world.db.writing(), [i.name for i in items], tuple(sides), tuple(fallen)))
         return {"沈浪": "沈浪一把火燒了營寨。"}
 
     monkeypatch.setattr(bi, "write_tales", write)
     monkeypatch.setitem(server.CONTENT.battles, "t2", content.battles["t2"])
     assert server.narrate_once(game) == 1
-    # 第三格是兩軍的名字：守門要靠它（失手那一句不准寫敵方受損，Joy 2026-10-19）
-    assert seen == [(False, ["沈浪"], ("官軍", "黃巾"))]
+    # 第三格是兩軍的名字（失手那一句不准寫敵方受損，Joy 2026-10-19）、第四格是這一回合引擎真的放倒的人
+    # （寫到死人的那一句要指名他們其中一位，企劃者 2026-11-04）：兩個守門都靠這張單子帶過來
+    assert seen == [(False, ["沈浪"], ("官軍", "黃巾"), ())]
     assert server.narrate_once(game) is None
 
 
@@ -241,3 +242,41 @@ def test_a_battle_gamble_may_queue_for_its_whole_budget(game, monkeypatch, left)
     server.model_call(game, lambda: 1, fallback=0, left=left, max_wait=left)
     server.model_call(game, lambda: 1, fallback=0, left=left)
     assert waits == [left, min(left, game.content.config.llm_queue_wait_seconds)]
+
+
+def test_a_gamble_cannot_kill_anyone_the_engine_did_not_fell():
+    """企劃者 2026-11-04（第 8 季廣宗）：玩家喊「取其首級讓她下班！」判成功，戰報就寫對方被斬首，
+    可是她整場沒倒下——「成了」只代表引擎把戰線推過去，誰死誰活只看氣血歸零（fell_round）。
+    寫到死人的那一句要指名這一回合真的倒下的人才算數，其餘整句不用、照固定句播。"""
+    client = mock.Mock()
+    items = [bi.TaleItem(name="彩加", faction_name="官軍", text="取其首級", won=True, target="黃0")]
+    client.chat_structured.return_value = bi.TaleBatch(
+        lines=[bi.TaleLine(name="彩加", story="彩加一刀斬落黃0的首級。")])
+    assert bi.write_tales(client, ACT, items) == {}  # 沒有人倒下：整句不用
+    assert "這一回合沒有人倒下。" in client.chat_structured.call_args.args[0][1]["content"]
+    got = bi.write_tales(client, ACT, items, fallen=["黃0"])  # 引擎真的把他放倒了：照收
+    assert got == {"彩加": "彩加一刀斬落黃0的首級。"}
+    assert "這一回合倒下的：黃0" in client.chat_structured.call_args.args[0][1]["content"]
+    client.chat_structured.return_value = bi.TaleBatch(  # 有人倒下，但寫死的是別人
+        lines=[bi.TaleLine(name="彩加", story="彩加一刀斬落黃1的首級。")])
+    assert bi.write_tales(client, ACT, items, fallen=["黃0"]) == {}
+    client.chat_structured.return_value = bi.TaleBatch(  # 逼退、重創照舊可以寫
+        lines=[bi.TaleLine(name="彩加", story="彩加一刀逼得黃0連退三步。")])
+    assert bi.write_tales(client, ACT, items) == {"彩加": "彩加一刀逼得黃0連退三步。"}
+
+
+def test_the_words_that_count_as_killing_someone():
+    for story in ("甲斬落其首級。", "甲一槍斃命。", "乙倒在血泊之中。", "丙當場氣絕。", "丁陣亡於陣前。"):
+        assert bi.claims_a_kill(story), story
+    for story in ("甲死守城門。", "乙拚死一搏。", "丙被打倒在地。", "丁狼狽倒地。", "戊重創對手。"):
+        assert not bi.claims_a_kill(story), story  # 「死守」「拚死」「倒地」不算
+
+
+def test_the_two_versions_written_before_the_roll_cannot_kill():
+    """評分那一趟是**擲骰之前**寫的，這時候誰會倒下還不知道：寫到死人的那一版不用。
+    不用＝這一搏沒有現成劇情，引擎先播固定句、記一筆等回合結算後再寫（那時候才知道誰真的倒了）。"""
+    client = mock.Mock()
+    client.chat_structured.return_value = bi.SuccessRateJudgment(
+        success_rate=55, reasoning="", win="彩加取下黃0的首級。", lose="彩加撲了個空，摔了一跤。")
+    verdict = bi.assess_gamble(client, ACT, "官軍", "取其首級", "彩加", target="黃0")
+    assert verdict.rate == 55 and verdict.win == "" and verdict.lose == "彩加撲了個空，摔了一跤。"

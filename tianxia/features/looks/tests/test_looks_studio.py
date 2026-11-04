@@ -90,6 +90,39 @@ def test_three_misses_stop_until_the_admin_says_again(on):
     assert actions.admin_studio_retry(game, pid)[-1] == "（此刻無法這麼做。）"  # 不是管理者
 
 
+def test_a_look_sheet_that_never_passes_is_skipped_and_the_rest_are_painted(on):
+    """企劃者 2026-11-04：某一張十次都沒畫好就先跳過、把其他張畫完，全部輪過了才停手等管理者
+    （#495 卡在走一趟揮砍，排在後面的打坐、推一直輪不到）。「再畫一次」連跳過的一起清掉。"""
+    game = _game(on)
+    actions.order(game, "雪衣", "長髮飄飄的仙子", "look-ref-805")
+    pid = orders.mine(Wallet(game.world.db), game._mall_owner())[0].pid
+    root = actions.image_root(game)
+    folder = orders.folder(root, orders.look_id(pid))
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "ref.png").write_bytes(b"portrait")
+
+    class NoHit(Critic):
+        def review(self, checklist, image, refs):
+            self.seen.append(checklist)
+            hit = orders.ACTIONS["hero_bare_hit"] in checklist
+            return studio.Verdict(False, ["挨打那張讀不出來"], "redo") if hit else studio.Verdict(True)
+
+    painter, critic = Painter(), NoHit()
+    lines = []
+    for _ in range(len(orders.SHEETS) + 2):
+        lines += _tick(game, painter, critic, tries=2)
+    assert any("hero_bare_hit 沒畫好，先跳過、畫其他張" in line for line in lines)
+    assert "停手等管理者" in lines[-1] and "hero_bare_hit" in lines[-1]
+    assert set(orders.SHEETS) - set(orders.present(root, orders.look_id(pid))) == {"hero_bare_hit"}  # 其他十五張都畫了
+    data = Wallet(game.world.db).purchase(pid).data["studio"]
+    assert list(data["skipped"]) == ["hero_bare_hit"] and "沒畫好的 1 張" in data["failed"]
+    assert orders.of(Wallet(game.world.db).purchase(pid)).status == orders.PENDING  # 十六張沒齊，不會待審
+    assert _tick(game, painter, critic) == []  # 停手了不再畫
+    assert studio.retry(Wallet(game.world.db), pid)
+    assert "skipped" not in Wallet(game.world.db).purchase(pid).data["studio"]
+    assert _tick(game, painter, Critic())[0].startswith(f"#{pid} hero_bare_hit 收了")
+
+
 def test_a_cut_that_fails_counts_as_a_miss(on):
     game = _game(on)
     pid = _move_order(on, game)
@@ -172,6 +205,103 @@ def test_a_look_starts_from_its_portrait_and_draws_ten_sheets(on):
     assert orders.of(Wallet(game.world.db).purchase(pid)).status == orders.REVIEW
     row = actions.admin_view(_admin(on, game.world))["open"][0]
     assert row["studio"]["painted"] == 1 + len(orders.SHEETS)
+
+
+def test_the_players_words_are_painted_as_an_english_description(on):
+    """2026-11-04 畫坊量測：玩家那一句中文原封不動塞進提示詞，「女版斗笠小子」十次都畫成參考圖的男孩；換成英文描述第一次就過。
+    定裝照照那一句寫；十六張照定裝照寫（畫的是定裝照上那個人），一套只問一次、記在訂單上；審圖的照舊看玩家那一句。"""
+    game = _game(on)
+    actions.order(game, "雪衣", "女版斗笠小子", "look-ref-804")
+    pid = orders.mine(Wallet(game.world.db), game._mall_owner())[0].pid
+    PNG = b"\x89PNG\r\n\x1a\n" + b"1" * 20
+
+    class PortraitPainter(Painter):
+        def paint(self, prompt, images, aspect, size):
+            super().paint(prompt, images, aspect, size)
+            return PNG
+
+    class Words(Critic):
+        texts, images = [], []
+
+        def describe_text(self, text):
+            self.texts.append(text)
+            return "a girl with two long braids under a conical straw hat"
+
+        def describe_image(self, image):
+            self.images.append(image)
+            return "a girl in a tan plaid vest and a grey scarf"
+
+    painter, critic = PortraitPainter(), Words()
+    assert _tick(game, painter, critic) == [f"#{pid} 定裝照好了"]
+    assert critic.texts == ["女版斗笠小子"]
+    assert "two long braids" in painter.calls[0][0] and "女版斗笠小子" not in painter.calls[0][0]
+    assert "女版斗笠小子" in critic.seen[0]  # 審圖照舊對玩家那一句
+    _tick(game, painter, critic)
+    _tick(game, painter, critic)
+    assert critic.images == [PNG]  # 兩張只描述一次（記在訂單上，照定裝照的指紋）
+    assert all("tan plaid vest" in p and "女版斗笠小子" not in p for p, _ in painter.calls[1:3])
+    studio_data = Wallet(game.world.db).purchase(pid).data["studio"]
+    assert studio_data["design"]["text"] == "a girl in a tan plaid vest and a grey scarf"
+    # 審圖的沒有這兩個本事（測試假人）就照舊用玩家那一句：上一條測試就是這樣
+
+
+def test_dodge_and_fall_are_painted_from_a_gray_silhouette_but_reviewed_against_the_hat_boy(on):
+    """閃避、被擊倒兩張畫圖時第一張參考圖換成灰色剪影（studio.POSE；2026-11-03 量：彩色原圖會被當成要畫的人，
+    斗笠、格紋護甲漏到玩家的角色身上，第一次就過的比例 dodge 6%→31%、fall 6%→17%）。審圖照舊看彩色原圖，其他張照舊。"""
+    game = _game(on)
+    actions.order(game, "雪衣", "長髮飄飄，仙氣十足的仙子", "look-ref-002")
+    pid = orders.mine(Wallet(game.world.db), game._mall_owner())[0].pid
+    folder = orders.folder(actions.image_root(game), orders.look_id(pid))
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "ref.png").write_bytes(b"portrait")
+    jobs = {j.slot: j for j in studio.jobs(game.content, Wallet(game.world.db), actions.image_root(game), actions.WEB_IMG)
+            if j.pid == pid}
+    assert set(jobs) == {"hero_bare_idle"}  # 一張單一次只排下一張：先確認其他張不帶剪影
+    assert jobs["hero_bare_idle"].pose is None and studio.SHEET_EXTRA in jobs["hero_bare_idle"].prompt
+    for sheet in orders.SHEETS:  # 讓 dodge 變成下一張
+        if sheet == "hero_bare_dodge":
+            break
+        orders.save_sheet(actions.image_root(game), orders.look_id(pid), sheet, SHEET[sheet])
+    job = next(j for j in studio.jobs(game.content, Wallet(game.world.db), actions.image_root(game), actions.WEB_IMG)
+               if j.pid == pid)
+    assert job.slot == "hero_bare_dodge" and job.pose == studio.POSE_DIR / "hero_bare_dodge.png"
+    assert studio.POSE_EXTRA in job.prompt and studio.SHEET_EXTRA not in job.prompt
+
+    class Seen(Painter):
+        def paint(self, prompt, images, aspect, size):
+            self.images = images
+            return super().paint(prompt, images, aspect, size)
+
+    class SeenCritic(Critic):
+        def review(self, checklist, image, refs):
+            self.refs = refs
+            return super().review(checklist, image, refs)
+
+    painter, critic = Seen(), SeenCritic()
+    assert studio.work(job, painter, critic, cut).ok
+    assert painter.images[0] == job.pose.read_bytes() and painter.images[1] == b"portrait"
+    assert critic.refs[0] == SHEET["hero_bare_dodge"]  # 審圖照舊看斗笠小子的彩色原圖
+    for sheet in studio.POSE:  # 剪影要跟著程式一起進版控（scripts/make_pose_refs.py 產的）
+        assert (studio.POSE_DIR / f"{sheet}.png").is_file(), sheet
+
+
+def test_the_run_silhouette_drops_the_hat_boys_sword():
+    """跑步的剪影去掉斗笠小子腰間的劍（2026-11-04 #495：留著劍的剪影六張都被判「帶兵器」）：細長的拿掉，身體一點不少。"""
+    import importlib.util
+    from pathlib import Path
+
+    import numpy as np
+
+    path = Path(__file__).resolve().parents[4] / "scripts" / "make_pose_refs.py"
+    spec = importlib.util.spec_from_file_location("make_pose_refs", path)
+    pose = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pose)
+    assert "hero_run" in studio.POSE and "hero_run" in pose.NO_PROPS
+    cell = np.zeros((220, 220), dtype=bool)
+    cell[60:200, 80:140] = True  # 身體
+    cell[150:155, 20:80] = True  # 劍：五列粗、往後伸出去
+    out = pose.no_props(cell)
+    assert out[60:200, 80:140].all() and not out[150:155, 20:70].any()  # 貼著身體的那幾點會留著，不要緊
 
 
 def test_budget_and_fake_orders_are_skipped(on, monkeypatch):
@@ -385,10 +515,11 @@ def test_frames_that_barely_move_are_sent_back_to_be_redrawn():
         assert not bad, (sheet, bad)
 
     def strip(shift, frames=4):
-        """每一格往右挪 shift 像素（shift 小＝幾乎沒動）；第 3 格另外往前探，免得先被「前後擺幅」那一關擋掉。"""
+        """每一格往右挪 shift 像素（shift 小＝幾乎沒動）；第 3 格另外往前探，免得先被「前後擺幅」那一關擋掉。
+        前探 15 不是 45：45 會讓第 3 格伸進第 4 格，被「一格只能有一塊」擋下（真的切出來的格不會跨格）。"""
         im = Image.new("RGBA", (frames * cutting.CELL, cutting.CELL), (0, 0, 0, 0))
         for k in range(frames):
-            ox = k * cutting.CELL + 70 + k * shift + (45 if k == 2 else 0)
+            ox = k * cutting.CELL + 70 + k * shift + (15 if k == 2 else 0)
             for y in range(cutting.BY - 150, cutting.BY):
                 for x in range(ox, ox + 60):
                     im.putpixel((x, y), (40, 40, 60, 255))
@@ -401,6 +532,53 @@ def test_frames_that_barely_move_are_sent_back_to_be_redrawn():
     assert cutting.sheet_problems(strip(1, 6), 6, "hero_bare_fall")[0] == []
     # 沒給張名就不驗這一項（舊呼叫端）
     assert cutting.sheet_problems(strip(1), 4)[0] == []
+
+
+def test_two_row_sheets_are_cut_in_the_gap_not_at_the_midline():
+    """3×2 的圖第一排畫得比半張高（腳伸過中線）：切線要落在兩排之間的空白，不是等分線
+    （2026-11-03 畫坊量測：#495 hero_bare_fall 十次全掛，審圖寫「上方出現多餘的另一雙腳」——是我們切壞的）。
+    等分線本來就在空白裡的圖，切線不變。"""
+    pytest.importorskip("scipy")
+    import numpy as np
+
+    from tianxia.features.looks import cutting
+
+    tall = np.zeros((400, 300), dtype=bool)
+    tall[20:230, 100:160] = True  # 第一排的人，腳在 230（中線 200）
+    tall[270:390, 100:160] = True  # 第二排
+    assert cutting.row_cuts(tall, 2) == [0, 230, 400]  # 空白裡離中線最近的那一列
+    fits = np.zeros((400, 300), dtype=bool)
+    fits[20:180, 100:160] = True
+    fits[230:390, 100:160] = True
+    assert cutting.row_cuts(fits, 2) == [0, 200, 400]  # 原本就切在空白裡：照舊
+
+
+def test_a_frame_with_a_second_figure_or_a_stray_fragment_is_sent_back():
+    """一格只能有一塊、而且不能只剩一小塊（2026-11-03 量：斗笠小子與過關的那幾套一百多格全部一塊、最少是其他格的 0.68；
+    被審圖擋下的多一個人、別格的腳是 2～4 塊，只剩一雙腳的那一格是 0.13）。機械驗就擋，不花審圖的錢。"""
+    pytest.importorskip("scipy")
+    from PIL import Image
+
+    from tianxia.features.looks import cutting
+
+    def strip(extra=None, small=None):
+        im = Image.new("RGBA", (4 * cutting.CELL, cutting.CELL), (0, 0, 0, 0))
+        for k in range(4):
+            top = cutting.BY - (20 if k == small else 150)
+            for y in range(top, cutting.BY):
+                for x in range(k * cutting.CELL + 60 + 15 * k, k * cutting.CELL + 120 + 15 * k):
+                    im.putpixel((x, y), (40, 40, 60, 255))
+        if extra is not None:  # 那一格上方多一塊（別格的腳）
+            for y in range(10, 40):
+                for x in range(extra * cutting.CELL + 150, extra * cutting.CELL + 180):
+                    im.putpixel((x, y), (40, 40, 60, 255))
+        return im
+
+    assert cutting.sheet_problems(strip(), 4)[0] == []
+    bad, fix = cutting.sheet_problems(strip(extra=2), 4)
+    assert bad == ["第 3 格不只一塊（多一個人，或別格的手腳碎片）"] and "exactly ONE character" in fix
+    bad, _ = cutting.sheet_problems(strip(small=1), 4)
+    assert len(bad) == 1 and bad[0].startswith("第 2 格只剩一小塊")
 
 
 def test_a_sprite_that_never_moves_forward_is_sent_back():
@@ -749,6 +927,21 @@ def test_the_redraw_limit_comes_from_the_painter(on):
     assert not out.ok and out.painted == 5 and len(painted) == 5
     out = studio.work(jobs[0], Never(), No(), cut)  # 不給就是雲端那個上限
     assert out.painted == studio.MAX_TRIES == 3
+
+
+def test_the_local_painter_redraws_from_scratch_instead_of_copying_the_failed_picture(on):
+    """本機 klein 沒過就重新畫（同一份提示詞與參考圖），不把失敗的那張當第一張參考圖（2026-11-03 量：它會照抄，
+    十次綁在一起；正式站 #494 的 hero_bare_fall 部署剪影之後還是十連掛）。雲端照舊照意見改。"""
+    from tianxia.features.looks.studio_local import LocalPainter
+
+    game = _game(on)
+    _move_order(on, game)
+    job = studio.jobs(on, Wallet(game.world.db), actions.image_root(game), actions.WEB_IMG)[0]
+    critic = Critic([studio.Verdict(False, ["佛像多了一隻手"], "Remove the extra arm.")])
+    painter = Painter()
+    assert studio.work(job, painter, critic, cut, tries=3, fresh=True).ok
+    assert painter.calls[1] == painter.calls[0] == (job.prompt, 1)  # 第二次跟第一次一模一樣：沒有上一張、沒有改法
+    assert LocalPainter.fresh_retries is True and not getattr(Painter, "fresh_retries", False)
 
 
 def test_the_outing_six_are_empty_handed_too(on):

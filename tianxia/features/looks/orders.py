@@ -270,10 +270,11 @@ def find(wallet: Wallet, item: str, pid: int) -> Order | None:
 
 
 def mark(wallet: Wallet, order: Order, root: Path) -> Order:
-    """擂台那十張齊了而且還在等圖：換成待審。回最新的那一張。走一趟那六張不擋（FB-8001）：缺的走一趟照預設的斗笠小子畫
-    （web/outing.js 抓不齊就退回預設），畫坊之後照樣補（studio.jobs 對待審、上架了的只補這幾張）。"""
+    """十六張（擂台十張＋走一趟六張）齊了而且還在等圖：換成待審。回最新的那一張。
+    企劃者 2026-11-04「改成十六張全齊才算」：FB-8001 曾讓擂台十張齊了就待審、走一趟之後補，通知寫「到齊了」其實只有十張。
+    以前就待審、上架了的缺走一趟那幾張，畫坊照樣補（studio.jobs）；上架照舊要十六張齊（release）。"""
     have = present(root, look_id(order.pid))
-    if order.status == PENDING and all(s in have for s in ARENA):
+    if order.status == PENDING and all(s in have for s in SHEETS):
         wallet.update_data(order.pid, status=REVIEW)
         return Order(**{**order.__dict__, "status": REVIEW})
     return order
@@ -284,7 +285,7 @@ def release(wallet: Wallet, order: Order, root: Path) -> str:
         return f"（「{order.name}」已經上架了。）"
     if order.status == REJECTED:
         return f"（「{order.name}」已經退回了。）"
-    missing = [s for s in ARENA if s not in present(root, look_id(order.pid))]  # 走一趟那六張不擋上架（FB-8001，同 mark）
+    missing = [s for s in SHEETS if s not in present(root, look_id(order.pid))]  # 十六張齊了才上架（企劃者 2026-11-04，同 mark）
     if missing:
         return f"（「{order.name}」還缺 {len(missing)} 張：{'、'.join(missing)}。）"
     wallet.update_data(order.pid, status=MADE, look_id=look_id(order.pid))
@@ -384,16 +385,21 @@ ACTIONS = {
     "hero_bare_kneel": "Losing and dropping to one knee: 1 wobbling, 2 one knee bending, 3 kneeling, right fist planted on the ground, head down, 4 same pose, breathing hard. Layout: 4 frames in one row. Aspect 4:1.",
     "hero_bare_dodge": "Dodging. Strict side profile in every frame: the face and body always point to the right, the face is always visible, never show the back, never turn away from the viewer. Frames: 1 stance; 2 leaning far back to the left, weight on the back foot, hands pulled to the chest; 3 knees bent low, leaning back, face still visible in profile looking right; 4 springing back into stance. Each frame clearly different and the body visibly shifts left and right. Layout: 4 frames in one row. Aspect 4:1.",
     "hero_bare_block": "Guarding / blocking: 1 settling into a low, wide defensive stance, 2 both fists raised crossed in front of the chest as if holding a blade sideways to block, 3 bracing against an impact, body pushed slightly back, back foot sliding, 4 holding the guard firmly, eyes on the opponent. Layout: 4 frames in one row. Aspect 4:1.",
-    "hero_bare_fall": "Knocked down: 1 big hit, flinching back, 2 knocked back with arms up, 3 stumbling backward, 4 falling backward, 5 lying on the back, 6 lying still (knocked out, no blood). The same clothes in every frame, including lying down; no armour, no hat. In the last two frames nothing lies on the ground beside the head. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
-    "hero_atk_slash": "Two-handed overhead slash with an invisible blade: 1 stance, fists together at waist, 2 fists raised over the right shoulder, 3 fists at the top, 4 fast downward diagonal swing, 5 follow-through low in front, 6 returning to stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
-    "hero_atk_pole": "Long-weapon attack with an invisible spear, fists one behind the other at hip height: 1 low stance, 2 pulling back, 3 lunging thrust, arms extended, 4 recovering, 5 wide horizontal sweep, 6 back to stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
+    # 衣著那一句（2026-11-03 畫坊量測）：原本寫死「no armour, no hat」，本意是擋斗笠小子的斗笠、護甲漏進躺著那幾格；
+    # 但這段也是審圖的清單（studio.CHECK_SHEET 的 {action}），角色本身就戴斗笠、穿護甲的（正式站 #495）照定裝照畫就
+    # 「違反不戴帽」、不畫就「不是同一個人」，怎麼畫都過不了。改成照定裝照、不多不少。
+    "hero_bare_fall": "Knocked down: 1 big hit, flinching back, 2 knocked back with arms up, 3 stumbling backward, 4 falling backward, 5 lying on the back, 6 lying still (knocked out, no blood). Exactly the same clothes, headwear and accessories as the character design in every frame, including lying down — nothing added, nothing missing; do not borrow the hat, armour or clothes of the character in the layout reference. In the last two frames nothing lies on the ground beside the head. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
+    "hero_atk_slash": "Two-handed overhead chop with empty hands, both fists clasped together: 1 stance, clasped fists at the waist, 2 clasped fists raised over the right shoulder, 3 clasped fists high above the head, 4 both arms swinging fast diagonally down, 5 follow-through, clasped fists low in front, 6 returning to stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
+    "hero_atk_pole": "Lunge and sweep with empty hands, both fists held one behind the other at hip height: 1 low stance, 2 pulling both fists back, 3 lunging forward, both arms extended to the right, 4 recovering, 5 both arms sweeping wide and level, 6 back to stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_atk_fist": "Unarmed attack (real fists): 1 stance, fists up, 2 stepping in, 3 straight right punch, 4 pulling back, 5 high front kick, 6 landing back into stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_atk_shoot": "Shooting an invisible crossbow: 1 stance, 2 raising fists to the right shoulder, 3 aiming, 4 the shot with small recoil, 5 lowering, 6 back in stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_run": "Running to the right, one full run cycle, arms swinging: 8 frames. Layout: 8 frames in a 4x2 grid. Aspect 2:1.",
     "hero_pickup": "Picking something up from the ground: 1 standing, 2 bending the knees, 3 crouching low, 4 reaching to the ground, 5 still crouched, hand at the ground, 6 standing up again. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_lift": "Showing a found treasure (a small glowing pearl): 1 holding it in both hands at the chest, smiling, 2 raising it with the right hand, 3 holding it high above the head, delighted. Layout: 3 frames in one row. Aspect 3:1.",
     # 走一趟的揮砍本來寫「拔劍」：空手之後照擂台已經在用的寫法改成隱形刀刃（同 hero_atk_slash），手是鬆握的拳
-    "hero_slash": "Slashing to the right with an invisible blade: 1 ready stance, fists together low in front, 2 fists raised over the head, 3 top of the swing, 4 fast downward slash, 5 follow-through low in front, 6 back to the ready stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
+    "hero_slash": "Chopping to the right with empty hands, both fists clasped together: 1 ready stance, clasped fists low in front, 2 fists raised over the head, 3 top of the swing, 4 fast downward slash, 5 follow-through low in front, 6 back to the ready stance. Layout: 6 frames in a 3x2 grid. Aspect 3:2.",
     "hero_meditate": "Sitting cross-legged on the ground, eyes closed, meditating, hands resting on the knees, gentle breathing loop: 4 frames. Layout: 4 frames in one row. Aspect 4:1.",
-    "hero_push": "Pushing hard with both palms forward against something heavy on the right (a stuck cart or a boulder, not drawn), legs braced, leaning in: 4 frames. Layout: 4 frames in one row. Aspect 4:1.",
+    # 不寫推的是什麼（2026-11-04 量：寫了「推車或巨石，不要畫」，關羽十次裡八次畫出巨石或車輪——提到的東西 klein 就會畫；
+    # 只寫手腳身體 0/10 → 3/6）
+    "hero_push": "Pushing hard to the right with both open palms: arms stretched forward at chest height, palms flat and facing right, legs braced in a long stance, body leaning far forward, straining: 4 frames. Layout: 4 frames in one row. Aspect 4:1.",
 }

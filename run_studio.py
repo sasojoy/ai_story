@@ -64,10 +64,11 @@ def main(argv: list[str]) -> int:
     painter, local = _painter(argv)
     critic = ClaudeCritic()
     tries = int(getattr(painter, "tries", studio.MAX_TRIES))
+    fresh = bool(getattr(painter, "fresh_retries", False))  # 本機 klein：沒過就重新畫，不照意見改上一張（studio_local）
     daily = 0 if local else _int_env("TIANXIA_STUDIO_DAILY", 80)  # 本機生圖不要錢，不設每日上限
     seconds = _int_env("TIANXIA_STUDIO_SECONDS", 30) or 30
     gate = local and not anytime  # 本機生圖要跟遊戲搶同一張卡：只在省電模式動工
-    print(f"畫坊啟動：生圖 {painter.model}、審圖 {critic.model}；一張最多畫 {tries} 次；"
+    print(f"畫坊啟動：生圖 {painter.model}、審圖 {critic.model}；一張最多畫 {tries} 次（{'沒過重新畫' if fresh else '沒過照意見改'}）；"
           + (f"一天最多畫 {daily} 張；" if daily else "不限每日張數；")
           + (f"只在省電模式動工；" if gate else "")
           + f"每 {seconds} 秒巡一輪（Ctrl+C 結束）", flush=True)
@@ -90,7 +91,7 @@ def main(argv: list[str]) -> int:
                     before = _painted(store)
                     for line in studio.tick(content, store, root, actions.WEB_IMG, painter, critic,
                                             lambda job, raw: studio.cut_for(job, _matted(painter, job, raw), cutting),
-                                            tries=tries):
+                                            tries=tries, fresh=fresh):
                         print(line, flush=True)
                     spent += max(0, _painted(store) - before)
                 except Exception as exc:  # 一輪出錯只記一筆就繼續（同 run_bots）
