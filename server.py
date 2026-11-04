@@ -3241,12 +3241,13 @@ def tale_view(battle_id: int, request: Request | None = None) -> dict:
 TALE_COVER_DIR = WEB / "img" / "tale"
 TALE_SIEGE_COVER = "siege"
 TALE_DEFAULT_COVER = "default"
+TALE_COVER_ALIAS = {"wancheng_jia": "wancheng", "wancheng_yi": "wancheng"}  # 宛城兩場（甲、乙）共用一張
 TALE_LEAD_MAX = 80  # 分享預覽的摘要最多幾個字
 
 
 def tale_cover(definition) -> str:
     """封面圖的網址（/static/...）；圖檔真的在才給那一張，照上面的順序往下找。"""
-    keys = [definition.id] if definition is not None else []
+    keys = [TALE_COVER_ALIAS.get(definition.id, definition.id)] if definition is not None else []
     if definition is not None and definition.id.startswith("siege_"):
         keys.append(TALE_SIEGE_COVER)
     keys.append(TALE_DEFAULT_COVER)

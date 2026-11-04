@@ -43,7 +43,8 @@
   --zh-slip: 42px; --zh-cord: #6e4f29;
   --zh-c1: #c49d5c; --zh-c2: #e4c98f; --zh-c3: #cda768; --zh-gap: #20170f;
 }
-.zh-bamboo .zh-head { background: radial-gradient(ellipse at 50% 30%, #3b2b1e 0%, #1c140d 75%); }
+/* 漆木桌面（企劃者畫的 web/img/zhuan/desk.webp，2026-11-04）：竹簡疊在上面展開；壓一層暗，竹簡與篇名才跳得出來 */
+.zh-bamboo .zh-head { background: linear-gradient(180deg, rgba(20, 12, 8, 0.35), rgba(20, 12, 8, 0.6)), url("img/zhuan/desk.webp") center / cover, #1c140d; }
 .zh-bamboo .zh-orn { position: absolute; inset: 18px 0 40px; display: flex; justify-content: center; gap: 4px; }
 .zh-bamboo .zh-orn i { display: block; width: 30px; border-radius: 3px; background: linear-gradient(90deg, #c49d5c, #e4c98f 30%, #e4c98f 70%, #cda768); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45); }
 .zh-bamboo .zh-orn i:nth-child(3) { margin-right: 68px; }

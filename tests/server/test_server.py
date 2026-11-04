@@ -442,8 +442,10 @@ def test_a_written_tale_gets_a_share_page_anyone_can_open(client, tmp_path, monk
 
 def test_the_tale_cover_falls_back_until_the_art_arrives(tmp_path, monkeypatch):
     """封面：那一場自己的圖 > 攻城共用 > 通用 > 那一區的地點圖 > 事件插圖。"""
-    monkeypatch.setattr(server, "TALE_COVER_DIR", tmp_path)
     battles = server.CONTENT.battles
+    assert server.tale_cover(battles["wancheng_yi"]) == "/static/img/tale/wancheng.webp"  # 企劃者的圖：宛城甲乙共用一張
+    assert server.tale_cover(battles["siege_luoyang"]) == "/static/img/tale/siege.webp"
+    monkeypatch.setattr(server, "TALE_COVER_DIR", tmp_path)
     assert server.tale_cover(battles["changshe_fire"]) == "/static/img/places/yingru.webp"
     assert server.tale_cover(None) == "/static/img/events/tale.webp"
     (tmp_path / "siege.webp").write_bytes(b"x")
