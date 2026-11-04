@@ -809,6 +809,36 @@ GAME_DELEGATES |= {
 }
 
 
+# figure_acts（全部拆包第 31 批「大勢人物」：新包 tianxia/features/figure_acts/；計畫 docs/superpowers/plans/2026-11-04-大勢人物包-第1批.md 1.1、1.4、1.5）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。24 個方法搬進包，留 14 個一行委派（10 個只有包裡或測試在叫，沒有委派，測試改叫包函式）；
+# `aid:`、`plan:` 的 choose 與 _action_title 的兩格接了掛鉤（Outcome），`bot_policy.score` 的 aid 那一段搬進包的 bots.py，bot.py 的 aid: 改 bot_always
+GAME_IMPORTS |= {
+    "tianxia.features.figure_acts.admin_actions", "tianxia.features.figure_acts.aid_actions", "tianxia.features.figure_acts.challenge",
+    "tianxia.features.figure_acts.plan_actions", "tianxia.features.figure_acts.yuedan_actions",
+}
+GAME_DELEGATES |= {
+    # 核心原位叫的：選單（_challenge_options、_aid_options、_plan_options）、閉門不見（_snubbed_character）、挑戰的對手隊伍（_figure_squad）、
+    # 按下去（_challenge）、同步補名望（_deliver_guard_credits）
+    "_challenge_options", "_aid_options", "_plan_options", "_snubbed_character", "_figure_squad", "_challenge", "_deliver_guard_credits",
+    # 被測試換掉的：_rout（challenge 經 ctx._rout 叫，批次表第二節）；只有測試直接叫的：_challenge_reward、_figure_tier3、_figure_tier4（留委派，測試不改）
+    "_rout", "_challenge_reward", "_figure_tier3", "_figure_tier4",
+    # server、假人、腳本、測試在叫的：challenge_odds（bot.py、bot_policy、測試換掉它）、plan_view、place_deeds_view（main_view）、yuedan_request、apply_yuedan（月旦評三段式）、
+    # admin_fallen、admin_revive_figure（管理頁）
+    "challenge_odds", "plan_view", "place_deeds_view", "yuedan_request", "apply_yuedan", "admin_fallen", "admin_revive_figure",
+}
+_ACT_CHALLENGE = ("act:challenge:<人物> 是 act 子動詞，帶後綴接不了 Verb（總表第 57 批才擴）：選單那一格、按下去、標題都留在核心原位叫這一包的委派")
+_AID_PLAN_MENU = ("選單的順序算行為（/api/main 的選項一顆一顆逐位元組）：末段 `opts + 護衛 + features_core.options + 盤算`，護衛那串在包選項之前、盤算在之後，"
+                  "夾著 `options` 掛鉤，接成掛鉤登記在後面的包會排在盤算之後")
+GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_challenge_options"): _ACT_CHALLENGE + "（選單：在 act:train 那格與晉升奇遇之間）",
+    ("_everyday_options", "_snubbed_character"): _ACT_CHALLENGE + "（單人求見那顆灰掉的判斷）",
+    ("action_notes", "_snubbed_character"): _ACT_CHALLENGE + "（行動列底下那一行說明：閉門不見的人不算此地可求見）",
+    ("_stamina_play_options", "_aid_options"): _AID_PLAN_MENU,
+    ("_stamina_play_options", "_plan_options"): _AID_PLAN_MENU,
+    ("_fight_squad", "_figure_squad"): "act:challenge: 的對手隊伍（大場面判讀的鎖外 A 段與鎖內 C 段重驗）：" + _ACT_CHALLENGE,
+    ("_act", "_challenge"): _ACT_CHALLENGE + "（按下去）",
+    ("sync", "_deliver_guard_credits"): "同步補名望與心得：夾在 _deliver_echoes 與 deliver_notices 之間，FEATURES 新包排在最後，酒肆的 deliver_notices 會跑在它前面，行狀順序會變",
+})
 @functools.lru_cache(maxsize=None)
 def _engine_tree() -> ast.Module:
     return ast.parse((TIANXIA / "engine.py").read_text(encoding="utf-8"))  # 一萬七千行，parse 一次一秒多：大家共用這一份
@@ -967,6 +997,14 @@ SHARED_LATER = {
 # 事件抽選 events 讀的也是世界那一半（不再碰包）：理由改成只剩伏筆
 SHARED_PENDING[("stance_world", "figures")] = "排定：大勢人物（figures.state_of，函式裡，持重拉進度找他在哪條線）——總表第 40 批收進共用規則層"
 SHARED_LATER["events"] = "事件抽選：讀伏筆 foreshadow（軍情第 34 批成包）；伏筆改成查詢服務之後再看（心意第 19 批換成共用規則層 stance_world）"
+# figure_acts（全部拆包第 31 批）
+# 月旦評 A、C 兩段與盤算、管理者救回人物的 Game 方法只被 server 叫，不是 Game 裡的呼叫端；figures.py 函式裡 import 舊名 figure_aid（犒軍與自然回復共用一天的上限）：
+# 叫到才連帶載入 figure_acts，兩條指到 figures 的排定項補一句
+for _key in SHARED_PENDING:
+    if _key[1] == "figures":
+        SHARED_PENDING[_key] += "；figures 函式裡也 import 舊名 figure_aid（大勢人物的行動包 figure_acts 的別名：犒軍與自然回復共用一天的上限），叫到它就連帶載入 figure_acts（第 31 批）"
+    elif _key[1] == "world":
+        SHARED_PENDING[_key] += "；world 最外層 import 舊名 yuedan（figure_acts 的別名：每一步叫 yuedan.tick），import 它就連帶載入 figure_acts（第 31 批）"
 
 
 def test_the_shared_rules_layer_only_imports_the_core_and_itself():
@@ -1365,7 +1403,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # story（全部拆包第 30 批：tianxia/storyline.py）
                          "storyline": "story",
                          # checkin（全部拆包第 30 批：tianxia/checkin.py）
-                         "checkin": "checkin"}
+                         "checkin": "checkin",
+                         # figure_acts（全部拆包第 31 批：tianxia/figure_aid.py、yuedan.py）
+                         "figure_aid": "figure_acts", "yuedan": "figure_acts"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 

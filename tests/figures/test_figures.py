@@ -827,7 +827,7 @@ def test_jailed_figure_is_gone_from_audience_and_dongzhuo_receives_at_the_camp(o
 def test_nothing_changes_with_the_switch_off(real, world):
     """Review Focus 5：開關關著（beta 那一季）：沒有挑戰的選項、人物照 characters.json 的 talk_at 站（下獄也看不到）、
     存檔沒有人物，交友照舊找波才。現在「開關關著」是挑戰每季都有的緊急開關（Config.figure_challenge_every_season）：14 天的季
-    預設有挑戰本人，見 tests/test_challenge_season.py。"""
+    預設有挑戰本人，見 tianxia/features/figure_acts/tests/test_challenge_season.py。"""
     real.config.figure_challenge_every_season = False
     game = _player(real, world, "官甲", "guan", "huangjin_camp")
     game.state.player.stats["fame"] = 50
