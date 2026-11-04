@@ -16,7 +16,7 @@
 - **雲端 session 與 Joy 的 Claude**（企劃者 2026-10-31）：照開發規範手冊做（企劃者 10/30「只要符合開發規範，不管是本機還是雲端都沒差」）。
   - 在自己的分支做、開 PR 到 `develop`，由 Joy 在 GitHub 合；PR 說明寫改了哪一包（或 `Game` 哪一群方法）、跑了哪些測試幾條過、退版風險。PM 靠每天 03:30 的整套事後驗，紅了開單交回。
   - **不直推 `main`**：上 main 一律從 `develop` 合、先跑整套含 slow。Joy 的維運與緊急修正例外，推完跟企劃者說一聲（哪一筆、改了哪個方法）。
-  - **正在搬成包的那幾包不要改**：清單在 `docs/superpowers/plans/2026-10-31-主動搬六包-批次.md` 開頭「搬包中」那一段（全部拆完的路線在 `2026-10-31-全部拆包-總表.md`）。真要改先告訴企劃者。
+  - **不用避開搬包中的包**（企劃者 2026-11-04「不停，把現在的 develop 訂一個錨點，全面分拆完之後再慢慢追 commit 合併調整」）：架構拆分從錨點 tag `split-anchor-20261104` 開到 `split/trunk` 上做，develop 照常開發；全面分拆完 PM 才把 develop 的提交追過去。develop 上看到的「搬包中」、總表、交接停在錨點那一刻，活的那一份在 `split/trunk`。
   - 已經搬進 `tianxia/features/<包>/` 的功能，改包裡的檔；`Game` 上的一行委派不加邏輯。新功能用 `scripts/new_feature.py` 開一包。
 - 這台機器有兩份 clone：`C:\Ray\專案\天下大勢` 是主要的那份（main 在這裡合併、推上 GitHub；專職開發的工作樹在它的 `.claude/worktrees/`）；`C:\Ray\專案\ai遊戲` 是另一份 clone，地圖擴充開發在它的 `.worktrees/` 裡做。**開工前先 `git worktree list`、`git remote -v` 核對一次**：曾經在另一個遊戲的目錄開 session，讀到錯的 CLAUDE.md，白繞一圈。
 - `.claude/worktrees/` 底下的工作樹沒有 `.venv`：下面指令裡的 `.venv/Scripts/python.exe` 換成那份 clone 的絕對路徑（例：`C:/Ray/專案/天下大勢/.venv/Scripts/python.exe`）。

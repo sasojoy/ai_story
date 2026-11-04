@@ -42,35 +42,19 @@
 計畫是 11/03 寫的，有幾處過時了：
 
 1. **開工時機改了**：計畫第七節寫「拆包全部做完再開」，**作廢，現在就開工**。同一節另外兩條照舊：舊存檔不換算；做完驗過、開關關著先合進 `develop`。
-2. **第 23、24 批先合**：計畫第二節建議第 1 批先做。現在反過來，修練（第 23 批）與有所感（第 24 批）PM 先搬完合掉，你改包裡的檔（下面有對照）。
-3. **計畫第二節的「在飛」過時了**：第 7、8、15、16、17、22 批與鐵匠鋪都已經合進 `develop`。Task 0 不用查那幾條分支，改看批次表開頭的「搬包中」。
+2. **計畫第二節「跟拆包撞到哪裡」不用管了**：拆分搬到別條分支（下一節），`develop` 上的程式不會被搬。Task 0 不用查那幾條分支，也不用看「搬包中」。第 7、8、12、15、16、17、22 批與鐵匠鋪都已經在 `develop` 裡。
 
-## 跟拆分一起做的規矩
+## 跟拆分的關係
 
-**PM 正全力拆分，`engine.py` 的方法每天都在搬。** 拆分不會等你，所以：
+**你在 `develop` 上做，拆分不會干擾你。** PM 的拆分從錨點 tag `split-anchor-20261104` 開到 `split/trunk` 上做，全面分拆完才把 `develop` 的提交一筆一筆追過去。所以 `develop` 上的 `engine.py` 不會被搬，計畫寫的 `Game.allocate_stat` 這些都還在原位。
 
-- **開工前、每天開工時**都把最新的 `develop` 合進來。
-- **批要小、要快合**：開關關著的東西一批一批合，累積越久衝突越大。計畫第 1 批有 14 個 Task，可以再切幾次 PR。
-- **不改「搬包中」的包**：清單在 `docs/superpowers/plans/2026-10-31-主動搬六包-批次.md` 開頭。真的要改先問。
-- **已經成包的改包裡的檔**，`Game` 上的一行委派不加邏輯。方法找不到了，多半是搬走了：`git log -S "def <方法名>" --oneline` 查。
-- **新邏輯放核心或你的新包**：`team.py`、`state.py`、`models.py` 是核心，不會被搬。季初對話放 `features/aptitude`，用 `scripts/new_feature.py` 開包。
-- 共用登記檔（`tests/core/test_feature_boundaries.py`、`tianxia/core/services.py`、`tianxia/core/registry.py`）拆分每批都在改，你的段集中寫，衝突時兩邊都留。
+**為了之後追得動，請照這幾條：**
 
-**第 1 批要碰的方法，現在或之後會在哪**（開工時照現況再查一次）：
-
-| 計畫寫的 | 會搬到 | 什麼時候 |
-|---|---|---|
-| `Game.allocate_stat`、`_allocate_line`、`milestone_card`、`chuangong.py`、`cultivation.py` | `features/cultivation/`（第 23 批） | 快合了 |
-| `sensing.rate`、`epiphany.chance` | `features/sense/`（第 24 批） | 快合了 |
-| `Game._explore_weights` | 第 13 批拿掉探索三選一、第 18 批探索三 | 近期 |
-| `Game._raid_spoils` | 玩家互動包（第 38 批） | 之後 |
-| `Game._ambush_spoils`、`_finish_seclusion` | 體力玩法、閉關包（第 39 批） | 之後 |
-| `smithing.forge_odds` | 鐵匠鋪包（第 41 批） | 之後 |
-| `howto.py` | 引導包（第 59 批） | 之後 |
-| `bot.allocate_points` | 假人殼（第 60 批） | 之後 |
-| `web/app.js`、`web/mall.js` | 網頁殼化（第 64～67 批） | 最後 |
-
-`team.py`、`state.py`、`models.py`、`rules.py`、`world_state.py` 都留在核心。`features/mall` 已經成包，改包裡的檔。
+- **新邏輯放核心或你的新包**：`team.py`、`state.py`、`models.py`、`rules.py`、`world_state.py` 是核心，季初對話放 `features/aptitude`，用 `scripts/new_feature.py` 開包。
+- **`engine.py` 裡只改必要的行**，不要順手整理、不要搬方法。那些方法在 `split/trunk` 上已經或將要搬進包，你改的每一行之後都要人工搬過去。
+- **一筆 commit 做一件事**，訊息寫清楚改了哪個方法。之後是一筆一筆追的。
+- **已經成包的改包裡的檔**（`features/mall` 等），`Game` 上的一行委派不加邏輯。
+- **批要小、要快合**：開關關著的東西一批一批合。計畫第 1 批有 14 個 Task，可以再切幾次 PR。
 
 ## 不能破的
 
@@ -152,7 +136,7 @@ python scripts/same_behavior.py explore-compare --base ../base --head . --tmp ..
 |---|---|
 | 企劃者 | 這個專案的負責人，定玩法與規矩。 |
 | Joy | 在 GitHub 審與合 PR 的人。 |
-| PM | 企劃者的專案管理 session，正在做架構拆分。 |
+| PM | 企劃者的專案管理 session，正在 `split/trunk` 上做架構拆分。 |
 | 批（拆分的） | 拆包的一個工作單位，路線在 `docs/superpowers/plans/2026-10-31-全部拆包-總表.md`。跟這裡的「第 1～4 批」是兩回事。 |
 | 包 | `tianxia/features/<包>/`，一個功能一包。 |
 | same_behavior | `scripts/same_behavior.py`，同一串操作在新舊程式各跑一次，逐位元組比。 |
