@@ -1,5 +1,5 @@
 """初入江湖（新手引導第四段，Joy 2026-10-17「不要讓玩家可以亂點，新玩家現在迷路機率太高」）：走出草廬到了潁川，
-賣茶的老周一步一步帶：醫館療傷 → 操練 → 修練 → 出城到潁水河畔練功 → 野外探索 → 進店再出店 → 打開輿圖（新手引導重做，Joy 2026-10-22）。
+賣茶的老周一步一步帶：醫館療傷 → 探索（字還寫操練，第 13 批拿掉了那顆鈕）→ 修練 → 出城到潁水河畔探索（字還寫尋敵）→ 野外探索 → 進店再出店 → 打開輿圖（新手引導重做，Joy 2026-10-22）。
 走這幾步時「此地還能做」只留教到的，畫面一樣一樣亮。"""
 import random
 
@@ -52,12 +52,21 @@ def test_arriving_shows_only_the_clinic_under_here(newcomer):
     assert newcomer.prologue_view() is None  # 草廬的規矩（略過序章、師父的框）不跟出來
 
 
+def _explore_once(game):
+    """按一下探索（舊探索：可能撞上事件或有所感），撞上的先了結。"""
+    game.state.player.stamina = 250.0
+    game.choose("act:explore")
+    while game.state.pending_event is not None:
+        game.choose(next(i for i in _ids(game) if i.startswith("choice:")))
+    game.state.player.sensing = None
+
+
 def test_walking_the_seven_steps_opens_everything(newcomer):
     p = newcomer.state.player
     newcomer.choose("act:heal")
     assert _step(newcomer) == "e2_drill"
-    assert "act:drill" in _ids(newcomer) and "act:practice" in newcomer.onboard_view()["reveal"]
-    newcomer.choose("act:drill")
+    assert "act:practice" in newcomer.onboard_view()["reveal"]
+    _explore_once(newcomer)
     assert _step(newcomer) == "e3_cultivate"
     p.stats["xinde"] = 500
     newcomer.practice("武學")
@@ -65,17 +74,8 @@ def test_walking_the_seven_steps_opens_everything(newcomer):
     newcomer.choose(next(i for i in _ids(newcomer) if i.startswith("move:yingshui")))
     newcomer.advance(3600)
     assert p.location == "yingshui"
-    for _ in range(30):  # 打贏一場練功才算（輸了把氣血體力補回來再打）
-        p.stamina, p.member.injury = 250.0, 0.0
-        newcomer.choose("explore:practice")
-        if _step(newcomer) != "e4_field":
-            break
-    assert _step(newcomer) == "e5_wild"
-    p.stamina = 250.0
-    newcomer.choose("explore:gather")
-    while newcomer.state.pending_event is not None:  # 撞上的事件先了結
-        newcomer.choose(next(i for i in _ids(newcomer) if i.startswith("choice:")))
-    assert _step(newcomer) == "e6_shops"
+    _explore_once(newcomer)
+    assert _step(newcomer) == "e6_shops"  # e4_field、e5_wild 現在都是「在城外探索」：一下走完兩步
     newcomer.choose(next(i for i in _ids(newcomer) if i.startswith("move:yingchuan")))
     newcomer.advance(3600)
     assert "act:smith" in _ids(newcomer) and "act:arena" not in _ids(newcomer)

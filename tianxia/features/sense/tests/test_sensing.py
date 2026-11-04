@@ -1,10 +1,11 @@
 """悟意境（悟意境設計第零節）：讀筆畫、看圖取名、有所感的流程、私有意境在合成與修練裡、首悟紀錄、機器人。"""
 import random
+from unittest import mock
 
 import pytest
-from conftest import FixedRandom, next_season
+from conftest import FixedRandom, next_season, real_content
 
-from tianxia import bot, fusion, glyph, insight_llm, insights, journal, naming, sensing
+from tianxia import bot, fusion, glyph, insight_llm, insights, journal, naming, sensing, treasures
 from tianxia.engine import Game
 from tianxia.models import InsightScene, SenseMethod
 from tianxia.sqlite_world import open_world
@@ -32,6 +33,26 @@ def _pick(g: Game, attribute: str) -> list[str]:
     s = g.state.player.sensing
     index = [SCENE.methods[j].attribute for j in s.order].index(attribute)
     return g.choose(f"sense:{index}")
+
+
+# ── 擲中的機會 ──────────────────────────────────────
+
+def test_a_treasure_raises_the_sensing_odds():
+    """寶物「探索悟意境」（觀山石）：擲中多 sense_treasure_points，夾在 sense_rate_range 的上限；0 是沒有這一支。
+    第 13 批拿掉探索三選一時從 tests/acts/test_explore_modes.py 搬來（原本最後一段關的開關拿掉了，改關數字）。"""
+    c = real_content("week7")
+    c.config.auto_open_first_season = True
+    game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
+    s = game.state
+    s.player.location = "yingshui"
+    loc = c.locations["yingshui"]
+    with mock.patch.object(treasures, "amount", side_effect=lambda st, ct, key: 1.5 if key == "insight" else 1.0):
+        assert sensing.rate(s, c, loc) == 85
+        s.player.stats["wis"] = 15
+        assert sensing.rate(s, c, loc) == 95  # 夾在 sense_rate_range 的上限
+        s.player.stats["wis"] = 5
+        c.config.sense_treasure_points = 0
+        assert sensing.rate(s, c, loc) == 70
 
 
 # ── 讀筆畫 ──────────────────────────────────────────

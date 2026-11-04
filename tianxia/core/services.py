@@ -214,12 +214,22 @@ explore（主動搬六包第 3＋4 批加的這一段）
   人物對話的 open_dialogue 與 dialogue_request 問
 - `ctx._open_dialogue(companion_id, prepared)`（主人人物情誼，第 20 批已搬、Game 留一行委派：交友碰上人物、指名求見之後開口對話；
   原本是 Game 的方法，交友求見成包之前核心原位直接叫，記在邊界測試的 GAME_DELEGATE_CALLERS）
+# story（全部拆包第 30 批「一條線」；主人：一條線包。計畫 docs/superpowers/plans/2026-11-04-一條線簽到-第30批.md 1.3）
+- `ctx._story_begin(strand, custom=False)`（開一條線、端出第一段：探索包的探索擲中了叫它；原本列在三、過渡 explore 那一段，主人現在是一條線包，
+  本體在 `features/story/actions.py`，Game 留一行委派）
+- 這一包經 ctx 用的其餘服務都是一、共用服務（`ctx._present`、`_story_squad`〔劇情戰的江湖水漲〕、`_judged`、`_fight_with`、`_style_note`、
+  `_terrain_note`、`_narrate`、`_play_rounds`、`_hp_facts`、`_battle_rewards`、`_file_battle`、`_outcome`、`_save_season`）；一條線包自己的函式互相直接叫
+# checkin（全部拆包第 30 批「簽到」；主人：簽到包）
+- `ctx._opening_pending()`、`ctx._opening_gate()`（主人新手引導：開局第一分鐘〔城門口三選一還沒選〕不能簽到，回那一句；簽到的 `check_in`、
+  `auto_checkin`、`checkin_view` 問）
+- 共用的字與小函式（從這個模組 import，簽到包 re-export）：`PILL_FOUND`（找素材、練功掉回體丹那一句）、`checkin_on(content, world)`（簽到開著沒；
+  核心的 `Game._pill_find` 掉回體丹也問，回體丹那一套歸核心；原本是 `tianxia/checkin.py` 的 `PILL_FOUND` 與 `on`）
 
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
 explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._home_gather(loc, mids)`、`ctx._wild_foes(loc)`、`ctx._practice_tier(loc)`
-  （探索三選一：企劃者 10/31 定不搬、留在 engine——批次表第 9 批不做，三選一整套拿掉之前一直掛在 Game 上；`_boss_face` 第 12 批改成二、查詢服務）
+  （`_home_gather` 本體第 13 批搬進探索包，Game 留一行委派、探索包經 ctx 叫——測試換它；`_wild_foes`、`_practice_tier` 還在 engine；`_boss_face` 第 12 批改成二、查詢服務）
   （`ctx._sense_here(loc, rng)`：全部拆包第 24 批有所感成包，改列二、查詢服務 `# sense` 那一段）
 - `ctx._story_begin(strand)`（一條線；`_duel_start` 第 12 批改成二、查詢服務）
 - 收尾的掉落：`ctx._legend_find(rng)`（破境丹）、`ctx._seal_find(loc_id)`（玉璽碎片）——照原本的順序在原位叫，不收成事件（同一串的
@@ -295,8 +305,7 @@ explore（主動搬六包第 3＋4 批加的這一段；都是 Game.__init__ 起
 - `ctx._beat`（走一趟：剛剛那一次探索抽到什麼——探索一顆寫、走一趟讀）、`ctx._outing_close`、`ctx._outing_upset`（探索一顆：這一趟打了折的閘、
   這一場開打前勝算凶險以下）、`ctx._outing_busy`（走一趟正在走、正在記一件事選完的得失：核心的 `outing_watch`〔第 24 批從 engine 模組層的
   `_outing_watch` 搬來〕套在 choose、answer_event 與有所感包的 epiphany_names、sense_draw 上，看它不再套一層）
-- `ctx._loot_scale`、`ctx._drop_scale`、`ctx._gate_scale`（遭遇那一場的戰利、掉落、經驗倍數：探索一顆的遭遇設、核心 `_battle_rewards` 讀；
-  三選一的 `_practice` 也寫 `_loot_scale`）
+- `ctx._loot_scale`、`ctx._drop_scale`、`ctx._gate_scale`（遭遇那一場的戰利、掉落、經驗倍數：探索一顆的遭遇設、核心 `_battle_rewards` 讀）
 
 - `ctx.mall_bought`、`ctx.mall_already`（商城）：上一次 actions.buy 的結果（買成的商品 id；同一個編號早就買好的那一件），伺服器在鎖裡讀
 - `ctx._clash_won`、`ctx._sortie_marked`、`ctx._sortie_moved`、`ctx._sortie_flipped`（出陣）：Game.__init__ 起的、出陣那一下設、
@@ -326,12 +335,13 @@ from __future__ import annotations
 import functools  # sense（第 24 批）：outing_watch 用
 from typing import TYPE_CHECKING
 
+from .. import calendar  # checkin（第 30 批）：checkin_on 用
 from ..models import Content
 from ..wallet import Purchase, Wallet
 
 if TYPE_CHECKING:
     from ..engine import Game
-    from ..state import GameState  # companions（note_cheer 的型別）
+    from ..state import GameState, WorldState  # companions（note_cheer 的型別）；checkin（checkin_on 的型別）
 
 # 共用的字（原本寫在 engine.py；功能包要用、又不能 import engine，搬到這裡，engine 照舊叫得到）
 PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，畫面照常可看"
@@ -508,3 +518,13 @@ def not_while_preparing(action):
 AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交友就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
 SOCIAL_NO_ONE = "這裡沒有能說上話的人"  # 待 joy 潤：一類一顆的交友沒有人物、也沒有結識事件時（鈕上不帶句號）
 SNUB_NOTE = "剛吃了敗仗，閉門不見"  # 挑戰本人打贏之後，他對打贏的人關上門（軍令文件 4.5）：求見、交友、挑戰的按鈕寫這一句
+
+
+# checkin（全部拆包第 30 批「簽到」）：原本寫在 tianxia/checkin.py；回體丹那一套（Game._pill_find 掉回體丹）歸核心，要問簽到開著沒、說那一句，
+# 簽到包（tianxia/features/checkin/checkin.py）又不能被核心 import，搬到這裡，簽到包 re-export（`checkin.on is services.checkin_on`）
+PILL_FOUND = "獲得 【{name}】一顆——不知誰落下的，正好收著。"
+
+
+def checkin_on(content: Content, world: WorldState | None) -> bool:
+    """簽到開著沒：設定打開（只有 season21），這一季是 21 天季（開季時蓋的章），而且還沒收季。週末與 14 天一律關著。"""
+    return content.config.checkin.enabled and calendar.season21_on(world, content) and not world.ended

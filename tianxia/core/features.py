@@ -82,7 +82,7 @@ class Shop:
 @dataclass(frozen=True)
 class Verb:
     """act:<verb> 那一格的主人（act 子動詞；第 11 批先開給主人已經成包的三格，總表第 57 批其餘的接上同一張表）。每一樣都可以是 None，
-    回 None 也一樣：照舊由核心做（核心那一支還在：探索三選一、舊探索、遊歷……）。"""
+    回 None 也一樣：照舊由核心做（核心那一支還在：舊探索、遊歷……）。"""
 
     verb: str
     run: Callable[[Any, Any], list[str] | None] | None = None  # Game._act 最前面：按下去（ctx, prepared）

@@ -415,10 +415,10 @@ def fill_marks(text: str, state: GameState) -> str:
     """把文字裡的 {marks:地點:痕跡} 換成這個痕跡目前的模糊人數；寫給這個人看的稱呼照性別換（gender.address：女的「少俠」→「女俠」）。
     事件的本文與結果都經過這裡（也只寫給這個人看），所以內容裡寫死給玩家的稱呼在這裡換一次就好。"""
     text = gender.address(text, state)
-    if "{?" in text or "{!" in text or "{said:" in text:  # 長篇奇事：照一條線的記號換段落、引自己寫過的話（storyline.vary）
-        from . import storyline  # noqa: PLC0415  storyline → rules：延後 import
+    if "{?" in text or "{!" in text or "{said:" in text:  # 長篇奇事：照一條線的記號換段落、引自己寫過的話（story_base.vary）
+        from . import story_base  # noqa: PLC0415  story_base → rules：延後 import
 
-        text = storyline.vary(text, state)
+        text = story_base.vary(text, state)
     if "{marks:" not in text:
         return text
     return _MARKS_TOKEN.sub(lambda m: fuzzy_count(state.world.marks.get(m.group(1), 0)), text)

@@ -66,7 +66,7 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, ascend, battle_instance, flavor, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, fight_llm, foreshadow, gather_llm, gender, insight_llm, leaderboard, letters, mapdata, might,
+    arena_crowd, ascend, battle_instance, flavor, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, fight_llm, foreshadow, gender, insight_llm, leaderboard, letters, mapdata, might,
     naming, narration, outing,
     ollama_client, power_save, rules,
     precise, seal, seal_duel, server_bots, social, sortie, speech, tale, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
@@ -1673,25 +1673,8 @@ def feast_text(game: Game, text: str) -> list[str]:
     return act(game, lambda g: g.feast_toast(request.text, rate, request))
 
 
-def gather_text(game: Game, text: str) -> list[str]:
-    """找素材的「自己說」（第 32 項），三段同 feast_text：A Game.gather_text_request（只讀）→ B 鎖外請模型評成算、挑屬性
-    （gather_llm.score，預算同隨口應對 free_text_budget_seconds；評不到 40、屬性照第一條分支）→ C Game.gather_say 重驗同一個地點、
-    同一次探索、同一句才扣體力擲骰。排隊被擋丟 GameError（BUSY_FREE_TEXT、BUSY_QUEUE_TIMEOUT），不扣體力。"""
-    started, request = _open_request(game, lambda: game.gather_text_request(text))
-    if isinstance(request, list):
-        return request
-    total = game.content.config.free_text_budget_seconds
-
-    def ask() -> tuple[int, str | None]:
-        return gather_llm.score(within_budget(game.client, total - (_monotonic() - started)), request)
-
-    rate, attribute = model_call(game, ask, fallback=(gather_llm.DEFAULT_RATE, None), left=total - (_monotonic() - started),
-                                 busy=BUSY_FREE_TEXT)
-    return act(game, lambda g: g.gather_say(request, rate, attribute))
-
-
 def persuade_text(game: Game, errand_id: str, text: str) -> list[str]:
-    """勸降（減法季批 6，整合設計 5.9），三段同 gather_text：A Game.persuade_request（只讀：那一件還在辦、人在那裡、字是 1～20 字）→
+    """勸降（減法季批 6，整合設計 5.9），三段同 feast_text：A Game.persuade_request（只讀：那一件還在辦、人在那裡、字是 1～20 字）→
     B 鎖外請模型評那一句（event_llm.rate_persuasion，預算同隨口應對 free_text_budget_seconds）→ C Game.persuade 重驗同一件、同一句才
     扣體力擲骰。模型叫不動（評不到、逾時、沒有模型）是 None：照批 4 的慣例落到最保守的結果，什麼都不發生、那一件照舊在。
     排隊被擋丟 GameError（BUSY_FREE_TEXT、BUSY_QUEUE_TIMEOUT），不扣體力。"""
@@ -2962,8 +2945,6 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         msgs = tavern_ask(game, str(body.get("text", ""))[:60])
     elif op == "feast_text":  # 宴席上自己寫的敬酒詞：分數在行動鎖外評（見 feast_text）
         msgs = feast_text(game, str(body.get("text", "")))
-    elif op == "gather_text":  # 找素材的「自己說」：成算在行動鎖外評（見 gather_text）
-        msgs = gather_text(game, str(body.get("text", "")))
     elif op == "persuade_text":  # 託付的勸降（減法季批 6）：那一句在行動鎖外評（見 persuade_text）；id 是那一件託付
         msgs = persuade_text(game, str(body.get("id", ""))[:20], str(body.get("text", ""))[:60])
     elif op in MAIN_ACTIONS:

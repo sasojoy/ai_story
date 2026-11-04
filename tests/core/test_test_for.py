@@ -584,32 +584,32 @@ def _marker(cmd):
 def test_a_changed_test_file_runs_with_its_slow_tests():
     """手冊 4.3「只跑改到的那幾個測試檔」：改了一個整個檔標 slow 的測試檔，就是要跑它，連 slow 一起
     （以前 -m "not slow" 把它整個濾掉，39 deselected、結束碼 5）。"""
-    own = test_for.pick(["tests/core/test_story_wolong.py", "tests/core/test_story_maier.py"])
+    own = test_for.pick(["tests/core/test_event_tiers.py", "tests/core/test_gentry_ledgers.py"])
     (cmd,) = test_for.pytest_commands(own, slow=False, extra=[])
     assert _marker(cmd) == "slow or not slow"
-    assert {"tests/core/test_story_wolong.py", "tests/core/test_story_maier.py"} <= set(cmd)
+    assert {"tests/core/test_event_tiers.py", "tests/core/test_gentry_ledgers.py"} <= set(cmd)
 
 
 def test_changed_slow_test_files_run_apart_from_the_rest_of_the_pick():
     """改到的測試檔連 slow 一起跑，其他挑到的照舊不含 slow：分兩次，改到的那幾個不在第一次裡重複跑。"""
-    mixed = test_for.pick(["tests/core/test_story_wolong.py"])
+    mixed = test_for.pick(["tests/core/test_event_tiers.py"])
     mixed.files.add(ROOT / "tests/arts/test_fusion.py")
     mixed.core = True
     first, second = test_for.pytest_commands(mixed, slow=False, extra=[])
     assert _marker(first) == "not slow" and "tests/arts/test_fusion.py" in first
-    assert "tests/core/test_story_wolong.py" not in first and "tests/core/test_engine.py" in first
-    assert _marker(second) == "slow or not slow" and second[-1] == "tests/core/test_story_wolong.py"
+    assert "tests/core/test_event_tiers.py" not in first and "tests/core/test_engine.py" in first
+    assert _marker(second) == "slow or not slow" and second[-1] == "tests/core/test_event_tiers.py"
     plain = test_for.pick(["tests/arts/test_fusion.py"])  # 沒有 slow 的測試檔：一次就好
     assert len(test_for.pytest_commands(plain, slow=False, extra=[])) == 1
     # 這個檔的字串裡寫了 "@pytest.mark.slow"（_slow_smoke 的例子），不是標記：也是一次就好
     assert not test_for.has_slow(ROOT / "tests/core/test_test_for.py")
-    assert test_for.has_slow(ROOT / "tests/core/test_story_wolong.py")
+    assert test_for.has_slow(ROOT / "tests/core/test_event_tiers.py")
 
 
 def test_a_pick_that_is_all_slow_says_so_and_does_not_fail(capsys):
     """挑到的全在整個檔標 slow 的檔裡：先列出來；一條都沒跑（pytest 結束碼 5）時說要 --slow，結束碼 0。"""
-    picked = test_for.Pick(files={ROOT / "tests/core/test_story_wolong.py"})
-    assert any("--slow" in line and "test_story_wolong.py" in line for line in test_for.describe(picked))
+    picked = test_for.Pick(files={ROOT / "tests/core/test_event_tiers.py"})
+    assert any("--slow" in line and "test_event_tiers.py" in line for line in test_for.describe(picked))
     assert test_for.finish([5], picked, slow=False) == 0
     assert "--slow" in capsys.readouterr().out
     assert test_for.finish([0, 5], picked, slow=False) == 0
@@ -989,7 +989,7 @@ def test_a_reexported_name_counts_only_when_written_after_the_module_word():
     assert not test_for.names_through(["arena"], "title_for", "c.config.arena.enabled = True\nleaderboard.title_for\n")
 
 
-STAGE_PACKAGES = ["bout", "battle", "companions", "feast", "guide", "looks", "sense", "socialize"]  # 有 <包>_stage.py 的包（引導是第 22 批合進 develop 的，第 12 批合併時補上；人物情誼是第 19 批、有所感是第 24 批、交友求見是第 21 批合進 split/trunk 時補上）
+STAGE_PACKAGES = ["bout", "battle", "checkin", "companions", "feast", "guide", "looks", "sense", "socialize", "story"]  # 有 <包>_stage.py 的包（引導是第 22 批合進 develop 的，第 12 批合併時補上；人物情誼是第 19 批、有所感是第 24 批、交友求見是第 21 批合進 split/trunk 時補上）
 
 
 def test_the_stage_packages_are_every_package_with_a_stage_file():

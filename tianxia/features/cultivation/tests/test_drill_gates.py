@@ -64,7 +64,7 @@ def test_the_band_width_and_steps_come_from_the_numbers():
 def test_every_fight_counts_as_battle_and_the_rest_do_not():
     """設計 4.2：「交戰」＝任何一場仗（野外遭遇與地痞、頭目、出陣約戰與應戰、切磋、截殺、擂台、全服決戰、挑戰本人）。"""
     fights = ("encounter", "camp_spar", "battle", "boss", "sortie", "answer", "spar", "raid", "arena", "showdown", "challenge", "dividend")
-    others = ("event", "insight", "errand", "material", "drill", "bounty", "hold")
+    others = ("event", "insight", "errand", "material", "bounty", "hold")
     assert {k: growth.exp_source(k) for k in fights} == dict.fromkeys(fights, growth.BATTLE)
     assert {k: growth.exp_source(k) for k in others} == dict.fromkeys(others, growth.OTHER)
     with pytest.raises(ValueError, match="打坐"):

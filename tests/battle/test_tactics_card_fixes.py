@@ -126,15 +126,15 @@ def test_wuzhao_is_not_a_showdown_tactic():
     assert special.tactic.kind == "insight" and "insight" not in tactics.WAR_KINDS
 
 
-# ── 5. 觀山石的卡片照探索三選一的開關 ──
+# ── 5. 觀山石的卡片照 sense_treasure_points ──
 
 
-def test_the_insight_stone_card_follows_the_explore_switch():
+def test_the_insight_stone_card_follows_the_sense_points():
     content = real_content()
     cfg = content.config
-    assert cfg.explore_modes.enabled and cfg.treasures.effects["insight"] != 1.0
-    assert treasures.effect_text(content, "insight") == f"靜心感悟擲中的機會 +{cfg.explore_modes.sense_treasure_points:g} 個百分點"
-    cfg.explore_modes.enabled = False
+    assert cfg.sense_treasure_points and cfg.treasures.effects["insight"] != 1.0
+    assert treasures.effect_text(content, "insight") == f"靜心感悟擲中的機會 +{cfg.sense_treasure_points:g} 個百分點"
+    cfg.sense_treasure_points = 0
     assert treasures.effect_text(content, "insight") == f"探索悟得意境的機會 ×{cfg.treasures.effects['insight']:g}"
 
 

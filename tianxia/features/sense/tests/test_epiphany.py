@@ -269,7 +269,7 @@ def test_the_demon_is_your_own_shadow():
     s, c = game.state, game.content
     _begin(game)
     line = next(iter(s.player.storylines))
-    stage = epiphany.storyline.definition(c, s.player.storylines[line]).stage("demon")
+    stage = epiphany.story_base.definition(c, s.player.storylines[line]).stage("demon")
     squad = game._mirror_squad(s.player.storylines[line], stage)
     power = team.power_vs(s, c, game.world, squad.model_copy(update={"difficulty": 1.0}), fresh=True, terrain=False, seal=False)
     assert squad.name == "心魔" and squad.difficulty == pytest.approx(round(power * c.config.epiphany.demon_scale, 1), abs=0.11)
@@ -332,7 +332,7 @@ def test_the_demon_gets_weaker_every_time_you_fail_down_to_a_floor():
     _begin(game)
     line = next(iter(s.player.storylines))
     progress = s.player.storylines[line]
-    stage = epiphany.storyline.definition(c, progress).stage("demon")
+    stage = epiphany.story_base.definition(c, progress).stage("demon")
     r = c.config.epiphany
     assert r.demon_weaken > 0 and 0 < r.demon_floor < r.demon_scale   # 設定真的開著
     base = game._mirror_squad(progress, stage).difficulty
@@ -354,7 +354,7 @@ def test_other_mirror_fights_are_not_weakened():
     s, c = game.state, game.content
     _begin(game)
     progress = next(iter(s.player.storylines.values()))
-    stage = epiphany.storyline.definition(c, progress).stage("demon")
+    stage = epiphany.story_base.definition(c, progress).stage("demon")
     plain = stage.model_copy(update={"mirror_weaken": 0.0, "mirror_floor": 0.0})
     progress.tries = 0
     first = game._mirror_squad(progress, plain).difficulty

@@ -55,8 +55,8 @@ def test_the_menu_has_one_explore_button_and_no_modes_drill_or_practice():
 def test_closed_season_keeps_the_old_menu():
     game = ready(plain_game(), side="guan", loc="yingchuan")
     ids = _ids(game)
-    assert "explore:gather" in ids and "act:drill" in ids
-    assert next(o for o in game.options(odds=False) if o.id == "act:explore").label == "探索"
+    assert not [i for i in ids if i.startswith("explore:")] and "act:drill" not in ids
+    assert next(o for o in game.options(odds=False) if o.id == "act:explore").label == f"探索（體力 {game._action_costs()['explore']}）"
 
 
 def test_one_press_costs_six_and_writes_one_outing_entry():
@@ -142,7 +142,7 @@ def test_nothing_gained_fills_one_tier_one_material():
     assert any(line.startswith("獲得 ") for line in msgs)
     bag = sum(p.materials.values())
     _reset(game)
-    with _beat("material"), mock.patch("tianxia.explore_modes.gather_finds", return_value=[]):
+    with _beat("material"), mock.patch.object(explore_one, "gather_finds", return_value=[]):
         msgs = game.choose("act:explore")
     assert sum(p.materials.values()) == bag + 1
     assert any(line.startswith("獲得 ") for line in msgs)
@@ -227,7 +227,7 @@ def test_bots_score_the_one_explore_button():
     assert value in (bot_policy.OUTING_SCORE, bot_policy.OUTING_SCORE + bot_policy.NEED_MATERIAL_SCORE)  # 剛出師缺素材：潁水河畔素材不比遭遇少
     assert bot.explore_choice([o.id for o in game.options(odds=False)]) == "act:explore"
     off = ready(plain_game(), side="guan", loc="yingshui")
-    assert bot_policy.score(off, next(o for o in off.options(odds=False) if o.id == "act:explore"), BotProfile(personality="普通", seed=1, faction="guan", season_number=1)) is None  # 三選一的入口
+    assert bot_policy.score(off, next(o for o in off.options(odds=False) if o.id == "act:explore"), BotProfile(personality="普通", seed=1, faction="guan", season_number=1)) == bot_policy.ACT_SCORES["explore"]  # 舊探索是真的探索
 
 
 def test_outing_lines_are_checked_when_loaded():

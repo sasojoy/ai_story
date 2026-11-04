@@ -67,8 +67,8 @@ def test_closed_season_counts_nothing():
     game = ready(plain_game(), side="huang", loc="guan_camp")
     p = game.state.player
     p.stamina = 250.0
-    with _fight():
-        game.choose("explore:practice")
+    with _fight(), mock.patch.object(game, "_explore_weights", return_value=[("wild", 1.0)]):  # 舊探索落在野怪那一支
+        game.choose("act:explore")
     assert (p.fights_today, p.fight_day) == (0, 0)
 
 
