@@ -49,6 +49,9 @@ def faced(content, me: ArenaSide, foe: ArenaSide) -> None:
     mine, theirs = me.card, foe.card
     me.power, me.scores, me.bare = team.pvp_faced(content, me.power, me.scores, mine, theirs, me.bare)
     foe.power, foe.scores, foe.bare = team.pvp_faced(content, foe.power, foe.scores, theirs, mine, foe.bare)
+    me.dodge, foe.dodge = team.pvp_dodge(content, mine, theirs), team.pvp_dodge(content, theirs, mine)
+    me.role, me.scores = team.pvp_unrole(content, me.role, me.scores)
+    foe.role, foe.scores = team.pvp_unrole(content, foe.role, foe.scores)
 
 
 def arena_bare(ctx) -> float | None:

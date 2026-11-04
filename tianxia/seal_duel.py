@@ -121,6 +121,8 @@ def faced(content, a: SealSide, b: SealSide) -> None:
     ca, cb = a.card, b.card
     a.power, a.scores, _ = team.pvp_faced(content, a.power, a.scores, ca, cb)
     b.power, b.scores, _ = team.pvp_faced(content, b.power, b.scores, cb, ca)
+    a.role, a.scores = team.pvp_unrole(content, a.role, a.scores)
+    b.role, b.scores = team.pvp_unrole(content, b.role, b.scores)
 
 
 def open_duel(

@@ -315,3 +315,21 @@ def test_counter_traits_cut_the_attribute_they_answer(monkeypatch):
     assert Game._spar_power(brute, wall) < plain
     old = _game(False)
     assert team.counter_cuts(old.state, old.content, old.world) == {}
+
+
+def test_arena_counts_dodge_and_drops_roles_in_five_attribute_seasons():
+    """企劃者 2026-11-04：擂台以前完全不看身法——補上閃避（身法對他的身法）；玩家對打不給職位加成（職位留在決戰）。"""
+    from tianxia.features.bout import arena_actions
+    quick, plain = _game(), _game()
+    for g, split, bonus in ((quick, {"str": 3, "lead": 1, "int": 1, "spd": 4, "cha": 1}, "spd"), (plain, None, None)):
+        _level(g, 30)
+        if split:
+            g.pick_growth("custom", split)
+            g.state.player.attr_alloc = {bonus: 30}
+    me, foe = arena_actions.arena_side(quick), arena_actions.arena_side(plain)
+    assert me.role  # 開打前還帶著職位（身法最高：斥候）
+    arena_actions.faced(quick.content, me, foe)
+    assert me.dodge > 0 and foe.dodge == 0
+    assert me.role == "" and foe.role == ""
+    old = _game(False)
+    assert arena_actions.arena_side(old).dodge == 0.0

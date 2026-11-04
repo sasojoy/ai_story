@@ -521,6 +521,7 @@ class ArenaSide(BaseModel):
     bare: float | None = None  # 不含玉璽碎片戰力的威力（改版，FB-615）：只有戴著碎片才記；None＝power 本身就是給別人看的那一份
     cut: float = 0.0  # 這一邊的防具減損（挑的人是開打那一刻的、守的人是分身 ArenaEntry.cut）：對面打中這一邊的那一下乘 1 − 它（鐵匠鋪與合成流程 3.9）；舊存檔 0
     card: dict | None = None  # 五項屬性的季：重算對上真正的對手要的東西（team.pvp_card）；舊的季、舊存檔 None
+    dodge: float = 0.0  # 五項屬性的季：挨打的那一下閃掉的機會（身法對他的身法，team.pvp_dodge；faced 開打時填）；舊的季 0
 
     @property
     def shown(self) -> float:

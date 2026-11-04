@@ -272,6 +272,25 @@ def pvp_ratio(content: Content, card: dict | None, foe: dict | None) -> float:
             * (1 + share * max(floor, 1 + inner)) / (1 + share * max(floor, 1 + card["inner"])))
 
 
+def pvp_unrole(content: Content, role: str, scores: dict[str, float]) -> tuple[str, dict[str, float]]:
+    """五項屬性的季、玩家對打（擂台、奪璽單挑）不給職位加成（企劃者 2026-11-04 平衡總表：盾陣的固守、三成氣血疊在一起，
+    全統御在中低段贏六成多；斥候加的奇襲是最弱的一招）：拿掉職位、份量把拿手那一招多的那一截除回去。職位留在全服決戰的大場面。"""
+    from . import battle_instance  # 延後 import：只有這裡用得到
+    move = battle_instance.ROLE_MOVES.get(role)
+    if not role:
+        return role, scores
+    bonus = 1 + content.config.battle.role_move_bonus
+    return "", {m: (round(v / bonus, 1) if m == move else v) for m, v in scores.items()}
+
+
+def pvp_dodge(content: Content, card: dict | None, foe: dict | None) -> float:
+    """快照對打（擂台）挨打的那一下閃掉的機會：身法對他的身法（效果表的 dodge，乘 pvp_scale），料敵讓他的身法少算；沒卡是 0。
+    擂台以前完全不看身法（企劃者 2026-11-04 平衡總表：全身法在擂台只贏兩成）。"""
+    if not card or not foe:
+        return 0.0
+    return max(0.0, _v2_from(content, "dodge", card, foe) * content.config.attributes.v2.pvp_scale)
+
+
 def pvp_faced(content: Content, power: float, scores: dict[str, float], card: dict | None, foe: dict | None,
               bare: float | None = None) -> tuple[float, dict[str, float], float | None]:
     """快照的威力、份量（還有不含碎片的那一份）照真正的對手重算（pvp_ratio）；份量照實力（battle_instance.strength）的比例。"""
