@@ -12,7 +12,7 @@ def test_a_figure_entrusts_a_letter_and_it_gets_delivered():
     feature = next(f for f in FEATURES if f.name == "companions")
     g = real_game("week7")
     s, c = g.state, g.content
-    assert feature.enabled(g) and feature.prefix == "errand"
+    assert feature.enabled(g) and feature.prefix == ("errand", "talk", "parley")  # 第 20 批：人物對話的 talk:、parley: 也是這一包的前綴
     s.player.affinities[LUZHI] = 50
     errands.give(s, c, LUZHI, "luzhi_letter")
     e = s.player.errands[-1]

@@ -131,6 +131,10 @@
 - `ctx._deed_points(points, capped=True)`（「文字的事」那一本的貢獻帳：記到心意、託付辦成了；第 16 批 PM 認定第 1 條留在 Game）、`ctx._apply(effect)`（效果套用：
   勸降成了立痕跡；事件檢定的委派）
 - 共用的字與小函式（從這個模組 import）：`note_cheer`、`CHEERS_KEEP`（等著寫道賀信的那一格：舊模組 figure_life.spread 寫、書信讀；原本在 tianxia/letters.py）
+# companions（全部拆包第 20 批「人物情誼二」：人物對話與 NPC 智能 2.0 搬進人物情誼包要叫的；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第2批.md 1.3）
+- 共用的字與小函式（從這個模組 import）：`SAY_OPTION`、`PLAN_OPTION`、`ROAD_SAY`、`TEXT_TALKS`、`SAY_MAX`、`say_text`（「自己說」「商量打法」「帶路的路上說一句」
+  這三顆要打一句話的選項 id，與那句話能不能送；原本寫在 engine.py，server、假人、核心的 choose 都讀，engine 照舊 import 回來）、`BACKED_LINE`、`PLAN_MISS`
+  （並肩出陣的兩句：出陣包 act:train 打那一場前面那一句；原本寫在 parley.py）
 # cultivation（全部拆包第 23 批「修練」：改練、練成、意境裝卸、熔煉、絕學與破境丹、破境卡、傳功、配點搬進修練包要叫的；主人都是核心，
 # 總表附錄乙 final_owner.json；計畫 docs/superpowers/plans/2026-11-01-修練包-第1批.md 1.3）
 籌備中與絕學的名字（`ctx._preparing()` 列在 `# guide` 那一段；定名的 A 段〔假人用〕籌備中回 None。動作被擋的裝飾器不經這張清單：下面那一行，從這個模組 import）
@@ -186,6 +190,8 @@ explore（主動搬六包第 3＋4 批加的這一段）
 # companions（全部拆包第 19 批）
 - `ctx._settle_partings(write=True)`（主人決戰：決戰收場時從你身邊回江湖的人，情誼乘 parted_keep；按招募之前先結清。本體第 7 批在 `features/battle/muster.py`，總表第 19 列「先做」列成查詢服務）
 - `ctx._recruit_target()`、`ctx._recruitable_here()`（主人人物情誼：此地有沒有招得了的人；新手引導碰到才說的 h_recruit 問。第 22 批原本記在三、過渡）
+# companions（全部拆包第 20 批：人物對話與 NPC 智能 2.0 的本體搬進人物情誼包，Game 留一行委派回答別的包）
+- `ctx._parley_backing_here()`（主人人物情誼：並肩出陣——今天答應陪你、你在他那一帶的那位人物；出陣包 act:train 打的那一場包在外面問它。原本記在三、過渡 sortie 那一段）
 # sense（全部拆包第 24 批：有所感包回答別的包、有所感包問探索包）
 - `ctx._sense_here(loc, rng)`（主人有所感：靜心感悟——這一處有場景就跳有所感的卡，沒有場景的內容照舊直接悟；探索包的探索一顆抽到感悟叫它。
   第 3＋4 批記在三、過渡 explore 那一段，主人成包了，改列這裡）
@@ -251,9 +257,9 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
   從這裡拿掉；Game 上的委派留給 options）
 
 # sortie（全部拆包第 17 批「出陣三」）
-- `ctx._parley_backing_here()`（並肩出陣：今天答應陪你、你在他那一帶的那位人物；act:train 打的那一場包在外面；主人人物情誼〔總表第 19～20 批〕）
+（`ctx._parley_backing_here()`：全部拆包第 20 批人物對話成包，改列二、查詢服務 `# companions` 那一段）
 - `ctx._train()`、`ctx._sortie()`、`ctx.train_trend_push(loc_id=None)`、`ctx._train_push(trend_id, delta)`（出陣包自己的委派：
-  tests/figures/test_parley_two.py 換掉實例上的 `_train`、`_sortie`，tests/core/test_explain.py 換掉 `Game.train_trend_push`，
+  tianxia/features/companions/tests/test_parley_two.py 換掉實例上的 `_train`、`_sortie`，tests/core/test_explain.py 換掉 `Game.train_trend_push`，
   scripts/sim_trend_sources.py 換掉 `Game._train_push`——包裡經 ctx 叫，換掉的才打得到；呼叫端改完就拿掉）
 
 # guide（全部拆包第 22 批：新手引導包叫的、主人還沒搬的）
@@ -265,6 +271,11 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 # bout（全部拆包第 12 批：單挑包自己的委派，被測試或腳本換掉的，包裡經 ctx 叫才打得到；呼叫端改完就拿掉）
 - `ctx._arena_bare()`（擂台挑人的身手不含玉璽碎片的那一份；`tests/seal/test_seal_revamp_hidden.py` 換掉 `Game._arena_bare`）、
   `ctx._duel_finish(tier, line)`（頭目戰收場；`scripts/sim_season_one.py` 換掉 `Game._duel_finish` 數頭目戰打成怎樣）
+
+# companions（全部拆包第 20 批：人物對話叫的、主人還沒搬的）
+- `ctx._can_meet(companion_id)`、`ctx._socialize_figure()`、`ctx._count_talk(companion_id)`（主人交友求見 features/socialize，總表第 21 批：見不見得到他、
+  交友會直接開口的那位人物、記一輪並在聊滿時自動告辭；對話的 A 段 dialogue_request 與每一輪收尾問它們。第 21 批搬走時改成那一包的查詢服務）
+- `ctx._depart(route, mode, pace=None)`（主人移動 features/travel：帶路答應之後他親自帶你動身，步調照他的腳程；總表第 56 批前一直是 Game 的方法）
 
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 
@@ -288,6 +299,9 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 
 # companions（全部拆包第 19 批：Game 的類別屬性，choose 前段〔按勸降只叫出輸入框〕與包都讀）
 - `ctx._persuade_said`（勸降的 C 段交給 choose 的單子與模型的分數；不是 None 才真的擲骰）
+# companions（全部拆包第 20 批：Game 的類別屬性，人物對話的 _talk、_road_say 與 _parley_decide 之間傳的）
+- `ctx._parley_decision`（這一輪「自己說」擲出來的結果：_parley_decide 記、talk 與 road_say 收尾時拿去做事）
+- `ctx._talk_turn`、`ctx._talk_said`（Game.choose 前段驗過的那一輪對話與那句話，交給 choose 掛鉤的 talk、road_say；第 20 批審查接上掛鉤時開的）
 # cultivation（全部拆包第 23 批；Game.__init__ 起的）
 - `ctx.forged`、`ctx.forged_thing`、`ctx.secret_solved`：這一下裝成了沒、合出了什麼、解開了哪一份口訣秘方（裝意境寫，server 的
   api_menxia_do 在鎖裡讀；煉製 `Game.forge`、自創 `create_name` 也寫——煉製第 44 批）
@@ -324,6 +338,34 @@ def drill_share(amount: int, share: float) -> int:
     操練真的給的（出陣包 train_actions.drill）與行動列底下說會給什麼（train_actions.train_line）都算這一個；出陣的守與打贏（出陣包）、探索也用。
     （原本寫在 engine.py；出陣包要用、又不能 import engine，搬到這裡，`from tianxia.engine import drill_share` 照舊拿得到。）"""
     return int(amount * share + 0.5)
+
+
+# companions（全部拆包第 20 批）：原本寫在 engine.py；人物對話搬進人物情誼包要用、又不能 import engine，搬到這裡，engine 照舊 import 回來
+# （`from tianxia.engine import SAY_OPTION, PLAN_OPTION, ROAD_SAY, TEXT_TALKS, say_text` 照舊拿得到）
+# 跟人物對話時的「自己說」（企劃者 2026-10-08）：按下去只是叫出輸入框，真正送出帶著那句話走 choose(SAY_OPTION, text=…)（server.say）
+SAY_OPTION = "talk:say"
+# NPC 智能 2.1（parley.py）：同「自己說」要打一句話的兩顆——對話裡跟答應陪你出陣的人商量打法、他帶路的路上跟他說一句
+PLAN_OPTION = "talk:plan"
+ROAD_SAY = "parley:road"
+TEXT_TALKS = (SAY_OPTION, PLAN_OPTION, ROAD_SAY)
+SAY_MAX = 20  # 「自己說」最多幾個字（跟隨口應對一樣）
+# 並肩出陣（NPC 智能 2.0）：出陣包的 act:train 打那一場前面那一句——陪他出陣的人部曲出力加成，與商量打法沒談攏、這一仗他幫不上忙
+# （原本寫在 tianxia/parley.py，出陣包 import 它；parley 搬進人物情誼包之後包不能 import 包，搬到這裡，parley re-export）
+BACKED_LINE = "〔{name}的部曲與你並肩，這一仗威力 +{pct}%〕"
+PLAN_MISS = "（打法沒談攏：這一仗他的部曲幫不上忙。）"
+
+
+def say_text(text: str | None, limit: int = SAY_MAX) -> str | None:
+    """「自己說」那句話能不能送：先去頭尾空白、中間連著的空白併成一個，1～limit 字才算數，再轉繁體（zh.to_traditional）；
+    不行就是 None。長度在轉繁體之前量（轉換不改字數，量的是玩家打的）。limit 平常是 SAY_MAX，NPC 智能 2.0開著時照 Game.say_max。"""
+    from .. import zh  # noqa: PLC0415  （延後載入：核心的服務檔平常不碰簡繁轉換）
+
+    if text is None:
+        return None
+    text = " ".join(text.split())
+    if not text or len(text) > limit:
+        return None
+    return zh.to_traditional(text)
 
 
 # companions（全部拆包第 19 批「先做」：figure_life 讀來信改走核心）：PlayerState.cheers 那一格——舊模組 figure_life.spread 寫（他欣賞你做的事）、

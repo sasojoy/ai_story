@@ -15,7 +15,7 @@ from tianxia.rules import rate_words
 from tianxia.state import PLAYER
 
 from . import errands as errand_rules
-from . import letters
+from . import letters, parley
 from . import stances as stance_rules
 
 # 名冊第一列是本人（PLAYER）：本人永遠出戰，加入、移出都只回一句話，隊伍裡不會多出一個 "player"
@@ -363,8 +363,10 @@ def decline_letter(ctx, letter_id: int) -> list[str]:
     return msgs
 
 
-def deliver_mail(ctx, now: float, mail: list[str]) -> None:
-    """同步裡書信那一格（Game.sync）：mail 是前一行欠人物的事作罷的句子（parley.lapse，第 20 批），接上人物來信、過期的委託作罷，有字就寫一則「書信」。"""
+def deliver_mail(ctx, now: float) -> None:
+    """同步裡書信那一格（Game.sync）：先收欠人物的事過了期限的句子（parley.lapse：NPC 智能 2.1，欠的事作罷、附的委託先作罷，書信不再補一句），
+    接上人物來信、過期的委託作罷，併成一則「書信」，有字才寫。（第 19 批 mail 是呼叫端傳的；第 20 批 parley 進同一包，這一行搬進來。）"""
+    mail = parley.lapse(ctx.state, ctx.content)
     mail += letters.deliver(ctx.state, ctx.content, now)
     if mail:
         ctx._write(letters.TITLE, mail)

@@ -1054,6 +1054,23 @@ class Sect(_Strict):
     desc: str = ""
 
 
+# 好感度 tag 查表（設計文件七.1／五.1 一貫原則：好感度變化只信任封閉分類查表，不信任 LLM 自報數字）。目前是全部人物共用同一張表，
+# 之後如果要每位歷史人物有不同的個性化反應強度，可以在 CharacterDef 加一個對應欄位覆寫，這裡先給一個通用版本。
+# （全部拆包第 20 批「先做」：原本寫在 companion_agent.py；核心的 content.py 驗內容要讀 DIALOGUE_TAGS、不能 import 包，搬到這裡，
+# 人物情誼包的 companion_agent 從這裡拿）
+AFFINITY_TAG_DELTAS: dict[str, int] = {
+    "雪中送炭": 8,
+    "坦誠相待": 7,
+    "真誠請教": 6,
+    "由衷讚賞": 5,
+    "尋常寒暄": 1,
+    "冷漠敷衍": -2,
+    "言語冒犯": -6,
+    "強人所難": -5,
+}
+DIALOGUE_TAGS = list(AFFINITY_TAG_DELTAS.keys())
+
+
 class CharacterDef(_Strict):
     """人物（同伴或敵人）。stats 是第 1 級的屬性，growth 是每升一級增加的量，仍給 Check
     系統（辦事/修行類事件選項的屬性判定）使用，跟遭遇/劇情戰的判定（encounter.py）無關。"""
