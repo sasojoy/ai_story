@@ -203,6 +203,16 @@ explore（主動搬六包第 3＋4 批加的這一段）
 # cultivation（全部拆包第 23 批；主人：修練包）
 - `ctx._seize_chance(ratio)`：絕學的契機——剛打贏一場難度比 ratio 的仗，身上到了門檻的那一門擲一次頓悟（cultivation.seize），回寫給玩家看的
   那幾句（沒擲、沒成是空的或一句摸到又滑走）。核心的單打服務 `_seize` 與決戰包的收場補送叫它（本體在 `features/cultivation/actions.py`）
+# story（全部拆包第 30 批「一條線」；主人：一條線包。計畫 docs/superpowers/plans/2026-11-04-一條線簽到-第30批.md 1.3）
+- `ctx._story_begin(strand, custom=False)`（開一條線、端出第一段：探索包的探索擲中了叫它；原本列在三、過渡 explore 那一段，主人現在是一條線包，
+  本體在 `features/story/actions.py`，Game 留一行委派）
+- 這一包經 ctx 用的其餘服務都是一、共用服務（`ctx._present`、`_story_squad`〔劇情戰的江湖水漲〕、`_judged`、`_fight_with`、`_style_note`、
+  `_terrain_note`、`_narrate`、`_play_rounds`、`_hp_facts`、`_battle_rewards`、`_file_battle`、`_outcome`、`_save_season`）；一條線包自己的函式互相直接叫
+# checkin（全部拆包第 30 批「簽到」；主人：簽到包）
+- `ctx._opening_pending()`、`ctx._opening_gate()`（主人新手引導：開局第一分鐘〔城門口三選一還沒選〕不能簽到，回那一句；簽到的 `check_in`、
+  `auto_checkin`、`checkin_view` 問）
+- 共用的字與小函式（從這個模組 import，簽到包 re-export）：`PILL_FOUND`（找素材、練功掉回體丹那一句）、`checkin_on(content, world)`（簽到開著沒；
+  核心的 `Game._pill_find` 掉回體丹也問，回體丹那一套歸核心；原本是 `tianxia/checkin.py` 的 `PILL_FOUND` 與 `on`）
 
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
@@ -313,12 +323,13 @@ from __future__ import annotations
 import functools  # sense（第 24 批）：outing_watch 用
 from typing import TYPE_CHECKING
 
+from .. import calendar  # checkin（第 30 批）：checkin_on 用
 from ..models import Content
 from ..wallet import Purchase, Wallet
 
 if TYPE_CHECKING:
     from ..engine import Game
-    from ..state import GameState  # companions（note_cheer 的型別）
+    from ..state import GameState, WorldState  # companions（note_cheer 的型別）；checkin（checkin_on 的型別）
 
 # 共用的字（原本寫在 engine.py；功能包要用、又不能 import engine，搬到這裡，engine 照舊叫得到）
 PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，畫面照常可看"
@@ -488,3 +499,13 @@ def not_while_preparing(action):
         return action(ctx, *args, **kwargs)
 
     return guarded
+
+
+# checkin（全部拆包第 30 批「簽到」）：原本寫在 tianxia/checkin.py；回體丹那一套（Game._pill_find 掉回體丹）歸核心，要問簽到開著沒、說那一句，
+# 簽到包（tianxia/features/checkin/checkin.py）又不能被核心 import，搬到這裡，簽到包 re-export（`checkin.on is services.checkin_on`）
+PILL_FOUND = "獲得 【{name}】一顆——不知誰落下的，正好收著。"
+
+
+def checkin_on(content: Content, world: WorldState | None) -> bool:
+    """簽到開著沒：設定打開（只有 season21），這一季是 21 天季（開季時蓋的章），而且還沒收季。週末與 14 天一律關著。"""
+    return content.config.checkin.enabled and calendar.season21_on(world, content) and not world.ended

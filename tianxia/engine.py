@@ -16,9 +16,8 @@ from typing import TYPE_CHECKING
 from . import arts as arts_mod
 # （cultivation：破境卡 ascend 全部拆包第 23 批搬進修練包，engine 不再用，拿掉）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
-from . import chapters  # 章回主線（企劃者 2026-10-29）
 from . import (
-    allied, annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, clinic, conquest, conquest_day, create, defection, divine, economy, encounter, equipment,
+    allied, annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, clinic, conquest, conquest_day, create, defection, divine, economy, encounter, equipment,
     deeds, fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, forge_secrets, fusion, gender, howto, insight_fx, insights, invites, journal, library, mapdata, martial_arts, plans,
     materials, mounts, naming, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skillview, smithing,
@@ -26,7 +25,6 @@ from . import (
 )
 from . import flavor
 from .flavor import FlavorJob
-from . import storyline  # 一條線：特殊事件與特殊頓悟的底座（企劃者 2026-10-26）
 from . import epiphany  # 特殊頓悟（登記一條線的鉤子；企劃者 2026-10-26）
 from . import tiers  # 事件分級：場景卡上那一行「州郡大事」「天下大事」
 from . import outing as outing_rules  # 走一趟（企劃者 2026-10-29～30）：探索一次走一、三、五段
@@ -135,6 +133,13 @@ from .core.services import not_while_preparing as _not_while_preparing
 from .features.cultivation import actions as cultivation_actions  # 過渡：Game 上修練頁動作的 22 個一行委派（全部拆包第 23 批）
 from .features.cultivation import view as cultivation_view  # 過渡：Game 上修練頁唯讀資料的 11 個一行委派（全部拆包第 23 批）
 from .features.cultivation.actions import MELT_MANY_PROLOGUE  # noqa: F401  過渡：tests/core/test_prologue.py 從 engine 拿
+# checkin（全部拆包第 30 批）：回體丹那一套歸核心，簽到開著沒、掉回體丹那一句搬進核心的共用小函式（Game._pill_find 用）
+from .core.services import PILL_FOUND, checkin_on
+# story（全部拆包第 30 批）：一條線的底座（共用規則層：JOURNAL、場景圖、題目文字、線的定義）；10 個一行委派（章回 chapters 的模組層 import 搬到包的 actions.py：載入時登記 TASKS）
+from . import story_base
+from .features.story import actions as story_actions  # 過渡：Game 上一條線的 10 個一行委派
+# checkin（全部拆包第 30 批）：每日簽到的 3 個一行委派
+from .features.checkin import actions as checkin_actions  # 過渡：Game 上簽到的 3 個一行委派
 from .state import (
     ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, CrowdNote, Equipment, GameState, HintNote, JournalEntry, Journey, Mingtie, Rumor, Tagalong,
     StoryCard, StoryProgress, TierResult, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
@@ -562,7 +567,7 @@ class Game:
         之後新增的 PlayerState 欄位預設就跟著新角色重來；要跨季保留的才加進下面這份清單。"""
         old = self.state
         past = self._zhuan_past(old)  # 列傳為終點（減法季批 7b）：收季之後沒回來過的人，存之前補季末論功與〈天下形勢〉
-        storyline.close_season(old, self.content)  # 一條線：還沒收的寫「此事未了」進傳（休季時同步過的已經寫了）
+        self._story_close_season(old)  # 一條線：還沒收的寫「此事未了」進傳（休季時同步過的已經寫了；一條線包，第 30 批：要在 save_annals 之前，接不了 on_season_end）
         if old.player.annals:  # 行狀跟著角色重來：先把上一季的存起來，季末的傳照它寫（玩家傳）
             self.world.save_annals(
                 old.player.season_number, old.player.name, [e.model_dump() for e in old.player.annals],
@@ -955,7 +960,7 @@ class Game:
             self._write("召見", summons)
         story = self._story_tick()  # 一條線：不在線時過了的期限、休季時還沒收的（此事未了），回來第一次同步就走
         if story:
-            self._write(storyline.JOURNAL, story)
+            self._write(story_base.JOURNAL, story)
         # 第四階席次：抄帳、補缺（正式版丁）。輪詢只同步、只存角色（server.poll_main → act_look），所以帳或名單變了要自己把共用賽季存回去，
         # 不然補上的缺、那一則陣營軍情都會丟掉，下一次輪詢又補一次、又寫一則紀錄
         watching = self.state.player.qualified or seats.on_the_books(self.state)  # 沒資格、帳上也沒有名字的人，同步不碰共用賽季
@@ -1189,10 +1194,9 @@ class Game:
         sense_menu = self._sense_menu()
         if sense_menu is not None:
             return sense_menu
-        if s.player.story_open is not None:  # 一條線的答題（storyline.quiz_menu）：只有這一題的答案與「先擱著」
-            menu = storyline.quiz_menu(s, c)
-            if menu:
-                return [Option(id=option_id, label=label) for option_id, label in menu]
+        story_menu = self._story_menu()  # 一條線的答題：只有這一題的答案與「先擱著」（一條線包，第 30 批：在有所感的選單之後，menu 掛鉤的位置不對）
+        if story_menu is not None:
+            return story_menu
         if s.player.pending_companion:  # 跟人物談著：整個選單是對話的（人物情誼包 talk_options）
             return self._talk_options()
         if allied.needs_ally(s, c):  # 拜入要依附的門派之後還沒挑一邊（豪強分屬兩軍）：只剩選邊
@@ -1260,7 +1264,7 @@ class Game:
             # 鈕上寫它自己的名字與一行小字
             opts.append(Option(id="act:summons", label=SUMMONS_LABEL if precise.on(c, s.world) else "應召"))
         # 一條線（特殊事件）：此刻在這裡做得了的那一段一顆，不花體力（同應召）
-        opts += [Option(id=option_id, label=label, enabled=ok) for option_id, label, ok in storyline.options(s, c)]
+        opts += self._story_options()  # 一條線包，第 30 批：在應召之後、此地的人之前，options 掛鉤在最後面，位置不對
         people = self._figures_here()
         if precise.on(c, s.world):  # 一類一顆（正式季整合 2.8）：交友只談話、求見併進交友；拜入門派另成一顆（2.7）
             opts += self._sect_options() + [self._precise_social_option(cost["socialize"])]
@@ -2222,8 +2226,7 @@ class Game:
                 msgs = self._aid_act(arg)
             elif kind == "plan":
                 msgs = self._plan_act(arg)
-            elif kind == storyline.OPTION:
-                msgs = self._story_act(arg)
+            # （story：一條線的答題、打一場、端事件，全部拆包第 30 批換成一條線包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             elif kind == "dunwu":  # 特殊頓悟取名（有所感包，第 24 批；choose 掛鉤不帶 text——自己寫的名字在 text——留原位叫委派）
                 msgs = self._epiphany_name(arg, text)
             else:
@@ -2478,10 +2481,7 @@ class Game:
             verb = arg.partition(":")[0]
             what = invites.kind_name(inv.kind)
             return {"yes": f"{what}・{inv.sender}", "no": f"婉拒{what}", "cancel": "收回邀請"}.get(verb, f"與{inv.sender}")
-        if kind == storyline.OPTION:  # 一條線（答題、打一場、端事件）：寫線的名字
-            progress = s.player.storylines.get(arg.partition(":")[0])
-            line = storyline.definition(c, progress) if progress is not None else None
-            return line.title if line is not None else "奇事"
+        # （story：寫線的名字，全部拆包第 30 批換成一條線包 choose 掛鉤的 Outcome.title，拿掉）
         if kind == "dunwu":  # 特殊頓悟取名（有所感包，第 24 批）
             return self._epiphany_title()
         if kind == "act" and arg.startswith("challenge:"):
@@ -3010,11 +3010,11 @@ class Game:
         不碰別的骰。兩行同破境丹：「獲得」開頭的敘事與「回體丹 +1」（寫進紀錄的數值變化）。"""
         c = self.content
         chance = c.config.checkin.pill_drop
-        if chance <= 0 or not checkin.on(c, self.state.world) or rng.random() >= chance:
+        if chance <= 0 or not checkin_on(c, self.state.world) or rng.random() >= chance:
             return []
         self.state.player.stamina_pills += 1
         name = c.config.stamina_pill_name
-        return [checkin.PILL_FOUND.format(name=name), f"{name} +1"]
+        return [PILL_FOUND.format(name=name), f"{name} +1"]
 
     def _explore_outcome(self) -> list[str]:
         s, c = self.state, self.content
@@ -5406,110 +5406,41 @@ class Game:
             return self._story_tick()  # 一條線：段落事件了結了，照記下的那一步往下走（下一段就在這裡時直接端出來）
         return self._push_progress(p.location, c.config.conquest.event_progress, "event") + self._story_tick()
 
-    # ── 一條線（特殊事件與特殊頓悟的底座，tianxia/storyline.py；企劃者 2026-10-26）──
+    # ── 一條線（特殊事件與特殊頓悟的底座）：本體在 tianxia/features/story/actions.py（全部拆包第 30 批），這裡留一行委派 ──
+    # （_story_act、_story_fight、_story_bout 只有包裡叫：story: 由 choose 掛鉤接走，不留）
 
     def story_start(self, definition: StoryDef) -> list[str]:
-        """程式組的線（例：特殊頓悟）從這裡開：整份 StoryDef 存進進度，第一段是事件、人又在那裡就直接端出來。
-        關著、這一季開過同一個 id、這一種沒有空位（Config.jianfa.story_caps）時回空的、什麼都不動。呼叫端自己存檔。"""
-        return self._story_begin(definition, custom=True)
+        return story_actions.story_start(self, definition)
 
     def story_cards(self) -> list[StoryCard]:
-        """等著跳出來的卡（開頭、此事已了・入傳、此事未了），照發生的順序。"""
-        return list(self.state.player.story_cards)
+        return story_actions.story_cards(self)
 
     def story_seen(self) -> None:
-        storyline.seen(self.state)
+        return story_actions.story_seen(self)
 
     def story_card_view(self) -> list[dict]:
-        """網頁跳顯框要的那幾張卡（特殊事件設計稿的跳顯框）：sort 是這條線的類別（奇事、頓悟），自訂的線照存檔裡那一份。
-        image 是 web/img/ 底下不含副檔名的路徑，圖檔在不在是伺服器的事（同 scene_art）。"""
-        p = self.state.player
-        out = []
-        for card in p.story_cards:
-            progress = p.storylines.get(card.line)
-            line = storyline.definition(self.content, progress) if progress is not None else self.content.storylines.get(card.line)
-            out.append({
-                "line": card.line, "kind": card.kind, "sort": line.kind if line is not None else storyline.JOURNAL,
-                "title": card.title, "text": card.text, "image": card.image, "ending": card.ending, "failed": card.failed,
-            })
-        return out
+        return story_actions.story_card_view(self)
 
     def event_tier(self) -> dict | None:
         return event_check.event_tier(self)
 
     def _story_begin(self, definition: StoryDef, custom: bool = False) -> list[str]:
-        progress = storyline.start(self.state, self.content, definition, custom=custom)
-        if progress is None:
-            return []
-        head = f"✦ 奇事：{definition.title}"
-        self._outcome(journal.event_marker(definition.title, True), head)
-        intro = [fill_marks(definition.intro, self.state)] if definition.intro else []
-        return [head] + intro + self._story_tick()
+        return story_actions.story_begin(self, definition, custom)
 
     def _story_tick(self) -> list[str]:
-        """一條線往前走（storyline.tick）；剛進的那一段是事件、人就在那裡時直接端出來。關著是空的。
-        章回主線（chapters）排在前後：先開該開的回、收錯過的回，走完之後把剛走進最後一段的回記成做成（世界的帳改了就存共用的季）。"""
-        before = (dict(self.state.world.chapter_done), {k: dict(v) for k, v in self.state.world.chapter_weights.items()})
-        head = chapters.tick(self.state, self.content, self.world)
-        msgs, event_id = storyline.tick(self.state, self.content, self.world)
-        msgs = head + msgs + chapters.after(self.state, self.content)
-        if (self.state.world.chapter_done, self.state.world.chapter_weights) != before:
-            self._save_season()
-        if event_id is not None:
-            msgs += self._present(self.content.events[event_id])
-        return msgs
-
-    def _story_act(self, arg: str) -> list[str]:
-        """按「未了之事」那一顆（story:<線>）：事件段端出事件、答題段出第一題、打一場的段直接打；答題的答案是 story:<線>:a<序號>，
-        先擱著是 story:<線>:later。選單上才有這幾顆（choose 先驗過），所以這裡不再驗地方。"""
-        s, c = self.state, self.content
-        line_id, _, sub = arg.partition(":")
-        if sub:
-            return storyline.answer(s, c, line_id, sub)
-        progress = s.player.storylines[line_id]
-        line, stage = storyline.current(c, progress)
-        if stage.kind == "event":
-            progress.opened = True
-            return self._present(c.events[stage.event])
-        if stage.kind == "quiz":
-            return [f"【{line.title}】"] + storyline.open_quiz(s, c, progress)
-        return self._story_fight(progress, stage)
-
-    def _story_fight(self, progress: StoryProgress, stage: StoryStage) -> list[str]:
-        """一條線的 fight 段：照劇情戰打（不閃、不扣氣血，同 _event_battle），打完交給 storyline.fought（鉤子寫記號、往 win 或 lose、輸了等再試）。"""
-        s, c = self.state, self.content
-        if stage.mirror is not None:  # 自己的影子不在內容的隊伍表裡：打這一場的時候借放一下（行動鎖裡，打完就拿掉）
-            squad = self._mirror_squad(progress, stage)
-            c.squads[squad.id] = squad
-            try:
-                return self._story_bout(progress, stage, squad)
-            finally:
-                c.squads.pop(squad.id, None)
-        return self._story_bout(progress, stage, self._story_squad(c.squads[stage.squad]))
-
-    def _story_bout(self, progress: StoryProgress, stage: StoryStage, squad: Squad) -> list[str]:
-        s, c = self.state, self.content
-        judged = self._judged(squad)
-        result = self._fight_with(squad, judged, dodge=False, difficulty=squad.difficulty)
-        line = storyline.definition(c, progress)
-        record = battlelog.new_record(s, c, self.world, squad, result, "event", line.title)
-        record.notes += self._style_note(squad, result) + self._terrain_note()
-        self._narrate(record, result, judged)
-        self._play_rounds(record, squad, result.tier, None, self._hp_facts(), clash=result.clash)
-        won = result.tier in team.WIN_TIERS
-        rewards = self._battle_rewards(squad, record) if won and stage.mirror is None else []  # 打自己的影子沒有東西掉
-        after = storyline.fought(s, c, progress, won, record)  # 打輸、還能再打（心魔未破）：跳卡、記行狀，紀錄多一行
-        return [self._file_battle(record)] + rewards + after
+        return story_actions.story_tick(self)
 
     def _mirror_squad(self, progress: StoryProgress, stage: StoryStage) -> Squad:
-        """fight 段的對手是自己的影子（StoryStage.mirror，特殊頓悟的心魔）：難度＝你此刻的全隊威力（氣血當滿的、不算地利與碎片，同江湖水漲）
-        × mirror，名字是 mirror_name。"""
-        base = Squad(id=f"mirror:{progress.line}", name=stage.mirror_name, difficulty=1.0)
-        power = team.power_vs(self.state, self.content, self.world, base, fresh=True, terrain=False, seal=False)
-        scale = stage.mirror
-        if stage.mirror_weaken:  # 重複挑戰時越打越弱（企劃者 2026-10-28）：輸過幾次就削幾次，削到 mirror_floor 為止
-            scale = max(stage.mirror_floor, stage.mirror - stage.mirror_weaken * progress.tries)
-        return base.model_copy(update={"difficulty": round(max(1.0, power * scale), 1)})
+        return story_actions.mirror_squad(self, progress, stage)
+
+    def _story_menu(self) -> list[Option] | None:
+        return story_actions.story_menu(self)
+
+    def _story_options(self) -> list[Option]:
+        return story_actions.story_options(self)
+
+    def _story_close_season(self, old: GameState) -> None:
+        return story_actions.close_season(self, old)
 
     # ── 混戰（翻地與爭搶，輿圖簡化設計 4.3）、出陣的鈕、出陣、獎勵、守：本體在 tianxia/features/sortie/actions.py，這裡留一行委派 ──
 
@@ -6910,44 +6841,17 @@ class Game:
         rewards = self._guide(self._note_action("pill"))  # 序章「服一顆回體丹」（新手引導重做）
         return self._log(msgs + [f"體力 +{round(p.stamina - before)}（{name}還剩 {p.stamina_pills} 顆）"] + rewards)
 
+    # ── 每日簽到：本體在 tianxia/features/checkin/actions.py（全部拆包第 30 批），這裡留一行委派 ──
+
     @_not_while_preparing
     def check_in(self, attribute: str = "") -> list[str]:
-        """每日簽到（21 天季，正式季整合 6.2；tianxia/checkin.py）：領今天的份，四階的日子帶 attribute（剛柔快慢）。草廬序章裡不簽
-        （同回體丹）；關著、簽過了、沒挑或挑錯四階都只回一句、什麼都不動。成了寫一則「簽到」江湖紀錄（數值變化寫丹、銀兩、素材）。"""
-        s, c = self.state, self.content
-        if checkin.on(c, s.world) and self._opening_pending():  # 開局第一分鐘：三選一還沒選，福利之後寫進紀錄、不當第一張卡
-            return self._log([self._opening_gate()])
-        if checkin.on(c, s.world) and prologue_rules.active(s, c):
-            return self._log([checkin.HUT])
-        result = checkin.claim(s, c, s.world, attribute)
-        if isinstance(result, str):
-            return self._log([result])
-        lines, changes = result
-        journal.add_entry(s, JournalEntry(time=s.world.time, title=checkin.TITLE, lines=lines, changes=changes))
-        return self._log(lines + changes)
+        return checkin_actions.check_in(self, attribute)
 
     def _auto_checkin(self) -> None:
-        """每日簽到自動領（減法季批 1；Joy 2026-10-24 挑了江湖頁乙案：簽到不放鈕）：每天第一次同步時，今天的份不必挑的就直接領、
-        寫一則「簽到」江湖紀錄（同 check_in，「剛剛」那一行會寫出來）；要挑四階的日子不動，江湖頁冒一張挑屬性的小卡（status.checkin.pick），
-        挑了才領（check_in）。草廬序章裡不簽（同 check_in）。假人照舊在 bot.check_in 自己簽，先同步到的這裡順手領了也只是同一份。"""
-        s, c = self.state, self.content
-        if prologue_rules.active(s, c) or self._opening_pending():
-            return
-        day = checkin.due(s, c, s.world)
-        if day is None or checkin.needs_pick(c, day):
-            return
-        result = checkin.claim(s, c, s.world)
-        if isinstance(result, str):
-            return
-        lines, changes = result
-        journal.add_entry(s, JournalEntry(time=s.world.time, title=checkin.TITLE, lines=lines, changes=changes))
+        return checkin_actions.auto_checkin(self)
 
     def checkin_view(self) -> dict | None:
-        """江湖頁「簽到」小標的資料（checkin.view）：簽到關著、草廬序章裡、過了這一季最後一天（管理者把季末往後排）是 None。"""
-        s, c = self.state, self.content
-        if not checkin.on(c, s.world) or not checkin.in_season(c, s.world) or prologue_rules.active(s, c) or self._opening_pending():
-            return None
-        return checkin.view(s, c, s.world)
+        return checkin_actions.checkin_view(self)
 
     # ── 領地爭奪：翻地與爭搶（輿圖簡化設計第四章）——戰書、換天的掛鉤、分紅送到、畫面資料。投票與 22:00 公告結算拿掉了（PM 2026-10-20）──
 
@@ -10368,7 +10272,7 @@ class Game:
             return None
         if s.pending_event:
             event = c.events[s.pending_event]
-            own = storyline.stage_art(s, c)  # 一條線事件段的專屬圖（StoryStage.image）蓋過事件的類型圖
+            own = story_base.stage_art(s, c)  # 一條線事件段的專屬圖（StoryStage.image）蓋過事件的類型圖
             if not event.image and own is None:
                 return None
             path = own or f"events/{event.image}"
@@ -10426,11 +10330,6 @@ class Game:
         seat = features_core.scene(self)
         if seat is not None:
             return seat
-        question = storyline.question_text(s, c) if s.player.story_open is not None else None
-        if question:  # 一條線的答題：場景寫這一題（選單上是答案）
-            progress = s.player.storylines[s.player.story_open]
-            line = storyline.definition(c, progress)
-            return f"**{line.title}**\n\n{question}"
         if s.player.pending_companion:
             character = c.characters[s.player.pending_companion]
             history = s.player.dialogue_history.get(s.player.pending_companion, [])
