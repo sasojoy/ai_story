@@ -10255,7 +10255,7 @@ class RoamScenario(StripScenario):
             self.me(who, "接手之後探索")
 
 
-_events_register_track("roam", RoamScenario, (("tianxia/engine.py",), ('一枚——{cfg.legend_item_note}', '一枚——{cfg.legend_item_note}！')), "week7")
+_events_register_track("roam", RoamScenario, (("tianxia/features/explore/explore_base.py", "tianxia/engine.py"), ('一枚——{cfg.legend_item_note}', '一枚——{cfg.legend_item_note}！')), "week7")
 
 
 if __name__ == "__main__":

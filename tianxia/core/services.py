@@ -173,6 +173,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 # explore（全部拆包第 18 批：探索的底搬進 features/explore/explore_base.py，Game 留一行委派）
 - `ctx._practice_tier(loc)`、`ctx._wild_foes(loc)`（主人 explore：這一處最弱的對手分一二三級、此處站著的野怪；引導包的 `_newbie_go`、`h_*` 提示、
   輿圖的地點詳情〔`_fierce_line`〕問。原本列在三、過渡 explore 那一段）
+- `ctx._sense_start(scene, rng)`（主人有所感：開一張有所感的卡；序章第 3 步的有所感版〔草廬四景〕，舊探索的 `explore_outcome` 叫）
 - `ctx._explore_weights(loc)`、`ctx._explore_can(loc)`、`ctx._legend_find(rng)`（主人 explore：舊探索三支的比重、做不做得了、撿破境丹；探索包
   的本體經 ctx 叫它們——測試與 same_behavior 在 Game 上換掉，包裡直接叫模組函式就換不到）
 
