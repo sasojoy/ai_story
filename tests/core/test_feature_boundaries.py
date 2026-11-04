@@ -418,16 +418,11 @@ GAME_DELEGATE_CALLERS.update({
     ("_squad_encounter", "train_trend_push"): "戰鬥（不是出陣的那一支）打贏之後遊歷推大勢：總表第 26 批的事件（打贏一場；原位行尾標「# 過渡：第 26 批」）",
     ("_order_options", "_duty_option"): "軍令的兩個行動（軍情，總表第 33 批）：守勢那一顆的鈕是出陣包的（共用出陣的次數與字）；軍情成包時改叫出陣包的查詢服務",
 })
-# arts（全部拆包第 23 批「修練」：改練、練成、意境裝卸、熔煉、絕學與破境丹、破境卡、傳功、配點搬進修練包 tianxia/features/arts/；計畫
+# cultivation（全部拆包第 23 批「修練」：改練、練成、意境裝卸、熔煉、絕學與破境丹、破境卡、傳功、配點搬進修練包 tianxia/features/cultivation/；計畫
 # docs/superpowers/plans/2026-11-01-修練包-第1批.md 1.6）：這一批加的集中在這一段（並行的拆包線不跟別人的行穿插；拿掉的在原處）
-# 共用規則層的模組跟一包同名（包名是總表定的）：兩個是不同的東西——tianxia/<名字>.py 是共用規則層那一個、tianxia/features/<名字>/ 是包；
-# 包裡要共用層那一個一律寫 `from tianxia import <名字>`（包裡的 `from . import <名字>` 指到包自己）。模組名 → 為什麼同名
-SHARED_NAMED_LIKE_A_PACKAGE = {
-    "arts": "修練包（總表第 23 批的包名 features/arts）跟武學的評分、裝卸、意境格（tianxia/arts.py，第 15 批登記的共用規則層）同名",
-}
 # 22 個動作（actions）、11 個修練頁的唯讀資料（view）的一行委派；原本那兩行 `from . import ascend`、`from . import (..., chuangong, ...,
 # cultivation, ...)` 現在是別名，engine 不再用，拿掉。MELT_MANY_PROLOGUE（序章裡批量熔煉那一句）搬進包，tests/core/test_prologue.py 照舊從 engine 拿
-GAME_IMPORTS |= {"tianxia.features.arts.actions", "tianxia.features.arts.view"}
+GAME_IMPORTS |= {"tianxia.features.cultivation.actions", "tianxia.features.cultivation.view"}
 GAME_DELEGATES |= {
     # server（MENXIA_ACTIONS、menxia_view、main_view 的境界卡、/api/do/allocate、破境卡那一句的三段式）、假人（bot、bot_policy）、測試在叫的：
     # 改練、練成、意境裝卸、熔煉、服丹衝關、舊存檔的定名（A 段與 C 段）、破境卡、傳功、配點與境界卡（20 個）、修練頁的唯讀資料（11 個）
@@ -520,8 +515,7 @@ def test_the_shared_rules_layer_is_real_old_modules_with_a_reason_and_never_impo
     assert SHARED and all(isinstance(why, str) and why.strip() for why in SHARED.values())
     for name in SHARED:
         assert (TIANXIA / f"{name}.py").exists(), name
-        assert name not in CORE and name not in aliases() and (name not in _packages() or name in SHARED_NAMED_LIKE_A_PACKAGE), name
-    assert set(SHARED_NAMED_LIKE_A_PACKAGE) <= set(SHARED) & set(_packages())  # 拿掉了一邊就從名單上拿掉
+        assert name not in CORE and name not in aliases() and name not in _packages(), name
     assert [f"{name}.py:{line} {mod}" for name in sorted(SHARED) for line, mod in _feature_imports(TIANXIA / f"{name}.py")] == []
 
 
@@ -957,8 +951,8 @@ def test_the_old_names_left_as_aliases_are_known():
                          "tavern": "tavern", "tavern_ask": "tavern",
                          # battle（全部拆包第 7 批：tianxia/escorts.py）
                          "escorts": "battle",
-                         # arts（全部拆包第 23 批：tianxia/cultivation.py、chuangong.py、ascend.py）
-                         "cultivation": "arts", "chuangong": "arts", "ascend": "arts"}
+                         # cultivation（全部拆包第 23 批：tianxia/cultivation.py、chuangong.py、ascend.py）
+                         "cultivation": "cultivation", "chuangong": "cultivation", "ascend": "cultivation"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 

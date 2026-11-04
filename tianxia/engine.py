@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import arts as arts_mod
-# （arts：破境卡 ascend 全部拆包第 23 批搬進修練包，engine 不再用，拿掉）
+# （cultivation：破境卡 ascend 全部拆包第 23 批搬進修練包，engine 不再用，拿掉）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import chapters  # 章回主線（企劃者 2026-10-29）
 from . import (
@@ -71,7 +71,7 @@ from .guide import speakers as guide_speakers
 from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
 from .mapview import legend_data, render_map, render_minimap
-from .martial_arts import QUALITIES  # （arts：is_renamed 跟著 _deliver_renames 搬進修練包，拿掉）
+from .martial_arts import QUALITIES  # （cultivation：is_renamed 跟著 _deliver_renames 搬進修練包，拿掉）
 from .models import (
     EXPLORE_BRANCHES, FREE_TEXT_MAX, MOVES, BattleDef, Check, Choice, Content, Effect, Event, ExploreBranch, FactionDef, GatherBranch, Location,
     DuelBoss, PromotionDef, RoadKind, Squad, Threshold, TimetableEvent, TravelMode, TutorialStep, WorldEvent,
@@ -117,13 +117,13 @@ from .features.battle.rules import (  # noqa: F401  過渡：測試從 engine �
     ESCORT_MUSTER, ESCORT_SCENE, RESTORED_NOTE, ROUND_BLOCKS, TROOPS_LINE, TROOPS_REPORT,  # test_showdown_full_report、test_battle_round_blocks）
     ESCORT_PICK,  # 第 7 批：挑同伴那一句（test_companions_battle 從 engine 讀）
 )
-# arts（全部拆包第 23 批「修練」）：籌備中那兩句與裝飾器搬進核心的共用的字與小函式（還掛在 Game 上的動作照舊掛 @_not_while_preparing）；
+# cultivation（全部拆包第 23 批「修練」）：籌備中那兩句與裝飾器搬進核心的共用的字與小函式（還掛在 Game 上的動作照舊掛 @_not_while_preparing）；
 # 修練頁的 33 個一行委派（原本 engine 那兩行 import 的 cultivation、chuangong 與 `from . import ascend` 現在是修練包的別名，engine 不再用，拿掉）
 from .core.services import PREPARING_REFUSAL, PREPARING_TEXT  # noqa: F401  PREPARING_REFUSAL：兩個測試檔從 engine 拿
 from .core.services import not_while_preparing as _not_while_preparing
-from .features.arts import actions as arts_actions  # 過渡：Game 上修練頁動作的 22 個一行委派（全部拆包第 23 批）
-from .features.arts import view as arts_view  # 過渡：Game 上修練頁唯讀資料的 11 個一行委派（全部拆包第 23 批）
-from .features.arts.actions import MELT_MANY_PROLOGUE  # noqa: F401  過渡：tests/core/test_prologue.py 從 engine 拿
+from .features.cultivation import actions as cultivation_actions  # 過渡：Game 上修練頁動作的 22 個一行委派（全部拆包第 23 批）
+from .features.cultivation import view as cultivation_view  # 過渡：Game 上修練頁唯讀資料的 11 個一行委派（全部拆包第 23 批）
+from .features.cultivation.actions import MELT_MANY_PROLOGUE  # noqa: F401  過渡：tests/core/test_prologue.py 從 engine 拿
 from .state import (
     ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, FrontReport, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong, TimelineResult,
     StoryCard, StoryProgress, TierResult, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
@@ -804,7 +804,7 @@ class Game:
 
     def _drop_old_zhuifeng(self) -> None:
         """追風步的舊品質讀檔時拿掉（修練包 actions.drop_old_zhuifeng，全部拆包第 23 批；_drop_stale_references 照原位叫、測試直接叫）。"""
-        return arts_actions.drop_old_zhuifeng(self)
+        return cultivation_actions.drop_old_zhuifeng(self)
 
     def _drop_stale_references(self) -> None:
         """內容檔改版後，舊存檔可能引用已刪除的事件、地點、武學或人物；丟掉這些引用以免當機。"""
@@ -6832,7 +6832,7 @@ class Game:
     def _deliver_renames(self) -> None:
         """別人替手上那一門定了名，下一次同步補一則江湖紀錄（FB-083；修練包 actions.deliver_renames，全部拆包第 23 批）：sync 照原位叫
         （玉璽補送之後、首創名望回饋之前：江湖紀錄的先後算行為）。"""
-        return arts_actions.deliver_renames(self)
+        return cultivation_actions.deliver_renames(self)
 
     # ── 全服決戰收場補送（戰報、江湖紀錄、軍餉、行狀、戰功；FB-027）：本體在 tianxia/features/battle/view.py（主動搬六包第 5 批），這裡留一行委派 ──
 
@@ -8562,27 +8562,27 @@ class Game:
         """爐裡只放了一個意境時，另一格放得進來的每一個合不合得了（skillview.forge_picks）。只讀。"""
         return skillview.forge_picks(self.state, self.content, self.world, insight_ids)
 
-    # ── 修練（全部拆包第 23 批：本體在修練包 tianxia/features/arts/actions.py，server、假人、測試照舊叫 Game，這裡留一行委派）──
+    # ── 修練（全部拆包第 23 批：本體在修練包 tianxia/features/cultivation/actions.py，server、假人、測試照舊叫 Game，這裡留一行委派）──
 
     def cultivate(self, art_id: str, use_legend: bool = False) -> list[str]:
         """服一枚破境丹強行衝絕學（修練包 actions.cultivate；籌備中被擋）。"""
-        return arts_actions.cultivate(self, art_id, use_legend=use_legend)
+        return cultivation_actions.cultivate(self, art_id, use_legend=use_legend)
 
     def mastery_request(self) -> naming.NamingRequest | None:
         """定名的 A 段（伺服器假人程式在行動鎖內呼叫；修練包 actions.mastery_request）：只讀。賽季籌備中是 None。"""
-        return arts_actions.mastery_request(self)
+        return cultivation_actions.mastery_request(self)
 
     def name_mastered(self, name: str) -> list[str]:
         """替第一個練成絕學的武學取正式名字（修練包 actions.name_mastered；籌備中被擋）。"""
-        return arts_actions.name_mastered(self, name)
+        return cultivation_actions.name_mastered(self, name)
 
     def _seize_chance(self, ratio: float) -> list[str]:
         """絕學的契機（修練包 actions.seize_chance；服務清單二、查詢服務）：核心的單打服務 _seize 與決戰包的收場補送叫它。"""
-        return arts_actions.seize_chance(self, ratio)
+        return cultivation_actions.seize_chance(self, ratio)
 
     def ascend_view(self) -> dict | None:
         """剛破境、還沒看過的破境卡（修練包 actions.ascend_view）：status_data 的 ascension 那一格照原位叫（鍵的順序算行為）。"""
-        return arts_actions.ascend_view(self)
+        return cultivation_actions.ascend_view(self)
 
     @_not_while_preparing
     def name_divine(self, item_id: str, name: str = "", keep: bool = False) -> list[str]:
@@ -8608,7 +8608,7 @@ class Game:
 
     def switch_art(self, art_id: str) -> list[str]:
         """改練：把功法庫裡的一門換上身（修練包 actions.switch_art；籌備中被擋）。"""
-        return arts_actions.switch_art(self, art_id)
+        return cultivation_actions.switch_art(self, art_id)
 
     # ── 自創武學（五步：執器、擺式、立意、成形、立名；tianxia/create.py）──────────────────
 
@@ -8683,15 +8683,15 @@ class Game:
 
     def ascend_request(self):
         """破境卡那一句的 A 段（鎖內、只讀；修練包 actions.ascend_request）：有一張還沒寫那一句的卡，回請模型寫的單子；沒有是 None。"""
-        return arts_actions.ascend_request(self)
+        return cultivation_actions.ascend_request(self)
 
     def ascend_line(self, req, line: str) -> list[str]:
         """破境卡那一句的 C 段（修練包 actions.ascend_line）：卡還是同一張才存。"""
-        return arts_actions.ascend_line(self, req, line)
+        return cultivation_actions.ascend_line(self, req, line)
 
     def ascend_dismiss(self) -> list[str]:
         """看過破境卡了，收掉（修練包 actions.ascend_dismiss）。"""
-        return arts_actions.ascend_dismiss(self)
+        return cultivation_actions.ascend_dismiss(self)
 
     def create_view(self) -> dict:
         """煉製頁「自創」那一塊（create.view）。只讀。"""
@@ -8699,31 +8699,31 @@ class Game:
 
     def slot_insight(self, art_id: str, insight_id: str, index: int | None = None) -> list[str]:
         """把一個意境裝進一門武學的意境槽（修練包 actions.slot_insight；修練頁與煉製頁都走這裡，籌備中被擋）。"""
-        return arts_actions.slot_insight(self, art_id, insight_id, index)
+        return cultivation_actions.slot_insight(self, art_id, insight_id, index)
 
     def unslot_insight(self, art_id: str, insight_id: str) -> list[str]:
         """把一個意境從武學的槽上拆下來（修練包 actions.unslot_insight；籌備中被擋）。"""
-        return arts_actions.unslot_insight(self, art_id, insight_id)
+        return cultivation_actions.unslot_insight(self, art_id, insight_id)
 
     def melt_art(self, art_id: str) -> list[str]:
         """熔煉：功法庫裡的一門熔成心得（修練包 actions.melt_art；籌備中被擋）。"""
-        return arts_actions.melt_art(self, art_id)
+        return cultivation_actions.melt_art(self, art_id)
 
     def melt_many(self, art_ids: list[str], insight_ids: list[str]) -> list[str]:
         """批量熔煉（修練包 actions.melt_many；籌備中被擋）。"""
-        return arts_actions.melt_many(self, art_ids, insight_ids)
+        return cultivation_actions.melt_many(self, art_ids, insight_ids)
 
     def melt_insight(self, insight_id: str) -> list[str]:
         """把一個意境化成心得（修練包 actions.melt_insight；籌備中被擋）。"""
-        return arts_actions.melt_insight(self, insight_id)
+        return cultivation_actions.melt_insight(self, insight_id)
 
     def practice_refusal(self, kind: str) -> str | None:
         """練成這一欄現在做不做得了（修練包 actions.practice_refusal；server 的修練頁照它把練成鈕灰掉）。"""
-        return arts_actions.practice_refusal(self, kind)
+        return cultivation_actions.practice_refusal(self, kind)
 
     def practice(self, kind: str) -> list[str]:
         """練成：身上這一門加深一成（修練包 actions.practice；籌備中被擋）。"""
-        return arts_actions.practice(self, kind)
+        return cultivation_actions.practice(self, kind)
 
     @_not_while_preparing
     def heal(self) -> list[str]:
@@ -9254,11 +9254,11 @@ class Game:
 
     def allocate_stat(self, stat: str) -> list[str]:
         """把升級得到的屬性點分配到一項（修練包 actions.allocate_stat；配點那一句 actions.allocate_line；籌備中被擋）。"""
-        return arts_actions.allocate_stat(self, stat)
+        return cultivation_actions.allocate_stat(self, stat)
 
     def milestone_card(self) -> dict | None:
         """境界卡（修練包 actions.milestone_card；server 的 main_view 照它放 main.milestone）。"""
-        return arts_actions.milestone_card(self)
+        return cultivation_actions.milestone_card(self)
 
     # ── 玩家之間的邀請與切磋（玩家互動第二層，企劃者 2026-10-08「互動的兩層也可以派下去做了」）──────────
     # 切磋掛在玩家卡上（spar.py 登記進 social.ACTIONS）：發邀請、答應、婉拒、收回都是按的那個人自己的動作，在他自己那一把行動鎖裡做；
@@ -11209,50 +11209,50 @@ class Game:
 
     def chuangong(self, key: str, what: str) -> list[str]:
         """傳功門下（修練包 actions.chuangong；籌備中被擋）。"""
-        return arts_actions.chuangong(self, key, what)
+        return cultivation_actions.chuangong(self, key, what)
 
     def chuangong_lessons(self, key: str | None) -> list[dict]:
         """修練頁人物卡底下的傳功鈕（修練包 actions.chuangong_lessons；server.menxia_view 的 lessons）。"""
-        return arts_actions.chuangong_lessons(self, key)
+        return cultivation_actions.chuangong_lessons(self, key)
 
-    # ── 門下頁面：武學說明（全部拆包第 23 批：修練頁的唯讀資料在修練包 tianxia/features/arts/view.py，這裡留一行委派）──────
+    # ── 門下頁面：武學說明（全部拆包第 23 批：修練頁的唯讀資料在修練包 tianxia/features/cultivation/view.py，這裡留一行委派）──────
 
     def skill_detail(self, kind: str) -> str:
-        return arts_view.skill_detail(self, kind)
+        return cultivation_view.skill_detail(self, kind)
 
     def art_detail(self, art_id: str) -> str:
         """這個角色擁有的一門功法的功法卡（FB-006；修練包 view.art_detail）。"""
-        return arts_view.art_detail(self, art_id)
+        return cultivation_view.art_detail(self, art_id)
 
     def member_card(self, key: str) -> str:
-        return arts_view.member_card(self, key)
+        return cultivation_view.member_card(self, key)
 
     def roster_cards(self) -> list[dict]:
-        return arts_view.roster_cards(self)
+        return cultivation_view.roster_cards(self)
 
     def menxia_rules(self) -> str:
-        return arts_view.menxia_rules(self)
+        return cultivation_view.menxia_rules(self)
 
     def attribute_note(self) -> str:
         """修練頁與煉製頁摺起來的「屬性有什麼用」那一句（W2；修練包 view.attribute_note）。"""
-        return arts_view.attribute_note(self)
+        return cultivation_view.attribute_note(self)
 
     def bag_text(self) -> str:
-        return arts_view.bag_text(self)
+        return cultivation_view.bag_text(self)
 
     def holdings(self) -> dict:
         """武學與意境的持有數與上限（修練包 view.holdings）。"""
-        return arts_view.holdings(self)
+        return cultivation_view.holdings(self)
 
     def gear_rows(self) -> dict:
         """修練頁「裝備」那一塊的資料（skillview.gear_rows；裝備四欄設計 2.5）。"""
         return skillview.gear_rows(self.state, self.content, self.world)
 
     def art_rows(self) -> list[dict]:
-        return arts_view.art_rows(self)
+        return cultivation_view.art_rows(self)
 
     def insight_rows(self) -> list[dict]:
-        return arts_view.insight_rows(self)
+        return cultivation_view.insight_rows(self)
 
     def heal_button(self) -> dict:
         """修練頁療傷鈕按不按得下去與不能按的原因（FB-082，見 skillview.heal_button）。"""
@@ -11260,7 +11260,7 @@ class Game:
 
     def naming_row(self) -> dict | None:
         """等著自己取正式名字的那一門（第一個練成絕學；修練包 view.naming_row）；沒有是 None。"""
-        return arts_view.naming_row(self)
+        return cultivation_view.naming_row(self)
 
     # ── 戰鬥紀錄 ──────────────────────────────────────────
 

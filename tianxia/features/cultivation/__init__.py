@@ -5,17 +5,14 @@
   舊存檔的絕學定名；傳功門下；破境（破境卡與卡上那一句的三段式）
 - actions.py：原本 Game 上修練頁的動作與拜師學藝（learn:；Game 留一行委派給 server、假人、測試與核心原位）
 - view.py：修練頁的唯讀資料（server.menxia_view 叫的那幾個；Game 留一行委派）
-
-包名 arts 跟共用規則層的 tianxia/arts.py（武學的評分、裝卸、意境格）同名：包裡要那一個一律寫 `from tianxia import arts`（`from . import arts`
-在包裡指到包自己）。
 """
 from __future__ import annotations
 
 from tianxia.core.features import Feature, Outcome
 
 
-class ArtsFeature(Feature):
-    name = "arts"
+class CultivationFeature(Feature):
+    name = "cultivation"
     # 拜師學藝（武學與成長設計附錄 B）：learn:<武學 id>。鈕照舊在 Game._everyday_options 原位畫（移動鈕之後、投靠之前，位置算行為；
     # 只叫共用規則層的 library），按下去由這一包接走（choose 掛鉤，標題在動作之前先拿）。假人：bot_policy.score 沒有 learn 那一段
     # （落到最後的 return None），拿了前綴之後 bot_pick 照預設回 None＝不按，跟原本一樣；學藝是 bot_policy.tend_arts 的 _learn_here
@@ -38,4 +35,4 @@ class ArtsFeature(Feature):
         return Outcome(title=actions.learn_title(ctx, arg), run=lambda: actions.learn(ctx, arg))
 
 
-FEATURE = ArtsFeature()
+FEATURE = CultivationFeature()

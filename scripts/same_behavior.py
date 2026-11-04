@@ -5949,8 +5949,8 @@ def _arts_entry(main_fn):
 
 
 main = _arts_entry(main)
-# 改一個字（selftest）：配點沒有點那一句（搬之前在 engine.py 的 allocate_stat、之後在 features/arts/actions.py），week7 墨池配點那一下抓到
-_register_track("arts", ArtsScenario, (("tianxia/features/arts/actions.py", "tianxia/engine.py"),
+# 改一個字（selftest）：配點沒有點那一句（搬之前在 engine.py 的 allocate_stat、之後在 features/cultivation/actions.py），week7 墨池配點那一下抓到
+_register_track("arts", ArtsScenario, (("tianxia/features/cultivation/actions.py", "tianxia/engine.py"),
                                        ("沒有可以分配的屬性點，升級才會有。", "沒有可以分配的屬性點，升級才會有！")), "week7")
 
 

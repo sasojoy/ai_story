@@ -64,7 +64,7 @@ def test_a_module_also_picks_the_tests_of_the_modules_that_import_it():
     """10/31 測試自檢 T-02：might.py 沒有測試檔直接 import，以前挑 0 個；把 might.now 改成回 0，透過 ascend、create 用到它的
     test_ascend、test_create_ritual 會紅。現在照 tianxia/ 模組之間的 import 往上找。
     （shared：might 第 15 批進了共用規則層，改共用規則層照下面那一條挑；這一條換成還是舊模組的 ascend——經 cultivation 挑到
-    只 import cultivation 的 test_cultivation。arts：ascend、cultivation 第 23 批搬進修練包、舊名成了別名，換成還是舊模組的輿圖畫法
+    只 import cultivation 的 test_cultivation。cultivation：ascend、cultivation 第 23 批搬進修練包、舊名成了別名，換成還是舊模組的輿圖畫法
     mapview——經 mapdata 挑到只 import mapdata 的 test_mapdata_layers。）"""
     picked = test_for.pick(["tianxia/mapview.py"])
     assert "test_mapdata_layers.py" in {p.name for p in picked.files}

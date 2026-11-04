@@ -22,7 +22,7 @@ def test_learn_practice_and_slot_an_insight():
         if first is None:
             break
         game.choose(first)
-    feature = next(f for f in FEATURES if f.name == "arts")
+    feature = next(f for f in FEATURES if f.name == "cultivation")
     assert feature.enabled(game) is True
     p = game.state.player
     p.location, p.journey = "yingshui", None

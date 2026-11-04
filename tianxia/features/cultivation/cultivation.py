@@ -12,7 +12,7 @@ from __future__ import annotations
 import random
 
 # 搬進修練包（全部拆包第 23 批）：原本那一行 `from . import arts as arts_mod, ascend as ascend_mod, library, naming, seal_acts, silver, team,
-# treasures` 照原本的先後拆開——包名 arts 跟共用規則層的 tianxia/arts.py 同名，共用層的一律絕對 import；ascend 在同一包
+# treasures` 照原本的先後拆開——共用層的一律絕對 import；ascend 在同一包
 from tianxia import arts as arts_mod  # noqa: I001
 from . import ascend as ascend_mod
 from tianxia import library, naming
