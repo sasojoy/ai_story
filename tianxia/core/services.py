@@ -113,6 +113,12 @@
 - 核心的：`ctx._preparing()`（籌備中）、`ctx._journal_guide(notes)`（引導的話記進這一則江湖紀錄的引導那幾行）、`ctx._free_text_of(event)`
   （這一則事件有沒有隨口應對：事件檢定的委派）
 - 共用的字：`HutReward`（序章步驟的獎勵那一行的記號，核心的 `_guide` 認它；原本在 `tianxia/guide.py`，搬到這個模組，引導包 re-export）
+# sense（全部拆包第 24 批「有所感與頓悟」：搬進有所感包的動作要掛、要回的；原本在 engine.py 模組層，包不能 import engine，搬到這裡，engine 照舊叫得到）
+- 共用的小函式：`outing_watch`（裝飾器：走一趟停在要選的事上時，這一下選完的得失記在那一段——經 Game 上探索包的委派 `_outing_watched`
+  〔核心叫它，記在邊界測試的 CORE_DELEGATE_CALLERS；包不必直接叫〕；
+  掛在 `Game.choose`、`answer_event` 與有所感包的 `sense_draw`、`epiphany_names` 上。原本是 engine.py 的 `_outing_watch`，engine 照舊用同一個）
+- 共用的字：`PREPARING_TEXT`、`PREPARING_REFUSAL`（賽季籌備中：選單上那一顆灰的、動作被擋回的那一句；有所感包的 `sense_request` 籌備中回它。
+  **第 23 批〔dev/arts-1〕同時把同樣的兩句〔連裝飾器 `not_while_preparing`〕搬進這個檔的 `# arts` 那一段**：兩批都合了之後留一份）
 
 # sortie（全部拆包第 17 批「出陣三」：舊遊歷、操練、守勢、遊歷推大勢搬進出陣包要叫的；主人都是核心，總表附錄乙 final_owner.json）
 推大勢（玩家自己造成的大勢推動一律走這裡）
@@ -174,12 +180,21 @@ explore（主動搬六包第 3＋4 批加的這一段）
 # companions（全部拆包第 19 批）
 - `ctx._settle_partings(write=True)`（主人決戰：決戰收場時從你身邊回江湖的人，情誼乘 parted_keep；按招募之前先結清。本體第 7 批在 `features/battle/muster.py`，總表第 19 列「先做」列成查詢服務）
 - `ctx._recruit_target()`、`ctx._recruitable_here()`（主人人物情誼：此地有沒有招得了的人；新手引導碰到才說的 h_recruit 問。第 22 批原本記在三、過渡）
+# sense（全部拆包第 24 批：有所感包回答別的包、有所感包問探索包）
+- `ctx._sense_here(loc, rng)`（主人有所感：靜心感悟——這一處有場景就跳有所感的卡，沒有場景的內容照舊直接悟；探索包的探索一顆抽到感悟叫它。
+  第 3＋4 批記在三、過渡 explore 那一段，主人成包了，改列這裡）
+- `ctx._sense_missed(loc)`（主人有所感：這個遊戲日在這一處選錯過做法——探索包算這一處感悟的比重是 0；原本探索包 import 有所感〔包 import 包〕）
+- `ctx._sense_prologue_choice()`（主人有所感：序章草廬的有所感這一下按哪一顆——還沒選做法挑一個〔做法都對〕、進了感悟狀態順其自然；
+  新手引導包的假人走序章〔`graduate_pass`〕叫它，原本 import 有所感）
+- `ctx._rare_boost()`（主人 explore：走一趟的稀有倍數 `outing_rules.rare_boost`——有所感包擲特殊頓悟乘它；原本 `Game._sense` 直接讀探索包的
+  別名，那一筆 `GAME_DIRECT` 換成它）
 
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
 explore（主動搬六包第 3＋4 批加的這一段）
-- `ctx._home_gather(loc, mids)`、`ctx._sense_here(loc, rng)`、`ctx._wild_foes(loc)`、`ctx._practice_tier(loc)`
+- `ctx._home_gather(loc, mids)`、`ctx._wild_foes(loc)`、`ctx._practice_tier(loc)`
   （探索三選一：企劃者 10/31 定不搬、留在 engine——批次表第 9 批不做，三選一整套拿掉之前一直掛在 Game 上；`_boss_face` 第 12 批改成二、查詢服務）
+  （`ctx._sense_here(loc, rng)`：全部拆包第 24 批有所感成包，改列二、查詢服務 `# sense` 那一段）
 - `ctx._story_begin(strand)`（一條線；`_duel_start` 第 12 批改成二、查詢服務）
 - 收尾的掉落：`ctx._legend_find(rng)`（破境丹）、`ctx._seal_find(loc_id)`（玉璽碎片）——照原本的順序在原位叫，不收成事件（同一串的
   回體丹 `_pill_find`、殘譜 `_scrap_find` 在一、共用服務）
@@ -246,8 +261,8 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 
 explore（主動搬六包第 3＋4 批加的這一段；都是 Game.__init__ 起的）
 - `ctx._beat`（走一趟：剛剛那一次探索抽到什麼——探索一顆寫、走一趟讀）、`ctx._outing_close`、`ctx._outing_upset`（探索一顆：這一趟打了折的閘、
-  這一場開打前勝算凶險以下）、`ctx._outing_busy`（走一趟正在走、正在記一件事選完的得失：engine 模組層的 `_outing_watch` 套在 choose、
-  answer_event、epiphany_names、sense_draw 上，看它不再套一層）
+  這一場開打前勝算凶險以下）、`ctx._outing_busy`（走一趟正在走、正在記一件事選完的得失：核心的 `outing_watch`〔第 24 批從 engine 模組層的
+  `_outing_watch` 搬來〕套在 choose、answer_event 與有所感包的 epiphany_names、sense_draw 上，看它不再套一層）
 - `ctx._loot_scale`、`ctx._drop_scale`、`ctx._gate_scale`（遭遇那一場的戰利、掉落、經驗倍數：探索一顆的遭遇設、核心 `_battle_rewards` 讀；
   三選一的 `_practice` 也寫 `_loot_scale`）
 
@@ -270,6 +285,7 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 """
 from __future__ import annotations
 
+import functools  # sense（第 24 批）：outing_watch 用
 from typing import TYPE_CHECKING
 
 from ..models import Content
@@ -312,6 +328,24 @@ def note_cheer(state: GameState, content: Content, cid: str, text: str) -> None:
         return
     state.player.cheers = [c for c in state.player.cheers if not c.startswith(f"{cid}|")] + [f"{cid}|{text}"]
     del state.player.cheers[:-CHEERS_KEEP]
+
+
+# sense（全部拆包第 24 批「有所感與頓悟」）：原本寫在 engine.py；搬進有所感包的動作要掛裝飾器、要回籌備中那一句，又不能 import engine，
+# 搬到這裡，engine 照舊叫得到（`from tianxia.engine import PREPARING_REFUSAL`：tests/bots/test_stamina_refill.py、tests/gear/test_shop.py）。
+# 第 23 批（dev/arts-1）同時把 PREPARING_TEXT、PREPARING_REFUSAL 搬進這個檔檔尾的 # arts 那一段：兩批都合了之後留一份
+# 賽季籌備中（管理者還沒開季）：選單上那一顆灰的、安排前往被擋的原因寫 PREPARING_TEXT；動作被擋回一句 PREPARING_REFUSAL
+PREPARING_TEXT = "賽季籌備中，等待管理者開季"
+PREPARING_REFUSAL = f"（{PREPARING_TEXT}。）"
+
+
+def outing_watch(fn):
+    """走一趟停在要選的事上時，這一下選完的得失記在那一段（探索包 outing_actions.outing_watched，Game 上留一行委派 _outing_watched）。
+    第一個參數是 ctx（第一階就是 Game）：掛在 Game.choose、answer_event 與有所感包的 sense_draw、epiphany_names 上（原本是 engine.py
+    模組層的 _outing_watch）。"""
+    @functools.wraps(fn)
+    def run(ctx, *args, **kwargs):
+        return ctx._outing_watched(fn, *args, **kwargs)
+    return run
 
 
 CARD_KEY = "pill_cap"  # 月卡記在 mall_entitlements 的哪一格（回體丹每天的上限）

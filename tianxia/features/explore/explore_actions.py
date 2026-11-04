@@ -31,7 +31,6 @@ from tianxia import mapview  # 過渡：待搬（輿圖：哪些地點畫得出�
 from tianxia import materials  # 共用規則層（素材的發放）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章裡探索照舊是寫好的那幾步）
 from tianxia import renown  # 共用規則層（名聲：頭目的倍數）
-from tianxia import sensing  # 過渡：待搬（有所感：這一處今天悟錯過沒）
 from tianxia import storyline  # 過渡：待搬（一條線：開頭擲不擲中）
 from tianxia import territory  # 共用規則層（地盤：這一處此刻歸誰）
 from tianxia.core.option import Option
@@ -102,7 +101,7 @@ def outing_weights(ctx, loc: Location, *, has_foes: bool, bounty_here: bool, hid
     # 一次性與奇遇（rare）加可重複的（common）就是全部（pool=None），一趟只問一次，找到一則就夠
     if not event_rules.has_event_candidates(s, c, "explore", hidden=hidden):
         weights[explore_rules.EVENT] = 0
-    if not insights.explore_gives(loc, c) or sensing.missed_today(s, c, loc):
+    if not insights.explore_gives(loc, c) or ctx._sense_missed(loc):  # 選錯過做法問有所感包（查詢服務，全部拆包第 24 批：包不 import 包）
         weights[explore_rules.INSIGHT] = 0
     return weights
 

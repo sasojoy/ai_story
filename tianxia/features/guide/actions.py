@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import atlas, create, figures, howto, sensing, training  # 過渡：待搬
+from tianxia import atlas, create, figures, howto, training  # 過渡：待搬
 from tianxia import insight_fx, journal, library, martial_arts, team  # 核心、共用規則層
 from tianxia import prologue as prologue_rules  # 共用規則層；Game.new 有個參數也叫 prologue，跟 engine 一樣叫 prologue_rules
 from tianxia.models import TutorialStep
@@ -79,10 +79,7 @@ def graduate_pass(ctx: Game, step: TutorialStep) -> bool:
         ctx.choose(ctx.rng.choice(good).id)
         return True
     if p.sensing is not None:  # 草廬的有所感：做法都選得對；不畫，順其自然落回那個基本意境（假人不叫模型）
-        if p.sensing.stage == "choose":
-            ctx.choose(f"{sensing.PREFIX}{ctx.rng.randrange(len(sensing.current(s, c)[1].methods))}")
-        else:
-            ctx.choose(sensing.LET_GO)
+        ctx.choose(ctx._sense_prologue_choice())  # 按哪一顆問有所感包（查詢服務，全部拆包第 24 批：包不 import 包）
         return True
     fused = prologue_rules.slotted_arts(s, c, ctx.world)
     if goal.action == "view_tab":

@@ -272,8 +272,7 @@ GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
 _MAP_LINE = "輿圖的線（feature/map-view）還在飛，這一輪不碰；輿圖成包（總表第 46～50 批）時改叫出陣、探索的查詢服務"
 GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；過渡）
     # explore（主動搬六包第 3＋4 批）：用到 outing 這個名字（現在是探索包 outing_rules 的別名）的只剩有所感
-    "_sense": "有所感畫完那一筆擲特殊頓悟（epiphany.roll 的 boost＝outing_rules.rare_boost：走一趟段數越多越容易來）：有所感還沒成包"
-              "（總表第 24 批）；成包時探索包開「此刻稀有的乘多少」的查詢服務，改叫它",
+    # （_sense：有所感擲特殊頓悟的 boost＝outing_rules.rare_boost——全部拆包第 24 批探索包開了查詢服務 _rare_boost〔# sense 那一段〕，改叫它，拿掉）
     # （_own_scene_text：坐在宴席上的場景卡第 11 批換成 scene 掛鉤，拿掉）
     # 出陣（主動搬六包第 1 批）：下面這些方法用到 sortie 這個名字（現在是出陣包 rules 的別名）——開關（sortie.on＝territory.on）、
     # 鈕上的字（NAME、USED_UP、LEFT_NOTE、OUT_NOTE……）、次數（spend）
@@ -447,7 +446,7 @@ GAME_DELEGATE_CALLERS.update({
     ("sync", "_check_hints"): "sync 的最後幾行（引薦人的結語之後、結伴逾時之前）：抵達、大事揭曉這些不靠行動的改變；on_sync 在更前面",
     ("travel", "_check_hints"): "出發那一下（移動還沒成包，總表第 47 批）",
     ("allocate_stat", "_check_hints"): "配點之後（武學還沒成包，總表 features/arts）",
-    ("sense_draw", "_check_hints"): "有所感畫完那一筆（有所感還沒成包，總表第 24 批）",
+    # （(sense_draw, _check_hints)：有所感畫完那一筆——全部拆包第 24 批 sense_draw 搬進有所感包、包裡經 ctx 叫，拿掉）
     ("_menxia_entry", "_check_hints"): "修練頁、煉製頁的動作寫進紀錄（核心的修練頁紀錄服務）：說的話接在這一則",
     ("_act", "_hint"): "act 子動詞裡碰到的事件型提示（操練練完 h_drill_done…）：其餘子動詞還沒分給各包（總表第 57 批）",
     ("_brush_off", "_hint"): "求見被名將打發（h_snubbed）：交友求見還沒成包（總表第 21 批）",
@@ -459,7 +458,7 @@ GAME_DELEGATE_CALLERS.update({
     ("status_data", "newbie_view"): "狀態列的任務卡那一塊（status 的鍵順序算行為；狀態列掛鉤是總表第 66 批）",
     # 核心原位與別的功能叫引導的服務（Task 2 把 note_action、opening、enlist、guide 的幾個名字換成這幾個一行的委派）
     ("choose", "_note_action"): "選項做完、出門、交友、進出店面……七處：" + _NOTE_HOOK,
-    ("_sense_apply", "_note_action"): "有所感悟到意境（序章的悟）：有所感還沒成包（總表第 24 批）；" + _NOTE_HOOK,
+    # （(_sense_apply, _note_action)：有所感悟到意境——全部拆包第 24 批 _sense_apply 搬進有所感包、包裡經 ctx 叫，拿掉）
     ("_order_credit", "_note_action"): "替軍令記到功（入伍段的「出一次力」）：軍情還沒成包（總表第 33、34 批）；" + _NOTE_HOOK,
     # 守勢（原 Game._duty，act:duty）：這一批開發時第 17 批正在把它搬進出陣包，開發時不改它（計畫第六節「跟第 17 批」）；第 17 批先合進
     # develop、搬成 train_actions.duty，這一批合進 develop 時那兩處改叫 ctx._note_action（包裡叫，不在這張名單；計畫第七節）
@@ -645,6 +644,46 @@ GAME_DELEGATE_CALLERS.update({
     ("_road_say", "_stance_before"): "帶路的路上說一句（同上）：" + _TALKS,
     ("_road_say", "_stance_credit"): "同上：" + _TALKS,
 })
+# sense（全部拆包第 24 批「有所感與頓悟」：新包 tianxia/features/sense/；計畫 docs/superpowers/plans/2026-11-01-有所感包-第1批.md 1.4、1.5）：
+# 四張名單的有所感那幾筆集中在這一段（並行的拆包線不跟別人的行穿插；拿掉的在原處）。核心原位碰有所感的那幾處，能接第 11 批掛鉤的接上
+# （choose 掛鉤接 sense:、scene 掛鉤接場景卡），接不了的改叫 Game 上一行的服務委派、記進 GAME_DELEGATE_CALLERS 寫理由（不新增 GAME_DIRECT）
+GAME_IMPORTS |= {
+    # 8 個方法的一行委派、7 個服務的本體（actions）；原本那一行 `from . import (..., sensing, ...)` 與 `from . import epiphany`（登記一條線的
+    # 鉤子）現在是別名：委派的型別註記用，探索包的 test_explore_one_2f 換的是 tianxia.engine.sensing.missed_today（engine 要有這個名字）
+    "tianxia.features.sense.actions", "tianxia.sensing", "tianxia.epiphany",
+}
+GAME_DELEGATES |= {
+    # 探索包回答有所感包的查詢服務（主人 explore）：擲特殊頓悟的 boost（原本 Game._sense 直接讀 outing_rules 那一筆 GAME_DIRECT 換成它）
+    "_rare_boost",
+    # 搬進包的 10 個方法留 8 個（3 個私有）：server 與假人叫的 epiphany_request、epiphany_names、sense_request、sense_draw、method_help，
+    # 測試直接叫的 _epiphany_begin，choose 原位叫的 _epiphany_name（dunwu:），探索包與 _explore_mode、_explore_outcome 叫的 _sense_here。
+    # _sense（sense: 由 choose 掛鉤接走）、_sense_apply 只有包裡叫
+    "_epiphany_begin", "_epiphany_name", "epiphany_request", "epiphany_names", "sense_request", "sense_draw", "_sense_here", "method_help",
+    # 核心原位與探索、引導兩包叫的服務 7 個（Task 2 開的；本體在 actions）
+    "_sense_missed", "_sense_drop_stale", "_sense_menu", "_sense_start", "_sense_canvas", "_epiphany_title", "_sense_prologue_choice",
+}
+_LATER_13 = "探索三選一與舊探索（總表第 13 批拿掉三選一；舊探索留給序章與測試內容）"
+GAME_DELEGATE_CALLERS.update({
+    ("_drop_stale_references", "_sense_drop_stale"): "清失效參照中段（收店之前）：後面的收店（features_core.drop_shops → 酒肆 Shop.here → _idle）讀 "
+                                                     "player.sensing，on_drop_stale 在最後、還只問開著的包",
+    ("_everyday_options", "_sense_menu"): "選單：有所感的卡與取名在擂台那一支之後、一條線的答題之前；接 menu 掛鉤留給總表第 57 批"
+                                          "（第 24 批 PM 認定第 2 條）",
+    ("_explore_mode_options", "_sense_missed"): "三選一的「靜心感悟」選錯過做法灰掉：" + _LATER_13,
+    ("_insight_blocked", "_sense_missed"): "舊探索那一行（action_notes）句尾補什麼時候才悟得出：" + _LATER_13,
+    ("_explore_can", "_sense_missed"): "舊探索這一處悟意境那一支的比重：" + _LATER_13,
+    ("_explore_outcome", "_sense_start"): "序章第 3 步的有所感版（草廬四景）：" + _LATER_13,
+    ("_explore_outcome", "_sense_here"): "舊探索落在悟意境那一支（同靜心感悟那四行）：" + _LATER_13,
+    ("_explore_mode", "_sense_here"): "三選一的靜心感悟：" + _LATER_13,
+    ("choose", "_sense_canvas"): "「畫下來」只叫出畫布：查完選單、清掉「剛剛」與引導之後、建紀錄之前（同 battle:），「選單上、不建紀錄」那一格"
+                                 "留給核心批（總表第 57 批）",
+    ("choose", "_epiphany_name"): "dunwu:（特殊頓悟取名）：要帶自己寫的名字（choose 的 text），choose 掛鉤不帶 text，留在原位的 elif",
+    ("_action_title", "_epiphany_title"): "dunwu: 那一下江湖紀錄的標題（同上，dunwu: 留在原位）",
+})
+CORE_DELEGATE_CALLERS_SENSE = {  # 核心本體經 ctx 叫包的委派
+    ("services.outing_watch", "_outing_watched"): "走一趟停在要選的事上時這一下選完的得失（探索包的委派）：裝飾器原本是 engine.py 模組層的 "
+                                                  "_outing_watch，掛在 Game.choose、answer_event 與有所感包的 sense_draw、epiphany_names 上；"
+                                                  "包不能 import engine，第 24 批搬進核心的共用小函式。「做完一件事」的事件是總表第 26 批",
+}
 
 
 @functools.lru_cache(maxsize=None)
@@ -775,7 +814,7 @@ SHARED_PENDING[("siege", "world")] += "；world 函式裡也 import 舊名 gener
 # 總表第 15 列寫了、這一批先不收的（派工：import 了包的「先改成查詢服務，或者先不收」；讀的都是還沒成包的舊模組，還沒有包可以回答查詢）：
 # 模組 → 卡在哪、哪一批之後收。包 import 它們的那幾行照舊註「過渡：待搬」。
 SHARED_LATER = {
-    "fusion": "讀有所感的自創（sensing.add_own、own_name：有所感第 24 批成包）與行狀（annals.note）：有所感成包時改成查詢服務再收",
+    "fusion": "讀有所感的自創（sensing.add_own、own_name：有所感第 24 批成包）與行狀（annals.note）：排到第 29 批（行狀成包）一起改成查詢服務再收（第 24 批 PM 認定第 3 條）",
     "skillview": "門下頁的說明（彙整）：讀自創 create（第 44 批）、修練 cultivation（第 23 批）、玉璽 seal（第 27 批）、鐵匠鋪 smithing（第 41 批）、"
                  "輿圖 atlas；那幾包成包、改成查詢服務之後再收",
     "shopview": "店面的畫面資料（彙整）：讀擂台 arena（第 12 批）、懸賞 bounties（第 45 批）、鐵匠鋪 smithing（第 41 批）、單挑 duel 的底層；"
@@ -969,6 +1008,8 @@ CORE_DELEGATE_CALLERS: dict[tuple[str, str], str] = {}
 # guide（全部拆包第 22 批）：上面註解裡寫好的 features/guide 那 6 對（answer_event、answer_branch × _begin_enlistment、_greet_rejoin、_check_hints）
 # 新手引導搬成包、它們成了委派，照註解記進來（理由在 # guide 那一段的 CORE_DELEGATE_CALLERS_GUIDE）
 CORE_DELEGATE_CALLERS.update(CORE_DELEGATE_CALLERS_GUIDE)
+# sense（全部拆包第 24 批）：核心的裝飾器 outing_watch 經 ctx 叫探索包的委派（理由在 # sense 那一段的 CORE_DELEGATE_CALLERS_SENSE）
+CORE_DELEGATE_CALLERS.update(CORE_DELEGATE_CALLERS_SENSE)
 # battle（全部拆包第 8 批）：_battle_for_me 換成決戰包的委派，上面預留的第一條接上（寫理由）
 CORE_DELEGATE_CALLERS.update({
     ("event_check.event_tier", "_battle_for_me"): "事件分級那一行：全服戰鬥蓋著場景時不寫（tick=False）；事件檢定是核心本體、決戰包回答「此刻蓋著的那一場」，"
@@ -1181,7 +1222,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # bout（全部拆包第 12 批：tianxia/duel.py、arena.py、arena_crowd.py）
                          "duel": "bout", "arena": "bout", "arena_crowd": "bout",
                          # companions（全部拆包第 19 批：tianxia/stances.py、errands.py、letters.py）
-                         "stances": "companions", "errands": "companions", "letters": "companions"}
+                         "stances": "companions", "errands": "companions", "letters": "companions",
+                         # sense（全部拆包第 24 批：tianxia/sensing.py、epiphany.py、glyph.py、insight_llm.py）
+                         "sensing": "sense", "epiphany": "sense", "glyph": "sense", "insight_llm": "sense"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 
