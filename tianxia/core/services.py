@@ -121,6 +121,11 @@
   `ctx._push_room(trend_id)`（今天在這條線上還推得動多少；第一季規則關著是無限）
 - 共用的字：`BIG_FIGHT_WAIT`（大場面按下去、等模型判讀時按鈕上的字；事件的戰鬥選項、挑戰本人、遊歷與出陣都用，從這個模組 import）
 
+# companions（全部拆包第 19 批「人物情誼一」：主人都是核心，留在 Game 上；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第1批.md 1.3）
+- `ctx._deed_points(points, capped=True)`（「文字的事」那一本的貢獻帳：記到心意、託付辦成了；第 16 批 PM 認定第 1 條留在 Game）、`ctx._apply(effect)`（效果套用：
+  勸降成了立痕跡；事件檢定的委派）
+- 共用的字與小函式（從這個模組 import）：`note_cheer`、`CHEERS_KEEP`（等著寫道賀信的那一格：舊模組 figure_life.spread 寫、書信讀；原本在 tianxia/letters.py）
+
 ## 二、查詢服務
 
 # battle（主動搬六包第 5 批；主人：決戰包。本體還在 Game——「打」那一半，第 6～8 批搬——決戰包「看」那一半經 ctx 叫；搬完由決戰包經
@@ -159,6 +164,10 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._tavern_on()`、`ctx._tavern_here()`、`ctx._tavern_at(loc_id)`（主人酒肆：酒肆開著沒、人此刻在酒肆、這個地點有沒有酒肆；碰到才說的
   h_tavern、新手目標「去酒肆」指哪幾處。Game 上一行的委派叫 `tavern_rules.on`／`here`／`tavern_at`——原本 `_hint_triggers`、`_newbie_go`
   直接讀酒肆的那兩筆 `GAME_DIRECT` 換成它們）
+
+# companions（全部拆包第 19 批）
+- `ctx._settle_partings(write=True)`（主人決戰：決戰收場時從你身邊回江湖的人，情誼乘 parted_keep；按招募之前先結清。本體第 7 批在 `features/battle/muster.py`，總表第 19 列「先做」列成查詢服務）
+- `ctx._recruit_target()`、`ctx._recruitable_here()`（主人人物情誼：此地有沒有招得了的人；新手引導碰到才說的 h_recruit 問。第 22 批原本記在三、過渡）
 
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
@@ -218,7 +227,6 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
   scripts/sim_trend_sources.py 換掉 `Game._train_push`——包裡經 ctx 叫，換掉的才打得到；呼叫端改完就拿掉）
 
 # guide（全部拆包第 22 批：新手引導包叫的、主人還沒搬的）
-- `ctx._recruit_target()`、`ctx._recruitable_here()`（主人同伴 features/companions：碰到才說的 h_recruit）
 - 假人走序章（`_graduate`）照每一步的完成條件做的那幾下：`ctx.slot_insight(art, insight)`、`ctx.switch_art(art)`、`ctx.practice(kind)`、
   `ctx.allocate_stat(stat)`、`ctx.melt_art(art)`（主人武學 features/arts）、`ctx.forge(main, aux)`（主人煉製 features/craft）
 - `ctx._hint_triggers(only)`（這一包自己的委派：tests/arts/test_hints.py 換掉 game._hint_triggers，包裡經 ctx 叫，換掉的才打得到；
@@ -245,6 +253,9 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 - `ctx._tavern_seek_exact`、`ctx._tavern_reply`：查人那一下問得多清楚（託酒家留意看它；None 沒查成、True 確切地點、False 沒問清楚）、
   問酒家 B 段寫好的那一句（tavern_ask 放、問完清掉）
 
+# companions（全部拆包第 19 批：Game 的類別屬性，choose 前段〔按勸降只叫出輸入框〕與包都讀）
+- `ctx._persuade_said`（勸降的 C 段交給 choose 的單子與模型的分數；不是 None 才真的擲骰）
+
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """
 from __future__ import annotations
@@ -256,6 +267,7 @@ from ..wallet import Purchase, Wallet
 
 if TYPE_CHECKING:
     from ..engine import Game
+    from ..state import GameState  # companions（note_cheer 的型別）
 
 # 共用的字（原本寫在 engine.py；功能包要用、又不能 import engine，搬到這裡，engine 照舊叫得到）
 PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，畫面照常可看"
@@ -275,6 +287,21 @@ def drill_share(amount: int, share: float) -> int:
     操練真的給的（出陣包 train_actions.drill）與行動列底下說會給什麼（train_actions.train_line）都算這一個；出陣的守與打贏（出陣包）、探索也用。
     （原本寫在 engine.py；出陣包要用、又不能 import engine，搬到這裡，`from tianxia.engine import drill_share` 照舊拿得到。）"""
     return int(amount * share + 0.5)
+
+
+# companions（全部拆包第 19 批「先做」：figure_life 讀來信改走核心）：PlayerState.cheers 那一格——舊模組 figure_life.spread 寫（他欣賞你做的事）、
+# 書信（人物情誼包 letters._cheer_letter）讀；原本寫在 tianxia/letters.py，letters re-export（tianxia.letters.note_cheer 照舊是同一個函式）
+CHEERS_KEEP = 5
+
+
+def note_cheer(state: GameState, content: Content, cid: str, text: str) -> None:
+    """figure_life.spread 讓 cid 的情誼往上動、情誼到了 letter_affinity：記下來，等著寫道賀信（最多 CHEERS_KEEP 件，舊的先丟）。
+    開關同 letters.on（人物活起來開著、書信開著）。"""
+    tuning = content.config.figure_life
+    if not (tuning.enabled and tuning.letters) or state.player.affinities.get(cid, 0) < tuning.letter_affinity:
+        return
+    state.player.cheers = [c for c in state.player.cheers if not c.startswith(f"{cid}|")] + [f"{cid}|{text}"]
+    del state.player.cheers[:-CHEERS_KEEP]
 
 
 CARD_KEY = "pill_cap"  # 月卡記在 mall_entitlements 的哪一格（回體丹每天的上限）

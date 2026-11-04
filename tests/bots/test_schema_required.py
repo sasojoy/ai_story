@@ -61,7 +61,8 @@ def _model(module_name: str, expr: str):
 
 def test_the_scan_finds_the_call_sites():
     names = {(f, m) for f, _, m, *_ in _calls()}
-    assert ("companion_agent.py", "CompanionTurn") in names and ("letters.py", "LetterText") in names
+    # companions（全部拆包第 19 批：letters.py 搬進功能包，檔名記相對 tianxia/ 的路徑；改路徑字串的例外照批次表第二節）
+    assert ("companion_agent.py", "CompanionTurn") in names and ("features/companions/letters.py", "LetterText") in names
 
 
 def test_required_fields_are_written_into_the_schema_or_known():

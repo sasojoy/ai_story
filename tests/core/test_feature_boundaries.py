@@ -542,6 +542,41 @@ GAME_DELEGATE_CALLERS.update({
 })
 
 
+# companions（全部拆包第 19 批「人物情誼一」：招募與名下、心意、託付與勸降、來信；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第1批.md 1.5、1.6）：
+# 四張名單這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。核心原位碰這一包的都沒有第 11 批的掛鉤，改叫 Game 上一行的委派，沒有新增 GAME_DIRECT
+GAME_IMPORTS |= {"tianxia.features.companions.actions"}
+GAME_DELEGATES |= {
+    # 搬進包的 29 個方法留 26 個（9 個私有）：server、假人、測試在叫的 17 個（roster_lines、owned_companions、add_to_team、remove_from_team、release_companion、
+    # release_view、voice_stance、figure_view、errands_view、persuade_request、persuade、letter_view、read_letter、decline_letter、morning_mail、letter_request、
+    # apply_letter），核心原位叫的 _recruit、_recruit_one、_stance_before、_stance_credit、_stance_annals、_errand_options，引導包（ctx）與測試問的 _recruit_target、
+    # _recruitable_here，測試直接叫的 _recruit_targets。_errand_act、_errand_reward、_errand_persuade 只有包裡叫（choose 改走掛鉤）
+    "_recruit_target", "_recruit_targets", "_recruitable_here", "_recruit", "_recruit_one", "roster_lines", "owned_companions", "add_to_team",
+    "remove_from_team", "release_companion", "release_view", "_stance_before", "_stance_credit", "voice_stance", "figure_view", "errands_view",
+    "_errand_options", "persuade_request", "persuade", "_stance_annals", "letter_view", "read_letter", "decline_letter", "morning_mail",
+    "letter_request", "apply_letter",
+    # 原位那幾行的本體一起搬進包（選單招募那一段、同步書信那一格、勸降只叫出輸入框）
+    "_recruit_options", "_deliver_mail", "_errand_ask",
+}
+del GAME_DELEGATE_CALLERS[("_recruit_one", "_settle_partings")]  # _recruit_one 進了包，經 ctx._settle_partings 問（服務清單二、查詢服務）
+GAME_DELEGATE_CALLERS[("sync", "_settle_partings")] = ("同步的同伴回江湖（簽到之後、退押金之前）：on_sync 在寄放之前、還問 enabled，江湖紀錄的先後算行為；"
+                                                       "本體在決戰包 muster，核心原位叫查詢服務（總表第 19 列「先做」）")
+_MENU_ORDER = "選單的順序算行為（/api/main 的選項一顆一顆逐位元組）；options 掛鉤在體力玩法之後、位置不對。選單照包排是總表第 55～57 批"
+_TALKS = "人物對話第 20 批搬進同一包，變成包裡互相叫"
+GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_recruit_options"): "招募那一段（求見之後、前往之前）：" + _MENU_ORDER,
+    ("_everyday_options", "_errand_options"): "託付那一顆（伏筆之後、邀請之前）：" + _MENU_ORDER,
+    ("sync", "_stance_annals"): "同步記心意的行狀（痕跡 _marks_tick 之後、列傳 _zhuan_tick 之前，三樣都寫行狀，先後算行為）；on_sync 在更後面、還問 enabled",
+    ("sync", "_deliver_mail"): "同步書信那一格（欠人物的事 parley.lapse 之後，一則「書信」併著寫，先後算行為）：deliver_notices 在領地爭奪換天之前、位置不對；parley 第 20 批搬進同一包再看",
+    ("_act", "_recruit"): "act:recruit：核心 act: 的子動詞，總表第 57 批接進 Verb（同第 22 批 PM 認定第 4 條的 act:rest）",
+    ("_act", "_recruit_one"): "act:recruit:<id>：同上；Verb 照 verb == 比，這一格第 57 批要照前綴認",
+    ("choose", "_errand_ask"): "勸降按下去只叫出輸入框：查完選單、建紀錄之前，同 battle: 那一支的位置（第 7 批 PM 認定第 1 條）；第 57 批「選單上、不建紀錄」那一格一起接",
+    ("_talk", "_stance_before"): "這一輪對話之前今天記過沒：" + _TALKS,
+    ("_talk", "_stance_credit"): "這一輪記到一筆就給貢獻：" + _TALKS,
+    ("_road_say", "_stance_before"): "帶路的路上說一句（同上）：" + _TALKS,
+    ("_road_say", "_stance_credit"): "同上：" + _TALKS,
+})
+
+
 @functools.lru_cache(maxsize=None)
 def _engine_tree() -> ast.Module:
     return ast.parse((TIANXIA / "engine.py").read_text(encoding="utf-8"))  # 一萬七千行，parse 一次一秒多：大家共用這一份
@@ -678,6 +713,12 @@ SHARED_LATER = {
     "leaderboard": "賽季榜單：讀擂台榜 arena（第 12 批）、本命兵器 signature_arms（裝備第 42 批）；擂台的名次改成查詢服務、裝備成包之後再收",
     "rumor_view": "傳聞分層的畫面：讀伏筆 foreshadow、機緣 opportunities（軍情第 34 批）與軍令 orders（第 40 批）；軍情成包時改成查詢服務再收",
 }
+
+
+# companions（全部拆包第 19 批；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第1批.md 1.2、1.6）：stances 的世界那一半進了共用規則層 stance_world。
+# 事件抽選 events 讀的也是世界那一半（不再碰包）：理由改成只剩伏筆
+SHARED_PENDING[("stance_world", "figures")] = "排定：大勢人物（figures.state_of，函式裡，持重拉進度找他在哪條線）——總表第 40 批收進共用規則層"
+SHARED_LATER["events"] = "事件抽選：讀伏筆 foreshadow（軍情第 34 批成包）；伏筆改成查詢服務之後再看（心意第 19 批換成共用規則層 stance_world）"
 
 
 def test_the_shared_rules_layer_only_imports_the_core_and_itself():
@@ -1060,7 +1101,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # battle（全部拆包第 7 批：tianxia/escorts.py；第 8 批：tianxia/generals.py）
                          "escorts": "battle", "generals": "battle",
                          # guide（全部拆包第 22 批：tianxia/guide.py、hints.py、newbie.py、opening.py、enlist.py）
-                         "guide": "guide", "hints": "guide", "newbie": "guide", "opening": "guide", "enlist": "guide"}
+                         "guide": "guide", "hints": "guide", "newbie": "guide", "opening": "guide", "enlist": "guide",
+                         # companions（全部拆包第 19 批：tianxia/stances.py、errands.py、letters.py）
+                         "stances": "companions", "errands": "companions", "letters": "companions"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 

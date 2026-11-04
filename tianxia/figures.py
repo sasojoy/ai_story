@@ -260,10 +260,10 @@ def tick(state: GameState, content: Content, cal_hours: float) -> None:
 
 
 def _stance_push(state: GameState, content: Content, fid: str) -> float:
-    """人物心意照著做的那一個要他推線乘幾倍（stances.push_scale）。stances → calendar、rules：延後 import。"""
-    from . import stances  # noqa: PLC0415
+    """人物心意照著做的那一個要他推線乘幾倍（stance_world.push_scale）。stance_world → calendar、rules：延後 import。"""
+    from . import stance_world  # noqa: PLC0415
 
-    return stances.push_scale(state, content, fid)
+    return stance_world.push_scale(state, content, fid)
 
 
 # ── 時刻表的人物結局 ─────────────────────────────────────
