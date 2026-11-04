@@ -17,7 +17,7 @@
 - `stances.py`（行動那一半：跟人物說話記一筆、人物頁、行狀、假人挑心意）、`errands.py`、`letters.py`：舊名 `tianxia/stances.py`、`errands.py`、`letters.py` 留成 `sys.modules` 別名（同一個模組物件，`monkeypatch.setattr(letters, "write", …)` 照樣有效）。
 - **心意的世界那一半在共用規則層 `tianxia/stance_world.py`**（這一週的計數、誰照哪一個做事、門檻、換手、每週歸零）：核心的 `rules`、事件檢定與舊模組 `world`、`figures`、`events` 讀它；`stances.py` re-export，`from tianxia import stances; stances.check(...)` 照舊。
 - `routes.py`：`/api/figure`（原本在 `server.py`）。
-- 掛鉤：`enabled` 一直是 True（招募 `Config.companions`、書信 `Config.figure_life.letters`、心意與託付 `Config.jianfa`、NPC 智能 2.0 `Config.parley` 各有自己的開關，包本身沒有總開關）；`prefix = ("errand", "talk", "parley")`；`choose`（`errand:` 那幾顆；`talk:`、`parley:` 的 choose 留在 `Game.choose` 原位，見下）；`bot_pick`（`talk:`、`parley:`）；`routes`；`bot_always`（`errand:`：整季機器人不收託付，原本寫在 `bot.pick` 的清單）；`player_fields`。
+- 掛鉤：`enabled` 一直是 True（招募 `Config.companions`、書信 `Config.figure_life.letters`、心意與託付 `Config.jianfa`、NPC 智能 2.0 `Config.parley` 各有自己的開關，包本身沒有總開關）；`prefix = ("errand", "talk", "parley")`；`choose`（`errand:` 那幾顆，加上 `talk:`、`parley:road`，見下）；`bot_pick`（`talk:`、`parley:`）；`routes`；`bot_always`（`errand:`：整季機器人不收託付，原本寫在 `bot.pick` 的清單）；`player_fields`。
 - **`bots.py` 只管 `talk:`、`parley:`**：`bot_policy.score` 沒有 `errand:` 那一段（`take_turn` 打分數之前就濾掉，那一行留著）；假人直接記一筆心意走 `Game.voice_stance`（`bot_policy.voice_stance` 叫，不是選項）；假人不跟人物閒聊、不求事，萬一停在對話裡只按「告辭」（`take_turn` 也會先 `choose("talk:leave")`）。
 
 ## 認領的欄位（手冊 3.5：留在原地）
@@ -28,7 +28,7 @@
 
 ## 委派與留在原位的接縫
 
-`Game` 留 42 個一行委派：第 19 批 27 個（`_stance_before`、`_stance_credit` 兩個第 20 批拿掉了，只有搬走的 `_talk`、`_road_say` 在叫，現在包裡互相叫）加第 20 批 15 個——server 與測試在叫的 `dialogue_request`、`say_max`、`_checked_prepared`、`_parley_lists`、`_parley_prompt`、`_parley_options`、`_annal_talk`（`test_annals` 直接叫）；核心原位叫的 `_open_dialogue`（交友與求見開口，第 21 批）、`_talk`、`_road_say`（`choose`）、`_last_talk_line`（場景文字）、`_parley_road_option`（路上的選單）、`_talk_options`（跟人物談著的整個選單）、`_parley_forsake`（叛投之後）；出陣包經 `ctx` 問的 `_parley_backing_here`。其餘 16 個（`_dialogue_unavailable`、`_parley_finish`、`_parley_decide`……與 `_prepared_turn`）只有包裡叫，沒有委派；`add_to_team`、`remove_from_team`、`release_companion` 帶 `@_not_while_preparing`；`_errand_act`、`_errand_reward`、`_errand_persuade` 只有包裡叫，沒有委派。`Game.SELF_IN_TEAM`、`FOLLOWER_IN_TEAM` 指到包的常數（`test_ranks` 讀）；`Game._persuade_said`、`Game._parley_decision` 是寄放（`choose` 前段與包都讀寫）。
+`Game` 留 41 個一行委派：第 19 批 27 個（`_stance_before`、`_stance_credit` 兩個第 20 批拿掉了，只有搬走的 `_talk`、`_road_say` 在叫，現在包裡互相叫）加第 20 批 14 個——server 與測試在叫的 `dialogue_request`、`say_max`、`_checked_prepared`、`_parley_lists`、`_parley_prompt`、`_parley_options`、`_annal_talk`（`test_annals` 直接叫）；核心原位叫的 `_open_dialogue`（交友與求見開口，第 21 批）、`_last_talk_line`、`affinity_text`（場景文字與談話那張人物卡）、`_parley_road_option`（路上的選單）、`_talk_options`（跟人物談著的整個選單）、`_parley_forsake`（叛投之後）；出陣包經 `ctx` 問的 `_parley_backing_here`。其餘 16 個（`_dialogue_unavailable`、`_parley_finish`、`_parley_decide`……與 `_prepared_turn`）只有包裡叫，沒有委派；`add_to_team`、`remove_from_team`、`release_companion` 帶 `@_not_while_preparing`；`_errand_act`、`_errand_reward`、`_errand_persuade` 只有包裡叫，沒有委派。`Game.SELF_IN_TEAM`、`FOLLOWER_IN_TEAM` 指到包的常數（`test_ranks` 讀）；`Game._persuade_said`、`Game._parley_decision` 是寄放（`choose` 前段與包都讀寫）。
 
 核心原位碰這一包的都沒有第 11 批的掛鉤，改叫委派、記進邊界測試的 `GAME_DELEGATE_CALLERS`，**沒有新增 `GAME_DIRECT`**：
 
