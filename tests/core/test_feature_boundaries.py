@@ -459,7 +459,7 @@ GAME_DELEGATE_CALLERS.update({
     # 核心原位與別的功能叫引導的服務（Task 2 把 note_action、opening、enlist、guide 的幾個名字換成這幾個一行的委派）
     ("choose", "_note_action"): "選項做完、出門、交友、進出店面……七處：" + _NOTE_HOOK,
     # （(_sense_apply, _note_action)：有所感悟到意境——全部拆包第 24 批 _sense_apply 搬進有所感包、包裡經 ctx 叫，拿掉）
-    ("_order_credit", "_note_action"): "替軍令記到功（入伍段的「出一次力」）：軍情還沒成包（總表第 33、34 批）；" + _NOTE_HOOK,
+    # （(_order_credit, _note_action)：軍情第 33 批成包，_order_credit 搬進軍情包，經 ctx._note_action 叫引導，拿掉）
     # 守勢（原 Game._duty，act:duty）：這一批開發時第 17 批正在把它搬進出陣包，開發時不改它（計畫第六節「跟第 17 批」）；第 17 批先合進
     # develop、搬成 train_actions.duty，這一批合進 develop 時那兩處改叫 ctx._note_action（包裡叫，不在這張名單；計畫第七節）
     ("_faction_step", "_note_action"): "投靠那一下（序章、引導的 join）：陣營還沒成包（總表第 35 批）；" + _NOTE_HOOK,
@@ -884,10 +884,6 @@ GAME_DELEGATE_CALLERS.update({
     ("travel", "_report_seat"): "走完一趟之後抄帳（同 choose：正式版丁）；賽季時鐘暫停時什麼都不做這一句在委派的本體裡",
     ("admin_player_choices", "_summons_plan"): "管理者的玩家選單（發召見那一顆灰不灰、為什麼）與 admin_summon 共用同一個規劃（_summons_plan）",
 })
-CORE_DELEGATE_CALLERS.update({
-    ("event_check.answer_event", "_report_seat"): "隨口應對的結果也可能推大勢、記貢獻：第四階席次的帳在這裡也抄（正式版丁）；事件檢定是核心本體、席次抄帳在軍情包，位置固定、沒有對應的掛鉤",
-    ("event_check.answer_branch", "_report_seat"): "同上（隨口應對的分岔那一支）",
-})
 
 
 @functools.lru_cache(maxsize=None)
@@ -1236,6 +1232,11 @@ CORE_DELEGATE_CALLERS.update(CORE_DELEGATE_CALLERS_SENSE)
 CORE_DELEGATE_CALLERS.update({
     ("event_check.event_tier", "_battle_for_me"): "事件分級那一行：全服戰鬥蓋著場景時不寫（tick=False）；事件檢定是核心本體、決戰包回答「此刻蓋著的那一場」，"
                                                   "位置固定、沒有對應的掛鉤（總表第 55～57 批再看要不要改成查詢服務的掛鉤）",
+})
+# military（全部拆包第 33 批）：上面預留的 features/orders 那一對（answer_event、answer_branch × _report_seat）接上
+CORE_DELEGATE_CALLERS.update({
+    ("event_check.answer_event", "_report_seat"): "隨口應對的結果也可能推大勢、記貢獻：第四階席次的帳在這裡也抄（正式版丁）；事件檢定是核心本體、席次抄帳在軍情包，位置固定、沒有對應的掛鉤",
+    ("event_check.answer_branch", "_report_seat"): "同上（隨口應對的分岔那一支）",
 })
 
 

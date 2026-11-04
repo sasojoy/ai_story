@@ -7,13 +7,29 @@
 
 ## 檔案
 
-（Task 3 搬進來之後補。）
+| 檔 | 內容 |
+|---|---|
+| `__init__.py` | 登記：沒有前綴、沒有掛鉤，只認領三個欄位（行動列的 `act:` 前綴是核心的） |
+| `order_actions.py` | 軍令卡與記功 4 個：`order_options`（守勢與接糧車的選單）、`order_credit`（替自己記一次軍令）、`convoy_line`、`orders_view`（江湖頁「本週軍令」卡） |
+| `convoy_actions.py` | 押糧 2 個：`take_convoy`、`convoy_arrives`（走到終點：可能撞上截糧隊、記捐獻與貢獻、軍令記功） |
+| `step_actions.py` | 第 2 階與第 3、4 階行動 6 個：`rank2_options`、`check_cost_note`、`rank2`、`rank_action_options`、`rank_action_line`、`rank_action` |
+| `seat_actions.py` | 第四階席次抄帳：`report_seat`（賽季時鐘暫停中什麼都不做） |
+| `admin_actions.py` | 管理者的軍令與召見：`issue_orders`、`rotate_seats`、`summons_plan`、`summon`，與回話用的五個常數 |
+| `rank_rules.py` | 第 3、4 階行動的規則（原 `tianxia/rank_actions.py`，舊名留成指到同一個模組的別名） |
+
+`Game` 留 15 個一行委派：`_order_options`、`_rank2_options`、`_rank_action_options`、`_rank2`、`_rank_action`、`_take_convoy`、`_convoy_arrives`、`_order_credit`、
+`_report_seat`、`_summons_plan`、`orders_view`、`convoy_line`、`admin_issue_orders`、`admin_rotate_seats`、`admin_summon`；`_check_cost_note`、`_rank_action_line` 只有包裡自己叫，沒有委派。
 
 ## 認領的欄位（`PlayerState`，換季全部跟著新角色重來，沒有帶走的）
 
 `convoy`（押著的糧車；只有這一包寫）、`rank2_days`（第 2 階行動今天做了幾次）、`rank_action_weeks`（第 3、4 階行動這週做了幾次；`rank_rules.count` 寫）。
 `donations`（押糧與捐糧效果都寫）、`summons`、`qualified`、`rank`、`contrib_weeks`、`rank_hinted` 是共用或階級、席次規則層的，不認領。
 
-## 還留在核心原位的接縫
+## 還留在核心原位的接縫（理由在 `tests/core/test_feature_boundaries.py` 的 `# military` 那一段）
 
-（Task 3 搬進來之後補。）
+- `act:rank2`、`act:convoy`、`act:rank:<行動>`：核心 `_act` 的 act 子動詞（總表第 57 批才擴 `Verb`），選單三段（`_everyday_options`，順序算行為）和按下去（`_act`）留在核心原位叫 Game 的委派。
+- `act:summons`（往召見的地點）、`bot_policy.score` 的 `rank2`、`convoy`、`summons` 分數、`_summons_hop`：假人行動列的分數，留原位。
+- `_report_seat`：`sync`、`choose`、`travel` 與事件檢定的兩處（`answer_event`、`answer_branch`）叫，位置固定（回話與紀錄的先後算行為），沒有掛鉤可接。
+- `_convoy_arrives`：`_arrive` 走到地點那一刻先交糧車、再接懸賞榜護送交差。`_order_credit`：核心的單打服務（`_squad_encounter`）打贏之後記功；出陣、決戰、大勢人物也經 `ctx._order_credit` 叫。
+- `server.py` 的 `orders`、`convoy` 兩個鍵（`/api/main`）與管理者三顆鈕（`ADMIN_ACTIONS` 的順序算行為）照舊叫 Game 的委派。
+- `orders.py`（軍令規則）、`ranks.py`、`seats.py`、`opportunities.py`、`foreshadow.py` 不在這一包（共用規則層，總表第 40 批；機緣、伏筆第 34 批）。
