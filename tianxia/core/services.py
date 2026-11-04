@@ -259,7 +259,7 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 # sortie（全部拆包第 17 批「出陣三」）
 （`ctx._parley_backing_here()`：全部拆包第 20 批人物對話成包，改列二、查詢服務 `# companions` 那一段）
 - `ctx._train()`、`ctx._sortie()`、`ctx.train_trend_push(loc_id=None)`、`ctx._train_push(trend_id, delta)`（出陣包自己的委派：
-  tests/figures/test_parley_two.py 換掉實例上的 `_train`、`_sortie`，tests/core/test_explain.py 換掉 `Game.train_trend_push`，
+  tianxia/features/companions/tests/test_parley_two.py 換掉實例上的 `_train`、`_sortie`，tests/core/test_explain.py 換掉 `Game.train_trend_push`，
   scripts/sim_trend_sources.py 換掉 `Game._train_push`——包裡經 ctx 叫，換掉的才打得到；呼叫端改完就拿掉）
 
 # guide（全部拆包第 22 批：新手引導包叫的、主人還沒搬的）
