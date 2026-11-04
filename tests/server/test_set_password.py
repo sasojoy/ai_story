@@ -57,16 +57,17 @@ def test_creates_the_character_when_it_does_not_exist_yet(tmp_path, capsys):
 
 
 def test_a_character_it_creates_gets_the_same_profile_as_the_server(tmp_path, capsys, monkeypatch):
-    """設定照伺服器那一份（TIANXIA_PROFILE，content.env_profile）：週末設定下建角色，印的設定那一行是週末設定的；
-    沒設就是預設的那一行。以前這支腳本不看 TIANXIA_PROFILE，一律拿預設設定建角色。"""
-    weekend, plain = real_content("week7"), real_content()
-    assert profile_line(weekend, "week7") != profile_line(plain, None)
+    """設定照伺服器那一份（TIANXIA_PROFILE，content.serving_profile）：week7 下建角色，印的設定那一行是 week7 的；
+    沒設是 season21 的那一行。以前這支腳本不看 TIANXIA_PROFILE，一律拿預設設定建角色。"""
+    weekend, plain = real_content("week7"), real_content("season21")
+    assert profile_line(weekend, "week7") != profile_line(plain, "season21")
     monkeypatch.setenv("TIANXIA_PROFILE", "week7")
     assert _run(tmp_path, "Rayal", "--character", "Rayal") == 0
     assert profile_line(weekend, "week7") in capsys.readouterr().out  # 跟伺服器啟動時印的同一行
     assert howto.gift_line(weekend) in CharacterStore(_db(tmp_path)).load("Rayal").journal[0].lines
-    monkeypatch.delenv("TIANXIA_PROFILE")
+    monkeypatch.delenv("TIANXIA_PROFILE")  # 沒帶就是 season21（週末設定關門）
     assert _run(tmp_path, "other", "--character", "沈青衫") == 0
+    assert profile_line(plain, "season21") in capsys.readouterr().out
     assert howto.gift_line(plain) in CharacterStore(_db(tmp_path)).load("沈青衫").journal[0].lines
 
 

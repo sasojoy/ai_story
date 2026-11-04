@@ -196,6 +196,7 @@ GAME_IMPORTS = {
     # explore（主動搬六包第 3＋4 批）：走一趟 9 個、探索一顆 9 個一行委派；原本那一行 `from . import outing as outing_rules` 現在是別名
     # （有所感照舊讀 rare_boost，見 GAME_DIRECT 的 _sense）；原本的 `from . import explore_one` 拿掉了（engine 不再用它）
     "tianxia.features.explore.outing_actions", "tianxia.features.explore.explore_actions", "tianxia.outing",
+    "tianxia.features.explore.explore_base",  # explore（全部拆包第 18 批）：舊探索的底 6 個一行委派
     "tianxia.features.mall.actions", "tianxia.features.feast.actions",
     # 出陣（主動搬六包第 1 批）：13 個一行委派；原本那一行 `from . import (..., sortie, ...)` 現在是別名（engine 照舊叫 sortie.on、
     # sortie.NAME 這些字，見 GAME_DIRECT）；混戰的字搬進包，tests/ranger/test_raid.py 照舊從 engine 拿那三個
@@ -580,8 +581,6 @@ GAME_DELEGATE_CALLERS.update({
     # 沒參戰的持有者），game_links 只掃 self.<名>，這裡記不到。第 28 批把那兩個方法搬進玉璽包時，先把 _duel_cut 登記成服務清單的查詢服務
     # （主人：單挑包），不然玉璽包叫它就是過渡外的 Game 方法（審查修正記下）
     ("seal_text_request", "_duel_side"): "奪璽單挑的放手一搏寫這個人是哪一邊（陣營名）：玉璽還沒成包（總表第 28 批）",
-    ("_explore_outcome", "_boss_ready"): "舊探索（不帶設定的季）撞上頭目：總表第 18 批拿掉舊探索",
-    ("_explore_outcome", "_duel_start"): "同上",
 })
 # 只讀擂台名次與稱號的舊模組（名帖 mingtie、玩家卡 social、榜單 leaderboard：on、title_of、ladder、title_for、record_text 都在核心
 # arena_ranks）讀核心那一份，不經舊名 arena 連帶載入單挑包（手冊 3.11「能走服務就走服務」；第 12 批審查修正）。tiers 照舊經別名：
@@ -665,22 +664,19 @@ GAME_DELEGATES |= {
     # 探索包回答有所感包的查詢服務（主人 explore）：擲特殊頓悟的 boost（原本 Game._sense 直接讀 outing_rules 那一筆 GAME_DIRECT 換成它）
     "_rare_boost",
     # 搬進包的 10 個方法留 8 個（3 個私有）：server 與假人叫的 epiphany_request、epiphany_names、sense_request、sense_draw、method_help，
-    # 測試直接叫的 _epiphany_begin，choose 原位叫的 _epiphany_name（dunwu:），探索包與 _explore_outcome 叫的 _sense_here。
+    # 測試直接叫的 _epiphany_begin，choose 原位叫的 _epiphany_name（dunwu:），探索包與 explore_base.explore_outcome 叫的 _sense_here。
     # _sense（sense: 由 choose 掛鉤接走）、_sense_apply 只有包裡叫
     "_epiphany_begin", "_epiphany_name", "epiphany_request", "epiphany_names", "sense_request", "sense_draw", "_sense_here", "method_help",
     # 核心原位與探索、引導兩包叫的服務 7 個（Task 2 開的；本體在 actions）
     "_sense_missed", "_sense_drop_stale", "_sense_menu", "_sense_start", "_sense_canvas", "_epiphany_title", "_sense_prologue_choice",
 }
-_LATER_18 = "舊探索（留給序章與測試內容，總表第 18 批）"
+_LATER_18 = "舊探索（留給序章與測試內容；總表第七節第 1 題選甲，沒有下一批要收）"
 GAME_DELEGATE_CALLERS.update({
     ("_drop_stale_references", "_sense_drop_stale"): "清失效參照中段（收店之前）：後面的收店（features_core.drop_shops → 酒肆 Shop.here → _idle）讀 "
                                                      "player.sensing，on_drop_stale 在最後、還只問開著的包",
     ("_everyday_options", "_sense_menu"): "選單：有所感的卡與取名在擂台那一支之後、一條線的答題之前；接 menu 掛鉤留給總表第 57 批"
                                           "（第 24 批 PM 認定第 2 條）",
     ("_insight_blocked", "_sense_missed"): "舊探索那一行（action_notes）句尾補什麼時候才悟得出：" + _LATER_18,
-    ("_explore_can", "_sense_missed"): "舊探索這一處悟意境那一支的比重：" + _LATER_18,
-    ("_explore_outcome", "_sense_start"): "序章第 3 步的有所感版（草廬四景）：" + _LATER_18,
-    ("_explore_outcome", "_sense_here"): "舊探索落在悟意境那一支（同靜心感悟那四行）：" + _LATER_18,
     ("choose", "_sense_canvas"): "「畫下來」只叫出畫布：查完選單、清掉「剛剛」與引導之後、建紀錄之前（同 battle:），「選單上、不建紀錄」那一格"
                                  "留給核心批（總表第 57 批）",
     ("choose", "_epiphany_name"): "dunwu:（特殊頓悟取名）：要帶自己寫的名字（choose 的 text），choose 掛鉤不帶 text，留在原位的 elif",
@@ -691,6 +687,14 @@ CORE_DELEGATE_CALLERS_SENSE = {  # 核心本體經 ctx 叫包的委派
                                                   "_outing_watch，掛在 Game.choose、answer_event 與有所感包的 sense_draw、epiphany_names 上；"
                                                   "包不能 import engine，第 24 批搬進核心的共用小函式。「做完一件事」的事件是總表第 26 批",
 }
+# explore（全部拆包第 18 批「探索三」：舊探索的底 8 個方法搬進 tianxia/features/explore/explore_base.py，Game 留 6 個一行委派；計畫
+# docs/superpowers/plans/2026-11-04-探索包-第3批.md 1.1、1.4）：這一批加的集中在這一段。_explore_outcome、_here_squads 只有包裡自己叫，Game 上不留。
+GAME_DELEGATES |= {"_practice_tier", "_explore", "_legend_find", "_explore_weights", "_explore_can", "_wild_foes"}
+GAME_DELEGATE_CALLERS.update({
+    ("_act", "_explore"): "關著探索一顆時的舊探索（扣體力、晉升奇遇、序章的舊探索都在它前面；第 11 批 README 認定留原位，不改成 Verb）",
+    ("action_notes", "_explore_weights"): "行動列底下那一行的舊探索句（掛鉤 act_note 回 None 時）：" + _LATER_18,
+    ("_fierce_line", "_practice_tier"): "輿圖的地點卡與詳情（place_detail）：這一處練功第幾級；輿圖不是這一包（feature/map-view）",
+})
 # cultivation（全部拆包第 23 批「修練」：改練、練成、意境裝卸、熔煉、絕學與破境丹、破境卡、傳功、配點搬進修練包 tianxia/features/cultivation/；計畫
 # docs/superpowers/plans/2026-11-01-修練包-第1批.md 1.6）：這一批加的集中在這一段（並行的拆包線不跟別人的行穿插；拿掉的在原處）
 # 22 個動作（actions）、11 個修練頁的唯讀資料（view）的一行委派；原本那兩行 `from . import ascend`、`from . import (..., chuangong, ...,
@@ -819,6 +823,36 @@ GAME_DELEGATES |= {
 }
 
 
+# figure_acts（全部拆包第 31 批「大勢人物」：新包 tianxia/features/figure_acts/；計畫 docs/superpowers/plans/2026-11-04-大勢人物包-第1批.md 1.1、1.4、1.5）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。24 個方法搬進包，留 14 個一行委派（10 個只有包裡或測試在叫，沒有委派，測試改叫包函式）；
+# `aid:`、`plan:` 的 choose 與 _action_title 的兩格接了掛鉤（Outcome），`bot_policy.score` 的 aid 那一段搬進包的 bots.py，bot.py 的 aid: 改 bot_always
+GAME_IMPORTS |= {
+    "tianxia.features.figure_acts.admin_actions", "tianxia.features.figure_acts.aid_actions", "tianxia.features.figure_acts.challenge",
+    "tianxia.features.figure_acts.plan_actions", "tianxia.features.figure_acts.yuedan_actions",
+}
+GAME_DELEGATES |= {
+    # 核心原位叫的：選單（_challenge_options、_aid_options、_plan_options）、閉門不見（_snubbed_character）、挑戰的對手隊伍（_figure_squad）、
+    # 按下去（_challenge）、同步補名望（_deliver_guard_credits）
+    "_challenge_options", "_aid_options", "_plan_options", "_snubbed_character", "_figure_squad", "_challenge", "_deliver_guard_credits",
+    # 被測試換掉的：_rout（challenge 經 ctx._rout 叫，批次表第二節）；只有測試直接叫的：_challenge_reward、_figure_tier3、_figure_tier4（留委派，測試不改）
+    "_rout", "_challenge_reward", "_figure_tier3", "_figure_tier4",
+    # server、假人、腳本、測試在叫的：challenge_odds（bot.py、bot_policy、測試換掉它）、plan_view、place_deeds_view（main_view）、yuedan_request、apply_yuedan（月旦評三段式）、
+    # admin_fallen、admin_revive_figure（管理頁）
+    "challenge_odds", "plan_view", "place_deeds_view", "yuedan_request", "apply_yuedan", "admin_fallen", "admin_revive_figure",
+}
+_ACT_CHALLENGE = ("act:challenge:<人物> 是 act 子動詞，帶後綴接不了 Verb（總表第 57 批才擴）：選單那一格、按下去、標題都留在核心原位叫這一包的委派")
+_AID_PLAN_MENU = ("選單的順序算行為（/api/main 的選項一顆一顆逐位元組）：末段 `opts + 護衛 + features_core.options + 盤算`，護衛那串在包選項之前、盤算在之後，"
+                  "夾著 `options` 掛鉤，接成掛鉤登記在後面的包會排在盤算之後")
+GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_challenge_options"): _ACT_CHALLENGE + "（選單：在 act:train 那格與晉升奇遇之間）",
+    ("_everyday_options", "_snubbed_character"): _ACT_CHALLENGE + "（單人求見那顆灰掉的判斷）",
+    ("action_notes", "_snubbed_character"): _ACT_CHALLENGE + "（行動列底下那一行說明：閉門不見的人不算此地可求見）",
+    ("_stamina_play_options", "_aid_options"): _AID_PLAN_MENU,
+    ("_stamina_play_options", "_plan_options"): _AID_PLAN_MENU,
+    ("_fight_squad", "_figure_squad"): "act:challenge: 的對手隊伍（大場面判讀的鎖外 A 段與鎖內 C 段重驗）：" + _ACT_CHALLENGE,
+    ("_act", "_challenge"): _ACT_CHALLENGE + "（按下去）",
+    ("sync", "_deliver_guard_credits"): "同步補名望與心得：夾在 _deliver_echoes 與 deliver_notices 之間，FEATURES 新包排在最後，酒肆的 deliver_notices 會跑在它前面，行狀順序會變",
+})
 @functools.lru_cache(maxsize=None)
 def _engine_tree() -> ast.Module:
     return ast.parse((TIANXIA / "engine.py").read_text(encoding="utf-8"))  # 一萬七千行，parse 一次一秒多：大家共用這一份
@@ -977,6 +1011,14 @@ SHARED_LATER = {
 # 事件抽選 events 讀的也是世界那一半（不再碰包）：理由改成只剩伏筆
 SHARED_PENDING[("stance_world", "figures")] = "排定：大勢人物（figures.state_of，函式裡，持重拉進度找他在哪條線）——總表第 40 批收進共用規則層"
 SHARED_LATER["events"] = "事件抽選：讀伏筆 foreshadow（軍情第 34 批成包）；伏筆改成查詢服務之後再看（心意第 19 批換成共用規則層 stance_world）"
+# figure_acts（全部拆包第 31 批）
+# 月旦評 A、C 兩段與盤算、管理者救回人物的 Game 方法只被 server 叫，不是 Game 裡的呼叫端；figures.py 函式裡 import 舊名 figure_aid（犒軍與自然回復共用一天的上限）：
+# 叫到才連帶載入 figure_acts，兩條指到 figures 的排定項補一句
+for _key in SHARED_PENDING:
+    if _key[1] == "figures":
+        SHARED_PENDING[_key] += "；figures 函式裡也 import 舊名 figure_aid（大勢人物的行動包 figure_acts 的別名：犒軍與自然回復共用一天的上限），叫到它就連帶載入 figure_acts（第 31 批）"
+    elif _key[1] == "world":
+        SHARED_PENDING[_key] += "；world 最外層 import 舊名 yuedan（figure_acts 的別名：每一步叫 yuedan.tick），import 它就連帶載入 figure_acts（第 31 批）"
 
 
 def test_the_shared_rules_layer_only_imports_the_core_and_itself():
@@ -1376,6 +1418,8 @@ def test_the_old_names_left_as_aliases_are_known():
                          "storyline": "story",
                          # checkin（全部拆包第 30 批：tianxia/checkin.py）
                          "checkin": "checkin",
+                         # figure_acts（全部拆包第 31 批：tianxia/figure_aid.py、yuedan.py）
+                         "figure_aid": "figure_acts", "yuedan": "figure_acts",
                          # zhuan（全部拆包第 29 批：tianxia/biography.py、zhuan_end.py）
                          "biography": "zhuan", "zhuan_end": "zhuan"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]

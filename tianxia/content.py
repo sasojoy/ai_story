@@ -68,6 +68,15 @@ def env_profile() -> str | None:
     return os.environ.get(PROFILE_ENV) or None
 
 
+DEFAULT_SERVING_PROFILE = "season21"  # 拿掉二（甲）：週末設定關門，主機端沒帶 TIANXIA_PROFILE 就套 21 天季
+
+
+def serving_profile() -> str:
+    """伺服器、假人與主機端工具「當主程式跑」時用的設定：環境變數有帶照它，沒帶套 season21。
+    env_profile() 不改（import server 的測試與 same_behavior 的子行程靠它沒帶＝預設內容）。"""
+    return env_profile() or DEFAULT_SERVING_PROFILE
+
+
 TIER_BANDS = {2: (9, 12), 3: (12, 15)}  # 第二、三階事件的難度帶（事件分級設計稿：照剛開門的人定）；第一階照地點的危險度（tests/season/test_real_content.py）
 
 
@@ -82,7 +91,7 @@ def stamp_tier(event: Event) -> None:
 
 
 def load_content(root: Path, profile: str | None = None) -> Content:
-    """profile 給了就把 profiles/<profile>.json 的鍵蓋在 config.json 上（例如週末設定一次打開季曆與 2.5 天的季），
+    """profile 給了就把 profiles/<profile>.json 的鍵蓋在 config.json 上（例如 week7 一次打開季曆與 7 天的季），
     不必手改 config.json；覆寫檔只能寫 Config 有的欄位，拼錯在載入當下就報錯。"""
     root = Path(root)
     events: dict[str, Event] = {}

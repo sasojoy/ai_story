@@ -58,7 +58,8 @@ ${NOTES ? '**要特別處理的**：\n' + NOTES + '\n' : ''}
 3. **閘門只驗「合起來」才會壞的**（企劃者 11/04「不要一直測試變成高度重複測試，這就是拆分的精神」）。這一批的行為不變開發證明過了，這裡**不跑整套、不跑相關的 slow、不跑 same_behavior**；跨包的問題由主幹每天一次的全面檢查抓（PM 跑）：
    - 三種設定（season21、week7、不帶）各載一次內容、各起一次伺服器（GET / 200，起完關掉、確認埠空了）。
    - 邊界、契約、煙霧各一次：\`python -m pytest -q -n 4 tests/core/test_feature_boundaries.py tests/core/test_contract_core.py tests/core/test_contract_features.py\`、\`python -m pytest -q -n 4 -m smoke\`。${FULL ? '**核心批**另外跑一次 `scripts/test_for.py --base origin/' + TRUNK + '`（核心測試）。' : ''}
-   - **只有合併時撞到程式**（共用登記檔以外的 \`tianxia/\`、\`server.py\`）才多跑：撞到的那幾個檔 \`scripts/test_for.py <檔>\`，加這一包那一軌的 \`same_behavior\`（base＝\`git archive origin/${TRUNK}\`，五種設定）。
+   - 未定義名稱掃一次（幾秒）：\`python docs/superpowers/pm-workflows/undef_scan.py tianxia server.py\`。
+   - **只有合併時撞到程式**（共用登記檔以外的 \`tianxia/\`、\`server.py\`）才多跑：撞到的那幾個檔 \`scripts/test_for.py <檔>\`，加這一包那一軌的 \`same_behavior\`（base＝\`git archive origin/${TRUNK}\`，三種設定）。
    - 紅了：判斷是這一批、${TRUNK} 還是合起來才壞；合起來才壞的修（一個 commit，寫進紀錄），再跑那幾條。
 4. 計畫第七節「合併紀錄」寫好、commit。閘門跑的那一筆的樹，除了 docs/ 以外要跟推上去的一樣。
 5. 推 \`HEAD:${FEAT}\`（快轉；不是快轉就停下回報）。再明確 fetch ${TRUNK}（動了照上面「共通的規矩」再合一次）。在 detached 工作樹 checkout \`origin/${TRUNK}\`、\`merge --no-ff origin/${FEAT}\`，\`git diff <合好的> origin/${FEAT}\` 要是空的，確認 ancestor 再推 \`HEAD:${TRUNK}\`；\`${FEAT}\` 快轉到 ${TRUNK} 那一筆。

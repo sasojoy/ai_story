@@ -14,9 +14,9 @@ state.battles 只留最近 20 場，在 observe 裡照流水號逐步累計）�
 它第一個交差，所以那一欄是全服的上限。
 
 兩組（第十節）：14 天設定加 --season-one（挑戰本人現在只在第一季規則開著時有；設計 6.4 要開到每一季，是另一份設計）種子 1～5；
-週末設定（--profile weekend --steer）種子 1～5。模型一律不連。
+7 天濃縮季（--profile week7 --steer）種子 1～5。模型一律不連。
 
-用法：.venv/Scripts/python.exe scripts/measure_treasures.py --seeds 1 2 3 4 5 [--season-one] [--profile weekend --steer]
+用法：.venv/Scripts/python.exe scripts/measure_treasures.py --seeds 1 2 3 4 5 [--season-one] [--profile week7 --steer]
 """
 from __future__ import annotations
 

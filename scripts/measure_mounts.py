@@ -10,11 +10,11 @@
 
 整季機器人平常只步行（Game.move_mode 預設 walk、不存檔）：--gait mix 讓機器人每一步照種子擲一次走法（步行、疾行各一半；企劃者 2026-10-12 拿掉趕路，
 自己一份亂數，不動 Game.rng 與 bot.pick 的那一份；體力不夠的鈕本來就灰掉、bot.pick 不會挑），才量得到省下的體力（設計 5.2 的依據缺口）。
-兩組（第十節）：14 天設定（不給 --profile）種子 1～5，加 --season-one 量決戰騎兵；週末設定（--profile weekend --steer）種子 1～5——
+兩組（第十節）：14 天設定（不給 --profile）種子 1～5，加 --season-one 量決戰騎兵；7 天濃縮季（--profile week7 --steer）種子 1～5——
 週末的機器人一季只走 81～90 段（FB-129），--steer 照 measure_gear 的 _steer 一半的時候照手上的懸賞、軍令走。模型一律不連。
 湊整的地方（個數、兩數、百分比）走 mounts.half_up／mounts.pct（.5 進位，不用 round）。
 
-用法：.venv/Scripts/python.exe scripts/measure_mounts.py --seeds 1 2 3 4 5 [--profile weekend --steer] [--gait mix] [--season-one]
+用法：.venv/Scripts/python.exe scripts/measure_mounts.py --seeds 1 2 3 4 5 [--profile week7 --steer] [--gait mix] [--season-one]
 """
 from __future__ import annotations
 

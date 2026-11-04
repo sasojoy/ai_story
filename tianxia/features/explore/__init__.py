@@ -6,6 +6,8 @@
 - explore_actions.py：原本 Game 上探索一顆的 15 個方法與 OutingPlan（Game 留 9 個一行委派）——名字帶 outing 的那幾個是探索一顆的
 - outing_rules.py：走一趟的純規則（原 tianxia/outing.py；那個名字留成指到這裡的別名）
 - outing_actions.py：原本 Game 上走一趟的 12 個方法（Game 留 9 個一行委派）
+- explore_base.py：原本 Game 上舊探索的底 8 個方法（_explore、_explore_outcome 含序章草廬四景、_explore_weights、_explore_can、_wild_foes、
+  _here_squads、撿破境丹 _legend_find、練功分級 _practice_tier；Game 留 6 個一行委派，全部拆包第 18 批）
 
 這一批不拿選項前綴（prefix 是 None）：那一格的 id 照留核心的 act:explore（IDLE_MARK；跟扣體力、晉升奇遇、序章的舊探索、
 探索三選一纏在一起），分派留在 Game._act；走一趟沒有自己的選項，走 /api/do/outing。所以這一包只接 enabled、欄位、內容驗證與網頁檔，

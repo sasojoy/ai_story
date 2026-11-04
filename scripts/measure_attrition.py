@@ -177,7 +177,7 @@ def _aid(game, role: str) -> None:
 def main(argv=None) -> None:
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser()
-    ap.add_argument("--profile", default="weekend")
+    ap.add_argument("--profile", default="week7")
     ap.add_argument("--life", choices=["on", "off"], default="on", help="人物活起來（Config.figure_life）")
     ap.add_argument("--rules", choices=("new", "old"), default="new")
     ap.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
