@@ -678,24 +678,7 @@ def check_front_lines(c: Content, need) -> None:
             check_pool(f"front_lines.by_side.{side}.{band}", pool)
 
 
-def check_arena_crowd(c: Content, need) -> None:
-    """擂台場邊事件的固定句（content/arena_crowd.json）：只能是認得的種類，每一句照 arena_crowd.FIELDS 填得進去、填完不能有阿拉伯數字
-    （數字只能是引擎寫在括號裡的）；擂台與場邊事件開著時每一種至少一句。"""
-    from . import arena_crowd  # noqa: PLC0415
-
-    for kind, lines in c.arena_crowd.items():
-        need(kind in arena_crowd.KINDS, f"arena_crowd：不認得的種類 {kind}")
-        need(isinstance(lines, list) and bool(lines), f"arena_crowd.{kind}：要寫成一串句子")
-        for text in lines if isinstance(lines, list) else []:
-            try:
-                filled = str(text).format(**arena_crowd.SAMPLE)
-            except (KeyError, IndexError, ValueError) as e:
-                need(False, f"arena_crowd.{kind}：「{text}」填不進去（{e}）")
-                continue
-            need(bool(filled.strip()) and not any(ch.isdigit() for ch in filled), f"arena_crowd.{kind}：「{text}」不能空、不能有數字")
-    if c.arena_crowd and c.config.arena.enabled and c.config.arena.crowd.enabled:
-        for kind in arena_crowd.KINDS:
-            need(bool(c.arena_crowd.get(kind)), f"arena_crowd 缺少種類 {kind}")
+# 擂台場邊事件的固定句（原本的 check_arena_crowd）搬進單挑包：tianxia/features/bout/arena_crowd.py 的 check_content（全部拆包第 12 批）
 
 
 def check_xingshi_lines(c: Content, need) -> None:
@@ -2625,9 +2608,9 @@ def validate(c: Content) -> None:
     check_front_lines(c, need)
     check_combat_lines(c, need)
     check_shop_lines(c, need)
-    check_features(c, need)  # 功能包自己的內容（商城的商品，原本的 check_mall）
+    # 功能包自己的內容（商城的商品，原本的 check_mall；擂台的場邊事件，原本在 check_art 下一行的 check_arena_crowd，全部拆包第 12 批）
+    check_features(c, need)
     check_art(c, need)
-    check_arena_crowd(c, need)
     check_xingshi_lines(c, need)
     check_traits(c, need)
     check_signature_arts(c, need)

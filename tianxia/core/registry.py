@@ -17,9 +17,12 @@ from ..features import sortie  # 出陣：主動搬六包第 1 批（沒有選�
 from ..features import battle  # 全服決戰：主動搬六包第 5 批（「看」那一半；沒有選項、選單、狀態，排在哪裡結果都一樣）
 from ..features import looks  # 擂台形象
 # guide
-from ..features import guide  # 新手引導：全部拆包第 22 批（沒有選項、選單、狀態，排在哪裡結果都一樣；check_content 的錯誤排在別包之後）
+from ..features import guide  # 新手引導：全部拆包第 22 批（沒有選項、選單、狀態，排在哪裡結果都一樣；check_content 的錯誤排在別包之後——
+# 第 12 批合進 develop 時單挑包接在它後面，只有碰到才說與場邊事件同時寫壞時錯誤的先後不同）
 # companions
 from ..features import companions  # 人物情誼：全部拆包第 19 批（只接 errand:* 的 choose 與 /api/figure；都照前綴、路徑認，排在哪裡結果都一樣）
+# bout
+from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。排最後：擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -38,6 +41,8 @@ FEATURES: list[Feature] = [
     guide.FEATURE,
     # companions
     companions.FEATURE,
+    # bout（排最後：店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4）
+    bout.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 

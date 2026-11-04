@@ -823,8 +823,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     # 決戰（battle:）搬進功能包：假人的分數在 features/battle/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 7 批）
     if kind == "seal":
         return None  # 奪璽單挑：假人一律被代打（玉璽碎片設計 14.1），選單上就算出現也不按；在不在場只看 last_seen，假人永遠不記
-    if kind == "duel":
-        return None  # 頭目戰在 take_turn 前面就出招了（duel_move）
+    # 頭目戰（duel:）、擂台（arena:）搬進功能包：假人的分數在 features/bout/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 12 批）
     if kind == "sect":
         return None  # 拜入門派（一類一顆從交友搬出來的一顆）：假人不拜門派，同不叛投
     if kind == "choice":
@@ -870,8 +869,6 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return BOUNTY_SCORE if verb == "take" else 0.0 if verb in ("back", "unpick") else None
     if kind == "smith":  # 鐵匠鋪上：照 _smith_want 按那一顆（換買修、打造與換上打出來的那把，含切頁），沒事就離開；不淬煉、不拆，萬一停在單子上只按「不打了」
         return SMITH_SCORE if option.id == _smith_want(game) else 0.0 if arg in ("back", "forge-cancel") else None
-    if kind == "arena":  # 擂台由 _arena 一次做完；萬一停在擂台邊只會返回，打到一半由 take_turn 照架勢出招
-        return 0.0 if arg == "back" else None
     # 酒肆（tavern:）搬進功能包：假人的分數在 features/tavern/bots.py，上面的 features_core.bot_pick 問它（主動搬六包第 10 批）
     if kind == "market":  # 馬市上：照 bot.market_want 按那一顆（換、買、餵），沒事就離開
         return MARKET_SCORE if option.id == bot.market_want(game) else 0.0 if arg == "back" else None
