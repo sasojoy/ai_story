@@ -300,6 +300,28 @@ def test_a_white_dressed_look_still_loses_the_white_between_its_legs():
         assert not cutting.leg_gaps(Image.open(f).convert("RGBA")).any(), f.name
 
 
+def test_the_pale_shadow_under_the_feet_is_dropped_but_white_boots_stay():
+    """企劃者 2026-11-04「腳的中間都還是會有沒去背成功的白色」：klein 在腳底畫的淺灰白影子挖掉；
+    白靴子在鞋底那條深色線上面，不動；斗笠小子本來就沒有影子，幾乎不變。"""
+    pytest.importorskip("scipy")
+    import numpy as np
+    from PIL import Image
+
+    from tianxia.features.looks import cutting
+
+    a = np.zeros((220, 220, 4), dtype=np.uint8)
+    a[60:200, 80:140] = (60, 60, 60, 255)  # 身體
+    a[185:206, 85:105] = (245, 245, 245, 255)  # 白靴子
+    a[206:208, 85:105] = (30, 30, 30, 255)  # 鞋底的線
+    a[208:214, 50:180] = (225, 225, 222, 255)  # 腳底一攤淺灰白的影子
+    after = np.asarray(cutting.drop_ground_shadow(Image.fromarray(a, "RGBA")))
+    assert after[211, 60, 3] == 0 and after[211, 150, 3] == 0  # 影子沒了
+    assert after[195, 95, 3] == 255 and after[207, 95, 3] == 255  # 靴子與鞋底留著
+
+    hat = Image.open(ROOT / "web/img/arena/hero_bare_idle.webp").convert("RGBA")
+    assert cutting.ground_shadow(hat).sum() < 50
+
+
 def test_a_look_is_complete_only_with_all_sixteen_sheets(on):
     """企劃者 2026-11-04「改成十六張全齊才算」（推翻 FB-8001）：擂台十張齊了還在等圖、不能上架；走一趟六張也齊了才待審。"""
     game = _game(on)

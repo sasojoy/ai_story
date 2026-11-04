@@ -507,8 +507,9 @@ def drop_white_holes(strip: "Image.Image", min_share: float = 0.0) -> "Image.Ima
 # 夠大、矮胖。2026-11-04 量正式站七套（小龍女、功夫貓、錦袍槍客、白袍銀槍、閉月舞姬、聖誕老人，加白衣書生）逐格看過：
 #   真的腿縫 137 塊：寬高比最小 0.78、填滿比最小 0.35
 #   白衣書生的衣襬（不准挖）兩塊：寬高比 0.68／填滿 0.20、寬高比 0.33／填滿 0.45
-#   小龍女倒地（躺著，身體寬大於高）、跪地第 4 格（褲子，身體幾乎方的）不算站著
-GAP_UPRIGHT = 1.15  # 那一格身體高至少是寬的這麼多倍才算站著
+#   小龍女倒地（躺著，身體寬大於高，0.47）不算站著；跪地第 4 格（褲子）面積不到 GAP_MIN
+#   放寬到 0.8 多挖到的 16 格（跨步、蹲下撿東西）逐格看過都是腿縫；0.6～0.85 之間一格都沒有
+GAP_UPRIGHT = 0.8  # 那一格身體高至少是寬的這麼多倍才算站著（躺著的約 0.5；1.15 會漏掉跨大步、蹲著的那幾格，企劃者 2026-11-04 看線上錦袍槍客閃避第 3 格）
 GAP_NEAR = 14  # 白塊最低點離地面線（BY）這麼近以內才算碰到地
 GAP_MIN = 150  # 像素
 GAP_ASPECT = 0.75  # 寬／高
@@ -534,6 +535,52 @@ def leg_gaps(strip: "Image.Image"):
     return gaps
 
 
+# 地上的影子（企劃者 2026-11-04「腳的中間都還是會有沒去背成功的白色」）：klein 常在腳底畫一圈淺灰白的影子，
+# 斗笠小子與四套舊形象都沒有，疊在擂台上就是腳底一攤白。每一欄從底往上，地面線附近 SHADOW_BAND 列以內、
+# 淺而且沒顏色的點挖掉，碰到線條（深色）或透明就停——白靴子在鞋底那條線上面，挖不到；
+# 量過（2026-11-04）：斗笠小子、俠女每張 1～22 點，新八套每張 300～2300 點；白衣書生、小龍女躺著跪著坐著都沒傷到衣服。
+SHADOW_BAND = 12
+SHADOW_LIGHT = 180  # RGB 最小值
+SHADOW_SAT = 40  # RGB 最大減最小
+SPECK = 40  # 挖完之後地面線附近剩下比這小的碎點一起清掉
+
+
+def ground_shadow(strip: "Image.Image"):
+    a = np.asarray(strip)
+    rgb = a[..., :3].astype(np.int16)
+    lo, hi = rgb.min(axis=2), rgb.max(axis=2)
+    solid = a[..., 3] > 32
+    light = solid & (lo >= SHADOW_LIGHT) & (hi - lo <= SHADOW_SAT)
+    kill = np.zeros(a.shape[:2], dtype=bool)
+    top = max(0, BY - SHADOW_BAND)
+    for x in range(a.shape[1]):
+        for y in range(a.shape[0] - 1, top - 1, -1):
+            if not solid[y, x]:
+                if y < BY - 2:
+                    break
+                continue
+            if not light[y, x]:
+                break
+            kill[y, x] = True
+    if kill.any():
+        left = solid & ~kill
+        lab, n = ndimage.label(left)
+        if n:
+            sizes = ndimage.sum(left, lab, range(1, n + 1))
+            low = ndimage.maximum(np.indices(left.shape)[0], lab, range(1, n + 1))
+            kill |= np.isin(lab, [i + 1 for i in range(n) if sizes[i] < SPECK and low[i] >= top])
+    return kill
+
+
+def drop_ground_shadow(strip: "Image.Image") -> "Image.Image":
+    kill = ground_shadow(strip)
+    if not kill.any():
+        return strip
+    a = np.asarray(strip).copy()
+    a[kill, 3] = 0
+    return Image.fromarray(a, "RGBA")
+
+
 def drop_leg_gaps(strip: "Image.Image") -> "Image.Image":
     gaps = leg_gaps(strip)
     if not gaps.any():
@@ -553,6 +600,7 @@ def sheet_bytes(raw: bytes, name: str, keep_white: bool = False) -> bytes:
     except (ValueError, IndexError) as exc:  # 去背之後什麼都不剩、某一格是空的
         raise CutError(f"切不出 {cols * rows} 格：{exc}") from exc
     strip = drop_leg_gaps(strip) if keep_white else drop_white_holes(strip)
+    strip = drop_ground_shadow(strip)
     bad, fix = sheet_problems(strip, cols * rows, name)
     if bad:
         raise CutProblem(bad, fix)
