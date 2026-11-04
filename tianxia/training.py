@@ -1,6 +1,6 @@
 """城外分級（新手引導重做，Joy 2026-10-22 同意設計稿 https://claude.ai/artifact/Eb25MwPveJMYSf5Ge4mDyx；Config.training）：
 一類一顆（precise.on）開著、Config.training.enabled 也開著才有：照這裡最弱的對手分一、二、三級，玩家看不到「幾級」，每一級寫成一句
-江湖話（TIER_WORDS），寫在輿圖的地點詳情（PLACE_LINE）。城裡操練（act:drill）與尋敵鈕全部拆包第 13 批拿掉；這裡剩下的分級第 18 批處理。
+江湖話（TIER_WORDS），寫在輿圖的地點詳情（PLACE_LINE）。城裡操練（act:drill）與尋敵鈕全部拆包第 13 批拿掉；這裡剩下的分級是共用規則層（registry.SHARED；全部拆包第 18 批）。
 這裡放不看引擎的純規則，engine.Game 接線。"""
 from __future__ import annotations
 

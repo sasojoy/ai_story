@@ -174,6 +174,12 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._outing_on()`（主人 explore：減法季探索一顆開著、不在序章裡；出陣包問——散人那一行、出陣的字；出陣第 1 批原本列在
   三、過渡，審查修正拿掉了，只在這一段）
 - `ctx._sortie_host(loc)`（主人 sortie：這一處自家的那一路；探索一顆在自家營寨跟同袍比劃問）
+# explore（全部拆包第 18 批：探索的底搬進 features/explore/explore_base.py，Game 留一行委派）
+- `ctx._practice_tier(loc)`、`ctx._wild_foes(loc)`（主人 explore：這一處最弱的對手分一二三級、此處站著的野怪；引導包的 `_newbie_go`、`h_*` 提示、
+  輿圖的地點詳情〔`_fierce_line`〕問。原本列在三、過渡 explore 那一段）
+- `ctx._sense_start(scene, rng)`（主人有所感：開一張有所感的卡；序章第 3 步的有所感版〔草廬四景〕，舊探索的 `explore_outcome` 叫）
+- `ctx._explore_weights(loc)`、`ctx._explore_can(loc)`、`ctx._legend_find(rng)`（主人 explore：舊探索三支的比重、做不做得了、撿破境丹；探索包
+  的本體經 ctx 叫它們——測試與 same_behavior 在 Game 上換掉，包裡直接叫模組函式就換不到）
 
 # looks（主人：形象包）
 - `ctx._battle_ult()`：放手一搏送出那一刻身上的絕招（move、name、look、weapon；沒穿、沒有導演稿是 None）。決戰包送出放手一搏時記進
@@ -228,11 +234,11 @@ explore（主動搬六包第 3＋4 批加的這一段）
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
 explore（主動搬六包第 3＋4 批加的這一段）
-- `ctx._home_gather(loc, mids)`、`ctx._wild_foes(loc)`、`ctx._practice_tier(loc)`
-  （`_home_gather` 本體第 13 批搬進探索包，Game 留一行委派、探索包經 ctx 叫——測試換它；`_wild_foes`、`_practice_tier` 還在 engine；`_boss_face` 第 12 批改成二、查詢服務）
+- `ctx._home_gather(loc, mids)`
+  （`_home_gather` 本體第 13 批搬進探索包，Game 留一行委派、探索包經 ctx 叫——測試換它；`_wild_foes`、`_practice_tier` 第 18 批改成二、查詢服務 `# explore` 那一段；`_boss_face` 第 12 批改成二、查詢服務）
   （`ctx._sense_here(loc, rng)`：全部拆包第 24 批有所感成包，改列二、查詢服務 `# sense` 那一段）
 - `ctx._story_begin(strand)`（一條線；`_duel_start` 第 12 批改成二、查詢服務）
-- 收尾的掉落：`ctx._legend_find(rng)`（破境丹）、`ctx._seal_find(loc_id)`（玉璽碎片）——照原本的順序在原位叫，不收成事件（同一串的
+- 收尾的掉落：`ctx._legend_find(rng)`（破境丹；第 18 批本體搬進探索包，也列在二、查詢服務 `# explore`）、`ctx._seal_find(loc_id)`（玉璽碎片）——照原本的順序在原位叫，不收成事件（同一串的
   回體丹 `_pill_find`、殘譜 `_scrap_find` 在一、共用服務）
 - `ctx._outing_plan(loc)`、`ctx.outing_plan()`（探索包自己的委派：測試換掉 game._outing_plan 之後按探索，包裡經 ctx 叫，換掉的才打得到；
   呼叫端改完就拿掉）
