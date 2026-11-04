@@ -868,7 +868,7 @@
       <div class="lg-cols">${cols}</div>
       <p class="lg-note" aria-live="polite">${note}</p>
       ${portal}
-      <p class="lg-foot">每一季收季時，正氣看善名、邪氣看惡名、機緣看懸賞託付、戰功、名望與人物交情；舊的留七成再加上去。只開門路，不加屬性。</p>`;
+      <p class="lg-foot">每一季收季時，正氣看善名、邪氣看惡名、機緣看懸賞託付、戰功、名望與人物情誼；舊的留七成再加上去。只開門路，不加屬性。</p>`;
   }
   function legacyShihaiHtml(g) {
     const sh = g.shihai || {};
