@@ -4156,7 +4156,7 @@ class Config(_Strict):
     # 測試期間一鍵補滿體力（企劃者 2026-10-07，緊急）：「體力在這個遊戲是很重要的資源，現在的回復以及消耗完全不成正比，探索偶爾
     # 還順便扣一堆體力，新人玩家體驗不到樂趣。另外現在還在測試版，請直接讓玩家能直接補滿體力。」打開時，狀態列體力條上 joy 的
     # 「丹」鈕（同一個入口 Game.take_stamina_pill、同一條路由 pill）變成「補滿」：按一下直接補到 stamina_max，不花丹、不花銀兩、
-    # 不限次數；關著時回體丹一個字不變。只在測試期間開（content/profiles/weekend.json），content/config.json 不寫；測試期過了就關掉。
+    # 不限次數；關著時回體丹一個字不變。只在測試期間開（週末設定 content/profiles/weekend.json，第 14 批拿掉；測試內容與覆寫檔可以再開），content/config.json 不寫；測試期過了就關掉。
     # 伺服器假人與整季機器人不吃這個，照舊吃丹（bot.take_pill 傳 pill_only=True），平衡量表不受影響
     beta_free_refill: bool = False
     # 開關打開時狀態列那顆鈕上的字（取代「丹 N」）；新寫，待 joy 潤。不能是空字串：網頁見空字串會退回畫「丹 N」，引擎卻照樣補滿

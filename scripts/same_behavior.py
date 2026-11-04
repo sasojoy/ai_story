@@ -46,9 +46,9 @@ import sys
 import time
 from pathlib import Path
 
-PROFILES = ("none", "weekend", "season21", "week7", "test")
+PROFILES = ("season21", "week7", "test")  # 拿掉二（甲）：none、weekend 關門，不再是可以選的設定
 TRACK_NAMES = ("sortie", "duel")  # 第 1 批的一軌（出陣：Scenario）、第 2 批的一軌（出陣約戰：DuelScenario）；各自一個資料庫、各自切一半
-BOT_PROFILES = ("weekend", "week7")
+BOT_PROFILES = ("week7",)
 DUEL_BOT_PROFILES = ("season21", "week7")  # 約戰的假人（推現實時鐘的整季機器人、BotRunner 兩軍各 4 個）：約戰開著的兩種
 DUEL_PROFILES = ("season21", "week7")  # 減法季開著、出陣換成約戰的季：先照原樣（約戰）走一段，攻守混戰那幾段把約戰關掉走
 CLOCK0 = 1792900800.0  # 2026-10-25 08:00 UTC（台灣 16:00）
@@ -60,7 +60,7 @@ MUTATIONS = {
     "duel": (("tianxia/features/sortie/duel_rules.py", "tianxia/sortie_duel.py"),
              ('WHY_JOINED = "已經同去了"', 'WHY_JOINED = "已經同去了！"')),  # 同去按第二次那一句
 }
-MUTANT_PROFILE = {"sortie": "weekend", "duel": "week7"}
+MUTANT_PROFILE = {"sortie": "week7", "duel": "week7"}
 
 
 # ═══════════════════════════ 調度（compare、selftest） ═══════════════════════════
@@ -124,7 +124,7 @@ def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int
             ])
     bot_out = {}
     if bots:
-        for seats, p in _bot_runs(tracks):
+        for seats, p in [r for r in _bot_runs(tracks) if r[1] in profiles]:  # --profiles 給什麼就跑什麼
             n = f"{seats}_{p}"
             bot_out[(seats, p)] = {k: tmp / f"{label}_bots_{k}_{n}.txt" for k in ("base", "head")}
             for k, root in (("base", base), ("head", head)):
@@ -194,7 +194,7 @@ def selftest(base: Path, tmp: Path, profiles: list[str], workers: int, tracks: l
             if p == MUTANT_PROFILE[t]:
                 chains.append([(["run", str(mutants[t]), p, str(o["mut"]), *run, "--db", str(tmp / f"self_mut_{n}.db")], tmp / f"self_mut_{n}.log")])
     bot_out = {}
-    for seats, p in _bot_runs(tracks):
+    for seats, p in [r for r in _bot_runs(tracks) if r[1] in profiles]:
         n = f"{seats}_{p}"
         bot_out[(seats, p)] = {k: tmp / f"self_bots_{k}_{n}.txt" for k in ("a", "b")}
         for k in ("a", "b"):
@@ -5692,7 +5692,7 @@ class TrainScenario(Scenario):
 
 
 # 舊遊歷與操練（none）、守勢與出陣（weekend）、約戰開著的守勢（week7）。測試內容的 BotRunner 一個都不上線（acted 0），不跑
-TRAIN_BOT_PROFILES = ("none", "weekend", "week7")
+TRAIN_BOT_PROFILES = ("week7",)
 TRAIN_SEATS = [("操兵甲", "guan", "guan_camp"), ("操兵乙", "guan", "changshe"), ("操兵丙", "huang", "huangjin_camp"),
                ("操兵丁", "huang", "nanyang_wilds"), ("操兵戊", "guan", "zhuo_county")]
 # 修正輪：weekend（地盤開著、約戰關著）照原樣擺，BotRunner 336 次行動一則出陣、守勢都沒有（只有城裡操練），三軌的假人也沒有一個按過非約戰的
@@ -5838,7 +5838,7 @@ def _sortie3_entry(main_fn):
 main = _sortie3_entry(main)
 # 改一個字（selftest）：操練那一句（搬之前在 engine.py 的 _drill、之後在 features/sortie/train_actions.py），none 的官軍大營操練到
 _register_track("train", TrainScenario, (("tianxia/features/sortie/train_actions.py", "tianxia/engine.py"),
-                                         ("軍心為之一振。", "軍心為之一振！")), "none")
+                                         ("軍心為之一振。", "軍心為之一振！")), "week7")
 
 
 # ═══════════════════════════ guide：新手引導一軌（全部拆包第 22 批，dev/guide-1） ═══════════════════════════
@@ -6976,7 +6976,7 @@ def _bout_register_track(name: str, scenario: type, mutation: tuple, profile: st
 _bout_register_track("bout", BoutScenario, (("tianxia/features/bout/arena_rules.py", "tianxia/arena.py"),
                                              ("別人隨時可以來挑。", "別人隨時可以來挑！")), "week7")
 _bout_register_track("ring", RingScenario, (("tianxia/features/bout/duel_actions.py", "tianxia/engine.py"),
-                                             ("攔住了去路！", "攔住了去路。")), "weekend")
+                                             ("攔住了去路！", "攔住了去路。")), "week7")
 
 
 # ═══════════════════════════ companions：人物情誼一軌（全部拆包第 19 批，dev/companions-1） ═══════════════════════════
@@ -9011,7 +9011,7 @@ class ArtsScenario(Scenario):
 
 
 # 假人：none（舊遊歷、沒有第一季規則）、weekend（序章、部下）、week7（減法季）。測試內容的 BotRunner 一個都不上線（acted 0），不跑
-ARTS_BOT_PROFILES = ("none", "weekend", "week7")
+ARTS_BOT_PROFILES = ("week7",)
 ARTS_SEATS = [("硯甲", "yingchuan_academy"), ("硯乙", "yingchuan"), ("硯丙", "yingchuan"), ("硯丁", "yingchuan")]
 
 

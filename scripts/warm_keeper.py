@@ -30,7 +30,7 @@ sys.path.insert(0, str(ROOT))
 
 import console  # noqa: E402
 from tianxia import database, power_save  # noqa: E402
-from tianxia.content import env_profile, load_content, profile_line  # noqa: E402
+from tianxia.content import serving_profile, load_content, profile_line  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 
 UNLOAD_SECONDS = 20.0  # 請 Ollama 卸掉模型：它回得很快，不必等久
@@ -99,7 +99,7 @@ def main(argv: list[str] | None = None) -> None:
                         help="不管有沒有人在線，先暖一次就結束（開服腳本用：keep_alive 照省電模式，不會把 12h 釘回去）")
     args = parser.parse_args(argv)
 
-    profile = env_profile()
+    profile = serving_profile()
     content = load_content(ROOT / "content", profile=profile)
     presence = args.presence or ONLINE_SECONDS
     client = OllamaClient.from_config(content.config)
