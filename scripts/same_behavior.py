@@ -9140,22 +9140,25 @@ class StoryScenario(Scenario):
     - 打一場：呂臨淵打渡口一戰落敗（灰著寫還要等多久、按灰的被擋、行狀與卡）——**前半停在等著再試**；後半時候到了打贏入傳。桑弄潮打鏡中人
       （自己的影子，難度照輸過幾次削弱）輸兩次、第三次贏。
     - 期限：魏守拙的答題段有期限，前半只開線，後半把期限擺成過了，同步時往 late 走、失敗的結局入傳。
-    - 長篇奇事（內容寫的線，走事件、多日段、站到各段的地點）：周問舟在汝南荒野遇上賣兒契，前半走幾步停在半路，快轉五天後期限過了往 late；
+    - 長篇奇事（內容寫的線，走事件、多日段、站到各段的地點）：周問舟在汝南荒野遇上賣兒契，前半走幾步停在半路（簽到的快轉排在最前面，等的段與期限都還沒過就跨過切點），後半接著走完；
       杜歸舟後半才在潁川書院遇上臥龍岡的地，一路走完。
     - 季末未了：衛未央、蔡留白各開一條答題線不答，收季之後衛未央同步一次（寫此事未了）、蔡留白不同步（換季那一刻補寫）。
     - 簽到（season21、week7 開著；其餘寫「這一季沒有簽到」，同一串 API 照打）：祝延年、范長歌第 1 天自動領了，快轉到要挑四階的那一天——
       **前半停在當天還沒領**；後半：祝延年沒挑（回要先挑）、挑錯、挑對領了、再領一次（簽過了）；范長歌直接挑對；隔天（普通日）自動領、過了最後一天畫面沒有簽到。
-    - 假人：BotRunner 兩個（一個眼前有答題、一個閒著，簽到由假人自己簽）；整季機器人站在答題的選單上挑哪一顆。沒有一條線的設定（none、weekend、
+    - 章回主線、探索擲中（審查修正）：韓承業投靠官軍、照 walk 走章回的事件段；陸尋蹤把長篇奇事開頭的機率擺成 1、站到開頭的地方按探索。
+    - 假人：BotRunner 兩個（一個眼前有答題、一個閒著；簽到是同步時自動簽的，假人開工那天通常已經領了）；整季機器人站在答題的選單上挑哪一顆。沒有一條線的設定（none、weekend、
       test 的線關著）寫「沒有」，同一串 API 照打。"""
 
     QUIZ, DUELER, MIRROR, LATE, WALKER = "宋問津", "呂臨淵", "桑弄潮", "魏守拙", "周問舟"
     REST_A, REST_B, SIGNER, LAPSER, WALKER2 = "衛未央", "蔡留白", "祝延年", "范長歌", "杜歸舟"
-    PLAYERS = {name: None for name in (QUIZ, DUELER, MIRROR, LATE, WALKER, REST_A, REST_B, SIGNER, LAPSER, WALKER2)}
+    PLAYERS = {name: None for name in (QUIZ, DUELER, MIRROR, LATE, WALKER, REST_A, REST_B, SIGNER, LAPSER, WALKER2, "韓承業", "陸尋蹤")}
     NEWBIE = "穆安然"
     BOT_SEATS = ["線甲", "線乙"]
     REAL = "maier"
-    PHASES_FIRST = ["setup", "quiz_first", "duel_first", "mirror_first", "late_first", "walk_first", "rest_open", "sign_first", "half"]
-    PHASES_SECOND = ["resume", "quiz_on", "duel_on", "mirror_on", "late_on", "walk_on", "sign_on", "bots", "season"]
+    # 審查修正（第 30 批）：投靠官軍走章回主線的人、探索擲中內容寫的線的人
+    CHAPTER, EXPLORER = "韓承業", "陸尋蹤"
+    PHASES_FIRST = ["setup", "sign_first", "quiz_first", "duel_first", "mirror_first", "late_first", "walk_first", "rest_open", "half"]
+    PHASES_SECOND = ["resume", "quiz_on", "duel_on", "mirror_on", "late_on", "walk_on", "sign_on", "chapter_on", "explore_on", "bots", "season"]
 
     def __init__(self, root: Path, profile: str, db: Path):
         super().__init__(root, profile, db)
@@ -9484,12 +9487,53 @@ class StoryScenario(Scenario):
         if line is None or not self.lines_on():
             emit(f"{who} 這一季沒有長篇奇事", None)
             return
-        self.main(self.WALKER)
-        self.seen(self.WALKER, "期限過了")
+        self.walk(self.WALKER, 40)  # 前半停在半路（還在等的段、期限都跨過切點，審查修正），後半接著走完
+        self.seen(self.WALKER, "收卡")
         self.place(who, "yingchuan_academy")
         self.edit_state(who, lambda s: storyline.start(s, self.c, line, custom=False))
         self.walk(who, 40)
         self.seen(who, "收卡")
+
+    def chapter_on(self) -> None:
+        """章回主線（審查修正）：投靠官軍、章回的線開了，照 walk 的走法按「未了之事」走事件段到 task 段（記帳、存季、chapter_beat 的登記時機）。
+        沒有陣營的設定寫「沒有」。"""
+        who = self.CHAPTER
+        factions = {f.id: f for f in self.c.scenario.factions}
+        side = factions.get("guan")
+        if side is None or not side.join_at or not self.lines_on():
+            emit(f"{who} 這一季沒有章回主線", None)
+            return
+        self.place(who, side.join_at[0])
+        self.choose(who, "faction:guan")
+        self.choose(who, "faction:confirm")
+        self.settle_choices(who)
+        self.place(who, None)
+        self.me(who, "投靠之後")
+        self.walk(who, 24)
+        self.seen(who, "收卡")
+
+    def explore_on(self) -> None:
+        """探索擲中內容寫的線（審查修正，Game._story_begin 的委派）：把長篇奇事開頭的機率擺成 1，站到開頭的地方按探索（三選一開著的季再挑一顆）。"""
+        who = self.EXPLORER
+        line = self.c.storylines.get(self.REAL)
+        if line is None or line.start is None or not self.lines_on():
+            emit(f"{who} 這一季沒有長篇奇事", None)
+            return
+        where = line.start.where
+        spot = next(iter(where.locations), None) if where is not None else None
+        if spot is None or not self.place(who, spot):
+            emit(f"{who} 開頭的地方站不到", None)
+            return
+        chance = line.start.chance
+        line.start.chance = 1.0
+        try:
+            self.choose(who, "act:explore")
+            modes = [i for i, o in self.options(who).items() if i.startswith("explore:") and o.get("enabled")]
+            if modes:
+                self.choose(who, next((m for m in modes if m == "explore:seek"), modes[0]))
+        finally:
+            line.start.chance = chance
+        self.me(who, "探索之後")
 
     def sign_on(self) -> None:
         """要挑四階的那一天：祝延年不帶屬性（要先挑）、帶錯的、挑對的領了、再領（簽過了）；范長歌直接挑對；隔一天（普通日）自動領；過了最後一天。"""
@@ -9504,7 +9548,7 @@ class StoryScenario(Scenario):
             self.me(who, "隔天")
 
     def bots(self) -> None:
-        """假人：BotRunner 兩個（線甲眼前有答題、線乙閒著；簽到是假人自己簽）若干輪；整季機器人站在答題的選單上挑哪一顆。"""
+        """假人：BotRunner 兩個（線甲按過「未了之事」、眼前是答題，線乙閒著；簽到是同步時自動簽的）若干輪；整季機器人站在答題的選單上挑哪一顆。"""
         from collections import Counter
 
         from tianxia import bot, server_bots
@@ -9532,6 +9576,7 @@ class StoryScenario(Scenario):
             p.joined_at = -1.0e9
             if i == 0:
                 emit(f"{name} 開線", g.story_start(self.defs["open"]))
+                emit(f"{name} 按了未了之事（眼前是答題）", g.choose("story:sb_open"))
             self.chars.save(g.state)
         emit("假人開工時的賽季", self.world.season_phase())
         runner = BotRunner(self.c, self.world, self.chars, rng=random.Random(19), clock=lambda: CLOCK[0])
