@@ -40,11 +40,16 @@ def free_here(ctx: Game) -> list[str]:
     return out
 
 
+def price(ctx: Game) -> int:
+    """招募價：Config.hire.cost，五項屬性的季照魅力打折（attrset.charm「hire」：魅力高便宜、低的貴一點；企劃者 2026-11-04）。"""
+    return max(1, round(ctx.content.config.hire.cost * (1 - attrset.charm(ctx.state, ctx.content, "hire"))))
+
+
 def options(ctx: Game) -> list[Option]:
     if not on(ctx) or ctx.state.player.journey is not None:
         return []
     s, c = ctx.state, ctx.content
-    cost = c.config.hire.cost
+    cost = price(ctx)
     full = len(roster.owned_companions(ctx.world, s.player.name)) >= c.config.companions.max_owned
     poor = s.player.stats.get("silver", 0) < cost
     out = []
@@ -62,7 +67,7 @@ def act(ctx: Game, cid: str) -> list[str]:
     ch = c.characters.get(cid)
     if not on(ctx) or ch is None or ch.hire_type is None or ch.hire_at != s.player.location:
         return ["（此刻無法這麼做。）"]
-    cost = c.config.hire.cost
+    cost = price(ctx)
     n = len(roster.owned_companions(w, s.player.name))
     if n >= c.config.companions.max_owned:
         return [FULL.format(n=n)]

@@ -54,7 +54,7 @@
      {"text": "跳下水把落水的人拖上岸", "check": {"stat": "con", "grade": "normal", "shift": 1, "by": "self"},
       "effect": {"text": "你連拖了三個人上岸，凍得嘴唇發紫。岸上的人自動讓出一條路，讓老弱先上船。", "stats": {"good": 2, "fame": 1}, "stamina": -15},
       "fail_effect": {"text": "河水太急，你自己險些被沖走，抓著船纜才爬上來。", "stamina": -20}},
-     {"text": "跟船家講價，讓他照舊價分批渡人", "check": {"stat": "wis", "grade": "normal", "shift": 1},
+     {"text": "跟船家講價，讓他照舊價分批渡人", "check": {"stat": "wis", "v2": "cha", "grade": "normal", "shift": 1},
       "effect": {"text": "你算給船家聽：照舊價多跑幾趟，賺得比坐地起價還多，還不會被人砸了船。船家想了想，點頭了。", "stats": {"good": 1, "fame": 1}},
       "fail_effect": {"text": "船家冷笑一聲，說聽你囉嗦也得收錢，伸手討了幾個才把船撐離岸。", "stats": {"silver": -5}}},
      {"text": "出高價，自己先上船", "condition": {"min_stats": {"silver": 20}}, "effect": {"text": "你遞上銀子，船家立刻替你在船頭騰了個位子。", "stats": {"silver": -20}}}

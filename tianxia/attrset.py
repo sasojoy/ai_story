@@ -69,6 +69,18 @@ def values(state: GameState, content: Content) -> dict[str, float]:
     return {k: value(state, content, k) for k in keys(content)}
 
 
+def charm(state: GameState, content: Content, hook: str) -> float:
+    """魅力在 hook 這一處的效果（Config.attributes.v2.charm）：比同等級的平均人高幾成 r，高於平均拿 上限 × tanh(r ÷ legacy_scale)，
+    低於平均照另一個上限扣。舊的季、表上沒有這個鉤子是 0。"""
+    cfg = content.config.attributes.v2
+    caps = cfg.charm.get(hook)
+    if caps is None or not on(content, getattr(state, "world", None)):
+        return 0.0
+    avg = expect(content, state.player.member.level)
+    t = math.tanh((value(state, content, "cha") - avg) / avg / cfg.legacy_scale)
+    return caps[0] * t if t >= 0 else caps[1] * t
+
+
 def expect(content: Content, level: int, key: str | None = None) -> float:
     """這個等級的「平均人」這一項有多少（第五節 expect(level, attr)）：均分的配比、送點也均分。key 先不分（五項一樣）。"""
     cfg = content.config.attributes.v2

@@ -1018,7 +1018,7 @@
       {
         "text": "跟嘍囉頭目講價",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "easy", "shift": -1
         },
         "effect": {
@@ -1160,7 +1160,7 @@
           "id": "haggle",
           "tag": "講價：跟頭目談、少交些",
           "check": {
-            "stat": "wis",
+            "stat": "wis", "v2": "cha",
             "grade": "easy", "shift": -1
           },
           "effect": {
@@ -1660,7 +1660,7 @@
       {
         "text": "好言相說，打聽寨裡的規矩",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "normal"
         },
         "effect": {

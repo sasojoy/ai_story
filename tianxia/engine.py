@@ -9939,7 +9939,8 @@ class Game:
             if problem:
                 out.append(f"（{problem}）")
                 return
-            seal_duel.submit(duel, who, text=checked, rate=rate, stories=stories)
+            charmed = None if rate is None else int(rate) + round(attrset.charm(self.state, self.content, "gamble"))  # 魅力（五項屬性的季）
+            seal_duel.submit(duel, who, text=checked, rate=charmed, stories=stories)
             seal_duel.note_seen(duel, who, self.now, cfg)
             out.append(f"你放手一搏：「{checked}」")
             out.extend(seal_duel.advance(shared, self.content, self.now))

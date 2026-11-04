@@ -229,7 +229,7 @@
       {
         "text": "說自己是大將軍府派來的",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "normal", "shift": 1
         },
         "effect": {

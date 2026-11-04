@@ -267,6 +267,9 @@ class Check(_Strict):
     # stat 是 BEST_OF 時取這幾項裡最高的（至少兩項；rules.check_stat_value）；別的 stat 不寫。現在只有分岔的後果用得到
     # （固定選項的 stat 要是一項屬性，content.validate 擋）。空的時候不寫進序列化
     stats: list[str] = Field(default_factory=list)
+    # 五項屬性的季改看這一項（新的鍵；企劃者 2026-11-04 魅力的用途：勸說、說情、講價這類從悟性改看魅力）。舊的季照 stat，一個字不變；
+    # 沒寫照 stat 對過去（attrset.key_of）。空的時候不寫進序列化
+    v2: Literal["cha", "int", "lead", "spd", "str"] | None = None
 
     @model_validator(mode="after")
     def _best_of_names_its_stats(self) -> Check:
@@ -286,7 +289,7 @@ class Check(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        data = _drop_unset(handler(self), ("stats", "shift"))
+        data = _drop_unset(handler(self), ("stats", "shift", "v2"))
         if isinstance(data, dict) and data.get("tier") == 1:
             del data["tier"]
         if isinstance(data, dict):  # 照內容寫的那一種寫回去：寫 grade 的不寫換算好的 difficulty，舊寫法不多一個 grade
@@ -4006,6 +4009,11 @@ class AttrV2Rules(_Strict):
     counter_hooks: dict[str, tuple[str, float]] = Field(default_factory=lambda: {
         "difficulty_cut": ("lead", 0.2), "fx_heavy": ("lead", 0.2), "fx_foresight": ("spd", 0.2),
         "toll_cut": ("str", 0.2), "fx_mend": ("str", 0.2)})
+    pvp_dodge_cap: float = Field(default=0.25, ge=0, le=1)  # 擂台挨打那一下閃掉的機會上限（身法對身法，team.pvp_dodge；平衡總表第二輪量的是 0.25，.4/.6 試過差不多）【草】
+    # 魅力的用途（企劃者 2026-11-04「魅力可以略為提高放手一搏的機率」，選「魅力不算打架的屬性」）：鉤子 → (高於平均人的上限, 低於平均人的上限)，
+    # 照比平均人高幾成走 tanh(r ÷ legacy_scale)（attrset.charm）。gamble 是百分點，hire 是招募價便宜幾成，favor 是情誼多長幾成【草】
+    charm: dict[str, tuple[float, float]] = Field(default_factory=lambda: {
+        "gamble": (5.0, 3.0), "hire": (0.30, 0.15), "favor": (0.30, 0.15)})
     neigong_divisor: float = Field(default=50.0, gt=0)  # 內功份量的除數（舊的 100）：內功加重，悟性才有地方用（企劃者 2026-11-04 點頭）
     # 檢定（第五節 5.1）：成功率＝難度等級的底 ＋ slope ×（值 − 期望值）÷ 期望值 − 微調 × shift_step，夾在 floor～ceil
     grade_rates: dict[str, float] = Field(default_factory=lambda: {

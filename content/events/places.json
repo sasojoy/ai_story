@@ -59,7 +59,7 @@
     "choices": [
       {
         "text": "替老漢說幾句好話",
-        "check": {"stat": "wis", "grade": "normal"},
+        "check": {"stat": "wis", "v2": "cha", "grade": "normal"},
         "effect": {"text": "你陪著笑臉說老漢是城外種菜的，天天打這裡過。守卒罵了兩句，揮手放了他。老漢撿起菜，塞了兩根蘿蔔給你。", "stats": {"good": 2, "xinde": 4}},
         "fail_effect": {"text": "守卒瞪了你一眼，連你也一起推到牆邊蹲了半個時辰。", "stamina": -8}
       },

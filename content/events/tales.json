@@ -43,7 +43,7 @@
       {
         "text": "站起來替救棚的人說句話",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "easy",
           "by": "self"
         },

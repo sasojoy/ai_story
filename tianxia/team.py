@@ -288,7 +288,11 @@ def pvp_dodge(content: Content, card: dict | None, foe: dict | None) -> float:
     擂台以前完全不看身法（企劃者 2026-11-04 平衡總表：全身法在擂台只贏兩成）。"""
     if not card or not foe:
         return 0.0
-    return max(0.0, _v2_from(content, "dodge", card, foe) * content.config.attributes.v2.pvp_scale)
+    cfg = content.config.attributes.v2
+    rows = [row.model_copy(update={"cap": cfg.pvp_dodge_cap}) for row in cfg.effects if row.hook == "dodge"]
+    total = sum(_v2_row(content, row, card["attrs"], foe["attrs"], card.get("cuts", NO_CUTS), foe.get("cuts", NO_CUTS), True)
+                for row in rows)
+    return max(0.0, total * cfg.pvp_scale)
 
 
 def pvp_faced(content: Content, power: float, scores: dict[str, float], card: dict | None, foe: dict | None,

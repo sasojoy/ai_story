@@ -333,3 +333,37 @@ def test_arena_counts_dodge_and_drops_roles_in_five_attribute_seasons():
     assert me.role == "" and foe.role == ""
     old = _game(False)
     assert arena_actions.arena_side(old).dodge == 0.0
+
+
+def test_charm_helps_gamble_hire_and_favor_only_in_five_attribute_seasons():
+    """魅力的用途（企劃者 2026-11-04）：高於平均人放手一搏多幾個百分點、招募便宜、情誼長得快，都有上限；低於平均反過來、上限小；舊的季是 0。"""
+    from tianxia import renown
+    from tianxia.features.hire import actions as hire
+    g = _game()
+    _level(g, 30)
+    caps = g.content.config.attributes.v2.charm
+    g.pick_growth("custom", {"str": 1, "lead": 1, "int": 3, "spd": 1, "cha": 4})
+    g.state.player.attr_alloc = {"cha": 30}
+    up = {h: attrset.charm(g.state, g.content, h) for h in caps}
+    assert all(0 < up[h] <= caps[h][0] for h in caps) and up["gamble"] > 4
+    assert hire.price(g) < g.content.config.hire.cost
+    assert renown.warmed(g.content, 10, g.state) > renown.warmed(g.content, 10)
+    g.pick_growth("custom", {"str": 4, "lead": 3, "int": 1, "spd": 1, "cha": 1})
+    g.state.player.attr_alloc = {"str": 30}
+    assert all(-caps[h][1] <= attrset.charm(g.state, g.content, h) < 0 for h in caps)
+    old = _game(False)
+    assert all(attrset.charm(old.state, old.content, h) == 0 for h in caps)
+    assert hire.price(old) == old.content.config.hire.cost
+
+
+def test_a_check_can_read_charm_in_five_attribute_seasons():
+    """檢定寫了 v2（例 cha）：五項屬性的季改看那一項、選項上寫「魅力」；舊的季照 stat。"""
+    g = _game()
+    _level(g, 30)
+    g.pick_growth("custom", {"str": 1, "lead": 1, "int": 1, "spd": 3, "cha": 4})
+    plain, charm = Check(stat="wis", difficulty=7), Check(stat="wis", difficulty=7, v2="cha")
+    assert rules.check_chance(charm, g.state, g.content, g.world) > rules.check_chance(plain, g.state, g.content, g.world)
+    assert rules.check_stat_name(charm, g.content, g.state.world) == "魅力"
+    old = _game(False)
+    assert rules.check_chance(charm, old.state, old.content, old.world) == rules.check_chance(plain, old.state, old.content, old.world)
+    assert "v2" not in plain.model_dump()

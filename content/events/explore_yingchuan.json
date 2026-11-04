@@ -897,7 +897,7 @@
           "id": "reason",
           "tag": "說理：跟散兵講鄉民也是窮人",
           "check": {
-            "stat": "wis",
+            "stat": "wis", "v2": "cha",
             "grade": "normal"
           },
           "effect": {
@@ -2254,7 +2254,7 @@
           ]
         },
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "normal", "shift": 1,
           "by": "self"
         },

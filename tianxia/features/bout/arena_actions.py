@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from tianxia import annals  # 過渡：待搬（行狀）
 from tianxia import battle_instance, battlelog, encounter, renown, tactics, treasures
-from tianxia import gender, team
+from tianxia import attrset, gender, team
 from tianxia.characters import name_key
 from tianxia.core import duel_base
 from tianxia.core.option import Option
@@ -330,6 +330,7 @@ def arena_gamble(
     p.guide_done = []
     fired: list[str] = []
     skills: tuple[list[str], list[str]] = ([], [])
+    rate = int(rate) + round(attrset.charm(s, c, "gamble"))  # 魅力略為提高放手一搏（五項屬性的季；企劃者 2026-11-04）
     won, delta, hp, _ = arena.gamble(fight, int(rate), c, arena.rng_for(p.season_number, p.name, fight, "搏"),
                                      arena.rng_for(p.season_number, p.name, fight, "戰法"), fired, skills)
     story = (stories or ("", ""))[0 if won else 1]

@@ -231,6 +231,7 @@ def main() -> int:
     ap.add_argument("--str-cap", type=float, default=None, help="試草稿：武力管外功的上限")
     ap.add_argument("--neigong-div", type=float, default=None, help="試：五項屬性的季內功份量的除數（Config.attributes.v2.neigong_divisor，現在 50；越小內功越重）")
     ap.add_argument("--effect", nargs="*", help="試：效果表一條的上限，例 lead:guard=0.15 spd:dodge=0.35")
+    ap.add_argument("--pvp-dodge", type=float, default=None, help="試：擂台閃避的上限（Config.attributes.v2.pvp_dodge_cap，現在 0.25）")
     ap.add_argument("--legacy", nargs="*", help="試：舊公式的上限，例 con=0.2 agi=0.4（Config.attributes.v2.legacy_caps）")
     ap.add_argument("--role-bonus", type=float, default=None, help="試：職位拿手那一招的份量（battle.role_move_bonus，現在 0.15）")
     ap.add_argument("--power-cap", type=float, default=None, help="試：份量的威力上限（battle.power_cap，現在 400）")
@@ -253,6 +254,8 @@ def main() -> int:
         for row in c.config.attributes.v2.effects:
             if row.attr == attr and row.hook == hook:
                 row.cap = float(v)
+    if args.pvp_dodge is not None:
+        c.config.attributes.v2.pvp_dodge_cap = args.pvp_dodge
     for item in args.legacy or []:  # 試：舊公式改讀新屬性的上限（Config.attributes.v2.legacy_caps，例 con=0.2）
         k, v = item.split("=")
         c.config.attributes.v2.legacy_caps[k] = float(v)
