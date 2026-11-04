@@ -1750,7 +1750,7 @@ class Game:
     def _recruit_targets(self) -> list[str]:
         """歷史武將同行（Config.companions）：此地此刻站著（_figures_here，照人物此刻的所在）、標了 recruitable、還沒有主、
         情誼到門檻（roster.affinity_ok，沒到的不畫鈕）的人。關著是空的（舊的 recruit_at 那一條照舊走 _recruit_target）。"""
-        if not roster.on(self.content):
+        if not roster.on(self.content, self.state.world):
             return []
         return [
             cid for cid in self._figures_here()
@@ -7018,14 +7018,14 @@ class Game:
         """挑戰這位人物的勝算（跟遊歷同一套說法）：對手是代表本人的隊伍，難度照他此刻的聲威（figures.difficulty）與江湖水漲。"""
         squad = self._figure_squad(fid)
         return team.estimate(self.state, self.content, self.world, squad.id, difficulty=squad.difficulty,
-                             draw_floor=rise.draw_floor(self.content))
+                             draw_floor=rise.draw_floor(self.content, self.state.world))
 
     def _figure_squad(self, fid: str) -> Squad:
         """挑戰這位人物本人要打的那一路：難度照他此刻的聲威（figures.squad_of），再照江湖水漲浮上來——你此刻對他的全隊威力 ×
         倍數，倍數照你這一季打贏他幾次（figure_wins）往上加（rise.big）。勝算、備料（A、C 段）、打起來都照這一份。"""
         s, c = self.state, self.content
         squad = figures.squad_of(s, c, fid)
-        if not rise.on(c):
+        if not rise.on(c, s.world):
             return squad
         # 地利不浮上去（武學隨地理環境 2.1）；玉璽碎片的戰力也不浮上去（改版 PM 五之一 2）
         power = team.power_vs(s, c, self.world, squad, fresh=True, terrain=False, seal=False)
@@ -7036,7 +7036,7 @@ class Game:
         """劇情戰的對手：大場面（is_big）照江湖水漲浮上來（全隊威力 × big_scale，不看打贏幾次：劇情戰多半一次性）；
         其餘、序章照內容寫的。勝算（_choice_label）、備料（_fight_squad）、打起來（_event_battle）都照這一份。"""
         s, c = self.state, self.content
-        if not rise.on(c) or not self.is_big(squad) or prologue_rules.active(s, c):
+        if not rise.on(c, s.world) or not self.is_big(squad) or prologue_rules.active(s, c):
             return squad
         level = rise.big(c, squad.difficulty, team.power_vs(s, c, self.world, squad, fresh=True, terrain=False, seal=False))  # 地利、碎片不浮
         return squad if level == squad.difficulty else squad.model_copy(update={"difficulty": round(level, 1)})
@@ -7055,7 +7055,7 @@ class Game:
         if not broke:  # 護衛擋下：這一次挑戰不成，不打他本人、不扣情誼（Joy 2026-10-17 第 6 條）
             return [figure_aid.BLOCKED_LINE.format(guard=post.name, name=fig.name)]
         judged = self._judged(squad)  # 挑戰本人一律是大場面：有鎖外的判讀就用（武學與成長設計 8.3）
-        result = self._fight_with(squad, judged, difficulty=squad.difficulty, draw_floor=rise.draw_floor(c))
+        result = self._fight_with(squad, judged, difficulty=squad.difficulty, draw_floor=rise.draw_floor(c, s.world))
         record = battlelog.new_record(s, c, self.world, squad, result, "event", event=f"挑戰{fig.name}")
         record.notes += self._style_note(squad, result) + self._terrain_note()
         self._narrate(record, result, judged)

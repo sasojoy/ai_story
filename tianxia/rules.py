@@ -336,14 +336,20 @@ def check_outlook(check: Check, state: GameState, content: Content, world: World
 def _season_stats(effect: Effect, state: GameState, content: Content):
     """效果給的數值照這一季走：舊的季原樣；五項屬性的季（attrset.on）事件不再直接給屬性點（屬性與跨季架構 v2 第三節），
     加的屬性點改給心得（每點 attr_xinde），扣的不扣；跟原本寫的心得合在一起、照原本的順序。"""
-    if not attrset.on(content, state.world) or not any(k in team.COMBAT_STATS for k in effect.stats):
+    rewards = content.config.rewards
+    if not attrset.on(content, state.world) or not any(k in team.COMBAT_STATS or k in rewards.amounts for k in effect.stats):
         return effect.stats.items()
     out: dict[str, int] = {}
     per = content.config.attributes.v2.attr_xinde
+    scale = 1 + rewards.per_level * (state.player.member.level - 1)
     for key, delta in effect.stats.items():
         if key in team.COMBAT_STATS:
             if delta > 0 and per:
                 out["xinde"] = out.get("xinde", 0) + delta * per
+        elif key in rewards.amounts and delta > 0:  # 獎勵等級（v2 5.2）：照最近的那一級、跟著等級走；扣的（花費）照原樣
+            row = rewards.amounts[key]
+            grade = min(range(len(row)), key=lambda i: (abs(math.log(row[i]) - math.log(delta)), i))
+            out[key] = out.get(key, 0) + round(row[grade] * scale)
         else:
             out[key] = out.get(key, 0) + delta
     return out.items()

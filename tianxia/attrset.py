@@ -90,6 +90,39 @@ def legacy(state: GameState, content: Content, key: str, default: float = V1_BAS
     return state.player.stats.get(key, default)
 
 
+def foe_level(content: Content, difficulty: float) -> float:
+    """對手的難度換成等級（Config.attributes.v2.foe_levels，中間照直線、兩頭夾住）。"""
+    table = content.config.attributes.v2.foe_levels
+    if difficulty <= table[0][0]:
+        return table[0][1]
+    for (p0, l0), (p1, l1) in zip(table, table[1:]):
+        if difficulty <= p1:
+            return l0 + (l1 - l0) * (difficulty - p0) / (p1 - p0)
+    return table[-1][1]
+
+
+def grown(content: Content, level: float, aptitude: float) -> float:
+    """資質 aptitude（平均是 foe_aptitude）的人長到 level 級，一項有多少：跟平均人同一條曲線，照資質放大縮小成長的那一截。"""
+    cfg = content.config.attributes.v2
+    return cfg.base + (expect(content, level) - cfg.base) * aptitude / cfg.foe_aptitude
+
+
+def foe_values(content: Content, squad, level: float | None = None) -> dict[str, float]:
+    """對手的五項（第四節「同一把尺」）：等級照隊伍寫的、沒寫照難度換；資質照隊伍寫的、沒寫當平均。"""
+    cfg = content.config.attributes.v2
+    lv = level if level is not None else (squad.level if getattr(squad, "level", None) else foe_level(content, squad.difficulty))
+    apt = getattr(squad, "aptitude", {}) or {}
+    return {k: grown(content, lv, apt.get(k, cfg.foe_aptitude)) for k in cfg.keys}
+
+
+def from_v1(content: Content, level: int, v1: dict[str, float]) -> dict[str, float]:
+    """舊尺度的人（同伴照內容寫的臂力、身法……）換成新的五項：對得到的照 legacy 反過來換，魅力這種沒有舊值的當平均人。"""
+    cfg = content.config.attributes.v2
+    ratio = cfg.per_level / max(1, content.config.stat_points_per_level)
+    back = {new: old for old, new in cfg.legacy.items()}
+    return {k: (cfg.base + (v1[back[k]] - V1_BASE) * ratio if back.get(k) in v1 else expect(content, level)) for k in cfg.keys}
+
+
 def bonus_between(content: Content, before: int, after: int) -> int:
     """從第 before 級升到第 after 級送幾點（每 bonus_every 級 bonus_points 點）。"""
     cfg = content.config.attributes.v2

@@ -133,9 +133,54 @@ def hook_effect(content: Content, hook: str, values, rivals=None, season=None) -
     return 0.0 if total is None else total
 
 
+_FOE: ContextVar[dict | None] = ContextVar("foe", default=None)
+
+
+@contextmanager
+def facing(state: GameState, content: Content, squad, level: float | None = None):
+    """這一仗的對手（五項屬性的季，屬性與跨季架構 v2 第四節）：仗裡算加成的地方（attr_effect）照它的屬性對抗；舊的季什麼都不做。"""
+    if not attrset.on(content, getattr(state, "world", None)) or squad is None:
+        yield
+        return
+    token = _FOE.set(attrset.foe_values(content, squad, level))
+    try:
+        yield
+    finally:
+        _FOE.reset(token)
+
+
+def v2_values(state: GameState, content: Content, world: WorldStateStore, key: str) -> dict[str, float]:
+    """五項屬性的季，名冊上這個人的五項：本人照 attrset；同伴照他內容寫的舊屬性換過來（第 4 批換成型與資質）。"""
+    if key == PLAYER:
+        return attrset.values(state, content)
+    progress = world.get_companion(key)
+    return attrset.from_v1(content, progress.level, member_stats(state, content, world, key))
+
+
+def _v2_effect(state: GameState, content: Content, world: WorldStateStore, key: str, hook: str, rival) -> float | None:
+    """五項屬性的季、效果表（v2）寫了這個鉤子：照新尺度對抗（我 − 他）；他沒給時照這一仗的對手（facing），再沒有就是同等級的平均人。"""
+    rows = [r for r in content.config.attributes.v2.effects if r.hook == hook]
+    if not rows or not attrset.on(content, getattr(state, "world", None)):
+        return None
+    mine = v2_values(state, content, world, key)
+    foe = rival or _FOE.get()
+    if foe is None:
+        flat = attrset.expect(content, state.player.member.level)
+        foe = {k: flat for k in attrset.keys(content)}
+    against = content.config.attributes.v2.against
+    total = 0.0
+    for row in rows:
+        other = foe.get(against.get(row.attr, row.attr), row.origin)
+        total += _curve(content, row, mine.get(row.attr, row.origin), other, None)
+    return total
+
+
 def attr_effect(state: GameState, content: Content, world: WorldStateStore, key: str, hook: str, rival=None) -> float:
     """名冊上這個人在 hook 這一個讀點的效果（第二節 2.1「team.attr_effect(誰, 鉤子, 對手)」）：照效果表、照這一季的每點效果。
-    rival 是對手的屬性（鍵 → 值），contest 曲線才用得到。"""
+    rival 是對手的屬性（鍵 → 值），contest 曲線才用得到。五項屬性的季、v2 的效果表寫了這個鉤子時照新尺度對抗（_v2_effect）。"""
+    v2 = _v2_effect(state, content, world, key, hook, rival)
+    if v2 is not None:
+        return v2
     attrs = {row.attr for row in content.config.attributes.effects if row.hook == hook}
     values = {attr: (con_of(state, content, world, key) if attr == "con" else attr_value(state, content, world, key, attr))
               for attr in attrs}  # 根骨照舊只從 con_of 讀
@@ -1079,7 +1124,8 @@ def dodge_chance(state: GameState, content: Content) -> float:
     金角 +3 個百分點（玉璽碎片設計 7.1）。每一點照這一季（per_point：減法季每點加倍）。"""
     mine = {row.attr: float(v1_stat(state, content, row.attr))  # 只有本人：不經 world（量表與純函式也叫得到）
             for row in content.config.attributes.effects if row.hook == "dodge"}
-    return min(1.0, max(0.0, hook_effect(content, "dodge", mine, season=getattr(state, "world", None))
+    v2 = _v2_effect(state, content, None, PLAYER, "dodge", None)  # 五項屬性的季：身法對身法（本人不經 world）
+    return min(1.0, max(0.0, (v2 if v2 is not None else hook_effect(content, "dodge", mine, season=getattr(state, "world", None)))
                         + treasures.amount(state, content, "dodge")))
 
 
@@ -1192,6 +1238,18 @@ def _apply_toll(
 
 
 def fight(
+    state: GameState, content: Content, world: WorldStateStore, squad_id: str, rng: random.Random,
+    *, difficulty: float | None = None, shift: float = 0.0, dodge: bool = True, tier: str | None = None,
+    draw_floor: float | None = None,
+) -> encounter.EncounterResult:
+    """見 _fight；五項屬性的季照這一隊（難度換過的照換過的）的屬性對抗（facing）。"""
+    squad = content.squads[squad_id]
+    with facing(state, content, squad if difficulty is None else squad.model_copy(update={"difficulty": difficulty})):
+        return _fight(state, content, world, squad_id, rng, difficulty=difficulty, shift=shift, dodge=dodge, tier=tier,
+                      draw_floor=draw_floor)
+
+
+def _fight(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, rng: random.Random,
     *, difficulty: float | None = None, shift: float = 0.0, dodge: bool = True, tier: str | None = None,
     draw_floor: float | None = None,
@@ -1478,6 +1536,16 @@ def _odds_text(wins: int, draws: int, runs: int) -> str:
 
 
 def estimate(
+    state: GameState, content: Content, world: WorldStateStore, squad_id: str, *, difficulty: float | None = None,
+    draw_floor: float | None = None, memo: OddsMemo | None = None, at: str | None = None,
+) -> str:
+    """見 _estimate；五項屬性的季照這一隊的屬性對抗（facing），勝算跟真的打照同一把尺。"""
+    squad = content.squads[squad_id]
+    with facing(state, content, squad if difficulty is None else squad.model_copy(update={"difficulty": difficulty})):
+        return _estimate(state, content, world, squad_id, difficulty=difficulty, draw_floor=draw_floor, memo=memo, at=at)
+
+
+def _estimate(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, *, difficulty: float | None = None,
     draw_floor: float | None = None, memo: OddsMemo | None = None, at: str | None = None,
 ) -> str:

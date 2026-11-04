@@ -109,3 +109,75 @@ def test_the_old_season_is_untouched():
     g = _game(False)
     assert "growth" not in g.status_data()
     assert [row[2] for row in g.status_data()["attrs"]] == list(team.COMBAT_STATS)
+
+
+# ── 第 2 批：同一把尺（對手也有屬性）、對抗式 ──
+
+
+def test_foes_get_attributes_from_level_and_aptitude():
+    g = _game()
+    c = g.content
+    weak, strong = c.squads[min(c.squads, key=lambda k: c.squads[k].difficulty)], c.squads[max(c.squads, key=lambda k: c.squads[k].difficulty)]
+    assert attrset.foe_values(c, weak)["lead"] < attrset.foe_values(c, strong)["lead"]
+    picked = weak.model_copy(update={"level": 30, "aptitude": {"lead": 9}})
+    assert attrset.foe_values(c, picked)["lead"] > attrset.foe_values(c, picked)["str"]
+
+
+def test_damage_is_my_force_against_their_command():
+    g = _game()
+    c = g.content
+    _level(g, 21)
+    g.pick_growth("warrior")
+    weak = c.squads[min(c.squads, key=lambda k: c.squads[k].difficulty)]
+    tough = weak.model_copy(update={"level": 21, "aptitude": {"lead": 9}})
+    with team.facing(g.state, c, weak):
+        vs_weak = team.player_boost(g.state, c, g.world).outer
+    with team.facing(g.state, c, tough):
+        vs_tough = team.player_boost(g.state, c, g.world).outer
+    assert vs_weak > vs_tough
+    assert abs(vs_weak) <= c.config.attributes.v2.effects[0].cap
+
+
+def test_the_old_season_ignores_the_foe():
+    g = _game(False)
+    c = g.content
+    squad = next(iter(c.squads.values()))
+    plain = team.player_boost(g.state, c, g.world)
+    with team.facing(g.state, c, squad):
+        assert team.player_boost(g.state, c, g.world) == plain
+
+
+# ── 第 3、4 批：江湖水漲退掉、獎勵跟著等級、歷史武將不同行 ──
+
+
+def test_rise_steps_back_in_the_new_season():
+    from tianxia import rise
+
+    g, old = _game(), _game(False)
+    assert not rise.on(g.content, g.state.world)
+    assert rise.on(old.content, old.state.world) == old.content.config.rise.enabled
+
+
+def test_rewards_follow_the_level():
+    g = _game()
+    p = g.state.player
+    rules.apply_effect(Effect(stats={"silver": 35}), g.state, g.content, g.world)  # 35 最近「大」：40
+    low = p.stats["silver"]
+    _level(g, 21)
+    rules.apply_effect(Effect(stats={"silver": 35}), g.state, g.content, g.world)
+    assert p.stats["silver"] - low > 40
+    old = _game(False)
+    before = old.state.player.stats["silver"]
+    rules.apply_effect(Effect(stats={"silver": 35}), old.state, old.content, old.world)
+    assert old.state.player.stats["silver"] == before + 35
+
+
+def test_historical_figures_do_not_join_in_the_new_season():
+    from tianxia import roster
+
+    g = _game()
+    c = g.content
+    assert not roster.on(c, g.state.world)
+    cid = next(k for k, ch in c.characters.items() if ch.recruitable)
+    lines = roster.recruit(g.state, c, g.world, cid)
+    assert "不會跟你走" in lines[0] and roster.owned_by(g.world, cid) is None
