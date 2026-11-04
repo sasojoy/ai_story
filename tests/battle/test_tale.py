@@ -260,6 +260,20 @@ def test_the_fallback_is_what_the_battle_report_said():
     assert tale.plain(only).acts[0].scenes[0].text == "霜刃放手一搏，沒成。"  # 連戰報那一句都沒有才用引擎的
 
 
+def test_a_subtitle_written_into_the_prose_is_moved_into_the_head():
+    """2026-11-04 第 8 季廣宗實測：head 欄 17 拍全空，模型把小標寫成散文第一行的「【雙軍對峙】」。
+    head 可省略，提示詞講幾次都一樣，所以在程式這邊收。挖在算字數之前，不然【小標】會佔掉那一拍的額度。"""
+    m = _material()
+    beat = next(b for a in m.acts for b in a.beats if b.said is None)
+    long = "城" * (tale.SCENE_MAX - 4)  # 加上【四字】就超過上限，挖出來剛好不超過
+    scenes, _ = tale.write(_Client({"scenes": [{"id": beat.id, "text": f"【雙軍對峙】\n{long}"}], "cast": []}), m)
+    assert scenes[beat.id] == ("雙軍對峙", long)
+    # head 本來就有就不動它
+    scenes, _ = tale.write(_Client({"scenes": [{"id": beat.id, "head": "暮色", "text": "【雙軍對峙】城下塵土飛揚。"}],
+                                    "cast": []}), m)
+    assert scenes[beat.id] == ("暮色", "【雙軍對峙】城下塵土飛揚。")
+
+
 def test_the_same_text_on_two_beats_falls_back_on_both():
     m = _material()
     ids = [b.id for a in m.acts for b in a.beats if b.said is None][:2]

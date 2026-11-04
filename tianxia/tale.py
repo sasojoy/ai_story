@@ -406,6 +406,19 @@ def known_names(material: Material) -> tuple[str, ...]:
     return tuple(sorted(n for n in out if n))
 
 
+_INLINE_HEAD = re.compile(r"^[\s]*[【〔]([^】〕\n]{1,10})[】〕][\s　]*")
+
+
+def _head_out(head: str, text: str) -> tuple[str, str]:
+    """小標寫進散文開頭了就挖出來（2026-11-04 第 8 季廣宗實測：head 欄 17 拍全空，模型把小標寫成散文第一行的
+    「【雙軍對峙】」）。head 有預設值＝可省略，模型就用自己的方式給；提示詞講幾次都一樣，所以在這裡收。
+    挖在 clean 之前：不然【小標】會一起算進那一拍的字數上限。"""
+    if head.strip():
+        return head, text
+    m = _INLINE_HEAD.match(text or "")
+    return (m.group(1), text[m.end():]) if m else (head, text)
+
+
 def _write_act(client, material: Material, act: ActFacts, names: Sequence[str],
                others: Sequence[str]) -> dict[str, tuple[str, str]]:
     """一幕一趟：回這一幕的（拍子 id → (小標, 散文)）。叫不動、寫壞的不在裡面（那幾拍照引擎那一句）。"""
@@ -420,9 +433,10 @@ def _write_act(client, material: Material, act: ActFacts, names: Sequence[str],
     beats = {beat.id: beat for beat in act.beats}
     out: dict[str, tuple[str, str]] = {}
     for s in reply.scenes:
-        text = clean(s.text, SCENE_MAX, names)
+        raw_head, raw_text = _head_out(s.head, s.text)
+        text = clean(raw_text, SCENE_MAX, names)
         if s.id in beats and s.id not in out and text and fits(beats[s.id], text, others):
-            out[s.id] = (clean(s.head, HEAD_MAX, names), text)
+            out[s.id] = (clean(raw_head, HEAD_MAX, names), text)
     return out
 
 
