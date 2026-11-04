@@ -704,7 +704,7 @@ LONG_FIRST = (
     "tests/season/test_sim_scripts.py::test_the_secrets_measure_script_also_prints_the_forge_part",
     "tests/season/test_four_wins_gentry_bots.py::test_gentry_server_bots_split_between_the_two_armies",
     "tests/season/test_sim_scripts.py::test_the_weapons_measure_script_prints_one_line_with_and_one_without_weapons",
-    "tests/season/test_sim_scripts.py::test_the_exp_pace_measure_prints_one_line_per_side_and_rule",
+    "tests/season/test_sim_scripts.py::test_the_exp_pace_measure_prints_one_line_per_side",
     "tests/season/test_sim_scripts.py::test_the_treasures_measure_script_prints_one_line_with_and_one_without_treasures",
     "tests/season/test_sim_scripts.py::test_the_gear_measure_script_prints_one_line_with_and_one_without_armor",
     "tests/season/test_real_content.py::test_bot_plays_a_full_season",
