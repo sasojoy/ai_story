@@ -285,11 +285,6 @@ def test_dirty_moves_every_kind_of_field_off_its_default(field):
     assert _dirty(info.annotation, default) != default
 
 
-# checkin（全部拆包第 30 批）：換季重來之後，新季的第一次同步就自動簽了第 1 天（Game._auto_checkin；真實內容 week7 的簽到開著），
-# 所以 checkin_days 不是空的而是 [1]；換季前擺的那個值（[7]）沒有帶過來才是這一條要驗的
-RESEEDED = {"checkin_days": [1]}
-
-
 @pytest.mark.parametrize("feature", FEATURES, ids=lambda f: f.name)
 def test_a_new_season_keeps_only_what_the_package_carries(feature):
     c = real_content("week7")
@@ -305,10 +300,12 @@ def test_a_new_season_keeps_only_what_the_package_carries(feature):
         value = _dirty(fields[name].annotation, fields[name].get_default(call_default_factory=True))
         setattr(game.state.player, name, value)
         before[name] = value
+    # checkin（全部拆包第 30 批）：新季第一次同步會自動簽第 1 天（簽到開著），checkin_days 就不是預設的空值；擺局面時關掉，斷言不動
+    c.config.checkin.enabled = False
     next_season(c, world, game)
     for name in feature.player_fields:
         now = getattr(game.state.player, name)
         if name in feature.carried:
             assert now == before[name], name
         else:
-            assert now == RESEEDED.get(name, fields[name].get_default(call_default_factory=True)), name
+            assert now == fields[name].get_default(call_default_factory=True), name
