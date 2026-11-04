@@ -3997,6 +3997,11 @@ class AttrV2Rules(_Strict):
     custom_max: int = Field(default=4, ge=1)  # ……最多長幾點（跟預設五套最重的那一項一樣；企劃者 2026-11-04「初始成長應該也有上限 不能太誇張」）
     # 舊的鍵（內容的檢定、還沒改寫的讀點）在新的季對到哪一項；博聞拔掉（持有上限只靠等級）
     legacy: dict[str, str] = Field(default_factory=lambda: {"str": "str", "agi": "spd", "con": "lead", "wis": "int"})
+    # 舊公式（氣血、內傷、損耗、修練、悟意境、打造、頓悟、感悟、閉關、戰法比快慢、職位）讀新的五項（attrset.v1_value）：比同等級的
+    # 平均人高幾成 r，效果＝上限 × tanh(r ÷ legacy_scale)，換成舊的「比 5 多幾點 × 每點 stat_bonus_per_point」。屬性沒有上限、效果有上限
+    # （企劃者 2026-11-04「要用新的屬性點的加法，不限於5～15」）【草】
+    legacy_caps: dict[str, float] = Field(default_factory=lambda: {"str": 0.30, "agi": 0.30, "con": 0.35, "wis": 0.40})
+    legacy_scale: float = Field(default=0.5, gt=0)
     # 檢定（第五節 5.1）：成功率＝難度等級的底 ＋ slope ×（值 − 期望值）÷ 期望值 − 微調 × shift_step，夾在 floor～ceil
     grade_rates: dict[str, float] = Field(default_factory=lambda: {
         "easy": 0.9, "normal": 0.7, "hard": 0.55, "harsh": 0.4, "legend": 0.25})  # 企劃者 2026-11-04：草稿每級 +10%

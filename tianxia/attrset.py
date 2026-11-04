@@ -5,11 +5,13 @@
 - 本人的值不存進存檔的 stats，讀的時候算：base ＋（等級 − 1）× 這一季的配比 ＋ 送點自己配的（PlayerState.attr_alloc）。
   配比季初自己挑（五套預設或自己配，合計固定），沒挑的照 default_preset 長；季中改配比一律回溯。
 - 舊的鍵（臂力、身法、根骨、悟性）照 legacy 對到新的一項：內容的檢定照舊寫 agi、wis，不必改；博聞拔掉。
-- 還沒改寫成新尺度的舊讀點（修練機率、悟意境、閉關心得……）讀 v1_value：新尺度的值換回舊尺度（5 起、每級約 0.2），
-  公式不動也照樣有作用，之後一處一處改成走效果表。
+- 舊公式的讀點（氣血、內傷、損耗、修練、悟意境、打造、頓悟、感悟、閉關、戰法比快慢、職位）讀 v1_value：比同等級的平均人
+  高幾成，經過有上限的曲線（legacy_caps），換成舊公式讀得懂的點數。屬性沒有上限、效果有上限（企劃者 2026-11-04）。
 這個模組不 import team（team 反過來 import 這裡）。
 """
 from __future__ import annotations
+
+import math
 
 from .models import Content
 from .state import GameState
@@ -74,13 +76,18 @@ def expect(content: Content, level: int, key: str | None = None) -> float:
     return cfg.base + (level - 1) * cfg.per_level / n + (level // cfg.bonus_every) * cfg.bonus_points / n
 
 
-def v1_value(state: GameState, content: Content, new_value: float) -> float:
-    """新尺度的值換回舊尺度（5 起、每級約 stat_points_per_level ÷ 5）：還沒改寫的舊公式照舊讀得到差別。
-    夾在舊的 stat_cap（15）：全點一項的人換回去會超過舊的上限，舊的武學、戰法、氣血公式只認得 5～15 這一段
-    （企劃者 2026-11-04「先確保我們舊的武學效果不會因為新的屬性點而亂套」）。"""
+def v1_value(state: GameState, content: Content, new_value: float, old_key: str | None = None) -> float:
+    """新尺度的值換成舊公式讀得懂的那一點數（企劃者 2026-11-04「要用新的屬性點的加法，不限於5～15」「新的屬性點架構是確定的」）：
+    不看幾點，看比同等級的平均人高幾成（r），效果＝上限 × tanh(r ÷ legacy_scale)，再換回舊公式「比 5 多幾點 × 每點 3%」的那一點數。
+    屬性本身沒有上限，效果有上限（legacy_caps，每一項舊的鍵一個）：氣血、內傷、損耗、修練、悟意境、打造、頓悟、感悟、閉關、
+    戰法比快慢、職位都經過這裡，練多高都不會失控。old_key 沒給（或表上沒有）照 legacy_caps 最小的那一個。"""
     cfg = content.config.attributes.v2
-    ratio = cfg.per_level / max(1, content.config.stat_points_per_level)
-    return min(float(content.config.stat_cap), V1_BASE + (new_value - cfg.base) / ratio)
+    level = max(1, state.player.member.level)
+    mean = expect(content, level)
+    r = (new_value - mean) / max(1.0, mean)
+    cap = cfg.legacy_caps.get(old_key or "", min(cfg.legacy_caps.values()) if cfg.legacy_caps else 0.3)
+    per = max(1e-9, content.config.stat_bonus_per_point)
+    return V1_BASE + cap * math.tanh(r / cfg.legacy_scale) / per
 
 
 def legacy(state: GameState, content: Content, key: str, default: float = V1_BASE) -> float:
@@ -88,7 +95,7 @@ def legacy(state: GameState, content: Content, key: str, default: float = V1_BAS
     五項屬性的季照 legacy 對到新的一項、換回舊尺度，對不到的（博聞）當基準。"""
     if on(content, getattr(state, "world", None)):
         new = key_of(content, key)
-        return v1_value(state, content, value(state, content, new)) if new else float(V1_BASE)
+        return v1_value(state, content, value(state, content, new), key) if new else float(V1_BASE)
     return state.player.stats.get(key, default)
 
 

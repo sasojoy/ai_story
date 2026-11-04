@@ -73,13 +73,18 @@ def test_bonus_points_every_ten_levels_have_no_cap():
     assert g.state.player.attr_alloc == {"cha": 30} and g.state.player.stat_points == 0
 
 
-def test_old_formulas_read_the_new_value_on_the_old_scale():
+def test_old_formulas_read_the_new_value_against_the_average_person():
+    """舊公式讀新的五項：比同等級的平均人高幾成，經過有上限的曲線（企劃者 2026-11-04「不限於5～15」）。"""
+    import math
     g = _game()
-    c = g.content
-    assert team.v1_stat(g.state, c, "agi") == 5  # 第 1 級、還沒長：舊尺度的起點
+    c, v2 = g.content, g.content.config.attributes.v2
+    assert team.v1_stat(g.state, c, "agi") == 5  # 跟平均人一樣：舊尺度的起點，效果 0
     _level(g, 11)
     g.pick_growth("ranger")  # 身法每級 4
-    assert team.v1_stat(g.state, c, "agi") == 5 + 40 / 10
+    mean = attrset.expect(c, 11)
+    r = (attrset.value(g.state, c, "spd") - mean) / mean
+    want = v2.legacy_caps["agi"] * math.tanh(r / v2.legacy_scale)
+    assert team.stat_bonus(c, team.v1_stat(g.state, c, "agi")) == pytest.approx(want)
     assert team.v1_stat(g.state, c, "lore") == 5  # 博聞拔掉：當基準
     assert team.con_of(g.state, c, g.world, "player") == team.v1_stat(g.state, c, "con")
 
@@ -274,11 +279,10 @@ def test_custom_growth_is_capped_per_attribute():
     assert attrset.view(g.state, g.content)["custom_max"] == cap
 
 
-def test_extreme_builds_stay_inside_the_old_stat_range():
-    """企劃者 2026-11-04「先確保我們舊的武學效果不會因為新的屬性點而亂套」：全點一項的人換回舊尺度不超過 stat_cap，
-    舊的武學、戰法、氣血公式只會看到舊的 5～15。"""
+def test_extreme_builds_stay_inside_the_effect_caps():
+    """全點一項到第 60 級：舊公式拿到的效果不超過 legacy_caps（屬性沒有上限、效果有上限；企劃者 2026-11-04）。"""
     a, b = _pvp_pair(level=60)
-    cap = a.content.config.stat_cap
+    caps = a.content.config.attributes.v2.legacy_caps
     for g in (a, b):
-        for old in ("str", "agi", "con", "wis"):
-            assert attrset.V1_BASE <= team.v1_stat(g.state, g.content, old) <= cap
+        for old, cap in caps.items():
+            assert abs(team.stat_bonus(g.content, team.v1_stat(g.state, g.content, old))) <= cap + 1e-9

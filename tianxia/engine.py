@@ -5585,6 +5585,9 @@ class Game:
 
     def _battle_role(self) -> str:
         """進場的職位（試玩回饋 2026-10-08）：本人最突出的屬性（battle_instance.role_for）。真人、散人臨時投效、假人都走這裡。"""
+        if attrset.on(self.content, self.state.world):  # 五項屬性的季：照新的五項比（舊的四項有上限曲線，上限不同會偏向悟性）
+            stats = {old: attrset.value(self.state, self.content, new) for old, new in self.content.config.attributes.v2.legacy.items()}
+            return battle_instance.role_for(stats, team.COMBAT_STATS)
         stats = team.member_stats(self.state, self.content, self.world, team.PLAYER)
         return battle_instance.role_for(stats, team.COMBAT_STATS)
 
