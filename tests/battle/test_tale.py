@@ -114,13 +114,14 @@ def test_the_model_text_fills_the_beats_and_the_player_line_survives():
 
 
 class _Client:
-    """假的 client：回一份寫好的 TaleReply。"""
+    """假的 client：每一趟都回同一份寫好的回覆（一幕一趟，所以會被叫好幾次；scenes 照 id 篩，各幕拿到自己那幾拍）。"""
 
     def __init__(self, reply: dict):
-        self.reply, self.kwargs = reply, {}
+        self.reply, self.kwargs, self.calls = reply, {}, []
 
     def chat_structured(self, messages, model, **kwargs):
         self.kwargs = kwargs
+        self.calls.append((model, messages, kwargs))
         return model.model_validate(self.reply)
 
 
@@ -128,11 +129,35 @@ def test_no_client_means_the_template_version():
     assert tale.write(None, _material()) == ({}, {})
 
 
-def test_the_required_fields_are_forced_into_the_schema():
-    """scenes、cast 都有預設值：沒寫進 required（而且語法強制）的話模型回 {} 也合法，整篇靜靜變成模板版。"""
+def test_one_call_per_act_plus_one_for_the_cast():
+    """企劃者 2026-11-04（要更長、更連貫）：以前整篇一趟，而 within_budget 把單趟壓到預算的一半，
+    拍子一多就寫不完、整篇變墊底句。拆成一幕一趟、名錄一趟之後每一趟都比以前小。"""
+    m = _material()
     client = _Client({"scenes": [], "cast": []})
-    tale.write(client, _material())
-    assert client.kwargs["required_fields"] == ["scenes", "cast"] and client.kwargs["require_in_schema"] is True
+    tale.write(client, m)
+    assert len(client.calls) == len(m.acts) + 1
+    assert [model for model, _msg, _kw in client.calls] == [tale.ActReply] * len(m.acts) + [tale.CastReply]
+    for (_model, messages, _kw), act in zip(client.calls, m.acts, strict=False):
+        assert act.title in messages[1]["content"]  # 那一趟只給那一幕
+
+
+def test_the_budget_runs_out_and_the_rest_of_the_acts_fall_back():
+    """next_client 回 None＝時間用完了：剩下的幕照引擎那一句，不是整篇垮掉。"""
+    m = _material()
+    client = _Client({"scenes": [{"id": b.id, "text": "城下塵土飛揚。"} for b in m.acts[0].beats
+                                 if b.said is None][:1], "cast": []})
+    scenes, cast = tale.write(client, m, next_client=lambda: None)
+    assert len(client.calls) == 1 and scenes and cast == {}  # 第一幕寫了，第二幕與名錄都沒叫
+
+
+def test_the_required_fields_are_forced_into_the_schema():
+    """scenes、cast 都有預設值：沒寫進 required（而且語法強制）的話模型回 {} 也合法，那一趟靜靜變成墊底句。"""
+    m = _material()
+    client = _Client({"scenes": [], "cast": []})
+    tale.write(client, m)
+    wanted = [["scenes"]] * len(m.acts) + [["cast"]]
+    assert [kw["required_fields"] for _model, _msg, kw in client.calls] == wanted
+    assert all(kw["require_in_schema"] is True for _model, _msg, kw in client.calls)
 
 
 def test_what_the_model_writes_is_screened():
@@ -154,16 +179,19 @@ def test_what_the_model_writes_is_screened():
     assert page.cast[1].line == m.cast[1].fact  # 被丟掉的照引擎那一句
 
 
-def test_the_output_budget_grows_with_the_tale():
-    """2026-10-31 線上：3 幕 12 拍＋6 人的名錄 1400 寫不完，cast 被截掉、整篇變模板句。預算照拍數與名錄加，小場面不低於原本的下限。"""
+def test_the_output_budget_grows_with_the_act_and_the_cast():
+    """2026-10-31 線上：3 幕 12 拍＋6 人的名錄 1400 寫不完，cast 被截掉、整篇變模板句。
+    現在一幕一趟：那一趟的預算照那一幕的拍數加，名錄那一趟照人數加，小場面都不低於原本的下限。"""
     m = _material()
     client = _Client({"scenes": [], "cast": []})
     tale.write(client, m)
-    assert client.kwargs["num_predict"] == tale.predict_budget(m) >= tale.NUM_PREDICT
-    beats = sum(len(a.beats) for a in m.acts)
-    big = tale.Material(record_id=1, season=8, battle_name="長社", result="官軍勝", reason="",
-                        acts=m.acts * 3, cast=m.cast * 3)
-    assert tale.predict_budget(big) >= tale.PREDICT_PER_SCENE * beats * 3 + tale.PREDICT_PER_CAST * len(m.cast) * 3
+    budgets = [kw["num_predict"] for _model, _msg, kw in client.calls]
+    assert budgets == [tale.act_budget(a) for a in m.acts] + [tale.cast_budget(m)]
+    assert min(budgets) >= tale.NUM_PREDICT
+    big = tale.ActFacts(title="大", banner="", setting="", beats=m.acts[0].beats * 4)
+    assert tale.act_budget(big) >= tale.PREDICT_PER_SCENE * len(big.beats)
+    crowd = tale.Material(**{**m.__dict__, "cast": m.cast * 4})
+    assert tale.cast_budget(crowd) >= tale.PREDICT_PER_CAST * len(crowd.cast)
 
 
 def test_a_scene_that_copies_the_player_line_or_names_someone_else_is_dropped():
@@ -178,7 +206,58 @@ def test_a_scene_that_copies_the_player_line_or_names_someone_else_is_dropped():
         assert beat.id not in scenes, text
     scenes, _ = tale.write(_Client({"scenes": [{"id": beat.id, "text": "霜刃一聲斷喝，帶人撲上城頭。"}], "cast": []}), m)
     assert scenes[beat.id][1] == "霜刃一聲斷喝，帶人撲上城頭。"
-    assert "不要引" in tale.messages(m)[1]["content"]
+    assert "不要引" in tale.act_messages(m, m.acts[0])[1]["content"]
+
+
+def _called_out_material():
+    """帶數字的名號（管理者建的角色，例「Rayal2」）＋ 一次點名的料：兩個人都在第一幕放手一搏。"""
+    rayal = _fighter("Rayal2", "guan", gambles_won=1, gambles=[
+        GambleMoment(name="Rayal2", faction="guan", text="集火霜刃不要讓他破壞戰線", rate=65, won=True,
+                     target="霜刃", round=1, story="Rayal2一聲令下，箭雨攢向霜刃。"),
+    ])
+    shuang = _fighter("霜刃", "huang", gambles_won=1, gambles=[
+        GambleMoment(name="霜刃", faction="huang", text="躲在後排射弓箭", rate=75, won=True, round=2),
+    ])
+    battle = _battle(participants={"Rayal2": rayal, "霜刃": shuang}, highlight=rayal.gambles[0])
+    content = real_content()
+    return tale.gather(content.battles["huangjin_showdown"], battle, _rounds(), season=8, side_names=SIDES)
+
+
+def test_a_name_with_a_digit_in_it_no_longer_throws_the_whole_sentence_away():
+    """企劃者 2026-11-04 讀的那一篇：場上有個名號叫「Rayal2」，模型只要提到他，整句就被「不准寫阿拉伯數字」那一關丟掉、
+    退成「某某放手一搏，成了」（那一場 24 次放手一搏有 7 次旁白是空的，7 次都是提到他）。
+    名號裡本來就有的數字不算；模型自己寫的數字照樣擋。"""
+    m = _called_out_material()
+    names = tale.known_names(m)
+    assert "Rayal2" in names and "霜刃" in names
+    assert tale.clean("Rayal2一聲令下，箭雨攢向霜刃。", tale.SCENE_MAX, names) == "Rayal2一聲令下，箭雨攢向霜刃。"
+    assert tale.clean("Rayal2帶著 3 個人撲上去。", tale.SCENE_MAX, names) == ""  # 模型自己寫的數字照樣丟掉
+    assert tale.clean("Rayal2一聲令下。", tale.SCENE_MAX) == ""  # 不給名單＝舊行為
+
+
+def test_the_prose_may_name_the_player_he_called_out():
+    """企劃者 2026-11-04「玩家有點另一個玩家，在戰報中有的互動到戰記被輕輕一筆帶過」：
+    點名的對手剛好也被挑成拍子時，以前寫出兩個人交手會整段被 fits 退成墊底句。點名也要寫進給模型的料。"""
+    m = _called_out_material()
+    beat = next(b for a in m.acts for b in a.beats if b.target)
+    assert beat.target == "霜刃" and beat.said is not None and beat.said.who == "Rayal2"
+    text = "Rayal2回身張弓，箭鋒直指霜刃，霜刃側身一閃卻慢了半步。"
+    scenes, _ = tale.write(_Client({"scenes": [{"id": beat.id, "head": "箭指霜刃", "text": text}], "cast": []}), m)
+    assert scenes[beat.id] == ("箭指霜刃", text)
+    assert "衝著霜刃" in tale.act_messages(m, m.acts[0])[1]["content"]
+
+
+def test_the_fallback_is_what_the_battle_report_said():
+    """企劃者 2026-11-04「有些直接寫放手一搏成了，感覺根本沒讀懂他的行為」：模型沒寫到那一拍時，
+    墊底用戰報當場播出去的那一句（玩家已經讀過，接得上），引擎的「某某放手一搏，成了」只在連那一句都沒有時才用。"""
+    m = _called_out_material()
+    beat = next(b for a in m.acts for b in a.beats if b.story)
+    page = tale.plain(m)
+    mine = [s for a in page.acts for s in a.scenes if s.said is not None and s.said.who == "Rayal2"]
+    assert mine and mine[0].text == beat.story and "放手一搏" not in mine[0].text
+    bare = tale.BeatFacts(id="1-1", fact="霜刃放手一搏，沒成。", said=tale.Said(who="霜刃", line="衝"))
+    only = tale.Material(**{**m.__dict__, "acts": (tale.ActFacts(title="一", banner="", setting="", beats=(bare,)),)})
+    assert tale.plain(only).acts[0].scenes[0].text == "霜刃放手一搏，沒成。"  # 連戰報那一句都沒有才用引擎的
 
 
 def test_the_same_text_on_two_beats_falls_back_on_both():

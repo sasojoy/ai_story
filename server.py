@@ -3313,8 +3313,11 @@ def tale_round(clock: Callable[[], float] = time.time) -> int | None:
         return None
     budget, started = TALE_BUDGET_SECONDS, _monotonic()
 
+    def fresh():  # 一幕一趟：每一趟照「還剩多少」重算預算，用完回 None（剩下的幕照引擎那一句，不是整篇垮掉）
+        return within_budget(TALES_CLIENT, budget - (_monotonic() - started))
+
     def ask() -> tuple[dict, dict]:
-        return tale.write(within_budget(TALES_CLIENT, budget - (_monotonic() - started)), material)
+        return tale.write(fresh(), material, next_client=fresh)
 
     if QUEUE is None:
         scenes, cast = ask()

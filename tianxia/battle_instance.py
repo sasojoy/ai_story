@@ -2168,7 +2168,12 @@ def clean_story(raw: str, name: str, known: Sequence[str] = ()) -> str:
     不是以名號開頭的補上名號，名號後面接冒號的換成逗號，句尾補句號。"""
     text = zh.to_traditional(str(raw or ""))
     text = re.sub(r"[\s*#>`_]+", "", text).strip("「」『』\"'“”")
-    if not text or len(text) > STORY_LIMIT or _DIGITS.search(text) or zh.stray_latin(text, name, *known):
+    # 數字那一關比的是「挖掉名號之後」的字：名號裡本來就有阿拉伯數字（管理者建的角色，例「Rayal2」）時不挖的話，
+    # 模型只要提到他整句就被丟掉、退回固定句（企劃者 2026-11-04 讀的那一場：24 次放手一搏有 7 次旁白是空的，7 次都是提到他）
+    bare = text
+    for one in sorted({x for x in (name, *known) if x}, key=len, reverse=True):
+        bare = bare.replace(one, "")
+    if not text or len(text) > STORY_LIMIT or _DIGITS.search(bare) or zh.stray_latin(text, name, *known):
         return ""
     if any(ch in (text.replace(name, "") if name else text) for ch in "你妳"):
         return ""
