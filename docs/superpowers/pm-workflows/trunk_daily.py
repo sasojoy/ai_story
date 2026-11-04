@@ -82,7 +82,8 @@ def main() -> int:
     work = Path(tempfile.gettempdir()) / "tianxia-trunk-daily"
     shutil.rmtree(work, ignore_errors=True)
     unpack(repo, base, work / "base")
-    unpack(repo, head, work / "head")
+    # 現在的主幹開成真的工作樹：test_test_for 有幾條要叫 git，解開的 archive 不是 repo 會紅（11/04 第一次跑就中了三條）
+    git(repo, "worktree", "add", "--detach", str(work / "head"), head)
     (work / "tmp").mkdir()
     log = out / f"{head[:8]}.log"
     log.write_text(f"{BRANCH} {base[:8]}..{head[:8]}\n", encoding="utf-8")
@@ -95,6 +96,7 @@ def main() -> int:
     shutil.rmtree(work / "base", ignore_errors=True)
     suite = step([py, "-m", "pytest", "-q", "-n", "4", "-m", "slow or not slow", "-p", "no:cacheprovider"],
                  work / "head", env, log, "整套含 slow")
+    git(repo, "worktree", "remove", "--force", str(work / "head"))
     shutil.rmtree(work, ignore_errors=True)
 
     green = compare == 0 and explore == 0 and suite == 0
