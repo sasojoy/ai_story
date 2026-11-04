@@ -17,7 +17,7 @@ from . import arts as arts_mod
 # （cultivation：破境卡 ascend 全部拆包第 23 批搬進修練包，engine 不再用，拿掉）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
-    allied, annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, clinic, conquest, conquest_day, create, defection, divine, economy, encounter, equipment,
+    allied, annals, armor, atlas, battle_instance, battlelog, bounties, calendar, clinic, conquest, conquest_day, create, defection, divine, economy, encounter, equipment,
     deeds, fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, forge_secrets, fusion, gender, howto, insight_fx, insights, invites, journal, library, mapdata, martial_arts, plans,
     materials, mounts, naming, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skillview, smithing,
@@ -29,7 +29,6 @@ from . import epiphany  # 特殊頓悟（登記一條線的鉤子；企劃者 20
 from . import tiers  # 事件分級：場景卡上那一行「州郡大事」「天下大事」
 from . import outing as outing_rules  # 走一趟（企劃者 2026-10-29～30）：探索一次走一、三、五段
 from . import growth  # 減法季批 2：三道閘、屬性五段的純規則（開關走 rules.jianfa；探索一顆搬進了探索包）
-from . import zhuan_end  # 減法季批 7b：列傳為終點（票、深交上限、人物評曰）
 from . import ambush as ambush_rules  # 設伏劫道（後期體力玩法第一批）；叫 ambush_rules：這個檔裡有區域變數叫 ambush
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）
 from . import raid as _raid_card  # noqa: F401  截殺登記進玩家卡的動作表（social.ACTIONS）
@@ -90,6 +89,7 @@ from .core.services import HutReward  # guide（全部拆包第 22 批）：序�
 from .core.services import PREPARING_REFUSAL, PREPARING_TEXT  # noqa: F401
 from .core.services import outing_watch as _outing_watch
 from .features.sense import actions as sense_actions  # 過渡：Game 上有所感與頓悟的 8 個一行委派、7 個服務（全部拆包第 24 批）
+from .features.zhuan import actions as zhuan_actions  # 過渡：Game 上列傳的 9 個一行委派（全部拆包第 29 批）
 # explore
 from .features.explore import explore_actions  # 過渡：Game 上探索一顆的 9 個一行委派（主動搬六包第 3＋4 批）
 from .features.explore import outing_actions  # 過渡：Game 上走一趟的 9 個一行委派（主動搬六包第 3＋4 批）
@@ -660,19 +660,7 @@ class Game:
         self._season_grant(old)
 
     def _zhuan_past(self, old: GameState) -> WorldState | None:
-        """換季那一刻（_reset_player_for_new_season）：上一季開著列傳為終點（zhuan_end）就回那一季（WorldStateStore.past_season），
-        先替這個人補上收季之後還沒記的季末論功與〈天下形勢〉（同步時記的那兩種，annals.tier_note、xingshi_notes），身家照它多論功的那幾樣；
-        關著（設定沒開就不讀資料庫）是 None，一個字都不變。old 是上一季的存檔，馬上就丟：old.world 換成上一季那一份才記得到正確的時刻。"""
-        cfg = self.content.config.jianfa
-        if not (cfg.enabled and cfg.zhuan_end):
-            return None
-        past = self.world.past_season(old.player.season_number)
-        if past is None or not jianfa(self.content, past, "zhuan_end"):
-            return None
-        old.world = past
-        annals.xingshi_notes(old, self.content, past)
-        annals.tier_note(old, self.content, past)
-        return past
+        return zhuan_actions.past(self, old)
 
     def _season_grant(self, old: GameState) -> None:
         """三陣營四勝利（減法季設計 3.3）：上一季收季時論了功的人（那一季的 WorldState.final_tiers），新的一季開局照那一階發起手資源
@@ -1815,14 +1803,7 @@ class Game:
             self._save_season()
 
     def _zhuan_tick(self) -> None:
-        """列傳為終點（減法季批 7b-1）：同步時替自己記行狀——〈天下形勢〉上一次看到之後寫到名號的那幾篇（annals.xingshi_notes），
-        季收了之後的季末論功（annals.tier_note）。只改自己的存檔，不存季。關著（zhuan_end）什麼都不做。"""
-        s, c = self.state, self.content
-        if not jianfa(c, s.world, "zhuan_end"):
-            return
-        annals.xingshi_notes(s, c, s.world)
-        if s.world.ended:
-            annals.tier_note(s, c, s.world)
+        return zhuan_actions.tick(self)
 
     def _mark_credits(self) -> bool:
         """跨過門檻那一刻出過力的人（WorldState.mark_helpers）裡有自己的，各記一則行狀（annals.MARK：只寫那一句傳聞，不列名字、
@@ -2049,8 +2030,6 @@ class Game:
         unlisted = features_core.choose_unlisted(self, option_id)
         if unlisted is not None:
             return unlisted
-        if option_id.startswith(zhuan_end.PREFIX) and any(o.id == option_id and o.enabled for o in self.options(odds=False)):
-            return self._log(self._zhuan_act(option_id))  # 休季用列傳的票（減法季批 7b）：不走行動那一串（季收了，不推大勢、不存季）
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None and option_id.startswith(wins.LEAN_PREFIX):
             option = self._lean_anytime(option_id)  # 「改幫…」隨時都能換（設計 3.2）：在路上、決戰的大區選單上沒有它，照樣收
@@ -10418,222 +10397,25 @@ class Game:
         return out
 
     def annals_view(self) -> dict:
-        """見聞的「行狀」頁（玩家傳第一批）：這一季至今記下的事，照時間先後；開關關著時 on 是 False、rows 是空的。
-        books 是歷季列傳（第二批）：存著的每一季（這一季收了、還沒換季的也算），新的在前。"""
-        on = annals.on(self.content)
-        return {
-            "on": on, "name": self.state.player.name, "rows": annals.rows(self.state, self.content) if on else [],
-            "books": self.biography_list() if on else [],
-        }
-
-    # ── 玩家傳第二批：季末寫成《某某傳》、公開分享 ──
-
-    def _season_closed(self) -> bool:
-        """這一季收了（休季）：這一季的傳寫得了。"""
-        return self.world.season_phase() == "resting"
+        return zhuan_actions.annals_view(self)
 
     def biography_entry(self) -> dict | None:
-        """休季時江湖頁最上面的「讀你的傳」（這一季的那一篇）：季收了、有行狀或已經存了那一篇才有；假人、開關關著、季還在跑是 None。
-        輪詢每次都問：季還在跑時不讀資料庫。列傳為終點開著（減法季批 7b）多 tier、illustration、seal（_zhuan_extra）。"""
-        p = self.state.player
-        if not annals.on(self.content) or p.bot is not None or not self.state.world.ended:
-            return None
-        if not p.annals and self.world.biography(p.season_number, p.name) is None:
-            return None
-        return {"season": p.season_number, "title": biography.title(p.name), **self._zhuan_extra(p.season_number)}
-
-    # ── 列傳為終點（減法季批 7b）：休季用票、列傳多畫的那幾樣 ──
-
-    def _zhuan_season(self, season: int) -> WorldState | None:
-        """那一季的 WorldState（這一季照手上的，以前的照 past_season）；沒有是 None。"""
-        p = self.state.player
-        return self.state.world if season == p.season_number else self.world.past_season(season)
-
-    def _zhuan_purchases(self) -> list:
-        return self.wallet.purchases()
-
-    def _zhuan_extra(self, season: int) -> dict:
-        """列傳多畫的那幾樣（zhuan_end.extras：季末論功、插畫的圖庫鍵、紀念印的字）；那一季沒開列傳為終點是空的（一個鍵都不多）。
-        這一季的身家照角色身上的，以前的季照存起來的那一份。評曰的名單照寫成的那一篇傳列（FB-847，zhuan_end.extras 的 text）：
-        還沒寫成是 None（預告要寫的人）。"""
-        p = self.state.player
-        world = self._zhuan_season(season)
-        if world is None or not zhuan_end.on(self.content, world):
-            return {}
-        row = self.world.biography(season, p.name)
-        if season == p.season_number:
-            profile = annals.profile(self.state, self.content, season=world)
-        else:
-            profile = row["profile"] if row is not None else {}
-        text = row["text"] if row is not None else None
-        return zhuan_end.extras(self.content, season, profile, zhuan_end.season_tickets(self._zhuan_purchases(), season), text)
+        return zhuan_actions.entry(self)
 
     def _zhuan_options(self) -> list[Option]:
-        """休季用列傳的票（減法季批 7b；設計第九章）：列傳為終點開著、季收了，手上有沒用的票才有那一顆。插畫：投靠了劇本裡的陣營、
-        這一季還沒用過、不是第一階（第一階白送）；紀念印：這一季還沒蓋；親筆評曰：情誼 40～69、這一季還沒替你寫的人物一位一顆。"""
-        s, c = self.state, self.content
-        if not s.world.ended or not zhuan_end.on(c, s.world):
-            return []
-        purchases = self._zhuan_purchases()
-        if not purchases:
-            return []
-        n = s.player.season_number
-        used = zhuan_end.season_tickets(purchases, n)
-        standing = annals.standing(s, c, s.world)
-        out = []
-        # 票綁買的那一季（FB-845）：只數這一季買的，之前的季沒用掉的不再冒出用票的鈕
-        if zhuan_end.unused(purchases, zhuan_end.ART, n) and standing.get("illustration") and not used["art"] and standing.get("tier") != 1:
-            out.append(Option(id=zhuan_end.PICK_ART, label=zhuan_end.ART_BUTTON))
-        if zhuan_end.unused(purchases, zhuan_end.SEAL_TICKET, n) and not used["seal"]:
-            out.append(Option(id=zhuan_end.SEAL, label=zhuan_end.SEAL_BUTTON.format(seal=zhuan_end.seal_text(c, n, standing))))
-        if zhuan_end.unused(purchases, zhuan_end.QUOTE_TICKET, n):
-            taken = set(used["quotes"]) | set(self._verdict_taken(standing))
-            out += [Option(id=f"{zhuan_end.QUOTE}{cid}", label=zhuan_end.QUOTE_BUTTON.format(name=c.characters[cid].name, value=value))
-                    for cid, value in zhuan_end.quote_figures(s, c, taken)]
-        return out
+        return zhuan_actions.options(self)
 
-    def _verdict_taken(self, standing: dict) -> list[str]:
-        """這一季已經白送評曰的人物（annals.standing 的 verdicts：第一二階的主將或家主、情誼 70 以上的；親筆評曰不再列他們）。"""
-        return [w["fid"] for w in standing.get("verdicts", [])]
+    def biography_request(self, season: int, rewrite: bool = False):
+        return zhuan_actions.request(self, season, rewrite)
 
-    def _zhuan_act(self, option_id: str) -> list[str]:
-        """用掉一張列傳的票（_zhuan_options 驗過有票、按得下去）：那一列購買記 used、season（親筆評曰另記 fid），寫一則「列傳」紀錄。"""
-        s, c = self.state, self.content
-        n = s.player.season_number
-        now = self.pill_now()
-        if option_id == zhuan_end.PICK_ART:
-            self.wallet.consume(zhuan_end.ART, bought_in=n, at=now, season=n, art=zhuan_end.illustration_for(s, c, s.world))
-            lines = [zhuan_end.ART_DONE]
-        elif option_id == zhuan_end.SEAL:
-            self.wallet.consume(zhuan_end.SEAL_TICKET, bought_in=n, at=now, season=n)
-            lines = [zhuan_end.SEAL_DONE.format(seal=zhuan_end.seal_text(c, n, annals.standing(s, c, s.world)))]
-        else:
-            cid = option_id.removeprefix(zhuan_end.QUOTE)
-            self.wallet.consume(zhuan_end.QUOTE_TICKET, bought_in=n, at=now, season=n, fid=cid)
-            lines = [zhuan_end.QUOTE_DONE.format(name=c.characters[cid].name)]
-            row = self.world.biography(n, s.player.name)
-            if row is not None and row["text"] is not None:
-                lines.append(zhuan_end.QUOTE_LATER)
-        journal.add_entry(s, JournalEntry(time=s.world.time, title=zhuan_end.TITLE, lines=lines))
-        return lines
-
-    def biography_list(self) -> list[dict]:
-        """歷季列傳：每一季一列（季別、篇名、寫成了沒、公開了沒）。這一季收了、行狀還在角色身上（還沒換季）的那一季排第一。"""
-        p = self.state.player
-        rows = {b["season"]: b for b in self.world.biographies_of(p.name)}
-        out = []
-        if self._season_closed() and p.annals and p.season_number not in rows:
-            out.append({"season": p.season_number, "title": biography.title(p.name), "written": False, "public": False})
-        out += [
-            {"season": n, "title": biography.title(b["name"]), "written": b["text"] is not None, "public": b["public"]}
-            for n, b in sorted(rows.items(), reverse=True)
-        ]
-        return out
-
-    def biography_request(self, season: int, rewrite: bool = False) -> biography.BiographyRequest | None:
-        """A 段（鎖內、只讀）：那一季那一篇要寫（或重寫）的單子。寫不了回 None：開關關著、假人、這一季還沒收、那一季沒有行狀、
-        已經寫過而不是重寫、重寫的次數用完了。這一季收了、還沒換季時，行狀與身家照角色身上的；以前的季照存起來的。"""
-        c, p = self.content, self.state.player
-        if not annals.on(c) or p.bot is not None:
-            return None
-        row = self.world.biography(season, p.name)
-        if row is None:
-            if rewrite or season != p.season_number or not self._season_closed() or not p.annals:
-                return None
-            entries = tuple(e.model_dump() for e in sorted(p.annals, key=lambda e: e.time))
-            profile = annals.profile(self.state, c, season=self.state.world)
-        else:
-            if season == p.season_number and not self._season_closed():
-                return None
-            entries = tuple(sorted(row["annals"], key=lambda e: e.get("time", 0.0)))
-            profile = row["profile"]
-            if season == p.season_number and p.annals and row["text"] is None:  # 這一季還沒寫成：照角色身上最新的
-                entries = tuple(e.model_dump() for e in sorted(p.annals, key=lambda e: e.time))
-                profile = annals.profile(self.state, c, season=self.state.world)
-            written = row["text"] is not None
-            if written != rewrite or (rewrite and row["rewrites"] >= self._rewrites_allowed()):
-                return None
-        if not entries:
-            return None
-        chronicle = dict(self.world.chronicle_before(season + 1)).get(season, [])
-        era = [r.text for r in chronicle][: biography.ERA_MAX]
-        return biography.BiographyRequest(
-            season=season, name=p.name, scenario=c.scenario.name, era_note=c.scenario.era_note, profile=profile,
-            annals=entries, era=tuple(era), rewrite=rewrite, sex=gender.of(p), verdicts=self._verdict_jobs(season, entries, profile),
-        )
-
-    def _verdict_jobs(self, season: int, entries: tuple[dict, ...], profile: dict) -> tuple:
-        """人物評曰的單子（減法季批 7b-2，zhuan_end.verdict_request）：身家裡白送的寫手（第一二階的主將或家主、情誼 70 以上的），
-        接這一季用了親筆評曰請的那幾位。那一季沒開列傳為終點是空的。"""
-        c, p = self.content, self.state.player
-        world = self._zhuan_season(season)
-        if world is None or not zhuan_end.on(c, world):
-            return ()
-        free = [zhuan_end.Writer(w["fid"], w["reason"]) for w in profile.get("verdicts", [])]
-        bought = zhuan_end.season_tickets(self._zhuan_purchases(), season)["quotes"]
-        writers = zhuan_end.with_bought(free, bought, c)
-        fixed = zhuan_end.fixed_verdicts(c, writers, p.name, season)  # 整篇一起挑固定句：模型叫不動時兩位寫手也不會一字不差（FB-848）
-        return tuple(zhuan_end.verdict_request(c, w, p.name, gender.of(p), entries, profile, season, fixed=fixed[w.fid])
-                     for w in writers)
-
-    def write_biography(
-        self, request: biography.BiographyRequest, text: str | None, now: float, verdicts: dict[str, str] | None = None,
-    ) -> bool:
-        """C 段（鎖內）：重驗單子（同一季、同一份行狀、還寫得了），存進 biographies。text 是 B 段模型寫好、清過的全文；None 就照規則拼。
-        這一季的先把行狀與身家存起來（換季時存的是同一份；之後再來的決戰照 add_saved_annal 補）。存了回 True。
-        列傳為終點（減法季批 7b-2）：單子上的每一位評曰寫手接一段「評曰：」（verdicts 是 B 段寫好的，人物 id → 一句；沒寫成照固定句）。"""
-        current = self.biography_request(request.season, request.rewrite)
-        if current is None or current.annals != request.annals:
-            return False
-        p = self.state.player
-        if request.season == p.season_number and p.annals:
-            self.world.save_annals(request.season, p.name, list(request.annals), dict(request.profile))
-        by = biography.MODEL if text else biography.RULE
-        row = self.world.biography(request.season, p.name) if request.rewrite else None
-        body = text or biography.rule_text(request)
-        for job in request.verdicts:  # 人物評曰（批 7b-2）：一位一段，接在正文（含史官的評曰）後面
-            body += "\n\n" + zhuan_end.apply_verdict(job, (verdicts or {}).get(job.fid, ""))
-        stored = self.world.store_biography(request.season, p.name, body, by, now, request.rewrite)
-        if stored and row is not None and row["rewrites"] >= self.content.config.biography.rewrites:
-            self._use_rewrite_token(now)  # 白送的重寫用完了，這一次是萬寶閣買的「重修列傳」
-        return stored
-
-    def _rewrite_tokens(self) -> list[int]:
-        """萬寶閣「重修列傳」還沒用掉的那幾筆購買（錢包服務的 zhuan_rewrite 票）；商城關著是空的。"""
-        return self.wallet.tokens("zhuan_rewrite")
-
-    def _rewrites_allowed(self) -> int:
-        """一篇傳能重寫幾次：Config.biography.rewrites 加上手上還沒用掉的「重修列傳」（Joy 2026-10-21 定案：200 元寶、一季兩次）。"""
-        return self.content.config.biography.rewrites + len(self._rewrite_tokens())
-
-    def _use_rewrite_token(self, now: float) -> None:
-        self.wallet.consume("zhuan_rewrite", at=now)
+    def write_biography(self, request, text: str | None, now: float, verdicts: dict[str, str] | None = None) -> bool:
+        return zhuan_actions.write(self, request, text, now, verdicts)
 
     def biography_view(self, season: int) -> dict | None:
-        """修練之外的一本書（網頁的「讀你的傳」）：篇名、段落、誰寫的、公開了沒、分享代碼、還能不能重寫、還沒寫成時寫不寫得了。
-        那一季沒有（沒有行狀、還沒收季）回 None。"""
-        p = self.state.player
-        row = self.world.biography(season, p.name)
-        if row is None or row["text"] is None:
-            ready = self.biography_request(season) is not None
-            if row is None and not ready:
-                return None
-            return {
-                "season": season, "title": biography.title(p.name), "written": False, "can_write": ready, "paragraphs": [],
-                "scenario": self.content.scenario.name, **self._zhuan_extra(season),  # 列傳為終點（批 7b）：關著一個鍵都不多
-            }
-        return {
-            "season": season, "title": biography.title(row["name"]), "written": True, "paragraphs": row["text"].split("\n\n"),
-            "by": row["written_by"], "public": row["public"], "code": row["share_code"] if row["public"] else None,
-            "can_rewrite": row["rewrites"] < self._rewrites_allowed(), "scenario": self.content.scenario.name,
-            **self._zhuan_extra(season),
-        }
+        return zhuan_actions.view(self, season)
 
     def share_biography(self, season: int, public: bool, code: str) -> str | None:
-        """公開或收回那一季的傳（寫成了才行）；回傳分享代碼（收回時也回，網頁不用它）。code 是伺服器產生的亂碼，已經有代碼就沿用。"""
-        if not annals.on(self.content) or self.state.player.bot is not None:
-            return None
-        return self.world.share_biography(season, self.state.player.name, public, code)
+        return zhuan_actions.share(self, season, public, code)
 
     def stamp(self, time: float, clock: bool = True) -> str:
         """玩家看得到的遊戲時間（江湖紀錄、江湖史、傳聞、戰報、路上）：第一季寫成季曆，其他時候照舊（calendar.stamp_text）。"""

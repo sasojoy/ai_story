@@ -163,7 +163,7 @@ def standing(state: GameState, content: Content, season: WorldState) -> dict:
     tier 第幾階（0 是沒到門檻）、tier_title 稱號（WorldState.final_tiers）。投靠了劇本裡的陣營、季收了的多 illustration：列傳插畫的
     圖庫鍵（zhuan_end.illustration_for；第一階白送、買了插畫票的休季用掉才畫）。有人替你寫評曰的多 verdicts（zhuan_end.writers：
     [{fid, reason}]，批 7b-2）。"""
-    from .zhuan_end import illustration_for, writers  # noqa: PLC0415
+    from .core.services import illustration_for, writers  # noqa: PLC0415
 
     p = state.player
     out: dict = {"contrib": p.contrib}
