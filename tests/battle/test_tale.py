@@ -260,6 +260,31 @@ def test_the_fallback_is_what_the_battle_report_said():
     assert tale.plain(only).acts[0].scenes[0].text == "霜刃放手一搏，沒成。"  # 連戰報那一句都沒有才用引擎的
 
 
+def test_a_report_line_that_killed_someone_who_never_fell_is_not_used_as_material():
+    """2026-11-04 之後戰鬥那一層就擋著不寫了，但那一天以前打完的場次，資料庫裡存的還是舊的那幾句
+    （第 8 季廣宗：玩家喊「取其首級讓她下班！」判成功，當場照著播，可是她整場沒倒下）。
+    這種句子不拿來當戰記的料，那一拍照引擎自己那一句。"""
+    gone = GambleMoment(name="霜刃", faction="huang", text="取鐵鍋的首級", rate=55, won=True, round=2,
+                        target="鐵鍋", story="霜刃一刀斬落鐵鍋的首級。")
+    stays = GambleMoment(name="霜刃", faction="huang", text="逼退鐵鍋", rate=55, won=True, round=2,
+                         target="鐵鍋", story="霜刃一刀逼得鐵鍋連退三步。")
+    for moment, kept in ((gone, False), (stays, True)):
+        shuang = _fighter("霜刃", "huang", gambles_won=1, gambles=[moment])
+        tiehuo = _fighter("鐵鍋", "guan", led_rounds=2)  # 鐵鍋沒有 fell_round：整場沒倒下
+        m = tale.gather(real_content().battles["huangjin_showdown"],
+                        _battle(participants={"霜刃": shuang, "鐵鍋": tiehuo}, highlight=moment),
+                        _rounds(), season=8, side_names=SIDES)
+        beat = next(b for a in m.acts for b in a.beats if b.said is not None)
+        assert bool(beat.story) is kept, moment.story
+    # 真的倒下了就照收
+    shuang = _fighter("霜刃", "huang", gambles_won=1, gambles=[gone])
+    tiehuo = _fighter("鐵鍋", "guan", fell_round=2)
+    m = tale.gather(real_content().battles["huangjin_showdown"],
+                    _battle(participants={"霜刃": shuang, "鐵鍋": tiehuo}, highlight=gone),
+                    _rounds(), season=8, side_names=SIDES)
+    assert next(b for a in m.acts for b in a.beats if b.said is not None).story == gone.story
+
+
 def test_a_subtitle_written_into_the_prose_is_moved_into_the_head():
     """2026-11-04 第 8 季廣宗實測：head 欄 17 拍全空，模型把小標寫成散文第一行的「【雙軍對峙】」。
     head 可省略，提示詞講幾次都一樣，所以在程式這邊收。挖在算字數之前，不然【小標】會佔掉那一拍的額度。"""

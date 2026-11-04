@@ -23,7 +23,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from . import zh
-from .battle_instance import CENTER, BattleInstance, BattleRoundRecord, GambleMoment
+from .battle_instance import CENTER, BattleInstance, BattleRoundRecord, GambleMoment, claims_a_kill
 from .models import BattleDef
 
 CAST_MAX = 8  # 名錄最多寫幾個人（企劃者 2026-11-04「篇幅都很短」：原本 6，11 人的場子漏掉一半）
@@ -174,6 +174,21 @@ def _lead_line(rounds: Sequence[BattleRoundRecord], names: dict[str, str], sides
     return LEAD_LINE.format(side=names.get(side, side))
 
 
+def _told(moment: GambleMoment, fell: Sequence[str]) -> str:
+    """這一搏當時播出去的那一句，能不能拿來當戰記的料。
+
+    寫到死人、而被寫死的那位其實沒倒下的就不要（回空字串，那一拍照引擎自己那一句）：
+    2026-11-04 之後戰鬥那一層已經擋著不寫（battle_instance.claims_a_kill），但**那一天以前打完的場次**
+    資料庫裡存的還是舊的那幾句——第 8 季廣宗那一篇就是這樣把沒倒下的人寫成被斬首的
+    （玩家自己喊「取其首級讓她下班！」，判成功，當場就照著播了）。"""
+    story = moment.story or ""
+    if not story or not claims_a_kill(story):
+        return story
+    if moment.target:  # 點名了：被寫死的就是他，他沒倒下這一句就不用
+        return story if moment.target in fell else ""
+    return story if any(name in story for name in fell) else ""
+
+
 def _dramatic(moments: Sequence[GambleMoment], highlight: GambleMoment | None) -> list[GambleMoment]:
     """這一幕挑哪幾次放手一搏：全場最有戲的那一次先（highlight），其餘成功的先、名號排序定序（同一場每次挑出來一樣）。"""
     picked = [m for m in moments if highlight is not None and (m.name, m.round) == (highlight.name, highlight.round)]
@@ -187,6 +202,7 @@ def gather(
 ) -> Material:
     """把收場的一場決戰整理成寫戰記的料。只讀，不碰狀態、不叫模型、不讀時鐘（時辰行走 stamp）。"""
     sides = [f.id for f in definition.factions]
+    fell = tuple(p.name for p in instance.participants.values() if p.fell_round)  # 真的倒下過的人（_told 用）
     by_act = _acts_of_rounds(rounds)
     act_of_round = {r.round_number: r.act_index for r in rounds}
     acts: list[ActFacts] = []
@@ -209,7 +225,7 @@ def gather(
                 id=f"{index + 1}-{len(beats) + 1}",
                 fact=line.format(name=moment.name),
                 said=Said(who=moment.name, side=side_names.get(moment.faction, moment.faction), line=moment.text),
-                target=moment.target, won=moment.won, story=moment.story,
+                target=moment.target, won=moment.won, story=_told(moment, fell),
             ))
         numbers = {r.round_number for r in group}
         fallen = sorted(p.name for p in instance.participants.values() if p.fell_round in numbers)
