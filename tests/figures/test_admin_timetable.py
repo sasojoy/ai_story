@@ -547,7 +547,7 @@ def _texts(game, content):
     game.state.player.location = "town"
     out["talk"] = _talk_out(game)[-1]
     out["talked_out"] = game._talked_out_note()  # noqa: SLF001
-    with mock.patch("tianxia.engine.pick_event", return_value=None):
+    with mock.patch("tianxia.features.socialize.actions.pick_event", return_value=None):
         out["busy"] = game.choose("act:socialize")[0]
     content.characters["scholar"].deep_interaction = True
     content.characters["scholar"].audience_fame = 0

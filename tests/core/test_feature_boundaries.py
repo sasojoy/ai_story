@@ -450,7 +450,7 @@ GAME_DELEGATE_CALLERS.update({
     # （(sense_draw, _check_hints)：有所感畫完那一筆——全部拆包第 24 批 sense_draw 搬進有所感包、包裡經 ctx 叫，拿掉）
     ("_menxia_entry", "_check_hints"): "修練頁、煉製頁的動作寫進紀錄（核心的修練頁紀錄服務）：說的話接在這一則",
     ("_act", "_hint"): "act 子動詞裡碰到的事件型提示（操練練完 h_drill_done…）：其餘子動詞還沒分給各包（總表第 57 批）",
-    ("_brush_off", "_hint"): "求見被名將打發（h_snubbed）：交友求見還沒成包（總表第 21 批）",
+    # （原本這裡有 ("_brush_off", "_hint")：第 21 批 _brush_off 搬進交友求見包，包裡經 ctx._hint 問，核心原位不再叫它）
     # （原本這裡有 ("_open_dialogue", "_hint")：第 20 批 _open_dialogue 搬進人物情誼包，包裡經 ctx._hint 問，核心原位不再叫它）
     ("choose", "_begin_enlistment"): "這一下才投靠（或拜入陣營名下的門派）的人開始入伍段：陣營還沒成包（總表第 35 批）、要知道動作之前的陣營",
     ("choose", "_greet_rejoin"): "第二季起再投靠：引薦人打個招呼（同上）",
@@ -649,9 +649,7 @@ GAME_DELEGATE_CALLERS.update({
                                             "與「有所感開著就讓路」兩道守衛，位置算行為，這一批的軌證明不了兩者永不並存，所以維持委派",
     ("_own_scene_text", "affinity_text"): "談話畫面名字旁的「情誼 N」：同上一筆（場景文字的一部分，不接 scene 掛鉤）",
     ("scene_art", "affinity_text"): "談話那張人物卡（scene_art）的副標也寫「情誼 N」：與 _own_scene_text 同一個詞，兩處不能各拼一份",
-    ("_socialize", "_open_dialogue"): "交友碰上人物開口對話：交友求見第 21 批搬進 socialize 包，到時候改經 ctx",
-    ("_precise_socialize", "_open_dialogue"): "一類一顆的交友開口：同上",
-    ("_call", "_open_dialogue"): "求見開口：同上",
+    # （原本這裡有 ("_socialize", "_open_dialogue")、("_precise_socialize", ...)、("_call", ...) 三筆：第 21 批交友求見搬進 socialize 包，包裡經 ctx._open_dialogue 問，拿掉）
     ("_defect_step", "_parley_forsake"): "叛投之後欠著的都算食言（NPC 智能 2.1）：接在 defection.defect 與 _leave_behind 之後，回話的先後算行為；叛投第 36 批再看",
 })
 # sense（全部拆包第 24 批「有所感與頓悟」：新包 tianxia/features/sense/；計畫 docs/superpowers/plans/2026-11-01-有所感包-第1批.md 1.4、1.5）：
@@ -724,6 +722,84 @@ GAME_DELEGATE_CALLERS.update({
                                     "（狀態列順序，總表第 66 批）",
     # （_graduate_pass 叫 slot_insight、switch_art、practice、allocate_stat、melt_art 那 5 對：第 22 批把 _graduate_pass 搬進引導包、經 ctx 叫，合併時拿掉）
 })
+
+# socialize（全部拆包第 21 批「交友求見」：新包 tianxia/features/socialize/；計畫 docs/superpowers/plans/2026-11-04-交友求見包-第1批.md 1.1、1.4）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。31 個方法搬進包，留 21 個一行委派（10 個只有包裡叫，沒有委派）；
+# `call:` 的 choose 與 _action_title 的那一格接了掛鉤（Outcome），`bot_policy.score` 的 call 那一段搬進包的 bots.py
+GAME_IMPORTS |= {"tianxia.features.socialize.actions", "tianxia.features.socialize.menus", "tianxia.features.socialize.view"}
+GAME_DELEGATES |= {
+    # 核心原位叫的：選單（_precise_social_option、_socialize_option、_audience_options）、行動列說明（_socialize_figure、_audience_hall、_fame_gap、_can_meet、
+    # _talked_out_note）、_act 的 act:socialize（_socialize）、sync（_audience_hall）、補算時間（_deliver_fortune）、場景文字（_audience_intro）
+    "_precise_social_option", "_socialize_option", "_audience_options", "_socialize_figure", "_audience_hall", "_fame_gap", "_can_meet",
+    "_talked_out_note", "_socialize", "_deliver_fortune", "_audience_intro", "_talks_left",
+    # 別的包經 ctx 問的（服務清單二、查詢）：_can_meet、_socialize_figure、_count_talk（人物對話的 A 段與每一輪收尾）、_social_plan、_brush_off（開口與開單）
+    "_social_plan", "_count_talk", "_brush_off",
+    # server、假人、腳本、測試在叫的：can_meet_figure（bot.py）、socialize_starts_dialogue、socialize_is_futile（bot_policy）、_talk_cap（玉璽測試）、
+    # _talks_used（tests/core/test_engine.py、tests/server/test_server.py）、_deep_interaction_target（tests/season/test_real_content.py）
+    "can_meet_figure", "socialize_starts_dialogue", "socialize_is_futile", "_talk_cap", "_talks_used", "_deep_interaction_target",
+}
+_ACT_VERB = "act:socialize、act:call 是 act 子動詞（總表第 57 批才接 Verb.cell、Verb.note、Verb.run）：行動列那一格、底下那一行、按下去，留在核心原位叫這一包的委派"
+_AUDIENCE_ONE = "單人地點的「求見某某」（call:<人物>）那一顆：選單上直接列的求見，是 act 子動詞那一格旁邊的選項建構（總表第 57 批），四個分支問閉門不見、見不見得到、差多少、談滿了沒"
+GAME_DELEGATE_CALLERS.update({
+    ("_act", "_socialize"): _ACT_VERB + "（act:socialize 的動作；最後一行）",
+    ("_everyday_options", "_precise_social_option"): _ACT_VERB + "（一類一顆的交友那一顆）",
+    ("_everyday_options", "_socialize_option"): _ACT_VERB + "（交友那一顆）",
+    ("_everyday_options", "socialize_is_futile"): _ACT_VERB + "（交友撲空時灰掉的判斷）",
+    ("_everyday_options", "_can_meet"): _AUDIENCE_ONE,
+    ("_everyday_options", "_fame_gap"): _AUDIENCE_ONE,
+    ("_everyday_options", "_talks_left"): _AUDIENCE_ONE,
+    ("_everyday_options", "_talked_out_note"): _AUDIENCE_ONE,
+    # 求見名單的選單：`menu` 掛鉤坐在 sense_menu、一條線答題、談著、選邊、投靠確認、叛投確認這幾個 picking_* 之前（選單的順序算行為，同 _TALK_MENU），
+    # 名單這一行夾在叛投確認與懸賞榜中間，接成掛鉤就改了它們並存時誰先；所以留委派
+    ("_everyday_options", "_audience_options"): "求見名單（picking_audience）：" + _MENU_ORDER,
+    # 場景文字同理：`scene` 掛鉤坐在談話、選邊、投靠、叛投那幾段之前，求見畫面夾在叛投之後、伏筆答題之前，位置算行為，留委派
+    ("_own_scene_text", "_audience_intro"): "求見畫面的說明（picking_audience）：場景文字夾在叛投確認與伏筆答題之間，`scene` 掛鉤坐在更前面，位置算行為",
+    ("_advance_player_local", "_deliver_fortune"): "福緣到期自己送上門：夾在閉關收尾與別的補算中間，on_sync 沒有對應的位置",
+    ("action_notes", "_socialize_figure"): _ACT_VERB + "（交友那一行說明）",
+    ("action_notes", "_audience_hall"): _ACT_VERB + "（求見那一行說明）",
+    ("action_notes", "_can_meet"): _ACT_VERB + "（單人求見那一行說明）",
+    ("action_notes", "_fame_gap"): _ACT_VERB + "（同上）",
+    ("action_notes", "_talks_left"): _ACT_VERB + "（同上）",
+    ("action_notes", "_talked_out_note"): _ACT_VERB + "（同上）",
+})
+
+# story（全部拆包第 30 批「一條線」：新包 tianxia/features/story/；計畫 docs/superpowers/plans/2026-11-04-一條線簽到-第30批.md 1.5、1.6）：這一批加的集中在這一段
+# （並行的拆包線不跟別人的行穿插）。核心原位碰一條線的幾處，能接第 11 批掛鉤的接上（choose 掛鉤接 story:，標題一起帶），接不了的改叫 Game 上一行的委派、
+# 記進 GAME_DELEGATE_CALLERS 寫理由（不新增 GAME_DIRECT）。原本那行 `from . import storyline`、`chapters` 拿掉：JOURNAL、場景圖、題目文字、線的定義
+# 改讀共用規則層 story_base（不算過渡）；章回主線 chapters 的模組層 import 搬到包的 actions.py（載入時登記 storyline.TASKS）
+GAME_IMPORTS |= {"tianxia.features.story.actions"}
+GAME_DELEGATES |= {
+    # 搬進包的 10 個方法留 10 個一行委派：server（MAIN_ACTIONS 的 story_seen、main_view 的 story_cards）、假人與腳本（story_start）、測試（story_cards、
+    # _story_begin、_story_tick、_mirror_squad）、探索包（ctx._story_begin）、核心原位（_story_tick）在叫的；_story_act、_story_fight、_story_bout 只有包裡叫
+    "story_start", "story_cards", "story_seen", "story_card_view", "_story_begin", "_story_tick", "_mirror_squad",
+    # 核心原位叫的 3 個（本體在 actions）：答題的選單、「未了之事」那一顆、換季收線
+    "_story_menu", "_story_options", "_story_close_season",
+}
+GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_story_menu"): "選單：一條線的答題在有所感的選單之後、此地有人要談的選單之前；接 menu 掛鉤的位置不對（menu 掛鉤在有所感的 _sense_menu 之前，"
+                                          "同時成立時先後會變），/api/main 的選項順序算行為",
+    ("_everyday_options", "_story_options"): "選單：「未了之事」那一顆在應召之後、此地的人之前；options 掛鉤在體力玩法之後（最後面），順序算行為",
+    ("_reset_player_for_new_season", "_story_close_season"): "換季：還沒收的線要在 world.save_annals 存上一季的行狀之前寫「此事未了」進傳；on_season_end 在 save_annals 之後，來不及",
+    ("sync", "_story_tick"): "同步：不在線時過了的期限、休季時還沒收的線在召見之後、席次之前走一步；紀錄先後算行為，on_sync 在召見之前",
+    ("choose", "_story_tick"): "每個動作結束那一格（事件了結之後、召見之前）：不是任何掛鉤的位置",
+    ("_event_progress", "_story_tick"): "事件了結的推進：段落事件了結了，照記下的那一步往下走；同上",
+})
+
+# checkin（全部拆包第 30 批「簽到」：新包 tianxia/features/checkin/；計畫 1.5、1.6）：核心原位碰簽到的兩處沒有第 11 批掛鉤可接，改叫 Game 上一行的委派。
+# 原本那行 import 的 checkin 拿掉：回體丹那一套（Game._pill_find）改叫核心 core/services.py 的 checkin_on、PILL_FOUND。
+# 引導那一段（# guide）原本記的 (check_in／_auto_checkin／checkin_view, _opening_pending／_opening_gate) 四對，呼叫端搬進簽到包、經 ctx 叫，在 CORE_DELEGATE_CALLERS_CHECKIN
+GAME_IMPORTS |= {"tianxia.features.checkin.actions"}
+GAME_DELEGATES |= {
+    # server（MAIN_ACTIONS["checkin"]）、假人（bot.check_in 叫 checkin_view、check_in）、測試在叫的 check_in、checkin_view，與核心原位 sync 叫的 _auto_checkin
+    "check_in", "_auto_checkin", "checkin_view",
+}
+GAME_DELEGATE_CALLERS.update({
+    ("sync", "_auto_checkin"): "同步的每日簽到自動領：在補送裝備（_deliver_held_gear）之後；on_sync 掛鉤在它前面，不能接，紀錄先後算行為",
+    ("status_data", "checkin_view"): "狀態列的簽到小標（status 的 checkin 那一格）：在 howto_entry 之後、fronts 之前，鍵的順序算行為；feature_status 是 main 的頂層、位置不對",
+})
+# 簽到的三個方法搬進簽到包，不再是 Game 上的呼叫端：它們問引導的 _opening_pending／_opening_gate 改成包裡經 ctx 叫（服務清單二、查詢服務 # checkin）
+for _pair in (("check_in", "_opening_pending"), ("check_in", "_opening_gate"), ("_auto_checkin", "_opening_pending"), ("checkin_view", "_opening_pending")):
+    del GAME_DELEGATE_CALLERS[_pair]
 
 
 # strip（全部拆包第 13 批「拿掉一」：探索三選一、找素材「自己說」、城裡操練；計畫 docs/superpowers/plans/2026-11-04-拿掉一-第13批.md）：
@@ -855,6 +931,17 @@ SHARED_PENDING.update({
                          "叫到才載入決戰包 battle）：切開之前 import chiefs 會連帶載入 sortie、feast、bout 三包（第 12 批合進 develop 時量的）",
     ("chiefs", "figures"): "排定：大勢人物（figures.state_of、line_of）——總表第 40 批收進共用規則層",
 })
+# story（全部拆包第 30 批：storyline 拆兩半，底座與換字進共用規則層的 story_base；計畫 docs/superpowers/plans/2026-11-04-一條線簽到-第30批.md 1.2）：
+# 照原本 storyline 那樣讀大區（here）與章回的大事結果（vary，函式裡），多兩條排定的
+SHARED_PENDING.update({
+    ("story_base", "atlas"): "排定：大區（atlas.region_of）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層（同 chiefs → atlas：atlas 最外層 import "
+                             "出陣包 sortie，也經 world 帶進宴客包 feast、單挑包 bout）：切開之前 import story_base 會連帶載入 sortie（原本 import storyline 就是這樣）",
+    ("story_base", "chapters"): "排定：章回的大事結果（chapters.outcome_mark，vary 函式裡延後 import）——第 40 批收進共用規則層"
+                                "；章回自己 import 舊名 storyline（一條線包 story 的別名），叫到才連帶載入 story",
+})
+# chapters 載入時 import 舊名 storyline（章回登記 TASKS，storyline.active、start 這些）：第 30 批 storyline 成了一條線包 story 的別名，
+# 所以另外兩條指到 chapters 的排定項（timetable 的擲骰修正）叫到它也連帶載入 story
+SHARED_PENDING[("timetable", "chapters")] += "；章回自己 import 舊名 storyline（一條線包 story 的別名），叫到才連帶載入 story（第 30 批）"
 SHARED_PENDING[("siege", "world")] += "；world 函式裡也 import 舊名 generals（決戰包 battle 的別名：開集結那一下派龍頭上陣），叫到它就連帶載入 battle"
 
 # 總表第 15 列寫了、這一批先不收的（派工：import 了包的「先改成查詢服務，或者先不收」；讀的都是還沒成包的舊模組，還沒有包可以回答查詢）：
@@ -1274,7 +1361,11 @@ def test_the_old_names_left_as_aliases_are_known():
                          # sense（全部拆包第 24 批：tianxia/sensing.py、epiphany.py、glyph.py、insight_llm.py）
                          "sensing": "sense", "epiphany": "sense", "glyph": "sense", "insight_llm": "sense",
                          # cultivation（全部拆包第 23 批：tianxia/cultivation.py、chuangong.py、ascend.py）
-                         "cultivation": "cultivation", "chuangong": "cultivation", "ascend": "cultivation"}
+                         "cultivation": "cultivation", "chuangong": "cultivation", "ascend": "cultivation",
+                         # story（全部拆包第 30 批：tianxia/storyline.py）
+                         "storyline": "story",
+                         # checkin（全部拆包第 30 批：tianxia/checkin.py）
+                         "checkin": "checkin"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 

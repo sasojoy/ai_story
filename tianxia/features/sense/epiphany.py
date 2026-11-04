@@ -33,7 +33,7 @@ from types import SimpleNamespace
 from pydantic import BaseModel
 
 from tianxia import insight_fx, insights, naming  # 核心、共用規則層
-from tianxia import annals, storyline  # 過渡：待搬（行狀〔列傳〕、一條線的底座：登記這一種線的鉤子）
+from tianxia import annals, story_base  # annals 過渡：待搬（行狀〔列傳〕）；story_base 共用規則層（一條線的底座：登記這一種線的鉤子）
 from tianxia.martial_arts import Insight
 from tianxia.models import (
     GOD_FORMS, Content, Effect, GodTrait, StoryAnswer, StoryDef, StoryEnding, StoryFail, StoryQuestion, StoryStage,
@@ -114,7 +114,7 @@ TRIALS: dict[str, tuple[str, str]] = {
     "terrain": ("到{tag}靜坐", "守"),
     "roam": ("四處探訪三回", "變"),
     # 以前寫「靜候一日」：等多久改成設定之後這句話就會騙人（同心魔那一句，FB-900），
-    # 所以話裡不寫時間，還要多久由選單那一行的倒數寫（storyline.TASK_LEFT，FB-902）
+    # 所以話裡不寫時間，還要多久由選單那一行的倒數寫（story_base.TASK_LEFT，FB-902）
     WAIT: ("靜候，什麼都別急", "心"),
 }
 TERRAINS = ("山林", "河畔", "野外", "寺院", "古戰場")
@@ -129,7 +129,7 @@ def rules(content: Content):
 
 
 def on(content: Content, state: GameState) -> bool:
-    return rules(content).enabled and storyline.on(content, state)
+    return rules(content).enabled and story_base.on(content, state)
 
 
 def _seed(state: GameState, *parts: object) -> str:
@@ -144,7 +144,7 @@ def busy(state: GameState, content: Content) -> bool:
     """還有一條頓悟的線沒收、或悟了還沒取名：不再擲（同時只有一個）。"""
     if state.player.god_naming is not None:
         return True
-    return any((d := storyline.definition(content, pr)) is not None and d.kind == KIND for pr in storyline.active(state))
+    return any((d := story_base.definition(content, pr)) is not None and d.kind == KIND for pr in story_base.active(state))
 
 
 def chance(state: GameState, content: Content) -> float:
@@ -209,7 +209,7 @@ def _trial(state: GameState, content: Content) -> tuple[str, str, int]:
 
 
 def build(state: GameState, content: Content, method: str) -> tuple[StoryDef, dict[str, int]]:
-    """這一次頓悟的線（整份存進進度：storyline.start custom）與開線時要先記下的記號：做法的屬性（剛柔快慢）記成「法剛」…，
+    """這一次頓悟的線（整份存進進度：story_base.start custom）與開線時要先記下的記號：做法的屬性（剛柔快慢）記成「法剛」…，
     小試是靜坐時記要去的地形（TAG）。"""
     r = rules(content)
     n = state.player.epiphanies + 1
@@ -232,7 +232,7 @@ def build(state: GameState, content: Content, method: str) -> tuple[StoryDef, di
 def begin(state: GameState, content: Content, method: str, place: str) -> StoryProgress | None:
     """中了：開線、記下做法與小試的地形，這一季頓悟次數 +1、保底歸零。開不了（沒空位）是 None。"""
     line, marks = build(state, content, method)
-    progress = storyline.start(state, content, line)
+    progress = story_base.start(state, content, line)
     if progress is None:
         return None
     progress.marks.update(marks)
@@ -242,7 +242,7 @@ def begin(state: GameState, content: Content, method: str, place: str) -> StoryP
     return progress
 
 
-# ── 小試（storyline.TASKS）──────────────────────────────
+# ── 小試（story_base.TASKS）──────────────────────────────
 
 
 def _mark_start(state: GameState, progress: StoryProgress) -> None:
@@ -276,7 +276,7 @@ def _task(trial: str):
 
 
 for _name in TRIALS:
-    storyline.TASKS[f"{KIND}:{_name}"] = _task(_name)
+    story_base.TASKS[f"{KIND}:{_name}"] = _task(_name)
 
 
 def _wait_left(state: GameState, content: Content, progress: StoryProgress) -> float | None:
@@ -291,11 +291,11 @@ def _wait_left(state: GameState, content: Content, progress: StoryProgress) -> f
     return left if left > 0 else None
 
 
-storyline.TASK_LEFT[f"{KIND}:{WAIT}"] = _wait_left
+story_base.TASK_LEFT[f"{KIND}:{WAIT}"] = _wait_left
 
 
 def _refresh(content: Content, line: StoryDef) -> StoryDef:
-    """每次讀這一條線都照此刻的設定重算心魔那一關的數字（storyline.REFRESH_HOOKS）：
+    """每次讀這一條線都照此刻的設定重算心魔那一關的數字（story_base.REFRESH_HOOKS）：
     線是程式組的、整份存在 progress.custom 裡，不這樣做的話改了設定只對之後新開的線有效。"""
     r = rules(content)
     stages = [
@@ -310,10 +310,10 @@ def _refresh(content: Content, line: StoryDef) -> StoryDef:
     return line.model_copy(update={"stages": stages})
 
 
-storyline.REFRESH_HOOKS[KIND] = _refresh
+story_base.REFRESH_HOOKS[KIND] = _refresh
 
 
-# ── 心魔（storyline.FIGHT_HOOKS）──────────────────────────
+# ── 心魔（story_base.FIGHT_HOOKS）──────────────────────────
 
 
 def _fought(state: GameState, content: Content, progress: StoryProgress, stage: StoryStage, record) -> None:
@@ -325,7 +325,7 @@ def _fought(state: GameState, content: Content, progress: StoryProgress, stage: 
     progress.marks[best] = progress.marks.get(best, 0) + 2
 
 
-storyline.FIGHT_HOOKS[KIND] = _fought
+story_base.FIGHT_HOOKS[KIND] = _fought
 
 
 # ── 挑模板 ─────────────────────────────────────────────
@@ -397,7 +397,7 @@ def _end(state: GameState, content: Content, world: WorldStateStore, progress: S
     return [THINK_ASK]
 
 
-storyline.END_HOOKS[KIND] = _end
+story_base.END_HOOKS[KIND] = _end
 
 
 # ── 取名、收進意境 ───────────────────────────────────────

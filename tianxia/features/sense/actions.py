@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import insights, journal  # 共用規則層、核心
 from tianxia import prologue as prologue_rules  # 共用規則層（序章草廬：必中）
-from tianxia import storyline  # 過渡：待搬（一條線：頓悟那一條開了之後的開場與第一題）
+from tianxia import story_base  # 共用規則層（一條線的底座：頓悟那一條開了之後的開場與第一題）
 from tianxia.core.option import Option
 from tianxia.core.services import PREPARING_REFUSAL, outing_watch
 from tianxia.journal import Draft
@@ -61,9 +61,9 @@ def epiphany_begin(ctx: Game, method: str, place: str) -> list[str]:
     if progress is None:
         return []
     s.player.sensing = None
-    line = storyline.definition(c, progress)
+    line = story_base.definition(c, progress)
     ctx._outcome(journal.event_marker(epiphany.TITLE, True), f"✦ {epiphany.TITLE}")
-    return [f"✦ {epiphany.TITLE}", line.intro, f"【{line.title}】"] + storyline.open_quiz(s, c, progress)
+    return [f"✦ {epiphany.TITLE}", line.intro, f"【{line.title}】"] + story_base.open_quiz(s, c, progress)
 
 
 def epiphany_name(ctx: Game, arg: str, text: str | None) -> list[str]:

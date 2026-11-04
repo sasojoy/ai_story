@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
-from .. import annals, battlelog, bounties, event_llm, foreshadow, forge_secrets, journal, narration, secret_recipes, storyline, team, tiers
+from .. import annals, battlelog, bounties, event_llm, foreshadow, forge_secrets, journal, narration, secret_recipes, story_base, team, tiers
 from .. import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有端出事件那一下會叫；照 engine 的叫法）
 from .. import outcomes as outcome_rules
 from .. import prologue as prologue_rules
@@ -302,7 +302,7 @@ def answer_event(
     if current is None or current.event_id != request.event_id:
         return ctx._log(["（事情已經過去了，這句話沒派上用場。）"])
     event = c.events[request.event_id]
-    storyline.heard(s, c, event.id, request.text)  # 一條線的段落：自己寫的那一句記進那條線（結尾與模型用）
+    story_base.heard(s, c, event.id, request.text)  # 一條線的段落：自己寫的那一句記進那條線（結尾與模型用）
     branches = branches_of(ctx, event)
     if branches:
         return answer_branch(ctx, event, request, branches, llm_rate, moral, outcome)
