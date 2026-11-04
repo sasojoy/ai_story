@@ -245,3 +245,15 @@ def affinity_text(ctx, companion_id: str) -> str:
     玩家看得到的只叫「情誼」，程式裡照舊叫 affinity）。深交不限人數（企劃者 2026-10-28「不要限制深交名額」），不再接「已深交三位」。
     （總表附錄甲點名第 20 批；第 20 批審查補搬。）"""
     return f"情誼 {ctx.state.player.affinities.get(companion_id, 0)}"
+
+
+def talk_title(ctx) -> str:
+    """談話那一下江湖紀錄的標題：「交談・盧植」（動作之前拿，原本 Game._action_title 的 talk 那一支）。"""
+    who = ctx.state.player.pending_companion
+    return f"交談・{ctx.content.characters[who].name}" if who in ctx.content.characters else "交談"
+
+
+def road_title(ctx) -> str:
+    """帶路的路上跟他說一句的標題：「同行・盧植」（原本 Game._action_title 的 parley 那一支；帶路的人不在人物表時選單上不會有這一顆，寫「同行」）。"""
+    escort = ctx.state.player.parley_escort
+    return f"同行・{ctx.content.characters[escort].name}" if escort in ctx.content.characters else "同行"

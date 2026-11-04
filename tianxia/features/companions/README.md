@@ -35,7 +35,7 @@
 - 選單（`_everyday_options` × `_recruit_options`、`_errand_options`、`_talk_options`、`_parley_road_option`）：選項的順序算行為，`options` 掛鉤在體力玩法之後、`menu` 掛鉤要照包排（總表第 55～57 批）。
 - 同步（`sync` × `_stance_annals`、`_deliver_mail`）：紀錄與行狀的先後算行為，`deliver_notices`、`on_sync` 位置不對。欠人物的事過了期限（`parley.lapse`）第 20 批併進 `deliver_mail`（第 19 批是 `sync` 先叫、把句子傳進去）。
 - `act:recruit`、`act:recruit:<id>`（`_act` × `_recruit`、`_recruit_one`）：核心 `act:` 的子動詞，第 57 批接進 `Verb`。`choose` 的 FB-363 與 `_action_title` 的招募那一格也留給第 57 批。
-- `choose` 前段：勸降只叫出輸入框（`_errand_ask`，同 `battle:`，第 7 批 PM 認定第 1 條）；**`talk:`、`parley:` 按下去**（`_talk`、`_road_say`）與進鎖後重驗（`_checked_prepared`）、「自己說」的字數（`say_max`）——要帶鎖外生成好的一輪 `prepared` 與驗過的那句話，`choose` 掛鉤的簽名（`kind, arg`）放不下，留給第 57 批「選單上、不建紀錄」那一格再看。這一包拿了 `talk:`、`parley:` 前綴，只用在 `bot_pick`。
+- `choose` 前段：勸降只叫出輸入框（`_errand_ask`，同 `battle:`，第 7 批 PM 認定第 1 條）；進鎖後重驗（`_checked_prepared`）、「自己說」的字數（`say_max`）仍在 `choose` 前段（`talk:`、`parley:road` 之外的 `act:`、`call:` 也要驗）。**`talk:`、`parley:road` 按下去第 20 批審查接上了 `choose` 掛鉤**：驗過的 `prepared` 與那句話經 `ctx._talk_turn`、`ctx._talk_said` 寄放（同勸降的 `_persuade_said`），標題（「交談・某人」「同行・某人」）在動作之前拿；`Game._talk`、`_road_say` 兩個委派跟著拿掉。
 - 交友與求見開口（`_socialize`、`_precise_socialize`、`_call` × `_open_dialogue`）：交友求見第 21 批搬進 `socialize` 包，到時候改經 `ctx`。
 - 叛投（`_defect_step` × `_parley_forsake`）：回話的先後算行為；場景文字（`_own_scene_text` × `_last_talk_line`）：位置算行為。
 

@@ -2,8 +2,8 @@
 人物對話與 NPC 智能（companion_agent、parley，`talk:`、`parley:`）是第 20 批搬進來的（talk_actions、parley_actions、bots.py）。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
 選項前綴 `errand:`（託付：交信、探營、勸降）、`talk:`（跟人物談著的選項：上一輪給的、自己說、商量打法、條件的接與不接、還債、請他兌現、伏筆與機緣的話題、告辭）、
-`parley:`（帶路的路上跟他說一句）；招募是核心 `act:` 的子動詞（`act:recruit`、`act:recruit:<id>`，總表第 57 批）。`talk:`、`parley:` 的 choose 留在 Game.choose 原位
-（要帶鎖外生成好的一輪 prepared 與驗過的那句話，掛鉤的簽名放不下；第 57 批「選單上、不建紀錄」那一格再看），這一包只拿前綴問 bot_pick。enabled 一直是 True
+`parley:`（帶路的路上跟他說一句）；招募是核心 `act:` 的子動詞（`act:recruit`、`act:recruit:<id>`，總表第 57 批）。`talk:`、`parley:road` 的 choose 第 20 批審查接上掛鉤
+（鎖外生成好的一輪 prepared 與驗過的那句話經 `ctx._talk_turn`、`ctx._talk_said` 寄放，同勸降的 `_persuade_said`）；進鎖後的重驗 `_checked_prepared` 與字數 `say_max` 仍在 choose 前段。enabled 一直是 True
 （招募 Config.companions、書信 Config.figure_life.letters、心意與託付 Config.jianfa 各有自己的開關，包本身沒有總開關）。
 """
 from __future__ import annotations
@@ -33,7 +33,15 @@ class CompanionsFeature(Feature):
 
     def choose(self, ctx, kind, arg):
         """託付（交信、探營、勸降的 C 段）；勸降按下去只叫出輸入框那一下在建紀錄之前，核心原位問 Game._errand_ask（計畫 1.5）。"""
-        if kind != "errand":  # talk:、parley: 的 choose 留在 Game.choose 原位（帶 prepared 與驗過的那句話）
+        if kind == "talk" or (kind == "parley" and arg == "road"):
+            # 談話（talk:<N>、say、leave、clue、opp、terms……）與帶路的路上說一句（parley:road；第 20 批審查接上掛鉤）：鎖外生成好的一輪與驗過的
+            # 那句話經 ctx._talk_turn、ctx._talk_said 寄放（Game.choose 前段驗完擺好，同勸降的 _persuade_said）；標題在動作之前拿
+            from . import talk_actions  # noqa: PLC0415
+
+            if kind == "talk":
+                return Outcome(title=talk_actions.talk_title(ctx), run=lambda: talk_actions.talk(ctx, arg, ctx._talk_turn, ctx._talk_said))
+            return Outcome(title=talk_actions.road_title(ctx), run=lambda: talk_actions.road_say(ctx, ctx._talk_turn, ctx._talk_said))
+        if kind != "errand":
             return None
         from . import actions  # noqa: PLC0415
 

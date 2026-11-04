@@ -30,8 +30,9 @@ from tianxia.state import PlayerState
 
 ROOT = Path(__file__).resolve().parents[2]
 FEATURE_DIR = ROOT / "tianxia" / "features"
+# companions（第 20 批審查）：原本的 "talk:leave" 這一批拿了前綴之後是人物情誼包的 id，換成核心的 "road:back"。
 # battle（全部拆包第 8 批）：原本的 "battle:join:guan" 第 7 批拿了前綴之後其實是決戰包的 id（第 7 批 PM 認定第 6 條），換成核心的 "season:paused"
-CORE_IDS = ["act:explore", "act:train", "move:yingshui", "choice:0", "talk:leave", "season:paused", "season:resting", "x"]
+CORE_IDS = ["act:explore", "act:train", "move:yingshui", "choice:0", "road:back", "season:paused", "season:resting", "x"]
 
 
 def _game() -> Game:

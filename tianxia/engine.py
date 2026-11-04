@@ -2369,6 +2369,7 @@ class Game:
         self._fight = self._checked_fight(option_id, fight)
         was_opening = kind == "choice" and self._opening_pending()  # 開局三選一（減法季批 7）：選完人物的信到
         # 搬成包的功能：那一包接走（只吃自己前綴的 id；這一下江湖紀錄的標題在動作之前先拿，同 _action_title；開發規範手冊 3.3）
+        self._talk_turn, self._talk_said = prepared, said  # 談話與帶路的路上一句（人物情誼包 choose 掛鉤）要的：鎖外生成好的一輪與驗過的那句話（寄放，同 _persuade_said）
         taken = features_core.choose(self, kind, arg)
         self._draft = Draft(taken.title if taken is not None else self._action_title(kind, arg))
         self._affinity_before = dict(self.state.player.affinities)
@@ -2380,10 +2381,7 @@ class Game:
                 msgs = self._act(arg, prepared)
             elif kind == "move":
                 msgs = self._move(arg)
-            elif kind == "talk":
-                msgs = self._talk(arg, prepared, said)
-            elif option_id == ROAD_SAY:
-                msgs = self._road_say(prepared, said)
+            # （talk：談話；parley:road：帶路的路上說一句，第 20 批審查換成人物情誼包的 choose 掛鉤〔上面 taken 那一支；prepared 與 said 經 _talk_turn、_talk_said 寄放〕，拿掉）
             elif kind == "faction":
                 msgs = self._faction_step(arg)
             elif kind == "defect":
@@ -2587,6 +2585,8 @@ class Game:
     # ── 託付與勸降（減法季批 6）：本體同上 ────────────
 
     _persuade_said: tuple | None = None  # 勸降的 C 段（人物情誼包 actions.persuade）交給 choose 的單子與模型的分數（服務清單四、寄放）
+    _talk_turn: companion_agent.PreparedTurn | None = None  # choose 前段驗過的那一輪對話（鎖外生成好的）與那句話，交給人物情誼包的 choose 掛鉤（服務清單四、寄放）
+    _talk_said: str | None = None
 
     def errands_view(self) -> list[dict] | None:
         return companions_actions.errands_view(self)
@@ -2685,11 +2685,7 @@ class Game:
         if kind == "choice":
             event = c.events[s.pending_event]
             return f"{event.title}・{event.choices[int(arg)].text}"
-        if kind == "talk":
-            character = c.characters[s.player.pending_companion]
-            return f"交談・{character.name}"
-        if kind == "parley" and s.player.parley_escort in c.characters:  # NPC 智能 2.1：帶路的路上跟他說一句
-            return f"同行・{c.characters[s.player.parley_escort].name}"
+        # （talk：「交談・某人」、parley:road：「同行・某人」，第 20 批審查換成人物情誼包 choose 掛鉤的 Outcome.title，拿掉）
         if kind == "call":
             return "收回名帖" if arg == "back" else f"求見・{c.characters[arg].name}"
         # （sense：「有所感・場景」，全部拆包第 24 批換成有所感包 choose 掛鉤的 Outcome.title，拿掉）
@@ -4532,8 +4528,7 @@ class Game:
             and not roster.fortune_due(s, c)
         )
 
-    def _talk(self, arg: str, prepared: companion_agent.PreparedTurn | None = None, said: str | None = None) -> list[str]:
-        return companions_talk.talk(self, arg, prepared, said)
+
 
     def _annal_talk(self, companion_id: str, delta: int, said: str | None) -> None:
         companions_talk.annal_talk(self, companion_id, delta, said)
@@ -4557,8 +4552,7 @@ class Game:
     def _parley_road_option(self, j: Journey) -> Option | None:
         return companions_parley.road_option(self, j)
 
-    def _road_say(self, prepared: companion_agent.PreparedTurn | None, said: str | None) -> list[str]:
-        return companions_talk.road_say(self, prepared, said)
+
 
     def _parley_backing_here(self) -> str | None:
         return companions_parley.backing_here(self)

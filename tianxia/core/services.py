@@ -301,7 +301,8 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 # companions（全部拆包第 19 批：Game 的類別屬性，choose 前段〔按勸降只叫出輸入框〕與包都讀）
 - `ctx._persuade_said`（勸降的 C 段交給 choose 的單子與模型的分數；不是 None 才真的擲骰）
 # companions（全部拆包第 20 批：Game 的類別屬性，人物對話的 _talk、_road_say 與 _parley_decide 之間傳的）
-- `ctx._parley_decision`（這一輪「自己說」擲出來的結果：_parley_decide 記、_talk 與 _road_say 收尾時拿去做事）
+- `ctx._parley_decision`（這一輪「自己說」擲出來的結果：_parley_decide 記、talk 與 road_say 收尾時拿去做事）
+- `ctx._talk_turn`、`ctx._talk_said`（Game.choose 前段驗過的那一輪對話與那句話，交給 choose 掛鉤的 talk、road_say；第 20 批審查接上掛鉤時開的）
 # cultivation（全部拆包第 23 批；Game.__init__ 起的）
 - `ctx.forged`、`ctx.forged_thing`、`ctx.secret_solved`：這一下裝成了沒、合出了什麼、解開了哪一份口訣秘方（裝意境寫，server 的
   api_menxia_do 在鎖裡讀；煉製 `Game.forge`、自創 `create_name` 也寫——煉製第 44 批）

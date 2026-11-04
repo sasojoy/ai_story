@@ -640,15 +640,15 @@ GAME_DELEGATE_CALLERS.update({
     ("choose", "_errand_ask"): "勸降按下去只叫出輸入框：查完選單、建紀錄之前，同 battle: 那一支的位置（第 7 批 PM 認定第 1 條）；第 57 批「選單上、不建紀錄」那一格一起接",
 })
 # companions（全部拆包第 20 批「人物情誼二」：人物對話、NPC 智能 2.0；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第2批.md 1.5、1.6）：
-# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。_stance_before、_stance_credit 兩個委派只有搬走的 _talk、_road_say 在叫，包裡互相叫之後拿掉了（上面）
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。_stance_before、_stance_credit 兩個委派只有搬走的 talk、road_say 在叫，包裡互相叫之後拿掉了（上面）
 GAME_IMPORTS |= {"tianxia.features.companions.talk_actions", "tianxia.features.companions.parley_actions"}
 GAME_DELEGATES |= {
-    # 搬進包的 29 個方法留 13 個（9 個私有）：server 與測試在叫的 dialogue_request、say_max、_checked_prepared、_parley_lists、_parley_prompt、_parley_options、
+    # 搬進包的 29 個方法（第 20 批審查把 _talk、_road_say 換成 choose 掛鉤）留 11 個（9 個私有）：server 與測試在叫的 dialogue_request、say_max、_checked_prepared、_parley_lists、_parley_prompt、_parley_options、
     # _annal_talk（tests/core/test_annals.py 直接叫）；
-    # 核心原位叫的 _open_dialogue（交友與求見開口，第 21 批）、_talk 與 _road_say（choose）、_last_talk_line（場景文字）、_parley_road_option（路上的選單）；
+    # 核心原位叫的 _open_dialogue（交友與求見開口，第 21 批）、_last_talk_line（場景文字）、_parley_road_option（路上的選單）；
     # 出陣包經 ctx 問的 _parley_backing_here。其餘 16 個（_dialogue_unavailable、_prepared_turn、_parley_finish……）只有包裡叫，沒有委派
-    "dialogue_request", "say_max", "_checked_prepared", "_parley_lists", "_parley_prompt", "_parley_options", "_annal_talk", "_open_dialogue", "_talk",
-    "_road_say", "_last_talk_line", "_parley_road_option", "_parley_backing_here",
+    "dialogue_request", "say_max", "_checked_prepared", "_parley_lists", "_parley_prompt", "_parley_options", "_annal_talk", "_open_dialogue",
+    "_last_talk_line", "_parley_road_option", "_parley_backing_here",
     # 原位那幾行的本體一起搬進包（選單上談著的那一整段、叛投之後欠著的都算食言）
     "_talk_options", "_parley_forsake",
     # 審查補搬：總表附錄甲點名第 20 批的 affinity_text（談話畫面名字底下的「情誼 N」；server 的人物頁、場景卡、測試在叫）
@@ -659,8 +659,7 @@ GAME_DELEGATE_CALLERS.update({
     ("_everyday_options", "_talk_options"): "跟人物談著：" + _TALK_MENU,
     ("_everyday_options", "_parley_road_option"): "路上跟他說一句那一顆（折返之後、喊停之前）：" + _TALK_MENU,
     ("choose", "_checked_prepared"): "進鎖後重驗鎖外生成的一輪對話（查完選單、建紀錄之前）：choose 前段，第 57 批「選單上、不建紀錄」那一格再看",
-    ("choose", "_talk"): "talk:<N>、say、leave……按下去：要帶鎖外生成好的一輪 prepared 與驗過的那句話，choose 掛鉤的簽名放不下；第 57 批再看",
-    ("choose", "_road_say"): "parley:road 按下去：同上",
+    # （talk:、parley:road 按下去〔talk、road_say〕第 20 批審查接上 choose 掛鉤：prepared 與 said 經 ctx._talk_turn、_talk_said 寄放，同勸降的 _persuade_said）
     ("choose", "say_max"): "「自己說」最多幾個字：choose 前段驗那句話",
     ("_own_scene_text", "_last_talk_line"): "談話畫面名字底下的「上回」那一行：場景文字（_own_scene_text）的一部分。不接 scene 掛鉤的理由（第 20 批審查）：掛鉤坐在一條線的答題"
                                             "（storyline.question_text）之前，談話這一段在答題之後；包的登記順序又是人物情誼排在有所感前面，接成掛鉤得替它補「答題開著就讓路」"
