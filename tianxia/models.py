@@ -1165,7 +1165,7 @@ class Squad(_Strict):
     drops: list[Drop] = Field(default_factory=list)  # 留空則走 materials.py 依難度的預設掉落表
     faction: str | None = None  # 這支隊伍屬於哪個陣營（Scenario.factions 的 id）；自己陣營的人遇到時改成操練、不開打
     # 五項屬性的季（attrset.foe_values）：這支隊伍的等級與資質（鍵 → 2～9）；沒寫照難度換等級、資質當 foe_aptitude
-    level: int | None = None
+    level: float | None = None
     aptitude: dict[str, int] = Field(default_factory=dict)
     desc: str = ""  # 一句描述（運糧隊這類有特別來歷的對手才寫；遇上時接在戰鬥那一行後面，濃縮版內容表 3.3）
     boss: bool = False  # 頭目：遊歷、劇情戰遇上它算大場面，先請模型判讀（武學與成長設計 8.3）
@@ -3914,7 +3914,7 @@ class AttrV2Rules(_Strict):
     legacy: dict[str, str] = Field(default_factory=lambda: {"str": "str", "agi": "spd", "con": "lead", "wis": "int"})
     # 檢定（第五節 5.1）：成功率＝難度等級的底 ＋ slope ×（值 − 期望值）÷ 期望值 − 微調 × shift_step，夾在 floor～ceil
     grade_rates: dict[str, float] = Field(default_factory=lambda: {
-        "easy": 0.8, "normal": 0.6, "hard": 0.45, "harsh": 0.3, "legend": 0.15})
+        "easy": 0.9, "normal": 0.7, "hard": 0.55, "harsh": 0.4, "legend": 0.25})  # 企劃者 2026-11-04：草稿每級 +10%
     slope: float = 1.0
     shift_step: float = 0.05
     practice_step: float = 0.05  # 熟練加成每一點加幾成（舊的是 0.1 一點，配上舊尺度）
@@ -3932,6 +3932,9 @@ class AttrV2Rules(_Strict):
     foe_levels: list[tuple[float, float]] = Field(default_factory=lambda: [
         (9, 1), (30, 8), (200, 12), (400, 17), (600, 21), (1200, 30), (3000, 45), (6000, 60)])
     foe_aptitude: int = Field(default=5, ge=1)  # 沒寫資質的那一項當幾（人物表的資質 2～9，5 是平均）
+    # 挑戰大勢人物本人：等級跟著季曆長（企劃者 2026-11-04 照建議，取代江湖水漲）。季末比開季多幾級，中間照季曆天數直線；
+    # 難度與屬性都照長上去的等級（foe_levels 反過來換）【草】
+    figure_growth: float = Field(default=35.0, ge=0)
 
     @model_validator(mode="after")
     def _presets_add_up(self) -> AttrV2Rules:

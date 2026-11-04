@@ -101,6 +101,29 @@ def foe_level(content: Content, difficulty: float) -> float:
     return table[-1][1]
 
 
+def foe_difficulty(content: Content, level: float) -> float:
+    """foe_level 反過來：等級換成難度（中間照直線；比表上最高還高的照最後一段的斜率往外推）。"""
+    table = content.config.attributes.v2.foe_levels
+    if level <= table[0][1]:
+        return table[0][0]
+    for (p0, l0), (p1, l1) in zip(table, table[1:]):
+        if level <= l1:
+            return p0 + (p1 - p0) * (level - l0) / (l1 - l0)
+    (p0, l0), (p1, l1) = table[-2], table[-1]
+    return p1 + (p1 - p0) * (level - l1) / (l1 - l0)
+
+
+def figure_squad(content: Content, season, squad, now: float):
+    """挑戰大勢人物本人的那一路，等級跟著季曆長（figure_growth）：開季照難度換的等級，季末多 figure_growth 級；
+    難度照長上去的等級換回來，屬性也照它（Squad.level）。"""
+    from . import calendar
+
+    days = calendar.total_days(content, season) or 1
+    share = min(1.0, max(0.0, calendar.cal_days(now, content, season) / days))
+    level = foe_level(content, squad.difficulty) + content.config.attributes.v2.figure_growth * share
+    return squad.model_copy(update={"level": level, "difficulty": round(max(squad.difficulty, foe_difficulty(content, level)), 1)})
+
+
 def grown(content: Content, level: float, aptitude: float) -> float:
     """資質 aptitude（平均是 foe_aptitude）的人長到 level 級，一項有多少：跟平均人同一條曲線，照資質放大縮小成長的那一截。"""
     cfg = content.config.attributes.v2

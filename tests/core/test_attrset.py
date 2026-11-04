@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import random
+
+import pytest
 import tempfile
 from pathlib import Path
 
@@ -181,3 +183,20 @@ def test_historical_figures_do_not_join_in_the_new_season():
     cid = next(k for k, ch in c.characters.items() if ch.recruitable)
     lines = roster.recruit(g.state, c, g.world, cid)
     assert "不會跟你走" in lines[0] and roster.owned_by(g.world, cid) is None
+
+
+def test_figures_grow_with_the_calendar_instead_of_rise():
+    from tianxia import calendar
+
+    g = _game()
+    c = g.content
+    fid = next(iter(c.figures))
+    g.state.world.time = 0
+    start = g._figure_squad(fid)
+    g.state.world.time = calendar.calendar_end(c, g.state.world)
+    end = g._figure_squad(fid)
+    assert end.level - start.level == pytest.approx(c.config.attributes.v2.figure_growth, abs=0.5)
+    assert end.difficulty > start.difficulty
+    assert attrset.foe_level(c, attrset.foe_difficulty(c, 25)) == pytest.approx(25)
+    old = _game(False)
+    assert old._figure_squad(fid).level is None

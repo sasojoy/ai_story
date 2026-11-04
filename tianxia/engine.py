@@ -7025,6 +7025,8 @@ class Game:
         倍數，倍數照你這一季打贏他幾次（figure_wins）往上加（rise.big）。勝算、備料（A、C 段）、打起來都照這一份。"""
         s, c = self.state, self.content
         squad = figures.squad_of(s, c, fid)
+        if attrset.on(c, s.world):
+            return attrset.figure_squad(c, s.world, squad, s.world.time)
         if not rise.on(c, s.world):
             return squad
         # 地利不浮上去（武學隨地理環境 2.1）；玉璽碎片的戰力也不浮上去（改版 PM 五之一 2）

@@ -22,9 +22,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import measure_difficulty as md  # noqa: E402  它開暫存資料庫、包 stdout
 
-from tianxia import attrset, rules, team  # noqa: E402
+from tianxia import attrset, calendar, rules, team  # noqa: E402
 
 UPS: list[float] = []
+GROWTHS: list[float] = []
 REGIMES = ("v1", "warrior", "strategist", "ranger", "envoy", "balanced")
 
 
@@ -54,7 +55,7 @@ def snapshot(game) -> dict:
     train = sorted({sid for loc in c.locations.values() for sid in loc.enemies if sid in c.squads})
     figs = [c.squads[f.squad].model_copy(update={"difficulty": md.figures_base(game, fid)}) for fid, f in c.figures.items()]
     checks = md.checks(c)
-    out = {"level": level}
+    out = {"level": level, "day": round(calendar.cal_days(s.world.time, c, s.world), 1)}
     for regime in REGIMES:
         _switch(game, regime)
         low, high, odds = [], [], {}
@@ -66,7 +67,8 @@ def snapshot(game) -> dict:
             r = _rate(game, sq)
             (low if lv <= level else high).append(r)
             odds.setdefault(_odds(game, sq), []).append(r)
-        fig_rates = [_rate(game, sq) for sq in figs]
+        grown = figs if regime == "v1" else [attrset.figure_squad(c, s.world, sq, s.world.time) for sq in figs]  # 新季：等級跟著季曆長
+        fig_rates = [_rate(game, sq) for sq in grown]
         chances = [(ch.stat, rules.check_chance(ch, s, c, game.world)) for ch in checks]
         row = {
             "low": statistics.mean(low) if low else None, "n_low": len(low),
@@ -90,6 +92,13 @@ def snapshot(game) -> dict:
             rates.clear()
             rates.update(keep)
             row["values"] = attrset.values(s, c)
+        if regime == "balanced":
+            keep = c.config.attributes.v2.figure_growth
+            for g in GROWTHS:  # --growth：人物季末多長幾級，各量一次（均衡）
+                c.config.attributes.v2.figure_growth = g
+                rs = [_rate(game, attrset.figure_squad(c, s.world, sq, s.world.time)) for sq in figs]
+                row.setdefault("growth", {})[g] = statistics.mean(rs)
+            c.config.attributes.v2.figure_growth = keep
         out[regime] = row
     _switch(game, "v1")
     return out
@@ -106,9 +115,11 @@ def main():
     ap.add_argument("--profile", default="season21")
     ap.add_argument("--runs", type=int, default=600)
     ap.add_argument("--up", type=float, nargs="*", default=[], help="檢定每一級的基本成功率另外加這幾個量各算一次")
+    ap.add_argument("--growth", type=float, nargs="*", default=[], help="人物季末多長幾級（figure_growth）另外量這幾個值（均衡）")
     ap.add_argument("--json")
     args = ap.parse_args()
     UPS[:] = args.up
+    GROWTHS[:] = args.growth
     md.LEVELS = tuple(args.levels)
     md.RUNS = args.runs
     md.snapshot = snapshot
@@ -118,10 +129,11 @@ def main():
         snaps = md.run(seed, grind, "solo")
         result[seed] = snaps
         for lv, r in sorted(snaps.items()):
-            print(f"== 種子 {seed}・{lv} 級（實 {r['level']}）", flush=True)
+            print(f"== 種子 {seed}・{lv} 級（實 {r['level']}，季曆第 {r['day']} 天）", flush=True)
             for regime in REGIMES:
                 x = r[regime]
                 weak = f"｜最輕 {x['weak_key']} {pct(x['weak'])}" if "weak" in x else ""
+                weak += "".join(f"｜人物長{g:g}級：{pct(v)}" for g, v in x.get("growth", {}).items())
                 weak += "".join(f"｜+{u:g}：{pct(a)}・最輕 {pct(b)}" for u, (a, b) in x.get("up", {}).items())
                 print(f"  {regime:<10} 同級以下 {pct(x['low'])}（{x['n_low']}）高十級內 {pct(x['high'])}（{x['n_high']}）"
                       f"人物 {pct(x['figs'])}・過半 {pct(x['figs_50'])}｜檢定 {pct(x['checks'])}{weak}")
