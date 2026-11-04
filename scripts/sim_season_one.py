@@ -281,7 +281,7 @@ def main() -> None:
                         help="每陣營幾個假人（官軍、黃巾、豪強）")
     parser.add_argument("--hours", type=float, default=60.0, help="最多跑幾個現實小時（週末設定一季 60 小時）")
     parser.add_argument("--tick", type=float, default=60.0, help="假時鐘每一輪走幾秒")
-    parser.add_argument("--profile", default="weekend")
+    parser.add_argument("--profile", default="week7")
     args = parser.parse_args()
     targets = dict(zip(SIDES, args.factions))
     print(profile_line(load_content(ROOT / "content", profile=args.profile), args.profile), flush=True)

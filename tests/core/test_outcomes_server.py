@@ -101,7 +101,7 @@ def test_the_plow_button_is_only_there_in_a_branching_season(monkeypatch):
     assert view["event_free_text"] == server.CONTENT.events[PLOW].free_text.prompt
 
 
-@pytest.mark.parametrize("profile, shown", [("season21", True), ("week7", True), ("weekend", False), (None, False)])
+@pytest.mark.parametrize("profile, shown", [("season21", True), ("week7", True), (None, False)])
 def test_the_plow_follows_the_profile(profile, shown):
     content = real_content(profile)
     content.config.auto_open_first_season = True  # 正式內容預設要管理者開季

@@ -10,7 +10,7 @@
 - 事件檢定：正式內容每一個檢定照本人此刻的屬性算成功率，平均與 ≥90% 的佔幾成。
 贏面＝大勝＋險勝（勝算那一套，氣血當滿的），對手的屬性與一門打不遍不算（大場面還有模型的 ±15，也不算）。
 
-用法：.venv/Scripts/python.exe scripts/measure_difficulty.py --seeds 1 2 [--profile weekend] [--kinds solo team taught] [--rise on|off]
+用法：.venv/Scripts/python.exe scripts/measure_difficulty.py --seeds 1 2 [--profile week7] [--kinds solo team taught] [--rise on|off]
 （--rise off 是修前：江湖水漲關著；人物的難度照開季聲威，練功的走法不打人物）
 減法季（主機側計畫 Task 2-6；Config.jianfa，season21、week7 開著）：--jianfa on|off 強制開關（預設照設定）；--bump 0 0.5 1 在每一個停的等級
 把江湖水漲的事件加難乘這幾個倍數（Config.jianfa.event_bump_scale）各算一次事件檢定的平均與 ≥90% 的佔幾成（不必重練；關著的季倍數不起作用）。
@@ -305,7 +305,7 @@ def pct(x: float) -> str:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, nargs="+", default=[1, 2])
-    ap.add_argument("--profile", default="weekend")
+    ap.add_argument("--profile", default="week7")
     ap.add_argument("--kinds", nargs="+", default=["solo", "team", "taught"])
     ap.add_argument("--rise", choices=("on", "off"), default="on", help="江湖水漲開著（修後）或關著（修前）")
     ap.add_argument("--tiers", action="store_true", help="只量挑戰本人的大勝／險勝／僵持／落敗（照打起來的回合與戰法）與事件檢定")

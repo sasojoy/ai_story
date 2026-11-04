@@ -231,7 +231,7 @@ def main() -> None:
     ap.add_argument("--name-rate", type=float, default=0.0)
     ap.add_argument("--ranks", type=float, nargs=2, default=None)
     args = ap.parse_args()
-    content = load_content(ROOT / "content", profile="weekend")
+    content = load_content(ROOT / "content", profile="week7")
     if args.generals:
         if args.ranks:
             content.config.battle.generals.ranks = tuple(args.ranks)

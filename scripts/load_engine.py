@@ -71,7 +71,7 @@ def _note_error(errors: dict[str, int], samples: dict[str, str], exc: BaseExcept
 def _import_server(db_path: Path):
     """server 在 import 時就讀環境變數、載入內容；要在 import 之前把資料庫指到暫存檔。"""
     os.environ["TIANXIA_DB"] = str(db_path)
-    os.environ.setdefault("TIANXIA_PROFILE", "weekend")
+    os.environ.setdefault("TIANXIA_PROFILE", "week7")
     import server  # noqa: PLC0415
 
     return server
