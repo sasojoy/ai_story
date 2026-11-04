@@ -12571,8 +12571,9 @@ class MilitaryScenario(Scenario):
                 self.press(who, "act:rank2", f"第 {k + 1} 次")
             self.me(who, "做滿之後")
         self.place(self.G_R2, None)
-        self.edit(self.G_R2, lambda p: setattr(p, "stamina", 0.0))
+        self.edit(self.G_R2, lambda p: (p.rank2_days.clear(), setattr(p, "stamina", 0.0)))  # 今天的次數清掉，才輪得到「體力不夠」那一句（審查：原本被「今天做滿」擋在前面）
         self.menu(self.G_R2, "體力沒了", "act:rank2")
+        self.press(self.G_R2, "act:rank2", "體力沒了")
         self.press(self.LONE, "act:rank2", "散人")
 
     def rank34(self) -> None:
@@ -12644,7 +12645,7 @@ class MilitaryScenario(Scenario):
         self.grain(self.G_RUN2, need + 2)
         self.press(self.G_RUN2, "act:convoy", "接糧車")
         self.hop(self.G_RUN2)
-        for who, chance, tier in ((self.G_RUN, 0.0, "大勝"), (self.H_RUN, 1.0, "落敗"), (self.G_RUN2, 0.0, "大勝")):
+        for who, chance, tier in ((self.G_RUN, 0.0, "大勝"), (self.H_RUN, 1.0, "落敗"), (self.G_RUN2, 1.0, "大勝")):  # 顧長庚撞上截糧隊、打贏、照樣送到（審查：原本機率 0.0，一場仗都沒打）
             for _ in range(10):
                 self.do(ADMIN, "fast_forward", {"hours": 1})
                 with self.tuned(convoy_ambush_chance=chance), self.fights(tier):
@@ -12669,6 +12670,28 @@ class MilitaryScenario(Scenario):
             self.main(who)
             self.menu(who, "輪替之後", "act:rank:")
             self.me(who, "輪替之後")
+        for who in (self.H_CALL, self.G_CALL, self.LONE, self.G_SEAT, "無此人"):  # 管理頁「玩家個人劇情」查名號（召見的計畫經它回給管理頁）
+            self.call(ADMIN, "POST", "/api/admin/player", {"name": who})
+        self.pause()
+
+    def pause(self) -> None:
+        """賽季時鐘暫停中：發軍令、輪替席次、發召見、有資格的人同步（抄帳什麼都不做）、走一步、答事件；繼續之後再同步一次（審查：這一路原本沒人走到）。"""
+        self.do(ADMIN, "pause_clock")
+        self.edit(self.G_R3, lambda p: (setattr(p, "qualified", True), p.contrib_weeks.update({1: 55})))
+        self.do(ADMIN, "issue_orders")
+        self.do(ADMIN, "rotate_seats")
+        self.do(ADMIN, "summon", {"name": self.G_R3})
+        for who in (self.G_R3, self.G_SEAT, self.H_SEAT):
+            self.main(who)
+            self.me(who, "暫停中")
+        self.hop(self.G_R3)
+        self.settle_choices(self.G_R3, 3)
+        self.me(self.G_R3, "暫停中走了一步")
+        self.world_view("暫停中")
+        self.do(ADMIN, "resume_clock")
+        for who in (self.G_R3, self.G_SEAT):
+            self.main(who)
+            self.me(who, "繼續之後")
 
     def bots(self) -> None:
         """假人：BotRunner 兩個（官軍，站在有戰線的地方、體力滿）若干輪；整季機器人眼前的選單挑哪一顆。"""
@@ -12742,6 +12765,11 @@ class MilitaryScenario(Scenario):
 
     def season(self) -> None:
         """收季、開下一季：手上的召見、押著的糧車、每週貢獻帳、席次怎麼帶。"""
+        self.place(self.G_RUN2, self.spot("guan", 0))  # 收季時押著一車、不交（審查：休季時有車也回 None、換季帶不帶，原本沒人走到）
+        self.grain(self.G_RUN2, self.c.config.convoy_grain + 2)
+        self.press(self.G_RUN2, "act:convoy", "收季前接車")
+        self.main(self.G_RUN2)
+        self.me(self.G_RUN2, "收季前押著")
         self.do(ADMIN, "end_season")
         for who in (self.G_SEAT, self.G_CALL, self.H_CALL, self.G_RUN2):
             self.main(who)
