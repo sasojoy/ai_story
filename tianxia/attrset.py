@@ -75,10 +75,12 @@ def expect(content: Content, level: int, key: str | None = None) -> float:
 
 
 def v1_value(state: GameState, content: Content, new_value: float) -> float:
-    """新尺度的值換回舊尺度（5 起、每級約 stat_points_per_level ÷ 5）：還沒改寫的舊公式照舊讀得到差別。"""
+    """新尺度的值換回舊尺度（5 起、每級約 stat_points_per_level ÷ 5）：還沒改寫的舊公式照舊讀得到差別。
+    夾在舊的 stat_cap（15）：全點一項的人換回去會超過舊的上限，舊的武學、戰法、氣血公式只認得 5～15 這一段
+    （企劃者 2026-11-04「先確保我們舊的武學效果不會因為新的屬性點而亂套」）。"""
     cfg = content.config.attributes.v2
     ratio = cfg.per_level / max(1, content.config.stat_points_per_level)
-    return V1_BASE + (new_value - cfg.base) / ratio
+    return min(float(content.config.stat_cap), V1_BASE + (new_value - cfg.base) / ratio)
 
 
 def legacy(state: GameState, content: Content, key: str, default: float = V1_BASE) -> float:

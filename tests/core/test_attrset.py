@@ -272,3 +272,13 @@ def test_custom_growth_is_capped_per_attribute():
     cap = g.content.config.attributes.v2.custom_max
     assert attrset.growth_problem(g.content, "custom", {"str": cap + 1, "lead": 1, "int": 1, "spd": 1, "cha": 10 - cap - 4})
     assert attrset.view(g.state, g.content)["custom_max"] == cap
+
+
+def test_extreme_builds_stay_inside_the_old_stat_range():
+    """企劃者 2026-11-04「先確保我們舊的武學效果不會因為新的屬性點而亂套」：全點一項的人換回舊尺度不超過 stat_cap，
+    舊的武學、戰法、氣血公式只會看到舊的 5～15。"""
+    a, b = _pvp_pair(level=60)
+    cap = a.content.config.stat_cap
+    for g in (a, b):
+        for old in ("str", "agi", "con", "wis"):
+            assert attrset.V1_BASE <= team.v1_stat(g.state, g.content, old) <= cap
