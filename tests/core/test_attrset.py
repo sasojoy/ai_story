@@ -55,9 +55,11 @@ def test_custom_split_must_add_up():
     g = _game()
     bad = g.pick_growth("custom", {"str": 9, "lead": 1, "int": 0, "spd": 0, "cha": 0})
     assert "至少" in bad[-1] and g.state.player.growth_preset is None
-    g.pick_growth("custom", {"str": 6, "lead": 1, "int": 1, "spd": 1, "cha": 1})
+    bad = g.pick_growth("custom", {"str": 6, "lead": 1, "int": 1, "spd": 1, "cha": 1})
+    assert "最多" in bad[-1] and g.state.player.growth_preset is None  # 每一項最多 custom_max（4），不能全壓在一項
+    g.pick_growth("custom", {"str": 4, "lead": 3, "int": 1, "spd": 1, "cha": 1})
     _level(g, 3)
-    assert attrset.value(g.state, g.content, "str") == g.content.config.attributes.v2.base + 12
+    assert attrset.value(g.state, g.content, "str") == g.content.config.attributes.v2.base + 8
 
 
 def test_bonus_points_every_ten_levels_have_no_cap():

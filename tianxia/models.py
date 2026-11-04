@@ -3994,6 +3994,7 @@ class AttrV2Rules(_Strict):
         GrowthPreset(key="balanced", name="均衡", split={"str": 2, "lead": 2, "int": 2, "spd": 2, "cha": 2}),
     ])
     custom_min: int = Field(default=1, ge=0)  # 自己配時每一項每級至少長幾點（挑輕的那一項還有基本的成長）
+    custom_max: int = Field(default=4, ge=1)  # ……最多長幾點（跟預設五套最重的那一項一樣；企劃者 2026-11-04「初始成長應該也有上限 不能太誇張」）
     # 舊的鍵（內容的檢定、還沒改寫的讀點）在新的季對到哪一項；博聞拔掉（持有上限只靠等級）
     legacy: dict[str, str] = Field(default_factory=lambda: {"str": "str", "agi": "spd", "con": "lead", "wis": "int"})
     # 檢定（第五節 5.1）：成功率＝難度等級的底 ＋ slope ×（值 − 期望值）÷ 期望值 − 微調 × shift_step，夾在 floor～ceil

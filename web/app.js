@@ -1009,17 +1009,17 @@
       `<button class="btn small" data-act="growth-custom" ${draft ? "disabled" : ""}>自己配</button></div>${draft ? growthEditHtml(g, draft) : ""}</div>`;
   }
 
-  // 自己配（五項屬性的季）：每一項 −／＋，合計要剛好 per_level、每一項至少 custom_min；草稿只在這個分頁（S.growthDraft），按「定下來」才送
+  // 自己配（五項屬性的季）：每一項 −／＋，合計要剛好 per_level、每一項 custom_min～custom_max；草稿只在這個分頁（S.growthDraft），按「定下來」才送
   function growthEditHtml(g, draft) {
     const left = g.per_level - g.keys.reduce((n, [k]) => n + (draft[k] || 0), 0);
     const rows = g.keys.map(([k, name]) => {
       const v = draft[k] || 0;
       return `<div class="growth-step"><span>${esc(name)}</span>` +
         `<button class="btn small" data-act="growth-step" data-key="${esc(k)}" data-d="-1" aria-label="${esc(name)}少一點" ${v <= g.custom_min ? "disabled" : ""}>−</button>` +
-        `<b>${v}</b><button class="btn small" data-act="growth-step" data-key="${esc(k)}" data-d="1" aria-label="${esc(name)}多一點" ${left <= 0 ? "disabled" : ""}>＋</button></div>`;
+        `<b>${v}</b><button class="btn small" data-act="growth-step" data-key="${esc(k)}" data-d="1" aria-label="${esc(name)}多一點" ${left <= 0 || v >= (g.custom_max || g.per_level) ? "disabled" : ""}>＋</button></div>`;
     }).join("");
     const note = left > 0 ? `還剩 ${left} 點` : left < 0 ? `多了 ${-left} 點` : "剛好";
-    return `<div class="growth-edit">${rows}<div class="growth-foot"><span class="growth-left">每級合計 ${g.per_level} 點，每一項至少 ${g.custom_min}：${note}</span>` +
+    return `<div class="growth-edit">${rows}<div class="growth-foot"><span class="growth-left">每級合計 ${g.per_level} 點，每一項 ${g.custom_min}～${g.custom_max || g.per_level}：${note}</span>` +
       `<button class="btn small" data-act="growth-save" ${left === 0 ? "" : "disabled"}>定下來</button>` +
       `<button class="btn small" data-act="growth-cancel">取消</button></div></div>`;
   }

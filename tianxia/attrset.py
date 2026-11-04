@@ -153,7 +153,7 @@ def bonus_between(content: Content, before: int, after: int) -> int:
 
 
 def growth_problem(content: Content, key: str, custom: dict[str, int] | None = None) -> str | None:
-    """挑配比對不對：預設的五套之一，或自己配（五項寫齊、每項至少 custom_min、合計 per_level）。對的回 None。"""
+    """挑配比對不對：預設的五套之一，或自己配（五項寫齊、每項 custom_min～custom_max、合計 per_level）。對的回 None。"""
     cfg = content.config.attributes.v2
     if key != CUSTOM:
         return None if preset(content, key) is not None else "（沒有這一套配比。）"
@@ -163,6 +163,8 @@ def growth_problem(content: Content, key: str, custom: dict[str, int] | None = N
         return f"自己配要寫齊{'、'.join(names.get(k, k) for k in cfg.keys)}。"
     if any(v < cfg.custom_min for v in custom.values()):
         return f"每一項每級至少長 {cfg.custom_min} 點。"
+    if any(v > cfg.custom_max for v in custom.values()):
+        return f"每一項每級最多長 {cfg.custom_max} 點。"
     if sum(custom.values()) != cfg.per_level:
         return f"五項合計要是 {cfg.per_level} 點（現在 {sum(custom.values())}）。"
     return None
@@ -190,5 +192,6 @@ def view(state: GameState, content: Content) -> dict:
         "keys": [[k, names.get(k, k)] for k in cfg.keys],
         "per_level": cfg.per_level,
         "custom_min": cfg.custom_min,
+        "custom_max": cfg.custom_max,
         "now": [[names.get(k, k), v] for k, v in split(state, content).items()],
     }
