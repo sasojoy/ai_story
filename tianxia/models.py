@@ -3828,6 +3828,59 @@ class AttrEffect(_Strict):
     steps: list[tuple[float, float]] = Field(default_factory=list)
 
 
+class GrowthPreset(_Strict):
+    """季初挑的一套每級成長（第三節 3.1）：名字＋每一項每級長幾點（合計要等於 AttrV2Rules.per_level）。"""
+
+    key: str
+    name: str
+    split: dict[str, int]
+
+
+class AttrV2Rules(_Strict):
+    """第 ② 階段的五項屬性（屬性與跨季架構 v2 第三節；Joy 11/4 定顯示名混搭）。enabled 是主機的開關，加上開季時蓋的章
+    （WorldState.attrs_v2，attrset.on）才生效：正在跑的季不變。數字全是【草】，量完（第十一節）給 Joy 挑。
+    屬性不存進存檔的 stats：本人的值＝base ＋（等級 − 1）× 配比 ＋ 自己配的點（PlayerState.attr_alloc），讀的時候算（attrset.value），
+    所以季中改配比一律回溯、不用補帳。"""
+
+    enabled: bool = False
+    keys: list[str] = Field(default_factory=lambda: ["str", "lead", "int", "spd", "cha"])
+    base: int = Field(default=50, ge=1)  # 起始值（每一項）
+    per_level: int = Field(default=10, ge=1)  # 每升一級五項合計長幾點（照配比分）
+    bonus_every: int = Field(default=10, ge=1)  # 每幾級送一次點……
+    bonus_points: int = Field(default=10, ge=0)  # ……送幾點，自己配、沒有上限
+    default_preset: str = "balanced"  # 還沒挑的人照這一套長（挑了就照挑的回溯）
+    presets: list[GrowthPreset] = Field(default_factory=lambda: [
+        GrowthPreset(key="warrior", name="武將", split={"str": 4, "lead": 3, "int": 1, "spd": 1, "cha": 1}),
+        GrowthPreset(key="strategist", name="謀士", split={"str": 1, "lead": 2, "int": 4, "spd": 1, "cha": 2}),
+        GrowthPreset(key="ranger", name="遊俠", split={"str": 2, "lead": 1, "int": 1, "spd": 4, "cha": 2}),
+        GrowthPreset(key="envoy", name="說客", split={"str": 1, "lead": 1, "int": 3, "spd": 1, "cha": 4}),
+        GrowthPreset(key="balanced", name="均衡", split={"str": 2, "lead": 2, "int": 2, "spd": 2, "cha": 2}),
+    ])
+    custom_min: int = Field(default=1, ge=0)  # 自己配時每一項每級至少長幾點（挑輕的那一項還有基本的成長）
+    # 舊的鍵（內容的檢定、還沒改寫的讀點）在新的季對到哪一項；博聞拔掉（持有上限只靠等級）
+    legacy: dict[str, str] = Field(default_factory=lambda: {"str": "str", "agi": "spd", "con": "lead", "wis": "int"})
+    # 檢定（第五節 5.1）：成功率＝難度等級的底 ＋ slope ×（值 − 期望值）÷ 期望值 − 微調 × shift_step，夾在 floor～ceil
+    grade_rates: dict[str, float] = Field(default_factory=lambda: {
+        "easy": 0.8, "normal": 0.6, "hard": 0.45, "harsh": 0.3, "legend": 0.15})
+    slope: float = 1.0
+    shift_step: float = 0.05
+    practice_step: float = 0.05  # 熟練加成每一點加幾成（舊的是 0.1 一點，配上舊尺度）
+    attr_xinde: int = Field(default=3, ge=0)  # 事件寫的屬性點在新的季改給心得：每一點換幾點心得（第三節：一般事件不再直接給屬性）
+    # 效果表（新尺度，第 2 批接上對抗式：我 − 他）。空的時候（第 1 批）新的五項換回舊尺度（attrset.v1_value）餵舊的效果表
+    effects: list[AttrEffect] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _presets_add_up(self) -> AttrV2Rules:
+        for preset in self.presets:
+            if set(preset.split) != set(self.keys) or sum(preset.split.values()) != self.per_level:
+                raise ValueError(f"成長配比 {preset.key} 要寫齊 {'、'.join(self.keys)}、合計 {self.per_level}")
+        if self.default_preset not in {p.key for p in self.presets}:
+            raise ValueError(f"default_preset {self.default_preset} 不是任何一套配比")
+        if set(self.grade_rates) != {"easy", "normal", "hard", "harsh", "legend"}:
+            raise ValueError("grade_rates 要寫齊五個難度等級")
+        return self
+
+
 class AttributesRules(_Strict):
     """屬性的效果表（第二節第 2 層）。預設值＝現在的數字：臂力管外功、根骨管內功、身法管落敗閃成僵持，每一點的量照舊讀
     stat_bonus_per_point 與 dodge_per_point（減法季讀 jianfa.stat_rates）。"""
@@ -3837,6 +3890,7 @@ class AttributesRules(_Strict):
         AttrEffect(attr="con", hook="inner", per="bonus_per_point"),
         AttrEffect(attr="agi", hook="dodge", per="dodge_per_point"),
     ])
+    v2: AttrV2Rules = Field(default_factory=AttrV2Rules)  # 第 ② 階段的五項（見 AttrV2Rules）
 
 
 class CheckGrade(_Strict):
@@ -3845,6 +3899,7 @@ class CheckGrade(_Strict):
     key: str
     name: str
     dc: int
+    low: int = 0  # 舊寫法（difficulty）從幾起算這一級（Joy 11/4：3～4 易、5～6 尋常、7～8 難、9～12 極難、13 以上傳說）
 
 
 class CheckRules(_Strict):
@@ -3852,11 +3907,11 @@ class CheckRules(_Strict):
     夾在 floor～ceil。期望值現在就是江湖水漲的那幾點（rules.check_expect → rise.event_bump）。預設值＝現在的數字。"""
 
     grades: list[CheckGrade] = Field(default_factory=lambda: [
-        CheckGrade(key="easy", name="易", dc=4),
-        CheckGrade(key="normal", name="尋常", dc=5),
-        CheckGrade(key="hard", name="難", dc=7),
-        CheckGrade(key="harsh", name="極難", dc=11),
-        CheckGrade(key="legend", name="傳說", dc=14),
+        CheckGrade(key="easy", name="易", dc=4, low=0),
+        CheckGrade(key="normal", name="尋常", dc=5, low=5),
+        CheckGrade(key="hard", name="難", dc=7, low=7),
+        CheckGrade(key="harsh", name="極難", dc=11, low=9),
+        CheckGrade(key="legend", name="傳說", dc=14, low=13),
     ])
     shift_max: int = Field(default=2, ge=0)  # 同一級裡的微調最多幾點（現有內容換過來只用到 ±1；9 這一格是 +2）
     base_rate: float = 0.5
@@ -5296,6 +5351,7 @@ class Content(_Strict):
     config: Config
     # 屬性定義（content/attributes.json，屬性與跨季架構 v2 第二節第 1 層）；沒有這個檔照 team.COMBAT_STATS 與 Config.stat_names
     attributes: list[StatDef] = Field(default_factory=list)
+    attributes_v2: list[StatDef] = Field(default_factory=list)  # 五項屬性的定義（content/attributes_v2.json；attrset，新的季才用）
     scenario: Scenario
     locations: dict[str, Location]
     events: dict[str, Event]

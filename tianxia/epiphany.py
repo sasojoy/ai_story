@@ -32,7 +32,7 @@ from types import SimpleNamespace
 
 from pydantic import BaseModel
 
-from . import annals, insight_fx, insights, naming, storyline
+from . import annals, attrset, insight_fx, insights, naming, storyline
 from .martial_arts import Insight
 from .models import (
     GOD_FORMS, Content, Effect, GodTrait, StoryAnswer, StoryDef, StoryEnding, StoryFail, StoryQuestion, StoryStage,
@@ -152,7 +152,7 @@ def chance(state: GameState, content: Content) -> float:
     n = state.player.epiphanies
     if n >= len(r.chances):
         return 0.0
-    wis = state.player.stats.get("wis", 5)
+    wis = attrset.legacy(state, content, "wis", 5)
     return min(1.0, r.chances[n] * min(r.wis_cap, (1 + r.wis_step) ** max(0, wis - r.wis_from)))
 
 

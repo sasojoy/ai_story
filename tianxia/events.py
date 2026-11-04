@@ -8,7 +8,7 @@ from typing import Literal
 from . import foreshadow, precise, tiers
 from . import stances as stance_rules
 from .models import Check, Choice, Content, Event, FreeTextChoice, Location
-from .rules import check_condition, check_outlook, fail_stamina, practice_line, season_one_off
+from .rules import check_condition, check_outlook, check_stat_name, fail_stamina, practice_line, season_one_off
 from .state import GameState
 from .world_state import WorldStateStore
 
@@ -198,7 +198,7 @@ def check_note(check: Check, state: GameState, content: Content, world: WorldSta
     心裡話前面。事件選項（choice_label）與有檢定的行動（第 2 階行動、第 3 階煽動起事，企劃者裁決 E5.3：
     「{行動}（體力 N・{屬性名} {數值}：{心裡話}）」）都用這一個，只有這一份寫法。只是檢定那一段：體力的代價各自另寫。"""
     outlook = check_outlook(check, state, content, world)
-    stat = content.config.stat_names.get(check.stat, check.stat)
+    stat = check_stat_name(check, content, state.world)
     value = f"{round(outlook.stat_value, 1):g}" + (f"＋{outlook.bonus}" if outlook.bonus else "")
     line = voice_line(check.stat, outlook.gap, content)
     practiced = practice_line(check, state, content, world)

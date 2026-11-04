@@ -135,7 +135,7 @@ def forge_odds(state: GameState, content: Content, world: WorldStateStore, kind:
     配方有沒有人打過都一樣。"""
     rule = rules_of(content, slot_of(kind)).quality
     m, a = content.materials[main], content.materials[aux]
-    wis = state.player.stats.get("wis", team.BASE_STAT)
+    wis = team.v1_stat(state, content, "wis")
     done = state.player.forge_counts.get(recipe_key(kind, main, aux), 0)
     scored = [
         ("aux", rule.aux_tier.get(str(a.tier - m.tier), 0.0)),

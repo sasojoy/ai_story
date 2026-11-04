@@ -14,6 +14,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from . import arts as arts_mod
+from . import attrset  # 五項屬性（屬性與跨季架構 v2 第三節）
 from . import ascend  # 破境卡（招式與絕學稿案第三節）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import chapters  # 章回主線（企劃者 2026-10-29）
@@ -3677,7 +3678,7 @@ class Game:
         探索真的擲骰（_explore_outcome）與行動列底下那一行（action_notes，explain-1）讀同一份：說的跟擲的不會走樣。"""
         s, c = self.state, self.content
         mix = c.config.explore_mix_of(loc.tags).weights
-        wis = team.stat_factor(c, s.player.stats.get("wis", team.BASE_STAT), s.world)
+        wis = team.stat_factor(c, team.v1_stat(s, c, "wis"), s.world)
         sharp = wis * treasures.amount(s, c, "insight")  # 寶物「探索悟意境」跟悟性疊乘（裝備四欄 6.2）
         return [
             (b, mix[b] * (sharp if b == "insight" else 1))
@@ -6928,7 +6929,7 @@ class Game:
         rng = random.Random(f"{p.name}|{record.id}")
         lo = traits.loadout(s, c, self.world)
         foe = rounds.Foe(name=squad.name, attribute=squad.attribute, agility=rounds.foe_agility(squad.difficulty))
-        our_agility = float(p.stats.get("agi", team.BASE_STAT))
+        our_agility = float(team.v1_stat(s, c, "agi"))
         fighters = team.fighters(s, c, self.world)
         if clash is not None:
             played = rounds.from_clash(clash, fighters, foe, our_agility, hp_lost, rng)
@@ -7848,7 +7849,7 @@ class Game:
         hours = (end_time - p.seclusion_start) / HOUR
         # 寶物「閉關心得」（裝備四欄 6.2）：照出關那一刻身上那件算——寶物隨時能換（2.3【定】，企劃者 2026-10-11），閉關到一半換上也算
         bonus = 1 + treasures.amount(self.state, self.content, "seclusion")
-        amount = round(hours * cfg.seclusion_xinde_per_hour * (1 + p.stats["wis"] / 20) * bonus)
+        amount = round(hours * cfg.seclusion_xinde_per_hour * (1 + team.v1_stat(self.state, self.content, "wis", 0) / 20) * bonus)
         p.busy_until = None
         p.seclusion_done = end_time  # 天時地利的「心靜」：出關之後一陣子開爐（fusion.setting_points）
         p.stats["xinde"] = p.stats.get("xinde", 0) + amount
@@ -8737,12 +8738,43 @@ class Game:
         ))
         return self._log([REFILL_LINE, gained])
 
+    def _allocate_v2(self, stat: str) -> list[str]:
+        """五項屬性的季的配點（attrset）：送的點加到一項（PlayerState.attr_alloc），沒有上限；寫法同舊的配點。"""
+        p, c = self.state.player, self.content
+        if stat not in attrset.keys(c):
+            return self._log(["（沒有這項屬性。）"])
+        if p.stat_points <= 0:
+            return self._log([f"沒有可以分配的屬性點，每 {c.config.attributes.v2.bonus_every} 級送一次。"])
+        name = attrset.names(c, self.state.world).get(stat, stat)
+        p.stat_points -= 1
+        p.attr_alloc[stat] = p.attr_alloc.get(stat, 0) + 1
+        journal.add_entry(self.state, JournalEntry(time=self.state.world.time, title=journal.ALLOCATE, changes=[f"{name} +1"]), merge=True)
+        left = f"（還有 {p.stat_points} 點可以分配）" if p.stat_points else ""
+        self._guide(self._note_action("allocate"))
+        return self._log([f"{name} +1{left}"])
+
+    @_not_while_preparing
+    def pick_growth(self, preset: str, custom: dict | None = None) -> list[str]:
+        """挑這一季的成長配比（屬性與跨季架構 v2 3.1：五套預設或自己配，合計固定）：只有五項屬性的季有；回溯照現在的等級整條重算。"""
+        s, c = self.state, self.content
+        if not attrset.on(c, s.world):
+            return self._log(["（這一季沒有成長配比。）"])
+        custom = {str(k): v for k, v in (custom or {}).items()} if isinstance(custom, dict) else None
+        problem = attrset.growth_problem(c, preset, custom)
+        if problem:
+            return self._log([problem])
+        line = attrset.pick(s, c, preset, custom)
+        journal.add_entry(s, JournalEntry(time=s.world.time, title="成長配比", changes=[line]))
+        return self._log([line])
+
     @_not_while_preparing
     def allocate_stat(self, stat: str) -> list[str]:
         """把升級得到的屬性點分配到一項（武學與成長設計 6.2）：每項最高 stat_cap，這個版本不能洗點。
         配成了才寫江湖紀錄，連按幾次（玩家、假人都一樣）併成一則「配點」；被拒絕（沒有點、到頂、沒這項屬性）
         只回一句話，不留紀錄（武學與成長計畫 F12）。"""
         p, cfg = self.state.player, self.content.config
+        if attrset.on(self.content, self.state.world):
+            return self._allocate_v2(stat)
         name = cfg.stat_names.get(stat, stat)
         if stat not in team.COMBAT_STATS:
             return self._log(["（沒有這項屬性。）"])
@@ -9396,7 +9428,7 @@ class Game:
         wp.stats["silver"] = wp.stats.get("silver", 0) + taken
         con = team.con_of(loser.state, c, loser.world, PLAYER)
         cut = team.armor_cut(loser.state, c, loser.world)  # 截殺輸的一方只吃防具（裝備四欄 4.4）：不吃化勁，也就不必夾合計上限
-        hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0,
+        hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=team.v1_stat(loser.state, c, "agi"), con=con, injury=0.0,
                                  season=loser.state.world)
         # 散人（揭了通緝）不記貢獻；第一季規則關著的季沒有晉升，也不記（懸賞榜設計 2.2 第 4 點，寫法同軍餉 _showdown_pay）
         contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None and season_one(c, self.state.world) else 0
@@ -9721,7 +9753,7 @@ class Game:
             left -= got
         con = team.con_of(loser.state, c, loser.world, PLAYER)
         cut = team.armor_cut(loser.state, c, loser.world)
-        hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0,
+        hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=team.v1_stat(loser.state, c, "agi"), con=con, injury=0.0,
                                  season=loser.state.world)
         contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None and season_one(c, self.state.world) else 0
         if contrib:
@@ -11911,6 +11943,14 @@ class Game:
         """功能包合進江湖畫面頂層的資料（FEATURES 的 status，照清單的順序；例：商城的入口 main.mall）。server.main_view 放在原本商城那一格。"""
         return features_core.status(self)
 
+    def _attr_rows(self, names: dict[str, str]) -> list[tuple[str, int, str]]:
+        """狀態列的屬性（名字, 數值, 鍵）：舊的季照存檔的五屬性；五項屬性的季照 attrset 算（武力、統御……）。"""
+        s, c = self.state, self.content
+        if attrset.on(c, s.world):
+            shown = attrset.names(c, s.world)
+            return [(shown[k], int(attrset.value(s, c, k)), k) for k in attrset.keys(c)]
+        return [(names[k], s.player.stats[k], k) for k in team.COMBAT_STATS]
+
     def status_data(self) -> dict:
         """狀態列的資料（數字與短字串），網頁前端照這份自己排版；status_text 是同一份資料的文字版。"""
         s, c = self.state, self.content
@@ -11972,9 +12012,10 @@ class Game:
             "silver": p.stats.get("silver", 0),
             "xinde": p.stats.get("xinde", 0),
             "minor": [(names[k], p.stats.get(k, 0)) for k in ("fame", "good", "evil")],
-            "attrs": [(names[k], p.stats[k], k) for k in team.COMBAT_STATS],  # 第三項是鍵：配點鈕送它（allocate_stat）
+            "attrs": self._attr_rows(names),  # 第三項是鍵：配點鈕送它（allocate_stat）
             "stat_points": p.stat_points,
-            "stat_cap": c.config.stat_cap,
+            "stat_cap": c.config.stat_cap if not attrset.on(c, s.world) else 10**9,  # 五項屬性的季沒有上限
+            **({"growth": attrset.view(s, c)} if attrset.on(c, s.world) else {}),  # 挑成長配比的那一塊（屬性與跨季架構 v2 3.1）
             # ＋鈕底下那一行：五項各管什麼、事件檢定也看它們（計畫二最終審查 M2）；網頁只在有點可配時畫
             "stat_uses": skillview.stat_uses(c, s),  # 減法季屬性五段開著時寫「現在給你什麼」的數字（設計 4.5）
             "stat_uses_note": skillview.STAT_CHECK_NOTE,

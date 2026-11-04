@@ -790,6 +790,7 @@
       ${S.showMore ? `<div class="more-stats">
         ${s.renown ? "" : `${s.minor.map(([k, v]) => `${esc(k)} ${v}`).join("　")}　｜　`}${s.attrs.map(([k, v]) => `${esc(k)} ${v}`).join("　")}
         ${s.stat_points ? `<div class="pts-label"><b class="pts">可配 ${s.stat_points} 點</b></div><div class="row alloc">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" data-glow="allocate" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>${statUsesHtml(s)}` : ""}
+        ${s.growth ? growthHtml(s.growth) : ""}
         ${team ? `<br>${team}` : ""}
         ${s.stances && shown("stances") ? stancesHtml(s.stances, s.stance_notes) : ""}
       </div>` : ""}
@@ -872,6 +873,15 @@
 
   // ＋鈕底下一行：五項各管什麼（計畫二最終審查 M2）。點數配了收不回來，按之前要讀得到；文字是引擎給的（status.stat_uses），
   // 一項一個 inline-block：手機上整項一起換行，不會把「根骨：內功威力…」從中間折斷，也不會撐出橫向捲動
+  // 成長配比（五項屬性的季才有 s.growth）：還沒挑時列五套預設，挑了寫現在怎麼長、照樣能改（回溯）
+  function growthHtml(g) {
+    const row = (split) => split.map(([k, v]) => `${esc(k)} ${v}`).join("・");
+    const chosen = g.presets.find((p) => p.key === g.chosen);
+    const head = chosen ? `成長：${esc(chosen.name)}（每級 ${row(g.now)}）` : g.chosen === "custom" ? `成長：自己配（每級 ${row(g.now)}）` : "挑這一季的成長（每級合計 " + g.per_level + " 點，之後改也照現在的等級重算）";
+    return `<div class="growth"><div class="pts-label">${head}</div><div class="row alloc">${g.presets.map((p) =>
+      `<button class="btn small" data-act="growth" data-preset="${esc(p.key)}" title="${esc(row(p.split))}" ${p.key === g.chosen ? "disabled" : ""}>${esc(p.name)}</button>`).join("")}</div></div>`;
+  }
+
   function statUsesHtml(s) {
     if (!s.stat_uses) return "";
     const items = s.stat_uses.map(([k, use]) => `<span>${esc(k)}：${esc(use)}</span>`);
@@ -6087,6 +6097,7 @@
         }
         case "drawer-close": S.pdrawer = false; S.artOpen = null; S.insOpen = null; S.slotPick = null; renderPage(); break;
         case "ins-filter": S.insFilter = el.dataset.filter; renderPage(); break;
+        case "growth": await doMain("growth", { preset: el.dataset.preset }); break; // 五項屬性的季：挑成長配比
         case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
         case "letter-open": {

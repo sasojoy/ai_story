@@ -238,6 +238,8 @@ def load_content(root: Path, profile: str | None = None) -> Content:
     content.config.admins = _with_local_admins(content.config.admins)
     _fill_story_lines(content)
     _load_attributes(content, root / "attributes.json")
+    if (root / "attributes_v2.json").exists():  # 五項屬性（屬性與跨季架構 v2 第三節）：顯示名照季讀（attrset.names），不蓋 stat_names
+        content.attributes_v2 = [_build(StatDef, raw) for raw in _read(root / "attributes_v2.json")]
     resolve_grades(content)
     validate(content)
     _scale_marks(content, content.config.mark_threshold_scale)
@@ -2295,6 +2297,12 @@ def check_attributes(c: Content, need) -> None:
             need(row.per in RATE_KEYS, f"{at}：per 寫字的話要是 {'、'.join(RATE_KEYS)} 其中一個")
         if row.curve == "tiers":
             need(bool(row.steps) and [t for t, _ in row.steps] == sorted(t for t, _ in row.steps), f"{at}：steps 要照門檻由小到大")
+    v2 = c.config.attributes.v2
+    if c.attributes_v2:
+        need([a.key for a in c.attributes_v2] == v2.keys, f"attributes_v2.json：鍵與順序要是 {'、'.join(v2.keys)}")
+    for i, row in enumerate(v2.effects):
+        need(row.attr in v2.keys and row.hook in ATTR_HOOKS, f"attributes.v2.effects[{i}]：{row.attr}→{row.hook} 不認得")
+    need(all(t in v2.keys for t in v2.legacy.values()), "attributes.v2.legacy：只能對到新的五項")
     grades = [g.key for g in c.config.checks.grades]
     need(len(set(grades)) == len(grades) and bool(grades), "checks.grades：等級的 key 不能重複、至少一級")
     need([g.dc for g in c.config.checks.grades] == sorted(g.dc for g in c.config.checks.grades), "checks.grades：照難度由易到難排")

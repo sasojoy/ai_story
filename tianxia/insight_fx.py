@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import random
 
+from . import attrset
 from .models import Content, GeneralTrait, HighTrait
 from .state import GameState, InsightFx
 from .world_state import WorldStateStore
@@ -182,7 +183,7 @@ def roll_quality(state: GameState, content: Content, rng: random.Random, strong:
     at = rng.choices(range(len(QUALITIES)), weights=odds if sum(odds) > 0 else None)[0]
     if strong:
         at += 1
-    wis = int(state.player.stats.get("wis", 5))
+    wis = int(attrset.legacy(state, content, "wis", 5))
     if rng.random() < min(cfg.insight_quality_wis_cap, max(0, wis - 5) * cfg.insight_quality_per_wis):
         at += 1
     return QUALITIES[min(at, len(QUALITIES) - 1)]

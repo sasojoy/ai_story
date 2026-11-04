@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from collections.abc import Callable
 
-from . import armor, calendar, encounter, equipment, mounts, rounds, seal_acts, signature, styles, tactics, traits, treasures, weapons
+from . import armor, attrset, calendar, encounter, equipment, mounts, rounds, seal_acts, signature, styles, tactics, traits, treasures, weapons
 from . import growth  # 減法季三道閘、屬性五段的純規則（growth 只在函式裡反過來 import team）
 from . import terrain as terrain_mod  # 地利（_styled_fighters 的參數 terrain 是開關，模組另取名字）
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, power_at, with_quality
@@ -88,10 +88,22 @@ ATTR_HOOKS = {
 }
 
 
+def stat_keys(state: GameState, content: Content) -> tuple[str, ...]:
+    """這一季本人有哪幾項屬性（狀態列、配點鈕的順序）：五項屬性的季是 attrset.keys，其餘照 COMBAT_STATS。"""
+    return attrset.keys(content) if attrset.on(content, getattr(state, "world", None)) else COMBAT_STATS
+
+
+def v1_stat(state: GameState, content: Content, key: str, default: float = BASE_STAT) -> float:
+    """本人舊尺度的一項屬性（key 是舊的鍵：str、agi、con、wis、lore），給還沒改寫成效果表的舊公式讀。舊的季照存檔
+    （沒有這一項當 default）；五項屬性的季照 legacy 對到新的一項、換回舊尺度（attrset.v1_value），對不到的（博聞）當基準。"""
+    return attrset.legacy(state, content, key, default)
+
+
 def attr_value(state: GameState, content: Content, world: WorldStateStore, key: str, attr: str) -> float:
-    """名冊上這個人（key：PLAYER 或同伴的 id）的一項屬性：本人照存檔（沒有這一項當 BASE_STAT），同伴照 member_stats。"""
+    """名冊上這個人（key：PLAYER 或同伴的 id）的一項屬性：本人照存檔（沒有這一項當 BASE_STAT；五項屬性的季照 v1_stat），
+    同伴照 member_stats。"""
     if key == PLAYER:
-        return state.player.stats.get(attr, BASE_STAT)
+        return v1_stat(state, content, attr)
     return member_stats(state, content, world, key)[attr]
 
 
@@ -135,7 +147,7 @@ def con_of(state: GameState, content: Content, world: WorldStateStore, key: str)
     本人照存檔；同伴照 member_stats（內容的起始值加每級成長，人物資質設計 14.2；原本一律是基準）。
     認 key 不認物件：拿到玩家 Member 的複本也照樣是本人。"""
     if key == PLAYER:
-        return float(state.player.stats.get("con", BASE_STAT))
+        return float(v1_stat(state, content, "con"))
     return member_stats(state, content, world, key)["con"]
 
 
@@ -147,7 +159,7 @@ def member_stats(state: GameState, content: Content, world: WorldStateStore, key
     """這個人的五屬性。玩家本人就是存檔裡的數字（升級給點、自己分配，武學與成長設計 6.2，不再每級自動長）；
     同伴照舊是第 1 級的屬性加上每級成長，同伴的內容沒寫的屬性（博聞）當基準。"""
     if key == PLAYER:
-        return {k: float(state.player.stats.get(k, 0)) for k in COMBAT_STATS}
+        return {k: float(v1_stat(state, content, k, 0)) for k in COMBAT_STATS}
     character = content.characters[key]
     progress = world.get_companion(key)
     steps = growth_steps(content.config, progress.level)  # 30 級以後每 2 級長一步，同本人的屬性點
@@ -747,7 +759,10 @@ def points_between(cfg, before: int, after: int) -> int:
 def level_points(state: GameState, content: Content, before: int, after: int) -> int:
     """本人從第 before 級升到第 after 級拿到幾點屬性（升級的五個地方都走這一個：grant_team_exp、決戰軍餉、翻地分紅、切磋、頭目戰）。
     減法季屬性五段（Config.jianfa 的 stat_milestones）開著：升級不給點，跨過一個境界（milestone_levels）給 stat_points_per_milestone，
-    跨過的最後那一級記進 PlayerState.milestone_due（境界卡，Game.milestone_card；配完點清掉）；關著照 points_between。"""
+    跨過的最後那一級記進 PlayerState.milestone_due（境界卡，Game.milestone_card；配完點清掉）；關著照 points_between。
+    五項屬性的季（attrset.on）：每級照配比自己長（讀的時候算），這裡只給每 bonus_every 級送的點（attrset.bonus_between）。"""
+    if attrset.on(content, getattr(state, "world", None)):
+        return attrset.bonus_between(content, before, after)
     if not _jianfa(state, content, "stat_milestones"):
         return points_between(content.config, before, after)
     cfg = content.config.jianfa
@@ -1062,7 +1077,7 @@ def team_boosts(state: GameState, content: Content, world: WorldStateStore, *, s
 def dodge_chance(state: GameState, content: Content) -> float:
     """本人的身法讓落敗有機會閃成僵持（人物資質設計 14.4）：比 5 每多一點 dodge_per_point，夾在 0～1；同伴不另外算。
     金角 +3 個百分點（玉璽碎片設計 7.1）。每一點照這一季（per_point：減法季每點加倍）。"""
-    mine = {row.attr: float(state.player.stats.get(row.attr, BASE_STAT))  # 只有本人：不經 world（量表與純函式也叫得到）
+    mine = {row.attr: float(v1_stat(state, content, row.attr))  # 只有本人：不經 world（量表與純函式也叫得到）
             for row in content.config.attributes.effects if row.hook == "dodge"}
     return min(1.0, max(0.0, hook_effect(content, "dodge", mine, season=getattr(state, "world", None))
                         + treasures.amount(state, content, "dodge")))
@@ -1113,7 +1128,7 @@ def take_encounter_toll(
             cut = min(cfg.armor.total_cap, traits.amount(content, lo, "toll_cut") + armor_cut(state, content, world))
             lost, hurt = _apply_toll(
                 content, state.player.member, fraction * (1 - cut),
-                agi=stats.get("agi", BASE_STAT), con=con_of(state, content, world, PLAYER),
+                agi=v1_stat(state, content, "agi"), con=con_of(state, content, world, PLAYER),
                 injury=treasures.amount(state, content, "injury"),  # 螭首（玉璽碎片改版）：變成內傷的減半；沒帶是 1
                 season=state.world,
             )
@@ -1147,7 +1162,7 @@ def toll_saved(
         return 0, 0
     worn = min(cfg.armor.total_cap, armor_cut(state, content, world))
     total = min(cfg.armor.total_cap, cut + worn)
-    agi, con = state.player.stats.get("agi", BASE_STAT), con_of(state, content, world, PLAYER)
+    agi, con = v1_stat(state, content, "agi"), con_of(state, content, world, PLAYER)
 
     def toll(cut_: float, injury: float) -> tuple[float, float]:
         return _apply_toll(
@@ -1363,7 +1378,7 @@ def tactic_ctx(state: GameState, content: Content, world: WorldStateStore, squad
     mount = p.mount if mounts.on(content) else None
     owner = territory.controller(state.world, content, p.location) if p.faction else None
     return tactics.Ctx(
-        foe=squad.name, our_agility=float(p.stats.get("agi", BASE_STAT)), foe_agility=rounds.foe_agility(difficulty),
+        foe=squad.name, our_agility=float(v1_stat(state, content, "agi")), foe_agility=rounds.foe_agility(difficulty),
         night=calendar.is_night(state.world.time, content, state.world), mount_tier=mount.tier if mount is not None else 0,
         good=int(p.stats.get("good", 0)), evil=int(p.stats.get("evil", 0)), followers=len(follower_rows(state, content)),
         foe_faction=squad.faction, own_turf=owner is not None and owner == p.faction,
@@ -1381,7 +1396,7 @@ def self_side(state: GameState, content: Content, world: WorldStateStore, *, mou
         return None
     mount = p.mount if mounted and mounts.on(content) else None
     return tactics.side_for(holders, tactics.Ctx(
-        foe="", our_agility=float(p.stats.get("agi", BASE_STAT)), night=calendar.is_night(state.world.time, content, state.world),
+        foe="", our_agility=float(v1_stat(state, content, "agi")), night=calendar.is_night(state.world.time, content, state.world),
         mount_tier=mount.tier if mount is not None else 0, good=int(p.stats.get("good", 0)), evil=int(p.stats.get("evil", 0)),
         followers=len(follower_rows(state, content)) if troops else 0, foe_faction=None, team=[PLAYER],
     ))
