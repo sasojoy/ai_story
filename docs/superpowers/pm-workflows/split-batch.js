@@ -35,6 +35,7 @@ const STEPS = A.check_steps || ''
 const WEB = !!A.web
 const LENSES_N = A.reviewers === 2 ? 2 : 3
 const SCRATCH = 'b' + N
+const DEV_OPTS = A.dev_model ? { model: A.dev_model } : {}  // 開發與修正用的模型（PM 11/04：每週額度是瓶頸，純搬批試省額度的模型）；審查照舊
 
 const COMMON = `
 共通的規矩（這台機器）：
@@ -104,7 +105,7 @@ ${BODY}
 - **Task 2：核心那一側**：services.py、FEATURES、邊界清單（集中在 \`# ${PKG}\`）。commit、推。
 - **Task 3：搬**：方法與模組進 \`tianxia/features/${PKG}/\`（舊模組名留 \`sys.modules\` 別名，同一個模組物件）；委派一行、不加邏輯；拿了前綴就把 \`bot_policy.score\` 那一段搬進包的 \`bots.py\`（測試直接換的名字照舊生效）。commit、推。
 - **Task 4：測試整檔搬**：整檔屬於這一包的才搬；混合檔不拆、記數字；README（含「另外要跑的混合檔」）。commit、推。
-- **Task 5：證明與驗收**：same_behavior base（${BASE}）對 head，**這一批只跑這一次，跑在最後的程式上**：${A.all_tracks ? '這一批動到核心，**所有軌**' : '**這一包的軌，加上這一批搬的方法直接叫到、或直接叫它們的那幾包的軌**（計畫第一節列出來；探索只有碰到才跑 `explore-compare`）'}，五種設定、整段、半舊半新、假人全部逐位元組一樣。量：包的測試時間、改包任一檔挑到幾條（≤ 300）、過渡處數、委派數、GAME_DIRECT 與 GAME_DELEGATE_CALLERS、engine.py 行數。寫進計畫第五節，導覽跟著改。commit、推。
+- **Task 5：證明與驗收**：same_behavior base（${BASE}）對 head，**這一批只跑這一次，跑在最後的程式上**：${A.all_tracks ? '這一批動到核心，**所有軌**' : '**這一包的軌，加上這一批搬的方法直接叫到、或直接叫它們的那幾包的軌**（計畫第一節列出來；探索只有碰到才跑 `explore-compare`）'}，五種設定、整段、半舊半新、假人全部逐位元組一樣。量：包的測試時間、改包任一檔挑到幾條（≤ 300，不算核心契約）、過渡處數、委派數、GAME_DIRECT 與 GAME_DELEGATE_CALLERS、engine.py 行數。寫進計畫第五節，導覽跟著改。commit、推。
 測試：做的過程中只跑改到的那幾條；Task 5 跑一次 \`scripts/test_for.py --base origin/${FEAT}\`（照改到的檔挑包的測試、核心契約、import 到的；挑到幾條記下來）。**相關的 slow、整套、別包的軌都不跑。**
 回報：head、commits、same_behavior、驗收數字、測試、學到的、要 PM 定的。碰到只有企劃者能定的，stopped 寫原因、停下來。`
 
@@ -112,7 +113,7 @@ const NO_RUN = `**這一關不跑測試、不重跑比對、不做突變**（企
 const LENSES_ALL = [
   { key: 'proof', text: `**行為不變的證明誠不誠實**。${NO_RUN}讀 \`scripts/same_behavior.py\` 這一批加的情境：每一個都真的走到了嗎（不是被擋在前面；讀程式看不出來才單跑這一軌 season21 一次，看輸出、不比對；暫存 ${SP}\\${SCRATCH}-rev-proof\\，用完刪）？半舊半新的切點是不是在這一包「寫到一半」的那一刻？假人碰不碰得到這一包的選項？搬過的路由每一條都打到了嗎？**搬過去的方法用 \`ast\` 逐條比**舊方法跟新函式：除了 self 換 ctx 那種機械的改寫，還有哪幾行不一樣，一行一行列出來，看是不是行為改了、情境有沒有走到那一行。開發選的軌夠不夠（這些方法還碰到哪幾包）。` },
   { key: 'boundary', text: `**照不照手冊、批次表、總表**。${NO_RUN}包只 import 核心、共用規則層與標了「# 過渡：待搬」的舊模組（數一數，跟開發報的對）；委派都是一行；別名是同一個模組物件；這一批加的是不是集中在 \`# ${PKG}\`；第 11 批有掛鉤的位置接了掛鉤、沒有新增 \`GAME_DIRECT\`；前綴與 \`bots.py\`；歸屬照總表附錄甲／丙（有沒有搬了別包的、漏了這一包的）；README；有沒有碰到不准碰的（web/、輿圖、鐵匠鋪、戰記、資料庫結構、技能檔、CLAUDE.md、手冊、批次表、總表）；有沒有測試被改了斷言（只准改路徑與 import）。` },
-  { key: 'regress', text: `**回歸風險**。${NO_RUN}讀：monkeypatch 敏感的路照舊有效嗎（測試 patch 舊路徑，搬過去的程式還讀得到那一下嗎）；\`scripts/test_for.py --list\` 改包任一檔挑不挑得到它的測試、幾條（≤ 300，\`--count\`）；拿掉東西的批：拿掉的還有沒有人讀（\`git grep\`）。` },
+  { key: 'regress', text: `**回歸風險**。${NO_RUN}讀：monkeypatch 敏感的路照舊有效嗎（測試 patch 舊路徑，搬過去的程式還讀得到那一下嗎）；\`scripts/test_for.py --list\` 改包任一檔挑不挑得到它的測試、幾條（≤ 300，不算核心契約，\`--count\`）；拿掉東西的批：拿掉的還有沒有人讀（\`git grep\`）。` },
 ]
 const LENSES = LENSES_ALL.slice(0, LENSES_N)
 
@@ -124,7 +125,7 @@ ${COMMON}
 回報：same、走了哪些步驟、差異、FB、截圖路徑、qa 分支 head。`
 
 phase('Build')
-const dev = await agent(DEVP, { label: `dev:b${N}`, phase: 'Build', schema: DEV_SCHEMA, isolation: 'worktree' })
+const dev = await agent(DEVP, { label: `dev:b${N}`, phase: 'Build', schema: DEV_SCHEMA, isolation: 'worktree', ...DEV_OPTS })
 if (!dev) return { dev: null }
 if (dev.stopped) return { dev, stopped: dev.stopped }
 phase('Review')
@@ -134,7 +135,7 @@ const findings = reviews.filter(Boolean).flatMap(r => r.findings || [])
 let head = dev.head, fix = null
 if (findings.some(f => f.severity !== 'nit')) {
   phase('Fix')
-  fix = await agent(`你是《天下大勢》的開發子代理，修 ${DEV}（現在 ${dev.head}）上審查員的發現。\n${COMMON}\n分支：明確 fetch，\`git switch -c ${DEV}-fix origin/${DEV}\`（同名已存在就加 -work），推回 origin/${DEV}（快轉）。每修一條一個 commit、修一條推一次；先寫會紅的測試（或讓 same_behavior 先抓到）再修；屬實的才修，不屬實的寫進 rejected 附證據；**nit 不修**，寫進計畫的審查那一節就好（PM 11/04：額度是拆完的瓶頸）。修完只跑修到的那幾條測試；改了 \`tianxia/\` 的程式或情境才重比這一包那一軌（五種，不跑別的軌）；只改測試、文件的不重比。要開伺服器用埠 ${P.fix}、${HOST}fix.localhost。暫存 ${SP}\\${SCRATCH}-fix\\，做完刪大檔。\n開發回報（摘要）：${dev.report.slice(0, 5000)}\n發現：\n${JSON.stringify(findings, null, 1)}\n審查摘要：${reviews.filter(Boolean).map(r => r.summary).join('\n---\n')}\n回報 head、修了哪些、駁回哪些、測試、學到的。`, { label: `fix:b${N}`, phase: 'Fix', schema: FIX_SCHEMA })
+  fix = await agent(`你是《天下大勢》的開發子代理，修 ${DEV}（現在 ${dev.head}）上審查員的發現。\n${COMMON}\n分支：明確 fetch，\`git switch -c ${DEV}-fix origin/${DEV}\`（同名已存在就加 -work），推回 origin/${DEV}（快轉）。每修一條一個 commit、修一條推一次；先寫會紅的測試（或讓 same_behavior 先抓到）再修；屬實的才修，不屬實的寫進 rejected 附證據；**nit 不修**，寫進計畫的審查那一節就好（PM 11/04：額度是拆完的瓶頸）。修完只跑修到的那幾條測試；改了 \`tianxia/\` 的程式或情境才重比這一包那一軌（五種，不跑別的軌）；只改測試、文件的不重比。要開伺服器用埠 ${P.fix}、${HOST}fix.localhost。暫存 ${SP}\\${SCRATCH}-fix\\，做完刪大檔。\n開發回報（摘要）：${dev.report.slice(0, 5000)}\n發現：\n${JSON.stringify(findings, null, 1)}\n審查摘要：${reviews.filter(Boolean).map(r => r.summary).join('\n---\n')}\n回報 head、修了哪些、駁回哪些、測試、學到的。`, { label: `fix:b${N}`, phase: 'Fix', schema: FIX_SCHEMA, ...DEV_OPTS })
   if (fix && fix.head) head = fix.head
 }
 if (!WEB) return { n: N, dev, reviews, fix, head, check: null }
