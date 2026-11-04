@@ -19,7 +19,7 @@ from typing import Annotated, ClassVar
 from pydantic import BaseModel, Field, create_model, field_validator
 
 from . import figure_life, gender, parley, renown, seal_acts, stances, zh
-from .models import CharacterDef, Content
+from .models import AFFINITY_TAG_DELTAS, DIALOGUE_TAGS, CharacterDef, Content  # noqa: F401
 from .ollama_client import OllamaClient
 from .state import GameState, TalkMemo
 from .world_state import WorldStateStore
@@ -33,20 +33,7 @@ MAX_RETRIES = 3
 NOTE_MAX = 60  # 記憶整理的關係現況、性情漂移那一句最多幾個字：每一輪對話的系統提示都帶著它（M-09；以前沒上限，實測 400 字照存）
 DRIFT_SYNTHESIS_INTERVAL = 15  # 全服玩家對這位人物又新累積了幾次交友 tag，就該重新語意化一次性情漂移
 
-# 好感度 tag 查表（設計文件七.1／五.1 一貫原則：好感度變化只信任封閉分類查表，
-# 不信任 LLM 自報數字）。目前是全部人物共用同一張表，之後如果要每位歷史人物有不同的
-# 個性化反應強度，可以在 CharacterDef 加一個對應欄位覆寫，這裡先給一個通用版本。
-AFFINITY_TAG_DELTAS: dict[str, int] = {
-    "雪中送炭": 8,
-    "坦誠相待": 7,
-    "真誠請教": 6,
-    "由衷讚賞": 5,
-    "尋常寒暄": 1,
-    "冷漠敷衍": -2,
-    "言語冒犯": -6,
-    "強人所難": -5,
-}
-DIALOGUE_TAGS = list(AFFINITY_TAG_DELTAS.keys())
+# 好感度 tag 查表（AFFINITY_TAG_DELTAS）與 DIALOGUE_TAGS 在 models.py（全部拆包第 20 批「先做」：核心的 content.py 驗內容要讀它）；這裡 re-export
 
 GENERIC_OPENING = "上前攀談，試著攀談幾句"
 MEMO_CHARS = 40  # 「上回」那一句最多幾個字（模型寫的照這個夾，提示裡寫 30 字讓它留餘地）
