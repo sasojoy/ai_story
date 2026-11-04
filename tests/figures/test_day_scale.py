@@ -166,7 +166,7 @@ def test_on_the_last_game_day_the_texts_say_not_this_season(content):
     msgs = _talk_out(game)
     assert msgs[-1] == "韓鐵起身送客：這一季之內不能再來拜會了。"
     assert game._talked_out_note() == "已經談滿 3 輪，這一季之內不能再來"
-    with mock.patch("tianxia.engine.pick_event", return_value=None):
+    with mock.patch("tianxia.features.socialize.actions.pick_event", return_value=None):
         assert game.choose("act:socialize") == ["韓鐵事忙，這一季之內都不得空。"]
     content.characters["scholar"].deep_interaction = True
     content.characters["scholar"].audience_fame = 0
@@ -235,7 +235,7 @@ def test_the_talk_texts_name_the_moment_the_figure_opens_again(content):
     moment = rules.day_ends_text(content, game.state.world)
     assert moment.startswith("第 1 週・週")
     assert msgs[-1] == f"韓鐵起身送客，改日再敘：要到 {moment} 之後才能再來拜會。"
-    with mock.patch("tianxia.engine.pick_event", return_value=None):
+    with mock.patch("tianxia.features.socialize.actions.pick_event", return_value=None):
         assert game.choose("act:socialize") == [f"韓鐵事忙，要到 {moment} 之後才得空。"]
     assert all("今天" not in m and "明天" not in m and "今日" not in m for m in msgs)
 

@@ -4374,7 +4374,7 @@ def _figure(content, fame=0):
 
 def test_a_newcomer_without_fame_is_turned_away_from_a_figure(content, game):
     _figure(content, fame=10)
-    with mock.patch("tianxia.engine.pick_event", return_value=None), \
+    with mock.patch("tianxia.features.socialize.actions.pick_event", return_value=None), \
             mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
         msgs = game.choose("act:socialize")
     assert game.state.player.pending_companion is None
@@ -4406,7 +4406,7 @@ def test_three_turns_a_day_with_the_same_figure(content, game):
         moment = rules.day_ends_text(content, game.state.world)  # 換日的那一刻（遊戲日跟著季長縮，企劃者 2026-10-08）
         assert msgs[-1] == f"韓鐵起身送客，改日再敘：要到 {moment} 之後才能再來拜會。"
         assert game.state.player.pending_companion is None
-        with mock.patch("tianxia.engine.pick_event", return_value=None):
+        with mock.patch("tianxia.features.socialize.actions.pick_event", return_value=None):
             msgs = game.choose("act:socialize")
         assert msgs == [f"韓鐵事忙，要到 {moment} 之後才得空。"]
         game.state.world.time = rules.day_ends(content, game.state.world)  # 換日重算
@@ -5440,7 +5440,7 @@ def test_socializing_where_two_figures_stand_never_opens_a_dialogue(content, gam
     assert game.state.pending_event == "join"  # 小鎮的交友事件（拜師）照常發生
     assert game.state.player.pending_companion is None
     game.state.pending_event = None
-    with mock.patch("tianxia.engine.pick_event", return_value=None):
+    with mock.patch("tianxia.features.socialize.actions.pick_event", return_value=None):
         msgs = game.choose("act:socialize")
     assert msgs == ["你四處結交了一番，沒遇上什麼事；想拜會此地的人物，請按「求見」指名。"]
 
@@ -5789,14 +5789,14 @@ def test_the_brush_off_line_is_only_picked_when_it_is_used(content, game):
         game.choose("act:socialize")
     assert game.state.pending_event == "join"
     game.state.pending_event = None
-    with mock.patch("tianxia.engine.pick_event", return_value=None),             mock.patch.object(Game, "_brush_off", return_value=["打發。"]) as brushed:
+    with mock.patch("tianxia.features.socialize.actions.pick_event", return_value=None),             mock.patch.object(Game, "_brush_off", return_value=["打發。"]) as brushed:
         assert game.choose("act:socialize") == ["打發。"]
     brushed.assert_called_once()
 
 
 def test_socializing_with_a_figure_you_cannot_meet_uses_the_same_brush_off(content, game):
     cid = _stand_by_one_figure(content, game)
-    with mock.patch("tianxia.engine.pick_event", return_value=None),             mock.patch.object(companion_agent, "_generate", side_effect=AssertionError("被打發的不該叫模型")):
+    with mock.patch("tianxia.features.socialize.actions.pick_event", return_value=None),             mock.patch.object(companion_agent, "_generate", side_effect=AssertionError("被打發的不該叫模型")):
         msgs = game.choose("act:socialize")
     assert msgs == ["閒雜人等退下。（名望還差 30）"]
     assert game.state.player.pending_companion is None
