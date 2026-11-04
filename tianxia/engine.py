@@ -11278,11 +11278,6 @@ class Game:
         seat = features_core.scene(self)
         if seat is not None:
             return seat
-        question = story_base.question_text(s, c) if s.player.story_open is not None else None
-        if question:  # 一條線的答題：場景寫這一題（選單上是答案）
-            progress = s.player.storylines[s.player.story_open]
-            line = story_base.definition(c, progress)
-            return f"**{line.title}**\n\n{question}"
         if s.player.pending_companion:
             character = c.characters[s.player.pending_companion]
             history = s.player.dialogue_history.get(s.player.pending_companion, [])

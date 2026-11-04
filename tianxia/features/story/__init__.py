@@ -6,7 +6,7 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
   底座〔登記鉤子的字典、開線、換字、題目文字〕在共用規則層 tianxia/story_base.py（核心的 rules、事件檢定與探索包、有所感包也讀），storyline.py re-export 它的每個名字
 - actions.py：原本 Game 上的 10 個方法（Game 留 10 個一行委派）與核心原位叫的 4 個（答題選單、「未了之事」那一顆、換季收線、標題）的本體
 
-掛鉤：choose（只吃 story:；enabled 一直是 True，線自己看 Config.jianfa.storylines）。沒有路由（/api/do/story_seen 在殼的 MAIN_ACTIONS，照舊叫 Game）、
+掛鉤：choose（只吃 story:）、scene（接縫掛鉤：眼前的答題）。enabled 一直是 True，線自己看 Config.jianfa.storylines。沒有路由（/api/do/story_seen 在殼的 MAIN_ACTIONS，照舊叫 Game）、
 沒有假人分數（story: 原本在 bot_policy.score 就沒有處理，落到預設的 None）。
 """
 from __future__ import annotations
@@ -37,6 +37,13 @@ class StoryFeature(Feature):
         from . import actions  # noqa: PLC0415
 
         return Outcome(title=actions.story_title(ctx, arg), run=lambda: actions.story_act(ctx, arg))
+
+    def scene(self, ctx):
+        """自己眼前的場景卡（接縫掛鉤，第 11 批；原本 Game._own_scene_text 有所感、取名之後的一支）：一條線的答題；沒有答題是 None。
+        不問 enabled（原位本來就不看開關）。排在有所感包、宴客包之後（FEATURES 的順序），第一個不是 None 的算。"""
+        from . import actions  # noqa: PLC0415
+
+        return actions.scene(ctx)
 
 
 FEATURE = StoryFeature()
