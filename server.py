@@ -3055,14 +3055,6 @@ def api_peer(request: Request, name: str = ""):
     return {"card": look(game, lambda g: g.peer_card(name)), "gone": social.GONE}
 
 
-@app.get("/api/figure")
-def api_figure(request: Request, id: str = ""):
-    """人物頁（減法季批 6，主機側計畫 1.3 的 figure.stances、figure.errands）：這位人物（對話人物 id）的心意條、你今天記的那一筆、
-    他託你的事（Game.figure_view）。關著、他什麼都沒有是 None。只讀。"""
-    game = _game(request)
-    return {"figure": look(game, lambda g: g.figure_view(str(id)[:40]))}
-
-
 @app.post("/api/peer/act")
 def api_peer_act(request: Request, body: dict = Body(default={})):
     """按了玩家卡上的一顆鈕（Game.peer_act）：回傳 {card, main, message}。參數都是客戶端寫的，一律轉成字串或整數再交給引擎驗。"""
