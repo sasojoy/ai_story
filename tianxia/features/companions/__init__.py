@@ -18,8 +18,15 @@ class CompanionsFeature(Feature):
     content = ("events/stances.json",)  # 人物心意開的事件（總表附錄甲）；content.py 照舊讀（第 62 批起照它載）；檔名照舊
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）。換季全部跟著新角色重來；parted_done（同伴回江湖的減半記號）第 7 批決戰包認領了，第 7 批 PM 認定第 4 條留到這一包再看：
     # 寫它的 settle_partings 還在決戰包，這一批照留
-    player_fields = ("stance_notes", "errands", "letters", "letter_day", "letter_seq", "cheers")
-    carried: tuple[str, ...] = ()
+    player_fields = (
+        "stance_notes", "errands", "letters", "letter_day", "letter_seq", "cheers",
+        # 第 20 批（審查補認領）：人物對話（companion_agent）的私有狀態與 NPC 智能 2.0（parley）這一季的帳；talks_today、picking_audience 留給第 21 批（交友求見）
+        "pending_companion", "dialogue_history", "used_dialogue_options", "last_offered_dialogue", "turns_since_consolidation",
+        "talk_memos", "talk_prev", "parley_days", "parley_terms", "parley_owed", "parley_backing", "parley_debts", "parley_records",
+        "parley_escort", "parley_road_leg",
+    )
+    # 對話紀錄、說過的話、梳理的輪數換季照帶（Game._reset_player_for_new_season；history_start 是它從 dialogue_history 的長度算的，不另認領）
+    carried: tuple[str, ...] = ("dialogue_history", "used_dialogue_options", "turns_since_consolidation")
 
     def enabled(self, ctx) -> bool:
         return True

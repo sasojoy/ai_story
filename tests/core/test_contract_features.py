@@ -266,12 +266,14 @@ def _dirty(annotation, default):
     if origin is set:
         return {"x"}
     if origin is dict:
+        if len(args) == 2 and typing.get_origin(args[1]) is list:  # 值是清單的（人物情誼包的 dialogue_history）：換季會對值取長度，擺 7 會壞
+            return {"x": []}
         return {"x": 7}
     raise AssertionError(f"契約測試還不會擺 {annotation} 這種欄位，補 _dirty")
 
 
 @pytest.mark.parametrize("field", ["sortie_cooldown_until", "hidden_until", "escort_pick", "outing_last", "outing", "sorties_today",
-                                   "picking_audience", "visited", "team", "affinities", "sect"])  # sect 是 str | None（dev/sortie-2 審查補）
+                                   "picking_audience", "visited", "team", "affinities", "sect", "dialogue_history"])  # dialogue_history 值是清單（第 20 批審查補）；sect 是 str | None（dev/sortie-2 審查補）
 def test_dirty_moves_every_kind_of_field_off_its_default(field):
     """_dirty 每一種都真的擺得出跟預設不一樣的值（還沒有包認領的那幾種也擺一次：不然補了永遠沒跑過）。只挑型別定義在 PlayerState 前面的欄位：
     寫在後面的（letters 的 Letter）在 PlayerState 第一次建出來之前，model_fields 裡還是 ForwardRef（xdist 分到這一條先跑的那個 worker 就紅過）；
