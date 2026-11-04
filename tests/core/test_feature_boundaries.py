@@ -558,6 +558,8 @@ GAME_DELEGATES |= {
     "_recruit_options", "_deliver_mail", "_errand_ask",
 }
 del GAME_DELEGATE_CALLERS[("_recruit_one", "_settle_partings")]  # _recruit_one 進了包，經 ctx._settle_partings 問（服務清單二、查詢服務）
+GAME_DELEGATE_CALLERS[("sync", "_settle_partings")] = ("同步的同伴回江湖（簽到之後、退押金之前）：on_sync 在寄放之前、還問 enabled，江湖紀錄的先後算行為；"
+                                                       "本體在決戰包 muster，核心原位叫查詢服務（總表第 19 列「先做」）")
 _MENU_ORDER = "選單的順序算行為（/api/main 的選項一顆一顆逐位元組）；options 掛鉤在體力玩法之後、位置不對。選單照包排是總表第 55～57 批"
 _TALKS = "人物對話第 20 批搬進同一包，變成包裡互相叫"
 GAME_DELEGATE_CALLERS.update({
