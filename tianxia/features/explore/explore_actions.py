@@ -31,7 +31,7 @@ from tianxia import mapview  # 過渡：待搬（輿圖：哪些地點畫得出�
 from tianxia import materials  # 共用規則層（素材的發放）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章裡探索照舊是寫好的那幾步）
 from tianxia import renown  # 共用規則層（名聲：頭目的倍數）
-from tianxia import storyline  # 過渡：待搬（一條線：開頭擲不擲中）
+from tianxia import story_base  # 共用規則層（一條線的底座：開頭擲不擲中）
 from tianxia import territory  # 共用規則層（地盤：這一處此刻歸誰）
 from tianxia.core.option import Option
 from tianxia.events import event_candidates, pick_event  # 過渡：待搬（事件：候選、抽一則）
@@ -209,7 +209,7 @@ def explore_one(ctx) -> list[str]:
     beat = explore_rules.draw(roll("拍"), weights, last_choice=last_kind if last_loc == loc.id else None)
     # 一條線（特殊事件）：在開頭的地方擲中了，這一趟就是那條線的第一段（關著、沒有線不擲；用自己的亂數，不動拍子）
     boost = outing_rules.rare_boost(s, c)  # 走一趟：段數越多，稀有的越容易來（不在路上是 1）
-    strand = storyline.roll_start(s, c, roll("奇事"), boost=boost)
+    strand = story_base.roll_start(s, c, roll("奇事"), boost=boost)
     if strand is not None:
         beat = explore_rules.EVENT
     say, lines = roll("段落"), c.outing_lines

@@ -262,10 +262,14 @@ def _dirty(annotation, default):
     if optional and len(args) == 1 and isinstance(args[0], type) and issubclass(args[0], BaseModel):
         return args[0].model_construct()  # 一份全是預設值的（不驗必填）：跟預設的 None 不一樣就夠
     if origin is list:
-        return [7]
+        # story（全部拆包第 30 批）：lasting 是字串的清單，換季時併進旗標集合（annals 讀旗標的字串開頭），擺 7 會壞；字串的清單擺字串
+        return ["x"] if typing.get_args(annotation) == (str,) else [7]
     if origin is set:
         return {"x"}
     if origin is dict:
+        value = typing.get_args(annotation)[-1]
+        if isinstance(value, type) and issubclass(value, BaseModel):  # story（全部拆包第 30 批）：一條線的進度 StoryProgress，必填的 line 擺一個內容裡沒有的 id
+            return {"x": value(**{n: "x" for n, f in value.model_fields.items() if f.is_required()})}
         return {"x": 7}
     raise AssertionError(f"契約測試還不會擺 {annotation} 這種欄位，補 _dirty")
 
@@ -296,6 +300,8 @@ def test_a_new_season_keeps_only_what_the_package_carries(feature):
         value = _dirty(fields[name].annotation, fields[name].get_default(call_default_factory=True))
         setattr(game.state.player, name, value)
         before[name] = value
+    # checkin（全部拆包第 30 批）：新季第一次同步會自動簽第 1 天（簽到開著），checkin_days 就不是預設的空值；擺局面時關掉，斷言不動
+    c.config.checkin.enabled = False
     next_season(c, world, game)
     for name in feature.player_fields:
         now = getattr(game.state.player, name)
