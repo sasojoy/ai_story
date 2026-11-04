@@ -93,6 +93,7 @@ from .core.services import outing_watch as _outing_watch
 from .features.sense import actions as sense_actions  # 過渡：Game 上有所感與頓悟的 8 個一行委派、7 個服務（全部拆包第 24 批）
 # explore
 from .features.explore import explore_actions  # 過渡：Game 上探索一顆的 9 個一行委派（主動搬六包第 3＋4 批）
+from .features.explore import explore_base  # 過渡：Game 上舊探索的底 6 個一行委派（全部拆包第 18 批）
 from .features.explore import outing_actions  # 過渡：Game 上走一趟的 9 個一行委派（主動搬六包第 3＋4 批）
 from .features.mall import actions as mall_actions  # 過渡：Game.mall_* 留一行委派（開發規範手冊 3.10）
 from .features.looks import actions as looks_actions  # 過渡：Game.arena_look 留一行委派（擂台記形象）
@@ -1700,11 +1701,7 @@ class Game:
         return bout_duel.boss_ready(self)
 
     def _practice_tier(self, loc: Location) -> int | None:
-        """這裡練功是第幾級（0、1、2；Config.training）：照此刻這裡最弱、不是自己人的對手。城裡操練關著、這裡沒有對手是 None。"""
-        if not training.on(self.content, self.state.world):
-            return None
-        foes = self._wild_foes(loc)
-        return training.tier_of(self.content.config.training, min(f.difficulty for f in foes)) if foes else None
+        return explore_base.practice_tier(self, loc)  # 本體在探索包（全部拆包第 18 批）
 
     def _precise_social_option(self, cost: int) -> Option:
         """一類一顆的交友（正式季整合 2.8）：照 _social_plan。兩位以上見得到的人物時是「交友」打開名單（act:call，不花體力）；
@@ -2931,21 +2928,7 @@ class Game:
         return companions_talk.open_dialogue(self, companion_id, prepared)
 
     def _explore(self) -> list[str]:
-        """探索三選一（FB-013，docs/superpowers/specs/2026-10-03-探索三選一-design.md）。
-
-        1. 奇遇判定最優先：這裡有還能遇上的一次性或奇遇事件時，先滾 `rare_explore_chance`，中了就是它。
-        2. 沒中就照地點類型（`Config.explore_mix`）的比例抽悟意境、野怪、事件三支之一；做不了的那一支
-           （沒有會打的對手、沒有可重複的事件）從候選裡拿掉，用剩下的比例重抽——等於把它的比例按比例分給另外兩支。
-        3. 三支都做不了才是一無所獲。
-        4. 不論走哪一支，結束後再擲一次有沒有撿到破境丹（`_legend_find`）。
-
-        以前是「先滾三成素材，再一定撞到一個事件」：40 個地點有 38 個探索 100% 跳事件，荒郊野外跟
-        城裡的手感一樣（QA 量過）。奇遇事件只走第 1 步、不進事件那一支，所以一直是稀有的。
-        """
-        if prologue_rules.active(self.state, self.content):
-            return self._explore_outcome()  # 序章裡不撿破境丹（新手引導計畫一）
-        scouted = bounties.on_explore(self.state, self.content, self.world, self.state.player.location)  # 懸賞榜的打探：探索一次就算
-        return self._explore_outcome() + self._legend_find() + self._scrap_find() + scouted
+        return explore_base.explore(self)  # 本體在探索包（全部拆包第 18 批）；舊探索（沒開探索一顆的季）走這裡
 
     def _seal_find(self, loc_id: str) -> list[str]:
         """領地爭奪的季，探索撿玉璽碎片（領地爭奪設計 3.9、4.8；計畫 Task 14）：探索的四種（找素材、找事件、靜心感悟、練功）收尾各叫一次。
@@ -2992,18 +2975,7 @@ class Game:
         return [seal.FIND_SCENE]
 
     def _legend_find(self, rng: random.Random | None = None) -> list[str]:
-        """探索不論走哪一支，結束後擲一次有沒有撿到破境丹（企劃者 2026-10-05：到處探索都有約 2% 的機會；帶著「探索撿破境丹」的寶物時門檻 ×2）。
-        機率是 0 就不擲骰（先判斷機率，亂數序列一個都不動：測試內容把它設成 0，既有的固定種子序列才不會位移）。
-        兩行：「獲得」開頭的敘事（江湖紀錄給它掃光，journal._NEW_THING）與「破境丹 +1」（寫進紀錄的數值變化）。
-        rng：探索三選一傳自己的亂數；舊的探索不傳，照舊用 Game.rng。"""
-        cfg = self.content.config
-        # 寶物「探索撿破境丹」（裝備四欄 6.2）：只放大門檻（夾在 1 以下），擲的還是同一顆 self.rng.random()——帶不帶都只擲一次，
-        # 序列不位移；基本機率是 0 照舊不擲（測試內容）
-        chance = min(1.0, cfg.explore_legend_chance * treasures.amount(self.state, self.content, "legend"))
-        if cfg.explore_legend_chance <= 0 or (rng or self.rng).random() >= chance:
-            return []
-        self.state.player.legend_items += 1
-        return [f"獲得 【{cfg.legend_item_name}】一枚——{cfg.legend_item_note}", f"{cfg.legend_item_name} +1"]
+        return explore_base.legend_find(self, rng)  # 本體在探索包（全部拆包第 18 批）；探索包經 ctx 叫這一行（測試換它）
 
     def _pill_find(self, rng: random.Random) -> list[str]:
         """素材那一拍掉一顆回體丹（21 天季，正式季整合 6.4；Config.checkin.pill_drop）：用探索自己的亂數（用途「回體丹」），
@@ -3016,64 +2988,14 @@ class Game:
         name = c.config.stamina_pill_name
         return [checkin.PILL_FOUND.format(name=name), f"{name} +1"]
 
-    def _explore_outcome(self) -> list[str]:
-        s, c = self.state, self.content
-        loc = c.locations[s.player.location]
-        sight = prologue_rules.explore_event(s, c)
-        if sight is not None:  # 序章第 3 步：草廬四景四選一（新手引導設計 3.2），不抽奇遇、不分三支
-            return self._present(c.events[sight], "explore")
-        scene = prologue_rules.explore_scene(s, c)
-        if scene is not None:  # 序章第 3 步的有所感版（悟意境設計第七節）：草廬四景就是四個做法，都對、必中
-            return self._sense_start(scene, self.rng)
-        boss = self._boss_ready()  # 單人頭目戰：只有這裡有頭目時才擲（沒有頭目的地點、測試內容，亂數序列一個都不動）
-        # 名聲 4.4：名望高、頭目找上門的機會乘 renown.duel_chance（只放大門檻，擲的還是同一顆骰）
-        if boss is not None and self.rng.random() < c.config.duel.explore_chance * renown.duel_chance(s, c):
-            return self._duel_start(boss)
-        if event_candidates(s, c, "explore", "rare") and self.rng.random() < c.config.rare_explore_chance:
-            return self._present(pick_event(s, c, "explore", self.rng, "rare"), "explore")
-        weighted = self._explore_weights(loc)
-        if not weighted:
-            return ["你四處走走，一無所獲。"]
-        branch = self.rng.choices([b for b, _ in weighted], weights=[w for _, w in weighted])[0]
-        if branch == "insight":  # 有場景：有所感，要選做法、畫一筆才悟得到（悟意境設計第零節）；沒有場景的內容（測試內容）照舊直接悟
-            return self._sense_here(loc, self.rng)  # 就是靜心感悟那四行（有所感包，第 24 批）
-        if branch == "wild":
-            squad = min(self._wild_foes(loc), key=lambda foe: foe.difficulty)  # 同分取這裡列的第一路
-            return [f"你在{loc.name}走著，{squad.name}突然殺出！"] + self._squad_encounter(squad.id, wild=True)
-        return self._present(pick_event(s, c, "explore", self.rng, "common"), "explore")
-
     def _explore_weights(self, loc: Location) -> list[tuple[ExploreBranch, float]]:
-        """探索三選一此刻在這裡的候選與比重（探索三選一設計第三節）：照地點類型（Config.explore_mix），比例是 0 的與做不了的
-        （_explore_can）拿掉；悟意境那一支的比重 ×（1＋3%×（悟性−5））× 寶物（treasures.amount 的 insight，裝備四欄 6.2），另外兩支不動（武學與成長設計 6.1）。
-        探索真的擲骰（_explore_outcome）與行動列底下那一行（action_notes，explain-1）讀同一份：說的跟擲的不會走樣。"""
-        s, c = self.state, self.content
-        mix = c.config.explore_mix_of(loc.tags).weights
-        wis = team.stat_factor(c, s.player.stats.get("wis", team.BASE_STAT), s.world)
-        sharp = wis * treasures.amount(s, c, "insight")  # 寶物「探索悟意境」跟悟性疊乘（裝備四欄 6.2）
-        return [
-            (b, mix[b] * (sharp if b == "insight" else 1))
-            for b in EXPLORE_BRANCHES if mix.get(b, 0) > 0 and self._explore_can(b, loc)
-        ]
+        return explore_base.explore_weights(self, loc)  # 本體在探索包（全部拆包第 18 批）；探索包經 ctx 叫這一行（測試換它）
 
     def _explore_can(self, branch: ExploreBranch, loc: Location) -> bool:
-        """探索三選一的這一支在這裡做不做得了。"""
-        if branch == "insight":
-            if self._sense_missed(loc):
-                return False  # 這個遊戲日在這裡選錯過做法：換日之前這裡悟不出什麼（Q2）
-            return bool(insights.explore_gives(loc, self.content))  # 輿圖詳情欄「這裡能悟」用同一個判斷（W3）
-        if branch == "wild":
-            return bool(self._wild_foes(loc))
-        return bool(event_candidates(self.state, self.content, "explore", "common"))
+        return explore_base.explore_can(self, branch, loc)  # 本體在探索包（全部拆包第 18 批）；探索包經 ctx 叫這一行（測試換它）
 
     def _wild_foes(self, loc: Location) -> list[Squad]:
-        """探索時可能殺出來的野怪：這裡此刻站的隊伍（地盤易手照控制方，_here_squads）裡不是自己陣營的那幾路
-        （自己人不會突然殺出來，也不在這裡操練）。"""
-        squads = [self.content.squads[sid] for sid in self._here_squads(loc.id)]
-        return [squad for squad in squads if not self._drills_with(squad)]
-
-    def _here_squads(self, loc_id: str) -> list[str]:
-        """這個地點此刻站的隊伍（territory.squads_at；地盤易手的開關關著就是 loc.enemies）。"""
-        return territory.squads_at(self.state.world, self.content, loc_id)
+        return explore_base.wild_foes(self, loc)  # 本體在探索包（全部拆包第 18 批）；探索包經 ctx 叫這一行（測試換它）
 
     def _home_gather(self, loc: Location, mids: list[str]) -> list[str]:
         return explore_actions.home_gather(self, loc, mids)  # 本體在探索包（全部拆包第 13 批）；探索包經 ctx 叫這一行（測試換它）

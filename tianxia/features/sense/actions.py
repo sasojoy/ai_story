@@ -199,7 +199,7 @@ def sense_menu(ctx: Game) -> list[Option] | None:
 
 
 def sense_start(ctx: Game, scene_id: str, rng: random.Random) -> list[str]:
-    """序章第 3 步的有所感版（舊探索 Game._explore_outcome）：草廬四景那一張卡。"""
+    """序章第 3 步的有所感版（舊探索，本體 explore_base.explore_outcome）：草廬四景那一張卡。"""
     return sensing.start(ctx.state, ctx.content, ctx.content.insight_scenes[scene_id], rng)
 
 

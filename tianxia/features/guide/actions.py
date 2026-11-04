@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import atlas, create, figures, howto, training  # 過渡：待搬
-from tianxia import insight_fx, journal, library, martial_arts, team  # 核心、共用規則層
+from tianxia import atlas, create, figures, howto  # 過渡：待搬
+from tianxia import insight_fx, training, journal, library, martial_arts, team  # 核心、共用規則層
 from tianxia import prologue as prologue_rules  # 共用規則層；Game.new 有個參數也叫 prologue，跟 engine 一樣叫 prologue_rules
 from tianxia.models import TutorialStep
 from tianxia.rules import season_one
