@@ -6353,8 +6353,8 @@ class CompanionsScenario(Scenario):
     程遠山、秦照夜各開一件勸降，韋南星一件送信一件探營：**前半切在託付還開著、信還沒回、委託做到一半**。柳聽泉收求援（附委託，沒看過、沒婉拒）。
     後半：陶秋水選下一顆、告辭；石望舒交差（交信、探營、勸降照開到哪一種）；勸降走一遍拒絕（不在地點、沒寫字、太長、沒有這一件）、模型叫不動（什麼都不發生）、
     成了（痕跡、推線、獎勵、行狀、心意 +1）、敗了（打一場）；韋南星探營（花體力、卡留見聞）、婉拒那一封、過了期限作罷（情誼扣）；柳聽泉鎖外重寫信
-    （server.letter_once）、收起、婉拒委託、道賀（figure_life.spread 記的 cheers）、邀宴、委託過期、09:00 看守替他送信（server._notice_keys → morning_mail）。
-    人物頁 /api/figure（有心意有託付、沒有、不認得、太長的 id）。假人（BotRunner；心意直接記一筆 voice_stance、測試內容按舊招募）；時鐘往前推（跨 00:00、
+    （server.letter_once）、收起、婉拒委託、道賀（figure_life.spread 記的 cheers）、邀宴、委託過期、09:00 看守替他送信（server._notice_keys → morning_mail）、
+    敬過酒的宴不邀、宴客關著不邀；欠人物的事過了期限，那幾句併進「書信」（debts）。人物頁 /api/figure（有心意有託付、沒有、不認得、太長的 id）。假人（BotRunner；心意直接記一筆 voice_stance、測試內容按舊招募）；時鐘往前推（跨 00:00、
     跨週：daily 換手與持重拉進度、週初歸零）；換季。沒有陣營、沒有託付、沒有盧植的設定寫「沒有」略過，同一串 API 照打。"""
 
     RECRUITER, RIVAL, DRIFTER, PREP = "顧行舟", "白鷺汀", "溫景明", "魏長卿"
@@ -6364,7 +6364,7 @@ class CompanionsScenario(Scenario):
     BOT_SEATS = ["情甲", "情乙", "情丙"]
     LUZHI = "luzhi"
     PHASES_FIRST = ["setup", "seat", "recruit", "named", "talk", "errands_open", "letters_open", "half"]
-    PHASES_SECOND = ["resume", "talk_on", "errands_on", "persuade", "lapse", "letters_on", "figure_page", "bots", "clock", "season"]
+    PHASES_SECOND = ["resume", "talk_on", "errands_on", "persuade", "lapse", "letters_on", "debts", "figure_page", "bots", "clock", "season"]
 
     def __init__(self, root: Path, profile: str, db: Path):
         super().__init__(root, profile, db)
@@ -6861,6 +6861,20 @@ class CompanionsScenario(Scenario):
         self.edit(who, lambda p: setattr(p, "letter_day", -1))
         self.main(who)
         self.me(who, "拿掉那一杯才邀")
+
+    def debts(self) -> None:
+        """欠人物的事過了期限（ParleyDebt；parley.lapse，第 20 批搬）：同步時那幾句併進「書信」那一則（Game.sync 的 mail → deliver_mail，第 19 批改成帶出入參數的委派；審查 M14）。"""
+        from tianxia.state import ParleyDebt
+
+        who = self.MAILER
+        cid = "qinjie" if "qinjie" in self.c.characters else next(iter(self.c.characters))
+
+        def owed(s) -> None:
+            s.player.parley_debts[cid] = ParleyDebt(kind="owe", condition="silver", due=s.world.time - 1)
+
+        self.edit_state(who, owed)
+        self.main(who)
+        self.me(who, "欠他的事過了期限")
 
     def figure_page(self) -> None:
         """人物頁：有心意有託付的、沒有的、不認得的、太長的、沒帶 id。"""

@@ -5,10 +5,11 @@ from __future__ import annotations
 import pytest
 
 from conftest import real_content
+from stances_kit import at, real_game
 from tianxia import bounties, calendar, figure_life, figures, letters, relations
 from tianxia.content import ContentError, validate
 from tianxia.models import RelationDef
-from tianxia.state import Feast, GameState, PlayerState, Toast
+from tianxia.state import Feast, GameState, ParleyDebt, PlayerState, Toast
 from tianxia.world_state import fresh_season
 
 
@@ -211,6 +212,20 @@ def test_no_invitation_with_feasts_switched_off(c):
     s.player.letter_day = -1
     letters.deliver(s, c)
     assert s.player.letters[-1].kind == "邀宴"
+
+
+def test_a_broken_promise_shares_the_letters_journal_entry():
+    """同步裡書信那一格（Game.sync → actions.deliver_mail）：前一行欠人物的事作罷的句子（parley.lapse）跟人物來信寫進同一則「書信」。"""
+    g = real_game("week7")
+    s = g.state
+    s.player.affinities["qinjie"] = 40
+    s.player.cheers = ["qinjie|在潁川打退了黃巾"]
+    s.player.letter_day = -1
+    s.player.parley_debts["bocai"] = ParleyDebt(kind="owe", condition="silver", due=s.world.time)
+    at(g, g.now + 60)
+    entry = next(e for e in s.journal if e.title == letters.TITLE)
+    assert entry.lines[0].startswith("【食言】") and entry.lines[-1] == "秦頡派人送來一封信。"
+    assert "bocai" not in s.player.parley_debts
 
 
 def test_the_card_shows_the_newest_unread_letter(c):
