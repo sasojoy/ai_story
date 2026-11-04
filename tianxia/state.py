@@ -315,6 +315,28 @@ class InsightFx(BaseModel):
     grand: str | None = None
 
 
+class ShihaiSeal(BaseModel):
+    """識海裡封著的那一份神品意境（傳承，tianxia/features/legacy；架構方向 v2 第七節）：上一季季末自己選的，換季那一刻抄下整份。
+    解封之前不在自己的意境裡、裝不上；解封那一刻名字才照這一季登記（撞名就從 names 挑一個）。"""
+
+    insight: Insight
+    fx: InsightFx
+    season: int  # 從第幾季帶來的
+    names: list[str] = Field(default_factory=list)  # 解封時名字這一季已經有人先取了：換的候選（空的是還沒撞名）
+
+
+class LegacyBook(BaseModel):
+    """傳承（tianxia/features/legacy）：正氣、邪氣、機緣只在換季那一刻結算一次（季中不動）、跨季帶著走；識海選了哪一份、封著的那一份。"""
+
+    zheng: float = 0.0
+    xie: float = 0.0
+    luck: float = 0.0
+    settled: int = 0  # 結算過的季號（同一季只結算一次）
+    gains: dict[str, float] = Field(default_factory=dict)  # 這一季結算加了多少（顯示用：zheng／xie／luck）
+    pick: str | None = None  # 這一季選了哪一份放進識海（自己的意境 id）；換季那一刻照它抄
+    sealed: ShihaiSeal | None = None  # 從上一季帶來、還封著的那一份
+
+
 class Ascension(BaseModel):
     """破境卡（tianxia/ascend.py；招式與絕學稿案第三節）：剛破境的那一門，收場後跳出來的那一張。看過（dismiss）就收掉。"""
 
@@ -1090,6 +1112,9 @@ class PlayerState(BaseModel):
     # 長篇奇事（企劃者 2026-10-27）：紀念物（沒有效果、不能賣，跨季跟著角色）、跨季的旗標（換季時再立進新角色的 flags）。都在 QUIET_DEFAULTS
     keepsakes: list[str] = Field(default_factory=list)
     lasting: list[str] = Field(default_factory=list)
+    # 傳承（tianxia/features/legacy）：正氣、邪氣、機緣與識海。跨季帶著走（Game._reset_player_for_new_season 照帶，結算在包的 on_season_start）；
+    # None 的時候不寫進存檔（QUIET_DEFAULTS）：開關關著存檔一個鍵都不多
+    legacy: LegacyBook | None = None
 
     @model_serializer(mode="wrap")
     def _drop_quiet_defaults(self, handler):
@@ -1115,6 +1140,7 @@ QUIET_DEFAULTS = (
     "epiphanies", "epiphany_dry", "god_naming",  # 特殊頓悟
     "keepsakes", "lasting",  # 長篇奇事
     "growth_preset", "growth_custom", "attr_alloc",  # 五項屬性（屬性與跨季架構 v2）
+    "legacy",  # 傳承（features/legacy）
 )
 
 
