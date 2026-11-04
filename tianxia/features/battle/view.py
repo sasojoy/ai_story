@@ -1,7 +1,9 @@
 """全服決戰「看」那一半（主動搬六包第 5 批）：原本 Game 上的 31 個方法，本體照抄、self 換成 ctx（第一階 ctx 就是 Game，開發規範手冊 3.3），
 包裡互相叫直接叫函式，模組層的字在 rules.py；「打」那一半（集結、投效、挑同伴、推進、結算、攻城、管理者——還在 Game，第 6～8 批搬）與別的功能
 一律經 ctx.<名>（tianxia/core/services.py 的清單：測試換掉的 Game 方法才打得到）。Game 留 22 個一行委派（server、核心原位、測試在叫），
-另外 9 個只有這裡叫。第 7 批之後集結、投效、挑同伴（在不在場、臨時投效、隨你出陣的同伴回江湖、送出一招）在 muster.py，直接叫。
+另外 9 個只有這裡叫。第 7 批之後集結、投效、挑同伴（在不在場、臨時投效、隨你出陣的同伴回江湖、送出一招）在 muster.py，直接叫；第 8 批之後
+推進與結算（此刻看的那一場 battle_for_me、battle_now、只能觀戰 watching_battle、改那一場 mutate_battle_of）在 progress.py、龍頭上陣在
+generals.py，直接叫（被測試換掉的 _battle_status 由 progress.battle_for_me 經 ctx 叫）。
 
 - 場景：battle_scene_text（集結中、開打的畫面）、chief_lines（龍頭上陣）、round_blocks／fold_war_lines（一回合一段、一軍的戰法摺成一列）、
   idle_note（掛機）、battle_spotlight（點名與顯眼）、round_wait（已送出／在場）、escort_line（隨你出陣的同伴）、watch_text（只能觀戰的原因）
@@ -21,14 +23,16 @@ from tianxia import annals  # 過渡：待搬（行狀）
 from tianxia import battle_instance, battlelog, tactics  # 共用規則層（戰鬥規則核心）
 from tianxia import conquest, siege  # 共用規則層（地盤與攻城）
 from tianxia import four_tiers, materials, mounts, renown, roster  # 共用規則層（四階料、素材、坐騎、名聲、同伴；絕學的契機第 23 批改叫 ctx._seize_chance）
-from tianxia import figure_life, front_lines, generals, seal, wins  # 過渡：待搬（人物風聞、戰線、龍頭上陣、玉璽、三陣營四勝利）
+from tianxia import figure_life, front_lines, seal, wins  # 過渡：待搬（人物風聞、戰線、玉璽、三陣營四勝利）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章；照 engine 的叫法）
 from tianxia.core.services import PAUSED_TEXT
 from tianxia.models import MOVES, BattleDef
 from tianxia.rules import can_draw_side_change, front_text, resolve_trends, season_one
 from tianxia.state import BattleRecord, JournalEntry
 
+from . import generals  # 龍頭上陣（第 8 批從 tianxia/generals.py 搬進這一包）
 from . import muster, rules  # muster：集結、投效、挑同伴（第 7 批；它也 import 這一檔，都在函式裡用）
+from . import progress  # 推進與結算（第 8 批；它 import muster、sieges，都在函式裡用）
 
 
 def escort_line(ctx, e: battle_instance.Escort) -> str:
@@ -359,7 +363,7 @@ def gauge_of(ctx, battle: battle_instance.BattleInstance, definition: BattleDef,
 def battle_gauge(ctx) -> dict | None:
     """場景裡畫著的這場決戰（集結、開打）的戰局條（Joy 2026-10-10）；沒有、序章裡是 None。只讀，不推進戰鬥。
     自己在場上就站自己那一邊看；還沒加入的看自己陣營那一邊；散人、第三方看第一方在左。"""
-    status = ctx._battle_for_me(tick=False)
+    status = progress.battle_for_me(ctx, tick=False)
     if status is None:
         return None
     battle, definition = status
@@ -379,7 +383,7 @@ def battle_gauge(ctx) -> dict | None:
 def siege_banner(ctx) -> dict | None:
     """場景裡畫著的這一場是攻城戰時，畫面最上面那一條（領地爭奪第三批 A，企劃者挑甲：「攻城・地點｜守方：某某」，siege.banner）；
     決戰、沒有戰鬥、序章裡是 None。同 battle_gauge 看同一場（_battle_for_me），只讀。"""
-    status = ctx._battle_for_me(tick=False)
+    status = progress.battle_for_me(ctx, tick=False)
     if status is None or status[0].siege is None:
         return None
     return siege.banner(ctx.content, status[0])
@@ -420,7 +424,7 @@ def battle_scene_text(ctx, battle: battle_instance.BattleInstance, definition: B
     if battle.phase == "muster" and battle.commanders:  # 龍頭上陣：集結時就看得到誰親自上陣（三方混戰多一格守軍）
         header += "\n\n" + "\n".join(
             f"{names[fid]}：{text}" for fid in battle_instance.fields(battle, definition) if (text := generals.lineup(battle, fid)))
-    watching = ctx._watching_battle(battle, definition)
+    watching = progress.watching_battle(ctx, battle, definition)
     watch_line = watch_text(ctx, battle, definition)
     if battle.phase == "muster":
         paused = ctx.world.paused_at()  # 暫停中集結不倒數：停在按下暫停那一刻剩下的
@@ -634,7 +638,7 @@ def battle_free_text_prompt(ctx) -> str | None:
     ——設計討論：魯莽這類選項該是玩家自己想出來的招，不是從清單挑一個）；沒有（不在
     戰鬥中、集結期、已經出局、這回合已經選過）就回傳 None，server.py 用這個決定輸入框
     要不要顯示。序章裡沒有（_battle_for_me）。"""
-    status = ctx._battle_for_me(tick=False)
+    status = progress.battle_for_me(ctx, tick=False)
     if status is None:
         return None
     battle, definition = status
@@ -651,7 +655,7 @@ def battle_free_text_note(ctx) -> str | None:
     再失手一次就會倒下時（battle_instance.one_miss_left）後面多 BATTLE_GAMBLE_LAST。"""
     if battle_free_text_prompt(ctx) is None:
         return None
-    battle, definition = ctx._battle_for_me(tick=False)
+    battle, definition = progress.battle_for_me(ctx, tick=False)
     p = battle.participants[ctx.state.player.name]
     if definition.free_text_gamble is not None and battle_instance.one_miss_left(p, definition.free_text_gamble):
         return f"{rules.BATTLE_GAMBLE_NOTE}{rules.BATTLE_GAMBLE_LAST}"
@@ -663,7 +667,7 @@ def battle_text_check(ctx, text: str, tick: bool) -> tuple[BattleDef, str, str, 
     不行回傳要給玩家看的那一句。tick 照 _battle_status。"""
     if ctx.world.paused_at() is not None:  # 不走 choose()：暫停中自己擋，不然送出去會把這一回合結算掉
         return [f"（{PAUSED_TEXT}。）"]
-    status = ctx._battle_for_me(tick=tick)  # 序章裡送不出去（FB-113）
+    status = progress.battle_for_me(ctx, tick=tick)  # 序章裡送不出去（FB-113）
     if status is None:
         return ["（此刻無法這麼做。）"]
     battle, definition = status
@@ -688,7 +692,7 @@ def battle_text_request(ctx, text: str) -> rules.BattleTextRequest | list[str]:
     if isinstance(checked, list):
         return checked
     definition, _, text, faction_name = checked
-    battle = ctx._battle_now()
+    battle = progress.battle_now(ctx)
     return rules.BattleTextRequest(
         battle_id=definition.id, act_index=battle.act_index, faction_name=faction_name, text=text,
         name=ctx.state.player.name, sex=gender.of(ctx.state),
@@ -714,7 +718,7 @@ def submit_battle_custom_action(
         return checked
     definition, tag, text, faction_name = checked
     if llm_rate is None:
-        battle = ctx._battle_now()
+        battle = progress.battle_now(ctx)
         act = battle_instance.current_act(battle, definition)
         target = battle_instance.target_line(battle, definition, ctx.state.player.name, text, ctx.content.config.battle)
         verdict = battle_instance.assess_gamble(
@@ -759,7 +763,7 @@ def apply_battle_tales(ctx, request: rules.BattleTaleRequest, stories: dict[str,
     def _apply(b: battle_instance.BattleInstance) -> None:
         patched["n"] = battle_instance.apply_tales(b, request.done, stories)
 
-    ctx._mutate_battle_of(battle, _apply)
+    progress.mutate_battle_of(ctx, battle, _apply)
     return patched["n"]
 
 
@@ -795,4 +799,4 @@ def showdown_tier4(ctx, battle: battle_instance.BattleInstance, me: battle_insta
 def battle_on_screen(ctx) -> bool:
     """場景上此刻畫著一場全服戰鬥（同 scene_text 讀的那一場；只讀、不推進）。server.main_view 拿它認出「選單這一下把決戰推到
     收場了」，場景要重讀（手機介面自檢 U-06）。"""
-    return ctx._battle_for_me(tick=False) is not None
+    return progress.battle_for_me(ctx, tick=False) is not None

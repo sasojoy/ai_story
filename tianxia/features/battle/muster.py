@@ -9,12 +9,12 @@ docs/superpowers/plans/2026-11-01-決戰包-第3批.md）。原本 Game 上的 2
 - 在不在場：at_battle、in_battle_region、battle_region_name、absent_reason、sync_battle_presence；我在哪幾場打得進去：joinable、in_region
 - 假人趕路：rally_region、rally_any（bot_policy、bot_runner 照舊叫 Game.rally_region）
 
-留在 Game 的經 ctx：「打」那一半第 8 批的（_battle_for_me、_battle_status〔測試換掉〕、_battle_now、_watching_battle、battles_now、
-_mutate_battle_of、_mutate_battle_now、_advance_battle_round、_apply_battle_outcome〔測試換掉〕）、戰力快照（核心的單打服務：_battle_scores
-〔測試換掉〕、_battle_power〔測試換掉〕、_battle_gear、_battle_marks、_battle_role、_battle_road、_battle_neili_cap）、玉璽的 _mandate_weight
-（總表裁定歸玉璽）、_backfill_battle_scores、_side、_conquest_side、_write，與 Game 上的暫時旗標 _battle_ref、_escort_picked、_escort_now（寄放）。
-這一包自己的（view.round_wait、sieges.sieges、sieges.definition_of、escorts、這一檔互相叫）直接叫函式：測試只是直接叫 Game 上的委派、
-沒有換掉它們（手冊第十五節 PM 11/01）。
+留在 Game 的經 ctx：「打」那一半被測試換掉的 _battle_status、_apply_battle_outcome（第 8 批的本體在 progress.py，照舊經 Game：換掉的才打得到）、
+戰力快照（核心的單打服務：_battle_scores〔測試換掉〕、_battle_power〔測試換掉〕、_battle_gear、_battle_marks、_battle_role、_battle_road、
+_battle_neili_cap）、玉璽的 _mandate_weight（總表裁定歸玉璽）、_side、_conquest_side、_write，與 Game 上的暫時旗標 _battle_ref、_escort_picked、
+_escort_now（寄放）。這一包自己的（view.round_wait、sieges.sieges、sieges.definition_of、escorts、第 8 批的 progress〔battle_for_me、battle_now、
+watching_battle、battles_now、mutate_battle_of、mutate_battle_now、advance_battle_round、backfill_battle_scores：第 7 批時還在 Game、經 ctx 叫〕、
+這一檔互相叫）直接叫函式：測試只是直接叫 Game 上的委派、沒有換掉它們（手冊第十五節 PM 11/01）。
 """
 from __future__ import annotations
 
@@ -26,14 +26,14 @@ from tianxia.core.option import Option
 from tianxia.models import BattleDef
 from tianxia.state import JournalEntry
 
-from . import escorts, rules, sieges, view
+from . import escorts, progress, rules, sieges, view  # progress：推進與結算（第 8 批；它也 import 這一檔，都在函式裡用）
 
 
 def ally_follows_battle(ctx) -> list[str]:
     """選邊的那一刻（豪強分屬兩軍），人已經在這一場決戰的參戰名單上、站的是另一邊（先臨時投效了，FB-273）：集結時照新選的
     那一邊換過去（同改選：份量照這一刻重新快照），開打了照決戰的規則不能改投（同 _enlist），這一場照舊站原來那一邊；兩種都說一句。
     沒有決戰、不在名單上、本來就站這一邊，什麼都不做。"""
-    status = ctx._battle_for_me(tick=False)
+    status = progress.battle_for_me(ctx, tick=False)
     if status is None:
         return []
     battle, definition = status
@@ -45,8 +45,8 @@ def ally_follows_battle(ctx) -> list[str]:
         return [allied.ALLY_STAYS.format(battle=definition.name, ally=camps[side], old=camps.get(me.faction, me.faction))]
     scores = ctx._mandate_weight(definition, ctx._battle_scores())
     gear, marks = ctx._battle_gear(), ctx._battle_marks()
-    ctx._mutate_battle_of(
-        battle,
+    progress.mutate_battle_of(
+        ctx, battle,
         lambda b: battle_instance.join_faction(
             b, name, side, ctx._battle_neili_cap(), ctx._battle_power(), scores=scores, attribute=ctx._battle_road(),
             role=ctx._battle_role(), **gear, **marks,
@@ -77,7 +77,7 @@ def escort_carry(ctx) -> battle_instance.Escort | None:
     """這一次加入要帶的同伴：剛在挑的那一位（_escort_step）；不然是已經在參戰名單上的那一位（集結時改選、依附那一軍重新快照，照舊跟著）。"""
     if ctx._escort_picked:
         return ctx._escort_now
-    battle = ctx._battle_now()
+    battle = progress.battle_now(ctx)
     me = battle.participants.get(ctx.state.player.name) if battle is not None else None
     return me.escort if me is not None else None
 
@@ -178,7 +178,7 @@ def joinable(ctx) -> list[battle_instance.BattleInstance]:
     out = []
     for b in live:
         d = sieges.definition_of(ctx, b)
-        if d is not None and at_battle(ctx, d) and not ctx._watching_battle(b, d):
+        if d is not None and at_battle(ctx, d) and not progress.watching_battle(ctx, b, d):
             out.append(b)
     return out
 
@@ -276,7 +276,7 @@ def sync_battle_presence(ctx) -> None:
         return
     away = not in_battle_region(ctx, definition)
     if me.away != away:
-        ctx._mutate_battle_of(battle, lambda b: battle_instance.set_away(b, name, away))
+        progress.mutate_battle_of(ctx, battle, lambda b: battle_instance.set_away(b, name, away))
 
 
 def rally_region(ctx) -> str | None:
@@ -395,7 +395,7 @@ def battle_choose(ctx, arg: str) -> list[str]:
     if not ref.isdigit():
         return ["（此刻無法這麼做。）"]
     name = ctx.state.player.name
-    if any(name in b.participants and b.record_id != int(ref) for b in ctx.battles_now() if b.phase != "ended"):
+    if any(name in b.participants and b.record_id != int(ref) for b in progress.battles_now(ctx) if b.phase != "ended"):
         return ["（你已經在另一場戰局裡。）"]
     ctx._battle_ref = int(ref)
     try:
@@ -406,7 +406,7 @@ def battle_choose(ctx, arg: str) -> list[str]:
 
 def battle_choose_in(ctx, arg: str) -> list[str]:
     """_battle_choose 的本體（看的那一場已經照 @流水號 定好）。"""
-    status = ctx._battle_for_me(tick=False)
+    status = progress.battle_for_me(ctx, tick=False)
     if status is None:
         return ["（此刻無法這麼做。）"]
     battle, definition = status
@@ -438,8 +438,8 @@ def battle_choose_in(ctx, arg: str) -> list[str]:
             return [problem]
         scores = ctx._mandate_weight(definition, ctx._battle_scores())  # 在 mutate_battle 之前算好：快照的是加入這一刻、這個玩家自己的份量
         gear, marks = ctx._battle_gear(), ctx._battle_marks()
-        ctx._mutate_battle_of(
-            battle,
+        progress.mutate_battle_of(
+            ctx, battle,
             lambda b: battle_instance.join_faction(
                 b, name, rest, ctx._battle_neili_cap(), ctx._battle_power(), scores=scores, attribute=ctx._battle_road(),
                 role=ctx._battle_role(), **gear, **marks,
@@ -455,8 +455,8 @@ def battle_choose_in(ctx, arg: str) -> list[str]:
             return [problem]
         scores = ctx._mandate_weight(definition, ctx._battle_scores())
         gear, marks = ctx._battle_gear(), ctx._battle_marks()
-        ctx._mutate_battle_of(
-            battle,
+        progress.mutate_battle_of(
+            ctx, battle,
             lambda b: battle_instance.auto_assign_latecomer(
                 b, definition, name, ctx._battle_neili_cap(), ctx.rng, ctx._battle_power(), faction=own,
                 scores=scores, attribute=ctx._battle_road(), role=ctx._battle_role(), **gear, **marks,
@@ -466,7 +466,7 @@ def battle_choose_in(ctx, arg: str) -> list[str]:
         ctx._write(f"{definition.name}・趕到戰場", msgs)  # 趕到也留一則（FB-030）；每回合的出招不寫，太吵
         return msgs
     if kind == "act":
-        ctx._backfill_battle_scores()  # 還沒有份量快照的自己，出招之前先補（結算要讀）
+        progress.backfill_battle_scores(ctx)  # 還沒有份量快照的自己，出招之前先補（結算要讀）
         return submit_battle_action(ctx, name, definition, rest)
     return ["（此刻無法這麼做。）"]
 
@@ -507,16 +507,16 @@ def enlist(
     if side == battle_instance.GUARD:  # 三方混戰助守：同伴只在兩軍那兩格上陣，這一場不帶（裁決 22）
         marks["escort"] = None
     if battle.phase == "muster":
-        ctx._mutate_battle_of(
-            battle,
+        progress.mutate_battle_of(
+            ctx, battle,
             lambda b: battle_instance.join_faction(
                 b, name, side, cap, power, scores=scores, attribute=road, role=role, **gear, **marks,
             ),
         )
         msgs = [f"你臨時投效了{armies[side]}，只算這一場：打完你照樣是{own_side_name(ctx)}。"]
     else:
-        ctx._mutate_battle_of(
-            battle,
+        progress.mutate_battle_of(
+            ctx, battle,
             lambda b: battle_instance.auto_assign_latecomer(
                 b, definition, name, cap, ctx.rng, power, faction=side, scores=scores, attribute=road, role=role,
                 **gear, **marks,
@@ -548,9 +548,9 @@ def submit_battle_action(
         battle_instance.submit_action(b, name, tag, text, success_rate, stories, sex=sex)
         if ult and name in b.round.success_rates:  # 這一搏真的送進去了，記下身上的絕招
             b.round.ults[name] = ult
-        captured["msgs"] = ctx._advance_battle_round(b, definition)
+        captured["msgs"] = progress.advance_battle_round(ctx, b, definition)
 
-    battle = ctx._mutate_battle_now(_apply)  # 有攻城戰時是自己參戰的那一場（領地爭奪第二批）
+    battle = progress.mutate_battle_now(ctx, _apply)  # 有攻城戰時是自己參戰的那一場（領地爭奪第二批）
     if battle is not None and battle.phase == "ended":
         ctx._apply_battle_outcome(battle)
     return captured["msgs"] or ["你選擇了行動，等待其他人……"]

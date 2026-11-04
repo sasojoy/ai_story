@@ -16,8 +16,17 @@ from ..features import sortie  # 出陣：主動搬六包第 1 批（沒有選�
 # battle
 from ..features import battle  # 全服決戰：主動搬六包第 5 批（「看」那一半；沒有選項、選單、狀態，排在哪裡結果都一樣）
 from ..features import looks  # 擂台形象
+# guide
+from ..features import guide  # 新手引導：全部拆包第 22 批（沒有選項、選單、狀態，排在哪裡結果都一樣；check_content 的錯誤排在別包之後——
+# 第 12 批合進 develop 時單挑包接在它後面，只有碰到才說與場邊事件同時寫壞時錯誤的先後不同）
+# companions
+from ..features import companions  # 人物情誼：全部拆包第 19 批（只接 errand:* 的 choose 與 /api/figure；都照前綴、路徑認，排在哪裡結果都一樣）
+# sense
+from ..features import sense  # 有所感與頓悟：全部拆包第 24 批（choose 只吃 sense:、scene 接在宴客之後——原本那一行就在宴客那一行後面）
 # cultivation
 from ..features import cultivation  # 修練：全部拆包第 23 批（只接 learn:* 的 choose，照前綴認，排在哪裡結果都一樣）
+# bout
+from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。排最後：擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -32,8 +41,16 @@ FEATURES: list[Feature] = [
     # battle
     battle.FEATURE,
     looks.FEATURE,
+    # guide
+    guide.FEATURE,
+    # companions
+    companions.FEATURE,
+    # sense
+    sense.FEATURE,
     # cultivation
     cultivation.FEATURE,
+    # bout（排最後：店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4）
+    bout.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 
@@ -119,4 +136,8 @@ SHARED: dict[str, str] = {
     "flavor": "重複內容的模型潤色（世界事件傳聞全服只潤一次）：核心的 sqlite_world 讀；世界一步也叫（模型服務）",
     "playlog": "真人量表（每個帳號每天按了哪幾顆）：只 import 核心的 database；殼記帳、量表腳本讀",
     "prologue": "序章（草廬那幾步）：決戰、探索、出陣、酒肆四包都問「還在序章裡」，引導、開局、輿圖也讀",
+    # battle（全部拆包第 8 批：generals 進決戰包時，共用規則層的 siege 讀的那一塊留在這一層；第 15 批 PM 認定第 2 條）
+    "chiefs": "龍頭上陣的挑法（誰上陣、份量、池子；原本 generals 的 on、pick）：決戰包開集結派人上陣、共用規則層 siege 的攻城留守都讀",
+    # companions（全部拆包第 19 批「先做」：stances 拆兩半，總表附錄甲；行動那一半在人物情誼包）
+    "stance_world": "人物心意的世界那一半（這一週的計數、誰照哪一個做事、門檻、換手、每週歸零）：核心的 rules、事件檢定與舊模組 world、figures、events 都讀",
 }

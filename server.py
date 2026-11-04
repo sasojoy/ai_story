@@ -66,7 +66,7 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, ascend, battle_instance, flavor, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mapdata, might,
+    arena_crowd, ascend, battle_instance, flavor, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, fight_llm, foreshadow, gather_llm, gender, insight_llm, leaderboard, letters, mapdata, might,
     naming, narration, outing,
     ollama_client, power_save, rules,
     precise, seal, seal_duel, server_bots, social, sortie, speech, tale, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
@@ -3055,14 +3055,6 @@ def api_peer(request: Request, name: str = ""):
     return {"card": look(game, lambda g: g.peer_card(name)), "gone": social.GONE}
 
 
-@app.get("/api/figure")
-def api_figure(request: Request, id: str = ""):
-    """人物頁（減法季批 6，主機側計畫 1.3 的 figure.stances、figure.errands）：這位人物（對話人物 id）的心意條、你今天記的那一筆、
-    他託你的事（Game.figure_view）。關著、他什麼都沒有是 None。只讀。"""
-    game = _game(request)
-    return {"figure": look(game, lambda g: g.figure_view(str(id)[:40]))}
-
-
 @app.post("/api/peer/act")
 def api_peer_act(request: Request, body: dict = Body(default={})):
     """按了玩家卡上的一顆鈕（Game.peer_act）：回傳 {card, main, message}。參數都是客戶端寫的，一律轉成字串或整數再交給引擎驗。"""
@@ -3156,32 +3148,8 @@ def api_howto(request: Request):
     return look(game, lambda g: {"text": md(g.howto_text())})
 
 
-@app.post("/api/sense")
-def api_sense(request: Request, body: dict = Body(default={})):
-    """有所感畫完那一筆：points 是 [[x, y, 毫秒], …]，png 是畫布的小圖（base64，不含 data: 開頭）。"""
-    game = _game(request)
-    msgs = sense_draw(game, body.get("points"), body.get("png") or "")
-    _tell_tabs(game)
-    return {"main": look(game, main_view), "message": joined(msgs)}
-
-
-@app.post("/api/sense_read")
-def api_sense_read(request: Request, body: dict = Body(default={})):
-    """畫布底下那一行（不算行動、不拿鎖、不碰狀態）：這一筆讀不讀得出來（跟送出時讀的是同一套 glyph.read）。讀得出來只回 ok，
-    不寫規則讀到什麼——玩家面前不寫筆畫的幾何（企劃者 2026-10-06），那一筆的感覺留到意境的說明；讀不出來回一句話（只點了一下）。"""
-    _game(request)
-    try:
-        glyph.read(body.get("points"))
-    except glyph.GlyphError as e:
-        return {"ok": False, "problem": str(e)}
-    return {"ok": True}
-
-
-@app.post("/api/sense_warm")
-def api_sense_warm(request: Request):
-    """畫布一出現就送的暖機（悟意境設計 0.2a）：只叫 Ollama 把模型載起來、不取名、不等它載完；不拿鎖、不碰狀態。"""
-    game = _game(request)
-    return {"ok": insight_llm.warm(game.client)}
+# （/api/sense、/api/sense_read、/api/sense_warm：全部拆包第 24 批搬進有所感包 tianxia/features/sense/routes.py，殼照 FEATURES 掛；
+# 畫完那一筆的鎖外三段式照舊是這個檔的 sense_draw）
 
 
 @app.post("/api/forge_line")

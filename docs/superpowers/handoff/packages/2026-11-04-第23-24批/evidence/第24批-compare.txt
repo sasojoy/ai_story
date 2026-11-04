@@ -1,0 +1,54 @@
+跑完 974 秒
+sortie none      整段 base 515 行 2197897 位元組 35096a1216e2fe7a｜head 35096a1216e2fe7a 一樣｜base 前半＋head 後半 35096a1216e2fe7a 一樣
+sortie weekend   整段 base 623 行 5309026 位元組 90782f0e81ab0d97｜head 90782f0e81ab0d97 一樣｜base 前半＋head 後半 90782f0e81ab0d97 一樣
+sortie season21  整段 base 692 行 7402558 位元組 56cd85cf9de1b4c1｜head 56cd85cf9de1b4c1 一樣｜base 前半＋head 後半 56cd85cf9de1b4c1 一樣
+sortie week7     整段 base 667 行 6394501 位元組 d9b7d0610b3e13e8｜head d9b7d0610b3e13e8 一樣｜base 前半＋head 後半 d9b7d0610b3e13e8 一樣
+sortie test      整段 base 475 行 895309 位元組 b823420f864a91ed｜head b823420f864a91ed 一樣｜base 前半＋head 後半 b823420f864a91ed 一樣
+duel   none      整段 base 1192 行 3383064 位元組 9de3c733f1c84f2a｜head 9de3c733f1c84f2a 一樣｜base 前半＋head 後半 9de3c733f1c84f2a 一樣
+duel   weekend   整段 base 1266 行 6913779 位元組 7c7c0638739ec8de｜head 7c7c0638739ec8de 一樣｜base 前半＋head 後半 7c7c0638739ec8de 一樣
+duel   season21  整段 base 1151 行 10499939 位元組 cfb7b95cf85bd37c｜head cfb7b95cf85bd37c 一樣｜base 前半＋head 後半 cfb7b95cf85bd37c 一樣
+duel   week7     整段 base 1109 行 9112459 位元組 655e668c589aaa85｜head 655e668c589aaa85 一樣｜base 前半＋head 後半 655e668c589aaa85 一樣
+duel   test      整段 base 845 行 1415636 位元組 03d42e4929ee01b8｜head 03d42e4929ee01b8 一樣｜base 前半＋head 後半 03d42e4929ee01b8 一樣
+battle none      整段 base 1003 行 4663725 位元組 28f77d3fa49cf19c｜head 28f77d3fa49cf19c 一樣｜base 前半＋head 後半 28f77d3fa49cf19c 一樣
+battle weekend   整段 base 1475 行 14599846 位元組 5c9f527c99d3d10d｜head 5c9f527c99d3d10d 一樣｜base 前半＋head 後半 5c9f527c99d3d10d 一樣
+battle season21  整段 base 1552 行 18235983 位元組 a595152e2fc866b2｜head a595152e2fc866b2 一樣｜base 前半＋head 後半 a595152e2fc866b2 一樣
+battle week7     整段 base 1553 行 17423412 位元組 b7716a82c82ebde8｜head b7716a82c82ebde8 一樣｜base 前半＋head 後半 b7716a82c82ebde8 一樣
+battle test      整段 base 631 行 1155001 位元組 85c05b097c416aaa｜head 85c05b097c416aaa 一樣｜base 前半＋head 後半 85c05b097c416aaa 一樣
+muster none      整段 base 1003 行 4663725 位元組 28f77d3fa49cf19c｜head 28f77d3fa49cf19c 一樣｜base 前半＋head 後半 28f77d3fa49cf19c 一樣
+muster weekend   整段 base 1475 行 14599846 位元組 5c9f527c99d3d10d｜head 5c9f527c99d3d10d 一樣｜base 前半＋head 後半 5c9f527c99d3d10d 一樣
+muster season21  整段 base 1552 行 18235983 位元組 a595152e2fc866b2｜head a595152e2fc866b2 一樣｜base 前半＋head 後半 a595152e2fc866b2 一樣
+muster week7     整段 base 1553 行 17423412 位元組 b7716a82c82ebde8｜head b7716a82c82ebde8 一樣｜base 前半＋head 後半 b7716a82c82ebde8 一樣
+muster test      整段 base 631 行 1155001 位元組 85c05b097c416aaa｜head 85c05b097c416aaa 一樣｜base 前半＋head 後半 85c05b097c416aaa 一樣
+tavern none      整段 base 656 行 3641685 位元組 655f95a8d5f0afe6｜head 655f95a8d5f0afe6 一樣｜base 前半＋head 後半 655f95a8d5f0afe6 一樣
+tavern weekend   整段 base 703 行 5991322 位元組 0a72b73315cced66｜head 0a72b73315cced66 一樣｜base 前半＋head 後半 0a72b73315cced66 一樣
+tavern season21  整段 base 745 行 8128206 位元組 94dc67152ec23279｜head 94dc67152ec23279 一樣｜base 前半＋head 後半 94dc67152ec23279 一樣
+tavern week7     整段 base 717 行 7233995 位元組 1fc16ea5e2f0d3cc｜head 1fc16ea5e2f0d3cc 一樣｜base 前半＋head 後半 1fc16ea5e2f0d3cc 一樣
+tavern test      整段 base 633 行 1418157 位元組 2da936d09278014a｜head 2da936d09278014a 一樣｜base 前半＋head 後半 2da936d09278014a 一樣
+events none      整段 base 727 行 3333975 位元組 f01590813bf5e48f｜head f01590813bf5e48f 一樣｜base 前半＋head 後半 f01590813bf5e48f 一樣
+events weekend   整段 base 785 行 6311262 位元組 7aebd0df1be13e55｜head 7aebd0df1be13e55 一樣｜base 前半＋head 後半 7aebd0df1be13e55 一樣
+events season21  整段 base 830 行 8572310 位元組 67407e8db8c3873e｜head 67407e8db8c3873e 一樣｜base 前半＋head 後半 67407e8db8c3873e 一樣
+events week7     整段 base 781 行 7044407 位元組 1096faf62bff70da｜head 1096faf62bff70da 一樣｜base 前半＋head 後半 1096faf62bff70da 一樣
+events test      整段 base 583 行 1337543 位元組 1c2b61532e8b273d｜head 1c2b61532e8b273d 一樣｜base 前半＋head 後半 1c2b61532e8b273d 一樣
+train  none      整段 base 545 行 2605856 位元組 a78d0646ed1824f4｜head a78d0646ed1824f4 一樣｜base 前半＋head 後半 a78d0646ed1824f4 一樣
+train  weekend   整段 base 546 行 4642293 位元組 c92943a6262e2bb2｜head c92943a6262e2bb2 一樣｜base 前半＋head 後半 c92943a6262e2bb2 一樣
+train  season21  整段 base 546 行 5609898 位元組 f99030dd2687f637｜head f99030dd2687f637 一樣｜base 前半＋head 後半 f99030dd2687f637 一樣
+train  week7     整段 base 528 行 4792606 位元組 cbfa418eab21c946｜head cbfa418eab21c946 一樣｜base 前半＋head 後半 cbfa418eab21c946 一樣
+train  test      整段 base 435 行 988300 位元組 ceb6cd9d2cd2021d｜head ceb6cd9d2cd2021d 一樣｜base 前半＋head 後半 ceb6cd9d2cd2021d 一樣
+guide  none      整段 base 537 行 2197037 位元組 326674bee895cf3a｜head 326674bee895cf3a 一樣｜base 前半＋head 後半 326674bee895cf3a 一樣
+guide  weekend   整段 base 563 行 3840692 位元組 6877538b48a0f2d6｜head 6877538b48a0f2d6 一樣｜base 前半＋head 後半 6877538b48a0f2d6 一樣
+guide  season21  整段 base 584 行 4773833 位元組 8ea302dfa1e0ad44｜head 8ea302dfa1e0ad44 一樣｜base 前半＋head 後半 8ea302dfa1e0ad44 一樣
+guide  week7     整段 base 548 行 4106674 位元組 cc09d9aeac014445｜head cc09d9aeac014445 一樣｜base 前半＋head 後半 cc09d9aeac014445 一樣
+guide  test      整段 base 422 行 742876 位元組 6d2849f1ba7d890f｜head 6d2849f1ba7d890f 一樣｜base 前半＋head 後半 6d2849f1ba7d890f 一樣
+sense  none      整段 base 679 行 2622467 位元組 193e97bf86d339c5｜head 193e97bf86d339c5 一樣｜base 前半＋head 後半 193e97bf86d339c5 一樣
+sense  weekend   整段 base 708 行 4868579 位元組 ba2e98d214f84463｜head ba2e98d214f84463 一樣｜base 前半＋head 後半 ba2e98d214f84463 一樣
+sense  season21  整段 base 911 行 9532050 位元組 8ae86a86206340b2｜head 8ae86a86206340b2 一樣｜base 前半＋head 後半 8ae86a86206340b2 一樣
+sense  week7     整段 base 887 行 8216070 位元組 eccb87be81fddf02｜head eccb87be81fddf02 一樣｜base 前半＋head 後半 eccb87be81fddf02 一樣
+sense  test      整段 base 623 行 1308752 位元組 ab0ae30ae4d7b3d6｜head ab0ae30ae4d7b3d6 一樣｜base 前半＋head 後半 ab0ae30ae4d7b3d6 一樣
+假人 sortie weekend   16 行 5212 位元組 base 42f00a9921242270｜head 42f00a9921242270 一樣
+假人 sortie week7     16 行 4609 位元組 base e3bfa43713853ff3｜head e3bfa43713853ff3 一樣
+假人 duel   season21  28 行 8446 位元組 base 67cd2e51b642449d｜head 67cd2e51b642449d 一樣
+假人 duel   week7     28 行 9349 位元組 base 5363204a668638f3｜head 5363204a668638f3 一樣
+假人 train  none      28 行 5858 位元組 base 1c6a6ceb83b95d27｜head 1c6a6ceb83b95d27 一樣
+假人 train  weekend   28 行 5593 位元組 base 7a5da278d16aacf3｜head 7a5da278d16aacf3 一樣
+假人 train  week7     28 行 5308 位元組 base 87b36932a9f980c4｜head 87b36932a9f980c4 一樣
+全部一樣

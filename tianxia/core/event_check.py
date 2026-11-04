@@ -45,7 +45,7 @@ from .. import annals, battlelog, bounties, event_llm, foreshadow, forge_secrets
 from .. import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有端出事件那一下會叫；照 engine 的叫法）
 from .. import outcomes as outcome_rules
 from .. import prologue as prologue_rules
-from .. import stances as stance_rules
+from .. import stance_world as stance_rules  # 人物心意的世界那一半（共用規則層，全部拆包第 19 批）
 from ..events import choice_label, stamina_note, visible_choices
 from ..journal import Draft
 from ..models import FREE_TEXT_MAX, Choice, Effect, Event, FreeTextChoice, Outcome

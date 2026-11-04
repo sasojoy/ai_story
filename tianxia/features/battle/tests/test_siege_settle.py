@@ -2,8 +2,8 @@
 
 守方是陣營時，攻城的留守是那一區守方的大勢人物（siege.commanders 照 generals.pick）；打倒了照決戰扣聲威、天下大事一句，句子寫這一場的
 名字（攻城・地點），「每一位只扣一次」記在攻城那一列（generals.after_battle 的 where、mutate 兩個參數）。搬包之前也沒有一條測試守：
-tests/acts/test_conquest_siege.py 倒下的守將都是隊伍（squad:…，不在人物表、after_battle 略過），tests/battle/test_generals.py 拿決戰直接叫
-after_battle、不經攻城收場；scripts/same_behavior.py 決戰一軌的六場攻城，是人物的留守一位都沒倒。
+tests/acts/test_conquest_siege.py 倒下的守將都是隊伍（squad:…，不在人物表、after_battle 略過），決戰包的 tests/test_generals.py（第 8 批合併時
+從 tests/battle/test_generals.py 拆過來）拿決戰直接叫 after_battle、不經攻城收場；scripts/same_behavior.py 決戰一軌的六場攻城，是人物的留守一位都沒倒。
 
 另一條（同一輪審查的單點突變裡沒人抓到的 M6）：收場只做一次——傳進來的那一份也標上 settled，同一份再叫一次什麼都不做。
 """

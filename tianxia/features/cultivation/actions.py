@@ -15,7 +15,6 @@ from tianxia import growth, journal, library, naming, team
 from tianxia import prologue as prologue_rules  # 序章（共用規則層；Game.new 有個參數也叫 prologue，照 engine 叫 prologue_rules）
 from tianxia import skillview  # 過渡：待搬（修練頁的說明：熔了還能重學、配點那一句；共用規則層 SHARED_LATER）
 from tianxia.core.services import not_while_preparing
-from tianxia.guide import note_action  # 過渡：待搬（新手引導：序章第 9 步配點；第 22 批成包之後改叫 ctx._note_action）
 from tianxia.martial_arts import is_renamed
 from tianxia.rules import jianfa
 from tianxia.state import JournalEntry
@@ -309,7 +308,7 @@ def allocate_stat(ctx, stat: str) -> list[str]:
         merge=True,
     )
     left = f"（還有 {p.stat_points} 點可以分配）" if p.stat_points else ""  # 最後一點不寫「還有 0 點」
-    ctx._guide(note_action(ctx.state, ctx.content, ctx.world, "allocate"))  # 序章第 9 步（新手引導計畫一）
+    ctx._guide(ctx._note_action("allocate"))  # 序章第 9 步（新手引導計畫一）
     ctx._check_hints()  # 博聞加了持有上限會變（h_cap 的條件）：配成了之後看一遍（新手引導計畫三）
     return ctx._log([f"{said or f'{name} +1'}{left}"])
 

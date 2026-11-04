@@ -55,9 +55,10 @@ def _added(path, src, *lines):
 
 
 def test_a_module_picks_the_tests_that_import_it():
-    picked = test_for.pick(["tianxia/glyph.py"])
-    assert "test_sensing.py" in {p.name for p in picked.files} and not picked.core
-    assert any("sensing" in w for w in picked.why)  # 經 import 它的 sensing 再挑（T-02）
+    # sense（全部拆包第 24 批）：原本的例子 glyph ← sensing 搬進了有所感包（tianxia/glyph.py 成了別名），換一對還是舊模組的 chapters ← weekcard
+    picked = test_for.pick(["tianxia/chapters.py"])
+    assert "test_chapters.py" in {p.name for p in picked.files} and not picked.core
+    assert any("weekcard" in w for w in picked.why)  # 經 import 它的 weekcard 再挑（T-02）
 
 
 def test_a_module_also_picks_the_tests_of_the_modules_that_import_it():
@@ -942,6 +943,83 @@ def test_a_core_module_named_without_a_change_counts_the_whole_file():
     for name in ("tale_clue", "present", "answer_branch", "EVIL_ANNAL"):
         assert {p.name for p in _core_pick(name).files} <= names, name
     assert any("整個檔" in w for w in picked.why)
+
+
+# bout（全部拆包第 12 批審查修正）：單挑底層 duel_base、擂台的名次 arena_ranks 被單挑包的 duel_rules、arena_rules 照抄出去
+# （re-export 同一批函式物件），測試照舊經舊名寫（`from tianxia import duel`、`duel.blow_taken`、`arena.title_for`、
+# `from tianxia import duel as duel_rules`）。以前「模組名與函式名寫在同一個檔」只認 duel_base、arena_ranks 這兩個字，一個都並不上
+# （審查 C1、C2、C5：改了核心那一份，test_for 挑的全綠、包與奪璽單挑的測試紅）。
+
+def _core_pick_in(module: str, name: str):
+    return test_for.pick([f"tianxia/core/{module}.py"], hunks_of=_core_hunk(module, name))
+
+
+def test_the_core_names_a_package_reexports_are_read_with_the_package_module_and_its_old_name():
+    """照語法樹讀出：名字 → 照抄它的模組名（duel_rules、arena_rules）與指到那一份的舊名別名（duel、arena）。只看 from … import 名字
+    （整個模組 import 進來的 `from tianxia.core import duel_base as duel_rules` 不算照抄：那一份寫得到 duel_base 這個字）。"""
+    duel_words = test_for.core_reexports("duel_base")
+    assert {"duel_rules", "duel"} <= duel_words["push_of"] and {"duel_rules", "duel"} <= duel_words["blow_taken"]
+    assert {"arena_rules", "arena"} <= test_for.core_reexports("arena_ranks")["title_for"]
+    assert "shopview" not in set().union(*duel_words.values()) and "seal_duel" not in set().union(*duel_words.values())
+    assert "present" not in test_for.core_reexports("event_check")  # 沒有人照抄的函式：照舊只認模組名與委派名
+    aliases = test_for.old_aliases()
+    assert aliases["tianxia.features.bout.duel_rules"] == {"duel"} and aliases["tianxia.features.bout.arena_rules"] == {"arena"}
+    assert aliases["tianxia.features.sortie.duel_rules"] == {"sortie_duel"}  # 同名的模組照全名分開
+
+
+@pytest.mark.parametrize("module, name, expected", [
+    ("duel_base", "push_of", {"test_seal_duel.py"}),  # 審查 C1（參謀減半拿掉）：寫 duel_rules.push_of（from tianxia import duel as duel_rules）
+    ("duel_base", "blow_taken", {"test_duel.py"}),  # 審查 C2（不算防具）：寫 duel.blow_taken
+    ("arena_ranks", "title_for", {"test_arena.py"}),  # 審查 C5（<= 改成 <）：寫 arena.title_for
+])
+def test_a_core_function_also_picks_the_tests_that_name_it_through_a_package_reexport(module, name, expected):
+    picked = _core_pick_in(module, name)
+    names = {p.name for p in picked.files}
+    assert picked.core and picked.smoke
+    assert expected <= names, picked.why
+    assert any("照抄" in w for w in picked.why), picked.why
+
+
+def test_a_reexported_name_counts_only_when_written_after_the_module_word():
+    """經照抄的模組寫的要寫成 `<模組名>.<名字>`（或從那個模組 import 那個名字）才算：duel、arena 是到處都有的字（p.duel、config.arena），
+    只看兩個字寫在同一個檔裡會把一大半的測試都挑進來。"""
+    assert test_for.names_through(["duel", "duel_rules"], "push_of", "from tianxia import duel as duel_rules\nduel_rules.push_of(1)\n")
+    assert test_for.names_through(["duel"], "blow_taken", "from tianxia.duel import blow_taken, counter\n")
+    assert not test_for.names_through(["duel"], "counter", "p.duel = None\ncounter = 3\n")
+    assert not test_for.names_through(["arena"], "title_for", "c.config.arena.enabled = True\nleaderboard.title_for\n")
+
+
+STAGE_PACKAGES = ["bout", "battle", "companions", "feast", "guide", "looks", "sense"]  # 有 <包>_stage.py 的包（引導是第 22 批合進 develop 的，第 12 批合併時補上；人物情誼是第 19 批、有所感是第 24 批合進 split/trunk 時補上）
+
+
+def test_the_stage_packages_are_every_package_with_a_stage_file():
+    """下面兩條照這張表參數化：新的一包放了 <包>_stage.py 就要加進來（不然那一包的擺局面檔沒有人驗挑不挑得到）。"""
+    found = sorted(p.parent.parent.name for p in (ROOT / "tianxia" / "features").glob("*/tests/*_stage.py")
+                   if p.name == f"{p.parent.parent.name}_stage.py")
+    assert found == sorted(STAGE_PACKAGES)
+
+
+@pytest.mark.parametrize("package", STAGE_PACKAGES)
+def test_a_package_stage_file_picks_the_contract_test_that_loads_it(package):
+    """tianxia/features/<包>/tests/<包>_stage.py 只有契約測試載入（test_contract_features 的 _stages 用 importlib 照路徑讀），沒有測試檔
+    import 它：改了挑核心契約（同改包的檔），不是「import 它的測試檔」那一條（第 12 批審查：以前四包的 *_stage.py 一條都不挑）。"""
+    rel = f"tianxia/features/{package}/tests/{package}_stage.py"
+    assert (ROOT / rel).is_file(), rel
+    picked = test_for.pick([rel])
+    assert {p.name for p in picked.files} >= {"test_contract_features.py", "test_feature_boundaries.py"}
+    assert any("契約" in w for w in picked.why), picked.why
+
+
+@pytest.mark.parametrize("package", STAGE_PACKAGES)
+def test_a_package_stage_file_also_picks_its_own_package_tests(package):
+    """擺局面檔算成那一包（第 22 批 PM 認定第 1 條、第 12 批合併時補）：挑那一包的 tests/ 加核心契約，同改包裡的任一檔——擺錯局面時
+    契約測試會紅，那一包自己的測試也要跟著跑（修正輪只挑了核心契約）。"""
+    rel = f"tianxia/features/{package}/tests/{package}_stage.py"
+    own = set((ROOT / "tianxia" / "features" / package / "tests").rglob("test_*.py"))
+    assert own, package
+    picked = test_for.pick([rel])
+    assert own <= set(picked.files), sorted(p.name for p in own - set(picked.files))
+    assert picked.files == test_for.pick([f"tianxia/features/{package}/__init__.py"]).files
 
 
 def test_a_core_pick_that_names_too_many_files_falls_back_to_core_and_smoke(monkeypatch):

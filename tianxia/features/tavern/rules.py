@@ -246,13 +246,13 @@ def person_fame(other: GameState, content: Content, wanted: set[str] | None = No
     """一個玩家的名氣（0～5）：名望段，加上善惡稱號第三段以上、擂台前十、手上有玉璽碎片、身上有通緝、行狀份量 4 以上的事三件以上各 +1。
     wanted 是身上有通緝的名號鍵（呼叫端從懸賞榜算好傳進來）。玉璽碎片改版開著時碎片那一項不算（持有者平時藏起來：不然查一個人
     查得準不準，看得出他有沒有碎片）；起用碎片的那一筆行狀也不算（annals.heard，FB-643）。"""
-    from tianxia import arena  # noqa: PLC0415  過渡：待搬（arena → … ：在函式裡 import）
+    from tianxia.core import arena_ranks  # noqa: PLC0415  擂台的稱號（核心的查詢服務，全部拆包第 12 批：酒肆包不 import 單挑包）
 
     p = other.player
     score = renown.fame_tier(other, content)
     if renown.virtue_tier(other, content) >= 3:
         score += 1
-    if arena.on(content) and arena.title_of(other.world, p.name):
+    if arena_ranks.on(content) and arena_ranks.title_of(other.world, p.name):
         score += 1
     if p.heirloom is not None and not treasures.revamp_on(content):
         score += 1

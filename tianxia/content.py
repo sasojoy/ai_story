@@ -20,7 +20,6 @@ from pydantic import BaseModel, ValidationError
 
 from . import encounter
 from . import forge_secrets as forge_rules
-from . import hints as hint_rules
 from .companion_agent import DIALOGUE_TAGS
 from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS
@@ -679,24 +678,7 @@ def check_front_lines(c: Content, need) -> None:
             check_pool(f"front_lines.by_side.{side}.{band}", pool)
 
 
-def check_arena_crowd(c: Content, need) -> None:
-    """擂台場邊事件的固定句（content/arena_crowd.json）：只能是認得的種類，每一句照 arena_crowd.FIELDS 填得進去、填完不能有阿拉伯數字
-    （數字只能是引擎寫在括號裡的）；擂台與場邊事件開著時每一種至少一句。"""
-    from . import arena_crowd  # noqa: PLC0415
-
-    for kind, lines in c.arena_crowd.items():
-        need(kind in arena_crowd.KINDS, f"arena_crowd：不認得的種類 {kind}")
-        need(isinstance(lines, list) and bool(lines), f"arena_crowd.{kind}：要寫成一串句子")
-        for text in lines if isinstance(lines, list) else []:
-            try:
-                filled = str(text).format(**arena_crowd.SAMPLE)
-            except (KeyError, IndexError, ValueError) as e:
-                need(False, f"arena_crowd.{kind}：「{text}」填不進去（{e}）")
-                continue
-            need(bool(filled.strip()) and not any(ch.isdigit() for ch in filled), f"arena_crowd.{kind}：「{text}」不能空、不能有數字")
-    if c.arena_crowd and c.config.arena.enabled and c.config.arena.crowd.enabled:
-        for kind in arena_crowd.KINDS:
-            need(bool(c.arena_crowd.get(kind)), f"arena_crowd 缺少種類 {kind}")
+# 擂台場邊事件的固定句（原本的 check_arena_crowd）搬進單挑包：tianxia/features/bout/arena_crowd.py 的 check_content（全部拆包第 12 批）
 
 
 def check_xingshi_lines(c: Content, need) -> None:
@@ -2626,9 +2608,9 @@ def validate(c: Content) -> None:
     check_front_lines(c, need)
     check_combat_lines(c, need)
     check_shop_lines(c, need)
-    check_features(c, need)  # 功能包自己的內容（商城的商品，原本的 check_mall）
+    # 功能包自己的內容（商城的商品，原本的 check_mall；擂台的場邊事件，原本在 check_art 下一行的 check_arena_crowd，全部拆包第 12 批）
+    check_features(c, need)
     check_art(c, need)
-    check_arena_crowd(c, need)
     check_xingshi_lines(c, need)
     check_traits(c, need)
     check_signature_arts(c, need)
@@ -3010,34 +2992,6 @@ def validate(c: Content) -> None:
             texts = [who.intro, who.briefing, who.order_hint, who.done, who.rejoin, *who.lines, *who.allied.values()]
             for slot in sorted({s for text in texts for s in re.findall(r"\{[^{}]*\}", text)}):  # enlist.fill 只換這兩個（FB-502）
                 need(slot in RECRUITER_SLOTS, f"入伍段：引薦人 {who.name} 的話裡 {slot} 不認得（只認 {RECRUITER_SLOTS}）")
-
-    # ── 碰到才說（新手引導計畫三）：id 不重複、只能是設計 5.2 的十八條（hints.KNOWN）；師父的條要有 text、引薦人的條要有 texts，
-    # texts 的鍵是劇本的陣營、每一句都不是空的；寫反了（師父的條寫 texts、引薦人的條寫 text）多半是填錯欄位，載入時就報錯 ──
-    need(bool(c.hints.head.strip()), "hints.json：head 不能是空的（師父那幾條框上寫的字）")
-    hint_ids: set[str] = set()
-    for hint in c.hints.hints:
-        where = f"hints.json：{hint.id}"
-        need(hint.id not in hint_ids, f"{where} 重複")
-        hint_ids.add(hint.id)
-        need(hint.id in hint_rules.KNOWN, f"{where} 不認得（只認設計 5.2 的十八條與 h_bond，見 hints.KNOWN）")
-        if hint.by == "mentor":
-            need(bool(hint.text.strip()), f"{where}：師父的提示要有 text")
-            need(not hint.texts and not hint.drifter, f"{where}：師父的提示不寫 texts、drifter（那是引薦人的提示才有的）")
-        else:
-            need(bool(hint.texts), f"{where}：引薦人的提示要有 texts（陣營 id → 那一位說的話）")
-            need(not hint.text, f"{where}：引薦人的提示不寫 text（寫在 texts 裡，散人版寫 drifter）")
-            need(not hint.season_one, f"{where}：引薦人的提示不寫 season_one（第一季那一句只有師父的條有）")
-            need(not hint.explore_one, f"{where}：引薦人的提示不寫 explore_one（出門探索那一句只有師父的條有）")
-        for faction_id, line in hint.texts.items():
-            need(faction_id in faction_ids, f"{where}：texts 有不是劇本陣營的 {faction_id}")
-            need(bool(line.strip()), f"{where}：texts 的 {faction_id} 是空的")
-        for faction_id, line in hint.allied.items():  # 豪強分屬兩軍的季另一版：只換 texts 裡有的那一位說的話
-            need(faction_id in hint.texts, f"{where}：allied 的 {faction_id} 在 texts 裡沒有")
-            need(bool(line.strip()) and to_traditional(line) == line, f"{where}：allied 的 {faction_id} 要是繁體、不能是空的")
-        # 句子裡的 {名字} 只能是設定裡有的數（hints.values，explain-1）：寫錯名字的話框上會留著大括號
-        for line in (hint.text, hint.drifter, hint.season_one, hint.explore_one, *hint.texts.values(), *hint.allied.values()):
-            bad = hint_rules.unknown(c, line)
-            need(not bad, f"{where}：不認得的 {{{'}、{'.join(bad)}}}（只認 {sorted(hint_rules.values(c))}）")
 
     # ── 開局第一分鐘（減法季批 7，content/opening.json；tianxia/opening.py）──
     o = c.opening

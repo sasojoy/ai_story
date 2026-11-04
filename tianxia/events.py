@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from typing import Literal
 
 from . import foreshadow, precise, tiers
-from . import stances as stance_rules
+from . import stance_world as stance_rules  # 人物心意的世界那一半（共用規則層，全部拆包第 19 批）
 from .models import Check, Choice, Content, Event, FreeTextChoice, Location
 from .rules import check_condition, check_outlook, fail_stamina, practice_line, season_one_off
 from .state import GameState

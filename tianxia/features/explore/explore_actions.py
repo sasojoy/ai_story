@@ -21,7 +21,6 @@ from dataclasses import dataclass
 
 from tianxia import battlelog  # 共用規則層（戰報：出門一趟・遭遇的標籤、拆得失）
 from tianxia import bounties  # 過渡：待搬（懸賞榜：討伐那一路、打探交差、打贏交差）
-from tianxia import duel as duel_rules  # 過渡：待搬（頭目戰：此刻遇得上的頭目）
 from tianxia import events as event_rules  # 過渡：待搬（事件：抽不抽得到、藏起來的、照輪替抽）
 from tianxia import explore_modes  # 過渡：待搬（探索三選一，企劃者 10/31 定不搬：找素材那一套 gather_finds、補料 one_of）
 from tianxia import growth  # 共用規則層（三道閘：今天第幾場、疲勞、對手的檔）
@@ -32,7 +31,6 @@ from tianxia import mapview  # 過渡：待搬（輿圖：哪些地點畫得出�
 from tianxia import materials  # 共用規則層（素材的發放）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章裡探索照舊是寫好的那幾步）
 from tianxia import renown  # 共用規則層（名聲：頭目的倍數）
-from tianxia import sensing  # 過渡：待搬（有所感：這一處今天悟錯過沒）
 from tianxia import storyline  # 過渡：待搬（一條線：開頭擲不擲中）
 from tianxia import territory  # 共用規則層（地盤：這一處此刻歸誰）
 from tianxia.core.option import Option
@@ -103,7 +101,7 @@ def outing_weights(ctx, loc: Location, *, has_foes: bool, bounty_here: bool, hid
     # 一次性與奇遇（rare）加可重複的（common）就是全部（pool=None），一趟只問一次，找到一則就夠
     if not event_rules.has_event_candidates(s, c, "explore", hidden=hidden):
         weights[explore_rules.EVENT] = 0
-    if not insights.explore_gives(loc, c) or sensing.missed_today(s, c, loc):
+    if not insights.explore_gives(loc, c) or ctx._sense_missed(loc):  # 選錯過做法問有所感包（查詢服務，全部拆包第 24 批：包不 import 包）
         weights[explore_rules.INSIGHT] = 0
     return weights
 
@@ -117,7 +115,8 @@ def outing_plan_at(ctx, loc: Location, *, hidden: set[str] | None = None) -> Out
     cfg = c.config.jianfa
     kind = explore_rules.kind_of(cfg, loc).kind
     how, foe = outing_foe(ctx, loc, kind)
-    boss = None if how == "bounty" else duel_rules.available(s, c)  # 接了懸賞：遭遇就是懸賞那一路，不擲頭目
+    # 接了懸賞：遭遇就是懸賞那一路，不擲頭目；此刻遇得上的頭目問單挑包（查詢服務 ctx._boss_ready，全部拆包第 12 批）
+    boss = None if how == "bounty" else ctx._boss_ready()
     weights = outing_weights(ctx, loc, has_foes=foe is not None, bounty_here=how == "bounty", hidden=hidden)
     return OutingPlan(kind=kind, weights=weights, how=how, foe=foe, boss=boss, hint=explore_rules.hint_of(kind, how, weights))
 
