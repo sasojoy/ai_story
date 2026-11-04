@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 
 from . import calendar, four_tiers, materials
+from .core.services import PILL_FOUND, checkin_on as on  # noqa: F401  回體丹那一套歸核心（第 30 批）：簽到開著沒、掉回體丹那一句搬到核心的共用小函式，這裡 re-export
 from .models import Content, Material
 from .state import GameState, WorldState
 
@@ -30,18 +31,12 @@ STEP_BOTH = "回體丹 {n} 顆，再挑一種四階料（點一種就領）："
 STEP_PICK = "挑一種四階料（點一種就領）："
 STEP_CLAIM = "今天的份：{gift}"
 STEP_DONE = "今天的份領過了：{gift}。"
-PILL_FOUND = "獲得 【{name}】一顆——不知誰落下的，正好收著。"
 
 # 七格上的短字與整句（一樣東西一段，「＋」接起來）
 SHORT = {PILLS: "丹 {n}", TIER4: "四階", SILVER: "{silver} 兩", MATERIAL: "{tier}"}
 SHORT_BOTH = "丹{n}＋四階"  # 第 6 天：格子窄，兩樣擠在一格
 FULL = {PILLS: "回體丹 {n} 顆", TIER4: "自己挑的四階料一個", SILVER: "{silver} 兩", MATERIAL: "{tier}素材一個"}
 TIER_WORDS = {1: "一階", 2: "二階", 3: "三階"}
-
-
-def on(content: Content, world: WorldState | None) -> bool:
-    """簽到開著沒：設定打開（只有 season21），這一季是 21 天季（開季時蓋的章），而且還沒收季。週末與 14 天一律關著。"""
-    return content.config.checkin.enabled and calendar.season21_on(world, content) and not world.ended
 
 
 def day_of(content: Content, world: WorldState) -> int:

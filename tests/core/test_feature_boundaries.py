@@ -836,6 +836,13 @@ SHARED_PENDING.update({
                          "叫到才載入決戰包 battle）：切開之前 import chiefs 會連帶載入 sortie、feast、bout 三包（第 12 批合進 develop 時量的）",
     ("chiefs", "figures"): "排定：大勢人物（figures.state_of、line_of）——總表第 40 批收進共用規則層",
 })
+# story（全部拆包第 30 批：storyline 拆兩半，底座與換字進共用規則層的 story_base；計畫 docs/superpowers/plans/2026-11-04-一條線簽到-第30批.md 1.2）：
+# 照原本 storyline 那樣讀大區（here）與章回的大事結果（vary，函式裡），多兩條排定的
+SHARED_PENDING.update({
+    ("story_base", "atlas"): "排定：大區（atlas.region_of）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層（同 chiefs → atlas：atlas 最外層 import "
+                             "出陣包 sortie，也經 world 帶進宴客包 feast、單挑包 bout）：切開之前 import story_base 會連帶載入 sortie（原本 import storyline 就是這樣）",
+    ("story_base", "chapters"): "排定：章回的大事結果（chapters.outcome_mark，vary 函式裡延後 import）——第 40 批收進共用規則層",
+})
 SHARED_PENDING[("siege", "world")] += "；world 函式裡也 import 舊名 generals（決戰包 battle 的別名：開集結那一下派龍頭上陣），叫到它就連帶載入 battle"
 
 # 總表第 15 列寫了、這一批先不收的（派工：import 了包的「先改成查詢服務，或者先不收」；讀的都是還沒成包的舊模組，還沒有包可以回答查詢）：

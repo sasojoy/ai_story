@@ -262,10 +262,14 @@ def _dirty(annotation, default):
     if optional and len(args) == 1 and isinstance(args[0], type) and issubclass(args[0], BaseModel):
         return args[0].model_construct()  # 一份全是預設值的（不驗必填）：跟預設的 None 不一樣就夠
     if origin is list:
-        return [7]
+        # story（全部拆包第 30 批）：lasting 是字串的清單，換季時併進旗標集合（annals 讀旗標的字串開頭），擺 7 會壞；字串的清單擺字串
+        return ["x"] if typing.get_args(annotation) == (str,) else [7]
     if origin is set:
         return {"x"}
     if origin is dict:
+        value = typing.get_args(annotation)[-1]
+        if isinstance(value, type) and issubclass(value, BaseModel):  # story（全部拆包第 30 批）：一條線的進度 StoryProgress，必填的 line 擺一個內容裡沒有的 id
+            return {"x": value(**{n: "x" for n, f in value.model_fields.items() if f.is_required()})}
         return {"x": 7}
     raise AssertionError(f"契約測試還不會擺 {annotation} 這種欄位，補 _dirty")
 
@@ -279,6 +283,11 @@ def test_dirty_moves_every_kind_of_field_off_its_default(field):
     info = PlayerState.model_fields[field]
     default = info.get_default(call_default_factory=True)
     assert _dirty(info.annotation, default) != default
+
+
+# checkin（全部拆包第 30 批）：換季重來之後，新季的第一次同步就自動簽了第 1 天（Game._auto_checkin；真實內容 week7 的簽到開著），
+# 所以 checkin_days 不是空的而是 [1]；換季前擺的那個值（[7]）沒有帶過來才是這一條要驗的
+RESEEDED = {"checkin_days": [1]}
 
 
 @pytest.mark.parametrize("feature", FEATURES, ids=lambda f: f.name)
@@ -302,4 +311,4 @@ def test_a_new_season_keeps_only_what_the_package_carries(feature):
         if name in feature.carried:
             assert now == before[name], name
         else:
-            assert now == fields[name].get_default(call_default_factory=True), name
+            assert now == RESEEDED.get(name, fields[name].get_default(call_default_factory=True)), name

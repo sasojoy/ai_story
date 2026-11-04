@@ -129,6 +129,8 @@ from .core.services import not_while_preparing as _not_while_preparing
 from .features.cultivation import actions as cultivation_actions  # 過渡：Game 上修練頁動作的 22 個一行委派（全部拆包第 23 批）
 from .features.cultivation import view as cultivation_view  # 過渡：Game 上修練頁唯讀資料的 11 個一行委派（全部拆包第 23 批）
 from .features.cultivation.actions import MELT_MANY_PROLOGUE  # noqa: F401  過渡：tests/core/test_prologue.py 從 engine 拿
+# checkin（全部拆包第 30 批）：回體丹那一套歸核心，簽到開著沒、掉回體丹那一句搬進核心的共用小函式（Game._pill_find 用）
+from .core.services import PILL_FOUND, checkin_on
 from .state import (
     ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, CrowdNote, Equipment, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong,
     StoryCard, StoryProgress, TierResult, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
@@ -3387,11 +3389,11 @@ class Game:
         不碰別的骰。兩行同破境丹：「獲得」開頭的敘事與「回體丹 +1」（寫進紀錄的數值變化）。"""
         c = self.content
         chance = c.config.checkin.pill_drop
-        if chance <= 0 or not checkin.on(c, self.state.world) or rng.random() >= chance:
+        if chance <= 0 or not checkin_on(c, self.state.world) or rng.random() >= chance:
             return []
         self.state.player.stamina_pills += 1
         name = c.config.stamina_pill_name
-        return [checkin.PILL_FOUND.format(name=name), f"{name} +1"]
+        return [PILL_FOUND.format(name=name), f"{name} +1"]
 
     def _explore_outcome(self) -> list[str]:
         s, c = self.state, self.content

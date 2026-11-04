@@ -27,6 +27,10 @@ from ..features import sense  # 有所感與頓悟：全部拆包第 24 批（ch
 from ..features import cultivation  # 修練：全部拆包第 23 批（只接 learn:* 的 choose，照前綴認，排在哪裡結果都一樣）
 # bout
 from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。排最後：擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）
+# story
+from ..features import story  # 一條線：全部拆包第 30 批（只接 story:* 的 choose，照前綴認，排在哪裡結果都一樣）
+# checkin
+from ..features import checkin  # 簽到：全部拆包第 30 批（沒有選項、選單；排在哪裡結果都一樣）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -51,6 +55,10 @@ FEATURES: list[Feature] = [
     cultivation.FEATURE,
     # bout（排最後：店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4）
     bout.FEATURE,
+    # story
+    story.FEATURE,
+    # checkin
+    checkin.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 
@@ -140,4 +148,7 @@ SHARED: dict[str, str] = {
     "chiefs": "龍頭上陣的挑法（誰上陣、份量、池子；原本 generals 的 on、pick）：決戰包開集結派人上陣、共用規則層 siege 的攻城留守都讀",
     # companions（全部拆包第 19 批「先做」：stances 拆兩半，總表附錄甲；行動那一半在人物情誼包）
     "stance_world": "人物心意的世界那一半（這一週的計數、誰照哪一個做事、門檻、換手、每週歸零）：核心的 rules、事件檢定與舊模組 world、figures、events 都讀",
+    # story（全部拆包第 30 批：storyline 拆兩半，換字那一小段與別包也要讀的底座在這一層，一條線自己的走法在一條線包）
+    "story_base": "一條線的底座與換字：核心的 rules〔fill_marks 換字〕、事件檢定〔記自己寫的那一句〕讀；探索包的擲開頭、有所感包登記頓悟那一條線的鉤子也讀"
+                  "（讀輿圖的大區 atlas、章回的大事結果 chapters 記在邊界測試的 SHARED_PENDING）",
 }
