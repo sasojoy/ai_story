@@ -49,8 +49,8 @@
 ## 過渡（手冊 3.11）
 
 - 包 → 還沒搬的舊模組：`events`（`view.py`、`menus.py`、`actions.py`：候選、這個地點有沒有、抽一則）、`ranks`（階級，第 40 批；`view.py`、`actions.py`）。
-- 服務清單（`tianxia/core/services.py`）這一包加的：一、共用 `_snubbed_character`、`AUDIENCE_HALL_FIGURES`、`SNUB_NOTE`、`SOCIAL_NO_ONE`；二、查詢 `_can_meet`、`_socialize_figure`、`_count_talk`、
-  `_social_plan`、`_brush_off`（本體搬進這一包）與 `_open_dialogue`（本體在人物情誼包）。
+- 服務清單（`tianxia/core/services.py`）這一包加的：一、共用的字 `AUDIENCE_HALL_FIGURES`、`SNUB_NOTE`、`SOCIAL_NO_ONE`；二、查詢 `_can_meet`、`_socialize_figure`、`_count_talk`、
+  `_social_plan`、`_brush_off`（本體搬進這一包）與 `_open_dialogue`（本體在人物情誼包）；三、過渡 `_snubbed_character`（主人大勢人物 `features/figures`，第 31 批；總表附錄甲，本體留在 Game，主人成包時改成查詢服務）。
 - 測試換 `tianxia.engine.pick_event` 的那幾條（抽不到事件才走打發話），改成換 `tianxia.features.socialize.actions.pick_event`——本體搬走，換的名字跟著走。
 
 ## 測試

@@ -142,7 +142,6 @@
 - 共用的小函式：`not_while_preparing`（裝飾器：籌備中什麼都不能做，只回 PREPARING_REFUSAL、照一般的拒絕寫進紀錄〔`ctx._log`〕；原本是 engine.py 的
   `_not_while_preparing`，engine 照舊用同一個函式掛在還沒搬的那些動作上；`PREPARING_TEXT`、`PREPARING_REFUSAL` 第 24 批先搬了，見 `# sense` 那一段）
 # socialize（全部拆包第 21 批「交友求見」；計畫 docs/superpowers/plans/2026-11-04-交友求見包-第1批.md 1.3）
-- `ctx._snubbed_character(companion_id)`（核心，挑戰本人：這位人物剛被你打敗、還在對你閉門不見嗎；交友、求見的按鈕與動作都問）
 - 共用的字（從這個模組 import）：`AUDIENCE_HALL_FIGURES`（一個地點有幾位以上的大勢人物，交友就不直接找人、改按「求見」指名；核心的選單、`sync`、
   行動列說明都讀）、`SNUB_NOTE`（剛吃了敗仗，閉門不見：挑戰本人那一側的按鈕也寫它）、`SOCIAL_NO_ONE`（一類一顆的交友沒有人也沒有結識事件時，
   鈕上那一句；網頁測試讀）。原本在 engine.py，engine 照舊 import 回來（`from tianxia.engine import SNUB_NOTE, SOCIAL_NO_ONE` 照舊拿得到）
@@ -286,6 +285,9 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 
 # companions（全部拆包第 20 批：人物對話叫的、主人還沒搬的）
 - `ctx._depart(route, mode, pace=None)`（主人移動 features/travel：帶路答應之後他親自帶你動身，步調照他的腳程；總表第 56 批前一直是 Game 的方法）
+# socialize（全部拆包第 21 批：交友求見包問別的功能、主人還沒搬的）
+- `ctx._snubbed_character(companion_id)`（主人大勢人物 features/figures，第 31 批；總表附錄甲把挑戰本人 13 個〔含 `_snubbed`、`_snubbed_character`〕裁給大勢人物：
+  這位人物剛被你打敗、還在對你閉門不見嗎；交友、求見的按鈕與動作都問。本體留在 Game 上，主人成包時改成二、查詢服務）
 
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 
