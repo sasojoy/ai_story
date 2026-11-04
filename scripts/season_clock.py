@@ -4,7 +4,7 @@
 排好的決戰照原本的現實時間開，原本的時間落在暫停裡的，resume 那一刻就開集結（企劃者 2026-10-06）。跟管理者在設定頁按
 「暫停賽季時鐘」「繼續」是同一件事（WorldStateStore.pause_clock、world.resume_season_clock），不用登入；伺服器開著也可以跑（拿同一把行動鎖，一筆交易做完）。resume 要讀內容：設定覆寫檔要跟伺服器同一份
 （TIANXIA_PROFILE 或 --profile），不然第一季的季曆與排好的決戰會照錯的設定算。
-執行：.venv/Scripts/python.exe scripts/season_clock.py pause|resume|status [--db <資料庫檔>] [--profile weekend]
+執行：.venv/Scripts/python.exe scripts/season_clock.py pause|resume|status [--db <資料庫檔>] [--profile week7]
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia.content import env_profile, load_content, profile_line  # noqa: E402
+from tianxia.content import serving_profile, load_content, profile_line  # noqa: E402
 from tianxia.database import default_path  # noqa: E402
 from tianxia.models import Content  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
@@ -54,7 +54,7 @@ def main(argv: list[str] | None = None, clock: Callable[[], float] = time.time, 
     parser = argparse.ArgumentParser(description="讓賽季時鐘暫停或繼續（停機維護用）")
     parser.add_argument("action", choices=("pause", "resume", "status"), help="pause 暫停、resume 繼續、status 看現在的狀態")
     parser.add_argument("--db", default=None, help="資料庫檔（預設：環境變數 TIANXIA_DB，沒設就是 saves/tianxia.db）")
-    parser.add_argument("--profile", default=env_profile(), help="設定覆寫檔，要跟伺服器同一份（預設讀 TIANXIA_PROFILE）")
+    parser.add_argument("--profile", default=serving_profile(), help="設定覆寫檔，要跟伺服器同一份（預設讀 TIANXIA_PROFILE）")
     args = parser.parse_args(argv)
     path = Path(args.db) if args.db else default_path()
     print(f"資料庫：{path.resolve()}")

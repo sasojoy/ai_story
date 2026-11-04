@@ -255,16 +255,16 @@ def run_one(profile: str | None, side: str, pills: int, days: float, step_min: f
 
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--profile", default="weekend", help="weekend｜season21｜14（14＝不帶設定檔的 14 天季）")
+    ap.add_argument("--profile", default="week7", help="week7｜season21｜14（14＝不帶設定檔的 14 天季）")
     ap.add_argument("--sides", nargs="+", default=list(SIDES), choices=list(SIDES))
     ap.add_argument("--pills", nargs="+", type=int, default=[0], help="0＝不吃丹；其他數字＝每天照上限吃")
-    ap.add_argument("--days", type=float, default=None, help="量幾個現實日（預設：週末 2.5、14 天 14、21 天 21）")
+    ap.add_argument("--days", type=float, default=None, help="量幾個現實日（預設：7 天季 7、14 天 14、21 天 21）")
     ap.add_argument("--step", type=float, default=60.0, help="幾分鐘同步一次、把體力用掉")
     ap.add_argument("--late", nargs="+", type=float, default=[None], help="換 late_exp_step 再量")
     ap.add_argument("--seeds", nargs="+", type=int, default=[1], help="Game 與配點的亂數")
     args = ap.parse_args(argv)
     profile = None if args.profile == "14" else args.profile
-    days = args.days or {"weekend": 2.5, "season21": 21.0}.get(args.profile, 14.0)
+    days = args.days or {"week7": 7.0, "season21": 21.0}.get(args.profile, 14.0)
     print(f"設定 {args.profile}；量 {days} 個現實日、每 {args.step:.0f} 分鐘同步一次。簡化：換地點直接站過去、不挑戰本人、"
           "不上擂台、不接懸賞、事件按第一個選項（見檔頭）。")
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:

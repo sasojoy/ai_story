@@ -554,7 +554,7 @@ TW_MIDNIGHT = 16 * 3600  # UTC 16:00＝台灣 00:00：回體丹的換日（Game.
 
 
 def _fire(silver=300, profile="week7", name="火候"):
-    """正式內容（week7：銀兩出口開著；weekend：關著）、店面開著；人在潁川（城鎮），背包精鐵砂 ×4、驚羽 ×2；走進鐵匠鋪（act:smith）。
+    """正式內容（week7：銀兩出口開著；不帶設定的 14 天季：關著）、店面開著；人在潁川（城鎮），背包精鐵砂 ×4、驚羽 ×2；走進鐵匠鋪（act:smith）。
     game.now 停在台灣 01:00，要換日就加一天。"""
     from conftest import no_week_unlock
     from tianxia.engine import Game
@@ -685,7 +685,7 @@ def test_looking_needs_the_smithy_open_and_the_menu_in_front():
 
 def test_where_the_silver_outlets_are_off_there_is_no_furnace_and_nothing_changes():
     """銀兩出口關著（週末、14 天季）：forge.furnace 是 None、直接按也只回「此刻無法」，打造頁其餘的一個字不動。"""
-    game = _fire(profile="weekend")
+    game = _fire(profile=None)
     view = game.shop_view()
     assert view["forge"]["furnace"] is None
     assert set(view["forge"]) == {"kinds", "kind", "note", "materials", "line", "furnace"}
