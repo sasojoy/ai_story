@@ -1,8 +1,8 @@
 """傳承的量表（features/legacy；架構方向 v2 第六節、第十一節第 4 條）：權重先一律同值，量過再給 Joy 挑。
 
 兩種量法：
-- 讀一份資料庫（--db，建議對備份檔跑）：每個角色「此刻換季的話」評比的六樣原始數、三項的增量與結算後的值，加上每一樣的分布
-  （中位數、九成、最大）與「每一樣中位數貢獻一樣多」的建議權重（機緣那四樣；正邪各自只看一樣，權重只改尺度）。
+- 讀一份資料庫（--db，建議對備份檔跑）：每個真人角色「此刻換季的話」評比的六樣原始數、三項的增量與結算後的值，加上每一樣的分布
+  （中位數、九成、最大）與「每一樣九成位貢獻一樣多」的建議權重（機緣那四樣；正邪各自只看一樣，權重只改尺度）。
 - --demo：三種人（認真、普通、停一季再回來）連玩幾季的走向，看領先多少、差距收不收斂。每一季的原始數用 --keen、--casual 給。
 
 執行：python scripts/measure_legacy.py --db <備份檔> [--profile season21]
@@ -39,7 +39,8 @@ def from_db(db: Path, profile: str | None) -> None:
 
     content = load_content(ROOT / "content", profile)
     r = R.rules(content)
-    states = [s for s in open_characters(db).all() if s.player.tutorial_step > 0 or s.player.member.level > 1]
+    # 只算真人（Joy 11/4）；名單上不寫誰被排除
+    states = [s for s in open_characters(db).all() if not s.player.bot and (s.player.tutorial_step > 0 or s.player.member.level > 1)]
     rows = []
     for s in states:
         raw = R.inputs(s, content)
@@ -53,16 +54,17 @@ def from_db(db: Path, profile: str | None) -> None:
         after = " ".join(f"{got[a]:.1f}→{getattr(book, a):.1f}" for a in R.AXES)
         print(f"{name} | {nums} | {after}")
     print("\n分布（中位數／九成／最大）：")
-    medians = {}
+    p90 = {}
     for k in KEYS:
         values = [raw[k] for _, raw, _, _ in rows]
-        medians[k] = statistics.median(values) if values else 0.0
-        print(f"  {k}: {medians[k]:g}／{_pct(values, 0.9):g}／{max(values, default=0):g}")
-    luck = [k for k in R.LUCK_FROM if medians[k] > 0]
+        p90[k] = _pct(values, 0.9)
+        print(f"  {k}: {statistics.median(values) if values else 0:g}／{p90[k]:g}／{max(values, default=0):g}")
+    luck = [k for k in R.LUCK_FROM if p90[k] > 0]
     if luck:
-        top = max(medians[k] for k in luck)
-        print("\n建議權重（機緣四樣的中位數貢獻一樣多；中位數是 0 的照 1）：")
-        print("  " + "、".join(f"{k} {top / medians[k]:.3g}" if medians[k] > 0 else f"{k} 1" for k in R.LUCK_FROM))
+        top = max(p90[k] for k in luck)
+        # 九成位對齊（Joy 11/4）：中位數會被一堆全是 0 的角色拉低
+        print("\n建議權重（機緣四樣的九成位貢獻一樣多；九成位是 0 的照 1）：")
+        print("  " + "、".join(f"{k} {top / p90[k]:.3g}" if p90[k] > 0 else f"{k} 1" for k in R.LUCK_FROM))
     for axis in R.AXES:
         values = [getattr(book, axis) for *_, book in rows]
         print(f"{R.NAMES[axis]}：中位數 {statistics.median(values) if values else 0:.1f}、最大 {max(values, default=0):.1f}")
