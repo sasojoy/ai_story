@@ -9194,12 +9194,12 @@ def _talk_client(base: type) -> type:
 class TalkScenario(CompanionsScenario):
     """人物對話（全部拆包第 20 批；--track talk，自己一個資料庫）。
     沈鶴年在談盧植（直接擺成上一輪給了選項）：選選項、自己說，**前半停在還在談**。顧映雪模型叫不動：選選項、自己說都結束對話（「無心多談」）。
-    葉知秋求見（call:）開口兩種（模型回了、模型叫不動退回體力），交友（act:socialize）一次。
+    葉知秋求見（call:）開口兩種（模型回了、模型叫不動退回體力），交友（act:socialize）一次（在只有秦頡一位的宛城：盧植營兩位以上、交友是名單，不開口）。
     言半山求「指點一招」、模型開條件（交銀）：**前半停在條件還沒答覆**（接、不接兩顆）。後半：接了（交銀、當場做）。
     紀行雲：照擲出來的結果一件一件求（指點、說說敵情、贈物當場做；婉拒；開條件不接；開條件接了打探掛成委託；欠他的那一件請他兌現）。
     燕回聲求贈物、先做後付（模型開條件、擲中）：**前半停在約定還欠著**；後半還他。霍斷橋同一件，後半過了期限（食言：情誼扣、那幾句併進書信）。
     路修遠求帶路（動身，一路不花體力）：**前半停在帶路的路上**；後半每到一站跟他說一句（parley:road）。衛承光求陪你出陣：**前半停在答應了**；
-    後半商量打法（talk:plan）、出陣。葉聽雪求見焦慮的秦頡（他主動開口求你）：**前半停在他開的請託還沒答覆**；後半接下。冷千山是黃巾，求官軍的盧植（敵對）。
+    後半商量打法（talk:plan）、在盧植那一帶（冀州）出陣。葉聽雪交友焦慮的秦頡（他主動開口求你）：**前半停在他開的請託還沒答覆**；後半接下，再去黃巾的投靠點叛投（欠著的都算食言）。冷千山是黃巾，求官軍的盧植（敵對）。
     假人（BotRunner 十輪；bot_policy.score 問 talk:、parley: 的各幾顆）；換季。這份內容沒有盧植的設定用第一位人物，同一串 API 照打。"""
 
     TALKER, BLOCKED, OPENER, ASKER, DOER = "沈鶴年", "顧映雪", "葉知秋", "言半山", "紀行雲"
@@ -9209,7 +9209,7 @@ class TalkScenario(CompanionsScenario):
                BACKER: "guan", BACKER2: "guan", PLEADER: "guan", FOE: "huang"}
     PLEAD_FIG = "qinjie"
     PHASES_FIRST = ["setup", "seat", "opening", "plain", "terms_open", "owe_open", "road_open", "backing_open", "plea_open", "half"]
-    PHASES_SECOND = ["resume", "plain_on", "terms_on", "doer", "owe_on", "road_on", "backing_on", "plea_on", "foe", "bots", "season"]
+    PHASES_SECOND = ["resume", "plain_on", "terms_on", "doer", "owe_on", "road_on", "backing_on", "plea_on", "forsake", "foe", "bots", "season"]
 
     def __init__(self, root: Path, profile: str, db: Path):
         super().__init__(root, profile, db)
@@ -9271,6 +9271,16 @@ class TalkScenario(CompanionsScenario):
         self.edit(who, fn)
         self.choose(who, f"call:{cid}")
 
+    def open_social(self, who: str, cid: str) -> None:
+        """交友（act:socialize）：站到他那裡、按交友。只有他一位的地點才直接開口（兩位以上的地點交友是名單，按的是 call:，那一條走 open_call）。"""
+        self.stand(who, cid)
+        self.edit(who, lambda p: p.stats.update({"fame": 9999}))  # 名望夠才見得到（同 open_call）
+        emit("交友那一顆", self.buttons(who, "act:socialize"))
+        view = self.choose(who, "act:socialize")
+        if any(i.startswith("choice:") for i in self.ids(view)):  # 先碰上一件留在交友的事（福緣之類）：了結它，再按一次
+            self.settle_choices(who)
+            self.choose(who, "act:socialize")
+
     def you(self, who: str, tag: str) -> None:
         """存檔裡對話與 NPC 智能 2.0 碰得到的格子：談話對象與上一輪的選項、情誼、今天聊了幾輪、開的條件、欠的、欠你的、今天求了什麼、守約紀錄、陪你出陣、
         帶路的路、體力銀兩心得、書信、行狀與最新兩則紀錄、對話記錄的尾巴。"""
@@ -9324,9 +9334,8 @@ class TalkScenario(CompanionsScenario):
         emit("談話的選單", sorted(self.ids(self.main(self.OPENER))))
         self.choose(self.OPENER, "talk:leave")
         self.edit(self.OPENER, lambda p: setattr(p, "talks_today", {}))
-        self.stand(self.OPENER, cid)
-        emit("交友那一顆", self.buttons(self.OPENER, "act:socialize"))
-        self.choose(self.OPENER, "act:socialize")
+        alone = self.PLEAD_FIG if self.PLEAD_FIG in self.c.characters else cid  # 宛城只有秦頡一位：交友直接開口（盧植營兩位以上、是求見名單）
+        self.open_social(self.OPENER, alone)
         self.you(self.OPENER, "交友")
         self.choose(self.OPENER, "talk:leave")
         MODEL["talk"] = None
@@ -9412,10 +9421,16 @@ class TalkScenario(CompanionsScenario):
             return
         if cid == self.PLEAD_FIG:
             self.world.mutate_season(lambda s: setattr(figures._ensure(GameStateHolder(s), self.c, cid), "prestige", 1))
+            from tianxia import figure_life
+
+            emit("他此刻的心事", figure_life.mood_any(GameStateHolder(self.world.get_season()), self.c, cid))
         MODEL["talk"], MODEL["parley"] = {"stance": "suzhan"}, {"want": "*", "reward": "fit", "narrative": TALK_TERMS}
         try:
             with self.parley_on():
-                self.open_call(self.PLEADER, cid)
+                if cid == self.PLEAD_FIG:  # 只有他一位的地點：求見名單收起來了，開口走交友（act:socialize）
+                    self.open_social(self.PLEADER, cid)
+                else:
+                    self.open_call(self.PLEADER, cid)
         finally:
             MODEL["talk"] = MODEL["parley"] = None
         self.you(self.PLEADER, "他先開口")
@@ -9479,7 +9494,7 @@ class TalkScenario(CompanionsScenario):
         self.ask(who, "送我些盤纏，我替你辦事", "又開條件", {"ask": "gift", "willing": 0, "condition": "scout:*", "narrative_terms": TALK_TERMS}, floor=0)
         self.choose(who, "talk:terms:yes")
         self.you(who, "接了打探（掛成委託）")
-        self.edit(who, lambda p: p.parley_owed.update({cid: "spar"}))
+        self.edit(who, lambda p: p.parley_owed.update({cid: "gift"}))  # 今天還做得到的一件（指點今天婉拒過了：那一件只會回「改日」）
         emit("請他兌現那一顆", self.buttons(who, "talk:owed"))
         self.choose(who, "talk:owed")
         self.you(who, "他兌現了")
@@ -9533,11 +9548,25 @@ class TalkScenario(CompanionsScenario):
         self.set_duel(False)
         for who in (self.BACKER, self.BACKER2):
             self.choose(who, "talk:leave")
-            self.place(who, "runan_wilds")  # 中立地：出陣直接打一場，陪他的部曲並肩（並肩出陣那一句）
+            self.place(who, self.backing_spot(who))
             emit("出陣那一顆", self.ids(self.main(who)).get("act:train"))
             with self.winning():
                 self.choose(who, "act:train")
             self.you(who, "出陣之後")
+
+    def backing_spot(self, who: str) -> str:
+        """他那一帶（答應陪你出陣的那一區）裡出得了陣的地方：並肩那一句（BACKED_LINE）只在他那一帶出陣才有；找不到就退回中立地汝南荒野。"""
+        from tianxia import figure_life
+
+        state = self.chars.load(who)
+        b = state.player.parley_backing if state is not None else None
+        for spot in sorted(loc for loc in self.c.locations if b is not None and b.region is not None and figure_life._region(self.c, loc) == b.region):
+            self.place(who, spot)
+            if self.ids(self.main(who)).get("act:train", {}).get("enabled"):
+                emit("他那一帶出陣的地方", spot)
+                return spot
+        emit("他那一帶沒有出得了陣的地方", None)
+        return "runan_wilds"
 
     def plea_on(self) -> None:
         """葉聽雪接下他的請託：記成你欠他的一件（到期沒做是食言）；再不接的另一位（冷千山沒開口，這裡略）。"""
@@ -9547,6 +9576,23 @@ class TalkScenario(CompanionsScenario):
             self.choose(self.PLEADER, "talk:terms:yes")
             self.you(self.PLEADER, "接下請託")
             self.choose(self.PLEADER, "talk:leave")
+
+    def forsake(self) -> None:
+        """葉聽雪還欠著秦頡的請託，去黃巾的投靠點叛投（defect:<陣營> → defect:confirm）：欠著的都算食言（情誼扣、那幾句併進書信）。"""
+        if self.fig is None:
+            return
+        who = self.PLEADER
+        target = next((f for f in self.c.scenario.factions if f.id != self.PLAYERS[who] and f.join_at), None)
+        if target is None:
+            emit("沒有別的陣營可叛投", None)
+            return
+        self.place(who, target.join_at[0])
+        ids = [i for i in self.ids(self.main(who)) if i.startswith("defect:")]
+        emit("叛投那幾顆", ids)
+        if ids:
+            self.choose(who, ids[0])
+            self.choose(who, "defect:confirm")
+        self.you(who, "叛投之後")
 
     def foe(self) -> None:
         """冷千山（黃巾）求官軍的人物：敵對（意願的天花板再減）；擲中、擲不中各一次。"""
