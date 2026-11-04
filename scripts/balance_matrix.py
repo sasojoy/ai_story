@@ -59,7 +59,16 @@ BUILDS = {
 # 身手。arts：內容武學 id（wugong, neigong），或自創絕學 [(kind, attribute, cells)]，cell＝{"attr", "gens":{名:層}, "special", "god"}
 KITS = {
     "下品": {"arts": ("xingwu_dao", "xingwu_lianqi")},
-    "上品": {"arts": ("buqu_dao", "yanghao_jue")},
+    "上品": {"arts": ("buqu_dao", "qianjin_zhuiqi")},  # 部曲刀法配同屬性的上品內功（企劃者 2026-11-04 點頭的六門）
+    # 玩家多半用自創的（企劃者 2026-11-04「應該還是玩家都用自己自創的武學」）：自創的中品、上品，一般功效、沒有特別功效、沒有神器
+    "自創中品": {"quality": "中品",
+              "created": [("武學", "剛", [{"attr": "剛", "gens": {"破甲": 1}}, {"attr": "剛", "gens": {"沉勁": 1}}]),
+                          ("內功", "陽", [{"attr": "陽", "gens": {"朝陽": 1}}, {"attr": "陽", "gens": {"乘勝": 1}}])]},
+    "自創上品": {"quality": "上品",
+              "created": [("武學", "快", [{"attr": "快", "gens": {"先手": 2}}, {"attr": "快", "gens": {"掠影": 2}},
+                                        {"attr": "虛", "gens": {"險": 1}}]),
+                          ("內功", "柔", [{"attr": "柔", "gens": {"回瀾": 2}}, {"attr": "柔", "gens": {"化勁": 2}},
+                                        {"attr": "實", "gens": {"厚": 1}}])]},
     "絕學": {"arts": ("guanyu_wugong", "dongzhuo_neigong")},
     "秘方神器": {  # 10/27 的 A：連環、借力兩個秘方特效＋隕星刀
         "created": [("武學", "陽", [{"attr": "快", "gens": {"先手": 1}, "special": "連環"}, {"attr": "陽", "gens": {"朝陽": 2}},
@@ -115,7 +124,7 @@ class Kit:
             p.insight_fx[iid] = InsightFx(quality="上品", general={self.gen[k]: v for k, v in cell["gens"].items()})
         return iid
 
-    def _created(self, g: Game, kind: str, attribute: str, cells) -> None:
+    def _created(self, g: Game, kind: str, attribute: str, cells, quality: str = "絕學") -> None:
         s = g.state
         self.n += 1
         name = f"{s.player.name}{kind}{self.n}"
@@ -126,7 +135,7 @@ class Kit:
                          weapon="刀" if kind == "武學" else None, method="吐納" if kind == "內功" else None,
                          move_fire="透", move_rare=True, move_stance="出招" if kind == "武學" else "起手")
         g.world.claim_skill_name(art)
-        s.player.art_quality[name] = "絕學"
+        s.player.art_quality[name] = quality
         m = s.player.member
         if kind == "內功":
             m.neigong_id, m.neigong_level = name, MAX_LEVEL
@@ -140,7 +149,7 @@ class Kit:
             m.wugong_id, m.neigong_id = spec["arts"]
             m.wugong_level = m.neigong_level = MAX_LEVEL
         for kind, attribute, cells in spec.get("created", []):
-            self._created(g, kind, attribute, cells)
+            self._created(g, kind, attribute, cells, spec.get("quality", "絕學"))
         if spec.get("weapon"):
             sec = self.c.forge_secrets[spec["weapon"]]
             s.player.weapon = Equipment(id="兵:9", name=sec.name, kind=sec.kind, attribute=sec.main.attribute, tier=4,

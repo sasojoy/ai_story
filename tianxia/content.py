@@ -1068,7 +1068,7 @@ def check_signature_arts(c: Content, need) -> None:
             continue
         if tactic.minor:  # 小戰法（學來的武學，Joy 2026-10-21）：下品的內容武學、不是人物的本命；沒有本命底蘊與連動
             need(skill.id not in own_arts, f"武學 {skill.id}：人物的本命武學寫的是本命戰法，不是小戰法")
-            need(skill.quality == "下品", f"武學 {skill.id}：小戰法只寫在下品的武學上")
+            need(skill.quality in ("下品", "上品"), f"武學 {skill.id}：小戰法只寫在下品、上品的武學上")  # 上品內功（企劃者 2026-11-04）
             need(not tactic.might and not tactic.allies and tactic.foe_faction is None,
                  f"武學 {skill.id}：小戰法不寫 might、allies、foe_faction")
         else:

@@ -89,7 +89,7 @@ def test_the_card_line_lists_the_traits_with_this_arts_numbers(content):
 def test_the_special_descriptions_read_as_written(content):
     """特別功效的說明照內容寫死（本命戰法第三批：都換成回合裡的戰法）。"""
     assert "〔悟招〕每被對手剋中一次就看破一分" in traits.card_line(content, _art("悟拳", special="wuzhao"))
-    assert "〔輕身〕前 2 回合有 15% 的機會化影" in traits.card_line(content, _art("輕功", special="qingshen"))
+    assert "〔輕身〕前 4 回合有 15% 的機會化影" in traits.card_line(content, _art("輕功", special="qingshen"))
     assert "〔回春〕每回合開始回氣血 3%" in traits.card_line(content, _art("春功", special="huichun"))
 
 
