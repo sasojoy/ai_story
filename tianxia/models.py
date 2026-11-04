@@ -3390,6 +3390,8 @@ class LegacyRules(_Strict):
     shihai_after: float = Field(default=86400.0, ge=0)  # 開季後多少世界秒才解得開（WorldState.time，不讀電腦時鐘）
     shihai_level: int = Field(default=15, ge=1)
     shihai_xinde: int = Field(default=100, ge=0)  # 【草】解封花的心得
+    # 機緣的門路：立了這個旗標的人，頓悟（epiphany.roll）沒中再擲一次【草】；空字串是不給
+    luck_reroll_flag: str = "legacy_luck_1"
 
     @model_validator(mode="after")
     def _check(self) -> LegacyRules:

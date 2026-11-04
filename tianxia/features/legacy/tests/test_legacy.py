@@ -189,3 +189,51 @@ def test_a_real_season_change_through_sync():
     p = player.state.player
     assert p.legacy.zheng == 5.0 and p.legacy.sealed.insight.name == "寒江獨照" and "legacy_zheng_1" in p.flags
     assert player.feature_status()["legacy"]["values"]["zheng"] == 5
+
+
+class _Rng:
+    """照順序吐出給的亂數。"""
+
+    def __init__(self, *values):
+        self.values = list(values)
+
+    def random(self):
+        return self.values.pop(0)
+
+
+def test_luck_rolls_the_epiphany_once_more():
+    """機緣的門路（Config.legacy.luck_reroll_flag）：頓悟沒中再擲一次；沒有那道門路、或開關關著，照舊只擲一次。"""
+    from tianxia import epiphany
+
+    game, _ = god_game()
+    s, c = game.state, game.content
+    c.config.epiphany.enabled = True
+    s.player.own_insights.clear()
+    s.player.insight_fx.clear()
+    if not epiphany.on(c, s):
+        pytest.skip("這一份內容沒開一條線的底座")
+    odds = epiphany.chance(s, c)
+    miss, hit = 0.99, odds / 2
+    assert not epiphany.roll(s, c, _Rng(miss, hit)) and s.player.epiphany_dry == 1
+    s.player.flags.add(c.config.legacy.luck_reroll_flag)
+    assert epiphany.roll(s, c, _Rng(miss, hit))
+    c.config.legacy.enabled = False
+    rng = _Rng(miss, hit)
+    assert not epiphany.roll(s, c, rng) and rng.values == [hit]  # 關著不多擲、不動 rng
+
+
+def test_the_web_shows_the_three_values_and_the_sealed_one():
+    import webharness
+    from test_prologue_web import run
+
+    import server
+
+    if webharness.NODE is None:
+        pytest.skip("沒有 node")
+    game, iid = god_game()
+    game.state.player.stats["good"] = 100
+    game.choose(f"legacy:keep:{iid}")
+    next_season(game)
+    top = run(server.main_view(game), "return H.topHtml();", S={"showMore": True})
+    assert "傳承　正氣 10（+10）　邪氣 0　機緣 0" in top and "識海封著：寒江獨照" in top and "正派的門路開了第 2 道" in top
+    assert "傳承" not in run(server.main_view(god_game()[0]), "return H.topHtml();", S={"showMore": True})  # 還沒結算過：不畫

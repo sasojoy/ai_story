@@ -171,8 +171,16 @@ def roll(state: GameState, content: Content, rng, boost: float = 1.0) -> bool:
         return True
     if rng.random() < odds * boost:
         return True
+    if _luck_reroll(state, content) and rng.random() < odds * boost:  # 傳承的機緣：沒中再擲一次（features/legacy）
+        return True
     p.epiphany_dry += 1
     return False
+
+
+def _luck_reroll(state: GameState, content: Content) -> bool:
+    """傳承開著、季初結算到了機緣那一道門路（Config.legacy.luck_reroll_flag）：頓悟沒中再擲一次。關著不擲（不動 rng）。"""
+    cfg = content.config.legacy
+    return cfg.enabled and bool(cfg.luck_reroll_flag) and cfg.luck_reroll_flag in state.player.flags
 
 
 # ── 組線 ──────────────────────────────────────────────

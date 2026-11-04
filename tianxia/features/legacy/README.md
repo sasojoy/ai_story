@@ -15,4 +15,5 @@
 **認領的欄位**（3.5）：`PlayerState.legacy`（`LegacyBook`、`ShihaiSeal`；`None` 不寫進存檔，在 `state.QUIET_DEFAULTS`）。換季照帶（`carried`）：照帶本身寫在 `Game._reset_player_for_new_season`、不看開關（同出陣那兩格）；結算在 `on_season_start`，只在開關開著時。`Config.legacy`。
 **旗標**：門路是玩家旗標 `legacy_<zheng|xie|luck>_<n>`（`LegacyRules.tiers`），每次換季照新的值重立（掉下去的拿掉）；內容用條件的 `flags_all` 讀。現在還沒有內容讀它：每一道門路開什麼，第 ③ 階段量完給 Joy 挑（設計稿第十三節第 6 題）。
 **量表**：`scripts/measure_legacy.py`（讀一份資料庫裡每個角色「此刻換季的話」會拿到多少；`--demo` 看三種人連玩幾季的走向）。
-**還沒做的**：網頁還沒畫 `main.legacy`（季初那一則江湖紀錄先寫三項的值與給了什麼）；機緣「多一次擲骰」要碰有所感與頓悟（`sense` 搬包中），先只立旗標。
+**畫面**：狀態列展開名號時多一行「傳承　正氣 N（+n）　邪氣 N　機緣 N」，底下寫開了的門路與識海封著的那一份（`web/app.js` 的 `legacyHtml`，讀 `main.legacy`；還沒結算過的人不畫）。
+**機緣多擲一次**：立了 `Config.legacy.luck_reroll_flag`（預設 `legacy_luck_1`）的人，頓悟（`epiphany.roll`）沒中再擲一次；開關關著不多擲、不動亂數。
