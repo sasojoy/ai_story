@@ -70,6 +70,15 @@ BATCHES = {
             "- 第 13 批留給這一批的清單在總表第 14 列（初入江湖兩步的字、新手目標 field2、`h_field_lose`、序章與懸賞的「尋敵」「操練」字）：none、weekend 關門之後走不到的一起清，week7、season21 走得到的一字不動。拿掉型的批刪之前看斷言，不要只看名字（第 13 批把活規則的測試刪掉過）；用 `scratchpad\\b13\\removed_names.py`、`mark_diff.py` 靜態掃。",
             "- CLAUDE.md 與導覽裡寫週末設定的段落，計畫第五節列出來交 PM 改（你不改 CLAUDE.md）。",
         ]),
+    "33": dict(
+        title="軍情一——軍令卡與應召、押糧、第 2 階晉升奇遇、第 3／4 階行動、席次輪替與召見（`rank_actions` 進新包 `military`）",
+        pkg="military", feature="feature/military", dev="dev/military-1", host="military1",
+        plan="docs/superpowers/plans/2026-11-05-軍情包-第1批.md",
+        ports={"dev": 8159, "rev": 8160, "fix": 8160, "head": 8161, "base": 8162}, fb="FB-9380～FB-9389",
+        body=[
+            "- 範圍照總表 3.3 第 33 列（約 17 個方法、280 行）與第二節「軍情」、附錄甲與丙的裁定。**包名用 `military`，不是總表寫的 `orders`**：`tianxia/orders.py` 這一批不搬，同名不准（第 23 批的教訓）。`act:rank2`、`act:convoy`、`act:summons` 在 `_act` 留委派。機緣、伏筆是第 34 批，不搬。",
+            "- Task 1 的情境：軍令卡與應召（接、截止、過期）、押糧、第 2 階晉升奇遇、第 3／4 階行動、席次輪替與召見；三種設定；半舊半新切在軍令接了還沒交或押糧走到一半；假人碰得到（碰不到就寫明）。",
+        ]),
     "18": dict(
         title="探索三——序章草廬四景與探索的底：權重、野怪、自家營寨比劃、練功分級、撿破境丹",
         pkg="explore", feature="feature/explore", dev="dev/explore-3", host="explore3",
