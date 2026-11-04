@@ -19,6 +19,8 @@ from typing import NamedTuple
 
 from pydantic import BaseModel
 
+from .core.services import (  # noqa: F401  全部拆包第 29 批：核心要用的那一段搬到 core/services.py，這裡 re-export（zhuan_end.X is services.X）
+    AFFINITY, ART, ART_FREE, ART_NO_SIDE, BOUGHT, REASONS, TIER, Writer, art_problem, illustration_for, writers)
 from .models import Content
 from .state import GameState, WorldState
 
@@ -26,7 +28,7 @@ TITLE = "列傳"  # 江湖紀錄的標題（休季用票）
 PREFIX = "zhuan:"
 PICK_ART, SEAL = "zhuan:pick_art", "zhuan:seal"
 QUOTE = "zhuan:quote:"
-ART, SEAL_TICKET, QUOTE_TICKET, DEEP_SLOT = "zhuan_art", "zhuan_seal", "zhuan_quote", "deep_slot"  # mall.EFFECTS 的鍵
+SEAL_TICKET, QUOTE_TICKET, DEEP_SLOT = "zhuan_seal", "zhuan_quote", "deep_slot"  # mall.EFFECTS 的鍵
 ART_DIR = "zhuan"  # 圖檔在 web/img/zhuan/<鍵>.webp（雲端批 8 放；沒有檔案時伺服器不給 src）
 SEASON_NAME = "{scenario}・第 {n} 季"
 
@@ -38,8 +40,6 @@ ART_DONE = "列傳開頭配上了一幅水墨。"
 SEAL_DONE = "列傳末尾蓋上一方朱印：{seal}。"
 QUOTE_DONE = "你請{name}替你的列傳寫一句評曰。"
 QUOTE_LATER = "你的列傳已經寫成，下一次重修時這一句才會寫進去。"
-ART_NO_SIDE = "沒投靠一方的人，列傳配不了插畫。"  # 插畫票不賣的原因（FB-845）
-ART_FREE = "你的列傳得了第一階，插畫白送，不必買。"
 _DIGITS = "〇一二三四五六七八九十"
 _DIGIT = re.compile(r"[0-9０-９]")
 _KANA = re.compile(r"[぀-ヿㇰ-ㇿ]")
@@ -56,36 +56,6 @@ def _cn(n: int) -> str:
 
 
 # ── 列傳插畫與紀念印 ──
-
-
-def illustration_for(state: GameState, content: Content, season: WorldState) -> str:
-    """列傳插畫的圖庫鍵「<陣營>_<win|lose>」（第一批 6 張：三方各贏、各輸；設計第九章）。兩軍看結局贏的是不是自己；豪強看照哪一本論功
-    （那一本是贏的那一軍才算贏；沒論功照此刻幫的那一軍）；和局都是 lose。散人、季還沒收是空字串。"""
-    from .wins import winner_of  # noqa: PLC0415
-
-    p = state.player
-    faction = content.scenario.find_faction(p.faction)
-    if faction is None or not season.ended:
-        return ""
-    winner = winner_of(season, content)
-    if faction.allies:
-        result = season.final_tiers.get(p.name)
-        side = result.ledger_used if result is not None and result.ledger_used in faction.allies else p.ally
-        won = winner is not None and side == winner
-    else:
-        won = winner == faction.id
-    return f"{faction.id}_{'win' if won else 'lose'}"
-
-
-def art_problem(state: GameState, content: Content, season: WorldState) -> str | None:
-    """列傳插畫票這一季用不用得上（FB-845）：用不上就不賣，回商城那一列灰掉要寫的原因；用得上是 None。
-    沒投靠劇本裡的陣營的人（散人）列傳配不了插畫；休季時已經得第一階的人插畫白送（Game._zhuan_options 也是這兩條），
-    季中看不出會是第幾階，照舊賣。"""
-    p = state.player
-    if content.scenario.find_faction(p.faction) is None:
-        return ART_NO_SIDE
-    result = season.final_tiers.get(p.name) if season.ended else None
-    return ART_FREE if result is not None and result.tier == 1 else None
 
 
 def art_path(key: str) -> str:
@@ -166,8 +136,6 @@ def quote_figures(state: GameState, content: Content, taken: set[str]) -> list[t
 # B 鎖外 server.write_zhuan 寫完正文再逐條請模型寫（write_verdict；排在真人後面），C 鎖內 Game.write_biography 每一條接一段「評曰：」
 # （apply_verdict；寫不出來照固定句 content/verdicts.json）。模型只寫字：四十字以內、繁體、沒有數字、沒有假名，不給任何數字。
 
-AFFINITY, TIER, BOUGHT = "affinity", "tier", "bought"  # 誰替你寫：情誼 70 以上的、第一二階的主將或家主、買了親筆評曰請的
-REASONS = (AFFINITY, TIER, BOUGHT)
 VERDICT_HEAD = "評曰：{name}云：「"  # 人物評曰那一段的開頭（written_writers 照它認寫成的傳裡有誰）
 VERDICT_PARA = VERDICT_HEAD + "{text}」"  # 接在正文後面的一段（網頁與公開頁照段首「評曰」認，待 joy 潤）
 DEFAULT_VERDICTS = {  # 內容沒有 verdicts.json（測試內容）時的固定句
@@ -177,11 +145,6 @@ DEFAULT_VERDICTS = {  # 內容沒有 verdicts.json（測試內容）時的固定
 }
 VERDICT_PREDICT = 200  # 四十字的一句加 JSON 外殼（只加不減）
 ABOUT_MAX = 4  # 給模型看的「這一季的事」最多幾則行狀
-
-
-class Writer(NamedTuple):
-    fid: str  # 人物 id（content.characters）
-    reason: str  # AFFINITY／TIER／BOUGHT
 
 
 @dataclass(frozen=True)
@@ -196,28 +159,6 @@ class VerdictJob:
     player: str  # 名號
     about: str  # 這一季跟他有關、份量重的事（給模型；可以有數字，模型被要求不寫）
     fixed: str  # 固定句（{name} 換好了）
-
-
-def writers(state: GameState, content: Content, season: WorldState) -> list[Writer]:
-    """這一季替你寫評曰的人物（不含買了請的，那幾位照票）：第一、二階由自己這一方 FactionDef.verdict_by 裡跟你情誼最高的那一位寫
-    （一樣高照寫的順序；官軍皇甫嵩或盧植、黃巾張角或波才、豪強曹操）；情誼到 signature_affinity（70）以上的人物各一位（情誼高的在前），
-    最多 Config.jianfa.verdict_affinity_max（3）位——深交不限人數之後（企劃者 2026-10-28），PM 定只取情誼最高的前三位，省模型呼叫、
-    固定句也不重複。同一位人物只寫一條。關著的季、散人沒有階也沒有 70 以上的人物是空的。"""
-    p, c = state.player, content
-    out: dict[str, str] = {}
-    result = season.final_tiers.get(p.name)
-    faction = c.scenario.find_faction(p.faction)
-    if result is not None and result.tier in (1, 2) and faction is not None and faction.verdict_by:
-        order = {cid: i for i, cid in enumerate(faction.verdict_by)}
-        out[min(faction.verdict_by, key=lambda cid: (-p.affinities.get(cid, 0), order[cid]))] = TIER
-    edge, room = c.config.signature_affinity, c.config.jianfa.verdict_affinity_max
-    for cid, value in sorted(p.affinities.items(), key=lambda x: (-x[1], x[0])):
-        if room <= 0:
-            break
-        if value >= edge and cid in c.characters and cid not in out:
-            out[cid] = AFFINITY
-            room -= 1
-    return [Writer(cid, reason) for cid, reason in out.items()]
 
 
 def with_bought(free: list[Writer], bought: list[str], content: Content) -> list[Writer]:
