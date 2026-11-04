@@ -16,7 +16,6 @@
 | `yuedan_actions.py` | 月旦評 A 段（`request`）、C 段（`apply`）；B 段在 `server.yuedan_once` → `yuedan.write` |
 | `admin_actions.py` | 管理者「叫回人物」：`fallen`、`revive_figure` |
 | `figure_aid.py`、`yuedan.py` | 規則模組（舊名 `tianxia/figure_aid.py`、`tianxia/yuedan.py` 留成指到同一個模組的別名） |
-| `bots.py` | 假人看到 `aid:`、`plan:` 都不按（原本 `bot_policy.score` 的 `("ambush", "works", "aid")` 那一行拆出 `aid`） |
 
 ## 認領的欄位（`PlayerState`，換季全部跟著新角色重來，沒有帶走的）
 

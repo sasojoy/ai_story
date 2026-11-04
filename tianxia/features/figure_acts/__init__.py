@@ -37,11 +37,5 @@ class FigureActsFeature(Feature):
             return Outcome(title=plan_actions.title(ctx, arg), run=lambda: plan_actions.act(ctx, arg))
         return None
 
-    def bot_pick(self, ctx, option):
-        """假人看到 aid:、plan: 的選項怎麼按（原本 bot_policy.score 的 aid 那一段；plan: 原本落到最後的 None）：都不按。"""
-        from . import bots  # noqa: PLC0415
-
-        return bots.score(option)
-
 
 FEATURE = FigureActsFeature()
