@@ -18,6 +18,7 @@ const chrome = spawn(CHROME, ["--headless=new", `--remote-debugging-port=${CDP}`
   "--hide-scrollbars", "about:blank"], { stdio: "ignore" });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const NOTES = [];
+let senseId = null;  // 第 24 批：/api/sense 那個回應的 requestId，送出之後拿內容來比
 let ws;
 try {
   for (let i = 0; i < 80 && !ws; i++) {
@@ -38,6 +39,7 @@ try {
       const { status, url } = msg.params.response;
       if (status >= 400) NOTES.push({ httpError: status, url: url.slice(0, 200) });
       if (url.includes("/api/sense")) NOTES.push({ route: new globalThis.URL(url).pathname, status });
+      if (new globalThis.URL(url).pathname === "/api/sense") senseId = msg.params.requestId;
     }
     if (msg.method === "Runtime.exceptionThrown") NOTES.push({ exception: ((msg.params.exceptionDetails.exception || {}).description || "").slice(0, 300) });
     if (msg.method === "Runtime.consoleAPICalled" && msg.params.type === "error") NOTES.push({ consoleError: (msg.params.args || []).map((a) => a.value ?? a.description).join(" ").slice(0, 300) });
@@ -98,17 +100,24 @@ try {
     // 第 24 批：進了感悟狀態（快照停在那一刻）。canvas 用 setPointerCapture，合成的 PointerEvent 會丟錯，一定要用 CDP 的真事件。
     NOTES.push({ open: await clickSel('[data-act="choose"][data-id="sense:draw"]') });  // 打 /api/sense_warm
     await waitFor(`document.querySelector("#sense-canvas")`);
-    const r = await run(`document.querySelector("#sense-canvas").scrollIntoView(); const b = document.querySelector("#sense-canvas").getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height };`);
+    // 頂上的狀態列是 sticky 的，捲的時候要扣掉（同 shot()），不然第一點會按在狀態列上、整筆畫空又不報錯
+    const r = await run(`const el = document.querySelector("#sense-canvas"); const top = document.querySelector("#top"); const head = top ? top.getBoundingClientRect().bottom : 0; scrollTo(0, Math.max(0, el.getBoundingClientRect().top + scrollY - head - 8)); const b = el.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height };`);
     const mouse = (type, x, y, buttons) => send("Input.dispatchMouseEvent", { type, x, y, button: "left", buttons, clickCount: 1 });
     // 一筆：左上到右下再折回來（讀不出來就照 tianxia/features/sense/glyph.py 的 SAMPLES 換點位，兩台要同一組）
     const pts = Array.from({ length: 24 }, (_, i) => { const t = i / 23; return [r.x + r.w * (0.2 + 0.6 * (t < 0.5 ? t * 2 : 2 - t * 2)), r.y + r.h * (0.2 + 0.6 * t)]; });
+    NOTES.push({ hit: await run(`return document.elementFromPoint(${pts[0][0]}, ${pts[0][1]})?.id;`) });  // 要是 sense-canvas
     await mouse("mousePressed", pts[0][0], pts[0][1], 1);
     for (const [x, y] of pts.slice(1)) { await mouse("mouseMoved", x, y, 1); await sleep(30); }
     await mouse("mouseReleased", pts[23][0], pts[23][1], 0);  // pointerup 打 /api/sense_read
     await sleep(1500);
     await shot("canvas", "#sense-canvas");
+    NOTES.push({ sendDisabled: await run(`return document.querySelector('[data-act="sense-send"]')?.disabled;`) });  // 要是 false（disabled 的鈕 click 不會有事，clickSel 照樣回 true）
     NOTES.push({ send: await clickSel('[data-act="sense-send"]') });  // 打 /api/sense
-    await sleep(3000);
+    await waitFor(`!document.querySelector("#sense-canvas")`, 30000);  // 要取名那一支要連兩趟死埠才回
+    if (senseId) {
+      const body = await send("Network.getResponseBody", { requestId: senseId });
+      fs.writeFileSync(path.join(outDir, `${tag}-sense.json`), body.result ? body.result.body : "");
+    } else NOTES.push({ noSenseResponse: true });
     await shot("after");
   } else if (phase === "boss") {
     await shot("1-boss", "#page section.card.scene");
