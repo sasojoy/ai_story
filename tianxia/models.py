@@ -3365,12 +3365,27 @@ class LegacyTier(_Strict):
     text: str
 
 
+# 九道門路（Joy 11/4「照建議」）：每一道寫給玩家看的那一句（待 joy 潤）。門檻 5、10、20 是【草】
+LEGACY_DOOR_TEXT = {
+    "zheng": ("潁川書院不看你的惡名、正派武學第一段肯教你", "俠義的事多一種做法（第一段的俠選項不看路與段）", "敬重俠義的人物見你就有好感"),
+    "xie": ("綠林的門路：寇一路第一段的武學肯教你", "狠辣的事多一種做法（第一段的寇選項不看路與段）", "欣賞狠角色的人物見你就有好感"),
+    "luck": ("頓悟沒中，再擲一次", "奇遇比旁人容易撞上", "長篇奇事沒中，再擲一次"),
+}
+
+
 def _legacy_tiers() -> dict[str, list[LegacyTier]]:
-    # 【草】門檻與給的門路：第 ③ 階段量完給 Joy 挑（設計稿第十三節第 6 題）；旗標先開好，內容還沒有讀它的條件
-    words = {"zheng": "正派", "xie": "綠林", "luck": "奇遇"}
     return {
-        key: [LegacyTier(at=at, flag=f"legacy_{key}_{n}", text=f"{word}的門路開了第 {n} 道") for n, at in enumerate((5.0, 10.0, 20.0), start=1)]
-        for key, word in words.items()
+        key: [LegacyTier(at=at, flag=f"legacy_{key}_{n}", text=text) for n, (at, text) in enumerate(zip((5.0, 10.0, 20.0), texts), start=1)]
+        for key, texts in LEGACY_DOOR_TEXT.items()
+    }
+
+
+def _legacy_doors() -> dict[str, str]:
+    # 門路 → 要哪一個旗標（rules.legacy_door 讀；潁川書院那一道寫在內容的條件裡，直接讀 legacy_zheng_1）
+    return {
+        "lessons_俠": "legacy_zheng_1", "choices_俠": "legacy_zheng_2", "regard_敬俠": "legacy_zheng_3",
+        "lessons_寇": "legacy_xie_1", "choices_寇": "legacy_xie_2", "regard_喜狠": "legacy_xie_3",
+        "epiphany": "legacy_luck_1", "qiyu": "legacy_luck_2", "storyline": "legacy_luck_3",
     }
 
 
@@ -3384,14 +3399,20 @@ class LegacyRules(_Strict):
     curve: Literal["sqrt", "log"] = "sqrt"  # 增量怎麼換算：平方根，或 log(1 + x)；遞減，認真玩的人領先但差距不會無限拉開
     # 評比的每一樣乘多少（先一律 1）：tasks 懸賞與託付辦成幾件、merit 陣營貢獻＋決戰場數＋首功、fame 名望、relations 跟人物的好感合計、
     # good／evil 善名／惡名。正氣看 good、邪氣看 evil、機緣看其餘四樣的合計（legacy/rules.py 的 gains）
-    weights: dict[str, float] = Field(default_factory=lambda: dict.fromkeys(("tasks", "merit", "fame", "relations", "good", "evil"), 1.0))
+    # Joy 11/4「照建議」：機緣那四樣照正式站量表（60 個真人，九成位 tasks 4、merit 2075、fame 173、relations 210）對齊到同一個份量
+    weights: dict[str, float] = Field(default_factory=lambda: {
+        "tasks": 40.0, "merit": 0.1, "fame": 1.0, "relations": 1.0, "good": 1.0, "evil": 1.0})
     tiers: dict[str, list[LegacyTier]] = Field(default_factory=_legacy_tiers)  # zheng／xie／luck → 門路（照 at 由小到大）
     # 識海（第七節；Joy 11/4 定：開季後一天＋心得＋15 級）
     shihai_after: float = Field(default=86400.0, ge=0)  # 開季後多少世界秒才解得開（WorldState.time，不讀電腦時鐘）
     shihai_level: int = Field(default=15, ge=1)
     shihai_xinde: int = Field(default=100, ge=0)  # 【草】解封花的心得
-    # 機緣的門路：立了這個旗標的人，頓悟（epiphany.roll）沒中再擲一次【草】；空字串是不給
-    luck_reroll_flag: str = "legacy_luck_1"
+    # 門路（Joy 11/4「照建議」）：哪一樣看哪一個旗標（rules.legacy_door）。只給廣度：俠寇的選項與正邪武學只開到 door_tier 段；
+    # 人物起始好感加 regard_bonus（換季那一刻、照人物的 regard）；奇遇的比重再乘 1 + qiyu_boost；頓悟、長篇奇事沒中再擲一次【草】
+    doors: dict[str, str] = Field(default_factory=_legacy_doors)
+    door_tier: int = Field(default=1, ge=1, le=4)
+    regard_bonus: int = Field(default=10, ge=0)
+    qiyu_boost: float = Field(default=0.5, ge=0)
 
     @model_validator(mode="after")
     def _check(self) -> LegacyRules:

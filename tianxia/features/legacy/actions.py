@@ -9,7 +9,7 @@
 """
 from __future__ import annotations
 
-from tianxia import insight_fx, insights, naming
+from tianxia import insight_fx, insights, naming, renown
 from tianxia.core.features import Outcome
 from tianxia.core.option import Option
 from tianxia.state import GameState, LegacyBook, ShihaiSeal
@@ -200,11 +200,22 @@ def on_season_start(ctx, old: GameState) -> None:
     p.legacy = book
     p.flags -= R.all_flags(r)
     p.flags |= {tier.flag for _, tier in R.reached(book, r)}
+    _regard_bonus(ctx)
     lines = R.summary(book, r)
     if book.sealed is not None:
         why = "、".join([WHY_TIME, WHY_LEVEL.format(level=r.shihai_level), WHY_XINDE.format(xinde=r.shihai_xinde)])
         lines.append(f"識海裡封著上一季的神品意境「{book.sealed.insight.name}」：{why}，才解得開。")
     ctx._write("傳承", lines, tag="傳承")
+
+
+def _regard_bonus(ctx) -> None:
+    """正氣、邪氣的第三道門路：敬重俠義（regard 敬俠）、欣賞狠角色（喜狠）的人物，這一季的起始好感多 Config.legacy.regard_bonus（最多 100）。
+    換季那一刻做一次（好感照帶一成之後）。"""
+    r = R.rules(ctx.content)
+    p = ctx.state.player
+    for cid, ch in ctx.content.characters.items():
+        if ch.regard is not None and renown.legacy_door(ctx.state, ctx.content, f"regard_{ch.regard}"):
+            p.affinities[cid] = min(100, p.affinities.get(cid, 0) + r.regard_bonus)
 
 
 def status(ctx) -> dict:

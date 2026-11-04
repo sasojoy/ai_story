@@ -25,6 +25,7 @@ def _unsealable(game) -> None:
 
 def test_gains_are_square_roots_of_the_weighted_season():
     r = real_content("season21").config.legacy
+    r.weights = dict.fromkeys(r.weights, 1.0)
     raw = {"tasks": 4, "merit": 30, "fame": 10, "relations": 20, "good": 49, "evil": 0}
     got = R.gains(raw, r)
     assert got == {"zheng": 7.0, "xie": 0.0, "luck": round(math.sqrt(64), 2)}
@@ -32,9 +33,12 @@ def test_gains_are_square_roots_of_the_weighted_season():
     assert R.gains(raw, r)["zheng"] == round(math.log1p(49), 2)
 
 
-def test_every_weight_starts_equal():
-    weights = real_content("season21").config.legacy.weights
-    assert set(weights) == {"tasks", "merit", "fame", "relations", "good", "evil"} and len(set(weights.values())) == 1
+def test_weights_line_up_the_live_ninetieth_percentile():
+    """Joy 11/4「照建議」：正式站 60 個真人的九成位（tasks 4、merit 2075、fame 173、relations 210）乘上權重差不多一樣重。"""
+    w = real_content("season21").config.legacy.weights
+    assert w == {"tasks": 40.0, "merit": 0.1, "fame": 1.0, "relations": 1.0, "good": 1.0, "evil": 1.0}
+    shares = [4 * w["tasks"], 2075 * w["merit"], 173 * w["fame"], 210 * w["relations"]]
+    assert max(shares) / min(shares) < 1.4
 
 
 def test_settle_keeps_seventy_percent_then_adds():
@@ -202,7 +206,7 @@ class _Rng:
 
 
 def test_luck_rolls_the_epiphany_once_more():
-    """機緣的門路（Config.legacy.luck_reroll_flag）：頓悟沒中再擲一次；沒有那道門路、或開關關著，照舊只擲一次。"""
+    """機緣的第一道門路（Config.legacy.doors["epiphany"]）：頓悟沒中再擲一次；沒有那道門路、或開關關著，照舊只擲一次。"""
     from tianxia import epiphany
 
     game, _ = god_game()
@@ -215,7 +219,7 @@ def test_luck_rolls_the_epiphany_once_more():
     odds = epiphany.chance(s, c)
     miss, hit = 0.99, odds / 2
     assert not epiphany.roll(s, c, _Rng(miss, hit)) and s.player.epiphany_dry == 1
-    s.player.flags.add(c.config.legacy.luck_reroll_flag)
+    s.player.flags.add("legacy_luck_1")
     assert epiphany.roll(s, c, _Rng(miss, hit))
     c.config.legacy.enabled = False
     rng = _Rng(miss, hit)
@@ -235,5 +239,57 @@ def test_the_web_shows_the_three_values_and_the_sealed_one():
     game.choose(f"legacy:keep:{iid}")
     next_season(game)
     top = run(server.main_view(game), "return H.topHtml();", S={"showMore": True})
-    assert "傳承　正氣 10（+10）　邪氣 0　機緣 0" in top and "識海封著：寒江獨照" in top and "正派的門路開了第 2 道" in top
+    assert "傳承　正氣 10（+10）　邪氣 0　機緣 0" in top and "識海封著：寒江獨照" in top and "俠義的事多一種做法" in top
     assert "傳承" not in run(server.main_view(god_game()[0]), "return H.topHtml();", S={"showMore": True})  # 還沒結算過：不畫
+
+
+def test_doors_open_only_with_the_switch_on():
+    from tianxia import renown
+
+    game, _ = god_game()
+    s, c = game.state, game.content
+    s.player.flags |= {"legacy_zheng_1", "legacy_zheng_2", "legacy_xie_1"}
+    s.player.stats.update(good=0, evil=0)
+    assert renown.open_to(s, c, "choices", "俠", 1) and not renown.open_to(s, c, "choices", "俠", 2)  # 只開到第一段
+    assert renown.open_to(s, c, "lessons", "俠", 1) and renown.open_to(s, c, "lessons", "寇", 1)
+    assert not renown.open_to(s, c, "choices", "寇", 1)
+    assert not renown.meets(s, c, "俠", 1)  # 通緝、黑市、醫館照舊只看名聲
+    c.config.legacy.enabled = False
+    assert not renown.open_to(s, c, "choices", "俠", 1)
+
+
+def test_the_third_doors_warm_up_the_figures_who_care():
+    game, _ = god_game()
+    c = game.content
+    keen = next(cid for cid, ch in c.characters.items() if ch.regard == "敬俠")
+    hard = next(cid for cid, ch in c.characters.items() if ch.regard == "喜狠")
+    game.state.player.legacy = LegacyBook(zheng=30.0, settled=1)
+    next_season(game)
+    p = game.state.player
+    assert "legacy_zheng_3" in p.flags and p.affinities.get(keen, 0) >= c.config.legacy.regard_bonus
+    assert p.affinities.get(hard, 0) < c.config.legacy.regard_bonus
+
+
+def test_luck_weighs_the_qiyu_and_rolls_long_tales_again():
+    from tianxia import events, storyline
+
+    game, _ = god_game()
+    s, c = game.state, game.content
+    base = events.qiyu_multiplier(s, c)
+    s.player.flags.add("legacy_luck_2")
+    assert events.qiyu_multiplier(s, c) == pytest.approx(base * (1 + c.config.legacy.qiyu_boost))
+    assert not storyline._luck_again(s, c)
+    s.player.flags.add("legacy_luck_3")
+    assert storyline._luck_again(s, c)
+
+
+def test_the_academy_takes_a_righteous_heir_with_some_infamy():
+    from tianxia.rules import check_condition
+
+    game, _ = god_game()
+    s, c = game.state, game.content
+    cond = c.events["yingchuan_join"].condition
+    s.player.sect, s.player.stats["evil"] = None, 20
+    assert not check_condition(cond, s, c)
+    s.player.flags.add("legacy_zheng_1")
+    assert check_condition(cond, s, c)

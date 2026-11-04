@@ -111,6 +111,21 @@ def titles(state: GameState, content: Content, fame_from: int = 1) -> list[str]:
     return out
 
 
+def legacy_door(state: GameState, content: Content, door: str) -> bool:
+    """傳承的門路（放在這裡：rules、library 都讀名聲，這一支不能放在 rules）（features/legacy；Config.legacy.doors）：開關開著、季初結算立了那一道的旗標。關著一律是假（不動亂數、一個字都不變）。"""
+    cfg = content.config.legacy
+    flag = cfg.doors.get(door) if cfg.enabled else None
+    return bool(flag) and flag in state.player.flags
+
+
+def open_to(state: GameState, content: Content, kind: str, way: str, tier: int) -> bool:
+    """俠寇選項（kind "choices"）、正邪武學（kind "lessons"）：照名聲走那條路、到那一段，或傳承開了那一道門路（只開到 Config.legacy.door_tier 段）。
+    官府通緝、黑市、醫館打折這些照舊只看 meets。"""
+    if meets(state, content, way, tier):
+        return True
+    return tier <= content.config.legacy.door_tier and legacy_door(state, content, f"{kind}_{way}")
+
+
 def meets(state: GameState, content: Content, way: str, tier: int) -> bool:
     """走 way 那一條路、到第 tier 段了沒（俠寇選項、正邪武學、官府通緝共用）。開關關著一律不成立。"""
     return path(state) == way and virtue_tier(state, content) >= tier
