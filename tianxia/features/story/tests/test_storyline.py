@@ -296,7 +296,7 @@ def test_fuzhi_scenes_use_their_own_pictures_and_the_files_ship():
     assert game.scene_art()["path"] == "stories/fuzhi_act1"
     assert game.story_card_view()[0]["image"] == "stories/fuzhi_act1"
     line = game.content.storylines["fuzhi"]
-    web = Path(__file__).resolve().parents[2] / "web" / "img"
+    web = Path(__file__).resolve().parents[4] / "web" / "img"
     after = [b.image for e in line.endings for b in e.after if b.image]
     for img in [line.image] + [st.image for st in line.stages] + [e.image for e in line.endings] + after:
         assert (web / f"{img}.webp").is_file(), img

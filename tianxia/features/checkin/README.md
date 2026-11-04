@@ -1,5 +1,41 @@
 # 簽到（`tianxia/features/checkin/`）
 
-- 做什麼：21 天季每天簽一次（Task 4 補完整）。
-- 導覽：`docs/guide/大勢人物與賽季.md` 的「簽到」那一節
-- 設計稿：（Task 4 補）
+21 天季每天簽一次（第 N 天照開季那一天起算，那天沒上線就錯過）：丹的日子給回體丹，第 6、13、20 天給一個自己挑屬性（剛柔快慢）的四階料（第 6 天連丹兩樣都給），其餘的日子照先後輪流 30 兩銀子與一個一階素材；找素材、練功另有機會掉一顆回體丹。每天第一次同步時今天不必挑的份自動領（江湖頁沒有簽到鈕，只有一張小標；要挑四階的日子冒一張挑屬性的小卡）。全部拆包第 30 批搬進來（計畫 `docs/superpowers/plans/2026-11-04-一條線簽到-第30批.md`，和一條線小包併批）。
+
+- 導覽：`docs/guide/大勢人物與賽季.md` 的「簽到（功能包 `tianxia/features/checkin/`）」那一節。
+- 設計稿：`docs/superpowers/specs/2026-10-17-正式季整合-design.md` 6.2～6.4（每日簽到與回體丹）、8.1（假人）；減法季批 1（Joy 2026-10-24 挑江湖頁乙案：簽到不放鈕）。都沒有版本號。數字在 `Config.checkin`（只有 season21 設定打開，另照開季的章）。
+
+## 裡面有什麼
+
+- `checkin.py`（原 `tianxia/checkin.py`，舊名留成 `sys.modules` 別名，同一個模組物件）：第幾天、給什麼、能不能領、領了改背包與銀兩、畫面要的資料、假人挑哪一種（`bot_attribute`）。`on`、`PILL_FOUND` 是**核心** `tianxia/core/services.py` 的 `checkin_on`、`PILL_FOUND`（回體丹那一套歸核心，總表附錄甲：`Game._pill_find` 掉回體丹也問「簽到開著沒」），這裡 re-export（`checkin.on is services.checkin_on`）。
+- `actions.py`：原本 `Game` 上的 3 個方法（`check_in`、`auto_checkin`、`checkin_view`；`Game` 留 3 個一行委派，`check_in` 的裝飾器 `@_not_while_preparing` 留在委派上）。序章（草廬）裡不簽，開局第一分鐘〔城門口三選一還沒選〕回引導包那一句（經 `ctx._opening_pending()`、`ctx._opening_gate()`，服務清單二、查詢服務 `# checkin`）。
+- 掛鉤：`enabled` 回 `checkin_on`（沒有任何掛鉤吃這個開關，委派自己各問 `checkin.on`）；`prefix = None`（沒有選項 id）。**沒有路由、沒有 `bots.py`、不碰 `web/`**：`/api/do/checkin` 在殼的 `MAIN_ACTIONS`，照舊叫 `Game.check_in`；假人叫的是 `Game.checkin_view`／`check_in`（`bot.check_in`、`bot_policy.take_turn`），不是選項。
+
+## 認領的欄位（手冊 3.5：留在原地）
+
+- `player_fields`：`checkin_days`（這一季簽過的是第幾天）、`checkin_picks`（四階的日子挑到哪一樣：第幾天 → 素材 id）；`carried` 空的，換季全部跟著新角色重來。（契約測試的換季那一條，新季第一次同步就自動簽了第 1 天，所以讀回來是 `[1]`：`RESEEDED`。）
+- 內容：沒有自己的檔（簽到的數字在 `content/config.json` 的 `checkin`）。
+
+## 委派與留在原位的接縫
+
+核心原位碰簽到的兩處沒有第 11 批掛鉤可接，改叫 `Game` 上一行的委派，記進邊界測試 `GAME_DELEGATE_CALLERS` 的 `# checkin` 那一段，**沒有新增 `GAME_DIRECT`**：
+
+- `sync` 的 `_auto_checkin`：在補送裝備（`_deliver_held_gear`）之後；`on_sync` 掛鉤在它前面，江湖紀錄的先後算行為。
+- `status_data` 的 `checkin_view`：`data["checkin"]` 在 `howto_entry` 之後、`fronts` 之前，鍵的順序算行為；`feature_status` 是 `main` 的頂層。
+- `Game._pill_find`：直接叫核心的 `checkin_on`、`PILL_FOUND`。
+
+## 過渡（手冊 3.11）
+
+- 包 → 還沒搬的舊模組：**沒有**（`checkin.py` 只 import 核心與共用規則層 `four_tiers`、`materials`、`prologue`）。
+- 舊模組 → 包：`engine` 1 行（`checkin_actions`）、別名檔 `tianxia/checkin.py`；還沒搬的 `bot`（`bot_attribute`）與測試、腳本。
+- 服務清單（`tianxia/core/services.py`）這一包加的：一、共用 `PILL_FOUND`、`checkin_on`；二、查詢 `# checkin` 一段（`_opening_pending`、`_opening_gate`：這一包問引導包）。
+
+## 測試
+
+`tests/` 底下：`test_checkin.py`（24 條：表、領、斷簽、序章與開局第一分鐘、回體丹掉落、假人，從 `tests/figures/` 整檔搬來）、煙霧 `test_checkin_smoke.py`（正式內容 season21：第 1 天自動領、同一天被擋、第 6 天等挑）與契約測試擺局面用的 `checkin_stage.py`。全部不含 slow，共 25 條。
+
+另外要跑的（網頁測試，第 3 階跟網頁一起搬，不在這一包）：`tests/web/test_checkin_web.py`（江湖頁的簽到小標；整檔跑 node，沒有 node 就略過）。
+
+```
+python scripts/test_for.py --base HEAD tianxia/features/checkin/actions.py tests/web/test_checkin_web.py
+```
