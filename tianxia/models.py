@@ -4002,6 +4002,11 @@ class AttrV2Rules(_Strict):
     # （企劃者 2026-11-04「要用新的屬性點的加法，不限於5～15」）【草】
     legacy_caps: dict[str, float] = Field(default_factory=lambda: {"str": 0.30, "agi": 0.30, "con": 0.35, "wis": 0.40})
     legacy_scale: float = Field(default=0.5, gt=0)
+    # 剋屬性的功效（企劃者 2026-11-04 點頭）：一般功效的掛點 → (對手的哪一項, 少算幾成)。破甲、沉勁剋統御；料敵剋身法；化勁、回瀾剋武力
+    counter_hooks: dict[str, tuple[str, float]] = Field(default_factory=lambda: {
+        "difficulty_cut": ("lead", 0.2), "fx_heavy": ("lead", 0.2), "fx_foresight": ("spd", 0.2),
+        "toll_cut": ("str", 0.2), "fx_mend": ("str", 0.2)})
+    neigong_divisor: float = Field(default=50.0, gt=0)  # 內功份量的除數（舊的 100）：內功加重，悟性才有地方用（企劃者 2026-11-04 點頭）
     # 檢定（第五節 5.1）：成功率＝難度等級的底 ＋ slope ×（值 − 期望值）÷ 期望值 − 微調 × shift_step，夾在 floor～ceil
     grade_rates: dict[str, float] = Field(default_factory=lambda: {
         "easy": 0.9, "normal": 0.7, "hard": 0.55, "harsh": 0.4, "legend": 0.25})  # 企劃者 2026-11-04：草稿每級 +10%

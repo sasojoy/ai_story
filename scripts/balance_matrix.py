@@ -220,7 +220,7 @@ def main() -> int:
     ap.add_argument("--json")
     ap.add_argument("--int-outer", type=float, default=None, help="試草稿：悟性也管外功（對他的悟性），上限這麼多")
     ap.add_argument("--str-cap", type=float, default=None, help="試草稿：武力管外功的上限")
-    ap.add_argument("--neigong-div", type=float, default=None, help="試：內功份量的除數（encounter.NEIGONG_BONUS_DIVISOR，現在 100；越小內功越重）")
+    ap.add_argument("--neigong-div", type=float, default=None, help="試：五項屬性的季內功份量的除數（Config.attributes.v2.neigong_divisor，現在 50；越小內功越重）")
     ap.add_argument("--power-cap", type=float, default=None, help="試：份量的威力上限（battle.power_cap，現在 400）")
     args = ap.parse_args()
     c = load_content(ROOT / "content", profile="season21")
@@ -234,8 +234,7 @@ def main() -> int:
             if row.attr == "str" and row.hook == "outer":
                 row.cap = args.str_cap
     if args.neigong_div:
-        from tianxia import encounter
-        encounter.NEIGONG_BONUS_DIVISOR = args.neigong_div
+        c.config.attributes.v2.neigong_divisor = args.neigong_div
     if args.power_cap:
         c.config.battle.power_cap = args.power_cap
     kit = Kit(c)

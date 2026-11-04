@@ -9236,7 +9236,7 @@ class Game:
         """這個人切磋時的威力：只算本人（同伴、部下不上場），照對手身上那一門武學的屬性算相剋，吃自己的氣血係數與加成。
         seal=False 不含玉璽碎片的戰力（買兇的殺手照它浮上來，同江湖水漲）。"""
         s, c, w = who.state, who.content, who.world
-        with team.facing_player(c, s, against.state):  # 五項屬性的季：照對手本人的五項對抗（他的統御擋你的武力）
+        with team.facing_player(c, s, against.state, against.world):  # 五項屬性的季：照對手本人的五項對抗（他的統御擋你的武力）
             members, conditions, boosts = team._fighters(s, c, w, seal=seal)
         return encounter.member_power(
             members[0], team.team_arts(s, c, w), team.worn_attribute(against.state, c, against.world), conditions[0], boosts[0],

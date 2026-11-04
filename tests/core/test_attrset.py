@@ -286,3 +286,32 @@ def test_extreme_builds_stay_inside_the_effect_caps():
     for g in (a, b):
         for old, cap in caps.items():
             assert abs(team.stat_bonus(g.content, team.v1_stat(g.state, g.content, old))) <= cap + 1e-9
+
+
+def test_neigong_weighs_double_only_in_five_attribute_seasons():
+    """企劃者 2026-11-04 點頭的武學調整「內功加重」：五項屬性的季內功份量的除數 100 → 50，舊的季照舊。"""
+    from tianxia import encounter
+    g, old = _game(), _game(False)
+    assert team.player_boost(g.state, g.content, g.world).inner_div == g.content.config.attributes.v2.neigong_divisor == 50
+    assert team.player_boost(old.state, old.content, old.world).inner_div == encounter.NEIGONG_BONUS_DIVISOR
+
+
+def test_counter_traits_cut_the_attribute_they_answer(monkeypatch):
+    """剋屬性的功效（企劃者 2026-11-04）：破甲讓對手的統御少算兩成——全武力帶破甲撞全統御，比不帶的強；舊的季沒有。"""
+    from tianxia import traits
+    brute, wall = _pvp_pair()
+    plain = Game._spar_power(brute, wall)
+    real = traits.loadout
+    monkeypatch.setattr(traits, "loadout", lambda s, c, w: traits.Loadout(layers={"difficulty_cut": 1.0})
+                        if s is brute.state else real(s, c, w))
+    assert team.counter_cuts(brute.state, brute.content, brute.world) == {"lead": 0.2}
+    assert Game._spar_power(brute, wall) > plain
+    # 快照（擂台、奪璽）帶在卡上，照卡重算跟活的一樣
+    ca, cb = (team.pvp_card(x.state, x.content, x.world) for x in (brute, wall))
+    assert ca["cuts"] == {"lead": 0.2}
+    # 對手帶化勁回瀾：我的武力少算
+    monkeypatch.setattr(traits, "loadout", lambda s, c, w: traits.Loadout(layers={"toll_cut": 1.0})
+                        if s is wall.state else real(s, c, w))
+    assert Game._spar_power(brute, wall) < plain
+    old = _game(False)
+    assert team.counter_cuts(old.state, old.content, old.world) == {}
