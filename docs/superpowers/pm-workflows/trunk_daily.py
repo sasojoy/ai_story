@@ -25,7 +25,7 @@ import tempfile
 from pathlib import Path
 
 # 只剩 7 天與 21 天兩種季（企劃者 10/31）；第 14 批 none、weekend 關門，same_behavior 的 compare 預設 --profiles 就是 week7、season21、test，假人軌一起比。
-# 只剩 7 天與 21 天兩種季（企劃者 10/31），none、weekend 第 13 批起照拿掉的範圍變、第 14 批關門。
+BRANCH = "split/trunk"
 ANCHOR = "split-anchor-20261104"
 FLAGS = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
 
