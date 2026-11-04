@@ -147,6 +147,7 @@ def test_a_quiz_stage_adds_marks_per_answer_and_can_be_left_half_done():
     assert s.player.storylines["dunwu_1"].custom is not None
     msgs = game.choose("story:dunwu_1")
     assert "第一問" in msgs
+    assert game._own_scene_text() == "**劍意初萌**\n\n" + storyline.question_text(s, game.content)  # 場景卡走 story 包的 scene 掛鉤
     assert [o.id for o in game.options(odds=False)] == ["story:dunwu_1:a0", "story:dunwu_1:a1", "story:dunwu_1:later"]
     game.choose("story:dunwu_1:a0")
     game.choose("story:dunwu_1:later")  # 先擱著：回到平常的選單，那一顆還在
@@ -296,7 +297,7 @@ def test_fuzhi_scenes_use_their_own_pictures_and_the_files_ship():
     assert game.scene_art()["path"] == "stories/fuzhi_act1"
     assert game.story_card_view()[0]["image"] == "stories/fuzhi_act1"
     line = game.content.storylines["fuzhi"]
-    web = Path(__file__).resolve().parents[2] / "web" / "img"
+    web = Path(__file__).resolve().parents[4] / "web" / "img"
     after = [b.image for e in line.endings for b in e.after if b.image]
     for img in [line.image] + [st.image for st in line.stages] + [e.image for e in line.endings] + after:
         assert (web / f"{img}.webp").is_file(), img

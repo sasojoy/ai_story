@@ -27,7 +27,7 @@ event_llm、secret_recipes）這裡也叫模組屬性——測試換掉的東西
   函式的不夠：改了，提交之後照整個檔挑一次 `scripts/test_for.py tianxia/core/event_check.py --base HEAD --slow`（工作樹跟 HEAD 沒有差
   時照整個檔算；還沒提交就只挑改到的那幾個函式的）。
 - 一個名字都沒寫、經 choose、探索、整季走的，改了 present 等等 test_for 也挑不到，另外跑（-m "slow or not slow" -n 4）：
-  - present 記看過的事件：tests/battle/test_explore.py（test_a_seen_once_event_never_comes_back）、tests/season/test_real_content.py
+  - present 記看過的事件：tianxia/features/explore/tests/test_explore.py（test_a_seen_once_event_never_comes_back）、tests/season/test_real_content.py
     （slow：test_bot_plays_a_full_season）——審查把 seen_events.add 拿掉，test_for 挑的與原本列的 18 個檔都沒紅，只有這兩個紅
   - 端出事件與固定選項：tests/bots/test_event_llm.py、tests/core/test_event_ease.py、tests/core/test_event_reward_caps.py、
     tests/core/test_event_tiers.py（整檔 slow；event_tier 沒有測試寫到它的名字）、tests/core/test_events_new_regions.py、
@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
-from .. import annals, battlelog, bounties, event_llm, foreshadow, forge_secrets, journal, narration, secret_recipes, storyline, team, tiers
+from .. import annals, battlelog, bounties, event_llm, foreshadow, forge_secrets, journal, narration, secret_recipes, story_base, team, tiers
 from .. import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有端出事件那一下會叫；照 engine 的叫法）
 from .. import outcomes as outcome_rules
 from .. import prologue as prologue_rules
@@ -302,7 +302,7 @@ def answer_event(
     if current is None or current.event_id != request.event_id:
         return ctx._log(["（事情已經過去了，這句話沒派上用場。）"])
     event = c.events[request.event_id]
-    storyline.heard(s, c, event.id, request.text)  # 一條線的段落：自己寫的那一句記進那條線（結尾與模型用）
+    story_base.heard(s, c, event.id, request.text)  # 一條線的段落：自己寫的那一句記進那條線（結尾與模型用）
     branches = branches_of(ctx, event)
     if branches:
         return answer_branch(ctx, event, request, branches, llm_rate, moral, outcome)

@@ -12,7 +12,7 @@ from tianxia.content import load_content
 from tianxia.events import event_matches_location
 from tianxia.models import Condition
 
-CONTENT_DIR = Path(__file__).parents[2] / "content"
+CONTENT_DIR = Path(__file__).resolve().parents[4] / "content"
 EXPLORE_FILES = sorted((CONTENT_DIR / "events").glob("explore_*.json"))
 
 

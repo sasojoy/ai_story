@@ -29,7 +29,7 @@
 - **開工前只讀這一次要碰的那一兩塊**，不要整批讀。派工的人在派工單上寫明要讀哪幾塊。
 - 新規則、新模組寫進那一塊的導覽檔；這份檔只留跨區塊的原則、分支、指令與這張表（上限約 1 萬 token）。
 - 模組沒列在表上的，照它做的事歸到最近的那一塊，順手補進表與導覽檔。
-- **已經搬成功能包的**（開發規範手冊；在 `tianxia/features/<包>/`；2026-11-04 照 `split/trunk`）：商城 `mall`（含易名帖 `rename`）、宴客 `feast`、出陣 `sortie`（含出陣約戰、舊遊歷、操練、守勢）、探索 `explore`、酒肆 `tavern`、決戰 `battle`（畫面與戰報、集結、推進與結算、`generals`、護送 `escorts`）、形象 `looks`、引導 `guide`（引導框、提示、新手目標、開局、入伍段）、單挑 `bout`（單人頭目戰、擂台、看台）、人物情誼 `companions`（同伴招募與名下、心意、託付與勸降、來信與委託）、有所感 `sense`（有所感與頓悟）、修練 `cultivation`（改練、意境裝卸、熔煉、絕學與破境丹、傳功、配點）。正在搬的看 `docs/superpowers/plans/2026-10-31-主動搬六包-批次.md` 開頭「搬包中」。
+- **已經搬成功能包的**（開發規範手冊；在 `tianxia/features/<包>/`；2026-11-04 照 `split/trunk`）：商城 `mall`（含易名帖 `rename`）、宴客 `feast`、出陣 `sortie`（含出陣約戰、舊遊歷、操練、守勢）、探索 `explore`、酒肆 `tavern`、決戰 `battle`（畫面與戰報、集結、推進與結算、`generals`、護送 `escorts`）、形象 `looks`、引導 `guide`（引導框、提示、新手目標、開局、入伍段）、單挑 `bout`（單人頭目戰、擂台、看台）、人物情誼 `companions`（同伴招募與名下、心意、託付與勸降、來信與委託）、有所感 `sense`（有所感與頓悟）、修練 `cultivation`（改練、意境裝卸、熔煉、絕學與破境丹、傳功、配點）、一條線 `story`、簽到 `checkin`、交友求見 `socialize`；人物情誼包另有人物對話與 NPC 智能 2.0（`companion_agent`、`parley`）。探索三選一、找素材「自己說」、城裡操練第 13 批拿掉了。正在搬的看 `docs/superpowers/plans/2026-10-31-主動搬六包-批次.md` 開頭「搬包中」。
 - 規則速查的寫法：數字都在 `Config`（`tianxia/models.py`，正式值以 `content/config.json` 與設定覆寫檔為準）；這裡只寫結構與現在的值，改數字不必改這一節的結構。
 
 | 區塊 | 管什麼 | 模組（`tianxia/`） | 原本「規則速查」的節 |
