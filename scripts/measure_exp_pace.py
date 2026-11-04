@@ -37,7 +37,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tianxia import bot, bot_policy, clinic, database, encounter, explore_modes, growth, sensing, team  # noqa: E402
+from tianxia import bot, bot_policy, clinic, database, encounter, growth, precise, sensing, team  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
@@ -45,8 +45,8 @@ from tianxia.sqlite_world import open_world  # noqa: E402
 DAY = 86400.0
 T0 = 1_792_339_200.0  # 2026-10-19 週一 00:00（台灣）：開季那一刻
 SIDES = {"官軍": "guan", "黃巾": "huang", "豪強": "haoqiang", "散人": None}
-PRACTICE = explore_modes.option_id(explore_modes.PRACTICE)
-GATHER = explore_modes.option_id(explore_modes.GATHER)
+PRACTICE = "explore:practice"  # 第 13 批拿掉了，這份舊比較的選單上不會再有
+GATHER = "explore:gather"
 OUTING = "act:explore"  # 減法季探索一顆：出門一趟
 LABELS = {"old": "舊規則", "new": "新規則", "jianfa": "減法季"}
 SOURCE = {"old": "找素材", "new": "練功", "jianfa": "出門"}
@@ -97,7 +97,7 @@ def _best_spot(game: Game, press: str) -> str:
     c, p = game.content, game.state.player
     here, best, value = p.location, p.location, -1.0
     for loc in c.locations.values():
-        if loc.prologue_only or (press == GATHER and explore_modes.is_town(c, loc)):
+        if loc.prologue_only or (press == GATHER and precise.is_town(c, loc)):
             continue
         p.location = loc.id
         if press == OUTING:

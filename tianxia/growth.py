@@ -42,7 +42,6 @@ OTHER_KINDS = frozenset({
     "insight",  # 感悟
     "errand",  # 託付（批 6）
     "material",  # 素材拍
-    "drill",  # 城裡操練（_town_drill）
     "bounty",  # 懸賞交付（bounties.deliver）
     "hold",  # 不打的：守、攪局、守勢行動、自家隊伍的零風險操練（_drill_gains 現在的呼叫點；計畫寫 _drill_gains 歸仗，見計畫 3.0）
 })

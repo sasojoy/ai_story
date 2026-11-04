@@ -21,7 +21,7 @@ class ExploreFeature(Feature):
     prefix: str | None = None  # act:explore 是核心的 act 前綴；走一趟沒有選項（/api/do/outing、outing_say、outing_tale、outing_erase）
     web = ("outing.js",)  # 走一趟的畫面（本來就是獨立的檔；這一輪不切網頁，位置不動、index.html 照舊手寫）
     content = ("outing_lines.json",)  # 出門一趟回來那一段的句子（content.py 照舊讀；檔名照舊，批次表第二節）
-    # 走一趟這一趟（outing）、探索一顆上一趟要選的那件事（outing_last）、第幾次探索（explore_seq：跟還留在 engine 的探索三選一共用）、
+    # 走一趟這一趟（outing）、探索一顆上一趟要選的那件事（outing_last）、第幾次探索（explore_seq）、
     # 遭遇的疲勞那一天與場數（fight_day、fights_today：三道閘的前一道）；換季全部跟著新角色重來
     player_fields = ("outing", "outing_last", "explore_seq", "fight_day", "fights_today")
     carried: tuple[str, ...] = ()
@@ -46,7 +46,7 @@ class ExploreFeature(Feature):
     def verbs(self) -> tuple[Verb, ...]:
         """act:explore 那一格的主人（act 子動詞，全部拆包第 11 批；原本 Game 上四處叫 _outing_on 的那幾行，判斷照抄）：探索一顆開著
         （outing_on：減法季 explore_one、不在序章裡）時，按下去是出門一趟（_act 最前面）、紀錄標題「出門一趟・某地」、行動列只剩那一顆
-        「探索」、底下那一行寫這一處多半給什麼；關著每一樣都回 None，核心照舊（三選一、舊探索、序章寫好的那幾步）。建一次就留著，
+        「探索」、底下那一行寫這一處多半給什麼；關著每一樣都回 None，核心照舊（舊探索、序章寫好的那幾步）。建一次就留著，
         每一格在叫的那一下才照模組屬性找 explore_actions 的函式（monkeypatch 照樣有效；tests/core/test_contract_features.py 守）。"""
         if self._verbs is None:
             from tianxia import journal  # noqa: PLC0415

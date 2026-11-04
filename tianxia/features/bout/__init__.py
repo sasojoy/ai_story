@@ -13,7 +13,7 @@ docs/superpowers/plans/2026-11-03-單挑包-第1批.md）。README.md 寫這一�
 （店面登記 shops）、打開擂台與那一下的標題（act 子動詞 verbs）、報名與挑人（choose）、擂台打到一半的三招與認輸（menu）、
 場邊事件的內容檢查（check_content）。沒有對應掛鉤、留在 Game 原位叫一行委派的（choose 不建紀錄的出招、灰掉的挑擂鈕、頭目戰打到一半的
 選單、場景卡、
-sync 的補送、閉關中與路上的入口、店面那一頁、戰力快照抄防具、奪璽單挑的陣營名、三選一與舊探索撞上頭目）寫在 README。
+sync 的補送、閉關中與路上的入口、店面那一頁、戰力快照抄防具、奪璽單挑的陣營名、舊探索撞上頭目）寫在 README。
 """
 from __future__ import annotations
 

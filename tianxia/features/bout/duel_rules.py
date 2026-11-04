@@ -44,14 +44,6 @@ def used_up(state: GameState, content: Content, boss_id: str) -> bool:
     return tally.get(season_key(state, boss_id), 0) >= tuning.per_boss_season
 
 
-def cooldown_left(state: GameState, tuning: DuelTuning) -> float:
-    """離冷卻結束還有幾世界秒（不在冷卻是 0）。"""
-    last = state.player.duel_last
-    if not cooling(state, tuning):
-        return 0.0
-    return tuning.cooldown_seconds - (state.world.time - last[1])
-
-
 def cooling(state: GameState, tuning: DuelTuning) -> bool:
     """上一場頭目戰開打到現在還沒過 cooldown_seconds（同一季的世界秒；換了季就不算）。"""
     last = state.player.duel_last

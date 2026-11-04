@@ -161,7 +161,7 @@ def title(content: Content, b: Bounty) -> str:
 
 
 STRIKE_SORTIE = "出陣攻打贏"  # 待 joy 潤（FB-249）：出陣開著時討伐怎麼交差
-STRIKE_GATHER = "找素材撞上的那一場也算"  # 待 joy 潤：探索三選一開著時多的那半句（散人不出陣，討伐靠這裡）
+STRIKE_GATHER = "找素材撞上的那一場也算"  # 待 joy 潤：多的那半句（散人不出陣，討伐靠這裡；只剩沒有一類一顆章的季寫得到）
 # 一類一顆生效的季（FB-420）：找素材不打仗，討伐在練功交差（待 joy 潤）
 STRIKE_PRECISE = "到{target}尋敵或出陣攻打贏一場{enemy}的隊伍"
 STRIKE_PRACTICE = "到{target}尋敵打贏一場{enemy}的隊伍"
@@ -171,7 +171,7 @@ STRIKE_OUTING_RANGER = "到{target}出門探索打贏一場{enemy}的隊伍"
 
 
 def how(content: Content, b: Bounty, state: GameState | None = None, world: WorldState | None = None) -> str:
-    """怎麼完成（一句）。討伐在出陣開著時寫出陣攻（與探索三選一的找素材撞上），不寫遊歷（FB-249）；一類一顆在這一季生效時
+    """怎麼完成（一句）。討伐在出陣開著時寫出陣攻（與找素材撞上），不寫遊歷（FB-249）；一類一顆在這一季生效時
     （precise.on，要給 state 或 world）寫練功（FB-420：找素材不打仗了），看的人是散人（不出陣）只寫練功。懸賞卡、告示、紙上、揭下的回話、
     傳聞與書信都走這一句；只給 world 的（陣營傳聞，沒有看的人）照陣營的人寫（FB-435）。"""
     world = state.world if state is not None else world

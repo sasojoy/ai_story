@@ -61,13 +61,13 @@ class OutingPlan:
 
 def outing_on(ctx) -> bool:
     """探索一顆在這一季開著（Config.jianfa 的 explore_one＋開季的章，rules.jianfa），而且不在序章裡（序章照舊按「探索」走寫好的那幾步）。
-    開著時選單上只剩一顆「探索」（act:explore，出門一趟），不畫三選一（explore:*）、尋敵、城裡操練。"""
+    開著時選單上只剩一顆「探索」（act:explore，出門一趟）。"""
     return jianfa(ctx.content, ctx.state.world, "explore_one") and not prologue_rules.active(ctx.state, ctx.content)
 
 
 def outing_foe(ctx, loc: Location, kind: str) -> tuple[str | None, Squad | None]:
-    """遭遇拍打誰（設計 4.1，PM 2026-10-25 第 3 件）：手上有這裡的討伐懸賞、那一路不是自己人，就是它（bounty；易手了也找得到，同
-    _gather_foe）；**可是對那一路的勝算是必敗時不算**（2e，FB-880，企劃者 2026-10-26「勝算是必敗時不強制打懸賞，照原本的表抽」）：
+    """遭遇拍打誰（設計 4.1，PM 2026-10-25 第 3 件）：手上有這裡的討伐懸賞、那一路不是自己人，就是它（bounty；易手了也找得到）；
+    **可是對那一路的勝算是必敗時不算**（2e，FB-880，企劃者 2026-10-26「勝算是必敗時不強制打懸賞，照原本的表抽」）：
     問的是鈕上寫勝算的同一個函式（odds，固定種子、不碰 Game.rng），必敗就當這一處沒有這張懸賞，往下照沒有懸賞時挑；變強到不再必敗
     就又是它。自家營寨（營類、此刻歸自己這一邊、有自家的隊伍）是跟同袍比劃（spar，_sortie_host 那一路）；否則這裡此刻站的、
     不是自家的隊伍裡最弱的一路（foe）；城類的地點自己沒有對手才換成地痞（town，Config.jianfa.town_foes 的第一路）。都沒有是 (None, None)。"""
@@ -176,7 +176,7 @@ def outing_option(ctx, loc: Location) -> Option:
 
 def outing_note(ctx, loc: Location) -> str | None:
     """行動列底下探索那一行（act 子動詞，第 11 批從 Game.action_notes 搬來）：探索一顆開著時寫這一處多半給什麼，比重照擲骰用的那一份
-    （經 ctx._outing_plan：測試換掉它）；關著是 None（核心照舊寫三選一、舊探索那一行）。"""
+    （經 ctx._outing_plan：測試換掉它）；關著是 None（核心照舊寫舊探索那一行）。"""
     if not outing_on(ctx):
         return None
     from tianxia import howto  # noqa: PLC0415  過渡：待搬（行動列底下那一行的句子；函式裡 import：howto 照舊 import explore_one 的舊名）

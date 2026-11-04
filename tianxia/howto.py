@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from . import allied as allied_rules
-from . import calendar, conquest, economy, equipment, explore_modes, figures, four_tiers, precise, renown, rules, seal, sortie, territory, timetable, training
+from . import calendar, conquest, economy, equipment, figures, four_tiers, precise, renown, rules, seal, sortie, territory, timetable
 from .features.mall import rules as mall  # 商城那一節（功能包；還沒搬的舊模組可以 import 包，開發規範手冊 3.11）
 from . import sortie_duel  # 出陣約戰（減法季批 3b）：出陣那一行與玩法說明
 from . import explore_one  # 減法季探索一顆（批 2）：行動列底下那一行用同一份兩個字的叫法
@@ -51,15 +51,12 @@ def explore_line(
     return head + (f"；偶得{legend}" if legend else "") + tail
 
 
-EXPLORE_MODES = "點開三選一：找素材{fight}、找事件，或靜心感悟{sense}。"  # 待 joy 潤：行動列底下探索那一行（出陣探索與地盤設計第三節）
+SEEK_NAME = "找事件"  # 玩法說明「交友的事在探索的找事件裡」那一句（一類一顆開著的季）
 # 意境提示設計第二節（不寫數字）。輿圖第三版拿掉了意境濾鏡（第 4 批），第 5 批改寫成區圖名字底下的意境字與卡上的「最濃」（PM 2026-10-22；待 joy 潤）
 STRONG_HOWTO = "每個地點有一種意境最濃（區圖上名字底下排第一的意境字、卡上「此地能悟」標著「最濃」的那一個），選對那一種的做法比較容易悟成。"
 # 地利（武學隨地理環境計畫 Task 5；不寫倍數，待 joy 潤）
 TERRAIN_HOWTO = ("- 各地的氣象不同：身上的武學、內功跟此地最濃的意境同一路，打起來順手；被它剋的，施展不開。"
                  "輿圖上點地點，「地利」那一段寫著此地利哪一路。")
-EXPLORE_FIGHT = "（這裡可能撞上怪，打贏是經驗的大宗）"
-EXPLORE_CALM = "（這裡不會撞上怪）"
-EXPLORE_NO_SENSE = "（這裡悟不出什麼）"
 
 
 # 減法季探索一顆（整合設計 4.1，批 2）：行動列底下探索那一行。照擲骰用的那一份比重（探索包 explore_actions.outing_weights）排，不寫百分比；都待 joy 潤
@@ -84,18 +81,6 @@ def outing_line(weights: dict[str, float], foe: str | None = None) -> str:
     else:
         body = f"，可能{'、'.join(words)}" if words else ""
     return OUTING_HEAD + body + OUTING_FOE.get(foe or "", "")
-
-
-def explore_modes_line(fight: bool, sense: bool) -> str:
-    """探索三選一開著時行動列底下探索那一行（Game.action_notes）：找素材會不會撞上怪、靜心感悟悟不悟得出。"""
-    return EXPLORE_MODES.format(fight=EXPLORE_FIGHT if fight else EXPLORE_CALM, sense="" if sense else EXPLORE_NO_SENSE)
-
-
-# 行動列底下練功那一行（FB-670，企劃者 2026-10-22 選練功入口「丙」：練功在行動列自己一格；Game._practice_line 照練功鈕同一個判斷挑一句）。
-# 灰著的城鎮寫 PRACTICE_TOWN_NOTE＋「，最近的在某地（步行約 N 分鐘）」（explore_modes.NO_FOE_NEAR、atlas.route_text）。都待 joy 潤
-PRACTICE_NOTE = "打這裡的{foe}，不限次數，打贏是經驗的大宗"
-PRACTICE_BOSS_NOTE = "這裡只有頭目{foe}，尋敵直接對上他；打一場要等他再現身，次數有限"
-PRACTICE_TOWN_NOTE = "城外才有對手"
 
 
 def train_line(foes: bool, gains: Sequence[str], drops: bool, push: bool, drill_gains: Sequence[str], drills: bool) -> str:
@@ -428,22 +413,8 @@ def sortie_lines(content: Content, allied: bool = False, season: WorldState | No
 
 
 def explore_lines(content: Content, season: WorldState | None = None) -> list[str]:
-    """玩法說明「行動」裡探索那一條（三選一開著時取代照地點比例那一條；待 joy 潤）。數字讀 Config。
-    一類一顆在這一季生效時（precise.on）寫另一版：找素材一定給、不打仗，練功另一條（FB-422）；舊季一個字都不變。"""
-    cfg = content.config
-    names = explore_modes.NAMES
-    if rules.jianfa(content, season, "explore_one"):  # 減法季探索一顆（批 2）：只剩一顆、出門一趟；關著下面一個字不變
-        return outing_lines(content, season) + jianfa_growth_lines(content, season)
-    if precise.on(content, season):
-        return precise_explore_lines(content, season) + gather_branch_lines(content, season) + jianfa_growth_lines(content, season)
-    legend = f"三種都有機會撿到{cfg.legend_item_name}。" if cfg.explore_legend_chance > 0 else ""
-    econ = cfg.economy  # 素材與經濟設計第七節：一階從一定給改成七成
-    first = f"（一階約 {econ.gather_first_chance * 10:g} 成撿得到）" if econ.gather_cut else ""
-    return [
-        f"- **探索**（體力 {cfg.action_cost['explore']}）：點開三選一。{names['gather']}：照這裡的地形撿素材{first}，"
-        f"城外約 {cfg.explore_modes.encounter_chance * 10:g} 成會撞上怪，打贏是經驗的大宗；{names['seek']}：碰上這一帶的事，偶有奇遇；"
-        f"{names['sense']}：只在悟得到意境的地方。{legend}",
-    ]
+    """玩法說明「行動」裡探索那一條（減法季探索一顆開著時取代照地點比例那一條；待 joy 潤）。"""
+    return outing_lines(content, season) + jianfa_growth_lines(content, season)
 
 
 def _pct(share: float) -> str:
@@ -481,45 +452,6 @@ def jianfa_growth_lines(content: Content, season: WorldState | None = None) -> l
             f"點少了、每一點重了：臂力、根骨一點多 {jf.stat_rates.bonus_per_point * 100:g}% 的威力，身法一點多 {jf.stat_rates.dodge_per_point * 100:g}% 的閃避，"
             f"博聞一點多 {jf.stat_rates.holding_per_lore_point} 格持有。配滿一項是一條路，配下去那一刻會寫多了什麼。")
     return out
-
-
-def precise_explore_lines(content: Content, season: WorldState | None = None) -> list[str]:
-    """一類一顆的探索與練功（FB-422；正式季整合 2.4、2.5；待 joy 潤）。數字讀 Config。
-    城裡操練開著時（training.on，新手引導重做）：練功在行動列自成一格，城裡那一格是操練，練功點分三級。"""
-    cfg = content.config
-    names = explore_modes.NAMES
-    cost = cfg.action_cost["explore"]
-    legend = f"每一種都有機會撿到{cfg.legend_item_name}。" if cfg.explore_legend_chance > 0 else ""
-    explore = (f"- **探索**（體力 {cost}）：點開來挑一種。{names['gather']}：照這裡的地形一定撿得到素材，不打仗；"
-               f"{names['seek']}：碰上這一帶的事（交友的事也在這裡），偶有奇遇；{names['sense']}：只在悟得到意境的地方。{legend}")
-    if not training.on(content, season):
-        return [explore,
-                f"- **{names['practice']}**（在探索裡，體力 {cost}）：找這裡的對手打一場，一定開打、不限次數，打贏是經驗的大宗；"
-                "城鎮與沒有對手的地方灰著。有頭目的地方，頭目在尋敵時碰上。"]
-    t = cfg.training
-    loot = "、".join(f"{w} ×{x:g}" for w, x in zip(training.TIER_WORDS, t.tier_loot))
-    return [
-        explore,
-        f"- **{training.DRILL}**（城裡，行動列那一格，體力 {cost}）：跟校場的教頭過招，不打仗、不受傷，一天 {t.drill_per_day} 次"
-        f"（00:00 換日）；一次給心得 {t.drill_xinde_base}＋等級、經驗一點點。用完了那一格寫著最近能尋敵的地方。",
-        f"- **{names['practice']}**（城外，同一格，體力 {cost}）：找這裡的對手打一場，一定開打、不限次數，打贏是經驗的大宗。"
-        f"照這裡最弱的對手分三等（難度 {t.tier_bounds[0]} 以下、{t.tier_bounds[1]} 以下、再上去），"
-        f"越遠越兇；打贏的心得與銀兩照這一帶多兇加成（{loot}），經驗不加成。多兇寫在格子上與輿圖的地點詳情。有頭目的地方，頭目在尋敵時碰上。",
-    ]
-
-
-def gather_branch_lines(content: Content, season: WorldState | None) -> list[str]:
-    """找素材分支（第 32 項；待 joy 潤）開著時多一條：哪幾條路多給哪幾種屬性、深入偶有所悟、「自己說」。照 content/gather_branches.json 寫，
-    關著是空的（一個字都不變）。"""
-    if not explore_modes.branches_on(content, season):
-        return []
-    names = explore_modes.NAMES
-    roads = "，".join(f"{b.name}多{'、'.join(b.attributes)}" for b in content.gather_branches.values() if not b.deep)
-    deep = next((b for b in content.gather_branches.values() if b.deep), None)
-    deep_line = f"；深山裡「{deep.name}」偶爾另有所悟" if deep is not None and content.config.gather_branches.deep_insight_chance > 0 else ""
-    say = (f"最後一顆「{explore_modes.SAY_LABEL}」寫一句自己的找法（{explore_modes.SAY_MAX} 字內），寫得好多一份。"
-           if content.config.gather_branches.say_enabled else "")
-    return [f"- **{names['gather']}的路**：城外有兩條以上的路可走時，按{names['gather']}會再攤開幾條——{roads}{deep_line}。{say}"]
 
 
 def _tenth(share: float) -> str:
@@ -1158,7 +1090,7 @@ def forge_lines(content: Content, season: WorldState) -> list[str]:
                      "說書、殘譜也聽得到；三片湊齊，鑄譜上那一條就完整。")
     else:
         lines.append("配方的口訣聽說書、聽鐵匠順口、撿殘譜都聽得到，記在鑄譜上。")
-    if rule.scrap_every_mode and explore_modes.on(content) and (rule.scrap_chance > 0 or content.config.secrets.scrap_chance > 0):
+    if rule.scrap_every_mode and rules.jianfa(content, season, "explore_one") and (rule.scrap_chance > 0 or content.config.secrets.scrap_chance > 0):
         lines.append("殘譜三種探索都撿得到。")
     return lines
 
@@ -1208,16 +1140,17 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         f"得對手 {cfg.drill_reward_share * 10:g} 成的心得與經驗，不給銀兩、素材。兩種都有的地方，遇上誰看運氣。"
         f"有些地方打贏或操練還會{PUSH_WORD}（行動列底下那一行寫著這裡、今天還推不推得動）。",  # 審查 M4：不是「多半」（SOME_PLACES），待 joy 潤
     ]
-    # 三選一關著時的探索（照地點比例自動抽；開著時換成 explore_lines）
+    # 舊探索（照地點比例自動抽；探索一顆開著時換成 explore_lines）
     old_explore = [f"- **探索**（體力 {cost['explore']}）：照地點三選一：悟意境、遇野怪、碰上事件。{mix_sentence(content)}。偶有奇遇。{legend}"]
-    sense_when = "靜心感悟" if explore_modes.on(content) else "探索落在悟意境"
+    outing = rules.jianfa(content, season, "explore_one")
+    sense_when = "靜心感悟" if outing else "探索落在悟意境"
     lines = [
         *_section("這一季在打什麼", season_page_lines(content, season, rule)),
         "#### 行動",
-        *(explore_lines(content, season) if explore_modes.on(content) else old_explore),
+        *(explore_lines(content, season) if outing else old_explore),
         *(sortie_lines(content, allied, season) if sortie.on(content) else old_train),
         f"- **交友**（體力 {cost['socialize']}）：見這裡的人物談話（每輪體力 {cfg.talk_stamina}，同一位人物{day_every(content, season)}最多 "
-        + (f"{cfg.talk_turns_per_day} 輪）。名望不夠的人物在名單上灰著，寫還差多少；交友的事在探索的{explore_modes.NAMES['seek']}裡。"
+        + (f"{cfg.talk_turns_per_day} 輪）。名望不夠的人物在名單上灰著，寫還差多少；交友的事在探索的{SEEK_NAME}裡。"
            if precise.on(content, season) else f"{cfg.talk_turns_per_day} 輪），或碰上交友的事。名望不夠的人物會打發你。"),
         "- **移動**：步行不花體力、只花時間；疾行立刻到、要花體力。步行時，每一段路可以邊走邊想、"
         + "沿途打聽、路邊採集各一次。",  # 全圖開放拿掉了留意地形
