@@ -15,7 +15,7 @@
         "text": "舉爵奉陪，一爵接一爵",
         "check": {
           "stat": "con",
-          "difficulty": 4,
+          "grade": "easy",
           "by": "self"
         },
         "effect": {
@@ -38,7 +38,7 @@
         "text": "以酒為題，即席作一段頌辭",
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你從袁氏累世公卿說到主人新任，辭句得體，座中老吏頻頻點頭，有人私下約你改日論學。",
@@ -81,7 +81,7 @@
         "text": "側身鑽過人群，把名刺遞進門去",
         "check": {
           "stat": "agi",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "你在車輪與人肩間鑽了過去，名刺送到主人手中，得以入內行禮。主人記下了你這個遠來的弔客。",
@@ -102,7 +102,7 @@
         "text": "留下來替主家守夜，陪靈到天明",
         "check": {
           "stat": "con",
-          "difficulty": 4,
+          "grade": "easy",
           "by": "self"
         },
         "effect": {
@@ -154,7 +154,7 @@
         "text": "引經據典，替兩人找個台階",
         "check": {
           "stat": "wis",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "你說出處各有其時、進退皆可守節，兩人各退一步，竟同坐對飲起來，還邀你一起論了半夜。",
@@ -174,7 +174,7 @@
         "text": "趁兩人動手前，一把架開醉得最凶的那個",
         "check": {
           "stat": "str",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "你攔腰把人架回座上，他掙了兩下沒掙脫，酒也醒了大半。酒家主人謝你免了一場打砸，送你一壺好酒。",
@@ -233,7 +233,7 @@
         "text": "起身直問經師講漏的一處義理",
         "check": {
           "stat": "wis",
-          "difficulty": 5,
+          "grade": "normal",
           "by": "self"
         },
         "effect": {
@@ -254,7 +254,7 @@
         "text": "講後留下，替經師連夜謄錄講義",
         "check": {
           "stat": "con",
-          "difficulty": 3,
+          "grade": "easy", "shift": -1,
           "by": "self"
         },
         "effect": {
@@ -296,7 +296,7 @@
         "text": "挽袖投矢，連投四矢",
         "check": {
           "stat": "agi",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "四矢連中，壺口嗡嗡作響。眾人擊節叫好，說汝南許久沒見過這樣的手法，當場請你入座。",
@@ -317,7 +317,7 @@
         "text": "自承手拙，改以吟詠代投",
         "check": {
           "stat": "wis",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "你吟了一段《詩》中的〈賓之初筵〉，眾人說你知禮，罰酒也免了。",
@@ -355,7 +355,7 @@
         "text": "替主講搬運學宮新到的書簡，順道帶他進門",
         "check": {
           "stat": "str",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "你扛著一擔擔書簡進出，管書的老吏見你勤快，放你和書生一同入內，書生的文章遞上去了。",
@@ -375,7 +375,7 @@
         "text": "親自在主講面前替他說項",
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你把書生的品行文章說得有憑有據，主講答應看他的文章。書生對你深深一揖，說來日必報。",
@@ -443,7 +443,7 @@
         "text": "穿過人縫追上去",
         "check": {
           "stat": "agi",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "你在攤棚間追了兩條巷子，一把揪住少年後領，錢囊物歸原主。老婦硬塞給你一份謝禮，市人都說你手腳俐落。",
@@ -463,7 +463,7 @@
         "text": "先看清那少年的同夥往哪去",
         "check": {
           "stat": "wis",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "你看出接贓的是個挑擔的漢子，喊住市吏一攔，連人帶贓都截了下來。市吏記下你的名號。",
@@ -501,7 +501,7 @@
         },
         "check": {
           "stat": "agi",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "你在巷口截住少年，聽他說家裡老母病著。你替他把錢還給老婦，又叮囑他別再幹這種事。",
@@ -536,7 +536,7 @@
         "text": "借來市吏的官斛，當眾比量",
         "check": {
           "stat": "wis",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "你兩斛一比，糧商那隻果然大了一圈。市吏沒收了私斛，鄉人對你千恩萬謝。",
@@ -557,7 +557,7 @@
         "text": "一把抬起滿斛的米，倒進空斛裡量給眾人看",
         "check": {
           "stat": "str",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "一斛米沉甸甸地倒過去，滿溢出一大截，眾人譁然，糧商臉色鐵青，只得補足老農的米錢。",
@@ -624,7 +624,7 @@
         "text": "坐上席陪新郎家的長輩飲酒",
         "check": {
           "stat": "con",
-          "difficulty": 4,
+          "grade": "easy",
           "by": "self"
         },
         "effect": {
@@ -647,7 +647,7 @@
         "text": "幫忙搶在日落前把嫁妝抬進門",
         "check": {
           "stat": "agi",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "你腳下飛快，幾趟就把箱籠搬完，新婦家的人直誇你手腳俐落，請你上席。",
@@ -701,7 +701,7 @@
         },
         "check": {
           "stat": "str",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "你把大石高舉過頂、連舉三回，門客們喝了一聲采，當場請你到曹家門下吃一頓酒。鄉里子弟見狀，報名的又多了一排。",
@@ -731,7 +731,7 @@
         },
         "check": {
           "stat": "wis",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "你把應募者的里籍、年歲一一記清，還挑出兩個冒名頂替的。門客說曹家正缺這樣細心的人。",
@@ -774,7 +774,7 @@
         "text": "把禮法與人情一條條說清",
         "check": {
           "stat": "wis",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "你說延期不是悔婚，聘禮當留，從軍歸來再行親迎。兩家父老聽了都點頭，亭長當場寫了約。",
@@ -794,7 +794,7 @@
         "text": "陪兩家父老坐下來，一爵一爵喝到消氣",
         "check": {
           "stat": "con",
-          "difficulty": 3,
+          "grade": "easy", "shift": -1,
           "by": "self"
         },
         "effect": {
@@ -855,7 +855,7 @@
         "text": "下場擲箸，拚手上功夫",
         "check": {
           "stat": "agi",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "你出手又快又準，連贏幾局，門客們服氣地把錢推給你，還說改日要再領教。",
@@ -875,7 +875,7 @@
         "text": "先在旁邊看兩局，瞧瞧有沒有門道",
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你看出那佩刀門客的箸有一根削過，當眾點破時說得客氣，滿座大笑，他只好請你喝酒賠罪。",

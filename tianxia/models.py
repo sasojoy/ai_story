@@ -139,7 +139,9 @@ class StoryStep(_Strict):
 
 class Effect(_Strict):
     text: str = ""
-    stats: dict[str, int] = Field(default_factory=dict)
+    # 值可以寫獎勵等級（Config.rewards.grades 的 key，例 "medium"；只給 Config.rewards.amounts 有的那幾種，例銀兩、心得），
+    # 載入時照 Config.rewards 換成數字（content.resolve_grades；屬性與跨季架構 v2 5.2）。換算完一律是 int，引擎只看 int
+    stats: dict[str, int | str] = Field(default_factory=dict)
     stamina: int = 0
     flags_add: list[str] = Field(default_factory=list)
     flags_remove: list[str] = Field(default_factory=list)
@@ -245,7 +247,12 @@ BEST_OF = "best_of"  # Check.stat 寫它：看 Check.stats 裡最高的那一項
 
 class Check(_Strict):
     stat: str
-    difficulty: int
+    # 難度有兩種寫法（屬性與跨季架構 v2 第五節；骨架 2026-11-04）：內容寫 grade（難度等級，Config.checks.grades 的 key）＋ shift
+    # （同一級裡的微調，正負 Config.checks.shift_max 以內），載入時換成 difficulty（content.resolve_grades）；舊寫法直接寫 difficulty
+    # （程式裡臨時組的檢定、測試內容）。兩個只能寫一個。引擎一律讀 difficulty（換算好的那一格）。
+    difficulty: int | None = None
+    grade: str | None = None
+    shift: int = 0
     # 讀得進來、不再有作用（企劃者 2026-10-05「探索應該沒有本人跟夥伴之分了」）：以前 team 派隊伍中這項屬性最高的人、
     # self 只看本人；現在每一個事件檢定都看本人的屬性（rules.check_outlook）。留著這個欄位，舊內容與 joy 寫好的事件照樣載入。
     by: Literal["team", "self"] = "team"
@@ -258,6 +265,10 @@ class Check(_Strict):
 
     @model_validator(mode="after")
     def _best_of_names_its_stats(self) -> Check:
+        if self.grade is None and self.difficulty is None:
+            raise ValueError("檢定要寫 grade（難度等級）或 difficulty（舊寫法）其中一個")
+        if self.grade is None and self.shift:
+            raise ValueError("shift 只跟 grade 一起寫")
         if self.stat == BEST_OF and len(self.stats) < 2:
             raise ValueError(f"stat 是 {BEST_OF} 時，stats 要寫至少兩項屬性")
         if self.stat != BEST_OF and self.stats:
@@ -270,9 +281,14 @@ class Check(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        data = _drop_unset(handler(self), ("stats",))
+        data = _drop_unset(handler(self), ("stats", "shift"))
         if isinstance(data, dict) and data.get("tier") == 1:
             del data["tier"]
+        if isinstance(data, dict):  # 照內容寫的那一種寫回去：寫 grade 的不寫換算好的 difficulty，舊寫法不多一個 grade
+            if data.get("grade") is None:
+                data.pop("grade", None)
+            else:
+                data.pop("difficulty", None)
         return data
 
 
@@ -3781,6 +3797,98 @@ class MallItem(_Strict):
     look: str = ""  # 形象（kind 是 look）賣的是 content/looks.json 的哪一套
 
 
+# ── 屬性與跨季架構 v2（docs/superpowers/specs/2026-11-04-屬性與跨季-架構方向v2.md；第十節 ① 骨架）──────────────
+# 第 ① 階段：屬性定義、效果表、相對檢定與獎勵等級的骨架接上「現在的四項與現在的數字」，玩家看到的一個字都不變
+# （scripts/same_behavior.py 證明）。數字之後照第十三節的決定改這幾張表，程式不動。
+
+
+class StatDef(_Strict):
+    """一項屬性（content/attributes.json；第二節第 1 層）：鍵（程式與存檔認它）、顯示名（畫面上寫它；載入時蓋進
+    Config.stat_names，現有讀 stat_names 的地方照舊）、一句說明。排序照檔案。"""
+
+    key: str
+    name: str
+    blurb: str = ""
+
+
+class AttrEffect(_Strict):
+    """效果表的一條（第二節第 2 層、2.1）：哪一項屬性（attr）掛在哪一個鉤子（hook，team.ATTR_HOOKS）、用哪條曲線。
+    同一個鉤子掛好幾條就相加（team.attr_effect）。曲線：
+    - linear：per ×（值 − origin）。per 寫數字，或寫 team.RATE_KEYS 的鍵（照這一季讀：減法季每點加倍，team.per_point）。
+    - contest：cap × tanh（（我 − 他）÷ scale），有上下限的 S 形（第 ② 階段才有人用）。
+    - tiers：steps 是 [門檻, 效果]，值到了哪一格給哪一格（照門檻由小到大；第 ② 階段才有人用）。"""
+
+    attr: str
+    hook: str
+    curve: Literal["linear", "contest", "tiers"] = "linear"
+    origin: float = 5
+    per: float | str = 0.0
+    cap: float = 0.0
+    scale: float = Field(default=1.0, gt=0)
+    steps: list[tuple[float, float]] = Field(default_factory=list)
+
+
+class AttributesRules(_Strict):
+    """屬性的效果表（第二節第 2 層）。預設值＝現在的數字：臂力管外功、根骨管內功、身法管落敗閃成僵持，每一點的量照舊讀
+    stat_bonus_per_point 與 dodge_per_point（減法季讀 jianfa.stat_rates）。"""
+
+    effects: list[AttrEffect] = Field(default_factory=lambda: [
+        AttrEffect(attr="str", hook="outer", per="bonus_per_point"),
+        AttrEffect(attr="con", hook="inner", per="bonus_per_point"),
+        AttrEffect(attr="agi", hook="dodge", per="dodge_per_point"),
+    ])
+
+
+class CheckGrade(_Strict):
+    """一個難度等級：key（內容寫它）、顯示名、dc（現在的數字：這一級對到的舊難度；第 ② 階段改成期望值曲線上的位置）。"""
+
+    key: str
+    name: str
+    dc: int
+
+
+class CheckRules(_Strict):
+    """相對檢定（第五節 5.1）：內容寫難度等級，引擎換成這一格的難度；成功率＝base_rate ＋ per_point ×（值＋熟練 − 難度 − 期望值），
+    夾在 floor～ceil。期望值現在就是江湖水漲的那幾點（rules.check_expect → rise.event_bump）。預設值＝現在的數字。"""
+
+    grades: list[CheckGrade] = Field(default_factory=lambda: [
+        CheckGrade(key="easy", name="易", dc=4),
+        CheckGrade(key="normal", name="尋常", dc=5),
+        CheckGrade(key="hard", name="難", dc=7),
+        CheckGrade(key="harsh", name="極難", dc=11),
+        CheckGrade(key="legend", name="傳說", dc=14),
+    ])
+    shift_max: int = Field(default=2, ge=0)  # 同一級裡的微調最多幾點（現有內容換過來只用到 ±1；9 這一格是 +2）
+    base_rate: float = 0.5
+    per_point: float = 0.1
+    floor: float = 0.05
+    ceil: float = 0.95
+
+
+class RewardGrade(_Strict):
+    key: str
+    name: str
+
+
+class RewardRules(_Strict):
+    """獎勵等級（第五節 5.2）：內容在 Effect.stats 寫等級的 key（例 {"silver": "medium"}），載入時照 amounts 換成數字。
+    amounts：哪一種 → 每一級多少（照 grades 的順序）。數字【草】，現有內容還沒換過來（scripts/convert_grades.py rewards 只出報告），
+    第 ② 階段跟經濟表一起定。"""
+
+    grades: list[RewardGrade] = Field(default_factory=lambda: [
+        RewardGrade(key="small", name="小"), RewardGrade(key="medium", name="中"),
+        RewardGrade(key="large", name="大"), RewardGrade(key="rich", name="厚"),
+    ])
+    amounts: dict[str, list[int]] = Field(default_factory=lambda: {"silver": [10, 20, 40, 80], "xinde": [3, 8, 15, 25]})
+
+    @model_validator(mode="after")
+    def _one_amount_per_grade(self) -> RewardRules:
+        for kind, row in self.amounts.items():
+            if len(row) != len(self.grades):
+                raise ValueError(f"rewards.amounts.{kind} 要有 {len(self.grades)} 個數字（照 grades）")
+        return self
+
+
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
@@ -3886,6 +3994,9 @@ class Config(_Strict):
     # 1 是不放慢；正式 0.7、週末設定 0.85。對話、事件、名聲起步、風聞都走它；名將贈禮、本命、招募的門檻不動，所以跟著晚一點拿到
     affinity_gain_scale: float = Field(default=1.0, gt=0, le=1)
     rise: RiseTuning = Field(default_factory=RiseTuning)  # 江湖水漲：大場面、頭目、事件檢定跟得上變強的人（見 RiseTuning）
+    attributes: AttributesRules = Field(default_factory=AttributesRules)  # 屬性的效果表（屬性與跨季架構 v2 第二節；見 AttributesRules）
+    checks: CheckRules = Field(default_factory=CheckRules)  # 相對檢定：難度等級與成功率（v2 5.1；見 CheckRules）
+    rewards: RewardRules = Field(default_factory=RewardRules)  # 獎勵等級（v2 5.2；見 RewardRules）
     treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
     renown: RenownTuning = Field(default_factory=RenownTuning)  # 名聲（兩個稱號與各段的效果，見 RenownTuning）
@@ -5183,6 +5294,8 @@ class ArtBook(_Strict):
 
 class Content(_Strict):
     config: Config
+    # 屬性定義（content/attributes.json，屬性與跨季架構 v2 第二節第 1 層）；沒有這個檔照 team.COMBAT_STATS 與 Config.stat_names
+    attributes: list[StatDef] = Field(default_factory=list)
     scenario: Scenario
     locations: dict[str, Location]
     events: dict[str, Event]

@@ -35,7 +35,7 @@
     "condition": {"factions": ["huang"]},
     "text": "你摸到長社城下，城頭堆著捆好的乾葦，離牆頭不遠。",
     "choices": [
-      {"text": "抽一束乾葦下來當證物", "check": {"stat": "agi", "difficulty": 6, "by": "self"},
+      {"text": "抽一束乾葦下來當證物", "check": {"stat": "agi", "grade": "normal", "shift": 1, "by": "self"},
        "effect": {"text": "你悄悄抽下一束乾葦，揣進懷裡。", "clue_items": {"fs_dry_reeds": 1}},
        "fail_effect": {"text": "這次沒成，可以再來。"}},
       {"text": "不冒這個險", "effect": {"text": "你退回暗處，沒有動手。"}}
@@ -50,7 +50,7 @@
     "condition": {"factions": ["guan"]},
     "text": "被左豐逼到家破的前任郡丞躲在塢堡裡，不肯輕易拿出血書。",
     "choices": [
-      {"text": "好言相勸，請他交出血書", "check": {"stat": "wis", "difficulty": 6, "by": "self"},
+      {"text": "好言相勸，請他交出血書", "check": {"stat": "wis", "grade": "normal", "shift": 1, "by": "self"},
        "effect": {"text": "前任郡丞沉默良久，把血書交到你手上。", "clue_items": {"fs_blood_letter": 1}},
        "fail_effect": {"text": "這次沒成，可以再來。"}},
       {"text": "不打擾他", "effect": {"text": "你悄悄退了出去。"}}
@@ -65,7 +65,7 @@
     "condition": {"factions": ["guan"], "night": true},
     "text": "送進左府的財貨都從這裡過河，夜裡渡口的帳房還亮著燈。",
     "choices": [
-      {"text": "偷抄渡口的帳本", "check": {"stat": "agi", "difficulty": 6, "by": "self"},
+      {"text": "偷抄渡口的帳本", "check": {"stat": "agi", "grade": "normal", "shift": 1, "by": "self"},
        "effect": {"text": "你趁帳房打盹，把帳本抄下一份。", "clue_items": {"fs_ledger": 1}},
        "fail_effect": {"text": "這次沒成，可以再來。"}},
       {"text": "不碰帳本", "effect": {"text": "你在渡口邊站了站，轉身離開。"}}
@@ -107,7 +107,7 @@
     "condition": {"factions": ["huang"]},
     "text": "看守的白髮老道問了一個太平道的問題，答得上來才讓你取丹爐裡的灰。",
     "choices": [
-      {"text": "回答老道的問題", "check": {"stat": "wis", "difficulty": 7, "by": "self"},
+      {"text": "回答老道的問題", "check": {"stat": "wis", "grade": "hard", "by": "self"},
        "effect": {"text": "老道點點頭，讓你取了一撮丹爐灰。", "clue_items": {"fs_ash": 1}},
        "fail_effect": {"text": "這次沒成，可以再來。"}},
       {"text": "不答，轉身離開", "effect": {"text": "你向老道拱了拱手，退了出來。"}}

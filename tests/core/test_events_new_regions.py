@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from tianxia.content import load_content
+from grade_kit import raw_difficulty
 
 CONTENT_DIR = Path(__file__).parents[2] / "content"
 REGIONS = [  # （大區, 新地點, 最少事件數, 最多事件數）
@@ -68,7 +69,7 @@ def test_events_stay_within_the_reward_limits(content, region):
             if "check" in c or "combat" in c:
                 assert "fail_effect" in c, e["id"]
             if "check" in c:
-                assert c["check"]["stat"] in {"str", "agi", "con", "wis"} and 3 <= c["check"]["difficulty"] <= 8, e["id"]  # 難度帶另見 test_real_content.py::DIFFICULTY_BANDS
+                assert c["check"]["stat"] in {"str", "agi", "con", "wis"} and 3 <= raw_difficulty(c["check"]) <= 8, e["id"]  # 難度帶另見 test_real_content.py::DIFFICULTY_BANDS
             rumors += sum(bool(c.get(key, {}).get("rumor")) for key in ("effect", "fail_effect"))
     assert risky * 2 >= len(events)
     assert rumors <= 2

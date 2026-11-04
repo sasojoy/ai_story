@@ -324,10 +324,18 @@ def check_outlook(check: Check, state: GameState, content: Content, world: World
     所以標籤講的和實際擲出來的不會對不起來。江湖水漲（rise.event_bump）：本人等級高了，難度在這裡多加幾點，內容寫的不動。"""
     stat_value = check_stat_value(check, state, content, world)
     bonus = team.practice_bonus(state, content, check)
-    gap = stat_value + bonus - check.difficulty - rise.event_bump(state, content)  # 江湖水漲：等級高了檢定加深（Config.rise）
+    gap = stat_value + bonus - check.difficulty - check_expect(check, state, content)  # 相對檢定：減掉這個等級的人該有的
     if jianfa(content, state.world) and check.tier == 1:  # 減法季：第一階事件放寬（Config.jianfa.event_ease，企劃者 2026-10-26）；
         gap += content.config.jianfa.event_ease  # 第二、三階事件的檢定不放寬（事件分級設計稿）；關著一個字都不變
-    return CheckOutlook(stat_value, bonus, gap, min(0.95, max(0.05, 0.5 + gap * 0.1)))
+    cfg = content.config.checks  # 成功率的換算（屬性與跨季架構 v2 5.1）：現在的數字是 0.5 ＋ 0.1 × 差值，夾在 5%～95%
+    return CheckOutlook(stat_value, bonus, gap, min(cfg.ceil, max(cfg.floor, cfg.base_rate + gap * cfg.per_point)))
+
+
+def check_expect(check: Check, state: GameState, content: Content) -> float:
+    """這個等級的人這一項該有多少（屬性與跨季架構 v2 5.1 的 expect(level, attr)）：檢定的難度是「比期望值高多少」。
+    現在的數字：期望值就是江湖水漲的那幾點（rise.event_bump：15 級起每 6 級 +1），不分哪一項；第 ② 階段換成照成長規則算的曲線，
+    內容寫的難度等級不動。"""
+    return rise.event_bump(state, content)
 
 
 def check_stat_value(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
