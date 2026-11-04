@@ -5325,7 +5325,7 @@ class ArtsScenario(Scenario):
     - 籌備中（管理者還沒開季）：修練頁的動作一律回「賽季籌備中」那一句（裝飾器 _not_while_preparing 搬進核心）。
     - 學藝（learn:）：書院那幾門灰著（書院弟子、俠名）、付不起灰著（按了被擋）、兩處各學一門、學過的不在選單上、再按一次被擋；
       改練（換上庫裡學來的那一門）、換回、沒有這一門。
-    - 練成：心得不足、練到第十成（第一下受傷：機率在記憶體裡擺成 1）、練無可練、內功；裝意境（不指定格、指定格、沒有這個意境、沒有這門武學）、
+    - 練成：心得不足、練到第十成（第一下受傷：機率在記憶體裡擺成 1）、練無可練、內功；裝意境（第一格空著時指定第二格、不指定格、沒有這個意境、沒有這門武學）、
       拆下、拆不在槽上的。
     - 熔煉：身上的熔不掉、庫裡沒有、熔庫裡學來的一門、熔一個意境、批量熔煉（一門武學與一個意境）；配點：沒有點、配兩點、沒有這一項、到頂。
     - 破境丹衝絕學：自創一門上品（三段式立意，模型擋著走關鍵字表）、還沒到極處、等契機、沒有丹、體力不足、下品的、沒有這門；
@@ -5502,15 +5502,17 @@ class ArtsScenario(Scenario):
         self.state_of(who, "練成之後")
 
     def slot(self) -> None:
-        """意境裝卸：不指定格、指定格、沒有這個意境、沒有這門武學；拆下、拆不在槽上的。"""
+        """意境裝卸：指定格（第一格空著時指定第二格：不給 index 會落到第一格，才分得出 index 有沒有傳到底；審查補的，網頁每一次裝都帶 index）、
+        不指定格（挑空的那一格）、沒有這個意境、沒有這門武學；拆下、拆不在槽上的。"""
         who = self.PRACTICE
         ins = self.base_insights()
         self.edit(who, lambda p: p.insights.extend(i for i in ins if i not in p.insights))
         art = self.worn(who) or ""
-        if ins:
-            self.mx(who, "slot", {"art": art, "insight": ins[0]})
         if len(ins) > 1:
             self.mx(who, "slot", {"art": art, "insight": ins[1], "index": 1})
+            emit("指定第二格之後的槽", self.chars.load(who).player.art_slots.get(art))
+        if ins:
+            self.mx(who, "slot", {"art": art, "insight": ins[0]})
         self.mx(who, "slot", {"art": art, "insight": "沒有這個意境"})
         if ins:
             self.mx(who, "slot", {"art": "沒有這門", "insight": ins[0]})
