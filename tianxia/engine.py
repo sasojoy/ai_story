@@ -719,8 +719,6 @@ class Game:
         lost_place = p.location not in c.locations
         if lost_place:
             p.location = c.scenario.start_location
-        if p.picking_audience and not self._audience_hall():
-            p.picking_audience = False  # 內容改版後這裡不再有兩位以上的人物：收起求見選單
         if p.picking_bounty and not bounties.board_here(s, c):
             bounties.close_board(p)  # 懸賞榜關了（Config.bounties.enabled、劇本沒有陣營）、人不在城鎮了：收起懸賞榜，挑到哪一張與榜吏那一句一併清掉
         if p.picking_smith and not equipment.smith_open(s, c):

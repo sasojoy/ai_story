@@ -49,3 +49,15 @@ def test_the_bot_questions_go_through_game_so_a_swapped_figure_is_heard(monkeypa
     assert g.socialize_starts_dialogue() is True
     monkeypatch.setattr("tianxia.precise.on", lambda content, world: False)  # 舊寫法那一支才直接問人物
     assert g.socialize_is_futile() is False
+
+
+def test_a_stale_audience_list_is_put_away_by_the_drop_stale_hook():
+    """求見名單開著、但這裡沒有兩位以上的人物（內容改版）：換掉參照時收起；還有兩位以上的不動。"""
+    g = real_game("week7", location="changshe")
+    assert g._audience_hall()
+    g.state.player.picking_audience = True
+    g._drop_stale_references()
+    assert g.state.player.picking_audience is True
+    g.state.player.location = "runan_wilds"
+    g._drop_stale_references()
+    assert g.state.player.picking_audience is False

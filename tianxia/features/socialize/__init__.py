@@ -23,6 +23,14 @@ class SocializeFeature(Feature):
     def enabled(self, ctx) -> bool:
         return True
 
+    def on_drop_stale(self, ctx) -> None:
+        """內容改版後這裡不再有兩位以上的人物：收起求見名單（原本在 _drop_stale_references 一串 picking_* 之間，現在接在最後；只差序章收尾挪人之後的地點）。"""
+        from . import view  # noqa: PLC0415
+
+        p = ctx.state.player
+        if p.picking_audience and not view.audience_hall(ctx):
+            p.picking_audience = False
+
     def choose(self, ctx, kind, arg):
         """指名求見（call:<人物>、call:back）；一開頭就收起名單，名望不夠被打發、夠了開口對話（動作在 actions.call）。"""
         if kind != "call":

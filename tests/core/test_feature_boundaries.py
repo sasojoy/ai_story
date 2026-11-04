@@ -768,7 +768,6 @@ GAME_DELEGATE_CALLERS.update({
     ("_everyday_options", "_audience_options"): "求見名單（picking_audience）：" + _MENU_ORDER,
     # 場景文字同理：`scene` 掛鉤坐在談話、選邊、投靠、叛投那幾段之前，求見畫面夾在叛投之後、伏筆答題之前，位置算行為，留委派
     ("_own_scene_text", "_audience_intro"): "求見畫面的說明（picking_audience）：場景文字夾在叛投確認與伏筆答題之間，`scene` 掛鉤坐在更前面，位置算行為",
-    ("_drop_stale_references", "_audience_hall"): "內容改版後這裡不再有兩位以上的人物：收起求見名單（一串 picking_* 收起來的判斷之一）",
     ("_advance_player_local", "_deliver_fortune"): "福緣到期自己送上門：夾在閉關收尾與別的補算中間，on_sync 沒有對應的位置",
     ("action_notes", "_socialize_figure"): _ACT_VERB + "（交友那一行說明）",
     ("action_notes", "_audience_hall"): _ACT_VERB + "（求見那一行說明）",
