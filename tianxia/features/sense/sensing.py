@@ -143,8 +143,8 @@ def rate(state: GameState, content: Content, loc: Location, method: str | None =
 
     per_wis = team.per_point(content, state.world, "sense_rate_per_wis")  # 減法季每點加倍（6）；關著照 Config（3）
     base = min(max(cfg.sense_rate + (wis - 5) * per_wis, low), high)
-    if cfg.explore_modes.enabled and treasures.amount(state, content, "insight") > 1:  # 寶物「探索悟意境」（出陣探索與地盤設計 3.3）
-        base = min(high, base + cfg.explore_modes.sense_treasure_points)
+    if treasures.amount(state, content, "insight") > 1:  # 寶物「探索悟意境」（出陣探索與地盤設計 3.3）
+        base = min(high, base + cfg.sense_treasure_points)
     strong = insights.strong_of(loc, content)
     if method is not None and strong is not None and content.insights[strong].attribute == method:
         base = min(high, base + cfg.insight_strong.sense_points)

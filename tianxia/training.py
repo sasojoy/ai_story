@@ -8,13 +8,13 @@
 這裡放不看引擎的純規則（字、數字、次數），engine.Game 接線。"""
 from __future__ import annotations
 
-from . import explore_modes, precise
+from . import precise
 from .models import Content, Location, Training
 from .state import PlayerState, WorldState
 
 DRILL_ID = "act:drill"
 DRILL = "操練"  # 待 joy 潤
-PRACTICE = explore_modes.NAMES[explore_modes.PRACTICE]
+PRACTICE = "尋敵"  # 以前叫練功（Joy 2026-10-22 改名）
 # 一、二、三級的江湖話（Joy 2026-10-22：不寫「幾級練功點」，移動清單也不寫）：尋敵那一格的小字（五格時最多四個字）、鈕上、輿圖的地點詳情。待 joy 潤
 TIER_WORDS = ("宵小出沒", "匪寇橫行", "兇徒盤據")
 PLACE_LINE = "此地{tier}。"  # 輿圖地點詳情最後那一句（Game.place_detail）
@@ -65,4 +65,4 @@ def line(p: PlayerState) -> str:
 
 
 def is_town(content: Content, loc: Location) -> bool:
-    return explore_modes.is_town(content, loc)
+    return precise.is_town(content, loc)

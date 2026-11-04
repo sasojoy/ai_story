@@ -12,8 +12,9 @@ from pydantic import BaseModel
 
 from typing import TYPE_CHECKING
 
-from . import calendar, insights, materials
+from . import calendar, insights, materials, precise
 from .models import Content, GatherBranch, Location
+from .precise import is_town  # noqa: F401  搬到共用規則層了（第 13 批），這一份拿掉之前別處照舊叫得到
 
 if TYPE_CHECKING:
     from .state import GameState, WorldState
@@ -94,8 +95,6 @@ class GatherTextRequest(BaseModel):
 def branches_on(content: Content, world: WorldState | None) -> bool:
     """找素材分支開著沒：Config.gather_branches 打開、內容有分支表、一類一顆（precise.on：設定＋開季蓋章＋探索三選一）也開著——
     分支只接在「找素材一定給、不打仗」之後（第 3 批）。分支本身不蓋章（PM）。"""
-    from . import precise  # noqa: PLC0415  precise 反過來 import 這一份
-
     return content.config.gather_branches.enabled and bool(content.gather_branches) and precise.on(content, world)
 
 
@@ -162,7 +161,7 @@ def deep_insight(content: Content, loc: Location, rng: random.Random) -> str | N
 def say_bonus(content: Content, loc: Location, rng: random.Random, attribute: str) -> list[str]:
     """「自己說」寫得好多給的（【預設】）：一個同屬性一階，say_bonus_second 開著時再照危險度（second_tier）擲一次同屬性二階。"""
     found = [_one(content, {attribute}, 1, rng)]
-    if content.config.gather_branches.say_bonus_second and rng.random() < content.config.explore_modes.second_tier.get(loc.danger, 0.0):
+    if content.config.gather_branches.say_bonus_second and rng.random() < content.config.jianfa.second_tier.get(loc.danger, 0.0):
         found.append(_one(content, {attribute}, 2, rng))
     return [mid for mid in found if mid is not None]
 
@@ -178,10 +177,6 @@ def option_id(mode: str) -> str:
 def rng_for(season: int, name: str, serial: int, what: str) -> random.Random:
     """這一次探索、這一個用途自己的亂數：季數｜名號｜第幾次探索（PlayerState.explore_seq）｜用途。決定性，不動 Game.rng。"""
     return random.Random(f"探索|{season}|{name}|{serial}|{what}")
-
-
-def is_town(content: Content, loc: Location) -> bool:
-    return content.config.explore_mix_of(loc.tags).kind == "town"
 
 
 def _one(content: Content, kinds: set[str], tier: int, rng: random.Random) -> str | None:
@@ -219,7 +214,7 @@ def gather_finds(
         found = [one(1)] if sure or rng.random() < cfg.town_chance else []
     else:
         found = [one(1)] if sure or not econ.gather_cut or rng.random() < econ.gather_first_chance else []
-        if rng.random() < cfg.second_tier.get(loc.danger, 0.0) * boost:
+        if rng.random() < content.config.jianfa.second_tier.get(loc.danger, 0.0) * boost:
             found.append(one(2))
     return [mid for mid in found if mid is not None]
 

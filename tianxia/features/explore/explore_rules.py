@@ -16,6 +16,8 @@ import random
 from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING
 
+from tianxia import materials, precise  # 共用規則層（找素材那一下：素材表、算不算城鎮）
+
 if TYPE_CHECKING:
     from tianxia.jianfa_numbers import ExploreOneTable, JianfaNumbers
 
@@ -95,8 +97,35 @@ def draw(rng: random.Random, weights: Mapping[str, float], *, last_choice: str |
 
 def rng_for(season: int, name: str, serial: int, what: str) -> random.Random:
     """出門這一趟、這一個用途自己的亂數：季數｜名號｜第幾次探索（PlayerState.explore_seq）｜用途。決定性，不動 Game.rng；
-    跟 `explore_modes.rng_for`（「探索|…」）分開，這一件事裡叫的舊結算照舊用它自己的。"""
+    跟 `find_rng`（「探索|…」）分開，這一件事裡叫的舊結算照舊用它自己的。"""
     return random.Random(f"出門|{season}|{name}|{serial}|{what}")
+
+
+# ── 找素材那一下（全部拆包第 13 批從探索三選一搬來）──
+
+
+def find_rng(season: int, name: str, serial: int, what: str) -> random.Random:
+    """找素材那一下、這一個用途自己的亂數：季數｜名號｜第幾次探索（PlayerState.explore_seq）｜用途。決定性，不動 Game.rng。
+    字是「探索|…」，**不要併進上面的 `rng_for`（「出門|…」）**：自家領地多給的那一個（`home_gather`）的亂數序列會變。"""
+    return random.Random(f"探索|{season}|{name}|{serial}|{what}")
+
+
+def one_of(content, kinds: set[str], tier: int, rng: random.Random) -> str | None:
+    """這一階、這幾種屬性的素材挑一個（一個都沒有就從同階全部挑）；同階一個都沒有是 None。"""
+    pool = [m for m in materials.by_tier(content, tier) if m.attribute in kinds] or materials.by_tier(content, tier)
+    return rng.choice(pool).id if pool else None
+
+
+def gather_finds(content, loc, rng: random.Random, boost: float = 1.0) -> list[str]:
+    """素材那一拍撿到的素材 id：屬性照這裡寫的素材（Location.materials），沒寫就從同階全部挑；一定給一個一階（不擲骰）；
+    城外再照危險度（Config.jianfa.second_tier）擲一次，中了多一個二階。三階不從這裡來。
+    boost：走一趟的稀有倍數（outing.rare_boost），乘在二階那一顆的機會上。"""
+    kinds = {content.materials[m].attribute for m in loc.materials if m in content.materials}
+
+    found = [one_of(content, kinds, 1, rng)]
+    if not precise.is_town(content, loc) and rng.random() < content.config.jianfa.second_tier.get(loc.danger, 0.0) * boost:
+        found.append(one_of(content, kinds, 2, rng))
+    return [mid for mid in found if mid is not None]
 
 
 # ── 鈕上的小字與段落（Task 2-3；字都待 joy 潤）──

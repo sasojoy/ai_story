@@ -3195,15 +3195,11 @@ class SortieRules(_Strict):
 
 
 class ExploreModes(_Strict):
-    """探索三選一（設計第三節）：找素材、找事件、靜心感悟。enabled 關掉回到照地點比例自動抽的探索（Config.explore_mix），
-    事件推戰線也不再打折。"""
+    """探索三選一（設計第三節）：找素材、找事件、靜心感悟。enabled 關掉回到照地點比例自動抽的探索（Config.explore_mix）。"""
 
     enabled: bool = True
     encounter_chance: float = Field(default=0.35, ge=0, le=1)  # 找素材撞上怪（城鎮不撞）
-    second_tier: dict[int, float] = Field(default_factory=lambda: {1: 0.0, 2: 0.25, 3: 0.5})  # 照危險度：再一個二階的機會
     town_chance: float = Field(default=0.5, ge=0, le=1)  # 城鎮找素材撿到一個一階的機會
-    event_trend_share: float = Field(default=0.5, ge=0, le=1)  # 可重複的事件推戰線的量（設計 3.2、5.3；一次性的事照全額）
-    sense_treasure_points: int = Field(default=15, ge=0)  # 寶物「探索悟意境」：靜心感悟擲中機率多幾個百分點（夾在 sense_rate_range 的上限）
 
 
 class Training(_Strict):
@@ -3653,9 +3649,10 @@ class EconomyRules(_Strict):
     donate: bool = True  # 自家陣營的大本營捐軍備（第六節）
     donate_points: dict[int, int] = Field(default_factory=lambda: {1: 1, 2: 3, 3: 9})  # 階 → 貢獻（糧草的份量）
     donate_daily_cap: int = Field(default=100, ge=0)  # 每人每天捐的貢獻最多幾點（回體丹的換日）
-    # 每一點貢獻推大勢多少（PM 2026-10-15 同意專職開發的定法）：再打事件五折（Config.explore_modes.event_trend_share）、
+    # 每一點貢獻推大勢多少（PM 2026-10-15 同意專職開發的定法）：再打五折（donate_trend_share）、
     # 季長倍數、盡頭阻力，跟出陣共用每人每日推力上限，不另記推力的貢獻（貢獻照捐的份量記）
     donate_push_per_point: float = Field(default=0.05, ge=0)
+    donate_trend_share: float = Field(default=0.5, ge=0, le=1)  # 捐軍備推大勢的折數（跟 Config.event_trend_share 同值、不同欄：測試內容事件不打折、捐軍備照打）
     armaments: dict[str, str] = Field(  # 素材屬性 → 陣營軍備的名字（第六節第 3 點；存量照份量累積）
         default_factory=lambda: {"慢": "糧秣", "快": "箭矢", "剛": "甲冑", "柔": "戰馬"}
     )
@@ -3849,8 +3846,9 @@ class Config(_Strict):
     gather_branches: GatherBranches = Field(default_factory=GatherBranches)  # 找素材分支（見 GatherBranches；內容在 content/gather_branches.json）
     training: Training = Field(default_factory=Training)  # 城裡操練、城外練功分級（見 Training）
     # 一類一顆（正式季整合第二章；tianxia/precise.py）：每一顆鈕只給一類、按了一定拿到那一類。預設開、測試內容關；照開季蓋章
-    # （WorldState.precise_actions，12.3 第 13 條：正在跑的季不變、下一個開季起生效）；探索三選一也開著時才生效
+    # （WorldState.precise_actions，12.3 第 13 條：正在跑的季不變、下一個開季起生效）
     precise_actions: bool = True
+    event_trend_share: float = Field(default=0.5, ge=0, le=1)  # 可重複的事件推戰線的量（設計 3.2、5.3；一次性的事照全額；Game._shaped 讀）
     # 借進找事件的戰後事件（內容寫 train 的九則）在一處池子裡合起來最多佔幾成（PM 2026-10-19：QA 量到潁川郊野佔七成）；
     # 當地自己的事件都抽不到時照舊補上，池子裡只有這幾則時不受上限（events.pick_event）
     precise_aftermath_share: float = Field(default=0.3, ge=0, le=1)
@@ -4209,6 +4207,7 @@ class Config(_Strict):
     sense_rate: int = 70  # 有所感選對做法之後，進入感悟狀態的成功率（%）
     sense_rate_per_wis: int = 3  # 悟性比基準 5 每多一點 +3%（少一點 −3%）
     sense_rate_range: tuple[int, int] = (40, 95)  # 夾在這之間（痕跡的加成另外加在上面，見 sense_marks_bonus）
+    sense_treasure_points: int = Field(default=15, ge=0)  # 寶物「探索悟意境」：感悟擲中機率多幾個百分點（夾在 sense_rate_range 的上限；0 是沒有這一支，寶物字走舊的那一句）
     sense_miss_xinde: int = 3  # 選對了但沒擲中：「差一點就抓到了」給的心得
     sense_marks_bonus: int = 3  # 這一處悟成過的人每多一檔模糊人數（一兩個人、幾個人、十來個人），成功率 +3%……
     sense_marks_cap: int = 9  # ……最多 +9%

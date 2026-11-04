@@ -178,7 +178,7 @@ def how(content: Content, b: Bounty, state: GameState | None = None, world: Worl
     if b.motive == "求援":  # 求援委託：護衛、犒軍那位人物也算（大勢人物擴充第三批，跟「大勢人物參戰與護衛」對齊）
         return how(content, b.model_copy(update={"motive": None}), state, world) + RALLY_AID.format(who=issuer(content, b))
     if b.kind == "strike":
-        from . import explore_modes, precise, sortie  # 延後 import 只是保險
+        from . import precise, sortie  # 延後 import 只是保險
         from .rules import jianfa
 
         target = _loc_name(content, b.location)
@@ -190,7 +190,7 @@ def how(content: Content, b: Bounty, state: GameState | None = None, world: Worl
                 line = STRIKE_PRECISE if sortie.on(content) and not ranger else STRIKE_PRACTICE
             return line.format(target=target, enemy=_enemy_name(content, b))
         if sortie.on(content):
-            ways = f"{STRIKE_SORTIE}，{STRIKE_GATHER}" if explore_modes.on(content) else STRIKE_SORTIE
+            ways = f"{STRIKE_SORTIE}，{STRIKE_GATHER}"
             return f"到{target}打贏一場{_enemy_name(content, b)}的隊伍（{ways}）"
         return f"到{target}遊歷，打贏一場{_enemy_name(content, b)}的隊伍"
     if b.kind == "scout":

@@ -1,8 +1,8 @@
 """新手引導、個人目標與任務區塊：讓玩家知道這一季在發生什麼、下一步該做什麼。"""
 from __future__ import annotations
 
-from tianxia import calendar, library, prologue  # 核心、共用規則層
-from tianxia import explore_modes, ranks  # 過渡：待搬
+from tianxia import calendar, library, precise, prologue  # 核心、共用規則層
+from tianxia import ranks  # 過渡：待搬
 from . import enlist
 # 序章步驟的獎勵那一行的記號（HutReward）：核心的 Game._guide 認它，型別在核心（全部拆包第 22 批），這裡照舊叫得到
 from tianxia.core.services import HutReward  # noqa: F401
@@ -66,7 +66,7 @@ def goal_met(state: GameState, content: Content, world: WorldStateStore, goal: T
         return False
     if not goal.action and goal.any_action and action not in goal.any_action:
         return False
-    if goal.wild and explore_modes.is_town(content, content.locations[state.player.location]):
+    if goal.wild and precise.is_town(content, content.locations[state.player.location]):
         return False
     if goal.locations and state.player.location not in goal.locations:
         return False

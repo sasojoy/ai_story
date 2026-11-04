@@ -2,22 +2,25 @@
 按了一定拿到那一類，運氣只決定拿到多少。找素材一定給、不打仗；練功（新）一定打一場；找事件寫這裡多半給哪一類；交友只談話；
 靜心感悟選錯給心得、不鎖；應召不再換掉別的鈕。
 
-開關 Config.precise_actions，照開季蓋章（WorldState.precise_actions）；探索三選一（Config.explore_modes）也開著時才生效——
-找素材只存在於三選一裡（10.1）。關著時一個字都不變。這裡放不看引擎的純規則，engine.Game 接線。
+開關 Config.precise_actions，照開季蓋章（WorldState.precise_actions）。關著時一個字都不變。這裡放不看引擎的純規則，engine.Game 接線。
 """
 from __future__ import annotations
 
-from . import explore_modes, territory
-from .models import Content, Effect, Event
+from . import territory
+from .models import Content, Effect, Event, Location
 from .state import GameState, WorldState
 
 MEET_FLAG = "結識:"  # 結識事件立的旗標（rules.can_meet 看到它就不看名望門檻）
 
 
 def on(content: Content, world: WorldState | None) -> bool:
-    """一類一顆開著沒：設定打開、這一季開季時也蓋了章、探索三選一開著。"""
-    return (content.config.precise_actions and world is not None and world.precise_actions
-            and explore_modes.on(content))
+    """一類一顆開著沒：設定打開、這一季開季時也蓋了章。"""
+    return content.config.precise_actions and world is not None and world.precise_actions
+
+
+def is_town(content: Content, loc: Location) -> bool:
+    """這一處算不算城鎮類（Config.explore_mix_of 照地點標籤）。"""
+    return content.config.explore_mix_of(loc.tags).kind == "town"
 
 
 def _effects(event: Event) -> list[Effect]:
@@ -46,7 +49,7 @@ def kept_social(event: Event) -> bool:
 def field_with_foes(state: GameState, content: Content) -> bool:
     """所在地是城外、而且站著不是自己陣營的隊伍（地盤易手照控制方，territory.squads_at；同 Game._wild_foes 的敵我）。"""
     loc = content.locations[state.player.location]
-    if explore_modes.is_town(content, loc):
+    if is_town(content, loc):
         return False
     mine = state.player.faction
     return any(

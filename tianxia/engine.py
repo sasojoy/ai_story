@@ -3520,20 +3520,7 @@ class Game:
         return msgs
 
     def _home_gather(self, loc: Location, mids: list[str]) -> list[str]:
-        """領地爭奪：人站在自家領地找素材，Config.conquest.gather_bonus_chance 的機會多一個同屬性的一階（設計 4.5；散人在開季中立的區塊也算）。
-        屬性照這一下找到的第一個素材，沒找到照地點寫的第一種素材；擲骰用這一次探索自己的亂數（用途「領地」），不碰 Game.rng。
-        開關關著、不在自家是空的，一個字都不變。"""
-        s, c = self.state, self.content
-        if not conquest.home(s, c):
-            return []
-        rng = explore_modes.rng_for(self.world.get_season_number(), s.player.name, s.player.explore_seq, "領地")
-        if rng.random() >= c.config.conquest.gather_bonus_chance:
-            return []
-        pool = [m for m in [*mids, *loc.materials] if m in c.materials]
-        attribute = c.materials[pool[0]].attribute if pool else None
-        mid = explore_modes.one_of(c, {attribute} if attribute else set(), 1, rng)
-        line = materials.grant(s, c, mid) if mid is not None else None
-        return [conquest.HOME_GATHER_LINE, line] if line else []
+        return explore_actions.home_gather(self, loc, mids)  # 本體在探索包（全部拆包第 13 批）；探索包經 ctx 叫這一行（測試換它）
 
     def _gather_say(self, loc: Location, rng: random.Random, say_rng: random.Random) -> list[str]:
         """找素材的「自己說」（第 32 項，計畫 2.3）：照模型挑的屬性一定給一份（同分支），成算＝模型分數＋悟性修正、夾 5～85
@@ -6216,8 +6203,8 @@ class Game:
         amount = float(delta)
         if trend_id not in self._resisted_lines():
             return amount, False
-        if source == "event" and cfg.explore_modes.enabled:
-            amount *= cfg.explore_modes.event_trend_share
+        if source == "event":
+            amount *= cfg.event_trend_share
         season21 = calendar.season21_on(w, c)
         if season21 and source in ("sortie", "donate", "event"):  # 21 天季（7.4）：出陣、捐軍備、可重複的事件同一個速度，不乘季長倍數
             amount *= cfg.season21_daily.push_speed
@@ -7328,7 +7315,7 @@ class Game:
         # 糧車到了終點（路過也算）先交糧，再照原本的新手引導與門檻（計畫 T6）；呼叫的先後不能換
         convoy = self._convoy_arrives(loc_id) + bounties.on_arrive(s, c, self.world, loc_id)  # 懸賞榜的護送：走到終點就交差（路過也算）
         guide = self._guide(self._note_action("move"))  # 出師的盤纏（序章步驟的獎勵）是這一趟路的結果，回在這裡
-        if not explore_modes.is_town(c, c.locations[loc_id]):  # 走到城外（初入江湖逛鋪子那一步：沒進鋪子、直接出城也算過，Joy 2026-10-22）
+        if not precise.is_town(c, c.locations[loc_id]):  # 走到城外（初入江湖逛鋪子那一步：沒進鋪子、直接出城也算過，Joy 2026-10-22）
             guide += self._guide(self._note_action("leave_town"))
         thresholds = check_thresholds(s, c, self.world, self._flavor_sink(), now=self.now)
         t = c.tutorial

@@ -713,6 +713,17 @@ GAME_DELEGATE_CALLERS.update({
 })
 
 
+# strip（全部拆包第 13 批「拿掉一」：探索三選一、找素材「自己說」、城裡操練；計畫 docs/superpowers/plans/2026-11-04-拿掉一-第13批.md）：
+# 這一批多半是刪（刪的在原處），加的集中在這一段
+GAME_DELEGATES |= {
+    "_home_gather",  # 本體搬進探索包（explore_actions.home_gather）；探索包經 ctx 叫這一行，測試換它、same_behavior 叫它（經 ctx 的規矩，手冊第十五節）
+}
+GAME_DELEGATE_CALLERS.update({
+    ("_gather", "_home_gather"): "三選一的找素材（Task 3 連方法一起拿掉）",
+    ("_gather_say", "_home_gather"): "三選一的「自己說」（Task 3 連方法一起拿掉）",
+})
+
+
 @functools.lru_cache(maxsize=None)
 def _engine_tree() -> ast.Module:
     return ast.parse((TIANXIA / "engine.py").read_text(encoding="utf-8"))  # 一萬七千行，parse 一次一秒多：大家共用這一份
@@ -820,7 +831,6 @@ SHARED_PENDING = {
     ("siege", "world"): "排定：開集結那一季（world._season_vehicle，函式裡）——第 25 批 world 收進核心本體。world 最外層 import 宴客包 feast"
                         "與單挑包 bout（舊名 arena：收季記擂台前三名的 close_season，全部拆包第 12 批成包）："
                         "叫到那個函式就連帶載入 feast、bout（現在 import siege 已經經 atlas 載進來了），收進核心本體之前那一行要先處理（核心不 import 包）",
-    ("precise", "explore_modes"): "排定：三選一的開關與城鎮（explore_modes.on、is_town）——第 13 批 on 改成一直是開著的值、is_town 進共用規則層",
     ("moves", "create"): "之後成包：擺式的幾何（create.icon_pose、stance_of，函式裡）——煉製與自創第 44 批 create 進包之前，先把這一段留在"
                          "共用規則層或改成查詢服務（moves 是 tactics 的底、tactics 是核心 team 的底，先不收會連帶 43 個收不了）",
     ("siege", "generals"): "之後成包：攻城的留守挑龍頭（generals.on、pick）——決戰第 8 批 generals 進包之前，先改成查詢服務或把挑法留在共用規則層"

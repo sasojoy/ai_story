@@ -1940,12 +1940,12 @@ def check_bounties(c: Content, need) -> None:
 
 
 def check_core_loop(c: Content, need) -> None:
-    """出陣探索與地盤的設定（Config.push_resistance、explore_modes）：阻力的兩段照大小排、二階素材的機會只寫危險度 1～3。"""
+    """出陣探索與地盤的設定（Config.push_resistance、jianfa.second_tier）：阻力的兩段照大小排、二階素材的機會只寫危險度 1～3。"""
     r = c.config.push_resistance
     need(r.full_within <= r.half_within,
          f"Config.push_resistance：full_within 不能大於 half_within（{r.full_within}、{r.half_within}）")
-    need(set(c.config.explore_modes.second_tier) <= {1, 2, 3},
-         f"Config.explore_modes.second_tier 的鍵是危險度 1～3：{sorted(c.config.explore_modes.second_tier)}")
+    need(set(c.config.jianfa.second_tier) <= {1, 2, 3},
+         f"Config.jianfa.second_tier 的鍵是危險度 1～3：{sorted(c.config.jianfa.second_tier)}")
 
 
 GATHER_BRANCH_FIELDS = {"place"}  # 分支第一句能用的佔位（GatherBranch.line）
