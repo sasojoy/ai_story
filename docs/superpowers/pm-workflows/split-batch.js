@@ -50,7 +50,7 @@ const COMMON = `
 - 不要碰：${WEB ? '' : 'web/（這一批不切網頁）、'}輿圖（feature/map-view）、鐵匠鋪（feature/smithing-flow）、戰記（tale.py、server 的 TALES 與 narrate_*）、別的包的行為${A.dont_touch ? '、' + A.dont_touch : ''}。
 - **第 11 批已經合了**：\`tianxia/core/features.py\` 有接縫掛鉤與兩個宣告（\`Shop\`、\`Verb\`）；手冊第十五節「第 11 批的 PM 認定」。**原位該接的照第 11 批的寫法接上掛鉤，不要再新增 \`GAME_DIRECT\`**（真的接不了寫理由）。${A.after15 ? '**第 15 批（共用規則層登記）也合了**：`registry.SHARED` 裡的模組包可以直接 import，不算過渡。' : ''}
 - **並行**：${A.parallel || '同時還有別的拆包線在跑'}。共用登記檔（邊界清單、services.py、registry.py、FEATURES、same_behavior、\`aliases()\`）你加的每一筆都集中在 \`# ${PKG}\` 那一段後面，不穿插在別人的行之間；後合的那一條 PM 會先合 develop 再重比。
-- **開工第一步先查雲端的線**：明確 fetch origin 的 \`claude/*\`（\`git ls-remote origin 'refs/heads/claude/*'\`），看最近兩天有提交、還沒合進 develop 的，有沒有改到這一批要搬的方法或模組（名字照你在計畫第一節量出來的清單）。**動到了就停**，stopped 寫哪一條、哪幾個方法，不要開工。
+- **拆分在 \`split/trunk\` 上做**（企劃者 11/04：錨點 tag \`split-anchor-20261104\`）。\`develop\` 是別人在開發的線，它後來的提交不管、不要合進來，雲端的線也不用查；全面分拆完 PM 才追。
 - 不開子代理、不開工作流程。任何畫面、輸出不能透露誰是假人；這一批不該有新字。做完就停；回報用繁體中文。
 `
 
@@ -94,7 +94,7 @@ ${COMMON}
 - 已成包的範本：\`tianxia/features/\`（sortie、explore、tavern、battle、feast、mall）與它們的 README、\`bots.py\`。
 - \`scripts/same_behavior.py\`（各軌與 \`--help\`）。
 用 \`grep -n '^#'\` 看大綱，只讀相關的節。調查的行號是 develop \`5fccb11a\` 量的，一律照現行程式重量。
-分支：明確 fetch ${FEAT}（PM 已開在 develop ${BASE}；不是的話停下來回報）；\`git switch -c ${DEV} origin/${FEAT}\`（同名已存在就加 -work），推 \`git push origin HEAD:${DEV}\`。不碰 ${FEAT}、develop、main，PM 合。埠 ${P.dev}、${HOST}.localhost；暫存 ${SP}\\${SCRATCH}\\。
+分支：明確 fetch ${FEAT}（PM 已開在 split/trunk ${BASE}；不是的話停下來回報）；\`git switch -c ${DEV} origin/${FEAT}\`（同名已存在就加 -work），推 \`git push origin HEAD:${DEV}\`。不碰 ${FEAT}、develop、main，PM 合。埠 ${P.dev}、${HOST}.localhost；暫存 ${SP}\\${SCRATCH}\\。
 
 **這一批要做的（PM 定，照做）**：
 ${BODY}
