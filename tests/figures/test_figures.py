@@ -14,6 +14,7 @@ from conftest import FixedRandom, no_plans, no_territory, real_content
 from tianxia import atlas, battle_instance, battlelog, bot_policy, calendar, figures, team, timetable, world
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game, Option
+from tianxia.features.figure_acts import challenge as figure_challenge
 from tianxia.events import event_candidates
 from tianxia.state import BotProfile, FigureState, GameState, PlayerState
 from tianxia.content import ContentError, validate
@@ -907,7 +908,7 @@ def test_a_drawn_challenge_pays_half_a_win_and_nothing_else(on, world):
     record = game.state.battles[0]
     assert record.tier == "僵持" and figures.DRAW_LINE.format(name=fig.name) in msgs
     assert (win.xinde, win.exp) == (squad.reward_xinde, squad.exp)  # 官甲打的時候聲威是滿的
-    full = game._challenge_reward("bocai", squad)  # 官乙打的時候聲威已經被官甲扣過：照聲威打折之後的險勝那一份
+    full = figure_challenge.win_reward(game, "bocai", squad)  # 官乙打的時候聲威已經被官甲扣過：照聲威打折之後的險勝那一份
     assert full.reward_xinde < squad.reward_xinde
     assert (record.xinde, record.exp) == (int(full.reward_xinde * 0.5 + 0.5), int(full.exp * 0.5 + 0.5))
     assert p.stats["xinde"] == xinde + record.xinde and p.stats["silver"] == 50 and p.materials == mats

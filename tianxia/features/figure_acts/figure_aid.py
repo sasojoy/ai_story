@@ -5,14 +5,16 @@
 - 犒軍：補人物的聲威（restore，跟每天的自然回復共用 daily_restore_cap）。
 - 探望：人物被挑戰打到退場、還在等回來（FigureState.back_at）時，在自己陣營的大本營讓他早一點回來。
 這裡只改 GameState（季在 state.world 上），扣體力、銀兩、記貢獻、寫紀錄是 engine 的事。只 import models、state、figures、calendar、encounter。
+（全部拆包第 31 批搬進功能包 figure_acts；舊名 tianxia/figure_aid.py 留成別名。）
 """
 from __future__ import annotations
 
 import random
 
-from . import calendar, encounter, figures
-from .models import Content
-from .state import GameState, GuardPost
+from tianxia import calendar, encounter
+from tianxia import figures  # 過渡：待搬（大勢人物 figures，總表第 40 批）
+from tianxia.models import Content
+from tianxia.state import GameState, GuardPost
 
 DAY = 86400
 
@@ -118,7 +120,7 @@ def _life():
     """「大勢人物擴充」那一份（tianxia/figure_life.py，PR #58）在的話，一天的上限照它的帳（gain_left／note_gain，募兵、自然回復、
     犒軍共用 Config.figure_life.daily_gain_cap）；不在照這裡的 daily_restore_cap 與 aid_tally。兩份先後合進 main 都對得上。"""
     try:
-        from . import figure_life  # noqa: PLC0415
+        from tianxia import figure_life  # noqa: PLC0415  過渡：待搬（人物活起來 figure_life，總表第 40 批）
     except ImportError:
         return None
     return figure_life if hasattr(figure_life, "gain_left") else None

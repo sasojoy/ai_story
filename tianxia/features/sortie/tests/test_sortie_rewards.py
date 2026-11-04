@@ -10,6 +10,7 @@ from conquest_kit import conquest_rules
 from tianxia import battle_instance, forge_secrets, four_tiers, team
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game, drill_share
+from tianxia.features.figure_acts import challenge as figure_challenge
 from tianxia.sqlite_world import open_world
 
 
@@ -138,7 +139,7 @@ def _tier4(game):
 
 
 def _beat_figure(game, fid):
-    game._figure_tier4(fid, game.content.squads[game.content.figures[fid].squad], game.state.battles[-1] if game.state.battles else
+    figure_challenge.tier4(game, fid, game.content.squads[game.content.figures[fid].squad], game.state.battles[-1] if game.state.battles else
                        type("R", (), {"id": 1, "materials": []})())
 
 

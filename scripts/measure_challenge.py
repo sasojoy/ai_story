@@ -33,6 +33,7 @@ from tianxia import world as world_mod  # noqa: E402
 from tianxia.bot_runner import BotRunner  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
+from tianxia.features.figure_acts import challenge as figure_challenge  # noqa: E402
 from tianxia.martial_arts import QUALITIES  # noqa: E402
 
 DAY = 86400.0
@@ -101,7 +102,7 @@ def _tier3(game) -> int:
 
 def instrument(tally: ChallengeTally, outcome: str) -> list:
     """包函式（只在記憶體裡）：回傳要 start／stop 的 patch 清單。"""
-    real_challenge, real_rewards, real_figure_tier3 = Game._challenge, Game._battle_rewards, Game._figure_tier3
+    real_challenge, real_rewards, real_figure_tier3 = Game._challenge, Game._battle_rewards, figure_challenge.tier3
     real_drop, real_seize, real_engine_seize = treasures.challenge_drop, cultivation.seize, Game._seize
     real_tick = BotRunner.tick
     kind_now: list[str] = []

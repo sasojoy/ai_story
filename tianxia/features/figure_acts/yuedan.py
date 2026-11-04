@@ -6,7 +6,8 @@
 八到十六字的評語（write、clean；三段式 Game.yuedan_request → write → Game.apply_yuedan），寫好了一起上天下大事與江湖史；
 等過 yuedan_wait_seconds 還沒寫好（模型叫不動、伺服器沒開背景寫字）照固定句發（tick）。被評的人的玩家卡上掛這一週那一句
 （line_for）。只是名聲，不加數值。
-只 import models、state、rules、calendar、leaderboard、figure_life、zh；world、engine、server、social 呼叫它。"""
+只 import models、state、rules、calendar、leaderboard、figure_life、zh；world、engine、server、social 呼叫它。
+（全部拆包第 31 批搬進功能包 figure_acts；舊名 tianxia/yuedan.py 留成別名。）"""
 from __future__ import annotations
 
 import hashlib
@@ -14,10 +15,11 @@ import re
 
 from pydantic import BaseModel, Field
 
-from . import calendar, figure_life, zh
-from .models import Content
-from .rules import add_chronicle, add_rumor
-from .state import GameState, YuedanEntry
+from tianxia import calendar, zh
+from tianxia import figure_life  # 過渡：待搬（人物活起來 figure_life，總表第 40 批）
+from tianxia.models import Content
+from tianxia.rules import add_chronicle, add_rumor
+from tianxia.state import GameState, YuedanEntry
 
 CRITIC = "xushao"
 BOARDS = ("名人", "善人", "惡人")  # 輪流挑的順序
@@ -73,7 +75,7 @@ def tick(state: GameState, content: Content, world) -> None:
     week = calendar.point(w.time, content, w).week
     tuning = content.config.figure_life
     if week >= tuning.yuedan_from_week and week > w.yuedan_week:
-        from . import leaderboard  # noqa: PLC0415  leaderboard → team → …：延後載入
+        from tianxia import leaderboard  # noqa: PLC0415  過渡：待搬（榜單 leaderboard）  leaderboard → team → …：延後載入
 
         w.yuedan_week = week
         board = leaderboard.compute_boards(content, world)
