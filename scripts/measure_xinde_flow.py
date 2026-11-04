@@ -2,7 +2,7 @@
 
 玩家照 measure_chuangong.py 的「一直在線、體力一有就打」機器人（每 10 步照整季機器人花心得、練、合成、修練）。
 每一筆心得的增減照呼叫它的函式記帳（p.stats 換成會記帳的 dict）。
-用法：python scripts/measure_xinde_flow.py --seeds 1 2 [--profile weekend] [--online 24] [--mates guanyu zhangfei | --mates]
+用法：python scripts/measure_xinde_flow.py --seeds 1 2 [--profile week7] [--online 24] [--mates guanyu zhangfei | --mates]
 """
 from __future__ import annotations
 
@@ -123,7 +123,7 @@ def run(seed, args):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, nargs="+", default=[1, 2])
-    ap.add_argument("--profile", default="weekend")
+    ap.add_argument("--profile", default="week7")
     ap.add_argument("--online", type=float, default=24)
     ap.add_argument("--faction", default="guan")
     ap.add_argument("--mates", nargs="*", default=["guanyu", "zhangfei"])

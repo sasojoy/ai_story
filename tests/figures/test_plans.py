@@ -369,9 +369,9 @@ def test_the_yinjiang_list_does_not_change_with_plans_off(c):
     assert off == seal_acts.figure_targets(s, c, until) and all(row["why"] != seal_acts.CLASH_PLAN for row in off)
 
 
-@pytest.mark.parametrize("profile", ["weekend", "week7", "season21"])
+@pytest.mark.parametrize("profile", ["week7", "season21"])
 def test_the_yinjiang_window_follows_each_season_kind(profile):
-    """季種類（週末、7 天、21 天）的時間換算照 plans.tick 用的 day7／season_end_time：孫堅 7 天季第 1.7 天要走（sunjian_march），
+    """季種類（7 天、21 天）的時間換算照 plans.tick 用的 day7／season_end_time：孫堅 7 天季第 1.7 天要走（sunjian_march），
     引將的一日（一個季曆天）窗口蓋到那一刻才灰，窗口在它之前結束就不灰。"""
     from tianxia import world
 

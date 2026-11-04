@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import sim_server_bots as sim  # noqa: E402
 from tianxia import engine, rules  # noqa: E402
 from tianxia import world as worldmod  # noqa: E402
-from tianxia.content import env_profile, load_content, profile_line  # noqa: E402
+from tianxia.content import serving_profile, load_content, profile_line  # noqa: E402
 
 TREND = "huangjin"
 TRAINING = ("_drill", "_squad_encounter", "_sortie_hold")  # 出陣（出陣探索與地盤）：攻走 _squad_encounter，守與攪局走 _sortie_hold
@@ -42,7 +42,7 @@ def main() -> None:
     ap.add_argument("--seasons", type=int, default=4)
     ap.add_argument("--variant", choices=("none", "zero", "half"), default="none")
     ap.add_argument("--cap", type=int, default=0)
-    ap.add_argument("--profile", default=env_profile(), help="設定覆寫檔，例如 weekend（預設讀 TIANXIA_PROFILE）")
+    ap.add_argument("--profile", default=serving_profile(), help="設定覆寫檔，例如 week7（預設讀 TIANXIA_PROFILE，沒帶是 season21）")
     args = ap.parse_args()
 
     season = {"n": 0}

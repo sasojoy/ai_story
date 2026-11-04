@@ -1,6 +1,6 @@
 """擂台場邊事件的觸發率與勝率差（PM 2026-10-17：「量表量實際觸發率」「量開關勝率差，要在幾個百分點內」；只量不改）。
 
-正式內容（--profile，預設 weekend）、一個暫存資料庫、兩個一樣強的角色：甲挑乙（乙第一名、甲第二名，每一場打完把名次、戰績擺回去，
+正式內容（--profile，預設 week7）、一個暫存資料庫、兩個一樣強的角色：甲挑乙（乙第一名、甲第二名，每一場打完把名次、戰績擺回去，
 免得「天下第一」的喊聲每一場都在）。甲照假人的打法出招（看架勢出剋它的招六成，bot_policy.duel_move），--gamble 的機率改寫放手一搏
 （成功率 --rate，觀眾反應照 --label）。每一種情境 --fights 場、場邊事件開與關各打一遍（同一串亂數），印：
 - 一場有場邊事件的比例、各種事件各幾件；
@@ -141,7 +141,7 @@ def run(args, name: str, crowd_on: bool) -> tuple[float, float, Counter]:
 def main(argv=None) -> None:
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser()
-    ap.add_argument("--profile", default="weekend")
+    ap.add_argument("--profile", default="week7")
     ap.add_argument("--fights", type=int, default=1000)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--scenarios", nargs="+", default=["none", "patron", "both", "mixed", "boo", "champion"])

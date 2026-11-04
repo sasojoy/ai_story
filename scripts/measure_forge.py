@@ -13,7 +13,7 @@ chat_text／chat_structured 與 requests 另外擋成一律丟錯，其他地方
 另外記體力（為了判斷 bot.FORGE_RESERVE 留 20 夠不夠）：整季步數、體力低於 10 的步數（探索與遊歷要 10，
 見底就選不到）、合成被保留量擋下幾次、真的合成幾次。
 
-用法：.venv/Scripts/python.exe scripts/measure_forge.py --seeds 1 2 3 4 5 [--profile weekend] [--reserve 0]
+用法：.venv/Scripts/python.exe scripts/measure_forge.py --seeds 1 2 3 4 5 [--profile week7] [--reserve 0]
 """
 from __future__ import annotations
 

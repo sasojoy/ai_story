@@ -73,7 +73,7 @@ from tianxia import (
     zhuan_end,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, SESSION_SECONDS, AccountError, AccountStore, SessionStore, normalize
-from tianxia.content import env_profile, load_content, profile_line
+from tianxia.content import env_profile, load_content, profile_line, serving_profile
 from tianxia.characters import name_key, open_characters
 from tianxia.database import default_path, open_database
 from tianxia.flavor import FlavorJob
@@ -130,7 +130,7 @@ def zhuan_art_src(key: str | None) -> str | None:
 def horse_art() -> list[str]:
     """web/ 裡真的有的馬圖（web/horse-<鍵>.webp，鍵見 mounts.COAT_ART、STEED_ART）：網頁只對這些鍵放圖，其餘照舊畫色塊。"""
     return sorted(path.stem.removeprefix("horse-") for path in WEB.glob("horse-*.webp"))
-PROFILE = env_profile()  # 設定覆寫檔（TIANXIA_PROFILE，例如 weekend）；run_bots.py、scripts/set_password.py 讀同一個
+PROFILE = serving_profile() if __name__ == "__main__" else env_profile()  # 設定覆寫檔（TIANXIA_PROFILE，例如 week7）；當主程式跑、沒帶時套 season21；被 import（測試）沒帶＝預設內容。run_bots.py、scripts/set_password.py 讀同一個
 CONTENT = load_content(ROOT / "content", profile=PROFILE)
 PORT = 7861
 COOKIE = "tx_session"

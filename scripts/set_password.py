@@ -4,7 +4,7 @@
 --character 的角色還不存在時，直接建立一個新角色再綁上去：管理者的名號在畫面上取不到（名號檢查會擋），
 線上架構第 1 期換版從零開始之後（企劃者 2026-10-03 決定不搬舊存檔），管理者的角色只能這樣建。
 執行：.venv/Scripts/python.exe scripts/set_password.py Rayal --character Rayal
-建角色時的設定照伺服器那一份（TIANXIA_PROFILE）：伺服器開著週末設定，就先設 $env:TIANXIA_PROFILE = "weekend" 再執行
+建角色時的設定照伺服器那一份（TIANXIA_PROFILE）：伺服器開著 week7 設定，就先設 $env:TIANXIA_PROFILE = "week7" 再執行（沒帶是 season21，跟伺服器一樣）
 （建好時印一行「設定：…」，跟伺服器啟動時印的一樣）。
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 
 from tianxia.accounts import AccountError, AccountStore, check_login, normalize  # noqa: E402
 from tianxia.characters import CharacterStore  # noqa: E402
-from tianxia.content import env_profile, load_content, profile_line  # noqa: E402
+from tianxia.content import serving_profile, load_content, profile_line  # noqa: E402
 from tianxia.database import default_path, open_database  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
 from tianxia.sqlite_world import SqliteWorldStore  # noqa: E402
@@ -39,9 +39,9 @@ def main(argv: list[str] | None = None) -> int:
     created = False
     try:
         check_login(args.account)
-        # 讀內容檔很慢：在交易外先讀好。設定照伺服器那一份（TIANXIA_PROFILE，content.env_profile）：不然週末設定的伺服器上，
+        # 讀內容檔很慢：在交易外先讀好。設定照伺服器那一份（TIANXIA_PROFILE，content.serving_profile）：不然濃縮設定的伺服器上，
         # 這裡建的角色拿到的是預設設定（例如開場那一則的贈禮那一行）
-        profile = env_profile()
+        profile = serving_profile()
         content = load_content(ROOT / "content", profile=profile) if args.character else None
         with db.transaction():  # 跟伺服器、假人程式寫同一個資料庫：一筆交易做完，不會跟假人取名撞在一起
             existing = store.get(args.account)

@@ -9,7 +9,7 @@
 看圖沒取到時同一次會再問一次文字（最多兩趟），畫布出現時另有一個暖機請求（不取名，不算在這裡）。打造從 2026-10-12 起不叫模型（打造隱藏配方設計第八節）。
 --old 把有所感的場景拿掉，量舊的做法（探索悟意境那一支直接悟到基本意境）當對照。
 
-用法：.venv/Scripts/python.exe scripts/measure_insight.py --seeds 1 2 3 4 5 [--profile weekend] [--old]
+用法：.venv/Scripts/python.exe scripts/measure_insight.py --seeds 1 2 3 4 5 [--profile week7] [--old]
 """
 from __future__ import annotations
 
