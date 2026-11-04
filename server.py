@@ -55,7 +55,7 @@ from collections import deque
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
-from fastapi import Body, FastAPI, HTTPException, Request, Response
+from fastapi import Body, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
@@ -63,6 +63,7 @@ from starlette.concurrency import run_in_threadpool
 
 import console
 import server_push
+import tale_html
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
@@ -3219,15 +3220,76 @@ def api_reports(request: Request, id: int | None = None):
 # 寫法、產生、存放在 tianxia/tale.py 與下面這一段：收場之後由背景執行緒（tale_round）一篇一篇寫，
 # 存進資料庫旁邊的小檔 <db>-tale.sqlite（不動 SCHEMA_VERSION）。模型叫不動就存引擎自己拼的那一版（tale.plain），
 # 所以「史官還在落筆」只會是「還沒輪到它寫」，不會永遠卡著。
-def tale_view(battle_id: int) -> dict:
-    """一場的戰記：寫好了回整篇（ready）；是決戰、收場了、還沒寫好回 pending；其餘（不是決戰、沒這場、還沒接上）回 none。"""
+def tale_view(battle_id: int, request: Request | None = None) -> dict:
+    """一場的戰記：寫好了回整篇（ready）；是決戰、收場了、還沒寫好回 pending；其餘（不是決戰、沒這場、還沒接上）回 none。
+    寫好了另外帶分享網址（url，/zhanji/<代碼>）與遊戲裡那一層要開的頁（page，同一頁加 ?in=1；戰記分享頁，Joy 2026-11-04）。"""
     store = TALES
     if store is None:
         return {"status": "none"}
     written = store.get(battle_id)
     if written is not None:
-        return written.model_dump()
+        view = written.model_dump()
+        code = store.share_code(battle_id)
+        view["page"] = f"/zhanji/{code}?in=1"
+        if request is not None:
+            view["url"] = f"{public_base(request)}/zhanji/{code}"
+        return view
     return {"status": "pending"} if _tale_due(battle_id) else {"status": "none"}
+
+
+# 戰記頁的封面（web/img/tale/）：那一場自己的圖 > 攻城共用一張 > 那一區的地點圖 > 事件插圖 tale（企劃者的圖還沒到時用）
+TALE_COVER_DIR = WEB / "img" / "tale"
+TALE_SIEGE_COVER = "siege"
+TALE_DEFAULT_COVER = "default"
+TALE_LEAD_MAX = 80  # 分享預覽的摘要最多幾個字
+
+
+def tale_cover(definition) -> str:
+    """封面圖的網址（/static/...）；圖檔真的在才給那一張，照上面的順序往下找。"""
+    keys = [definition.id] if definition is not None else []
+    if definition is not None and definition.id.startswith("siege_"):
+        keys.append(TALE_SIEGE_COVER)
+    keys.append(TALE_DEFAULT_COVER)
+    for key in keys:
+        if (TALE_COVER_DIR / f"{key}.webp").is_file():
+            return f"/static/img/tale/{key}.webp"
+    region = getattr(definition, "region", None) if definition is not None else None
+    if region and (WEB / "img" / "places" / f"{region}.webp").is_file():
+        return f"/static/img/places/{region}.webp"
+    return "/static/img/events/tale.webp"
+
+
+def tale_page_view(record_id: int, written: tale.Tale) -> dict:
+    """戰記頁（tale_html.page）要的那一份：整篇加上封面、抬頭、兩邊（名字與顏色）、在場幾人、分享預覽的摘要。只讀。"""
+    battle = open_world().ended_battle(record_id)
+    definition = CONTENT.battles.get(battle.battle_id) if battle is not None else None
+    view = written.model_dump()
+    names = battle_instance.side_names(battle, definition) if battle is not None and definition is not None else {}
+    view["sides"] = [{"name": name, "cls": tale_html.SIDE_CLASS.get(side, "")} for side, name in names.items()]
+    view["present"] = len(battle.participants) if battle is not None else 0
+    view["title"] = written.title or f"{written.battle_name}{tale.TITLE_SUFFIX}"
+    view["kicker"] = f"天下大勢・第 {written.season} 季・{CONTENT.scenario.name}"
+    view["stamp"] = written.result
+    view["sub"] = battle.outcome_reason if battle is not None and battle.outcome_reason else ""
+    first = next((sc.text for a in written.acts for sc in a.scenes if sc.text.strip()), "")
+    line = first.strip().split("\n", 1)[0]
+    view["lead"] = line if len(line) <= TALE_LEAD_MAX else line[: TALE_LEAD_MAX - 1] + "…"
+    view["cover"] = tale_cover(definition)
+    return view
+
+
+@app.get("/zhanji/{code}")
+def tale_page(code: str, request: Request, embedded: str | None = Query(default=None, alias="in")):
+    """戰記頁（不用登入、唯讀；Joy 2026-11-04）：只認發出去的分享代碼，其餘一律 404。帶 Open Graph，貼到 LINE、FB 有預覽；
+    ?in=1 是遊戲裡戰報頁疊的那一層（頂條換成「‹ 返回」、不畫招攬）。"""
+    store = TALES
+    record_id = store.record_for(code) if store is not None else None
+    written = store.get(record_id) if record_id is not None else None
+    if written is None:
+        return HTMLResponse(tale_html.missing(), status_code=404)
+    base = public_base(request)
+    view = tale_page_view(record_id, written)
+    return HTMLResponse(tale_html.page(view, url=f"{base}/zhanji/{code}", image=f"{base}{view['cover']}", embedded=embedded == "1"))
 
 
 def _tale_due(record_id: int) -> bool:
@@ -3251,7 +3313,7 @@ def tale_index(game: Game) -> list[dict]:
 @app.get("/api/tale/{battle_id}")
 def api_tale(request: Request, battle_id: int):
     _game(request)  # 要登入，跟戰報一樣
-    return tale_view(battle_id)
+    return tale_view(battle_id, request)
 
 
 # ── 戰記怎麼寫出來：全服一條背景執行緒（start_tales，main() 開），每 TALE_ROUND_SECONDS 秒看一次這一季有沒有收場了

@@ -1,7 +1,7 @@
 /* 玩家傳（第二批）的樣子：遊戲裡讀傳（web/app.js 的 zhuanHtml）與公開頁（zhuan_html.py）共用這一份。
    企劃者 2026-10-12：「圖片跟現在的武學譜重複了」——傳不用武學譜那本線裝書（--bk-*），改成竹簡（三個方向裡她挑了竹簡；
    手卷、碑拓沒留）。深色漆木是竹簡本身的顏色，手機淺色、深色模式一樣。
-   標記兩邊一樣：.zh > .zh-head（.zh-orn 裝飾、.zh-label > .zh-title 篇名、.zh-sub）、.zh-tools、.zh-body > .zh-text（p，評曰是 p.ping）、.zh-seals */
+   標記兩邊一樣：.zh > .zh-head（.zh-orn 裝飾、.zh-label > .zh-title 篇名、.zh-sub）、.zh-tools、.zh-body > .zh-text（p，第一段 p.first）、.zh-ping（評曰拆出來那一塊）、.zh-seals */
 /* 字型：霞鶩文楷 400、700（內文與題簽）、Noto Serif TC 700（印章）。公開的傳也載這個檔，所以只列它用得到的字重；
    遊戲頁的襯線字要 Noto Serif TC 400，由 web/index.html 另外載（FB-575）：這裡加 400 會讓公開頁白多載一整份 CSS。 */
 @import url("https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&family=Noto+Serif+TC:wght@700&display=swap");
@@ -59,17 +59,26 @@
   border-radius: 3px; background: linear-gradient(90deg, #a98447, #d7b77a 30%, #d7b77a 70%, #b18c50); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
 }
 .zh-bamboo .zh-title { color: #22160a; }
-/* 簡片畫在每一段自己身上（段與段之間空的那一片是 p + p 的 padding），容器只墊同一張底給段落外面空出來的地方：
-   段落一段一段重新對齊，不靠 background-attachment，行高與簡片也一定同一個整數 px——
-   WebKit（iPhone 的 Safari、LINE）把 2.2em＝41.8px 的行高取整，條紋卻照 41.8 畫，越往下字越壓到簡片的縫上。 */
-.zh-bamboo .zh-text { padding: 0; color: var(--zh-ink); line-height: var(--zh-slip); font-size: 19px; text-align: start; border-radius: 4px; }
-.zh-bamboo .zh-text p { text-indent: 0; margin: 0; }
-.zh-bamboo .zh-text:not(.vertical), .zh-bamboo .zh-text:not(.vertical) p {
-  background: linear-gradient(90deg, transparent 12px, var(--zh-cord) 12px 16px, transparent 16px calc(100% - 16px), var(--zh-cord) calc(100% - 16px) calc(100% - 12px), transparent calc(100% - 12px)),
-    repeating-linear-gradient(to bottom, var(--zh-gap) 0 2px, var(--zh-c1) 2px 6px, var(--zh-c2) 6px calc(var(--zh-slip) - 6px), var(--zh-c3) calc(var(--zh-slip) - 6px) var(--zh-slip));
+/* 正文（Joy 2026-11-04 改得更有質感，設計稿 claude.ai/artifact/UK5fStzZVYHKxTBoSp3V9M）：橫書是一整塊竹片——直紋淡淡的、
+   上下兩道麻繩，不再一行一片（以前一行一片的條紋要跟行高對齊，段與段之間還空出一整片）。第一段放大第一個字。
+   直書照舊一行一片簡（直著讀才像竹簡），簡片畫在每一段自己身上：WebKit 把小數的行高取整，條紋要跟行高同一個整數 px。 */
+.zh-bamboo .zh-text { color: var(--zh-ink); font-size: 18.5px; border-radius: 3px; }
+.zh-bamboo .zh-text:not(.vertical) {
+  position: relative; padding: 32px 22px 28px; line-height: 2.05; text-align: justify;
+  background: repeating-linear-gradient(90deg, rgba(120, 84, 36, 0.10) 0 1px, transparent 1px 38px), linear-gradient(180deg, #e6cf9c, #d9bd84);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
-.zh-bamboo .zh-text:not(.vertical) p { padding: 0 30px; }
-.zh-bamboo .zh-text:not(.vertical) p + p { padding-top: var(--zh-slip); }
+.zh-bamboo .zh-text:not(.vertical)::before, .zh-bamboo .zh-text:not(.vertical)::after {
+  content: ""; position: absolute; left: -4px; right: -4px; height: 4px; background: repeating-linear-gradient(90deg, var(--zh-cord) 0 7px, #4f3819 7px 10px);
+}
+.zh-bamboo .zh-text:not(.vertical)::before { top: 12px; }
+.zh-bamboo .zh-text:not(.vertical)::after { bottom: 12px; }
+.zh-bamboo .zh-text:not(.vertical) p { margin: 0 0 1.1em; text-indent: 2em; overflow-wrap: anywhere; }
+.zh-bamboo .zh-text:not(.vertical) p:last-child { margin-bottom: 0; }
+.zh-bamboo .zh-text:not(.vertical) p.first { text-indent: 0; }
+.zh-bamboo .zh-text:not(.vertical) p.first::first-letter { float: left; font-size: 50px; line-height: 1; font-weight: 700; color: #8f2417; margin: 6px 8px 0 0; }
+.zh-bamboo .zh-text.vertical { padding: 0; line-height: var(--zh-slip); font-size: 19px; }
+.zh-bamboo .zh-text.vertical p { text-indent: 0; margin: 0; }
 .zh-bamboo .zh-text.vertical, .zh-bamboo .zh-text.vertical p {
   background: linear-gradient(to bottom, transparent 30px, var(--zh-cord) 30px 34px, transparent 34px calc(100% - 34px), var(--zh-cord) calc(100% - 34px) calc(100% - 30px), transparent calc(100% - 30px)),
     repeating-linear-gradient(to left, var(--zh-gap) 0 2px, var(--zh-c1) 2px 6px, var(--zh-c2) 6px calc(var(--zh-slip) - 6px), var(--zh-c3) calc(var(--zh-slip) - 6px) var(--zh-slip));
@@ -77,7 +86,30 @@
 .zh-bamboo .zh-text.vertical { background-attachment: local; }
 .zh-bamboo .zh-text.vertical p { padding: 52px 0; }
 .zh-bamboo .zh-text.vertical p + p { padding-right: var(--zh-slip); }
-.zh-bamboo .zh-text p.ping { color: #5a2a14; }
+
+/* 評曰：拆出正文，深色一塊、左上蓋一個「評」字印 */
+.zh-ping { position: relative; margin: 14px 0 0; padding: 18px 18px 16px 62px; background: #2f2219; border: 1px solid #6e5330; border-radius: 3px; color: #f1e2c2; }
+.zh-ping .chop { position: absolute; left: 14px; top: 18px; width: 34px; height: 34px; display: grid; place-items: center; font: 900 18px "Noto Serif TC", serif;
+  color: #f7ead0; background: #a9281f; border-radius: 3px; transform: rotate(-4deg); }
+.zh-ping p { margin: 0; font-size: 18px; line-height: 1.95; letter-spacing: 0.05em; overflow-wrap: anywhere; }
+
+/* 竹簡展開（Joy 2026-11-04「列傳前面能用竹簡展開的動畫？」）：打開那一下，竹簡先捲成一束在中間、往兩邊攤開，麻繩跟著拉長，
+   題簽最後落定，正文才浮出來。只在 .zh-play 上播（遊戲裡寫成的傳第一次畫出來那一下、公開頁載入那一下），點一下加 .zh-skip 直接攤開；
+   系統設了減少動態效果就不播 */
+@media (prefers-reduced-motion: no-preference) {
+  .zh-play .zh-orn i { animation: zh-unroll 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .zh-play .zh-orn i:nth-child(1) { --zh-from: 120px; } .zh-play .zh-orn i:nth-child(2) { --zh-from: 86px; } .zh-play .zh-orn i:nth-child(3) { --zh-from: 52px; }
+  .zh-play .zh-orn i:nth-child(4) { --zh-from: -52px; } .zh-play .zh-orn i:nth-child(5) { --zh-from: -86px; } .zh-play .zh-orn i:nth-child(6) { --zh-from: -120px; }
+  .zh-play .zh-orn::before, .zh-play .zh-orn::after { animation: zh-cord 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .zh-play .zh-label { animation: zh-drop 0.5s 0.65s cubic-bezier(0.2, 0.8, 0.3, 1.2) both; }
+  .zh-play .zh-sub, .zh-play .zh-tools, .zh-play .zh-body { animation: zh-rise 0.6s 1s ease-out both; }
+  .zh-play.zh-skip .zh-orn i, .zh-play.zh-skip .zh-orn::before, .zh-play.zh-skip .zh-orn::after, .zh-play.zh-skip .zh-label,
+  .zh-play.zh-skip .zh-sub, .zh-play.zh-skip .zh-tools, .zh-play.zh-skip .zh-body { animation: none; }
+}
+@keyframes zh-unroll { from { transform: translateX(var(--zh-from, 0)) scaleX(0.7); filter: brightness(0.8); } }
+@keyframes zh-cord { from { transform: scaleX(0.15); } }
+@keyframes zh-drop { from { opacity: 0; transform: translateX(-50%) translateY(-28px); } to { opacity: 1; transform: translateX(-50%); } }
+@keyframes zh-rise { from { opacity: 0; transform: translateY(12px); } }
 
 /* ── 遊戲裡（web/app.js）：疊在整個畫面上的那一層、上面的返回列、分享、等史官落筆；入口卡（江湖頁、歷季列傳） ── */
 .zhuan-layer {

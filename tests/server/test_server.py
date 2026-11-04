@@ -417,6 +417,43 @@ def test_the_tale_api_says_pending_until_it_is_written(client, tmp_path, monkeyp
     assert server.tale_round() is None  # 寫過的不重寫
 
 
+def test_a_written_tale_gets_a_share_page_anyone_can_open(client, tmp_path, monkeypatch):
+    """戰記分享頁（Joy 2026-11-04）：寫好了 /api/tale 帶分享網址（/zhanji/<亂碼>，每次問都是同一個）與遊戲裡那一層的頁（?in=1）；
+    沒登入也打得開、帶 Open Graph 與招攬；遊戲裡那一層換成「‹ 返回」、不招攬；認不得的代碼一律 404。"""
+    _player(client)
+    _tale_store(tmp_path, monkeypatch)
+    record_id = _ended_showdown(open_world())
+    server.tale_round()
+    page = client.get(f"/api/tale/{record_id}").json()
+    code = page["url"].rsplit("/", 1)[1]
+    assert page["page"] == f"/zhanji/{code}?in=1" and len(code) >= 8 and str(record_id) != code
+    assert client.get(f"/api/tale/{record_id}").json()["url"] == page["url"]  # 同一篇同一個代碼
+    anyone = TestClient(server.app)  # 沒登入
+    html = anyone.get(f"/zhanji/{code}")
+    assert html.status_code == 200 and "黃巾決戰戰記・天下大勢" in html.text
+    assert f'<meta property="og:url" content="{page["url"]}">' in html.text and 'property="og:image"' in html.text
+    assert "zj-cta" in html.text and 'href="/"' in html.text and 'id="zj-back"' not in html.text
+    assert "黃巾大勝" in html.text and "官軍" in html.text and "黃巾軍" in html.text
+    inside = anyone.get(f"/zhanji/{code}?in=1").text
+    assert 'id="zj-back"' in inside and '<section class="zj-cta">' not in inside
+    assert anyone.get("/zhanji/nope").status_code == 404
+    assert anyone.get(f"/zhanji/{record_id}").status_code == 404  # 流水號猜不到
+
+
+def test_the_tale_cover_falls_back_until_the_art_arrives(tmp_path, monkeypatch):
+    """封面：那一場自己的圖 > 攻城共用 > 通用 > 那一區的地點圖 > 事件插圖。"""
+    monkeypatch.setattr(server, "TALE_COVER_DIR", tmp_path)
+    battles = server.CONTENT.battles
+    assert server.tale_cover(battles["changshe_fire"]) == "/static/img/places/yingru.webp"
+    assert server.tale_cover(None) == "/static/img/events/tale.webp"
+    (tmp_path / "siege.webp").write_bytes(b"x")
+    assert server.tale_cover(battles["siege_jizhou"]) == "/static/img/tale/siege.webp"
+    (tmp_path / "default.webp").write_bytes(b"x")
+    assert server.tale_cover(battles["changshe_fire"]) == "/static/img/tale/default.webp"
+    (tmp_path / "changshe_fire.webp").write_bytes(b"x")
+    assert server.tale_cover(battles["changshe_fire"]) == "/static/img/tale/changshe_fire.webp"
+
+
 def test_a_showdown_cut_short_by_the_season_gets_no_tale(client, tmp_path, monkeypatch):
     """季終沒打完收起來的那一場沒有結果（unfinished）：不寫、也不是 pending。"""
     _player(client)

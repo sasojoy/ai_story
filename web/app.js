@@ -4359,7 +4359,7 @@
           : "<p>這一季還不能寫傳。</p>");
     } else {
       const vertical = zhuanVertical();
-      const paras = v.paragraphs.map((p) => `<p${p.startsWith("評曰") ? ' class="ping"' : ""}>${esc(p)}</p>`).join("");
+      const { body: paras, ping } = zhuanText(v.paragraphs);
       const share = v.public
         ? `<p class="zh-url"><span>${esc(v.url || "")}</span></p>
            <div class="row"><button class="btn primary" data-act="zhuan-send">分享給朋友</button><button class="btn" data-act="zhuan-share" data-public="0">收回</button></div>
@@ -4372,15 +4372,27 @@
       const art = v.illustration_src
         ? `<figure class="zh-art"><img src="${esc(v.illustration_src)}" alt="${esc(head)}的插畫" loading="lazy"></figure>` : "";
       body = `<div class="zh-tools"><button data-act="zhuan-vertical" aria-pressed="${vertical}">直書</button></div>
-        <div class="zh-body">${art}<article class="zh-text${vertical ? " vertical" : ""}">${paras}</article><div class="zh-seals">${zhuanSeal(head.replace(/傳$/, ""))}</div>
+        <div class="zh-body">${art}<article class="zh-text${vertical ? " vertical" : ""}">${paras}</article>${ping}<div class="zh-seals">${zhuanSeal(head.replace(/傳$/, ""))}</div>
         <section class="zh-panel">${share}</section>
         ${v.can_rewrite ? '<button class="zh-again" data-act="zhuan-rewrite">請史官重寫一次</button>' : ""}</div>`;
     }
-    return `<div class="zhuan-layer zh zh-bamboo" role="dialog" aria-label="${esc(head)}">
+    // 竹簡展開（Joy 2026-11-04）：寫成的傳第一次畫出來那一下才播（z.played），之後重畫（切直書、分享）不再播；點一下跳過（zh-skip）
+    const play = v && v.written && !z.played ? " zh-play" : "";
+    if (play) z.played = true;
+    return `<div class="zhuan-layer zh zh-bamboo${play}" role="dialog" aria-label="${esc(head)}">
       <div class="zh-bar"><button data-act="zhuan-close" aria-label="返回">‹ 返回</button><span>列傳</span></div>
       ${zhuanHead(head, `第 ${Number(z.season)} 季${v && v.scenario ? `・${esc(v.scenario)}` : ""}`)}
       ${body}
     </div>`;
+  }
+  // 傳的正文（公開頁 zhuan_html.text 同一份標記）：第一段放大第一個字（first）；「評曰」那一段拆出正文、另起一塊蓋「評」字印
+  function zhuanText(paragraphs) {
+    const plain = paragraphs.filter((p) => !p.startsWith("評曰"));
+    const ping = paragraphs.find((p) => p.startsWith("評曰"));
+    return {
+      body: plain.map((p, i) => `<p${i === 0 ? ' class="first"' : ""}>${esc(p)}</p>`).join(""),
+      ping: ping ? `<aside class="zh-ping"><span class="chop">評</span><p>${esc(ping.replace(/^評曰[：:]?/, ""))}</p></aside>` : "",
+    };
   }
   // 篇名的字照字數縮：名號最長十來個字，一律直書排進一條（四字以內 30px）。zhuan_html.slip_size 同一條算法
   const slipSize = (title) => Math.min(30, Math.floor(176 / [...title].length / 1.3));
@@ -4732,22 +4744,17 @@
     if (t.status === "pending") return '<button class="linkish huaben-link" disabled>史官還在落筆</button>';
     return `<button class="linkish huaben-link" data-act="tale" data-id="${id}">戰記 ›</button>`;
   }
-  // 戰記頁：抬頭（季、戰名、結果）→ 一幕一段（幕名、那一幕的時辰，再一回一回：小標、正文、玩家原話）→ 尾段名錄（三四個人各一句）
+  // 戰記頁（Joy 2026-11-04「獨立一頁，做漂亮一些」、可以分享）：寫好了就疊一層全螢幕，開伺服器畫的那一頁（/zhanji/<代碼>?in=1，
+  // 分享出去的也是同一頁、標記只有 tale_html.py 一份）；那一頁頂條的「‹ 返回」用 postMessage 叫這裡收起來（taleClose）
   function taleHtml(t) {
     const back = `<button class="linkish back" data-act="tale-back">‹ ${S.news === "chronicle" ? "江湖史" : "戰報"}</button>`;
     if (!t) return `${back}<p class="muted">載入中…</p>`;
-    if (t.status !== "ready") return `${back}<div class="card"><p class="muted">${t.status === "pending" ? "史官還在落筆，過一會兒再來。" : "這一場沒有戰記。"}</p></div>`;
-    const paras = (text) => String(text || "").split(/\n+/).filter((x) => x.trim()).map((x) => `<p>${esc(x)}</p>`).join("");
-    const said = (x) => (x ? `<div class="huaben-said"><span class="who">${esc(x.who || "")}${x.side ? `・${esc(x.side)}` : ""}</span><span class="line">「${esc(x.line || "")}」</span></div>` : "");
-    const scene = (x) => `${x.head ? `<h4>${esc(x.head)}</h4>` : ""}${paras(x.text)}${said(x.said)}`;
-    const acts = (t.acts || []).map((a, i) => `<section class="huaben-act"><h3><span class="no">${esc(a.no || `第${cnNum(i + 1)}回`)}</span>${esc(a.title || "")}</h3>`
-      + `${a.banner ? `<p class="huaben-banner">${esc(a.banner)}</p>` : ""}${(a.scenes || []).map(scene).join("")}</section>`).join("");
-    const cast = (t.cast || []).length
-      ? `<section class="huaben-cast"><h3><span class="no">名錄</span>這一場在場的人</h3><ul>${t.cast.map((c) => `<li><b>${esc(c.name || "")}</b>${c.side ? `<span class="cast-side">${esc(c.side)}</span>` : ""}<span class="say">${esc(c.line || "")}</span></li>`).join("")}</ul></section>`
-      : "";
-    const meta = [t.season ? `第 ${t.season | 0} 季` : "", t.result || ""].filter(Boolean).join("・");
-    return `${back}<article class="card huaben-page"><h2>${esc(taleName(t.battle_name || t.title))}</h2>`
-      + `${meta ? `<p class="huaben-meta">${esc(meta)}</p>` : ""}${acts}${cast}</article>`;
+    if (t.status !== "ready" || !t.page) return `${back}<div class="card"><p class="muted">${t.status === "pending" ? "史官還在落筆，過一會兒再來。" : "這一場沒有戰記。"}</p></div>`;
+    return `${back}<div class="zj-layer"><iframe src="${esc(t.page)}" title="${esc(taleName(t.battle_name || t.title))}" allow="web-share; clipboard-write"></iframe></div>`;
+  }
+  function taleClose() {
+    if (S.taleOpen == null) return;
+    S.taleOpen = null; renderPage(); window.scrollTo(0, 0);
   }
   // 江湖史最上面的戰記目錄（main.tales，伺服器的開關關著是空的、不畫）
   function taleIndexHtml(list) {
@@ -6025,8 +6032,14 @@
   };
   document.addEventListener("pointerup", releasePointer, true);
   document.addEventListener("pointercancel", releasePointer, true);
+  // 戰記那一層（taleHtml）的「‹ 返回」：同一個網域的頁面才認
+  window.addEventListener("message", (ev) => {
+    if (ev.origin === location.origin && ev.data && ev.data.zhanji === "close") taleClose();
+  });
 
   document.addEventListener("click", async (ev) => {
+    const unroll = document.querySelector(".zhuan-layer.zh-play:not(.zh-skip)");
+    if (unroll) unroll.classList.add("zh-skip"); // 竹簡還在展開：點一下直接攤開
     const el = ev.target.closest("[data-act]");
     if (!el) return;
     pressed = { el, at: Date.now() };
