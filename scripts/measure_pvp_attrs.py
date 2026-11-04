@@ -107,11 +107,23 @@ def main() -> int:
     ap.add_argument("--levels", type=int, nargs="+", default=[10, 20, 30, 50])
     ap.add_argument("--n", type=int, default=4000)
     ap.add_argument("--old", action="store_true", help="照改之前：對上同等級的平均人")
+    ap.add_argument("--int-outer", type=float, default=None, help="試：悟性也管外功（對他的悟性），上限這麼多")
+    ap.add_argument("--str-cap", type=float, default=None, help="試：武力管外功的上限改成這麼多")
+    ap.add_argument("--inner-x", type=float, default=None, help="試：內功那一項的份量乘這麼多（悟性管的那一塊變重）")
     ap.add_argument("--pvp", type=float, default=None, help="試別的 pvp_scale（玩家對玩家時效果表再乘幾倍，例 1 或 0.5）")
     args = ap.parse_args()
     c = load_content(ROOT / "content", profile="season21")
     c.config.attributes.v2.enabled = True
     c.config.auto_open_first_season = True
+    if args.int_outer:
+        from tianxia.models import AttrEffect
+        c.config.attributes.v2.effects.append(AttrEffect(attr="int", hook="outer", curve="contest", cap=args.int_outer, scale=40, origin=50))
+    if args.str_cap is not None:
+        for row in c.config.attributes.v2.effects:
+            if row.attr == "str" and row.hook == "outer":
+                row.cap = args.str_cap
+    if args.inner_x:
+        encounter.NEIGONG_BONUS_DIVISOR /= args.inner_x
     if args.pvp is not None:
         c.config.attributes.v2.pvp_scale = args.pvp
     names = list(BUILDS)
