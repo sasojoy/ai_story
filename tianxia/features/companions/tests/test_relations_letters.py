@@ -228,6 +228,20 @@ def test_a_broken_promise_shares_the_letters_journal_entry():
     assert "bocai" not in s.player.parley_debts
 
 
+def test_the_watcher_skips_someone_still_in_last_season():
+    """09:00 的看守（Game.morning_mail）不替還停在上一季的人送信（換季後還沒上線過）：情誼夠、等著寫道賀，只差季數。"""
+    g = real_game("week7")
+    p = g.state.player
+    p.affinities["qinjie"] = 40
+    p.cheers = ["qinjie|在潁川打退了黃巾"]
+    p.letter_day = -1
+    mail = len(p.letters)
+    p.season_number -= 1
+    assert g.morning_mail(g.now) is False and len(p.letters) == mail
+    p.season_number += 1
+    assert g.morning_mail(g.now) is True and p.letters[-1].kind == "道賀"
+
+
 def test_the_card_shows_the_newest_unread_letter(c):
     s = _season(c)
     _anxious(s, c, "qinjie")

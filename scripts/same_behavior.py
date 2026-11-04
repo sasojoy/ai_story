@@ -7015,14 +7015,21 @@ class CompanionsScenario(Scenario):
             emit("整季機器人按了", [picked, [e.title for e in solo.state.journal[:1]], list(p.team)])
 
     def season(self) -> None:
-        """收季、開下一季：託付、信、心意帳換季清掉；名下照全服的放掉；看守不替還停在上一季的人送信（morning_mail）。"""
+        """收季、開下一季：託付、信、心意帳換季清掉；名下照全服的放掉。看守（morning_mail）：柳聽泉還停在上一季、情誼夠、等著寫道賀。看守那條路進鎖就換了季
+        （server._locked → _reload → _reconcile_season：身上的信與道賀都清了），季數那道檢查走不到；所以再拿資料庫裡原樣的那一列直接問一次：拿掉檢查就真的會送
+        （審查 M07；morning_mail 開著的 season21、week7，其餘的設定送信日是 None、本來就不送）。"""
         self.do(ADMIN, "end_season")
         self.main(self.RECRUITER)
         self.do(ADMIN, "next_season")
+        if "qinjie" in self.c.characters:
+            self.edit(self.MAILER, lambda p: (p.affinities.update({"qinjie": 45}), setattr(p, "cheers", ["qinjie|在潁川打退了黃巾"]),
+                                              setattr(p, "letter_day", -1)))
         self.begin()
         game = self.server.game_for(self.MAILER)
         with self.server._locked(game):
-            emit("還停在上一季的人", game.morning_mail(CLOCK[0]))
+            emit("看守那條路（進鎖已換季）", [game.morning_mail(CLOCK[0]), len(game.state.player.letters), list(game.state.player.cheers)])
+            game.state = self.chars.load(self.MAILER)
+            emit("還停在上一季的人", [game.morning_mail(CLOCK[0]), len(game.state.player.letters), list(game.state.player.cheers)])
         for who in self.everyone():
             self.main(who)
             self.me(who, "換季之後")
