@@ -227,7 +227,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 # figure_acts（全部拆包第 31 批「大勢人物」；主人：大勢人物的行動包。計畫 docs/superpowers/plans/2026-11-04-大勢人物包-第1批.md 1.3）
 - `ctx._snubbed_character(companion_id)`（這位對話人物剛被你打敗、還在對你閉門不見嗎；交友、求見的按鈕與動作都問。總表附錄甲把挑戰本人 13 個
   〔含 `_snubbed`、`_snubbed_character`〕裁給大勢人物；本體在 `features/figure_acts/challenge.py`，Game 留一行委派回答別的包。原本列在三、過渡 socialize 那一段）
-- `ctx.challenge_odds(fid)`（挑戰這位人物的勝算：這一包自己的 options 也經 ctx 叫它，tests/figures、tests/core/test_challenge_season.py、tests/figures/test_orders.py
+- `ctx.challenge_odds(fid)`（挑戰這位人物的勝算：這一包自己的 options 也經 ctx 叫它，tests/figures、tianxia/features/figure_acts/tests/test_challenge_season.py、tests/figures/test_orders.py
   換掉 `Game.challenge_odds`，包裡經 ctx 叫才打得到）
 - `ctx._rout(fid)`（打贏他敗走：tests/gear/test_signature_arms、test_forge_divine 換掉 `Game._rout`，`challenge` 經 ctx 叫才打得到；批次表第二節）
 

@@ -30,20 +30,19 @@
 - `act:challenge:<人物>`：`_everyday_options` 的選單那一格、`_act` 的按下去、`_action_title`、`_fight_squad` 的對手隊伍——act 子動詞帶後綴接不了 `Verb`（總表第 57 批），Game 留 `_challenge_options`、`_challenge`、`_figure_squad`、`_snubbed_character`、`challenge_odds` 的一行委派。
 - 選單末段 `護衛 + features_core.options + 盤算`：護衛那串在包選項之前、盤算在之後，`options` 掛鉤接不了，Game 留 `_aid_options`、`_plan_options` 的委派。
 - `sync` 的 `_deliver_guard_credits`：夾在 `_deliver_echoes` 與 `deliver_notices` 之間，留委派（接成 `deliver_notices` 掛鉤，酒肆的會跑在它前面，行狀順序會變）。
-- `world.py` 的 `yuedan.tick`、`social.py` 的 `yuedan.line_for`、`figures.py` 的 `figure_aid.restore`：舊模組經別名讀（過渡；第 40 批、第 36 批各自換掉）。
+- `world.py` 的 `yuedan.tick`、`social.py` 的 `yuedan.line_for`、`figures.py` 的 `figure_aid.restore`：舊模組經別名讀（過渡；第 40 批、第 37 批各自換掉）。
 - `bot_policy._stamina_play` 的 `("ambush:set:", "works:", "aid:")`、`models.ALLOW_FAMILIES` 的 `aid:`、`plan:`、`act:challenge:` 字串：核心原位。
 
 ## 測試
 
-- 這一包的 `tests/`：`test_figure_aid.py`（護衛犒軍探望，7 條，原 `tests/figures/`，整檔搬）、`test_figure_acts_smoke.py`（煙霧）、`figure_acts_stage.py`（契約測試擺局面）。
+- 這一包的 `tests/`：`test_figure_aid.py`（護衛犒軍探望，7 條，原 `tests/figures/`，整檔搬）、`test_challenge_season.py`（挑戰每季都有的開關，27 條，原 `tests/core/`，總表附錄甲歸這一包，整檔搬）、`test_figure_acts_smoke.py`（煙霧）、`figure_acts_stage.py`（契約測試擺局面）。
 - `test_figure_life_batch3.py`（9 條）**留在 `tests/figures/`**：4 條是月旦評（這一包），5 條是求援委託（`bounties` 的 rallies、`figure_life`，之後各自成包），混合檔不拆。
 
 ## 另外要跑的混合檔
 
 混著別的功能、留在原處的（`條數＝碰到這一包的／全檔`，用語法樹數過，數字是粗的）；改這一包時連它們一起跑：
 
-- 挑戰本人與大勢人物：`tests/figures/test_figures.py`（19／62，`challenge_odds`、`win_reward` 在這裡）、`tests/core/test_challenge_season.py`（18／27，挑戰每季都有的開關：核心的季種類 × 這一包的鈕）、
-  `tests/figures/test_orders.py`（8／85）、`tests/figures/test_figure_life.py`（2／17，`rout`）、`tests/figures/test_admin_timetable.py`（`admin_fallen`、`admin_revive_figure`）、
+- 挑戰本人與大勢人物：`tests/figures/test_figures.py`（19／62，`challenge_odds`、`win_reward` 在這裡）、  `tests/figures/test_orders.py`（8／85）、`tests/figures/test_figure_life.py`（2／17，`rout`）、`tests/figures/test_admin_timetable.py`（`admin_fallen`、`admin_revive_figure`）、
   `tests/figures/test_figure_attrition.py`（4／9）、`tests/battle/test_rise.py`（4／10）、`tests/figures/test_gentry_allied.py`、`tests/figures/test_figure_life_batch3.py`（4／9，月旦評）
 - 打贏的一串：`tests/gear/test_signature_arms.py`（7／25，換掉 `challenge.rout`）、`tests/gear/test_treasures.py`（6／56）、`tests/gear/test_weapons.py`（`tier3`）、
   `tianxia/features/sortie/tests/test_sortie_rewards.py`（`tier4`）、`tests/seal/test_seal_revamp.py`（`figure_squad`）、`tests/seal/test_seal_engine.py`（16／41）、`tests/seal/test_seal_duel.py`（12／27）
