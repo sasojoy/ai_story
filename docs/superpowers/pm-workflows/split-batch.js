@@ -52,6 +52,7 @@ const COMMON = `
 - **第 11 批已經合了**：\`tianxia/core/features.py\` 有接縫掛鉤與兩個宣告（\`Shop\`、\`Verb\`）；手冊第十五節「第 11 批的 PM 認定」。**原位該接的照第 11 批的寫法接上掛鉤，不要再新增 \`GAME_DIRECT\`**（真的接不了寫理由）。${A.after15 ? '**第 15 批（共用規則層登記）也合了**：`registry.SHARED` 裡的模組包可以直接 import，不算過渡。' : ''}
 - **並行**：${A.parallel || '同時還有別的拆包線在跑'}。共用登記檔（邊界清單、services.py、registry.py、FEATURES、same_behavior、\`aliases()\`）你加的每一筆都集中在 \`# ${PKG}\` 那一段後面，不穿插在別人的行之間；PM 合的時候接好。
 - **拆分在 \`split/trunk\` 上做**（企劃者 11/04：錨點 tag \`split-anchor-20261104\`）。\`develop\` 是別人在開發的線，它後來的提交不管、不要合進來，雲端的線也不用查；全面分拆完 PM 才追。
+- **context 就是額度**（PM 11/04 量的：一回合的 context 會漲到 50 萬 token，每回合都重讀）：大檔用 grep 加行號範圍讀，不整份讀、不重讀同一段；指令輸出先截短。
 - 不開子代理、不開工作流程。任何畫面、輸出不能透露誰是假人；這一批不該有新字。做完就停；回報用繁體中文。
 `
 
@@ -86,8 +87,18 @@ const CHECK_SCHEMA = {
   required: ['same', 'steps', 'diffs', 'report'],
 }
 
-const DEVP = `你是《天下大勢》的開發子代理，做**全部拆包的第 ${N} 批：${TITLE}**（總表 ${MASTER} 第三節第 ${N} 列）。承諾是**行為一個字不變**。
+const DEV_HEAD = `你是《天下大勢》的開發子代理，做**全部拆包的第 ${N} 批：${TITLE}**（總表 ${MASTER} 第三節第 ${N} 列）。承諾是**行為一個字不變**。
 ${COMMON}
+${COMMON}`
+const DEV_JOB = `**這一批要做的（PM 定，照做）**：
+${BODY}`
+const ONE = (what) => `**這一批的開發分三段，每段一個新的子代理**（PM 11/04：額度八成花在每回合重讀 context，段落短就省）。**你只做${what}，做完推上去、回報、就停。**`
+const NEXT = (part, prev) => `先讀計畫 \`${PLAN}\`（在 \`origin/${DEV}\` 上，上一段寫的，**這是你的起點**）。手冊、總表只在有疑問時用 grep 查，不要整份讀。
+分支：明確 fetch ${DEV}；\`git switch -c ${DEV}-${part} origin/${DEV}\`（同名已存在就加 -work），做完快轉推回 \`${DEV}\`。不碰 ${FEAT}、develop、main，PM 合。埠 ${P.dev}、${HOST}.localhost；暫存 ${SP}\\${SCRATCH}\\。
+上一段的回報：
+${String(prev.report || '').slice(0, 3000)}`
+const DEV_REPORT = `回報：head、commits、same_behavior、驗收數字、測試、學到的、要 PM 定的。碰到只有企劃者能定的，stopped 寫原因、停下來。`
+const DEVP1 = `${DEV_HEAD}
 先讀：
 - 手冊 ${BOOK} 3.1～3.11 與第十五節（含各批的 PM 認定）。
 - 批次表 ${BATCH}（整份，短）；總表第 ${N} 列整格與第六節、附錄甲與丙裡這一包的裁定；${SURVEYDIR}/ 裡歸這一包的 \`area_*.json\` 條目。
@@ -97,17 +108,33 @@ ${COMMON}
 用 \`grep -n '^#'\` 看大綱，只讀相關的節。調查的行號是 develop \`5fccb11a\` 量的，一律照現行程式重量。
 分支：明確 fetch ${FEAT}（PM 已開在 split/trunk ${BASE}；不是的話停下來回報）；\`git switch -c ${DEV} origin/${FEAT}\`（同名已存在就加 -work），推 \`git push origin HEAD:${DEV}\`。不碰 ${FEAT}、develop、main，PM 合。埠 ${P.dev}、${HOST}.localhost；暫存 ${SP}\\${SCRATCH}\\。
 
-**這一批要做的（PM 定，照做）**：
-${BODY}
+${DEV_JOB}
 
-做法：先照 superpowers:writing-plans 寫計畫 ${PLAN}（第一節「現行程式對照」照現行程式重量：要搬的方法與模組、要留的委派、留在原位的、接到第 11 批掛鉤的、核心直接碰包的各幾處、選項前綴在 choose／bot_policy／bot.py／bot_runner 的每一處）。然後一個 Task 一個 commit 做（superpowers:executing-plans，不開子代理）：
+${ONE('計畫與 Task 1')}
+做法：先照 superpowers:writing-plans 寫計畫 ${PLAN}（第一節「現行程式對照」照現行程式重量：要搬的方法與模組、要留的委派、留在原位的、接到第 11 批掛鉤的、核心直接碰包的各幾處、選項前綴在 choose／bot_policy／bot.py／bot_runner 的每一處）。**後面的子代理只看得到這份計畫與 commit，不必也不該再重量一次**：要搬的方法與行號範圍、委派寫法、掛鉤、每一處前綴、順序與坑都寫清楚。然後做 Task 1，一個 commit（不開子代理）：
 - **Task 1：證明的情境**：same_behavior 加這一包的一軌或在相關那一軌加情境（上面寫的情境；五種設定 none、weekend、season21、week7、test；整段、半舊半新〔切在這一包有「寫到一半」狀態的那一刻〕、假人〔BotRunner 碰得到這一包的選項〕）。先在 base 上跑兩次證明穩、改一個字抓得到，commit、推。
+測試：Task 1 只跑上面那一軌的 selftest。
+${DEV_REPORT}`
+const DEVP2 = (prev) => `${DEV_HEAD}
+${NEXT('move', prev)}
+
+${DEV_JOB}
+
+${ONE('Task 2、3、4')}一個 Task 一個 commit（不開子代理）：
 - **Task 2：核心那一側**：services.py、FEATURES、邊界清單（集中在 \`# ${PKG}\`）。commit、推。
 - **Task 3：搬**：方法與模組進 \`tianxia/features/${PKG}/\`（舊模組名留 \`sys.modules\` 別名，同一個模組物件）；委派一行、不加邏輯；拿了前綴就把 \`bot_policy.score\` 那一段搬進包的 \`bots.py\`（測試直接換的名字照舊生效）。commit、推。
 - **Task 4：測試整檔搬**：整檔屬於這一包的才搬；混合檔不拆、記數字；README（含「另外要跑的混合檔」）。commit、推。
+測試：只跑改到的那幾條。比對與 test_for 是下一段的事。
+${DEV_REPORT}`
+const DEVP3 = (prev) => `${DEV_HEAD}
+${NEXT('proof', prev)}
+
+${DEV_JOB}
+
+${ONE('Task 5')}
 - **Task 5：證明與驗收**：same_behavior base（${BASE}）對 head，**這一批只跑這一次，跑在最後的程式上**：${A.all_tracks ? '這一批動到核心，**所有軌**' : '**這一包的軌，加上這一批搬的方法直接叫到、或直接叫它們的那幾包的軌**（計畫第一節列出來；探索只有碰到才跑 `explore-compare`）'}，五種設定、整段、半舊半新、假人全部逐位元組一樣。量：包的測試時間、改包任一檔挑到幾條（≤ 300，不算核心契約）、過渡處數、委派數、GAME_DIRECT 與 GAME_DELEGATE_CALLERS、engine.py 行數。寫進計畫第五節，導覽跟著改。commit、推。
 測試：做的過程中只跑改到的那幾條；Task 5 跑一次 \`scripts/test_for.py --base origin/${FEAT}\`（照改到的檔挑包的測試、核心契約、import 到的；挑到幾條記下來）。**相關的 slow、整套、別包的軌都不跑。**
-回報：head、commits、same_behavior、驗收數字、測試、學到的、要 PM 定的。碰到只有企劃者能定的，stopped 寫原因、停下來。`
+${DEV_REPORT}`
 
 const NO_RUN = `**這一關不跑測試、不重跑比對、不做突變**（企劃者 11/04「不要一直測試變成高度重複測試」：開發跑過了，你讀）。`
 const LENSES_ALL = [
@@ -125,9 +152,18 @@ ${COMMON}
 回報：same、走了哪些步驟、差異、FB、截圖路徑、qa 分支 head。`
 
 phase('Build')
-const dev = await agent(DEVP, { label: `dev:b${N}`, phase: 'Build', schema: DEV_SCHEMA, isolation: 'worktree', ...DEV_OPTS })
-if (!dev) return { dev: null }
-if (dev.stopped) return { dev, stopped: dev.stopped }
+const devOpts = (key) => ({ label: `dev:b${N}-${key}`, phase: 'Build', schema: DEV_SCHEMA, isolation: 'worktree', ...DEV_OPTS })
+const p1 = await agent(DEVP1, devOpts('plan'))
+if (!p1) return { dev: null }
+if (p1.stopped) return { dev: p1, stopped: p1.stopped }
+const p2 = await agent(DEVP2(p1), devOpts('move'))
+if (!p2) return { dev: p1, stopped: 'Task 2～4 那一段沒有結果' }
+if (p2.stopped) return { dev: p2, stopped: p2.stopped }
+const p3 = await agent(DEVP3(p2), devOpts('proof'))
+if (!p3) return { dev: p2, stopped: 'Task 5 那一段沒有結果' }
+if (p3.stopped) return { dev: p3, stopped: p3.stopped }
+const joined = (k) => [p1, p2, p3].flatMap(x => x[k] || [])
+const dev = { ...p3, commits: joined('commits'), learned: joined('learned'), open_questions: joined('open_questions') }
 phase('Review')
 const devText = `開發回報：\n${dev.report}\nsame_behavior：${dev.same_behavior}\n驗收：${dev.acceptance}`
 const reviews = await parallel(LENSES.map(l => () => agent(`你是《天下大勢》的唯讀審查員（不改檔、不提交、不推）。\n${COMMON}\n審 ${DEV} 的 ${dev.head}（明確 fetch），base 是 ${FEAT} ${BASE}。這一批：${TITLE}。\n${devText}\n你的鏡頭：${l.text}\n每一條發現寫 severity（blocker＝合了會壞、或行為變了、或違反手冊／批次表／總表／PM 定的；should；nit）、在哪裡、證據（指令與輸出）。沒有就回空陣列，不要湊。`, { label: `review:b${N}-${l.key}`, phase: 'Review', schema: REVIEW_SCHEMA })))
