@@ -269,8 +269,8 @@ def _dirty(annotation, default):
         return {"x"}
     if origin is dict:
         value = typing.get_args(annotation)[-1]
-        if isinstance(value, type) and issubclass(value, BaseModel):  # story（全部拆包第 30 批）：一條線的進度 StoryProgress，必填的 line 擺一個內容裡沒有的 id
-            return {"x": value(**{n: "x" for n, f in value.model_fields.items() if f.is_required()})}
+        if isinstance(value, type) and issubclass(value, BaseModel):  # story（全部拆包第 30 批）：一條線的進度 StoryProgress，必填的 line 擺一個內容裡沒有的 id；不驗（人物情誼包的 TalkMemo 必填的 at 是小數，第 30 批合併時改）
+            return {"x": value.model_construct(**{n: "x" for n, f in value.model_fields.items() if f.is_required()})}
         if len(args) == 2 and typing.get_origin(args[1]) is list:  # 值是清單的（人物情誼包的 dialogue_history）：換季會對值取長度，擺 7 會壞
             return {"x": []}
         return {"x": 7}
