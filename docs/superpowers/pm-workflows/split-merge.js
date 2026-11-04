@@ -1,6 +1,6 @@
 export const meta = {
   name: 'split-merge',
-  description: 'Merge one finished split batch into split/trunk: dev branch into its feature branch, latest trunk in; the gate only checks what merging can break (four-profile boot, boundaries, contracts, smoke); push, write the merge record and PM decisions',
+  description: 'Merge one finished split batch into split/trunk: dev branch into its feature branch, latest trunk in; the gate only checks what merging can break (profile boot, boundaries, contracts, smoke); push, write the merge record and PM decisions',
   phases: [
     { title: 'Merge', detail: 'merge helper: merge, gate, push, docs' },
   ],
@@ -56,7 +56,7 @@ ${NOTES ? '**要特別處理的**：\n' + NOTES + '\n' : ''}
 1. 明確 fetch ${TRUNK}、${FEAT}、${SRC.replace(/^origin\//, '')}。\`git worktree add --detach ${SP.replace(/\\/g, '/')}/${DIR}/wt origin/${FEAT}\`，\`git switch -c pm/merge-b${N}\`（本地用，不推這個名字）。
 2. \`merge --no-ff ${SRC}\` → \`merge --no-ff origin/${TRUNK}\`。衝突照「程式為準」：兩邊的行都留；共用登記檔（邊界清單、services.py、registry.py、FEATURES、same_behavior、\`aliases()\`）各包的段都留、照順序接；導覽的過渡處數照合好之後 \`python tests/core/test_feature_boundaries.py\` 重印的寫。**git 自己合好的也逐檔看**：兩邊各自的增刪行，合好的那一筆都要在。
 3. **閘門只驗「合起來」才會壞的**（企劃者 11/04「不要一直測試變成高度重複測試，這就是拆分的精神」）。這一批的行為不變開發證明過了，這裡**不跑整套、不跑相關的 slow、不跑 same_behavior**；跨包的問題由主幹每天一次的全面檢查抓（PM 跑）：
-   - 四種設定（season21、week7、weekend、不帶）各載一次內容、各起一次伺服器（GET / 200，起完關掉、確認埠空了）。
+   - 三種設定（season21、week7、不帶）各載一次內容、各起一次伺服器（GET / 200，起完關掉、確認埠空了）。
    - 邊界、契約、煙霧各一次：\`python -m pytest -q -n 4 tests/core/test_feature_boundaries.py tests/core/test_contract_core.py tests/core/test_contract_features.py\`、\`python -m pytest -q -n 4 -m smoke\`。${FULL ? '**核心批**另外跑一次 `scripts/test_for.py --base origin/' + TRUNK + '`（核心測試）。' : ''}
    - **只有合併時撞到程式**（共用登記檔以外的 \`tianxia/\`、\`server.py\`）才多跑：撞到的那幾個檔 \`scripts/test_for.py <檔>\`，加這一包那一軌的 \`same_behavior\`（base＝\`git archive origin/${TRUNK}\`，五種設定）。
    - 紅了：判斷是這一批、${TRUNK} 還是合起來才壞；合起來才壞的修（一個 commit，寫進紀錄），再跑那幾條。
