@@ -19,7 +19,7 @@ from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import chapters  # 章回主線（企劃者 2026-10-29）
 from . import (
     allied, annals, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, create, cultivation, defection, divine, economy, encounter, equipment, explore_modes,
-    deeds, fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, forge_secrets, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, plans,
+    deeds, fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, forge_secrets, fusion, gender, howto, insight_fx, insights, invites, journal, library, mapdata, martial_arts, plans,
     materials, mounts, naming, opportunities, orders, parley, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skillview, smithing,
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, xingshi, zh, yuedan,
@@ -47,8 +47,6 @@ from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不�
 # 減法季批 4：隨口應對分岔、痕跡看得見、貢獻（三陣營四勝利的 wins.credit）；別名避開這個檔裡叫 marks、outcomes 的區域變數
 from . import marks as marks_rules
 from . import outcomes as outcome_rules
-from . import stances as stance_rules  # 人物心意（減法季批 6）；叫 stance_rules：rules.stances 是陣營的態勢
-from . import errands as errand_rules  # 託付與來信（減法季批 6）
 from . import wins as wins_rules
 from .models import FreeTextChoice, Outcome, StoryDef, StoryStage
 from .rules import jianfa
@@ -117,6 +115,8 @@ from .features.battle.rules import (  # noqa: F401  過渡：測試從 engine �
 from .features.bout import duel_actions as bout_duel  # 過渡：Game 上頭目戰的一行委派（全部拆包第 12 批）
 from .features.bout import arena_actions as bout_arena  # 過渡：Game 上擂台的一行委派（全部拆包第 12 批）
 from .features.bout import duel_rules as bout_rules  # 過渡：Game.DUEL_GAMBLE_NOTE 類別屬性、委派的型別註記（DuelTextRequest）
+# companions（全部拆包第 19 批：人物情誼一）
+from .features.companions import actions as companions_actions  # 過渡：Game 上人物情誼的 29 個一行委派（招募、名下、心意、託付、書信）
 from .state import (
     ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, CrowdNote, Equipment, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong,
     StoryCard, StoryProgress, TierResult, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
@@ -950,9 +950,7 @@ class Game:
         self._stance_annals()  # 減法季批 6：這一週勸過的心意到了門檻，記一則行狀（關著什麼都不做）
         self._zhuan_tick()  # 減法季批 7b：〈天下形勢〉寫到名號、季末論功各記一則行狀（關著什麼都不做）
         mail = parley.lapse(self.state, self.content)  # NPC 智能 2.1：欠人物的事過了期限是食言（附的委託先作罷，書信不再補一句）
-        mail += letters.deliver(self.state, self.content, now)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
-        if mail:
-            self._write(letters.TITLE, mail)
+        self._deliver_mail(now, mail)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷（人物情誼包；有字就寫一則）
         settled = plans.deliver(self.state, self.content)  # 世界活起來：我插過手的盤算有了結果
         if settled:
             self._write(plans.TITLE, settled)
@@ -1330,24 +1328,7 @@ class Game:
                 opts.append(self._cost_option(f"call:{cid}", f"求見{ch.name}", cost["socialize"]))
         if len(people) >= AUDIENCE_HALL_FIGURES:
             opts.append(Option(id="act:call", label="求見"))  # 只是打開第二層選單，不花體力（見 _audience_options）
-        target = self._recruit_target()
-        if target is not None:
-            cfg = c.config
-            chance = roster.recruit_chance(c, s, target)
-            opts.append(self._cost_option(
-                "act:recruit", f"招募【{c.characters[target].name}】", cfg.recruit_stamina,
-                note=f"成功率約 {chance * 100:.0f}%",
-            ))
-        for cid in self._recruit_targets():  # 歷史武將同行：此地此刻站著、還沒有主的每一位一顆；招不了的灰掉寫原因
-            problem = roster.recruit_problem(s, c, self.world, cid)
-            name = c.characters[cid].name
-            if problem is not None:
-                opts.append(Option(id=f"act:recruit:{cid}", label=f"招募【{name}】（{problem}）", enabled=False))
-            else:
-                chance = roster.recruit_chance(c, s, cid)
-                opts.append(self._cost_option(
-                    f"act:recruit:{cid}", f"招募【{name}】", c.config.recruit_stamina, note=f"成功率約 {chance * 100:.0f}%",
-                ))
+        opts += self._recruit_options()  # 招募（人物情誼包）：舊的 recruit_at 那一顆、歷史武將同行此地此刻站著的每一位一顆（招不了的灰掉寫原因）
         for dest_id in loc.connections:
             if not atlas.is_unlocked(c.locations[dest_id], s, c):  # 世界旗標沒開、序章的草廬（只給站在那裡的人）
                 continue
@@ -1737,29 +1718,16 @@ class Game:
         self.move_mode = mode if mode in atlas.MODES else "walk"
 
     def _recruit_target(self) -> str | None:
-        """這個地點目前能嘗試招募的人（自由之身、recruit_at 是這裡、情誼到門檻 roster.affinity_ok）；沒有就是 None。"""
-        s, c = self.state, self.content
-        for cid, ch in c.characters.items():
-            if (ch.kind == "recruitable" and ch.recruit_at == s.player.location and roster.owned_by(self.world, cid) is None
-                    and roster.affinity_ok(s, c, cid)):
-                return cid
-        return None
+        return companions_actions.recruit_target(self)
 
     def _recruit_targets(self) -> list[str]:
-        """歷史武將同行（Config.companions）：此地此刻站著（_figures_here，照人物此刻的所在）、標了 recruitable、還沒有主、
-        情誼到門檻（roster.affinity_ok，沒到的不畫鈕）的人。關著是空的（舊的 recruit_at 那一條照舊走 _recruit_target）。"""
-        if not roster.on(self.content):
-            return []
-        return [
-            cid for cid in self._figures_here()
-            if self.content.characters[cid].recruitable and roster.owned_by(self.world, cid) is None
-            and roster.affinity_ok(self.state, self.content, cid)
-        ]
+        return companions_actions.recruit_targets(self)
 
     def _recruitable_here(self) -> bool:
-        """此地有人招得了你（_recruit_targets 裡陣營對、名下沒滿的）：h_recruit 照它說，灰掉的鈕不算（黃巾的人在涿郡不說）。"""
-        s, c = self.state, self.content
-        return any(roster.recruit_problem(s, c, self.world, cid) is None for cid in self._recruit_targets())
+        return companions_actions.recruitable_here(self)
+
+    def _recruit_options(self) -> list[Option]:
+        return companions_actions.recruit_options(self)
 
     def _cost_option(self, option_id: str, label: str, cost: int, note: str = "") -> Option:
         extra = f"・{note}" if note else ""
@@ -2497,8 +2465,9 @@ class Game:
             return self._log(self._arena_act(arg))
         if option_id == FREE_TEXT_OPTION:
             return self._log([f"（寫下你的做法，{FREE_TEXT_MAX} 字以內。）"])  # 選項本身只叫出輸入框，不消耗事件
-        if kind == "errand" and arg.startswith("persuade:") and self._persuade_said is None:
-            return self._log([errand_rules.PERSUADE_ASK])  # 勸降（減法季批 6）：選項本身只叫出輸入框，送出走 persuade_request／persuade
+        asked = self._errand_ask(arg) if kind == "errand" else None  # 勸降（減法季批 6；人物情誼包）：選項本身只叫出輸入框，送出走 persuade_request／persuade
+        if asked is not None:
+            return self._log(asked)
         if option_id == sensing.DRAW:
             return self._log(["（在畫布上一筆畫下心中的形。）"])  # 只叫出畫布；畫完送出走 sense_request／sense_draw
         if option_id == explore_modes.SAY_ID and self._gather_said is None:
@@ -2567,8 +2536,6 @@ class Game:
                 msgs = self._aid_act(arg)
             elif kind == "plan":
                 msgs = self._plan_act(arg)
-            elif kind == "errand":
-                msgs = self._errand_act(arg)
             elif kind == storyline.OPTION:
                 msgs = self._story_act(arg)
             elif kind == epiphany.OPTION:
@@ -2721,170 +2688,41 @@ class Game:
             wins_rules.credit(p, c, w, at.week, room)
         return room
 
-    # ── 人物心意（減法季批 6；tianxia/stances.py）────────────
+    # ── 人物心意（減法季批 6）：本體在 tianxia/features/companions/actions.py（全部拆包第 19 批），這裡留一行委派 ────────────
 
     def _stance_before(self, cid: str) -> str | None:
-        """這一輪對話之前，你今天跟這位人物記過的那一筆（沒有心意、關著是 None）：跟之後比，看這一輪有沒有記到。"""
-        fid = stance_rules.figure_of(self.content, cid)
-        return stance_rules.heard_today(self.state, self.content, fid) if fid is not None else None
+        return companions_actions.stance_before(self, cid)
 
     def _stance_credit(self, cid: str, before: str | None) -> None:
-        """這一輪對話記到一筆心意（之前今天沒記過、之後有了）：記 Config.jianfa.stance_contribution 點貢獻（整合設計 5.3，跟分岔同一本上限）。"""
-        fid = stance_rules.figure_of(self.content, cid)
-        if fid is not None and before is None and stance_rules.heard_today(self.state, self.content, fid) is not None:
-            self._deed_points(self.content.config.jianfa.stance_contribution)
+        companions_actions.stance_credit(self, cid, before)
 
     def voice_stance(self, fid: str, sid: str) -> bool:
-        """不說話、直接記一筆心意（只有伺服器假人叫：bot_policy 照 stances.bot_pick，企劃者 2026-10-24 第 5 件）：一人一天一筆的規則、
-        到門檻、貢獻都跟真人說話那一輪一樣，只是沒有那一輪對話、不寫江湖紀錄。記到了存季，回有沒有記。"""
-        if self.world.paused_at() is not None or self.state.world.ended:
-            return False
-        if not stance_rules.record(self.state, self.content, fid, sid):
-            return False
-        self._deed_points(self.content.config.jianfa.stance_contribution)
-        self._save_season()
-        return True
+        return companions_actions.voice_stance(self, fid, sid)
 
     def figure_view(self, cid: str) -> dict | None:
-        """人物頁的資料（主機側計畫 1.3 的 figure.stances、figure.errands）：{"id", "name", "stances", "my_stance_today", "errands"}；
-        心意關著（或他沒有心意）沒有前兩個鍵、託付關著（或他沒有託付池）沒有 errands。兩樣都沒有是 None。"""
-        s, c = self.state, self.content
-        fid = figures.of_character(c, cid)
-        if fid is None:
-            return None
-        mind = stance_rules.view(s, c, fid)
-        jobs = errand_rules.view(s, c, fid=fid) if errand_rules.on(c, s.world) and c.figures[fid].errands else None
-        if mind is None and jobs is None:
-            return None
-        out: dict = {"id": cid, "name": c.figures[fid].name, **(mind or {})}
-        if jobs is not None:
-            out["errands"] = jobs
-        return out
+        return companions_actions.figure_view(self, cid)
 
-    # ── 託付與來信（減法季批 6；tianxia/errands.py）────────────
+    # ── 託付與勸降（減法季批 6）：本體同上 ────────────
 
-    _persuade_said: tuple[errand_rules.PersuadeRequest, int] | None = None  # 勸降的 C 段（persuade）交給 choose 的單子與模型的分數
+    _persuade_said: tuple | None = None  # 勸降的 C 段（人物情誼包 actions.persuade）交給 choose 的單子與模型的分數（服務清單四、寄放）
 
     def errands_view(self) -> list[dict] | None:
-        """江湖畫面的 main.errands（主機側計畫 1.3）：這一季人物託你的事；託付關著是 None（畫面沒有這個鍵）。"""
-        s, c = self.state, self.content
-        return errand_rules.view(s, c) if errand_rules.on(c, s.world) else None
+        return companions_actions.errands_view(self)
 
     def _errand_options(self) -> list[Option]:
-        """人在託付的地點：交信（不花體力）、探營、勸降（花 errand_stamina）。勸降按下去只叫出輸入框（choose 的早退）。"""
-        s, c = self.state, self.content
-        opts = []
-        for e in errand_rules.here(s, c):
-            option_id = f"errand:{errand_rules.VERBS[e.kind]}:{e.id}"
-            label = f"{errand_rules.LABELS[e.kind]}（替{errand_rules.who(c, e)}{errand_rules.task_text(c, e)}）"
-            if e.kind == "letter":
-                opts.append(Option(id=option_id, label=label))
-            else:
-                opts.append(self._cost_option(option_id, label, c.config.jianfa.errand_stamina))
-        return opts
+        return companions_actions.errand_options(self)
 
-    def _errand_act(self, arg: str) -> list[str]:
-        """交信（errand:deliver:<id>）、探營（errand:scout:<id>）、勸降（errand:persuade:<id>，只從 persuade 的 C 段進來）：重驗那一件
-        還在辦、人在那裡、是那一種，照種類做完、給獎勵。"""
-        s, c = self.state, self.content
-        verb, _, eid = arg.partition(":")
-        e = errand_rules.find(s, eid)
-        if e is None or e not in errand_rules.here(s, c) or errand_rules.VERBS[e.kind] != verb:
-            return [errand_rules.NOT_HERE]
-        if e.kind == "letter":
-            d = errand_rules.find_def(c, e.figure, e.errand)
-            msgs = [errand_rules.DELIVERED.format(to=d.to or errand_rules.place(c, e.target))]
-            msgs += self._errand_reward(e)
-            errand_rules.thank(s, c, e)
-            return msgs
-        s.player.stamina -= c.config.jianfa.errand_stamina
-        if e.kind == "scout":
-            lines = errand_rules.scout_lines(s, c, e)
-            errand_rules.note_scout(s, c, e, lines)
-            return [errand_rules.SCOUT_TITLE.format(place=errand_rules.place(c, e.target)), *lines, *self._errand_reward(e)]
-        return self._errand_persuade(e)
+    def _errand_ask(self, arg: str) -> list[str] | None:
+        return companions_actions.errand_ask(self, arg)
 
-    def _errand_reward(self, e) -> list[str]:
-        """辦成了（整合設計 5.5）：他的情誼 +affinity（照寫的數字給、不照 affinity_gain_scale 放慢，夾在 0～100；PM 2026-10-26）、
-        貢獻 +contribution（不吃每天的貢獻上限、也不佔那一本，PM 2026-10-26）、他的那個心意 +1、行狀一則（annals.ERRAND）。回紀錄的句子。"""
-        s, c = self.state, self.content
-        d = errand_rules.find_def(c, e.figure, e.errand)
-        errand_rules.done(s, e)
-        cid = errand_rules.cid_of(c, e)
-        msgs = [errand_rules.DONE.format(who=errand_rules.who(c, e))]
-        if d is not None:
-            msgs += errand_rules.warm(s, c, cid, d.affinity)
-            self._deed_points(d.contribution, capped=False)
-            stance_rules.bump(s, c, e.figure, d.stance)
-        annals.note(s, c, annals.ERRAND, f"替{errand_rules.who(c, e)}{errand_rules.task_text(c, e)}，辦成了。", 3, figure=cid)
-        return msgs
+    def persuade_request(self, errand_id: str, text: str) -> companions_actions.errand_rules.PersuadeRequest | list[str]:
+        return companions_actions.persuade_request(self, errand_id, text)
 
-    def _errand_persuade(self, e) -> list[str]:
-        """勸降的結果（choose 的這一下，_persuade_said 是單子與模型的分數）：引擎加情誼名望的修正、夾、自己擲骰；成了立痕跡 band_turned
-        （Effect.marks 走 _apply：一人一天一筆、恤民這類心意的倍數照算）、推那一條線（errands.turn_band：一次性的推法，照寫的量、不打事件五折、
-        不另記推線的貢獻；FB-827）、給獎勵；敗了打一場遭遇（_squad_encounter，同探索撞上的野怪），那一件沒談成。"""
-        s, c = self.state, self.content
-        request, rate = self._persuade_said
-        d = errand_rules.find_def(c, e.figure, e.errand)
-        who = d.persuade.who if d is not None and d.persuade is not None else ""
-        final = errand_rules.persuade_rate(s, c, e, rate)
-        msgs = [f"你：「{request.text}」（{rate_words(final)}）"]
-        if errand_rules.persuade_roll(s, e) < final:
-            msgs.append(errand_rules.PERSUADE_WON.format(who=who))
-            if d is not None and d.persuade is not None:
-                msgs += self._apply(Effect(marks=dict(d.persuade.marks)))
-                msgs += errand_rules.turn_band(s, c, d, e.target)
-            return msgs + self._errand_reward(e)
-        msgs.append(errand_rules.PERSUADE_LOST.format(who=who))
-        errand_rules.done(s, e, "failed")
-        if d is not None and d.persuade is not None and d.persuade.foe in c.squads:
-            msgs += self._squad_encounter(d.persuade.foe, wild=True)
-        return msgs
-
-    def persuade_request(self, errand_id: str, text: str) -> errand_rules.PersuadeRequest | list[str]:
-        """勸降的 A 段（server.persuade_text 在行動鎖內、很快地呼叫；只讀）：那一件按得下去（勸降、人在那裡、體力夠）、字是 1～20 字，
-        就開單；不行回拒絕的話。"""
-        if self.world.paused_at() is not None:
-            return [f"（{PAUSED_TEXT}。）"]
-        s, c = self.state, self.content
-        problem = errand_rules.persuade_problem(s, c, errand_id)
-        if problem is not None:
-            return [problem]
-        said = errand_rules.clean_text(text)
-        option = {o.id: o for o in self.options(odds=False, tick=False)}.get(f"errand:persuade:{errand_id}")
-        if said is None or option is None or not option.enabled:
-            return [errand_rules.PERSUADE_ASK]
-        e = errand_rules.find(s, errand_id)
-        d = errand_rules.find_def(c, e.figure, e.errand)
-        return errand_rules.PersuadeRequest(
-            errand=errand_id, figure=errand_rules.who(c, e), who=d.persuade.who if d is not None and d.persuade else "",
-            place=errand_rules.place(c, e.target), text=zh.to_traditional(said),
-        )
-
-    def persuade(self, request: errand_rules.PersuadeRequest, rate: int | None = None) -> list[str]:
-        """勸降的 C 段（鎖內）：重驗同一件、同一句還按得下去才扣體力擲骰（choose 的 errand:persuade，紀錄、行狀照一般動作寫）。
-        rate 是鎖外評好的 0～100；None＝模型叫不動：照批 4 的慣例落到最保守的結果——什麼都不發生（不扣體力、不打、那一件照舊在），
-        回 PERSUADE_SILENT，不寫紀錄。"""
-        now = self.persuade_request(request.errand, request.text)
-        if isinstance(now, list):
-            return self._log(now)
-        if (now.errand, now.text) != (request.errand, request.text):
-            return self._log([errand_rules.NOT_HERE])
-        if rate is None:
-            return self._log([errand_rules.PERSUADE_SILENT])
-        self._persuade_said = (now, max(0, min(100, int(rate))))
-        try:
-            return self.choose(f"errand:persuade:{request.errand}")
-        finally:
-            self._persuade_said = None
+    def persuade(self, request: companions_actions.errand_rules.PersuadeRequest, rate: int | None = None) -> list[str]:
+        return companions_actions.persuade(self, request, rate)
 
     def _stance_annals(self) -> None:
-        """同步時：這一週你勸過的心意到了門檻，記一則行狀（annals.STANCE：只寫他改做什麼，不列名字、不寫你說的話）。"""
-        s, c = self.state, self.content
-        for fid, d in stance_rules.annals_due(s, c):
-            cid = c.figures[fid].character or fid
-            annals.note(s, c, annals.STANCE, stance_rules.ANNAL.format(name=c.figures[fid].name, stance=d.name, rumor=d.rumor), 2,
-                        figure=cid, time=s.world.stance_active[fid].at)
+        companions_actions.stance_annals(self)
 
     def add_gamble_narration(self, outcome: FreeTextOutcome, narration: str) -> None:
         return event_check.add_gamble_narration(self, outcome, narration)
@@ -3057,9 +2895,6 @@ class Game:
         if kind == "plan":  # 盤算（世界活起來）：「盤算・劉備」
             plan = plans.find(s, arg.partition(":")[2])
             return f"{plans.TITLE}・{plans._name(c, plan.who)}" if plan is not None else plans.TITLE
-        if kind == "errand":  # 託付（減法季批 6）：「交信・盧植」
-            e = errand_rules.find(s, arg.partition(":")[2])
-            return f"{errand_rules.LABELS[e.kind]}・{errand_rules.who(c, e)}" if e is not None else "託付"
         # （kind == "arena"：報名、挑人的標題由單挑包的 choose 掛鉤給，全部拆包第 12 批）
         if kind == "invite":
             inv = invites.find(s.world, arg.partition(":")[2])
@@ -3251,43 +3086,25 @@ class Game:
     def newbie_drifter(self) -> list[str]:
         return guide_actions.newbie_drifter(self)
 
-    # ── 書信與委託（大勢人物擴充第二批；tianxia/letters.py）──
+    # ── 書信與委託（大勢人物擴充第二批）：本體同上 ──
 
     def letter_view(self) -> dict | None:
-        """江湖頁「剛剛」上面那張小卡：最新一封沒看過的信；沒有是 None。"""
-        return letters.view(self.state, self.content)
+        return companions_actions.letter_view(self)
 
     def read_letter(self, letter_id: int) -> list[str]:
-        """小卡上的「收起」：記成看過了（委託照樣在身上，懸賞卡上看得到）。"""
-        return letters.read(self.state, letter_id)
+        return companions_actions.read_letter(self, letter_id)
 
     def decline_letter(self, letter_id: int) -> list[str]:
-        """小卡上的「婉拒」：這封信附的委託作罷（不扣情誼），信記成看過了。"""
-        msgs = letters.decline(self.state, self.content, letter_id)
-        if msgs and msgs[0] != letters.NO_LETTER:
-            self._write(letters.TITLE, msgs)
-        return msgs
+        return companions_actions.decline_letter(self, letter_id)
+
+    def _deliver_mail(self, now: float, mail: list[str]) -> None:
+        companions_actions.deliver_mail(self, now, mail)
 
     def morning_mail(self, now: float) -> bool:
-        """減法季「09:00 來信」（整合設計第十章，批 9）：伺服器的看守替開了推播的人送今天的信，不必等他上線（送了手機才跳得出
-        「某某來信」）。只做同步裡書信那一格（letters.deliver），不補算體力、不算上線、不動「此地還有」；他下次同步照常，同一個
-        送信日不會再送第二封。角色還停在上一季（換季後還沒上線過）、或這一季沒開 morning_mail 時什麼都不做。
-        呼叫端拿著行動鎖、事後存角色；送了一封回 True。"""
-        self.now = now
-        if self.state.player.season_number < self.world.get_season_number():
-            return False
-        self.state.world = self.world.get_season()
-        if letters.mail_day(self.content, self.state.world, now) is None:
-            return False
-        seq = self.state.player.letter_seq
-        mail = letters.deliver(self.state, self.content, now)
-        if mail:
-            self._write(letters.TITLE, mail)
-        return self.state.player.letter_seq != seq
+        return companions_actions.morning_mail(self, now)
 
-    def letter_request(self) -> letters.LetterNote | None:
-        """還等著模型照他的口氣重寫的那一封（server 鎖外寫；A 段，只讀）。"""
-        return letters.request(self.state, self.content)
+    def letter_request(self) -> companions_actions.letters.LetterNote | None:
+        return companions_actions.letter_request(self)
 
     # ── 人物的行程與盤算（世界活起來；tianxia/plans.py、deeds.py）──
 
@@ -3353,9 +3170,8 @@ class Game:
             self._save_season()
         return done
 
-    def apply_letter(self, note: letters.LetterNote, text: str) -> bool:
-        """C 段：還是同一封才換；寫不出來照固定句。"""
-        return letters.apply(self.state, note, text)
+    def apply_letter(self, note: companions_actions.letters.LetterNote, text: str) -> bool:
+        return companions_actions.apply_letter(self, note, text)
 
     # 本體在 tianxia/features/guide/actions.py（全部拆包第 22 批：新手引導），這裡留一行委派
     def set_hints_off(self, value: bool) -> None:
@@ -6358,21 +6174,10 @@ class Game:
         return battle_muster.battle_choose_in(self, arg)
 
     def _recruit(self) -> list[str]:
-        target = self._recruit_target()
-        if target is None:
-            return ["（此地此刻沒有能招募的人。）"]
-        return roster.attempt_recruit(self.state, self.content, self.world, target, self.rng)
+        return companions_actions.recruit(self)
 
     def _recruit_one(self, cid: str) -> list[str]:
-        """歷史武將同行：招這一位（第三節，照現在的成功率；失敗照舊可能被要求決鬥）。選單上那一顆按得下去才會走到這裡，
-        這裡再驗一次：人還在這裡、沒有主、陣營對、名下沒滿。"""
-        if cid not in self._recruit_targets():
-            return ["（此刻無法這麼做。）"]
-        self._settle_partings()  # 9.6：原主人不會因為比別人先上線就用舊情誼搶回來
-        problem = roster.recruit_problem(self.state, self.content, self.world, cid)
-        if problem is not None:
-            return [f"（{problem}。）"]
-        return roster.attempt_recruit(self.state, self.content, self.world, cid, self.rng)
+        return companions_actions.recruit_one(self, cid)
 
     def _fortune_gift(self) -> list[str]:
         p = self.state.player
@@ -10105,53 +9910,28 @@ class Game:
     # ── 門下與隊伍 ────────────────────────────────────────
 
     def roster_lines(self) -> list[tuple[str, str]]:
-        return roster.roster_lines(self.state, self.content, self.world)
+        return companions_actions.roster_lines(self)
 
     def owned_companions(self) -> list[str]:
-        return roster.owned_companions(self.world, self.state.player.name)
+        return companions_actions.owned_companions(self)
 
-    # 名冊第一列是本人（PLAYER）：本人永遠出戰，加入、移出都只回一句話，隊伍裡不會多出一個 "player"
-    SELF_IN_TEAM = "本人一直都在隊伍裡，不用加入，也不能移出。"
-    FOLLOWER_IN_TEAM = "部下一直跟著你出戰，不用加入，也不能移出。"  # 計畫 T5
+    SELF_IN_TEAM = companions_actions.SELF_IN_TEAM  # 名冊上本人、部下那兩句（搬進人物情誼包；tests/battle/test_ranks.py 讀 Game.FOLLOWER_IN_TEAM）
+    FOLLOWER_IN_TEAM = companions_actions.FOLLOWER_IN_TEAM
 
     @_not_while_preparing
     def add_to_team(self, companion_id: str) -> list[str]:
-        if companion_id == PLAYER:
-            return self._log([self.SELF_IN_TEAM])
-        if companion_id.startswith(team.FOLLOWER_KEY):
-            return self._log([self.FOLLOWER_IN_TEAM])
-        return self._log(team.add_to_team(self.state, companion_id))
+        return companions_actions.add_to_team(self, companion_id)
 
     @_not_while_preparing
     def remove_from_team(self, companion_id: str) -> list[str]:
-        if companion_id == PLAYER:
-            return self._log([self.SELF_IN_TEAM])
-        if companion_id.startswith(team.FOLLOWER_KEY):
-            return self._log([self.FOLLOWER_IN_TEAM])
-        return self._log(team.remove_from_team(self.state, companion_id))
+        return companions_actions.remove_from_team(self, companion_id)
 
     @_not_while_preparing
     def release_companion(self, companion_id: str) -> list[str]:
-        """放他回江湖（歷史武將同行第四節【PM】）：修練頁名冊上那一顆（網頁先問一次）。全服放掉 owner、拿出出戰隊伍、
-        江湖紀錄一則；情誼、他的進度都不動。開關關著、不是你名下的只回一句話。"""
-        c, cid = self.content, str(companion_id)
-        if not roster.on(c) or cid not in c.characters or not roster.owns(roster.owned_by(self.world, cid), self.state.player.name):
-            return self._log([roster.RELEASE_NOT_YOURS])
-        self.world.release_companion(cid)
-        team.remove_from_team(self.state, cid)
-        name = c.characters[cid].name
-        msgs = [roster.RELEASE_DONE.format(name=name)]
-        self._write(roster.RELEASE_TITLE.format(name=name), msgs)
-        return self._log(msgs)
+        return companions_actions.release_companion(self, companion_id)
 
     def release_view(self, companion_id: str | None) -> dict | None:
-        """修練頁人物卡的「放他回江湖」：開關開著、這個人在你名下才有（問句照 roster.RELEASE_CONFIRM），否則 None。"""
-        c = self.content
-        if not roster.on(c) or companion_id not in c.characters:
-            return None
-        if not roster.owns(roster.owned_by(self.world, companion_id), self.state.player.name):
-            return None
-        return {"confirm": roster.RELEASE_CONFIRM.format(name=c.characters[companion_id].name)}
+        return companions_actions.release_view(self, companion_id)
 
     @_not_while_preparing
     def chuangong(self, key: str, what: str) -> list[str]:

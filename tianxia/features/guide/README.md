@@ -36,7 +36,7 @@
 ## 過渡（手冊 3.11）
 
 - 包 → 還沒搬的舊模組：`rules.py` 2 行（`explore_modes`、`ranks`；`world`）、`opening.py` 1（`bounties`）、`enlist.py` 1（`orders`）、`actions.py` 1（`atlas`、`create`、`figures`、`howto`、`sensing`、`training`）。
-- 服務清單（`tianxia/core/services.py`）這一包加的：一、共用 `_check_hints`、`_hint`、`_note_action`、`_preparing`、`_journal_guide`、`_free_text_of`、`HutReward`；二、查詢 `_at_battle`（決戰）、`_tavern_on`、`_tavern_here`、`_tavern_at`（酒肆）；三、過渡 `_recruit_target`、`_recruitable_here`（同伴）、`slot_insight`、`switch_art`、`practice`、`allocate_stat`、`melt_art`（武學）、`forge`（煉製）、`_hint_triggers`（自己的委派）。
+- 服務清單（`tianxia/core/services.py`）這一包加的：一、共用 `_check_hints`、`_hint`、`_note_action`、`_preparing`、`_journal_guide`、`_free_text_of`、`HutReward`；二、查詢 `_at_battle`（決戰）、`_tavern_on`、`_tavern_here`、`_tavern_at`（酒肆）、`_recruit_target`、`_recruitable_here`（人物情誼；第 19 批成包，從過渡改成查詢服務）；三、過渡 `slot_insight`、`switch_art`、`practice`、`allocate_stat`、`melt_art`（武學）、`forge`（煉製）、`_hint_triggers`（自己的委派）。
 
 ## 測試
 
