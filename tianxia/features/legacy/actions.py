@@ -37,6 +37,12 @@ WHY_TIME = "開季滿一天"
 WHY_LEVEL = "{level} 級以上"
 WHY_XINDE = "心得 {xinde}"
 WHY_HELD = "先放掉身上那一份神品"
+# 傳承頁竹簡上的短名（門路的旗標 → 幾個字；長的那一句是 LegacyTier.text）
+SHORT = {
+    "legacy_zheng_1": "書院不問惡名", "legacy_zheng_2": "俠義多一法", "legacy_zheng_3": "俠士相敬",
+    "legacy_xie_1": "綠林肯教", "legacy_xie_2": "狠事多一法", "legacy_xie_3": "狠角相惜",
+    "legacy_luck_1": "頓悟再擲", "legacy_luck_2": "奇遇易逢", "legacy_luck_3": "奇事再擲",
+}
 
 
 def book_of(state: GameState) -> LegacyBook:
@@ -219,15 +225,47 @@ def _regard_bonus(ctx) -> None:
 
 
 def status(ctx) -> dict:
-    """江湖畫面的頂層 main.legacy：三項的值、這一季加了多少、到了的門路、識海封著的那一份（網頁之後照它畫）。"""
-    book = ctx.state.player.legacy
-    if book is None:
+    """江湖畫面的頂層 main.legacy（網頁的傳承頁、識海頁照它畫）：
+    values／gains 三項的值與這一季加了多少；opened 到了的門路；tracks 每一項的三道門（at、text、open）；
+    sealed 識海封著的那一份名字；pick 這一季選進識海的意境 id；shihai 識海頁要的東西（封著的那一份、解封的三個條件、
+    身上能放進去的神品、這一季選了哪一份、改名的候選）。還沒結算過、身上也沒有神品的人不畫（{}）。"""
+    p = ctx.state.player
+    book = p.legacy
+    gods = _gods(ctx.state)
+    if book is None and not gods:
         return {}
+    view = book if book is not None else LegacyBook()
     r = R.rules(ctx.content)
+    sealed = view.sealed
     return {"legacy": {
-        "values": {axis: R.shown(getattr(book, axis)) for axis in R.AXES},
-        "gains": {axis: R.shown(book.gains.get(axis, 0.0)) for axis in R.AXES},
-        "opened": [tier.text for _, tier in R.reached(book, r)],
-        "sealed": book.sealed.insight.name if book.sealed is not None else None,
-        "pick": book.pick,
+        "values": {axis: R.shown(getattr(view, axis)) for axis in R.AXES},
+        "gains": {axis: R.shown(view.gains.get(axis, 0.0)) for axis in R.AXES},
+        "opened": [tier.text for _, tier in R.reached(view, r)],
+        "tracks": {axis: [{"at": R.shown(t.at), "text": t.text, "short": SHORT.get(t.flag, t.text[:5]),
+                           "open": getattr(view, axis) >= t.at}
+                          for t in r.tiers.get(axis, [])] for axis in R.AXES},
+        "sealed": sealed.insight.name if sealed is not None else None,
+        "pick": view.pick,
+        "shihai": {
+            "sealed": None if sealed is None else {
+                "name": sealed.insight.name, "attribute": sealed.insight.attribute, "season": sealed.season,
+                "names": list(sealed.names),
+            },
+            "need": _needs(ctx),
+            "held": _held(ctx.state),
+            "gods": [{"id": iid, "name": p.own_insights[iid].name} for iid in gods],
+        },
     }}
+
+
+def _needs(ctx) -> list[dict]:
+    """解封的三道封印（識海頁）：key、寫什麼、過了沒、現在多少。"""
+    r = R.rules(ctx.content)
+    p = ctx.state.player
+    xinde = p.stats.get("xinde", 0)
+    return [
+        {"key": "time", "text": WHY_TIME, "ok": ctx.state.world.time >= r.shihai_after, "now": ""},
+        {"key": "level", "text": WHY_LEVEL.format(level=r.shihai_level), "ok": p.member.level >= r.shihai_level,
+         "now": f"現在 {p.member.level} 級"},
+        {"key": "xinde", "text": WHY_XINDE.format(xinde=r.shihai_xinde), "ok": xinde >= r.shihai_xinde, "now": f"現在 {xinde}"},
+    ]

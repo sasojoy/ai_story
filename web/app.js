@@ -468,6 +468,7 @@
       ${S.sealAct && sealActNow() ? sealActHtml(sealActNow()) : ""}
       ${S.book ? bookHtml() : ""}
       ${S.zhuan ? zhuanHtml(S.zhuan) : ""}
+      ${S.legacy ? legacyPageHtml() : ""}
       ${S.mtEdit && S.mingtie ? mtEditHtml() : ""}
       ${S.mtZoom ? mtZoomHtml() : ""}`;
     fitBars(); // 先量狀態列：所在那一行放不下會折成兩行、狀態列高一截（FB-493），第一屏（renderPage 裡的 fitFirstScreen）照折好的高度收
@@ -797,13 +798,141 @@
     `;
   }
 
-  // 傳承（features/legacy；main.legacy）：正氣、邪氣、機緣三項（季初結算，這一季加了多少寫在括號裡）、這一季開了的門路、識海封著的那一份
+  // 傳承（features/legacy；main.legacy）：展開的屬性裡一行入口，按了打開傳承頁（S.legacy = "main"）；識海頁是 S.legacy = "shihai"。
+  // 兩頁的樣子在 web/legacy.css（企劃者 2026-11-04「要有真的傳承、識海的感覺」，示意 BsEscEEXvy8BVgw9hM89Si）
+  const LG_AXES = [["zheng", "正氣"], ["xie", "邪氣"], ["luck", "機緣"]];
+  const LG_NUM = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+  const lgNum = (n) => { // 竹簡上的小字：5 → 五、10 → 十、20 → 二十、差 8 → 八
+    n = Math.max(0, Math.floor(n));
+    if (n <= 10) return n ? LG_NUM[n] : "〇";
+    if (n < 20) return `十${LG_NUM[n - 10]}`;
+    if (n < 100) return `${LG_NUM[Math.floor(n / 10)]}十${LG_NUM[n % 10]}`;
+    return String(n);
+  };
   function legacyHtml(g) {
-    const names = { zheng: "正氣", xie: "邪氣", luck: "機緣" };
-    const vals = Object.keys(names).map((k) => `${names[k]} ${g.values[k]}${g.gains[k] > 0 ? `（+${g.gains[k]}）` : ""}`).join("　");
-    const opened = g.opened && g.opened.length ? `<div class="legacy-doors">${g.opened.map((t) => esc(t)).join("；")}</div>` : "";
-    const sealed = g.sealed ? `<div class="legacy-sealed">識海封著：${esc(g.sealed)}</div>` : "";
-    return `<div class="legacy-line">傳承　${vals}</div>${opened}${sealed}`;
+    const vals = LG_AXES.map(([k, n]) => `<b class="lg-v-${k}">${n} ${g.values[k]}</b>`).join("　");
+    const sealed = g.sealed ? `<span class="lg-entry-sub">識海封著：${esc(g.sealed)}</span>` : "";
+    return `<button class="lg-entry" data-act="legacy-open"><span class="lg-entry-main">傳承　${vals}</span>${sealed}<span class="lg-entry-go" aria-hidden="true">›</span></button>`;
+  }
+  // 三卷：墨水漲到這一項的值，到了那一道門就蓋朱印。卷的刻度照最後一道門的 1.25 倍（至少 25）
+  function lgScrollSvg(k, value, track) {
+    const top = 12, bottom = 238, h = bottom - top;
+    const max = Math.max(25, ...track.map((t) => t.at * 1.25), value * 1.1);
+    const y = (v) => bottom - Math.min(v, max) / max * h;
+    const fy = y(value);
+    const marks = track.map((t) => {
+      const ty = y(t.at).toFixed(1);
+      return `<line x1="14" y1="${ty}" x2="78" y2="${ty}" class="lg-tick"/>`
+        + (t.open ? `<circle cx="84" cy="${ty}" r="7.5" class="lg-seal-on"/><text x="84" y="${(+ty + 3.5).toFixed(1)}" class="lg-seal-t on">${lgNum(t.at)}</text>`
+          : `<circle cx="84" cy="${ty}" r="7.5" class="lg-seal-off"/><text x="84" y="${(+ty + 3.5).toFixed(1)}" class="lg-seal-t">${lgNum(t.at)}</text>`);
+    }).join("");
+    const ink = value > 0 ? `<rect x="14" y="${fy.toFixed(1)}" width="64" height="${(bottom - fy).toFixed(1)}" fill="url(#lg-ink-${k})"/>
+      <path d="M14 ${fy.toFixed(1)} C30 ${(fy - 6).toFixed(1)} 46 ${(fy + 6).toFixed(1)} 62 ${(fy - 2).toFixed(1)} S78 ${fy.toFixed(1)} 78 ${fy.toFixed(1)}" class="lg-ink-top lg-ink-top-${k}"/>` : "";
+    return `<svg class="lg-scroll" viewBox="0 0 92 250" aria-hidden="true">
+      <defs><linearGradient id="lg-ink-${k}" x1="0" y1="1" x2="0" y2="0"><stop offset="0" class="lg-ink-a-${k}"/><stop offset="1" class="lg-ink-b-${k}"/></linearGradient></defs>
+      <rect x="6" y="2" width="80" height="10" rx="5" class="lg-rod"/><rect x="6" y="238" width="80" height="10" rx="5" class="lg-rod"/>
+      <rect x="14" y="12" width="64" height="226" class="lg-paper"/>${ink}${marks}</svg>`;
+  }
+  const LG_MOUNT = `<svg class="lg-sky" viewBox="0 0 390 300" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+    <defs><radialGradient id="lg-moon" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#f6e7c4"/><stop offset=".6" stop-color="#e9cf95" stop-opacity=".9"/><stop offset="1" stop-color="#e9cf95" stop-opacity="0"/></radialGradient>
+    <linearGradient id="lg-dusk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2118"/><stop offset="1" stop-color="#120f0c"/></linearGradient></defs>
+    <rect width="390" height="300" fill="url(#lg-dusk)"/><circle cx="300" cy="78" r="62" fill="url(#lg-moon)" opacity=".5"/><circle cx="300" cy="78" r="26" fill="#f1dfb6" opacity=".85"/>
+    <path d="M0 210 L40 170 L70 188 L118 128 L160 176 L196 150 L240 196 L290 160 L330 186 L390 140 L390 300 L0 300 Z" fill="#1d1813" opacity=".9"/>
+    <path d="M0 250 L50 214 L96 236 L150 196 L210 240 L262 214 L318 244 L390 210 L390 300 L0 300 Z" fill="#16120e"/></svg>`;
+  function legacyMainHtml(g) {
+    const cols = LG_AXES.map(([k, n]) => {
+      const track = (g.tracks && g.tracks[k]) || [];
+      const slips = track.map((t, i) => {
+        const on = S.legacySlip === `${k}:${i}`;
+        const tail = t.open ? `${n.slice(0, 1)}${lgNum(t.at)}` : `差${lgNum(t.at - g.values[k])}`;
+        return `<button class="lg-slip${t.open ? " open" : ""}" data-act="legacy-slip" data-k="${k}:${i}" aria-pressed="${on}" aria-label="${esc(n)} ${t.at}：${esc(t.text)}"><span>${esc(t.short)}</span><small>${tail}</small></button>`;
+      }).join("");
+      return `<div class="lg-col">${lgScrollSvg(k, g.values[k], track)}
+        <div class="lg-name lg-c-${k}">${n}</div><div class="lg-val">${g.values[k]}</div>
+        <div class="lg-gain">${g.gains[k] > 0 ? `上一季 +${g.gains[k]}` : "上一季 —"}</div>
+        <div class="lg-slips">${slips}</div></div>`;
+    }).join("");
+    let note = "按一片竹簡，看那一道門路開了什麼";
+    if (S.legacySlip) {
+      const [k, i] = S.legacySlip.split(":");
+      const t = ((g.tracks || {})[k] || [])[+i];
+      const n = (LG_AXES.find((x) => x[0] === k) || ["", ""])[1];
+      if (t) note = `<b class="lg-c-${k}">${n} ${t.at}</b>　${esc(t.text)}<span class="lg-note-st">${t.open ? "這一季開著" : `還差 ${t.at - g.values[k]}`}</span>`;
+    }
+    const sh = g.shihai || {};
+    const sealed = sh.sealed;
+    const left = (sh.need || []).filter((x) => !x.ok).length;
+    const portal = `<button class="lg-portal" data-act="legacy-view" data-v="shihai">
+      <svg viewBox="0 0 350 150" preserveAspectRatio="xMaxYMid slice" aria-hidden="true"><defs><radialGradient id="lg-orb" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#e8f4ff"/><stop offset=".35" stop-color="#7fb4e0" stop-opacity=".8"/><stop offset="1" stop-color="#2a5a86" stop-opacity="0"/></radialGradient></defs>
+      <path d="M0 104 C40 94 70 112 110 102 S190 92 230 104 S310 112 350 100 L350 150 L0 150 Z" fill="#12263a"/><path d="M0 122 C50 112 90 130 140 120 S240 110 290 124 S340 126 350 120 L350 150 L0 150 Z" fill="#183450"/>
+      ${sealed ? '<circle cx="280" cy="64" r="44" fill="url(#lg-orb)" class="lg-breathe"/><circle cx="280" cy="64" r="10" fill="#f2f8ff"/>' : ""}</svg>
+      <span class="lg-portal-t">入識海</span>
+      <span class="lg-portal-s">${sealed ? "前世封著一縷神品意境" : g.pick ? "這一季選好了要沉下去的那一份" : "沉一份神品意境到下一季"}</span>
+      ${sealed ? `<span class="lg-portal-n">${esc(sealed.name)}・三道封印${left ? `還有 ${left} 道` : "都破了"}</span>` : ""}
+    </button>`;
+    return `<div class="lg-head">${LG_MOUNT}<div class="lg-title"><h2>傳承</h2><p>前塵七分入骨，今生再添一筆</p></div></div>
+      <div class="lg-cols">${cols}</div>
+      <p class="lg-note" aria-live="polite">${note}</p>
+      ${portal}
+      <p class="lg-foot">每一季收季時，正氣看善名、邪氣看惡名、機緣看懸賞託付、戰功、名望與人物交情；舊的留七成再加上去。只開門路，不加屬性。</p>`;
+  }
+  function legacyShihaiHtml(g) {
+    const sh = g.shihai || {};
+    const s = sh.sealed;
+    const need = sh.need || [];
+    const SEAL_CH = { time: "時", level: "境", xinde: "悟" };
+    const orb = s ? `<div class="lg-orb-wrap lg-drift"><svg viewBox="0 0 240 300" aria-hidden="true">
+        <defs><radialGradient id="lg-halo" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#cfe6ff" stop-opacity=".9"/><stop offset=".3" stop-color="#6aa6dc" stop-opacity=".45"/><stop offset="1" stop-color="#1b3c5e" stop-opacity="0"/></radialGradient>
+        <radialGradient id="lg-core" cx=".42" cy=".38" r=".6"><stop offset="0" stop-color="#fff"/><stop offset=".5" stop-color="#bcdcf6"/><stop offset="1" stop-color="#4b85b8"/></radialGradient></defs>
+        <circle cx="120" cy="150" r="118" fill="url(#lg-halo)" class="lg-breathe"/><circle cx="120" cy="150" r="52" fill="url(#lg-core)"/>
+        <path d="M84 140 C100 128 120 160 156 140" stroke="#fff" stroke-opacity=".6" stroke-width="2" fill="none"/></svg>
+        <div class="lg-talisman"><span>敕令鎮心</span><b>封</b><span>第${lgNum(s.season)}季</span></div></div>
+      <div class="lg-insight"><small>神品意境・屬${esc(s.attribute)}</small><b>${esc(s.name)}</b></div>`
+      : `<div class="lg-insight empty"><b>識海空空</b><small>上一季沒有沉下任何一份</small></div>`;
+    let unseal = "";
+    if (s) {
+      const seals = need.map((x) => `<div class="lg-seal${x.ok ? " broken" : ""}"><i>${SEAL_CH[x.key] || ""}</i><span>${esc(x.text)}</span><small>${x.ok ? "已破" : esc(x.now || "未破")}</small></div>`).join("");
+      const ready = need.every((x) => x.ok) && !sh.held;
+      const names = (s.names || []).length
+        ? `<div class="lg-rename"><p>「${esc(s.name)}」這一季江湖上已經有人取了，先取的人優先。替它換一個名字：</p>
+            <div class="row">${s.names.map((n, i) => `<button class="lg-btn" data-act="choose" data-id="legacy:name:${i}">${esc(n)}</button>`).join("")}</div></div>` : "";
+      unseal = `<div class="lg-sep"><span>三道封印</span></div><div class="lg-seals">${seals}</div>
+        ${sh.held ? '<p class="lg-warn">你身上已經有一份神品意境：神品一人最多一份，先放掉那一份才解得開。</p>' : ""}
+        ${names || `<button class="lg-break" data-act="choose" data-id="legacy:open" ${ready ? "" : "disabled"}>破封　撈起意境</button>
+        <p class="lg-hint">封印全破才按得下；破封要付心得，名號照這一季登記</p>`}`;
+    }
+    const gods = sh.gods || [];
+    const picked = gods.find((x) => x.id === g.pick);
+    const keep = picked
+      ? `<div class="lg-keep"><div><b>${esc(picked.name)}</b><small>收季那一刻沉入識海，下一季封著帶過去</small></div><button class="lg-btn" data-act="choose" data-id="legacy:drop">不留了</button></div>`
+      : "";
+    const others = gods.filter((x) => x.id !== g.pick).map((x) => `<div class="lg-keep"><div><b>${esc(x.name)}</b><small>身上的神品意境</small></div><button class="lg-btn" data-act="choose" data-id="legacy:keep:${esc(x.id)}">${picked ? "改沉這一份" : "沉進識海"}</button></div>`).join("");
+    const none = gods.length ? "" : '<p class="lg-hint">身上還沒有神品意境；悟出一份之後，才能把它沉進識海、帶到下一季。</p>';
+    return `<div class="lg-sea">
+        <svg class="lg-sea-bg" viewBox="0 0 390 760" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
+          <defs><linearGradient id="lg-deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b1826"/><stop offset="1" stop-color="#060c14"/></linearGradient></defs>
+          <rect width="390" height="760" fill="url(#lg-deep)"/>
+          <circle cx="60" cy="90" r="1.2" fill="#cfe6ff" opacity=".6"/><circle cx="140" cy="40" r="1" fill="#cfe6ff" opacity=".5"/><circle cx="330" cy="120" r="1.4" fill="#cfe6ff" class="lg-breathe"/><circle cx="250" cy="60" r=".9" fill="#cfe6ff" opacity=".5"/>
+          <g class="lg-sway"><path d="M-20 560 C40 540 90 580 150 560 S270 536 330 560 S400 572 420 556" stroke="#4f86b8" stroke-opacity=".35" stroke-width="1.5" fill="none"/>
+          <path d="M-20 600 C50 584 100 616 170 598 S290 580 350 602 S410 606 420 598" stroke="#4f86b8" stroke-opacity=".25" stroke-width="1.5" fill="none"/></g>
+          <path d="M0 640 C60 620 120 660 190 640 S320 618 390 644 L390 760 L0 760 Z" fill="#0a1a2a" opacity=".85"/>
+          <path d="M0 700 C70 684 130 716 200 700 S330 684 390 704 L390 760 L0 760 Z" fill="#0d2235" opacity=".7"/></svg>
+        <div class="lg-sea-title"><h2>識海</h2><p>前世所悟，沉於心底。<br>今生境到，方能撈起。</p></div>
+        ${orb}
+      </div>
+      <div class="lg-sea-body">${unseal}
+        <div class="lg-sep"><span>這一世要沉下去的</span></div>${keep}${others}${none}
+      </div>`;
+  }
+  function legacyPageHtml() {
+    const g = S.main && S.main.legacy;
+    if (!g) return "";
+    const v = S.legacy === "shihai" ? "shihai" : "main";
+    return `<div class="lg-layer lg-${v}" role="dialog" aria-label="${v === "shihai" ? "識海" : "傳承"}">
+      <div class="lg-bar"><button data-act="legacy-close" aria-label="返回">‹ 返回</button>
+        <span class="seg-lite"><button data-act="legacy-view" data-v="main" aria-pressed="${v === "main"}">傳承</button><button data-act="legacy-view" data-v="shihai" aria-pressed="${v === "shihai"}">識海</button></span></div>
+      ${v === "shihai" ? legacyShihaiHtml(g) : legacyMainHtml(g)}
+    </div>`;
   }
 
   // 狀態列的名號那一塊（FB-071）。收起來是一行：名號、頭銜（小字，放不下加「…」）、可配 N 點、▾——「可配」放在會省略的 <span>
@@ -6017,6 +6146,10 @@
           S.bookFrom = window.scrollY; S.zhuan = { season: Number(el.dataset.season), view: null }; render();
           await loadZhuan();
           break;
+        case "legacy-open": S.legacy = "main"; S.legacySlip = null; render(); break; // 傳承頁（features/legacy）
+        case "legacy-close": S.legacy = null; render(); break;
+        case "legacy-view": S.legacy = el.dataset.v === "shihai" ? "shihai" : "main"; render(); { const L = document.querySelector(".lg-layer"); if (L) L.scrollTop = 0; } break;
+        case "legacy-slip": S.legacySlip = S.legacySlip === el.dataset.k ? null : el.dataset.k; render(); break;
         case "zhuan-close": S.zhuan = null; clearTimeout(zhuanTimer); render(); window.scrollTo(0, S.bookFrom || 0); break;
         case "zhuan-write": await zhuanPost("/api/zhuan/write", { rewrite: false }); break;
         case "zhuan-rewrite":

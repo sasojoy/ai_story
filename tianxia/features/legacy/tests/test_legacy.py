@@ -228,6 +228,7 @@ def test_luck_rolls_the_epiphany_once_more():
 
 def test_the_web_shows_the_three_values_and_the_sealed_one():
     import webharness
+    from test_legacy_web import run as run_page
     from test_prologue_web import run
 
     import server
@@ -238,9 +239,31 @@ def test_the_web_shows_the_three_values_and_the_sealed_one():
     game.state.player.stats["good"] = 100
     game.choose(f"legacy:keep:{iid}")
     next_season(game)
-    top = run(server.main_view(game), "return H.topHtml();", S={"showMore": True})
-    assert "傳承　正氣 10（+10）　邪氣 0　機緣 0" in top and "識海封著：寒江獨照" in top and "俠義的事多一種做法" in top
-    assert "傳承" not in run(server.main_view(god_game()[0]), "return H.topHtml();", S={"showMore": True})  # 還沒結算過：不畫
+    view = server.main_view(game)
+    top = run(view, "return H.topHtml();", S={"showMore": True})
+    assert 'data-act="legacy-open"' in top and "正氣 10" in top and "識海封著：寒江獨照" in top
+    page = run_page(view["legacy"], "main")
+    assert page.count('class="lg-slip open"') == 2 and "俠義的事多一種做法" in page  # 正氣 5、10 兩道（長句在竹簡的 aria-label）
+    sea = run_page(view["legacy"], "shihai")
+    assert "寒江獨照" in sea and 'data-id="legacy:open" disabled' in sea  # 開季還不滿一天、等級心得也不夠
+    fresh = god_game()[0]
+    assert "識海封著" not in run(server.main_view(fresh), "return H.topHtml();", S={"showMore": True})  # 還沒結算過：只有入口
+    fresh.content.config.legacy.enabled = False
+    assert "legacy-open" not in run(server.main_view(fresh), "return H.topHtml();", S={"showMore": True})  # 開關關著：不畫
+
+
+def test_status_lists_tracks_seals_and_gods():
+    game, iid = god_game()
+    st = game.feature_status()["legacy"]
+    assert [t["short"] for t in st["tracks"]["zheng"]] == ["書院不問惡名", "俠義多一法", "俠士相敬"]
+    assert st["shihai"]["sealed"] is None and st["shihai"]["gods"] == [{"id": iid, "name": "寒江獨照"}]
+    assert [n["key"] for n in st["shihai"]["need"]] == ["time", "level", "xinde"] and st["shihai"]["held"]
+    game.choose(f"legacy:keep:{iid}")
+    next_season(game)
+    st = game.feature_status()["legacy"]["shihai"]
+    assert st["sealed"]["name"] == "寒江獨照" and st["gods"] == [] and not st["held"]
+    _unsealable(game)
+    assert all(n["ok"] for n in game.feature_status()["legacy"]["shihai"]["need"])
 
 
 def test_doors_open_only_with_the_switch_on():

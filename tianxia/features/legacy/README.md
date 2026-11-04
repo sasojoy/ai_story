@@ -15,7 +15,7 @@
 **認領的欄位**（3.5）：`PlayerState.legacy`（`LegacyBook`、`ShihaiSeal`；`None` 不寫進存檔，在 `state.QUIET_DEFAULTS`）。換季照帶（`carried`）：照帶本身寫在 `Game._reset_player_for_new_season`、不看開關（同出陣那兩格）；結算在 `on_season_start`，只在開關開著時。`Config.legacy`。
 **旗標**：門路是玩家旗標 `legacy_<zheng|xie|luck>_<n>`（`LegacyRules.tiers`），每次換季照新的值重立（掉下去的拿掉）；內容用條件的 `flags_all` 讀。每一道開什麼見下面「九道門路」。
 **量表**：`scripts/measure_legacy.py`（只算真人；讀一份資料庫裡每個角色「此刻換季的話」會拿到多少、九成位對齊的建議權重；`--demo` 看三種人連玩幾季的走向）。
-**畫面**：狀態列展開名號時多一行「傳承　正氣 N（+n）　邪氣 N　機緣 N」，底下寫開了的門路與識海封著的那一份（`web/app.js` 的 `legacyHtml`，讀 `main.legacy`；還沒結算過的人不畫）。
+**畫面**（企劃者 2026-11-04「要有真的傳承、識海的感覺」）：狀態列展開名號時一行入口（`web/app.js` 的 `legacyHtml`），按了打開整頁的傳承（`legacyPageHtml`，`S.legacy = "main"`：月夜山影、三卷墨水到門就蓋朱印、每項三片竹簡＝門路，按一片看長句）與識海（`S.legacy = "shihai"`：深海、封印符紙、時境悟三道封印、破封、這一季要沉下去的那一份）。讀 `main.legacy`（`actions.status`：values、gains、tracks、shihai）；還沒結算過、身上也沒有神品的人不畫。樣子在 `web/legacy.css`，測試 `tests/test_legacy_web.py`。圖（水墨背景、符紙、卷軸、竹簡）等企劃者給，放 `web/img/legacy/`。
 **九道門路**（Joy 11/4「照建議」；門檻 5、10、20【草】；`Config.legacy.doors` 寫哪一樣看哪一個旗標，判斷一律走 `renown.legacy_door`，開關關著一律是假）：
 - 正氣：① 潁川書院不看惡名（`content/events/sects.json` 的 `yingchuan_join` 條件 `any_of` 讀 `legacy_zheng_1`）、正派武學第一段肯教（`library.learn_problem` 走 `renown.open_to("lessons")`）；② 第一段的俠選項不看路與段（`Game.options` 走 `renown.open_to("choices")`）；③ 敬俠的人物換季那一刻起始好感 +`regard_bonus`（10）。
 - 邪氣：① 寇一路第一段的武學肯教（綠林門路）；② 第一段的寇選項；③ 喜狠的人物起始好感 +10。
