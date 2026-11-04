@@ -24,7 +24,7 @@
 
 核心原位碰有所感的那幾處（計畫 1.4）：能接第 11 批掛鉤的接上——`choose` 掛鉤接 `sense:`、`scene` 掛鉤接場景卡（就在原本那一行）；接不了的改叫上面的服務、記進邊界測試 `GAME_DELEGATE_CALLERS` 的 `# sense` 那一段（11 對，各寫理由），**沒有新增 `GAME_DIRECT`**（原本那一筆 `_sense` 讀探索包的 `rare_boost` 換成查詢服務、拿掉）：
 
-- 清失效參照中段的 `_sense_drop_stale`（後面的收店讀 `player.sensing`，`on_drop_stale` 在最後）；選單的 `_sense_menu`（擂台之後；`menu` 掛鉤在擂台前面）。
+- 清失效參照中段的 `_sense_drop_stale`（後面的收店讀 `player.sensing`，`on_drop_stale` 在最後）；選單的 `_sense_menu`（`menu` 掛鉤之後一行，擂台第 12 批進了那個掛鉤；這一格接上 `menu` 掛鉤留給總表第 57 批，第 24 批 PM 認定第 2 條）。
 - `choose`：`sense:draw` 只叫出畫布（`_sense_canvas`，建紀錄之前那一格，同 `battle:`）；`dunwu:` 要帶自己寫的名字（`text`），`choose` 掛鉤不帶，留在原位的 elif 叫 `_epiphany_name`，標題 `_action_title` 叫 `_epiphany_title`。
 - 探索三選一與舊探索（總表第 13 批）：`_explore_mode_options`、`_insight_blocked`、`_explore_can` 的 `_sense_missed`；`_explore_outcome` 的 `_sense_start`（序章四景）、`_sense_here`（落在悟意境那一支：就是靜心感悟那四行）；`_explore_mode` 的 `_sense_here`。
 - 裝飾器 `_outing_watch` 搬進核心（`tianxia/core/services.py` 的 `outing_watch`；`Game.choose`、`answer_event` 照舊掛），經 `ctx._outing_watched` 叫探索包的委派，記在 `CORE_DELEGATE_CALLERS`。籌備中那兩句 `PREPARING_TEXT`、`PREPARING_REFUSAL` 也搬進核心（`sense_request` 籌備中回它；第 23 批同時搬同樣兩句）。
