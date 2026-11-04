@@ -337,12 +337,12 @@ def test_run_bots_says_which_database_file_it_uses(monkeypatch, capsys):
 
 
 def test_run_bots_reads_the_profile_from_the_environment(monkeypatch, capsys):
-    """跟 server.py 用同一份設定（TIANXIA_PROFILE），啟動時印出來；沒設就是預設。"""
+    """跟 server.py 用同一份設定（TIANXIA_PROFILE），啟動時印出來；沒設套 season21。"""
     monkeypatch.setattr(run_bots.time, "sleep", lambda seconds: None)
     monkeypatch.setattr(BotRunner, "tick", lambda self: bot_runner.TickReport())
     monkeypatch.delenv("TIANXIA_PROFILE", raising=False)
     run_bots.main(ticks=1)
-    assert "設定：預設" in capsys.readouterr().out
+    assert "設定：season21（" in capsys.readouterr().out  # 沒帶套 season21（週末設定關門）
     monkeypatch.setenv("TIANXIA_PROFILE", "week7")
     run_bots.main(ticks=1)
     assert "設定：week7（第一季濃縮版規則開啟、季長 7 天、人數上限 20）" in capsys.readouterr().out

@@ -61,7 +61,7 @@ SALT = "measure"
 ROUND_SECONDS = 20.0
 
 
-def load_content(root: Path, profile: str | None = "weekend") -> Content:
+def load_content(root: Path, profile: str | None = "week7") -> Content:
     """照 sim_season_one 的載法：週末設定（"none" 是不帶設定覆寫檔的十四天季）、第一季開著（run_season 自己再設一次）。"""
     content = _load_content(root, profile=None if profile in (None, "none") else profile)
     content.config.season_one = True
@@ -410,7 +410,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--factions", type=int, nargs=3, default=[5, 5, 5], metavar=("GUAN", "HUANG", "HAOQIANG"))
     parser.add_argument("--hours", type=float, default=60.0)
     parser.add_argument("--tick", type=float, default=60.0)
-    parser.add_argument("--profile", default="weekend")
+    parser.add_argument("--profile", default="week7")
     parser.add_argument("--decisive-week", type=int, default=None)
     parser.add_argument("--force-stir", action="store_true")
     parser.add_argument("--holders", type=int, default=0)

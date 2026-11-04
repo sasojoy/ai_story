@@ -170,10 +170,10 @@ def no_audience_line(ctx) -> str:
         ch = ctx.content.characters[companion_id]
         if ctx._snubbed_character(companion_id):
             return f"{ch.name}{SNUB_NOTE}。"
-        if not figure_can_meet(ctx, companion_id):
+        if not view.figure_can_meet(ctx, companion_id):
             return ctx._brush_off(companion_id)[0]  # 交友時遇上見不到的人物，用求見同一套打發的話
-        if talks_left(ctx, companion_id) == 0:  # 這個遊戲日談滿了：寫換日的那一刻（待 joy 潤）
-            kind, moment = talks_reopen(ctx)
+        if view.talks_left(ctx, companion_id) == 0:  # 這個遊戲日談滿了：寫換日的那一刻（待 joy 潤）
+            kind, moment = view.talks_reopen(ctx)
             if kind == "later":
                 return f"{ch.name}事忙，過一陣子才得空。"  # FB-102，待 joy 潤
             return f"{ch.name}事忙，要到 {moment} 之後才得空。" if moment else f"{ch.name}事忙，這一季之內都不得空。"

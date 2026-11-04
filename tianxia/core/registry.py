@@ -31,10 +31,10 @@ from ..features import story  # 一條線：全部拆包第 30 批（只接 stor
 from ..features import checkin  # 簽到：全部拆包第 30 批（沒有選項、選單；排在哪裡結果都一樣）
 # socialize
 from ..features import socialize  # 交友求見：全部拆包第 21 批（只接 call: 的 choose 與假人分數，照前綴認，排在哪裡結果都一樣）
-# bout
-from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。排最後：擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）
 # figure_acts
 from ..features import figure_acts  # 大勢人物的行動：全部拆包第 31 批（只接 aid:、plan: 的 choose 與假人分數，照前綴認，排在哪裡結果都一樣；同步補名望 _deliver_guard_credits 不接 deliver_notices，留 Game 的委派原位）
+# bout
+from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。排最後：擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -63,10 +63,10 @@ FEATURES: list[Feature] = [
     checkin.FEATURE,
     # socialize
     socialize.FEATURE,
-    # bout（排最後：店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4）
-    bout.FEATURE,
     # figure_acts
     figure_acts.FEATURE,
+    # bout（排最後：店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4）
+    bout.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 
@@ -139,6 +139,8 @@ SHARED: dict[str, str] = {
     "ranger": "遊俠名號（散人的成長階梯、經驗倍數）：核心的 rules 讀，Game 的戰後獎勵與狀態列也叫；出陣包與懸賞（bounties）、同伴招募（roster）、"
               "玩家卡（social）、行狀（annals：列傳讀它記下的名號）都叫",
     "precise": "一類一顆（每一顆行動鈕只給一類東西）與算不算城鎮（is_town）：出陣、探索、引導三包的獎勵與懸賞、有所感、玩法說明讀",
+    # explore（全部拆包第 18 批）
+    "training": "城外分級（最弱的對手分一二三級、江湖話、輿圖地點詳情那一句）：探索包的 _practice_tier、輿圖的地點卡與詳情、引導包的提示與新手目標都讀",
     # 其餘（12 個；總表寫 20 個，events、tiers、narration、leaderboard、rumor_view 先不收：讀擂台、伏筆、機緣，理由在 SHARED_LATER）
     "renown": "名聲（名望、善惡稱號、跨段）：核心的 rules、team、world_state 讀；決戰、探索、宴客、酒肆四包與十幾個舊模組都叫（總表附錄甲裁定）",
     "speech": "玩家寫給別人看的一句話（擋髒話）：探索包的題壁、形象包的招式名與名帖、挑釁共用（總表附錄甲裁定）",
