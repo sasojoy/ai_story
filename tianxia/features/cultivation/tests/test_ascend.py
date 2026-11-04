@@ -75,6 +75,24 @@ def test_the_card_line_is_rechecked_and_dismissed(content):
     assert s.player.ascension is None and ascend.view(s) is None
 
 
+def test_the_line_the_model_wrote_is_what_ends_up_on_the_card(content):
+    """線上正常走的那一條：B 段拿模型那一句（洗過、轉繁體），C 段 Game.ascend_line 存回卡上，不是套句。
+    上面那一條寫壞了也是套句，只有它的話 C 段把模型的句子丟掉也全綠（第 23 批審查）。"""
+    class Model:
+        def chat_structured(self, messages, schema, **kwargs):
+            return schema(line="你的掌风如雷霆万钧般劈开了黑暗")
+
+    game = _made(content, "落筆人")
+    s = game.state
+    ascend.ascend(s, content, game.world, "疾風掌", "seize")
+    req = game.ascend_request()
+    line = ascend.read(Model(), req)
+    assert line == "你的掌風如雷霆萬鈞般劈開了黑暗"
+    game.ascend_line(req, line)
+    assert s.player.ascension.line == line and ascend.view(s)["line"] == line
+    assert game.ascend_request() is None
+
+
 def test_seize_in_a_fight_goes_through_the_ascension(content):
     game = _made(content, "契機人")
     s, p = game.state, game.state.player

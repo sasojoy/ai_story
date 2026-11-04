@@ -5319,6 +5319,23 @@ _register_track("train", TrainScenario, (("tianxia/features/sortie/train_actions
 # docs/superpowers/plans/2026-11-01-修練包-第1批.md）。這一段整塊是這一批的：接在檔尾、最後兩行登記（_register_track、假人的 --seats arts），
 # PM 合的時候不跟別人的行穿插。名號一律原創（PM 11/04）。
 
+ARTS_LINE = "千招落盡，只剩你與那一腿，風聲都慢了下來。"  # 假模型寫的破境卡那一句：合格（八到四十字、沒有數字英文）、跟兩句套句都不一樣
+_ARTS_CLIENTS: dict[type, type] = {}
+
+
+def _arts_client(base: type) -> type:
+    """破境卡那一句的假模型（base 是 _setup_child 那一層換好的 client 類別；同 _tavern_client）：LineReading 回 MODEL["ascend_line"] 那一句，
+    其餘照 base（丟連線錯誤、大場面判讀）。"""
+    if base not in _ARTS_CLIENTS:
+        class ArtsClient(base):
+            def chat_structured(self, messages, schema, *a, **k):
+                if schema.__name__ == "LineReading":
+                    return schema(line=MODEL["ascend_line"])
+                return super().chat_structured(messages, schema, *a, **k)
+
+        _ARTS_CLIENTS[base] = ArtsClient
+    return _ARTS_CLIENTS[base]
+
 
 class ArtsScenario(Scenario):
     """修練（--track arts，自己一個資料庫）：修練頁的每一顆（/api/menxia/<op>、/api/do/allocate、/api/do/ascend_line）與 learn:。
@@ -5336,12 +5353,26 @@ class ArtsScenario(Scenario):
       接著定名（名字不行、被用掉、定成）與手上同一門的人下一次同步補一則（_deliver_renames）；序章新人接著練成、熔煉（序章的拒絕）；
       傳功給同伴與部下（心得不足、每一項、本人、名冊上沒有）；境界卡（屬性五段在記憶體裡打開：season21、week7）與配點那一句；
       絕學的契機（核心的單打服務 _seize：基礎武學擺成上品第十成，照原本的機會打五場、必中一場〔照舊一句升品〕；自創一門換上、必中一場
-      〔破境卡、卡上那一句 via seize〕）；追風步的舊品質讀檔時拿掉；最後每個人的修練頁。"""
+      〔破境卡、卡上那一句 via seize：假模型寫得好，線上正常走的那一條，C 段存回模型那一句〕）；追風步的舊品質讀檔時拿掉；最後每個人的修練頁。"""
 
     PRACTICE, PILL, NAMER, HOLDER, TEACHER, FIGHTER = "墨池", "寒江", "竹影", "松風", "石泉", "雲岫"
     PUPIL = "初學"
     PHASES_FIRST = ["setup", "learn", "switch", "practice", "slot", "melt", "allocate", "create", "pill", "pending", "hut_slot"]
     PHASES_SECOND = ["card", "resume", "naming", "renames", "hut_rest", "teach", "milestone", "seize", "zhuifeng", "pages"]
+
+    def __init__(self, root: Path, profile: str, db: Path):
+        super().__init__(root, profile, db)
+        from tianxia import ollama_client
+
+        inner = ollama_client.OllamaClient.from_config.__func__  # _setup_child 換好的那一層（不連網路、大場面判讀）
+
+        def from_config(cls, cfg):
+            client = inner(cls, cfg)
+            if MODEL.get("ascend_line") is not None:
+                client.__class__ = _arts_client(type(client))
+            return client
+
+        ollama_client.OllamaClient.from_config = classmethod(from_config)
 
     def setup(self) -> None:
         from tianxia.accounts import AccountStore
@@ -5733,7 +5764,7 @@ class ArtsScenario(Scenario):
     def seize(self) -> None:
         """絕學的契機（核心的單打服務 _seize → 修練包）：身上那一門（基礎武學）擺成上品第十成，照寫好的打贏幾場；出陣開著的季在
         汝南荒野出陣，關著的在長社遊歷。再自創一門換上、擺到第十成，打一場必中的：自創的那一門破境（破境卡、江湖史、傳聞），
-        卡上那一句走三段式（via seize 的套句）。"""
+        卡上那一句走三段式，模型寫得好（假模型；後半第一件事的寒江那一張走模型擋著的套句，只走那一條的話 C 段把模型的句子丟掉也看不出來）。"""
         from tianxia import territory
 
         who = self.FIGHTER
@@ -5757,7 +5788,11 @@ class ArtsScenario(Scenario):
             self.set_duel(True)
         self.state_of(who, "契機之後")
         emit("契機的破境卡", (self.main(who).get("status") or {}).get("ascension"))
-        self.do(who, "ascend_line")
+        MODEL["ascend_line"] = ARTS_LINE
+        try:
+            self.do(who, "ascend_line")
+        finally:
+            MODEL["ascend_line"] = None
         emit("契機的破境卡（寫回之後）", (self.main(who).get("status") or {}).get("ascension"))
         with self.milestones_on():  # 單點突變補的（Task 5）：打過幾場、威力夠大，配點那一句才寫全隊前後；身法不動威力、不寫那一段
             self.do(who, "allocate", {"stat": "str"})
