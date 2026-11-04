@@ -20,13 +20,13 @@
 
 ## 委派與留在原位的接縫
 
-`Game` 留 8 個一行委派（公開 5：`epiphany_request`、`epiphany_names`、`sense_request`、`sense_draw`、`method_help`——server 與假人在叫；私有 3：`_epiphany_begin`〔測試直接叫〕、`_epiphany_name`〔`choose` 原位〕、`_sense_here`〔探索包、`_explore_mode`、`_explore_outcome`〕），加上核心原位與探索、引導兩包叫的服務 7 個，與探索包回答這一包的查詢服務 `_rare_boost`（走一趟的稀有倍數：擲特殊頓悟乘它）。`_sense`、`_sense_apply` 只有包裡叫，不留。
+`Game` 留 8 個一行委派（公開 5：`epiphany_request`、`epiphany_names`、`sense_request`、`sense_draw`、`method_help`——server 與假人在叫；私有 3：`_epiphany_begin`〔測試直接叫〕、`_epiphany_name`〔`choose` 原位〕、`_sense_here`〔探索包、`_explore_outcome`〕），加上核心原位與探索、引導兩包叫的服務 7 個，與探索包回答這一包的查詢服務 `_rare_boost`（走一趟的稀有倍數：擲特殊頓悟乘它）。`_sense`、`_sense_apply` 只有包裡叫，不留。
 
 核心原位碰有所感的那幾處（計畫 1.4）：能接第 11 批掛鉤的接上——`choose` 掛鉤接 `sense:`、`scene` 掛鉤接場景卡（就在原本那一行）；接不了的改叫上面的服務、記進邊界測試 `GAME_DELEGATE_CALLERS` 的 `# sense` 那一段（11 對，各寫理由），**沒有新增 `GAME_DIRECT`**（原本那一筆 `_sense` 讀探索包的 `rare_boost` 換成查詢服務、拿掉）：
 
 - 清失效參照中段的 `_sense_drop_stale`（後面的收店讀 `player.sensing`，`on_drop_stale` 在最後）；選單的 `_sense_menu`（`menu` 掛鉤之後一行，擂台第 12 批進了那個掛鉤；這一格接上 `menu` 掛鉤留給總表第 57 批，第 24 批 PM 認定第 2 條）。
 - `choose`：`sense:draw` 只叫出畫布（`_sense_canvas`，建紀錄之前那一格，同 `battle:`）；`dunwu:` 要帶自己寫的名字（`text`），`choose` 掛鉤不帶，留在原位的 elif 叫 `_epiphany_name`，標題 `_action_title` 叫 `_epiphany_title`。
-- 探索三選一與舊探索（總表第 13 批）：`_explore_mode_options`、`_insight_blocked`、`_explore_can` 的 `_sense_missed`；`_explore_outcome` 的 `_sense_start`（序章四景）、`_sense_here`（落在悟意境那一支：就是靜心感悟那四行）；`_explore_mode` 的 `_sense_here`。
+- 舊探索（總表第 18 批）：`_insight_blocked`、`_explore_can` 的 `_sense_missed`；`_explore_outcome` 的 `_sense_start`（序章四景）、`_sense_here`（落在悟意境那一支）。
 - 裝飾器 `_outing_watch` 搬進核心（`tianxia/core/services.py` 的 `outing_watch`；`Game.choose`、`answer_event` 照舊掛），經 `ctx._outing_watched` 叫探索包的委派，記在 `CORE_DELEGATE_CALLERS`。籌備中那兩句 `PREPARING_TEXT`、`PREPARING_REFUSAL` 也搬進核心（`sense_request` 籌備中回它；第 23 批同時搬了同樣兩句，合進 `split/trunk` 時留這一份，裝飾器 `not_while_preparing` 是第 23 批的）。
 - 包 import 包的地雷先拆：探索包 `explore_actions.outing_weights` 改問 `ctx._sense_missed(loc)`、引導包 `actions.graduate_pass` 改問 `ctx._sense_prologue_choice()`。
 - 一行沒動的：`server.py` 的 `sense_draw`（鎖外三段式）、`epiphany_think`、`main_view` 的 `sense_help`、`api_choose` 自己寫名字被擋回給表單那一句；`bot.py`、`bot_policy.py`、`bot_runner.py`；`fusion`（`own_name`、`add_own`：舊模組 → 包，過渡；它還在共用規則層的 `SHARED_LATER`，同時還讀 `annals`）、`mapdata`（`terrain_tags`）；網頁。
