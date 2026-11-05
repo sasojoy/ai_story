@@ -22,7 +22,8 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from . import annals, arts as arts_mod, calendar, insight_fx, insights, library, naming, rules, secret_recipes, sensing
+from .core import annal_base as annals
+from . import arts as arts_mod, calendar, insight_fx, insights, library, naming, rules, secret_recipes, sensing
 from .martial_arts import Insight, MartialArt, shown_creator
 from .models import Content
 from .ollama_client import OllamaClient

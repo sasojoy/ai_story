@@ -41,7 +41,8 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
-from .. import annals, battlelog, bounties, event_llm, forge_secrets, journal, narration, secret_recipes, story_base, team, tiers
+from . import annal_base as annals
+from .. import battlelog, bounties, event_llm, forge_secrets, journal, narration, secret_recipes, story_base, team, tiers
 from .. import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有端出事件那一下會叫；照 engine 的叫法）
 from .. import outcomes as outcome_rules
 from .. import prologue as prologue_rules
