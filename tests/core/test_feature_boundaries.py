@@ -438,7 +438,8 @@ GAME_DELEGATES |= {
     # 酒肆的查詢服務 3 個（主人酒肆；引導包問：碰到才說的 h_tavern、新手目標「去酒肆」）——叫 tavern_rules（酒肆包 rules 的別名）
     "_tavern_on", "_tavern_here", "_tavern_at",
 }
-_NOTE_HOOK = "「做完一件事、引導跟著走」是總表第 26 批的事件（PM 第 11 批定不開）；這幾處在動作中間、回話照位置接"
+_NOTE_HOOK = ("「做完一件事、引導跟著走」歸總表第 57 批（分派與標題收接縫，那一批量了再決定要不要開事件；第 26 批 PM 認定第 6 條。"
+              "PM 第 11 批定不開）；這幾處在動作中間、回話照位置接")
 _OPENING = "開局第一分鐘（城門口三選一還沒選）"
 GAME_DELEGATE_CALLERS.update({
     # 做完一件事看一遍碰到才說（_check_hints）、碰到某個玩法排一條（_hint）：位置都在記進江湖紀錄之前，說的話記在這一則；after_action 在
@@ -483,7 +484,7 @@ GAME_DELEGATE_CALLERS.update({
     # Game.new（classmethod，`game.` 叫）的 _opening_on、_opening_begin、_tutorial_intro、_graduate、_note_gift：掃描只認 self.，記在這裡備查
 })
 CORE_DELEGATE_CALLERS_GUIDE = {  # 事件檢定（核心本體）經 ctx 叫的新手引導委派：隨口應對的結果也可能拜入門派、碰到新玩法（answer_event、answer_branch
-    # 照抄選項做完那一下的三行；位置在事件檢定裡，第 11 批沒有掛鉤；陣營第 35 批、事件第 26 批再看）
+    # 照抄選項做完那一下的三行；位置在事件檢定裡，第 11 批沒有掛鉤；陣營第 35 批、「做完一件事」第 57 批再看〔第 26 批 PM 認定第 6 條〕）
     ("event_check.answer_event", "_begin_enlistment"): "隨口應對的結果拜入陣營名下的門派：開始入伍段",
     ("event_check.answer_event", "_greet_rejoin"): "同上：入伍段早就走完的人，引薦人打個招呼",
     ("event_check.answer_event", "_check_hints"): "隨口應對了結了事件：同選項一樣，碰到的新玩法排一條、排著的上框",
@@ -686,7 +687,7 @@ GAME_DELEGATE_CALLERS.update({
 CORE_DELEGATE_CALLERS_SENSE = {  # 核心本體經 ctx 叫包的委派
     ("services.outing_watch", "_outing_watched"): "走一趟停在要選的事上時這一下選完的得失（探索包的委派）：裝飾器原本是 engine.py 模組層的 "
                                                   "_outing_watch，掛在 Game.choose、answer_event 與有所感包的 sense_draw、epiphany_names 上；"
-                                                  "包不能 import engine，第 24 批搬進核心的共用小函式。「做完一件事」的事件是總表第 26 批",
+                                                  "包不能 import engine，第 24 批搬進核心的共用小函式。「做完一件事」歸總表第 57 批（第 26 批 PM 認定第 6 條）",
 }
 # explore（全部拆包第 18 批「探索三」：舊探索的底 8 個方法搬進 tianxia/features/explore/explore_base.py，Game 留 6 個一行委派；計畫
 # docs/superpowers/plans/2026-11-04-探索包-第3批.md 1.1、1.4）：這一批加的集中在這一段。_explore_outcome、_here_squads 只有包裡自己叫，Game 上不留。
