@@ -1,8 +1,8 @@
 """邀請框：打招呼（挑釁）、名帖、切磋、論武、結伴同行共用的 invite:yes|no|cancel:<編號>（原本 Game 上的 _invite_options、_invite、answer_invite、
 answer_on_card、_greet_back、_tell_sender、_invite_status；全部拆包第 37 批搬進來，行為一個字不變）。
 
-這一包拿 invite: 前綴與 choose 掛鉤；答應時照邀請的種類分派：打招呼 greet_back、名帖 mingtie_actions.swap 在包裡，切磋 _spar、論武 _discuss
-（第 38 批）、結伴同行 _join（移動包）留在 Game，經 ctx 叫。選單上怎麼排（Game._everyday_options 第 1295 行）不能動，所以 Game 留 _invite_options 的委派。
+這一包拿 invite: 前綴與 choose 掛鉤；答應時照邀請的種類分派：打招呼 greet_back、名帖 mingtie_actions.swap、切磋 spar_actions.spar、論武 discuss_actions.discuss（第 38 批）都在包裡，
+結伴同行 _join（移動包）留在 Game，經 ctx 叫。選單上怎麼排（Game._everyday_options 第 1295 行）不能動，所以 Game 留 _invite_options 的委派。
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from tianxia.characters import CharacterStore
 from tianxia.core.option import Option
 from tianxia.journal import Draft
 
-from . import actions, invites, mingtie_actions, social
+from . import actions, discuss_actions, invites, mingtie_actions, social, spar_actions
 from . import mingtie as mingtie_rules
 
 if TYPE_CHECKING:
@@ -87,8 +87,8 @@ def answer_invite(
     （discuss_request 的 C 段；沒給才在鎖裡叫模型，整季腳本與測試）。"""
     s = ctx.state
     what = invites.kind_name(inv.kind)
-    if verb == "yes" and inv.kind == "discuss" and other is not None and ctx.discuss_invite_problem(inv, other) is None:
-        problem = ctx.discuss_item_problem(inv, other, item)
+    if verb == "yes" and inv.kind == "discuss" and other is not None and discuss_actions.invite_problem(ctx, inv, other) is None:
+        problem = discuss_actions.item_problem(ctx, inv, other, item)
         if problem is not None:  # 是你挑的那一樣不行（同一樣、合不成）：換一樣再答就好，邀請留著（FB-117）
             return [problem]
     invites.drop(s.world, inv.id)
@@ -114,8 +114,8 @@ def answer_invite(
     if inv.kind == "mingtie":
         return mingtie_actions.swap(ctx, inv, other)
     if inv.kind == "discuss":
-        return ctx._discuss(inv, other, item, proposed)
-    return ctx._spar(inv, other)
+        return discuss_actions.discuss(ctx, inv, other, item, proposed)
+    return spar_actions.spar(ctx, inv, other)
 
 
 def answer_on_card(ctx, inv, other: Game, verb: str) -> list[str]:

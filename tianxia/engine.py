@@ -29,10 +29,7 @@ from . import epiphany  # 特殊頓悟（登記一條線的鉤子；企劃者 20
 from . import tiers  # 事件分級：場景卡上那一行「州郡大事」「天下大事」
 from . import outing as outing_rules  # 走一趟（企劃者 2026-10-29～30）：探索一次走一、三、五段
 from . import growth  # 減法季批 2：三道閘、屬性五段的純規則（開關走 rules.jianfa；探索一顆搬進了探索包）
-from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）
-from . import raid as _raid_card  # noqa: F401  截殺登記進玩家卡的動作表（social.ACTIONS）
 from . import wanted as _wanted_card  # noqa: F401  通緝登記進玩家卡的動作表（social.ACTIONS）
-from . import spar as _spar_card  # noqa: F401  切磋登記進玩家卡的動作表（social.ACTIONS）
 from . import speech
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from . import tavern as tavern_rules  # 酒肆（企劃者 2026-10-18）；叫 tavern_rules：跟其他 *_rules 一樣避開區域變數
@@ -107,7 +104,7 @@ from .features.outlets import silver_actions as outlets_silver  # 過渡：Game 
 from .features.tavern import actions as tavern_actions  # 過渡：Game 上酒肆的 19 個一行委派（主動搬六包第 10 批）
 from .features.sortie import actions as sortie_actions  # 過渡：Game 上出陣的 13 個一行委派（主動搬六包第 1 批）
 from .features.sortie import duel_actions as sortie_duel_actions  # 過渡：Game 上出陣約戰的 16 個一行委派（主動搬六包第 2 批）
-from .features.sortie.rules import CLASH_OPEN, CLASH_THEIRS_WON, CLASH_WON  # noqa: F401  過渡：tests/ranger/test_raid.py 從 engine 拿
+from .features.sortie.rules import CLASH_OPEN, CLASH_THEIRS_WON, CLASH_WON  # noqa: F401  過渡：tianxia/features/peers/tests/test_raid.py 從 engine 拿
 # sortie（全部拆包第 17 批）：舊遊歷、操練、守勢的 8 個一行委派；必敗先問的那兩句搬進包（test_orders、test_mounts、test_prologue_web 從 engine 拿）
 from .features.sortie import train_actions as sortie_train_actions  # 過渡：Game 上舊遊歷、操練、守勢的 8 個一行委派（全部拆包第 17 批）
 from .features.sortie.rules import TRAIN_CONFIRM, TRAIN_CONFIRM_RIDING  # noqa: F401  過渡：三個測試檔從 engine 拿
@@ -201,14 +198,16 @@ from .core import smith_base  # 打造單子讀的那一小半（全部拆包第
 # 名帖遞帖的登記（mingtie_card）改在包載入時做；invites、social 是切磋、論武、結伴同行（第 38 批與移動包）還在原位用的
 from .features.peers import actions as peers_actions  # 過渡：Game 上玩家卡與此地還有的一行委派
 from .features.peers import invite_actions as peers_invite_actions  # 過渡：Game 上邀請框的一行委派
-from .features.peers import invites  # 過渡：切磋、論武、結伴同行（還在原位）用的邀請帳
 from .features.peers import mingtie_actions as peers_mingtie_actions  # 過渡：Game 上名帖的一行委派
 from .features.peers import pair_actions as peers_pair_actions  # 過渡：Game 上同一對人的帳的一行委派
+# peers2（全部拆包第 38 批）：切磋、論武、截殺的 28 個方法搬進玩家互動包；Game 留 13 個一行委派（論武 4、截殺 9；切磋沒有外面的呼叫端）
+from .features.peers import discuss_actions as peers_discuss_actions  # 過渡：Game 上論武的一行委派
+from .features.peers import raid_actions as peers_raid_actions  # 過渡：Game 上截殺的一行委派
+from .features.peers.discuss_actions import DISCUSS_SAME, _refusal  # noqa: F401  過渡：tests/arts/test_discuss.py 從 engine 拿
 from .features.faction import join_actions as faction_join  # 過渡：Game 上投靠與拜入門派的 4 個一行委派（全部拆包第 35 批）
 from .features.faction import lean_actions as faction_lean  # 過渡：Game 上豪強改幫的 2 個一行委派（全部拆包第 35 批）
 from .features.faction import defect_actions as faction_defect  # 過渡：Game 上叛投的 2 個一行委派（全部拆包第 35 批）
 from .features.faction import ending_actions as faction_ending  # 過渡：Game 上季末與三方卡的 5 個一行委派（全部拆包第 35 批）
-from .features.peers import social  # 過渡：切磋、論武、結伴同行（還在原位）用的玩家卡字句與登記表
 from .features.peers.invite_actions import INVITE_LAPSED, INVITE_LAPSED_AWAY  # noqa: F401  邀請沒成局的兩句：tests/arts/test_discuss.py 從 engine 拿
 from .core import arena_ranks, duel_base  # 擂台的名次與稱號、單挑底層（全部拆包第 12 批：留核心；擂台、頭目戰本身在單挑包）
 from .core.event_check import EVIL_ANNAL, FREE_TEXT_OPTION, FreeTextOutcome, FreeTextRequest
@@ -221,24 +220,6 @@ SOCIAL_LIST_TITLE = "交友"  # 待 joy 潤：一類一顆的交友打開的人�
 SUMMONS_LABEL = "應召晉升（召見在此・不花體力）"  # 待 joy 潤：一類一顆的應召（設計 9.1 第 1 組乙，橫幅上的字）
 GENDER_SET = "往後江湖上以{word}相稱。"  # 設定頁選了性別（只能選一次）
 GENDER_LOCKED = "性別已經定了，改不了。"
-DISCUSS_SAME = "兩個人出的是同一樣，論不出新東西。"
-# 答應論武時對方那邊合不成：照他那一句的兩三個字（fusion.Refusal.short）換成從你這邊看的說法——他那一句原話是寫給他看的，
-# 「你已經有了」的「你」是他（FB-243；待 joy 潤）。沒列到的只寫「某某那邊合不成。」
-THEIR_SIDE = {
-    "已經有了": "合出來的那一樣{him}已經有了",
-    "持有滿了": "{him}的武學與意境已經滿了",
-    "心得不足": "{him}的心得不夠",
-    "體力不足": "{him}的體力不夠",
-    "不能當料": "那一門的路數是寫死的，不能拿來合成",
-}
-
-
-def _refusal(text: str, short: str) -> str:
-    """一句拒絕的話，帶兩三個字的 short（fusion.Refusal：論武答應的下拉清單上，合不成的那一項後面寫它，FB-117）。"""
-    out = fusion.Refusal(text)
-    out.short = short
-    return out
-
 
 @dataclass(frozen=True)
 class TollFacts:
@@ -274,9 +255,7 @@ LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣�
 # 上面 import 回來，`from tianxia.engine import SAY_OPTION` 照舊拿得到）
 DUEL_FLEE = "duel:flee"  # 頭目戰的抽身退走（整季機器人不按它：bot.pick）
 ARENA_YIELD = "arena:yield"  # 擂台的認輸下台（整季機器人不按它：bot.pick）；寫字面（＝ features/bout/arena_rules.YIELD_ID）：單挑搬成包之後模組層不碰包
-# 撞過一場混戰之後，截殺的拒絕話照實寫（FB-607：混戰跟截殺共用冷卻與護身那一本，以前一律寫「截殺過」「被人截殺過」）。待 joy 潤
-RAID_AFTER_CLASH = "你跟{them}不久前才在混戰裡交過手，過一陣子再說。"
-RAID_SHIELD_CLASH = "{them}剛跟人混戰過，元氣未復，這時下手太不講江湖道義。"
+# （RAID_AFTER_CLASH、RAID_SHIELD_CLASH 隨截殺搬進玩家互動包 raid_actions.py，全部拆包第 38 批）
 
 
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）；PAUSED_TEXT 在核心（core/services.py）。待 S1／joy 潤
@@ -5124,69 +5103,13 @@ class Game:
     # （invite:yes|no|cancel:<編號>，走 choose；假人照這條路答，bot_policy._answer_invite）。邀請存在這一季的 WorldState.invites。
     # 「是假人」不影響任何一句話。
 
-    def _spar_problem(self, who: Game, *, me: bool, what: str = "切磋", cost: int | None = None) -> str | None:
-        """這個人此刻能不能切磋（論武也問這一個，what 換成「論武」）：拒絕的話；能是 None。不在序章、閒著（Game.is_idle：
-        不在事件、路上、閉關、決戰裡）、體力付得起（cost 沒給是一次遊歷）。me 是說話的人自己（「你」），不然寫對方的名號。"""
-        s, c = who.state, self.content
-        name = "你" if me else s.player.name
-        if prologue_rules.active(s, c):
-            return f"{name}還在草廬學藝，下山之後才能{what}。"
-        if not who.is_idle():
-            return f"{name}此刻正忙，騰不出手來{what}。"
-        cost = c.config.action_cost["train"] if cost is None else cost
-        if s.player.stamina < cost:
-            return f"{name}體力不夠（{what}要 {cost} 點）。"
-        return None
-
     def _spar_pair(self, other: str) -> str:
         """同一對人的帳本鍵（玩家互動包 pair_actions.pair_key）。"""
         return peers_pair_actions.pair_key(self, other)
 
-    def _pair_left(self, tally: dict[str, list[int]], cap: int, other: str) -> int:
-        """這一對人這個遊戲日在這本帳上還剩幾次（玩家互動包 pair_actions.pair_left；切磋、論武的次數還在原位算）。"""
-        return peers_pair_actions.pair_left(self, tally, cap, other)
-
     def _pair_tick(self, tally: dict[str, list[int]], other: str) -> None:
         """這一對人這個遊戲日在這本帳上記一次（玩家互動包 pair_actions.pair_tick）。"""
         return peers_pair_actions.pair_tick(self, tally, other)
-
-    def _spars_left(self, other: str) -> int:
-        """這一對人這個遊戲日還能切磋幾場（Spar.per_pair_day）。"""
-        return self._pair_left(self.state.world.spar_tally, self.content.config.spar.per_pair_day, other)
-
-    def discusses_left(self, other: str) -> int:
-        """這一對人這個遊戲日還能論武幾回（Config.discuss_per_pair_day；FB-116）。"""
-        return self._pair_left(self.state.world.discuss_tally, self.content.config.discuss_per_pair_day, other)
-
-    def spar_refusal(self, other: Game) -> str | None:
-        """玩家卡上「切磋」按不按得下去（拒絕的話；能是 None）：規則開著、兩個人都閒著、付得起體力、今天這一對還沒打滿、
-        之間沒有一張還在等的邀請。休季（這一季收了）卡上不畫，直接打 API 也是這一句（FB-169）。"""
-        s, c = self.state, self.content
-        if not season_one(c, s.world) or s.world.ended:
-            return "（此刻無法這麼做。）"
-        for who, me in ((self, True), (other, False)):
-            problem = self._spar_problem(who, me=me)
-            if problem is not None:
-                return problem
-        if self._spars_left(other.state.player.name) <= 0:
-            return social.pair_full(self, "spar")
-        if invites.between(s.world, s.player.name, other.state.player.name, "spar") is not None:
-            return "已經有一張切磋的邀請在等回覆了。"
-        return None
-
-    def spar_invite(self, other: Game) -> list[str]:
-        """玩家卡上的「切磋」：向這個人發一張邀請，他在 invite_ttl_seconds 內答應才打。被拒絕只回一句話。"""
-        s = self.state
-        problem = self.spar_refusal(other)
-        if problem is not None:
-            return [problem]
-        name = other.state.player.name
-        invites.expire(s.world)
-        invites.send(s.world, self.content, "spar", s.player.name, name, s.player.location)
-        self._save_season()
-        self.touched.add(name)  # 他的選單、他看你的那張卡要多出答應、婉拒
-        him = gender.pronoun(other.state)
-        return [f"你向{name}抱拳，邀{him}過幾招；等{him}回覆。"]
 
     def _invite_options(self) -> list[Option]:
         """閒著的時候：別人發給你的邀請（答應、婉拒）與你發出去還在等的（收回）；選單上的位置固定（玩家互動包 invite_actions.options）。"""
@@ -5217,191 +5140,26 @@ class Game:
         """答應了卻沒成、邀請已經收掉：發邀請的那個人下次同步看到一句（玩家互動包 invite_actions.tell_sender；切磋、論武、結伴還在原位叫它）。"""
         return peers_invite_actions.tell_sender(self, inv, other, why)
 
-    def _spar_answer_problem(self, inv, other: Game, *, for_sender: bool = False) -> str | None:
-        """答應切磋時這一場還打不打得成：還在發邀請的那個地點、兩個人都閒著付得起體力、這一對這個遊戲日還沒打滿。
-        for_sender：寫給發邀請的那個人看（「你」是他，_tell_sender 用）。"""
-        if inv.location != self.state.player.location:
-            return presence.GONE
-        for who in (self, other):
-            problem = self._spar_problem(who, me=(who is self) != for_sender)
-            if problem is not None:
-                return problem
-        if self._spars_left(other.state.player.name) <= 0:
-            return social.pair_full(self, "spar")
-        return None
-
-    def _spar(self, inv, other: Game) -> list[str]:
-        """答應一場切磋：重驗（還在發邀請的那個地點、兩個人都閒著、體力付得起、今天這一對還沒打滿），雙方各花一次遊歷的體力，
-        用本人的威力照單次判定打一場（從發邀請的那一方算，收的一方照鏡像），不扣氣血、不掉銀兩；雙方各一份戰報（回合演出不帶數字）
-        與一則江湖紀錄，經驗與心得照 Config.spar。驗不過就把邀請收掉（answer_invite 已經收了）、說一句為什麼，發邀請的那個人也收到一句。"""
-        c = self.content
-        me, them = self.state.player, other.state.player
-        problem = self._spar_answer_problem(inv, other)
-        if problem is not None:
-            self._tell_sender(inv, other, self._spar_answer_problem(inv, other, for_sender=True))
-            return [problem]
-        cost = c.config.action_cost["train"]
-        me.stamina -= cost
-        them.stamina -= cost
-        self._pair_tick(self.state.world.spar_tally, them.name)
-        self._save_season()
-        ours, theirs = self._spar_power(self, other), self._spar_power(other, self)
-        ours_shown, theirs_shown = self._spar_power(self, other, seal=False), self._spar_power(other, self, seal=False)  # 戰報給對方看的（先算：記完戰報可能升級）
-        result = encounter.resolve_encounter(theirs, ours, self.rng)  # 從發邀請的那一方看：他的威力對上你的
-        other._spar_record(result, me.name, ours, self, shown=ours_shown)
-        return self._spar_record(self._spar_mirror(result, ours), them.name, theirs, other, shown=theirs_shown)
-
     # ── 論武（玩家互動第二層）：兩個人各出一個意境合成一個新的，兩人都拿到；首創算兩人共有，價錢各付一半 ──
     # 走 fusion.merge（fusion.Partner：對方出的那一個不必是你的、不佔你的持有）；持有上限、「已經有了」照舊各自擋。
     # 武學不再拿來合（Joy 2026-10-21），論武跟著只剩意境。
     # 開爐的是答應的那一方（discuss_request 是 A 段，伺服器在鎖外取名，_discuss 是 C 段），發邀請的那一方接著照配方合出同一門。
 
     def discuss_items(self) -> list[tuple[str, str]]:
-        """論武時你出得了的：悟得的全服意境（「insight:<id>」；自己畫圖悟的私有意境不行）。回傳（鍵, 寫給人看的名字）。"""
-        s, c = self.state, self.content
-        out: list[tuple[str, str]] = []
-        for insight_id in s.player.insights:
-            insight = None if insights.is_own(insight_id) else insights.resolve(insight_id, c, self.world, s)
-            if insight is not None:
-                out.append((f"insight:{insight_id}", f"「{insight.name}」"))
-        return out
+        """玩家互動包 discuss_actions.items 的一行委派（全部拆包第 38 批；測試叫）。"""
+        return peers_discuss_actions.items(self)
 
     def _discuss_cost(self) -> tuple[int, int]:
-        """論武這一邊付的（心得, 體力）：一爐意境合成的一半（fusion.half_price）。"""
-        cfg = self.content.config
-        return fusion.half_price(cfg.merge_xinde, cfg.merge_stamina)
-
-    def discuss_refusal(self, other: Game) -> str | None:
-        """玩家卡上「論武」按不按得下去：規則開著、兩個人都閒著、付得起一半的體力、之間沒有一張還在等的論武邀請。
-        休季（這一季收了）卡上不畫，直接打 API 也是這一句（FB-169）。"""
-        s, c = self.state, self.content
-        if not season_one(c, s.world) or s.world.ended:
-            return "（此刻無法這麼做。）"
-        cost = self._discuss_cost()[1]
-        for who, me in ((self, True), (other, False)):
-            problem = self._spar_problem(who, me=me, what="論武", cost=cost)
-            if problem is not None:
-                return problem
-        if self.discusses_left(other.state.player.name) <= 0:
-            return social.pair_full(self, "discuss")
-        if invites.between(s.world, s.player.name, other.state.player.name, "discuss") is not None:
-            return "已經有一張論武的邀請在等回覆了。"
-        return None
-
-    def discuss_invite(self, other: Game, item: str) -> list[str]:
-        """玩家卡上的「論武・以 X」：帶著你要出的那一樣發一張邀請，對方在卡上挑他出的那一樣答應才開爐。"""
-        s = self.state
-        problem = self.discuss_refusal(other)
-        if problem is not None:
-            return [problem]
-        label = dict(self.discuss_items()).get(item)
-        if label is None:
-            return ["你身上沒有這一樣。"]
-        name = other.state.player.name
-        invites.expire(s.world)
-        invites.send(s.world, self.content, "discuss", s.player.name, name, s.player.location, {"item": item})
-        self._save_season()
-        self.touched.add(name)
-        return [f"你拿出{label}，邀{name}一起論武；等{gender.pronoun(other.state)}回覆。"]
-
-    def _discuss_partner(self, mine: str, theirs: str, other_name: str, fresh: bool = False):
-        """兩樣東西排成一爐意境合成：（兩個意境的 id, 借來的那一份）。舊邀請上的「art:」交給 discuss_problem 擋。"""
-        mid, tid = mine.partition(":")[2], theirs.partition(":")[2]
-        return [mid, tid], fusion.Partner(lent=tid, name=other_name, price=self._discuss_cost(), fresh=fresh)
-
-    def discuss_request(self, inv, other: Game, item: str) -> naming.NamingRequest | None:
-        """論武的 A 段（鎖內、只讀）：答應的那一方出 item、發邀請的那一方出邀請上那一樣，這一爐要不要模型取名或挑？
-        要就回單子（伺服器在鎖外交給 naming.generate，假人程式交給 bot_runner），不要是 None。
-        C 段（_discuss）一定會擋的先問（discuss_invite_problem、discuss_item_problem：他正忙、論滿了、你挑的那一樣合不成……）：
-        成不了就不開單、不叫模型，呼叫端照「不必取名」直接走 C 段，回的話、邀請作廢與通知都同以前，只是不等模型（FB-245）。
-        C 段照樣重驗（A 到 C 之間狀態可能變）。"""
-        if inv is None or inv.kind != "discuss":
-            return None
-        if self.discuss_invite_problem(inv, other) is not None or self.discuss_item_problem(inv, other, item) is not None:
-            return None
-        insight_ids, partner = self._discuss_partner(item, inv.payload.get("item", ""), other.state.player.name)
-        return fusion.forge_request(self.state, self.content, self.world, None, insight_ids, partner=partner)
-
-    def _discuss_forge(self, mine: str, theirs: str, other_name: str, proposed, fresh: bool = False):
-        """這一邊開一爐（意境合成，對方那一個當作借來的）：（合出來的那個意境, 訊息）；沒合成是 None。
-        fresh：對方剛剛在這一次論武裡首創了這個配方（發邀請的那一方接著合，FB-243）。"""
-        problem = self.discuss_problem(mine, theirs, other_name)
-        if problem is not None:
-            return None, [problem]
-        insight_ids, partner = self._discuss_partner(mine, theirs, other_name, fresh)
-        return fusion.merge(self.state, self.content, self.world, self._quick_client(), *insight_ids, proposed, partner)
+        """玩家互動包 discuss_actions.cost_of 的一行委派（全部拆包第 38 批；測試叫）。"""
+        return peers_discuss_actions.cost_of(self)
 
     def discuss_problem(self, mine: str, theirs: str, other_name: str) -> str | None:
-        """這一邊合不合得成（拒絕的話；fusion.merge_problem，對方那一個當作借來的、價錢是一半）。只讀；假人挑要出哪一樣也問它。"""
-        if not (mine.startswith("insight:") and theirs.startswith("insight:")):
-            return fusion.DISCUSS_ARTS_GONE
-        insight_ids, partner = self._discuss_partner(mine, theirs, other_name)
-        return fusion.merge_problem(self.state, self.content, self.world, *insight_ids, partner)
-
-    def discuss_invite_problem(self, inv, other: Game, *, for_sender: bool = False) -> str | None:
-        """答應論武時，這一張邀請本身還成不成（不看你挑哪一樣）：還在發邀請的那個地點、兩個人都閒著付得起一半的體力、
-        這一對這個遊戲日還沒論滿（FB-116）、他要出的那一樣還在他身上。不成就作廢：answer_invite 收掉、發邀請的人收到一句（FB-117）。
-        for_sender：寫給發邀請的那個人看（「你」是他，_tell_sender 用）。"""
-        them = other.state.player
-        if inv.location != self.state.player.location:
-            return presence.GONE
-        cost = self._discuss_cost()[1]
-        for who in (self, other):
-            problem = self._spar_problem(who, me=(who is self) != for_sender, what="論武", cost=cost)
-            if problem is not None:
-                return problem
-        if self.discusses_left(them.name) <= 0:  # 邀請在等的時候，這一對人今天的帳被別處用滿了（FB-116）
-            return social.pair_full(self, "discuss")
-        if inv.payload.get("item", "") not in dict(other.discuss_items()):
-            return "你身上已經沒有要出的那一樣了。" if for_sender else f"{them.name}身上已經沒有{gender.pronoun(them)}要出的那一樣了。"
-        return None
+        """玩家互動包 discuss_actions.merge_problem 的一行委派（全部拆包第 38 批；包裡經 other 叫，測試換掉對方那一份）。"""
+        return peers_discuss_actions.merge_problem(self, mine, theirs, other_name)
 
     def discuss_item_problem(self, inv, other: Game, item: str) -> str | None:
-        """答應論武時你出 item 這一樣合不合得成：身上還有沒有、是不是跟他出的同一樣、兩邊各自合不合得成（fusion 的 *_problem）；
-        合得成是 None。這一種不成是你挑的那一樣不行，換一樣再答就好，邀請留著（FB-117）。回的話帶 short（兩三個字），
-        玩家卡上答應的下拉清單在合不成的那一項後面寫它（discuss.buttons）。先問過 discuss_invite_problem 才準。"""
-        them = other.state.player
-        theirs = inv.payload.get("item", "")
-        if item not in dict(self.discuss_items()):
-            return _refusal("你身上沒有這一樣。", "身上沒有")
-        if item == theirs:
-            return _refusal(DISCUSS_SAME, "同一樣")
-        problem = self.discuss_problem(item, theirs, them.name)
-        if problem is not None:
-            return problem
-        theirs_problem = other.discuss_problem(theirs, item, self.state.player.name)
-        if theirs_problem is None:
-            return None
-        short, him = getattr(theirs_problem, "short", "") or "合不成", gender.pronoun(them)
-        side = THEIR_SIDE.get(short)
-        text = f"{them.name}那邊合不成：{side.format(him=him)}。" if side else f"{them.name}那邊合不成。"
-        return _refusal(text, f"{him}那邊{short}")
-
-    def _discuss(self, inv, other: Game, item: str, proposed) -> list[str]:
-        """答應論武（C 段）：重驗（discuss_invite_problem、discuss_item_problem：還在發邀請的那個地點、兩個人都閒著、兩樣東西都還在
-        各自手上、兩邊各自合得成），你先開爐（新配方的名字照 proposed），他接著照配方合出同一門；各付一半，各記一則江湖紀錄。
-        驗不過就說一句為什麼（邀請已經收了），發邀請的那個人也收到一句（FB-117）。"""
-        me, them = self.state.player, other.state.player
-        theirs = inv.payload.get("item", "")
-        problem = self.discuss_invite_problem(inv, other) or self.discuss_item_problem(inv, other, item)
-        if problem is not None:
-            self._tell_sender(inv, other, self.discuss_invite_problem(inv, other, for_sender=True))
-            return [problem]
-        made, msgs = self._discuss_forge(item, theirs, them.name, proposed)
-        if made is None:
-            self._tell_sender(inv, other)
-            return msgs
-        self.peer_brief = social.DISCUSS_BRIEF.format(thing=social.thing_label(made))
-        # 配方剛登記：他照查表合出同一門，不取名；這一爐首創了的話，他那一句寫跟你一起首創（FB-243）
-        _, their_msgs = other._discuss_forge(theirs, item, me.name, (None, ""), fresh=fusion.made_first(msgs))
-        self._pair_tick(self.state.world.discuss_tally, them.name)
-        self._save_season()
-        other._write(f"論武・{me.name}", their_msgs)
-        if self._draft is None:
-            self._write(f"論武・{them.name}", msgs)
-        else:
-            self._outcome("論武", msgs[0])
-        return msgs
+        """玩家互動包 discuss_actions.item_problem 的一行委派（全部拆包第 38 批；測試叫）。"""
+        return peers_discuss_actions.item_problem(self, inv, other, item)
 
     @staticmethod
     def _spar_power(who: Game, against: Game, *, seal: bool = True) -> float:
@@ -5425,175 +5183,42 @@ class Game:
             tier = "大勝" if -result.margin >= big else "險勝"
         return result.model_copy(update={"tier": tier, "margin": -result.margin, "our_power": power, "difficulty": result.our_power})
 
-    def _spar_record(self, result: encounter.EncounterResult, rival: str, rival_power: float, rival_game: Game,
-                     *, shown: float | None = None) -> list[str]:
-        """這一邊的戰報、獎勵與紀錄。對手寫成一支只為這一場存在的隊伍（名號、威力、身上那一門的屬性），戰報只列本人。
-        shown：戰報上「對手威力 N」寫的數字＝對手不含玉璽碎片的威力（改版 FB-615；打起來照 result，含碎片）；不給就照 result。"""
-        s, c, cfg = self.state, self.content, self.content.config.spar
-        p = s.player
-        squad = Squad(
-            id=f"spar:{rival}", name=rival, difficulty=rival_power,
-            attribute=team.worn_attribute(rival_game.state, c, rival_game.world),
-        )
-        record = battlelog.new_record(s, c, self.world, squad, result, "spar")
-        if shown is not None:
-            record.difficulty = shown
-        record.ours = record.ours[:1]
-        xinde = cfg.win_xinde if result.tier in team.WIN_TIERS else cfg.draw_xinde if result.tier in team.DRAW_TIERS else cfg.lose_xinde
-        p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
-        record.xinde = xinde
-        before = p.member.level
-        maxed_note = self._record_exp(record, cfg.exp, "spar")  # 先換（滿級才換）；升到滿級那一下剩下的不換
-        ups = team.add_exp(c, p.member, cfg.exp, p.name, "spar")  # 切磋是仗（減法季 45 級以後照算）
-        if p.member.level > before:
-            points = team.level_points(self.state, c, before, p.member.level)
-            p.stat_points += points
-            if points:
-                ups.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
-        record.notes += [n for n in maxed_note if not n.startswith("心得 +")]  # 戰報敘事只留那一句；心得算在得失
-        record.notes += ups
-        self._play_rounds(record, squad, result.tier, None)
-        line = self._file_battle(record, team_exp=False)
-        # 兩邊對稱（FB-244）：各寫各自拿到的經驗與心得（只有本人拿，不寫「（每人）」）、各連自己的戰報
-        msgs = [line] + ([f"經驗 +{cfg.exp}"] if record.exp else []) + [f"心得 +{xinde}"] + maxed_note + ups + self._last_wear  # 滿級不寫經驗（FB-451）
-        if self._draft is None:  # 對方那一邊（或從玩家卡答應、沒有草稿）：替他記一則，連到這一份戰報
-            self._write(f"切磋・{rival}", msgs, tag=battlelog.outcome_text(record), battle_id=record.id)
-        else:  # 答應的那一方（自己按的，這次行動的草稿寫這一則）：結果那一句照樣寫進敘事，跟發邀請的那一方一樣（FB-117）
-            self._draft.keep(line)
-        return msgs
-
     # ── 截殺（Config.raid；企劃者 2026-10-08 在決策卡選「有限制地開」）：玩家卡上的一顆鈕，不必對方同意 ──
     # 每季都有、不看第一季開關（企劃者 2026-10-10，懸賞榜設計 2.2）；Config.raid.enabled 是主機的緊急開關，關著時通緝一起收。
     # 兩個人都投靠了陣營、而且是不同陣營時才有（三個陣營彼此都是敵對）；散人只能截殺自己揭了通緝的那個人。對方下線、在忙也照打：
     # 他在「此地還有」的名單上（presence_seconds 內同步過、不在路上）就行，他回來在戰報與江湖紀錄裡看得到。真人假人一樣。
 
     def raid_shown(self, other: Game) -> bool:
-        """卡上要不要畫「截殺」：截殺開著（Config.raid.enabled）、這一季還沒收、兩個人都投靠了陣營、而且不同陣營；或是你揭了通緝他的懸賞
-        （散人、同陣營的人也行）。每季都有，不看第一季開關（懸賞榜設計 2.2 第 3 點）；休季（這一季收了）不畫，跟通緝鈕、懸賞榜一樣
-        （FB-163：以前還畫著灰的，原因寫成「城裡耳目眾多」「你此刻正忙」）；raid_targets 與 raid_refusal 都先問這裡。"""
-        mine, theirs = self._side(), other._side()  # 豪強分屬兩軍：同一邊的不能截殺
-        if not self.content.config.raid.enabled or self.state.world.ended:
-            return False
-        if mine is not None and theirs is not None and mine != theirs:
-            return True
-        return bounties.hunting(self.state, self.content, other.state.player.name)
+        """玩家互動包 raid_actions.is_shown 的一行委派（全部拆包第 38 批；測試叫）。"""
+        return peers_raid_actions.is_shown(self, other)
 
     @staticmethod
     def _raid_key(attacker: str, target: str) -> str:
         return f"{name_key(attacker)}>{name_key(target)}"
 
     def raid_refusal(self, other: Game) -> str | None:
-        """「截殺」按不按得下去（拒絕的話；能是 None）：不在城鎮類的地點、兩個人都過了新手期、你閒著付得起體力、
-        你上一次截殺他已經過了冷卻、他沒有剛被人截殺過。對方忙不忙不看（截殺不必他同意）。"""
-        s, c, cfg = self.state, self.content, self.content.config.raid
-        if not self.raid_shown(other):
-            return "（此刻無法這麼做。）"
-        loc = c.locations[s.player.location]
-        if c.config.explore_mix_of(loc.tags).kind == "town":
-            return "城裡耳目眾多，不便動手。"
-        if roster.raid_newbie(s, c):  # 新手期從各自加入的那一刻算，不看第一季開關（懸賞榜設計 14.1 丁）
-            return "你初入江湖，還在新手期，先別結這種仇。"
-        them = other.state.player.name
-        if roster.raid_newbie(other.state, c):
-            return f"{them}初入江湖，還在新手期，下不了這個手。"
-        problem = self._spar_problem(self, me=True, what="截殺", cost=cfg.stamina)
-        if problem is not None:
-            return problem
-        w = s.world
-        key = self._raid_key(s.player.name, them)
-        last = w.raids.get(key)
-        if last is not None and w.time - last < cfg.pair_cooldown_seconds:
-            if w.clashes.get(key) == last:  # 那一筆是混戰寫的（翻地與爭搶）：照實寫交過手，不寫截殺過（FB-607）
-                return RAID_AFTER_CLASH.format(them=them)
-            return f"你不久前才截殺過{them}，過一陣子再說。"
-        hit = w.raided.get(name_key(them))
-        if hit is not None and w.time - hit < cfg.shield_seconds:
-            if w.clashed.get(name_key(them)) == hit:
-                return RAID_SHIELD_CLASH.format(them=them)
-            return f"{them}剛被人截殺過，元氣未復，這時下手太不講江湖道義。"
-        return None
+        """玩家互動包 raid_actions.refusal 的一行委派（全部拆包第 38 批；測試叫）。"""
+        return peers_raid_actions.refusal(self, other)
 
     def raid_odds(self, other: Game) -> str:
-        """截殺的勝算（「有把握」這種字，同遊歷的按鈕）：本人對本人的威力，照固定種子模擬。兩邊都照**不含玉璽碎片**的威力算
-        （改版 FB-625：給別人看的字不能讓人對同一個人看出他有沒有碎片，持有者自己看也照這一份，免得畫面對不上；
-        打起來 raid() 照含碎片的威力擲，勝負不變）。"""
-        theirs = self._spar_power(other, self, seal=False)
-        squad = Squad(id=f"raid:{other.state.player.name}", name=other.state.player.name, difficulty=theirs)
-        return team.odds_word(self._spar_power(self, other, seal=False), squad)
+        """玩家互動包 raid_actions.odds_word 的一行委派（全部拆包第 38 批；測試叫）。"""
+        return peers_raid_actions.odds_word(self, other)
 
     def raid_targets(self) -> list[tuple[str, str]]:
-        """此地截殺得了的人與勝算：[(名號, 勝算)]，照名號排序（假人挑對象用；真人看卡上的鈕）。截殺關著時是空的（raid_shown 擋）；
-        散人只有揭了通緝的那個人。"""
-        out = []
-        for state in presence.here(self):
-            other = self._kin(state)
-            if self.raid_shown(other) and self.raid_refusal(other) is None:
-                out.append((state.player.name, self.raid_odds(other)))
-        return out
+        """玩家互動包 raid_actions.targets 的一行委派（全部拆包第 38 批；假人與測試叫）。"""
+        return peers_raid_actions.targets(self)
 
     def raid(self, other: Game) -> list[str]:
-        """截殺 other：重驗、付體力、記冷卻，用本人的威力照單次判定打一場（從發起的人看）。輸的一方失一點銀兩（贏的拿走一部分）
-        與一點氣血（不變成內傷）；他身上的防具照減損少扣、也只有他磨（裝備四欄 4.4、4.5）；贏的一方記一點本季貢獻；平手誰都不失什麼。
-        雙方各一份戰報與一則江湖紀錄。被截殺的人騎的馬比較快時，開打之前先擲策馬脫身（raid_flee_odds、_raid_fled）。"""
-        problem = self.raid_refusal(other)
-        if problem is not None:
-            return [problem]
-        s, c, cfg = self.state, self.content, self.content.config.raid
-        me, them = s.player, other.state.player
-        me.stamina -= cfg.stamina
-        s.world.raids[self._raid_key(me.name, them.name)] = s.world.time
-        s.world.raided[name_key(them.name)] = s.world.time
-        # 策馬脫身（裝備四欄 5.10）：付完體力、記完冷卻才擲（跑掉了冷卻照算，不然可以一直按到追上），用自己的亂數、不動 Game.rng
-        flee = self.raid_flee_odds(other)
-        if flee > 0 and random.Random(f"截殺脫身|{me.name}|{them.name}|{s.world.time}").random() < flee:
-            return self._raid_fled(other)
-        ours, theirs = self._spar_power(self, other), self._spar_power(other, self)
-        ours_shown, theirs_shown = self._spar_power(self, other, seal=False), self._spar_power(other, self, seal=False)  # 戰報給對方看的（FB-615）
-        result = encounter.resolve_encounter(ours, theirs, self.rng)
-        mirrored = self._spar_mirror(result, theirs)
-        if result.tier in team.WIN_TIERS:
-            winner, loser = self, other
-        elif mirrored.tier in team.WIN_TIERS:
-            winner, loser = other, self
-        else:
-            winner = loser = None
-        # 名聲 5.4：交差之前先判會不會交到官府通緝（打贏了、手上揭著他的官府通緝），把惡名少的那一點算進輸的那一邊，兩邊的戰報才寫得到
-        official = winner is self and renown.on(c, "official_wanted") and bounties.official_hit(s, c, them.name)
-        spoils = winner._raid_spoils(loser, evil=c.config.renown.official_evil_loss if official else 0) if winner is not None else None
-        self.touched.add(them.name)
-        other._raid_record(mirrored, me.name, ours, self, spoils, attacker=False, shown=ours_shown)
-        msgs = self._raid_record(result, them.name, theirs, other, spoils, attacker=True, shown=theirs_shown)
-        if winner is self:
-            msgs += self._raid_bounty(them.name)
-            heard = figure_life.spread(s, c, "raid", name_key(them.name), at=me.location, side=them.faction,
-                                       text=f"在{c.locations[me.location].name}截殺了{them.name}")
-            if heard and self._draft is None:
-                self._write(figure_life.HEARSAY_TITLE, heard)
-            msgs += heard
-        # 冷卻與交差（通緝那一張的 done_by／takers）都在共用賽季：最後存一次。玩家卡走 peer_act、server.act 都只存角色，
-        # 以前在打之前就存了季，交差改的沒存回去，同一張可以一直揭、一直領，過期還照退押金（FB-119）
-        self._save_season()
-        return msgs
+        """玩家互動包 raid_actions.raid 的一行委派（全部拆包第 38 批；測試叫）。"""
+        return peers_raid_actions.raid(self, other)
 
     def raid_flee_odds(self, other: Game) -> float:
-        """被截殺的 other 策馬脫身的機會（裝備四欄 5.10）：他的腳力減你的腳力，夾在 0～raid_escape_cap；坐騎關著是 0。
-        截殺鈕的確認句（raid.buttons）與 raid() 真正擲的都讀這一個。"""
-        return mounts.raid_flee(self.content, self.state, other.state)
+        """玩家互動包 raid_actions.flee_odds 的一行委派（全部拆包第 38 批；包裡經 ctx 叫；測試換掉它）。"""
+        return peers_raid_actions.flee_odds(self, other)
 
     def _raid_fled(self, other: Game) -> list[str]:
-        """截殺時被截殺的人策馬脫身（裝備四欄 5.10）：不打、誰都不失銀兩與氣血、不寫戰報、不磨兵器防具、不扣飽足；發起的人的體力
-        已經付了、冷卻已經記了（raid 在擲之前做完）。雙方各一則江湖紀錄。冷卻在共用賽季，最後存一次（FB-119：玩家卡走 peer_act、
-        server.act 都只存角色）。scripts/sim_season_one.py 照這個函式數跑掉幾次。"""
-        s, c = self.state, self.content
-        me, them = s.player, other.state.player
-        horse = mounts.name_of(them.mount)
-        self.touched.add(them.name)
-        other._write(f"遭{me.name}截殺", [mounts.RAID_ESCAPED.format(rival=me.name, horse=horse)], tag=mounts.RAID_ESCAPED_TAG)
-        msgs = [f"體力 -{c.config.raid.stamina}", mounts.RAID_FLED.format(rival=them.name, horse=horse)]
-        if self._draft is None:
-            self._write(f"截殺・{them.name}", msgs, tag=mounts.RAID_FLED_TAG.format(him=gender.pronoun(them)))
-        self._save_season()
-        return msgs
+        """玩家互動包 raid_actions.fled 的一行委派（全部拆包第 38 批；包裡經 ctx 叫；scripts/sim_season_one.py 換掉它數跑掉幾次）。"""
+        return peers_raid_actions.fled(self, other)
 
     def post_wanted(self, other: Game, amount: int) -> list[str]:
         """通緝 other（玩家卡的「通緝」）：押金從你身上扣、掛上懸賞榜（bounties.post）；成了寫一則江湖紀錄、存季。"""
@@ -5611,73 +5236,15 @@ class Game:
         return msgs
 
     def _raid_spoils(self, loser: Game, evil: int = 0) -> RaidSpoils:
-        """贏的是 self：loser 失銀兩（比例、有上限）與氣血（上限的一成弱，乘 1−他身上防具的減損；不吃化勁、不變成內傷，裝備四欄 4.4），
-        self 拿走一部分銀兩、記一點貢獻。evil 是 loser 惡名少幾點（名聲 5.4：贏的人揭著他的官府通緝；夾在 0）。"""
-        c, cfg = self.content, self.content.config.raid
-        lp, wp = loser.state.player, self.state.player
-        purse = lp.stats.get("silver", 0)
-        lost = min(cfg.silver_cap, math.ceil(purse * cfg.silver_share)) if purse > 0 else 0
-        taken = math.ceil(lost * cfg.take_share)
-        lp.stats["silver"] = purse - lost
-        wp.stats["silver"] = wp.stats.get("silver", 0) + taken
-        con = team.con_of(loser.state, c, loser.world, PLAYER)
-        cut = team.armor_cut(loser.state, c, loser.world)  # 截殺輸的一方只吃防具（裝備四欄 4.4）：不吃化勁，也就不必夾合計上限
-        hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0,
-                                 season=loser.state.world)
-        # 散人（揭了通緝）不記貢獻；第一季規則關著的季沒有晉升，也不記（懸賞榜設計 2.2 第 4 點，寫法同軍餉 _showdown_pay）
-        contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None and season_one(c, self.state.world) else 0
-        if contrib:
-            wins.credit(wp, c, self.state.world, calendar.point(self.state.world.time, c, self.state.world).week, contrib)
-        cut = min(evil, lp.stats.get("evil", 0))
-        if cut > 0:
-            lp.stats["evil"] = lp.stats.get("evil", 0) - cut
-        return RaidSpoils(winner=wp.name, lost=lost, taken=taken, hp=round(hp), contrib=contrib, evil=cut)
+        """玩家互動包 raid_actions.take_spoils 的一行委派（全部拆包第 38 批；包裡經 ctx 叫；scripts/sim_season_one.py 換掉它）。"""
+        return peers_raid_actions.take_spoils(self, loser, evil)
 
     def _raid_record(
         self, result: encounter.EncounterResult, rival: str, rival_power: float, rival_game: Game,
         spoils: RaidSpoils | None, *, attacker: bool, shown: float | None = None,
     ) -> list[str]:
-        """這一邊的戰報與紀錄。對手寫成一支只為這一場存在的隊伍（同切磋），戰報只列本人。shown 同 _spar_record。"""
-        s, c = self.state, self.content
-        p = s.player
-        squad = Squad(
-            id=f"raid:{rival}", name=rival, difficulty=rival_power,
-            attribute=team.worn_attribute(rival_game.state, c, rival_game.world),
-        )
-        record = battlelog.new_record(s, c, self.world, squad, result, "raid")
-        if shown is not None:
-            record.difficulty = shown
-        record.ours = record.ours[:1]
-        won = spoils is not None and name_key(spoils.winner) == name_key(p.name)
-        hp_lost: int | None = 0
-        if spoils is None:
-            story = f"你攔下{rival}動手，兩人鬥了半天不分高下，各自退開。" if attacker else \
-                f"{rival}半路攔下你動手，兩人鬥了半天不分高下，各自退開。"
-        elif won:
-            record.silver = spoils.taken
-            if spoils.contrib:
-                record.changes.append(f"貢獻 +{spoils.contrib}")
-            story = f"你攔下{rival}動手，{rival}不敵，丟下銀兩走了。" if attacker else \
-                f"{rival}半路截殺你，反被你打退，丟下銀兩走了。"
-        else:
-            record.silver = -spoils.lost
-            hp_lost = spoils.hp
-            if spoils.hp > 0:
-                record.changes.append(f"氣血 -{spoils.hp}")
-            if spoils.evil:  # 名聲 5.4
-                record.changes.append(bounties.BEATEN_OFFICIAL.format(n=spoils.evil, winner=spoils.winner))
-            story = f"你攔下{rival}動手，卻不是{gender.pronoun(rival_game.state)}的對手，只得丟下銀兩脫身。" if attacker else \
-                f"{rival}半路截殺你，你不敵，丟下銀兩脫身。"
-        record.notes.append(story)
-        annals.note(s, c, annals.FIGHT, story, 3 if won else 2, keep=[rival])  # 行狀：截殺與被截殺（兩邊各記自己的；對手的名號原樣留，FB-9020）
-        self._play_rounds(record, squad, result.tier, hp_lost)
-        line = self._file_battle(record)
-        msgs = [line, story, *battlelog.gains_list(record), *self._last_wear]
-        if attacker:
-            msgs.insert(0, f"體力 -{c.config.raid.stamina}")
-        if self._draft is None:
-            self._write(f"截殺・{rival}" if attacker else f"遭{rival}截殺", msgs, tag=battlelog.outcome_text(record))
-        return msgs
+        """玩家互動包 raid_actions.raid_record 的一行委派（全部拆包第 38 批；包裡經 ctx 叫；sim 腳本換掉它數截殺）。"""
+        return peers_raid_actions.raid_record(self, result, rival, rival_power, rival_game, spoils, attacker=attacker, shown=shown)
 
     # ── 後期體力玩法第一批（Joy 2026-10-16）：設伏劫道、屯糧練兵（本體在 tianxia/features/stamina_plays/；修築工事 2026-10-27 跟著舊拔河拿掉）──
 

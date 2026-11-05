@@ -311,8 +311,9 @@ explore（主動搬六包第 3＋4 批加的這一段）
 
 # peers（全部拆包第 37 批；主人：玩家互動包。本體在 tianxia/features/peers/，Game 留一行委派回答別的包）
 - `ctx._peer(name)`（把此地還有的某個人包成 Game，不在這裡是 None）、`ctx._tell_sender(...)`（替發邀請的人寫一則他下次上線看得到的話）、
-  `ctx._pair_tick(...)`、`ctx._pair_left(...)`、`ctx._spar_pair(...)`（同一對人這個遊戲日切磋、論武的次數）、`ctx.answer_invite(...)`、`ctx.peer_act(...)`：
-  切磋、論武、截殺、結伴同行還沒搬（第 38 批與移動包），它們經 Game 的委派問玩家互動包；搬走之後改成各自包的查詢
+  `ctx._pair_tick(...)`（贈物一天的次數，social 的 gift 叫）、`ctx._spar_pair(...)`、`ctx.answer_invite(...)`、`ctx.peer_act(...)`：
+  結伴同行還沒搬（第 48 批），它與測試經 Game 的委派問玩家互動包；搬走之後改成各自包的查詢。切磋、論武、截殺第 38 批搬進包了：包內直接叫
+  （`_pair_left` 沒人叫了，委派拿掉）
 - `ctx._yuedan_line(content, name)`（月旦評那一週許劭對他的那一句，只讀；主人：大勢人物的行動包 figure_acts〔月旦評 yuedan〕。玩家卡 `card` 要這一句，
   玩家互動包不能 import 大勢人物包，經 Game 的一行委派問，總表第六節第 6 條「`social` 讀月旦評」）
 
@@ -448,10 +449,17 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 - `ctx._raid_bounty(target)`（主人懸賞榜〔第 45 批〕：伏兵贏了、揭了通緝他就交差，截殺也叫；本體留在 Game 上，懸賞榜成包時改成二、查詢服務）。
   設伏要叫的其餘 Game 方法（`_side`、`_raid_key`、`_load_kin`、`_save_kin`、`_spar_power`、`_spar_mirror`、`_file_battle`、`_play_rounds`、
   `_last_wear`、`_idle`、`_log`、`_write`、`stamp`、`_cost_option`、`_draft`、`touched`）上面已經列了，這一包只記「誰在用」。
-# peers（全部拆包第 37 批：答應邀請時分派給還沒搬的切磋、論武、結伴同行）
-- `ctx._spar(inv, other)`（主人切磋，第 38 批）、`ctx._discuss(inv, other)`、`ctx.discuss_invite_problem(...)`、`ctx.discuss_item_problem(...)`（主人論武，第 38 批）、
-  `ctx._join(inv, other)`（主人移動 features/travel：答應結伴同行）：`answer_invite` 照邀請的種類叫它們
+# peers（全部拆包第 37 批：答應邀請時分派給還沒搬的結伴同行；切磋、論武第 38 批搬進包，`answer_invite` 包內直接叫，那幾條拿掉）
+- `ctx._join(inv, other)`（主人移動 features/travel：答應結伴同行）：`answer_invite` 照邀請的種類叫它
 - `ctx.join_refusal(leader)`（主人移動：答應跟某人結伴同行，不行的原因；假人回結伴邀請〔bots.answer_call〕先問它）
+# peers2（全部拆包第 38 批「玩家互動二」：切磋、論武、截殺搬進玩家互動包；計畫 docs/superpowers/plans/2026-11-07-玩家互動包-第2批.md 1.3）。
+# 包要叫的核心服務 `ctx._spar_power`、`ctx._spar_mirror`、`ctx._raid_key`、`ctx._raid_bounty`、`ctx._side`、`ctx._kin`、`ctx._load_kin`、`ctx._save_kin`、
+# `ctx._write`、`ctx._save_season`、`ctx._outcome`、`ctx.touched`、`ctx.publish`、`ctx._record_exp`、`ctx._file_battle`、`ctx._play_rounds`、`ctx._last_wear`、
+# `ctx.is_idle()`、`ctx._quick_client()`、`ctx._draft`、`ctx.peer_brief` 上面都列了；這一段只補 Game 上留一行委派、包裡也經 ctx 叫的：
+- `ctx.discuss_problem(mine, theirs, other_name)`（主人論武 discuss_actions；測試把對方那一份換成只有 `discuss_problem` 的替身，所以包裡用 `other.discuss_problem(...)` 照舊叫方法；
+  `discuss_items`、`_discuss_cost`、`discuss_item_problem` 沒有測試換掉，包裡直接叫 discuss_actions 的 `items`、`cost_of`、`item_problem`，Game 上的一行委派留給測試直接叫）
+- `ctx.raid_flee_odds(other)`、`ctx._raid_fled(other)`、`ctx._raid_spoils(loser, evil)`、`ctx._raid_record(...)`（主人截殺 raid_actions；`scripts/sim_season_one.py`、
+  `sim_server_bots.py` 用 `mock.patch.object(Game, …)` 數截殺、`tests/gear/test_mounts.py` 換 `Game.raid_flee_odds`，所以包裡一律經 ctx 叫；同 `ctx._duel_finish`）
 
 # travel（全部拆包第 47 批「移動一」：移動選單、路上三樣小事、喊停、折返、/api/travel 搬進 features/travel；計畫 docs/superpowers/plans/2026-11-06-移動包-第1批.md 1.1）。
 # 主人都是核心或第 48 批（移動二：出發與抵達的補算、結伴同行）；包要叫的核心服務，上面大多已經列了（`ctx.content`、`ctx.state`、`ctx.world`、`ctx.rng`、
@@ -491,8 +499,9 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 # cultivation（全部拆包第 23 批；Game.__init__ 起的）
 - `ctx.forged`、`ctx.forged_thing`、`ctx.secret_solved`：這一下裝成了沒、合出了什麼、解開了哪一份口訣秘方（裝意境寫，server 的
   api_menxia_do 在鎖裡讀；煉製 `Game.forge`、自創 `create_name` 也寫——煉製第 44 批）
-# peers（全部拆包第 37 批）
-- `ctx.peer_brief`（論武合成了才填、`peer_act` 每次開頭清掉；提示泡泡那一句，伺服器在鎖裡讀。論武第 38 批搬走時改掛到論武那一包）
+# peers（全部拆包第 37 批；第 38 批論武進包）
+- `ctx.peer_brief`（論武合成了才填、`peer_act` 每次開頭清掉；提示泡泡那一句：寫它的是包的 discuss_actions.discuss、清它的是 actions.peer_act、讀它的是包的 routes.py；
+  屬性留在 Game）
 
 # smithy（全部拆包第 41 批）
 - `ctx.smith_result`（`smith_forge` 寫、server 的 `api_do` 在鎖裡讀：上一次店面直接開爐的出爐卡，shopview.forged_card；被拒絕是 None。屬性留在 `Game.__init__`）
