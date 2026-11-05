@@ -28,7 +28,7 @@ def profile(ctx: Game, old: GameState, season: WorldState | None) -> dict:
 
 def past(ctx: Game, old: GameState) -> WorldState | None:
     """換季那一刻（_reset_player_for_new_season）：上一季開著列傳為終點（zhuan_end）就回那一季（WorldStateStore.past_season），
-    先替這個人補上收季之後還沒記的季末論功與〈天下形勢〉（同步時記的那兩種，annals.tier_note、xingshi_notes），身家照它多論功的那幾樣；
+    先替這個人補上收季之後還沒記的季末論功與〈天下形勢〉（同步時記的那兩種，standing_mod.tier_note、xingshi_notes），身家照它多論功的那幾樣；
     關著（設定沒開就不讀資料庫）是 None，一個字都不變。old 是上一季的存檔，馬上就丟：old.world 換成上一季那一份才記得到正確的時刻。"""
     cfg = ctx.content.config.jianfa
     if not (cfg.enabled and cfg.zhuan_end):
@@ -43,8 +43,8 @@ def past(ctx: Game, old: GameState) -> WorldState | None:
 
 
 def tick(ctx: Game) -> None:
-    """列傳為終點（減法季批 7b-1）：同步時替自己記行狀——〈天下形勢〉上一次看到之後寫到名號的那幾篇（annals.xingshi_notes），
-    季收了之後的季末論功（annals.tier_note）。只改自己的存檔，不存季。關著（zhuan_end）什麼都不做。"""
+    """列傳為終點（減法季批 7b-1）：同步時替自己記行狀——〈天下形勢〉上一次看到之後寫到名號的那幾篇（standing_mod.xingshi_notes），
+    季收了之後的季末論功（standing_mod.tier_note）。只改自己的存檔，不存季。關著（zhuan_end）什麼都不做。"""
     s, c = ctx.state, ctx.content
     if not jianfa(c, s.world, "zhuan_end"):
         return
@@ -138,7 +138,7 @@ def options(ctx: Game) -> list[Option]:
 
 
 def verdict_taken(standing: dict) -> list[str]:
-    """這一季已經白送評曰的人物（annals.standing 的 verdicts：第一二階的主將或家主、情誼 70 以上的；親筆評曰不再列他們）。"""
+    """這一季已經白送評曰的人物（standing_mod.standing 的 verdicts：第一二階的主將或家主、情誼 70 以上的；親筆評曰不再列他們）。"""
     return [w["fid"] for w in standing.get("verdicts", [])]
 
 

@@ -12227,7 +12227,7 @@ class ZhuanScenario(Scenario):
         self.main(self.MODEL_W)
 
     def pending(self) -> None:
-        """半舊半新的切點：狀態變了（情誼跨格、等級；同伴 id 是人物表的、不在 characters，watch 不記）、annals_mark 還是舊的（edit_state 直接存，沒有走動作）——有 mark 還沒寫成行狀。
+        """半舊半新的切點：狀態變了（情誼跨格、等級；同伴不會記：建 Game 時 engine.py 的 _drop_stale_references 把隊伍收成名下的同伴〔roster 開著〕，edit_state 塞進去的那一位 watch 看不到）、annals_mark 還是舊的（edit_state 直接存，沒有走動作）——有 mark 還沒寫成行狀。
         前半停在這裡，後半第一件事（flush）才讓 watch 比出來。"""
         figs = self.figs()
         for who in (self.RULE, self.FREE):

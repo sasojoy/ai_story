@@ -3,7 +3,9 @@
 
 - biography.py：人物列傳的規則（原 tianxia/biography.py）；zhuan_end.py：列傳為終點的規則（原 tianxia/zhuan_end.py；核心要用的那一段
   illustration_for／writers／art_problem 在 core/services.py，這裡 re-export）；zhuan_html.py：公開頁（原根目錄 zhuan_html.py）——舊名都留成別名
-- actions.py：原本 Game 上的 20 個方法（Game 留 9 個一行委派）與休季用票的 choose
+- actions.py：原本 Game 上的 20 個方法（Game 留 10 個一行委派，第 29 批之二加了換季存行狀的 profile）與休季用票的 choose
+- standing.py：行狀的查詢與行狀頁那一半（第 29 批之二，原 tianxia/annals.py 的 profile、standing、tier_*、xingshi_notes、rows）；
+  記一筆那一半在核心 core/annal_base.py，這裡 re-export，舊名 tianxia/annals.py 是指到這個模組的 sys.modules 別名
 - routes.py：/api/annals、/api/zhuan、/api/zhuan/write、/api/zhuan/share、/zhuan/{code}（原本寫在 server.py；殼照 FEATURES 掛）
 
 選項前綴 zhuan:（zhuan:pick_art、zhuan:seal、zhuan:quote:<人物 id>）。掛鉤：choose_unlisted（原本 Game.choose 在 choose_unlisted 之後、查選單之前
@@ -20,7 +22,7 @@ class ZhuanFeature(Feature):
     name = "zhuan"
     prefix = "zhuan"
     content = ("verdicts.json",)  # content.py 照舊讀（核心沒有 import 這一包）；驗證在下面的 check_content
-    # 沒有認領的 PlayerState 欄位：annals、annals_mark、xingshi_seen 是行狀，核心 annals.py 管；列傳存在資料庫的 biographies 表、票在錢包裡
+    # 沒有認領的 PlayerState 欄位：annals、annals_mark、xingshi_seen 是行狀，核心 core/annal_base.py 管；列傳存在資料庫的 biographies 表、票在錢包裡
     player_fields: tuple[str, ...] = ()
     carried: tuple[str, ...] = ()
 
