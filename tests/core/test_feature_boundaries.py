@@ -1046,6 +1046,35 @@ GAME_DIRECT.update({
 })
 
 
+# travel（全部拆包第 47 批「移動一」；計畫 docs/superpowers/plans/2026-11-06-移動包-第1批.md 1.4）：選單的順序算行為
+# （/api/main 的選項一顆一顆逐位元組：站著的時候「前往」夾在求見、招募之後、拜師之前；路上那串是折返、帶路一句、喊停、路上小事、擂台），
+# 不能改成 Feature.options 登記（會排進 FEATURES 的順序），所以 Game 原位那幾行叫委派、位置不動。
+_TRAVEL_MENU = "選單的順序算行為（/api/main 的選項一顆一顆逐位元組）；移動的選單不能改成 Feature.options 登記（會排進 FEATURES 的順序），原位叫委派、位置不動"
+GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_move_option"): _TRAVEL_MENU + "：站著的時候「前往」夾在求見、招募之後、拜師之前",
+    ("_everyday_options", "_back_option"): _TRAVEL_MENU
+    + "：路上那串的折返，在 act:on_road（結伴時是 act:part）之後、帶路的路上一句與喊停之前",
+    ("_everyday_options", "_road_task_options"): _TRAVEL_MENU + "：路上小事在喊停之後、擂台之前（結伴同行時緊接在 act:part 後面）",
+    ("_arrivals", "_road_sight"): "抵達一站的迴圈中途（_ambush_check → _arrive → 騎乘飽足 → 路上見聞）：位置固定、沒有對應的掛鉤；第 48 批 _arrivals 搬進移動包時改經 ctx",
+})
+GAME_IMPORTS |= {
+    # travel（全部拆包第 47 批）：移動選單、路上小事、喊停、折返、安排前往的 9 個一行委派
+    "tianxia.features.travel.menu", "tianxia.features.travel.road_actions", "tianxia.features.travel.go_actions",
+}
+GAME_DELEGATES |= {
+    # travel（全部拆包第 47 批）：移動一的 9 個一行委派。_move_option、_back_option、_road_task_options 給選單（順序算行為，不能改成 Feature.options）；
+    # _road_sight、_road_reward_due、_count_road_reward 給 _arrivals 與第 48 批的 _share_road；set_move_mode 給 server、腳本與測試；
+    # travel、travel_refusal 給 /api/travel、假人（bot_policy._rally）、腳本與 21 個測試檔（測試也換掉 game.travel_refusal 繞過檢查）
+    "_move_option", "_back_option", "_road_task_options", "set_move_mode", "_road_reward_due", "_count_road_reward", "_road_sight",
+    "travel", "travel_refusal",
+}
+# 拿掉別人段裡的格：在自己的段 del（halt、check_hints、report_seat、hear_after_stamina 現在由包經 ctx 叫，不再是 Game 內部互叫）
+del GAME_DELEGATE_CALLERS[("_halt", "_sync_battle_presence")]
+del GAME_DELEGATE_CALLERS[("travel", "_check_hints")]
+del GAME_DELEGATE_CALLERS[("travel", "_report_seat")]
+del GAME_DELEGATE_CALLERS[("travel", "_hear_after_stamina")]
+
+
 @functools.lru_cache(maxsize=None)
 def _engine_tree() -> ast.Module:
     return ast.parse((TIANXIA / "engine.py").read_text(encoding="utf-8"))  # 一萬七千行，parse 一次一秒多：大家共用這一份

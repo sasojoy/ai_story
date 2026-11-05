@@ -51,6 +51,8 @@ from ..features import stamina_plays  # 體力玩法（設伏、屯糧）：全�
 from ..features import seclusion  # 閉關：全部拆包第 39 批。只有 verbs()（act:break），沒有選項、選單
 # peers
 from ..features import peers  # 玩家互動一（此地還有、玩家卡、邀請框、打招呼、贈物、名帖）：全部拆包第 37 批（只接 invite: 的 choose、換季的頭銜簿與路由，排在哪裡結果都一樣）
+# travel
+from ..features import travel  # 移動一（移動選單、路上小事、喊停、折返、/api/travel）：全部拆包第 47 批（choose 前綴 move、road；Verb halt；路由）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -100,6 +102,8 @@ FEATURES: list[Feature] = [
     seclusion.FEATURE,
     # peers（排在 seclusion 後面〔照合併先後〕：只接 invite: 的 choose、on_season_start 與路由，跟 stamina_plays、seclusion、territory_acts 的掛鉤不重疊，順序不影響結果）
     peers.FEATURE,
+    # travel（排在最後：choose 前綴 move、road 與別的包不重疊；Verb halt 與別的包的 verb 不同名；路由 /api/travel 不重疊；順序不影響結果）
+    travel.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 
