@@ -387,6 +387,14 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
   `ctx._join(inv, other)`（主人移動 features/travel：答應結伴同行）：`answer_invite` 照邀請的種類叫它們
 - `ctx.join_refusal(leader)`（主人移動：答應跟某人結伴同行，不行的原因；假人回結伴邀請〔bots.answer_call〕先問它）
 
+# travel（全部拆包第 47 批「移動一」：移動選單、路上三樣小事、喊停、折返、/api/travel 搬進 features/travel；計畫 docs/superpowers/plans/2026-11-06-移動包-第1批.md 1.1）。
+# 主人都是核心或第 48 批（移動二：出發與抵達的補算、結伴同行）；包要叫的核心服務，上面大多已經列了（`ctx.content`、`ctx.state`、`ctx.world`、`ctx.rng`、
+# `ctx._draft`、`ctx._log`、`ctx._save_season`、`ctx._preparing`、`ctx.push_trend`、`ctx._check_hints`、`ctx._depart`），這一段記還沒列的：
+- `ctx.move_mode`（主畫面選的走法；`Game.__init__` 起、server 在鎖裡逐次 `set_move_mode`；選單的「前往」「折返」標籤與 `/api/travel` 預設的走法都讀它）
+- `ctx._road_gain`（這一件路上小事的收穫：路上小事填、`_share_road` 分給結伴同行的人；第 48 批 `_share_road` 搬走時一起搬）
+- `ctx._share_road(what)`、`ctx._lead(...)`、`ctx._sync_battle_presence()`（主人移動第 48 批：結伴同行分收穫、帶路、出發抵達時對一下決戰的人在不在）
+- `ctx._report_seat()`、`ctx._hear_after_stamina()`（走完一趟之後抄帳、抽一次耳聞；原本是 `travel` 在 Game 上直接叫的，搬成包之後位置不動）
+
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 
 explore（主動搬六包第 3＋4 批加的這一段；都是 Game.__init__ 起的）
@@ -442,6 +450,14 @@ RANK_ACTION_PREFIX = "act:rank:"  # 第 3、4 階行動的選項 id 前綴（act
 # stamina_plays（全部拆包第 39 批：原本寫在 tianxia/ambush.py；核心的移動被擋〔engine 的 _move_option〕要用、核心不能 import 包，搬到這裡，
 # ambush.MOVE_BLOCKED 照舊是同一個字串）
 MOVE_BLOCKED = "守著埋伏"
+# travel（全部拆包第 47 批：原本寫在 engine.py；移動包的路上小事選單要讀、核心的重設與第 48 批的 _share_road 也讀，搬到這裡，engine 照舊叫得到）
+# 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見移動包的 road_task_options
+ROAD_TASKS: dict[str, tuple[str, str]] = {
+    "think": ("邊走邊想", "想過了"),
+    "ask": ("沿途打聽", "打聽過了"),
+    "gather": ("路邊採集", "找過了"),
+}
+ROAD_REWARD_TASKS = ("think", "gather")  # 有經濟收穫、受每天上限管的路上小事（Config.road_reward_daily_cap）
 
 
 # stamina_plays（全部拆包第 39 批：原本寫在 engine.py；設伏的贏家帳〔包〕與截殺〔核心〕共用，包不能 import engine，搬到這裡，
