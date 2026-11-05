@@ -61,14 +61,16 @@
 .lg-ink-a-luck { stop-color: #8a6420; } .lg-ink-b-luck { stop-color: #f0cf78; }
 .lg-ink-top { fill: none; stroke-width: 5; opacity: 0.7; }
 .lg-ink-top-zheng { stroke: #cfe5f7; } .lg-ink-top-xie { stroke: #f0a070; } .lg-ink-top-luck { stroke: #f6e0a0; }
+/* 三項的名字、值、上一季：底下是淡色的山霧，字照舊淺色但壓一圈深色的暈，才看得清（企劃者 2026-11-05「字跟背景顏色相近根本看不清楚」） */
+.lg-name, .lg-val, .lg-gain { text-shadow: 0 0 2px #0d0a07, 0 0 6px #0d0a07, 0 1px 10px rgba(13, 10, 7, 0.9); }
 .lg-name { font: 700 18px "Noto Serif TC", serif; letter-spacing: 0.24em; }
 .lg-c-zheng { color: #9cc6ec; } .lg-c-xie { color: #e08a55; } .lg-c-luck { color: #f0cf78; }
 .lg-val { font: 700 32px/1 "Noto Serif TC", serif; color: #f3e6c8; }
-.lg-gain { font-size: 13px; color: #c4f0cf; }
+.lg-gain { font-size: 14px; font-weight: 700; color: #d8f7df; }
 .lg-slips { display: flex; gap: 4px; justify-content: center; margin-top: 6px; }
 .lg-slip {
   position: relative; isolation: isolate; overflow: hidden;
-  width: 32px; height: 150px; padding: 8px 0; border-radius: 3px; border: 1px dashed #6b5a42; background: #1e1a15; color: #b3a387; text-shadow: none;
+  width: 32px; height: 150px; padding: 8px 0; border-radius: 3px; border: 1px dashed #6b5a42; background: #1e1a15; color: #e2d5b8; text-shadow: 0 1px 2px #000;
   font: 400 14px "LXGW WenKai TC", serif; writing-mode: vertical-rl; letter-spacing: 0.12em;
   display: flex; align-items: center; justify-content: space-between; cursor: pointer;
 }
@@ -77,7 +79,8 @@
 .lg-slip.open::before { filter: none; }
 .lg-slip.open { border: 1px solid #8a7550; background: #d9c69a; color: #2a1f14; }
 .lg-slip.open span { font-weight: 700; }
-.lg-slip small { font-size: 11px; letter-spacing: 0; }
+.lg-slip small { font-size: 12px; letter-spacing: 0; color: #f0c98a; }
+.lg-slip.open { text-shadow: none; }
 .lg-slip.open small { color: #9a2a20; }
 .lg-slip[aria-pressed="true"] { outline: 2px solid #e0b860; outline-offset: 2px; }
 .lg-note { min-height: 3.2em; margin: 16px 20px 0; font-size: 15px; line-height: 1.6; text-align: center; color: #e6d8b8; text-shadow: 0 1px 3px #000; }
@@ -100,7 +103,7 @@
 .lg-sea-title { position: absolute; left: 24px; top: 24px; display: flex; gap: 14px; align-items: flex-start; }
 .lg-sea-title h2 { margin: 0; writing-mode: vertical-rl; font: 700 48px/1 "Noto Serif TC", serif; letter-spacing: 0.2em; color: #e6f1fb; }
 .lg-sea-title { text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7); }
-.lg-sea-title p { margin: 6px 0 0; writing-mode: vertical-rl; font-size: 15px; line-height: 1.8; letter-spacing: 0.24em; color: #8fb2cf; }
+.lg-sea-title p { margin: 6px 0 0; writing-mode: vertical-rl; font-size: 15px; line-height: 1.8; letter-spacing: 0.24em; color: #d3e6f6; text-shadow: 0 0 3px #0a1220, 0 0 8px #0a1220; }
 .lg-orb-wrap { position: absolute; left: 50%; top: 200px; width: 240px; height: 300px; margin-left: -120px; }
 .lg-orb-wrap svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .lg-talisman {
@@ -111,10 +114,10 @@
 .lg-talisman span { writing-mode: vertical-rl; font: 700 13px "Noto Serif TC", serif; letter-spacing: 0.2em; color: #5a3f22; }
 .lg-talisman b { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: #b8352b; color: #fff1dc; font: 700 20px "Noto Serif TC", serif; }
 .lg-insight { text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8); position: absolute; left: 0; right: 0; top: 520px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.lg-insight small { font-size: 13px; letter-spacing: 0.24em; color: #8fb2cf; }
+.lg-insight small { font-size: 14px; letter-spacing: 0.24em; color: #d3e6f6; text-shadow: 0 0 3px #0a1220, 0 0 8px #0a1220; }
 .lg-insight b { font: 700 30px "Noto Serif TC", serif; letter-spacing: 0.24em; color: #f2f8ff; }
 .lg-insight.empty { top: 300px; }
-.lg-insight.empty b { color: #8fb2cf; }
+.lg-insight.empty b { color: #e6f1fb; text-shadow: 0 0 3px #0a1220, 0 0 10px #0a1220; }
 .lg-sea-body { position: relative; padding: 24px 20px 0; margin-top: -24px; display: flex; flex-direction: column; gap: 12px;
   background: linear-gradient(rgba(28, 33, 47, 0), rgba(28, 33, 47, 0.88) 40px, #1c2130 220px); }
 .lg-sep span { text-shadow: 0 1px 4px #000; }
@@ -139,8 +142,8 @@
   min-height: 52px; border-radius: 26px; border: 1px solid #7fb4e0; background: #1d4a73; color: #f2f8ff;
   font: 700 18px "Noto Serif TC", serif; letter-spacing: 0.3em; cursor: pointer;
 }
-.lg-break:disabled { border-color: #2f5d8a; background: #0e2236; color: #7d98b0; cursor: default; }
-.lg-hint { margin: 0; font-size: 13px; line-height: 1.6; color: #8fa9bf; text-align: center; }
+.lg-break:disabled { border-color: #3d6c99; background: #0e2236; color: #a9c1d6; cursor: default; }
+.lg-hint { margin: 0; font-size: 13px; line-height: 1.6; color: #bcd0e2; text-align: center; }
 .lg-warn { margin: 0; font-size: 14px; line-height: 1.6; color: #f0b89f; }
 .lg-rename p { margin: 0 0 8px; font-size: 14px; line-height: 1.6; color: #dcebf7; }
 .lg-rename .row { display: flex; flex-wrap: wrap; gap: 8px; }
