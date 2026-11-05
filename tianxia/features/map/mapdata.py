@@ -7,7 +7,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 
-from tianxia import atlas, bounties, figures, orders  # 過渡：待搬（地點與路的資料；懸賞榜；大勢人物；軍令：atlas 第 50 批拆兩半〔第 49 批 PM 認定第 2 條〕，留下的那一半不進包）
+from tianxia import atlas, bounties, figures, orders  # 過渡：待搬（懸賞榜；地點與路的資料：atlas 第 50 批拆兩半〔第 49 批 PM 認定第 2 條〕，留下的那一半不進包）
 from tianxia import calendar, conquest, equipment, insights, materials, mounts, rules, terrain, territory, timetable, week_unlock
 from tianxia.core import services  # 探索表的小字、地形標籤、勝算的「必敗」：探索包、有所感包的純函式搬到核心的服務檔（第 49 批）
 from tianxia.models import Content, FactionDef, Location

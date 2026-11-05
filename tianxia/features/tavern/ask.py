@@ -161,7 +161,7 @@ def shop_lines(state: GameState, content: Content, key: str, label: str) -> list
 
 def figure_lines(state: GameState, content: Content, cid: str) -> list[str]:
     """一位人物：在哪（照打聽度，tavern.seek_figure_lines）、哪一方、出身與眼下處境（內容檔寫好的，不是模型編的）、心事。"""
-    from tianxia import figures  # noqa: PLC0415  過渡：待搬（大勢人物在哪）
+    from tianxia import figures  # noqa: PLC0415  共用規則層（大勢人物在哪；第 40 批收進）
 
     ch = content.characters[cid]
     lines = [line.removeprefix("酒家說：「").removesuffix("」") for line in tavern.seek_figure_lines(state, content, cid)]

@@ -23,7 +23,7 @@ from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 
 from tianxia import battle_instance, battlelog, tactics  # 共用規則層（戰鬥規則核心）
 from tianxia import conquest, siege  # 共用規則層（地盤與攻城）
 from tianxia import four_tiers, materials, mounts, renown, roster  # 共用規則層（四階料、素材、坐騎、名聲、同伴；絕學的契機第 23 批改叫 ctx._seize_chance）
-from tianxia import figure_life, front_lines, seal, wins  # 過渡：待搬（人物風聞、戰線、玉璽、三陣營四勝利）
+from tianxia import figure_life, front_lines, seal, wins  # 過渡：待搬（戰線、玉璽、三陣營四勝利）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章；照 engine 的叫法）
 from tianxia.core.services import PAUSED_TEXT
 from tianxia.models import MOVES, BattleDef

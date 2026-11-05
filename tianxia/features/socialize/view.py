@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from tianxia import precise, ranks, roster, treasures  # 過渡：待搬（階級 ranks 第 40 批）
+from tianxia import precise, ranks, roster, treasures  # 共用規則層（階級 ranks 第 40 批收進；precise、roster、treasures）
 from tianxia.core.services import AUDIENCE_HALL_FIGURES, SNUB_NOTE, SOCIAL_NO_ONE
 from tianxia.events import event_candidates, has_events_here  # 過渡：待搬（事件：候選、這個地點有沒有）
 from tianxia.models import Event

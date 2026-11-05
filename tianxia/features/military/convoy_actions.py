@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from tianxia import materials, team, wins
-from tianxia import orders  # 過渡：待搬（軍令 orders，總表第 40 批收共用規則層）
+from tianxia import orders  # 共用規則層（軍令 orders，第 40 批收進）
 from tianxia.rules import front_of
 from tianxia.state import Convoy, PlayerState
 

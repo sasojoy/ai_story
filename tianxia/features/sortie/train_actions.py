@@ -18,7 +18,7 @@ from tianxia import calendar, team
 from tianxia import howto  # 過渡：待搬（遊歷那一行的句子）
 from tianxia import materials  # 共用規則層（素材：打贏會不會掉）
 from tianxia import mounts  # 共用規則層（坐騎：必敗先問的那一句寫策馬脫身的機會）
-from tianxia import orders  # 過渡：待搬（軍令：截糧時那一帶的敵方運糧隊）
+from tianxia import orders  # 共用規則層（軍令：截糧時那一帶的敵方運糧隊；第 40 批收進）
 from tianxia import precise  # 共用規則層（一類一顆：守勢再加跟守一樣的經驗心得）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章：雪恥那一步的對手與寫好的結果）
 from tianxia import territory  # 共用規則層（地盤：站的照控制方）

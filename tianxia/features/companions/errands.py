@@ -277,7 +277,7 @@ def scout_lines(state: GameState, content: Content, e: ErrandState) -> list[str]
     """探營那一張卡（整合設計 5.9「對面幾人在推、條幾成、守將是誰」）：領地爭奪開著、那裡是一塊地時寫誰佔著、每一邊的攻勢推到幾成、
     這幾天幾人在這裡出陣；最後一句是守將（在場的大勢人物）或守在那裡的隊伍。字待 joy 潤。"""
     from tianxia import conquest, territory  # noqa: PLC0415  conquest → territory → rules
-    from tianxia import figures  # noqa: PLC0415  過渡：待搬（第 40 批進共用規則層）
+    from tianxia import figures  # noqa: PLC0415  共用規則層（第 40 批收進）
 
     w, loc = state.world, e.target
     names = content.scenario.faction_name

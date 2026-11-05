@@ -23,7 +23,7 @@ from tianxia import encounter  # 共用規則層（單次判定：混戰）
 from tianxia import four_tiers  # 共用規則層（素材四階：打贏照掉落表掉素材）
 from tianxia import howto  # 過渡：待搬（行動列底下那一行的句子）
 from tianxia import materials  # 共用規則層（素材的掉落與發放）
-from tianxia import orders  # 過渡：待搬（軍令：截糧的運糧隊、出陣回報的軍令小籤）
+from tianxia import orders  # 共用規則層（軍令：截糧的運糧隊、出陣回報的軍令小籤；第 40 批收進）
 from tianxia import precise  # 共用規則層（一類一顆：打贏的獎勵怎麼算）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章：雪恥、不掉東西）
 from tianxia import ranger  # 共用規則層（遊俠名號：經驗倍數）

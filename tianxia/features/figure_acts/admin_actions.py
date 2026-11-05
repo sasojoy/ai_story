@@ -3,7 +3,7 @@
 """
 from __future__ import annotations
 
-from tianxia import figures  # 過渡：待搬（大勢人物 figures，總表第 40 批）
+from tianxia import figures  # 共用規則層（大勢人物 figures，第 40 批收進）
 
 
 def fallen(ctx) -> list[str]:

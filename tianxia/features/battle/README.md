@@ -60,3 +60,5 @@
 **全部拆包第 25 批（core_world：世界層掛鉤，`world` 收進核心本體）**：包 import `world` 的 6 處（`progress.py` 2 行、`generals.py` 函式裡 2 處、`sieges.py`、`admin.py` 各 1 行）是核心了，不算過渡、行尾的「過渡：待搬」拿掉——決戰包 → 舊模組剩 **7 處**（`view.py` 3、`progress.py` 的 `seal`、`generals.py` 的 `figures`、`sieges.py` 的 `orders`、`muster.py` 的 `atlas`）。舊模組 → 決戰包少 1：`world.py` 開集結派龍頭上陣（函式裡 `from . import generals`）換成世界層 `muster` 的 `generals` 那一格（`__init__.py` 的 `world()` → `generals.world_muster`；排在起點、屯糧、玉璽之後，先後在核心的 `WORLD_ORDER`；不問 `enabled`）。
 
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+
+**全部拆包第 40 批（core_world2：六個舊模組收進共用規則層）合完重印**：包 → 舊模組 **3 處**（`muster.py` → `atlas`、`progress.py` → `seal`、`view.py` → `seal`）；`view.py` → `figure_life`、`generals.py` → `figures`、`sieges.py` → `orders` 這 3 處第 40 批收進共用規則層，不算過渡（原本 6 處）：`generals.py`、`sieges.py` 那兩行的註改寫成「共用規則層（…第 40 批收進）」，`view.py` 那一行還有 `seal`，「過渡：待搬」照留。

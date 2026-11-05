@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from tianxia import calendar, library, precise, prologue  # 核心、共用規則層
-from tianxia import ranks  # 過渡：待搬
+from tianxia import ranks  # 共用規則層（階級，第 40 批收進）
 from . import enlist
 # 序章步驟的獎勵那一行的記號（HutReward）：核心的 Game._guide 認它，型別在核心（全部拆包第 22 批），這裡照舊叫得到
 from tianxia.core.services import HutReward  # noqa: F401

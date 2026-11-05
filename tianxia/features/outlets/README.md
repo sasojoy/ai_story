@@ -59,4 +59,4 @@
 
 ## 過渡（手冊 3.11）
 
-過渡 import 共 2 處：`donate_actions` 到 `shopview`、`silver_actions` 到 `figures`（`figures` 排總表第 40 批收進共用規則層）。
+過渡 import 共 1 處（全部拆包第 40 批合完重印）：`donate_actions` 到 `shopview`。`silver_actions` 到 `figures` 那一處第 40 批 `figures` 收進共用規則層，不算過渡（原本 2 處）。

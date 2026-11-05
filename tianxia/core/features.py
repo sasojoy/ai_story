@@ -50,7 +50,7 @@
 | verbs()（Verb） | act 子動詞：_act 最前面、_action_title、行動列那一格（_everyday_options）、行動列底下那一行（action_notes）、只打開一張卡的回話（choose）；
   這一下打哪一路（_fight_squad 最前面：大場面判讀問；sortie：全部拆包第 17 批多開的一格 squad） |
 | world()（WorldHook） | 世界層的格（core_world：全部拆包第 25 批）：world.advance_world_state 每一步、season_events 的週初與每天、settle_season_start、
-  end_season、_open_claimed；sqlite_world 的開季與換季。照檔尾那張寫死的順序表 WORLD_ORDER 一格一格叫（包與還沒成包的舊模組穿插），不問 enabled |
+  end_season、_open_claimed；sqlite_world 的開季與換季；figure_life.tick 每一位對話人物（life，第 40 批）。照檔尾那張寫死的順序表 WORLD_ORDER 一格一格叫（包與還沒成包的舊模組穿插），不問 enabled |
 | effects()（EffectHook） | 一則效果的格（core_effects：全部拆包第 32 批）：rules.apply_effect 從頭到尾一段一格，照檔尾寫死的順序表 EFFECT_ORDER 一格一格叫
   （每一個效果欄位歸哪一格寫在 EFFECT_FIELDS），不問 enabled |
 | defection()（DefectHook） | 叛投那一刻的格（core_effects）：defection.clear_progress（clear）、defection.defect（leave、stranded）、陣營包
@@ -630,6 +630,7 @@ class WorldHook:
 # open    sqlite_world 開季那一刻（seed_first_season 自動開的、open_season）          (shared, content, now) -> None               不接（自動開的 now 是 None）
 # retire  sqlite_world.next_season 換新季之前（首創之後、清奪璽單挑之前）             (shared, content, now, seen) -> bool         寫了上一季的江湖史就是 True
 # next    sqlite_world.next_season 蓋上新的天機之後、挪開半夜之前                     (shared, content, now, old_season) -> None   不接
+# life    figure_life.tick 每一輪每一位對話人物（_maybe_rally 之前；core_world2）      (state, content, cid, turn) -> None          不接
 WORLD_ORDER: dict[str, tuple[str, ...]] = {
     "step": ("bounties", "figures.recover", "figures.revive", "seal_acts", "figure_life", "feast", "plans", "yuedan"),
     "week": ("seats", "orders", "bounties", "stances"),
@@ -640,6 +641,7 @@ WORLD_ORDER: dict[str, tuple[str, ...]] = {
     "open": ("divine", "seal.cache"),
     "retire": ("seal",),
     "next": ("inscriptions", "divine", "seal.mandate", "seal.cache"),
+    "life": ("feast",),  # core_world2（全部拆包第 40 批）：設宴，宴客包登記；核心不代叫
 }
 
 

@@ -156,7 +156,7 @@ def bot_pick(state: GameState, content: Content) -> tuple[str, str] | None:
     rng = random.Random(f"心意|{w.tianji}|{p.name}|{day}")
     if rng.random() >= content.config.jianfa.bot_stance_chance:
         return None
-    from tianxia import figures  # noqa: PLC0415  過渡：待搬（第 40 批進共用規則層）
+    from tianxia import figures  # noqa: PLC0415  共用規則層（第 40 批收進）
 
     side = p.ally if p.ally is not None else p.faction
     pool = [fid for fid, fig in content.figures.items() if fig.stances and (side not in ("guan", "huang") or fig.faction == side)

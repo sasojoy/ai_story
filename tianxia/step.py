@@ -21,8 +21,9 @@
 - 反過來也挑不到（第 36 批審查）：test_for 碰到核心模組就不往上找，bounties 又是在函式裡才 import（不算進依賴），所以改 step、weekcard
   依賴的舊模組時上面那一串（加 tests/bots/test_step.py）多半挑不到。第 45 批之前改 bounties.py 另跑 tests/bots/test_step.py
   （test_bounty_newbie_and_join_get_their_places、test_errand_and_foreshadow_get_their_places 釘住委託、懸賞兩格）、
-  tests/map/test_weekcard.py；改 chapters.py、atlas.py、orders.py、figures.py、seal_acts.py 少挑哪幾個見
-  docs/superpowers/plans/2026-11-06-你這一步-第36批.md 第六節。"""
+  tests/map/test_weekcard.py；改 atlas.py、seal_acts.py 少挑哪幾個見 docs/superpowers/plans/2026-11-06-你這一步-第36批.md 第六節。
+  chapters.py、orders.py、figures.py 第 40 批收進共用規則層：改它們 test_for 只挑自己檔名的測試＋煙霧＋邊界，上面那一串（加
+  tests/bots/test_step.py）照舊另外跑（各自的模組說明也寫了）。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

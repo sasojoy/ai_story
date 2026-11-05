@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import allied, roster, seats, wins
 from tianxia import bounties  # 過渡：待搬（第 45 批：懸賞榜；手上揭著的舊陣營懸賞作廢）
-from tianxia import ranks  # 過渡：待搬（第 40 批：階與稱號）
+from tianxia import ranks  # 共用規則層（階與稱號，第 40 批收進）
 from tianxia.core import convoy_base, omen_base
 from tianxia.core import features as features_core  # 核心：叛投那一刻各包清自己的進度（core_effects：全部拆包第 32 批，DEFECT_ORDER）
 from tianxia.models import Content, FactionDef, Sect

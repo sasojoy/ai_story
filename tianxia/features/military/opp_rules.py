@@ -14,8 +14,9 @@ import random
 from typing import NamedTuple
 
 from tianxia import calendar, timetable, wins
-from tianxia import figures, ranks  # 過渡：待搬（大勢人物 figures、階級 ranks，總表第 40 批收共用規則層）
+from tianxia import figures, ranks  # 共用規則層（大勢人物 figures、階級 ranks，第 40 批收進）
 from tianxia.core.omen_base import _live, done_for_rank, in_plot  # noqa: F401  只讀那一半在 core/omen_base，這裡 re-export 同一批名字
+from tianxia.core.omen_base import heard_clues, opp_active as active  # noqa: F401  core_world2：機緣「讀」的那一半（全部拆包第 40 批），re-export 同一批
 from tianxia.journal import fragment_line
 
 from . import fs_rules as foreshadow  # 同一包的伏筆規則（原本 import 舊名 foreshadow；測試換掉 foreshadow 的屬性，兩邊是同一個模組物件）
@@ -78,10 +79,6 @@ def windows(content: Content, season: WorldState | None = None) -> Windows:
         showdown_seconds=max(cfg.opp_showdown_days * calendar.DAY / scale, floor),
         plot_seconds=max(cfg.plot_days * calendar.DAY / scale, floor),
     )
-
-
-def active(state: GameState, content: Content) -> bool:
-    return season_one(content, state.world) and bool(content.opportunities)
 
 
 def open_ones(state: GameState, content: Content) -> list[OppDef]:
@@ -395,23 +392,6 @@ def hear_clue(state: GameState, key: str, text: str) -> list[str]:
     回傳寫進江湖紀錄的那一句（「你聽到一件事：…」）。不發傳聞。"""
     state.player.opp_clues.append(key)
     return [fragment_line(text)]
-
-
-def heard_clues(state: GameState, content: Content) -> list[str]:
-    """聽過的機緣線索（見聞頁的「個人線索」，FB-086）：天時地利型的線索加上推理型內鬼的特徵片段，照聽到的先後（opp_clues 的順序），
-    字跟當時寫進江湖紀錄的那一句一樣（hear_clues 的 text，只是不帶「你聽到一件事：」，跟伏筆片段 foreshadow.heard_texts 的寫法一致）。
-    只有這個人自己聽過的（opp_clues 是他的存檔）；機緣完成了、時段過了照舊留著（跟伏筆完成之後片段還在一樣，不標記）；
-    叛投之後舊陣營的線索也留著（clear 不清 opp_clues，企劃者裁決 E5.2），只是那些機緣做不了了。內容裡已經沒有的機緣或特徵（改版拿掉）略過。
-    機緣沒在跑（開關關著、沒有機緣）時是空的。"""
-    if not active(state, content):
-        return []
-    texts: dict[str, str] = {}
-    for o in content.opportunities:
-        if o.kind == "timing":
-            texts[o.id] = o.timing.clue
-        elif o.kind == "deduce":
-            texts.update({f"{o.id}:{t.key}": t.text for t in o.deduce.traits})
-    return [texts[key] for key in state.player.opp_clues if key in texts]
 
 
 # ── 推理型 ─────────────────────────────────

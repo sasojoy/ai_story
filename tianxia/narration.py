@@ -17,7 +17,8 @@ import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
-from . import calendar, events, foreshadow, rules, zh
+from . import calendar, events, rules, zh
+from .core import omen_base  # 伏筆的事件：核心的查詢服務（全部拆包第 40 批，原本經舊名 foreshadow 讀軍情包）
 from .models import Content, Event
 from .state import WorldState
 
@@ -70,7 +71,7 @@ def period(content: Content, world: WorldState) -> int:
 def eligible(content: Content) -> list[str]:
     """這一季要改寫的事件（照 id 排，背景執行緒照這個順序寫）：從池子裡抽得到的那些（actions 不空），扣掉奇遇與一次性的、福緣、
     伏筆的、晉升的；序章、開局、晉升召見都是串接或指定的（actions 空的），本來就不在裡面。"""
-    skip = foreshadow.event_ids(content) | {x for p in content.promotions for x in (p.event_main, p.event_handoff) if x}
+    skip = omen_base.event_ids(content) | {x for p in content.promotions for x in (p.event_main, p.event_handoff) if x}
     return sorted(
         e.id for e in content.events.values()
         if e.actions and not events.is_rare(e) and not e.fortune and e.id not in skip

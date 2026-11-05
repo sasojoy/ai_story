@@ -60,6 +60,6 @@
 
 ## 過渡（手冊 3.11）
 
-過渡 import 5 處（行尾標「過渡：待搬」）：`bounties`（第 45 批：懸賞榜；`join_actions.py`、`lean_actions.py`、`defection.py` 各一）、`ranks`（第 40 批：階與稱號；`defection.py`）、
-`events.event_candidates`（`join_actions.py`：拜入門派那一顆）。叛投的 `stranded` 格（`_STRANDED_CORE`，主人是舊模組 `bounties`）留在 `defection.py`，等懸賞榜成包再登記。
+過渡 import 4 處（行尾標「過渡：待搬」；全部拆包第 40 批合完重印）：`bounties`（第 45 批：懸賞榜；`join_actions.py`、`lean_actions.py`、`defection.py` 各一）、
+`events.event_candidates`（`join_actions.py`：拜入門派那一顆）。`ranks`（階與稱號；`defection.py`）第 40 批收進共用規則層，不算過渡（原本 5 處）。叛投的 `stranded` 格（`_STRANDED_CORE`，主人是舊模組 `bounties`）留在 `defection.py`，等懸賞榜成包再登記。
 確認畫面讀押糧不直接碰軍情包的欄位：問核心的 `core/convoy_base.py`（`held(state)`，同 `omen_base` 的先例；它只讀軍情包認領的 `convoy`，不寫）。

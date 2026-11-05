@@ -14,7 +14,7 @@ import hashlib
 from typing import TYPE_CHECKING
 
 from tianxia import calendar, library, renown, tactics
-from tianxia import ranks  # 過渡：待搬（階級的稱號；總表第 40 批收進共用規則層）
+from tianxia import ranks  # 共用規則層（階級的稱號；第 40 批收進）
 from tianxia.characters import name_key
 from tianxia.core import arena_ranks  # 擂台的稱號（核心的查詢服務；擂台本身在單挑包）
 from tianxia.models import Content

@@ -1,10 +1,14 @@
 """傳聞分層的畫面（傳聞分層設計第二、八、十二節；計畫 2026-10-06 傳聞分層一）：見聞頁「傳聞」分成四層、
-「你不在的時候」那一份摘要。只讀狀態與內容、只產生文字，不改任何東西；誰聽得到哪一則照 rules.audible，這裡不另寫一份規則。"""
+「你不在的時候」那一份摘要。只讀狀態與內容、只產生文字，不改任何東西；誰聽得到哪一則照 rules.audible，這裡不另寫一份規則。
+
+共用規則層（全部拆包第 40 批收進 registry.SHARED）：聽過的伏筆片段與機緣線索問核心的查詢服務 omen_base，不 import 軍情包。改這一份
+scripts/test_for.py 只挑自己檔名的測試＋煙霧＋邊界；收進來之前挑到的 tests/figures/test_rumor_layers.py、tests/ranger/test_season21_daily.py 另外跑。"""
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from . import calendar, foreshadow, opportunities, orders
+from . import calendar, orders
+from .core import omen_base  # 聽過的伏筆片段與機緣線索：核心的查詢服務（全部拆包第 40 批，原本經舊名 foreshadow、opportunities 讀軍情包）
 from .models import Content
 from .rules import Ears, audible, ears_of
 from .state import GameState, Rumor
@@ -82,8 +86,8 @@ def layers(
     faction = _listing(of("faction"), when, FACTION_EMPTY) if state.player.faction else FACTION_LONER
     personal = (
         [f"{when(r.time)}　{r.text}" for r in of("personal")[::-1]]  # 寫給自己的傳聞，新的在前
-        + foreshadow.heard_texts(state, content, world)  # 伏筆片段，照鏈與片段的順序
-        + opportunities.heard_clues(state, content)  # 機緣的線索（天時地利與內鬼的特徵），照聽到的先後（FB-086）
+        + omen_base.heard_texts(state, content, world)  # 伏筆片段，照鏈與片段的順序
+        + omen_base.heard_clues(state, content)  # 機緣的線索（天時地利與內鬼的特徵），照聽到的先後（FB-086）
     )
     title = LOCAL_TITLE.format(regions=_region_names(content, ears), days=content.config.rumor_board_days)
     return [

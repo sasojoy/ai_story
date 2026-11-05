@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import atlas, ranks  # 過渡：待搬（輿圖：路程與前往的檢查；晉升：疾行送到糧車記貢獻）
+from tianxia import atlas, ranks  # 過渡：待搬（輿圖：路程與前往的檢查）
 from tianxia import journal
 from tianxia.core.services import PREPARING_TEXT
 from tianxia.journal import Draft

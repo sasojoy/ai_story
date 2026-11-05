@@ -31,7 +31,7 @@
 
 **店面登記（`Shop`）這一批不登記**（計畫 1.9 量出四條）：「此地還能做」的入口順序是 懸賞榜 → 鐵匠鋪 → 馬市 → 搬成包的店，搬進登記就排到馬市後面（`/api/main` 的選項順序變）；選單順序同；`here` 有兩個意思（`_shop_open` 要單子沒開著，收店要 `smith_open`），`Shop.here` 只有一個；同一排的懸賞榜（第 45 批）、馬市（第 42 批）還沒成包。這些留在 `Game` 原位：`_everyday_options` 的 `picking_smith` 選單與 `act:smith` 入口、`_shop_open`、`shop_view` 的 smith 分支、`_drop_stale_references`／`sync` 的收店、`_depart` 的 `close_smith`、`_idle`。**PM 定案**（第 41 批 PM 認定第 1 條）：第 42 批（馬市）與第 45 批（懸賞榜）比較晚合的那一批，把懸賞榜、鐵匠鋪、馬市三間一起排進 `Shop`，入口先後維持 懸賞榜 → 鐵匠鋪 → 馬市（先後就是行為）；若非得讓 `Shop` 分兩個「此地」判斷（改核心）才行，先回報 PM。
 
-核心原位讀 `smithing`（經舊名別名）的三處記在邊界測試的 `GAME_DIRECT`：`choose`（打造那幾步併成一則：`GO_VERB`、`is_forge_step`、`is_step_line`；切頁不寫紀錄），`_drop_stale_references`、`sync`（`draft_here`、`draft_stale`，單子那一欄關了就清）。位置在寫紀錄與收店的中段，沒有對應的掛鉤。這三筆先認（第 41 批 PM 認定第 4 條）：第 40 批（核心批）把這五個純函式抽到核心小模組，三處改讀核心、`GAME_DIRECT` 還原。
+核心原位讀 `smithing`（經舊名別名）的三處記在邊界測試的 `GAME_DIRECT`：`choose`（打造那幾步併成一則：`GO_VERB`、`is_forge_step`、`is_step_line`；切頁不寫紀錄），`_drop_stale_references`、`sync`（`draft_here`、`draft_stale`，單子那一欄關了就清）。位置在寫紀錄與收店的中段，沒有對應的掛鉤。這三筆先認（第 41 批 PM 認定第 4 條）；**全部拆包第 40 批（核心批）收了**：五個純函式連同它們讀的常數（`ARMOR_KIND`、問句與回報那幾句）與 `here` 抽到核心小模組 `tianxia/core/smith_base.py`（照 `omen_base`），`smithing.py` 照原名 re-export 同一個物件；`engine` 的 `choose`、`_drop_stale_references`、`sync` 三處改讀 `smith_base`、不再 import `smithing`，邊界測試那三筆 `GAME_DIRECT` 還原（11 → 8）、`GAME_IMPORTS` 拿掉 `tianxia.smithing`（84 → 83）。
 
 ## 測試
 

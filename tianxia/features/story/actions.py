@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tianxia import battlelog, journal, team  # 共用規則層（戰報）、核心
-from tianxia import chapters  # 過渡：待搬（章回主線：模組層 import，載入時登記 storyline.TASKS；第 40 批）
+from tianxia import chapters  # 共用規則層（章回主線，第 40 批收進：模組層 import，載入時登記 story_base.TASKS）
 from tianxia.core.option import Option
 from tianxia.models import Squad, StoryDef, StoryStage
 from tianxia.rules import fill_marks
@@ -67,7 +67,7 @@ def story_tick(ctx: Game) -> list[str]:
     """一條線往前走（storyline.tick）；剛進的那一段是事件、人就在那裡時直接端出來。關著是空的。
     章回主線（chapters）排在前後：先開該開的回、收錯過的回，走完之後把剛走進最後一段的回記成做成（世界的帳改了就存共用的季）。"""
     before = (dict(ctx.state.world.chapter_done), {k: dict(v) for k, v in ctx.state.world.chapter_weights.items()})
-    head = chapters.tick(ctx.state, ctx.content, ctx.world)
+    head = storyline.chapter_tick(ctx.state, ctx.content, ctx.world)  # 章回的開回與收回（原本 chapters.tick，全部拆包第 40 批搬進這一包）
     msgs, event_id = storyline.tick(ctx.state, ctx.content, ctx.world)
     msgs = head + msgs + chapters.after(ctx.state, ctx.content)
     if (ctx.state.world.chapter_done, ctx.state.world.chapter_weights) != before:
