@@ -41,7 +41,7 @@
 
 另外要跑的（混在別人檔裡的，改這一包時連它們一起跑）：
 
-- `tests/core/test_chapters.py`（章回主線：用 `storyline.vary`、`TASKS`、`start`，章回批才搬）、`tests/web/test_week_card_web.py`（本週卡：`game._story_tick()`、`OPTION`）。
+- `tests/core/test_chapters.py`（章回主線：經 `game._story_tick()` 走這一包的 `storyline.chapter_tick`〔第 40 批從 `chapters.tick` 整段搬進來〕，也用 `storyline.vary`、`TASKS`、`start`；檔名對不上，改 `storyline.py` 挑不到它）、`tests/web/test_week_card_web.py`（本週卡：`game._story_tick()`、`OPTION`）。
 - 有所感包的 `tianxia/features/sense/tests/test_epiphany.py`、`test_epiphany_name_web.py`（頓悟那一條線登記的鉤子，依賴 `story_base` 與 `storyline` 別名）。
 - 探索包的 `tianxia/features/explore/tests/test_explore_one.py`、`test_explore_one_polish.py`（擲開頭 `roll_start`）。
 

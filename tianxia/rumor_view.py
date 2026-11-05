@@ -74,7 +74,7 @@ def layers(
 ) -> list[dict[str, str]]:
     """見聞頁的四層（傳聞分層設計第二節）：天下大事、陣營軍情、所在大區、個人線索，各一段 {id, title, body}（body 是 Markdown）。
     陣營軍情只有自己陣營的、散人寫一句說明；所在大區只有此刻人在的大區、傳聞板上的（在路上是這段路兩頭）；個人線索是寫給
-    自己的傳聞，加上聽過的伏筆片段（foreshadow.heard_texts），再加上聽過的機緣線索（opportunities.heard_clues：天時地利型的線索
+    自己的傳聞，加上聽過的伏筆片段（omen_base.heard_texts），再加上聽過的機緣線索（omen_base.heard_clues：天時地利型的線索
     與內鬼的特徵，FB-086）——三樣都是「你聽到一件事」，都只有自己聽過的。所在大區那一段同一句傳聞合成一行、句尾接（×N）（_local_listing）；
     其他三層照舊一則一行。when 是時間的寫法（Game._day_stamp）。"""
     ears = ears_of(state, content)
