@@ -2,7 +2,7 @@
 map_header、map_places、place_detail、travel_options，Game 留一行委派，server 與假人照舊叫 Game）。ctx 就是 Game（第一階）。
 全部只讀，不擲骰、不動存檔；函式名＝原本的方法名去掉前導底線。
 
-`_map_foes`、`_fierce_line` 在這裡也經 ctx 叫（Game 上的一行委派）：測試換掉 Game._map_foes 看地點卡的對手跟著變（tests/map/test_jianfa_3d_map_foes.py）。
+`_map_foes`、`_fierce_line` 在這裡也經 ctx 叫（Game 上的一行委派）：測試換掉 Game._map_foes 看地點卡的對手跟著變（tianxia/features/map/tests/test_jianfa_3d_map_foes.py）。
 open_places、mostly_here 是探索包問輿圖包的兩個查詢（原本探索包直接 import mapview、mapdata；成包之後包不能 import 包，經 Game 的委派叫這裡）。
 """
 from __future__ import annotations
