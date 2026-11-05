@@ -2064,15 +2064,16 @@ SHARED_LATER["narration"] = "事件旁白每週改寫：只剩讀事件抽選 ev
 for _name in ("choose", "_drop_stale_references", "sync"):
     del GAME_DIRECT[_name]
 GAME_IMPORTS -= {"tianxia.smithing"}
-# gear（全部拆包第 42 批）：鐵匠鋪的 _drop_stale_references 刪掉之後，這個函式為裝備重新開一筆（理由見上面 # gear 那一段）
-# 清失效參照：signature_arms.refresh_names 排在 treasures、forge_secrets 的 refresh_names 後面、_copy_heirloom 前面，會改 item.name、要讀 owned，不是只讀的純函式；
-# 清失效參照的先後就是行為，on_drop_stale 掛鉤在最後面，位置不同不能接。經舊名別名讀（GAME_IMPORTS 的 tianxia.signature_arms）。
-# （鐵匠鋪那一筆第 40 批已收，GAME_DIRECT 的 _drop_stale_references 在這裡重新開一筆；歸第 55 批補算與換季收接縫。）
-GAME_DIRECT.update({
-    "_drop_stale_references": "裝備：signature_arms.refresh_names 排在 treasures、forge_secrets 的 refresh_names 後面、_copy_heirloom 前面，會改 item.name、要讀 owned；"
-                              "清失效參照的先後就是行為，不接 on_drop_stale（會挪到最後）——過渡：第 55 批（補算與換季收接縫）收",
-})
 SHARED_CORE_WORLD2 = ("figures", "figure_life", "plans", "orders", "ranks", "chapters", "rumor_view")
+# gear（全部拆包第 42 批）：鐵匠鋪的 _drop_stale_references 刪掉之後，這個函式為裝備重新開一筆（理由見上面 # gear 那一段）
+# 清失效參照：signature_arms.refresh_names 會改 item.name、要讀 owned，不是只讀的純函式；經舊名別名讀（GAME_IMPORTS 的 tianxia.signature_arms）。
+# 接不了 on_drop_stale 的原因是開關：core/features.py 的 on_drop_stale 只問開著的包（active），原位的 refresh_names 不看開關，
+# GearFeature.enabled 在四欄都關著時是 False，接進掛鉤就不跑了（挪到最後面的先後看不出差別：中間的 _copy_heirloom 等沒有一行讀本命兵器的名字）。
+# 要收：第 55 批（補算與換季收接縫）把 refresh_names 放進共用層或核心的 *_base（照第 40 批 smith_base 的前例）。
+GAME_DIRECT.update({
+    "_drop_stale_references": "裝備：signature_arms.refresh_names 要改 item.name、要讀 owned；on_drop_stale 掛鉤只問開著的包，原位不看開關"
+                              "（四欄都關著時 GearFeature.enabled 是 False，接了就不跑）——過渡：第 55 批（補算與換季收接縫）收",
+})
 
 
 def test_the_seven_joined_the_shared_layer_and_import_no_package_not_even_inside_a_function():
