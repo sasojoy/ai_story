@@ -24,6 +24,7 @@ from tianxia import annals  # 過渡：待搬（行狀：名氣、近況、近�
 from tianxia import atlas  # 過渡：待搬（大區：遠近）
 from tianxia import figures  # 過渡：待搬（大勢人物：名氣、心事）
 from tianxia import gender
+from tianxia.core import presence  # 「此地還有」的窗口（核心的查詢服務，第 37 批）
 from tianxia import renown  # 共用規則層（名望段、善惡稱號）
 from tianxia import rules
 from tianxia import territory  # 共用規則層（地盤：誰控制、地頭熟、大勢線）
@@ -339,7 +340,7 @@ def seek_lines(state: GameState, content: Content, other: GameState, now_real: f
         if score >= 1:
             return [OFFLINE.format(name=name, him=him)], True
         return [], False
-    present = bool(seen) and now_real - seen <= content.config.presence_seconds  # 跟「此地還有」同一個定義
+    present = bool(seen) and now_real - seen <= presence.window(content)  # 跟「此地還有」同一個定義（core/presence.py）
     if score >= 5 and present:
         if p.journey is not None:
             j = p.journey

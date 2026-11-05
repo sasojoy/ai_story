@@ -175,6 +175,7 @@ from .world_state import SealDuel, SealSide, WorldStateStore, season_length_days
 # core-events：事件檢定是核心本體（tianxia/core/event_check.py，全部拆包第 16 批）。排在上面的 import 都做完之後：那一份 import 的模組這時都已經
 # 載入，載入的先後一個都不變；模組層的四個名字照名字拿回來（server、假人、測試 `from tianxia.engine import FREE_TEXT_OPTION` 照舊）
 from .core import event_check  # 事件檢定的本體（Game 上留一行委派）
+from .core import presence  # 「此地還有」的判斷與身分字（全部拆包第 37 批：從 social 拆進核心）
 from .core import arena_ranks, duel_base  # 擂台的名次與稱號、單挑底層（全部拆包第 12 批：留核心；擂台、頭目戰本身在單挑包）
 from .core.event_check import EVIL_ANNAL, FREE_TEXT_OPTION, FreeTextOutcome, FreeTextRequest
 
@@ -6419,7 +6420,7 @@ class Game:
     def _join(self, inv, other: Game) -> list[str]:
         """答應結伴同行：重驗（還在發邀請的那個地點、兩個人都沒在跟別人、你身後也沒有人跟著你），記下跟著誰；兩邊各記一則。"""
         p = self.state.player
-        refusal = self.join_refusal(inv.sender) if inv.location == p.location else social.GONE.rstrip("。")
+        refusal = self.join_refusal(inv.sender) if inv.location == p.location else presence.GONE.rstrip("。")
         if refusal is not None:
             self._tell_sender(inv, other)
             return [f"（{refusal}。）"]
@@ -6443,7 +6444,7 @@ class Game:
         """答應切磋時這一場還打不打得成：還在發邀請的那個地點、兩個人都閒著付得起體力、這一對這個遊戲日還沒打滿。
         for_sender：寫給發邀請的那個人看（「你」是他，_tell_sender 用）。"""
         if inv.location != self.state.player.location:
-            return social.GONE
+            return presence.GONE
         for who in (self, other):
             problem = self._spar_problem(who, me=(who is self) != for_sender)
             if problem is not None:
@@ -6566,7 +6567,7 @@ class Game:
         for_sender：寫給發邀請的那個人看（「你」是他，_tell_sender 用）。"""
         them = other.state.player
         if inv.location != self.state.player.location:
-            return social.GONE
+            return presence.GONE
         cost = self._discuss_cost()[1]
         for who in (self, other):
             problem = self._spar_problem(who, me=(who is self) != for_sender, what="論武", cost=cost)
@@ -6747,7 +6748,7 @@ class Game:
         """此地截殺得了的人與勝算：[(名號, 勝算)]，照名號排序（假人挑對象用；真人看卡上的鈕）。截殺關著時是空的（raid_shown 擋）；
         散人只有揭了通緝的那個人。"""
         out = []
-        for state in social.here(self):
+        for state in presence.here(self):
             other = self._kin(state)
             if self.raid_shown(other) and self.raid_refusal(other) is None:
                 out.append((state.player.name, self.raid_odds(other)))
@@ -8686,7 +8687,7 @@ class Game:
             return "已經有人跟著你走"
         other = self._peer(leader)
         if other is None:
-            return social.GONE.rstrip("。")
+            return presence.GONE.rstrip("。")
         if other.state.player.tagalong is not None:
             return f"{leader}已經跟著別人走了"
         return None
@@ -8772,7 +8773,7 @@ class Game:
             # 路是帶頭的人認得的路，跟著的人不必自己認得（所以不問 travel_refusal），只看他手上有沒有事、體力夠不夠
             block = atlas.travel_block(other.state, self.content)
             if start is not None and (o.journey is not None or o.location != start):
-                problem = social.GONE.rstrip("。")
+                problem = presence.GONE.rstrip("。")
             elif start is not None and block is not None:
                 problem = block.reason
             else:
@@ -9107,7 +9108,7 @@ class Game:
                           "hp": round(mate_now), "hp_max": round(mate_cap)})
         data = {
             "name": p.name,
-            "affiliation": social.affiliation(s, c),
+            "affiliation": presence.affiliation(s, c),
             "ranger": ranger.status(s, c),  # 散人的遊俠名號（名號、階、俠名、下一階）；陣營的人、劇本沒有陣營、名聲開著是 None
             "renown": renown.status(s, c),  # 名聲（狀態列 1B、2C 的稱號與說明卡）；名聲關著是 None
             # 手上揭了的懸賞（標題、怎麼完成、賞、期限與名額），加上身上有合用東西的求兵（多一個 have）；懸賞榜關著是空的

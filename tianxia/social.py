@@ -5,6 +5,7 @@
 
 卡上的動作是一張登記表（`ACTIONS`）：每一種互動寫一個 `CardAction`，用 `register` 登記，就會出現在每一張卡上——
 `buttons` 決定這張卡上畫哪幾顆鈕（可以一顆都不畫），`run` 是按下去之後做的事。贈物、結伴同行、打招呼、切磋、論武都掛在這裡。
+「此地還有」（`here`）與身分字（`affiliation`）在 `tianxia/core/presence.py`（核心的查詢服務，第 37 批），這裡 re-export。
 引擎的門面是 `Game.peers_here`、`Game.peer_card`、`Game.peer_act`（拒絕的話與對方不在這裡都在那裡擋）。
 
 伺服器假人跟真人一模一樣（伺服器假人設計第五節）：名單、卡、按鈕、拒絕的話一律不看 `PlayerState.bot`。
@@ -15,10 +16,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
-from . import prologue as prologue_rules
-from . import allied, four_tiers, gender, invites, ranger, ranks, renown, team, yuedan
-from .characters import CharacterStore, name_key
-from .core import arena_ranks  # 擂台的稱號（核心的查詢服務；擂台本身在單挑包）
+from . import four_tiers, gender, invites, renown, team, yuedan
+from .characters import name_key
+from .core.presence import GONE, affiliation, here, side, visible  # noqa: F401  「此地還有」的判斷與身分字搬進核心（第 37 批）：舊名照舊拿得到同一批函式物件
 from .rules import day_turn
 from .state import GameState
 
@@ -26,7 +26,6 @@ if TYPE_CHECKING:
     from .engine import Game
     from .models import Content
 
-GONE = "對方已經不在這裡了。"  # 對方離開了、下線太久、或根本沒有這個人：一律這一句（不讓人試出名號在不在）
 # 玩家卡動作回來時，網頁的卡已經關了或換了人（等論武取名的時候）：提示泡泡只講一句短的，完整的在江湖紀錄（FB-242；待 joy 潤）
 DISCUSS_BRIEF = "論武有結果了：合出{thing}。詳見江湖紀錄。"
 BRIEF_MAX = 40  # 沒有專門那一句時，泡泡寫回話的第一句，最多幾個字
@@ -99,47 +98,6 @@ ACTIONS: dict[str, CardAction] = {}
 def register(action: CardAction) -> CardAction:
     ACTIONS[action.id] = action
     return action
-
-
-def visible(state: GameState, content: Content) -> bool:
-    """這個人看得到別人、也被別人看得到：不在路上（人在兩地之間）、不在草廬序章裡（序章是一個人的）。"""
-    return state.player.journey is None and not prologue_rules.active(state, content)
-
-
-def here(game: Game) -> list[GameState]:
-    """此地還有誰：跟你同一個地點、presence_seconds 之內同步過、不在路上也不在序章裡的人，照名號排序；你自己看不到人時是空的。
-    存檔不含賽季（characters.py），讀回來的每一份接上你這一份的季（同 Game._peer）：看季的讀法（豪強分屬兩軍的 allied.on）才讀得到
-    這一季的章——沒接的話依附黃巾軍的豪強在名單上寫回「地方豪強」（FB-275 複驗）。"""
-    s, c = game.state, game.content
-    if not visible(s, c) or not hasattr(game.world, "db"):
-        return []
-    since = game.now - c.config.presence_seconds
-    found = CharacterStore(game.world.db).present(s.player.location, since, s.player.name)
-    for o in found:
-        o.world = s.world
-    return [o for o in found if visible(o, c)]
-
-
-def side(state: GameState, content: Content) -> str:
-    """名單上名字後面括號裡那一個：陣營，沒有陣營是「散人」；豪強分屬兩軍的季寫依附哪一邊（allied.side_text，FB-275）。"""
-    return allied.side_text(state, content) or "散人"
-
-
-def affiliation(state: GameState, content: Content) -> str:
-    """門派・陣營・頭銜・擂台稱號・上一季論功的稱號（有哪幾樣寫哪幾樣），都沒有是散人；散人有遊俠名號時寫「散人・江湖遊俠」（有門派時門派代替「散人」）。
-    狀態列（Game.status_data）與玩家卡都用這一個。"""
-    p = state.player
-    sect = content.sects[p.sect].name if p.sect else None
-    faction = allied.label_of(state, content) or None  # 豪強分屬兩軍的季寫「地方豪強（依附官軍）」
-    named = ranger.title(content, state)
-    ring = arena_ranks.title_of(state.world, p.name) if arena_ranks.on(content) else None  # 擂台的稱號照此刻的名次，掉出就沒了（PM 2026-10-14）
-    if faction is None and named is not None:
-        base = f"{sect or '散人'}・{named}"
-    else:
-        base = "・".join(name for name in (sect, faction, ranks.title(content, state)) if name) or "散人"
-    base = f"{base}・{ring}" if ring else base
-    # 上一季論功的稱號（減法季設計 3.3；PlayerState.season_title，換季時掛上）：沒有是空字串，一個字都不多
-    return f"{base}・{p.season_title}" if p.season_title else base
 
 
 def arts(other: Game) -> list[dict]:

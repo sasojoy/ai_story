@@ -13,7 +13,7 @@ from tianxia import deeds  # 共用規則層（世界記事：同上）
 from tianxia import journal, naming, team
 from tianxia import materials  # 共用規則層（撿到的東西那一句的開頭）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章裡不走一趟）
-from tianxia import social  # 過渡：待搬（「此地還有」那一份名單：結算卡、遠處有人揮手）
+from tianxia.core import presence  # 「此地還有」那一份名單：結算卡、遠處有人揮手（核心的查詢服務，第 37 批）
 from tianxia import speech  # 共用規則層（留言過字表）
 from tianxia.core.option import IDLE_MARK, Option
 from tianxia.state import PLAYER, JournalEntry, Outing, OutingBeat
@@ -63,7 +63,7 @@ def outing_view(ctx) -> dict | None:
         if trip["can_say"]:
             trip["ink"] = outing_ink_left(ctx)
             trip["ink_item"] = ctx.wallet.item_for(outing_rules.INK)
-            trip["people"] = [o.player.name for o in social.here(ctx)]  # 結算卡的「此地還有」：點名字開玩家卡打招呼、邀結伴
+            trip["people"] = [o.player.name for o in presence.here(ctx)]  # 結算卡的「此地還有」：點名字開玩家卡打招呼、邀結伴
         trip["admin"] = ctx.is_admin()
     return view
 
@@ -171,7 +171,7 @@ def outing_trace(ctx, trip: Outing) -> None:
         return
     beat = None
     if not trip.waved:
-        beat = outing_rules.wave_beat([o.player.name for o in social.here(ctx)], rng)
+        beat = outing_rules.wave_beat([o.player.name for o in presence.here(ctx)], rng)
         trip.waved = beat is not None
     if beat is None:
         beat = outing_rules.seen_beat(ctx.state, c, trip, rng)

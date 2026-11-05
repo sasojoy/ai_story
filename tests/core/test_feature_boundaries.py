@@ -585,13 +585,14 @@ GAME_DELEGATE_CALLERS.update({
 # 只讀擂台名次與稱號的舊模組（名帖 mingtie、玩家卡 social、榜單 leaderboard：on、title_of、ladder、title_for、record_text 都在核心
 # arena_ranks）讀核心那一份，不經舊名 arena 連帶載入單挑包（手冊 3.11「能走服務就走服務」；第 12 批審查修正）。tiers 照舊經別名：
 # tests/core/test_event_tiers.py 換掉 tianxia.arena.entry_of，改讀核心之後那一條打不到（SHARED_LATER 的 tiers）
-ARENA_RANK_READERS = ("mingtie", "social", "leaderboard")
+ARENA_RANK_READERS = ("mingtie", "leaderboard")  # 玩家卡的稱號（social.affiliation）第 37 批搬進核心的 core/presence.py，下面另驗那一份
 
 
 def test_the_old_modules_that_only_read_the_arena_ranks_read_the_core_not_the_bout_package():
     for name in ARENA_RANK_READERS:
         assert "bout" not in {feature_target(mod) for _, mod in _feature_imports(TIANXIA / f"{name}.py")}, name
         assert "arena_ranks" in (TIANXIA / f"{name}.py").read_text(encoding="utf-8"), name
+    assert "arena_ranks" in (TIANXIA / "core" / "presence.py").read_text(encoding="utf-8")  # 身分字的擂台稱號（第 37 批）
 
 
 # companions（全部拆包第 19 批「人物情誼一」：招募與名下、心意、託付與勸降、來信；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第1批.md 1.5、1.6）：
