@@ -86,6 +86,15 @@ const extra = L.extra ? el("extra", ["tx-extra"]) : null;
 const duelRow = L.duel ? el("duelrow", ["sx-drow"]) : null;
 const duelBtn = L.duel ? el("duelbtn", ["btn"], { parentElement: duelRow }) : null;
 if (extra) extra.querySelectorAll = (s) => (s === ":scope > .tx-line" ? Array.from({ length: L.extra }, () => ({})) : []);
+// 開局一到就攤開的託付信（收法 1a，FB-9110）：L.letter 是有一封攤開的；標題那一顆鈕與右邊的箭頭
+const letterHead = L.letter ? el("lhead", ["letter-head"]) : null;
+const letterArrow = L.letter ? el("larrow", ["letter-arrow"], { textContent: "▴" }) : null;
+if (letterHead) letterHead.setAttribute("aria-expanded", "true");
+const letter = L.letter ? el("letter", ["card", "letter", "open"]) : null;
+if (letter) {
+  letter.dataset.letter = "5";
+  letter.querySelector = (s) => (s === ":scope > .letter-head" ? letterHead : s === ".letter-arrow" ? letterArrow : null);
+}
 const box = L.box ? el("box", ["card", "guide"]) : null;
 const hint = L.hint ? el("hint", ["hint"]) : null;  // 狀態列的 💡（#top 裡）；收成一行看的是 S.hintTight（renderTop 照它畫）
 // 名聲（名聲設計十一之二）：狀態列名號底下那一行稱號（1B，收不收看 S.renownTight）與決戰本場戰功名字底下的稱號（4B，L.merit 是幾行）
@@ -140,7 +149,7 @@ if (callsBox) {
   callsBox.insertAdjacentHTML = () => { callsMore = makeMore("", true); };
 }
 // 每一樣收起來省多少 px（假的；真的看 375×812 估的數字）
-const SAVE = Object.assign({ art: 190, extra: 60, space: 30, cardSpace: 6, box: 22, hint: 20, renown: 20, line: 20, rounds: 23, merit: 6, own: 27, muster: 27, desc: 27, options: 22, call: 70, moreLine: 0, peek: 56, note: 18 }, input.save || {});
+const SAVE = Object.assign({ letter: 300, art: 190, extra: 60, space: 30, cardSpace: 6, box: 22, hint: 20, renown: 20, line: 20, rounds: 23, merit: 6, own: 27, muster: 27, desc: 27, options: 22, call: 70, moreLine: 0, peek: 56, note: 18 }, input.save || {});
 // 「剛剛」只留時間與標題（fit-title）時剩兩行 48px；只露三行（fit-short）時最多 72px
 const bodyHeight = () => (now && has(now, "fit-title") && !has(now, "open") ? Math.min(L.nowBody, 48)
   : now && has(now, "fit-short") ? Math.min(L.nowBody, 72) : Math.min(L.nowBody || 0, 120));
@@ -149,6 +158,7 @@ const bottom = () => {
   if (has(page, "fit-space")) b -= SAVE.space;
   if (card && has(card, "fit-space")) b -= SAVE.cardSpace;
   if (box && has(box, "fit-box")) b -= SAVE.box;
+  if (letter && has(letter, "fit-letter")) b -= SAVE.letter;
   if (hint && S.hintTight && !S.hintOpen) b -= SAVE.hint;
   if (renownLine && S.renownTight) b -= SAVE.renown;
   meritSmalls.forEach((x) => { if (has(x, "fit-hide")) b -= SAVE.merit; });
@@ -195,6 +205,8 @@ const where = {
   ".g-merit small.fit-hide": () => meritSmalls.filter((x) => has(x, "fit-hide")),
   ".fit-space": () => all.filter((x) => x !== page && has(x, "fit-space")),
   ".fit-box": () => all.filter((x) => has(x, "fit-box")),
+  "#page > .card.letter.open:not(.fit-letter)": () => (letter && !has(letter, "fit-letter") ? [letter] : []),
+  ".card.letter.fit-letter": () => (letter && has(letter, "fit-letter") ? [letter] : []),
   ".tx-tight": () => all.filter((x) => has(x, "tx-tight")),
   ".fit-fold": () => all.filter((x) => has(x, "fit-fold")),
   ".fit-art": () => all.filter((x) => has(x, "fit-art")),
@@ -261,6 +273,7 @@ const snap = () => ({
   renownTight: S.renownTight, merit: meritSmalls.map((x) => has(x, "fit-hide")),
   art: art ? [...art.classes].sort() : null, extra: extra ? [...extra.classes].sort() : null, extraAttrs: extra ? extra.attrs : null,
   desc: descParas.map((x) => [...x.classes].sort()), descAttrs: descParas.map((x) => ({ ...x.attrs })), descClassAttr: descParas.map((x) => x.getAttribute("class")), descHead: descHead ? [...descHead.classes].sort() : null,
+  letter: letter ? [[...letter.classes].sort(), letterHead.attrs["aria-expanded"], letterArrow.textContent] : null,
   peek: peek ? [...peek.classes].sort() : null, notes: notes.map((x) => has(x, "fit-hide")), nowWas: now ? now.dataset.fitWas || null : null,
 });
 finish(new Function("H", "S", "snap", "L", "W", "els", input.script || "H.fitFirstScreen(); return snap();")(
@@ -684,6 +697,8 @@ def test_each_step_only_touches_what_it_names():
         # 第 5c 步（extra）：戰鬥補充第一行以後的（點那一塊整塊攤開，extraOpen）
         ".battle-card .tx-extra.fit-extra > .tx-line ~ .tx-line",
         ".battle-card p.rounds-tale.fit-fold:not(.open)", ".battle-card ul.rounds.fit-fold:not(.open)", ".call.fit-hide",
+        # 第 1a 步（letter，FB-9110）：攤開的託付信收成標題一行、底下問通知那一張（點標題攤開，letterOpen）
+        ".card.letter.fit-letter > .letter-body, .card.letter.fit-letter + .push-ask",
         ".g-mcol li .rn-two small.fit-hide",  # 名聲 4B：本場戰功名字底下那一行稱號（名字照舊）
         # 第 10 步（choices）：「剛剛」的敘事（展開 .open 就回來）、灰掉的鈕底下那一行原因（在鈕的 title，點了說整句）、態勢那一排
         ".now.fit-title:not(.open) .tx-now > .tx-line, .now.fit-title:not(.open) .tx-now > .tx-heading, .now.fit-title:not(.open) .tx-now > .tx-glyph",
@@ -854,6 +869,42 @@ def test_the_selector_follows_the_real_markup_the_duel_card_draws():
     assert '#page > .act-bar + #sortie-duels > .sx-drow:first-of-type > [data-act="sortie-answer"]' in sel and '[data-act="sortie-join"]' in sel
     grey = run_prologue_web({**m, "sorties": [{**row, "can_answer": False, "why_not": "今日應戰 3 次已用完"}]}, "return H.actionBar(H.S.main);")
     assert 'data-act="sortie-answer"' not in grey  # 灰的那一行沒有可按的鈕：選擇器抓不到、量的還是行動列
+
+
+# ── 託付的信攤著時約戰那一行也要露出來（FB-9110）──────────────────────────────────────
+# 新人開局第一封就是一到就攤開的託付信（傅燮來信），信加上底下問手機通知那一張把約戰卡的應戰、同去擠到第二屏（375×812 第一顆鈕 1007～1041、
+# 分頁列頂 756）。量的是約戰那一行時，間距之後先把信收成標題一行（收法 1a，同玩家按標題收攏），點標題照樣攤開
+
+
+@node
+def test_an_open_letter_folds_to_its_title_to_bring_the_duel_row_up():
+    """756 − 16 = 740。行動列 690、約戰那一行再低 300（990）：間距 30 不夠，信收成標題一行（省 300）就放得下，場景的畫不動。"""
+    out = run({"bottom": 690, "actbar": True, "scene": True, "art": True, "letter": True, "duel": 300})
+    assert out["fitted"] == ["space", "letter"] and out["art"] == ["scene-art"]
+    assert out["letter"] == [["card", "fit-letter", "letter", "open"], "false", "›"]  # 點標題走「沒攤開 → 攤開」
+    assert out["bottom"] + 300 <= 740
+
+
+@node
+def test_the_letter_stays_open_without_an_answerable_duel_or_when_the_player_opened_it():
+    no_duel = run({"bottom": 900, "actbar": True, "scene": True, "art": True, "letter": True})
+    assert "letter" not in no_duel["fitted"] and no_duel["letter"] == [["card", "letter", "open"], "true", "▴"]
+    mine = run({"bottom": 690, "actbar": True, "scene": True, "art": True, "letter": True, "duel": 300}, S={"letterOpen": 5})
+    assert "letter" not in mine["fitted"] and mine["letter"][0] == ["card", "letter", "open"]
+
+
+@node
+def test_refitting_opens_the_letter_again_once_the_duel_is_gone():
+    script = "H.fitFirstScreen(); const tight = snap(); L.duel = 0; H.fitFirstScreen(); return { tight, roomy: snap() };"
+    out = run({"bottom": 690, "actbar": True, "scene": True, "art": True, "letter": True, "duel": 300}, script=script)
+    assert "letter" in out["tight"]["fitted"]
+    assert out["roomy"]["fitted"] == [] and out["roomy"]["letter"] == [["card", "letter", "open"], "true", "▴"]
+
+
+@node
+def test_the_folded_letter_hides_its_body_and_the_push_question_in_css():
+    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    assert ".card.letter.fit-letter > .letter-body, .card.letter.fit-letter + .push-ask { display: none; }" in css
 
 
 # ── 約戰那一行擠完還放不下：再把場景卡的地點描述收成一行（企劃者 2026-10-28「擠完再上」）──────────────────

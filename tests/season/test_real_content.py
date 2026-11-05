@@ -600,6 +600,9 @@ PLACEHOLDER_LINES |= {("h_basic_art", "text"), ("h_drill_done", "text"), ("h_fie
                       ("h_tavern", "text"), ("h_points", "text")}
 # 減法季探索一顆開著時操練練完那一句換成出門探索的說法（HintDef.explore_one，2026-10-26 批 2 小修），待 joy 潤；事實由 tests/test_explore_one_polish.py 管
 PLACEHOLDER_LINES |= {("h_drill_done", "explore_one")}
+# 補新手教學（2026-11-05，PM 盤點）新寫的十一句，待 joy 潤；事實由 tests/arts/test_hints.py 的 test_the_real_new_hints_name_the_right_places 管
+PLACEHOLDER_LINES |= {(hint_id, "text") for hint_id in ("h_raid_guard", "h_checkin", "h_mall", "h_looks", "h_seal", "h_feast",
+                                                       "h_chuangong", "h_mount", "h_treasure", "h_place", "h_tale")}
 RECRUITER_HINTS = ["h_foreshadow", "h_event_reveal", "h_promotion", "h_showdown", "h_figure"]  # 第 13～17 條
 DRIFTER_HINTS = {"h_foreshadow", "h_event_reveal", "h_figure"}  # 散人也聽得到的三條（師父講，第 13、14、17 條）
 
@@ -608,7 +611,7 @@ def test_the_real_hint_book_has_all_eighteen(content):
     from tianxia import hints
 
     ids = [h.id for h in content.hints.hints]
-    assert len(ids) == 23 and set(ids) == set(hints.KNOWN)  # KNOWN 裡的每一條都有內容（十八條＋explain-1 的 h_bond，新手引導重做拿掉一條、多五條）
+    assert len(ids) == 34 and set(ids) == set(hints.KNOWN)  # KNOWN 裡的每一條都有內容（十八條＋explain-1 的 h_bond，新手引導重做拿掉一條、多五條，補新手教學多十一條）
     assert content.hints.head == "想起師父說過" and content.hints.season_return.strip()
 
 
@@ -724,7 +727,7 @@ def test_every_hint_line_taken_from_the_design_keeps_its_pinned_sentence(content
     """提示書的三十三句：二十七句是設計 10.5 的原文（各釘一段），六句是待 joy 潤的（PLACEHOLDER_LINES：四句改成現在的事實、兩句是
     explain-1 新寫的 h_bond）；兩邊合起來正好是書裡的每一句，以後多寫一句沒釘也沒標待潤的，這裡會叫。開季那一句（10.6）整句釘。"""
     cells = _hint_cells(content)
-    assert len(cells) == 38 and not set(HINT_PINS) & PLACEHOLDER_LINES  # 新手引導重做：拿掉 h_refine_fail、多五條；批 2 小修：h_drill_done 多一句
+    assert len(cells) == 49 and not set(HINT_PINS) & PLACEHOLDER_LINES  # 新手引導重做：拿掉 h_refine_fail、多五條；批 2 小修：h_drill_done 多一句；補新手教學多十一句
     assert set(cells) == set(HINT_PINS) | PLACEHOLDER_LINES
     for key, sentence in HINT_PINS.items():
         assert sentence in cells[key], key
