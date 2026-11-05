@@ -8,7 +8,7 @@ import math
 import random
 from typing import TYPE_CHECKING
 
-from tianxia import annals  # 過渡：待搬（行狀）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import battlelog, calendar, encounter, four_tiers, gender, prologue, roster, team, wins
 from tianxia.characters import name_key
 from tianxia.core.services import RaidSpoils

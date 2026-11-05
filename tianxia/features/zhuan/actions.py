@@ -8,21 +8,27 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import annals  # 過渡：待搬（行狀）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import gender, journal
 from tianxia.core.option import Option
 from tianxia.rules import jianfa
 from tianxia.state import GameState, JournalEntry, WorldState
 
 from . import biography, zhuan_end
+from . import standing as standing_mod  # 行狀的查詢那一半（第 29 批之二）
 
 if TYPE_CHECKING:
     from tianxia.engine import Game
 
 
+def profile(ctx: Game, old: GameState, season: WorldState | None) -> dict:
+    """換季存行狀時的身家（_reset_player_for_new_season；Game._zhuan_profile 一行委派過來，核心不能 import 包）。"""
+    return standing_mod.profile(old, ctx.content, season=season)
+
+
 def past(ctx: Game, old: GameState) -> WorldState | None:
     """換季那一刻（_reset_player_for_new_season）：上一季開著列傳為終點（zhuan_end）就回那一季（WorldStateStore.past_season），
-    先替這個人補上收季之後還沒記的季末論功與〈天下形勢〉（同步時記的那兩種，annals.tier_note、xingshi_notes），身家照它多論功的那幾樣；
+    先替這個人補上收季之後還沒記的季末論功與〈天下形勢〉（同步時記的那兩種，standing_mod.tier_note、xingshi_notes），身家照它多論功的那幾樣；
     關著（設定沒開就不讀資料庫）是 None，一個字都不變。old 是上一季的存檔，馬上就丟：old.world 換成上一季那一份才記得到正確的時刻。"""
     cfg = ctx.content.config.jianfa
     if not (cfg.enabled and cfg.zhuan_end):
@@ -31,20 +37,20 @@ def past(ctx: Game, old: GameState) -> WorldState | None:
     if last is None or not jianfa(ctx.content, last, "zhuan_end"):
         return None
     old.world = last
-    annals.xingshi_notes(old, ctx.content, last)
-    annals.tier_note(old, ctx.content, last)
+    standing_mod.xingshi_notes(old, ctx.content, last)
+    standing_mod.tier_note(old, ctx.content, last)
     return last
 
 
 def tick(ctx: Game) -> None:
-    """列傳為終點（減法季批 7b-1）：同步時替自己記行狀——〈天下形勢〉上一次看到之後寫到名號的那幾篇（annals.xingshi_notes），
-    季收了之後的季末論功（annals.tier_note）。只改自己的存檔，不存季。關著（zhuan_end）什麼都不做。"""
+    """列傳為終點（減法季批 7b-1）：同步時替自己記行狀——〈天下形勢〉上一次看到之後寫到名號的那幾篇（standing_mod.xingshi_notes），
+    季收了之後的季末論功（standing_mod.tier_note）。只改自己的存檔，不存季。關著（zhuan_end）什麼都不做。"""
     s, c = ctx.state, ctx.content
     if not jianfa(c, s.world, "zhuan_end"):
         return
-    annals.xingshi_notes(s, c, s.world)
+    standing_mod.xingshi_notes(s, c, s.world)
     if s.world.ended:
-        annals.tier_note(s, c, s.world)
+        standing_mod.tier_note(s, c, s.world)
 
 
 def annals_view(ctx: Game) -> dict:
@@ -52,7 +58,7 @@ def annals_view(ctx: Game) -> dict:
     books 是歷季列傳（第二批）：存著的每一季（這一季收了、還沒換季的也算），新的在前。"""
     on = annals.on(ctx.content)
     return {
-        "on": on, "name": ctx.state.player.name, "rows": annals.rows(ctx.state, ctx.content) if on else [],
+        "on": on, "name": ctx.state.player.name, "rows": standing_mod.rows(ctx.state, ctx.content) if on else [],
         "books": biography_list(ctx) if on else [],
     }
 
@@ -99,7 +105,7 @@ def extra(ctx: Game, season: int) -> dict:
         return {}
     row = ctx.world.biography(season, p.name)
     if season == p.season_number:
-        profile = annals.profile(ctx.state, ctx.content, season=world)
+        profile = standing_mod.profile(ctx.state, ctx.content, season=world)
     else:
         profile = row["profile"] if row is not None else {}
     text = row["text"] if row is not None else None
@@ -117,7 +123,7 @@ def options(ctx: Game) -> list[Option]:
         return []
     n = s.player.season_number
     used = zhuan_end.season_tickets(bought, n)
-    standing = annals.standing(s, c, s.world)
+    standing = standing_mod.standing(s, c, s.world)
     out = []
     # 票綁買的那一季（FB-845）：只數這一季買的，之前的季沒用掉的不再冒出用票的鈕
     if zhuan_end.unused(bought, zhuan_end.ART, n) and standing.get("illustration") and not used["art"] and standing.get("tier") != 1:
@@ -132,7 +138,7 @@ def options(ctx: Game) -> list[Option]:
 
 
 def verdict_taken(standing: dict) -> list[str]:
-    """這一季已經白送評曰的人物（annals.standing 的 verdicts：第一二階的主將或家主、情誼 70 以上的；親筆評曰不再列他們）。"""
+    """這一季已經白送評曰的人物（standing_mod.standing 的 verdicts：第一二階的主將或家主、情誼 70 以上的；親筆評曰不再列他們）。"""
     return [w["fid"] for w in standing.get("verdicts", [])]
 
 
@@ -146,7 +152,7 @@ def act(ctx: Game, option_id: str) -> list[str]:
         lines = [zhuan_end.ART_DONE]
     elif option_id == zhuan_end.SEAL:
         ctx.wallet.consume(zhuan_end.SEAL_TICKET, bought_in=n, at=now, season=n)
-        lines = [zhuan_end.SEAL_DONE.format(seal=zhuan_end.seal_text(c, n, annals.standing(s, c, s.world)))]
+        lines = [zhuan_end.SEAL_DONE.format(seal=zhuan_end.seal_text(c, n, standing_mod.standing(s, c, s.world)))]
     else:
         cid = option_id.removeprefix(zhuan_end.QUOTE)
         ctx.wallet.consume(zhuan_end.QUOTE_TICKET, bought_in=n, at=now, season=n, fid=cid)
@@ -183,7 +189,7 @@ def request(ctx: Game, season: int, rewrite: bool = False) -> biography.Biograph
         if rewrite or season != p.season_number or not season_closed(ctx) or not p.annals:
             return None
         entries = tuple(e.model_dump() for e in sorted(p.annals, key=lambda e: e.time))
-        profile = annals.profile(ctx.state, c, season=ctx.state.world)
+        profile = standing_mod.profile(ctx.state, c, season=ctx.state.world)
     else:
         if season == p.season_number and not season_closed(ctx):
             return None
@@ -191,7 +197,7 @@ def request(ctx: Game, season: int, rewrite: bool = False) -> biography.Biograph
         profile = row["profile"]
         if season == p.season_number and p.annals and row["text"] is None:  # 這一季還沒寫成：照角色身上最新的
             entries = tuple(e.model_dump() for e in sorted(p.annals, key=lambda e: e.time))
-            profile = annals.profile(ctx.state, c, season=ctx.state.world)
+            profile = standing_mod.profile(ctx.state, c, season=ctx.state.world)
         written = row["text"] is not None
         if written != rewrite or (rewrite and row["rewrites"] >= rewrites_allowed(ctx)):
             return None

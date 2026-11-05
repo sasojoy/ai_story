@@ -15,6 +15,7 @@ COMMON_BODY = [
     "- 前幾批的 PM 認定在手冊第十五節，開工先用 grep 找跟這一包有關的，不要整節讀。**不准碰 `web/`**；動到路由的話，自己那一軌每一條都要打到（web/ 沒動就沒有實機驗收）。",
     "- 這一批搬的模組若是世界層代叫的舊模組（`tianxia/world.py` 開頭模組說明「另外要跑的」反過來那一段點名的，例：`figure_life`、`bounties`），`test_for` 挑不到 `test_world` 那一串：開發與修正另跑那一段列的檔（第 25 批 PM 認定第 7 條）。",
     "- **掃原始碼、寫死檔名的測試**跟著改路徑（只改路徑、不改判斷）：搬的方法裡有 `renown.gain(..., \"fame\", ...)` 的，`tests/arts/test_explain2.py` 名望來源那張清單要把那一行從 `engine.py` 改成包裡的檔、照路徑排（第 46 批漏了，主幹全面檢查才抓到，FB-9431）；其他寫死 `\"engine.py\"` 的期望用 `git grep -n '\"engine.py\"' -- tests tianxia/features` 找。`test_for` 挑不到這種測試，開發自己跑一次那幾個檔。",
+    "- **事件機制**（第 26 批，11/05 已合）：一包發生的事要別包跟著動，經 `ctx.publish(\"<事件>\", ...)`；現有六種（`win`、`outing`、`explore`、`arrive`、`raid_win`、`battle_end`），同一下各訂閱者的先後是 `tianxia/core/features.py` 的 `BUS_ORDER`，**改它或開新事件先過 PM**（手冊第十五節第 26 批認定）。包登記自己那一格用 `Feature.bus()`，格回 `list[str]` 或 `None`、不准回字串。搬的方法裡有 `self.publish(...)`／`ctx.publish(...)` 的，發布點跟著搬、位置不動；邊界測試的 `bus_bypasses` 擋包直接叫 `bounties.on_*`、`_seal_find`、`_seal_settle`、`convoy_arrives`。",
     "- 審查常抓到的（第 19、20 批）：總表附錄甲點名這一批的方法與測試檔有沒有漏；這一批搬進來的 `PlayerState` 欄位 `player_fields` 與 README 有沒有認領；「列舉每一包」的表（`STAGE_PACKAGES`）；情境有沒有真的走到（看輸出裡有沒有預期的按鈕或句子，不是只看 200）。",
 ]
 
@@ -220,6 +221,7 @@ BATCHES = {
         body=[
             "- 範圍照總表 3.3 第 47 列（19 個方法、208 行）與第二節「移動（`travel`）」。**不等輿圖那條線**（`feature/map-view` 擱著，拆完才追進主幹；交接第三節），照現行程式搬。`move:`、`road:` 前綴；搬 `bot_policy` 的 `move:` 那一段；`/api/travel` 搬進包的 `routes.py`。結伴同行、前往是第 48 批（移動二），不搬。",
             "- 移動是每一步都會碰的：`_arrivals`、`sync` 裡抵達、路上小事、喊停的位置一個都不動（順序就是行為）；接不上掛鉤的留 Game 一行委派、邊界測試寫理由。舊的「趕路」（CLAUDE.md：拿掉之前出發、還在路上的那一趟照原本的步調走完，`atlas.MODE_NAMES`、`TIME_SHARE`、`TravelMode` 還認得它）照舊認得。",
+            "- **抵達是事件 `arrive` 的發布點**（第 26 批）：`Game._arrive` 那一行 `self.publish(\"arrive\", loc_id)`（軍情包交糧車→懸賞護送，先後由 `BUS_ORDER` 鎖住；`_convoy_arrives` 委派已拿掉）。`_arrive` 搬進包的話發布點跟著搬、改成 `ctx.publish`、留在原本那個位置；不搬就留 Game。自己的比對要連 `herald` 一軌（溫若谷重新登入那一下同步抵達：「糧車送進了」接著護送交差）一起比，三種設定、整段與半舊半新都一樣。",
             "- `web/` 不准碰，所以沒有實機驗收：自己那一軌 `/api/travel` 與每一個 `move:`、`road:` 動作都要打到、看回應內容。",
             "- Task 1 的情境：步行、疾行、路上三樣小事各一、喊停、折返、抵達（含有人設伏的地點）、舊的趕路還在路上；三種設定；半舊半新切在路上（出發了還沒到、路上小事出現了還沒選）；假人碰得到 `move:`。",
         ]),

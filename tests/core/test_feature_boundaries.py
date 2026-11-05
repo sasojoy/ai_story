@@ -816,6 +816,12 @@ GAME_DELEGATE_CALLERS.update({
     ("sync", "_zhuan_tick"): "同步記行狀（_stance_annals 之後、_deliver_mail 之前）：on_sync 在更後面、還問 enabled，紀錄先後算行為",
     ("_everyday_options", "_zhuan_options"): "休季的行動列：用列傳的票排在休季那一支選單裡，不是店面也不是 menu 掛鉤的位置",
 })
+# zhuan 第 29 批之二（annals 拆兩半）：換季存行狀時的身家 profile 在包裡（standing.py），核心不能 import 包，經一行委派 _zhuan_profile；
+# 記一筆的那一半收進核心 core/annal_base.py，包與核心原本的 annals 過渡 import 都改它。
+GAME_DELEGATES |= {"_zhuan_profile"}
+GAME_DELEGATE_CALLERS.update({
+    ("_reset_player_for_new_season", "_zhuan_profile"): "換季存行狀（save_annals 的第四個引數）時的身家：位置不動，紀錄先後算行為",
+})
 
 
 # strip（全部拆包第 13 批「拿掉一」：探索三選一、找素材「自己說」、城裡操練；計畫 docs/superpowers/plans/2026-11-04-拿掉一-第13批.md）：
@@ -1040,6 +1046,35 @@ GAME_DIRECT.update({
 })
 
 
+# travel（全部拆包第 47 批「移動一」；計畫 docs/superpowers/plans/2026-11-06-移動包-第1批.md 1.4）：選單的順序算行為
+# （/api/main 的選項一顆一顆逐位元組：站著的時候「前往」夾在求見、招募之後、拜師之前；路上那串是折返、帶路一句、喊停、路上小事、擂台），
+# 不能改成 Feature.options 登記（會排進 FEATURES 的順序），所以 Game 原位那幾行叫委派、位置不動。
+_TRAVEL_MENU = "選單的順序算行為（/api/main 的選項一顆一顆逐位元組）；移動的選單不能改成 Feature.options 登記（會排進 FEATURES 的順序），原位叫委派、位置不動"
+GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_move_option"): _TRAVEL_MENU + "：站著的時候「前往」夾在求見、招募之後、拜師之前",
+    ("_everyday_options", "_back_option"): _TRAVEL_MENU
+    + "：路上那串的折返，在 act:on_road（結伴時是 act:part）之後、帶路的路上一句與喊停之前",
+    ("_everyday_options", "_road_task_options"): _TRAVEL_MENU + "：路上小事在喊停之後、擂台之前（結伴同行時緊接在 act:part 後面）",
+    ("_arrivals", "_road_sight"): "抵達一站的迴圈中途（_ambush_check → _arrive → 騎乘飽足 → 路上見聞）：位置固定、沒有對應的掛鉤；第 48 批 _arrivals 搬進移動包時改經 ctx",
+})
+GAME_IMPORTS |= {
+    # travel（全部拆包第 47 批）：移動選單、路上小事、喊停、折返、安排前往的 9 個一行委派
+    "tianxia.features.travel.menu", "tianxia.features.travel.road_actions", "tianxia.features.travel.go_actions",
+}
+GAME_DELEGATES |= {
+    # travel（全部拆包第 47 批）：移動一的 9 個一行委派。_move_option、_back_option、_road_task_options 給選單（順序算行為，不能改成 Feature.options）；
+    # _road_sight、_road_reward_due、_count_road_reward 給 _arrivals 與第 48 批的 _share_road；set_move_mode 給 server、腳本與測試；
+    # travel、travel_refusal 給 /api/travel、假人（bot_policy._rally）、腳本與 21 個測試檔（測試也換掉 game.travel_refusal 繞過檢查）
+    "_move_option", "_back_option", "_road_task_options", "set_move_mode", "_road_reward_due", "_count_road_reward", "_road_sight",
+    "travel", "travel_refusal",
+}
+# 拿掉別人段裡的格：在自己的段 del（halt、check_hints、report_seat、hear_after_stamina 現在由包經 ctx 叫，不再是 Game 內部互叫）
+del GAME_DELEGATE_CALLERS[("_halt", "_sync_battle_presence")]
+del GAME_DELEGATE_CALLERS[("travel", "_check_hints")]
+del GAME_DELEGATE_CALLERS[("travel", "_report_seat")]
+del GAME_DELEGATE_CALLERS[("travel", "_hear_after_stamina")]
+
+
 # map（全部拆包第 49 批「輿圖一」：新包 tianxia/features/map/；計畫 docs/superpowers/plans/2026-11-06-輿圖包-第1批.md 1.1、1.4、1.5）：
 # 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。11 個方法搬進包，Game 留 11 個一行委派（_map_foes、_fierce_line 也留：測試換掉 Game._map_foes、
 # 包裡經 ctx 叫），另多兩個：探索包原本直接 import mapview、mapdata（open_places、mostly_here），成包之後包不能 import 包，改經 Game 的 _map_open_places、
@@ -1198,7 +1233,7 @@ SHARED_PENDING[("siege", "world")] += "；world 函式裡也 import 舊名 gener
 # 總表第 15 列寫了、這一批先不收的（派工：import 了包的「先改成查詢服務，或者先不收」；讀的都是還沒成包的舊模組，還沒有包可以回答查詢）：
 # 模組 → 卡在哪、哪一批之後收。包 import 它們的那幾行照舊註「過渡：待搬」。
 SHARED_LATER = {
-    "fusion": "讀有所感的自創（sensing.add_own、own_name：有所感第 24 批成包）與行狀（annals.note）：排到第 29 批（行狀成包）一起改成查詢服務再收（第 24 批 PM 認定第 3 條）",
+    "fusion": "讀有所感的自創（sensing.add_own、own_name：有所感第 24 批成包）（第 24 批 PM 認定第 3 條；行狀 annals.note 那一半第 29 批之二收進核心 core/annal_base.py，fusion 改 import 它，不算了）",
     "skillview": "門下頁的說明（彙整）：讀自創 create（第 44 批）、修練 cultivation（第 23 批）、玉璽 seal（第 27 批）、鐵匠鋪 smithing（第 41 批）、"
                  "輿圖 atlas；那幾包成包、改成查詢服務之後再收",
     "shopview": "店面的畫面資料（彙整）：讀擂台 arena（第 12 批）、懸賞 bounties（第 45 批）、鐵匠鋪 smithing（第 41 批）、單挑 duel 的底層；"
@@ -1665,6 +1700,8 @@ def test_the_old_names_left_as_aliases_are_known():
                          "figure_aid": "figure_acts", "yuedan": "figure_acts",
                          # zhuan（全部拆包第 29 批：tianxia/biography.py、zhuan_end.py）
                          "biography": "zhuan", "zhuan_end": "zhuan",
+                         # zhuan（第 29 批之二：tianxia/annals.py 指到 zhuan/standing.py，那一份 re-export 核心 annal_base）
+                         "annals": "zhuan",
                          # military（全部拆包第 33 批：tianxia/rank_actions.py）
                          "rank_actions": "military",
                          # military（全部拆包第 34 批：tianxia/foreshadow.py、opportunities.py）

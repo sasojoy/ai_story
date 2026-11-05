@@ -17,7 +17,7 @@ from . import arts as arts_mod
 # （cultivation：破境卡 ascend 全部拆包第 23 批搬進修練包，engine 不再用，拿掉）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
-    allied, annals, armor, atlas, battle_instance, battlelog, bounties, calendar, clinic, conquest, create, defection, divine, economy, encounter, equipment,
+    allied, armor, atlas, battle_instance, battlelog, bounties, calendar, clinic, conquest, create, defection, divine, economy, encounter, equipment,
     fight_llm, figure_life, figures, four_tiers, forge_secrets, fusion, gender, howto, insight_fx, insights, journal, library, martial_arts, plans,
     materials, mounts, naming, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skillview, smithing,
@@ -74,6 +74,7 @@ from .rules import (
 from .rules import jianfa  # 減法季（Config.jianfa＋開季的章；子開關照名字問）
 from .sqlite_world import open_world
 from .wallet import Wallet
+from .core import annal_base as annals  # 行狀記一筆（第 29 批之二）
 from .core import features as features_core  # 核心照 FEATURES 問每一包（開發規範手冊 3.3）
 from .core.option import IDLE_MARK, Option  # 選單上的一顆（搬進核心：功能包要做選項）；閒著的選單一定有的那一顆（走一趟要認它）
 from .core.services import NO_SUCH_PLAYER, PAUSED_TEXT, WalletService, drill_share, wallet_on  # 共用的字與小函式、錢包服務（3.10）
@@ -81,8 +82,10 @@ from .core.services import BIG_FIGHT_WAIT  # sortie（全部拆包第 17 批）�
 from .core.services import PLAN_OPTION, ROAD_SAY, SAY_MAX, SAY_OPTION, TEXT_TALKS, say_text  # noqa: F401  companions（全部拆包第 20 批）：「自己說」那三顆的 id 與那句話能不能送，搬進核心的共用的字
 from .core.services import AUDIENCE_HALL_FIGURES, SNUB_NOTE, SOCIAL_NO_ONE  # noqa: F401  socialize（全部拆包第 21 批）：交友求見的三個共用的字搬進核心的共用的字（SOCIAL_NO_ONE、SNUB_NOTE 測試從 engine 拿）
 from .features.stamina_plays import actions as stamina_actions  # 過渡：Game._stamina_play_options 前半的一行委派（全部拆包第 39 批）
+from .features.travel import go_actions as travel_go, menu as travel_menu, road_actions as travel_road  # 過渡：Game 上移動的 9 個一行委派（全部拆包第 47 批）
 from .features.stamina_plays import ambush_actions  # 過渡：Game 上設伏的 4 個一行委派（全部拆包第 39 批）
 from .features.seclusion import actions as seclusion_actions  # 過渡：Game 上閉關的 3 個一行委派（全部拆包第 39 批）
+from .core.services import ROAD_REWARD_TASKS, ROAD_TASKS  # noqa: F401  travel（全部拆包第 47 批）：路上小事的名稱表與有收穫的那兩樣搬進核心的共用的字（from tianxia.engine import ROAD_TASKS 照舊拿得到）
 from .core.services import MOVE_BLOCKED, RaidSpoils  # stamina_plays（全部拆包第 39 批）：移動被擋的標籤與設伏／截殺共用的贏家帳
 from .core.services import HutReward  # guide（全部拆包第 22 批）：序章步驟的獎勵那一行的記號（原本 import 自 guide）
 # sense（全部拆包第 24 批）：籌備中那兩句與走一趟的裝飾器搬進核心的共用的字與小函式（engine 照舊用：`from tianxia.engine import PREPARING_REFUSAL`
@@ -206,13 +209,6 @@ SECT_LABEL = "拜入{sect}"  # 待 joy 潤：拜入門派從交友搬到「此�
 SUMMONS_LABEL = "應召晉升（召見在此・不花體力）"  # 待 joy 潤：一類一顆的應召（設計 9.1 第 1 組乙，橫幅上的字）
 GENDER_SET = "往後江湖上以{word}相稱。"  # 設定頁選了性別（只能選一次）
 GENDER_LOCKED = "性別已經定了，改不了。"
-# 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見 _road_task_options
-ROAD_TASKS: dict[str, tuple[str, str]] = {
-    "think": ("邊走邊想", "想過了"),
-    "ask": ("沿途打聽", "打聽過了"),
-    "gather": ("路邊採集", "找過了"),
-}
-ROAD_REWARD_TASKS = ("think", "gather")  # 有經濟收穫、受每天上限管的路上小事（Config.road_reward_daily_cap）
 DISCUSS_SAME = "兩個人出的是同一樣，論不出新東西。"
 # 答應論武時對方那邊合不成：照他那一句的兩三個字（fusion.Refusal.short）換成從你這邊看的說法——他那一句原話是寫給他看的，
 # 「你已經有了」的「你」是他（FB-243；待 joy 潤）。沒列到的只寫「某某那邊合不成。」
@@ -571,7 +567,7 @@ class Game:
         if old.player.annals:  # 行狀跟著角色重來：先把上一季的存起來，季末的傳照它寫（玩家傳）
             self.world.save_annals(
                 old.player.season_number, old.player.name, [e.model_dump() for e in old.player.annals],
-                annals.profile(old, self.content, season=past),
+                self._zhuan_profile(old, past),
             )
         features_core.on_season_end(self)  # 功能包：舊的那一季要丟之前（self.state 還是舊的；開發規範手冊 3.3）
         fresh = new_game_state(self.content, old.player.name)
@@ -661,6 +657,9 @@ class Game:
 
     def _zhuan_past(self, old: GameState) -> WorldState | None:
         return zhuan_actions.past(self, old)
+
+    def _zhuan_profile(self, old: GameState, season: WorldState | None) -> dict:
+        return zhuan_actions.profile(self, old, season)
 
     def _season_grant(self, old: GameState) -> None:
         """三陣營四勝利（減法季設計 3.3）：上一季收季時論了功的人（那一季的 WorldState.final_tiers），新的一季開局照那一階發起手資源
@@ -1358,67 +1357,20 @@ class Game:
         return outlets_donate.armament_view(self)
 
     def _move_option(self, here: str, dest_id: str) -> Option:
-        """選單上的「前往 相鄰地點」，照主畫面選的走法（move_mode）：標籤寫這種走法的時間與體力，體力不夠就按不下去、
-        寫明原因（跟大地圖的「安排前往」按鈕同一個說法）。步行的 id 維持 move:<地點>（機器人、假人與舊的呼叫端
-        只認這個）；趕路、疾行是 move:<地點>:<走法>，所以 choose() 照樣只認選單上真的有的 id。
-        時間與體力走 atlas.route_text／route_stamina，跟 _move 出發時 _depart 實際扣的是同一條路（騎著馬照腳力省、步調照坐騎，
-        裝備四欄 5.3；閒著時不在路上，不會是剛出發就折返）。"""
-        c, mode = self.content, self.move_mode
-        dest = c.locations[dest_id]
-        route = atlas.Route((dest_id,), (atlas.leg_minutes(c, here, dest_id),))
-        option_id = f"move:{dest_id}" if mode == "walk" else f"move:{dest_id}:{mode}"
-        if self.state.player.ambush is not None:  # 守著埋伏不能移動（設伏劫道：沒有分身）
-            return Option(id=option_id, label=f"前往 {dest.name}（{MOVE_BLOCKED}）", enabled=False)
-        cost = atlas.route_stamina(self.state, c, route, mode)
-        if self.state.player.stamina < cost:
-            return Option(id=option_id, label=f"前往 {dest.name}（{atlas.MODES[mode]}・體力不足，要 {cost}）", enabled=False)
-        # 尋敵分級不寫在移動清單上（Joy 2026-10-22）：兇險程度只在輿圖的地點詳情寫一句（place_detail）
-        return Option(id=option_id, label=f"前往 {dest.name}（{atlas.route_text(self.state, c, route, mode)}）")
-
-    def _back_way(self) -> atlas.Route:
-        """折返的路：從路上回到身後那一站（路上設計 3.2：折返就是「改去」那一站，見 atlas.way_to）。
-        掉頭那一種走法到身後那一站一定算得出來，所以在路上時不會是 None。"""
-        spot = atlas.road_spot(self.state, self.content)
-        return atlas.way_to(self.state, self.content, spot.behind)
+        """選單上的「前往 相鄰地點」（本體在 tianxia/features/travel/menu.py，全部拆包第 47 批；留一行委派給 _everyday_options）。"""
+        return travel_menu.move_option(self, here, dest_id)
 
     def _back_option(self) -> Option:
-        """路上的「折返 某站」，照主畫面選的走法（move_mode）：標籤寫這種走法的時間與體力，體力不夠就按不下去、寫明原因
-        （跟「前往」同一個說法，見 _move_option）。id 也跟「前往」一樣：步行是 road:back，趕路、疾行是 road:back:<走法>，
-        所以 choose() 照樣只認選單上真的有的 id。"""
-        c, mode = self.content, self.move_mode
-        way = self._back_way()
-        name = c.locations[way.path[-1]].name
-        option_id = "road:back" if mode == "walk" else f"road:back:{mode}"
-        cost = atlas.route_stamina(self.state, c, way, mode)
-        if self.state.player.stamina < cost:
-            return Option(id=option_id, label=f"折返 {name}（{atlas.MODES[mode]}・體力不足，要 {cost}）", enabled=False)
-        return Option(id=option_id, label=f"折返 {name}（{atlas.route_text(self.state, c, way, mode)}）")
+        """路上的「折返 某站」（本體在 tianxia/features/travel/menu.py；留一行委派給 _options 路上那串）。"""
+        return travel_menu.back_option(self)
 
     def _road_task_options(self, j: Journey) -> list[Option]:
-        """路上小事（路上設計第四節）：步行、趕路時每樣一顆（四樣；全圖開放時沒有留意地形，三樣），不花體力；這一段路做過的灰掉、寫「這段路已經……」。
-        疾行一站一站立刻抵達，沒有。這個遊戲日的收穫拿滿了（每天上限，遊戲日跟著季長縮）的邊走邊想、路邊採集照樣按得下去，
-        補充改寫「收穫拿滿了」（待 joy 潤）。鈕上不寫換日的那一刻：375 px 上 2×2 格子一格的小字只有約 143 px，時刻本身就約 118 px，
-        再加字就折成兩行、整個格子變高（day-scale 審查 M1）；時刻寫在按下去的那一句（_road_think、_road_gather）。"""
-        if j.mode == "dash":
-            return []
-        hints = {
-            "think": f"心得 +{self.content.config.road_think_xinde}",
-            "ask": "聽一則這一帶的傳聞",
-            "gather": "有機會撿到素材",
-        }
-        if not self._road_reward_due("task"):
-            for what in ROAD_REWARD_TASKS:
-                hints[what] = "收穫拿滿了"  # 不留「心得 +3」：拿滿了就沒有
-        done = self.state.player.leg_actions
-        return [
-            Option(id=f"road:{what}", label=f"{name}（{did}，到下一站再說）", enabled=False) if what in done
-            else Option(id=f"road:{what}", label=f"{name}（{hints[what]}）")
-            for what, (name, did) in ROAD_TASKS.items()
-        ]
+        """路上小事的那幾顆（本體在 tianxia/features/travel/menu.py；留一行委派給 _options 路上那串）。"""
+        return travel_menu.road_task_options(self, j)
 
     def set_move_mode(self, mode: str) -> None:
-        """主畫面的「走法」切換：之後選單上的「前往」用這種走法；不認得的走法當成步行。不存檔（見 __init__ 的 move_mode）。"""
-        self.move_mode = mode if mode in atlas.MODES else "walk"
+        """主畫面的「走法」切換（本體在 tianxia/features/travel/menu.py；留一行委派給 server、腳本與測試）。"""
+        travel_menu.set_move_mode(self, mode)
 
     def _recruit_target(self) -> str | None:
         return companions_actions.recruit_target(self)
@@ -1855,16 +1807,13 @@ class Game:
                 msgs = taken.run()
             elif kind == "act":
                 msgs = self._act(arg, prepared)
-            elif kind == "move":
-                msgs = self._move(arg)
+            # （move：前往，road：折返與路上小事，全部拆包第 47 批換成移動包的 choose 掛鉤〔上面 taken 那一支〕，拿掉）
             # （talk：談話；parley:road：帶路的路上說一句，第 20 批審查換成人物情誼包的 choose 掛鉤〔上面 taken 那一支；prepared 與 said 經 _talk_turn、_talk_said 寄放〕，拿掉）
             elif kind == "faction":
                 msgs = self._faction_step(arg)
             elif kind == "defect":
                 msgs = self._defect_step(arg)
             # （call：指名求見，全部拆包第 21 批換成交友求見包的 choose 掛鉤〔上面 features_core.choose 接走；prepared 經 _talk_turn 寄放〕，拿掉）
-            elif kind == "road":
-                msgs = self._road(arg)
             # （learn：拜師學藝，全部拆包第 23 批換成修練包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             # （opp：機緣、fs：伏筆的最後一步，全部拆包第 34 批換成軍情包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             # （sense：有所感選做法、順其自然，全部拆包第 24 批換成有所感包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
@@ -2087,8 +2036,7 @@ class Game:
                 return "再想想"
             fid, _, ally = arg.partition(":")  # 豪強分屬兩軍：defect:<陣營>:<依附的那一軍>
             return f"考慮{defection.slot_label(s, c, c.scenario.faction(fid), ally or None)}"
-        if kind == "move":
-            return f"前往 {c.locations[arg.partition(':')[0]].name}"
+        # （move：「前往 <地點名>」，全部拆包第 47 批換成移動包 choose 掛鉤的 Outcome.title，拿掉）
         if kind == "choice":
             event = c.events[s.pending_event]
             return f"{event.title}・{event.choices[int(arg)].text}"
@@ -2097,11 +2045,7 @@ class Game:
         # （sense：「有所感・場景」，全部拆包第 24 批換成有所感包 choose 掛鉤的 Outcome.title，拿掉）
         # （learn：「學藝・<武學名>」，全部拆包第 23 批換成修練包 choose 掛鉤的 Outcome.title，拿掉）
         # （fs：「作罷」「<這一趟>・<所在>」，全部拆包第 34 批換成軍情包 choose 掛鉤的 Outcome.title，拿掉）
-        if kind == "road":
-            what = arg.partition(":")[0]
-            if what == "back":
-                return atlas.journey_title(c, self._back_way().path)  # 折返：跟「前往」同一個標題，抵達時才併得進同一則
-            return ROAD_TASKS[what][0]
+        # （road：折返跟「前往」同一個標題、路上小事寫它自己的名字，全部拆包第 47 批換成移動包 choose 掛鉤的 Outcome.title，拿掉）
         # （opp：機緣的標題，全部拆包第 34 批換成軍情包 choose 掛鉤的 Outcome.title，拿掉）
         if kind == "bounty":
             return bounties.BOARD
@@ -2140,7 +2084,7 @@ class Game:
             return owned
         titles = {
             "explore": f"探索{here}", "socialize": f"交友・{here}", "call": f"求見・{here}", "train": f"遊歷・{here}",
-            "recruit": f"招募・{here}", "rest": f"調息・{here}", "summons": f"應召・{here}", "halt": "喊停", "part": "分道揚鑣",
+            "recruit": f"招募・{here}", "rest": f"調息・{here}", "summons": f"應召・{here}", "part": "分道揚鑣",
             "duty": f"{duty.name if duty else '守勢'}・{here}", "convoy": f"接下糧車・{here}",
             "rank2": f"{action2.name if action2 else '第二階行動'}・{here}",
             "bounties": f"{bounties.BOARD}・{here}",
@@ -2375,8 +2319,7 @@ class Game:
         got = features_core.act(self, what, prepared)
         if got is not None:
             return got
-        if what == "halt":
-            return self._halt()
+        # （halt：喊停，全部拆包第 47 批換成移動包 Verb 的 run 與 title〔上面 features_core.act 接走〕，拿掉）
         if what == "part":
             return self._part_ways()
         if what == "recruit":
@@ -5079,95 +5022,13 @@ class Game:
                 self._draft.changes.append(f"經驗 +{record.exp}（每人）")
         return line
 
-    def _move(self, arg: str) -> list[str]:
-        """選單上的「前往 某地」：沿直接相連的那條路出發。arg 是 move: 後面那段——只有地點就是步行，
-        「地點:走法」是主畫面「走法」切換選的趕路或疾行（見 _move_option）。"""
-        dest_id, _, mode = arg.partition(":")
-        legs = atlas.path_legs(self.content, self.state.player.location, [dest_id])
-        return self._depart(atlas.Route((dest_id,), tuple(legs)), mode or "walk")
-
-    def _road(self, arg: str) -> list[str]:
-        """路上的選項（路上設計第三、四節）。road:back[:<走法>] 是折返：回身後那一站，跟大地圖改道走同一條路（見 _depart）。
-        其餘是路上小事（ROAD_TASKS）：記進這一段做過的，結果照既有慣例寫成「心得 +3」這種變化量。"""
-        what, _, mode = arg.partition(":")
-        if what == "back":
-            return self._depart(self._back_way(), mode or "walk")
-        self.state.player.leg_actions.add(what)
-        tasks = {"think": self._road_think, "ask": self._road_ask, "gather": self._road_gather}
-        self._road_gain = None  # 這件小事的收穫（分給結伴同行的人，_share_road）；各個小事真的給了東西才填
-        msgs = tasks[what]()
-        return msgs + self._share_road(what, self._road_gain)
-
-    def _road_ends(self) -> tuple[str, str]:
-        """這段路的兩頭：身後那一站、前面那一站。"""
-        spot = atlas.road_spot(self.state, self.content)
-        return spot.behind, spot.ahead
-
-    def _road_rewards_used(self, kind: str, day: int | None = None) -> int:
-        """這一個遊戲日（rules.game_day，跟每天對話輪數同一個算法、跟著季長縮；不給就是此刻的）路上已經拿過幾次收穫；
-        kind 是 "task"（路上小事）或 "sight"（見聞）。紀錄是別的號碼就當沒拿過。"""
-        record = self.state.player.road_rewards_today.get(kind)
-        return record[1] if record and record[0] == (day or game_day(self.content, self.state.world)) else 0
-
     def _road_reward_due(self, kind: str, day: int | None = None) -> bool:
-        """這一個遊戲日路上這一種收穫還沒拿滿（企劃者 2026-10-03 決定的每天上限 road_reward_daily_cap）。"""
-        return self._road_rewards_used(kind, day) < self.content.config.road_reward_daily_cap
+        """路上這一種收穫還沒拿滿（本體在 tianxia/features/travel/road_actions.py；留一行委派給 _share_road〔第 48 批〕與測試）。"""
+        return travel_road.reward_due(self, kind, day)
 
     def _count_road_reward(self, kind: str, day: int | None = None) -> None:
-        """記一次真的給出去的收穫（沒撿到東西的採集不算）。"""
-        day = day or game_day(self.content, self.state.world)
-        self.state.player.road_rewards_today[kind] = [day, self._road_rewards_used(kind, day) + 1]
-
-    def _road_reopen(self, after: str) -> str:
-        """路上收穫拿滿了那兩句括號裡的話：「〔換日的那一刻〕 {after}」；這一季之內不會再換日（rules.day_turn 是 "season"，
-        day-scale 審查 M2）時是「這一季之內不會再有」（待 joy 潤）。"""
-        kind, moment = day_turn(self.content, self.state.world)
-        if kind == "later":  # 季末延後、換日寫不出那一刻（FB-102，待 joy 潤）：「之後才會再有」→「過一陣子才會再有」
-            return "過一陣子" + after.removeprefix("之後")
-        return f"{moment} {after}" if moment else "這一季之內不會再有"
-
-    def _road_think(self) -> list[str]:
-        """邊走邊想：心得（一次遊歷大約 12～20，這裡刻意少很多）。這個遊戲日的收穫拿滿了就照樣想，只是沒有心得
-        （寫換日的那一刻，待 joy 潤）。"""
-        if not self._road_reward_due("task"):
-            return [f"你邊走邊想，這陣子想得夠多了，沒有新的心得（{self._road_reopen('之後才會再有')}）。"]
-        p, amount = self.state.player, self.content.config.road_think_xinde
-        p.stats["xinde"] = p.stats.get("xinde", 0) + amount
-        self._count_road_reward("task")
-        self._road_gain = ("xinde", amount)
-        return ["你邊走邊想，把這幾天的見聞在心裡過了一遍。", f"心得 +{amount}"]
-
-    def _road_ask(self) -> list[str]:
-        """沿途打聽：這段路兩頭所在大區（Rumor.region；兩頭不同區時兩區都算）最近幾則傳聞裡隨機挑一則；沒有就寫一句，
-        仍算做過。聽得到的才挑（rules.audible：別的陣營的軍情、寫給別人的個人線索聽不到）；第一季只挑傳聞板上的
-        （最近 rumor_board_days 個季曆天，天下大事也一樣——打聽的是「這一帶最近」的事）。"""
-        s, c = self.state, self.content
-        ears, regions = ears_of(s, c), here_regions(s, c)  # 在路上時 here_regions 就是這段路兩頭的大區（beta 的 ears.regions 是空的）
-        heard = [
-            r for r in s.world.rumors if r.region in regions and r.time >= ears.since and audible(r, ears)
-        ][-c.config.road_rumor_pool:]
-        if not heard:
-            return ["你沿途問了幾個人，這一帶最近沒什麼新鮮事。"]
-        text = self.rng.choice(heard).text
-        self._road_gain = ("rumor", text)
-        return [f"你沿途向人打聽，聽說：{text}"]
-
-    def _road_gather(self) -> list[str]:
-        """路邊採集：一定機率撿到一樣一階素材；屬性照這段路兩頭的地點寫的素材（Location.materials），兩頭都沒寫就隨機。
-        這個遊戲日的收穫拿滿了就不翻（也不擲骰，寫換日的那一刻，待 joy 潤）；撿到了才算一次收穫。"""
-        s, c = self.state, self.content
-        if not self._road_reward_due("task"):
-            return [f"你留心路邊，這陣子已經撿夠了，沒再去翻（{self._road_reopen('之後再說')}）。"]
-        if self.rng.random() >= c.config.road_gather_chance:
-            return ["你在路邊翻找了一陣，沒找到什麼能用的。"]
-        kinds = {c.materials[m].attribute for end in self._road_ends() for m in c.locations[end].materials if m in c.materials}
-        pool = [m for m in materials.by_tier(c, 1) if m.attribute in kinds] or materials.by_tier(c, 1)
-        if not pool:  # 內容裡沒有一階素材：當成沒找到
-            return ["你在路邊翻找了一陣，沒找到什麼能用的。"]
-        self._count_road_reward("task")
-        found = self.rng.choice(pool).id
-        self._road_gain = ("material", found)
-        return ["你在路邊翻找了一陣。", materials.grant(s, c, found)]
+        """記一次真的給出去的路上收穫（本體在 tianxia/features/travel/road_actions.py；留一行委派給 _share_road〔第 48 批〕與測試）。"""
+        travel_road.count_reward(self, kind, day)
 
     def _depart(self, route: atlas.Route, mode: TravelMode, pace: float | None = None) -> list[str]:
         """出發（地圖擴充設計 3.2、3.3）：趕路、疾行的體力出發時一次扣，照走法排好每一站的抵達時間。
@@ -5287,34 +5148,8 @@ class Game:
         return [text] + convoy + left + guide + thresholds
 
     def _road_sight(self, road: RoadKind, loc_id: str, when: float | None = None) -> list[str]:
-        """路上見聞（路上設計第五節）：抵達一站時有 road_sight_chance 的機會，從符合這段路的種類、剛抵達那一站所在大區的
-        見聞裡平均挑一則（最近看過的 road_sight_recent 則先排除，池子不夠才重複）。文字寫進這次抵達的紀錄，小收穫照慣例
-        接在後面。寫好的文字、不呼叫模型，下線補算時照樣發生。機率是 0 或池子是空的時候連骰子都不擲。
-        有收穫的見聞受每天上限管（企劃者 2026-10-03 決定，跟路上小事各算各的）：抵達那一個遊戲日（when，下線補算時是當時的
-        抵達時間；遊戲日跟著季長縮，rules.game_day）的 "sight" 收穫拿滿了，給銀兩、素材的見聞就不挑（文字寫的就是拿到東西），
-        給心得的照寫文字、不給心得；真的給了才算一次。沒有收穫的見聞不算次數。"""
-        s, c = self.state, self.content
-        day = game_day(c, s.world, when)
-        capped = not self._road_reward_due("sight", day)
-        region = atlas.region_of(c, loc_id)
-        area = region.id if region is not None else None
-        pool = [
-            sight for sight in c.road_sights.values()
-            if (not sight.roads or road in sight.roads) and (not sight.regions or area in sight.regions)
-            and not (capped and (sight.effect.materials or sight.effect.stats.get("silver")))
-        ]
-        chance = c.config.road_sight_chance
-        if not pool or chance <= 0 or self.rng.random() >= chance:
-            return []
-        recent = s.player.recent_sights
-        sight = self.rng.choice([x for x in pool if x.id not in recent] or pool)
-        keep = c.config.road_sight_recent
-        s.player.recent_sights = (recent + [sight.id])[-keep:] if keep else []
-        rewarded = bool(sight.effect.stats or sight.effect.materials)  # 載入檢查保證見聞只會有這兩種效果
-        if not rewarded or capped:
-            return [sight.text]
-        self._count_road_reward("sight", day)
-        return [sight.text] + apply_effect(sight.effect, s, c, self.world, push=self.push_trend)
+        """路上見聞（本體在 tianxia/features/travel/road_actions.py；留一行委派給 _arrivals，位置不動，第 48 批才搬）。"""
+        return travel_road.sight(self, road, loc_id, when)
 
     def _real_minutes(self, world_seconds: float) -> int:
         """世界時鐘的一段秒數，換成給玩家看的「現實」整分鐘（至少 1 分，.5 進位）：世界秒 ÷ time_scale ＝ 現實秒（FB-062）。"""
@@ -5332,49 +5167,13 @@ class Game:
             line += f"；下一站{c.locations[j.path[j.reached]].name}"
         return line
 
-    def _halt(self) -> list[str]:
-        """喊停（地圖擴充設計 3.3）：到下一站就停下，不走完全程。不花體力；趕路已經扣的體力也不退。"""
-        s, c = self.state, self.content
-        j = s.player.journey
-        j.stop_at = j.reached
-        msgs = [f"你喊停，到了{c.locations[j.path[j.reached]].name}就停下來。"]
-        if j.mode == "hurry":
-            msgs.append("（趕路已經花掉的體力不退。）")  # 拿掉趕路之前出發、還在路上的那一趟
-        msgs += self._lead(None, 0, f"{s.player.name}喊停，到了{c.locations[j.path[j.reached]].name}就停下來。")
-        self._sync_battle_presence()  # 這一趟縮短了：最後一站落在決戰的大區內，就不再算離開
-        return msgs
-
     def travel(self, dest_id: str, mode: TravelMode = "walk") -> list[str]:
-        """安排前往（大地圖詳情欄的按鈕）：照路程最短的路線出發，走法見 _depart。在路上也行（路上設計 3.1）：
-        取掉頭與繼續兩種走法裡路程短的（見 atlas.way_to），新路程從路中間出發。"""
-        refusal = self.travel_refusal(dest_id, mode)
-        if refusal is not None:
-            return self._log([f"（{refusal}。）"])
-        s, c = self.state, self.content
-        route = atlas.way_to(s, c, dest_id)
-        s.battle_card = None
-        s.player.guide_done = []
-        self._draft = Draft(atlas.journey_title(c, route.path))
-        stamina = s.player.stamina
-        try:
-            msgs = self._depart(route, mode)
-            msgs += self._hear_after_stamina(stamina)
-            msgs += ranks.check_summons(s, c)  # 疾行送到糧車也記貢獻（計畫 T5）
-            msgs += self._report_seat()  # 同上：第四階席次的帳也要抄（正式版丁）
-            self._check_hints()  # 出發之後看一遍（疾行立刻到：抵達的地方教基礎武學、站著大勢人物，新手引導計畫三）
-            journal.add_entry(s, self._draft.entry(s.world.time, msgs))
-        finally:
-            self._draft = None
-        self._save_season()
-        return self._log(msgs)
+        """安排前往（本體在 tianxia/features/travel/go_actions.py；留一行委派給 /api/travel、假人與測試）。"""
+        return travel_go.travel(self, dest_id, mode)
 
     def travel_refusal(self, loc_id: str, mode: TravelMode = "walk") -> str | None:
-        """用這種走法安排前往這裡，不行的原因；可以時為 None。server.py 拿它分辨「沒能出發」。"""
-        if self._preparing():
-            return PREPARING_TEXT
-        if loc_id not in self.content.locations or mode not in atlas.MODES:
-            return "無法安排前往這裡"
-        return atlas.travel_refusal(self.state, self.content, loc_id, mode)
+        """用這種走法安排前往這裡，不行的原因（本體在 tianxia/features/travel/go_actions.py；留一行委派給 /api/travel 與測試）。"""
+        return travel_go.travel_refusal(self, loc_id, mode)
 
     def _choose(self, index: int) -> list[str]:
         return event_check.resolve_choice(self, index)
