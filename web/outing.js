@@ -37,7 +37,7 @@
   // 畫面上的字（待 joy 潤）
   const OUTING_WAIT = "路上碰到要選的事。";
   const OUTING_AFTER = "果";
-  const OUTING_AFTER_HOLD = 2200; // 「果」寫出來之後停多久才接著走（毫秒）
+  const OUTING_AFTER_HOLD = 5000; // 「果」寫出來之後停多久才接著走（毫秒）；Joy 2026-11-05「兩秒太短…提高到5秒」，要快的人點畫面就走
   const OUTING_GO_ON = "接著走 ›";
   const OUTING_CLOSE = "收起";
   const OUTING_AGAIN = "再走一趟";
@@ -179,7 +179,7 @@
     outingGo(0).finally(() => { OW.going = false; });
   }
 
-  // 點畫面一下就接著走（Joy 2026-11-03「選完都要等 3～5 秒」：伺服器只花 0.1 秒，等的是「果」停的 2.2 秒與走到下一站的動畫）：
+  // 點畫面一下就接著走（Joy 2026-11-03「選完都要等 3～5 秒」：伺服器只花 0.1 秒，等的是「果」停的 5 秒與走到下一站的動畫）：
   // 正在走就快轉到下一站（同「略過」）；「果」那一行停著的時候不等了，直接出發。不點的人照舊慢慢演
   function outingHurry() {
     if (OW.cur || OW.tasks.length) { OW.turbo = true; return; }
