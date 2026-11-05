@@ -1789,7 +1789,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # smithy（全部拆包第 41 批：tianxia/smithing.py）
                          "smithing": "smithy",
                          # faction（全部拆包第 35 批：tianxia/defection.py）
-                         "defection": "faction"}
+                         "defection": "faction",
+                         # gear（全部拆包第 42 批：tianxia/signature_arms.py）
+                         "signature_arms": "gear"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 
@@ -1945,13 +1947,7 @@ GAME_DELEGATE_CALLERS.update({
     ("choose", "_signature_arms"): _GEAR_POS.format(what="同上：本命兵器與名將贈禮同一處"),
     ("choose", "_gift_entry"): _GEAR_POS.format(what="贈禮另起一則江湖紀錄，接在這一下的紀錄寫完之後"),
 })
-# 清失效參照：signature_arms.refresh_names 排在 treasures、forge_secrets 的 refresh_names 後面、_copy_heirloom 前面，會改 item.name、要讀 owned，不是只讀的純函式；
-# 清失效參照的先後就是行為，on_drop_stale 掛鉤在最後面，位置不同不能接。經舊名別名讀（GAME_IMPORTS 的 tianxia.signature_arms）。
-# （鐵匠鋪那一筆第 40 批已收，GAME_DIRECT 的 _drop_stale_references 在這裡重新開一筆；歸第 55 批補算與換季收接縫。）
-GAME_DIRECT.update({
-    "_drop_stale_references": "裝備：signature_arms.refresh_names 排在 treasures、forge_secrets 的 refresh_names 後面、_copy_heirloom 前面，會改 item.name、要讀 owned；"
-                              "清失效參照的先後就是行為，不接 on_drop_stale（會挪到最後）——過渡：第 55 批（補算與換季收接縫）收",
-})
+# （gear 第 42 批的 GAME_DIRECT 一筆：_drop_stale_references 的 signature_arms.refresh_names，寫在檔案下面鐵匠鋪那三筆刪掉之後。）
 # 核心本體（事件檢定）經 ctx 叫裝備的委派：上面「現在是空的」註解預留的六對（answer_event、answer_branch × _general_gifts、_signature_arms、_gift_entry）接上
 _GEAR_EVENT = "隨口應對的效果加了情誼，另起一則贈禮（名將贈禮、本命兵器）：事件檢定是核心本體，位置固定在效果套完之後、沒有對應的掛鉤"
 CORE_DELEGATE_CALLERS.update({
@@ -2068,6 +2064,14 @@ SHARED_LATER["narration"] = "事件旁白每週改寫：只剩讀事件抽選 ev
 for _name in ("choose", "_drop_stale_references", "sync"):
     del GAME_DIRECT[_name]
 GAME_IMPORTS -= {"tianxia.smithing"}
+# gear（全部拆包第 42 批）：鐵匠鋪的 _drop_stale_references 刪掉之後，這個函式為裝備重新開一筆（理由見上面 # gear 那一段）
+# 清失效參照：signature_arms.refresh_names 排在 treasures、forge_secrets 的 refresh_names 後面、_copy_heirloom 前面，會改 item.name、要讀 owned，不是只讀的純函式；
+# 清失效參照的先後就是行為，on_drop_stale 掛鉤在最後面，位置不同不能接。經舊名別名讀（GAME_IMPORTS 的 tianxia.signature_arms）。
+# （鐵匠鋪那一筆第 40 批已收，GAME_DIRECT 的 _drop_stale_references 在這裡重新開一筆；歸第 55 批補算與換季收接縫。）
+GAME_DIRECT.update({
+    "_drop_stale_references": "裝備：signature_arms.refresh_names 排在 treasures、forge_secrets 的 refresh_names 後面、_copy_heirloom 前面，會改 item.name、要讀 owned；"
+                              "清失效參照的先後就是行為，不接 on_drop_stale（會挪到最後）——過渡：第 55 批（補算與換季收接縫）收",
+})
 SHARED_CORE_WORLD2 = ("figures", "figure_life", "plans", "orders", "ranks", "chapters", "rumor_view")
 
 
