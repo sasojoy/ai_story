@@ -26,8 +26,8 @@ from tianxia import seal  # 過渡：待搬（玉璽：天命之爭）
 from tianxia.models import BattleDef
 from tianxia.rules import recompute_trends, resolve_trends, season_one, world_trend_value
 from tianxia.state import Rumor, TimelineResult, WorldState
-from tianxia.world import _season_vehicle, showdown_key  # 過渡：待搬（季的事用的空殼玩家、時刻表決戰照實際那一版的結果鍵）
-from tianxia.world import open_waiting_showdown as open_waiting  # 過渡：待搬（開時間到了、在等的那一場決戰）
+from tianxia.world import _season_vehicle, showdown_key  # 核心本體：季的事用的空殼玩家、時刻表決戰照實際那一版的結果鍵
+from tianxia.world import open_waiting_showdown as open_waiting  # 核心本體：開時間到了、在等的那一場決戰
 
 from . import escorts, generals, muster, sieges
 

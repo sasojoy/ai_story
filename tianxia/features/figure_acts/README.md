@@ -29,7 +29,8 @@
 - `act:challenge:<人物>`：`_everyday_options` 的選單那一格、`_act` 的按下去、`_action_title`、`_fight_squad` 的對手隊伍——act 子動詞帶後綴接不了 `Verb`（總表第 57 批），Game 留 `_challenge_options`、`_challenge`、`_figure_squad`、`_snubbed_character`、`challenge_odds` 的一行委派。
 - 選單末段 `護衛 + features_core.options + 盤算`：護衛那串在包選項之前、盤算在之後，`options` 掛鉤接不了，Game 留 `_aid_options`、`_plan_options` 的委派。
 - `sync` 的 `_deliver_guard_credits`：夾在 `_deliver_echoes` 與 `deliver_notices` 之間，留委派（接成 `deliver_notices` 掛鉤，酒肆的會跑在它前面，行狀順序會變）。
-- `world.py` 的 `yuedan.tick`、`social.py` 的 `yuedan.line_for`、`figures.py` 的 `figure_aid.restore`：舊模組經別名讀（過渡；第 40 批、第 37 批各自換掉）。
+- `social.py` 的 `yuedan.line_for`、`figures.py` 的 `figure_aid.restore`：舊模組經別名讀（過渡；第 40 批、第 37 批各自換掉）。
+- 世界層的格（core_world：全部拆包第 25 批）：月旦評每一步（原本 `world.py` 經別名叫 `yuedan.tick`）是世界層 `step` 的 `yuedan` 那一格（`__init__.py` 的 `world()` → `yuedan.world_step`；排在盤算之後、那一步最後，先後在核心的 `WORLD_ORDER`；不問 `enabled`）。
 - `bot_policy._stamina_play` 的 `("ambush:set:", "works:", "aid:")`、`models.ALLOW_FAMILIES` 的 `aid:`、`plan:`、`act:challenge:` 字串：核心原位。
 
 ## 測試

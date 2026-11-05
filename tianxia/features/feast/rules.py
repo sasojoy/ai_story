@@ -299,3 +299,10 @@ def text_problem(text: str) -> str | None:
         return BAD_TEXT
     return None
 
+
+# core_world（全部拆包第 25 批「世界層掛鉤」）：世界層 step 的 feast 那一格（tianxia/core/features.py 的 WORLD_ORDER）
+def world_step(vehicle: GameState, content: Content, world, step: float) -> None:
+    """世界一步（原本 world.advance_world_state 裡人物行事之後、盤算之前那一行）：時間到了的宴散席，席間最佳那一句上天下大事。
+    不看開關（settle 本來就「開關關著也照散」）；不接回傳值。"""
+    settle(vehicle, content)
+

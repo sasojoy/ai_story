@@ -244,7 +244,7 @@ def build_system_prompt(
     used = p.used_dialogue_options.get(companion_id, [])
     used_str = "、".join(f"「{o}」" for o in used[-8:]) if used else "無"
     tags_str = "、".join(DIALOGUE_TAGS)
-    from tianxia.world import current_act  # 過渡：待搬（世界一步 world 第 25 批收進核心）  函式內 import：避免循環引用
+    from tianxia.world import current_act  # 核心本體（world 第 25 批收進核心）  函式內 import：避免循環引用
 
     act_title = current_act(state, content).title
     day = int(state.world.time // 86400) + 1

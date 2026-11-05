@@ -350,3 +350,14 @@ def tale_write(client, req: TaleRequest) -> str | None:
     except Exception:  # noqa: BLE001 — 叫不動就用模板
         return None
     return tale_clean(result.tale, req)
+
+
+# core_world（全部拆包第 25 批「世界層掛鉤」）：世界層 next 的 inscriptions 那一格（tianxia/core/features.py 的 WORLD_ORDER：排在神器、天命之季、
+# 藏碎片之前）
+def world_next(state, content: Content, now: float, old) -> None:
+    """開下一季（原本 sqlite_world.next_season 換好新的一季、蓋上新的天機之後那兩行；state 是全服狀態 SharedWorldState、old 是剛結束那一季
+    的 WorldState）：路牌上題壁墨寫的字跟著到新的一季（花錢買的，Joy 10/31「路牌也會繼續傳承」），id 不變、流水號接著上一季走（商城帳上
+    用掉的那一張照舊指得到它）；免費的預設句照舊一季一清。PR #117 原本是 outing.carry，探索第 1 批合 develop 時搬進核心，世界層開了
+    掛鉤交回這一包（欄位 WorldState.inscriptions、inscription_seq 是這一包認領的）。"""
+    state.season.inscriptions = [i for i in old.inscriptions if not i.preset]
+    state.season.inscription_seq = max(state.season.inscription_seq, old.inscription_seq)

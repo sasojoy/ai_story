@@ -755,6 +755,19 @@ def test_the_core_tests_stay_what_the_pm_defined_when_the_journal_joins_the_core
     assert test_for.NOT_CORE_TESTS <= test_for.CORE_MODULES
 
 
+# core_world（全部拆包第 25 批「世界層掛鉤」）
+def test_the_core_tests_stay_what_the_pm_defined_when_the_world_joins_the_core():
+    """world 收進核心本體（第 25 批）同 journal 只改「改了它挑什麼」：它自己的 test_world、test_world_map 不收進核心測試
+    （NOT_CORE_TESTS；要不要收交 PM），world_state 的 test_world_state 照舊在。改 world.py 是核心那一條：核心測試＋煙霧＋自己檔名的
+    （test_world…，連 test_world_state），不再照「誰 import 它」往上找。"""
+    names = {p.name for p in test_for.core_tests()}
+    assert "world" in test_for.CORE_MODULES and "world" in test_for.NOT_CORE_TESTS
+    assert "test_world_state.py" in names and not names & {"test_world.py", "test_world_map.py"}
+    picked = test_for.pick(["tianxia/world.py"])
+    assert picked.core and picked.smoke
+    assert {p.name for p in picked.files} == {"test_world.py", "test_world_map.py", "test_world_state.py"}
+
+
 def test_core_tests_take_the_contract_boundary_and_wallet_tests_of_tests_core(tmp_path, monkeypatch):
     """第 1 階會在 tests/core/ 加核心契約（test_contract*）、邊界（test_feature_boundaries）、錢包服務（test_wallet）的
     測試：用 glob 收，現在沒有就是空的；tests/core/ 的其他檔不算。"""

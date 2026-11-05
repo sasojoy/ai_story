@@ -9,7 +9,7 @@ enabled 一直是 True（沒有自己的總開關：護衛看 Config.figure_aid�
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome
+from tianxia.core.features import Feature, Outcome, WorldHook
 
 
 class FigureActsFeature(Feature):
@@ -36,6 +36,18 @@ class FigureActsFeature(Feature):
 
             return Outcome(title=plan_actions.title(ctx, arg), run=lambda: plan_actions.act(ctx, arg))
         return None
+
+    # core_world（全部拆包第 25 批「世界層掛鉤」）
+    _world: tuple[WorldHook, ...] | None = None
+
+    def world(self) -> tuple[WorldHook, ...]:
+        """世界層 step 的 yuedan 那一格（月旦評；原本 world.advance_world_state 直接叫 yuedan.tick）：不問 enabled。建一次就留著，
+        在叫的那一下才照模組屬性找 yuedan.world_step（monkeypatch 照樣有效）。"""
+        if self._world is None:
+            from . import yuedan  # noqa: PLC0415
+
+            self._world = (WorldHook("step", "yuedan", lambda *args: yuedan.world_step(*args)),)
+        return self._world
 
 
 FEATURE = FigureActsFeature()

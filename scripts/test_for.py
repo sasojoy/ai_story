@@ -11,14 +11,14 @@
   python scripts/test_for.py -- -x -k fuse   # -- 之後的參數原樣交給 pytest（-- -n 2 會換掉預設的 -n 4）
 
 怎麼挑（開發規範手冊 4.3，docs/superpowers/specs/2026-10-30-開發模式-design.md）：
-- 「核心測試」（過渡期，PM 2026-10-31）＝ 核心模組自己檔名的測試（test_<模組>…；江湖紀錄的 test_journal 不收，
-  NOT_CORE_TESTS）＋ tests/core/test_engine*.py
+- 「核心測試」（過渡期，PM 2026-10-31）＝ 核心模組自己檔名的測試（test_<模組>…；江湖紀錄的 test_journal、全部拆包第 25 批收進來的
+  world 的 test_world、test_world_map 不收，NOT_CORE_TESTS）＋ tests/core/test_engine*.py
   ＋ tests/core/ 的核心契約、邊界、錢包服務測試（CORE_GLOBS），不含 slow；「煙霧」＝ 標了 @pytest.mark.smoke 的
   （每個區塊約 10 條）。
 - tianxia/features/<包>/**：那一包的 tests/ ＋ 核心契約（tests/core/test_contract*.py 與邊界 test_feature_boundaries.py，
   CONTRACT_GLOBS：手冊 4.1 第三級的核心契約含邊界測試，改包最容易踩的就是 import 了別的包）。
 - 核心（tianxia/core/**，與 tianxia/core/__init__.py 的 MODULES：手冊 3.1 的 state、models、content、rules、calendar、
-  sqlite_world、world_state、characters、accounts、database、team、gender、naming，3.10 的 wallet，PM 10/31 的 journal；
+  sqlite_world、world_state、characters、accounts、database、team、gender、naming，3.10 的 wallet，PM 10/31 的 journal，全部拆包第 25 批的 world；
   邊界測試照同一份）：核心測試＋煙霧＋檔名是 test_<模組>… 的。tianxia/core/ 底下掛鉤與清單（CORE_LISTS：features、services、
   registry、__init__）以外的（event_check.py：第 16 批從 Game 搬來的事件檢定）再並上寫到改到的函式名（連模組名）、Game 委派名、
   類別與常數的測試檔，模組裡直接叫它的函式一路往上算（core_module_callers；第 16 批修正，PM 11/03 照第 11 批修正輪的做法）。
@@ -41,7 +41,7 @@
   第一個字的（mingtie_card → test_mingtie.py）（「import 了 engine」不再算相關：engine.py 照上面那一條）。
   tianxia/<模組>.py 另外照模組之間最外層的 import 往上找（dependents；10/31 測試自檢 T-02：改 might.py 以前挑 0 個檔）：
   import 任何依賴它的模組的測試檔也挑；engine 與假人三支（DRIVERS）、核心模組不往上走，彙整的模組（自己 import 至少
-  AGGREGATOR_FANOUT 個的：skillview、world……）算、不往上走；往上找到的超過 IMPORT_CAP 個檔（tactics、zh 這種底層的）改加
+  AGGREGATOR_FANOUT 個的：skillview、shopview……）算、不往上走；往上找到的超過 IMPORT_CAP 個檔（tactics、zh 這種底層的）改加
   核心測試＋煙霧。engine 只為了登記才 import 的（from . import wanted as _wanted_card  # noqa: F401）照它登記的動作名
   （social.register(CardAction(id=KIND))：wanted、mingtie）挑寫到 "wanted" 的測試檔＋那一群（registered_actions）。
 - content/：test_content.py ＋ test_real_content.py ＋ 寫到那個檔名的測試檔，照舊不含 slow：test_real_content.py 用真實內容
@@ -156,7 +156,9 @@ BOUNDARY_TEST = "test_feature_boundaries.py"
 # 核心模組裡、自己檔名的測試不收進「核心測試」的：江湖紀錄的 test_journal（76 條）。PM 10/31 定的核心測試是手冊 3.1 那十三個
 # 自己的測試＋test_engine＋契約、邊界、錢包（CORE_GLOBS），journal 算核心是同一天邊界測試那一條定的；收進來改 models.py 一個
 # 欄位的底數從 1,517 再漲到約 1,593，要不要收等 PM 跟 < 1,500 一起定。改 journal.py 照舊跑它（自己檔名的測試）。
-NOT_CORE_TESTS = frozenset({"journal"})
+# core_world（全部拆包第 25 批）：world 收進核心本體，同 journal 先不收它的 test_world、test_world_map（69 條；test_world_state 是 world_state 的、
+# 照舊在）——核心測試照 PM 10/31 定的那一份，要不要收交 PM。改 world.py 照舊跑它們（自己檔名的測試）。
+NOT_CORE_TESTS = frozenset({"journal", "world"})
 # 「核心測試」除了核心模組自己檔名的，再收 tests/core/ 底下這幾種（core_tests）：Game 門面、核心契約、邊界、錢包服務
 CORE_GLOBS = ("test_engine*.py", "test_contract*.py", "test_feature_boundaries.py", "test_wallet.py")
 # 功能包改了跟著那一包跑的「核心契約」（tests/core/ 底下；手冊 4.1 第三級：選項帶前綴、choose 不吃別包的、關著不給、換季、邊界）
@@ -378,7 +380,7 @@ def imported(test: Path) -> frozenset[str]:
 # - engine 與假人的三支（DRIVERS：bot、bot_policy、bot_runner，經 Game 什麼都碰）：engine 照它自己那一條（hunk 落在哪個
 #   方法）另外挑，「import 了 engine」不算相關；拿 bot 當驅動的測試檔有三十幾個，算進來改 outing.py 也挑到七十幾個檔。
 # - 核心模組（CORE_MODULES）：改核心照核心那一條；X 被核心 import，也不把 import 核心的幾百個測試檔算進來。
-# - 彙整的模組（自己 import 至少 AGGREGATOR_FANOUT 個 tianxia 模組的：bot、skillview、shopview、world、mapdata……）：
+# - 彙整的模組（自己 import 至少 AGGREGATOR_FANOUT 個 tianxia 模組的：bot、skillview、shopview、mapdata……；world 第 25 批收進核心）：
 #   import 它的測試檔算，可是不再往上走（不然 bot 一路帶出整套）。
 # 函式裡的 import（多半是為了繞開互相 import 的圈）與 TYPE_CHECKING 底下的不算邊：算進來一百二十個模組連成一圈。
 # 往上找到的（不含直接 import 的）超過 IMPORT_CAP 個測試檔時（tactics、zh、martial_arts 這種底層模組）：不一個一個挑，
