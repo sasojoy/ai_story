@@ -1393,7 +1393,7 @@ def test_the_shared_scanner_catches_an_old_module():
     """outside_imports 本身抓得到（不然上面那一條永遠綠）：最外層、函式裡、import tianxia.x 都算；TYPE_CHECKING、tianxia/core/、核心本體、
     同一層、from tianxia import 名字、標準庫不算；包與別名不在這裡算（是上面那一條）。"""
     m = "tianxia.timetable"
-    assert outside_imports("from . import figures, territory\n", m) == {"figures"}
+    assert outside_imports("from . import atlas, territory\n", m) == {"atlas"}  # 第 40 批：原本的例子 figures 收進了共用規則層
     assert outside_imports("def f():\n    from .seal import mandate_event\n", m) == {"seal"}  # 第 25 批：原本的例子 world 收進了核心本體
     assert outside_imports("def f():\n    from .world import _season_vehicle\n", m) == set()
     assert outside_imports("import tianxia.engine\n", m) == {"engine"}
@@ -1548,15 +1548,17 @@ CORE_DELEGATE_CALLERS.update({
 })
 
 
-def ctx_delegate_callers(source: str, name: str, delegates: set[str] | None = None) -> set[tuple[str, str]]:
+def ctx_delegate_callers(source: str, name: str, delegates: set[str] | None = None,
+                         names: tuple[str, ...] = ("ctx",)) -> set[tuple[str, str]]:
     """核心模組（source 是原文、name 是模組名，例 event_check）經 ctx.<名> 叫的、而且是包的委派（預設 GAME_DELEGATES）的
-    (模組.函式, 委派)；函式以外的記成 (模組, 委派)。巢狀的函式算在最外層那一個。"""
+    (模組.函式, 委派)；函式以外的記成 (模組, 委派)。巢狀的函式算在最外層那一個。names 是哪幾個變數名算 Game（預設只認 ctx；
+    core_world2：頂層的核心模組也認 game，全部拆包第 40 批）。"""
     delegates = GAME_DELEGATES if delegates is None else delegates
     out: set[tuple[str, str]] = set()
     for top in ast.parse(source).body:
         where = f"{name}.{top.name}" if isinstance(top, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) else name
         out |= {(where, node.attr) for node in ast.walk(top)
-                if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "ctx" and node.attr in delegates}
+                if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in names and node.attr in delegates}
     return out
 
 
@@ -1990,6 +1992,99 @@ def test_step_and_weekcard_joined_the_core_and_reach_no_package():
     assert _package_imports_of(old_step, "tianxia.step") == [(1, "military")]
     assert not [e for e in transitional_imports() if e.endswith(" tianxia.step") or e.endswith(" tianxia.weekcard")]
     assert not [e for e in reverse_imports() if e.startswith(("tianxia/step.py:", "tianxia/weekcard.py:"))]
+
+
+# core_world2（全部拆包第 40 批「世界模型二」；計畫 docs/superpowers/plans/2026-11-06-世界模型二-第40批.md 1.3、1.5、1.8、Task 4）：figures、figure_life、
+# plans、orders、ranks、chapters 與量出來的 rumor_view 收進共用規則層（registry.SHARED 的 # core_world2 那一段）。這一批加的都在這一段，別批的行照原樣
+# （同第 8、25、32 批 del、update、-= 的寫法）。
+# 指到這六個的六條排定項收掉（第 31 批補在指到 figures 那幾條後面的 figure_aid 那半句跟著沒了）；這六個自己碰到的別的舊模組多六條
+# （璽效 seal_acts 第 51 批、大區 atlas 第 50 批、懸賞 bounties 第 45 批成包——figure_life 叫 post_rally、post_figure、RALLY_POSTED、how，第 45 批派工要先切）。
+for _pair in (("timetable", "figures"), ("timetable", "chapters"), ("seats", "ranks"), ("chiefs", "figures"), ("stance_world", "figures"),
+              ("story_base", "chapters")):
+    del SHARED_PENDING[_pair]
+SHARED_PENDING.update({
+    ("figures", "seal_acts"): "排定：璽效查詢（seal_acts 的璽效，人物的聲威與在場）——第 51 批 16 個璽效查詢進共用規則層",
+    ("figure_life", "seal_acts"): "排定：璽效查詢（seal_acts 的璽效，人物的行事）——第 51 批 16 個璽效查詢進共用規則層",
+    ("plans", "seal_acts"): "排定：璽效查詢（seal_acts 的璽效，盤算的結果）——第 51 批 16 個璽效查詢進共用規則層",
+    ("figure_life", "atlas"): "排定：大區與路線（atlas.region_of 這一類，函式裡）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層；"
+                              "atlas 最外層 import 出陣包（舊名 sortie）：切開之前 import 它會連帶載入 sortie",
+    ("ranks", "atlas"): "排定：大區（atlas.region_of，函式裡，避免循環）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層；"
+                        "atlas 最外層 import 出陣包（舊名 sortie）：切開之前 import 它會連帶載入 sortie",
+    ("figure_life", "bounties"): "之後成包：求援委託與人物懸賞（bounties.post_rally、post_figure、RALLY_POSTED、how，函式裡）——第 45 批懸賞榜成包之前，"
+                                 "先改成查詢服務或掛鉤；bounties 經舊名 letters、parley 與 sortie import 人物情誼包 companions 與出陣包 sortie，"
+                                 "叫到它就連帶載入那兩包",
+})
+# rumor_view 讀的伏筆、機緣改問核心的 omen_base、軍令 orders 收進共用規則層之後只剩核心本體與共用規則層：收進 registry.SHARED（量出來的）。
+# events、narration 照留，理由改寫（伏筆的那一半第 40 批也改問 omen_base 了，卡住的是別的）。
+del SHARED_LATER["rumor_view"]
+SHARED_LATER["events"] = ("事件抽選：只剩讀事件分級 tiers（tiers 讀舊名 arena，也在這一份名單）；伏筆在不在跑、伏筆的事件第 40 批改問核心的 omen_base"
+                          "（心意第 19 批換成共用規則層 stance_world）")
+SHARED_LATER["narration"] = "事件旁白每週改寫：只剩讀事件抽選 events（也在這一份名單）；伏筆的事件第 40 批改問核心的 omen_base"
+# 鐵匠鋪那三筆直連（第 41 批 PM 認定第 4 條）：GO_VERB、is_forge_step、is_step_line、draft_here、draft_stale 搬進核心的 core/smith_base.py，
+# engine 改讀它、不再 import 舊名 smithing。_SMITHY_STALE 那個字串留在 # smithy 那一段，不用了。
+for _name in ("choose", "_drop_stale_references", "sync"):
+    del GAME_DIRECT[_name]
+GAME_IMPORTS -= {"tianxia.smithing"}
+SHARED_CORE_WORLD2 = ("figures", "figure_life", "plans", "orders", "ranks", "chapters", "rumor_view")
+
+
+def test_the_seven_joined_the_shared_layer_and_import_no_package_not_even_inside_a_function():
+    """這一批收進共用規則層的七個：最外層與函式裡都不 import 包與舊名的別名（大勢人物的 figure_aid、宴客 feasts、出陣 sortie、一條線 storyline、
+    軍情 foreshadow、opportunities 換成了核心的查詢服務 omen_base、feast_base、底座 story_base 與世界層的 life 那一格）。上面
+    test_the_shared_rules_layer_is_real_old_modules_with_a_reason_and_never_imports_a_package 照 SHARED 掃到它們；這裡寫明七個，免得名單改了沒人發現。
+    先證明掃描看得到函式裡的：換之前那幾行（figures.recover、figure_life.tick、orders.intercept_spots 的延後 import，chapters、rumor_view 的最外層）。"""
+    assert set(SHARED_CORE_WORLD2) <= set(SHARED)
+    for name in SHARED_CORE_WORLD2:
+        assert _feature_imports(TIANXIA / f"{name}.py") == [], name
+    old = ("from . import calendar, foreshadow, opportunities, orders\n"
+           "from . import calendar, deeds, storyline, wins\n"
+           "def recover():\n    from . import figure_aid\n"
+           "def tick():\n    from .features.feast import rules as feasts\n"
+           "def intercept_spots():\n    from . import sortie\n")
+    assert _package_imports_of(old, "tianxia.figures") == [(1, "military"), (2, "story"), (4, "figure_acts"), (6, "feast"), (8, "sortie")]
+
+
+CORE_TOP_DELEGATE_CALLERS = {  # 頂層的核心模組（MODULES 裡放在 tianxia/ 底下的）經 game 叫包的委派（第 36 批 PM 認定第 6 條）
+    ("weekcard.sides_card", "_opening_pending"): "開局三選一還沒選時陣營卡不畫：本週卡是核心本體、新手引導回答「還停在城門口」，位置固定、沒有掛鉤"
+                                                 "——第 66 批（狀態列掛鉤：/api/main 的鍵改由 status 掛鉤合）收",
+    ("weekcard.sides_card", "sides_card"): "陣營卡本體在陣營包（faction_ending），本週卡照抄；同上第 66 批收",
+    ("weekcard.sides_card", "tier_hint"): "陣營卡那一格的分級提示在陣營包（faction_ending）；同上第 66 批收",
+    ("weekcard.week_card", "_opening_pending"): "本週卡在信收起來之後才出現（批 7）：新手引導回答還沒選開局；同上第 66 批收",
+}
+
+
+def test_the_top_level_core_modules_reach_no_package_delegate_through_the_game():
+    """「核心叫委派」那一條（test_the_core_modules_reach_no_package_delegate_through_ctx）只掃 tianxia/core/ 底下的 ctx.：擴到 MODULES 裡放在
+    tianxia/ 頂層的模組（world、weekcard、step……），game.<委派> 照 ctx. 一樣算。掃到的只有 CORE_TOP_DELEGATE_CALLERS 那幾對（寫明哪一批收）。
+    先證明掃描看得到 game 那個名字（預設只認 ctx 的照舊看不到）。"""
+    found: set[tuple[str, str]] = set()
+    for name in sorted(CORE):
+        path = TIANXIA / f"{name}.py"
+        if path.exists():
+            found |= ctx_delegate_callers(path.read_text(encoding="utf-8"), name, names=("ctx", "game"))
+    assert found == set(CORE_TOP_DELEGATE_CALLERS)
+    assert all(isinstance(why, str) and why.strip() for why in CORE_TOP_DELEGATE_CALLERS.values())
+    src = "def f(game):\n    return game._tavern_price(1)\n"
+    assert ctx_delegate_callers(src, "m", names=("ctx", "game")) == {("m.f", "_tavern_price")}
+    assert ctx_delegate_callers(src, "m") == set()
+
+
+def condition_fields_touched(source: str) -> list[str]:
+    """source 的 check_condition 裡碰到的包認領的欄位：["行 欄位（包）"]。條件本身的欄位（cond.<名>：Condition 的 clue_items 跟 PlayerState 的同名）不算。"""
+    claimed = claimed_fields()
+    fn = next(n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef) and n.name == "check_condition")
+    return [f"{sub.lineno} {sub.attr}（{claimed[sub.attr]}）" for sub in ast.walk(fn)
+            if isinstance(sub, ast.Attribute) and sub.attr in claimed and not (isinstance(sub.value, ast.Name) and sub.value.id == "cond")]
+
+
+def test_check_condition_touches_no_package_field():
+    """核心本體的 rules.check_condition 不直接讀包認領的欄位：一條線的記號（storylines）問共用規則層的 story_base.mark_of、伏筆物品
+    （clue_items）問核心的查詢服務 omen_base.clue_count。先證明掃描看得到：換之前的寫法（split/trunk d4b36bf6 第 218～227、298 行）抓得到兩樣。"""
+    assert condition_fields_touched((TIANXIA / "rules.py").read_text(encoding="utf-8")) == []
+    old = ("def check_condition(cond, state, content=None):\n    p = state.player\n"
+           "    for key, need in cond.story_marks.items():\n        progress = p.storylines.get(key)\n"
+           "    if any(p.clue_items.get(k, 0) < v for k, v in cond.clue_items.items()):\n        return False\n")
+    assert condition_fields_touched(old) == ["4 storylines（story）", "5 clue_items（military）"]
 
 
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py

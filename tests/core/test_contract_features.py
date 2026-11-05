@@ -332,12 +332,14 @@ def test_the_core_and_the_packages_fill_every_world_slot_exactly_once():
         "step": world._STEP_CORE, "week": world._WEEK_CORE, "day": world._DAY_CORE, "start": world._START_CORE, "close": {},
         "muster": world._MUSTER_CORE, "open": sqlite_world.SqliteWorldStore._open_core(), "retire": sqlite_world._RETIRE_CORE,
         "next": sqlite_world.SqliteWorldStore._next_core(),
+        "life": {},  # core_world2（全部拆包第 40 批）：figure_life.tick 設宴那一格核心不代叫
     }
     owners = {(hook.at, hook.slot): f.name for f in FEATURES for hook in f.world()}
     assert len(owners) == sum(len(f.world()) for f in FEATURES)  # 同一格不會有兩包
     assert owners == {("step", "feast"): "feast", ("step", "yuedan"): "figure_acts", ("close", "arena"): "bout",
                       ("muster", "generals"): "battle", ("next", "inscriptions"): "explore",
-                      ("muster", "works"): "stamina_plays"}  # 全部拆包第 39 批
+                      ("muster", "works"): "stamina_plays",  # 全部拆包第 39 批
+                      ("life", "feast"): "feast"}  # core_world2（全部拆包第 40 批）
     assert set(core) == set(features_core.WORLD_ORDER)
     for at, order in features_core.WORLD_ORDER.items():
         own = set(features_core.world_hooks(at))
