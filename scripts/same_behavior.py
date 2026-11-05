@@ -14209,6 +14209,13 @@ class EffectsScenario(Scenario):
             return [sorted(c.followers)[0]] if c.followers else None
         if field == "donate_grain":
             return {self.hub(): 3}
+        if field == "insights":  # 正式內容沒有事件給意境：第一個地點探索悟得到的基本意境
+            got = next((i for loc in sorted(c.locations) for i in c.locations[loc].insights), None)
+            return [got] if got else None
+        if field == "gear":  # 正式內容沒有事件給寶物：掉落池的第一件，沒有就一匹良駒
+            return next((tid for tid, t in sorted(c.gear.treasures.items()) if getattr(t, "pool", True)), "good_horse")
+        if field == "fs_counters":  # 伏筆的隱藏計數（官銀）
+            return {"guanyin": 1}
         if field == "recruit":
             free = [cid for cid in sorted(c.characters) if c.characters[cid].kind is not None and c.characters[cid].side in (None, "guan")]
             return free[0] if free else None
