@@ -458,6 +458,9 @@
     legacyOfferOpen();
     S.prologueKey = prologueKey();
     const top = topHtml();
+    // 疊在最上面那幾層（傳承、識海、列傳）自己捲：整個重畫會把它們捲回頂端（企劃者 2026-11-05「竹簡點下去會畫面跳到置頂」），
+    // 重畫前記下捲到哪、畫完照原樣放回去；換頁（傳承↔識海、開新的一層）是另一個 class，不帶過去
+    const layers = [".lg-layer", ".zhuan-layer"].map((sel) => { const el = document.querySelector(sel); return el && { sel, cls: el.className, top: el.scrollTop }; }).filter(Boolean);
     $app.innerHTML = `
       <div class="shell">
         <header class="top" id="top"${top ? "" : " hidden"}>${top}</header>
@@ -475,6 +478,7 @@
       ${S.mtZoom ? mtZoomHtml() : ""}`;
     fitBars(); // 先量狀態列：所在那一行放不下會折成兩行、狀態列高一截（FB-493），第一屏（renderPage 裡的 fitFirstScreen）照折好的高度收
     renderPage();
+    for (const l of layers) { const el = document.querySelector(l.sel); if (el && el.className.replace(" zh-play", "") === l.cls.replace(" zh-play", "")) el.scrollTop = l.top; }
     if (S.mtEdit) mtPadReady();
     fitBars(); // 狀態列的「體力」「氣血」放不放得下（FB-198）；頁面畫上去之後再量一次（電腦上捲軸出來，狀態列跟著窄）
     if (S.sheet) document.querySelector(".sheet-bg")?.addEventListener("wheel", sheetWheel, { passive: false }); // 暗處是每次新畫的，掛一次
