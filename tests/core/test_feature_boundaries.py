@@ -1040,6 +1040,41 @@ GAME_DIRECT.update({
 })
 
 
+# faction（全部拆包第 35 批「陣營」：新包 tianxia/features/faction/；計畫 docs/superpowers/plans/2026-11-06-陣營包-第1批.md 1.1、1.4、1.5）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。20 個方法搬進包，Game 留 13 個一行委派（_season_grant、_sect_options、_lean_options、_lean_anytime、
+# _join_lean、_faction_prompt、_four_wins、ending_card、tier_hint、sides_card，加三個新的：_faction_pending_options〔選單接管整個選單的待確認三段〕、
+# _defect_options〔選單的叛投迴圈〕、_defect_scene〔叛投確認畫面的場景〕；_ally_options、_left_names 沒有原位的呼叫端、不留）。
+# 核心原位碰這一包的：choose 的 faction／defect／sect 與 _action_title 的 faction／defect 換成包的 choose 掛鉤；叛投的 clear progress 與 after leave_behind
+# 兩格換成包登記的叛投格（DEFECT_ORDER 不動）；選單的位置固定（選單的順序算行為），留原位叫委派。
+GAME_IMPORTS |= {
+    "tianxia.features.faction.join_actions", "tianxia.features.faction.lean_actions", "tianxia.features.faction.defect_actions",
+    "tianxia.features.faction.ending_actions",
+}
+GAME_DELEGATES |= {
+    "_season_grant", "_sect_options", "_lean_options", "_lean_anytime", "_join_lean", "_faction_prompt", "_faction_pending_options", "_defect_options",
+    "_defect_scene", "_four_wins", "ending_card", "tier_hint", "sides_card",
+}
+_FACTION_ORDER = "選單的順序算行為（/api/main 的選項一顆一顆逐位元組）：{what}，位置固定、沒有對應的掛鉤（選單照包排是總表第 55～57 批）"
+GAME_DELEGATE_CALLERS.update({
+    ("_reset_player_for_new_season", "_season_grant"): "換季開場、_write 之後發上一季論功的起手資源與稱號：位置固定、沒有掛鉤（on_season_start 在 _write 之前）",
+    ("_everyday_options", "_faction_pending_options"): _FACTION_ORDER.format(what="待確認的三段接管整個選單，夾在談著與求見之間；`menu` 掛鉤坐的位置更前面（sense_menu、一條線答題之前）"),
+    ("_everyday_options", "_sect_options"): _FACTION_ORDER.format(what="拜入門派那一顆夾在交友與求見的那一顆之間"),
+    ("_everyday_options", "_defect_options"): _FACTION_ORDER.format(what="叛投夾在投靠與改幫之間"),
+    ("_everyday_options", "_lean_options"): _FACTION_ORDER.format(what="改幫接在叛投之後、軍令之前"),
+    ("choose", "_lean_anytime"): "「改幫…」不在選單上時照樣收（在路上、決戰的大區，設計 3.2）：要先查選單、查不到才問它，choose 掛鉤在查選單之後，位置不對",
+    ("choose", "_join_lean"): "投靠或拜入陣營名下的門派那一下，動作之後、入伍段之前給傾向：位置固定、動作之後的收尾沒有對應的掛鉤",
+    ("_own_scene_text", "_faction_prompt"): "場景那一段的順序算行為（談著、選邊、投靠、叛投確認、求見…）：位置固定，場景的掛鉤是第 55～57 批",
+    ("_own_scene_text", "_defect_scene"): "同上（叛投確認畫面的場景）",
+    ("season_result", "ending_card"): "收季之後的結局卡接在 season_result 的 out 後面（欄位表 main.ending）：資料的鍵序算行為，沒有對應的掛鉤",
+})
+# 理由字換了（別人那一段的原文不改）：陣營成包之後，這一筆留的理由是「choose 掛鉤要的是動作之前的陣營」，不再是「陣營還沒成包」
+GAME_DELEGATE_CALLERS[("choose", "_begin_enlistment")] = (
+    "這一下才投靠（或拜入陣營名下的門派）的人開始入伍段：陣營成包（第 35 批）之後，投靠那一步在包裡，入伍段屬引導包；要知道動作之前的陣營，"
+    "位置固定在 choose 掛鉤之後")
+for _pair in (("_faction_step", "_ally_follows_battle"), ("_join_lean", "_ally_follows_battle"), ("_lean_step", "_ally_follows_battle"),
+              ("_faction_step", "_note_action"), ("_defect_step", "_battle_now"), ("_defect_targets", "_battle_now")):
+    del GAME_DELEGATE_CALLERS[_pair]  # 陣營成包：呼叫端搬進包，包裡經 ctx 叫（services.py 的 # faction 一段）；原文不改，同第 8、25、32 批 del 的寫法
+
 @functools.lru_cache(maxsize=None)
 def _engine_tree() -> ast.Module:
     return ast.parse((TIANXIA / "engine.py").read_text(encoding="utf-8"))  # 一萬七千行，parse 一次一秒多：大家共用這一份
@@ -1652,7 +1687,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # territory_acts（全部拆包第 46 批：tianxia/conquest_day.py、xingshi.py）
                          "conquest_day": "territory_acts", "xingshi": "territory_acts",
                          # peers（全部拆包第 37 批：tianxia/social.py、invites.py、mingtie.py、mingtie_card.py）
-                         "social": "peers", "invites": "peers", "mingtie": "peers", "mingtie_card": "peers"}
+                         "social": "peers", "invites": "peers", "mingtie": "peers", "mingtie_card": "peers",
+                         # faction（全部拆包第 35 批：tianxia/defection.py）
+                         "defection": "faction"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 
@@ -1744,7 +1781,8 @@ def test_the_effect_slots_and_the_defection_clearing_touch_no_package_field():
     """核心本體 rules 的效果格與舊模組 defection 的清進度都不寫包認領的欄位（換成核心的掛鉤之後是空的）。先證明掃描看得到：
     原本寫在 apply_effect 最後一段的一條線那一步、clear_progress 裡的押糧與提示，照這一條都抓得到。"""
     for module, names in EFFECT_DEFECT_SCAN.items():
-        assert package_fields_touched((TIANXIA / f"{module}.py").read_text(encoding="utf-8"), names) == [], module
+        where = FEATURES / "faction" / f"{module}.py" if module == "defection" else TIANXIA / f"{module}.py"  # defection 第 35 批搬進陣營包（舊名是別名）
+        assert package_fields_touched(where.read_text(encoding="utf-8"), names) == [], module
     old = ("def apply_effect(effect, state):\n    p = state.player\n    progress = p.storylines.get(effect.story.line)\n"
            "    p.keepsakes.append(effect.story.keepsake)\n"
            "def clear_progress(p):\n    p.convoy = None\n    p.hint_queue = []\n    p.rank = 0\n"

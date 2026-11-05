@@ -51,6 +51,8 @@ from ..features import stamina_plays  # 體力玩法（設伏、屯糧）：全�
 from ..features import seclusion  # 閉關：全部拆包第 39 批。只有 verbs()（act:break），沒有選項、選單
 # peers
 from ..features import peers  # 玩家互動一（此地還有、玩家卡、邀請框、打招呼、贈物、名帖）：全部拆包第 37 批（只接 invite: 的 choose、換季的頭銜簿與路由，排在哪裡結果都一樣）
+# faction
+from ..features import faction  # 陣營：全部拆包第 35 批（接 faction:、defect:、sect: 三個前綴的 choose 與假人分數、叛投 clear／after 兩格；三個前綴與別的包都不重疊，排在哪裡結果都一樣）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -100,6 +102,8 @@ FEATURES: list[Feature] = [
     seclusion.FEATURE,
     # peers（排在 seclusion 後面〔照合併先後〕：只接 invite: 的 choose、on_season_start 與路由，跟 stamina_plays、seclusion、territory_acts 的掛鉤不重疊，順序不影響結果）
     peers.FEATURE,
+    # faction（排在最後：前綴 faction／defect／sect 不跟別的包重疊，叛投的格有 DEFECT_ORDER 定先後，順序不影響結果）
+    faction.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 
@@ -159,7 +163,7 @@ SHARED: dict[str, str] = {
     "relations": "人物之間的關係：大勢人物、人物活起來、懸賞、人物對話讀",
     "deeds": "世界記事（你做的事被世界記住）：探索包的走一趟、人物活起來、章回都讀",
     "seats": "第四階席次與每週輪替：叛投、晉升、世界一步讀（讀 ranks 的稱號記在 SHARED_PENDING：第 40 批收進這一層）",
-    "factions": "陣營規模的換算：席次 seats 讀；陣營成包（第 35 批）之後還要",
+    "factions": "陣營規模的換算：席次 seats 讀；陣營包（features/faction，第 35 批）也讀",
     "week_unlock": "功能照週解鎖與三週主題：擂台、懸賞、輿圖、本週卡讀",
     "roster": "同伴的名下與全服唯一：核心的 rules 讀；決戰、出陣、酒肆三包與人物情誼、懸賞、叛投都叫",
     # 地盤與攻城（siege 第 11 批已登記，在最上面）、醫館、散人、一類一顆（行動與地盤＋散人區）
