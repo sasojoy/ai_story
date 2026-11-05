@@ -178,6 +178,12 @@
   掉到最後的「提前出關」，隨後被事件標題換掉，包照原本的寫法問核心）。這一包用到的其餘 Game 服務上面都已經列了：`ctx._note_action(action)`、`ctx._guide(...)`、
   `ctx._battle_now()`、`ctx._preparing()`、`ctx._write(...)`、`ctx._draft`、`ctx.place_minutes(loc_id)`、`ctx._present(event, action)`
 
+「你這一步」（全部拆包第 36 批）
+# core_step
+- 包登記 `StepHook`（tianxia/core/features.py 的 # core_step：本週卡「眼下要事」的一格，先後在 STEP_ORDER）；格的 `place` 用核心的
+  `tianxia.step.place(ctx, loc)`（目標地點 {"location", "name", "minutes"}）、`step.REF`（掛在每一件上給 finish 找回那一格的內部鍵）；
+  `ctx.place_minutes(loc_id)` 上面已經列了
+
 ## 二、查詢服務
 
 # battle（主動搬六包第 5 批；主人：決戰包。本體還在 Game——「打」那一半，第 6～8 批搬——決戰包「看」那一半經 ctx 叫；搬完由決戰包經
@@ -340,6 +346,12 @@ explore（主動搬六包第 3＋4 批加的這一段）
 # faction（全部拆包第 35 批「陣營」；主人：陣營包，本體在 tianxia/features/faction/，Game 留一行委派回答別的包；計畫 docs/superpowers/plans/2026-11-06-陣營包-第1批.md 1.3）
 - `ctx._four_wins()`（三陣營四勝利：這一季開著沒；決戰的軍餉記不記豪強的貢獻。原本記在三、過渡 `# battle`，主人成包了，改列這裡；包裡自己叫的直接叫，不經它）
 - `ctx._ally_follows_battle()`（主人決戰包 features/battle/muster.py：投靠豪強、選邊、改幫之後集結名單跟著換邊，FB-273；陣營包的投靠、改幫那幾步叫它，本體留在決戰那一側）
+
+# core_step（全部拆包第 36 批「你這一步」；主人：新手引導包，本體在 features/guide/actions.py 的 nearest_to，Game 留一行委派；
+# 計畫 docs/superpowers/plans/2026-11-06-你這一步-第36批.md 2.5）
+- `ctx._nearest_to(targets)`（離這裡最近的那一個地點：先照摸清的路、都走不到照所有開放的地點，這裡就是的話回這裡；軍情包的軍令那一格、
+  陣營包的去投靠那一格補目標時問。原本是舊模組 step.py 直接叫 game._nearest_to）。`ctx._opening_pending()` 上面 `# checkin` 已經列了
+  （weekcard 收進核心本體照叫 Game，不必再列）
 
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
