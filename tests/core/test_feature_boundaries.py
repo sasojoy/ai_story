@@ -1075,6 +1075,28 @@ del GAME_DELEGATE_CALLERS[("travel", "_report_seat")]
 del GAME_DELEGATE_CALLERS[("travel", "_hear_after_stamina")]
 
 
+# map（全部拆包第 49 批「輿圖一」：新包 tianxia/features/map/；計畫 docs/superpowers/plans/2026-11-06-輿圖包-第1批.md 1.1、1.4、1.5）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。11 個方法搬進包，Game 留 11 個一行委派（_map_foes、_fierce_line 也留：測試換掉 Game._map_foes、
+# 包裡經 ctx 叫），另多兩個：探索包原本直接 import mapview、mapdata（open_places、mostly_here），成包之後包不能 import 包，改經 Game 的 _map_open_places、
+# _map_mostly_here 問輿圖包。沒有選項前綴、沒有掛鉤可接（輿圖是只讀的畫面）、沒有 GAME_DIRECT：原本 map_state、_map_foes 兩筆（sortie.on）拿掉，
+# 現在經 ctx 問出陣包的 _sortie_mode；原本 (map_base|map_state, map_mostly)、(map_state|_map_foes, _sortie_foes|duel_on|_duel_squad|sorties_left)、
+# (_fierce_line, _practice_tier) 十幾對是 Game 叫委派，現在是包裡經 ctx 叫（服務清單二、查詢服務 # map），拿掉。
+GAME_IMPORTS |= {"tianxia.features.map.actions"}
+GAME_DELEGATES |= {
+    # server 的 map_base_view（底圖）、/api/map/state（疊層）、map_view（舊輿圖的圖層、標頭、地點、詳情、移動鈕）、/api/travel 走不成時帶的 map，bot_policy
+    # 的 travel_options（假人的移動選項），測試與腳本叫的；_map_foes、_fierce_line 包裡也經 ctx 叫（測試換掉 Game._map_foes）；_map_open_places、
+    # _map_mostly_here 是探索包的查詢
+    "map_base", "map_state", "_map_foes", "_fierce_line", "world_map_svg", "minimap_svg", "map_legend", "map_header", "map_places", "place_detail",
+    "travel_options", "_map_open_places", "_map_mostly_here",
+}
+# 輿圖搬進包之後這些不用了（第 25 批定的寫法：用 del 集中在自己的段，不在別人的段裡刪行）：_MAP_LINE 留著不動
+del GAME_DIRECT["map_state"], GAME_DIRECT["_map_foes"]  # 兩支都搬進包，經 ctx 叫
+for _pair in (("map_base", "map_mostly"), ("map_state", "map_mostly"), ("map_state", "_sortie_foes"), ("map_state", "sorties_left"),
+              ("_map_foes", "_sortie_foes"), ("map_state", "duel_on"), ("_map_foes", "duel_on"), ("_map_foes", "_duel_squad"),
+              ("_fierce_line", "_practice_tier")):
+    del GAME_DELEGATE_CALLERS[_pair]  # 包裡經 ctx 叫（Game 的委派只剩一行）
+
+
 @functools.lru_cache(maxsize=None)
 def _engine_tree() -> ast.Module:
     return ast.parse((TIANXIA / "engine.py").read_text(encoding="utf-8"))  # 一萬七千行，parse 一次一秒多：大家共用這一份
@@ -1689,7 +1711,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # territory_acts（全部拆包第 46 批：tianxia/conquest_day.py、xingshi.py）
                          "conquest_day": "territory_acts", "xingshi": "territory_acts",
                          # peers（全部拆包第 37 批：tianxia/social.py、invites.py、mingtie.py、mingtie_card.py）
-                         "social": "peers", "invites": "peers", "mingtie": "peers", "mingtie_card": "peers"}
+                         "social": "peers", "invites": "peers", "mingtie": "peers", "mingtie_card": "peers",
+                         # map（全部拆包第 49 批：tianxia/mapview.py、mapart.py、mapdata.py、worldgeo.py）
+                         "mapview": "map", "mapart": "map", "mapdata": "map", "worldgeo": "map"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 

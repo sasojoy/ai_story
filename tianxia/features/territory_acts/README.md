@@ -47,7 +47,7 @@
 ## 另外要跑的混合檔
 
 - `tests/acts/test_conquest_rules.py`（領地爭奪規則＋戰書換天救場）、`tests/acts/test_conquest_siege.py`（攻城戰本身在決戰包，戰書、換天、救場在這一包）、`tests/acts/test_conquest_flip.py`、`tests/acts/test_conquest_bots.py`（假人參加攻城戰，屬決戰包）
-- `tests/web/test_conquest_web.py`（網頁，第 3 階）、`tests/core/test_marks_visible.py`、`tests/core/test_world_map.py`、`tests/seal/test_seal_acts3.py`、`tests/kit/conquest_kit.py`（共用建局）
+- `tests/web/test_conquest_web.py`（網頁，第 3 階）、`tests/core/test_marks_visible.py`、`tianxia/features/map/tests/test_world_map.py`、`tests/seal/test_seal_acts3.py`、`tests/kit/conquest_kit.py`（共用建局）
 - 別包的：`tianxia/features/battle/tests/test_siege_cancel.py`（叫 `admin_conquest_cancel`）、`tianxia/features/sortie/tests/test_sortie_report.py`（叫 `_deliver_conquest`）
 - 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/territory_acts/day_actions.py`
 
