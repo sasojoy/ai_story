@@ -13153,10 +13153,19 @@ class OutletsScenario(Scenario):
         """坐在店裡動身：計玄機進店之後走一步，店收起來；石開山開著軍需官也走一步。"""
         for who in (self.SHOP_IN, self.DONATE_IN):
             self.press(who, "act:dadian" if who == self.SHOP_IN else "act:donate", "進店再動身")
-            move = next((i for i, o in self.options(who).items() if i.startswith("move:") and o.get("enabled")), None)
-            emit(f"{who} 走的那一步", move)
-            if move is not None:
-                self.choose(who, move)
+            # 坐著的選單是店裡那一串、沒有 move:：照酒肆軌，在鎖裡直接叫一次 Game._depart（收店那一行就在它裡面）
+            from tianxia import atlas
+            from tianxia.engine import Game
+
+            here = self.chars.load(who).player.location
+            dest = self.c.locations[here].connections[0]
+            self.begin()
+            with self.world.action_lock():
+                game = Game(self.c, self.chars.load(who), world=self.world)
+                game.sync(CLOCK[0])
+                route = atlas.way_to(game.state, self.c, dest)
+                emit(f"{who} 直接動身", game._depart(route, "walk") if route is not None else None)
+                self.chars.save(game.state)
             self.me(who, "動身之後")
 
     def next_day(self) -> None:
