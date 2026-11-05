@@ -12,6 +12,7 @@ from conftest import FixedRandom, install_season_one, walk_to
 
 from tianxia import calendar, companion_agent, howto, rules, sensing
 from tianxia.engine import Game
+from tianxia.features.travel import road_actions
 from tianxia.models import InsightScene, SenseMethod, TimetableEvent
 from tianxia.state import WorldState
 
@@ -297,25 +298,25 @@ def test_old_talk_records_keyed_by_the_old_day_number_read_as_an_earlier_day(con
 def test_road_gains_come_back_after_one_scaled_day(content):
     game = _game(content, WEEKEND)
     content.config.road_reward_daily_cap = 1
-    game._count_road_reward("task")
+    road_actions.count_reward(game, "task")
     w = game.state.world
-    assert not game._road_reward_due("task")
+    assert not road_actions.reward_due(game, "task")
     end = rules.day_ends(content, w)
     w.time = math.nextafter(end, -math.inf)
-    assert not game._road_reward_due("task")
+    assert not road_actions.reward_due(game, "task")
     w.time = end
-    assert game._road_reward_due("task")
+    assert road_actions.reward_due(game, "task")
 
 
 def test_road_gains_in_a_fourteen_day_season_still_wait_a_whole_day(content):
     game = _game(content, 14)
     content.config.road_reward_daily_cap = 1
-    game._count_road_reward("task")
+    road_actions.count_reward(game, "task")
     w = game.state.world
     w.time += SHORT
-    assert not game._road_reward_due("task")
+    assert not road_actions.reward_due(game, "task")
     w.time = DAY
-    assert game._road_reward_due("task")
+    assert road_actions.reward_due(game, "task")
 
 
 def test_the_capped_road_texts_name_the_moment(content):

@@ -1,7 +1,9 @@
-"""移動的 API（功能包 tianxia/features/travel/；原本寫在 server.py，全部拆包第 47 批）：殼（server 模組，參數 shell）照 FEATURES 掛
-（server 的 features_core.routers 那一行；/api/travel 跟別的路徑不重疊，先後不影響）。
+"""移動的 API（功能包 tianxia/features/travel/；原本寫在 server.py，全部拆包第 47、48 批：/api/travel、/api/party/leave）：殼（server 模組，參數 shell）照 FEATURES 掛
+（server 的 features_core.routers 那一行；/api/travel、/api/party/leave 跟別的路徑不重疊，先後不影響）。
 這個檔只在殼掛路由時才 import（引擎與假人程式不碰網頁框架）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。"""
 from fastapi import APIRouter, Body, Request
+
+from . import party
 
 
 def router(shell) -> APIRouter:
@@ -31,5 +33,13 @@ def router(shell) -> APIRouter:
             out["reason"] = refused[0]
             out["map"] = shell.look(game, lambda g: shell.map_view(g, str(body.get("layer") or shell.DEFAULT_LAYER), target))
         return out
+
+    @r.post("/api/party/leave")
+    def api_party_leave(request: Request):
+        """還在等帶頭的人動身時的「分道揚鑣」（party.leave_party）；在路上時走選單的 act:part。回傳 {main, message}。"""
+        game = shell._game(request)
+        msgs = shell.act(game, lambda g: party.leave_party(g))
+        shell._tell_tabs(game)
+        return {"main": shell.look(game, shell.main_view), "message": shell.joined(msgs)}
 
     return r

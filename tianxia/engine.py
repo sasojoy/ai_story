@@ -82,7 +82,8 @@ from .core.services import BIG_FIGHT_WAIT  # sortie（全部拆包第 17 批）�
 from .core.services import PLAN_OPTION, ROAD_SAY, SAY_MAX, SAY_OPTION, TEXT_TALKS, say_text  # noqa: F401  companions（全部拆包第 20 批）：「自己說」那三顆的 id 與那句話能不能送，搬進核心的共用的字
 from .core.services import AUDIENCE_HALL_FIGURES, SNUB_NOTE, SOCIAL_NO_ONE  # noqa: F401  socialize（全部拆包第 21 批）：交友求見的三個共用的字搬進核心的共用的字（SOCIAL_NO_ONE、SNUB_NOTE 測試從 engine 拿）
 from .features.stamina_plays import actions as stamina_actions  # 過渡：Game._stamina_play_options 前半的一行委派（全部拆包第 39 批）
-from .features.travel import go_actions as travel_go, menu as travel_menu, road_actions as travel_road  # 過渡：Game 上移動的 9 個一行委派（全部拆包第 47 批）
+from .features.travel import go_actions as travel_go, menu as travel_menu  # 過渡：Game 上移動的 6 個一行委派（全部拆包第 47 批；原本 9 個，第 48 批拿掉 3 個）
+from .features.travel import departure as travel_departure, party as travel_party  # 過渡：Game 上移動的 8 個一行委派（全部拆包第 48 批）
 from .features.stamina_plays import ambush_actions  # 過渡：Game 上設伏的 4 個一行委派（全部拆包第 39 批）
 from .features.seclusion import actions as seclusion_actions  # 過渡：Game 上閉關的 3 個一行委派（全部拆包第 39 批）
 from .core.services import ROAD_REWARD_TASKS, ROAD_TASKS  # noqa: F401  travel（全部拆包第 47 批）：路上小事的名稱表與有收穫的那兩樣搬進核心的共用的字（from tianxia.engine import ROAD_TASKS 照舊拿得到）
@@ -187,7 +188,7 @@ from .features.territory_acts import letter_actions as territory_letter  # 過�
 from .features.territory_acts import view as territory_view  # 過渡：Game 上地盤畫面的 2 個一行委派
 from .features.territory_acts import xingshi_actions as territory_xingshi  # 過渡：Game 上〈天下形勢〉的 9 個一行委派
 from .state import (
-    ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, CrowdNote, GameState, HintNote, JournalEntry, Journey, Mingtie, Rumor, Tagalong,
+    ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, CrowdNote, GameState, HintNote, JournalEntry, Journey, Mingtie, Rumor,
     StoryCard, StoryProgress, TierResult, WorldState, XingshiEssay,
     new_game_state,
 )
@@ -396,7 +397,6 @@ class Game:
         self._sortie_flipped = False  # 這一下出陣推滿、當場易手
         # choose() 進行中那次行動、鎖外先判讀好的大場面（重驗過的，見 _checked_fight）；打那一場時用掉（_judged）
         self._fight: fight_llm.PreparedFight | None = None
-        self._road_gain: tuple | None = None  # 這一件路上小事的收穫（_road 填、_share_road 分給結伴同行的人）
         self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
         self.smith_result: dict | None = None  # 上一次 smith_forge 的出爐卡（server 的 /api/do/smith_forge 回給網頁）；被拒絕是 None
         self.mall_bought: str | None = None  # 上一次 mall_buy 買成的商品 id（/api/mall/buy 回給網頁：成了換掌櫃道謝、不成換原因）；不成是 None
@@ -2036,7 +2036,7 @@ class Game:
             return owned
         titles = {
             "explore": f"探索{here}", "socialize": f"交友・{here}", "call": f"求見・{here}", "train": f"遊歷・{here}",
-            "recruit": f"招募・{here}", "rest": f"調息・{here}", "summons": f"應召・{here}", "part": "分道揚鑣",
+            "recruit": f"招募・{here}", "rest": f"調息・{here}", "summons": f"應召・{here}",
             "duty": f"{duty.name if duty else '守勢'}・{here}", "convoy": f"接下糧車・{here}",
             "rank2": f"{action2.name if action2 else '第二階行動'}・{here}",
             "bounties": f"{bounties.BOARD}・{here}",
@@ -2271,9 +2271,7 @@ class Game:
         got = features_core.act(self, what, prepared)
         if got is not None:
             return got
-        # （halt：喊停，全部拆包第 47 批換成移動包 Verb 的 run 與 title〔上面 features_core.act 接走〕，拿掉）
-        if what == "part":
-            return self._part_ways()
+        # （halt：喊停，全部拆包第 47 批換成移動包 Verb 的 run 與 title〔上面 features_core.act 接走〕，拿掉；part：分道揚鑣，第 48 批同上）
         if what == "recruit":
             return self._recruit()
         if what.startswith("recruit:"):
@@ -4383,150 +4381,25 @@ class Game:
                 self._draft.changes.append(f"經驗 +{record.exp}（每人）")
         return line
 
-    def _road_reward_due(self, kind: str, day: int | None = None) -> bool:
-        """路上這一種收穫還沒拿滿（本體在 tianxia/features/travel/road_actions.py；留一行委派給 _share_road〔第 48 批〕與測試）。"""
-        return travel_road.reward_due(self, kind, day)
-
-    def _count_road_reward(self, kind: str, day: int | None = None) -> None:
-        """記一次真的給出去的路上收穫（本體在 tianxia/features/travel/road_actions.py；留一行委派給 _share_road〔第 48 批〕與測試）。"""
-        travel_road.count_reward(self, kind, day)
-
     def _depart(self, route: atlas.Route, mode: TravelMode, pace: float | None = None) -> list[str]:
-        """出發（地圖擴充設計 3.2、3.3）：趕路、疾行的體力出發時一次扣，照走法排好每一站的抵達時間。
-        疾行立刻一站一站抵達；步行、趕路就在路上，之後由 sync／advance 補算抵達（見 _arrivals）。
-        在路上改道、折返（路上設計 3.1）也從這裡出發：route 的第一段是半段路（origin、share 記著是哪條路、走掉幾成），
-        新路程整個取代原本那一趟；原本已經扣的趕路體力不退。剛出發就折返（見 atlas.returns_at_once）不扣體力、當下就回到原地。
-        騎著馬的體力與步調照出發這一刻的坐騎（裝備四欄 5.3）。"""
-        s, c = self.state, self.content
-        bounties.close_board(s.player)  # 動身了：城鎮的第二層選單（懸賞榜、鐵匠鋪）收起來，不留在路上
-        s.player.parley_escort = None  # NPC 智能 2.1：自己動身就不是誰帶的路了（帶路那一支出發之後再寫回去）
-        equipment.close_smith(s.player)  # 鐵匠鋪連同打造到一半的單子、停在哪一頁一起收
-        mounts.close_market(s.player)  # 馬市也收起來（裝備四欄 5.5）
-        # （picking_donate、picking_dadian：全部拆包第 43 批換成銀兩出口包的店面登記，下面 close_shops 收）
-        features_core.close_shops(self)  # 搬成包的店也收起來（店面登記，第 11 批；酒肆、擂台〔全部拆包第 12 批〕）
-        rerouting = s.player.journey is not None
-        start = None if rerouting else s.player.location
-        parted = self._part_ways() if s.player.tagalong is not None and not rerouting else []  # 答應了結伴卻自己先走：散了
-        minutes = route.minutes
-        at_once = atlas.returns_at_once(s, c, route)  # 要在換掉原本那一趟之前看：它看的是現在在路上的位置
-        pace = mounts.pace(s, c) if pace is None else pace  # 出發這一刻的步調（大勢人物帶路照他的腳程，parley）（裝備四欄 5.3）：寫進 Journey、排抵達時刻、紀錄的標籤都用這一個數；路上餓了、換了馬都不回頭改
-        cost = atlas.route_stamina(s, c, route, mode)
-        foot = atlas.route_foot_stamina(s, c, route, mode)  # 不算坐騎的那一份：結伴同行時跟著的人照自己的坐騎再省（_lead，5.8）
-        s.player.stamina -= cost
-        legs = [0.0] if at_once else list(route.legs)
-        s.player.journey = Journey(
-            mode=mode, path=list(route.path), arrive_at=atlas.arrival_times(s.world.time, legs, mode, pace=pace),
-            origin=route.origin, share=route.share, pace=pace,
-        )
-        if self._draft is not None:
-            self._draft.tag = "立刻折返" if at_once else atlas.MODE_NAMES[mode] + atlas.mode_when(minutes, mode, pace=pace)
-            if cost:
-                self._draft.changes.append(f"體力 -{cost}")
-        verb = "改道" if rerouting else "動身"
-        told = f"{s.player.name}{verb}{atlas.MODE_NAMES[mode]}前往{c.locations[route.path[-1]].name}，你跟著走。"
-        party = parted + self._lead(start, foot, told)  # 結伴同行：跟著的人照抄這一趟（玩家互動第二層），體力各付各的
-        if mode == "dash" or at_once:
-            return party + self._arrivals()
-        left = self._real_minutes(s.player.journey.arrive_at[-1] - s.world.time)
-        msg = f"你{verb}{atlas.MODE_NAMES[mode]}前往{c.locations[route.path[-1]].name}，現實約 {left} 分鐘後抵達。"  # 只寫現實的倒數（FB-062）
-        self._hide(msg)  # 場景會顯示「在路上」，紀錄只留標題與走法
-        self._sync_battle_presence()
-        return [msg] + party
+        """出發（本體在 tianxia/features/travel/departure.py，全部拆包第 48 批；留一行委派給人物帶路、腳本與測試）。"""
+        return travel_departure.depart(self, route, mode, pace)
 
     def _arrivals(self) -> list[str]:
-        """在路上：抵達時間已經到了的站，一站一站抵達（地圖擴充設計 3.3）。走到這一趟的最後一站（終點或喊停的
-        那一站）就下馬。賽季已經落幕時，落幕前就該到的站照樣抵達（時鐘停在落幕那一刻，之後的站不會再到），
-        然後停在當下那一站；抵達某一站時觸發了賽季落幕，就停在那一站。不在行動裡（sync、advance）時自己寫
-        江湖紀錄（見 journal.add_arrival），而且不叫模型——它們在計時器裡、拿著全服行動鎖；疾行在
-        travel() 的行動裡，寫在那次行動的紀錄，照原本的規則可以叫模型。"""
-        s, c = self.state, self.content
-        j = s.player.journey
-        if j is None or (j.arrive_at[j.reached] > s.world.time and not s.world.ended):
-            return []
-        own = self._draft is None
-        if own:
-            self._draft = Draft(atlas.journey_title(c, j.path))
-        try:
-            already_over = s.world.ended
-            msgs: list[str] = []
-            when = s.world.time
-            while j.reached <= j.last and j.arrive_at[j.reached] <= s.world.time:
-                if s.world.ended and not already_over:
-                    break  # 剛抵達的那一站觸發了賽季落幕：停在那裡
-                when = j.arrive_at[j.reached]
-                stop = j.path[j.reached]
-                came_from = j.origin if j.reached == 0 and j.origin is not None else s.player.location
-                j.reached += 1
-                # 到了另一站：換段，路上小事重新可做，也可能看見路上見聞。掉頭回到剛離開的那一站不算換段、也不擲見聞
-                # （剛出發就折返不花時間也不花體力，不能拿來刷見聞）
-                new_leg = stop != s.player.location
-                if new_leg:
-                    s.player.leg_actions = set()
-                    msgs += self._ambush_check(came_from, stop, when)  # 設伏劫道：這一段路上有沒有埋伏（字典查一次，疾行也算）
-                msgs += self._arrive(stop)
-                if new_leg:
-                    msgs += mounts.hunger(s, c, j.mode)  # 騎著馬走完一段（裝備四欄 5.4）：扣飽足度，第一次低到 30 以下提醒一次；掉頭回原地不扣
-                if new_leg and not c.locations[came_from].prologue_only:  # 出師那段路不抽路上見聞
-                    msgs += self._road_sight(c.locations[came_from].road_to(stop), stop, when)
-            done = j.reached > j.last or s.world.ended
-            if done:
-                s.player.journey = None
-                if s.player.tagalong is not None:  # 結伴同行到這一趟的最後一站就散了（玩家互動第二層）
-                    msgs.append(f"一路同行到此，你與{s.player.tagalong.leader}拱手作別。")
-                    s.player.tagalong = None
-                if s.player.location != j.path[-1]:
-                    reason = "賽季落幕" if s.world.ended else "喊停"
-                    self._draft.tag = f"{reason}，停在 {c.locations[s.player.location].name}"
-            if own:
-                entry = self._draft.entry(when, msgs)
-                if done or entry.lines or entry.changes or entry.guide:  # 只到了中途的站、又沒有別的事（連引導也沒有），不另寫一則
-                    journal.add_arrival(s, entry, done)
-        finally:
-            if own:
-                self._draft = None
-        self._sync_battle_presence()
-        return msgs
+        """補算已經到了的站（本體在 tianxia/features/travel/departure.py；留一行委派給 sync、advance，位置就是行為）。"""
+        return travel_departure.arrivals(self)
 
     def _arrive(self, loc_id: str) -> list[str]:
-        """抵達一站：照原本走到一個地點的規則——地點描寫、新手引導、大勢門檻。鎖內一個模型都不叫：江湖大事的潤色記成單子、
-        放鎖之後才請（S-09，見 _flavor_sink）。以前重遊的終點還在鎖內請模型補一句點綴，那句只進 GameState.log、
-        畫面上看不到，卻佔著全服的行動鎖（2026-10-12 拿掉，見 _present）。"""
-        s, c = self.state, self.content
-        before = s.player.tutorial_step
-        s.player.location = loc_id
-        s.player.visited.add(loc_id)
-        text = self.location_text()
-        self._hide(text)
-        # 糧車到了終點（路過也算）先交糧，再照原本的新手引導與門檻（計畫 T6）；呼叫的先後不能換
-        convoy = self.publish("arrive", loc_id)  # 事件 arrive（第 26 批）：軍情包交糧車→懸賞榜的護送（走到終點就交差，路過也算）
-        guide = self._guide(self._note_action("move"))  # 出師的盤纏（序章步驟的獎勵）是這一趟路的結果，回在這裡
-        if not precise.is_town(c, c.locations[loc_id]):  # 走到城外（初入江湖逛鋪子那一步：沒進鋪子、直接出城也算過，Joy 2026-10-22）
-            guide += self._guide(self._note_action("leave_town"))
-        thresholds = check_thresholds(s, c, self.world, self._flavor_sink(), now=self.now)
-        t = c.tutorial
-        left = [t.leave_text] if t.location is not None and before < t.prologue_steps <= s.player.tutorial_step and t.leave_text else []
-        # 出師、抵達起點：「剛剛」先接一句草廬已經看不見了（新手引導設計 10.3），再寫盤纏（T7 審查 M4）
-        return [text] + convoy + left + guide + thresholds
-
-    def _road_sight(self, road: RoadKind, loc_id: str, when: float | None = None) -> list[str]:
-        """路上見聞（本體在 tianxia/features/travel/road_actions.py；留一行委派給 _arrivals，位置不動，第 48 批才搬）。"""
-        return travel_road.sight(self, road, loc_id, when)
+        """抵達一站，事件 arrive 的發布點（本體在 tianxia/features/travel/departure.py；留一行委派給核心契約測試）。"""
+        return travel_departure.arrive(self, loc_id)
 
     def _real_minutes(self, world_seconds: float) -> int:
         """世界時鐘的一段秒數，換成給玩家看的「現實」整分鐘（至少 1 分，.5 進位）：世界秒 ÷ time_scale ＝ 現實秒（FB-062）。"""
         return atlas.whole_minutes(max(0.0, world_seconds) / self.content.config.time_scale / 60)
 
     def _journey_line(self) -> str:
-        """在路上的那一句（狀態列）：「往寶洞（步行），現實約 8 分鐘後抵達；下一站湖邊」。
-        只寫現實的倒數，不寫抵達的季曆時刻（FB-062）：季曆跑得比現實快，「第 8 週・週五 12:19 抵達」配上「還要約 1 分鐘」
-        兩種時間混在一行，玩家算不出來；季曆時刻已經在狀態列上一行。"""
-        s, c = self.state, self.content
-        j = s.player.journey
-        left = self._real_minutes(j.arrive_at[j.last] - s.world.time)
-        line = f"往{c.locations[j.path[j.last]].name}（{atlas.MODE_NAMES[j.mode]}），現實約 {left} 分鐘後抵達"
-        if j.reached < j.last:
-            line += f"；下一站{c.locations[j.path[j.reached]].name}"
-        return line
+        """在路上的那一句（本體在 tianxia/features/travel/departure.py；留一行委派給 status_data）。"""
+        return travel_departure.journey_line(self)
 
     def travel(self, dest_id: str, mode: TravelMode = "walk") -> list[str]:
         """安排前往（本體在 tianxia/features/travel/go_actions.py；留一行委派給 /api/travel、假人與測試）。"""
@@ -5116,15 +4989,8 @@ class Game:
         return peers_invite_actions.answer_invite(self, inv, other, verb, item, proposed)
 
     def _join(self, inv, other: Game) -> list[str]:
-        """答應結伴同行：重驗（還在發邀請的那個地點、兩個人都沒在跟別人、你身後也沒有人跟著你），記下跟著誰；兩邊各記一則。"""
-        p = self.state.player
-        refusal = self.join_refusal(inv.sender) if inv.location == p.location else presence.GONE.rstrip("。")
-        if refusal is not None:
-            self._tell_sender(inv, other)
-            return [f"（{refusal}。）"]
-        p.tagalong = Tagalong(leader=inv.sender, since=self.now)
-        other._write(f"結伴同行・{p.name}", [f"{p.name}答應與你結伴同行：由你定去哪、怎麼走，出發時{gender.pronoun(p)}跟著走。"])
-        return [f"你答應與{inv.sender}結伴同行，等{gender.pronoun(other.state)}動身。"]
+        """答應結伴同行（本體在 tianxia/features/travel/party.py；留一行委派給玩家互動包 answer_invite）。"""
+        return travel_party.join(self, inv, other)
 
     def _tell_sender(self, inv, other: Game | None, why: str | None = None) -> None:
         """答應了卻沒成、邀請已經收掉：發邀請的那個人下次同步看到一句（玩家互動包 invite_actions.tell_sender；切磋、論武、結伴還在原位叫它）。"""
@@ -6813,176 +6679,16 @@ class Game:
         return peers_actions.calls_here(self)
 
     def join_refusal(self, leader: str) -> str | None:
-        """答應跟 leader 結伴同行，不行的原因：他得還在這裡、兩個人都沒在跟別人、你身後也沒有人跟著你、你人不在路上。"""
-        p = self.state.player
-        if p.journey is not None:
-            return "你在路上"
-        if p.tagalong is not None:
-            return f"你已經跟著{p.tagalong.leader}了"
-        if self._party():
-            return "已經有人跟著你走"
-        other = self._peer(leader)
-        if other is None:
-            return presence.GONE.rstrip("。")
-        if other.state.player.tagalong is not None:
-            return f"{leader}已經跟著別人走了"
-        return None
+        """答應跟 leader 結伴同行，不行的原因（本體在 tianxia/features/travel/party.py；留一行委派給玩家互動包 bots.answer_call）。"""
+        return travel_party.join_refusal(self, leader)
 
     def _party_expires(self) -> None:
-        """答應結伴之後，帶頭的人 party_wait_seconds（現實秒）之內沒動身，各走各的。"""
-        p = self.state.player
-        tag = p.tagalong
-        if tag is not None and p.journey is None and tag.since < self.now - self.content.config.party_wait_seconds:
-            p.tagalong = None
-            self._write(f"結伴同行・{tag.leader}", [f"{tag.leader}遲遲沒有動身，你們各走各的。"])
-
-    def _party(self, catch_up: bool = False) -> list[Game]:
-        """跟著你結伴同行、還算數的人（各自那一份 Game）：還在等你動身的（跟你同一個地點、沒過期），或已經跟著你在路上的。
-        catch_up：先替他們補算路上的抵達（抵達終點就散了），帶他們出發、改道之前要用。"""
-        if not hasattr(self.world, "db"):
-            return []
-        me = self.state.player
-        out = []
-        for state in CharacterStore(self.world.db).tagging(me.name):
-            other = self._kin(state)
-            if catch_up:
-                other._arrivals()
-            o = other.state.player
-            if o.tagalong is None or o.tagalong.leader != me.name:
-                if catch_up:
-                    self._save_kin(other)
-                continue
-            # 帶頭的人剛動身（_lead）時 location 還是出發的那一站，所以還在等的人照樣認得出來
-            waiting = o.journey is None and o.location == me.location \
-                and o.tagalong.since >= self.now - self.content.config.party_wait_seconds
-            if waiting or (o.journey is not None and me.journey is not None):
-                out.append(other)
-            elif catch_up:
-                self._save_kin(other)
-        return out
+        """答應結伴之後，帶頭的人沒動身就散（本體在 tianxia/features/travel/party.py；留一行委派給 sync）。"""
+        travel_party.party_expires(self)
 
     def party_view(self) -> dict | None:
-        """場景底下結伴同行的那一行：跟著誰（可以分道揚鑣），或誰跟著你。都沒有是 None。"""
-        p = self.state.player
-        if p.tagalong is not None:
-            return {"lead": False, "names": [p.tagalong.leader], "text": f"你跟著{p.tagalong.leader}結伴同行，由對方定去哪、怎麼走。"}
-        names = [g.state.player.name for g in self._party()]
-        if not names:
-            return None
-        when = "一路同行" if p.journey is not None else "你動身時跟著走"
-        return {"lead": True, "names": names, "text": f"{'、'.join(names)}與你結伴同行，{when}。"}
-
-    def leave_party(self) -> list[str]:
-        """場景底下的「分道揚鑣」（還在等帶頭的人動身時）：見 _part_ways。在路上時走選單的 act:part。"""
-        if self.state.player.tagalong is None:
-            return self._log(["（你沒有跟著誰。）"])
-        leader = self.state.player.tagalong.leader
-        msgs = self._part_ways()
-        self._write(f"結伴同行・{leader}", msgs)
-        return self._log(msgs)
-
-    def _part_ways(self) -> list[str]:
-        """不再跟著帶頭的人（他的紀錄記一句）。在路上的話照原本那一趟自己走下去（之後可以自己折返、改道）。"""
-        p = self.state.player
-        tag, p.tagalong = p.tagalong, None
-        if tag is None:
-            return []
-        leader = self._load_kin(tag.leader)
-        if leader is not None:
-            leader._write(f"結伴同行・{p.name}", [f"{p.name}與你分道揚鑣。"])
-            self._save_kin(leader)
-            self.touched.add(tag.leader)
-        return [f"你與{tag.leader}分道揚鑣。"]
-
-    def _lead(self, start: str | None, foot: int, told: str) -> list[str]:
-        """結伴同行：帶頭的你出發、改道、喊停之後，跟著的人照抄這一趟（同樣的路、同樣的抵達時間，連步調 Journey.pace 一起抄：
-        整隊照帶頭的人的坐騎走，_partners 才認得出同行）。趕路、疾行的體力各付各的（裝備四欄 5.8）：foot 是不算坐騎的體力
-        （atlas.route_foot_stamina；喊停是 0），每個跟著的人照自己的坐騎再省（atlas.ride_stamina、mounts.saving）。
-        start 是你動身的地點（從路上改道、喊停時是 None）。跟不上的人（體力不夠、手上有事、已經不在這裡）就散了，兩邊各記一句。
-        回傳寫給你的幾句。told 是寫進跟著的人紀錄的那一句。"""
-        me = self.state.player
-        j = me.journey
-        lines: list[str] = []
-        for other in self._party(catch_up=True):
-            o = other.state.player
-            cost = atlas.ride_stamina(foot, mounts.saving(other.state, self.content))  # 這個人自己騎的馬省下之後要付的
-            # 路是帶頭的人認得的路，跟著的人不必自己認得（所以不問 travel_refusal），只看他手上有沒有事、體力夠不夠
-            block = atlas.travel_block(other.state, self.content)
-            if start is not None and (o.journey is not None or o.location != start):
-                problem = presence.GONE.rstrip("。")
-            elif start is not None and block is not None:
-                problem = block.reason
-            else:
-                problem = None if o.stamina >= cost else f"體力不足，要 {cost} 體力"
-            if problem is not None:
-                o.tagalong = None
-                other._write(f"結伴同行・{me.name}", [f"{me.name}{told.split('，')[0]}，你沒能跟上（{problem}）。"])
-                lines.append(f"{o.name}沒能跟上，你們就此分開。")
-            else:
-                o.stamina -= cost
-                o.journey = j.model_copy(deep=True)
-                o.leg_actions = o.leg_actions | me.leg_actions
-                other._write(f"結伴同行・{me.name}", [told] + ([f"體力 -{cost}"] if cost else []))
-                if j.mode == "dash":
-                    other._arrivals()
-                lines.append(f"{o.name}跟著你。")
-            self._save_kin(other)
-            self.touched.add(o.name)
-        return lines
-
-    def _partners(self) -> list[Game]:
-        """同一趟路上結伴的其他人（帶頭的與其他跟著的；路上小事的收穫分給他們）：補算過抵達，跟你走在同一段路上的。"""
-        p, j = self.state.player, self.state.player.journey
-        if j is None or not hasattr(self.world, "db"):
-            return []
-        leader = p.tagalong.leader if p.tagalong is not None else p.name
-        states = CharacterStore(self.world.db).tagging(leader)
-        if leader != p.name:
-            head = CharacterStore(self.world.db).load(leader)
-            states = ([head] if head is not None else []) + states
-        out = []
-        for state in states:
-            if name_key(state.player.name) == name_key(p.name):
-                continue
-            other = self._kin(state)
-            other._arrivals()
-            oj = other.state.player.journey
-            if oj is not None and oj.path == j.path and oj.reached == j.reached and oj.arrive_at == j.arrive_at:
-                out.append(other)
-            else:
-                self._save_kin(other)
-        return out
-
-    def _share_road(self, what: str, gain: tuple | None) -> list[str]:
-        """路上小事的收穫分給同行的人（企劃者：每一樣收穫兩個人都有）：這一段路上這件事也算他做過了。
-        有收穫上限的（心得、素材）照他自己這個遊戲日的上限給。回傳寫給你的幾句。"""
-        lines: list[str] = []
-        me = self.state.player.name
-        name = ROAD_TASKS[what][0]
-        for other in self._partners():
-            o = other.state.player
-            o.leg_actions.add(what)
-            got: list[str] = []
-            if gain is not None:
-                kind, value = gain
-                capped = kind in ("xinde", "material") and not other._road_reward_due("task")
-                if capped:
-                    got = ["（這陣子的收穫拿滿了。）"]
-                elif kind == "xinde":
-                    o.stats["xinde"] = o.stats.get("xinde", 0) + value
-                    other._count_road_reward("task")
-                    got = [f"心得 +{value}"]
-                elif kind == "material":
-                    got = [materials.grant(other.state, self.content, value)]
-                    other._count_road_reward("task")
-                elif kind == "rumor":
-                    got = [f"聽說：{value}"]
-            if got:
-                other._write(f"結伴同行・{me}", [f"同行的{me}{name}，你也有一份。", *got])
-                lines.append(f"（同行的{o.name}也有一份。）")
-                self.touched.add(o.name)
-            self._save_kin(other)
-        return lines
+        """場景底下結伴同行的那一行（本體在 tianxia/features/travel/party.py；留一行委派給殼的 /api/main）。"""
+        return travel_party.party_view(self)
 
     # ── 管理者：玩家個人劇情（管理者觸發鈕第 2 組）──────────────────────
     # 輸入一個名號：照角色存檔認人（不分大小寫，同 CharacterStore），在這一把行動鎖裡讀他的存檔、補算到此刻，做完存回去——
