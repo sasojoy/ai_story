@@ -8787,6 +8787,7 @@ class Game:
             return self._log([problem])
         line = attrset.pick(s, c, preset, custom)
         journal.add_entry(s, JournalEntry(time=s.world.time, title="成長配比", changes=[line]))
+        self._guide(self._note_action("allocate"))  # 五項屬性的季，序章配點那一步就是挑成長配比（升一級沒有點可配）
         return self._log([line])
 
     @_not_while_preparing

@@ -1005,7 +1005,7 @@
     const head = chosen ? `成長：${esc(chosen.name)}（每級 ${row(g.now)}）` : g.chosen === "custom" ? `成長：自己配（每級 ${row(g.now)}）` : "挑這一季的成長（每級合計 " + g.per_level + " 點，之後改也照現在的等級重算）";
     const draft = S.growthDraft;
     return `<div class="growth"><div class="pts-label">${head}</div><div class="row alloc">${g.presets.map((p) =>
-      `<button class="btn small" data-act="growth" data-preset="${esc(p.key)}" title="${esc(row(p.split))}" ${p.key === g.chosen ? "disabled" : ""}>${esc(p.name)}</button>`).join("")}` +
+      `<button class="btn small" data-act="growth" data-preset="${esc(p.key)}" data-glow="allocate" title="${esc(row(p.split))}" ${p.key === g.chosen ? "disabled" : ""}>${esc(p.name)}</button>`).join("")}` +
       `<button class="btn small" data-act="growth-custom" ${draft ? "disabled" : ""}>自己配</button></div>${draft ? growthEditHtml(g, draft) : ""}</div>`;
   }
 

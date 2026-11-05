@@ -367,3 +367,16 @@ def test_a_check_can_read_charm_in_five_attribute_seasons():
     old = _game(False)
     assert rules.check_chance(charm, old.state, old.content, old.world) == rules.check_chance(plain, old.state, old.content, old.world)
     assert "v2" not in plain.model_dump()
+
+
+def test_hints_talk_about_the_new_rules_in_five_attribute_seasons():
+    """PM 2026-11-04 查新手教學：五項屬性的季配點提示講每十級送點、找同伴的提示指向酒肆招募；舊的季照舊。"""
+    from tianxia.features.guide import actions as guide_actions, hints as hint_rules
+    g, old = _game(), _game(False)
+    for hid in ("h_points", "h_recruit"):
+        hint = next(h for h in g.content.hints.hints if h.id == hid)
+        assert hint_rules.note_for(g.state, g.content, hid).text.endswith(hint.attrs_v2[-6:])
+        assert hint_rules.note_for(old.state, old.content, hid).text.endswith(hint.text[-6:])
+    town = next(ch.hire_at for ch in g.content.characters.values() if ch.hire_at)
+    g.state.player.location = town
+    assert guide_actions.hire_here(g) and not guide_actions.hire_here(old)

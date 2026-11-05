@@ -158,7 +158,14 @@ def _walk_the_hut(game, ambush="choice:0", attribute="快", luck=None):
 
         game.rng = FixedRandom(luck)
     game.choose("act:train")
-    game.allocate_stat("str")
+    from tianxia import attrset
+
+    if attrset.on(content, game.state.world):  # 五項屬性的季：升一級沒有點可配，這一步是挑成長配比
+        step = content.tutorial.steps[p.tutorial_step]
+        assert game.guide_box()["text"] == step.text_v2 and game.guide_box()["line"] == step.line_v2
+        game.pick_growth("warrior")
+    else:
+        game.allocate_stat("str")
     game.melt_art("manniu_quan")
     assert p.tutorial_step == 10
     return art
@@ -246,6 +253,16 @@ def test_bots_and_scripts_skip_the_real_prologue_and_look_like_graduates(content
     slotted = prologue.slotted_arts(bot.state, content, world)  # 武學重構：沒有師門功夫了，看的是裝了意境的基礎拳腳
     assert [a.id for a in slotted] == ["jichu_quanjiao"] and prologue.deepened(bot.state)
     assert "manniu_quan" not in bot.state.player.arts and not prologue.active(bot.state, content)
+
+
+def test_the_real_prologue_and_bots_get_through_in_five_attribute_seasons(content, world, monkeypatch):
+    """五項屬性的季（PM 2026-11-04 查新手教學）：每 10 級才送點，序章配點那一步改成挑成長配比，真人走得過、假人也略得過。"""
+    monkeypatch.setattr(content.config.attributes.v2, "enabled", True)  # 共用的內容：測完還原
+    human = Game.new(content, "真人", rng=random.Random(0), world=world, prologue=True)
+    _walk_the_real_prologue(human)
+    assert human.state.player.growth_preset == "warrior" and human.state.player.location == "yingchuan"
+    bot = Game.new(content, "假人", rng=random.Random(1), world=world, graduated=True)
+    assert bot.state.player.tutorial_step == len(content.tutorial.steps) and bot.state.player.growth_preset is not None
 
 
 @pytest.mark.parametrize("old_step, new_step", [(0, 18), (3, 18), (6, 18), (7, 18), (8, 18)])  # 序章十一步＋初入江湖七步（新手引導重做）

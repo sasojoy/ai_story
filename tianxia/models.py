@@ -1458,6 +1458,9 @@ class TutorialStep(_Strict):
     # ── 序章（新手引導計畫一，設計第三、六節）：只寫在前 Tutorial.prologue_steps 步（content.validate）──
     scene: str = ""  # 旁白，對話框裡排在話的前面
     line: str = ""  # 對話框收起後那一行（例：「師父：回『江湖』按『探索』」）；空的＝用 text
+    # 五項屬性的季（attrset.on）改說的話與那一行（空的照 text、line）：配點那一步改成挑成長配比（每 10 級才送點，升一級沒有點可配）
+    text_v2: str = ""
+    line_v2: str = ""
     reveal: list[str] = Field(default_factory=list)  # 這一步起畫面上亮起來的元件（REVEAL_KEYS）；前面幾步亮的照舊亮著
     glow: list[str] = Field(default_factory=list)  # 這一步要發光的鈕（網頁的 data-glow，見計畫 Task 6）
     # 在草廬閒著時選單只留這些（前綴比對，例："act:explore"、"move:"）。初入江湖的步驟（序章之後、不分季的）也可以寫：
@@ -1647,6 +1650,8 @@ class HintDef(_Strict):
     # 減法季探索一顆開著時（rules.jianfa 的 explore_one）師父改說這一句（只有師父的條能寫；空的就照 text；先於 season_one）：
     # 那一季沒有「尋敵」那顆鈕了（h_drill_done，FB-816 同一類）。待 joy 潤
     explore_one: str = ""
+    # 五項屬性的季（attrset.on）師父改說這一句（只有師父的條能寫；空的照下面的順序；最先）：每 10 級送點、同伴改去酒肆招募
+    attrs_v2: str = ""
     # 豪強分屬兩軍的季（allied.on）引薦人改說的那一句：陣營 id → 句子（新寫；只寫要換的，例：豪強不再臨時投效）
     allied: dict[str, str] = Field(default_factory=dict)
 

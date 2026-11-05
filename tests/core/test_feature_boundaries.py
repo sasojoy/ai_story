@@ -468,6 +468,7 @@ GAME_DELEGATE_CALLERS.update({
     ("take_stamina_pill", "_note_action"): "服回體丹（序章那一步）：回體丹是核心；" + _NOTE_HOOK,
     ("allocate_stat", "_note_action"): "配點（序章那一步）：武學還沒成包；" + _NOTE_HOOK,
     ("_allocate_v2", "_note_action"): "五項屬性的季的配點（序章那一步，同 allocate_stat）：武學還沒成包；" + _NOTE_HOOK,
+    ("pick_growth", "_note_action"): "五項屬性的季挑成長配比（序章配點那一步，升一級沒有點可配）：屬性還沒成包；" + _NOTE_HOOK,
     ("_menxia_entry", "_note_action"): "修練頁、煉製頁的動作（序章的練功、熔煉）：核心的修練頁紀錄服務；" + _NOTE_HOOK,
     ("choose", "_opening_pending"): _OPENING + "：選完那一下人物的信接在這一下的回話裡（位置算行為）",
     ("choose", "_opening_deliver"): "同上：那位人物的信與護送委託",
