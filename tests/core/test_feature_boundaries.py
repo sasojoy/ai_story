@@ -922,6 +922,32 @@ GAME_DELEGATE_CALLERS.update({
     ("status_data", "armament_view"): "江湖頁的陣營軍備存量（status_data[\"armament\"]）：狀態列的資料，位置固定、沒有對應的掛鉤",
 })
 
+# territory_acts（全部拆包第 46 批「地盤」：新包 tianxia/features/territory_acts/；計畫 docs/superpowers/plans/2026-11-06-地盤包-第1批.md 1.4、1.5）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。27 個方法搬進包，Game 留 20 個一行委派（_letter_key、_siege_you 等只有包裡叫的沒有委派）。
+# 22:00 換天沒有掛鉤可接（世界層的 day 格是 21 天季的曆日，不是現實 22:00 的換天；engine 的 world_tick、sync、advance 把 _conquest_tick、_deliver_conquest
+# 排在別的結算之間，順序就是行為），這五處改叫委派，不新增 GAME_DIRECT。原本 `import conquest_day`、`import xingshi` 兩行拿掉（舊名是指到包裡同一個模組的別名）。
+GAME_IMPORTS |= {
+    "tianxia.features.territory_acts.admin_actions", "tianxia.features.territory_acts.day_actions", "tianxia.features.territory_acts.letter_actions",
+    "tianxia.features.territory_acts.view", "tianxia.features.territory_acts.xingshi_actions",
+}
+GAME_DELEGATES |= {
+    # server（MAIN_ACTIONS 的下戰書、〈天下形勢〉A／C 兩段與背景執行緒、main_view 的 conquest／xingshi_mark、admin_choices 的 conquest）、
+    # 測試與腳本（scripts/try_xingshi.py）叫的；letter_problem 只有測試叫（包裡的 view 直接叫 letter_actions.letter_problem）、conquest_view 是 server main_view 與測試叫的，
+    # 兩個都沒有核心原位叫的；_conquest_tick、_deliver_conquest 是 engine 五處換天／補送叫的（下）
+    "letter_problem", "conquest_letter", "_conquest_tick", "_deliver_conquest", "_xingshi_start", "_xingshi_open", "_xingshi_finish", "xingshi_waiting",
+    "release_xingshi", "xingshi_request", "settle_xingshi", "xingshi_view", "xingshi_mark", "admin_xingshi_now", "conquest_view",
+    "admin_conquest_set", "admin_conquest_progress", "admin_conquest_letter", "admin_conquest_cancel", "admin_conquest_choices",
+}
+_TERRITORY_TURN = ("22:00 換天（_conquest_tick）與分紅補送（_deliver_conquest）沒有掛鉤：世界層的 day 格是 21 天季的曆日，不是現實 22:00 的換天；"
+                   "這個呼叫排在別的結算之間，順序就是行為（計畫 Review Focus 2）")
+GAME_DELEGATE_CALLERS.update({
+    ("world_tick", "_conquest_tick"): _TERRITORY_TURN + "：伺服器排程的 world_tick（沒人在線也收得掉）",
+    ("sync", "_conquest_tick"): _TERRITORY_TURN + "：第一個看到新的一天的人（sync）",
+    ("sync", "_deliver_conquest"): _TERRITORY_TURN + "：登入時補自己的分紅與守城功",
+    ("advance", "_conquest_tick"): _TERRITORY_TURN + "：管理者快轉（advance，save=False）",
+    ("advance", "_deliver_conquest"): _TERRITORY_TURN + "：同上",
+})
+
 
 # stamina_plays、seclusion（全部拆包第 39 批「體力玩法＋閉關」：新包 tianxia/features/stamina_plays/、tianxia/features/seclusion/；計畫
 # docs/superpowers/plans/2026-11-06-體力玩法閉關-第39批.md 1.4）：這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。10 個方法搬進包，Game 留 7 個一行委派
@@ -1123,6 +1149,11 @@ SHARED_PENDING.update({
     ("story_base", "atlas"): "排定：大區（atlas.region_of）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層（同 chiefs → atlas：atlas 最外層 import "
                              "出陣包 sortie）：切開之前 import story_base 會連帶載入 sortie（原本 import storyline 就是這樣）",
 })
+
+# territory_acts（第 46 批）：地盤搬成包之後這四筆不用了（第 25 批定的寫法：用 del 集中在自己的段，不在別人的段裡刪行）
+for _pair in (("_siege_live", "_sieges"), ("admin_conquest_cancel", "_cancel_siege"), ("_siege_live", "_joinable")):
+    del GAME_DELEGATE_CALLERS[_pair]  # 地盤畫面、救場工具改叫決戰包的查詢服務（ctx._joinable、ctx._cancel_siege、ctx._sieges）
+del SHARED_PENDING[("siege", "conquest_day")]  # 作罷（void、note_void）第 46 批 Task 1 已搬進 conquest
 
 
 def test_the_shared_rules_layer_only_imports_the_core_and_itself():
@@ -1538,7 +1569,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # military（全部拆包第 33 批：tianxia/rank_actions.py）
                          "rank_actions": "military",
                          # craft（全部拆包第 44 批：tianxia/create.py）
-                         "create": "craft"}
+                         "create": "craft",
+                         # territory_acts（全部拆包第 46 批：tianxia/conquest_day.py、xingshi.py）
+                         "conquest_day": "territory_acts", "xingshi": "territory_acts"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 
