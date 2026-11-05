@@ -19,6 +19,7 @@ from .engine import FREE_TEXT_OPTION, Game, Option
 # tests/season/test_real_content.py 直接叫，同一個函式、同一個數）
 from .features.travel import bots as travel_bots  # 舊模組 → 包：move: 的分數（全部拆包第 47 批）  # 過渡：掛鉤沒有 profile（第 47 批 PM 認定第 2 條）
 from .features.battle.bots import JOIN_BATTLE_SCORE, battle_score as _battle_score  # noqa: F401
+from .features.smithy import bots as smithy_bots  # 過渡：_smith_want 的一行委派（全部拆包第 41 批）
 from .features.peers.bots import (  # noqa: F401  打招呼、名帖的回法與比例：全部拆包第 37 批搬進玩家互動包（tests 讀 bot_policy.answer_call、REPLY_MIN_SECONDS）
     GREET_REPLY_SHARE, MINGTIE_ACCEPT_SHARE, MINGTIE_REJECT_SHARE, MINGTIE_SEND_CHANCE, REPLY_MIN_SECONDS, REPLY_SPREAD_SECONDS,
     TRAVEL_ACCEPT_SHARE, TRAVEL_REJECT_SHARE, _hand_card, _make_card, _roll, answer_call,
@@ -763,8 +764,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             wanted = None if move is None else f"bounty:pick:{move[0]}" if verb == "pick" else f"bounty:give:{move[0]}:{move[1]}"
             return BOUNTY_SCORE if option.id == wanted else None
         return BOUNTY_SCORE if verb == "take" else 0.0 if verb in ("back", "unpick") else None
-    if kind == "smith":  # 鐵匠鋪上：照 _smith_want 按那一顆（換買修、打造與換上打出來的那把，含切頁），沒事就離開；不淬煉、不拆，萬一停在單子上只按「不打了」
-        return SMITH_SCORE if option.id == _smith_want(game) else 0.0 if arg in ("back", "forge-cancel") else None
+    # 鐵匠鋪（smith:）搬進功能包：假人的分數在 features/smithy/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 41 批）
     # 酒肆（tavern:）搬進功能包：假人的分數在 features/tavern/bots.py，上面的 features_core.bot_pick 問它（主動搬六包第 10 批）
     if kind == "market":  # 馬市上：照 bot.market_want 按那一顆（換、買、餵），沒事就離開
         return MARKET_SCORE if option.id == bot.market_want(game) else 0.0 if arg == "back" else None
@@ -1010,11 +1010,8 @@ def _takeable(game: Game) -> bool:
 
 
 def _smith_want(game: Game) -> str | None:
-    """此刻在鐵匠鋪最該按的那一顆：單子開著時只照 bot.forge_step（下一步或「不打了」）；不然先照 bot.smith_want（換、買、修，兵器防具兩頁），
-    沒事再照 bot.forge_step（打造與換上打出來的那把，打造第二批 PM 決定第 3 條）。都沒事是 None。不淬煉、不拆。"""
-    if game.state.player.smith_draft is not None:
-        return bot.forge_step(game)
-    return bot.smith_want(game) or bot.forge_step(game)
+    """此刻在鐵匠鋪最該按的那一顆（本體在鐵匠鋪包的 bots.want；act:smith 的分數在這個檔，繼續叫它）。"""
+    return smithy_bots.want(game)
 
 
 def _short_of_materials(game: Game) -> bool:

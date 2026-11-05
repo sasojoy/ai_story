@@ -3062,12 +3062,7 @@ def api_howto(request: Request):
 # 鎖外三段式〔prepare_forge、create_intent、create_reread〕照舊是這個檔的）
 
 
-@app.post("/api/smith_line")
-def api_smith_line(request: Request, body: dict = Body(default={})):
-    """店面打造那一頁：爐裡放了什麼就問這一爐會怎樣（不算行動、不存檔；店面獨立介面設計 6.3）。參數是客戶端寫的，一律轉成字串。"""
-    game = _game(request)
-    kind, main, aux = (str(body.get(key) or "") for key in ("kind", "main", "aux"))
-    return look(game, lambda g: g.smith_line(kind, main or None, aux or None))
+# （/api/smith_line：全部拆包第 41 批搬進鐵匠鋪包 tianxia/features/smithy/routes.py，殼照 FEATURES 掛）
 
 
 @app.get("/api/reports")
