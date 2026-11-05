@@ -16987,6 +16987,22 @@ class TravelScenario(StaminaScenario):
                 best = (round(route.minutes, 6), loc_id)
         return best[1] if best else None
 
+    def far_first(self, who: str) -> str | None:
+        """從這個人站的地方走得到、第一段路最長的地點（一樣長取 id 排前面的）：出發之後第一站要很久才到，前半切下去、後半第一步的時候人還沒走過
+        第一站（走過了換站，路上做過的小事 leg_actions 就被清掉，半舊半新讀不到）。"""
+        from tianxia import atlas
+
+        with self.world.action_lock():
+            state = self.chars.load(who)
+        found = atlas.shortest_routes(state, self.c)
+        best = None
+        for loc_id, route in sorted(found.items()):
+            if not route.path or loc_id == state.player.location or atlas.travel_refusal(state, self.c, loc_id, "walk") is not None:
+                continue
+            if best is None or round(route.legs[0], 6) > best[0]:
+                best = (round(route.legs[0], 6), loc_id)
+        return best[1] if best else None
+
     def near(self, who: str) -> str | None:
         """相鄰的第一個地點（序章的草廬只給站在那裡的人，這裡不管）。"""
         with self.world.action_lock():
@@ -17094,6 +17110,7 @@ class TravelScenario(StaminaScenario):
         再主畫面選疾行走一步；W1、W3、W4、W5 緊接著步行走遠處；W1 做一件小事、W3 喊停、W4 折返、W5 把那一趟換成舊的趕路
         （拿掉趕路之前出發的樣子）。選單長什麼樣看每一下 choose 回的 main。"""
         dest = {w: self.far(w) for w in self.WALKERS}
+        dest[self.W1] = self.far_first(self.W1)  # 第一段最長：前半切下去的時候小事還記在 leg_actions 裡、後半第一步還沒換站
         emit("各人要去的遠處", dest)
         if dest[self.W2] is not None:
             with self.tune(road_sight_chance=1.0):
@@ -17151,8 +17168,11 @@ class TravelScenario(StaminaScenario):
         far = self.far(self.W4)
         if far is not None:
             self.travel(self.W4, far, "walk")
+        self.ways(self.W4, "出發之後（疾行標籤）", "dash")
+        self.call_mode(self.W4, "POST", "/api/choose", {"id": "road:back:dash"}, "dash")  # 還在路上的時候按：帶著走法的折返
+        if far is not None:
+            self.travel(self.W4, far, "walk")
         self.choose(self.W4, "road:back")
-        self.call_mode(self.W4, "POST", "/api/choose", {"id": "road:back:dash"}, "dash")
         self.me(self.W4, "疾行折返之後")
         self.ways(self.W4, "折返完")
 
