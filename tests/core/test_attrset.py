@@ -121,6 +121,9 @@ def test_events_give_lilian_points_on_the_new_scale():
     assert attrset.value(g.state, g.content, "str") == v2.base + 2 * v2.event_points
     assert attrset.value(g.state, g.content, "lead") == v2.base  # 扣的不扣
     assert f"武力 +{2 * v2.event_points}（歷練 {2 * v2.event_points}／{v2.event_cap}）" in msgs
+    from tianxia.battlelog import split_changes
+    assert split_changes(msgs)[0] == [m for m in msgs if "歷練" in m]  # 江湖紀錄裡是數值小框
+    assert split_changes(["經驗 +60（每人）"]) == ([], ["經驗 +60（每人）"])  # 別的附註照舊是敘事（舊的季一個字都不變）
     assert p.stats.get("xinde", 0) == xinde and g.status_data()["lilian"] == {"have": 3 * v2.event_points, "cap": v2.event_cap}
 
 
