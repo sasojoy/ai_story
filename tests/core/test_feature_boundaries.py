@@ -1040,6 +1040,30 @@ GAME_DIRECT.update({
 })
 
 
+# smithy（全部拆包第 41 批「鐵匠鋪」：新包 tianxia/features/smithy/；計畫 docs/superpowers/plans/2026-11-06-鐵匠鋪包-第1批.md 1.4、1.9）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。23 個方法搬進包，Game 留 11 個一行委派（其餘 12 個只有包裡叫的，沒有委派）。
+# 核心原位碰這一包的：choose 的 smith: 與 _action_title 的兩處（kind == "smith" 的標題、act:smith 的表格）換成包的 choose 掛鉤與 act 子動詞（Verb）；
+# 「打造那幾步併成一則」（quiet、merge、fold）留 choose 後半原位讀 smithing 的三個名字（經舊名別名）。
+# 店面登記（Shop）這一批不登記（計畫 1.9 量出四條）：鐵匠鋪留在 Game 原位，只有 _smith_options 變成一行委派；懸賞榜（第 45 批）、馬市（第 42 批）成包後 PM 一次排進 Shop。
+GAME_IMPORTS |= {
+    "tianxia.features.smithy.shelf_actions", "tianxia.features.smithy.forge_actions", "tianxia.features.smithy.trade_actions",
+    "tianxia.features.smithy.gear_actions", "tianxia.features.smithy.divine_actions", "tianxia.features.smithy.clue",
+    "tianxia.smithing",  # 舊名：現在是指到包裡 smithing 的別名（核心原位讀 draft_here、draft_stale、GO_VERB 等）
+}
+GAME_DELEGATES |= {
+    # server（MAIN_ACTIONS 的 smith_forge、smith_sell、smith_upgrade、smith_furnace，MENXIA_ACTIONS 的 repair_item、temper_item、name_divine、bind_art，
+    # 包的 /api/smith_line 路由）、假人（bot.trade_at_smith、bot.keep_book_names）、測試在叫的；_smith_options 是核心原位選單叫的；
+    # _smith_clue 是測試換掉的（包裡經 ctx 叫，services.py 二、查詢服務 # smithy）
+    "_smith_options", "_smith_clue", "smith_line", "smith_forge", "smith_furnace", "smith_sell", "smith_upgrade",
+    "repair_item", "temper_item", "name_divine", "bind_art",
+}
+_SMITHY_SHOP = ("鐵匠鋪不登記店面（計畫 1.9）：「此地還能做」的入口順序是 懸賞榜 → 鐵匠鋪 → 馬市 → 搬成包的店，搬進 Shop 就排到馬市後面（/api/main 的選項順序變）；"
+                "同一排的懸賞榜（第 45 批）、馬市（第 42 批）還沒成包；`here` 有兩個意思（_shop_open 要單子沒開著，收店要 smith_open）；PM 一次排")
+GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_smith_options"): _SMITHY_SHOP,
+})
+
+
 @functools.lru_cache(maxsize=None)
 def _engine_tree() -> ast.Module:
     return ast.parse((TIANXIA / "engine.py").read_text(encoding="utf-8"))  # 一萬七千行，parse 一次一秒多：大家共用這一份
@@ -1177,9 +1201,9 @@ SHARED_PENDING[("siege", "world")] += "；world 函式裡也 import 舊名 gener
 # 模組 → 卡在哪、哪一批之後收。包 import 它們的那幾行照舊註「過渡：待搬」。
 SHARED_LATER = {
     "fusion": "讀有所感的自創（sensing.add_own、own_name：有所感第 24 批成包）與行狀（annals.note）：排到第 29 批（行狀成包）一起改成查詢服務再收（第 24 批 PM 認定第 3 條）",
-    "skillview": "門下頁的說明（彙整）：讀自創 create（第 44 批）、修練 cultivation（第 23 批）、玉璽 seal（第 27 批）、鐵匠鋪 smithing（第 41 批）、"
+    "skillview": "門下頁的說明（彙整）：讀自創 create（第 44 批）、修練 cultivation（第 23 批）、玉璽 seal（第 27 批）、鐵匠鋪 smithing（第 41 批已成包，經舊名別名）、"
                  "輿圖 atlas；那幾包成包、改成查詢服務之後再收",
-    "shopview": "店面的畫面資料（彙整）：讀擂台 arena（第 12 批）、懸賞 bounties（第 45 批）、鐵匠鋪 smithing（第 41 批）、單挑 duel 的底層；"
+    "shopview": "店面的畫面資料（彙整）：讀擂台 arena（第 12 批）、懸賞 bounties（第 45 批）、鐵匠鋪 smithing（第 41 批已成包，經舊名別名）、單挑 duel 的底層；"
                 "那幾包成包之後再收",
     "events": "事件抽選：讀伏筆 foreshadow（軍情第 34 批成包）與心意 stances（第 19 批）；伏筆改成查詢服務、事件檢定搬進核心（第 16 批）之後再看",
     "tiers": "事件分級：讀擂台的名次 arena.entry_of，經舊名 arena（單挑包的別名）：名次已經是核心的查詢服務 arena_ranks（第 12 批），"

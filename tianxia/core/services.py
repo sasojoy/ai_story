@@ -304,6 +304,15 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._yuedan_line(content, name)`（月旦評那一週許劭對他的那一句，只讀；主人：大勢人物的行動包 figure_acts〔月旦評 yuedan〕。玩家卡 `card` 要這一句，
   玩家互動包不能 import 大勢人物包，經 Game 的一行委派問，總表第六節第 6 條「`social` 讀月旦評」）
 
+# smithy（全部拆包第 41 批「鐵匠鋪」；主人：鐵匠鋪包。本體在 tianxia/features/smithy/，Game 留一行委派回答別的包；計畫 docs/superpowers/plans/2026-11-06-鐵匠鋪包-第1批.md 1.3）。
+# 包要叫的核心服務，上面都已經列了，這一段只記「誰在用」，新增的只有 `ctx._smith_clue`：
+- `ctx._log(msgs)`、`ctx._save_season()`、`ctx._pill_day()`、`ctx._shop_say(...)`、`ctx._shop_after(...)`、`ctx._shop_live()`、`ctx._xinde()`、`ctx._menxia_entry(...)`、
+  `ctx.state`、`ctx.content`、`ctx.world`、`ctx.rng`：選單、買修淬煉、開爐、收購升階、裝備庫那一列的修與淬煉、神器定名用
+- `ctx._smith_clue(paid=True)`（鐵匠順口：花了銀兩或素材之後擲一次，中了說出這家知道的隱藏配方那一句；只讀、自己的亂數不動 ctx.rng。主人：鐵匠鋪包，
+  本體在 `features/smithy/clue.py`，Game 留一行委派，因為 tests/gear/test_econ_smith.py、test_shop.py 換掉 `Game._smith_clue`，包裡一律經 ctx 叫才打得到）
+- 共用規則層（包直接 import，registry.SHARED 已登記）：`weapons`、`armor`、`equipment`、`forge_secrets`、`four_tiers`、`silver`、`economy`、`traits`、`library`、
+  `secret_recipes`、`territory`、`insights`、`prologue`、`materials`；過渡（待收進共用層，標「# 過渡：待搬」）：`fusion`（SHARED_LATER）、`shopview`（SHARED_LATER）、`annals`（行狀）
+
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
 explore（主動搬六包第 3＋4 批加的這一段）
@@ -417,6 +426,9 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
   api_menxia_do 在鎖裡讀；煉製 `Game.forge`、自創 `create_name` 也寫——煉製第 44 批）
 # peers（全部拆包第 37 批）
 - `ctx.peer_brief`（論武合成了才填、`peer_act` 每次開頭清掉；提示泡泡那一句，伺服器在鎖裡讀。論武第 38 批搬走時改掛到論武那一包）
+
+# smithy（全部拆包第 41 批）
+- `ctx.smith_result`（`smith_forge` 寫、server 的 `api_do` 在鎖裡讀：上一次店面直接開爐的出爐卡，shopview.forged_card；被拒絕是 None。屬性留在 `Game.__init__`）
 
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """
