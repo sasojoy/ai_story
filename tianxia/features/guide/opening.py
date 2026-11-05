@@ -4,7 +4,7 @@
 選了之後照旗標由一位人物開口——做成他派人送來的一封信（Letter，kind「託付」）附一件護送委託（把信送到 Opening.end，到了就算；
 bounties.on_arrive → _complete_commission：銀兩與他的情誼照 Config.figure_life 的委託數字），信先寫固定句、伺服器鎖外請模型照他的口氣
 重寫（letters.write，寫不出來照固定句）。三方卡本來就在江湖頁最上面；信收起來本週卡才出現，「你這一步」第一件就是這一封信
-（weekcard._steps 的 errand）。新手八步（newbie.GOALS）照舊只在本週卡與「為什麼」裡。草廬序章（prologue.py）與老周的初入江湖
+（core/features.py 的 STEP_ORDER 的 commission 那一格：懸賞榜的委託，核心 step._STEP_CORE 代叫，_ref 是 errand）。新手八步（newbie.GOALS）照舊只在本週卡與「為什麼」裡。草廬序章（prologue.py）與老周的初入江湖
 （tutorial.json 的 e 步）一律略過。丹的福利照舊寫在江湖紀錄開場那一則（Game._note_gift），不另起一張卡。
 
 開關：Config.jianfa.opening 加上這一季開季時蓋的章（rules.jianfa(content, world, "opening")）；關著、或內容沒有 opening.json，

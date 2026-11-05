@@ -46,7 +46,7 @@
 ## 測試
 
 - 這一包的 `tests/`（全部拆包第 49 批從 `tests/` 整檔搬來，含 slow）：`test_mapview.py`（畫法）、`test_mapart.py`、`test_mapdata.py`（底圖、疊層、推薦）、`test_mapdata_layers.py`、`test_mapdata_suggest_cooling.py`、`test_map_base.py`、`test_open_map.py`、`test_worldgeo.py`、`test_world_map.py`、`test_real_map.py`（正式內容的地圖）、`test_map_perf.py`、`test_map_history.py`、`test_jianfa_3d_map_foes.py`（地點卡的對手與勝算）；另加 `test_map_package.py`（接縫：舊名別名、殼留的是同一個物件、三條路由、搬到核心服務檔的函式是同一個物件）。搬的時候改的只有 `test_mapview.py`、`test_real_map.py` 讀 `content/` 的路徑（`parents[2]` 換成 `parents[4]`）。
-- 混合檔的一處改動：`tests/core/test_test_for.py` 的 `test_a_module_also_picks_the_tests_of_the_modules_that_import_it` 原本拿 `mapview` 當「還是舊模組」的例子，`mapview` 成了包的模組，換成本週卡 `step`（經 `weekcard` 挑到 `test_weekcard`）。
+- 混合檔的一處改動：`tests/core/test_test_for.py` 的 `test_a_module_also_picks_the_tests_of_the_modules_that_import_it` 原本拿 `mapview` 當「還是舊模組」的例子，`mapview` 成了包的模組，換成本週卡 `step`（經 `weekcard` 挑到 `test_weekcard`）；第 36 批 `step`、`weekcard` 收進核心本體，又換成 `events` ← `narration`（`test_narration`）。
 - 跑：`pytest tianxia/features/map/tests -m "slow or not slow" -n 4`。
 
 ## 另外要跑的混合檔

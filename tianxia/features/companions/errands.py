@@ -254,7 +254,7 @@ def letter_card(state: GameState, content: Content, letter: Letter) -> dict | No
 
 
 def step_items(state: GameState, content: Content) -> list[dict]:
-    """本週卡「你這一步」的第一順位（整合設計 6.1；weekcard._steps 接在最前面）：身上還在辦的那一件，
+    """本週卡「你這一步」的第一順位（整合設計 6.1；這一包登記的 errand 那一格，排 core/features.py 的 STEP_ORDER 第一）：身上還在辦的那一件，
     [{"kind": "errand", "text", "who", "id", "target": {"location", "name", "minutes"}, "reward"}]；沒有、關著是空的。"""
     e = live(state)
     if e is None or not on(content, state.world):
