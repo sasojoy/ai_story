@@ -483,7 +483,7 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
             if option.id.startswith("choice:") and choices[int(option.id.partition(":")[2])].effect.recruit:
                 return option.id
     # 叛投（defect:）：機器人不換陣營；選單上一直有，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
-    # 邀請（invite:）：整季機器人不跟別人切磋，收回自己的邀請也一直按得下去，同 act:rest
+    # 邀請（invite:）：整季機器人不跟別人切磋，收回自己的邀請也一直按得下去，同 act:rest（玩家互動包的 bot_always 宣告，全部拆包第 37 批）
     # 懸賞榜（act:bounties）在城裡一直按得下去（只是打開第二層選單）：同 act:rest 排除；揭懸賞走 take_bounties
     # 鐵匠鋪（act:smith）同懸賞榜：只是打開選單；買修換走 visit_smith。鐵匠鋪的切頁（smith:page:）也只是換一頁（裝備四欄設計第九節）
     # 馬市（act:market）同鐵匠鋪：只是打開選單；買、換、餵走 visit_market、feed_mount
@@ -499,7 +499,7 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
         o for o in options
         if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", "act:market", "act:heal", "act:arena", "act:donate", "act:dadian",
                         "act:tavern", DUEL_FLEE, ARENA_YIELD)
-        and not o.id.startswith(("road:", "defect:", "invite:", "smith:page:", "ambush:", "works:",
+        and not o.id.startswith(("road:", "defect:", "smith:page:", "ambush:", "works:",
                                  "act:recruit:", "faction:lean:") + features_core.bot_always())  # 功能包宣告的永遠按得下去
     ]  # 招募歷史武將（act:recruit:<id>，歷史武將同行第七節）：整季機器人不招。託付（errand:，減法季批 6）：機器人不收託付，萬一有也不按（勸降要寫字；人物情誼包的 bot_always 宣告）。頭目戰的抽身退走（DUEL_FLEE）：打到一半一直按得下去，機器人照出招打完
     # 豪強改幫另一軍（faction:lean:，三陣營四勝利）：隨時按得下去、不花體力，同叛投排除（機器人不換邊）

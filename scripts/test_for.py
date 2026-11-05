@@ -44,7 +44,8 @@
   import 任何依賴它的模組的測試檔也挑；engine 與假人三支（DRIVERS）、核心模組不往上走，彙整的模組（自己 import 至少
   AGGREGATOR_FANOUT 個的：skillview、shopview……）算、不往上走；往上找到的超過 IMPORT_CAP 個檔（tactics、zh 這種底層的）改加
   核心測試＋煙霧。engine 只為了登記才 import 的（from . import wanted as _wanted_card  # noqa: F401）照它登記的動作名
-  （social.register(CardAction(id=KIND))：wanted、mingtie）挑寫到 "wanted" 的測試檔＋那一群（registered_actions）。
+  （social.register(CardAction(id=KIND))：wanted、mingtie）挑寫到 "wanted" 的測試檔＋那一群（registered_actions；
+  搬進功能包的登記〔mingtie_card，第 37 批〕改在包的 __init__.py 寫同樣的 `as _x  # noqa: F401`，照樣認）。
 - content/：test_content.py ＋ test_real_content.py ＋ 寫到那個檔名的測試檔，照舊不含 slow：test_real_content.py 用真實內容
   跑整季的那幾條是 slow（--slow 才跑、每日整套會跑），其他的（事件難度帶 DIFFICULTY_BANDS 的鎖、地點走得到……）每次都跑。
 - web/：寫到那個檔名的測試檔（main.js、map.js 照 app.js 挑），加上 test_server.py。功能包登記的網頁檔
@@ -468,9 +469,15 @@ def registered_actions(mod: str) -> tuple[str, ...]:
     這種模組沒有測試檔 import 它（測試是經 Game.peer_card／peer_act 用到），只能照動作名挑。"""
     engine = TIANXIA / "engine.py"
     try:
+        path = TIANXIA / f"{mod}.py"
         if mod not in _ENGINE_SIDE_IMPORT.findall(engine.read_text(encoding="utf-8")):
-            return ()
-        tree = _ast((TIANXIA / f"{mod}.py").read_text(encoding="utf-8"))
+            # 搬進功能包之後，登記改在包的 __init__.py 載入時做（全部拆包第 37 批：mingtie_card 進了玩家互動包，舊名是別名）：
+            # 同一個寫法，模組在那一包的資料夾裡
+            path = next((init.parent / f"{mod}.py" for init in sorted((TIANXIA / "features").glob("*/__init__.py"))
+                         if mod in _ENGINE_SIDE_IMPORT.findall(init.read_text(encoding="utf-8"))), None)
+            if path is None:
+                return ()
+        tree = _ast(path.read_text(encoding="utf-8"))
     except (OSError, SyntaxError):
         return ()
     consts = {t.id: n.value.value for n in tree.body if isinstance(n, ast.Assign)

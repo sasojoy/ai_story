@@ -585,7 +585,7 @@ GAME_DELEGATE_CALLERS.update({
 # 只讀擂台名次與稱號的舊模組（名帖 mingtie、玩家卡 social、榜單 leaderboard：on、title_of、ladder、title_for、record_text 都在核心
 # arena_ranks）讀核心那一份，不經舊名 arena 連帶載入單挑包（手冊 3.11「能走服務就走服務」；第 12 批審查修正）。tiers 照舊經別名：
 # tests/core/test_event_tiers.py 換掉 tianxia.arena.entry_of，改讀核心之後那一條打不到（SHARED_LATER 的 tiers）
-ARENA_RANK_READERS = ("mingtie", "leaderboard")  # 玩家卡的稱號（social.affiliation）第 37 批搬進核心的 core/presence.py，下面另驗那一份
+ARENA_RANK_READERS = ("features/peers/mingtie", "leaderboard")  # 名帖第 37 批搬進玩家互動包（舊名 tianxia/mingtie.py 是別名）； 玩家卡的稱號（social.affiliation）第 37 批搬進核心的 core/presence.py，下面另驗那一份
 
 
 def test_the_old_modules_that_only_read_the_arena_ranks_read_the_core_not_the_bout_package():
@@ -921,6 +921,47 @@ GAME_DELEGATE_CALLERS.update({
     ("_act", "_silver_act"): "act:bribe:<人物> 帶後綴接不了 Verb（總表第 57 批才擴），按下去留在核心 _act 叫委派",
     ("shop_view", "_bribe_targets"): "店面那一頁（打點的帳簿）要此地打點得了的人物，shop_view 是核心的店面殼",
     ("status_data", "armament_view"): "江湖頁的陣營軍備存量（status_data[\"armament\"]）：狀態列的資料，位置固定、沒有對應的掛鉤",
+})
+
+
+# peers（全部拆包第 37 批「玩家互動一」：新包 tianxia/features/peers/；計畫 docs/superpowers/plans/2026-11-06-玩家互動包-第1批.md 1.4）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。31 個方法搬進包，Game 留 21 個一行委派（另加月旦評那一句 _yuedan_line，主人大勢人物包）。
+# 核心原位碰這一包的：choose 的 invite: 與 _action_title 的 invite 兩處換成包的 choose 掛鉤；換季的頭銜簿換成 on_season_start 掛鉤；
+# 選單的 _invite_options 位置固定（選單的順序算行為），留原位叫委派。engine 還用 invites、social（切磋、論武、結伴同行還在原位，第 38 批與移動包）。
+GAME_IMPORTS |= {
+    "tianxia.features.peers.actions", "tianxia.features.peers.invite_actions", "tianxia.features.peers.mingtie_actions",
+    "tianxia.features.peers.pair_actions", "tianxia.features.peers.invites", "tianxia.features.peers.social",
+}
+GAME_DELEGATES |= {
+    # 玩家卡與此地還有（server 的 /api/main 與 bot_policy 與測試叫）、邀請框（選單 _invite_options、main_view 的 _invite_status、切磋論武叫的 answer_invite 與 _tell_sender、
+    # 測試叫的 _invite）、同一對人的帳（切磋、論武在原位算次數）、名帖（server 的管理者工具與測試叫）；_yuedan_line 是玩家卡問大勢人物包的月旦評那一句（包經 ctx 叫）
+    "peers_here", "_peer", "peer_card", "peer_request", "peer_act", "calls_here", "_invite_options", "_invite", "answer_invite", "_tell_sender", "_invite_status",
+    "gift_day_left", "_spar_pair", "_pair_left", "_pair_tick", "mingtie_view", "make_mingtie", "report_mingtie",
+    "admin_mingtie_reports", "admin_mingtie_remove", "admin_mingtie_restore", "_yuedan_line",
+}
+_PEERS_ORDER = "選單的順序算行為（/api/main 的選項一顆一顆逐位元組）：邀請框那幾顆夾在託付與懸賞榜之間，位置固定、沒有對應的掛鉤"
+_PEERS_38 = "切磋、論武（總表第 38 批）還在 Game，叫玩家互動包的{what}（經 Game 的一行委派）；搬走之後各自經 ctx 叫"
+GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_invite_options"): _PEERS_ORDER,
+    ("status_data", "_invite_status"): "江湖頁的邀請（status_data[\"invites\"]）：狀態列的資料，位置固定、鍵的順序算行為，總表第 66 批才接 status 掛鉤",
+    ("_spar", "_tell_sender"): _PEERS_38.format(what="邀請沒成局的通知"),
+    ("_discuss", "_tell_sender"): _PEERS_38.format(what="邀請沒成局的通知"),
+    ("_join", "_tell_sender"): "結伴同行（移動包）還在 Game，叫玩家互動包的邀請沒成局的通知（經 Game 的一行委派）",
+    ("_spar", "_pair_tick"): _PEERS_38.format(what="同一對人的帳"),
+    ("_discuss", "_pair_tick"): _PEERS_38.format(what="同一對人的帳"),
+    ("_spars_left", "_pair_left"): _PEERS_38.format(what="同一對人的帳"),
+    ("discusses_left", "_pair_left"): _PEERS_38.format(what="同一對人的帳"),
+    ("join_refusal", "_peer"): "結伴同行（移動包）還在 Game，問玩家互動包此地還有沒有那個人（經 Game 的一行委派）",
+})
+_PEERS_PENDING = "切磋、論武（總表第 38 批）還在 Game，直接用玩家互動包的 {what}；搬走之後這一條跟著拿掉"
+GAME_DIRECT.update({
+    "_spar_answer_problem": _PEERS_PENDING.format(what="invites、social（同一對人的上限那一句 social.pair_full、對方不在這裡 presence.GONE）"),
+    "spar_invite": _PEERS_PENDING.format(what="invites（發邀請）"),
+    "spar_refusal": _PEERS_PENDING.format(what="invites、social（不能發邀請的原因）"),
+    "_discuss": _PEERS_PENDING.format(what="invites、social（論武的提示泡泡 social.DISCUSS_BRIEF、thing_label）"),
+    "discuss_invite": _PEERS_PENDING.format(what="invites（發邀請）"),
+    "discuss_invite_problem": _PEERS_PENDING.format(what="invites、social（答應時重驗）"),
+    "discuss_refusal": _PEERS_PENDING.format(what="invites、social（不能發邀請的原因）"),
 })
 
 
@@ -1519,7 +1560,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # military（全部拆包第 33 批：tianxia/rank_actions.py）
                          "rank_actions": "military",
                          # craft（全部拆包第 44 批：tianxia/create.py）
-                         "create": "craft"}
+                         "create": "craft",
+                         # peers（全部拆包第 37 批：tianxia/social.py、invites.py、mingtie.py、mingtie_card.py）
+                         "social": "peers", "invites": "peers", "mingtie": "peers", "mingtie_card": "peers"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 
