@@ -17,9 +17,9 @@ from .core import features as features_core
 from .engine import FREE_TEXT_OPTION, Game, Option
 # 決戰（battle:）的分數搬進決戰包的 bots.py（全部拆包第 7 批；score 先問那一包）：這兩個名字照舊在這裡（tests/bots/test_bot_policy.py、
 # tests/season/test_real_content.py 直接叫，同一個函式、同一個數）
-from .features.travel import bots as travel_bots  # 舊模組 → 包：move: 的分數（全部拆包第 47 批）  # 過渡：掛鉤沒有 profile（第 47 批 PM 認定第 2 條）
 from .features.battle.bots import JOIN_BATTLE_SCORE, battle_score as _battle_score  # noqa: F401
 from .features.smithy import bots as smithy_bots  # 過渡：_smith_want 的一行委派（全部拆包第 41 批）
+from .features.travel import bots as travel_bots  # 舊模組 → 包：move: 的分數（全部拆包第 47 批）  # 過渡：掛鉤沒有 profile（第 47 批 PM 認定第 2 條）
 from .features.peers.bots import (  # noqa: F401  打招呼、名帖的回法與比例：全部拆包第 37 批搬進玩家互動包（tests 讀 bot_policy.answer_call、REPLY_MIN_SECONDS）
     GREET_REPLY_SHARE, MINGTIE_ACCEPT_SHARE, MINGTIE_REJECT_SHARE, MINGTIE_SEND_CHANCE, REPLY_MIN_SECONDS, REPLY_SPREAD_SECONDS,
     TRAVEL_ACCEPT_SHARE, TRAVEL_REJECT_SHARE, _hand_card, _make_card, _roll, answer_call,

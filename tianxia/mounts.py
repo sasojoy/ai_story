@@ -194,7 +194,7 @@ def grade(item: Equipment) -> str:
 # ---- 飽足與餵（5.4） ----
 
 def hunger(state: GameState, content: Content, mode: str) -> list[str]:
-    """抵達新的一站（Game._arrivals 的 new_leg）：身上那匹扣飽足度（步行、趕路 −5，疾行 −10）；第一次低到 edge_warn 以下回一句提醒
+    """抵達新的一站（移動包 departure.arrivals 的 new_leg）：身上那匹扣飽足度（步行、趕路 −5，疾行 −10）；第一次低到 edge_warn 以下回一句提醒
     （只一次，餵過或換一匹才重設）。沒騎馬、開關關著不扣。結伴同行時每個人照自己的馬扣（各自那一份 Game 的 _arrivals）。"""
     item, rule = riding(state, content), content.config.mounts
     if item is None:

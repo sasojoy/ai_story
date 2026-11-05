@@ -10,8 +10,8 @@ from tianxia.core.registry import FEATURES
 def test_travel_is_registered_and_takes_move_road_and_halt(game):
     feature = next(f for f in FEATURES if f.name == "travel")
     assert set(feature.prefix) == {"move", "road"} and feature.bot_always == ("road:",)
-    assert set(feature.player_fields) == {"leg_actions", "recent_sights", "road_rewards_today"}
-    assert [v.verb for v in feature.verbs()] == ["halt"]
+    assert set(feature.player_fields) == {"leg_actions", "recent_sights", "road_rewards_today", "tagalong"}
+    assert [v.verb for v in feature.verbs()] == ["halt", "part"]
     game.skip_tutorial()
     ids = [o.id for o in game.options() if o.id.startswith("move:") and o.enabled]
     assert ids and features_core.choose(game, "move", ids[0][5:]).title.startswith("前往 ")

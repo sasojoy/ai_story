@@ -107,7 +107,7 @@ class MilitaryFeature(Feature):
     _bus: tuple[BusHook, ...] | None = None
 
     def bus(self) -> tuple[BusHook, ...]:
-        """事件 arrive 的 convoy 那一格（抵達一站：糧車到了終點就交糧；原本 Game._arrive 經 _convoy_arrives 委派直接叫）：排在懸賞護送之前
+        """事件 arrive 的 convoy 那一格（抵達一站：糧車到了終點就交糧；原本 Game._arrive 經 _convoy_arrives 委派直接叫；現在發布點在移動包 departure.arrive）：排在懸賞護送之前
         （BUS_ORDER）。不問 enabled（押糧的判斷都在 convoy_arrives 裡）。建一次就留著，在叫的那一下才照模組屬性找 convoy_actions.convoy_arrives。"""
         if self._bus is None:
             from . import convoy_actions  # noqa: PLC0415

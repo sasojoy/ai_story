@@ -36,7 +36,7 @@
 另加 `_yuedan_line`（玩家卡的月旦評那一句，主人是大勢人物包，包經 `ctx` 叫）。其餘 10 個方法只有包裡叫，沒有委派。
 核心原位接掛鉤的：`choose` 與 `_action_title` 的 `invite`（`Outcome`）、換季的頭銜簿（`on_season_start`）、`bot.py` 的 `invite:` 排除（`bot_always`）。
 留委派、記進 `GAME_DELEGATE_CALLERS` 的：`_everyday_options` 叫 `_invite_options`（選單的順序是行為）、`status_data` 叫 `_invite_status`（鍵的順序是行為，總表第 66 批才接 status 掛鉤）；
-`_spar`、`_discuss`、`_join`（第 38 批與移動包）叫 `_tell_sender`、`_pair_tick`、`_pair_left`、`_peer`。
+`_spar`、`_discuss`、`_join`（移動包 `party.join`，Game 留一行委派）叫 `_tell_sender`、`_pair_tick`、`_pair_left`、`_peer`。
 `GAME_DIRECT` 新增 7 個（`_spar_answer_problem`、`spar_invite`、`spar_refusal`、`_discuss`、`discuss_invite`、`discuss_invite_problem`、`discuss_refusal`）：切磋、論武在第 38 批搬走之前直接用這一包的 `social`、`invites`，跟著拿掉。
 網頁那一半（`MT_INKS` 等）第 3 階才切，這一批不碰 `web/`。
 
