@@ -688,7 +688,9 @@ def test_a_feature_packages_web_file_picks_that_package_not_the_app_js_batch():
     mall_tests = {p.name for p in (test_for.FEATURES / "mall" / "tests").rglob("test_*.py")}
     contract = {p.name for p in test_for.contract_tests()}
     js = test_for.pick(["web/mall.js"])
-    assert {p.name for p in js.files} == mall_tests | contract and not js.core and not js.smoke
+    # 寫到 web/mall.js 檔名的別包測試照檔名跟（絕招例句每一句都收得下，#166）
+    assert {p.name for p in js.files} == mall_tests | contract | {"test_looks_scenes.py"}
+    assert not js.core and not js.smoke
     assert "test_server.py" not in {p.name for p in js.files}
     assert not {p.name for p in js.files} & (_names(["web/app.js"]) - mall_tests - contract)
     css = {p.name for p in test_for.pick(["web/mall.css"]).files}
