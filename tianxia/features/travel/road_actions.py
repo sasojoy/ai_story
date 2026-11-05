@@ -1,6 +1,6 @@
 """出發、路上小事、路上見聞（功能包 tianxia/features/travel/；原本是 Game._move、_road、_road_*、_road_sight，全部拆包第 47 批）。
-ctx 是 Game（第一階）。出發本身（_depart）與抵達（_arrive、_arrivals）是第 48 批的，這裡經 ctx 叫；_road_sight 在 Game._arrivals 迴圈中途叫
-（位置不動，Game 留一行委派）。"""
+ctx 是 Game（第一階）。出發本身（departure.depart）經 ctx._depart 叫（人物帶路與測試換掉的 Game._depart 才打得到）；sight 由 departure.arrivals 迴圈中途直接叫（位置不動）；
+收穫由 think／ask／gather 回傳，road 再交給 party.share_road 分給結伴同行的人（不再寄放在 Game 上）。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -9,7 +9,7 @@ from tianxia import atlas, materials  # 過渡：待搬（輿圖：路程與所�
 from tianxia.models import RoadKind
 from tianxia.rules import apply_effect, audible, day_turn, ears_of, game_day, here_regions
 
-from . import menu
+from . import menu, party
 
 if TYPE_CHECKING:
     from tianxia.engine import Game
@@ -31,9 +31,8 @@ def road(ctx: Game, arg: str) -> list[str]:
         return ctx._depart(menu.back_way(ctx), mode or "walk")
     ctx.state.player.leg_actions.add(what)
     tasks = {"think": think, "ask": ask, "gather": gather}
-    ctx._road_gain = None  # 這件小事的收穫（分給結伴同行的人，_share_road）；各個小事真的給了東西才填
-    msgs = tasks[what](ctx)
-    return msgs + ctx._share_road(what, ctx._road_gain)
+    msgs, gain = tasks[what](ctx)  # 這件小事的收穫（分給結伴同行的人，party.share_road）；各個小事真的給了東西才有，沒有是 None
+    return msgs + party.share_road(ctx, what, gain)
 
 
 def road_ends(ctx: Game) -> tuple[str, str]:
@@ -69,19 +68,18 @@ def reopen(ctx: Game, after: str) -> str:
     return f"{moment} {after}" if moment else "這一季之內不會再有"
 
 
-def think(ctx: Game) -> list[str]:
+def think(ctx: Game) -> tuple[list[str], tuple | None]:
     """邊走邊想：心得（一次遊歷大約 12～20，這裡刻意少很多）。這個遊戲日的收穫拿滿了就照樣想，只是沒有心得
     （寫換日的那一刻，待 joy 潤）。"""
     if not reward_due(ctx, "task"):
-        return [f"你邊走邊想，這陣子想得夠多了，沒有新的心得（{reopen(ctx, '之後才會再有')}）。"]
+        return [f"你邊走邊想，這陣子想得夠多了，沒有新的心得（{reopen(ctx, '之後才會再有')}）。"], None
     p, amount = ctx.state.player, ctx.content.config.road_think_xinde
     p.stats["xinde"] = p.stats.get("xinde", 0) + amount
     count_reward(ctx, "task")
-    ctx._road_gain = ("xinde", amount)
-    return ["你邊走邊想，把這幾天的見聞在心裡過了一遍。", f"心得 +{amount}"]
+    return ["你邊走邊想，把這幾天的見聞在心裡過了一遍。", f"心得 +{amount}"], ("xinde", amount)
 
 
-def ask(ctx: Game) -> list[str]:
+def ask(ctx: Game) -> tuple[list[str], tuple | None]:
     """沿途打聽：這段路兩頭所在大區（Rumor.region；兩頭不同區時兩區都算）最近幾則傳聞裡隨機挑一則；沒有就寫一句，
     仍算做過。聽得到的才挑（rules.audible：別的陣營的軍情、寫給別人的個人線索聽不到）；第一季只挑傳聞板上的
     （最近 rumor_board_days 個季曆天，天下大事也一樣——打聽的是「這一帶最近」的事）。"""
@@ -91,28 +89,26 @@ def ask(ctx: Game) -> list[str]:
         r for r in s.world.rumors if r.region in regions and r.time >= ears.since and audible(r, ears)
     ][-c.config.road_rumor_pool:]
     if not heard:
-        return ["你沿途問了幾個人，這一帶最近沒什麼新鮮事。"]
+        return ["你沿途問了幾個人，這一帶最近沒什麼新鮮事。"], None
     text = ctx.rng.choice(heard).text
-    ctx._road_gain = ("rumor", text)
-    return [f"你沿途向人打聽，聽說：{text}"]
+    return [f"你沿途向人打聽，聽說：{text}"], ("rumor", text)
 
 
-def gather(ctx: Game) -> list[str]:
+def gather(ctx: Game) -> tuple[list[str], tuple | None]:
     """路邊採集：一定機率撿到一樣一階素材；屬性照這段路兩頭的地點寫的素材（Location.materials），兩頭都沒寫就隨機。
     這個遊戲日的收穫拿滿了就不翻（也不擲骰，寫換日的那一刻，待 joy 潤）；撿到了才算一次收穫。"""
     s, c = ctx.state, ctx.content
     if not reward_due(ctx, "task"):
-        return [f"你留心路邊，這陣子已經撿夠了，沒再去翻（{reopen(ctx, '之後再說')}）。"]
+        return [f"你留心路邊，這陣子已經撿夠了，沒再去翻（{reopen(ctx, '之後再說')}）。"], None
     if ctx.rng.random() >= c.config.road_gather_chance:
-        return ["你在路邊翻找了一陣，沒找到什麼能用的。"]
+        return ["你在路邊翻找了一陣，沒找到什麼能用的。"], None
     kinds = {c.materials[m].attribute for end in road_ends(ctx) for m in c.locations[end].materials if m in c.materials}
     pool = [m for m in materials.by_tier(c, 1) if m.attribute in kinds] or materials.by_tier(c, 1)
     if not pool:  # 內容裡沒有一階素材：當成沒找到
-        return ["你在路邊翻找了一陣，沒找到什麼能用的。"]
+        return ["你在路邊翻找了一陣，沒找到什麼能用的。"], None
     count_reward(ctx, "task")
     found = ctx.rng.choice(pool).id
-    ctx._road_gain = ("material", found)
-    return ["你在路邊翻找了一陣。", materials.grant(s, c, found)]
+    return ["你在路邊翻找了一陣。", materials.grant(s, c, found)], ("material", found)
 
 
 def sight(ctx: Game, road: RoadKind, loc_id: str, when: float | None = None) -> list[str]:

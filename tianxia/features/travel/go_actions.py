@@ -1,5 +1,5 @@
 """喊停、安排前往（功能包 tianxia/features/travel/；原本是 Game._halt、travel、travel_refusal，全部拆包第 47 批）。
-ctx 是 Game（第一階）。出發（_depart）本身與結伴同行是第 48 批的，這裡經 ctx 叫。"""
+ctx 是 Game（第一階）。出發（departure.depart）經 ctx._depart 叫；結伴同行（party.lead）直接叫包內的函式（第 48 批）。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -9,6 +9,8 @@ from tianxia import journal
 from tianxia.core.services import PREPARING_TEXT
 from tianxia.journal import Draft
 from tianxia.models import TravelMode
+
+from . import party
 
 if TYPE_CHECKING:
     from tianxia.engine import Game
@@ -22,7 +24,7 @@ def halt(ctx: Game) -> list[str]:
     msgs = [f"你喊停，到了{c.locations[j.path[j.reached]].name}就停下來。"]
     if j.mode == "hurry":
         msgs.append("（趕路已經花掉的體力不退。）")  # 拿掉趕路之前出發、還在路上的那一趟
-    msgs += ctx._lead(None, 0, f"{s.player.name}喊停，到了{c.locations[j.path[j.reached]].name}就停下來。")
+    msgs += party.lead(ctx, None, 0, f"{s.player.name}喊停，到了{c.locations[j.path[j.reached]].name}就停下來。")
     ctx._sync_battle_presence()  # 這一趟縮短了：最後一站落在決戰的大區內，就不再算離開
     return msgs
 

@@ -829,7 +829,7 @@ class BusHook:
 # win         Game._squad_encounter 打贏（不是野怪、不在序章）；探索包 outing_fight 遭遇打贏（不是城裡）   (ctx, loc_id, squad_id)            接 list[str]
 # outing      探索包 explore_one 收尾                                                             (ctx, loc_id)                      接
 # explore     探索包 explore_base.explore（舊探索，序章外）                                        (ctx, loc_id)                      接
-# arrive      Game._arrive 抵達一站                                                               (ctx, loc_id)                      接
+# arrive      移動包 departure.arrive 抵達一站（Game._arrive 留一行委派）                           (ctx, loc_id)                      接
 # raid_win    Game._raid_bounty（截殺、設伏打贏）                                                  (ctx, target)                      接
 # battle_end  決戰包 progress.settle_showdown（時刻表決戰收場，讀回季之前）                         (ctx, battle, definition, result)  不接（None）
 BUS_ORDER: dict[str, tuple[str, ...]] = {
