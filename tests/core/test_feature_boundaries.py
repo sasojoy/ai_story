@@ -214,8 +214,6 @@ GAME_IMPORTS = {
     # （engine 照舊叫 escorts.due、after_battle，見 GAME_DIRECT 的 _apply_battle_outcome）
     "tianxia.features.battle.muster", "tianxia.escorts",
     "tianxia.features.looks.actions",  # 擂台形象：Game.arena_look、arena_move 一行委派（擂台報名、開打記穿哪一套、疊哪一張光效）
-    # travel（全部拆包第 47 批）：移動選單、路上小事、喊停、折返、安排前往的 9 個一行委派
-    "tianxia.features.travel.menu", "tianxia.features.travel.road_actions", "tianxia.features.travel.go_actions",
 }
 GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
     "arena_look",  # 擂台形象（looks）
@@ -267,11 +265,6 @@ GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
     # _joinable）、只能臨時投效（_free_agent）、假人趕路（rally_region）；測試直接叫的 _battle_options、_battle_choose_in。其餘 16 個只有包裡叫
     "_battle_menu", "_battle_options", "_battle_choose", "_battle_choose_in", "_escort_carry", "_settle_partings", "_ally_follows_battle",
     "_free_agent", "_at_battle", "_sync_battle_presence", "rally_region", "_joinable", "_in_region",
-    # travel（全部拆包第 47 批）：移動一的 9 個一行委派。_move_option、_back_option、_road_task_options 給選單（順序算行為，不能改成 Feature.options）；
-    # _road_sight、_road_reward_due、_count_road_reward 給 _arrivals 與第 48 批的 _share_road；set_move_mode 給 server、腳本與測試；
-    # travel、travel_refusal 給 /api/travel、假人（bot_policy._rally）、腳本與 21 個測試檔（測試也換掉 game.travel_refusal 繞過檢查）
-    "_move_option", "_back_option", "_road_task_options", "set_move_mode", "_road_reward_due", "_count_road_reward", "_road_sight",
-    "travel", "travel_refusal",
 }
 # 第 11 批（全部拆包「核心收接縫」，計畫 docs/superpowers/plans/2026-11-01-核心收接縫.md 1.2）之後留下的直連：核心的接縫（選單、補算時間、
 # 行動列與 act 子動詞、choose 前後段、本人這一輪、場景卡、戰報頁、店面）都換成了接縫掛鉤（tianxia/core/features.py），留下的都不是核心
@@ -369,6 +362,7 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("_lean_step", "_ally_follows_battle"): "三陣營四勝利：改幫另一軍之後同上；同上",
     ("_arrivals", "_sync_battle_presence"): "抵達時記人還在不在決戰的大區：移動還沒成包（總表第 47 批）",
     ("_depart", "_sync_battle_presence"): "出發時同上；同上",
+    ("_halt", "_sync_battle_presence"): "喊停時同上（這一趟縮短了）；同上",
     # （(_hint_triggers, _at_battle)：碰到才說的 h_spectator，全部拆包第 22 批 _hint_triggers 搬進新手引導包、經 ctx._at_battle 叫〔決戰的
     # 查詢服務〕，拿掉）
     ("_watching_battle", "_at_battle"): "此刻只能在一旁看（還沒參戰的人不在那個大區）：決戰「打」那一半，第 8 批",
@@ -452,6 +446,7 @@ GAME_DELEGATE_CALLERS.update({
     # choose 最後、sync 沒有對應的位置，修練頁與移動也不走 choose
     ("choose", "_check_hints"): "choose 最後、記進江湖紀錄之前：這一下碰到的新玩法排一條、排著的上框；after_action 之後才存回季、紀錄已經寫了",
     ("sync", "_check_hints"): "sync 的最後幾行（引薦人的結語之後、結伴逾時之前）：抵達、大事揭曉這些不靠行動的改變；on_sync 在更前面",
+    ("travel", "_check_hints"): "出發那一下（移動還沒成包，總表第 47 批）",
     # （(allocate_stat, _check_hints)：配點之後——全部拆包第 23 批 allocate_stat 搬進修練包、包裡經 ctx 叫，拿掉）
     # （(sense_draw, _check_hints)：有所感畫完那一筆——全部拆包第 24 批 sense_draw 搬進有所感包、包裡經 ctx 叫，拿掉）
     ("_menxia_entry", "_check_hints"): "修練頁、煉製頁的動作寫進紀錄（核心的修練頁紀錄服務）：說的話接在這一則",
@@ -888,6 +883,7 @@ GAME_DELEGATE_CALLERS.update({
     ("_squad_encounter", "_order_credit"): "戰鬥（核心的單打服務）打贏之後替軍令記功：位置固定在推線與地盤進度之間（出陣攻打的記功排在推進度之前），沒有對應的掛鉤",
     ("sync", "_report_seat"): "同步的第四階席次抄帳與補缺（回話的最後一段，在 summons 之後）：on_sync 在更後面，回話的先後算行為",
     ("choose", "_report_seat"): "做完一個動作之後抄帳、補缺（這個動作結束時 _save_season 一起存）：位置在 after_action 之前，先後算行為",
+    ("travel", "_report_seat"): "走完一趟之後抄帳（同 choose：正式版丁）；賽季時鐘暫停時什麼都不做這一句在委派的本體裡",
     ("admin_player_choices", "_summons_plan"): "管理者的玩家選單（發召見那一顆灰不灰、為什麼）與 admin_summon 共用同一個規劃（_summons_plan）",
 })
 # military（全部拆包第 34 批「軍情二」：機緣 opp: 與伏筆 fs: 搬進同一包；計畫 docs/superpowers/plans/2026-11-06-軍情包-第2批.md 1.1、1.4、1.5）：
@@ -911,6 +907,7 @@ GAME_DELEGATE_CALLERS.update({
     ("sync", "_settle_plots"): "同步的集體密謀結算：位置固定在 sync 的中段，沒有對應的掛鉤（world 的 sync 順序算行為）",
     ("choose", "_settle_plots"): "做完一個動作之後的集體密謀結算：位置在回話的最後一段，沒有對應的掛鉤",
     ("choose", "_hear_after_stamina"): "花體力的動作之後抽伏筆片段與機緣線索：位置在 choose 結尾、after_action 之前，伏筆先機緣後、共用 self.rng，擲骰順序算行為，沒有對應的掛鉤",
+    ("travel", "_hear_after_stamina"): "輿圖安排前往走完一趟之後同樣抽一次（同 choose）：位置固定，沒有對應的掛鉤",
     ("_everyday_options", "_fs_asking_options"): _OMEN_MENU + "答題中的選單排在店面 shop_menu 之後、閉關之前，menu 掛鉤在更前面（宴客、有所感之前），位置不同不能接",
     ("_everyday_options", "_omen_options"): _OMEN_MENU + "機緣與伏筆最後一步夾在 _rank_action_options 與 _errand_options 中間，options 掛鉤是另一個選單（體力玩法之後），位置不同不能接",
     ("_action_title", "_rank2_action"): "act:rank2 的江湖紀錄標題寫第 2 階行動自己的名字（招降黃巾散兵、施符水收人心）；act 子動詞的標題在表上，第 2 階行動接 Verb 是總表第 57 批",
@@ -1054,6 +1051,22 @@ GAME_DELEGATE_CALLERS.update({
     ("_everyday_options", "_road_task_options"): _TRAVEL_MENU + "：路上小事在喊停之後、擂台之前（結伴同行時緊接在 act:part 後面）",
     ("_arrivals", "_road_sight"): "抵達一站的迴圈中途（_ambush_check → _arrive → 騎乘飽足 → 路上見聞）：位置固定、沒有對應的掛鉤；第 48 批 _arrivals 搬進移動包時改經 ctx",
 })
+GAME_IMPORTS |= {
+    # travel（全部拆包第 47 批）：移動選單、路上小事、喊停、折返、安排前往的 9 個一行委派
+    "tianxia.features.travel.menu", "tianxia.features.travel.road_actions", "tianxia.features.travel.go_actions",
+}
+GAME_DELEGATES |= {
+    # travel（全部拆包第 47 批）：移動一的 9 個一行委派。_move_option、_back_option、_road_task_options 給選單（順序算行為，不能改成 Feature.options）；
+    # _road_sight、_road_reward_due、_count_road_reward 給 _arrivals 與第 48 批的 _share_road；set_move_mode 給 server、腳本與測試；
+    # travel、travel_refusal 給 /api/travel、假人（bot_policy._rally）、腳本與 21 個測試檔（測試也換掉 game.travel_refusal 繞過檢查）
+    "_move_option", "_back_option", "_road_task_options", "set_move_mode", "_road_reward_due", "_count_road_reward", "_road_sight",
+    "travel", "travel_refusal",
+}
+# 拿掉別人段裡的格：在自己的段 del（halt、check_hints、report_seat、hear_after_stamina 現在由包經 ctx 叫，不再是 Game 內部互叫）
+del GAME_DELEGATE_CALLERS[("_halt", "_sync_battle_presence")]
+del GAME_DELEGATE_CALLERS[("travel", "_check_hints")]
+del GAME_DELEGATE_CALLERS[("travel", "_report_seat")]
+del GAME_DELEGATE_CALLERS[("travel", "_hear_after_stamina")]
 
 
 @functools.lru_cache(maxsize=None)
