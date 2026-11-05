@@ -16927,12 +16927,13 @@ class MapScenario(Scenario):
     **三條路由**：`GET /api/map`（舊的整張 SVG 與詳情欄：四個圖層、不存在的圖層、有效／無效的 place、沒登入）、`GET /api/map/base`（底圖與
     清單，伺服器照鍵快取：同一個人連問兩次、不同的人、看的人換地點）、`GET /api/map/state`（疊層：勝算、出陣、分鐘、戰線、每一週的地盤），
     還有 `POST /api/travel` 走不成時帶的 `map`（打開輿圖之後才冒出事件、就在這裡、沒這個地方）與成功時地點詳情的安排前往（travel_options）。
-    **局面**：官軍、黃巾、散人、剛進門還在序章的人各看一遍；出陣約戰開著／關著（出陣那一格與推薦）；全圖開放、地盤、出陣、意境提示四個
-    設定開關各翻一下；走在路上的人（路上的「你」與到選定地點的粗線）；時間過了兩天（軍令、戰線、每週地盤）；地盤進度擺到高（警報、易手標記）。
+    **局面**：官軍、黃巾、散人、剛進門還在序章的人各看一遍；出陣約戰開著／關著（出陣那一格與推薦）；意境提示、盡頭阻力、劇本的地盤
+    各翻一下（翻前翻後各清一次底圖快取；盡頭阻力這一包不讀，翻了輸出本來就一樣）；走在路上的人（路上的「你」與到選定地點的粗線）；時間過了兩天（軍令、戰線、每週地盤）；地盤進度擺到高（警報、易手標記）。
     **網頁檔**：`GET /static/map.js` 的整檔 sha256（網頁拿到的內容一個位元組不變）與 `/` 載入它的那一行、載入版本號。
     **寫到一半**：地圖本身沒有寫到一半的狀態（每個畫面從存檔現算）；前半停在有人走在路上、有人剛擺好地盤進度的那一刻，後半新程式接手：
     路上的人走到、畫面照存檔的 journey 現算。**假人**：假人不看地圖（沒有任何 /api/map 的呼叫），碰到輿圖的只有 `bot_policy` 的
-    移動選項叫 `Game.travel_options`——BotRunner 在城裡跑幾輪，走不走得動都照舊（比存檔與世界的雜湊）。"""
+    `_toward_battle` 叫 `Game.travel_options`——它要有決戰在集結才走得到，這一軌的假人段沒有開決戰（season21 量過一次也沒走到），
+    所以這一段只比假人跑完的存檔與世界雜湊，`travel_options` 由 /api/map 的地點詳情與 /api/travel 走到。"""
 
     PLAYERS = {"韓望舒": "guan", "賀凌川": "huang", "祝聽雨": None, "岑九皋": "guan"}
     GUAN, HUANG, LONE, WALKER = tuple(PLAYERS)
@@ -17047,12 +17048,14 @@ class MapScenario(Scenario):
                 emit(f"開關 {label}：這份內容沒有", None)
                 continue
             setattr(holder, attr, value)
+            self.server.MAP_BASE.clear()  # 底圖快取的鍵不含這些開關：不清的話翻了也看不到（審查 11/05：意境提示整段只算過一次底圖）
             try:
                 emit(f"開關 {label} 翻成", None if value is None else value)
                 for who in (self.GUAN, self.NEWBIE):
                     self.three_views(who, f"{label}翻過", full=who == self.GUAN)
             finally:
                 setattr(holder, attr, old)
+                self.server.MAP_BASE.clear()
         self.three_views(self.GUAN, "開關都還原")
 
     def web(self) -> None:
