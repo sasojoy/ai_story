@@ -344,7 +344,7 @@ SETTLED_LEVEL = 5  # 簽到、萬寶閣這種「不是碰到一個玩法」的�
 
 
 def _more_triggers(ctx: Game, want) -> list[str]:
-    """補新手教學（2026-11-05）的十一條：截殺自保、簽到、萬寶閣、形象、玉璽碎片、宴客、傳功、坐騎、寶物、地點變樣、戰記分享。"""
+    """補新手教學（2026-11-05）的十一條：截殺自保、簽到、萬寶閣、形象、玉璽碎片、宴客、傳功、坐騎、寶物、地點變樣、戰記分享；加上歷練快滿了。"""
     s, c, p = ctx.state, ctx.content, ctx.state.player
     w = s.world
     on: list[str] = []
@@ -375,6 +375,9 @@ def _more_triggers(ctx: Game, want) -> list[str]:
     # 戰記：打完一場決戰或奪璽單挑（只有這兩種有戰記）
     if want("h_tale") and any(r.kind in ("showdown", "seal") for r in s.battles):
         on.append("h_tale")
+    # 歷練快滿了（五項屬性的季）：這一季從事件得來的屬性到 event_hint_at（到頂之前說一次，再磨下去長進有限）
+    if want("h_lilian") and attrset.on(c, w) and attrset.event_total(s) >= c.config.attributes.v2.event_hint_at:
+        on.append("h_lilian")
     return on
 
 

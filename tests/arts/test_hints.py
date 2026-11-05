@@ -81,7 +81,8 @@ def test_every_known_hint_id_is_one_of_the_eighteen():
 
     # 設計 5.2 的十八條，加上 explain-1 的 h_bond（第一次交友或談話：情誼有什麼用；事件型，不看狀態）
     # 新手引導重做（2026-10-22）：拿掉 h_refine_fail，多五條（h_drill_done 是事件型）
-    assert len(hints.KNOWN) == 34 and {"h_snubbed", "h_mandate", "h_merge", "h_figure", "h_bond", "h_tavern"} <= hints.KNOWN
+    # 補新手教學多十一條、歷練快滿了（h_lilian）一條
+    assert len(hints.KNOWN) == 35 and {"h_snubbed", "h_mandate", "h_merge", "h_figure", "h_bond", "h_tavern"} <= hints.KNOWN
     assert "h_refine_fail" not in hints.KNOWN
     assert hints.EVENT_ONLY == {"h_snubbed", "h_mandate", "h_bond", "h_drill_done"}
 

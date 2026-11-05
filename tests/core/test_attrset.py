@@ -111,13 +111,48 @@ def test_the_check_is_relative_to_the_level():
     assert rules.grade_of(legacy, c) == ("hard", 1)
 
 
-def test_events_give_xinde_instead_of_attribute_points():
+def test_events_give_lilian_points_on_the_new_scale():
+    """事件寫的舊屬性 +N（企劃者 2026-11-05「照給屬性，每季有上限」）：照 legacy 對到新的一項、一點舊的換 event_points 點，記進這一季的歷練；扣的不扣。"""
     g = _game()
-    p = g.state.player
-    before = p.stats.get("xinde", 0)
-    rules.apply_effect(Effect(stats={"str": 2, "silver": 5}), g.state, g.content, g.world)
-    assert p.stats["xinde"] == before + 2 * g.content.config.attributes.v2.attr_xinde
-    assert attrset.value(g.state, g.content, "str") == g.content.config.attributes.v2.base
+    p, v2 = g.state.player, g.content.config.attributes.v2
+    xinde = p.stats.get("xinde", 0)
+    msgs = rules.apply_effect(Effect(stats={"str": 2, "agi": 1, "con": -3}), g.state, g.content, g.world)
+    assert p.attr_event == {"str": 2 * v2.event_points, "spd": v2.event_points}
+    assert attrset.value(g.state, g.content, "str") == v2.base + 2 * v2.event_points
+    assert attrset.value(g.state, g.content, "lead") == v2.base  # 扣的不扣
+    assert f"武力 +{2 * v2.event_points}（歷練 {2 * v2.event_points}／{v2.event_cap}）" in msgs
+    from tianxia.battlelog import split_changes
+    assert split_changes(msgs)[0] == [m for m in msgs if "歷練" in m]  # 江湖紀錄裡是數值小框
+    assert split_changes(["經驗 +60（每人）"]) == ([], ["經驗 +60（每人）"])  # 別的附註照舊是敘事（舊的季一個字都不變）
+    assert p.stats.get("xinde", 0) == xinde and g.status_data()["lilian"] == {"have": 3 * v2.event_points, "cap": v2.event_cap}
+
+
+def test_lilian_stops_at_the_cap_and_the_rest_turns_into_xinde():
+    g = _game()
+    p, v2 = g.state.player, g.content.config.attributes.v2
+    p.attr_event = {"str": v2.event_cap - v2.event_points}  # 差一點舊的就滿
+    xinde = p.stats.get("xinde", 0)
+    msgs = rules.apply_effect(Effect(stats={"str": 3}), g.state, g.content, g.world)
+    assert attrset.event_total(g.state) == v2.event_cap
+    left = round(2 * v2.event_points * v2.attr_xinde / v2.event_points)  # 夾掉的兩點舊的
+    assert p.stats["xinde"] == xinde + left
+    assert msgs[-2:] == [f"武力 +{v2.event_points}（歷練 {v2.event_cap}／{v2.event_cap}）", f"這一季的歷練已到火候，此後所得，化為心得 +{left}。"]
+    again = rules.apply_effect(Effect(stats={"wis": 1}), g.state, g.content, g.world)  # 滿了：只寫心得
+    assert again[-1] == f"心得 +{v2.attr_xinde}" and "int" not in p.attr_event
+    assert not any("刷" in m or "上限" in m for m in msgs + again)
+
+
+def test_lilian_starts_over_each_season_and_the_master_warns_once_near_the_top():
+    g = _game()
+    p, v2 = g.state.player, g.content.config.attributes.v2
+    assert "h_lilian" not in g._hint_triggers({"h_lilian"})
+    p.attr_event = {"str": v2.event_hint_at}
+    assert "h_lilian" in g._hint_triggers({"h_lilian"})
+    text = next(h.text for h in g.content.hints.hints if h.id == "h_lilian")
+    assert "歷練" in text and "刷" not in text
+    from conftest import next_season
+    next_season(g.content, g.world, g)
+    assert g.state.player.attr_event == {}
 
 
 def test_the_old_season_is_untouched():

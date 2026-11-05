@@ -794,6 +794,7 @@
         ${s.renown ? "" : `${s.minor.map(([k, v]) => `${esc(k)} ${v}`).join("　")}　｜　`}${s.attrs.map(([k, v]) => `${esc(k)} ${v}`).join("　")}
         ${s.stat_points ? `<div class="pts-label"><b class="pts">可配 ${s.stat_points} 點</b></div><div class="row alloc">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" data-glow="allocate" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>${statUsesHtml(s)}` : ""}
         ${s.growth ? growthHtml(s.growth) : ""}
+        ${s.lilian ? lilianHtml(s.lilian) : ""}
         ${S.main && S.main.legacy ? legacyHtml(S.main.legacy) : ""}
         ${team ? `<br>${team}` : ""}
         ${s.stances && shown("stances") ? stancesHtml(s.stances, s.stance_notes) : ""}
@@ -1044,7 +1045,7 @@
     const edit = pick === "custom" && S.growthDraft ? growthEditHtml(g, S.growthDraft) : "";
     const go = pick && pick !== "custom" ? `<button class="btn primary prep-go" data-act="prep-growth">照「${esc((g.presets.find((x) => x.key === pick) || {}).name || "")}」長，定下來</button>` : "";
     return `<p class="prep-lead">每升一級五項合計長 ${g.per_level} 點，照你挑的這一套分。<b>這一季只挑一次</b>，挑了就定了；每 10 級另外送的點，隨時自己配。</p>
-      <div class="prep-opts">${cards}</div>${edit}${go}`;
+      <div class="prep-opts">${cards}</div>${edit}${go}${g.event_cap ? `<p class="prep-note">江湖歷練每一季最多長 ${g.event_cap | 0} 點，滿了化為心得。</p>` : ""}`;
   }
   function prepShihaiHtml(sh) {
     const offers = (sh && sh.offers) || [];
@@ -1053,6 +1054,13 @@
       <div class="prep-opts">${offers.map((o, i) => `<div class="prep-keep"><div><b>${esc(o.name)}</b><small>神品意境・屬${esc(o.attribute)}・第${lgNum(o.season)}季</small></div>
         <button class="btn primary small" data-act="choose" data-id="legacy:seal:${i}">封進識海</button></div>`).join("")}</div>
       <button class="btn ghost prep-go" data-act="choose" data-id="legacy:skip">這一季不帶</button>`;
+  }
+
+  // 歷練（五項屬性的季才有 s.lilian）：這一季從事件得來的屬性，跟經驗那一行一樣寫「N／上限」，底下一條細的進度；滿了寫化為心得
+  function lilianHtml(l) {
+    const full = l.have >= l.cap;
+    const pct = l.cap ? Math.min(100, Math.round((l.have / l.cap) * 100)) : 100;
+    return `<div class="lilian${full ? " full" : ""}"><span>歷練 ${l.have | 0}／${l.cap | 0}${full ? "・已到火候，此後所得化為心得" : ""}</span><i style="--w:${pct}%"></i></div>`;
   }
 
   // 自己配（五項屬性的季）：每一項 −／＋，合計要剛好 per_level、每一項 custom_min～custom_max；草稿只在這個分頁（S.growthDraft），按「定下來」才送
