@@ -41,8 +41,16 @@ from ..features import military  # 軍情：全部拆包第 33 批（沒有選�
 from ..features import outlets  # 銀兩出口與捐軍備：全部拆包第 43 批（兩間店的店面登記排在酒肆之後、擂台之前，entry 都回 None；只有同時坐在兩間店裡才分先後，正常不會）
 # craft
 from ..features import craft  # 煉製與自創：全部拆包第 44 批（只接 routes、content、on_drop_stale，排在哪裡結果都一樣；on_drop_stale 的 prune 只動 creating）
+# territory_acts
+from ..features import territory_acts  # 地盤的行動與畫面：全部拆包第 46 批（只接 /api/xingshi、管理者五個工具與〈天下形勢〉句型的 check_content，排在哪裡結果都一樣；22:00 換天沒有掛鉤，留 Game 的委派原位）
 # bout
-from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。排最後：擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）
+from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）；後面接的 stamina_plays、seclusion（第 39 批）與 peers（第 37 批）沒有店面登記、沒有 menu 掛鉤，bout 的店面與 menu 位置不變
+# stamina_plays
+from ..features import stamina_plays  # 體力玩法（設伏、屯糧）：全部拆包第 39 批。choose 與 bot_pick 的前綴 ambush／works 與別的包不重疊；world() 的格有表序；選項不走 FEATURES（見該包 actions.py）
+# seclusion
+from ..features import seclusion  # 閉關：全部拆包第 39 批。只有 verbs()（act:break），沒有選項、選單
+# peers
+from ..features import peers  # 玩家互動一（此地還有、玩家卡、邀請框、打招呼、贈物、名帖）：全部拆包第 37 批（只接 invite: 的 choose、換季的頭銜簿與路由，排在哪裡結果都一樣）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -81,8 +89,17 @@ FEATURES: list[Feature] = [
     outlets.FEATURE,
     # craft
     craft.FEATURE,
-    # bout（排最後：店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4）
+    # territory_acts
+    territory_acts.FEATURE,
+    # bout（店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4。
+    # 後面接的 stamina_plays、seclusion、peers 沒有店面登記、沒有 menu 掛鉤，bout 的店面與 menu 位置不變）
     bout.FEATURE,
+    # stamina_plays（排在 bout 後面：choose 前綴與別的包不重疊，順序不影響結果）
+    stamina_plays.FEATURE,
+    # seclusion
+    seclusion.FEATURE,
+    # peers（排在 seclusion 後面〔照合併先後〕：只接 invite: 的 choose、on_season_start 與路由，跟 stamina_plays、seclusion、territory_acts 的掛鉤不重疊，順序不影響結果）
+    peers.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 

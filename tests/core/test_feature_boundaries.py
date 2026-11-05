@@ -585,13 +585,14 @@ GAME_DELEGATE_CALLERS.update({
 # 只讀擂台名次與稱號的舊模組（名帖 mingtie、玩家卡 social、榜單 leaderboard：on、title_of、ladder、title_for、record_text 都在核心
 # arena_ranks）讀核心那一份，不經舊名 arena 連帶載入單挑包（手冊 3.11「能走服務就走服務」；第 12 批審查修正）。tiers 照舊經別名：
 # tests/core/test_event_tiers.py 換掉 tianxia.arena.entry_of，改讀核心之後那一條打不到（SHARED_LATER 的 tiers）
-ARENA_RANK_READERS = ("mingtie", "social", "leaderboard")
+ARENA_RANK_READERS = ("features/peers/mingtie", "leaderboard")  # 名帖第 37 批搬進玩家互動包（舊名 tianxia/mingtie.py 是別名）； 玩家卡的稱號（social.affiliation）第 37 批搬進核心的 core/presence.py，下面另驗那一份
 
 
 def test_the_old_modules_that_only_read_the_arena_ranks_read_the_core_not_the_bout_package():
     for name in ARENA_RANK_READERS:
         assert "bout" not in {feature_target(mod) for _, mod in _feature_imports(TIANXIA / f"{name}.py")}, name
         assert "arena_ranks" in (TIANXIA / f"{name}.py").read_text(encoding="utf-8"), name
+    assert "arena_ranks" in (TIANXIA / "core" / "presence.py").read_text(encoding="utf-8")  # 身分字的擂台稱號（第 37 批）
 
 
 # companions（全部拆包第 19 批「人物情誼一」：招募與名下、心意、託付與勸降、來信；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第1批.md 1.5、1.6）：
@@ -952,6 +953,91 @@ GAME_DELEGATE_CALLERS.update({
     ("status_data", "armament_view"): "江湖頁的陣營軍備存量（status_data[\"armament\"]）：狀態列的資料，位置固定、沒有對應的掛鉤",
 })
 
+# territory_acts（全部拆包第 46 批「地盤」：新包 tianxia/features/territory_acts/；計畫 docs/superpowers/plans/2026-11-06-地盤包-第1批.md 1.4、1.5）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。27 個方法搬進包，Game 留 20 個一行委派（_letter_key、_siege_you 等只有包裡叫的沒有委派）。
+# 22:00 換天沒有掛鉤可接（世界層的 day 格是 21 天季的曆日，不是現實 22:00 的換天；engine 的 world_tick、sync、advance 把 _conquest_tick、_deliver_conquest
+# 排在別的結算之間，順序就是行為），這五處改叫委派，不新增 GAME_DIRECT。原本 `import conquest_day`、`import xingshi` 兩行拿掉（舊名是指到包裡同一個模組的別名）。
+GAME_IMPORTS |= {
+    "tianxia.features.territory_acts.admin_actions", "tianxia.features.territory_acts.day_actions", "tianxia.features.territory_acts.letter_actions",
+    "tianxia.features.territory_acts.view", "tianxia.features.territory_acts.xingshi_actions",
+}
+GAME_DELEGATES |= {
+    # server（MAIN_ACTIONS 的下戰書、〈天下形勢〉A／C 兩段與背景執行緒、main_view 的 conquest／xingshi_mark、admin_choices 的 conquest）、
+    # 測試與腳本（scripts/try_xingshi.py）叫的；letter_problem 只有測試叫（包裡的 view 直接叫 letter_actions.letter_problem）、conquest_view 是 server main_view 與測試叫的，
+    # 兩個都沒有核心原位叫的；_conquest_tick、_deliver_conquest 是 engine 五處換天／補送叫的（下）
+    "letter_problem", "conquest_letter", "_conquest_tick", "_deliver_conquest", "_xingshi_start", "_xingshi_open", "_xingshi_finish", "xingshi_waiting",
+    "release_xingshi", "xingshi_request", "settle_xingshi", "xingshi_view", "xingshi_mark", "admin_xingshi_now", "conquest_view",
+    "admin_conquest_set", "admin_conquest_progress", "admin_conquest_letter", "admin_conquest_cancel", "admin_conquest_choices",
+}
+_TERRITORY_TURN = ("22:00 換天（_conquest_tick）與分紅補送（_deliver_conquest）沒有掛鉤：世界層的 day 格是 21 天季的曆日，不是現實 22:00 的換天；"
+                   "這個呼叫排在別的結算之間，順序就是行為（計畫 Review Focus 2）")
+GAME_DELEGATE_CALLERS.update({
+    ("world_tick", "_conquest_tick"): _TERRITORY_TURN + "：伺服器排程的 world_tick（沒人在線也收得掉）",
+    ("sync", "_conquest_tick"): _TERRITORY_TURN + "：第一個看到新的一天的人（sync）",
+    ("sync", "_deliver_conquest"): _TERRITORY_TURN + "：登入時補自己的分紅與守城功",
+    ("advance", "_conquest_tick"): _TERRITORY_TURN + "：管理者快轉（advance，save=False）",
+    ("advance", "_deliver_conquest"): _TERRITORY_TURN + "：同上",
+})
+
+
+# stamina_plays、seclusion（全部拆包第 39 批「體力玩法＋閉關」：新包 tianxia/features/stamina_plays/、tianxia/features/seclusion/；計畫
+# docs/superpowers/plans/2026-11-06-體力玩法閉關-第39批.md 1.4）：這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。10 個方法搬進包，Game 留 7 個一行委派
+# （_ambush_act、_ambush_fight、_works_act 只有包裡叫，沒有委派），另多一個 _stamina_play_head（_stamina_play_options 的前半），一共 8 個。核心原位碰這一包的：choose 的 ambush:、works:（choose 掛鉤）與 _action_title 的兩格、
+# _act 的 act:break（Verb）拿掉；_stamina_play_options 的前半叫包（選單順序算行為，不能改成 Feature.options 登記）；世界層 muster 的 works 那一格換成包登記。
+GAME_IMPORTS |= {"tianxia.features.stamina_plays.actions", "tianxia.features.stamina_plays.ambush_actions", "tianxia.features.seclusion.actions"}
+GAME_DELEGATES |= {
+    # server 與測試叫的閉關（seclusion_refusal、seclude）、_advance_player_local 叫的出關（_finish_seclusion）、sync 叫的收伏、_arrivals 叫的查伏兵，
+    # 與測試直接叫的搶奪（_ambush_spoils）、戰報（_ambush_record）
+    "seclusion_refusal", "seclude", "_finish_seclusion", "_stamina_play_head", "_ambush_expire", "_ambush_check", "_ambush_spoils", "_ambush_record",
+}
+GAME_DELEGATE_CALLERS.update({
+    ("_advance_player_local", "_finish_seclusion"): "體力回復之後、財運之前：自己滿時的出關（位置就是行為，留在原位叫委派）",
+    ("sync", "_ambush_expire"): "drop_shops 之後、_arrivals 之前：守著的埋伏到時刻了收起來（位置就是行為，留在原位叫委派）",
+    ("_arrivals", "_ambush_check"): "每換一段才查一次這一段路上有沒有敵對的伏兵（迴圈中途，位置就是行為，留在原位叫委派）",
+    ("_stamina_play_options", "_stamina_play_head"): "選單順序「設伏／收伏 → 屯糧 → 護衛 → 功能包的選項 → 盤算」：前半在體力玩法包，接縫留在 Game",
+})
+
+
+# peers（全部拆包第 37 批「玩家互動一」：新包 tianxia/features/peers/；計畫 docs/superpowers/plans/2026-11-06-玩家互動包-第1批.md 1.4）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。31 個方法搬進包，Game 留 21 個一行委派（另加月旦評那一句 _yuedan_line，主人大勢人物包）。
+# 核心原位碰這一包的：choose 的 invite: 與 _action_title 的 invite 兩處換成包的 choose 掛鉤；換季的頭銜簿換成 on_season_start 掛鉤；
+# 選單的 _invite_options 位置固定（選單的順序算行為），留原位叫委派。engine 還用 invites、social（切磋、論武、結伴同行還在原位，第 38 批與移動包）。
+GAME_IMPORTS |= {
+    "tianxia.features.peers.actions", "tianxia.features.peers.invite_actions", "tianxia.features.peers.mingtie_actions",
+    "tianxia.features.peers.pair_actions", "tianxia.features.peers.invites", "tianxia.features.peers.social",
+}
+GAME_DELEGATES |= {
+    # 玩家卡與此地還有（server 的 /api/main 與 bot_policy 與測試叫）、邀請框（選單 _invite_options、main_view 的 _invite_status、切磋論武叫的 answer_invite 與 _tell_sender、
+    # 測試叫的 _invite）、同一對人的帳（切磋、論武在原位算次數）、名帖（server 的管理者工具與測試叫）；_yuedan_line 是玩家卡問大勢人物包的月旦評那一句（包經 ctx 叫）
+    "peers_here", "_peer", "peer_card", "peer_request", "peer_act", "calls_here", "_invite_options", "_invite", "answer_invite", "_tell_sender", "_invite_status",
+    "gift_day_left", "_spar_pair", "_pair_left", "_pair_tick", "mingtie_view", "make_mingtie", "report_mingtie",
+    "admin_mingtie_reports", "admin_mingtie_remove", "admin_mingtie_restore", "_yuedan_line",
+}
+_PEERS_ORDER = "選單的順序算行為（/api/main 的選項一顆一顆逐位元組）：邀請框那幾顆夾在託付與懸賞榜之間，位置固定、沒有對應的掛鉤"
+_PEERS_38 = "切磋、論武（總表第 38 批）還在 Game，叫玩家互動包的{what}（經 Game 的一行委派）；搬走之後各自經 ctx 叫"
+GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_invite_options"): _PEERS_ORDER,
+    ("status_data", "_invite_status"): "江湖頁的邀請（status_data[\"invites\"]）：狀態列的資料，位置固定、鍵的順序算行為，總表第 66 批才接 status 掛鉤",
+    ("_spar", "_tell_sender"): _PEERS_38.format(what="邀請沒成局的通知"),
+    ("_discuss", "_tell_sender"): _PEERS_38.format(what="邀請沒成局的通知"),
+    ("_join", "_tell_sender"): "結伴同行（移動包）還在 Game，叫玩家互動包的邀請沒成局的通知（經 Game 的一行委派）",
+    ("_spar", "_pair_tick"): _PEERS_38.format(what="同一對人的帳"),
+    ("_discuss", "_pair_tick"): _PEERS_38.format(what="同一對人的帳"),
+    ("_spars_left", "_pair_left"): _PEERS_38.format(what="同一對人的帳"),
+    ("discusses_left", "_pair_left"): _PEERS_38.format(what="同一對人的帳"),
+    ("join_refusal", "_peer"): "結伴同行（移動包）還在 Game，問玩家互動包此地還有沒有那個人（經 Game 的一行委派）",
+})
+_PEERS_PENDING = "切磋、論武（總表第 38 批）還在 Game，直接用玩家互動包的 {what}；搬走之後這一條跟著拿掉"
+GAME_DIRECT.update({
+    "_spar_answer_problem": _PEERS_PENDING.format(what="invites、social（同一對人的上限那一句 social.pair_full、對方不在這裡 presence.GONE）"),
+    "spar_invite": _PEERS_PENDING.format(what="invites（發邀請）"),
+    "spar_refusal": _PEERS_PENDING.format(what="invites、social（不能發邀請的原因）"),
+    "_discuss": _PEERS_PENDING.format(what="invites、social（論武的提示泡泡 social.DISCUSS_BRIEF、thing_label）"),
+    "discuss_invite": _PEERS_PENDING.format(what="invites（發邀請）"),
+    "discuss_invite_problem": _PEERS_PENDING.format(what="invites、social（答應時重驗）"),
+    "discuss_refusal": _PEERS_PENDING.format(what="invites、social（不能發邀請的原因）"),
+})
+
 
 @functools.lru_cache(maxsize=None)
 def _engine_tree() -> ast.Module:
@@ -1135,6 +1221,11 @@ SHARED_PENDING.update({
     ("story_base", "atlas"): "排定：大區（atlas.region_of）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層（同 chiefs → atlas：atlas 最外層 import "
                              "出陣包 sortie）：切開之前 import story_base 會連帶載入 sortie（原本 import storyline 就是這樣）",
 })
+
+# territory_acts（第 46 批）：地盤搬成包之後這四筆不用了（第 25 批定的寫法：用 del 集中在自己的段，不在別人的段裡刪行）
+for _pair in (("_siege_live", "_sieges"), ("admin_conquest_cancel", "_cancel_siege"), ("_siege_live", "_joinable")):
+    del GAME_DELEGATE_CALLERS[_pair]  # 地盤畫面、救場工具改叫決戰包的查詢服務（ctx._joinable、ctx._cancel_siege、ctx._sieges）
+del SHARED_PENDING[("siege", "conquest_day")]  # 作罷（void、note_void）第 46 批 Task 1 已搬進 conquest
 
 
 def test_the_shared_rules_layer_only_imports_the_core_and_itself():
@@ -1531,6 +1622,8 @@ def test_the_old_names_left_as_aliases_are_known():
                          "escorts": "battle", "generals": "battle",
                          # guide（全部拆包第 22 批：tianxia/guide.py、hints.py、newbie.py、opening.py、enlist.py）
                          "guide": "guide", "hints": "guide", "newbie": "guide", "opening": "guide", "enlist": "guide",
+                         # stamina_plays（全部拆包第 39 批：tianxia/ambush.py、works.py）
+                         "ambush": "stamina_plays", "works": "stamina_plays",
                          # bout（全部拆包第 12 批：tianxia/duel.py、arena.py、arena_crowd.py）
                          "duel": "bout", "arena": "bout", "arena_crowd": "bout",
                          # companions（全部拆包第 19 批：tianxia/stances.py、errands.py、letters.py）
@@ -1554,7 +1647,11 @@ def test_the_old_names_left_as_aliases_are_known():
                          # military（全部拆包第 34 批：tianxia/foreshadow.py、opportunities.py）
                          "foreshadow": "military", "opportunities": "military",
                          # craft（全部拆包第 44 批：tianxia/create.py）
-                         "create": "craft"}
+                         "create": "craft",
+                         # territory_acts（全部拆包第 46 批：tianxia/conquest_day.py、xingshi.py）
+                         "conquest_day": "territory_acts", "xingshi": "territory_acts",
+                         # peers（全部拆包第 37 批：tianxia/social.py、invites.py、mingtie.py、mingtie_card.py）
+                         "social": "peers", "invites": "peers", "mingtie": "peers", "mingtie_card": "peers"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 

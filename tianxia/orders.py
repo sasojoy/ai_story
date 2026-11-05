@@ -403,9 +403,9 @@ SIEGE_GUARD = "siege_guard"
 def _today(content: Content, world: WorldState | None, side: str | None, how: str) -> list[str]:
     """領地爭奪：這一邊此刻進度最高、推得動的那一塊（attack），或自家被推得最高、守得動的那一塊（defend）（conquest_day.today；
     翻地與爭搶 PM 2026-10-20 第 1 條；第二批是每天公告的目標，投票與公告拿掉了）。"""
-    from . import conquest_day  # noqa: PLC0415  conquest_day → conquest → territory → rules：在函式裡 import
+    from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
 
-    return conquest_day.today(world, content, side, how) if world is not None and side is not None else []
+    return conquest.today(world, content, side, how) if world is not None and side is not None else []
 
 
 def defend_places(content: Content, world: WorldState | None, o: Order) -> list[str]:

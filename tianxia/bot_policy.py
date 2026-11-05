@@ -6,11 +6,10 @@
 """
 from __future__ import annotations
 
-import hashlib
 import random
 from dataclasses import dataclass
 
-from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, epiphany, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, outing, precise, rules, sensing, server_bots, social, sortie, stances, team
+from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, epiphany, forge_secrets, invites, library, naming, orders, outing, precise, rules, sensing, server_bots, sortie, stances, team
 from . import sortie_duel  # 出陣約戰（減法季批 3b）
 from . import tavern as tavern_rules  # 酒肆殺手：失手加價
 from .bot import allocate_points, can_practise, wants_heal
@@ -19,8 +18,12 @@ from .engine import FREE_TEXT_OPTION, Game, Option
 # 決戰（battle:）的分數搬進決戰包的 bots.py（全部拆包第 7 批；score 先問那一包）：這兩個名字照舊在這裡（tests/bots/test_bot_policy.py、
 # tests/season/test_real_content.py 直接叫，同一個函式、同一個數）
 from .features.battle.bots import JOIN_BATTLE_SCORE, battle_score as _battle_score  # noqa: F401
+from .features.peers.bots import (  # noqa: F401  打招呼、名帖的回法與比例：全部拆包第 37 批搬進玩家互動包（tests 讀 bot_policy.answer_call、REPLY_MIN_SECONDS）
+    GREET_REPLY_SHARE, MINGTIE_ACCEPT_SHARE, MINGTIE_REJECT_SHARE, MINGTIE_SEND_CHANCE, REPLY_MIN_SECONDS, REPLY_SPREAD_SECONDS,
+    TRAVEL_ACCEPT_SHARE, TRAVEL_REJECT_SHARE, _hand_card, _make_card, _roll, answer_call,
+)
 from .models import MOVES, Content, Effect, SkillDef
-from .state import BotProfile, Invite
+from .state import BotProfile
 
 REWARD_STATS = ("str", "agi", "con", "wis", "silver", "fame", "xinde")  # 博聞不在內：它只靠升級的點數增加，事件不給
 TREND_WEIGHT = 10.0  # 推大勢一點，抵得過十點獎勵
@@ -84,16 +87,6 @@ def _clinic_score(game: Game) -> float:
     return CLINIC_URGENT_SCORE if bot.injury_share(game) >= bot.CLINIC_URGENT else CLINIC_MOVE_SCORE
 MARKET_SCORE = SMITH_SCORE  # 馬市（裝備四欄設計第九節）：趕路疾行省體力，跟鐵匠鋪一樣急；真人會騎馬，假人也要
 INVITE_YES = 0.7  # 有人邀切磋時答應的機會（付得起體力才算）【預設】
-# 打招呼、結伴邀請（玩家互動第二層）照人的步調回：不會一收到就回，有時回、有時拒、有時不理（等它逾時）。
-# 真的回的時刻還要等假人下一次出手（在線時 1～3 分鐘一次），所以實際的延遲比這裡寫的更散【預設】
-REPLY_MIN_SECONDS = 30  # 收到之後至少隔這麼多現實秒數才回
-REPLY_SPREAD_SECONDS = 150  # 再加上 0～這麼多秒（每一件各擲一次，同一件永遠一樣）
-GREET_REPLY_SHARE = 0.65  # 打招呼：回禮的比例，其餘不理
-TRAVEL_ACCEPT_SHARE = 0.4  # 結伴邀請：答應的比例
-TRAVEL_REJECT_SHARE = 0.3  # 婉拒的比例；其餘不理
-MINGTIE_ACCEPT_SHARE = 0.7  # 有人遞名帖：回帖的比例（Joy 2026-10-19）
-MINGTIE_REJECT_SHARE = 0.1  # 婉拒的比例；其餘不理
-MINGTIE_SEND_CHANCE = 0.03  # 每一輪向此地一個還沒換過帖的人遞名帖的機會【預設】
 LEARN_ROOM = 3  # 學藝之後，功法庫至少還留幾格給合成
 LEARN_SILVER_RESERVE = 30  # 付完學費至少留幾兩（療傷用）
 DIVINE_NAME_CHANCE = 0.3  # 打出神器原品之後，每一輪按「沿用譜名」的機會（不在打出來那一下就定，照人的步調，同 answer_call）【預設】
@@ -342,29 +335,6 @@ def _stamina_play(game: Game, rng: random.Random) -> list[str] | None:
     return game.choose(rng.choice(plays))
 
 
-def _make_card(game: Game) -> None:
-    """還沒有名帖就做一張（Joy 2026-10-19「假人也做名帖」）：現成的畫、句庫或留空、照雜湊挑頭銜（mingtie.bot_card），
-    走 Game.make_mingtie（跟真人按定稿同一條；不叫模型：句庫的句子本來就過得了字表）。頭銜的榜單名次照此刻掃一次榜。"""
-    p, c = game.state.player, game.content
-    if p.mingtie is not None or not c.config.mingtie.enabled:
-        return
-    board = leaderboard.compute_boards(c, game.world, top=10) if hasattr(game.world, "db") else None
-    card = mingtie.bot_card(game.state, c, mingtie.earned(game.state, c, game.world, board))
-    game.make_mingtie(card.strokes, card.titles, card.motto, board=board)
-
-
-def _hand_card(game: Game, rng: random.Random) -> list[str] | None:
-    """有名帖、今天還能遞時，MINGTIE_SEND_CHANCE 的機會向此地一個遞得了的人遞名帖（走玩家卡同一條路）。先擲骰再看此地有誰。"""
-    if game.state.player.mingtie is None or rng.random() >= MINGTIE_SEND_CHANCE:
-        return None
-    for peer in game.peers_here():
-        card = game.peer_card(peer["name"])
-        ready = [b for b in (card or {}).get("actions", []) if b["action"] == "mingtie" and b["arg"] == "send" and b["enabled"]]
-        if ready:
-            return game.peer_act(peer["name"], "mingtie", {"arg": "send"})
-    return None
-
-
 def _raid(game: Game, rng: random.Random) -> list[str] | None:
     """此地有截殺得了、勝算在 RAID_ODDS 的人時，RAID_CHANCE 的機會截殺第一個（走玩家卡同一條路，Game.peer_act）。
     沒有對象時不擲骰（不改到其他行為的亂數）；這一輪不動手是 None。"""
@@ -461,49 +431,6 @@ def _tavern(game: Game, rng: random.Random) -> list[str] | None:
     if s.player.picking_tavern:
         msgs += game.choose(view["back"])
     return msgs
-
-
-def _roll(profile: BotProfile, invite: Invite, salt: str) -> float:
-    """這個假人對這一張的決定性擲骰（0～1）：同一張、同一個假人永遠一樣，所以每一輪重看不會改主意。"""
-    digest = hashlib.sha256(f"{profile.seed}|{invite.id}|{salt}".encode()).digest()
-    return int.from_bytes(digest[:8], "big") / 2**64
-
-
-def answer_call(game: Game, profile: BotProfile) -> str | None:
-    """別人遞過來的打招呼、結伴邀請（玩家互動第二層），要回的那一個選項（invite:<回應>:<編號>，跟真人按的同一顆）；這一輪不回是 None。
-    每一張先等一段（收到之後 REPLY_MIN_SECONDS＋擲出來的一段現實秒），再照擲骰回、拒或不理；結伴答應不了（手上有事、對方走了）就婉拒。
-    一輪只回一張，最早的那張先。"""
-    s = game.state
-    menu = {o.id for o in game.options(odds=False, tick=False) if o.enabled and o.id.startswith("invite:")}
-    for inv in invites.incoming(s.world, s.player.name):
-        if inv.kind not in ("greet", "travel", "mingtie"):
-            continue
-        waited = (s.world.time - inv.sent_at) / game.content.config.time_scale
-        if waited < REPLY_MIN_SECONDS + _roll(profile, inv, "wait") * REPLY_SPREAD_SECONDS:
-            continue
-        roll = _roll(profile, inv, "answer")
-        gesture = social.gesture_of(inv)
-        if gesture is not None:
-            if roll >= GREET_REPLY_SHARE:
-                continue
-            verb = gesture.replies[int(_roll(profile, inv, "which") * len(gesture.replies))][0]
-        elif inv.kind == "mingtie":
-            if roll < MINGTIE_ACCEPT_SHARE:
-                verb = "yes"
-            elif roll < MINGTIE_ACCEPT_SHARE + MINGTIE_REJECT_SHARE:
-                verb = "no"
-            else:
-                continue
-        elif roll < TRAVEL_ACCEPT_SHARE:
-            verb = "yes" if game.join_refusal(inv.sender) is None else "no"
-        elif roll < TRAVEL_ACCEPT_SHARE + TRAVEL_REJECT_SHARE:
-            verb = "no"
-        else:
-            continue
-        option = f"invite:{verb}:{inv.id}"
-        if option in menu:
-            return option
-    return None
 
 
 def _answer_discuss(game: Game, rng: random.Random, slot: NamingSlot | None) -> list[str] | None:
@@ -808,8 +735,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     kind, _, arg = option.id.partition(":")
     if kind == "defect":
         return None  # 假人不叛投（計畫甲）
-    if kind in ("ambush", "works"):
-        return None  # 設伏、工事、屯糧由 take_turn 的 _stamina_play 做，不交給打分數（護衛、犒軍、探望 aid: 同理，假人沒有要按的，大勢人物包不開 bots.py，全部拆包第 31 批）
+    # （ambush、works：設伏、屯糧由 take_turn 的 _stamina_play 做，不交給打分數；全部拆包第 39 批換成體力玩法包的 bots.py，下面 features_core.bot_pick 問到；
+    # 護衛、犒軍、探望 aid: 同理，假人沒有要按的，大勢人物包不開 bots.py，全部拆包第 31 批）
     owned, value = features_core.bot_pick(game, option)  # 搬成包的功能：假人看到這一顆怎麼按問那一包（開發規範手冊 3.8；宴客 feast:）
     if owned:
         return value

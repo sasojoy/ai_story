@@ -1631,7 +1631,7 @@ def write_xingshi(game: Game) -> bool:
 def xingshi_once(game: Game) -> bool:
     """寫一篇（write_xingshi 的那一圈；測試直接叫）：收了回 True。呼叫端不能握著行動鎖。
     佇列沒讓這一趟跑（假人的名額被佔、排不到）：不照固定段收，單子放回去（Game.release_xingshi），隔 retry_seconds 下一輪再試；
-    寬限（grace_seconds）到了還沒寫成，由 Game._xingshi_grace 照固定段收（PM，第三批 A 回報之後）。模型叫了卻寫不出來照舊馬上照固定段。"""
+    寬限（grace_seconds）到了還沒寫成，由換天（Game._conquest_tick → 地盤包 xingshi_actions.grace）照固定段收（PM，第三批 A 回報之後）。模型叫了卻寫不出來照舊馬上照固定段。"""
     with _locked(game):
         request = game.xingshi_request()
     if request is None:
@@ -2822,14 +2822,7 @@ ADMIN_ACTIONS = {
     "schedule": lambda g, b: g.admin_schedule(str(b.get("id", "")), _float(b.get("at"), 0.0), time.time()),
     "jump_next": lambda g, b: g.admin_jump_next(time.time()),
     "set_trend": lambda g, b: g.admin_set_trend(str(b.get("id", "")), _int(b.get("value"), 0)),
-    # 領地爭奪（第 38 項改版第一批）：定一塊歸誰（side 空字串＝放回中立）；第一批沒有攻城戰，地圖只靠這裡與時刻表指定易手
-    "conquest_set": lambda g, b: g.admin_conquest_set(str(b.get("id", "")), str(b.get("side", "")) or None),
-    # 救場（翻地與爭搶，QA 用）：定一條進度（到 100 照推滿易手）、立刻替一邊下戰書（集結馬上開）、取消一場（id 是時程表那一場的 id）。
-    # 立刻下戰書叫 admin_conquest_letter，不叫 conquest_letter：api_do 先查這一張，同名會把玩家的下戰書（MAIN_ACTIONS）整個蓋掉（FB-609）
-    "conquest_progress": lambda g, b: g.admin_conquest_progress(str(b.get("id", "")), str(b.get("side", "")), _float(b.get("value"), 0.0)),
-    "admin_conquest_letter": lambda g, b: g.admin_conquest_letter(str(b.get("id", "")), str(b.get("side", ""))),
-    "conquest_cancel": lambda g, b: g.admin_conquest_cancel(str(b.get("id", ""))),
-    "xingshi_now": lambda g, b: g.admin_xingshi_now(),  # 領地爭奪第三批 A：現在就開一篇〈天下形勢〉
+    # 領地爭奪的五個救場工具（conquest_set、conquest_progress、admin_conquest_letter、conquest_cancel、xingshi_now）搬進 tianxia/features/territory_acts/routes.py 的 admin_tools（全部拆包第 46 批）
     "resolve_event": lambda g, b: g.admin_resolve_event(str(b.get("id", "")), str(b.get("key", ""))),
     "clear_lock": lambda g, b: g.admin_clear_lock(str(b.get("id", ""))),
     "cancel_battle": lambda g, b: g.admin_cancel_battle(),
@@ -3028,40 +3021,7 @@ MENXIA_ACTIONS = {
 }
 
 
-@app.get("/api/peer")
-def api_peer(request: Request, name: str = ""):
-    """玩家卡（social.card）：他不在這裡了 card 是 None，網頁照 gone 那一句說。只讀。"""
-    game = _game(request)
-    return {"card": look(game, lambda g: g.peer_card(name)), "gone": social.GONE}
-
-
-@app.post("/api/peer/act")
-def api_peer_act(request: Request, body: dict = Body(default={})):
-    """按了玩家卡上的一顆鈕（Game.peer_act）：回傳 {card, main, message}。參數都是客戶端寫的，一律轉成字串或整數再交給引擎驗。"""
-    game = _game(request)
-    name, action = str(body.get("name", "")), str(body.get("action", ""))
-    params = {"arg": str(body.get("arg", "")), "choice": str(body.get("choice", ""))}
-    try:
-        params["amount"] = int(body.get("amount", 0))
-    except (TypeError, ValueError):
-        params["amount"] = 0
-    params["text"] = str(body.get("text", ""))[:200]  # 挑釁附的一句話（CardButton.text）：C 段照字數與字表再驗
-    verdict = screen_peer(game, name, action, params)  # 那一句先在鎖外請模型審（speech.judge），結果交給 C 段
-    if verdict:
-        params["verdict"] = verdict
-    proposed = prepare_peer(game, name, action, params)  # 論武的首創取名：A 鎖內開單、B 鎖外取名，C 是下面的 peer_act
-    if proposed is not None:
-        params["proposed"] = proposed
-    msgs = act(game, lambda g: g.peer_act(name, action, params))
-    _tell_tabs(game)
-    return {
-        "card": look(game, lambda g: g.peer_card(name)),
-        "gone": social.GONE,
-        "main": look(game, main_view),
-        "message": joined(msgs),
-        # 卡已經關了或換了人時，網頁的提示泡泡只講這一句（FB-242）：論武合成了是「論武有結果了：合出…」，其餘是回話的第一句
-        "brief": game.peer_brief or social.brief(msgs),
-    }
+# （/api/peer、/api/peer/act：全部拆包第 37 批搬進玩家互動包 tianxia/features/peers/routes.py，殼照 FEATURES 掛；鎖外的 screen_peer、prepare_peer 留在殼，第 38 批）
 
 
 @app.post("/api/party/leave")
@@ -3328,42 +3288,13 @@ def api_board_card(request: Request, board: str, name: str = "", season: int = 0
 
 
 
-@app.get("/api/mingtie")
-def api_mingtie(request: Request):
-    """見聞的「名帖匣」（Game.mingtie_view）：頭銜的榜單名次照快取的整張榜（boards_now，不拿行動鎖）。"""
-    game = _game(request)
-    board = boards_now(game)
-    return look(game, lambda g: g.mingtie_view(board))
-
-
-@app.post("/api/mingtie/{op}")
-def api_mingtie_do(op: str, request: Request, body: dict = Body(default={})):
-    """名帖的動作：save（定稿：筆劃、頭銜、自題一句；那一句先在鎖外審過）、report（檢舉某人的第幾版）。回傳 {mingtie, message}。"""
-    game = _game(request)
-    if op == "save":
-        board = boards_now(game)
-        motto = speech.clean(str(body.get("motto", ""))[:200])
-        verdict = screen_text(game, motto, speech.MOTTO) if look(game, lambda g: g.mingtie_screen(motto)) else ""
-        titles = body.get("titles")
-        titles = [str(t) for t in titles] if isinstance(titles, list) else []
-        msgs = act(game, lambda g: g.make_mingtie(body.get("strokes"), titles, motto, verdict, board))
-    elif op == "report":
-        msgs = act(game, lambda g: g.report_mingtie(str(body.get("name", "")), _int(body.get("version"), 0)))
-        board = boards_now(game)
-    else:
-        raise HTTPException(404)
-    _tell_tabs(game)
-    return {"mingtie": look(game, lambda g: g.mingtie_view(board)), "message": joined(msgs)}
+# （/api/mingtie、/api/mingtie/{op}：全部拆包第 37 批搬進玩家互動包 tianxia/features/peers/routes.py，殼照 FEATURES 掛）
 
 
 # （/api/annals：全部拆包第 29 批搬進列傳包 tianxia/features/zhuan/routes.py，殼照 FEATURES 掛）
 
 
-@app.get("/api/xingshi")
-def api_xingshi(request: Request):
-    """見聞的「形勢」：這一季每天一篇的〈天下形勢〉（領地爭奪第三批 A；只讀，不叫模型——文章在背景寫，write_xingshi）。"""
-    game = _game(request)
-    return look(game, lambda g: g.xingshi_view())
+# （/api/xingshi：全部拆包第 46 批搬進地盤包 tianxia/features/territory_acts/routes.py，殼照 FEATURES 掛）
 
 
 # ── 玩家傳第二批：季末寫成《某某傳》、公開分享（企劃者 2026-10-12）──
