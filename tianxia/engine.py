@@ -143,7 +143,7 @@ from .features.socialize import actions as socialize_actions  # 過渡：Game �
 from .features.socialize import menus as socialize_menus  # 過渡：同上（選單、求見名單與畫面說明）
 from .features.socialize import view as socialize_view  # 過渡：同上（見不見得到、次數、交友會做什麼）
 from .features.craft import actions as craft_actions  # 過渡：Game 上煉製頁開爐與自創的 16 個一行委派（全部拆包第 44 批）
-# smithy（全部拆包第 41 批）：Game 上鐵匠鋪的 11 個一行委派（server、假人、測試與核心原位的選單叫的）
+# smithy（全部拆包第 41 批）：Game 上鐵匠鋪的 12 個一行委派（server、假人、測試與核心原位的選單叫的）
 from .features.smithy import shelf_actions as smithy_shelf
 from .features.smithy import forge_actions as smithy_forge
 from .features.smithy import trade_actions as smithy_trade

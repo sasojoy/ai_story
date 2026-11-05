@@ -29,9 +29,9 @@
 
 `Game` 留 12 個一行委派：`_smith_options`（核心原位選單叫）、`_smith`（`tests/gear/test_shop2.py` 直接叫）、`_smith_clue`（測試換掉它）、`smith_line`、`smith_forge`、`smith_furnace`、`smith_sell`、`smith_upgrade`（`server.py` 的 `MAIN_ACTIONS`、整季機器人與假人、測試叫）、`repair_item`、`temper_item`、`name_divine`、`bind_art`（`MENXIA_ACTIONS`、假人、測試叫）；其餘 11 個方法只有包裡叫，沒有委派。
 
-**店面登記（`Shop`）這一批不登記**（計畫 1.9 量出四條）：「此地還能做」的入口順序是 懸賞榜 → 鐵匠鋪 → 馬市 → 搬成包的店，搬進登記就排到馬市後面（`/api/main` 的選項順序變）；選單順序同；`here` 有兩個意思（`_shop_open` 要單子沒開著，收店要 `smith_open`），`Shop.here` 只有一個；同一排的懸賞榜（第 45 批）、馬市（第 42 批）還沒成包。這些留在 `Game` 原位：`_everyday_options` 的 `picking_smith` 選單與 `act:smith` 入口、`_shop_open`、`shop_view` 的 smith 分支、`_drop_stale_references`／`sync` 的收店、`_depart` 的 `close_smith`、`_idle`。第 42、45 批做完三間店之後，由 PM 一次把懸賞榜／鐵匠鋪／馬市排進 `Shop`（要先決定入口順序）。
+**店面登記（`Shop`）這一批不登記**（計畫 1.9 量出四條）：「此地還能做」的入口順序是 懸賞榜 → 鐵匠鋪 → 馬市 → 搬成包的店，搬進登記就排到馬市後面（`/api/main` 的選項順序變）；選單順序同；`here` 有兩個意思（`_shop_open` 要單子沒開著，收店要 `smith_open`），`Shop.here` 只有一個；同一排的懸賞榜（第 45 批）、馬市（第 42 批）還沒成包。這些留在 `Game` 原位：`_everyday_options` 的 `picking_smith` 選單與 `act:smith` 入口、`_shop_open`、`shop_view` 的 smith 分支、`_drop_stale_references`／`sync` 的收店、`_depart` 的 `close_smith`、`_idle`。**PM 定案**（第 41 批 PM 認定第 1 條）：第 42 批（馬市）與第 45 批（懸賞榜）比較晚合的那一批，把懸賞榜、鐵匠鋪、馬市三間一起排進 `Shop`，入口先後維持 懸賞榜 → 鐵匠鋪 → 馬市（先後就是行為）；若非得讓 `Shop` 分兩個「此地」判斷（改核心）才行，先回報 PM。
 
-核心原位讀 `smithing`（經舊名別名）的三處記在邊界測試的 `GAME_DIRECT`：`choose`（打造那幾步併成一則：`GO_VERB`、`is_forge_step`、`is_step_line`；切頁不寫紀錄），`_drop_stale_references`、`sync`（`draft_here`、`draft_stale`，單子那一欄關了就清）。位置在寫紀錄與收店的中段，沒有對應的掛鉤。
+核心原位讀 `smithing`（經舊名別名）的三處記在邊界測試的 `GAME_DIRECT`：`choose`（打造那幾步併成一則：`GO_VERB`、`is_forge_step`、`is_step_line`；切頁不寫紀錄），`_drop_stale_references`、`sync`（`draft_here`、`draft_stale`，單子那一欄關了就清）。位置在寫紀錄與收店的中段，沒有對應的掛鉤。這三筆先認（第 41 批 PM 認定第 4 條）：第 40 批（核心批）把這五個純函式抽到核心小模組，三處改讀核心、`GAME_DIRECT` 還原。
 
 ## 測試
 
@@ -49,7 +49,7 @@
 - `test_forge_secrets.py`（19 條；`test_forge_divine`、`test_shop`、`test_weapons` 用它的 `BLADE`、`_smith`、`forge_content`）、`test_forge_divine.py`（36 條；`test_board_cards`、`test_weapons`、`test_shop` 用它的 `_forger`、`divine_content`、`STAR`）。
 - `test_divine_rotation.py`（14 條）與 `test_divine_collect.py`（6 條）；`test_shop2.py`、`tests/web/test_smith_divine_web.py` 用 `test_divine_rotation` 的 `_smith`、`_forge_sword`。
 
-這五個檔共 134 條，附錄甲歸這一包，這一批只搬了 4 個檔；其餘留到第 61 批（照第 44 批 PM 認定第 5 條「只搬一部分、其餘留到第 61 批」，待 PM 認下）。`tests/core/test_kiln_round.py`（讀 `web/style.css` 與 `app.js`，煉製頁的開爐鈕）附錄甲也歸鐵匠鋪，屬網頁類，隨網頁第 3 階處理；歸屬是否改成 craft 待 PM 定。
+這五個檔共 134 條，附錄甲歸這一包，這一批只搬了 4 個檔；其餘留到第 61 批（照第 44 批 PM 認定第 5 條「只搬一部分、其餘留到第 61 批」；第 41 批 PM 認定第 6 條認了）。`tests/core/test_kiln_round.py`（讀 `web/style.css` 與 `app.js`，煉製頁的開爐鈕）附錄甲也歸鐵匠鋪，屬網頁類，隨網頁第 3 階處理；歸屬（鐵匠鋪或 craft）待定，跟上面五個檔一起歸第 61 批（第 41 批 PM 認定第 6 條）。
 
 **另外要跑的混合檔**（含這一包的測試，但檔案不屬於這一包，不拆）：
 

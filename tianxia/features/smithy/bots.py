@@ -15,7 +15,7 @@ SMITH_SCORE = 8.0  # 鐵匠鋪：跟揭懸賞一樣急，兵器配不上是白�
 def want(game) -> str | None:
     """此刻在鐵匠鋪最該按的那一顆：單子開著時只照 bot.forge_step（下一步或「不打了」）；不然先照 bot.smith_want（換、買、修，兵器防具兩頁），
     沒事再照 bot.forge_step（打造與換上打出來的那把，打造第二批 PM 決定第 3 條）。都沒事是 None。不淬煉、不拆。"""
-    from tianxia import bot  # noqa: PLC0415  過渡：待搬（整季機器人與假人共用的底層，總表歸「假人三支不搬」）
+    from tianxia import bot  # noqa: PLC0415  過渡：待搬（整季機器人與假人共用的底層 bot.py：這一批不搬，手冊 3.8 之後才拆）
 
     if game.state.player.smith_draft is not None:
         return bot.forge_step(game)

@@ -1101,7 +1101,8 @@ for _pair in (("map_base", "map_mostly"), ("map_state", "map_mostly"), ("map_sta
 # 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。23 個方法搬進包，Game 留 12 個一行委派（其餘 11 個只有包裡叫的，沒有委派）。
 # 核心原位碰這一包的：choose 的 smith: 與 _action_title 的兩處（kind == "smith" 的標題、act:smith 的表格）換成包的 choose 掛鉤與 act 子動詞（Verb）；
 # 「打造那幾步併成一則」（quiet、merge、fold）留 choose 後半原位讀 smithing 的三個名字（經舊名別名）。
-# 店面登記（Shop）這一批不登記（計畫 1.9 量出四條）：鐵匠鋪留在 Game 原位，只有 _smith_options 變成一行委派；懸賞榜（第 45 批）、馬市（第 42 批）成包後 PM 一次排進 Shop。
+# 店面登記（Shop）這一批不登記（計畫 1.9 量出四條）：鐵匠鋪留在 Game 原位，只有 _smith_options 變成一行委派；第 42 批（馬市）與第 45 批（懸賞榜）比較晚合的那一批
+# 把懸賞榜、鐵匠鋪、馬市三間一起排進 Shop，入口先後維持 懸賞榜 → 鐵匠鋪 → 馬市（第 41 批 PM 認定第 1 條）。
 GAME_IMPORTS |= {
     "tianxia.features.smithy.shelf_actions", "tianxia.features.smithy.forge_actions", "tianxia.features.smithy.trade_actions",
     "tianxia.features.smithy.gear_actions", "tianxia.features.smithy.divine_actions", "tianxia.features.smithy.clue",
@@ -1122,11 +1123,11 @@ GAME_DELEGATE_CALLERS.update({
 _SMITHY_STALE = "鐵匠鋪的單子：{what}；核心原位讀 smithing（經舊名別名，現在是鐵匠鋪包的 smithing.py）的 {names}，{why}"
 GAME_DIRECT.update({
     "choose": _SMITHY_STALE.format(what="打造那幾步併成一則、切頁不寫紀錄", names="GO_VERB、is_forge_step、is_step_line",
-                                   why="位置在 choose 後半寫紀錄那一段（quiet、merge、fold 要看單子收起來了沒），沒有對應的掛鉤"),
+                                   why="位置在 choose 後半寫紀錄那一段（quiet、merge、fold 要看單子收起來了沒），沒有對應的掛鉤"),  # 過渡：第 40 批收（第 41 批 PM 認定第 4 條）
     "_drop_stale_references": _SMITHY_STALE.format(what="鐵匠鋪關了、人不在城鎮就收起，單子那一欄關了、內容改版拿掉了種類或素材就清", names="draft_here、draft_stale",
-                                                   why="順序夾在懸賞榜與馬市中間（計畫 1.9），on_drop_stale 掛鉤在最後面，位置不同不能接"),
+                                                   why="順序夾在懸賞榜與馬市中間（計畫 1.9），on_drop_stale 掛鉤在最後面，位置不同不能接"),  # 過渡：第 40 批收（第 41 批 PM 認定第 4 條）
     "sync": _SMITHY_STALE.format(what="同步時單子那一欄關了就清", names="draft_here",
-                                 why="位置固定在 sync 的中段，沒有對應的掛鉤（world 的 sync 順序算行為）"),
+                                 why="位置固定在 sync 的中段，沒有對應的掛鉤（world 的 sync 順序算行為）"),  # 過渡：第 40 批收（第 41 批 PM 認定第 4 條）
 })
 
 

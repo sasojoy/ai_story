@@ -17896,7 +17896,7 @@ class SmithyScenario(Scenario):
         self.choose(who, "smith:page:material")  # 素材頁、再切回去
         self.choose(who, "smith:page:weapon")
         self.choose(who, "smith:page:nowhere")
-        self.edit(who, lambda p: p.stats.__setitem__("silver", 0))  # 沒錢：買、修、淬煉都被擋，掌櫃那一句換成原因
+        self.edit(who, lambda p: p.stats.__setitem__("silver", 0))  # 沒錢：買、修、淬煉在選單上灰掉，下面三下由 Game.choose 先擋（此刻無法這麼做），沒進包（第 41 批 PM 認定第 9 條）
         self.choose(who, "smith:buy:劍")
         self.choose(who, "smith:repair")
         self.choose(who, "smith:temper")
@@ -17986,7 +17986,7 @@ class SmithyScenario(Scenario):
         self.press(who, "smith:forge-kind:")
         self.press(who, "smith:forge-cancel")
         self.state_of(who, "不打了之後")
-        self.choose(who, "smith:forge-go:劍:gang_1:kuai_1")  # 沒有單子就開爐（直接送 id）
+        self.choose(who, "smith:forge-go:劍:gang_1:kuai_1")  # 沒有單子就開爐（直接送 id）：不在選單上，Game.choose 先擋，沒進包（第 41 批 PM 認定第 9 條）
         self.choose(who, "smith:forge-go:劍:不是料:kuai_1")
         self.choose(who, "smith:forge-go:不是兵器:gang_1:kuai_1")
         self.choose(who, "smith:page:armor")  # 防具頁的單子
@@ -18058,7 +18058,7 @@ class SmithyScenario(Scenario):
                 self.press(who, "smith:buy:")
             self.state_of(who, "順口")
         self.database("隱藏配方之後")
-        self.press(self.SECRET, "smith:forge")  # 單子上開爐的隱藏配方鍵（一步一步）
+        self.press(self.SECRET, "smith:forge")  # 單子上開爐的隱藏配方鍵（一步一步）：單子還沒挑種類與料，那一顆不在選單上，Game.choose 先擋，沒進包（第 41 批 PM 認定第 9 條）
         for kind, main, aux, _rid in hits[:1]:
             self.choose(self.SECRET, f"smith:forge-go:{kind}:{main}:{aux}")
         self.state_of(self.SECRET, "單子上的隱藏配方")
@@ -18082,7 +18082,7 @@ class SmithyScenario(Scenario):
         who, other = self.DIV, self.DIV2
         for w in (who, other):
             self.press(w, "act:smith")
-        for kind, main, aux, _rid in recipes[:2] + recipes[-1:]:  # 兩把兵器、一件防具
+        for kind, main, aux, _rid in recipes[:2] + recipes[-1:]:  # 兩把兵器、一件防具（防具那一件天池露不夠，沒打成原品；兩兵一甲另由查核走到（第 41 批 PM 認定第 9 條））
             self.line(who, {"kind": kind, "main": main, "aux": aux})
             self.do(who, "smith_forge", {"kind": kind, "main": main, "aux": aux})
         self.state_of(who, "神器原品之後")
@@ -18305,7 +18305,7 @@ class SmithyScenario(Scenario):
                                         "armor": None if p.armor is None else p.armor.model_dump(mode="json"),
                                         "rack": [e.model_dump(mode="json") for e in p.rack], "picking": p.picking_smith,
                                         "journal": [[e.title, list(e.lines)[:3]] for e in solo.state.journal[:6]]})
-        bot.keep_book_names(solo)
+        bot.keep_book_names(solo)  # 這一軌只打到仿品；沿用譜名由上面 divine 那一段的 /api/menxia/name_divine keep 走到（第 41 批 PM 認定第 9 條）
         emit("整季機器人 沿用譜名", [e.name for e in p.rack])
 
     def season(self) -> None:
