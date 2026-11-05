@@ -45,7 +45,7 @@ FACT_KEYS = ("taken", "taken_blow", "held", "stalemate", "void", "fighting", "fi
 SUMMARY_KEYS = ("taken", "taken_mended", "mended", "held", "stalemate", "void", "none")
 LEAN_KEYS = ("strong", "up", "slight", "even")
 MOVE_KEYS = ("toward", "still")
-# content.check_xingshi_lines 拿它填一次每一句：填得進去、填完沒有阿拉伯數字
+# check_lines（包的 check_content；原本的 content.check_xingshi_lines）拿它填一次每一句：填得進去、填完沒有阿拉伯數字
 SAMPLE = {
     "side": "官軍", "margin": "大勝", "place": "荒丘", "who": "沈浪", "keeper": "守軍", "attackers": "官軍、黃巾軍",
     "line": "南陽", "lean": "兩軍相持", "move": "，這一日大致未動",

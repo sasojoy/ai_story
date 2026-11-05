@@ -80,7 +80,7 @@ def waiting(ctx) -> bool:
 
 def release(ctx, request: xingshi.XingshiRequest) -> bool:
     """B 段沒叫成模型（佇列裡假人的名額被佔、排不到）：同一張單放回去（taken 清掉），隔 Config.xingshi.retry_seconds 再拿；
-    寬限到了還沒寫成，照舊由 _xingshi_grace 照固定段收（PM，第三批 A 回報之後：不要一被擋就退回固定段）。放了回 True、存季。"""
+    寬限到了還沒寫成，照舊由 grace（換天 day_actions.conquest_tick 叫）照固定段收（PM，第三批 A 回報之後：不要一被擋就退回固定段）。放了回 True、存季。"""
     ticket = ctx.state.world.xingshi_ticket
     if ticket is None or ticket.n != request.n or ticket.key != request.key:
         return False

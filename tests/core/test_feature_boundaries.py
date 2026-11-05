@@ -932,7 +932,8 @@ GAME_IMPORTS |= {
 }
 GAME_DELEGATES |= {
     # server（MAIN_ACTIONS 的下戰書、〈天下形勢〉A／C 兩段與背景執行緒、main_view 的 conquest／xingshi_mark、admin_choices 的 conquest）、
-    # 測試與腳本（scripts/try_xingshi.py）叫的；letter_problem、conquest_view 也是核心原位叫的（下）；_conquest_tick、_deliver_conquest 是 engine 五處換天／補送叫的
+    # 測試與腳本（scripts/try_xingshi.py）叫的；letter_problem 只有測試叫（包裡的 view 直接叫 letter_actions.letter_problem）、conquest_view 是 server main_view 與測試叫的，
+    # 兩個都沒有核心原位叫的；_conquest_tick、_deliver_conquest 是 engine 五處換天／補送叫的（下）
     "letter_problem", "conquest_letter", "_conquest_tick", "_deliver_conquest", "_xingshi_start", "_xingshi_open", "_xingshi_finish", "xingshi_waiting",
     "release_xingshi", "xingshi_request", "settle_xingshi", "xingshi_view", "xingshi_mark", "admin_xingshi_now", "conquest_view",
     "admin_conquest_set", "admin_conquest_progress", "admin_conquest_letter", "admin_conquest_cancel", "admin_conquest_choices",

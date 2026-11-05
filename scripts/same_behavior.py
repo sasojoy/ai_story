@@ -51,7 +51,7 @@ TRACK_NAMES = ("sortie", "duel")  # 第 1 批的一軌（出陣：Scenario）、
 BOT_PROFILES = ("week7",)
 DUEL_BOT_PROFILES = ("season21", "week7")  # 約戰的假人（推現實時鐘的整季機器人、BotRunner 兩軍各 4 個）：約戰開著的兩種
 DUEL_PROFILES = ("season21", "week7")  # 減法季開著、出陣換成約戰的季：先照原樣（約戰）走一段，攻守混戰那幾段把約戰關掉走
-CLOCK0 = 1792900800.0  # 2026-10-25 08:00 UTC（台灣 16:00）
+CLOCK0 = 1792900800.0  # 2026-10-25 04:00 UTC（台灣 12:00；1792900800 mod 86400 = 14400）
 STEP_SECONDS = 60.0
 ADMIN = "掌門"
 # selftest 故意改的一個字：每一軌一句（舊名的檔、搬進包的檔兩處找），在 MUTANT_PROFILE 那一種設定跑
