@@ -19,6 +19,7 @@ def test_a_new_character_meets_the_gate_gets_the_letter_and_sees_the_goals():
     game.sync(1000.0)
     assert feature.enabled(game) and feature.prefix is None
     assert game.state.pending_event == c.opening.event
+    game.choose("growth:balanced")  # 五項屬性的季：開季準備卡先挑成長配比，才輪到城門口的三選一
     game.choose("choice:0")
     assert [x.kind for x in game.state.player.letters] == ["託付"]
     view = game.newbie_view()

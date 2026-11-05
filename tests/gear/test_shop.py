@@ -360,6 +360,7 @@ def test_the_routes_answer_the_forge_page(monkeypatch):
         client.post("/api/register", json={"login": "smith_01", "password": "secret-pw", "again": "secret-pw"})
         client.post("/api/character", json={"name": "鐵匠客"})
         client.post("/api/do/skip_tutorial", json={})
+        client.post("/api/do/growth", json={"preset": "balanced"})  # 五項屬性的季：略過序章之後開季準備卡先挑配比
         game = server.game_for("鐵匠客")
         p = game.state.player
         p.location, p.stats["silver"], p.materials = "yingchuan", 300, {"gang_1": 3, "kuai_1": 2}
@@ -1076,6 +1077,7 @@ def test_the_server_route_looks_at_the_fire(monkeypatch):
         client.post("/api/register", json={"login": "fire_01", "password": "secret-pw", "again": "secret-pw"})
         client.post("/api/character", json={"name": "火候客"})
         client.post("/api/do/skip_tutorial", json={})
+        client.post("/api/do/growth", json={"preset": "balanced"})  # 五項屬性的季：略過序章之後開季準備卡先挑配比
         game = server.game_for("火候客")
         p = game.state.player
         p.location, p.stats["silver"] = "yingchuan", 300

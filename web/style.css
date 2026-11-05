@@ -3774,3 +3774,48 @@ svg.fig .blade.bow { stroke-width: 3; }
 .made-card .mc-grand { font-weight: 600; color: var(--gold); white-space: nowrap; }
 .shop-layer .rk-go { margin-top: 10px; }
 .shop-layer .rk-go.live { position: sticky; bottom: 0; padding: 18px 2px 4px; background: linear-gradient(to bottom, rgba(30, 19, 12, 0), #1e130c 40%); }
+
+/* 開季準備卡（企劃者 2026-11-05）：新的一季第一個畫面，蓋住整頁、沒有關掉的鈕；① 成長配比 ② 識海 */
+.prep-layer { position: fixed; inset: 0; z-index: 60; overflow-y: auto; overscroll-behavior: contain; background: rgba(30, 22, 14, 0.62);
+  padding: calc(16px + var(--top)) 16px calc(24px + var(--bottom)); animation: fade 0.2s; }
+.prep-card { max-width: 520px; margin: 0 auto; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 18px 16px 16px; }
+.prep-head small { display: block; color: var(--accent); font-size: 12px; letter-spacing: 0.1em; }
+.prep-head h2 { margin: 4px 0 10px; font-family: var(--serif); font-size: 21px; color: var(--ink); }
+.prep-steps { list-style: none; display: flex; gap: 8px; margin: 0 0 12px; padding: 0; font-size: 13px; color: var(--ink-2); }
+.prep-steps li { display: flex; align-items: center; gap: 6px; }
+.prep-steps li + li::before { content: ""; width: 18px; height: 1px; background: var(--line); }
+.prep-steps b { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line); font-weight: 600; }
+.prep-steps li.on { color: var(--ink); font-weight: 600; }
+.prep-steps li.on b { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.prep-steps li.done b { background: var(--ok); border-color: var(--ok); color: #fff; }
+.prep-lead { margin: 0 0 12px; font-size: 14px; line-height: 1.6; color: var(--ink-2); }
+.prep-lead b { color: var(--ink); }
+.prep-opts { display: grid; gap: 8px; }
+.prep-opt { display: grid; gap: 4px; text-align: left; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--paper); color: var(--ink); font: inherit; cursor: pointer; }
+.prep-opt b { font-size: 16px; }
+.prep-opt small { font-size: 12px; color: var(--ink-2); }
+.prep-opt.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); background: var(--card); }
+.prep-split { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin-top: 2px; }
+.prep-split span { position: relative; font-size: 11px; color: var(--ink-2); padding-top: 6px; white-space: nowrap; }
+.prep-split i { position: absolute; top: 0; left: 0; height: 3px; width: var(--w); border-radius: 2px; background: var(--accent); }
+.prep-card .growth-edit { margin-top: 10px; }
+.prep-go { display: block; width: 100%; margin-top: 14px; padding: 12px; font-size: 15px; }
+.prep-keep { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--paper); }
+.prep-keep b { display: block; font-size: 16px; color: var(--ink); }
+.prep-keep small { font-size: 12px; color: var(--ink-2); }
+
+/* 江湖頁頂上的常駐提示條：可配的點、識海（企劃者 2026-11-05） */
+.jh-hints { display: grid; gap: 6px; margin-bottom: 8px; }
+.jh-hint { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 9px 12px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--card); color: var(--ink); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.jh-hint i { font-style: normal; color: var(--ink-2); font-size: 13px; flex: none; }
+.jh-hint.ready { border-color: var(--gold); background: linear-gradient(90deg, rgba(183, 134, 43, 0.16), var(--card)); animation: jh-glow 2.4s ease-in-out infinite; }
+.jh-hint.ready i { color: var(--gold); font-weight: 600; }
+@keyframes jh-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(183, 134, 43, 0); } 50% { box-shadow: 0 0 0 4px rgba(183, 134, 43, 0.22); } }
+@media (prefers-reduced-motion: reduce) { .jh-hint.ready { animation: none; } }
+.jh-alloc { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.jh-alloc .btn { display: grid; padding: 6px 0; }
+.jh-alloc small { font-size: 11px; color: var(--ink-2); }

@@ -224,6 +224,7 @@ def test_the_opening_gate_holds_the_check_in_until_the_choice_is_made():
     assert "checkin" not in game.status_data()
     assert game.check_in() == [opening.GATE]
     assert p.stamina_pills == pills and p.stats["silver"] == silver and p.checkin_days == []
+    game.choose("growth:balanced")  # 五項屬性的季：開季準備卡先挑配比
     game.choose("choice:0")
     game.sync(game.now + 60)
     assert p.checkin_days == [1] and p.stats["silver"] > silver  # 第 1 天的 30 兩不必挑：選完同步到就領了、寫進紀錄

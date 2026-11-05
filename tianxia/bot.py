@@ -17,7 +17,7 @@ from . import prologue as prologue_rules
 from . import sortie_duel, tactics  # 出陣約戰（減法季批 3b）：封三招
 from . import growth  # 減法季屬性五段：假人照路配點（stat_path、plan_points）
 from . import outing  # 走一趟：假人挑段數（outing_segments）
-from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, TEXT_TALKS, Game, Option
+from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, GROWTH_PREFIX, TEXT_TALKS, Game, Option
 from .rules import jianfa
 from .core import features as features_core
 from .martial_arts import MartialArt, next_quality
@@ -110,6 +110,12 @@ def check_in(game: Game) -> None:
     game.check_in(checkin.bot_attribute(game.content, p.name, p.season_number) if view["pick"] else "")
 
 
+def growth_key(game: Game) -> str:
+    """假人這一季挑哪一套成長配比：照名號挑五套預設之一（不擲骰；allocate_points 與開季準備卡的 growth: 鈕同一個）。"""
+    presets = game.content.config.attributes.v2.presets
+    return presets[int(hashlib.md5(game.state.player.name.encode("utf-8")).hexdigest(), 16) % len(presets)].key
+
+
 def allocate_points(game: Game, rng: random.Random) -> None:
     """升級得到的屬性點隨機分掉（還沒到頂的那幾項裡挑）。走 Game.allocate_stat——真人按按鈕的同一條路。
     迴圈有界：它在全服寫入鎖裡跑，空轉會凍住伺服器。最多試「手上有幾點」次；全到頂、或 allocate_stat
@@ -118,8 +124,7 @@ def allocate_points(game: Game, rng: random.Random) -> None:
     if attrset.on(game.content, game.state.world):
         # 五項屬性的季（屬性與跨季架構 v2 3.1）：照名號挑一套配比（不擲骰，跟真人一樣按「成長」那一排），送的點全配在那一套最重的那一項
         if p.growth_preset is None:
-            presets = game.content.config.attributes.v2.presets
-            game.pick_growth(presets[int(hashlib.md5(p.name.encode("utf-8")).hexdigest(), 16) % len(presets)].key)
+            game.pick_growth(growth_key(game))
         split = attrset.split(game.state, game.content)
         top = max(attrset.keys(game.content), key=lambda k: split.get(k, 0))
         for _ in range(p.stat_points):
@@ -489,6 +494,8 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     side = allied.pick_side(s.player.name, [o.id for o in options if o.enabled], game.world.roll_counts())
     if side is not None:  # 豪強分屬兩軍：投靠豪強、拜入曹氏莊院之後挑依附哪一軍，挑人少的那一邊（設計第十三節）
         return side
+    if any(o.id.startswith(GROWTH_PREFIX) for o in options):  # 開季準備卡：照名號挑配比（不按「自己配」）
+        return f"{GROWTH_PREFIX}{growth_key(game)}"
     if s.player.sensing is not None and any(o.id.startswith(sensing.PREFIX) for o in options):
         return sense_pick(game, rng)  # 有所感的卡擋著：先了結它（畫的那一步回 sensing.DRAW，play_season 接著 sense_draw）
     battle = game.battle_now()  # 有攻城戰時是自己看的那一場（領地爭奪第二批）

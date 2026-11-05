@@ -1461,6 +1461,30 @@
     if (!m.art || !m.art.head || !(m.scene || "").startsWith(m.art.head)) return m;
     return { ...m, scene: m.scene.slice(m.art.head.length).replace(/^\n/, "") };
   }
+  // 江湖頁頂上的常駐提示條（企劃者 2026-11-05「舊玩家根本不會知道要去哪邊點點數」「識海入口藏在現在那個位子…至少需要導引」）：
+  // 五項屬性的季有沒配的送點：「有 N 點可配」，點了在原地攤開＋鈕；識海（main.legacy.shihai）封著一份：寫解封還差什麼，解得開時發光，
+  // 點了進識海頁。舊的季（沒有 status.growth）、傳承關著（沒有 main.legacy）一顆都不畫
+  function jhHintsHtml(m) {
+    const s = m.status || {}, out = [];
+    const pts = s.growth ? s.stat_points | 0 : 0;
+    if (pts) {
+      const open = !!S.allocOpen;
+      out.push(`<button class="jh-hint ready" data-act="alloc-toggle" aria-expanded="${open}"><span>有 <b>${pts}</b> 點屬性可配</span><i>${open ? "收起 ▴" : "去配 ▾"}</i></button>`);
+      if (open) out.push(`<div class="jh-alloc">${(s.attrs || []).map(([k, v, key]) =>
+        `<button class="btn small" data-act="allocate" data-stat="${esc(key)}">＋${esc(k)}<small>${esc(String(v))}</small></button>`).join("")}</div>`);
+    }
+    const sh = m.legacy && m.legacy.shihai;
+    if (sh && sh.offers && sh.offers.length) {
+      out.push(`<button class="jh-hint ready" data-act="legacy-view" data-v="shihai"><span>識海：上一季的神品意境還沒挑</span><i>去看 ›</i></button>`);
+    } else if (sh && sh.sealed) {
+      const left = (sh.need || []).filter((n) => !n.ok).map((n) => n.text);
+      const ready = !left.length && !sh.held && !(sh.sealed.names || []).length;
+      const why = sh.sealed.names && sh.sealed.names.length ? "要先換個名字" : ready ? "可以解封了" : sh.held && !left.length ? "身上已有一份神品" : `解封還差：${left.join("、")}`;
+      out.push(`<button class="jh-hint${ready || (sh.sealed.names || []).length ? " ready" : ""}" data-act="legacy-view" data-v="shihai"><span>識海封著「${esc(sh.sealed.name)}」・${esc(why)}</span><i>›</i></button>`);
+    }
+    return out.length ? `<div class="jh-hints">${out.join("")}</div>` : "";
+  }
+
   function pageJianghu() {
     const m = S.main;
     // 「剛剛」（A4）：預設只露出開頭幾行，太長的（例如新角色的開場故事）收著、點「展開全文」看完，不在卡片裡捲。
@@ -1572,14 +1596,15 @@
     const guideUp = pro() ? guide : "", guideDown = pro() ? "" : guide;
     // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以那一排小標與說書人的框都排在選項底下——
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
-    if (m.on_road) return `${resultCard}${letter}${letterCard}${pushAsk}${now}${scene}${links}${free}${menu}${guide}${sidesFirstHtml(m)}${weekCardHtml(m)}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+    const hints = jhHintsHtml(m);
+    if (m.on_road) return `${hints}${resultCard}${letter}${letterCard}${pushAsk}${now}${scene}${links}${free}${menu}${guide}${sidesFirstHtml(m)}${weekCardHtml(m)}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     // 決戰輪到你出招的回合（FB-136）：三招緊接在場景底下，放手一搏的輸入框與說書人的框排在三招後面（同在路上，這一刻要按的排前面）。
     // 開打那一刻場景多了戰局條、這一幕的開場、騎兵那一句，框與輸入框再排在上面的話三招整排落到分頁列底下（14 天、騎著馬、框還在：855～999）
     if (myTurn) {
-      return `${resultCard}${peek}${letter}${now}${scene}${links}${menu}${peopleAfter}${free}${guide}${senseNotes}${weekCard}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+      return `${hints}${resultCard}${peek}${letter}${now}${scene}${links}${menu}${peopleAfter}${free}${guide}${senseNotes}${weekCard}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     }
     const planCard = planHtml(m.plan) + placeDeedsHtml(m.place_deeds); // 世界活起來：行動列與眼下要事底下（四顆行動鈕一定在第一屏）
-    return `${resultCard}${peek}${letter}${now}${scene}${links}${guideUp}${free}${menu}${senseNotes}${weekCard}${planCard}${guideDown}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+    return `${hints}${resultCard}${peek}${letter}${now}${scene}${links}${guideUp}${free}${menu}${senseNotes}${weekCard}${planCard}${guideDown}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
   }
 
   // 此地還有誰（玩家之間的互動第一層，企劃者 2026-10-08）：場景卡底下一行，名字點了打開玩家卡（peerHtml）。

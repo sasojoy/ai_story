@@ -1,7 +1,7 @@
 """傳承測試共用的局面：正式內容（season21）、傳承開著、身上有一份神品意境。"""
 from __future__ import annotations
 
-from jianfa_kit import jianfa_game, ready
+from jianfa_kit import jianfa_game, past_prep, ready
 
 from tianxia import insight_fx, insights
 from tianxia.martial_arts import Insight
@@ -29,3 +29,4 @@ def give_god(game, name: str) -> str:
 
 def next_season(game) -> None:
     game._reset_player_for_new_season(game.state.player.season_number + 1)
+    past_prep(game)  # 開季準備卡挑配比那一步過了：測的是識海那一步

@@ -1,14 +1,14 @@
 # 傳承 `tianxia/features/legacy/`
 
-- **做什麼**：正氣、邪氣、機緣三項只在換季那一刻照上一季的傳結算一次（季中不動）；識海——開季時從上一季身上的神品意境挑一份（做第一件事之前），封著帶進這一季，解封才回到身上（企劃者 2026-11-05）。
+- **做什麼**：正氣、邪氣、機緣三項只在換季那一刻照上一季的傳結算一次（季中不動）；識海——開季準備卡的第二步從上一季身上的神品意境挑一份或不帶（挑完才能做別的事，`prep` 掛鉤），封著帶進這一季，解封才回到身上（企劃者 2026-11-05）。
 - **導覽**：`docs/guide/大勢人物與賽季.md` 的「傳承（功能包）」那一節。
 - **設計稿**：`docs/superpowers/specs/2026-11-04-屬性與跨季-架構方向v2.md` 第六、七節（實作順序第十節的第 ③ 階段）；數字在 `Config.legacy`（`LegacyRules`），全是【草】。
 
 | 檔 | 是什麼 |
 |---|---|
-| `__init__.py` | 登記（`LegacyFeature`）：`enabled`＝`Config.legacy.enabled`（預設關）、`options`（識海：開季的封進／不帶、解封、改名）、`choose`（`legacy:`）、`status`（`main.legacy`）、`on_season_start`（結算）、`bot_pick`、`bot_always`＝`legacy:drop` |
+| `__init__.py` | 登記（`LegacyFeature`）：`enabled`＝`Config.legacy.enabled`（預設關）、`options`（識海：解封、改名）、`prep`（開季準備卡：封進／不帶）、`choose`（`legacy:`）、`status`（`main.legacy`）、`on_season_start`（結算）、`bot_pick`、`bot_always`＝`legacy:drop` |
 | `rules.py` | 純規則：評比的六樣（`inputs`）、增量（`gains`：平方根或 log）、結算（`settle`：舊的留七成再加）、門路（`reached`）、季初那一則的字 |
-| `actions.py` | 換季結算、識海的選項與動作（開季封進、不帶、第一件事之後收掉候選、解封、撞名改名）、江湖畫面的狀態 |
+| `actions.py` | 換季結算、識海的選項與動作（開季準備卡的封進、不帶〔`prep`〕、解封、撞名改名）、江湖畫面的狀態 |
 | `bots.py` | 假人的分數：開季封第一份 60、解封 40、撞名挑第一個候選 50；這一季不帶不按 |
 | `tests/` | `test_legacy.py`、`test_legacy_smoke.py`、`legacy_kit.py`（有神品的局面）、`legacy_stage.py`（契約測試擺局面） |
 
