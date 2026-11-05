@@ -10,7 +10,7 @@
 - routes.py：/api/peer、/api/peer/act、/api/mingtie、/api/mingtie/{op}；bots.py：假人收到打招呼、結伴邀請、名帖的回法與做名帖、遞名帖
 
 邀請框是一個前綴三種意思：invite:yes|no|cancel:<編號> 是打招呼（挑釁）、名帖、切磋、論武、結伴同行共用的選項。這一包拿前綴與 choose，
-答應時照邀請的種類分派；切磋 Game._spar、論武 Game._discuss（第 38 批）、結伴同行 Game._join（移動包）還在原位，經 ctx 叫。
+答應時照邀請的種類分派；切磋 Game._spar、論武 Game._discuss（第 38 批）、結伴同行（移動包 party.join，Game._join 留一行委派）經 ctx 叫。
 enabled 一直是 True（沒有整包的總開關：名帖開關 Config.mingtie.enabled 只管名帖那幾顆）。選單上怎麼排（Game._everyday_options 的 _invite_options）
 位置固定，留原位叫委派。
 """
