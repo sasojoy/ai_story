@@ -339,14 +339,12 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     # （_joinable、_in_region、_battle_menu、_rally_any、rally_region 叫 _sieges、_definition_of 那 7 對：第 7 批那幾個搬進包、包裡直接叫
     # sieges.sieges、sieges.definition_of，拿掉）
     ("battles_now", "_sieges"): "全服此刻的每一場（假人程式、bot_policy 讀）：決戰「打」那一半，第 8 批",
-    ("_siege_live", "_sieges"): "地盤畫面（conquest_view）的集結・交戰中那一場加不加得進去（FB-690）；地盤搬成包（第 46 批）時改叫決戰包的查詢服務",
     ("_apply_battle_outcome", "_settle_siege"): "收場分進攻城那一支（易手、作罷、時程表另外收）：決戰「打」那一半，第 8 批",
     ("admin_end_season", "_sieges"): "管理者立刻收季：沒打完的攻城照決戰收兵（收季的順序算行為：先決戰、再攻城、再補大事）；管理者外殼是核心，"
                                      "可是前一行的決戰收兵（_shelve_unfinished_battle）還在 Game：第 8 批兩段一起搬進決戰包時一起換成「收季」的掛鉤",
     ("admin_end_season", "_shelve_siege"): "同上",
     ("admin_next_season", "_sieges"): "開下一季：季自然結束、沒人同步過的攻城換季前收起來（參戰者補得到交代）；同上",
     ("admin_next_season", "_shelve_siege"): "同上",
-    ("admin_conquest_cancel", "_cancel_siege"): "地盤的救場工具「取消一場攻城」：已經開了集結的那一場照收兵收起來；地盤搬成包（第 46 批）時改叫決戰包",
     # 決戰「打」那一半之二（全部拆包第 7 批）：核心與別的功能叫集結、投效、挑同伴的委派 17 對——這幾個位置都沒有第 11 批的掛鉤
     # （計畫 docs/superpowers/plans/2026-11-01-決戰包-第3批.md 1.4）
     ("options", "_battle_menu"): "選單的戰鬥那一段：集結時接在平常的選單前面、開打了整個取代（再接別人前綴的 defect:cancel）；menu 掛鉤在 "
@@ -369,7 +367,6 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("_fighting", "_free_agent"): "開打了還沒投效的散人與豪強不整個取代畫面：決戰「打」那一半，第 8 批",
     ("_battle_now", "_joinable"): "這個人看的那一場：自己站得進去的那一場先（FB-566）；決戰「打」那一半，第 8 批",
     ("_battle_now", "_in_region"): "同上：自己大區裡的那一場；同上",
-    ("_siege_live", "_joinable"): "地盤畫面（conquest_view）的集結・交戰中那一場加不加得進去（FB-690）：地盤搬成包（第 46 批）時改叫決戰包的查詢服務",
 }
 # tavern（主動搬六包第 10 批：酒肆的引擎那一半）：四張名單的酒肆那幾筆集中在這一段（三條拆包線並行，PM 合的時候不跟別人的行穿插）
 GAME_IMPORTS |= {
@@ -920,6 +917,31 @@ GAME_DELEGATE_CALLERS.update({
     ("_act", "_silver_act"): "act:bribe:<人物> 帶後綴接不了 Verb（總表第 57 批才擴），按下去留在核心 _act 叫委派",
     ("shop_view", "_bribe_targets"): "店面那一頁（打點的帳簿）要此地打點得了的人物，shop_view 是核心的店面殼",
     ("status_data", "armament_view"): "江湖頁的陣營軍備存量（status_data[\"armament\"]）：狀態列的資料，位置固定、沒有對應的掛鉤",
+})
+
+# territory_acts（全部拆包第 46 批「地盤」：新包 tianxia/features/territory_acts/；計畫 docs/superpowers/plans/2026-11-06-地盤包-第1批.md 1.4、1.5）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。27 個方法搬進包，Game 留 20 個一行委派（_letter_key、_siege_you 等只有包裡叫的沒有委派）。
+# 22:00 換天沒有掛鉤可接（世界層的 day 格是 21 天季的曆日，不是現實 22:00 的換天；engine 的 world_tick、sync、advance 把 _conquest_tick、_deliver_conquest
+# 排在別的結算之間，順序就是行為），這五處改叫委派，不新增 GAME_DIRECT。原本 `import conquest_day`、`import xingshi` 兩行拿掉（舊名是指到包裡同一個模組的別名）。
+GAME_IMPORTS |= {
+    "tianxia.features.territory_acts.admin_actions", "tianxia.features.territory_acts.day_actions", "tianxia.features.territory_acts.letter_actions",
+    "tianxia.features.territory_acts.view", "tianxia.features.territory_acts.xingshi_actions",
+}
+GAME_DELEGATES |= {
+    # server（MAIN_ACTIONS 的下戰書、〈天下形勢〉A／C 兩段與背景執行緒、main_view 的 conquest／xingshi_mark、admin_choices 的 conquest）、
+    # 測試與腳本（scripts/try_xingshi.py）叫的；letter_problem、conquest_view 也是核心原位叫的（下）；_conquest_tick、_deliver_conquest 是 engine 五處換天／補送叫的
+    "letter_problem", "conquest_letter", "_conquest_tick", "_deliver_conquest", "_xingshi_start", "_xingshi_open", "_xingshi_finish", "xingshi_waiting",
+    "release_xingshi", "xingshi_request", "settle_xingshi", "xingshi_view", "xingshi_mark", "admin_xingshi_now", "conquest_view",
+    "admin_conquest_set", "admin_conquest_progress", "admin_conquest_letter", "admin_conquest_cancel", "admin_conquest_choices",
+}
+_TERRITORY_TURN = ("22:00 換天（_conquest_tick）與分紅補送（_deliver_conquest）沒有掛鉤：世界層的 day 格是 21 天季的曆日，不是現實 22:00 的換天；"
+                   "這個呼叫排在別的結算之間，順序就是行為（計畫 Review Focus 2）")
+GAME_DELEGATE_CALLERS.update({
+    ("world_tick", "_conquest_tick"): _TERRITORY_TURN + "：伺服器排程的 world_tick（沒人在線也收得掉）",
+    ("sync", "_conquest_tick"): _TERRITORY_TURN + "：第一個看到新的一天的人（sync）",
+    ("sync", "_deliver_conquest"): _TERRITORY_TURN + "：登入時補自己的分紅與守城功",
+    ("advance", "_conquest_tick"): _TERRITORY_TURN + "：管理者快轉（advance，save=False）",
+    ("advance", "_deliver_conquest"): _TERRITORY_TURN + "：同上",
 })
 
 
@@ -1517,7 +1539,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # military（全部拆包第 33 批：tianxia/rank_actions.py）
                          "rank_actions": "military",
                          # craft（全部拆包第 44 批：tianxia/create.py）
-                         "create": "craft"}
+                         "create": "craft",
+                         # territory_acts（全部拆包第 46 批：tianxia/conquest_day.py、xingshi.py）
+                         "conquest_day": "territory_acts", "xingshi": "territory_acts"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 

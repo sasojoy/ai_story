@@ -41,6 +41,8 @@ from ..features import military  # 軍情：全部拆包第 33 批（沒有選�
 from ..features import outlets  # 銀兩出口與捐軍備：全部拆包第 43 批（兩間店的店面登記排在酒肆之後、擂台之前，entry 都回 None；只有同時坐在兩間店裡才分先後，正常不會）
 # craft
 from ..features import craft  # 煉製與自創：全部拆包第 44 批（只接 routes、content、on_drop_stale，排在哪裡結果都一樣；on_drop_stale 的 prune 只動 creating）
+# territory_acts
+from ..features import territory_acts  # 地盤的行動與畫面：全部拆包第 46 批（只接 /api/xingshi、管理者五個工具與〈天下形勢〉句型的 check_content，排在哪裡結果都一樣；22:00 換天沒有掛鉤，留 Game 的委派原位）
 # bout
 from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。排最後：擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）
 # ── import（new_feature.py 接在這一行前面）──
@@ -81,6 +83,8 @@ FEATURES: list[Feature] = [
     outlets.FEATURE,
     # craft
     craft.FEATURE,
+    # territory_acts
+    territory_acts.FEATURE,
     # bout（排最後：店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4）
     bout.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──

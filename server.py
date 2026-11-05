@@ -2822,14 +2822,7 @@ ADMIN_ACTIONS = {
     "schedule": lambda g, b: g.admin_schedule(str(b.get("id", "")), _float(b.get("at"), 0.0), time.time()),
     "jump_next": lambda g, b: g.admin_jump_next(time.time()),
     "set_trend": lambda g, b: g.admin_set_trend(str(b.get("id", "")), _int(b.get("value"), 0)),
-    # 領地爭奪（第 38 項改版第一批）：定一塊歸誰（side 空字串＝放回中立）；第一批沒有攻城戰，地圖只靠這裡與時刻表指定易手
-    "conquest_set": lambda g, b: g.admin_conquest_set(str(b.get("id", "")), str(b.get("side", "")) or None),
-    # 救場（翻地與爭搶，QA 用）：定一條進度（到 100 照推滿易手）、立刻替一邊下戰書（集結馬上開）、取消一場（id 是時程表那一場的 id）。
-    # 立刻下戰書叫 admin_conquest_letter，不叫 conquest_letter：api_do 先查這一張，同名會把玩家的下戰書（MAIN_ACTIONS）整個蓋掉（FB-609）
-    "conquest_progress": lambda g, b: g.admin_conquest_progress(str(b.get("id", "")), str(b.get("side", "")), _float(b.get("value"), 0.0)),
-    "admin_conquest_letter": lambda g, b: g.admin_conquest_letter(str(b.get("id", "")), str(b.get("side", ""))),
-    "conquest_cancel": lambda g, b: g.admin_conquest_cancel(str(b.get("id", ""))),
-    "xingshi_now": lambda g, b: g.admin_xingshi_now(),  # 領地爭奪第三批 A：現在就開一篇〈天下形勢〉
+    # 領地爭奪的五個救場工具（conquest_set、conquest_progress、admin_conquest_letter、conquest_cancel、xingshi_now）搬進 tianxia/features/territory_acts/routes.py 的 admin_tools（全部拆包第 46 批）
     "resolve_event": lambda g, b: g.admin_resolve_event(str(b.get("id", "")), str(b.get("key", ""))),
     "clear_lock": lambda g, b: g.admin_clear_lock(str(b.get("id", ""))),
     "cancel_battle": lambda g, b: g.admin_cancel_battle(),
@@ -3359,11 +3352,7 @@ def api_mingtie_do(op: str, request: Request, body: dict = Body(default={})):
 # （/api/annals：全部拆包第 29 批搬進列傳包 tianxia/features/zhuan/routes.py，殼照 FEATURES 掛）
 
 
-@app.get("/api/xingshi")
-def api_xingshi(request: Request):
-    """見聞的「形勢」：這一季每天一篇的〈天下形勢〉（領地爭奪第三批 A；只讀，不叫模型——文章在背景寫，write_xingshi）。"""
-    game = _game(request)
-    return look(game, lambda g: g.xingshi_view())
+# （/api/xingshi：全部拆包第 46 批搬進地盤包 tianxia/features/territory_acts/routes.py，殼照 FEATURES 掛）
 
 
 # ── 玩家傳第二批：季末寫成《某某傳》、公開分享（企劃者 2026-10-12）──
