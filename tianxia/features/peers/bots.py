@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from tianxia import leaderboard  # 過渡：待搬（賽季榜單：名帖頭銜的榜單名次）
 from tianxia.state import BotProfile, Invite
 
-from . import actions, invites, mingtie_actions, social
+from . import actions, invites, mingtie_actions, raid_actions, social
 from . import mingtie as mingtie
 
 if TYPE_CHECKING:
@@ -30,6 +30,13 @@ TRAVEL_REJECT_SHARE = 0.3  # 婉拒的比例；其餘不理
 MINGTIE_ACCEPT_SHARE = 0.7  # 有人遞名帖：回帖的比例（Joy 2026-10-19）
 MINGTIE_REJECT_SHARE = 0.1  # 婉拒的比例；其餘不理
 MINGTIE_SEND_CHANCE = 0.03  # 每一輪向此地一個還沒換過帖的人遞名帖的機會【預設】
+# 切磋、論武、截殺（全部拆包第 38 批從 bot_policy.py 搬來；bot_policy 照舊 import 這幾個名字，測試與 same_behavior 兩邊都換）
+INVITE_YES = 0.7  # 有人邀切磋、論武時答應的機會（付得起體力才算）【預設】
+# 截殺（Config.raid）：此地有截殺得了、而且勝算夠的敵對陣營的人時，每一輪有 RAID_CHANCE 的機會動手；只挑 RAID_ODDS 的對象
+# （輸了要丟銀兩、掉氣血，跟挑戰大勢人物同一個標準）。真人被假人截殺跟被真人截殺一模一樣【預設】
+RAID_CHANCE = 0.1
+RAID_ODDS = ("穩勝", "有把握")  # 同 bot_policy.CHALLENGE_ODDS（bot.CHALLENGE_ODDS）；包不 import bot_policy，照 SMITH_SCORE 的前例寫一份同值
+NO_NAME: tuple[str | None, str] = (None, "")  # 開爐的 C 段不必取名：鎖內一定不叫模型（同 server.NO_NAME、bot_policy.NO_NAME）
 
 
 def _roll(profile: BotProfile, invite: Invite, salt: str) -> float:
@@ -96,3 +103,57 @@ def _hand_card(game: Game, rng: random.Random) -> list[str] | None:
         if ready:
             return actions.peer_act(game, peer["name"], "mingtie", {"arg": "send"})
     return None
+
+
+def _answer_invite(game: Game, rng: random.Random) -> str | None:
+    """有人在這裡邀假人切磋（玩家互動第二層）：跟真人一樣在自己這一輪看到才答——付得起體力時 INVITE_YES 的機會答應，
+    其餘婉拒（真人也會婉拒，假人不能每一張都答應，不然看得出來）。一次只答一張，最早的那張。沒有邀請是 None。"""
+    world = game.state.world
+    incoming = [  # 論武的邀請由 answer_discuss 答（選單上那一顆是灰的，要在玩家卡上挑出哪一樣）
+        o for o in game.options(odds=False, tick=False) if o.id.startswith("invite:yes:")
+        and getattr(invites.find(world, o.id.removeprefix("invite:yes:")), "kind", "") == "spar"
+    ]
+    if not incoming:
+        return None
+    first = incoming[0]
+    if first.enabled and rng.random() < INVITE_YES:
+        return first.id
+    return "invite:no:" + first.id.removeprefix("invite:yes:")
+
+
+def answer_discuss(game: Game, rng: random.Random, slot_open: bool) -> list[str] | tuple[str, str, object] | None:
+    """有人在這裡邀假人論武：跟切磋一樣 INVITE_YES 的機會答應，挑第一樣自己這邊合得成的（身上的在前）出；挑不到就婉拒。
+    走玩家卡同一條路（actions.peer_request、peer_act）。首創要取名時回 (發邀請的人, 出哪一樣, 取名單)，由 bot_policy 包成 DiscussJob 放進取名的名額
+    （這一輪到此為止，B、C 段在 bot_runner；DiscussJob 照鐵匠鋪 ForgeJob 的前例留在 bot_policy，包不 import bot_policy）；
+    這一輪沒有取名的名額（slot_open 是 False）就先放著（邀請還在，下一輪再答）、照常做別的事（回 None）。沒有論武邀請也是 None。
+    擲骰的先後（rng.random() 在 peer_request 之前）一個字不動。"""
+    p = game.state.player
+    pending = [i for i in invites.incoming(game.state.world, p.name) if i.kind == "discuss" and i.location == p.location]
+    if not pending or not game.is_idle():
+        return None
+    inv = pending[0]
+    # 照玩家卡上答應的那幾顆挑（跟真人看到的同一張卡）：按得下去的就是兩邊都合得成的（discuss._answer_buttons，FB-117）
+    card = actions.peer_card(game, inv.sender)
+    ready = [
+        b["arg"].removeprefix("yes:") for b in (card or {}).get("actions", [])
+        if b["action"] == "discuss" and b["enabled"] and b["arg"].startswith("yes:")
+    ]
+    item = ready[0] if ready else None
+    if item is None or rng.random() >= INVITE_YES:  # 他走了（卡打不開）、一樣都合不成：收掉這張
+        return game.choose(f"invite:no:{inv.id}")
+    params = {"arg": f"yes:{item}"}
+    request = actions.peer_request(game, inv.sender, "discuss", params)
+    if request is None:
+        return actions.peer_act(game, inv.sender, "discuss", {**params, "proposed": NO_NAME})
+    if not slot_open:
+        return None
+    return (inv.sender, item, request)
+
+
+def _raid(game: Game, rng: random.Random) -> list[str] | None:
+    """此地有截殺得了、勝算在 RAID_ODDS 的人時，RAID_CHANCE 的機會截殺第一個（走玩家卡同一條路，actions.peer_act）。
+    沒有對象時不擲骰（不改到其他行為的亂數）；這一輪不動手是 None。"""
+    targets = [name for name, odds in raid_actions.targets(game) if odds in RAID_ODDS]
+    if not targets or rng.random() >= RAID_CHANCE:
+        return None
+    return actions.peer_act(game, targets[0], "raid")
