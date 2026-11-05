@@ -702,7 +702,7 @@ LONG_FIRST = (
     "tianxia/features/sortie/tests/test_sortie_duel_bots.py::test_a_bots_only_server_clears_every_duel_within_a_day",
     "tests/season/test_sim_scripts.py::test_the_mounts_measure_script_prints_one_line_with_and_one_without_mounts",
     "tests/season/test_sim_scripts.py::test_the_secrets_measure_script_also_prints_the_forge_part",
-    "tests/season/test_four_wins_gentry_bots.py::test_gentry_server_bots_split_between_the_two_armies",
+    "tianxia/features/faction/tests/test_four_wins_gentry_bots.py::test_gentry_server_bots_split_between_the_two_armies",
     "tests/season/test_sim_scripts.py::test_the_weapons_measure_script_prints_one_line_with_and_one_without_weapons",
     "tests/season/test_sim_scripts.py::test_the_exp_pace_measure_prints_one_line_per_side",
     "tests/season/test_sim_scripts.py::test_the_treasures_measure_script_prints_one_line_with_and_one_without_treasures",
@@ -720,7 +720,7 @@ LONG_FIRST = (
     "tests/web/test_prologue_web.py::test_fb095_after_a_redraw_the_busy_mark_lands_on_the_button_on_the_page",
     "tianxia/features/explore/tests/test_explore_one_fix.py::test_an_official_newbie_at_changshe_meets_the_boss_about_five_percent_of_trips",
     "tests/season/test_sim_scripts.py",
-    "tests/season/test_four_wins_gentry_bots.py",
+    "tianxia/features/faction/tests/test_four_wins_gentry_bots.py",
 )
 
 
