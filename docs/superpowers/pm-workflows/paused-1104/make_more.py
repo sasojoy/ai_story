@@ -1,4 +1,4 @@
-"""接下來幾批的派工（第 21、30、31、29、14、18、33、43、44、25、32 批）。用法：make_more.py <批號> <split/trunk SHA> [輸出資料夾]
+"""接下來幾批的派工（第 21、30、31、29、14、18、33、43、44、25、32、34、37、39、46 批）。用法：make_more.py <批號> <split/trunk SHA> [輸出資料夾]
 先把 feature 分支快轉或開在那一筆，再把產生的 b<批號>.js 交給 Workflow。第 31 批的包名不用總表寫的 `figures`：`tianxia/figures.py` 留著，同名不准（第 23 批的教訓）。"""
 import json
 import re
@@ -130,6 +130,48 @@ BATCHES = {
             "- Task 1 的情境：**所有軌**都要跑（核心批）。這一批特別要走到的：事件效果分別帶上面七種欄位、還有一則同時帶好幾種的；叛投時手上有軍令、押糧在路上、其他會被清的進度各一；week7、season21、test 三種設定；半舊半新切在叛投確認到一半（先按、還沒確認）或效果套到一半的事件；假人照常跑。現有的軌已經走到的就不另加，計畫第一節列出哪一軌走到哪一個欄位。",
             "- **順手收**（第 25 批 PM 認定第 2 條）：`log_archive`（封存舊季的傳聞與回合紀錄；只有 `sqlite_world`、`database` 用，自己不 import 任何 tianxia 模組）兩份名單都沒有，收進核心本體（`MODULES` 加一個）；先想好 `test_for` 的「核心測試」會不會因此多收檔（第 25 批 `NOT_CORE_TESTS` 的先例），計畫第五節寫多收了幾條。",
             "- **不改的**：資料庫結構（develop 第 9 版）；戰記、輿圖、鐵匠鋪、`web/`。",
+        ]),
+    "34": dict(
+        title="軍情二——機緣（`opp:`）與伏筆（`fs:`）；`opportunities`、`foreshadow` 進包 `military`；`ranks` 讀機緣改查詢服務",
+        pkg="military", feature="feature/military", dev="dev/military-2", host="military2",
+        plan="docs/superpowers/plans/2026-11-06-軍情包-第2批.md",
+        prev_plan="docs/superpowers/plans/2026-11-05-軍情包-第1批.md",
+        ports={"dev": 8158, "rev": 8159, "fix": 8159, "head": 8160, "base": 8161}, fb="FB-9440～FB-9449",
+        body=[
+            "- 範圍照總表 3.3 第 34 列（5 個方法、85 行，加 `opportunities` 973 行、`foreshadow` 770 行兩個模組，測試 257 條）與第二節「軍情」。包名照第 33 批用 `military`（`tianxia/orders.py` 留著，同名不准）。`ranks` 讀機緣改成查詢服務；伏筆的內容檢查改成 `check_content`；搬 `bot_policy` 的 `opp:` 那一段。",
+            "- **第 32 批留給這一批的過渡格**：`tianxia/rules.py` 效果分派裡伏筆那幾格、`tianxia/defection.py` 叛投清進度裡機緣那兩格（標「過渡：待搬（第 34 批）」；grep 時連「過渡：第 34 批」一起找），主人搬進包之後由包登記，`EFFECT_ORDER`／`DEFECT_ORDER` 的位置不准動（順序就是行為，第 32 批 PM 認定第 1 條）。",
+            "- Task 1 的情境：機緣（出現、接下、做完、過期）、伏筆（埋下、事件推進、收線、拿到物品）；事件效果帶伏筆的欄位；叛投時手上有機緣；三種設定；半舊半新切在機緣接了還沒做完、伏筆埋了還沒收；假人碰得到 `opp:`（碰不到就寫明）。",
+        ]),
+    "37": dict(
+        title="玩家互動一——此地還有、玩家卡、邀請框、打招呼、贈物、名帖、`/api/peer` 與 `/api/mingtie` 四條路由（`social`、`invites`、`mingtie`、`mingtie_card` 進新包 `peers`）",
+        pkg="peers", feature="feature/peers", dev="dev/peers-1", host="peers1",
+        plan="docs/superpowers/plans/2026-11-06-玩家互動包-第1批.md",
+        ports={"dev": 8162, "rev": 8163, "fix": 8163, "head": 8164, "base": 8165}, fb="FB-9450～FB-9459",
+        body=[
+            "- 範圍照總表 3.3 第 37 列（31 個方法、365 行）與第二節「玩家互動（`peers`）」。**先做**：「此地還有」的判斷（窗口 `Config.presence_seconds`）與狀態列的身分字，從 `social` 拆成核心服務，其他包（截殺、酒肆查人、通緝）改問服務；`tests/test_tavern_seek_presence.py` 守的不變量照舊成立。切磋、論武、截殺是第 38 批，不搬。",
+            "- 四條路由跟著搬進包的 `routes.py`（照商城的做法）；`web/` 不准碰，所以沒有實機驗收，自己那一軌四條路由每一條都要打到、看回應的內容不是只看 200。",
+            "- Task 1 的情境：同一地點有別人（24 小時內同步過、不在路上）與沒有；看玩家卡；邀請（送出、接受、過期 `invite_ttl_seconds`）；打招呼；贈物；名帖（寫、看、分享）；三種設定；半舊半新切在邀請送出還沒接受；假人照常（任何畫面都不能透露誰是假人）。",
+        ]),
+    "39": dict(
+        title="體力玩法＋閉關（小包併批）——設伏、屯糧（`ambush`、`works` 進新包 `stamina_plays`，`works.on_muster` 掛「開集結」）；閉關（新包 `seclusion`）",
+        pkg="stamina_plays", feature="feature/stamina-plays", dev="dev/stamina-plays-1", host="stamina1",
+        plan="docs/superpowers/plans/2026-11-06-體力玩法閉關-第39批.md",
+        ports={"dev": 8166, "rev": 8167, "fix": 8167, "head": 8168, "base": 8169}, fb="FB-9460～FB-9469",
+        body=[
+            "- 範圍照總表 3.3 第 39 列（10 個方法、240 行）與第二節「體力玩法（`stamina_plays`）」「閉關（`seclusion`）」。一批開兩個包，登記各寫各的段（`# stamina_plays`、`# seclusion`），舊名留別名；搬 `bot_policy` 的 `ambush:`、`works:` 兩段。",
+            "- `works.on_muster` 現在是第 25 批世界層「開集結」那一格的主人（舊模組），搬進包之後改由包登記，`WORLD_ORDER` 的位置不准動（順序就是行為，第 25 批 PM 認定第 1 條）。第 25 批量到：三種設定的屯糧（`Config.stockpile`）都關著、`on_muster` 什麼都不寫，Task 1 要在那一下把它打開才看得到。",
+            "- Task 1 的情境：設伏（埋、中伏、撤）、屯糧（捐、練兵、開集結那一刻結算）、閉關（1～12 小時、`act:break` 提早出關）；三種設定；半舊半新切在設伏埋了還沒中、閉關閉到一半；假人碰得到 `ambush:`、`works:`。",
+        ]),
+    "46": dict(
+        title="地盤——戰書與攻城時段、22:00 換天、〈天下形勢〉三段式、地盤畫面的資料、分紅與守城功、管理者五個救場工具（`conquest_day`、`xingshi` 進新包 `territory_acts`）",
+        pkg="territory_acts", feature="feature/territory-acts", dev="dev/territory-acts-1", host="territory1",
+        plan="docs/superpowers/plans/2026-11-06-地盤包-第1批.md",
+        ports={"dev": 8170, "rev": 8171, "fix": 8171, "head": 8172, "base": 8173}, fb="FB-9470～FB-9479",
+        body=[
+            "- 範圍照總表 3.3 第 46 列（27 個方法、431 行）與第二節「地盤」。**包名用 `territory_acts`，不是總表寫的 `territory`**：`tianxia/territory.py` 這一批不搬，同名不准（第 23 批的教訓）。這一批不等輿圖那條線（交接第三節），照現行程式搬。",
+            "- **先做**：`conquest_day` 的 `void`、`note_void`、`today` 搬進 `conquest`（共用規則層），攻城與軍令就不必 import 包。`/api/xingshi` 跟著搬進包的 `routes.py`；`web/` 不准碰，自己那一軌要打到那條路由、看內容。〈天下形勢〉是三段式，模型呼叫不在鎖裡的寫法照舊。",
+            "- 22:00 換天若經第 25 批的世界層「每天」那一格，主人換成包登記、`WORLD_ORDER` 位置不准動。",
+            "- Task 1 的情境：下戰書、攻城時段、22:00 換天（跨過與沒跨過）、〈天下形勢〉、分紅與守城功補送、管理者五個救場工具各一次；三種設定（地盤要劇本有陣營、寫了 `territory`；設定關著的那一種寫明走不到）；半舊半新切在戰書下了、還沒到攻城時段；假人照常。",
         ]),
     "18": dict(
         title="探索三——序章草廬四景與探索的底：權重、野怪、自家營寨比劃、練功分級、撿破境丹",

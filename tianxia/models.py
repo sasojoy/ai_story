@@ -5187,7 +5187,7 @@ class Content(_Strict):
     forge_secrets: dict[str, ForgeSecret] = Field(default_factory=dict)  # 隱藏配方池（content/forge_secrets.json，照 id）；沒有這個檔就是空的
     tier4_named: dict[str, Tier4Named] = Field(default_factory=dict)  # 四階名器名字表（content/tier4_named.json，照 id）；沒有這個檔就是空的（測試內容）
     arena_crowd: dict[str, list[str]] = Field(default_factory=dict)  # 擂台的場邊事件的固定句（content/arena_crowd.json）：種類 → 句子；沒有這個檔就沒有場邊事件
-    # 〈天下形勢〉的句型（content/xingshi_lines.json，領地爭奪第三批 A；tianxia/xingshi.py 讀、content.check_xingshi_lines 驗）；沒有這個檔就沒有〈天下形勢〉
+    # 〈天下形勢〉的句型（content/xingshi_lines.json，領地爭奪第三批 A；tianxia/features/territory_acts/xingshi.py 讀、地盤包的 check_content〔xingshi.check_lines〕驗）；沒有這個檔就沒有〈天下形勢〉
     xingshi_lines: dict = Field(default_factory=dict)
     banned_words: list[str] = Field(default_factory=list)  # 玩家寫給別人看的話（挑釁那一句、名帖自題）的髒話與辱罵字表（content/banned_words.json）；沒有這個檔就是空的
     mingtie: MingtieContent = Field(default_factory=lambda: MingtieContent())  # 名帖的現成的畫與假人的自題句庫（content/mingtie.json）；沒有這個檔就是空的

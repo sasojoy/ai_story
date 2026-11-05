@@ -33,7 +33,7 @@ from fastapi.testclient import TestClient
 from conftest import real_content
 from conquest_kit import conquest_rules
 from tianxia import accounts, conquest
-from tianxia.engine import SIEGE_STATUS
+from tianxia.features.territory_acts.view import SIEGE_STATUS
 
 
 NOW = 1_792_000_000.0
@@ -934,7 +934,7 @@ def test_day_turn_only_voids_letters_that_never_opened():
 def test_votes_and_the_22_settle_are_gone():
     assert "conquest_vote" not in server.MAIN_ACTIONS and "conquest_letter" in server.MAIN_ACTIONS
     assert "conquest_settle_now" not in server.ADMIN_ACTIONS
-    assert {"conquest_progress", "admin_conquest_letter"} <= set(server.ADMIN_ACTIONS)  # FB-609：管理者那一個改名，不蓋掉玩家的
+    assert {"conquest_progress", "admin_conquest_letter"} <= set(server.FEATURE_ADMIN_ACTIONS)  # 第 46 批搬進地盤包的 admin_tools。FB-609：管理者那一個改名，不蓋掉玩家的
     assert not hasattr(Game, "conquest_vote")
     assert not any(hasattr(conquest_day, name) for name in ("tally", "plan", "merge", "settle", "settle_now", "commander_picks"))
     assert "conquest_letter" not in inspect.getsource(bot_policy)  # 假人不下戰書
@@ -1731,7 +1731,7 @@ def test_player_and_admin_action_names_never_collide():
     tools = set(server.FEATURE_ADMIN_ACTIONS)
     assert "mall_reissue" in tools  # 讀到了（商城那三樣）
     assert tools & (set(server.MAIN_ACTIONS) | set(server.ADMIN_ACTIONS) | SPECIAL_OPS) == set()
-    assert "admin_conquest_letter" in server.ADMIN_ACTIONS and "conquest_letter" in server.MAIN_ACTIONS
+    assert "admin_conquest_letter" in server.FEATURE_ADMIN_ACTIONS and "conquest_letter" in server.MAIN_ACTIONS
 
 
 # ── 原 test_conquest_void_quiet.py（整檔搬進來） ──

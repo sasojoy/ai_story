@@ -463,8 +463,8 @@ def test_bot_slot_never_frees_falls_back_after_grace(monkeypatch):
 
 
 def test_server_serves_the_page():
-    assert any(getattr(r, "path", "") == "/api/xingshi" for r in server.app.routes)
-    assert "xingshi_now" in server.ADMIN_ACTIONS
+    assert "/api/xingshi" in server.app.openapi()["paths"]  # 第 46 批：路由搬進地盤包的 routes.py，include_router 進來的不在 app.routes 上
+    assert "xingshi_now" in server.FEATURE_ADMIN_ACTIONS  # 第 46 批：搬進地盤包的 admin_tools
 
 
 def test_lines_file_has_every_key(tmp_path):

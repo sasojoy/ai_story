@@ -1002,7 +1002,7 @@ def test_a_reexported_name_counts_only_when_written_after_the_module_word():
     assert not test_for.names_through(["arena"], "title_for", "c.config.arena.enabled = True\nleaderboard.title_for\n")
 
 
-STAGE_PACKAGES = ["bout", "battle", "checkin", "companions", "feast", "figure_acts", "guide", "looks", "outlets", "sense", "socialize", "story", "zhuan"]  # 有 <包>_stage.py 的包（銀兩出口是第 43 批加的；引導是第 22 批合進 develop 的，第 12 批合併時補上；人物情誼是第 19 批、有所感是第 24 批、交友求見是第 21 批、大勢人物是第 31 批合進 split/trunk 時補上；列傳是第 29 批加的）
+STAGE_PACKAGES = ["bout", "battle", "checkin", "companions", "feast", "figure_acts", "guide", "looks", "outlets", "sense", "socialize", "story", "territory_acts", "zhuan"]  # 有 <包>_stage.py 的包（銀兩出口是第 43 批加的；引導是第 22 批合進 develop 的，第 12 批合併時補上；人物情誼是第 19 批、有所感是第 24 批、交友求見是第 21 批、大勢人物是第 31 批合進 split/trunk 時補上；列傳是第 29 批加的；地盤是第 46 批加的）
 
 
 def test_the_stage_packages_are_every_package_with_a_stage_file():

@@ -735,8 +735,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     kind, _, arg = option.id.partition(":")
     if kind == "defect":
         return None  # 假人不叛投（計畫甲）
-    if kind in ("ambush", "works"):
-        return None  # 設伏、工事、屯糧由 take_turn 的 _stamina_play 做，不交給打分數（護衛、犒軍、探望 aid: 同理，假人沒有要按的，大勢人物包不開 bots.py，全部拆包第 31 批）
+    # （ambush、works：設伏、屯糧由 take_turn 的 _stamina_play 做，不交給打分數；全部拆包第 39 批換成體力玩法包的 bots.py，下面 features_core.bot_pick 問到；
+    # 護衛、犒軍、探望 aid: 同理，假人沒有要按的，大勢人物包不開 bots.py，全部拆包第 31 批）
     owned, value = features_core.bot_pick(game, option)  # 搬成包的功能：假人看到這一顆怎麼按問那一包（開發規範手冊 3.8；宴客 feast:）
     if owned:
         return value
