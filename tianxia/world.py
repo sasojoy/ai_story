@@ -1,4 +1,27 @@
-"""江湖大勢：大勢門檻、世界事件、分幕主線與主線改寫、虛擬玩家、賽季結局。"""
+"""江湖大勢：大勢門檻、世界事件、分幕主線與主線改寫、虛擬玩家、賽季結局。
+
+核心本體（全部拆包第 25 批收進 tianxia/core/__init__.py 的 MODULES；計畫 docs/superpowers/plans/2026-11-05-世界層掛鉤-第25批.md，
+導覽 docs/guide/核心與存檔.md 的 world.py 那一條）。
+
+改這一份要跑的測試（第 25 批審查修正）：
+- scripts/test_for.py：核心測試＋煙霧＋自己檔名的 tests/core/test_world.py、test_world_map.py（整檔 slow）。WORLD_ORDER 的先後由
+  核心契約 tests/core/test_contract_core.py、test_contract_features.py 逐字鎖住（核心測試，會跟著跑）。
+- 不寫 world 檔名的混合檔 test_for 挑不到，另外跑（-n 4；這 25 個檔不含 slow 850 條、約 45 秒，第 25 批審查修正量的）：
+  - 換掉或直接叫這裡的掛鉤串列與函式：tests/figures/test_timetable.py（WEEK_HOOKS、season_hour、season_events：週初那一串的先後）、
+    tests/figures/test_seats.py（WEEK_HOOKS[0]）、tests/core/test_season_pause.py（catch_up_season）、
+    tianxia/features/companions/tests/test_stances_tie.py（DAY_HOOKS 叫 stances.daily）、tests/figures/test_week7_season.py
+  - 經世界一步、週初、每天、開季、收季、開集結推這裡代叫的舊模組（_STEP_CORE、_WEEK_CORE、_DAY_CORE、_MUSTER_CORE、
+    settle_season_start、end_season）：tests/ranger/test_bounties.py（規則關著的季每週掛單、開季那一格）、tests/ranger/test_season21_daily.py、
+    tests/figures/test_season21_frame.py、tests/figures/test_season21_caps.py、tests/figures/test_plans.py、tests/figures/test_figure_life.py、
+    tests/figures/test_figure_attrition.py、tests/battle/test_fronts.py、tests/figures/test_front_lines.py、tests/figures/test_finale.py、
+    tests/figures/test_admin_triggers.py、tests/figures/test_calendar.py、tests/seal/test_seal.py、
+    tests/seal/test_seal_engine.py（換季把沒收場的奪璽單挑記成未分勝負）、tests/seal/test_seal_acts.py、tests/acts/test_conquest_rules.py、
+    tests/acts/test_stamina_plays.py、tests/core/test_chapters.py、tests/core/test_marks_wired.py、tianxia/features/looks/tests/test_looks_mvp.py
+- 與 scripts/same_behavior.py 的 world 一軌（compare --tracks world，season21、week7、test 三種）。
+- 反過來：改這裡代叫的舊模組（figure_life、bounties、orders、plans、figures、seal_acts、seal、works……）時，test_for 往上找走到核心的
+  world 就停，挑不到 tests/core/test_world.py 與上面那一串（第 25 批之前 world 是舊模組、會挑到）。改了它們的簽名或回傳值，另外跑
+  tests/core/test_world.py 與上面那一串；要不要讓 test_for 自己並上交 PM（計畫第六節）。
+"""
 from __future__ import annotations
 
 import math
