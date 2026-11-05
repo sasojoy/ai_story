@@ -18337,6 +18337,9 @@ _smithy_register_track("smithy", SmithyScenario, (("tianxia/features/smithy/smit
                                                   ('UNDONE = "退回一步。"', 'UNDONE = "退回一步！"')), "week7")
 
 
+# ═══════════════════════════ faction：陣營一軌 allegiance（全部拆包第 35 批，dev/faction-1；計畫 docs/superpowers/plans/2026-11-06-陣營包-第1批.md） ════
+
+
 class AllegianceScenario(EffectsScenario):
     """陣營一軌（全部拆包第 35 批；--track allegiance，自己一個資料庫）。借效果與叛投那一軌的擺法（stage_defector：叛投之前手上擺滿會被清的進度）。
     投靠（faction:<id> → faction:confirm）：確認畫面（寫明這一季不能改投、各方人數）、再想想（faction:cancel）、確定、按了之後走開再確定

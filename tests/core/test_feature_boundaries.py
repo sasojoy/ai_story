@@ -1839,6 +1839,8 @@ del GAME_DELEGATE_CALLERS[("_defect_step", "_parley_forsake")]
 # 效果那幾格與叛投清進度不碰包認領的欄位（計畫 1.7）：rules.apply_effect 與它的格（_fx_*、核心代叫表 _EFFECT_CORE）、defection 的清進度
 # （clear_progress、_clear_own、defect 與代叫表）——屬性名不准是任何一包 player_fields 裡的名字。包的欄位由那一包登記的格寫（一條線的 storylines、
 # keepsakes；軍情的 convoy；新手引導的 hint_queue），核心照表叫。defection.prompt（確認畫面讀 convoy）是讀不是清，不在這一條（計畫 1.10）。
+# defection 第 35 批搬進陣營包（下面照 features/faction/defection.py 掃）；代叫表只剩 _STRANDED_CORE——_CLEAR_CORE、_LEAVE_CORE 那兩張拿掉了，
+# 下面那一列還寫著兩個名字：掃不到就不算，不礙事（第 35 批 PM 認定第 12 條：合併時只改註解）。
 EFFECT_DEFECT_SCAN = {
     "rules": ("apply_effect", "_fx_", "_EFFECT_CORE"),
     "defection": ("clear_progress", "_clear_own", "defect", "_CLEAR_CORE", "_LEAVE_CORE", "_STRANDED_CORE"),

@@ -20,7 +20,7 @@
   TIANJI、FIGURE_SLOT、TIANJI_ANSWER、trips、asks_of）、召見與叛投確認畫面讀的機緣（done_for_rank、in_plot）；rules、content、ranks、
   defection 讀它，軍情包的 fs_rules、opp_rules re-export 同一批。同 event_check 不進 MODULES。
 - convoy_base.py（faction：全部拆包第 35 批）：押糧「只讀」的那一小半——手上押著糧車沒有（held）；叛投確認畫面（陣營包 defection.prompt）經它問，
-  不碰軍情包認領的 PlayerState.convoy。同 event_check 不進 MODULES。
+  只讀軍情包認領的 PlayerState.convoy，不寫（寫與清照舊是軍情包的 convoy_actions）。同 event_check 不進 MODULES。
 
 第一階 ctx 就是 Game 本身，不另包一層（手冊 3.3）。
 """

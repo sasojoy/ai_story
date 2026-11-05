@@ -4,7 +4,9 @@
 **跟 `tianxia/factions.py` 不是同一個東西**：`factions.py`（多一個 s）是陣營規模的換算（席次 `seats` 讀），在共用規則層（`registry.SHARED`），這一批沒搬；這一包管的是玩家對陣營做的事。
 
 - 導覽：`docs/guide/大勢人物與賽季.md`（叛投、三方卡、結局卡）。
-- 設計稿：第一季設計 5.1（叛投）、傳聞分層設計第五節；三陣營四勝利（減法季整合設計第三章）；歷史武將同行 9.5。
+- 設計稿（都在 `docs/superpowers/specs/`）：`2026-10-02-第一季黃巾之亂-design.md` 5.1（投靠與叛投）、`2026-10-02-傳聞分層-design.md` 第五節（叛投的軍情）；
+  三陣營四勝利是 `2026-10-24-減法季-整合設計.md` 第三章（整合版，取代 `2026-10-23-減法季-回到文字互動-design.md`）；豪強選依附哪一軍是
+  `2026-10-15-第一季豪強分屬兩軍-design.md`；叛投時同伴回江湖是 `2026-10-18-歷史武將同行-design.md` 9.5。
 - 計畫：`docs/superpowers/plans/2026-11-06-陣營包-第1批.md`。
 
 ## 裡面有什麼
@@ -34,7 +36,7 @@
 還留在原位的：`bot_policy.take_turn` 的選項濾掉 `faction:lean:`／`defect:`（裡面還有別包與核心的前綴，且不用 `bot_always`）、`bot_policy._toward_faction`（投靠與確認，不經 `score`）、`bot.py` 的 `sect:` 看過才排除（條件式）。
 核心還直接碰這一包認領欄位或前綴的：`options` 的 `defect:cancel`（叛投確認畫面上的「再想想」，`pending_defect` 有值時核心原位加進戰鬥選單）、`_own_scene_text` 選邊與投靠確認的場景判斷（叛投那一段已是 `_defect_scene` 委派）、`atlas.py` 讀 `pending_faction`／`pending_defect`；這幾處沒有掛鉤可接，位置算行為，留原位。
 包裡自己叫自己的 `four_wins` 一律直接叫（沒有測試換掉它）；`Game._four_wins` 只剩決戰包經 ctx 問的那一條（`services.py` 二、查詢服務 `# faction`）。
-叛投確認畫面問押糧經核心的 `core/convoy_base.py`（見計畫第五節；它讀軍情包認領的 `PlayerState.convoy`，只讀、`held(state)` 一個函式）。
+叛投確認畫面問押糧經核心的 `core/convoy_base.py`（第 35 批 PM 認定第 3 條認了，照 `omen_base` 前例；它只讀軍情包認領的 `PlayerState.convoy`、不寫，`held(state)` 一個函式）。
 
 ## 測試
 
@@ -47,7 +49,8 @@
 
 **不搬、另外要跑的混合檔**（含這一包的測試，但整檔不屬於這一包，不拆；數字是全檔條數，用到這一包的條數未逐條量）：
 
-- `tests/core/test_contract_core.py`（46）：叛投兩格的順序、核心與包把每一格剛好各拿一次（約 710～776 行；第 35 批這兩條的擺法改了：假包自己登記 `progress`、`leave_behind` 兩格〔`DefectHook`〕，原本 `monkeypatch` 換掉 `defection._clear_own`／`Game._leave_behind` 的兩行拿掉，預期表跟著改；理由與要 PM 認定見計畫第五節）。
+- `tests/core/test_contract_core.py`（46）：叛投兩格的順序、核心與包把每一格剛好各拿一次（約 710～776 行；第 35 批這兩條的擺法改了：假包自己登記 `progress`、`leave_behind` 兩格〔`DefectHook`〕，原本 `monkeypatch` 換掉 `defection._clear_own`／`Game._leave_behind` 的兩行拿掉，`g2._defect_step` 改叫 `defect_actions.defect_step(g2, ...)`，
+  `calls` 的內容與先後、預期表照登記表換主人改，斷言的意思不變；第 35 批 PM 認定第 2 條認了，比照第 34 批認定第 4 條，寫在手冊第十五節）。
 - `tests/figures/test_gentry_allied.py`（47）、`tests/core/test_gentry_ledgers.py`（16）、`tests/core/test_factions.py`（2）、`tests/core/test_faction_events.py`（3）：豪強、兩本帳、陣營規模與事件。
 - `tests/figures/test_promotions_huang.py`（56）、`test_promotions_high.py`（130）、`test_seats.py`（83）、`test_rumor_layers.py`（70）：只有幾處 `import defection`（晉升、席次、傳聞分層）。
 - `tests/web/test_gentry_allied_web.py`（2）：網頁（第 3 階）。
@@ -57,4 +60,4 @@
 
 過渡 import 5 處（行尾標「過渡：待搬」）：`bounties`（第 45 批：懸賞榜；`join_actions.py`、`lean_actions.py`、`defection.py` 各一）、`ranks`（第 40 批：階與稱號；`defection.py`）、
 `events.event_candidates`（`join_actions.py`：拜入門派那一顆）。叛投的 `stranded` 格（`_STRANDED_CORE`，主人是舊模組 `bounties`）留在 `defection.py`，等懸賞榜成包再登記。
-確認畫面讀押糧不碰軍情包的欄位：問核心的 `core/convoy_base.py`（`held(state)`，同 `omen_base` 的先例）。
+確認畫面讀押糧不直接碰軍情包的欄位：問核心的 `core/convoy_base.py`（`held(state)`，同 `omen_base` 的先例；它只讀軍情包認領的 `convoy`，不寫）。

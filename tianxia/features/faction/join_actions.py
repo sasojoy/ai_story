@@ -2,8 +2,9 @@
 本體一字沒改，self 換成 ctx）。
 
 投靠分兩步（伺服器假人設計第八節第 3 項）：按「投靠某陣營」先出確認畫面，「確定」才真的投靠，「再想想」就作罷；豪強分屬兩軍的季
-投靠豪強中間多一步挑依附哪一軍。Game 留一行委派的：_sect_options、_ally_options、_join_lean、_faction_prompt（選單與場景原位在叫）；
-_faction_step 只有包的 choose 掛鉤叫（沒有委派）。選單「接管整個選單」的待確認那兩段搬成 pending_options（Game 留 _faction_pending_options）。
+投靠豪強中間多一步挑依附哪一軍。Game 留一行委派的：_sect_options、_join_lean、_faction_prompt（選單與場景原位在叫）；_ally_options 只有包裡的
+pending_options 叫（沒有委派）；_faction_step 只有包的 choose 掛鉤叫（沒有委派）。選單「接管整個選單」的待確認那三段搬成 pending_options
+（Game 留 _faction_pending_options）。
 """
 from __future__ import annotations
 

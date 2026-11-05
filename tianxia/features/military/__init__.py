@@ -77,7 +77,8 @@ class MilitaryFeature(Feature):
 
     def defection(self) -> tuple[DefectHook, ...]:
         """叛投：clear 位置的 convoy 那一格（押著的糧車；原本 defection.clear_progress 直接寫 p.convoy）與 opportunities 那一格（機緣的進度，
-        第 34 批；原本 defection._CLEAR_CORE），leave 位置的 plots 那一格（還開著的密謀全部退出；原本 defection._LEAVE_CORE）：不問 enabled。
+        第 34 批；原本是核心代叫表 defection._CLEAR_CORE 的一格），leave 位置的 plots 那一格（還開著的密謀全部退出；原本 defection._LEAVE_CORE）：
+        不問 enabled。那兩張核心代叫表第 35 批陣營成包時拿掉了（progress 那一格改由陣營包登記）。
         建一次就留著，在叫的那一下才照模組屬性找 convoy_actions.defect_clear、opp_rules.clear、opp_rules.leave_plots（monkeypatch 照樣有效）。"""
         if self._defection is None:
             from . import convoy_actions, opp_rules  # noqa: PLC0415

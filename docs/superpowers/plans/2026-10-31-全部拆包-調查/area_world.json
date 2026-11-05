@@ -251,14 +251,14 @@
    "app_js": [],
    "content": [],
    "tests": [
-    "tests/figures/test_defection.py",
-    "tests/figures/test_sides_card.py",
-    "tests/battle/test_four_wins_wiring.py",
-    "tests/map/test_four_wins_lean_anytime.py",
-    "tests/acts/test_gentry_allied_fixes.py",
+    "tianxia/features/faction/tests/test_defection.py",
+    "tianxia/features/faction/tests/test_sides_card.py",
+    "tianxia/features/faction/tests/test_four_wins_wiring.py",
+    "tianxia/features/faction/tests/test_four_wins_lean_anytime.py",
+    "tianxia/features/faction/tests/test_gentry_allied_fixes.py",
     "tests/web/test_gentry_allied_web.py",
-    "tests/core/test_season_end_tiers.py",
-    "tests/season/test_four_wins_gentry_bots.py"
+    "tianxia/features/faction/tests/test_season_end_tiers.py",
+    "tianxia/features/faction/tests/test_four_wins_gentry_bots.py"
    ]
   },
   "features/orders": {

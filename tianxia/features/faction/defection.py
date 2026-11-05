@@ -154,8 +154,9 @@ def clear_progress(p: PlayerState) -> None:
     刻意沒清的：`runic_pieces`（符文殘片，丙二）、聽過的伏筆片段（`fragments`）與聽過的機緣線索（`opp_clues`，企劃者裁決 E5.2）
     ——它們是「知道的事」、不是陣營給的身份，跟伏筆物品一樣留著。殘片與片段當初是現在的做法、待企劃者確認（在 PM 那裡）；
     tests/figures/test_promotions_huang.py 的 test_defecting_keeps_the_runic_pieces_for_now 釘著它，改了就改那個測試。
-    各包清自己的（core_effects：全部拆包第 32 批）：照 core/features.py 的 DEFECT_ORDER["clear"] 一格一格走——叛投自己的（progress：_clear_own）、
-    押著的糧車（convoy：軍情包登記）、舊陣營的引薦人排著還沒說的提示（hints：新手引導包登記）、機緣（opportunities：核心代叫，過渡）。
+    各包清自己的（core_effects：全部拆包第 32 批）：照 core/features.py 的 DEFECT_ORDER["clear"] 一格一格走——叛投自己的（progress：_clear_own，
+    第 35 批起陣營包登記）、押著的糧車（convoy：軍情包登記）、舊陣營的引薦人排著還沒說的提示（hints：新手引導包登記）、機緣（opportunities：
+    第 34 批起軍情包登記）；四格都是包登記的，核心代叫的一格都不剩（所以這裡傳空的 {}）。
     測試直接叫這一個，所以 clear 位置在這裡（不挪到 defect 或 defect_actions.defect_step）。"""
     features_core.defect_run("clear", {}, p)
 
