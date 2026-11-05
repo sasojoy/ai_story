@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 
 from . import calendar, conquest, timetable
+from .conquest import _rumor, note_void, today, void  # noqa: F401  第 46 批搬進 conquest（共用規則層；攻城、軍令不必 import 地盤包）
 from .models import Config, Content
 from .state import ConquestState, DayNote, Rumor, SiegeSlot, WorldState
 
@@ -110,10 +111,6 @@ def _names(content: Content, sides: list[str]) -> str:
     return "、".join(content.scenario.faction_name(s, s) for s in sides)
 
 
-def _rumor(world: WorldState, text: str, loc: str | None = None) -> None:
-    world.rumors.append(Rumor(time=world.time, text=text, location=loc, layer="world"))
-
-
 def _ordered(content: Content, sides: list[str]) -> list[str]:
     """攻方照劇本的陣營順序（兩軍是官軍、黃巾；siege 的戰局以 factions[0] 為正向）。"""
     order = [f.id for f in content.scenario.factions]
@@ -195,24 +192,6 @@ def place_now(world: WorldState, content: Content, side: str, loc_id: str, real_
     return text
 
 
-def void(world: WorldState, content: Content, slot: SiegeSlot, text: str = "") -> None:
-    """這一場作罷：那一塊解凍（進度照留）；text 給了寫一句天下大事。"""
-    slot.status = "void"
-    if text:
-        _rumor(world, text, slot.loc)
-
-
-def note_void(world: WorldState, slot: SiegeSlot, why: str) -> None:
-    """作罷了不發天下大事的那幾種（攻方沒人到，裁決 19）在 day_log 記一筆：那一場的每一個攻方各一筆（void 寫原因）。"""
-    if world.conquest is None:
-        return
-    for side in slot.attackers:
-        world.conquest.day_log.append(DayNote(
-            key=slot.key, side=side, loc=slot.loc, minute=slot.minute, by=slot.by.get(side, ""),
-            reason=slot.reasons.get(side, ""), void=why,
-        ))
-
-
 def day_turn(world: WorldState, content: Content, key: int) -> list[str]:
     """換天（Game._conquest_tick 確認 key 比 settled_key 大、開關開著、季在跑）：前幾天排的、到現在還沒開集結的那幾場作罷（伺服器停過）、
     一場一句天下大事；前幾天打完或作罷的從時程表拿掉（還在打的留著）；settled_key 記成 key。回寫進天下大事的那幾句。
@@ -230,11 +209,3 @@ def day_turn(world: WorldState, content: Content, key: int) -> list[str]:
     state.schedule = kept
     state.settled_key = key
     return out
-
-
-def today(world: WorldState, content: Content, side: str | None, how: str) -> list[str]:
-    """軍令的攻城、守城認的地點（PM 2026-10-20 第 1 條，設計 4.5）：how 是 attack（這一邊此刻進度最高、推得動的那幾塊）或 defend（自家被推得
-    最高、守得動的那幾塊）；每一條戰線各挑，照內容順序（conquest.focus_blocks）。開關關著是空的。名字照第二批留著（orders._today 讀它）。"""
-    if side is None or not conquest.on(content, world):
-        return []
-    return conquest.focus_blocks(world, content, side, "attack" if how == "attack" else "defend")
