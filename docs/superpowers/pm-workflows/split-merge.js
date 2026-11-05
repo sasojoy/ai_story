@@ -66,7 +66,7 @@ ${NOTES ? '**要特別處理的**：\n' + NOTES + '\n' : ''}
 6. ${TRUNK} 上的文件（同一串，推前確認 ancestor）：
    - 全部拆包總表 \`docs/superpowers/plans/2026-10-31-全部拆包-總表.md\` 第 ${N} 列標「已合進 ${TRUNK}」（${TRUNK} 那一筆）；批次表 \`2026-10-31-主動搬六包-批次.md\` 若有這一批也改；「搬包中」有這一包就拿掉。
    - 手冊 \`docs/superpowers/specs/2026-10-30-開發模式-design.md\` 第十五節加「第 ${N} 批的 PM 認定」：${DECISIONS || '（照計畫第五節「交 PM 定的」，PM 沒另外寫的就寫「照開發的做法，認」）'}
-   - 交接 \`docs/superpowers/handoff/2026-10-30-主機側交接.md\`：**只改**第〇節裡這一批那一句（改成已合、${TRUNK} 那一筆、閘門數字）。其餘段落 PM 自己改。
+   - 交接 \`docs/superpowers/handoff/2026-10-30-主機側交接.md\`：**只改**第一節表格的主幹、進度、\`engine.py\` 行數，第三節「已合」加這一批。其餘段落 PM 自己改。
 7. 收：工作樹 \`git worktree remove\`、本地分支 \`pm/merge-b${N}\` 刪掉（已含在 ${TRUNK}）、伺服器與測試都關、暫存大檔刪掉。
 回報：${TRUNK} 與 ${FEAT} 的 HEAD、閘門跑的那一筆、撞了什麼怎麼解、閘門數字、改了哪些文件、有問題的。`, { label: `merge:b${N}`, phase: 'Merge', schema: MERGE_SCHEMA })
 
