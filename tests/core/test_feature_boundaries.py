@@ -948,6 +948,24 @@ GAME_DELEGATE_CALLERS.update({
 })
 
 
+# stamina_plays、seclusion（全部拆包第 39 批「體力玩法＋閉關」：新包 tianxia/features/stamina_plays/、tianxia/features/seclusion/；計畫
+# docs/superpowers/plans/2026-11-06-體力玩法閉關-第39批.md 1.4）：這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。10 個方法搬進包，Game 留 7 個一行委派
+# （_ambush_act、_ambush_fight、_works_act 只有包裡叫，沒有委派），另多一個 _stamina_play_head（_stamina_play_options 的前半），一共 8 個。核心原位碰這一包的：choose 的 ambush:、works:（choose 掛鉤）與 _action_title 的兩格、
+# _act 的 act:break（Verb）拿掉；_stamina_play_options 的前半叫包（選單順序算行為，不能改成 Feature.options 登記）；世界層 muster 的 works 那一格換成包登記。
+GAME_IMPORTS |= {"tianxia.features.stamina_plays.actions", "tianxia.features.stamina_plays.ambush_actions", "tianxia.features.seclusion.actions"}
+GAME_DELEGATES |= {
+    # server 與測試叫的閉關（seclusion_refusal、seclude）、_advance_player_local 叫的出關（_finish_seclusion）、sync 叫的收伏、_arrivals 叫的查伏兵，
+    # 與測試直接叫的搶奪（_ambush_spoils）、戰報（_ambush_record）
+    "seclusion_refusal", "seclude", "_finish_seclusion", "_stamina_play_head", "_ambush_expire", "_ambush_check", "_ambush_spoils", "_ambush_record",
+}
+GAME_DELEGATE_CALLERS.update({
+    ("_advance_player_local", "_finish_seclusion"): "體力回復之後、財運之前：自己滿時的出關（位置就是行為，留在原位叫委派）",
+    ("sync", "_ambush_expire"): "drop_shops 之後、_arrivals 之前：守著的埋伏到時刻了收起來（位置就是行為，留在原位叫委派）",
+    ("_arrivals", "_ambush_check"): "每換一段才查一次這一段路上有沒有敵對的伏兵（迴圈中途，位置就是行為，留在原位叫委派）",
+    ("_stamina_play_options", "_stamina_play_head"): "選單順序「設伏／收伏 → 屯糧 → 護衛 → 功能包的選項 → 盤算」：前半在體力玩法包，接縫留在 Game",
+})
+
+
 @functools.lru_cache(maxsize=None)
 def _engine_tree() -> ast.Module:
     return ast.parse((TIANXIA / "engine.py").read_text(encoding="utf-8"))  # 一萬七千行，parse 一次一秒多：大家共用這一份
@@ -1527,6 +1545,8 @@ def test_the_old_names_left_as_aliases_are_known():
                          "escorts": "battle", "generals": "battle",
                          # guide（全部拆包第 22 批：tianxia/guide.py、hints.py、newbie.py、opening.py、enlist.py）
                          "guide": "guide", "hints": "guide", "newbie": "guide", "opening": "guide", "enlist": "guide",
+                         # stamina_plays（全部拆包第 39 批：tianxia/ambush.py、works.py）
+                         "ambush": "stamina_plays", "works": "stamina_plays",
                          # bout（全部拆包第 12 批：tianxia/duel.py、arena.py、arena_crowd.py）
                          "duel": "bout", "arena": "bout", "arena_crowd": "bout",
                          # companions（全部拆包第 19 批：tianxia/stances.py、errands.py、letters.py）
