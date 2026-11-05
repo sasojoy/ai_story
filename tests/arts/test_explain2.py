@@ -273,7 +273,6 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
         ("engine.py", 'changes += renown.gain(s, c, "fame", fame)'),  # 奪璽單挑（玉璽碎片設計 5.9，同一季才給）
         ("engine.py", 'self._write(journal.ECHO, lines + renown.gain(self.state, self.content, "fame", gained))'),  # 首創回饋
         ("engine.py", 'return renown.gain(self.state, c, "fame", n)'),  # 立功（名聲 3.1：出陣、挑戰本人、決戰參戰，Game._deed_fame）
-        ("engine.py", 'lines += renown.gain(s, c, "fame", pay.fame)'),  # 領地爭奪的分紅與守城功（翻地與爭搶，Game._deliver_conquest）
         # battle：決戰收場補送搬進決戰包（主動搬六包第 5 批；這三行原本在 engine.py 那一段的中間，字一個沒變）
         ("features/battle/view.py", 'highlight_changes += renown.gain(s, c, "fame", fame)'),  # 決戰最有戲的那一搏與首功
         ("features/battle/view.py", 'changes += renown.gain(s, c, "fame", c.config.seal.mandate.fame)'),  # 得天命的那一軍（玉璽二）
@@ -289,6 +288,8 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
         # 酒肆搬進功能包（主動搬六包第 10 批）：同兩行，路徑從 engine.py 換成 features/tavern/actions.py（照路徑排在宴客後面）
         ("features/tavern/actions.py", 'return [tavern_rules.TREAT_DONE] + renown.gain(s, c, "fame", cfg.treat_fame)'),  # 酒肆請全店喝酒（tavern_treat）
         ("features/tavern/actions.py", 'record.changes += renown.gain(s, c, "fame", cfg.hit_win_fame)'),  # 酒肆：打退殺手（tavern_hit_fight）
+        # territory_acts：領地爭奪的分紅與守城功搬進地盤包（全部拆包第 46 批；這一行原本在 engine.py 的 Game._deliver_conquest，字一個沒變，路徑換成地盤包、照路徑排在酒肆後面；FB-9431）
+        ("features/territory_acts/day_actions.py", 'lines += renown.gain(s, c, "fame", pay.fame)'),  # 領地爭奪的分紅與守城功（翻地與爭搶，day_actions.deliver_conquest）
     ]
     givers = []
 
