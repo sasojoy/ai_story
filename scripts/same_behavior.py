@@ -16484,7 +16484,7 @@ HD_PREFIX = "hd_"
 class HeraldScenario(ExploreScenario):
     """事件機制一軌（全部拆包第 26 批；--track herald，自己一個資料庫）。每一種事件都擺到「有人聽、聽的人真的動了」的那一刻：
     打贏一場（出陣／遊歷打贏、出門一趟的遭遇打贏，手上揭著那裡的討伐）、探索一趟（出門一趟收尾：手上揭著那裡的打探、那一塊藏著一片碎片——
-    同一下兩個訂閱者；測試內容走舊探索）、抵達某地（押著糧車、揭著到那裡的護送——同一下兩個訂閱者）、截殺打贏（揭著通緝他的懸賞）、
+    同一下兩個訂閱者；測試內容走舊探索）、舊探索（有陣營的季在記憶體裡關掉探索一顆、揭著那裡的另一張打探按一次）、抵達某地（押著糧車、揭著到那裡的護送——同一下兩個訂閱者）、截殺打贏（揭著通緝他的懸賞）、
     集結開始（手上有碎片的人、管理者強制璽動：開標了璽動、這一季還沒打過的那一場，開集結那一刻璽動）、決戰收場（那一場璽動過、持有者還拿著那一片）。
     **前半停在三件寫到一半的事**：時刻表決戰集結到一半（璽動過、兩軍各有人加入）；押著糧車又揭著護送的人走在路上還沒到；揭了討伐還沒打。
     後半：新程式接著走到、打贏、決戰開打到收場；假人（BotRunner 兩個揭著自己那裡的討伐與打探）；收季、開下一季。
@@ -16726,6 +16726,21 @@ class HeraldScenario(ExploreScenario):
             self.explore(self.SCOUT)
         self.me(self.SCOUT, "探索之後")
         self.world_view("探索之後")
+        self.old_explore()
+
+    def old_explore(self) -> None:
+        """舊探索（事件 explore；修正輪補的：審查發現沒有一軌走到舊探索「聽的人真的動了」，_BUS_CORE 那一格漏了也比不出來）：
+        有陣營的季探索一顆開著、act:explore 是出門一趟，這一下在記憶體裡關掉探索一顆（兩份程式同一步關、同一步開），祁梧聲揭著
+        這裡的另一張打探、按一次舊探索——打探交差。測試內容上面那一下就是舊探索（沒有陣營、懸賞榜關著：叫到、沒人動），不再按。"""
+        if not self.factions_on():
+            emit("舊探索：這份內容上面那一下就是", None)
+            return
+        where = self.chars.load(self.SCOUT).player.location
+        self.post(self.bounty(f"scout_old_{self.SCOUT}", "scout", self.SCOUT, self.side(self.SCOUT) or "guan", location=where))
+        with self.tweak(self.c.config.jianfa, explore_one=False):
+            self.explore(self.SCOUT)
+        self.me(self.SCOUT, "舊探索之後")
+        self.world_view("舊探索之後")
 
     def arrive(self) -> None:
         """抵達某地：押著糧車（終點）、揭著到那裡的護送，走一步到（先交糧車、再交護送：同一下兩個訂閱者）。"""
