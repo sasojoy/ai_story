@@ -46,6 +46,7 @@
 
 - `test_mingtie.py`（13 條，原 `tests/bots/test_mingtie.py`）：名帖（定稿的檢查、遞與回帖、檢舉與撤下放回、假人做名帖與遞名帖）與審一句話。借 `tests/core/test_social.py` 的小工具（`NOW`、`_as`、`_done`、`_player`）。
 - `test_peers_smoke.py`（1 條，**新寫的煙霧**，手冊 4.1 每一包至少一條）：兩人同地點互看、打開玩家卡、挑釁、乙的選單多出 `invite:` 回禮、挑一個回（這一包的 `choose` 掛鉤接走，標題「與甲」）。
+- `test_season_book.py`（1 條，**合併時補**，第 37 批 PM 認定第 1 條）：換季的頭銜簿（`on_season_start`）——舊簿非空、其中一條跟這一季也掙到的重複，換季之後是舊的照順序、接上這一季新掙到的，重複的不再加（期望值照搬之前的行為寫，測試內容）。
 - 不放 `peers_stage.py`：這一包不給選單（`menu` 沒接，`options` 空的，`invite:` 的選項由 `Game._everyday_options` 的 `_invite_options` 委派給，位置算行為）；契約測試的擺局面用預設的「平常」。
 
 **不搬、另外要跑的混合檔**（含這一包的測試，但整檔不屬於這一包，不拆；數字是用到這一包的條數／全檔）：
@@ -58,7 +59,7 @@
 
 ## 過渡（手冊 3.11）
 
-過渡 import 2 處：`mingtie.py` 到 `ranks`（階級的稱號，總表第 40 批收進共用規則層）、`mingtie.py` 函式裡到 `leaderboard`（賽季榜單）；`bots.py` 到 `leaderboard`（名帖頭銜的榜單名次）。
+過渡 import 3 處：`mingtie.py` 到 `ranks`（階級的稱號，總表第 40 批收進共用規則層）、`mingtie.py` 函式裡到 `leaderboard`（賽季榜單）；`bots.py` 到 `leaderboard`（名帖頭銜的榜單名次）。
 
 ## 量到的（第 37 批 Task 5）
 
