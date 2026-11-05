@@ -21,3 +21,8 @@
 **接縫在原位的位置不能動**（位置就是行為）：`sync` 的 `_ambush_expire`（`drop_shops` 之後、`_arrivals` 之前）、`_arrivals` 迴圈中途的 `_ambush_check`（每換一段才查）、移動被擋（`engine.py` 的 `_move_option`，讀 `p.ambush` 與核心的 `MOVE_BLOCKED`）。
 **過渡**：`ambush_rules.py` import `bounties`（`has_prey`、`hostile`，第 45 批懸賞榜成包）、`atlas`（第 50 批）；`ambush_actions.py` import `annals`（行狀）；設伏贏了揭通緝交差走 `ctx._raid_bounty`（服務清單三、過渡，主人懸賞榜）。假人的 `_stamina_play`（`bot_policy.py`）挑 `ambush:set:`、`works:`、`aid:`，叫 `game.choose` 公開動作，留在原位。`tianxia/howto.py`、`scripts/measure_stamina_plays.py`、`test_conquest_flip.py` 用舊名 `ambush`、`works`（別名，同一個模組物件）。
 **審查守的**：`encounter.resolve_encounter` 一律用模組屬性叫（`same_behavior` 的 `stamina` 軌換掉這個屬性強制伏兵必勝／必敗）；`_ambush_fight` 的亂數用 `random.Random(f"設伏|…")`、不動 `Game.rng`；兩個人之間的函式（`fight`、`record`）帶兩個 ctx。
+**另外要跑的混合檔**（設伏、屯糧的用法散在別人的檔裡，這一輪不拆；改包任一檔時 `test_for` 挑不到，合併閘門要跑「相關的 slow」就靠這一張清單）：
+- `tests/gear/test_four_tiers.py`（叫 `_ambush_spoils`）、`tests/ranger/test_raid.py`（叫 `_ambush_record`）、`tests/acts/test_conquest_flip.py`（import `works` 舊名）。
+- `tests/seal/test_seal_revamp_sidedoor.py`（slow 的 `test_an_ambush_report_names_the_rivals_bare_power`，借用包的測試檔 `test_stamina_plays` 的 `_player`、`_plays_on`、`_reload`、`_set`；那幾個輔助函式改名或搬動時它會壞）。
+- 世界層 `muster` 代叫（`works` 那一格）：`tests/core/test_world.py`、`tests/battle/test_fronts.py`、`tests/figures/test_timetable.py`。
+- 一起跑：`pytest tianxia/features/stamina_plays/tests tests/gear/test_four_tiers.py tests/ranger/test_raid.py tests/acts/test_conquest_flip.py tests/seal/test_seal_revamp_sidedoor.py tests/core/test_world.py tests/battle/test_fronts.py tests/figures/test_timetable.py -n 4 -m "slow or not slow"`。
