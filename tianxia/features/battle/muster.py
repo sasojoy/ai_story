@@ -21,7 +21,7 @@ from __future__ import annotations
 import math
 
 from tianxia import allied, atlas, battle_instance, roster, siege  # 過渡：待搬（豪強依附、輿圖、戰鬥規則核心、同伴；siege 是共用規則層 registry.SHARED）
-from tianxia import journal, team
+from tianxia import attrset, journal, team
 from tianxia.core.option import Option
 from tianxia.models import BattleDef
 from tianxia.state import JournalEntry
@@ -542,6 +542,8 @@ def submit_battle_action(
     如果結算完變成 ended，一定是這次送出的行動剛好造成的，不用再跟「結算前是不是
     已經 ended」比對。"""
     captured: dict[str, list[str]] = {"msgs": []}
+    if success_rate is not None and name == ctx.state.player.name:  # 魅力略為提高放手一搏（五項屬性的季；企劃者 2026-11-04）
+        success_rate = int(success_rate) + round(attrset.charm(ctx.state, ctx.content, "gamble"))
     ult = ctx._battle_ult() if success_rate is not None and name == ctx.state.player.name else None  # 回合首功用（looks）
 
     def _apply(b: battle_instance.BattleInstance) -> None:

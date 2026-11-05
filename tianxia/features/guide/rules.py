@@ -150,10 +150,20 @@ def pending_line(state: GameState, content: Content) -> str | None:
     return f"先把眼前的「{title}」了結" if title is not None else None
 
 
+def step_words(state: GameState, content: Content, step) -> tuple[str, str]:
+    """這一步的話與收起來那一行：五項屬性的季有 text_v2／line_v2 就照它（配點那一步改講挑成長配比）。"""
+    from tianxia import attrset  # noqa: PLC0415
+
+    if attrset.on(content, state.world):
+        return step.text_v2 or step.text, step.line_v2 or step.line
+    return step.text, step.line
+
+
 def step_text(state: GameState, content: Content, world: WorldStateStore | None = None) -> str:
     """引導目前這一步要說的話：眼前有事件待處理時是 pending_line，不然是這一步本身的話。呼叫端先確認引導還沒做完。
     給了 world，序章的話裡的 {武學} 換成合成出來的那一門（prologue.fill）；沒給就照原樣。"""
-    text = pending_line(state, content) or steps(state, content)[state.player.tutorial_step].text
+    step = steps(state, content)[state.player.tutorial_step]
+    text = pending_line(state, content) or step_words(state, content, step)[0]
     return text if world is None else prologue.fill(text, state, content, world)
 
 

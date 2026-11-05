@@ -224,6 +224,14 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
    高度仍是 .btn.small 的 38px。只改這一排（.alloc），不動全站的 .btn */
 .more-stats .alloc, .self-stats .alloc { gap: 4px; margin-top: 4px; }
 .more-stats .alloc .btn, .self-stats .alloc .btn { min-width: 0; padding: 6px 2px; white-space: nowrap; }
+/* 自己配（五項屬性的季）：一項一列「名字 − 數字 ＋」，兩欄排；底下一行寫還剩幾點與「定下來」「取消」 */
+.growth-edit { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; margin-top: 6px; }
+.growth-step { display: flex; align-items: center; gap: 6px; }
+.growth-step span { flex: 1; min-width: 0; }
+.growth-step b { min-width: 1.5em; text-align: center; font-variant-numeric: tabular-nums; color: var(--ink); }
+.growth-step .btn { min-width: 38px; padding: 6px 0; }
+.growth-foot { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 2px; }
+.growth-foot .growth-left { flex: 1 1 100%; font-size: 11px; color: var(--ink-2); }
 /* ＋鈕底下那一行（五項各管什麼）：比面板再小一號；一項一個 inline-block，整項一起換行，太長時在項裡面折，不撐寬 */
 .more-stats .stat-uses, .self-stats .stat-uses { margin-top: 4px; font-size: 11px; line-height: 1.5; }
 .more-stats .stat-uses span, .self-stats .stat-uses span { display: inline-block; max-width: 100%; margin-right: 0.8em; }
@@ -891,6 +899,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .letter-peek { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ink-2); font-size: 14px; }
 .letter-arrow { flex: none; margin-left: auto; color: var(--ink-2); }
 .letter-body { padding: 0 12px 12px; }
+/* 第一屏收法 1a（FB-9110）：攤開的託付信收成標題一行、底下問通知那一張先不畫，讓約戰那一行露出來；點標題照樣攤開 */
+.card.letter.fit-letter > .letter-body, .card.letter.fit-letter + .push-ask { display: none; }
 .letter-body p { margin: 0 0 6px; font-family: var(--serif); line-height: 1.7; }
 .letter-sign { text-align: right; color: var(--ink-2); }
 .letter-task { padding: 8px 0; border-top: 1px solid var(--line); margin-bottom: 8px; }

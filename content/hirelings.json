@@ -1,0 +1,1892 @@
+[
+ {
+  "id": "hire_yingchuan_dao_1",
+  "name": "蔣彥方",
+  "stats": {
+   "str": 8.0,
+   "agi": 5.0,
+   "con": 5.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.4,
+   "agi": 0.25,
+   "con": 0.25,
+   "wis": 0.15
+  },
+  "desc": "在潁川郡替商隊押過幾趟貨的刀客。",
+  "starting_wugong": "xingwu_dao",
+  "starting_neigong": "xingwu_lianqi",
+  "hire_type": "dao",
+  "hire_at": "yingchuan"
+ },
+ {
+  "id": "hire_yingchuan_dao_2",
+  "name": "蔡士遠",
+  "stats": {
+   "str": 8.0,
+   "agi": 5.0,
+   "con": 5.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.4,
+   "agi": 0.25,
+   "con": 0.25,
+   "wis": 0.15
+  },
+  "desc": "潁川郡一帶的鄉勇出身，一口刀使得紮實。",
+  "starting_wugong": "xingwu_dao",
+  "starting_neigong": "xingwu_lianqi",
+  "hire_type": "dao",
+  "hire_at": "yingchuan"
+ },
+ {
+  "id": "hire_yingchuan_qiang_1",
+  "name": "蔡義方",
+  "stats": {
+   "str": 6.0,
+   "agi": 4.0,
+   "con": 8.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.3,
+   "agi": 0.2,
+   "con": 0.4,
+   "wis": 0.15
+  },
+  "desc": "潁川郡的部曲散了以後，一桿槍到處找主人。",
+  "starting_wugong": "xingwu_qiang",
+  "starting_neigong": "wubao_zhuanggong",
+  "hire_type": "qiang",
+  "hire_at": "yingchuan"
+ },
+ {
+  "id": "hire_yingchuan_qiang_2",
+  "name": "馮義成",
+  "stats": {
+   "str": 6.0,
+   "agi": 4.0,
+   "con": 8.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.3,
+   "agi": 0.2,
+   "con": 0.4,
+   "wis": 0.15
+  },
+  "desc": "在潁川郡的塢堡守過幾年門的槍手。",
+  "starting_wugong": "xingwu_qiang",
+  "starting_neigong": "wubao_zhuanggong",
+  "hire_type": "qiang",
+  "hire_at": "yingchuan"
+ },
+ {
+  "id": "hire_yingchuan_gong_1",
+  "name": "戴彥明",
+  "stats": {
+   "str": 5.0,
+   "agi": 8.0,
+   "con": 3.0,
+   "wis": 4.0
+  },
+  "growth": {
+   "str": 0.25,
+   "agi": 0.4,
+   "con": 0.15,
+   "wis": 0.2
+  },
+  "desc": "在潁川郡山裡打獵為生，箭不虛發。",
+  "starting_wugong": "qiangnu",
+  "starting_neigong": "xiaolin_gong",
+  "hire_type": "gong",
+  "hire_at": "yingchuan"
+ },
+ {
+  "id": "hire_yingchuan_gong_2",
+  "name": "任子昌",
+  "stats": {
+   "str": 5.0,
+   "agi": 8.0,
+   "con": 3.0,
+   "wis": 4.0
+  },
+  "growth": {
+   "str": 0.25,
+   "agi": 0.4,
+   "con": 0.15,
+   "wis": 0.2
+  },
+  "desc": "潁川郡的獵戶，腳程快、眼力好。",
+  "starting_wugong": "qiangnu",
+  "starting_neigong": "xiaolin_gong",
+  "hire_type": "gong",
+  "hire_at": "yingchuan"
+ },
+ {
+  "id": "hire_yingchuan_yi_1",
+  "name": "金孝良",
+  "stats": {
+   "str": 2.0,
+   "agi": 4.0,
+   "con": 4.0,
+   "wis": 7.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.2,
+   "con": 0.2,
+   "wis": 0.35
+  },
+  "desc": "在潁川郡走街串巷替人看病的郎中。",
+  "starting_wugong": "yujia_quan",
+  "starting_neigong": "chanzuo_tiaoxi",
+  "hire_type": "yi",
+  "hire_at": "yingchuan"
+ },
+ {
+  "id": "hire_yingchuan_yi_2",
+  "name": "姚公勇",
+  "stats": {
+   "str": 2.0,
+   "agi": 4.0,
+   "con": 4.0,
+   "wis": 7.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.2,
+   "con": 0.2,
+   "wis": 0.35
+  },
+  "desc": "在潁川郡走街串巷替人看病的郎中。",
+  "starting_wugong": "yujia_quan",
+  "starting_neigong": "chanzuo_tiaoxi",
+  "hire_type": "yi",
+  "hire_at": "yingchuan"
+ },
+ {
+  "id": "hire_yingchuan_mou_1",
+  "name": "黃元勇",
+  "stats": {
+   "str": 2.0,
+   "agi": 3.0,
+   "con": 5.0,
+   "wis": 8.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.15,
+   "con": 0.25,
+   "wis": 0.4
+  },
+  "desc": "潁川郡的落第書生，肚子裡有些兵書。",
+  "starting_wugong": "shusheng_jian",
+  "starting_neigong": "yanghao_jue",
+  "hire_type": "mou",
+  "hire_at": "yingchuan"
+ },
+ {
+  "id": "hire_yingchuan_mou_2",
+  "name": "張伯興",
+  "stats": {
+   "str": 2.0,
+   "agi": 3.0,
+   "con": 5.0,
+   "wis": 8.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.15,
+   "con": 0.25,
+   "wis": 0.4
+  },
+  "desc": "在潁川郡替人寫狀紙、算帳目的讀書人。",
+  "starting_wugong": "shusheng_jian",
+  "starting_neigong": "yanghao_jue",
+  "hire_type": "mou",
+  "hire_at": "yingchuan"
+ },
+ {
+  "id": "hire_wan_city_dao_1",
+  "name": "張彥興",
+  "stats": {
+   "str": 8.0,
+   "agi": 5.0,
+   "con": 5.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.4,
+   "agi": 0.25,
+   "con": 0.25,
+   "wis": 0.15
+  },
+  "desc": "在宛城替商隊押過幾趟貨的刀客。",
+  "starting_wugong": "xingwu_dao",
+  "starting_neigong": "xingwu_lianqi",
+  "hire_type": "dao",
+  "hire_at": "wan_city"
+ },
+ {
+  "id": "hire_wan_city_dao_2",
+  "name": "于季明",
+  "stats": {
+   "str": 8.0,
+   "agi": 5.0,
+   "con": 5.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.4,
+   "agi": 0.25,
+   "con": 0.25,
+   "wis": 0.15
+  },
+  "desc": "在宛城替商隊押過幾趟貨的刀客。",
+  "starting_wugong": "xingwu_dao",
+  "starting_neigong": "xingwu_lianqi",
+  "hire_type": "dao",
+  "hire_at": "wan_city"
+ },
+ {
+  "id": "hire_wan_city_qiang_1",
+  "name": "龔承達",
+  "stats": {
+   "str": 6.0,
+   "agi": 4.0,
+   "con": 8.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.3,
+   "agi": 0.2,
+   "con": 0.4,
+   "wis": 0.15
+  },
+  "desc": "宛城的部曲散了以後，一桿槍到處找主人。",
+  "starting_wugong": "xingwu_qiang",
+  "starting_neigong": "wubao_zhuanggong",
+  "hire_type": "qiang",
+  "hire_at": "wan_city"
+ },
+ {
+  "id": "hire_wan_city_qiang_2",
+  "name": "謝宣恭",
+  "stats": {
+   "str": 6.0,
+   "agi": 4.0,
+   "con": 8.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.3,
+   "agi": 0.2,
+   "con": 0.4,
+   "wis": 0.15
+  },
+  "desc": "宛城的部曲散了以後，一桿槍到處找主人。",
+  "starting_wugong": "xingwu_qiang",
+  "starting_neigong": "wubao_zhuanggong",
+  "hire_type": "qiang",
+  "hire_at": "wan_city"
+ },
+ {
+  "id": "hire_wan_city_gong_1",
+  "name": "常子敬",
+  "stats": {
+   "str": 5.0,
+   "agi": 8.0,
+   "con": 3.0,
+   "wis": 4.0
+  },
+  "growth": {
+   "str": 0.25,
+   "agi": 0.4,
+   "con": 0.15,
+   "wis": 0.2
+  },
+  "desc": "宛城的獵戶，腳程快、眼力好。",
+  "starting_wugong": "qiangnu",
+  "starting_neigong": "xiaolin_gong",
+  "hire_type": "gong",
+  "hire_at": "wan_city"
+ },
+ {
+  "id": "hire_wan_city_gong_2",
+  "name": "孔宣勇",
+  "stats": {
+   "str": 5.0,
+   "agi": 8.0,
+   "con": 3.0,
+   "wis": 4.0
+  },
+  "growth": {
+   "str": 0.25,
+   "agi": 0.4,
+   "con": 0.15,
+   "wis": 0.2
+  },
+  "desc": "宛城的獵戶，腳程快、眼力好。",
+  "starting_wugong": "qiangnu",
+  "starting_neigong": "xiaolin_gong",
+  "hire_type": "gong",
+  "hire_at": "wan_city"
+ },
+ {
+  "id": "hire_wan_city_yi_1",
+  "name": "楊德昌",
+  "stats": {
+   "str": 2.0,
+   "agi": 4.0,
+   "con": 4.0,
+   "wis": 7.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.2,
+   "con": 0.2,
+   "wis": 0.35
+  },
+  "desc": "在宛城走街串巷替人看病的郎中。",
+  "starting_wugong": "yujia_quan",
+  "starting_neigong": "chanzuo_tiaoxi",
+  "hire_type": "yi",
+  "hire_at": "wan_city"
+ },
+ {
+  "id": "hire_wan_city_yi_2",
+  "name": "田仲恭",
+  "stats": {
+   "str": 2.0,
+   "agi": 4.0,
+   "con": 4.0,
+   "wis": 7.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.2,
+   "con": 0.2,
+   "wis": 0.35
+  },
+  "desc": "在宛城走街串巷替人看病的郎中。",
+  "starting_wugong": "yujia_quan",
+  "starting_neigong": "chanzuo_tiaoxi",
+  "hire_type": "yi",
+  "hire_at": "wan_city"
+ },
+ {
+  "id": "hire_wan_city_mou_1",
+  "name": "朱休和",
+  "stats": {
+   "str": 2.0,
+   "agi": 3.0,
+   "con": 5.0,
+   "wis": 8.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.15,
+   "con": 0.25,
+   "wis": 0.4
+  },
+  "desc": "在宛城替人寫狀紙、算帳目的讀書人。",
+  "starting_wugong": "shusheng_jian",
+  "starting_neigong": "yanghao_jue",
+  "hire_type": "mou",
+  "hire_at": "wan_city"
+ },
+ {
+  "id": "hire_wan_city_mou_2",
+  "name": "湯文明",
+  "stats": {
+   "str": 2.0,
+   "agi": 3.0,
+   "con": 5.0,
+   "wis": 8.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.15,
+   "con": 0.25,
+   "wis": 0.4
+  },
+  "desc": "宛城的落第書生，肚子裡有些兵書。",
+  "starting_wugong": "shusheng_jian",
+  "starting_neigong": "yanghao_jue",
+  "hire_type": "mou",
+  "hire_at": "wan_city"
+ },
+ {
+  "id": "hire_xinye_dao_1",
+  "name": "汪休遠",
+  "stats": {
+   "str": 8.0,
+   "agi": 5.0,
+   "con": 5.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.4,
+   "agi": 0.25,
+   "con": 0.25,
+   "wis": 0.15
+  },
+  "desc": "在新野替商隊押過幾趟貨的刀客。",
+  "starting_wugong": "xingwu_dao",
+  "starting_neigong": "xingwu_lianqi",
+  "hire_type": "dao",
+  "hire_at": "xinye"
+ },
+ {
+  "id": "hire_xinye_dao_2",
+  "name": "于文勇",
+  "stats": {
+   "str": 8.0,
+   "agi": 5.0,
+   "con": 5.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.4,
+   "agi": 0.25,
+   "con": 0.25,
+   "wis": 0.15
+  },
+  "desc": "新野一帶的鄉勇出身，一口刀使得紮實。",
+  "starting_wugong": "xingwu_dao",
+  "starting_neigong": "xingwu_lianqi",
+  "hire_type": "dao",
+  "hire_at": "xinye"
+ },
+ {
+  "id": "hire_xinye_qiang_1",
+  "name": "鄭伯忠",
+  "stats": {
+   "str": 6.0,
+   "agi": 4.0,
+   "con": 8.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.3,
+   "agi": 0.2,
+   "con": 0.4,
+   "wis": 0.15
+  },
+  "desc": "新野的部曲散了以後，一桿槍到處找主人。",
+  "starting_wugong": "xingwu_qiang",
+  "starting_neigong": "wubao_zhuanggong",
+  "hire_type": "qiang",
+  "hire_at": "xinye"
+ },
+ {
+  "id": "hire_xinye_qiang_2",
+  "name": "史茂興",
+  "stats": {
+   "str": 6.0,
+   "agi": 4.0,
+   "con": 8.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.3,
+   "agi": 0.2,
+   "con": 0.4,
+   "wis": 0.15
+  },
+  "desc": "在新野的塢堡守過幾年門的槍手。",
+  "starting_wugong": "xingwu_qiang",
+  "starting_neigong": "wubao_zhuanggong",
+  "hire_type": "qiang",
+  "hire_at": "xinye"
+ },
+ {
+  "id": "hire_xinye_gong_1",
+  "name": "蘇彥忠",
+  "stats": {
+   "str": 5.0,
+   "agi": 8.0,
+   "con": 3.0,
+   "wis": 4.0
+  },
+  "growth": {
+   "str": 0.25,
+   "agi": 0.4,
+   "con": 0.15,
+   "wis": 0.2
+  },
+  "desc": "新野的獵戶，腳程快、眼力好。",
+  "starting_wugong": "qiangnu",
+  "starting_neigong": "xiaolin_gong",
+  "hire_type": "gong",
+  "hire_at": "xinye"
+ },
+ {
+  "id": "hire_xinye_gong_2",
+  "name": "賀世信",
+  "stats": {
+   "str": 5.0,
+   "agi": 8.0,
+   "con": 3.0,
+   "wis": 4.0
+  },
+  "growth": {
+   "str": 0.25,
+   "agi": 0.4,
+   "con": 0.15,
+   "wis": 0.2
+  },
+  "desc": "新野的獵戶，腳程快、眼力好。",
+  "starting_wugong": "qiangnu",
+  "starting_neigong": "xiaolin_gong",
+  "hire_type": "gong",
+  "hire_at": "xinye"
+ },
+ {
+  "id": "hire_xinye_yi_1",
+  "name": "王彥昌",
+  "stats": {
+   "str": 2.0,
+   "agi": 4.0,
+   "con": 4.0,
+   "wis": 7.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.2,
+   "con": 0.2,
+   "wis": 0.35
+  },
+  "desc": "新野藥鋪的學徒，懂一點接骨止血。",
+  "starting_wugong": "yujia_quan",
+  "starting_neigong": "chanzuo_tiaoxi",
+  "hire_type": "yi",
+  "hire_at": "xinye"
+ },
+ {
+  "id": "hire_xinye_yi_2",
+  "name": "蔣承成",
+  "stats": {
+   "str": 2.0,
+   "agi": 4.0,
+   "con": 4.0,
+   "wis": 7.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.2,
+   "con": 0.2,
+   "wis": 0.35
+  },
+  "desc": "新野藥鋪的學徒，懂一點接骨止血。",
+  "starting_wugong": "yujia_quan",
+  "starting_neigong": "chanzuo_tiaoxi",
+  "hire_type": "yi",
+  "hire_at": "xinye"
+ },
+ {
+  "id": "hire_xinye_mou_1",
+  "name": "喬仲達",
+  "stats": {
+   "str": 2.0,
+   "agi": 3.0,
+   "con": 5.0,
+   "wis": 8.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.15,
+   "con": 0.25,
+   "wis": 0.4
+  },
+  "desc": "在新野替人寫狀紙、算帳目的讀書人。",
+  "starting_wugong": "shusheng_jian",
+  "starting_neigong": "yanghao_jue",
+  "hire_type": "mou",
+  "hire_at": "xinye"
+ },
+ {
+  "id": "hire_xinye_mou_2",
+  "name": "賴德遠",
+  "stats": {
+   "str": 2.0,
+   "agi": 3.0,
+   "con": 5.0,
+   "wis": 8.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.15,
+   "con": 0.25,
+   "wis": 0.4
+  },
+  "desc": "在新野替人寫狀紙、算帳目的讀書人。",
+  "starting_wugong": "shusheng_jian",
+  "starting_neigong": "yanghao_jue",
+  "hire_type": "mou",
+  "hire_at": "xinye"
+ },
+ {
+  "id": "hire_runan_dao_1",
+  "name": "姜德勇",
+  "stats": {
+   "str": 8.0,
+   "agi": 5.0,
+   "con": 5.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.4,
+   "agi": 0.25,
+   "con": 0.25,
+   "wis": 0.15
+  },
+  "desc": "在汝南替商隊押過幾趟貨的刀客。",
+  "starting_wugong": "xingwu_dao",
+  "starting_neigong": "xingwu_lianqi",
+  "hire_type": "dao",
+  "hire_at": "runan"
+ },
+ {
+  "id": "hire_runan_dao_2",
+  "name": "金彥成",
+  "stats": {
+   "str": 8.0,
+   "agi": 5.0,
+   "con": 5.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.4,
+   "agi": 0.25,
+   "con": 0.25,
+   "wis": 0.15
+  },
+  "desc": "汝南一帶的鄉勇出身，一口刀使得紮實。",
+  "starting_wugong": "xingwu_dao",
+  "starting_neigong": "xingwu_lianqi",
+  "hire_type": "dao",
+  "hire_at": "runan"
+ },
+ {
+  "id": "hire_runan_qiang_1",
+  "name": "郝士明",
+  "stats": {
+   "str": 6.0,
+   "agi": 4.0,
+   "con": 8.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.3,
+   "agi": 0.2,
+   "con": 0.4,
+   "wis": 0.15
+  },
+  "desc": "在汝南的塢堡守過幾年門的槍手。",
+  "starting_wugong": "xingwu_qiang",
+  "starting_neigong": "wubao_zhuanggong",
+  "hire_type": "qiang",
+  "hire_at": "runan"
+ },
+ {
+  "id": "hire_runan_qiang_2",
+  "name": "陸元興",
+  "stats": {
+   "str": 6.0,
+   "agi": 4.0,
+   "con": 8.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.3,
+   "agi": 0.2,
+   "con": 0.4,
+   "wis": 0.15
+  },
+  "desc": "汝南的部曲散了以後，一桿槍到處找主人。",
+  "starting_wugong": "xingwu_qiang",
+  "starting_neigong": "wubao_zhuanggong",
+  "hire_type": "qiang",
+  "hire_at": "runan"
+ },
+ {
+  "id": "hire_runan_gong_1",
+  "name": "蘇世方",
+  "stats": {
+   "str": 5.0,
+   "agi": 8.0,
+   "con": 3.0,
+   "wis": 4.0
+  },
+  "growth": {
+   "str": 0.25,
+   "agi": 0.4,
+   "con": 0.15,
+   "wis": 0.2
+  },
+  "desc": "在汝南山裡打獵為生，箭不虛發。",
+  "starting_wugong": "qiangnu",
+  "starting_neigong": "xiaolin_gong",
+  "hire_type": "gong",
+  "hire_at": "runan"
+ },
+ {
+  "id": "hire_runan_gong_2",
+  "name": "顧義忠",
+  "stats": {
+   "str": 5.0,
+   "agi": 8.0,
+   "con": 3.0,
+   "wis": 4.0
+  },
+  "growth": {
+   "str": 0.25,
+   "agi": 0.4,
+   "con": 0.15,
+   "wis": 0.2
+  },
+  "desc": "汝南的獵戶，腳程快、眼力好。",
+  "starting_wugong": "qiangnu",
+  "starting_neigong": "xiaolin_gong",
+  "hire_type": "gong",
+  "hire_at": "runan"
+ },
+ {
+  "id": "hire_runan_yi_1",
+  "name": "杜公敬",
+  "stats": {
+   "str": 2.0,
+   "agi": 4.0,
+   "con": 4.0,
+   "wis": 7.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.2,
+   "con": 0.2,
+   "wis": 0.35
+  },
+  "desc": "在汝南走街串巷替人看病的郎中。",
+  "starting_wugong": "yujia_quan",
+  "starting_neigong": "chanzuo_tiaoxi",
+  "hire_type": "yi",
+  "hire_at": "runan"
+ },
+ {
+  "id": "hire_runan_yi_2",
+  "name": "孟義良",
+  "stats": {
+   "str": 2.0,
+   "agi": 4.0,
+   "con": 4.0,
+   "wis": 7.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.2,
+   "con": 0.2,
+   "wis": 0.35
+  },
+  "desc": "在汝南走街串巷替人看病的郎中。",
+  "starting_wugong": "yujia_quan",
+  "starting_neigong": "chanzuo_tiaoxi",
+  "hire_type": "yi",
+  "hire_at": "runan"
+ },
+ {
+  "id": "hire_runan_mou_1",
+  "name": "孔元成",
+  "stats": {
+   "str": 2.0,
+   "agi": 3.0,
+   "con": 5.0,
+   "wis": 8.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.15,
+   "con": 0.25,
+   "wis": 0.4
+  },
+  "desc": "汝南的落第書生，肚子裡有些兵書。",
+  "starting_wugong": "shusheng_jian",
+  "starting_neigong": "yanghao_jue",
+  "hire_type": "mou",
+  "hire_at": "runan"
+ },
+ {
+  "id": "hire_runan_mou_2",
+  "name": "李子遠",
+  "stats": {
+   "str": 2.0,
+   "agi": 3.0,
+   "con": 5.0,
+   "wis": 8.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.15,
+   "con": 0.25,
+   "wis": 0.4
+  },
+  "desc": "汝南的落第書生，肚子裡有些兵書。",
+  "starting_wugong": "shusheng_jian",
+  "starting_neigong": "yanghao_jue",
+  "hire_type": "mou",
+  "hire_at": "runan"
+ },
+ {
+  "id": "hire_runan_market_dao_1",
+  "name": "萬長信",
+  "stats": {
+   "str": 8.0,
+   "agi": 5.0,
+   "con": 5.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.4,
+   "agi": 0.25,
+   "con": 0.25,
+   "wis": 0.15
+  },
+  "desc": "在汝南集市替商隊押過幾趟貨的刀客。",
+  "starting_wugong": "xingwu_dao",
+  "starting_neigong": "xingwu_lianqi",
+  "hire_type": "dao",
+  "hire_at": "runan_market"
+ },
+ {
+  "id": "hire_runan_market_dao_2",
+  "name": "黎文興",
+  "stats": {
+   "str": 8.0,
+   "agi": 5.0,
+   "con": 5.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.4,
+   "agi": 0.25,
+   "con": 0.25,
+   "wis": 0.15
+  },
+  "desc": "在汝南集市替商隊押過幾趟貨的刀客。",
+  "starting_wugong": "xingwu_dao",
+  "starting_neigong": "xingwu_lianqi",
+  "hire_type": "dao",
+  "hire_at": "runan_market"
+ },
+ {
+  "id": "hire_runan_market_qiang_1",
+  "name": "杜彥敬",
+  "stats": {
+   "str": 6.0,
+   "agi": 4.0,
+   "con": 8.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.3,
+   "agi": 0.2,
+   "con": 0.4,
+   "wis": 0.15
+  },
+  "desc": "汝南集市的部曲散了以後，一桿槍到處找主人。",
+  "starting_wugong": "xingwu_qiang",
+  "starting_neigong": "wubao_zhuanggong",
+  "hire_type": "qiang",
+  "hire_at": "runan_market"
+ },
+ {
+  "id": "hire_runan_market_qiang_2",
+  "name": "汪元正",
+  "stats": {
+   "str": 6.0,
+   "agi": 4.0,
+   "con": 8.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.3,
+   "agi": 0.2,
+   "con": 0.4,
+   "wis": 0.15
+  },
+  "desc": "汝南集市的部曲散了以後，一桿槍到處找主人。",
+  "starting_wugong": "xingwu_qiang",
+  "starting_neigong": "wubao_zhuanggong",
+  "hire_type": "qiang",
+  "hire_at": "runan_market"
+ },
+ {
+  "id": "hire_runan_market_gong_1",
+  "name": "劉茂平",
+  "stats": {
+   "str": 5.0,
+   "agi": 8.0,
+   "con": 3.0,
+   "wis": 4.0
+  },
+  "growth": {
+   "str": 0.25,
+   "agi": 0.4,
+   "con": 0.15,
+   "wis": 0.2
+  },
+  "desc": "在汝南集市山裡打獵為生，箭不虛發。",
+  "starting_wugong": "qiangnu",
+  "starting_neigong": "xiaolin_gong",
+  "hire_type": "gong",
+  "hire_at": "runan_market"
+ },
+ {
+  "id": "hire_runan_market_gong_2",
+  "name": "夏宣正",
+  "stats": {
+   "str": 5.0,
+   "agi": 8.0,
+   "con": 3.0,
+   "wis": 4.0
+  },
+  "growth": {
+   "str": 0.25,
+   "agi": 0.4,
+   "con": 0.15,
+   "wis": 0.2
+  },
+  "desc": "在汝南集市山裡打獵為生，箭不虛發。",
+  "starting_wugong": "qiangnu",
+  "starting_neigong": "xiaolin_gong",
+  "hire_type": "gong",
+  "hire_at": "runan_market"
+ },
+ {
+  "id": "hire_runan_market_yi_1",
+  "name": "任元勇",
+  "stats": {
+   "str": 2.0,
+   "agi": 4.0,
+   "con": 4.0,
+   "wis": 7.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.2,
+   "con": 0.2,
+   "wis": 0.35
+  },
+  "desc": "汝南集市藥鋪的學徒，懂一點接骨止血。",
+  "starting_wugong": "yujia_quan",
+  "starting_neigong": "chanzuo_tiaoxi",
+  "hire_type": "yi",
+  "hire_at": "runan_market"
+ },
+ {
+  "id": "hire_runan_market_yi_2",
+  "name": "鍾宣通",
+  "stats": {
+   "str": 2.0,
+   "agi": 4.0,
+   "con": 4.0,
+   "wis": 7.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.2,
+   "con": 0.2,
+   "wis": 0.35
+  },
+  "desc": "在汝南集市走街串巷替人看病的郎中。",
+  "starting_wugong": "yujia_quan",
+  "starting_neigong": "chanzuo_tiaoxi",
+  "hire_type": "yi",
+  "hire_at": "runan_market"
+ },
+ {
+  "id": "hire_runan_market_mou_1",
+  "name": "史叔安",
+  "stats": {
+   "str": 2.0,
+   "agi": 3.0,
+   "con": 5.0,
+   "wis": 8.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.15,
+   "con": 0.25,
+   "wis": 0.4
+  },
+  "desc": "在汝南集市替人寫狀紙、算帳目的讀書人。",
+  "starting_wugong": "shusheng_jian",
+  "starting_neigong": "yanghao_jue",
+  "hire_type": "mou",
+  "hire_at": "runan_market"
+ },
+ {
+  "id": "hire_runan_market_mou_2",
+  "name": "任德平",
+  "stats": {
+   "str": 2.0,
+   "agi": 3.0,
+   "con": 5.0,
+   "wis": 8.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.15,
+   "con": 0.25,
+   "wis": 0.4
+  },
+  "desc": "在汝南集市替人寫狀紙、算帳目的讀書人。",
+  "starting_wugong": "shusheng_jian",
+  "starting_neigong": "yanghao_jue",
+  "hire_type": "mou",
+  "hire_at": "runan_market"
+ },
+ {
+  "id": "hire_qiao_county_dao_1",
+  "name": "錢茂達",
+  "stats": {
+   "str": 8.0,
+   "agi": 5.0,
+   "con": 5.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.4,
+   "agi": 0.25,
+   "con": 0.25,
+   "wis": 0.15
+  },
+  "desc": "譙縣一帶的鄉勇出身，一口刀使得紮實。",
+  "starting_wugong": "xingwu_dao",
+  "starting_neigong": "xingwu_lianqi",
+  "hire_type": "dao",
+  "hire_at": "qiao_county"
+ },
+ {
+  "id": "hire_qiao_county_dao_2",
+  "name": "蕭伯明",
+  "stats": {
+   "str": 8.0,
+   "agi": 5.0,
+   "con": 5.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.4,
+   "agi": 0.25,
+   "con": 0.25,
+   "wis": 0.15
+  },
+  "desc": "在譙縣替商隊押過幾趟貨的刀客。",
+  "starting_wugong": "xingwu_dao",
+  "starting_neigong": "xingwu_lianqi",
+  "hire_type": "dao",
+  "hire_at": "qiao_county"
+ },
+ {
+  "id": "hire_qiao_county_qiang_1",
+  "name": "常世昌",
+  "stats": {
+   "str": 6.0,
+   "agi": 4.0,
+   "con": 8.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.3,
+   "agi": 0.2,
+   "con": 0.4,
+   "wis": 0.15
+  },
+  "desc": "譙縣的部曲散了以後，一桿槍到處找主人。",
+  "starting_wugong": "xingwu_qiang",
+  "starting_neigong": "wubao_zhuanggong",
+  "hire_type": "qiang",
+  "hire_at": "qiao_county"
+ },
+ {
+  "id": "hire_qiao_county_qiang_2",
+  "name": "段文忠",
+  "stats": {
+   "str": 6.0,
+   "agi": 4.0,
+   "con": 8.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.3,
+   "agi": 0.2,
+   "con": 0.4,
+   "wis": 0.15
+  },
+  "desc": "在譙縣的塢堡守過幾年門的槍手。",
+  "starting_wugong": "xingwu_qiang",
+  "starting_neigong": "wubao_zhuanggong",
+  "hire_type": "qiang",
+  "hire_at": "qiao_county"
+ },
+ {
+  "id": "hire_qiao_county_gong_1",
+  "name": "郝孝信",
+  "stats": {
+   "str": 5.0,
+   "agi": 8.0,
+   "con": 3.0,
+   "wis": 4.0
+  },
+  "growth": {
+   "str": 0.25,
+   "agi": 0.4,
+   "con": 0.15,
+   "wis": 0.2
+  },
+  "desc": "譙縣的獵戶，腳程快、眼力好。",
+  "starting_wugong": "qiangnu",
+  "starting_neigong": "xiaolin_gong",
+  "hire_type": "gong",
+  "hire_at": "qiao_county"
+ },
+ {
+  "id": "hire_qiao_county_gong_2",
+  "name": "方宣達",
+  "stats": {
+   "str": 5.0,
+   "agi": 8.0,
+   "con": 3.0,
+   "wis": 4.0
+  },
+  "growth": {
+   "str": 0.25,
+   "agi": 0.4,
+   "con": 0.15,
+   "wis": 0.2
+  },
+  "desc": "在譙縣山裡打獵為生，箭不虛發。",
+  "starting_wugong": "qiangnu",
+  "starting_neigong": "xiaolin_gong",
+  "hire_type": "gong",
+  "hire_at": "qiao_county"
+ },
+ {
+  "id": "hire_qiao_county_yi_1",
+  "name": "廖景達",
+  "stats": {
+   "str": 2.0,
+   "agi": 4.0,
+   "con": 4.0,
+   "wis": 7.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.2,
+   "con": 0.2,
+   "wis": 0.35
+  },
+  "desc": "譙縣藥鋪的學徒，懂一點接骨止血。",
+  "starting_wugong": "yujia_quan",
+  "starting_neigong": "chanzuo_tiaoxi",
+  "hire_type": "yi",
+  "hire_at": "qiao_county"
+ },
+ {
+  "id": "hire_qiao_county_yi_2",
+  "name": "潘承山",
+  "stats": {
+   "str": 2.0,
+   "agi": 4.0,
+   "con": 4.0,
+   "wis": 7.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.2,
+   "con": 0.2,
+   "wis": 0.35
+  },
+  "desc": "在譙縣走街串巷替人看病的郎中。",
+  "starting_wugong": "yujia_quan",
+  "starting_neigong": "chanzuo_tiaoxi",
+  "hire_type": "yi",
+  "hire_at": "qiao_county"
+ },
+ {
+  "id": "hire_qiao_county_mou_1",
+  "name": "姚休信",
+  "stats": {
+   "str": 2.0,
+   "agi": 3.0,
+   "con": 5.0,
+   "wis": 8.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.15,
+   "con": 0.25,
+   "wis": 0.4
+  },
+  "desc": "譙縣的落第書生，肚子裡有些兵書。",
+  "starting_wugong": "shusheng_jian",
+  "starting_neigong": "yanghao_jue",
+  "hire_type": "mou",
+  "hire_at": "qiao_county"
+ },
+ {
+  "id": "hire_qiao_county_mou_2",
+  "name": "何文安",
+  "stats": {
+   "str": 2.0,
+   "agi": 3.0,
+   "con": 5.0,
+   "wis": 8.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.15,
+   "con": 0.25,
+   "wis": 0.4
+  },
+  "desc": "在譙縣替人寫狀紙、算帳目的讀書人。",
+  "starting_wugong": "shusheng_jian",
+  "starting_neigong": "yanghao_jue",
+  "hire_type": "mou",
+  "hire_at": "qiao_county"
+ },
+ {
+  "id": "hire_zhuo_county_dao_1",
+  "name": "邱文安",
+  "stats": {
+   "str": 8.0,
+   "agi": 5.0,
+   "con": 5.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.4,
+   "agi": 0.25,
+   "con": 0.25,
+   "wis": 0.15
+  },
+  "desc": "涿郡一帶的鄉勇出身，一口刀使得紮實。",
+  "starting_wugong": "xingwu_dao",
+  "starting_neigong": "xingwu_lianqi",
+  "hire_type": "dao",
+  "hire_at": "zhuo_county"
+ },
+ {
+  "id": "hire_zhuo_county_dao_2",
+  "name": "吳季方",
+  "stats": {
+   "str": 8.0,
+   "agi": 5.0,
+   "con": 5.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.4,
+   "agi": 0.25,
+   "con": 0.25,
+   "wis": 0.15
+  },
+  "desc": "涿郡一帶的鄉勇出身，一口刀使得紮實。",
+  "starting_wugong": "xingwu_dao",
+  "starting_neigong": "xingwu_lianqi",
+  "hire_type": "dao",
+  "hire_at": "zhuo_county"
+ },
+ {
+  "id": "hire_zhuo_county_qiang_1",
+  "name": "蕭元昌",
+  "stats": {
+   "str": 6.0,
+   "agi": 4.0,
+   "con": 8.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.3,
+   "agi": 0.2,
+   "con": 0.4,
+   "wis": 0.15
+  },
+  "desc": "涿郡的部曲散了以後，一桿槍到處找主人。",
+  "starting_wugong": "xingwu_qiang",
+  "starting_neigong": "wubao_zhuanggong",
+  "hire_type": "qiang",
+  "hire_at": "zhuo_county"
+ },
+ {
+  "id": "hire_zhuo_county_qiang_2",
+  "name": "邱休成",
+  "stats": {
+   "str": 6.0,
+   "agi": 4.0,
+   "con": 8.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.3,
+   "agi": 0.2,
+   "con": 0.4,
+   "wis": 0.15
+  },
+  "desc": "涿郡的部曲散了以後，一桿槍到處找主人。",
+  "starting_wugong": "xingwu_qiang",
+  "starting_neigong": "wubao_zhuanggong",
+  "hire_type": "qiang",
+  "hire_at": "zhuo_county"
+ },
+ {
+  "id": "hire_zhuo_county_gong_1",
+  "name": "蔣孝勇",
+  "stats": {
+   "str": 5.0,
+   "agi": 8.0,
+   "con": 3.0,
+   "wis": 4.0
+  },
+  "growth": {
+   "str": 0.25,
+   "agi": 0.4,
+   "con": 0.15,
+   "wis": 0.2
+  },
+  "desc": "在涿郡山裡打獵為生，箭不虛發。",
+  "starting_wugong": "qiangnu",
+  "starting_neigong": "xiaolin_gong",
+  "hire_type": "gong",
+  "hire_at": "zhuo_county"
+ },
+ {
+  "id": "hire_zhuo_county_gong_2",
+  "name": "譚季勇",
+  "stats": {
+   "str": 5.0,
+   "agi": 8.0,
+   "con": 3.0,
+   "wis": 4.0
+  },
+  "growth": {
+   "str": 0.25,
+   "agi": 0.4,
+   "con": 0.15,
+   "wis": 0.2
+  },
+  "desc": "在涿郡山裡打獵為生，箭不虛發。",
+  "starting_wugong": "qiangnu",
+  "starting_neigong": "xiaolin_gong",
+  "hire_type": "gong",
+  "hire_at": "zhuo_county"
+ },
+ {
+  "id": "hire_zhuo_county_yi_1",
+  "name": "唐景信",
+  "stats": {
+   "str": 2.0,
+   "agi": 4.0,
+   "con": 4.0,
+   "wis": 7.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.2,
+   "con": 0.2,
+   "wis": 0.35
+  },
+  "desc": "在涿郡走街串巷替人看病的郎中。",
+  "starting_wugong": "yujia_quan",
+  "starting_neigong": "chanzuo_tiaoxi",
+  "hire_type": "yi",
+  "hire_at": "zhuo_county"
+ },
+ {
+  "id": "hire_zhuo_county_yi_2",
+  "name": "盧彥良",
+  "stats": {
+   "str": 2.0,
+   "agi": 4.0,
+   "con": 4.0,
+   "wis": 7.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.2,
+   "con": 0.2,
+   "wis": 0.35
+  },
+  "desc": "涿郡藥鋪的學徒，懂一點接骨止血。",
+  "starting_wugong": "yujia_quan",
+  "starting_neigong": "chanzuo_tiaoxi",
+  "hire_type": "yi",
+  "hire_at": "zhuo_county"
+ },
+ {
+  "id": "hire_zhuo_county_mou_1",
+  "name": "林義昌",
+  "stats": {
+   "str": 2.0,
+   "agi": 3.0,
+   "con": 5.0,
+   "wis": 8.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.15,
+   "con": 0.25,
+   "wis": 0.4
+  },
+  "desc": "在涿郡替人寫狀紙、算帳目的讀書人。",
+  "starting_wugong": "shusheng_jian",
+  "starting_neigong": "yanghao_jue",
+  "hire_type": "mou",
+  "hire_at": "zhuo_county"
+ },
+ {
+  "id": "hire_zhuo_county_mou_2",
+  "name": "范世通",
+  "stats": {
+   "str": 2.0,
+   "agi": 3.0,
+   "con": 5.0,
+   "wis": 8.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.15,
+   "con": 0.25,
+   "wis": 0.4
+  },
+  "desc": "涿郡的落第書生，肚子裡有些兵書。",
+  "starting_wugong": "shusheng_jian",
+  "starting_neigong": "yanghao_jue",
+  "hire_type": "mou",
+  "hire_at": "zhuo_county"
+ },
+ {
+  "id": "hire_market_town_dao_1",
+  "name": "潘伯安",
+  "stats": {
+   "str": 8.0,
+   "agi": 5.0,
+   "con": 5.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.4,
+   "agi": 0.25,
+   "con": 0.25,
+   "wis": 0.15
+  },
+  "desc": "集市小鎮一帶的鄉勇出身，一口刀使得紮實。",
+  "starting_wugong": "xingwu_dao",
+  "starting_neigong": "xingwu_lianqi",
+  "hire_type": "dao",
+  "hire_at": "market_town"
+ },
+ {
+  "id": "hire_market_town_dao_2",
+  "name": "葉世興",
+  "stats": {
+   "str": 8.0,
+   "agi": 5.0,
+   "con": 5.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.4,
+   "agi": 0.25,
+   "con": 0.25,
+   "wis": 0.15
+  },
+  "desc": "在集市小鎮替商隊押過幾趟貨的刀客。",
+  "starting_wugong": "xingwu_dao",
+  "starting_neigong": "xingwu_lianqi",
+  "hire_type": "dao",
+  "hire_at": "market_town"
+ },
+ {
+  "id": "hire_market_town_qiang_1",
+  "name": "江仲信",
+  "stats": {
+   "str": 6.0,
+   "agi": 4.0,
+   "con": 8.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.3,
+   "agi": 0.2,
+   "con": 0.4,
+   "wis": 0.15
+  },
+  "desc": "集市小鎮的部曲散了以後，一桿槍到處找主人。",
+  "starting_wugong": "xingwu_qiang",
+  "starting_neigong": "wubao_zhuanggong",
+  "hire_type": "qiang",
+  "hire_at": "market_town"
+ },
+ {
+  "id": "hire_market_town_qiang_2",
+  "name": "唐公正",
+  "stats": {
+   "str": 6.0,
+   "agi": 4.0,
+   "con": 8.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.3,
+   "agi": 0.2,
+   "con": 0.4,
+   "wis": 0.15
+  },
+  "desc": "集市小鎮的部曲散了以後，一桿槍到處找主人。",
+  "starting_wugong": "xingwu_qiang",
+  "starting_neigong": "wubao_zhuanggong",
+  "hire_type": "qiang",
+  "hire_at": "market_town"
+ },
+ {
+  "id": "hire_market_town_gong_1",
+  "name": "錢士忠",
+  "stats": {
+   "str": 5.0,
+   "agi": 8.0,
+   "con": 3.0,
+   "wis": 4.0
+  },
+  "growth": {
+   "str": 0.25,
+   "agi": 0.4,
+   "con": 0.15,
+   "wis": 0.2
+  },
+  "desc": "在集市小鎮山裡打獵為生，箭不虛發。",
+  "starting_wugong": "qiangnu",
+  "starting_neigong": "xiaolin_gong",
+  "hire_type": "gong",
+  "hire_at": "market_town"
+ },
+ {
+  "id": "hire_market_town_gong_2",
+  "name": "程義正",
+  "stats": {
+   "str": 5.0,
+   "agi": 8.0,
+   "con": 3.0,
+   "wis": 4.0
+  },
+  "growth": {
+   "str": 0.25,
+   "agi": 0.4,
+   "con": 0.15,
+   "wis": 0.2
+  },
+  "desc": "集市小鎮的獵戶，腳程快、眼力好。",
+  "starting_wugong": "qiangnu",
+  "starting_neigong": "xiaolin_gong",
+  "hire_type": "gong",
+  "hire_at": "market_town"
+ },
+ {
+  "id": "hire_market_town_yi_1",
+  "name": "杜季敬",
+  "stats": {
+   "str": 2.0,
+   "agi": 4.0,
+   "con": 4.0,
+   "wis": 7.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.2,
+   "con": 0.2,
+   "wis": 0.35
+  },
+  "desc": "在集市小鎮走街串巷替人看病的郎中。",
+  "starting_wugong": "yujia_quan",
+  "starting_neigong": "chanzuo_tiaoxi",
+  "hire_type": "yi",
+  "hire_at": "market_town"
+ },
+ {
+  "id": "hire_market_town_yi_2",
+  "name": "賴孝誠",
+  "stats": {
+   "str": 2.0,
+   "agi": 4.0,
+   "con": 4.0,
+   "wis": 7.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.2,
+   "con": 0.2,
+   "wis": 0.35
+  },
+  "desc": "在集市小鎮走街串巷替人看病的郎中。",
+  "starting_wugong": "yujia_quan",
+  "starting_neigong": "chanzuo_tiaoxi",
+  "hire_type": "yi",
+  "hire_at": "market_town"
+ },
+ {
+  "id": "hire_market_town_mou_1",
+  "name": "廖士興",
+  "stats": {
+   "str": 2.0,
+   "agi": 3.0,
+   "con": 5.0,
+   "wis": 8.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.15,
+   "con": 0.25,
+   "wis": 0.4
+  },
+  "desc": "集市小鎮的落第書生，肚子裡有些兵書。",
+  "starting_wugong": "shusheng_jian",
+  "starting_neigong": "yanghao_jue",
+  "hire_type": "mou",
+  "hire_at": "market_town"
+ },
+ {
+  "id": "hire_market_town_mou_2",
+  "name": "蕭文通",
+  "stats": {
+   "str": 2.0,
+   "agi": 3.0,
+   "con": 5.0,
+   "wis": 8.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.15,
+   "con": 0.25,
+   "wis": 0.4
+  },
+  "desc": "在集市小鎮替人寫狀紙、算帳目的讀書人。",
+  "starting_wugong": "shusheng_jian",
+  "starting_neigong": "yanghao_jue",
+  "hire_type": "mou",
+  "hire_at": "market_town"
+ },
+ {
+  "id": "hire_xiaquyang_dao_1",
+  "name": "潘世和",
+  "stats": {
+   "str": 8.0,
+   "agi": 5.0,
+   "con": 5.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.4,
+   "agi": 0.25,
+   "con": 0.25,
+   "wis": 0.15
+  },
+  "desc": "在下曲陽替商隊押過幾趟貨的刀客。",
+  "starting_wugong": "xingwu_dao",
+  "starting_neigong": "xingwu_lianqi",
+  "hire_type": "dao",
+  "hire_at": "xiaquyang"
+ },
+ {
+  "id": "hire_xiaquyang_dao_2",
+  "name": "譚季遠",
+  "stats": {
+   "str": 8.0,
+   "agi": 5.0,
+   "con": 5.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.4,
+   "agi": 0.25,
+   "con": 0.25,
+   "wis": 0.15
+  },
+  "desc": "下曲陽一帶的鄉勇出身，一口刀使得紮實。",
+  "starting_wugong": "xingwu_dao",
+  "starting_neigong": "xingwu_lianqi",
+  "hire_type": "dao",
+  "hire_at": "xiaquyang"
+ },
+ {
+  "id": "hire_xiaquyang_qiang_1",
+  "name": "史承成",
+  "stats": {
+   "str": 6.0,
+   "agi": 4.0,
+   "con": 8.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.3,
+   "agi": 0.2,
+   "con": 0.4,
+   "wis": 0.15
+  },
+  "desc": "下曲陽的部曲散了以後，一桿槍到處找主人。",
+  "starting_wugong": "xingwu_qiang",
+  "starting_neigong": "wubao_zhuanggong",
+  "hire_type": "qiang",
+  "hire_at": "xiaquyang"
+ },
+ {
+  "id": "hire_xiaquyang_qiang_2",
+  "name": "雷文興",
+  "stats": {
+   "str": 6.0,
+   "agi": 4.0,
+   "con": 8.0,
+   "wis": 3.0
+  },
+  "growth": {
+   "str": 0.3,
+   "agi": 0.2,
+   "con": 0.4,
+   "wis": 0.15
+  },
+  "desc": "下曲陽的部曲散了以後，一桿槍到處找主人。",
+  "starting_wugong": "xingwu_qiang",
+  "starting_neigong": "wubao_zhuanggong",
+  "hire_type": "qiang",
+  "hire_at": "xiaquyang"
+ },
+ {
+  "id": "hire_xiaquyang_gong_1",
+  "name": "郝孝成",
+  "stats": {
+   "str": 5.0,
+   "agi": 8.0,
+   "con": 3.0,
+   "wis": 4.0
+  },
+  "growth": {
+   "str": 0.25,
+   "agi": 0.4,
+   "con": 0.15,
+   "wis": 0.2
+  },
+  "desc": "在下曲陽山裡打獵為生，箭不虛發。",
+  "starting_wugong": "qiangnu",
+  "starting_neigong": "xiaolin_gong",
+  "hire_type": "gong",
+  "hire_at": "xiaquyang"
+ },
+ {
+  "id": "hire_xiaquyang_gong_2",
+  "name": "汪公通",
+  "stats": {
+   "str": 5.0,
+   "agi": 8.0,
+   "con": 3.0,
+   "wis": 4.0
+  },
+  "growth": {
+   "str": 0.25,
+   "agi": 0.4,
+   "con": 0.15,
+   "wis": 0.2
+  },
+  "desc": "在下曲陽山裡打獵為生，箭不虛發。",
+  "starting_wugong": "qiangnu",
+  "starting_neigong": "xiaolin_gong",
+  "hire_type": "gong",
+  "hire_at": "xiaquyang"
+ },
+ {
+  "id": "hire_xiaquyang_yi_1",
+  "name": "廖公正",
+  "stats": {
+   "str": 2.0,
+   "agi": 4.0,
+   "con": 4.0,
+   "wis": 7.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.2,
+   "con": 0.2,
+   "wis": 0.35
+  },
+  "desc": "在下曲陽走街串巷替人看病的郎中。",
+  "starting_wugong": "yujia_quan",
+  "starting_neigong": "chanzuo_tiaoxi",
+  "hire_type": "yi",
+  "hire_at": "xiaquyang"
+ },
+ {
+  "id": "hire_xiaquyang_yi_2",
+  "name": "高仲平",
+  "stats": {
+   "str": 2.0,
+   "agi": 4.0,
+   "con": 4.0,
+   "wis": 7.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.2,
+   "con": 0.2,
+   "wis": 0.35
+  },
+  "desc": "在下曲陽走街串巷替人看病的郎中。",
+  "starting_wugong": "yujia_quan",
+  "starting_neigong": "chanzuo_tiaoxi",
+  "hire_type": "yi",
+  "hire_at": "xiaquyang"
+ },
+ {
+  "id": "hire_xiaquyang_mou_1",
+  "name": "鍾仲正",
+  "stats": {
+   "str": 2.0,
+   "agi": 3.0,
+   "con": 5.0,
+   "wis": 8.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.15,
+   "con": 0.25,
+   "wis": 0.4
+  },
+  "desc": "在下曲陽替人寫狀紙、算帳目的讀書人。",
+  "starting_wugong": "shusheng_jian",
+  "starting_neigong": "yanghao_jue",
+  "hire_type": "mou",
+  "hire_at": "xiaquyang"
+ },
+ {
+  "id": "hire_xiaquyang_mou_2",
+  "name": "梁士敬",
+  "stats": {
+   "str": 2.0,
+   "agi": 3.0,
+   "con": 5.0,
+   "wis": 8.0
+  },
+  "growth": {
+   "str": 0.1,
+   "agi": 0.15,
+   "con": 0.25,
+   "wis": 0.4
+  },
+  "desc": "下曲陽的落第書生，肚子裡有些兵書。",
+  "starting_wugong": "shusheng_jian",
+  "starting_neigong": "yanghao_jue",
+  "hire_type": "mou",
+  "hire_at": "xiaquyang"
+ }
+]

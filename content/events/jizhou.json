@@ -401,7 +401,7 @@
       {
         "text": "跟守門的頭目說情",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "normal", "shift": 1
         },
         "effect": {

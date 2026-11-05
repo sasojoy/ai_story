@@ -196,7 +196,7 @@
       {
         "text": "進縣衙替百姓說話",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "normal"
         },
         "effect": {

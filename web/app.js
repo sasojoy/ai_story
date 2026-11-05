@@ -455,6 +455,7 @@
       try { history.replaceState(null, "", "/"); } catch (e) { /* 換不了網址也照常畫江湖 */ }
     }
     if (S.tab !== "jianghu" && !shown(`tab:${S.tab}`)) S.tab = "jianghu"; // 序章重來（換季）：藏起來的分頁不能還停在那一頁
+    legacyOfferOpen();
     S.prologueKey = prologueKey();
     const top = topHtml();
     $app.innerHTML = `
@@ -862,7 +863,7 @@
       <path d="M0 104 C40 94 70 112 110 102 S190 92 230 104 S310 112 350 100 L350 150 L0 150 Z" fill="#12263a"/><path d="M0 122 C50 112 90 130 140 120 S240 110 290 124 S340 126 350 120 L350 150 L0 150 Z" fill="#183450"/>
       ${sealed ? '<circle cx="280" cy="64" r="44" fill="url(#lg-orb)" class="lg-breathe"/><circle cx="280" cy="64" r="10" fill="#f2f8ff"/>' : ""}</svg>
       <span class="lg-portal-t">入識海</span>
-      <span class="lg-portal-s">${sealed ? "前世封著一縷神品意境" : g.pick ? "這一季選好了要沉下去的那一份" : "沉一份神品意境到下一季"}</span>
+      <span class="lg-portal-s">${sealed ? "前世封著一縷神品意境" : (sh.offers || []).length ? "上一季的神品意境，挑一份封進來" : "每一季開季時，可以把上一季的神品意境封一份進來"}</span>
       ${sealed ? `<span class="lg-portal-n">${esc(sealed.name)}・三道封印${left ? `還有 ${left} 道` : "都破了"}</span>` : ""}
     </button>`;
     return `<div class="lg-head"><div class="lg-title"><h2>傳承</h2><p>前塵七分入骨，今生再添一筆</p></div></div>
@@ -875,6 +876,7 @@
     const sh = g.shihai || {};
     const s = sh.sealed;
     const need = sh.need || [];
+    const offers = sh.offers || []; // 開季的候選（企劃者 2026-11-05：開季、做第一件事之前挑；一動身就收掉）
     const SEAL_CH = { time: "時", level: "境", xinde: "悟" };
     const orb = s ? `<div class="lg-orb-wrap lg-drift"><svg viewBox="0 0 240 300" aria-hidden="true">
         <defs><radialGradient id="lg-halo" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#cfe6ff" stop-opacity=".9"/><stop offset=".3" stop-color="#6aa6dc" stop-opacity=".45"/><stop offset="1" stop-color="#1b3c5e" stop-opacity="0"/></radialGradient>
@@ -883,7 +885,7 @@
         <path d="M84 140 C100 128 120 160 156 140" stroke="#fff" stroke-opacity=".6" stroke-width="2" fill="none"/></svg>
         <div class="lg-talisman"><span>敕令鎮心</span><b>封</b><span>第${lgNum(s.season)}季</span></div></div>
       <div class="lg-insight"><small>神品意境・屬${esc(s.attribute)}</small><b>${esc(s.name)}</b></div>`
-      : `<div class="lg-insight empty"><b>識海空空</b><small>上一季沒有沉下任何一份</small></div>`;
+      : `<div class="lg-insight empty"><b>識海空空</b><small>${offers.length ? "還沒封進任何一份" : "這一季沒有封著的意境"}</small></div>`;
     let unseal = "";
     if (s) {
       const seals = need.map((x) => `<div class="lg-seal${x.ok ? " broken" : ""}"><i>${SEAL_CH[x.key] || ""}</i><span>${esc(x.text)}</span><small>${x.ok ? "已破" : esc(x.now || "未破")}</small></div>`).join("");
@@ -896,20 +898,24 @@
         ${names || `<button class="lg-break" data-act="choose" data-id="legacy:open" ${ready ? "" : "disabled"}>破封　撈起意境</button>
         <p class="lg-hint">封印全破才按得下；破封要付心得，名號照這一季登記</p>`}`;
     }
-    const gods = sh.gods || [];
-    const picked = gods.find((x) => x.id === g.pick);
-    const keep = picked
-      ? `<div class="lg-keep"><div><b>${esc(picked.name)}</b><small>收季那一刻沉入識海，下一季封著帶過去</small></div><button class="lg-btn" data-act="choose" data-id="legacy:drop">不留了</button></div>`
-      : "";
-    const others = gods.filter((x) => x.id !== g.pick).map((x) => `<div class="lg-keep"><div><b>${esc(x.name)}</b><small>身上的神品意境</small></div><button class="lg-btn" data-act="choose" data-id="legacy:keep:${esc(x.id)}">${picked ? "改沉這一份" : "沉進識海"}</button></div>`).join("");
-    const none = gods.length ? "" : '<p class="lg-hint">身上還沒有神品意境；悟出一份之後，才能把它沉進識海、帶到下一季。</p>';
-    return `<div class="lg-sea">
+    const offer = offers.length ? `<div class="lg-sep"><span>前世帶來的神品</span></div>
+        <p class="lg-hint">挑一份封進識海帶進這一季。做第一件事之前都能選，一動身就來不及了。</p>
+        ${offers.map((o, i) => `<div class="lg-keep"><div><b>${esc(o.name)}</b><small>神品意境・屬${esc(o.attribute)}・第${lgNum(o.season)}季</small></div><button class="lg-btn" data-act="choose" data-id="legacy:seal:${i}">封進識海</button></div>`).join("")}
+        <button class="lg-btn lg-skip" data-act="choose" data-id="legacy:skip">這一季不帶</button>` : "";
+    return `<div class="lg-sea${s ? "" : " bare"}">
         <div class="lg-sea-title"><h2>識海</h2><p>前世所悟，沉於心底。<br>今生境到，方能撈起。</p></div>
         ${orb}
       </div>
-      <div class="lg-sea-body">${unseal}
-        <div class="lg-sep"><span>這一世要沉下去的</span></div>${keep}${others}${none}
-      </div>`;
+      <div class="lg-sea-body">${offer}${unseal}${offers.length || s ? "" : '<p class="lg-hint">每一季開季時，上一季身上的神品意境可以挑一份封進識海，解封之後就是你的。</p>'}</div>`;
+  }
+  // 開季還沒挑識海（main.legacy.shihai.offers）：進遊戲第一個畫面就打開識海頁，一次（關掉之後不再自己跳；選單裡照舊有）
+  function legacyOfferOpen() {
+    const g = S.main && S.main.legacy;
+    const n = g && g.shihai && g.shihai.offers ? g.shihai.offers.length : 0;
+    if (!n) { S.legacyOffered = false; return; }
+    if (S.legacyOffered) return;
+    S.legacyOffered = true;
+    S.legacy = "shihai";
   }
   function legacyPageHtml() {
     const g = S.main && S.main.legacy;
@@ -1003,8 +1009,25 @@
     const row = (split) => split.map(([k, v]) => `${esc(k)} ${v}`).join("・");
     const chosen = g.presets.find((p) => p.key === g.chosen);
     const head = chosen ? `成長：${esc(chosen.name)}（每級 ${row(g.now)}）` : g.chosen === "custom" ? `成長：自己配（每級 ${row(g.now)}）` : "挑這一季的成長（每級合計 " + g.per_level + " 點，之後改也照現在的等級重算）";
+    const draft = S.growthDraft;
     return `<div class="growth"><div class="pts-label">${head}</div><div class="row alloc">${g.presets.map((p) =>
-      `<button class="btn small" data-act="growth" data-preset="${esc(p.key)}" title="${esc(row(p.split))}" ${p.key === g.chosen ? "disabled" : ""}>${esc(p.name)}</button>`).join("")}</div></div>`;
+      `<button class="btn small" data-act="growth" data-preset="${esc(p.key)}" data-glow="allocate" title="${esc(row(p.split))}" ${p.key === g.chosen ? "disabled" : ""}>${esc(p.name)}</button>`).join("")}` +
+      `<button class="btn small" data-act="growth-custom" ${draft ? "disabled" : ""}>自己配</button></div>${draft ? growthEditHtml(g, draft) : ""}</div>`;
+  }
+
+  // 自己配（五項屬性的季）：每一項 −／＋，合計要剛好 per_level、每一項 custom_min～custom_max；草稿只在這個分頁（S.growthDraft），按「定下來」才送
+  function growthEditHtml(g, draft) {
+    const left = g.per_level - g.keys.reduce((n, [k]) => n + (draft[k] || 0), 0);
+    const rows = g.keys.map(([k, name]) => {
+      const v = draft[k] || 0;
+      return `<div class="growth-step"><span>${esc(name)}</span>` +
+        `<button class="btn small" data-act="growth-step" data-key="${esc(k)}" data-d="-1" aria-label="${esc(name)}少一點" ${v <= g.custom_min ? "disabled" : ""}>−</button>` +
+        `<b>${v}</b><button class="btn small" data-act="growth-step" data-key="${esc(k)}" data-d="1" aria-label="${esc(name)}多一點" ${left <= 0 || v >= (g.custom_max || g.per_level) ? "disabled" : ""}>＋</button></div>`;
+    }).join("");
+    const note = left > 0 ? `還剩 ${left} 點` : left < 0 ? `多了 ${-left} 點` : "剛好";
+    return `<div class="growth-edit">${rows}<div class="growth-foot"><span class="growth-left">每級合計 ${g.per_level} 點，每一項 ${g.custom_min}～${g.custom_max || g.per_level}：${note}</span>` +
+      `<button class="btn small" data-act="growth-save" ${left === 0 ? "" : "disabled"}>定下來</button>` +
+      `<button class="btn small" data-act="growth-cancel">取消</button></div></div>`;
   }
 
   function statUsesHtml(s) {
@@ -1190,6 +1213,19 @@
       fitPage().classList.add("fit-space");
       const card = document.querySelector("#page > .battle-card");
       if (card) card.classList.add("fit-space"); // 戰鬥卡片的內距寫在 .battle-card 底下（style.css 的 .battle-card.fit-space）
+      return true;
+    } },
+    // 1a. 開局一到就攤開的那封信（letter.open：託付的信，FB-9110）把約戰那一行擠出第一屏：量的是約戰那一行（fitDuelRow）時，信收成標題一行
+    //     （誰來信，同玩家按標題收攏的樣子），緊接在底下問手機通知的那一張也先不畫（信攤開時照舊問）。點標題照樣攤開（letter-open 記 S.letterOpen，
+    //     重畫時不再收）。玩家自己攤開的不收；目標是行動列、一組選項時一個像素都不動
+    { key: "letter", run: () => {
+      if (!fitDuelRow()) return false;
+      const card = document.querySelector("#page > .card.letter.open:not(.fit-letter)");
+      if (!card || S.letterOpen === Number(card.dataset.letter)) return false;
+      card.classList.add("fit-letter");
+      const head = card.querySelector(":scope > .letter-head"), arrow = card.querySelector(".letter-arrow");
+      if (head) head.setAttribute("aria-expanded", "false"); // 點標題走 letter-open 的「沒攤開 → 攤開」
+      if (arrow) arrow.textContent = "›";
       return true;
     } },
     // 2. 師父的框收緊：「知道了」不再撐高標題那一行、話的行高小一點；框裡的話一個字都不切（設計 6.2）
@@ -1381,6 +1417,12 @@
     page.classList.remove("fit-space");
     page.querySelectorAll(".fit-space").forEach((el) => el.classList.remove("fit-space"));
     page.querySelectorAll(".fit-box").forEach((el) => el.classList.remove("fit-box"));
+    page.querySelectorAll(".card.letter.fit-letter").forEach((el) => { // 1a：信攤回來
+      el.classList.remove("fit-letter");
+      const head = el.querySelector(":scope > .letter-head"), arrow = el.querySelector(".letter-arrow");
+      if (head) head.setAttribute("aria-expanded", "true");
+      if (arrow) arrow.textContent = "▴";
+    });
     if (S.renownTight) { S.renownTight = false; renderTop(); } // 名聲（1B）：稱號那一行畫回來再量
     page.querySelectorAll(".g-merit small.fit-hide").forEach((el) => el.classList.remove("fit-hide")); // 本場戰功的稱號（4B）
     page.querySelectorAll(".tx-tight").forEach((el) => {
@@ -6244,7 +6286,21 @@
         }
         case "drawer-close": S.pdrawer = false; S.artOpen = null; S.insOpen = null; S.slotPick = null; renderPage(); break;
         case "ins-filter": S.insFilter = el.dataset.filter; renderPage(); break;
-        case "growth": await doMain("growth", { preset: el.dataset.preset }); break; // 五項屬性的季：挑成長配比
+        case "growth": S.growthDraft = null; await doMain("growth", { preset: el.dataset.preset }); break; // 五項屬性的季：挑成長配比
+        case "growth-custom": { // 自己配：從現在怎麼長起草（鍵照 growth.keys 的順序，now 是同一個順序）
+          const g = S.main && S.main.status && S.main.status.growth;
+          if (g) S.growthDraft = Object.fromEntries(g.keys.map(([k], i) => [k, g.now[i] ? g.now[i][1] : g.custom_min]));
+          renderTop();
+          break;
+        }
+        case "growth-step": {
+          const d = S.growthDraft;
+          if (d) d[el.dataset.key] = Math.max(0, (d[el.dataset.key] || 0) + Number(el.dataset.d));
+          renderTop();
+          break;
+        }
+        case "growth-cancel": S.growthDraft = null; renderTop(); break;
+        case "growth-save": { const split = S.growthDraft; S.growthDraft = null; await doMain("growth", { preset: "custom", split }); break; }
         case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
         case "letter-open": {

@@ -2,7 +2,8 @@
 
 - 展開屬性裡一行入口（三項的值；識海封著東西時多一行名字），按了打開傳承頁。
 - 傳承頁：三卷（墨水漲到值、到了的門蓋朱印）、每一項三片竹簡（開了的亮、沒開的寫還差多少）、按一片看那一道門的長句、入識海的入口。
-- 識海頁：封著的意境與三道封印；全破了、身上沒有神品，「破封」才按得下；被人先取了名，改列候選；這一季要沉下去的那一份（不留了、改沉）。
+- 識海頁：封著的意境與三道封印；全破了、身上沒有神品，「破封」才按得下；被人先取了名，改列候選；
+  開季還沒挑的候選（封進識海、這一季不帶），有候選時進遊戲第一個畫面自己打開識海頁一次（企劃者 2026-11-05）。
 切 app.js 裡傳承那一段（從「// 傳承（features/legacy」到名號那一塊的註解）放進 node 跑。"""
 from __future__ import annotations
 
@@ -20,8 +21,9 @@ const b = src.indexOf("\n  // 狀態列的名號那一塊");
 if (a < 0 || b < a) throw new Error("app.js 裡找不到傳承那一段");
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const S = input.S;
-eval(src.slice(a, b) + "\nglobalThis.__L = { legacyHtml, legacyPageHtml };");
-finish(input.what === "entry" ? __L.legacyHtml(S.main.legacy) : __L.legacyPageHtml());
+eval(src.slice(a, b) + "\nglobalThis.__L = { legacyHtml, legacyPageHtml, legacyOfferOpen };");
+if (input.what === "auto") { __L.legacyOfferOpen(); const first = S.legacy; S.legacy = null; __L.legacyOfferOpen(); finish([first, S.legacy]); }
+else finish(input.what === "entry" ? __L.legacyHtml(S.main.legacy) : __L.legacyPageHtml());
 """
 
 
@@ -31,16 +33,16 @@ def _track(values):
                 for i, at in enumerate((5, 10, 20))] for k in texts}
 
 
-def _legacy(values=None, sealed=True, need_ok=(True, False, False), held=False, names=(), gods=(), pick=None):
+def _legacy(values=None, sealed=True, need_ok=(True, False, False), held=False, names=(), offers=()):
     values = values or {"zheng": 12, "xie": 3, "luck": 7}
     keys = ("time", "level", "xinde")
     return {
         "values": values, "gains": {"zheng": 4, "xie": 0, "luck": 3}, "opened": [], "tracks": _track(values),
-        "sealed": "寒江獨照" if sealed else None, "pick": pick,
+        "sealed": "寒江獨照" if sealed else None,
         "shihai": {
             "sealed": {"name": "寒江獨照", "attribute": "冰", "season": 2, "names": list(names)} if sealed else None,
             "need": [{"key": k, "text": f"條件{k}", "ok": ok, "now": f"現在{k}"} for k, ok in zip(keys, need_ok)],
-            "held": held, "gods": [{"id": i, "name": n} for i, n in gods],
+            "held": held, "offers": [{"name": n, "attribute": "風", "season": 8} for n in offers],
         },
     }
 
@@ -96,11 +98,12 @@ def test_a_taken_name_lists_the_candidates_instead():
     assert 'data-id="legacy:open"' not in html
 
 
-def test_what_sinks_this_season():
-    html = run(_legacy(sealed=False, gods=(("own_1", "斷雲"),), pick="own_1"), "shihai")
-    assert "識海空空" in text(html)
-    assert 'data-id="legacy:drop"' in html and "斷雲" in text(html)
-    other = run(_legacy(sealed=False, gods=(("own_1", "斷雲"),)), "shihai")
-    assert 'data-id="legacy:keep:own_1"' in other
+def test_the_season_start_offers_and_opens_once():
+    html = run(_legacy(sealed=False, offers=("斷雲", "孤鴻")), "shihai")
+    assert "識海空空" in text(html) and "前世帶來的神品" in text(html)
+    assert 'data-id="legacy:seal:0"' in html and 'data-id="legacy:seal:1"' in html and 'data-id="legacy:skip"' in html
+    assert "第八季" in text(html)
     none = run(_legacy(sealed=False), "shihai")
-    assert "身上還沒有神品意境" in text(none)
+    assert "legacy:seal" not in none and "每一季開季時" in text(none)
+    assert run(_legacy(sealed=False, offers=("斷雲",)), what="auto") == ["shihai", None]  # 打開一次，關掉不再自己跳
+    assert run(_legacy(sealed=False), what="auto") == [None, None]

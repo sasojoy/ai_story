@@ -492,11 +492,15 @@ def _cold_to(state: GameState, content: Content, character_id: str) -> bool:
             and virtue_tier(state, content) >= 1)
 
 
-def warmed(content: Content, delta: int) -> int:
+def warmed(content: Content, delta: int, state: GameState | None = None) -> int:
     """情誼放慢（歷史武將同行第三節、9.4；Config.affinity_gain_scale）：加的那一筆乘倍數、四捨五入，原本加 1 以上的至少加 1；
-    扣的與 0 原樣，倍數 1 原樣。不存零頭、不改存檔。對話、事件、名聲起步、風聞加情誼之前都先過它。"""
+    扣的與 0 原樣，倍數 1 原樣。不存零頭、不改存檔。對話、事件、名聲起步、風聞加情誼之前都先過它。
+    給了 state 時，五項屬性的季再照魅力乘（attrset.charm「favor」：魅力高的人情誼長得快；企劃者 2026-11-04）。"""
     scale = content.config.affinity_gain_scale
-    if delta <= 0 or scale >= 1:
+    if state is not None and delta > 0:
+        from . import attrset  # noqa: PLC0415
+        scale *= 1 + attrset.charm(state, content, "favor")
+    if delta <= 0 or scale == 1:
         return delta
     return max(1, math.floor(delta * scale + 0.5 + 1e-9))  # 浮點：5×0.7 是 3.4999…，照十進位的 3.5 進位
 
@@ -516,7 +520,7 @@ def first_meet(state: GameState, content: Content, character_id: str) -> list[st
 
     def bump(n: int) -> int:
         before = p.affinities.get(character_id, 0)
-        p.affinities[character_id] = max(0, min(100, before + warmed(content, n)))
+        p.affinities[character_id] = max(0, min(100, before + warmed(content, n, state)))
         return p.affinities[character_id] - before
 
     flag = MEET_FAME_FLAG.format(cid=character_id)

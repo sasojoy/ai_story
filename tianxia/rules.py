@@ -375,7 +375,7 @@ def _v2_outlook(check: Check, state: GameState, content: Content, world: WorldSt
     夾在 Config.checks 的 floor～ceil（屬性與跨季架構 v2 5.1）。期望值照本人的等級（attrset.expect），所以內容寫的等級不必跟著改版。
     gap 換回舊的「差幾點」（每 0.1 一點），選項上的心裡話照舊挑檔。"""
     v2, rules_ = content.config.attributes.v2, content.config.checks
-    names = [attrset.key_of(content, k) for k in (check.stats if check.stat == BEST_OF else [check.stat])]
+    names = [check.v2] if check.v2 else [attrset.key_of(content, k) for k in (check.stats if check.stat == BEST_OF else [check.stat])]
     level = state.player.member.level
     expect = attrset.expect(content, level)
     value = max((attrset.value(state, content, k) if k else expect) for k in names)
@@ -391,7 +391,7 @@ def _v2_outlook(check: Check, state: GameState, content: Content, world: WorldSt
 def check_stat_name(check: Check, content: Content, world) -> str:
     """選項上寫的屬性名：五項屬性的季照新的名字（臂力的檢定寫「武力」、根骨的寫「統御」），其餘照 stat_names。"""
     if attrset.on(content, world):
-        key = attrset.key_of(content, check.stat)
+        key = check.v2 or attrset.key_of(content, check.stat)
         return attrset.names(content, world).get(key or check.stat, check.stat)
     return content.config.stat_names.get(check.stat, check.stat)
 
@@ -1145,7 +1145,7 @@ def apply_effect(
         msgs.append(f"體力 {'+' if effect.stamina > 0 else ''}{effect.stamina}")
     for character_id, delta in effect.affinity.items():  # 情誼（計畫 T5）：夾在 0～100，訊息寫實際動了多少，沒動就不寫
         before = p.affinities.get(character_id, 0)
-        p.affinities[character_id] = max(0, min(100, before + renown.warmed(content, delta)))  # 加的放慢（Config.affinity_gain_scale）
+        p.affinities[character_id] = max(0, min(100, before + renown.warmed(content, delta, state)))  # 加的放慢（Config.affinity_gain_scale）
         if p.affinities[character_id] != before:
             msgs.append(f"{content.characters[character_id].name}情誼 {p.affinities[character_id] - before:+d}")
     if effect.patron is not None:  # 豪強的靠山（晉升奇遇 4.2；正式版丙一）
