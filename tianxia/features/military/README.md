@@ -39,7 +39,7 @@
 過渡 import 共 8 處（`test_feature_boundaries.py` 數）：`admin_actions`→`orders`、`ranks`；`convoy_actions`→`orders`；`order_actions`→`atlas`、`orders`；`rank_rules`→`ranks`；`step_actions`→`events`、`opportunities`。
 `orders`、`ranks` 是共用規則層（第 40 批收進 `SHARED`），`atlas`、`events`、`opportunities` 等後面的批。
 服務清單（`tianxia/core/services.py`）這一包加的：`_order_credit`（共用服務，出陣、決戰、大勢人物也經 `ctx` 叫）、`RANK_ACTION_PREFIX`、`_duty_option`（出陣包的委派，`order_options` 叫它）。
-叛投那一刻經核心的叛投掛鉤（`core/features.py` 的 `DEFECT_ORDER`）`clear` 位置的 `convoy` 那一格清（`convoy_actions.defect_clear`：`p.convoy = None`，押著的糧車留給舊陣營；全部拆包第 32 批，原本 `defection.clear_progress` 直接寫）。軍令記下的貢獻（`contrib`、`contrib_weeks`）照舊由叛投自己的 `progress` 那一格清。
+叛投那一刻經核心的叛投掛鉤（`core/features.py` 的 `DEFECT_ORDER`）`clear` 位置的 `convoy` 那一格清（`convoy_actions.defect_clear`：`p.convoy = None`，押著的糧車留給舊陣營；全部拆包第 32 批，原本 `defection.clear_progress` 直接寫）。軍令記下的貢獻（`contrib`、`contrib_weeks`）照舊由叛投自己的 `progress` 那一格清。釘住這一格的測試在包外、改這一包時 `test_for` 挑不到：`tests/figures/test_defection.py::test_defect_resets_rank_and_old_progress`（叛投之後 `convoy` 是 None；下面「改這一包時連它們一起跑」那一串已經列了這個檔）。
 
 ## 內容歸屬
 
