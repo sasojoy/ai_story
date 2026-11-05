@@ -22,6 +22,7 @@ class TerritoryActsFeature(Feature):
     # 沒有 PlayerState 欄位：WorldState.conquest、xingshi、xingshi_ticket、xingshi_mark 是全服的帳，留在 state.py
     player_fields: tuple[str, ...] = ()
     carried: tuple[str, ...] = ()
+    content = ("xingshi_lines.json",)  # 〈天下形勢〉的句型；content.py 照舊讀，驗證在下面的 check_content
 
     def enabled(self, ctx) -> bool:
         return True

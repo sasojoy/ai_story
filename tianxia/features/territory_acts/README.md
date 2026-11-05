@@ -3,7 +3,7 @@
 - 做什麼：領地爭奪（翻地與爭搶）裡「玩家碰到的行動與畫面」——下戰書與攻城時段、每天 22:00 換天（前一天沒開成的攻城作罷）、〈天下形勢〉每天一篇（三段式的 A、C 兩段）、翻地分紅與守城功送到、地盤畫面的資料（時程表、每一塊的翻地資料、能不能下戰書）、管理者五個救場工具。全部拆包第 46 批從 `Game` 搬來（27 個方法、431 行，加 `conquest_day.py` 240 行、`xingshi.py` 314 行兩個模組）。
 - **包名叫 `territory_acts`，不叫 `territory`**：`tianxia/territory.py`（誰控制、駐軍、大本營）是共用規則層，這一批不搬，同名不准（第 23 批的教訓）。`tianxia/conquest.py`（進度、易手、分紅的規則）也在共用規則層。
 - 導覽：`docs/guide/行動與地盤.md` 的地盤易手那一節、`docs/guide/大勢人物與賽季.md`（戰線推力與軍令）
-- 設計稿：`docs/superpowers/specs/` 的輿圖簡化與翻地爭搶（`2026-10-20-…`）、領地爭奪（〈天下形勢〉是第三批 A）；搬家計畫 `docs/superpowers/plans/2026-11-06-地盤包-第1批.md`
+- 設計稿：`docs/superpowers/specs/2026-10-20-輿圖簡化-design.md`（開頭寫「三版」，翻地與爭搶）、`docs/superpowers/specs/2026-10-20-領地爭奪-design.md`（沒有版本號；〈天下形勢〉是第三批 A）；搬家計畫 `docs/superpowers/plans/2026-11-06-地盤包-第1批.md`
 
 ## 檔案
 
@@ -32,6 +32,10 @@
 - `MAIN_ACTIONS["conquest_letter"]`（玩家下戰書）留在殼。**管理者那一個叫 `admin_conquest_letter`，不叫 `conquest_letter`**：`api_do` 先查功能包的管理者工具，同名會把玩家的下戰書整個蓋掉（FB-609）。
 - `Game._conquest_side`（陣營是哪一軍）、`_sieges`、`_joinable`、`_cancel_siege`、`_flavor_sink`：包經 `ctx` 叫（服務清單）。
 - 沒有選項前綴：戰書走 `/api/do/conquest_letter`，不在選單上；假人不下戰書（`bot_policy` 只讀 `conquest` 規則）。
+
+## 過渡（手冊 3.11）
+
+過渡 import 共 4 處（包到舊模組，都標了「# 過渡：待搬」）：`day_actions`→`annals`；`letter_actions`→`ranks`；`view`→`atlas`、`ranks`。舊模組到包有 `engine.py` 的 GAME_IMPORTS 五行與 `conquest_day`、`xingshi` 兩個別名（理由在邊界測試的 `# territory_acts` 段）。
 
 ## 測試
 
