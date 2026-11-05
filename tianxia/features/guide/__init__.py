@@ -13,7 +13,7 @@ newbie_drifter）與 /api/prologue，選單上的那幾顆是別人的（act:res
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature
+from tianxia.core.features import DefectHook, Feature
 
 
 class GuideFeature(Feature):
@@ -35,6 +35,18 @@ class GuideFeature(Feature):
         from . import checks  # noqa: PLC0415
 
         checks.check_hints(content, need)
+
+    # core_effects（全部拆包第 32 批「效果與叛投掛鉤」）
+    _defection: tuple[DefectHook, ...] | None = None
+
+    def defection(self) -> tuple[DefectHook, ...]:
+        """叛投 clear 位置的 hints 那一格（舊陣營引薦人排著的提示作廢；原本 defection.clear_progress 直接寫 p.hint_queue）：不問 enabled。
+        建一次就留著，在叫的那一下才照模組屬性找 hints.defect_clear（monkeypatch 照樣有效）。"""
+        if self._defection is None:
+            from . import hints  # noqa: PLC0415
+
+            self._defection = (DefectHook("clear", "hints", lambda p: hints.defect_clear(p)),)
+        return self._defection
 
 
 FEATURE = GuideFeature()

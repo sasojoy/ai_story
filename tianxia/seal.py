@@ -5,7 +5,8 @@
 - 擲骰一律用 dice（密鹽｜天機｜用途｜…，設計 5.13 的種子表），不碰 Game.rng。密鹽只在伺服器與假人程式啟動時用 secrets 產生
   （ensure_salt，server.main／run_bots.main 叫；計畫「要 PM 定的」第 8 條），引擎裡只讀：測試與量表腳本沒有密鹽（空字串），
   同樣的種子跑出同樣的結果。密鹽不顯示、不進指紋。每一份亂數取數的順序寫在用它的函式說明裡。
-- 只 import models、state、world_state、battle_instance、treasures、characters；engine、world、sqlite_world 反過來叫這裡。
+- 只 import models、state、world_state、battle_instance、treasures、characters；engine、world、sqlite_world 反過來叫這裡
+  （rules.apply_effect 的兩格 effect_runic、effect_shard 也是：rules 延後 import 這裡，effect_runic 在函式裡拿 rules.season_one；第 32 批）。
   on_muster 會寫 store：呼叫端不在任何 mutate 裡（world._open_claimed）。
 - 領地爭奪的季（Config.conquest；領地爭奪設計 3.9、4.8）碎片不再從宛城現世，改成開季藏一片在中立地、探索撿到（hide／find／stamp_cache）；
   要認區塊與大區所以在函式裡延後 import conquest、atlas（它們反過來 import 的鏈很長）。
@@ -14,13 +15,17 @@ from __future__ import annotations
 
 import random
 import secrets
+from typing import TYPE_CHECKING
 
 from . import battle_instance, treasures
 from .battle_instance import BattleInstance
 from .characters import name_key
 from .models import BattleDef, Content, SealTuning, TimetableEvent
 from .state import Equipment, GameState, Rumor, WorldState
-from .world_state import SealCache, SealEvent, SealRegistry, SealShard, SealUse, SharedWorldState, WorldStateStore
+from .world_state import JADE_SEAL_FRAGMENT_COUNT, SealCache, SealEvent, SealRegistry, SealShard, SealUse, SharedWorldState, WorldStateStore
+
+if TYPE_CHECKING:
+    from .rules import EffectRun  # core_effects（第 32 批）：效果的兩格只拿它當型別
 
 HEIRLOOM_PREFIX = "璽:"  # 抄本的 id（固定，不吃 weapon_serial，重抄幾次都一樣；不會跟「寶:N」撞號）
 HEIRLOOM_LABEL = treasures.HEIRLOOM_LABEL  # 寶物段裡那一列的小標、角色卡那一行的開頭（字在 treasures，treasures 不 import seal）
@@ -675,3 +680,35 @@ def chronicle_block(content: Content, reg: SealRegistry, before: str = "", manda
     if before:
         parts.append(BOOK_BEFORE.format(text=before))
     return "\n\n".join(parts)
+
+
+# core_effects（全部拆包第 32 批「效果與叛投掛鉤」）：rules.apply_effect 的兩格（符文殘片、舊鏈的玉璽碎片），原本那兩段逐字搬；
+# 核心（rules._EFFECT_CORE）延後 import 代叫，過渡：待搬（第 27 批：玉璽包登記那兩格）。先後在 core/features.py 的 EFFECT_ORDER。
+# 改這兩格時 test_for 往上找停在核心的 rules，挑不到釘住它們的測試：另外跑 tests/core/test_rules.py（舊鏈的玉璽碎片 5 條）、
+# tests/figures/test_promotions_huang.py（符文殘片）、tests/seal/test_seal.py（rules.py 模組說明「改效果那幾格要跑的測試」）。
+
+
+def effect_runic(r: EffectRun) -> list[str]:
+    """效果的 runic 那一格：符文殘片（黃巾的第 3、4 階奇遇，正式版丙二；PlayerState.runic_pieces），開關關著什麼都不做。原本跟捐糧、
+    伏筆片段共用一個守衛（foreshadow.effect_grain 的說明）。"""
+    from .rules import season_one  # noqa: PLC0415  seal 最外層不 import rules（模組說明）；rules 也是延後 import 這裡
+
+    if r.effect.runic and season_one(r.content, r.state.world):
+        r.state.player.runic_pieces += r.effect.runic
+    return []
+
+
+def effect_shard(r: EffectRun) -> list[str]:
+    """效果的 shard 那一格（排在江湖史之後；自己不認領欄位）：舊鏈的玉璽碎片——玉璽碎片開著時舊鏈不再寫跨季紀錄（玉璽碎片設計 11.2 第 2 條），
+    關著時這一下新立了劇本的碎片旗標（world_flags 那一格立旗之前記的 r.fresh_flags）才記一塊；那一句跟江湖史同一句（沒寫江湖史照預設）。"""
+    effect, state, content, world = r.effect, r.state, r.content, r.world
+    jade_seal_flag = content.scenario.jade_seal_flag
+    seal_on = content.config.seal.enabled and bool(content.seal)
+    if seal_on or jade_seal_flag is None or jade_seal_flag not in r.fresh_flags:
+        return []
+    name = state.player.name  # 天下大事一律寫名號
+    fragment_text = effect.chronicle.format(name=name) if effect.chronicle else f"{name}取得了傳國玉璽的一塊碎片。"
+    fragment = world.record_jade_seal_fragment(name, content.scenario.name, fragment_text)
+    if fragment is None:
+        return []
+    return [f"🏺 【天下大事】{name}尋得傳國玉璽第 {fragment.number} 塊碎片！（{fragment.number}/{JADE_SEAL_FRAGMENT_COUNT} 已現世）"]

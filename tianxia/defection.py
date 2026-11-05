@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from . import allied, bounties, opportunities, ranks, roster, seats, wins
+from .core import features as features_core  # 核心：叛投那一刻各包清自己的進度（core_effects：全部拆包第 32 批，DEFECT_ORDER）
 from .models import Content, FactionDef, Sect
 from .rules import add_rumor, display_name
 from .state import GameState, PlayerState
@@ -149,7 +150,16 @@ def clear_progress(p: PlayerState) -> None:
     跟 active_pushers 的清理放在一起。
     刻意沒清的：`runic_pieces`（符文殘片，丙二）、聽過的伏筆片段（`fragments`）與聽過的機緣線索（`opp_clues`，企劃者裁決 E5.2）
     ——它們是「知道的事」、不是陣營給的身份，跟伏筆物品一樣留著。殘片與片段當初是現在的做法、待企劃者確認（在 PM 那裡）；
-    tests/figures/test_promotions_huang.py 的 test_defecting_keeps_the_runic_pieces_for_now 釘著它，改了就改那個測試。"""
+    tests/figures/test_promotions_huang.py 的 test_defecting_keeps_the_runic_pieces_for_now 釘著它，改了就改那個測試。
+    各包清自己的（core_effects：全部拆包第 32 批）：照 core/features.py 的 DEFECT_ORDER["clear"] 一格一格走——叛投自己的（progress：_clear_own）、
+    押著的糧車（convoy：軍情包登記）、舊陣營的引薦人排著還沒說的提示（hints：新手引導包登記）、機緣（opportunities：核心代叫，過渡）。
+    測試直接叫這一個，所以 clear 位置在這裡（不挪到 defect 或 Game._defect_step）。"""
+    features_core.defect_run("clear", _CLEAR_CORE, p)
+
+
+def _clear_own(p: PlayerState) -> None:
+    """clear 位置的 progress 那一格（叛投自己清的；原本 clear_progress 的前十行逐字搬）：階、召見、第 4 階資格與「只缺一個機會」、
+    「沒有人能引見」、部下與傳功、貢獻與每週貢獻（軍令記下的貢獻也在這裡）、兩本帳與換邊次數、捐獻。"""
     p.rank = 0
     p.summons = None
     p.qualified, p.rank_hinted = False, []  # 第 4 階資格（候缺）與說過的「只缺一個機會」（正式版丙一）
@@ -160,10 +170,19 @@ def clear_progress(p: PlayerState) -> None:
     p.contrib_weeks = {}
     p.ledgers, p.lean_changed = {}, 0  # 豪強兩本帳與這一季換邊的次數（三陣營四勝利；PM 2026-10-25 第 4 件）：舊帳帶不走
     p.donations = {}
-    p.convoy = None  # 押著的糧車留給舊陣營，交出去的糧草不退【預設】
-    # 舊陣營的引薦人排著還沒說的提示作廢（新手引導計畫三，N7）：換了邊之後由新的引薦人說；師父的（by 是空的）不動
-    p.hint_queue = [n for n in p.hint_queue if p.faction is None or n.by != p.faction]
-    opportunities.clear(p)  # 機緣的完成、計數、物品全部作廢（機緣文件第一節；正式版乙一）；聽過的線索留著（裁決 E5.2）
+
+
+# 叛投那一刻核心代叫的格（core_effects：全部拆包第 32 批；先後在 core/features.py 的 DEFECT_ORDER）。押糧（clear 的 convoy）是軍情包、
+# 舊陣營引薦人的提示（clear 的 hints）是新手引導包，各自登記（Feature.defection()）。lambda 在叫的那一下才照模組屬性找（monkeypatch 照樣有效）。
+_CLEAR_CORE = {
+    "progress": lambda p: _clear_own(p),
+    # 機緣的完成、計數、物品全部作廢（機緣文件第一節；正式版乙一）；聽過的線索留著（裁決 E5.2）
+    "opportunities": lambda p: opportunities.clear(p),  # 過渡：待搬（第 34 批）機緣進軍情包，那一格改由包登記
+}
+# 還開著的集體密謀退出，做過的那幾處不再算（乙二；企劃者 2026-10-06 裁決）；全服的那一份在 state.world
+_LEAVE_CORE = {"plots": lambda s: opportunities.leave_plots(s)}  # 過渡：待搬（第 34 批）密謀進軍情包，那一格改由包登記
+# 手上舊陣營掛的懸賞作廢、每張一句（FB-151）；改的是共用的季，Game.choose 結尾統一存
+_STRANDED_CORE = {"bounties": lambda s, c, side: bounties.drop_stranded(s, c, side)}  # 過渡：待搬（第 45 批）懸賞包登記
 
 
 def defect(state: GameState, content: Content, target: FactionDef, ally: str | None = None) -> list[str]:
@@ -187,7 +206,7 @@ def defect(state: GameState, content: Content, target: FactionDef, ally: str | N
     # 排在 clear_progress 前後、改投前後結果都一樣；放這裡是因為舊陣營的 id 在這一段都還拿得到
     seats.leave(state, old.id)
     clear_progress(p)
-    opportunities.leave_plots(state)  # 還開著的集體密謀退出，做過的那幾處不再算（乙二；企劃者 2026-10-06 裁決）；全服的那一份在 state.world
+    features_core.defect_run("leave", _LEAVE_CORE, state)  # 清完、改投之前：還開著的集體密謀退出（plots）
     p.faction, p.ally, p.defected = target.id, ally, True
     new_side = ally or target.id
     new_name = allied.label(content, target.id, ally)
@@ -207,5 +226,6 @@ def defect(state: GameState, content: Content, target: FactionDef, ally: str | N
               named=not p.anonymous)
     msgs.append(f"你叛出{old_name}，投了{new_name}。" if new_side != old_side or target.id != old.id
                 else f"你改依附{content.scenario.faction_name(ally, ally)}。")
-    msgs += bounties.drop_stranded(state, content, new_side)  # 手上舊陣營掛的懸賞作廢、每張一句（FB-151）；改的是共用的季，Game.choose 結尾統一存
+    for got in features_core.defect_run("stranded", _STRANDED_CORE, state, content, new_side):
+        msgs += got  # 手上舊陣營掛的懸賞作廢、每張一句（bounties）
     return msgs

@@ -346,6 +346,9 @@ SHOP_ACTS = frozenset({"smith", "bounties", "market", "arena"})  # 初入江湖�
 # 出店的那一顆。酒肆的寫字面（＝ features/tavern/rules.BACK_ID）：酒肆搬成包之後模組層不碰包（主動搬六包第 10 批）；擂台同
 # （＝ features/bout/arena_rules.BACK_ID，全部拆包第 12 批）
 LEAVE_SHOP_IDS = frozenset({"bounty:back", "smith:back", mounts.BACK, "arena:back", "tavern:back"})
+# 叛投 after 位置核心代叫的格（core_effects：全部拆包第 32 批；先後在 core/features.py 的 DEFECT_ORDER）：寫了 side、跟新陣營不合的同伴當場
+# 回江湖是 Game 自己的（陣營，第 35 批）；食言（parley）是人物情誼包登記的。lambda 在叫的那一下才找 Game 的方法；契約測試讀這一份
+_DEFECT_AFTER_CORE = {"leave_behind": lambda ctx, side: ctx._leave_behind(side)}
 
 # （走一趟的裝飾器 _outing_watch 搬進核心〔tianxia/core/services.py 的 outing_watch，全部拆包第 24 批〕：上面 import 回來，同一個名字）
 
@@ -3363,9 +3366,6 @@ class Game:
     def _parley_backing_here(self) -> str | None:
         return companions_parley.backing_here(self)
 
-    def _parley_forsake(self) -> list[str]:
-        return companions_parley.forsake_all(self)
-
     def _talk_options(self) -> list[Option]:
         return companions_talk.talk_options(self)
 
@@ -3511,8 +3511,10 @@ class Game:
                 if self._draft is not None:
                     self._draft.title = "叛投不成"
                 return [f"（{reason}）"]
-            return (defection.defect(self.state, self.content, target, ally) + self._leave_behind(target.id)
-                    + self._parley_forsake())  # NPC 智能 2.1：接了又叛投，欠著的都算食言
+            msgs = defection.defect(self.state, self.content, target, ally)
+            for got in features_core.defect_run("after", _DEFECT_AFTER_CORE, self, target.id):
+                msgs += got  # 同伴回江湖（陣營自己的，第 35 批）→ 人物情誼包：接了又叛投，欠著的都算食言（NPC 智能 2.1）
+            return msgs
         fid, _, ally = arg.partition(":")
         target = self.content.scenario.faction(fid)
         p.pending_defect, p.pending_ally = target.id, ally or None

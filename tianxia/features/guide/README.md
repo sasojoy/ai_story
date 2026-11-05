@@ -11,7 +11,7 @@
 - `actions.py`：原本 `Game` 上的 31 個方法（名字去掉前導底線），加上核心原位叫的 11 個服務的本體（`opening_on`……`enlist_expire`；`Game._note_action` 叫 engine 模組層的 `note_action`，見下）。
 - `checks.py`：內容檢查（`check_content`）——碰到才說（`hints.json`）那一塊原本在 `content.validate`，核心不准 import 包，搬進這裡、句子照抄。
 - `HutReward`（序章步驟的獎勵那一行的記號）搬進核心 `tianxia/core/services.py`：核心的 `Game._guide`、`_menxia_entry` 認它；`rules.HutReward` 是同一個類別。
-- 掛鉤：`enabled` 一直是 True（引導、提示、新手目標、開局各有自己的開關）、`check_content`、`player_fields`／`carried`。**沒有選項前綴**：動作走 `server.MAIN_ACTIONS`（`hints_off`、`skip_tutorial`、`view_map`、`view_orders`、`view_tab`、`guide_ack`、`newbie_drifter`）與 `/api/prologue`（`server.py` 一行沒動，照舊叫 Game 的委派）；選單上的那幾顆是別人的（`act:rest` 是核心 `act:` 的子動詞、開局三選一是事件的 `choice:`、投靠是 `faction:`），所以沒有 `bots.py`、`bot_policy` 不動。
+- 掛鉤：`enabled` 一直是 True（引導、提示、新手目標、開局各有自己的開關）、`check_content`、`player_fields`／`carried`、叛投那一刻的格 `defection()`（`clear` 位置的 `hints`：`hints.defect_clear`，舊陣營的引薦人排著還沒說的提示作廢；全部拆包第 32 批，原本 `defection.clear_progress` 直接寫 `hint_queue`；釘住這一格的測試在包外、改這一包時 `test_for` 挑不到：`tests/arts/test_hints.py::test_defecting_drops_the_old_sides_queued_hints_and_keeps_the_mentors`，下面「另外要跑的」那一串已經列了這個檔；`tests/figures/test_defection.py::test_defecting_drops_the_old_sides_queued_hints` 測的是同一件事）。**沒有選項前綴**：動作走 `server.MAIN_ACTIONS`（`hints_off`、`skip_tutorial`、`view_map`、`view_orders`、`view_tab`、`guide_ack`、`newbie_drifter`）與 `/api/prologue`（`server.py` 一行沒動，照舊叫 Game 的委派）；選單上的那幾顆是別人的（`act:rest` 是核心 `act:` 的子動詞、開局三選一是事件的 `choice:`、投靠是 `faction:`），所以沒有 `bots.py`、`bot_policy` 不動。
 
 ## 認領的欄位（手冊 3.5：留在原地）
 

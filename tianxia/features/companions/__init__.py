@@ -8,7 +8,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome
+from tianxia.core.features import DefectHook, Feature, Outcome
 
 
 class CompanionsFeature(Feature):
@@ -57,6 +57,18 @@ class CompanionsFeature(Feature):
         from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）
 
         return routes.router(shell)
+
+    # core_effects（全部拆包第 32 批「效果與叛投掛鉤」）
+    _defection: tuple[DefectHook, ...] | None = None
+
+    def defection(self) -> tuple[DefectHook, ...]:
+        """叛投 after 位置的 parley 那一格（NPC 智能 2.1：接了又叛投，欠著的都算食言；原本 Game._defect_step 經 Game._parley_forsake 委派叫）：
+        排在同伴回江湖（leave_behind）之後。不問 enabled。建一次就留著，在叫的那一下才照模組屬性找 parley_actions.forsake_all。"""
+        if self._defection is None:
+            from . import parley_actions  # noqa: PLC0415
+
+            self._defection = (DefectHook("after", "parley", lambda ctx, side: parley_actions.forsake_all(ctx)),)
+        return self._defection
 
 
 FEATURE = CompanionsFeature()

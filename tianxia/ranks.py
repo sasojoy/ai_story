@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from . import allied, calendar, figures, seats
 from .models import Content, PromotionCast, PromotionDef
-from .rules import add_rumor, season_one
+from .rules import EffectRun, add_rumor, season_one
 from .state import GameState, Summons
 
 NEAREST_BASE = "nearest_base"  # promotions.json 的地點寫這個：照路網挑離玩家最近的那個陣營的投靠點（豪強，內容表 2.1）
@@ -366,3 +366,33 @@ def flush_news(state: GameState, content: Content, before_day: int | None) -> No
         when = "今日" if day >= today else "昨日"
         add_rumor(state, f"{when}升為{titles[rank]}的有：{'、'.join(names)}。", content=content, layer="faction",
                   faction=faction)
+
+
+# core_effects（全部拆包第 32 批「效果與叛投掛鉤」）：rules.apply_effect 的三格（靠山、召見往下一段、晉升與部下），原本那幾段逐字搬；
+# 核心（rules._EFFECT_CORE）延後 import 代叫，過渡：待搬（第 40 批：ranks 收進共用規則層，照舊核心代叫）。先後在 core/features.py 的 EFFECT_ORDER
+
+
+def effect_patron(r: EffectRun) -> list[str]:
+    """效果的 patron 那一格：豪強的靠山（晉升奇遇 4.2；正式版丙一）。"""
+    if r.effect.patron is not None:
+        r.state.player.patron = r.effect.patron
+    return []
+
+
+def effect_summons_next(r: EffectRun) -> list[str]:
+    """效果的 summons_next 那一格：晉升奇遇演完一段，召見往下一段（正式版丙一）；排在 promote 前面，下一段的召見那一句先出
+    （晉升會清召見）。"""
+    if r.effect.summons_next is not None:
+        return next_leg(r.state, r.content, r.effect.summons_next)
+    return []
+
+
+def effect_promote(r: EffectRun) -> list[str]:
+    """效果的 promote 那一格（promote、followers 兩個欄位）：晉升奇遇（計畫 T5）；開關關著時什麼都不做。晉升有寫、部下空著也叫 add_followers。"""
+    effect, state, content = r.effect, r.state, r.content
+    msgs: list[str] = []
+    if effect.promote is not None or effect.followers:
+        if effect.promote is not None:
+            msgs += promote(state, content, effect.promote)
+        msgs += add_followers(state, content, effect.followers)
+    return msgs

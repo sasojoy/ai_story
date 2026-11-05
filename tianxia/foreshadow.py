@@ -22,7 +22,7 @@ from .journal import fragment_line
 from .models import (
     Check, Content, FsAsk, FsChain, FsFinal, FsFragment, FsItem, FsRequires, FsStep, FsWrong, Squad,
 )
-from .rules import can_meet, check_chance, check_result_line, day_seconds, side_of
+from .rules import EffectRun, can_meet, check_chance, check_result_line, day_seconds, season_one, side_of
 from .state import GameState, Lock
 from .world_state import WorldStateStore
 
@@ -744,6 +744,51 @@ def grant(state: GameState, content: Content, clue_items: dict[str, int], counte
     for key, n in counters.items():
         state.player.fs_counters[key] = max(0, state.player.fs_counters.get(key, 0) + n)
     return lines
+
+
+# core_effects（全部拆包第 32 批「效果與叛投掛鉤」）：rules.apply_effect 的三格（捐糧、直接給伏筆片段、伏筆物品與計數），原本那幾段逐字搬；
+# 核心（rules._EFFECT_CORE）延後 import 代叫，過渡：待搬（第 34 批：伏筆進軍情包，那三格改由軍情包登記）。先後在 core/features.py 的 EFFECT_ORDER。
+# 捐糧與片段原本跟符文殘片（seal.effect_runic）共用一個守衛（三個欄位有一個不空、而且 season_one）：拆開之後各自守自己的欄位——空著的那一段本來就
+# 什麼都不做，season_one 只讀內容與季上的章、捐糧那一段不會改它（計畫 2.5）。
+
+
+def effect_grain(r: EffectRun) -> list[str]:
+    """效果的 grain 那一格（donate_grain）：黃巾的第 3、4 階奇遇（正式版丙二），開關關著什麼都不做。捐糧同護糧送到（Game._convoy_arrives）
+    ——記捐獻、記一次推動的貢獻（四勝利記帳 wins.credit，共用規則層，夾在每一處捐糧的迴圈裡）；糧不夠、換算出 0 份就什麼都不記。"""
+    effect, state, content = r.effect, r.state, r.content
+    p = state.player
+    msgs: list[str] = []
+    if effect.donate_grain and season_one(content, state.world):
+        for loc_id, base in effect.donate_grain.items():
+            amount = need(content, base)
+            lines = spend_grain(state, content, amount)
+            if lines:
+                msgs += lines
+                key = f"{loc_id}:糧草"
+                p.donations[key] = p.donations.get(key, 0) + amount
+                week = calendar.point(state.world.time, content, state.world).week
+                wins.credit(p, content, state.world, week, content.config.contrib_per_push)
+    return msgs
+
+
+def effect_fragments(r: EffectRun) -> list[str]:
+    """效果的 fs_fragments 那一格：直接給片段（「鏈 id:片段序號」）；不發傳聞。守衛同捐糧（正式版丙二）。"""
+    effect, state, content, world = r.effect, r.state, r.content, r.world
+    msgs: list[str] = []
+    if effect.fs_fragments and season_one(content, state.world):
+        for ref in effect.fs_fragments:
+            chain_id, _, index = ref.rpartition(":")
+            if index.isdecimal():
+                msgs += grant_fragment(state, content, chain_id, int(index), world)
+    return msgs
+
+
+def effect_clues(r: EffectRun) -> list[str]:
+    """效果的 foreshadow 那一格（clue_items、fs_counters）：伏筆的準備事件；開關關著時什麼都不給、不寫字（grant）。"""
+    effect = r.effect
+    if effect.clue_items or effect.fs_counters:
+        return grant(r.state, r.content, effect.clue_items, effect.fs_counters)
+    return []
 
 
 def asks_of(c: FsChain) -> Iterator[tuple[str, FsAsk]]:
