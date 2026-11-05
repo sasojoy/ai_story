@@ -925,11 +925,11 @@ GAME_DELEGATE_CALLERS.update({
 
 # stamina_plays、seclusion（全部拆包第 39 批「體力玩法＋閉關」：新包 tianxia/features/stamina_plays/、tianxia/features/seclusion/；計畫
 # docs/superpowers/plans/2026-11-06-體力玩法閉關-第39批.md 1.4）：這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。10 個方法搬進包，Game 留 7 個一行委派
-# （_ambush_act、_ambush_fight、_works_act 只有包裡叫，沒有委派）。核心原位碰這一包的：choose 的 ambush:、works:（choose 掛鉤）與 _action_title 的兩格、
+# （_ambush_act、_ambush_fight、_works_act 只有包裡叫，沒有委派），另多一個 _stamina_play_head（_stamina_play_options 的前半），一共 8 個。核心原位碰這一包的：choose 的 ambush:、works:（choose 掛鉤）與 _action_title 的兩格、
 # _act 的 act:break（Verb）拿掉；_stamina_play_options 的前半叫包（選單順序算行為，不能改成 Feature.options 登記）；世界層 muster 的 works 那一格換成包登記。
 GAME_IMPORTS |= {"tianxia.features.stamina_plays.actions", "tianxia.features.stamina_plays.ambush_actions", "tianxia.features.seclusion.actions"}
 GAME_DELEGATES |= {
-    # server 與測試叫的閉關（seclusion_refusal、seclude）、_tick_player 叫的出關（_finish_seclusion）、sync 叫的收伏、_arrivals 叫的查伏兵，
+    # server 與測試叫的閉關（seclusion_refusal、seclude）、_advance_player_local 叫的出關（_finish_seclusion）、sync 叫的收伏、_arrivals 叫的查伏兵，
     # 與測試直接叫的搶奪（_ambush_spoils）、戰報（_ambush_record）
     "seclusion_refusal", "seclude", "_finish_seclusion", "_stamina_play_head", "_ambush_expire", "_ambush_check", "_ambush_spoils", "_ambush_record",
 }

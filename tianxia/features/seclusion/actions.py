@@ -1,5 +1,5 @@
 """閉關的動作（功能包 tianxia/features/seclusion/；原本是 Game 上的 seclusion_refusal、seclude、_finish_seclusion，開發規範手冊 3.2）。
-ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。Game 上留一行委派（server 的修練頁、_tick_player 與測試叫的）；
+ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。Game 上留一行委派（server 的修練頁、_advance_player_local 與測試叫的）；
 act:break（提早出關）由 SeclusionFeature.verbs() 的 Verb("break") 直接叫 finish。"""
 from __future__ import annotations
 

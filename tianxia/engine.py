@@ -5482,7 +5482,7 @@ class Game:
             and not allied.needs_ally(s, self.content)  # 拜入之後還沒挑依附哪一邊（豪強分屬兩軍）：先挑
         )
 
-    # ── 閉關（本體在功能包 tianxia/features/seclusion/，全部拆包第 39 批；這裡留一行委派給 server 的修練頁、_tick_player 與測試）──
+    # ── 閉關（本體在功能包 tianxia/features/seclusion/，全部拆包第 39 批；這裡留一行委派給 server 的修練頁、_advance_player_local 與測試）──
 
     def seclusion_refusal(self) -> str | None:
         return seclusion_actions.refusal(self)
