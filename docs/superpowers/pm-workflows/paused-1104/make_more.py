@@ -79,6 +79,24 @@ BATCHES = {
             "- 範圍照總表 3.3 第 33 列（約 17 個方法、280 行）與第二節「軍情」、附錄甲與丙的裁定。**包名用 `military`，不是總表寫的 `orders`**：`tianxia/orders.py` 這一批不搬，同名不准（第 23 批的教訓）。`act:rank2`、`act:convoy`、`act:summons` 在 `_act` 留委派。機緣、伏筆是第 34 批，不搬。",
             "- Task 1 的情境：軍令卡與應召（接、截止、過期）、押糧、第 2 階晉升奇遇、第 3／4 階行動、席次輪替與召見；三種設定；半舊半新切在軍令接了還沒交或押糧走到一半；假人碰得到（碰不到就寫明）。",
         ]),
+    "43": dict(
+        title="銀兩出口與捐軍備——捐素材、捐銀兩、名師指點、買破境丹、打點門路與帳簿（新包 `outlets`）",
+        pkg="outlets", feature="feature/outlets", dev="dev/outlets-1", host="outlets1",
+        plan="docs/superpowers/plans/2026-11-05-銀兩出口包-第1批.md",
+        ports={"dev": 8163, "rev": 8164, "fix": 8164, "head": 8165, "base": 8166}, fb="FB-9390～FB-9399",
+        body=[
+            "- 範圍照總表 3.3 第 43 列（約 17 個方法、225 行）與第二節「銀兩出口（`outlets`）」。`donate:`、`dadian:` 前綴；`bot_policy.score` 那兩段搬進包的 `bots.py`。看火候跟鐵匠鋪共用規則層的 `silver`，`silver.py` 留在共用規則層。",
+            "- Task 1 的情境：捐素材、捐銀兩、名師指點、買破境丹、打點門路與帳簿（成、錢不夠、次數滿）；三種設定；半舊半新切在打點開了還沒結；假人碰得到這兩個前綴（碰不到就寫明）。",
+        ]),
+    "44": dict(
+        title="煉製與自創——意境合成與揣摩（取名三段式、預覽、`/api/forge_line`）、自創五步、重悟帖、作罷（`create` 進新包 `craft`）",
+        pkg="craft", feature="feature/craft", dev="dev/craft-1", host="craft1",
+        plan="docs/superpowers/plans/2026-11-05-煉製自創包-第1批.md",
+        ports={"dev": 8167, "rev": 8168, "fix": 8168, "head": 8169, "base": 8170}, fb="FB-9400～FB-9409",
+        body=[
+            "- 範圍照總表 3.3 第 44 列（約 16 個方法、126 行）與第二節「煉製與自創（`craft`）」。`create` 進包（舊名留別名），`fusion` 不搬，留共用層。鎖外的取名三段式照第 24 批 `sense_draw` 的做法，模型呼叫不進鎖。`/api/forge_line` 那一條自己的軌要打到。",
+            "- Task 1 的情境：意境合成與揣摩（取名 A、B、C 三段，模型回與模型擋著）、預覽、自創五步走完與作罷、重悟帖；三種設定；半舊半新切在自創走到一半；假人碰得到（碰不到就寫明）。",
+        ]),
     "18": dict(
         title="探索三——序章草廬四景與探索的底：權重、野怪、自家營寨比劃、練功分級、撿破境丹",
         pkg="explore", feature="feature/explore", dev="dev/explore-3", host="explore3",
