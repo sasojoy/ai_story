@@ -1,4 +1,4 @@
-"""接下來幾批的派工（第 21、30、31、29、14、18、33、43、44、25、26、32、34、37、39、46 批）。用法：make_more.py <批號> <split/trunk SHA> [輸出資料夾]
+"""接下來幾批的派工（第 21、30、31、29、14、18、33、43、44、25、26、29b（第 29 批之二）、32、34、35、37、39、41、46、47、49 批）。用法：make_more.py <批號> <split/trunk SHA> [輸出資料夾]
 先把 feature 分支快轉或開在那一筆，再把產生的 b<批號>.js 交給 Workflow。第 31 批的包名不用總表寫的 `figures`：`tianxia/figures.py` 留著，同名不准（第 23 批的教訓）。"""
 import json
 import re
@@ -189,6 +189,62 @@ BATCHES = {
             "- 22:00 換天若經第 25 批的世界層「每天」那一格，主人換成包登記、`WORLD_ORDER` 位置不准動。",
             "- Task 1 的情境：下戰書、攻城時段、22:00 換天（跨過與沒跨過）、〈天下形勢〉、分紅與守城功補送、管理者五個救場工具各一次；三種設定（地盤要劇本有陣營、寫了 `territory`；設定關著的那一種寫明走不到）；半舊半新切在戰書下了、還沒到攻城時段；假人照常。",
         ]),
+    "35": dict(
+        title="陣營——投靠確認、改幫、叛投、三方卡、結局卡與季末四階、拜入門派（`defection` 進新包 `faction`）",
+        pkg="faction", feature="feature/faction", dev="dev/faction-1", host="faction1",
+        plan="docs/superpowers/plans/2026-11-06-陣營包-第1批.md",
+        ports={"dev": 8178, "rev": 8179, "fix": 8179, "head": 8180, "base": 8181}, fb="FB-9490～FB-9499",
+        body=[
+            "- 範圍照總表 3.3 第 35 列（20 個方法、252 行，加 `defection` 211 行）與第二節「陣營（`faction`）」。包名 `faction`（`tianxia/factions.py` 是另一個模組、這一批不搬，名字不同可以用；README 寫一句兩者的分別）。`faction:`、`defect:`、`sect:` 三個前綴（`Feature.prefix` 收 tuple，第 11 批 PM 定）；搬 `bot_policy` 的 `defect:`、`sect:` 兩段。",
+            "- **第 32 批 PM 認定第 5 條**：`defection.prompt`（叛投確認畫面）直接讀軍情包的押糧（`convoy`）、機緣、懸賞、階，搬 `defection` 時改成查詢服務（軍情包已成包，經 `ctx` 問；懸賞還是舊模組 `bounties`，照共用層或過渡寫法、行尾標「# 過渡：待搬（第 45 批）」）。",
+            "- **叛投清進度的掛鉤**（第 32 批開的 `DEFECT_ORDER`，`tianxia/core/features.py`）：叫掛鉤的那一處跟著 `defection` 搬進包，但**順序表留在核心、位置不准動**（順序就是行為，第 32 批 PM 認定第 1 條）；還掛在 `defection.py` 上、主人是別包或別的舊模組的格，照原主人留著，只改 import 的位置。",
+            "- Task 1 的情境：投靠（先按 `faction:<id>`、再按 `faction:confirm`）、改幫、叛投（確認畫面上有押糧在路上、有機緣、有懸賞、有階）、拜入門派；季末結局卡與四階；三種設定（陣營要劇本有陣營；測試內容沒有陣營的那一種寫明走不到）；半舊半新切在投靠按了還沒確認、叛投確認到一半；假人碰得到 `defect:`、`sect:`。",
+        ]),
+    "41": dict(
+        title="鐵匠鋪——架上、修、淬煉、一步一步打造與直接開爐、隱藏配方、神器定名、以器配招、收購升階、看火候（`smithing` 進新包 `smithy`）",
+        pkg="smithy", feature="feature/smithy", dev="dev/smithy-1", host="smithy1",
+        plan="docs/superpowers/plans/2026-11-06-鐵匠鋪包-第1批.md",
+        ports={"dev": 8182, "rev": 8183, "fix": 8183, "head": 8184, "base": 8185}, fb="FB-9500～FB-9509",
+        body=[
+            "- 範圍照總表 3.3 第 41 列（約 23 個方法、381 行，加 `smithing` 825 行）與第二節「鐵匠鋪（`smithy`）」。鐵匠鋪那條線（`feature/smithing-flow`）11/03 已合進 develop，在錨點 `split-anchor-20261104` 裡，照現行程式量。`/api/smith_line` 搬進包的 `routes.py`（照商城的做法）；`smith:` 前綴；搬 `bot_policy` 的 `smith:` 那一段。",
+            "- 鐵匠鋪是店面：店面登記（`Shop`，第 11 批開的宣告）與「此地還能做」的入口位置照現在的（FEATURES 裡 `bout` 的店面接在酒肆後面，這一包的店面先後量出來、寫進計畫第一節；接不上的留 Game 一行委派、邊界測試寫理由）。神器定名是三段式（模型呼叫不在鎖裡），寫法照舊；假人打出神器原品一律沿用譜名（CLAUDE.md 寫的已知破綻）照舊，不改。",
+            "- `web/` 不准碰（鐵匠鋪的畫面不搬），所以沒有實機驗收：自己那一軌 `/api/smith_line` 與每一個 `smith:` 動作都要打到、看回應內容。",
+            "- Task 1 的情境：買、修、淬煉、一步一步打造（每一步都按）與直接開爐、隱藏配方、神器定名（三段式的 A／C 段，模型擋掉時走保底名）、以器配招、收購升階、看火候；三種設定；半舊半新切在打造到一半、神器定名的單開著；假人碰得到 `smith:`。",
+        ]),
+    "47": dict(
+        title="移動一——移動選單（步行、疾行）、路上三樣小事、喊停、折返、`/api/travel`（新包 `travel`）",
+        pkg="travel", feature="feature/travel", dev="dev/travel-1", host="travel1",
+        plan="docs/superpowers/plans/2026-11-06-移動包-第1批.md",
+        ports={"dev": 8186, "rev": 8187, "fix": 8187, "head": 8188, "base": 8189}, fb="FB-9510～FB-9519",
+        body=[
+            "- 範圍照總表 3.3 第 47 列（19 個方法、208 行）與第二節「移動（`travel`）」。**不等輿圖那條線**（`feature/map-view` 擱著，拆完才追進主幹；交接第三節），照現行程式搬。`move:`、`road:` 前綴；搬 `bot_policy` 的 `move:` 那一段；`/api/travel` 搬進包的 `routes.py`。結伴同行、前往是第 48 批（移動二），不搬。",
+            "- 移動是每一步都會碰的：`_arrivals`、`sync` 裡抵達、路上小事、喊停的位置一個都不動（順序就是行為）；接不上掛鉤的留 Game 一行委派、邊界測試寫理由。舊的「趕路」（CLAUDE.md：拿掉之前出發、還在路上的那一趟照原本的步調走完，`atlas.MODE_NAMES`、`TIME_SHARE`、`TravelMode` 還認得它）照舊認得。",
+            "- `web/` 不准碰，所以沒有實機驗收：自己那一軌 `/api/travel` 與每一個 `move:`、`road:` 動作都要打到、看回應內容。",
+            "- Task 1 的情境：步行、疾行、路上三樣小事各一、喊停、折返、抵達（含有人設伏的地點）、舊的趕路還在路上；三種設定；半舊半新切在路上（出發了還沒到、路上小事出現了還沒選）；假人碰得到 `move:`。",
+        ]),
+    "49": dict(
+        title="輿圖一——天下圖、區圖、小地圖、地點詳情、疊層；`mapview`、`mapart`、`mapdata`、`worldgeo`、`map.js` 進新包 `map`；`/api/map` 三條路由",
+        pkg="map", feature="feature/map", dev="dev/map-1", host="map1", web=True,
+        plan="docs/superpowers/plans/2026-11-06-輿圖包-第1批.md",
+        ports={"dev": 8190, "rev": 8191, "fix": 8191, "head": 8192, "base": 8193}, fb="FB-9520～FB-9529",
+        body=[
+            "- 範圍照總表 3.3 第 49 列（11 個方法、82 行，加 `mapview` 802、`mapart` 545、`mapdata` 677、`worldgeo` 320 與 `atlas` 的圖層那一半）與第二節「輿圖（`map`）」、附錄丙裁給這一包的網頁宣告。**不等輿圖那條線**（`feature/map-view` 的 W2～W4 擱著，拆完才照新位置追進主幹；交接第三節），照現行程式搬；計畫第一節列出 `feature/map-view` 動到的檔，之後追的人照這張表改位置。`/api/map` 三條路由搬進包的 `routes.py`。",
+            "- **這一批例外，會動 `web/`**：`web/map.js`（與附錄丙裁給輿圖的宣告）搬到包裡、殼照包的登記把它送出去，網頁拿到的內容一個位元組不變；其餘 `web/` 照舊不准碰。動到 `web/`，所以有實機驗收（375 淺、375 深、1280 並排截圖逐像素比，`split-batch.js` 的 Check 那一段）。",
+            "- `atlas` 拆兩半：圖層那一半進包，地點與路的資料（移動、地盤、設伏都在讀的）留在原處；拆的線照附錄甲。",
+            "- Task 1 的情境：天下圖、各區圖、小地圖、地點詳情、每一種疊層開關；三種設定；`/api/map` 三條路由與 `map.js` 的內容（整檔 sha256）都要打到；半舊半新切在地圖畫到一半沒有意義的話寫明（沒有寫到一半的狀態）；假人不看地圖就寫明。",
+        ]),
+    "29b": dict(
+        title="列傳二（第 29 批之二）——`annals` 拆兩半：記一筆行狀的那一半收進核心，查詢與行狀頁那一半進列傳包 `zhuan`",
+        pkg="zhuan", feature="feature/zhuan", dev="dev/zhuan-2", host="zhuan2",
+        plan="docs/superpowers/plans/2026-11-06-列傳包-第29批之二.md",
+        prev_plan="docs/superpowers/plans/2026-11-04-列傳包-第1批.md",
+        ports={"dev": 8194, "rev": 8195, "fix": 8195, "head": 8196, "base": 8197}, fb="FB-9530～FB-9539",
+        body=[
+            "- **這是第 29 批之二，不是第 29 批**：第 29 批（列傳包）11/05 已合；這一批做它沒做的總表附錄甲「`annals` 拆兩半」（總表第 29 列末句、附錄甲第 522 行那一列，第 29 批計畫第 168 行的說明）。",
+            "- 拆法：**記一筆行狀的那一半**（各包打完、做完時記一筆用的函式與常數，例：`DUEL`、`ERRAND`、`GROUPS`、`MARK`、`STANCE`、`TIER`、`XINGSHI`，與寫進 `PlayerState.annals`／`annals_mark` 的函式）收進核心本體（`tianxia/core/` 新檔，照第 34 批 `omen_base`、第 37 批 `presence` 的前例）；**查詢與行狀頁的那一半**（`standing()` 這一類，`/api/annals` 已在列傳包的 `routes.py`）搬進列傳包。舊名 `tianxia/annals.py` 留別名，兩半都 re-export。`PlayerState.annals`、`annals_mark`、`xingshi_seen` 照舊是核心欄位、不認領。",
+            "- **先量**：現在「包 → `tianxia.annals`」的過渡處（約 16～17 處，`git grep -n annals -- tianxia/features` 看行尾「過渡」）、`SHARED_LATER[\"fusion\"]`、companions 與 story 兩包 README 提到的。拆完這些過渡處改 import 核心那一半，拿掉過渡標記，處數寫進計畫第五節。換季與同步的位置（`_stance_annals`、`_zhuan_tick`、`_zhuan_past` 的先後）一個都不動。",
+            "- Task 1 的情境：沿用 `zhuan` 一軌，再補「各包記一筆行狀」：打贏、做完差事、立場、決戰、單挑、〈天下形勢〉各一，看 `/api/annals` 的內容；三種設定；半舊半新切在記了一半（有 mark 還沒寫成行狀）；假人照常。",
+        ]),
     "18": dict(
         title="探索三——序章草廬四景與探索的底：權重、野怪、自家營寨比劃、練功分級、撿破境丹",
         pkg="explore", feature="feature/explore", dev="dev/explore-3", host="explore3",
@@ -205,7 +261,7 @@ DEFAULTS = {"reviewers": 2, "dev_model": "sonnet", "after15": True,
             "prev_plan": "docs/superpowers/plans/2026-11-04-人物情誼包-第2批.md"}
 PARALLEL = (f"同時在跑的批看 split/trunk 交接第一節「現在在跑」。這一批從 split/trunk `{BASE}` 開（PM 開 `{b['feature']}` 在這一筆）。"
             "共用登記檔各寫各的段，合併時 PM 照順序接。")
-a = {**DEFAULTS, **{k: v for k, v in b.items() if v is not None}, "n": int(N), "base": BASE,
+a = {**DEFAULTS, **{k: v for k, v in b.items() if v is not None}, "n": int(re.match(r"\d+", N).group()),  # 「29b」＝第 29 批之二 "base": BASE,
      "parallel": b.get("parallel") or PARALLEL,
      "body": "\n".join(b["body"] + COMMON_BODY)}
 if b.get("dev_model", "x") is None:  # 核心批留在 Opus（總表 5.2 第 3 條）：不給 dev_model
