@@ -266,6 +266,12 @@ explore（主動搬六包第 3＋4 批加的這一段）
   `look(game, lambda g: …)` 叫，路由裡的變數叫 g）
 - `ctx.forge(main, aux)`（煉製頁開爐，序章合成；新手引導的假人走序章〔`_graduate`〕叫它：原本記在三、過渡 guide 那一段，主人成包了，改列這裡）
 
+# territory_acts（全部拆包第 46 批「地盤」；計畫 docs/superpowers/plans/2026-11-06-地盤包-第1批.md 1.3）。包要叫的核心服務 `ctx._conquest_side()`、`ctx._admin_refusal(action)`、
+# `ctx._log(msgs)`、`ctx._write(...)`、`ctx._save_season()`、`ctx.stamp(t)`、`ctx.pill_now()`、`ctx._sieges()`、`ctx.is_admin()` 上面已經列了；這一段只補還沒列的三個：
+- `ctx._flavor_sink()`（核心：這一下收進來、等著鎖外請模型潤的江湖大事單子；管理者救場工具〔設進度、推進度〕叫 check_thresholds 時帶上）
+- `ctx._joinable()`、`ctx._cancel_siege(record_id, text)`（主人：決戰包；地盤畫面問「這一塊集結・交戰中的那一場自己加不加得進去」、管理者救場工具「取消一場攻城」
+  照收兵收起來；原本邊界測試 GAME_DELEGATE_CALLERS 的 `(_siege_live, _joinable)`、`(admin_conquest_cancel, _cancel_siege)` 兩筆，方法搬進包之後改經 ctx 叫）
+
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
 explore（主動搬六包第 3＋4 批加的這一段）

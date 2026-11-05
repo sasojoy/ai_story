@@ -688,42 +688,7 @@ def check_front_lines(c: Content, need) -> None:
 # 擂台場邊事件的固定句（原本的 check_arena_crowd）搬進單挑包：tianxia/features/bout/arena_crowd.py 的 check_content（全部拆包第 12 批）
 
 
-def check_xingshi_lines(c: Content, need) -> None:
-    """〈天下形勢〉的句型（content/xingshi_lines.json，領地爭奪第三批 A；Joy 直接改字）：寫了這個檔就每一組都要齊——open、close 是一串句子，
-    fact、summary、lean、move 每一個鍵（xingshi.FACT_KEYS 這幾組）都要有一句、不能多寫認不得的鍵；每一句照 xingshi.SAMPLE 填得進去、
-    填完不能空、不能有阿拉伯數字（文章不准有數字，固定段就是拿這些句子拼的）。沒有這個檔就沒有〈天下形勢〉（xingshi.on）。"""
-    from . import xingshi  # noqa: PLC0415
-
-    lines = c.xingshi_lines
-    if not lines:
-        return
-
-    def check(where: str, text) -> None:
-        try:
-            filled = str(text).format(**xingshi.SAMPLE)
-        except (KeyError, IndexError, ValueError) as e:
-            need(False, f"xingshi_lines.{where}：「{text}」填不進去（{e}）")
-            return
-        need(isinstance(text, str) and bool(filled.strip()) and not any(ch.isdigit() for ch in filled),
-             f"xingshi_lines.{where}：「{text}」不能空、不能有數字")
-
-    groups = {"fact": xingshi.FACT_KEYS, "summary": xingshi.SUMMARY_KEYS, "lean": xingshi.LEAN_KEYS, "move": xingshi.MOVE_KEYS}
-    for key in lines:
-        need(key in groups or key in ("open", "close"), f"xingshi_lines：不認得的鍵 {key}")
-    for key in ("open", "close"):
-        pool = lines.get(key)
-        need(isinstance(pool, list) and bool(pool), f"xingshi_lines.{key}：要寫成一串句子")
-        for text in pool if isinstance(pool, list) else []:
-            check(key, text)
-    for group, keys in groups.items():
-        table = lines.get(group)
-        need(isinstance(table, dict), f"xingshi_lines.{group}：要寫成「鍵：句子」")
-        table = table if isinstance(table, dict) else {}
-        for key in keys:
-            need(key in table, f"xingshi_lines.{group} 缺少 {key}")
-        for key, text in table.items():
-            need(key in keys, f"xingshi_lines.{group}：不認得的鍵 {key}")
-            check(f"{group}.{key}", text)
+# 〈天下形勢〉句型（content/xingshi_lines.json）的驗證（原本的 check_xingshi_lines）搬進地盤包的 check_content：tianxia/features/territory_acts/xingshi.py 的 check_lines（全部拆包第 46 批）
 
 
 # 減法季探索一顆的「旅人」（整合設計 4.1）：野外的事件拍偏向救助旅人那一類（從現有的野外事件挑合適的標上，PM 2026-10-25 第 7 件）。
@@ -2593,7 +2558,6 @@ def validate(c: Content) -> None:
     # 功能包自己的內容（商城的商品，原本的 check_mall；擂台的場邊事件，原本在 check_art 下一行的 check_arena_crowd，全部拆包第 12 批）
     check_features(c, need)
     check_art(c, need)
-    check_xingshi_lines(c, need)
     check_traits(c, need)
     check_signature_arts(c, need)
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。

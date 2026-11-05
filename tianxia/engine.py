@@ -17,11 +17,11 @@ from . import arts as arts_mod
 # （cultivation：破境卡 ascend 全部拆包第 23 批搬進修練包，engine 不再用，拿掉）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
-    allied, annals, armor, atlas, battle_instance, battlelog, bounties, calendar, clinic, conquest, conquest_day, create, defection, divine, economy, encounter, equipment,
+    allied, annals, armor, atlas, battle_instance, battlelog, bounties, calendar, clinic, conquest, create, defection, divine, economy, encounter, equipment,
     fight_llm, figure_life, figures, foreshadow, four_tiers, forge_secrets, fusion, gender, howto, insight_fx, insights, invites, journal, library, mapdata, martial_arts, plans,
     materials, mounts, naming, opportunities, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skillview, smithing,
-    social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, xingshi, zh,
+    social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, zh,
 )
 from . import flavor
 from .flavor import FlavorJob
@@ -67,7 +67,7 @@ from .models import (
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    HUANGJIN, add_chronicle, add_rumor, add_season_rumor, add_world_flags, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
+    HUANGJIN, add_rumor, add_season_rumor, add_world_flags, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
     day_turn, ears_of, fill_marks, game_day, here_regions,
     chaos_fronts, front_chip, front_ids, front_of, humanize,
     is_revealed, learn_skill, pushable, resolve_goals, resolve_trend, roll_check,
@@ -130,6 +130,7 @@ from .features.companions import talk_actions as companions_talk  # 過渡：Gam
 
 if TYPE_CHECKING:  # 型別註記用（companion_agent、parley 搬進人物情誼包之後 engine 不再 import 它們；Game 上的委派只轉手）
     from .features.companions import companion_agent, parley
+    from .features.territory_acts import xingshi  # 〈天下形勢〉B 段的請求型別（全部拆包第 46 批）
 # cultivation（全部拆包第 23 批「修練」）：裝飾器搬進核心的共用的小函式（還掛在 Game 上的動作照舊掛 @_not_while_preparing；籌備中那兩句第 24 批先搬了，
 # `# sense` 那一行 import）；
 # 修練頁的 33 個一行委派（原本 engine 那兩行 import 的 cultivation、chuangong 與 `from . import ascend` 現在是修練包的別名，engine 不再用，拿掉）
@@ -162,9 +163,15 @@ from .features.military import convoy_actions as military_convoy_actions  # 過�
 from .features.military import order_actions as military_order_actions  # 過渡：Game 上軍令卡與記功的 4 個一行委派
 from .features.military import seat_actions as military_seat_actions  # 過渡：Game 上席次抄帳的一行委派
 from .features.military import step_actions as military_step_actions  # 過渡：Game 上第 2 階與第 3、4 階行動的 4 個一行委派
+# territory_acts（全部拆包第 46 批）：戰書與攻城時段、22:00 換天與分紅補送、〈天下形勢〉、地盤畫面、管理者救場的 20 個一行委派
+from .features.territory_acts import admin_actions as territory_admin  # 過渡：Game 上管理者救場工具的 5 個一行委派
+from .features.territory_acts import day_actions as territory_day  # 過渡：Game 上換天與分紅補送的 2 個一行委派（engine 五處直接叫，沒有掛鉤）
+from .features.territory_acts import letter_actions as territory_letter  # 過渡：Game 上戰書的 2 個一行委派
+from .features.territory_acts import view as territory_view  # 過渡：Game 上地盤畫面的 2 個一行委派
+from .features.territory_acts import xingshi_actions as territory_xingshi  # 過渡：Game 上〈天下形勢〉的 9 個一行委派
 from .state import (
     ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, CrowdNote, Equipment, GameState, HintNote, JournalEntry, Journey, Mingtie, Rumor, Tagalong,
-    StoryCard, StoryProgress, TierResult, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
+    StoryCard, StoryProgress, TierResult, WorldState, XingshiEssay,
     new_game_state,
 )
 from .world import (
@@ -249,36 +256,9 @@ LOW_HP_RATIO = 0.3  # 開打前氣血剩上限的三成以下（含）算「氣�
 # 上面 import 回來，`from tianxia.engine import SAY_OPTION` 照舊拿得到）
 DUEL_FLEE = "duel:flee"  # 頭目戰的抽身退走（整季機器人不按它：bot.pick）
 ARENA_YIELD = "arena:yield"  # 擂台的認輸下台（整季機器人不按它：bot.pick）；寫字面（＝ features/bout/arena_rules.YIELD_ID）：單挑搬成包之後模組層不碰包
-# 領地爭奪：戰書（翻地與爭搶，輿圖簡化設計 4.4；投票與 22:00 公告結算拿掉了，PM 2026-10-20）。待 joy 潤
-LETTER_TITLE = "下戰書"
-LETTER_DONE = "你替{side}下了戰書：{time} 攻{place}。這一塊的進度凍結到那一場打完。"
-LETTER_JOINED = "你替{side}下了戰書，併進{time} 那一場：跟{others}同時攻{place}。"
-LETTER_RANK = "只有這一週在任的第 4 階才能下戰書"
-LETTER_NO_SLOT = "今明兩天都排不出攻城的時段"
-CONQUEST_OFF = "這一季沒有攻城戰。"
-CONQUEST_ENDED = "這一季已經收了。"
-CONQUEST_PAY_TITLE = "攻下{place}"  # 分紅送到的那一則江湖紀錄（Game._deliver_conquest）
-CONQUEST_GUARD_TITLE = "守住{place}"
-CONQUEST_PAY_LINE = "{place}易手，你這一輪替{side}出了 {pct}% 的力，分得："
-CONQUEST_GUARD_LINE = "{place}守住了，你這一輪替{side}拉回 {pct}% 的進度，分得守城功："
-CONQUEST_TOP_ANNAL = "率先攻入{place}"  # 行狀（annals.CONQUER）
-CONQUEST_TOP_GUARD_ANNAL = "力保{place}不失"
 # 撞過一場混戰之後，截殺的拒絕話照實寫（FB-607：混戰跟截殺共用冷卻與護身那一本，以前一律寫「截殺過」「被人截殺過」）。待 joy 潤
 RAID_AFTER_CLASH = "你跟{them}不久前才在混戰裡交過手，過一陣子再說。"
 RAID_SHIELD_CLASH = "{them}剛跟人混戰過，元氣未復，這時下手太不講江湖道義。"
-# 領地爭奪第三批 A：管理者「現在就開一篇天下形勢」的回話（管理者看的，待 joy 潤）
-XINGSHI_OFF = "這一季沒有〈天下形勢〉。"
-XINGSHI_OPENED = "第 {n} 篇〈天下形勢〉開了單：伺服器在背景請模型寫，寫不出來或 {minutes} 分鐘沒交回就照固定段收。"
-SIEGE_STATUS = {"planned": "未開", "waiting": "即將集結", "open": "集結・交戰中", "void": "作罷"}
-SIEGE_TAKEN = "{side}拿下"
-SIEGE_HELD = "守住了"
-
-
-def siege_status_text(content: Content, slot) -> str:
-    """時程表上一場攻城的狀態那幾個字（待 joy 潤）。"""
-    if slot.status == "done":
-        return SIEGE_TAKEN.format(side=content.scenario.faction_name(slot.winner, slot.winner)) if slot.winner else SIEGE_HELD
-    return SIEGE_STATUS.get(slot.status, "")
 
 
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）；PAUSED_TEXT 在核心（core/services.py）。待 S1／joy 潤
@@ -5788,340 +5768,52 @@ class Game:
         side = allied.side_of(self.state, self.content)
         return side if side in conquest.SIDES else None
 
-    def _letter_key(self) -> int:
-        """今天是第幾天（conquest_day.day_key：當地 22:00 換天；一邊一天一張戰書照它算）。"""
-        return conquest_day.day_key(self.pill_now(), self.content.config)
-
     def letter_problem(self, loc: str) -> str | None:
-        """下不了戰書的那一句（不含括號）；下得了是 None（設計 4.4、第九章第 13 條）：這一週在任的第 4 階（ranks.rank_of）、自己那一邊在這一塊的
-        進度到 letter_at、這一塊推得動、這一邊今天還沒下過（conquest.letter_problem），排得出時段。假人不下（bot_policy 不按），規則本身不看。"""
-        c, w = self.content, self.state.world
-        if not conquest.on(c, w) or w.conquest is None:
-            return CONQUEST_OFF
-        if w.ended:
-            return CONQUEST_ENDED
-        side = self._conquest_side()
-        if side is None or ranks.rank_of(self.state) != ranks.SEAT_RANK:
-            return LETTER_RANK
-        if loc not in c.locations:
-            return conquest.WHY_OUT
-        problem = conquest.letter_problem(w, c, side, loc, self._letter_key())
-        if problem is not None:
-            return problem
-        slot = conquest.frozen(w, loc)
-        if slot is None and conquest_day.next_slot(w, c, self.pill_now()) is None:
-            return LETTER_NO_SLOT
-        return None
+        return territory_letter.letter_problem(self, loc)
 
     def conquest_letter(self, loc: str) -> list[str]:
-        """下戰書（MAIN_ACTIONS["conquest_letter"]；輿圖的卡上那一顆，第 4 批畫）：照 conquest_day.place_letter 排一場攻城（最近的時段；同一塊
-        別一邊下了、還沒開集結就併進那一場），那一塊凍結到打完。天下大事一句（具名）、江湖紀錄一則、存季。"""
-        problem = self.letter_problem(loc)
-        if problem is not None:
-            return self._log([f"（{problem}。）"])
-        c, w = self.content, self.state.world
-        side = self._conquest_side()
-        before = list(conquest.frozen(w, loc).attackers) if conquest.frozen(w, loc) is not None else []
-        placed = conquest_day.place_letter(w, c, side, loc, self.state.player.name, self.pill_now())
-        if placed is None:
-            return self._log([f"（{LETTER_NO_SLOT}。）"])
-        slot, _ = placed
-        names = {f.id: f.name for f in c.scenario.factions}
-        when, place = self.stamp(slot.at), c.locations[loc].name
-        if before:
-            line = LETTER_JOINED.format(side=names.get(side, side), time=when, others="、".join(names.get(a, a) for a in before), place=place)
-        else:
-            line = LETTER_DONE.format(side=names.get(side, side), time=when, place=place)
-        self._write(LETTER_TITLE, [line])
-        self._save_season()
-        return self._log([line])
+        return territory_letter.conquest_letter(self, loc)
 
     def _conquest_tick(self, save: bool = True) -> list[str]:
-        """領地爭奪：換天（當地 22:00，conquest_day.day_key 照 pill_now）的掛鉤——前幾天排的、到現在還沒開集結的攻城作罷（conquest_day.day_turn），
-        收場的攻城戰從共用狀態拿掉。第一個看到新的一天的人觸發（sync、伺服器的排程 world_tick、快轉 advance 都叫）；**日子只准往前走**
-        （ConquestState.settled_key，同 arena.roll_day 的教訓：快轉過的 Game 與照現實時間的 Game 輪流同步不重排、不倒退）。這一季第一次只記下今天。
-        開關關著、季收了、暫停中什麼都不做（不碰 WorldState）。save 是假時不存季（advance 自己存）。
-        第三批 A〈天下形勢〉（開著時，xingshi.on）：一開頭先看還在等模型的那一張單過了 grace_seconds 沒有（照固定段收，季收了也收）；
-        第一次只記下起點（_xingshi_start），之後每一次換天（day_turn）之後開一張新的（_xingshi_open）。"""
-        c, w = self.content, self.state.world
-        if not conquest.on(c, w) or w.conquest is None:
-            return []
-        late = self._xingshi_grace()  # 沒人上線也收得掉：伺服器排程的 world_tick 也走這裡
-        key = conquest_day.day_key(self.pill_now(), c.config)
-        if w.ended or key <= w.conquest.settled_key or self.world.paused_at() is not None:
-            if late and save:
-                self._save_season()
-            return []
-        if w.conquest.settled_key < 0:
-            w.conquest.settled_key, msgs = key, []
-            self._xingshi_start()
-        else:
-            msgs = conquest_day.day_turn(w, c, key)
-            for done in [b for b in self.world.get_sieges() if b.phase == "ended"]:  # 收場的攻城戰留到這時才從共用狀態拿掉
-                self.world.drop_siege(done.record_id)
-            self._xingshi_open(key)
-        if save:
-            self._save_season()
-        return msgs
+        return territory_day.conquest_tick(self, save)
 
     def _deliver_conquest(self) -> None:
-        """翻地的分紅送到（輿圖簡化設計 4.5；conquest._payout 記在 ConquestState.payouts）：自己同步（與快轉）時拿走自己的那幾筆——銀兩、經驗
-        （只給本人；滿級照 5 換 1 換成心得，同決戰軍餉）、名望（renown.gain）；推（拉）最多的那一個記一筆行狀（annals.CONQUER）。一筆一則江湖紀錄。
-        下線的人回來照樣拿得到。沒有自己的什麼都不做（不碰共用賽季）。"""
-        s, c = self.state, self.content
-        state = s.world.conquest
-        if state is None or not state.payouts:
-            return
-        me = name_key(s.player.name)
-        mine = [pay for pay in state.payouts if name_key(pay.name) == me]
-        if not mine:
-            return
-        state.payouts = [pay for pay in state.payouts if name_key(pay.name) != me]
-        p = s.player
-        names = {f.id: f.name for f in c.scenario.factions}
-        # 出陣回報：最新一則就是推滿（拉回歸零）那一下出陣的話，分紅那一則接著畫同一塊——不然一同步「剛剛」就換成分紅、看不到易手那一條
-        last = s.journal[0].front if s.journal else None
-        for pay in mine:
-            place = c.locations[pay.loc].name if pay.loc in c.locations else pay.loc
-            side = names.get(pay.side, pay.side)
-            head = (CONQUEST_PAY_LINE if pay.kind == "take" else CONQUEST_GUARD_LINE).format(place=place, side=side, pct=round(pay.share * 100))
-            lines: list[str] = [head]
-            if pay.silver:
-                p.stats["silver"] = p.stats.get("silver", 0) + pay.silver
-                lines.append(f"銀兩 +{pay.silver}")
-            if pay.exp and team.maxed(c, p.member):
-                gained = team.maxed_xinde(s, c, pay.exp, "dividend")
-                if gained:
-                    lines += [team.MAXED_XINDE.format(n=gained), f"心得 +{gained}"]
-            elif pay.exp:  # 翻地分紅算仗（地是打下來的，growth.BATTLE_KINDS）
-                before = p.member.level
-                lines.append(f"經驗 +{pay.exp}")
-                lines += team.add_exp(c, p.member, pay.exp, p.name, "dividend")
-                if p.member.level > before:
-                    points = team.level_points(self.state, c, before, p.member.level)
-                    p.stat_points += points
-                    if points:
-                        lines.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
-            if pay.fame:
-                lines += renown.gain(s, c, "fame", pay.fame)
-            if pay.top:
-                text = (CONQUEST_TOP_ANNAL if pay.kind == "take" else CONQUEST_TOP_GUARD_ANNAL).format(place=place)
-                annals.note(s, c, annals.CONQUER, text, 4, place=place, time=pay.time)
-            self._write((CONQUEST_PAY_TITLE if pay.kind == "take" else CONQUEST_GUARD_TITLE).format(place=place), lines)
-            if last is not None and last.loc == pay.loc:
-                s.journal[0].front = last
-        self._save_season()
+        return territory_day.deliver_conquest(self)
+
     # ── 〈天下形勢〉（領地爭奪第三批 A；tianxia/xingshi.py，計畫第五章 Task 16、17）──
 
     def _xingshi_start(self) -> None:
-        """這一季第一次結算（只記下 key 的那一下）：記〈天下形勢〉的起點——三條線此刻的值、day_log 與天下大事讀到哪裡（XingshiMark）。
-        已經記過、或〈天下形勢〉關著不動。"""
-        c, w = self.content, self.state.world
-        if not xingshi.on(c, w) or w.xingshi_mark is not None:
-            return
-        w.xingshi_mark = XingshiMark(log=len(w.conquest.day_log), rumors=len(w.rumors), lines=xingshi.line_values(w, c))
+        return territory_xingshi.start(self)
 
     def _xingshi_open(self, key: int) -> None:
-        """結算完那一下開一張新的單（WorldState.xingshi_ticket）：事實是上一篇以來的 day_log、三條線比上一篇的動向、天下大事（xingshi.facts），
-        「是日：…」照收場的那幾筆（summary_line）。上一張還沒收的先照固定段收（一天一篇，不會兩張單並存）；讀到哪裡往前挪（XingshiMark）。"""
-        c, w = self.content, self.state.world
-        if not xingshi.on(c, w):
-            return
-        if w.xingshi_ticket is not None:
-            self._xingshi_finish(None)
-        mark = w.xingshi_mark or XingshiMark()
-        notes = w.conquest.day_log[mark.log:]
-        n = max([e.n for e in w.xingshi], default=0) + 1
-        w.xingshi_ticket = XingshiTicket(
-            n=n, key=key, opened_real=self.now,  # 現實時鐘（FB-577）
-            facts=xingshi.facts(w, c, notes, mark.lines, mark.rumors, night=xingshi.is_night(self.pill_now(), c),  # 白天開的不寫「打到入夜」
-                                marks_from=mark.fired),  # 減法季批 4：上一篇開單以後過門檻的痕跡（PM 2026-10-25 修正輪：不再靠世界層傳聞補）
-            line=xingshi.summary_line(notes, c),
-        )
-        w.xingshi_mark = XingshiMark(log=len(w.conquest.day_log), rumors=len(w.rumors), lines=xingshi.line_values(w, c),
-                                     fired=len(w.marks_fired))  # 這一篇開單那一刻讀到哪裡：開單到收下之間過門檻的，下一篇寫
+        return territory_xingshi.open_ticket(self, key)
 
     def _xingshi_finish(self, essay: str | None) -> XingshiEssay:
-        """收下還在等的那一張：模型寫的過得了 xingshi.clean 就用，不然照固定段（by_rule，畫面上看不出差別）；天下大事一則、江湖史一筆，
-        這一季最多留 Config.xingshi.keep 篇。呼叫端確認有單、自己存季。"""
-        c, w = self.content, self.state.world
-        ticket = w.xingshi_ticket
-        text = xingshi.clean(essay) if essay else None
-        done = XingshiEssay(
-            key=ticket.key, time=w.time, n=ticket.n, line=ticket.line, by_rule=text is None,
-            essay=text if text is not None else xingshi.rule_text(ticket.facts, c, f"{w.tianji}|{ticket.key}|{ticket.n}"),
-        )
-        w.xingshi = (w.xingshi + [done])[-c.config.xingshi.keep:]
-        news = xingshi.rumor_text(ticket.line)
-        add_rumor(self.state, news, content=c, layer="world")
-        add_chronicle(self.state, news)
-        w.xingshi_ticket = None
-        return done
-
-    def _xingshi_grace(self) -> bool:
-        """還在等模型的那一張單開了 Config.xingshi.grace_seconds（現實秒）還沒交回：照固定段收（伺服器關著、模型壞了，照樣每天一篇）。
-        暫停中不收（暫停凍結世界的變化）。收了回 True（呼叫端存季）。開單、寬限、重試一律照現實時鐘 self.now（FB-577：管理者快轉推的
-        advanced_real 只活在那一個 Game 裡，拿 pill_now 開的單，沒快轉過的 Game 要等現實追上十幾個小時才收得掉）；換天照舊認 pill_now。"""
-        c, w = self.content, self.state.world
-        ticket = w.xingshi_ticket
-        if ticket is None or not xingshi.on(c, w) or self.world.paused_at() is not None:
-            return False
-        if self.now - ticket.opened_real < c.config.xingshi.grace_seconds:
-            return False
-        self._xingshi_finish(None)
-        return True
+        return territory_xingshi.finish(self, essay)
 
     def xingshi_waiting(self) -> bool:
-        """有一張單等著伺服器拿去請模型寫（server._xingshi_waiting 問；還沒被拿走、上一趟沒輪到的隔過 retry_seconds 了）。只讀。"""
-        ticket = self.state.world.xingshi_ticket
-        return (ticket is not None and not ticket.taken and self.now >= ticket.retry_at
-                and xingshi.on(self.content, self.state.world))
+        return territory_xingshi.waiting(self)
 
     def release_xingshi(self, request: xingshi.XingshiRequest) -> bool:
-        """B 段沒叫成模型（佇列裡假人的名額被佔、排不到）：同一張單放回去（taken 清掉），隔 Config.xingshi.retry_seconds 再拿；
-        寬限到了還沒寫成，照舊由 _xingshi_grace 照固定段收（PM，第三批 A 回報之後：不要一被擋就退回固定段）。放了回 True、存季。"""
-        ticket = self.state.world.xingshi_ticket
-        if ticket is None or ticket.n != request.n or ticket.key != request.key:
-            return False
-        ticket.taken, ticket.retry_at = False, self.now + self.content.config.xingshi.retry_seconds
-        self._save_season()
-        return True
+        return territory_xingshi.release(self, request)
 
     def xingshi_request(self) -> xingshi.XingshiRequest | None:
-        """A 段（server.xingshi_once 在行動鎖內叫）：拿走還在等的那一張單（記 taken、存季，同一張不再拿第二次），回請模型寫要的東西；
-        沒有、已經被拿走是 None。"""
-        w = self.state.world
-        if not self.xingshi_waiting():
-            return None
-        ticket = w.xingshi_ticket
-        ticket.taken = True
-        self._save_season()
-        return xingshi.XingshiRequest(n=ticket.n, key=ticket.key, line=ticket.line, facts=list(ticket.facts))
+        return territory_xingshi.request(self)
 
     def settle_xingshi(self, request: xingshi.XingshiRequest, essay: str | None) -> bool:
-        """C 段：還是同一張單（篇次與 key 都對得上、還沒收）才收；文章過不了 xingshi.clean 照固定段。收了回 True、存季。
-        單子換了（過了 grace 已經照固定段收、隔天開了新的）就丟掉。"""
-        ticket = self.state.world.xingshi_ticket
-        if ticket is None or ticket.n != request.n or ticket.key != request.key:
-            return False
-        self._xingshi_finish(essay)
-        self._save_season()
-        return True
+        return territory_xingshi.settle(self, request, essay)
 
     def xingshi_view(self) -> dict:
-        """見聞「形勢」頁（/api/xingshi）：這一季收下的每一篇（新的在前；標題、時刻、「是日：…」、文章），pending＝今天這一篇還在寫。
-        不寫是不是模型寫的（by_rule 不送）。〈天下形勢〉關著是 {"on": False}。"""
-        c, w = self.content, self.state.world
-        if not xingshi.on(c, w):
-            return {"on": False}
-        essays = [{"n": e.n, "title": xingshi.HEAD.format(n=e.n), "time": self.stamp(e.time), "line": e.line, "essay": e.essay}
-                  for e in reversed(w.xingshi)]
-        return {"on": True, "pending": w.xingshi_ticket is not None, "essays": essays}
+        return territory_xingshi.view(self)
 
     def xingshi_mark(self) -> str:
-        """見聞「形勢」頁要不要重抓（FB-578；server.main_view 的 xingshi_mark）：收下的最新一篇的篇次，有一張還在寫就多一個「+」。
-        開了新單、寫好了都會變，網頁停在那一頁時看到它變了就重抓 /api/xingshi。只讀。"""
-        w = self.state.world
-        latest = max((e.n for e in w.xingshi), default=0)
-        return f"{latest}{'+' if w.xingshi_ticket is not None else ''}"
+        return territory_xingshi.mark(self)
 
     def admin_xingshi_now(self) -> list[str]:
-        """管理者（測試與試玩用）：現在就開一篇〈天下形勢〉——照上一篇以來的事實開一張單，效果跟每天結算那一下一樣（還在等的那一張先照
-        固定段收）。伺服器照常在背景請模型寫，寫不出來照固定段。"""
-        refusal = self._admin_refusal("現在就開一篇天下形勢")
-        if refusal:
-            return self._log(refusal)
-        c, w = self.content, self.state.world
-        if not xingshi.on(c, w) or w.conquest is None or w.ended:
-            return self._log([f"（{XINGSHI_OFF}）"])
-        self._xingshi_open(w.conquest.settled_key)
-        line = XINGSHI_OPENED.format(n=w.xingshi_ticket.n, minutes=round(c.config.xingshi.grace_seconds / 60))
-        self._write("天下形勢", [line], tag="管理者")
-        self._save_season()
-        return self._log([line])
+        return territory_xingshi.admin_now(self)
 
     def conquest_view(self) -> dict | None:
-        """領地爭奪的畫面資料（server.main_view 的 conquest；輿圖第 3、4 批畫）：today 是時程表（戰書排的攻城：地點、攻方、時刻、狀態、誰下的），
-        blocks 是每一塊的翻地資料（conquest.block_view：誰佔著、開季的種類、每一條進度、冷卻幾分、被哪一場戰書凍結〔時刻照 stamp_text〕、正在推的人、
-        激戰、每一邊的集火、看的人攻或守推不推得動與原因），here 是自己腳下那一塊（不是區塊是 None），letter 是自己能不能下戰書（只有在任的第 4 階
-        有 can／why 與自己那一邊進度到門檻的塊）。開關關著、季收了是 None。誰推的只寫名號，真人假人一樣。"""
-        c, w = self.content, self.state.world
-        if not conquest.on(c, w) or w.ended or w.conquest is None:
-            return None
-        side = self._conquest_side()
-        names = {f.id: f.name for f in c.scenario.factions}
-        live = self._siege_live() if any(slot.status == "open" for slot in w.conquest.schedule) else None
-        today = [{
-            "id": slot.id, "loc": slot.loc, "place": c.locations[slot.loc].name,
-            "attackers": [names.get(a, a) for a in slot.attackers], "time": self.stamp(slot.at), "minute": slot.minute,
-            "status": slot.status, "status_text": siege_status_text(c, slot),
-            "by": {names.get(a, a): conquest_day.BY_WORDS.get(slot.by.get(a, ""), "") for a in slot.attackers},
-            # 輿圖第三版第 5 批（卡上「戰書／攻城／攻城戰果」那一段）：sides 是攻方的陣營 id；you 是看的人站得進哪一格（siege.slots 同一套：
-            # 攻方 attack、被打的那一方 defend、散人與不是兩軍的人 help〔臨時投效或助守〕、另一軍站不進去是空的）；margin 是打完那一場的大勝／險勝
-            "sides": list(slot.attackers), "you": self._siege_you(slot, side), "margin": self._siege_margin(slot),
-            # FB-690：region 是那一塊的大區名（加入要人在那一區）；join 是集結・交戰中那一場看的人此刻加不加得進去（_siege_join）
-            "region": self._region_name(slot.loc), "join": self._siege_join(slot, side, live),
-        } for slot in w.conquest.schedule]
-        blocks: dict[str, dict] = {}
-        for loc in conquest.blocks(c):
-            row = conquest.block_view(w, c, loc, side)
-            if row["frozen"] is not None:
-                row["frozen"]["time"] = self.stamp(row["frozen"].pop("at"))
-            row["holder_name"] = names.get(row["holder"], "") if row["holder"] else ""
-            for line in row["bars"]:
-                line["name"] = names.get(line["side"], line["side"])
-            blocks[loc] = row
-        p = self.state.player
-        here = blocks.get(p.location) if p.journey is None else None
-        letter = None
-        if side is not None and ranks.rank_of(self.state) == ranks.SEAT_RANK:
-            ready = [loc for loc in conquest.blocks(c) if conquest.bar(w, loc, side) >= c.config.conquest.letter_at]
-            letter = {"used": w.conquest.letter_days.get(side) == self._letter_key(), "at": c.config.conquest.letter_at,
-                      "ready": [{"id": loc, "name": c.locations[loc].name, "why": self.letter_problem(loc) or ""} for loc in ready]}
-        return {"today": today, "blocks": blocks, "here": here, "letter": letter, "muster": c.config.conquest.muster_minutes}
-
-    def _siege_you(self, slot, side: str | None) -> str:
-        """看的人站得進這一場攻城的哪一格（卡上那顆鈕寫什麼；siege.slots 同一套）：攻方 attack、此刻佔著那一塊的那一軍 defend、
-        散人與不是兩軍的人 help（臨時投效攻方或助守）、另一軍站不進去是空字串。打完、作罷的也照算（卡上那時不畫鈕）。"""
-        if side is None:
-            return "help"
-        if side in slot.attackers:
-            return "attack"
-        return "defend" if conquest.holder(self.state.world, self.content, slot.loc) == side else ""
-
-    def _region_name(self, loc_id: str) -> str:
-        region = atlas.region_of(self.content, loc_id) if loc_id in self.content.locations else None
-        return region.name if region is not None else ""
-
-    def _siege_live(self) -> tuple[list[battle_instance.BattleInstance], set[int]]:
-        """此刻集結或開打的全服戰鬥（決戰與攻城）與自己此刻加得進去的那幾場的流水號（_joinable：人在那一區、不在路上、站得進去、
-        還沒在任何一場的名單上）。conquest_view 有集結・交戰中的攻城時才讀一次。"""
-        showdown = self.world.get_battle()
-        live = ([showdown] if showdown is not None and showdown.phase != "ended" else []) + self._sieges()
-        return live, {b.record_id for b in self._joinable()}
-
-    def _siege_join(self, slot, side: str | None, live) -> str:
-        """FB-690：集結・交戰中那一場看的人此刻加不加得進去（卡上那顆鈕照它畫，跟江湖頁的加入鈕同一套 _joinable）：go＝加得進去、
-        in＝已經在這一場、busy＝已經在別的一場、far＝站得進去但人不在那一區（或在路上）、空字串＝站不進去（另一軍）或不是集結・交戰中。"""
-        if slot.status != "open" or live is None or not self._siege_you(slot, side):
-            return ""
-        battles, joinable = live
-        battle = next((b for b in battles if b.siege is not None and slot.record_id is not None and b.record_id == slot.record_id), None)
-        if battle is None:
-            return ""
-        name = self.state.player.name
-        if name in battle.participants:
-            return "in"
-        if any(name in b.participants for b in battles):
-            return "busy"
-        return "go" if battle.record_id in joinable else "far"
-
-    def _siege_margin(self, slot) -> str:
-        """打完那一場的大勝／險勝（收場那一下 siege._note_result 記在 day_log）；還沒打完、作罷、找不到是空字串。"""
-        if slot.status != "done" or self.state.world.conquest is None:
-            return ""
-        return next((n.margin for n in reversed(self.state.world.conquest.day_log)
-                     if n.result and n.key == slot.key and n.loc == slot.loc and n.minute == slot.minute), "")
+        return territory_view.conquest_view(self)
 
     def pill_now(self) -> float:
         """回體丹換日看的現實時間：sync 給的 now，加上 advance 推過的那一截（advanced_real）。"""
@@ -7975,128 +7667,19 @@ class Game:
         return self._log(msgs)
 
     def admin_conquest_set(self, loc_id: str, side: str | None) -> list[str]:
-        """領地爭奪（第 38 項改版）：管理者把一塊改成某一軍的（side None 或空字串＝放回中立）。第一批沒有攻城戰，地圖只能靠這裡與時刻表
-        指定易手動；易手的天下大事、江湖史、三條線的重算跟自然易手一樣（conquest.set_control）。只收搶得下來的區塊、官軍或黃巾。"""
-        refusal = self._admin_refusal("定一塊歸誰")
-        if refusal:
-            return self._log(refusal)
-        c, w = self.content, self.state.world
-        if not conquest.on(c, w):
-            return self._log(["（這一季沒有開領地爭奪。）"])
-        side = side or None
-        if not conquest.capturable(c, loc_id):
-            return self._log(["（這裡不是搶得下來的區塊：大本營、廣宗、不是區塊的地點都不收。）"])
-        if side is not None and side not in conquest.SIDES:
-            return self._log(["（只能定給官軍或黃巾。）"])
-        before = territory.controller(w, c, loc_id)
-        if before == side:
-            return self._log(["（這一塊本來就是這樣。）"])
-        conquest.set_control(w, c, loc_id, side)
-        msgs = check_thresholds(self.state, c, self.world, self._flavor_sink(), now=self.now)
-        name = c.locations[loc_id].name
-        line = f"{name}改歸{c.scenario.faction_name(side, side)}。" if side else f"{name}放回中立。"  # 管理者看的，不是天下大事
-        self._write("定一塊歸誰", [line] + msgs, tag="管理者")
-        self._save_season()
-        return self._log([line] + msgs)
+        return territory_admin.conquest_set(self, loc_id, side)
 
     def admin_conquest_progress(self, loc_id: str, side: str, value: float) -> list[str]:
-        """領地爭奪（救場，QA 用；翻地與爭搶）：直接把 side 在這一塊的那一條定成 value（0～100）；到 100 照推滿當場易手（分紅給這一輪推過的人、
-        冷卻起算）。不看推不推得動、不記誰推的。只收搶得下來的區塊、劇本的陣營、而且不是此刻佔著的那一方。"""
-        refusal = self._admin_refusal("定一塊的進度")
-        if refusal:
-            return self._log(refusal)
-        c, w = self.content, self.state.world
-        if not conquest.on(c, w) or w.conquest is None or w.ended:
-            return self._log([f"（{CONQUEST_OFF}）"])
-        if not conquest.capturable(c, loc_id):
-            return self._log(["（這裡不是搶得下來的區塊：大本營、廣宗、不是區塊的地點都不收。）"])
-        if c.scenario.find_faction(side) is None or conquest.holder(w, c, loc_id) == side:
-            return self._log(["（只能替不是此刻佔著的那一方定進度。）"])
-        value = max(0.0, min(conquest.FULL, float(value)))
-        fight = conquest._fight(w, c, loc_id)
-        line = fight.bars.setdefault(side, conquest.Bar())
-        line.value = value
-        fight.last_push = w.time
-        name = c.locations[loc_id].name
-        msgs = [f"{name}：{c.scenario.faction_name(side, side)}的進度定成 {round(value)}。"]  # 管理者看的
-        if value >= conquest.FULL:
-            msgs += conquest.flip(w, c, loc_id, side)
-            msgs += check_thresholds(self.state, c, self.world, self._flavor_sink(), now=self.now)
-        elif value <= 0:
-            fight.bars.pop(side, None)
-        self._write("定一塊的進度", msgs, tag="管理者")
-        self._save_season()
-        return self._log(msgs)
+        return territory_admin.conquest_progress(self, loc_id, side, value)
 
     def admin_conquest_letter(self, loc_id: str, side: str) -> list[str]:
-        """領地爭奪（救場，QA 用）：替 side 立刻對這一塊下一張戰書——不看階、門檻、一天一張，開打在「此刻＋集結」、集結馬上開（QA 不必等到下午）。
-        同一塊別一邊下了、還沒開集結就併進那一場。天下大事照戰書寫、不寫管理者；不算進那一邊今天的那一張。"""
-        refusal = self._admin_refusal("立刻下戰書")
-        if refusal:
-            return self._log(refusal)
-        c, w = self.content, self.state.world
-        if not conquest.on(c, w) or w.conquest is None or w.ended:
-            return self._log([f"（{CONQUEST_OFF}）"])
-        if side not in conquest.SIDES or not conquest.capturable(c, loc_id) or conquest.holder(w, c, loc_id) == side:
-            return self._log(["（只能替官軍或黃巾、對不是自己的、搶得下來的區塊下。）"])
-        found = conquest.frozen(w, loc_id)
-        if found is not None and (found.status == "open" or side in found.attackers):
-            return self._log(["（這一塊已經有一場攻城了。）"])
-        text = conquest_day.place_now(w, c, side, loc_id, self.pill_now())
-        self._write("立刻下戰書", [text], tag="管理者")
-        self._save_season()
-        return self._log([text])
+        return territory_admin.conquest_letter(self, loc_id, side)
 
     def admin_conquest_cancel(self, slot_id: str) -> list[str]:
-        """領地爭奪（救場）：取消一場攻城（照作罷處理：那一塊解凍、進度照留、天下大事一句，公告不寫管理者）；已經開了集結的那一場照決戰的
-        取消收兵（不算勝負、不發軍餉、不易手）。"""
-        refusal = self._admin_refusal("取消一場攻城")
-        if refusal:
-            return self._log(refusal)
-        c, w = self.content, self.state.world
-        if not conquest.on(c, w) or w.conquest is None:
-            return self._log([f"（{CONQUEST_OFF}）"])
-        slot = next((s for s in w.conquest.schedule if s.id == slot_id), None)
-        if slot is None or slot.status in ("done", "void"):
-            return self._log(["（找不到這一場，或已經打完、作罷了。）"])
-        text = conquest_day.VOID_CANCEL.format(who=conquest_day._names(c, slot.attackers), place=c.locations[slot.loc].name)
-        if slot.status == "open" and slot.record_id is not None:
-            self._cancel_siege(slot.record_id, text)
-            w = self.state.world
-            slot = next(s for s in w.conquest.schedule if s.id == slot_id)
-        conquest_day.void(w, c, slot, text)
-        self._write("取消一場攻城", [text], tag="管理者")
-        self._save_season()
-        return self._log([text])
+        return territory_admin.conquest_cancel(self, slot_id)
 
     def admin_conquest_choices(self) -> dict | None:
-        """設定頁管理者工具「領地爭奪」那一組的下拉選單（server.admin_choices 的 conquest；打開領地爭奪，PM 2026-10-22）：只在領地爭奪開著、
-        季還沒收的季有，其餘 None（網頁不畫）。blocks 是搶得下來的區塊（字寫此刻歸誰、每一條進度、冷卻、被戰書凍結），sides 是交戰兩軍
-        （admin_conquest_set／progress／letter 只收這兩軍），sieges 是時程表上還沒打完、沒作罷的攻城（admin_conquest_cancel 的 id）。
-        只給管理者看；字待 joy 潤。"""
-        c, w = self.content, self.state.world
-        if not conquest.on(c, w) or w.ended or w.conquest is None:
-            return None
-        names = {f.id: f.name for f in c.scenario.factions}
-        blocks = []
-        for loc in conquest.blocks(c):
-            if not conquest.capturable(c, loc):
-                continue
-            held = conquest.holder(w, c, loc)
-            bits = [names.get(held, held) if held else "沒人佔"]
-            bits += [f"{names.get(s, s)} {conquest._int(v)}" for s, v in sorted(conquest.bars(w, loc).items(), key=lambda kv: (-kv[1], kv[0]))]
-            if conquest.cooling(w, c, loc):
-                bits.append(f"冷卻 {conquest.cooling_minutes(w, c, loc)} 分")
-            if conquest.frozen(w, loc) is not None:
-                bits.append("戰書凍結")
-            name = c.locations[loc].name  # 問句寫地名（label 後面的括號不能拿來切：潁川郡（陽翟）自己就有括號）
-            blocks.append({"id": loc, "name": name, "label": f"{name}（{'・'.join(bits)}）"})
-        sides = [{"id": s, "label": names.get(s, s)} for s in conquest.SIDES]
-        sieges = [{
-            "id": slot.id,
-            "label": f"{c.locations[slot.loc].name}：{'、'.join(names.get(a, a) for a in slot.attackers)}攻・{siege_status_text(c, slot)}・{self.stamp(slot.at)}",
-        } for slot in w.conquest.schedule if slot.status not in ("done", "void")]
-        return {"blocks": blocks, "sides": sides, "sieges": sieges}
+        return territory_view.admin_choices(self)
 
     def admin_resolve_event(self, event_id: str, key: str) -> list[str]:
         """定結果：管理者直接定一件大事的結果（不含版本的鍵，例如「成」「guan:險勝」），照時刻表結算（公告、江湖史、

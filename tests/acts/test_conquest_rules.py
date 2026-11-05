@@ -838,8 +838,8 @@ def test_server_admin_choices_carry_the_conquest_group(monkeypatch):
 def test_the_four_routes_are_admin_actions_named_after_the_engine():
     """網頁的四顆鈕送的路由都在 ADMIN_ACTIONS，跟 Game.admin_* 同名或照舊名（FB-609：不跟玩家的下戰書撞名）。"""
     for op in ("conquest_set", "conquest_progress", "admin_conquest_letter", "conquest_cancel"):
-        assert op in server.ADMIN_ACTIONS, op
-    assert "conquest_letter" not in server.ADMIN_ACTIONS
+        assert op in server.FEATURE_ADMIN_ACTIONS, op  # 第 46 批：搬進地盤包的 admin_tools
+    assert "conquest_letter" not in server.FEATURE_ADMIN_ACTIONS and "conquest_letter" not in server.ADMIN_ACTIONS
 
 
 def test_a_non_admin_gets_refused_and_the_map_stays():
@@ -966,21 +966,21 @@ def test_the_routes_do_what_the_questions_say():
     game = _admin_game()
     c, w = game.content, game.state.world
     before = len(w.rumors)
-    server.ADMIN_ACTIONS["conquest_set"](game, {"id": "hilltop_wilds", "side": "guan"})
+    server.FEATURE_ADMIN_ACTIONS["conquest_set"].run(game, {"id": "hilltop_wilds", "side": "guan"})
     w = game.state.world
     assert conquest.holder(w, c, "hilltop_wilds") == "guan" and not conquest.cooling(w, c, "hilltop_wilds")
     assert len(w.rumors) == before + 1
-    server.ADMIN_ACTIONS["conquest_set"](game, {"id": "hilltop_wilds", "side": ""})
+    server.FEATURE_ADMIN_ACTIONS["conquest_set"].run(game, {"id": "hilltop_wilds", "side": ""})
     w = game.state.world
     assert conquest.holder(w, c, "hilltop_wilds") is None and len(w.rumors) == before + 1
-    server.ADMIN_ACTIONS["conquest_progress"](game, {"id": "hilltop_wilds", "side": "huang", "value": 100})
+    server.FEATURE_ADMIN_ACTIONS["conquest_progress"].run(game, {"id": "hilltop_wilds", "side": "huang", "value": 100})
     w = game.state.world
     assert conquest.holder(w, c, "hilltop_wilds") == "huang" and conquest.cooling(w, c, "hilltop_wilds")
-    server.ADMIN_ACTIONS["admin_conquest_letter"](game, {"id": "runan_wilds", "side": "guan"})
+    server.FEATURE_ADMIN_ACTIONS["admin_conquest_letter"].run(game, {"id": "runan_wilds", "side": "guan"})
     w = game.state.world
     slot = conquest.frozen(w, "runan_wilds")
     assert slot is not None
-    server.ADMIN_ACTIONS["conquest_cancel"](game, {"id": slot.id})
+    server.FEATURE_ADMIN_ACTIONS["conquest_cancel"].run(game, {"id": slot.id})
     assert conquest.frozen(game.state.world, "runan_wilds") is None
 
 
