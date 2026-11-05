@@ -29,7 +29,7 @@ SET_DONE = "你在往{to}的路上埋伏下來，守到{until}。這段時間你
 LIFTED = "你收起埋伏，從路邊撤了回來。"
 EXPIRED = "往{to}的路上守了這麼久，沒再等到人，你收起埋伏。"
 BROKEN = "你被{rival}打退，往{to}的埋伏散了。"
-MOVE_BLOCKED = "守著埋伏"
+from .core.services import MOVE_BLOCKED  # noqa: E402,F401  搬進核心的共用的字（全部拆包第 39 批），這裡 re-export 同一個字串
 TOWN = "城鎮旁邊耳目眾多，設不了伏"
 NO_PREY = "散人只劫得了你揭了通緝的人，先去懸賞榜揭一張"
 NEWBIE = "你初入江湖，還在新手期，先別結這種仇"
