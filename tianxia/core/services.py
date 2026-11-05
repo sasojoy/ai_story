@@ -172,6 +172,12 @@
   簽名與回傳見 tianxia/core/features.py 的 # core_eventbus）。三、過渡的 `ctx._seal_find`、`ctx._seal_settle` 包裡不再叫（事件的 seal 那一格
   由 engine._BUS_CORE 核心代叫），第 27 批玉璽成包時拿掉那兩條。
 
+# faction（全部拆包第 35 批「陣營」；陣營包要叫的核心服務，主人都是核心）
+- `ctx._hide(msg)`（這一下那一則江湖紀錄裡藏起一句：投靠、叛投確認畫面的話場景已經寫著這一問，紀錄只留標題，FB-046）、
+  `ctx.faction_counts_text()`（三方目前各有幾人，確認畫面接在話後面）、`ctx._action_title(kind, arg)`（拜入門派那一下江湖紀錄的標題：sect 在標題表上沒有自己的支，
+  掉到最後的「提前出關」，隨後被事件標題換掉，包照原本的寫法問核心）。這一包用到的其餘 Game 服務上面都已經列了：`ctx._note_action(action)`、`ctx._guide(...)`、
+  `ctx._battle_now()`、`ctx._preparing()`、`ctx._write(...)`、`ctx._draft`、`ctx.place_minutes(loc_id)`、`ctx._present(event, action)`
+
 ## 二、查詢服務
 
 # battle（主動搬六包第 5 批；主人：決戰包。本體還在 Game——「打」那一半，第 6～8 批搬——決戰包「看」那一半經 ctx 叫；搬完由決戰包經
@@ -304,6 +310,10 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._yuedan_line(content, name)`（月旦評那一週許劭對他的那一句，只讀；主人：大勢人物的行動包 figure_acts〔月旦評 yuedan〕。玩家卡 `card` 要這一句，
   玩家互動包不能 import 大勢人物包，經 Game 的一行委派問，總表第六節第 6 條「`social` 讀月旦評」）
 
+# faction（全部拆包第 35 批「陣營」；主人：陣營包，本體在 tianxia/features/faction/，Game 留一行委派回答別的包；計畫 docs/superpowers/plans/2026-11-06-陣營包-第1批.md 1.3）
+- `ctx._four_wins()`（三陣營四勝利：這一季開著沒；決戰的軍餉記不記豪強的貢獻。原本記在三、過渡 `# battle`，主人成包了，改列這裡；包裡自己叫的直接叫，不經它）
+- `ctx._ally_follows_battle()`（主人決戰包 features/battle/muster.py：投靠豪強、選邊、改幫之後集結名單跟著換邊，FB-273；陣營包的投靠、改幫那幾步叫它，本體留在決戰那一側）
+
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
 explore（主動搬六包第 3＋4 批加的這一段）
@@ -323,7 +333,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 # battle（主動搬六包第 5 批；擺在這兩行之間：別條拆包線與 develop 改的是段頭、_order_credit、_outing_on 以下與段尾，不跟它們貼在一起）
 - （`_mutate_battle_of`：改共用狀態裡的那一場——第 8 批本體搬進 `features/battle/progress.py`、包裡直接叫，從這裡拿掉。第 7 批：
   放手一搏送出、隨你出陣的同伴回江湖兩個本體搬進 `muster.py`、包裡直接叫，從這裡拿掉）
-- `ctx._four_wins()`（三陣營四勝利：這一季開著沒；決戰的軍餉記不記豪強的貢獻）
+（`ctx._four_wins()`：全部拆包第 35 批陣營成包，改列二、查詢服務 `# faction` 那一段）
 # battle（全部拆包第 6 批：管理者的決戰工具、攻城）
 - `ctx._apply_battle_outcome(battle)`（收場套結果：第 8 批本體搬進 `features/battle/progress.py`，包裡照舊經 ctx 叫——測試換掉
   `Game._apply_battle_outcome`〔test_server〕。同一行原本的 `_shelve_unfinished_battle`、`_advance_battle_round`、`_highlight_line`、`_merit_line`
@@ -386,14 +396,6 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 - `ctx._spar(inv, other)`（主人切磋，第 38 批）、`ctx._discuss(inv, other)`、`ctx.discuss_invite_problem(...)`、`ctx.discuss_item_problem(...)`（主人論武，第 38 批）、
   `ctx._join(inv, other)`（主人移動 features/travel：答應結伴同行）：`answer_invite` 照邀請的種類叫它們
 - `ctx.join_refusal(leader)`（主人移動：答應跟某人結伴同行，不行的原因；假人回結伴邀請〔bots.answer_call〕先問它）
-
-# faction（全部拆包第 35 批「陣營」；計畫 docs/superpowers/plans/2026-11-06-陣營包-第1批.md 1.3）。包要叫的核心服務：
-- `ctx._hide(msg)`（這一下那一則江湖紀錄裡藏起一句：投靠、叛投確認畫面的話場景已經寫著這一問，紀錄只留標題，FB-046）、
-  `ctx.faction_counts_text()`（三方目前各有幾人，確認畫面接在話後面）、`ctx._ally_follows_battle()`（主人決戰包 features/battle/muster.py：
-  投靠豪強、選邊、改幫之後集結名單跟著換邊，FB-273）、`ctx._action_title(kind, arg)`（拜入門派那一下江湖紀錄的標題：sect 在標題表上沒有自己的支，
-  掉到最後的「提前出關」，隨後被事件標題換掉，包照原本的寫法問核心）
-- 這一包用到的其餘 Game 服務上面都已經列了：`ctx._four_wins()`、`ctx._note_action(action)`、`ctx._guide(...)`、`ctx._battle_now()`、
-  `ctx._preparing()`、`ctx._write(...)`、`ctx._draft`、`ctx.place_minutes(loc_id)`、`ctx._present(event, action)`
 
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 
