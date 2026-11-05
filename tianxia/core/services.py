@@ -166,6 +166,12 @@
 - `ctx._kin(state)`（把一份讀回來的存檔包成另一位玩家的 Game：此地還有誰、玩家卡、名帖匣都用；本體在 Game 上，留核心。同 `_load_kin`、`_save_kin`）
 - 此地還有的判斷與狀態列的身分字不在 ctx 上：搬進核心的查詢服務 `tianxia/core/presence.py`（`window`、`here`、`visible`、`side`、`affiliation`、`GONE`），包直接 import
 
+事件（全部拆包第 26 批）
+# core_eventbus
+- `ctx.publish(event, *args)`：一包發生的事、別包跟著動——照核心的 BUS_ORDER 叫每一格（win、outing、explore、arrive、raid_win、battle_end；
+  簽名與回傳見 tianxia/core/features.py 的 # core_eventbus）。三、過渡的 `ctx._seal_find`、`ctx._seal_settle` 包裡不再叫（事件的 seal 那一格
+  由 engine._BUS_CORE 核心代叫），第 27 批玉璽成包時拿掉那兩條。
+
 ## 二、查詢服務
 
 # battle（主動搬六包第 5 批；主人：決戰包。本體還在 Game——「打」那一半，第 6～8 批搬——決戰包「看」那一半經 ctx 叫；搬完由決戰包經

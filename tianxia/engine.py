@@ -11,7 +11,7 @@ import math
 import random
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from . import arts as arts_mod
 # （cultivation：破境卡 ascend 全部拆包第 23 批搬進修練包，engine 不再用，拿掉）
@@ -327,6 +327,19 @@ LEAVE_SHOP_IDS = frozenset({"bounty:back", "smith:back", mounts.BACK, "arena:bac
 # 叛投 after 位置核心代叫的格（core_effects：全部拆包第 32 批；先後在 core/features.py 的 DEFECT_ORDER）：寫了 side、跟新陣營不合的同伴當場
 # 回江湖是 Game 自己的（陣營，第 35 批）；食言（parley）是人物情誼包登記的。lambda 在叫的那一下才找 Game 的方法；契約測試讀這一份
 _DEFECT_AFTER_CORE = {"leave_behind": lambda ctx, side: ctx._leave_behind(side)}
+# core_eventbus（全部拆包第 26 批）：事件的格由核心代叫的那幾格（還沒成包的舊模組與 Game 上主人還沒搬的方法）。每一格在叫的那一下才照
+# 模組屬性找函式（bounties.on_win、ctx._seal_find…：測試與量表腳本換掉的照樣打得到）。BUS_ORDER 在 core/features.py；契約測試讀這一份
+_BUS_CORE: dict[str, dict[str, Callable[..., Any]]] = {
+    "win": {"bounties": lambda ctx, loc_id, squad_id: bounties.on_win(ctx.state, ctx.content, ctx.world, loc_id, squad_id)},  # 過渡：待搬（第 45 批：懸賞榜包登記）
+    "outing": {
+        "bounties": lambda ctx, loc_id: bounties.on_explore(ctx.state, ctx.content, ctx.world, loc_id),  # 過渡：待搬（第 45 批）
+        "seal": lambda ctx, loc_id: ctx._seal_find(loc_id),  # 過渡：待搬（第 27 批：玉璽包登記）
+    },
+    "explore": {"bounties": lambda ctx, loc_id: bounties.on_explore(ctx.state, ctx.content, ctx.world, loc_id)},  # 過渡：待搬（第 45 批）
+    "arrive": {"bounties": lambda ctx, loc_id: bounties.on_arrive(ctx.state, ctx.content, ctx.world, loc_id)},  # 過渡：待搬（第 45 批）；convoy 那一格軍情包登記
+    "raid_win": {"bounties": lambda ctx, target: bounties.on_raid_win(ctx.state, ctx.content, ctx.world, target)},  # 過渡：待搬（第 45 批）
+    "battle_end": {"seal": lambda ctx, battle, definition, result: ctx._seal_settle(battle, definition, result)},  # 過渡：待搬（第 27 批）
+}
 
 # （走一趟的裝飾器 _outing_watch 搬進核心〔tianxia/core/services.py 的 outing_watch，全部拆包第 24 批〕：上面 import 回來，同一個名字）
 
@@ -2138,6 +2151,15 @@ class Game:
         }
         return titles.get(arg, "提前出關")
 
+    # core_eventbus（全部拆包第 26 批）
+    def publish(self, event: str, *args: Any) -> list[str]:
+        """一包發生的事、別包跟著動（事件機制，全部拆包第 26 批）：照 core/features.py 的 BUS_ORDER[event] 一格一格叫（包登記的叫包的，
+        其餘是 _BUS_CORE 核心代叫），每一格回的那幾句照順序串起來（battle_end 的格回 None，不串）。"""
+        msgs: list[str] = []
+        for got in features_core.bus_run(event, _BUS_CORE.get(event, {}), self, *args):
+            msgs += got or []
+        return msgs
+
     def _hide(self, msg: str) -> None:
         if self._draft is not None:
             self._draft.hide(msg)
@@ -2631,9 +2653,6 @@ class Game:
 
     def _take_convoy(self) -> list[str]:
         return military_convoy_actions.take_convoy(self)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/convoy_actions.py
-
-    def _convoy_arrives(self, loc_id: str) -> list[str]:
-        return military_convoy_actions.convoy_arrives(self, loc_id)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/convoy_actions.py
 
     # 本體在 tianxia/features/guide/actions.py（全部拆包第 22 批：新手引導），這裡留一行委派
     def _rest(self) -> list[str]:
@@ -4353,16 +4372,16 @@ class Game:
         self._narrate(record, result, judged)
         msgs: list[str] = []
         if result.tier in team.WIN_TIERS:
-            rewards = self._sortie_rewards(squad, record) if as_sortie else self._battle_rewards(squad, record)  # 過渡：第 26 批（打贏之後出陣包給獎勵）
+            rewards = self._sortie_rewards(squad, record) if as_sortie else self._battle_rewards(squad, record)  # 留原位：第 26 批（打贏的獎勵是出陣包與核心二選一、接在 msgs 最前面不進 extra，不在懸賞那一個發布點上）
             msgs += rewards
             extra: list[str] = []
             if not wild and not prologue_rules.active(s, c):  # 序章打贏不推大勢、不抽伏筆、不記軍令
                 if not as_sortie:  # 出陣不推線（領地爭奪：推那一塊的進度，下面 _push_progress）
-                    for trend_id, delta in self.train_trend_push(loc.id).items():  # 換算過的線，照舊交給 T3 的 push_trend  # 過渡：第 26 批（打贏之後遊歷推大勢）
+                    for trend_id, delta in self.train_trend_push(loc.id).items():  # 換算過的線，照舊交給 T3 的 push_trend  # 留原位：第 26 批（推大勢夾在記功、地盤進度之前，結果交給 push_trend，不在發布點上）
                         extra += self.push_trend(trend_id, delta, source="train")
                 credit: list[str] | None = None
                 # 領地爭奪：出陣攻打贏推這一塊的進度、不推線（設計 3.7）；約戰開著時這裡只剩截糧（減法季批 3b：進度只在約戰結算動）
-                if as_sortie and not self.duel_on():  # 過渡：第 26 批（打贏之後約戰開著的季不推進度）
+                if as_sortie and not self.duel_on():  # 留原位：第 26 批（約戰開著與否是查詢，決定記功與推進度走哪一支，不是事件）
                     # 軍令照推之前的清單記（FB-608：推滿易手的那一下，推完那一塊已經是自家的、在冷卻，不在攻的清單上）；那一句照舊排在後面
                     credit = self._order_credit(
                         kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,
@@ -4374,7 +4393,7 @@ class Game:
                     kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,
                 )
                 extra += self._opp_on_win(front_of(c, loc.id), squad.faction)  # 三路並進（正式版乙二）
-                extra += bounties.on_win(s, c, self.world, loc.id, squad.id)  # 懸賞榜的討伐
+                extra += self.publish("win", loc.id, squad.id)  # 懸賞榜的討伐（事件 win，第 26 批）
                 if as_sortie:  # 名聲 3.1：出陣攻打贏 +1（遊歷、探索野怪不給）
                     extra += self._deed_fame("sortie")
             changes, notes = battlelog.split_changes(extra, for_record=True)
@@ -5031,7 +5050,7 @@ class Game:
         tiers = (*team.WIN_TIERS, "僵持") if draw else team.WIN_TIERS
         if record.tier not in tiers or record.our_power <= 0 or prologue_rules.active(self.state, self.content):
             return []
-        msgs = self._seize_chance(record.difficulty / record.our_power)  # 過渡：第 26 批（打贏一場之後修練包跟著擲；修練包的查詢服務）
+        msgs = self._seize_chance(record.difficulty / record.our_power)  # 留原位：第 26 批（頓悟的契機在單打服務收尾、三處叫、野怪與僵持也算，不是懸賞那一下；修練包的查詢服務）
         record.notes += msgs
         return msgs
 
@@ -5257,7 +5276,7 @@ class Game:
         text = self.location_text()
         self._hide(text)
         # 糧車到了終點（路過也算）先交糧，再照原本的新手引導與門檻（計畫 T6）；呼叫的先後不能換
-        convoy = self._convoy_arrives(loc_id) + bounties.on_arrive(s, c, self.world, loc_id)  # 懸賞榜的護送：走到終點就交差（路過也算）
+        convoy = self.publish("arrive", loc_id)  # 事件 arrive（第 26 批）：軍情包交糧車→懸賞榜的護送（走到終點就交差，路過也算）
         guide = self._guide(self._note_action("move"))  # 出師的盤纏（序章步驟的獎勵）是這一趟路的結果，回在這裡
         if not precise.is_town(c, c.locations[loc_id]):  # 走到城外（初入江湖逛鋪子那一步：沒進鋪子、直接出城也算過，Joy 2026-10-22）
             guide += self._guide(self._note_action("leave_town"))
@@ -6362,7 +6381,7 @@ class Game:
 
     def _raid_bounty(self, target: str) -> list[str]:
         """截殺打贏、揭了通緝他的懸賞：交差（賞銀、散人的俠名），補進這一則江湖紀錄。"""
-        msgs = bounties.on_raid_win(self.state, self.content, self.world, target)
+        msgs = self.publish("raid_win", target)  # 事件 raid_win（第 26 批）：通緝交差
         if msgs and self._draft is None:
             self._write(bounties.BOARD, msgs)
         return msgs

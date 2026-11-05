@@ -177,6 +177,7 @@ SHARED_METHODS = {
 CORE_METHODS = {
     "_log", "_write", "_save_season", "_side", "_pill_day", "_cost_option", "stamp", "_guide", "_quick_client",
     "_wallet",
+    "publish",  # core_eventbus（全部拆包第 26 批）：事件的發布點，七處叫
 }
 # 不是功能前綴的字：方法名第一個字是它的（_deliver_seal_results、apply_tavern_chatter、_can_x）往後找下一個認得的字，
 # hunk 裡出現它也不算。寫在這裡的字有自己的測試檔名也不算（test_for、test_in_lock_model_timeout、test_real_content……）。
