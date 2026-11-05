@@ -885,6 +885,36 @@ GAME_DELEGATE_CALLERS.update({
     ("travel", "_report_seat"): "走完一趟之後抄帳（同 choose：正式版丁）；賽季時鐘暫停時什麼都不做這一句在委派的本體裡",
     ("admin_player_choices", "_summons_plan"): "管理者的玩家選單（發召見那一顆灰不灰、為什麼）與 admin_summon 共用同一個規劃（_summons_plan）",
 })
+# military（全部拆包第 34 批「軍情二」：機緣 opp: 與伏筆 fs: 搬進同一包；計畫 docs/superpowers/plans/2026-11-06-軍情包-第2批.md 1.1、1.4、1.5）：
+# 這一批加的集中在這一段。5 個方法搬進包（_settle_plots、_hear_after_stamina、admin_give_opportunity、admin_give_fragment 留一行委派；_foreshadow 接 choose 掛鉤之後
+# 沒人叫了，不留）。選項前綴 opp:、fs: 接 choose 掛鉤（Outcome.title 隨掛鉤搬走）；效果三格（grain、fs_fragments、foreshadow）與叛投兩格
+# （clear 的 opportunities、leave 的 plots）改由包登記；rules 讀伏筆的換算、content 驗內容的天機表、ranks 與叛投確認畫面讀機緣，改讀核心的查詢服務
+# core/omen_base.py。接不了掛鉤、留成委派的在下面每一條寫理由。events、narration、rumor_view、step、weekcard、server 讀伏筆機緣的規則走舊名別名
+# （都是舊模組、不是核心也不在共用層；它們收進共用層〔第 36、40 批〕時再改成查詢服務）。
+GAME_IMPORTS |= {"tianxia.features.military.opp_actions", "tianxia.features.military.fs_actions"}
+GAME_DELEGATES |= {
+    # 核心原位叫的：集體密謀結算（_settle_plots）、花體力之後抽片段與線索（_hear_after_stamina）、答題中的選單（_fs_asking_options）與場景文字（_fs_asking_text）、
+    # 閒著的選單（_omen_options）、第 2 階行動的名字（_rank2_action）、遊歷打贏之後（_fs_after_win、_opp_on_win）、管理者的玩家選單（_admin_omen_choices）；
+    # 事件檢定經 ctx 叫的 _hear_from_event；人物情誼包與出陣包經 ctx 問的查詢服務（_omen_talk_options、_fs_hear_talk、_opp_hear_topic、_opp_after_success）
+    "_settle_plots", "_hear_after_stamina", "_fs_asking_options", "_fs_asking_text", "_omen_options", "_rank2_action", "_fs_after_win", "_opp_on_win",
+    "_admin_omen_choices", "_hear_from_event", "_omen_talk_options", "_fs_hear_talk", "_opp_hear_topic", "_opp_after_success",
+    # server 的管理者兩顆鈕（/api/admin：give_opportunity、give_fragment）
+    "admin_give_opportunity", "admin_give_fragment",
+}
+_OMEN_MENU = "選單的順序算行為（/api/main 的選項一顆一顆逐位元組）；"
+GAME_DELEGATE_CALLERS.update({
+    ("sync", "_settle_plots"): "同步的集體密謀結算：位置固定在 sync 的中段，沒有對應的掛鉤（world 的 sync 順序算行為）",
+    ("choose", "_settle_plots"): "做完一個動作之後的集體密謀結算：位置在回話的最後一段，沒有對應的掛鉤",
+    ("choose", "_hear_after_stamina"): "花體力的動作之後抽伏筆片段與機緣線索：位置在 choose 結尾、after_action 之前，伏筆先機緣後、共用 self.rng，擲骰順序算行為，沒有對應的掛鉤",
+    ("travel", "_hear_after_stamina"): "輿圖安排前往走完一趟之後同樣抽一次（同 choose）：位置固定，沒有對應的掛鉤",
+    ("_everyday_options", "_fs_asking_options"): _OMEN_MENU + "答題中的選單排在店面 shop_menu 之後、閉關之前，menu 掛鉤在更前面（宴客、有所感之前），位置不同不能接",
+    ("_everyday_options", "_omen_options"): _OMEN_MENU + "機緣與伏筆最後一步夾在 _rank_action_options 與 _errand_options 中間，options 掛鉤是另一個選單（體力玩法之後），位置不同不能接",
+    ("_action_title", "_rank2_action"): "act:rank2 的江湖紀錄標題寫第 2 階行動自己的名字（招降黃巾散兵、施符水收人心）；act 子動詞的標題在表上，第 2 階行動接 Verb 是總表第 57 批",
+    ("_squad_encounter", "_fs_after_win"): "遊歷打贏之後擲官銀：夾在軍令記功前後，「一包發生了、別包跟著動」是總表第 26 批的事件（打贏一場）",
+    ("_squad_encounter", "_opp_on_win"): "遊歷打贏之後記密謀一處（三路並進）：夾在軍令記功與懸賞討伐之間，同上（總表第 26 批）",
+    ("_own_scene_text", "_fs_asking_text"): "答題中的場景文字排在拜入、投靠、叛投、求見的畫面之後、趕路的畫面之前，scene 掛鉤在更前面（有所感、宴席之後、談話之前），位置不同不能接",
+    ("admin_player_choices", "_admin_omen_choices"): "管理者的玩家選單（/api/admin/player）最後兩鍵：可以給的機緣與伏筆片段，鍵的順序算行為，沒有對應的掛鉤",
+})
 
 # craft（全部拆包第 44 批「煉製與自創」：新包 tianxia/features/craft/；計畫 docs/superpowers/plans/2026-11-05-煉製自創包-第1批.md 1.4、1.5）：
 # 16 個一行委派（煉製頁開爐 5 個、自創 11 個）；原本那一行 `from . import create` 現在是別名（委派的型別註記 create.IntentRequest、IntentReading 用）。
@@ -1384,6 +1414,10 @@ CORE_DELEGATE_CALLERS.update({
     ("event_check.answer_event", "_report_seat"): "隨口應對的結果也可能推大勢、記貢獻：第四階席次的帳在這裡也抄（正式版丁）；事件檢定是核心本體、席次抄帳在軍情包，位置固定、沒有對應的掛鉤",
     ("event_check.answer_branch", "_report_seat"): "同上（隨口應對的分岔那一支）",
 })
+# military（全部拆包第 34 批）：事件檢定（核心）經 ctx 叫軍情包的委派——事件卡寫完、接在後面的伏筆片段（核心不 import 包）
+CORE_DELEGATE_CALLERS.update({
+    ("event_check.present", "_hear_from_event"): "事件觸發時聽到的伏筆片段（計畫 T7）：接在事件卡的後面，事件檢定是核心本體、伏筆在軍情包，位置固定、沒有對應的掛鉤",
+})
 
 
 def ctx_delegate_callers(source: str, name: str, delegates: set[str] | None = None) -> set[tuple[str, str]]:
@@ -1610,6 +1644,8 @@ def test_the_old_names_left_as_aliases_are_known():
                          "biography": "zhuan", "zhuan_end": "zhuan",
                          # military（全部拆包第 33 批：tianxia/rank_actions.py）
                          "rank_actions": "military",
+                         # military（全部拆包第 34 批：tianxia/foreshadow.py、opportunities.py）
+                         "foreshadow": "military", "opportunities": "military",
                          # craft（全部拆包第 44 批：tianxia/create.py）
                          "create": "craft",
                          # territory_acts（全部拆包第 46 批：tianxia/conquest_day.py、xingshi.py）

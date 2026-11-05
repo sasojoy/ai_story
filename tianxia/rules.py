@@ -298,9 +298,9 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
     if any(p.clue_items.get(k, 0) < v for k, v in cond.clue_items.items()):
         return False
     if cond.grain_min:  # 帶了糧（晉升奇遇 3.2；正式版丙二）：要 content 才算得出糧草與換算
-        from . import foreshadow  # noqa: PLC0415  foreshadow → rules：在函式裡 import，避免循環
+        from .core import omen_base  # noqa: PLC0415  軍情第 34 批：伏筆需求量的換算在核心的 omen_base
 
-        if content is None or materials.grain_of(state, content) < foreshadow.need(content, cond.grain_min):
+        if content is None or materials.grain_of(state, content) < omen_base.need(content, cond.grain_min):
             return False
     if cond.fight_tiers:
         # 這次行動打的那一場：battle_card 每次行動開頭清掉、打完才指向那筆紀錄，所以上一次行動留下的紀錄不算
@@ -1278,12 +1278,6 @@ def _ranks():
     return ranks
 
 
-def _foreshadow():
-    from . import foreshadow  # noqa: PLC0415  過渡：待搬（第 34 批：伏筆進軍情包，那三格改由軍情包登記）；foreshadow → rules：在函式裡 import，避免循環
-
-    return foreshadow
-
-
 def _seal():
     from . import seal  # noqa: PLC0415  過渡：待搬（第 27 批：玉璽包登記那兩格）；延後 import，同 ranks、foreshadow
 
@@ -1301,8 +1295,6 @@ _EFFECT_CORE: dict[str, Callable[[EffectRun], list[str]]] = {
     "stamina": _fx_stamina,
     "affinity": _fx_affinity,
     "patron": lambda r: _ranks().effect_patron(r),  # 過渡：待搬（第 40 批）豪強的靠山（晉升奇遇 4.2；正式版丙一）
-    "grain": lambda r: _foreshadow().effect_grain(r),  # 過渡：待搬（第 34 批）捐糧；夾著四勝利記帳 wins.credit（共用規則層）
-    "fs_fragments": lambda r: _foreshadow().effect_fragments(r),  # 過渡：待搬（第 34 批）直接給伏筆片段
     "runic": lambda r: _seal().effect_runic(r),  # 過渡：待搬（第 27 批）符文殘片
     "event_mods": _fx_event_mods,  # 共用規則層 timetable
     "summons_next": lambda r: _ranks().effect_summons_next(r),  # 過渡：待搬（第 40 批）召見往下一段（排在晉升前面）
@@ -1315,7 +1307,6 @@ _EFFECT_CORE: dict[str, Callable[[EffectRun], list[str]]] = {
     "trend": _fx_trend,
     "world_flags": _fx_world_flags,
     "marks": _fx_marks,
-    "foreshadow": lambda r: _foreshadow().effect_clues(r),  # 過渡：待搬（第 34 批）伏筆物品與計數
     "rumor": _fx_rumor,
     "chronicle": _fx_chronicle,
     "shard": lambda r: _seal().effect_shard(r),  # 過渡：待搬（第 27 批）舊鏈的玉璽碎片

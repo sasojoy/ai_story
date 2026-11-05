@@ -12,6 +12,9 @@
   頭目戰、擂台（單挑包）與奪璽單挑（seal_duel.py）共用，單挑包的 duel_rules re-export 同一批函式物件。同 event_check 不進 MODULES。
 - arena_ranks.py（bout：全部拆包第 12 批）：擂台的名次與稱號（on、entry_of、ladder、title_of、title_for、record_text、board、歷屆擂主）
   ——查詢服務：酒肆包的名氣、名帖、玩家卡、榜單、事件分級、江湖史讀它；單挑包的 arena_rules re-export 同一批。同 event_check 不進 MODULES。
+- omen_base.py（military：全部拆包第 34 批）：機緣與伏筆「只讀」的那一小半——伏筆需求量的換算（scale、need）、天機表與題目（GUANYIN、
+  TIANJI、FIGURE_SLOT、TIANJI_ANSWER、trips、asks_of）、召見與叛投確認畫面讀的機緣（done_for_rank、in_plot）；rules、content、ranks、
+  defection 讀它，軍情包的 fs_rules、opp_rules re-export 同一批。同 event_check 不進 MODULES。
 
 第一階 ctx 就是 Game 本身，不另包一層（手冊 3.3）。
 """
