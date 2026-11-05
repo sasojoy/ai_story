@@ -216,9 +216,9 @@ def check_summons(state: GameState, content: Content) -> list[str]:
     promo = promotion_for(content, p.faction, rank)
     if promo is None or p.contrib < threshold(content, rank):
         return []
-    from . import opportunities  # noqa: PLC0415  opportunities → ranks：在函式裡 import，避免循環
+    from .core import omen_base  # noqa: PLC0415  軍情第 34 批：機緣做過沒改問核心的查詢服務 omen_base（ranks 不 import 軍情包）
 
-    if rank >= 3 and not opportunities.done_for_rank(state, content, rank):
+    if rank >= 3 and not omen_base.done_for_rank(state, content, rank):
         if rank in p.rank_hinted:
             return []
         p.rank_hinted.append(rank)

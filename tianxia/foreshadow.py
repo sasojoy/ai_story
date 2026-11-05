@@ -18,6 +18,7 @@ import random
 from collections.abc import Iterator
 
 from . import calendar, figures, materials, renown, timetable, wins
+from .core.omen_base import FIGURE_SLOT, GUANYIN, TIANJI, TIANJI_ANSWER, _asks, asks_of, need, scale, trips  # noqa: F401  軍情第 34 批：核心與共用層讀的只讀那一半搬到 core/omen_base，這裡 re-export 同一批名字
 from .journal import fragment_line
 from .models import (
     Check, Content, FsAsk, FsChain, FsFinal, FsFragment, FsItem, FsRequires, FsStep, FsWrong, Squad,
@@ -28,18 +29,8 @@ from .world_state import WorldStateStore
 
 DAY = 86400
 BASE_FRAGMENT_CHANCE = 0.05  # 每次花體力的行動，在所在的大區聽到一則片段的機率（1000 人以上那一檔；伏筆文件 2.2）
-GUANYIN = "guanyin"  # 官銀的計數鍵（PlayerState.fs_counters）
-# 天機（伏筆文件 2.9）：同一個天機、同一個 key 永遠同一個答案。廣宗的內鬼（mole）是黃巾第 4 階機緣「營中的內鬼」
-# （正式版乙二，opportunities 的推理型）用的，伏筆的鏈沒有用它
-TIANJI: dict[str, tuple[str, ...]] = {
-    "wind": ("東", "南", "西", "北"),
-    "disguise": ("鹽車", "棺木", "香客", "商隊"),
-    "mole": ("clerk", "priest", "strongman"),  # 廣宗的內鬼（伏筆文件 2.9；黃巾第 4 階機緣「營中的內鬼」）
-}
 TIANJI_SLOTS = {"{風向}": "wind", "{偽裝}": "disguise"}  # 文字裡的插槽
 OVERHEARD = "聽說{name}說過："  # 名望不夠求見不到的人，對話片段從行動偷聽到時，原文前面加的這一句（內容表 4.0）
-FIGURE_SLOT = "{人物}"  # 最後一步的敘事裡「出面的那位」：figure 在那條戰線上就是他，否則是 stand_in
-TIANJI_ANSWER = "tianji:"  # 答案寫成 tianji:<key>
 LOCK_SIDES = tuple(timetable.SIDE_NAMES)  # 會鎖定大事的兩方（官軍、黃巾）；鏈只能是這兩方的（content.validate）
 FRONT_RULES = {"guan": (0, 60), "huang": (40, 100)}  # 戰況（往黃巾為正）：官軍 ≤ 60、黃巾 ≥ 40
 UNREADY = "東西還沒備齊"
@@ -49,22 +40,6 @@ NOT_NOW = "（此刻無法這麼做。）"
 
 
 # ── 換算與天機 ───────────────────────────────────────────
-
-
-def scale(content: Content) -> float:
-    """需求量的係數（伏筆文件 2.8、Config.foreshadow_tiers）：人數上限未滿哪一檔就用那一檔；都不是（1000 人以上）是 1。"""
-    players = content.config.server_max_players
-    for bound, factor in content.config.foreshadow_tiers:
-        if players < bound:
-            return factor
-    return 1.0
-
-
-def need(content: Content, base: int) -> int:
-    """基準量換算成這個伺服器的需求量：乘上係數、無條件進位、最少 1。基準量 0（或更少）就是不要，回 0。"""
-    if base <= 0:
-        return 0
-    return max(1, math.ceil(round(base * scale(content), 9)))
 
 
 def fragment_chance(content: Content) -> float:
@@ -112,11 +87,6 @@ def held_items(state: GameState, content: Content) -> list[tuple[FsItem, int]]:
         return []
     bag = state.player.clue_items
     return [(item, bag[item.id]) for item in content.foreshadows.items if bag.get(item.id, 0) > 0]
-
-
-def trips(final: FsFinal) -> list[FsStep]:
-    """最後一步的每一趟：寫了 steps 就是 steps，否則 final 自己就是那一趟。"""
-    return list(final.steps) if final.steps else [final]
 
 
 def _requires_of(final: FsFinal, trip: FsStep) -> list[FsRequires]:
@@ -502,13 +472,6 @@ def final_options(state: GameState, content: Content, loc_id: str) -> list:
 # ── 最後一步：答題 ───────────────────────────────────────
 
 
-def _asks(trip: FsStep) -> list[FsAsk]:
-    if not trip.question:
-        return []
-    main = FsAsk.model_construct(question=trip.question, options=list(trip.options), answer=trip.answer or "")
-    return [main, *trip.then]
-
-
 def _current_ask(state: GameState, content: Content) -> tuple[FsChain, FsAsk] | None:
     p = state.player
     c = chain(content, p.fs_asking) if p.fs_asking else None
@@ -789,11 +752,3 @@ def effect_clues(r: EffectRun) -> list[str]:
     if effect.clue_items or effect.fs_counters:
         return grant(r.state, r.content, effect.clue_items, effect.fs_counters)
     return []
-
-
-def asks_of(c: FsChain) -> Iterator[tuple[str, FsAsk]]:
-    """每一趟的每一道題（給內容檢查用）：(哪裡, 題)。"""
-    for i, trip in enumerate(trips(c.final)):
-        for j, ask in enumerate(_asks(trip)):
-            yield f"第 {i + 1} 趟第 {j + 1} 題", ask
-

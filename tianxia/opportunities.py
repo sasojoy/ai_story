@@ -14,6 +14,7 @@ import random
 from typing import NamedTuple
 
 from . import calendar, figures, foreshadow, ranks, timetable, wins
+from .core.omen_base import _live, done_for_rank, in_plot  # noqa: F401  軍情第 34 批：只讀那一半搬到 core/omen_base，這裡 re-export 同一批名字
 from .journal import fragment_line
 from .models import Content, Effect, OppDef, OppPiece, Rank2Action
 from .rules import add_rumor, apply_effect, change_trend, front_of, haoqiang_allied, roll_check, season_one, side_of
@@ -90,12 +91,6 @@ def open_ones(state: GameState, content: Content) -> list[OppDef]:
         o for o in content.opportunities
         if o.faction == p.faction and o.id not in p.opp_done and (o.rank == 3 or rank >= 3)
     ]
-
-
-def done_for_rank(state: GameState, content: Content, rank: int) -> bool:
-    """這一季替目前陣營完成過第 rank 階的任一種機緣（同一階完成任一種就夠，機緣文件第一節）；計畫丙的召見讀它。"""
-    p = state.player
-    return any(o.rank == rank and o.faction == p.faction and o.id in p.opp_done for o in content.opportunities)
 
 
 def clear(p: PlayerState) -> None:
@@ -459,11 +454,6 @@ def _plot_def(content: Content, plot: Plot) -> OppDef | None:
     return next((o for o in content.opportunities if o.id == plot.opp and o.kind == "plot"), None)
 
 
-def _live(state: GameState, plot: Plot) -> bool:
-    """還在進行：開著、沒過期、而且這一季還沒落幕（休季什麼都不能再加）。"""
-    return plot.status == "open" and state.world.time <= plot.deadline and not state.world.ended
-
-
 def _need_parts(o: OppDef) -> int:
     return o.plot.need_parts or len(o.plot.parts)
 
@@ -568,15 +558,6 @@ def settle(state: GameState, content: Content) -> list[str]:
             msgs.append(o.plot.helper_text)
             wins.credit(p, content, state.world, calendar.point(state.world.time, content, state.world).week, content.config.plot_contrib)
     return msgs
-
-
-def in_plot(state: GameState) -> bool:
-    """響應或牽頭過、還沒收場也沒領的密謀：還開著（沒過期）的，或已經完成但自己還沒結算的。叛投的確認畫面讀它。"""
-    p = state.player
-    return any(
-        p.name in x.members and x.id not in p.opp_settled and x.faction == p.faction and (_live(state, x) or x.status == "done")
-        for x in state.world.plots
-    )
 
 
 def leave_plots(state: GameState) -> None:

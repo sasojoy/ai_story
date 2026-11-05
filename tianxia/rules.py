@@ -298,9 +298,9 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
     if any(p.clue_items.get(k, 0) < v for k, v in cond.clue_items.items()):
         return False
     if cond.grain_min:  # 帶了糧（晉升奇遇 3.2；正式版丙二）：要 content 才算得出糧草與換算
-        from . import foreshadow  # noqa: PLC0415  foreshadow → rules：在函式裡 import，避免循環
+        from .core import omen_base  # noqa: PLC0415  軍情第 34 批：伏筆需求量的換算在核心的 omen_base
 
-        if content is None or materials.grain_of(state, content) < foreshadow.need(content, cond.grain_min):
+        if content is None or materials.grain_of(state, content) < omen_base.need(content, cond.grain_min):
             return False
     if cond.fight_tiers:
         # 這次行動打的那一場：battle_card 每次行動開頭清掉、打完才指向那筆紀錄，所以上一次行動留下的紀錄不算
