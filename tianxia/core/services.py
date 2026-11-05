@@ -309,7 +309,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._log(msgs)`、`ctx._save_season()`、`ctx._pill_day()`、`ctx._shop_say(...)`、`ctx._shop_after(...)`、`ctx._shop_live()`、`ctx._xinde()`、`ctx._menxia_entry(...)`、
   `ctx.state`、`ctx.content`、`ctx.world`、`ctx.rng`：選單、買修淬煉、開爐、收購升階、裝備庫那一列的修與淬煉、神器定名用
 - `ctx._smith_clue(paid=True)`（鐵匠順口：花了銀兩或素材之後擲一次，中了說出這家知道的隱藏配方那一句；只讀、自己的亂數不動 ctx.rng。主人：鐵匠鋪包，
-  本體在 `features/smithy/clue.py`，Game 留一行委派，因為 tests/gear/test_econ_smith.py、test_shop.py 換掉 `Game._smith_clue`，包裡一律經 ctx 叫才打得到）
+  本體在 `features/smithy/clue.py`，Game 留一行委派，因為 tianxia/features/smithy/tests/test_econ_smith.py、tests/gear/test_shop.py 換掉 `Game._smith_clue`，包裡一律經 ctx 叫才打得到）
 - `ctx.smith_line(kind, main, aux)`（店面打造頁爐裡放了什麼、這一爐會怎樣，只讀；包自己的 `/api/smith_line` 路由經殼的 `look(game, lambda g: g.smith_line(…))` 叫，
   路由裡的變數叫 g；本體在 `features/smithy/forge_actions.py`，Game 留一行委派給 server 與測試）
 - 共用規則層（包直接 import，registry.SHARED 已登記）：`weapons`、`armor`、`equipment`、`forge_secrets`、`four_tiers`、`silver`、`economy`、`traits`、`library`、

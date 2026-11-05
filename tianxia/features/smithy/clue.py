@@ -1,5 +1,5 @@
 """鐵匠順口（全部拆包第 41 批；打造隱藏配方設計 6.2）：鐵匠鋪的動作不花時間，種子多帶這一下之後的銀兩與素材數；中了說出這家知道的那一句。
-原本 Game._smith_clue，Game 留一行委派，因為測試換掉它（tests/gear/test_econ_smith.py、test_shop.py），包裡其餘各檔一律經 ctx._smith_clue 叫才打得到。
+原本 Game._smith_clue，Game 留一行委派，因為測試換掉它（features/smithy/tests/test_econ_smith.py、tests/gear/test_shop.py），包裡其餘各檔一律經 ctx._smith_clue 叫才打得到。
 第一個參數 ctx 是 Game。"""
 from __future__ import annotations
 
