@@ -23,5 +23,10 @@ class MapFeature(Feature):
     def enabled(self, ctx) -> bool:
         return True
 
+    def routes(self, shell):
+        from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）
+
+        return routes.router(shell)
+
 
 FEATURE = MapFeature()

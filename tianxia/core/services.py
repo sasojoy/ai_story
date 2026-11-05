@@ -306,12 +306,17 @@ explore（主動搬六包第 3＋4 批加的這一段）
 
 # map（全部拆包第 49 批「輿圖一」；主人：輿圖包。本體在 tianxia/features/map/，Game 留一行委派回答別的包；計畫 docs/superpowers/plans/2026-11-06-輿圖包-第1批.md 1.1、1.4）
 - 輿圖包要叫的核心服務，上面都已經列了的（`ctx._side()`、`ctx._conquest_side()`、`ctx.odds(...)`、`ctx.sorties_left()`、`ctx._practice_tier(loc)`），這一段只補沒列的：
+- `ctx._sortie_mode(loc)`（主人 sortie：這一處的出陣是攻、守還是沒有；輿圖疊層的出陣那一格問，原本直接叫 `sortie.mode`）
 - `ctx.duel_on()`、`ctx._sortie_foes(loc)`、`ctx._duel_squad(loc_id)`（主人 sortie：約戰開著沒、出陣真的會打的那一批、貼約戰時守軍迎戰挑的那一路；輿圖地點卡的
   對手與勝算〔map_foes〕、出陣那一格〔map_state〕問）
 - `ctx._real_minutes(...)`（主人核心：`atlas.place_minutes` 的包裝，路程換算成現實分鐘；輿圖疊層的走路分鐘問）
 - `ctx.map_mostly()`（主人 explore：輿圖第一層名字旁的兩個字，每一處站過去之後的比重；原本列在三、過渡 explore）
 - `ctx._map_open_places()`、`ctx._map_mostly_here()`（主人 map：畫得出來的地點；腳下這一處「多半給什麼」那一句。探索包原本直接 import `mapview.open_places`、
   `mapdata.mostly_here`，輿圖成包之後包不能 import 包，改經 Game 的一行委派問輿圖包）
+- `ctx._map_foes(loc_id)`、`ctx._fierce_line(loc)`（主人 map：自己叫自己，經 Game 的一行委派——測試換掉 `Game._map_foes` 看地點卡的對手跟著變）
+- `ctx.map_base(viewer=)`、`ctx.map_state()`、`ctx.map_places()`、`ctx.map_header()`、`ctx.world_map_svg(layer, selected)`、`ctx.map_legend(layer)`、`ctx.place_detail(loc_id)`、
+  `ctx.travel_options(loc_id)`、`ctx.MAP_LAYERS`（主人 map：`views.map_view`、`views.map_base_view` 這兩個 API 資料函式與 `routes.py` 的 /api/map/state 經 Game 的委派叫，server 與測試換掉的都看得到；
+  `MAP_LAYERS` 是 Game 的類別屬性，就是 `atlas.LAYERS`）
 - 另外兩個共用的字與小函式不在 Game 上、從這個模組 import（最底下 # map 那一段）：`LOSE_WORD`（勝算的「必敗」，探索包挑懸賞、輿圖包標淡都讀）、
   探索表的小字（`kind_of`、`hint_in`、`mostly_in`……，輿圖名字旁的退路讀）、`terrain_tags`（地形標籤，有所感與輿圖地點卡共用）
 

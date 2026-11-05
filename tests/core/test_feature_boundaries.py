@@ -270,7 +270,6 @@ GAME_DELEGATES = {  # 一行的委派（server 與測試照舊叫 Game）
 # 行動列與 act 子動詞、choose 前後段、本人這一輪、場景卡、戰報頁、店面）都換成了接縫掛鉤（tianxia/core/features.py），留下的都不是核心
 # 自己的接縫——還沒搬的別的功能（或同一包還沒搬的那一半）叫包。每一條寫「為什麼留、哪一批收」；「打完之後」那一種（一包發生了、別包跟著動）
 # PM 定這一批不開掛鉤，原位行尾標「# 過渡：第 26 批」（事件機制）。
-_MAP_LINE = "輿圖的線（feature/map-view）還在飛，這一輪不碰；輿圖成包（總表第 46～50 批）時改叫出陣、探索的查詢服務"
 GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；過渡）
     # explore（主動搬六包第 3＋4 批）：用到 outing 這個名字（現在是探索包 outing_rules 的別名）的只剩有所感
     # （_sense：有所感擲特殊頓悟的 boost＝outing_rules.rare_boost——全部拆包第 24 批探索包開了查詢服務 _rare_boost〔# sense 那一段〕，改叫它，拿掉）
@@ -285,8 +284,6 @@ GAME_DIRECT = {  # 核心自己的邏輯直接叫包（沒有對應的掛鉤；�
                         "戰報標題寫雪恥（sortie.on、PROLOGUE_FIGHT）留在這裡（第 17 批）：戰報在這個單打服務裡建、裡面就存檔，序章裡誰打都照寫"
                         "（不只 act:train），出陣包從外面改不到；要拿掉得在單打服務開一個「這一場戰報叫什麼」的位置，交 PM 定",
     # （_train_squad_ids、_duty_option、_duty：舊遊歷與出陣共用的對手池、守勢行動第 17 批搬進出陣包〔train_actions〕，拿掉）
-    "map_state": "輿圖（今天去哪裡出陣：sortie.on、叫 _sortie_foes、sorties_left）：" + _MAP_LINE,
-    "_map_foes": "輿圖的地點卡（出陣打誰：sortie.on、叫 _sortie_foes）：" + _MAP_LINE,
     # （choose：用到 sortie_duel 這個名字的 PREFIX、PICK 第 11 批換成 choose_unlisted 與 Verb.picks，拿掉）
     # battle（全部拆包第 7 批：tianxia/escorts.py 整個搬進決戰包，舊名是別名）
     "_apply_battle_outcome": "收場那一刻全服放回隨你出陣的同伴（escorts.due、after_battle，排在龍頭上陣的 generals.after_battle 之後，先後算行為）："
@@ -298,8 +295,6 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     # 出陣第 1 批記的 (_outing_foe, _sortie_host) 拿掉了（下面出陣那一段少了那一行）：_outing_foe 進了探索包，經 ctx._sortie_host 叫
     # （服務清單二、查詢服務）。第 11 批（核心收接縫）：_act、_action_title、_everyday_options、action_notes 那 7 對換成 act 子動詞的掛鉤
     # （Verb：探索一顆開著時的出門一趟、標題、那一顆、那一行），拿掉
-    ("map_base", "map_mostly"): "輿圖的底圖：名字旁的兩個字照看的人站過去之後的比重（探索一顆開著時）：" + _MAP_LINE,
-    ("map_state", "map_mostly"): "輿圖：地點旁的兩個字照看的人站過去之後的比重（探索一顆開著時）：" + _MAP_LINE,
     # （(own_turn_checks, _mall_grant)：封測元寶每一輪發，第 11 批換成 on_own_turn 掛鉤，拿掉）
     # 擂台形象（looks；PR #121 Joy 11/1 合進 develop，第 11 批合 develop 時接上）：核心的擂台叫形象委派的 4 對（_arena_join、_arena_start
     # 叫 arena_look、arena_move）全部拆包第 12 批拿掉——擂台搬進單挑包，包裡經 ctx 叫形象包的查詢服務（服務清單二、查詢服務 # bout）
@@ -309,18 +304,12 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     # （第 17 批：(_act, _sortie)、(_train_squad_ids, _sortie_mode|_sortie_foes)、(_duty_option, sorties_left)、(_duty, _sortie_host) 那 5 對
     # 跟著舊遊歷、守勢搬進出陣包，變成包裡互相叫，拿掉）
     ("_squad_encounter", "_sortie_rewards"): "戰鬥（as_sortie）打贏之後給出陣的獎勵：總表第 26 批的事件（打贏一場；原位標「# 過渡：第 26 批」）",
-    ("map_state", "_sortie_foes"): "輿圖（今天去哪裡出陣）：出陣那一格是哪一種；" + _MAP_LINE,
-    ("map_state", "sorties_left"): "輿圖：今天還能出陣幾次；同上",
-    ("_map_foes", "_sortie_foes"): "輿圖的地點卡：約戰關著時出陣打的那一批；同上",
     # 出陣約戰（主動搬六包第 2 批）：核心叫約戰委派 17 對（搬之前約戰自己叫出陣委派的 8 對跟著進了包）。第 11 批（核心收接縫）：三處結算
     # （world_tick、sync、advance → _sortie_duel_tick）換成 on_due 掛鉤，拿掉；choose 那兩對（sortie:* 在查選單之前接走）換成 choose_unlisted，拿掉；
     # _act、action_notes 那 4 對（約戰開著時那張卡、約戰那一句）換成 act 子動詞的掛鉤，拿掉。第 17 批：(_fight_squad, duel_on) 換成
     # act 子動詞的掛鉤（Verb.squad）、(_duty_option|_duty, duel_on)、(_duty, _duty_credit) 跟著守勢搬進出陣包，拿掉
     ("_squad_encounter", "duel_on"): "戰鬥（as_sortie）打贏之後：約戰開著時只剩截糧、不推進度（進度只在約戰結算動）：總表第 26 批的事件"
                                      "（原位標「# 過渡：第 26 批」）",
-    ("map_state", "duel_on"): "輿圖：約戰開著時不畫零風險的守、攻不了的不推薦、運糧隊經過的帶 convoy；" + _MAP_LINE,
-    ("_map_foes", "duel_on"): "輿圖的地點卡：約戰開著時列貼約戰會迎戰的守軍那一路；同上",
-    ("_map_foes", "_duel_squad"): "同上：守軍那一路（經驗最高的那一路）",
     # battle
     # 全服決戰「看」那一半（主動搬六包第 5 批）：叫它的都是「打」那一半（第 7、8 批搬進同一包之後變成包裡互相叫）。第 11 批：場景卡
     # (scene_text, _battle_scene_text) 換成 scene_over 掛鉤、戰報頁 (battle_detail, _round_blocks) 換成 record_detail 掛鉤，拿掉
@@ -695,7 +684,6 @@ GAME_DELEGATES |= {"_practice_tier", "_explore", "_legend_find", "_explore_weigh
 GAME_DELEGATE_CALLERS.update({
     ("_act", "_explore"): "關著探索一顆時的舊探索（扣體力、晉升奇遇、序章的舊探索都在它前面；第 11 批 README 認定留原位，不改成 Verb）",
     ("action_notes", "_explore_weights"): "行動列底下那一行的舊探索句（掛鉤 act_note 回 None 時）：" + _LATER_18,
-    ("_fierce_line", "_practice_tier"): "輿圖的地點卡與詳情（place_detail）：這一處練功第幾級；輿圖不是這一包（feature/map-view）",
 })
 # cultivation（全部拆包第 23 批「修練」：改練、練成、意境裝卸、熔煉、絕學與破境丹、破境卡、傳功、配點搬進修練包 tianxia/features/cultivation/；計畫
 # docs/superpowers/plans/2026-11-01-修練包-第1批.md 1.6）：這一批加的集中在這一段（並行的拆包線不跟別人的行穿插；拿掉的在原處）
@@ -1038,6 +1026,22 @@ GAME_DIRECT.update({
     "discuss_invite_problem": _PEERS_PENDING.format(what="invites、social（答應時重驗）"),
     "discuss_refusal": _PEERS_PENDING.format(what="invites、social（不能發邀請的原因）"),
 })
+
+
+# map（全部拆包第 49 批「輿圖一」：新包 tianxia/features/map/；計畫 docs/superpowers/plans/2026-11-06-輿圖包-第1批.md 1.1、1.4、1.5）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。11 個方法搬進包，Game 留 11 個一行委派（_map_foes、_fierce_line 也留：測試換掉 Game._map_foes、
+# 包裡經 ctx 叫），另多兩個：探索包原本直接 import mapview、mapdata（open_places、mostly_here），成包之後包不能 import 包，改經 Game 的 _map_open_places、
+# _map_mostly_here 問輿圖包。沒有選項前綴、沒有掛鉤可接（輿圖是只讀的畫面）、沒有 GAME_DIRECT：原本 map_state、_map_foes 兩筆（sortie.on）拿掉，
+# 現在經 ctx 問出陣包的 _sortie_mode；原本 (map_base|map_state, map_mostly)、(map_state|_map_foes, _sortie_foes|duel_on|_duel_squad|sorties_left)、
+# (_fierce_line, _practice_tier) 十幾對是 Game 叫委派，現在是包裡經 ctx 叫（服務清單二、查詢服務 # map），拿掉。
+GAME_IMPORTS |= {"tianxia.features.map.actions"}
+GAME_DELEGATES |= {
+    # server 的 map_base_view（底圖）、/api/map/state（疊層）、map_view（舊輿圖的圖層、標頭、地點、詳情、移動鈕）、/api/travel 走不成時帶的 map，bot_policy
+    # 的 travel_options（假人的移動選項），測試與腳本叫的；_map_foes、_fierce_line 包裡也經 ctx 叫（測試換掉 Game._map_foes）；_map_open_places、
+    # _map_mostly_here 是探索包的查詢
+    "map_base", "map_state", "_map_foes", "_fierce_line", "world_map_svg", "minimap_svg", "map_legend", "map_header", "map_places", "place_detail",
+    "travel_options", "_map_open_places", "_map_mostly_here",
+}
 
 
 @functools.lru_cache(maxsize=None)
@@ -1652,7 +1656,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # territory_acts（全部拆包第 46 批：tianxia/conquest_day.py、xingshi.py）
                          "conquest_day": "territory_acts", "xingshi": "territory_acts",
                          # peers（全部拆包第 37 批：tianxia/social.py、invites.py、mingtie.py、mingtie_card.py）
-                         "social": "peers", "invites": "peers", "mingtie": "peers", "mingtie_card": "peers"}
+                         "social": "peers", "invites": "peers", "mingtie": "peers", "mingtie_card": "peers",
+                         # map（全部拆包第 49 批：tianxia/mapview.py、mapart.py、mapdata.py、worldgeo.py）
+                         "mapview": "map", "mapart": "map", "mapdata": "map", "worldgeo": "map"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 
