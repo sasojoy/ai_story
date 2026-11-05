@@ -1114,3 +1114,123 @@ def test_the_step_places_list_only_the_slots_with_a_ref_and_a_place(monkeypatch)
     got = features_core.step_places({"commission": step("commission", _no_items, "errand", place)})
     assert got == {"errand": place, "order": place}
     assert list(got) == ["errand", "order"]
+
+
+def _every_step_slot(items_calls, place_calls):
+    """登記「你這一步」表上每一格的假包（關著）：items 記 (格, ctx, status, orders)、回一件 kind＝格名（託付那一格自己帶 target、不掛 _ref，
+    同人物情誼包）；place 記 (格, ctx, ref)、照格回 (id, target, then)：委託三樣都有、軍令 target 是 None（不給 then）、懸賞 id 是 None（不寫 id）。"""
+    from tianxia import step as step_rules
+
+    back = {"commission": ("c1", {"location": "c"}, {"location": "c2"}), "order": ("o1", None, {"location": "o2"}),
+            "bounty": (None, {"location": "b"}, None), "foreshadow": ("f1", {"location": "f"}, None),
+            "newbie": ("n1", {"location": "n"}, None), "join": ("j1", {"location": "j"}, None)}
+    refs = {"commission": "errand", "order": "order", "bounty": "bounty", "foreshadow": "foreshadow", "newbie": "newbie", "join": "join"}
+
+    def items(slot):
+        def run(ctx, status, orders):
+            items_calls.append((slot, ctx, status, orders))
+            if slot == "errand":
+                return [{"kind": slot, "text": slot, "id": "e1", "target": {"location": "e"}}]
+            return [{"kind": slot, "text": slot, step_rules.REF: (refs[slot], slot)}]
+        return run
+
+    def place(slot):
+        return lambda ctx, ref: place_calls.append((slot, ctx, ref)) or back[slot]
+
+    hooks = [features_core.StepHook(slot, items(slot), refs.get(slot), place(slot) if slot in refs else None) for slot in features_core.STEP_ORDER]
+    return Stepper(hooks, open_=False)
+
+
+def test_the_week_card_asks_the_step_slots_with_the_shells_status_and_orders(monkeypatch):
+    """真的本週卡（weekcard.week_card，server.main_view 叫的那一個）問「你這一步」的掛鉤：換掉 FEATURES、假包登記七格（關著），每一格的 items
+    照表的順序叫一次，參數是 ctx 與殼傳進來的那一份 status、orders（同一個物件，不重算）；四勝利開著時 finish 照每一件 _ref 的第一個字叫到
+    寫它那一格的 place（委託那一格的 ref 是 errand），(id, target, then) 照原本的規矩寫進那一件（target 是 None 不給 then、id 是 None 不寫、
+    _ref 拿掉），自己帶 target 的託付照留、不叫 place。四勝利關著時一格的 place 都不叫，只拿掉 _ref。"""
+    from wins_kit import wins_game
+
+    from tianxia import step as step_rules
+    from tianxia import weekcard
+
+    game = wins_game(faction="guan", at="changshe")
+    assert step_rules.on(game)
+    status, orders = game.status_data(), [{"id": "殼算好的軍令"}]
+    items_calls, place_calls = [], []
+    monkeypatch.setattr(registry, "FEATURES", [_every_step_slot(items_calls, place_calls)])
+    rows = [r for r in weekcard.week_card(game, status, orders)["steps"] if r["kind"] != "chapter"]
+    assert [(slot, ctx is game, got is status, given is orders) for slot, ctx, got, given in items_calls] == [
+        (slot, True, True, True) for slot in features_core.STEP_ORDER]
+    assert [(slot, ctx is game, ref) for slot, ctx, ref in place_calls] == [
+        ("commission", True, ("errand", "commission")), ("order", True, ("order", "order")), ("bounty", True, ("bounty", "bounty")),
+        ("foreshadow", True, ("foreshadow", "foreshadow")), ("newbie", True, ("newbie", "newbie")), ("join", True, ("join", "join"))]
+    assert rows == [
+        {"kind": "errand", "text": "errand", "id": "e1", "target": {"location": "e"}},
+        {"kind": "commission", "text": "commission", "target": {"location": "c"}, "id": "c1", "then": {"location": "c2"}},
+        {"kind": "order", "text": "order", "target": None, "id": "o1"},
+        {"kind": "bounty", "text": "bounty", "target": {"location": "b"}},
+        {"kind": "foreshadow", "text": "foreshadow", "target": {"location": "f"}, "id": "f1"},
+        {"kind": "newbie", "text": "newbie", "target": {"location": "n"}, "id": "n1"},
+        {"kind": "join", "text": "join", "target": {"location": "j"}, "id": "j1"},
+    ]
+    items_calls.clear()
+    place_calls.clear()
+    monkeypatch.setattr(step_rules, "on", lambda game: False)  # 四勝利關著（或季收了）：finish 只拿掉 _ref
+    rows = [r for r in weekcard.week_card(game, status, orders)["steps"] if r["kind"] != "chapter"]
+    assert [slot for slot, *_ in items_calls] == list(features_core.STEP_ORDER) and place_calls == []
+    assert rows[1:] == [{"kind": slot, "text": slot} for slot in features_core.STEP_ORDER[1:]]
+
+
+def test_the_core_and_the_packages_take_every_step_slot_exactly_once():
+    """核心代叫的格（step._STEP_CORE：懸賞榜的委託與懸賞，第 45 批）與包登記的格（照真的 FEATURES）合起來剛好是表上的格、沒有重疊、ref 不重複：
+    沒有一格默默不排、也沒有一格兩邊都寫。主人照計畫 1.2 量的：託付是人物情誼包、軍令與伏筆是軍情包、新手目標是新手引導包、去投靠是陣營包；
+    有 ref 的格都有 place（託付自己帶 target，兩個都沒有）。"""
+    from tianxia import step as step_rules
+
+    mine = features_core.step_hooks()
+    assert not mine.keys() & step_rules._STEP_CORE.keys()
+    assert mine.keys() | step_rules._STEP_CORE.keys() == set(features_core.STEP_ORDER)
+    assert set(step_rules._STEP_CORE) == {"commission", "bounty"}
+    table = features_core.step_table(step_rules._STEP_CORE)
+    assert [h.slot for h in table] == list(features_core.STEP_ORDER)
+    assert [h.ref for h in table] == [None, "errand", "order", "bounty", "foreshadow", "newbie", "join"]
+    assert all((h.ref is None) == (h.place is None) for h in table)
+    fs = features_core.registered()
+    assert {f.name: [h.slot for h in f.steps()] for f in fs if f.steps()} == {
+        "companions": ["errand"], "military": ["order", "foreshadow"], "guide": ["newbie"], "faction": ["join"]}
+
+
+def test_the_step_slots_look_up_their_functions_when_called(monkeypatch):
+    """每一格在叫的那一下才照模組屬性找（核心代叫的懸賞榜兩格找 tianxia.bounties，包的格找自己的模組）：換掉的照樣打得到，參數照傳
+    （軍令那一格拿殼傳進來的 orders、新手目標那一格拿 status；託付、伏筆、去投靠讀 ctx 上的 state 與 content）。"""
+    from wins_kit import wins_game
+
+    from tianxia import bounties
+    from tianxia import step as step_rules
+    from tianxia.features.companions import errands
+    from tianxia.features.faction import join_actions
+    from tianxia.features.guide import actions as guide_actions
+    from tianxia.features.military import fs_rules, order_actions
+
+    game = wins_game(faction="guan", at="changshe")
+    calls = []
+
+    def note(name, back):
+        return lambda *args: calls.append((name, args)) or back
+
+    s, c = game.state, game.content
+    monkeypatch.setattr(errands, "step_items", note("errands.step_items", []))
+    monkeypatch.setattr(order_actions, "step_items", note("order_actions.step_items", []))
+    monkeypatch.setattr(fs_rules, "next_step", note("fs_rules.next_step", None))
+    monkeypatch.setattr(guide_actions, "newbie_step_items", note("guide_actions.newbie_step_items", []))
+    monkeypatch.setattr(join_actions, "join_step_items", note("join_actions.join_step_items", []))
+    status, orders = {"bounties": [], "newbie": None}, ["軍令"]
+    assert step_rules.items(game, status, orders) == []
+    assert calls == [("errands.step_items", (s, c)), ("order_actions.step_items", (game, orders)), ("fs_rules.next_step", (s, c)),
+                     ("guide_actions.newbie_step_items", (game, status)), ("join_actions.join_step_items", (game,))]
+    calls.clear()
+    monkeypatch.setattr(bounties, "open_commissions", note("bounties.open_commissions", []))
+    monkeypatch.setattr(bounties, "rallies", note("bounties.rallies", []))
+    monkeypatch.setattr(fs_rules, "next_trip", note("fs_rules.next_trip", None))
+    rows = step_rules.finish(game, [{"kind": "errand", "text": "x", step_rules.REF: ("errand", "沒有這一張")},
+                                    {"kind": "foreshadow", "text": "y", step_rules.REF: ("foreshadow",)}])
+    assert rows == [{"kind": "errand", "text": "x", "target": None, "id": "沒有這一張"}, {"kind": "foreshadow", "text": "y", "target": None}]
+    assert calls == [("bounties.open_commissions", (s, c)), ("bounties.rallies", (s, c)), ("fs_rules.next_trip", (s, c))]

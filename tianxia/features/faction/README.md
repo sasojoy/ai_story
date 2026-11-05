@@ -55,6 +55,7 @@
 - `tests/figures/test_gentry_allied.py`（47）、`tests/core/test_gentry_ledgers.py`（16）、`tests/core/test_factions.py`（2）、`tests/core/test_faction_events.py`（3）：豪強、兩本帳、陣營規模與事件。
 - `tests/figures/test_promotions_huang.py`（56）、`test_promotions_high.py`（130）、`test_seats.py`（83）、`test_rumor_layers.py`（70）：只有幾處 `import defection`（晉升、席次、傳聞分層）。
 - `tests/web/test_gentry_allied_web.py`（2）：網頁（第 3 階）。
+- 「你這一步」的去投靠那一格（第 36 批）：`tests/bots/test_step.py`（9：去投靠的目標是最近的投靠點、先後在新手目標之後）、`tests/map/test_weekcard.py`（7：散人的卡最後一件是去投靠）；格的先後與登記由核心契約 `tests/core/test_contract_core.py`（`# core_step`）鎖住。
 - `tests/core/test_feature_boundaries.py`、`tests/core/test_contract_features.py`（核心契約）：這一包的邊界、前綴、欄位、換季都在裡面守。
 
 ## 過渡（手冊 3.11）
