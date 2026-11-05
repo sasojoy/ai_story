@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import random
 
+import pytest
+
 from conftest import real_content
 from tianxia import bot, economy
 from tianxia.engine import Game
@@ -41,6 +43,7 @@ def test_only_your_own_base_takes_donations():
     assert "act:donate" not in _ids(_game(faction=None))  # 散人
 
 
+@pytest.mark.smoke
 def test_donating_from_the_menu_records_points_stores_and_pushes_the_front():
     game = _game(bag={"rou_1": 40, "rou_3": 1})
     p, w = game.state.player, game.state.world

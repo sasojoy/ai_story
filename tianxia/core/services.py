@@ -153,6 +153,12 @@
 - 共用的字（從這個模組 import）：`RANK_ACTION_PREFIX`（第 3、4 階行動的選項 id 前綴 `act:rank:`；核心的 `_act`、`_action_title` 認它，軍情包的選單產生它。原本在 engine.py，
   engine 照舊 import 回來，`from tianxia.engine import RANK_ACTION_PREFIX` 照舊拿得到）
 
+# outlets（全部拆包第 43 批「銀兩出口與捐軍備」：捐素材、捐銀兩、名師指點、買破境丹、看火候、打點門路與帳簿搬進銀兩出口包；
+# 計畫 docs/superpowers/plans/2026-11-05-銀兩出口包-第1批.md 1.3）。包要叫的核心服務，上面都已經列了，這一段只記「誰在用」，不新增：
+- `ctx._at_own_base()`、`ctx._at_clinic_town()`（人在自家大本營、帶醫館標籤的地點；附錄甲裁核心）、`ctx._pill_day()`（「一天」）、`ctx._idle()`、
+  `ctx._side()`、`ctx._log(msgs)`、`ctx._save_season()`、`ctx._shop_say(...)`、`ctx._shop_after(...)`、`ctx.push_trend(...)`（捐軍備推大本營那一條線）
+- 共用規則層（包直接 import，registry.SHARED 已登記）：`silver`、`economy`、`materials`、`equipment`、`wins`；過渡（待收進共用層，標「# 過渡：待搬」）：`shopview`（SHARED_LATER）、`figures`（第 40 批）。
+
 ## 二、查詢服務
 
 # battle（主動搬六包第 5 批；主人：決戰包。本體還在 Game——「打」那一半，第 6～8 批搬——決戰包「看」那一半經 ctx 叫；搬完由決戰包經
