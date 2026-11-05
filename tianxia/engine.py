@@ -8824,7 +8824,7 @@ class Game:
         if problem:
             return self._log([problem])
         line = attrset.pick(s, c, preset, custom)
-        journal.add_entry(s, JournalEntry(time=s.world.time, title="成長配比", changes=[line]))
+        journal.add_entry(s, JournalEntry(time=s.world.time, title="成長配比", lines=[line]))  # 一整句：寫成敘事（數值變化的小框放不下，手機上會撐出畫面）
         self._guide(self._note_action("allocate"))  # 五項屬性的季，序章配點那一步就是挑成長配比（升一級沒有點可配）
         return self._log([line])
 
@@ -12090,6 +12090,8 @@ class Game:
             "stat_points": p.stat_points,
             "stat_cap": c.config.stat_cap if not attrset.on(c, s.world) else 10**9,  # 五項屬性的季沒有上限
             **({"growth": attrset.view(s, c)} if attrset.on(c, s.world) else {}),  # 挑成長配比的那一塊（屬性與跨季架構 v2 3.1）
+            # 歷練：這一季從事件得來的屬性有多少、上限多少（展開的屬性底下那一條，企劃者 2026-11-05）
+            **({"lilian": {"have": attrset.event_total(s), "cap": c.config.attributes.v2.event_cap}} if attrset.on(c, s.world) else {}),
             # ＋鈕底下那一行：五項各管什麼、事件檢定也看它們（計畫二最終審查 M2）；網頁只在有點可配時畫
             "stat_uses": skillview.stat_uses(c, s),  # 減法季屬性五段開著時寫「現在給你什麼」的數字（設計 4.5）
             "stat_uses_note": skillview.STAT_CHECK_NOTE,

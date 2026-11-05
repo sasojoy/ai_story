@@ -4026,7 +4026,13 @@ class AttrV2Rules(_Strict):
     slope: float = 1.0
     shift_step: float = 0.05
     practice_step: float = 0.05  # 熟練加成每一點加幾成（舊的是 0.1 一點，配上舊尺度）
-    attr_xinde: int = Field(default=3, ge=0)  # 事件寫的屬性點在新的季改給心得：每一點換幾點心得（第三節：一般事件不再直接給屬性）
+    attr_xinde: int = Field(default=3, ge=0)  # 事件給的屬性過了這一季的歷練上限（event_cap）改給心得：每一點舊屬性換幾點心得；對不到新的一項（博聞）也照這個給
+    # 歷練（企劃者 2026-11-05 選「照給屬性，每季有上限」）：事件寫的舊屬性 +N 照 legacy 對到新的一項，一點舊的＝event_points 點新的
+    # （per_level ÷ 5），記進這一季的 PlayerState.attr_event（換季清零）；每人每季從事件拿到的合計最多 event_cap，超過的照 attr_xinde 改給心得；
+    # 扣的不扣。到 event_hint_at 師父說一次（h_lilian）【草】
+    event_points: int = Field(default=2, ge=0)
+    event_cap: int = Field(default=60, ge=0)
+    event_hint_at: int = Field(default=50, ge=0)
     # 效果表（新尺度，第四節「同一把尺」：我 − 他）。有寫的鉤子照這一份、對上對手的屬性（team.facing）；沒寫的鉤子照舊：
     # 新的五項換回舊尺度（attrset.v1_value）餵舊的效果表。【草】：武力對統御管外功、悟性對悟性管內功、身法對身法管閃成僵持
     effects: list[AttrEffect] = Field(default_factory=lambda: [

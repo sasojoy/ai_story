@@ -3,7 +3,9 @@
 同一套起始武學（兩門都練滿）、同一個等級，只差配比與送點：每一對照切磋的算法（Game._spar_power：照對手本人的五項對抗）擲 N 場，
 印「列那一個人贏的機會」；再印打 NPC 與事件檢定（pve）。--old 照改之前的算法（對上同等級的平均人、各算各的）對照。
 
-用法：python scripts/measure_pvp_attrs.py [--levels 10 20 30 50] [--n 4000] [--old] [--pvp 0.5]
+用法：python scripts/measure_pvp_attrs.py [--levels 10 20 30 50] [--n 4000] [--old] [--pvp 0.5] [--lilian 60]
+
+--lilian N：多幾列「某某＋歷練」：同一套配法，事件歷練（PlayerState.attr_event）N 點全在它最重的那一項（最壞的情形：這一季拿到的歷練全是同一項）。
 """
 from __future__ import annotations
 
@@ -39,8 +41,12 @@ BUILDS = {
 }
 
 
-def make(content, name: str, level: int) -> Game:
-    split, bonus = BUILDS[name]
+LILIAN = "＋歷練"
+
+
+def make(content, name: str, level: int, lilian: int = 0) -> Game:
+    base = name.removesuffix(LILIAN)
+    split, bonus = BUILDS[base]
     world = open_world(Path(tempfile.mkdtemp(prefix="pvp-")) / "t.db")
     g = Game.new(content, name, rng=random.Random(0), world=world)
     g.client = None
@@ -57,6 +63,8 @@ def make(content, name: str, level: int) -> Game:
         p.attr_alloc = {bonus: pts}
     else:
         p.attr_alloc = {k: pts // len(keys) for k in keys}
+    if name.endswith(LILIAN):
+        p.attr_event = {bonus: lilian} if bonus else {k: lilian // len(keys) for k in keys}
     return g
 
 
@@ -111,6 +119,7 @@ def main() -> int:
     ap.add_argument("--str-cap", type=float, default=None, help="試：武力管外功的上限改成這麼多")
     ap.add_argument("--inner-x", type=float, default=None, help="試：內功那一項的份量乘這麼多（悟性管的那一塊變重）")
     ap.add_argument("--pvp", type=float, default=None, help="試別的 pvp_scale（玩家對玩家時效果表再乘幾倍，例 1 或 0.5）")
+    ap.add_argument("--lilian", type=int, default=0, help="多幾列「某某＋歷練」：事件歷練這麼多點全在最重的那一項")
     args = ap.parse_args()
     c = load_content(ROOT / "content", profile="season21")
     c.config.attributes.v2.enabled = True
@@ -127,8 +136,10 @@ def main() -> int:
     if args.pvp is not None:
         c.config.attributes.v2.pvp_scale = args.pvp
     names = list(BUILDS)
+    if args.lilian:
+        names += [n + LILIAN for n in ("全武力", "全統御", "全悟性", "全身法", "均衡")]
     for level in args.levels:
-        games = {n: make(c, n, level) for n in names}
+        games = {n: make(c, n, level, args.lilian) for n in names}
         print(f"\n第 {level} 級（列的人贏的機會；同武學同等級）")
         print("".ljust(12) + "".join(n.ljust(12) for n in names))
         for a in names:

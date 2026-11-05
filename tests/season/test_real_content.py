@@ -646,7 +646,7 @@ def test_the_real_hint_book_has_all_eighteen(content):
     from tianxia import hints
 
     ids = [h.id for h in content.hints.hints]
-    assert len(ids) == 34 and set(ids) == set(hints.KNOWN)  # KNOWN 裡的每一條都有內容（十八條＋explain-1 的 h_bond，新手引導重做拿掉一條、多五條，補新手教學多十一條）
+    assert len(ids) == 35 and set(ids) == set(hints.KNOWN)  # KNOWN 裡的每一條都有內容（十八條＋explain-1 的 h_bond，新手引導重做拿掉一條、多五條，補新手教學多十一條）
     assert content.hints.head == "想起師父說過" and content.hints.season_return.strip()
 
 
@@ -755,6 +755,8 @@ HINT_PINS = {
     ("h_figure", "huang"): "一條戰線的勝負都繫在他身上",
     ("h_figure", "haoqiang"): "要是當面輸了一場，也得先收攤避一避",
     ("h_figure", "drifter"): "那位就是能左右整條戰線的人物",
+    # 歷練快滿了（2026-11-05，企劃者「師父會說『刷』嗎，不要那麼跳離世界觀」之後 PM 定的整句）
+    ("h_lilian", "text"): "這一季你在江湖上的歷練已經夠深了，再磨下去，長進有限。",
 }
 
 
@@ -762,7 +764,7 @@ def test_every_hint_line_taken_from_the_design_keeps_its_pinned_sentence(content
     """提示書的三十三句：二十七句是設計 10.5 的原文（各釘一段），六句是待 joy 潤的（PLACEHOLDER_LINES：四句改成現在的事實、兩句是
     explain-1 新寫的 h_bond）；兩邊合起來正好是書裡的每一句，以後多寫一句沒釘也沒標待潤的，這裡會叫。開季那一句（10.6）整句釘。"""
     cells = _hint_cells(content)
-    assert len(cells) == 49 and not set(HINT_PINS) & PLACEHOLDER_LINES  # 新手引導重做：拿掉 h_refine_fail、多五條；批 2 小修：h_drill_done 多一句；補新手教學多十一句
+    assert len(cells) == 50 and not set(HINT_PINS) & PLACEHOLDER_LINES  # 新手引導重做：拿掉 h_refine_fail、多五條；批 2 小修：h_drill_done 多一句；補新手教學多十一句
     assert set(cells) == set(HINT_PINS) | PLACEHOLDER_LINES
     for key, sentence in HINT_PINS.items():
         assert sentence in cells[key], key
