@@ -33,6 +33,8 @@ DODGE_NOTE = "身法一閃，躲過了這一敗。"  # 落敗被閃成僵持時�
 DAY = 86400
 HOUR = 3600
 _NUMERIC_CHANGE = re.compile(r"^\S+ [+-]\d+(\.\d+)?$")  # 例如「名望 +3」「銀兩 -10」
+# 五項屬性的季的事件歷練（attrset.grant_event）：「武力 +2（歷練 14／60）」也算數值變化。只認這一種附註：別的「經驗 +60（每人）」照舊是敘事，舊的季一個字都不變
+_LILIAN_CHANGE = re.compile(r"^\S+ \+\d+（歷練 \d+／\d+）$")
 
 
 def split_changes(msgs: list[str], *, for_record: bool = False) -> tuple[list[str], list[str]]:
@@ -42,8 +44,8 @@ def split_changes(msgs: list[str], *, for_record: bool = False) -> tuple[list[st
     是不上色的字、而戰況變化的顏色要看畫面的人站哪一邊，所以它留在江湖紀錄裡、由卡片底下的補充用標籤畫（FB-064）。"""
     if for_record:
         msgs = [m for m in msgs if not front_lines.is_mark(m)]
-    changes = [m for m in msgs if _NUMERIC_CHANGE.match(m)]
-    notes = [m for m in msgs if not _NUMERIC_CHANGE.match(m)]
+    changes = [m for m in msgs if _NUMERIC_CHANGE.match(m) or _LILIAN_CHANGE.match(m)]
+    notes = [m for m in msgs if not (_NUMERIC_CHANGE.match(m) or _LILIAN_CHANGE.match(m))]
     return changes, notes
 
 

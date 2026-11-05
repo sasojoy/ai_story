@@ -26,6 +26,8 @@ KNOWN = frozenset({
     # 地點變樣與上線邸報、戰記與列傳的分享頁。全是狀態提示（Game._hint_triggers）
     "h_raid_guard", "h_checkin", "h_mall", "h_looks", "h_seal", "h_feast", "h_chuangong", "h_mount", "h_treasure", "h_place",
     "h_tale",
+    # 歷練快滿了（2026-11-05，五項屬性的季才有）：這一季從事件得來的屬性到 Config.attributes.v2.event_hint_at
+    "h_lilian",
 })
 
 

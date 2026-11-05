@@ -340,18 +340,16 @@ def check_outlook(check: Check, state: GameState, content: Content, world: World
 
 
 def _season_stats(effect: Effect, state: GameState, content: Content):
-    """效果給的數值照這一季走：舊的季原樣；五項屬性的季（attrset.on）事件不再直接給屬性點（屬性與跨季架構 v2 第三節），
-    加的屬性點改給心得（每點 attr_xinde），扣的不扣；跟原本寫的心得合在一起、照原本的順序。"""
+    """效果給的數值照這一季走：舊的季原樣；五項屬性的季（attrset.on）屬性照原樣交出去，由 apply_effect 交給 attrset.grant_event
+    （歷練：換成新尺度、每季有上限、滿了改給心得、扣的不扣）；錢與心得照獎勵等級。照原本的順序。"""
     rewards = content.config.rewards
     if not attrset.on(content, state.world) or not any(k in team.COMBAT_STATS or k in rewards.amounts for k in effect.stats):
         return effect.stats.items()
     out: dict[str, int] = {}
-    per = content.config.attributes.v2.attr_xinde
     scale = 1 + rewards.per_level * (state.player.member.level - 1)
     for key, delta in effect.stats.items():
         if key in team.COMBAT_STATS:
-            if delta > 0 and per:
-                out["xinde"] = out.get("xinde", 0) + delta * per
+            out[key] = out.get(key, 0) + delta
         elif key in rewards.amounts and delta > 0:  # 獎勵等級（v2 5.2）：照最近的那一級、跟著等級走；扣的（花費）照原樣
             row = rewards.amounts[key]
             grade = min(range(len(row)), key=lambda i: (abs(math.log(row[i]) - math.log(delta)), i))
@@ -1115,7 +1113,11 @@ def apply_effect(
     msgs: list[str] = []
     if effect.text:
         msgs.append(fill_marks(effect.text, state))
+    v2 = attrset.on(content, state.world)
     for key, delta in _season_stats(effect, state, content):  # 照實際動了多少寫、沒動就不寫（跟下面的情誼一樣）
+        if v2 and key in team.COMBAT_STATS:  # 五項屬性的季：歷練（每季有上限，滿了化為心得）
+            msgs += attrset.grant_event(state, content, key, delta)
+            continue
         before = p.stats.get(key, 0)
         after = max(0, before + delta)
         capped = key in team.COMBAT_STATS and delta > 0 and after > content.config.stat_cap

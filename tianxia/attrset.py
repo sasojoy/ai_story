@@ -5,6 +5,7 @@
 - 本人的值不存進存檔的 stats，讀的時候算：base ＋（等級 − 1）× 這一季的配比 ＋ 送點自己配的（PlayerState.attr_alloc）。
   配比季初自己挑（五套預設或自己配，合計固定），沒挑的照 default_preset 長；季中改配比一律回溯。
 - 舊的鍵（臂力、身法、根骨、悟性）照 legacy 對到新的一項：內容的檢定照舊寫 agi、wis，不必改；博聞拔掉。
+- 事件給的屬性是「歷練」（grant_event，PlayerState.attr_event）：照給、換成新尺度，每人每季合計最多 event_cap，滿了改給心得。
 - 舊公式的讀點（氣血、內傷、損耗、修練、悟意境、打造、頓悟、感悟、閉關、戰法比快慢、職位）讀 v1_value：比同等級的平均人
   高幾成，經過有上限的曲線（legacy_caps），換成舊公式讀得懂的點數。屬性沒有上限、效果有上限（企劃者 2026-11-04）。
 這個模組不 import team（team 反過來 import 這裡）。
@@ -62,7 +63,37 @@ def value(state: GameState, content: Content, key: str) -> float:
     """本人這一項現在多少（key 是新的鍵）。"""
     cfg = content.config.attributes.v2
     level = state.player.member.level
-    return float(cfg.base + (level - 1) * split(state, content).get(key, 0) + state.player.attr_alloc.get(key, 0))
+    p = state.player
+    return float(cfg.base + (level - 1) * split(state, content).get(key, 0) + p.attr_alloc.get(key, 0) + p.attr_event.get(key, 0))
+
+
+def event_total(state: GameState) -> int:
+    """這一季從事件歷練得來的合計（狀態列「歷練 N／event_cap」）。"""
+    return sum(state.player.attr_event.values())
+
+
+def grant_event(state: GameState, content: Content, old_key: str, delta: int) -> list[str]:
+    """事件寫的舊屬性 +delta（企劃者 2026-11-05「照給屬性，每季有上限」）：照 legacy 對到新的一項，一點舊的換 event_points 點新的，
+    記進這一季的 attr_event；這一季的合計到 event_cap 為止，過了的照 attr_xinde 改給心得（每一點舊的換幾點），對不到新的一項（博聞）全給心得。
+    扣的不扣。回給玩家看的話：「武力 +2（歷練 14／60）」；到頂那一下多一句（火候）；已經滿了的只寫心得。"""
+    cfg, p = content.config.attributes.v2, state.player
+    if delta <= 0:
+        return []
+    new, points = key_of(content, old_key), delta * cfg.event_points
+    gain = 0 if new is None else max(0, min(points, cfg.event_cap - event_total(state)))
+    msgs: list[str] = []
+    if gain:
+        p.attr_event[new] = p.attr_event.get(new, 0) + gain
+        msgs.append(f"{names(content, state.world).get(new, new)} +{gain}（歷練 {event_total(state)}／{cfg.event_cap}）")
+    left = points - gain
+    xinde = round(left * cfg.attr_xinde / max(1, cfg.event_points)) if left else 0
+    if xinde:
+        p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
+    if gain and event_total(state) >= cfg.event_cap:
+        msgs.append(f"這一季的歷練已到火候，此後所得，化為心得{f' +{xinde}' if xinde else ''}。")
+    elif xinde:
+        msgs.append(f"{content.config.stat_names.get('xinde', '心得')} +{xinde}")
+    return msgs
 
 
 def values(state: GameState, content: Content) -> dict[str, float]:
@@ -214,5 +245,6 @@ def view(state: GameState, content: Content) -> dict:
         "per_level": cfg.per_level,
         "custom_min": cfg.custom_min,
         "custom_max": cfg.custom_max,
+        "event_cap": cfg.event_cap,  # 開季準備卡那一行：江湖歷練每一季最多長幾點
         "now": [[names.get(k, k), v] for k, v in split(state, content).items()],
     }
