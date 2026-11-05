@@ -157,7 +157,7 @@
 # 計畫 docs/superpowers/plans/2026-11-05-銀兩出口包-第1批.md 1.3）。包要叫的核心服務，上面都已經列了，這一段只記「誰在用」，不新增：
 - `ctx._at_own_base()`、`ctx._at_clinic_town()`（人在自家大本營、帶醫館標籤的地點；附錄甲裁核心）、`ctx._pill_day()`（「一天」）、`ctx._idle()`、
   `ctx._side()`、`ctx._log(msgs)`、`ctx._save_season()`、`ctx._shop_say(...)`、`ctx._shop_after(...)`、`ctx.push_trend(...)`（捐軍備推大本營那一條線）
-- 共用規則層（包直接 import，registry.SHARED 已登記）：`silver`、`economy`、`materials`、`shopview`、`equipment`、`wins`、`figures`、`clinic`
+- 共用規則層（包直接 import，registry.SHARED 已登記）：`silver`、`economy`、`materials`、`equipment`、`wins`；過渡（待收進共用層，標「# 過渡：待搬」）：`shopview`（SHARED_LATER）、`figures`（第 40 批）。
 
 ## 二、查詢服務
 

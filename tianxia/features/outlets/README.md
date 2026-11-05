@@ -14,7 +14,7 @@
 - `silver_actions.py`：原本 `Game` 上的 8 個方法——`silver_options`（打點那一間店裡的幾樣）、`bribe_targets`、`silver_act`（五樣的分派）、`close_dadian`、`bribe`、`furnace`、`mentor`、`silver_donate`。
   `_at_clinic_town`（附錄甲裁核心）留在 `Game`，包裡經 ctx 叫。
 - `bots.py`：假人看到 `donate:`、`dadian:` 的選項怎麼按（原本 `bot_policy.score` 的 dadian、donate 兩段）——萬一停在店裡只會離開。`act:donate`、`act:dadian` 的分數（None）是 act 子動詞，前綴 `act` 是核心的，留在 `bot_policy` 原位。
-- 數字與字不在包裡：`tianxia/silver.py`（銀兩出口）、`tianxia/economy.py`（捐軍備）、店面那一頁的資料 `shopview.dadian_view`、`donate_view` 都在共用規則層（`registry.SHARED`，鐵匠鋪、馬市也讀），包直接 import。
+- 數字與字不在包裡：`tianxia/silver.py`（銀兩出口）、`tianxia/economy.py`（捐軍備）、店面那一頁的資料 `shopview.dadian_view`、`donate_view` 中 `shopview` 還沒收進 `registry.SHARED`（邊界測試的 SHARED_LATER），是過渡 import。
 - 掛鉤：`prefix = ("donate", "dadian")`；`choose` 接 `donate:*`、`dadian:*`（標題在動作之前拿）；`bot_pick` 問 `bots.score`；`bot_always = ("donate:", "dadian:")`；
   `enabled`＝捐軍備開著、銀兩出口開著、或此刻還坐在其中一間店裡（開關在坐著時被關掉，離開還按得到）。
   `shops()` 兩間店（`donate`、`dadian`：坐在店裡的選單、哪一間開著、動身與此地不開了收店；`entry` 回 None）；`verbs()` 六個 act 子動詞（`donate`、`dadian`、`silver_donate`、`mentor`、`furnace`、`buy_legend`；
@@ -56,3 +56,7 @@
 - `tests/bots/test_bot_policy_stuck.py`：假人卡在店裡那一類（含坐在軍需官、打點店裡只會離開）。
 - `tests/web/test_econ_web.py`：捐軍備與軍備存量的網頁測試（網頁，第 3 階才切）。
 - `tests/figures/test_gentry_allied.py`：一條（`test_donate_goes_to_the_side_stock`，豪強捐軍備進依附那一軍的存量）。
+
+## 過渡（手冊 3.11）
+
+過渡 import 共 2 處：`donate_actions` 到 `shopview`、`silver_actions` 到 `figures`（`figures` 排總表第 40 批收進共用規則層）。

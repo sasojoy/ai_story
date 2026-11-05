@@ -2,7 +2,7 @@
 捐銀兩進軍需帳、名師指點、看火候、買破境丹、打點門路（塞門房）。數字在 Config.silver_outlets（只有 season21 設定打開，另照開季的章）。
 
 這裡只放規則：能不能、多少錢、做了改什麼（背包、銀兩、當天的計數、下一次修練或打造的加成）。人在哪裡（大本營、醫館、鐵匠鋪、
-人物所在）由 engine.Game 問；記貢獻、軍備存量、推大勢跟捐素材同一條（Game._credit_donation）。只 import models、state、calendar，
+人物所在）由 engine.Game 問；記貢獻、軍備存量、推大勢跟捐素材同一條（features/outlets/donate_actions.credit）。只 import models、state、calendar，
 cultivation、fusion、smithing 都能叫它。「一天」由呼叫端給（Game.econ_day，回體丹的換日）。玩家看得到的字都待 joy 潤。
 """
 from __future__ import annotations

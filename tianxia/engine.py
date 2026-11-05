@@ -4986,7 +4986,7 @@ class Game:
         if side is not None:  # 散人：照推，但不記貢獻、不進活躍名單
             faction = c.scenario.find_faction(side)
             goal = faction.goals.get(trend_id, 0) if faction is not None else 0
-            # 捐軍備（source="donate"）的貢獻照捐的份量在 _donate 記，推力不另記（PM 2026-10-15）
+            # 捐軍備（source="donate"）的貢獻照捐的份量在 donate_actions.take 記，推力不另記（PM 2026-10-15）
             if source != "donate" and goal and (goal > 0) == (amount > 0):  # 替自己陣營的目標方向推；逆著推、這條線沒有目標都不記
                 gained = push.contribution(abs(delta), pushed, moved, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
                 wins.credit(p, c, w, at.week, gained)
