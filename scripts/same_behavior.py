@@ -19243,6 +19243,12 @@ def _loom_register_track(name: str, scenario: type, mutation: tuple, profile: st
 # 改一個字（selftest）：退場的大勢人物回來那一句（figures.revive 的 BACK_LINE；figures 這一批收進共用規則層、留在原檔）
 _loom_register_track("loom", LoomScenario, (("tianxia/figures.py",), ("重新出來領兵", "重新出來帶兵")), "week7")
 
+# 鐵匠鋪那一軌改一個字的那一句（UNDONE，# smithy 那一段登記的）這一批跟著鐵匠鋪的常數搬進了 tianxia/core/smith_base.py：檔清單前面補上
+# 新的那一處（_mutant 照順序找、哪一處剛好一次就改哪一處；舊的樹沒有這個檔，照舊落到後面兩處）。只動 selftest，compare 不讀 MUTATIONS。
+_smithy_files, _smithy_line = MUTATIONS["smithy"]
+MUTATIONS["smithy"] = (("tianxia/core/smith_base.py", *_smithy_files), _smithy_line)
+del _smithy_files, _smithy_line
+
 
 if __name__ == "__main__":
     sys.exit(main())
