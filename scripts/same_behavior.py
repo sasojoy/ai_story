@@ -16919,16 +16919,16 @@ _herald_register_track("herald", HeraldScenario, (("tianxia/bounties.py",), ("�
 class AllegianceScenario(EffectsScenario):
     """陣營一軌（全部拆包第 35 批；--track allegiance，自己一個資料庫）。借效果與叛投那一軌的擺法（stage_defector：叛投之前手上擺滿會被清的進度）。
     投靠（faction:<id> → faction:confirm）：確認畫面（寫明這一季不能改投、各方人數）、再想想（faction:cancel）、確定、按了之後走開再確定
-    （寫「你已經不在投靠的地方了」）、豪強分屬兩軍的季投靠豪強（四勝利開著時照投靠點直接給傾向；pick_side 把四勝利暫時關掉，走 faction:ally:<id> 自己挑依附哪一軍）。
+    （寫「你已經不在投靠的地方了」）、豪強分屬兩軍的季投靠豪強（四勝利開著時照投靠點直接給傾向；pick_side 把四勝利暫時關掉，走 faction:ally:<id> 自己挑依附哪一軍；那一段只有投靠豪強的人，沒有人拜門派）。
     改幫（faction:lean:<軍>，三陣營四勝利）：改幫、再改同一軍（灰或清單外）、有事件待選時被擋（FB-820）、在路上照樣收（_lean_anytime）。
-    拜入門派（sect:<事件>）：進去、婉拒、拜入曹氏莊院之後要挑依附哪一軍；測試內容只有流雲派一個。
+    拜入門派（sect:<事件>）：進去、婉拒；測試內容只有流雲派一個。拜入曹氏莊院之後「挑依附哪一軍」這一步在四勝利開著時由 join_lean 直接給傾向（回「你依附了官軍。」），不經選單，見下面「沒走到的」。
     叛投（defect:<陣營>[:<依附>] → defect:confirm）：確認畫面（身份歸零、糧車、密謀、懸賞、同伴……）、再想想、按了之後走開再確定（叛投不成）、
-    已叛投過再按、豪強換依附的一邊；叛投之後欠著的、清進度那幾格由效果與叛投那一軌擺局面（defect_full）。
+    已叛投過再按、豪強以叛投換陣營；叛投之後欠著的、清進度那幾格由效果與叛投那一軌擺局面（defect_full）。
     三方卡與結局卡（main 的 sides_card、week_card.tier_hint、收季之後的 ending）、新的一季開局的起手資源與稱號（_season_grant）。
-    **前半停在三件寫到一半的事**：一個人按了投靠還沒確定、一個人按了叛投還在確認畫面上、一位豪強按了投靠還沒挑依附哪一軍；後半新程式接著按。
+    **前半停在三件寫到一半的事**：一個人按了投靠還沒確定、一個人按了叛投還在確認畫面上、一位豪強按了投靠並已經挑好依附（pending_faction=haoqiang、pending_ally=guan，畫面是「確定投靠地方豪強（依附官軍）？」）；後半新程式接著確定。
     假人：BotRunner 三個（一個站在別人的投靠點、一個站在門派所在地、一個還沒投靠站在投靠點照 bot_policy 投靠）；整季機器人在投靠點與門派眼前的選單與挑法。
     沒有陣營的內容（測試內容）：投靠、改幫、叛投、三方卡寫「這份內容沒有兩軍」，同一串 API 照打；拜入門派的鈕（sect:）要「一類一顆」開著才有，測試內容關著，
-    走不到（選單上是空的）。**沒走到的**：名字還在沒打完的決戰參戰名單上不能叛投（defection.refusal 的 enlisted 那一條；決戰那一軌的人物才擺得出來）。
+    走不到（選單上是空的）。**沒走到的**：名字還在沒打完的決戰參戰名單上不能叛投（defection.refusal 的 enlisted 那一條；決戰那一軌的人物才擺得出來）；四勝利關著時拜入曹氏莊院之後挑依附（faction_step 的 ally 支在 pending_faction 是 None 的那一段、join_actions.pending_options 的 needs_ally 第一支、p.ally 與 ALLY_DONE；pick_side 關掉四勝利那一小段沒有人拜門派）；豪強換依附的那一邊（defect:<陣營>:<依附>：「考慮改投／改依附」標題、p.pending_ally、defection.refusal／defect 帶依附、slot_label 的改依附；選單上有 defect:haoqiang:huang 但沒有人按）；豪強按了投靠但還沒挑依附（pending_ally 為空）的前半停點與接著挑依附。這幾處的本體搬過去前後用 ast 比過是一樣的，沒有 same_behavior 的軌證明；集結中投靠豪強之後名單換邊（_ally_follows_battle）由集結那一軌 muster 證明。
     曹氏莊院要先接護院三招：這一軌把「曹家護院」的難度暫時壓到 1，讓拜入走得到。"""
 
     G, H, Q, X = "戚承光", "樊既白", "邵雲岫", "祁望舒"
@@ -17173,7 +17173,7 @@ class AllegianceScenario(EffectsScenario):
         self.world_view("三方卡")
 
     def half(self) -> None:
-        """前半停在三處：一位按了投靠還沒確定、一位按了叛投停在確認畫面上、一位豪強按了投靠還沒挑依附哪一軍。"""
+        """前半停在三處：一位按了投靠還沒確定、一位按了叛投停在確認畫面上、一位豪強按了投靠並已挑好依附還沒確定（不是「還沒挑依附」，那一段沒走到）。"""
         if not self.factions_on():
             emit("前半停在這裡：這份內容沒有兩軍", None)
             return
