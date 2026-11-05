@@ -42,7 +42,19 @@
 
 ## 測試
 
-（Task 4 補。）
+`tianxia/features/peers/tests/`（整檔屬於這一包的，原樣搬來，只改檔頭的路徑字串）：
+
+- `test_mingtie.py`（13 條，原 `tests/bots/test_mingtie.py`）：名帖（定稿的檢查、遞與回帖、檢舉與撤下放回、假人做名帖與遞名帖）與審一句話。借 `tests/core/test_social.py` 的小工具（`NOW`、`_as`、`_done`、`_player`）。
+- `test_peers_smoke.py`（1 條，**新寫的煙霧**，手冊 4.1 每一包至少一條）：兩人同地點互看、打開玩家卡、挑釁、乙的選單多出 `invite:` 回禮、挑一個回（這一包的 `choose` 掛鉤接走，標題「與甲」）。
+- 不放 `peers_stage.py`：這一包不給選單（`menu` 沒接，`options` 空的，`invite:` 的選項由 `Game._everyday_options` 的 `_invite_options` 委派給，位置算行為）；契約測試的擺局面用預設的「平常」。
+
+**不搬、另外要跑的混合檔**（含這一包的測試，但整檔不屬於這一包，不拆；數字是用到這一包的條數／全檔）：
+
+- `tests/core/test_social.py`（19／27）：此地還有、玩家卡、贈物、挑釁與回禮、假人回的步調；另外 8 條是結伴同行（移動包）、求見被打發（交友求見包）與網頁字寬（網頁），所以整檔不搬。其他測試檔經 `from test_social import …` 借它的小工具。
+- `tests/arts/test_discuss.py`（35／59）、`tests/battle/test_spar.py`（17／18）：論武、切磋（第 38 批整檔搬）；`tests/ranger/test_raid.py`（5／21）：截殺（第 38 批）；`tests/ranger/test_bounties.py`（8／56）：通緝（第 45 批）。
+- `tests/gear/test_mounts.py`（3／53）、`tests/seal/test_seal_revamp_sidedoor.py`（6／15）、`tests/server/test_server.py`（4／385）、`tests/web/test_sanren_web.py`（1／6）、`tianxia/features/mall/tests/test_mall_bots.py`（1／3）、`tests/acts/test_gentry_allied_fixes.py`（2／13）：各只有幾處經 `peer_card`、`peer_act`、`peers_here`。
+- `tests/core/test_presence_window.py`（5 條）：「此地還有」的窗口（24 小時）與主機端兩支腳本刻意不跟著拉長——窗口的判斷已是核心的查詢服務（`core/presence.py`），這份留在核心測試；酒肆的 `tianxia/features/tavern/tests/test_tavern_seek_presence.py` 守「酒家說得出『此刻』不能比『此地還有』寬」，兩份不重複（一個管設定與腳本，一個管酒肆的查人），都原樣過。
+- `tests/core/test_feature_boundaries.py`、`tests/core/test_contract_features.py`（核心契約）：這一包的邊界、前綴、欄位、換季都在裡面守。
 
 ## 過渡（手冊 3.11）
 
