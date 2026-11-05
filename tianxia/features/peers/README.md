@@ -59,3 +59,7 @@
 ## 過渡（手冊 3.11）
 
 過渡 import 2 處：`mingtie.py` 到 `ranks`（階級的稱號，總表第 40 批收進共用規則層）、`mingtie.py` 函式裡到 `leaderboard`（賽季榜單）；`bots.py` 到 `leaderboard`（名帖頭銜的榜單名次）。
+
+## 量到的（第 37 批 Task 5）
+
+包的測試 14 條 6.8 秒；改包任一檔挑到 219 條；過渡 3 處；Game 委派 21 個加 `_yuedan_line`；`GAME_DIRECT` 7 個（切磋、論武，第 38 批拿掉）；`engine.py` 9,369 行。`same_behavior` 的 `peers`、`tavern`、`roam` 三軌三種設定整段、半舊半新逐位元組一樣。細節見計畫 5.4。
