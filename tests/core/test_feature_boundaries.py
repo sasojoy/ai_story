@@ -1067,6 +1067,10 @@ GAME_DELEGATE_CALLERS.update({
     ("_own_scene_text", "_defect_scene"): "同上（叛投確認畫面的場景）",
     ("season_result", "ending_card"): "收季之後的結局卡接在 season_result 的 out 後面（欄位表 main.ending）：資料的鍵序算行為，沒有對應的掛鉤",
 })
+# 理由字換了（別人那一段的原文不改）：陣營成包之後，這一筆留的理由是「choose 掛鉤要的是動作之前的陣營」，不再是「陣營還沒成包」
+GAME_DELEGATE_CALLERS[("choose", "_begin_enlistment")] = (
+    "這一下才投靠（或拜入陣營名下的門派）的人開始入伍段：陣營成包（第 35 批）之後，投靠那一步在包裡，入伍段屬引導包；要知道動作之前的陣營，"
+    "位置固定在 choose 掛鉤之後")
 for _pair in (("_faction_step", "_ally_follows_battle"), ("_join_lean", "_ally_follows_battle"), ("_lean_step", "_ally_follows_battle"),
               ("_faction_step", "_note_action"), ("_defect_step", "_battle_now"), ("_defect_targets", "_battle_now")):
     del GAME_DELEGATE_CALLERS[_pair]  # 陣營成包：呼叫端搬進包，包裡經 ctx 叫（services.py 的 # faction 一段）；原文不改，同第 8、25、32 批 del 的寫法
