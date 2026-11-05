@@ -62,4 +62,6 @@
 
 ## 過渡（手冊 3.11）
 
-過渡 import 共 6 筆（shopview 兩處、annals、fusion 兩行、bot；邊界測試計 +6）：`shelf_actions`、`forge_actions` 到 `shopview`（店面的畫面資料，邊界測試的 SHARED_LATER）、`smithing` 到 `annals`（行狀）與 `fusion`（合成與揣摩，SHARED_LATER；兩行，`fusion` 一行是 `QualityOdds`）、`bots` 到 `bot`（整季機器人與假人共用的底層，總表歸「假人三支不搬」；函式裡延後 import）。
+過渡 import 共 5 行（shopview 兩處、fusion 兩行、bot；邊界測試的「包 → 舊模組」列 5 行）：`shelf_actions`、`forge_actions` 到 `shopview`（店面的畫面資料，邊界測試的 SHARED_LATER）、`smithing` 到 `fusion`（合成與揣摩，SHARED_LATER；兩行，一行是 `QualityOdds`）、`bots` 到 `bot`（整季機器人與假人共用的底層，總表歸「假人三支不搬」；函式裡延後 import）。
+
+**行狀記一筆 import 核心**（第 41 批合併時改，第 41 批 PM 認定第 10 條）：開發時 `smithing` 是 `from tianxia import annals, fusion` 一行；第 29 批之二把行狀拆兩半之後，舊名 `tianxia.annals` 是指到列傳包 `standing.py` 的別名（經別名 import 就是包 import 包，邊界測試擋），合併時拆成兩行：`from tianxia import fusion`（過渡）與 `from tianxia.core import annal_base as annals`（核心本體，不算過渡；包裡只用 `annals.note`、`annals.DEED`，都在記一筆那一半）。

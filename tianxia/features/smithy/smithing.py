@@ -20,7 +20,8 @@ from collections import Counter
 from collections.abc import Callable
 
 from tianxia import armor, equipment, forge_secrets, four_tiers, library, naming, silver, team, traits, weapons
-from tianxia import annals, fusion  # 過渡：待搬（行狀 annals；合成與揣摩 fusion，SHARED_LATER）
+from tianxia import fusion  # 過渡：待搬（合成與揣摩 fusion，SHARED_LATER）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二；第 41 批 PM 認定第 10 條）
 from tianxia.fusion import QualityOdds  # 過渡：待搬（fusion，SHARED_LATER）
 from tianxia.insights import merged_attribute
 from tianxia.models import WEAPON_KINDS, Content
