@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import random
 
-from tianxia import bounties  # 過渡：待搬（懸賞榜：探索一次就算打探）
 from tianxia import insights  # 共用規則層（這裡悟不悟得出）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章草廬四景）
 from tianxia import renown, team, territory, training, treasures  # 核心、共用規則層
@@ -42,7 +41,7 @@ def explore(ctx) -> list[str]:
     """
     if prologue_rules.active(ctx.state, ctx.content):
         return explore_outcome(ctx)  # 序章裡不撿破境丹（新手引導計畫一）
-    scouted = bounties.on_explore(ctx.state, ctx.content, ctx.world, ctx.state.player.location)  # 懸賞榜的打探：探索一次就算
+    scouted = ctx.publish("explore", ctx.state.player.location)  # 事件 explore（第 26 批）：懸賞榜的打探，探索一次就算
     return explore_outcome(ctx) + ctx._legend_find() + ctx._scrap_find() + scouted
 
 

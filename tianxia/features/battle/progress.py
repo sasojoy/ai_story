@@ -15,7 +15,7 @@ Game.admin_end_season、admin_next_season 裡的兩段，核心經 on_season_clo
 留在 Game 的經 ctx：被測試換掉的 _battle_status（tests/core/test_engine.py、tests/arts/test_hints.py：數一次請求推幾次）、_apply_battle_outcome
 （tests/server/test_server.py：套用結果時壞一次）、_deliver_battle_results（tests/core/test_renown_cross.py）、戰力快照（核心的單打服務：_battle_scores
 〔換掉〕、_battle_gear、_battle_role、_battle_road）；形象包的 _round_mvp（回合首功：決戰包不 import 形象包）；玉璽的 _mandate_weight、_seal_bare、
-_seal_settle、_deliver_seal_results；時刻表大事的 _deliver_big_events；地盤的 _conquest_side；Game 上的暫時旗標 _battle_ref（寄放）。這一包自己的
+_deliver_seal_results（決戰收場的 _seal_settle 改發事件 battle_end：ctx.publish，第 26 批）；時刻表大事的 _deliver_big_events；地盤的 _conquest_side；Game 上的暫時旗標 _battle_ref（寄放）。這一包自己的
 （sieges、muster、generals、escorts、這一檔互相叫）直接叫函式：測試只是直接叫 Game 上的委派、沒有換掉它們（手冊第十五節 PM 11/01）。
 """
 from __future__ import annotations
@@ -408,7 +408,7 @@ def settle_showdown(ctx, battle: battle_instance.BattleInstance, definition: Bat
         b.outcome_world_flags = []
 
     ctx.world.mutate_battle(_relabel)
-    ctx._seal_settle(battle, definition, result)  # 玉璽碎片：先挑挑戰者、再挑現世的得主（3.3、4.5）；只寫登記、天下大事、江湖史，接著讀回的賽季看得到
+    ctx.publish("battle_end", battle, definition, result)  # 事件 battle_end（第 26 批）：玉璽碎片：先挑挑戰者、再挑現世的得主（3.3、4.5）；只寫登記、天下大事、江湖史，接著讀回的賽季看得到
     ctx.state.world = ctx.world.get_season()
     ctx._deliver_big_events()
     ctx._deliver_battle_results()

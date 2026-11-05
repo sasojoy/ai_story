@@ -23,7 +23,7 @@
 **還留在原位的**（不是核心的接縫，`tests/core/test_feature_boundaries.py` 的 `GAME_DELEGATE_CALLERS` 逐條寫理由，4 對）：
 - `_drop_stale_references` 叫 `_drop_old_zhuifeng`（在 `arts.migrate` 之前：槽數照品質算；`on_drop_stale` 在最後、位置不對）。
 - `sync` 叫 `_deliver_renames`（玉璽補送之後、首創名望回饋之前：江湖紀錄的先後算行為）。
-- 核心的單打服務 `_seize` 叫 `_seize_chance`（打贏一場之後修練包跟著擲：總表第 26 批的事件，原位行尾標「# 過渡：第 26 批」）；決戰包的收場補送經 `ctx._seize_chance`（服務清單二、查詢服務；原本 `view.py` import `cultivation`，第 23 批改掉、那一行的過渡註拿掉）。
+- 核心的單打服務 `_seize` 叫 `_seize_chance`（打贏一場之後修練包跟著擲；留原位（第 26 批量過：頓悟的契機在單打服務收尾、三處叫、野怪與僵持也算，不是懸賞那一下，回傳還要寫進戰報），行尾標「# 留原位：第 26 批」）；決戰包的收場補送經 `ctx._seize_chance`（服務清單二、查詢服務；原本 `view.py` import `cultivation`，第 23 批改掉、那一行的過渡註拿掉）。
 - `status_data` 的 `ascension` 那一格叫 `ascend_view`（狀態列的鍵順序，總表第 66 批）。
 - 序章 `_graduate_pass`（假人與腳本照步驟按）在引導包（第 22 批），經 `ctx.slot_insight`、`switch_art`、`practice`、`allocate_stat`、`melt_art` 叫這一包的委派（服務清單三、過渡 `# guide` 那一段；開發時多記的 5 對，合併時拿掉）。
 - server 一行不動（`MENXIA_ACTIONS`、`menxia_view`、`ascend_line` 的 B 段 `ascend.read`／`fallback` 照舊經別名）；`web/` 一行不動；`bot.py`（`chuangong.cheapest`、`cultivation.ready`、`cultivate_problem`）、`bot_policy`（`tend_arts`、`_learn_here`、`_master`、`apply_job`）、`skillview`（`cultivation.cultivate_problem`、`needs_pill`、`force_odds`、`fails_of`）、`scripts/measure_challenge.py` 照舊經別名。

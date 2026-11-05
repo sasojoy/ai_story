@@ -27,6 +27,7 @@
 
 `Game` 留 15 個一行委派（第 33 批）：`_order_options`、`_rank2_options`、`_rank_action_options`、`_rank2`、`_rank_action`、`_take_convoy`、`_convoy_arrives`、`_order_credit`、
 `_report_seat`、`_summons_plan`、`orders_view`、`convoy_line`、`admin_issue_orders`、`admin_rotate_seats`、`admin_summon`；`_check_cost_note`、`_rank_action_line` 只有包裡自己叫，沒有委派。
+第 26 批（事件機制）拿掉 `_convoy_arrives`（抵達那一刻改由這一包登記事件 `arrive` 的 `convoy` 那一格，見下面「事件的格」），剩 14 個。
 第 34 批再留 16 個：`_settle_plots`、`_hear_after_stamina`、`admin_give_opportunity`、`admin_give_fragment`（原本就有的）與新增的 `_fs_asking_options`、`_fs_asking_text`、`_omen_options`、`_rank2_action`、`_fs_after_win`、`_opp_on_win`、`_admin_omen_choices`、`_hear_from_event`（事件檢定經 `ctx` 叫）、`_omen_talk_options`、`_fs_hear_talk`、`_opp_hear_topic`、`_opp_after_success`（後四個是人物情誼包、出陣包經 `ctx` 問的查詢服務）。
 
 ## 認領的欄位（`PlayerState`，換季全部跟著新角色重來，沒有帶走的）
@@ -40,10 +41,10 @@
 - `act:rank2`、`act:convoy`、`act:rank:<行動>`：核心 `_act` 的 act 子動詞（總表第 57 批才擴 `Verb`），選單三段（`_everyday_options`，順序算行為）和按下去（`_act`）留在核心原位叫 Game 的委派。
 - `act:summons`（人已在召見地點時按的應召）、`_summons_hop`（往召見地點）、`bot_policy.score` 的 `rank2`、`convoy`、`summons` 分數、`_summons_hop`：假人行動列的分數，留原位。
 - `_report_seat`：`sync`、`choose`、`travel` 與事件檢定的兩處（`answer_event`、`answer_branch`）叫，位置固定（回話與紀錄的先後算行為），沒有掛鉤可接。
-- `_convoy_arrives`：`_arrive` 走到地點那一刻先交糧車、再接懸賞榜護送交差。`_order_credit`：核心的單打服務（`_squad_encounter`）打贏之後記功；出陣、決戰、大勢人物也經 `ctx._order_credit` 叫。
+- 抵達那一刻經事件 `arrive` 的 `convoy` 那一格（`FEATURE.bus()`：`convoy_actions.convoy_arrives`，排在懸賞護送之前，順序在核心的 `BUS_ORDER`；第 26 批起，委派 `_convoy_arrives` 拿掉）。`_order_credit`：核心的單打服務（`_squad_encounter`）打贏之後記功；出陣、決戰、大勢人物也經 `ctx._order_credit` 叫。
 - `server.py` 的 `orders`、`convoy` 兩個鍵（`/api/main`）與管理者三顆鈕（`/api/do` 的路由留原位，批次表第二節；`ADMIN_ACTIONS` 只是查表用的 dict，照包分是第 68 批）照舊叫 Game 的委派。
 - `orders.py`（軍令規則）、`ranks.py`、`seats.py` 不在這一包（共用規則層，總表第 40 批）。
-- **第 34 批留在核心／共用層的接縫**（理由在邊界測試 `# military` 的第二段）：答題中的選單（`_fs_asking_options`，位置在店面之後、閉關之前）與場景文字（`_fs_asking_text`，在拜入／投靠／叛投／求見的畫面之後）、閒著的選單上機緣與伏筆最後一步（`_omen_options`，夾在 `_rank_action_options` 與託付之間）、遊歷打贏之後的官銀與密謀一處（`_fs_after_win`、`_opp_on_win`，總表第 26 批事件）、`_hear_after_stamina`（`choose` 結尾與 `travel`，伏筆先機緣後、共用 `self.rng`）、`_settle_plots`（`sync` 與 `choose` 結尾）。都因位置固定或順序算行為，沒有對應的掛鉤。
+- **第 34 批留在核心／共用層的接縫**（理由在邊界測試 `# military` 的第二段）：答題中的選單（`_fs_asking_options`，位置在店面之後、閉關之前）與場景文字（`_fs_asking_text`，在拜入／投靠／叛投／求見的畫面之後）、閒著的選單上機緣與伏筆最後一步（`_omen_options`，夾在 `_rank_action_options` 與託付之間）、遊歷打贏之後的官銀與密謀一處（`_fs_after_win`、`_opp_on_win`；第 26 批量過留原位：夾在懸賞那一個發布點前面、讀先算好的記功，只在單打服務那一處有）、`_hear_after_stamina`（`choose` 結尾與 `travel`，伏筆先機緣後、共用 `self.rng`）、`_settle_plots`（`sync` 與 `choose` 結尾）。都因位置固定或順序算行為，沒有對應的掛鉤。
 - **查詢服務 `tianxia/core/omen_base.py`**（核心本體）：核心的 `rules`（`grain_min` 的需求量換算）、`content`（天機表、題目）、共用層待收的 `ranks`（召見問這一階的機緣做過沒）、叛投確認畫面（`in_plot`）讀機緣、伏筆的「只讀」那一半，不 import 本包；`fs_rules`、`opp_rules` 從它 re-export 同一批名字。`content.py` 的 `check_foreshadows`、`check_opportunities` 因為夾在別的檢查中間、吃 `known` 與幾個局部變數，接不了 `check_content` 掛鉤（錯誤訊息的先後算行為），留在核心。
 - `events`、`narration`、`rumor_view`、`step`、`weekcard`、`server.py` 讀伏筆、機緣的規則，走舊名別名（它們是舊模組，還沒收進共用層）；各自收進共用層時改成查詢服務。
 
@@ -53,6 +54,7 @@
 `orders`、`ranks`、`figures` 是共用規則層（第 40 批收進 `SHARED`），`atlas`（第 50 批）、`events` 等後面的批。
 服務清單（`tianxia/core/services.py`）這一包加的：`_order_credit`（共用服務，出陣、決戰、大勢人物也經 `ctx` 叫）、`RANK_ACTION_PREFIX`、`_duty_option`（出陣包的委派，`order_options` 叫它）。
 叛投那一刻經核心的叛投掛鉤（`core/features.py` 的 `DEFECT_ORDER`）`clear` 位置的 `convoy` 那一格清（`convoy_actions.defect_clear`：`p.convoy = None`，押著的糧車留給舊陣營；全部拆包第 32 批，原本 `defection.clear_progress` 直接寫）。軍令記下的貢獻（`contrib`、`contrib_weeks`）照舊由叛投自己的 `progress` 那一格清。釘住這一格的測試在包外、改這一包時 `test_for` 挑不到：`tests/figures/test_defection.py::test_defect_resets_rank_and_old_progress`（叛投之後 `convoy` 是 None；下面「改這一包時連它們一起跑」那一串已經列了這個檔）。
+事件的格（全部拆包第 26 批「事件機制」）：抵達一站（`Game._arrive` 的 `ctx.publish("arrive", loc_id)`）經核心的事件表（`core/features.py` 的 `BUS_ORDER`）`arrive` 的 `convoy` 那一格交糧車（`convoy_actions.convoy_arrives`），排在懸賞護送（核心代叫，第 45 批）之前；原本 `_arrive` 經委派 `_convoy_arrives` 直接叫。
 
 ## 內容歸屬
 
