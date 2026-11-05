@@ -305,11 +305,13 @@ explore（主動搬六包第 3＋4 批加的這一段）
   玩家互動包不能 import 大勢人物包，經 Game 的一行委派問，總表第六節第 6 條「`social` 讀月旦評」）
 
 # smithy（全部拆包第 41 批「鐵匠鋪」；主人：鐵匠鋪包。本體在 tianxia/features/smithy/，Game 留一行委派回答別的包；計畫 docs/superpowers/plans/2026-11-06-鐵匠鋪包-第1批.md 1.3）。
-# 包要叫的核心服務，上面都已經列了，這一段只記「誰在用」，新增的只有 `ctx._smith_clue`：
+# 包要叫的核心服務，上面都已經列了，這一段只記「誰在用」，新增的只有 `ctx._smith_clue`、`ctx.smith_line`：
 - `ctx._log(msgs)`、`ctx._save_season()`、`ctx._pill_day()`、`ctx._shop_say(...)`、`ctx._shop_after(...)`、`ctx._shop_live()`、`ctx._xinde()`、`ctx._menxia_entry(...)`、
   `ctx.state`、`ctx.content`、`ctx.world`、`ctx.rng`：選單、買修淬煉、開爐、收購升階、裝備庫那一列的修與淬煉、神器定名用
 - `ctx._smith_clue(paid=True)`（鐵匠順口：花了銀兩或素材之後擲一次，中了說出這家知道的隱藏配方那一句；只讀、自己的亂數不動 ctx.rng。主人：鐵匠鋪包，
   本體在 `features/smithy/clue.py`，Game 留一行委派，因為 tests/gear/test_econ_smith.py、test_shop.py 換掉 `Game._smith_clue`，包裡一律經 ctx 叫才打得到）
+- `ctx.smith_line(kind, main, aux)`（店面打造頁爐裡放了什麼、這一爐會怎樣，只讀；包自己的 `/api/smith_line` 路由經殼的 `look(game, lambda g: g.smith_line(…))` 叫，
+  路由裡的變數叫 g；本體在 `features/smithy/forge_actions.py`，Game 留一行委派給 server 與測試）
 - 共用規則層（包直接 import，registry.SHARED 已登記）：`weapons`、`armor`、`equipment`、`forge_secrets`、`four_tiers`、`silver`、`economy`、`traits`、`library`、
   `secret_recipes`、`territory`、`insights`、`prologue`、`materials`；過渡（待收進共用層，標「# 過渡：待搬」）：`fusion`（SHARED_LATER）、`shopview`（SHARED_LATER）、`annals`（行狀）
 
