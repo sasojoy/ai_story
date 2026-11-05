@@ -17280,8 +17280,8 @@ def _travel_register_track(name: str, scenario: type, mutation: tuple, profile: 
     MUTANT_PROFILE[name] = profile
 
 
-# 改一個字（selftest）：舊的趕路喊停那一句（Game._halt；移動搬進包時那一行搬到 tianxia/features/travel/ 底下，那時這裡要多寫包裡的檔）
-_travel_register_track("travel", TravelScenario, (("tianxia/engine.py",), ("（趕路已經花掉的體力不退。）", "（趕路已經花掉的體力不退！）")), "week7")
+# 改一個字（selftest）：舊的趕路喊停那一句（go_actions.halt，第 47 批從 Game._halt 搬進 tianxia/features/travel/；base 上還在 engine.py，所以兩個檔都寫）
+_travel_register_track("travel", TravelScenario, (("tianxia/features/travel/go_actions.py", "tianxia/engine.py"), ("（趕路已經花掉的體力不退。）", "（趕路已經花掉的體力不退！）")), "week7")
 
 
 if __name__ == "__main__":

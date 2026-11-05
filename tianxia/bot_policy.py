@@ -17,6 +17,7 @@ from .core import features as features_core
 from .engine import FREE_TEXT_OPTION, Game, Option
 # 決戰（battle:）的分數搬進決戰包的 bots.py（全部拆包第 7 批；score 先問那一包）：這兩個名字照舊在這裡（tests/bots/test_bot_policy.py、
 # tests/season/test_real_content.py 直接叫，同一個函式、同一個數）
+from .features.travel import bots as travel_bots  # 舊模組 → 包：move: 的分數（全部拆包第 47 批）
 from .features.battle.bots import JOIN_BATTLE_SCORE, battle_score as _battle_score  # noqa: F401
 from .features.peers.bots import (  # noqa: F401  打招呼、名帖的回法與比例：全部拆包第 37 批搬進玩家互動包（tests 讀 bot_policy.answer_call、REPLY_MIN_SECONDS）
     GREET_REPLY_SHARE, MINGTIE_ACCEPT_SHARE, MINGTIE_REJECT_SHARE, MINGTIE_SEND_CHANCE, REPLY_MIN_SECONDS, REPLY_SPREAD_SECONDS,
@@ -737,6 +738,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return None  # 假人不叛投（計畫甲）
     # （ambush、works：設伏、屯糧由 take_turn 的 _stamina_play 做，不交給打分數；全部拆包第 39 批換成體力玩法包的 bots.py，下面 features_core.bot_pick 問到；
     # 護衛、犒軍、探望 aid: 同理，假人沒有要按的，大勢人物包不開 bots.py，全部拆包第 31 批）
+    if kind == "move":  # 往哪裡走：移動包的分數要 profile（測試傳的不一定是 game.state.player.bot），所以在掛鉤之前直接問（全部拆包第 47 批）
+        return travel_bots.score(game, option, profile)
     owned, value = features_core.bot_pick(game, option)  # 搬成包的功能：假人看到這一顆怎麼按問那一包（開發規範手冊 3.8；宴客 feast:）
     if owned:
         return value
@@ -766,15 +769,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     if kind == "market":  # 馬市上：照 bot.market_want 按那一顆（換、買、餵），沒事就離開
         return MARKET_SCORE if option.id == bot.market_want(game) else 0.0 if arg == "back" else None
     # 求見（call:）搬進功能包：假人只按返回，分數在 features/socialize/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 21 批）
-    if kind == "move":
-        base = HOME_MOVE_SCORE if arg == _front_hop(game, profile) or arg in _home(game, profile) else AWAY_MOVE_SCORE
-        order_hop = ORDER_MOVE_SCORE if arg.partition(":")[0] == _order_hop(game) else 0.0  # 往軍令要去的地方（計畫 T6）
-        summons_hop = SUMMONS_MOVE_SCORE if arg.partition(":")[0] == _summons_hop(game) else 0.0  # 往召見的地點（計畫 T5）
-        bounty_hop = BOUNTY_MOVE_SCORE if arg.partition(":")[0] == _bounty_hop(game) else 0.0  # 往懸賞要去的地方
-        clinic_hop = _clinic_score(game) if arg.partition(":")[0] == bot.clinic_hop(game) else 0.0  # 內傷重了往醫館
-        focus_hop = FOCUS_MOVE_SCORE if arg.partition(":")[0] == _focus_hop(game) else 0.0  # 領地爭奪：往這一邊最該推的那一塊
-        return base + order_hop + summons_hop + bounty_hop + clinic_hop + focus_hop \
-            + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
+    # 往哪裡走（move:）搬進功能包：分數在 features/travel/bots.py，上面 features_core.bot_pick 之前那一行問它（要 profile，掛鉤沒有；全部拆包第 47 批）
     if kind == "act":
         if arg == "tavern":
             return None  # 酒肆：不交給打分數（只是打開酒肆），打聽由 take_turn 另外做

@@ -5,6 +5,7 @@ import pytest
 
 from conftest import real_content
 from tianxia import weapons
+from tianxia.features.travel import road_actions
 from tianxia.martial_arts import MartialArt
 from tianxia.models import WEAPON_KINDS
 import random
@@ -754,7 +755,7 @@ def test_departing_never_leaves_a_stale_smith_menu(content, world, walk):
     p = game.state.player
     p.picking_smith = p.picking_bounty = True  # 就算有別的路徑繞過了 travel_block，出發本身也收起第二層選單
     if walk == "move":
-        game._move("lake")
+        road_actions.move(game, "lake")
     else:
         game.travel_refusal = lambda *a, **k: None  # 繞過檢查，直接測 _depart 的防線
         game.travel("lake", "dash" if walk == "dash" else "walk")

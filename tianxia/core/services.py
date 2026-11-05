@@ -394,6 +394,8 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 - `ctx._road_gain`（這一件路上小事的收穫：路上小事填、`_share_road` 分給結伴同行的人；第 48 批 `_share_road` 搬走時一起搬）
 - `ctx._share_road(what)`、`ctx._lead(...)`、`ctx._sync_battle_presence()`（主人移動第 48 批：結伴同行分收穫、帶路、出發抵達時對一下決戰的人在不在）
 - `ctx._report_seat()`、`ctx._hear_after_stamina()`（走完一趟之後抄帳、抽一次耳聞；原本是 `travel` 在 Game 上直接叫的，搬成包之後位置不動）
+- `ctx.travel_refusal(loc_id, mode)`（主人移動：Game 上的一行委派；`travel` 經它叫自己的檢查，因為測試換掉 `game.travel_refusal` 來繞過檢查）
+- `ctx.travel(dest_id, mode)`（主人移動：Game 上的一行委派；`/api/travel` 的路由經它叫，測試與假人照舊叫 `Game.travel`）
 
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 
