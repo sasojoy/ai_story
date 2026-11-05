@@ -142,7 +142,7 @@ def card(game: Game, other: Game) -> dict:
 # 挑釁與名帖是邀請（invites.py，跟切磋同一套：存在這一季的 WorldState.invites，invite_ttl_seconds 沒回就作廢——對方下線、
 # 假人沒理都是這樣）。收到的列在閒著的選單上（invite:<回應>:<編號>，Game._invite_options），場景底下也畫一份（calls），
 # 回應走 choose（Game._invite → answer_invite）。回應是固定的；挑釁附的那一句只有發的人寫（假人不寫自由文字，真人也多半不寫）。
-# 結伴同行的引擎（Game._join、_lead、tagalong）還在，只是卡上沒有入口了：拿掉之前答應的那一趟照舊走完。
+# 結伴同行的引擎（移動包 party.join、lead，tagalong）還在，只是卡上沒有入口了：拿掉之前答應的那一趟照舊走完。
 
 
 @dataclass(frozen=True)

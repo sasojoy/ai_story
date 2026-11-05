@@ -30,7 +30,7 @@ def halt(ctx: Game) -> list[str]:
 
 
 def travel(ctx: Game, dest_id: str, mode: TravelMode = "walk") -> list[str]:
-    """安排前往（大地圖詳情欄的按鈕）：照路程最短的路線出發，走法見 Game._depart。在路上也行（路上設計 3.1）：
+    """安排前往（大地圖詳情欄的按鈕）：照路程最短的路線出發，走法見 departure.depart。在路上也行（路上設計 3.1）：
     取掉頭與繼續兩種走法裡路程短的（見 atlas.way_to），新路程從路中間出發。"""
     refusal = ctx.travel_refusal(dest_id, mode)  # 經 Game 的委派叫：測試換掉 game.travel_refusal 繞過檢查，照樣生效
     if refusal is not None:

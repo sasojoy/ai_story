@@ -24,7 +24,7 @@ def move(ctx: Game, arg: str) -> list[str]:
 
 
 def road(ctx: Game, arg: str) -> list[str]:
-    """路上的選項（路上設計第三、四節）。road:back[:<走法>] 是折返：回身後那一站，跟大地圖改道走同一條路（見 Game._depart）。
+    """路上的選項（路上設計第三、四節）。road:back[:<走法>] 是折返：回身後那一站，跟大地圖改道走同一條路（見 departure.depart）。
     其餘是路上小事（ROAD_TASKS）：記進這一段做過的，結果照既有慣例寫成「心得 +3」這種變化量。"""
     what, _, mode = arg.partition(":")
     if what == "back":

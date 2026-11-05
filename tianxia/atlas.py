@@ -547,7 +547,7 @@ def ride_stamina(foot: int, saving: float) -> int:
     """騎馬省下之後的體力（裝備四欄 5.2，企劃者 2026-10-10 選丙：照比例算、不設保底）：四捨五入（原本的體力 ×（1－腳力）），
     .5 一律進位（mounts.half_up：不用 round，Python 的 round 把 .5 捨到偶數，4.5 會變 4；也補一個浮點誤差，
     30×(1－0.55)＝13.499999999999998 要算 14），剩下的至少 1 點；原本就是 0（步行）照舊 0。
-    結伴同行時跟著的人拿帶頭的人的 foot 照自己的腳力算（Game._lead）。"""
+    結伴同行時跟著的人拿帶頭的人的 foot 照自己的腳力算（移動包 party.lead）。"""
     return 0 if foot <= 0 else max(1, mounts.half_up(foot * (1 - saving)))
 
 
@@ -704,14 +704,14 @@ def returns_at_once(state: GameState, content: Content, route: Route) -> bool:
 
 def route_stamina(state: GameState, content: Content, route: Route, mode: TravelMode) -> int:
     """照這條路、這種走法出發要扣的體力（騎著馬照腳力省，mounts.saving，裝備四欄 5.2）；剛出發就折返不扣（見 returns_at_once）。
-    選單、輿圖的鈕、輿圖的拒絕話與 Game._depart 實際扣的都走這裡。"""
+    選單、輿圖的鈕、輿圖的拒絕話與移動包 departure.depart（Game._depart 一行委派）實際扣的都走這裡。"""
     if returns_at_once(state, content, route):
         return 0
     return travel_stamina(content, route.minutes, mode, saving=mounts.saving(state, content))
 
 
 def route_foot_stamina(state: GameState, content: Content, route: Route, mode: TravelMode) -> int:
-    """同 route_stamina，但不算坐騎：結伴同行時交給跟著的人，各自照自己的坐騎再省（Game._lead，裝備四欄 5.8）。"""
+    """同 route_stamina，但不算坐騎：結伴同行時交給跟著的人，各自照自己的坐騎再省（移動包 party.lead，裝備四欄 5.8）。"""
     return 0 if returns_at_once(state, content, route) else foot_stamina(content, route.minutes, mode)
 
 
