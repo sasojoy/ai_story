@@ -9,9 +9,9 @@
 
 | 檔 | 內容 |
 |---|---|
-| `__init__.py` | 登記：沒有前綴、沒有掛鉤，只認領三個欄位（行動列的 `act:` 前綴是核心的） |
+| `__init__.py` | 登記：沒有前綴，只認領三個欄位（行動列的 `act:` 前綴是核心的）；掛鉤只有叛投那一刻的格 `defection()`（`clear` 位置的 `convoy`，第 32 批） |
 | `order_actions.py` | 軍令卡與記功 4 個：`order_options`（守勢與接糧車的選單）、`order_credit`（替自己記一次軍令）、`convoy_line`、`orders_view`（江湖頁「本週軍令」卡） |
-| `convoy_actions.py` | 押糧 2 個：`take_convoy`、`convoy_arrives`（走到終點：可能撞上截糧隊、記捐獻與貢獻、軍令記功） |
+| `convoy_actions.py` | 押糧 2 個：`take_convoy`、`convoy_arrives`（走到終點：可能撞上截糧隊、記捐獻與貢獻、軍令記功）；叛投 `clear` 位置的 `convoy` 那一格 `defect_clear`（第 32 批） |
 | `step_actions.py` | 第 2 階與第 3、4 階行動 6 個：`rank2_options`、`check_cost_note`、`rank2`、`rank_action_options`、`rank_action_line`、`rank_action` |
 | `seat_actions.py` | 第四階席次抄帳：`report_seat`（賽季時鐘暫停中什麼都不做） |
 | `admin_actions.py` | 管理者的軍令與召見：`issue_orders`、`rotate_seats`、`summons_plan`、`summon`，與回話用的五個常數 |
@@ -22,7 +22,7 @@
 
 ## 認領的欄位（`PlayerState`，換季全部跟著新角色重來，沒有帶走的）
 
-`convoy`（押著的糧車；這一包寫，叛投也會清成 None）、`rank2_days`（第 2 階行動今天做了幾次）、`rank_action_weeks`（第 3、4 階行動這週做了幾次；`rank_rules.count` 寫）。
+`convoy`（押著的糧車；這一包寫，叛投那一刻也由這一包清成 None）、`rank2_days`（第 2 階行動今天做了幾次）、`rank_action_weeks`（第 3、4 階行動這週做了幾次；`rank_rules.count` 寫）。
 `donations`（押糧與捐糧效果都寫）、`summons`、`qualified`、`rank`、`contrib_weeks`、`rank_hinted` 是共用或階級、席次規則層的，不認領。
 
 ## 還留在核心原位的接縫（理由在 `tests/core/test_feature_boundaries.py` 的 `# military` 那一段）
@@ -39,7 +39,7 @@
 過渡 import 共 8 處（`test_feature_boundaries.py` 數）：`admin_actions`→`orders`、`ranks`；`convoy_actions`→`orders`；`order_actions`→`atlas`、`orders`；`rank_rules`→`ranks`；`step_actions`→`events`、`opportunities`。
 `orders`、`ranks` 是共用規則層（第 40 批收進 `SHARED`），`atlas`、`events`、`opportunities` 等後面的批。
 服務清單（`tianxia/core/services.py`）這一包加的：`_order_credit`（共用服務，出陣、決戰、大勢人物也經 `ctx` 叫）、`RANK_ACTION_PREFIX`、`_duty_option`（出陣包的委派，`order_options` 叫它）。
-叛投（`tianxia/defection.py:163`）也寫 `p.convoy = None`（押著的糧車留給舊陣營）：第 32 批搬叛投時要記得這一個欄位的另一個寫入者。
+叛投那一刻經核心的叛投掛鉤（`core/features.py` 的 `DEFECT_ORDER`）`clear` 位置的 `convoy` 那一格清（`convoy_actions.defect_clear`：`p.convoy = None`，押著的糧車留給舊陣營；全部拆包第 32 批，原本 `defection.clear_progress` 直接寫）。軍令記下的貢獻（`contrib`、`contrib_weeks`）照舊由叛投自己的 `progress` 那一格清。
 
 ## 內容歸屬
 

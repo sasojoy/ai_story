@@ -1,10 +1,30 @@
-"""數值規則的核心：條件判定、效果套用、屬性檢定、大勢推進、習得武學。"""
+"""數值規則的核心：條件判定、效果套用、屬性檢定、大勢推進、習得武學。
+
+效果套用 apply_effect 一段一格（core_effects：全部拆包第 32 批；計畫 docs/superpowers/plans/2026-11-06-效果與叛投掛鉤-第32批.md）：
+照 core/features.py 的 EFFECT_ORDER 一格一格叫，包登記的叫包的（一條線的一步），其餘是 _EFFECT_CORE（核心自己的、共用規則層的、
+還沒成包的舊模組 ranks、foreshadow、seal 的〔標批號〕）。
+
+改效果那幾格要跑的測試（第 32 批）：
+- scripts/test_for.py：核心測試＋煙霧＋自己檔名的 tests/core/test_rules.py。EFFECT_ORDER、EFFECT_FIELDS 由核心契約
+  tests/core/test_contract_core.py 逐字鎖住（核心測試，會跟著跑）。
+- 每一格的行為由別處的測試蓋，test_for 挑不到，另外跑（-n 4，不含 slow）：
+  - 晉升與部下、召見往下一段、靠山：tests/figures/test_promotions_high.py、tests/figures/test_promotions_huang.py
+  - 伏筆、捐糧、片段：tests/figures/test_foreshadow.py（與 test_promotions_huang.py）
+  - 舊鏈的玉璽碎片：tests/core/test_world_state.py、tests/seal/test_seal.py
+  - 一條線的一步與紀念物：tianxia/features/story/tests/test_story_*.py；結識同伴：tianxia/features/companions/tests/test_companions.py
+  - 其餘：tests/arts/test_renown_insight.py、tests/gear/test_treasures.py、tests/battle/test_fronts.py、tests/core/test_drill_push.py、
+    tianxia/features/guide/tests/test_enlist.py、tianxia/features/cultivation/tests/test_zhuifeng_quality.py、tests/figures/test_rumor_layers.py
+- 與 scripts/same_behavior.py 的 effects 一軌（compare --tracks effects，season21、week7、test 三種）。
+- 反過來：改這裡代叫的舊模組（ranks、foreshadow、seal 的 effect_* 那幾格）時，test_for 往上找走到核心的 rules 就停，挑不到上面那一串；
+  改了那幾格，另外跑上面那一串。
+"""
 from __future__ import annotations
 
 import math
 import random
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Literal, NamedTuple
 
 from . import calendar, front_lines, gender, insights, library, materials, renown, rise, roster, seal_acts, team, treasures  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
@@ -14,6 +34,7 @@ from .martial_arts import content_art
 from .models import BEST_OF, DEFAULT_SEASON_DAYS, FRONT_KEY, Check, Condition, Content, Effect, Ending, FactionDef, Trend
 from .state import PLAYER, GameState, Rumor, RumorLayer, WorldState
 from .world_state import JADE_SEAL_FRAGMENT_COUNT, WorldStateStore, length_factor, season_length_days  # noqa: F401
+from .core import features as features_core  # core_effects（第 32 批）：效果的格照 EFFECT_ORDER（core/features.py 只 import .option；registered() 叫的那一刻才 import registry）
 # length_factor：季長倍數（名聲設計 2.4、決戰道具 2.2 共用），定義在 world_state（stamp_season 要用），從這裡轉出去叫 rules.length_factor
 
 DAY = 86400
@@ -1029,6 +1050,20 @@ def learn_skill(state: GameState, content: Content, skill_id: str) -> list[str]:
     return [f"你習得了【{skill.name}】！"] + (stored if skill_id in state.player.arts else [])
 
 
+@dataclass
+class EffectRun:
+    """apply_effect 這一下（core_effects：全部拆包第 32 批）：一則效果的每一格拿到同一份。world 可能是 None（ranks 的召見那一句只帶
+    text、affinity）。fresh_flags：world_flags 那一格立旗之前，這一則效果這一下新立的世界旗標（shard 那一格讀；原本的 newly_found_shard 那一半）。"""
+
+    effect: Effect
+    state: GameState
+    content: Content
+    world: WorldStateStore | None
+    push: Callable[..., list[str]] | None = None
+    once: bool = False
+    fresh_flags: tuple[str, ...] = ()
+
+
 def apply_effect(
     effect: Effect, state: GameState, content: Content, world: WorldStateStore,
     push: Callable[..., list[str]] | None = None, once: bool = False,
@@ -1036,12 +1071,34 @@ def apply_effect(
     """套用一則效果。push 是玩家造成的大勢推動要交給誰處理（Game.push_trend：人數緩衝、每曆日上限、貢獻帳，
     呼叫時帶 source="event"）；沒給就照舊直接 change_trend（管理者、引導獎勵等沒有「玩家個人推動」的呼叫端）。
     once：這一則出自標了 once 的事件。它、或這一則效果這一下新立世界旗標（例：擊敗波才立 bocai_defeated），算一季只會發生一次的事，
-    推大勢時帶 source="event_once"：規則關著的季不照季長縮放（FB-166，PM 2026-10-13；季再長也不會多發生一次）。"""
-    p = state.player
-    names = content.config.stat_names
+    推大勢時帶 source="event_once"：規則關著的季不照季長縮放（FB-166，PM 2026-10-13；季再長也不會多發生一次）。
+    一段一格（core_effects：全部拆包第 32 批）：照 core/features.py 的 EFFECT_ORDER 叫（包登記的叫包的，其餘是 _EFFECT_CORE），
+    回話照順序串起來。"""
+    r = EffectRun(effect, state, content, world, push, once)
+    msgs: list[str] = []
+    for got in features_core.effect_run(_EFFECT_CORE, r):
+        msgs += got
+    return msgs
+
+
+# ── 一則效果的格（core_effects：全部拆包第 32 批；計畫 docs/superpowers/plans/2026-11-06-效果與叛投掛鉤-第32批.md 1.2）──
+# 原本 apply_effect 一段一段逐字搬（只把 effect、state、content、world 換成從 r 取），先後在 core/features.py 的 EFFECT_ORDER。
+# 主人在還沒成包的舊模組的那幾格（ranks、foreshadow、seal）身體在舊模組裡，這裡延後 import 代叫（行尾標批號）；一條線那一格（story）是一條線包登記的。
+
+
+def _fx_text(r: EffectRun) -> list[str]:
+    effect, state = r.effect, r.state
     msgs: list[str] = []
     if effect.text:
         msgs.append(fill_marks(effect.text, state))
+    return msgs
+
+
+def _fx_stats(r: EffectRun) -> list[str]:
+    effect, state, content, world = r.effect, r.state, r.content, r.world
+    p = state.player
+    names = content.config.stat_names
+    msgs: list[str] = []
     for key, delta in effect.stats.items():  # 照實際動了多少寫、沒動就不寫（跟下面的情誼一樣）
         before = p.stats.get(key, 0)
         after = max(0, before + delta)
@@ -1059,62 +1116,87 @@ def apply_effect(
             msgs.append(f"（{names.get(key, key)}已到頂 {content.config.stat_cap}）")
     if any(key in ("good", "evil") for key in effect.stats):
         msgs += insights.grant_by_name(state, content, world)  # 善名、惡名到門檻悟得浩然、血煞（只悟一次）
+    return msgs
+
+
+def _fx_materials(r: EffectRun) -> list[str]:
+    effect, state, content = r.effect, r.state, r.content
+    msgs: list[str] = []
     for material_id, count in effect.materials.items():
         line = materials.grant(state, content, material_id, count)
         if line:
             msgs.append(line)
+    return msgs
+
+
+def _fx_insights(r: EffectRun) -> list[str]:
+    effect, state, content, world = r.effect, r.state, r.content, r.world
+    msgs: list[str] = []
     for insight_id in effect.insights:
         msgs += insights.learn(state, content, world, insight_id)
+    return msgs
+
+
+def _fx_gear(r: EffectRun) -> list[str]:
+    effect, state, content, world = r.effect, r.state, r.content, r.world
+    msgs: list[str] = []
     if effect.gear is not None:  # 奇遇給的寶物或良駒（裝備四欄 6.4）：自己一份亂數，不碰 Game.rng
         msgs += treasures.grant_effect(state, content, effect.gear, world.get_season_number())
+    return msgs
+
+
+def _fx_stamina(r: EffectRun) -> list[str]:
+    effect, state, content = r.effect, r.state, r.content
+    p = state.player
+    msgs: list[str] = []
     if effect.stamina:
         p.stamina = min(content.config.stamina_max, max(0.0, p.stamina + effect.stamina))
         msgs.append(f"體力 {'+' if effect.stamina > 0 else ''}{effect.stamina}")
+    return msgs
+
+
+def _fx_affinity(r: EffectRun) -> list[str]:
+    effect, state, content = r.effect, r.state, r.content
+    p = state.player
+    msgs: list[str] = []
     for character_id, delta in effect.affinity.items():  # 情誼（計畫 T5）：夾在 0～100，訊息寫實際動了多少，沒動就不寫
         before = p.affinities.get(character_id, 0)
         p.affinities[character_id] = max(0, min(100, before + renown.warmed(content, delta)))  # 加的放慢（Config.affinity_gain_scale）
         if p.affinities[character_id] != before:
             msgs.append(f"{content.characters[character_id].name}情誼 {p.affinities[character_id] - before:+d}")
-    if effect.patron is not None:  # 豪強的靠山（晉升奇遇 4.2；正式版丙一）
-        p.patron = effect.patron
-    if (effect.donate_grain or effect.fs_fragments or effect.runic) and season_one(content, state.world):  # 黃巾的第 3、4 階奇遇（正式版丙二）：開關關著什麼都不做
-        from . import foreshadow  # noqa: PLC0415  foreshadow → rules：在函式裡 import，避免循環
-        from .wins import credit  # noqa: PLC0415  只引這個函式（同 push：apply_effect 的參數就叫 push）；wins → rules 延後 import
+    return msgs
 
-        for loc_id, base in effect.donate_grain.items():  # 捐糧：同護糧送到（Game._convoy_arrives）——記捐獻、記一次推動的貢獻；糧不夠、換算出 0 份就什麼都不記
-            amount = foreshadow.need(content, base)
-            lines = foreshadow.spend_grain(state, content, amount)
-            if lines:
-                msgs += lines
-                key = f"{loc_id}:糧草"
-                p.donations[key] = p.donations.get(key, 0) + amount
-                week = calendar.point(state.world.time, content, state.world).week
-                credit(p, content, state.world, week, content.config.contrib_per_push)
-        for ref in effect.fs_fragments:  # 直接給片段：「鏈 id:片段序號」；不發傳聞
-            chain_id, _, index = ref.rpartition(":")
-            if index.isdecimal():
-                msgs += foreshadow.grant_fragment(state, content, chain_id, int(index), world)
-        p.runic_pieces += effect.runic
+
+def _fx_event_mods(r: EffectRun) -> list[str]:
+    effect, state, content = r.effect, r.state, r.content
     if effect.event_mods:  # 一般伏筆（伏筆文件 4.4）：那件大事還沒結算才算；不寫字（暗中的）
         from . import timetable  # noqa: PLC0415  timetable → rules：在函式裡 import，避免循環
 
         for mod in effect.event_mods:
             if mod.event not in state.world.timeline:
                 timetable.add_mod(state, content, mod.event, mod.side, mod.amount)
-    if effect.summons_next is not None:  # 晉升奇遇演完一段：召見往下一段（正式版丙一）；放在 promote 前面，下一段的召見那一句先出
-        from . import ranks  # noqa: PLC0415  ranks → rules：在函式裡 import，避免循環
+    return []
 
-        msgs += ranks.next_leg(state, content, effect.summons_next)
-    if effect.promote is not None or effect.followers:  # 晉升奇遇（計畫 T5）：開關關著時 ranks 什麼都不做
-        from . import ranks  # noqa: PLC0415  ranks → rules：在函式裡 import，避免循環
 
-        if effect.promote is not None:
-            msgs += ranks.promote(state, content, effect.promote)
-        msgs += ranks.add_followers(state, content, effect.followers)
+def _fx_flags(r: EffectRun) -> list[str]:
+    effect, p = r.effect, r.state.player
     p.flags |= set(effect.flags_add)
     p.flags -= set(effect.flags_remove)
+    return []
+
+
+def _fx_learn_skills(r: EffectRun) -> list[str]:
+    effect, state, content = r.effect, r.state, r.content
+    msgs: list[str] = []
     for skill_id in effect.learn_skills:
         msgs += learn_skill(state, content, skill_id)
+    return msgs
+
+
+def _fx_join_sect(r: EffectRun) -> list[str]:
+    effect, content = r.effect, r.content
+    p = r.state.player
+    msgs: list[str] = []
     if effect.join_sect:
         sect = content.sects[effect.join_sect]
         p.sect = sect.id
@@ -1123,53 +1205,117 @@ def apply_effect(
         if owner is not None and p.faction is None:
             p.faction = owner.id
             msgs.append(f"你從此是{owner.name}的人了。")
+    return msgs
+
+
+def _fx_leave_sect(r: EffectRun) -> list[str]:
+    effect, content = r.effect, r.content
+    p = r.state.player
+    msgs: list[str] = []
     if effect.leave_sect and p.sect:
         msgs.append(f"你叛出了{content.sects[p.sect].name}。")
         p.flags.add(f"叛出:{p.sect}")
         p.sect = None
+    return msgs
+
+
+def _fx_recruit(r: EffectRun) -> list[str]:
+    effect, state, content, world = r.effect, r.state, r.content, r.world
+    msgs: list[str] = []
     if effect.recruit:
         msgs += roster.recruit(state, content, world, effect.recruit)
-    single = once or any(flag not in state.world.flags for flag in effect.world_flags_add)  # 旗標在下面才立：這裡看的是立之前
+    return msgs
+
+
+def _fx_trend(r: EffectRun) -> list[str]:
+    effect, state, content, push = r.effect, r.state, r.content, r.push
+    msgs: list[str] = []
+    single = r.once or any(flag not in state.world.flags for flag in effect.world_flags_add)  # 旗標在下一格（world_flags）才立：這裡看的是立之前
     for trend_id, delta in resolve_trends(content, state.world, effect.trend, state.player.location).items():
         # front 與戰線先照這一季的規則換成真的要推的線，再照舊交給 push（Game.push_trend，T3）或 change_trend
         source = "event_once" if single else "event"
         msgs += change_trend(state, content, trend_id, delta) if push is None else push(trend_id, delta, source=source)
-    jade_seal_flag = content.scenario.jade_seal_flag
-    seal_on = content.config.seal.enabled and bool(content.seal)  # 玉璽碎片開著：舊鏈不再寫跨季紀錄（玉璽碎片設計 11.2 第 2 條）
-    newly_found_shard = (
-        not seal_on and jade_seal_flag is not None and jade_seal_flag in effect.world_flags_add
-        and jade_seal_flag not in state.world.flags
-    )
-    add_world_flags(state, effect.world_flags_add)
-    add_marks(effect.marks, state, content)
-    if effect.clue_items or effect.fs_counters:  # 伏筆的準備事件：開關關著時什麼都不給、不寫字（foreshadow.grant）
-        from . import foreshadow  # noqa: PLC0415  foreshadow → rules：在函式裡 import，避免循環
+    return msgs
 
-        msgs += foreshadow.grant(state, content, effect.clue_items, effect.fs_counters)
-    name = state.player.name  # 江湖史與玉璽碎片（天下大事）一律寫名號；只有下面的地方傳聞看匿名（傳聞分層設計第七節）
-    if effect.rumor:
+
+def _fx_world_flags(r: EffectRun) -> list[str]:
+    effect, state = r.effect, r.state
+    # 這一下新立的（立之前看）：shard 那一格讀（劇本的碎片旗標是不是這一下才立的；原本的 newly_found_shard 在這裡算）
+    r.fresh_flags = tuple(flag for flag in effect.world_flags_add if flag not in state.world.flags)
+    add_world_flags(state, effect.world_flags_add)
+    return []
+
+
+def _fx_marks(r: EffectRun) -> list[str]:
+    add_marks(r.effect.marks, r.state, r.content)
+    return []
+
+
+def _fx_rumor(r: EffectRun) -> list[str]:
+    effect, state, content = r.effect, r.state, r.content
+    msgs: list[str] = []
+    if effect.rumor:  # 只有地方傳聞看匿名（江湖史與玉璽碎片一律寫名號；傳聞分層設計第七節）
         text = effect.rumor.format(name=display_name(state), him=gender.pronoun(state))  # {him}：寫傳聞主角的他／她
         add_rumor(  # 玩家觸發的傳聞記在當時所在地：地方傳聞的單獨事件，觸發者可以選匿名（傳聞分層設計第七節）
             state, text, state.player.location, content=content, layer="local", named=not state.player.anonymous,
         )
         msgs.append(f"【江湖傳聞】{text}")
+    return msgs
+
+
+def _fx_chronicle(r: EffectRun) -> list[str]:
+    effect, state = r.effect, r.state
+    name = state.player.name  # 江湖史與玉璽碎片（天下大事）一律寫名號；只有地方傳聞（rumor 那一格）看匿名（傳聞分層設計第七節）
     if effect.chronicle:
         add_chronicle(state, effect.chronicle.format(name=name))
-    if newly_found_shard:
-        fragment_text = effect.chronicle.format(name=name) if effect.chronicle else f"{name}取得了傳國玉璽的一塊碎片。"
-        fragment = world.record_jade_seal_fragment(name, content.scenario.name, fragment_text)
-        if fragment is not None:
-            msgs.append(f"🏺 【天下大事】{name}尋得傳國玉璽第 {fragment.number} 塊碎片！（{fragment.number}/{JADE_SEAL_FRAGMENT_COUNT} 已現世）")
-    step = effect.story
-    progress = p.storylines.get(step.line) if step is not None else None
-    if progress is not None and progress.ending is None:  # 一條線的一步（storyline.py）：記號加上去、記下往哪裡，動作結束時 storyline.tick 才走
-        for key, value in step.marks.items():
-            progress.marks[key] = progress.marks.get(key, 0) + value
-        if step.go:
-            progress.go = step.go
-    if step is not None and step.keepsake and step.keepsake not in p.keepsakes:  # 紀念物：線收了也給（例：交契之後才拿到的）
-        p.keepsakes.append(step.keepsake)
-        msgs.append(f"（收進行囊：{step.keepsake}）")
-    if step is not None and step.keepsake_drop in p.keepsakes:
-        p.keepsakes.remove(step.keepsake_drop)
-    return msgs
+    return []
+
+
+def _ranks():
+    from . import ranks  # noqa: PLC0415  過渡：待搬（第 40 批：ranks 收進共用規則層）；ranks → rules：在函式裡 import，避免循環
+
+    return ranks
+
+
+def _foreshadow():
+    from . import foreshadow  # noqa: PLC0415  過渡：待搬（第 34 批：伏筆進軍情包，那三格改由軍情包登記）；foreshadow → rules：在函式裡 import，避免循環
+
+    return foreshadow
+
+
+def _seal():
+    from . import seal  # noqa: PLC0415  過渡：待搬（第 27 批：玉璽包登記那兩格）；延後 import，同 ranks、foreshadow
+
+    return seal
+
+
+# 核心代叫的格 {格: run(r) -> list[str]}：核心自己的段、共用規則層的段（照舊直接叫），與主人還沒成包的舊模組那幾格（行尾標批號）。
+# 沒有 story：一條線包登記（Feature.effects()）。lambda 在叫的那一下才照模組屬性找（monkeypatch 照樣有效）。
+_EFFECT_CORE: dict[str, Callable[[EffectRun], list[str]]] = {
+    "text": _fx_text,
+    "stats": _fx_stats,
+    "materials": _fx_materials,  # 共用規則層 materials
+    "insights": _fx_insights,  # 共用規則層 insights
+    "gear": _fx_gear,  # 共用規則層 treasures
+    "stamina": _fx_stamina,
+    "affinity": _fx_affinity,
+    "patron": lambda r: _ranks().effect_patron(r),  # 過渡：待搬（第 40 批）豪強的靠山（晉升奇遇 4.2；正式版丙一）
+    "grain": lambda r: _foreshadow().effect_grain(r),  # 過渡：待搬（第 34 批）捐糧；夾著四勝利記帳 wins.credit（共用規則層）
+    "fs_fragments": lambda r: _foreshadow().effect_fragments(r),  # 過渡：待搬（第 34 批）直接給伏筆片段
+    "runic": lambda r: _seal().effect_runic(r),  # 過渡：待搬（第 27 批）符文殘片
+    "event_mods": _fx_event_mods,  # 共用規則層 timetable
+    "summons_next": lambda r: _ranks().effect_summons_next(r),  # 過渡：待搬（第 40 批）召見往下一段（排在晉升前面）
+    "promote": lambda r: _ranks().effect_promote(r),  # 過渡：待搬（第 40 批）晉升、部下
+    "flags": _fx_flags,
+    "learn_skills": _fx_learn_skills,
+    "join_sect": _fx_join_sect,
+    "leave_sect": _fx_leave_sect,
+    "recruit": _fx_recruit,  # 共用規則層 roster
+    "trend": _fx_trend,
+    "world_flags": _fx_world_flags,
+    "marks": _fx_marks,
+    "foreshadow": lambda r: _foreshadow().effect_clues(r),  # 過渡：待搬（第 34 批）伏筆物品與計數
+    "rumor": _fx_rumor,
+    "chronicle": _fx_chronicle,
+    "shard": lambda r: _seal().effect_shard(r),  # 過渡：待搬（第 27 批）舊鏈的玉璽碎片
+}

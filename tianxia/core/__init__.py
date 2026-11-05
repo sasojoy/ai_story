@@ -23,8 +23,11 @@
 # 只寫字面的名字（test_for 用 ast.literal_eval 讀）。
 # core_world（全部拆包第 25 批）：world（世界一步、週初與每天、開季結算、收季、開集結）改成世界層掛鉤（core/features.py 的 WORLD_ORDER）、
 # 不再 import 功能包之後收進來（總表第 15 列）。它還代叫幾個沒成包的舊模組（行尾標批號），核心 → 舊模組這一版照舊不掃（同 journal）。
+# core_effects（全部拆包第 32 批，第 25 批 PM 認定第 2 條）：log_archive（換季時封存舊季的傳聞與回合紀錄；只 import 標準函式庫，
+# 只有 sqlite_world 用）兩份名單都沒有，順手收進核心本體。它的 tests/core/test_log_archive.py（8 條）跟著進核心測試，不放進 NOT_CORE_TESTS。
 MODULES = frozenset({
     "state", "sqlite_world", "world_state", "characters", "accounts", "database", "rules", "calendar", "models", "content",
     "team", "gender", "naming", "wallet", "journal",
     "world",
+    "log_archive",
 })

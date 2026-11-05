@@ -6,12 +6,12 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
   底座〔登記鉤子的字典、開線、換字、題目文字〕在共用規則層 tianxia/story_base.py（核心的 rules、事件檢定與探索包、有所感包也讀），storyline.py re-export 它的每個名字
 - actions.py：原本 Game 上的 10 個方法（Game 留 10 個一行委派）與核心原位叫的 4 個（答題選單、「未了之事」那一顆、換季收線、標題）的本體
 
-掛鉤：choose（只吃 story:）、scene（接縫掛鉤：眼前的答題）。enabled 一直是 True，線自己看 Config.jianfa.storylines。沒有路由（/api/do/story_seen 在殼的 MAIN_ACTIONS，照舊叫 Game）、
+掛鉤：choose（只吃 story:）、scene（接縫掛鉤：眼前的答題）、effects（核心的效果格 story：一條線的一步，第 32 批）。enabled 一直是 True，線自己看 Config.jianfa.storylines。沒有路由（/api/do/story_seen 在殼的 MAIN_ACTIONS，照舊叫 Game）、
 沒有假人分數（story: 原本在 bot_policy.score 就沒有處理，落到預設的 None）。
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome
+from tianxia.core.features import EffectHook, Feature, Outcome
 
 
 class StoryFeature(Feature):
@@ -44,6 +44,18 @@ class StoryFeature(Feature):
         from . import actions  # noqa: PLC0415
 
         return actions.scene(ctx)
+
+    # core_effects（全部拆包第 32 批「效果與叛投掛鉤」）
+    _effects: tuple[EffectHook, ...] | None = None
+
+    def effects(self) -> tuple[EffectHook, ...]:
+        """核心的效果格 story（一條線的一步；原本 rules.apply_effect 最後一段直接寫 storylines、keepsakes）：不問 enabled。
+        建一次就留著，在叫的那一下才照模組屬性找 storyline.effect_step（monkeypatch 照樣有效）。"""
+        if self._effects is None:
+            from . import storyline  # noqa: PLC0415
+
+            self._effects = (EffectHook("story", lambda r: storyline.effect_step(r)),)
+        return self._effects
 
 
 FEATURE = StoryFeature()

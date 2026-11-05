@@ -1561,6 +1561,13 @@ def test_the_world_layer_core_files_import_no_package_not_even_inside_a_function
     assert {feature_target(mod) for _, mod, _ in imports_of(source, "tianxia.world")} - {None} == {"battle", "feast", "bout", "figure_acts"}
 
 
+# core_effects（全部拆包第 32 批「效果與叛投掛鉤」；計畫 docs/superpowers/plans/2026-11-06-效果與叛投掛鉤-第32批.md 1.7）：叛投之後的食言
+# 改由人物情誼包登記叛投 after 位置的 parley 那一格（DEFECT_ORDER），Game._defect_step 不再叫委派 _parley_forsake、委派沒人叫了拿掉。
+# 第 20 批那兩行原文不改（同第 8 批 del、第 25 批的寫法）
+GAME_DELEGATES -= {"_parley_forsake"}
+del GAME_DELEGATE_CALLERS[("_defect_step", "_parley_forsake")]
+
+
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py
     import io
     import sys
