@@ -1649,6 +1649,8 @@ def test_the_old_names_left_as_aliases_are_known():
                          "figure_aid": "figure_acts", "yuedan": "figure_acts",
                          # zhuan（全部拆包第 29 批：tianxia/biography.py、zhuan_end.py）
                          "biography": "zhuan", "zhuan_end": "zhuan",
+                         # zhuan（第 29 批之二：tianxia/annals.py 指到 zhuan/standing.py，那一份 re-export 核心 annal_base）
+                         "annals": "zhuan",
                          # military（全部拆包第 33 批：tianxia/rank_actions.py）
                          "rank_actions": "military",
                          # military（全部拆包第 34 批：tianxia/foreshadow.py、opportunities.py）

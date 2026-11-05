@@ -17,8 +17,7 @@ import random
 from collections import Counter
 from collections.abc import Callable
 
-from .core import annal_base as annals
-from . import armor, equipment, forge_secrets, four_tiers, fusion, library, naming, silver, team, traits, weapons
+from . import annals, armor, equipment, forge_secrets, four_tiers, fusion, library, naming, silver, team, traits, weapons
 from .fusion import QualityOdds
 from .insights import merged_attribute
 from .models import WEAPON_KINDS, Content
