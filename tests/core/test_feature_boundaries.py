@@ -339,12 +339,14 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     # （_joinable、_in_region、_battle_menu、_rally_any、rally_region 叫 _sieges、_definition_of 那 7 對：第 7 批那幾個搬進包、包裡直接叫
     # sieges.sieges、sieges.definition_of，拿掉）
     ("battles_now", "_sieges"): "全服此刻的每一場（假人程式、bot_policy 讀）：決戰「打」那一半，第 8 批",
+    ("_siege_live", "_sieges"): "地盤畫面（conquest_view）的集結・交戰中那一場加不加得進去（FB-690）；地盤搬成包（第 46 批）時改叫決戰包的查詢服務",
     ("_apply_battle_outcome", "_settle_siege"): "收場分進攻城那一支（易手、作罷、時程表另外收）：決戰「打」那一半，第 8 批",
     ("admin_end_season", "_sieges"): "管理者立刻收季：沒打完的攻城照決戰收兵（收季的順序算行為：先決戰、再攻城、再補大事）；管理者外殼是核心，"
                                      "可是前一行的決戰收兵（_shelve_unfinished_battle）還在 Game：第 8 批兩段一起搬進決戰包時一起換成「收季」的掛鉤",
     ("admin_end_season", "_shelve_siege"): "同上",
     ("admin_next_season", "_sieges"): "開下一季：季自然結束、沒人同步過的攻城換季前收起來（參戰者補得到交代）；同上",
     ("admin_next_season", "_shelve_siege"): "同上",
+    ("admin_conquest_cancel", "_cancel_siege"): "地盤的救場工具「取消一場攻城」：已經開了集結的那一場照收兵收起來；地盤搬成包（第 46 批）時改叫決戰包",
     # 決戰「打」那一半之二（全部拆包第 7 批）：核心與別的功能叫集結、投效、挑同伴的委派 17 對——這幾個位置都沒有第 11 批的掛鉤
     # （計畫 docs/superpowers/plans/2026-11-01-決戰包-第3批.md 1.4）
     ("options", "_battle_menu"): "選單的戰鬥那一段：集結時接在平常的選單前面、開打了整個取代（再接別人前綴的 defect:cancel）；menu 掛鉤在 "
@@ -367,6 +369,7 @@ GAME_DELEGATE_CALLERS = {  # 核心自己的邏輯叫委派（同上）。GAME_D
     ("_fighting", "_free_agent"): "開打了還沒投效的散人與豪強不整個取代畫面：決戰「打」那一半，第 8 批",
     ("_battle_now", "_joinable"): "這個人看的那一場：自己站得進去的那一場先（FB-566）；決戰「打」那一半，第 8 批",
     ("_battle_now", "_in_region"): "同上：自己大區裡的那一場；同上",
+    ("_siege_live", "_joinable"): "地盤畫面（conquest_view）的集結・交戰中那一場加不加得進去（FB-690）：地盤搬成包（第 46 批）時改叫決戰包的查詢服務",
 }
 # tavern（主動搬六包第 10 批：酒肆的引擎那一半）：四張名單的酒肆那幾筆集中在這一段（三條拆包線並行，PM 合的時候不跟別人的行穿插）
 GAME_IMPORTS |= {
@@ -1048,6 +1051,7 @@ SHARED_PENDING = {
                         " sortie、feast、bout 三包",
     ("clinic", "atlas"): "排定：最近的醫館（atlas.routes、shortest_routes、Route）——同上，第 50 批；切開之前 import clinic 同樣經 atlas"
                          "連帶載入出陣包 sortie、宴客包 feast、單挑包 bout",
+    ("siege", "conquest_day"): "排定：作罷（conquest_day.void、note_void）——第 46 批 Task 1 先搬進 conquest",
     ("siege", "world"): "排定：開集結那一季（world._season_vehicle，函式裡）——第 25 批 world 收進核心本體。world 最外層 import 宴客包 feast"
                         "與單挑包 bout（舊名 arena：收季記擂台前三名的 close_season，全部拆包第 12 批成包）："
                         "叫到那個函式就連帶載入 feast、bout（現在 import siege 已經經 atlas 載進來了），收進核心本體之前那一行要先處理（核心不 import 包）",
@@ -1126,6 +1130,11 @@ SHARED_PENDING.update({
     ("story_base", "atlas"): "排定：大區（atlas.region_of）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層（同 chiefs → atlas：atlas 最外層 import "
                              "出陣包 sortie）：切開之前 import story_base 會連帶載入 sortie（原本 import storyline 就是這樣）",
 })
+
+# territory_acts（第 46 批）：地盤搬成包之後這四筆不用了（第 25 批定的寫法：用 del 集中在自己的段，不在別人的段裡刪行）
+for _pair in (("_siege_live", "_sieges"), ("admin_conquest_cancel", "_cancel_siege"), ("_siege_live", "_joinable")):
+    del GAME_DELEGATE_CALLERS[_pair]  # 地盤畫面、救場工具改叫決戰包的查詢服務（ctx._joinable、ctx._cancel_siege、ctx._sieges）
+del SHARED_PENDING[("siege", "conquest_day")]  # 作罷（void、note_void）第 46 批 Task 1 已搬進 conquest
 
 
 def test_the_shared_rules_layer_only_imports_the_core_and_itself():
