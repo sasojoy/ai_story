@@ -800,7 +800,7 @@
           ]
         },
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "easy"
         },
         "effect": {
@@ -1081,7 +1081,7 @@
       {
         "text": "獨自去蘆葦蕩，跟他們的頭目談",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "normal", "shift": 1
         },
         "effect": {

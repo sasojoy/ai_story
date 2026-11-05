@@ -1003,8 +1003,25 @@
     const row = (split) => split.map(([k, v]) => `${esc(k)} ${v}`).join("・");
     const chosen = g.presets.find((p) => p.key === g.chosen);
     const head = chosen ? `成長：${esc(chosen.name)}（每級 ${row(g.now)}）` : g.chosen === "custom" ? `成長：自己配（每級 ${row(g.now)}）` : "挑這一季的成長（每級合計 " + g.per_level + " 點，之後改也照現在的等級重算）";
+    const draft = S.growthDraft;
     return `<div class="growth"><div class="pts-label">${head}</div><div class="row alloc">${g.presets.map((p) =>
-      `<button class="btn small" data-act="growth" data-preset="${esc(p.key)}" title="${esc(row(p.split))}" ${p.key === g.chosen ? "disabled" : ""}>${esc(p.name)}</button>`).join("")}</div></div>`;
+      `<button class="btn small" data-act="growth" data-preset="${esc(p.key)}" data-glow="allocate" title="${esc(row(p.split))}" ${p.key === g.chosen ? "disabled" : ""}>${esc(p.name)}</button>`).join("")}` +
+      `<button class="btn small" data-act="growth-custom" ${draft ? "disabled" : ""}>自己配</button></div>${draft ? growthEditHtml(g, draft) : ""}</div>`;
+  }
+
+  // 自己配（五項屬性的季）：每一項 −／＋，合計要剛好 per_level、每一項 custom_min～custom_max；草稿只在這個分頁（S.growthDraft），按「定下來」才送
+  function growthEditHtml(g, draft) {
+    const left = g.per_level - g.keys.reduce((n, [k]) => n + (draft[k] || 0), 0);
+    const rows = g.keys.map(([k, name]) => {
+      const v = draft[k] || 0;
+      return `<div class="growth-step"><span>${esc(name)}</span>` +
+        `<button class="btn small" data-act="growth-step" data-key="${esc(k)}" data-d="-1" aria-label="${esc(name)}少一點" ${v <= g.custom_min ? "disabled" : ""}>−</button>` +
+        `<b>${v}</b><button class="btn small" data-act="growth-step" data-key="${esc(k)}" data-d="1" aria-label="${esc(name)}多一點" ${left <= 0 || v >= (g.custom_max || g.per_level) ? "disabled" : ""}>＋</button></div>`;
+    }).join("");
+    const note = left > 0 ? `還剩 ${left} 點` : left < 0 ? `多了 ${-left} 點` : "剛好";
+    return `<div class="growth-edit">${rows}<div class="growth-foot"><span class="growth-left">每級合計 ${g.per_level} 點，每一項 ${g.custom_min}～${g.custom_max || g.per_level}：${note}</span>` +
+      `<button class="btn small" data-act="growth-save" ${left === 0 ? "" : "disabled"}>定下來</button>` +
+      `<button class="btn small" data-act="growth-cancel">取消</button></div></div>`;
   }
 
   function statUsesHtml(s) {
@@ -6263,7 +6280,21 @@
         }
         case "drawer-close": S.pdrawer = false; S.artOpen = null; S.insOpen = null; S.slotPick = null; renderPage(); break;
         case "ins-filter": S.insFilter = el.dataset.filter; renderPage(); break;
-        case "growth": await doMain("growth", { preset: el.dataset.preset }); break; // 五項屬性的季：挑成長配比
+        case "growth": S.growthDraft = null; await doMain("growth", { preset: el.dataset.preset }); break; // 五項屬性的季：挑成長配比
+        case "growth-custom": { // 自己配：從現在怎麼長起草（鍵照 growth.keys 的順序，now 是同一個順序）
+          const g = S.main && S.main.status && S.main.status.growth;
+          if (g) S.growthDraft = Object.fromEntries(g.keys.map(([k], i) => [k, g.now[i] ? g.now[i][1] : g.custom_min]));
+          renderTop();
+          break;
+        }
+        case "growth-step": {
+          const d = S.growthDraft;
+          if (d) d[el.dataset.key] = Math.max(0, (d[el.dataset.key] || 0) + Number(el.dataset.d));
+          renderTop();
+          break;
+        }
+        case "growth-cancel": S.growthDraft = null; renderTop(); break;
+        case "growth-save": { const split = S.growthDraft; S.growthDraft = null; await doMain("growth", { preset: "custom", split }); break; }
         case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
         case "letter-open": {

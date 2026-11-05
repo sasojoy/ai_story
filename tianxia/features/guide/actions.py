@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 
 from tianxia import atlas, create, figures, howto, sensing, training  # 過渡：待搬
 from tianxia import checkin, chuangong, seal  # 過渡：待搬（碰到才說的簽到、傳功、玉璽碎片）
-from tianxia import equipment, mounts, place_state, roster, treasures  # 共用規則層
+from tianxia import equipment, mounts, place_state, treasures  # 共用規則層
 from tianxia.characters import name_key
-from tianxia import insight_fx, journal, library, martial_arts, team  # 核心、共用規則層
+from tianxia import attrset, insight_fx, journal, library, martial_arts, roster, team  # 核心、共用規則層
 from tianxia import prologue as prologue_rules  # 共用規則層；Game.new 有個參數也叫 prologue，跟 engine 一樣叫 prologue_rules
 from tianxia.models import TutorialStep
 from tianxia.rules import season_one
@@ -26,6 +26,14 @@ GRADUATE_TRIES = 12  # graduate 每一步最多試幾次；照著走卻一直前
 PROLOGUE_TABS = ("practice", "craft")  # 序章裡打開這兩頁才記旗標（原 Game.PROLOGUE_TABS）
 NO_REST = "（打坐已經拿掉了：體力會隨時辰自己回來，急用就服回體丹。）"  # 舊分頁按到 act:rest
 
+
+
+def hire_here(ctx) -> bool:
+    """五項屬性的季，此地酒肆有還沒有主的人可招（招募同伴包 hire；這裡照內容與名冊判，不 import 別的功能包）：h_recruit 改指向酒肆招募。"""
+    s, c = ctx.state, ctx.content
+    if not (c.config.hire.enabled and attrset.on(c, s.world)):
+        return False
+    return any(ch.hire_at == s.player.location and roster.owned_by(ctx.world, cid) is None for cid, ch in c.characters.items())
 
 def note_gift(ctx: Game) -> None:
     """建角色時送了回體丹：江湖紀錄開場那一則多一行（explain-1：以前送了二十顆卻沒有任何紀錄）。接在開場那一則裡、不另起一則：
@@ -113,6 +121,13 @@ def graduate_pass(ctx: Game, step: TutorialStep) -> bool:
         ctx.choose(f"act:{goal.action}")
     elif goal.action == "pill":  # 序章服回體丹（新手引導重做）：假人也真的服一顆（同真人，看不出來）
         ctx.take_stamina_pill(pill_only=True)
+    elif goal.action == "allocate" and attrset.on(c, ctx.state.world):  # 五項屬性的季：這一步是挑成長配比（同真人）
+        if p.growth_preset is None:
+            ctx.pick_growth(ctx.rng.choice([preset.key for preset in c.config.attributes.v2.presets]))
+        elif p.stat_points > 0:
+            ctx.allocate_stat(ctx.rng.choice(attrset.keys(c)))
+        else:
+            return False
     elif goal.action == "allocate":
         open_stats = [k for k in team.COMBAT_STATS if p.stats.get(k, 0) < c.config.stat_cap]
         if not open_stats:
@@ -191,7 +206,7 @@ def guide_box(ctx: Game) -> dict | None:
             "speaker": rules.speaker_of(c, step), "key": step.id, "scene": fill(step.scene), "text": fill(rules.step_text(s, c)),
             # 收起來那一行（網頁用 line || text）：待處理時話已經換成「先把眼前的「…」了結」，這一步自己的短提示不能留著
             # ——收著的框寫著短提示、跟事件擋著路互相矛盾（序章之外的步驟也可能有 line；序章自己在事件出現時整個框不畫，見上）
-            "line": "" if pending else fill(step.line), "done": list(p.guide_done), "end": False, "pending": pending,
+            "line": "" if pending else fill(rules.step_words(s, c, step)[1]), "done": list(p.guide_done), "end": False, "pending": pending,
         }
         if step.paged:  # 話太長的序章步驟：網頁照空一行切成幾頁（只有分頁的步驟才帶這個鍵）
             box["paged"] = True
@@ -294,7 +309,7 @@ def hint_triggers(ctx: Game, only: set[str] | None = None) -> list[str]:
     # 「這裡能學新的底」：只算現在學得了的（learn 擋下的——名望、學費、門派、陣營、持有滿了——都不算，不然師父說能學、按下去卻是「學不了」）
     if want("h_basic_art") and any(problem is None for _, problem in library.lessons_here(s, c)):
         on.append("h_basic_art")
-    if want("h_recruit") and (ctx._recruit_target() is not None or ctx._recruitable_here()):
+    if want("h_recruit") and (ctx._recruit_target() is not None or ctx._recruitable_here() or hire_here(ctx)):
         on.append("h_recruit")
     if want("h_free_text") and s.pending_event:
         event = c.events.get(s.pending_event)

@@ -55,9 +55,11 @@ def test_custom_split_must_add_up():
     g = _game()
     bad = g.pick_growth("custom", {"str": 9, "lead": 1, "int": 0, "spd": 0, "cha": 0})
     assert "至少" in bad[-1] and g.state.player.growth_preset is None
-    g.pick_growth("custom", {"str": 6, "lead": 1, "int": 1, "spd": 1, "cha": 1})
+    bad = g.pick_growth("custom", {"str": 6, "lead": 1, "int": 1, "spd": 1, "cha": 1})
+    assert "最多" in bad[-1] and g.state.player.growth_preset is None  # 每一項最多 custom_max（4），不能全壓在一項
+    g.pick_growth("custom", {"str": 4, "lead": 3, "int": 1, "spd": 1, "cha": 1})
     _level(g, 3)
-    assert attrset.value(g.state, g.content, "str") == g.content.config.attributes.v2.base + 12
+    assert attrset.value(g.state, g.content, "str") == g.content.config.attributes.v2.base + 8
 
 
 def test_bonus_points_every_ten_levels_have_no_cap():
@@ -71,13 +73,18 @@ def test_bonus_points_every_ten_levels_have_no_cap():
     assert g.state.player.attr_alloc == {"cha": 30} and g.state.player.stat_points == 0
 
 
-def test_old_formulas_read_the_new_value_on_the_old_scale():
+def test_old_formulas_read_the_new_value_against_the_average_person():
+    """舊公式讀新的五項：比同等級的平均人高幾成，經過有上限的曲線（企劃者 2026-11-04「不限於5～15」）。"""
+    import math
     g = _game()
-    c = g.content
-    assert team.v1_stat(g.state, c, "agi") == 5  # 第 1 級、還沒長：舊尺度的起點
+    c, v2 = g.content, g.content.config.attributes.v2
+    assert team.v1_stat(g.state, c, "agi") == 5  # 跟平均人一樣：舊尺度的起點，效果 0
     _level(g, 11)
     g.pick_growth("ranger")  # 身法每級 4
-    assert team.v1_stat(g.state, c, "agi") == 5 + 40 / 10
+    mean = attrset.expect(c, 11)
+    r = (attrset.value(g.state, c, "spd") - mean) / mean
+    want = v2.legacy_caps["agi"] * math.tanh(r / v2.legacy_scale)
+    assert team.stat_bonus(c, team.v1_stat(g.state, c, "agi")) == pytest.approx(want)
     assert team.v1_stat(g.state, c, "lore") == 5  # 博聞拔掉：當基準
     assert team.con_of(g.state, c, g.world, "player") == team.v1_stat(g.state, c, "con")
 
@@ -200,3 +207,176 @@ def test_figures_grow_with_the_calendar_instead_of_rise():
     assert attrset.foe_level(c, attrset.foe_difficulty(c, 25)) == pytest.approx(25)
     old = _game(False)
     assert old._figure_squad(fid).level is None
+
+
+def test_command_cuts_the_hp_lost_against_their_force():
+    g = _game()
+    c = g.content
+    _level(g, 21)
+    weak = c.squads[min(c.squads, key=lambda k: c.squads[k].difficulty)]
+    brute = weak.model_copy(update={"level": 21, "aptitude": {"str": 9}})
+
+    def lost(preset, squad):
+        g.pick_growth(preset)
+        m = g.state.player.member
+        m.neili, m.injury = None, 0.0
+        before, cap = g._player_hp_and_cap()
+        team.take_encounter_toll(g.state, c, g.world, "落敗", squad=squad)
+        return (before - g._player_hp()) / cap  # 照上限的比例（根骨〔統御〕也拉高上限）
+
+    assert lost("warrior", weak) < lost("strategist", weak)  # 統御每級 3 對 2、身法一樣：同一隊少掉的比例小
+    assert lost("warrior", weak) < lost("warrior", brute)  # 他的武力越高，擋掉的越少
+    old = _game(False)
+    assert team._guard(old.state, old.content, old.world, weak) == 0.0
+
+
+def _pvp_pair(level: int = 30):
+    """兩個同武學同等級的人：甲全點武力（上限 4，另一項 3 給身法、送點全給武力），乙全點統御（送點全給統御）。"""
+    a, b = _game(), _game()
+    for g, split, bonus in ((a, {"str": 4, "lead": 1, "int": 1, "spd": 3, "cha": 1}, "str"),
+                            (b, {"str": 3, "lead": 4, "int": 1, "spd": 1, "cha": 1}, "lead")):
+        _level(g, level)
+        g.pick_growth("custom", split)
+        g.state.player.attr_alloc = {bonus: 30}
+    return a, b
+
+
+def _alone(g: Game) -> float:
+    from tianxia import encounter
+    s, c, w = g.state, g.content, g.world
+    return encounter.member_power(s.player.member, team.team_arts(s, c, w), boost=team.player_boost(s, c, w))
+
+
+def test_player_fights_face_the_real_opponents_attributes():
+    """企劃者 2026-11-04「全部點武力 會不會沒人打得過他」：玩家對玩家照對手本人的五項（他的統御擋你的武力），不是同等級的平均人。"""
+    brute, wall = _pvp_pair()
+    assert Game._spar_power(brute, wall) < _alone(brute)  # 對上統御高的人，武力的加成縮了
+    assert Game._spar_power(wall, brute) > Game._spar_power(brute, wall)
+    # 快照（擂台的分身、奪璽單挑）照卡重算，跟兩邊都活著算的一樣
+    ca, cb = (team.pvp_card(g.state, g.content, g.world) for g in (brute, wall))
+    with team.facing_player(brute.content, brute.state, wall.state):
+        live = _alone(brute)
+    faced, _, _ = team.pvp_faced(brute.content, _alone(brute), {}, ca, cb)
+    assert faced == pytest.approx(live, rel=1e-6)
+
+
+def test_arena_rescales_both_snapshots_against_each_other():
+    from tianxia.features.bout import arena_actions
+    brute, wall = _pvp_pair()
+    me, foe = arena_actions.arena_side(brute), arena_actions.arena_side(wall)
+    before = (me.power, foe.power, dict(me.scores))
+    arena_actions.faced(brute.content, me, foe)
+    assert me.power / before[0] < foe.power / before[1] and foe.power > me.power  # 全武力撞上全統御：前者縮得多、後者反而比較強
+    assert all(me.scores[m] <= before[2][m] for m in me.scores)
+    old = _game(False)
+    assert team.pvp_card(old.state, old.content, old.world) is None  # 舊的季沒有卡，擂台、奪璽一個字不變
+
+
+def test_custom_growth_is_capped_per_attribute():
+    g = _game()
+    cap = g.content.config.attributes.v2.custom_max
+    assert attrset.growth_problem(g.content, "custom", {"str": cap + 1, "lead": 1, "int": 1, "spd": 1, "cha": 10 - cap - 4})
+    assert attrset.view(g.state, g.content)["custom_max"] == cap
+
+
+def test_extreme_builds_stay_inside_the_effect_caps():
+    """全點一項到第 60 級：舊公式拿到的效果不超過 legacy_caps（屬性沒有上限、效果有上限；企劃者 2026-11-04）。"""
+    a, b = _pvp_pair(level=60)
+    caps = a.content.config.attributes.v2.legacy_caps
+    for g in (a, b):
+        for old, cap in caps.items():
+            assert abs(team.stat_bonus(g.content, team.v1_stat(g.state, g.content, old))) <= cap + 1e-9
+
+
+def test_neigong_weighs_double_only_in_five_attribute_seasons():
+    """企劃者 2026-11-04 點頭的武學調整「內功加重」：五項屬性的季內功份量的除數 100 → 50，舊的季照舊。"""
+    from tianxia import encounter
+    g, old = _game(), _game(False)
+    assert team.player_boost(g.state, g.content, g.world).inner_div == g.content.config.attributes.v2.neigong_divisor == 50
+    assert team.player_boost(old.state, old.content, old.world).inner_div == encounter.NEIGONG_BONUS_DIVISOR
+
+
+def test_counter_traits_cut_the_attribute_they_answer(monkeypatch):
+    """剋屬性的功效（企劃者 2026-11-04）：破甲讓對手的統御少算兩成——全武力帶破甲撞全統御，比不帶的強；舊的季沒有。"""
+    from tianxia import traits
+    brute, wall = _pvp_pair()
+    plain = Game._spar_power(brute, wall)
+    real = traits.loadout
+    monkeypatch.setattr(traits, "loadout", lambda s, c, w: traits.Loadout(layers={"difficulty_cut": 1.0})
+                        if s is brute.state else real(s, c, w))
+    assert team.counter_cuts(brute.state, brute.content, brute.world) == {"lead": 0.2}
+    assert Game._spar_power(brute, wall) > plain
+    # 快照（擂台、奪璽）帶在卡上，照卡重算跟活的一樣
+    ca, cb = (team.pvp_card(x.state, x.content, x.world) for x in (brute, wall))
+    assert ca["cuts"] == {"lead": 0.2}
+    # 對手帶化勁回瀾：我的武力少算
+    monkeypatch.setattr(traits, "loadout", lambda s, c, w: traits.Loadout(layers={"toll_cut": 1.0})
+                        if s is wall.state else real(s, c, w))
+    assert Game._spar_power(brute, wall) < plain
+    old = _game(False)
+    assert team.counter_cuts(old.state, old.content, old.world) == {}
+
+
+def test_arena_counts_dodge_and_drops_roles_in_five_attribute_seasons():
+    """企劃者 2026-11-04：擂台以前完全不看身法——補上閃避（身法對他的身法）；玩家對打不給職位加成（職位留在決戰）。"""
+    from tianxia.features.bout import arena_actions
+    quick, plain = _game(), _game()
+    for g, split, bonus in ((quick, {"str": 3, "lead": 1, "int": 1, "spd": 4, "cha": 1}, "spd"), (plain, None, None)):
+        _level(g, 30)
+        if split:
+            g.pick_growth("custom", split)
+            g.state.player.attr_alloc = {bonus: 30}
+    me, foe = arena_actions.arena_side(quick), arena_actions.arena_side(plain)
+    assert me.role  # 開打前還帶著職位（身法最高：斥候）
+    arena_actions.faced(quick.content, me, foe)
+    assert me.dodge > 0 and foe.dodge == 0
+    assert me.role == "" and foe.role == ""
+    old = _game(False)
+    assert arena_actions.arena_side(old).dodge == 0.0
+
+
+def test_charm_helps_gamble_hire_and_favor_only_in_five_attribute_seasons():
+    """魅力的用途（企劃者 2026-11-04）：高於平均人放手一搏多幾個百分點、招募便宜、情誼長得快，都有上限；低於平均反過來、上限小；舊的季是 0。"""
+    from tianxia import renown
+    from tianxia.features.hire import actions as hire
+    g = _game()
+    _level(g, 30)
+    caps = g.content.config.attributes.v2.charm
+    g.pick_growth("custom", {"str": 1, "lead": 1, "int": 3, "spd": 1, "cha": 4})
+    g.state.player.attr_alloc = {"cha": 30}
+    up = {h: attrset.charm(g.state, g.content, h) for h in caps}
+    assert all(0 < up[h] <= caps[h][0] for h in caps) and up["gamble"] > 4
+    assert hire.price(g) < g.content.config.hire.cost
+    assert renown.warmed(g.content, 10, g.state) > renown.warmed(g.content, 10)
+    g.pick_growth("custom", {"str": 4, "lead": 3, "int": 1, "spd": 1, "cha": 1})
+    g.state.player.attr_alloc = {"str": 30}
+    assert all(-caps[h][1] <= attrset.charm(g.state, g.content, h) < 0 for h in caps)
+    old = _game(False)
+    assert all(attrset.charm(old.state, old.content, h) == 0 for h in caps)
+    assert hire.price(old) == old.content.config.hire.cost
+
+
+def test_a_check_can_read_charm_in_five_attribute_seasons():
+    """檢定寫了 v2（例 cha）：五項屬性的季改看那一項、選項上寫「魅力」；舊的季照 stat。"""
+    g = _game()
+    _level(g, 30)
+    g.pick_growth("custom", {"str": 1, "lead": 1, "int": 1, "spd": 3, "cha": 4})
+    plain, charm = Check(stat="wis", difficulty=7), Check(stat="wis", difficulty=7, v2="cha")
+    assert rules.check_chance(charm, g.state, g.content, g.world) > rules.check_chance(plain, g.state, g.content, g.world)
+    assert rules.check_stat_name(charm, g.content, g.state.world) == "魅力"
+    old = _game(False)
+    assert rules.check_chance(charm, old.state, old.content, old.world) == rules.check_chance(plain, old.state, old.content, old.world)
+    assert "v2" not in plain.model_dump()
+
+
+def test_hints_talk_about_the_new_rules_in_five_attribute_seasons():
+    """PM 2026-11-04 查新手教學：五項屬性的季配點提示講每十級送點、找同伴的提示指向酒肆招募；舊的季照舊。"""
+    from tianxia.features.guide import actions as guide_actions, hints as hint_rules
+    g, old = _game(), _game(False)
+    for hid in ("h_points", "h_recruit"):
+        hint = next(h for h in g.content.hints.hints if h.id == hid)
+        assert hint_rules.note_for(g.state, g.content, hid).text.endswith(hint.attrs_v2[-6:])
+        assert hint_rules.note_for(old.state, old.content, hid).text.endswith(hint.text[-6:])
+    town = next(ch.hire_at for ch in g.content.characters.values() if ch.hire_at)
+    g.state.player.location = town
+    assert guide_actions.hire_here(g) and not guide_actions.hire_here(old)

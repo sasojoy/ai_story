@@ -267,6 +267,9 @@ class Check(_Strict):
     # stat 是 BEST_OF 時取這幾項裡最高的（至少兩項；rules.check_stat_value）；別的 stat 不寫。現在只有分岔的後果用得到
     # （固定選項的 stat 要是一項屬性，content.validate 擋）。空的時候不寫進序列化
     stats: list[str] = Field(default_factory=list)
+    # 五項屬性的季改看這一項（新的鍵；企劃者 2026-11-04 魅力的用途：勸說、說情、講價這類從悟性改看魅力）。舊的季照 stat，一個字不變；
+    # 沒寫照 stat 對過去（attrset.key_of）。空的時候不寫進序列化
+    v2: Literal["cha", "int", "lead", "spd", "str"] | None = None
 
     @model_validator(mode="after")
     def _best_of_names_its_stats(self) -> Check:
@@ -286,7 +289,7 @@ class Check(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        data = _drop_unset(handler(self), ("stats", "shift"))
+        data = _drop_unset(handler(self), ("stats", "shift", "v2"))
         if isinstance(data, dict) and data.get("tier") == 1:
             del data["tier"]
         if isinstance(data, dict):  # 照內容寫的那一種寫回去：寫 grade 的不寫換算好的 difficulty，舊寫法不多一個 grade
@@ -1109,6 +1112,10 @@ class CharacterDef(_Strict):
     # 歷史武將同行（Config.companions）：開關開著時招得進名下（kind 照舊 locked：深度對話、走動、贈禮、本命都不變）。十六位大勢人物
     # 不准標（content.validate）；寫了 side 的只有投靠了那個陣營的人招得到，沒寫的誰都招得到
     recruitable: bool = False
+    # 一般 NPC 同伴（features/hire，屬性與跨季架構 v2 第九節；企劃者 2026-11-04 照建議）：content/hirelings.json 生的，
+    # 五型（刀客、槍手、弓手、醫者、謀士）之一、在哪間酒肆招得到；不是對話人物（不寫 kind、recruit_at、talk_at），只在那裡花銀兩招
+    hire_type: str | None = None
+    hire_at: str | None = None
 
 
 class PlanContest(_Strict):
@@ -1451,6 +1458,9 @@ class TutorialStep(_Strict):
     # ── 序章（新手引導計畫一，設計第三、六節）：只寫在前 Tutorial.prologue_steps 步（content.validate）──
     scene: str = ""  # 旁白，對話框裡排在話的前面
     line: str = ""  # 對話框收起後那一行（例：「師父：回『江湖』按『探索』」）；空的＝用 text
+    # 五項屬性的季（attrset.on）改說的話與那一行（空的照 text、line）：配點那一步改成挑成長配比（每 10 級才送點，升一級沒有點可配）
+    text_v2: str = ""
+    line_v2: str = ""
     reveal: list[str] = Field(default_factory=list)  # 這一步起畫面上亮起來的元件（REVEAL_KEYS）；前面幾步亮的照舊亮著
     glow: list[str] = Field(default_factory=list)  # 這一步要發光的鈕（網頁的 data-glow，見計畫 Task 6）
     # 在草廬閒著時選單只留這些（前綴比對，例："act:explore"、"move:"）。初入江湖的步驟（序章之後、不分季的）也可以寫：
@@ -1640,6 +1650,8 @@ class HintDef(_Strict):
     # 減法季探索一顆開著時（rules.jianfa 的 explore_one）師父改說這一句（只有師父的條能寫；空的就照 text；先於 season_one）：
     # 那一季沒有「尋敵」那顆鈕了（h_drill_done，FB-816 同一類）。待 joy 潤
     explore_one: str = ""
+    # 五項屬性的季（attrset.on）師父改說這一句（只有師父的條能寫；空的照下面的順序；最先）：每 10 級送點、同伴改去酒肆招募
+    attrs_v2: str = ""
     # 豪強分屬兩軍的季（allied.on）引薦人改說的那一句：陣營 id → 句子（新寫；只寫要換的，例：豪強不再臨時投效）
     allied: dict[str, str] = Field(default_factory=dict)
 
@@ -3414,6 +3426,43 @@ def _legacy_doors() -> dict[str, str]:
     }
 
 
+class HireType(_Strict):
+    """一般 NPC 同伴的一型（features/hire）：資質照五項屬性的鍵（2～9），起始武學與內功；scripts/make_hirelings.py 照它生人。"""
+
+    key: str
+    name: str
+    aptitude: dict[str, int]
+    wugong: str
+    neigong: str
+    blurbs: list[str] = Field(default_factory=list)  # 一人一句來歷（{place} 換成酒肆所在）
+
+
+class HireRules(_Strict):
+    """一般 NPC 同伴（features/hire；屬性與跨季架構 v2 第九節）：五項屬性的季（attrset.on）才開，在城裡的酒肆花銀兩招。
+    名下最多幾位照歷史武將同行的 max_owned；換季跟其他同伴一樣重獲自由。【草】"""
+
+    enabled: bool = True
+    cost: int = Field(default=100, ge=0)  # 招一位要幾兩銀子
+    per_tavern: int = Field(default=2, ge=1)  # 每一間酒肆每一型生幾位（make_hirelings 讀）
+    types: list[HireType] = Field(default_factory=lambda: [
+        HireType(key="dao", name="刀客", aptitude={"str": 8, "lead": 5, "int": 3, "spd": 5, "cha": 3},
+                 wugong="xingwu_dao", neigong="xingwu_lianqi",
+                 blurbs=["在{place}替商隊押過幾趟貨的刀客。", "{place}一帶的鄉勇出身，一口刀使得紮實。"]),
+        HireType(key="qiang", name="槍手", aptitude={"str": 6, "lead": 8, "int": 3, "spd": 4, "cha": 3},
+                 wugong="xingwu_qiang", neigong="wubao_zhuanggong",
+                 blurbs=["在{place}的塢堡守過幾年門的槍手。", "{place}的部曲散了以後，一桿槍到處找主人。"]),
+        HireType(key="gong", name="弓手", aptitude={"str": 5, "lead": 3, "int": 4, "spd": 8, "cha": 4},
+                 wugong="qiangnu", neigong="xiaolin_gong",
+                 blurbs=["在{place}山裡打獵為生，箭不虛發。", "{place}的獵戶，腳程快、眼力好。"]),
+        HireType(key="yi", name="醫者", aptitude={"str": 2, "lead": 4, "int": 7, "spd": 4, "cha": 7},
+                 wugong="yujia_quan", neigong="chanzuo_tiaoxi",
+                 blurbs=["在{place}走街串巷替人看病的郎中。", "{place}藥鋪的學徒，懂一點接骨止血。"]),
+        HireType(key="mou", name="謀士", aptitude={"str": 2, "lead": 5, "int": 8, "spd": 3, "cha": 6},
+                 wugong="shusheng_jian", neigong="yanghao_jue",
+                 blurbs=["在{place}替人寫狀紙、算帳目的讀書人。", "{place}的落第書生，肚子裡有些兵書。"]),
+    ])
+
+
 class LegacyRules(_Strict):
     """傳承（tianxia/features/legacy；設計 docs/superpowers/specs/2026-11-04-屬性與跨季-架構方向v2.md 第六、七節）：正氣、邪氣、機緣三項
     只在換季那一刻照上一季的傳結算一次（季中不動），識海帶一份神品意境到下一季、解封才用得到。預設關：關著一個位元組都不變。
@@ -3953,8 +4002,24 @@ class AttrV2Rules(_Strict):
         GrowthPreset(key="balanced", name="均衡", split={"str": 2, "lead": 2, "int": 2, "spd": 2, "cha": 2}),
     ])
     custom_min: int = Field(default=1, ge=0)  # 自己配時每一項每級至少長幾點（挑輕的那一項還有基本的成長）
+    custom_max: int = Field(default=4, ge=1)  # ……最多長幾點（跟預設五套最重的那一項一樣；企劃者 2026-11-04「初始成長應該也有上限 不能太誇張」）
     # 舊的鍵（內容的檢定、還沒改寫的讀點）在新的季對到哪一項；博聞拔掉（持有上限只靠等級）
     legacy: dict[str, str] = Field(default_factory=lambda: {"str": "str", "agi": "spd", "con": "lead", "wis": "int"})
+    # 舊公式（氣血、內傷、損耗、修練、悟意境、打造、頓悟、感悟、閉關、戰法比快慢、職位）讀新的五項（attrset.v1_value）：比同等級的
+    # 平均人高幾成 r，效果＝上限 × tanh(r ÷ legacy_scale)，換成舊的「比 5 多幾點 × 每點 stat_bonus_per_point」。屬性沒有上限、效果有上限
+    # （企劃者 2026-11-04「要用新的屬性點的加法，不限於5～15」）【草】
+    legacy_caps: dict[str, float] = Field(default_factory=lambda: {"str": 0.30, "agi": 0.30, "con": 0.35, "wis": 0.40})
+    legacy_scale: float = Field(default=0.5, gt=0)
+    # 剋屬性的功效（企劃者 2026-11-04 點頭）：一般功效的掛點 → (對手的哪一項, 少算幾成)。破甲、沉勁剋統御；料敵剋身法；化勁、回瀾剋武力
+    counter_hooks: dict[str, tuple[str, float]] = Field(default_factory=lambda: {
+        "difficulty_cut": ("lead", 0.2), "fx_heavy": ("lead", 0.2), "fx_foresight": ("spd", 0.2),
+        "toll_cut": ("str", 0.2), "fx_mend": ("str", 0.2)})
+    pvp_dodge_cap: float = Field(default=0.25, ge=0, le=1)  # 擂台挨打那一下閃掉的機會上限（身法對身法，team.pvp_dodge；平衡總表第二輪量的是 0.25，.4/.6 試過差不多）【草】
+    # 魅力的用途（企劃者 2026-11-04「魅力可以略為提高放手一搏的機率」，選「魅力不算打架的屬性」）：鉤子 → (高於平均人的上限, 低於平均人的上限)，
+    # 照比平均人高幾成走 tanh(r ÷ legacy_scale)（attrset.charm）。gamble 是百分點，hire 是招募價便宜幾成，favor 是情誼多長幾成【草】
+    charm: dict[str, tuple[float, float]] = Field(default_factory=lambda: {
+        "gamble": (5.0, 3.0), "hire": (0.30, 0.15), "favor": (0.30, 0.15)})
+    neigong_divisor: float = Field(default=50.0, gt=0)  # 內功份量的除數（舊的 100）：內功加重，悟性才有地方用（企劃者 2026-11-04 點頭）
     # 檢定（第五節 5.1）：成功率＝難度等級的底 ＋ slope ×（值 − 期望值）÷ 期望值 − 微調 × shift_step，夾在 floor～ceil
     grade_rates: dict[str, float] = Field(default_factory=lambda: {
         "easy": 0.9, "normal": 0.7, "hard": 0.55, "harsh": 0.4, "legend": 0.25})  # 企劃者 2026-11-04：草稿每級 +10%
@@ -3968,9 +4033,12 @@ class AttrV2Rules(_Strict):
         AttrEffect(attr="str", hook="outer", curve="contest", cap=0.6, scale=40, origin=50),
         AttrEffect(attr="int", hook="inner", curve="contest", cap=0.6, scale=40, origin=50),
         AttrEffect(attr="spd", hook="dodge", curve="contest", cap=0.25, scale=40, origin=50),
+        AttrEffect(attr="lead", hook="guard", curve="contest", cap=0.3, scale=40, origin=50),  # 統御對他的武力：一場少掉幾成氣血
     ])
+    pvp_scale: float = Field(default=0.5, ge=0)  # 玩家對玩家（兩邊都是配出來的人，只差屬性）時效果表再乘這個（量表 scripts/measure_pvp_attrs.py）【草】
+    contest_relative: bool = False  # 對 NPC 的對抗式也照比例算差距（team._v2_curve；玩家對玩家一律照比例）；False 照絕對差（第 ② 階段量好的）
     # 對抗式的「他」：outer 對上的是對手的哪一項（武力打統御）；沒寫的對上同一項
-    against: dict[str, str] = Field(default_factory=lambda: {"str": "lead"})
+    against: dict[str, str] = Field(default_factory=lambda: {"str": "lead", "lead": "str"})
     # 對手（散兵、野怪、劇情戰、頭目）沒寫等級時照難度換等級（[難度, 等級]，中間照直線；量自整季機器人的威力，2026-11-04）【草】
     foe_levels: list[tuple[float, float]] = Field(default_factory=lambda: [
         (9, 1), (30, 8), (200, 12), (400, 17), (600, 21), (1200, 30), (3000, 45), (6000, 60)])
@@ -4136,6 +4204,7 @@ class Config(_Strict):
     conquest: ConquestRules = Field(default_factory=ConquestRules)  # 領地爭奪（見 ConquestRules）
     jianfa: JianfaRules = Field(default_factory=JianfaRules)  # 減法季（見 JianfaRules；暫名）
     epiphany: EpiphanyRules = Field(default_factory=EpiphanyRules)  # 特殊頓悟（見 EpiphanyRules）
+    hire: HireRules = Field(default_factory=HireRules)  # 一般 NPC 同伴：五項屬性的季在酒肆花銀兩招（見 HireRules；features/hire）
     legacy: LegacyRules = Field(default_factory=LegacyRules)  # 傳承：正氣、邪氣、機緣與識海（見 LegacyRules；features/legacy）
     xingshi: XingshiTuning = Field(default_factory=XingshiTuning)  # 〈天下形勢〉：領地爭奪每天一篇的旁白（見 XingshiTuning）
     ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）

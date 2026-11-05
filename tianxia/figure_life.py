@@ -407,7 +407,7 @@ def spread(state: GameState, content: Content, kind: str, target: str, *, at: st
         notes.append(text)
         del notes[:-tuning.hearsay_keep]
         before = p.affinities.get(cid, 0)
-        p.affinities[cid] = max(0, min(100, before + renown.warmed(content, delta)))  # 加的放慢（Config.affinity_gain_scale）
+        p.affinities[cid] = max(0, min(100, before + renown.warmed(content, delta, state)))  # 加的放慢（Config.affinity_gain_scale）
         moved = p.affinities[cid] - before
         if moved:
             deltas.setdefault(moved, []).append(ch.name)

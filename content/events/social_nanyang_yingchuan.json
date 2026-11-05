@@ -407,7 +407,7 @@
       },
       {
         "text": "勸書佐改由鄉人互保作證",
-        "check": {"stat": "wis", "grade": "easy"},
+        "check": {"stat": "wis", "v2": "cha", "grade": "easy"},
         "effect": {
           "text": "你提議同鄉五家互保、由年長者作證，記下名字再發糧。書佐想了想照辦，隊伍立時順了，流民們紛紛向你道謝。",
           "stats": {"good": 3, "fame": 1},

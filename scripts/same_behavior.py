@@ -3327,6 +3327,7 @@ class BattleScenario(Scenario):
         if not roster.on(self.c):
             return None
         return next((cid for cid in sorted(self.c.characters) if cid not in self.c.figures and self.c.characters[cid].side in (None, side)
+                     and getattr(self.c.characters[cid], "hire_type", None) is None  # 一般 NPC 同伴（features/hire）不算
                      and self.world.get_companion(cid).owner is None), None)
 
     def give_mate(self, who: str, side: str | None) -> None:
