@@ -155,3 +155,7 @@
 .lg-keep div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .lg-keep b { font: 700 20px "Noto Serif TC", serif; letter-spacing: 0.12em; color: #f2f8ff; }
 .lg-keep small { font-size: 12px; color: #8fb2cf; }
+.lg-skip { align-self: center; min-width: 160px; }
+.lg-sea.bare { height: 400px; } /* 沒封著東西（開季挑候選時）：海面收矮，候選在第一屏 */
+.lg-sea.bare .lg-insight.empty { top: 300px; }
+.lg-sea.bare + .lg-sea-body { min-height: 520px; box-sizing: border-box; } /* 蓋過背景圖下半的浪：候選底下不再露出一截浪 */
