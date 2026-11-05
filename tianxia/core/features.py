@@ -49,6 +49,8 @@
 | shops()（Shop） | 店面登記：店裡那一串（_everyday_options）、進店那一顆、哪一間開著（_shop_open）、動身收店（_depart）、此地不開了收店（sync、_drop_stale_references） |
 | verbs()（Verb） | act 子動詞：_act 最前面、_action_title、行動列那一格（_everyday_options）、行動列底下那一行（action_notes）、只打開一張卡的回話（choose）；
   這一下打哪一路（_fight_squad 最前面：大場面判讀問；sortie：全部拆包第 17 批多開的一格 squad） |
+| world()（WorldHook） | 世界層的格（core_world：全部拆包第 25 批）：world.advance_world_state 每一步、season_events 的週初與每天、settle_season_start、
+  end_season、_open_claimed；sqlite_world 的開季與換季。照檔尾那張寫死的順序表 WORLD_ORDER 一格一格叫（包與還沒成包的舊模組穿插），不問 enabled |
 
 ctx 第一階就是 Game；功能包只准叫 services.py 那張清單上的方法。
 """
@@ -156,6 +158,8 @@ class FeatureHooks(Protocol):
     def on_season_close(self, ctx: Game, reread: bool) -> None: ...
     def shops(self) -> tuple[Shop, ...]: ...
     def verbs(self) -> tuple[Verb, ...]: ...
+    # core_world（全部拆包第 25 批：世界層的格，位置與先後在 WORLD_ORDER；不問 enabled）
+    def world(self) -> tuple[WorldHook, ...]: ...
 
 
 class Feature:
@@ -248,6 +252,9 @@ class Feature:
         return ()
 
     def verbs(self) -> tuple[Verb, ...]:
+        return ()
+
+    def world(self) -> tuple[WorldHook, ...]:
         return ()
 
     def __repr__(self) -> str:
@@ -563,3 +570,81 @@ def act_squad(ctx: Game, verb: str) -> Squad | None:
         if got is not None:
             return got
     return None
+
+
+# core_world（全部拆包第 25 批「世界層掛鉤」；計畫 docs/superpowers/plans/2026-11-05-世界層掛鉤-第25批.md 1.4、2.1）
+
+
+@dataclass(frozen=True)
+class WorldHook:
+    """世界層的一格（Feature.world() 回一串）：核心在 at 那個位置照 WORLD_ORDER[at] 一格一格叫，輪到 slot 就叫 run。照 registered() 問、
+    不看 enabled（原位那幾行本來就不看包的開關：宴客關著也照散席、擂台只看 arena_ranks.on，同第 11 批的接縫掛鉤）。run 的簽名照位置
+    （WORLD_ORDER 底下那張）；包的 run 在叫的那一下才照模組屬性找自己的函式（monkeypatch 照樣有效）。"""
+
+    at: str
+    slot: str
+    run: Callable[..., Any]
+
+
+# 世界層的順序表：位置 → 那一個位置的格，照換成掛鉤之前一行一行的呼叫順序。順序就是行為（同一步裡先推誰、後推誰、亂數抽到的順序都算）。
+# 包登記自己那一格（Feature.world()），其餘由核心代叫（world.py、sqlite_world.py 裡的一張 {格: 函式}：還沒成包、不在共用規則層的舊模組，
+# 與核心自己的那幾格）。寫死在這裡、不照 FEATURES 的先後：同一個位置包與舊模組穿插（step 的宴客夾在人物行事與盤算之間、月旦評排最後；
+# muster 的龍頭上陣排在屯糧與玉璽之後），照 FEATURES 只排得出「所有包擠在同一個位置」。之後舊模組成包只是那一格換主人，表不動。
+# 改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。
+#
+# 位置    核心在哪裡問                                                         run 的簽名                                   回傳
+# step    world.advance_world_state 每一步：sim_tick 之後、季還沒收（季曆交界之前）  (vehicle, content, store, step)               bounties、figures.revive、seal_acts 的 list 接進訊息；其餘 None
+# week    world.season_events 季曆跨進新的一週（WEEK_HOOKS，那一刻的大事之前）       (state, content, rng) -> list[str]           接
+# day     world.season_events 21 天季跨進新的一天（DAY_HOOKS，週初那一串之後）       (state, content, rng) -> list[str]           接
+# start   world.settle_season_start 第一季規則關著的季（季沒收）                     (state, content, rng) -> list[str]           接
+# close   world.end_season：分級（_settle_tiers）之後、榜單之前                      (state, content, store) -> None              不接
+# muster  world._open_claimed 開成之後（_open_battle 回了訊息）                       (store, content, definition, start, now)      接
+# open    sqlite_world 開季那一刻（seed_first_season 自動開的、open_season）          (shared, content, now) -> None               不接（自動開的 now 是 None）
+# retire  sqlite_world.next_season 換新季之前（首創之後、清奪璽單挑之前）             (shared, content, now, seen) -> bool         寫了上一季的江湖史就是 True
+# next    sqlite_world.next_season 蓋上新的天機之後、挪開半夜之前                     (shared, content, now, old_season) -> None   不接
+WORLD_ORDER: dict[str, tuple[str, ...]] = {
+    "step": ("bounties", "figures.recover", "figures.revive", "seal_acts", "figure_life", "feast", "plans", "yuedan"),
+    "week": ("seats", "orders", "bounties", "stances"),
+    "day": ("orders", "bounties", "stances"),
+    "start": ("bounties",),
+    "close": ("arena",),
+    "muster": ("front", "works", "seal", "generals"),
+    "open": ("divine", "seal.cache"),
+    "retire": ("seal",),
+    "next": ("inscriptions", "divine", "seal.mandate", "seal.cache"),
+}
+
+
+def world_hooks(at: str) -> dict[str, Callable[..., Any]]:
+    """at 那個位置包登記的格 {slot: run}：照 registered()、不看 enabled。每一次都驗登記的全部格：表上沒有的格、同一格登記兩次（兩包或
+    同一包）都丟 ValueError（tests/core/test_contract_core.py 守）。"""
+    if at not in WORLD_ORDER:
+        raise ValueError(f"世界層沒有 {at} 這個位置")
+    own: dict[str, Callable[..., Any]] = {}
+    for f in registered():
+        for hook in f.world():
+            if hook.slot not in WORLD_ORDER.get(hook.at, ()):
+                raise ValueError(f"{f.name} 登記了世界層表上沒有的格 {hook.at}/{hook.slot}")
+            if hook.at == at:
+                if hook.slot in own:
+                    raise ValueError(f"世界層的 {at}/{hook.slot} 登記了兩次（{f.name}）")
+                own[hook.slot] = hook.run
+    return own
+
+
+def world_run(at: str, core: dict[str, Callable[..., Any]], *args: Any,
+              hooks: dict[str, Callable[..., Any]] | None = None) -> list[Any]:
+    """照 WORLD_ORDER[at] 走每一格：包登記了叫包的，沒有叫 core 那一份（核心代叫的格）；兩邊都沒有（那一格的包沒登記：契約測試換掉
+    FEATURES 時）跳過。回每一格的回傳值（照順序、跳過的不算）：接不接由呼叫端照位置決定，跟換之前一行一行寫的一樣。
+    hooks 是呼叫端先取好的 world_hooks(at)（advance_world_state 一次推進只取一次：FEATURES 在一次推進裡不會變）。
+    core 寫了表上沒有的格丟 ValueError（打錯字的格不會默默不跑）。"""
+    order = WORLD_ORDER[at]
+    if not core.keys() <= set(order):
+        raise ValueError(f"核心代叫了世界層 {at} 表上沒有的格 {sorted(core.keys() - set(order))}")
+    own = world_hooks(at) if hooks is None else hooks
+    out: list[Any] = []
+    for slot in order:
+        run = own.get(slot) or core.get(slot)
+        if run is not None:
+            out.append(run(*args))
+    return out
