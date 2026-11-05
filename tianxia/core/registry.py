@@ -43,6 +43,8 @@ from ..features import outlets  # 銀兩出口與捐軍備：全部拆包第 43 
 from ..features import craft  # 煉製與自創：全部拆包第 44 批（只接 routes、content、on_drop_stale，排在哪裡結果都一樣；on_drop_stale 的 prune 只動 creating）
 # bout
 from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。排最後：擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）
+# peers
+from ..features import peers  # 玩家互動一（此地還有、玩家卡、邀請框、打招呼、贈物、名帖）：全部拆包第 37 批（只接 invite: 的 choose、換季的頭銜簿與路由，排在哪裡結果都一樣）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -83,6 +85,8 @@ FEATURES: list[Feature] = [
     craft.FEATURE,
     # bout（排最後：店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4）
     bout.FEATURE,
+    # peers
+    peers.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 

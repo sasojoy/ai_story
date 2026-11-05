@@ -11,7 +11,8 @@ from unittest import mock
 import pytest
 from jianfa_kit import jianfa_game, ready
 
-from tianxia import explore_one, outing, precise, social, speech, team
+from tianxia import explore_one, outing, precise, speech, team
+from tianxia.core import presence
 from tianxia.encounter import EncounterResult
 from tianxia.state import Inscription
 
@@ -318,7 +319,7 @@ def test_someone_here_waves_once():
     game = _game()
     game.content.config.jianfa.outing_trace_chance = 1.0
     other = SimpleNamespace(player=SimpleNamespace(name="遠方客"))
-    with mock.patch.object(social, "here", return_value=[other]):
+    with mock.patch.object(presence, "here", return_value=[other]):
         trip = _walked(game, 5)
         assert game.outing_view()["trip"]["people"] == ["遠方客"]
     waves = [b for b in trip.beats if b.kind == outing.TRACE]
