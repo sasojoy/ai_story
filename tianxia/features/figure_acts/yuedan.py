@@ -16,7 +16,7 @@ import re
 from pydantic import BaseModel, Field
 
 from tianxia import calendar, zh
-from tianxia import figure_life  # 過渡：待搬（人物活起來 figure_life，總表第 40 批）
+from tianxia import figure_life  # 共用規則層（人物活起來 figure_life，第 40 批收進）
 from tianxia.models import Content
 from tianxia.rules import add_chronicle, add_rumor
 from tianxia.state import GameState, YuedanEntry

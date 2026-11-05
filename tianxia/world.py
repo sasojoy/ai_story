@@ -18,9 +18,10 @@
     tests/seal/test_seal_engine.py（換季把沒收場的奪璽單挑記成未分勝負）、tests/seal/test_seal_acts.py、tests/acts/test_conquest_rules.py、
     tianxia/features/stamina_plays/tests/test_stamina_plays.py、tests/core/test_chapters.py、tests/core/test_marks_wired.py、tianxia/features/looks/tests/test_looks_mvp.py
 - 與 scripts/same_behavior.py 的 world 一軌（compare --tracks world，season21、week7、test 三種）。
-- 反過來：改這裡代叫的舊模組（figure_life、bounties、orders、plans、figures、seal_acts、seal……；works 第 39 批已成包、改由體力玩法包登記 muster 的 works 那一格）時，test_for 往上找走到核心的
+- 反過來：改這裡代叫的舊模組（bounties、seal_acts、seal……；works 第 39 批已成包、改由體力玩法包登記 muster 的 works 那一格）時，test_for 往上找走到核心的
   world 就停，挑不到 tests/core/test_world.py 與上面那一串（第 25 批之前 world 是舊模組、會挑到）。改了它們的簽名或回傳值，另外跑
-  tests/core/test_world.py 與上面那一串；要不要讓 test_for 自己並上交 PM（計畫第六節）。
+  tests/core/test_world.py 與上面那一串；要不要讓 test_for 自己並上交 PM（計畫第六節）。這裡代叫的 figure_life、figures、orders、plans、ranks
+  第 40 批收進共用規則層（照舊核心代叫）：改它們 test_for 只挑自己檔名的測試＋煙霧＋邊界，上面那一串照舊要另外跑（各自的模組說明也寫了）。
 """
 from __future__ import annotations
 
@@ -34,12 +35,12 @@ from typing import Any
 # 龍頭上陣、題壁照帶由各包登記世界層的格（tianxia/core/features.py 的 WORLD_ORDER），還沒成包、不在共用規則層的舊模組由這裡代叫（標批號）
 from . import battle_instance, calendar, flavor, renown, seats, territory, timetable, wins  # 核心本體與共用規則層
 from . import bounties  # 過渡：待搬（第 45 批：懸賞榜成包）
-from . import figure_life  # 過渡：待搬（第 40 批：人物活起來收進共用規則層）
-from . import figures  # 過渡：待搬（第 40 批：大勢人物收進共用規則層）
+from . import figure_life  # 共用規則層（人物活起來，全部拆包第 40 批收進）
+from . import figures  # 共用規則層（大勢人物，全部拆包第 40 批收進）
 from . import leaderboard  # 過渡：待搬（SHARED_LATER：裝備第 42 批成包、skillview 收進共用規則層之後）
-from . import orders  # 過渡：待搬（第 40 批：軍令收進共用規則層）
-from . import plans  # 過渡：待搬（第 40 批：盤算收進共用規則層）
-from . import ranks  # 過渡：待搬（第 40 批：晉升收進共用規則層）
+from . import orders  # 共用規則層（軍令，全部拆包第 40 批收進）
+from . import plans  # 共用規則層（盤算，全部拆包第 40 批收進）
+from . import ranks  # 共用規則層（晉升，全部拆包第 40 批收進）
 from . import seal_acts  # 過渡：待搬（第 51 批：璽效查詢進共用規則層）
 from . import stance_world as stance_rules  # 人物心意（減法季批 6；世界那一半在共用規則層，全部拆包第 19 批）；rules.stances（陣營的態勢）在這個檔裡也叫 stances
 from .core import features as features_core  # 世界層的掛鉤（core_world：全部拆包第 25 批）
@@ -618,7 +619,7 @@ def _claim_showdown(state: GameState, content: Content, event_id: str) -> tuple[
         return None
     w.showdowns_opened[event_id] = definition.id
     w.showdown_opened_at[event_id] = w.time  # 開的那一刻：輿圖歸週、判斷到了沒照它（FB-563）
-    from . import chapters  # noqa: PLC0415  過渡：待搬（第 40 批：章回收進共用規則層）
+    from . import chapters  # noqa: PLC0415  共用規則層（章回，全部拆包第 40 批收進）；延後 import 照舊
 
     # 章回主線：做成那一回的份量挪開打的起點（以官軍為正向，夾在 0～100）；沒人做成是 0，一個字都不變
     start = showdown_start(state, content, definition) + chapters.showdown_edge(w, content, event_id)

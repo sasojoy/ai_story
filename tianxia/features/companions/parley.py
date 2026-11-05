@@ -16,7 +16,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from tianxia import atlas, bounties, figure_life, figures  # 過渡：待搬（輿圖路線 atlas 第 50 批；懸賞 bounties 第 45 批；人物 figure_life、figures 第 40 批）
+from tianxia import atlas, bounties, figure_life, figures  # 過渡：待搬（輿圖路線 atlas 第 50 批；懸賞 bounties 第 45 批）
 from tianxia import calendar, materials
 from tianxia.calendar import DAY
 from tianxia.core.services import BACKED_LINE, PLAN_MISS  # noqa: F401

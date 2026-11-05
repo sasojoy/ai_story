@@ -1,13 +1,13 @@
 """軍令卡與記功（功能包 military；全部拆包第 33 批）：軍令的兩個行動（第 1 階守勢、接糧車）的選單、替自己記一次軍令、江湖頁的「本週軍令」卡、押著的糧車那一行。
 原本 Game 上的 4 個方法（_order_options、_order_credit、convoy_line、orders_view）；名字去掉前導底線。第一個參數是 ctx。orders_view、convoy_line 不改狀態；
-order_credit 會改（記進軍令的進度、推新手引導）。軍令的規則在 tianxia/orders.py（共用規則層，總表第 40 批收）。
+order_credit 會改（記進軍令的進度、推新手引導）。軍令的規則在 tianxia/orders.py（共用規則層，第 40 批收進）。
 「你這一步」的 order 那一格（全部拆包第 36 批；原本 weekcard._steps 的軍令那一段與 step._order_places、_target、_then 的軍令那一支）：
 step_items、step_place，只讀；ORDER_GAIN 從 weekcard 搬來，字一個不改。
 """
 from __future__ import annotations
 
 from tianxia import materials
-from tianxia import atlas, orders  # 過渡：待搬（輿圖 atlas 第 50 批；軍令 orders 總表第 40 批收共用規則層）
+from tianxia import atlas, orders  # 過渡：待搬（輿圖 atlas 第 50 批）
 from tianxia import step as step_rules  # 核心本體（第 36 批收進 MODULES）：「你這一步」的 REF、place
 from tianxia.core.option import Option
 from tianxia.models import Location

@@ -460,6 +460,7 @@ def test_the_world_order_is_the_table_in_the_plan():
         "open": ("divine", "seal.cache"),
         "retire": ("seal",),
         "next": ("inscriptions", "divine", "seal.mandate", "seal.cache"),
+        "life": ("feast",),  # core_world2（全部拆包第 40 批）：figure_life.tick 每一輪每一位對話人物設宴
     }
     assert Feature().world() == ()
 
@@ -1234,3 +1235,64 @@ def test_the_step_slots_look_up_their_functions_when_called(monkeypatch):
                                     {"kind": "foreshadow", "text": "y", step_rules.REF: ("foreshadow",)}])
     assert rows == [{"kind": "errand", "text": "x", "target": None, "id": "沒有這一張"}, {"kind": "foreshadow", "text": "y", "target": None}]
     assert calls == [("bounties.open_commissions", (s, c)), ("bounties.rallies", (s, c)), ("fs_rules.next_trip", (s, c))]
+
+
+# core_world2（全部拆包第 40 批「世界模型二」；計畫 docs/superpowers/plans/2026-11-06-世界模型二-第40批.md 1.6、2.4、Task 4）：世界層多一個位置
+# life（figure_life.tick 每一輪每一位對話人物設宴，宴客包登記；核心不代叫）。figure_life 收進共用規則層之後不 import 宴客包。
+def test_the_life_slot_runs_only_when_a_package_takes_it_and_asks_a_closed_one_too(monkeypatch):
+    """life 那一格核心不代叫（core 傳 {}）：包沒登記（契約測試換掉 FEATURES）時不跑、回空串；登記了照 registered() 問、不看 enabled
+    （原位本來就不看宴客包的開關：maybe_open 自己判 on），收到 (state, content, cid, turn)。真的宴客包登記的那一格就是 rules.maybe_open
+    （叫的那一下才照模組屬性找：換掉 feasts.maybe_open 照樣打得到）。"""
+    from tianxia import feasts
+
+    real = registry.FEATURES
+    monkeypatch.setattr(registry, "FEATURES", [])
+    assert features_core.world_run("life", {}, "state", "content", "cid", 3) == []
+    calls = []
+    monkeypatch.setattr(registry, "FEATURES", [Worldly([WorldHook("life", "feast", lambda *args: calls.append(args))], open_=False)])
+    assert features_core.world_run("life", {}, "state", "content", "cid", 3) == [None]
+    assert calls == [("state", "content", "cid", 3)]
+    monkeypatch.setattr(registry, "FEATURES", real)
+    calls.clear()
+    monkeypatch.setattr(feasts, "maybe_open", lambda *args: calls.append(args))
+    assert sorted(features_core.world_hooks("life")) == ["feast"]
+    features_core.world_run("life", {}, "state", "content", "cid", 3)
+    assert calls == [("state", "content", "cid", 3)]
+
+
+def test_figure_life_opens_feasts_through_the_life_slot_one_figure_at_a_time(monkeypatch):
+    """figure_life.tick 的先後照換之前：每一位對話人物先設宴（life 那一格）、再求援（_maybe_rally），一位一位穿插，照人物表的順序；
+    life 那一格一輪只問一次包（world_hooks）。包沒登記時只剩求援。"""
+    from conftest import real_content
+
+    from tianxia import figure_life
+    from tianxia.state import GameState, PlayerState
+    from tianxia.world_state import fresh_season
+
+    c = real_content()
+    s = GameState(player=PlayerState(name="甲", location=c.scenario.start_location, stats={}, stamina=0), world=fresh_season(c))
+    assert figure_life.on(c)
+    talkers = [cid for cid, ch in c.characters.items() if ch.deep_interaction]
+    assert len(talkers) >= 2
+    calls = []
+    monkeypatch.setattr(figure_life, "_act", lambda *args: None)
+    monkeypatch.setattr(figure_life, "_follow", lambda *args: None)
+    monkeypatch.setattr(figure_life, "_maybe_rally", lambda state, content, cid, turn: calls.append(("rally", cid, turn)))
+    asked = []
+    real_hooks = features_core.world_hooks
+    monkeypatch.setattr(features_core, "world_hooks", lambda at: asked.append(at) or real_hooks(at))
+    monkeypatch.setattr(registry, "FEATURES", [Worldly([WorldHook("life", "feast", lambda st, co, cid, turn: calls.append(("feast", cid, turn)))],
+                                                       open_=False)])
+
+    def tick_at(turn):
+        s.world.time = turn * figure_life.period(c, s.world)
+        s.world.life_turn = turn - 1
+        figure_life.tick(s, c)
+
+    tick_at(5)
+    assert calls == [(kind, cid, 5) for cid in talkers for kind in ("feast", "rally")]
+    assert asked == ["life"]
+    calls.clear()
+    monkeypatch.setattr(registry, "FEATURES", [])
+    tick_at(6)
+    assert calls == [("rally", cid, 6) for cid in talkers]

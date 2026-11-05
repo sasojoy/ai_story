@@ -19,8 +19,15 @@
 - omen_base.py（military：全部拆包第 34 批）：機緣與伏筆「只讀」的那一小半——伏筆需求量的換算（scale、need）、天機表與題目（GUANYIN、
   TIANJI、FIGURE_SLOT、TIANJI_ANSWER、trips、asks_of）、召見與叛投確認畫面讀的機緣（done_for_rank、in_plot）；rules、content、ranks、
   defection 讀它，軍情包的 fs_rules、opp_rules re-export 同一批。同 event_check 不進 MODULES。
+  core_world2（全部拆包第 40 批）再收伏筆與機緣「讀」的那一半：fs_active、event_ids、held_items、heard_texts（與填字的 fill 那一串）、
+  opp_active、heard_clues，與新的 clue_count——events、narration、rumor_view、殼的門下頁、rules.check_condition 讀它。
 - convoy_base.py（faction：全部拆包第 35 批）：押糧「只讀」的那一小半——手上押著糧車沒有（held）；叛投確認畫面（陣營包 defection.prompt）經它問，
   只讀軍情包認領的 PlayerState.convoy，不寫（寫與清照舊是軍情包的 convoy_actions）。同 event_check 不進 MODULES。
+- feast_base.py（core_world2：全部拆包第 40 批）：宴席「讀」的那一半——on、find、is_open、open_feasts、hosting、toasted；人物活起來 figure_life
+  （共用規則層）問誰在擺宴、書信的邀宴問開著的宴，宴客包的 rules re-export 同一批。設宴（寫）是世界層 life 那一格。同 event_check 不進 MODULES。
+- smith_base.py（core_world2：全部拆包第 40 批，第 41 批 PM 認定第 4 條）：打造單子「讀」的那一小半——GO_VERB、is_forge_step、is_step_line、
+  draft_here、draft_stale（與 here、ARMOR_KIND、單子回話的八句常數）；engine 的 choose、_drop_stale_references、sync 讀它，鐵匠鋪包的 smithing
+  re-export 同一批。同 event_check 不進 MODULES。
 
 第一階 ctx 就是 Game 本身，不另包一層（手冊 3.3）。
 """

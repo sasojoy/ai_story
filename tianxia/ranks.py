@@ -1,6 +1,11 @@
 """陣營裡的階級（計畫 T5、第一季設計 5.2、5.3）：頭銜、召見、晉升、部下、每日彙整。
 
-只有第一季的規則開著（rules.season_one）才有這些；開關關著時狀態列照舊寫「門派・陣營」。"""
+只有第一季的規則開著（rules.season_one）才有這些；開關關著時狀態列照舊寫「門派・陣營」。
+
+共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包與舊名的別名。改這一份 scripts/test_for.py 只挑自己檔名的
+tests/battle/test_ranks.py＋煙霧＋邊界；收進來之前挑到的另外跑（-n 4）：tests/acts/test_conquest_siege、tests/arts/test_explain2、
+tests/core/test_precise_actions、tests/figures/ 的 test_admin_triggers、test_gentry_allied、test_promotions_high、test_promotions_huang、
+test_rumor_layers、test_season21_caps、test_seats、test_week7_season。"""
 from __future__ import annotations
 
 from . import allied, calendar, figures, seats
@@ -369,7 +374,7 @@ def flush_news(state: GameState, content: Content, before_day: int | None) -> No
 
 
 # core_effects（全部拆包第 32 批「效果與叛投掛鉤」）：rules.apply_effect 的三格（靠山、召見往下一段、晉升與部下），原本那幾段逐字搬；
-# 核心（rules._EFFECT_CORE）延後 import 代叫，過渡：待搬（第 40 批：ranks 收進共用規則層，照舊核心代叫）。先後在 core/features.py 的 EFFECT_ORDER
+# 核心（rules._EFFECT_CORE）延後 import 代叫（共用規則層 ranks，全部拆包第 40 批收進，照舊核心代叫）。先後在 core/features.py 的 EFFECT_ORDER
 
 
 def effect_patron(r: EffectRun) -> list[str]:

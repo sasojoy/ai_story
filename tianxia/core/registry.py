@@ -167,14 +167,14 @@ SHARED: dict[str, str] = {
     # 季的世界模型第一批（11 個；第 40 批再收 figures、figure_life、plans、orders、ranks、chapters）：核心的 rules、content、sqlite_world 讀，
     # 決戰、出陣、酒肆與之後的軍情、陣營、大勢人物都靠它們知道這一季的局面
     "timetable": "時刻表（季曆上的大事什麼時候發生、怎麼結算）：核心的 content、rules、sqlite_world、world_state 讀；決戰包的管理者工具、"
-                 "軍情、地盤都叫（讀大勢人物 figures、chapters 記在邊界測試的 SHARED_PENDING：第 40 批收進這一層）",
+                 "軍情、地盤都叫（讀的大勢人物 figures、章回 chapters 第 40 批收進這一層）",
     "front_lines": "戰況變化的說法（大勢@<線> 換成一句話）：核心的 content、journal、rules 讀；決戰包的戰況也用",
     "push": "推力的算式（陣營人數緩衝、每人每日上限、貢獻）：出陣包的約戰與大勢人物、軍令、四勝利都讀",
     "allied": "豪強分屬兩軍（依附哪一軍）：核心的 rules、sqlite_world 讀；決戰、出陣、酒肆三包與懸賞、叛投都叫",
     "wins": "三陣營四勝利（豪強兩本帳、季末四階）：核心的 content、rules 讀；決戰、出陣兩包與列傳、軍情都叫",
     "relations": "人物之間的關係：大勢人物、人物活起來、懸賞、人物對話讀",
     "deeds": "世界記事（你做的事被世界記住）：探索包的走一趟、人物活起來、章回都讀",
-    "seats": "第四階席次與每週輪替：叛投、晉升、世界一步讀（讀 ranks 的稱號記在 SHARED_PENDING：第 40 批收進這一層）",
+    "seats": "第四階席次與每週輪替：叛投、晉升、世界一步讀（讀的 ranks 稱號第 40 批收進這一層）",
     "factions": "陣營規模的換算：席次 seats 讀；陣營包（features/faction，第 35 批）也讀",
     "week_unlock": "功能照週解鎖與三週主題：擂台、懸賞、輿圖、本週卡讀",
     "roster": "同伴的名下與全服唯一：核心的 rules 讀；決戰、出陣、酒肆三包與人物情誼、懸賞、叛投都叫",
@@ -208,7 +208,21 @@ SHARED: dict[str, str] = {
     "stance_world": "人物心意的世界那一半（這一週的計數、誰照哪一個做事、門檻、換手、每週歸零）：核心的 rules、事件檢定與舊模組 world、figures、events 都讀",
     # story（全部拆包第 30 批：storyline 拆兩半，換字那一小段與別包也要讀的底座在這一層，一條線自己的走法在一條線包）
     "story_base": "一條線的底座與換字：核心的 rules〔fill_marks 換字〕、事件檢定〔記自己寫的那一句〕讀；探索包的擲開頭、有所感包登記頓悟那一條線的鉤子也讀"
-                  "（讀輿圖的大區 atlas、章回的大事結果 chapters 記在邊界測試的 SHARED_PENDING）",
+                  "（讀輿圖的大區 atlas 記在邊界測試的 SHARED_PENDING；章回的大事結果 chapters 第 40 批收進這一層）",
     # craft（全部拆包第 44 批「煉製與自創」：create 進煉製包，認勢要用的擺式幾何抽出來留在這一層）
     "pose": "擺式的幾何（火柴人九個角度 → 勢與偏向，原本在 create.py）：以意成招 moves 認勢讀；煉製包的 create 照名字 re-export，門下頁的說明也讀",
+    # core_world2（全部拆包第 40 批「世界模型二」：季的世界模型第一批之後收的六個，與量出來的 rumor_view；這幾個不 import 包，
+    # 讀包認領的欄位改問核心的查詢服務 omen_base、feast_base 與底座 story_base，設宴是世界層 life 那一格）
+    "figures": "大勢人物（聲威、在場、退場與回來、自然回復與犒軍共用一天的上限 aid_*）：核心的 world〔世界一步〕、rules、timetable 讀；"
+               "決戰、人物情誼、大勢人物、軍情、銀兩出口、酒肆、引導、輿圖八包都叫（讀璽效 seal_acts 記在邊界測試的 SHARED_PENDING：第 51 批）",
+    "figure_life": "人物活起來（人物此刻在哪、心事、募兵、走動、求援；每一位對話人物設宴是世界層 life 那一格）：核心的 world 每一步叫；"
+                   "宴客、大勢人物、酒肆、決戰、人物情誼五包都讀（讀璽效 seal_acts、輿圖的大區 atlas、懸賞 bounties 記在 SHARED_PENDING）",
+    "plans": "人物的盤算（每一步推、送到的那一下）：核心的 world 每一步叫、engine.sync 送；人物活起來、大勢人物包的盤算行動讀"
+             "（讀璽效 seal_acts 記在 SHARED_PENDING：第 51 批）",
+    "orders": "軍令（每週與每天發令、截糧的站、目標）：核心的 world 週初與每天叫；決戰、軍情、出陣、引導、輿圖五包與假人、見聞的分層讀",
+    "ranks": "階級與晉升（稱號、召見、提拔）：核心的 world、rules〔效果 patron、summons_next、promote〕與共用層的 seats 讀；"
+             "人物情誼、陣營、引導、軍情、玩家互動、交友、出陣、地盤行動、行路九包都讀（讀輿圖的大區 atlas 記在 SHARED_PENDING：第 50 批）",
+    "chapters": "章回（主線一回一回的規則、份量、做成、卡；開回與收回在一條線包）：核心的 weekcard〔本週卡的章回那一件〕、world、content、"
+                "timetable 與底座 story_base 讀；一條線包叫",
+    "rumor_view": "見聞的分層（天下、地方、個人線索）：核心的 engine〔見聞頁〕讀；個人線索讀伏筆、機緣（核心的查詢服務 omen_base）與軍令 orders",
 }

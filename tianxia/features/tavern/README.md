@@ -31,7 +31,7 @@
 
 ## 過渡（手冊 3.11）
 
-- 包 → 還沒搬的舊模組 12 處：`actions.py` 4（`annals`、`bounties`、`shopview`、`social`）、`rules.py` 7（`annals`、`atlas`、`figures`，函式裡的 `arena`、`figure_life` 三處）、`ask.py` 1（`figures`）。原本 24 處；`battlelog`、`encounter`、`equipment`、`renown`、`roster`、`territory`、`treasures`、`prologue`、`allied`、`zh` 全部拆包第 15 批登記進共用規則層（`tianxia/core/registry.py` 的 `SHARED`），那幾行行尾改註「共用規則層」，不算過渡。
+- 包 → 還沒搬的舊模組（全部拆包第 40 批合完重印 **3 處**：`actions.py` → `bounties`、`shopview`，`rules.py` → `atlas`；`figures`〔`rules.py`、`ask.py` 函式裡〕、`figure_life`〔`rules.py` 函式裡三處〕第 40 批收進共用規則層，不算過渡，原本 8 處；`annals` 第 29 批之二改 import 核心；以下是更早的寫法）12 處：`actions.py` 4（`annals`、`bounties`、`shopview`、`social`）、`rules.py` 7（`annals`、`atlas`、`figures`，函式裡的 `arena`、`figure_life` 三處）、`ask.py` 1（`figures`）。原本 24 處；`battlelog`、`encounter`、`equipment`、`renown`、`roster`、`territory`、`treasures`、`prologue`、`allied`、`zh` 全部拆包第 15 批登記進共用規則層（`tianxia/core/registry.py` 的 `SHARED`），那幾行行尾改註「共用規則層」，不算過渡。
 - 服務清單（`tianxia/core/services.py`）這一包加的：`_shop_say`、`_shop_after`、`_idle`、`_last_wear`（共用）、`_battle_now`（過渡，決戰）、`_tavern_seek_exact`、`_tavern_reply`（寄放）。
 
 ## 測試

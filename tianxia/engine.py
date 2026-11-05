@@ -20,7 +20,7 @@ from . import (
     allied, armor, atlas, battle_instance, battlelog, bounties, calendar, clinic, conquest, create, divine, economy, encounter, equipment,
     fight_llm, figure_life, figures, forge_secrets, fusion, gender, howto, insight_fx, insights, journal, library, martial_arts, plans,
     materials, mounts, naming, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
-    shopview, signature, signature_arms, silver, skillview, smithing,
+    shopview, signature, signature_arms, silver, skillview,
     sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, zh,
 )
 from . import flavor
@@ -196,6 +196,7 @@ from .world_state import SealDuel, SealSide, WorldStateStore, season_length_days
 # 載入，載入的先後一個都不變；模組層的四個名字照名字拿回來（server、假人、測試 `from tianxia.engine import FREE_TEXT_OPTION` 照舊）
 from .core import event_check  # 事件檢定的本體（Game 上留一行委派）
 from .core import presence  # 「此地還有」的判斷與身分字（全部拆包第 37 批：從 social 拆進核心）
+from .core import smith_base  # 打造單子讀的那一小半（全部拆包第 40 批，第 41 批 PM 認定第 4 條：choose 併成一則、讀檔與 sync 清單子，不經舊名 smithing）
 # peers（全部拆包第 37 批）：玩家卡、邀請框、打招呼、贈物、名帖的 31 個方法搬進玩家互動包，Game 留 21 個一行委派（另加月旦評那一句）；
 # 名帖遞帖的登記（mingtie_card）改在包載入時做；invites、social 是切磋、論武、結伴同行（第 38 批與移動包）還在原位用的
 from .features.peers import actions as peers_actions  # 過渡：Game 上玩家卡與此地還有的一行委派
@@ -704,7 +705,7 @@ class Game:
         if p.picking_smith and not equipment.smith_open(s, c):
             equipment.close_smith(p)  # 武器、防具都關了、人不在城鎮了：收起鐵匠鋪，打造的單子與停在哪一頁一起清
         if p.smith_draft is not None and (
-            not p.picking_smith or not smithing.draft_here(s, c, p.smith_draft) or smithing.draft_stale(c, p.smith_draft)
+            not p.picking_smith or not smith_base.draft_here(s, c, p.smith_draft) or smith_base.draft_stale(c, p.smith_draft)
         ):
             p.smith_draft = None  # 單子只在鐵匠鋪開著、那一欄也開著時有意義（兵器的單子看武器、防具的單子看防具：一欄關了另一欄還開著，鐵匠鋪照開，那一欄的單子要清）；內容改版拿掉了單子上的種類或素材：選單畫不出來，從頭來
         if p.picking_market and not mounts.market_here(s, c):
@@ -865,7 +866,7 @@ class Game:
             features_core.on_away(self, away_from)
         if self.state.player.picking_smith and not equipment.smith_open(self.state, self.content):
             equipment.close_smith(self.state.player)  # 開關關了、人不在城鎮了（內容改版、管理者挪人）：收起鐵匠鋪，單子與頁一起清
-        if self.state.player.smith_draft is not None and not smithing.draft_here(self.state, self.content, self.state.player.smith_draft):
+        if self.state.player.smith_draft is not None and not smith_base.draft_here(self.state, self.content, self.state.player.smith_draft):
             self.state.player.smith_draft = None  # 單子那一欄關了、另一欄還開著：鐵匠鋪照開（另一頁），這張單子清掉
         if self.state.player.picking_market and not mounts.market_here(self.state, self.content):
             mounts.close_market(self.state.player)  # 開關關了、人不在馬市了（內容改版、管理者挪人）：收起馬市
@@ -1848,11 +1849,11 @@ class Game:
             if not quiet:
                 # FB-141：開爐成了（_smith_act 打完把單子收起來了）那一下併進「打造」那一則時只留結果——結果句排第一，375 寬「剛剛」
                 # 收著時看得到；挑種類、主料、輔料的回報收掉（放了哪兩樣、哪一種，結果句「打出一把【…】（種類・屬…）」
-                # 本身寫了）。開爐沒成（單子還在）、上一步、不打了照舊接在後面。收掉的只有單子自己的回話（smithing.is_step_line）：
+                # 本身寫了）。開爐沒成（單子還在）、上一步、不打了照舊接在後面。收掉的只有單子自己的回話（smith_base.is_step_line）：
                 # 前幾步順便帶來的別的話（大勢門檻的消息、召見之類）接在結果句後面留著（終審 M3）
-                forged = kind == "smith" and arg.partition(":")[0] == smithing.GO_VERB and self.state.player.smith_draft is None
-                journal.add_entry(self.state, entry, merge=kind == "smith" and smithing.is_forge_step(arg) and arg != "forge",
-                                  fold=smithing.is_step_line if forged else False)
+                forged = kind == "smith" and arg.partition(":")[0] == smith_base.GO_VERB and self.state.player.smith_draft is None
+                journal.add_entry(self.state, entry, merge=kind == "smith" and smith_base.is_forge_step(arg) and arg != "forge",
+                                  fold=smith_base.is_step_line if forged else False)
             self._gift_entry(gifts)
             msgs += gifts
         finally:

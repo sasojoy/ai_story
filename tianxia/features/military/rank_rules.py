@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from tianxia import calendar
-from tianxia import ranks  # 過渡：待搬（階級 ranks，總表第 40 批收共用規則層）
+from tianxia import ranks  # 共用規則層（階級 ranks，第 40 批收進）
 from tianxia.models import Content, RankAction
 from tianxia.rules import front_of, in_chaos, season_one
 from tianxia.state import GameState

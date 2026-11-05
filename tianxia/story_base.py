@@ -5,7 +5,8 @@
 - 探索包：探索那一下擲內容寫的線（roll_start）；
 - 有所感包：頓悟那一條線的鉤子登記（TASKS、TASK_LEFT、REFRESH_HOOKS、FIGHT_HOOKS、END_HOOKS）與開線、開第一題（start、open_quiz、definition、active、on）。
 一條線自己的走法（選單、答題、打一場、結算、收尾、餘波）在 tianxia/features/story/storyline.py，那一份 re-export 這裡的每一個名字
-（tianxia.storyline 是指到那一份的舊名別名）。這一層只 import 核心與兩個還沒搬的舊模組：atlas（here 的大區）、chapters（vary 的大事結果，函式裡）。
+（tianxia.storyline 是指到那一份的舊名別名）。這一層只 import 核心、共用規則層的 chapters（vary 的大事結果，函式裡；全部拆包第 40 批收進）與一個還沒搬的舊模組 atlas（here 的大區）。
+第 40 批另收 waiting、doable（章回卡讀）與 mark_of（條件 story_marks 讀），在檔尾 core_world2 那一段。
 """
 
 from __future__ import annotations
@@ -240,3 +241,29 @@ def heard(state: GameState, content: Content, event_id: str, text: str) -> None:
         if pair is not None and progress.opened and pair[1].kind == "event":  # 段落事件或它串接下去的（next_event）都算
             progress.said.append(text)
             return
+
+
+# ── core_world2：章回卡（chapters.card）與條件（rules.check_condition）也讀的（全部拆包第 40 批；waiting、doable 從一條線包 storyline.py 原樣搬來，那一份 re-export）──
+
+
+def waiting(state: GameState, content: Content, progress: StoryProgress, stage: StoryStage) -> bool:
+    """多日段還沒到時候（StoryStage.wait_days）。"""
+    if not stage.wait_days or progress.entered is None:
+        return False
+    return state.world.time < progress.entered + stage.wait_days * day_seconds(content, state.world)
+
+
+def doable(state: GameState, content: Content, progress: StoryProgress) -> bool:
+    """這一段此刻在這裡按得下去：event、quiz、fight 才有鈕（task 是去做別的事），還沒端出來、等完了、站在對的地方。"""
+    pair = current(content, progress)
+    if pair is None or progress.opened:
+        return False
+    _, stage = pair
+    return stage.kind != "task" and not waiting(state, content, progress, stage) and here(state, content, stage.where)
+
+
+def mark_of(state: GameState, line: str, mark: str) -> int:
+    """一條線的記號（StoryProgress.marks）：那條線沒開過算 0。條件 story_marks、story_marks_max（rules.check_condition）照它讀——
+    一條線包認領的 storylines 由這一層回答（全部拆包第 40 批：核心不直接讀包的欄位）。"""
+    progress = state.player.storylines.get(line)
+    return progress.marks.get(mark, 0) if progress is not None else 0

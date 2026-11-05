@@ -7,14 +7,25 @@
 
 原本寫在 tianxia/foreshadow.py（GUANYIN、TIANJI、FIGURE_SLOT、TIANJI_ANSWER、scale、need、trips、_asks、asks_of）與
 tianxia/opportunities.py（done_for_rank、_live、in_plot），一個字沒改。與 event_check 同樣不進 MODULES（tianxia/core/ 底下的檔本來就是核心）。
+
+# core_world2：伏筆與機緣「讀」的那一半第 40 批再收（檔尾那一段）：fs_active（原 fs_rules.active）、event_ids、held_items、
+heard_texts（與填字的 fill、_fragment_text、_version、_front、chain、_event、_figure_name、tianji_answer、_tianji、TIANJI_SLOTS）、
+opp_active（原 opp_rules.active）、heard_clues，加上新的 clue_count（條件 clue_items 讀的）。events、narration、rumor_view、
+server、rules.check_condition 讀它；軍情包的 fs_rules、opp_rules re-export 同一批（active 照原名）。要的共用依賴（calendar、
+timetable、figures、rules.season_one）都在函式裡 import：這一份被 content、rules 早早載入。
 """
 from __future__ import annotations
 
+import hashlib
 import math
 from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
-from ..models import Content, FsAsk, FsChain, FsFinal, FsStep
+from ..models import Content, FsAsk, FsChain, FsFinal, FsFragment, FsItem, FsStep
 from ..state import GameState, Plot
+
+if TYPE_CHECKING:
+    from ..world_state import WorldStateStore
 
 GUANYIN = "guanyin"  # 官銀的計數鍵（PlayerState.fs_counters）
 # 天機（伏筆文件 2.9）：同一個天機、同一個 key 永遠同一個答案。廣宗的內鬼（mole）是黃巾第 4 階機緣「營中的內鬼」
@@ -87,3 +98,138 @@ def in_plot(state: GameState) -> bool:
         p.name in x.members and x.id not in p.opp_settled and x.faction == p.faction and (_live(state, x) or x.status == "done")
         for x in state.world.plots
     )
+
+
+# ── core_world2：伏筆與機緣「讀」的那一半（全部拆包第 40 批；軍情包 fs_rules、opp_rules 搬來、re-export 同一批）──
+# 事件出不出現（events）、旁白挑事件（narration）、見聞的個人線索（rumor_view）、門下頁的伏筆物品（server）、
+# 條件 clue_items（rules.check_condition）都讀這裡，不 import 軍情包。函式本體一個字沒改，只改名兩個：fs_rules.active → fs_active、opp_rules.active → opp_active。
+
+
+TIANJI_SLOTS = {"{風向}": "wind", "{偽裝}": "disguise"}  # 文字裡的插槽
+
+
+def tianji_answer(world_tianji: int, key: str) -> str:
+    """本季的天機答案（伏筆文件 2.9）：天機與 key 的 sha256 決定候選裡的哪一個。用 hashlib，不用 Python 內建的 hash
+    （那個每次執行都不同）。不認得的 key 丟 KeyError。"""
+    candidates = TIANJI[key]
+    digest = hashlib.sha256(f"{world_tianji}|tianji|{key}".encode()).digest()
+    return candidates[int.from_bytes(digest[:8], "big") % len(candidates)]
+
+
+def _tianji(world: WorldStateStore | None) -> int:
+    return world.tianji() if world is not None else 0
+
+
+def fs_active(state: GameState, content: Content) -> bool:
+    """伏筆有沒有在跑：第一季開關開著、這一季開季時也是開的（蓋了章），而且 foreshadows.json 至少有一條鏈。
+    所有入口都只看這一個判斷（審查 M4）。"""
+    from .. import calendar  # noqa: PLC0415  omen_base 被 content、rules 早早載入：共用的依賴一律函式裡 import
+    return bool(content.foreshadows.chains) and calendar.season_one_on(state.world, content)
+
+
+def chain(content: Content, chain_id: str) -> FsChain | None:
+    return next((c for c in content.foreshadows.chains if c.id == chain_id), None)
+
+
+def _event(content: Content, event_id: str):
+    return next((e for e in content.timetable if e.id == event_id), None)
+
+
+def held_items(state: GameState, content: Content) -> list[tuple[FsItem, int]]:
+    """手上的伏筆物品（煉製頁素材旁的「伏筆物品」畫面用，T7b）：照 foreshadows.json 的順序、不列數量 0 的。
+    伏筆沒在跑（active 不成立：開關關著、這一季沒蓋章、沒有鏈）時是空的，就算背包裡有東西。"""
+    if not fs_active(state, content):
+        return []
+    bag = state.player.clue_items
+    return [(item, bag[item.id]) for item in content.foreshadows.items if bag.get(item.id, 0) > 0]
+
+
+def event_ids(content: Content) -> set[str]:
+    """伏筆的事件：片段的來源事件，以及任何選項會給伏筆物品或伏筆計數的事件（準備事件、豪強的起點）。
+    開關關著時這些事件不出現（events.event_candidates），beta 那一季一個字都不變。"""
+    found = {f.event for c in content.foreshadows.chains for f in c.fragments if f.event}
+    for event in content.events.values():
+        effects = [eff for ch in event.choices for eff in (ch.effect, ch.fail_effect)]
+        if event.free_text is not None:
+            effects += [event.free_text.effect, event.free_text.fail_effect]
+        if any(eff.clue_items or eff.fs_counters for eff in effects):
+            found.add(event.id)
+    return found
+
+
+def _version(state: GameState, content: Content, c: FsChain) -> str | None:
+    from .. import timetable  # noqa: PLC0415  同上
+    event = _event(content, c.event)
+    return timetable._version(state, event) if event is not None else None  # noqa: SLF001  同一個套件
+
+
+def _figure_name(content: Content, fid: str | None) -> str:
+    character = content.characters.get(fid) if fid else None
+    return character.name if character is not None else ""
+
+
+def _front(content: Content, c: FsChain) -> str | None:
+    if c.front is not None:
+        return c.front
+    event = _event(content, c.event)
+    return event.front if event is not None else None
+
+
+def fill(state: GameState, content: Content, c: FsChain, text: str, world: WorldStateStore | None) -> str:
+    """填文字裡的插槽：{風向}、{偽裝} 是本季的天機；{人物} 是最後一步出面的那位（figure 在那條戰線上就是他，否則是 stand_in）。"""
+    from .. import figures  # noqa: PLC0415  同上（共用規則層）
+    for slot, key in TIANJI_SLOTS.items():
+        if slot in text:
+            text = text.replace(slot, tianji_answer(_tianji(world), key))
+    if FIGURE_SLOT in text:
+        final = c.final
+        front = _front(content, c)
+        present = final.figure is not None and (front is None or figures.on_front(state, final.figure, front))
+        fid = final.figure if present or final.stand_in is None else final.stand_in
+        text = text.replace(FIGURE_SLOT, _figure_name(content, fid))
+    return text
+
+
+def _fragment_text(state: GameState, content: Content, c: FsChain, fragment: FsFragment, world) -> str:
+    text = fragment.versions.get(_version(state, content, c) or "", fragment.text)
+    return fill(state, content, c, text, world)
+
+
+def heard_texts(state: GameState, content: Content, world: WorldStateStore | None = None) -> list[str]:
+    """聽過的線索片段（見聞頁的「個人線索」，傳聞分層設計第六節）：照鏈與片段的順序，文字照片段的寫法填好天機與出面的人
+    （偷聽到的不再加「聽說誰說過」）。只有自己看得到；伏筆沒在跑（開關關著、沒有鏈）時是空的。"""
+    if not fs_active(state, content):
+        return []
+    heard = state.player.fragments
+    return [
+        _fragment_text(state, content, c, c.fragments[i], world)
+        for c in content.foreshadows.chains for i in sorted(heard.get(c.id, [])) if 0 <= i < len(c.fragments)
+    ]
+
+
+def opp_active(state: GameState, content: Content) -> bool:
+    from ..rules import season_one  # noqa: PLC0415  rules 最外層不 import 這裡，反過來延後
+    return season_one(content, state.world) and bool(content.opportunities)
+
+
+def heard_clues(state: GameState, content: Content) -> list[str]:
+    """聽過的機緣線索（見聞頁的「個人線索」，FB-086）：天時地利型的線索加上推理型內鬼的特徵片段，照聽到的先後（opp_clues 的順序），
+    字跟當時寫進江湖紀錄的那一句一樣（hear_clues 的 text，只是不帶「你聽到一件事：」，跟伏筆片段 foreshadow.heard_texts 的寫法一致）。
+    只有這個人自己聽過的（opp_clues 是他的存檔）；機緣完成了、時段過了照舊留著（跟伏筆完成之後片段還在一樣，不標記）；
+    叛投之後舊陣營的線索也留著（clear 不清 opp_clues，企劃者裁決 E5.2），只是那些機緣做不了了。內容裡已經沒有的機緣或特徵（改版拿掉）略過。
+    機緣沒在跑（開關關著、沒有機緣）時是空的。"""
+    if not opp_active(state, content):
+        return []
+    texts: dict[str, str] = {}
+    for o in content.opportunities:
+        if o.kind == "timing":
+            texts[o.id] = o.timing.clue
+        elif o.kind == "deduce":
+            texts.update({f"{o.id}:{t.key}": t.text for t in o.deduce.traits})
+    return [texts[key] for key in state.player.opp_clues if key in texts]
+
+
+def clue_count(state: GameState, item_id: str) -> int:
+    """手上某一種伏筆物品的數量（PlayerState.clue_items，軍情包認領）：條件 clue_items（rules.check_condition）照它讀——
+    核心不直接讀包的欄位（全部拆包第 40 批）。"""
+    return state.player.clue_items.get(item_id, 0)

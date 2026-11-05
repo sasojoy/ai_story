@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from tianxia import calendar
-from tianxia import orders  # 過渡：待搬
+from tianxia import orders  # 共用規則層（軍令，第 40 批收進）
 from tianxia.models import Content, Recruiter
 from tianxia.rules import front_of, haoqiang_allied, season_one, side_of
 from tianxia.state import GameState

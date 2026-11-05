@@ -65,7 +65,7 @@ import console
 import server_push
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, ascend, battle_instance, flavor, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, fight_llm, foreshadow, gender, insight_llm, leaderboard, letters, might,
+    arena_crowd, ascend, battle_instance, flavor, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, fight_llm, gender, insight_llm, leaderboard, letters, might,
     naming, narration, outing,
     ollama_client, power_save, rules,
     precise, seal, seal_duel, server_bots, social, sortie, speech, tale, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
@@ -78,6 +78,7 @@ from tianxia.database import default_path, open_database
 from tianxia.flavor import FlavorJob
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, TEXT_TALKS, Game, Refused
 from tianxia.core import features as features_core  # 功能包：殼照 FEATURES 掛管理者工具與路由（開發規範手冊 3.1）
+from tianxia.core import omen_base  # 門下頁的伏筆物品：核心的查詢服務（全部拆包第 40 批，原本經舊名 foreshadow 讀軍情包）
 from tianxia.features.map import views as map_views  # 輿圖的 /api/map 資料與底圖快取：全部拆包第 49 批搬進輿圖包（殼留同一個物件的別名）  # 殼留薄包裝：`map_view` 要 `md`（第 49 批 PM 認定第 10 條）
 from tianxia.features.feast import rules as feasts  # 宴客自己寫的敬酒詞：鎖外評分（三段式還在殼裡，過渡）
 from tianxia.models import FREE_TEXT_MAX
@@ -2187,7 +2188,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         "heal": game.heal_button(),  # 修練頁的療傷鈕：按不按得下去、不能按的原因（FB-082）；鈕上的字寫內傷與下面的 heal_cost
         # 背包旁的「伏筆物品」：開關開著、這一季蓋了章、手上有才有東西，沒有就是空的（畫面整塊不出現）。只有名字與數量
         "clue_items": [
-            {"id": item.id, "name": item.name, "count": n} for item, n in foreshadow.held_items(game.state, game.content)
+            {"id": item.id, "name": item.name, "count": n} for item, n in omen_base.held_items(game.state, game.content)
         ],
         # 功法卡（FB-006）：身上兩門各一張，還沒學的那一門是一句「你還沒有內功。」；
         # 功法庫通常只有幾門，卡一起送，點開不必再打一次 API（QA L4：先看卡再改練）

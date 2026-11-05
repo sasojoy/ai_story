@@ -59,7 +59,7 @@
 
 ## 過渡（手冊 3.11）
 
-過渡 import 3 處：`mingtie.py` 到 `ranks`（階級的稱號，總表第 40 批收進共用規則層）、`mingtie.py` 函式裡到 `leaderboard`（賽季榜單）；`bots.py` 到 `leaderboard`（名帖頭銜的榜單名次）。
+過渡 import 2 處（全部拆包第 40 批合完重印）：`mingtie.py` 函式裡到 `leaderboard`（賽季榜單）；`bots.py` 到 `leaderboard`（名帖頭銜的榜單名次）。`mingtie.py` 到 `ranks`（階級的稱號）第 40 批收進共用規則層，不算過渡（原本 3 處）。
 
 ## 量到的（第 37 批 Task 5）
 

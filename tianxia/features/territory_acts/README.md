@@ -35,7 +35,7 @@
 
 ## 過渡（手冊 3.11）
 
-過渡 import 共 4 處（包到舊模組，都標了「# 過渡：待搬」）：`day_actions`→`annals`；`letter_actions`→`ranks`；`view`→`atlas`、`ranks`。舊模組到包有 `engine.py` 的 GAME_IMPORTS 五行與 `conquest_day`、`xingshi` 兩個別名（理由在邊界測試的 `# territory_acts` 段）。
+過渡 import 共 1 處（包到舊模組，標了「# 過渡：待搬」；全部拆包第 40 批合完重印）：`view`→`atlas`。原本還有 `day_actions`→`annals`（第 29 批之二改 import 核心）、`letter_actions`→`ranks`、`view`→`ranks`（第 40 批 `ranks` 收進共用規則層，行尾註改寫成「共用規則層」），不算過渡。舊模組到包有 `engine.py` 的 GAME_IMPORTS 五行與 `conquest_day`、`xingshi` 兩個別名（理由在邊界測試的 `# territory_acts` 段）。
 
 ## 測試
 
