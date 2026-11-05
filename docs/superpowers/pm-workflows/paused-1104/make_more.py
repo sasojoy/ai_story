@@ -256,12 +256,12 @@ BATCHES = {
         ]),
 }
 
-b = BATCHES[N]
+b = BATCHES[N]  # 鍵可以帶字尾（「29b」＝第 29 批之二），n 取前面的數字
 DEFAULTS = {"reviewers": 2, "dev_model": "sonnet", "after15": True,
             "prev_plan": "docs/superpowers/plans/2026-11-04-人物情誼包-第2批.md"}
 PARALLEL = (f"同時在跑的批看 split/trunk 交接第一節「現在在跑」。這一批從 split/trunk `{BASE}` 開（PM 開 `{b['feature']}` 在這一筆）。"
             "共用登記檔各寫各的段，合併時 PM 照順序接。")
-a = {**DEFAULTS, **{k: v for k, v in b.items() if v is not None}, "n": int(re.match(r"\d+", N).group()),  # 「29b」＝第 29 批之二 "base": BASE,
+a = {**DEFAULTS, **{k: v for k, v in b.items() if v is not None}, "n": int(re.match(r"\d+", N).group()), "base": BASE,
      "parallel": b.get("parallel") or PARALLEL,
      "body": "\n".join(b["body"] + COMMON_BODY)}
 if b.get("dev_model", "x") is None:  # 核心批留在 Opus（總表 5.2 第 3 條）：不給 dev_model
