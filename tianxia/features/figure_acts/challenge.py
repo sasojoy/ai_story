@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import random
 
-from tianxia import annals  # 過渡：待搬（行狀 annals）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import battlelog, calendar, deeds, four_tiers, materials, push, rise, team, treasures, wins
 from tianxia import figure_life  # 過渡：待搬（人物活起來 figure_life，總表第 40 批）
 from tianxia import figures  # 過渡：待搬（大勢人物 figures，總表第 40 批）

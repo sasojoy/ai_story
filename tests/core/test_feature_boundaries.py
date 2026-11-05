@@ -816,6 +816,12 @@ GAME_DELEGATE_CALLERS.update({
     ("sync", "_zhuan_tick"): "同步記行狀（_stance_annals 之後、_deliver_mail 之前）：on_sync 在更後面、還問 enabled，紀錄先後算行為",
     ("_everyday_options", "_zhuan_options"): "休季的行動列：用列傳的票排在休季那一支選單裡，不是店面也不是 menu 掛鉤的位置",
 })
+# zhuan 第 29 批之二（annals 拆兩半）：換季存行狀時的身家 profile 在包裡（standing.py），核心不能 import 包，經一行委派 _zhuan_profile；
+# 記一筆的那一半收進核心 core/annal_base.py，包與核心原本的 annals 過渡 import 都改它。
+GAME_DELEGATES |= {"_zhuan_profile"}
+GAME_DELEGATE_CALLERS.update({
+    ("_reset_player_for_new_season", "_zhuan_profile"): "換季存行狀（save_annals 的第四個引數）時的身家：位置不動，紀錄先後算行為",
+})
 
 
 # strip（全部拆包第 13 批「拿掉一」：探索三選一、找素材「自己說」、城裡操練；計畫 docs/superpowers/plans/2026-11-04-拿掉一-第13批.md）：
@@ -1040,6 +1046,91 @@ GAME_DIRECT.update({
 })
 
 
+# travel（全部拆包第 47 批「移動一」；計畫 docs/superpowers/plans/2026-11-06-移動包-第1批.md 1.4）：選單的順序算行為
+# （/api/main 的選項一顆一顆逐位元組：站著的時候「前往」夾在求見、招募之後、拜師之前；路上那串是折返、帶路一句、喊停、路上小事、擂台），
+# 不能改成 Feature.options 登記（會排進 FEATURES 的順序），所以 Game 原位那幾行叫委派、位置不動。
+_TRAVEL_MENU = "選單的順序算行為（/api/main 的選項一顆一顆逐位元組）；移動的選單不能改成 Feature.options 登記（會排進 FEATURES 的順序），原位叫委派、位置不動"
+GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_move_option"): _TRAVEL_MENU + "：站著的時候「前往」夾在求見、招募之後、拜師之前",
+    ("_everyday_options", "_back_option"): _TRAVEL_MENU
+    + "：路上那串的折返，在 act:on_road（結伴時是 act:part）之後、帶路的路上一句與喊停之前",
+    ("_everyday_options", "_road_task_options"): _TRAVEL_MENU + "：路上小事在喊停之後、擂台之前（結伴同行時緊接在 act:part 後面）",
+    ("_arrivals", "_road_sight"): "抵達一站的迴圈中途（_ambush_check → _arrive → 騎乘飽足 → 路上見聞）：位置固定、沒有對應的掛鉤；第 48 批 _arrivals 搬進移動包時改經 ctx",
+})
+GAME_IMPORTS |= {
+    # travel（全部拆包第 47 批）：移動選單、路上小事、喊停、折返、安排前往的 9 個一行委派
+    "tianxia.features.travel.menu", "tianxia.features.travel.road_actions", "tianxia.features.travel.go_actions",
+}
+GAME_DELEGATES |= {
+    # travel（全部拆包第 47 批）：移動一的 9 個一行委派。_move_option、_back_option、_road_task_options 給選單（順序算行為，不能改成 Feature.options）；
+    # _road_sight、_road_reward_due、_count_road_reward 給 _arrivals 與第 48 批的 _share_road；set_move_mode 給 server、腳本與測試；
+    # travel、travel_refusal 給 /api/travel、假人（bot_policy._rally）、腳本與 21 個測試檔（測試也換掉 game.travel_refusal 繞過檢查）
+    "_move_option", "_back_option", "_road_task_options", "set_move_mode", "_road_reward_due", "_count_road_reward", "_road_sight",
+    "travel", "travel_refusal",
+}
+# 拿掉別人段裡的格：在自己的段 del（halt、check_hints、report_seat、hear_after_stamina 現在由包經 ctx 叫，不再是 Game 內部互叫）
+del GAME_DELEGATE_CALLERS[("_halt", "_sync_battle_presence")]
+del GAME_DELEGATE_CALLERS[("travel", "_check_hints")]
+del GAME_DELEGATE_CALLERS[("travel", "_report_seat")]
+del GAME_DELEGATE_CALLERS[("travel", "_hear_after_stamina")]
+
+
+# map（全部拆包第 49 批「輿圖一」：新包 tianxia/features/map/；計畫 docs/superpowers/plans/2026-11-06-輿圖包-第1批.md 1.1、1.4、1.5）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。11 個方法搬進包，Game 留 11 個一行委派（_map_foes、_fierce_line 也留：測試換掉 Game._map_foes、
+# 包裡經 ctx 叫），另多兩個：探索包原本直接 import mapview、mapdata（open_places、mostly_here），成包之後包不能 import 包，改經 Game 的 _map_open_places、
+# _map_mostly_here 問輿圖包。沒有選項前綴、沒有掛鉤可接（輿圖是只讀的畫面）、沒有 GAME_DIRECT：原本 map_state、_map_foes 兩筆（sortie.on）拿掉，
+# 現在經 ctx 問出陣包的 _sortie_mode；原本 (map_base|map_state, map_mostly)、(map_state|_map_foes, _sortie_foes|duel_on|_duel_squad|sorties_left)、
+# (_fierce_line, _practice_tier) 十幾對是 Game 叫委派，現在是包裡經 ctx 叫（服務清單二、查詢服務 # map），拿掉。
+GAME_IMPORTS |= {"tianxia.features.map.actions"}
+GAME_DELEGATES |= {
+    # server 的 map_base_view（底圖）、/api/map/state（疊層）、map_view（舊輿圖的圖層、標頭、地點、詳情、移動鈕）、/api/travel 走不成時帶的 map，bot_policy
+    # 的 travel_options（假人的移動選項），測試與腳本叫的；_map_foes、_fierce_line 包裡也經 ctx 叫（測試換掉 Game._map_foes）；_map_open_places、
+    # _map_mostly_here 是探索包的查詢
+    "map_base", "map_state", "_map_foes", "_fierce_line", "world_map_svg", "minimap_svg", "map_legend", "map_header", "map_places", "place_detail",
+    "travel_options", "_map_open_places", "_map_mostly_here",
+}
+# 輿圖搬進包之後這些不用了（第 25 批定的寫法：用 del 集中在自己的段，不在別人的段裡刪行）：_MAP_LINE 留著不動
+del GAME_DIRECT["map_state"], GAME_DIRECT["_map_foes"]  # 兩支都搬進包，經 ctx 叫
+for _pair in (("map_base", "map_mostly"), ("map_state", "map_mostly"), ("map_state", "_sortie_foes"), ("map_state", "sorties_left"),
+              ("_map_foes", "_sortie_foes"), ("map_state", "duel_on"), ("_map_foes", "duel_on"), ("_map_foes", "_duel_squad"),
+              ("_fierce_line", "_practice_tier")):
+    del GAME_DELEGATE_CALLERS[_pair]  # 包裡經 ctx 叫（Game 的委派只剩一行）
+
+
+# smithy（全部拆包第 41 批「鐵匠鋪」：新包 tianxia/features/smithy/；計畫 docs/superpowers/plans/2026-11-06-鐵匠鋪包-第1批.md 1.4、1.9）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。23 個方法搬進包，Game 留 12 個一行委派（其餘 11 個只有包裡叫的，沒有委派）。
+# 核心原位碰這一包的：choose 的 smith: 與 _action_title 的兩處（kind == "smith" 的標題、act:smith 的表格）換成包的 choose 掛鉤與 act 子動詞（Verb）；
+# 「打造那幾步併成一則」（quiet、merge、fold）留 choose 後半原位讀 smithing 的三個名字（經舊名別名）。
+# 店面登記（Shop）這一批不登記（計畫 1.9 量出四條）：鐵匠鋪留在 Game 原位，只有 _smith_options 變成一行委派；第 42 批（馬市）與第 45 批（懸賞榜）比較晚合的那一批
+# 把懸賞榜、鐵匠鋪、馬市三間一起排進 Shop，入口先後維持 懸賞榜 → 鐵匠鋪 → 馬市（第 41 批 PM 認定第 1 條）。
+GAME_IMPORTS |= {
+    "tianxia.features.smithy.shelf_actions", "tianxia.features.smithy.forge_actions", "tianxia.features.smithy.trade_actions",
+    "tianxia.features.smithy.gear_actions", "tianxia.features.smithy.divine_actions", "tianxia.features.smithy.clue",
+    "tianxia.smithing",  # 舊名：現在是指到包裡 smithing 的別名（核心原位讀 draft_here、draft_stale、GO_VERB 等）
+}
+GAME_DELEGATES |= {
+    # server（MAIN_ACTIONS 的 smith_forge、smith_sell、smith_upgrade、smith_furnace，MENXIA_ACTIONS 的 repair_item、temper_item、name_divine、bind_art，
+    # 包的 /api/smith_line 路由）、假人（bot.trade_at_smith、bot.keep_book_names）、測試在叫的；_smith_options 是核心原位選單叫的；
+    # _smith_clue 是測試換掉的（包裡經 ctx 叫，services.py 二、查詢服務 # smithy）；_smith 是 tests/gear/test_shop2.py 直接叫的（計畫 1.1 寫沒有呼叫端，量錯了一個）
+    "_smith_options", "_smith", "_smith_clue", "smith_line", "smith_forge", "smith_furnace", "smith_sell", "smith_upgrade",
+    "repair_item", "temper_item", "name_divine", "bind_art",
+}
+_SMITHY_SHOP = ("鐵匠鋪不登記店面（計畫 1.9）：「此地還能做」的入口順序是 懸賞榜 → 鐵匠鋪 → 馬市 → 搬成包的店，搬進 Shop 就排到馬市後面（/api/main 的選項順序變）；"
+                "同一排的懸賞榜（第 45 批）、馬市（第 42 批）還沒成包；`here` 有兩個意思（_shop_open 要單子沒開著，收店要 smith_open）；PM 一次排")
+GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_smith_options"): _SMITHY_SHOP,
+})
+_SMITHY_STALE = "鐵匠鋪的單子：{what}；核心原位讀 smithing（經舊名別名，現在是鐵匠鋪包的 smithing.py）的 {names}，{why}"
+GAME_DIRECT.update({
+    "choose": _SMITHY_STALE.format(what="打造那幾步併成一則、切頁不寫紀錄", names="GO_VERB、is_forge_step、is_step_line",
+                                   why="位置在 choose 後半寫紀錄那一段（quiet、merge、fold 要看單子收起來了沒），沒有對應的掛鉤"),  # 過渡：第 40 批收（第 41 批 PM 認定第 4 條）
+    "_drop_stale_references": _SMITHY_STALE.format(what="鐵匠鋪關了、人不在城鎮就收起，單子那一欄關了、內容改版拿掉了種類或素材就清", names="draft_here、draft_stale",
+                                                   why="順序夾在懸賞榜與馬市中間（計畫 1.9），on_drop_stale 掛鉤在最後面，位置不同不能接"),  # 過渡：第 40 批收（第 41 批 PM 認定第 4 條）
+    "sync": _SMITHY_STALE.format(what="同步時單子那一欄關了就清", names="draft_here",
+                                 why="位置固定在 sync 的中段，沒有對應的掛鉤（world 的 sync 順序算行為）"),  # 過渡：第 40 批收（第 41 批 PM 認定第 4 條）
+})
+
+
 # faction（全部拆包第 35 批「陣營」：新包 tianxia/features/faction/；計畫 docs/superpowers/plans/2026-11-06-陣營包-第1批.md 1.1、1.4、1.5）：
 # 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。20 個方法搬進包，Game 留 13 個一行委派（_season_grant、_sect_options、_lean_options、_lean_anytime、
 # _join_lean、_faction_prompt、_four_wins、ending_card、tier_hint、sides_card，加三個新的：_faction_pending_options〔選單接管整個選單的待確認三段〕、
@@ -1074,6 +1165,7 @@ GAME_DELEGATE_CALLERS[("choose", "_begin_enlistment")] = (
 for _pair in (("_faction_step", "_ally_follows_battle"), ("_join_lean", "_ally_follows_battle"), ("_lean_step", "_ally_follows_battle"),
               ("_faction_step", "_note_action"), ("_defect_step", "_battle_now"), ("_defect_targets", "_battle_now")):
     del GAME_DELEGATE_CALLERS[_pair]  # 陣營成包：呼叫端搬進包，包裡經 ctx 叫（services.py 的 # faction 一段）；原文不改，同第 8、25、32 批 del 的寫法
+
 
 @functools.lru_cache(maxsize=None)
 def _engine_tree() -> ast.Module:
@@ -1211,10 +1303,10 @@ SHARED_PENDING[("siege", "world")] += "；world 函式裡也 import 舊名 gener
 # 總表第 15 列寫了、這一批先不收的（派工：import 了包的「先改成查詢服務，或者先不收」；讀的都是還沒成包的舊模組，還沒有包可以回答查詢）：
 # 模組 → 卡在哪、哪一批之後收。包 import 它們的那幾行照舊註「過渡：待搬」。
 SHARED_LATER = {
-    "fusion": "讀有所感的自創（sensing.add_own、own_name：有所感第 24 批成包）與行狀（annals.note）：排到第 29 批（行狀成包）一起改成查詢服務再收（第 24 批 PM 認定第 3 條）",
-    "skillview": "門下頁的說明（彙整）：讀自創 create（第 44 批）、修練 cultivation（第 23 批）、玉璽 seal（第 27 批）、鐵匠鋪 smithing（第 41 批）、"
+    "fusion": "讀有所感的自創（sensing.add_own、own_name：有所感第 24 批成包）（第 24 批 PM 認定第 3 條；行狀 annals.note 那一半第 29 批之二收進核心 core/annal_base.py，fusion 改 import 它，不算了）",
+    "skillview": "門下頁的說明（彙整）：讀自創 create（第 44 批）、修練 cultivation（第 23 批）、玉璽 seal（第 27 批）、鐵匠鋪 smithing（第 41 批已成包，經舊名別名）、"
                  "輿圖 atlas；那幾包成包、改成查詢服務之後再收",
-    "shopview": "店面的畫面資料（彙整）：讀擂台 arena（第 12 批）、懸賞 bounties（第 45 批）、鐵匠鋪 smithing（第 41 批）、單挑 duel 的底層；"
+    "shopview": "店面的畫面資料（彙整）：讀擂台 arena（第 12 批）、懸賞 bounties（第 45 批）、鐵匠鋪 smithing（第 41 批已成包，經舊名別名）、單挑 duel 的底層；"
                 "那幾包成包之後再收",
     "events": "事件抽選：讀伏筆 foreshadow（軍情第 34 批成包）與心意 stances（第 19 批）；伏筆改成查詢服務、事件檢定搬進核心（第 16 批）之後再看",
     "tiers": "事件分級：讀擂台的名次 arena.entry_of，經舊名 arena（單挑包的別名）：名次已經是核心的查詢服務 arena_ranks（第 12 批），"
@@ -1678,6 +1770,8 @@ def test_the_old_names_left_as_aliases_are_known():
                          "figure_aid": "figure_acts", "yuedan": "figure_acts",
                          # zhuan（全部拆包第 29 批：tianxia/biography.py、zhuan_end.py）
                          "biography": "zhuan", "zhuan_end": "zhuan",
+                         # zhuan（第 29 批之二：tianxia/annals.py 指到 zhuan/standing.py，那一份 re-export 核心 annal_base）
+                         "annals": "zhuan",
                          # military（全部拆包第 33 批：tianxia/rank_actions.py）
                          "rank_actions": "military",
                          # military（全部拆包第 34 批：tianxia/foreshadow.py、opportunities.py）
@@ -1688,6 +1782,10 @@ def test_the_old_names_left_as_aliases_are_known():
                          "conquest_day": "territory_acts", "xingshi": "territory_acts",
                          # peers（全部拆包第 37 批：tianxia/social.py、invites.py、mingtie.py、mingtie_card.py）
                          "social": "peers", "invites": "peers", "mingtie": "peers", "mingtie_card": "peers",
+                         # map（全部拆包第 49 批：tianxia/mapview.py、mapart.py、mapdata.py、worldgeo.py）
+                         "mapview": "map", "mapart": "map", "mapdata": "map", "worldgeo": "map",
+                         # smithy（全部拆包第 41 批：tianxia/smithing.py）
+                         "smithing": "smithy",
                          # faction（全部拆包第 35 批：tianxia/defection.py）
                          "defection": "faction"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]

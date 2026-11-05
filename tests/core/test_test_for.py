@@ -66,13 +66,14 @@ def test_a_module_also_picks_the_tests_of_the_modules_that_import_it():
     test_ascend、test_create_ritual 會紅。現在照 tianxia/ 模組之間的 import 往上找。
     （shared：might 第 15 批進了共用規則層，改共用規則層照下面那一條挑；這一條換成還是舊模組的 ascend——經 cultivation 挑到
     只 import cultivation 的 test_cultivation。cultivation：ascend、cultivation 第 23 批搬進修練包、舊名成了別名，換成還是舊模組的輿圖畫法
-    mapview——經 mapdata 挑到只 import mapdata 的 test_mapdata_layers。）"""
-    picked = test_for.pick(["tianxia/mapview.py"])
-    assert "test_mapdata_layers.py" in {p.name for p in picked.files}
-    assert "mapview" not in test_for.imported(next(p for p in picked.files if p.name == "test_mapdata_layers.py"))
+    mapview——經 mapdata 挑到只 import mapdata 的 test_mapdata_layers。mapview：mapview、mapdata 第 49 批搬進輿圖包、舊名成了別名，
+    換成還是舊模組的本週卡 step——經 weekcard 挑到只 import weekcard 的 test_weekcard。）"""
+    picked = test_for.pick(["tianxia/step.py"])
+    assert "test_weekcard.py" in {p.name for p in picked.files}
+    assert "step" not in test_for.imported(next(p for p in picked.files if p.name == "test_weekcard.py"))
     assert not picked.core and not picked.smoke
-    ups = test_for.dependents("mapview")
-    assert {"mapdata"} <= ups
+    ups = test_for.dependents("step")
+    assert {"weekcard"} <= ups
     assert not ups & test_for.DRIVERS and not ups & test_for.CORE_MODULES  # engine、假人、核心不往上走
 
 

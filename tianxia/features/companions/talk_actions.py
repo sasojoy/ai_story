@@ -10,7 +10,8 @@ checked_prepared 重驗再套用；模型不在鎖裡，server 留的殼不動�
 """
 from __future__ import annotations
 
-from tianxia import annals, ranks  # 過渡：待搬（行狀 annals 第 29 批；階級 ranks 第 40 批）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
+from tianxia import ranks  # 過渡：待搬（階級 ranks 第 40 批）
 from tianxia import precise, roster
 from tianxia.core.option import Option
 from tianxia.core.services import PLAN_OPTION, ROAD_SAY, SAY_MAX, SAY_OPTION, say_text

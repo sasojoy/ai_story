@@ -271,8 +271,8 @@ explore（主動搬六包第 3＋4 批加的這一段）
 
 # zhuan（全部拆包第 29 批「列傳」；主人：列傳包）
 - 共用的字與小函式（從這個模組 import，列傳包的 zhuan_end re-export）：`ART`（mall.EFFECTS 的列傳插畫鍵）、`ART_NO_SIDE`、`ART_FREE`、`art_problem(state, content, season)`
-  （商城：這一季用不上的插畫票不賣）、`illustration_for(state, content, season)`（行狀 annals.standing 的插畫圖庫鍵）、`Writer`、`writers(...)`、
-  `AFFINITY／TIER／BOUGHT／REASONS`（行狀 annals.standing 的評曰寫手）；原本是 `tianxia/zhuan_end.py` 的
+  （商城：這一季用不上的插畫票不賣）、`illustration_for(state, content, season)`（行狀 zhuan/standing.py 的 standing 的插畫圖庫鍵）、`Writer`、`writers(...)`、
+  `AFFINITY／TIER／BOUGHT／REASONS`（行狀 zhuan/standing.py 的 standing 的評曰寫手）；原本是 `tianxia/zhuan_end.py` 的
 
 # military（全部拆包第 33 批「軍情一」；主人：軍情包）
 - `ctx._duty_option(name)`（主人：出陣包 features/sortie；軍令卡上第 1 階守勢行動那一顆的鈕，共用出陣的次數與字；軍情的 `order_options` 在有戰線的地方叫它。
@@ -309,6 +309,33 @@ explore（主動搬六包第 3＋4 批加的這一段）
   切磋、論武、截殺、結伴同行還沒搬（第 38 批與移動包），它們經 Game 的委派問玩家互動包；搬走之後改成各自包的查詢
 - `ctx._yuedan_line(content, name)`（月旦評那一週許劭對他的那一句，只讀；主人：大勢人物的行動包 figure_acts〔月旦評 yuedan〕。玩家卡 `card` 要這一句，
   玩家互動包不能 import 大勢人物包，經 Game 的一行委派問，總表第六節第 6 條「`social` 讀月旦評」）
+
+# map（全部拆包第 49 批「輿圖一」；主人：輿圖包。本體在 tianxia/features/map/，Game 留一行委派回答別的包；計畫 docs/superpowers/plans/2026-11-06-輿圖包-第1批.md 1.1、1.4）
+- 輿圖包要叫的核心服務，上面都已經列了的（`ctx._side()`、`ctx._conquest_side()`、`ctx.odds(...)`、`ctx.sorties_left()`、`ctx._practice_tier(loc)`），這一段只補沒列的：
+- `ctx._sortie_mode(loc)`（主人 sortie：這一處的出陣是攻、守還是沒有；輿圖疊層的出陣那一格問，原本直接叫 `sortie.mode`）
+- `ctx.duel_on()`、`ctx._sortie_foes(loc)`、`ctx._duel_squad(loc_id)`（主人 sortie：約戰開著沒、出陣真的會打的那一批、貼約戰時守軍迎戰挑的那一路；輿圖地點卡的
+  對手與勝算〔map_foes〕、出陣那一格〔map_state〕問）
+- `ctx._real_minutes(...)`（主人核心：`atlas.place_minutes` 的包裝，路程換算成現實分鐘；輿圖疊層的走路分鐘問）
+- `ctx.map_mostly()`（主人 explore：輿圖第一層名字旁的兩個字，每一處站過去之後的比重；原本列在三、過渡 explore）
+- `ctx._map_open_places()`、`ctx._map_mostly_here()`（主人 map：畫得出來的地點；腳下這一處「多半給什麼」那一句。探索包原本直接 import `mapview.open_places`、
+  `mapdata.mostly_here`，輿圖成包之後包不能 import 包，改經 Game 的一行委派問輿圖包）
+- `ctx._map_foes(loc_id)`、`ctx._fierce_line(loc)`（主人 map：自己叫自己，經 Game 的一行委派——測試換掉 `Game._map_foes` 看地點卡的對手跟著變）
+- `ctx.map_base(viewer=)`、`ctx.map_state()`、`ctx.map_places()`、`ctx.map_header()`、`ctx.world_map_svg(layer, selected)`、`ctx.map_legend(layer)`、`ctx.place_detail(loc_id)`、
+  `ctx.travel_options(loc_id)`、`ctx.MAP_LAYERS`（主人 map：`views.map_view`、`views.map_base_view` 這兩個 API 資料函式與 `routes.py` 的 /api/map/state 經 Game 的委派叫，server 與測試換掉的都看得到；
+  `MAP_LAYERS` 是 Game 的類別屬性，就是 `atlas.LAYERS`）
+- 另外兩個共用的字與小函式不在 Game 上、從這個模組 import（最底下 # map 那一段）：`LOSE_WORD`（勝算的「必敗」，探索包挑懸賞、輿圖包標淡都讀）、
+  探索表的小字（`kind_of`、`hint_in`、`mostly_in`……，輿圖名字旁的退路讀）、`terrain_tags`（地形標籤，有所感與輿圖地點卡共用）
+
+# smithy（全部拆包第 41 批「鐵匠鋪」；主人：鐵匠鋪包。本體在 tianxia/features/smithy/，Game 留一行委派回答別的包；計畫 docs/superpowers/plans/2026-11-06-鐵匠鋪包-第1批.md 1.3）。
+# 包要叫的核心服務，上面都已經列了，這一段只記「誰在用」，新增的只有 `ctx._smith_clue`、`ctx.smith_line`：
+- `ctx._log(msgs)`、`ctx._save_season()`、`ctx._pill_day()`、`ctx._shop_say(...)`、`ctx._shop_after(...)`、`ctx._shop_live()`、`ctx._xinde()`、`ctx._menxia_entry(...)`、
+  `ctx.state`、`ctx.content`、`ctx.world`、`ctx.rng`：選單、買修淬煉、開爐、收購升階、裝備庫那一列的修與淬煉、神器定名用
+- `ctx._smith_clue(paid=True)`（鐵匠順口：花了銀兩或素材之後擲一次，中了說出這家知道的隱藏配方那一句；只讀、自己的亂數不動 ctx.rng。主人：鐵匠鋪包，
+  本體在 `features/smithy/clue.py`，Game 留一行委派，因為 tianxia/features/smithy/tests/test_econ_smith.py、tests/gear/test_shop.py 換掉 `Game._smith_clue`，包裡一律經 ctx 叫才打得到）
+- `ctx.smith_line(kind, main, aux)`（店面打造頁爐裡放了什麼、這一爐會怎樣，只讀；包自己的 `/api/smith_line` 路由經殼的 `look(game, lambda g: g.smith_line(…))` 叫，
+  路由裡的變數叫 g；本體在 `features/smithy/forge_actions.py`，Game 留一行委派給 server 與測試）
+- 共用規則層（包直接 import，registry.SHARED 已登記）：`weapons`、`armor`、`equipment`、`forge_secrets`、`four_tiers`、`silver`、`economy`、`traits`、`library`、
+  `secret_recipes`、`territory`、`insights`、`prologue`、`materials`；過渡（待收進共用層，標「# 過渡：待搬」）：`fusion`（SHARED_LATER）、`shopview`（SHARED_LATER）、`annals`（行狀）
 
 # faction（全部拆包第 35 批「陣營」；主人：陣營包，本體在 tianxia/features/faction/，Game 留一行委派回答別的包；計畫 docs/superpowers/plans/2026-11-06-陣營包-第1批.md 1.3）
 - `ctx._four_wins()`（三陣營四勝利：這一季開著沒；決戰的軍餉記不記豪強的貢獻。原本記在三、過渡 `# battle`，主人成包了，改列這裡；包裡自己叫的直接叫，不經它）
@@ -397,6 +424,16 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
   `ctx._join(inv, other)`（主人移動 features/travel：答應結伴同行）：`answer_invite` 照邀請的種類叫它們
 - `ctx.join_refusal(leader)`（主人移動：答應跟某人結伴同行，不行的原因；假人回結伴邀請〔bots.answer_call〕先問它）
 
+# travel（全部拆包第 47 批「移動一」：移動選單、路上三樣小事、喊停、折返、/api/travel 搬進 features/travel；計畫 docs/superpowers/plans/2026-11-06-移動包-第1批.md 1.1）。
+# 主人都是核心或第 48 批（移動二：出發與抵達的補算、結伴同行）；包要叫的核心服務，上面大多已經列了（`ctx.content`、`ctx.state`、`ctx.world`、`ctx.rng`、
+# `ctx._draft`、`ctx._log`、`ctx._save_season`、`ctx._preparing`、`ctx.push_trend`、`ctx._check_hints`、`ctx._depart`），這一段記還沒列的：
+- `ctx.move_mode`（主畫面選的走法；`Game.__init__` 起、server 在鎖裡逐次 `set_move_mode`；選單的「前往」「折返」標籤與 `/api/travel` 預設的走法都讀它）
+- `ctx._road_gain`（這一件路上小事的收穫：路上小事填、`_share_road` 分給結伴同行的人；第 48 批 `_share_road` 搬走時一起搬）
+- `ctx._share_road(what)`、`ctx._lead(...)`、`ctx._sync_battle_presence()`（主人移動第 48 批：結伴同行分收穫、帶路、出發抵達時對一下決戰的人在不在）
+- `ctx._report_seat()`、`ctx._hear_after_stamina()`（走完一趟之後抄帳、抽一次耳聞；原本是 `travel` 在 Game 上直接叫的，搬成包之後位置不動）
+- `ctx.travel_refusal(loc_id, mode)`（主人移動：Game 上的一行委派；`travel` 經它叫自己的檢查，因為測試換掉 `game.travel_refusal` 來繞過檢查）
+- `ctx.travel(dest_id, mode)`（主人移動：Game 上的一行委派；`/api/travel` 的路由經它叫，測試與假人照舊叫 `Game.travel`）
+
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 
 explore（主動搬六包第 3＋4 批加的這一段；都是 Game.__init__ 起的）
@@ -428,19 +465,24 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 # peers（全部拆包第 37 批）
 - `ctx.peer_brief`（論武合成了才填、`peer_act` 每次開頭清掉；提示泡泡那一句，伺服器在鎖裡讀。論武第 38 批搬走時改掛到論武那一包）
 
+# smithy（全部拆包第 41 批）
+- `ctx.smith_result`（`smith_forge` 寫、server 的 `api_do` 在鎖裡讀：上一次店面直接開爐的出爐卡，shopview.forged_card；被拒絕是 None。屬性留在 `Game.__init__`）
+
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """
 from __future__ import annotations
 
 import functools  # sense（第 24 批）：outing_watch 用
+from collections.abc import Iterable, Mapping  # map（第 49 批）：探索表的小函式用
 from dataclasses import dataclass  # stamina_plays（第 39 批）：RaidSpoils 用
 from typing import TYPE_CHECKING, NamedTuple  # zhuan（第 29 批）：Writer 用
 
 from .. import calendar  # checkin（第 30 批）：checkin_on 用
-from ..models import Content
+from ..models import Content, Location  # Location：map（第 49 批）terrain_tags 的型別
 from ..wallet import Purchase, Wallet
 
 if TYPE_CHECKING:
+    from ..jianfa_numbers import ExploreOneTable, JianfaNumbers  # map（第 49 批）：探索表的小函式
     from ..engine import Game
     from ..state import GameState, WorldState  # companions（note_cheer 的型別）；checkin（checkin_on 的型別）
 
@@ -452,6 +494,14 @@ RANK_ACTION_PREFIX = "act:rank:"  # 第 3、4 階行動的選項 id 前綴（act
 # stamina_plays（全部拆包第 39 批：原本寫在 tianxia/ambush.py；核心的移動被擋〔engine 的 _move_option〕要用、核心不能 import 包，搬到這裡，
 # ambush.MOVE_BLOCKED 照舊是同一個字串）
 MOVE_BLOCKED = "守著埋伏"
+# travel（全部拆包第 47 批：原本寫在 engine.py；移動包的路上小事選單要讀、核心的重設與第 48 批的 _share_road 也讀，搬到這裡，engine 照舊叫得到）
+# 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見移動包的 road_task_options
+ROAD_TASKS: dict[str, tuple[str, str]] = {  # 寄放：第 48 批與換季清舊還讀（第 47 批 PM 認定第 4 條）
+    "think": ("邊走邊想", "想過了"),
+    "ask": ("沿途打聽", "打聽過了"),
+    "gather": ("路邊採集", "找過了"),
+}
+ROAD_REWARD_TASKS = ("think", "gather")  # 有經濟收穫、受每天上限管的路上小事（Config.road_reward_daily_cap）
 
 
 # stamina_plays（全部拆包第 39 批：原本寫在 engine.py；設伏的贏家帳〔包〕與截殺〔核心〕共用，包不能 import engine，搬到這裡，
@@ -652,7 +702,7 @@ def checkin_on(content: Content, world: WorldState | None) -> bool:
     """簽到開著沒：設定打開（只有 season21），這一季是 21 天季（開季時蓋的章），而且還沒收季。週末與 14 天一律關著。"""
     return content.config.checkin.enabled and calendar.season21_on(world, content) and not world.ended
 
-# zhuan（全部拆包第 29 批「列傳」）：原本寫在 tianxia/zhuan_end.py；核心的行狀（annals.standing 的插畫鍵與寫評曰的人物）與商城（插畫票用不上不賣）要用、
+# zhuan（全部拆包第 29 批「列傳」）：原本寫在 tianxia/zhuan_end.py；核心的行狀（zhuan/standing.py 的 standing 的插畫鍵與寫評曰的人物）與商城（插畫票用不上不賣）要用、
 # 列傳包又不能被核心與別包 import，搬到這裡，zhuan_end re-export（`zhuan_end.illustration_for is services.illustration_for`）
 ART = "zhuan_art"  # mall.EFFECTS 的鍵（列傳插畫票）
 ART_NO_SIDE = "沒投靠一方的人，列傳配不了插畫。"  # 插畫票不賣的原因（FB-845）
@@ -716,3 +766,62 @@ def writers(state: GameState, content: Content, season: WorldState) -> list[Writ
             out[cid] = AFFINITY
             room -= 1
     return [Writer(cid, reason) for cid, reason in out.items()]
+
+
+# map（全部拆包第 49 批「輿圖一」）：下面三樣原本分別寫在 tianxia/mapdata.py（LOSE_WORD）、探索包的 explore_rules.py（六種地點、四類事、「多半」那兩個字的算法）、
+# 有所感包的 sensing.py（terrain_tags）；輿圖包要用、又不能 import 探索包與有所感包，搬到這裡（純函式，照 config 與地點的標籤算，不碰 Game），
+# 原本的模組 re-export（`mapdata.LOSE_WORD is services.LOSE_WORD`、`explore_rules.kind_of is services.kind_of`、`sensing.terrain_tags is services.terrain_tags`）；寄放：第 50 批移到核心小模組（第 49 批 PM 認定第 3 條）
+LOSE_WORD = "必敗"  # 這種勝算的出陣建議照樣列，但排到最後、網頁畫淡（企劃者 10/15 從對比圖選乙）；探索挑懸賞時對這一路是必敗就不強制
+
+TOWN, TEMPLE, FORD, WILD, HILL, CAMP = "town", "temple", "ford", "wild", "hill", "camp"  # 六種地點（jianfa_numbers.ExploreKind）
+EVENT, ENCOUNTER, MATERIAL, INSIGHT = "event", "encounter", "material", "insight"
+KINDS = (EVENT, ENCOUNTER, MATERIAL, INSIGHT)  # 一趟可能發生的四類事（比重的鍵照這個順序）
+FILL = MATERIAL  # 什麼都抽不出來（比重全是 0）補素材
+PLACE_WORDS = {TOWN: "城裡", TEMPLE: "寺裡", FORD: "渡口", WILD: "野外", HILL: "山裡", CAMP: "營裡"}
+BEAT_MOSTLY = {EVENT: "多事", ENCOUNTER: "多敵", MATERIAL: "多料", INSIGHT: "多悟"}  # 比重最高的那一類寫成哪兩個字
+BALANCED = "參半"  # 最高的有兩類以上並列
+
+
+def match(cfg: JianfaNumbers, tags: Iterable[str]) -> ExploreOneTable | None:
+    """這組地點標籤靠自己對得上哪一張表：照 `explore_tables` 的順序，第一張有共同標籤的；一個都對不上是 None。
+    內容驗證（每個正式地點都歸得到一張）問它；探索本身問 `kind_of`。"""
+    have = set(tags)
+    return next((t for t in cfg.explore_tables if have & set(t.tags)), None)
+
+
+def kind_of(cfg: JianfaNumbers, loc) -> ExploreOneTable:
+    """這一處用哪一張表：`match`；標籤一張都對不上的歸最後一張（野）。"""
+    return match(cfg, loc.tags) or cfg.explore_tables[-1]
+
+
+def mostly_of(weights: Mapping[str, float]) -> str:
+    """「多半」那兩個字照比重寫：四類裡比重最高的那一類（BEAT_MOSTLY），並列最高寫「參半」；全是 0 的那一趟補素材（FILL）所以寫「多料」。"""
+    top = max((weights.get(kind, 0) for kind in KINDS), default=0)
+    if top <= 0:
+        return BEAT_MOSTLY[FILL]
+    best = [kind for kind in KINDS if weights.get(kind, 0) == top]
+    return BALANCED if len(best) > 1 else BEAT_MOSTLY[best[0]]
+
+
+def table_weights(table: ExploreOneTable) -> dict[str, int]:
+    """一張表的四欄（事件、遭遇、素材、感悟），照 KINDS 的順序。"""
+    return {EVENT: table.event, ENCOUNTER: table.encounter, MATERIAL: table.material, INSIGHT: table.insight}
+
+
+def mostly_in(table: ExploreOneTable) -> str:
+    """這一種地點的「多半」兩個字，照它的表算（沒有危險度、不看誰站在那裡）：序章裡沒有比重可看時輿圖名字旁的退路
+    （平常是 Game.map_mostly 照每一處自己的比重，tail_of）。"""
+    return mostly_of(table_weights(table))
+
+
+def hint_in(table: ExploreOneTable) -> str:
+    """這一種地點的小字，照它的表算（沒有危險度）：玩法說明列六張表的樣子、沒有比重可看時的退路。"""
+    return PLACE_WORDS[table.kind] + mostly_in(table)
+
+
+def terrain_tags(loc: Location) -> list[str]:
+    """地點標籤裡的地形（河畔、城鎮……）：設施的標籤（馬市，裝備四欄 5.5；醫館，clinic.CLINIC_TAG；酒肆，tavern.TAG）不算地形。
+    有所感標題的括號與輿圖抽屜名字旁的地形（意境提示設計第五節）共用。"""
+    from .. import mounts  # noqa: PLC0415  共用規則層
+
+    return [tag for tag in loc.tags if tag not in (mounts.MARKET_TAG, "醫館", "酒肆")]

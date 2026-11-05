@@ -41,6 +41,8 @@ from ..features import military  # 軍情：全部拆包第 33 批（沒有選�
 from ..features import outlets  # 銀兩出口與捐軍備：全部拆包第 43 批（兩間店的店面登記排在酒肆之後、擂台之前，entry 都回 None；只有同時坐在兩間店裡才分先後，正常不會）
 # craft
 from ..features import craft  # 煉製與自創：全部拆包第 44 批（只接 routes、content、on_drop_stale，排在哪裡結果都一樣；on_drop_stale 的 prune 只動 creating）
+# smithy
+from ..features import smithy  # 鐵匠鋪：全部拆包第 41 批（choose 前綴 smith 與 act:smith 的 Verb、路由、content；沒有店面登記，排在哪裡結果都一樣）
 # territory_acts
 from ..features import territory_acts  # 地盤的行動與畫面：全部拆包第 46 批（只接 /api/xingshi、管理者五個工具與〈天下形勢〉句型的 check_content，排在哪裡結果都一樣；22:00 換天沒有掛鉤，留 Game 的委派原位）
 # bout
@@ -51,6 +53,10 @@ from ..features import stamina_plays  # 體力玩法（設伏、屯糧）：全�
 from ..features import seclusion  # 閉關：全部拆包第 39 批。只有 verbs()（act:break），沒有選項、選單
 # peers
 from ..features import peers  # 玩家互動一（此地還有、玩家卡、邀請框、打招呼、贈物、名帖）：全部拆包第 37 批（只接 invite: 的 choose、換季的頭銜簿與路由，排在哪裡結果都一樣）
+# travel
+from ..features import travel  # 移動一（移動選單、路上小事、喊停、折返、/api/travel）：全部拆包第 47 批（choose 前綴 move、road；Verb halt；路由）
+# map
+from ..features import map as map_feature  # 輿圖：全部拆包第 49 批（包名就叫 map，這裡換個名字免得蓋掉內建的 map；只接 routes 與網頁的宣告，沒有選項、選單、狀態，排在哪裡結果都一樣）
 # faction
 from ..features import faction  # 陣營：全部拆包第 35 批（接 faction:、defect:、sect: 三個前綴的 choose 與假人分數、叛投 clear／after 兩格；三個前綴與別的包都不重疊，排在哪裡結果都一樣）
 # ── import（new_feature.py 接在這一行前面）──
@@ -91,6 +97,8 @@ FEATURES: list[Feature] = [
     outlets.FEATURE,
     # craft
     craft.FEATURE,
+    # smithy
+    smithy.FEATURE,
     # territory_acts
     territory_acts.FEATURE,
     # bout（店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4。
@@ -102,7 +110,11 @@ FEATURES: list[Feature] = [
     seclusion.FEATURE,
     # peers（排在 seclusion 後面〔照合併先後〕：只接 invite: 的 choose、on_season_start 與路由，跟 stamina_plays、seclusion、territory_acts 的掛鉤不重疊，順序不影響結果）
     peers.FEATURE,
-    # faction（排在最後：前綴 faction／defect／sect 不跟別的包重疊，叛投的格有 DEFECT_ORDER 定先後，順序不影響結果）
+    # travel（排在 peers 後面〔照合併先後〕：choose 前綴 move、road 與別的包不重疊；Verb halt 與別的包的 verb 不同名；路由 /api/travel 不重疊；順序不影響結果）
+    travel.FEATURE,
+    # map（排在 travel 後面〔照合併先後〕：只有 routes〔三條 /api/map 路由，跟 /api/travel 不重疊〕與網頁的宣告；順序不影響結果）
+    map_feature.FEATURE,
+    # faction（排在 map 後面〔照合併先後〕：前綴 faction／defect／sect 不跟別的包重疊，叛投的格有 DEFECT_ORDER 定先後，順序不影響結果）
     faction.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
