@@ -5,14 +5,18 @@
 投靠豪強中間多一步挑依附哪一軍。Game 留一行委派的：_sect_options、_join_lean、_faction_prompt（選單與場景原位在叫）；_ally_options 只有包裡的
 pending_options 叫（沒有委派）；_faction_step 只有包的 choose 掛鉤叫（沒有委派）。選單「接管整個選單」的待確認那三段搬成 pending_options
 （Game 留 _faction_pending_options）。
+
+「你這一步」的 join 那一格（全部拆包第 36 批；原本 weekcard._steps 最後那一段與 step._target 的去投靠那一支）：join_step_items、
+join_step_place，只讀；JOIN_STEP 從 weekcard 搬來，字一個不改。
 """
 from __future__ import annotations
 
 from tianxia import allied, wins
+from tianxia import step as step_rules  # 核心本體（第 36 批收進 MODULES）：「你這一步」的 REF、place
 from tianxia import bounties  # 過渡：待搬（第 45 批：懸賞榜；手上揭著、投靠之後接不了的懸賞）
 from tianxia.core.option import Option
 from tianxia.events import event_candidates  # 過渡：待搬（事件：這裡抽得到的拜門派事件）
-from tianxia.rules import season_one
+from tianxia.rules import STANCE_NAMES, season_one
 
 from . import defection, lean_actions
 from .ending_actions import four_wins
@@ -145,3 +149,30 @@ def pending_options(ctx) -> list[Option] | None:
             Option(id="defect:cancel", label="再想想"),
         ]
     return None
+
+
+# core_step（全部拆包第 36 批「你這一步」）：join 那一格（core/features.py 的 STEP_ORDER：排最後）
+JOIN_STEP = "先投一方：{places}。"  # 待 joy 潤：散人「眼下要事」最後的退路
+
+
+def _join_place_names(ctx, faction) -> list[str]:
+    """這一方的投靠點的地名（同 weekcard._places：三方卡照用那一份，這裡抄一份，包不 import weekcard）。"""
+    locs = ctx.content.locations
+    return [locs[x].name for x in faction.join_at if x in locs]
+
+
+def join_step_items(ctx) -> list[dict]:
+    """「你這一步」的去投靠那一件（原本 weekcard._steps 最後那一段）：散人、劇本有陣營、季沒收才有。"""
+    s, c = ctx.state, ctx.content
+    if s.player.faction is None and c.scenario.factions and not s.world.ended:
+        places = "、".join(f"{STANCE_NAMES.get(f.id, f.name)}在{_join_place_names(ctx, f)[0]}" for f in c.scenario.factions if _join_place_names(ctx, f))
+        return [{"kind": "join", "text": JOIN_STEP.format(places=places), step_rules.REF: ("join",)}]
+    return []
+
+
+def join_step_place(ctx, ref: tuple) -> tuple:
+    """去投靠那一件的 (id, target, None)（原本 step._target 的去投靠那一支）：最近的投靠點；一樣近照劇本陣營的順序；沒有 (None, None, None)。"""
+    c = ctx.content
+    joins = {loc: f for f in reversed(c.scenario.factions) for loc in f.join_at if loc in c.locations}  # 一樣近照劇本陣營的順序
+    where = ctx._nearest_to(set(joins)) if joins else None  # noqa: SLF001
+    return (joins[where].id, step_rules.place(ctx, where), None) if where is not None else (None, None, None)

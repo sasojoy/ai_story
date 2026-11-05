@@ -21,6 +21,7 @@
 - 內容檔：`content = ("sects.json", "events/sects.json")`（門派與拜入門派的事件，總表附錄甲歸陣營；`content.py` 照舊讀）。
 - 掛鉤：`prefix = ("faction", "defect", "sect")`；`choose` 接這三個前綴（標題在動作之前拿；`sect` 的標題問核心的 `_action_title`，落到最後的「提前出關」，隨後被事件標題換掉）；`bot_pick` 一律 `None`；
   `bot_always = ("defect:", "faction:lean:")`；`enabled` 一直是 `True`；`on_drop_stale`（內容改版後拿掉的陣營，三個 pending 欄位作廢；原本在 `_drop_stale_references` 中段）；`defection()` 登記叛投兩格——`clear` 的 `progress`（`_clear_own`）與 `after` 的 `leave_behind`（`DEFECT_ORDER` 一個字不動）。
+- 「你這一步」的格 `steps()`（全部拆包第 36 批；順序在核心的 `STEP_ORDER`，排最後）：`join`（`join_actions.join_step_items`／`join_step_place`：散人、劇本有陣營、季沒收才有那一件，目標是最近的投靠點〔問新手引導包的查詢服務 `ctx._nearest_to`；一樣近照劇本陣營的順序〕；`JOIN_STEP` 從 `weekcard` 搬來，字一個不改；投靠點的地名照 `weekcard._places` 抄一份 `_join_place_names`〔三方卡照用 `weekcard` 那一份，包不 import `weekcard`〕；原本 `weekcard._steps` 最後那一段與 `step._target` 的去投靠那一支）。不問 `enabled`。
 
 ## 認領的欄位（手冊 3.5：留在原地）
 

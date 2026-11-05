@@ -13,7 +13,7 @@ newbie_drifter）與 /api/prologue，選單上的那幾顆是別人的（act:res
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature
+from tianxia.core.features import DefectHook, Feature, StepHook
 
 
 class GuideFeature(Feature):
@@ -47,6 +47,20 @@ class GuideFeature(Feature):
 
             self._defection = (DefectHook("clear", "hints", lambda p: hints.defect_clear(p)),)
         return self._defection
+
+    # core_step（全部拆包第 36 批「你這一步」）
+    _steps: tuple[StepHook, ...] | None = None
+
+    def steps(self) -> tuple[StepHook, ...]:
+        """「你這一步」的 newbie 那一格（新手目標；原本 weekcard._steps 讀 status["newbie"] 那一段與 step._target 的新手目標那一支）：位置在
+        STEP_ORDER。不問 enabled（新手期過了 status 裡就沒有 newbie）。建一次就留著，在叫的那一下才照模組屬性找 actions.newbie_step_items／
+        newbie_step_place（monkeypatch 照樣有效）。"""
+        if self._steps is None:
+            from . import actions  # noqa: PLC0415
+
+            self._steps = (StepHook("newbie", lambda ctx, status, orders: actions.newbie_step_items(ctx, status), ref="newbie",
+                                    place=lambda ctx, ref: actions.newbie_step_place(ctx, ref)),)
+        return self._steps
 
 
 FEATURE = GuideFeature()

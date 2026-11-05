@@ -8,7 +8,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, Outcome
+from tianxia.core.features import DefectHook, Feature, Outcome, StepHook
 
 
 class CompanionsFeature(Feature):
@@ -69,6 +69,19 @@ class CompanionsFeature(Feature):
 
             self._defection = (DefectHook("after", "parley", lambda ctx, side: parley_actions.forsake_all(ctx)),)
         return self._defection
+
+    # core_step（全部拆包第 36 批「你這一步」）
+    _steps: tuple[StepHook, ...] | None = None
+
+    def steps(self) -> tuple[StepHook, ...]:
+        """「你這一步」的 errand 那一格（身上還在辦的人物託付；原本 weekcard._steps 第一行直接叫 errands.step_items）：排在最前面（STEP_ORDER）。
+        自己帶好 id 與 target、不掛 _ref，所以沒有 ref、place（step.finish 看到有 target 就照留）。不問 enabled（託付關著是 errands.on 判的，回空的）。
+        建一次就留著，在叫的那一下才照模組屬性找 errands.step_items（monkeypatch 照樣有效）。"""
+        if self._steps is None:
+            from . import errands  # noqa: PLC0415
+
+            self._steps = (StepHook("errand", lambda ctx, status, orders: errands.step_items(ctx.state, ctx.content)),)
+        return self._steps
 
 
 FEATURE = CompanionsFeature()
