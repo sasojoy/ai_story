@@ -369,9 +369,36 @@
   // 入帳多少、押著多少；掛著的排前面，沒掛的摺起來，按「掛上去」才跳出定價）；退回的摺起來，留最新一張（改一改再送）
   const LOOK_ORDER_NOTE = "畫好、審過就放進「我的」。沒通過的話，元寶全部退回。"; // 待 joy 潤
   const LOOK_EXAMPLES = ["白衣書生，背著竹簍", "黑甲將軍，手持長槍", "紅衣女刀客"]; // 想不到就點；待 joy 潤
-  const MOVE_EXAMPLES = ["一劍寒光九萬里", "背後出現一座大佛擊出一掌", "巨掌從天而降"];
-  const exampleHtml = (list, target) => `<div class="look-ex"><span>想不到就點：</span>${list.map((t) =>
-    `<button class="btn small ghost" data-act="prompt-ex" data-for="${target}" data-text="${esc(t)}">${esc(t)}</button>`).join("")}</div>`;
+  // 絕招的例句（Joy 2026-11-05「現在的demo提示詞沒辦法完美展示我們的多種招式施放」）：每一句演得出不同的法相出場、主攻路線、對手異狀
+  // （scenes.py 的 MOTIONS／PATHS／MARKS）。一次擺三句，「換一批」換下一組三句（S.moveExAt），重畫時不會自己亂跳
+  const MOVE_EXAMPLES = [
+    "一劍寒光九萬里",
+    "夜色驟暗，萬劍環成劍輪，絞向對手將其冰封",
+    "背後浮現明王法相緩緩旋轉，一道金光平推而出",
+    "火鳳自天降臨，挾漫天火星撞向對手，烈焰焚身",
+    "背後幻出三尊羅漢分身，地底雷光轟然湧上",
+    "雪落無聲，一道寒光自對手背後襲來，將他擊飛",
+    "落花滿天，劍雨傾盆而下，中者身染劇毒",
+    "大地震動，一隻巨石拳迴旋砸出，轟然爆炸",
+    "紫氣漫天，神龍自雲端降臨，龍口吐出一道紫光盤旋而出",
+    "秋葉蕭瑟，一道碧色劍氣迴旋連斬九道",
+    "大佛法相脈動金光，佛掌從天壓下，對手被震飛又遭雷殛",
+  ];
+  const MOVE_EX_SHOWN = 3;
+  const exampleHtml = (list, target) => {
+    const many = list.length > MOVE_EX_SHOWN && list === MOVE_EXAMPLES;
+    const at = many ? ((S.moveExAt | 0) % list.length + list.length) % list.length : 0;
+    const shown = many ? Array.from({ length: MOVE_EX_SHOWN }, (_, k) => list[(at + k) % list.length]) : list;
+    return `<div class="look-ex"><span>想不到就點：</span>${shown.map((t) =>
+      `<button class="btn small ghost" data-act="prompt-ex" data-for="${target}" data-text="${esc(t)}">${esc(t)}</button>`).join("")}${many
+      ? '<button class="btn small ghost ex-more" data-act="prompt-ex-more">換一批 ↻</button>' : ""}</div>`;
+  };
+  function moveExMore() {
+    const box = document.getElementById("move-prompt");
+    if (box) S.moveDraft = box.value; // 框裡打到一半的字跟著重畫留著
+    S.moveExAt = ((S.moveExAt | 0) + MOVE_EX_SHOWN) % MOVE_EXAMPLES.length;
+    renderMall();
+  }
   const waitIcon = '<span class="look-wait" aria-hidden="true"></span>';
   function lookOrderHtml(o, d) {
     if (!o) return "";
@@ -517,6 +544,16 @@
       : "這一句沒有看得出形狀的東西：買通用的就好（獨門會退回來叫你換一句）。";
     return `<canvas id="scene-preview" class="scene-preview" width="720" height="320" aria-label="絕招預覽"></canvas><p class="mall-note">${esc(note)}</p>`;
   }
+  // 預覽台上站的是自己（Joy 11/5 例句影片驗出來：以前一律是斗笠小子）：穿的那一套、拿那一種打法的兵器。
+  // 擂台開打時 arena_anim 會照那一場重設。俠客頁武學卡的「演一次」也叫它（app.js heroMoveShow）
+  function sceneAsMe(style) {
+    const look = (S.main && S.main.look) || "";
+    const kind = { slash: "劍", pole: "槍", fist: "拳腳", shoot: "弓弩" }[style || ""] || "";
+    if (typeof RA !== "undefined") RA.looks = { ...RA.looks, me: kind, me_look: look };
+    if (typeof ringLoad === "function") ringLoad();
+    if (look && typeof ringWarmLook === "function") ringWarmLook(look);
+  }
+  const looksMoves = () => (S.mallLooks && S.mallLooks.moves) || null;
   // 招式庫裡做好了的那一招：照它的稿和畫好的圖演一次（同擂台；再按一次收起，回到下單的表單）
   async function moveShowTo(mid) {
     if (!mid || S.moveShow === mid) { S.moveShow = null; if (S.mallOpen) renderMall(); return; }
@@ -524,6 +561,8 @@
     if (!r || !r.scene) { S.mallSay = { text: "這一招演不出來，等一下再試。", ok: false }; if (S.mallOpen) renderMall(); return; }
     S.moveShow = mid; S.movePreview = null;
     if (S.mallOpen) renderMall();
+    const row = ((looksMoves() || {}).library || []).find((x) => x.move === mid);
+    sceneAsMe(row ? row.style : (looksMoves() || {}).style);
     if (typeof scenePreview === "function") scenePreview(r.scene, mid);
   }
   async function movePreview() {
@@ -535,6 +574,7 @@
     // 兩次答案不同，玩家核准的跟真的畫出來的就不是同一份（#493：預覽說槍＋菊花，結果兩把槍）
     S.moveShown = r && r.draft ? { text, draft: r.draft } : null;
     if (S.mallOpen) renderMall();
+    if (S.movePreview.scene) sceneAsMe((looksMoves() || {}).style);
     if (S.movePreview.scene && typeof scenePreview === "function") scenePreview(S.movePreview.scene);
   }
   function moveOrderAsk(basic) {

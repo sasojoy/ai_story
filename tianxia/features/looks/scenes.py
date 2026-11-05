@@ -280,7 +280,7 @@ def direct(text: str, name: str = "", draft: dict | None = None) -> dict:
     raw: dict = {"beats": []}
     beats = raw["beats"]
     cold, hot, thunder = _has(text, "寒", "冰", "霜", "雪", "凍"), _has(text, "火", "炎", "焰", "焚", "陽", "日", "烈"), _has(text, "雷", "電", "霆")
-    raw["glow"] = GLOWS["寒"] if cold else GLOWS["赤"] if hot and not _has(text, "佛", "金") else GLOWS["紫"] if thunder \
+    raw["glow"] = GLOWS["寒"] if cold else GLOWS["赤"] if hot and not _has(text, "佛", "金") else GLOWS["紫"] if thunder or _has(text, "紫") \
         else GLOWS["碧"] if _has(text, "毒", "碧", "青") else GLOWS["白"] if _has(text, "白", "月", "銀") else GLOWS["金"]
     beats.append({"op": "暗場", "tone": "冷" if cold else "紫" if thunder else "夜" if _has(text, "夜", "月", "鬼") else "暖"})
     figure = next((label for key, label in FIGURES if key in text), "")
@@ -323,15 +323,16 @@ def direct(text: str, name: str = "", draft: dict | None = None) -> dict:
 
 
 def _motion_of(text: str) -> str:
-    """關鍵字：法相怎麼出來。"""
-    if _has(text, "旋", "轉"):
-        return "旋轉"
-    if _has(text, "天降", "從天", "降臨", "自天"):
-        return "天降"
+    """關鍵字：法相怎麼出來。「迴旋」「盤旋」是主攻的路線，不算法相在轉；「從天」「當頭」多半是說砸下來的那一下（_path_of），
+    法相從天上來要寫「降臨」。"""
     if _has(text, "分身", "化身", "千手", "三頭", "幻影"):
         return "分身"
     if _has(text, "脈動", "呼吸", "鼓動", "搏動"):
         return "脈動"
+    if _has(text.replace("迴旋", "").replace("盤旋", "").replace("回旋", ""), "旋", "轉"):
+        return "旋轉"
+    if _has(text, "降臨", "天降法相", "自天而降"):
+        return "天降"
     return MOTIONS[0]
 
 
