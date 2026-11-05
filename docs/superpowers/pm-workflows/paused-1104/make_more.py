@@ -14,6 +14,7 @@ COMMON_BODY = [
     "- same_behavior 新開的軌一律用原創名字（PM 11/04，第 22 批認定第 3 條）。",
     "- 前幾批的 PM 認定在手冊第十五節，開工先用 grep 找跟這一包有關的，不要整節讀。**不准碰 `web/`**；動到路由的話，自己那一軌每一條都要打到（web/ 沒動就沒有實機驗收）。",
     "- 這一批搬的模組若是世界層代叫的舊模組（`tianxia/world.py` 開頭模組說明「另外要跑的」反過來那一段點名的，例：`figure_life`、`bounties`），`test_for` 挑不到 `test_world` 那一串：開發與修正另跑那一段列的檔（第 25 批 PM 認定第 7 條）。",
+    "- **掃原始碼、寫死檔名的測試**跟著改路徑（只改路徑、不改判斷）：搬的方法裡有 `renown.gain(..., \"fame\", ...)` 的，`tests/arts/test_explain2.py` 名望來源那張清單要把那一行從 `engine.py` 改成包裡的檔、照路徑排（第 46 批漏了，主幹全面檢查才抓到，FB-9431）；其他寫死 `\"engine.py\"` 的期望用 `git grep -n '\"engine.py\"' -- tests tianxia/features` 找。`test_for` 挑不到這種測試，開發自己跑一次那幾個檔。",
     "- 審查常抓到的（第 19、20 批）：總表附錄甲點名這一批的方法與測試檔有沒有漏；這一批搬進來的 `PlayerState` 欄位 `player_fields` 與 README 有沒有認領；「列舉每一包」的表（`STAGE_PACKAGES`）；情境有沒有真的走到（看輸出裡有沒有預期的按鈕或句子，不是只看 200）。",
 ]
 
