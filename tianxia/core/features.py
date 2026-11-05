@@ -55,6 +55,8 @@
   （每一個效果欄位歸哪一格寫在 EFFECT_FIELDS），不問 enabled |
 | defection()（DefectHook） | 叛投那一刻的格（core_effects）：defection.clear_progress（clear）、defection.defect（leave、stranded）、Game._defect_step 確定那一支
   （after）四個位置，照檔尾寫死的順序表 DEFECT_ORDER 一格一格叫（各包清自己的進度），不問 enabled |
+| bus()（BusHook） | 一種事件的格（core_eventbus：全部拆包第 26 批）：ctx.publish 的七個發布點（打贏一場、出門一趟、舊探索、抵達、截殺打贏、
+  決戰收場），照檔尾寫死的順序表 BUS_ORDER 一格一格叫，不問 enabled |
 
 ctx 第一階就是 Game；功能包只准叫 services.py 那張清單上的方法。
 """
@@ -167,6 +169,8 @@ class FeatureHooks(Protocol):
     # core_effects（全部拆包第 32 批：一則效果的格與叛投那一刻的格，先後在 EFFECT_ORDER、DEFECT_ORDER；不問 enabled）
     def effects(self) -> tuple[EffectHook, ...]: ...
     def defection(self) -> tuple[DefectHook, ...]: ...
+    # core_eventbus（全部拆包第 26 批：一種事件的格，先後在 BUS_ORDER；不問 enabled）
+    def bus(self) -> tuple[BusHook, ...]: ...
 
 
 class Feature:
@@ -268,6 +272,9 @@ class Feature:
         return ()
 
     def defection(self) -> tuple[DefectHook, ...]:
+        return ()
+
+    def bus(self) -> tuple[BusHook, ...]:
         return ()
 
     def __repr__(self) -> str:
@@ -779,6 +786,78 @@ def defect_run(at: str, core: dict[str, Callable[..., Any]], *args: Any) -> list
     order = DEFECT_ORDER[at]
     if not core.keys() <= set(order):
         raise ValueError(f"核心代叫了叛投 {at} 表上沒有的格 {sorted(core.keys() - set(order))}")
+    out: list[Any] = []
+    for slot in order:
+        run = own.get(slot) or core.get(slot)
+        if run is not None:
+            out.append(run(*args))
+    return out
+
+
+# core_eventbus（全部拆包第 26 批「事件機制」；計畫 docs/superpowers/plans/2026-11-06-事件機制-第26批.md 1.2、2.1）
+
+
+@dataclass(frozen=True)
+class BusHook:
+    """一種事件的一格（Feature.bus() 回一串）：核心在發布點（ctx.publish）照 BUS_ORDER[event] 一格一格叫，輪到 slot 就叫 run(ctx, *args)，
+    回這一格的那幾句（沒有是 []；battle_end 回 None、不接）。照 registered() 問、不看 enabled（原位不看包的開關，判斷在被叫的函式裡）。
+    包的 run 在叫的那一下才照模組屬性找自己的函式（monkeypatch 照樣有效）。"""
+
+    event: str
+    slot: str
+    run: Callable[..., Any]
+
+
+# 事件 → 訂閱的格，照換成事件之前一行裡的呼叫先後。同一下兩個訂閱者的先後就是回話與存檔寫入的先後（outing：打探懸賞→撿玉璽碎片；
+# arrive：交糧車→護送懸賞；調了就抓得到，計畫 1.9），所以寫死。包登記自己那一格（Feature.bus()），其餘由 engine._BUS_CORE 代叫（還沒成包的
+# 舊模組，標批號）。之後懸賞（第 45 批）、玉璽（第 27 批）成包只是那一格換主人，表不動。改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。
+# 「集結開始」是世界層 WORLD_ORDER["muster"] 的 seal 那一格（第 25 批），不在這裡。
+#
+# 事件        發布點（位置不動）                                                                 run 的簽名                         回傳
+# win         Game._squad_encounter 打贏（不是野怪、不在序章）；探索包 outing_fight 遭遇打贏（不是城裡）   (ctx, loc_id, squad_id)            接 list[str]
+# outing      探索包 explore_one 收尾                                                             (ctx, loc_id)                      接
+# explore     探索包 explore_base.explore（舊探索，序章外）                                        (ctx, loc_id)                      接
+# arrive      Game._arrive 抵達一站                                                               (ctx, loc_id)                      接
+# raid_win    Game._raid_bounty（截殺、設伏打贏）                                                  (ctx, target)                      接
+# battle_end  決戰包 progress.settle_showdown（時刻表決戰收場，讀回季之前）                         (ctx, battle, definition, result)  不接（None）
+BUS_ORDER: dict[str, tuple[str, ...]] = {
+    "win": ("bounties",),
+    "outing": ("bounties", "seal"),
+    "explore": ("bounties",),
+    "arrive": ("convoy", "bounties"),
+    "raid_win": ("bounties",),
+    "battle_end": ("seal",),
+}
+
+
+def bus_hooks(event: str) -> dict[str, Callable[..., Any]]:
+    """event 那一種包登記的格 {slot: run}：照 registered()、不看 enabled。每一次都驗登記的全部格：表上沒有的事件或格、同一格登記兩次
+    （兩包或同一包）都丟 ValueError（同 world_hooks、defect_hooks）。"""
+    if event not in BUS_ORDER:
+        raise ValueError(f"事件沒有 {event} 這一種")
+    own: dict[str, Callable[..., Any]] = {}
+    for f in registered():
+        for hook in f.bus():
+            if hook.slot not in BUS_ORDER.get(hook.event, ()):
+                raise ValueError(f"{f.name} 登記了事件表上沒有的格 {hook.event}/{hook.slot}")
+            if hook.event == event:
+                if hook.slot in own:
+                    raise ValueError(f"事件的 {event}/{hook.slot} 登記了兩次（{f.name}）")
+                own[hook.slot] = hook.run
+    return own
+
+
+def bus_run(event: str, core: dict[str, Callable[..., Any]], *args: Any,
+            hooks: dict[str, Callable[..., Any]] | None = None) -> list[Any]:
+    """照 BUS_ORDER[event] 走每一格：包登記了叫包的，沒有叫 core 那一份（核心代叫的格：engine._BUS_CORE）；兩邊都沒有（那一格的包沒登記：
+    契約測試換掉 FEATURES 時）跳過。回每一格的回傳值（照順序、跳過的不算）：接不接由發布點決定（battle_end 不接）。
+    core 寫了表上沒有的格丟 ValueError（打錯字的格不會默默不跑）；沒有這一種事件丟 ValueError。"""
+    own = bus_hooks(event) if hooks is None else hooks  # 沒有這一種事件在 bus_hooks 丟
+    order = BUS_ORDER.get(event)
+    if order is None:
+        raise ValueError(f"事件沒有 {event} 這一種")
+    if not core.keys() <= set(order):
+        raise ValueError(f"核心代叫了事件 {event} 表上沒有的格 {sorted(core.keys() - set(order))}")
     out: list[Any] = []
     for slot in order:
         run = own.get(slot) or core.get(slot)

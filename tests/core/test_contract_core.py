@@ -9,7 +9,7 @@ import pytest
 from conftest import next_season
 from tianxia.core import features as features_core
 from tianxia.core import registry
-from tianxia.core.features import AdminTool, DefectHook, EffectHook, Feature, Outcome, Shop, Verb, WorldHook
+from tianxia.core.features import AdminTool, BusHook, DefectHook, EffectHook, Feature, Outcome, Shop, Verb, WorldHook
 from tianxia.core.option import Option
 from tianxia.engine import Game
 
@@ -775,3 +775,100 @@ def test_the_core_and_the_packages_take_every_effect_and_defection_slot_exactly_
         "story": ["story"], "military": ["grain", "fs_fragments", "foreshadow"]}
     assert {f.name: [(h.at, h.slot) for h in f.defection()] for f in fs if f.defection()} == {
         "military": [("clear", "convoy"), ("clear", "opportunities"), ("leave", "plots")], "guide": [("clear", "hints")], "companions": [("after", "parley")]}
+
+
+# core_eventbus（全部拆包第 26 批「事件機制」；計畫 docs/superpowers/plans/2026-11-06-事件機制-第26批.md 1.2、2.1、Task 2）
+class Bussy(Feature):
+    """只登記事件的格的假包；open 是 enabled 的答案（事件不問它）。"""
+
+    name = "bussy"
+
+    def __init__(self, hooks, open_=True):
+        self.hooks, self.open = tuple(hooks), open_
+
+    def enabled(self, ctx):
+        return self.open
+
+    def bus(self):
+        return self.hooks
+
+
+def test_the_bus_order_is_the_table_in_the_plan():
+    """順序就是行為：每一種事件的格照換成事件之前一行裡的呼叫先後（計畫 1.2），一格不挪——同一下兩個訂閱者的先後就是回話與存檔寫入的先後
+    （outing：打探懸賞→撿玉璽碎片；arrive：交糧車→護送懸賞；計畫 1.9 調了就抓得到）。改這張表先過 PM。"""
+    assert features_core.BUS_ORDER == {
+        "win": ("bounties",),
+        "outing": ("bounties", "seal"),
+        "explore": ("bounties",),
+        "arrive": ("convoy", "bounties"),
+        "raid_win": ("bounties",),
+        "battle_end": ("seal",),
+    }
+    assert Feature().bus() == ()
+
+
+def test_a_package_can_only_take_an_event_slot_on_the_table_and_only_one_package_a_slot(monkeypatch):
+    """包登記的格都在表上、同一格只有一包：表外的格（哪一種事件都驗）、沒有的事件、兩包（或同一包兩次）登記同一格，bus_hooks 都丟
+    ValueError；核心代叫的打錯字、沒有這一種事件也丟（bus_run）。"""
+    run = lambda *a: None  # noqa: E731
+    monkeypatch.setattr(registry, "FEATURES", [Bussy([BusHook("arrive", "nobody", run)])])
+    with pytest.raises(ValueError):
+        features_core.bus_hooks("win")
+    monkeypatch.setattr(registry, "FEATURES", [Bussy([BusHook("nothing", "bounties", run)])])
+    with pytest.raises(ValueError):
+        features_core.bus_hooks("win")
+    monkeypatch.setattr(registry, "FEATURES", [Bussy([BusHook("arrive", "convoy", run)]), Bussy([BusHook("arrive", "convoy", run)])])
+    with pytest.raises(ValueError):
+        features_core.bus_hooks("arrive")
+    monkeypatch.setattr(registry, "FEATURES", [Bussy([BusHook("outing", "seal", run), BusHook("outing", "seal", run)])])
+    with pytest.raises(ValueError):
+        features_core.bus_hooks("outing")
+    monkeypatch.setattr(registry, "FEATURES", [])
+    with pytest.raises(ValueError):
+        features_core.bus_hooks("nothing")
+    with pytest.raises(ValueError):
+        features_core.bus_run("win", {"bounty": run}, "ctx", "loc", "squad")
+    with pytest.raises(ValueError):
+        features_core.bus_run("nothing", {}, "ctx")
+    with pytest.raises(ValueError):
+        features_core.bus_run("nothing", {}, "ctx", hooks={})
+
+
+def test_the_bus_calls_its_slots_in_the_table_order(monkeypatch):
+    """bus_run 照表的順序叫：包登記的那一格（arrive 的護送懸賞、outing 的撿碎片，各自排在核心代叫的那一格之後）照表、不照登記的先後；
+    回每一格的回傳值（照順序）；兩邊都沒有的格跳過；包登記了的格就不叫核心那一份。先取好的 hooks 照用、不再問包。"""
+    calls = []
+
+    def note(owner, slot, back):
+        return lambda *args: calls.append((owner, slot, args)) or back
+
+    pkg = Bussy([BusHook("outing", "seal", note("pkg", "seal", ["碎片"])), BusHook("arrive", "bounties", note("pkg", "bounties", ["護送"]))])
+    monkeypatch.setattr(registry, "FEATURES", [pkg])
+    core = {"convoy": note("core", "convoy", ["糧車"]), "bounties": note("core", "bounties", ["不該叫"])}
+    assert features_core.bus_run("arrive", core, "ctx", "loc") == [["糧車"], ["護送"]]
+    assert calls == [("core", "convoy", ("ctx", "loc")), ("pkg", "bounties", ("ctx", "loc"))]
+    calls.clear()
+    assert features_core.bus_run("outing", {"bounties": note("core", "bounties", ["打探"])}, "ctx", "loc") == [["打探"], ["碎片"]]
+    assert [(owner, slot) for owner, slot, _ in calls] == [("core", "bounties"), ("pkg", "seal")]
+    calls.clear()
+    assert features_core.bus_run("outing", {}, "ctx", "loc") == [["碎片"]]
+    assert calls == [("pkg", "seal", ("ctx", "loc"))]
+    calls.clear()
+    monkeypatch.setattr(registry, "FEATURES", [])
+    assert features_core.bus_run("arrive", {}, "ctx", "loc") == []
+    assert calls == []
+    got = features_core.bus_run("arrive", {"bounties": note("core", "bounties", [])}, "ctx", "loc",
+                                hooks={"convoy": note("pre", "convoy", ["糧車"])})
+    assert got == [["糧車"], []] and [(owner, slot) for owner, slot, _ in calls] == [("pre", "convoy"), ("core", "bounties")]
+
+
+def test_the_bus_returns_what_each_slot_returns_and_asks_a_closed_package_too(monkeypatch):
+    """事件不問 enabled（原位那幾行本來就不看包的開關：押糧、懸賞、玉璽的判斷都在被叫的函式裡）：關著的包照樣被叫；battle_end 的格回 None
+    照樣在回傳值裡（不接是發布點的事）。"""
+    calls = []
+    pkg = Bussy([BusHook("battle_end", "seal", lambda *args: calls.append(args)),
+                 BusHook("raid_win", "bounties", lambda ctx, target: calls.append((ctx, target)) or ["通緝"])], open_=False)
+    monkeypatch.setattr(registry, "FEATURES", [pkg])
+    assert features_core.bus_run("battle_end", {}, "ctx", "battle", "definition", "result") == [None]
+    assert features_core.bus_run("raid_win", {}, "ctx", "某人") == [["通緝"]]
+    assert calls == [("ctx", "battle", "definition", "result"), ("ctx", "某人")]
