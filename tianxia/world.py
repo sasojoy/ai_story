@@ -16,7 +16,7 @@
     tests/figures/test_figure_attrition.py、tests/battle/test_fronts.py、tests/figures/test_front_lines.py、tests/figures/test_finale.py、
     tests/figures/test_admin_triggers.py、tests/figures/test_calendar.py、tests/seal/test_seal.py、
     tests/seal/test_seal_engine.py（換季把沒收場的奪璽單挑記成未分勝負）、tests/seal/test_seal_acts.py、tests/acts/test_conquest_rules.py、
-    tests/acts/test_stamina_plays.py、tests/core/test_chapters.py、tests/core/test_marks_wired.py、tianxia/features/looks/tests/test_looks_mvp.py
+    tianxia/features/stamina_plays/tests/test_stamina_plays.py、tests/core/test_chapters.py、tests/core/test_marks_wired.py、tianxia/features/looks/tests/test_looks_mvp.py
 - 與 scripts/same_behavior.py 的 world 一軌（compare --tracks world，season21、week7、test 三種）。
 - 反過來：改這裡代叫的舊模組（figure_life、bounties、orders、plans、figures、seal_acts、seal……；works 第 39 批已成包、改由體力玩法包登記 muster 的 works 那一格）時，test_for 往上找走到核心的
   world 就停，挑不到 tests/core/test_world.py 與上面那一串（第 25 批之前 world 是舊模組、會挑到）。改了它們的簽名或回傳值，另外跑
