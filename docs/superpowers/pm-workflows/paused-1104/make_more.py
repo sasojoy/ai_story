@@ -19,6 +19,7 @@ COMMON_BODY = [
     "- **數字照重印，不抄舊計畫**：`GAME_DIRECT`、委派、過渡處數一律用 `python tests/core/test_feature_boundaries.py` 在開工那一筆重印的（11/06 第 41 批合完 `GAME_DIRECT` 是 11；第 35、47、29b 三批的計畫都抄了舊的「維持 3」）。`tests/core/test_test_for.py` 拿來當例子的舊模組因為搬走而失效時，照實換一個例子、在測試裡寫明理由與量到的數，不必問 PM（第 35 批認定第 1 條、第 49 批認定第 8 條）；`scripts/test_for.py` 本身的 `IMPORT_CAP` 不准動。",
     "- 這份 clone 的 `git fetch origin <分支>` 只寫 `FETCH_HEAD`、不更新 `origin/<分支>`：一律 `git fetch origin +refs/heads/<分支>:refs/remotes/origin/<分支>`。",
     "- **收進核心或共用層、或把 import 移進函式時，回頭量反方向**（第 36 批認定第 1 條）：`test_for.dependents` 碰到核心模組就不往上走、`module_graph` 只讀最外層的 import，所以依賴它的舊模組原本經它挑到的測試會整串消失。解出 base、head，對每個被它 import 的舊模組各叫一次 `test_for.pick` 比，少挑到的寫進那個模組說明的「另外跑」與計畫第五節，不必問 PM。",
+    "- **搬常數或函式時，驗收數一次 selftest 的目標句**（第 40 批認定第 16 條）：照 `scripts/same_behavior.py` `_mutant` 的找法，把 `MUTATIONS` 與 `EXPLORE_MUTATIONS` 每一條的目標句在 head 列出的檔裡數一次（幾秒）；找不到的在這一批 `# <批>` 那一段補檔清單。`compare` 不讀這兩張表，前後比對全綠也抓不到。收舊模組進共用層或核心時，`tests/core/test_feature_boundaries.py`、`tests/core/test_test_for.py` 裡拿它當「舊模組」的例子也一起看，失效的換掉、行尾寫理由（第 40 批認定第 15 條）。",
     "- 審查常抓到的（第 19、20 批）：總表附錄甲點名這一批的方法與測試檔有沒有漏；這一批搬進來的 `PlayerState` 欄位 `player_fields` 與 README 有沒有認領；「列舉每一包」的表（`STAGE_PACKAGES`）；情境有沒有真的走到（看輸出裡有沒有預期的按鈕或句子，不是只看 200）。",
 ]
 
