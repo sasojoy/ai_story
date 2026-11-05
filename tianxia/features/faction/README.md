@@ -16,8 +16,9 @@
 - `defection.py`（原 `tianxia/defection.py`，舊名是別名）：叛投的規則——能不能叛投、去哪些槽、確認畫面的話（`prompt`）、`clear_progress`／`_clear_own`／`defect`。
 - `ending_actions.py`：季末與三方卡——`season_grant`（換季開場照上一季論功發起手資源與稱號）、`four_wins`、`ending_card`、`tier_outlook`、`tier_hint`、`gentry_now`、`sides_card`。
 - `bots.py`：假人的分數（原本 `bot_policy.score` 的 `defect`、`sect` 兩段；`faction:` 原本落到最後的 `None`）：三個前綴一律回 `None`。投靠與確認仍走 `bot_policy._toward_faction`（不經 `score`）。
+- 內容檔：`content = ("sects.json", "events/sects.json")`（門派與拜入門派的事件，總表附錄甲歸陣營；`content.py` 照舊讀）。
 - 掛鉤：`prefix = ("faction", "defect", "sect")`；`choose` 接這三個前綴（標題在動作之前拿；`sect` 的標題問核心的 `_action_title`，落到最後的「提前出關」，隨後被事件標題換掉）；`bot_pick` 一律 `None`；
-  `bot_always = ("defect:", "faction:lean:")`；`enabled` 一直是 `True`；`defection()` 登記叛投兩格——`clear` 的 `progress`（`_clear_own`）與 `after` 的 `leave_behind`（`DEFECT_ORDER` 一個字不動）。
+  `bot_always = ("defect:", "faction:lean:")`；`enabled` 一直是 `True`；`on_drop_stale`（內容改版後拿掉的陣營，三個 pending 欄位作廢；原本在 `_drop_stale_references` 中段）；`defection()` 登記叛投兩格——`clear` 的 `progress`（`_clear_own`）與 `after` 的 `leave_behind`（`DEFECT_ORDER` 一個字不動）。
 
 ## 認領的欄位（手冊 3.5：留在原地）
 
@@ -31,6 +32,9 @@
 其餘 `_faction_step`、`_bot_lean`、`_lean_step`、`_defect_step`、`_leave_behind`、`_tier_outlook`、`_gentry_now` 只有包裡叫，沒有委派。
 核心原位接掛鉤的：`choose` 的 `faction`／`defect`／`sect` 與 `_action_title` 的 `faction`／`defect`（`Outcome`）、`bot_policy.score` 的 `defect`／`sect`、`bot.py` 的 `defect:`／`faction:lean:` 排除（`bot_always`）、叛投兩格（`_CLEAR_CORE`、`_DEFECT_AFTER_CORE` 拿掉）。
 還留在原位的：`bot_policy.take_turn` 的選項濾掉 `faction:lean:`／`defect:`（裡面還有別包與核心的前綴，且不用 `bot_always`）、`bot_policy._toward_faction`（投靠與確認，不經 `score`）、`bot.py` 的 `sect:` 看過才排除（條件式）。
+核心還直接碰這一包認領欄位或前綴的：`options` 的 `defect:cancel`（叛投確認畫面上的「再想想」，`pending_defect` 有值時核心原位加進戰鬥選單）、`_own_scene_text` 選邊與投靠確認的場景判斷（叛投那一段已是 `_defect_scene` 委派）、`atlas.py` 讀 `pending_faction`／`pending_defect`；這幾處沒有掛鉤可接，位置算行為，留原位。
+包裡自己叫自己的 `four_wins` 一律直接叫（沒有測試換掉它）；`Game._four_wins` 只剩決戰包經 ctx 問的那一條（`services.py` 二、查詢服務 `# faction`）。
+叛投確認畫面問押糧經核心的 `core/convoy_base.py`（見計畫第五節；它讀軍情包認領的 `PlayerState.convoy`，只讀、`held(state)` 一個函式）。
 
 ## 測試
 
@@ -43,7 +47,7 @@
 
 **不搬、另外要跑的混合檔**（含這一包的測試，但整檔不屬於這一包，不拆；數字是全檔條數，用到這一包的條數未逐條量）：
 
-- `tests/core/test_contract_core.py`（46）：叛投兩格的順序、核心與包把每一格剛好各拿一次（約 710～776 行；`monkeypatch` 的目標第 35 批改成包裡的 `defect_actions`）。
+- `tests/core/test_contract_core.py`（46）：叛投兩格的順序、核心與包把每一格剛好各拿一次（約 710～776 行；第 35 批這兩條的擺法改了：假包自己登記 `progress`、`leave_behind` 兩格〔`DefectHook`〕，原本 `monkeypatch` 換掉 `defection._clear_own`／`Game._leave_behind` 的兩行拿掉，預期表跟著改；理由與要 PM 認定見計畫第五節）。
 - `tests/figures/test_gentry_allied.py`（47）、`tests/core/test_gentry_ledgers.py`（16）、`tests/core/test_factions.py`（2）、`tests/core/test_faction_events.py`（3）：豪強、兩本帳、陣營規模與事件。
 - `tests/figures/test_promotions_huang.py`（56）、`test_promotions_high.py`（130）、`test_seats.py`（83）、`test_rumor_layers.py`（70）：只有幾處 `import defection`（晉升、席次、傳聞分層）。
 - `tests/web/test_gentry_allied_web.py`（2）：網頁（第 3 階）。
