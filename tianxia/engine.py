@@ -6005,6 +6005,19 @@ class Game:
         """煉製頁「自創」那一塊（create.view）。只讀。"""
         return create.view(self.state, self.content, self.world)
 
+    # craft（全部拆包第 44 批）：新手引導碰到才說的 h_create 問的三個查詢服務（只讀；原本引導包直接 import create）
+    def _create_on(self) -> bool:
+        """自創開著沒（create.on）。"""
+        return create.on(self.content)
+
+    def _create_allowed(self) -> str | None:
+        """此刻能不能自創：不能是原因，能是 None（create.allowed）。"""
+        return create.allowed(self.state, self.content)
+
+    def _create_price(self) -> int:
+        """這一門自創要付多少心得（create.price）。"""
+        return create.price(self.state, self.content)
+
     def slot_insight(self, art_id: str, insight_id: str, index: int | None = None) -> list[str]:
         """把一個意境裝進一門武學的意境槽（修練包 actions.slot_insight；修練頁與煉製頁都走這裡，籌備中被擋）。"""
         return cultivation_actions.slot_insight(self, art_id, insight_id, index)
