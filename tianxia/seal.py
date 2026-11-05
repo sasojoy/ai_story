@@ -683,7 +683,9 @@ def chronicle_block(content: Content, reg: SealRegistry, before: str = "", manda
 
 
 # core_effects（全部拆包第 32 批「效果與叛投掛鉤」）：rules.apply_effect 的兩格（符文殘片、舊鏈的玉璽碎片），原本那兩段逐字搬；
-# 核心（rules._EFFECT_CORE）延後 import 代叫，過渡：待搬（第 27 批：玉璽包登記那兩格）。先後在 core/features.py 的 EFFECT_ORDER
+# 核心（rules._EFFECT_CORE）延後 import 代叫，過渡：待搬（第 27 批：玉璽包登記那兩格）。先後在 core/features.py 的 EFFECT_ORDER。
+# 改這兩格時 test_for 往上找停在核心的 rules，挑不到釘住它們的測試：另外跑 tests/core/test_rules.py（舊鏈的玉璽碎片 5 條）、
+# tests/figures/test_promotions_huang.py（符文殘片）、tests/seal/test_seal.py（rules.py 模組說明「改效果那幾格要跑的測試」）。
 
 
 def effect_runic(r: EffectRun) -> list[str]:
