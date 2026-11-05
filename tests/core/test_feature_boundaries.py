@@ -1567,6 +1567,58 @@ def test_the_world_layer_core_files_import_no_package_not_even_inside_a_function
 GAME_DELEGATES -= {"_parley_forsake"}
 del GAME_DELEGATE_CALLERS[("_defect_step", "_parley_forsake")]
 
+# 效果那幾格與叛投清進度不碰包認領的欄位（計畫 1.7）：rules.apply_effect 與它的格（_fx_*、核心代叫表 _EFFECT_CORE）、defection 的清進度
+# （clear_progress、_clear_own、defect 與代叫表）——屬性名不准是任何一包 player_fields 裡的名字。包的欄位由那一包登記的格寫（一條線的 storylines、
+# keepsakes；軍情的 convoy；新手引導的 hint_queue），核心照表叫。defection.prompt（確認畫面讀 convoy）是讀不是清，不在這一條（計畫 1.10）。
+EFFECT_DEFECT_SCAN = {
+    "rules": ("apply_effect", "_fx_", "_EFFECT_CORE"),
+    "defection": ("clear_progress", "_clear_own", "defect", "_CLEAR_CORE", "_LEAVE_CORE", "_STRANDED_CORE"),
+}
+
+
+def claimed_fields() -> dict[str, str]:
+    """包認領的 PlayerState 欄位 → 哪一包（registry.FEATURES 的 player_fields）。"""
+    from tianxia.core.registry import FEATURES as registered  # noqa: PLC0415  這個檔的 FEATURES 是 features 資料夾
+
+    return {field: f.name for f in registered for field in f.player_fields}
+
+
+def package_fields_touched(source: str, names: tuple[str, ...]) -> list[str]:
+    """source 最外層名字是 names 之一（結尾是底線的照開頭比：_fx_ 就是每一格）的函式與賦值裡，碰到的包認領的欄位：["函式:行 欄位（包）"]。"""
+    claimed = claimed_fields()
+
+    def picked(name: str) -> bool:
+        return any(name.startswith(n) if n.endswith("_") else name == n for n in names)
+
+    out = []
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.FunctionDef):
+            name = node.name
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            name = next((t.id for t in targets if isinstance(t, ast.Name)), "")
+        else:
+            continue
+        if not picked(name):
+            continue
+        out += [f"{name}:{sub.lineno} {sub.attr}（{claimed[sub.attr]}）" for sub in ast.walk(node)
+                if isinstance(sub, ast.Attribute) and sub.attr in claimed]
+    return out
+
+
+def test_the_effect_slots_and_the_defection_clearing_touch_no_package_field():
+    """核心本體 rules 的效果格與舊模組 defection 的清進度都不寫包認領的欄位（換成核心的掛鉤之後是空的）。先證明掃描看得到：
+    原本寫在 apply_effect 最後一段的一條線那一步、clear_progress 裡的押糧與提示，照這一條都抓得到。"""
+    for module, names in EFFECT_DEFECT_SCAN.items():
+        assert package_fields_touched((TIANXIA / f"{module}.py").read_text(encoding="utf-8"), names) == [], module
+    old = ("def apply_effect(effect, state):\n    p = state.player\n    progress = p.storylines.get(effect.story.line)\n"
+           "    p.keepsakes.append(effect.story.keepsake)\n"
+           "def clear_progress(p):\n    p.convoy = None\n    p.hint_queue = []\n    p.rank = 0\n"
+           "def prompt(p):\n    return p.convoy\n")
+    assert sorted(package_fields_touched(old, EFFECT_DEFECT_SCAN["rules"] + EFFECT_DEFECT_SCAN["defection"])) == [
+        "apply_effect:3 storylines（story）", "apply_effect:4 keepsakes（story）", "clear_progress:6 convoy（military）",
+        "clear_progress:7 hint_queue（guide）"]
+
 
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py
     import io
