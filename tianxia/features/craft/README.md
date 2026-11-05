@@ -31,4 +31,4 @@
 - 網頁：`tests/web/test_craft_web.py`（這一批不切網頁）。
 - 一起跑：`scripts/test_for.py --base <分支> <改的包檔> tests/arts/test_fusion.py tests/arts/test_skillview.py tests/web/test_craft_web.py`。
 
-**過渡 import**（註「過渡：待搬」）：`actions.py` 2 行（`fusion`、`skillview`，共用規則層 `SHARED_LATER`）、`create.py` 1 行（`annals`，行狀第 29 批）。核心本體與共用規則層（含新的 `pose`）不算過渡。舊模組 → 包多 1 個別名（`tianxia/create.py`）與 engine 委派的兩行 import（`craft_actions`、`create`）。
+**過渡 import**（註「過渡：待搬」）：`actions.py` 2 行（`fusion`、`skillview`，共用規則層 `SHARED_LATER`）、`create.py` 1 行（`annals`，行狀第 29 批）。核心本體與共用規則層（含新的 `pose`）不算過渡。舊模組 → 包多 1 個別名（`tianxia/create.py`）與 engine 委派的兩行 import（`craft_actions`、`create`），另有 `bot.py`、`skillview.py`、`server.py`、`scripts/` 走別名（舊模組 → 包 224 → 239）。共用規則層 64 → 65 個模組（新增 `pose`）；`SHARED_PENDING` 14 → 13 條。
