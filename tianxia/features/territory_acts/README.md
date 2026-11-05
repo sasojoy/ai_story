@@ -35,7 +35,10 @@
 
 ## 測試
 
-- 這一包的 `tests/`：`test_territory_acts_smoke.py`（煙霧）、`territory_acts_stage.py`（契約測試擺局面）。整檔屬於這一包的（`test_xingshi.py`、`test_marks_xingshi_once.py`）見下面 Task 4 之後的清單。
+- 這一包的 `tests/`：`test_xingshi.py`（〈天下形勢〉，37 條，原 `tests/acts/`，整檔搬）、`test_marks_xingshi_once.py`（痕跡與〈天下形勢〉，6 條，原 `tests/core/`，整檔搬）、`test_territory_acts_smoke.py`（煙霧）、`territory_acts_stage.py`（契約測試擺局面）。
+- 整檔搬時改的只有 `tests/acts/test_xingshi.py` 的兩處斷言字串（路由搬進包之後 `include_router` 掛的不在 `server.app.routes` 上，改查 `app.openapi()["paths"]`；管理者工具不在 `server.ADMIN_ACTIONS`，改查 `server.FEATURE_ADMIN_ACTIONS`）。
+- 留在原處的混合檔（`test_conquest_rules.py`、`test_conquest_siege.py`）也因為管理者五個工具搬進 `admin_tools`，把 `server.ADMIN_ACTIONS[op](game, …)` 改成 `server.FEATURE_ADMIN_ACTIONS[op].run(game, …)`，`SIEGE_STATUS` 改從 `view` import。
+- 調查點名的 `test_xingshi_fb610_order.py`、`test_xingshi_fb646_mend.py`、`test_fb883_admin_letter_ids.py` 現行程式裡沒有這三個檔（已併進 `test_xingshi.py` 或 `test_conquest_siege.py`）。
 
 ## 另外要跑的混合檔
 
