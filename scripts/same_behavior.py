@@ -19686,17 +19686,21 @@ GEAR_TEST_BOOK = {
 
 class GearScenario(Scenario):
     """裝備一軌（全部拆包第 42 批；--track gear，自己一個資料庫）。每一步都存回應；分段：
-    - setup：籌備中（管理者還沒開季）只有批量拆解擋，馬市的入口、買、換上、餵、拆解照常做；開季、補體力、擺位置，給銀兩與一階素材。
+    - setup：籌備中（管理者還沒開季）只證到批量拆解被擋（@not_while_preparing）；進馬市、買、換上、餵、拆解也各按一下，但都沒走到
+      （審查實測），不算證明「籌備中照常做」；開季、補體力、擺位置，給銀兩與一階素材。
     - closed：不在馬市的人按進門、買、餵、換上、離開；在馬市沒進門的人按買（FB-195：選單上沒有，回為什麼不成或「情形變了」）。
     - stall：進門、買得起與買不起、已經有馬時新的進裝備庫、裝備庫滿了、餵（不餓、沒素材、餵飽）、換上（裝備庫那一匹、不存在的）、離開兩次。
-    - bench：修練頁 /api/menxia/{wield,dismantle,feed,dismantle_many}：兵、甲、騎、寶四種 id，空 id、不存在的、坐騎寶物不能拆、路上換坐騎被擋、閉關中換寶物。
+    - bench：修練頁 /api/menxia/{wield,dismantle,feed,dismantle_many}：兵、甲、騎、寶四種 id，空 id、不存在的、坐騎寶物不能拆、路上換坐騎被擋、閉關中換寶物
+      （路辛約 2 分鐘就到了：路上「餵被擋」那一支沒走到，審查實測）。
     - held：裝備庫滿時寄放的東西，sync 補送（先滿著補不進去、騰出空位再補）。
     - gifts：名將贈禮與本命兵器（情誼經 choose 到門檻）：當面交給你、託人送來、每位名將每季全服一人、名駒；答覆事件（放手一搏）那一條路也打一下。
     - fight：挑戰本人打贏兩次（還不夠）；內容沒有大勢人物的（測試內容）寫「沒有」。
     - boards：/api/boards 的神器譜與 /api/board_card（神器譜每一筆、不存在的、缺參數）。
     - half：**前半停在這裡**——馬市開著剛買了一匹、坐騎餓了還沒餵、情誼差一下到贈禮門檻、寄放裡有東西等補送、打贏本人兩次（第三次由後半打）。
-    - 後半：resume 接著走、views（每個人看一遍主畫面與門下頁與神器譜）、bots（BotRunner 兩個〔一個坐在馬市、一個在門外〕＋bot_policy.pick 兩個＋
-      整季機器人 visit_market、feed_mount、wear_better、advance 補送寄放）、season（換季：開著的馬市跟新角色重來、神器譜跨季）。
+    - 後半：resume 接著走、views（每個人看一遍主畫面與門下頁與神器譜）、bots（BotRunner 兩個〔牧甲坐在馬市、牧乙在門外；牧乙沒進馬市，
+      act:market 的假人路徑靠 bot_policy.pick 驅動的牧丁與整季機器人，審查實測〕＋bot_policy.pick 兩個＋
+      整季機器人 visit_market、feed_mount、wear_better、advance 補送寄放）、season（換季：神器譜跨季；收季前沒人坐在馬市裡，
+      「開著的馬市跟新角色重來」沒走到，換季後照樣按一下 market:back，審查實測）。
     測試內容的兵器、防具、坐騎、寶物本來關著，馬市的標籤也沒有：這一軌在記憶體裡打開、補上（base 與 head 一樣）。"""
 
     SHOPPER, POOR, HORSED, FULLRACK, FEEDER, AWAY = "駒甲", "駒乙", "駒丙", "駒丁", "駒戊", "駒己"
@@ -19882,7 +19886,7 @@ class GearScenario(Scenario):
             self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who],
                                                     "again": self.passwords[who]})
             self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
-        who = self.PREP  # 籌備中：批量拆解擋（@not_while_preparing）；馬市、換上、餵、拆解照常做（照實記）
+        who = self.PREP  # 籌備中：只證到批量拆解擋（@not_while_preparing）；馬市、買、換上、餵、拆解也按，但沒走到（審查實測，照實記）
         self.choose(who, "act:market")
         self.choose(who, "market:buy")
         self.mx(who, "wield", {"weapon": "兵:1"})
@@ -19995,7 +19999,7 @@ class GearScenario(Scenario):
         self.mx(who, "dismantle_many")
         self.mx(who, "dismantle_many", {"items": every})
         self.state_of(who, "批量拆解之後")
-        who = self.ROAD  # 路上：換坐騎被擋，換寶物不擋，餵被擋
+        who = self.ROAD  # 路上：換坐騎被擋，換寶物不擋；約 2 分鐘就到了，「餵被擋」那一支沒走到（審查實測）
         self.stock(who, horses_n=1, treasures_n=1, worn=True)
         first = next((i for i in self.opts(who) if i.startswith("move:")), None)
         emit(f"{who} 出發", first)
@@ -20224,7 +20228,8 @@ class GearScenario(Scenario):
         self.boards()
 
     def bots(self) -> None:
-        """伺服器假人兩個（BotRunner：bot_policy 的 market:、act:market）、直接用 bot_policy.pick 驅動兩個、整季機器人；不寫誰是假人。"""
+        """伺服器假人兩個（BotRunner：bot_policy 的 market:；門外的牧乙沒進馬市，act:market 靠 pick 驅動的牧丁與整季機器人）、
+        直接用 bot_policy.pick 驅動兩個、整季機器人；不寫誰是假人。"""
         from collections import Counter
 
         from tianxia import bot, bot_policy, mounts, server_bots, treasures
@@ -20252,7 +20257,7 @@ class GearScenario(Scenario):
                 p.picking_market = True
             return g
 
-        for i, name in enumerate(GEAR_BOTS):  # 甲已經坐在馬市裡（market: 的分數）；乙在門外（act:market 的分數）
+        for i, name in enumerate(GEAR_BOTS):  # 甲已經坐在馬市裡（market: 的分數）；乙在門外，沒進馬市（act:market 靠下面 pick 驅動的牧丁與整季機器人；審查實測）
             g = make(name, 71 + i, i == 0, i)
             emit(f"假人 {name} 進場前", {"want": bot.market_want(g), "loc": g.state.player.location,
                                          "options": [o.id for o in g.options(odds=False, tick=False)][:14]})
@@ -20327,7 +20332,7 @@ class GearScenario(Scenario):
                                                   "journal": [[e.title, list(e.lines)[:3]] for e in solo.state.journal[:3]]})
 
     def season(self) -> None:
-        """收季、開下一季：開著的馬市跟新角色重來；神器譜跨季還在。"""
+        """收季、開下一季：神器譜跨季還在；換季後按 market:back。收季前沒人坐在馬市裡，「開著的馬市跟新角色重來」沒走到（審查實測）。"""
         self.do(ADMIN, "end_season")
         for who in (self.H_BUY, self.SHOPPER):
             self.main(who)

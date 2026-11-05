@@ -1348,7 +1348,7 @@ SHARED_LATER = {
              "（改核心測試，PM 定）之後再收",
     "narration": "事件旁白每週改寫：讀伏筆 foreshadow.event_ids（軍情第 34 批）；那時改成查詢服務再收",
     "leaderboard": "賽季榜單：讀本命兵器 signature_arms（裝備第 42 批已搬進 features/gear/signature_arms.py，函式裡經舊名別名讀）與門下頁的說明 skillview（函式裡）；擂台榜第 12 批審查修正改讀核心的"
-                   "查詢服務 arena_ranks；裝備成包、skillview 收進來之後再收",
+                   "查詢服務 arena_ranks；gear_card 讀本命兵器改成查詢服務、skillview 收進來之後再收",
     "rumor_view": "傳聞分層的畫面：讀伏筆 foreshadow、機緣 opportunities（軍情第 34 批）與軍令 orders（第 40 批）；軍情成包時改成查詢服務再收",
 }
 
@@ -1975,7 +1975,9 @@ GAME_DELEGATES |= {
 _GEAR_POS = "位置固定、沒有對應的掛鉤（{what}）"
 GAME_DELEGATE_CALLERS.update({
     ("_everyday_options", "_market_options"): "馬市開著時接管整個選單（同 _smith_options）；不登記 Shop（入口先後 懸賞榜 → 鐵匠鋪 → 馬市，第 45 批三間一起排）",
-    ("sync", "_deliver_held_gear"): _GEAR_POS.format(what="補送寄放的重賞與贈禮在 _deliver_big_events 之後、_auto_checkin 之前；不接 on_sync，位置不動，江湖紀錄的先後算行為"),
+    ("sync", "_deliver_held_gear"): _GEAR_POS.format(what="補送寄放的重賞與贈禮在 _deliver_big_events 之後、_auto_checkin 之前，江湖紀錄的先後算行為；"
+                                                          "不接 on_sync 有三條：on_sync 只問開著的包（active）；advance 沒有 on_sync（快轉與只 advance 的整季機器人也要補）；"
+                                                          "同一波別批的包加在 FEATURES 後面時，on_sync 裡的先後會變"),
     ("advance", "_deliver_held_gear"): _GEAR_POS.format(what="同 sync：在 _deliver_big_events 之後"),
     ("choose", "_general_gifts"): _GEAR_POS.format(what="名將贈禮夾在「引導」與 check_thresholds 之間，choose 後半的先後算行為"),
     ("choose", "_signature_arms"): _GEAR_POS.format(what="同上：本命兵器與名將贈禮同一處"),

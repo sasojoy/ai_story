@@ -37,7 +37,7 @@ from . import battle_instance, calendar, flavor, renown, seats, territory, timet
 from . import bounties  # 過渡：待搬（第 45 批：懸賞榜成包）
 from . import figure_life  # 共用規則層（人物活起來，全部拆包第 40 批收進）
 from . import figures  # 共用規則層（大勢人物，全部拆包第 40 批收進）
-from . import leaderboard  # 過渡：待搬（SHARED_LATER：裝備第 42 批已成包，signature_arms 經舊名別名；skillview 收進共用規則層之後）
+from . import leaderboard  # 過渡：待搬（SHARED_LATER：裝備第 42 批已成包，signature_arms 經舊名別名；gear_card 讀本命兵器改成查詢服務、skillview 收進來之後再收）
 from . import orders  # 共用規則層（軍令，全部拆包第 40 批收進）
 from . import plans  # 共用規則層（盤算，全部拆包第 40 批收進）
 from . import ranks  # 共用規則層（晉升，全部拆包第 40 批收進）
