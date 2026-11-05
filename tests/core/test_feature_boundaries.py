@@ -199,7 +199,7 @@ GAME_IMPORTS = {
     "tianxia.features.explore.explore_base",  # explore（全部拆包第 18 批）：舊探索的底 6 個一行委派
     "tianxia.features.mall.actions", "tianxia.features.feast.actions",
     # 出陣（主動搬六包第 1 批）：13 個一行委派；原本那一行 `from . import (..., sortie, ...)` 現在是別名（engine 照舊叫 sortie.on、
-    # sortie.NAME 這些字，見 GAME_DIRECT）；混戰的字搬進包，tests/ranger/test_raid.py 照舊從 engine 拿那三個
+    # sortie.NAME 這些字，見 GAME_DIRECT）；混戰的字搬進包，tianxia/features/peers/tests/test_raid.py 照舊從 engine 拿那三個
     "tianxia.features.sortie.actions", "tianxia.sortie", "tianxia.features.sortie.rules",
     # 出陣約戰（主動搬六包第 2 批）：16 個一行委派；原本那一行 `from . import sortie_duel`（別名，choose 讀 PREFIX、PICK）第 11 批
     # 換成 choose_unlisted 與 Verb.picks 之後沒人用，拿掉

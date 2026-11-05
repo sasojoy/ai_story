@@ -4,7 +4,7 @@ _spar_record；全部拆包第 38 批搬進來，行為一個字不變）。ctx 
 切磋掛在玩家卡上（spar.py 登記進 social.ACTIONS）：發邀請、答應、婉拒、收回都是按的那個人自己的動作，在他自己那一把行動鎖裡做；
 對方那一份照 social 的做法拿（actions.peer：此刻在這裡的人、不補算時間、賽季接上這一份），做完存回去。邀請存在這一季的 WorldState.invites。
 who_problem 論武、截殺也問（what 換字）。「是假人」不影響任何一句話。
-encounter.resolve_encounter 一律用模組屬性叫（same_behavior 與 tests/ranger/test_raid.py 換掉這個屬性來強制勝負）。"""
+encounter.resolve_encounter 一律用模組屬性叫（same_behavior 與 tianxia/features/peers/tests/test_raid.py 換掉這個屬性來強制勝負）。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
