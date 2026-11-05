@@ -17,6 +17,8 @@
 - 不寫 weekcard 檔名的混合檔 test_for 挑不到，另外跑（-n 4，不含 slow）：tests/bots/test_step.py、tests/core/test_chapters.py、
   tests/figures/test_week_unlock.py、tianxia/features/companions/tests/test_errands_weekcard.py、tianxia/features/guide/tests/test_opening.py；
   slow 的 tianxia/features/faction/tests/test_sides_card.py、tests/web/test_week_card_web.py 要跑就 --slow。
+- 反過來，改這裡 import 的舊模組 chapters 時 test_for 不經這裡往上找，上面那一串只挑到 test_chapters：見 step.py 說明
+  「反過來也挑不到」那一條（bounties、atlas、orders 等一起在那裡）。
 """
 from __future__ import annotations
 

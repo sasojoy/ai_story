@@ -17,7 +17,12 @@
   STEP_ORDER 的先後由核心契約 tests/core/test_contract_core.py 逐字鎖住（核心測試，會跟著跑）。
 - 不寫 step 檔名的混合檔 test_for 挑不到，另外跑（-n 4，不含 slow）：tests/map/test_weekcard.py、tests/core/test_chapters.py、
   tests/figures/test_week_unlock.py、tianxia/features/companions/tests/test_errands_weekcard.py、tianxia/features/guide/tests/test_opening.py；
-  slow 的 tianxia/features/faction/tests/test_sides_card.py、tests/web/test_week_card_web.py 要跑就 --slow。"""
+  slow 的 tianxia/features/faction/tests/test_sides_card.py、tests/web/test_week_card_web.py 要跑就 --slow。
+- 反過來也挑不到（第 36 批審查）：test_for 碰到核心模組就不往上找，bounties 又是在函式裡才 import（不算進依賴），所以改 step、weekcard
+  依賴的舊模組時上面那一串（加 tests/bots/test_step.py）多半挑不到。第 45 批之前改 bounties.py 另跑 tests/bots/test_step.py
+  （test_bounty_newbie_and_join_get_their_places、test_errand_and_foreshadow_get_their_places 釘住委託、懸賞兩格）、
+  tests/map/test_weekcard.py；改 chapters.py、atlas.py、orders.py、figures.py、seal_acts.py 少挑哪幾個見
+  docs/superpowers/plans/2026-11-06-你這一步-第36批.md 第六節。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
