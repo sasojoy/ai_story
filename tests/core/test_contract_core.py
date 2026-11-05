@@ -9,7 +9,7 @@ import pytest
 from conftest import next_season
 from tianxia.core import features as features_core
 from tianxia.core import registry
-from tianxia.core.features import AdminTool, Feature, Outcome, Shop, Verb, WorldHook
+from tianxia.core.features import AdminTool, DefectHook, EffectHook, Feature, Outcome, Shop, Verb, WorldHook
 from tianxia.core.option import Option
 from tianxia.engine import Game
 
@@ -537,3 +537,138 @@ def test_the_world_layer_is_asked_where_the_old_lines_were(game, monkeypatch):
     g.admin_next_season(now=1030.0)
     assert [c for c in calls if c[0] in ("retire", "next")] == [("retire", "seal"), ("next", "inscriptions")]
     assert g.world.get_season_number() == 2
+
+
+# core_effects（全部拆包第 32 批「效果與叛投掛鉤」；計畫 docs/superpowers/plans/2026-11-06-效果與叛投掛鉤-第32批.md 1.2、1.3、Task 2）
+class Effectful(Feature):
+    """只登記效果與叛投的格的假包；open 是 enabled 的答案（這兩種掛鉤不問它）。"""
+
+    name = "effectful"
+
+    def __init__(self, effects=(), defection=(), open_=True):
+        self.fx, self.dx, self.open = tuple(effects), tuple(defection), open_
+
+    def enabled(self, ctx):
+        return self.open
+
+    def effects(self):
+        return self.fx
+
+    def defection(self):
+        return self.dx
+
+
+def test_the_effect_and_defection_orders_are_the_tables_in_the_plan():
+    """順序就是行為：一則效果一段一格、叛投那一刻四個位置，都照換成掛鉤之前的先後（計畫 1.2、1.3），一格不挪；每一格認領的效果欄位
+    照計畫 2.1。改這幾張表先過 PM。"""
+    assert features_core.EFFECT_ORDER == (
+        "text", "stats", "materials", "insights", "gear", "stamina", "affinity",
+        "patron", "grain", "fs_fragments", "runic", "event_mods", "summons_next", "promote",
+        "flags", "learn_skills", "join_sect", "leave_sect", "recruit", "trend", "world_flags", "marks",
+        "foreshadow", "rumor", "chronicle", "shard", "story",
+    )
+    assert features_core.EFFECT_FIELDS == {
+        "text": ("text",), "stats": ("stats",), "materials": ("materials",), "insights": ("insights",), "gear": ("gear",),
+        "stamina": ("stamina",), "affinity": ("affinity",), "patron": ("patron",), "grain": ("donate_grain",),
+        "fs_fragments": ("fs_fragments",), "runic": ("runic",), "event_mods": ("event_mods",), "summons_next": ("summons_next",),
+        "promote": ("promote", "followers"), "flags": ("flags_add", "flags_remove"), "learn_skills": ("learn_skills",),
+        "join_sect": ("join_sect",), "leave_sect": ("leave_sect",), "recruit": ("recruit",), "trend": ("trend",),
+        "world_flags": ("world_flags_add",), "marks": ("marks",), "foreshadow": ("clue_items", "fs_counters"),
+        "rumor": ("rumor",), "chronicle": ("chronicle",), "shard": (), "story": ("story",),
+    }
+    assert features_core.DEFECT_ORDER == {
+        "clear": ("progress", "convoy", "hints", "opportunities"),
+        "leave": ("plots",),
+        "stranded": ("bounties",),
+        "after": ("leave_behind", "parley"),
+    }
+    assert Feature().effects() == () and Feature().defection() == ()
+
+
+def test_every_effect_field_belongs_to_exactly_one_slot():
+    """照效果欄位分派給主人：EFFECT_FIELDS 的格就是 EFFECT_ORDER（同一個先後）；併起來＝models.Effect 的欄位扣掉 apply_effect 不讀的
+    next_event（串接是事件檢定的事）、contribution（只准寫在隨口應對的分岔上），沒有一個欄位歸兩格。Effect 多一個欄位就紅：先想好歸哪一格。"""
+    from tianxia.models import Effect
+
+    assert tuple(features_core.EFFECT_FIELDS) == features_core.EFFECT_ORDER
+    claimed = [field for fields in features_core.EFFECT_FIELDS.values() for field in fields]
+    assert len(claimed) == len(set(claimed))
+    assert set(claimed) == set(Effect.model_fields) - {"next_event", "contribution"}
+
+
+def test_a_package_can_only_take_an_effect_or_defection_slot_on_the_table_and_only_one_package_a_slot(monkeypatch):
+    """包登記的格都在表上、同一格只有一包：表外的格、沒有的位置、兩包（或同一包兩次）登記同一格，effect_hooks／defect_hooks 都丟
+    ValueError（叛投那邊哪一個位置都驗）；核心代叫的打錯字、沒有的位置也丟（effect_run、defect_run）。"""
+    run = lambda *a: None  # noqa: E731
+    monkeypatch.setattr(registry, "FEATURES", [Effectful([EffectHook("nobody", run)])])
+    with pytest.raises(ValueError):
+        features_core.effect_hooks()
+    monkeypatch.setattr(registry, "FEATURES", [Effectful([EffectHook("story", run)]), Effectful([EffectHook("story", run)])])
+    with pytest.raises(ValueError):
+        features_core.effect_hooks()
+    monkeypatch.setattr(registry, "FEATURES", [Effectful([EffectHook("story", run), EffectHook("story", run)])])
+    with pytest.raises(ValueError):
+        features_core.effect_hooks()
+    monkeypatch.setattr(registry, "FEATURES", [Effectful(defection=[DefectHook("clear", "nobody", run)])])
+    with pytest.raises(ValueError):
+        features_core.defect_hooks("after")
+    monkeypatch.setattr(registry, "FEATURES", [Effectful(defection=[DefectHook("nowhere", "convoy", run)])])
+    with pytest.raises(ValueError):
+        features_core.defect_hooks("clear")
+    monkeypatch.setattr(registry, "FEATURES", [Effectful(defection=[DefectHook("clear", "convoy", run)]),
+                                               Effectful(defection=[DefectHook("clear", "convoy", run)])])
+    with pytest.raises(ValueError):
+        features_core.defect_hooks("clear")
+    monkeypatch.setattr(registry, "FEATURES", [])
+    with pytest.raises(ValueError):
+        features_core.defect_hooks("nowhere")
+    with pytest.raises(ValueError):
+        features_core.effect_run({"stroy": run}, None)
+    with pytest.raises(ValueError):
+        features_core.defect_run("clear", {"convoys": run}, None)
+    with pytest.raises(ValueError):
+        features_core.defect_run("nowhere", {}, None)
+
+
+def test_the_effect_and_defection_slots_are_called_in_the_table_order(monkeypatch):
+    """effect_run、defect_run 照表的順序叫：包登記的兩格（登記的先後跟表相反）夾在核心代叫的格之間；回每一格的回傳值（照順序）；
+    兩邊都沒有的格跳過；包登記了的格就不叫核心那一份。先取好的 hooks 照用、不再問包。"""
+    calls = []
+
+    def note(owner, slot, back):
+        return lambda *args: calls.append((owner, slot, args)) or back
+
+    pkg = Effectful([EffectHook("story", note("pkg", "story", ["s"])), EffectHook("grain", note("pkg", "grain", ["g"]))],
+                    [DefectHook("clear", "hints", note("pkg", "hints", None)), DefectHook("clear", "convoy", note("pkg", "convoy", None))])
+    monkeypatch.setattr(registry, "FEATURES", [pkg])
+    core = {slot: note("core", slot, [slot]) for slot in features_core.EFFECT_ORDER if slot != "shard"}
+    got = features_core.effect_run(core, "r")
+    order = [slot for slot in features_core.EFFECT_ORDER if slot != "shard"]
+    assert [slot for _, slot, _ in calls] == order
+    assert all(owner == ("pkg" if slot in ("story", "grain") else "core") for owner, slot, _ in calls)
+    assert all(args == ("r",) for _, _, args in calls)
+    assert got == [["g"] if slot == "grain" else ["s"] if slot == "story" else [slot] for slot in order]
+    calls.clear()
+    clear_core = {"progress": note("core", "progress", None), "convoy": note("core", "convoy", None),
+                  "opportunities": note("core", "opportunities", None)}
+    assert features_core.defect_run("clear", clear_core, "p") == [None, None, None, None]
+    assert [(owner, slot) for owner, slot, _ in calls] == [("core", "progress"), ("pkg", "convoy"), ("pkg", "hints"), ("core", "opportunities")]
+    assert all(args == ("p",) for _, _, args in calls)
+    calls.clear()
+    monkeypatch.setattr(registry, "FEATURES", [])
+    features_core.effect_run({"text": note("core", "text", [])}, "r", hooks={"story": note("pre", "story", [])})
+    assert [(owner, slot) for owner, slot, _ in calls] == [("core", "text"), ("pre", "story")]
+    calls.clear()
+    assert features_core.defect_run("after", {"leave_behind": note("core", "leave_behind", ["x"])}, "ctx", "side") == [["x"]]
+    assert calls == [("core", "leave_behind", ("ctx", "side"))]
+
+
+def test_the_effect_and_defection_slots_ask_a_closed_package_too(monkeypatch):
+    """效果與叛投的格不問 enabled（原位那幾段本來就不看包的開關：一條線關著也照記記號、押糧關著也照清）：關著的包照樣被叫。"""
+    calls = []
+    pkg = Effectful([EffectHook("story", lambda r: calls.append(("story", r)) or ["一步"])],
+                    [DefectHook("after", "parley", lambda ctx, side: calls.append(("parley", ctx, side)) or ["食言"])], open_=False)
+    monkeypatch.setattr(registry, "FEATURES", [pkg])
+    assert features_core.effect_run({}, "r") == [["一步"]]
+    assert features_core.defect_run("after", {}, "ctx", "huang") == [["食言"]]
+    assert calls == [("story", "r"), ("parley", "ctx", "huang")]

@@ -51,6 +51,10 @@
   這一下打哪一路（_fight_squad 最前面：大場面判讀問；sortie：全部拆包第 17 批多開的一格 squad） |
 | world()（WorldHook） | 世界層的格（core_world：全部拆包第 25 批）：world.advance_world_state 每一步、season_events 的週初與每天、settle_season_start、
   end_season、_open_claimed；sqlite_world 的開季與換季。照檔尾那張寫死的順序表 WORLD_ORDER 一格一格叫（包與還沒成包的舊模組穿插），不問 enabled |
+| effects()（EffectHook） | 一則效果的格（core_effects：全部拆包第 32 批）：rules.apply_effect 從頭到尾一段一格，照檔尾寫死的順序表 EFFECT_ORDER 一格一格叫
+  （每一個效果欄位歸哪一格寫在 EFFECT_FIELDS），不問 enabled |
+| defection()（DefectHook） | 叛投那一刻的格（core_effects）：defection.clear_progress（clear）、defection.defect（leave、stranded）、Game._defect_step 確定那一支
+  （after）四個位置，照檔尾寫死的順序表 DEFECT_ORDER 一格一格叫（各包清自己的進度），不問 enabled |
 
 ctx 第一階就是 Game；功能包只准叫 services.py 那張清單上的方法。
 """
@@ -160,6 +164,9 @@ class FeatureHooks(Protocol):
     def verbs(self) -> tuple[Verb, ...]: ...
     # core_world（全部拆包第 25 批：世界層的格，位置與先後在 WORLD_ORDER；不問 enabled）
     def world(self) -> tuple[WorldHook, ...]: ...
+    # core_effects（全部拆包第 32 批：一則效果的格與叛投那一刻的格，先後在 EFFECT_ORDER、DEFECT_ORDER；不問 enabled）
+    def effects(self) -> tuple[EffectHook, ...]: ...
+    def defection(self) -> tuple[DefectHook, ...]: ...
 
 
 class Feature:
@@ -255,6 +262,12 @@ class Feature:
         return ()
 
     def world(self) -> tuple[WorldHook, ...]:
+        return ()
+
+    def effects(self) -> tuple[EffectHook, ...]:
+        return ()
+
+    def defection(self) -> tuple[DefectHook, ...]:
         return ()
 
     def __repr__(self) -> str:
@@ -642,6 +655,130 @@ def world_run(at: str, core: dict[str, Callable[..., Any]], *args: Any,
     if not core.keys() <= set(order):
         raise ValueError(f"核心代叫了世界層 {at} 表上沒有的格 {sorted(core.keys() - set(order))}")
     own = world_hooks(at) if hooks is None else hooks
+    out: list[Any] = []
+    for slot in order:
+        run = own.get(slot) or core.get(slot)
+        if run is not None:
+            out.append(run(*args))
+    return out
+
+
+# core_effects（全部拆包第 32 批「效果與叛投掛鉤」；計畫 docs/superpowers/plans/2026-11-06-效果與叛投掛鉤-第32批.md 1.2、1.3、2.1）
+
+
+@dataclass(frozen=True)
+class EffectHook:
+    """一則效果的一格（Feature.effects() 回一串）：rules.apply_effect 照 EFFECT_ORDER 一格一格叫，輪到 slot 就叫 run(r)（r 是 rules.EffectRun），
+    回這一格的那幾句（沒有是 []）。照 registered() 問、不看 enabled（原位不看包的開關：一條線關著也照記記號）。包的 run 在叫的那一下才照
+    模組屬性找自己的函式（monkeypatch 照樣有效）。"""
+
+    slot: str
+    run: Callable[..., Any]
+
+
+# 一則效果的分派順序（rules.apply_effect 從頭到尾一段一格，核心自己的段也在表上）：照換成掛鉤之前的先後。回話的先後、世界旗標與存檔寫入的先後
+# 都算行為，格與格之間也有讀寫的先後（召見往下一段在晉升清召見之前、推大勢的一次性看立旗之前、碎片看這一下新立的旗標與江湖史那一句），所以寫死。
+# 包登記自己那一格（Feature.effects()），其餘由 rules._EFFECT_CORE 代叫（核心自己的、共用規則層的、還沒成包的舊模組的〔標批號〕）。
+# 改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。
+EFFECT_ORDER: tuple[str, ...] = (
+    "text", "stats", "materials", "insights", "gear", "stamina", "affinity",
+    "patron", "grain", "fs_fragments", "runic", "event_mods", "summons_next", "promote",
+    "flags", "learn_skills", "join_sect", "leave_sect", "recruit", "trend", "world_flags", "marks",
+    "foreshadow", "rumor", "chronicle", "shard", "story",
+)
+# 每一格認領哪幾個效果欄位（照效果欄位分派給主人）：併起來＝models.Effect 的欄位扣掉 apply_effect 不讀的 next_event、contribution，每一個欄位剛好一格。
+# shard 不認領（讀 world_flags_add 新立的那一面與 chronicle）。
+EFFECT_FIELDS: dict[str, tuple[str, ...]] = {
+    "text": ("text",), "stats": ("stats",), "materials": ("materials",), "insights": ("insights",), "gear": ("gear",),
+    "stamina": ("stamina",), "affinity": ("affinity",), "patron": ("patron",), "grain": ("donate_grain",),
+    "fs_fragments": ("fs_fragments",), "runic": ("runic",), "event_mods": ("event_mods",), "summons_next": ("summons_next",),
+    "promote": ("promote", "followers"), "flags": ("flags_add", "flags_remove"), "learn_skills": ("learn_skills",),
+    "join_sect": ("join_sect",), "leave_sect": ("leave_sect",), "recruit": ("recruit",), "trend": ("trend",),
+    "world_flags": ("world_flags_add",), "marks": ("marks",), "foreshadow": ("clue_items", "fs_counters"),
+    "rumor": ("rumor",), "chronicle": ("chronicle",), "shard": (), "story": ("story",),
+}
+
+
+@dataclass(frozen=True)
+class DefectHook:
+    """叛投那一刻的一格（Feature.defection() 回一串）：核心在 at 那個位置照 DEFECT_ORDER[at] 一格一格叫，輪到 slot 就叫 run。照 registered() 問、
+    不看 enabled（原位不看包的開關：押糧關著也照清）。run 的簽名照位置（DEFECT_ORDER 底下那張）；包的 run 在叫的那一下才照模組屬性找。"""
+
+    at: str
+    slot: str
+    run: Callable[..., Any]
+
+
+# 叛投那一刻各包清自己的進度：位置 → 那一個位置的格，照換成掛鉤之前一行一行的先後（同 WORLD_ORDER：包與還沒成包的舊模組穿插，寫死在這裡）。
+# 包登記自己那一格（Feature.defection()），其餘由核心代叫（defection._CLEAR_CORE／_LEAVE_CORE／_STRANDED_CORE、engine._DEFECT_AFTER_CORE）。
+# 改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。
+#
+# 位置      核心在哪裡問                                                      run 的簽名                       回傳
+# clear     defection.clear_progress(p) 整個身體                              (p: PlayerState) -> None         不接
+# leave     defection.defect：clear_progress 之後、改投之前                    (state) -> None                  不接
+# stranded  defection.defect 最後：「你叛出…」那一句之後                       (state, content, new_side)       接（list[str]）
+# after     Game._defect_step 確定那一支：defection.defect 之後                (ctx, side) -> list[str]         接
+DEFECT_ORDER: dict[str, tuple[str, ...]] = {
+    "clear": ("progress", "convoy", "hints", "opportunities"),
+    "leave": ("plots",),
+    "stranded": ("bounties",),
+    "after": ("leave_behind", "parley"),
+}
+
+
+def effect_hooks() -> dict[str, Callable[..., Any]]:
+    """包登記的效果格 {slot: run}：照 registered()、不看 enabled。表外的格、同一格登記兩次（兩包或同一包）都丟 ValueError
+    （同 world_hooks；tests/core/test_contract_core.py 守）。"""
+    own: dict[str, Callable[..., Any]] = {}
+    for f in registered():
+        for hook in f.effects():
+            if hook.slot not in EFFECT_ORDER:
+                raise ValueError(f"{f.name} 登記了效果表上沒有的格 {hook.slot}")
+            if hook.slot in own:
+                raise ValueError(f"效果的 {hook.slot} 登記了兩次（{f.name}）")
+            own[hook.slot] = hook.run
+    return own
+
+
+def effect_run(core: dict[str, Callable[..., Any]], *args: Any,
+               hooks: dict[str, Callable[..., Any]] | None = None) -> list[Any]:
+    """照 EFFECT_ORDER 走每一格：包登記了叫包的，沒有叫 core 那一份（rules._EFFECT_CORE）；兩邊都沒有（那一格的包沒登記：契約測試換掉
+    FEATURES 時）跳過。回每一格的回傳值（照順序、跳過的不算）。core 寫了表上沒有的格丟 ValueError（打錯字的格不會默默不跑）。"""
+    if not core.keys() <= set(EFFECT_ORDER):
+        raise ValueError(f"核心代叫了效果表上沒有的格 {sorted(core.keys() - set(EFFECT_ORDER))}")
+    own = effect_hooks() if hooks is None else hooks
+    out: list[Any] = []
+    for slot in EFFECT_ORDER:
+        run = own.get(slot) or core.get(slot)
+        if run is not None:
+            out.append(run(*args))
+    return out
+
+
+def defect_hooks(at: str) -> dict[str, Callable[..., Any]]:
+    """at 那個位置包登記的叛投格 {slot: run}：照 registered()、不看 enabled。每一次都驗登記的全部格：表上沒有的格、同一格登記兩次
+    （兩包或同一包）、沒有的位置都丟 ValueError（同 world_hooks）。"""
+    if at not in DEFECT_ORDER:
+        raise ValueError(f"叛投沒有 {at} 這個位置")
+    own: dict[str, Callable[..., Any]] = {}
+    for f in registered():
+        for hook in f.defection():
+            if hook.slot not in DEFECT_ORDER.get(hook.at, ()):
+                raise ValueError(f"{f.name} 登記了叛投表上沒有的格 {hook.at}/{hook.slot}")
+            if hook.at == at:
+                if hook.slot in own:
+                    raise ValueError(f"叛投的 {at}/{hook.slot} 登記了兩次（{f.name}）")
+                own[hook.slot] = hook.run
+    return own
+
+
+def defect_run(at: str, core: dict[str, Callable[..., Any]], *args: Any) -> list[Any]:
+    """照 DEFECT_ORDER[at] 走每一格：包登記了叫包的，沒有叫 core 那一份（核心代叫的格）；兩邊都沒有跳過。回每一格的回傳值（照順序、
+    跳過的不算）：接不接由呼叫端照位置決定。core 寫了表上沒有的格丟 ValueError。"""
+    own = defect_hooks(at)  # 沒有的位置在這裡丟
+    order = DEFECT_ORDER[at]
+    if not core.keys() <= set(order):
+        raise ValueError(f"核心代叫了叛投 {at} 表上沒有的格 {sorted(core.keys() - set(order))}")
     out: list[Any] = []
     for slot in order:
         run = own.get(slot) or core.get(slot)
