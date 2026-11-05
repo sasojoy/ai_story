@@ -454,7 +454,7 @@ RANK_ACTION_PREFIX = "act:rank:"  # 第 3、4 階行動的選項 id 前綴（act
 MOVE_BLOCKED = "守著埋伏"
 # travel（全部拆包第 47 批：原本寫在 engine.py；移動包的路上小事選單要讀、核心的重設與第 48 批的 _share_road 也讀，搬到這裡，engine 照舊叫得到）
 # 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見移動包的 road_task_options
-ROAD_TASKS: dict[str, tuple[str, str]] = {
+ROAD_TASKS: dict[str, tuple[str, str]] = {  # 寄放：第 48 批與換季清舊還讀（第 47 批 PM 認定第 4 條）
     "think": ("邊走邊想", "想過了"),
     "ask": ("沿途打聽", "打聽過了"),
     "gather": ("路邊採集", "找過了"),

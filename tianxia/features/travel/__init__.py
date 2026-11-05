@@ -47,6 +47,7 @@ class TravelFeature(Feature):
     def bot_pick(self, ctx, option):
         from . import bots  # noqa: PLC0415
 
+        # 正式路徑上 `move:` 由 `bot_policy.score` 先問（第 47 批 PM 認定第 2 條），這裡留給直接叫掛鉤的測試
         return bots.score(ctx, option, ctx.state.player.bot)
 
     def routes(self, shell):
