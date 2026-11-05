@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from tianxia import deeds
-from tianxia import plans  # 過渡：待搬（人物活起來 plans，總表第 40 批）
+from tianxia import plans  # 共用規則層（人物活起來 plans，第 40 批收進）
 from tianxia.core.option import Option
 
 

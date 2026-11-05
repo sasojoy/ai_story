@@ -9,7 +9,18 @@
 - 改：apply（時刻表的人物結局與接手）、defeat（挑戰本人打贏扣聲威）。
 
 state 是 GameState（季的事用的是 world._season_vehicle 那個空殼玩家），只讀寫 state.world；不碰儲存。
-人物表沒有的 id（測試夾具）照 T2 最小版的規則：FigureState 的預設值、只改欄位。"""
+人物表沒有的 id（測試夾具）照 T2 最小版的規則：FigureState 的預設值、只改欄位。
+
+共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包與舊名的別名；犒軍與自然回復共用一天的上限（aid_ 開頭那一段）
+從大勢人物包的 figure_aid 搬來，recover 直接叫。改這一份 scripts/test_for.py 只挑自己檔名的 tests/figures/test_figures.py＋煙霧＋邊界
+（第 15 批 PM 認定第 3 條；收進來之前經 atlas、chiefs、figure_life、orders、plans、ranks、rumor_view……往上找挑到 110 個檔）。另外跑（-n 4）
+直接 import 它的：tests/figures/ 的 test_admin_timetable、test_figure_attrition、test_figure_life、test_figure_life_batch3、test_front_lines、
+test_gentry_allied、test_orders、test_plans、test_promotions_high、test_promotions_huang、test_season21_caps、test_season21_frame、test_timetable、
+test_week7_season；tests/battle/ 的 test_chiefs、test_ranks、test_rise；tests/seal/test_seal_acts、test_seal_revamp；tests/gear/test_signature_arms；
+tests/server/test_push_resistance、test_web_push；tianxia/features/ 的 battle/tests/test_generals、test_siege_settle、companions/tests/test_relations_letters、
+test_stances、figure_acts/tests/test_challenge_season、test_figure_aid、map/tests/test_open_map、military/tests/test_opportunities、test_opportunities_two、
+outlets/tests/test_silver_outlets；slow 的 tests/bots/test_bot_policy_conquest、tests/season/test_real_content。世界一步代叫它（world._STEP_CORE），
+world.py 說明「另外跑」那一串也跑。"""
 from __future__ import annotations
 
 from . import calendar, push, relations, seal_acts
@@ -500,9 +511,8 @@ def recover(state: GameState, content: Content, cal_hours: float) -> None:
             continue
         pending = w.trend_accum.get(key, 0.0) + rate * cal_hours / 24
         whole = int(pending + 1e-9)  # 容一點浮點誤差（同 tick）
-        if whole:  # 跟犒軍共用一天的上限（figure_aid.restore；開關關著照舊補到開季值）
-            from . import figure_aid  # noqa: PLC0415  figure_aid → figures：延後 import
-            figure_aid.restore(state, content, fid, whole)
+        if whole:  # 跟犒軍共用一天的上限（aid_restore；開關關著照舊補到開季值）
+            aid_restore(state, content, fid, whole)
         rest = max(0.0, pending - whole)
         if rest and now.prestige < fig.start_prestige:
             w.trend_accum[key] = rest

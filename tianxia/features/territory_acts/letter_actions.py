@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from tianxia import conquest
-from tianxia import ranks  # 過渡：待搬（階級 ranks）
+from tianxia import ranks  # 共用規則層（階級 ranks，第 40 批收進）
 
 from . import conquest_day
 

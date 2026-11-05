@@ -7,7 +7,7 @@ Game._everyday_options、sync、_action_title，也搬進來。
 from __future__ import annotations
 
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
-from tianxia import figures  # 過渡：待搬（人物表 figures 第 40 批進共用規則層）
+from tianxia import figures  # 共用規則層（人物表 figures，第 40 批收進）
 from tianxia import roster, team, zh
 from tianxia.core.option import Option
 from tianxia.core.services import PAUSED_TEXT

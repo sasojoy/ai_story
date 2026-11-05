@@ -16,7 +16,7 @@ import re
 
 from pydantic import BaseModel
 
-from tianxia import bounties, figure_life  # 過渡：待搬（懸賞第 45 批；人物活起來第 40 批）
+from tianxia import bounties, figure_life  # 過渡：待搬（懸賞第 45 批）
 from tianxia import calendar, gender, prologue, rules, zh
 from tianxia.calendar import DAY
 from tianxia.core.services import CHEERS_KEEP, note_cheer  # noqa: F401  等著寫道賀信的那一格走核心（figure_life.spread 寫，全部拆包第 19 批）；舊名照舊讀得到

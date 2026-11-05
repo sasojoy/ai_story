@@ -6,7 +6,7 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 動作（opp_actions.py、fs_actions.py）、假人分數（bots.py）。選項前綴 opp:、fs: 接 choose 掛鉤；效果三格與叛投兩格由這一包登記；核心與共用規則層讀的只讀那一半
 留在 tianxia/core/omen_base.py（查詢服務）。下面「沒有選項前綴」那一段只講第 33 批搬進來的那幾樣（act: 開頭的）。
 
-包名不叫 `orders`：`tianxia/orders.py`（軍令的規則）、`ranks.py`、`seats.py` 這一批不搬（共用規則層，總表第 40 批收），包裡照 `# 過渡：待搬` 或 `registry.SHARED` import。
+包名不叫 `orders`：`tianxia/orders.py`（軍令的規則）、`ranks.py`、`seats.py` 這一批不搬（共用規則層，第 40 批收進），包裡照 `registry.SHARED` import。
 
 沒有選項前綴：`act:rank2`、`act:convoy`、`act:summons`、`act:rank:<行動>` 都是核心 `_act` 的 act 子動詞（行動列），選單那三段、按下去、抄帳、管理者的鈕都在核心原位叫
 Game 上的一行委派（理由在 tests/core/test_feature_boundaries.py 的 `# military` 那一段）；掛鉤只有叛投那一刻的格（defection：clear 位置的 convoy，第 32 批）；沒有路由（server.py 的 `orders`、`convoy` 兩個鍵與管理者三顆鈕照舊叫 Game）。

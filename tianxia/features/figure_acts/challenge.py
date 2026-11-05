@@ -11,8 +11,8 @@ import random
 
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import battlelog, calendar, deeds, four_tiers, materials, push, rise, team, treasures, wins
-from tianxia import figure_life  # 過渡：待搬（人物活起來 figure_life，總表第 40 批）
-from tianxia import figures  # 過渡：待搬（大勢人物 figures，總表第 40 批）
+from tianxia import figure_life  # 共用規則層（人物活起來 figure_life，第 40 批收進）
+from tianxia import figures  # 共用規則層（大勢人物 figures，第 40 批收進）
 from tianxia import prologue as prologue_rules
 from tianxia.calendar import DAY, HOUR
 from tianxia.core.option import Option

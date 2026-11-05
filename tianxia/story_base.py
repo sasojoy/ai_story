@@ -5,7 +5,8 @@
 - 探索包：探索那一下擲內容寫的線（roll_start）；
 - 有所感包：頓悟那一條線的鉤子登記（TASKS、TASK_LEFT、REFRESH_HOOKS、FIGHT_HOOKS、END_HOOKS）與開線、開第一題（start、open_quiz、definition、active、on）。
 一條線自己的走法（選單、答題、打一場、結算、收尾、餘波）在 tianxia/features/story/storyline.py，那一份 re-export 這裡的每一個名字
-（tianxia.storyline 是指到那一份的舊名別名）。這一層只 import 核心與兩個還沒搬的舊模組：atlas（here 的大區）、chapters（vary 的大事結果，函式裡）。
+（tianxia.storyline 是指到那一份的舊名別名）。這一層只 import 核心、共用規則層的 chapters（vary 的大事結果，函式裡；全部拆包第 40 批收進）與一個還沒搬的舊模組 atlas（here 的大區）。
+第 40 批另收 waiting、doable（章回卡讀）與 mark_of（條件 story_marks 讀），在檔尾 core_world2 那一段。
 """
 
 from __future__ import annotations

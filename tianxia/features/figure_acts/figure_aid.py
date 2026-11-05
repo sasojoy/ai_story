@@ -12,7 +12,7 @@ from __future__ import annotations
 import random
 
 from tianxia import calendar, encounter
-from tianxia import figures  # 過渡：待搬（大勢人物 figures，總表第 40 批）
+from tianxia import figures  # 共用規則層（大勢人物 figures，第 40 批收進）
 from tianxia.figures import (  # noqa: F401  犒軍與自然回復共用一天的上限（共用規則層，全部拆包第 40 批），re-export 回原名
     _aid_day as _day, _aid_life as _life, _aid_prune_tally as _prune_tally, aid_left_today as left_today, aid_on as on,
     aid_restore as restore,

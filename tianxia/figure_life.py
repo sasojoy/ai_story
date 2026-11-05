@@ -9,13 +9,22 @@
 - 風聞（spread）：玩家做了份量夠的事，跟這件事有關的人物記一句、情誼照表動；對話提示照 prompt_lines 帶進去。
 - 華佗坐診（healer_factor）：他此刻在的醫館療傷打折。
 
-只 import models、state、figures、rules、calendar、push、atlas（延後）；engine、world、team、companion_agent 呼叫它。"""
+只 import models、state、figures、rules、calendar、push、atlas（延後）；engine、world、team、companion_agent 呼叫它。
+
+共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包與舊名的別名——誰在擺宴、開著的宴問核心的查詢服務 core/feast_base，
+設宴是世界層 life 那一格（core/features.py 的 WORLD_ORDER；宴客包登記，tick 每一輪每一位對話人物叫一次、在求援之前）。讀璽效 seal_acts、
+輿圖的大區 atlas、懸賞 bounties 記在邊界測試的 SHARED_PENDING。改這一份 scripts/test_for.py 只挑自己檔名的 tests/figures/test_figure_life.py、
+test_figure_life_batch3.py＋煙霧＋邊界；收進來之前挑到的另外跑（-n 4）：tests/figures/test_plans.py、tests/seal/test_seal_acts.py、
+tianxia/features/companions/tests/ 的 test_companions、test_parley_schema、test_parley_two、test_relations_letters、tianxia/features/feast/tests/test_feast.py；
+世界一步代叫它（world._STEP_CORE），world.py 說明「另外跑」那一串也跑。"""
 from __future__ import annotations
 
 import random
 
 from . import calendar, figures, push, relations, renown, seal_acts
 from .calendar import DAY
+from .core import feast_base  # 全部拆包第 40 批：誰在擺宴、開著的宴問核心的查詢服務（宴客包 re-export 同一批），不 import 宴客包
+from .core import features as features_core  # 全部拆包第 40 批：設宴是世界層 life 那一格（core/features.py 只 import option，不會循環）
 from .core.services import note_cheer  # 全部拆包第 19 批「先做」：等著寫道賀信的那一格走核心（書信搬進人物情誼包，舊模組不必為了它 import 包）
 from .models import Content
 from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value, world_day
@@ -139,18 +148,18 @@ def tick(state: GameState, content: Content) -> None:
     first, w.life_turn = w.life_turn < 0, turn
     if first:
         return
-    from .features.feast import rules as feasts  # noqa: PLC0415  宴客（功能包）→ figure_life：延後載入
+    hooks = features_core.world_hooks("life")  # 世界層 life：每一位對話人物設宴（宴客包登記；全部拆包第 40 批），一輪取一次
 
     movers = [cid for cid, ch in content.characters.items() if ch.deep_interaction and ch.follows is None]
     for cid in movers:
-        if feasts.hosting(state, cid) is None:  # 擺著宴的人留在原地（第三批）
+        if feast_base.hosting(state, cid) is None:  # 擺著宴的人留在原地（第三批；宴席讀的那一半在核心 feast_base）
             _act(state, content, cid, random.Random(f"人物|{w.tianji}|{cid}|{turn}"))
     for cid, ch in content.characters.items():  # 跟著走的人最後才動：關羽、張飛跟著劉備
         if ch.follows is not None and ch.deep_interaction:
             _follow(state, content, cid, ch.follows)
     for cid, ch in content.characters.items():  # 第三批：宴客、求援委託（排在走動之後：照他這一輪走到的地方）
         if ch.deep_interaction:
-            feasts.maybe_open(state, content, cid, turn)
+            features_core.world_run("life", {}, state, content, cid, turn, hooks=hooks)  # 設宴（宴客包；包沒登記時不跑）
             _maybe_rally(state, content, cid, turn)
 
 
@@ -416,12 +425,10 @@ def spread(state: GameState, content: Content, kind: str, target: str, *, at: st
 
 def feast_invites(state: GameState, content: Content) -> list:
     """此刻開著、你還沒敬過酒的宴（書信的邀宴問，letters._feast_letter）；宴客關著是空的。書信是人物情誼包的、宴客是宴客包的，包不能互相 import：
-    經這裡問（全部拆包第 19 批；舊模組 → 包，這個檔本來就延後 import 宴客包設宴，第 40 批 figure_life 收進共用規則層時一起處理）。只讀。"""
-    from .features.feast import rules as feasts  # noqa: PLC0415  宴客（功能包）→ figure_life：延後載入
-
-    if not feasts.on(content):
+    經這裡問（全部拆包第 19 批；第 40 批 figure_life 收進共用規則層，改讀核心的 feast_base，不 import 宴客包）。只讀。"""
+    if not feast_base.on(content):
         return []
-    return [f for f in feasts.open_feasts(state) if not feasts.toasted(state, f)]
+    return [f for f in feast_base.open_feasts(state) if not feast_base.toasted(state, f)]
 
 
 def prompt_lines(state: GameState, content: Content, cid: str) -> str:

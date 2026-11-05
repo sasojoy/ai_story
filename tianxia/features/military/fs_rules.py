@@ -17,7 +17,7 @@ import random
 from collections.abc import Iterator
 
 from tianxia import calendar, materials, renown, timetable, wins
-from tianxia import figures  # 過渡：待搬（大勢人物 figures，總表第 40 批收共用規則層）
+from tianxia import figures  # 共用規則層（大勢人物 figures，第 40 批收進）
 from tianxia.core.omen_base import FIGURE_SLOT, GUANYIN, TIANJI, TIANJI_ANSWER, _asks, asks_of, need, scale, trips  # noqa: F401  核心與共用層讀的只讀那一半在 core/omen_base，這裡 re-export 同一批名字（舊名 tianxia.foreshadow 照舊拿到同一個函式）
 from tianxia.core.omen_base import (  # noqa: F401  core_world2：伏筆「讀」的那一半（全部拆包第 40 批）也在 core/omen_base，re-export 同一批
     TIANJI_SLOTS, _event, _figure_name, _fragment_text, _front, _tianji, _version, chain, event_ids, fill,

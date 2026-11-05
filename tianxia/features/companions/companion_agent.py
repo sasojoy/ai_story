@@ -18,7 +18,7 @@ from typing import Annotated, ClassVar
 
 from pydantic import BaseModel, Field, create_model, field_validator
 
-from tianxia import figure_life, seal_acts  # 過渡：待搬（人物活起來 figure_life 第 40 批；玉璽碎片的璽效 seal_acts 第 51 批）
+from tianxia import figure_life, seal_acts  # 過渡：待搬（玉璽碎片的璽效 seal_acts 第 51 批）
 from tianxia import gender, renown, zh
 from tianxia.models import AFFINITY_TAG_DELTAS, DIALOGUE_TAGS, CharacterDef, Content  # noqa: F401
 from tianxia.ollama_client import OllamaClient

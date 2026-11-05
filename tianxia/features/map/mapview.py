@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 from html import escape
 
-from tianxia import atlas, orders  # 過渡：待搬（地點與路的資料、視野；軍令：atlas 第 50 批拆兩半〔第 49 批 PM 認定第 2 條〕，留下的那一半不進包）
+from tianxia import atlas, orders  # 過渡：待搬（地點與路的資料、視野：atlas 第 50 批拆兩半〔第 49 批 PM 認定第 2 條〕，留下的那一半不進包）
 from tianxia import conquest, mounts, territory  # 共用規則層
 from tianxia.atlas import KNOWN, Odds  # 過渡：待搬（同上）
 from tianxia.models import Content, Location, MapLabel, MapLayout, MapRegion

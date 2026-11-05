@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from tianxia import allied, calendar, gender, seats
-from tianxia import orders, ranks  # 過渡：待搬（軍令 orders、階級 ranks，總表第 40 批收共用規則層）
+from tianxia import orders, ranks  # 共用規則層（軍令 orders、階級 ranks，第 40 批收進）
 from tianxia.core.services import NO_SUCH_PLAYER
 from tianxia.models import PromotionDef
 from tianxia.rules import season_one

@@ -19,7 +19,7 @@ import re
 from pydantic import BaseModel
 
 from tianxia import gender
-from tianxia import figure_life  # 過渡：待搬（人物此刻在哪、心事、站哪一邊）
+from tianxia import figure_life  # 共用規則層（人物此刻在哪、心事、站哪一邊；第 40 批收進）
 from tianxia import seal_acts  # 過渡：待搬（收心：一日之內敬酒的情誼 ×2）
 from tianxia.core.feast_base import _key, find, hosting, is_open, on, open_feasts, toasted  # noqa: F401  宴席「讀」的那一半在核心（全部拆包第 40 批），re-export 同一批
 from tianxia.models import Content

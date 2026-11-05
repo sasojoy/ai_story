@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from tianxia import bounties  # 過渡：待搬（懸賞 bounties）
 from tianxia import calendar, renown, wins
-from tianxia import figures  # 過渡：待搬（大勢人物 figures，總表第 40 批）
+from tianxia import figures  # 共用規則層（大勢人物 figures，第 40 批收進）
 from tianxia.core.option import Option
 from tianxia.rules import season_one
 

@@ -14,7 +14,7 @@ import random
 from typing import NamedTuple
 
 from tianxia import calendar, timetable, wins
-from tianxia import figures, ranks  # 過渡：待搬（大勢人物 figures、階級 ranks，總表第 40 批收共用規則層）
+from tianxia import figures, ranks  # 共用規則層（大勢人物 figures、階級 ranks，第 40 批收進）
 from tianxia.core.omen_base import _live, done_for_rank, in_plot  # noqa: F401  只讀那一半在 core/omen_base，這裡 re-export 同一批名字
 from tianxia.core.omen_base import heard_clues, opp_active as active  # noqa: F401  core_world2：機緣「讀」的那一半（全部拆包第 40 批），re-export 同一批
 from tianxia.journal import fragment_line

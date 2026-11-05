@@ -215,15 +215,15 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         return False
     if cond.no_sect and p.sect is not None:
         return False
-    for key, need in cond.story_marks.items():  # 一條線的記號（storyline.py）：那條線沒開過算 0
+    if cond.story_marks or cond.story_marks_max:
+        from . import story_base  # noqa: PLC0415  story_base → rules：延後 import（一條線的記號由共用層回答，全部拆包第 40 批）
+    for key, need in cond.story_marks.items():  # 一條線的記號（story_base.mark_of）：那條線沒開過算 0
         line, _, mark = key.partition(":")
-        progress = p.storylines.get(line)
-        if (progress.marks.get(mark, 0) if progress is not None else 0) < need:
+        if story_base.mark_of(state, line, mark) < need:
             return False
     for key, most in cond.story_marks_max.items():
         line, _, mark = key.partition(":")
-        progress = p.storylines.get(line)
-        if (progress.marks.get(mark, 0) if progress is not None else 0) > most:
+        if story_base.mark_of(state, line, mark) > most:
             return False
     if cond.level_min is not None and p.member.level < cond.level_min:
         return False
@@ -295,8 +295,11 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
             return False
         if cond.virtue_min is not None and renown.virtue_tier(state, content) < cond.virtue_min:
             return False
-    if any(p.clue_items.get(k, 0) < v for k, v in cond.clue_items.items()):
-        return False
+    if cond.clue_items:
+        from .core import omen_base  # noqa: PLC0415  軍情包認領的 clue_items 由核心的查詢服務回答（全部拆包第 40 批）
+
+        if any(omen_base.clue_count(state, k) < v for k, v in cond.clue_items.items()):
+            return False
     if cond.grain_min:  # 帶了糧（晉升奇遇 3.2；正式版丙二）：要 content 才算得出糧草與換算
         from .core import omen_base  # noqa: PLC0415  軍情第 34 批：伏筆需求量的換算在核心的 omen_base
 
@@ -1273,7 +1276,7 @@ def _fx_chronicle(r: EffectRun) -> list[str]:
 
 
 def _ranks():
-    from . import ranks  # noqa: PLC0415  過渡：待搬（第 40 批：ranks 收進共用規則層）；ranks → rules：在函式裡 import，避免循環
+    from . import ranks  # noqa: PLC0415  共用規則層 ranks（全部拆包第 40 批收進，照舊核心代叫）；ranks → rules：在函式裡 import，避免循環
 
     return ranks
 
@@ -1294,11 +1297,11 @@ _EFFECT_CORE: dict[str, Callable[[EffectRun], list[str]]] = {
     "gear": _fx_gear,  # 共用規則層 treasures
     "stamina": _fx_stamina,
     "affinity": _fx_affinity,
-    "patron": lambda r: _ranks().effect_patron(r),  # 過渡：待搬（第 40 批）豪強的靠山（晉升奇遇 4.2；正式版丙一）
+    "patron": lambda r: _ranks().effect_patron(r),  # 共用規則層 ranks（第 40 批收進）豪強的靠山（晉升奇遇 4.2；正式版丙一）
     "runic": lambda r: _seal().effect_runic(r),  # 過渡：待搬（第 27 批）符文殘片
     "event_mods": _fx_event_mods,  # 共用規則層 timetable
-    "summons_next": lambda r: _ranks().effect_summons_next(r),  # 過渡：待搬（第 40 批）召見往下一段（排在晉升前面）
-    "promote": lambda r: _ranks().effect_promote(r),  # 過渡：待搬（第 40 批）晉升、部下
+    "summons_next": lambda r: _ranks().effect_summons_next(r),  # 共用規則層 ranks（第 40 批收進）召見往下一段（排在晉升前面）
+    "promote": lambda r: _ranks().effect_promote(r),  # 共用規則層 ranks（第 40 批收進）晉升、部下
     "flags": _fx_flags,
     "learn_skills": _fx_learn_skills,
     "join_sect": _fx_join_sect,

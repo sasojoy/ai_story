@@ -411,3 +411,35 @@ def close_season(state: GameState, content: Content) -> None:
 def seen(state: GameState) -> None:
     """跳出來的卡看過了：清掉。"""
     state.player.story_cards = []
+
+
+# ── core_world2：章回的開回與收回（全部拆包第 40 批；原本 chapters.tick）──
+
+
+def chapter_tick(state: GameState, content: Content, world: WorldStateStore | None) -> list[str]:
+    """同步與每個動作之前（Game._story_tick）：換了陣營的作罷、大事結算了還沒做成的收成 missed、該開的開。回江湖紀錄要寫的話。
+    （原本是 chapters.tick，全部拆包第 40 批整段搬來：章回收進共用規則層，開回與收回叫這一包的 start、finish；章回的規則照舊讀 chapters。）"""
+    from tianxia import chapters  # noqa: PLC0415  章回（共用規則層）；延後 import 只是保險
+
+    if not chapters.on(content, state.world):
+        return []
+    p, w = state.player, state.world
+    msgs: list[str] = []
+    for progress in active(state):
+        line = definition(content, progress)
+        if line is None or line.chapter is None:
+            continue
+        if line.chapter.side != p.faction:
+            progress.ending, progress.stage, progress.go, progress.due = chapters.LEFT, "", None, None
+            progress.ended_at = w.time
+            continue
+        result = w.timeline.get(line.chapter.beat)
+        if result is not None and progress.stage != chapters.WAIT and line.ending(chapters.MISSED) is not None:
+            progress.marks[chapters.outcome_mark(result.key)] = 1
+            msgs += finish(state, content, world, progress, line, line.ending(chapters.MISSED))
+    if p.faction is None or w.ended:  # 休季了：錯過的照樣收成 missed（不寫此事未了），不再開新的
+        return msgs
+    for line in chapters.lines(content, p.faction):
+        if chapters._ready(state, content, line):  # noqa: SLF001  # 開的那一下不另寫一行、不跳卡：江湖頁最上面的章回卡換成這一回
+            start(state, content, line, custom=False, card=False)
+    return msgs

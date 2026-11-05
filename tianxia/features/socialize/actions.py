@@ -11,7 +11,7 @@ from typing import Any
 
 from tianxia import journal, precise, renown, roster
 from tianxia.core.services import SNUB_NOTE
-from tianxia import ranks  # 過渡：待搬（階級 ranks 第 40 批）
+from tianxia import ranks  # 共用規則層（階級 ranks，第 40 批收進）
 from tianxia.events import pick_event  # 過渡：待搬（事件：抽一則）
 from tianxia.journal import Draft
 from tianxia.rules import audience_hint, game_day, season_one

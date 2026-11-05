@@ -6,7 +6,7 @@ _silver_donate；全部拆包第 43 批搬進來，行為一個字不變）；Ga
 from __future__ import annotations
 
 from tianxia import economy, equipment, materials, prologue as prologue_rules, silver
-from tianxia import figures  # 過渡：待搬（大勢人物：此地在場的人物）
+from tianxia import figures  # 共用規則層（大勢人物：此地在場的人物；第 40 批收進）
 from tianxia.core.option import Option
 
 from .donate_actions import credit

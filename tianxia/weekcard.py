@@ -12,20 +12,20 @@
 字待 joy 潤。
 
 「你這一步」的候選由各包登記的格組（全部拆包第 36 批：step.items 照 core/features.py 的 STEP_ORDER 一格一格叫，懸賞榜兩格核心代叫），
-這裡不再直接叫包、讀包的欄位。核心本體（第 36 批收進 MODULES）：不 import 功能包；章回（chapters）是舊模組（第 40 批收進共用規則層）。
+這裡不再直接叫包、讀包的欄位。核心本體（第 36 批收進 MODULES）：不 import 功能包；章回（chapters）是共用規則層（第 40 批收進）。
 - scripts/test_for.py：改這個檔跑核心測試＋煙霧＋自己檔名的 tests/map/test_weekcard.py（NOT_CORE_TESTS：改別的核心模組不多跑它）。
 - 不寫 weekcard 檔名的混合檔 test_for 挑不到，另外跑（-n 4，不含 slow）：tests/bots/test_step.py、tests/core/test_chapters.py、
   tests/figures/test_week_unlock.py、tianxia/features/companions/tests/test_errands_weekcard.py、tianxia/features/guide/tests/test_opening.py；
   slow 的 tianxia/features/faction/tests/test_sides_card.py、tests/web/test_week_card_web.py 要跑就 --slow。
-- 反過來，改這裡 import 的舊模組 chapters 時 test_for 不經這裡往上找，上面那一串只挑到 test_chapters：見 step.py 說明
-  「反過來也挑不到」那一條（bounties、atlas、orders 等一起在那裡）。
+- 反過來，改這裡 import 的 chapters（共用規則層）時 test_for 只挑它自己檔名的 test_chapters＋煙霧＋邊界，上面那一串照舊另外跑：
+  見 step.py 說明「反過來也挑不到」那一條（bounties、atlas、orders 等一起在那裡）。
 """
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 from . import calendar, rules, story_base, week_unlock, wins
-from . import chapters  # 過渡：待搬（第 40 批：章回收進共用規則層）
+from . import chapters  # 共用規則層（章回，全部拆包第 40 批收進）
 from . import step as step_rules
 from . import prologue as prologue_rules
 from .rules import STANCE_NAMES
