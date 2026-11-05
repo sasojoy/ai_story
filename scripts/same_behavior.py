@@ -16986,7 +16986,7 @@ class TravelScenario(StaminaScenario):
     （汲長風）；舊的趕路出發了還在路上（戈青嵐）；設伏埋了、前半祝臨川疾行踩過一次（鄒歸帆埋的）。
     後半：新程式接著做完小事（含收穫上限拿滿的對照）、走到停下、折返再折返、走完；伏兵那一段讓人走過；假人（BotRunner 兩個走出去；
     整季機器人眼前的選單與挑法、bot_policy.score 對 move:／road: 的分數）；收季、開下一季。
-    **結伴同行的路上那一半**（`_share_road`、`act:part`）是第 48 批（移動二）的，這一軌不擺同伴。
+    **結伴同行的路上那一半**（`_share_road`、`act:part`）是第 48 批（移動二）的，不擺在這一軌：另開 `roadmate` 軌（`RoadmateScenario`，借這一軌的小工具）。
     沒有陣營的內容（測試內容）同一串 API 照打，設伏寫「沒有」。"""
 
     A, B1, B2, B3, C, G = "鄒歸帆", "洪疏桐", "岑尋舟", "樂謹言", "苗遠山", "盧靜川"
@@ -17361,6 +17361,410 @@ def _travel_register_track(name: str, scenario: type, mutation: tuple, profile: 
 
 # 改一個字（selftest）：舊的趕路喊停那一句（go_actions.halt，第 47 批從 Game._halt 搬進 tianxia/features/travel/；base 上還在 engine.py，所以兩個檔都寫）
 _travel_register_track("travel", TravelScenario, (("tianxia/features/travel/go_actions.py", "tianxia/engine.py"), ("（趕路已經花掉的體力不退。）", "（趕路已經花掉的體力不退！）")), "week7")
+
+
+# ═══════════════════════════ roadmate（全部拆包第 48 批：移動二——出發與抵達的補算、在路上那一行字、結伴同行路上那一半、/api/party/leave） ═══════════════════════════
+# 另開一軌（不接在 travel 那一軌後面）的理由：結伴要兩個人以上、五組人各走各的路（二十二個帳號），跟 travel 那一軌的十一個人互不相干，
+# 合在一起每次改一組都要重比整個資料庫；另開一軌可以只重比這一軌，也各自切一半（TravelScenario 的 PHASES、PLAYERS 全換掉，借它的只有小工具）。
+
+class RoadmateScenario(TravelScenario):
+    """移動二一軌（全部拆包第 48 批；--track roadmate，自己一個資料庫）。結伴同行（Joy 2026-10-19 把結伴從玩家卡上拿掉，/api/peer/act 的 travel 回
+    「沒有這個動作」，所以這一軌直接記一張 kind 是 travel 的邀請，帶頭的人發、跟著的人在選單上 invite:yes／invite:no 回；帶頭的人 invite:cancel 收回）、
+    答應時重驗（已經跟著別人、身後已經有人跟著、帶頭的人已經跟著別人；「帶頭的人不在這裡了」被玩家互動包擋在前面，沒進到 party.join，見限制）、帶頭的人步行出發（跟著的人照抄同一趟，騎馬的照自己的坐騎再省）、
+    疾行出發（體力不夠的跟不上，兩邊各記一句；手上有事、已經不在出發那一站的兩種沒走到，見限制）、結伴路上三樣小事分收穫（含收穫上限拿滿的對照）、帶頭的人喊停、折返
+    （步行、疾行的 road:back:dash）、跟著的人在路上按 act:part、還在等時按 /api/party/leave（沒跟著誰時也按一次）、答應了卻自己先走、
+    party_wait_seconds 內沒動身就散了、走到終點拱手作別、兩邊 /api/main 的 party；出發與抵達的補算（出發那一句的現實倒數、抵達）在這些路上一併走到，
+    「剛出發就折返」「季落幕停在當下」兩支沒走到（見限制）。
+    **前半停在四件寫到一半的事**：答應了結伴、帶頭的人還沒動身（湛長庚、戎棠）；結伴走在路上、做了一件小事（霍承嶼）；帶頭的人喊了停、還沒走到那一站（樊靖安）；
+    跟著的人分道揚鑣之後自己還在路上（莘慕白）。後半：接著做完小事、跟著的人在路上按 /api/party/leave、折返再折返、等著的帶頭人動身（跟著的人照抄）、
+    等太久散了、喊停的那一站、走到終點；假人（BotRunner 四個收到結伴邀請，其中一個已經跟著別人；整季機器人眼前的選單與挑法）；收季、開下一季。
+    **這一軌的限制（不當成涵蓋了；第 48 批審查實跑 season21 量到）**：「你在路上」這一種答應時的拒絕（選單上在路上沒有邀請可按）只有單元測試；
+    測試內容（test）的路最長 3 分鐘，前半切下去時在路上的人少（計畫第五節量到 test 3 個、season21 與 week7 各 7 個），「切在路上」以 season21、week7 為主（第 47 批認定第 6 條）。
+    沒走到的支：(1) departure.depart 的「立刻折返」（at_once）；(2) arrivals 的「賽季落幕，停在」：收季之後情境只讀資料庫，沒有同步路上的人；
+    (3) lead 裡「手上有事」（懸賞榜 block）：Game 建構時 engine 的 `if p.picking_bounty and not bounties.board_here(...)` 把直接寫進去的 picking_bounty 收掉
+    （board_here 要過 week_unlock；測試內容沒有陣營），欒修遠照樣跟上；(4) 戚懷瑾「已經不在出發那一站」那一句：`_party` 先把他篩掉，鄂臨川的訊息沒提到他；
+    (5) 答應時重驗的第四種「帶頭的人不在這裡了」：回的是玩家互動包 invite_actions.answer_invite 的 social.GONE（「對方已經不在這裡了。」，沒有括號），
+    party.join 的 presence.GONE 那一支與 join_refusal 的 other is None 那一支都沒走到；(6) 霍承嶼「前半最後做了一件小事」的 leg_actions 沒交到新程式手上：
+    後半第一個碰到他的請求（重新登入）補算一口氣過了兩站，leg_actions 被清掉，所以選單與 share_road 讀 leg_actions 的支只有單元測試；
+    交接過去的只有複製的 journey 與 road_rewards_today（紀望舒上限滿）。這些支的 ast 搬前搬後一樣，風險低；要補的話另開情境（week7 可能走得到 (3)，未驗）。"""
+
+    HUO, LIN, JI, TU = "霍承嶼", "藺知夏", "紀望舒", "屠宛然"  # 步行帶頭；騎馬跟著；收穫拿滿的對照；婉拒後改跟戎棠、還在等時分道揚鑣
+    E, SANG, QI, LUAN, QIN = "鄂臨川", "桑若水", "祁雲岫", "欒修遠", "戚懷瑾"  # 疾行帶頭；跟上的（騎馬）；體力不夠；手上有事；已經不在這裡
+    FAN, MI, RAN = "樊靖安", "莘慕白", "冉驚鴻"  # 喊停；在路上分道揚鑣；一直跟到停下來
+    ZHAN, BI, TAI = "湛長庚", "畢雲書", "邰明遠"  # 先答應、後動身；答應了卻自己先走；等著、之後照抄
+    RONG, YUE = "戎棠", "樂正初"  # 一直沒動身（等太久散了）
+    QUE, MEI, HE, MU, XIAO = "闕子安", "梅疏影", "賀蘭澈", "沐春風", "蕭長歌"  # 重驗那幾種；闕子安也是假人邀請的帶頭人
+    GHOST = "遠行客"  # 沒有這個人：記著「跟著他」的對照
+    W1 = HUO  # 借 TravelScenario.rumor（沿途的傳聞掛在帶頭人的路上）
+    NEWBIE = "初出茅廬"
+    PLAYERS = {HUO: "guan", LIN: "guan", JI: "guan", TU: None, E: "huang", SANG: "huang", QI: "huang", LUAN: "huang", QIN: "huang",
+               FAN: "guan", MI: "guan", RAN: None, ZHAN: "guan", BI: "guan", TAI: None, RONG: "huang", YUE: "huang",
+               QUE: "guan", MEI: None, HE: "huang", MU: "huang", XIAO: "guan"}
+    BOT_SEATS = ["行丙", "行丁", "行戊", "行己"]
+    PHASES_FIRST = ["setup", "seat", "join_up", "reverify", "leave_wait", "go", "half"]
+    PHASES_SECOND = ["resume", "tasks", "parts", "backs", "waits", "halts", "arrivals", "bots", "season"]
+    WALKERS = (HUO, LIN, JI, FAN, MI, RAN, BI, ZHAN, TAI, RONG)
+    WATCHED = (HUO, LIN, JI, E, SANG, QI, LUAN, QIN, FAN, MI, RAN, ZHAN, BI, TAI, RONG, YUE, TU)
+
+    # ── 小工具 ──
+
+    def reach(self, who: str, mode: str = "walk") -> str | None:
+        """從這個人站的地方走得到（這個走法）、路程最長的地點（一樣長取 id 排前面的）。"""
+        from tianxia import atlas
+
+        with self.world.action_lock():
+            state = self.chars.load(who)
+        found = atlas.shortest_routes(state, self.c)
+        best = None
+        for loc_id, route in sorted(found.items()):
+            if not route.path or loc_id == state.player.location or atlas.travel_refusal(state, self.c, loc_id, mode) is not None:
+                continue
+            if best is None or round(route.minutes, 6) > best[0]:
+                best = (round(route.minutes, 6), loc_id)
+        return best[1] if best else None
+
+    def aside(self) -> str:
+        """出發地以外的第一個地點（擺人「已經不在這裡」用）。"""
+        return next((loc for loc in sorted(self.c.locations) if loc != self.hub()), self.hub())
+
+    def invite(self, sender: str, target: str) -> None:
+        """記一張結伴同行的邀請（kind 是 travel；玩家卡上沒有入口了，只剩舊的邀請照舊走完）。"""
+        from tianxia.features.peers import invites
+
+        with self.world.action_lock():
+            loc = self.chars.load(sender).player.location
+        self.begin()
+        self.world.mutate_season(lambda w: invites.send(w, self.c, "travel", sender, target, loc))
+        emit(f"{sender} 發結伴同行的邀請給 {target}", loc)
+
+    def found(self, target: str, sender: str) -> list:
+        return [i for i in self.world.get_season().invites if i.kind == "travel" and i.sender == sender and i.target == target]
+
+    def reply(self, target: str, sender: str, verb: str) -> None:
+        """選單上回他的邀請（invite:yes|no:<編號>，同真人按的那一顆）；先看一眼選單；沒有他發的邀請寫「沒有」。"""
+        self.main(target)
+        found = self.found(target, sender)
+        if not found:
+            emit(f"{target} 沒有 {sender} 的邀請", None)
+            return
+        self.choose(target, f"invite:{verb}:{found[0].id}")
+
+    def cancel(self, sender: str, target: str) -> None:
+        """帶頭的人在自己的選單上收回邀請（invite:cancel:<編號>）。"""
+        self.main(sender)
+        found = self.found(target, sender)
+        if not found:
+            emit(f"{sender} 沒有給 {target} 的邀請", None)
+            return
+        self.choose(sender, f"invite:cancel:{found[0].id}")
+
+    def follow(self, who: str, leader: str) -> None:
+        """直接擺成「跟著 leader」（對照用）；since 擺在很遠的未來，不會因為步數累積（每一步一分鐘）就散了。"""
+        from tianxia.state import Tagalong
+
+        self.edit(who, lambda p: setattr(p, "tagalong", Tagalong(leader=leader, since=CLOCK0 + 10 ** 7)))
+
+    def unfollow(self, who: str) -> None:
+        self.edit(who, lambda p: setattr(p, "tagalong", None))
+
+    def keep(self, who: str) -> None:
+        """答應之後把等的期限推到很遠（party_wait_seconds 只有 600 現實秒，十步就散了）；要測散掉的另外擺。"""
+        def fn(p) -> None:
+            if p.tagalong is not None:
+                p.tagalong.since = CLOCK0 + 10 ** 7
+        self.edit(who, fn)
+
+    def cap_out(self, who: str) -> None:
+        """這個人這個遊戲日路上小事的收穫已經拿滿了（跟著的人自己的上限，分收穫時照他的算）。"""
+        from tianxia.rules import game_day
+
+        with self.world.action_lock():
+            state = self.chars.load(who)
+            world = self.world.get_season()
+            state.player.road_rewards_today["task"] = [game_day(self.c, world), self.c.config.road_reward_daily_cap]
+            self.chars.save(state)
+
+    def party_leave(self, who: str) -> None:
+        """場景底下的「分道揚鑣」（POST /api/party/leave）：回 {main, message}。"""
+        self.call(who, "POST", "/api/party/leave")
+
+    def pick_view(self, who: str, tag: str) -> None:
+        """整季機器人眼前的選單與挑法（有邀請的、跟著人在路上的）。"""
+        import random as _random
+
+        from tianxia import bot
+
+        self.main(who)
+        self.begin()
+        game = self.server.game_for(who)
+        opts = game.options(odds=False)
+        emit(f"{who} 整季機器人眼前的選單 {tag}", [[o.id, o.enabled, o.label] for o in opts if o.id.startswith(("move:", "road:", "act:", "invite:"))])
+        emit(f"{who} 整季機器人挑的 {tag}", sorted({str(bot.pick(game, opts, _random.Random(k))) for k in range(30)}))
+
+    # ── 前半 ──
+
+    def seat(self) -> None:
+        from tianxia.state import Equipment
+
+        for who, side in self.PLAYERS.items():
+            self.place(who, self.hub(), side)
+            self.edit(who, lambda p: p.stats.update({"silver": 400}))
+        for who, mount_id in ((self.LIN, "騎:901"), (self.SANG, "騎:902")):  # 騎馬的跟著人（坐騎沒開的設定這一匹就只是帶著）
+            self.edit(who, lambda p, mount_id=mount_id: setattr(p, "mount", Equipment(id=mount_id, slot="mount", name="棗騮馬", tier=1, quality="下品")))
+        for who in self.PLAYERS:
+            self.main(who)
+        self.stock_view("坐定")
+
+    def join_up(self) -> None:
+        """五組人答應結伴（每一個答應完立刻把等的期限推遠）：帶頭的人看得到誰跟著他；一個婉拒、之後改跟戎棠。"""
+        groups = ((self.HUO, (self.LIN, self.JI)), (self.E, (self.SANG, self.QI, self.LUAN, self.QIN)), (self.FAN, (self.MI, self.RAN)),
+                  (self.ZHAN, (self.BI, self.TAI)), (self.RONG, (self.YUE,)))
+        for lead, followers in groups:
+            for who in followers:
+                self.invite(lead, who)
+                self.reply(who, lead, "yes")
+                self.keep(who)
+            self.main(lead)
+        self.invite(self.HUO, self.TU)
+        self.reply(self.TU, self.HUO, "no")
+        self.main(self.HUO)
+
+    def reverify(self) -> None:
+        """收回邀請；答應時重驗的四種：已經跟著別人、身後已經有人跟著、帶頭的人已經跟著別人、帶頭的人已經不在這裡（第四種：邀請還在選單上，按下去才發現）。"""
+        hub = self.hub()
+        self.invite(self.QUE, self.XIAO)
+        self.main(self.XIAO)
+        self.cancel(self.QUE, self.XIAO)
+        self.main(self.XIAO)
+        self.follow(self.MEI, self.GHOST)
+        self.invite(self.QUE, self.MEI)
+        self.reply(self.MEI, self.QUE, "yes")
+        self.unfollow(self.MEI)
+        self.follow(self.MU, self.HE)
+        self.invite(self.QUE, self.HE)
+        self.reply(self.HE, self.QUE, "yes")
+        self.unfollow(self.MU)
+        self.follow(self.QUE, self.GHOST)
+        self.invite(self.QUE, self.XIAO)
+        self.reply(self.XIAO, self.QUE, "yes")
+        self.unfollow(self.QUE)
+        self.invite(self.QUE, self.XIAO)
+        self.place(self.QUE, self.aside())
+        self.reply(self.XIAO, self.QUE, "yes")
+        self.place(self.QUE, hub, self.PLAYERS[self.QUE])
+        for who in (self.QUE, self.XIAO, self.MEI, self.HE, self.MU):
+            self.me(who, "重驗之後")
+
+    def leave_wait(self) -> None:
+        """還在等帶頭的人動身時按「分道揚鑣」（POST /api/party/leave）；沒跟著誰時也按一次。"""
+        self.invite(self.RONG, self.TU)
+        self.reply(self.TU, self.RONG, "yes")
+        self.keep(self.TU)
+        self.main(self.RONG)
+        self.party_leave(self.TU)
+        self.main(self.RONG)
+        self.party_leave(self.TU)
+        self.party_leave(self.XIAO)
+
+    def go(self) -> None:
+        """出發（世界時鐘一請求走一分鐘，所以這一段不插別的請求，前半切下去的時候人還在路上）：疾行的先走（祁雲岫體力 0、欒修遠手上有懸賞榜開著、
+        戚懷瑾已經不在出發那一站、桑若水跟上），再接著霍承嶼、樊靖安步行（跟著的人照抄），霍承嶼做一件小事（紀望舒的上限已滿），樊靖安喊停，
+        莘慕白在路上分道揚鑣，畢雲書答應了卻自己先走。"""
+        dest = {self.HUO: self.far(self.HUO), self.FAN: self.far(self.FAN), self.BI: self.far(self.BI), self.E: self.reach(self.E, "dash")}
+        emit("各人要去的遠處", dest)
+        self.cap_out(self.JI)
+        self.edit(self.QI, lambda p: setattr(p, "stamina", 0.0))
+        self.edit(self.LUAN, lambda p: setattr(p, "picking_bounty", True))
+        self.place(self.QIN, self.aside())
+        if dest[self.E] is not None:
+            self.travel(self.E, dest[self.E], "dash")
+        for who in (self.E, self.SANG, self.QI, self.LUAN, self.QIN):
+            self.me(who, "疾行之後")
+        for who in (self.HUO, self.FAN):
+            if dest[who] is not None:
+                self.travel(who, dest[who], "walk")
+        self.choose(self.HUO, "road:think")
+        self.choose(self.FAN, "act:halt")
+        self.choose(self.MI, "act:part")
+        if dest[self.BI] is not None:
+            self.travel(self.BI, dest[self.BI], "walk")
+        for who in (self.HUO, self.LIN, self.JI, self.FAN, self.MI, self.RAN, self.BI, self.ZHAN, self.TAI):
+            self.me(who, "出發之後")
+
+    def half(self) -> None:
+        for who in (self.HUO, self.LIN, self.JI, self.FAN, self.MI, self.RAN, self.BI, self.ZHAN, self.TAI, self.RONG, self.YUE):
+            self.me(who, "前半最後")
+        self.stock_view("前半最後")
+
+    # ── 後半 ──
+
+    def resume(self) -> None:
+        """只先登入管理者和還在路上的人（每登入一個世界時鐘走一分鐘；整段也照這個順序登入，兩邊的步數才對得上）；其他人用到才登入。"""
+        self.relogin(ADMIN)
+        for who in (self.HUO, self.LIN, self.JI, self.FAN, self.MI, self.RAN, self.BI):
+            self.relogin(who)
+        self.rumor()
+
+    def tasks(self) -> None:
+        """霍承嶼接著做完小事（打聽、採集必中；做過的再按灰著、硬按）：跟著的藺知夏有一份，紀望舒的心得、素材上限已滿，聽說照樣有。"""
+        with self.tune(road_gather_chance=1.0):
+            for what in ("ask", "gather", "think", "gather"):
+                self.choose(self.HUO, f"road:{what}")
+        for who in (self.LIN, self.JI):
+            self.me(who, "小事分完")
+
+    def parts(self) -> None:
+        """跟著的人在路上按場景底下的「分道揚鑣」（紀望舒；POST /api/party/leave 不管在不在路上都收），再看帶頭的人。"""
+        self.party_leave(self.JI)
+        self.main(self.HUO)
+        self.me(self.JI, "分道揚鑣之後")
+
+    def backs(self) -> None:
+        """霍承嶼折返（步行）、緊接著再折返（跟著的藺知夏照抄每一趟）。"""
+        for _ in range(2):
+            self.choose(self.HUO, "road:back")
+            for who in (self.HUO, self.LIN):
+                self.me(who, "折返之後")
+        self.ways(self.HUO, "折返完")
+
+    def waits(self) -> None:
+        """湛長庚（跟著的邰明遠一直在等）動身走遠處，邰明遠照抄；整季機器人眼前的選單；湛長庚做一件小事再疾行折返（立刻回到原地）；
+        樂正初等太久散了（把期限擺回過去）；戎棠動身，沒有人跟著。這一段開頭先登入其餘的人（後半是新的行程；整段也照樣登入，兩邊的步數才對得上）。"""
+        for who in (self.ZHAN, self.TAI, self.RONG, self.YUE, self.E, self.SANG, self.QI, self.LUAN, self.QIN, self.TU, self.QUE, self.XIAO,
+                    self.MEI, self.HE, self.MU):
+            self.relogin(who)
+        far = self.far(self.ZHAN)
+        if far is not None:
+            self.travel(self.ZHAN, far, "walk")
+        for who in (self.ZHAN, self.TAI):
+            self.me(who, "動身之後")
+        self.pick_view(self.TAI, "跟著人在路上")
+        self.choose(self.ZHAN, "road:ask")
+        self.call_mode(self.ZHAN, "POST", "/api/choose", {"id": "road:back:dash"}, "dash")
+        for who in (self.ZHAN, self.TAI):
+            self.me(who, "疾行折返之後")
+        self.edit(self.YUE, lambda p: setattr(p.tagalong, "since", CLOCK0 - 10 ** 6) if p.tagalong is not None else None)
+        self.main(self.YUE)
+        self.main(self.RONG)
+        far = self.far(self.RONG)
+        if far is not None:
+            self.travel(self.RONG, far, "walk")
+        self.me(self.YUE, "散了之後")
+        self.me(self.RONG, "動身之後")
+
+    def halts(self) -> None:
+        """樊靖安走到喊停的那一站就停下，冉驚鴻一路跟到這裡（拱手作別）；停下之後再喊停（不在路上了，硬按）。"""
+        self.do(ADMIN, "fast_forward", {"hours": 1})
+        for who in (self.FAN, self.RAN):
+            self.main(who)
+            self.me(who, "喊停的那一站")
+        self.choose(self.FAN, "act:halt")
+
+    def arrivals(self) -> None:
+        """還在路上的一路走完（快轉六小時、同步一次）；每個人走完看一眼（江湖紀錄、party）。"""
+        for _ in range(8):
+            traveling = self.moving()
+            if not traveling:
+                break
+            self.do(ADMIN, "fast_forward", {"hours": 6})
+            for who in traveling:
+                self.main(who)
+        for who in self.WATCHED:
+            self.main(who)
+            self.me(who, "走完")
+        self.stock_view("走完")
+
+    def bots(self) -> None:
+        """假人：BotRunner 四個（站在出發地，體力滿；乙已經跟著別人）收到闕子安的結伴邀請，若干輪；答應的原地等，闕子安動身時照抄。
+        整季機器人眼前有結伴邀請的選單與挑法。"""
+        from collections import Counter
+
+        from tianxia import server_bots
+        from tianxia.bot_runner import BotRunner
+        from tianxia.engine import Game
+        from tianxia.state import BotProfile
+
+        on = bool(self.c.scenario.factions)
+        hub = self.hub()
+        made = []
+        for i, name in enumerate(self.BOT_SEATS):
+            self.begin()
+            g = Game.new(self.c, name, rng=random.Random(i), world=self.world, graduated=True)
+            p = g.state.player
+            p.bot = BotProfile(personality="普通", seed=61 + i, faction="guan" if on else None, season_number=self.world.get_season_number())
+            g.client = None
+            g.sync(CLOCK[0])
+            for _ in range(6):
+                first = next((o.id for o in g.options(odds=False) if o.id.startswith("choice:") and o.enabled), None)
+                if first is None:
+                    break
+                g.choose(first)
+            p.faction, p.location, p.journey = p.bot.faction, hub, None
+            p.visited.add(hub)
+            p.tutorial_step = len(self.c.tutorial.steps)
+            p.joined_at = -1.0e9
+            p.stamina = float(self.c.config.stamina_max)
+            self.chars.save(g.state)
+            made.append(name)
+        self.follow(self.BOT_SEATS[1], self.GHOST)
+        self.place(self.QUE, hub, self.PLAYERS[self.QUE])
+        self.main(self.QUE)
+        for name in made:
+            self.invite(self.QUE, name)
+        runner = BotRunner(self.c, self.world, self.chars, rng=random.Random(43), clock=lambda: CLOCK[0])
+        tick, online = self.c.config.bot_tick_seconds, server_bots.is_online
+        seeds = {61 + i for i in range(len(made))}
+        self.c.config.bot_tick_seconds = 10 ** 6
+        server_bots.is_online = lambda profile, now: profile.seed in seeds or online(profile, now)
+        totals = Counter()
+        try:
+            with self.tune(party_wait_seconds=10 ** 9):
+                for _ in range(int(os.environ.get("SB_TRAVEL_TICKS", "8"))):
+                    STEP[0] += 4
+                    self.begin()
+                    report = runner.tick()
+                    totals.update(acted=report.acted, added=report.added, skipped=report.skipped, failed=report.failed, online=report.online)
+        finally:
+            self.c.config.bot_tick_seconds, server_bots.is_online = tick, online
+        emit("假人 一輪一輪", dict(sorted(totals.items())))
+        emit("假人 還在等的邀請", sorted([i.target, i.sender] for i in self.world.get_season().invites if i.kind == "travel"))
+        self.invite(self.QUE, self.TU)
+        self.pick_view(self.TU, "有結伴邀請")
+        far = self.far(self.QUE)
+        if far is not None:
+            with self.tune(party_wait_seconds=10 ** 9):
+                self.travel(self.QUE, far, "walk")
+        self.me(self.QUE, "假人跟著之後")
+        for name in made:
+            s = self.chars.load(name)
+            emit(f"假人 {name}", {"loc": s.player.location, "journey": None if s.player.journey is None else s.player.journey.model_dump(mode="json"),
+                                  "tagalong": None if s.player.tagalong is None else s.player.tagalong.model_dump(mode="json"),
+                                  "stamina": s.player.stamina, "journal": [[e.title, e.tag, list(e.lines)[:3]] for e in s.journal[:4]],
+                                  "state": hashlib.sha256(s.model_dump_json().encode("utf-8")).hexdigest()})
+
+    def season(self) -> None:
+        self.do(ADMIN, "end_season")
+        self.stock_view("收季之後")
+        for who in (self.HUO, self.LIN, self.QUE):
+            self.me(who, "收季之後")
+        self.do(ADMIN, "next_season")
+        self.main(self.HUO)
+        for who in (self.HUO, self.LIN, self.QUE):
+            self.me(who, "換季之後")
+        self.stock_view("換季之後")
+
+
+def _roadmate_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
+    """再開一軌（TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記；同 _travel_register_track，名字分開免得幾塊都在時互相蓋掉）。"""
+    global TRACK_NAMES
+    TRACKS[name] = scenario
+    TRACK_NAMES = (*TRACK_NAMES, name)
+    MUTATIONS[name] = mutation
+    MUTANT_PROFILE[name] = profile
+
+
+# 改一個字（selftest）：跟不上的那一句（_lead，第 48 批從 Game 搬進 tianxia/features/travel/party.py；base 上還在 engine.py，所以兩個檔都寫），week7 疾行那一組抓到
+_roadmate_register_track("roadmate", RoadmateScenario, (("tianxia/features/travel/party.py", "tianxia/engine.py"), ("你們就此分開。", "你們就此分開！")), "week7")
 
 
 # ═══════════════════════════ map（全部拆包第 49 批：輿圖一——天下圖、區圖、小地圖、地點詳情、疊層） ═══════════════════════════
@@ -19248,6 +19652,712 @@ _loom_register_track("loom", LoomScenario, (("tianxia/figures.py",), ("重新出
 _smithy_files, _smithy_line = MUTATIONS["smithy"]
 MUTATIONS["smithy"] = (("tianxia/core/smith_base.py", *_smithy_files), _smithy_line)
 del _smithy_files, _smithy_line
+
+
+# ═══════════════════════════ gear：裝備一軌（全部拆包第 42 批，dev/gear-1） ═══════════════════════════
+# 裝備（馬市的買、餵、換上，修練頁 /api/menxia/{wield,dismantle,feed,dismantle_many}，寄放補送，名將贈禮與本命兵器，神器譜 /api/boards、/api/board_card）：
+# Game 上 13 個方法與 tianxia/signature_arms.py 之後搬進 tianxia/features/gear/（計畫 docs/superpowers/plans/2026-11-07-裝備包-第1批.md）。
+# 這一段整塊是這一批的：接在檔尾、最後一行登記（_gear_register_track），PM 合的時候不跟別人的行穿插。角色的名字都是原創的（第 22 批 PM 認定第 3 條）。
+
+GEAR_BOTS = ["牧甲", "牧乙"]
+GEAR_SILVER = 6000
+GEAR_RACK_CAP = 5  # 裝備庫幾格：預設 100 格，要「裝備庫滿了」得塞一百件；這一軌在記憶體裡壓成 5（兩份程式一樣）
+# 測試內容沒有 gear.json（沒有寶物、名駒、贈禮、本命兵器）：在記憶體裡補一份，人物用測試內容的（兩份程式一樣）
+GEAR_TEST_BOOK = {
+    "treasures": {
+        "gt_a": {"id": "gt_a", "name": "銅鈴匣", "effect": "cultivate", "pool": False},
+        "gt_b": {"id": "gt_b", "name": "墨玉扣", "effect": "insight", "pool": False},
+        "gt_c": {"id": "gt_c", "name": "青蓑", "effect": "win_material", "pool": False},
+        "gt_d": {"id": "gt_d", "name": "黃麻鞍", "effect": "audience", "pool": False},
+    },
+    "steeds": {"gs_a": {"id": "gs_a", "name": "流雲駒", "quality": "上品"}, "gs_b": {"id": "gs_b", "name": "追星駒", "quality": "中品"}},
+    "gifts": [
+        {"character": "mate", "gear": "gt_a"}, {"character": "scholar", "gear": "gt_b"}, {"character": "hero", "gear": "gt_c"},
+        {"character": "captain", "gear": "gt_d"}, {"character": "friend", "gear": "gs_a"}, {"character": "pupil", "gear": "gs_b"},
+    ],
+    "signature_arms": [
+        {"character": "mate", "name": "斷水刀", "kind": "刀", "attribute": "剛"},
+        {"character": "hero", "name": "寒枝劍", "kind": "劍", "attribute": "柔"},
+        {"character": "scholar", "name": "鳴沙槍", "kind": "槍", "attribute": "剛"},
+        {"character": "captain", "name": "霜痕棍", "kind": "棍", "attribute": "柔"},
+    ],
+}
+
+
+class GearScenario(Scenario):
+    """裝備一軌（全部拆包第 42 批；--track gear，自己一個資料庫）。每一步都存回應；分段：
+    - setup：籌備中（管理者還沒開季）只證到批量拆解被擋（@not_while_preparing）；進馬市、買、換上、餵、拆解也各按一下，但都沒走到
+      （審查實測），不算證明「籌備中照常做」；開季、補體力、擺位置，給銀兩與一階素材。
+    - closed：不在馬市的人按進門、買、餵、換上、離開；在馬市沒進門的人按買（FB-195：選單上沒有，回為什麼不成或「情形變了」）。
+    - stall：進門、買得起與買不起、已經有馬時新的進裝備庫、裝備庫滿了、餵（不餓、沒素材、餵飽）、換上（裝備庫那一匹、不存在的）、離開兩次。
+    - bench：修練頁 /api/menxia/{wield,dismantle,feed,dismantle_many}：兵、甲、騎、寶四種 id，空 id、不存在的、坐騎寶物不能拆、路上換坐騎被擋、閉關中換寶物
+      （路辛約 2 分鐘就到了：路上「餵被擋」那一支沒走到，審查實測）。
+    - held：裝備庫滿時寄放的東西，sync 補送（先滿著補不進去、騰出空位再補）。
+    - gifts：名將贈禮與本命兵器（情誼經 choose 到門檻）：當面交給你、託人送來、每位名將每季全服一人、名駒；答覆事件（放手一搏）那一條路也打一下。
+    - fight：挑戰本人打贏兩次（還不夠）；內容沒有大勢人物的（測試內容）寫「沒有」。
+    - boards：/api/boards 的神器譜與 /api/board_card（神器譜每一筆、不存在的、缺參數）。
+    - half：**前半停在這裡**——馬市開著剛買了一匹、坐騎餓了還沒餵、情誼差一下到贈禮門檻、寄放裡有東西等補送、打贏本人兩次（第三次由後半打）。
+    - 後半：resume 接著走、views（每個人看一遍主畫面與門下頁與神器譜）、bots（BotRunner 兩個〔牧甲坐在馬市、牧乙在門外；牧乙沒進馬市，
+      act:market 的假人路徑靠 bot_policy.pick 驅動的牧丁與整季機器人，審查實測〕＋bot_policy.pick 兩個＋
+      整季機器人 visit_market、feed_mount、wear_better、advance 補送寄放）、season（換季：神器譜跨季；收季前沒人坐在馬市裡，
+      「開著的馬市跟新角色重來」沒走到，換季後照樣按一下 market:back，審查實測）。
+    測試內容的兵器、防具、坐騎、寶物本來關著，馬市的標籤也沒有：這一軌在記憶體裡打開、補上（base 與 head 一樣）。"""
+
+    SHOPPER, POOR, HORSED, FULLRACK, FEEDER, AWAY = "駒甲", "駒乙", "駒丙", "駒丁", "駒戊", "駒己"
+    BENCH, ROAD, SECLUDED, PREP = "列庚", "路辛", "關壬", "備未"
+    HELD, NEAR, FAR, TAKEN, STEED, FIGHT = "寄癸", "贈子", "贈丑", "贈辰", "贈寅", "贈卯"
+    H_BUY, H_FEED, H_NEAR, H_HELD, H_FIGHT = "半辰", "半巳", "半午", "半未", "半申"
+    PLAYERS = [SHOPPER, POOR, HORSED, FULLRACK, FEEDER, AWAY, BENCH, ROAD, SECLUDED, PREP, HELD, NEAR, FAR, TAKEN, STEED, FIGHT,
+               H_BUY, H_FEED, H_NEAR, H_HELD, H_FIGHT]
+    PHASES_FIRST = ["setup", "closed", "stall", "bench", "held", "gifts", "fight", "boards", "half"]
+    PHASES_SECOND = ["resume", "views", "bots", "season"]
+
+    def __init__(self, root: Path, profile: str, db: Path):
+        super().__init__(root, profile, db)
+        cf = self.c.config
+        if profile == "test":  # 測試內容四欄都關、沒有馬市、沒有 gear.json：打開、補上（兩份程式一樣）
+            from tianxia.models import GearBook
+
+            cf.weapons.enabled = cf.armor.enabled = cf.mounts.enabled = cf.treasures.enabled = True
+            town = self.c.locations["town"]
+            if "馬市" not in (town.tags or []):
+                town.tags = [*(town.tags or []), "馬市"]
+            if not self.c.gear.gifts:
+                self.c.gear = GearBook.model_validate(GEAR_TEST_BOOK)
+        cf.weapons.rack_cap = GEAR_RACK_CAP
+
+    # ── 小工具 ──
+
+    def begin(self) -> None:
+        """每個請求前把榜單的快取清掉（server.BOARDS_CACHE 是行程裡的快取：前半＋後半是兩個行程，不清的話整段與切開的榜單新舊不同）。"""
+        super().begin()
+        self.server.BOARDS_CACHE.clear()
+
+    def market(self) -> str:
+        """有「馬市」標籤的地點：表上第一個（測試內容是 __init__ 補上的那一處）。"""
+        return next(i for i, loc in sorted(self.c.locations.items()) if "馬市" in (loc.tags or []))
+
+    def wild(self) -> str:
+        market = self.market()
+        return next((i for i, loc in sorted(self.c.locations.items()) if i != market and "馬市" not in (loc.tags or [])), market)
+
+    def mats(self, tier: int) -> list[str]:
+        return sorted(m.id for m in self.c.materials.values() if m.tier == tier)
+
+    def opts(self, who: str) -> dict[str, dict]:
+        self.begin()
+        r = self.clients[who].get("/api/main")
+        try:
+            return self.ids(r.json())
+        except Exception:  # noqa: BLE001
+            return {}
+
+    def press(self, who: str, option_id: str, tag: str = "") -> None:
+        """按選單上的一顆（灰著、不在選單上也照按，被擋的那一句也要寫出來）。"""
+        have = self.opts(who).get(option_id)
+        emit(f"{who} {tag} 按 {option_id}", None if have is None else {"label": have.get("label"), "enabled": have.get("enabled")})
+        self.choose(who, option_id)
+
+    def mx(self, who: str, op: str, body: dict | None = None):
+        return self.call(who, "POST", f"/api/menxia/{op}", body or {})[1]
+
+    def edit_state(self, name: str, fn) -> None:
+        with self.world.action_lock():
+            state = self.chars.load(name)
+            state.world = self.world.get_season()
+            fn(state)
+            self.chars.save(state)
+
+    def kit(self, who: str, silver: int = GEAR_SILVER, each: int = 3) -> None:
+        def fn(p):
+            p.stats["silver"] = silver
+            for mid in self.mats(1):
+                p.materials[mid] = each
+            p.stamina = float(self.c.config.stamina_max)
+            p.joined_at = -1.0e9
+        self.edit(who, fn)
+
+    def stock(self, who: str, weapons_n: int = 0, armors_n: int = 0, horses_n: int = 0, treasures_n: int = 0, worn: bool = False) -> None:
+        """身上與裝備庫擺東西：worn 先把四欄穿滿，再往裝備庫放這幾件。"""
+        from tianxia import armor, mounts, treasures, weapons
+        from tianxia.models import WEAPON_KINDS
+
+        tid = next(iter(sorted(self.c.gear.treasures)), None)
+
+        def fn(state):
+            p = state.player
+            if worn:
+                p.weapon = weapons.new_weapon(state, name="試手劍", kind=WEAPON_KINDS[0], attribute="剛", tier=1, quality="中品")
+                p.armor = armor.new_armor(state, name="試手甲", attribute="剛", tier=1, quality="中品")
+                p.mount = mounts.new_mount(state, name="試手馬", tier=2, quality="中品")
+                if tid is not None:
+                    p.treasure = treasures.new_treasure(state, self.c, tid)
+            for k in range(weapons_n):
+                p.rack.append(weapons.new_weapon(state, name=f"備用兵{k}", kind=WEAPON_KINDS[k % 3], attribute="剛", tier=1, quality="下品"))
+            for k in range(armors_n):
+                p.rack.append(armor.new_armor(state, name=f"備用甲{k}", attribute="柔", tier=1, quality="下品"))
+            for k in range(horses_n):
+                p.rack.append(mounts.new_mount(state, name=f"備用馬{k}", tier=1, quality="下品"))
+            if tid is not None:
+                for k in range(treasures_n):
+                    p.rack.append(treasures.new_treasure(state, self.c, tid))
+        self.edit_state(who, fn)
+
+    def state_of(self, who: str, tag: str) -> None:
+        """存檔裡跟裝備有關的那幾格與最新那一則紀錄。"""
+        s = self.chars.load(who)
+        p = s.player
+        latest = (s.journal or [None])[0]
+        dump = lambda e: None if e is None else e.model_dump(mode="json")  # noqa: E731
+        emit(f"{who} {tag}", {
+            "loc": p.location, "journey": p.journey is not None, "silver": p.stats.get("silver"), "mats": dict(sorted(p.materials.items())),
+            "weapon": dump(p.weapon), "armor": dump(p.armor), "mount": dump(p.mount), "treasure": dump(p.treasure),
+            "rack": [dump(e) for e in p.rack], "held": [dump(e) for e in p.held_gear],
+            "picking": p.picking_market, "shop_line": p.shop_line, "shop_clue": p.shop_clue, "hunger_warned": p.hunger_warned,
+            "aff": dict(sorted(p.affinities.items())), "wins": dict(sorted(p.figure_wins.items())), "stamina": p.stamina,
+            "annals": [[a.kind, a.text] for a in p.annals][-3:],
+            "latest": [dump(e) for e in (s.journal or [])[:3]] if latest is not None else None,
+        })
+
+    def world_gear(self, tag: str) -> None:
+        w = self.world.get_season()
+        emit(f"世界 {tag}", {"gifts": dict(sorted(w.general_gifts.items())),
+                            "arms": {k: v.model_dump(mode="json") for k, v in sorted(w.signature_arms.items())},
+                            "rumors": [r.text for r in w.rumors][-3:], "chronicle": [r.text for r in w.chronicle][-3:]})
+
+    def cast(self) -> tuple[list[str], list[str]]:
+        """贈禮的人物：送寶物的（內容裡的先後）、送名駒的。"""
+        book = self.c.gear
+        steeds = set(book.steeds)
+        return ([g.character for g in book.gifts if g.gear not in steeds], [g.character for g in book.gifts if g.gear in steeds])
+
+    def where(self, cid: str) -> str:
+        """此刻在哪裡找得到他（同 Game._people_here 的所在：人物表上的人照此刻的所在，其餘 recruit_at、talk_at）。"""
+        from tianxia import figures
+        from tianxia.engine import Game
+
+        self.begin()
+        state = self.chars.load(self.PREP)
+        state.world = self.world.get_season()
+        game = Game(self.c, state, world=self.world)
+        placed = figures.placed_characters(game.state, self.c)
+        ch = self.c.characters[cid]
+        found = placed.get(cid) if cid in placed else (ch.recruit_at or ch.talk_at)
+        return found if found in self.c.locations else self.wild()
+
+    def elsewhere(self, cid: str) -> str:
+        here = self.where(cid)
+        return self.market() if here != self.market() else self.wild()
+
+    def befriend(self, who: str, cid: str, value: int) -> None:
+        self.edit(who, lambda p: p.affinities.__setitem__(cid, value))
+
+    def touch(self, who: str) -> None:
+        """做一件不要緊的事（choose 最後會問名將贈禮與本命兵器）：先離開店、再試對話、進店，最後才拿第一顆能按的。"""
+        enabled = [i for i, o in self.opts(who).items() if o.get("enabled", True)]
+        for pre in ("market:back", "smith:back", "bounty:back", "talk:", "act:smith", "act:market", "act:halt", "act:rest"):
+            found = next((i for i in enabled if i.startswith(pre)), None)
+            if found:
+                emit(f"{who} 做的事", found)
+                self.choose(who, found)
+                return
+        emit(f"{who} 做的事", enabled[:1])
+        if enabled:
+            self.choose(who, enabled[0])
+
+    # ── 前半 ──
+
+    def setup(self) -> None:
+        from tianxia.accounts import AccountStore
+        from tianxia.engine import Game
+
+        store = AccountStore(self.world.db)
+        self.passwords[ADMIN] = "pw-admin-123456"
+        with self.world.db.transaction():
+            store.register(self.login_of(ADMIN), self.passwords[ADMIN])
+            game = Game.new(self.c, ADMIN, world=self.world)
+            self.chars.save(game.state)
+            store.bind_character(self.login_of(ADMIN), ADMIN)
+        self.clients[ADMIN] = self.TestClient(self.server.app)
+        self.call(ADMIN, "POST", "/api/login", {"login": self.login_of(ADMIN), "password": self.passwords[ADMIN]})
+        for who in self.PLAYERS:
+            self.clients[who] = self.TestClient(self.server.app)
+            self.passwords[who] = "pw-" + self.login_of(who)
+            self.call(who, "POST", "/api/register", {"login": self.login_of(who), "password": self.passwords[who],
+                                                    "again": self.passwords[who]})
+            self.call(who, "POST", "/api/character", {"name": who, "gender": "男"})
+        who = self.PREP  # 籌備中：只證到批量拆解擋（@not_while_preparing）；馬市、買、換上、餵、拆解也按，但沒走到（審查實測，照實記）
+        self.choose(who, "act:market")
+        self.choose(who, "market:buy")
+        self.mx(who, "wield", {"weapon": "兵:1"})
+        self.mx(who, "feed")
+        self.mx(who, "dismantle", {"weapon": "兵:1"})
+        self.mx(who, "dismantle_many", {"items": ["兵:1", "甲:2"]})
+        self.call(who, "GET", "/api/boards")
+        self.call(who, "GET", "/api/board_card?board=%E7%A5%9E%E5%99%A8&season=1&ref=x")
+        self.do(ADMIN, "open_season")
+        for who in self.PLAYERS:
+            self.do(who, "skip_tutorial")
+            self.settle_choices(who)
+        for who in self.PLAYERS:
+            self.place(who, self.wild() if who in (self.AWAY, self.ROAD) else self.market())
+            self.kit(who)
+        self.world_gear("開場")
+
+    def closed(self) -> None:
+        """不在馬市：進門、買、餵、換上、離開都被擋；在馬市沒進門：選單上沒有 market: 那一串，按了回為什麼不成。"""
+        who = self.AWAY
+        for oid in ("act:market", "market:buy", "market:feed", "market:wield:騎:1", "market:back"):
+            self.choose(who, oid)
+        self.mx(who, "feed")
+        self.state_of(who, "被擋之後")
+        who = self.SHOPPER
+        for oid in ("market:buy", "market:feed", "market:wield:騎:1", "market:back", "market:bogus"):
+            self.press(who, oid, "沒進門")
+        self.state_of(who, "沒進門")
+
+    def stall(self) -> None:
+        """馬市：進門、買、再買、沒錢、餵、換上、離開。"""
+        who = self.SHOPPER
+        self.press(who, "act:market")
+        self.state_of(who, "進門")
+        self.press(who, "market:buy", "買得起")
+        self.state_of(who, "買了第一匹")
+        self.press(who, "market:buy", "已經有馬")
+        self.state_of(who, "買了第二匹（進裝備庫）")
+        self.press(who, "market:feed", "不餓")
+        self.edit(who, lambda p: setattr(p.mount, "edge", 30))
+        self.edit(who, lambda p: p.materials.clear())
+        self.press(who, "market:feed", "沒素材")
+        self.kit(who, silver=GEAR_SILVER)
+        self.press(who, "market:feed", "餵飽")
+        self.state_of(who, "餵過之後")
+        rack_horses = [e.id for e in self.chars.load(who).player.rack if e.slot == "mount"]
+        for mid in (rack_horses[:1] or ["騎:1"]) + ["騎:999", "騎:999"]:
+            self.press(who, f"market:wield:{mid}", "換上")
+        self.press(who, "market:wield:", "空 id")
+        self.state_of(who, "換上之後")
+        self.press(who, "market:back")
+        self.press(who, "market:back", "已經離開")
+        self.state_of(who, "離開之後")
+        who = self.POOR  # 買不起：鈕灰著寫還差多少
+        self.edit(who, lambda p: p.stats.__setitem__("silver", 10))
+        self.press(who, "act:market")
+        self.press(who, "market:buy", "買不起")
+        self.state_of(who, "買不起之後")
+        self.press(who, "market:back")
+        who = self.HORSED  # 已經有馬：新的進裝備庫
+        self.stock(who, horses_n=1, worn=True)
+        self.press(who, "act:market")
+        self.press(who, "market:buy", "身上有馬")
+        self.state_of(who, "身上有馬再買")
+        self.press(who, "market:back")
+        who = self.FULLRACK  # 裝備庫滿了
+        self.stock(who, weapons_n=GEAR_RACK_CAP - 1, horses_n=1, worn=True)
+        self.press(who, "act:market")
+        self.press(who, "market:buy", "裝備庫滿了")
+        self.press(who, "market:back")
+        who = self.FEEDER
+        self.stock(who, worn=True)
+        self.edit(who, lambda p: setattr(p.mount, "edge", 10))
+        self.press(who, "act:market")
+        self.press(who, "market:feed", "餓了")
+        self.press(who, "market:feed", "吃飽了")
+        self.press(who, "market:back")
+        self.state_of(who, "餵完離開")
+
+    def bench(self) -> None:
+        """修練頁：換上、拆解、餵、批量拆解（兵、甲、騎、寶四種 id；路上、閉關中）。"""
+        who = self.BENCH
+        self.stock(who, weapons_n=2, armors_n=1, horses_n=1, treasures_n=1, worn=True)
+        self.state_of(who, "備好")
+        p = self.chars.load(who).player
+        ids = {slot: [e.id for e in p.rack if e.slot == slot] for slot in ("weapon", "armor", "mount", "treasure")}
+        for slot in ("weapon", "armor", "mount", "treasure"):
+            for item in ids[slot][:1]:
+                self.mx(who, "wield", {"weapon": item})
+        for item in ("兵:999", "", "不是裝備"):
+            self.mx(who, "wield", {"weapon": item})
+        self.mx(who, "wield")  # 沒給鍵
+        self.mx(who, "wield", {"item": ids["weapon"][0] if ids["weapon"] else "兵:1"})  # 給了別的鍵：讀的是 weapon，當空 id
+        self.state_of(who, "換上之後")
+        p = self.chars.load(who).player
+        ids = {slot: [e.id for e in p.rack if e.slot == slot] for slot in ("weapon", "armor", "mount", "treasure")}
+        for slot in ("mount", "treasure", "weapon", "armor"):  # 坐騎寶物不能拆
+            for item in ids[slot][:1]:
+                self.mx(who, "dismantle", {"weapon": item})
+        for item in ("兵:999", ""):
+            self.mx(who, "dismantle", {"weapon": item})
+        self.edit(who, lambda p: setattr(p.mount, "edge", 20))
+        self.mx(who, "feed")
+        self.mx(who, "feed")
+        self.state_of(who, "拆解與餵之後")
+        p = self.chars.load(who).player
+        every = [e.id for e in p.rack] + ["兵:999"]
+        self.mx(who, "dismantle_many", {"items": []})
+        self.mx(who, "dismantle_many", {"items": "兵:1"})
+        self.mx(who, "dismantle_many")
+        self.mx(who, "dismantle_many", {"items": every})
+        self.state_of(who, "批量拆解之後")
+        who = self.ROAD  # 路上：換坐騎被擋，換寶物不擋；約 2 分鐘就到了，「餵被擋」那一支沒走到（審查實測）
+        self.stock(who, horses_n=1, treasures_n=1, worn=True)
+        first = next((i for i in self.opts(who) if i.startswith("move:")), None)
+        emit(f"{who} 出發", first)
+        if first:
+            self.choose(who, first)
+        p = self.chars.load(who).player
+        for slot in ("mount", "treasure"):
+            for item in [e.id for e in p.rack if e.slot == slot][:1]:
+                self.mx(who, "wield", {"weapon": item})
+        self.mx(who, "feed")
+        self.mx(who, "dismantle_many", {"items": [e.id for e in p.rack]})
+        self.state_of(who, "路上")
+        who = self.SECLUDED  # 閉關中：寶物照換，餵被擋
+        self.stock(who, horses_n=1, treasures_n=1, worn=True)
+        self.edit(who, lambda p: setattr(p, "busy_until", 4.0e9))
+        p = self.chars.load(who).player
+        for slot in ("treasure", "mount"):
+            for item in [e.id for e in p.rack if e.slot == slot][:1]:
+                self.mx(who, "wield", {"weapon": item})
+        self.mx(who, "feed")
+        self.state_of(who, "閉關中")
+
+    def held(self) -> None:
+        """寄放：裝備庫滿時重賞寄放，sync 補送（滿著補不進去；騰出空位再補，閉關中也補）。"""
+        from tianxia import mounts, treasures
+
+        who = self.HELD
+        tid = next(iter(sorted(self.c.gear.treasures)), None)
+
+        def fn(state):
+            p = state.player
+            p.held_gear.append(mounts.new_mount(state, name="重賞馬", tier=2, quality="中品"))
+            if tid is not None:
+                p.held_gear.append(treasures.new_treasure(state, self.c, tid))
+        self.stock(who, weapons_n=GEAR_RACK_CAP, worn=True)
+        self.edit_state(who, fn)
+        self.state_of(who, "寄放著、庫是滿的")
+        self.main(who)  # sync：滿著補不進去
+        self.state_of(who, "滿著補不進去")
+        self.mx(who, "dismantle_many", {"items": [e.id for e in self.chars.load(who).player.rack[:3]]})
+        self.edit(who, lambda p: setattr(p, "busy_until", 4.0e9))  # 閉關中也補
+        self.main(who)
+        self.state_of(who, "騰出空位之後補送")
+
+    def gifts(self) -> None:
+        """名將贈禮與本命兵器：情誼到門檻，做一件事（choose 最後問）；當面、託人送來、名駒、同一位名將已經送過人。"""
+        tre, ste = self.cast()
+        emit("贈禮的人物", {"寶物": tre, "名駒": ste, "本命": [a.character for a in self.c.gear.signature_arms]})
+        if len(tre) < 2 or not ste:
+            emit("這份內容沒有那麼多贈禮", None)
+            return
+        near, far, steed = tre[0], tre[1], ste[0]
+        self.place(self.NEAR, self.where(near))  # 他就在身邊：當面交給你
+        self.befriend(self.NEAR, near, 85)
+        self.state_of(self.NEAR, "情誼到了")
+        self.touch(self.NEAR)
+        self.state_of(self.NEAR, "當面")
+        self.place(self.FAR, self.elsewhere(far))  # 他不在：託人送來
+        self.befriend(self.FAR, far, 85)
+        self.touch(self.FAR)
+        self.state_of(self.FAR, "託人送來")
+        self.place(self.TAKEN, self.where(near))  # 同一位名將這一季已經送過人
+        self.befriend(self.TAKEN, near, 90)
+        self.touch(self.TAKEN)
+        self.state_of(self.TAKEN, "已經送過人")
+        self.place(self.STEED, self.elsewhere(steed))  # 名駒（情誼在本命兵器的門檻以下，只有名駒）
+        self.befriend(self.STEED, steed, 65)
+        self.touch(self.STEED)
+        self.state_of(self.STEED, "名駒")
+        self.world_gear("贈禮之後")
+        # 答覆事件（放手一搏）那一條路也問名將贈禮：沒有待答的事件時只回一句；有的話照走
+        self.call(self.NEAR, "POST", "/api/answer", {"text": "我自有辦法"})
+        self.call(self.FAR, "POST", "/api/answer", {"text": ""})
+
+    def revive(self) -> None:
+        """打贏他、他敗走了：管理者先救回（不然下一個人按不到挑戰鈕）。沒有帶本命兵器的大勢人物（測試內容）什麼都不做。"""
+        for arm in self.c.gear.signature_arms:
+            if arm.figure and arm.figure in self.c.figures:
+                self.do(ADMIN, "revive_figure", {"id": arm.figure})
+
+    def foe(self):
+        """帶本命兵器的大勢人物（內容寫了 figure 的那位）此刻在哪、哪個陣營的人挑得了他；沒有（測試內容）是 None。"""
+        from tianxia import figures
+        from tianxia.engine import Game
+
+        arms = [a for a in self.c.gear.signature_arms if a.figure]
+        if not arms or not self.c.figures:
+            return None
+        self.begin()
+        state = self.chars.load(self.PREP)
+        state.world = self.world.get_season()
+        game = Game(self.c, state, world=self.world)
+        for arm in arms:
+            fig = self.c.figures.get(arm.figure)
+            now = figures.state_of(game.state, self.c, arm.figure)
+            if fig is None or not figures.can_challenge(game.state, self.c, arm.figure):
+                continue
+            side = next((f.id for f in self.c.scenario.factions if f.id != fig.faction and f.id in ("guan", "huang")), None)
+            if side is not None:
+                return arm.figure, now.location, side
+        return None
+
+    def fight(self) -> None:
+        """挑戰本人打贏兩次（還不夠 signature_wins 次，沒有本命兵器）。"""
+        found = self.foe()
+        emit("本命兵器的大勢人物", found)
+        if found is None:
+            emit("這份內容沒有帶本命兵器的大勢人物（測試內容沒有大勢人物）：走不到", None)
+            return
+        fid, loc, side = found
+        who = self.FIGHT
+        self.place(who, loc, side)
+        for k in range(2):
+            if k:
+                self.revive()
+            self.edit(who, lambda p: p.snubbed_until.clear())
+            self.kit(who)
+            with self.winning():
+                self.press(who, f"act:challenge:{fid}", f"打贏第 {k + 1} 次")
+            self.state_of(who, f"打贏 {k + 1} 次之後")
+        self.world_gear("打贏之後")
+
+    def boards(self) -> None:
+        """神器譜與榜單卡：/api/boards、/api/board_card（神器譜每一筆、不存在的、缺參數）。"""
+        from urllib.parse import urlencode
+
+        status, data = self.call(self.NEAR, "GET", "/api/boards")
+        book = [b for b in (data.get("boards") or []) if b.get("id") == "神器"] if isinstance(data, dict) else []
+        rows = book[0]["book"] if book else []
+        emit("神器譜幾筆", len(rows))
+        for row in rows[:4]:
+            self.call(self.NEAR, "GET", "/api/board_card?" + urlencode({"board": "神器", "season": row["season"], "ref": row["ref"]}))
+        for query in ({"board": "神器", "season": 1, "ref": "不存在"}, {"board": "神器", "season": 0, "ref": "本命|nobody"}, {"board": "神器"}, {"board": "不是榜"}):
+            self.call(self.FAR, "GET", "/api/board_card?" + urlencode(query))
+
+    def half(self) -> None:
+        """**前半停在這裡**：馬市開著剛買了一匹、坐騎餓了還沒餵、情誼差一下到贈禮門檻、寄放裡有東西等補送、打贏本人兩次。"""
+        from tianxia import mounts, treasures
+
+        tre, ste = self.cast()
+        who = self.H_BUY  # 馬市開著，剛買了一匹（身上有馬、庫裡有一匹，店還開著）
+        self.press(who, "act:market")
+        self.press(who, "market:buy")
+        self.state_of(who, "半途：剛買一匹")
+        who = self.H_FEED  # 坐騎餓了還沒餵
+        self.stock(who, worn=True)
+        self.edit(who, lambda p: setattr(p.mount, "edge", 25))
+        self.state_of(who, "半途：餓了")
+        if len(tre) >= 4:
+            who = self.H_NEAR  # 情誼差一下到贈禮門檻（60）
+            self.place(who, self.where(tre[3]))
+            self.befriend(who, tre[3], self.c.config.treasures.gift_affinity - 1)
+            self.touch(who)
+            self.state_of(who, "半途：差一下")
+            who = self.H_HELD  # 重賞寄放著、裝備庫是滿的
+            tid = next(iter(sorted(self.c.gear.treasures)), None)
+            self.stock(who, weapons_n=GEAR_RACK_CAP, worn=True)
+            self.place(who, self.elsewhere(tre[2]))
+            self.befriend(who, tre[2], 85)
+            self.touch(who)  # 名將贈禮 + 本命兵器：庫是滿的，寄放
+            self.state_of(who, "半途：寄放著")
+        else:
+            emit("這份內容贈禮不夠四位", None)
+        self.revive()
+        found = self.foe()
+        if found is not None:
+            fid, loc, side = found
+            who = self.H_FIGHT  # 打贏兩次（還差一次）：第三次由後半打
+            self.place(who, loc, side)
+            self.edit(who, lambda p: p.figure_wins.__setitem__(fid, self.c.config.weapons.signature_wins - 2))
+            self.edit(who, lambda p: p.snubbed_until.clear())
+            with self.winning():
+                self.press(who, f"act:challenge:{fid}", "打贏")
+            self.state_of(who, "半途：打贏本人 (n-1) 次")
+        self.world_gear("半途")
+        self.database("前半結束")
+
+    def database(self, tag: str) -> None:
+        emit(tag, hashlib.sha256(db_text(self.db).encode("utf-8")).hexdigest())
+
+    # ── 後半 ──
+
+    def resume(self) -> None:
+        """新程式接著走：店還開著的繼續買與離開、餓了的馬餵、情誼補到門檻、騰出空位補送、第三次打贏本人。"""
+        self.login_all()
+        tre, ste = self.cast()
+        who = self.H_BUY
+        self.press(who, "market:buy", "接著買（進庫）")
+        self.press(who, "market:feed", "接著餵")
+        self.press(who, "market:back")
+        self.state_of(who, "接著做完")
+        who = self.H_FEED
+        self.mx(who, "feed")
+        self.press(who, "act:market")
+        self.press(who, "market:feed", "已經餵過")
+        self.press(who, "market:back")
+        self.state_of(who, "餵完")
+        if len(tre) >= 4:
+            who = self.H_NEAR
+            self.befriend(who, tre[3], self.c.config.treasures.gift_affinity)
+            self.touch(who)
+            self.state_of(who, "接著到門檻")
+            who = self.H_HELD
+            self.mx(who, "dismantle_many", {"items": [e.id for e in self.chars.load(who).player.rack[:3]]})
+            self.main(who)  # sync 補送
+            self.state_of(who, "騰出空位補送")
+        self.revive()
+        found = self.foe()
+        if found is not None:
+            fid, loc, side = found
+            who = self.H_FIGHT
+            self.place(who, loc, side)
+            self.edit(who, lambda p: p.snubbed_until.clear())
+            self.kit(who)
+            with self.winning():
+                self.press(who, f"act:challenge:{fid}", "第三次打贏")
+            self.state_of(who, "第三次打贏之後")
+        self.world_gear("接著做完")
+        self.database("接手之後")
+
+    def views(self) -> None:
+        """每個人看一遍主畫面、門下頁、神器譜。"""
+        for who in self.PLAYERS:
+            self.main(who)
+            self.call(who, "GET", "/api/menxia")
+        self.boards()
+
+    def bots(self) -> None:
+        """伺服器假人兩個（BotRunner：bot_policy 的 market:；門外的牧乙沒進馬市，act:market 靠 pick 驅動的牧丁與整季機器人）、
+        直接用 bot_policy.pick 驅動兩個、整季機器人；不寫誰是假人。"""
+        from collections import Counter
+
+        from tianxia import bot, bot_policy, mounts, server_bots, treasures
+        from tianxia.bot_runner import BotRunner
+        from tianxia.engine import Game
+        from tianxia.state import BotProfile
+
+        def make(name: str, seed: int, inside: bool, rng_seed: int):
+            self.begin()
+            g = Game.new(self.c, name, rng=random.Random(rng_seed), world=self.world, graduated=True)
+            p = g.state.player
+            p.bot = BotProfile(personality="普通", seed=seed, faction=None, season_number=self.world.get_season_number())
+            g.client = None
+            g.sync(CLOCK[0])
+            p.location, p.journey = self.market(), None
+            p.visited.add(self.market())
+            p.stats["silver"] = GEAR_SILVER
+            for mid in self.mats(1):
+                p.materials[mid] = 4
+            p.stamina = float(self.c.config.stamina_max)
+            p.tutorial_step = len(self.c.tutorial.steps)
+            p.joined_at = -1.0e9
+            g.state.pending_event = None  # 開局那一件事先放下
+            if inside:
+                p.picking_market = True
+            return g
+
+        for i, name in enumerate(GEAR_BOTS):  # 甲已經坐在馬市裡（market: 的分數）；乙在門外，沒進馬市（act:market 靠下面 pick 驅動的牧丁與整季機器人；審查實測）
+            g = make(name, 71 + i, i == 0, i)
+            emit(f"假人 {name} 進場前", {"want": bot.market_want(g), "loc": g.state.player.location,
+                                         "options": [o.id for o in g.options(odds=False, tick=False)][:14]})
+            self.chars.save(g.state)
+        runner = BotRunner(self.c, self.world, self.chars, rng=random.Random(29), clock=lambda: CLOCK[0])
+        tick, online = self.c.config.bot_tick_seconds, server_bots.is_online
+        seeds = {71 + i for i in range(len(GEAR_BOTS))}
+        self.c.config.bot_tick_seconds = 10 ** 6
+        server_bots.is_online = lambda profile, now: profile.seed in seeds or online(profile, now)
+        totals = Counter()
+        try:
+            for _ in range(int(os.environ.get("SB_GEAR_TICKS", "14"))):
+                STEP[0] += 4
+                self.begin()
+                report = runner.tick()
+                totals.update(acted=report.acted, added=report.added, skipped=report.skipped, failed=report.failed, online=report.online)
+        finally:
+            self.c.config.bot_tick_seconds, server_bots.is_online = tick, online
+        emit("假人 一輪一輪", dict(sorted(totals.items())))
+        for name in GEAR_BOTS:
+            s = self.chars.load(name)
+            p = s.player
+            emit(f"假人 {name}", {"silver": p.stats.get("silver"), "mount": None if p.mount is None else p.mount.model_dump(mode="json"),
+                                  "rack": [e.model_dump(mode="json") for e in p.rack], "picking": p.picking_market,
+                                  "titles": dict(sorted(Counter(e.title.partition("・")[0] for e in s.journal).items())),
+                                  "state": hashlib.sha256(s.model_dump_json().encode("utf-8")).hexdigest()})
+        # 打分數挑選項（bot_policy.pick：market: 與 act:market 的分數，不經 take_turn 前面那一串別的事）：甲坐在馬市裡、乙在門外，各按到不想按為止
+        for k, (name, inside) in enumerate((("牧丙", True), ("牧丁", False))):
+            drv = make(name, 80 + k, inside, 40 + k)
+            profile = BotProfile(personality="普通", seed=80 + k, faction=None, season_number=self.world.get_season_number())
+            trace = []
+            for step in range(12):
+                self.begin()
+                options = [o for o in drv.options(odds=False, tick=False) if o.enabled and o.id.startswith(("market:", "act:market"))]
+                if step == 0:
+                    emit(f"假人 {name} 分數", [[o.id, bot_policy.score(drv, o, profile)] for o in options])
+                choice = bot_policy.pick(drv, options, profile, random.Random(step))
+                trace.append(choice)
+                if choice is None:
+                    break
+                drv.choose(choice)
+            emit(f"假人 {name} 挑的", trace)
+            p = drv.state.player
+            emit(f"假人 {name} 之後", {"silver": p.stats.get("silver"), "mount": None if p.mount is None else p.mount.model_dump(mode="json"),
+                                        "rack": [e.model_dump(mode="json") for e in p.rack], "picking": p.picking_market,
+                                        "journal": [[e.title, list(e.lines)[:3]] for e in drv.state.journal[:5]]})
+        # 整季機器人：路過馬市看一眼（visit_market）、餵（feed_mount）、換更好的（wear_better）、advance 補送寄放
+        solo = make("牧戊", 90, False, 5)
+        p = solo.state.player
+        tid = next(iter(sorted(self.c.gear.treasures)), None)
+        emit("整季機器人 進門前", {"want": bot.market_want(solo)})
+        bot.visit_market(solo)
+        emit("整季機器人 visit_market", {"silver": p.stats.get("silver"), "mount": None if p.mount is None else p.mount.model_dump(mode="json"),
+                                        "rack": [e.model_dump(mode="json") for e in p.rack], "picking": p.picking_market,
+                                        "journal": [[e.title, list(e.lines)[:3]] for e in solo.state.journal[:5]]})
+        if p.mount is not None:
+            p.mount.edge = 20
+            bot.feed_mount(solo)
+        if tid is not None:
+            p.rack.append(treasures.new_treasure(solo.state, self.c, tid))
+        bot.wear_better(solo)
+        emit("整季機器人 餵與換", {"mount": None if p.mount is None else p.mount.model_dump(mode="json"),
+                                  "treasure": None if p.treasure is None else p.treasure.model_dump(mode="json"), "rack": len(p.rack)})
+        p.held_gear.append(mounts.new_mount(solo.state, name="補送馬", tier=2, quality="中品"))
+        while len(p.rack) < self.c.config.weapons.rack_cap:  # 庫滿了，advance 補不進去
+            p.rack.append(mounts.new_mount(solo.state, name="塞滿", tier=1, quality="下品"))
+        solo.advance(3600)
+        emit("整季機器人 advance 補送（庫滿）", {"held": len(p.held_gear), "rack": len(p.rack)})
+        p.rack.pop()
+        solo.advance(3600)  # 只 advance、不 sync：整季機器人補寄放的東西走這裡
+        emit("整季機器人 advance 補送（有空位）", {"held": [e.name for e in p.held_gear], "rack": [e.name for e in p.rack],
+                                                  "journal": [[e.title, list(e.lines)[:3]] for e in solo.state.journal[:3]]})
+
+    def season(self) -> None:
+        """收季、開下一季：神器譜跨季還在；換季後按 market:back。收季前沒人坐在馬市裡，「開著的馬市跟新角色重來」沒走到（審查實測）。"""
+        self.do(ADMIN, "end_season")
+        for who in (self.H_BUY, self.SHOPPER):
+            self.main(who)
+        self.do(ADMIN, "next_season")
+        for who in (self.H_BUY, self.SHOPPER, self.NEAR):
+            self.state_of(who, "換季之後（動作前的存檔）")
+            self.main(who)
+            self.press(who, "market:back", "換季後")
+            self.state_of(who, "換季之後（動作後）")
+        self.boards()
+
+
+def _gear_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
+    """再開一軌（TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記；同 _smithy_register_track）。"""
+    global TRACK_NAMES
+    TRACKS[name] = scenario
+    TRACK_NAMES = (*TRACK_NAMES, name)
+    MUTATIONS[name] = mutation
+    MUTANT_PROFILE[name] = profile
+
+
+# 改一個字（selftest）：名將託人送來那一句（signature_arms.GIFT_SENT_LINE；搬之前在 tianxia/signature_arms.py、之後在 tianxia/features/gear/signature_arms.py，
+# 第 1 項是搬進包的檔、第 2 項是舊名的檔，搬的人照實際的檔名改）。抓到的地方：贈丑的本命兵器（他不在身邊，託人送來）
+_gear_register_track("gear", GearScenario, (("tianxia/features/gear/signature_arms.py", "tianxia/signature_arms.py"),
+                                            ("託人把【{arm}】送到你手上", "託人將【{arm}】送到你手上")), "week7")
 
 
 # ═══════════════════════════ crossblade（全部拆包第 38 批「玩家互動二」，dev/peers-2）：crossblade 一軌 ═══════════════════════════

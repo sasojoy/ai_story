@@ -1078,7 +1078,7 @@ GAME_DELEGATE_CALLERS.update({
     ("_arrivals", "_road_sight"): "抵達一站的迴圈中途（_ambush_check → _arrive → 騎乘飽足 → 路上見聞）：位置固定、沒有對應的掛鉤；第 48 批 _arrivals 搬進移動包時改經 ctx",
 })
 GAME_IMPORTS |= {
-    # travel（全部拆包第 47 批）：移動選單、路上小事、喊停、折返、安排前往的 9 個一行委派
+    # travel（全部拆包第 47 批）：移動選單、路上小事、喊停、折返、安排前往的 9 個一行委派（第 48 批拿掉 3 個，剩 6 個）
     "tianxia.features.travel.menu", "tianxia.features.travel.road_actions", "tianxia.features.travel.go_actions",
 }
 GAME_DELEGATES |= {
@@ -1093,6 +1093,40 @@ del GAME_DELEGATE_CALLERS[("_halt", "_sync_battle_presence")]
 del GAME_DELEGATE_CALLERS[("travel", "_check_hints")]
 del GAME_DELEGATE_CALLERS[("travel", "_report_seat")]
 del GAME_DELEGATE_CALLERS[("travel", "_hear_after_stamina")]
+
+
+# travel（全部拆包第 48 批「移動二」；計畫 docs/superpowers/plans/2026-11-07-移動包-第2批.md 1.9）：出發與抵達的補算、在路上那一行字、結伴同行搬進
+# tianxia/features/travel/departure.py、party.py。這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。
+# Game 留 8 個一行委派：_depart（人物帶路、腳本與測試、bout 接縫）、_arrivals（sync、advance、測試）、_arrive（核心契約測試鎖事件接法）、_journey_line（status_data）、
+# _join（玩家互動包答應結伴）、join_refusal（假人回結伴邀請）、_party_expires（sync）、party_view（殼的 /api/main）。
+# _lead、_partners、_share_road、_party、_part_ways、leave_party 呼叫端都在包內，不留。
+# 拿掉別人段裡的格：移動成包了，這些由包經 ctx 叫，不再是 Game 內部互叫（在自己的段 del，第 46 批 PM 認定第 3 條；_NOTE_HOOK 那一格照第 35 批搬 _faction_step 的前例）
+del GAME_DELEGATE_CALLERS[("_arrivals", "_sync_battle_presence")]
+del GAME_DELEGATE_CALLERS[("_depart", "_sync_battle_presence")]
+del GAME_DELEGATE_CALLERS[("_arrive", "_note_action")]
+del GAME_DELEGATE_CALLERS[("_arrivals", "_ambush_check")]
+del GAME_DELEGATE_CALLERS[("_join", "_tell_sender")]
+del GAME_DELEGATE_CALLERS[("join_refusal", "_peer")]
+# 第 47 批段裡的格也在這裡拿（第 46 批 PM 認定第 3 條；第 48 批合併時從直接改第 47 批段改成這樣）：_arrivals 搬進包、直接叫 road_actions.sight；
+# _share_road 搬進包、直接叫 road_actions.reward_due／count_reward，三個 road_actions 委派拿掉
+del GAME_DELEGATE_CALLERS[("_arrivals", "_road_sight")]
+GAME_DELEGATES -= {"_road_reward_due", "_count_road_reward", "_road_sight"}
+_TRAVEL_TIME ="位置就是行為：sync、advance 每次都補算抵達（_arrivals）、sync 補算結伴過期（_party_expires）、status_data 的 journey 鍵（鍵的順序算行為）；原位叫委派"
+GAME_DELEGATE_CALLERS.update({
+    ("sync", "_arrivals"): _TRAVEL_TIME,
+    ("advance", "_arrivals"): _TRAVEL_TIME,
+    ("sync", "_party_expires"): _TRAVEL_TIME,
+    ("status_data", "_journey_line"): _TRAVEL_TIME,
+})
+GAME_IMPORTS |= {
+    # travel（全部拆包第 48 批）：出發與抵達的補算、結伴同行
+    "tianxia.features.travel.departure", "tianxia.features.travel.party",
+}
+# 三個 road_actions 委派拿掉之後 engine 不再 import road_actions（第 48 批審查）：第 47 批登記的那一格在自己的段 -=
+GAME_IMPORTS -= {"tianxia.features.travel.road_actions"}
+GAME_DELEGATES |= {
+    "_depart", "_arrivals", "_arrive", "_journey_line", "_join", "join_refusal", "_party_expires", "party_view",
+}
 
 
 # map（全部拆包第 49 批「輿圖一」：新包 tianxia/features/map/；計畫 docs/superpowers/plans/2026-11-06-輿圖包-第1批.md 1.1、1.4、1.5）：
@@ -1121,8 +1155,8 @@ for _pair in (("map_base", "map_mostly"), ("map_state", "map_mostly"), ("map_sta
 # 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。23 個方法搬進包，Game 留 12 個一行委派（其餘 11 個只有包裡叫的，沒有委派）。
 # 核心原位碰這一包的：choose 的 smith: 與 _action_title 的兩處（kind == "smith" 的標題、act:smith 的表格）換成包的 choose 掛鉤與 act 子動詞（Verb）；
 # 「打造那幾步併成一則」（quiet、merge、fold）留 choose 後半原位讀 smithing 的三個名字（經舊名別名）。
-# 店面登記（Shop）這一批不登記（計畫 1.9 量出四條）：鐵匠鋪留在 Game 原位，只有 _smith_options 變成一行委派；第 42 批（馬市）與第 45 批（懸賞榜）比較晚合的那一批
-# 把懸賞榜、鐵匠鋪、馬市三間一起排進 Shop，入口先後維持 懸賞榜 → 鐵匠鋪 → 馬市（第 41 批 PM 認定第 1 條）。
+# 店面登記（Shop）這一批不登記（計畫 1.9 量出四條）：鐵匠鋪留在 Game 原位，只有 _smith_options 變成一行委派；第 42 批（馬市，已成包 features/gear，也不登記）與
+# 第 45 批（懸賞榜）比較晚合的那一批把懸賞榜、鐵匠鋪、馬市三間一起排進 Shop，入口先後維持 懸賞榜 → 鐵匠鋪 → 馬市（第 41 批 PM 認定第 1 條）。
 GAME_IMPORTS |= {
     "tianxia.features.smithy.shelf_actions", "tianxia.features.smithy.forge_actions", "tianxia.features.smithy.trade_actions",
     "tianxia.features.smithy.gear_actions", "tianxia.features.smithy.divine_actions", "tianxia.features.smithy.clue",
@@ -1136,7 +1170,7 @@ GAME_DELEGATES |= {
     "repair_item", "temper_item", "name_divine", "bind_art",
 }
 _SMITHY_SHOP = ("鐵匠鋪不登記店面（計畫 1.9）：「此地還能做」的入口順序是 懸賞榜 → 鐵匠鋪 → 馬市 → 搬成包的店，搬進 Shop 就排到馬市後面（/api/main 的選項順序變）；"
-                "同一排的懸賞榜（第 45 批）、馬市（第 42 批）還沒成包；`here` 有兩個意思（_shop_open 要單子沒開著，收店要 smith_open）；PM 一次排")
+                "同一排的懸賞榜（第 45 批）還沒成包、馬市（第 42 批）成了包但同樣不登記；`here` 有兩個意思（_shop_open 要單子沒開著，收店要 smith_open）；PM 一次排")
 GAME_DELEGATE_CALLERS.update({
     ("_everyday_options", "_smith_options"): _SMITHY_SHOP,
 })
@@ -1333,8 +1367,8 @@ SHARED_LATER = {
              "可是 tests/core/test_event_tiers.py 換掉 tianxia.arena.entry_of，改讀核心之後那一條打不到；那一條改成換掉核心那一份"
              "（改核心測試，PM 定）之後再收",
     "narration": "事件旁白每週改寫：讀伏筆 foreshadow.event_ids（軍情第 34 批）；那時改成查詢服務再收",
-    "leaderboard": "賽季榜單：讀本命兵器 signature_arms（裝備第 42 批）與門下頁的說明 skillview（函式裡）；擂台榜第 12 批審查修正改讀核心的"
-                   "查詢服務 arena_ranks；裝備成包、skillview 收進來之後再收",
+    "leaderboard": "賽季榜單：讀本命兵器 signature_arms（裝備第 42 批已搬進 features/gear/signature_arms.py，函式裡經舊名別名讀）與門下頁的說明 skillview（函式裡）；擂台榜第 12 批審查修正改讀核心的"
+                   "查詢服務 arena_ranks；gear_card 讀本命兵器改成查詢服務、skillview 收進來之後再收",
     "rumor_view": "傳聞分層的畫面：讀伏筆 foreshadow、機緣 opportunities（軍情第 34 批）與軍令 orders（第 40 批）；軍情成包時改成查詢服務再收",
 }
 
@@ -1811,7 +1845,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # smithy（全部拆包第 41 批：tianxia/smithing.py）
                          "smithing": "smithy",
                          # faction（全部拆包第 35 批：tianxia/defection.py）
-                         "defection": "faction"}
+                         "defection": "faction",
+                         # gear（全部拆包第 42 批：tianxia/signature_arms.py）
+                         "signature_arms": "gear"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 
@@ -1942,6 +1978,45 @@ GAME_DELEGATE_CALLERS.update({
     ("_squad_encounter", "_opp_on_win"): "遊歷打贏之後記密謀一處（三路並進）：夾在軍令記功與懸賞討伐之間，留原位（第 26 批量過：同上）",
 })
 
+# gear（全部拆包第 42 批「裝備」：新包 tianxia/features/gear/；計畫 docs/superpowers/plans/2026-11-07-裝備包-第1批.md 1.4、1.9）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。13 個方法搬進包，Game 留 13 個一行委派（全部有人叫：server、假人、測試、核心原位）。
+# 核心原位碰這一包的：choose 的 market: 與 _action_title 的兩處、_act 的 act:market 換成包的 choose 掛鉤與 act 子動詞（Verb）；
+# FB-195 被搶的那一句（mounts.stale_problem）留 choose 原位；選單（picking_market）、入口、_shop_open、shop_view 的 market 那一支、收店、_idle 不登記 Shop，
+# 留 Game 原位（同鐵匠鋪：入口先後 懸賞榜 → 鐵匠鋪 → 馬市，三間第 45 批一起排）。
+GAME_IMPORTS |= {
+    "tianxia.features.gear.market_actions", "tianxia.features.gear.bench_actions", "tianxia.features.gear.gift_actions", "tianxia.features.gear.views",
+    "tianxia.signature_arms",  # 舊名：現在是指到包裡 signature_arms 的別名（_drop_stale_references 讀 refresh_names）
+}
+GAME_DELEGATES |= {
+    # server（MENXIA_ACTIONS 的 wield、dismantle、feed、dismantle_many，menxia_view 的 gear_rows，/api/boards 的 divine_book_view）、假人（bot.feed_mount、bot.wear_better）、
+    # 測試在叫的；_market_options 是核心原位選單叫的；_deliver_held_gear 是 sync、advance 叫的；_general_gifts、_signature_arms、_gift_entry 是 choose 後半與核心 event_check 叫的
+    # （_signature_arms 還有大勢人物包經 ctx 叫，services.py 二、查詢服務 # gear）；_market、_people_here 是測試直接叫的
+    "_market_options", "_market", "wield_weapon", "feed_mount", "dismantle_weapon", "dismantle_many", "_deliver_held_gear", "_general_gifts",
+    "_people_here", "_gift_entry", "_signature_arms", "gear_rows", "divine_book_view",
+}
+_GEAR_POS = "位置固定、沒有對應的掛鉤（{what}）"
+GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_market_options"): "馬市開著時接管整個選單（同 _smith_options）；不登記 Shop（入口先後 懸賞榜 → 鐵匠鋪 → 馬市，第 45 批三間一起排）",
+    ("sync", "_deliver_held_gear"): _GEAR_POS.format(what="補送寄放的重賞與贈禮在 _deliver_big_events 之後、_auto_checkin 之前，江湖紀錄的先後算行為；"
+                                                          "不接 on_sync 有三條：on_sync 只問開著的包（active）；advance 沒有 on_sync（快轉與只 advance 的整季機器人也要補）；"
+                                                          "同一波別批的包加在 FEATURES 後面時，on_sync 裡的先後會變"),
+    ("advance", "_deliver_held_gear"): _GEAR_POS.format(what="同 sync：在 _deliver_big_events 之後"),
+    ("choose", "_general_gifts"): _GEAR_POS.format(what="名將贈禮夾在「引導」與 check_thresholds 之間，choose 後半的先後算行為"),
+    ("choose", "_signature_arms"): _GEAR_POS.format(what="同上：本命兵器與名將贈禮同一處"),
+    ("choose", "_gift_entry"): _GEAR_POS.format(what="贈禮另起一則江湖紀錄，接在這一下的紀錄寫完之後"),
+})
+# （gear 第 42 批的 GAME_DIRECT 一筆：_drop_stale_references 的 signature_arms.refresh_names，寫在檔案下面鐵匠鋪那三筆刪掉之後。）
+# 核心本體（事件檢定）經 ctx 叫裝備的委派：上面「現在是空的」註解預留的六對（answer_event、answer_branch × _general_gifts、_signature_arms、_gift_entry）接上
+_GEAR_EVENT = "隨口應對的效果加了情誼，另起一則贈禮（名將贈禮、本命兵器）：事件檢定是核心本體，位置固定在效果套完之後、沒有對應的掛鉤"
+CORE_DELEGATE_CALLERS.update({
+    ("event_check.answer_event", "_general_gifts"): _GEAR_EVENT,
+    ("event_check.answer_event", "_signature_arms"): "同上（本命兵器與名將贈禮同一處）",
+    ("event_check.answer_event", "_gift_entry"): "同上（贈禮另起的那一則江湖紀錄）",
+    ("event_check.answer_branch", "_general_gifts"): "同上（隨口應對的分岔那一支）",
+    ("event_check.answer_branch", "_signature_arms"): "同上",
+    ("event_check.answer_branch", "_gift_entry"): "同上",
+})
+
 # 發布點之外不直接叫事件的訂閱者（計畫 1.7、Task 4）：懸賞的四種交差（bounties.on_win／on_explore／on_arrive／on_raid_win）、玉璽的撿碎片與收場
 # （_seal_find、_seal_settle）、交糧車（_convoy_arrives，已拿掉），在 engine.py 與每一包的 .py（測試除外）只准出現在核心代叫表 engine._BUS_CORE 裡；
 # 別處要聽，登記事件的格（Feature.bus()），先後照核心的 BUS_ORDER。bounties.on_aid（人物託付交差）不在總表的四種裡，不管（交 PM）。
@@ -2048,6 +2123,15 @@ for _name in ("choose", "_drop_stale_references", "sync"):
     del GAME_DIRECT[_name]
 GAME_IMPORTS -= {"tianxia.smithing"}
 SHARED_CORE_WORLD2 = ("figures", "figure_life", "plans", "orders", "ranks", "chapters", "rumor_view")
+# gear（全部拆包第 42 批）：鐵匠鋪的 _drop_stale_references 刪掉之後，這個函式為裝備重新開一筆（理由見上面 # gear 那一段）
+# 清失效參照：signature_arms.refresh_names 會改 item.name、要讀 owned，不是只讀的純函式；經舊名別名讀（GAME_IMPORTS 的 tianxia.signature_arms）。
+# 接不了 on_drop_stale 的原因是開關：core/features.py 的 on_drop_stale 只問開著的包（active），原位的 refresh_names 不看開關，
+# GearFeature.enabled 在四欄都關著時是 False，接進掛鉤就不跑了（挪到最後面的先後看不出差別：中間的 _copy_heirloom 等沒有一行讀本命兵器的名字）。
+# 要收：第 55 批（補算與換季收接縫）把 refresh_names 放進共用層或核心的 *_base（照第 40 批 smith_base 的前例）。
+GAME_DIRECT.update({
+    "_drop_stale_references": "裝備：signature_arms.refresh_names 要改 item.name、要讀 owned；on_drop_stale 掛鉤只問開著的包，原位不看開關"
+                              "（四欄都關著時 GearFeature.enabled 是 False，接了就不跑）——過渡：第 55 批（補算與換季收接縫）收",
+})
 
 
 def test_the_seven_joined_the_shared_layer_and_import_no_package_not_even_inside_a_function():

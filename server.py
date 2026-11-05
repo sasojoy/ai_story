@@ -2991,13 +2991,7 @@ MENXIA_ACTIONS = {
 # （/api/peer、/api/peer/act：全部拆包第 37 批搬進玩家互動包 tianxia/features/peers/routes.py，殼照 FEATURES 掛；鎖外的 screen_peer、prepare_peer 照手冊 G10 留在殼：A 段 discuss_actions.request、C 段 discuss_actions.discuss 在包裡，第 38 批）
 
 
-@app.post("/api/party/leave")
-def api_party_leave(request: Request):
-    """還在等帶頭的人動身時的「分道揚鑣」（Game.leave_party）；在路上時走選單的 act:part。回傳 {main, message}。"""
-    game = _game(request)
-    msgs = act(game, lambda g: g.leave_party())
-    _tell_tabs(game)
-    return {"main": look(game, main_view), "message": joined(msgs)}
+# POST /api/party/leave 搬進 tianxia/features/travel/routes.py（api_party_leave；全部拆包第 48 批）
 
 
 @app.get("/api/menxia")

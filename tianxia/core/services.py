@@ -312,7 +312,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 # peers（全部拆包第 37 批；主人：玩家互動包。本體在 tianxia/features/peers/，Game 留一行委派回答別的包）
 - `ctx._peer(name)`（把此地還有的某個人包成 Game，不在這裡是 None）、`ctx._tell_sender(...)`（替發邀請的人寫一則他下次上線看得到的話）、
   `ctx._pair_tick(...)`（贈物一天的次數，social 的 gift 叫）、`ctx._spar_pair(...)`、`ctx.answer_invite(...)`、`ctx.peer_act(...)`：
-  結伴同行還沒搬（第 48 批），它與測試經 Game 的委派問玩家互動包；搬走之後改成各自包的查詢。切磋、論武、截殺第 38 批搬進包了：包內直接叫
+  移動包的結伴同行（第 48 批，`party.py` 叫 `_peer`、`_tell_sender`）與測試經 Game 的委派問玩家互動包；之後改成各自包的查詢。切磋、論武、截殺第 38 批搬進包了：包內直接叫
   （`_pair_left` 沒人叫了，委派拿掉）
 - `ctx._yuedan_line(content, name)`（月旦評那一週許劭對他的那一句，只讀；主人：大勢人物的行動包 figure_acts〔月旦評 yuedan〕。玩家卡 `card` 要這一句，
   玩家互動包不能 import 大勢人物包，經 Game 的一行委派問，總表第六節第 6 條「`social` 讀月旦評」）
@@ -370,6 +370,28 @@ explore（主動搬六包第 3＋4 批加的這一段）
   `here`、`ARMOR_KIND` 與單子回話的八句常數（engine 的 choose 併成一則、_drop_stale_references 與 sync 清單子讀）
 - `tianxia/figures.py`（共用規則層）：犒軍與自然回復共用一天的上限 `aid_on`、`aid_left_today`、`aid_restore`（與 `_aid_day`、`_aid_life`、`_aid_prune_tally`）；
   `figures.recover` 直接叫，大勢人物包的 `figure_aid` re-export 回原名（`on`、`left_today`、`restore`……）
+
+# travel（全部拆包第 48 批「移動二」：出發與抵達的補算、在路上那一行字、結伴同行搬進 features/travel；計畫 docs/superpowers/plans/2026-11-07-移動包-第2批.md 1.8）。
+# 本體搬進包，Game 留一行委派（呼叫端不在移動包：sync、advance、status_data、殼、玩家互動包、人物對話、腳本與測試換掉的）；包經 ctx 叫自己的委派，
+# 測試換掉 Game 上的名字（例 `_depart`、`_arrivals`）時包裡才打得到：
+- `ctx._depart(route, mode, pace=None)`（出發：收店、散掉答應了卻先走的結伴、扣體力、排抵達時刻、帶跟著的人一起；人物帶路答應之後他親自帶你動身，步調照他的腳程；
+  路上折返、改道也走它）
+- `ctx._arrivals()`（補算已經到了的站，一站一站抵達；sync、advance 叫，`stamina_plays` 包測試、`test_seats` 直接叫；包內在別人那份 Game 上也叫 `other._arrivals()`）
+- `ctx._arrive(loc_id)`（抵達一站；事件 `arrive` 的發布點，核心契約測試直接叫它鎖事件接法）、`ctx._journey_line()`（`/api/main` 的 `journey` 那一句）
+- `ctx._join(inv, other)`（答應結伴同行；玩家互動包 `answer_invite` 叫）、`ctx.join_refusal(leader)`（答應跟某人結伴，不行的原因；假人回結伴邀請〔`bots.answer_call`〕先問它）、
+  `ctx._party_expires()`（sync 叫：答應了、帶頭的人過了 `party_wait_seconds` 沒動身就散）、`ctx.party_view()`（殼的 `/api/main` 的 `party` 鍵）
+- 移動包要叫、上面還沒列的核心與別包的 Game 方法：`ctx._ambush_check(came_from, stop, when)`（主人體力玩法包，Game 留委派；`_arrivals` 迴圈中途每換一段查一次伏兵）、
+  `ctx._hide(msg)`、`ctx._guide(...)`、`ctx._note_action(action)`、`ctx.location_text()`、`ctx._flavor_sink()`、`ctx._kin(state)`、`ctx._load_kin(name)`、`ctx._save_kin(game)`、
+  `ctx._peer(name)`、`ctx._tell_sender(inv, other, why=None)`、`ctx._write(...)`、`ctx.touched`、`ctx._real_minutes(world_seconds)`（核心：留在 Game，核心的 `place_minutes` 與輿圖包也叫）
+
+# gear（全部拆包第 42 批「裝備」；主人：裝備包。本體在 tianxia/features/gear/，Game 留一行委派回答別的包；計畫 docs/superpowers/plans/2026-11-07-裝備包-第1批.md 1.3）
+# 包要叫的核心服務，上面都已經列了，這一段只記「誰在用」，不新增：`ctx._log(msgs)`、`ctx._write(...)`、`ctx._shop_say(...)`、`ctx._shop_after(...)`、`ctx._xinde()`、
+# `ctx._menxia_entry(...)`、`ctx.state`、`ctx.content`、`ctx.world`（馬市的買餵換上、修練頁的換上拆解餵馬、寄放補送、贈禮與本命兵器用）
+- `ctx._signature_arms(record, beaten=None, later=None)`（本命兵器：打贏本人的那一刻他讓你奪走，寫進這一場戰報的「得失」、行狀照 `later` 的先後；
+  大勢人物包 `features/figure_acts/challenge.py` 經它叫；本體在 `features/gear/gift_actions.py`，Game 留一行委派。原本列在三、過渡 `# figure_acts`）
+- `ctx._people_here()`（此刻在身邊的人物：名將贈禮「當面交給你」或「託人送來」要分；測試直接叫。主人：裝備包〔總表附錄甲挑錯改裁〕）
+- `ctx._general_gifts()`、`ctx._gift_entry(lines)`（名將贈禮與另起的那一則江湖紀錄：核心 `event_check` 的 `answer_event`、`answer_branch` 與 `choose` 後半叫，
+  位置固定在效果套完之後）
 
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
@@ -439,19 +461,15 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 - `ctx._arena_bare()`（擂台挑人的身手不含玉璽碎片的那一份；`tests/seal/test_seal_revamp_hidden.py` 換掉 `Game._arena_bare`）、
   `ctx._duel_finish(tier, line)`（頭目戰收場；`scripts/sim_season_one.py` 換掉 `Game._duel_finish` 數頭目戰打成怎樣）
 
-# companions（全部拆包第 20 批：人物對話叫的、主人還沒搬的）
-- `ctx._depart(route, mode, pace=None)`（主人移動 features/travel：帶路答應之後他親自帶你動身，步調照他的腳程；總表第 56 批前一直是 Game 的方法）
 # figure_acts（全部拆包第 31 批：大勢人物的行動包叫的、主人還沒搬的；原本這裡還有 socialize 那一段的 `ctx._snubbed_character`，第 31 批大勢人物成包，改列二、查詢服務 `# figure_acts`）
-- `ctx._signature_arms(record, beaten=None, later=None)`（主人裝備〔本命兵器 signature_arms，第 42 批〕：打贏本人的那一刻他讓你奪走本命兵器，寫進這一場戰報的
-  「得失」；挑戰本人打贏的那一串叫它。本體留在 Game 上，主人成包時改成二、查詢服務）
+（`ctx._signature_arms`：全部拆包第 42 批裝備成包，改列二、查詢服務 `# gear`）
 
 # stamina_plays（全部拆包第 39 批「體力玩法＋閉關」：設伏劫道、屯糧練兵搬進 features/stamina_plays；計畫 docs/superpowers/plans/2026-11-06-體力玩法閉關-第39批.md 1.3）
 - `ctx._raid_bounty(target)`（主人懸賞榜〔第 45 批〕：伏兵贏了、揭了通緝他就交差，截殺也叫；本體留在 Game 上，懸賞榜成包時改成二、查詢服務）。
   設伏要叫的其餘 Game 方法（`_side`、`_raid_key`、`_load_kin`、`_save_kin`、`_spar_power`、`_spar_mirror`、`_file_battle`、`_play_rounds`、
   `_last_wear`、`_idle`、`_log`、`_write`、`stamp`、`_cost_option`、`_draft`、`touched`）上面已經列了，這一包只記「誰在用」。
-# peers（全部拆包第 37 批：答應邀請時分派給還沒搬的結伴同行；切磋、論武第 38 批搬進包，`answer_invite` 包內直接叫，那幾條拿掉）
-- `ctx._join(inv, other)`（主人移動 features/travel：答應結伴同行）：`answer_invite` 照邀請的種類叫它
-- `ctx.join_refusal(leader)`（主人移動：答應跟某人結伴同行，不行的原因；假人回結伴邀請〔bots.answer_call〕先問它）
+# peers（全部拆包第 37 批：答應邀請時分派給還沒搬的切磋、論武、結伴同行；切磋、論武第 38 批搬進包，`answer_invite` 包內直接叫，那幾條拿掉）
+（結伴同行的 `ctx._join(inv, other)`、`ctx.join_refusal(leader)` 主人成包了（第 48 批），改列二、查詢服務 `# travel`；`answer_invite` 照邀請的種類叫它們）
 # peers2（全部拆包第 38 批「玩家互動二」：切磋、論武、截殺搬進玩家互動包；計畫 docs/superpowers/plans/2026-11-07-玩家互動包-第2批.md 1.3）。
 # 包要叫的核心服務 `ctx._spar_power`、`ctx._spar_mirror`、`ctx._raid_key`、`ctx._raid_bounty`、`ctx._side`、`ctx._kin`、`ctx._load_kin`、`ctx._save_kin`、
 # `ctx._write`、`ctx._save_season`、`ctx._outcome`、`ctx.touched`、`ctx.publish`、`ctx._record_exp`、`ctx._file_battle`、`ctx._play_rounds`、`ctx._last_wear`、
@@ -462,11 +480,10 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
   `sim_server_bots.py` 用 `mock.patch.object(Game, …)` 數截殺、`tests/gear/test_mounts.py` 換 `Game.raid_flee_odds`，所以包裡一律經 ctx 叫；同 `ctx._duel_finish`）
 
 # travel（全部拆包第 47 批「移動一」：移動選單、路上三樣小事、喊停、折返、/api/travel 搬進 features/travel；計畫 docs/superpowers/plans/2026-11-06-移動包-第1批.md 1.1）。
-# 主人都是核心或第 48 批（移動二：出發與抵達的補算、結伴同行）；包要叫的核心服務，上面大多已經列了（`ctx.content`、`ctx.state`、`ctx.world`、`ctx.rng`、
+# 主人都是核心或決戰包（第 48 批「移動二」：出發與抵達的補算、結伴同行已經搬進來，`_share_road`、`_lead`、`_road_gain` 拿掉了）；包要叫的核心服務，上面大多已經列了（`ctx.content`、`ctx.state`、`ctx.world`、`ctx.rng`、
 # `ctx._draft`、`ctx._log`、`ctx._save_season`、`ctx._preparing`、`ctx.push_trend`、`ctx._check_hints`、`ctx._depart`），這一段記還沒列的：
 - `ctx.move_mode`（主畫面選的走法；`Game.__init__` 起、server 在鎖裡逐次 `set_move_mode`；選單的「前往」「折返」標籤與 `/api/travel` 預設的走法都讀它）
-- `ctx._road_gain`（這一件路上小事的收穫：路上小事填、`_share_road` 分給結伴同行的人；第 48 批 `_share_road` 搬走時一起搬）
-- `ctx._share_road(what)`、`ctx._lead(...)`、`ctx._sync_battle_presence()`（主人移動第 48 批：結伴同行分收穫、帶路、出發抵達時對一下決戰的人在不在）
+- `ctx._sync_battle_presence()`（主人**決戰包** `muster`，不是移動：出發與抵達時對一下決戰的人在不在；移動包〔第 48 批〕的 `departure.depart`、`arrivals` 經 ctx 叫）
 - `ctx._report_seat()`、`ctx._hear_after_stamina()`（走完一趟之後抄帳、抽一次耳聞；原本是 `travel` 在 Game 上直接叫的，搬成包之後位置不動）
 - `ctx.travel_refusal(loc_id, mode)`（主人移動：Game 上的一行委派；`travel` 經它叫自己的檢查，因為測試換掉 `game.travel_refusal` 來繞過檢查）
 - `ctx.travel(dest_id, mode)`（主人移動：Game 上的一行委派；`/api/travel` 的路由經它叫，測試與假人照舊叫 `Game.travel`）
@@ -506,6 +523,9 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 # smithy（全部拆包第 41 批）
 - `ctx.smith_result`（`smith_forge` 寫、server 的 `api_do` 在鎖裡讀：上一次店面直接開爐的出爐卡，shopview.forged_card；被拒絕是 None。屬性留在 `Game.__init__`）
 
+# gear（全部拆包第 42 批）
+- `ctx._affinity_before`（`choose` 與核心 `event_check` 的 `answer_event`、`answer_branch` 寫、`_people_here` 讀的暫時旗標：這一下之前的情誼；屬性留在 `Game.__init__`，照鐵匠鋪 `smith_result`）
+
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """
 from __future__ import annotations
@@ -532,16 +552,6 @@ RANK_ACTION_PREFIX = "act:rank:"  # 第 3、4 階行動的選項 id 前綴（act
 # stamina_plays（全部拆包第 39 批：原本寫在 tianxia/ambush.py；核心的移動被擋〔engine 的 _move_option〕要用、核心不能 import 包，搬到這裡，
 # ambush.MOVE_BLOCKED 照舊是同一個字串）
 MOVE_BLOCKED = "守著埋伏"
-# travel（全部拆包第 47 批：原本寫在 engine.py；移動包的路上小事選單要讀、核心的重設與第 48 批的 _share_road 也讀，搬到這裡，engine 照舊叫得到）
-# 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見移動包的 road_task_options
-ROAD_TASKS: dict[str, tuple[str, str]] = {  # 寄放：第 48 批與換季清舊還讀（第 47 批 PM 認定第 4 條）
-    "think": ("邊走邊想", "想過了"),
-    "ask": ("沿途打聽", "打聽過了"),
-    "gather": ("路邊採集", "找過了"),
-}
-ROAD_REWARD_TASKS = ("think", "gather")  # 有經濟收穫、受每天上限管的路上小事（Config.road_reward_daily_cap）
-
-
 # stamina_plays（全部拆包第 39 批：原本寫在 engine.py；設伏的贏家帳〔包〕與截殺〔核心〕共用，包不能 import engine，搬到這裡，
 # `from tianxia.engine import RaidSpoils` 照舊拿得到，是同一個類別）
 @dataclass(frozen=True)
@@ -555,6 +565,16 @@ class RaidSpoils:
     contrib: int
     goods: tuple[tuple[str, int], ...] = ()  # 設伏劫道：贏的搶走的素材（素材 id, 個數）；截殺沒有
     evil: int = 0  # 名聲 5.4：贏的人揭著輸的人的官府通緝，輸的人惡名少幾點（Config.renown.official_evil_loss）
+
+
+# travel（全部拆包第 47 批：原本寫在 engine.py；移動包的路上小事選單與結伴分收穫要讀、核心的換季重設與讀檔清舊〔_drop_stale_references〕也讀，**留在核心**〔第 48 批 PM 認定〕，engine 照舊叫得到）
+# 路上小事（路上設計第四節）：road:<id> → (名稱, 這一段做過之後寫的「這段路已經……」)；按鈕上的補充見移動包的 road_task_options
+ROAD_TASKS: dict[str, tuple[str, str]] = {  # 留核心：讀檔清舊與換季重設還讀（第 47 批 PM 認定第 4 條）
+    "think": ("邊走邊想", "想過了"),
+    "ask": ("沿途打聽", "打聽過了"),
+    "gather": ("路邊採集", "找過了"),
+}
+ROAD_REWARD_TASKS = ("think", "gather")  # 有經濟收穫、受每天上限管的路上小事（Config.road_reward_daily_cap）
 
 
 # sortie（全部拆包第 17 批：原本寫在 engine.py；出陣包的遊歷鈕要用、又不能 import engine，搬到這裡，engine 照舊叫得到）

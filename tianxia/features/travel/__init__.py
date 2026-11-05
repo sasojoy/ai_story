@@ -2,13 +2,15 @@
 README.md 寫這一包做什麼、導覽與設計稿。
 
 - menu.py：原本 Game 上的 _move_option、_back_way、_back_option、_road_task_options、set_move_mode（Game 留一行委派給選單、server、測試）
-- road_actions.py：原本 Game 上的 _move、_road、_road_*、_road_sight（_road_sight、_road_reward_due、_count_road_reward 留委派，
-  給 _arrivals 與第 48 批的 _share_road）
+- road_actions.py：原本 Game 上的 _move、_road、_road_*、_road_sight（第 48 批 _arrivals 搬進 departure.py，直接叫 sight；委派拿掉）
 - go_actions.py：原本 Game 上的 _halt、travel、travel_refusal（travel、travel_refusal 留委派）
+- departure.py：原本 Game 上的 _depart、_arrivals、_arrive、_journey_line（第 48 批；都留一行委派）
+- party.py：原本 Game 上結伴同行的 _join、join_refusal、_party_expires、_party、party_view、leave_party、_part_ways、_lead、_partners、_share_road
+  （_join、join_refusal、_party_expires、party_view 留委派）
 - bots.py：假人的分數（原本 bot_policy.score 的 move: 那一段）
-- routes.py：POST /api/travel（原本 server.py 的 api_travel）
+- routes.py：POST /api/travel、POST /api/party/leave（原本 server.py 的 api_travel、api_party_leave）
 
-出發（_depart）與抵達（_arrive、_arrivals）、結伴同行、前往的補算是第 48 批（移動二），這一批都經 ctx 叫、位置不動。
+`_arrivals` 每次 sync、advance 都叫，迴圈中途的 _ambush_check → arrive → 騎乘飽足 → 路上見聞先後算行為；`arrive` 是事件 arrive 的發布點。
 """
 from __future__ import annotations
 
@@ -21,7 +23,8 @@ class TravelFeature(Feature):
     name = "travel"
     prefix = ("move", "road")  # move:<地點>[:<走法>]；road:back[:<走法>]、road:think／ask／gather
     bot_always = ("road:",)  # 路上小事按完還有、折返隨時能按：整季機器人不按（原本 bot.pick 的排除；move: 不在這裡，站著的時候它是正常的選項）
-    player_fields = ("leg_actions", "recent_sights", "road_rewards_today")  # 這一段做過的路上小事、最近看過的見聞、今天拿過幾次路上收穫；換季照 _reset_player_for_new_season 重來
+    player_fields = ("leg_actions", "recent_sights", "road_rewards_today", "tagalong")  # 這一段做過的路上小事、最近看過的見聞、今天拿過幾次路上收穫、跟著誰結伴同行；換季照 _reset_player_for_new_season 重來
+    content = ("road_sights.json",)  # 路上見聞（road_actions.sight 讀 content.road_sights）
     carried: tuple[str, ...] = ()
 
     def enabled(self, ctx) -> bool:
@@ -58,12 +61,16 @@ class TravelFeature(Feature):
     _verbs: tuple[Verb, ...] | None = None
 
     def verbs(self) -> tuple[Verb, ...]:
-        """act:halt 那一格（act 子動詞，第 11 批）：按下去（go_actions.halt）與紀錄標題「喊停」（原本 Game._action_title 那張表的 halt 一格）。
-        選單上的 act:halt 那一顆在路上那串裡（Game._options，順序算行為），不在這裡。建一次就留著，在叫的那一下才照模組屬性找函式。"""
+        """act:halt、act:part 兩格（act 子動詞，第 11 批、第 48 批）：按下去（go_actions.halt、party.part_ways）與紀錄標題「喊停」「分道揚鑣」
+        （原本 Game._action_title 那張表的兩格）。選單上的 act:halt、act:part 那兩顆在路上那串裡（Game._options，順序算行為），不在這裡。
+        建一次就留著，在叫的那一下才照模組屬性找函式。"""
         if self._verbs is None:
-            from . import go_actions  # noqa: PLC0415
+            from . import go_actions, party  # noqa: PLC0415
 
-            self._verbs = (Verb("halt", run=lambda ctx, prepared: go_actions.halt(ctx), title=lambda ctx: "喊停"),)
+            self._verbs = (
+                Verb("halt", run=lambda ctx, prepared: go_actions.halt(ctx), title=lambda ctx: "喊停"),
+                Verb("part", run=lambda ctx, prepared: party.part_ways(ctx), title=lambda ctx: "分道揚鑣"),
+            )
         return self._verbs
 
 
