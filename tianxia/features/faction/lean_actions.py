@@ -6,13 +6,14 @@ from __future__ import annotations
 from tianxia import wins
 from tianxia import bounties  # 過渡：待搬（第 45 批：懸賞榜；改幫之後新的那一邊接不了的懸賞作廢）
 from tianxia.core.option import Option
+from .ending_actions import four_wins
 
 
 def lean_options(ctx) -> list[Option]:
     """本週卡「改幫…」（三陣營四勝利，設計 3.2）：豪強能幫、此刻沒在幫的那幾軍各一顆，不花體力、隨時換、不算叛投。
     按不下去（wins.lean_problem）灰著寫原因。開關關著、不是豪強是空的。"""
     s, c = ctx.state, ctx.content
-    if not ctx._four_wins() or not wins.is_gentry(s.player, c):
+    if not four_wins(ctx) or not wins.is_gentry(s.player, c):
         return []
     opts = []
     for side in wins.lean_sides(s.player, c):
@@ -41,7 +42,7 @@ def lean_step(ctx, side: str) -> list[str]:
     s, c = ctx.state, ctx.content
     p, w = s.player, s.world
     old = p.ally
-    if not ctx._four_wins() or not wins.set_lean(p, c, side):
+    if not four_wins(ctx) or not wins.set_lean(p, c, side):
         return ["（此刻無法這麼做。）"]
     names = w.active_pushers.get(old or "")
     if names is not None and p.name in names:

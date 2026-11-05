@@ -14,6 +14,7 @@ from tianxia.events import event_candidates  # 過渡：待搬（事件：這裡
 from tianxia.rules import season_one
 
 from . import defection, lean_actions
+from .ending_actions import four_wins
 
 SECT_LABEL = "拜入{sect}"  # 待 joy 潤：拜入門派從交友搬到「此地還能做」的一顆（正式季整合 2.7；原本寫在 engine.py）
 
@@ -83,7 +84,7 @@ def faction_step(ctx, arg: str) -> list[str]:
         return msgs
     faction = ctx.content.scenario.faction(arg)
     # 三陣營四勝利開著的季，投靠豪強照投靠點直接給傾向、不出選邊鈕（企劃者 2026-10-24 第 6 件；之後隨時改幫）
-    lean = wins.join_lean(ctx.content, faction.id, p.location) if ctx._four_wins() and allied.on(ctx.content, ctx.state.world) else None
+    lean = wins.join_lean(ctx.content, faction.id, p.location) if four_wins(ctx) and allied.on(ctx.content, ctx.state.world) else None
     p.pending_faction, p.pending_ally = faction.id, lean
     prompt = faction_prompt(ctx, faction)
     ctx._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（FB-046）
@@ -93,7 +94,7 @@ def faction_step(ctx, arg: str) -> list[str]:
 def bot_lean(ctx, faction_id: str, picked: str | None) -> str | None:
     """三陣營四勝利開著的季，伺服器假人投靠豪強那一下的傾向（FB-810）：依附豪強人數少的那一軍（wins.bot_lean，確認這一下才數），
     不看投靠點；真人、兩軍的人、開關關著（還有選邊鈕）都照 picked。假人投靠之後不按「改幫」，所以這一下就是它這一季幫誰。"""
-    if ctx.state.player.bot is None or not ctx._four_wins():
+    if ctx.state.player.bot is None or not four_wins(ctx):
         return picked
     season = ctx.world.get_season_number()
     return wins.bot_lean(ctx.state.player.name, season, ctx.content, faction_id, ctx.world.roll_counts()) or picked
@@ -104,7 +105,7 @@ def join_lean(ctx) -> list[str]:
     不出選邊鈕；先臨時投效了另一邊的照 _ally_follows_battle 換過去。其他時候什麼都不做（照舊 allied.needs_ally 出選邊鈕）。"""
     s, c = ctx.state, ctx.content
     p = s.player
-    if not ctx._four_wins() or not allied.needs_ally(s, c):
+    if not four_wins(ctx) or not allied.needs_ally(s, c):
         return []
     sect = c.sects.get(p.sect) if p.sect else None
     p.ally = wins.join_lean(c, p.faction, sect.location if sect is not None else p.location)

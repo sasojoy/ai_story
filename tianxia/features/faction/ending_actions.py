@@ -39,7 +39,7 @@ def ending_card(ctx) -> dict | None:
     reward 下一季分到的，ledger_used 照哪一本排（豪強和局是 wins.BOTH）。收季那一刻存好（WorldState.final_tiers），這裡只讀。"""
     s, c = ctx.state, ctx.content
     w = s.world
-    if not w.ended or not ctx._four_wins():
+    if not w.ended or not four_wins(ctx):
         return None
     result = w.final_tiers.get(s.player.name)
     tier = result.tier if result is not None else 0
@@ -64,7 +64,7 @@ def tier_hint(ctx) -> str | None:
     """三方卡的 tier_hint（weekcard.sides_card，批 3c）：此刻就收季拿第幾階・離上一階還差多少（「第三階・還差 40」「第一階」
     「未入階・還差 20」，wins.tier_hint）。四勝利開著、季還沒收、投靠了劇本裡的陣營才有；其餘是 None。"""
     s, c = ctx.state, ctx.content
-    if not ctx._four_wins() or s.world.ended or c.scenario.find_faction(s.player.faction) is None:
+    if not four_wins(ctx) or s.world.ended or c.scenario.find_faction(s.player.faction) is None:
         return None
     return wins.tier_hint(*tier_outlook(ctx))
 
@@ -90,7 +90,7 @@ def sides_card(ctx) -> dict | None:
     在 week_unlock.win_gap（wins.gap_line）。四勝利關著、休季沒有。"""
     s, c = ctx.state, ctx.content
     w = s.world
-    if not ctx._four_wins() or w.ended:
+    if not four_wins(ctx) or w.ended:
         return None
     standing = stances(s, c)
     out = {}
