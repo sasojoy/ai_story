@@ -1,0 +1,114 @@
+輿圖包第 1 批（全部拆包第 49 批）QA 比對結果
+HEAD dev/map-1 157a8374（HEAD 解開檔，埠 8192、map1qa.localhost）對 BASE origin/feature/map 72b87004（埠 8193、127.0.0.1）；
+season21；局面：BASE 一台起、用真的 HTTP 擺好（管理者開季；官軍沈硯秋站在潁川、過新手期；散人陸聞笙新手、步行往燕山腳下走在路上；
+白馬津黃巾進度 70），sqlite backup 成快照，兩台各載一份新副本、時鐘凍在快照那一刻（serve.py：時鐘、亂數、排程、旁白、戰記、玉璽密鹽、榜單快取都凍住），
+網頁的 Date 也凍在同一刻、動畫關掉、prefers-reduced-motion。無頭 Chromium（chromium-1208）＋CDP。
+每個人三種視窗（375×812 淺、375×812 深、1280×800 淺）× 十鏡：輿圖分頁、全（天下圖）、點長社（地點詳情）、往上拉、篩選第一顆、塗層、
+找地點、跳到第一個大區（區圖：幽州）、版圖（天下怎麼變）、◎回到我。兩個人 × 30 鏡 = 每一份 60 張。
+r1、r2：HEAD 與 BASE 各在自己的埠與 host；r3：換位置（HEAD 在 8193／127.0.0.1、BASE 在 8192／map1qa.localhost）。
+
+== r2:head 對 r2:base
+head vs base: shots 60  same_png_bytes 57  same_pixels 57  different 3
+  !! ('qa49guan-m375l-02-fit.png', 'px 1124 box (98, 398, 652, 1219) mapx_same True text_same True')
+  !! ('qa49lone-d1280-21-map.png', 'px 8 box (120, 299, 859, 671) mapx_same True text_same True')
+  !! ('qa49lone-d1280-22-fit.png', 'px 6 box (324, 411, 544, 684) mapx_same True text_same True')
+DOM/text differences: 0 []
+qa49guan errors 0 0 notes_same True hscroll [] bot []
+qa49lone errors 0 0 notes_same True hscroll [] bot []
+
+== r1:head 對 r1:base
+head vs base: shots 60  same_png_bytes 54  same_pixels 54  different 6
+  !! ('qa49guan-d1280-21-map.png', 'px 3 box (846, 663, 861, 664) mapx_same True text_same True')
+  !! ('qa49guan-d1280-27-search.png', 'px 47 box (16, 99, 921, 502) mapx_same True text_same True')
+  !! ('qa49guan-m375d-12-fit.png', 'px 1124 box (98, 398, 652, 1219) mapx_same True text_same True')
+  !! ('qa49lone-d1280-21-map.png', 'px 4 box (120, 299, 136, 300) mapx_same True text_same True')
+  !! ('qa49lone-d1280-22-fit.png', 'px 6 box (324, 411, 544, 684) mapx_same True text_same True')
+  !! ('qa49lone-m375l-02-fit.png', 'px 1710 box (147, 426, 603, 1104) mapx_same True text_same True')
+DOM/text differences: 0 []
+qa49guan errors 0 0 notes_same True hscroll [] bot []
+qa49lone errors 0 0 notes_same True hscroll [] bot []
+
+== r3:headB 對 r3:baseH
+headB vs baseH: shots 60  same_png_bytes 56  same_pixels 56  different 4
+  !! ('qa49guan-d1280-27-search.png', 'px 47 box (16, 99, 921, 502) mapx_same True text_same True')
+  !! ('qa49guan-m375d-19-timeline.png', 'px 154 box (178, 272, 573, 854) mapx_same True text_same True')
+  !! ('qa49lone-d1280-26-wash.png', 'px 32 box (12, 169, 785, 199) mapx_same True text_same True')
+  !! ('qa49lone-m375l-02-fit.png', 'px 1710 box (147, 426, 603, 1104) mapx_same True text_same True')
+DOM/text differences: 0 []
+qa49guan errors 0 0 notes_same True hscroll [] bot []
+qa49lone errors 0 0 notes_same True hscroll [] bot []
+
+== r1:head 對 r2:head
+head vs head: shots 60  same_png_bytes 54  same_pixels 54  different 6
+  !! ('qa49guan-d1280-21-map.png', 'px 3 box (846, 663, 861, 664) mapx_same True text_same True')
+  !! ('qa49guan-m375d-12-fit.png', 'px 1124 box (98, 398, 652, 1219) mapx_same True text_same True')
+  !! ('qa49guan-m375l-02-fit.png', 'px 1124 box (98, 398, 652, 1219) mapx_same True text_same True')
+  !! ('qa49lone-d1280-22-fit.png', 'px 6 box (324, 411, 544, 684) mapx_same True text_same True')
+  !! ('qa49lone-d1280-27-search.png', 'px 29 box (16, 115, 893, 159) mapx_same True text_same True')
+  !! ('qa49lone-m375d-12-fit.png', 'px 1710 box (147, 426, 603, 1104) mapx_same True text_same True')
+DOM/text differences: 0 []
+qa49guan errors 0 0 notes_same True hscroll [] bot []
+qa49lone errors 0 0 notes_same True hscroll [] bot []
+
+== r1:base 對 r2:base
+base vs base: shots 60  same_png_bytes 54  same_pixels 54  different 6
+  !! ('qa49guan-d1280-27-search.png', 'px 47 box (16, 99, 921, 502) mapx_same True text_same True')
+  !! ('qa49lone-d1280-21-map.png', 'px 4 box (843, 670, 859, 671) mapx_same True text_same True')
+  !! ('qa49lone-d1280-22-fit.png', 'px 6 box (324, 411, 544, 684) mapx_same True text_same True')
+  !! ('qa49lone-d1280-27-search.png', 'px 29 box (16, 115, 893, 159) mapx_same True text_same True')
+  !! ('qa49lone-m375d-12-fit.png', 'px 1710 box (147, 426, 603, 1104) mapx_same True text_same True')
+  !! ('qa49lone-m375l-02-fit.png', 'px 1710 box (147, 426, 603, 1104) mapx_same True text_same True')
+DOM/text differences: 0 []
+qa49guan errors 0 0 notes_same True hscroll [] bot []
+qa49lone errors 0 0 notes_same True hscroll [] bot []
+
+== 每一鏡在六份（HEAD×3、BASE×3）裡拍到幾種圖（只列兩種以上的；其餘鏡六份位元組全一樣）
+qa49guan-d1280-21-map.png {'c7da2159e9': ['season21-r1:head'], '6d788a0449': ['season21-r1:base', 'season21-r2:head', 'season21-r2:base', 'season21-r3:headB', 'season21-r3:baseH']} every variant seen on both sides: False some variant on both: True
+qa49guan-d1280-27-search.png {'ecb2b55a77': ['season21-r1:head', 'season21-r2:head', 'season21-r2:base', 'season21-r3:baseH'], '3ee7caa56b': ['season21-r1:base', 'season21-r3:headB']} every variant seen on both sides: True some variant on both: True
+qa49guan-m375d-12-fit.png {'62ec782ec5': ['season21-r1:head'], '38ed2e5f6f': ['season21-r1:base', 'season21-r2:head', 'season21-r2:base', 'season21-r3:headB', 'season21-r3:baseH']} every variant seen on both sides: False some variant on both: True
+qa49guan-m375d-19-timeline.png {'7aeb59a079': ['season21-r1:head', 'season21-r1:base', 'season21-r2:head', 'season21-r2:base', 'season21-r3:baseH'], '6a1bdce329': ['season21-r3:headB']} every variant seen on both sides: False some variant on both: True
+qa49guan-m375l-02-fit.png {'d0be8537db': ['season21-r1:head', 'season21-r1:base', 'season21-r2:base', 'season21-r3:headB', 'season21-r3:baseH'], '97d4ec928c': ['season21-r2:head']} every variant seen on both sides: False some variant on both: True
+qa49lone-d1280-21-map.png {'e3839bce26': ['season21-r1:head', 'season21-r2:head', 'season21-r3:headB', 'season21-r3:baseH'], '304b77d89c': ['season21-r1:base'], '5c242dea84': ['season21-r2:base']} every variant seen on both sides: False some variant on both: True
+qa49lone-d1280-22-fit.png {'7002e498a2': ['season21-r1:head', 'season21-r2:base'], '6ce2347200': ['season21-r1:base', 'season21-r2:head', 'season21-r3:headB', 'season21-r3:baseH']} every variant seen on both sides: True some variant on both: True
+qa49lone-d1280-26-wash.png {'473f790198': ['season21-r1:head', 'season21-r1:base', 'season21-r2:head', 'season21-r2:base', 'season21-r3:baseH'], 'c4337b4a23': ['season21-r3:headB']} every variant seen on both sides: False some variant on both: True
+qa49lone-d1280-27-search.png {'01e0e238dd': ['season21-r1:head', 'season21-r1:base', 'season21-r3:headB', 'season21-r3:baseH'], '06c21a118c': ['season21-r2:head', 'season21-r2:base']} every variant seen on both sides: True some variant on both: True
+qa49lone-m375d-12-fit.png {'244bd06ac0': ['season21-r1:head', 'season21-r1:base'], '09cf67e1d5': ['season21-r2:head', 'season21-r2:base', 'season21-r3:headB', 'season21-r3:baseH']} every variant seen on both sides: True some variant on both: True
+qa49lone-m375l-02-fit.png {'45c3bf891f': ['season21-r1:head', 'season21-r2:head', 'season21-r2:base', 'season21-r3:baseH'], '5fdf56736b': ['season21-r1:base', 'season21-r3:headB']} every variant seen on both sides: True some variant on both: True
+  兩種以上的 11 鏡，其餘 49 鏡六份位元組全一樣。
+  → 每一鏡都有一種圖是 HEAD 與 BASE 都拍到過、位元組一樣的；多出來的那一種 HEAD 自己對自己、BASE 自己對自己也拍得到，差的只是同一處幾個到一千多個像素（畫底圖的 canvas 與小圖點陣化），DOM（#mapx 的 outerHTML）、整頁文字、抽屜文字六份全一樣。
+
+== 三條路由與網頁檔的原始回應（r2，requests 直接打；r3 換位置再比一次也一樣）：28 個檔、一樣 28
+  anon-map.bin                 401 application/json None                                              54B sha 05c46e52b15c
+  anon-state.bin               401 application/json None                                              54B sha 05c46e52b15c
+  index.bin                    200 text/html; charset=utf-8 no-cache                                  3037B sha a4774b64c42b
+  qa49guan-00.bin              200 /api/map/base                                                      152658B sha 37ee24193da2
+  qa49guan-01.bin              200 /api/map/base                                                      152658B sha 37ee24193da2
+  qa49guan-02.bin              200 /api/map/state                                                     24797B sha 3aece062647d
+  qa49guan-03.bin              200 /api/map                                                           153440B sha 41fb9135cd52
+  qa49guan-04.bin              200 /api/map?layer=nope                                                153451B sha bd0481e69bf2
+  qa49guan-05.bin              200 /api/map?layer=routes&place=nowhere                                159004B sha 216839ec3366
+  qa49guan-06.bin              200 /api/map?layer=situation&place=changshe                            155570B sha eb8c9626c15e
+  qa49guan-07.bin              200 /api/map?layer=enemies&place=changshe                              157459B sha a9f50df6e00c
+  qa49guan-08.bin              200 /api/map?layer=story&place=changshe                                152067B sha dd7986d8fff4
+  qa49guan-09.bin              200 /api/map?layer=routes&place=changshe                               161293B sha 31ab7a4e22bd
+  qa49guan-travel0.bin         200 {'place': 'nowhere', 'mode': 'walk'}                               193772B sha 9d414071d003
+  qa49guan-travel1.bin         200 {'place': 'nowhere', 'mode': 'dash', 'layer': 'enemies'}           195687B sha fefc8b85fc44
+  qa49lone-00.bin              200 /api/map/base                                                      152658B sha c38e764c0f88
+  qa49lone-01.bin              200 /api/map/base                                                      152658B sha c38e764c0f88
+  qa49lone-02.bin              200 /api/map/state                                                     23906B sha eafc434710e8
+  qa49lone-03.bin              200 /api/map                                                           153827B sha b39146600ed2
+  qa49lone-04.bin              200 /api/map?layer=nope                                                153838B sha 214edf6380ea
+  qa49lone-05.bin              200 /api/map?layer=routes&place=nowhere                                159570B sha 14f5c9de0f4d
+  qa49lone-06.bin              200 /api/map?layer=situation&place=changshe                            155808B sha 9a5c87231836
+  qa49lone-07.bin              200 /api/map?layer=enemies&place=changshe                              158391B sha 2f57c9b037f0
+  qa49lone-08.bin              200 /api/map?layer=story&place=changshe                                152306B sha 74ffda6a1ed9
+  qa49lone-09.bin              200 /api/map?layer=routes&place=changshe                               161537B sha 8b4ab26c7da0
+  qa49lone-travel0.bin         200 {'place': 'nowhere', 'mode': 'walk'}                               191351B sha 4183871891dc
+  qa49lone-travel1.bin         200 {'place': 'nowhere', 'mode': 'dash', 'layer': 'enemies'}           193962B sha 281a34937c24
+  static-map.js.bin            200 text/javascript; charset=utf-8 no-cache                            125246B sha 45868b2dd2d3
+  /static/map.js 本體 125202 位元組、sha256 cb816f325fb897a2c460a29669a0d8411df96a1b7920176316cbeae57b04fade（計畫 Review Focus 3 的值）；/ 載入它的那一行兩邊都是 map.js?v=cb816f325f
+
+== 主控台與網路（三輪六份、每份兩個人）：Runtime 例外、console.error、Log 錯誤、4xx／5xx、載入失敗全是 0；牙：同一支腳本對 HEAD 故意 fetch 一個不存在的檔、console.error 一行、丟一個沒接住的例外，記到 4 筆（404 記成網路與 Log 兩筆）。
+   網頁打到的 API：GET /api/me、/api/patch_notes、/api/main、/api/events、/api/map/base、/api/map/state，POST /api/login、/api/do/view_map（舊的整張圖 /api/map 網頁沒在叫，由上面 requests 那一段比）。
+
+== web/ 這一批一個位元組都沒動：BASE 與 HEAD 的解開檔逐檔比，web/ 0 個不同（計畫 Task 5 `map.js` 進包沒有做；MapFeature 只宣告 web = ("map.js",)、檔留在 web/）。
