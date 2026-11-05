@@ -24,7 +24,7 @@ from tianxia.events import event_candidates
 from tianxia.journal import WORLD_NEWS
 from tianxia.state import FigureState, GameState
 
-CONTENT_DIR = Path(__file__).parents[2] / "content"
+CONTENT_DIR = Path(__file__).parents[4] / "content"
 PLACEHOLDER_TAG = "待joy寫"  # 11 則事件的文字是占位（內容表 4.5：事件文字歸 joy）；事件模型不收多的欄位，所以記在 tags 上
 
 FS_CHAINS = {  # chain: (大事, 陣營, 類型, 戰況看哪條, 片段的大區（4.2）, 片段的來源（4.2）)

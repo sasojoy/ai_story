@@ -23,3 +23,27 @@ def test_a_yellow_turban_incites_a_town_and_the_front_moves(on):
         game.choose("act:rank:incite")
     assert rules.trend_value(game.state, on, "yingru") == before + 5
     assert sum(p.rank_action_weeks.values()) == 1 and p.stamina == 80
+
+
+@pytest.mark.smoke
+def test_the_opportunity_and_foreshadow_options_belong_to_the_package(on):
+    """機緣 opp:、伏筆 fs:（全部拆包第 34 批）：兩個前綴都是軍情包的，按下去走 choose 掛鉤（標題先拿、動作後做）；舊名 tianxia.opportunities、
+    tianxia.foreshadow 是同一個模組物件。"""
+    from tianxia import foreshadow, opportunities
+    from tianxia.core import features as features_core
+    from tianxia.features.military import fs_rules, opp_rules
+
+    assert foreshadow is fs_rules and opportunities is opp_rules
+    assert features_core.owner_of("opp:deliver:x").name == "military" and features_core.owner_of("fs:leave").name == "military"
+    game = Game.new(on, "甲", rng=random.Random(0))
+    taken = features_core.choose(game, "fs", "leave")
+    assert taken is not None and taken.title == "作罷" and isinstance(taken.run(), list)
+    taken = features_core.choose(game, "opp", "deliver:no_such_opportunity")
+    assert taken is not None and isinstance(taken.run(), list)  # 沒有這個機緣：一句「此刻無法這麼做」，不丟錯
+
+
+@pytest.mark.smoke
+def test_the_opportunity_and_foreshadow_admin_tools_refuse_a_player(on):
+    """管理者給機緣、給片段（Game 上留的一行委派）：不是管理者回拒絕的一句，不丟錯、不動任何人的存檔。"""
+    game = Game.new(on, "甲", rng=random.Random(0))
+    assert isinstance(game.admin_give_opportunity("乙", "no_such"), list) and isinstance(game.admin_give_fragment("乙", "no_such:0"), list)

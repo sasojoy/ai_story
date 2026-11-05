@@ -22,7 +22,7 @@ from tianxia.engine import Game
 from tianxia.state import BotProfile, PlayerState, Plot, WorldState
 
 
-GENTRY_RANK4 = Path(__file__).parents[1] / "fixtures" / "opportunities" / "gentry_rank4.json"
+GENTRY_RANK4 = Path(__file__).parents[4] / "tests" / "fixtures" / "opportunities" / "gentry_rank4.json"
 
 
 def with_gentry_rank4(c):
