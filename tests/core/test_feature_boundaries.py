@@ -1087,6 +1087,24 @@ for _key in SHARED_PENDING:
         SHARED_PENDING[_key] += "；figures 函式裡也 import 舊名 figure_aid（大勢人物的行動包 figure_acts 的別名：犒軍與自然回復共用一天的上限），叫到它就連帶載入 figure_acts（第 31 批）"
     elif _key[1] == "world":
         SHARED_PENDING[_key] += "；world 最外層 import 舊名 yuedan（figure_acts 的別名：每一步叫 yuedan.tick），import 它就連帶載入 figure_acts（第 31 批）"
+# core_world（全部拆包第 25 批「世界層掛鉤」；計畫 docs/superpowers/plans/2026-11-05-世界層掛鉤-第25批.md 1.6）：world 改成世界層掛鉤、收進核心本體
+# （MODULES），不再 import 宴客包、單挑包與舊名 yuedan、generals——siege → world 那一條（含第 30 批補的龍頭上陣、第 31 批補的月旦評兩句）拿掉，
+# atlas 的四條（siege、clinic、chiefs、story_base）「也經 world 帶進宴客包、單挑包」那半句改寫。都寫在這一段、上面別批的行照原樣
+# （同第 8 批 del、第 19 批覆寫的寫法）。world 自己 import 的舊模組（bounties、figure_life……，行尾標批號）跟 journal 一樣是
+# 核心 → 舊模組，這一版不掃。
+del SHARED_PENDING[("siege", "world")]
+SHARED_PENDING.update({
+    ("siege", "atlas"): "排定：大區（atlas.region_of）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層。atlas 最外層 import 出陣包"
+                        "（舊名 sortie；函式裡還有 sortie_duel）：切開之前 import siege 會連帶載入 sortie（以前也經 world 帶進宴客包、單挑包，"
+                        "第 25 批 world 收進核心本體之後不再 import 包）",
+    ("clinic", "atlas"): "排定：最近的醫館（atlas.routes、shortest_routes、Route）——同上，第 50 批；切開之前 import clinic 同樣經 atlas"
+                         "連帶載入出陣包 sortie",
+    ("chiefs", "atlas"): "排定：大區（atlas.region_of）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層。atlas 最外層 import 出陣包"
+                         "（舊名 sortie；函式裡還有 sortie_duel）：切開之前 import chiefs 會連帶載入 sortie（第 25 批 world 收進核心本體之後量的；"
+                         "以前也經 world 帶進宴客包 feast、單挑包 bout）",
+    ("story_base", "atlas"): "排定：大區（atlas.region_of）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層（同 chiefs → atlas：atlas 最外層 import "
+                             "出陣包 sortie）：切開之前 import story_base 會連帶載入 sortie（原本 import storyline 就是這樣）",
+})
 
 
 def test_the_shared_rules_layer_only_imports_the_core_and_itself():
@@ -1099,10 +1117,11 @@ def test_the_shared_rules_layer_only_imports_the_core_and_itself():
 
 
 def test_a_pending_target_that_imports_a_package_says_it_drags_the_package_in():
-    """SHARED_PENDING 的對象自己 import 了包的（atlas 經舊名 sortie import 出陣包、world import 宴客包）：import 那個共用規則層的模組，
-    包就跟著載進來（import clinic、siege、chiefs〔第 8 批〕實際載入出陣、宴客兩包——第 12 批之後加上經 world 的單挑包，三包；其餘 58 個一包都不載）。上面那幾條只看共用規則層自己的 import，
+    """SHARED_PENDING 的對象自己 import 了包的（atlas 經舊名 sortie import 出陣包）：import 那個共用規則層的模組，
+    包就跟著載進來（import clinic、siege、chiefs〔第 8 批〕、story_base〔第 30 批〕實際載入出陣包；以前還經 world 載入宴客、單挑兩包，
+    第 25 批 world 收進核心本體、不再 import 包之後只剩出陣包；其餘一包都不載）。上面那幾條只看共用規則層自己的 import，
     看不到這一層，所以理由要寫明「連帶載入」與那幾包的名字；對象不再 import 包了，「連帶載入」那句也拿掉（第 15 批審查修正）。
-    只驗對象直接的 import；經對象再往下一層的（atlas 經 world 載宴客包）寫在理由裡，這裡不驗。"""
+    只驗對象直接的 import；經對象再往下一層的（chapters 經舊名 storyline 載一條線包）寫在理由裡，這裡不驗。"""
     for (name, old), why in SHARED_PENDING.items():
         packages = sorted({feature_target(mod) for _, mod in _feature_imports(TIANXIA / f"{old}.py")})
         if packages:
@@ -1126,7 +1145,8 @@ def test_the_shared_scanner_catches_an_old_module():
     同一層、from tianxia import 名字、標準庫不算；包與別名不在這裡算（是上面那一條）。"""
     m = "tianxia.timetable"
     assert outside_imports("from . import figures, territory\n", m) == {"figures"}
-    assert outside_imports("def f():\n    from .world import _season_vehicle\n", m) == {"world"}
+    assert outside_imports("def f():\n    from .seal import mandate_event\n", m) == {"seal"}  # 第 25 批：原本的例子 world 收進了核心本體
+    assert outside_imports("def f():\n    from .world import _season_vehicle\n", m) == set()
     assert outside_imports("import tianxia.engine\n", m) == {"engine"}
     assert outside_imports("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from .engine import Game\n", m) == set()
     assert outside_imports("from .core import features\nfrom .models import Content\nfrom tianxia import calendar, siege\n", m) == set()
@@ -1527,6 +1547,18 @@ def test_a_mark_with_no_old_module_left_is_caught():
 ])
 def test_the_scanner_lets_the_allowed_ones_through(source):
     assert problems_of(source, "tianxia.features.mall.actions") == []
+
+
+# core_world（全部拆包第 25 批「世界層掛鉤」；計畫 docs/superpowers/plans/2026-11-05-世界層掛鉤-第25批.md 1.6、Task 4）
+def test_the_world_layer_core_files_import_no_package_not_even_inside_a_function():
+    """world.py 收進核心本體（MODULES）之後跟 sqlite_world.py 一樣：最外層與函式裡都不 import 包與舊名的別名（宴客 feasts、單挑 arena、
+    大勢人物 yuedan、決戰 generals 換成了世界層的格）。掃描照 ast.walk 看得到函式裡的 import（下面那一段證明），所以核心那一條
+    （test_the_core_never_imports_a_feature_package_except_the_registry）照 CORE 掃到它們；這裡寫明兩個檔，免得 MODULES 改了沒人發現。"""
+    assert {"world", "sqlite_world"} <= CORE
+    for name in ("world", "sqlite_world"):
+        assert _feature_imports(TIANXIA / f"{name}.py") == [], name
+    source = "def f():\n    from . import generals\n    from .features.feast import rules as feasts\n    from . import arena, yuedan\n"
+    assert {feature_target(mod) for _, mod, _ in imports_of(source, "tianxia.world")} - {None} == {"battle", "feast", "bout", "figure_acts"}
 
 
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py

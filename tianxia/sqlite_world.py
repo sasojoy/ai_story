@@ -31,6 +31,7 @@ from sqlite3 import Connection, Row
 from pydantic import TypeAdapter
 
 from . import allied, calendar, divine, log_archive
+from .core import features as features_core  # 世界層的掛鉤（core_world：全部拆包第 25 批）：開季、換季那幾格
 from .battle_instance import BattleInstance, BattleRoundRecord, SiegeInfo, shift_deadlines, start_muster
 from .characters import name_key
 from .database import Database, open_database
@@ -837,9 +838,8 @@ class SqliteWorldStore:
                 return
             state.season = fresh_season(content)
             state.season_opened = content.config.auto_open_first_season
-            if state.season_opened:  # 自動開的第一季（測試內容）：同開季那一刻挑這一季的神器（divine.stamp，開關關著什麼都不做）
-                divine.stamp(state, content)
-                self._stamp_cache(state, content)
+            if state.season_opened:  # 自動開的第一季（測試內容）：同開季那一刻（世界層 open）挑這一季的神器（divine.stamp，開關關著什麼都不做）
+                features_core.world_run("open", self._open_core(), state, content, None)  # 沒有開季的現實時刻：兩格都不讀 now
 
         return self.mutate(_apply).season
 
@@ -857,8 +857,9 @@ class SqliteWorldStore:
             state.season.conquest = None  # 領地爭奪同上：照開季的區塊與戰線重算（偏移從這一刻的戰線起算）
             state.sieges = []  # 攻城戰（第二批）：籌備中不會有，保險
             state.season.tianji = state.tianji  # 這一季的天機蓋進季裡：週初掛單的重賞亂數看它（裝備四欄 6.4；bounties.issue 讀不到全服那一列）
-            divine.stamp(state, content)  # 神器輪替（正式季整合 5.6）：照全服登記挑這一季的神器；開關關著什麼都不做
-            self._stamp_cache(state, content)  # 領地爭奪的季：碎片藏在中立地（Task 14）
+            # 世界層 open（全部拆包第 25 批）：神器輪替（正式季整合 5.6：照全服登記挑這一季的神器；開關關著什麼都不做）、
+            # 領地爭奪的季碎片藏在中立地（Task 14）——兩格核心代叫（_open_core）
+            features_core.world_run("open", self._open_core(), state, content, now)
             state.season_opened = True
             state.season_last_real = now
             state.seal.opened_real = now  # 「這一季上線過」與隱沒看它（玉璽碎片設計 5.3、7.6）
@@ -874,25 +875,8 @@ class SqliteWorldStore:
             if state.season_phase() != "resting":
                 return False
             lines = _season_firsts_lines(conn, state.season_number)
-            wrote = False
-            if content.seal:  # 玉璽碎片（7.6、5.11、8.4）：直接改 state.seal（這裡是手動 _load／_save，不能巢狀 mutate）
-                from . import seal  # noqa: PLC0415
-
-                reg = seal.filled(state.seal, content)
-                mandate = state.season.mandate  # 剛結束的是天命之季：這一次不判隱沒、最後七片散去（8.4）
-                if content.config.seal.enabled and not mandate:  # 主機關掉碎片時不判隱沒（登記照留）
-                    seen = {s.holder: _seen_real(conn, s.holder) for s in reg.shards.values() if s.state == "held" and s.holder}
-                    for shard, name in seal.sink(reg, state.season_number, seen, now, content.config.seal):
-                        text = seal.sink_text(content, name, content.seal[shard.id].name)  # 改版：不點名
-                        state.season.chronicle.append(Rumor(time=state.season.time, text=text))
-                        wrote = True
-                for duel in state.seal_duels:  # 還沒收場的單挑記成未分勝負，兩人補得到（開關關著時留下來的也一樣，不帶進下一季）
-                    seal.log(reg, state.season_number, "unsettled", shard=duel.shard, holder=duel.holder.name, other=duel.challenger.name,
-                             record=duel.record, where=duel.where, lines=list(duel.lines))
-                if mandate:  # 散去不看 seal.enabled：季的章已經蓋了，下一輪照樣要從頭來
-                    seal.scatter(reg, state.season_number)
-                    state.season.chronicle.append(Rumor(time=state.season.time, text=seal.SCATTER))
-                    wrote = True
+            # 世界層 retire（全部拆包第 25 批）：舊季收尾，玉璽碎片那一格核心代叫（_retire_seal）；寫了上一季的江湖史，那一列先存
+            wrote = any(features_core.world_run("retire", _RETIRE_CORE, state, content, now, lambda holder: _seen_real(conn, holder)))
             state.seal_duels = []
             for line in lines:  # 上一季的首創（合成、意境、絕學）寫進那一季的江湖史（第一季設計第十四節、武學與成長設計 3.10）
                 state.season.chronicle.append(Rumor(time=state.season.time, text=line))
@@ -908,16 +892,9 @@ class SqliteWorldStore:
             state.companions = {}  # 跨季不滾雪球第二條：同伴全部重獲自由、等級武學歸零
             state.tianji += 1  # 第三條：天機 +1；武學命名、煉製配方、投靠名冊照季分開存，新的一季自然是空的
             state.season.tianji = state.tianji  # 同 open_season：新的一季蓋上新的天機
-            # 路牌上題壁墨寫的字跟著到新的一季（花錢買的，Joy 10/31「路牌也會繼續傳承」），id 不變、流水號接著上一季走（商城帳上用掉的
-            # 那一張照舊指得到它）；免費的預設句照舊一季一清。欄位是探索包認領的（WorldState.inscriptions），這兩行寫在核心：核心不准
-            # import 包（別名 tianxia.outing 也算），世界那一層的換季沒有掛鉤（開掛鉤先過 PM）。PR #117 原本是 outing.carry，探索第 1 批
-            # 合 develop 時搬來這裡（第 11 批收接縫時再看要不要開掛鉤交回探索包）
-            state.season.inscriptions = [i for i in old_season.inscriptions if not i.preset]
-            state.season.inscription_seq = max(state.season.inscription_seq, old_season.inscription_seq)
-            divine.stamp(state, content)  # 同 open_season：新的一季照全服登記挑神器（季數、天機都是新的）
-            if content.seal and content.config.seal.enabled:  # 七片這一輪都現世過：新的一季蓋天命之季的章（8.1）
-                self._stamp_mandate(state, content)
-            self._stamp_cache(state, content)  # 上一季沒撿到的清掉；領地爭奪的季（天命之季除外）重擲藏一片（Task 14）
+            # 世界層 next（全部拆包第 25 批）：路牌上題壁墨寫的字跟著到新的一季（探索包登記的 inscriptions 那一格：欄位是探索包認領的
+            # WorldState.inscriptions；原本這兩行寫在這裡）、神器、天命之季的章、藏碎片（核心代叫，_next_core）
+            features_core.world_run("next", self._next_core(), state, content, now, old_season)
             from .timetable import avoid_quiet_hours  # noqa: PLC0415  延後 import：timetable → rules → world_state
 
             avoid_quiet_hours(state.season, content, now)  # 同開季：季曆排的決戰（含天命之爭）照這一刻挪開半夜
@@ -938,16 +915,37 @@ class SqliteWorldStore:
         hide_chance 擲、天命之季不藏）。直接改 state（同一筆交易、不巢狀 mutate）；內容沒有七片就什麼都不做。"""
         if not content.seal:
             return
-        from . import seal  # noqa: PLC0415
+        from . import seal  # noqa: PLC0415  過渡：待搬（第 27 批：玉璽成包）
 
         seal.stamp_cache(state, content)
+
+    @staticmethod
+    def _open_core() -> dict[str, Callable[..., None]]:
+        """世界層 open 那兩格核心代叫的（features.WORLD_ORDER["open"]；簽名 (state, content, now)，now 兩格都不讀）：神器輪替
+        （divine.stamp）、碎片藏在中立地（_stamp_cache）。每一格在叫的那一下才照屬性找函式。"""
+        return {
+            "divine": lambda state, content, now: divine.stamp(state, content),
+            "seal.cache": lambda state, content, now: SqliteWorldStore._stamp_cache(state, content),
+        }
+
+    @staticmethod
+    def _next_core() -> dict[str, Callable[..., None]]:
+        """世界層 next 那三格核心代叫的（features.WORLD_ORDER["next"]；簽名 (state, content, now, old_season)；題壁照帶是探索包登記的格）：
+        同 open_season，新的一季照全服登記挑神器（季數、天機都是新的）；七片這一輪都現世過：新的一季蓋天命之季的章（8.1；主機關掉碎片時不蓋）；
+        上一季沒撿到的碎片清掉，領地爭奪的季（天命之季除外）重擲藏一片（Task 14）。"""
+        return {
+            "divine": lambda state, content, now, old: divine.stamp(state, content),
+            "seal.mandate": lambda state, content, now, old: (
+                SqliteWorldStore._stamp_mandate(state, content) if content.seal and content.config.seal.enabled else None),
+            "seal.cache": lambda state, content, now, old: SqliteWorldStore._stamp_cache(state, content),
+        }
 
     @staticmethod
     def _stamp_mandate(state: SharedWorldState, content: Content) -> None:
         """next_season 換好新的一季之後：該蓋天命之季（seal.mandate_due）就蓋（seal.stamp_mandate，天命之爭的時刻照這一季的章算）；
         這一季打不了天命之爭（沒蓋第一季規則的章、劇本沒標或沒有那一場決戰）就記 mandate_pending，延到下一個能打的季（8.1、8.5）。
         直接改 state（同一筆交易、不巢狀 mutate）。"""
-        from . import seal, timetable  # noqa: PLC0415
+        from . import seal, timetable  # noqa: PLC0415  過渡：待搬（第 27 批：玉璽成包；timetable 是共用規則層）
 
         reg = seal.filled(state.seal, content)
         if not seal.mandate_due(reg, content):
@@ -1385,3 +1383,35 @@ def _seen_real(conn: Connection, name: str) -> float | None:
         return None
     value = row["seen"] if row["seen"] is not None else row["last"]
     return None if value is None else float(value)
+
+
+def _retire_seal(state: SharedWorldState, content: Content, now: float, seen_real: Callable[[str], float | None]) -> bool:
+    """世界層 retire 的 seal 那一格（核心代叫；原本 next_season 換新季之前那一段，原樣搬來）：玉璽碎片（7.6、5.11、8.4）——直接改
+    state.seal（next_season 是手動 _load／_save，不能巢狀 mutate）。seen_real(持有者) 是那個人最後一次自己上線的現實秒（_seen_real，
+    同一條連線）。回這一段有沒有寫上一季的江湖史（next_season 照它決定要不要先存上一季那一列）。"""
+    wrote = False
+    if content.seal:
+        from . import seal  # noqa: PLC0415  過渡：待搬（第 27 批：玉璽成包）
+
+        reg = seal.filled(state.seal, content)
+        mandate = state.season.mandate  # 剛結束的是天命之季：這一次不判隱沒、最後七片散去（8.4）
+        if content.config.seal.enabled and not mandate:  # 主機關掉碎片時不判隱沒（登記照留）
+            seen = {s.holder: seen_real(s.holder) for s in reg.shards.values() if s.state == "held" and s.holder}
+            for shard, name in seal.sink(reg, state.season_number, seen, now, content.config.seal):
+                text = seal.sink_text(content, name, content.seal[shard.id].name)  # 改版：不點名
+                state.season.chronicle.append(Rumor(time=state.season.time, text=text))
+                wrote = True
+        for duel in state.seal_duels:  # 還沒收場的單挑記成未分勝負，兩人補得到（開關關著時留下來的也一樣，不帶進下一季）
+            seal.log(reg, state.season_number, "unsettled", shard=duel.shard, holder=duel.holder.name, other=duel.challenger.name,
+                     record=duel.record, where=duel.where, lines=list(duel.lines))
+        if mandate:  # 散去不看 seal.enabled：季的章已經蓋了，下一輪照樣要從頭來
+            seal.scatter(reg, state.season_number)
+            state.season.chronicle.append(Rumor(time=state.season.time, text=seal.SCATTER))
+            wrote = True
+    return wrote
+
+
+# 世界層 retire 那一格核心代叫的（features.WORLD_ORDER["retire"]；簽名 (state, content, now, seen_real) -> 寫了江湖史沒）
+_RETIRE_CORE: dict[str, Callable[..., bool]] = {
+    "seal": lambda state, content, now, seen_real: _retire_seal(state, content, now, seen_real),
+}

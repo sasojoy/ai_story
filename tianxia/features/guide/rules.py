@@ -10,7 +10,7 @@ from tianxia.martial_arts import QUALITIES
 from tianxia.models import Content, Ending, TutorialGoal, TutorialStep
 from tianxia.rules import apply_effect, check_condition, pending_event_title, season_one, season_one_off
 from tianxia.state import GameState
-from tianxia.world import current_act, current_storyline, early_end_flags, early_end_note, season_endings, storyline_off  # 過渡：待搬
+from tianxia.world import current_act, current_storyline, early_end_flags, early_end_note, season_endings, storyline_off  # 核心本體
 from tianxia.world_state import WorldStateStore
 
 # 任務卡「下一步」體力快滿時那一句（explain-1 改寫：說為什麼——滿了就不再回；待 joy 潤）：九成到還沒滿

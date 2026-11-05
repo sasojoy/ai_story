@@ -15,7 +15,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Verb
+from tianxia.core.features import Feature, Verb, WorldHook
 
 
 class ExploreFeature(Feature):
@@ -69,6 +69,18 @@ class ExploreFeature(Feature):
                 note=lambda ctx, loc: explore_actions.outing_note(ctx, loc),
             ),)
         return self._verbs
+
+    # core_world（全部拆包第 25 批「世界層掛鉤」）
+    _world: tuple[WorldHook, ...] | None = None
+
+    def world(self) -> tuple[WorldHook, ...]:
+        """世界層 next 的 inscriptions 那一格（題壁照帶；原本寫在 sqlite_world.next_season 的兩行）：不問 enabled（原位不看開關：
+        花錢題的字關著也照帶）。建一次就留著，在叫的那一下才照模組屬性找 outing_rules.world_next（monkeypatch 照樣有效）。"""
+        if self._world is None:
+            from . import outing_rules  # noqa: PLC0415
+
+            self._world = (WorldHook("next", "inscriptions", lambda *args: outing_rules.world_next(*args)),)
+        return self._world
 
 
 FEATURE = ExploreFeature()

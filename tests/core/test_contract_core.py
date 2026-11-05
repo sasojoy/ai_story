@@ -9,7 +9,7 @@ import pytest
 from conftest import next_season
 from tianxia.core import features as features_core
 from tianxia.core import registry
-from tianxia.core.features import AdminTool, Feature, Outcome, Shop, Verb
+from tianxia.core.features import AdminTool, Feature, Outcome, Shop, Verb, WorldHook
 from tianxia.core.option import Option
 from tianxia.engine import Game
 
@@ -430,3 +430,110 @@ def test_the_own_turn_is_heard_while_the_season_clock_is_paused(game, seams):
     seams.calls.clear()
     g.mark_seen(1010.0)
     assert seams.calls.count(("on_own_turn",)) == 1
+
+
+# core_world（全部拆包第 25 批「世界層掛鉤」；計畫 docs/superpowers/plans/2026-11-05-世界層掛鉤-第25批.md 1.4、Task 2）
+class Worldly(Feature):
+    """只登記世界層的格的假包；open 是 enabled 的答案（世界層不問它）。"""
+
+    name = "worldly"
+
+    def __init__(self, hooks, open_=True):
+        self.hooks, self.open = tuple(hooks), open_
+
+    def enabled(self, ctx):
+        return self.open
+
+    def world(self):
+        return self.hooks
+
+
+def test_the_world_order_is_the_table_in_the_plan():
+    """順序就是行為：每一個位置的格照換成掛鉤之前的呼叫順序（計畫 1.4），一格不挪。改這張表先過 PM。"""
+    assert features_core.WORLD_ORDER == {
+        "step": ("bounties", "figures.recover", "figures.revive", "seal_acts", "figure_life", "feast", "plans", "yuedan"),
+        "week": ("seats", "orders", "bounties", "stances"),
+        "day": ("orders", "bounties", "stances"),
+        "start": ("bounties",),
+        "close": ("arena",),
+        "muster": ("front", "works", "seal", "generals"),
+        "open": ("divine", "seal.cache"),
+        "retire": ("seal",),
+        "next": ("inscriptions", "divine", "seal.mandate", "seal.cache"),
+    }
+    assert Feature().world() == ()
+
+
+def test_a_package_can_only_take_a_slot_on_the_table_and_only_one_package_a_slot(monkeypatch):
+    """包登記的格都在表上、同一格只有一包：表外的格（哪一個位置都驗）、沒有的位置、兩包登記同一格，world_hooks 都丟 ValueError；
+    核心代叫的打錯字也丟（world_run）。"""
+    run = lambda *a: None  # noqa: E731
+    monkeypatch.setattr(registry, "FEATURES", [Worldly([WorldHook("step", "nobody", run)])])
+    with pytest.raises(ValueError):
+        features_core.world_hooks("week")
+    monkeypatch.setattr(registry, "FEATURES", [Worldly([WorldHook("nowhere", "feast", run)])])
+    with pytest.raises(ValueError):
+        features_core.world_hooks("step")
+    monkeypatch.setattr(registry, "FEATURES", [Worldly([WorldHook("step", "feast", run)]), Worldly([WorldHook("step", "feast", run)])])
+    with pytest.raises(ValueError):
+        features_core.world_hooks("step")
+    with pytest.raises(ValueError):
+        features_core.world_hooks("nowhere")
+    monkeypatch.setattr(registry, "FEATURES", [])
+    with pytest.raises(ValueError):
+        features_core.world_run("step", {"feasts": run}, None, None, None, 1.0)
+
+
+def test_the_world_layer_calls_its_slots_in_the_table_order(monkeypatch):
+    """world_run 照表的順序叫：包登記的兩格（宴客、月旦評，登記的先後跟表相反）夾在核心代叫的格之間；回每一格的回傳值（照順序），
+    包的格回 None 照樣在；兩邊都沒有的格跳過。先取好的 hooks 照用、不再問包。"""
+    calls = []
+
+    def note(owner, slot, back):
+        return lambda *args: calls.append((owner, slot, args)) or back
+
+    pkg = Worldly([WorldHook("step", "yuedan", note("pkg", "yuedan", None)), WorldHook("step", "feast", note("pkg", "feast", None))])
+    monkeypatch.setattr(registry, "FEATURES", [pkg])
+    core = {slot: note("core", slot, [slot]) for slot in features_core.WORLD_ORDER["step"] if slot not in ("feast", "yuedan", "plans")}
+    got = features_core.world_run("step", core, "v", "c", "w", 1.0)
+    assert [slot for _, slot, _ in calls] == ["bounties", "figures.recover", "figures.revive", "seal_acts", "figure_life", "feast", "yuedan"]
+    assert [owner for owner, _, _ in calls] == ["core"] * 5 + ["pkg", "pkg"] and all(args == ("v", "c", "w", 1.0) for _, _, args in calls)
+    assert got == [["bounties"], ["figures.recover"], ["figures.revive"], ["seal_acts"], ["figure_life"], None, None]
+    calls.clear()
+    monkeypatch.setattr(registry, "FEATURES", [])
+    features_core.world_run("step", core, "v", "c", "w", 1.0, hooks=features_core.world_hooks("step") | {"plans": note("pre", "plans", None)})
+    assert [slot for _, slot, _ in calls][-2:] == ["figure_life", "plans"] and calls[-1][0] == "pre"
+
+
+def test_the_world_layer_asks_a_closed_package_too(monkeypatch):
+    """世界層不問 enabled（原位那幾行本來就不看包的開關：宴客關著也照散席、擂台只看 arena_ranks.on）：關著的包照樣被叫。"""
+    calls = []
+    pkg = Worldly([WorldHook("close", "arena", lambda *args: calls.append(args))], open_=False)
+    monkeypatch.setattr(registry, "FEATURES", [pkg])
+    assert features_core.world_run("close", {}, "state", "content", "store") == [None]
+    assert calls == [("state", "content", "store")]
+
+
+def test_the_world_layer_is_asked_where_the_old_lines_were(game, monkeypatch):
+    """接在原本那幾行（Task 4）：同步推世界一步問 step（宴客那一格）；管理者立刻收季問 close（擂台那一格）；開下一季先問 retire
+    （舊季收尾）再問 next（題壁照帶），換季之後的季照著走。關著的假包照樣被問。"""
+    calls = []
+
+    def note(at, slot, back=None):
+        return lambda *args: calls.append((at, slot)) or back
+
+    pkg = Worldly([WorldHook("step", "feast", note("step", "feast")), WorldHook("close", "arena", note("close", "arena")),
+                   WorldHook("retire", "seal", note("retire", "seal", False)),
+                   WorldHook("next", "inscriptions", note("next", "inscriptions"))], open_=False)
+    monkeypatch.setattr(registry, "FEATURES", [pkg])
+    g = _made(game)
+    g.sync(1060.0)  # 再過一分鐘：世界推一步
+    assert ("step", "feast") in calls and ("close", "arena") not in calls
+    g.content.config.admins = [g.state.player.name]
+    calls.clear()
+    g.admin_end_season(now=1020.0)
+    assert calls.count(("close", "arena")) == 1
+    calls.clear()
+    g.admin_next_season(now=1030.0)
+    assert [c for c in calls if c[0] in ("retire", "next")] == [("retire", "seal"), ("next", "inscriptions")]
+    assert g.world.get_season_number() == 2

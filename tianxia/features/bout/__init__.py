@@ -17,7 +17,7 @@ sync 的補送、閉關中與路上的入口、店面那一頁、戰力快照抄
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, Shop, Verb
+from tianxia.core.features import Feature, Outcome, Shop, Verb, WorldHook
 
 
 class BoutFeature(Feature):
@@ -105,6 +105,18 @@ class BoutFeature(Feature):
             self._verbs = (Verb("arena", run=lambda ctx, prepared: arena_actions.arena_open(ctx),
                                 title=lambda ctx: arena_actions.arena_sign(ctx)),)
         return self._verbs
+
+    # core_world（全部拆包第 25 批「世界層掛鉤」）
+    _world: tuple[WorldHook, ...] | None = None
+
+    def world(self) -> tuple[WorldHook, ...]:
+        """世界層 close 的 arena 那一格（收季記擂台前三名；原本 world.end_season 經舊名 arena 叫 close_season，第 12 批 PM 認定第 2 條）：
+        不問 enabled（原位只看擂台開著沒）。建一次就留著，在叫的那一下才照模組屬性找 arena_rules.world_close（monkeypatch 照樣有效）。"""
+        if self._world is None:
+            from . import arena_rules  # noqa: PLC0415
+
+            self._world = (WorldHook("close", "arena", lambda *args: arena_rules.world_close(*args)),)
+        return self._world
 
 
 FEATURE = BoutFeature()
