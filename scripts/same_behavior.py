@@ -14637,7 +14637,7 @@ class LandTurnScenario(Scenario):
     戰書：散人、不在任的第 4 階、進度不到門檻、不存在的地點各按一次被擋；在任的第 4 階（官軍）下戰書排一場攻城（時段、天下大事、江湖紀錄、那一塊凍結），
     同一天第二張被擋（一邊一天一張），黃巾的在任第 4 階併進同一場；江湖畫面的 conquest（時程表、每一塊、能不能下戰書）、管理者頁的下拉選單。
     分紅：一塊推滿易手（兩個人分紅、其中一個當場同步補、另一個留到後半）、守城功（一筆擺進帳裡）。**前半停在戰書下了、還沒到攻城時段**（那一場排著、
-    分紅有人還沒領、一張戰書的時段被擺成「伺服器停過」的樣子）。
+    分紅有人還沒領、一張戰書的時段被擺成「伺服器停過」的樣子、一張〈天下形勢〉的單 A 段拿走了而 C 段還沒收；land 撥過一次 22:00，那張前半就收掉了，所以另開一張）。
     後半：登入就補（分紅）；沒跨過 22:00 什麼都不變；同步跨過 22:00（第一個看到新的一天的人觸發：前一天沒開成的作罷、新的一天可以再下戰書、開一張〈天下形勢〉的單）；
     〈天下形勢〉三段式（A 拿單、B 鎖外請模型〔叫不動／回了／回太短〕、C 收；進度條 xingshi_mark、/api/xingshi）；沒人在線的排程（server.world_step）跨過 22:00；管理者快轉
     跨過 22:00（日子只准往前走）；單開了超過寬限照固定段收；佇列沒讓這一趟跑把單放回去。管理者五個救場工具（定一塊歸誰、定進度、立刻下戰書、取消一場攻城、
@@ -14821,6 +14821,13 @@ class LandTurnScenario(Scenario):
                     slot.at = slot.muster_at = s.time + 10 ** 8
 
         self.world.mutate_season(stale)
+        if self.essay_on():  # 〈天下形勢〉寫到一半：land 撥過 22:00 的那張單前半就收掉了，這裡另開一張、A 段拿走、C 段還沒收（後半的同步照寬限收）
+            self.do(ADMIN, "xingshi_now")
+            self.begin()
+            game = self.server.game_for(self.G_SEAT)
+            with self.server._locked(game):
+                req = game.xingshi_request()
+            emit("前半拿走單子（A 段）", None if req is None else {"n": req.n, "key": req.key})
         for who in self.PLAYERS:
             self.me(who, "前半停在這裡")
         self.world_view("前半停在這裡")
