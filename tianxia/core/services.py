@@ -259,6 +259,13 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._duty_option(name)`（主人：出陣包 features/sortie；軍令卡上第 1 階守勢行動那一顆的鈕，共用出陣的次數與字；軍情的 `order_options` 在有戰線的地方叫它。
   原本核心的 `_order_options` 直接叫 `self._duty_option`，記在邊界測試 GAME_DELEGATE_CALLERS 的 `(_order_options, _duty_option)`，軍情成包改經 ctx 叫）
 
+# craft（全部拆包第 44 批「煉製與自創」；主人：煉製包。本體在 tianxia/features/craft/，Game 留一行委派回答別的包）
+- `ctx._create_on()`、`ctx._create_allowed()`、`ctx._create_price()`（自創開著沒、此刻能不能自創〔不能是原因，能是 None〕、這一門要付多少心得；
+  只讀。新手引導碰到才說的 h_create 問——原本引導包直接 import create 讀 `create.on`／`allowed`／`price`〔包 import 包〕）
+- `ctx.forge_line(ids)`、`ctx.forge_picks(ids)`、`ctx.forge_preview(ids)`（煉製頁選了東西更新的說明、放得進來的、預覽卡；只讀。包自己的 `/api/forge_line` 路由經殼的
+  `look(game, lambda g: …)` 叫，路由裡的變數叫 g）
+- `ctx.forge(main, aux)`（煉製頁開爐，序章合成；新手引導的假人走序章〔`_graduate`〕叫它：原本記在三、過渡 guide 那一段，主人成包了，改列這裡）
+
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
 explore（主動搬六包第 3＋4 批加的這一段）
@@ -319,7 +326,7 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 
 # guide（全部拆包第 22 批：新手引導包叫的、主人還沒搬的）
 - 假人走序章（`_graduate`）照每一步的完成條件做的那幾下：`ctx.slot_insight(art, insight)`、`ctx.switch_art(art)`、`ctx.practice(kind)`、
-  `ctx.allocate_stat(stat)`、`ctx.melt_art(art)`（主人修練 features/cultivation）、`ctx.forge(main, aux)`（主人煉製 features/craft）
+  `ctx.allocate_stat(stat)`、`ctx.melt_art(art)`（主人修練 features/cultivation）、`ctx.forge(main, aux)`（主人煉製：第 44 批成包，改列二、查詢服務 `# craft` 那一段）
 - `ctx._hint_triggers(only)`（這一包自己的委派：tests/arts/test_hints.py 換掉 game._hint_triggers，包裡經 ctx 叫，換掉的才打得到；
   呼叫端改完就拿掉）
 

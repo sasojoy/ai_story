@@ -3132,16 +3132,8 @@ def api_howto(request: Request):
 # 畫完那一筆的鎖外三段式照舊是這個檔的 sense_draw）
 
 
-@app.post("/api/forge_line")
-def api_forge_line(request: Request, body: dict = Body(default={})):
-    """煉製頁選了東西就更新說明（不算行動、不存檔）。爐裡只放了一樣時多給 picks：另一格放得進來的每一樣合不合得了，
-    判斷是開爐時那一套（skillview.forge_picks）；其他時候是 None。"""
-    game = _game(request)
-    _art, picked = forge_args(body)
-    return look(game, lambda g: {
-        "line": md(g.forge_line(picked)), "picks": g.forge_picks(picked),
-        "preview": g.forge_preview(picked),  # 兩格都放好：預覽卡，其餘 None、網頁畫 line
-    })
+# （/api/forge_line：全部拆包第 44 批搬進煉製與自創包 tianxia/features/craft/routes.py，殼照 FEATURES 掛；forge_args 與開爐、立意的
+# 鎖外三段式〔prepare_forge、create_intent、create_reread〕照舊是這個檔的）
 
 
 @app.post("/api/smith_line")

@@ -39,6 +39,8 @@ from ..features import zhuan  # 列傳：全部拆包第 29 批（只接 zhuan: 
 from ..features import military  # 軍情：全部拆包第 33 批（沒有選項、選單、狀態、掛鉤，排在哪裡結果都一樣；選單那幾顆和按下去都在核心原位叫 Game 的委派）
 # outlets
 from ..features import outlets  # 銀兩出口與捐軍備：全部拆包第 43 批（兩間店的店面登記排在酒肆之後、擂台之前，entry 都回 None；只有同時坐在兩間店裡才分先後，正常不會）
+# craft
+from ..features import craft  # 煉製與自創：全部拆包第 44 批（只接 routes、content、on_drop_stale，排在哪裡結果都一樣；on_drop_stale 的 prune 只動 creating）
 # bout
 from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。排最後：擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）
 # ── import（new_feature.py 接在這一行前面）──
@@ -77,6 +79,8 @@ FEATURES: list[Feature] = [
     military.FEATURE,
     # outlets
     outlets.FEATURE,
+    # craft
+    craft.FEATURE,
     # bout（排最後：店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4）
     bout.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
@@ -110,8 +114,7 @@ SHARED: dict[str, str] = {
     "insight_fx": "意境效果池與層數：武學 arts、意境 insights、功法庫、序章讀；修練、有所感成包之後也要",
     "insights": "意境（基本意境與悟得）：核心的 content、rules 讀；探索包的悟意境、合成、有所感都叫",
     "traits": "武學的功效（八個一般功效與特別功效）：核心的 team 打仗時讀；武學 arts、鐵匠鋪、修練頁都用",
-    "moves": "以意成招（自創武學的招）：戰法 tactics、武學 arts、功效 traits 讀；認勢用到的擺式幾何在 create（函式裡 import，"
-             "記在邊界測試的 SHARED_PENDING：煉製第 44 批成包之前要處理）",
+    "moves": "以意成招（自創武學的招）：戰法 tactics、武學 arts、功效 traits 讀；認勢用到的擺式幾何在 pose（第 44 批從 create 抽出來）",
     "might": "戰力（全身加總的數）：修練頁、自創、破境讀；它自己讀 arts、equipment、encounter 這一層",
     "signature": "本命武學（本命戰法）：核心的 team 讀；人物對話、功法庫也用",
     "library": "功法庫（持有上限、熔煉、學基礎武學）：核心的 rules 讀；商城包的深交名額上限 cap_of（手冊 3.10）、修練、自創、名帖都叫",
@@ -173,4 +176,6 @@ SHARED: dict[str, str] = {
     # story（全部拆包第 30 批：storyline 拆兩半，換字那一小段與別包也要讀的底座在這一層，一條線自己的走法在一條線包）
     "story_base": "一條線的底座與換字：核心的 rules〔fill_marks 換字〕、事件檢定〔記自己寫的那一句〕讀；探索包的擲開頭、有所感包登記頓悟那一條線的鉤子也讀"
                   "（讀輿圖的大區 atlas、章回的大事結果 chapters 記在邊界測試的 SHARED_PENDING）",
+    # craft（全部拆包第 44 批「煉製與自創」：create 進煉製包，認勢要用的擺式幾何抽出來留在這一層）
+    "pose": "擺式的幾何（火柴人九個角度 → 勢與偏向，原本在 create.py）：以意成招 moves 認勢讀；煉製包的 create 照名字 re-export，門下頁的說明也讀",
 }

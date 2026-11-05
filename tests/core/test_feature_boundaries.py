@@ -885,6 +885,22 @@ GAME_DELEGATE_CALLERS.update({
     ("admin_player_choices", "_summons_plan"): "管理者的玩家選單（發召見那一顆灰不灰、為什麼）與 admin_summon 共用同一個規劃（_summons_plan）",
 })
 
+# craft（全部拆包第 44 批「煉製與自創」：新包 tianxia/features/craft/；計畫 docs/superpowers/plans/2026-11-05-煉製自創包-第1批.md 1.4、1.5）：
+# 16 個一行委派（煉製頁開爐 5 個、自創 11 個）；原本那一行 `from . import create` 現在是別名（委派的型別註記 create.IntentRequest、IntentReading 用）。
+# 沒有選項前綴、沒有 GAME_DIRECT。
+GAME_IMPORTS |= {"tianxia.features.craft.actions", "tianxia.create"}
+GAME_DELEGATES |= {
+    # server（MENXIA_ACTIONS、開爐與立意的鎖外三段式、/api/forge_line）、假人（bot_policy.tend_arts、bot.create_art、forge_and_cultivate）、測試、
+    # 引導包的假人走序章（ctx.forge）在叫的；create_view 是核心原位 status_data 叫的（下）
+    "forge_request", "forge", "forge_line", "forge_preview", "forge_picks", "create_begin", "create_pose", "create_request", "create_intent",
+    "create_reread_request", "create_reread", "create_reroll", "create_back", "create_name", "create_cancel", "create_view",
+    # 引導包經 ctx 問的三個查詢服務（services.py 二、查詢服務 # craft）
+    "_create_on", "_create_allowed", "_create_price",
+}
+GAME_DELEGATE_CALLERS.update({
+    ("status_data", "create_view"): "狀態列的自創那一塊（status 的 create 鍵）：鍵的順序算行為，狀態列掛鉤是總表第 66 批",
+})
+
 
 # outlets（全部拆包第 43 批「銀兩出口與捐軍備」：新包 tianxia/features/outlets/；計畫 docs/superpowers/plans/2026-11-05-銀兩出口包-第1批.md 1.4、1.5）：
 # 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。17 個方法搬進包，Game 留 8 個一行委派（_close_dadian、_donate_choice 等只有包裡叫的沒有委派）。核心原位碰這一包的，能接第 11 批掛鉤的都接上了
@@ -1014,8 +1030,6 @@ SHARED_PENDING = {
     ("siege", "world"): "排定：開集結那一季（world._season_vehicle，函式裡）——第 25 批 world 收進核心本體。world 最外層 import 宴客包 feast"
                         "與單挑包 bout（舊名 arena：收季記擂台前三名的 close_season，全部拆包第 12 批成包）："
                         "叫到那個函式就連帶載入 feast、bout（現在 import siege 已經經 atlas 載進來了），收進核心本體之前那一行要先處理（核心不 import 包）",
-    ("moves", "create"): "之後成包：擺式的幾何（create.icon_pose、stance_of，函式裡）——煉製與自創第 44 批 create 進包之前，先把這一段留在"
-                         "共用規則層或改成查詢服務（moves 是 tactics 的底、tactics 是核心 team 的底，先不收會連帶 43 個收不了）",
     ("siege", "generals"): "之後成包：攻城的留守挑龍頭（generals.on、pick）——決戰第 8 批 generals 進包之前，先改成查詢服務或把挑法留在共用規則層"
                            "（siege 第 11 批就登記了）",
 }
@@ -1482,7 +1496,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # zhuan（全部拆包第 29 批：tianxia/biography.py、zhuan_end.py）
                          "biography": "zhuan", "zhuan_end": "zhuan",
                          # military（全部拆包第 33 批：tianxia/rank_actions.py）
-                         "rank_actions": "military"}
+                         "rank_actions": "military",
+                         # craft（全部拆包第 44 批：tianxia/create.py）
+                         "create": "craft"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import atlas, create, figures, howto  # 過渡：待搬
+from tianxia import atlas, figures, howto  # 過渡：待搬
 from tianxia import insight_fx, training, journal, library, martial_arts, team  # 核心、共用規則層
 from tianxia import prologue as prologue_rules  # 共用規則層；Game.new 有個參數也叫 prologue，跟 engine 一樣叫 prologue_rules
 from tianxia.models import TutorialStep
@@ -278,8 +278,8 @@ def hint_triggers(ctx: Game, only: set[str] | None = None) -> list[str]:
     if want("h_field_lose") and sum(1 for r in s.battles if r.label == training.PRACTICE and r.tier not in team.WIN_TIERS
                                     and r.tier != "僵持") >= 2:
         on.append("h_field_lose")
-    if want("h_create") and create.on(c) and p.created_count == 0 and create.allowed(s, c) is None \
-            and p.stats.get("xinde", 0) >= create.price(s, c):
+    if want("h_create") and ctx._create_on() and p.created_count == 0 and ctx._create_allowed() is None \
+            and p.stats.get("xinde", 0) >= ctx._create_price():
         on.append("h_create")
     if want("h_tavern") and ctx._tavern_on() and ctx._tavern_here() and p.location not in prologue_rules.onboard_towns(c):  # 老周在那裡教過酒肆
         on.append("h_tavern")
