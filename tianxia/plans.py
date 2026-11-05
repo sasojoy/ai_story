@@ -411,7 +411,7 @@ def deliver(state: GameState, content: Content) -> list[str]:
             continue
         if mine == "help" and t.affinity:
             before = p.affinities.get(plan.who, 0)
-            p.affinities[plan.who] = max(0, min(100, before + renown.warmed(content, t.affinity)))
+            p.affinities[plan.who] = max(0, min(100, before + renown.warmed(content, t.affinity, state)))
             if p.affinities[plan.who] != before:
                 out.append(f"{name}情誼 {p.affinities[plan.who] - before:+d}")
     return out

@@ -17,7 +17,7 @@ import random
 
 from tianxia import annals  # 過渡：待搬（行狀）
 from tianxia import battle_instance, battlelog, encounter, materials, renown, rise, rounds, tactics, treasures
-from tianxia import gender, team
+from tianxia import attrset, gender, team
 from tianxia.core import duel_base
 from tianxia.core.option import Option
 from tianxia.core.services import PAUSED_TEXT
@@ -182,6 +182,7 @@ def duel_gamble(
     s.player.guide_done = []
     boss, _ = duel_rules.foe_of(c, duel)
     fired: list[str] = []
+    llm_rate = int(llm_rate) + round(attrset.charm(s, c, "gamble"))  # 魅力略為提高放手一搏（五項屬性的季；企劃者 2026-11-04）
     won, delta, hp, _ = duel_rules.gamble(duel, int(llm_rate), c.config.duel, c.config.battle, ctx.rng,
                                           c.config.tactics, bout_rng(ctx, "頭目戰", duel.boss, duel.round), fired)
     story = (stories or ("", ""))[0 if won else 1]

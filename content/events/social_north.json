@@ -472,7 +472,7 @@
       {
         "text": "跟舀粥的道徒攀談，求個通融",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "easy"
         },
         "effect": {

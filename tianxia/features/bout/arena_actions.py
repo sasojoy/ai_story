@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from tianxia import annals  # 過渡：待搬（行狀）
 from tianxia import battle_instance, battlelog, encounter, renown, tactics, treasures
-from tianxia import gender, team
+from tianxia import attrset, gender, team
 from tianxia.characters import name_key
 from tianxia.core import duel_base
 from tianxia.core.option import Option
@@ -38,7 +38,20 @@ def arena_side(ctx) -> ArenaSide:
         name=ctx.state.player.name, power=ctx._battle_power(), scores=ctx._battle_scores(mounted=False),
         role=ctx._battle_role(), hp=cap, hp_cap=cap, bare=ctx._arena_bare(),
         cut=duel_actions.duel_cut(ctx),  # 防具減損（鐵匠鋪與合成流程 3.9）：開打、報名這一刻身上那件的
+        card=team.pvp_card(ctx.state, ctx.content, ctx.world),  # 五項屬性的季：開打時照對手重算（faced）
     )
+
+
+def faced(content, me: ArenaSide, foe: ArenaSide) -> None:
+    """五項屬性的季：兩邊的威力與份量照對手真正的五項重算（我的武力對他的統御；企劃者 2026-11-04）。舊的季、舊的分身不動。"""
+    if me.card is None or foe.card is None:
+        return
+    mine, theirs = me.card, foe.card
+    me.power, me.scores, me.bare = team.pvp_faced(content, me.power, me.scores, mine, theirs, me.bare)
+    foe.power, foe.scores, foe.bare = team.pvp_faced(content, foe.power, foe.scores, theirs, mine, foe.bare)
+    me.dodge, foe.dodge = team.pvp_dodge(content, mine, theirs), team.pvp_dodge(content, theirs, mine)
+    me.role, me.scores = team.pvp_unrole(content, me.role, me.scores)
+    foe.role, foe.scores = team.pvp_unrole(content, foe.role, foe.scores)
 
 
 def arena_bare(ctx) -> float | None:
@@ -119,6 +132,7 @@ def arena_join(ctx) -> list[str]:
         entry.name, entry.power, entry.scores, entry.role, entry.hp_cap, entry.arts, entry.famed = (
             p.name, side.power, side.scores, side.role, side.hp_cap, arts, famed)
         entry.bare = side.bare  # 碎片沒了再更新分身：不含碎片的那一份跟著清掉
+        entry.card = side.card
         entry.cut = side.cut  # 防具也換成此刻身上那件的（含耐久；沒穿就是 0），鐵匠鋪與合成流程 3.9
         entry.kit = team.self_side(s, ctx.content, ctx.world)
         entry.crowd = arena_crowd.snapshot(s, ctx.content, ctx.world)  # 場邊事件看的底細（照更新這一刻）
@@ -130,7 +144,7 @@ def arena_join(ctx) -> list[str]:
     entry = arena.join(s.world, ArenaEntry(
         name=p.name, power=side.power, bare=side.bare, scores=side.scores, role=side.role, hp_cap=side.hp_cap, arts=arts, joined=s.world.time,
         kit=team.self_side(s, ctx.content, ctx.world), famed=famed, crowd=arena_crowd.snapshot(s, ctx.content, ctx.world),
-        cut=side.cut,  # 分身留下報名那一刻的防具減損（3.9）
+        cut=side.cut, card=side.card,  # 分身留下報名那一刻的防具減損（3.9）與五項（開打時照挑的人重算）
         weapon=arena.held_kind(p), look=ctx.arena_look(), move=ctx.arena_move(),
     ))
     entry.move_art = arena_move_art(ctx, entry.move)
@@ -165,7 +179,7 @@ def arena_start(ctx, key: str) -> list[str]:
     fight = ArenaFight(
         id=s.world.arena_seq, foe_key=key, me=arena_side(ctx), rounds=cfg.rounds,
         foe=ArenaSide(name=foe.name, power=foe.power, scores=dict(foe.scores), role=foe.role, hp=foe.hp_cap, hp_cap=foe.hp_cap,
-                      bare=foe.bare, cut=foe.cut),  # 分身的防具是他報名、更新那一刻的（3.9）
+                      bare=foe.bare, cut=foe.cut, card=foe.card),  # 分身的防具是他報名、更新那一刻的（3.9）
         edge=c.config.duel.start,
         crowd_me=arena_crowd.snapshot(s, c, ctx.world), crowd_foe=foe.crowd,  # 場邊事件看的底細（arena_crowd）
         looks=[arena.held_kind(p), foe.weapon],  # 擂台動畫：兩邊手上的兵器（分身的照報名那一刻）
@@ -173,6 +187,7 @@ def arena_start(ctx, key: str) -> list[str]:
         fx=[ctx.arena_move(), foe.move],  # 招式動畫：兩邊出招疊哪一張（同上）
         fx_arts=[arena_move_art(ctx, ctx.arena_move()), foe.move_art if foe.move else ""],
     )
+    faced(c, fight.me, fight.foe)
     p.arena_crowd_note = None
     arena.roll_next(fight, arena.rng_for(p.season_number, p.name, fight, "招"), cfg, c.config.duel)
     p.arena = fight
@@ -315,6 +330,7 @@ def arena_gamble(
     p.guide_done = []
     fired: list[str] = []
     skills: tuple[list[str], list[str]] = ([], [])
+    rate = int(rate) + round(attrset.charm(s, c, "gamble"))  # 魅力略為提高放手一搏（五項屬性的季；企劃者 2026-11-04）
     won, delta, hp, _ = arena.gamble(fight, int(rate), c, arena.rng_for(p.season_number, p.name, fight, "搏"),
                                      arena.rng_for(p.season_number, p.name, fight, "戰法"), fired, skills)
     story = (stories or ("", ""))[0 if won else 1]

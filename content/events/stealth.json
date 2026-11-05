@@ -30,7 +30,7 @@
       {
         "text": "上前攔住市吏，替漢子說情",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "easy", "shift": -1
         },
         "effect": {
@@ -104,7 +104,7 @@
           "id": "plead",
           "tag": "說情：攔住市吏替他講話",
           "check": {
-            "stat": "wis",
+            "stat": "wis", "v2": "cha",
             "grade": "easy", "shift": -1
           },
           "effect": {
@@ -194,7 +194,7 @@
       {
         "text": "去找隊率，當面說清口糧的帳",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "normal", "shift": 1
         },
         "effect": {

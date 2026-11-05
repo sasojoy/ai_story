@@ -676,7 +676,7 @@
       {
         "text": "跟仲景回縣衙，替柳灣說話：疫區的人還沒死完，亭長和他的兵進去也要染病",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "normal", "shift": 1
         },
         "effect": {

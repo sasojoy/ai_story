@@ -63,7 +63,7 @@
       {
         "text": "扮成黃巾傳令，騙他們撤",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "harsh", "shift": 1
         },
         "effect": {
@@ -773,7 +773,7 @@
       {
         "text": "說清楚：冀州的糧該歸誰",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "harsh", "shift": 1
         },
         "effect": {
@@ -1262,7 +1262,7 @@
       {
         "text": "跟他談分成",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "harsh", "shift": -1,
           "practice": "evil"
         },
@@ -2601,7 +2601,7 @@
       {
         "text": "上山，跟張燕談條件",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "legend"
         },
         "effect": {

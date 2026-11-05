@@ -106,6 +106,7 @@ class Boost(BaseModel):
     factor: float = 1.0  # 整個人的乘數：內外搭配 × 正邪共鳴（計畫二 Task 3）
     outer_scale: float = 1.0  # 武學那一門自己的倍數，乘在 (1＋outer) 之後：地利（terrain.factor，計畫 2026-10-18 2.1）
     inner_scale: float = 1.0  # 內功那一門自己的倍數，乘在 (1＋inner) 之後：地利
+    inner_div: float = NEIGONG_BONUS_DIVISOR  # 內功份量的除數：五項屬性的季照 Config.attributes.v2.neigong_divisor（內功加重，企劃者 2026-11-04）
 
 
 BOOST_FLOOR = 0.1  # 1 + 加成再低也夾在這裡：屬性被扣到很低時威力變小，但不會變成負的
@@ -131,7 +132,7 @@ def member_power(
     if member.neigong_id and member.neigong_id in arts:
         neigong = arts[member.neigong_id]
         inner = power_at(neigong, member.neigong_level) * max(BOOST_FLOOR, 1 + boost.inner) * boost.inner_scale
-        power *= 1 + inner / NEIGONG_BONUS_DIVISOR
+        power *= 1 + inner / boost.inner_div
     power *= boost.factor
     if opponent_attribute and counters(wugong.attribute, opponent_attribute):
         power *= COUNTER_BONUS

@@ -374,7 +374,7 @@
       {
         "text": "親自在主講面前替他說項",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "normal"
         },
         "effect": {
@@ -773,7 +773,7 @@
       {
         "text": "把禮法與人情一條條說清",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "easy"
         },
         "effect": {

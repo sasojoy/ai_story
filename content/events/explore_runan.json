@@ -11,7 +11,7 @@
       {
         "text": "進席應對，聽憑品評",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "normal",
           "by": "self"
         },
@@ -146,7 +146,7 @@
       {
         "text": "把兩邊帶頭的人拉開說理",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "easy", "shift": -1
         },
         "effect": {
@@ -1505,7 +1505,7 @@
           ]
         },
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "normal"
         },
         "effect": {
@@ -1621,7 +1621,7 @@
           "id": "soothe",
           "tag": "安撫：好言相勸、問清散部去向",
           "check": {
-            "stat": "wis",
+            "stat": "wis", "v2": "cha",
             "grade": "normal"
           },
           "effect": {

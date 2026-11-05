@@ -340,7 +340,7 @@
           ]
         },
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "hard"
         },
         "effect": {
@@ -826,7 +826,7 @@
       {
         "text": "隔著灶台低聲說明來意",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "normal"
         },
         "effect": {
@@ -887,7 +887,7 @@
           "id": "talk",
           "tag": "勸出：隔著灶台說話、讓他們信你",
           "check": {
-            "stat": "wis",
+            "stat": "wis", "v2": "cha",
             "grade": "normal"
           },
           "effect": {
@@ -1576,7 +1576,7 @@
           "id": "shout",
           "tag": "喝令：報名號、喊話，嚇退水寇",
           "check": {
-            "stat": "wis",
+            "stat": "wis", "v2": "cha",
             "grade": "normal", "shift": 1
           },
           "effect": {

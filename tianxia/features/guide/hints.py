@@ -65,6 +65,10 @@ def note_for(state: GameState, content: Content, hint_id: str) -> HintNote | Non
     if hint.by == "mentor":
         from tianxia.rules import jianfa  # noqa: PLC0415  rules 很大（content 也 import 這個模組），只在說話時才用
 
+        from tianxia import attrset  # noqa: PLC0415
+
+        if hint.attrs_v2 and attrset.on(content, state.world):  # 五項屬性的季的說法（HintDef.attrs_v2）
+            return HintNote(id=hint_id, speaker=h.head, text=fill(content, hint.attrs_v2))
         first = hint.season_one and calendar.season_one_on(state.world, content)  # 第一季才是真的那幾句（HintDef.season_one）
         outing = hint.explore_one and jianfa(content, state.world, "explore_one")  # 出門探索的說法（HintDef.explore_one）
         return HintNote(id=hint_id, speaker=h.head, text=fill(content, hint.explore_one if outing else hint.season_one if first else hint.text))

@@ -211,6 +211,7 @@ class SealSide(BaseModel):
     acted: int = 0  # 這一場自己出了幾手（含放手一搏；FB-174：一手都沒出才是「未及趕到」）
     kit: BoutSide | None = None  # 身上的本命戰法快照（不算坐騎與部下，同頭目戰）；沒有是 None
     cut: float = 0.0  # 這一邊的防具減損（參戰者從 BattleParticipant.cut 帶、沒參戰的現算；鐵匠鋪與合成流程 3.9）：對手打中這一邊的那一下乘 1 − 它；舊的單挑 0
+    card: dict | None = None  # 五項屬性的季：重算對上真正的對手要的東西（team.pvp_card）；開單挑時兩邊照對方換一次。舊的季 None
 
 
 class SealDuel(BaseModel):

@@ -5585,6 +5585,9 @@ class Game:
 
     def _battle_role(self) -> str:
         """進場的職位（試玩回饋 2026-10-08）：本人最突出的屬性（battle_instance.role_for）。真人、散人臨時投效、假人都走這裡。"""
+        if attrset.on(self.content, self.state.world):  # 五項屬性的季：照新的五項比（舊的四項有上限曲線，上限不同會偏向悟性）
+            stats = {old: attrset.value(self.state, self.content, new) for old, new in self.content.config.attributes.v2.legacy.items()}
+            return battle_instance.role_for(stats, team.COMBAT_STATS)
         stats = team.member_stats(self.state, self.content, self.world, team.PLAYER)
         return battle_instance.role_for(stats, team.COMBAT_STATS)
 
@@ -5625,6 +5628,9 @@ class Game:
         bare = self._seal_bare()
         if bare is not None:  # 玉璽碎片改版：只有戴著碎片才多這一鍵（沒碎片、改版關著時這一包一個字不變）
             marks["seal_bare"] = bare
+        card = team.pvp_card(self.state, self.content, self.world)
+        if card is not None:  # 五項屬性的季才多這一鍵（奪璽單挑照對手重算）；舊的季一個字不變
+            marks["card"] = card
         return marks
 
     def _seal_bare(self) -> battle_instance.SealBare | None:
@@ -5964,6 +5970,7 @@ class Game:
         guarded = me is not None and me.acted_rounds >= need  # 護璽：自己出手滿門檻（臨時投效的散人也算，只多這一條，4.5）
         keeper = seal_duel.side_from_participant(me, battle.seal_holder_faction) if me is not None else self._seal_side_of(holder)
         cap = min(cfg.cap, cfg.cap * cfg.side_factor.get(tier, 0.0) * (cfg.guard if guarded else 1.0))
+        seal_duel.faced(self.content, challenger, keeper)  # 五項屬性的季：兩邊照對方真正的五項重算；舊的季不動
         return seal_duel.open_duel(
             f"{battle.record_id}:{shard.id}", shard.id, battle.record_id, definition.timetable_event, definition.name, tier, cap,
             challenger, keeper, self.now, cfg,
@@ -6006,6 +6013,7 @@ class Game:
                 out.append((name, 0, seal_duel.side_from(  # 不含玉璽碎片的戰力（改版：奪璽單挑不吃；手上有碎片的本來就擋掉了）
                     name, None, kin._battle_power(seal=False), kin._battle_scores(mounted=False, seal=False), kin._battle_role(),
                     kin._battle_neili_cap(), kit=team.self_side(kin.state, self.content, kin.world), cut=kin._duel_cut(),  # 防具照他的存檔現算（3.9）
+                    card=team.pvp_card(kin.state, self.content, kin.world),
                 )))
         return out
 
@@ -6023,6 +6031,7 @@ class Game:
             name, self.world.faction_of(name), game._battle_power(seal=False), game._battle_scores(mounted=False, seal=False),
             game._battle_role(), game._battle_neili_cap(), fresh=fresh, kit=team.self_side(game.state, self.content, game.world),
             cut=game._duel_cut(),  # 沒參戰的持有者：防具照他的存檔現算（鐵匠鋪與合成流程 3.9；fresh 的是新角色，沒穿＝0）
+            card=team.pvp_card(game.state, self.content, game.world),
         )
 
     def _my_seal_duel(self) -> tuple[SealDuel | None, str | None]:
@@ -6478,7 +6487,7 @@ class Game:
             msgs += extra
         elif result.tier == "落敗":
             msgs += self._lose_silver(record)
-        toll, hp_lost, facts = self._take_toll(result.tier, wild=wild, clash=result.clash)
+        toll, hp_lost, facts = self._take_toll(result.tier, wild=wild, clash=result.clash, squad=squad)
         record.changes += toll
         msgs += toll
         self._play_rounds(record, squad, result.tier, hp_lost, facts, clash=result.clash)
@@ -6895,7 +6904,8 @@ class Game:
         now, cap = self._player_hp_and_cap()
         return TollFacts(wounded=now < cap, low_hp=now <= LOW_HP_RATIO * cap, healed=healed)
 
-    def _take_toll(self, tier: str, *, wild: bool = False, clash: tactics.Clash | None = None) -> tuple[list[str], int, TollFacts]:
+    def _take_toll(self, tier: str, *, wild: bool = False, clash: tactics.Clash | None = None, squad: Squad | None = None,
+                   ) -> tuple[list[str], int, TollFacts]:
         """照結果扣這一場的氣血（team.take_encounter_toll），回傳（訊息, 本人真的掉了多少氣血, 寫演出句要的事實）。掉的量緊貼著
         扣氣血的前後量（計畫三 G4）：打贏升級會讓上限變高，開打前量的話回合裡寫的跟戰報「氣血 -N」對不上。四捨五入跟訊息的
         「:.0f」是同一個數（兩者都對同一個浮點數做銀行家捨入）。
@@ -6907,8 +6917,8 @@ class Game:
         本命戰法回的與自扣的氣血（Clash.hp：本人與同伴）在最後改。"""
         before, cap = self._player_hp_and_cap()
         share = 1 - clash.blocked_share() if clash is not None else 1.0
-        saved, spared = team.toll_saved(self.state, self.content, self.world, tier, wild=wild, share=share)  # 扣之前量：化勁、不動這一場改了多少
-        toll = team.take_encounter_toll(self.state, self.content, self.world, tier, wild=wild, share=share)
+        saved, spared = team.toll_saved(self.state, self.content, self.world, tier, wild=wild, share=share, squad=squad)  # 扣之前量：化勁、不動這一場改了多少
+        toll = team.take_encounter_toll(self.state, self.content, self.world, tier, wild=wild, share=share, squad=squad)
         hp_lost = round(before - self._player_hp())  # 回血之前量：回合裡寫的扣血不受吸取與回春影響
         healed: list[str] = []  # 吸取、回春以前在這裡打完回血；本命戰法第三批起在回合裡回（Clash.hp）
         gained: list[tuple[str, int]] = []
@@ -7097,7 +7107,7 @@ class Game:
             msgs += self._challenge_draw(fid, squad, record)
         elif result.tier == "落敗":
             msgs += self._lose_silver(record)
-        toll, hp_lost, facts = self._take_toll(result.tier, clash=result.clash)
+        toll, hp_lost, facts = self._take_toll(result.tier, clash=result.clash, squad=squad)
         record.changes += toll
         msgs += toll
         self._play_rounds(record, squad, result.tier, hp_lost, facts, clash=result.clash)  # squad 是照聲威的那一份：對手的身法跟著難度走
@@ -8777,6 +8787,7 @@ class Game:
             return self._log([problem])
         line = attrset.pick(s, c, preset, custom)
         journal.add_entry(s, JournalEntry(time=s.world.time, title="成長配比", changes=[line]))
+        self._guide(self._note_action("allocate"))  # 五項屬性的季，序章配點那一步就是挑成長配比（升一級沒有點可配）
         return self._log([line])
 
     @_not_while_preparing
@@ -9226,7 +9237,8 @@ class Game:
         """這個人切磋時的威力：只算本人（同伴、部下不上場），照對手身上那一門武學的屬性算相剋，吃自己的氣血係數與加成。
         seal=False 不含玉璽碎片的戰力（買兇的殺手照它浮上來，同江湖水漲）。"""
         s, c, w = who.state, who.content, who.world
-        members, conditions, boosts = team._fighters(s, c, w, seal=seal)
+        with team.facing_player(c, s, against.state, against.world):  # 五項屬性的季：照對手本人的五項對抗（他的統御擋你的武力）
+            members, conditions, boosts = team._fighters(s, c, w, seal=seal)
         return encounter.member_power(
             members[0], team.team_arts(s, c, w), team.worn_attribute(against.state, c, against.world), conditions[0], boosts[0],
         )
@@ -9928,7 +9940,8 @@ class Game:
             if problem:
                 out.append(f"（{problem}）")
                 return
-            seal_duel.submit(duel, who, text=checked, rate=rate, stories=stories)
+            charmed = None if rate is None else int(rate) + round(attrset.charm(self.state, self.content, "gamble"))  # 魅力（五項屬性的季）
+            seal_duel.submit(duel, who, text=checked, rate=charmed, stories=stories)
             seal_duel.note_seen(duel, who, self.now, cfg)
             out.append(f"你放手一搏：「{checked}」")
             out.extend(seal_duel.advance(shared, self.content, self.now))
@@ -11022,9 +11035,11 @@ class Game:
         self.now = now
         cap = min(cfg.cap, cfg.cap * max(0.0, min(1.0, factor)))
         duel_id = f"{reg.last_showdown}:{shard_id}" if hung else f"qa{reg.seq + 1}:{shard_id}"
+        a, b = self._seal_side_of(challenger), self._seal_side_of(shard.holder)
+        seal_duel.faced(c, a, b)  # 五項屬性的季：兩邊照對方真正的五項重算；舊的季不動
         duel = seal_duel.open_duel(
             duel_id, shard_id, reg.last_showdown if hung else None, None, reg.last_showdown_where if hung else "", "旁觀", cap,
-            self._seal_side_of(challenger), self._seal_side_of(shard.holder), now, cfg,
+            a, b, now, cfg,
         )
         line = (seal_duel.CALL if hung else seal_duel.CALL_QA).format(
             challenger=duel.challenger.name, holder=duel.holder.name, shard=c.seal[shard_id].name)

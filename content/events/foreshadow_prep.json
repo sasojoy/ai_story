@@ -50,7 +50,7 @@
     "condition": {"factions": ["guan"]},
     "text": "被左豐逼到家破的前任郡丞躲在塢堡裡，不肯輕易拿出血書。",
     "choices": [
-      {"text": "好言相勸，請他交出血書", "check": {"stat": "wis", "grade": "normal", "shift": 1, "by": "self"},
+      {"text": "好言相勸，請他交出血書", "check": {"stat": "wis", "v2": "cha", "grade": "normal", "shift": 1, "by": "self"},
        "effect": {"text": "前任郡丞沉默良久，把血書交到你手上。", "clue_items": {"fs_blood_letter": 1}},
        "fail_effect": {"text": "這次沒成，可以再來。"}},
       {"text": "不打擾他", "effect": {"text": "你悄悄退了出去。"}}

@@ -29,7 +29,7 @@
       {
         "text": "跟戍卒講明來歷，請他通融",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "normal"
         },
         "effect": {
@@ -82,7 +82,7 @@
           "id": "explain",
           "tag": "講理：說明來歷、指出破綻、請他通融",
           "check": {
-            "stat": "wis",
+            "stat": "wis", "v2": "cha",
             "grade": "normal"
           },
           "effect": {
@@ -534,7 +534,7 @@
           "id": "rally",
           "tag": "喊人：招呼役夫、指揮大家一起拉",
           "check": {
-            "stat": "wis",
+            "stat": "wis", "v2": "cha",
             "grade": "easy"
           },
           "effect": {
@@ -854,7 +854,7 @@
       {
         "text": "以茶代酒，席間應對眾人",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "easy"
         },
         "effect": {
@@ -1217,7 +1217,7 @@
       {
         "text": "替船主跟軍侯講道理",
         "check": {
-          "stat": "wis",
+          "stat": "wis", "v2": "cha",
           "grade": "hard"
         },
         "effect": {
@@ -1323,7 +1323,7 @@
           "id": "argue",
           "tag": "講理：拿帳簿、拿封泥跟軍侯說",
           "check": {
-            "stat": "wis",
+            "stat": "wis", "v2": "cha",
             "grade": "hard"
           },
           "effect": {
