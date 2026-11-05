@@ -330,7 +330,8 @@ def test_the_core_and_the_packages_fill_every_world_slot_exactly_once():
     owners = {(hook.at, hook.slot): f.name for f in FEATURES for hook in f.world()}
     assert len(owners) == sum(len(f.world()) for f in FEATURES)  # 同一格不會有兩包
     assert owners == {("step", "feast"): "feast", ("step", "yuedan"): "figure_acts", ("close", "arena"): "bout",
-                      ("muster", "generals"): "battle", ("next", "inscriptions"): "explore"}
+                      ("muster", "generals"): "battle", ("next", "inscriptions"): "explore",
+                      ("muster", "works"): "stamina_plays"}  # 全部拆包第 39 批
     assert set(core) == set(features_core.WORLD_ORDER)
     for at, order in features_core.WORLD_ORDER.items():
         own = set(features_core.world_hooks(at))
