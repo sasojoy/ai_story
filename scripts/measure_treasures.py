@@ -155,7 +155,7 @@ def run(seed: int, profile: str | None, on: bool, steer: bool, season_one: bool)
     def refuse(*args, **kwargs):
         raise RuntimeError("量測不連模型")
 
-    # engine、bounties、rules 照模組屬性呼叫 treasures 的四種來源、extra_drop、deliver_held；Game.wield_weapon、cultivate、_legend_find
+    # engine、裝備包（features/gear 的寄放補送，第 42 批）、bounties、rules 照模組屬性呼叫 treasures 的四種來源、extra_drop、deliver_held；Game.wield_weapon、cultivate、_legend_find
     # 照類別找；bot.play_season 照模組全域呼叫 pick：都換得到
     patches = [mock.patch.object(treasures, name, wrap(name)) for name in SOURCES]
     with mock.patch.object(naming, "propose", lambda *a, **k: (None, "")), \

@@ -383,6 +383,15 @@ explore（主動搬六包第 3＋4 批加的這一段）
   `ctx._hide(msg)`、`ctx._guide(...)`、`ctx._note_action(action)`、`ctx.location_text()`、`ctx._flavor_sink()`、`ctx._kin(state)`、`ctx._load_kin(name)`、`ctx._save_kin(game)`、
   `ctx._peer(name)`、`ctx._tell_sender(inv, other, why=None)`、`ctx._write(...)`、`ctx.touched`、`ctx._real_minutes(world_seconds)`（核心：留在 Game，核心的 `place_minutes` 與輿圖包也叫）
 
+# gear（全部拆包第 42 批「裝備」；主人：裝備包。本體在 tianxia/features/gear/，Game 留一行委派回答別的包；計畫 docs/superpowers/plans/2026-11-07-裝備包-第1批.md 1.3）
+# 包要叫的核心服務，上面都已經列了，這一段只記「誰在用」，不新增：`ctx._log(msgs)`、`ctx._write(...)`、`ctx._shop_say(...)`、`ctx._shop_after(...)`、`ctx._xinde()`、
+# `ctx._menxia_entry(...)`、`ctx.state`、`ctx.content`、`ctx.world`（馬市的買餵換上、修練頁的換上拆解餵馬、寄放補送、贈禮與本命兵器用）
+- `ctx._signature_arms(record, beaten=None, later=None)`（本命兵器：打贏本人的那一刻他讓你奪走，寫進這一場戰報的「得失」、行狀照 `later` 的先後；
+  大勢人物包 `features/figure_acts/challenge.py` 經它叫；本體在 `features/gear/gift_actions.py`，Game 留一行委派。原本列在三、過渡 `# figure_acts`）
+- `ctx._people_here()`（此刻在身邊的人物：名將贈禮「當面交給你」或「託人送來」要分；測試直接叫。主人：裝備包〔總表附錄甲挑錯改裁〕）
+- `ctx._general_gifts()`、`ctx._gift_entry(lines)`（名將贈禮與另起的那一則江湖紀錄：核心 `event_check` 的 `answer_event`、`answer_branch` 與 `choose` 後半叫，
+  位置固定在效果套完之後）
+
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
 explore（主動搬六包第 3＋4 批加的這一段）
@@ -452,8 +461,7 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
   `ctx._duel_finish(tier, line)`（頭目戰收場；`scripts/sim_season_one.py` 換掉 `Game._duel_finish` 數頭目戰打成怎樣）
 
 # figure_acts（全部拆包第 31 批：大勢人物的行動包叫的、主人還沒搬的；原本這裡還有 socialize 那一段的 `ctx._snubbed_character`，第 31 批大勢人物成包，改列二、查詢服務 `# figure_acts`）
-- `ctx._signature_arms(record, beaten=None, later=None)`（主人裝備〔本命兵器 signature_arms，第 42 批〕：打贏本人的那一刻他讓你奪走本命兵器，寫進這一場戰報的
-  「得失」；挑戰本人打贏的那一串叫它。本體留在 Game 上，主人成包時改成二、查詢服務）
+（`ctx._signature_arms`：全部拆包第 42 批裝備成包，改列二、查詢服務 `# gear`）
 
 # stamina_plays（全部拆包第 39 批「體力玩法＋閉關」：設伏劫道、屯糧練兵搬進 features/stamina_plays；計畫 docs/superpowers/plans/2026-11-06-體力玩法閉關-第39批.md 1.3）
 - `ctx._raid_bounty(target)`（主人懸賞榜〔第 45 批〕：伏兵贏了、揭了通緝他就交差，截殺也叫；本體留在 Game 上，懸賞榜成包時改成二、查詢服務）。
@@ -505,6 +513,9 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 
 # smithy（全部拆包第 41 批）
 - `ctx.smith_result`（`smith_forge` 寫、server 的 `api_do` 在鎖裡讀：上一次店面直接開爐的出爐卡，shopview.forged_card；被拒絕是 None。屬性留在 `Game.__init__`）
+
+# gear（全部拆包第 42 批）
+- `ctx._affinity_before`（`choose` 與核心 `event_check` 的 `answer_event`、`answer_branch` 寫、`_people_here` 讀的暫時旗標：這一下之前的情誼；屬性留在 `Game.__init__`，照鐵匠鋪 `smith_result`）
 
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """

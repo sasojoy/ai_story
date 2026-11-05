@@ -1,0 +1,64 @@
+"""馬市（全部拆包第 42 批；裝備四欄設計 5.5）：第二層選單與選單上的選擇、進門。原本 Game 上的 2 個方法（_market_options、_market）加 _act 裡 act:market 的三行，
+Game 留 _market_options、_market 兩個一行委派（核心原位的選單 _everyday_options 與測試叫）。choose 的 market: 由包的 choose 掛鉤接走（Outcome.run 叫 market）；
+act:market 由包的 act 子動詞接走（enter）。選單開著與否（picking_market）、入口、收店不登記 Shop，留在 Game 原位（計畫 1.9）。
+計畫 docs/superpowers/plans/2026-11-07-裝備包-第1批.md 1.1。第一個參數 ctx 是 Game（手冊 3.3）。
+規則照模組屬性叫（mounts.buy、mounts.feed……：量表腳本換掉模組上的，這裡照樣打得到）。"""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from tianxia import equipment  # 共用規則層
+from tianxia import mounts  # 共用規則層
+from tianxia import territory  # 共用規則層
+from tianxia.core.option import Option  # 核心
+
+if TYPE_CHECKING:
+    from tianxia.engine import Game
+
+
+def market_options(ctx: Game) -> list[Option]:
+    """馬市的第二層選單（裝備四欄設計 5.5）：一顆「買」（駑馬下品，寫省幾成體力與價錢；買不了的灰掉寫為什麼），
+    身上有馬時一顆「餵」（寫用哪一種素材；不餓、沒素材灰掉寫為什麼），裝備庫裡每一匹一顆「換上」，最後「離開」。都不花體力。"""
+    s, c, p = ctx.state, ctx.content, ctx.state.player
+    item = mounts.shop_item(s, c)
+    problem = mounts.buy_problem(s, c)
+    note = problem or f"{mounts.price(s, c)} 兩{territory.price_note(s, c)}"  # 名聲 4.1：馬價後面寫原因
+    # 三種鈕的寫法都待 joy 潤；飽足度這個叫法讀 mounts.WEAR_WORD，不寫死。網頁照 FB-132 把 market: 的鈕切成不折行的小段
+    opts = [Option(id=mounts.BUY, enabled=problem is None,
+                   label=f"買【{mounts.name_of(item)}】（{mounts.grade(item)}・疾行省 {mounts.pct(mounts.fresh_power(c, item))} 體力・{note}）")]
+    if p.mount is not None:
+        opts.append(Option(id=mounts.FEED, enabled=mounts.feed_problem(s, c) is None,
+                           label=f"餵【{mounts.name_of(p.mount)}】（{mounts.WEAR_WORD} {p.mount.edge}・{mounts.feed_note(s, c)}）"))
+    for m in equipment.in_slot(p, "mount"):
+        opts.append(Option(id=f"{mounts.WIELD}{m.id}",
+                           label=f"換上【{mounts.name_of(m)}】（{mounts.grade(m)}・{mounts.WEAR_WORD} {m.edge}）"))
+    opts.append(Option(id=mounts.BACK, label=mounts.LEAVE))
+    return opts
+
+
+def market(ctx: Game, arg: str) -> list[str]:
+    """馬市上的選擇：買、餵、換上，或離開（收起選單）。做完選單還開著，可以接著挑。店面上馬販那一句照這一下的擋法記（1.4）。"""
+    s, c = ctx.state, ctx.content
+    verb, _, rest = arg.partition(":")
+    if verb == "back":
+        mounts.close_market(s.player)
+        return [mounts.LEFT]
+    if verb == "buy":
+        ctx._shop_after(mounts.buy_problem(s, c), "buy")
+        return mounts.buy(s, c)
+    if verb == "feed":
+        ctx._shop_after(mounts.feed_problem(s, c), "feed")
+        return mounts.feed(s, c)
+    if verb == "wield":
+        msgs = mounts.wield(s, c, rest)
+        ctx._shop_say("wield" if msgs[0].startswith(equipment.WIELDED.partition("{")[0]) else "refused")
+        return msgs
+    return ["（此刻無法這麼做。）"]
+
+
+def enter(ctx: Game) -> list[str]:
+    """act:market（裝備包的 act 子動詞接走，原本是 Game._act 中段那幾行）：走進馬市。"""
+    p = ctx.state.player
+    p.picking_market, p.shop_clue = True, ""  # 打開馬市（見 market_options），不花體力
+    ctx._shop_say("enter")  # 店面上馬販那一句（1.4）
+    return [mounts.ENTERED]

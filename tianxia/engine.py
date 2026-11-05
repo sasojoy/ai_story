@@ -151,6 +151,10 @@ from .features.smithy import trade_actions as smithy_trade
 from .features.smithy import gear_actions as smithy_gear
 from .features.smithy import divine_actions as smithy_divine
 from .features.smithy import clue as smithy_clue
+from .features.gear import market_actions as gear_market  # 過渡：Game 上馬市選單與選擇的 2 個一行委派（全部拆包第 42 批）
+from .features.gear import bench_actions as gear_bench  # 過渡：Game 上修練頁換上、餵馬、拆解的 4 個一行委派（全部拆包第 42 批）
+from .features.gear import gift_actions as gear_gifts  # 過渡：Game 上寄放補送、名將贈禮、本命兵器的 5 個一行委派（全部拆包第 42 批）
+from .features.gear import views as gear_views  # 過渡：Game 上修練頁裝備與神器譜的 2 個一行委派（全部拆包第 42 批）
 from .features.cultivation import actions as cultivation_actions  # 過渡：Game 上修練頁動作的 22 個一行委派（全部拆包第 23 批）
 from .features.cultivation import view as cultivation_view  # 過渡：Game 上修練頁唯讀資料的 11 個一行委派（全部拆包第 23 批）
 from .features.cultivation.actions import MELT_MANY_PROLOGUE  # noqa: F401  過渡：tests/core/test_prologue.py 從 engine 拿
@@ -1790,8 +1794,7 @@ class Game:
             elif kind == "bounty":
                 msgs = self._bounty(arg)
             # （smith：鐵匠鋪第二層選單上的每一顆，全部拆包第 41 批換成鐵匠鋪包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
-            elif kind == "market":
-                msgs = self._market(arg)
+            # （market：馬市第二層選單上的每一顆，全部拆包第 42 批換成裝備包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉；FB-195 被搶的那一句仍在上面 choose 前段）
             # （donate：軍需官那一串的選擇；dadian：打點那一間店的離開。全部拆包第 43 批換成銀兩出口包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             # （arena:join／fight／back：單挑包的 choose 掛鉤接走，上面 taken 那一支；全部拆包第 12 批）
             # （sect：拜入門派〔一類一顆，_sect_options〕，全部拆包第 35 批換成陣營包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
@@ -2001,8 +2004,7 @@ class Game:
         if kind == "bounty":
             return bounties.BOARD
         # （smith：鐵匠鋪的標題，全部拆包第 41 批換成鐵匠鋪包 choose 掛鉤的 Outcome.title，拿掉）
-        if kind == "market":
-            return mounts.MARKET
+        # （market：馬市的標題，全部拆包第 42 批換成裝備包 choose 掛鉤的 Outcome.title，拿掉）
         # （donate、dadian 的標題：全部拆包第 43 批換成銀兩出口包 choose 掛鉤的 Outcome.title 與 act 子動詞的 Verb.title，拿掉）
         # （kind == "aid"、"plan"：標題由大勢人物包的 choose 掛鉤給，全部拆包第 31 批）
         # （kind == "arena"：報名、挑人的標題由單挑包的 choose 掛鉤給，全部拆包第 12 批）
@@ -2039,7 +2041,7 @@ class Game:
             "rank2": f"{action2.name if action2 else '第二階行動'}・{here}",
             "bounties": f"{bounties.BOARD}・{here}",
             # （smith：「鐵匠鋪・此地」由鐵匠鋪包的 act 子動詞給，上面 owned 那一行；全部拆包第 41 批）
-            "market": f"{mounts.MARKET}・{here}",
+            # （market：「馬市・此地」由裝備包的 act 子動詞給，上面 owned 那一行；全部拆包第 42 批）
             # （arena：「擂台・此地」由單挑包的 act 子動詞給，上面 owned 那一行；全部拆包第 12 批）
             "heal": f"療傷・{here}",
         }
@@ -2290,11 +2292,7 @@ class Game:
             self._shop_say("enter")  # 店面上榜吏那一句（店面獨立介面設計 1.4）
             return [f"你擠到{bounties.BOARD}前，看上面貼了些什麼。"]
         # （smith：打開鐵匠鋪，全部拆包第 41 批換成鐵匠鋪包的 act 子動詞〔上面 features_core.act 接走〕，拿掉）
-        if what == "market":
-            p = self.state.player
-            p.picking_market, p.shop_clue = True, ""  # 打開馬市（見 _market_options），不花體力
-            self._shop_say("enter")  # 店面上馬販那一句（1.4）
-            return [mounts.ENTERED]
+        # （market：打開馬市，全部拆包第 42 批換成裝備包的 act 子動詞〔上面 features_core.act 接走〕，拿掉）
         # （act:arena：打開擂台由單挑包的 act 子動詞接走，最上面 features_core.act 那一行；全部拆包第 12 批）
         if what == "heal":  # 醫館療傷（企劃者 2026-10-12）：同修練頁的療傷鈕，不花體力
             return self._heal_msgs()
@@ -2672,42 +2670,12 @@ class Game:
         return smithy_shelf.smith(self, arg)
 
     def _market_options(self) -> list[Option]:
-        """馬市的第二層選單（裝備四欄設計 5.5）：一顆「買」（駑馬下品，寫省幾成體力與價錢；買不了的灰掉寫為什麼），
-        身上有馬時一顆「餵」（寫用哪一種素材；不餓、沒素材灰掉寫為什麼），裝備庫裡每一匹一顆「換上」，最後「離開」。都不花體力。"""
-        s, c, p = self.state, self.content, self.state.player
-        item = mounts.shop_item(s, c)
-        problem = mounts.buy_problem(s, c)
-        note = problem or f"{mounts.price(s, c)} 兩{territory.price_note(s, c)}"  # 名聲 4.1：馬價後面寫原因
-        # 三種鈕的寫法都待 joy 潤；飽足度這個叫法讀 mounts.WEAR_WORD，不寫死。網頁照 FB-132 把 market: 的鈕切成不折行的小段
-        opts = [Option(id=mounts.BUY, enabled=problem is None,
-                       label=f"買【{mounts.name_of(item)}】（{mounts.grade(item)}・疾行省 {mounts.pct(mounts.fresh_power(c, item))} 體力・{note}）")]
-        if p.mount is not None:
-            opts.append(Option(id=mounts.FEED, enabled=mounts.feed_problem(s, c) is None,
-                               label=f"餵【{mounts.name_of(p.mount)}】（{mounts.WEAR_WORD} {p.mount.edge}・{mounts.feed_note(s, c)}）"))
-        for m in equipment.in_slot(p, "mount"):
-            opts.append(Option(id=f"{mounts.WIELD}{m.id}",
-                               label=f"換上【{mounts.name_of(m)}】（{mounts.grade(m)}・{mounts.WEAR_WORD} {m.edge}）"))
-        opts.append(Option(id=mounts.BACK, label=mounts.LEAVE))
-        return opts
+        """馬市的第二層選單：買、餵、換上、離開（裝備包 market_actions；全部拆包第 42 批）。"""
+        return gear_market.market_options(self)
 
     def _market(self, arg: str) -> list[str]:
-        """馬市上的選擇：買、餵、換上，或離開（收起選單）。做完選單還開著，可以接著挑。店面上馬販那一句照這一下的擋法記（1.4）。"""
-        s, c = self.state, self.content
-        verb, _, rest = arg.partition(":")
-        if verb == "back":
-            mounts.close_market(s.player)
-            return [mounts.LEFT]
-        if verb == "buy":
-            self._shop_after(mounts.buy_problem(s, c), "buy")
-            return mounts.buy(s, c)
-        if verb == "feed":
-            self._shop_after(mounts.feed_problem(s, c), "feed")
-            return mounts.feed(s, c)
-        if verb == "wield":
-            msgs = mounts.wield(s, c, rest)
-            self._shop_say("wield" if msgs[0].startswith(equipment.WIELDED.partition("{")[0]) else "refused")
-            return msgs
-        return ["（此刻無法這麼做。）"]
+        """馬市上的選擇：買、餵、換上，或離開（裝備包 market_actions；choose 的 market: 由包的 choose 掛鉤接走，測試直接叫這裡）。"""
+        return gear_market.market(self, arg)
 
     def _shop_say(self, key: str, problem: str | None = None) -> None:
         """店面上掌櫃那一句（店面獨立介面設計 1.4、6.1）：記下店裡最後一件事的情況鍵、挑句子的種子（這一刻的季的時間），與被拒的那一句
@@ -2796,38 +2764,20 @@ class Game:
         return smithy_gear.temper_item(self, item_id)
 
     def wield_weapon(self, item_id: str) -> list[str]:
-        """修練頁的「換上」（兵器設計 2.2、裝備四欄設計 2.3）：武器、防具、寶物哪裡都能換（含路上、閉關中；寶物不設限制，企劃者 2026-10-11），
-        坐騎路上不能換（equipment.wield 擋）、不花體力，換進那一件自己的欄位；寫一則修練紀錄。網頁照舊送 weapon 這個鍵
-        （MENXIA_ACTIONS["wield"]），防具（甲:N）、坐騎（騎:N）、寶物（寶:N）的 id 也走它。"""
-        msgs = self._log(equipment.wield(self.state, self.content, item_id, equipment.WIELDABLE))
-        if msgs and msgs[0].startswith("你換上了"):
-            self._menxia_entry(msgs[0], self._xinde())
-        return msgs
+        """修練頁的「換上」（裝備包 bench_actions；MENXIA_ACTIONS["wield"]）。"""
+        return gear_bench.wield_weapon(self, item_id)
 
     def feed_mount(self) -> list[str]:
-        """修練頁坐騎那一列的「餵」（裝備四欄 5.4，MENXIA_ACTIONS["feed"]）：閒著時哪裡都能餵（不在路上、不在閉關），
-        一個一階素材餵滿、不花銀兩；寫一則修練紀錄。整季機器人與假人也走這裡（bot.feed_mount）。"""
-        msgs = self._log(mounts.feed(self.state, self.content))
-        if msgs and msgs[0].startswith(mounts.FED_PREFIX):
-            self._menxia_entry(msgs[0], self._xinde())
-        return msgs
+        """修練頁坐騎那一列的「餵」（裝備包 bench_actions；MENXIA_ACTIONS["feed"]，整季機器人與假人也走這裡）。"""
+        return gear_bench.feed_mount(self)
 
     def dismantle_weapon(self, item_id: str) -> list[str]:
-        """修練頁裝備庫的「拆解」（兵器設計 4.7.1、裝備四欄設計 4.8）：武器、防具哪裡都能拆、不花體力；坐騎、寶物不能拆；寫一則修練紀錄。"""
-        msgs = self._log(equipment.dismantle(self.state, self.content, item_id, equipment.DISMANTLABLE))
-        if msgs and msgs[0].startswith(equipment.DISMANTLE_PREFIX):
-            self._menxia_entry(msgs[0], self._xinde())
-        return msgs
+        """修練頁裝備庫的「拆解」（裝備包 bench_actions；MENXIA_ACTIONS["dismantle"]）。"""
+        return gear_bench.dismantle_weapon(self, item_id)
 
-    @_not_while_preparing
     def dismantle_many(self, item_ids: list[str]) -> list[str]:
-        """批量拆解（鐵匠鋪與合成流程 3.4；MENXIA_ACTIONS["dismantle_many"]，見 equipment.dismantle_many）：裝備庫裡勾好的一次拆完，
-        照 melt_many 的做法——拆不了的跳過寫原因、拆成了寫一則修練紀錄（標記是那一句總結）。同 dismantle_weapon 不擋地點、不花體力。"""
-        held = len(self.state.player.rack)
-        msgs = self._log(equipment.dismantle_many(self.state, self.content, item_ids))
-        if len(self.state.player.rack) < held:
-            self._menxia_entry(msgs[0], self._xinde())
-        return msgs
+        """批量拆解（裝備包 bench_actions，裝飾器 not_while_preparing 在包的函式上；MENXIA_ACTIONS["dismantle_many"]）。"""
+        return gear_bench.dismantle_many(self, item_ids)
 
     def _talked_out_note(self) -> str:
         return socialize_view.talked_out_note(self)
@@ -3539,61 +3489,24 @@ class Game:
         self._save_season()  # 補到第幾個人記在共用賽季裡
 
     def _deliver_held_gear(self) -> None:
-        """寄放的東西補發（裝備四欄 6.5）：懸賞的重賞、名將贈禮在裝備庫滿了時寄放在 PlayerState.held_gear；同步與快轉時那一欄開著、
-        身上空著或裝備庫有空位就補，一次補到裝備庫滿為止，補不完的留著（treasures.deliver_held）。閉關中也補（寶物閉關中本來就能換，
-        2.3【定】）。整季機器人只 advance、不 sync，所以 advance 也叫，不然整季模擬裡寄放的東西永遠補不回來。補了就寫一則江湖紀錄。"""
-        lines = treasures.deliver_held(self.state, self.content)
-        if lines:
-            self._write(treasures.HELD_TITLE, lines)
+        """寄放的東西補發（裝備包 gift_actions；sync、advance 叫，位置固定在 _deliver_big_events 之後）。"""
+        gear_gifts.deliver_held_gear(self)
 
     def _general_gifts(self) -> list[str]:
-        """名將贈禮（裝備四欄 6.4）：情誼到 gift_affinity 的人物把贈禮交給你，每位名將每季全服只送一人（treasures.gifts_due 記進
-        WorldState.general_gifts，這一下動作最後的 _save_season 存回去）。choose 與 answer_event 最後各叫一次：情誼從對話（companion_agent）、
-        事件（Effect.affinity）、隨口應對來都走得到，不必在兩條路各寫一份。"""
-        given = dict(self.state.world.general_gifts)
-        msgs = treasures.gifts_due(self.state, self.content, self._people_here())
-        for cid, who in self.state.world.general_gifts.items():
-            if cid not in given and who == self.state.player.name:  # 行狀：哪一位名將送的（送的是什麼，annals.watch 照裝備記）
-                annals.note(self.state, self.content, annals.FIGURE, f"{annals.figure_name(self.content, cid)}看重你，送了你一份贈禮。", 4, figure=cid)
-        return msgs
+        """名將贈禮（裝備包 gift_actions；choose 後半與事件檢定的 answer_event、answer_branch 叫）。"""
+        return gear_gifts.general_gifts(self)
 
     def _people_here(self) -> set[str]:
-        """此刻站在你身邊的人物：同 _figures_here 的所在（人物表上的人照此刻的所在與狀態，其餘照 recruit_at、talk_at），不限深度互動；
-        在路上一個都沒有。再加上這一下加了情誼的人（終審 F2：情誼只從當面的事來——對話、晉升事件、伏筆收尾——劉關張在婁桑村的晉升
-        事件裡當面出現，不在他們平常站的地方）。名將贈禮與本命兵器照它寫當面交給你還是託人送來（FB-139、FB-149）。"""
-        s, c = self.state, self.content
-        before = self._affinity_before or {}
-        raised = {cid for cid, v in s.player.affinities.items() if self._affinity_before is not None and v > before.get(cid, 0)}
-        if s.player.journey is not None:
-            return raised
-        here, placed = s.player.location, figures.placed_characters(s, c)
-        return raised | {cid for cid, ch in c.characters.items()
-                         if (placed[cid] == here if cid in placed else here in (ch.recruit_at, ch.talk_at))}
+        """此刻站在你身邊的人物（裝備包 gift_actions；名將贈禮與本命兵器照它寫當面交給你還是託人送來）。"""
+        return gear_gifts.people_here(self)
 
     def _gift_entry(self, lines: list[str]) -> None:
-        """名將贈禮與本命兵器（情誼那條路）另起一則江湖紀錄（FB-139、FB-149），排在當下那個動作的那一則之後。沒有就不寫。"""
-        if lines:
-            journal.add_entry(self.state, JournalEntry(time=self.state.world.time, title=treasures.GIFT_TITLE, tag=lines[0], lines=lines[1:]))
+        """名將贈禮與本命兵器另起一則江湖紀錄（裝備包 gift_actions）。"""
+        gear_gifts.gift_entry(self, lines)
 
     def _signature_arms(self, record=None, beaten: str | None = None, later: list | None = None) -> list[str]:
-        """名將本命兵器（兵器設計 4.10；打造第三批，signature_arms.due）：情誼到 signature_affinity 他送你，打贏他本人 signature_wins 次
-        他讓你奪走；每位名將每季全服一人（WorldState.signature_arms，這一下動作最後的 _save_season 存回去，同名將贈禮）。choose 與
-        answer_event 最後各叫一次（情誼從對話、事件、隨口應對來都走得到）；_challenge 打贏時帶 record、beaten 先叫一次，那一把寫進
-        這一場戰報的「得失」（同寶物掉落）——只寫被打敗的那一位的那一把：同一下動作裡別位名將的情誼也到了、一起給的，不寫進這一場
-        （終審 minor）。行狀記一筆（人物）；later 給了（_challenge）就先放進去，等那一場自己的行狀記完再記，行狀才照時間先後。
-        不擲骰：不碰 Game.rng。"""
-        s, c = self.state, self.content
-        items, msgs = signature_arms.due(s, c, beaten=beaten, present=self._people_here())
-        for item in items:
-            arm = next((a for a in c.gear.signature_arms if a.character == item.signature), None)
-            if record is not None and beaten is not None and arm is not None and arm.figure == beaten:
-                record.materials.append(signature_arms.GAIN_LINE.format(name=item.name))
-            note = (signature_arms.annal_line(c, item, s.world.signature_arms[item.signature].via), item.signature)
-            if later is None:
-                annals.note(s, c, annals.FIGURE, note[0], 4, figure=note[1])
-            else:
-                later.append(note)
-        return msgs
+        """名將本命兵器（裝備包 gift_actions；choose、事件檢定叫，大勢人物包的挑戰本人打贏時經 ctx 叫）。"""
+        return gear_gifts.signature_arms_due(self, record, beaten, later)
 
     def _deliver_renames(self) -> None:
         """別人替手上那一門定了名，下一次同步補一則江湖紀錄（FB-083；修練包 actions.deliver_renames，全部拆包第 23 批）：sync 照原位叫
@@ -5952,8 +5865,8 @@ class Game:
         return cultivation_view.holdings(self)
 
     def gear_rows(self) -> dict:
-        """修練頁「裝備」那一塊的資料（skillview.gear_rows；裝備四欄設計 2.5）。"""
-        return skillview.gear_rows(self.state, self.content, self.world)
+        """修練頁「裝備」那一塊的資料（裝備包 views）。"""
+        return gear_views.gear_rows(self)
 
     def art_rows(self) -> list[dict]:
         return cultivation_view.art_rows(self)
@@ -7309,12 +7222,8 @@ class Game:
         return "\n\n---\n\n".join(parts)
 
     def divine_book_view(self) -> list[dict]:
-        """見聞「榜單」的神器譜（打造隱藏配方設計 5.5；Joy 2026-10-17「神器譜移到排行榜」，原本接在江湖史後面）：跨季，新的一季在前，
-        同一季打出來的神器在前、名將本命兵器在後。一筆 {season, name, text, ref}（ref 認那一把，點開看卡用，leaderboard.gear_card）；都沒有是空的。"""
-        rows = forge_secrets.divine_entries(self.world.divine_records())
-        rows += signature_arms.book_entries(self.content, self.world.signature_records())
-        rows.sort(key=lambda row: -row[0])  # 穩定排序：同一季照原來的先後
-        return [{"season": season, "name": name, "text": text, "ref": ref} for season, name, text, ref in rows]
+        """見聞「榜單」的神器譜（裝備包 views；/api/boards 最後一張）。"""
+        return gear_views.divine_book_view(self)
 
     # ── 江湖紀錄 ──────────────────────────────────────────
 

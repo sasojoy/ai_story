@@ -146,7 +146,7 @@ def run(seed: int, profile: str | None, mounts_on: bool, steer: bool, gait: str,
     def refuse(*args, **kwargs):
         raise RuntimeError("量測不連模型")
 
-    # engine 照模組屬性呼叫 mounts.hunger、mounts.buy、mounts.feed，照類別找 Game._depart、Game._lose_silver，
+    # engine 與裝備包（features/gear 的馬市、修練頁餵馬，第 42 批）照模組屬性呼叫 mounts.hunger、mounts.buy、mounts.feed，照類別找 Game._depart、Game._lose_silver，
     # bot.play_season 照模組全域呼叫 pick：都換得到
     with mock.patch.object(naming, "propose", lambda *a, **k: (None, "")), \
             mock.patch.object(naming, "pick", lambda *a, **k: (None, "")), \
