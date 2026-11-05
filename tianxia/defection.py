@@ -177,12 +177,12 @@ def _clear_own(p: PlayerState) -> None:
 _CLEAR_CORE = {
     "progress": lambda p: _clear_own(p),
     # 機緣的完成、計數、物品全部作廢（機緣文件第一節；正式版乙一）；聽過的線索留著（裁決 E5.2）
-    "opportunities": lambda p: opportunities.clear(p),  # 過渡：第 34 批（機緣進軍情包，那一格改由包登記）
+    "opportunities": lambda p: opportunities.clear(p),  # 過渡：待搬（第 34 批）機緣進軍情包，那一格改由包登記
 }
 # 還開著的集體密謀退出，做過的那幾處不再算（乙二；企劃者 2026-10-06 裁決）；全服的那一份在 state.world
-_LEAVE_CORE = {"plots": lambda s: opportunities.leave_plots(s)}  # 過渡：第 34 批（密謀進軍情包，那一格改由包登記）
+_LEAVE_CORE = {"plots": lambda s: opportunities.leave_plots(s)}  # 過渡：待搬（第 34 批）密謀進軍情包，那一格改由包登記
 # 手上舊陣營掛的懸賞作廢、每張一句（FB-151）；改的是共用的季，Game.choose 結尾統一存
-_STRANDED_CORE = {"bounties": lambda s, c, side: bounties.drop_stranded(s, c, side)}  # 過渡：第 45 批（懸賞包登記）
+_STRANDED_CORE = {"bounties": lambda s, c, side: bounties.drop_stranded(s, c, side)}  # 過渡：待搬（第 45 批）懸賞包登記
 
 
 def defect(state: GameState, content: Content, target: FactionDef, ally: str | None = None) -> list[str]:
