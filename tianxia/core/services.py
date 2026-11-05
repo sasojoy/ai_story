@@ -265,8 +265,8 @@ explore（主動搬六包第 3＋4 批加的這一段）
 
 # zhuan（全部拆包第 29 批「列傳」；主人：列傳包）
 - 共用的字與小函式（從這個模組 import，列傳包的 zhuan_end re-export）：`ART`（mall.EFFECTS 的列傳插畫鍵）、`ART_NO_SIDE`、`ART_FREE`、`art_problem(state, content, season)`
-  （商城：這一季用不上的插畫票不賣）、`illustration_for(state, content, season)`（行狀 annals.standing 的插畫圖庫鍵）、`Writer`、`writers(...)`、
-  `AFFINITY／TIER／BOUGHT／REASONS`（行狀 annals.standing 的評曰寫手）；原本是 `tianxia/zhuan_end.py` 的
+  （商城：這一季用不上的插畫票不賣）、`illustration_for(state, content, season)`（行狀 zhuan/standing.py 的 standing 的插畫圖庫鍵）、`Writer`、`writers(...)`、
+  `AFFINITY／TIER／BOUGHT／REASONS`（行狀 zhuan/standing.py 的 standing 的評曰寫手）；原本是 `tianxia/zhuan_end.py` 的
 
 # military（全部拆包第 33 批「軍情一」；主人：軍情包）
 - `ctx._duty_option(name)`（主人：出陣包 features/sortie；軍令卡上第 1 階守勢行動那一顆的鈕，共用出陣的次數與字；軍情的 `order_options` 在有戰線的地方叫它。
@@ -660,7 +660,7 @@ def checkin_on(content: Content, world: WorldState | None) -> bool:
     """簽到開著沒：設定打開（只有 season21），這一季是 21 天季（開季時蓋的章），而且還沒收季。週末與 14 天一律關著。"""
     return content.config.checkin.enabled and calendar.season21_on(world, content) and not world.ended
 
-# zhuan（全部拆包第 29 批「列傳」）：原本寫在 tianxia/zhuan_end.py；核心的行狀（annals.standing 的插畫鍵與寫評曰的人物）與商城（插畫票用不上不賣）要用、
+# zhuan（全部拆包第 29 批「列傳」）：原本寫在 tianxia/zhuan_end.py；核心的行狀（zhuan/standing.py 的 standing 的插畫鍵與寫評曰的人物）與商城（插畫票用不上不賣）要用、
 # 列傳包又不能被核心與別包 import，搬到這裡，zhuan_end re-export（`zhuan_end.illustration_for is services.illustration_for`）
 ART = "zhuan_art"  # mall.EFFECTS 的鍵（列傳插畫票）
 ART_NO_SIDE = "沒投靠一方的人，列傳配不了插畫。"  # 插畫票不賣的原因（FB-845）

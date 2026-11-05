@@ -29,7 +29,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
 
-from tianxia import annals  # 過渡：待搬（行狀記自創一門，全部拆包第 29 批）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import arts as arts_mod, library, might, moves, naming, tactics, team, treasures, zh  # 共用規則層、核心
 from tianxia.martial_arts import ATTRIBUTES, QUALITY_BASE_POWER, QUALITY_TOP_POWER, MartialArt, scaled
 from tianxia.models import Content, TacticDef

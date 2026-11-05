@@ -17,7 +17,7 @@ from . import arts as arts_mod
 # （cultivation：破境卡 ascend 全部拆包第 23 批搬進修練包，engine 不再用，拿掉）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
-    allied, annals, armor, atlas, battle_instance, battlelog, bounties, calendar, clinic, conquest, create, defection, divine, economy, encounter, equipment,
+    allied, armor, atlas, battle_instance, battlelog, bounties, calendar, clinic, conquest, create, defection, divine, economy, encounter, equipment,
     fight_llm, figure_life, figures, four_tiers, forge_secrets, fusion, gender, howto, insight_fx, insights, journal, library, mapdata, martial_arts, plans,
     materials, mounts, naming, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skillview, smithing,
@@ -74,6 +74,7 @@ from .rules import (
 from .rules import jianfa  # 減法季（Config.jianfa＋開季的章；子開關照名字問）
 from .sqlite_world import open_world
 from .wallet import Wallet
+from .core import annal_base as annals  # 行狀記一筆（第 29 批之二）
 from .core import features as features_core  # 核心照 FEATURES 問每一包（開發規範手冊 3.3）
 from .core.option import IDLE_MARK, Option  # 選單上的一顆（搬進核心：功能包要做選項）；閒著的選單一定有的那一顆（走一趟要認它）
 from .core.services import NO_SUCH_PLAYER, PAUSED_TEXT, WalletService, drill_share, wallet_on  # 共用的字與小函式、錢包服務（3.10）
@@ -566,7 +567,7 @@ class Game:
         if old.player.annals:  # 行狀跟著角色重來：先把上一季的存起來，季末的傳照它寫（玩家傳）
             self.world.save_annals(
                 old.player.season_number, old.player.name, [e.model_dump() for e in old.player.annals],
-                annals.profile(old, self.content, season=past),
+                self._zhuan_profile(old, past),
             )
         features_core.on_season_end(self)  # 功能包：舊的那一季要丟之前（self.state 還是舊的；開發規範手冊 3.3）
         fresh = new_game_state(self.content, old.player.name)
@@ -656,6 +657,9 @@ class Game:
 
     def _zhuan_past(self, old: GameState) -> WorldState | None:
         return zhuan_actions.past(self, old)
+
+    def _zhuan_profile(self, old: GameState, season: WorldState | None) -> dict:
+        return zhuan_actions.profile(self, old, season)
 
     def _season_grant(self, old: GameState) -> None:
         """三陣營四勝利（減法季設計 3.3）：上一季收季時論了功的人（那一季的 WorldState.final_tiers），新的一季開局照那一階發起手資源

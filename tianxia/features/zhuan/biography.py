@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass, field
 
 from tianxia import gender, zh
-from tianxia.annals import DUEL, ERRAND, GROUPS, MARK, STANCE, TIER, XINGSHI  # 過渡：待搬（行狀）
+from tianxia.core.annal_base import DUEL, ERRAND, GROUPS, MARK, STANCE, TIER, XINGSHI  # 核心（行狀的種類，第 29 批之二）
 
 MODEL, RULE = "model", "rule"
 TITLE = "{name}傳"
