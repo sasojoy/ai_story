@@ -3443,30 +3443,7 @@ def api_map_state(request: Request):
     return look(game, lambda g: g.map_state())
 
 
-@app.post("/api/travel")
-def api_travel(request: Request, body: dict = Body(...)):
-    """「安排前往」（步行、疾行）：出發了就回 {main, arrived: true}，畫面回江湖、場景寫路上或抵達的地點；
-    按鈕是舊的而走不成時（例如打開輿圖之後才冒出事件）回 {arrived: false, map, reason}，留在輿圖、寫出原因。"""
-    game = _game(request)
-    target = str(body.get("place", ""))
-    mode = str(body.get("mode") or "walk")
-    refused: list[str] = []
-
-    def go(g: Game) -> list[str]:
-        reason = g.travel_refusal(target, mode)
-        if reason is not None:
-            refused.append(reason)
-        return g.travel(target, mode)
-
-    act(game, go)
-    if not refused:  # 走不成的什麼都沒變（同步而已），其他分頁不必刷新
-        _play_did(game, "travel")
-        _tell_tabs(game)
-    out = {"main": look(game, main_view), "arrived": not refused}
-    if refused:
-        out["reason"] = refused[0]
-        out["map"] = look(game, lambda g: map_view(g, str(body.get("layer") or DEFAULT_LAYER), target))
-    return out
+# POST /api/travel（安排前往）：全部拆包第 47 批搬進移動包 tianxia/features/travel/routes.py，殼照 FEATURES 掛（features_core.routers）。
 
 
 @app.post("/api/password")
