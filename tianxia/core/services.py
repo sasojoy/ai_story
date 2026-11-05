@@ -259,6 +259,18 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._duty_option(name)`（主人：出陣包 features/sortie；軍令卡上第 1 階守勢行動那一顆的鈕，共用出陣的次數與字；軍情的 `order_options` 在有戰線的地方叫它。
   原本核心的 `_order_options` 直接叫 `self._duty_option`，記在邊界測試 GAME_DELEGATE_CALLERS 的 `(_order_options, _duty_option)`，軍情成包改經 ctx 叫）
 
+# military（全部拆包第 34 批「軍情二」：機緣與伏筆搬進軍情包；主人：軍情包。計畫 docs/superpowers/plans/2026-11-06-軍情包-第2批.md 1.2、1.4）
+- 軍情包自己用到的核心服務，上面都已經列了，這一段不新增：`ctx._admin_refusal`、`ctx._admin_target`、`ctx._save_target`、`ctx._log`、`ctx._write`、
+  `ctx._timetable_event`（管理者給機緣、給片段）、`ctx.world`、`ctx.rng`、`ctx.state`、`ctx.content`。共用的字 `NO_SUCH_PLAYER` 從這個模組 import
+- 查詢服務（軍情包回答別的包；本體在 `features/military/fs_actions.py`、`opp_actions.py`，Game 留一行委派）：
+  - `ctx._omen_talk_options(companion_id)`（跟人物對話時的伏筆片段選項，後面接機緣的話題；人物情誼包的 talk_actions 問）
+  - `ctx._fs_hear_talk(companion_id, chain_id, index)`、`ctx._opp_hear_topic(companion_id, topic)`（按下 `talk:clue:`、`talk:opp:` 聽到的那幾句；同上）
+  - `ctx._opp_after_success(kind, loc_id)`（第 2 階與守勢行動之後替累積型機緣記一次、收容流民；出陣包的守勢行動 train_actions.duty 問）
+  - 反過來，軍情包要問別的包的：沒有新增
+- 核心與共用規則層讀機緣、伏筆的「只讀」那一半不經 ctx、不經 Game，直接 import 核心本體 `tianxia/core/omen_base.py`：`need`、`scale`（伏筆需求量的換算；
+  rules 的晉升條件 grain_min）、`TIANJI`、`TIANJI_ANSWER`、`FIGURE_SLOT`、`GUANYIN`、`trips`、`asks_of`（content 驗內容）、`done_for_rank`（ranks 的召見）、
+  `in_plot`（叛投確認畫面）。包裡的 `fs_rules`、`opp_rules` 從它 re-export 同一批名字，舊名 `tianxia.foreshadow`、`tianxia.opportunities` 照舊拿到同一個函式
+
 # craft（全部拆包第 44 批「煉製與自創」；主人：煉製包。本體在 tianxia/features/craft/，Game 留一行委派回答別的包）
 - `ctx._create_on()`、`ctx._create_allowed()`、`ctx._create_price()`（自創開著沒、此刻能不能自創〔不能是原因，能是 None〕、這一門要付多少心得；
   只讀。新手引導碰到才說的 h_create 問——原本引導包直接 import create 讀 `create.on`／`allowed`／`price`〔包 import 包〕）

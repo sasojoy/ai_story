@@ -5,12 +5,13 @@ rank2、rank_action 會改狀態。第 3、4 階的規則（誰做得了、在�
 from __future__ import annotations
 
 from tianxia import calendar
-from tianxia import events as event_rules, opportunities  # 過渡：待搬（事件 events 的 check_note；機緣 opportunities 總表第 34 批）
+from tianxia import events as event_rules  # 過渡：待搬（事件 events 的 check_note，總表第 16 批後的共用規則層）
 from tianxia.core.option import Option
 from tianxia.core.services import RANK_ACTION_PREFIX
 from tianxia.models import Check, Location
 from tianxia.rules import front_of, roll_check
 
+from . import opp_rules as opportunities  # 同一包的機緣規則（原本 import 舊名 opportunities）
 from . import rank_rules
 
 

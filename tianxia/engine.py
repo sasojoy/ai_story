@@ -18,8 +18,8 @@ from . import arts as arts_mod
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
     allied, annals, armor, atlas, battle_instance, battlelog, bounties, calendar, clinic, conquest, conquest_day, create, defection, divine, economy, encounter, equipment,
-    fight_llm, figure_life, figures, foreshadow, four_tiers, forge_secrets, fusion, gender, howto, insight_fx, insights, invites, journal, library, mapdata, martial_arts, plans,
-    materials, mounts, naming, opportunities, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
+    fight_llm, figure_life, figures, four_tiers, forge_secrets, fusion, gender, howto, insight_fx, insights, invites, journal, library, mapdata, martial_arts, plans,
+    materials, mounts, naming, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skillview, smithing,
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, xingshi, zh,
 )
@@ -162,6 +162,8 @@ from .features.military import convoy_actions as military_convoy_actions  # 過�
 from .features.military import order_actions as military_order_actions  # 過渡：Game 上軍令卡與記功的 4 個一行委派
 from .features.military import seat_actions as military_seat_actions  # 過渡：Game 上席次抄帳的一行委派
 from .features.military import step_actions as military_step_actions  # 過渡：Game 上第 2 階與第 3、4 階行動的 4 個一行委派
+from .features.military import fs_actions as military_fs_actions  # 過渡：Game 上伏筆的一行委派（第 34 批）
+from .features.military import opp_actions as military_opp_actions  # 過渡：Game 上機緣的一行委派（第 34 批）
 from .state import (
     ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, CrowdNote, Equipment, GameState, HintNote, JournalEntry, Journey, Mingtie, Rumor, Tagalong,
     StoryCard, StoryProgress, TierResult, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
@@ -305,9 +307,7 @@ class RaidSpoils:
     contrib: int
     goods: tuple[tuple[str, int], ...] = ()  # 設伏劫道：贏的搶走的素材（素材 id, 個數）；截殺沒有
     evil: int = 0  # 名聲 5.4：贏的人揭著輸的人的官府通緝，輸的人惡名少幾點（Config.renown.official_evil_loss）
-# 管理者給的伏筆片段、機緣線索在那個玩家江湖紀錄裡那一則的標題（自然聽到的時候句子夾在那次行動的紀錄裡，沒有自己的標題；
-# 也不說是哪一個機緣、不說是管理者給的，審查 M-1）。玩家看得到：新寫，待 joy 潤
-HEARD_TITLE = "聽聞"
+# （管理者給的伏筆片段、機緣線索在玩家江湖紀錄裡的標題 HEARD_TITLE，全部拆包第 34 批搬進 tianxia/features/military/opp_actions.py）
 # 等模型判讀的時候選項沒了（另一個分頁把人帶走、事件被了結、體力花光）：這一仗不打，回這一句話代替一句看不出所以然的「無法這麼做」
 FIGHT_LEFT = "你離開了，這一仗沒打成。"
 FIGHT_CHANGED = "情勢變了，這一仗沒打成。"
@@ -785,13 +785,8 @@ class Game:
         # 自創的舊三步單子收掉（還沒付錢；create.prune）：全部拆包第 44 批改接煉製包的 on_drop_stale 掛鉤（下面 features_core.on_drop_stale）
         if p.naming is not None and (p.naming not in owned or self.world.master_of(p.naming) != p.name):
             p.naming = None
-        chains = {ch.id for ch in c.foreshadows.chains}  # 伏筆：內容改版後拿掉的鏈與物品
-        items = {item.id for item in c.foreshadows.items}
-        p.clue_items = {k: v for k, v in p.clue_items.items() if k in items and v > 0}
-        p.fragments = {k: v for k, v in p.fragments.items() if k in chains}
+        # 伏筆：內容改版後拿掉的鏈與物品（第 34 批改接軍情包的 on_drop_stale 掛鉤，下面 features_core.on_drop_stale）
         p.snubbed_until = {k: v for k, v in p.snubbed_until.items() if k in c.figures}  # 內容改版拿掉的大勢人物（T4）
-        if p.fs_asking is not None and p.fs_asking not in chains:
-            p.fs_asking, p.fs_asked = None, 0
         line_ids = [line.id for line in c.scenario.storylines]
         if s.world.storyline not in line_ids:
             s.world.storyline, s.world.act = line_ids[0], 0
@@ -971,11 +966,7 @@ class Game:
         return military_seat_actions.report_seat(self)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/seat_actions.py
 
     def _settle_plots(self) -> list[str]:
-        """集體密謀的結算（正式版乙二；opportunities.settle）：賽季時鐘暫停中不結算。暫停時畫面照常可看、計時器的同步照常走
-        （sync 不經 _refuse_while_paused），動作被擋；結算會記貢獻、完成機緣，那是動作的結果，所以也等繼續之後的第一次同步。"""
-        if self.world.paused_at() is not None:
-            return []
-        return opportunities.settle(self.state, self.content)
+        return military_opp_actions.settle_plots(self)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/opp_actions.py
 
     def _deliver_away(self, away_from: float | None) -> None:
         """「你不在的時候」（傳聞分層設計第八節）：上次同步到這一次隔了 Config.away_hours 個「現實」小時以上（PM 2026-10-06：
@@ -1213,7 +1204,7 @@ class Game:
         if shop_taken is not None:
             return shop_taken
         if s.player.fs_asking is not None:
-            return foreshadow.asking_options(s, c)  # 伏筆的最後一步正在答題：只有答案與「作罷」
+            return self._fs_asking_options()  # 伏筆的最後一步正在答題：只有答案與「作罷」（軍情，全部拆包第 34 批；位置在店面之後、閉關之前，不接 menu 掛鉤）
         if s.player.busy_until is not None:
             return [Option(id="act:break", label="提前出關")] + self._arena_entry()  # 閉關中也能上擂台（PM 轉述 Joy 2026-10-14）
         j = s.player.journey
@@ -1289,8 +1280,7 @@ class Game:
         opts += self._order_options(loc)  # 軍令（計畫 T6）：守勢行動、接糧車；開關關著、散人沒有
         opts += self._rank2_options(loc)  # 第 2 階行動（正式版乙一）
         opts += self._rank_action_options(loc)  # 第 3、4 階的行動（正式版戊一）
-        opts += opportunities.place_options(s, c, loc.id)  # 機緣：交東西、天時地利（正式版乙一）
-        opts += foreshadow.final_options(s, c, loc.id)  # 伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有
+        opts += self._omen_options(loc.id)  # 機緣：交東西、天時地利（正式版乙一）、伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有（軍情，第 34 批）
         opts += self._errand_options()  # 託付（減法季批 6）：人在託付的地點才有那一顆；關著是空的
         opts += self._invite_options()  # 玩家之間的邀請（切磋）：別人發給你的、你發出去還在等的
         shown = bounties.visible(s, c) if bounties.board_here(s, c) else []
@@ -1887,10 +1877,7 @@ class Game:
             elif kind == "road":
                 msgs = self._road(arg)
             # （learn：拜師學藝，全部拆包第 23 批換成修練包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
-            elif kind == "opp":
-                msgs = opportunities.act(self.state, self.content, self.world, arg, self.rng)
-            elif kind == "fs":
-                msgs = self._foreshadow(arg)
+            # （opp：機緣、fs：伏筆的最後一步，全部拆包第 34 批換成軍情包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             # （sense：有所感選做法、順其自然，全部拆包第 24 批換成有所感包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             elif kind == "invite":
                 msgs = self._invite(arg)
@@ -2124,16 +2111,13 @@ class Game:
         # （call：「求見・某某」「收回名帖」，全部拆包第 21 批換成交友求見包 choose 掛鉤的 Outcome.title，拿掉）
         # （sense：「有所感・場景」，全部拆包第 24 批換成有所感包 choose 掛鉤的 Outcome.title，拿掉）
         # （learn：「學藝・<武學名>」，全部拆包第 23 批換成修練包 choose 掛鉤的 Outcome.title，拿掉）
-        if kind == "fs":
-            here = c.locations[s.player.location].name
-            return "作罷" if arg == "leave" else f"{foreshadow.trip_label(s, c, arg.partition(':')[0])}・{here}"
+        # （fs：「作罷」「<這一趟>・<所在>」，全部拆包第 34 批換成軍情包 choose 掛鉤的 Outcome.title，拿掉）
         if kind == "road":
             what = arg.partition(":")[0]
             if what == "back":
                 return atlas.journey_title(c, self._back_way().path)  # 折返：跟「前往」同一個標題，抵達時才併得進同一則
             return ROAD_TASKS[what][0]
-        if kind == "opp":
-            return opportunities.title(s, c, arg)
+        # （opp：機緣的標題，全部拆包第 34 批換成軍情包 choose 掛鉤的 Outcome.title，拿掉）
         if kind == "bounty":
             return bounties.BOARD
         if kind == "smith":
@@ -2173,7 +2157,7 @@ class Game:
             return f"{name}・{c.locations[s.player.location].name}"
         here = c.locations[s.player.location].name
         duty = c.orders.duties.get(s.player.faction or "")  # 守勢行動的標題寫陣營自己的名字（巡哨、傳道、保境安民）
-        action2 = opportunities.rank2_action(s, c)  # 第 2 階行動的標題也寫它自己的名字（招降黃巾散兵、施符水收人心）
+        action2 = self._rank2_action()  # 第 2 階行動的標題也寫它自己的名字（招降黃巾散兵、施符水收人心）
         # act 子動詞的主人是功能包的那幾格（接縫掛鉤，第 11 批）：探索包「出門一趟・某地」（探索一顆開著）、出陣包「出陣／雪恥／遊歷・某地」、
         # 酒肆包的招牌、單挑包的「擂台・某地」（全部拆包第 12 批）。下面那張表照 arg 查、不看 kind，這裡也照 arg 問；主人不接照舊查表
         owned = features_core.act_title(self, arg)
@@ -2474,30 +2458,44 @@ class Game:
     def _socialize(self, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
         return socialize_actions.socialize(self, prepared)
 
-    def _foreshadow(self, arg: str) -> list[str]:
-        """伏筆的最後一步（計畫 T7）：fs:<鏈> 看題（沒有題的直接做）、fs:<鏈>:<選項> 答題、fs:leave 作罷。"""
-        if arg == "leave":
-            return foreshadow.leave(self.state)
-        chain_id, _, option_id = arg.partition(":")
-        return foreshadow.attempt(
-            self.state, self.content, chain_id, option_id or None, self.state.world.time, self.rng, self.world,
-        )
-
     def _hear_after_stamina(self, before: float) -> list[str]:
-        """每次花體力的行動之後抽一次伏筆片段（計畫 T7）：選單的每一個行動（choose）與輿圖的安排前往（travel）都經過這裡，
-        體力比行動前少了才抽（探索、遊歷、交友、求見、對話、招募、趕路、疾行；打坐、步行、生成不出對話退回體力的都不算）。
-        抽的是行動後所在地點的大區；沒有伏筆在跑（開關關著、沒有鏈）就什麼都不做。
-        伏筆先抽、天時地利型機緣的線索（正式版乙一）後抽：伏筆的擲骰順序不變。
-        序章（新手引導計畫一）在草廬裡什麼都不抽：那是真實世界的事。"""
-        s, c = self.state, self.content
-        if s.player.stamina >= before or prologue_rules.active(s, c):
-            return []
-        region = atlas.region_of(c, s.player.location)
-        region_id = region.id if region is not None else None
-        msgs = foreshadow.hear_after_action(s, c, region_id, self.rng, self.world) if foreshadow.active(s, c) else []
-        if opportunities.active(s, c):  # 天時地利型機緣的線索（正式版乙一）
-            msgs += opportunities.hear_clues(s, c, region_id, self.rng, world=self.world)  # 內鬼的特徵要讀本季天機
-        return msgs
+        return military_fs_actions.hear_after_stamina(self, before)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/fs_actions.py
+
+    def _fs_asking_options(self) -> list[Option]:
+        return military_fs_actions.asking_options(self)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/fs_actions.py
+
+    def _fs_asking_text(self) -> str | None:
+        return military_fs_actions.asking_text(self)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/fs_actions.py
+
+    def _omen_options(self, loc_id: str) -> list[Option]:
+        return military_fs_actions.omen_options(self, loc_id)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/fs_actions.py
+
+    def _rank2_action(self):
+        return military_opp_actions.rank2_action(self)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/opp_actions.py
+
+    def _fs_after_win(self, squad, region_id: str | None) -> list[str]:
+        return military_fs_actions.after_win(self, squad, region_id)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/fs_actions.py
+
+    def _opp_on_win(self, front, faction) -> list[str]:
+        return military_opp_actions.on_win(self, front, faction)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/opp_actions.py
+
+    def _hear_from_event(self, event_id: str) -> list[str]:
+        return military_fs_actions.hear_from_event(self, event_id)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/fs_actions.py
+
+    def _admin_omen_choices(self, s) -> dict:
+        return military_fs_actions.admin_choices(self, s)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/fs_actions.py
+
+    def _omen_talk_options(self, companion_id: str) -> list[Option]:
+        return military_fs_actions.talk_options(self, companion_id)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/fs_actions.py
+
+    def _fs_hear_talk(self, companion_id: str, chain_id: str, index: int) -> list[str]:
+        return military_fs_actions.hear_talk(self, companion_id, chain_id, index)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/fs_actions.py
+
+    def _opp_hear_topic(self, companion_id: str, topic: str) -> list[str]:
+        return military_opp_actions.hear_topic(self, companion_id, topic)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/opp_actions.py
+
+    def _opp_after_success(self, kind: str, loc_id: str) -> list[str]:
+        return military_opp_actions.after_success(self, kind, loc_id)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/opp_actions.py
 
     def _open_dialogue(self, companion_id: str, prepared: companion_agent.PreparedTurn | None) -> list[str]:
         return companions_talk.open_dialogue(self, companion_id, prepared)
@@ -4411,11 +4409,11 @@ class Game:
                     )
                     extra += self._push_progress(loc.id, conquest.sortie_nominal(c, loc.id, "attack"), "sortie", "attack")
                 region = atlas.region_of(c, p.location)  # 官銀（伏筆，濃縮版內容表 4.0）：只有遊歷打贏才擲
-                extra += foreshadow.after_win(s, c, squad, self.rng, region.id if region is not None else None)
+                extra += self._fs_after_win(squad, region.id if region is not None else None)
                 extra += credit if credit is not None else self._order_credit(  # 軍令（計畫 T6）：攻城看戰線與敵方陣營，截糧看地點與運糧隊
                     kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,
                 )
-                extra += opportunities.on_win(s, c, front_of(c, loc.id), squad.faction)  # 三路並進（正式版乙二）
+                extra += self._opp_on_win(front_of(c, loc.id), squad.faction)  # 三路並進（正式版乙二）
                 extra += bounties.on_win(s, c, self.world, loc.id, squad.id)  # 懸賞榜的討伐
                 if as_sortie:  # 名聲 3.1：出陣攻打贏 +1（遊歷、探索野怪不給）
                     extra += self._deed_fame("sortie")
@@ -8887,62 +8885,10 @@ class Game:
         return military_admin_actions.summon(self, name)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/admin_actions.py
 
     def admin_give_opportunity(self, name: str, opp_id: str) -> list[str]:
-        """給他一個機緣：放到這一種機緣自然送上門那一刻之後的樣子（opportunities.offer，每一種用自然那條路的同一個函式；
-        集體密謀型沒有那一刻，拒絕）。別的陣營的、完成過的、階不夠的、已經給過的都拒絕。"""
-        refusal = self._admin_refusal("給機緣")
-        if refusal:
-            return self._log(refusal)
-        if not opportunities.active(self.state, self.content):
-            return self._log(["（這一季沒有機緣。）"])
-        o = next((x for x in self.content.opportunities if x.id == opp_id), None)
-        if o is None:
-            return self._log(["（沒有這個機緣。）"])
-        target = self._admin_target(name)
-        if target is None:
-            return self._log([NO_SUCH_PLAYER.format(name=name.strip())])
-        s = target.state
-        why = opportunities.offer_refusal(s, self.content, o, self.world)
-        if why is None:
-            lines, done = opportunities.offer(s, self.content, o, self.world)
-            # 聽到的（線索、內鬼的特徵）照自然聽到的樣子，不說是哪一個機緣；其他照機緣的寫法。都不標管理者（審查 M-1）
-            heard = o.kind in opportunities.HEARD_KINDS
-            target._write(HEARD_TITLE if heard else opportunities.title(s, self.content, f"offer:{o.id}"), lines)
-        self._save_target(target)
-        if why is not None:
-            return self._log([why])
-        msg = f"已給{s.player.name}機緣「{o.name}」：{done}。"
-        self._write("給機緣", [msg], tag="管理者")
-        return self._log([msg])
+        return military_opp_actions.give_opportunity(self, name, opp_id)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/opp_actions.py
 
     def admin_give_fragment(self, name: str, ref: str) -> list[str]:
-        """給他一個伏筆片段（ref 是「鏈 id:片段序號」）：照效果給片段的同一條（foreshadow.grant_fragment：記進聽過的片段、
-        江湖紀錄那一句「你聽到一件事：…」、不發傳聞）。不是他那一方的、已經聽過的、那條伏筆已經用不上的都拒絕。
-        給管理者的那一句不寫片段的原文（天機的答案填在裡面，管理者自己也是玩家），也不提鎖定。"""
-        refusal = self._admin_refusal("給伏筆片段")
-        if refusal:
-            return self._log(refusal)
-        c = self.content
-        if not foreshadow.active(self.state, c):
-            return self._log(["（這一季沒有伏筆。）"])
-        chain_id, _, index = ref.rpartition(":")
-        chain = foreshadow.chain(c, chain_id)
-        if chain is None or not index.isdecimal() or not 0 <= int(index) < len(chain.fragments):
-            return self._log(["（沒有這一則伏筆片段。）"])
-        i = int(index)
-        target = self._admin_target(name)
-        if target is None:
-            return self._log([NO_SUCH_PLAYER.format(name=name.strip())])
-        s = target.state
-        why = foreshadow.grant_refusal(s, c, chain, i)
-        if why is None:
-            target._write(HEARD_TITLE, foreshadow.grant_fragment(s, c, chain.id, i, self.world))  # 不標管理者（審查 M-1）
-        self._save_target(target)
-        if why is not None:
-            return self._log([why])
-        event = self._timetable_event(chain.event)
-        msg = f"已讓{s.player.name}聽到{event.title if event else chain.event}那條伏筆的第 {i + 1} 則片段。"
-        self._write("給伏筆片段", [msg], tag="管理者")
-        return self._log([msg])
+        return military_fs_actions.give_fragment(self, name, ref)  # 軍情（全部拆包第 34 批）：本體在 tianxia/features/military/fs_actions.py
 
     def admin_player_choices(self, name: str) -> dict:
         """管理者區「玩家個人劇情」查一個名號：他是誰（陣營・頭銜，在哪裡）、能不能替他發召見（不能的話為什麼）、能給他的機緣與伏筆片段
@@ -8962,19 +8908,12 @@ class Game:
         if title:
             parts.append(title)
         place = c.locations[p.location].name if p.location in c.locations else p.location
-        opps = [o for o in c.opportunities if opportunities.offer_refusal(s, c, o, self.world) is None] \
-            if opportunities.active(s, c) else []
-        frags = [(ch, i) for ch in c.foreshadows.chains for i in range(len(ch.fragments))
-                 if foreshadow.grant_refusal(s, c, ch, i) is None] if foreshadow.active(s, c) else []
         return {
             "name": p.name,
             "line": f"{p.name}：{'・'.join(parts)}，在{place}",
             "summons": {"ok": why is None, "note": why or f"會發第 {promo.rank} 階的召見"},
             # note：確認框多問的那一句（情誼型補的是真的情誼，審查 M-5）；其他種類是空字串
-            "opportunities": [
-                {"id": o.id, "label": opportunities.offer_label(c, o), "note": opportunities.offer_note(s, c, o)} for o in opps
-            ],
-            "fragments": [{"id": f"{ch.id}:{i}", "label": foreshadow.grant_label(c, ch, i)} for ch, i in frags],
+            **self._admin_omen_choices(s),  # opportunities（可以給的機緣）、fragments（可以給的伏筆片段）兩鍵，軍情（第 34 批）
         }
 
     # ── 畫面文字 ──────────────────────────────────────────
@@ -9075,7 +9014,7 @@ class Game:
         if s.player.picking_audience:
             title = SOCIAL_LIST_TITLE if precise.on(c, s.world) else "求見"
             return f"**{title}**\n\n{self._audience_intro()}"
-        asking = foreshadow.asking_text(s, c, self.world) if s.player.fs_asking is not None else None
+        asking = self._fs_asking_text() if s.player.fs_asking is not None else None
         if asking is not None:
             return asking
         if s.player.journey is not None:

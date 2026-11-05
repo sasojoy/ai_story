@@ -1629,7 +1629,7 @@ def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
     要寫送的選項與送到的那一句；文字只能繁體。front_ids 是 validate 的那一份戰線清單。
     乙二：拼圖型（拿法寫全、東西與處的 key 不重複、官軍交給誰與豪強的靠山）、推理型（天機存在、嫌疑人剛好是那個天機的候選、
     每個嫌疑人的特徵都有片段）、集體密謀型（每一處寫 front 或 at、跟 how 一致、need_parts 不超過處數）；請命的陣營與人物存在。"""
-    from . import foreshadow  # noqa: PLC0415  延後 import：foreshadow 讀 content 的模型，不能在載入時就互相 import
+    from .core import omen_base  # noqa: PLC0415  軍情第 34 批：天機表在核心的 omen_base（原本延後 import foreshadow）
 
     ids = [o.id for o in c.opportunities]
     need(len(set(ids)) == len(ids), "opportunities.json：機緣 id 重複")
@@ -1689,8 +1689,8 @@ def check_opportunities(c: Content, need, known, front_ids: list[str]) -> None:
             texts += [pr.stand_in, pr.label, pr.done] + [x.done for x in pr.patrons.values()]
         if o.deduce is not None:
             d = o.deduce
-            need(d.tianji in foreshadow.TIANJI, f"{where}：天機 {d.tianji} 不存在")
-            need({s.id for s in d.suspects} == set(foreshadow.TIANJI.get(d.tianji, ())),
+            need(d.tianji in omen_base.TIANJI, f"{where}：天機 {d.tianji} 不存在")
+            need({s.id for s in d.suspects} == set(omen_base.TIANJI.get(d.tianji, ())),
                  f"{where}：嫌疑人要跟天機 {d.tianji} 的候選一樣")
             keys = {t.key for t in d.traits}
             need(all(set(s.traits) <= keys for s in d.suspects), f"{where}：嫌疑人有沒寫片段的特徵")
@@ -1749,7 +1749,7 @@ def check_foreshadows(
     """伏筆（content/foreshadows.json，計畫 T7）：鏈的大事在時刻表上、陣營在劇本裡；片段的大區是大區、事件與人物存在；
     最後一步的地點、物品、人物存在，答案是選項之一或 tianji:<天機>（天機的選項要剛好是候選）；文字只用繁體中文。
     伏筆計數：效果寫的要有鏈讀，鏈讀的要有效果寫（官銀由 guanyin 的規則寫）。"""
-    from .foreshadow import FIGURE_SLOT, GUANYIN, TIANJI, TIANJI_ANSWER, asks_of, trips  # noqa: PLC0415  延後 import
+    from .core.omen_base import FIGURE_SLOT, GUANYIN, TIANJI, TIANJI_ANSWER, asks_of, trips  # noqa: PLC0415  軍情第 34 批：核心的 omen_base
 
     fs = c.foreshadows
     faction_ids = [f.id for f in c.scenario.factions]

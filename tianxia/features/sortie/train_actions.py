@@ -18,7 +18,6 @@ from tianxia import calendar, team
 from tianxia import howto  # 過渡：待搬（遊歷那一行的句子）
 from tianxia import materials  # 共用規則層（素材：打贏會不會掉）
 from tianxia import mounts  # 共用規則層（坐騎：必敗先問的那一句寫策馬脫身的機會）
-from tianxia import opportunities  # 過渡：待搬（守勢之後的收容流民，正式版乙一）
 from tianxia import orders  # 過渡：待搬（軍令：截糧時那一帶的敵方運糧隊）
 from tianxia import precise  # 共用規則層（一類一顆：守勢再加跟守一樣的經驗心得）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章：雪恥那一步的對手與寫好的結果）
@@ -289,7 +288,7 @@ def duty(ctx: Game) -> list[str]:
     goals = {} if duel else ctx._goals()  # 約戰開著：線只在約戰結算、軍令、大勢人物、事件的痕跡這幾處動（設計 4.3）
     if goals.get(front):
         msgs += ctx.push_trend(front, goals[front], source="duty")
-    msgs += opportunities.after_success(s, c, "duty", loc.id, ctx.rng)  # 收容流民（正式版乙一）
+    msgs += ctx._opp_after_success("duty", loc.id)  # 收容流民（正式版乙一）
     if precise.on(c, s.world):  # 一類一顆（正式季整合 2.6）：再加跟守一樣的經驗心得（這裡自家那一路的全額；沒有自家隊伍不給，只推線）
         host = actions.sortie_host(ctx, loc)
         if host is not None:
