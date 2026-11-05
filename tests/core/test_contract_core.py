@@ -708,7 +708,7 @@ def test_apply_effect_asks_the_effect_slots(game, monkeypatch):
 
 def test_clear_progress_asks_the_clear_slots_in_the_table_order(game, monkeypatch):
     """defection.clear_progress（測試直接叫它）照 DEFECT_ORDER["clear"] 走：叛投自己的（_clear_own）→ 包登記的押糧、提示（登記的先後跟表
-    相反）→ 機緣（核心代叫）；每一格拿到同一個 PlayerState。核心代叫的兩格在叫的那一下才照模組屬性找（換掉照樣打得到）。"""
+    相反）→ 機緣（第 34 批起也是包登記的）；每一格拿到同一個 PlayerState。核心代叫的只剩 progress 一格，在叫的那一下才照模組屬性找（換掉照樣打得到）。"""
     from tianxia import defection
 
     calls = []

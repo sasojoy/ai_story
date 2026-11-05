@@ -14644,7 +14644,8 @@ class OmenScenario(MilitaryScenario):
     BOT_SEATS = ["象甲", "象乙"]
     PHASES_FIRST = ["setup", "seat", "offers", "refusals", "natural", "hearing", "puzzle_deduce", "plots", "fragments", "asking", "half"]
     PHASES_SECOND = ["resume", "finish_fs", "finish_items", "finish_plots", "expire", "defect", "bots", "season"]
-    PICKS = ("hub", "ask_loc")
+    PICKS = ("hub", "ask_loc", "sweep_pressed")
+    sweep_pressed: list = []
     hub = "nobody"
     ask_loc: dict = {}
 
@@ -14693,8 +14694,9 @@ class OmenScenario(MilitaryScenario):
         emit(f"世界 {tag}", {"plots": [x.model_dump(mode="json") for x in w.plots], "time": w.time,
                           "rumors": [r.text for r in w.rumors][-4:]})
 
-    def sweep(self, who: str, locs: list[str], tag: str, prefixes: tuple = OMEN_OPP, per: int = 2, stop: bool = False) -> int:
-        """逐個地點站過去，按那裡選單上這個前綴的鈕（每處最多 per 顆，灰的只寫不按）。回傳按了幾顆。"""
+    def sweep(self, who: str, locs: list[str], tag: str, prefixes: tuple = OMEN_OPP, per: int = 2, stop: bool = False,
+              skip: frozenset = frozenset()) -> int:
+        """逐個地點站過去，按那裡選單上這個前綴的鈕（每處最多 per 顆，灰的只寫不按；skip 裡的鈕不按）。回傳按了幾顆；按過的記在 self.sweep_pressed。"""
         pressed = 0
         for loc in locs:
             if not self.place(who, loc):
@@ -14704,8 +14706,9 @@ class OmenScenario(MilitaryScenario):
             if not hits:
                 continue
             emit(f"{who} {tag} 在 {loc}", [[i, opts[i].get("label"), opts[i].get("enabled")] for i in hits])
-            for i in [i for i in hits if opts[i].get("enabled")][:per]:
+            for i in [i for i in hits if opts[i].get("enabled") and i not in skip][:per]:
                 self.choose(who, i)
+                self.sweep_pressed = [*getattr(self, "sweep_pressed", []), i]
                 pressed += 1
             if stop and pressed:
                 break
@@ -14722,6 +14725,8 @@ class OmenScenario(MilitaryScenario):
         for ch in self.chains():
             f = ch.final
             if ch.side != side or not f.question or f.night:
+                continue
+            if ch.event in self.world.get_season().timeline:  # 大事已經發生的鏈：看題、答題都是空按
                 continue
             if kind == "then" and not f.then:
                 continue
@@ -14854,7 +14859,8 @@ class OmenScenario(MilitaryScenario):
         for o in self.opps():
             if o.kind == "deduce":
                 locs = self.locs_of(o)
-                self.sweep(self.H_DED, locs, "指認", prefixes=("opp:accuse:",), per=3)
+                self.sweep_pressed = []
+                self.sweep(self.H_DED, locs, "指認", prefixes=("opp:accuse:",), per=1)  # 一天只算一次：先按第一個（錯的）
                 self.me(self.H_DED, "指認之後")
 
     def plots(self) -> None:
@@ -14965,10 +14971,13 @@ class OmenScenario(MilitaryScenario):
         self.hours(24)
         for o in self.opps():
             if o.kind == "deduce":
-                self.sweep(self.H_DED, self.locs_of(o), "隔天指認", prefixes=("opp:accuse:",), per=3)
-                self.me(self.H_DED, "隔天指認之後")
-        for step in range(8):  # 天時地利型：每三個小時換個時段，站到地點試一次
-            self.hours(3)
+                for day in range(3):  # 每天換一個沒指認過的，指認對了選單上的鈕就沒了
+                    tried = frozenset(getattr(self, "sweep_pressed", []))
+                    self.sweep(self.H_DED, self.locs_of(o), f"隔天指認 {day}", prefixes=("opp:accuse:",), per=1, skip=tried)
+                    self.me(self.H_DED, f"隔天指認之後 {day}")
+                    self.hours(24)
+        for step in range(24):  # 天時地利型：每個小時換個時段（黎明這種窄的窗三小時一步會跳過），站到地點試一次
+            self.hours(1)
             for who in (self.G_TIME, self.H_TIME, self.HAO):
                 for o in self.opps():
                     if o.kind == "timing" and o.faction == self.PLAYERS[who]:
