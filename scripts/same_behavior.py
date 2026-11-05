@@ -19614,7 +19614,7 @@ class CrossbladeScenario(PeersScenario):
         self.edit(f, lambda p: p.stats.__setitem__("xinde", 20000))
         self.act(c, f, "discuss", arg="cancel")
         self.act(a, d, "discuss", arg=f"invite:{self.item(2)}")
-        self.stamina(d, 0.0)  # 答應之前累倒
+        self.stamina(d, -100.0)  # 答應之前累倒（同步補不回 3 點）；沒答成，(2,3) 這個配方留給後半首創
         self.act(d, a, "discuss", arg=f"yes:{self.item(3)}")
         self.refill(d)
         self.main(a)
@@ -19768,8 +19768,8 @@ class CrossbladeScenario(PeersScenario):
         self.sync(self.S_A, self.S_B, self.S_C, self.S_E, self.D_C, self.D_D)
         with self.forced("險勝"):
             self.act(self.S_B, self.S_A, "spar", arg="yes")
-        self.stamina(self.S_E, 0.0)
-        self.reply(self.S_E, self.S_C, "yes", "spar")
+        self.stamina(self.S_E, -100.0)  # 同步補不回 6 點：選單上那一顆是灰的，改走卡上的答應（卡的路不看選單）
+        self.act(self.S_E, self.S_C, "spar", arg="yes")
         self.main(self.S_C)
         self.refill(self.S_E, self.S_A, self.S_B)
         self.spar(self.S_A, self.S_B)  # 今天這一對打滿了
