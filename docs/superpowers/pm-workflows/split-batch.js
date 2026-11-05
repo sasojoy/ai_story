@@ -88,7 +88,6 @@ const CHECK_SCHEMA = {
 }
 
 const DEV_HEAD = `你是《天下大勢》的開發子代理，做**全部拆包的第 ${N} 批：${TITLE}**（總表 ${MASTER} 第三節第 ${N} 列）。承諾是**行為一個字不變**。
-${COMMON}
 ${COMMON}`
 const DEV_JOB = `**這一批要做的（PM 定，照做）**：
 ${BODY}`

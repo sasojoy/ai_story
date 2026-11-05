@@ -1,4 +1,4 @@
-"""接下來幾批的派工（第 21、30、31、29、14、18 批）。用法：make_more.py <批號> <split/trunk SHA> [輸出資料夾]
+"""接下來幾批的派工（第 21、30、31、29、14、18、33、43、44、25、32 批）。用法：make_more.py <批號> <split/trunk SHA> [輸出資料夾]
 先把 feature 分支快轉或開在那一筆，再把產生的 b<批號>.js 交給 Workflow。第 31 批的包名不用總表寫的 `figures`：`tianxia/figures.py` 留著，同名不准（第 23 批的教訓）。"""
 import json
 import re
@@ -97,6 +97,38 @@ BATCHES = {
             "- 範圍照總表 3.3 第 44 列（約 16 個方法、126 行）與第二節「煉製與自創（`craft`）」。`create` 進包（舊名留別名），`fusion` 不搬，留共用層。鎖外的取名三段式照第 24 批 `sense_draw` 的做法，模型呼叫不進鎖。`/api/forge_line` 那一條自己的軌要打到。",
             "- Task 1 的情境：意境合成與揣摩（取名 A、B、C 三段，模型回與模型擋著）、預覽、自創五步走完與作罷、重悟帖；三種設定；半舊半新切在自創走到一半；假人碰得到（碰不到就寫明）。",
         ]),
+    "25": dict(
+        title="世界層掛鉤（核心批）——世界一步、每週、每天；世界層的開季與換季；全服收季；開集結；`world.py` 收進核心本體",
+        pkg="core_world", feature="feature/core-world", dev="dev/core-world-1", host="coreworld1",
+        plan="docs/superpowers/plans/2026-11-05-世界層掛鉤-第25批.md",
+        prev_plan="docs/superpowers/plans/2026-11-01-核心收接縫.md",
+        ports={"dev": 8150, "rev": 8151, "fix": 8151, "head": 8152, "base": 8153}, fb="FB-9410～FB-9419",
+        reviewers=3, dev_model=None, all_tracks=True,
+        parallel="**核心批單獨跑**（總表 5.2 第 3 條）：這段期間沒有別的拆包批在開發。PM 開 `feature/core-world` 在 split/trunk 這一筆",
+        body=[
+            "- **這一批是核心批，沒有新包**：範圍照總表 3.3 第 25 列整格、第 15 列「`world.py` 兩份名單都沒有…第 25 批改成世界層掛鉤之後收進核心本體（`MODULES` 加一個）」、手冊第十五節「第 12 批的 PM 認定」第 2 條。下面 Task 2～4 寫「搬進 `tianxia/features/<包>/`」的地方換成：**Task 2** 在 `tianxia/core/features.py` 開掛鉤（寫法照第 11 批的接縫掛鉤與 `on_season_close`：位置固定、不看包的 `enabled`、照 `registered()` 問），`services.py` 補要的服務；**Task 3** 把 `world.py`、`sqlite_world.py` 裡直接叫包與還沒成包的舊模組的地方改成叫掛鉤或服務，各包在自己的 `rules.py`／`actions.py` 掛上自己那一格（各包加的集中在那一包的檔裡），`world.py` 進核心 `MODULES`；**Task 4** 契約測試與邊界測試（核心不 import 包，`world.py` 也一樣）。",
+            "- **要開的掛鉤**（總表第 25 列）：世界一步、每週、每天（取代 `world.advance_world_state` 裡的直接呼叫和 `WEEKLY`、`DAILY` 兩張表）；世界層的開季與換季（`sqlite_world` 的 `open_season`、`next_season`）；全服收季（`world.end_season`）；開集結（`world._open_claimed`，裡面延後 import 的 `seal`、`works`、`generals`）。`world.py` 讀宴客散席那一處、經舊名 `arena` 叫單挑包 `close_season`（收季那一刻排擂台前三名）那一處，一起改成掛鉤或服務。",
+            "- **順序就是行為**：每一個掛鉤叫各包的順序必須跟現在的呼叫順序一模一樣（同一步裡先推誰、後推誰、亂數抽到的順序都算）。順序寫死在核心（一張明確的順序表或照 `FEATURES` 的固定位置，計畫寫清楚哪一種與理由），加一條契約測試鎖住順序；不要靠 import 順序或註冊先後碰運氣。",
+            "- `world.py` 現在 import 的共用規則層模組（`registry.SHARED` 裡的）照舊直接 import；import 包或還沒成包、不在共用層的舊模組的，一律改掛鉤或服務。真的改不了的標 `# 過渡：待搬` 並在計畫第五節寫理由與該由哪一批收（例：第 26、27、32 批）。`SHARED_PENDING` 裡跟 `world` 有關的那幾條（含「連帶載入 bout」）照改完的實際情況改。",
+            "- Task 1 的情境：**所有軌**都要跑（核心批）。這一批特別要走到的：世界一步跨過每天與每週的界線（同一步裡跨好幾天）、開季、收季（自然收季與管理者立刻收季，含擂台前三名與宴客散席）、開下一季、開集結（大勢門檻與時刻表兩種）；week7、season21、test 三種設定；半舊半新切在世界一步推到一半（base 推過某一天，head 接著推過下一週）；假人照常跑。現有的軌已經走到的就不另加，計畫第一節列出哪一軌走到哪一個掛鉤。",
+            "- **不改的**：資料庫結構（develop 第 9 版）；`world_state.py` 的時間讀法；戰記、輿圖、鐵匠鋪、`web/`。",
+        ]),
+    "32": dict(
+        title="效果與叛投掛鉤（核心批）——`rules.apply_effect` 照效果欄位分派給主人；叛投時各包清自己的進度",
+        pkg="core_effects", feature="feature/core-effects", dev="dev/core-effects-1", host="coreeffects1",
+        plan="docs/superpowers/plans/2026-11-06-效果與叛投掛鉤-第32批.md",
+        prev_plan="docs/superpowers/plans/2026-11-05-世界層掛鉤-第25批.md",
+        ports={"dev": 8154, "rev": 8155, "fix": 8155, "head": 8156, "base": 8157}, fb="FB-9420～FB-9429",
+        reviewers=3, dev_model=None, all_tracks=True,
+        parallel="**核心批單獨跑**（總表 5.2 第 3 條）：這段期間沒有別的拆包批在開發。第 25 批（世界層掛鉤）已合；PM 開 `feature/core-effects` 在 split/trunk 這一筆",
+        body=[
+            "- **這一批是核心批，沒有新包**：範圍照總表 3.3 第 32 列整格與第六節第 1 條（「效果與叛投」「叛投清軍情的進度」）。下面 Task 2～4 寫「搬進 `tianxia/features/<包>/`」的地方換成：**Task 2** 在 `tianxia/core/features.py` 開兩個掛鉤（寫法照第 11 批的接縫掛鉤與第 25 批的世界層掛鉤：位置固定、不看包的 `enabled`、照 `registered()` 問）；**Task 3** 把 `rules.apply_effect` 與叛投（`defection.defect`、`Game._defect_step` 那一路）裡直接碰各包的地方改成叫掛鉤，各包在自己的檔裡掛上自己那一格；**Task 4** 契約測試與邊界測試。",
+            "- **掛鉤一：效果分派**。`rules.apply_effect` 照效果欄位分派給主人：晉升、帶兵、招同伴、伏筆、碎片、屯糧、四勝利記帳。**呼叫點一個都不動**。總表說「位置不影響結果」，開發要自己證明：同一則效果帶好幾個欄位時，回傳的訊息行順序、世界旗標與狀態寫入的先後都算行為，分派順序寫死在核心（明確的順序表），契約測試鎖住；證明不了位置無關的，就照現在的順序。",
+            "- **掛鉤二：叛投清進度**。叛投那一刻各包清自己的進度（軍情包 `military` 的軍令與押糧、還有誰在叛投時被清，照現行程式量），不再由叛投那一側伸手進別包。清的順序照現在的。",
+            "- 主人還沒成包的（伏筆是第 34 批、碎片是第 27 批……照現行程式量）：那一格先掛在舊模組上、標 `# 過渡：待搬`，計畫第五節寫由哪一批收；主人在共用規則層的照共用層的寫法掛。陣營包（第 35 批）會把 `defection` 搬走，這一批不搬它，只把叛投那一側改成叫掛鉤。",
+            "- Task 1 的情境：**所有軌**都要跑（核心批）。這一批特別要走到的：事件效果分別帶上面七種欄位、還有一則同時帶好幾種的；叛投時手上有軍令、押糧在路上、其他會被清的進度各一；week7、season21、test 三種設定；半舊半新切在叛投確認到一半（先按、還沒確認）或效果套到一半的事件；假人照常跑。現有的軌已經走到的就不另加，計畫第一節列出哪一軌走到哪一個欄位。",
+            "- **不改的**：資料庫結構（develop 第 9 版）；戰記、輿圖、鐵匠鋪、`web/`。",
+        ]),
     "18": dict(
         title="探索三——序章草廬四景與探索的底：權重、野怪、自家營寨比劃、練功分級、撿破境丹",
         pkg="explore", feature="feature/explore", dev="dev/explore-3", host="explore3",
@@ -109,10 +141,15 @@ BATCHES = {
 }
 
 b = BATCHES[N]
-a = {**b, "n": int(N), "base": BASE, "reviewers": 2, "dev_model": "sonnet", "after15": True,
-     "prev_plan": "docs/superpowers/plans/2026-11-04-人物情誼包-第2批.md",
-     "parallel": f"同時在跑的批看 split/trunk 交接第〇節「現在在跑」。這一批從 split/trunk `{BASE}` 開（PM 開 `{b['feature']}` 在這一筆）。共用登記檔各寫各的段，合併時 PM 照順序接。",
+DEFAULTS = {"reviewers": 2, "dev_model": "sonnet", "after15": True,
+            "prev_plan": "docs/superpowers/plans/2026-11-04-人物情誼包-第2批.md"}
+PARALLEL = (f"同時在跑的批看 split/trunk 交接第一節「現在在跑」。這一批從 split/trunk `{BASE}` 開（PM 開 `{b['feature']}` 在這一筆）。"
+            "共用登記檔各寫各的段，合併時 PM 照順序接。")
+a = {**DEFAULTS, **{k: v for k, v in b.items() if v is not None}, "n": int(N), "base": BASE,
+     "parallel": b.get("parallel") or PARALLEL,
      "body": "\n".join(b["body"] + COMMON_BODY)}
+if b.get("dev_model", "x") is None:  # 核心批留在 Opus（總表 5.2 第 3 條）：不給 dev_model
+    a.pop("dev_model", None)
 meta_end = SRC.index("}\n", SRC.index("export const meta")) + 2
 body = re.sub(r"\bargs\b", "ARGS", SRC[meta_end:])
 s = SRC[:meta_end] + "\nconst ARGS = " + json.dumps(a, ensure_ascii=False) + "\n" + body
