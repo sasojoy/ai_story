@@ -26,14 +26,13 @@ from tianxia import events as event_rules  # 過渡：待搬（事件：抽不�
 from tianxia import growth  # 共用規則層（三道閘：今天第幾場、疲勞、對手的檔）
 from tianxia import insights  # 共用規則層（悟不悟得出）
 from tianxia import journal, team
-from tianxia import mapdata  # 過渡：待搬（輿圖：勝算的字、關著時的「多半」）
-from tianxia import mapview  # 過渡：待搬（輿圖：哪些地點畫得出來）
 from tianxia import materials  # 共用規則層（素材的發放）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章裡探索照舊是寫好的那幾步）
 from tianxia import renown  # 共用規則層（名聲：頭目的倍數）
 from tianxia import story_base  # 共用規則層（一條線的底座：開頭擲不擲中）
 from tianxia import territory  # 共用規則層（地盤：這一處此刻歸誰）
 from tianxia.core.option import Option
+from tianxia.core.services import LOSE_WORD  # 勝算的「必敗」（輿圖包也讀；全部拆包第 49 批搬到核心的服務檔）
 from tianxia.events import event_candidates, pick_event  # 過渡：待搬（事件：候選、抽一則）
 from tianxia.models import DuelBoss, Location, Squad
 from tianxia.rules import jianfa
@@ -74,7 +73,7 @@ def outing_foe(ctx, loc: Location, kind: str) -> tuple[str | None, Squad | None]
     s, c = ctx.state, ctx.content
     for b in bounties.mine(s, c):
         if b.kind == "strike" and b.location == loc.id and b.squad in c.squads and not ctx._drills_with(c.squads[b.squad]):
-            if ctx.odds(b.squad) == mapdata.LOSE_WORD:
+            if ctx.odds(b.squad) == LOSE_WORD:
                 continue  # 打不贏的懸賞不強制：這一處當作沒有它（沒有放棄，手上還揭著）
             return "bounty", c.squads[b.squad]
     side = ctx._side()
@@ -128,7 +127,7 @@ def mostly_here(ctx) -> str:
     plan = ctx.outing_plan()
     if plan is not None:
         return plan.hint
-    return mapdata.mostly_here(ctx.state, ctx.content)
+    return ctx._map_mostly_here()  # 輿圖包的查詢（全部拆包第 49 批；原本直接叫 mapdata.mostly_here）
 
 
 def outing_plan(ctx) -> OutingPlan | None:
@@ -149,7 +148,7 @@ def map_mostly(ctx) -> dict[str, str] | None:
         return None
     out: dict[str, str] = {}
     hidden = event_rules.hidden_events(ctx.state, ctx.content)  # 藏起來的事件不看站在哪，四十幾處共用一份，不必每處重算
-    for loc_id in mapview.open_places(ctx.state, ctx.content):
+    for loc_id in ctx._map_open_places():  # 輿圖包的查詢（全部拆包第 49 批；原本直接叫 mapview.open_places）
         with standing_at(ctx, loc_id):
             plan = ctx._outing_plan(ctx.content.locations[loc_id], hidden=hidden)
         out[loc_id] = explore_rules.tail_of(plan.how, plan.weights)

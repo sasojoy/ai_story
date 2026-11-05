@@ -19,7 +19,8 @@ from types import SimpleNamespace
 
 from pydantic import BaseModel, Field
 
-from tianxia import gender, insight_fx, insights, mounts, naming, precise, treasures  # 核心、共用規則層
+from tianxia import gender, insight_fx, insights, naming, precise, treasures  # 核心、共用規則層
+from tianxia.core.services import terrain_tags  # noqa: F401  地形標籤：輿圖包也要讀，全部拆包第 49 批搬到 core/services.py，這裡 re-export
 from tianxia import seal_acts  # 過渡：待搬（玉璽碎片的頒詔：靜心感悟擲中多幾個百分點）
 from tianxia.martial_arts import Insight
 from tianxia.models import Content, InsightScene, Location
@@ -156,12 +157,6 @@ def rate(state: GameState, content: Content, loc: Location, method: str | None =
         base = min(high, base + edict)
     bonus = min(cfg.sense_marks_cap, _tier(state.world.marks.get(mark_key(loc.id), 0)) * cfg.sense_marks_bonus)
     return base + bonus
-
-
-def terrain_tags(loc: Location) -> list[str]:
-    """地點標籤裡的地形（河畔、城鎮……）：設施的標籤（馬市，裝備四欄 5.5；醫館，clinic.CLINIC_TAG；酒肆，tavern.TAG）不是地形，不算。
-    有所感標題的括號與輿圖抽屜名字旁的地形（意境提示設計第五節）共用。"""
-    return [tag for tag in loc.tags if tag not in (mounts.MARKET_TAG, "醫館", "酒肆")]
 
 
 def place_tags(scene: InsightScene, loc: Location) -> str:

@@ -48,7 +48,7 @@
   搬進功能包的登記〔mingtie_card，第 37 批〕改在包的 __init__.py 寫同樣的 `as _x  # noqa: F401`，照樣認）。
 - content/：test_content.py ＋ test_real_content.py ＋ 寫到那個檔名的測試檔，照舊不含 slow：test_real_content.py 用真實內容
   跑整季的那幾條是 slow（--slow 才跑、每日整套會跑），其他的（事件難度帶 DIFFICULTY_BANDS 的鎖、地點走得到……）每次都跑。
-- web/：寫到那個檔名的測試檔（main.js、map.js 照 app.js 挑），加上 test_server.py。功能包登記的網頁檔
+- web/：寫到那個檔名的測試檔（main.js 照 app.js 挑），加上 test_server.py。功能包登記的網頁檔
   （各包 __init__.py 的 web，例 web/mall.js、web/mall.css、web/outing.js；feature_web）→ 那一包的 tests/＋核心契約（CONTRACT_GLOBS）
   ＋寫到那個檔名的（店面的 CSS 守門），不照 app.js 挑、不加 test_server.py（PM 2026-10-31）。包的 js 另外：包裡用假瀏覽器
   （webharness）跑整支頁面、真的執行它的網頁測試（test_mall_web）連 slow 一起跑，跟改到的測試檔一樣（runs_js）。
@@ -86,7 +86,7 @@ WORKERS = "4"  # 開發規範手冊 4.5：同一台同時最多兩份測試在�
 # 殼的網頁檔：網頁測試每一條都載入（tests/kit/webharness.py 的 APP_FILES 扣掉功能包的 js），改哪一個都照 app.js 挑。
 # 功能包的 js（mall.js；outing.js 主動搬六包第 3＋4 批登記成探索包的）也在 APP_FILES 裡，可是照那一包挑（feature_web）；
 # test_test_for 守 WEB_SCRIPTS ∪ 各包的 js == APP_FILES
-WEB_SCRIPTS = {"main.js", "map.js", "arena_anim.js", "arena_scene.js", "admin.js", "app.js"}
+WEB_SCRIPTS = {"main.js", "arena_anim.js", "arena_scene.js", "admin.js", "app.js"}  # map.js 第 49 批起是輿圖包登記的網頁檔（feature_web）
 SETUP_FILES = {"pyproject.toml", "requirements.txt", "requirements-dev.txt"}  # conftest.py 另外照 hunk 挑（conftest_picks）
 CONFTEST_CAP = 50  # conftest 改到的名字有超過這麼多個測試檔在用（content、game、real_content）：不一個一個挑，跑煙霧
 # 跟哪一條分支比：PM 2026-10-31 起預設 origin/develop（大家從 develop 開）；環境變數 TIANXIA_TEST_BASE 蓋過預設、
@@ -1376,7 +1376,7 @@ def pick(files: list[str], base: str | None = None,
         if f.startswith("web/"):
             if SERVER_TEST in named:
                 result.files.add(named[SERVER_TEST])
-            # 江湖頁（main.js）、輿圖（map.js）是從 app.js 切出來的：測試照舊寫「app.js」，也算寫到它們（走一趟的 outing.js 是探索包的，上面那一支）
+            # 江湖頁（main.js）是從 app.js 切出來的：測試照舊寫「app.js」，也算寫到它們（走一趟的 outing.js 是探索包的、輿圖的 map.js 是輿圖包的〔第 49 批〕，上面那一支）
             names = {path.name, "app.js"} if path.name in WEB_SCRIPTS else {path.name}
             result.files |= {t for t in tests if any(n in _text(t) for n in names)}
             continue

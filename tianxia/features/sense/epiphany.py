@@ -33,7 +33,8 @@ from types import SimpleNamespace
 from pydantic import BaseModel
 
 from tianxia import insight_fx, insights, naming  # 核心、共用規則層
-from tianxia import annals, story_base  # annals 過渡：待搬（行狀〔列傳〕）；story_base 共用規則層（一條線的底座：登記這一種線的鉤子）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
+from tianxia import story_base  # 共用規則層（一條線的底座：登記這一種線的鉤子）
 from tianxia.martial_arts import Insight
 from tianxia.models import (
     GOD_FORMS, Content, Effect, GodTrait, StoryAnswer, StoryDef, StoryEnding, StoryFail, StoryQuestion, StoryStage,

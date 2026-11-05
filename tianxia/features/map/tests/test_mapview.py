@@ -430,7 +430,7 @@ WOODS = Terrain(kind="forest", points=[[10, 40], [390, 40], [390, 190], [10, 190
 
 @pytest.fixture(scope="module")
 def real():
-    return load_content(Path(__file__).parents[2] / "content")
+    return load_content(Path(__file__).parents[4] / "content")  # 全部拆包第 49 批整檔搬進包（原本 tests/map/ 是 parents[2]）
 
 
 def trampled(pieces, content) -> list[str]:

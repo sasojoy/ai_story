@@ -65,7 +65,7 @@ import console
 import server_push
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, ascend, battle_instance, flavor, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, fight_llm, foreshadow, gender, insight_llm, leaderboard, letters, mapdata, might,
+    arena_crowd, ascend, battle_instance, flavor, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, fight_llm, foreshadow, gender, insight_llm, leaderboard, letters, might,
     naming, narration, outing,
     ollama_client, power_save, rules,
     precise, seal, seal_duel, server_bots, social, sortie, speech, tale, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
@@ -78,6 +78,7 @@ from tianxia.database import default_path, open_database
 from tianxia.flavor import FlavorJob
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, TEXT_TALKS, Game, Refused
 from tianxia.core import features as features_core  # 功能包：殼照 FEATURES 掛管理者工具與路由（開發規範手冊 3.1）
+from tianxia.features.map import views as map_views  # 輿圖的 /api/map 資料與底圖快取：全部拆包第 49 批搬進輿圖包（殼留同一個物件的別名）  # 殼留薄包裝：`map_view` 要 `md`（第 49 批 PM 認定第 10 條）
 from tianxia.features.feast import rules as feasts  # 宴客自己寫的敬酒詞：鎖外評分（三段式還在殼裡，過渡）
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.notices import KINDS as NOTICE_KINDS
@@ -2220,50 +2221,15 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
     }
 
 
-MAP_BASE: dict[str, dict] = {}  # 輿圖升級的底圖：照開放的地點（mapdata.base_key）快取；一季差不多只有一兩把鍵
-MAP_BASE_KEEP = 8  # 超過就整個清掉重來（劇情開放的地點只有幾處，不會真的到）
-
-
-def map_base_view(game: Game) -> dict:
-    """輿圖升級的底圖與清單（/api/map/base）：同一把鍵（開放的地點一樣）回同一份，不重畫。呼叫端拿著行動鎖（look）。
-    減法季探索一顆開著的季，名字旁的兩個字是看的人的（Game.map_mostly，2f，FB-886；網頁讀這裡 places[].mostly）：快取的是跟人無關的那一份
-    （山河的圖、路、大區、天下圖），每個人再換上自己的名字旁與鍵（mapdata.with_mostly，新的 dict、重的部分同一份物件）；鍵跟疊層
-    （Game.map_state）的 key 是同一串，字變了網頁就會重抓。"""
-    key = mapdata.base_key(game.state, game.content)
-    if key not in MAP_BASE:
-        if len(MAP_BASE) >= MAP_BASE_KEEP:
-            MAP_BASE.clear()
-        MAP_BASE[key] = game.map_base(viewer=False)
-    mostly = game.map_mostly()
-    if mostly is None:
-        return MAP_BASE[key]
-    return mapdata.with_mostly(MAP_BASE[key], mapdata.base_key(game.state, game.content, mostly), mostly)
+# 輿圖的底圖快取與 map_base_view、map_view 搬進輿圖包 tianxia/features/map/views.py（全部拆包第 49 批）；這裡留同一個物件的別名
+MAP_BASE = map_views.MAP_BASE  # 輿圖升級的底圖快取（測試 server.MAP_BASE.clear()）
+MAP_BASE_KEEP = map_views.MAP_BASE_KEEP
+map_base_view = map_views.map_base_view
 
 
 def map_view(game: Game, layer: str, selected: str | None) -> dict:
-    places = game.map_places()
-    if selected not in {loc_id for _, loc_id in places}:
-        selected = game.state.player.location
-    if layer not in Game.MAP_LAYERS:
-        layer = DEFAULT_LAYER
-    return {
-        "header": md(game.map_header()),
-        "layers": [{"id": key, "name": name} for key, name in Game.MAP_LAYERS.items()],
-        "layer": layer,
-        "svg": game.world_map_svg(layer, selected),
-        # 圖例不畫進 svg（圖裡的會跟著平移、縮放，放大時就看不見）：跟 svg 並排給網頁，疊在地圖框角落（web/app.js 的 legendHtml）
-        "legend": game.map_legend(layer),
-        "places": [{"label": label, "id": loc_id} for label, loc_id in places],
-        "selected": selected,
-        "here": game.state.player.location,
-        "detail": md(game.place_detail(selected)),
-        # 步行、疾行兩個按鈕（照 atlas.MODES 的順序）；就在這裡時是 None。被待處理的事件擋著時只有一顆灰的、
-        # label 寫是哪一則，to_jianghu 為真：頁面在旁邊多給一顆「回江湖」（FB-063）
-        "travel": [
-            {"mode": o.mode, "label": o.label, "enabled": o.enabled, "to_jianghu": o.to_jianghu}
-            for o in game.travel_options(selected) or []
-        ] or None,
-    }
+    """舊的輿圖（/api/map）與 /api/travel 走不成時帶的 map：資料在輿圖包 views.map_view，這裡只把殼的 md 帶進去。"""
+    return map_views.map_view(game, layer, selected, md)
 
 
 def reports_view(game: Game, record_id: int | None) -> dict:
@@ -3417,51 +3383,10 @@ def zhuan_extras(store, row: dict) -> dict:
     return out
 
 
-@app.get("/api/map")
-def api_map(request: Request, layer: str = DEFAULT_LAYER, place: str | None = None):
-    """舊的輿圖（四個圖層的整張 SVG 與詳情欄）：輿圖升級之後網頁不再呼叫，留一版給還開著舊網頁的分頁（設計第九節）。"""
-    game = _game(request)
-    return look(game, lambda g: map_view(g, layer, place))
+# （/api/map、/api/map/base、/api/map/state：全部拆包第 49 批搬進輿圖包 tianxia/features/map/routes.py，殼照 FEATURES 掛）
 
 
-@app.get("/api/map/base")
-def api_map_base(request: Request):
-    """輿圖升級的底圖（只有紙、大區、山河、路）與地點、路、大區的清單；網頁一次載入只抓一次，疊層的 key 變了才重抓。"""
-    game = _game(request)
-    return look(game, map_base_view)
-
-
-@app.get("/api/map/state")
-def api_map_state(request: Request):
-    """輿圖升級的疊層：每個地點此刻的控制方、勝算、出陣、分鐘、軍令懸賞，戰線、今天去哪裡出陣、每一週的地盤（mapdata.state）。"""
-    game = _game(request)
-    return look(game, lambda g: g.map_state())
-
-
-@app.post("/api/travel")
-def api_travel(request: Request, body: dict = Body(...)):
-    """「安排前往」（步行、疾行）：出發了就回 {main, arrived: true}，畫面回江湖、場景寫路上或抵達的地點；
-    按鈕是舊的而走不成時（例如打開輿圖之後才冒出事件）回 {arrived: false, map, reason}，留在輿圖、寫出原因。"""
-    game = _game(request)
-    target = str(body.get("place", ""))
-    mode = str(body.get("mode") or "walk")
-    refused: list[str] = []
-
-    def go(g: Game) -> list[str]:
-        reason = g.travel_refusal(target, mode)
-        if reason is not None:
-            refused.append(reason)
-        return g.travel(target, mode)
-
-    act(game, go)
-    if not refused:  # 走不成的什麼都沒變（同步而已），其他分頁不必刷新
-        _play_did(game, "travel")
-        _tell_tabs(game)
-    out = {"main": look(game, main_view), "arrived": not refused}
-    if refused:
-        out["reason"] = refused[0]
-        out["map"] = look(game, lambda g: map_view(g, str(body.get("layer") or DEFAULT_LAYER), target))
-    return out
+# POST /api/travel（安排前往）：全部拆包第 47 批搬進移動包 tianxia/features/travel/routes.py，殼照 FEATURES 掛（features_core.routers）。
 
 
 @app.post("/api/password")

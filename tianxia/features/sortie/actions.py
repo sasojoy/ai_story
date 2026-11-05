@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import gender, team
 from tianxia import allied  # 共用規則層（豪強依附的那一軍：混戰撞不撞得上）
-from tianxia import annals  # 過渡：待搬（行狀：混戰那一筆交手）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import battlelog  # 共用規則層（戰報）
 from tianxia import conquest  # 共用規則層（地盤：區塊、進度、推不推得動、混戰的對象）
 from tianxia import encounter  # 共用規則層（單次判定：混戰）

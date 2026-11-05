@@ -463,7 +463,7 @@ def _index(model, items: list[dict]) -> dict:
 def _material_sources(c: Content) -> set[str]:
     """所有拿得到的素材 id：路邊採集、對手掉（含依難度的預設表）、事件與路上見聞給。
 
-    探索不再撿素材（武學與成長計畫一：探索改悟意境），地點能給素材的只剩路邊採集（Game._road_gather）：
+    探索不再撿素材（武學與成長計畫一：探索改悟意境），地點能給素材的只剩路邊採集（移動包 features/travel/road_actions.py 的 gather）：
     採到的永遠是一階，屬性看這段路兩頭的地點寫了哪些素材（只看屬性，不看寫的是幾階），兩頭都沒寫就隨機一階。
     所以地點寫了二、三階素材，那一階並不會因此拿得到。"""
     from .materials import _default_rolls, by_tier  # noqa: PLC0415  延後 import，避免循環依賴
@@ -477,7 +477,7 @@ def _material_sources(c: Content) -> set[str]:
                 for end in (loc, c.locations.get(str(conn)))
                 if end is not None for mid in end.materials if mid in c.materials
             }
-            picked = [m.id for m in first_tier if m.attribute in kinds]  # 跟 Game._road_gather 一樣：挑不到就退回全部一階
+            picked = [m.id for m in first_tier if m.attribute in kinds]  # 跟移動包 features/travel/road_actions.py 的 gather 一樣：挑不到就退回全部一階
             reachable |= set(picked or [m.id for m in first_tier])
     for squad in c.squads.values():
         if squad.drops:

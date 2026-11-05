@@ -26,7 +26,7 @@
 
 from __future__ import annotations
 
-from tianxia import annals  # 過渡：待搬（行狀〔列傳〕，第 29 批）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import calendar  # 核心
 from tianxia.models import Content, StoryDef, StoryEnding, StoryStage
 from tianxia.rules import EffectRun, apply_effect, check_condition, day_seconds, fill_marks
