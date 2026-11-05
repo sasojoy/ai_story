@@ -32,8 +32,8 @@ ROOT = Path(__file__).resolve().parents[2]
 FEATURE_DIR = ROOT / "tianxia" / "features"
 # companions（第 20 批審查）：原本的 "talk:leave" 這一批拿了前綴之後是人物情誼包的 id，換成核心的 "road:back"。
 # battle（全部拆包第 8 批）：原本的 "battle:join:guan" 第 7 批拿了前綴之後其實是決戰包的 id（第 7 批 PM 認定第 6 條），換成核心的 "season:paused"
-# travel（全部拆包第 47 批）：原本的 "move:yingshui"、"road:back" 這一批拿了前綴之後是移動包的 id，換成核心的 "faction:confirm"、"bounty:take"。
-CORE_IDS = ["act:explore", "act:train", "faction:confirm", "choice:0", "bounty:take", "season:paused", "season:resting", "x"]
+# travel（全部拆包第 47 批）：原本的 "move:yingshui"、"road:back" 這一批拿了前綴之後是移動包的 id，換成核心的 "act:rest"、"choice:1"（faction: 歸第 35 批、bounty: 歸第 45 批，同一波合進來不能拿它們當核心 id）。
+CORE_IDS = ["act:explore", "act:train", "act:rest", "choice:0", "choice:1", "season:paused", "season:resting", "x"]
 # 選單由核心原位排、包一律開著（enabled 一律 True）的包：關掉它也不會讓選單少掉那幾顆（test_a_closed_package_gives_nothing 不查選單那兩行）
 MENU_BY_CORE = {"travel": "移動的選單（前往、折返、路上小事）順序算行為，Game 原位叫包的函式排（不走 Feature.options）；包一律開著，選單本來就不看開關（全部拆包第 47 批）"}
 
