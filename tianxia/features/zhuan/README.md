@@ -18,14 +18,14 @@
 
 ## 認領的欄位（手冊 3.5）
 
-`player_fields = ()`、`carried = ()`：`annals`、`annals_mark`、`xingshi_seen` 是行狀，核心 `annals.py` 管，這一包不認領；列傳存在資料庫的 `biographies` 表，票在錢包（商城）裡，都不是 `PlayerState` 欄位。
+`player_fields = ()`、`carried = ()`：`annals`、`annals_mark`、`xingshi_seen` 是行狀，核心 `core/annal_base.py` 管，這一包不認領；列傳存在資料庫的 `biographies` 表，票在錢包（商城）裡，都不是 `PlayerState` 欄位。
 
 ## 還留在原位的接縫
 
 - `Game` 上 9 個一行委派：`_zhuan_past`（換季：`_reset_player_for_new_season` 最前面）、`_zhuan_tick`（`sync` 的 `_stance_annals` 之後、`_deliver_mail` 之前）、`_zhuan_options`（`_everyday_options` 休季那一支）、`annals_view`、`biography_entry`（server `main_view`）、`biography_request`、`write_biography`、`biography_view`、`share_biography`。紀錄先後算行為，前三個不是掛鉤的位置，記在邊界測試的 `GAME_DELEGATE_CALLERS`。
 - B 段（鎖外叫模型）留在 `server.py`：`write_zhuan`、`verdict_text`、`ZHUAN_JOBS`、`ZHUAN_LOCK`，加上 `zhuan_view`、`zhuan_extras`、`zhuan_art_src`、`public_base`、`_season_arg`、`_zhuan_key`。`tests/server/test_server.py` 掃「鎖外叫模型的函式」認 `zhuan_job`、`verdict_text` 這幾個名字；鎖外工作的掛鉤是總表第 69 批，到時候再搬。
 - 根目錄 `zhuan_html.py` 是別名檔（`server.py` 舊的 import、`tests/core/test_desktop_type.py` 讀的路徑）；`tests/core/test_shop_width.py` 讀這個檔斷言「不含 zhuan-layer」，別名檔也成立，但斷言的實質變弱了（真正的內容在包裡）。
-- `biography.py` import 核心的行狀 `annals`（行尾註「過渡：待搬」，行狀歸核心 `annals.py`，總表第 29 批拆兩半時再處理）。
+- 行狀拆兩半（全部拆包第 29 批之二）：記一筆的那一半（`note`、`entry`、`watch`、種類常數）在核心 `tianxia/core/annal_base.py`，`biography.py`、`actions.py` 與各包記行狀都 import 它（不算過渡）；查詢與行狀頁那一半（`profile`、`standing`、`tier_*`、`xingshi_notes`、`rows`）在 `standing.py`。舊名 `tianxia/annals.py` 是別名，兩半都 re-export 同一批物件。換季存行狀時的身家 `profile` 核心不能 import 包，經 `Game._zhuan_profile` 一行委派（Game 上列傳的委派成了 10 個）。
 
 ## 測試
 

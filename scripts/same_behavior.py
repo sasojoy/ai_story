@@ -11996,7 +11996,7 @@ class ZhuanScenario(Scenario):
     PLAYERS = {RULE: "guan", MODEL_W: "huang", FREE: "guan", LONE: None, EMPTY: "guan", LAPSED: "huang"}
     NEWBIE = "紀懷素"
     BOT_SEATS = ["冊甲", "冊乙"]
-    PHASES_FIRST = ["setup", "seed", "close", "tickets", "first_writes", "half"]
+    PHASES_FIRST = ["setup", "seed", "records", "close", "tickets", "first_writes", "pending", "half"]
     PHASES_SECOND = ["resume", "second_writes", "after_written", "pages", "bots", "roll", "old_season", "bots_again"]
 
     # ── 小工具 ──
@@ -12137,6 +12137,38 @@ class ZhuanScenario(Scenario):
         names = f"{self.RULE}與{self.LAPSED}"
         self.world.mutate_season(lambda s: s.xingshi.append(XingshiEssay(key=1, time=1000, n=1, essay=f"潁川一帶，{names}連日奔走。", line="是日：兩軍相持。")))
 
+    def records(self) -> None:
+        """各包記一筆行狀（全部拆包第 29 批之二，annals 拆兩半）：打贏（交手）、差事辦成、人物立場、決戰（大戰）、約戰單挑、攻守、玉璽、痕跡、奇事各記一則
+        （種類、份量、人物、保留的名號），〈天下形勢〉與季末論功是 seed／close 的同步記的；再各自先看一次狀態（annals_mark 有了才比得出變化）。
+        看 /api/annals 的小標、時刻與排序、酒肆打聽得到的（heard）與文字工具。"""
+        from tianxia import annals
+        from tianxia.engine import Game
+
+        figs = self.figs()
+        for who in (self.RULE, self.FREE, self.MODEL_W):
+            def fn(s, who=who):
+                c = self.c
+                other = self.MODEL_W if who != self.MODEL_W else self.RULE
+                annals.note(s, c, annals.FIGHT, f"{who}在城門外打贏了{other}。", 4, keep=[other])
+                annals.note(s, c, annals.ERRAND, f"替{figs[0]}跑了一趟腿，辦成了。", 3, figure=figs[0])
+                annals.note(s, c, annals.STANCE, "他改做另一件事。", 2, figure=figs[1])
+                big = annals.entry(s, c, annals.SHOWDOWN, f"{who}在決戰裡守住了一處關口。", 5, quote="死守", reply="好！", place="潁川", time=s.world.time)
+                s.player.annals.append(big)
+                annals.trim(s, c)
+                annals.note(s, c, annals.DUEL, f"在渡口約戰{other}，險勝。", 3, keep=[other])
+                annals.note(s, c, annals.CONQUER, "率先攻入一處城邑", 4, place="城外", time=s.world.time)
+                annals.note(s, c, annals.SEAL, "起用了一片碎片。", 4)
+                annals.note(s, c, annals.MARK, "這裡頭有你出的一分力。", 2)
+                annals.note(s, c, annals.STORY, "一樁奇事收了尾。" * 3, 4)
+                annals.note(s, c, annals.DEED, "", 3)  # 空句不記
+                emit(f"{who} 行狀的分類", [[e.kind, annals.KINDS.get(e.kind), annals.GROUPS.get(e.kind), annals.heard(e)] for e in s.player.annals])
+                Game(c, s, world=self.world)._log([])  # 先看一次：annals_mark 有了，下一次才比得出變化
+                emit(f"{who} 先看了", {"mark": s.player.annals_mark, "n": len(s.player.annals)})
+            self.edit_state(who, fn)
+            self.call(who, "GET", "/api/annals")
+            self.me(who, "各包記完")
+        emit("文字工具", [annals.clip("甲\n乙  丙" * 30, 20), annals.first_sentence("你好嗎？我很好。" * 12)])
+
     def close(self) -> None:
         """管理者收季；除了屈懷瑾，每個人同步一次進休季（季末論功、〈天下形勢〉各記一則行狀）並看行狀頁。"""
         self.do(ADMIN, "end_season")
@@ -12194,6 +12226,21 @@ class ZhuanScenario(Scenario):
         self.main(self.RULE)
         self.main(self.MODEL_W)
 
+    def pending(self) -> None:
+        """半舊半新的切點：狀態變了（情誼跨格、等級；同伴 id 是人物表的、不在 characters，watch 不記）、annals_mark 還是舊的（edit_state 直接存，沒有走動作）——有 mark 還沒寫成行狀。
+        前半停在這裡，後半第一件事（flush）才讓 watch 比出來。"""
+        figs = self.figs()
+        for who in (self.RULE, self.FREE):
+            def fn(s, who=who):
+                p = s.player
+                p.affinities[figs[1]] = 95
+                p.member.level += self.c.config.biography.level_every * 2
+                if figs[2] not in p.team:
+                    p.team.append(figs[2])
+            self.edit_state(who, fn)
+            s = self.chars.load(who)
+            emit(f"{who} 變了還沒記", {"mark": s.player.annals_mark, "annals": len(s.player.annals), "level": s.player.member.level, "team": list(s.player.team)})
+
     def half(self) -> None:
         for who in self.PLAYERS:
             self.me(who, "前半停在這裡")
@@ -12202,10 +12249,22 @@ class ZhuanScenario(Scenario):
 
     def resume(self) -> None:
         self.login_all()
+        self.flush()  # 前半留下的變化先補記，再做別的（不然 main 的同步會先補）
         for who in self.PLAYERS:
             if who != self.LAPSED:
                 self.main(who)
                 self.zopts(who, "接手")
+
+    def flush(self) -> None:
+        """後半第一件事：同步比出前半留下的變化（情誼、等級各記一筆），看行狀頁。"""
+        from tianxia.engine import Game
+
+        for who in (self.RULE, self.FREE):
+            def fn(s):
+                Game(self.c, s, world=self.world)._log([])
+            self.edit_state(who, fn)
+            self.me(who, "補記之後")
+            self.call(who, "GET", "/api/annals")
 
     def second_writes(self) -> None:
         """模型回了：葛臨川才寫（正文＋三條評曰）；封硯秋重寫（買了重修列傳，一季能重寫兩次）；岑書瀾重寫一次（模型擋著）；同一篇已經在寫就不再開。"""

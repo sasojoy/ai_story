@@ -10,7 +10,7 @@ ctx 就是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上
 from __future__ import annotations
 
 from tianxia import arts as arts_mod  # 共用規則層
-from tianxia import annals  # 過渡：待搬（絕學定名寫行狀）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import growth, journal, library, naming, team
 from tianxia import prologue as prologue_rules  # 序章（共用規則層；Game.new 有個參數也叫 prologue，照 engine 叫 prologue_rules）
 from tianxia import skillview  # 過渡：待搬（修練頁的說明：熔了還能重學、配點那一句；共用規則層 SHARED_LATER）

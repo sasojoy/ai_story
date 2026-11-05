@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import random
 
-from tianxia import annals  # 過渡：待搬（行狀）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import battle_instance, battlelog, encounter, materials, renown, rise, rounds, tactics, treasures
 from tianxia import gender, team
 from tianxia.core import duel_base

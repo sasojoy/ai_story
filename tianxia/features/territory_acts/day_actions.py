@@ -4,7 +4,7 @@ _conquest_tick、_deliver_conquest，名字去掉前導底線、第一個參數�
 """
 from __future__ import annotations
 
-from tianxia import annals  # 過渡：待搬（行狀 annals）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import conquest, renown
 from tianxia import team
 from tianxia.characters import name_key

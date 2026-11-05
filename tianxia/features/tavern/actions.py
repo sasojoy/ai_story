@@ -17,7 +17,7 @@ import random
 from typing import TYPE_CHECKING
 
 from tianxia import team
-from tianxia import annals  # 過渡：待搬（行狀：殺手那一場記一筆）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import battlelog  # 共用規則層（戰報：殺手那一場）
 from tianxia import bounties  # 過渡：待搬（懸賞榜：通緝名單、牆上的榜）
 from tianxia import encounter  # 共用規則層（單次判定：殺手那一場；測試換掉 encounter.resolve_encounter）
