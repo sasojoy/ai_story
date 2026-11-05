@@ -133,12 +133,12 @@ BATCHES = {
         ]),
     "26": dict(
         title="事件機制（核心批）——一包發生的事、別包跟著動；先開六種事件（懸賞交差四種、玉璽兩種），訂閱順序寫死在核心",
-        pkg="core_events", feature="feature/core-events", dev="dev/core-events-1", host="coreevents1",
+        pkg="core_eventbus", feature="feature/core-eventbus", dev="dev/core-eventbus-1", host="coreeventbus1",
         plan="docs/superpowers/plans/2026-11-06-事件機制-第26批.md",
         prev_plan="docs/superpowers/plans/2026-11-06-效果與叛投掛鉤-第32批.md",
         ports={"dev": 8174, "rev": 8175, "fix": 8175, "head": 8176, "base": 8177}, fb="FB-9480～FB-9489",
         reviewers=3, dev_model=None, all_tracks=True,
-        parallel="**核心批單獨跑**（總表 5.2 第 3 條）：這段期間沒有別的拆包批在開發。第 25 批（世界層掛鉤）、第 32 批（效果與叛投）與第 34、37、39、46 批這一波都已合；PM 開 `feature/core-events` 在 split/trunk 這一筆",
+        parallel="**核心批單獨跑**（總表 5.2 第 3 條）：這段期間沒有別的拆包批在開發。第 25 批（世界層掛鉤）、第 32 批（效果與叛投）與第 34、37、39、46 批這一波都已合；PM 開 `feature/core-eventbus` 在 split/trunk 這一筆（`feature/core-events`、`dev/core-events-1` 是第 16 批事件檢定用過的名字，不要碰）",
         body=[
             "- **這一批是核心批，沒有新包**：範圍照總表 3.3 第 26 列與第六節第 1、2 條，手冊 3.10 說的「第 2 階有例子再開」的那個機制。下面 Task 2～4 寫「搬進 `tianxia/features/<包>/`」的地方換成：**Task 2** 在 `tianxia/core/features.py` 開事件機制（寫法照第 25 批世界層掛鉤與第 32 批效果掛鉤：發布點位置固定、不看包的 `enabled`、照 `registered()` 問；**每一種事件的訂閱順序寫死在核心**——一張明確的順序表，連還沒成包、先掛在舊模組上的那幾格一起列——契約測試鎖住。第 25、32 批都量到「位置不影響結果」不成立，這一批照同一個做法）；**Task 3** 接上發布點，現在的主人在自己的檔裡掛上自己那一格；**Task 4** 契約測試與邊界測試。",
             "- **先開六種事件**：懸賞交差用的四種（打贏一場、探索一趟、抵達某地、截殺打贏）、玉璽用的兩種（決戰收場、集結開始）。每一種寫明：發布點在哪（就是現在直接叫懸賞／玉璽的那一行，**位置一個都不動**）、帶什麼參數、回傳什麼（訊息行照現在的順序接回原處）、現在有誰該聽。**集結開始**：第 25 批的世界層 `WORLD_ORDER` 的 muster 格已經有 seal（front／works／seal／generals）；先量 `world._open_claimed` 叫 `seal.on_muster` 那一處還在不在，已經被世界層接走的就不另開一份，計畫第一節寫明、交 PM 定。",
