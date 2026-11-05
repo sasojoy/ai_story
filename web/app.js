@@ -470,6 +470,7 @@
       ${S.book ? bookHtml() : ""}
       ${S.zhuan ? zhuanHtml(S.zhuan) : ""}
       ${S.legacy ? legacyPageHtml() : ""}
+      ${S.main && S.main.prep ? prepHtml(S.main.prep) : ""}
       ${S.mtEdit && S.mingtie ? mtEditHtml() : ""}
       ${S.mtZoom ? mtZoomHtml() : ""}`;
     fitBars(); // 先量狀態列：所在那一行放不下會折成兩行、狀態列高一截（FB-493），第一屏（renderPage 裡的 fitFirstScreen）照折好的高度收
@@ -912,7 +913,7 @@
   function legacyOfferOpen() {
     const g = S.main && S.main.legacy;
     const n = g && g.shihai && g.shihai.offers ? g.shihai.offers.length : 0;
-    if (!n) { S.legacyOffered = false; return; }
+    if (!n || (S.main && S.main.prep)) { S.legacyOffered = false; return; } // 開季準備卡在畫識海那一步：不另外跳識海頁
     if (S.legacyOffered) return;
     S.legacyOffered = true;
     S.legacy = "shihai";
@@ -1004,15 +1005,54 @@
 
   // ＋鈕底下一行：五項各管什麼（計畫二最終審查 M2）。點數配了收不回來，按之前要讀得到；文字是引擎給的（status.stat_uses），
   // 一項一個 inline-block：手機上整項一起換行，不會把「根骨：內功威力…」從中間折斷，也不會撐出橫向捲動
-  // 成長配比（五項屬性的季才有 s.growth）：還沒挑時列五套預設，挑了寫現在怎麼長、照樣能改（回溯）
+  // 成長配比（五項屬性的季才有 s.growth）：一季只挑一次（開季準備卡，企劃者 2026-11-05），狀態列只寫現在怎麼長；還沒挑的時候開季準備卡蓋在上面
   function growthHtml(g) {
     const row = (split) => split.map(([k, v]) => `${esc(k)} ${v}`).join("・");
     const chosen = g.presets.find((p) => p.key === g.chosen);
-    const head = chosen ? `成長：${esc(chosen.name)}（每級 ${row(g.now)}）` : g.chosen === "custom" ? `成長：自己配（每級 ${row(g.now)}）` : "挑這一季的成長（每級合計 " + g.per_level + " 點，之後改也照現在的等級重算）";
-    const draft = S.growthDraft;
-    return `<div class="growth"><div class="pts-label">${head}</div><div class="row alloc">${g.presets.map((p) =>
-      `<button class="btn small" data-act="growth" data-preset="${esc(p.key)}" data-glow="allocate" title="${esc(row(p.split))}" ${p.key === g.chosen ? "disabled" : ""}>${esc(p.name)}</button>`).join("")}` +
+    const name = chosen ? chosen.name : g.chosen === "custom" ? "自己配" : "";
+    if (name) return `<div class="growth"><div class="pts-label">這一季的成長：${esc(name)}（每級 ${row(g.now)}）</div></div>`;
+    // 還沒挑：序章那一步在這裡挑（序章裡沒有開季準備卡）；序章外開季準備卡蓋在上面，草稿共用 S.growthDraft
+    const draft = S.main && S.main.prep ? null : S.growthDraft;
+    return `<div class="growth"><div class="pts-label">挑這一季的成長（每級合計 ${g.per_level} 點，一季只挑一次）</div><div class="row alloc">${g.presets.map((p) =>
+      `<button class="btn small" data-act="growth" data-preset="${esc(p.key)}" data-glow="allocate" title="${esc(row(p.split))}">${esc(p.name)}</button>`).join("")}` +
       `<button class="btn small" data-act="growth-custom" ${draft ? "disabled" : ""}>自己配</button></div>${draft ? growthEditHtml(g, draft) : ""}</div>`;
+  }
+
+  // 開季準備卡（main.prep，企劃者 2026-11-05「至少需要導引」）：新的一季第一個畫面，① 挑成長配比 ② 識海（有上一季的神品意境時）。
+  // 蓋住整個畫面、沒有關掉的鈕：兩步做完才能做別的事（引擎的選單也只剩這幾顆）。挑配比先點一張再按「定下來」（一季只挑一次）
+  const PREP_TAGS = { warrior: "武力、統御高：打得重、扛得住", strategist: "悟性高：內功打得重、悟意境", ranger: "身法高：落敗也容易閃成僵持",
+    envoy: "魅力、悟性高：招募便宜、說得動人、放手一搏", balanced: "五項一樣：哪一樣都不缺" };
+  function prepHtml(p) {
+    const m = S.main, g = m.status && m.status.growth;
+    const at = p.steps.indexOf(p.step);
+    const steps = p.steps.length > 1 ? `<ol class="prep-steps">${p.steps.map((k, i) =>
+      `<li class="${i === at ? "on" : i < at ? "done" : ""}"><b>${i < at ? "✓" : i + 1}</b>${k === "growth" ? "成長配比" : "識海"}</li>`).join("")}</ol>` : "";
+    const growth = p.step === "growth" && g;
+    const body = growth ? prepGrowthHtml(g) : prepShihaiHtml(m.legacy && m.legacy.shihai);
+    return `<div class="prep-layer" role="dialog" aria-modal="true" aria-label="開季準備"><div class="prep-card">
+      <div class="prep-head"><small>新的一季・開季準備</small><h2>${growth ? "這一季怎麼長" : "識海：帶一份前世所悟"}</h2>${steps}</div>
+      ${body}</div></div>`;
+  }
+  function prepGrowthHtml(g) {
+    const pick = S.prepPick;
+    const max = g.custom_max || g.per_level;
+    const bars = (split) => `<span class="prep-split">${split.map(([k, v]) =>
+      `<span><i style="--w:${Math.round((v / max) * 100)}%"></i>${esc(k)} ${v}</span>`).join("")}</span>`;
+    const cards = g.presets.map((x) => `<button class="prep-opt${pick === x.key ? " on" : ""}" data-act="prep-pick" data-preset="${esc(x.key)}" aria-pressed="${pick === x.key}">
+        <b>${esc(x.name)}</b><small>${esc(PREP_TAGS[x.key] || "")}</small>${bars(x.split)}</button>`).join("") +
+      `<button class="prep-opt${pick === "custom" ? " on" : ""}" data-act="prep-pick" data-preset="custom" aria-pressed="${pick === "custom"}"><b>自己配</b><small>五項各 ${g.custom_min}～${max} 點，合計 ${g.per_level}</small></button>`;
+    const edit = pick === "custom" && S.growthDraft ? growthEditHtml(g, S.growthDraft) : "";
+    const go = pick && pick !== "custom" ? `<button class="btn primary prep-go" data-act="prep-growth">照「${esc((g.presets.find((x) => x.key === pick) || {}).name || "")}」長，定下來</button>` : "";
+    return `<p class="prep-lead">每升一級五項合計長 ${g.per_level} 點，照你挑的這一套分。<b>這一季只挑一次</b>，挑了就定了；每 10 級另外送的點，隨時自己配。</p>
+      <div class="prep-opts">${cards}</div>${edit}${go}`;
+  }
+  function prepShihaiHtml(sh) {
+    const offers = (sh && sh.offers) || [];
+    const need = ((sh && sh.need) || []).map((n) => n.text).join("、");
+    return `<p class="prep-lead">上一季悟出的神品意境，可以挑一份封進識海帶進這一季。封著的用不上，${need ? `要${esc(need)}才解得開` : "解封了才用得上"}；不帶也可以。</p>
+      <div class="prep-opts">${offers.map((o, i) => `<div class="prep-keep"><div><b>${esc(o.name)}</b><small>神品意境・屬${esc(o.attribute)}・第${lgNum(o.season)}季</small></div>
+        <button class="btn primary small" data-act="choose" data-id="legacy:seal:${i}">封進識海</button></div>`).join("")}</div>
+      <button class="btn ghost prep-go" data-act="choose" data-id="legacy:skip">這一季不帶</button>`;
   }
 
   // 自己配（五項屬性的季）：每一項 −／＋，合計要剛好 per_level、每一項 custom_min～custom_max；草稿只在這個分頁（S.growthDraft），按「定下來」才送
@@ -6290,17 +6330,26 @@
         case "growth-custom": { // 自己配：從現在怎麼長起草（鍵照 growth.keys 的順序，now 是同一個順序）
           const g = S.main && S.main.status && S.main.status.growth;
           if (g) S.growthDraft = Object.fromEntries(g.keys.map(([k], i) => [k, g.now[i] ? g.now[i][1] : g.custom_min]));
-          renderTop();
+          render();
           break;
         }
         case "growth-step": {
           const d = S.growthDraft;
           if (d) d[el.dataset.key] = Math.max(0, (d[el.dataset.key] || 0) + Number(el.dataset.d));
-          renderTop();
+          render();
           break;
         }
-        case "growth-cancel": S.growthDraft = null; renderTop(); break;
-        case "growth-save": { const split = S.growthDraft; S.growthDraft = null; await doMain("growth", { preset: "custom", split }); break; }
+        case "growth-cancel": S.growthDraft = null; S.prepPick = null; render(); break;
+        case "prep-pick": { // 開季準備卡：先點一張（自己配從均衡起草），再按「定下來」
+          const g = S.main && S.main.status && S.main.status.growth;
+          S.prepPick = el.dataset.preset;
+          S.growthDraft = S.prepPick === "custom" && g ? Object.fromEntries(g.keys.map(([k], i) => [k, g.now[i] ? g.now[i][1] : g.custom_min])) : null;
+          render();
+          break;
+        }
+        case "prep-growth": { const preset = S.prepPick; S.prepPick = null; await doMain("growth", { preset }); break; }
+        case "alloc-toggle": S.allocOpen = !S.allocOpen; renderPage(); break; // 江湖頁頂上「有 N 點可配」：攤開＋鈕
+        case "growth-save": { const split = S.growthDraft; S.growthDraft = null; S.prepPick = null; await doMain("growth", { preset: "custom", split }); break; }
         case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
         case "letter-open": {

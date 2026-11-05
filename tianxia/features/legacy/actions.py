@@ -2,15 +2,13 @@
 
 識海（企劃者 2026-11-05「識海應該要在開季正式開始遊戲前可以設定才對」：不再季中選，改成開季時挑）：
 - 換季那一刻（on_season_start）抄下上一季身上所有神品意境當候選（LegacyBook.offers）。
-- legacy:seal:<i>：把第 i 份封進識海；legacy:skip：這一季不帶（一直按得下去，bot_always）。在做第一件事之前都能選，
-  一做別的事（after_action）候選就收掉。
+- legacy:seal:<i>：把第 i 份封進識海；legacy:skip：這一季不帶（一直按得下去，bot_always）。開季準備卡的第二步（prep：
+  有候選時接管整個選單，排在挑成長配比之後、開局三選一之前），選了才能做別的事；不會因為做了別的事被收掉（企劃者 2026-11-05「不能讓玩家誤丟」）。
 - legacy:open：解封封著的那一份：開季後 shihai_after 世界秒、shihai_level 級以上、花 shihai_xinde 心得；名字照這一季登記
   （WorldState.god_names；不寫 god_firsts、不上江湖史的首創：帶過來的是傳承、不是首創）。這一季已經有人先取了同名，先取的人優先，
   改從三個候選挑一個（legacy:name:<i>）。身上已經有一份神品（或正在等著取名）的解不開：神品一人最多一份，識海那一份也算。
 """
 from __future__ import annotations
-
-import weakref
 
 from tianxia import insight_fx, insights, naming, renown
 from tianxia.core.features import Outcome
@@ -21,7 +19,6 @@ from . import rules as R
 
 TITLE = "識海"
 NAMES_OFFERED = 3
-_OWN_TURN: weakref.WeakSet = weakref.WeakSet()  # 這一下按的是識海自己的動作的 Game（包不在 Game 上掛屬性：test_feature_boundaries）
 NAME_TRIES = 12
 
 # 寫給玩家看的字（待 joy 潤）
@@ -32,8 +29,7 @@ OPEN_WAIT = "解封識海：{name}（{why}）"
 NAME_LABEL = "識海裡的那一份改名為「{name}」"
 SEALED = "你把上一季的「{name}」封進識海。它跟著你，只是封著，要解封才用得上。"
 SKIPPED = "這一季識海不帶上一季的神品意境。"
-LAPSED = "你已動身，上一季的神品意境沒有封進識海，這一季不帶了。"
-OFFER_NOTE = "上一季身上的神品意境可以挑一份封進識海（{names}）：在做第一件事之前選，一動身就來不及了。"
+OFFER_NOTE = "上一季身上的神品意境可以挑一份封進識海（{names}）：開季準備時挑一份，或這一季不帶。"
 TAKEN = "這一季江湖上已經有一個神品意境叫「{name}」了，先取的人優先。替識海裡的那一份換個名字。"
 OPENED = "識海解封：神品意境「{name}」（屬{attribute}）回到你身上。"
 FITS = "這一份要裝在合得上屬{attribute}的武學上才生效；裝不上的話，先換一門武學。"
@@ -81,9 +77,6 @@ def options(ctx) -> list[Option]:
     out: list[Option] = []
     if book is None:
         return out
-    if book.offers:
-        out += [Option(id=f"legacy:seal:{i}", label=SEAL_LABEL.format(name=o.insight.name)) for i, o in enumerate(book.offers)]
-        out.append(Option(id="legacy:skip", label=SKIP_LABEL))
     sealed = book.sealed
     if sealed is not None:
         if sealed.names:
@@ -95,13 +88,21 @@ def options(ctx) -> list[Option]:
     return out
 
 
+def prep(ctx) -> list[Option] | None:
+    """開季準備卡的識海那一步：有候選時只剩「封進識海」幾顆與「這一季不帶」（Game._season_prep 排在挑成長配比之後）。"""
+    book = ctx.state.player.legacy
+    if book is None or not book.offers:
+        return None
+    return [Option(id=f"legacy:seal:{i}", label=SEAL_LABEL.format(name=o.insight.name)) for i, o in enumerate(book.offers)] + [
+        Option(id="legacy:skip", label=SKIP_LABEL)]
+
+
 def title(ctx, arg: str) -> str:
     return TITLE
 
 
 def act(ctx, arg: str) -> list[str]:
     verb, _, rest = arg.partition(":")
-    _OWN_TURN.add(ctx)  # 這一下是識海自己的動作：after_action 不收候選
     book = ctx.state.player.legacy
     if verb == "seal":
         if book is None or not rest.isdigit() or int(rest) >= len(book.offers):
@@ -119,18 +120,6 @@ def act(ctx, arg: str) -> list[str]:
     if verb == "name" and rest.isdigit():
         return _open(ctx, int(rest))
     return [NOT_YET]
-
-
-def after_action(ctx) -> list[str]:
-    """本人做完一件事（Game.choose 最後）：開季的識海候選只等到第一件別的事——一動身就收掉（識海自己的動作不算）。"""
-    if ctx in _OWN_TURN:
-        _OWN_TURN.discard(ctx)
-        return []
-    book = ctx.state.player.legacy
-    if book is None or not book.offers:
-        return []
-    book.offers = []
-    return [LAPSED]
 
 
 def _taken(ctx, name: str) -> bool:

@@ -38,10 +38,10 @@ class LegacyFeature(Feature):
 
         return actions.status(ctx)
 
-    def after_action(self, ctx) -> list[str]:
+    def prep(self, ctx):
         from . import actions  # noqa: PLC0415
 
-        return actions.after_action(ctx)
+        return actions.prep(ctx)
 
     def on_season_start(self, ctx, old) -> None:
         from . import actions  # noqa: PLC0415

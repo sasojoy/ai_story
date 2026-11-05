@@ -25,6 +25,12 @@ def _game(on: bool = True, profile: str = "season21") -> Game:
     return g
 
 
+def _grow(g: Game, preset: str, split: dict | None = None) -> list[str]:
+    """量不同配比：一季只能挑一次（開季準備卡），測試要換一套就先清掉再挑。"""
+    g.state.player.growth_preset = None
+    return g.pick_growth(preset, split)
+
+
 def _level(g: Game, level: int) -> None:
     g.state.player.member.level = level
 
@@ -44,7 +50,7 @@ def test_values_grow_by_the_preset_and_a_later_pick_is_retroactive():
     _level(g, 11)
     balanced = attrset.values(g.state, c)
     assert balanced == {k: v2.base + 10 * 2 for k in v2.keys}  # 還沒挑：照均衡長
-    g.pick_growth("warrior")
+    _grow(g, "warrior")
     assert attrset.value(g.state, c, "str") == v2.base + 10 * 4  # 回溯：照現在的等級整條重算
     assert attrset.value(g.state, c, "int") == v2.base + 10 * 1
     names = [row[0] for row in g.status_data()["attrs"]]
@@ -53,11 +59,11 @@ def test_values_grow_by_the_preset_and_a_later_pick_is_retroactive():
 
 def test_custom_split_must_add_up():
     g = _game()
-    bad = g.pick_growth("custom", {"str": 9, "lead": 1, "int": 0, "spd": 0, "cha": 0})
+    bad = _grow(g, "custom", {"str": 9, "lead": 1, "int": 0, "spd": 0, "cha": 0})
     assert "至少" in bad[-1] and g.state.player.growth_preset is None
-    bad = g.pick_growth("custom", {"str": 6, "lead": 1, "int": 1, "spd": 1, "cha": 1})
+    bad = _grow(g, "custom", {"str": 6, "lead": 1, "int": 1, "spd": 1, "cha": 1})
     assert "最多" in bad[-1] and g.state.player.growth_preset is None  # 每一項最多 custom_max（4），不能全壓在一項
-    g.pick_growth("custom", {"str": 4, "lead": 3, "int": 1, "spd": 1, "cha": 1})
+    _grow(g, "custom", {"str": 4, "lead": 3, "int": 1, "spd": 1, "cha": 1})
     _level(g, 3)
     assert attrset.value(g.state, g.content, "str") == g.content.config.attributes.v2.base + 8
 
@@ -80,7 +86,7 @@ def test_old_formulas_read_the_new_value_against_the_average_person():
     c, v2 = g.content, g.content.config.attributes.v2
     assert team.v1_stat(g.state, c, "agi") == 5  # 跟平均人一樣：舊尺度的起點，效果 0
     _level(g, 11)
-    g.pick_growth("ranger")  # 身法每級 4
+    _grow(g, "ranger")  # 身法每級 4
     mean = attrset.expect(c, 11)
     r = (attrset.value(g.state, c, "spd") - mean) / mean
     want = v2.legacy_caps["agi"] * math.tanh(r / v2.legacy_scale)
@@ -96,9 +102,9 @@ def test_the_check_is_relative_to_the_level():
     even = rules.check_outlook(check, g.state, c, g.world)
     assert round(even.chance, 6) == c.config.attributes.v2.grade_rates["normal"]  # 第 1 級＝平均人
     _level(g, 21)
-    g.pick_growth("strategist")  # 悟性每級 4：高過平均
+    _grow(g, "strategist")  # 悟性每級 4：高過平均
     high = rules.check_outlook(check, g.state, c, g.world).chance
-    g.pick_growth("warrior")  # 悟性每級 1：低過平均，還是有基本的成功率
+    _grow(g, "warrior")  # 悟性每級 1：低過平均，還是有基本的成功率
     low = rules.check_outlook(check, g.state, c, g.world).chance
     assert high > c.config.attributes.v2.grade_rates["normal"] > low >= c.config.checks.floor
     legacy = Check(stat="agi", difficulty=8)  # 舊寫法照帶子分級：8 是「難」＋1
@@ -136,7 +142,7 @@ def test_damage_is_my_force_against_their_command():
     g = _game()
     c = g.content
     _level(g, 21)
-    g.pick_growth("warrior")
+    _grow(g, "warrior")
     weak = c.squads[min(c.squads, key=lambda k: c.squads[k].difficulty)]
     tough = weak.model_copy(update={"level": 21, "aptitude": {"lead": 9}})
     with team.facing(g.state, c, weak):
@@ -217,7 +223,7 @@ def test_command_cuts_the_hp_lost_against_their_force():
     brute = weak.model_copy(update={"level": 21, "aptitude": {"str": 9}})
 
     def lost(preset, squad):
-        g.pick_growth(preset)
+        _grow(g, preset)
         m = g.state.player.member
         m.neili, m.injury = None, 0.0
         before, cap = g._player_hp_and_cap()
@@ -236,7 +242,7 @@ def _pvp_pair(level: int = 30):
     for g, split, bonus in ((a, {"str": 4, "lead": 1, "int": 1, "spd": 3, "cha": 1}, "str"),
                             (b, {"str": 3, "lead": 4, "int": 1, "spd": 1, "cha": 1}, "lead")):
         _level(g, level)
-        g.pick_growth("custom", split)
+        _grow(g, "custom", split)
         g.state.player.attr_alloc = {bonus: 30}
     return a, b
 
@@ -324,7 +330,7 @@ def test_arena_counts_dodge_and_drops_roles_in_five_attribute_seasons():
     for g, split, bonus in ((quick, {"str": 3, "lead": 1, "int": 1, "spd": 4, "cha": 1}, "spd"), (plain, None, None)):
         _level(g, 30)
         if split:
-            g.pick_growth("custom", split)
+            _grow(g, "custom", split)
             g.state.player.attr_alloc = {bonus: 30}
     me, foe = arena_actions.arena_side(quick), arena_actions.arena_side(plain)
     assert me.role  # 開打前還帶著職位（身法最高：斥候）
@@ -342,13 +348,13 @@ def test_charm_helps_gamble_hire_and_favor_only_in_five_attribute_seasons():
     g = _game()
     _level(g, 30)
     caps = g.content.config.attributes.v2.charm
-    g.pick_growth("custom", {"str": 1, "lead": 1, "int": 3, "spd": 1, "cha": 4})
+    _grow(g, "custom", {"str": 1, "lead": 1, "int": 3, "spd": 1, "cha": 4})
     g.state.player.attr_alloc = {"cha": 30}
     up = {h: attrset.charm(g.state, g.content, h) for h in caps}
     assert all(0 < up[h] <= caps[h][0] for h in caps) and up["gamble"] > 4
     assert hire.price(g) < g.content.config.hire.cost
     assert renown.warmed(g.content, 10, g.state) > renown.warmed(g.content, 10)
-    g.pick_growth("custom", {"str": 4, "lead": 3, "int": 1, "spd": 1, "cha": 1})
+    _grow(g, "custom", {"str": 4, "lead": 3, "int": 1, "spd": 1, "cha": 1})
     g.state.player.attr_alloc = {"str": 30}
     assert all(-caps[h][1] <= attrset.charm(g.state, g.content, h) < 0 for h in caps)
     old = _game(False)
@@ -360,7 +366,7 @@ def test_a_check_can_read_charm_in_five_attribute_seasons():
     """檢定寫了 v2（例 cha）：五項屬性的季改看那一項、選項上寫「魅力」；舊的季照 stat。"""
     g = _game()
     _level(g, 30)
-    g.pick_growth("custom", {"str": 1, "lead": 1, "int": 1, "spd": 3, "cha": 4})
+    _grow(g, "custom", {"str": 1, "lead": 1, "int": 1, "spd": 3, "cha": 4})
     plain, charm = Check(stat="wis", difficulty=7), Check(stat="wis", difficulty=7, v2="cha")
     assert rules.check_chance(charm, g.state, g.content, g.world) > rules.check_chance(plain, g.state, g.content, g.world)
     assert rules.check_stat_name(charm, g.content, g.state.world) == "魅力"
@@ -387,3 +393,40 @@ def test_counter_cuts_need_a_world_and_dodge_still_works_without_one():
     g = _game()
     assert team.counter_cuts(g.state, g.content, None) == {}
     assert 0 <= team.dodge_chance(g.state, g.content) <= 1
+
+
+def test_the_season_prep_card_asks_for_the_growth_first_and_locks_it():
+    """開季準備卡（企劃者 2026-11-05）：還沒挑配比時選單只剩挑配比的鈕（排在開局三選一前面）；挑了就鎖，這一季不能再換。"""
+    g = _game()
+    g.state.player.growth_preset = None  # 換季、網頁上建的新角色：還沒挑
+    assert g.season_prep_view() == {"step": "growth", "steps": ["growth"]}
+    ids = [o.id for o in g.options()]
+    assert ids == [f"growth:{p.key}" for p in g.content.config.attributes.v2.presets] + ["growth:custom"]
+    assert g.choose("act:train") == ["（此刻無法這麼做。）"]
+    assert g.choose("growth:custom") == ["（在卡上自己配五項，配好按「定下來」。）"] and g.state.player.growth_preset is None
+    g.choose("growth:ranger")
+    assert g.state.player.growth_preset == "ranger" and g.season_prep_view() is None
+    assert not any(o.id.startswith("growth:") for o in g.options())
+    assert g.pick_growth("warrior") == ["這一季的成長配比已經定了，下一季開季再挑。"] and g.state.player.growth_preset == "ranger"
+
+
+def test_no_prep_card_in_old_seasons_or_for_script_characters():
+    off = _game(False)
+    assert off.season_prep_view() is None
+    c = real_content("season21")
+    c.config.auto_open_first_season = True
+    scripted = Game.new(c, "沈浪", rng=random.Random(0), world=open_world(Path(tempfile.mkdtemp(prefix="attrs-")) / "tianxia.db"))
+    assert scripted.state.player.growth_preset == c.config.attributes.v2.default_preset  # 序章算走過：照預設那一套
+    assert scripted.season_prep_view() is None
+
+
+def test_bots_pick_their_growth_on_the_prep_card():
+    from tianxia import bot, bot_policy
+
+    g = _game()
+    g.state.player.growth_preset = None
+    options = g.options()
+    key = bot.growth_key(g)
+    assert bot.pick(g, options, random.Random(0)) == f"growth:{key}"
+    scores = {o.id: bot_policy.score(g, o, None) for o in options}  # 挑配比的分數不看個性
+    assert scores[f"growth:{key}"] == bot_policy.GROWTH_SCORE and all(v is None for k, v in scores.items() if k != f"growth:{key}")

@@ -311,6 +311,9 @@ class Refused(list):
 
 # 賽季籌備中（管理者還沒開季）：選單上那一顆灰的、安排前往被擋的原因寫 PREPARING_TEXT；動作被擋回一句 PREPARING_REFUSAL
 PREPARING_TEXT = "賽季籌備中，等待管理者開季"
+GROWTH_PREFIX = "growth:"  # 開季準備卡上挑成長配比的鈕（growth:<配比>；growth:custom 只打開自己配的那一塊）
+GROWTH_LOCKED = "這一季的成長配比已經定了，下一季開季再挑。"
+GROWTH_CUSTOM_ASK = "（在卡上自己配五項，配好按「定下來」。）"
 PREPARING_REFUSAL = f"（{PREPARING_TEXT}。）"
 # 測試期間一鍵補滿體力（Config.beta_free_refill，企劃者 2026-10-07）。以下四句與鈕上的字（Config.beta_free_refill_label）全是新寫的，待 joy 潤：
 REFILL_TITLE = "補滿體力"  # 江湖紀錄那一則的標題（joy 的丹是「服下回體丹」）
@@ -514,6 +517,9 @@ class Game:
             prologue_rules.skip_onboarding(game.state, content)  # 假人、機器人、腳本：初入江湖是給網頁上的真人看的
             if prologue_rules.has(content):
                 game.state.player.stamina = float(content.config.stamina_max)
+            if attrset.on(content, game.state.world) and game.state.player.growth_preset is None:
+                # 序章算走過：五項屬性的季序章那一步就是挑配比，照預設那一套（開季準備卡是給網頁上建的真人與換季的人看的）
+                game.state.player.growth_preset = content.config.attributes.v2.default_preset
         p = game.state.player
         p.visited.add(p.location)
         gift = content.config.beta_gift and content.config.beta_gift_stamina_pills > 0
@@ -1184,6 +1190,9 @@ class Game:
             return [Option(id="season:preparing", label=PREPARING_TEXT, enabled=False)]
         if s.world.ended:  # 休季：列傳為終點開著、手上有列傳的票時多幾顆用票的鈕（減法季批 7b；關著、沒票一顆不多）
             return [Option(id="season:resting", label="休季中，等待管理者開啟下一季", enabled=False)] + self._zhuan_options()
+        prep = self._season_prep()  # 開季準備（企劃者 2026-11-05）：成長配比、識海，做完才能做別的事；排在事件（開局三選一）前面
+        if prep is not None:
+            return prep
         if s.pending_event:
             event = c.events[s.pending_event]
             opts = []
@@ -2487,6 +2496,9 @@ class Game:
                 return Refused([f"（{problem}。）"])
         if option is None or not option.enabled:
             return self._log([self._fight_gone(fight) if fight is not None else "（此刻無法這麼做。）"])
+        if option_id.startswith(GROWTH_PREFIX):  # 開季準備卡挑配比：pick_growth 自己寫紀錄（自己配要五項的數字，走 /api/growth）
+            preset = option_id.removeprefix(GROWTH_PREFIX)
+            return self._log([GROWTH_CUSTOM_ASK]) if preset == attrset.CUSTOM else self.pick_growth(preset)
         faction_before = self.state.player.faction  # 這一下才投靠的人才開始入伍段（見 _begin_enlistment）
         self.state.battle_card = None
         self.state.player.guide_done = []  # 對話框上一次完成的那幾行，下一次行動就清掉
@@ -8775,12 +8787,38 @@ class Game:
         self._guide(self._note_action("allocate"))
         return self._log([f"{name} +1{left}"])
 
+    def _season_prep(self) -> list[Option] | None:
+        """開季準備卡（企劃者 2026-11-05「至少需要導引」）：進新的一季第一個畫面，依序 ① 挑這一季的成長配比（五項屬性的季、還沒挑）
+        ② 功能包的開季準備（傳承：識海的候選封一份或不帶）。做完才能做別的事，所以接管整個選單；不在選單上的動作照舊各自擋。
+        序章裡不問（序章那一步就是挑配比，跟這張卡不重複問）。沒有要準備的回 None。"""
+        s, c = self.state, self.content
+        if prologue_rules.active(s, c):
+            return None
+        if attrset.on(c, s.world) and s.player.growth_preset is None:
+            return [Option(id=f"{GROWTH_PREFIX}{p['key']}", label=f"這一季照「{p['name']}」長")
+                    for p in attrset.view(s, c)["presets"]] + [Option(id=f"{GROWTH_PREFIX}{attrset.CUSTOM}", label="自己配")]
+        return features_core.prep(self)
+
+    def season_prep_view(self) -> dict | None:
+        """江湖畫面的 main.prep（網頁畫開季準備卡）：step 是 growth（挑配比，鈕照 main.status.growth 畫）或 feature（功能包的那一步，
+        選項照選單畫：傳承的識海）；steps 是這一張卡有幾步（五項屬性的季有挑配比那一步，功能包還有要準備的多一步）。沒有要準備的是 None。"""
+        prep = self._season_prep()
+        if prep is None:
+            return None
+        growth = any(o.id.startswith(GROWTH_PREFIX) for o in prep)
+        steps = (["growth"] if attrset.on(self.content, self.state.world) else []) + (["feature"] if features_core.prep(self) is not None else [])
+        return {"step": "growth" if growth else "feature", "steps": steps}
+
     @_not_while_preparing
     def pick_growth(self, preset: str, custom: dict | None = None) -> list[str]:
-        """挑這一季的成長配比（屬性與跨季架構 v2 3.1：五套預設或自己配，合計固定）：只有五項屬性的季有；回溯照現在的等級整條重算。"""
+        """挑這一季的成長配比（屬性與跨季架構 v2 3.1：五套預設或自己配，合計固定）：只有五項屬性的季有。
+        一季只挑一次、挑了就鎖（企劃者 2026-11-05「加點是隨時都可以調整？感覺有點奇怪」）：序章那一步或開季準備卡上挑；
+        還沒挑的人照 default_preset 長。"""
         s, c = self.state, self.content
         if not attrset.on(c, s.world):
             return self._log(["（這一季沒有成長配比。）"])
+        if s.player.growth_preset is not None:
+            return Refused(self._log([GROWTH_LOCKED]))
         custom = {str(k): v for k, v in (custom or {}).items()} if isinstance(custom, dict) else None
         problem = attrset.growth_problem(c, preset, custom)
         if problem:

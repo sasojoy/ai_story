@@ -539,6 +539,7 @@ def _answer_discuss(game: Game, rng: random.Random, slot: NamingSlot | None) -> 
     return []
 
 
+GROWTH_SCORE = 100.0  # 開季準備卡上照名號那一套配比（只剩這幾顆可按）
 TEACH_PER_TICK = 3  # 假人一輪最多傳幾下功（真人也是一下一下按的）
 
 
@@ -818,6 +819,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     owned, value = features_core.bot_pick(game, option)  # 搬成包的功能：假人看到這一顆怎麼按問那一包（開發規範手冊 3.8；宴客 feast:）
     if owned:
         return value
+    if kind == "growth":  # 開季準備卡挑配比：照名號那一套（bot.growth_key），其餘不按
+        return GROWTH_SCORE if arg == bot.growth_key(game) else None
     if kind == "opp":
         return None  # 機緣：假人不做（正式版乙一）；對話裡的 talk:opp: 落在下面 talk 的 None
     # 決戰（battle:）搬進功能包：假人的分數在 features/battle/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 7 批）

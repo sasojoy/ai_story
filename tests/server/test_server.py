@@ -1304,7 +1304,7 @@ def test_the_allocate_buttons_say_what_each_stat_does():
     """M2：＋鈕底下那一行（五項各管什麼）跟＋鈕畫在同一個條件裡——有點可配才出現；用的是伺服器送的 stat_uses 與
     stat_uses_note，網頁不寫死屬性的用途。"""
     js = webharness.app_source()
-    start = js.index('data-act="allocate"')
+    start = js.index('data-act="allocate" data-stat="${esc(key)}" data-glow="allocate"')  # 狀態列那一排（江湖頁頂上提示條攤開的另有一排）
     line = js[js.rindex("\n", 0, start):js.index("\n", start)]
     assert line.strip().startswith("${s.stat_points ?") and "statUsesHtml(s)" in line
     helper = js[js.index("function statUsesHtml"):]
