@@ -24,7 +24,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import calendar, chapters, rules, story_base, week_unlock, wins
+from . import calendar, rules, story_base, week_unlock, wins
+from . import chapters  # 過渡：待搬（第 40 批：章回收進共用規則層）
 from . import step as step_rules
 from . import prologue as prologue_rules
 from .rules import STANCE_NAMES
