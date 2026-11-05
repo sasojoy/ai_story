@@ -14210,13 +14210,21 @@ class EffectsScenario(Scenario):
         if field == "donate_grain":
             return {self.hub(): 3}
         if field == "recruit":
-            free = [cid for cid in sorted(c.characters) if c.characters[cid].kind == "recruitable" and c.characters[cid].side in (None, "guan")]
+            free = [cid for cid in sorted(c.characters) if c.characters[cid].kind is not None and c.characters[cid].side in (None, "guan")]
             return free[0] if free else None
         return None
 
     def single_effect(self, slot: str, fields: tuple[str, ...]) -> dict | None:
         if slot == "shard":  # 舊鏈的玉璽碎片：劇本的碎片旗標（沒寫就換一個對照用的旗標，照樣是「這一下新立的世界旗標」）
             return {"world_flags_add": [self.c.scenario.jade_seal_flag or f"{FX_PREFIX}flag"], "chronicle": "{name}在對照的路上拾得一物。"}
+        if slot == "story":  # 一條線的一步：挑一步有紀念物的（「收進行囊」那一句才看得出這一格在回話裡的先後）；沒有就照 sample
+            import copy
+
+            steps = [eff.story for eid in sorted(self.c.events) if not eid.startswith(FX_PREFIX) for ch in self.c.events[eid].choices
+                     for eff in (ch.effect, ch.fail_effect) if eff.story is not None]
+            kept = next((s for s in steps if s.keepsake), None)
+            if kept is not None:
+                return {"story": copy.deepcopy(kept)}
         out = {}
         for f in fields:
             value = self.sample(f)
@@ -14240,6 +14248,8 @@ class EffectsScenario(Scenario):
         for kw in self.singles.values():
             for f, value in (kw or {}).items():
                 out.setdefault(f, value)
+        if (self.singles.get("story") or {}).get("story") is not None:  # 一條線那一步用有紀念物的那一步（回話裡排最後的那一句）
+            out["story"] = self.singles["story"]["story"]
         flag = self.c.scenario.jade_seal_flag
         if flag and flag not in out.get("world_flags_add", []):
             out["world_flags_add"] = [*out.get("world_flags_add", []), flag]
@@ -14376,6 +14386,7 @@ class EffectsScenario(Scenario):
 
     def stage_defector(self, who: str, n: int) -> None:
         """叛投之前手上擺滿會被清的進度（n 讓兩個人擺的數不一樣）；全服那一側：響應的密謀、席次與帳、揭著的懸賞、寫了 side 的同伴。"""
+        from tianxia import roster
         from tianxia.state import Bounty, Convoy, FollowerDrill, HintNote, ParleyDebt, Plot, Summons
 
         c, side = self.c, "guan"
@@ -14414,7 +14425,7 @@ class EffectsScenario(Scenario):
                                      location=self.hub(), takers=[who]))
 
         self.world.mutate_season(world_fn)
-        mate = next((cid for cid in sorted(c.characters) if c.characters[cid].kind == "recruitable" and c.characters[cid].side == side), None)
+        mate = next((cid for cid in sorted(c.characters) if c.characters[cid].side == side and roster.owned_by(self.world, cid) is None), None)
         emit(f"{who} 名下寫了 side 的同伴", [mate, mate is not None and self.world.try_recruit(mate, who, cap=3)])
 
     def to_target(self, who: str) -> str | None:
