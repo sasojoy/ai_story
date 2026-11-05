@@ -99,9 +99,10 @@ def test_the_season_start_offers_every_god_of_last_season():
     next_season(game)
     book = game.state.player.legacy
     assert book.sealed is None and [o.insight.name for o in book.offers] == ["寒江獨照"]
-    assert [o.id for o in game.options() if o.id.startswith("legacy:")] == ["legacy:seal:0", "legacy:skip"]
+    assert [o.id for o in game.options()] == ["legacy:seal:0", "legacy:skip"]  # 開季準備卡的識海那一步：接管整個選單
+    assert game.season_prep_view() == {"step": "feature", "steps": ["growth", "feature"]}
     entry = next(e for e in game.state.journal if e.title == "傳承")
-    assert any("「寒江獨照」" in line and "第一件事之前" in line for line in entry.lines)
+    assert any("「寒江獨照」" in line and "開季準備" in line for line in entry.lines)
     game, _ = god_game()
     give_god(game, "斷水流雲")
     next_season(game)
@@ -130,15 +131,16 @@ def test_seal_or_skip_before_the_first_move():
     assert game.choose("legacy:skip") == [actions.SKIPPED] and game.state.player.legacy.sealed is None
 
 
-def test_the_first_other_move_closes_the_offer():
+def test_the_offer_waits_until_sealed_or_skipped():
+    """企劃者 2026-11-05「不能讓玩家誤丟」：候選不會因為做了別的事收掉——開季準備卡擋著，別的事要等封了或不帶才做得了。"""
     game, _ = god_game()
     next_season(game)
-    other = next(o for o in game.options() if o.enabled and not o.id.startswith("legacy:"))
-    msgs = game.choose(other.id)
-    assert actions.LAPSED in msgs
+    assert game.choose("act:train") == ["（此刻無法這麼做。）"]
+    game.sync(game.state.world.time + 3600)
     book = game.state.player.legacy
-    assert book.offers == [] and book.sealed is None
-    assert actions.LAPSED not in game.choose(next(o for o in game.options() if o.enabled).id)  # 只說一次
+    assert [o.insight.name for o in book.offers] == ["寒江獨照"] and book.sealed is None
+    game.choose("legacy:skip")
+    assert game.season_prep_view() is None and any(o.id.startswith("act:") for o in game.options())
 
 
 def test_unsealing_waits_a_day_level_fifteen_and_xinde():
@@ -215,7 +217,12 @@ def test_a_real_season_change_through_sync():
     from conftest import next_season as roll
 
     roll(c, world, player)
+    assert player.season_prep_view() == {"step": "growth", "steps": ["growth", "feature"]}  # 開季準備卡：先挑配比、再封識海
+    assert {o.id for o in player.options()} == {f"growth:{k}" for k in ("warrior", "strategist", "ranger", "envoy", "balanced", "custom")}
+    player.choose("growth:warrior")
+    assert player.state.player.growth_preset == "warrior" and player.season_prep_view()["step"] == "feature"
     player.choose("legacy:seal:0")
+    assert player.season_prep_view() is None
     p = player.state.player
     assert p.legacy.zheng == 5.0 and p.legacy.sealed.insight.name == "寒江獨照" and "legacy_zheng_1" in p.flags
     assert player.feature_status()["legacy"]["values"]["zheng"] == 5

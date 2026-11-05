@@ -13,6 +13,7 @@
 | enabled(ctx) | 每一個彙整之前 |
 | options(ctx) | Game._stamina_play_options（「此地還能做」裡，體力玩法、護衛之後、盤算之前；序章裡、休季不問） |
 | menu(ctx) | Game._everyday_options：這一包此刻接管整個選單（坐在宴席上、店開著那一類）；第一個不是 None 的算。**手冊 3.3 表外**（見下） |
+| prep(ctx) | Game._season_prep：開季準備卡（企劃者 2026-11-05），挑完成長配比之後這一包此刻接管整個選單，排在事件（開局三選一）前面；第一個不是 None 的算。**手冊 3.3 表外**（傳承的識海；跟 menu 差在位置：menu 在事件之後） |
 | choose(ctx, kind, arg) | Game.choose 建這一下的紀錄（Draft）之前：只吃自己前綴的 id，吃不到回 None，核心問下一包 |
 | status(ctx) | Game.feature_status → server.main_view（合進江湖畫面的頂層，例：商城的入口 main.mall） |
 | on_sync(ctx, elapsed)、on_day(ctx) | Game.sync（elapsed 是這一次補算的自己的秒數；on_day 是回體丹那一天換了：照 _pill_day，含快轉推過的 advanced_real，所以 Game.advance 跨過 00:00 也叫） |
@@ -130,6 +131,7 @@ class FeatureHooks(Protocol):
     def enabled(self, ctx: Game) -> bool: ...
     def options(self, ctx: Game) -> list[Option]: ...
     def menu(self, ctx: Game) -> list[Option] | None: ...
+    def prep(self, ctx: Game) -> list[Option] | None: ...
     def choose(self, ctx: Game, kind: str, arg: str) -> Outcome | None: ...
     def status(self, ctx: Game) -> dict: ...
     def on_sync(self, ctx: Game, elapsed: float) -> None: ...
@@ -176,6 +178,9 @@ class Feature:
         return []
 
     def menu(self, ctx: Game) -> list[Option] | None:
+        return None
+
+    def prep(self, ctx: Game) -> list[Option] | None:
         return None
 
     def choose(self, ctx: Game, kind: str, arg: str) -> Outcome | None:
@@ -279,6 +284,14 @@ def options(ctx: Game) -> list[Option]:
 def menu(ctx: Game) -> list[Option] | None:
     for f in active(ctx):
         got = f.menu(ctx)
+        if got is not None:
+            return got
+    return None
+
+
+def prep(ctx: Game) -> list[Option] | None:
+    for f in active(ctx):
+        got = f.prep(ctx)
         if got is not None:
             return got
     return None
