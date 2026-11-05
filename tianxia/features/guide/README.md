@@ -35,7 +35,7 @@
 
 ## 過渡（手冊 3.11）
 
-- 包 → 還沒搬的舊模組：`rules.py` 2 行（`ranks`；`world`）、`opening.py` 1（`bounties`）、`enlist.py` 1（`orders`）、`actions.py` 1（`atlas`、`figures`、`howto`；`create` 第 44 批煉製自創成包時拿掉：`h_create` 改問包的三個查詢服務 `ctx._create_on()`、`_create_allowed()`、`_create_price()`；`training` 第 18 批登記進共用規則層，不算過渡；`sensing` 全部拆包第 24 批有所感成包時拿掉：假人走序章那一下改問有所感包的查詢服務 `ctx._sense_prologue_choice()`）。
+- 包 → 還沒搬的舊模組：`rules.py` 1 行（`ranks`；`world` 那一行全部拆包第 25 批收進核心本體，註拿掉）、`opening.py` 1（`bounties`）、`enlist.py` 1（`orders`）、`actions.py` 1（`atlas`、`figures`、`howto`；`create` 第 44 批煉製自創成包時拿掉：`h_create` 改問包的三個查詢服務 `ctx._create_on()`、`_create_allowed()`、`_create_price()`；`training` 第 18 批登記進共用規則層，不算過渡；`sensing` 全部拆包第 24 批有所感成包時拿掉：假人走序章那一下改問有所感包的查詢服務 `ctx._sense_prologue_choice()`）。
 - 服務清單（`tianxia/core/services.py`）這一包加的：一、共用 `_check_hints`、`_hint`、`_note_action`、`_preparing`、`_journal_guide`、`_free_text_of`、`HutReward`；二、查詢 `_at_battle`（決戰）、`_tavern_on`、`_tavern_here`、`_tavern_at`（酒肆）、`_recruit_target`、`_recruitable_here`（人物情誼；第 19 批成包，從過渡改成查詢服務）、`_create_on`、`_create_allowed`、`_create_price`、`forge`（煉製自創，第 44 批成包，從過渡改成查詢服務）；三、過渡 `slot_insight`、`switch_art`、`practice`、`allocate_stat`、`melt_art`（武學）、`_hint_triggers`（自己的委派）。
 
 ## 測試

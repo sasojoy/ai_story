@@ -195,3 +195,10 @@ def apply(state: GameState, content: Content, note: YuedanNote, lines: dict[str,
             e.line = lines[e.name]
     publish(state, content)
     return True
+
+
+# core_world（全部拆包第 25 批「世界層掛鉤」）：世界層 step 的 yuedan 那一格（tianxia/core/features.py 的 WORLD_ORDER：排最後）
+def world_step(vehicle: GameState, content: Content, world, step: float) -> None:
+    """世界一步（原本 world.advance_world_state 裡盤算之後那一行）：月旦評，跨進新的一週評六個人；給了 store 才評（要掃角色）。
+    判斷都在 tick 裡（照原位）；不接回傳值。"""
+    tick(vehicle, content, world)

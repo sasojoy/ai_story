@@ -21,7 +21,10 @@
 # - tests/core/test_feature_boundaries.py：功能包能 import 的就是這幾個（加上 tianxia/core/），這幾個都不能 import 功能包；
 # - scripts/test_for.py：改了這幾個跑核心測試＋煙霧＋自己檔名的測試（照語法樹讀這一行、不 import；test_test_for 守兩邊一樣）。
 # 只寫字面的名字（test_for 用 ast.literal_eval 讀）。
+# core_world（全部拆包第 25 批）：world（世界一步、週初與每天、開季結算、收季、開集結）改成世界層掛鉤（core/features.py 的 WORLD_ORDER）、
+# 不再 import 功能包之後收進來（總表第 15 列）。它還代叫幾個沒成包的舊模組（行尾標批號），核心 → 舊模組這一版照舊不掃（同 journal）。
 MODULES = frozenset({
     "state", "sqlite_world", "world_state", "characters", "accounts", "database", "rules", "calendar", "models", "content",
     "team", "gender", "naming", "wallet", "journal",
+    "world",
 })

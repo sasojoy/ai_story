@@ -7,7 +7,7 @@ README.md 寫這一包做什麼、導覽與設計稿。
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome
+from tianxia.core.features import Feature, Outcome, WorldHook
 
 
 class FeastFeature(Feature):
@@ -57,6 +57,18 @@ class FeastFeature(Feature):
         from . import actions  # noqa: PLC0415
 
         return actions.scene(ctx)
+
+    # core_world（全部拆包第 25 批「世界層掛鉤」）
+    _world: tuple[WorldHook, ...] | None = None
+
+    def world(self) -> tuple[WorldHook, ...]:
+        """世界層 step 的 feast 那一格（時間到了的宴散席；原本 world.advance_world_state 直接叫 feasts.settle）：不問 enabled。
+        建一次就留著，在叫的那一下才照模組屬性找 rules.world_step（monkeypatch 照樣有效）。"""
+        if self._world is None:
+            from . import rules  # noqa: PLC0415
+
+            self._world = (WorldHook("step", "feast", lambda *args: rules.world_step(*args)),)
+        return self._world
 
 
 FEATURE = FeastFeature()

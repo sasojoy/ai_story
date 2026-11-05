@@ -32,7 +32,7 @@ MARK = "過渡：待搬"
 
 # 核心的模組：tianxia/core/__init__.py 的 MODULES（手冊 3.1 的十三個、3.10 的錢包、PM 10/31 定算核心的江湖紀錄），
 # 只有那一份——scripts/test_for.py 也照它挑（10/31 審查：以前這裡跟 test_for 各寫一份，對不上）。
-# journal 自己 import front_lines、battlelog（核心 → 舊模組，這一版不掃）
+# journal 自己 import front_lines、battlelog（核心 → 舊模組，這一版不掃；第 25 批收進來的 world 代叫的舊模組也一樣，行尾標批號）
 CORE = set(CORE_MODULES)
 
 
@@ -1022,14 +1022,11 @@ SHARED_PENDING = {
     ("seats", "ranks"): "排定：階級的稱號（ranks.TITLES，函式裡）——第 40 批收進共用規則層",
     ("conquest", "seal_acts"): "排定：璽效查詢（seal_acts.held、ends、held_during、hold_lapse）——第 51 批 16 個璽效查詢進共用規則層",
     ("siege", "atlas"): "排定：大區（atlas.region_of）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層。atlas 最外層 import 出陣包"
-                        "（舊名 sortie；函式裡還有 sortie_duel），也經 world 帶進宴客包 feast、單挑包 bout（第 12 批）：切開之前 import siege 會連帶載入"
-                        " sortie、feast、bout 三包",
+                        "（舊名 sortie；函式裡還有 sortie_duel）：切開之前 import siege 會連帶載入 sortie（以前也經 world 帶進宴客包、單挑包，"
+                        "第 25 批 world 收進核心本體之後不再 import 包）",
     ("clinic", "atlas"): "排定：最近的醫館（atlas.routes、shortest_routes、Route）——同上，第 50 批；切開之前 import clinic 同樣經 atlas"
-                         "連帶載入出陣包 sortie、宴客包 feast、單挑包 bout",
+                         "連帶載入出陣包 sortie",
     ("siege", "conquest_day"): "排定：作罷（conquest_day.void、note_void）——第 46 批 Task 1 先搬進 conquest",
-    ("siege", "world"): "排定：開集結那一季（world._season_vehicle，函式裡）——第 25 批 world 收進核心本體。world 最外層 import 宴客包 feast"
-                        "與單挑包 bout（舊名 arena：收季記擂台前三名的 close_season，全部拆包第 12 批成包）："
-                        "叫到那個函式就連帶載入 feast、bout（現在 import siege 已經經 atlas 載進來了），收進核心本體之前那一行要先處理（核心不 import 包）",
     ("siege", "generals"): "之後成包：攻城的留守挑龍頭（generals.on、pick）——決戰第 8 批 generals 進包之前，先改成查詢服務或把挑法留在共用規則層"
                            "（siege 第 11 批就登記了）",
 }
@@ -1039,22 +1036,21 @@ SHARED_PENDING = {
 del SHARED_PENDING[("siege", "generals")]
 SHARED_PENDING.update({
     ("chiefs", "atlas"): "排定：大區（atlas.region_of）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層。atlas 最外層 import 出陣包"
-                         "（舊名 sortie；函式裡還有 sortie_duel），也經 world 帶進宴客包 feast、單挑包 bout（第 12 批；world 函式裡另有舊名 generals，"
-                         "叫到才載入決戰包 battle）：切開之前 import chiefs 會連帶載入 sortie、feast、bout 三包（第 12 批合進 develop 時量的）",
+                         "（舊名 sortie；函式裡還有 sortie_duel）：切開之前 import chiefs 會連帶載入 sortie（第 25 批 world 收進核心本體之後量的；"
+                         "以前也經 world 帶進宴客包 feast、單挑包 bout）",
     ("chiefs", "figures"): "排定：大勢人物（figures.state_of、line_of）——總表第 40 批收進共用規則層",
 })
 # story（全部拆包第 30 批：storyline 拆兩半，底座與換字進共用規則層的 story_base；計畫 docs/superpowers/plans/2026-11-04-一條線簽到-第30批.md 1.2）：
 # 照原本 storyline 那樣讀大區（here）與章回的大事結果（vary，函式裡），多兩條排定的
 SHARED_PENDING.update({
     ("story_base", "atlas"): "排定：大區（atlas.region_of）——第 50 批 atlas 的地點、大區、路線那一半留在共用規則層（同 chiefs → atlas：atlas 最外層 import "
-                             "出陣包 sortie，也經 world 帶進宴客包 feast、單挑包 bout）：切開之前 import story_base 會連帶載入 sortie（原本 import storyline 就是這樣）",
+                             "出陣包 sortie）：切開之前 import story_base 會連帶載入 sortie（原本 import storyline 就是這樣）",
     ("story_base", "chapters"): "排定：章回的大事結果（chapters.outcome_mark，vary 函式裡延後 import）——第 40 批收進共用規則層"
                                 "；章回自己 import 舊名 storyline（一條線包 story 的別名），叫到才連帶載入 story",
 })
 # chapters 載入時 import 舊名 storyline（章回登記 TASKS，storyline.active、start 這些）：第 30 批 storyline 成了一條線包 story 的別名，
 # 所以另外兩條指到 chapters 的排定項（timetable 的擲骰修正）叫到它也連帶載入 story
 SHARED_PENDING[("timetable", "chapters")] += "；章回自己 import 舊名 storyline（一條線包 story 的別名），叫到才連帶載入 story（第 30 批）"
-SHARED_PENDING[("siege", "world")] += "；world 函式裡也 import 舊名 generals（決戰包 battle 的別名：開集結那一下派龍頭上陣），叫到它就連帶載入 battle"
 
 # 總表第 15 列寫了、這一批先不收的（派工：import 了包的「先改成查詢服務，或者先不收」；讀的都是還沒成包的舊模組，還沒有包可以回答查詢）：
 # 模組 → 卡在哪、哪一批之後收。包 import 它們的那幾行照舊註「過渡：待搬」。
@@ -1085,8 +1081,9 @@ SHARED_LATER["events"] = "事件抽選：讀伏筆 foreshadow（軍情第 34 批
 for _key in SHARED_PENDING:
     if _key[1] == "figures":
         SHARED_PENDING[_key] += "；figures 函式裡也 import 舊名 figure_aid（大勢人物的行動包 figure_acts 的別名：犒軍與自然回復共用一天的上限），叫到它就連帶載入 figure_acts（第 31 批）"
-    elif _key[1] == "world":
-        SHARED_PENDING[_key] += "；world 最外層 import 舊名 yuedan（figure_acts 的別名：每一步叫 yuedan.tick），import 它就連帶載入 figure_acts（第 31 批）"
+# core_world（全部拆包第 25 批「世界層掛鉤」；計畫 docs/superpowers/plans/2026-11-05-世界層掛鉤-第25批.md 1.6）：world 改成世界層掛鉤、收進核心本體
+# （MODULES），不再 import 宴客包、單挑包與舊名 yuedan、generals——siege → world 那一條（含第 30 批補的龍頭上陣、第 31 批補的月旦評兩句）拿掉，
+# atlas 的四條（siege、clinic、chiefs、story_base）「也經 world 帶進宴客包、單挑包」那半句改寫（都在原處）
 
 
 def test_the_shared_rules_layer_only_imports_the_core_and_itself():
@@ -1099,10 +1096,11 @@ def test_the_shared_rules_layer_only_imports_the_core_and_itself():
 
 
 def test_a_pending_target_that_imports_a_package_says_it_drags_the_package_in():
-    """SHARED_PENDING 的對象自己 import 了包的（atlas 經舊名 sortie import 出陣包、world import 宴客包）：import 那個共用規則層的模組，
-    包就跟著載進來（import clinic、siege、chiefs〔第 8 批〕實際載入出陣、宴客兩包——第 12 批之後加上經 world 的單挑包，三包；其餘 58 個一包都不載）。上面那幾條只看共用規則層自己的 import，
+    """SHARED_PENDING 的對象自己 import 了包的（atlas 經舊名 sortie import 出陣包）：import 那個共用規則層的模組，
+    包就跟著載進來（import clinic、siege、chiefs〔第 8 批〕、story_base〔第 30 批〕實際載入出陣包；以前還經 world 載入宴客、單挑兩包，
+    第 25 批 world 收進核心本體、不再 import 包之後只剩出陣包；其餘一包都不載）。上面那幾條只看共用規則層自己的 import，
     看不到這一層，所以理由要寫明「連帶載入」與那幾包的名字；對象不再 import 包了，「連帶載入」那句也拿掉（第 15 批審查修正）。
-    只驗對象直接的 import；經對象再往下一層的（atlas 經 world 載宴客包）寫在理由裡，這裡不驗。"""
+    只驗對象直接的 import；經對象再往下一層的（chapters 經舊名 storyline 載一條線包）寫在理由裡，這裡不驗。"""
     for (name, old), why in SHARED_PENDING.items():
         packages = sorted({feature_target(mod) for _, mod in _feature_imports(TIANXIA / f"{old}.py")})
         if packages:
@@ -1126,7 +1124,8 @@ def test_the_shared_scanner_catches_an_old_module():
     同一層、from tianxia import 名字、標準庫不算；包與別名不在這裡算（是上面那一條）。"""
     m = "tianxia.timetable"
     assert outside_imports("from . import figures, territory\n", m) == {"figures"}
-    assert outside_imports("def f():\n    from .world import _season_vehicle\n", m) == {"world"}
+    assert outside_imports("def f():\n    from .seal import mandate_event\n", m) == {"seal"}  # 第 25 批：原本的例子 world 收進了核心本體
+    assert outside_imports("def f():\n    from .world import _season_vehicle\n", m) == set()
     assert outside_imports("import tianxia.engine\n", m) == {"engine"}
     assert outside_imports("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from .engine import Game\n", m) == set()
     assert outside_imports("from .core import features\nfrom .models import Content\nfrom tianxia import calendar, siege\n", m) == set()

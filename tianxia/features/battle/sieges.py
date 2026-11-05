@@ -22,7 +22,7 @@ from tianxia import allied, battle_instance, conquest, orders, siege  # 過渡�
 from tianxia.characters import name_key
 from tianxia.models import BattleDef
 from tianxia.state import Rumor, WorldState
-from tianxia.world import _season_vehicle  # 過渡：待搬（季的事用的空殼玩家）
+from tianxia.world import _season_vehicle  # 核心本體：季的事用的空殼玩家
 
 from . import generals, progress  # 龍頭上陣、推進與結算（第 8 批搬進這一包；progress 也 import 這一檔，都在函式裡用）
 

@@ -22,7 +22,7 @@ battle: 的分派照舊在 Game.choose 原位（查完選單、清掉「剛剛�
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature
+from tianxia.core.features import Feature, WorldHook
 
 
 class BattleFeature(Feature):
@@ -94,6 +94,18 @@ class BattleFeature(Feature):
         from . import progress  # noqa: PLC0415
 
         progress.close_season(ctx, reread)
+
+    # core_world（全部拆包第 25 批「世界層掛鉤」）
+    _world: tuple[WorldHook, ...] | None = None
+
+    def world(self) -> tuple[WorldHook, ...]:
+        """世界層 muster 的 generals 那一格（龍頭上陣；原本 world._open_claimed 函式裡 import 舊名 generals 叫 on_muster）：不問 enabled
+        （原位不看決戰包的開關，判斷在 on_muster 裡）。建一次就留著，在叫的那一下才照模組屬性找 generals.world_muster（monkeypatch 照樣有效）。"""
+        if self._world is None:
+            from . import generals  # noqa: PLC0415
+
+            self._world = (WorldHook("muster", "generals", lambda *args: generals.world_muster(*args)),)
+        return self._world
 
 
 FEATURE = BattleFeature()

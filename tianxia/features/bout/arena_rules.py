@@ -435,3 +435,17 @@ def close_season(world: WorldState, cfg: ArenaTuning) -> list[str]:
         return []
     return [SEASON_TOP.format(names="、".join(f"{e.name}（第 {i} 名）" for i, e in enumerate(top, 1))),
             CHAMPION.format(name=top[0].name)]
+
+
+# core_world（全部拆包第 25 批「世界層掛鉤」）：世界層 close 的 arena 那一格（tianxia/core/features.py 的 WORLD_ORDER）
+def world_close(state: GameState, content: Content, world) -> None:
+    """收季（原本 world.end_season 分級之後、榜單之前那五行，判斷照搬：只看擂台開著沒〔on，核心 arena_ranks 那一份〕）：前三名記名次
+    （休季時同步補獎勵）；有人上榜，前三名上天下大事、江湖史只記「本季擂主」（歷屆擂主照它，跨季），擂台榜的前三名由
+    leaderboard.chronicle_lines 寫。不接回傳值。"""
+    from tianxia.rules import add_chronicle, add_rumor  # noqa: PLC0415
+
+    if on(content):
+        lines = close_season(state.world, content.config.arena)
+        if lines:
+            add_rumor(state, lines[0], content=content, layer="world")
+            add_chronicle(state, lines[1])
