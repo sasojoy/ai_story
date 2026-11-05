@@ -22,6 +22,10 @@ KNOWN = frozenset({
     "h_bond",
     # 新手引導重做（2026-10-22）：今天的操練練完了（事件型）、練功連輸兩場、心得第一次夠自創、第一次到有酒肆的城、點數沒配又升一級
     "h_drill_done", "h_field_lose", "h_create", "h_tavern", "h_points",
+    # 補新手教學（2026-11-05，PM 盤點）：過了新手期或第一次被截（截殺自保）、簽到、萬寶閣、形象、玉璽碎片、宴客、傳功、坐騎、寶物、
+    # 地點變樣與上線邸報、戰記與列傳的分享頁。全是狀態提示（Game._hint_triggers）
+    "h_raid_guard", "h_checkin", "h_mall", "h_looks", "h_seal", "h_feast", "h_chuangong", "h_mount", "h_treasure", "h_place",
+    "h_tale",
 })
 
 

@@ -1209,6 +1209,19 @@
       if (card) card.classList.add("fit-space"); // 戰鬥卡片的內距寫在 .battle-card 底下（style.css 的 .battle-card.fit-space）
       return true;
     } },
+    // 1a. 開局一到就攤開的那封信（letter.open：託付的信，FB-9110）把約戰那一行擠出第一屏：量的是約戰那一行（fitDuelRow）時，信收成標題一行
+    //     （誰來信，同玩家按標題收攏的樣子），緊接在底下問手機通知的那一張也先不畫（信攤開時照舊問）。點標題照樣攤開（letter-open 記 S.letterOpen，
+    //     重畫時不再收）。玩家自己攤開的不收；目標是行動列、一組選項時一個像素都不動
+    { key: "letter", run: () => {
+      if (!fitDuelRow()) return false;
+      const card = document.querySelector("#page > .card.letter.open:not(.fit-letter)");
+      if (!card || S.letterOpen === Number(card.dataset.letter)) return false;
+      card.classList.add("fit-letter");
+      const head = card.querySelector(":scope > .letter-head"), arrow = card.querySelector(".letter-arrow");
+      if (head) head.setAttribute("aria-expanded", "false"); // 點標題走 letter-open 的「沒攤開 → 攤開」
+      if (arrow) arrow.textContent = "›";
+      return true;
+    } },
     // 2. 師父的框收緊：「知道了」不再撐高標題那一行、話的行高小一點；框裡的話一個字都不切（設計 6.2）
     { key: "box", run: () => {
       const box = document.querySelector("#page > .card.guide");
@@ -1398,6 +1411,12 @@
     page.classList.remove("fit-space");
     page.querySelectorAll(".fit-space").forEach((el) => el.classList.remove("fit-space"));
     page.querySelectorAll(".fit-box").forEach((el) => el.classList.remove("fit-box"));
+    page.querySelectorAll(".card.letter.fit-letter").forEach((el) => { // 1a：信攤回來
+      el.classList.remove("fit-letter");
+      const head = el.querySelector(":scope > .letter-head"), arrow = el.querySelector(".letter-arrow");
+      if (head) head.setAttribute("aria-expanded", "true");
+      if (arrow) arrow.textContent = "▴";
+    });
     if (S.renownTight) { S.renownTight = false; renderTop(); } // 名聲（1B）：稱號那一行畫回來再量
     page.querySelectorAll(".g-merit small.fit-hide").forEach((el) => el.classList.remove("fit-hide")); // 本場戰功的稱號（4B）
     page.querySelectorAll(".tx-tight").forEach((el) => {

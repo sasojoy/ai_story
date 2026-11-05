@@ -899,6 +899,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .letter-peek { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ink-2); font-size: 14px; }
 .letter-arrow { flex: none; margin-left: auto; color: var(--ink-2); }
 .letter-body { padding: 0 12px 12px; }
+/* 第一屏收法 1a（FB-9110）：攤開的託付信收成標題一行、底下問通知那一張先不畫，讓約戰那一行露出來；點標題照樣攤開 */
+.card.letter.fit-letter > .letter-body, .card.letter.fit-letter + .push-ask { display: none; }
 .letter-body p { margin: 0 0 6px; font-family: var(--serif); line-height: 1.7; }
 .letter-sign { text-align: right; color: var(--ink-2); }
 .letter-task { padding: 8px 0; border-top: 1px solid var(--line); margin-bottom: 8px; }

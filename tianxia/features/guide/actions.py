@@ -7,6 +7,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tianxia import atlas, create, figures, howto, sensing, training  # 過渡：待搬
+from tianxia import checkin, chuangong, seal  # 過渡：待搬（碰到才說的簽到、傳功、玉璽碎片）
+from tianxia import equipment, mounts, place_state, treasures  # 共用規則層
+from tianxia.characters import name_key
 from tianxia import attrset, insight_fx, journal, library, martial_arts, roster, team  # 核心、共用規則層
 from tianxia import prologue as prologue_rules  # 共用規則層；Game.new 有個參數也叫 prologue，跟 engine 一樣叫 prologue_rules
 from tianxia.models import TutorialStep
@@ -333,6 +336,45 @@ def hint_triggers(ctx: Game, only: set[str] | None = None) -> list[str]:
     # 大勢人物本人（人物表上的人，第一季的規則開著才有）：不是「這裡有可以交友的人物」（_figures_here 連陶謙、曹操、劉備也列，F1）
     if want("h_figure") and season_one(c, s.world) and figures.present_at(s, c, p.location):
         on.append("h_figure")
+    on += _more_triggers(ctx, want)
+    return on
+
+
+SETTLED_LEVEL = 5  # 簽到、萬寶閣這種「不是碰到一個玩法」的：升到這一級（新手目標第一條）才說，開局那幾步不被打斷
+
+
+def _more_triggers(ctx: Game, want) -> list[str]:
+    """補新手教學（2026-11-05）的十一條：截殺自保、簽到、萬寶閣、形象、玉璽碎片、宴客、傳功、坐騎、寶物、地點變樣、戰記分享。"""
+    s, c, p = ctx.state, ctx.content, ctx.state.player
+    w = s.world
+    on: list[str] = []
+    # 截殺自保：過了截殺的新手期（而且投靠了一方，散人只有被通緝才截得到），或第一次被人截殺過
+    if want("h_raid_guard") and c.config.raid.enabled and not w.ended and c.scenario.factions and (
+            name_key(p.name) in w.raided or (p.faction is not None and not roster.raid_newbie(s, c))):
+        on.append("h_raid_guard")
+    if want("h_checkin") and checkin.on(c, w) and len(p.checkin_days) >= 2:  # 第二天又來：簽到是天天的事
+        on.append("h_checkin")
+    if want("h_mall") and c.config.mall.enabled and p.member.level >= SETTLED_LEVEL:
+        on.append("h_mall")
+    # 形象：上過一次擂台（看過自己那副模樣）；形象開著＝商城開著而且有形象可賣（looks.rules.on 同一條；包不能 import 包）
+    if want("h_looks") and c.config.mall.enabled and c.looks and any(r.kind == "arena" for r in s.battles):
+        on.append("h_looks")
+    if want("h_seal") and seal.on(c) and seal.shard_of(ctx.world.seal_state().registry, p.name) is not None:
+        on.append("h_seal")
+    # 宴客：人在擺著的宴席那裡（同 feast.rules.is_open；包不能 import 包）
+    if want("h_feast") and any(not f.settled and f.start <= w.time < f.end and f.place == p.location for f in w.feasts):
+        on.append("h_feast")
+    if want("h_chuangong") and chuangong.on(c) and chuangong.cheapest(s, c, ctx.world) is not None:
+        on.append("h_chuangong")
+    if want("h_mount") and mounts.on(c) and (p.mount is not None or equipment.in_slot(p, "mount")):
+        on.append("h_mount")
+    if want("h_treasure") and treasures.on(c) and (p.treasure is not None or equipment.in_slot(p, "treasure")):
+        on.append("h_treasure")
+    if want("h_place") and place_state.on(c) and place_state.kind_at(w, c, p.location) != place_state.PEACE:
+        on.append("h_place")
+    # 戰記：打完一場決戰或奪璽單挑（只有這兩種有戰記）
+    if want("h_tale") and any(r.kind in ("showdown", "seal") for r in s.battles):
+        on.append("h_tale")
     return on
 
 
