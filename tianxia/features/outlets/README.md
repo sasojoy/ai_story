@@ -39,3 +39,20 @@
 - `shop_view` 叫 `_bribe_targets`；`status_data` 叫 `armament_view`。
 - 外面（server、假人）叫的：`donate`、`donate_items`（`/api/do/donate`）、`can_donate_here`（`bot.donate_spare`）。
 - 網頁那一半（`donatePicks`、`dadianHtml`、`donateHtml`、`donateCell`、`donateStep`、`donateTierOne`、`donateGo`）第 65 批才切，這一批不碰 `web/`。
+
+## 測試
+
+`tianxia/features/outlets/tests/`（整檔屬於這一包的，原樣搬來，只改路徑字串；`test_econ_donate` 多一個 `@pytest.mark.smoke`——手冊 4.1 每一包至少一條煙霧）：
+
+- `test_silver_outlets.py`（15 條）：銀兩出口五樣（捐銀兩、名師指點、買破境丹、看火候、打點門路與帳簿）。
+- `test_dadian_shop.py`（12 條）：「打點」那一間店（進、離開、五樣收在店裡、店面那一頁）；兩條讀 `web/style.css` 的字斷言規則，只讀不改。
+- `test_econ_donate.py`（11 條）：捐軍備（軍需官那一串、每天上限、推大本營、江湖頁的軍備存量、假人只離開）。
+- `test_silver_gates.py`（14 條）：**釘的是內容、不是這一包的程式**——真實內容裡選了就扣銀兩的事件選項都要帶 `min_stats.silver`，只讀 `content/events/`（總表附錄丙點名歸這一包；改事件內容時 `scripts/test_for.py` 照檔名挑到它）。
+- `outlets_stage.py`：契約測試的擺局面（坐在軍需官那一串前）。「打點」那一間店不擺：它的選單有核心 `act:` 前綴的銀兩出口幾樣，契約測試要求這一包給的選項都帶自己的前綴。
+
+**另外要跑的混合檔**（含這一包的測試，但檔案不屬於這一包，不拆）：
+
+- `tests/gear/test_shop.py`：店面那一頁混合檔（鐵匠鋪、馬市、打點、軍需帳都在裡面）。
+- `tests/bots/test_bot_policy_stuck.py`：假人卡在店裡那一類（含坐在軍需官、打點店裡只會離開）。
+- `tests/web/test_econ_web.py`：捐軍備與軍備存量的網頁測試（網頁，第 3 階才切）。
+- `tests/figures/test_gentry_allied.py`：一條（`test_donate_goes_to_the_side_stock`，豪強捐軍備進依附那一軍的存量）。
