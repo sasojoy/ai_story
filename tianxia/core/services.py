@@ -456,8 +456,8 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 # 包要叫的核心服務 `ctx._spar_power`、`ctx._spar_mirror`、`ctx._raid_key`、`ctx._raid_bounty`、`ctx._side`、`ctx._kin`、`ctx._load_kin`、`ctx._save_kin`、
 # `ctx._write`、`ctx._save_season`、`ctx._outcome`、`ctx.touched`、`ctx.publish`、`ctx._record_exp`、`ctx._file_battle`、`ctx._play_rounds`、`ctx._last_wear`、
 # `ctx.is_idle()`、`ctx._quick_client()`、`ctx._draft`、`ctx.peer_brief` 上面都列了；這一段只補 Game 上留一行委派、包裡也經 ctx 叫的：
-- `ctx.discuss_items()`、`ctx._discuss_cost()`、`ctx.discuss_problem(mine, theirs, other_name)`、`ctx.discuss_item_problem(inv, other, item)`（主人論武 discuss_actions；
-  測試把對方那一份換成只有 `discuss_problem` 的替身，所以包裡用 `other.discuss_problem(...)` 照舊叫方法）
+- `ctx.discuss_problem(mine, theirs, other_name)`（主人論武 discuss_actions；測試把對方那一份換成只有 `discuss_problem` 的替身，所以包裡用 `other.discuss_problem(...)` 照舊叫方法；
+  `discuss_items`、`_discuss_cost`、`discuss_item_problem` 沒有測試換掉，包裡直接叫 discuss_actions 的 `items`、`cost_of`、`item_problem`，Game 上的一行委派留給測試直接叫）
 - `ctx.raid_flee_odds(other)`、`ctx._raid_fled(other)`、`ctx._raid_spoils(loser, evil)`、`ctx._raid_record(...)`（主人截殺 raid_actions；`scripts/sim_season_one.py`、
   `sim_server_bots.py` 用 `mock.patch.object(Game, …)` 數截殺、`tests/gear/test_mounts.py` 換 `Game.raid_flee_odds`，所以包裡一律經 ctx 叫；同 `ctx._duel_finish`）
 

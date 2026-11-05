@@ -68,7 +68,7 @@ def refusal(ctx, other: Game) -> str | None:
     s, c = ctx.state, ctx.content
     if not season_one(c, s.world) or s.world.ended:
         return "（此刻無法這麼做。）"
-    cost = ctx._discuss_cost()[1]
+    cost = cost_of(ctx)[1]
     for who, me in ((ctx, True), (other, False)):
         problem = spar_actions.who_problem(ctx, who, me=me, what="論武", cost=cost)
         if problem is not None:
@@ -86,7 +86,7 @@ def send(ctx, other: Game, item: str) -> list[str]:
     problem = refusal(ctx, other)
     if problem is not None:
         return [problem]
-    label = dict(ctx.discuss_items()).get(item)
+    label = dict(items(ctx)).get(item)
     if label is None:
         return ["你身上沒有這一樣。"]
     name = other.state.player.name
@@ -100,7 +100,7 @@ def send(ctx, other: Game, item: str) -> list[str]:
 def forge_pair(ctx, mine: str, theirs: str, other_name: str, fresh: bool = False):
     """兩樣東西排成一爐意境合成：（兩個意境的 id, 借來的那一份）。舊邀請上的「art:」交給 discuss_problem 擋。"""
     mid, tid = mine.partition(":")[2], theirs.partition(":")[2]
-    return [mid, tid], fusion.Partner(lent=tid, name=other_name, price=ctx._discuss_cost(), fresh=fresh)
+    return [mid, tid], fusion.Partner(lent=tid, name=other_name, price=cost_of(ctx), fresh=fresh)
 
 
 def request(ctx, inv, other: Game, item: str) -> naming.NamingRequest | None:
@@ -111,7 +111,7 @@ def request(ctx, inv, other: Game, item: str) -> naming.NamingRequest | None:
     C 段照樣重驗（A 到 C 之間狀態可能變）。"""
     if inv is None or inv.kind != "discuss":
         return None
-    if invite_problem(ctx, inv, other) is not None or ctx.discuss_item_problem(inv, other, item) is not None:
+    if invite_problem(ctx, inv, other) is not None or item_problem(ctx, inv, other, item) is not None:
         return None
     insight_ids, partner = forge_pair(ctx, item, inv.payload.get("item", ""), other.state.player.name)
     return fusion.forge_request(ctx.state, ctx.content, ctx.world, None, insight_ids, partner=partner)
@@ -142,14 +142,14 @@ def invite_problem(ctx, inv, other: Game, *, for_sender: bool = False) -> str | 
     them = other.state.player
     if inv.location != ctx.state.player.location:
         return presence.GONE
-    cost = ctx._discuss_cost()[1]
+    cost = cost_of(ctx)[1]
     for who in (ctx, other):
         problem = spar_actions.who_problem(ctx, who, me=(who is ctx) != for_sender, what="論武", cost=cost)
         if problem is not None:
             return problem
     if left(ctx, them.name) <= 0:  # 邀請在等的時候，這一對人今天的帳被別處用滿了（FB-116）
         return social.pair_full(ctx, "discuss")
-    if inv.payload.get("item", "") not in dict(other.discuss_items()):
+    if inv.payload.get("item", "") not in dict(items(other)):
         return "你身上已經沒有要出的那一樣了。" if for_sender else f"{them.name}身上已經沒有{gender.pronoun(them)}要出的那一樣了。"
     return None
 
@@ -160,7 +160,7 @@ def item_problem(ctx, inv, other: Game, item: str) -> str | None:
     玩家卡上答應的下拉清單在合不成的那一項後面寫它（discuss.buttons）。先問過 discuss_invite_problem 才準。"""
     them = other.state.player
     theirs = inv.payload.get("item", "")
-    if item not in dict(ctx.discuss_items()):
+    if item not in dict(items(ctx)):
         return _refusal("你身上沒有這一樣。", "身上沒有")
     if item == theirs:
         return _refusal(DISCUSS_SAME, "同一樣")
@@ -182,7 +182,7 @@ def discuss(ctx, inv, other: Game, item: str, proposed) -> list[str]:
     驗不過就說一句為什麼（邀請已經收了），發邀請的那個人也收到一句（FB-117）。"""
     me, them = ctx.state.player, other.state.player
     theirs = inv.payload.get("item", "")
-    problem = invite_problem(ctx, inv, other) or ctx.discuss_item_problem(inv, other, item)
+    problem = invite_problem(ctx, inv, other) or item_problem(ctx, inv, other, item)
     if problem is not None:
         invite_actions.tell_sender(ctx, inv, other, invite_problem(ctx, inv, other, for_sender=True))
         return [problem]
