@@ -45,7 +45,8 @@
 留委派、記進 `GAME_DELEGATE_CALLERS` 的：`_everyday_options` 叫 `_invite_options`（選單的順序是行為）、`status_data` 叫 `_invite_status`（鍵的順序是行為，總表第 66 批才接 status 掛鉤）；
 `_join`、`join_refusal`（移動包）叫 `_tell_sender`、`_peer`。第 38 批把第 37 批的 `GAME_DIRECT` 7 個（切磋、論武直接用這一包的 `social`、`invites`）與 `_PEERS_38` 的 6 筆呼叫端都拿掉；
 `engine.py` 對 `invites`、`social` 的 import 也拿掉了，多 import 論武、截殺兩個動作檔（13 個委派用）與 `DISCUSS_SAME`、`_refusal` 一行（`tests/arts/test_discuss.py` 從 `engine` 拿的過渡）。
-懸賞榜（`bounties`）是舊模組，截殺讀它的 `hunting`、`official_hit`、`BEATEN_OFFICIAL` 三處標「過渡：待搬（第 45 批）」。
+懸賞榜（`bounties`）是舊模組，截殺 import 它一行、用 `hunting`、`official_hit`、`BEATEN_OFFICIAL` 三處，標「過渡：待搬（第 45 批）」。
+論武的 `discuss_actions` 還 import 舊模組 `fusion`（合成與揣摩，在 `SHARED_LATER`，標「過渡：待搬」），所以包到舊模組共 4 處：`mingtie.py`、`bots.py` 的 `leaderboard`，加 `bounties`、`fusion`。
 網頁那一半（`MT_INKS` 等）第 3 階才切，這一批不碰 `web/`。
 
 ## 測試
