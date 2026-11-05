@@ -44,8 +44,8 @@
 
 ## 過渡（手冊 3.11）
 
-- 包 → 還沒搬的舊模組：`actions.py` 第 9 行（`annals` 第 29 批、`figures` 第 40 批）、`errands.py`（`atlas` 第 50 批、`figures`，函式裡）、`letters.py`（`bounties` 第 45 批、`figure_life` 第 40 批、`atlas`，函式裡）、`stances.py`（`figures`，函式裡）；第 20 批加的：`talk_actions.py`（`annals`、`foreshadow` 與 `opportunities` 第 34 批、`ranks` 第 40 批）、`parley_actions.py`（`atlas`、`figure_life`）、`companion_agent.py`（`figure_life`、`seal_acts` 第 51 批；函式裡的 `world` 第 25 批收進核心本體，註拿掉）、`parley.py`（`atlas`、`bounties`、`figure_life`、`figures`）。
-- **`letters._feast_letter` 問 `figure_life.feast_invites`**：書信不能 import 宴客包（包 import 包），`figure_life` 本來就延後 import 宴客包設宴；第 40 批 `figure_life` 收進共用規則層時連同設宴一起處理。
+- 包 → 還沒搬的舊模組（全部拆包第 40 批合完重印：7 處、6 行）：`errands.py`（`atlas` 第 50 批，函式裡）、`letters.py`（`bounties` 第 45 批；`atlas`，函式裡）、`parley_actions.py`（`atlas`）、`companion_agent.py`（`seal_acts` 第 51 批；函式裡的 `world` 第 25 批收進核心本體，註拿掉）、`parley.py`（`atlas`、`bounties`）。原本也算過渡的 `figures`、`figure_life`、`ranks`（`actions.py`、`errands.py`、`stances.py`、`talk_actions.py`、`letters.py`、`parley_actions.py`、`companion_agent.py`、`parley.py` 共 9 處）第 40 批收進共用規則層，不算過渡，行尾註改寫成「共用規則層（第 40 批收進）」；`annals` 第 29 批之二、`foreshadow` 與 `opportunities` 第 34 批早就拿掉了。
+- **`letters._feast_letter` 問 `figure_life.feast_invites`**：書信不能 import 宴客包（包 import 包）；第 40 批 `figure_life` 收進共用規則層，`feast_invites` 改讀核心的 `core/feast_base`（宴客包 re-export 同一批），設宴改成世界層 `life` 那一格（宴客包登記），`figure_life` 不再 import 宴客包。
 - `figure_life.spread` 記道賀走核心 `services.note_cheer`（`letters.note_cheer` 是同一個函式）；`_settle_partings` 是決戰包的查詢服務（服務清單二）。
 - 服務清單（`tianxia/core/services.py`）這一包加的：一、共用 `_deed_points`、`_apply`、`note_cheer`、`CHEERS_KEEP`（第 19 批）、`SAY_OPTION`、`PLAN_OPTION`、`ROAD_SAY`、`TEXT_TALKS`、`SAY_MAX`、`say_text`、`BACKED_LINE`、`PLAN_MISS`（第 20 批，原本在 `engine.py`、`parley.py`）；二、查詢 `_settle_partings`、`_recruit_target`、`_recruitable_here`、`_parley_backing_here`；三、過渡 `_can_meet`、`_socialize_figure`、`_count_talk`（交友求見第 21 批）、`_depart`（移動）；四、寄放 `_persuade_said`、`_parley_decision`。
 
