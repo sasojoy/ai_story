@@ -49,15 +49,17 @@
 - `test_forge_secrets.py`（19 條；`test_forge_divine`、`test_shop`、`test_weapons` 用它的 `BLADE`、`_smith`、`forge_content`）、`test_forge_divine.py`（36 條；`test_board_cards`、`test_weapons`、`test_shop` 用它的 `_forger`、`divine_content`、`STAR`）。
 - `test_divine_rotation.py`（14 條）與 `test_divine_collect.py`（6 條）；`test_shop2.py`、`tests/web/test_smith_divine_web.py` 用 `test_divine_rotation` 的 `_smith`、`_forge_sword`。
 
+這五個檔共 134 條，附錄甲歸這一包，這一批只搬了 4 個檔；其餘留到第 61 批（照第 44 批 PM 認定第 5 條「只搬一部分、其餘留到第 61 批」，待 PM 認下）。`tests/core/test_kiln_round.py`（讀 `web/style.css` 與 `app.js`，煉製頁的開爐鈕）附錄甲也歸鐵匠鋪，屬網頁類，隨網頁第 3 階處理；歸屬是否改成 craft 待 PM 定。
+
 **另外要跑的混合檔**（含這一包的測試，但檔案不屬於這一包，不拆）：
 
 - `tests/gear/` 底下上面那七個，加 `test_armor.py`（44）、`test_weapons.py`（109）、`test_four_tiers.py`（47）、`test_board_cards.py`（11）、`test_renown_discount.py`（3）、`test_signature_arms.py`（25）、`test_shop2.py`、`test_shop_polish.py`。
 - `tests/bots/test_bot_policy.py`（鐵匠鋪的分數、`_smith_want`）、`tests/core/test_economy.py`、`tests/core/test_shop_width.py`、`tests/season/test_sim_scripts.py`。
 - `tests/arts/test_ultimates.py`（`bind_art`）、`tests/server/test_server.py`（`/api/do/smith_*`、`/api/menxia/…`）。
-- 網頁（第 3 階才切）：`tests/web/test_smith_labels_web.py`（8）、`test_shop_web.py`（61，slow 7）、`test_shop2_web.py`、`test_tier4_shop_web.py`（7）、`test_smith_divine_web.py`。
+- 網頁（第 3 階才切）：`tests/core/test_kiln_round.py`、`tests/web/test_smith_labels_web.py`（8）、`test_shop_web.py`（61，slow 7）、`test_shop2_web.py`、`test_tier4_shop_web.py`（7）、`test_smith_divine_web.py`。
 
 `scripts/same_behavior.py` 的 `smithy` 軌（`--tracks smithy`，三種設定）：整段、半舊半新、軌裡的假人段都跟搬之前一樣。
 
 ## 過渡（手冊 3.11）
 
-過渡 import 共 5 處：`shelf_actions`、`forge_actions` 到 `shopview`（店面的畫面資料，邊界測試的 SHARED_LATER）、`smithing` 到 `annals`（行狀）與 `fusion`（合成與揣摩，SHARED_LATER；兩行，`fusion` 一行是 `QualityOdds`）、`bots` 到 `bot`（整季機器人與假人共用的底層，總表歸「假人三支不搬」；函式裡延後 import）。
+過渡 import 共 6 筆（shopview 兩處、annals、fusion 兩行、bot；邊界測試計 +6）：`shelf_actions`、`forge_actions` 到 `shopview`（店面的畫面資料，邊界測試的 SHARED_LATER）、`smithing` 到 `annals`（行狀）與 `fusion`（合成與揣摩，SHARED_LATER；兩行，`fusion` 一行是 `QualityOdds`）、`bots` 到 `bot`（整季機器人與假人共用的底層，總表歸「假人三支不搬」；函式裡延後 import）。
