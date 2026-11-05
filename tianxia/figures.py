@@ -423,6 +423,65 @@ def defeat(state: GameState, content: Content, fid: str, amount: float, cap: int
     return lines
 
 
+# ── core_world2：犒軍與自然回復共用一天的上限（全部拆包第 40 批：大勢人物包 figure_aid 的 on、_day、_life、left_today、restore、
+# _prune_tally 原樣搬來、改名 aid_ 開頭；包裡 re-export 回原名）。recover 直接叫 aid_restore，不 import 包。
+
+
+def aid_on(content: Content) -> bool:
+    return content.config.figure_aid.enabled and bool(content.figures)
+
+
+def _aid_day(state: GameState, content: Content) -> int:
+    """「今天」的號碼（calendar.world_day：21 天季台灣 00:00 換日，其他季世界天）。"""
+    return calendar.world_day(state.world.time, content, state.world)
+
+
+def _aid_life():
+    """「大勢人物擴充」那一份（tianxia/figure_life.py，PR #58）在的話，一天的上限照它的帳（gain_left／note_gain，募兵、自然回復、
+    犒軍共用 Config.figure_life.daily_gain_cap）；不在照這裡的 daily_restore_cap 與 aid_tally。兩份先後合進 main 都對得上。"""
+    try:
+        from tianxia import figure_life  # noqa: PLC0415  figure_life → figures：延後 import（兩個都在共用規則層）
+    except ImportError:
+        return None
+    return figure_life if hasattr(figure_life, "gain_left") else None
+
+
+def aid_left_today(state: GameState, content: Content, fid: str) -> float:
+    """這位人物今天還能回幾點聲威（開關關著不設上限）。"""
+    life = _aid_life()
+    if life is not None:
+        return life.gain_left(state.world, content, fid)
+    if not aid_on(content):
+        return float("inf")
+    return content.config.figure_aid.daily_restore_cap - state.world.aid_tally.get(f"restored:{fid}:{_aid_day(state, content)}", 0.0)
+
+
+def aid_restore(state: GameState, content: Content, fid: str, amount: float) -> int:
+    """替人物補聲威 amount（自然回復、犒軍、人物自己募兵共用）：補到開季值、一天有上限（left_today）。回傳真的補了幾點。"""
+    fig = content.figures.get(fid)
+    now = state.world.figures.get(fid)
+    if fig is None or now is None or amount <= 0:
+        return 0
+    room = min(fig.start_prestige - now.prestige, aid_left_today(state, content, fid))
+    gained = max(0, int(min(int(amount), room)))
+    if gained:
+        now.prestige += gained
+        life = _aid_life()
+        if life is not None:
+            life.note_gain(state.world, content, fid, gained)
+        else:
+            key = f"restored:{fid}:{_aid_day(state, content)}"
+            state.world.aid_tally[key] = state.world.aid_tally.get(key, 0.0) + gained
+            _aid_prune_tally(state, content)
+    return gained
+
+
+def _aid_prune_tally(state: GameState, content: Content) -> None:
+    today = _aid_day(state, content)
+    for k in [k for k in state.world.aid_tally if k.rsplit(":", 1)[-1].isdigit() and int(k.rsplit(":", 1)[-1]) < today - 1]:
+        del state.world.aid_tally[k]
+
+
 def recover(state: GameState, content: Content, cal_hours: float) -> None:
     """沒有時刻表的季（甲 (b)）：存檔裡有寫的人物（沒被打過的本來就是開季值），在場、聲威低於人物表的開季值時，每個季曆天回
     figure_prestige_regen 點（累積在 trend_accum["regen:<id>"]，滿一點加一點），回到開季值為止；退場、重創、不在場的不回，

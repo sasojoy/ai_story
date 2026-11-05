@@ -13,6 +13,10 @@ import random
 
 from tianxia import calendar, encounter
 from tianxia import figures  # 過渡：待搬（大勢人物 figures，總表第 40 批）
+from tianxia.figures import (  # noqa: F401  犒軍與自然回復共用一天的上限（共用規則層，全部拆包第 40 批），re-export 回原名
+    _aid_day as _day, _aid_life as _life, _aid_prune_tally as _prune_tally, aid_left_today as left_today, aid_on as on,
+    aid_restore as restore,
+)
 from tianxia.models import Content
 from tianxia.state import GameState, GuardPost
 
@@ -37,15 +41,6 @@ FULL_NOTE = "今天已經犒過了"
 CAP_NOTE = "他今天已經補得夠多了"
 TOP_NOTE = "聲威已滿"
 SLOTS_NOTE = "護衛已滿"
-
-
-def on(content: Content) -> bool:
-    return content.config.figure_aid.enabled and bool(content.figures)
-
-
-def _day(state: GameState, content: Content) -> int:
-    """「今天」的號碼（calendar.world_day：21 天季台灣 00:00 換日，其他季世界天）。"""
-    return calendar.world_day(state.world.time, content, state.world)
 
 
 def prune(state: GameState, content: Content) -> None:
@@ -114,52 +109,6 @@ def contest(state: GameState, content: Content, fid: str, challenger: str, power
             CREDIT_LINE.format(name=content.figures[fid].name, who=challenger),
         )
     return post, broke
-
-
-def _life():
-    """「大勢人物擴充」那一份（tianxia/figure_life.py，PR #58）在的話，一天的上限照它的帳（gain_left／note_gain，募兵、自然回復、
-    犒軍共用 Config.figure_life.daily_gain_cap）；不在照這裡的 daily_restore_cap 與 aid_tally。兩份先後合進 main 都對得上。"""
-    try:
-        from tianxia import figure_life  # noqa: PLC0415  過渡：待搬（人物活起來 figure_life，總表第 40 批）
-    except ImportError:
-        return None
-    return figure_life if hasattr(figure_life, "gain_left") else None
-
-
-def left_today(state: GameState, content: Content, fid: str) -> float:
-    """這位人物今天還能回幾點聲威（開關關著不設上限）。"""
-    life = _life()
-    if life is not None:
-        return life.gain_left(state.world, content, fid)
-    if not on(content):
-        return float("inf")
-    return content.config.figure_aid.daily_restore_cap - state.world.aid_tally.get(f"restored:{fid}:{_day(state, content)}", 0.0)
-
-
-def restore(state: GameState, content: Content, fid: str, amount: float) -> int:
-    """替人物補聲威 amount（自然回復、犒軍、人物自己募兵共用）：補到開季值、一天有上限（left_today）。回傳真的補了幾點。"""
-    fig = content.figures.get(fid)
-    now = state.world.figures.get(fid)
-    if fig is None or now is None or amount <= 0:
-        return 0
-    room = min(fig.start_prestige - now.prestige, left_today(state, content, fid))
-    gained = max(0, int(min(int(amount), room)))
-    if gained:
-        now.prestige += gained
-        life = _life()
-        if life is not None:
-            life.note_gain(state.world, content, fid, gained)
-        else:
-            key = f"restored:{fid}:{_day(state, content)}"
-            state.world.aid_tally[key] = state.world.aid_tally.get(key, 0.0) + gained
-            _prune_tally(state, content)
-    return gained
-
-
-def _prune_tally(state: GameState, content: Content) -> None:
-    today = _day(state, content)
-    for k in [k for k in state.world.aid_tally if k.rsplit(":", 1)[-1].isdigit() and int(k.rsplit(":", 1)[-1]) < today - 1]:
-        del state.world.aid_tally[k]
 
 
 def rally_problem(state: GameState, content: Content, fid: str) -> str | None:

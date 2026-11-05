@@ -157,7 +157,7 @@
 # 計畫 docs/superpowers/plans/2026-11-05-銀兩出口包-第1批.md 1.3）。包要叫的核心服務，上面都已經列了，這一段只記「誰在用」，不新增：
 - `ctx._at_own_base()`、`ctx._at_clinic_town()`（人在自家大本營、帶醫館標籤的地點；附錄甲裁核心）、`ctx._pill_day()`（「一天」）、`ctx._idle()`、
   `ctx._side()`、`ctx._log(msgs)`、`ctx._save_season()`、`ctx._shop_say(...)`、`ctx._shop_after(...)`、`ctx.push_trend(...)`（捐軍備推大本營那一條線）
-- 共用規則層（包直接 import，registry.SHARED 已登記）：`silver`、`economy`、`materials`、`equipment`、`wins`；過渡（待收進共用層，標「# 過渡：待搬」）：`shopview`（SHARED_LATER）、`figures`（第 40 批）。
+- 共用規則層（包直接 import，registry.SHARED 已登記）：`silver`、`economy`、`materials`、`equipment`、`wins`、`figures`（第 40 批收進）；過渡（待收進共用層，標「# 過渡：待搬」）：`shopview`（SHARED_LATER）。
 
 # peers（全部拆包第 37 批「玩家互動一」：此地還有、玩家卡、邀請框、打招呼、贈物、名帖搬進玩家互動包；計畫 docs/superpowers/plans/2026-11-06-玩家互動包-第1批.md 1.3）。
 # 包要叫的核心服務，上面大多已經列了，這一段記「誰在用」，新增的只有 `ctx._kin`：
@@ -352,6 +352,23 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._nearest_to(targets)`（離這裡最近的那一個地點：先照摸清的路、都走不到照所有開放的地點，這裡就是的話回這裡；軍情包的軍令那一格、
   陣營包的去投靠那一格補目標時問。原本是舊模組 step.py 直接叫 game._nearest_to）。`ctx._opening_pending()` 上面 `# checkin` 已經列了
   （weekcard 收進核心本體照叫 Game，不必再列）
+
+# core_world2（全部拆包第 40 批「世界模型二」：figures、figure_life、plans、orders、ranks、chapters 與 rumor_view 收進共用規則層；計畫
+# docs/superpowers/plans/2026-11-06-世界模型二-第40批.md 1.7）。叫的那一端（rules.check_condition、events.hidden_events、narration.eligible、
+# rumor_view.layers、figure_life.tick、chapters.card、engine 的鐵匠鋪三處、殼的門下頁）都只拿 state、content，**不經 ctx，直接 import 核心本體**
+# （同第 34 批 omen_base）。本體搬進核心小模組或共用層的底座，包裡原本的模組照原名 re-export 同一個物件（舊名別名、monkeypatch 包的模組照樣有效）：
+- `tianxia/core/omen_base.py`（主人：軍情包）：伏筆讀的那一半 `fs_active`（包裡叫 `fs_rules.active`）、`event_ids`、`held_items`、`heard_texts`
+  （與填字的 `fill`、`_fragment_text`、`_version`、`_front`、`chain`、`_event`、`_figure_name`、`tianji_answer`、`_tianji`、`TIANJI_SLOTS`）；機緣讀的那一半
+  `opp_active`（包裡叫 `opp_rules.active`）、`heard_clues`；新的 `clue_count(state, item_id)`（條件 `clue_items` 讀 `PlayerState.clue_items`）。
+  events、narration、rumor_view、殼的門下頁、rules.check_condition 讀
+- `tianxia/story_base.py`（共用規則層；主人：一條線包）：`waiting`、`doable`（章回卡讀，原本在 `features/story/storyline.py`）、新的
+  `mark_of(state, line, mark)`（條件 `story_marks`、`story_marks_max` 讀 `PlayerState.storylines`）
+- `tianxia/core/feast_base.py`（主人：宴客包）：`on`、`find`、`is_open`、`open_feasts`、`hosting`、`toasted`、`_key`（人物活起來問誰在擺宴、書信的邀宴問開著的宴）。
+  設宴（寫）不是查詢：世界層 `WORLD_ORDER["life"]` 的 `feast` 那一格（宴客包登記，`figure_life.tick` 每一輪每一位對話人物叫）
+- `tianxia/core/smith_base.py`（主人：鐵匠鋪包；第 41 批 PM 認定第 4 條）：`GO_VERB`、`is_forge_step`、`is_step_line`、`draft_here`、`draft_stale` 與它們讀的
+  `here`、`ARMOR_KIND` 與單子回話的八句常數（engine 的 choose 併成一則、_drop_stale_references 與 sync 清單子讀）
+- `tianxia/figures.py`（共用規則層）：犒軍與自然回復共用一天的上限 `aid_on`、`aid_left_today`、`aid_restore`（與 `_aid_day`、`_aid_life`、`_aid_prune_tally`）；
+  `figures.recover` 直接叫，大勢人物包的 `figure_aid` re-export 回原名（`on`、`left_today`、`restore`……）
 
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 

@@ -240,3 +240,29 @@ def heard(state: GameState, content: Content, event_id: str, text: str) -> None:
         if pair is not None and progress.opened and pair[1].kind == "event":  # 段落事件或它串接下去的（next_event）都算
             progress.said.append(text)
             return
+
+
+# ── core_world2：章回卡（chapters.card）與條件（rules.check_condition）也讀的（全部拆包第 40 批；waiting、doable 從一條線包 storyline.py 原樣搬來，那一份 re-export）──
+
+
+def waiting(state: GameState, content: Content, progress: StoryProgress, stage: StoryStage) -> bool:
+    """多日段還沒到時候（StoryStage.wait_days）。"""
+    if not stage.wait_days or progress.entered is None:
+        return False
+    return state.world.time < progress.entered + stage.wait_days * day_seconds(content, state.world)
+
+
+def doable(state: GameState, content: Content, progress: StoryProgress) -> bool:
+    """這一段此刻在這裡按得下去：event、quiz、fight 才有鈕（task 是去做別的事），還沒端出來、等完了、站在對的地方。"""
+    pair = current(content, progress)
+    if pair is None or progress.opened:
+        return False
+    _, stage = pair
+    return stage.kind != "task" and not waiting(state, content, progress, stage) and here(state, content, stage.where)
+
+
+def mark_of(state: GameState, line: str, mark: str) -> int:
+    """一條線的記號（StoryProgress.marks）：那條線沒開過算 0。條件 story_marks、story_marks_max（rules.check_condition）照它讀——
+    一條線包認領的 storylines 由這一層回答（全部拆包第 40 批：核心不直接讀包的欄位）。"""
+    progress = state.player.storylines.get(line)
+    return progress.marks.get(mark, 0) if progress is not None else 0

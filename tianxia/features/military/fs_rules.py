@@ -12,7 +12,6 @@ state 是 GameState；只讀寫玩家自己（片段、物品、計數、做完�
 天機要讀全服的 SharedWorldState.tianji，所以要填天機的地方收一個 WorldStateStore（world）；沒給就當天機 0。"""
 from __future__ import annotations
 
-import hashlib
 import math
 import random
 from collections.abc import Iterator
@@ -20,9 +19,13 @@ from collections.abc import Iterator
 from tianxia import calendar, materials, renown, timetable, wins
 from tianxia import figures  # 過渡：待搬（大勢人物 figures，總表第 40 批收共用規則層）
 from tianxia.core.omen_base import FIGURE_SLOT, GUANYIN, TIANJI, TIANJI_ANSWER, _asks, asks_of, need, scale, trips  # noqa: F401  核心與共用層讀的只讀那一半在 core/omen_base，這裡 re-export 同一批名字（舊名 tianxia.foreshadow 照舊拿到同一個函式）
+from tianxia.core.omen_base import (  # noqa: F401  core_world2：伏筆「讀」的那一半（全部拆包第 40 批）也在 core/omen_base，re-export 同一批
+    TIANJI_SLOTS, _event, _figure_name, _fragment_text, _front, _tianji, _version, chain, event_ids, fill,
+    fs_active as active, heard_texts, held_items, tianji_answer,
+)
 from tianxia.journal import fragment_line
 from tianxia.models import (
-    Check, Content, FsAsk, FsChain, FsFinal, FsFragment, FsItem, FsRequires, FsStep, FsWrong, Squad,
+    Check, Content, FsAsk, FsChain, FsFinal, FsFragment, FsRequires, FsStep, FsWrong, Squad,
 )
 from tianxia.rules import EffectRun, can_meet, check_chance, check_result_line, day_seconds, season_one, side_of
 from tianxia.state import GameState, Lock
@@ -30,7 +33,6 @@ from tianxia.world_state import WorldStateStore
 
 DAY = 86400
 BASE_FRAGMENT_CHANCE = 0.05  # 每次花體力的行動，在所在的大區聽到一則片段的機率（1000 人以上那一檔；伏筆文件 2.2）
-TIANJI_SLOTS = {"{風向}": "wind", "{偽裝}": "disguise"}  # 文字裡的插槽
 OVERHEARD = "聽說{name}說過："  # 名望不夠求見不到的人，對話片段從行動偷聽到時，原文前面加的這一句（內容表 4.0）
 LOCK_SIDES = tuple(timetable.SIDE_NAMES)  # 會鎖定大事的兩方（官軍、黃巾）；鏈只能是這兩方的（content.validate）
 FRONT_RULES = {"guan": (0, 60), "huang": (40, 100)}  # 戰況（往黃巾為正）：官軍 ≤ 60、黃巾 ≥ 40
@@ -48,46 +50,11 @@ def fragment_chance(content: Content) -> float:
     return min(1.0, BASE_FRAGMENT_CHANCE / scale(content))
 
 
-def tianji_answer(world_tianji: int, key: str) -> str:
-    """本季的天機答案（伏筆文件 2.9）：天機與 key 的 sha256 決定候選裡的哪一個。用 hashlib，不用 Python 內建的 hash
-    （那個每次執行都不同）。不認得的 key 丟 KeyError。"""
-    candidates = TIANJI[key]
-    digest = hashlib.sha256(f"{world_tianji}|tianji|{key}".encode()).digest()
-    return candidates[int.from_bytes(digest[:8], "big") % len(candidates)]
-
-
-def _tianji(world: WorldStateStore | None) -> int:
-    return world.tianji() if world is not None else 0
-
-
 # ── 找東西 ───────────────────────────────────────────────
-
-
-def active(state: GameState, content: Content) -> bool:
-    """伏筆有沒有在跑：第一季開關開著、這一季開季時也是開的（蓋了章），而且 foreshadows.json 至少有一條鏈。
-    所有入口都只看這一個判斷（審查 M4）。"""
-    return bool(content.foreshadows.chains) and calendar.season_one_on(state.world, content)
-
-
-def chain(content: Content, chain_id: str) -> FsChain | None:
-    return next((c for c in content.foreshadows.chains if c.id == chain_id), None)
-
-
-def _event(content: Content, event_id: str):
-    return next((e for e in content.timetable if e.id == event_id), None)
 
 
 def item_name(content: Content, item_id: str) -> str:
     return next((i.name for i in content.foreshadows.items if i.id == item_id), item_id)
-
-
-def held_items(state: GameState, content: Content) -> list[tuple[FsItem, int]]:
-    """手上的伏筆物品（煉製頁素材旁的「伏筆物品」畫面用，T7b）：照 foreshadows.json 的順序、不列數量 0 的。
-    伏筆沒在跑（active 不成立：開關關著、這一季沒蓋章、沒有鏈）時是空的，就算背包裡有東西。"""
-    if not active(state, content):
-        return []
-    bag = state.player.clue_items
-    return [(item, bag[item.id]) for item in content.foreshadows.items if bag.get(item.id, 0) > 0]
 
 
 def _requires_of(final: FsFinal, trip: FsStep) -> list[FsRequires]:
@@ -109,19 +76,6 @@ def reads_counter(chains: list[FsChain], key: str) -> bool:
                 if any(key in r.counters for r in _all_requires(req)):
                     return True
     return False
-
-
-def event_ids(content: Content) -> set[str]:
-    """伏筆的事件：片段的來源事件，以及任何選項會給伏筆物品或伏筆計數的事件（準備事件、豪強的起點）。
-    開關關著時這些事件不出現（events.event_candidates），beta 那一季一個字都不變。"""
-    found = {f.event for c in content.foreshadows.chains for f in c.fragments if f.event}
-    for event in content.events.values():
-        effects = [eff for ch in event.choices for eff in (ch.effect, ch.fail_effect)]
-        if event.free_text is not None:
-            effects += [event.free_text.effect, event.free_text.fail_effect]
-        if any(eff.clue_items or eff.fs_counters for eff in effects):
-            found.add(event.id)
-    return found
 
 
 # ── 誰做得了 ─────────────────────────────────────────────
@@ -154,35 +108,6 @@ def _mark_heard(state: GameState, chain_id: str, index: int) -> None:
 
 
 # ── 文字 ─────────────────────────────────────────────────
-
-
-def _version(state: GameState, content: Content, c: FsChain) -> str | None:
-    event = _event(content, c.event)
-    return timetable._version(state, event) if event is not None else None  # noqa: SLF001  同一個套件
-
-
-def _figure_name(content: Content, fid: str | None) -> str:
-    character = content.characters.get(fid) if fid else None
-    return character.name if character is not None else ""
-
-
-def fill(state: GameState, content: Content, c: FsChain, text: str, world: WorldStateStore | None) -> str:
-    """填文字裡的插槽：{風向}、{偽裝} 是本季的天機；{人物} 是最後一步出面的那位（figure 在那條戰線上就是他，否則是 stand_in）。"""
-    for slot, key in TIANJI_SLOTS.items():
-        if slot in text:
-            text = text.replace(slot, tianji_answer(_tianji(world), key))
-    if FIGURE_SLOT in text:
-        final = c.final
-        front = _front(content, c)
-        present = final.figure is not None and (front is None or figures.on_front(state, final.figure, front))
-        fid = final.figure if present or final.stand_in is None else final.stand_in
-        text = text.replace(FIGURE_SLOT, _figure_name(content, fid))
-    return text
-
-
-def _fragment_text(state: GameState, content: Content, c: FsChain, fragment: FsFragment, world) -> str:
-    text = fragment.versions.get(_version(state, content, c) or "", fragment.text)
-    return fill(state, content, c, text, world)
 
 
 def grant_fragment(
@@ -286,18 +211,6 @@ def hear_from_event(state: GameState, content: Content, event_id: str, world: Wo
     return lines
 
 
-def heard_texts(state: GameState, content: Content, world: WorldStateStore | None = None) -> list[str]:
-    """聽過的線索片段（見聞頁的「個人線索」，傳聞分層設計第六節）：照鏈與片段的順序，文字照片段的寫法填好天機與出面的人
-    （偷聽到的不再加「聽說誰說過」）。只有自己看得到；伏筆沒在跑（開關關著、沒有鏈）時是空的。"""
-    if not active(state, content):
-        return []
-    heard = state.player.fragments
-    return [
-        _fragment_text(state, content, c, c.fragments[i], world)
-        for c in content.foreshadows.chains for i in sorted(heard.get(c.id, [])) if 0 <= i < len(c.fragments)
-    ]
-
-
 def _speaker(state: GameState, f: FsFragment) -> str | None:
     """對話片段由誰說：主角色退場、重創或下獄時改由 stand_in（沒寫就沒人說）；人物還沒種過當成在場。"""
     figure = state.world.figures.get(f.character) if f.character else None
@@ -335,13 +248,6 @@ def hear_talk(
 
 
 # ── 最後一步：做不做得了 ─────────────────────────────────
-
-
-def _front(content: Content, c: FsChain) -> str | None:
-    if c.front is not None:
-        return c.front
-    event = _event(content, c.event)
-    return event.front if event is not None else None
 
 
 def _window_open(state: GameState, content: Content, c: FsChain, now: float) -> bool:

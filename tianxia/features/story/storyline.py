@@ -36,6 +36,7 @@ from tianxia.story_base import (  # noqa: F401  底座（共用規則層）：�
     _close_brace, _enter, _split_else, active, current, definition, heard, here, on, open_quiz, question_text, roll_start, room,
     stage_art, start, vary,
 )
+from tianxia.story_base import doable, waiting  # noqa: F401  core_world2：章回卡與條件也讀（全部拆包第 40 批搬進底座），re-export 同一個
 from tianxia.world_state import WorldStateStore
 
 
@@ -80,24 +81,6 @@ AFTER_JOURNAL = "後來"  # 餘波那一則江湖紀錄與卡的標題開頭
 
 
 
-
-
-
-
-def waiting(state: GameState, content: Content, progress: StoryProgress, stage: StoryStage) -> bool:
-    """多日段還沒到時候（StoryStage.wait_days）。"""
-    if not stage.wait_days or progress.entered is None:
-        return False
-    return state.world.time < progress.entered + stage.wait_days * day_seconds(content, state.world)
-
-
-def doable(state: GameState, content: Content, progress: StoryProgress) -> bool:
-    """這一段此刻在這裡按得下去：event、quiz、fight 才有鈕（task 是去做別的事），還沒端出來、等完了、站在對的地方。"""
-    pair = current(content, progress)
-    if pair is None or progress.opened:
-        return False
-    _, stage = pair
-    return stage.kind != "task" and not waiting(state, content, progress, stage) and here(state, content, stage.where)
 
 
 def ready_event(state: GameState, content: Content) -> str | None:

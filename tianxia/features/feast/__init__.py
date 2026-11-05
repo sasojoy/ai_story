@@ -63,11 +63,15 @@ class FeastFeature(Feature):
 
     def world(self) -> tuple[WorldHook, ...]:
         """世界層 step 的 feast 那一格（時間到了的宴散席；原本 world.advance_world_state 直接叫 feasts.settle）：不問 enabled。
-        建一次就留著，在叫的那一下才照模組屬性找 rules.world_step（monkeypatch 照樣有效）。"""
+        建一次就留著，在叫的那一下才照模組屬性找 rules.world_step（monkeypatch 照樣有效）。
+        core_world2（全部拆包第 40 批）：世界層 life 的 feast 那一格（設宴；原本 figure_life.tick 每一輪每一位對話人物直接叫 feasts.maybe_open）。"""
         if self._world is None:
             from . import rules  # noqa: PLC0415
 
-            self._world = (WorldHook("step", "feast", lambda *args: rules.world_step(*args)),)
+            self._world = (
+                WorldHook("step", "feast", lambda *args: rules.world_step(*args)),
+                WorldHook("life", "feast", lambda *args: rules.maybe_open(*args)),  # core_world2
+            )
         return self._world
 
 
