@@ -14302,6 +14302,22 @@ class EffectsScenario(Scenario):
         if step is not None and step.line:
             self.edit(who, lambda p: p.storylines.setdefault(step.line, StoryProgress(line=step.line, stage=f"{FX_PREFIX}stage")))
 
+    @contextlib.contextmanager
+    def old_shard(self, on: bool):
+        """舊鏈的玉璽碎片那一下：玉璽碎片關著（開著的話舊鏈不寫跨季紀錄，三種設定都看不到這一格）、劇本有碎片旗標（測試內容沒寫就用對照用的那一個）；
+        出來還原。"""
+        if not on:
+            yield
+            return
+        seal, scen = self.c.config.seal, self.c.scenario
+        before = (seal.enabled, scen.jade_seal_flag)
+        seal.enabled, scen.jade_seal_flag = False, scen.jade_seal_flag or f"{FX_PREFIX}flag"
+        emit("舊鏈的玉璽碎片這一下", {"seal_enabled_before": before[0], "flag": scen.jade_seal_flag})
+        try:
+            yield
+        finally:
+            seal.enabled, scen.jade_seal_flag = before
+
     def card(self, who: str, eid: str) -> bool:
         if eid not in self.c.events:
             emit(f"{who}：這份內容沒有 {eid}", None)
@@ -14378,7 +14394,8 @@ class EffectsScenario(Scenario):
                 continue
             self.prep(who, kw)
             if self.card(who, f"{FX_PREFIX}{slot}"):
-                self.press_card(who, f"一則一種 {slot}")
+                with self.old_shard(slot == "shard"):
+                    self.press_card(who, f"一則一種 {slot}")
                 self.me(who, f"一則一種 {slot} 之後")
         self.world_view("一則一種之後")
 
