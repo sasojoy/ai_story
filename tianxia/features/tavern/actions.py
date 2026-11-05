@@ -25,7 +25,7 @@ from tianxia import equipment  # 共用規則層（店沒開時那一句 NOT_NOW
 from tianxia import renown  # 共用規則層（名望、惡名、名望段）
 from tianxia import roster  # 共用規則層（截殺與通緝的新手期）
 from tianxia import shopview  # 過渡：待搬（店面：掌櫃那一句、素材屬性的排序）
-from tianxia import social  # 過渡：待搬（此地還有誰、站哪一邊）
+from tianxia.core import presence  # 此地還有誰、站哪一邊（核心的查詢服務，第 37 批）
 from tianxia.calendar import DAY, HOUR
 from tianxia.characters import CharacterStore, name_key
 from tianxia.core.option import Option
@@ -699,10 +699,10 @@ def tavern_ask_facts(ctx: Game, question: str = "") -> tuple[tuple[str, ...], tu
                 players[other.state.player.name] = other.state
     topic, kinds = tavern_ask.topics(s, c, question, players, tavern_wanted(ctx))
     extra = []
-    guests = [o.player.name for o in social.here(ctx)][:6]
+    guests = [o.player.name for o in presence.here(ctx)][:6]
     if guests:
         extra.append(f"此刻也在{c.locations[p.location].name}的江湖人：{'、'.join(guests)}。")
-    side = social.side(s, c)
+    side = presence.side(s, c)
     extra.append(f"問話的客官是{side}，名號{p.name}，此刻在{c.locations[p.location].name}。")
     base = [f for f in tavern_rules.ask_facts(s, c, extra) if f not in topic]
     return tuple(topic + base), tuple(kinds)
@@ -810,7 +810,7 @@ def tavern_view(ctx: Game) -> dict:
     s, c = ctx.state, ctx.content
     p, cfg = s.player, c.config.tavern
     loc = p.location
-    guests = [o.player.name for o in social.here(ctx)]
+    guests = [o.player.name for o in presence.here(ctx)]
     treat = tavern_rules.treat_shown(s.world, c, loc)
     prices = {k: tavern_price(ctx, getattr(cfg, f"{k}_price")) for k in ("news", "seek", "ties", "wall", "treat", "hide", "trace", "ask")}
     mats = []

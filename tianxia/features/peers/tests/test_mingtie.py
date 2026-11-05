@@ -1,4 +1,4 @@
-"""名帖（tianxia/mingtie.py、mingtie_card.py；Joy 2026-10-19）與審一句話（speech.py）。"""
+"""名帖（tianxia/features/peers/mingtie.py、mingtie_card.py；Joy 2026-10-19）與審一句話（speech.py）。全部拆包第 37 批從 tests/bots/ 整檔搬進玩家互動包。"""
 from __future__ import annotations
 
 import random

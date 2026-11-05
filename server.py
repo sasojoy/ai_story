@@ -3021,40 +3021,7 @@ MENXIA_ACTIONS = {
 }
 
 
-@app.get("/api/peer")
-def api_peer(request: Request, name: str = ""):
-    """玩家卡（social.card）：他不在這裡了 card 是 None，網頁照 gone 那一句說。只讀。"""
-    game = _game(request)
-    return {"card": look(game, lambda g: g.peer_card(name)), "gone": social.GONE}
-
-
-@app.post("/api/peer/act")
-def api_peer_act(request: Request, body: dict = Body(default={})):
-    """按了玩家卡上的一顆鈕（Game.peer_act）：回傳 {card, main, message}。參數都是客戶端寫的，一律轉成字串或整數再交給引擎驗。"""
-    game = _game(request)
-    name, action = str(body.get("name", "")), str(body.get("action", ""))
-    params = {"arg": str(body.get("arg", "")), "choice": str(body.get("choice", ""))}
-    try:
-        params["amount"] = int(body.get("amount", 0))
-    except (TypeError, ValueError):
-        params["amount"] = 0
-    params["text"] = str(body.get("text", ""))[:200]  # 挑釁附的一句話（CardButton.text）：C 段照字數與字表再驗
-    verdict = screen_peer(game, name, action, params)  # 那一句先在鎖外請模型審（speech.judge），結果交給 C 段
-    if verdict:
-        params["verdict"] = verdict
-    proposed = prepare_peer(game, name, action, params)  # 論武的首創取名：A 鎖內開單、B 鎖外取名，C 是下面的 peer_act
-    if proposed is not None:
-        params["proposed"] = proposed
-    msgs = act(game, lambda g: g.peer_act(name, action, params))
-    _tell_tabs(game)
-    return {
-        "card": look(game, lambda g: g.peer_card(name)),
-        "gone": social.GONE,
-        "main": look(game, main_view),
-        "message": joined(msgs),
-        # 卡已經關了或換了人時，網頁的提示泡泡只講這一句（FB-242）：論武合成了是「論武有結果了：合出…」，其餘是回話的第一句
-        "brief": game.peer_brief or social.brief(msgs),
-    }
+# （/api/peer、/api/peer/act：全部拆包第 37 批搬進玩家互動包 tianxia/features/peers/routes.py，殼照 FEATURES 掛；鎖外的 screen_peer、prepare_peer 留在殼，第 38 批）
 
 
 @app.post("/api/party/leave")
@@ -3321,32 +3288,7 @@ def api_board_card(request: Request, board: str, name: str = "", season: int = 0
 
 
 
-@app.get("/api/mingtie")
-def api_mingtie(request: Request):
-    """見聞的「名帖匣」（Game.mingtie_view）：頭銜的榜單名次照快取的整張榜（boards_now，不拿行動鎖）。"""
-    game = _game(request)
-    board = boards_now(game)
-    return look(game, lambda g: g.mingtie_view(board))
-
-
-@app.post("/api/mingtie/{op}")
-def api_mingtie_do(op: str, request: Request, body: dict = Body(default={})):
-    """名帖的動作：save（定稿：筆劃、頭銜、自題一句；那一句先在鎖外審過）、report（檢舉某人的第幾版）。回傳 {mingtie, message}。"""
-    game = _game(request)
-    if op == "save":
-        board = boards_now(game)
-        motto = speech.clean(str(body.get("motto", ""))[:200])
-        verdict = screen_text(game, motto, speech.MOTTO) if look(game, lambda g: g.mingtie_screen(motto)) else ""
-        titles = body.get("titles")
-        titles = [str(t) for t in titles] if isinstance(titles, list) else []
-        msgs = act(game, lambda g: g.make_mingtie(body.get("strokes"), titles, motto, verdict, board))
-    elif op == "report":
-        msgs = act(game, lambda g: g.report_mingtie(str(body.get("name", "")), _int(body.get("version"), 0)))
-        board = boards_now(game)
-    else:
-        raise HTTPException(404)
-    _tell_tabs(game)
-    return {"mingtie": look(game, lambda g: g.mingtie_view(board)), "message": joined(msgs)}
+# （/api/mingtie、/api/mingtie/{op}：全部拆包第 37 批搬進玩家互動包 tianxia/features/peers/routes.py，殼照 FEATURES 掛）
 
 
 # （/api/annals：全部拆包第 29 批搬進列傳包 tianxia/features/zhuan/routes.py，殼照 FEATURES 掛）

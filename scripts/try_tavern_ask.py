@@ -22,7 +22,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.environ["TIANXIA_DB"] = str(Path(tempfile.mkdtemp(prefix="try-tavern-ask-")) / "tianxia.db")  # 不碰這份 clone 的 saves/
 
-from tianxia import social, tavern  # noqa: E402
+from tianxia import tavern  # noqa: E402
+from tianxia.core import presence  # noqa: E402
 from tianxia.characters import CharacterStore  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.engine import Game  # noqa: E402
@@ -101,10 +102,10 @@ def old_facts(game: Game) -> tuple[str, ...]:
     """改版前的清單：這一區的局勢、最近的傳聞、這裡的出產、座上客、你自己（tavern.ask_facts 加原本那兩條 extra）。"""
     s, c = game.state, game.content
     extra = []
-    guests = [o.player.name for o in social.here(game)][:6]
+    guests = [o.player.name for o in presence.here(game)][:6]
     if guests:
         extra.append(f"此刻也在{c.locations[s.player.location].name}的江湖人：{'、'.join(guests)}。")
-    extra.append(f"問話的客官是{social.side(s, c)}，名號{s.player.name}。")
+    extra.append(f"問話的客官是{presence.side(s, c)}，名號{s.player.name}。")
     return tavern.ask_facts(s, c, extra)
 
 
