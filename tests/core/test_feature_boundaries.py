@@ -885,6 +885,22 @@ GAME_DELEGATE_CALLERS.update({
     ("admin_player_choices", "_summons_plan"): "管理者的玩家選單（發召見那一顆灰不灰、為什麼）與 admin_summon 共用同一個規劃（_summons_plan）",
 })
 
+# craft（全部拆包第 44 批「煉製與自創」：新包 tianxia/features/craft/；計畫 docs/superpowers/plans/2026-11-05-煉製自創包-第1批.md 1.4、1.5）：
+# 16 個一行委派（煉製頁開爐 5 個、自創 11 個）；原本那一行 `from . import create` 現在是別名（委派的型別註記 create.IntentRequest、IntentReading 用）。
+# 沒有選項前綴、沒有 GAME_DIRECT。
+GAME_IMPORTS |= {"tianxia.features.craft.actions", "tianxia.create"}
+GAME_DELEGATES |= {
+    # server（MENXIA_ACTIONS、開爐與立意的鎖外三段式、/api/forge_line）、假人（bot_policy.tend_arts、bot.create_art、forge_and_cultivate）、測試、
+    # 引導包的假人走序章（ctx.forge）在叫的；create_view 是核心原位 status_data 叫的（下）
+    "forge_request", "forge", "forge_line", "forge_preview", "forge_picks", "create_begin", "create_pose", "create_request", "create_intent",
+    "create_reread_request", "create_reread", "create_reroll", "create_back", "create_name", "create_cancel", "create_view",
+    # 引導包經 ctx 問的三個查詢服務（services.py 二、查詢服務 # craft）
+    "_create_on", "_create_allowed", "_create_price",
+}
+GAME_DELEGATE_CALLERS.update({
+    ("status_data", "create_view"): "狀態列的自創那一塊（status 的 create 鍵）：鍵的順序算行為，狀態列掛鉤是總表第 66 批",
+})
+
 
 @functools.lru_cache(maxsize=None)
 def _engine_tree() -> ast.Module:
@@ -1459,7 +1475,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # zhuan（全部拆包第 29 批：tianxia/biography.py、zhuan_end.py）
                          "biography": "zhuan", "zhuan_end": "zhuan",
                          # military（全部拆包第 33 批：tianxia/rank_actions.py）
-                         "rank_actions": "military"}
+                         "rank_actions": "military",
+                         # craft（全部拆包第 44 批：tianxia/create.py）
+                         "create": "craft"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 
