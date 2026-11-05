@@ -15150,7 +15150,7 @@ def _omen_register_track(name: str, scenario: type, mutation: tuple, profile: st
 
 
 # 改一個字（selftest）：機緣完成那一句（搬之前在 tianxia/opportunities.py、搬之後在 tianxia/features/military/ 的機緣檔；搬的人照實際的檔名多寫一個）
-_omen_register_track("omen", OmenScenario, (("tianxia/opportunities.py",), ('DONE = "（機緣「{name}」完成。）"', 'DONE = "（機緣「{name}」完成！）"')), "week7")
+_omen_register_track("omen", OmenScenario, (("tianxia/opportunities.py", "tianxia/features/military/opp_rules.py"), ('DONE = "（機緣「{name}」完成。）"', 'DONE = "（機緣「{name}」完成！）"')), "week7")
 
 
 if __name__ == "__main__":

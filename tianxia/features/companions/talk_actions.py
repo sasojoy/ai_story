@@ -10,7 +10,7 @@ checked_prepared 重驗再套用；模型不在鎖裡，server 留的殼不動�
 """
 from __future__ import annotations
 
-from tianxia import annals, foreshadow, opportunities, ranks  # 過渡：待搬（行狀 annals 第 29 批；伏筆 foreshadow、機緣 opportunities 第 34 批；階級 ranks 第 40 批）
+from tianxia import annals, ranks  # 過渡：待搬（行狀 annals 第 29 批；階級 ranks 第 40 批）
 from tianxia import precise, roster
 from tianxia.core.option import Option
 from tianxia.core.services import PLAN_OPTION, ROAD_SAY, SAY_MAX, SAY_OPTION, say_text
@@ -140,10 +140,10 @@ def talk(ctx, arg: str, prepared: companion_agent.PreparedTurn | None = None, sa
         return companion_agent.leave_dialogue(ctx.state)
     if arg.startswith("clue:"):  # 伏筆的片段：固定文字，不經模型、不扣體力、不算對話輪數（計畫 T7）
         chain_id, _, index = arg.removeprefix("clue:").rpartition(":")
-        heard = foreshadow.hear_talk(ctx.state, ctx.content, companion_id, chain_id, int(index), ctx.world)
+        heard = ctx._fs_hear_talk(companion_id, chain_id, int(index))
         return heard or ["（此刻無法這麼做。）"]
     if arg.startswith("opp:"):  # 機緣的話題：固定文字，不經模型、不扣體力、不算對話輪數（正式版乙一）
-        heard = opportunities.hear_topic(ctx.state, ctx.content, companion_id, arg.removeprefix("opp:"))
+        heard = ctx._opp_hear_topic(companion_id, arg.removeprefix("opp:"))
         return heard or ["（此刻無法這麼做。）"]
     if arg in ("terms:yes", "terms:no", "owed", "repay"):  # NPC 智能 2.0：接不接他的條件、請他兌現、還他（固定文字，不經模型、不扣體力、不算輪數）
         return parley_actions.answer(ctx, companion_id, arg)
@@ -233,8 +233,7 @@ def talk_options(ctx) -> list[Option]:
     opts = [ctx._cost_option(f"talk:{i}", text, talk_cost) for i, text in enumerate(dialogue_options)]
     if dialogue_options:  # 模型寫的選項之外，自己打一句話（企劃者 2026-10-08）：價錢、輪數跟按選項一樣
         opts.append(ctx._cost_option(SAY_OPTION, "自己說…", talk_cost))
-    opts += foreshadow.talk_options(s, c, s.player.pending_companion)  # 伏筆的片段：固定文字、不花體力（計畫 T7）
-    opts += opportunities.talk_options(s, c, s.player.pending_companion)  # 機緣的話題（正式版乙一）：不花體力
+    opts += ctx._omen_talk_options(s.player.pending_companion)  # 伏筆的片段（計畫 T7）、機緣的話題（正式版乙一）：固定文字、不花體力（軍情，第 34 批查詢服務）
     opts += parley_actions.options(ctx, s.player.pending_companion)  # NPC 智能 2.0：他開的條件、欠你的那一件（不花體力）
     opts.append(Option(id="talk:leave", label="告辭"))
     return opts

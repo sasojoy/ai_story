@@ -709,17 +709,18 @@ def test_apply_effect_asks_the_effect_slots(game, monkeypatch):
 def test_clear_progress_asks_the_clear_slots_in_the_table_order(game, monkeypatch):
     """defection.clear_progress（測試直接叫它）照 DEFECT_ORDER["clear"] 走：叛投自己的（_clear_own）→ 包登記的押糧、提示（登記的先後跟表
     相反）→ 機緣（核心代叫）；每一格拿到同一個 PlayerState。核心代叫的兩格在叫的那一下才照模組屬性找（換掉照樣打得到）。"""
-    from tianxia import defection, opportunities
+    from tianxia import defection
 
     calls = []
 
     def note(slot):
         return lambda *args: calls.append((slot, args))
 
-    pkg = Effectful(defection=[DefectHook("clear", "hints", note("hints")), DefectHook("clear", "convoy", note("convoy"))], open_=False)
+    # 機緣那一格第 34 批起也是包登記的（原本是核心代叫、換掉 opportunities.clear）：四格合起來照表的先後，登記的先後跟表相反
+    pkg = Effectful(defection=[DefectHook("clear", "opportunities", note("opportunities")), DefectHook("clear", "hints", note("hints")),
+                               DefectHook("clear", "convoy", note("convoy"))], open_=False)
     monkeypatch.setattr(registry, "FEATURES", [pkg])
     monkeypatch.setattr(defection, "_clear_own", note("progress"))
-    monkeypatch.setattr(opportunities, "clear", note("opportunities"))
     p = game.state.player
     defection.clear_progress(p)
     assert calls == [("progress", (p,)), ("convoy", (p,)), ("hints", (p,)), ("opportunities", (p,))]
@@ -770,6 +771,7 @@ def test_the_core_and_the_packages_take_every_effect_and_defection_slot_exactly_
         assert not mine.keys() & core[at].keys(), at
         assert mine.keys() | core[at].keys() == set(order), at
     fs = features_core.registered()
-    assert {f.name: [h.slot for h in f.effects()] for f in fs if f.effects()} == {"story": ["story"]}
+    assert {f.name: [h.slot for h in f.effects()] for f in fs if f.effects()} == {
+        "story": ["story"], "military": ["grain", "fs_fragments", "foreshadow"]}
     assert {f.name: [(h.at, h.slot) for h in f.defection()] for f in fs if f.defection()} == {
-        "military": [("clear", "convoy")], "guide": [("clear", "hints")], "companions": [("after", "parley")]}
+        "military": [("clear", "convoy"), ("clear", "opportunities"), ("leave", "plots")], "guide": [("clear", "hints")], "companions": [("after", "parley")]}

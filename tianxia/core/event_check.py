@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
-from .. import annals, battlelog, bounties, event_llm, foreshadow, forge_secrets, journal, narration, secret_recipes, story_base, team, tiers
+from .. import annals, battlelog, bounties, event_llm, forge_secrets, journal, narration, secret_recipes, story_base, team, tiers
 from .. import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有端出事件那一下會叫；照 engine 的叫法）
 from .. import outcomes as outcome_rules
 from .. import prologue as prologue_rules
@@ -98,7 +98,7 @@ def present(ctx, event: Event, action: str | None = None) -> list[str]:
     text = fill_marks(event_text(ctx, event), ctx.state)
     ctx._outcome(journal.event_marker(event.title, event.qiyu), head)
     ctx._hide(text)
-    return [head, text] + foreshadow.hear_from_event(ctx.state, ctx.content, event.id, ctx.world)  # 片段事件（計畫 T7）
+    return [head, text] + ctx._hear_from_event(event.id)  # 片段事件（計畫 T7；本體在軍情包，全部拆包第 34 批）
 
 
 def event_text(ctx, event: Event) -> str:
