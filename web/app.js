@@ -2140,12 +2140,8 @@
     if (!r || !r.scene) { toast("這一招演不出來，等一下再試。"); return; }
     S.heroMoveShow = mid;
     render();
-    // 台上站的是自己：穿的那一套、拿那一招的打法的兵器（擂台開打時 arena_anim 會照那一場重設）
-    const hm = S.main && S.main.hero_move, look = (S.main && S.main.look) || "";
-    const kind = { slash: "劍", pole: "槍", fist: "拳腳", shoot: "弓弩" }[hm && hm.worn ? hm.worn.style : ""] || "";
-    if (typeof RA !== "undefined") RA.looks = { ...RA.looks, me: kind, me_look: look };
-    if (typeof ringLoad === "function") ringLoad();
-    if (look && typeof ringWarmLook === "function") ringWarmLook(look);
+    const hm = S.main && S.main.hero_move;
+    sceneAsMe(hm && hm.worn ? hm.worn.style : ""); // 台上站的是自己（mall.js）
     if (typeof scenePreview === "function") scenePreview(r.scene, mid);
   }
   // 「換一招」：萬寶閣絕招那一頁、招式庫開那一種打法的分頁（mall.js 的 openMallMoves）。
@@ -6455,6 +6451,7 @@
         case "mall-pick": mallPick(el.dataset.id); break;
         case "mall-cat": mallCatTo(el.dataset.cat); break; // 貨架的分類
         case "look-sub": lookSubTo(el.dataset.sub || ""); break; // 形象那一頁裡的自建形象、絕招那一頁（空的回形象）
+        case "prompt-ex-more": moveExMore(); break; // 絕招例句換下一批三句
         case "prompt-ex": promptExample(el.dataset.for || "", el.dataset.text || ""); break; // 想不到就點：把例句填進框裡
         case "look-pick": lookPickTo(el.dataset.id || ""); break; // 形象那一頁點一套：台子上換成它
         case "look-seg": lookSegTo(el.dataset.seg || "mine"); break; // 我的／官方／市集

@@ -169,6 +169,7 @@
 .shop-layer.shop-mall .move-new { width: 100%; margin: 16px 0 0; }
 .shop-layer.shop-mall .look-ex { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: #c9b391; }
 .shop-layer.shop-mall .look-ex .btn { border-style: dashed; }
+.shop-layer.shop-mall .look-ex .ex-more { border-style: solid; opacity: 0.85; }
 .shop-layer.shop-mall .market-set { grid-column: 1 / -1; display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
 .shop-layer.shop-mall .market-set .input { width: 96px; }
 .shop-layer.shop-mall .move-now-card { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; border: 1px solid #6b4a2e;
