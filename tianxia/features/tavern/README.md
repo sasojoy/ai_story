@@ -41,4 +41,4 @@
 - **改 `rules.py`、`actions.py` 時 `test_for` 挑的比搬之前窄**（審查量的）：搬之前改 `tianxia/tavern.py` 會挑到 import `tavern` 的 `test_zh` 與五個 seal 檔（8 個檔 120／176 條）；現在程式在包裡，改 `rules.py` 或 `actions.py` 只挑包的 4 個檔＋核心契約與邊界（7 個檔 118／119 條，不含／含 slow）。例：`rules.chatter_clean` 拿掉 `zh.stray_latin` 那一關只有 `test_zh` 紅、`tavern_hit_fight` 的 `hit_win_fame` 加倍只有 `test_explain2` 紅——上面這條指令兩個都抓得到，`test_for` 只給包的檔抓不到。這一輪不讓 `test_for` 把混合檔算進包（同出陣 README），交 PM 定。
 - 前後一字不變：`scripts/same_behavior.py` 的 `tavern` 一軌（`--tracks tavern`）。
 
-**行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面寫到 `annals` 過渡的處數，以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 留別名，兩半都 re-export）。
+**行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。

@@ -27,4 +27,4 @@
 - 世界層 `muster` 代叫（`works` 那一格）：`tests/core/test_world.py`、`tests/battle/test_fronts.py`、`tests/figures/test_timetable.py`。
 - 一起跑：`pytest tianxia/features/stamina_plays/tests tests/gear/test_four_tiers.py tests/ranger/test_raid.py tests/acts/test_conquest_flip.py tests/seal/test_seal_revamp_sidedoor.py tests/core/test_world.py tests/battle/test_fronts.py tests/figures/test_timetable.py -n 4 -m "slow or not slow"`。
 
-**行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面寫到 `annals` 過渡的處數，以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 留別名，兩半都 re-export）。
+**行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
