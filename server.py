@@ -78,7 +78,7 @@ from tianxia.database import default_path, open_database
 from tianxia.flavor import FlavorJob
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, TEXT_TALKS, Game, Refused
 from tianxia.core import features as features_core  # 功能包：殼照 FEATURES 掛管理者工具與路由（開發規範手冊 3.1）
-from tianxia.features.map import views as map_views  # 輿圖的 /api/map 資料與底圖快取：全部拆包第 49 批搬進輿圖包（殼留同一個物件的別名）
+from tianxia.features.map import views as map_views  # 輿圖的 /api/map 資料與底圖快取：全部拆包第 49 批搬進輿圖包（殼留同一個物件的別名）  # 殼留薄包裝：`map_view` 要 `md`（第 49 批 PM 認定第 10 條）
 from tianxia.features.feast import rules as feasts  # 宴客自己寫的敬酒詞：鎖外評分（三段式還在殼裡，過渡）
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.notices import KINDS as NOTICE_KINDS

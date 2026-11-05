@@ -56,7 +56,7 @@ from . import training
 from .guide import note_action
 from .features.guide import actions as guide_actions
 from .journal import LOG_BREAK, Draft
-from .features.map import actions as map_actions  # 輿圖：全部拆包第 49 批（11 個一行委派）
+from .features.map import actions as map_actions  # 輿圖：全部拆包第 49 批（13 個一行委派：搬的 11 個方法＋探索包問的 _map_open_places、_map_mostly_here）
 from .martial_arts import QUALITIES  # （cultivation：is_renamed 跟著 _deliver_renames 搬進修練包，拿掉）
 from .models import (
     EXPLORE_BRANCHES, FREE_TEXT_MAX, MOVES, BattleDef, Check, Choice, Content, Effect, Event, ExploreBranch, FactionDef, Location,

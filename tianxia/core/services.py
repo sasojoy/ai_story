@@ -746,7 +746,7 @@ def writers(state: GameState, content: Content, season: WorldState) -> list[Writ
 
 # map（全部拆包第 49 批「輿圖一」）：下面三樣原本分別寫在 tianxia/mapdata.py（LOSE_WORD）、探索包的 explore_rules.py（六種地點、四類事、「多半」那兩個字的算法）、
 # 有所感包的 sensing.py（terrain_tags）；輿圖包要用、又不能 import 探索包與有所感包，搬到這裡（純函式，照 config 與地點的標籤算，不碰 Game），
-# 原本的模組 re-export（`mapdata.LOSE_WORD is services.LOSE_WORD`、`explore_rules.kind_of is services.kind_of`、`sensing.terrain_tags is services.terrain_tags`）
+# 原本的模組 re-export（`mapdata.LOSE_WORD is services.LOSE_WORD`、`explore_rules.kind_of is services.kind_of`、`sensing.terrain_tags is services.terrain_tags`）；寄放：第 50 批移到核心小模組（第 49 批 PM 認定第 3 條）
 LOSE_WORD = "必敗"  # 這種勝算的出陣建議照樣列，但排到最後、網頁畫淡（企劃者 10/15 從對比圖選乙）；探索挑懸賞時對這一路是必敗就不強制
 
 TOWN, TEMPLE, FORD, WILD, HILL, CAMP = "town", "temple", "ford", "wild", "hill", "camp"  # 六種地點（jianfa_numbers.ExploreKind）

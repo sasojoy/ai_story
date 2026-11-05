@@ -17521,7 +17521,7 @@ class MapScenario(Scenario):
                                  re.findall(r'<link rel="stylesheet" href="([^"]+)"', page.text)])
 
     def road(self) -> None:
-        """安排前往：走不成的三種（就在這裡、沒這個地方、剛進門的人）帶 map；走成的兩種（步行、疾行）；走在路上的人看輿圖。"""
+        """安排前往：走不成的帶 map（就在這裡、沒這個地方；剛進門的人也站在那裡，跟就在這裡是同一種）；走成的兩種（步行、疾行：賀凌川疾行那一趟當場就到）；走在路上的人看輿圖。"""
         far = self.farthest(self.WALKER)
         emit("岑九皋走最遠的一趟", far)
         if far is not None:
