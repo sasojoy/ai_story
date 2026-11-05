@@ -15,7 +15,7 @@ import random
 from tianxia import atlas, fusion, seal, social
 from tianxia.engine import Game
 
-CONTENT_DIR = Path(__file__).parents[2] / "content"
+CONTENT_DIR = Path(__file__).parents[4] / "content"  # 全部拆包第 49 批整檔搬進包（原本 tests/season/ 是 parents[2]）
 
 REGIONS = {
     "youzhou": {"zhuo_county", "market_town", "loushang_village", "zhuo_militia_hall", "juma_river", "yanshan_foot"},
