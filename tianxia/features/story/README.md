@@ -31,7 +31,7 @@
 ## 過渡（手冊 3.11）
 
 - 包 → 還沒搬的舊模組：`actions.py` 1 行（`chapters`：第 40 批）、`storyline.py` 1 行（`annals`：第 29 批）。共用層 `story_base` → `atlas`（`here` 的大區，第 50 批）、`chapters`（`vary` 的大事結果，函式裡，第 40 批）記在邊界測試的 `SHARED_PENDING`。
-- 舊模組 → 包：`engine` 1 行（`story_actions`）、別名檔 `tianxia/storyline.py`；還沒搬的 `chapters`（登記 `TASKS`）、`weekcard`（`OPTION`）、`bot`、腳本、測試。
+- 舊模組 → 包：`engine` 1 行（`story_actions`）、別名檔 `tianxia/storyline.py`；還沒搬的 `chapters`（登記 `TASKS`）、`bot`、腳本、測試（`weekcard` 第 36 批起收進核心，`OPTION` 改讀共用規則層的 `story_base`）。
 - 服務清單（`tianxia/core/services.py`）這一包加的：二、查詢 `# story` 一段（`ctx._story_begin`：探索包叫它，原本列在三、過渡 explore 那一行）；包裡叫回 `Game` 的其餘都已在清單（`_present`、`_story_squad`、`_judged`、`_fight_with`、`_style_note`、`_terrain_note`、`_narrate`、`_play_rounds`、`_hp_facts`、`_battle_rewards`、`_file_battle`、`_outcome`、`_save_season`）。
 
 ## 測試

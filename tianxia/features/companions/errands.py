@@ -16,7 +16,7 @@
 
 開關是 rules.jianfa(content, world, "errands")（加上書信本身的開關 letters.on）；關著每個函式都當沒有這回事。
 狀態只在 PlayerState.errands（與那封信）；不碰季。只 import models、state、rules、calendar、gender、figures、atlas／conquest／territory（延後）；
-letters、這一包的 actions、weekcard、server 叫它。字待 joy 潤。
+letters、這一包的 actions 與 __init__（「你這一步」的 errand 那一格）、server 叫它。字待 joy 潤。
 功能包 tianxia/features/companions/ 的純規則（全部拆包第 19 批；原本是 tianxia/errands.py，那一個名字留成指到這裡的別名）。"""
 from __future__ import annotations
 
@@ -254,7 +254,7 @@ def letter_card(state: GameState, content: Content, letter: Letter) -> dict | No
 
 
 def step_items(state: GameState, content: Content) -> list[dict]:
-    """本週卡「你這一步」的第一順位（整合設計 6.1；weekcard._steps 接在最前面）：身上還在辦的那一件，
+    """本週卡「你這一步」的第一順位（整合設計 6.1；這一包登記的 errand 那一格，排 core/features.py 的 STEP_ORDER 第一）：身上還在辦的那一件，
     [{"kind": "errand", "text", "who", "id", "target": {"location", "name", "minutes"}, "reward"}]；沒有、關著是空的。"""
     e = live(state)
     if e is None or not on(content, state.world):

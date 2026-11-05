@@ -39,4 +39,7 @@ MODULES = frozenset({
     "team", "gender", "naming", "wallet", "journal",
     "world",
     "log_archive",
+    # core_step（全部拆包第 36 批）：step、weekcard 不再 import 包之後收進來（計畫 1.5 甲案）。它們還代叫懸賞榜（step._STEP_CORE）、
+    # 讀章回（chapters），核心 → 舊模組這一版照舊不掃（同 world）
+    "step", "weekcard",
 })

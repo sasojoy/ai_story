@@ -1,11 +1,14 @@
 """軍令卡與記功（功能包 military；全部拆包第 33 批）：軍令的兩個行動（第 1 階守勢、接糧車）的選單、替自己記一次軍令、江湖頁的「本週軍令」卡、押著的糧車那一行。
 原本 Game 上的 4 個方法（_order_options、_order_credit、convoy_line、orders_view）；名字去掉前導底線。第一個參數是 ctx。orders_view、convoy_line 不改狀態；
 order_credit 會改（記進軍令的進度、推新手引導）。軍令的規則在 tianxia/orders.py（共用規則層，總表第 40 批收）。
+「你這一步」的 order 那一格（全部拆包第 36 批；原本 weekcard._steps 的軍令那一段與 step._order_places、_target、_then 的軍令那一支）：
+step_items、step_place，只讀；ORDER_GAIN 從 weekcard 搬來，字一個不改。
 """
 from __future__ import annotations
 
 from tianxia import materials
 from tianxia import atlas, orders  # 過渡：待搬（輿圖 atlas 第 50 批；軍令 orders 總表第 40 批收共用規則層）
+from tianxia import step as step_rules  # 核心本體（第 36 批收進 MODULES）：「你這一步」的 REF、place
 from tianxia.core.option import Option
 from tianxia.models import Location
 from tianxia.rules import front_of
@@ -80,3 +83,53 @@ def orders_view(ctx) -> list[dict]:
             view["how"] = atlas.order_how(s, c, o)  # 怎麼出力（FB-093；打擊另寫他在哪，FB-072）；打完的沒有這個鍵
         views.append(view)
     return views
+
+
+# core_step（全部拆包第 36 批「你這一步」）：order 那一格（core/features.py 的 STEP_ORDER：委託之後、揭了的懸賞之前）
+ORDER_GAIN = "陣營記功 {n}／{quota}"  # 待 joy 潤：軍令那一件做完拿什麼（軍令本人不另給賞：照做一次替陣營記一次，湊滿套效果）
+
+
+def step_items(ctx, views: list[dict]) -> list[dict]:
+    """「你這一步」的軍令那幾件（原本 weekcard._steps 的軍令那一段）：views 是殼算好傳進來的那一份 orders_view（不重算），沒做完的每一道一件。"""
+    out: list[dict] = []
+    for o in views:
+        if not o.get("done"):
+            out.append({"kind": "order", "text": f"{o['title']}：{o.get('how') or o['text']}",
+                        "reward": ORDER_GAIN.format(n=o.get("progress", 0), quota=o.get("quota", 0)), step_rules.REF: ("order", o.get("id"))})
+    return out
+
+
+def _step_order_places(ctx, o) -> set[str]:
+    """這道軍令去哪裡做（只列摸清了的地方：同軍令卡，不洩漏沒摸清的地點；原本 step._order_places）。"""
+    s, c = ctx.state, ctx.content
+    if o.template == "strike":
+        where = atlas._strike_place(s, c, o)  # noqa: SLF001  同軍令卡的「他現在在哪」（讀人物此刻的所在）
+        places = [where] if where is not None else []
+    elif o.template == "siege":
+        places = orders.siege_places(c, o.faction, o.front, s.world) if o.front else []
+    elif o.template == "defend":
+        places = orders.defend_places(c, s.world, o)
+    elif o.template == "escort":
+        places = [o.end if s.player.convoy is not None and s.player.convoy.order == o.id else o.start]
+    else:
+        places = [o.location]
+    return {loc for loc in places if loc in c.locations and atlas.is_known(s, c, loc)}
+
+
+def _step_then(ctx, o) -> dict | None:
+    """護糧軍令還沒接糧車：糧車要送到的終點 {"location", "name"}（target 是起點）；其他都是 None（原本 step._then）。"""
+    s, c = ctx.state, ctx.content
+    if o is None or o.template != "escort" or (s.player.convoy is not None and s.player.convoy.order == o.id):
+        return None
+    if o.end not in c.locations or not atlas.is_known(s, c, o.end):
+        return None
+    return {"location": o.end, "name": c.locations[o.end].name}
+
+
+def step_place(ctx, ref: tuple) -> tuple:
+    """軍令那一件的 (id, target, then)（原本 step._target、_then 的軍令那一支）：target 是最近的摸清了的那一處，護糧還沒接糧車多 then（終點）。"""
+    s = ctx.state
+    o = next((x for x in s.world.orders if x.id == ref[1]), None)
+    places = _step_order_places(ctx, o) if o is not None else set()
+    target = step_rules.place(ctx, ctx._nearest_to(places) if places else None)  # noqa: SLF001
+    return ref[1], target, _step_then(ctx, o)

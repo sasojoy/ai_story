@@ -21,6 +21,7 @@
 - 內容檔：`content = ("sects.json", "events/sects.json")`（門派與拜入門派的事件，總表附錄甲歸陣營；`content.py` 照舊讀）。
 - 掛鉤：`prefix = ("faction", "defect", "sect")`；`choose` 接這三個前綴（標題在動作之前拿；`sect` 的標題問核心的 `_action_title`，落到最後的「提前出關」，隨後被事件標題換掉）；`bot_pick` 一律 `None`；
   `bot_always = ("defect:", "faction:lean:")`；`enabled` 一直是 `True`；`on_drop_stale`（內容改版後拿掉的陣營，三個 pending 欄位作廢；原本在 `_drop_stale_references` 中段）；`defection()` 登記叛投兩格——`clear` 的 `progress`（`_clear_own`）與 `after` 的 `leave_behind`（`DEFECT_ORDER` 一個字不動）。
+- 「你這一步」的格 `steps()`（全部拆包第 36 批；順序在核心的 `STEP_ORDER`，排最後）：`join`（`join_actions.join_step_items`／`join_step_place`：散人、劇本有陣營、季沒收才有那一件，目標是最近的投靠點〔問新手引導包的查詢服務 `ctx._nearest_to`；一樣近照劇本陣營的順序〕；`JOIN_STEP` 從 `weekcard` 搬來，字一個不改；投靠點的地名照 `weekcard._places` 抄一份 `_join_place_names`〔三方卡照用 `weekcard` 那一份，包不 import `weekcard`〕；原本 `weekcard._steps` 最後那一段與 `step._target` 的去投靠那一支）。不問 `enabled`。
 
 ## 認領的欄位（手冊 3.5：留在原地）
 
@@ -54,6 +55,7 @@
 - `tests/figures/test_gentry_allied.py`（47）、`tests/core/test_gentry_ledgers.py`（16）、`tests/core/test_factions.py`（2）、`tests/core/test_faction_events.py`（3）：豪強、兩本帳、陣營規模與事件。
 - `tests/figures/test_promotions_huang.py`（56）、`test_promotions_high.py`（130）、`test_seats.py`（83）、`test_rumor_layers.py`（70）：只有幾處 `import defection`（晉升、席次、傳聞分層）。
 - `tests/web/test_gentry_allied_web.py`（2）：網頁（第 3 階）。
+- 「你這一步」的去投靠那一格（第 36 批）：`tests/bots/test_step.py`（9：去投靠的目標是最近的投靠點、先後在新手目標之後）、`tests/map/test_weekcard.py`（7：散人的卡最後一件是去投靠）；格的先後與登記由核心契約 `tests/core/test_contract_core.py`（`# core_step`）鎖住。
 - `tests/core/test_feature_boundaries.py`、`tests/core/test_contract_features.py`（核心契約）：這一包的邊界、前綴、欄位、換季都在裡面守。
 
 ## 過渡（手冊 3.11）

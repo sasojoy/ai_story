@@ -57,6 +57,9 @@
   defect_actions.defect_step 確定那一支（after；第 35 批前是 Game._defect_step）四個位置，照檔尾寫死的順序表 DEFECT_ORDER 一格一格叫（各包清自己的進度），不問 enabled |
 | bus()（BusHook） | 一種事件的格（core_eventbus：全部拆包第 26 批）：ctx.publish 的七個發布點（打贏一場、出門一趟、舊探索、抵達、截殺打贏、
   決戰收場），照檔尾寫死的順序表 BUS_ORDER 一格一格叫，不問 enabled |
+| steps()（StepHook） | 「你這一步」的格（core_step：全部拆包第 36 批）：本週卡「眼下要事」的候選（weekcard._steps 叫 step.items）與四勝利開著時補目標
+  （step.finish 照每一件 _ref 的第一個字找回那一格的 place），照檔尾寫死的順序表 STEP_ORDER 一格一格叫（包登記自己那一格、懸賞榜兩格由
+  step._STEP_CORE 核心代叫），不問 enabled |
 
 ctx 第一階就是 Game；功能包只准叫 services.py 那張清單上的方法。
 """
@@ -171,6 +174,8 @@ class FeatureHooks(Protocol):
     def defection(self) -> tuple[DefectHook, ...]: ...
     # core_eventbus（全部拆包第 26 批：一種事件的格，先後在 BUS_ORDER；不問 enabled）
     def bus(self) -> tuple[BusHook, ...]: ...
+    # core_step（全部拆包第 36 批：「你這一步」的格，先後在 STEP_ORDER；不問 enabled）
+    def steps(self) -> tuple[StepHook, ...]: ...
 
 
 class Feature:
@@ -275,6 +280,9 @@ class Feature:
         return ()
 
     def bus(self) -> tuple[BusHook, ...]:
+        return ()
+
+    def steps(self) -> tuple[StepHook, ...]:
         return ()
 
     def __repr__(self) -> str:
@@ -866,3 +874,70 @@ def bus_run(event: str, core: dict[str, Callable[..., Any]], *args: Any,
         if run is not None:
             out.append(run(*args))
     return out
+
+
+# core_step（全部拆包第 36 批「你這一步」；計畫 docs/superpowers/plans/2026-11-06-你這一步-第36批.md 1.2、1.3、2.1）
+
+
+@dataclass(frozen=True)
+class StepHook:
+    """「你這一步」（本週卡 main.week_card.steps，畫面叫「眼下要事」）的一格（Feature.steps() 回一串）：step.items 照 STEP_ORDER 一格一格叫
+    items(ctx, status, orders)（status 是 Game.status_data()、orders 是 Game.orders_view()，殼算好傳進來的那一份），把每一格回的那幾件照順序
+    接起來（每一件 {"kind", "text", …}；要補目標的掛一個 step.REF＝(ref, …)，自己帶好 target 的不掛）；四勝利開著時 step.finish 照每一件
+    _ref 的第一個字找回寫它的那一格、叫 place(ctx, ref) 補 (id, target, then)。照 registered() 問、不看 enabled（原位那幾行本來就不看包的開關，
+    判斷都在被叫的函式裡）。包的函式在叫的那一下才照模組屬性找（monkeypatch 照樣有效：tests/bots/test_step.py 換 tianxia.foreshadow.next_trip）。
+    items 回 list（不准回字串、None）；place 回三個（沒有就是 None）。"""
+
+    slot: str
+    items: Callable[..., list[dict]]
+    ref: str | None = None
+    place: Callable[..., tuple[Any, Any, Any]] | None = None
+
+
+# 「你這一步」的順序表：照換成掛鉤之前 weekcard._steps 一段一段接的先後（整合設計 6.1：託付 → 軍令 → 揭了的懸賞 → 伏筆 → 新手目標 → 去投靠；
+# 託付量下來是兩格）。先後就是行為（卡上的先後、「換一件事」從哪一件排起：計畫 1.9 任兩格對調都抓得到），寫死在這裡、不照 FEATURES。包登記
+# 自己那一格（Feature.steps()），其餘由核心代叫（step._STEP_CORE：還沒成包的懸賞榜，第 45 批）。章回那一件不在這裡（weekcard 排在最前面、
+# 不跟著輪）。改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。
+#
+# 格          主人                                  寫的 kind    ref（_ref 第一個字）  place 補什麼（四勝利開著）
+# errand      人物情誼 companions                   errand       —（自己帶 id、target） —
+# commission  懸賞 bounties（核心代叫，第 45 批）    errand       errand                那一張委託或求援的地點（護送是終點）
+# order       軍情 military                         order        order                 那道軍令去哪裡做（最近的摸清了的）；護糧還沒接糧車多 then（終點）
+# bounty      懸賞 bounties（核心代叫，第 45 批）    bounty       bounty                那一張懸賞的地點（護送是終點、打探討伐是地點）
+# foreshadow  軍情 military                         foreshadow   foreshadow            伏筆那一趟的地點
+# newbie      新手引導 guide                        newbie       newbie                新手目標「去做」帶去的地點
+# join        陣營 faction                          join         join                  最近的投靠點
+STEP_ORDER: tuple[str, ...] = ("errand", "commission", "order", "bounty", "foreshadow", "newbie", "join")
+
+
+def step_hooks() -> dict[str, StepHook]:
+    """包登記的格 {slot: StepHook}：照 registered()、不看 enabled。每一次都驗登記的全部格：表上沒有的格、同一格登記兩次（兩包或同一包）
+    都丟 ValueError（同 world_hooks、bus_hooks）。"""
+    own: dict[str, StepHook] = {}
+    for f in registered():
+        for hook in f.steps():
+            if hook.slot not in STEP_ORDER:
+                raise ValueError(f"{f.name} 登記了「你這一步」表上沒有的格 {hook.slot}")
+            if hook.slot in own:
+                raise ValueError(f"「你這一步」的 {hook.slot} 登記了兩次（{f.name}）")
+            own[hook.slot] = hook
+    return own
+
+
+def step_table(core: dict[str, StepHook]) -> list[StepHook]:
+    """照 STEP_ORDER 排好的每一格：包登記了用包的，沒有用 core 那一份（核心代叫的格：step._STEP_CORE）；兩邊都沒有（那一格的包沒登記：
+    契約測試換掉 FEATURES 時）跳過。core 寫了表上沒有的格、key 跟 slot 對不上、兩格寫同一個 ref 都丟 ValueError（finish 照 ref 找回那一格）。"""
+    if not core.keys() <= set(STEP_ORDER) or any(k != h.slot for k, h in core.items()):
+        raise ValueError(f"核心代叫了「你這一步」表上沒有的格 {sorted(core)}")
+    own = step_hooks()
+    table = [own.get(slot) or core.get(slot) for slot in STEP_ORDER]
+    table = [h for h in table if h is not None]
+    refs = [h.ref for h in table if h.ref is not None]
+    if len(refs) != len(set(refs)):
+        raise ValueError(f"「你這一步」兩格寫了同一個 ref {refs}")
+    return table
+
+
+def step_places(core: dict[str, StepHook]) -> dict[str, Callable[..., Any]]:
+    """{ref: place}：step.finish 照每一件 _ref 的第一個字找回那一格補目標（沒有 ref 或沒有 place 的格不列）。"""
+    return {h.ref: h.place for h in step_table(core) if h.ref is not None and h.place is not None}

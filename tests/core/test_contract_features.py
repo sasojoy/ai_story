@@ -142,8 +142,9 @@ def test_declared_seams_look_up_the_package_functions_when_called(feature):
 
     home = type(feature).__module__
     # core_world（第 25 批）：世界層的格（WorldHook）也一樣；core_effects（第 32 批）：效果的格（EffectHook）、叛投的格（DefectHook）也一樣；
-    # core_eventbus（第 26 批）：事件的格（BusHook）也一樣
-    for decl in [*feature.shops(), *feature.verbs(), *feature.world(), *feature.effects(), *feature.defection(), *feature.bus()]:
+    # core_eventbus（第 26 批）：事件的格（BusHook）也一樣；core_step（第 36 批）：「你這一步」的格（StepHook）也一樣
+    for decl in [*feature.shops(), *feature.verbs(), *feature.world(), *feature.effects(), *feature.defection(), *feature.bus(),
+                 *feature.steps()]:
         for field in dataclasses.fields(decl):
             value = getattr(decl, field.name)
             if not callable(value):
