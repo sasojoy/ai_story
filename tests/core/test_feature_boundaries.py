@@ -1055,6 +1055,7 @@ GAME_DELEGATE_CALLERS.update({
     ("_everyday_options", "_back_option"): _TRAVEL_MENU
     + "：路上那串的折返，在 act:on_road（結伴時是 act:part）之後、帶路的路上一句與喊停之前",
     ("_everyday_options", "_road_task_options"): _TRAVEL_MENU + "：路上小事在喊停之後、擂台之前（結伴同行時緊接在 act:part 後面）",
+    ("_arrivals", "_road_sight"): "抵達一站的迴圈中途（_ambush_check → _arrive → 騎乘飽足 → 路上見聞）：位置固定、沒有對應的掛鉤；第 48 批 _arrivals 搬進移動包時改經 ctx",
 })
 GAME_IMPORTS |= {
     # travel（全部拆包第 47 批）：移動選單、路上小事、喊停、折返、安排前往的 9 個一行委派（第 48 批拿掉 3 個，剩 6 個）
@@ -1062,9 +1063,9 @@ GAME_IMPORTS |= {
 }
 GAME_DELEGATES |= {
     # travel（全部拆包第 47 批）：移動一的 9 個一行委派。_move_option、_back_option、_road_task_options 給選單（順序算行為，不能改成 Feature.options）；
-    # set_move_mode 給 server、腳本與測試（_road_sight、_road_reward_due、_count_road_reward 三個委派第 48 批拿掉：_arrivals、_share_road 搬進包，直接叫 road_actions）；
+    # _road_sight、_road_reward_due、_count_road_reward 給 _arrivals 與第 48 批的 _share_road；set_move_mode 給 server、腳本與測試；
     # travel、travel_refusal 給 /api/travel、假人（bot_policy._rally）、腳本與 21 個測試檔（測試也換掉 game.travel_refusal 繞過檢查）
-    "_move_option", "_back_option", "_road_task_options", "set_move_mode",
+    "_move_option", "_back_option", "_road_task_options", "set_move_mode", "_road_reward_due", "_count_road_reward", "_road_sight",
     "travel", "travel_refusal",
 }
 # 拿掉別人段裡的格：在自己的段 del（halt、check_hints、report_seat、hear_after_stamina 現在由包經 ctx 叫，不再是 Game 內部互叫）
@@ -1086,7 +1087,11 @@ del GAME_DELEGATE_CALLERS[("_arrive", "_note_action")]
 del GAME_DELEGATE_CALLERS[("_arrivals", "_ambush_check")]
 del GAME_DELEGATE_CALLERS[("_join", "_tell_sender")]
 del GAME_DELEGATE_CALLERS[("join_refusal", "_peer")]
-_TRAVEL_TIME = "位置就是行為：sync、advance 每次都補算抵達（_arrivals）、sync 補算結伴過期（_party_expires）、status_data 的 journey 鍵（鍵的順序算行為）；原位叫委派"
+# 第 47 批段裡的格也在這裡拿（第 46 批 PM 認定第 3 條；第 48 批合併時從直接改第 47 批段改成這樣）：_arrivals 搬進包、直接叫 road_actions.sight；
+# _share_road 搬進包、直接叫 road_actions.reward_due／count_reward，三個 road_actions 委派拿掉
+del GAME_DELEGATE_CALLERS[("_arrivals", "_road_sight")]
+GAME_DELEGATES -= {"_road_reward_due", "_count_road_reward", "_road_sight"}
+_TRAVEL_TIME ="位置就是行為：sync、advance 每次都補算抵達（_arrivals）、sync 補算結伴過期（_party_expires）、status_data 的 journey 鍵（鍵的順序算行為）；原位叫委派"
 GAME_DELEGATE_CALLERS.update({
     ("sync", "_arrivals"): _TRAVEL_TIME,
     ("advance", "_arrivals"): _TRAVEL_TIME,
