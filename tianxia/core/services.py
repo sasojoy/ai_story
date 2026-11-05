@@ -387,6 +387,14 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
   `ctx._join(inv, other)`（主人移動 features/travel：答應結伴同行）：`answer_invite` 照邀請的種類叫它們
 - `ctx.join_refusal(leader)`（主人移動：答應跟某人結伴同行，不行的原因；假人回結伴邀請〔bots.answer_call〕先問它）
 
+# faction（全部拆包第 35 批「陣營」；計畫 docs/superpowers/plans/2026-11-06-陣營包-第1批.md 1.3）。包要叫的核心服務：
+- `ctx._hide(msg)`（這一下那一則江湖紀錄裡藏起一句：投靠、叛投確認畫面的話場景已經寫著這一問，紀錄只留標題，FB-046）、
+  `ctx.faction_counts_text()`（三方目前各有幾人，確認畫面接在話後面）、`ctx._ally_follows_battle()`（主人決戰包 features/battle/muster.py：
+  投靠豪強、選邊、改幫之後集結名單跟著換邊，FB-273）、`ctx._action_title(kind, arg)`（拜入門派那一下江湖紀錄的標題：sect 在標題表上沒有自己的支，
+  掉到最後的「提前出關」，隨後被事件標題換掉，包照原本的寫法問核心）
+- 這一包用到的其餘 Game 服務上面都已經列了：`ctx._four_wins()`、`ctx._note_action(action)`、`ctx._guide(...)`、`ctx._battle_now()`、
+  `ctx._preparing()`、`ctx._write(...)`、`ctx._draft`、`ctx.place_minutes(loc_id)`、`ctx._present(event, action)`
+
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 
 explore（主動搬六包第 3＋4 批加的這一段；都是 Game.__init__ 起的）
