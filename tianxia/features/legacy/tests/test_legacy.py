@@ -94,31 +94,57 @@ def test_a_quiet_season_falls_back_and_drops_the_old_doors():
     assert p.legacy.zheng == 7.0 and "legacy_zheng_2" not in p.flags and "legacy_zheng_1" in p.flags
 
 
-def test_nothing_carries_without_a_pick_or_once_the_pick_is_gone():
-    game, iid = god_game()
+def test_the_season_start_offers_every_god_of_last_season():
+    game, _ = god_game()
     next_season(game)
-    assert game.state.player.legacy.sealed is None
-    game, iid = god_game()
-    game.choose(f"legacy:keep:{iid}")
-    del game.state.player.own_insights[iid]  # 季末之前熔掉了
+    book = game.state.player.legacy
+    assert book.sealed is None and [o.insight.name for o in book.offers] == ["寒江獨照"]
+    assert [o.id for o in game.options() if o.id.startswith("legacy:")] == ["legacy:seal:0", "legacy:skip"]
+    entry = next(e for e in game.state.journal if e.title == "傳承")
+    assert any("「寒江獨照」" in line and "第一件事之前" in line for line in entry.lines)
+    game, _ = god_game()
+    give_god(game, "斷水流雲")
     next_season(game)
-    assert game.state.player.legacy.sealed is None
+    assert [o.insight.name for o in game.state.player.legacy.offers] == ["寒江獨照", "斷水流雲"]
+    game, _ = god_game()  # 上一季傳承還關著（第 8 季）：身上沒有 LegacyBook，開季照樣抄
+    assert game.state.player.legacy is None
+    next_season(game)
+    assert [o.insight.name for o in game.state.player.legacy.offers] == ["寒江獨照"]
+    game, _ = god_game()
+    game.state.player.own_insights.clear()  # 季末之前熔掉了：沒有可帶的
+    next_season(game)
+    assert game.state.player.legacy.offers == []
 
 
-def test_keep_and_drop_options():
-    game, iid = god_game()
-    ids = [o.id for o in game.options() if o.id.startswith("legacy:")]
-    assert ids == [f"legacy:keep:{iid}"]
-    game.choose(f"legacy:keep:{iid}")
-    assert [o.id for o in game.options() if o.id.startswith("legacy:")] == ["legacy:drop"]
-    game.choose("legacy:drop")
-    assert game.state.player.legacy.pick is None
+def test_seal_or_skip_before_the_first_move():
+    game, _ = god_game()
+    give_god(game, "斷水流雲")
+    next_season(game)
+    msgs = game.choose("legacy:seal:1")
+    book = game.state.player.legacy
+    assert any("斷水流雲" in m and "封進識海" in m for m in msgs)
+    assert book.sealed.insight.name == "斷水流雲" and book.offers == []
+    assert not any(o.id.startswith("legacy:seal") for o in game.options())
+    game, _ = god_game()
+    next_season(game)
+    assert game.choose("legacy:skip") == [actions.SKIPPED] and game.state.player.legacy.sealed is None
+
+
+def test_the_first_other_move_closes_the_offer():
+    game, _ = god_game()
+    next_season(game)
+    other = next(o for o in game.options() if o.enabled and not o.id.startswith("legacy:"))
+    msgs = game.choose(other.id)
+    assert actions.LAPSED in msgs
+    book = game.state.player.legacy
+    assert book.offers == [] and book.sealed is None
+    assert actions.LAPSED not in game.choose(next(o for o in game.options() if o.enabled).id)  # 只說一次
 
 
 def test_unsealing_waits_a_day_level_fifteen_and_xinde():
     game, iid = god_game()
-    game.choose(f"legacy:keep:{iid}")
     next_season(game)
+    game.choose("legacy:seal:0")
     p = game.state.player
     p.member.level, p.stats["xinde"] = 14, 0
     game.state.world.time = 0.0
@@ -139,8 +165,8 @@ def test_unsealing_waits_a_day_level_fifteen_and_xinde():
 
 def test_a_name_taken_this_season_asks_for_another():
     game, iid = god_game()
-    game.choose(f"legacy:keep:{iid}")
     next_season(game)
+    game.choose("legacy:seal:0")
     game.world.mutate_season(lambda w: w.god_names.update({"寒江獨照": "別人"}))
     _unsealable(game)
     msgs = game.choose("legacy:open")
@@ -155,8 +181,8 @@ def test_a_name_taken_this_season_asks_for_another():
 
 def test_one_god_insight_at_a_time():
     game, iid = god_game()
-    game.choose(f"legacy:keep:{iid}")
     next_season(game)
+    game.choose("legacy:seal:0")
     give_god(game, "斷水流雲")  # 這一季又悟了一份
     _unsealable(game)
     option = next(o for o in game.options() if o.id == "legacy:open")
@@ -164,14 +190,14 @@ def test_one_god_insight_at_a_time():
     assert actions._open(game, None) == [actions.HOLDING]  # 選單之外直接叫也擋
 
 
-def test_bots_keep_and_unseal_like_people():
-    game, iid = god_game()
-    keep = next(o for o in game.options() if o.id == f"legacy:keep:{iid}")
-    assert features_core.bot_pick(game, keep) == (True, 30.0) and bots.score(keep) == 30.0
-    game.choose(keep.id)
-    drop = next(o for o in game.options() if o.id == "legacy:drop")
-    assert bots.score(drop) is None and any(drop.id.startswith(p) for p in features_core.bot_always())
+def test_bots_seal_first_and_unseal_like_people():
+    game, _ = god_game()
     next_season(game)
+    seal = next(o for o in game.options() if o.id == "legacy:seal:0")
+    assert features_core.bot_pick(game, seal) == (True, 60.0) and bots.score(seal) == 60.0
+    skip = next(o for o in game.options() if o.id == "legacy:skip")
+    assert bots.score(skip) is None and any(skip.id.startswith(p) for p in features_core.bot_always())
+    game.choose(seal.id)
     _unsealable(game)
     assert bots.score(next(o for o in game.options() if o.id == "legacy:open")) == 40.0
 
@@ -184,12 +210,12 @@ def test_a_real_season_change_through_sync():
     player = Game.new(c, "沈浪", rng=random.Random(0), world=world)
     player.skip_tutorial()
     player.sync(100.0)
-    iid = give_god(player, "寒江獨照")
+    give_god(player, "寒江獨照")
     player.state.player.stats["good"] = 25
-    player.choose(f"legacy:keep:{iid}")
     from conftest import next_season as roll
 
     roll(c, world, player)
+    player.choose("legacy:seal:0")
     p = player.state.player
     assert p.legacy.zheng == 5.0 and p.legacy.sealed.insight.name == "寒江獨照" and "legacy_zheng_1" in p.flags
     assert player.feature_status()["legacy"]["values"]["zheng"] == 5
@@ -237,8 +263,8 @@ def test_the_web_shows_the_three_values_and_the_sealed_one():
         pytest.skip("沒有 node")
     game, iid = god_game()
     game.state.player.stats["good"] = 100
-    game.choose(f"legacy:keep:{iid}")
     next_season(game)
+    game.choose("legacy:seal:0")
     view = server.main_view(game)
     top = run(view, "return H.topHtml();", S={"showMore": True})
     assert 'data-act="legacy-open"' in top and "正氣 10" in top and "識海封著：寒江獨照" in top
@@ -247,21 +273,23 @@ def test_the_web_shows_the_three_values_and_the_sealed_one():
     sea = run_page(view["legacy"], "shihai")
     assert "寒江獨照" in sea and 'data-id="legacy:open" disabled' in sea  # 開季還不滿一天、等級心得也不夠
     fresh = god_game()[0]
-    assert "識海封著" not in run(server.main_view(fresh), "return H.topHtml();", S={"showMore": True})  # 還沒結算過：只有入口
+    assert "legacy-open" not in run(server.main_view(fresh), "return H.topHtml();", S={"showMore": True})  # 還沒結算過：不畫
+    next_season(fresh)
     fresh.content.config.legacy.enabled = False
     assert "legacy-open" not in run(server.main_view(fresh), "return H.topHtml();", S={"showMore": True})  # 開關關著：不畫
 
 
-def test_status_lists_tracks_seals_and_gods():
-    game, iid = god_game()
+def test_status_lists_tracks_seals_and_offers():
+    game, _ = god_game()
+    assert "legacy" not in game.feature_status()  # 還沒結算過
+    next_season(game)
     st = game.feature_status()["legacy"]
     assert [t["short"] for t in st["tracks"]["zheng"]] == ["書院不問惡名", "俠義多一法", "俠士相敬"]
-    assert st["shihai"]["sealed"] is None and st["shihai"]["gods"] == [{"id": iid, "name": "寒江獨照"}]
-    assert [n["key"] for n in st["shihai"]["need"]] == ["time", "level", "xinde"] and st["shihai"]["held"]
-    game.choose(f"legacy:keep:{iid}")
-    next_season(game)
+    assert st["shihai"]["sealed"] is None and [o["name"] for o in st["shihai"]["offers"]] == ["寒江獨照"]
+    assert [n["key"] for n in st["shihai"]["need"]] == ["time", "level", "xinde"] and not st["shihai"]["held"]
+    game.choose("legacy:seal:0")
     st = game.feature_status()["legacy"]["shihai"]
-    assert st["sealed"]["name"] == "寒江獨照" and st["gods"] == [] and not st["held"]
+    assert st["sealed"]["name"] == "寒江獨照" and st["offers"] == []
     _unsealable(game)
     assert all(n["ok"] for n in game.feature_status()["legacy"]["shihai"]["need"])
 

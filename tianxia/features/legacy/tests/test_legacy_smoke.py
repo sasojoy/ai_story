@@ -14,10 +14,10 @@ def test_legacy_is_registered_and_quiet_while_closed(game):
 
 
 @pytest.mark.smoke
-def test_keep_a_god_insight_through_the_season_change_and_unseal_it():
-    game, iid = god_game()
-    game.choose(f"legacy:keep:{iid}")
+def test_seal_a_god_insight_at_the_season_start_and_unseal_it():
+    game, _ = god_game()
     next_season(game)
+    game.choose("legacy:seal:0")
     p = game.state.player
     assert p.legacy.sealed is not None and not p.own_insights
     p.member.level, p.stats["xinde"] = 15, 500

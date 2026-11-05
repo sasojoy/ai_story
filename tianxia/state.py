@@ -333,8 +333,9 @@ class LegacyBook(BaseModel):
     luck: float = 0.0
     settled: int = 0  # 結算過的季號（同一季只結算一次）
     gains: dict[str, float] = Field(default_factory=dict)  # 這一季結算加了多少（顯示用：zheng／xie／luck）
-    pick: str | None = None  # 這一季選了哪一份放進識海（自己的意境 id）；換季那一刻照它抄
+    pick: str | None = None  # 舊的（季中選）：2026-11-05 起不用，改成開季時從 offers 挑；留著讓舊存檔讀得進來
     sealed: ShihaiSeal | None = None  # 從上一季帶來、還封著的那一份
+    offers: list[ShihaiSeal] = Field(default_factory=list)  # 開季那一刻抄下上一季身上的神品意境：做第一件事之前挑一份封進識海（或不帶）
 
 
 class Ascension(BaseModel):

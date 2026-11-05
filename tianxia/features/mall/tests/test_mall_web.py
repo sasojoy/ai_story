@@ -591,14 +591,14 @@ def test_fb493_render_measures_the_top_before_the_first_screen():
     不然行動列被推到分頁列底下也沒人收。頁面畫上去之後照舊再量一次（電腦上捲軸出來，狀態列跟著窄）。"""
     names = ["S", "closeAsk", "hideMapHost", "renderGate", "renderCreate", "shown", "prologueKey", "topHtml", "$app", "tabsHtml",
              "sheetHtml", "peerHtml", "shopHtml", "mallShop", "bookHtml", "zhuanHtml", "mtEditHtml", "mtZoomHtml", "renderPage",
-             "mtPadReady", "fitBars", "document", "sheetWheel"]
+             "mtPadReady", "fitBars", "document", "sheetWheel", "legacyOfferOpen"]
     driver = r"""
 const seen = [];
 const stubs = { S: { stage: "game", tab: "jianghu" }, closeAsk() {}, hideMapHost() {}, renderGate() {}, renderCreate() {}, shown: () => true,
   prologueKey: () => "k", topHtml: () => "<div></div>", $app: { innerHTML: "" }, tabsHtml: () => "", sheetHtml: () => "", peerHtml: () => "",
   shopHtml: () => "", mallShop: () => null, bookHtml: () => "", zhuanHtml: () => "", mtEditHtml: () => "", mtZoomHtml: () => "",
   renderPage: () => seen.push("renderPage"), mtPadReady() {}, fitBars: () => seen.push("fitBars"), document: { querySelector: () => null },
-  sheetWheel() {} };
+  sheetWheel() {}, legacyOfferOpen() {} };
 const render = new Function(...input.names, fn("render") + "\nreturn render;")(...input.names.map((n) => stubs[n]));
 render();
 finish(seen);
