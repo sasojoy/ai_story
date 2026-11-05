@@ -19,7 +19,7 @@
 
 ## 認領的欄位（`PlayerState`，換季全部跟著新角色重來，沒有帶走的）
 
-`snubbed_until`（閉門不見到幾時）、`figure_wins`（這一季打贏每位人物幾次；本命兵器 `signature_arms.py` 也讀）、`figure_dented`（聲威哪天扣過）、`figure_rare_drops`、`tier3_drops`、
+`snubbed_until`（閉門不見到幾時）、`figure_wins`（這一季打贏每位人物幾次；本命兵器 `features/gear/signature_arms.py`〔舊名 `tianxia/signature_arms.py` 是別名〕也讀）、`figure_dented`（聲威哪天扣過）、`figure_rare_drops`、`tier3_drops`、
 `tier4_wins`、`tier4_challenge_drops`（三階與四階的帳）、`plans_paid`（領過盤算結果的站；寫的是舊模組 `plans.py`）。`treasure_drops` 是寶物的帳，不認領。
 
 **世界狀態**（`WorldState`）：`figure_guards`、`aid_tally`、`guard_credits`、`plans`、`yuedan`、`yuedan_week` 屬於世界，留在原地。

@@ -1,0 +1,49 @@
+# 裝備（`tianxia/features/gear/`）
+
+修練頁的換上、拆解（含批量）、餵馬，馬市的買、餵、換上，寄放的重賞與贈禮補送，名將贈禮，名將本命兵器，見聞榜單的神器譜。全部拆包第 42 批搬進來（引擎那一半；網頁那一半 `web/` 第 3 階才切，`app.js` 的 `gearEffect`、`gearCell`、`horseImg`、`marketHtml`、`horseCard` 歸第 65 批）。
+
+**包名 `gear` 跟兩個同字的東西不是同一件事**：`tests/gear/` 是舊的測試資料夾（兵器、防具、坐騎、寶物、鐵匠鋪一起放，下面「混合檔」），`Content.gear` 是 `content/gear.json` 讀進來的 `GearBook`（寶物、名駒、贈禮、本命兵器的內容表）。這裡的 `gear` 是功能包。
+
+- 導覽：`docs/guide/裝備與店面.md`（兵器、防具、坐騎、寶物、馬市、神器、本命兵器）。
+- 設計稿：裝備四欄設計（5.5 馬市、2.3 換上、5.4 餵馬、6.4 名將贈禮、6.5 寄放、4.8 拆解）；兵器設計（`2026-10-09-兵器-design.md` 4.7.1 拆解、4.10 本命兵器）；打造隱藏配方設計 5.5 神器譜；鐵匠鋪與合成流程 3.4 批量拆解。
+- 計畫：`docs/superpowers/plans/2026-11-07-裝備包-第1批.md`。
+
+## 裡面有什麼
+
+- `signature_arms.py`（原 `tianxia/signature_arms.py`，舊名留成指到這裡的 `sys.modules` 別名）：名將本命兵器的規則（情誼到門檻他送你、打贏本人 `signature_wins` 次他讓你奪走、神器譜的行、名字照內容讀 `refresh_names`）。
+- `market_actions.py`：`market_options`（馬市第二層選單：買、餵、換上、離開）、`market`（選單上的選擇）、`enter`（`act:market` 進門）。
+- `bench_actions.py`：`wield_weapon`、`feed_mount`、`dismantle_weapon`、`dismantle_many`（修練頁；`dismantle_many` 的 `@not_while_preparing` 在包的函式上）。
+- `gift_actions.py`：`deliver_held_gear`（寄放補送）、`general_gifts`（名將贈禮）、`people_here`（此刻在身邊的人物）、`gift_entry`（贈禮另起一則江湖紀錄）、`signature_arms_due`（本命兵器）。
+- `views.py`：`gear_rows`（修練頁裝備那一塊）、`divine_book_view`（見聞榜單的神器譜）。
+- `bots.py`：假人看到 `market:` 的選項怎麼按（原本 `bot_policy.score` 的 market 兩行）；`MARKET_SCORE` 在這裡重寫一份同值常數（8.0），`bot_policy.MARKET_SCORE` 名字照舊。
+- 掛鉤：`prefix = "market"`（`market:buy`、`market:feed`、`market:wield:<id>`、`market:back`）；`choose` 接 `market:*`（標題「馬市」）；`verbs()` 一個 `Verb("market")`（`run` 走進馬市、`title` 是「馬市・此地」，照舊寫江湖紀錄、不宣告 `picks`）；`content = ("gear.json",)`；`bot_pick`。**沒有路由**：`/api/menxia` 的 `wield`、`dismantle`、`feed`、`dismantle_many`、`menxia_view` 的 `gear` 鍵、`/api/boards` 的神器譜、`/api/board_card` 的裝備卡都留在殼，叫 `Game` 的委派。
+- `enabled`：兵器、防具、坐騎、寶物四欄各看自己的 `enabled`（不看第一季開關，裝備四欄設計 2.6），**或此刻還坐在馬市裡**（開關在坐著的時候被關掉，照樣按得到離開）。
+
+## 認領的欄位（手冊 3.5：留在原地）
+
+- `player_fields = ("picking_market",)`（馬市第二層選單開著）。
+- `carried = ()`：換季全部跟著新角色重來。
+- 不認領：`held_gear`（核心的 `PlayerState` 與共用層 `treasures` 都讀）、`figure_wins`（大勢人物包的）、`shop_line`／`shop_clue`／`shop_hold`（七間店共用，屬核心）。`Game._affinity_before`（`choose` 與核心 `event_check` 的 `answer_event`、`answer_branch` 寫、`people_here` 讀的暫時旗標）列在 `core/services.py` 四、寄放，屬性留在 `Game.__init__`。
+
+## 委派與留在原位的接縫
+
+`Game` 留 13 個一行委派：`_market_options`（核心原位選單叫）、`_market`、`_people_here`（測試直接叫）、`wield_weapon`、`feed_mount`、`dismantle_weapon`、`dismantle_many`（server 的 `MENXIA_ACTIONS`、假人 `bot.feed_mount`／`bot.wear_better`）、`_deliver_held_gear`（`sync`、`advance` 叫，位置固定在 `_deliver_big_events` 之後，不接 `on_sync`）、`_general_gifts`、`_signature_arms`、`_gift_entry`（`choose` 後半與核心事件檢定叫；`_signature_arms` 還有大勢人物包的挑戰本人經 `ctx` 叫，列在 `core/services.py` 二、查詢服務）、`gear_rows`、`divine_book_view`（server）。
+
+**店面登記（`Shop`）這一批不登記**（計畫 1.9，同鐵匠鋪，第 41 批 PM 認定第 1 條）：「此地還能做」的入口順序是 懸賞榜 → 鐵匠鋪 → 馬市，三間比較晚合的那一批（照排程是第 45 批懸賞榜）一起排進 `Shop`。這些留在 `Game` 原位：`_everyday_options` 的 `picking_market` 選單與 `act:market` 入口、`_shop_open`、`shop_view` 的 market 分支、`_drop_stale_references`／`sync` 的收店、`_depart` 的 `mounts.close_market`（第 48 批搬進移動包時帶著走）、`_idle`，以及 `choose` 裡 FB-195 被搶的那一句（`mounts.stale_problem`，在 `choose` 掛鉤之前）。
+
+核心原位碰這一包的，邊界測試（`tests/core/test_feature_boundaries.py` 的 `# gear` 段）逐條記理由：
+- `GAME_DELEGATE_CALLERS`：`_everyday_options → _market_options`；`sync`、`advance → _deliver_held_gear`；`choose → _general_gifts`、`_signature_arms`、`_gift_entry`（位置固定）。
+- `CORE_DELEGATE_CALLERS`：`event_check.answer_event`、`answer_branch` 各叫 `_general_gifts`、`_signature_arms`、`_gift_entry`（事件檢定是核心本體，贈禮在效果套完之後）。
+- `GAME_DIRECT`：`_drop_stale_references` 讀 `signature_arms.refresh_names`（經舊名別名）——它排在 `treasures`、`forge_secrets` 的 `refresh_names` 後面、`_copy_heirloom` 前面，會改 `item.name`、要讀 `owned`，清失效參照的先後就是行為，不接 `on_drop_stale`；歸第 55 批（補算與換季收接縫）。
+
+## 讀 `content/gear.json` 的人
+
+`content.py` 的 `check_gear`、`check_signature_arms` 留在 `content.py`、不接 `check_content`（第 34 批認定第 2 條：會動第一個錯誤的先後）。誰在讀 `Content.gear`：共用層 `treasures`、`tactics`；核心 `team`、`naming`、`content`；`SHARED_LATER` 的 `leaderboard`（`gear_card` 讀 `signature_arms`，函式裡經舊名別名）；`mounts` 不讀。
+
+## 測試
+
+- 包裡：`tests/test_gear_where.py`（修練頁每一段「哪裡買得到」，從內容讀地點）、`tests/test_gear_smoke.py`（煙霧：進馬市、買、離開，包的宣告，假人分數，修練頁委派）。
+- **留原處**（被別的測試用裸名 import，照第 41 批認定第 6 條歸第 61 批）：`tests/gear/test_shop2.py`、`test_treasures.py`、`test_signature_arms.py`、`tests/web/test_shop2_web.py`。
+- **網頁類，留原處**（第 3 階）：`tests/gear/test_horse_art.py`（import `server` 查 `web/`）、`test_shop_polish.py`（走網頁 harness）。
+- **混合檔不拆**（一個檔裡有這一包的也有別包的）：`tests/gear/test_mounts.py`、`test_weapons.py`、`test_armor.py`、`test_board_cards.py`、`test_forge_divine.py`、`test_shop.py`，`tests/bots/test_bot_policy.py`、`tests/core/test_shop_width.py`、`tests/server/test_server.py`（`/api/boards` 的神器譜）、`tests/seal/test_seal.py`（`dismantle_weapon`）、`tests/season/test_sim_scripts.py`（量表腳本）。
+- **另外要跑的**（`test_for` 不會因為改這一包挑到）：`tests/season/test_sim_scripts.py` 的 `measure_mounts`、`measure_treasures` 兩條 slow（量表腳本換掉的是 `mounts.buy`／`mounts.feed`、`treasures.gifts_due`／`treasures.deliver_held` 與 `Game.wield_weapon`，包裡一律照模組屬性叫，換得到）；`tests/server/test_server.py`、`tests/web/test_shop2_web.py`（殼與網頁）。

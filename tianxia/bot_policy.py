@@ -87,7 +87,7 @@ def _crippled(game: Game) -> bool:
 
 def _clinic_score(game: Game) -> float:
     return CLINIC_URGENT_SCORE if bot.injury_share(game) >= bot.CLINIC_URGENT else CLINIC_MOVE_SCORE
-MARKET_SCORE = SMITH_SCORE  # 馬市（裝備四欄設計第九節）：趕路疾行省體力，跟鐵匠鋪一樣急；真人會騎馬，假人也要
+MARKET_SCORE = SMITH_SCORE  # （同 features/gear/bots.py 的 MARKET_SCORE，8.0）馬市（裝備四欄設計第九節）：趕路疾行省體力，跟鐵匠鋪一樣急；真人會騎馬，假人也要
 INVITE_YES = 0.7  # 有人邀切磋時答應的機會（付得起體力才算）【預設】
 LEARN_ROOM = 3  # 學藝之後，功法庫至少還留幾格給合成
 LEARN_SILVER_RESERVE = 30  # 付完學費至少留幾兩（療傷用）
@@ -763,8 +763,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return BOUNTY_SCORE if verb == "take" else 0.0 if verb in ("back", "unpick") else None
     # 鐵匠鋪（smith:）搬進功能包：假人的分數在 features/smithy/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 41 批）
     # 酒肆（tavern:）搬進功能包：假人的分數在 features/tavern/bots.py，上面的 features_core.bot_pick 問它（主動搬六包第 10 批）
-    if kind == "market":  # 馬市上：照 bot.market_want 按那一顆（換、買、餵），沒事就離開
-        return MARKET_SCORE if option.id == bot.market_want(game) else 0.0 if arg == "back" else None
+    # 馬市（market:）搬進功能包：假人的分數在 features/gear/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 42 批）
     # 求見（call:）搬進功能包：假人只按返回，分數在 features/socialize/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 21 批）
     # 往哪裡走（move:）搬進功能包：分數在 features/travel/bots.py，上面 features_core.bot_pick 之前那一行問它（要 profile，掛鉤沒有；全部拆包第 47 批）
     if kind == "act":
