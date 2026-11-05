@@ -47,7 +47,7 @@
 - `orders.py`（軍令規則）、`ranks.py`、`seats.py` 不在這一包（共用規則層，總表第 40 批）。
 - **第 34 批留在核心／共用層的接縫**（理由在邊界測試 `# military` 的第二段）：答題中的選單（`_fs_asking_options`，位置在店面之後、閉關之前）與場景文字（`_fs_asking_text`，在拜入／投靠／叛投／求見的畫面之後）、閒著的選單上機緣與伏筆最後一步（`_omen_options`，夾在 `_rank_action_options` 與託付之間）、遊歷打贏之後的官銀與密謀一處（`_fs_after_win`、`_opp_on_win`；第 26 批量過留原位：夾在懸賞那一個發布點前面、讀先算好的記功，只在單打服務那一處有）、`_hear_after_stamina`（`choose` 結尾與 `travel`，伏筆先機緣後、共用 `self.rng`）、`_settle_plots`（`sync` 與 `choose` 結尾）。都因位置固定或順序算行為，沒有對應的掛鉤。
 - **查詢服務 `tianxia/core/omen_base.py`**（核心本體）：核心的 `rules`（`grain_min` 的需求量換算）、`content`（天機表、題目）、共用層待收的 `ranks`（召見問這一階的機緣做過沒）、叛投確認畫面（`in_plot`）讀機緣、伏筆的「只讀」那一半，不 import 本包；`fs_rules`、`opp_rules` 從它 re-export 同一批名字。`content.py` 的 `check_foreshadows`、`check_opportunities` 因為夾在別的檢查中間、吃 `known` 與幾個局部變數，接不了 `check_content` 掛鉤（錯誤訊息的先後算行為），留在核心。
-- `events`、`narration`、`rumor_view`、`step`、`weekcard`、`server.py` 讀伏筆、機緣的規則，走舊名別名（它們是舊模組，還沒收進共用層）；各自收進共用層時改成查詢服務。
+- `events`、`narration`、`rumor_view`、`server.py` 讀伏筆、機緣的規則，走舊名別名（它們是舊模組，還沒收進共用層）；各自收進共用層時改成查詢服務。`step`、`weekcard` 第 36 批起收進核心、不再讀別名：伏筆那一件改由這一包登記的 `foreshadow` 那一格（上面「你這一步」的格）。
 
 ## 過渡（手冊 3.11）
 

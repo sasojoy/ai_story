@@ -7,7 +7,7 @@
 
 ## 裡面有什麼
 
-- `rules.py`（原 `tianxia/guide.py`：說書人的步驟、任務卡、下一步）、`hints.py`、`newbie.py`、`opening.py`、`enlist.py`（原名）：五個舊名都留成 `sys.modules` 別名（同一個模組物件），`from tianxia import guide`、`from tianxia.guide import note_action`（engine）、舊模組 `weekcard`（`opening`）與測試照舊拿得到。
+- `rules.py`（原 `tianxia/guide.py`：說書人的步驟、任務卡、下一步）、`hints.py`、`newbie.py`、`opening.py`、`enlist.py`（原名）：五個舊名都留成 `sys.modules` 別名（同一個模組物件），`from tianxia import guide`、`from tianxia.guide import note_action`（engine）與測試照舊拿得到（本週卡 `weekcard` 第 36 批起收進核心，三選一還沒選改問 `Game._opening_pending` 委派，不再 import `opening`）。
 - `actions.py`：原本 `Game` 上的 31 個方法（名字去掉前導底線），加上核心原位叫的 11 個服務的本體（`opening_on`……`enlist_expire`；`Game._note_action` 叫 engine 模組層的 `note_action`，見下）。
 - `checks.py`：內容檢查（`check_content`）——碰到才說（`hints.json`）那一塊原本在 `content.validate`，核心不准 import 包，搬進這裡、句子照抄。
 - `HutReward`（序章步驟的獎勵那一行的記號）搬進核心 `tianxia/core/services.py`：核心的 `Game._guide`、`_menxia_entry` 認它；`rules.HutReward` 是同一個類別。

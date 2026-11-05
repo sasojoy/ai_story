@@ -9,7 +9,7 @@ bounties.on_arrive → _complete_commission：銀兩與他的情誼照 Config.fi
 
 開關：Config.jianfa.opening 加上這一季開季時蓋的章（rules.jianfa(content, world, "opening")）；關著、或內容沒有 opening.json，
 新角色照舊走草廬。假人（Game.new(graduated=True)）走同一條：一樣站在城門口挑一顆、收到信（看不出誰是假人）；腳本與測試不帶任何
-旗標建的角色照舊直接站在起點、什麼都不端出。只有 engine、weekcard、content 與測試 import 它。"""
+旗標建的角色照舊直接站在起點、什麼都不端出。只有這一包的 actions（engine 的委派）、content 與測試 import 它。"""
 from __future__ import annotations
 
 from tianxia import calendar, gender, prologue, rules  # 核心、共用規則層

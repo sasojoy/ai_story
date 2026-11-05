@@ -40,7 +40,7 @@
 - 交友與求見開口（`_socialize`、`_precise_socialize`、`_call` × `_open_dialogue`）：交友求見第 21 批搬進 `socialize` 包，那一包經 `ctx._open_dialogue` 問，核心原位不再叫它。
 - 叛投之後的食言：全部拆包第 32 批接上核心的叛投掛鉤（`DEFECT_ORDER` 的 `after` 位置，排在同伴回江湖 `leave_behind` 之後；回話的先後算行為），不再是這裡的接縫。場景文字（`_own_scene_text` × `_last_talk_line`）：位置算行為。
 
-別的舊模組經別名碰這一包（3.11）：`bot_policy`（`stances.bot_pick`）、`weekcard`（`errands.step_items`）、`bounties`（`letters.thank`；`parley` 延後載入）、`server`（`letters.mail_day`、`letters.write`、`companion_agent`〔鎖外三段式的 `prepare_turn`、`PreparedTurn`〕；鎖外重寫信、勸降、對話的三段式照舊在殼）、`scripts/try_*.py`、`scripts/figure_ask_trial.py`。`server` 的 `main_view`、`MAIN_ACTIONS`（`letter_read`、`letter_decline`）、`MENXIA_ACTIONS`（`join`、`leave`、`release`）照舊叫 `Game` 委派（總表第 66、68 批）。出陣包的 `act:train` 並肩出陣那一句（`BACKED_LINE`、`PLAN_MISS`）搬進核心 `services`，出陣包不再 import `parley`。
+別的舊模組經別名碰這一包（3.11）：`bot_policy`（`stances.bot_pick`）、`bounties`（`letters.thank`；`parley` 延後載入）、`server`（`letters.mail_day`、`letters.write`、`companion_agent`〔鎖外三段式的 `prepare_turn`、`PreparedTurn`〕；鎖外重寫信、勸降、對話的三段式照舊在殼）、`scripts/try_*.py`、`scripts/figure_ask_trial.py`。`server` 的 `main_view`、`MAIN_ACTIONS`（`letter_read`、`letter_decline`）、`MENXIA_ACTIONS`（`join`、`leave`、`release`）照舊叫 `Game` 委派（總表第 66、68 批）。出陣包的 `act:train` 並肩出陣那一句（`BACKED_LINE`、`PLAN_MISS`）搬進核心 `services`，出陣包不再 import `parley`。
 
 ## 過渡（手冊 3.11）
 
