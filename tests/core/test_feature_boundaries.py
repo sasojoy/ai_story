@@ -1528,6 +1528,18 @@ def test_the_scanner_lets_the_allowed_ones_through(source):
     assert problems_of(source, "tianxia.features.mall.actions") == []
 
 
+# core_world（全部拆包第 25 批「世界層掛鉤」；計畫 docs/superpowers/plans/2026-11-05-世界層掛鉤-第25批.md 1.6、Task 4）
+def test_the_world_layer_core_files_import_no_package_not_even_inside_a_function():
+    """world.py 收進核心本體（MODULES）之後跟 sqlite_world.py 一樣：最外層與函式裡都不 import 包與舊名的別名（宴客 feasts、單挑 arena、
+    大勢人物 yuedan、決戰 generals 換成了世界層的格）。掃描照 ast.walk 看得到函式裡的 import（下面那一段證明），所以核心那一條
+    （test_the_core_never_imports_a_feature_package_except_the_registry）照 CORE 掃到它們；這裡寫明兩個檔，免得 MODULES 改了沒人發現。"""
+    assert {"world", "sqlite_world"} <= CORE
+    for name in ("world", "sqlite_world"):
+        assert _feature_imports(TIANXIA / f"{name}.py") == [], name
+    source = "def f():\n    from . import generals\n    from .features.feast import rules as feasts\n    from . import arena, yuedan\n"
+    assert {feature_target(mod) for _, mod, _ in imports_of(source, "tianxia.world")} - {None} == {"battle", "feast", "bout", "figure_acts"}
+
+
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py
     import io
     import sys

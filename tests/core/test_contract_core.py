@@ -512,3 +512,28 @@ def test_the_world_layer_asks_a_closed_package_too(monkeypatch):
     monkeypatch.setattr(registry, "FEATURES", [pkg])
     assert features_core.world_run("close", {}, "state", "content", "store") == [None]
     assert calls == [("state", "content", "store")]
+
+
+def test_the_world_layer_is_asked_where_the_old_lines_were(game, monkeypatch):
+    """接在原本那幾行（Task 4）：同步推世界一步問 step（宴客那一格）；管理者立刻收季問 close（擂台那一格）；開下一季先問 retire
+    （舊季收尾）再問 next（題壁照帶），換季之後的季照著走。關著的假包照樣被問。"""
+    calls = []
+
+    def note(at, slot, back=None):
+        return lambda *args: calls.append((at, slot)) or back
+
+    pkg = Worldly([WorldHook("step", "feast", note("step", "feast")), WorldHook("close", "arena", note("close", "arena")),
+                   WorldHook("retire", "seal", note("retire", "seal", False)),
+                   WorldHook("next", "inscriptions", note("next", "inscriptions"))], open_=False)
+    monkeypatch.setattr(registry, "FEATURES", [pkg])
+    g = _made(game)
+    g.sync(1060.0)  # 再過一分鐘：世界推一步
+    assert ("step", "feast") in calls and ("close", "arena") not in calls
+    g.content.config.admins = [g.state.player.name]
+    calls.clear()
+    g.admin_end_season(now=1020.0)
+    assert calls.count(("close", "arena")) == 1
+    calls.clear()
+    g.admin_next_season(now=1030.0)
+    assert [c for c in calls if c[0] in ("retire", "next")] == [("retire", "seal"), ("next", "inscriptions")]
+    assert g.world.get_season_number() == 2

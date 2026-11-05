@@ -138,7 +138,7 @@ def test_declared_seams_look_up_the_package_functions_when_called(feature):
     import dataclasses
 
     home = type(feature).__module__
-    for decl in [*feature.shops(), *feature.verbs()]:
+    for decl in [*feature.shops(), *feature.verbs(), *feature.world()]:  # core_world（第 25 批）：世界層的格（WorldHook）也一樣
         for field in dataclasses.fields(decl):
             value = getattr(decl, field.name)
             if not callable(value):
@@ -312,3 +312,28 @@ def test_a_new_season_keeps_only_what_the_package_carries(feature):
             assert now == before[name], name
         else:
             assert now == fields[name].get_default(call_default_factory=True), name
+
+
+# core_world（全部拆包第 25 批「世界層掛鉤」；計畫 docs/superpowers/plans/2026-11-05-世界層掛鉤-第25批.md 1.4、2.4、Task 4）
+def test_the_core_and_the_packages_fill_every_world_slot_exactly_once():
+    """世界層的每一個位置：核心代叫的格（world.py、sqlite_world.py 裡那幾張 {格: 函式}；收季那一格核心沒有，寫 {}）與包登記的格
+    （Feature.world()）合起來剛好是 WORLD_ORDER 上的格、沒有重疊——不然 world_run 會叫包的那一份、核心那一份默默不跑，或那一格誰都不跑。
+    包登記的就是計畫 2.4 那五格；每一個位置照 FEATURES 問都問得出來（world_hooks 不丟 ValueError）。"""
+    from tianxia import sqlite_world, world
+
+    core = {
+        "step": world._STEP_CORE, "week": world._WEEK_CORE, "day": world._DAY_CORE, "start": world._START_CORE, "close": {},
+        "muster": world._MUSTER_CORE, "open": sqlite_world.SqliteWorldStore._open_core(), "retire": sqlite_world._RETIRE_CORE,
+        "next": sqlite_world.SqliteWorldStore._next_core(),
+    }
+    owners = {(hook.at, hook.slot): f.name for f in FEATURES for hook in f.world()}
+    assert len(owners) == sum(len(f.world()) for f in FEATURES)  # 同一格不會有兩包
+    assert owners == {("step", "feast"): "feast", ("step", "yuedan"): "figure_acts", ("close", "arena"): "bout",
+                      ("muster", "generals"): "battle", ("next", "inscriptions"): "explore"}
+    assert set(core) == set(features_core.WORLD_ORDER)
+    for at, order in features_core.WORLD_ORDER.items():
+        own = set(features_core.world_hooks(at))
+        assert own == {slot for (where, slot) in owners if where == at}, at
+        assert not own & set(core[at]) and own | set(core[at]) == set(order), at
+    # 週初、每天那兩串照表建、一格一個函式（season_events 照串列的順序叫）
+    assert len(world.WEEK_HOOKS) == len(features_core.WORLD_ORDER["week"]) and len(world.DAY_HOOKS) == len(features_core.WORLD_ORDER["day"])
