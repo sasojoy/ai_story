@@ -1075,6 +1075,27 @@ del GAME_DELEGATE_CALLERS[("travel", "_report_seat")]
 del GAME_DELEGATE_CALLERS[("travel", "_hear_after_stamina")]
 
 
+# travel（全部拆包第 48 批「移動二」；計畫 docs/superpowers/plans/2026-11-07-移動包-第2批.md 1.9）：出發與抵達的補算、在路上那一行字、結伴同行搬進
+# tianxia/features/travel/departure.py、party.py。這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。
+# Game 留 8 個一行委派：_depart（人物帶路、腳本與測試、bout 接縫）、_arrivals（sync、advance、測試）、_arrive（核心契約測試鎖事件接法）、_journey_line（status_data）、
+# _join（玩家互動包答應結伴）、join_refusal（假人回結伴邀請）、_party_expires（sync）、party_view（殼的 /api/main）。
+# _lead、_partners、_share_road、_party、_part_ways、leave_party 呼叫端都在包內，不留。
+_TRAVEL_TIME = "位置就是行為：sync、advance 每次都補算抵達（_arrivals）、sync 補算結伴過期（_party_expires）、status_data 的 journey 鍵（鍵的順序算行為）；原位叫委派"
+GAME_DELEGATE_CALLERS.update({
+    ("sync", "_arrivals"): _TRAVEL_TIME,
+    ("advance", "_arrivals"): _TRAVEL_TIME,
+    ("sync", "_party_expires"): _TRAVEL_TIME,
+    ("status_data", "_journey_line"): _TRAVEL_TIME,
+})
+GAME_IMPORTS |= {
+    # travel（全部拆包第 48 批）：出發與抵達的補算、結伴同行
+    "tianxia.features.travel.departure", "tianxia.features.travel.party",
+}
+GAME_DELEGATES |= {
+    "_depart", "_arrivals", "_arrive", "_journey_line", "_join", "join_refusal", "_party_expires", "party_view",
+}
+
+
 # map（全部拆包第 49 批「輿圖一」：新包 tianxia/features/map/；計畫 docs/superpowers/plans/2026-11-06-輿圖包-第1批.md 1.1、1.4、1.5）：
 # 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。11 個方法搬進包，Game 留 11 個一行委派（_map_foes、_fierce_line 也留：測試換掉 Game._map_foes、
 # 包裡經 ctx 叫），另多兩個：探索包原本直接 import mapview、mapdata（open_places、mostly_here），成包之後包不能 import 包，改經 Game 的 _map_open_places、
