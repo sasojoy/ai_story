@@ -5,7 +5,7 @@ rank2、rank_action 會改狀態。第 3、4 階的規則（誰做得了、在�
 from __future__ import annotations
 
 from tianxia import calendar
-from tianxia import events as event_rules  # 過渡：待搬（事件 events 的 check_note，總表第 16 批後的共用規則層）
+from tianxia import events as event_rules  # 過渡：待搬（事件 events 的 check_note；events 還在 SHARED_LATER〔讀伏筆〕，第 34 批 PM 認定第 1 條：第 36、40 批收進共用規則層時改查詢服務）
 from tianxia.core.option import Option
 from tianxia.core.services import RANK_ACTION_PREFIX
 from tianxia.models import Check, Location
