@@ -20,7 +20,7 @@ import random
 from dataclasses import dataclass
 
 from tianxia import battlelog  # 共用規則層（戰報：出門一趟・遭遇的標籤、拆得失）
-from tianxia import bounties  # 過渡：待搬（懸賞榜：討伐那一路、打探交差、打贏交差）
+from tianxia import bounties  # 過渡：待搬（懸賞榜：討伐那一路 bounties.mine；交差改發事件了，第 26 批）
 from tianxia import conquest  # 共用規則層（站在自家領地多給的那一個）
 from tianxia import events as event_rules  # 過渡：待搬（事件：抽不抽得到、藏起來的、照輪替抽）
 from tianxia import growth  # 共用規則層（三道閘：今天第幾場、疲勞、對手的檔）
@@ -288,7 +288,7 @@ def explore_one(ctx) -> list[str]:
             out.append(granted)
     # 收尾的幾樣先算（打探懸賞交差在 45 級換成心得時，那一句「境界已到」也在這裡面，段落結尾要看得到它，FB-818）
     extras = ctx._pill_find(roll("回體丹")) + ctx._scrap_find() + ctx._legend_find(roll("破境丹"))
-    extras += bounties.on_explore(s, c, ctx.world, loc.id) + ctx._seal_find(loc.id)  # 打探懸賞：出門一趟就算
+    extras += ctx.publish("outing", loc.id)  # 事件 outing（第 26 批）：打探懸賞（出門一趟就算）→撿玉璽碎片
     if any(line.startswith(team.CAPPED_XINDE.partition("，")[0]) for line in out + extras):
         ctx._outing_close.add("capped")
     for key in explore_rules.LINE_KEYS["close"]:  # 段落結尾：疲勞打了折、對手配不上你、境界已到（三道閘，設計 4.2）
@@ -327,7 +327,7 @@ def outing_fight(ctx, loc: Location, plan: OutingPlan) -> tuple[list[str], str, 
     if record is not None:
         record.label = battlelog.OUTING_LABEL
     if won and not town:
-        done = bounties.on_win(s, c, ctx.world, loc.id, foe.id)
+        done = ctx.publish("win", loc.id, foe.id)  # 事件 win（第 26 批）：懸賞榜的討伐
         changes, notes = battlelog.split_changes(done, for_record=True)
         record.changes += changes
         record.notes += notes

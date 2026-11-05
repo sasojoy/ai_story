@@ -717,7 +717,7 @@ def grant(state: GameState, content: Content, clue_items: dict[str, int], counte
 
 
 def effect_grain(r: EffectRun) -> list[str]:
-    """效果的 grain 那一格（donate_grain）：黃巾的第 3、4 階奇遇（正式版丙二），開關關著什麼都不做。捐糧同護糧送到（Game._convoy_arrives）
+    """效果的 grain 那一格（donate_grain）：黃巾的第 3、4 階奇遇（正式版丙二），開關關著什麼都不做。捐糧同護糧送到（事件 arrive 的 convoy 那一格：convoy_actions.convoy_arrives）
     ——記捐獻、記一次推動的貢獻（四勝利記帳 wins.credit，共用規則層，夾在每一處捐糧的迴圈裡）；糧不夠、換算出 0 份就什麼都不記。"""
     effect, state, content = r.effect, r.state, r.content
     p = state.player

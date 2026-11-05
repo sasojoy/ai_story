@@ -438,7 +438,8 @@ GAME_DELEGATES |= {
     # 酒肆的查詢服務 3 個（主人酒肆；引導包問：碰到才說的 h_tavern、新手目標「去酒肆」）——叫 tavern_rules（酒肆包 rules 的別名）
     "_tavern_on", "_tavern_here", "_tavern_at",
 }
-_NOTE_HOOK = "「做完一件事、引導跟著走」是總表第 26 批的事件（PM 第 11 批定不開）；這幾處在動作中間、回話照位置接"
+_NOTE_HOOK = ("「做完一件事、引導跟著走」歸總表第 57 批（分派與標題收接縫，那一批量了再決定要不要開事件；第 26 批 PM 認定第 6 條。"
+              "PM 第 11 批定不開）；這幾處在動作中間、回話照位置接")
 _OPENING = "開局第一分鐘（城門口三選一還沒選）"
 GAME_DELEGATE_CALLERS.update({
     # 做完一件事看一遍碰到才說（_check_hints）、碰到某個玩法排一條（_hint）：位置都在記進江湖紀錄之前，說的話記在這一則；after_action 在
@@ -483,7 +484,7 @@ GAME_DELEGATE_CALLERS.update({
     # Game.new（classmethod，`game.` 叫）的 _opening_on、_opening_begin、_tutorial_intro、_graduate、_note_gift：掃描只認 self.，記在這裡備查
 })
 CORE_DELEGATE_CALLERS_GUIDE = {  # 事件檢定（核心本體）經 ctx 叫的新手引導委派：隨口應對的結果也可能拜入門派、碰到新玩法（answer_event、answer_branch
-    # 照抄選項做完那一下的三行；位置在事件檢定裡，第 11 批沒有掛鉤；陣營第 35 批、事件第 26 批再看）
+    # 照抄選項做完那一下的三行；位置在事件檢定裡，第 11 批沒有掛鉤；陣營第 35 批、「做完一件事」第 57 批再看〔第 26 批 PM 認定第 6 條〕）
     ("event_check.answer_event", "_begin_enlistment"): "隨口應對的結果拜入陣營名下的門派：開始入伍段",
     ("event_check.answer_event", "_greet_rejoin"): "同上：入伍段早就走完的人，引薦人打個招呼",
     ("event_check.answer_event", "_check_hints"): "隨口應對了結了事件：同選項一樣，碰到的新玩法排一條、排著的上框",
@@ -686,7 +687,7 @@ GAME_DELEGATE_CALLERS.update({
 CORE_DELEGATE_CALLERS_SENSE = {  # 核心本體經 ctx 叫包的委派
     ("services.outing_watch", "_outing_watched"): "走一趟停在要選的事上時這一下選完的得失（探索包的委派）：裝飾器原本是 engine.py 模組層的 "
                                                   "_outing_watch，掛在 Game.choose、answer_event 與有所感包的 sense_draw、epiphany_names 上；"
-                                                  "包不能 import engine，第 24 批搬進核心的共用小函式。「做完一件事」的事件是總表第 26 批",
+                                                  "包不能 import engine，第 24 批搬進核心的共用小函式。「做完一件事」歸總表第 57 批（第 26 批 PM 認定第 6 條）",
 }
 # explore（全部拆包第 18 批「探索三」：舊探索的底 8 個方法搬進 tianxia/features/explore/explore_base.py，Game 留 6 個一行委派；計畫
 # docs/superpowers/plans/2026-11-04-探索包-第3批.md 1.1、1.4）：這一批加的集中在這一段。_explore_outcome、_here_squads 只有包裡自己叫，Game 上不留。
@@ -1751,6 +1752,74 @@ def test_the_effect_slots_and_the_defection_clearing_touch_no_package_field():
     assert sorted(package_fields_touched(old, EFFECT_DEFECT_SCAN["rules"] + EFFECT_DEFECT_SCAN["defection"])) == [
         "apply_effect:3 storylines（story）", "apply_effect:4 keepsakes（story）", "clear_progress:6 convoy（military）",
         "clear_progress:7 hint_queue（guide）"]
+
+
+# core_eventbus（全部拆包第 26 批「事件機制」；計畫 docs/superpowers/plans/2026-11-06-事件機制-第26批.md 1.4、1.7）：抵達那一刻的交糧車
+# 改由軍情包登記事件 arrive 的 convoy 那一格（BUS_ORDER），Game._arrive 不再叫委派 _convoy_arrives、委派沒人叫了拿掉。第 33 批那兩行原文不改
+# （同第 8、25、32 批 del、-= 的寫法）。原位標「過渡：第 26 批」的四處與同一段寫「總表第 26 批的事件」的軍情兩格量過都留原位（計畫 1.4），理由字覆寫在這裡。
+GAME_DELEGATES -= {"_convoy_arrives"}
+del GAME_DELEGATE_CALLERS[("_arrive", "_convoy_arrives")]
+GAME_DIRECT.update({
+    "_squad_encounter": "戰鬥（as_sortie 那一支）打贏之後出陣包給獎勵、約戰開著的季不推進度（那兩對記在 GAME_DELEGATE_CALLERS）：留原位"
+                        "（第 26 批量過：獎勵是出陣包與核心二選一、接在 msgs 最前面不進 extra；約戰開著與否是查詢；都不在懸賞那一個發布點上，"
+                        "原位行尾標「# 留原位：第 26 批」）。序章那一場的戰報標題寫雪恥（sortie.on、PROLOGUE_FIGHT）留在這裡（第 17 批）：戰報在"
+                        "這個單打服務裡建、裡面就存檔，序章裡誰打都照寫（不只 act:train），出陣包從外面改不到；要拿掉得在單打服務開一個「這一場"
+                        "戰報叫什麼」的位置，交 PM 定",
+})
+GAME_DELEGATE_CALLERS.update({
+    ("_squad_encounter", "_sortie_rewards"): "戰鬥（as_sortie）打贏之後給出陣的獎勵：留原位（第 26 批量過：出陣包與核心二選一、接在 msgs 最前面"
+                                             "不進 extra，不在懸賞那一個發布點上；原位行尾標「# 留原位：第 26 批」）",
+    ("_squad_encounter", "duel_on"): "戰鬥（as_sortie）打贏之後：約戰開著時只剩截糧、不推進度（進度只在約戰結算動）：留原位（第 26 批量過："
+                                     "約戰開著與否是查詢，決定記功與推進度走哪一支，不是事件；原位行尾標「# 留原位：第 26 批」）",
+    ("_squad_encounter", "train_trend_push"): "戰鬥（不是出陣的那一支）打贏之後遊歷推大勢：留原位（第 26 批量過：推大勢夾在記功、地盤進度之前，"
+                                              "結果交給 push_trend，不在發布點上；原位行尾標「# 留原位：第 26 批」）",
+    ("_seize", "_seize_chance"): "核心的單打服務收尾擲絕學的契機：留原位（第 26 批量過：在單打服務收尾、三處叫、野怪與僵持也算，不是懸賞那一下，"
+                                 "回傳還要寫進戰報；原位行尾標「# 留原位：第 26 批」）",
+    ("_squad_encounter", "_fs_after_win"): "遊歷打贏之後擲官銀：留原位（第 26 批量過：夾在軍令記功前後、懸賞那一個發布點之前，只在單打服務這一處有，"
+                                           "收進事件 win 兩個發布點的訂閱者就不一樣）",
+    ("_squad_encounter", "_opp_on_win"): "遊歷打贏之後記密謀一處（三路並進）：夾在軍令記功與懸賞討伐之間，留原位（第 26 批量過：同上）",
+})
+
+# 發布點之外不直接叫事件的訂閱者（計畫 1.7、Task 4）：懸賞的四種交差（bounties.on_win／on_explore／on_arrive／on_raid_win）、玉璽的撿碎片與收場
+# （_seal_find、_seal_settle）、交糧車（_convoy_arrives，已拿掉），在 engine.py 與每一包的 .py（測試除外）只准出現在核心代叫表 engine._BUS_CORE 裡；
+# 別處要聽，登記事件的格（Feature.bus()），先後照核心的 BUS_ORDER。bounties.on_aid（人物託付交差）不在總表的四種裡，不管（交 PM）。
+BUS_SUBSCRIBERS = {("bounties", "on_win"), ("bounties", "on_explore"), ("bounties", "on_arrive"), ("bounties", "on_raid_win")}
+BUS_METHODS = {"_seal_find", "_seal_settle", "_convoy_arrives"}
+
+
+def bus_bypasses(source: str) -> list[int]:
+    """source 裡直接叫事件訂閱者的行號（模組層 _BUS_CORE 那一個賦值裡的不算）：bounties.<交差>(...)、<誰>._seal_find(...) 這一類呼叫。"""
+    tree = ast.parse(source)
+    allowed: set[int] = set()
+    for node in tree.body:
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target] if isinstance(node, ast.AnnAssign) else []
+        if any(isinstance(t, ast.Name) and t.id == "_BUS_CORE" for t in targets):
+            allowed |= {id(sub) for sub in ast.walk(node)}
+    out = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute) or id(node) in allowed:
+            continue
+        func = node.func
+        if func.attr in BUS_METHODS or (isinstance(func.value, ast.Name) and (func.value.id, func.attr) in BUS_SUBSCRIBERS):
+            out.append(node.lineno)
+    return sorted(out)
+
+
+def test_nobody_calls_an_event_subscriber_outside_the_publish_points():
+    """engine.py 與每一包都經 ctx.publish 發事件，不直接叫懸賞的交差、玉璽、交糧車（只有 engine._BUS_CORE 代叫）。先證明掃描看得到：
+    原本那幾行（engine 的打贏、抵達、截殺打贏，探索包的出門一趟、遭遇打贏，決戰包的收場）照這一條都抓得到，_BUS_CORE 裡的不算。"""
+    files = [TIANXIA / "engine.py"] + [path for name in _packages() for path in _package_files(name)]
+    found = {str(path.relative_to(ROOT)): bus_bypasses(path.read_text(encoding="utf-8")) for path in files}
+    assert {path: lines for path, lines in found.items() if lines} == {}
+    old = ("def _squad_encounter(self, s, c, loc, squad):\n    extra = bounties.on_win(s, c, self.world, loc.id, squad.id)\n"
+           "def _arrive(self, s, c, loc_id):\n    convoy = self._convoy_arrives(loc_id) + bounties.on_arrive(s, c, self.world, loc_id)\n"
+           "def _raid_bounty(self, target):\n    msgs = bounties.on_raid_win(self.state, self.content, self.world, target)\n"
+           "def explore_one(ctx, s, c, loc):\n    extras = bounties.on_explore(s, c, ctx.world, loc.id) + ctx._seal_find(loc.id)\n"
+           "def settle_showdown(ctx, battle, definition, result):\n    ctx._seal_settle(battle, definition, result)\n"
+           "_BUS_CORE = {'win': {'bounties': lambda ctx, loc_id, squad_id: bounties.on_win(ctx.state, ctx.content, ctx.world, loc_id, squad_id)},\n"
+           "             'outing': {'seal': lambda ctx, loc_id: ctx._seal_find(loc_id)}}\n"
+           "def aid(s, c, who):\n    return bounties.on_aid(s, c, who) + bounties.mine(s, c)\n")
+    assert bus_bypasses(old) == [2, 4, 4, 6, 8, 8, 10]
 
 
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py

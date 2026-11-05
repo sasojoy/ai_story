@@ -678,7 +678,7 @@ def _open_claimed(
 
 def _muster_seal(world: WorldStateStore, content: Content, definition: BattleDef, start: int, now: float) -> list[str]:
     """玉璽碎片的現世與璽動在集結這一刻擲（玉璽碎片設計 3.2、4.1）。"""
-    from . import seal  # noqa: PLC0415  過渡：待搬（第 27 批：玉璽成包、改成「集結開始」事件）。seal → world_state：在函式裡 import
+    from . import seal  # noqa: PLC0415  過渡：待搬（第 27 批：玉璽包登記世界層 muster 的 seal 那一格）。seal → world_state：在函式裡 import
 
     return seal.on_muster(world, content, definition, now)
 

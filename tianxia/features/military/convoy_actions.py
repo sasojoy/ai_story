@@ -1,4 +1,4 @@
-"""押糧（功能包 military；全部拆包第 33 批；護糧，軍令文件 3.4）：接下糧車、走到終點交糧車。原本 Game 上的 2 個方法（_take_convoy、_convoy_arrives）；
+"""押糧（功能包 military；全部拆包第 33 批；護糧，軍令文件 3.4）：接下糧車、走到終點交糧車。原本 Game 上的 2 個方法（_take_convoy、_convoy_arrives；後者第 26 批起經事件 arrive 的 convoy 那一格叫、委派拿掉）；
 名字去掉前導底線。第一個參數是 ctx。會改狀態（扣糧草、記捐獻與貢獻、軍令記功、可能打一場截糧）。押著的糧車記在 PlayerState.convoy（這一包認領）。
 """
 from __future__ import annotations

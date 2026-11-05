@@ -166,6 +166,12 @@
 - `ctx._kin(state)`（把一份讀回來的存檔包成另一位玩家的 Game：此地還有誰、玩家卡、名帖匣都用；本體在 Game 上，留核心。同 `_load_kin`、`_save_kin`）
 - 此地還有的判斷與狀態列的身分字不在 ctx 上：搬進核心的查詢服務 `tianxia/core/presence.py`（`window`、`here`、`visible`、`side`、`affiliation`、`GONE`），包直接 import
 
+事件（全部拆包第 26 批）
+# core_eventbus
+- `ctx.publish(event, *args)`：一包發生的事、別包跟著動——照核心的 BUS_ORDER 叫每一格（win、outing、explore、arrive、raid_win、battle_end；
+  簽名與回傳見 tianxia/core/features.py 的 # core_eventbus）。三、過渡的 `ctx._seal_find`、`ctx._seal_settle` 包裡不再叫（事件的 seal 那一格
+  由 engine._BUS_CORE 核心代叫），第 27 批玉璽成包時拿掉那兩條。
+
 ## 二、查詢服務
 
 # battle（主動搬六包第 5 批；主人：決戰包。本體還在 Game——「打」那一半，第 6～8 批搬——決戰包「看」那一半經 ctx 叫；搬完由決戰包經
@@ -305,7 +311,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
   （`_home_gather` 本體第 13 批搬進探索包，Game 留一行委派、探索包經 ctx 叫——測試換它；`_wild_foes`、`_practice_tier` 第 18 批改成二、查詢服務 `# explore` 那一段；`_boss_face` 第 12 批改成二、查詢服務）
   （`ctx._sense_here(loc, rng)`：全部拆包第 24 批有所感成包，改列二、查詢服務 `# sense` 那一段）
 - `ctx._story_begin(strand)`（一條線；`_duel_start` 第 12 批改成二、查詢服務）
-- 收尾的掉落：`ctx._legend_find(rng)`（破境丹；第 18 批本體搬進探索包，也列在二、查詢服務 `# explore`）、`ctx._seal_find(loc_id)`（玉璽碎片）——照原本的順序在原位叫，不收成事件（同一串的
+- 收尾的掉落：`ctx._legend_find(rng)`（破境丹；第 18 批本體搬進探索包，也列在二、查詢服務 `# explore`）照原本的順序在原位叫；`ctx._seal_find(loc_id)`（玉璽碎片）過渡：第 27 批（包裡不再叫，由 `engine._BUS_CORE` 代叫）（同一串的
   回體丹 `_pill_find`、殘譜 `_scrap_find` 在一、共用服務）
 - `ctx._outing_plan(loc)`、`ctx.outing_plan()`（探索包自己的委派：測試換掉 game._outing_plan 之後按探索，包裡經 ctx 叫，換掉的才打得到；
   呼叫端改完就拿掉）
@@ -331,7 +337,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._mandate_weight(definition, scores)`（天命之爭手上有碎片的人份量加權；主人：玉璽，總表裁定這一批留原位）。（同一行原本的
   `_backfill_battle_scores` 第 8 批搬進 `progress.py`〔PM 11/03 從第 12 批挪來〕、包裡直接叫，從這裡拿掉）
 # battle（全部拆包第 8 批：推進與結算；主人：玉璽，總表附錄甲）
-- `ctx._seal_bare()`（補份量快照時不含碎片的那一份）、`ctx._seal_settle(battle, definition, result)`（時刻表決戰收場：先挑挑戰者、再挑現世的得主）、
+- `ctx._seal_bare()`（補份量快照時不含碎片的那一份）、`ctx._seal_settle(battle, definition, result)`（時刻表決戰收場：先挑挑戰者、再挑現世的得主；過渡：第 27 批（包裡不再叫，由 `engine._BUS_CORE` 代叫））、
   `ctx._deliver_seal_results()`（玉璽碎片的事補送到自己手上）
 （`ctx._order_credit(...)`：全部拆包第 33 批軍情成包，改列一、共用服務 `# military` 那一段）
 （第 16 批合進 develop 時去重：這一段原本還列了出陣包用的 `_squad_encounter`（as_sortie=True：打一場隊伍，出陣攻打）、`_push_progress`

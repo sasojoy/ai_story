@@ -14,7 +14,7 @@ Game 上的一行委派（理由在 tests/core/test_feature_boundaries.py 的 `#
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, EffectHook, Feature, Outcome
+from tianxia.core.features import BusHook, DefectHook, EffectHook, Feature, Outcome
 
 
 class MilitaryFeature(Feature):
@@ -101,6 +101,18 @@ class MilitaryFeature(Feature):
                 EffectHook("foreshadow", lambda r: fs_rules.effect_clues(r)),
             )
         return self._effects
+
+    # core_eventbus（全部拆包第 26 批「事件機制」）
+    _bus: tuple[BusHook, ...] | None = None
+
+    def bus(self) -> tuple[BusHook, ...]:
+        """事件 arrive 的 convoy 那一格（抵達一站：糧車到了終點就交糧；原本 Game._arrive 經 _convoy_arrives 委派直接叫）：排在懸賞護送之前
+        （BUS_ORDER）。不問 enabled（押糧的判斷都在 convoy_arrives 裡）。建一次就留著，在叫的那一下才照模組屬性找 convoy_actions.convoy_arrives。"""
+        if self._bus is None:
+            from . import convoy_actions  # noqa: PLC0415
+
+            self._bus = (BusHook("arrive", "convoy", lambda ctx, loc_id: convoy_actions.convoy_arrives(ctx, loc_id)),)
+        return self._bus
 
 
 FEATURE = MilitaryFeature()
