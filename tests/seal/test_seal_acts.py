@@ -620,6 +620,7 @@ def test_banzhao_respects_the_sensing_cap():
     c, w, g = _holder("yunzhuan")
     other = _person(c, w, "旁人", side="guan")
     other.state.player.stats["wis"] = 15
+    other.state.player.attr_alloc["int"] = 1000  # 五項屬性的季悟性照新的那一項
     CharacterStore(w.db).save(other.state)
     loc = c.locations[other.state.player.location]
     _use(c, w)

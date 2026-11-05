@@ -96,6 +96,13 @@ def classic_rules(content: Content) -> Content:
     return content
 
 
+def old_attrs(content: Content) -> Content:
+    """五項屬性（Config.attributes.v2）關掉，回傳同一份內容：week7、season21 的正式設定 2026-11-05 起打開（Joy「下一季新的功能都會上」），
+    測舊的五屬性（臂力根骨博聞、每級給點、每點 3%、配點五段、事件照點數比）本身的舊測試叫它；五項屬性的測試在 tests/core/test_attrset.py。"""
+    content.config.attributes.v2.enabled = False
+    return content
+
+
 def no_week_unlock(content: Content) -> Content:
     """功能照週解鎖（減法季 6.6，Config.jianfa.week_unlock）關掉，回傳同一份內容：用 week7／season21 的正式內容、開季第一天就要進
     擂台、懸賞榜的舊測試叫它（那兩樣在減法季第 2 週才開；鐵匠鋪 2026-10-27、自創 2026-10-28 起開季就有）；解鎖本身的測試在 tests/test_week_unlock.py。"""

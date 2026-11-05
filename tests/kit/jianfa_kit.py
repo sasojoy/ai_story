@@ -25,12 +25,15 @@ def jianfa_rules(content: Content, **flags: bool) -> Content:
         if not hasattr(cfg, part):
             raise AttributeError(f"JianfaRules 沒有子開關 {part}")
         setattr(cfg, part, on)
+    if flags.get("stat_milestones"):  # 配點五段是舊的五屬性（每點加倍）：五項屬性的季沒有配點五段，測它照舊屬性
+        content.config.attributes.v2.enabled = False
     return content
 
 
 def no_jianfa(content: Content) -> Content:
     """減法季之前的規則（Config.jianfa 關著）：正式內容的 season21、week7 是開的，測舊規則的測試在 helper 裡叫它；回傳同一份內容。"""
     content.config.jianfa.enabled = False
+    content.config.attributes.v2.enabled = False  # 減法季之前的規則也是舊的五屬性（五項屬性 2026-11-05 起在 week7、season21 打開）
     return content
 
 
@@ -53,9 +56,12 @@ def _new(content: Content, name: str, world=None) -> Game:
     return game
 
 
-def jianfa_game(profile: str = "season21", name: str = "沈浪", world=None, **flags: bool) -> Game:
-    """正式內容、開季時就蓋了減法季的章的一局；flags 是子開關（見 jianfa_rules）。"""
-    return _new(jianfa_rules(real_content(profile), **flags), name, world)
+def jianfa_game(profile: str = "season21", name: str = "沈浪", world=None, v2: bool = True, **flags: bool) -> Game:
+    """正式內容、開季時就蓋了減法季的章的一局；flags 是子開關（見 jianfa_rules）。v2=False：五項屬性關掉（測舊的五屬性本身）。"""
+    content = jianfa_rules(real_content(profile), **flags)
+    if not v2:
+        content.config.attributes.v2.enabled = False
+    return _new(content, name, world)
 
 
 def plain_game(profile: str = "season21", name: str = "沈浪", world=None) -> Game:

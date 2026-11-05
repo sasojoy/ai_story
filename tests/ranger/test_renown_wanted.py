@@ -90,7 +90,8 @@ def test_a_hero_with_the_magistrates_notice_beats_the_rogue_and_cuts_his_name():
     bounties.take(hero.state, hero.content, b.id)
     assert hero.raid_shown(rogue)  # 同一邊也打得到（官府通緝是例外）
     hero.state.player.stats["str"] = 30
-    hero.rng = random.Random(1)
+    hero.state.player.attr_alloc["str"] = 1000  # 五項屬性的季（2026-11-05 起）武力照新的那一項，效果有上限、對打再減半
+    hero.rng = random.Random(2)  # 這一顆種子俠乙打贏（五項屬性的季同樣的人威力 12 對 9，照種子；以前是 1）
     hero.raid(rogue)
     assert rogue.state.player.stats["evil"] == 17
     line = "惡名 -3（你被揭了官府海捕文書的俠乙打敗了）"

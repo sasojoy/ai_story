@@ -76,7 +76,7 @@ def test_only_tier_one_checks_get_the_ease():
     low, high = _event("e1", difficulty=10), _event("e2", 2, "武事", difficulty=10)
     gap_low = check_outlook(low.choices[0].check, s, c, game.world).gap
     gap_high = check_outlook(high.choices[0].check, s, c, game.world).gap
-    assert gap_low - gap_high == c.config.jianfa.event_ease
+    assert gap_low - gap_high == pytest.approx(c.config.jianfa.event_ease)  # 五項屬性的季照比例換算，差一點浮點誤差
 
 
 def test_switched_off_no_higher_tier_event_is_drawn():

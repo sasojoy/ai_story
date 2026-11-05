@@ -167,8 +167,10 @@ def test_a_treasure_raises_the_sensing_odds_instead_of_the_weight():
     with insight:
         assert sensing.rate(s, c, loc) == 85
         s.player.stats["wis"] = 15
+        s.player.attr_alloc["int"] = 1000  # 五項屬性的季（week7 2026-11-05 起）悟性照新的那一項
         assert sensing.rate(s, c, loc) == 95  # 夾在 sense_rate_range 的上限
         s.player.stats["wis"] = 5
+        s.player.attr_alloc["int"] = 0
         c.config.explore_modes.enabled = False
         assert sensing.rate(s, c, loc) == 70
 

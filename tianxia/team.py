@@ -209,9 +209,10 @@ def _v2_row(content: Content, row, mine: dict, foe: dict, my_cuts: dict, foe_cut
 
 def counter_cuts(state: GameState, content: Content, world: WorldStateStore) -> dict[str, float]:
     """本人身上剋屬性的功效（五項屬性的季；舊的季是空的）：對手的哪一項少算幾成（Config.attributes.v2.counter_hooks）。
-    帶著那一個功效（任一門、任一層）就算，同一項取最大的。"""
+    帶著那一個功效（任一門、任一層）就算，同一項取最大的。world 是 None（dodge_chance 這類不經 world 的純函式）不算：
+    身上的武學要 world 才解得出來（全服登記的合成武學；2026-11-05 量表腳本在這裡炸過）。"""
     cfg = content.config.attributes.v2
-    if not cfg.counter_hooks or not attrset.on(content, getattr(state, "world", None)):
+    if world is None or not cfg.counter_hooks or not attrset.on(content, getattr(state, "world", None)):
         return NO_CUTS
     layers = traits.loadout(state, content, world).layers
     out: dict[str, float] = {}

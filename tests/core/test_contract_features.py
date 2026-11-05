@@ -285,6 +285,8 @@ def test_dirty_moves_every_kind_of_field_off_its_default(field):
 def test_a_new_season_keeps_only_what_the_package_carries(feature):
     c = real_content("week7")
     c.config.auto_open_first_season = True
+    # 傳承（week7 2026-11-05 起打開）換季那一刻會結算、改寫帶著的那一份：這裡只驗「帶不帶」，結算本身在 features/legacy/tests
+    c.config.legacy.enabled = False
     world = open_world()
     game = Game.new(c, "換季客", rng=random.Random(0), world=world)
     game.skip_tutorial()

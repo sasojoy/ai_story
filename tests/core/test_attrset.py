@@ -380,3 +380,10 @@ def test_hints_talk_about_the_new_rules_in_five_attribute_seasons():
     town = next(ch.hire_at for ch in g.content.characters.values() if ch.hire_at)
     g.state.player.location = town
     assert guide_actions.hire_here(g) and not guide_actions.hire_here(old)
+
+
+def test_counter_cuts_need_a_world_and_dodge_still_works_without_one():
+    """dodge_chance 不經 world（量表與純函式）：剋屬性的功效要 world 才解得出身上的武學，沒有就不算，不能炸（2026-11-05 量表腳本）。"""
+    g = _game()
+    assert team.counter_cuts(g.state, g.content, None) == {}
+    assert 0 <= team.dodge_chance(g.state, g.content) <= 1

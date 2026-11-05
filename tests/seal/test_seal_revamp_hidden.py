@@ -163,12 +163,13 @@ SIDE_CAST = (  # 名號、陣營、武學等級、臂力；強度挑在含碎片
 )
 
 
-def _side_world(holder: str, *, on: bool = True):
+def _side_world(holder: str, *, on: bool = True, v2: bool = True):
     """正式內容（21 天季）：官軍兩個伺服器假人甲客、乙客（一模一樣）與黃巾兩個真人旁觀客都在同一處（不是城鎮），holder 懷著螭首。
     回（內容, 資料庫）。"""
     c = real_content("season21")
     c.config.auto_open_first_season = True
     c.config.seal.revamp.enabled = on
+    c.config.attributes.v2.enabled = v2  # season21 2026-11-05 起是五項屬性；守門那一條的強度是照舊的五屬性挑的
     c.config.newbie_days, c.config.newbie_real_hours = -1, 0  # 不等新手期（截殺要兩邊都過了）
     c.config.arena.enabled = True
     no_week_unlock(c)  # 開季第一天就要上擂台（減法季第 2 週才開）
@@ -284,7 +285,8 @@ def test_the_side_door_guard_has_teeth(monkeypatch):
     spar_power = Game._spar_power
     monkeypatch.setattr(Game, "_spar_power", staticmethod(lambda who, against, *, seal=True: spar_power(who, against, seal=True)))
     monkeypatch.setattr(Game, "_arena_bare", lambda self: None)
-    a, b = _side_seen(*_side_world("甲客")), _side_seen(*_side_world("乙客"))
+    # SIDE_CAST 的強度是照舊的五屬性挑在「含碎片會讓字變」的位置；五項屬性的季同樣的人威力不同、跨不過字的門檻，所以這一條照舊的算
+    a, b = _side_seen(*_side_world("甲客", v2=False)), _side_seen(*_side_world("乙客", v2=False))
     differs = {key for key in a if a[key] != b[key]}
     assert {"card:旁觀客>甲客", "card:旁觀客>乙客", "ring:旁觀客二", "page:旁觀客二", "records:旁觀客", "records:旁觀客二"} <= differs, differs
 
