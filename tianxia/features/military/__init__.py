@@ -31,10 +31,21 @@ class MilitaryFeature(Feature):
     )
     carried: tuple[str, ...] = ()
     # 第 2 階晉升奇遇與晉升表（第 33 批）、機緣、伏筆與準備事件（第 34 批；總表附錄甲）；content.py 照舊讀（第 62 批起照它載）；檔名照舊
-    content = ("promotions.json", "events/promotion.json", "opportunities.json", "foreshadows.json", "events/foreshadow_prep.json")
+    content = ("promotions.json", "events/promotion.json", "opportunities.json", "foreshadows.json", "events/foreshadow_fragments.json", "events/foreshadow_prep.json")
 
     def enabled(self, ctx) -> bool:
         return True
+
+    def on_drop_stale(self, ctx) -> None:
+        """內容改版後拿掉的伏筆鏈與物品：撿到的物品、聽過的片段、正在答的鏈清掉（原本接在 _drop_stale_references 的 snubbed_until 之前，現在接在最後；
+        中間到 features_core.on_drop_stale 沒有任何一行讀 clue_items、fragments、fs_asking、fs_asked）。"""
+        p = ctx.state.player
+        chains = {ch.id for ch in ctx.content.foreshadows.chains}
+        items = {item.id for item in ctx.content.foreshadows.items}
+        p.clue_items = {k: v for k, v in p.clue_items.items() if k in items and v > 0}
+        p.fragments = {k: v for k, v in p.fragments.items() if k in chains}
+        if p.fs_asking is not None and p.fs_asking not in chains:
+            p.fs_asking, p.fs_asked = None, 0
 
     def choose(self, ctx, kind, arg):
         """opp:<…> 與 fs:<…>（原本 Game.choose 的 `elif kind == "opp"`、`"fs"` 兩支，夾在 road 與 invite 中間；前後沒有別支會吃掉這兩個 kind）。

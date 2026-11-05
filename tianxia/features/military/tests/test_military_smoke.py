@@ -47,3 +47,14 @@ def test_the_opportunity_and_foreshadow_admin_tools_refuse_a_player(on):
     """管理者給機緣、給片段（Game 上留的一行委派）：不是管理者回拒絕的一句，不丟錯、不動任何人的存檔。"""
     game = Game.new(on, "甲", rng=random.Random(0))
     assert isinstance(game.admin_give_opportunity("乙", "no_such"), list) and isinstance(game.admin_give_fragment("乙", "no_such:0"), list)
+
+
+def test_the_pack_owns_both_foreshadow_event_files_and_drops_stale_foreshadow_refs(on):
+    """附錄甲：events/foreshadow_* 都歸軍情；內容改版拿掉的伏筆鏈與物品在讀檔時清掉（on_drop_stale）。"""
+    feature = next(f for f in FEATURES if f.name == "military")
+    assert {"events/foreshadow_fragments.json", "events/foreshadow_prep.json"} <= set(feature.content)
+    game = Game.new(on, "甲", rng=random.Random(0))
+    p = game.state.player
+    p.clue_items, p.fragments, p.fs_asking, p.fs_asked = {"gone_item": 2}, {"gone_chain": 1}, "gone_chain", 3
+    game._drop_stale_references()
+    assert p.clue_items == {} and p.fragments == {} and p.fs_asking is None and p.fs_asked == 0

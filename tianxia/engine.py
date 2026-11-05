@@ -785,13 +785,8 @@ class Game:
         # 自創的舊三步單子收掉（還沒付錢；create.prune）：全部拆包第 44 批改接煉製包的 on_drop_stale 掛鉤（下面 features_core.on_drop_stale）
         if p.naming is not None and (p.naming not in owned or self.world.master_of(p.naming) != p.name):
             p.naming = None
-        chains = {ch.id for ch in c.foreshadows.chains}  # 伏筆：內容改版後拿掉的鏈與物品
-        items = {item.id for item in c.foreshadows.items}
-        p.clue_items = {k: v for k, v in p.clue_items.items() if k in items and v > 0}
-        p.fragments = {k: v for k, v in p.fragments.items() if k in chains}
+        # 伏筆：內容改版後拿掉的鏈與物品（第 34 批改接軍情包的 on_drop_stale 掛鉤，下面 features_core.on_drop_stale）
         p.snubbed_until = {k: v for k, v in p.snubbed_until.items() if k in c.figures}  # 內容改版拿掉的大勢人物（T4）
-        if p.fs_asking is not None and p.fs_asking not in chains:
-            p.fs_asking, p.fs_asked = None, 0
         line_ids = [line.id for line in c.scenario.storylines]
         if s.world.storyline not in line_ids:
             s.world.storyline, s.world.act = line_ids[0], 0

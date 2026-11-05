@@ -56,7 +56,7 @@
 
 ## 內容歸屬
 
-`content/promotions.json`、`content/events/promotion.json`（第 2 階晉升奇遇）、`content/opportunities.json`（機緣）、`content/foreshadows.json`（伏筆）、`content/events/foreshadow_prep.json`（伏筆的準備事件）歸這一包，`__init__.py` 的 `content` 宣告；檔名照舊，`content.py` 照舊讀。
+`content/promotions.json`、`content/events/promotion.json`（第 2 階晉升奇遇）、`content/opportunities.json`（機緣）、`content/foreshadows.json`（伏筆）、`content/events/foreshadow_fragments.json`（伏筆片段事件）、`content/events/foreshadow_prep.json`（伏筆的準備事件）歸這一包，`__init__.py` 的 `content` 宣告；檔名照舊，`content.py` 照舊讀。
 
 ## 測試
 
