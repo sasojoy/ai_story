@@ -16916,5 +16916,308 @@ def _herald_register_track(name: str, scenario: type, mutation: tuple, profile: 
 _herald_register_track("herald", HeraldScenario, (("tianxia/bounties.py",), ("」交差了，", "」交差了！")), "week7")
 
 
+# ═══════════════════════════ map（全部拆包第 49 批：輿圖一——天下圖、區圖、小地圖、地點詳情、疊層） ═══════════════════════════
+
+MAP_LAYER_IDS = ("situation", "enemies", "story", "routes")  # Game.MAP_LAYERS（atlas.LAYERS）的四個圖層
+
+
+class MapScenario(Scenario):
+    """輿圖一軌（全部拆包第 49 批；--track map，自己一個資料庫）。輿圖是只讀的畫面，沒有選項前綴、不擲骰：每一個畫面都從存檔與世界現算，
+    所以情境是「擺不同的局面，把三條路由與網頁檔各打一遍」。
+    **三條路由**：`GET /api/map`（舊的整張 SVG 與詳情欄：四個圖層、不存在的圖層、有效／無效的 place、沒登入）、`GET /api/map/base`（底圖與
+    清單，伺服器照鍵快取：同一個人連問兩次、不同的人、看的人換地點）、`GET /api/map/state`（疊層：勝算、出陣、分鐘、戰線、每一週的地盤），
+    還有 `POST /api/travel` 走不成時帶的 `map`（打開輿圖之後才冒出事件、就在這裡、沒這個地方）與成功時地點詳情的安排前往（travel_options）。
+    **局面**：官軍、黃巾、散人、剛進門還在序章的人各看一遍；出陣約戰開著／關著（出陣那一格與推薦）；意境提示、盡頭阻力、劇本的地盤
+    各翻一下（翻前翻後各清一次底圖快取；盡頭阻力這一包不讀，翻了輸出本來就一樣）；走在路上的人（路上的「你」與到選定地點的粗線）；時間過了兩天（軍令、戰線、每週地盤）；地盤進度擺到高（警報、易手標記）。
+    **網頁檔**：`GET /static/map.js` 的整檔 sha256（網頁拿到的內容一個位元組不變）與 `/` 載入它的那一行、載入版本號。
+    **寫到一半**：地圖本身沒有寫到一半的狀態（每個畫面從存檔現算）；前半停在有人走在路上、有人剛擺好地盤進度的那一刻，後半新程式接手：
+    路上的人走到、畫面照存檔的 journey 現算。**假人**：假人不看地圖（沒有任何 /api/map 的呼叫），碰到輿圖的只有 `bot_policy` 的
+    `_toward_battle` 叫 `Game.travel_options`——它要有決戰在集結才走得到，這一軌的假人段沒有開決戰（season21 量過一次也沒走到），
+    所以這一段只比假人跑完的存檔與世界雜湊，`travel_options` 由 /api/map 的地點詳情與 /api/travel 走到。"""
+
+    PLAYERS = {"韓望舒": "guan", "賀凌川": "huang", "祝聽雨": None, "岑九皋": "guan"}
+    GUAN, HUANG, LONE, WALKER = tuple(PLAYERS)
+    NEWBIE = "初來乍到"
+    BOT_SEATS = ["輿甲", "輿乙"]
+    PHASES_FIRST = ["setup", "seat", "layers", "base", "state", "toggles", "web", "road", "half"]
+    PHASES_SECOND = ["resume", "arrive", "days", "fronts", "web_again", "bots", "season"]
+
+    # ── 小工具 ──
+
+    def factions_on(self) -> bool:
+        return any(f.id == "huang" for f in self.c.scenario.factions) and any(f.id == "guan" for f in self.c.scenario.factions)
+
+    def side(self, who: str) -> str | None:
+        return self.PLAYERS.get(who) if self.factions_on() else None
+
+    def hub(self) -> str:
+        return self.c.scenario.start_location
+
+    def get(self, who: str, url: str):
+        return self.call(who, "GET", url)[1]
+
+    @staticmethod
+    def q(layer: str, place: str | None = None) -> str:
+        from urllib.parse import quote
+
+        return "/api/map?layer=" + quote(layer) + ("" if place is None else "&place=" + quote(place))
+
+    def places_of(self, who: str) -> list[str]:
+        self.begin()  # 問一下有哪些地點可以選（不寫進輸出：整張 SVG 約 170KB，要看的畫面另外打）
+        data = self.clients[who].get("/api/map").json()
+        return [p["id"] for p in data.get("places", [])] if isinstance(data, dict) else []
+
+    def three_views(self, who: str, tag: str, full: bool = False) -> None:
+        """底圖、疊層各打一遍（同一個人此刻看到的輿圖）；full 為真再加舊的整張圖（SVG 每張約 170KB，要的幾處才打）。"""
+        emit(f"{who} 看輿圖 {tag}", None)
+        self.get(who, "/api/map/base")
+        self.get(who, "/api/map/state")
+        if full:
+            self.get(who, "/api/map")
+
+    def farthest(self, who: str) -> str | None:
+        """離這個人此刻站的地方（直線）最遠的地點：走起來最久，前半停在這一趟走到一半。"""
+        here = self.c.locations[self.chars.load(who).player.location]
+        known = [i for i in self.places_of(who) if i in self.c.locations]
+        if not known:
+            return None
+        return max(known, key=lambda i: ((self.c.locations[i].x - here.x) ** 2 + (self.c.locations[i].y - here.y) ** 2, i))
+
+    # ── 前半 ──
+
+    def seat(self) -> None:
+        spots = sorted(self.c.locations)
+        here = {self.GUAN: self.hub(), self.HUANG: self.hub(), self.LONE: spots[-1], self.WALKER: spots[len(spots) // 2]}
+        for who in self.PLAYERS:
+            self.place(who, here[who], self.side(who))
+            self.edit(who, lambda p: p.stats.update({"silver": 200}))
+        for who in (*self.PLAYERS, self.NEWBIE):
+            self.main(who)
+
+    def layers(self) -> None:
+        """舊的整張圖：四個圖層、不存在的圖層（回預設）、沒給圖層；有效的 place（頭、中、尾）與無效的；四種人各看。"""
+        for who in (self.GUAN, self.HUANG, self.LONE, self.NEWBIE):
+            places = self.places_of(who)
+            emit(f"{who} 畫得出來的地點數", len(places))
+            picks = [places[0], places[-1]] if places else []
+            for layer in (*MAP_LAYER_IDS, "沒這層") if who == self.GUAN else ("situation", "story"):
+                self.get(who, self.q(layer))
+            for pick in picks if who == self.GUAN else picks[-1:]:
+                for layer in MAP_LAYER_IDS if who == self.GUAN else ("enemies", "routes"):
+                    self.get(who, self.q(layer, pick))
+            self.get(who, self.q("situation", "nowhere"))
+        client = self.TestClient(self.server.app)  # 沒登入
+        for url in ("/api/map", "/api/map/base", "/api/map/state"):
+            r = client.get(url)
+            emit(f"沒登入 GET {url}", [r.status_code, r.text[:200]])
+
+    def base(self) -> None:
+        """底圖：每個人連問兩次（第二次是伺服器的快取）；不同的人（開放的地點不同、鍵不同）；看的人換了地點。"""
+        for who in (self.GUAN, self.HUANG, self.LONE, self.NEWBIE):
+            self.get(who, "/api/map/base")
+            self.get(who, "/api/map/base")
+        far = sorted(self.c.locations)[0]
+        self.place(self.GUAN, far)
+        self.get(self.GUAN, "/api/map/base")
+        self.place(self.GUAN, self.hub())
+        self.get(self.GUAN, "/api/map/base")
+
+    def state(self) -> None:
+        """疊層：四種人各看；出陣約戰關著（出陣那一格與今天去哪裡出陣的推薦換一種算法）再打開。"""
+        for who in (self.GUAN, self.HUANG, self.LONE, self.NEWBIE):
+            self.get(who, "/api/map/state")
+        if self.profile in DUEL_PROFILES:
+            self.set_duel(False)
+            try:
+                for who in (self.GUAN, self.HUANG):
+                    self.three_views(who, "約戰關著")
+            finally:
+                self.set_duel(True)
+            self.get(self.GUAN, "/api/map/state")
+
+    def toggles(self) -> None:
+        """輿圖看的設定各翻一下（在記憶體裡，翻完還原；兩份程式同一步翻、同一步翻回）：意境提示（輿圖的意境濾鏡與詳情那一行）、
+        盡頭阻力（疊層的推力說明）、劇本的地盤（寫了 territory 的才有地盤那一層；翻成沒有就是測試內容那種畫面）。
+        全圖開放、地盤、出陣已經不是 Config 的開關（Config 上沒有 open_map、territory.enabled、sortie.enabled），不翻。"""
+        cfg, scenario = self.c.config, self.c.scenario
+        for label, holder, attr, value in (("意境提示", cfg.insight_strong, "enabled", not cfg.insight_strong.enabled),
+                                           ("盡頭阻力", cfg.push_resistance, "enabled", not cfg.push_resistance.enabled),
+                                           ("劇本的地盤", scenario, "territory", None)):
+            old = getattr(holder, attr)
+            if old is None:
+                emit(f"開關 {label}：這份內容沒有", None)
+                continue
+            setattr(holder, attr, value)
+            self.server.MAP_BASE.clear()  # 底圖快取的鍵不含這些開關：不清的話翻了也看不到（審查 11/05：意境提示整段只算過一次底圖）
+            try:
+                emit(f"開關 {label} 翻成", None if value is None else value)
+                for who in (self.GUAN, self.NEWBIE):
+                    self.three_views(who, f"{label}翻過", full=who == self.GUAN)
+            finally:
+                setattr(holder, attr, old)
+                self.server.MAP_BASE.clear()
+        self.three_views(self.GUAN, "開關都還原")
+
+    def web(self) -> None:
+        """網頁檔：map.js 的整檔 sha256、長度、型別與快取標頭；載入它的那一行與各檔的版本號（index.html 的 script／link）。"""
+        import re
+
+        who = self.GUAN
+        self.begin()
+        client = self.clients[who]
+        for url in ("/static/map.js", "/static/app.js", "/static/沒有這個檔.js"):
+            r = client.get(url)
+            emit(f"GET {url}", [r.status_code, len(r.content), hashlib.sha256(r.content).hexdigest(),
+                                r.headers.get("content-type"), r.headers.get("cache-control")])
+        page = client.get("/")
+        emit("GET / 載入的檔", [page.status_code, re.findall(r'<script src="([^"]+)"', page.text),
+                                 re.findall(r'<link rel="stylesheet" href="([^"]+)"', page.text)])
+
+    def road(self) -> None:
+        """安排前往：走不成的三種（就在這裡、沒這個地方、剛進門的人）帶 map；走成的兩種（步行、疾行）；走在路上的人看輿圖。"""
+        far = self.farthest(self.WALKER)
+        emit("岑九皋走最遠的一趟", far)
+        if far is not None:
+            self.call(self.WALKER, "POST", "/api/travel", {"place": far, "mode": "walk", "layer": "enemies"})
+            self.three_views(self.WALKER, "走在路上", full=True)
+            for layer in MAP_LAYER_IDS:
+                self.get(self.WALKER, self.q(layer, far))
+        here = self.chars.load(self.GUAN).player.location
+        self.call(self.GUAN, "POST", "/api/travel", {"place": here, "mode": "walk", "layer": "routes"})
+        self.call(self.GUAN, "POST", "/api/travel", {"place": "nowhere", "mode": "walk"})
+        self.call(self.NEWBIE, "POST", "/api/travel", {"place": here, "mode": "dash"})
+        spots = [p for p in self.places_of(self.HUANG) if p != self.chars.load(self.HUANG).player.location]
+        if spots:
+            self.call(self.HUANG, "POST", "/api/travel", {"place": spots[len(spots) // 2], "mode": "dash"})
+            self.three_views(self.HUANG, "疾行出發之後")
+
+    def half(self) -> None:
+        """前半停在：祝聽雨站在最遠的地方等著、岑九皋走在路上、地盤進度擺到高（有地盤的內容）。"""
+        if self.contested():
+            from tianxia import conquest
+
+            blocks = sorted(conquest.blocks(self.c))
+            for loc, side in zip(blocks[:2], ("guan", "huang")):
+                self.preset_bar(loc, side, 60.0, self.GUAN if side == "guan" else self.HUANG)
+        for who in (self.WALKER, self.HUANG, self.LONE):
+            self.get(who, "/api/map/state")
+
+    # ── 後半 ──
+
+    def resume(self) -> None:
+        self.login_all()
+        for who in (self.WALKER, self.HUANG):
+            self.three_views(who, "接手")
+
+    def arrive(self) -> None:
+        """走在路上的人走到（時鐘一段一段往前推、每一下同步），到了之後再看一遍。"""
+        for who in (self.WALKER, self.HUANG):
+            n = 0
+            while n < 40 and self.chars.load(who).player.journey is not None:
+                STEP[0] += 20
+                self.main(who)
+                n += 1
+            emit(f"{who} 同步了 {n} 次抵達", self.chars.load(who).player.location)
+            self.three_views(who, "抵達之後", full=who == self.WALKER)
+
+    def days(self) -> None:
+        """時間過了兩天、再兩天（軍令、戰線、每週地盤、傳聞跟著走）：每過一段，四種人各看一遍。"""
+        for _ in range(2):
+            STEP[0] += 2 * 1440
+            for who in (self.GUAN, self.HUANG, self.LONE, self.NEWBIE):
+                self.main(who)
+            for who in (self.GUAN, self.HUANG):
+                self.three_views(who, "過了兩天", full=who == self.GUAN)
+
+    def fronts(self) -> None:
+        """地盤進度擺到高、警報線以上：疊層的警報與易手標記；官軍、黃巾、散人各看。"""
+        if self.contested():
+            from tianxia import conquest
+
+            blocks = sorted(conquest.blocks(self.c))
+            emit("地盤區塊", blocks[:3])
+            for loc, side in zip(blocks[-2:], ("huang", "guan")):
+                self.preset_bar(loc, side, 90.0, self.HUANG if side == "huang" else self.GUAN)
+        else:
+            emit("地盤：這份內容沒有", None)
+        for who in (self.GUAN, self.HUANG, self.LONE):
+            self.get(who, "/api/map/state")
+        self.get(self.GUAN, self.q("situation", self.chars.load(self.GUAN).player.location))
+
+    def web_again(self) -> None:
+        self.web()
+
+    def bots(self) -> None:
+        """假人：BotRunner 兩個在城裡若干輪（bot_policy 的移動選項叫 Game.travel_options）；沒有任何 /api/map 的呼叫。"""
+        from collections import Counter
+
+        from tianxia import server_bots
+        from tianxia.bot_runner import BotRunner
+        from tianxia.engine import Game
+        from tianxia.state import BotProfile
+
+        spot = self.hub()
+        on = self.factions_on()
+        for i, name in enumerate(self.BOT_SEATS):
+            self.begin()
+            g = Game.new(self.c, name, rng=random.Random(i), world=self.world, graduated=True)
+            p = g.state.player
+            p.bot = BotProfile(personality="普通", seed=71 + i, faction="guan" if on else None, season_number=self.world.get_season_number())
+            g.client = None
+            g.sync(CLOCK[0])
+            for _ in range(6):
+                first = next((o.id for o in g.options(odds=False) if o.id.startswith("choice:") and o.enabled), None)
+                if first is None:
+                    break
+                g.choose(first)
+            p.faction, p.location, p.journey = p.bot.faction, spot, None
+            p.visited.add(spot)
+            p.tutorial_step = len(self.c.tutorial.steps)
+            p.joined_at = -1.0e9
+            p.stamina = float(self.c.config.stamina_max)
+            self.chars.save(g.state)
+        runner = BotRunner(self.c, self.world, self.chars, rng=random.Random(43), clock=lambda: CLOCK[0])
+        tick, online = self.c.config.bot_tick_seconds, server_bots.is_online
+        seeds = {71 + i for i in range(len(self.BOT_SEATS))}
+        self.c.config.bot_tick_seconds = 10 ** 6
+        server_bots.is_online = lambda profile, now: profile.seed in seeds or online(profile, now)
+        totals = Counter()
+        try:
+            for _ in range(int(os.environ.get("SB_MAP_TICKS", "10"))):
+                STEP[0] += 4
+                self.begin()
+                report = runner.tick()
+                totals.update(acted=report.acted, added=report.added, skipped=report.skipped, failed=report.failed, online=report.online)
+        finally:
+            self.c.config.bot_tick_seconds, server_bots.is_online = tick, online
+        emit("假人 一輪一輪", dict(sorted(totals.items())))
+        for name in self.BOT_SEATS:
+            s = self.chars.load(name)
+            emit(f"假人 {name}", {"loc": s.player.location, "journey": None if s.player.journey is None else s.player.journey.model_dump(mode="json"),
+                                  "state": hashlib.sha256(s.model_dump_json().encode("utf-8")).hexdigest()})
+
+    def season(self) -> None:
+        self.do(ADMIN, "end_season")
+        self.three_views(self.GUAN, "收季之後", full=True)
+        self.do(ADMIN, "next_season")
+        self.main(self.GUAN)
+        self.three_views(self.GUAN, "換季之後", full=True)
+
+
+def _map_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
+    """再開一軌（同 _herald_register_track：TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記）。"""
+    global TRACK_NAMES
+    TRACKS[name] = scenario
+    TRACK_NAMES = (*TRACK_NAMES, name)
+    MUTATIONS[name] = mutation
+    MUTANT_PROFILE[name] = profile
+
+
+# 改一個字（selftest）：局勢圖層圖例那一句（mapview.LEGEND_LAYERS["situation"]；舊名的檔與搬進包的檔兩處找，哪一處有就改哪一處）
+_map_register_track("map", MapScenario, (("tianxia/mapview.py", "tianxia/features/map/mapview.py"),
+                                         ("常出沒　大區越紅，大勢越凶", "常出沒　大區越紅，大勢越凶！")), "week7")
+
+
+
 if __name__ == "__main__":
     sys.exit(main())
