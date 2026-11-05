@@ -1055,7 +1055,7 @@ GAME_IMPORTS |= {"tianxia.features.peers.discuss_actions", "tianxia.features.pee
 GAME_DELEGATES -= {"_pair_left"}
 GAME_DELEGATES |= {
     # 論武：測試叫（discuss_items、_discuss_cost、discuss_item_problem）、包裡經 other 叫（discuss_problem：測試換掉對方那一份）；
-    # 截殺：假人與測試叫（raid_shown、raid_refusal、raid_odds、raid_targets、raid）、包裡經 ctx 叫而 sim 腳本與測試換掉的四個（raid_flee_odds、_raid_fled、_raid_spoils、_raid_record）
+    # 截殺：測試叫（raid_shown、raid_refusal、raid_odds、raid_targets、raid）、包裡經 ctx 叫而 sim 腳本與測試換掉的四個（raid_flee_odds、_raid_fled、_raid_spoils、_raid_record）
     "discuss_items", "_discuss_cost", "discuss_problem", "discuss_item_problem",
     "raid_shown", "raid_refusal", "raid_odds", "raid_targets", "raid", "raid_flee_odds", "_raid_fled", "_raid_spoils", "_raid_record",
 }

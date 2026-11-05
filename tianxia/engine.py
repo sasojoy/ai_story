@@ -200,7 +200,7 @@ from .core import event_check  # 事件檢定的本體（Game 上留一行委派
 from .core import presence  # 「此地還有」的判斷與身分字（全部拆包第 37 批：從 social 拆進核心）
 from .core import smith_base  # 打造單子讀的那一小半（全部拆包第 40 批，第 41 批 PM 認定第 4 條：choose 併成一則、讀檔與 sync 清單子，不經舊名 smithing）
 # peers（全部拆包第 37 批）：玩家卡、邀請框、打招呼、贈物、名帖的 31 個方法搬進玩家互動包，Game 留 21 個一行委派（另加月旦評那一句）；
-# 名帖遞帖的登記（mingtie_card）改在包載入時做；invites、social 是切磋、論武、結伴同行（第 38 批與移動包）還在原位用的
+# 名帖遞帖的登記（mingtie_card）改在包載入時做；原本那兩行 invites、social 的 import 是切磋、論武還在原位用的，第 38 批搬進包之後沒人用，拿掉了
 from .features.peers import actions as peers_actions  # 過渡：Game 上玩家卡與此地還有的一行委派
 from .features.peers import invite_actions as peers_invite_actions  # 過渡：Game 上邀請框的一行委派
 from .features.peers import mingtie_actions as peers_mingtie_actions  # 過渡：Game 上名帖的一行委派
@@ -4884,10 +4884,10 @@ class Game:
         return cultivation_actions.milestone_card(self)
 
     # ── 玩家之間的邀請與切磋（玩家互動第二層，企劃者 2026-10-08「互動的兩層也可以派下去做了」）──────────
-    # 切磋掛在玩家卡上（spar.py 登記進 social.ACTIONS）：發邀請、答應、婉拒、收回都是按的那個人自己的動作，在他自己那一把行動鎖裡做；
-    # 對方那一份照 social 的做法拿（_peer：此刻在這裡的人、不補算時間、賽季接上這一份），做完存回去。收到的邀請也列在選單上
-    # （invite:yes|no|cancel:<編號>，走 choose；假人照這條路答，bot_policy._answer_invite）。邀請存在這一季的 WorldState.invites。
-    # 「是假人」不影響任何一句話。
+    # 切磋掛在玩家卡上（玩家互動包 spar.py 載入時登記進 social.ACTIONS，動作在 spar_actions.py，全部拆包第 38 批）：發邀請、答應、婉拒、收回都是按的那個人自己的動作，
+    # 在他自己那一把行動鎖裡做；對方那一份照 social 的做法拿（_peer：此刻在這裡的人、不補算時間、賽季接上這一份），做完存回去。收到的邀請也列在選單上
+    # （invite:yes|no|cancel:<編號>，走 choose；假人照這條路答，玩家互動包 bots._answer_invite）。邀請存在這一季的 WorldState.invites。
+    # 「是假人」不影響任何一句話。這裡留的是同一對人的帳與邀請框的一行委派（第 37 批），加結伴同行的一行委派（移動包 party.py，第 48 批）。
 
     def _spar_pair(self, other: str) -> str:
         """同一對人的帳本鍵（玩家互動包 pair_actions.pair_key）。"""
@@ -4908,7 +4908,7 @@ class Game:
     def answer_invite(
         self, inv, other: Game | None, verb: str, item: str = "", proposed: tuple[str | None, str] | None = None,
     ) -> list[str]:
-        """答應（yes）、婉拒（no）、收回（cancel）一張邀請（玩家互動包 invite_actions.answer_invite；切磋、論武還在原位叫它）。"""
+        """答應（yes）、婉拒（no）、收回（cancel）一張邀請（玩家互動包 invite_actions.answer_invite；切磋、論武第 38 批搬進包、包內直接叫，這一行留給測試）。"""
         return peers_invite_actions.answer_invite(self, inv, other, verb, item, proposed)
 
     def _join(self, inv, other: Game) -> list[str]:
@@ -4916,13 +4916,14 @@ class Game:
         return travel_party.join(self, inv, other)
 
     def _tell_sender(self, inv, other: Game | None, why: str | None = None) -> None:
-        """答應了卻沒成、邀請已經收掉：發邀請的那個人下次同步看到一句（玩家互動包 invite_actions.tell_sender；切磋、論武、結伴還在原位叫它）。"""
+        """答應了卻沒成、邀請已經收掉：發邀請的那個人下次同步看到一句（玩家互動包 invite_actions.tell_sender；移動包的結伴同行〔party.py〕經 ctx 叫它，切磋、論武在包內直接叫）。"""
         return peers_invite_actions.tell_sender(self, inv, other, why)
 
     # ── 論武（玩家互動第二層）：兩個人各出一個意境合成一個新的，兩人都拿到；首創算兩人共有，價錢各付一半 ──
     # 走 fusion.merge（fusion.Partner：對方出的那一個不必是你的、不佔你的持有）；持有上限、「已經有了」照舊各自擋。
     # 武學不再拿來合（Joy 2026-10-21），論武跟著只剩意境。
-    # 開爐的是答應的那一方（discuss_request 是 A 段，伺服器在鎖外取名，_discuss 是 C 段），發邀請的那一方接著照配方合出同一門。
+    # 開爐的是答應的那一方（玩家互動包 discuss_actions：request 是 A 段，伺服器在鎖外取名〔server.prepare_peer、screen_peer〕，discuss 是 C 段；全部拆包第 38 批），
+    # 發邀請的那一方接著照配方合出同一門。這裡留的是測試叫的一行委派。
 
     def discuss_items(self) -> list[tuple[str, str]]:
         """玩家互動包 discuss_actions.items 的一行委派（全部拆包第 38 批；測試叫）。"""
@@ -4984,7 +4985,7 @@ class Game:
         return peers_raid_actions.odds_word(self, other)
 
     def raid_targets(self) -> list[tuple[str, str]]:
-        """玩家互動包 raid_actions.targets 的一行委派（全部拆包第 38 批；假人與測試叫）。"""
+        """玩家互動包 raid_actions.targets 的一行委派（全部拆包第 38 批；測試叫）。"""
         return peers_raid_actions.targets(self)
 
     def raid(self, other: Game) -> list[str]:

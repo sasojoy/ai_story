@@ -2,7 +2,7 @@
 
 此地還有誰、玩家卡與卡上的動作登記表、邀請框（打招呼、名帖、切磋、論武、結伴同行共用的 `invite:` 選項）、打招呼、贈物、名帖（定稿、遞、回帖、檢舉、管理者撤下與放回）。全部拆包第 37 批搬進來，行為一個字不變。
 第 38 批再搬進來：切磋、論武（三段式首創取名）、截殺（含策馬脫身），與假人答切磋、答論武、截殺（`spar`、`discuss`、`raid` 三個模組，舊名留別名）。
-通緝（`wanted.py`）是第 45 批，結伴同行（`_join`、`join_refusal`）是移動包，都還在原位。
+通緝（`wanted.py`）是第 45 批，還在原位；結伴同行（`_join`、`join_refusal`）第 48 批搬進移動包（`tianxia/features/travel/party.py`，Game 留一行委派）。
 
 - 導覽：`docs/guide/散人與玩家互動.md`（玩家卡、切磋、論武）。
 - 設計稿：玩家互動（企劃者 2026-10-08）；名帖（Joy 2026-10-19，設計稿 https://claude.ai/artifact/YLTXjaX77DJRsCmMX57xAi）。
@@ -72,7 +72,7 @@
 
 ## 過渡（手冊 3.11）
 
-過渡 import 2 處（全部拆包第 40 批合完重印）：`mingtie.py` 函式裡到 `leaderboard`（賽季榜單）；`bots.py` 到 `leaderboard`（名帖頭銜的榜單名次）。`mingtie.py` 到 `ranks`（階級的稱號）第 40 批收進共用規則層，不算過渡（原本 3 處）。
+過渡 import 4 處（全部拆包第 38 批合完重印）：`mingtie.py` 函式裡到 `leaderboard`（賽季榜單）；`bots.py` 到 `leaderboard`（名帖頭銜的榜單名次）；第 38 批加的 `discuss_actions.py` 到 `fusion`（合成與揣摩，`SHARED_LATER`）與 `raid_actions.py` 到 `bounties`（懸賞榜，標「待搬（第 45 批）」）。`mingtie.py` 到 `ranks`（階級的稱號）第 40 批收進共用規則層，不算過渡（原本 3 處）。
 
 ## 量到的（第 37 批 Task 5）
 
