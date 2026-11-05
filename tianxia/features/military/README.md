@@ -75,6 +75,7 @@
 
 - 軍令卡、記功、押糧、席次抄帳：`tests/figures/test_orders.py`（20／85，`orders_view`、`_order_credit`、糧車）、`tests/figures/test_seats.py`（`_report_seat`）、
   `tests/figures/test_defection.py`（2／41）、`tests/figures/test_gentry_allied.py`（`_summons_plan`）、`tests/ranger/test_season21_daily.py`（2／29）、`tests/figures/test_week7_season.py`
+- 抵達那一刻交糧車（事件 `arrive` 的 `convoy` 那一格，第 26 批）：上面的 `tests/figures/test_orders.py`（糧車）；格的先後與登記由核心契約 `tests/core/test_contract_core.py`（`# core_eventbus`）鎖住。
 - 第 2 階行動與召見：`tests/figures/test_admin_triggers.py`（14／31）
 - 機緣與伏筆（第 34 批，粗數）：`tests/figures/test_promotions_huang.py`（32／56，第 4 階機緣與晉升）、`tests/figures/test_admin_triggers.py`（13／31，給機緣、給片段）、`tests/figures/test_rumor_layers.py`（11／70，見聞頁的片段與線索）、`tests/arts/test_hints.py`（9／108）、`tests/web/test_admin_triggers_web.py`（4／16，管理頁兩顆鈕與選單）、`tests/core/test_prologue.py`（3／101，序章不抽片段）、`tests/core/test_contract_core.py`（效果與叛投的格）、`tests/figures/test_promotions_high.py`、`tests/figures/test_gentry_allied.py`、`tests/figures/test_defection.py`（叛投確認畫面問 `in_plot`）、`tests/core/test_rules.py`、`tests/core/test_content.py`（驗內容讀天機表與題目）
 - 引導與網頁：`tianxia/features/guide/tests/test_opening.py`（2／9，`orders_view`）、`tests/map/test_weekcard.py`、`tests/core/test_prologue.py`（2／101）、`tests/web/test_prologue_web.py`（3／81）、`tests/web/test_jianghu_page_web.py`（1／134）

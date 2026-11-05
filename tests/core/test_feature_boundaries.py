@@ -1779,6 +1779,47 @@ GAME_DELEGATE_CALLERS.update({
     ("_squad_encounter", "_opp_on_win"): "遊歷打贏之後記密謀一處（三路並進）：夾在軍令記功與懸賞討伐之間，留原位（第 26 批量過：同上）",
 })
 
+# 發布點之外不直接叫事件的訂閱者（計畫 1.7、Task 4）：懸賞的四種交差（bounties.on_win／on_explore／on_arrive／on_raid_win）、玉璽的撿碎片與收場
+# （_seal_find、_seal_settle）、交糧車（_convoy_arrives，已拿掉），在 engine.py 與每一包的 .py（測試除外）只准出現在核心代叫表 engine._BUS_CORE 裡；
+# 別處要聽，登記事件的格（Feature.bus()），先後照核心的 BUS_ORDER。bounties.on_aid（人物託付交差）不在總表的四種裡，不管（交 PM）。
+BUS_SUBSCRIBERS = {("bounties", "on_win"), ("bounties", "on_explore"), ("bounties", "on_arrive"), ("bounties", "on_raid_win")}
+BUS_METHODS = {"_seal_find", "_seal_settle", "_convoy_arrives"}
+
+
+def bus_bypasses(source: str) -> list[int]:
+    """source 裡直接叫事件訂閱者的行號（模組層 _BUS_CORE 那一個賦值裡的不算）：bounties.<交差>(...)、<誰>._seal_find(...) 這一類呼叫。"""
+    tree = ast.parse(source)
+    allowed: set[int] = set()
+    for node in tree.body:
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target] if isinstance(node, ast.AnnAssign) else []
+        if any(isinstance(t, ast.Name) and t.id == "_BUS_CORE" for t in targets):
+            allowed |= {id(sub) for sub in ast.walk(node)}
+    out = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute) or id(node) in allowed:
+            continue
+        func = node.func
+        if func.attr in BUS_METHODS or (isinstance(func.value, ast.Name) and (func.value.id, func.attr) in BUS_SUBSCRIBERS):
+            out.append(node.lineno)
+    return sorted(out)
+
+
+def test_nobody_calls_an_event_subscriber_outside_the_publish_points():
+    """engine.py 與每一包都經 ctx.publish 發事件，不直接叫懸賞的交差、玉璽、交糧車（只有 engine._BUS_CORE 代叫）。先證明掃描看得到：
+    原本那幾行（engine 的打贏、抵達、截殺打贏，探索包的出門一趟、遭遇打贏，決戰包的收場）照這一條都抓得到，_BUS_CORE 裡的不算。"""
+    files = [TIANXIA / "engine.py"] + [path for name in _packages() for path in _package_files(name)]
+    found = {str(path.relative_to(ROOT)): bus_bypasses(path.read_text(encoding="utf-8")) for path in files}
+    assert {path: lines for path, lines in found.items() if lines} == {}
+    old = ("def _squad_encounter(self, s, c, loc, squad):\n    extra = bounties.on_win(s, c, self.world, loc.id, squad.id)\n"
+           "def _arrive(self, s, c, loc_id):\n    convoy = self._convoy_arrives(loc_id) + bounties.on_arrive(s, c, self.world, loc_id)\n"
+           "def _raid_bounty(self, target):\n    msgs = bounties.on_raid_win(self.state, self.content, self.world, target)\n"
+           "def explore_one(ctx, s, c, loc):\n    extras = bounties.on_explore(s, c, ctx.world, loc.id) + ctx._seal_find(loc.id)\n"
+           "def settle_showdown(ctx, battle, definition, result):\n    ctx._seal_settle(battle, definition, result)\n"
+           "_BUS_CORE = {'win': {'bounties': lambda ctx, loc_id, squad_id: bounties.on_win(ctx.state, ctx.content, ctx.world, loc_id, squad_id)},\n"
+           "             'outing': {'seal': lambda ctx, loc_id: ctx._seal_find(loc_id)}}\n"
+           "def aid(s, c, who):\n    return bounties.on_aid(s, c, who) + bounties.mine(s, c)\n")
+    assert bus_bypasses(old) == [2, 4, 4, 6, 8, 8, 10]
+
 
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py
     import io
