@@ -14,7 +14,7 @@ Game 上的一行委派（理由在 tests/core/test_feature_boundaries.py 的 `#
 """
 from __future__ import annotations
 
-from tianxia.core.features import BusHook, DefectHook, EffectHook, Feature, Outcome
+from tianxia.core.features import BusHook, DefectHook, EffectHook, Feature, Outcome, StepHook
 
 
 class MilitaryFeature(Feature):
@@ -114,6 +114,24 @@ class MilitaryFeature(Feature):
 
             self._bus = (BusHook("arrive", "convoy", lambda ctx, loc_id: convoy_actions.convoy_arrives(ctx, loc_id)),)
         return self._bus
+
+    # core_step（全部拆包第 36 批「你這一步」）
+    _steps: tuple[StepHook, ...] | None = None
+
+    def steps(self) -> tuple[StepHook, ...]:
+        """「你這一步」的 order 與 foreshadow 兩格（原本 weekcard._steps 的軍令、伏筆那兩段與 step._target、_then 的那兩支）：位置在 STEP_ORDER。
+        不問 enabled（軍令看殼傳進來的 orders_view、伏筆看 next_step，判斷都在被叫的函式裡）。讀伏筆就是 foreshadow 那一格，核心不再讀。
+        建一次就留著，在叫的那一下才照模組屬性找 order_actions.step_items／step_place、fs_actions.step_items／step_place（monkeypatch 照樣有效）。"""
+        if self._steps is None:
+            from . import fs_actions, order_actions  # noqa: PLC0415
+
+            self._steps = (
+                StepHook("order", lambda ctx, status, orders: order_actions.step_items(ctx, orders), ref="order",
+                         place=lambda ctx, ref: order_actions.step_place(ctx, ref)),
+                StepHook("foreshadow", lambda ctx, status, orders: fs_actions.step_items(ctx), ref="foreshadow",
+                         place=lambda ctx, ref: fs_actions.step_place(ctx, ref)),
+            )
+        return self._steps
 
 
 FEATURE = MilitaryFeature()

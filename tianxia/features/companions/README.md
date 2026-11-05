@@ -18,6 +18,7 @@
 - **心意的世界那一半在共用規則層 `tianxia/stance_world.py`**（這一週的計數、誰照哪一個做事、門檻、換手、每週歸零）：核心的 `rules`、事件檢定與舊模組 `world`、`figures`、`events` 讀它；`stances.py` re-export，`from tianxia import stances; stances.check(...)` 照舊。
 - `routes.py`：`/api/figure`（原本在 `server.py`）。
 - 掛鉤：`enabled` 一直是 True（招募 `Config.companions`、書信 `Config.figure_life.letters`、心意與託付 `Config.jianfa`、NPC 智能 2.0 `Config.parley` 各有自己的開關，包本身沒有總開關）；`prefix = ("errand", "talk", "parley")`；`choose`（`errand:` 那幾顆，加上 `talk:`、`parley:road`，見下）；`bot_pick`（`talk:`、`parley:`）；`routes`；`bot_always`（`errand:`：整季機器人不收託付，原本寫在 `bot.pick` 的清單）；`player_fields`；叛投那一刻的格 `defection()`（`after` 位置的 `parley`：`parley_actions.forsake_all`，欠著的都算食言；全部拆包第 32 批）。
+- 「你這一步」的格 `steps()`（全部拆包第 36 批；順序在核心的 `STEP_ORDER`，排最前面）：`errand`（身上還在辦的人物託付，`errands.step_items`；原本 `weekcard._steps` 第一行直接叫）。自己帶好 `id` 與 `target`、不掛 `_ref`，所以沒有 `ref`、`place`；託付關著（`errands.on`）回空的，不問 `enabled`。懸賞列裡的委託（書信附的、求援）是懸賞榜那一格（`commission`，核心代叫，第 45 批），不在這一包。釘住這一格的測試是這一包的 `tests/test_errands_weekcard.py`。
 - **`bots.py` 只管 `talk:`、`parley:`**：`bot_policy.score` 沒有 `errand:` 那一段（`take_turn` 打分數之前就濾掉，那一行留著）；假人直接記一筆心意走 `Game.voice_stance`（`bot_policy.voice_stance` 叫，不是選項）；假人不跟人物閒聊、不求事，萬一停在對話裡只按「告辭」（`take_turn` 也會先 `choose("talk:leave")`）。
 
 ## 認領的欄位（手冊 3.5：留在原地）
@@ -39,7 +40,7 @@
 - 交友與求見開口（`_socialize`、`_precise_socialize`、`_call` × `_open_dialogue`）：交友求見第 21 批搬進 `socialize` 包，那一包經 `ctx._open_dialogue` 問，核心原位不再叫它。
 - 叛投之後的食言：全部拆包第 32 批接上核心的叛投掛鉤（`DEFECT_ORDER` 的 `after` 位置，排在同伴回江湖 `leave_behind` 之後；回話的先後算行為），不再是這裡的接縫。場景文字（`_own_scene_text` × `_last_talk_line`）：位置算行為。
 
-別的舊模組經別名碰這一包（3.11）：`bot_policy`（`stances.bot_pick`）、`weekcard`（`errands.step_items`）、`bounties`（`letters.thank`；`parley` 延後載入）、`server`（`letters.mail_day`、`letters.write`、`companion_agent`〔鎖外三段式的 `prepare_turn`、`PreparedTurn`〕；鎖外重寫信、勸降、對話的三段式照舊在殼）、`scripts/try_*.py`、`scripts/figure_ask_trial.py`。`server` 的 `main_view`、`MAIN_ACTIONS`（`letter_read`、`letter_decline`）、`MENXIA_ACTIONS`（`join`、`leave`、`release`）照舊叫 `Game` 委派（總表第 66、68 批）。出陣包的 `act:train` 並肩出陣那一句（`BACKED_LINE`、`PLAN_MISS`）搬進核心 `services`，出陣包不再 import `parley`。
+別的舊模組經別名碰這一包（3.11）：`bot_policy`（`stances.bot_pick`）、`bounties`（`letters.thank`；`parley` 延後載入）、`server`（`letters.mail_day`、`letters.write`、`companion_agent`〔鎖外三段式的 `prepare_turn`、`PreparedTurn`〕；鎖外重寫信、勸降、對話的三段式照舊在殼）、`scripts/try_*.py`、`scripts/figure_ask_trial.py`。`server` 的 `main_view`、`MAIN_ACTIONS`（`letter_read`、`letter_decline`）、`MENXIA_ACTIONS`（`join`、`leave`、`release`）照舊叫 `Game` 委派（總表第 66、68 批）。出陣包的 `act:train` 並肩出陣那一句（`BACKED_LINE`、`PLAN_MISS`）搬進核心 `services`，出陣包不再 import `parley`。
 
 ## 過渡（手冊 3.11）
 

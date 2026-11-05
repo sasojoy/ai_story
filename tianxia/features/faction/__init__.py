@@ -1,6 +1,6 @@
 """陣營（功能包；開發規範手冊 3.2；全部拆包第 35 批）。README.md 寫這一包做什麼、導覽與設計稿。
 
-- join_actions.py：投靠與拜入門派（投靠兩步確認、選邊、拜入要依附的門派之後的傾向、待確認的選單、sect: 那一顆）
+- join_actions.py：投靠與拜入門派（投靠兩步確認、選邊、拜入要依附的門派之後的傾向、待確認的選單、sect: 那一顆）；「你這一步」的去投靠那一格（第 36 批）
 - lean_actions.py：豪強改幫（三陣營四勝利）
 - defect_actions.py：叛投的行動（確認、驗證、同伴回江湖、選單能叛投去的、確認畫面的場景）
 - defection.py：叛投的規則（原 tianxia/defection.py；那個名字留成指到這裡的別名）
@@ -9,7 +9,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, Outcome
+from tianxia.core.features import DefectHook, Feature, Outcome, StepHook
 
 
 class FactionFeature(Feature):
@@ -92,6 +92,20 @@ class FactionFeature(Feature):
                 DefectHook("after", "leave_behind", lambda ctx, side: defect_actions.leave_behind(ctx, side)),
             )
         return self._defection
+
+    # core_step（全部拆包第 36 批「你這一步」）
+    _steps: tuple[StepHook, ...] | None = None
+
+    def steps(self) -> tuple[StepHook, ...]:
+        """「你這一步」的 join 那一格（去投靠；原本 weekcard._steps 最後那一段與 step._target 的去投靠那一支）：排最後（STEP_ORDER）。
+        不問 enabled（散人、劇本有陣營、季沒收的判斷在 join_step_items 裡）。建一次就留著，在叫的那一下才照模組屬性找
+        join_actions.join_step_items／join_step_place（monkeypatch 照樣有效）。"""
+        if self._steps is None:
+            from . import join_actions  # noqa: PLC0415
+
+            self._steps = (StepHook("join", lambda ctx, status, orders: join_actions.join_step_items(ctx), ref="join",
+                                    place=lambda ctx, ref: join_actions.join_step_place(ctx, ref)),)
+        return self._steps
 
 
 FEATURE = FactionFeature()

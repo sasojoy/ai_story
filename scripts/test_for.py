@@ -12,14 +12,14 @@
 
 怎麼挑（開發規範手冊 4.3，docs/superpowers/specs/2026-10-30-開發模式-design.md）：
 - 「核心測試」（過渡期，PM 2026-10-31）＝ 核心模組自己檔名的測試（test_<模組>…；江湖紀錄的 test_journal、全部拆包第 25 批收進來的
-  world 的 test_world、test_world_map 不收，NOT_CORE_TESTS）＋ tests/core/test_engine*.py
+  world 的 test_world、test_world_map 不收，第 36 批收進來的 step、weekcard 的 test_step、test_weekcard 也不收，NOT_CORE_TESTS）＋ tests/core/test_engine*.py
   ＋ tests/core/ 的核心契約、邊界、錢包服務測試（CORE_GLOBS），不含 slow；「煙霧」＝ 標了 @pytest.mark.smoke 的
   （每個區塊約 10 條）。
 - tianxia/features/<包>/**：那一包的 tests/ ＋ 核心契約（tests/core/test_contract*.py 與邊界 test_feature_boundaries.py，
   CONTRACT_GLOBS：手冊 4.1 第三級的核心契約含邊界測試，改包最容易踩的就是 import 了別的包）。
 - 核心（tianxia/core/**，與 tianxia/core/__init__.py 的 MODULES：手冊 3.1 的 state、models、content、rules、calendar、
   sqlite_world、world_state、characters、accounts、database、team、gender、naming，3.10 的 wallet，PM 10/31 的 journal，全部拆包第 25 批的 world、
-  第 32 批的 log_archive（它的 test_log_archive 收進核心測試）；
+  第 32 批的 log_archive（它的 test_log_archive 收進核心測試）、第 36 批的 step、weekcard（NOT_CORE_TESTS）；
   邊界測試照同一份）：核心測試＋煙霧＋檔名是 test_<模組>… 的。tianxia/core/ 底下掛鉤與清單（CORE_LISTS：features、services、
   registry、__init__）以外的（event_check.py：第 16 批從 Game 搬來的事件檢定）再並上寫到改到的函式名（連模組名）、Game 委派名、
   類別與常數的測試檔，模組裡直接叫它的函式一路往上算（core_module_callers；第 16 批修正，PM 11/03 照第 11 批修正輪的做法）。
@@ -161,6 +161,9 @@ BOUNDARY_TEST = "test_feature_boundaries.py"
 # core_world（全部拆包第 25 批）：world 收進核心本體，同 journal 先不收它的 test_world、test_world_map（69 條；test_world_state 是 world_state 的、
 # 照舊在）——核心測試照 PM 10/31 定的那一份，要不要收交 PM。改 world.py 照舊跑它們（自己檔名的測試）。
 NOT_CORE_TESTS = frozenset({"journal", "world"})
+# core_step（全部拆包第 36 批）：step、weekcard 收進核心本體，同 world 先不收它們的 test_step（9 條）、test_weekcard（8 條）——改別的核心模組
+# 不多跑這 17 條；改 step.py、weekcard.py 照舊跑它們（自己檔名的測試）。
+NOT_CORE_TESTS = NOT_CORE_TESTS | {"step", "weekcard"}
 # 「核心測試」除了核心模組自己檔名的，再收 tests/core/ 底下這幾種（core_tests）：Game 門面、核心契約、邊界、錢包服務
 CORE_GLOBS = ("test_engine*.py", "test_contract*.py", "test_feature_boundaries.py", "test_wallet.py")
 # 功能包改了跟著那一包跑的「核心契約」（tests/core/ 底下；手冊 4.1 第三級：選項帶前綴、choose 不吃別包的、關著不給、換季、邊界）

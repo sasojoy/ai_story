@@ -2,11 +2,14 @@
 加上核心原位要問伏筆的地方（答題中的選單與場景文字、閒著的選單上最後一步的選項、遊歷打贏的官銀、事件觸發的片段、管理者頁的片段選單、對話的片段選項）。
 規則本體在 fs_rules.py（原本的 tianxia/foreshadow.py）。原本 Game 上的 foreshadow（_foreshadow）、hear_after_stamina（_hear_after_stamina）、
 give_fragment（admin_give_fragment）；其餘 Game 留一行委派回答，第一個參數是 ctx。
+「你這一步」的 foreshadow 那一格（全部拆包第 36 批；原本 weekcard._steps 經舊名 foreshadow 讀 next_step、step._target 讀 next_trip）：
+step_items、step_place，只讀——讀伏筆就是這一格回答，核心不再讀（第 34 批 PM 認定第 1 條）。
 """
 from __future__ import annotations
 
 from tianxia import atlas  # 過渡：待搬（輿圖 atlas，總表第 50 批：抽片段要知道所在地點的大區）
 from tianxia import prologue as prologue_rules
+from tianxia import step as step_rules  # 核心本體（第 36 批收進 MODULES）：「你這一步」的 REF、place
 from tianxia.core.services import NO_SUCH_PLAYER
 
 from . import fs_rules, opp_actions, opp_rules
@@ -125,3 +128,17 @@ def admin_choices(ctx, s) -> dict:
         "opportunities": opp_actions.admin_choices(ctx, s),
         "fragments": [{"id": f"{ch.id}:{i}", "label": fs_rules.grant_label(c, ch, i)} for ch, i in frags],
     }
+
+
+# core_step（全部拆包第 36 批「你這一步」）：foreshadow 那一格（core/features.py 的 STEP_ORDER：揭了的懸賞之後、新手目標之前）。
+# 照 fs_rules.next_step、fs_rules.next_trip 的模組屬性叫（tests/bots/test_step.py 換的是 tianxia.foreshadow.next_trip＝fs_rules 那一個）。
+def step_items(ctx) -> list[dict]:
+    """「你這一步」的伏筆那一件（原本 weekcard._steps 的伏筆那一段）：伏筆的下一步有才一件。"""
+    step = fs_rules.next_step(ctx.state, ctx.content)
+    return [{"kind": "foreshadow", "text": step, step_rules.REF: ("foreshadow",)}] if step else []
+
+
+def step_place(ctx, ref: tuple) -> tuple:
+    """伏筆那一件的 (id, target, None)（原本 step._target 的伏筆那一支）：下一趟那一條鏈與它的地點；沒有 (None, None, None)。"""
+    found = fs_rules.next_trip(ctx.state, ctx.content)
+    return (found[0].id, step_rules.place(ctx, found[1].location), None) if found is not None else (None, None, None)

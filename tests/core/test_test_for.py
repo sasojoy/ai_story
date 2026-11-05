@@ -56,9 +56,13 @@ def _added(path, src, *lines):
 
 def test_a_module_picks_the_tests_that_import_it():
     # sense（全部拆包第 24 批）：原本的例子 glyph ← sensing 搬進了有所感包（tianxia/glyph.py 成了別名），換一對還是舊模組的 chapters ← weekcard
+    # core_step（全部拆包第 36 批）：weekcard 收進核心本體（MODULES），核心不往上走——chapters 往上找的舊模組變成 0 個（量的：dependents("chapters")
+    # 是空的、改 chapters 挑 1 個檔 test_chapters）。直接 import 的那一半照舊用 chapters；「經 import 它的模組再挑」那一行換成還是舊模組的
+    # skillview ← shopview（改 skillview 挑 52 個檔，why 一行「經 shopview（依賴它的 1 個模組）再挑到 11 個檔」；兩個都是 SHARED_LATER，收的那一批再換）
     picked = test_for.pick(["tianxia/chapters.py"])
     assert "test_chapters.py" in {p.name for p in picked.files} and not picked.core
-    assert any("weekcard" in w for w in picked.why)  # 經 import 它的 weekcard 再挑（T-02）
+    picked = test_for.pick(["tianxia/skillview.py"])
+    assert any("shopview" in w for w in picked.why)  # 經 import 它的 shopview 再挑（T-02）
 
 
 def test_a_module_also_picks_the_tests_of_the_modules_that_import_it():
@@ -67,13 +71,15 @@ def test_a_module_also_picks_the_tests_of_the_modules_that_import_it():
     （shared：might 第 15 批進了共用規則層，改共用規則層照下面那一條挑；這一條換成還是舊模組的 ascend——經 cultivation 挑到
     只 import cultivation 的 test_cultivation。cultivation：ascend、cultivation 第 23 批搬進修練包、舊名成了別名，換成還是舊模組的輿圖畫法
     mapview——經 mapdata 挑到只 import mapdata 的 test_mapdata_layers。mapview：mapview、mapdata 第 49 批搬進輿圖包、舊名成了別名，
-    換成還是舊模組的本週卡 step——經 weekcard 挑到只 import weekcard 的 test_weekcard。）"""
-    picked = test_for.pick(["tianxia/step.py"])
-    assert "test_weekcard.py" in {p.name for p in picked.files}
-    assert "step" not in test_for.imported(next(p for p in picked.files if p.name == "test_weekcard.py"))
+    換成還是舊模組的本週卡 step——經 weekcard 挑到只 import weekcard 的 test_weekcard。core_step：step、weekcard 第 36 批收進核心本體（MODULES），
+    改 step 跑核心測試、不往上找，換成還是舊模組的事件抽選 events——經 narration 挑到只 import narration 的 test_narration
+    〔量的：改 events 挑 22 個檔、dependents("events") 只有 narration；兩個都是 SHARED_LATER、總表第 40 批收，那一批再換〕。）"""
+    picked = test_for.pick(["tianxia/events.py"])
+    assert "test_narration.py" in {p.name for p in picked.files}
+    assert "events" not in test_for.imported(next(p for p in picked.files if p.name == "test_narration.py"))
     assert not picked.core and not picked.smoke
-    ups = test_for.dependents("step")
-    assert {"weekcard"} <= ups
+    ups = test_for.dependents("events")
+    assert {"narration"} <= ups
     assert not ups & test_for.DRIVERS and not ups & test_for.CORE_MODULES  # engine、假人、核心不往上走
 
 
@@ -1056,3 +1062,17 @@ def test_the_core_hooks_and_lists_still_pick_only_the_core_tests_and_smoke(modul
     src = (ROOT / rel).read_text(encoding="utf-8")
     picked = test_for.pick([rel], hunks_of=_added(rel, src, *range(1, len(src.splitlines()) + 1)))
     assert picked.core and picked.smoke and not picked.files
+
+
+# core_step（全部拆包第 36 批「你這一步」）
+def test_the_core_tests_stay_what_the_pm_defined_when_step_and_weekcard_join_the_core():
+    """step、weekcard 收進核心本體（第 36 批，計畫 1.5 甲案）同 world 只改「改了它挑什麼」：它們自己的 test_step（9 條）、test_weekcard（8 條）
+    不收進核心測試（NOT_CORE_TESTS），改這兩個是核心那一條：核心測試＋煙霧＋自己檔名的，不再照「誰 import 它」往上找
+    （以前改 step 經 weekcard 挑 7 個檔 54 條）。"""
+    names = {p.name for p in test_for.core_tests()}
+    assert {"step", "weekcard"} <= test_for.CORE_MODULES and {"step", "weekcard"} <= test_for.NOT_CORE_TESTS
+    assert not names & {"test_step.py", "test_weekcard.py"}
+    for module, own in (("step", {"test_step.py"}), ("weekcard", {"test_weekcard.py"})):
+        picked = test_for.pick([f"tianxia/{module}.py"])
+        assert picked.core and picked.smoke
+        assert {p.name for p in picked.files} == own, module

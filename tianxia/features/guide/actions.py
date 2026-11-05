@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from tianxia import atlas, figures, howto  # 過渡：待搬
 from tianxia import insight_fx, training, journal, library, martial_arts, team  # 核心、共用規則層
 from tianxia import prologue as prologue_rules  # 共用規則層；Game.new 有個參數也叫 prologue，跟 engine 一樣叫 prologue_rules
+from tianxia import step as step_rules  # 核心本體（第 36 批收進 MODULES）：「你這一步」的 REF、place
 from tianxia.models import TutorialStep
 from tianxia.rules import season_one
 from tianxia.state import HintNote
@@ -393,6 +394,23 @@ def newbie_view(ctx: Game) -> dict | None:
     rows = [{"key": goal.key, "text": newbie.text_of(s, c, goal), "reward": newbie.reward_text(c, goal), "go": newbie_go(ctx, goal.go),
              "drifter": goal.key == "side" and s.player.faction is None} for goal in newbie.todo(s)]
     return {"title": newbie.TITLE, "rows": rows, "done": len(s.player.newbie_done), "total": len(newbie.GOALS)}
+
+
+# core_step（全部拆包第 36 批「你這一步」）：newbie 那一格（core/features.py 的 STEP_ORDER：伏筆之後、去投靠之前）
+def newbie_step_items(ctx: Game, status: dict) -> list[dict]:
+    """「你這一步」的新手目標那幾件（原本 weekcard._steps 的新手目標那一段）：讀殼算好傳進來的 status["newbie"]（newbie_view 那一份，不重算），
+    每一條一件、多一個 i（第幾條）。"""
+    out: list[dict] = []
+    view = status.get("newbie")
+    if view:
+        for i, r in enumerate(view["rows"]):
+            out.append({"kind": "newbie", "text": r["text"], "i": i, "reward": r.get("reward", ""), step_rules.REF: ("newbie", r.get("key"), r.get("go"))})
+    return out
+
+
+def newbie_step_place(ctx: Game, ref: tuple) -> tuple:
+    """新手目標那一件的 (id, target, None)（原本 step._target 的新手目標那一支）：「去做」帶去的地點（newbie_go 的 move），不是地點的 target 是 None。"""
+    return ref[1], step_rules.place(ctx, (ref[2] or {}).get("move")), None
 
 
 def newbie_drifter(ctx: Game) -> list[str]:

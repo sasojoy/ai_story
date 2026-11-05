@@ -1960,6 +1960,38 @@ def test_nobody_calls_an_event_subscriber_outside_the_publish_points():
     assert bus_bypasses(old) == [2, 4, 4, 6, 8, 8, 10]
 
 
+# core_step（全部拆包第 36 批「你這一步」；計畫 docs/superpowers/plans/2026-11-06-你這一步-第36批.md 1.4、2.6）：step、weekcard 不再 import 包
+# （人物情誼的託付、軍情的伏筆改成那兩包登記「你這一步」的格；一條線的 OPTION 改讀共用規則層 story_base；新手引導的開局改問 Game 的
+# _opening_pending），收進核心本體（MODULES；計畫 1.5 甲案，交 PM 第 1 條）。「核心不 import 包」那一條照 MODULES 掃，之後它們再 import 包
+# 就紅；舊模組 → 包少 5 處（313 → 308，計畫 1.1）。step 代叫的懸賞榜（bounties，函式裡延後 import）與 weekcard 讀的章回（chapters）是
+# 核心 → 舊模組，這一版照舊不掃（同 world、journal）。包 import 核心本體的 step（拿 REF、place）合法，不算過渡。
+STEP_PACKAGE_READS = {"convoy", "_nearest_to", "next_step", "next_trip", "step_items"}  # 換之前 step、weekcard 直接讀的包的欄位與函式
+
+
+def _package_imports_of(source: str, module: str) -> list[tuple[int, str]]:
+    """source（模組 module 的原文）裡 import 包（含舊名的別名）的 (行, 那一包)：同 _feature_imports，不讀檔（拿換之前的原文證明掃得到）。"""
+    return sorted({(line, feature_target(mod)) for line, mod, _ in imports_of(source, module) if feature_target(mod) is not None})
+
+
+def test_step_and_weekcard_joined_the_core_and_reach_no_package():
+    """step、weekcard 在核心本體裡、一處都不 import 包、不讀換之前直接讀的那幾樣（糧車、最近的地點、伏筆的下一步）。先證明掃描看得到：
+    換之前那幾行 import（split/trunk 8f86777e 的原文：weekcard 第 18、20 行、step 第 15 行）照這一條抓得到 5 處。"""
+    assert {"step", "weekcard"} <= CORE
+    for name in ("step", "weekcard"):
+        assert _feature_imports(TIANXIA / f"{name}.py") == [], name
+        tree = ast.parse((TIANXIA / f"{name}.py").read_text(encoding="utf-8"))
+        assert not {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)} & STEP_PACKAGE_READS, name
+    old_weekcard = ("from . import calendar, chapters, errands, foreshadow, rules, storyline, week_unlock, wins\n"
+                    "from . import step as step_rules\n"
+                    "from . import opening as opening_rules\n"
+                    "from . import prologue as prologue_rules\n")
+    old_step = "from . import atlas, bounties, foreshadow, orders\nfrom .rules import jianfa\n"
+    assert _package_imports_of(old_weekcard, "tianxia.weekcard") == [(1, "companions"), (1, "military"), (1, "story"), (3, "guide")]
+    assert _package_imports_of(old_step, "tianxia.step") == [(1, "military")]
+    assert not [e for e in transitional_imports() if e.endswith(" tianxia.step") or e.endswith(" tianxia.weekcard")]
+    assert not [e for e in reverse_imports() if e.startswith(("tianxia/step.py:", "tianxia/weekcard.py:"))]
+
+
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py
     import io
     import sys
