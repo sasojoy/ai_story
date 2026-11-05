@@ -14,7 +14,7 @@ from tianxia import create, moves
 from tianxia.content import load_content
 from tianxia.engine import Game
 
-ROOT = Path(__file__).parents[2]
+ROOT = Path(__file__).parents[4]  # 全部拆包第 44 批整檔搬進 tianxia/features/craft/tests/（原本 tests/arts/ 是 parents[2]）
 
 
 @pytest.fixture(scope="module")
