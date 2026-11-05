@@ -82,7 +82,7 @@ from .core.services import BIG_FIGHT_WAIT  # sortie（全部拆包第 17 批）�
 from .core.services import PLAN_OPTION, ROAD_SAY, SAY_MAX, SAY_OPTION, TEXT_TALKS, say_text  # noqa: F401  companions（全部拆包第 20 批）：「自己說」那三顆的 id 與那句話能不能送，搬進核心的共用的字
 from .core.services import AUDIENCE_HALL_FIGURES, SNUB_NOTE, SOCIAL_NO_ONE  # noqa: F401  socialize（全部拆包第 21 批）：交友求見的三個共用的字搬進核心的共用的字（SOCIAL_NO_ONE、SNUB_NOTE 測試從 engine 拿）
 from .features.stamina_plays import actions as stamina_actions  # 過渡：Game._stamina_play_options 前半的一行委派（全部拆包第 39 批）
-from .features.travel import go_actions as travel_go, menu as travel_menu, road_actions as travel_road  # 過渡：Game 上移動的 9 個一行委派（全部拆包第 47 批）
+from .features.travel import go_actions as travel_go, menu as travel_menu  # 過渡：Game 上移動的 6 個一行委派（全部拆包第 47 批；原本 9 個，第 48 批拿掉 3 個）
 from .features.travel import departure as travel_departure, party as travel_party  # 過渡：Game 上移動的 8 個一行委派（全部拆包第 48 批）
 from .features.stamina_plays import ambush_actions  # 過渡：Game 上設伏的 4 個一行委派（全部拆包第 39 批）
 from .features.seclusion import actions as seclusion_actions  # 過渡：Game 上閉關的 3 個一行委派（全部拆包第 39 批）

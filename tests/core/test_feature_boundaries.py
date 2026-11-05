@@ -1057,7 +1057,7 @@ GAME_DELEGATE_CALLERS.update({
     ("_everyday_options", "_road_task_options"): _TRAVEL_MENU + "：路上小事在喊停之後、擂台之前（結伴同行時緊接在 act:part 後面）",
 })
 GAME_IMPORTS |= {
-    # travel（全部拆包第 47 批）：移動選單、路上小事、喊停、折返、安排前往的 9 個一行委派
+    # travel（全部拆包第 47 批）：移動選單、路上小事、喊停、折返、安排前往的 9 個一行委派（第 48 批拿掉 3 個，剩 6 個）
     "tianxia.features.travel.menu", "tianxia.features.travel.road_actions", "tianxia.features.travel.go_actions",
 }
 GAME_DELEGATES |= {
@@ -1097,6 +1097,8 @@ GAME_IMPORTS |= {
     # travel（全部拆包第 48 批）：出發與抵達的補算、結伴同行
     "tianxia.features.travel.departure", "tianxia.features.travel.party",
 }
+# 三個 road_actions 委派拿掉之後 engine 不再 import road_actions（第 48 批審查）：第 47 批登記的那一格在自己的段 -=
+GAME_IMPORTS -= {"tianxia.features.travel.road_actions"}
 GAME_DELEGATES |= {
     "_depart", "_arrivals", "_arrive", "_journey_line", "_join", "join_refusal", "_party_expires", "party_view",
 }
