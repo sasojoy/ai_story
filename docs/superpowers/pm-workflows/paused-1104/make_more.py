@@ -1,4 +1,4 @@
-"""接下來幾批的派工（第 21、30、31、29、14、18、33、43、44、25、26、29b（第 29 批之二）、32、34、35、37、39、41、46、47、49 批）。用法：make_more.py <批號> <split/trunk SHA> [輸出資料夾]
+"""接下來幾批的派工（第 21、30、31、29、14、18、33、43、44、25、26、29b（第 29 批之二）、32、34、35、37、39、41、46、47、49、36、40 批）。用法：make_more.py <批號> <split/trunk SHA> [輸出資料夾]
 先把 feature 分支快轉或開在那一筆，再把產生的 b<批號>.js 交給 Workflow。第 31 批的包名不用總表寫的 `figures`：`tianxia/figures.py` 留著，同名不准（第 23 批的教訓）。"""
 import json
 import re
@@ -16,6 +16,8 @@ COMMON_BODY = [
     "- 這一批搬的模組若是世界層代叫的舊模組（`tianxia/world.py` 開頭模組說明「另外要跑的」反過來那一段點名的，例：`figure_life`、`bounties`），`test_for` 挑不到 `test_world` 那一串：開發與修正另跑那一段列的檔（第 25 批 PM 認定第 7 條）。",
     "- **掃原始碼、寫死檔名的測試**跟著改路徑（只改路徑、不改判斷）：搬的方法裡有 `renown.gain(..., \"fame\", ...)` 的，`tests/arts/test_explain2.py` 名望來源那張清單要把那一行從 `engine.py` 改成包裡的檔、照路徑排（第 46 批漏了，主幹全面檢查才抓到，FB-9431）；其他寫死 `\"engine.py\"` 的期望用 `git grep -n '\"engine.py\"' -- tests tianxia/features` 找。`test_for` 挑不到這種測試，開發自己跑一次那幾個檔。",
     "- **事件機制**（第 26 批，11/05 已合）：一包發生的事要別包跟著動，經 `ctx.publish(\"<事件>\", ...)`；現有六種（`win`、`outing`、`explore`、`arrive`、`raid_win`、`battle_end`），同一下各訂閱者的先後是 `tianxia/core/features.py` 的 `BUS_ORDER`，**改它或開新事件先過 PM**（手冊第十五節第 26 批認定）。包登記自己那一格用 `Feature.bus()`，格回 `list[str]` 或 `None`、不准回字串。搬的方法裡有 `self.publish(...)`／`ctx.publish(...)` 的，發布點跟著搬、位置不動；邊界測試的 `bus_bypasses` 擋包直接叫 `bounties.on_*`、`_seal_find`、`_seal_settle`、`convoy_arrives`。",
+    "- **數字照重印，不抄舊計畫**：`GAME_DIRECT`、委派、過渡處數一律用 `python tests/core/test_feature_boundaries.py` 在開工那一筆重印的（11/06 第 41 批合完 `GAME_DIRECT` 是 11；第 35、47、29b 三批的計畫都抄了舊的「維持 3」）。`tests/core/test_test_for.py` 拿來當例子的舊模組因為搬走而失效時，照實換一個例子、在測試裡寫明理由與量到的數，不必問 PM（第 35 批認定第 1 條、第 49 批認定第 8 條）；`scripts/test_for.py` 本身的 `IMPORT_CAP` 不准動。",
+    "- 這份 clone 的 `git fetch origin <分支>` 只寫 `FETCH_HEAD`、不更新 `origin/<分支>`：一律 `git fetch origin +refs/heads/<分支>:refs/remotes/origin/<分支>`。",
     "- 審查常抓到的（第 19、20 批）：總表附錄甲點名這一批的方法與測試檔有沒有漏；這一批搬進來的 `PlayerState` 欄位 `player_fields` 與 README 有沒有認領；「列舉每一包」的表（`STAGE_PACKAGES`）；情境有沒有真的走到（看輸出裡有沒有預期的按鈕或句子，不是只看 200）。",
 ]
 
@@ -247,6 +249,40 @@ BATCHES = {
             "- 拆法：**記一筆行狀的那一半**（各包打完、做完時記一筆用的函式與常數，例：`DUEL`、`ERRAND`、`GROUPS`、`MARK`、`STANCE`、`TIER`、`XINGSHI`，與寫進 `PlayerState.annals`／`annals_mark` 的函式）收進核心本體（`tianxia/core/` 新檔，照第 34 批 `omen_base`、第 37 批 `presence` 的前例）；**查詢與行狀頁的那一半**（`standing()` 這一類，`/api/annals` 已在列傳包的 `routes.py`）搬進列傳包。舊名 `tianxia/annals.py` 留別名，兩半都 re-export。`PlayerState.annals`、`annals_mark`、`xingshi_seen` 照舊是核心欄位、不認領。",
             "- **先量**：現在「包 → `tianxia.annals`」的過渡處（約 16～17 處，`git grep -n annals -- tianxia/features` 看行尾「過渡」）、`SHARED_LATER[\"fusion\"]`、companions 與 story 兩包 README 提到的。拆完這些過渡處改 import 核心那一半，拿掉過渡標記，處數寫進計畫第五節。換季與同步的位置（`_stance_annals`、`_zhuan_tick`、`_zhuan_past` 的先後）一個都不動。",
             "- Task 1 的情境：沿用 `zhuan` 一軌，再補「各包記一筆行狀」：打贏、做完差事、立場、決戰、單挑、〈天下形勢〉各一，看 `/api/annals` 的內容；三種設定；半舊半新切在記了一半（有 mark 還沒寫成行狀）；假人照常。",
+        ]),
+    "36": dict(
+        title="「你這一步」與本週卡殼化（核心批）——為 `weekcard`、`step` 開「你這一步」掛鉤，各包交自己那一件；讀伏筆改查詢服務",
+        pkg="core_step", feature="feature/core-step", dev="dev/core-step-1", host="corestep1",
+        plan="docs/superpowers/plans/2026-11-06-你這一步-第36批.md",
+        prev_plan="docs/superpowers/plans/2026-11-06-事件機制-第26批.md",
+        ports={"dev": 8198, "rev": 8199, "fix": 8199, "head": 8200, "base": 8201}, fb="FB-9540～FB-9549",
+        reviewers=3, dev_model=None, all_tracks=True,
+        parallel="**核心批單獨跑**（總表 5.2 第 3 條）：這段期間沒有別的拆包批在開發。第 35、41、47、49、29b 這一波都已合；PM 開 `feature/core-step` 在 split/trunk 這一筆",
+        body=[
+            "- **這一批是核心批，沒有新包**：範圍照總表 3.3 第 36 列整格（含「接第 34 批 PM 認定第 1 條」）。下面 Task 2～4 寫「搬進 `tianxia/features/<包>/`」的地方換成：**Task 2** 在 `tianxia/core/features.py` 開「你這一步」掛鉤（寫法照第 11 批接縫掛鉤、第 25 批世界層、第 32 批效果、第 26 批事件：位置固定、不看包的 `enabled`、照 `registered()` 問）；**Task 3** 把 `weekcard`、`step` 直接叫各包、讀各包欄位的地方改成叫掛鉤，各包在自己的檔裡交自己那一件；**Task 4** 契約測試與邊界測試。`step`、`weekcard` 兩個舊模組改完之後歸核心本體（`MODULES`）還是共用規則層（`registry.SHARED`），量了在計畫第一節寫理由、交 PM 定。",
+            "- **順序就是行為**：總表寫的先後是 託付 → 軍令 → 懸賞 → 伏筆 → 新手 → 投靠；**先照現行程式量**（同一張卡上幾件同時有的時候誰在前、只挑一件時挑誰），跟總表對不上以程式為準、計畫第一節寫明。順序寫死在核心（一張明確的順序表，連還沒成包、先掛在舊模組上的那幾格一起列），契約測試逐字鎖住。",
+            "- **主人**：託付＝大勢人物包 `figure_acts`、軍令與伏筆＝軍情包 `military`、懸賞＝還是舊模組 `bounties`（第 45 批搬，那一格先掛在舊模組上、行尾標「# 過渡：待搬（第 45 批）」）、新手＝引導包 `guide`、投靠＝陣營包 `faction`。照現行程式量，主人不同就照實寫。",
+            "- **接第 34 批 PM 認定第 1 條**：`step`、`weekcard` 讀伏筆（`next_trip`、`next_step`）現在經舊名別名 `tianxia.foreshadow`，改成軍情包的查詢服務（經 `ctx` 或核心查詢服務，照第 34 批 `omen_base` 的前例）。`events`、`narration`、`rumor_view`、`server.py` 那幾處是第 40 批，這一批不碰。",
+            "- Task 1 的情境：**所有軌**都要跑（核心批）。這一批特別要走到的：六種各自是「你這一步」的那一刻、兩件以上同時有（看先後）、一件都沒有；本週卡（`weekcard`）每一格；week7、season21、test 三種設定；半舊半新切在某一件剛出現還沒做；假人照常。現有的軌已經走到的就不另加，計畫第一節列出哪一軌走到哪一件。`tests/core/test_test_for.py` 第 49 批拿 `step` 當「仍是舊模組」的例子，這一批若把 `step` 收進核心或共用層，照共用那一段的規矩換例子。",
+            "- **不改的**：資料庫結構（develop 第 9 版）；`web/`；懸賞榜、玉璽、截殺三個模組本身。",
+        ]),
+    "40": dict(
+        title="世界模型第二批（核心批）——六個舊模組收進共用規則層、`yuedan.tick` 走世界一步、條件與敘事讀別包欄位改查詢服務、鐵匠鋪五個純函式進核心",
+        pkg="core_world2", feature="feature/core-world2", dev="dev/core-world2-1", host="coreworld2",
+        plan="docs/superpowers/plans/2026-11-06-世界模型二-第40批.md",
+        prev_plan="docs/superpowers/plans/2026-11-05-世界層掛鉤-第25批.md",
+        ports={"dev": 8203, "rev": 8204, "fix": 8204, "head": 8205, "base": 8206}, fb="FB-9550～FB-9559",
+        reviewers=3, dev_model=None, all_tracks=True,
+        parallel="**核心批單獨跑**（總表 5.2 第 3 條）：這段期間沒有別的拆包批在開發。第 36 批（你這一步）已合；PM 開 `feature/core-world2` 在 split/trunk 這一筆（`feature/core-world` 是第 25 批用過的名字，不要碰）",
+        body=[
+            "- **這一批是核心批，沒有新包**：範圍照總表 3.3 第 40 列**整格**（含接第 32 批第 6 條、第 34 批第 1、6、9 條、第 35 批第 5 條、第 41 批第 4 條的那幾句）。下面 Task 2～4 寫「搬進 `tianxia/features/<包>/`」的地方換成：**Task 2** 核心那一側（共用規則層登記、查詢服務、核心小模組、世界一步那一格）；**Task 3** 改各處的讀法；**Task 4** 契約測試與邊界測試。",
+            "- **六個舊模組收進共用規則層**：`figures`、`figure_life`、`plans`、`orders`、`ranks`、`chapters`（`registry.SHARED`），切掉它們往包與往還沒成包的舊模組的 import（總表量是 15 條，開工重量）。共用層的模組不准 import 包：讀包的欄位或叫包的，改查詢服務或掛鉤；改不了的標「# 過渡：待搬（第 N 批）」、計畫第五節寫理由。`SHARED_PENDING` 照改完的實際情況改。",
+            "- **`yuedan.tick` 這幾個改走第 25 批的世界一步掛鉤**：主人在包裡登記那一格，`WORLD_ORDER` 的位置**照現在的呼叫先後**（同一步裡先推誰後推誰、亂數抽到的順序都算），契約測試鎖住。",
+            "- **條件與敘事改查詢服務**：`rules.check_condition` 的 `story_marks`、`story_marks_max` 讀一條線包的 `storylines`、`clue_items` 讀軍情包的欄位，改成各包的查詢服務；`events`、`narration`、`rumor_view`、`server.py` 經舊名別名 `tianxia.foreshadow`、`opportunities` 讀的（`active`、`event_ids`、`heard_texts`、`heard_clues`、`held_items`）一樣改。軍情包的過渡處（`fs_rules`、`opp_rules` → `figures`，`opp_rules` → `ranks`）收完之後消掉。",
+            "- **鐵匠鋪五個純函式進核心小模組**（第 41 批認定第 4 條）：`GO_VERB`、`is_forge_step`、`is_step_line`、`draft_here`、`draft_stale` 抽到 `tianxia/core/` 新檔（照 `omen_base`、`annal_base`、`convoy_base`），鐵匠鋪包照舊 re-export 同一個物件；`engine` 的 `choose` 後半、`_drop_stale_references`、`sync` 三處改讀核心，邊界測試那三筆 `GAME_DIRECT` 還原。量了若不合適，回報 PM。",
+            "- **`defected`、`ledgers`、`lean_changed` 的歸屬**（第 35 批認定第 5 條）：`wins.set_lean` 在共用層寫、`_clear_own` 清、`battle_instance`、狀態列、引導包都讀；收共用層時一起量，計畫第一節寫誰認領、交 PM 定。",
+            "- Task 1 的情境：**所有軌**都要跑（核心批）。這一批特別要走到的：世界一步跨過每天與每週、`yuedan.tick` 那幾個真的動到的那一下；事件條件帶 `story_marks`、`story_marks_max`、`clue_items`（成立與不成立各一）；敘事與傳聞讀到伏筆、機緣的那一下；鐵匠鋪打造併成一則、讀檔清失效的單子、`sync` 收單子；week7、season21、test 三種設定；半舊半新切在世界一步推到一半；假人照常。現有的軌已經走到的就不另加，計畫第一節列出哪一軌走到哪一項。",
+            "- **不改的**：資料庫結構（develop 第 9 版）；`web/`；`world_state.py` 的時間讀法。",
         ]),
     "18": dict(
         title="探索三——序章草廬四景與探索的底：權重、野怪、自家營寨比劃、練功分級、撿破境丹",
