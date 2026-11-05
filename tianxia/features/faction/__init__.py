@@ -17,6 +17,7 @@ class FactionFeature(Feature):
     prefix = ("faction", "defect", "sect")  # faction:…（投靠、確認、選邊、改幫）、defect:…（叛投）、sect:<事件>（拜入門派）
     bot_always = ("defect:", "faction:lean:")  # 叛投、改幫隨時按得下去：整季機器人不按（原本 bot.pick 的排除；機器人不換邊）
     player_fields = ("pending_faction", "pending_defect", "pending_ally")  # 按了投靠／叛投還在確認畫面上、挑好的依附那一軍；換季照新角色重來
+    content = ("sects.json", "events/sects.json")  # 門派與拜入門派的事件（總表附錄甲：歸陣營）；content.py 照舊讀（第 62 批起照它載）；檔名照舊
     carried: tuple[str, ...] = ()
     _defection: tuple[DefectHook, ...] | None = None
 
@@ -61,6 +62,18 @@ class FactionFeature(Feature):
 
             return Outcome(title=ctx._action_title(kind, arg), run=lambda: join_actions.sect_choose(ctx, arg))
         return None
+
+    def on_drop_stale(self, ctx) -> None:
+        """內容改版後拿掉的陣營：還在確認畫面上的投靠、改依附、叛投作廢（原本在 Game._drop_stale_references 中段，現在接在最後；
+        中間到 features_core.on_drop_stale 沒有任何一行讀 pending_faction、pending_ally、pending_defect）。"""
+        p = ctx.state.player
+        ids = {f.id for f in ctx.content.scenario.factions}
+        if p.pending_faction and p.pending_faction not in ids:
+            p.pending_faction = None
+        if p.pending_ally and p.pending_ally not in ids:
+            p.pending_ally = None
+        if p.pending_defect and p.pending_defect not in ids:
+            p.pending_defect = None
 
     def bot_pick(self, ctx, option):
         from . import bots  # noqa: PLC0415

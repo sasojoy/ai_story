@@ -689,12 +689,7 @@ class Game:
         self._sense_drop_stale()  # 有所感的場景被拿掉、人不在那裡了：作廢（悟意境設計第零節；有所感包，第 24 批：後面的收店讀它，不放 on_drop_stale）
         if p.pending_companion and p.pending_companion not in c.characters:
             p.pending_companion = None
-        if p.pending_faction and p.pending_faction not in {f.id for f in c.scenario.factions}:
-            p.pending_faction = None
-        if p.pending_ally and p.pending_ally not in {f.id for f in c.scenario.factions}:
-            p.pending_ally = None
-        if p.pending_defect and p.pending_defect not in {f.id for f in c.scenario.factions}:
-            p.pending_defect = None
+        # 投靠、改依附、叛投還在確認畫面上而陣營被拿掉了：第 35 批改接陣營包的 on_drop_stale 掛鉤（下面 features_core.on_drop_stale；中間沒有任何一行讀這三個欄位）
         lost_place = p.location not in c.locations
         if lost_place:
             p.location = c.scenario.start_location
