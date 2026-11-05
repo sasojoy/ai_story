@@ -42,7 +42,11 @@ from ..features import outlets  # 銀兩出口與捐軍備：全部拆包第 43 
 # craft
 from ..features import craft  # 煉製與自創：全部拆包第 44 批（只接 routes、content、on_drop_stale，排在哪裡結果都一樣；on_drop_stale 的 prune 只動 creating）
 # bout
-from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。排最後：擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）
+from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）；後面接的 stamina_plays、seclusion（第 39 批）沒有店面登記、沒有 menu 掛鉤，bout 的店面與 menu 位置不變
+# stamina_plays
+from ..features import stamina_plays  # 體力玩法（設伏、屯糧）：全部拆包第 39 批。choose 與 bot_pick 的前綴 ambush／works 與別的包不重疊；world() 的格有表序；選項不走 FEATURES（見該包 actions.py）
+# seclusion
+from ..features import seclusion  # 閉關：全部拆包第 39 批。只有 verbs()（act:break），沒有選項、選單
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -81,8 +85,13 @@ FEATURES: list[Feature] = [
     outlets.FEATURE,
     # craft
     craft.FEATURE,
-    # bout（排最後：店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4）
+    # bout（店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4。
+    # 後面接的 stamina_plays、seclusion 沒有店面登記、沒有 menu 掛鉤，bout 的店面與 menu 位置不變）
     bout.FEATURE,
+    # stamina_plays（排在 bout 後面：choose 前綴與別的包不重疊，順序不影響結果）
+    stamina_plays.FEATURE,
+    # seclusion
+    seclusion.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 
