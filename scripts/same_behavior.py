@@ -14606,7 +14606,7 @@ def _effects_register_track(name: str, scenario: type, mutation: tuple, profile:
 
 
 # 改一個字（selftest）：叛投之後新陣營那一則陣營軍情（defection.defect；第 35 批陣營成包時那一行搬進包，這裡要多寫包裡的檔）
-_effects_register_track("effects", EffectsScenario, (("tianxia/defection.py",), ("投奔過來了。", "投奔過來了！")), "week7")
+_effects_register_track("effects", EffectsScenario, (("tianxia/defection.py", "tianxia/features/faction/defection.py"), ("投奔過來了。", "投奔過來了！")), "week7")
 
 
 class StaminaScenario(WorldScenario):
@@ -17316,8 +17316,8 @@ def _allegiance_register_track(name: str, scenario: type, mutation: tuple, profi
     MUTANT_PROFILE[name] = profile
 
 
-# 改一個字（selftest）：按了投靠走開再確定那一句（Game._faction_step 確定那一支；第 35 批陣營成包時那一行搬進包，這裡要多寫包裡的檔）
-_allegiance_register_track("allegiance", AllegianceScenario, (("tianxia/engine.py",), ("（你已經不在投靠的地方了。）", "（你已經不在投靠的地方了！）")), "week7")
+# 改一個字（selftest）：按了投靠走開再確定那一句（原 Game._faction_step 確定那一支，第 35 批搬進 features/faction/join_actions.py；舊名的檔與包裡的檔兩處找）
+_allegiance_register_track("allegiance", AllegianceScenario, (("tianxia/engine.py", "tianxia/features/faction/join_actions.py"), ("（你已經不在投靠的地方了。）", "（你已經不在投靠的地方了！）")), "week7")
 
 
 if __name__ == "__main__":

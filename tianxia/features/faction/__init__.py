@@ -1,21 +1,84 @@
-"""陣營（功能包；開發規範手冊 3.2）。這一包做什麼、導覽在哪一節、設計稿是哪一份：README.md。
+"""陣營（功能包；開發規範手冊 3.2；全部拆包第 35 批）。README.md 寫這一包做什麼、導覽與設計稿。
 
-掛鉤照 tianxia/core/features.py 的表；用得到哪一個才寫哪一個。功能包只 import 核心（tianxia/core/ 與手冊 3.1 的核心模組）。
-新寫給玩家看的字標「待 joy 潤」。
+- join_actions.py：投靠與拜入門派（投靠兩步確認、選邊、拜入要依附的門派之後的傾向、待確認的選單、sect: 那一顆）
+- lean_actions.py：豪強改幫（三陣營四勝利）
+- defect_actions.py：叛投的行動（確認、驗證、同伴回江湖、選單能叛投去的、確認畫面的場景）
+- defection.py：叛投的規則（原 tianxia/defection.py；那個名字留成指到這裡的別名）
+- ending_actions.py：季末與三方卡（起手資源與稱號、結局卡、三方卡、此刻拿第幾階、四勝利開著沒）
+- bots.py：假人的分數（原本 bot_policy.score 的 defect／sect 那兩段；faction: 原本落到最後的 None）
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature
+from tianxia.core.features import DefectHook, Feature, Outcome
 
 
 class FactionFeature(Feature):
     name = "faction"
-    prefix = "faction"  # 選項 id 的前綴：faction:…（核心只把這個前綴的 id 交給這一包）
-    player_fields: tuple[str, ...] = ()  # 認領的 PlayerState 欄位（新欄位放自己的子模型，手冊 3.5）
-    carried: tuple[str, ...] = ()  # 上面那些裡換季照帶走的
+    prefix = ("faction", "defect", "sect")  # faction:…（投靠、確認、選邊、改幫）、defect:…（叛投）、sect:<事件>（拜入門派）
+    bot_always = ("defect:", "faction:lean:")  # 叛投、改幫隨時按得下去：整季機器人不按（原本 bot.pick 的排除；機器人不換邊）
+    player_fields = ("pending_faction", "pending_defect", "pending_ally")  # 按了投靠／叛投還在確認畫面上、挑好的依附那一軍；換季照新角色重來
+    carried: tuple[str, ...] = ()
+    _defection: tuple[DefectHook, ...] | None = None
 
     def enabled(self, ctx) -> bool:
-        return False  # 接上 Config.faction.enabled（Config 加欄位先過 PM：手冊 3.5）
+        """一律開著：choose 與 bot_pick 原位本來就不看任何開關（投靠要劇本有陣營、改幫要四勝利、拜入門派要一類一顆，判斷在選單與步驟裡）；
+        搬包之前就是這樣，行為一個字不變。"""
+        return True
+
+    def choose(self, ctx, kind, arg):
+        """faction／defect／sect 三個前綴原本是 Game.choose 的 elif 最後幾支，標題是 Game._action_title 開頭那兩支（sect 沒有自己的支，
+        掉到最後的「提前出關」，隨後被事件標題換掉——照舊問核心的 _action_title）。標題在動作之前拿（同原本）。"""
+        s, c = ctx.state, ctx.content
+        if kind == "faction":
+            from tianxia import wins  # noqa: PLC0415
+            from tianxia import allied  # noqa: PLC0415
+            from . import join_actions  # noqa: PLC0415
+
+            if arg == "confirm":
+                title = f"投靠{allied.label(c, s.player.pending_faction, s.player.pending_ally)}"
+            elif arg == "cancel":
+                title = "再想想"
+            elif arg.startswith("ally:"):  # 豪強分屬兩軍：挑依附哪一軍
+                title = f"依附{c.scenario.faction_name(arg[5:], arg[5:])}"
+            elif arg.startswith("lean:"):  # 三陣營四勝利：豪強改幫另一軍
+                title = wins.LEAN_BUTTON.format(side=c.scenario.faction_name(arg[5:], arg[5:]))
+            else:
+                title = f"考慮投靠{c.scenario.faction(arg).name}"
+            return Outcome(title=title, run=lambda: join_actions.faction_step(ctx, arg))
+        if kind == "defect":
+            from . import defect_actions, defection  # noqa: PLC0415
+
+            if arg == "confirm":
+                title = defection.slot_label(s, c, c.scenario.faction(s.player.pending_defect), s.player.pending_ally)
+            elif arg == "cancel":
+                title = "再想想"
+            else:
+                fid, _, ally = arg.partition(":")  # 豪強分屬兩軍：defect:<陣營>:<依附的那一軍>
+                title = f"考慮{defection.slot_label(s, c, c.scenario.faction(fid), ally or None)}"
+            return Outcome(title=title, run=lambda: defect_actions.defect_step(ctx, arg))
+        if kind == "sect":  # 拜入門派（一類一顆，join_actions.sect_options）：端出那一則事件，不花體力
+            from . import join_actions  # noqa: PLC0415
+
+            return Outcome(title=ctx._action_title(kind, arg), run=lambda: join_actions.sect_choose(ctx, arg))
+        return None
+
+    def bot_pick(self, ctx, option):
+        from . import bots  # noqa: PLC0415
+
+        return bots.score(option)
+
+    def defection(self) -> tuple[DefectHook, ...]:
+        """叛投：clear 位置的 progress 那一格（階、召見、部下、貢獻、兩本帳、捐獻；原本 defection._CLEAR_CORE）與 after 位置的 leave_behind 那一格
+        （寫了新陣營不合的同伴當場回江湖；原本 engine._DEFECT_AFTER_CORE）：不問 enabled。位置在 DEFECT_ORDER，一個字不動。
+        建一次就留著，在叫的那一下才照模組屬性找 defection._clear_own、defect_actions.leave_behind（monkeypatch 照樣有效）。"""
+        if self._defection is None:
+            from . import defect_actions, defection  # noqa: PLC0415
+
+            self._defection = (
+                DefectHook("clear", "progress", lambda p: defection._clear_own(p)),
+                DefectHook("after", "leave_behind", lambda ctx, side: defect_actions.leave_behind(ctx, side)),
+            )
+        return self._defection
 
 
 FEATURE = FactionFeature()
