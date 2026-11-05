@@ -17,7 +17,7 @@ from . import arts as arts_mod
 # （cultivation：破境卡 ascend 全部拆包第 23 批搬進修練包，engine 不再用，拿掉）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
-    allied, armor, atlas, battle_instance, battlelog, bounties, calendar, clinic, conquest, create, defection, divine, economy, encounter, equipment,
+    allied, armor, atlas, battle_instance, battlelog, bounties, calendar, clinic, conquest, create, divine, economy, encounter, equipment,
     fight_llm, figure_life, figures, forge_secrets, fusion, gender, howto, insight_fx, insights, journal, library, martial_arts, plans,
     materials, mounts, naming, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skillview, smithing,
@@ -203,6 +203,10 @@ from .features.peers import invite_actions as peers_invite_actions  # 過渡：G
 from .features.peers import invites  # 過渡：切磋、論武、結伴同行（還在原位）用的邀請帳
 from .features.peers import mingtie_actions as peers_mingtie_actions  # 過渡：Game 上名帖的一行委派
 from .features.peers import pair_actions as peers_pair_actions  # 過渡：Game 上同一對人的帳的一行委派
+from .features.faction import join_actions as faction_join  # 過渡：Game 上投靠與拜入門派的 4 個一行委派（全部拆包第 35 批）
+from .features.faction import lean_actions as faction_lean  # 過渡：Game 上豪強改幫的 2 個一行委派（全部拆包第 35 批）
+from .features.faction import defect_actions as faction_defect  # 過渡：Game 上叛投的 2 個一行委派（全部拆包第 35 批）
+from .features.faction import ending_actions as faction_ending  # 過渡：Game 上季末與三方卡的 5 個一行委派（全部拆包第 35 批）
 from .features.peers import social  # 過渡：切磋、論武、結伴同行（還在原位）用的玩家卡字句與登記表
 from .features.peers.invite_actions import INVITE_LAPSED, INVITE_LAPSED_AWAY  # noqa: F401  邀請沒成局的兩句：tests/arts/test_discuss.py 從 engine 拿
 from .core import arena_ranks, duel_base  # 擂台的名次與稱號、單挑底層（全部拆包第 12 批：留核心；擂台、頭目戰本身在單挑包）
@@ -212,7 +216,7 @@ HOUR = 3600
 DAY = 86400
 BULLETIN_MAX = 3  # 江湖頁那排小標「大事」點開的面板最多放這一週的幾則大事（計畫 T2；以前是公告卡）
 SOCIAL_LIST_TITLE = "交友"  # 待 joy 潤：一類一顆的交友打開的人物名單（FB-421）
-SECT_LABEL = "拜入{sect}"  # 待 joy 潤：拜入門派從交友搬到「此地還能做」的一顆（正式季整合 2.7）
+# （SECT_LABEL：拜入門派那一顆的字，全部拆包第 35 批搬進陣營包 features/faction/join_actions.py）
 SUMMONS_LABEL = "應召晉升（召見在此・不花體力）"  # 待 joy 潤：一類一顆的應召（設計 9.1 第 1 組乙，橫幅上的字）
 GENDER_SET = "往後江湖上以{word}相稱。"  # 設定頁選了性別（只能選一次）
 GENDER_LOCKED = "性別已經定了，改不了。"
@@ -327,9 +331,7 @@ SHOP_ACTS = frozenset({"smith", "bounties", "market", "arena"})  # 初入江湖�
 # 出店的那一顆。酒肆的寫字面（＝ features/tavern/rules.BACK_ID）：酒肆搬成包之後模組層不碰包（主動搬六包第 10 批）；擂台同
 # （＝ features/bout/arena_rules.BACK_ID，全部拆包第 12 批）
 LEAVE_SHOP_IDS = frozenset({"bounty:back", "smith:back", mounts.BACK, "arena:back", "tavern:back"})
-# 叛投 after 位置核心代叫的格（core_effects：全部拆包第 32 批；先後在 core/features.py 的 DEFECT_ORDER）：寫了 side、跟新陣營不合的同伴當場
-# 回江湖是 Game 自己的（陣營，第 35 批）；食言（parley）是人物情誼包登記的。lambda 在叫的那一下才找 Game 的方法；契約測試讀這一份
-_DEFECT_AFTER_CORE = {"leave_behind": lambda ctx, side: ctx._leave_behind(side)}
+# （叛投 after 位置的 leave_behind 那一格：全部拆包第 35 批改由陣營包登記〔FactionFeature.defection()〕，原本核心代叫的 _DEFECT_AFTER_CORE 拿掉；食言〔parley〕是人物情誼包登記的）
 # core_eventbus（全部拆包第 26 批）：事件的格由核心代叫的那幾格（還沒成包的舊模組與 Game 上主人還沒搬的方法）。每一格在叫的那一下才照
 # 模組屬性找函式（bounties.on_win、ctx._seal_find…：測試與量表腳本換掉的照樣打得到）。BUS_ORDER 在 core/features.py；契約測試讀這一份
 _BUS_CORE: dict[str, dict[str, Callable[..., Any]]] = {
@@ -668,21 +670,9 @@ class Game:
     def _zhuan_profile(self, old: GameState, season: WorldState | None) -> dict:
         return zhuan_actions.profile(self, old, season)
 
+    # 本體在 tianxia/features/faction/ending_actions.py（全部拆包第 35 批：季末與三方卡），這裡留一行委派
     def _season_grant(self, old: GameState) -> None:
-        """三陣營四勝利（減法季設計 3.3）：上一季收季時論了功的人（那一季的 WorldState.final_tiers），新的一季開局照那一階發起手資源
-        （wins.start_grant）、掛上稱號（PlayerState.season_title，social.affiliation 接在後面），另寫一則江湖紀錄。
-        上一季沒論功（四勝利關著、散人、不到門檻）什麼都不做，一個字都不變。不看新的一季開不開四勝利：獎勵是上一季掙的。"""
-        past = self.world.past_season(old.player.season_number)
-        result = past.final_tiers.get(old.player.name) if past is not None else None
-        if result is None or not result.tier:
-            return
-        silver, xinde = wins.start_grant(wins.rules_of(self.content), result.tier)
-        p = self.state.player
-        p.stats["silver"] = p.stats.get("silver", 0) + silver
-        p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
-        p.season_title = result.title
-        line = wins.GRANT_LINE.format(tier=wins.TIER_NAMES[result.tier], title=result.title)
-        self._write(wins.GRANT_TITLE, [line] + [f"{name} +{n}" for name, n in (("銀兩", silver), ("心得", xinde)) if n])
+        return faction_ending.season_grant(self, old)
 
     def _drop_old_zhuifeng(self) -> None:
         """追風步的舊品質讀檔時拿掉（修練包 actions.drop_old_zhuifeng，全部拆包第 23 批；_drop_stale_references 照原位叫、測試直接叫）。"""
@@ -705,12 +695,7 @@ class Game:
         self._sense_drop_stale()  # 有所感的場景被拿掉、人不在那裡了：作廢（悟意境設計第零節；有所感包，第 24 批：後面的收店讀它，不放 on_drop_stale）
         if p.pending_companion and p.pending_companion not in c.characters:
             p.pending_companion = None
-        if p.pending_faction and p.pending_faction not in {f.id for f in c.scenario.factions}:
-            p.pending_faction = None
-        if p.pending_ally and p.pending_ally not in {f.id for f in c.scenario.factions}:
-            p.pending_ally = None
-        if p.pending_defect and p.pending_defect not in {f.id for f in c.scenario.factions}:
-            p.pending_defect = None
+        # 投靠、改依附、叛投還在確認畫面上而陣營被拿掉了：第 35 批改接陣營包的 on_drop_stale 掛鉤（下面 features_core.on_drop_stale；中間沒有任何一行讀這三個欄位）
         lost_place = p.location not in c.locations
         if lost_place:
             p.location = c.scenario.start_location
@@ -1169,22 +1154,9 @@ class Game:
             return story_menu
         if s.player.pending_companion:  # 跟人物談著：整個選單是對話的（人物情誼包 talk_options）
             return self._talk_options()
-        if allied.needs_ally(s, c):  # 拜入要依附的門派之後還沒挑一邊（豪強分屬兩軍）：只剩選邊
-            return self._ally_options(cancel=False)
-        if s.player.pending_faction:
-            faction = self.content.scenario.faction(s.player.pending_faction)
-            if allied.on(c, s.world) and faction.allies and s.player.pending_ally is None:  # 投靠豪強：先挑依附哪一軍
-                return self._ally_options(cancel=True)
-            return [
-                Option(id="faction:confirm", label=f"確定投靠{allied.label(c, faction.id, s.player.pending_ally)}"),
-                Option(id="faction:cancel", label="再想想"),
-            ]
-        if s.player.pending_defect:
-            target = self.content.scenario.faction(s.player.pending_defect)
-            return [  # 「確定叛投X」；豪強分屬兩軍時也可能是「確定改投X」「確定改依附X」（defection.slot_label）
-                Option(id="defect:confirm", label=f"確定{defection.slot_label(s, c, target, s.player.pending_ally)}"),
-                Option(id="defect:cancel", label="再想想"),
-            ]
+        pending_faction = self._faction_pending_options()  # 拜入要依附的門派之後還沒挑一邊、投靠與叛投的確認畫面：接管整個選單（陣營包，第 35 批）
+        if pending_faction is not None:
+            return pending_faction
         if s.player.picking_audience:
             return self._audience_options()
         if s.player.picking_bounty:
@@ -1268,9 +1240,7 @@ class Game:
             for faction in c.scenario.factions:
                 if s.player.location in faction.join_at:
                     opts.append(Option(id=f"faction:{faction.id}", label=f"投靠{faction.name}"))
-        for target, ally in self._defect_targets():  # 叛投（計畫甲）：別的陣營的投靠點、一季一次、不在沒打完的決戰的參戰名單上
-            option_id = f"defect:{target.id}" + (f":{ally}" if ally else "")  # 豪強分屬兩軍：豪強的投靠點每一軍一顆
-            opts.append(Option(id=option_id, label=defection.slot_label(s, c, target, ally)))
+        opts += self._defect_options()  # 叛投（計畫甲）：別的陣營的投靠點、一季一次、不在沒打完的決戰的參戰名單上（陣營包 defect_actions.defect_options）
         opts += self._lean_options()  # 三陣營四勝利：豪強改幫另一軍（隨時換、不算叛投；開關關著沒有）
         opts += self._order_options(loc)  # 軍令（計畫 T6）：守勢行動、接糧車；開關關著、散人沒有
         opts += self._rank2_options(loc)  # 第 2 階行動（正式版乙一）
@@ -1413,15 +1383,9 @@ class Game:
     def _social_plan(self) -> tuple[str | None, str | None]:
         return socialize_view.social_plan(self)
 
+    # 本體在 tianxia/features/faction/join_actions.py（全部拆包第 35 批：投靠與拜入門派），這裡留一行委派
     def _sect_options(self) -> list[Option]:
-        """拜入門派（一類一顆開著時從交友搬出來，正式季整合 2.7）：這裡抽得到的拜門派事件各一顆，不花體力（同投靠）。"""
-        s, c = self.state, self.content
-        opts = []
-        for event in event_candidates(s, c, "sect"):
-            sect = next((e.join_sect for ch in event.choices for e in (ch.effect, ch.fail_effect) if e.join_sect), None)
-            if sect in c.sects:
-                opts.append(Option(id=f"sect:{event.id}", label=SECT_LABEL.format(sect=c.sects[sect].name)))
-        return opts
+        return faction_join.sect_options(self)
 
     def _socialize_option(self, people: list[str], cost: int) -> Option:
         return socialize_menus.socialize_option(self, people, cost)
@@ -1816,10 +1780,7 @@ class Game:
                 msgs = self._act(arg, prepared)
             # （move：前往，road：折返與路上小事，全部拆包第 47 批換成移動包的 choose 掛鉤〔上面 taken 那一支〕，拿掉）
             # （talk：談話；parley:road：帶路的路上說一句，第 20 批審查換成人物情誼包的 choose 掛鉤〔上面 taken 那一支；prepared 與 said 經 _talk_turn、_talk_said 寄放〕，拿掉）
-            elif kind == "faction":
-                msgs = self._faction_step(arg)
-            elif kind == "defect":
-                msgs = self._defect_step(arg)
+            # （faction：投靠、確認、選邊、改幫；defect：叛投。全部拆包第 35 批換成陣營包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             # （call：指名求見，全部拆包第 21 批換成交友求見包的 choose 掛鉤〔上面 features_core.choose 接走；prepared 經 _talk_turn 寄放〕，拿掉）
             # （learn：拜師學藝，全部拆包第 23 批換成修練包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             # （opp：機緣、fs：伏筆的最後一步，全部拆包第 34 批換成軍情包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
@@ -1832,8 +1793,7 @@ class Game:
                 msgs = self._market(arg)
             # （donate：軍需官那一串的選擇；dadian：打點那一間店的離開。全部拆包第 43 批換成銀兩出口包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             # （arena:join／fight／back：單挑包的 choose 掛鉤接走，上面 taken 那一支；全部拆包第 12 批）
-            elif kind == "sect":  # 拜入門派（一類一顆，_sect_options）：端出那一則事件，不花體力
-                msgs = self._present(self.content.events[arg], "sect")
+            # （sect：拜入門派〔一類一顆，_sect_options〕，全部拆包第 35 批換成陣營包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             # （ambush：設伏、收伏；works：屯糧練兵。全部拆包第 39 批換成體力玩法包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             # （aid：護衛、犒軍、探望；plan：助他一臂、壞他的事。全部拆包第 31 批換成大勢人物包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             # （story：一條線的答題、打一場、端事件，全部拆包第 30 批換成一條線包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
@@ -2025,23 +1985,7 @@ class Game:
 
     def _action_title(self, kind: str, arg: str) -> str:
         s, c = self.state, self.content
-        if kind == "faction":
-            if arg == "confirm":
-                return f"投靠{allied.label(c, s.player.pending_faction, s.player.pending_ally)}"
-            if arg == "cancel":
-                return "再想想"
-            if arg.startswith("ally:"):  # 豪強分屬兩軍：挑依附哪一軍
-                return f"依附{c.scenario.faction_name(arg[5:], arg[5:])}"
-            if arg.startswith("lean:"):  # 三陣營四勝利：豪強改幫另一軍
-                return wins.LEAN_BUTTON.format(side=c.scenario.faction_name(arg[5:], arg[5:]))
-            return f"考慮投靠{self.content.scenario.faction(arg).name}"
-        if kind == "defect":
-            if arg == "confirm":
-                return defection.slot_label(s, c, c.scenario.faction(s.player.pending_defect), s.player.pending_ally)
-            if arg == "cancel":
-                return "再想想"
-            fid, _, ally = arg.partition(":")  # 豪強分屬兩軍：defect:<陣營>:<依附的那一軍>
-            return f"考慮{defection.slot_label(s, c, c.scenario.faction(fid), ally or None)}"
+        # （faction：投靠、確認、選邊、改幫；defect：叛投。標題全部拆包第 35 批換成陣營包 choose 掛鉤的 Outcome.title，拿掉；sect 沒有自己的支，掉到最後的「提前出關」）
         # （move：「前往 <地點名>」，全部拆包第 47 批換成移動包 choose 掛鉤的 Outcome.title，拿掉）
         if kind == "choice":
             event = c.events[s.pending_event]
@@ -2950,187 +2894,33 @@ class Game:
         """敵我的一個讀法（allied.side_of）：豪強分屬兩軍的季，豪強是依附的那一軍；其他人是自己的陣營（散人 None）。"""
         return allied.side_of(self.state, self.content)
 
-    def _ally_options(self, cancel: bool) -> list[Option]:
-        """選邊的兩顆（豪強分屬兩軍；照劇本 allies 的順序，鈕上寫那一軍此刻幾人，人數照 allied.side_totals）；
-        投靠的確認畫面上多「再想想」，拜入門派之後那兩顆不能略過。"""
-        sides = allied.side_totals(self.world.roll_counts())
-        faction = self.state.player.pending_faction or self.state.player.faction
-        opts = [
-            Option(id=f"faction:ally:{a.id}", label=allied.ALLY_BUTTON.format(ally=a.name, n=sides.get(a.id, 0)))
-            for a in allied.allies_of(self.content, faction)
-        ]
-        return opts + ([Option(id="faction:cancel", label="再想想")] if cancel else [])
-
-    def _faction_step(self, arg: str) -> list[str]:
-        """投靠分兩步（伺服器假人設計第八節第 3 項）：按「投靠某陣營」先出確認畫面（寫明這一季
-        不能改投、各方目前各有幾人），「確定」才真的投靠，「再想想」就作罷。
-        豪強分屬兩軍的季（allied.on），投靠豪強中間多一步挑依附哪一軍（ally:<id>）；拜入要依附的門派之後（allied.needs_ally）
-        也按 ally:<id> 挑，挑了就算投靠完成。"""
-        p = self.state.player
-        if arg == "cancel":
-            p.pending_faction = p.pending_ally = None
-            return ["你決定再想想。"]
-        kind, _, ally_id = arg.partition(":")
-        if kind == "lean":  # 三陣營四勝利：豪強改幫另一軍（本週卡「改幫黃巾」；選單只在 _lean_options 給）
-            return self._lean_step(ally_id)
-        if kind == "ally":
-            ally = self.content.scenario.faction(ally_id)
-            if p.pending_faction is None:  # 拜入門派之後挑一邊（選單只在 needs_ally 時給這兩顆）
-                p.ally = ally.id
-                return [allied.ALLY_DONE.format(ally=ally.name)] + self._ally_follows_battle()
-            p.pending_ally = ally.id
-            prompt = self._faction_prompt(self.content.scenario.faction(p.pending_faction))
-            self._hide(prompt)
-            return [prompt]
-        if arg == "confirm":
-            faction = self.content.scenario.faction(p.pending_faction)
-            ally, p.pending_faction, p.pending_ally = p.pending_ally, None, None
-            if p.location not in faction.join_at:
-                return ["（你已經不在投靠的地方了。）"]
-            p.faction = faction.id
-            p.ally = self._bot_lean(faction.id, ally) if allied.on(self.content, self.state.world) else None
-            # 投靠這一刻就推一次新手引導：第一季「投靠、看一眼本週軍令」那一步只看陣營（計畫 T6）；beta 照舊等下一個行動
-            msgs = [f"你投靠了{allied.label(self.content, p.faction, p.ally)}。"]
-            if p.ally is not None:
-                msgs += self._ally_follows_battle()  # 先臨時投效了另一邊的散人（FB-273）
-            if season_one(self.content, self.state.world):
-                msgs += self._guide(self._note_action("join"))  # 走對話框（畫面批次審查 I2）
-            return msgs
-        faction = self.content.scenario.faction(arg)
-        # 三陣營四勝利開著的季，投靠豪強照投靠點直接給傾向、不出選邊鈕（企劃者 2026-10-24 第 6 件；之後隨時改幫）
-        lean = wins.join_lean(self.content, faction.id, p.location) if self._four_wins() and allied.on(self.content, self.state.world) else None
-        p.pending_faction, p.pending_ally = faction.id, lean
-        prompt = self._faction_prompt(faction)
-        self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（FB-046）
-        return [prompt]
-
-    def _bot_lean(self, faction_id: str, picked: str | None) -> str | None:
-        """三陣營四勝利開著的季，伺服器假人投靠豪強那一下的傾向（FB-810）：依附豪強人數少的那一軍（wins.bot_lean，確認這一下才數），
-        不看投靠點；真人、兩軍的人、開關關著（還有選邊鈕）都照 picked。假人投靠之後不按「改幫」，所以這一下就是它這一季幫誰。"""
-        if self.state.player.bot is None or not self._four_wins():
-            return picked
-        season = self.world.get_season_number()
-        return wins.bot_lean(self.state.player.name, season, self.content, faction_id, self.world.roll_counts()) or picked
-
+    # 本體在 tianxia/features/faction/lean_actions.py（全部拆包第 35 批：豪強改幫），這裡留一行委派
     def _lean_options(self) -> list[Option]:
-        """本週卡「改幫…」（三陣營四勝利，設計 3.2）：豪強能幫、此刻沒在幫的那幾軍各一顆，不花體力、隨時換、不算叛投。
-        按不下去（wins.lean_problem）灰著寫原因。開關關著、不是豪強是空的。"""
-        s, c = self.state, self.content
-        if not self._four_wins() or not wins.is_gentry(s.player, c):
-            return []
-        opts = []
-        for side in wins.lean_sides(s.player, c):
-            label = wins.LEAN_BUTTON.format(side=c.scenario.faction_name(side, side))
-            problem = wins.lean_problem(s.player, c, side)
-            opts.append(Option(id=f"{wins.LEAN_PREFIX}{side}", label=f"{label}（{problem}）" if problem else label, enabled=not problem))
-        return opts
+        return faction_lean.lean_options(self)
 
     def _lean_anytime(self, option_id: str) -> Option | None:
-        """「改幫…」不看此地的選單（設計 3.2「隨時換」，FB-812）：選單上沒有它的時候（在路上、人站在正在打決戰的大區，
-        選單只剩那些事）照樣收（有事件待選是例外，choose 擋：FB-820），條件跟選單上的那一顆一樣（_lean_options：豪強、四勝利開著，按不下去的原因照 wins.lean_problem）。
-        只有賽季不在跑（籌備中、休季、時鐘暫停，這幾種選單本來就只剩一顆灰的）才不收；開關關著、不是豪強、本來就幫它、
-        不是它能幫的那一軍，都找不到那一顆，照舊「此刻無法這麼做」。決戰那一場的戰功照舊記參戰那一軍，開打了這一場照舊站原來那一邊
-        （_lean_step 的 _ally_follows_battle）。"""
-        if self.world.paused_at() is not None or self._preparing() or self.state.world.ended:
-            return None
-        return next((o for o in self._lean_options() if o.id == option_id), None)
-
-    def _lean_step(self, side: str) -> list[str]:
-        """豪強改幫 side（wins.set_lean：寫 ally、換邊次數 +1，不算叛投、帳不清）。跟著換的：活躍名單搬到新的那一邊（人數緩衝照新的
-        那一邊算），決戰集結中參戰名單跟著換、開打了這一場照舊（_ally_follows_battle，FB-273），手上揭著、新的那一邊接不了的
-        懸賞作廢、每張一句（不扣東西，PM 2026-10-25 第 4 件）。投靠名冊由 choose() 結尾的 _record_faction 改記。不發傳聞；
-        江湖紀錄就是這一下的那一則（choose 寫）。"""
-        s, c = self.state, self.content
-        p, w = s.player, s.world
-        old = p.ally
-        if not self._four_wins() or not wins.set_lean(p, c, side):
-            return ["（此刻無法這麼做。）"]
-        names = w.active_pushers.get(old or "")
-        if names is not None and p.name in names:
-            w.active_pushers.setdefault(side, {})[p.name] = names.pop(p.name)
-            if not names:
-                del w.active_pushers[old]
-        new_name = c.scenario.faction_name(side, side)
-        msgs = [wins.LEAN_DONE.format(side=new_name, old=c.scenario.faction_name(old, old) if old else new_name)]
-        return msgs + bounties.drop_stranded(s, c, side, lean=True) + self._ally_follows_battle()  # 作廢那一句寫「改幫」，不是投靠、叛投的「改投」（FB-811）
+        return faction_lean.lean_anytime(self, option_id)
 
     def _join_lean(self) -> list[str]:
-        """三陣營四勝利開著的季，拜入要依附一軍的門派而投靠（曹氏莊院）的那一下：照門派所在地直接給傾向（PM 2026-10-25 第 5 件），
-        不出選邊鈕；先臨時投效了另一邊的照 _ally_follows_battle 換過去。其他時候什麼都不做（照舊 allied.needs_ally 出選邊鈕）。"""
-        s, c = self.state, self.content
-        p = s.player
-        if not self._four_wins() or not allied.needs_ally(s, c):
-            return []
-        sect = c.sects.get(p.sect) if p.sect else None
-        p.ally = wins.join_lean(c, p.faction, sect.location if sect is not None else p.location)
-        return [allied.ALLY_DONE.format(ally=c.scenario.faction_name(p.ally, p.ally))] + self._ally_follows_battle()
+        return faction_join.join_lean(self)
 
     # 本體在 tianxia/features/battle/muster.py（全部拆包第 7 批：集結、投效、挑同伴），這裡留一行委派
     def _ally_follows_battle(self) -> list[str]:
         return battle_muster.ally_follows_battle(self)
 
-    def _defect_step(self, arg: str) -> list[str]:
-        """叛投分兩步（同投靠）：按「叛投某陣營」先出確認畫面（寫明代價、一季一次、三方人數），「確定」才真的叛投。
-        確定時再驗一次（defection.refusal，跟選單挑對象的 targets_here 同一套規則：還在那個投靠點、還能叛投、不是自己的陣營、
-        名字不在沒打完的決戰的參戰名單上）：中間走開了、規則關了、另一個分頁已經叛投過、報了名參戰，都不叛投，
-        而且把真正的原因說給玩家聽；那一則江湖紀錄也不寫成「叛投某某」（沒叛成）。
-        投靠名冊由 choose() 結尾的 _record_faction 改記，這裡不碰。
-        豪強分屬兩軍的季，arg 可以是「陣營:依附的那一軍」（defection.slots_here），挑的那一軍記在 pending_ally。"""
-        p = self.state.player
-        if arg == "cancel":
-            p.pending_defect = p.pending_ally = None
-            return ["你決定再想想。"]
-        if arg == "confirm":
-            target = self.content.scenario.faction(p.pending_defect)
-            ally, p.pending_defect, p.pending_ally = p.pending_ally, None, None
-            reason = defection.refusal(self.state, self.content, target, self._battle_now(), ally)
-            if reason is not None:
-                if self._draft is not None:
-                    self._draft.title = "叛投不成"
-                return [f"（{reason}）"]
-            msgs = defection.defect(self.state, self.content, target, ally)
-            for got in features_core.defect_run("after", _DEFECT_AFTER_CORE, self, target.id):
-                msgs += got  # 同伴回江湖（陣營自己的，第 35 批）→ 人物情誼包：接了又叛投，欠著的都算食言（NPC 智能 2.1）
-            return msgs
-        fid, _, ally = arg.partition(":")
-        target = self.content.scenario.faction(fid)
-        p.pending_defect, p.pending_ally = target.id, ally or None
-        prompt = defection.prompt(self.state, self.content, target, self.faction_counts_text(), p.pending_ally, self._left_names(target.id))
-        self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（同投靠，FB-046）
-        return [prompt]
-
-    def _left_names(self, side: str) -> list[str]:
-        """叛投確認畫面「會失去」那一段的同伴（歷史武將同行 9.5）：寫了 side、跟新陣營不合的。按鈕回的那一份與場景那一段（FB-362）共用。"""
-        return [self.content.characters[cid].name for cid in roster.left_behind(self.state, self.content, self.world, side)]
-
-    def _leave_behind(self, side: str) -> list[str]:
-        """叛投之後（歷史武將同行 9.5）：寫了 side、跟新陣營不合的同伴當場回江湖——全服放掉 owner、拿出隊伍、情誼照決戰後回江湖減半。"""
-        c, p = self.content, self.state.player
-        keep, out = c.config.companions.parted_keep, []
-        for cid in roster.left_behind(self.state, c, self.world, side):
-            self.world.release_companion(cid)
-            team.remove_from_team(self.state, cid)
-            before = p.affinities.get(cid, 0)
-            p.affinities[cid] = math.floor(before * keep)
-            out.append(roster.DEFECT_LEFT.format(name=c.characters[cid].name, before=before, after=p.affinities[cid]))
-        return out
-
-    def _defect_targets(self) -> list[tuple[FactionDef, str | None]]:
-        """這一刻選單上能叛投去的（陣營, 依附的那一軍）。先用不碰資料庫的條件擋掉大多數人（散人、劇本沒有陣營、叛投過），
-        剩下的才讀目前的決戰、看名字在不在參戰名單上（defection.enlisted）。豪強分屬兩軍的季見 defection.slots_here。"""
-        if not defection.can_defect(self.state, self.content):
-            return []
-        return defection.slots_here(self.state, self.content, self._battle_now())
+    # 本體在 tianxia/features/faction/defect_actions.py（全部拆包第 35 批：叛投），這裡留一行委派
+    def _defect_options(self) -> list[Option]:
+        return faction_defect.defect_options(self)
 
     def _faction_prompt(self, faction) -> str:
-        p = self.state.player
-        counts = self.faction_counts_text()
-        if allied.on(self.content, self.state.world) and faction.allies and p.pending_ally is None:  # 豪強分屬兩軍：先挑一邊
-            return allied.ALLY_PICK.format(counts=counts)
-        side = p.pending_ally or faction.id  # 依附的豪強接的是那一軍的懸賞
-        held = bounties.stranded(self.state, self.content, side)  # 手上揭著、投靠之後接不了的懸賞（FB-151）；沒有就一個字不多
-        lost = bounties.STRANDED_JOIN.format(n=len(held)) if held else ""
-        return f"投靠後這一季不能改投（叛投另論）。{lost}{counts}。確定投靠{allied.label(self.content, faction.id, p.pending_ally)}？"
+        return faction_join.faction_prompt(self, faction)
+
+    # 選單「接管整個選單」的待確認三段與叛投確認畫面的場景：本體在 join_actions.pending_options、defect_actions.scene
+    def _faction_pending_options(self) -> list[Option] | None:
+        return faction_join.pending_options(self)
+
+    def _defect_scene(self) -> str:
+        return faction_defect.scene(self)
 
     def faction_counts_text(self) -> str:
         """名冊那一句（allied.roster_text）：「目前官軍 N 人、黃巾軍 M 人、地方豪強 K 人」，照全服投靠名冊（真人與假人一起算）；
@@ -3835,9 +3625,9 @@ class Game:
     def _showdown_credits(self, me: battle_instance.BattleParticipant) -> bool:
         return battle_view.showdown_credits(self, me)
 
+    # 本體在 tianxia/features/faction/ending_actions.py（全部拆包第 35 批），這裡留一行委派
     def _four_wins(self) -> bool:
-        """這一季三陣營四勝利開著嗎（wins.on：減法季的總開關 Config.jianfa＋開季的章）。"""
-        return wins.on(self.content, self.state.world)
+        return faction_ending.four_wins(self)
 
     # 本體在 tianxia/features/battle/progress.py（全部拆包第 8 批：推進與結算），這裡留一行委派
     def _watching_battle(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> bool:
@@ -7442,10 +7232,7 @@ class Game:
             faction = self.content.scenario.faction(s.player.pending_faction)
             return f"**投靠{faction.name}**\n\n{self._faction_prompt(faction)}"
         if s.player.pending_defect:
-            target = self.content.scenario.faction(s.player.pending_defect)
-            ally = s.player.pending_ally
-            head = defection.slot_label(s, c, target, ally)  # 「叛投X」；豪強分屬兩軍時也可能是「改投X」「改依附X」
-            return f"**{head}**\n\n{defection.prompt(s, c, target, self.faction_counts_text(), ally, self._left_names(target.id))}"
+            return self._defect_scene()  # 「叛投X」的確認畫面（陣營包 defect_actions.scene，第 35 批）
         if s.player.picking_audience:
             title = SOCIAL_LIST_TITLE if precise.on(c, s.world) else "求見"
             return f"**{title}**\n\n{self._audience_intro()}"
@@ -7681,37 +7468,10 @@ class Game:
     # ── 三陣營四勝利（減法季整合設計第三章；計畫 Task 3c-2、3c-3：欄位表 main.ending；三方卡與「你這一步」補在批 1 的 weekcard 裡）──
 
     def ending_card(self) -> dict | None:
-        """結局卡（欄位表 main.ending；設計 3.4）：收季之後、四勝利開著的季才有。winner 是贏的那一軍（和局 None），condition 是你算在
-        哪一條（兩軍是陣營名，豪強是「地方豪強（官軍）」；散人、豪強沒有階是 None），my_tier 第幾階（0 是沒有），title 稱號，
-        reward 下一季分到的，ledger_used 照哪一本排（豪強和局是 wins.BOTH）。收季那一刻存好（WorldState.final_tiers），這裡只讀。"""
-        s, c = self.state, self.content
-        w = s.world
-        if not w.ended or not self._four_wins():
-            return None
-        result = w.final_tiers.get(s.player.name)
-        tier = result.tier if result is not None else 0
-        return {
-            "winner": wins.winner_of(w, c), "condition": wins.condition_of(c, s.player.faction, result), "my_tier": tier,
-            "title": result.title if result is not None else "", "reward": wins.reward_text(wins.rules_of(c), tier),
-            "ledger_used": result.ledger_used if result is not None else None,
-        }
-
-    def _tier_outlook(self) -> tuple[TierResult, int | None]:
-        """此刻就收季（結局照此刻會成立的那一種，world.evaluate_ending）自己拿第幾階、離上一階還差多少（wins.outlook）。名次要讀
-        這一季每個人的帳（CharacterStore.books，只挑那幾欄）；自己照記憶體裡的這一份（這一下剛記的貢獻可能還沒存）。"""
-        s, c = self.state, self.content
-        me = s.player
-        others = [q for q in CharacterStore(self.world.db).books(me.season_number) if name_key(q.name) != name_key(me.name)]
-        winner = evaluate_ending(_season_vehicle(c, s.world), c).winner
-        return wins.outlook(c, [*others, me], me.name, winner)
+        return faction_ending.ending_card(self)
 
     def tier_hint(self) -> str | None:
-        """三方卡的 tier_hint（weekcard.sides_card，批 3c）：此刻就收季拿第幾階・離上一階還差多少（「第三階・還差 40」「第一階」
-        「未入階・還差 20」，wins.tier_hint）。四勝利開著、季還沒收、投靠了劇本裡的陣營才有；其餘是 None。"""
-        s, c = self.state, self.content
-        if not self._four_wins() or s.world.ended or c.scenario.find_faction(s.player.faction) is None:
-            return None
-        return wins.tier_hint(*self._tier_outlook())
+        return faction_ending.tier_hint(self)
 
     def place_minutes(self, loc_id: str) -> int | None:
         """從此刻的位置走到 loc_id（步行；騎著馬照馬的步調）要現實幾分鐘（同狀態列的「現實約 N 分鐘後抵達」）；就在這裡是 0、走不到是 None。
@@ -7726,38 +7486,8 @@ class Game:
             return None
         return self._real_minutes(atlas.travel_seconds(route.minutes, "walk", pace=mounts.pace(s, c)))
 
-    def _gentry_now(self, faction: FactionDef) -> str:
-        """三方卡豪強那一欄的「現在」：看的人是豪強寫此刻幫誰與兩本帳（設計 3.4），其他人寫此刻依附兩軍各幾人（投靠名冊）。"""
-        s, c = self.state, self.content
-
-        def name(side: str) -> str:
-            return c.scenario.faction_name(side, side)
-
-        if s.player.faction == faction.id:
-            books = "、".join(wins.NOW_GENTRY_BOOK.format(side=name(side), n=n) for side, n in (wins.ledger_view(s.player, c) or {}).items())
-            return wins.NOW_GENTRY_MINE.format(side=name(s.player.ally) if s.player.ally else "", books=books)
-        rolls = allied.gentry_totals(self.world.roll_counts())
-        return "、".join(wins.NOW_GENTRY_ROLL.format(side=name(side), n=rolls.get(side, 0)) for side in faction.allies)
-
     def sides_card(self) -> dict | None:
-        """三方卡的批 3c 資料（設計 3.4）：劇本的每一方（陣營 id →）{name, goal 要做到, reward 贏了給, join_at 投靠在哪
-        [{location, name, minutes}], now 現在}，稱號與比例照 Config.jianfa.tiers。畫面的三方卡是批 1 的 weekcard.sides_card
-        （欄位表 main.sides_card），它拿這一份補豪強那一格的「現在」、每一方的「贏了給」與投靠點的分鐘；最後一週「離贏還差多少」
-        在 week_unlock.win_gap（wins.gap_line）。四勝利關著、休季沒有。"""
-        s, c = self.state, self.content
-        w = s.world
-        if not self._four_wins() or w.ended:
-            return None
-        standing = stances(s, c)
-        out = {}
-        for f in c.scenario.factions:
-            now = self._gentry_now(f) if f.allies else wins.NOW_ARMY.format(value=standing.get(f.id, 0))
-            out[f.id] = {
-                "name": f.name, "goal": wins.goal_text(c, f), "reward": wins.reward_card(c, f),
-                "join_at": [{"location": loc, "name": c.locations[loc].name, "minutes": self.place_minutes(loc)} for loc in f.join_at],
-                "now": now,
-            }
-        return out
+        return faction_ending.sides_card(self)
 
     def annals_view(self) -> dict:
         return zhuan_actions.annals_view(self)

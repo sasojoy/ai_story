@@ -707,8 +707,9 @@ def test_apply_effect_asks_the_effect_slots(game, monkeypatch):
 
 
 def test_clear_progress_asks_the_clear_slots_in_the_table_order(game, monkeypatch):
-    """defection.clear_progress（測試直接叫它）照 DEFECT_ORDER["clear"] 走：叛投自己的（_clear_own）→ 包登記的押糧、提示（登記的先後跟表
-    相反）→ 機緣（第 34 批起也是包登記的）；每一格拿到同一個 PlayerState。核心代叫的只剩 progress 一格，在叫的那一下才照模組屬性找（換掉照樣打得到）。"""
+    """defection.clear_progress（測試直接叫它）照 DEFECT_ORDER["clear"] 走：叛投自己的（progress：_clear_own）→ 押糧、提示 → 機緣；
+    每一格拿到同一個 PlayerState。四格都是包登記的（機緣第 34 批起、progress 第 35 批起由陣營包登記），核心代叫的一格都不剩：
+    假包自己登記這四格（登記的先後跟表相反），驗的是照表的先後。"""
     from tianxia import defection
 
     calls = []
@@ -718,18 +719,21 @@ def test_clear_progress_asks_the_clear_slots_in_the_table_order(game, monkeypatc
 
     # 機緣那一格第 34 批起也是包登記的（原本是核心代叫、換掉 opportunities.clear）：四格合起來照表的先後，登記的先後跟表相反
     pkg = Effectful(defection=[DefectHook("clear", "opportunities", note("opportunities")), DefectHook("clear", "hints", note("hints")),
-                               DefectHook("clear", "convoy", note("convoy"))], open_=False)
+                               DefectHook("clear", "convoy", note("convoy")),
+                               # progress 那一格第 35 批起也是包登記的（陣營包；原本是核心代叫、換掉 defection._clear_own）
+                               DefectHook("clear", "progress", note("progress"))], open_=False)
     monkeypatch.setattr(registry, "FEATURES", [pkg])
-    monkeypatch.setattr(defection, "_clear_own", note("progress"))
     p = game.state.player
     defection.clear_progress(p)
     assert calls == [("progress", (p,)), ("convoy", (p,)), ("hints", (p,)), ("opportunities", (p,))]
 
 
 def test_defecting_asks_the_leave_stranded_and_after_slots_where_the_old_lines_were(monkeypatch):
-    """defection.defect：清完、改投之前問 leave（密謀），「你叛出…」那一句之後問 stranded（懸賞，回話接在最後）；Game._defect_step 確定那一支：
-    defection.defect 之後問 after——同伴回江湖（核心代叫 Game._leave_behind）、再食言（包登記），回話照這個先後接。關著的假包照樣被問。"""
+    """defection.defect：清完、改投之前問 leave（密謀），「你叛出…」那一句之後問 stranded（懸賞，回話接在最後）；陣營包 defect_actions.defect_step
+    確定那一支（第 35 批前是 Game._defect_step）：defection.defect 之後問 after——同伴回江湖（leave_behind，第 35 批起陣營包登記；原本核心代叫
+    Game._leave_behind）、再食言（parley，人物情誼包登記），回話照這個先後接。關著的假包照樣被問。"""
     from tianxia import defection
+    from tianxia.features.faction import defect_actions
 
     g = _sided_game()
     calls = []
@@ -739,7 +743,10 @@ def test_defecting_asks_the_leave_stranded_and_after_slots_where_the_old_lines_w
 
     pkg = Effectful(defection=[DefectHook("stranded", "bounties", note("bounties", ["懸賞作廢"])),
                                DefectHook("leave", "plots", note("plots", None)),
-                               DefectHook("after", "parley", note("parley", ["食言"]))], open_=False)
+                               DefectHook("after", "parley", note("parley", ["食言"])),
+                               # leave_behind 那一格第 35 批起是陣營包登記的（原本是核心代叫 Game._leave_behind、測試換掉實例上的方法）
+                               DefectHook("after", "leave_behind",
+                                          lambda ctx, side: calls.append(("leave_behind", (side,))) or ["回江湖"])], open_=False)
     monkeypatch.setattr(registry, "FEATURES", [pkg])
     huang = g.content.scenario.faction("huang")
     msgs = defection.defect(g.state, g.content, huang)
@@ -750,21 +757,20 @@ def test_defecting_asks_the_leave_stranded_and_after_slots_where_the_old_lines_w
     g2.state.player.pending_defect = "huang"
     monkeypatch.setattr(defection, "refusal", lambda *args, **kwargs: None)
     monkeypatch.setattr(defection, "defect", lambda *args, **kwargs: ["叛投了"])
-    monkeypatch.setattr(g2, "_leave_behind", lambda side: calls.append(("leave_behind", (side,))) or ["回江湖"])
-    assert g2._defect_step("confirm") == ["叛投了", "回江湖", "食言"]
+    assert defect_actions.defect_step(g2, "confirm") == ["叛投了", "回江湖", "食言"]
     assert calls == [("leave_behind", ("huang",)), ("parley", (g2, "huang"))]
 
 
 def test_the_core_and_the_packages_take_every_effect_and_defection_slot_exactly_once():
-    """核心代叫的格（rules._EFFECT_CORE；defection._CLEAR_CORE、_LEAVE_CORE、_STRANDED_CORE；engine._DEFECT_AFTER_CORE）與包登記的格
-    （照真的 FEATURES）合起來剛好是表上的格、沒有重疊：沒有一格默默不跑、也沒有一格兩邊都寫。誰登記哪一格照計畫 1.4。"""
-    from tianxia import defection, engine, rules
+    """核心代叫的格（rules._EFFECT_CORE；叛投那邊只剩 defection._STRANDED_CORE——_CLEAR_CORE、_LEAVE_CORE 與 engine._DEFECT_AFTER_CORE
+    第 35 批拿掉，那幾格改由包登記）與包登記的格（照真的 FEATURES）合起來剛好是表上的格、沒有重疊：沒有一格默默不跑、也沒有一格兩邊都寫。
+    誰登記哪一格照計畫 1.4。"""
+    from tianxia import defection, rules
 
     own = features_core.effect_hooks()
     assert not own.keys() & rules._EFFECT_CORE.keys()
     assert own.keys() | rules._EFFECT_CORE.keys() == set(features_core.EFFECT_ORDER)
-    core = {"clear": defection._CLEAR_CORE, "leave": defection._LEAVE_CORE, "stranded": defection._STRANDED_CORE,
-            "after": engine._DEFECT_AFTER_CORE}
+    core = {"clear": {}, "leave": {}, "stranded": defection._STRANDED_CORE, "after": {}}  # clear、after 第 35 批起全是包登記的（陣營包）
     assert core.keys() == features_core.DEFECT_ORDER.keys()
     for at, order in features_core.DEFECT_ORDER.items():
         mine = features_core.defect_hooks(at)
@@ -774,7 +780,8 @@ def test_the_core_and_the_packages_take_every_effect_and_defection_slot_exactly_
     assert {f.name: [h.slot for h in f.effects()] for f in fs if f.effects()} == {
         "story": ["story"], "military": ["grain", "fs_fragments", "foreshadow"]}
     assert {f.name: [(h.at, h.slot) for h in f.defection()] for f in fs if f.defection()} == {
-        "military": [("clear", "convoy"), ("clear", "opportunities"), ("leave", "plots")], "guide": [("clear", "hints")], "companions": [("after", "parley")]}
+        "military": [("clear", "convoy"), ("clear", "opportunities"), ("leave", "plots")], "guide": [("clear", "hints")], "companions": [("after", "parley")],
+        "faction": [("clear", "progress"), ("after", "leave_behind")]}
 
 
 # core_eventbus（全部拆包第 26 批「事件機制」；計畫 docs/superpowers/plans/2026-11-06-事件機制-第26批.md 1.2、2.1、Task 2）

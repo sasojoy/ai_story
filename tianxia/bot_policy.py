@@ -735,8 +735,7 @@ def duel_move(game: Game, rng: random.Random, fight=None) -> str:
 def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     """選項的分數；None＝假人不會選（別的陣營的投靠、叛投、閒聊或求見大勢人物、只會被擋在門外的交友、投靠的確認畫面另外處理）。"""
     kind, _, arg = option.id.partition(":")
-    if kind == "defect":
-        return None  # 假人不叛投（計畫甲）
+    # （defect：假人不叛投〔計畫甲〕；sect：假人不拜門派；faction: 原本落到最後的 None。全部拆包第 35 批搬進陣營包的 bots.py，下面 features_core.bot_pick 問它）
     # （ambush、works：設伏、屯糧由 take_turn 的 _stamina_play 做，不交給打分數；全部拆包第 39 批換成體力玩法包的 bots.py，下面 features_core.bot_pick 問到；
     # 護衛、犒軍、探望 aid: 同理，假人沒有要按的，大勢人物包不開 bots.py，全部拆包第 31 批）
     if kind == "move":  # 往哪裡走：移動包的分數要 profile（測試傳的不一定是 game.state.player.bot），所以在掛鉤之前直接問（全部拆包第 47 批）
@@ -749,8 +748,6 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     if kind == "seal":
         return None  # 奪璽單挑：假人一律被代打（玉璽碎片設計 14.1），選單上就算出現也不按；在不在場只看 last_seen，假人永遠不記
     # 頭目戰（duel:）、擂台（arena:）搬進功能包：假人的分數在 features/bout/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 12 批）
-    if kind == "sect":
-        return None  # 拜入門派（一類一顆從交友搬出來的一顆）：假人不拜門派，同不叛投
     if kind == "choice":
         event = game.content.events[game.state.pending_event]
         effect = event.choices[int(arg)].effect

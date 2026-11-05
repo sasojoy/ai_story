@@ -53,7 +53,7 @@
 過渡 import 共 11 處（`test_feature_boundaries.py` 數；第 33 批 8 處，第 34 批拿掉 `step_actions`→`opportunities`、加 `fs_actions`→`atlas`、`fs_rules`→`figures`、`opp_rules`→`figures`、`ranks`）：`admin_actions`→`orders`、`ranks`；`convoy_actions`→`orders`；`order_actions`→`atlas`、`orders`；`rank_rules`→`ranks`；`step_actions`→`events`；`fs_actions`→`atlas`；`fs_rules`→`figures`；`opp_rules`→`figures`、`ranks`。
 `orders`、`ranks`、`figures` 是共用規則層（第 40 批收進 `SHARED`），`atlas`（第 50 批）、`events` 等後面的批。
 服務清單（`tianxia/core/services.py`）這一包加的：`_order_credit`（共用服務，出陣、決戰、大勢人物也經 `ctx` 叫）、`RANK_ACTION_PREFIX`、`_duty_option`（出陣包的委派，`order_options` 叫它）。
-叛投那一刻經核心的叛投掛鉤（`core/features.py` 的 `DEFECT_ORDER`）`clear` 位置的 `convoy` 那一格清（`convoy_actions.defect_clear`：`p.convoy = None`，押著的糧車留給舊陣營；全部拆包第 32 批，原本 `defection.clear_progress` 直接寫）。軍令記下的貢獻（`contrib`、`contrib_weeks`）照舊由叛投自己的 `progress` 那一格清。釘住這一格的測試在包外、改這一包時 `test_for` 挑不到：`tests/figures/test_defection.py::test_defect_resets_rank_and_old_progress`（叛投之後 `convoy` 是 None；下面「改這一包時連它們一起跑」那一串已經列了這個檔）。
+叛投那一刻經核心的叛投掛鉤（`core/features.py` 的 `DEFECT_ORDER`）`clear` 位置的 `convoy` 那一格清（`convoy_actions.defect_clear`：`p.convoy = None`，押著的糧車留給舊陣營；全部拆包第 32 批，原本 `defection.clear_progress` 直接寫）。軍令記下的貢獻（`contrib`、`contrib_weeks`）照舊由叛投自己的 `progress` 那一格清。釘住這一格的測試在包外、改這一包時 `test_for` 挑不到：`tianxia/features/faction/tests/test_defection.py::test_defect_resets_rank_and_old_progress`（叛投之後 `convoy` 是 None；下面「改這一包時連它們一起跑」那一串已經列了這個檔）。
 事件的格（全部拆包第 26 批「事件機制」）：抵達一站（`Game._arrive` 的 `ctx.publish("arrive", loc_id)`）經核心的事件表（`core/features.py` 的 `BUS_ORDER`）`arrive` 的 `convoy` 那一格交糧車（`convoy_actions.convoy_arrives`），排在懸賞護送（核心代叫，第 45 批）之前；原本 `_arrive` 經委派 `_convoy_arrives` 直接叫。
 
 ## 內容歸屬
@@ -74,10 +74,10 @@
 混著別的功能、留在原處的（`條數＝碰到這一包的／全檔`，用語法樹數過，函式為單位，數字是粗的）；改這一包時連它們一起跑：
 
 - 軍令卡、記功、押糧、席次抄帳：`tests/figures/test_orders.py`（20／85，`orders_view`、`_order_credit`、糧車）、`tests/figures/test_seats.py`（`_report_seat`）、
-  `tests/figures/test_defection.py`（2／41）、`tests/figures/test_gentry_allied.py`（`_summons_plan`）、`tests/ranger/test_season21_daily.py`（2／29）、`tests/figures/test_week7_season.py`
+  `tianxia/features/faction/tests/test_defection.py`（2／41）、`tests/figures/test_gentry_allied.py`（`_summons_plan`）、`tests/ranger/test_season21_daily.py`（2／29）、`tests/figures/test_week7_season.py`
 - 抵達那一刻交糧車（事件 `arrive` 的 `convoy` 那一格，第 26 批）：上面的 `tests/figures/test_orders.py`（糧車）；格的先後與登記由核心契約 `tests/core/test_contract_core.py`（`# core_eventbus`）鎖住。
 - 第 2 階行動與召見：`tests/figures/test_admin_triggers.py`（14／31）
-- 機緣與伏筆（第 34 批，粗數）：`tests/figures/test_promotions_huang.py`（32／56，第 4 階機緣與晉升）、`tests/figures/test_admin_triggers.py`（13／31，給機緣、給片段）、`tests/figures/test_rumor_layers.py`（11／70，見聞頁的片段與線索）、`tests/arts/test_hints.py`（9／108）、`tests/web/test_admin_triggers_web.py`（4／16，管理頁兩顆鈕與選單）、`tests/core/test_prologue.py`（3／101，序章不抽片段）、`tests/core/test_contract_core.py`（效果與叛投的格）、`tests/figures/test_promotions_high.py`、`tests/figures/test_gentry_allied.py`、`tests/figures/test_defection.py`（叛投確認畫面問 `in_plot`）、`tests/core/test_rules.py`、`tests/core/test_content.py`（驗內容讀天機表與題目）
+- 機緣與伏筆（第 34 批，粗數）：`tests/figures/test_promotions_huang.py`（32／56，第 4 階機緣與晉升）、`tests/figures/test_admin_triggers.py`（13／31，給機緣、給片段）、`tests/figures/test_rumor_layers.py`（11／70，見聞頁的片段與線索）、`tests/arts/test_hints.py`（9／108）、`tests/web/test_admin_triggers_web.py`（4／16，管理頁兩顆鈕與選單）、`tests/core/test_prologue.py`（3／101，序章不抽片段）、`tests/core/test_contract_core.py`（效果與叛投的格）、`tests/figures/test_promotions_high.py`、`tests/figures/test_gentry_allied.py`、`tianxia/features/faction/tests/test_defection.py`（叛投確認畫面問 `in_plot`）、`tests/core/test_rules.py`、`tests/core/test_content.py`（驗內容讀天機表與題目）
 - 引導與網頁：`tianxia/features/guide/tests/test_opening.py`（2／9，`orders_view`）、`tests/map/test_weekcard.py`、`tests/core/test_prologue.py`（2／101）、`tests/web/test_prologue_web.py`（3／81）、`tests/web/test_jianghu_page_web.py`（1／134）
 - 別包叫進來的：`tianxia/features/sortie/tests/test_sortie.py`（出陣不花出陣次數）、`tests/server/test_server.py`（2／385）
 - 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/military/order_actions.py`

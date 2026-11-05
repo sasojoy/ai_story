@@ -53,8 +53,8 @@
   end_season、_open_claimed；sqlite_world 的開季與換季。照檔尾那張寫死的順序表 WORLD_ORDER 一格一格叫（包與還沒成包的舊模組穿插），不問 enabled |
 | effects()（EffectHook） | 一則效果的格（core_effects：全部拆包第 32 批）：rules.apply_effect 從頭到尾一段一格，照檔尾寫死的順序表 EFFECT_ORDER 一格一格叫
   （每一個效果欄位歸哪一格寫在 EFFECT_FIELDS），不問 enabled |
-| defection()（DefectHook） | 叛投那一刻的格（core_effects）：defection.clear_progress（clear）、defection.defect（leave、stranded）、Game._defect_step 確定那一支
-  （after）四個位置，照檔尾寫死的順序表 DEFECT_ORDER 一格一格叫（各包清自己的進度），不問 enabled |
+| defection()（DefectHook） | 叛投那一刻的格（core_effects）：defection.clear_progress（clear）、defection.defect（leave、stranded）、陣營包
+  defect_actions.defect_step 確定那一支（after；第 35 批前是 Game._defect_step）四個位置，照檔尾寫死的順序表 DEFECT_ORDER 一格一格叫（各包清自己的進度），不問 enabled |
 | bus()（BusHook） | 一種事件的格（core_eventbus：全部拆包第 26 批）：ctx.publish 的七個發布點（打贏一場、出門一趟、舊探索、抵達、截殺打贏、
   決戰收場），照檔尾寫死的順序表 BUS_ORDER 一格一格叫，不問 enabled |
 
@@ -717,14 +717,16 @@ class DefectHook:
 
 
 # 叛投那一刻各包清自己的進度：位置 → 那一個位置的格，照換成掛鉤之前一行一行的先後（同 WORLD_ORDER：包與還沒成包的舊模組穿插，寫死在這裡）。
-# 包登記自己那一格（Feature.defection()），其餘由核心代叫（defection._CLEAR_CORE／_LEAVE_CORE／_STRANDED_CORE、engine._DEFECT_AFTER_CORE）。
+# 包登記自己那一格（Feature.defection()），其餘由核心代叫——現在只剩 defection._STRANDED_CORE（懸賞，主人還是舊模組 bounties；defection 第 35 批
+# 搬進陣營包、舊名是別名）；defection._CLEAR_CORE／_LEAVE_CORE、engine._DEFECT_AFTER_CORE 第 35 批拿掉（progress、leave_behind 改由陣營包登記）。
 # 改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。
 #
 # 位置      核心在哪裡問                                                      run 的簽名                       回傳
 # clear     defection.clear_progress(p) 整個身體                              (p: PlayerState) -> None         不接
 # leave     defection.defect：clear_progress 之後、改投之前                    (state) -> None                  不接
 # stranded  defection.defect 最後：「你叛出…」那一句之後                       (state, content, new_side)       接（list[str]）
-# after     Game._defect_step 確定那一支：defection.defect 之後                (ctx, side) -> list[str]         接
+# after     陣營包 defect_actions.defect_step 確定那一支：defection.defect 之後（第 35 批前是 Game._defect_step）
+#                                                                             (ctx, side) -> list[str]         接
 DEFECT_ORDER: dict[str, tuple[str, ...]] = {
     "clear": ("progress", "convoy", "hints", "opportunities"),
     "leave": ("plots",),

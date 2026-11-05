@@ -51,7 +51,7 @@
 
 ## 另外要跑的混合檔
 
-- `tests/map/test_atlas.py`（測 `atlas` 的核心那一半，圖層那幾條跟著第 50 批 `atlas` 拆兩半改 import）、`tests/map/test_weekcard.py`、`tests/map/test_four_wins_lean_anytime.py`（不是輿圖的，留）
+- `tests/map/test_atlas.py`（測 `atlas` 的核心那一半，圖層那幾條跟著第 50 批 `atlas` 拆兩半改 import）、`tests/map/test_weekcard.py`、`tianxia/features/faction/tests/test_four_wins_lean_anytime.py`（不是輿圖的：第 35 批搬進陣營包）
 - `tests/web/test_map_web.py`（網頁；留在 `tests/web`，歸總表第 61 批〔混合測試檔歸位〕一起搬，第 49 批 PM 認定第 9 條）、`tests/web/test_conquest_web.py`、`tests/core/test_prologue.py`（讀 `mapart._terrain_key`、`_obstacles`）、`tests/core/test_models.py`
 - `tests/server/test_server.py -k map`（`map_view`、`map_base_view`、`/api/travel` 的 `map`）、`tests/seal/test_seal_acts3.py`、`tests/seal/test_seal_acts_hidden.py`（用 `server.map_view`）、`tests/figures/test_week_unlock.py`（`mapdata.mostly_here`）
 - 別包的：`tianxia/features/explore/tests/test_explore_one*.py`（用 `mapdata.mostly_here`、`MOSTLY`、`VIEWER_MOSTLY`、`base_key`、`server.MAP_BASE`）、`tianxia/features/sortie/tests/test_sortie_duel_map.py`（`mapdata.state`、`Game.map_state`）
