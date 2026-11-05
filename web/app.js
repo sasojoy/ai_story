@@ -455,6 +455,7 @@
       try { history.replaceState(null, "", "/"); } catch (e) { /* 換不了網址也照常畫江湖 */ }
     }
     if (S.tab !== "jianghu" && !shown(`tab:${S.tab}`)) S.tab = "jianghu"; // 序章重來（換季）：藏起來的分頁不能還停在那一頁
+    legacyOfferOpen();
     S.prologueKey = prologueKey();
     const top = topHtml();
     $app.innerHTML = `
@@ -862,7 +863,7 @@
       <path d="M0 104 C40 94 70 112 110 102 S190 92 230 104 S310 112 350 100 L350 150 L0 150 Z" fill="#12263a"/><path d="M0 122 C50 112 90 130 140 120 S240 110 290 124 S340 126 350 120 L350 150 L0 150 Z" fill="#183450"/>
       ${sealed ? '<circle cx="280" cy="64" r="44" fill="url(#lg-orb)" class="lg-breathe"/><circle cx="280" cy="64" r="10" fill="#f2f8ff"/>' : ""}</svg>
       <span class="lg-portal-t">入識海</span>
-      <span class="lg-portal-s">${sealed ? "前世封著一縷神品意境" : g.pick ? "這一季選好了要沉下去的那一份" : "沉一份神品意境到下一季"}</span>
+      <span class="lg-portal-s">${sealed ? "前世封著一縷神品意境" : (sh.offers || []).length ? "上一季的神品意境，挑一份封進來" : "每一季開季時，可以把上一季的神品意境封一份進來"}</span>
       ${sealed ? `<span class="lg-portal-n">${esc(sealed.name)}・三道封印${left ? `還有 ${left} 道` : "都破了"}</span>` : ""}
     </button>`;
     return `<div class="lg-head"><div class="lg-title"><h2>傳承</h2><p>前塵七分入骨，今生再添一筆</p></div></div>
@@ -875,6 +876,7 @@
     const sh = g.shihai || {};
     const s = sh.sealed;
     const need = sh.need || [];
+    const offers = sh.offers || []; // 開季的候選（企劃者 2026-11-05：開季、做第一件事之前挑；一動身就收掉）
     const SEAL_CH = { time: "時", level: "境", xinde: "悟" };
     const orb = s ? `<div class="lg-orb-wrap lg-drift"><svg viewBox="0 0 240 300" aria-hidden="true">
         <defs><radialGradient id="lg-halo" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#cfe6ff" stop-opacity=".9"/><stop offset=".3" stop-color="#6aa6dc" stop-opacity=".45"/><stop offset="1" stop-color="#1b3c5e" stop-opacity="0"/></radialGradient>
@@ -883,7 +885,7 @@
         <path d="M84 140 C100 128 120 160 156 140" stroke="#fff" stroke-opacity=".6" stroke-width="2" fill="none"/></svg>
         <div class="lg-talisman"><span>敕令鎮心</span><b>封</b><span>第${lgNum(s.season)}季</span></div></div>
       <div class="lg-insight"><small>神品意境・屬${esc(s.attribute)}</small><b>${esc(s.name)}</b></div>`
-      : `<div class="lg-insight empty"><b>識海空空</b><small>上一季沒有沉下任何一份</small></div>`;
+      : `<div class="lg-insight empty"><b>識海空空</b><small>${offers.length ? "還沒封進任何一份" : "這一季沒有封著的意境"}</small></div>`;
     let unseal = "";
     if (s) {
       const seals = need.map((x) => `<div class="lg-seal${x.ok ? " broken" : ""}"><i>${SEAL_CH[x.key] || ""}</i><span>${esc(x.text)}</span><small>${x.ok ? "已破" : esc(x.now || "未破")}</small></div>`).join("");
@@ -896,20 +898,24 @@
         ${names || `<button class="lg-break" data-act="choose" data-id="legacy:open" ${ready ? "" : "disabled"}>破封　撈起意境</button>
         <p class="lg-hint">封印全破才按得下；破封要付心得，名號照這一季登記</p>`}`;
     }
-    const gods = sh.gods || [];
-    const picked = gods.find((x) => x.id === g.pick);
-    const keep = picked
-      ? `<div class="lg-keep"><div><b>${esc(picked.name)}</b><small>收季那一刻沉入識海，下一季封著帶過去</small></div><button class="lg-btn" data-act="choose" data-id="legacy:drop">不留了</button></div>`
-      : "";
-    const others = gods.filter((x) => x.id !== g.pick).map((x) => `<div class="lg-keep"><div><b>${esc(x.name)}</b><small>身上的神品意境</small></div><button class="lg-btn" data-act="choose" data-id="legacy:keep:${esc(x.id)}">${picked ? "改沉這一份" : "沉進識海"}</button></div>`).join("");
-    const none = gods.length ? "" : '<p class="lg-hint">身上還沒有神品意境；悟出一份之後，才能把它沉進識海、帶到下一季。</p>';
-    return `<div class="lg-sea">
+    const offer = offers.length ? `<div class="lg-sep"><span>前世帶來的神品</span></div>
+        <p class="lg-hint">挑一份封進識海帶進這一季。做第一件事之前都能選，一動身就來不及了。</p>
+        ${offers.map((o, i) => `<div class="lg-keep"><div><b>${esc(o.name)}</b><small>神品意境・屬${esc(o.attribute)}・第${lgNum(o.season)}季</small></div><button class="lg-btn" data-act="choose" data-id="legacy:seal:${i}">封進識海</button></div>`).join("")}
+        <button class="lg-btn lg-skip" data-act="choose" data-id="legacy:skip">這一季不帶</button>` : "";
+    return `<div class="lg-sea${s ? "" : " bare"}">
         <div class="lg-sea-title"><h2>識海</h2><p>前世所悟，沉於心底。<br>今生境到，方能撈起。</p></div>
         ${orb}
       </div>
-      <div class="lg-sea-body">${unseal}
-        <div class="lg-sep"><span>這一世要沉下去的</span></div>${keep}${others}${none}
-      </div>`;
+      <div class="lg-sea-body">${offer}${unseal}${offers.length || s ? "" : '<p class="lg-hint">每一季開季時，上一季身上的神品意境可以挑一份封進識海，解封之後就是你的。</p>'}</div>`;
+  }
+  // 開季還沒挑識海（main.legacy.shihai.offers）：進遊戲第一個畫面就打開識海頁，一次（關掉之後不再自己跳；選單裡照舊有）
+  function legacyOfferOpen() {
+    const g = S.main && S.main.legacy;
+    const n = g && g.shihai && g.shihai.offers ? g.shihai.offers.length : 0;
+    if (!n) { S.legacyOffered = false; return; }
+    if (S.legacyOffered) return;
+    S.legacyOffered = true;
+    S.legacy = "shihai";
   }
   function legacyPageHtml() {
     const g = S.main && S.main.legacy;

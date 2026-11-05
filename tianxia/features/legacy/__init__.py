@@ -12,8 +12,8 @@ from tianxia.core.features import Feature, Outcome
 
 class LegacyFeature(Feature):
     name = "legacy"
-    prefix = "legacy"  # legacy:keep:<意境 id>、legacy:drop、legacy:open、legacy:name:<i>
-    bot_always = ("legacy:drop",)  # 選了之後一直按得下去：整季機器人不按
+    prefix = "legacy"  # legacy:seal:<i>、legacy:skip、legacy:open、legacy:name:<i>
+    bot_always = ("legacy:skip",)  # 開季時一直按得下去：整季機器人不按
     player_fields = ("legacy",)  # PlayerState.legacy（LegacyBook）
     web = ("legacy.css",)  # 傳承頁、識海頁的樣子（app.js 的 legacyPageHtml 畫）
     carried = ("legacy",)  # 換季照帶（Game._reset_player_for_new_season，不看開關；結算在 on_season_start）
@@ -37,6 +37,11 @@ class LegacyFeature(Feature):
         from . import actions  # noqa: PLC0415
 
         return actions.status(ctx)
+
+    def after_action(self, ctx) -> list[str]:
+        from . import actions  # noqa: PLC0415
+
+        return actions.after_action(ctx)
 
     def on_season_start(self, ctx, old) -> None:
         from . import actions  # noqa: PLC0415

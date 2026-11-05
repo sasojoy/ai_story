@@ -1,13 +1,16 @@
 """傳承的動作（架構方向 v2 第六、七節）：換季那一刻結算正氣、邪氣、機緣；識海——這一季選一份神品意境帶到下一季，下一季解封才用得到。
 
-識海的三個選項（「此地還能做」裡；序章、休季核心本來就不問）：
-- legacy:keep:<意境 id>：把身上這一份神品意境放進識海（換季那一刻照它抄；不選就沒有，不自動帶）。
-- legacy:drop：不留了（一直按得下去，bot_always）。
-- legacy:open：解封上一季帶來的那一份：開季後 shihai_after 世界秒、shihai_level 級以上、花 shihai_xinde 心得；名字照這一季登記
+識海（企劃者 2026-11-05「識海應該要在開季正式開始遊戲前可以設定才對」：不再季中選，改成開季時挑）：
+- 換季那一刻（on_season_start）抄下上一季身上所有神品意境當候選（LegacyBook.offers）。
+- legacy:seal:<i>：把第 i 份封進識海；legacy:skip：這一季不帶（一直按得下去，bot_always）。在做第一件事之前都能選，
+  一做別的事（after_action）候選就收掉。
+- legacy:open：解封封著的那一份：開季後 shihai_after 世界秒、shihai_level 級以上、花 shihai_xinde 心得；名字照這一季登記
   （WorldState.god_names；不寫 god_firsts、不上江湖史的首創：帶過來的是傳承、不是首創）。這一季已經有人先取了同名，先取的人優先，
   改從三個候選挑一個（legacy:name:<i>）。身上已經有一份神品（或正在等著取名）的解不開：神品一人最多一份，識海那一份也算。
 """
 from __future__ import annotations
+
+import weakref
 
 from tianxia import insight_fx, insights, naming, renown
 from tianxia.core.features import Outcome
@@ -18,16 +21,19 @@ from . import rules as R
 
 TITLE = "識海"
 NAMES_OFFERED = 3
+_OWN_TURN: weakref.WeakSet = weakref.WeakSet()  # 這一下按的是識海自己的動作的 Game（包不在 Game 上掛屬性：test_feature_boundaries）
 NAME_TRIES = 12
 
 # 寫給玩家看的字（待 joy 潤）
-KEEP_LABEL = "放進識海：{name}"
-DROP_LABEL = "識海不留了（{name}）"
+SEAL_LABEL = "封進識海：{name}"
+SKIP_LABEL = "這一季識海不帶"
 OPEN_LABEL = "解封識海：{name}"
 OPEN_WAIT = "解封識海：{name}（{why}）"
 NAME_LABEL = "識海裡的那一份改名為「{name}」"
-KEPT = "你把「{name}」沉進識海。這一季收季、下一季開季時，它會跟著你，只是封著，要解封才用得上。"
-DROPPED = "你不再把「{name}」留進識海。"
+SEALED = "你把上一季的「{name}」封進識海。它跟著你，只是封著，要解封才用得上。"
+SKIPPED = "這一季識海不帶上一季的神品意境。"
+LAPSED = "你已動身，上一季的神品意境沒有封進識海，這一季不帶了。"
+OFFER_NOTE = "上一季身上的神品意境可以挑一份封進識海（{names}）：在做第一件事之前選，一動身就來不及了。"
 TAKEN = "這一季江湖上已經有一個神品意境叫「{name}」了，先取的人優先。替識海裡的那一份換個名字。"
 OPENED = "識海解封：神品意境「{name}」（屬{attribute}）回到你身上。"
 FITS = "這一份要裝在合得上屬{attribute}的武學上才生效；裝不上的話，先換一門武學。"
@@ -43,13 +49,6 @@ SHORT = {
     "legacy_xie_1": "綠林肯教", "legacy_xie_2": "狠事多一法", "legacy_xie_3": "狠角相惜",
     "legacy_luck_1": "頓悟再擲", "legacy_luck_2": "奇遇易逢", "legacy_luck_3": "奇事再擲",
 }
-
-
-def book_of(state: GameState) -> LegacyBook:
-    p = state.player
-    if p.legacy is None:
-        p.legacy = LegacyBook()
-    return p.legacy
 
 
 def _gods(state: GameState) -> list[str]:
@@ -80,13 +79,12 @@ def options(ctx) -> list[Option]:
     p = ctx.state.player
     book = p.legacy
     out: list[Option] = []
-    pick = book.pick if book is not None else None
-    for iid in _gods(ctx.state):
-        if iid != pick:
-            out.append(Option(id=f"legacy:keep:{iid}", label=KEEP_LABEL.format(name=p.own_insights[iid].name)))
-    if pick is not None and pick in p.own_insights:
-        out.append(Option(id="legacy:drop", label=DROP_LABEL.format(name=p.own_insights[pick].name)))
-    sealed = book.sealed if book is not None else None
+    if book is None:
+        return out
+    if book.offers:
+        out += [Option(id=f"legacy:seal:{i}", label=SEAL_LABEL.format(name=o.insight.name)) for i, o in enumerate(book.offers)]
+        out.append(Option(id="legacy:skip", label=SKIP_LABEL))
+    sealed = book.sealed
     if sealed is not None:
         if sealed.names:
             out += [Option(id=f"legacy:name:{i}", label=NAME_LABEL.format(name=n)) for i, n in enumerate(sealed.names)]
@@ -103,24 +101,36 @@ def title(ctx, arg: str) -> str:
 
 def act(ctx, arg: str) -> list[str]:
     verb, _, rest = arg.partition(":")
-    p = ctx.state.player
-    if verb == "keep":
-        if rest not in _gods(ctx.state):
+    _OWN_TURN.add(ctx)  # 這一下是識海自己的動作：after_action 不收候選
+    book = ctx.state.player.legacy
+    if verb == "seal":
+        if book is None or not rest.isdigit() or int(rest) >= len(book.offers):
             return [NOT_YET]
-        book_of(ctx.state).pick = rest
-        return [KEPT.format(name=p.own_insights[rest].name)]
-    if verb == "drop":
-        book = p.legacy
-        if book is None or book.pick is None:
+        book.sealed = book.offers[int(rest)]
+        book.offers = []
+        return [SEALED.format(name=book.sealed.insight.name)]
+    if verb == "skip":
+        if book is None or not book.offers:
             return [NOT_YET]
-        name = p.own_insights[book.pick].name if book.pick in p.own_insights else ""
-        book.pick = None
-        return [DROPPED.format(name=name)]
+        book.offers = []
+        return [SKIPPED]
     if verb == "open":
         return _open(ctx, None)
     if verb == "name" and rest.isdigit():
         return _open(ctx, int(rest))
     return [NOT_YET]
+
+
+def after_action(ctx) -> list[str]:
+    """本人做完一件事（Game.choose 最後）：開季的識海候選只等到第一件別的事——一動身就收掉（識海自己的動作不算）。"""
+    if ctx in _OWN_TURN:
+        _OWN_TURN.discard(ctx)
+        return []
+    book = ctx.state.player.legacy
+    if book is None or not book.offers:
+        return []
+    book.offers = []
+    return [LAPSED]
 
 
 def _taken(ctx, name: str) -> bool:
@@ -193,24 +203,21 @@ def on_season_start(ctx, old: GameState) -> None:
     if book.settled == season:
         return
     book = R.settle(book, R.gains(R.inputs(old, ctx.content), r), r, season)
-    # 識海：上一季選的那一份還在身上、還是神品才帶；不選就沒有（上一季帶來還沒解封的那一份也一樣，不自動再帶）
-    pick = book.pick
-    if pick is not None and pick in old.player.own_insights and insight_fx.is_god(old, pick):
-        book.sealed = ShihaiSeal(
-            insight=old.player.own_insights[pick].model_copy(deep=True), fx=old.player.insight_fx[pick].model_copy(deep=True),
-            season=old.player.season_number,
-        )
-    else:
-        book.sealed = None
+    # 識海：抄下上一季身上所有神品意境當候選，做第一件事之前挑一份封進來（企劃者 2026-11-05）。上一季帶來還沒解封的那一份不再帶
+    book.offers = [
+        ShihaiSeal(insight=old.player.own_insights[iid].model_copy(deep=True), fx=old.player.insight_fx[iid].model_copy(deep=True),
+                   season=old.player.season_number)
+        for iid in _gods(old)
+    ]
+    book.sealed = None
     book.pick = None
     p.legacy = book
     p.flags -= R.all_flags(r)
     p.flags |= {tier.flag for _, tier in R.reached(book, r)}
     _regard_bonus(ctx)
     lines = R.summary(book, r)
-    if book.sealed is not None:
-        why = "、".join([WHY_TIME, WHY_LEVEL.format(level=r.shihai_level), WHY_XINDE.format(xinde=r.shihai_xinde)])
-        lines.append(f"識海裡封著上一季的神品意境「{book.sealed.insight.name}」：{why}，才解得開。")
+    if book.offers:
+        lines.append(OFFER_NOTE.format(names="、".join(f"「{o.insight.name}」" for o in book.offers)))
     ctx._write("傳承", lines, tag="傳承")
 
 
@@ -227,14 +234,11 @@ def _regard_bonus(ctx) -> None:
 def status(ctx) -> dict:
     """江湖畫面的頂層 main.legacy（網頁的傳承頁、識海頁照它畫）：
     values／gains 三項的值與這一季加了多少；opened 到了的門路；tracks 每一項的三道門（at、text、open）；
-    sealed 識海封著的那一份名字；pick 這一季選進識海的意境 id；shihai 識海頁要的東西（封著的那一份、解封的三個條件、
-    身上能放進去的神品、這一季選了哪一份、改名的候選）。還沒結算過、身上也沒有神品的人不畫（{}）。"""
-    p = ctx.state.player
-    book = p.legacy
-    gods = _gods(ctx.state)
-    if book is None and not gods:
+    sealed 識海封著的那一份名字；shihai 識海頁要的東西（封著的那一份與改名的候選、解封的三個條件、
+    開季還沒挑的候選 offers）。還沒結算過的人不畫（{}）。"""
+    view = ctx.state.player.legacy
+    if view is None:
         return {}
-    view = book if book is not None else LegacyBook()
     r = R.rules(ctx.content)
     sealed = view.sealed
     return {"legacy": {
@@ -245,7 +249,6 @@ def status(ctx) -> dict:
                            "open": getattr(view, axis) >= t.at}
                           for t in r.tiers.get(axis, [])] for axis in R.AXES},
         "sealed": sealed.insight.name if sealed is not None else None,
-        "pick": view.pick,
         "shihai": {
             "sealed": None if sealed is None else {
                 "name": sealed.insight.name, "attribute": sealed.insight.attribute, "season": sealed.season,
@@ -253,7 +256,7 @@ def status(ctx) -> dict:
             },
             "need": _needs(ctx),
             "held": _held(ctx.state),
-            "gods": [{"id": iid, "name": p.own_insights[iid].name} for iid in gods],
+            "offers": [{"name": o.insight.name, "attribute": o.insight.attribute, "season": o.season} for o in view.offers],
         },
     }}
 
