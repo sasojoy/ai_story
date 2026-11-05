@@ -26,3 +26,5 @@
 - `tests/seal/test_seal_revamp_sidedoor.py`（slow 的 `test_an_ambush_report_names_the_rivals_bare_power`，借用包的測試檔 `test_stamina_plays` 的 `_player`、`_plays_on`、`_reload`、`_set`；那幾個輔助函式改名或搬動時它會壞）。
 - 世界層 `muster` 代叫（`works` 那一格）：`tests/core/test_world.py`、`tests/battle/test_fronts.py`、`tests/figures/test_timetable.py`。
 - 一起跑：`pytest tianxia/features/stamina_plays/tests tests/gear/test_four_tiers.py tests/ranger/test_raid.py tests/acts/test_conquest_flip.py tests/seal/test_seal_revamp_sidedoor.py tests/core/test_world.py tests/battle/test_fronts.py tests/figures/test_timetable.py -n 4 -m "slow or not slow"`。
+
+**行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面寫到 `annals` 過渡的處數，以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 留別名，兩半都 re-export）。

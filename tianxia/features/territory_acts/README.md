@@ -50,3 +50,5 @@
 - `tests/web/test_conquest_web.py`（網頁，第 3 階）、`tests/core/test_marks_visible.py`、`tests/core/test_world_map.py`、`tests/seal/test_seal_acts3.py`、`tests/kit/conquest_kit.py`（共用建局）
 - 別包的：`tianxia/features/battle/tests/test_siege_cancel.py`（叫 `admin_conquest_cancel`）、`tianxia/features/sortie/tests/test_sortie_report.py`（叫 `_deliver_conquest`）
 - 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/territory_acts/day_actions.py`
+
+**行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面寫到 `annals` 過渡的處數，以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 留別名，兩半都 re-export）。

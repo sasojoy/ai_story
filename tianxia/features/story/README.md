@@ -47,3 +47,5 @@
 ```
 python scripts/test_for.py --base HEAD tianxia/features/story/actions.py tests/core/test_chapters.py tests/web/test_week_card_web.py
 ```
+
+**行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面寫到 `annals` 過渡的處數，以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 留別名，兩半都 re-export）。

@@ -60,3 +60,5 @@
 - **只有 `companions` 一軌抓得到、pytest 守不到的**（第 19 批審查的突變；這一軌只比 base 對 head，合併之後不再守，改這幾處要自己驗）：`stance_annals` 的 `time`（行狀記門檻那一刻）、`persuade` 把分數夾在 0～100、`recruit_one` 的 `ctx._settle_partings()`（按招募那一下結清回江湖的記號）、`decline_letter` 寫江湖紀錄。暫停那兩支（`persuade_request`、`voice_stance` 的 `paused_at`）連這一軌也走不到。
 - **`morning_mail` 的季數檢查從伺服器那條路走不到**：看守進鎖就換了季（`server._locked` → `_reload` → `_reconcile_season`），要直接拿存檔裡原樣的那一列問（`test_the_watcher_skips_someone_still_in_last_season`、`companions` 一軌的換季那一段）。
 - **鎖外三段式的 B 段不在這一包**：`server.prepare_dialogue`、`server.say` 叫的 `companion_agent.prepare_turn` 在殼裡（模型不在鎖裡）；A 段 `dialogue_request`、C 段 `checked_prepared` 在這一包。`tests/server/test_server.py` 換掉的 `companion_agent.generate_turn`（別名是同一個模組物件，換得到）。
+
+**行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面寫到 `annals` 過渡的處數，以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 留別名，兩半都 re-export）。
