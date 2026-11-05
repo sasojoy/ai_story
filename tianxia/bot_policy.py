@@ -915,10 +915,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         if arg.startswith("recruit:"):
             return None  # 招募歷史武將（歷史武將同行第七節）：假人不招
         return ACT_SCORES.get(arg, 0.0)
-    if kind == "dadian":  # 萬一停在打點那一間店裡：只會離開
-        return 0.0
-    if kind == "donate":  # 萬一停在軍需官那一串裡（捐軍備）：只會離開；捐由 look_after 的 bot.donate_spare 直接捐，不按這一串的鈕
-        return 0.0 if arg == "back" else None
+    # 打點那一間店（dadian:）、軍需官那一串（donate:）搬進功能包：假人只會離開，分數在 features/outlets/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 43 批）
     return None
 
 

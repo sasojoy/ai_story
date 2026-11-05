@@ -886,6 +886,27 @@ GAME_DELEGATE_CALLERS.update({
 })
 
 
+# outlets（全部拆包第 43 批「銀兩出口與捐軍備」：新包 tianxia/features/outlets/；計畫 docs/superpowers/plans/2026-11-05-銀兩出口包-第1批.md 1.4、1.5）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。17 個方法搬進包，Game 留 8 個一行委派（_close_dadian、_donate_choice 等只有包裡叫的沒有委派）。核心原位碰這一包的，能接第 11 批掛鉤的都接上了
+# （兩間店的店面登記 shops：坐在店裡的選單、_shop_open、sync 與 _drop_stale_references 與 _depart 的收店；act:donate、dadian 與銀兩出口四樣的 Verb；
+# choose 的 donate:、dadian: 與 _action_title 的兩格），拿掉的在原處。接不了的：「此地還能做」裡捐軍備與打點兩顆入口排在療傷之後（順序算行為，
+# Shop.entry 回 None）；bribe:<人物> 帶後綴接不了 Verb（總表第 57 批才擴）；店面那一頁、狀態列、機器人與 server 叫的查詢。
+GAME_IMPORTS |= {"tianxia.features.outlets.donate_actions", "tianxia.features.outlets.silver_actions"}
+GAME_DELEGATES |= {
+    # 核心原位叫的：_everyday_options 的兩顆入口（_donate_option、_silver_options）、_act 的 bribe:（_silver_act）、shop_view 的 dadian_view（_bribe_targets）、
+    # status_data 的軍備存量（armament_view）；server 與假人叫的捐軍備（donate、donate_items、can_donate_here）
+    "can_donate_here", "_donate_option", "donate", "donate_items", "_silver_options", "_bribe_targets", "_silver_act", "armament_view",
+}
+_OUTLETS_ENTRY = "「此地還能做」裡捐軍備與打點兩顆入口排在療傷之後（選單的順序算行為，/api/main 的選項一顆一顆逐位元組）：Shop.entry 回 None、入口留在原位叫委派"
+GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_donate_option"): _OUTLETS_ENTRY,
+    ("_everyday_options", "_silver_options"): _OUTLETS_ENTRY,
+    ("_act", "_silver_act"): "act:bribe:<人物> 帶後綴接不了 Verb（總表第 57 批才擴），按下去留在核心 _act 叫委派",
+    ("shop_view", "_bribe_targets"): "店面那一頁（打點的帳簿）要此地打點得了的人物，shop_view 是核心的店面殼",
+    ("status_data", "armament_view"): "江湖頁的陣營軍備存量（status_data[\"armament\"]）：狀態列的資料，位置固定、沒有對應的掛鉤",
+})
+
+
 @functools.lru_cache(maxsize=None)
 def _engine_tree() -> ast.Module:
     return ast.parse((TIANXIA / "engine.py").read_text(encoding="utf-8"))  # 一萬七千行，parse 一次一秒多：大家共用這一份
