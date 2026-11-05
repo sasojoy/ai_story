@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass
 from collections import deque
 
-from tianxia import annals  # 過渡：待搬（行狀：名氣、近況、近來的事只算酒肆打聽得到的 annals.heard）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import atlas  # 過渡：待搬（大區：遠近）
 from tianxia import figures  # 過渡：待搬（大勢人物：名氣、心事）
 from tianxia import gender

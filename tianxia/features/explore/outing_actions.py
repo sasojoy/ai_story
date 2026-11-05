@@ -8,7 +8,7 @@ bot.py、bot_policy.take_turn、測試，與 engine 模組層的 `_outing_watch`
 """
 from __future__ import annotations
 
-from tianxia import annals  # 過渡：待搬（行狀：撿到稀世的東西、以弱勝強記一則）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import deeds  # 共用規則層（世界記事：同上）
 from tianxia import journal, naming, team
 from tianxia import materials  # 共用規則層（撿到的東西那一句的開頭）

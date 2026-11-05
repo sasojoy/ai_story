@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import calendar, journal, team
 from tianxia import allied  # 共用規則層（豪強依附的那一軍：補位的人算哪一邊）
-from tianxia import annals  # 過渡：待搬（行狀：約戰那一筆交手）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import atlas  # 過渡：待搬（大區：同一區才應得了戰）
 from tianxia import battlelog  # 共用規則層（戰報）
 from tianxia import conquest  # 共用規則層（地盤：區塊、進度、推、拉、集火、易手）

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
-from tianxia import annals  # 過渡：待搬（行狀記一筆破境）
+from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import might, moves, tactics, team, traits, zh  # 搬進修練包（全部拆包第 23 批）：核心與共用規則層一律絕對 import
 from tianxia.martial_arts import MAX_LEVEL
 from tianxia.models import Content
