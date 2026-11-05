@@ -6,7 +6,7 @@ from __future__ import annotations
 from tianxia import materials, team, wins
 from tianxia import orders  # 過渡：待搬（軍令 orders，總表第 40 批收共用規則層）
 from tianxia.rules import front_of
-from tianxia.state import Convoy
+from tianxia.state import Convoy, PlayerState
 
 
 def take_convoy(ctx) -> list[str]:
@@ -46,3 +46,10 @@ def convoy_arrives(ctx, loc_id: str) -> list[str]:
     wins.credit(p, c, s.world, orders.week_of(s, c), c.config.contrib_per_push)
     msgs.append(f"糧車送進了{c.locations[loc_id].name}，一粒不少。")
     return msgs + ctx._order_credit(kind="convoy", location=loc_id, front=front_of(c, loc_id), order=convoy.order)
+
+
+def defect_clear(p: PlayerState) -> None:
+    """叛投 clear 位置的 convoy 那一格（core_effects：全部拆包第 32 批；MilitaryFeature.defection() 登記；原本 defection.clear_progress 那一行）：
+    護糧軍令就是押著的糧車（Convoy.order），清的是 convoy；軍令記下的貢獻（contrib、contrib_weeks）在叛投自己的 progress 那一格清。
+    不問開關（原位本來就不看：押糧關著也照清）。"""
+    p.convoy = None  # 押著的糧車留給舊陣營，交出去的糧草不退【預設】

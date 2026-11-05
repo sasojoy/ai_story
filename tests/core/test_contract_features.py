@@ -138,7 +138,8 @@ def test_declared_seams_look_up_the_package_functions_when_called(feature):
     import dataclasses
 
     home = type(feature).__module__
-    for decl in [*feature.shops(), *feature.verbs(), *feature.world()]:  # core_world（第 25 批）：世界層的格（WorldHook）也一樣
+    # core_world（第 25 批）：世界層的格（WorldHook）也一樣；core_effects（第 32 批）：效果的格（EffectHook）、叛投的格（DefectHook）也一樣
+    for decl in [*feature.shops(), *feature.verbs(), *feature.world(), *feature.effects(), *feature.defection()]:
         for field in dataclasses.fields(decl):
             value = getattr(decl, field.name)
             if not callable(value):

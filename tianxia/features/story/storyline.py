@@ -29,7 +29,7 @@ from __future__ import annotations
 from tianxia import annals  # 過渡：待搬（行狀〔列傳〕，第 29 批）
 from tianxia import calendar  # 核心
 from tianxia.models import Content, StoryDef, StoryEnding, StoryStage
-from tianxia.rules import apply_effect, check_condition, day_seconds, fill_marks
+from tianxia.rules import EffectRun, apply_effect, check_condition, day_seconds, fill_marks
 from tianxia.state import GameState, StoryCard, StoryProgress
 from tianxia.story_base import (  # noqa: F401  底座（共用規則層）：每一個名字照舊從 storyline 拿得到
     HISTORY, JOURNAL, OPTION, WORLD, _SAID, _VARY, EndHook, FightHook, TaskCheck, END_HOOKS, FIGHT_HOOKS, REFRESH_HOOKS, TASK_LEFT, TASKS,
@@ -237,6 +237,27 @@ def fought(state: GameState, content: Content, progress: StoryProgress, won: boo
 def _add_marks(progress: StoryProgress, marks: dict[str, int]) -> None:
     for key, value in marks.items():
         progress.marks[key] = progress.marks.get(key, 0) + value
+
+
+def effect_step(r: EffectRun) -> list[str]:
+    """核心的效果格 story（core_effects：全部拆包第 32 批；StoryFeature.effects() 登記，排在 EFFECT_ORDER 最後）：一條線的一步（Effect.story）。
+    原本 rules.apply_effect 最後一段逐字搬：那一條線還沒收就把記號加上去、記下往哪裡（動作結束時 tick 才走）；紀念物收、交（線收了也給）。
+    不問開關（原位本來就不看）。"""
+    effect, p = r.effect, r.state.player
+    msgs: list[str] = []
+    step = effect.story
+    progress = p.storylines.get(step.line) if step is not None else None
+    if progress is not None and progress.ending is None:  # 一條線的一步：記號加上去、記下往哪裡，動作結束時 tick 才走
+        for key, value in step.marks.items():
+            progress.marks[key] = progress.marks.get(key, 0) + value
+        if step.go:
+            progress.go = step.go
+    if step is not None and step.keepsake and step.keepsake not in p.keepsakes:  # 紀念物：線收了也給（例：交契之後才拿到的）
+        p.keepsakes.append(step.keepsake)
+        msgs.append(f"（收進行囊：{step.keepsake}）")
+    if step is not None and step.keepsake_drop in p.keepsakes:
+        p.keepsakes.remove(step.keepsake_drop)
+    return msgs
 
 
 
