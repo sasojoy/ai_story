@@ -8,6 +8,7 @@ import pytest
 from test_prologue_web import run
 
 import server
+from tianxia.core import features as features_core
 import webharness
 from tianxia.martial_arts import MartialArt
 
@@ -118,9 +119,11 @@ def test_the_forge_line_endpoint_gives_marks_only(made, monkeypatch):
     game = made
     monkeypatch.setattr(server, "look", lambda g, view: view(g))
     monkeypatch.setattr(server, "_game", lambda request: game)
-    one = server.api_forge_line(None, {"insights": ["feng"]})
+    # 路由搬進煉製包（全部拆包第 44 批）：從包的路由器（殼照 FEATURES 掛的那一個）拿同一個函式叫
+    api_forge_line = next(r.endpoint for rt in features_core.routers(server) for r in rt.routes if r.path == "/api/forge_line")
+    one = api_forge_line(None, {"insights": ["feng"]})
     assert one["picks"]["insights"]["feng"]["short"] == "要兩份" and "ideas" not in one
-    empty = server.api_forge_line(None, {})
+    empty = api_forge_line(None, {})
     assert empty["picks"] is None and "ideas" not in empty
 
 

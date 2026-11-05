@@ -135,6 +135,7 @@ from .core.services import not_while_preparing as _not_while_preparing
 from .features.socialize import actions as socialize_actions  # 過渡：Game 上交友求見的一行委派（全部拆包第 21 批）
 from .features.socialize import menus as socialize_menus  # 過渡：同上（選單、求見名單與畫面說明）
 from .features.socialize import view as socialize_view  # 過渡：同上（見不見得到、次數、交友會做什麼）
+from .features.craft import actions as craft_actions  # 過渡：Game 上煉製頁開爐與自創的 16 個一行委派（全部拆包第 44 批）
 from .features.cultivation import actions as cultivation_actions  # 過渡：Game 上修練頁動作的 22 個一行委派（全部拆包第 23 批）
 from .features.cultivation import view as cultivation_view  # 過渡：Game 上修練頁唯讀資料的 11 個一行委派（全部拆包第 23 批）
 from .features.cultivation.actions import MELT_MANY_PROLOGUE  # noqa: F401  過渡：tests/core/test_prologue.py 從 engine 拿
@@ -779,7 +780,7 @@ class Game:
         p.art_mastery = {k: v for k, v in p.art_mastery.items() if k in owned and v > 0}
         arts_mod.migrate(s, c, self.world)  # 武學重構：舊存檔的功效轉成槽（只做一次）
         arts_mod.prune(s, c, self.world)  # 槽只留自己還有的武學與意境
-        create.prune(s, c)  # 自創的舊三步單子收掉（還沒付錢）
+        # 自創的舊三步單子收掉（還沒付錢；create.prune）：全部拆包第 44 批改接煉製包的 on_drop_stale 掛鉤（下面 features_core.on_drop_stale）
         if p.naming is not None and (p.naming not in owned or self.world.master_of(p.naming) != p.name):
             p.naming = None
         chains = {ch.id for ch in c.foreshadows.chains}  # 伏筆：內容改版後拿掉的鏈與物品
@@ -5786,60 +5787,15 @@ class Game:
     def forge_request(
         self, art_id: str | None, insight_ids: list[str], named_outside: bool = False,
     ) -> naming.NamingRequest | None:
-        """開爐首次取名或挑選的 A 段（呼叫端在行動鎖內、很快地呼叫；server.prepare_forge、bot_policy.tend_arts）：這一爐要不要模型？
-        要就回送模型的單子（naming.NamingRequest），由呼叫端在鎖外交給 naming.generate（B 段），再進鎖把結果交給
-        forge(..., proposed=...)（C 段）。單子有兩種：沒人合過、長新的 → 取名（choices 是空的）；合到舊的、候選兩個以上
-        → 從候選挑一個（choices 是候選的名字，見 fusion.forge_request）。不要的時候是 None：這個 Game 沒有 client
-        （例如伺服器假人鎖內的 Game）而且呼叫端不會自己叫模型、賽季籌備中、這一爐會被拒絕、配方已經有人登記、合到舊的而且
-        只有一個候選。只讀、不改狀態——跟 dialogue_request 同一個做法。煉製只剩意境＋意境（Joy 2026-10-21），art_id 有就是 None。
-        named_outside：呼叫端會在鎖外自己叫模型（伺服器假人程式：它的 Game 沒有 client，B 段用 bot_runner 自己的 client
-        叫 naming.generate），照樣開單。"""
-        if (self.client is None and not named_outside) or self._preparing():
-            return None
-        if art_id or prologue_rules.fuse_problem(self.state, self.content, insight_ids) is not None:
-            return None  # 會被擋下的一爐：不開取名的單子（forge 照常回那句話）
-        return fusion.forge_request(self.state, self.content, self.world, art_id, insight_ids)
+        """開爐首次取名或挑選的 A 段（煉製包 actions.forge_request；server.prepare_forge、bot_policy.tend_arts 在鎖內呼叫）：這一爐要不要模型？
+        要就回送模型的單子，不要是 None。只讀、不改狀態。"""
+        return craft_actions.forge_request(self, art_id, insight_ids, named_outside)
 
-    @_not_while_preparing
     def forge(
         self, art_id: str | None, insight_ids: list[str], proposed: tuple[str | None, str] | None = None,
     ) -> list[str]:
-        """煉製頁的開爐：只剩兩個意境（不同的＝合成、同一種的兩份＝揣摩；見 fusion.py）。武學＋武學、武學＋意境 Joy 2026-10-21
-        拿掉了：art_id 有就回 ART_IN_FURNACE（意境到修練頁裝進武學的槽）。
-        proposed 是鎖外先取好的（名字, 說明）（C 段，見 forge_request）：這裡整個重驗（A 段之後意境可能熔掉、心得或體力
-        可能花掉、配方可能被別人或同一個人的另一個請求登記了），名字再過一次過濾、登記時原子判斷重名，過不了走退路字表；
-        給了 proposed 就不會在這裡叫模型（伺服器與假人程式一律給，不需要模型時是 (None, "")）。沒給（整季機器人、腳本、測試）
-        首次出現的配方照舊在這裡叫模型，那是在行動鎖內，所以用 _quick_client 的短逾時複本，取不到名字就走退路字表。
-        江湖紀錄的標題照煉製頁寫「煉製」（FB-047），做成了才寫，被拒絕只回一句話、什麼都不收。
-        合成花心得與體力（設計 12.1）：花了的體力跟心得一起寫在這一則的數值變化上。"""
-        self.forged = False
-        self.forged_thing = None
-        self.secret_solved = None
-        if art_id or len(insight_ids) != 2:
-            return self._log([fusion.ART_IN_FURNACE if art_id else fusion.TWO_INSIGHTS])
-        refusal = prologue_rules.fuse_problem(self.state, self.content, insight_ids)  # 序章只准照劇本合成
-        if refusal is not None:
-            return self._log([refusal])
-        xinde, stamina = self._xinde(), self.state.player.stamina
-        solved = self._solved_secrets()
-        mixed = insight_fx.base_id(insight_ids[0]) != insight_fx.base_id(insight_ids[1])  # 兩種不同的意境（合成；同一種是揣摩）
-        insight, msgs = fusion.merge(self.state, self.content, self.world, self._quick_client(), *insight_ids, proposed=proposed)
-        tag = f"合併「{insight.name}」" if insight is not None else None
-        if insight is not None:
-            self.forged_thing = ("ins", insight.id)
-            if mixed:
-                self.state.player.newbie_marks.add("merge")  # 新手目標：在煉製合出一個新的意境
-        out = self._log(msgs)
-        self.forged = tag is not None
-        if tag is not None:
-            self._save_season()  # 首創秘方會記一則傳聞（fusion._secret_lines）；傳聞在共用賽季裡，要存回去
-            spent = round(stamina - self.state.player.stamina)  # 三種合成都花體力：數值變化寫在紀錄上，跟修練一樣
-            out += self._menxia_entry(  # 結果那一句（第一則訊息）也寫進這一則的敘事，拿到新東西的那一行才配得到 journal._NEW_THING（FB-073）
-                tag, xinde, guide=True, title=journal.CRAFT, extra=[f"體力 -{spent}"] if spent > 0 else None,
-                lines=out[:1],
-            )
-            self._note_solved(solved)
-        return out
+        """煉製頁的開爐（煉製包 actions.forge）：只剩兩個意境（不同的＝合成、同一種的兩份＝揣摩）。proposed 是鎖外先取好的（名字, 說明）（C 段）。"""
+        return craft_actions.forge(self, art_id, insight_ids, proposed)
 
     def _solved_secrets(self) -> list[str]:
         """這一季已經參透的秘方（開爐、裝意境之前記一份，做完跟 _note_solved 比）。"""
@@ -5860,15 +5816,15 @@ class Game:
         ))
 
     def forge_line(self, insight_ids: list[str]) -> str:
-        return skillview.forge_line(self.state, self.content, self.world, insight_ids)
+        return craft_actions.forge_line(self, insight_ids)
 
     def forge_preview(self, insight_ids: list[str]) -> dict | None:
-        """兩格都放好時煉製頁的預覽卡（skillview.forge_preview）。只讀。"""
-        return skillview.forge_preview(self.state, self.content, self.world, insight_ids)
+        """兩格都放好時煉製頁的預覽卡（煉製包 actions.forge_preview）。只讀。"""
+        return craft_actions.forge_preview(self, insight_ids)
 
     def forge_picks(self, insight_ids: list[str]) -> dict | None:
-        """爐裡只放了一個意境時，另一格放得進來的每一個合不合得了（skillview.forge_picks）。只讀。"""
-        return skillview.forge_picks(self.state, self.content, self.world, insight_ids)
+        """爐裡只放了一個意境時，另一格放得進來的每一個合不合得了（煉製包 actions.forge_picks）。只讀。"""
+        return craft_actions.forge_picks(self, insight_ids)
 
     # ── 修練（全部拆包第 23 批：本體在修練包 tianxia/features/cultivation/actions.py，server、假人、測試照舊叫 Game，這裡留一行委派）──
 
@@ -5920,74 +5876,44 @@ class Game:
 
     # ── 自創武學（五步：執器、擺式、立意、成形、立名；tianxia/create.py）──────────────────
 
-    @_not_while_preparing
     def create_begin(self, kind: str, form: str) -> list[str]:
-        """執器：內功或武學、兵器種類或行功之法。只開單、不收錢、不寫紀錄。"""
-        return self._log(create.begin(self.state, self.content, kind, form))
+        """執器：內功或武學、兵器種類或行功之法（煉製包 actions.begin）。只開單、不收錢、不寫紀錄。"""
+        return craft_actions.begin(self, kind, form)
 
-    @_not_while_preparing
     def create_pose(self, pose: dict) -> list[str]:
-        """擺式：火柴人的九個角度（create.POSE_KEYS）。只改單子。"""
-        return self._log(create.set_pose(self.state, self.content, pose))
+        """擺式：火柴人的九個角度（煉製包 actions.pose）。只改單子。"""
+        return craft_actions.pose(self, pose)
 
     def create_request(self, text: str) -> create.IntentRequest | list[str]:
-        """立意的 A 段（鎖內、只讀）：送得出去回傳要在鎖外請模型讀的單子，不行回傳那一句話。"""
-        if self._preparing():
-            return [PREPARING_REFUSAL]
-        problem = create.intent_problem(self.state, self.content, text)
-        if problem is not None:
-            return [problem]
-        return create.request(self.state, text)
+        """立意的 A 段（煉製包 actions.intent_request）：送得出去回傳要在鎖外請模型讀的單子，不行回傳那一句話。"""
+        return craft_actions.intent_request(self, text)
 
-    @_not_while_preparing
     def create_intent(self, text: str, reading: create.IntentReading | None = None) -> list[str]:
-        """立意（C 段，或直接呼叫）：reading 是鎖外讀好的；沒給（假人、整季機器人、腳本）照關鍵字表讀。
-        記下之後馬上成形（擲四格顏色），心得在這一刻收（一張單子一次，Joy 2026-10-21）：收了寫一則煉製紀錄。"""
-        xinde = self._xinde()
-        msgs = self._log(create.set_intent(self.state, self.content, self.world, text, reading))
-        if self._xinde() != xinde:
-            self._menxia_entry(msgs[0], xinde, title=journal.CRAFT, action="forge")
-        return msgs
+        """立意（C 段，或直接呼叫；煉製包 actions.intent）：reading 是鎖外讀好的；沒給（假人、整季機器人、腳本）照關鍵字表讀。"""
+        return craft_actions.intent(self, text, reading)
 
     def create_reread_request(self, text: str) -> create.IntentRequest | list[str]:
-        """重讀這句意的 A 段（鎖內、只讀）：送得出去回傳要在鎖外請模型讀的單子，不行回傳那一句話。"""
-        if self._preparing():
-            return [PREPARING_REFUSAL]
-        problem = create.reread_problem(self.state, self.content, text)
-        if problem is not None:
-            return [problem]
-        return create.request(self.state, text)
+        """重讀這句意的 A 段（煉製包 actions.reread_request）：送得出去回傳要在鎖外請模型讀的單子，不行回傳那一句話。"""
+        return craft_actions.reread_request(self, text)
 
-    @_not_while_preparing
     def create_reread(self, text: str, reading: create.IntentReading | None) -> list[str]:
-        """重悟帖：重讀這句意（C 段，create.reread）。reading 是 None（模型叫不動）什麼都不改、不扣帖。"""
-        return self._log(create.reread(self.state, self.content, self.world, text, reading))
+        """重悟帖：重讀這句意（C 段，煉製包 actions.reread）。reading 是 None（模型叫不動）什麼都不改、不扣帖。"""
+        return craft_actions.reread(self, text, reading)
 
-    @_not_while_preparing
     def create_reroll(self) -> list[str]:
-        """重悟帖：成了形直接重骰（create.reroll）。只改單子與帖數。"""
-        return self._log(create.reroll(self.state, self.content, self.world))
+        """重悟帖：成了形直接重骰（煉製包 actions.reroll）。只改單子與帖數。"""
+        return craft_actions.reroll(self)
 
-    @_not_while_preparing
     def create_back(self, to: str) -> list[str]:
-        """回頭重擺式或重立意（成形之後回頭用掉一次重來）。"""
-        return self._log(create.back(self.state, self.content, to))
+        """回頭重擺式或重立意（煉製包 actions.back）。"""
+        return craft_actions.back(self, to)
 
-    @_not_while_preparing
     def create_name(self, name: str, move: str | None = None) -> list[str]:
-        """立名：付心得、登記（create.finish，一律上品）；move 是招名（空的照模型起的）。做成了寫一則煉製紀錄，被拒絕只回一句。"""
-        xinde = self._xinde()
-        art, msgs = create.finish(self.state, self.content, self.world, name, move)
-        self.forged = art is not None
-        self.forged_thing = ("art", art.id) if art is not None else None
-        msgs = self._log(msgs)
-        if art is not None:
-            self._menxia_entry(msgs[0], xinde, guide=True, title=journal.CRAFT, action="forge", lines=msgs[1:])
-        return msgs
+        """立名：付心得、登記（煉製包 actions.name，一律上品）；move 是招名（空的照模型起的）。"""
+        return craft_actions.name(self, name, move)
 
-    @_not_while_preparing
     def create_cancel(self) -> list[str]:
-        return self._log(create.cancel(self.state))
+        return craft_actions.cancel(self)
 
     def ascend_request(self):
         """破境卡那一句的 A 段（鎖內、只讀；修練包 actions.ascend_request）：有一張還沒寫那一句的卡，回請模型寫的單子；沒有是 None。"""
@@ -6002,8 +5928,21 @@ class Game:
         return cultivation_actions.ascend_dismiss(self)
 
     def create_view(self) -> dict:
-        """煉製頁「自創」那一塊（create.view）。只讀。"""
-        return create.view(self.state, self.content, self.world)
+        """煉製頁「自創」那一塊（煉製包 actions.view）。只讀。"""
+        return craft_actions.view(self)
+
+    # craft（全部拆包第 44 批）：新手引導碰到才說的 h_create 問的三個查詢服務（只讀；原本引導包直接 import create）
+    def _create_on(self) -> bool:
+        """自創開著沒（create.on）。"""
+        return create.on(self.content)
+
+    def _create_allowed(self) -> str | None:
+        """此刻能不能自創：不能是原因，能是 None（create.allowed）。"""
+        return create.allowed(self.state, self.content)
+
+    def _create_price(self) -> int:
+        """這一門自創要付多少心得（create.price）。"""
+        return create.price(self.state, self.content)
 
     def slot_insight(self, art_id: str, insight_id: str, index: int | None = None) -> list[str]:
         """把一個意境裝進一門武學的意境槽（修練包 actions.slot_insight；修練頁與煉製頁都走這裡，籌備中被擋）。"""
