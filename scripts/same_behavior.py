@@ -13237,7 +13237,10 @@ class CraftScenario(Scenario):
         self.do(ADMIN, "next_season")
         for who in (self.H_INTENT, self.H_OLD, self.REROLLER, self.MAKER):
             self.menxia(who)
-            self.state_of(who, "換季之後")
+            self.state_of(who, "換季之後（動作前的存檔）")
+            self.main(who)  # status.create.draft 才看得到單子有沒有清掉（/api/menxia 沒有單子）
+            self.mx(who, "create_name", {"name": "霜葉掌", "move": ""})  # 單子清了應回「你還沒起意」
+            self.state_of(who, "換季之後（動作後）")
         self.line(self.MAKER, {"insights": self.base_insights()[:2]})
 
 
