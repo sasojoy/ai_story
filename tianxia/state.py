@@ -827,6 +827,7 @@ class PlayerState(BaseModel):
     # ── 五項屬性（屬性與跨季架構 v2 第三節；attrset，新的季才用）──
     growth_preset: str | None = None  # 這一季挑的成長配比（Config.attributes.v2.presets 的 key，或 "custom"）；None 照預設那一套
     growth_custom: dict[str, int] = Field(default_factory=dict)  # 自己配的每級成長（growth_preset 是 "custom" 時）
+    attr_event: dict[str, int] = Field(default_factory=dict)  # 這一季從事件歷練得來的（新的鍵 → 點數，attrset.grant_event；合計最多 Config.attributes.v2.event_cap）
     attr_alloc: dict[str, int] = Field(default_factory=dict)  # 送點自己配到哪幾項（鍵 → 點數）
     art_quality: dict[str, str] = Field(default_factory=dict)  # 功法 id → 自己那一份的品質（沒記＝全服登記的品質）
     art_mastery: dict[str, int] = Field(default_factory=dict)  # 功法 id → 修練往下一品失敗了幾次（熟練度）
@@ -1143,7 +1144,7 @@ QUIET_DEFAULTS = (
     "storylines", "story_open", "story_cards",  # 一條線（特殊事件）
     "epiphanies", "epiphany_dry", "god_naming",  # 特殊頓悟
     "keepsakes", "lasting",  # 長篇奇事
-    "growth_preset", "growth_custom", "attr_alloc",  # 五項屬性（屬性與跨季架構 v2）
+    "growth_preset", "growth_custom", "attr_alloc", "attr_event",  # 五項屬性（屬性與跨季架構 v2）
     "legacy",  # 傳承（features/legacy）
 )
 

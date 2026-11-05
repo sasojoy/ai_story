@@ -32,7 +32,7 @@ OUTING_LABEL = "出門一趟・遭遇"  # 減法季探索一顆（批 2）遭遇
 DODGE_NOTE = "身法一閃，躲過了這一敗。"  # 落敗被閃成僵持時，戰報與場景的戰鬥卡片多這一句（人物資質設計 14.4）
 DAY = 86400
 HOUR = 3600
-_NUMERIC_CHANGE = re.compile(r"^\S+ [+-]\d+(\.\d+)?$")  # 例如「名望 +3」「銀兩 -10」
+_NUMERIC_CHANGE = re.compile(r"^\S+ [+-]\d+(\.\d+)?(（[^）]*）)?$")  # 例如「名望 +3」「銀兩 -10」「武力 +2（歷練 14／60）」（附註同 journal._CHANGE）
 
 
 def split_changes(msgs: list[str], *, for_record: bool = False) -> tuple[list[str], list[str]]:

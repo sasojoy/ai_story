@@ -21,9 +21,10 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const lgNum = (n) => String(n);
 const S = input.S;
 eval(cut("\n  // 成長配比（五項屬性的季才有 s.growth）", "\n  function statUsesHtml") + cut("\n  function jhHintsHtml", "\n  function pageJianghu")
-  + "\nglobalThis.__P = { prepHtml, growthHtml, jhHintsHtml };");
+  + "\nglobalThis.__P = { prepHtml, growthHtml, jhHintsHtml, lilianHtml };");
 const m = S.main;
-finish(input.what === "prep" ? __P.prepHtml(m.prep) : input.what === "growth" ? __P.growthHtml(m.status.growth) : __P.jhHintsHtml(m));
+finish(input.what === "prep" ? __P.prepHtml(m.prep) : input.what === "growth" ? __P.growthHtml(m.status.growth)
+  : input.what === "lilian" ? __P.lilianHtml(m.status.lilian) : __P.jhHintsHtml(m));
 """
 
 KEYS = [["str", "武力"], ["lead", "統御"], ["int", "悟性"], ["spd", "身法"], ["cha", "魅力"]]
@@ -32,7 +33,7 @@ PRESETS = [("warrior", "武將", [4, 3, 1, 1, 1]), ("ranger", "遊俠", [2, 1, 1
 
 def _growth(chosen=None):
     return {
-        "chosen": chosen, "keys": KEYS, "per_level": 10, "custom_min": 1, "custom_max": 4,
+        "chosen": chosen, "keys": KEYS, "per_level": 10, "custom_min": 1, "custom_max": 4, "event_cap": 60,
         "presets": [{"key": k, "name": n, "split": [[name, v] for (_, name), v in zip(KEYS, split)]} for k, n, split in PRESETS],
         "now": [[name, 2] for _, name in KEYS],
     }
@@ -66,6 +67,7 @@ def test_the_growth_step_lists_the_presets_and_waits_for_a_pick():
     assert 'data-act="prep-growth"' in picked and "照「遊俠」長" in text(picked)
     custom = run(main, "prep", prepPick="custom", growthDraft={"str": 2, "lead": 2, "int": 2, "spd": 2, "cha": 2})
     assert 'data-act="growth-save"' in custom and 'data-act="prep-growth"' not in custom
+    assert "江湖歷練每一季最多長 60 點，滿了化為心得" in text(html)
     alone = run({"prep": {"step": "growth", "steps": ["growth"]}, "status": {"growth": _growth()}}, "prep")
     assert "prep-steps" not in alone  # 只有一步不畫步驟
 
@@ -99,3 +101,10 @@ def test_the_hint_bar_shows_points_and_the_shihai():
 
 def test_the_old_season_draws_no_hint():
     assert run({"status": {"stat_points": 3, "attrs": []}}, "hints") == ""
+
+
+def test_the_lilian_line_counts_up_to_the_cap():
+    half = run({"status": {"lilian": {"have": 14, "cap": 60}}}, "lilian")
+    assert "歷練 14／60" in text(half) and "--w:23%" in half and "full" not in half
+    full = run({"status": {"lilian": {"have": 60, "cap": 60}}}, "lilian")
+    assert "已到火候" in text(full) and "lilian full" in full and "刷" not in text(full)
