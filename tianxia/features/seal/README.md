@@ -45,10 +45,13 @@
 - `GAME_DIRECT` 第 28 批全收（13 筆都拿掉；剩下 3 筆不是玉璽的）。
 - 選項前綴 `seal:` 在 engine 的 `options`（`_seal_options`）、`choose`（`_seal_act`）、`_shop_open`（`startswith(("battle:", "seal:"))` 核心的字面比對）原位；`bot_policy.score` 的那一段第 28 批搬進 `bots.py`。
 
+**第 51 批「玉璽三」搬進來的**：`tianxia/seal_acts.py` 的包這一半進 `acts.py`（目標、灰掉的原因、碎片卡、字句、次數與時間，約 520 行，逐字）；別包讀的 16 個璽效查詢留在共用規則層 `tianxia/seal_acts.py`（登記進 `registry.SHARED`，不留搬走的名字的別名）。`Game` 沒動，選項前綴、路由、`PlayerState` 欄位都沒動。
+另外要跑的（共用層說明字串同一串）：`tests/seal/` 整夾、`tianxia/features/seal/tests/`、`tests/figures/test_plans.py`、`tests/web/test_seal_acts_web.py`、`tests/acts/` 的 `test_conquest_flip`、`test_conquest_rules`、`test_conquest_siege`。
+
 ## 過渡（手冊 3.11）
 
-- 包 → 舊模組：`card.py`、`admin.py` → `seal_acts`（獨門行動的規則；第 51 批璽效查詢進共用規則層、其餘再看）。`seal.py` 函式裡讀的 `atlas`（藏碎片要認大區）開發時是舊模組，第 50 批收進了共用規則層：合進 `split/trunk` 之後不算過渡，那一行的註改成「共用規則層」。第 27 批的 `actions.py` → `seal_duel` 第 28 批收了。
-- 舊模組 → 包（經舊名 `tianxia.seal`）：engine（`seal_rules`）、`bot_runner`（叫醒持璽的假人）、`howto`、`skillview`、`seal_duel`（現在也是別名，指到 `duel_rules.py`）、`seal_acts`（函式裡）、殼 `server.py`、`run_bots.py`（`ensure_salt`）、`scripts/measure_seal.py`（也直接換包的 `actions.settle`）、`measure_tactics.py`、`same_behavior.py`。`SHARED_PENDING` 的四條 `(conquest|figures|figure_life|plans, seal_acts)`：`seal_acts` 函式裡 import `seal`，連帶載入玉璽包。
+- 包 → 舊模組：第 51 批之後 `card.py`、`admin.py` 讀的 `seal_acts`（`on`、`EPS`）是共用規則層，不算過渡；包裡沒有別的過渡 import。`seal.py` 函式裡讀的 `atlas`（藏碎片要認大區）開發時是舊模組，第 50 批收進了共用規則層：合進 `split/trunk` 之後不算過渡，那一行的註改成「共用規則層」。第 27 批的 `actions.py` → `seal_duel` 第 28 批收了。
+- 舊模組 → 包（經舊名 `tianxia.seal`）：engine（`seal_rules`）、`bot_runner`（叫醒持璽的假人）、`howto`、`skillview`、`seal_duel`（現在也是別名，指到 `duel_rules.py`）、殼 `server.py`、`run_bots.py`（`ensure_salt`）、`scripts/measure_seal.py`（也直接換包的 `actions.settle`）、`measure_tactics.py`、`same_behavior.py`。`SHARED_PENDING` 的四條 `(conquest|figures|figure_life|plans, seal_acts)`：`seal_acts` 函式裡 import `seal`，連帶載入玉璽包。
 
 ## 內容歸屬
 

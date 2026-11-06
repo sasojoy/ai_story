@@ -11,7 +11,7 @@
 第 28 批「玉璽二」再搬進來（計畫 docs/superpowers/plans/2026-11-06-玉璽包-第2批.md）：
 - duel_rules.py：奪璽單挑的純規則（原 tianxia/seal_duel.py 整份，舊名留成別名）
 - duel_actions.py：奪璽單挑的玩法（挑挑戰者與開單挑、推進、三招、放手一搏、奪璽卡、背景輪詢）；Game 留一行委派
-- card.py：碎片卡與七種獨門行動（讀舊模組 seal_acts，第 51 批才拆）；admin.py 加強制璽動、指定、開單挑、定結果、取消、管理頁一組
+- card.py：碎片卡與七種獨門行動（規則讀同包 acts.py；第 51 批「玉璽三」：acts.py 是原 seal_acts 的包這一半，璽效查詢那一半留在共用規則層 tianxia/seal_acts.py）；admin.py 加強制璽動、指定、開單挑、定結果、取消、管理頁一組
 - bots.py：假人看到 seal: 一律不按
 
 選項前綴 seal:（bot_pick 問 bots.score；menu、choose 不接）、沒有路由（管理者的 seal_* 與 seal_text、seal_use 留在殼、叫委派）。
