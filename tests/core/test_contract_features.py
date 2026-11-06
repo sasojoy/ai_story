@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import functools
 import importlib.util
 import random
 import re
@@ -72,6 +73,13 @@ def _own_ids(feature, game) -> list[str]:
         ids += [o.id for o in (feature.prep(game) or [])]  # 開季準備卡那一步（prep；None 是這一包沒有要在卡上給的）
         ids += [o.id for shop in feature.shops() if shop.inside(game) for o in shop.menu(game)]
     return ids
+
+
+@functools.lru_cache(maxsize=None)
+def _ids_on_a_fresh_game(name: str) -> tuple[str, ...]:
+    """這一包在一個新角色上給的 id；test_choose_takes_only_its_own_ids 的 others 每一列要 35 包，一個行程算一次就好（第二輪第 75 批；三個契約檔 -n 4 量到 55 秒 → 31 秒）。
+    每次現算只有 feast 不一樣（feast:join:<編號> 的編號全服累計，算一次多一個），都是 feast: 前綴，對 choose 吃不吃沒有差。"""
+    return tuple(_own_ids(next(f for f in FEATURES if f.name == name), _game()))
 
 
 def _starts(option_id: str, feature) -> bool:
@@ -219,7 +227,7 @@ def test_options_carry_the_package_prefix(feature):
 def test_choose_takes_only_its_own_ids(feature):
     game = _game()
     own = _own_ids(feature, game)
-    others = [i for f in FEATURES if f is not feature for i in _own_ids(f, _game())]
+    others = [i for f in FEATURES if f is not feature for i in _ids_on_a_fresh_game(f.name)]
     for option_id in CORE_IDS + others:
         kind, _, arg = option_id.partition(":")
         assert feature.choose(game, kind, arg) is None, option_id

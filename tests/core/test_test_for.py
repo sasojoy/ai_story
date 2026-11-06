@@ -182,10 +182,14 @@ def test_a_low_module_with_too_many_dependents_runs_core_and_smoke_instead(monke
     # 守的是「超過就只挑直接 import 的」這個做法，不是 120 這個數：把上限壓到 100，讓它不再貼著邊界
     # 玉璽第 51 批：seal_acts 收進共用規則層（照上面那一條挑），例子換成還是真正的舊模組 fusion（依賴它的模組 1 個、import 它的測試檔量到 33 個；
     # 其餘沒搬的檔 sensing、seal、smithing 是只有幾行的別名，不算）：沒有一個舊模組超過 100，所以上限壓到 30（直接 import 它的測試檔 27 個，在上限之內）；scripts/test_for.py 的 IMPORT_CAP 不動
+    # 第二輪第 75 批：test_for 看穿 tests/kit 之後，fusion 直接的 42 個檔（server_kit 帶進來 15 個）、往上找到的 34 個：上限 30 仍是「太多」（core、smoke 照舊真），
+    # 「直接的比上限少」不成立了。這一條守的是「太多就不併往上找到的」，所以換成那一群一個都沒併；scripts/test_for.py 的 IMPORT_CAP 不動
     monkeypatch.setattr(test_for, "IMPORT_CAP", 30)
     picked = test_for.pick(["tianxia/fusion.py"])
     assert picked.core and picked.smoke
-    assert len(picked.files) < test_for.IMPORT_CAP
+    direct = {t for t in test_for.all_tests() if "fusion" in test_for.reached(t) or t.stem == "test_fusion" or t.stem.startswith("test_fusion_")}
+    via = {t for t in test_for.all_tests() if test_for.reached(t) & test_for.dependents("fusion")} - direct
+    assert via and not picked.files & via
     assert any("太多" in w for w in picked.why)
 
 
@@ -1118,3 +1122,159 @@ def test_the_core_tests_stay_what_the_pm_defined_when_step_and_weekcard_join_the
         picked = test_for.pick([f"tianxia/{module}.py"])
         assert picked.core and picked.smoke
         assert {p.name for p in picked.files} == own, module
+
+
+# 第二輪第 75 批：契約變快（逐包的核心契約只跑 [<包>]）、看穿 tests/kit、核心服務檔的新規則、第 72 批蓋掉 named 的修正
+def _package_names() -> list[str]:
+    return sorted(p.name for p in test_for.FEATURES.iterdir() if (p / "__init__.py").is_file())
+
+
+def _deselected(picked, tmp=None) -> list[str]:
+    return [a for cmd in test_for.pytest_commands(picked, False, [], tmp) for a in cmd if a.startswith("--deselect=")]
+
+
+@pytest.mark.parametrize("changed, hunks_of, package", [
+    ("tianxia/features/tavern/rules.py", None, "tavern"),
+    ("web/tavern.js", None, "tavern"),
+    ("tianxia/features/bout/tests/bout_stage.py", None, "bout"),
+    ("tianxia/features/tavern/game_api.py", _added("tianxia/features/tavern/game_api.py", GAME_API, 2), "tavern"),
+    ("tianxia/engine.py", _added("tianxia/engine.py", DELEGATE_ENGINE, 5), "tavern"),
+])
+def test_a_package_change_runs_only_its_own_cells_of_the_core_contract(changed, hunks_of, package):
+    """改一包：test_contract_features 逐包參數化的那幾條只留 [<包>]，別的包那幾格 --deselect（6 條 ×〔包數 − 1〕）；核心契約的檔照舊挑到。"""
+    picked = test_for.pick([changed], base="HEAD", hunks_of=hunks_of)
+    assert picked.contract_only == {package} and not picked.core
+    assert {p.name for p in test_for.contract_tests()} <= {p.name for p in picked.files}
+    args = _deselected(picked)
+    assert any(a.endswith("[hire]") for a in args) and not any(a.endswith(f"[{package}]") for a in args)
+    assert len(args) == len(test_for.per_package_contract_tests(test_for.CORE_TESTS / test_for.PER_PACKAGE_CONTRACT)) * (len(_package_names()) - 1)
+    assert all(a.startswith("--deselect=tests/core/test_contract_features.py::") for a in args)
+    assert any("核心契約逐包那幾條只跑" in line and f"[{package}]" in line for line in test_for.describe(picked))
+
+
+@pytest.mark.parametrize("files, hunks_of", [
+    (["tianxia/features/tavern/rules.py", "tianxia/core/features.py"], None),  # 動到核心：全跑
+    (["tianxia/features/tavern/rules.py", "tests/core/test_contract_features.py"], None),  # 改到契約檔本身：全跑
+    (["tianxia/engine.py"], _added("tianxia/engine.py", DELEGATE_ENGINE, 13)),  # engine 上不是委派的方法：不知道算哪一包，全跑
+])
+def test_the_core_contract_runs_every_package_when_the_change_is_not_just_a_package(files, hunks_of):
+    picked = test_for.pick(files, base="HEAD", hunks_of=hunks_of)
+    assert {"test_contract_features.py"} <= {p.name for p in picked.files} or picked.core
+    assert _deselected(picked) == []
+    assert not any("核心契約逐包那幾條只跑" in line for line in test_for.describe(picked))
+
+
+def test_the_core_contract_is_not_narrowed_for_everything_or_a_goal_without_it():
+    assert test_for._contract_deselect(test_for.Pick(everything=True, contract_only={"tavern"}), ["tests/core/test_contract_features.py"]) == []
+    assert test_for._contract_deselect(test_for.Pick(contract_only={"tavern"}), ["tests/core/test_contract_core.py"]) == []
+    assert test_for._contract_deselect(test_for.Pick(), ["tests/core/test_contract_features.py"]) == []
+
+
+def test_the_per_package_contract_tests_are_read_from_the_syntax_tree():
+    """照語法樹讀 @pytest.mark.parametrize("feature", …)：新加一條逐包的，不用改 test_for。"""
+    assert set(test_for.per_package_contract_tests(test_for.CORE_TESTS / test_for.PER_PACKAGE_CONTRACT)) == {
+        "test_declared_seams_look_up_the_package_functions_when_called", "test_options_carry_the_package_prefix",
+        "test_choose_takes_only_its_own_ids", "test_a_closed_package_gives_nothing",
+        "test_a_closed_package_gives_nothing_on_the_prep_card", "test_a_new_season_keeps_only_what_the_package_carries"}
+
+
+def test_a_long_deselect_list_goes_into_the_args_file_with_the_goal(tmp_path):
+    """一包 6 格 × 別的包，約兩萬字：跟 goal 一起算長度，太長寫進 @檔（Windows 一行有上限）。"""
+    picked = test_for.pick(["tianxia/features/tavern/rules.py"], base="HEAD")
+    [cmd] = test_for.pytest_commands(picked, False, [], tmp_path)
+    assert not any(a.startswith("--deselect=") for a in cmd)
+    listed = next(a for a in cmd if a.startswith("@"))[1:]
+    text = Path(listed).read_text(encoding="utf-8")
+    assert "tests/core/test_contract_features.py\n" in text and "::test_choose_takes_only_its_own_ids[hire]" in text
+    assert "::test_choose_takes_only_its_own_ids[tavern]" not in text
+
+
+def test_a_change_to_a_kit_or_a_module_reaches_the_tests_that_use_it_through_a_kit():
+    """test_battle_page_web → jianghu_kit → webharness；*_shell → server_kit → server_push（C 波審查量到的三種）。"""
+    harness = _names(["tests/kit/webharness.py"])
+    assert {"test_battle_page_web.py", "test_guide_page_web.py"} <= harness
+    assert "test_travel_shell.py" in _names(["server_push.py"])
+
+
+def test_a_js_file_reaches_the_tests_through_the_kit_text_but_not_through_the_kit_that_lists_every_js():
+    """web/app.js 掉過 cultivation、guide、socialize 的 *_page_web（jianghu_kit 寫到它的檔名）；webharness 的 APP_FILES 寫滿每一支 js、
+    server_kit 只在說明字寫到 app.js：這兩個不算（KIT_TEXT_BLIND），不然改哪一支都多 90 幾個檔、app.js 多 15 個 *_shell。"""
+    app = _names(["web/app.js"])
+    assert {"test_cultivation_page_web.py", "test_guide_page_web.py", "test_socialize_page_web.py"} <= app
+    assert "test_travel_shell.py" not in app
+    assert "test_battle_page_web.py" not in _names(["web/hire.js"], base="HEAD")
+
+
+def test_seeing_through_a_kit_goes_down_one_layer_only():
+    """test_sortie_duel → duel_kit → conquest_kit 算得到；conquest_kit 才 import 的 conquest_day 算不到。"""
+    test = test_for.FEATURES / "sortie" / "tests" / "test_sortie_duel.py"
+    assert "conquest_kit" in test_for.reached(test) and "conquest_kit" not in test_for.imported(test)
+    assert "conquest_day" in test_for.imported(test_for.TESTS / "kit" / "conquest_kit.py")
+    assert "conquest_day" not in test_for.reached(test)
+
+
+# 假的核心服務檔（第 79～81、91 批才開真檔，開檔的那一批再補一條用真檔的）：行號 _shaped 1～2、push_trend 5～6、LIMIT 9
+FAKE_PUSHING = "def _shaped(a):\n    return a\n\n\ndef push_trend(self, x):\n    return _shaped(x)\n\n\nLIMIT = 3\n"
+PUSHING = "tianxia/core/pushing.py"
+
+
+def test_the_core_service_files_are_the_six_the_plan_named():
+    assert set(test_for.CORE_SERVICES) == {"combat", "pushing", "pills", "status_view", "page_view", "scene_view"}
+
+
+@pytest.mark.parametrize("line", [6, 2, 9], ids=["the_function", "a_helper_only_it_calls", "a_constant"])
+def test_a_core_service_hunk_picks_its_group_not_core_and_smoke(line):
+    """服務檔裝的是單一功能本體：hunk 落在函式、類別、常數上 → 名字的功能群＋這個檔的底＋邊界測試，不跑核心測試、煙霧、契約兩檔。"""
+    picked = test_for.pick([PUSHING], hunks_of=_added(PUSHING, FAKE_PUSHING, line))
+    names = {p.name for p in picked.files}
+    assert {"test_push.py", "test_feature_boundaries.py"} <= names
+    assert not picked.core and not picked.smoke
+    assert not names & {"test_contract_core.py", "test_contract_features.py"}
+    assert len(names) <= test_for.IMPORT_CAP
+
+
+def test_a_core_service_helper_counts_the_function_that_calls_it():
+    """_shaped 自己的名字認不出功能（沒有測試檔叫 shaped）：連模組裡用到它的 push_trend，跟改 push_trend 同一群。"""
+    assert test_for.service_word("_shaped") == ""
+    helper = test_for.pick([PUSHING], hunks_of=_added(PUSHING, FAKE_PUSHING, 2))
+    caller = test_for.pick([PUSHING], hunks_of=_added(PUSHING, FAKE_PUSHING, 6))
+    assert helper.files == caller.files
+
+
+def test_a_core_service_hunk_names_its_group_by_the_first_word_a_test_file_has():
+    assert test_for.service_word("push_trend") == "push"
+    assert test_for.service_word("take_stamina_pill") == "stamina"  # take 在 SERVICE_STOP
+    assert test_for.service_word("pills_left_today") == "pill"  # 複數試單數
+    assert test_for.word_tests("push") and all("push" in t.stem.split("_")[1:] for t in test_for.word_tests("push"))
+
+
+def test_a_core_service_leaves_the_tests_that_only_write_the_name_to_the_gate_and_says_so():
+    """test_opportunities 442 條只拿 push_trend 當準備動作：不併，why 寫幾個檔，要當場驗直接給檔名。"""
+    picked = test_for.pick([PUSHING], hunks_of=_added(PUSHING, FAKE_PUSHING, 6))
+    assert "test_opportunities.py" in _writes("push_trend") and "test_opportunities.py" not in {p.name for p in picked.files}
+    assert any("不挑" in w and "push_trend" in w for w in picked.why)
+
+
+@pytest.mark.parametrize("hunks_of", [
+    _added(PUSHING, "import x\n" + FAKE_PUSHING, 1),  # 函式以外（import、說明、模組層）
+    {PUSHING: ([], FAKE_PUSHING, FAKE_PUSHING)},  # 指名了卻沒有差
+], ids=["outside_any_function", "no_difference"])
+def test_a_core_service_change_outside_a_function_falls_back_to_core_and_smoke(hunks_of):
+    picked = test_for.pick([PUSHING], hunks_of=hunks_of)
+    assert picked.core and picked.smoke
+
+
+def test_a_core_service_pick_with_too_many_files_falls_back_to_core_and_smoke(monkeypatch):
+    monkeypatch.setattr(test_for, "IMPORT_CAP", 2)
+    picked = test_for.pick([PUSHING], hunks_of=_added(PUSHING, FAKE_PUSHING, 6))
+    assert picked.core and picked.smoke and any("太多" in w for w in picked.why)
+
+
+def test_a_game_api_change_listed_first_keeps_the_content_and_web_routes():
+    """第 72 批留的：pick 裡 named（檔名 → 路徑）被 game_api 那一條蓋掉，game_api.py 排在內容檔、web/ 前面時 test_content、test_real_content、
+    test_content_packs、test_server 都掉（排後面才挑得到）。"""
+    rel = "tianxia/features/tavern/game_api.py"
+    hunks_of = _added(rel, GAME_API, 2)
+    names = {p.name for p in test_for.pick([rel, "content/events.json"], base="HEAD", hunks_of=hunks_of).files}
+    assert {"test_content.py", "test_real_content.py", "test_content_packs.py"} <= names
+    assert "test_server.py" in {p.name for p in test_for.pick([rel, "web/app.js"], base="HEAD", hunks_of=hunks_of).files}
