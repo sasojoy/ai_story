@@ -1127,5 +1127,31 @@
       "luoyang_palace"
     ],
     "regard": "喜狠"
+  },
+  {
+    "id": "yesanniang",
+    "name": "葉三娘",
+    "kind": "locked",
+    "talk_at": "mengjin_ford",
+    "image": "figures/yesanniang",
+    "background": "孟津渡口撐船人家的媳婦，三十出頭。男人去年秋天在官府的冊子上「淹死」了，家裡那條叫阿稻的船被官倉扣去抵了稅。",
+    "situation": "在渡口支一間酒棚，拿一塊船板當桌子，收官軍的竹籌、賣淡得像河水的酒。渡口屯了兵，糧船一船一船往北運，誰哪一天過了河，她心裡都有一本帳。",
+    "personality": "爽利、精明，句句帶帳，不叫人「客官」而叫「這位」。誰的消息都賣，賣之前先問你出得起多少；話說一半留一半，難得笑，笑起來比不笑年輕好幾歲。嘴硬心軟，最恨人欠帳，也最記得誰沒欠過她。",
+    "deep_interaction": true,
+    "audience_fame": 0,
+    "brush_off": [
+      "三娘頭也不抬：「這位，打烊了。」",
+      "「先把酒錢付了，再說別的。」三娘撥了一顆算盤珠。",
+      "船板後面沒有人，只有一盞油燈。"
+    ],
+    "starting_wugong": "dukou_duanda",
+    "starting_neigong": "jichu_tuna",
+    "stats": {
+      "str": 4,
+      "agi": 6,
+      "con": 5,
+      "wis": 7
+    },
+    "desc": "孟津渡口酒棚的老闆娘，拿一塊船板當桌子，在上面打算盤。"
   }
 ]

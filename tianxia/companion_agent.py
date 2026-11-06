@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, create_model, field_validator
 
 from . import figure_life, gender, parley, renown, seal_acts, stances, zh
 from .features.persona import rules as persona  # 人物性子（功能包；Joy 2026-11-06「可以」）
+from .features.heroines import rules as heroines  # 女子與隱線（功能包；Joy 2026-11-06「開工」）
 from .models import CharacterDef, Content
 from .ollama_client import OllamaClient
 from .state import GameState, TalkMemo
@@ -256,7 +257,7 @@ def build_system_prompt(
     era_str = f"【時代】{content.scenario.era_note}\n" if content.scenario.era_note else ""
 
     return (
-        f"你是文字角色扮演遊戲的敘事引擎，正在扮演漢末真實歷史人物「{character.name}」，"
+        f"你是文字角色扮演遊戲的敘事引擎，正在扮演{heroines.role(content, companion_id)}「{character.name}」，"
         f"跟玩家進行一段交友對話。\n"
         f"【{character.name}的出身】{character.background}\n"
         f"【{character.name}此時的處境】{character.situation}\n"
@@ -267,6 +268,7 @@ def build_system_prompt(
         f"{parley.prompt_lines(state, content, companion_id)}"  # NPC 智能 2.1：守約紀錄（答應幾件、做到幾件、食言、聽說的）
         f"{stances.prompt_lines(state, content, companion_id)}"  # 人物心意（減法季批 6）：他在拿的主意與要模型多填的 stance；關著是空的
         f"{persona.prompt_lines(state, content, companion_id)}"  # 人物性子（features/persona）：他如今的性子與要模型多填的 persona；關著是空的
+        f"{heroines.prompt_lines(state, content, companion_id)}"  # 女子（features/heroines）：故事之後、隱線走到哪、分寸；不是女子是空的
         f"{era_str}"
         f"【此刻】{content.scenario.name}・{act_title}，第 {day} 天。\n"
         f"{past_str}"
@@ -433,6 +435,10 @@ def _apply_turn(
     content 給了才算名聲的冷淡（5.2：敬俠的人遇上寇，加的情誼打折，renown.cold），那一輪多一句原因。
     hear：這一輪是玩家說的話（選選項、自己說；開口那一輪不是）——人物心意開著時模型歸的 stance 記一筆（stances.hear）、多一句。"""
     p = state.player
+    if content is not None:  # 女子（features/heroines）：寫回來的、玩家打的過一次過濾，擋到的換成固定的一句（不是女子原樣）
+        narrative, options, player_action, blocked = heroines.clean(state, content, companion_id, turn.narrative, list(turn.options), player_action)
+        if blocked:
+            turn = turn.model_copy(update={"narrative": narrative, "options": options})
     delta = resolve_tag_delta(tag, character)
     cooled = renown.cold(state, content, companion_id, delta) if content is not None else delta
     chill = cooled != delta

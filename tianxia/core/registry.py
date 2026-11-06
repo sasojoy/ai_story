@@ -24,6 +24,7 @@ from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 
 from ..features import legacy  # 傳承
 from ..features import hire  # 招募同伴
 from ..features import persona  # 人物性子
+from ..features import heroines  # 女子與隱線
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -45,6 +46,7 @@ FEATURES: list[Feature] = [
     legacy.FEATURE,
     hire.FEATURE,
     persona.FEATURE,
+    heroines.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 

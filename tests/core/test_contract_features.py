@@ -261,6 +261,9 @@ def _dirty(annotation, default):
         return (default or "") + "契約"
     if optional and len(args) == 1 and isinstance(args[0], type) and issubclass(args[0], BaseModel):
         return args[0].model_construct()  # 一份全是預設值的（不驗必填）：跟預設的 None 不一樣就夠
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):  # 一定有的子模型（女子與隱線的 heroines）：頭一格擺髒
+        name, field = next(iter(annotation.model_fields.items()))
+        return default.model_copy(update={name: _dirty(field.annotation, field.get_default(call_default_factory=True))})
     if origin is list:
         return [7]
     if origin is set:

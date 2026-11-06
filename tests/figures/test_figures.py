@@ -293,7 +293,7 @@ def test_who_stands_where(on):
     on.config.season_one = False  # 規則沒開：沒有時刻表的季也有挑戰本人（挑戰每季都有設計 3.3），人物照存檔（季中種好的那一份）站
     assert figures.placed_characters(s, on) == placed
     on.config.figure_challenge_every_season = False  # 緊急開關關著：大家照 talk_at
-    assert figures.placed_characters(s, on) == {}
+    assert figures.placed_characters(s, on) == dict.fromkeys(on.heroines)  # 女子沒走完她的奇事照舊不在
 
 
 # ── Task 3：每曆時的推動 ─────────────────────────────────

@@ -3463,6 +3463,33 @@ class HireRules(_Strict):
     ])
 
 
+class HeroineScene(_Strict):
+    """隱線的一段（功能包 features/heroines；設計稿「三位女子出場」第三節，Joy 2026-11-06「那先甲就好」「開工」）：玩家開了成人內容、
+    情誼到 affinity、上一段應下了（step 是第幾段：3 動情、4 相許），「此地還能做」多一顆 label；按下去端出 text，接著選 accept／decline。
+    寫好的固定文字，不叫模型；尺度照甲（寫到熄燈，隔天早上接著寫）。"""
+
+    step: int = Field(ge=3, le=4)
+    affinity: int = Field(ge=0, le=100)
+    label: str
+    text: str
+    accept_label: str
+    accept: str
+    decline_label: str
+    decline: str
+
+
+class HeroineDef(_Strict):
+    """一位女子（content/heroines.json；功能包 features/heroines）：line 是她出場的那一條奇事（storylines.json 的 id）；
+    endings 是走到哪幾個結局她會留下來（結局 id → 給模型的「故事之後」那一段）；hidden 是哪幾個結局之後開得了隱線；
+    scenes 是隱線的兩段；prompt 是隱線走到第幾段之後給模型的那一句（段 → 句子）。"""
+
+    line: str
+    endings: dict[str, str] = Field(min_length=1)
+    hidden: list[str] = Field(default_factory=list)
+    scenes: list[HeroineScene] = Field(default_factory=list)
+    prompt: dict[int, str] = Field(default_factory=dict)
+
+
 class PersonaStage(_Strict):
     """人物性子的一段（content/personas.json；功能包 features/persona）：text 是這一段的他（對話提示與簡介的「如今」都用），
     short 是一句說法（簡介的變化紀錄「第 N 週・週X 起，<short>」、換段那一刻的傳聞「有人說<名字>近來<short>。」）。"""
@@ -5623,6 +5650,7 @@ class Content(_Strict):
     looks: dict[str, Look] = Field(default_factory=dict)  # 擂台形象（content/looks.json，照 id、照檔案的順序）；沒有這個檔就是空的（只有預設的斗笠小子）
     itineraries: list[Itinerary] = Field(default_factory=list)  # 人物的行程（content/itineraries.json，世界活起來）；沒有這個檔就是沒有
     relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有
+    heroines: dict[str, HeroineDef] = Field(default_factory=dict)  # 女子與隱線（content/heroines.json，features/heroines）：人物 id → 她的設定；沒有這個檔就是空的
     personas: dict[str, list[PersonaAxis]] = Field(default_factory=dict)  # 人物性子（content/personas.json，features/persona）：對話人物 id → 兩條性子；沒有這個檔就是空的
     gather_branches: dict[str, GatherBranch] = Field(default_factory=dict)  # 找素材分支（content/gather_branches.json，照內容的順序）；沒有這個檔就是空的（分支關著）
     mark_rules: list[MarkRule] = Field(default_factory=list)  # 地方痕跡過門檻（content/mark_rules.json，減法季批 4）；沒有這個檔就是空的

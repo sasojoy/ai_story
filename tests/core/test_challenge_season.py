@@ -87,7 +87,7 @@ def test_people_stand_at_their_talk_at_until_someone_retires(real, world):
         if fig.character is not None and fig.start_status == "active":
             assert placed[fig.character] == real.characters[fig.character].talk_at, fid
     real.config.figure_challenge_every_season = False
-    assert figures.placed_characters(game.state, real) == {}
+    assert figures.placed_characters(game.state, real) == dict.fromkeys(real.heroines)  # 女子沒走完她的奇事照舊不在
 
 
 def test_a_retired_figure_leaves_the_audience_list(real, world):
@@ -231,7 +231,7 @@ def test_the_switch_off_brings_back_the_leaders_even_after_a_retirement(real, wo
     s = game.state
     hfs = next(sim for sim in real.scenario.sim_players if sim.name == "皇甫嵩")
     assert sim_active(hfs, s, real) and "皇甫嵩" in atlas.haunters(s, real, "changshe")
-    assert figures.placed_characters(s, real) == {}
+    assert figures.placed_characters(s, real) == dict.fromkeys(real.heroines)  # 女子沒走完她的奇事照舊不在
 
 
 def test_season_one_records_no_out_flag(real, world):
