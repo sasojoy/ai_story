@@ -1,8 +1,8 @@
 """數值規則的核心：條件判定、效果套用、屬性檢定、大勢推進、習得武學。
 
 效果套用 apply_effect 一段一格（core_effects：全部拆包第 32 批；計畫 docs/superpowers/plans/2026-11-06-效果與叛投掛鉤-第32批.md）：
-照 core/features.py 的 EFFECT_ORDER 一格一格叫，包登記的叫包的（一條線的一步），其餘是 _EFFECT_CORE（核心自己的、共用規則層的、
-還沒成包的舊模組 ranks、foreshadow、seal 的〔標批號〕）。
+照 core/features.py 的 EFFECT_ORDER 一格一格叫，包登記的叫包的（一條線的一步；伏筆三格軍情包、符文殘片與舊鏈的玉璽碎片兩格玉璽包，
+第 34、27 批），其餘是 _EFFECT_CORE（核心自己的與共用規則層的〔ranks 第 40 批收進〕）。
 
 改效果那幾格要跑的測試（第 32 批）：
 - scripts/test_for.py：核心測試＋煙霧＋自己檔名的 tests/core/test_rules.py。EFFECT_ORDER、EFFECT_FIELDS 由核心契約
@@ -11,13 +11,13 @@
   - 晉升與部下、召見往下一段、靠山：tests/figures/test_promotions_high.py、tests/figures/test_promotions_huang.py
   - 伏筆、捐糧、片段：tests/figures/test_foreshadow.py（與 test_promotions_huang.py）
   - 舊鏈的玉璽碎片：tests/core/test_rules.py（apply_effect 立碎片旗標那 5 條；改 rules.py 時是自己檔名挑得到）、tests/seal/test_seal.py；
-    符文殘片：tests/figures/test_promotions_huang.py
+    符文殘片：tests/figures/test_promotions_huang.py（這兩格第 27 批改由玉璽包登記，玉璽包 README「另外要跑的」也列了）
   - 一條線的一步與紀念物：tianxia/features/story/tests/test_story_*.py；結識同伴：tianxia/features/companions/tests/test_companions.py
   - 其餘：tests/arts/test_renown_insight.py、tests/gear/test_treasures.py、tests/battle/test_fronts.py、tests/core/test_drill_push.py、
     tianxia/features/guide/tests/test_enlist.py、tianxia/features/cultivation/tests/test_zhuifeng_quality.py、tests/figures/test_rumor_layers.py
 - 與 scripts/same_behavior.py 的 effects 一軌（compare --tracks effects，season21、week7、test 三種）。
-- 反過來：改這裡代叫的舊模組（ranks、foreshadow、seal 的 effect_* 那幾格）時，test_for 往上找走到核心的 rules 就停，挑不到上面那一串；
-  改了那幾格，另外跑上面那一串，加 tests/core/test_rules.py（seal.effect_shard 的 5 條在那裡，改 seal.py 時挑不到）。
+- 反過來：改這裡代叫的共用規則層（ranks 的 effect_* 那幾格）或包登記的格（軍情包的伏筆三格、玉璽包的 effect_runic、effect_shard）時，
+  test_for 挑不到上面那一串；改了那幾格，另外跑上面那一串，加 tests/core/test_rules.py（seal.effect_shard 的 5 條在那裡，改玉璽包時挑不到）。
 """
 from __future__ import annotations
 
@@ -1281,14 +1281,9 @@ def _ranks():
     return ranks
 
 
-def _seal():
-    from . import seal  # noqa: PLC0415  過渡：待搬（第 27 批：玉璽包登記那兩格）；延後 import，同 ranks、foreshadow
-
-    return seal
-
-
 # 核心代叫的格 {格: run(r) -> list[str]}：核心自己的段、共用規則層的段（照舊直接叫），與主人還沒成包的舊模組那幾格（行尾標批號）。
 # 沒有 story：一條線包登記（Feature.effects()）。lambda 在叫的那一下才照模組屬性找（monkeypatch 照樣有效）。
+# 沒有 runic、shard：全部拆包第 27 批改由玉璽包登記（SealFeature.effects()；原本這裡延後 import seal 代叫）。
 _EFFECT_CORE: dict[str, Callable[[EffectRun], list[str]]] = {
     "text": _fx_text,
     "stats": _fx_stats,
@@ -1298,7 +1293,6 @@ _EFFECT_CORE: dict[str, Callable[[EffectRun], list[str]]] = {
     "stamina": _fx_stamina,
     "affinity": _fx_affinity,
     "patron": lambda r: _ranks().effect_patron(r),  # 共用規則層 ranks（第 40 批收進）豪強的靠山（晉升奇遇 4.2；正式版丙一）
-    "runic": lambda r: _seal().effect_runic(r),  # 過渡：待搬（第 27 批）符文殘片
     "event_mods": _fx_event_mods,  # 共用規則層 timetable
     "summons_next": lambda r: _ranks().effect_summons_next(r),  # 共用規則層 ranks（第 40 批收進）召見往下一段（排在晉升前面）
     "promote": lambda r: _ranks().effect_promote(r),  # 共用規則層 ranks（第 40 批收進）晉升、部下
@@ -1312,5 +1306,4 @@ _EFFECT_CORE: dict[str, Callable[[EffectRun], list[str]]] = {
     "marks": _fx_marks,
     "rumor": _fx_rumor,
     "chronicle": _fx_chronicle,
-    "shard": lambda r: _seal().effect_shard(r),  # 過渡：待搬（第 27 批）舊鏈的玉璽碎片
 }

@@ -18,7 +18,8 @@
     tests/seal/test_seal_engine.py（換季把沒收場的奪璽單挑記成未分勝負）、tests/seal/test_seal_acts.py、tests/acts/test_conquest_rules.py、
     tianxia/features/stamina_plays/tests/test_stamina_plays.py、tests/core/test_chapters.py、tests/core/test_marks_wired.py、tianxia/features/looks/tests/test_looks_mvp.py
 - 與 scripts/same_behavior.py 的 world 一軌（compare --tracks world，season21、week7、test 三種）。
-- 反過來：改這裡代叫的舊模組（bounties、seal_acts、seal……；works 第 39 批已成包、改由體力玩法包登記 muster 的 works 那一格）時，test_for 往上找走到核心的
+- 反過來：改這裡代叫的舊模組（bounties、seal_acts……；works 第 39 批已成包、改由體力玩法包登記 muster 的 works 那一格；seal 第 27 批成包、
+  改由玉璽包登記 muster 的 seal 那一格，玉璽包 README「另外要跑的」照抄上面那一串）時，test_for 往上找走到核心的
   world 就停，挑不到 tests/core/test_world.py 與上面那一串（第 25 批之前 world 是舊模組、會挑到）。改了它們的簽名或回傳值，另外跑
   tests/core/test_world.py 與上面那一串；要不要讓 test_for 自己並上交 PM（計畫第六節）。這裡代叫的 figure_life、figures、orders、plans、ranks
   第 40 批收進共用規則層（照舊核心代叫）：改它們 test_for 只挑自己檔名的測試＋煙霧＋邊界，上面那一串照舊要另外跑（各自的模組說明也寫了）。
@@ -315,7 +316,7 @@ def evaluate_ending(state: GameState, content: Content) -> Ending:
     天命之季有一軍得天命時是那一軍的天命結局（玉璽二）。"""
     w = state.world
     if w.mandate and w.mandate_result:  # 天命之季、天命之爭有一軍得天命：結局改寫成那一軍的天命結局（玉璽碎片設計 8.3）
-        from .seal import mandate_event  # noqa: PLC0415  過渡：待搬（第 27 批：玉璽成包）
+        from .core.seal_base import mandate_event  # noqa: PLC0415  核心本體（玉璽「讀」的那一小半，全部拆包第 27 批）；照原位在函式裡 import
 
         event = mandate_event(content)
         won = event.mandate_endings.get(w.mandate_result) if event is not None else None
@@ -410,7 +411,7 @@ def end_season(
         early = w.time < season_end_time(w, content) - calendar.EPS_SECONDS
         ranks.flush_news(state, content, None)  # T5：還沒發的晉升彙整一起發掉
         if w.mandate and w.mandate_result is None:  # 天命之爭沒定下來（沒開成、管理者取消）：天命未定（8.3），江湖史只記這一次
-            from .seal import MANDATE_UNSETTLED_END  # noqa: PLC0415  過渡：待搬（第 27 批：玉璽成包）
+            from .core.seal_base import MANDATE_UNSETTLED_END  # noqa: PLC0415  同上（第 27 批）
 
             w.mandate_result = ""
             add_chronicle(state, MANDATE_UNSETTLED_END)
@@ -672,24 +673,17 @@ def _open_claimed(
     definition, start = claimed[0]
     msgs = _open_battle(world, definition, now, trend_start=start)
     if msgs:  # 真的開成了：玉璽碎片的現世與璽動在集結這一刻擲（玉璽碎片設計 3.2、4.1）
-        # 世界層 muster（全部拆包第 25 批）：起點、屯糧、玉璽三格核心代叫（_MUSTER_CORE），龍頭上陣那一格決戰包登記
+        # 世界層 muster（全部拆包第 25 批）：起點那一格核心代叫（_MUSTER_CORE），屯糧、玉璽、龍頭上陣三格體力玩法、玉璽、決戰三包登記
         msgs += _results(features_core.world_run("muster", _MUSTER_CORE, world, content, definition, start, now))
     return msgs
 
 
-def _muster_seal(world: WorldStateStore, content: Content, definition: BattleDef, start: int, now: float) -> list[str]:
-    """玉璽碎片的現世與璽動在集結這一刻擲（玉璽碎片設計 3.2、4.1）。"""
-    from . import seal  # noqa: PLC0415  過渡：待搬（第 27 批：玉璽包登記世界層 muster 的 seal 那一格）。seal → world_state：在函式裡 import
-
-    return seal.on_muster(world, content, definition, now)
-
-
-# 世界層 muster 那幾格核心代叫的（features.WORLD_ORDER["muster"]：起點、屯糧、玉璽；龍頭上陣是決戰包登記的 generals 那一格）。
+# 世界層 muster 那幾格核心代叫的（features.WORLD_ORDER["muster"]：起點；屯糧是體力玩法包登記的 works〔第 39 批〕、玉璽碎片的現世與璽動是
+# 玉璽包登記的 seal〔第 27 批，原本這裡的 _muster_seal〕、龍頭上陣是決戰包登記的 generals 那一格）。
 # 每一格在叫的那一下才照模組屬性找函式（monkeypatch 照樣有效）
 _MUSTER_CORE: dict[str, Callable[..., list[str]]] = {
     # 起點照哪一條戰線（領地爭奪開著的季；排在屯糧、天命之爭的偏移之前）
     "front": lambda world, content, definition, start, now: _front_muster(world, content, definition, start),
-    "seal": lambda world, content, definition, start, now: _muster_seal(world, content, definition, start, now),
 }
 
 
