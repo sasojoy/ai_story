@@ -15,7 +15,7 @@
 - `menus.py`：交友那一顆 `socialize_option`、一類一顆的交友 `precise_social_option`、求見的第二層名單 `audience_options`、求見畫面的說明 `audience_intro`；江湖頁「此地人物」那一排 `figures_here_view`（主幹合回 D 段從 `Game` 搬來：`talk.via`、`talk.why`、`aid`，只讀。它要問求見名單，所以放這裡不放 `view.py`：`menus` import `view`，反過來就循環）。陣營的名字走共用層 `figures.side_name`（人物情誼包的 `talk_view` 也問它）。
 - `actions.py`：交友見不到人時的打發話 `no_audience_line`（會排提示、花亂數，不是純讀，所以不放 `view.py`）、交友 `socialize`（舊寫法）與 `precise_socialize`（一類一顆）、指名求見 `call`、被打發 `brush_off`、記一輪 `count_talk`、福緣 `fortune_gift`、`deliver_fortune`、
   沒碰上人物時抽事件 `encounter`、紀錄標題 `call_title`。
-- `bots.py`：假人看到 `call:` 的選項怎麼按（原本 `bot_policy.score` 的 call 那一段）——只按「返回」，`call:<人物>` 一律不按（名望不夠的求見永遠按得下去，不能給分）。`act:call` 不按、`act:socialize`（`act_socialize`）第 60 批接進 `Verb.bot`；`Feature.bot_idle` 問 `idle_call`（整季機器人不按名望不夠的求見）。改 `bots.py` 的 `act:` 分數時另外跑 `tests/bots/test_bot_policy.py`、`tests/bots/test_bot_policy_conquest.py`、`tests/bots/test_bot_policy_stuck.py`（`test_for` 挑不到，第 60 批）。
+- `bots.py`：假人看到 `call:` 的選項怎麼按（原本 `bot_policy.score` 的 call 那一段）——只按「返回」，`call:<人物>` 一律不按（名望不夠的求見永遠按得下去，不能給分）。`act:call` 不按、`act:socialize`（`act_socialize`）第 60 批接進 `Verb.bot`；`Feature.bot_idle` 問 `idle_call`（整季機器人不按名望不夠的求見）。改 `bots.py` 的 `act:` 分數時另外跑 `tests/bots/test_bot_policy.py`、`tianxia/features/sortie/tests/test_bot_policy_conquest.py`、`tests/bots/test_bot_policy_stuck.py`（`test_for` 挑不到，第 60 批）。
 - 掛鉤：`enabled` 一直是 True（一類一顆 `precise`、福緣 `roster` 各有自己的開關，包本身沒有總開關）；`prefix = "call"`；`choose` 接 `call:`（`Outcome.title` 在動作之前拿，
   `prepared` 經 `ctx._talk_turn` 寄放）；`bot_pick` 問 `bots.score`；`bot_always` 不宣告。`menu`、`scene` 沒接（見下）。
 - 對話（`ctx._open_dialogue`）、事件呈現（`ctx._present`）、引導提示（`ctx._hint`）、閉門不見（`ctx._snubbed_character`）都經 `ctx`，不 import 人物情誼包；人物情誼包經 `ctx` 問這一包的
@@ -61,20 +61,26 @@
   這一包的 `content/events/social_*.json`；第 21 批整檔從 `tests/core/` 搬進來，只改了 `CONTENT_DIR` 的路徑層數）、`test_socialize_smoke.py`（1，`smoke`：week7 的官軍在長社按交友打開名單、
   點皇甫嵩，沒有模型他無心多談、名單收起）、`test_socialize_bots.py`（`call:back` 0.0、`call:<人物>` 不按、policy 問這一包）、`socialize_stage.py`（契約測試擺局面：平常）。
 - **`test_for` 挑不到的、另外要跑的**（混著別的功能，這一輪不搬、不拆）：`tests/core/test_precise_actions.py`（`_social_plan`、`_deliver_fortune`）、`tests/figures/test_day_scale.py`
-  （`_talks_left`、`_talked_out_note`、`_audience_intro`）、`tests/figures/test_promotions_high.py`（`_brush_off`）、`tests/arts/test_hints.py`、`tests/arts/test_renown_explain.py`、
+  （`_talks_left`、`_talked_out_note`、`_audience_intro`）、`tests/figures/test_promotions_high.py`（`_brush_off`）、`tianxia/features/guide/tests/test_hints.py`、`tests/arts/test_renown_explain.py`、
   `tests/core/test_engine.py`（`call:`、`can_meet_figure`、`_talks_used`、抽不到事件的打發話）、`tests/figures/test_admin_timetable.py`、`tests/bots/test_bot_policy.py`
-  （`socialize_*`）、`tests/figures/test_figures.py`、`tests/server/test_server.py`、`tests/seal/test_seal.py`／`test_seal_revamp.py`（`_talk_cap`）、`tests/core/test_explain.py`、
-  `tests/core/test_social.py`、`tests/season/test_real_content.py`（`_deep_interaction_target`）。網頁測試（`tests/web/test_explain_web.py`、`test_jianghu_page_web.py`）第 3 階。改 `figures_here_view`、`server.figure_intro` 另跑 `tests/web/test_revamp_web.py`（此地人物那一排與簡介，`test_for` 挑不到）。
+  （`socialize_*`）、`tests/figures/test_figures.py`、`tests/server/test_server.py`、`tianxia/features/seal/tests/test_seal.py`／`test_seal_revamp.py`（`_talk_cap`）、`tianxia/features/guide/tests/test_explain.py`、
+  `tianxia/features/peers/tests/test_social.py`、`tests/season/test_real_content.py`（`_deep_interaction_target`）。網頁測試（`tianxia/features/guide/tests/test_explain_web.py`、`test_jianghu_page_web.py`）第 3 階。改 `figures_here_view`、`server.figure_intro` 另跑 `tests/web/test_revamp_web.py`（此地人物那一排與簡介，`test_for` 挑不到）。
 - 前後一字不變：`scripts/same_behavior.py` 的 `socialize` 軌（`--tracks socialize,companions,talk,guide`）；此地人物那一排與對話框是 `here` 軌（主幹合回 D 段）。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`local` 的 `fortune`（`actions.fortune_due`，原位的判斷搬過來；`Game._deliver_fortune` 留給測試）。
 
 **第 56 批（選單收接縫，核心批）**：`take/audience`、`here/social`、`notes/socialize`、`idle/audience`、`block/audience` 是這一包登記的格（`_everyday_options` 那一段搬進 `menus.here_cell`，`action_notes` 那一段搬進 `menus.action_notes`，鍵的順序算行為；讀 `howto` 是過渡，第 59 批收）；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_precise_social_option`、`_socialize_option`、`_fame_gap`、`_audience_options` 拿掉（第 57 批的 `Verb.cell`、`Verb.note` 不必再開）；上面寫「留委派」「原位」的以這一句為準。
 
-**第 57 批（分派與標題收接縫，核心批）**：`verbs()` 是新開的（`call`、`socialize`）。`actions.press` 照原位的先後一字搬：先問召見、再扣體力、端晉升奇遇（這一支不排提示）或交友、排 `h_bond`；委派 `_socialize` 留著、格裡經 `ctx` 叫（`tests/core/test_explain.py` 換 Game 上的名字）。改這兩格另外跑：`tests/core/test_explain.py`、`tests/core/test_social.py`、`tests/bots/test_event_rotation.py`、`tests/core/test_engine.py -k "summons or call or socialize"`。
+**第 57 批（分派與標題收接縫，核心批）**：`verbs()` 是新開的（`call`、`socialize`）。`actions.press` 照原位的先後一字搬：先問召見、再扣體力、端晉升奇遇（這一支不排提示）或交友、排 `h_bond`；委派 `_socialize` 留著、格裡經 `ctx` 叫（`tianxia/features/guide/tests/test_explain.py` 換 Game 上的名字）。改這兩格另外跑：`tianxia/features/guide/tests/test_explain.py`、`tianxia/features/peers/tests/test_social.py`、`tests/bots/test_event_rotation.py`、`tests/core/test_engine.py -k "summons or call or socialize"`、`tianxia/features/companions/tests/test_companions_facade.py -k "call or socialize"`、`tianxia/features/travel/tests/test_travel_facade.py -k call`（第 61 批搬走的；這一包的 3 條在 `test_socialize_facade.py`，`test_for` 挑得到）。
 
 `howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（交友、求見那幾行與說明頁交友那一條），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
 
 ## 畫面與狀態列（全部拆包第 66 批）
 
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `figures_here`。
+
+## 第 61 批搬進來的測試（混合測試檔歸位）
+
+照條拆來：`test_socialize_facade.py`（23 條，從 `tests/core/test_engine.py` 拆來）、`test_socialize_page_web.py`（1 條，從 `tests/web/test_jianghu_page_web.py` 拆來）、`test_socialize_shell.py`（3 條，從 `tests/server/test_server.py` 拆來）；兩邊都用的小工具在 `tests/kit/`（`engine_kit`、`server_kit`、`jianghu_kit`）。
+
+這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。

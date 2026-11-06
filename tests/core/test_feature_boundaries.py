@@ -2523,6 +2523,9 @@ CORE_DELEGATE_CALLERS.update({
 # bot_policy 不再叫 Game 的私有方法。_duel_power 沒人叫了（tests、scripts、server、bot 三支、包都查過），拿掉；留著的：_side、_conquest_side、_sortie_foes（別的包還叫）、_tavern_price、_tavern_hit_problem（test_tavern 直接叫）
 GAME_DELEGATES -= {"_duel_power"}
 
+# core_tests（全部拆包第 61 批「混合測試檔歸位」；計畫 docs/superpowers/plans/2026-11-06-混合測試檔歸位-第61批.md）：engine 那一行 `from .features.peers.discuss_actions import DISCUSS_SAME, _refusal` 拿掉
+# （上面 peers2 那一段括號裡的過渡做完了：test_discuss 改讀 discuss_actions）。論武的 4 個委派還用 peers_discuss_actions，GAME_IMPORTS 那一筆留著，集合不變；委派、直連、過渡處的數字都不變，這一段不登記任何東西。
+
 
 def private_touches(source: str) -> list[str]:
     """碰了別的物件私有成員的地方（x._y；self 的、雙底線的不算）。"""

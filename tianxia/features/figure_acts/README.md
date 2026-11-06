@@ -10,7 +10,7 @@
 | 檔 | 內容 |
 |---|---|
 | `__init__.py` | 登記：前綴 `aid`、`plan` 的 choose 掛鉤（標題一起給）、`bot_always = ("aid:",)`、假人分數 |
-| `bots.py` | 假人（第 60 批）：`act:challenge:<人物>` 的分數（`challenge`，`Verb.tail_bot` 問；先後：`_crippled` → 勝算〔四十場模擬〕→ 打擊軍令）。條件與分數常數還在 `bot_policy`（`bp.` 讀）。改 `bots.py` 的 `act:` 分數時另外跑 `tests/bots/test_bot_policy.py`、`tests/bots/test_bot_policy_conquest.py`、`tests/bots/test_bot_policy_stuck.py`（`test_for` 挑不到，第 60 批）。 |
+| `bots.py` | 假人（第 60 批）：`act:challenge:<人物>` 的分數（`challenge`，`Verb.tail_bot` 問；先後：`_crippled` → 勝算〔四十場模擬〕→ 打擊軍令）。條件與分數常數還在 `bot_policy`（`bp.` 讀）。改 `bots.py` 的 `act:` 分數時另外跑 `tests/bots/test_bot_policy.py`、`tianxia/features/sortie/tests/test_bot_policy_conquest.py`、`tests/bots/test_bot_policy_stuck.py`（`test_for` 挑不到，第 60 批）。 |
 | `challenge.py` | 挑戰本人 13 個：`snubbed`、`snubbed_character`、`options`、`odds`、`figure_squad`、`challenge`、`win_reward`、`draw`、`rout`、`treasure`、`tier3`、`tier4`、`held_tier3` |
 | `aid_actions.py` | 護衛犒軍探望：`options`、`act`、`title`、`deliver_guard_credits`（同步補名望與心得） |
 | `plan_actions.py` | 盤算：`options`、`act`、`title`、`plan_view`（江湖頁的盤算卡）、`place_deeds_view`（此地舊事） |
@@ -46,8 +46,8 @@
 
 - 挑戰本人與大勢人物：`tests/figures/test_figures.py`（19／62，`challenge_odds`、`win_reward` 在這裡）、  `tests/figures/test_orders.py`（8／85）、`tests/figures/test_figure_life.py`（2／17，`rout`）、`tests/figures/test_admin_timetable.py`（`admin_fallen`、`admin_revive_figure`）、
   `tests/figures/test_figure_attrition.py`（4／9）、`tests/battle/test_rise.py`（4／10）、`tests/figures/test_gentry_allied.py`、`tests/figures/test_figure_life_batch3.py`（4／9，月旦評）
-- 打贏的一串：`tests/gear/test_signature_arms.py`（7／25，換掉 `challenge.rout`）、`tests/gear/test_treasures.py`（6／56）、`tests/gear/test_weapons.py`（`tier3`）、
-  `tianxia/features/sortie/tests/test_sortie_rewards.py`（`tier4`）、`tests/seal/test_seal_revamp.py`（`figure_squad`）、`tests/seal/test_seal_engine.py`（16／41）、`tests/seal/test_seal_duel.py`（12／27）
+- 打贏的一串：`tianxia/features/gear/tests/test_signature_arms.py`（7／25，換掉 `challenge.rout`）、`tianxia/features/gear/tests/test_treasures.py`（6／56）、`tests/gear/test_weapons.py`（`tier3`）、
+  `tianxia/features/sortie/tests/test_sortie_rewards.py`（`tier4`）、`tianxia/features/seal/tests/test_seal_revamp.py`（`figure_squad`）、`tianxia/features/seal/tests/test_seal_engine.py`（16／41）、`tests/seal/test_seal_duel.py`（12／27）
 - 假人：`tests/bots/test_bot_policy.py` 這一類（`aid:`、`act:challenge:` 的分數）
 - 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/figure_acts/challenge.py`
 

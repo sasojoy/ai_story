@@ -47,8 +47,8 @@
 
 ## 另外要跑的混合檔
 
-- `tests/acts/test_conquest_rules.py`（領地爭奪規則＋戰書換天救場）、`tests/acts/test_conquest_siege.py`（攻城戰本身在決戰包，戰書、換天、救場在這一包）、`tests/acts/test_conquest_flip.py`、`tests/acts/test_conquest_bots.py`（假人參加攻城戰，屬決戰包）
-- `tests/web/test_conquest_web.py`（網頁，第 3 階）、`tests/core/test_marks_visible.py`、`tianxia/features/map/tests/test_world_map.py`、`tests/seal/test_seal_acts3.py`、`tests/kit/conquest_kit.py`（共用建局）
+- `tests/acts/test_conquest_rules.py`（領地爭奪規則＋戰書換天救場）、`tests/acts/test_conquest_siege.py`（攻城戰本身在決戰包，戰書、換天、救場在這一包）、`tests/acts/test_conquest_flip.py`
+- `tests/core/test_marks_visible.py`、`tianxia/features/map/tests/test_world_map.py`、`tianxia/features/seal/tests/test_seal_acts3.py`、`tests/kit/conquest_kit.py`（共用建局）
 - 別包的：`tianxia/features/battle/tests/test_siege_cancel.py`（叫 `admin_conquest_cancel`）、`tianxia/features/sortie/tests/test_sortie_report.py`（叫 `_deliver_conquest`）
 - 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/territory_acts/day_actions.py`
 
@@ -66,3 +66,9 @@
 **動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `main_actions`：`conquest_letter`（玩家下戰書；管理者的 `admin_conquest_letter` 第 46 批就在 `admin_tools`，不同名）。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
 
 **鎖外工作**（全部拆包第 69 批；原本寫在 `server.py`，計畫 `docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md`）：`routes.py` 的〈天下形勢〉`_xingshi_waiting`、`write_xingshi`、`xingshi_once`、`XINGSHI_RUNNING`、`XINGSHI_OWNER`、`XINGSHI_SKIPPED`（`outlock` 掛鉤那一格 `xingshi`；殼留一行包裝 `_xingshi_waiting`、`xingshi_once`）。A、C 段照舊經 `Game` 的委派（假人走同一批、測試換 `Game.xxx` 打得到），模型呼叫絕不進鎖；殼的東西一律 `shell.<名字>` 當下讀，函式名不改（`tests/server/test_server.py` 的 `_users_in_server` 掃各包 `routes.py` 認這些名字，參數要叫 `shell`、不要先存成變數）；開執行緒寫 `shell.threading.Thread`、`shell.traceback`，不在包裡 `import threading`（`zhuan` 軌換的是殼上那個）。另外要跑的（`test_for` 挑不到）：`tests/server/test_outlock.py`。
+
+## 第 61 批搬進來的測試（混合測試檔歸位）
+
+整檔搬進 `tests/`（只搬位置、不改斷言；模組層標 `whole_content`，內容照舊是整份）：`test_conquest_bots.py`（原 `tests/acts/`）、`test_conquest_web.py`（原 `tests/web/`）。
+
+這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。

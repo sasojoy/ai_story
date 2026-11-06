@@ -5,7 +5,6 @@ import io
 import json
 import random
 import re
-import sqlite3
 import sys
 import threading
 import time
@@ -20,138 +19,28 @@ import server_push
 import webharness
 from conftest import at, old_explore, season_one_events
 from tianxia import (
-    atlas, battle_instance, calendar, companion_agent, cultivation, database, fight_llm, fusion, insights, journal, naming, renown, skillview, social,
-    sqlite_world, tale, team,
+    atlas, battle_instance, calendar, companion_agent, database, fight_llm, journal, naming, skillview, sqlite_world,
+    tale, team,
 )
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
 from tianxia.engine import Game
 from tianxia.journal import WORLD_NEWS
-from tianxia.martial_arts import MartialArt, generate_from_name
+from tianxia.martial_arts import MartialArt
 from tianxia.ollama_client import OllamaClient
 from tianxia.sqlite_world import SqliteWorldStore, open_world
-from tianxia.state import BotProfile, FigureState, Lock, Rumor, TimelineResult, WorldState
-from tianxia.world_state import SharedWorldState, season_length_days
+from tianxia.state import BotProfile, Rumor
+from tianxia.world_state import season_length_days
+# autouse 的 fixture 要明列：少一個，這個檔就會在沒有關排程、沒換雜湊參數之下跑（第 61 批）
+from server_kit import (  # noqa: F401
+    DASH, DIALOGUE_TURN, FENG_HUO, HURRY, ME, _ScriptedQueue, _a_player_with_insights, _a_showdown_fighter,
+    _ended_showdown, _forger, _js_function, _model, _no_landing, _no_preset_recipes, _nobody_holds_the_lock, _player,
+    _seal_duel, _season_one_now, _stand_by_a_figure, _stand_in_a_hall, _tale_store, breaker_clock, cheap_password_hashing,
+    client, fresh_server_memory, game, lock_events, model_breaker_closed, save_dir, scheduler_off, season_already_open,
+    told,
+)
 
 REAL_CHAT_STRUCTURED = OllamaClient.chat_structured  # 匯入時抓：conftest 的 autouse 之後會換成「連不上」，重問的測試要真的
-
-
-@pytest.fixture(autouse=True)
-def save_dir(tmp_path):
-    return tmp_path
-
-
-@pytest.fixture(autouse=True)
-def season_already_open(monkeypatch):
-    """server.CONTENT 是正式內容（預設要管理者開季）；這裡的測試要的是一季已經開打的畫面。"""
-    monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", True)
-
-
-@pytest.fixture(autouse=True)
-def scheduler_off(monkeypatch):
-    """server.CONTENT 是正式內容，伺服器排程開著（減法季批 0 起 world_tick_seconds 10）：這裡的測試叫 server.main 時不要真的開執行緒；
-    測排程本身的測試自己再打開。"""
-    monkeypatch.setattr(server.CONTENT.config, "world_tick_seconds", 0)
-
-
-def _stop_scheduler() -> None:
-    """排程執行緒也是 server 的模組狀態：測試留下來的那一條先停掉、等它真的結束，再把停止的旗子放下，
-    免得它在後面測試的暫存資料庫上推世界。"""
-    thread = server.SCHEDULER_THREAD
-    if thread is not None:
-        server.SCHEDULER_STOP.set()
-        thread.join(5.0)
-        assert not thread.is_alive()
-    server.SCHEDULER_THREAD = None
-    server.SCHEDULER_STOP.clear()
-
-
-def _stop_push() -> None:
-    """推送也是 server 的模組狀態（HUB 與看守執行緒）：每個測試從關著開始，留下來的看守先停掉、等它真的結束。"""
-    thread = server.PUSH_THREAD
-    if thread is not None:
-        server.PUSH_STOP.set()
-        thread.join(5.0)
-        assert not thread.is_alive()
-    server.PUSH_THREAD = None
-    server.PUSH_STOP.clear()
-    server.HUB = None
-
-
-@pytest.fixture(autouse=True)
-def _no_landing(monkeypatch):
-    """合到舊的（設計 12.2）在 test_fusion.py 測；這裡的測試照舊每一爐都長新的，結果才固定。"""
-
-
-@pytest.fixture(autouse=True)
-def _no_preset_recipes(monkeypatch):
-    """師門配方（基礎拳腳融風、山、水、火，content/preset_recipes.json）名字是寫好的、不叫模型；這裡測開爐取名的三段式，
-    拿基礎拳腳融基本意境當例子，要的是一般的配方。師門配方在 test_prologue.py、test_real_content.py 測。"""
-    monkeypatch.setattr(server.CONTENT, "preset_recipes", [])
-
-
-@pytest.fixture(autouse=True)
-def fresh_server_memory():
-    """登入紀錄、登入狀態、角色快取（還有排程那一份沒有玩家的 Game、排程執行緒）都只放在伺服器記憶體裡：每個測試從空的開始，
-    不然上一個測試的暫存資料庫會被沿用。"""
-    _stop_scheduler()
-    _stop_push()
-    for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES):
-        store.clear()
-    server.WORLD_GAME = None
-    server.QUEUE = None  # 模型佇列也是模組狀態：每個測試從關著開始（Config.llm_queue_slots 預設 0）
-    yield
-    _stop_scheduler()
-    _stop_push()
-    for store in (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES):
-        store.clear()
-    server.WORLD_GAME = None
-    server.QUEUE = None
-
-
-@pytest.fixture(autouse=True)
-def model_breaker_closed(monkeypatch):
-    """鎖內模型呼叫的全服斷路器是 server 的模組狀態：每個測試從關著開始，前一個測試的模型失敗（conftest 把 chat_structured
-    假成連不上）不會讓這一個的鎖內呼叫全部跳過。"""
-    monkeypatch.setattr(server, "_breaker_until", None, raising=False)
-
-
-@pytest.fixture(autouse=True)
-def cheap_password_hashing(monkeypatch):
-    """這個檔測的是伺服器，不是密碼：scrypt 換成最便宜的一組參數（一次約 40 毫秒變成幾微秒；測試整併第 4 區）。
-    雜湊與比對都在呼叫的當下讀 accounts.SCRYPT_PARAMS，所以註冊、登入、改密碼照舊走同一條路；
-    正式的參數與雜湊在 tests/test_accounts.py 測、也釘在那裡。正式程式不動。"""
-    from tianxia import accounts
-
-    monkeypatch.setattr(accounts, "SCRYPT_PARAMS", {"n": 2, "r": 1, "p": 1, "dklen": 32})
-
-
-@pytest.fixture
-def breaker_clock(monkeypatch):
-    """斷路器的時鐘（server._monotonic）換成撥得動的：clock[0] 是現在的秒數，測試不必真的等 180 秒。"""
-    clock = [1000.0]
-    monkeypatch.setattr(server, "_monotonic", lambda: clock[0], raising=False)
-    return clock
-
-
-@pytest.fixture
-def game():
-    return Game.new(server.CONTENT, "測試")
-
-
-@pytest.fixture
-def client():
-    return TestClient(server.app)
-
-
-def _player(client, login="shen_01", name="沈青衫", prologue=False):
-    """註冊、建角色。網頁上建的新角色先走序章（新手引導計畫一）；這裡的測試大多測序章之後的事，預設略過序章站到潁川
-    （prologue=True 留在草廬）。"""
-    client.post("/api/register", json={"login": login, "password": "secret-pw", "again": "secret-pw"})
-    out = client.post("/api/character", json={"name": name}).json()
-    if not prologue:
-        out = client.post("/api/do/skip_tutorial", json={}).json()
-    return out
 
 
 # ── 畫面資料 ────────────────────────────────────────────
@@ -300,18 +189,6 @@ def test_menxia_view_falls_back_to_no_person_for_an_unknown_one(game):
     assert "materials" not in view and "arts" not in view  # 煉製頁不再列素材、修練頁不再從舊功法庫畫（改畫 owned_arts）
 
 
-def test_a_json_list_person_is_treated_as_nobody_not_a_500(client, game):
-    """名冊裡點的人是客戶端寫的：JSON 清單、數字之類不是字串的東西，一律當作沒點到人（以前 `in {…}` 會丟 TypeError → 500）。"""
-    for odd in (["follower:x"], [], 7, {"k": "v"}):
-        view = server.look(game, lambda g, odd=odd: server.menxia_view(g, odd))
-        assert view["person"] is None and view["person_card"] is None
-    _player(client)
-    out = client.post("/api/menxia/heal", json={"person": ["follower:x"]})
-    assert out.status_code == 200 and out.json()["menxia"]["person"] is None
-    out = client.post("/api/menxia/join", json={"person": ["nobody"]})
-    assert out.status_code == 400 and out.json() == {"error": "名冊裡沒有這個人。"}
-
-
 def _clue_items(game):
     return server.look(game, server.menxia_view)["clue_items"]
 
@@ -356,88 +233,12 @@ def test_map_view_selects_your_location_by_default(game):
     assert 'data-loc="' in view["svg"]
 
 
-def test_map_view_gives_the_legend_as_data_for_the_layer_shown(game):
-    """圖例不畫進 SVG（企劃者 10/4：放大時也要看得到）：跟 svg 並排給網頁，由網頁疊在地圖框角落。
-    送的是正在看的那一層的說明（認不得的圖層退回預設那一層），不是四層全給。"""
-    from tianxia import mapview
-
-    legend = server.look(game, lambda g: server.map_view(g, "enemies", None))["legend"]
-    assert legend["layer"] == mapview.LEGEND_LAYERS["enemies"] and len(legend["icons"]) == 6
-    assert all(item["svg"].startswith("<svg") and item["label"] for item in legend["icons"])
-    # 不帶設定的正式內容沒有第一季規則、沒有地盤與出陣：⚔ 那一句是遊歷的說法（出陣開著是 LEGEND_RING_SORTIE，見 tests/test_mapview.py）
-    assert legend["states"] == mapview.LEGEND_STATES and legend["ring"] == mapview.LEGEND_RING and legend["strike"] == ""
-    fallback = server.look(game, lambda g: server.map_view(g, "沒這層", None))["legend"]
-    # 預設那一層是局勢層：沒有地盤，不多那一句誰佔著（地盤開著才有，出陣探索與地盤設計 4.3）
-    assert fallback["layer"] == mapview.LEGEND_LAYERS[server.DEFAULT_LAYER]
-
-
 def test_reports_view_is_empty_with_no_battles(game):
     view = server.look(game, lambda g: server.reports_view(g, None))
     assert view["list"] == [] and view["selected"] is None
     assert "還沒有戰報" in view["detail"]
     assert view["tale_id"] is None  # 不是決戰（這裡一場都沒有）就沒有戰記
     assert server.tale_view(1) == {"status": "none"}  # 沒這一場：網頁不畫那一顆
-
-
-# ── 戰記（Joy 2026-10-29，原稱戰役話本）：/api/tale 的三種狀態、背景寫一篇、江湖史目錄的開關 ──
-# 寫法與存放的測試在 tianxia/features/tale/tests/test_tale.py，這裡只管伺服器這一側。
-
-
-def _tale_store(tmp_path, monkeypatch):
-    store = tale.TaleStore(tmp_path / "server-tale.sqlite")
-    monkeypatch.setattr(server, "TALES", store)
-    return store
-
-
-def _ended_showdown(world, *, unfinished=False):
-    """開一場黃巾決戰再把它收掉（沒有回合紀錄也寫得出戰記）。回它在資料庫裡的流水號。"""
-    battle = world.start_battle(server.CONTENT.battles["huangjin_showdown"], now=0.0)
-
-    def _end(b):
-        b.phase, b.unfinished = "ended", unfinished
-        b.outcome_title = "" if unfinished else "黃巾大勝"
-        b.outcome_side = "huang"
-
-    world.mutate_battle(_end)
-    return battle.record_id
-
-
-def test_the_tale_api_says_pending_until_it_is_written(client, tmp_path, monkeypatch):
-    """收場了還沒寫好＝pending（網頁畫灰的「史官還在落筆」）、沒這一場＝none、寫好了＝整篇。
-    這裡沒有 client（TALES_CLIENT 是 None），寫出來的是模板版——叫不動模型也不會一直卡在 pending。"""
-    _player(client)
-    _tale_store(tmp_path, monkeypatch)
-    record_id = _ended_showdown(open_world())
-    assert client.get(f"/api/tale/{record_id}").json() == {"status": "pending"}
-    assert client.get("/api/tale/9999").json() == {"status": "none"}
-    assert server.tale_round() == record_id
-    page = client.get(f"/api/tale/{record_id}").json()
-    assert page["status"] == "ready" and page["title"] == "黃巾決戰戰記" and page["result"] == "黃巾大勝"
-    assert page["acts"] and all(scene["text"] for act in page["acts"] for scene in act["scenes"])
-    assert server.tale_round() is None  # 寫過的不重寫
-
-
-def test_a_written_tale_gets_a_share_page_anyone_can_open(client, tmp_path, monkeypatch):
-    """戰記分享頁（Joy 2026-11-04）：寫好了 /api/tale 帶分享網址（/zhanji/<亂碼>，每次問都是同一個）與遊戲裡那一層的頁（?in=1）；
-    沒登入也打得開、帶 Open Graph 與招攬；遊戲裡那一層換成「‹ 返回」、不招攬；認不得的代碼一律 404。"""
-    _player(client)
-    _tale_store(tmp_path, monkeypatch)
-    record_id = _ended_showdown(open_world())
-    server.tale_round()
-    page = client.get(f"/api/tale/{record_id}").json()
-    code = page["url"].rsplit("/", 1)[1]
-    assert page["page"] == f"/zhanji/{code}?in=1" and len(code) >= 8 and str(record_id) != code
-    assert client.get(f"/api/tale/{record_id}").json()["url"] == page["url"]  # 同一篇同一個代碼
-    anyone = TestClient(server.app)  # 沒登入
-    html = anyone.get(f"/zhanji/{code}")
-    assert html.status_code == 200 and "黃巾決戰戰記・天下大勢" in html.text
-    assert f'<meta property="og:url" content="{page["url"]}">' in html.text and 'property="og:image"' in html.text
-    assert "zj-cta" in html.text and 'href="/"' in html.text and 'id="zj-back"' not in html.text
-    assert "黃巾大勝" in html.text and "官軍" in html.text and "黃巾軍" in html.text
-    inside = anyone.get(f"/zhanji/{code}?in=1").text
-    assert 'id="zj-back"' in inside and '<section class="zj-cta">' not in inside
-    assert anyone.get("/zhanji/nope").status_code == 404
-    assert anyone.get(f"/zhanji/{record_id}").status_code == 404  # 流水號猜不到
 
 
 def test_the_tale_cover_falls_back_until_the_art_arrives(tmp_path, monkeypatch):
@@ -454,19 +255,6 @@ def test_the_tale_cover_falls_back_until_the_art_arrives(tmp_path, monkeypatch):
     assert server.tale_cover(battles["changshe_fire"]) == "/static/img/tale/default.webp"
     (tmp_path / "changshe_fire.webp").write_bytes(b"x")
     assert server.tale_cover(battles["changshe_fire"]) == "/static/img/tale/changshe_fire.webp"
-
-
-def test_a_showdown_cut_short_by_the_season_gets_no_tale(client, tmp_path, monkeypatch):
-    """季終沒打完收起來的那一場沒有結果（unfinished）：不寫、也不是 pending。"""
-    _player(client)
-    store = _tale_store(tmp_path, monkeypatch)
-    record_id = _ended_showdown(open_world(), unfinished=True)
-    assert client.get(f"/api/tale/{record_id}").json() == {"status": "none"}
-    assert server.tale_round() is None and store.done(open_world().get_season_number()) == set()
-
-
-def test_the_tale_needs_a_login_like_the_reports(client):
-    assert client.get("/api/tale/1").status_code != 200
 
 
 def test_the_chronicle_index_waits_for_the_switch(client, tmp_path, monkeypatch):
@@ -765,25 +553,6 @@ def test_a_reload_never_hands_a_bots_save_to_a_player(client, path):
     assert open_characters().load("沈青衫").player.bot is not None  # 假人的存檔原樣留著
 
 
-def test_join_and_leave_check_the_roster_inside_the_actions_own_lock(client, monkeypatch, lock_events):
-    """誰在名冊上是全服狀態（換季時同伴全部重獲自由、假人程式也在寫）：鎖外看完名冊、進鎖之前就可能變了。
-    加入／移出隊伍要在動作的同一把鎖裡核對，引擎才能照它的假設、只處理名冊上的人。"""
-    _player(client)
-    real = Game.roster_lines
-
-    def roster_spy(self):
-        lock_events.append("roster")
-        return real(self)
-
-    monkeypatch.setattr(Game, "roster_lines", roster_spy)
-    monkeypatch.setattr("tianxia.features.companions.actions.remove_from_team", lambda ctx, person: lock_events.append("leave") or [])  # 第 68 批：動作表直接叫包，不經 Game 的委派
-    lock_events.clear()
-    assert client.post("/api/menxia/leave", json={"person": "player"}).status_code == 200
-    leave = lock_events.index("leave")
-    enter = max(i for i, e in enumerate(lock_events[:leave]) if e == "enter")
-    assert "roster" in lock_events[enter:leave] and "exit" not in lock_events[enter:leave]
-
-
 # ── 登入與角色（HTTP）────────────────────────────────────
 
 
@@ -1051,46 +820,10 @@ def test_the_play_log_skips_characters_marked_as_bots(game):
     assert _play_rows() == ([], [])
 
 
-def test_seclude_and_anonymous(client):
-    _player(client)
-    out = client.post("/api/do/anonymous", json={"value": True}).json()
-    assert out["main"]["status"]["anonymous"] is True
-    out = client.post("/api/do/seclude", json={"hours": 2}).json()
-    assert out["main"]["status"]["busy_hours"] is not None
-
-
 def test_an_unknown_action_is_not_found(client):
     _player(client)
     assert client.post("/api/do/nonsense", json={}).status_code == 404
     assert client.post("/api/menxia/nonsense", json={}).status_code == 404
-
-
-def test_menxia_practice_and_heal(client, monkeypatch):
-    monkeypatch.setattr(server.CONTENT.config, "practice_injury_chance", 0.0)
-    _player(client)
-    out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()
-    assert "基礎拳腳" in out["message"] and "第2成" in out["message"]  # 開局送的那一門
-    assert "基礎拳腳" in out["menxia"]["player_card"]
-    out = client.post("/api/menxia/heal", json={}).json()
-    assert out["message"]
-    assert out["main"]["status"]["name"] == "沈青衫"
-
-
-def test_menxia_practice_costs_xinde_and_says_how_much_is_missing(client, monkeypatch):
-    """練成花心得（每成 2N，企劃者 2026-10-07 方案 A）：第 1 成升第 2 成 2 點、第 2 成升第 3 成 4 點；不夠時直接說還差多少，
-    等級與心得都不動。"""
-    monkeypatch.setattr(server.CONTENT.config, "practice_injury_chance", 0.0)
-    _player(client)
-    game = server.game_for("沈青衫")
-    game.state.player.stats["xinde"] = 2
-    open_characters().save(game.state)
-    out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()
-    assert "第2成" in out["message"]
-    assert open_characters().load("沈青衫").player.stats["xinde"] == 0
-    out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()  # 第 2 成升第 3 成要 4 點，只剩 0 點
-    assert "要 4 點心得，你只有 0 點" in out["message"] and "還差 4 點" in out["message"]
-    saved = open_characters().load("沈青衫").player
-    assert saved.member.wugong_level == 2 and saved.stats["xinde"] == 0
 
 
 def test_self_creating_an_art_is_gone_for_good(client):
@@ -1106,95 +839,11 @@ def test_self_creating_an_art_is_gone_for_good(client):
     assert "create-skill" not in webharness.app_source()
 
 
-def test_roster_pick_and_team_toggle_ignore_people_you_do_not_have(client):
-    _player(client)
-    assert client.get("/api/menxia?person=nobody").json()["person"] is None
-    out = client.post("/api/menxia/join", json={"person": "nobody"})
-    assert out.status_code == 400 and out.json() == {"error": "名冊裡沒有這個人。"}
-
-
-def test_forge_line_endpoint_says_what_one_lone_item_is_missing(client):
-    """W4：煉製頁放了一樣東西就問一次 /api/forge_line，字的唯一出處是 skillview.forge_line。"""
-    _player(client)
-    game = server.game_for("沈青衫")
-    game.state.player.insights = ["feng"]
-    open_characters().save(game.state)
-    insight = client.post("/api/forge_line", json={"insights": ["feng"]}).json()["line"]
-    assert skillview.FORGE_ONE_INSIGHT in insight
-
-
-def test_forge_line_previews_without_forging(client):
-    _player(client)
-    game = server.game_for("沈青衫")
-    game.state.player.insights = ["feng", "huo"]
-    game.state.player.stats["xinde"] = 100
-    open_characters().save(game.state)  # 資料庫是唯一的真實來源：進鎖先重讀，只改記憶體的話下一個請求就看不到
-    out = client.post("/api/forge_line", json={"insights": ["feng", "huo"]}).json()
-    assert "合併" in out["line"] and "「風」＋「火」→ 一個新的意境" in out["line"]
-    out = client.post("/api/forge_line", json={}).json()  # 什麼都沒放：只說怎麼放
-    assert "放兩個意境" in out["line"]
-    saved = open_characters().load("沈青衫").player
-    assert saved.arts == [] and saved.insights == ["feng", "huo"] and saved.stats["xinde"] == 100
-    assert open_world().lookup_insight_recipe(FENG_HUO) is None  # 只是預覽：沒登記
-    view = client.get("/api/menxia").json()
-    assert "放兩個意境" in view["forge_line"] and "craft_line" not in view and "per_craft" not in view
-
-
 def test_the_old_craft_endpoints_are_gone(client):
     _player(client)
     assert "craft" not in server.MENXIA_ACTIONS and "forge" in server.MENXIA_ACTIONS
     assert client.post("/api/menxia/craft", json={"materials": ["gang_1", "gang_1"]}).status_code == 404
     assert client.post("/api/craft_line", json={"materials": []}).status_code == 404
-
-
-def test_allocate_through_the_main_actions(client):
-    _player(client)
-    game = server.game_for("沈青衫")
-    game.state.player.stat_points = 1
-    open_characters().save(game.state)
-    r = client.post("/api/do/allocate", json={"stat": "con"}).json()
-    assert r["main"]["status"]["stat_points"] == 0
-    assert open_characters().load("沈青衫").player.stats["con"] == 6
-    stat_names = server.CONTENT.config.stat_names
-    assert [(name, key) for name, _, key in r["main"]["status"]["attrs"]] == [
-        (stat_names[key], key) for key in ("str", "agi", "con", "wis", "lore")
-    ]  # 網頁的配點鈕送的鍵就是這個鍵，要跟 Config.stat_names 對得上
-
-
-def test_a_point_goes_into_lore_through_the_server(client):
-    _player(client)
-    game = server.game_for("沈青衫")
-    game.state.player.stat_points = 1
-    open_characters().save(game.state)
-    r = client.post("/api/do/allocate", json={"stat": "lore"}).json()
-    assert r["main"]["status"]["stat_points"] == 0
-    assert open_characters().load("沈青衫").player.stats["lore"] == 6
-
-
-def test_an_old_save_stored_without_lore_reads_as_five_through_the_server(client):
-    """舊存檔（博聞加進來之前存的）：_reload 讀回來的是資料庫裡原樣的那一列、沒經過 Game 的建構，所以進鎖重讀之後也要
-    照開局的 5 補上（計畫 2-2 Review Focus 1）：唯讀的 look、會存檔的 act（/api/main）、＋博聞都照常，不是 KeyError。"""
-    _player(client)
-    game = server.game_for("沈青衫")
-    del game.state.player.stats["lore"]
-    game.state.player.stat_points = 1
-    open_characters().save(game.state)
-    assert "lore" not in open_characters().load("沈青衫").player.stats  # 資料庫裡那一列確實沒有博聞
-    game.state.player.stats["lore"] = 9  # 記憶體裡那份是別的數字：重讀要換成資料庫裡的（補成 5），不能沿用它
-    assert server.look(game, lambda g: g.state.player.stats["lore"]) == server.CONTENT.config.start_stats["lore"] == 5
-    status = client.get("/api/main").json()["status"]
-    assert status["attrs"][-1][1:] == [5, "lore"]
-    r = client.post("/api/do/allocate", json={"stat": "lore"}).json()
-    assert r["main"]["status"]["attrs"][-1][1:] == [6, "lore"]
-    assert open_characters().load("沈青衫").player.stats["lore"] == 6
-
-
-def test_a_refused_allocation_through_the_server_only_says_why(client):
-    _player(client)
-    r = client.post("/api/do/allocate", json={"stat": "con"}).json()
-    assert "沒有可以分配" in r["message"]
-    r = client.post("/api/do/allocate", json={}).json()  # 客戶端沒帶 stat：也只是一句話，不是 500
-    assert "沒有這項" in r["message"]
 
 
 def test_the_allocate_buttons_call_what_the_server_has():
@@ -1351,24 +1000,6 @@ def test_the_practice_and_furnace_pages_only_read_and_call_what_the_server_has(g
         assert gone not in js, gone
 
 
-def _js_function(js: str, header: str) -> str:
-    """app.js 裡 IIFE 內的一個函式本體：從標頭（例如 "async function mx("）到下一個縮兩格的收尾 "\\n  }\\n"。"""
-    start = js.index(header)
-    return js[start:js.index("\n  }\n", start)]
-
-
-def test_the_furnace_page_sends_only_insights():
-    """爐裡只合意境（Joy 2026-10-21）：網頁沒有測試框架，這裡擋住「伺服器只收意境、網頁卻還送武學」。"""
-    js = webharness.app_source()
-    body = _js_function(js, "function forgeBody(")
-    assert "insights:" in body and "other_art" not in body and "art:" not in body.replace("insights:", "")
-    ready = _js_function(js, "function forgeReady(")
-    assert "insights.length === 2" in ready  # 兩個意境才放得滿
-    pick = _js_function(js, "function pick(")
-    assert "已經放滿了" in pick and 'type !== "ins"' in pick  # 放滿了不再收；武學放不進爐
-    assert "/api/forge_line" in js and "/api/menxia/forge" in js and js.count("forgeBody()") >= 2  # 預覽與開爐送同一份 body
-
-
 def test_the_new_map_has_no_legend_box_and_the_chips_carry_the_colors():
     """輿圖升級（設計第一節）：圖例拿掉；地圖框是夾在狀態列與分頁列之間的整頁一層，寬 900 以上抽屜變右欄。輿圖第三版第 4 批起濾鏡那一排
     也拿掉了（輿圖簡化設計 5.4）；一張到底（2026-10-30）篩選改成浮在搜尋列底下的一排。網頁的版面與樣式對得上，就靠這一條。"""
@@ -1381,18 +1012,6 @@ def test_the_new_map_has_no_legend_box_and_the_chips_carry_the_colors():
     assert "@media (min-width: 900px)" in css and "grid-template-columns: 1fr 360px" in css
     assert re.search(r"\n\.mv-fab button \{[^}]*height: 46px;", css) and re.search(r"\n\.mv-q \{[^}]*height: 46px;", css)  # 浮著的鈕與搜尋列：觸控目標夠大
     assert "overflow: clip" in css  # 地圖框不能被 scrollIntoView 捲走（overflow: hidden 的框可以）
-
-
-def test_the_pages_trim_the_furnace_whenever_the_menxia_data_is_replaced():
-    """修練頁熔掉爐裡放著的東西、再回煉製頁：S.forgeSel 還留著那個 id，爐子看起來是空的、開爐卻亮著（forgeReady 照 id 數）。
-    只有輪詢的 refreshPage 會補，所以每個換掉 S.menxia 的地方都要自己修剪（mx、loadMenxia）。網頁沒有測試框架，這裡擋住漏改。"""
-    js = webharness.app_source()
-    for header in ("async function mx(", "async function loadMenxia("):
-        body = _js_function(js, header)
-        assert "S.menxia = " in body and "trimPot()" in body, header
-        assert body.index("trimPot()") > body.index("S.menxia = "), header  # 換上新資料之後才修剪
-    trim = _js_function(js, "function trimPot(")
-    assert "trimForgeSel()" in trim and 'S.forgeLine = ""' in trim and "updateForgeLine()" in trim
 
 
 def test_a_refused_name_keeps_what_the_player_typed_and_the_pill_tick_does_not_outlive_the_tab():
@@ -1699,30 +1318,6 @@ def test_a_hostile_big_fight_account_renders_as_one_plain_paragraph_on_the_card(
         assert "<p><strong>結果</strong>　波才抱拳認輸。　<strong>得失</strong>　" in html, (text, html)
 
 
-def test_a_trait_line_can_lead_the_folded_process_and_the_page_still_recognizes_it():
-    """計畫六 Task 4（N1）：功效開打前的句子排在回合前面，收著的「過程」露出的第一行因此是〔先手〕之類的句子、不是「第1回合」。
-    網頁認的 ROUNDS_MARK／TALE_MARK 照舊對得上（過程那一段的開頭沒變），第一個 <li> 就是功效的句子；
-    大場面的一段話則是功效的句子與模型的話在同一個 <p> 裡、各佔一行（<br />）。"""
-    from tianxia import battlelog
-    from tianxia.state import BattleRecord, Fighter
-
-    js = webharness.app_source()
-    rounds_mark = re.search(r'const ROUNDS_MARK = "([^"]*)";', js).group(1).replace("\\n", "\n")
-    tale_mark = re.search(r'const TALE_MARK = "([^"]*)";', js).group(1).replace("\\n", "\n")
-    base = dict(
-        id=1, time=0, location="湖邊", kind="train", opponent="水寇", ours=[Fighter(name="沈浪", level=1)], tier="大勝",
-        our_power=50, difficulty=10, rounds=["第1回合　甲，你氣血 -5；乙，對手氣勢 -34。", "第2回合　丙。"],
-        trait_before=["〔先手〕沈浪搶得先機，【穿林腿】出手在前。"], trait_after=["〔乘勝〕沈浪越打越順，這一仗收穫格外多。"],
-    )
-    html = server.md(battlelog.card_text(BattleRecord(**base)))
-    assert rounds_mark in html
-    after_mark = html[html.index(rounds_mark) + len(rounds_mark):]
-    assert after_mark.startswith("\n<li>〔先手〕沈浪搶得先機，【穿林腿】出手在前。</li>\n<li>第1回合") and "<li>〔乘勝〕" in after_mark
-    tale = server.md(battlelog.card_text(BattleRecord(**base, narration="波才刀勢沉猛，你左支右絀。")))
-    assert tale_mark in tale and "<ul" not in tale
-    assert tale[tale.index(tale_mark):].startswith(tale_mark + "〔先手〕沈浪搶得先機，【穿林腿】出手在前。<br />\n波才刀勢沉猛，你左支右絀。<br />\n〔乘勝〕")
-
-
 def test_a_trait_line_never_looks_like_a_round_to_the_numbers_only_fold():
     """收著的第一行是功效的句子時，fitFirstRound 量到太高也不會把它縮成數字行：compactRound 只認「第N回合」開頭的句子，
     〔功效名〕開頭的一律回 null、整句照常顯示（寧可多佔一行也不藏字）。S1 的 45 句，每一句配上一個人名與一群人都試過；
@@ -1921,162 +1516,6 @@ def test_the_heal_button_says_what_it_costs(client):
     assert client.get("/api/menxia").json()["heal_cost"] == 12  # 每 2 點內傷 1 兩，無條件進位
 
 
-def _a_player_with_insights(client, insights=("feng", "huo"), xinde=100):
-    """新角色（開局送的兩門基礎武學在身上），悟得 insights、心得 xinde；存進資料庫（進鎖會重讀）。"""
-    _player(client)
-    game = server.game_for("沈青衫")
-    game.state.player.insights = list(insights)
-    game.state.player.stats["xinde"] = xinde
-    open_characters().save(game.state)
-
-
-def test_the_forge_refuses_an_art_and_points_to_the_practice_page(client):
-    """爐裡只合意境（Joy 2026-10-21）：放一門武學＋一個意境不再是裝槽（裝槽在修練頁，MENXIA_ACTIONS 的 slot），
-    開爐回 fusion.ART_IN_FURNACE 那一句，什麼都不動。"""
-    _a_player_with_insights(client)
-    out = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]})
-    assert out.status_code == 200 and fusion.ART_IN_FURNACE in out.json()["message"]
-    assert out.json()["made"] is False  # 沒做成：煉製頁把東西留在爐裡
-    saved = open_characters().load("沈青衫").player
-    assert all(x is None for slots in saved.art_slots.values() for x in slots) and saved.arts == []
-    assert saved.stats["xinde"] == 100 and saved.insights == ["feng", "huo"]
-
-
-def test_the_forge_merges_two_insights(client):
-    _a_player_with_insights(client)
-    out = client.post("/api/menxia/forge", json={"insights": ["feng", "huo"]})
-    assert out.status_code == 200 and "交融" in out.json()["message"]
-    saved = open_characters().load("沈青衫").player
-    merged = open_world().lookup_insight_recipe(fusion.merge_key("feng", "huo"))
-    assert merged is not None and merged.attribute == "陽" and saved.insights == ["feng", "huo", merged.id]
-    assert saved.stats["xinde"] == 95
-
-
-def test_the_forge_refuses_what_it_cannot_do_and_charges_nothing(client):
-    _a_player_with_insights(client, insights=("feng",), xinde=2)
-    # 爐裡只合意境（Joy 2026-10-21）：放了武學一律被拒絕（舊網頁送來的 other_art 也一樣）；同一個意境放兩次是揣摩，要兩份、5 點心得
-    for body in ({"art": "jichu_quanjiao", "other_art": "jichu_tuna"}, {"insights": ["feng", "feng"]},
-                 {"art": "jichu_quanjiao", "insights": ["huo"]}, {"art": "jichu_quanjiao", "insights": []}):
-        out = client.post("/api/menxia/forge", json=body)
-        assert out.status_code == 200 and out.json()["message"], body
-        assert out.json()["made"] is False, body  # 沒合成：煉製頁把東西留在爐裡
-    saved = open_characters().load("沈青衫").player
-    assert saved.arts == [] and saved.insights == ["feng"] and saved.stats["xinde"] == 2
-    assert all(x is None for slots in saved.art_slots.values() for x in slots) and saved.insight_strength.get("feng", 1) == 1  # 沒裝、沒加深
-    other = client.post("/api/menxia/heal", json={})
-    assert "made" not in other.json()  # 只有開爐帶這個鍵
-
-
-def test_the_forge_endpoints_survive_oddly_shaped_bodies(client):
-    """body 是玩家（或亂送的客戶端）寫的：art 不是字串、insights 不是清單都不能打出 500，也不能動到任何東西。"""
-    _a_player_with_insights(client)
-    bodies = (
-        {"art": ["jichu_quanjiao"], "insights": ["feng"]},
-        {"art": {"id": "jichu_quanjiao"}, "insights": ["feng"]},
-        {"art": 5, "insights": ["feng"]},
-        {"art": "jichu_quanjiao", "insights": "feng"},
-        {"art": "jichu_quanjiao", "insights": {"feng": 1}},
-        {"art": None, "insights": 7},
-        {"insights": [["feng"], {"x": 1}]},
-        {"art": "jichu_quanjiao", "other_art": ["jichu_tuna"], "insights": []},
-        {"art": "jichu_quanjiao", "other_art": {"id": 1}},
-        {"other_art": "jichu_tuna", "insights": ["feng"]},
-        {},
-    )
-    for body in bodies:
-        line = client.post("/api/forge_line", json=body)
-        assert line.status_code == 200 and isinstance(line.json()["line"], str), body
-        out = client.post("/api/menxia/forge", json=body)
-        assert out.status_code == 200 and out.json()["message"], body
-    saved = open_characters().load("沈青衫").player
-    assert saved.arts == [] and saved.insights == ["feng", "huo"] and saved.stats["xinde"] == 100
-    assert all(x is None for slots in saved.art_slots.values() for x in slots)  # 武學重構：形狀不對也不會把意境裝進槽
-
-
-def test_forge_line_warns_about_an_insight_you_have_not_learned(client):
-    _player(client)
-    line = client.post("/api/forge_line", json={"insights": ["feng", "huo"]}).json()["line"]
-    assert line.startswith("<p>⚠") and "兩個意境都要是你悟得的" in line
-
-
-def test_forge_line_does_not_leak_an_art_the_player_does_not_have(client):
-    """預覽不能拿來探：別人的本命武學（龍頭人物的）不在你身上，不管放在哪一格，都不寫名字與屬性（爐裡只合意境：武學根本不讀）。"""
-    _a_player_with_insights(client)
-    assert "caocao_wugong" in server.CONTENT.skills  # 真的有這一門（挾風槍法・屬快），探得到才算數
-    for body in (
-        {"art": "caocao_wugong", "insights": ["feng"]},
-        {"art": "caocao_wugong", "insights": ["feng", "huo"]},
-        {"art": "jichu_quanjiao", "other_art": "caocao_wugong", "insights": []},
-        {"art": "caocao_wugong", "other_art": "jichu_quanjiao", "insights": []},
-    ):
-        line = client.post("/api/forge_line", json=body).json()["line"]
-        assert "挾風槍法" not in line and "屬快" not in line, (body, line)
-
-
-def _an_old_blended_art(name="沈青衫") -> str:
-    """以前武學＋武學合出來的那一門（煉製只剩意境＋意境，Joy 2026-10-21；登記過的照舊讀得到）：直接登記一門下品、兼容並蓄、
-    由基礎拳腳與基礎吐納衍生的武學，放進這個角色的功法庫。回傳 id。"""
-    art = generate_from_name("拳息合一", "武學", "拳息合一", weights={"下品": 100, "中品": 0, "上品": 0, "絕學": 0}).model_copy(
-        update={"origin": "fused", "parents": ["jichu_quanjiao", "jichu_tuna"], "affinity": [], "creator": name},
-    )
-    assert open_world().claim_skill_name(art)
-    game = server.game_for(name)
-    game.state.player.arts.append(art.id)
-    open_characters().save(game.state)
-    return art.id
-
-
-def test_a_blended_art_that_is_worn_names_its_parents_on_the_slot_card(client):
-    """身上兩欄的功法卡也寫「由…衍生」（不只清單裡的卡）：改練上身，再看修練頁。"""
-    _a_player_with_insights(client)
-    art = team.resolve_art(_an_old_blended_art(), server.CONTENT, open_world())
-    out = client.post("/api/menxia/switch", json={"art": art.id})
-    assert out.status_code == 200
-    view = client.get("/api/menxia").json()
-    worn = next(c for c in view["slot_cards"] if c["kind"] == art.kind)
-    assert "由【基礎拳腳】與【基礎吐納】衍生" in worn["card"]
-    plain = next(c for c in view["slot_cards"] if c["kind"] != art.kind)
-    assert "衍生" not in plain["card"]
-
-
-# ── 開爐的首次取名在行動鎖外（最終審查 Critical 1）：A 鎖內備料 → B 鎖外取名（有預算）→ C 鎖內重驗、登記、收費 ──
-
-FENG_HUO = fusion.merge_key("feng", "huo")  # 煉製只剩意境＋意境（Joy 2026-10-21）：取名的配方換成風＋火合併（名字沿用）
-SHAN_SHUI = fusion.merge_key("shan", "shui")  # 要第二個新配方時用的
-
-
-def _forger(name="沈青衫", insights=("feng", "huo"), xinde=100) -> Game:
-    """伺服器上這個角色唯一的那份 Game（server.game_for），悟得 insights、心得 xinde，存進資料庫（進鎖會重讀）。"""
-    game = server.game_for(name)
-    game.state.player.insights = list(insights)
-    game.state.player.stats["xinde"] = xinde
-    open_characters().save(game.state)
-    return game
-
-
-def _model(reply):
-    """假的模型：reply(self, messages) 回名字（字串）。self 是那一次呼叫用的 OllamaClient（有預算時是複本）。"""
-    def chat_structured(self, messages, response_model, **kwargs):
-        return naming.NameReply(name=reply(self, messages), description="一句話。")
-
-    return mock.patch.object(OllamaClient, "chat_structured", chat_structured)
-
-
-def _nobody_holds_the_lock(game):
-    assert not game.world.db.writing()  # 這個執行緒沒拿著寫入交易
-    probe = sqlite3.connect(game.world.db.path, timeout=0)
-    try:
-        probe.execute("BEGIN IMMEDIATE")  # 別的程式（假人、別的玩家）也拿得到寫入權
-        probe.execute("ROLLBACK")
-    finally:
-        probe.close()
-
-
-def _crafts(name):
-    """這個角色江湖紀錄裡「煉製」的那幾則（同一種連續的會併成一則，所以比內容，不只比則數）。"""
-    return [e.model_dump() for e in open_characters().load(name).journal if e.title == "煉製"]
-
-
 def test_a_new_recipe_is_named_outside_the_action_lock(lock_events):
     game = _forger()
     lock_events.clear()
@@ -2091,24 +1530,6 @@ def test_a_new_recipe_is_named_outside_the_action_lock(lock_events):
     assert lock_events == ["enter", "exit", "generate", "enter", "exit"]  # 鎖內備料 → 鎖外取名 → 鎖內登記
     assert open_world().lookup_insight_recipe(FENG_HUO).name == "旋風腿"
     assert any("第一次" in m for m in msgs)
-
-
-def test_the_forge_endpoint_never_asks_the_model_while_holding_the_lock(client):
-    _a_player_with_insights(client)
-    game = server.game_for("沈青衫")
-    asked = []
-
-    def reply(model, messages):
-        _nobody_holds_the_lock(game)
-        asked.append(model.timeout)
-        return "旋風腿"
-
-    with _model(reply):
-        out = client.post("/api/menxia/forge", json={"insights": ["feng", "huo"]})
-    assert out.status_code == 200 and "旋風腿" in out.json()["message"]
-    # 預算 60 秒（扣掉 A 段等鎖的時間）；chat_structured 一次最多送兩趟，所以一趟最多一半。原本那個 client 不動
-    assert len(asked) == 1 and 25 < asked[0] <= server.CONTENT.config.naming_budget_seconds / 2
-    assert game.client.timeout == server.CONTENT.config.ollama_timeout
 
 
 def test_the_forge_naming_outside_the_lock_keeps_its_retry_and_budget(monkeypatch):
@@ -2136,17 +1557,6 @@ def test_the_forge_naming_outside_the_lock_keeps_its_retry_and_budget(monkeypatc
     assert server.prepare_forge(game, None, ["feng", "huo"]) == server.NO_NAME
     assert len(sent) == 2 and all(25 < t <= server.CONTENT.config.naming_budget_seconds / 2 for t in sent)  # 第一趟＋重問
     assert game.client.timeout == server.CONTENT.config.ollama_timeout and game.client.retry is True
-
-
-def test_a_forge_in_the_lock_respects_the_model_breaker(monkeypatch, breaker_clock):
-    """沒給 proposed 直接在鎖內開爐（整季機器人那條路）：斷路器開著時鎖內不叫模型，名字走退路字表。"""
-    game = _forger(insights=("feng", "huo", "shan", "shui"))
-    server.act(game, lambda g: g.forge(None, ["feng", "huo"]))  # 鎖內取名失敗（conftest 假成連不上）→ 斷路器打開
-    asked = []
-    with _model(lambda model, messages: asked.append(1) or "山水清音"):
-        msgs = server.act(game, lambda g: g.forge(None, ["shan", "shui"]))  # 另一個新配方
-    assert asked == [] and any("交融" in m for m in msgs)
-    assert open_world().lookup_insight_recipe(SHAN_SHUI).name != "山水清音"
 
 
 def test_each_lock_hold_gets_a_fresh_model_budget(game, monkeypatch, breaker_clock):
@@ -2214,19 +1624,6 @@ def test_a_failed_in_lock_model_call_trips_the_breaker(game, monkeypatch, breake
     lines = capsys.readouterr().out.splitlines()
     assert len(lines) == 1 and f"{server.MODEL_BREAKER_SECONDS} 秒" in lines[0]
     assert "測試" not in lines[0]  # 不寫是誰（也就看不出是不是假人）
-
-
-def test_while_it_is_open_another_players_hold_starts_spent_and_asks_nothing(monkeypatch, breaker_clock):
-    """甲在鎖內替首次出現的配方取名（沒給 proposed），模型連不上（conftest）：斷路器打開。乙接著也在鎖內開一爐新配方：
-    這次拿鎖一開始額度就用完，不叫模型（假的模型一次都沒被叫到），照樣合成、名字走退路字表。"""
-    jia, yi = _forger("甲", insights=("shan", "shui")), _forger("乙")
-    server.act(jia, lambda g: g.forge(None, ["shan", "shui"]))
-    asked, spent = [], []
-    with _model(lambda model, messages: asked.append(1) or "旋風腿"):
-        msgs = server.act(yi, lambda g: spent.append(g._model_budget.gave_up) or g.forge(None, ["feng", "huo"]))  # 乙合另一爐
-    assert spent == [True] and asked == []
-    assert any("交融" in m for m in msgs)
-    assert open_world().lookup_insight_recipe(fusion.merge_key("feng", "huo")).name != "旋風腿"
 
 
 def test_after_the_pause_the_next_hold_asks_again_and_a_new_failure_trips_it_again(
@@ -2639,47 +2036,6 @@ def test_main_starts_the_scheduler_only_when_switched_on(capsys, monkeypatch):
     assert server.SCHEDULER_THREAD is not None and done.wait(2.0)
 
 
-def test_a_recipe_registered_between_the_two_trips_gives_the_registered_art():
-    """乙備料、取名的時候，甲把同一個配方合出來登記了：乙進鎖時拿到的是甲登記的那一個意境（照常付心得），
-    乙的模型取的名字不登記，全服只有一筆。"""
-    first, second = _forger("甲"), _forger("乙")
-    with _model(lambda model, messages: "疾風腿"):
-        proposed = server.prepare_forge(second, None, ["feng", "huo"])  # 乙的 A、B
-    assert proposed == ("疾風腿", "一句話。")
-    with _model(lambda model, messages: "旋風腿"):
-        server.forge(first, None, ["feng", "huo"])  # 甲從頭到尾
-    msgs = server.act(second, lambda g: g.forge(None, ["feng", "huo"], proposed=proposed))  # 乙的 C
-    world = open_world()
-    made = world.lookup_insight_recipe(FENG_HUO)
-    assert made.name == "旋風腿" and not world.is_skill_name_taken("疾風腿")
-    saved = open_characters().load("乙").player
-    assert made.id in saved.insights and saved.stats["xinde"] == 95
-    assert any("由甲首悟" in m for m in msgs)
-
-
-def test_a_second_tab_that_spends_the_xinde_while_naming_leaves_the_first_forge_refused_and_free():
-    """Infra 第 2 點：B 段在鎖外等模型的時候，同一個角色在另一個分頁把同一份心得花在另一爐；C 段進鎖重驗，
-    心得不夠了就整個不做：不登記配方、不扣東西、不寫紀錄，告訴玩家變了什麼。"""
-    game = _forger(insights=("feng", "huo", "shan", "shui"), xinde=5)
-    depth = []
-
-    def reply(model, messages):
-        if not depth:
-            depth.append(1)
-            server.forge(game, None, ["feng", "huo"])  # 另一個分頁：完整的一爐合併（它自己的取名是下面那一句）
-            return "旋風腿"
-        return "燎原"
-
-    with _model(reply):
-        msgs = server.forge(game, None, ["shan", "shui"])
-    saved = open_characters().load("沈青衫").player
-    fire = open_world().lookup_insight_recipe(FENG_HUO)
-    assert fire.name == "燎原" and fire.id in saved.insights and saved.stats["xinde"] == 0
-    assert any("心得不足" in m for m in msgs)
-    assert open_world().lookup_insight_recipe(SHAN_SHUI) is None and not open_world().is_skill_name_taken("旋風腿")
-    assert len(_crafts("沈青衫")) == 1 and "燎原" in _crafts("沈青衫")[0]["tag"]
-
-
 def test_the_furnace_button_stays_disabled_with_the_wait_line_while_naming():
     """企劃者 2026-10-05：等取名的時候「開爐」鈕關著、寫著爐火正旺，同一個分頁按不了第二下（busy）；
     重新整理之後頁面重畫、按鈕照常能按——伺服器不留任何等待中的狀態，重複扣由 C 段的重驗擋（見上面幾條）。"""
@@ -2712,20 +2068,6 @@ def test_menxia_view_lists_owned_arts_insights_and_holdings(client):
     assert view["slot_cards"][0]["price"] == 2
 
 
-def test_menxia_view_rows_carry_what_the_pages_need(client):
-    """每門武學一列：身上的在前、功法卡已轉成 HTML、修練與熔煉按不按得下去與為什麼；意境一列一個。"""
-    _a_player_with_insights(client)
-    view = client.get("/api/menxia").json()
-    breath, fist = view["owned_arts"]
-    assert (breath["worn"], fist["worn"], breath["kind"], fist["kind"]) == (True, True, "內功", "武學")
-    assert breath["level"] == 1 and breath["insight"] is None and breath["card"].startswith("<")
-    # 武學重構：下品不靠修練衝品，修練那一格灰掉寫 NO_RANK_LINE；意境槽一列一格（基礎武學下品 2 格、兼容並蓄）
-    assert breath["cultivate"]["ok"] is False and breath["cultivate"]["note"] == cultivation.NO_RANK_LINE
-    assert breath["affinity"] == "兼容並蓄" and len(breath["slots"]) == 2 and breath["cultivate"]["xinde"] is None
-    assert breath["melt"]["ok"] is False
-    assert [(i["id"], i["name"], i["melt"]) for i in view["insights"]] == [("feng", "風", 10), ("huo", "火", 10)]
-
-
 def test_slot_prices_are_none_when_empty_or_at_the_tenth_level(client, monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "starter_skills", [])  # 沒有開局送的武學：讀檔才不會把空著的欄位補回來
     _player(client)
@@ -2739,164 +2081,6 @@ def test_slot_prices_are_none_when_empty_or_at_the_tenth_level(client, monkeypat
     open_characters().save(game.state)
     cards = {c["kind"]: c for c in client.get("/api/menxia").json()["slot_cards"]}
     assert cards["武學"]["price"] == 18
-
-
-def test_forge_cultivate_and_melt_through_the_endpoints(client):
-    # 合成（意境＋意境）、修練（只剩上品到了極處衝絕學，沒到灰掉）、熔煉三個端點接不接得上
-    _a_player_with_insights(client)
-    r = client.post("/api/menxia/forge", json={"insights": ["feng", "huo"]}).json()
-    assert "交融" in r["message"] and r["made"] is True
-    art_id = _an_old_blended_art()
-    new = next(a for a in client.get("/api/menxia").json()["owned_arts"] if a["id"] == art_id)
-    assert not new["worn"] and new["cultivate"]["ok"] is False and new["cultivate"]["note"] == cultivation.NO_RANK_LINE  # 下品
-    stamina = open_characters().load("沈青衫").player.stamina
-    r = client.post("/api/menxia/cultivate", json={"art": new["id"]}).json()
-    assert r["message"] == f"<p>{cultivation.NO_RANK_LINE}</p>\n"  # 被拒絕只回一句：不花體力
-    assert open_characters().load("沈青衫").player.stamina >= stamina
-    r = client.post("/api/menxia/melt", json={"art": new["id"]}).json()
-    assert "熔成了心得" in r["message"]
-    assert all(row["id"] != new["id"] for row in r["menxia"]["owned_arts"])
-
-
-def test_slotting_and_unslotting_through_the_endpoints(client):
-    """武學重構：修練頁的意境槽（MENXIA_ACTIONS 的 slot／unslot）：裝上去那一列的 slots 跟著變，拆下來回到空格；不花心得。"""
-    _a_player_with_insights(client)
-    r = client.post("/api/menxia/slot", json={"art": "jichu_quanjiao", "insight": "feng"}).json()
-    assert "裝進了【基礎拳腳】第 1 格" in r["message"]
-    fist = next(a for a in r["menxia"]["owned_arts"] if a["id"] == "jichu_quanjiao")
-    assert fist["slots"][0] is not None and fist["slots"][1] is None
-    saved = open_characters().load("沈青衫").player
-    assert saved.art_slots["jichu_quanjiao"] == ["feng", None] and saved.stats["xinde"] == 100
-    r = client.post("/api/menxia/unslot", json={"art": "jichu_quanjiao", "insight": "feng"}).json()
-    assert "拆了下來" in r["message"]
-    assert open_characters().load("沈青衫").player.art_slots["jichu_quanjiao"] == [None, None]
-
-
-def _a_peerless_candidate(client, pills=2):
-    """一門（以前）合成出來、已經是上品、練到第十成、意境槽都裝滿的武學（下一步是絕學）、手上有 pills 枚破境丹、體力夠。
-    回傳（功法 id，Game）。武學重構：沒有火候了，到了極處（cultivation.ready）就只等契機或服丹。"""
-    from tianxia import arts
-
-    _a_player_with_insights(client, insights=("feng", "huo", "shui", "shan"))
-    art_id = _an_old_blended_art()
-    game = server.game_for("沈青衫")
-    game.state.player.art_quality[art_id] = "上品"
-    game.state.player.art_levels[art_id] = 10
-    art = team.resolve_art(art_id, server.CONTENT, game.world)
-    n = len(arts.slots_of(game.state, server.CONTENT, art))
-    game.state.player.art_slots[art_id] = ["feng", "huo", "shui", "shan"][:n]  # 兩門基礎武學合出來兼容並蓄：什麼都收
-    from test_cultivation import STRONG  # 槽裡放效果夠濃的意境（評分不是門檻，只是讓卡上有東西）
-    from tianxia.state import InsightFx
-
-    for ins in game.state.player.art_slots[art_id]:
-        game.state.player.insight_fx[ins] = InsightFx(quality="上品", general=dict(STRONG[ins]))
-    game.state.player.legend_items = pills
-    game.state.player.stamina = server.CONTENT.config.stamina_max
-    open_characters().save(game.state)
-    assert cultivation.ready(game.state, server.CONTENT, game.world, art_id)[0]
-    return art_id, game
-
-
-def test_the_pill_is_taken_only_when_the_request_ticks_it_with_a_real_true(client):
-    """勾了才服：use_legend 只認布林 true。到了極處的那一門，沒勾就修不下去（等契機），勾了是服丹強行衝關：
-    成不成都用掉一枚。"""
-    from conftest import FixedRandom
-
-    art_id, game = _a_peerless_candidate(client)
-    game.rng = FixedRandom(0.99)
-    for odd in (False, None, "true", 1, "yes", [True], {"a": 1}):  # 沒勾，或不是真正的 true：丹留著、什麼都不動
-        body = {"art": art_id} if odd is None else {"art": art_id, "use_legend": odd}
-        out = client.post("/api/menxia/cultivate", json=body).json()
-        assert "不在練功房裡" in out["message"] and "你服下" not in out["message"], odd
-    saved = open_characters().load("沈青衫").player
-    assert saved.legend_items == 2 and saved.stamina == server.CONTENT.config.stamina_max
-    out = client.post("/api/menxia/cultivate", json={"art": art_id, "use_legend": True}).json()  # 擲 99：沒衝開
-    assert "強行衝關" in out["message"] and "彈了回來" in out["message"]
-    saved = open_characters().load("沈青衫").player
-    assert saved.legend_items == 1 and saved.art_quality[art_id] == "上品"
-    game.rng = FixedRandom(0.0)
-    out = client.post("/api/menxia/cultivate", json={"art": art_id, "use_legend": True}).json()
-    assert "強行衝關" in out["message"] and "晉為絕學" in out["message"]
-    saved = open_characters().load("沈青衫").player
-    assert saved.legend_items == 0 and saved.art_quality[art_id] == "絕學"
-
-
-def test_a_stale_page_ticking_a_pill_you_no_longer_hold_changes_nothing(client):
-    """頁面過期、手上已經沒有丹，卻勾了丹送來：只回「等契機或服丹」那一句（CHANCE_LINE），什麼都不扣。
-    （武學重構：沒有火候了，原本「勾了丹也照樣添火候」那一條跟著拿掉。）"""
-    art_id, game = _a_peerless_candidate(client, pills=0)
-    out = client.post("/api/menxia/cultivate", json={"art": art_id, "use_legend": True})
-    assert out.status_code == 200 and "不在練功房裡" in out.json()["message"]
-    saved = open_characters().load("沈青衫").player
-    assert saved.legend_items == 0 and saved.art_quality[art_id] == "上品" and saved.stamina == server.CONTENT.config.stamina_max
-
-
-def test_the_practice_page_offers_the_pill_for_the_peerless_step(client):
-    """到了極處的那一門：修練那一格寫等契機或服丹，破境丹那一格是強行衝關，寫的機會跟實際擲的一樣（cultivation.force_odds）。"""
-    art_id, game = _a_peerless_candidate(client)
-    row = next(r for r in client.get("/api/menxia").json()["owned_arts"] if r["id"] == art_id)
-    odds = cultivation.force_odds(game.state, server.CONTENT, game.world, art_id)
-    stamina = server.CONTENT.config.cultivate_stamina
-    assert row["cultivate"]["ok"] and row["cultivate"]["note"] == f"上品已到極處：等一場硬仗的契機，或服丹強行衝關・體力 {stamina}"
-    assert row["cultivate"]["legend"]["label"] == "服下破境丹強行衝關（剩 2 枚）"
-    assert row["cultivate"]["legend"]["note"] == f"約 {odds}% 衝開・體力 {stamina}"
-    breath = client.get("/api/menxia").json()["owned_arts"][0]
-    assert breath["cultivate"]["ok"] is False and breath["cultivate"]["legend"] is None
-
-
-def test_melting_an_insight_through_the_endpoint(client):
-    _a_player_with_insights(client, xinde=0)
-    r = client.post("/api/menxia/melt_insight", json={"insight": "feng"}).json()
-    assert "化成了心得" in r["message"] and [i["id"] for i in r["menxia"]["insights"]] == ["huo"]
-    saved = open_characters().load("沈青衫").player
-    assert saved.insights == ["huo"] and saved.stats["xinde"] == 10
-    r = client.post("/api/menxia/melt_insight", json={"insight": "feng"}).json()  # 已經沒有了
-    assert "沒有這個意境" in r["message"]
-
-
-def test_melting_many_through_the_endpoint(client):
-    """批量熔煉：勾的武學與意境一次熔完、寫一則江湖紀錄；不是串列的當沒勾。art_rows 帶每一門熔了退多少（網頁合計用）。"""
-    _a_player_with_insights(client, xinde=100)
-    _an_old_blended_art()
-    fused = next(a for a in client.get("/api/menxia").json()["owned_arts"] if not a["worn"])
-    assert fused["melt"]["value"] == server.CONTENT.config.melt_min_refund
-    before = open_characters().load("沈青衫").player.stats["xinde"]
-    assert "沒有勾選" in client.post("/api/menxia/melt_many", json={"arts": "x", "insights": 3}).json()["message"]
-    r = client.post("/api/menxia/melt_many", json={"arts": [fused["id"]], "insights": ["feng", "huo"]}).json()
-    assert "一口氣熔掉了 1 門武學、2 個意境" in r["message"]
-    saved = open_characters().load("沈青衫")
-    assert fused["id"] not in saved.player.arts and saved.player.insights == []
-    assert saved.player.stats["xinde"] == before + fused["melt"]["value"] + 2 * server.CONTENT.config.melt_insight_xinde
-    assert "一口氣熔掉了" in saved.journal[0].tag
-
-
-def test_the_naming_row_and_the_name_action(client):
-    """練成絕學的第一人：修練頁有等著取名的一列；定了名，那一列消失、武學的名字全服一起改。"""
-    _a_player_with_insights(client)
-    art_id = _an_old_blended_art()
-    game = server.game_for("沈青衫")
-    game.state.player.naming = art_id
-    game.state.player.art_quality[art_id] = "絕學"
-    open_characters().save(game.state)
-    assert open_world().claim_master(art_id, "沈青衫")
-    view = client.get("/api/menxia").json()
-    assert view["naming"] == {"id": art_id, "name": view["owned_arts"][-1]["name"]}
-    assert view["owned_arts"][-1]["melt"]["ok"] is False and "先替它定名" in view["owned_arts"][-1]["melt"]["note"]
-    r = client.post("/api/menxia/name", json={"name": "旋風不歸腿"}).json()
-    assert "旋風不歸腿" in r["message"] and r["menxia"]["naming"] is None
-    assert r["menxia"]["owned_arts"][-1]["name"] == "旋風不歸腿"
-    assert open_characters().load("沈青衫").player.naming is None
-
-
-def test_a_bad_name_leaves_the_naming_right_in_place(client):
-    _a_player_with_insights(client)
-    art_id = _an_old_blended_art()
-    game = server.game_for("沈青衫")
-    game.state.player.naming = art_id
-    open_characters().save(game.state)
-    assert open_world().claim_master(art_id, "沈青衫")
-    r = client.post("/api/menxia/name", json={"name": "a"}).json()
-    assert "不行" in r["message"] and r["menxia"]["naming"]["id"] == art_id
 
 
 def test_the_new_menxia_actions_survive_oddly_shaped_bodies(client):
@@ -2939,29 +2123,6 @@ def test_the_menxia_payload_carries_the_attribute_note_both_pages_fold_away(clie
     assert "×1.3" in note and "剛柔" in note
 
 
-def test_the_slot_cards_say_whether_each_slot_holds_an_art_and_its_level(client, monkeypatch):
-    """C5：修練頁照目前那一門有沒有功法、練到第幾成，決定鍛鍊鈕亮不亮。
-    全程走 API：動作端點會存檔，每次進鎖都從資料庫重讀角色，所以讀到的是存好的那一份。"""
-    monkeypatch.setattr(server.CONTENT.config, "practice_injury_chance", 0.0)
-
-    def slots(cards):
-        return [(c["kind"], c["learned"], c["level"], c["maxed"]) for c in cards]
-
-    _player(client)
-    assert slots(client.get("/api/menxia").json()["slot_cards"]) == [("武學", True, 1, False), ("內功", True, 1, False)]
-    game = server.game_for("沈青衫")
-    monkeypatch.setattr(server.CONTENT.config, "starter_skills", [])  # 沒有開局送的武學：讀檔才不會把空著的欄位補回來
-    game.state.player.member.neigong_id = None  # 欄位空著（內容改版之後的舊角色）：沒學過、第 0 成
-    game.state.player.stats["xinde"] = 100  # 練成花心得：第 1 成升到第十成共 45 點，開局的 20 點不夠
-    open_characters().save(game.state)
-    out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()
-    assert slots(out["menxia"]["slot_cards"]) == [("武學", True, 2, False), ("內功", False, 0, False)]
-    assert slots(client.get("/api/menxia").json()["slot_cards"]) == [("武學", True, 2, False), ("內功", False, 0, False)]
-    for _ in range(8):  # 練到第十成：練滿了沒由伺服器照 team.MAX_LEVEL 說，前端不另外記上限
-        out = client.post("/api/menxia/practice", json={"kind": "武學"}).json()
-    assert slots(out["menxia"]["slot_cards"]) == [("武學", True, 10, True), ("內功", False, 0, False)]
-
-
 def _a_player_with_library_arts(client, *arts):
     """新角色，功法庫裡放這幾門功法。功法本體登記進共用世界（煉製、自創都放在那裡），
     角色的功法庫存進資料庫（每次進鎖都從資料庫重讀角色，只改記憶體的話下一個請求就看不到）。"""
@@ -2999,17 +2160,6 @@ def test_a_library_art_without_a_note_leaves_no_blank_line(client):
     assert "來源：自創（沈浪 所創）<br />\n功效：（意境槽空著，到煉製頁裝意境）<br />\n沈〔" in card
     assert "<br />\n比身上的【基礎拳腳】：威力 " in card
     assert card.rstrip().endswith("（第一成）</p>")
-
-
-def test_travel_sets_off_or_stays_on_the_map_and_says_why(client):
-    _player(client)
-    game = server.game_for("沈青衫")
-    out = client.post("/api/travel", json={"place": game.state.player.location}).json()
-    assert out["arrived"] is False and out["reason"] and out["map"]["selected"] == game.state.player.location
-    nearby = [o["id"][5:] for o in client.get("/api/main").json()["options"] if o["id"].startswith("move:")]
-    out = client.post("/api/travel", json={"place": nearby[0]}).json()
-    assert out["arrived"] is True
-    assert game.state.player.journey.path == [nearby[0]]  # 步行：在路上
 
 
 def test_the_map_offers_walking_and_dashing(game):
@@ -3055,191 +2205,10 @@ def test_the_other_blocks_settled_on_the_jianghu_page_flag_the_way_back_too(game
         assert (blocked["enabled"], blocked["label"], blocked["to_jianghu"]) == (False, reason, to_jianghu)
 
 
-def test_a_stale_travel_button_says_which_event_is_pending(client):
-    """打開輿圖之後才冒出事件、按了舊的按鈕：留在輿圖，寫出原因，回傳的輿圖也帶 to_jianghu（FB-063）。"""
-    _player(client)
-    game = server.game_for("沈青衫")
-    pending = server.CONTENT.events[next(iter(server.CONTENT.events))]
-    game.state.pending_event = pending.id
-    open_characters().save(game.state)  # 每次進鎖都從資料庫重讀角色，只改記憶體的話請求看不到
-    out = client.post("/api/travel", json={"place": "yingshui"}).json()
-    assert out["arrived"] is False and out["reason"] == f"先回江湖頁處理「{pending.title}」"
-    assert out["map"]["travel"][0]["to_jianghu"] is True
-
-
-def test_travel_dashes_when_asked(client):
-    _player(client)
-    game = server.game_for("沈青衫")
-    minutes = atlas.routes(game.state, game.content)["yingshui"].minutes
-    cost = atlas.travel_stamina(game.content, minutes, "dash", saving=0.0)  # 新角色沒騎馬
-    assert client.post("/api/travel", json={"place": "yingshui", "mode": "dash"}).json()["arrived"] is True
-    assert game.state.player.location == "yingshui"
-    assert game.state.player.stamina == game.content.config.stamina_max - cost
-
-
-def test_reports_and_map_pages_read_without_saving(client, save_dir):
-    _player(client)
-    with open_characters().db.transaction() as conn:
-        conn.execute("DELETE FROM characters")
-    assert client.get("/api/reports").json()["list"] == []
-    assert client.get("/api/map?layer=enemy").json()["layer"] in {"enemy", server.DEFAULT_LAYER}
-    assert client.get("/api/map/base").json()["places"] and client.get("/api/map/state").json()["places"]
-    assert not open_characters().exists("沈青衫")
-
-
-def test_the_new_map_comes_as_a_base_and_an_overlay(client):
-    """輿圖升級（設計第九節）：底圖（svg、地點、路、大區）與疊層（每個地點此刻的樣子）分兩個端點，兩個都只讀。"""
-    _player(client)
-    base = client.get("/api/map/base").json()
-    assert base["svg"].startswith("<svg") and base["places"] and base["edges"] and base["key"]
-    st = client.get("/api/map/state").json()
-    assert st["key"] == base["key"] and st["here"] in st["places"]
-
-
-def test_the_map_base_is_cached_until_a_place_opens(client):
-    from tianxia import mapdata
-
-    _player(client)
-    game = server.game_for("沈青衫")
-    first = server.look(game, server.map_base_view)
-    assert server.look(game, server.map_base_view) is first  # 同一把鍵：同一份，不重畫
-    game.state.world.flags.add("xi_open")  # 南華觀開放（14 天的季要等這面旗）
-    second = server.map_base_view(game)
-    assert second["key"] != first["key"] and second["key"] == mapdata.base_key(game.state, game.content)
-    assert "jade_cave" in {p["id"] for p in second["places"]}
-
-
-# ── 全服即時戰鬥：自訂行動 ────────────────────────────────
-
-
-def test_battle_free_text_shows_and_submits(game):
-    definition = server.CONTENT.battles["huangjin_showdown"]
-    game.state.player.faction = "guan"  # 劇本分陣營：散人只能觀戰，要先投靠才有得加入
-    game.world.start_battle(definition, now=0.0)
-    with at(game, 0.0):
-        game.choose("battle:join:guan")
-        game.world.mutate_battle(
-            lambda b: battle_instance.join_faction(b, "機器人", "huang", neili_cap=320.0, is_bot=True)
-        )
-    after_muster = definition.muster_seconds + 1
-    with at(game, after_muster):
-        assert server.look(game, server.main_view)["free_text"] == game.battle_free_text_prompt()
-        with mock.patch("server.time.time", return_value=after_muster):
-            server.battle_text(game, "直取波才首級")
-    assert any("直取波才首級" in line for line in game.world.get_battle().narrative_log)
-
-
-def test_duel_free_text_is_rated_outside_the_action_lock(game, monkeypatch):
-    """單人頭目戰的放手一搏（Joy 2026-10-10）：輸入框送到 duel_text，成功率與兩版劇情在鎖外評，C 段照評好的擲骰。"""
-    from tianxia import duel
-
-    game.client = None
-    game.state.player.location = "changshe"
-    with at(game, 0.0):
-        game._duel_start(duel.available(game.state, game.content))
-        view = server.look(game, server.main_view)
-        assert view["free_text"] == game.duel_free_text_prompt() and view["free_op"] == "duel_text"
-        assert view["free_text_note"] == game.DUEL_GAMBLE_NOTE
-        seen = []
-
-        def rate(client, act_, faction_name, text, name, setting, place, target="", sex="男"):
-            seen.append((open_world().db.writing(), act_.title, faction_name, text, name, place))
-            return battle_instance.GambleVerdict(100, "測試一把撒出石灰。", "測試踩到自己的衣角。")
-
-        monkeypatch.setattr(battle_instance, "assess_gamble", rate)
-        with mock.patch("server.time.time", return_value=0.0):
-            msgs = server.duel_text(game, "撒石灰")
-    assert seen == [(False, "黃巾小帥段鐵頭", "散人", "撒石灰", "測試", duel.PLACE)]
-    assert msgs[0].startswith("第 1 回合：測試一把撒出石灰。（氣勢 +")
-
-
 def test_duel_text_without_a_duel_asks_no_model(game, monkeypatch):
     monkeypatch.setattr(battle_instance, "assess_gamble", lambda *a, **k: pytest.fail("不該評"))
     with at(game, 0.0), mock.patch("server.time.time", return_value=0.0):
         assert server.duel_text(game, "撒石灰") == ["（此刻無法這麼做。）"]
-
-
-# ── 決戰選項的回話（FB-030）：網頁上要看得到按下去發生了什麼 ──────────────
-
-
-def _a_showdown_fighter(client, started=False):
-    """官軍的新角色，黃巾決戰剛開（started＝集結已經結束、正在打），另有一位黃巾的真人在場、所以回合會等人。"""
-    _player(client)
-    game = server.game_for("沈青衫")
-    game.state.player.faction = "guan"
-    open_characters().save(game.state)
-    definition = server.CONTENT.battles["huangjin_showdown"]
-    open_world().start_battle(definition, now=time.time() - (definition.muster_seconds + 1 if started else 0))
-    open_world().mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=320.0))
-    return definition
-
-
-def _journal_titles(name="沈青衫"):
-    return [e.title for e in open_characters().load(name).journal]
-
-
-def test_joining_the_muster_tells_the_page_and_is_journaled(client):
-    _a_showdown_fighter(client)
-    before = _journal_titles()
-    out = client.post("/api/choose", json={"id": "battle:join:guan"}).json()
-    assert "你加入了這場戰局。" in out["message"]
-    assert "黃巾決戰・加入官軍" in out["main"]["latest"]
-    assert _journal_titles() == ["黃巾決戰・加入官軍"] + before
-
-
-def test_joining_late_shows_the_line_on_the_page_data_and_journals_it(client):
-    """FB-028 的驗收：「你趕到了戰場，這一回合就能出手。」要在畫面資料裡找得到（回話與江湖紀錄兩處）。"""
-    _a_showdown_fighter(client, started=True)
-    before = _journal_titles()
-    out = client.post("/api/choose", json={"id": "battle:join_late"}).json()
-    line = "你趕到了戰場，這一回合就能出手。"
-    assert line in out["message"]
-    main = client.get("/api/main").json()
-    assert line in main["latest"] and line in out["main"]["latest"]
-    assert _journal_titles() == ["黃巾決戰・趕到戰場"] + before
-
-
-def test_a_rounds_action_replies_but_is_not_journaled(client):
-    _a_showdown_fighter(client, started=True)
-    client.post("/api/choose", json={"id": "battle:join_late"})
-    before = _journal_titles()
-    options = client.get("/api/main").json()["options"]
-    act_id = next(o["id"] for o in options if o["id"].startswith("battle:act:"))
-    out = client.post("/api/choose", json={"id": act_id}).json()
-    assert "等待其他人" in out["message"]
-    assert _journal_titles() == before
-
-
-def test_the_free_text_action_already_replies_and_is_not_journaled(client):
-    """放手一搏走 /api/do/battle_text，回話本來就從 api_do 的 message 回來、前端的 doMain 也會跳出來；不寫江湖紀錄。"""
-    _a_showdown_fighter(client, started=True)
-    client.post("/api/choose", json={"id": "battle:join_late"})
-    before = _journal_titles()
-    assert client.get("/api/main").json()["free_text"]
-    assert "重傷的是你自己" in client.get("/api/main").json()["free_text_note"]
-    out = client.post("/api/do/battle_text", json={"text": "直取波才首級"}).json()
-    assert "等待其他人" in out["message"]
-    assert _journal_titles() == before
-
-
-def test_the_free_text_action_is_rated_outside_the_action_lock(client, monkeypatch):
-    """試玩回饋 2026-10-08：放手一搏的成功率以前在行動鎖裡評，最多等 in_lock_model_timeout 秒，全服跟著等。現在鎖外評，
-    評好的分照樣送進這一回合。"""
-    _a_showdown_fighter(client, started=True)
-    client.post("/api/choose", json={"id": "battle:join_late"})
-    seen = []
-
-    def rate(c, act, faction_name, text, name, target="", sex="男"):
-        seen.append((open_world().db.writing(), faction_name, text, name))
-        return 73
-
-    monkeypatch.setattr(battle_instance, "score_gamble", rate)
-    client.post("/api/do/battle_text", json={"text": "火燒糧草"})
-    assert seen == [(False, "官軍", "火燒糧草", "沈青衫")]
-    battle = open_world().get_battle()
-    assert battle.round.success_rates == {"沈青衫": 73}
-    # 只評成功率（Joy 2026-10-13）：劇情等回合結算後一整批寫（narrate_battle），送出時沒有劇情
-    assert battle.round.stories == {} and battle.round.sexes == {"沈青衫": "男"}
 
 
 def test_the_free_text_action_does_not_ask_the_model_when_it_cannot_be_sent(client, monkeypatch):
@@ -3254,57 +2223,6 @@ def test_an_ordinary_option_does_not_come_back_with_a_message(client):
     _player(client)
     out = client.post("/api/choose", json={"id": "act:explore"}).json()
     assert "message" not in out
-
-
-def test_a_bounty_option_that_is_no_longer_on_the_menu_tells_the_page_why_and_is_not_journaled(client, monkeypatch):
-    """FB-162：兩個分頁搶同一張，慢的那一頁按下去的選項已經不在選單上——跟決戰選項一樣回一句 message（網頁跳提示），
-    原因是引擎的拒絕（bounties.give_problem：裝備庫裡沒有這一件）；不寫江湖紀錄。不是懸賞的、也不在選單上的選項照舊什麼都不回。"""
-    from tianxia import bounties
-    from tianxia.state import Bounty
-
-    monkeypatch.setattr(server.CONTENT.config.weapons, "enabled", True)  # 兵器關著時求兵一律回「此刻無法這麼做」，看不出原因
-    _player(client)
-    # 開季時已經掛了第 1 週的那一批（b1…），這一張另取名字，免得 give_problem 找到的是別張
-    open_world().mutate_season(lambda s: s.bounties.append(Bounty(
-        id="b-race", kind="arms", faction="guan", silver=0, deeds=2, quota=3, attribute="柔", weapon_kind="劍", week=1, expires=1e12)))
-    before = _journal_titles()
-    out = client.post("/api/choose", json={"id": "bounty:give:b-race:兵:9"}).json()
-    assert bounties.NO_WEAPON in out["message"]  # 伺服器把話轉成 HTML，網頁跳提示時再去掉標籤
-    assert bounties.GONE in client.post("/api/choose", json={"id": "bounty:pick:b99"}).json()["message"]
-    assert bounties.STALE in client.post("/api/choose", json={"id": "bounty:unpick"}).json()["message"]  # 榜根本沒開著
-    assert _journal_titles() == before
-    assert "message" not in client.post("/api/choose", json={"id": "act:nonsense"}).json()
-
-
-def test_a_showdown_option_that_is_no_longer_there_still_says_so(client):
-    _a_showdown_fighter(client)
-    out = client.post("/api/choose", json={"id": "battle:act:safe"}).json()
-    assert "此刻無法" in out["message"]
-
-
-def test_a_fighter_sees_the_finished_showdown_on_the_main_page(client):
-    """FB-027：決戰在這個帳號沒連線時收場（只動了資料庫裡的戰鬥），下一次打 /api/main 就補進江湖紀錄與戰報、
-    「剛剛」放這一場的卡片，而且存進了角色。"""
-    _player(client)
-    definition = server.CONTENT.battles["huangjin_showdown"]
-    world = open_world()
-    world.start_battle(definition, now=0.0)
-
-    def fight(b):
-        battle_instance.join_faction(b, "沈青衫", "guan", neili_cap=320.0)
-        battle_instance.close_muster(b, definition, random.Random(0))
-        while b.phase == "active":
-            battle_instance.submit_action(b, "沈青衫", battle_instance.safest_option_tag(b, definition, "沈青衫"))
-            battle_instance.resolve_round(b, definition, random.Random(0))
-
-    world.mutate_battle(fight)
-    main = client.get("/api/main").json()
-    assert main["card"] is not None and "決戰：黃巾決戰" in main["card"] and "你站在官軍" in main["card"]
-    assert main["card_id"] is not None
-    saved = open_characters().load("沈青衫")
-    assert saved.journal[0].title.startswith("黃巾決戰・") and saved.journal[0].battle_id == main["card_id"]
-    report = client.get(f"/api/reports?id={main['card_id']}").json()
-    assert report["list"][0]["id"] == main["card_id"] and "你站在官軍" in report["detail"]
 
 
 # ── 管理者 ────────────────────────────────────────────
@@ -3437,60 +2355,6 @@ def test_only_admins_can_reset_a_password(client, monkeypatch):
     server.login("shen_01", "temp-pass")
 
 
-# ── 對話在行動鎖外生成（一個玩家的模型呼叫不能讓所有人一起等）────────────
-
-
-DIALOGUE_TURN = companion_agent.CompanionTurn(
-    narrative="他點了點頭。", options=["閒聊幾句", "就此告辭"], option_tags=["尋常寒暄", "尋常寒暄"],
-)
-
-
-def _stand_by_a_figure(game):
-    """站到正式內容裡盧植所在的地點（盧植營，只有他一位大勢人物：交友直接找他），有他的結識旗標所以見得到；
-    福緣設成已領，交友不會先觸發福緣。兩位以上人物的地點（例如廣宗）交友不開口，要「求見」指名。"""
-    game.state.player.location = "luzhi_camp"
-    game.state.player.flags.add("結識:luzhi")
-    game.state.player.fortune = True
-
-
-@pytest.fixture
-def lock_events(monkeypatch):
-    """記錄行動鎖「拿到、放掉」的順序，再讓測試把「生成」插進同一條時間線。"""
-    events = []
-    real = SqliteWorldStore.action_lock
-
-    @contextlib.contextmanager
-    def spy(self, timeout=None):
-        with real(self, timeout):
-            events.append("enter")
-            yield
-        events.append("exit")
-
-    monkeypatch.setattr(SqliteWorldStore, "action_lock", spy)
-    return events
-
-
-def test_a_dialogue_option_generates_outside_the_action_lock(game, lock_events):
-    _stand_by_a_figure(game)
-
-    def generate(client, messages, required=()):
-        lock_events.append("generate")
-        assert not game.world.db.writing()  # 這個執行緒沒拿著寫入交易
-        probe = sqlite3.connect(game.world.db.path, timeout=0)
-        try:
-            probe.execute("BEGIN IMMEDIATE")  # 別的程式也拿得到寫入權：沒有人卡著
-            probe.execute("ROLLBACK")
-        finally:
-            probe.close()
-        return DIALOGUE_TURN
-
-    with mock.patch.object(companion_agent, "generate_turn", side_effect=generate) as gen:
-        server.choose(game, "act:socialize")
-    gen.assert_called_once()
-    assert lock_events == ["enter", "exit", "generate", "enter", "exit"]  # 鎖內備料 → 鎖外生成 → 鎖內套用
-    assert game.state.player.pending_companion == "luzhi"
-
-
 def test_the_dialogue_prepared_outside_the_lock_gets_its_budget_not_the_in_lock_limit(game, breaker_clock):
     """鎖內的模型呼叫有 15 秒的上限（Config.in_lock_model_timeout），鎖外的備料不受它管：一輪對話本來就要九、十秒，不能被短複本
     的 15 秒誤傷。鎖外有自己的總預算（Config.dialogue_budget_seconds，PM 2026-10-06）：拿的是 game.client 的複本，一趟的逾時是
@@ -3508,174 +2372,6 @@ def test_the_dialogue_prepared_outside_the_lock_gets_its_budget_not_the_in_lock_
     assert len(seen) == 1 and seen[0] is not game.client
     assert seen[0].timeout == config.dialogue_budget_seconds / 2 > config.in_lock_model_timeout
     assert game.client.timeout == config.ollama_timeout and game.client.retry is True
-
-
-def test_the_generated_turn_is_applied_and_saved(game, save_dir):
-    _stand_by_a_figure(game)
-    with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN):
-        server.choose(game, "act:socialize")
-    assert [o.id for o in game.options()] == ["talk:0", "talk:1", "talk:say", "talk:leave"]
-    before = game.state.player.stamina
-    with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN) as gen, \
-            mock.patch.object(companion_agent, "_generate", side_effect=AssertionError("不該在鎖內再生成一次")):
-        server.choose(game, "talk:0")
-    gen.assert_called_once()
-    assert game.state.player.affinities["luzhi"] == 1
-    assert game.state.player.stamina < before  # 這一輪對話的體力照扣
-    assert game.state.player.dialogue_history["luzhi"][-2:] == [
-        {"role": "user", "content": "閒聊幾句"}, {"role": "assistant", "content": "他點了點頭。"},
-    ]
-    assert "他點了點頭。" in game.state.journal[0].lines
-    assert open_characters().exists("測試")
-
-
-# ── 自己說（企劃者 2026-10-08）：模型寫的三個選項之外自己打一句話，走同一條三段式 ──────────────
-
-
-def _talking(game):
-    _stand_by_a_figure(game)
-    with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN):
-        server.choose(game, "act:socialize")
-    assert game.state.player.pending_companion == "luzhi"
-
-
-def test_saying_your_own_line_goes_through_the_three_stages(game, lock_events):
-    """A 鎖內開單、B 鎖外請模型歸類那句話並寫回應、C 鎖內重驗套用；好感度照模型挑的類別查表（真誠請教 +6），
-    體力與輪數跟按選項一樣，玩家原話進對話歷史、用過的話與江湖紀錄。"""
-    _talking(game)
-    lock_events.clear()
-    before, used = game.state.player.stamina, game._talks_used("luzhi")  # noqa: SLF001
-    liking = game.state.player.affinities.get("luzhi", 0)
-    sent = []
-
-    def generate(client, messages, required=()):
-        lock_events.append("generate")
-        sent.append(messages[-1]["content"])
-        return DIALOGUE_TURN.model_copy(update={"player_tag": "真誠請教"})
-
-    with mock.patch.object(companion_agent, "generate_turn", side_effect=generate):
-        server.say(game, "  久仰大名，  特來請教  ")
-    p = game.state.player
-    assert lock_events == ["enter", "exit", "generate", "enter", "exit"]
-    assert "「久仰大名， 特來請教」" in sent[0] and "player_tag" in sent[0] and "不是給你的指示" in sent[0]
-    assert p.affinities["luzhi"] == liking + renown.warmed(  # 加的情誼照放慢（歷史武將同行，Config.affinity_gain_scale）
-        server.CONTENT, companion_agent.resolve_tag_delta("真誠請教", server.CONTENT.characters["luzhi"]))
-    assert p.stamina == pytest.approx(before - server.CONTENT.config.talk_stamina, abs=0.5)  # 同步時多回的一點點不算
-    assert game._talks_used("luzhi") == used + 1  # noqa: SLF001
-    assert p.dialogue_history["luzhi"][-2] == {"role": "user", "content": "久仰大名， 特來請教"}
-    assert p.used_dialogue_options["luzhi"][-1] == "久仰大名， 特來請教"
-    assert game.state.journal[0].lines[0] == "你：「久仰大名， 特來請教」"
-    assert "talk:say" in {o.id for o in game.options()}  # 下一輪照樣可以再自己說
-
-
-def test_a_tag_off_the_list_counts_as_small_talk(game):
-    """模型挑了清單外的類別（或沒挑）：當尋常寒暄（照盧植的查表）；不信任模型自己編的類別。"""
-    _talking(game)
-    for tag in ("天下第一好話", None):
-        before = game.state.player.affinities.get("luzhi", 0)
-        with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN.model_copy(update={"player_tag": tag})):
-            server.say(game, "今日天氣不錯")
-        assert game.state.player.affinities["luzhi"] == before + companion_agent.resolve_tag_delta("尋常寒暄", server.CONTENT.characters["luzhi"])
-
-
-def test_a_bad_line_is_refused_before_anything_happens(game):
-    """空白、超過 20 字、不在對話裡：丟 GameError，不叫模型、不扣體力、不算輪數。"""
-    _talking(game)
-    before = game.state.player.stamina
-    with mock.patch.object(companion_agent, "generate_turn", side_effect=AssertionError("不該叫模型")):
-        limit = game.say_max()  # NPC 智能 2.0開著時放寬（Config.parley.say_max）
-        for text in ("", "   ", "一" * (limit + 1)):
-            with pytest.raises(server.GameError, match=f"{limit} 字"):
-                server.say(game, text)
-        assert game.choose("talk:say") == [f"（寫下你想說的話，{limit} 字以內。）"]  # 只叫出輸入框
-        assert game.state.player.stamina == pytest.approx(before, abs=0.5) and game.state.player.pending_companion == "luzhi"
-        server.choose(game, "talk:leave")
-        with pytest.raises(server.GameError):
-            server.say(game, "再會")
-
-
-def test_saying_a_line_in_simplified_chinese_is_kept_in_traditional(game):
-    _talking(game)
-    with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN):
-        server.say(game, "你好吗，将军")
-    assert game.state.player.dialogue_history["luzhi"][-2]["content"] == "你好嗎，將軍"
-
-
-def test_a_failed_reply_to_your_own_line_ends_the_talk_for_free(game):
-    _talking(game)
-    before = game.state.player.stamina
-    with mock.patch.object(companion_agent, "generate_turn", side_effect=companion_agent.DialogueUnavailable("連不上")):
-        server.say(game, "久仰大名")
-    assert game.state.player.pending_companion is None and game.state.player.stamina == pytest.approx(before, abs=0.5)
-
-
-def test_saying_needs_the_same_stamina_as_an_option(game):
-    _talking(game)
-    game.state.player.stamina = 0
-    open_characters().save(game.state)  # 伺服器進鎖先從資料庫重讀
-    assert {o.id: o.enabled for o in game.options()}["talk:say"] is False
-    with pytest.raises(server.GameError):
-        server.say(game, "久仰大名")
-
-
-def test_a_failed_generation_ends_the_talk_for_free(game, lock_events):
-    _stand_by_a_figure(game)
-    before = game.state.player.stamina
-
-    def generate(client, messages, required=()):
-        lock_events.append("generate")
-        raise companion_agent.DialogueUnavailable("連不上")
-
-    with mock.patch.object(companion_agent, "generate_turn", side_effect=generate):
-        server.choose(game, "act:socialize")
-    assert lock_events == ["enter", "exit", "generate", "enter", "exit"]
-    assert game.state.player.pending_companion is None
-    assert game.state.player.stamina == before
-    assert game.state.journal[0].lines == ["盧植似乎無心多談，你只好先行告辭。"]
-
-
-def test_a_changed_option_list_while_generating_falls_back_to_generating_in_the_lock(game):
-    """生成的那十秒內，選單換了（例如兩個分頁各按一下）：進鎖重驗對不上，丟掉鎖外生成的，改在鎖內現生成。"""
-    _stand_by_a_figure(game)
-    with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN):
-        server.choose(game, "act:socialize")
-
-    def generate(client, messages, required=()):
-        # 資料庫是唯一的真實來源（進鎖先重讀）：生成的那十秒裡另一個請求（連點兩下、第二個分頁）存了新的選單
-        other = open_characters().load("測試")
-        other.player.last_offered_dialogue["luzhi"] = [["換了一句話", "告辭"], ["尋常寒暄", "尋常寒暄"]]
-        open_characters().save(other)
-        return DIALOGUE_TURN
-
-    fresh = companion_agent.CompanionTurn(
-        narrative="他沉吟片刻。", options=["再聊聊", "告辭"], option_tags=["尋常寒暄", "尋常寒暄"],
-    )
-    with mock.patch.object(companion_agent, "generate_turn", side_effect=generate) as outside, \
-            mock.patch.object(companion_agent, "_generate", return_value=fresh) as in_lock:
-        server.choose(game, "talk:0")
-    outside.assert_called_once()  # 鎖外先生成過一次，但那一份被丟掉了
-    in_lock.assert_called_once()
-    assert "他沉吟片刻。" in game.state.journal[0].lines
-
-
-def _stand_in_a_hall(game):
-    """站到廣宗（張角、張梁兩位大勢人物：交友不開口，要「求見」指名），有張梁的結識旗標所以見得到他，
-    張角名望不到見不到；福緣設成已領。"""
-    game.state.player.location = "guangzong"
-    game.state.player.flags.add("結識:zhangliang")
-    game.state.player.fortune = True
-
-
-def test_opening_and_closing_the_audience_list_never_asks_the_model(game, lock_events):
-    _stand_in_a_hall(game)
-    assert "act:socialize" not in [o.id for o in game.options()]  # 廣宗沒有交友事件：兩位人物都要求見
-    with mock.patch.object(server, "prepare_dialogue", side_effect=AssertionError("打開或收起名單不必備料")), \
-            mock.patch.object(companion_agent, "generate_turn", side_effect=AssertionError("不該呼叫模型")):
-        server.choose(game, "act:call")
-        assert [o.id for o in game.options()] == ["call:zhangjiao", "call:zhangliang", "call:back"]
-        server.choose(game, "call:back")
-    assert lock_events == ["enter", "exit", "enter", "exit"]  # 各拿一次鎖，沒有備料那一趟
-    assert not game.state.player.picking_audience
 
 
 def test_calling_on_a_figure_generates_outside_the_action_lock(game, lock_events):
@@ -3702,51 +2398,12 @@ def test_may_generate_dialogue_covers_calls_but_not_leaving():
     assert not server.may_generate_dialogue("act:call") and not server.may_generate_dialogue("move:yingshui")
 
 
-class _PicksEvent(random.Random):
-    """rng.choices 從候選名單裡挑指定 id 的那一則：挑得到就證明它真的是合格的候選。"""
-
-    def __init__(self, wanted: str):
-        super().__init__(0)
-        self.wanted = wanted
-
-    def choices(self, population, weights=None, *, cum_weights=None, k=1):
-        return [next(event for event in population if event.id == self.wanted)]
-
-
-def test_socializing_at_the_generals_mansion_reaches_yuanshaos_meeting(game):
-    """大將軍府有何進、袁紹兩位人物，也有袁紹的結識事件：交友只走事件、從不開口，所以結識事件發得出來。"""
-    game.state.world.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
-    game.state.player.location = "dajiangjun_fu"
-    game.state.player.stats["fame"] = 99  # 兩位都見得到也一樣：交友不找人
-    game.state.player.fortune = True
-    ids = [o.id for o in game.options()]
-    assert "act:socialize" in ids and "act:call" in ids
-    assert not game.socialize_starts_dialogue()
-    game.rng = _PicksEvent("meet_yuanshao")
-    with mock.patch.object(companion_agent, "_generate", side_effect=AssertionError("交友不該開口對話")):
-        game.choose("act:socialize")
-    assert game.state.pending_event == "meet_yuanshao"
-    assert game.state.player.pending_companion is None
-
-
 def test_a_non_dialogue_option_takes_the_lock_once_and_never_asks_the_model(game, lock_events, monkeypatch):
     old_explore(server.CONTENT.config, monkeypatch.setattr)  # 舊探索當手段（同 classic_rules）
     with mock.patch.object(companion_agent, "generate_turn", side_effect=AssertionError("不該呼叫模型")):
         server.choose(game, "act:explore")
     assert lock_events == ["enter", "exit"]  # 只拿一次鎖，沒有多餘的備料那一趟
     assert game.state.player.stamina < server.CONTENT.config.stamina_max
-
-
-def test_leaving_a_dialogue_does_not_ask_the_model_or_take_an_extra_lock_round_trip(game, lock_events):
-    _stand_by_a_figure(game)
-    with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN):
-        server.choose(game, "act:socialize")
-    lock_events.clear()
-    with mock.patch.object(companion_agent, "generate_turn", side_effect=AssertionError("不該呼叫模型")), \
-            mock.patch.object(server, "prepare_dialogue", side_effect=AssertionError("告辭不必備料")):
-        server.choose(game, "talk:leave")
-    assert lock_events == ["enter", "exit"]  # talk:leave 永遠不會生成對話：跟非對話選項一樣只拿一次鎖
-    assert game.state.player.pending_companion is None
 
 
 # ── 大場面在行動鎖外請模型判讀（武學與成長設計 8.3、計畫三 Task 2）────────────
@@ -4016,17 +2673,6 @@ def test_the_lan_flag_opens_every_network_card_and_says_so(capsys, monkeypatch):
     assert str(database.default_path().resolve()) in out
 
 
-# （--share／cloudflared 臨時網址的測試 2026-10-25 拿掉：2026-10-13 起固定網域走具名 Tunnel，伺服器不再加 --share；
-#   server.start_tunnel 那段碼留給主機端，見 docs/superpowers/feedback/beta-主機端操作.md。）
-
-
-# ── 主畫面的走法切換（步行／疾行）──────────────────────
-# 頁面記著走法、每個請求都帶上 X-Move-Mode；伺服器在行動鎖裡照它排選單（server.MOVE_MODE），從不存檔。
-
-DASH = {"X-Move-Mode": "dash"}
-HURRY = {"X-Move-Mode": "hurry"}  # 拿掉的走法：當成步行
-
-
 def _moves(options):
     return [o for o in options if o["id"].startswith("move:")]
 
@@ -4050,22 +2696,6 @@ def test_the_move_mode_lasts_one_request_like_two_tabs(client):
     assert moves and all(o["id"].count(":") == 1 and "步行" in o["label"] for o in moves)
     unknown = _moves(client.get("/api/main", headers={"X-Move-Mode": "fly"}).json()["options"])
     assert [o["id"] for o in unknown] == [o["id"] for o in moves]  # 不認得的走法當成步行
-
-
-def test_a_dash_departs_only_from_the_dash_menu(client):
-    _player(client)
-    game = server.game_for("沈青衫")
-    start = game.state.player.location
-    assert "move:yingshui:dash" in [o["id"] for o in client.get("/api/main", headers=DASH).json()["options"]]
-    client.post("/api/choose", json={"id": "move:yingshui:dash"})  # 沒帶走法：步行的選單上沒有這個 id
-    assert game.state.player.location == start and game.state.player.journey is None
-    client.post("/api/choose", json={"id": "move:yingshui:hurry"}, headers=HURRY)  # 拿掉的走法：哪個選單上都沒有
-    assert game.state.player.location == start and game.state.player.journey is None
-    minutes = atlas.leg_minutes(game.content, start, "yingshui")
-    client.post("/api/choose", json={"id": "move:yingshui:dash"}, headers=DASH)
-    assert game.state.player.location == "yingshui" and game.state.player.journey is None  # 疾行立刻到
-    cost = atlas.travel_stamina(game.content, minutes, "dash", saving=0.0)  # 新角色沒騎馬
-    assert game.state.player.stamina == game.content.config.stamina_max - cost
 
 
 def test_the_menu_walks_unless_this_request_chose_otherwise(game):
@@ -4094,70 +2724,6 @@ def test_the_move_mode_is_never_saved(client):
     _player(client)
     client.get("/api/main", headers=HURRY)
     assert "move_mode" not in open_characters().load("沈青衫").model_dump_json()
-
-
-# ── 路上（路上設計第三節）──────────────────────────────
-
-
-def test_on_the_road_the_page_is_told_so_and_can_turn_back(client):
-    _player(client)
-    assert client.get("/api/main").json()["on_road"] is False
-    client.post("/api/choose", json={"id": "move:yingshui"})
-    main = client.get("/api/main").json()
-    assert main["on_road"] is True  # 頁面照它放輿圖、修練、煉製三個捷徑
-    assert "road:back" in [o["id"] for o in main["options"]]
-    assert "路上可以折返" in main["scene"]
-    with mock.patch("server.time.time", return_value=server.time.time() + 6 * 3600):  # 早就到了：捷徑收起來、回到平常的選單
-        main = client.get("/api/main").json()
-    assert main["on_road"] is False and "act:explore" in [o["id"] for o in main["options"]]
-
-
-def test_turning_back_follows_the_move_mode_header(client):
-    _player(client)
-    game = server.game_for("沈青衫")
-    start = game.state.player.location
-    t0 = server.time.time()
-    with mock.patch("server.time.time", return_value=t0):
-        client.post("/api/choose", json={"id": "move:yingshui"})
-    with mock.patch("server.time.time", return_value=t0 + 60):  # 走了一分鐘才掉頭：不是剛出發就折返（那種立刻回原地，FB-025）
-        back = [o for o in client.get("/api/main", headers=DASH).json()["options"] if o["id"].startswith("road:back")]
-        assert [o["id"] for o in back] == ["road:back:dash"] and "疾行" in back[0]["label"]
-        client.post("/api/choose", json={"id": "road:back:dash"})  # 沒帶走法：步行的選單上沒有這個 id
-        assert game.state.player.journey.path == ["yingshui"]
-        client.post("/api/choose", json={"id": "road:back:dash"}, headers=DASH)
-    assert game.state.player.journey is None and game.state.player.location == start
-
-
-def test_the_map_arranges_travel_while_on_the_road(client):
-    _player(client)
-    game = server.game_for("沈青衫")
-    start = game.state.player.location
-    client.post("/api/choose", json={"id": "move:yingshui"})
-    view = client.get(f"/api/map?place={start}").json()
-    assert view["selected"] == start and view["travel"][0]["enabled"] is True  # 剛離開的那一站：就是折返
-    assert view["travel"][0]["label"] == "步行（立刻到）"  # 剛出發：當下就回到原地（FB-025）
-    out = client.post("/api/travel", json={"place": start}).json()
-    assert out["arrived"] is True
-    assert game.state.player.journey is None and game.state.player.location == start
-
-
-def test_the_map_detail_says_which_insights_a_scouted_place_teaches(client):
-    """W3：輿圖點一個摸清的地點，詳情欄多一行「這裡能悟：…」，名字就是探索那裡悟得到的。"""
-    _player(client)
-    start = server.game_for("沈青衫").state.player.location
-    detail = client.get(f"/api/map?place={start}").json()["detail"]
-    names = "、".join(server.CONTENT.insights[i].name for i in insights.explore_gives(server.CONTENT.locations[start], server.CONTENT))
-    assert f"這裡能悟：{names}" in detail
-
-
-def test_on_the_road_the_page_offers_the_road_tasks(client):
-    _player(client)
-    client.post("/api/choose", json={"id": "move:yingshui"})
-    client.post("/api/choose", json={"id": "road:think"})
-    main = client.get("/api/main").json()
-    think = next(o for o in main["options"] if o["id"] == "road:think")
-    assert think["enabled"] is False and think["label"] == "邊走邊想（想過了，到下一站再說）"
-    assert main["status"]["xinde"] == server.CONTENT.config.start_stats["xinde"] + server.CONTENT.config.road_think_xinde
 
 
 # ── 隨口應對（探索的多人與 LLM 玩法 §8.1）────────────────────
@@ -4386,11 +2952,6 @@ def test_switch_off_season_end_sends_no_result_card(game, monkeypatch):
     assert game.state.world.ended and "season_result" not in server.look(game, server.main_view)
 
 
-def _season_one_now(game, monkeypatch):
-    monkeypatch.setattr(server.CONTENT.config, "season_one", True)
-    game.world.mutate_season(lambda season: setattr(season, "season_one", True))
-
-
 def test_orders_hidden_from_other_factions(game, monkeypatch):
     """T6 RF2：/api/main 只給自己陣營的軍令；散人沒有 orders 鍵；別陣營的軍令文字不出現在整份資料裡。"""
     import json as _json
@@ -4423,25 +2984,6 @@ def test_main_view_shows_the_cart_being_carried(game, monkeypatch):
     assert server.main_view(game)["convoy"] == "你押著一車糧（4 份），要送到宛城。"
     game.state.player.convoy = None
     assert "convoy" not in server.main_view(game)
-
-
-def test_resting_season_sends_no_orders_and_no_cart(game, monkeypatch):
-    """FB-045：收季之後（休季）江湖頁不再有本週軍令卡，也不再寫押糧那一行：收季那一週的軍令截止已經過了。"""
-    from tianxia.state import Convoy
-
-    _season_one_now(game, monkeypatch)
-    monkeypatch.setattr(server.CONTENT.config, "admins", ["測試"])
-    game.sync(game.now)  # 拉回蓋了第一季章的那一份季
-    game.state.player.faction = "guan"
-    game.advance(700)  # 跨過第一個曆時交界：第 1 週發令
-    game.state.player.convoy = Convoy(order="x", grain=4, from_loc="xinye", to_loc="wan_city")
-    view = server.main_view(game)
-    assert view["orders"] and view["convoy"]
-    game.admin_end_season(now=game.now)
-    assert game.state.world.ended
-    view = server.main_view(game)
-    assert "orders" not in view and "convoy" not in view
-    assert game.orders_view() == [] and game.convoy_line() is None
 
 
 # ── 管理者：時刻表與救場（計畫 T10）────────────────────────
@@ -4495,27 +3037,6 @@ def test_admin_schedule_jump_and_rescue_via_api(client, monkeypatch):
     assert game.world.get_season().trends["yingru"] == 70
     assert "沒有人鎖定" in client.post("/api/do/clear_lock", json={"id": "luzhi_siege"}).json()["message"]
     assert "沒有進行中的決戰" in client.post("/api/do/cancel_battle", json={}).json()["message"]
-
-
-# ── 引導小改版（新手引導重做設計第八節）─────────────────────────
-
-
-def test_main_view_sends_the_guide_box_and_skipping_hides_it(client):
-    """全新角色走序章：遇險的事件在眼前時沒有對話框；拜師之後 /api/main 帶著師父第 2 步的話（不用點開任何東西）；
-    略過新手引導後就沒有了。"""
-    main = _player(client, prologue=True)["main"]
-    assert main["guide"] is None  # 還沒遇到師父
-    for option in ("choice:0", "choice:0"):  # 遇險、拜師
-        main = client.post("/api/choose", json={"id": option}).json()["main"]
-    tutorial = server.CONTENT.tutorial
-    step = tutorial.steps[1]
-    assert main["guide"] == {
-        "speaker": tutorial.speaker, "key": step.id, "scene": "", "text": step.text, "line": step.line,
-        "done": main["guide"]["done"], "end": False, "pending": False, "glow": [],
-    }  # glow：入伍段「出一次力」那一步才有東西（FB-093）。key 是這一步的 id：網頁記收起記它；pending 標這一句是不是「先把眼前的「…」了結」，網頁預設把它收成一行（FB-076）
-    assert tutorial.speaker == "師父" and step.id == "p2_apprentice"
-    client.post("/api/do/skip_tutorial", json={})
-    assert client.get("/api/main").json()["guide"] is None
 
 
 def test_a_fight_then_an_event_sends_a_short_now_card_and_a_stable_guide_key(client, monkeypatch):
@@ -4596,61 +3117,6 @@ def test_the_prologue_recap_is_served_as_html(client, monkeypatch, prologue_cont
     assert client.get("/api/prologue").status_code == 200
 
 
-def test_guide_ack_closes_the_outro(client, monkeypatch):
-    monkeypatch.setattr(server.CONTENT.tutorial, "outro", "去闖吧。")  # 正式內容的結語是空的（新手引導計畫三換成碰到才說）
-    _player(client, prologue=True)
-    game = server.game_for("沈青衫")
-    game.state.player.location = server.CONTENT.scenario.start_location
-    game.state.pending_event = None
-    game.state.player.tutorial_step = len(server.CONTENT.tutorial.steps)
-    game.state.player.guide_outro = True
-    open_characters().save(game.state)
-    assert client.get("/api/main").json()["guide"]["end"] is True
-    client.post("/api/do/guide_ack", json={})
-    assert client.get("/api/main").json()["guide"] is None
-
-
-def test_a_hint_goes_out_in_the_guide_box_and_guide_ack_closes_it(client, monkeypatch):
-    """碰到才說（新手引導計畫三）：排著的提示就是 /api/main 的 guide（end 的框、key 是那一條的 id），按「知道了」收掉。
-    正式內容還沒有提示表：這裡給一條。"""
-    from tianxia.models import HintDef, Hints
-
-    monkeypatch.setattr(server.CONTENT, "hints", Hints(hints=[HintDef(id="h_merge", by="mentor", text="意境可以合。")]))
-    _player(client)
-    game = server.game_for("沈青衫")
-    game.state.player.tutorial_step = len(server.CONTENT.tutorial.steps)
-    game._hint("h_merge")
-    open_characters().save(game.state)
-    box = client.get("/api/main").json()["guide"]
-    assert (box["speaker"], box["text"], box["key"], box["end"]) == ("想起師父說過", "意境可以合。", "h_merge", True)
-    client.post("/api/do/guide_ack", json={})
-    assert client.get("/api/main").json()["guide"] is None
-    assert open_characters().load("沈青衫").player.hints_seen == {"h_merge"}
-
-
-def test_hints_off_toggles_from_the_settings_even_while_the_clock_is_paused(client):
-    """設定頁的「不再提示」（新手引導計畫三，F8）：狀態帶 hints_off；賽季時鐘暫停中也照做（跟匿名一樣是畫面設定），不然勾了被擋下、
-    勾選框卻已經打勾。"""
-    _player(client)
-    assert "hints_off" in server.MAIN_ACTIONS and "hints_off" in server.PAUSE_OK_ACTIONS
-    assert client.get("/api/main").json()["status"]["hints_off"] is False
-    out = client.post("/api/do/hints_off", json={"value": True}).json()
-    assert out["main"]["status"]["hints_off"] is True
-    assert open_characters().load("沈青衫").player.hints_off is True
-    assert server.game_for("沈青衫").world.pause_clock(time.time())
-    out = client.post("/api/do/hints_off", json={"value": False})
-    assert out.status_code == 200 and out.json()["main"]["status"]["hints_off"] is False
-    assert open_characters().load("沈青衫").player.hints_off is False
-
-
-def test_view_orders_is_accepted_and_leaves_a_new_players_box_alone(client):
-    """入伍段第一步的「軍令卡出現在畫面上」（新手引導計畫二）：網頁送 /api/do/view_orders。還沒投靠的人送了什麼也不會發生，框照舊。"""
-    main = _player(client)["main"]
-    posted = client.post("/api/do/view_orders", json={})
-    assert posted.status_code == 200
-    assert posted.json()["main"]["guide"] == main["guide"] == client.get("/api/main").json()["guide"]
-
-
 def test_timetable_finale_row_shows_the_ending_title(client, monkeypatch):
     """FB-051：收季之後，時刻表季末那一列寫結局的標題（豪強坐大），不是結局 id。"""
     game = _season_one_admin(client, monkeypatch)
@@ -4668,21 +3134,6 @@ def test_admin_choices_say_whether_the_next_season_has_a_timetable(client, monke
     assert client.get("/api/admin").json()["next_has_timetable"] is False
     monkeypatch.setattr(server.CONTENT.config, "season_one", True)
     assert client.get("/api/admin").json()["next_has_timetable"] is True
-
-
-def test_fb069_the_forge_never_names_a_recipe_after_a_character(lock_events):
-    """FB-069：鎖外取名（B 段）拿到別的角色的名號不算取到名字（60 秒的預算只夠問一次，所以直接走退路字表）；
-    C 段進鎖再擋一次。不會登記成角色的名號。"""
-    _forger("驗收新武")
-    game = _forger()
-    asked = []
-    with _model(lambda client, messages: asked.append(1) or "驗收新武"):
-        assert server.prepare_forge(game, None, ["feng", "huo"]) == server.NO_NAME
-        server.forge(game, None, ["feng", "huo"])
-    assert asked == [1, 1]  # 兩次 prepare 各問一次，都被擋下來
-    name = open_world().lookup_insight_recipe(FENG_HUO).name
-    assert name != "驗收新武" and naming.name_problem(name, server.CONTENT) is None
-    assert server.forge(game, None, ["feng", "huo"]) is not None  # 一般的名字照常（武學重構：另一爐換成合併意境）
 
 
 # ── 一次輪詢只拿一次行動鎖（壓測發現 /api/main 拿兩次：一次 act、一次 look，PM 2026-10-06）──────────────
@@ -4940,50 +3391,6 @@ def test_a_second_request_from_the_same_player_is_cancelled_or_refused_as_the_ca
     assert queue.snapshot() == {"running": 0, "waiting": 0}
 
 
-@pytest.mark.parametrize("option", ["call:zhangliang", "act:socialize"])
-def test_two_connections_asking_the_same_person_at_once_the_second_is_refused_and_the_first_is_applied(option, monkeypatch):
-    """FB-077（佇列開著）：同一個帳號開兩條連線、同時按「求見」同一個人（交友同一條路：盧植營只有盧植一位，交友直接找他）。
-    以前第二件在 B 段被擋下來拿 cancelled，C 段進鎖當成「生成不出對話」：寫一行「…似乎無心多談，你只好先行告辭。」、把求見的選單收掉，
-    之後第一件的回話（模型花了十幾秒）套用時選單已經換了、重驗對不上，兩邊都沒談成、也沒人知道為什麼。現在跟開爐、隨口應對、大場面
-    一樣：第二件被擋下來（丟 GameError，BUSY_DIALOGUE），不寫紀錄、求見的選單還開著、不扣體力；第一件照常套用。"""
-    queue = llm_queue.LlmQueue(slots=2, bot_cap=1)
-    monkeypatch.setattr(server, "QUEUE", queue)
-    game = Game.new(server.CONTENT, "測試")
-    audience = option.startswith("call:")
-    (_stand_in_a_hall if audience else _stand_by_a_figure)(game)  # 求見要在兩位以上人物的地點（廣宗）：先打開求見名單，再指名
-    game.state.player.picking_audience = audience
-    figure = option.removeprefix("call:") if audience else "luzhi"
-    open_characters().save(game.state)
-    stamina = game.state.player.stamina
-    started, release, asked, first = threading.Event(), threading.Event(), [], {}
-
-    def generate(client, messages, required=()):
-        asked.append(1)
-        started.set()
-        release.wait(5)
-        return DIALOGUE_TURN
-
-    monkeypatch.setattr(companion_agent, "generate_turn", generate)
-    thread = threading.Thread(target=lambda: first.update(msgs=server.choose(game, option)))
-    thread.start()
-    assert started.wait(2)  # 第一件還在模型那邊
-    with pytest.raises(server.GameError, match=server.BUSY_DIALOGUE):
-        server.choose(game, option)  # 第二條連線按同一個人
-    stored = open_characters().load("測試")
-    assert (stored.player.stamina, stored.player.picking_audience, stored.player.pending_companion) == (stamina, audience, None)
-    assert not any("無心多談" in "".join(e.lines) for e in stored.journal)  # 沒有寫紀錄
-    assert option in [o.id for o in game.options()]  # 選項還在：求見的選單還開著
-    assert asked == [1]  # 模型只被叫一次（第一件的）
-    release.set()
-    thread.join(5)
-    stored = open_characters().load("測試")  # 第一件照常套用：對話開始、花了這一次的體力、求見的選單收起
-    assert stored.player.pending_companion == figure and not stored.player.picking_audience
-    assert stored.player.stamina == stamina - server.CONTENT.config.action_cost["socialize"]
-    assert "他點了點頭。" in "".join(line for entry in stored.journal for line in entry.lines)
-    assert not any("無心多談" in "".join(e.lines) for e in stored.journal)
-    assert queue.snapshot() == {"running": 0, "waiting": 0}
-
-
 def test_the_queue_key_ignores_the_case_of_the_name(monkeypatch):
     """「Rayal」與「rayal」是同一個人（名號比對不分大小寫）：用大小寫換名字，也不能多拿一件。"""
     queue = llm_queue.LlmQueue(slots=2, bot_cap=1)
@@ -5232,23 +3639,6 @@ def test_a_queue_that_will_not_take_the_job_gives_each_site_its_old_fallback(sit
         assert GAMBLE_NARRATION not in game.state.journal[0].lines
 
 
-class _ScriptedQueue:
-    """照劇本回應每一件：「run」照常叫 job、「busy」丟 Busy（同一個人已經有一件在排或在跑）、「timeout」丟 QueueTimeout
-    （排超過 wait 秒還沒輪到，PM 2026-10-06）；劇本用完之後一律 run。"""
-
-    def __init__(self, *script):
-        self.script, self.calls = list(script), 0
-
-    def run(self, owner, job, *, fallback, bot=False, wait=30.0):
-        step = self.script[self.calls] if self.calls < len(self.script) else "run"
-        self.calls += 1
-        if step == "busy":
-            raise llm_queue.Busy("同一個人已經有一件在排或在跑")
-        if step == "timeout":
-            raise llm_queue.QueueTimeout("排超過等候的時間還沒輪到")
-        return job()
-
-
 REFUSED_AS_DUPLICATE = {  # 重複的那一件：各呼叫點自己的一句（潤色沒有，不插句子就是了）
     "dialogue": server.BUSY_DIALOGUE, "fight": "還在對峙，稍等。", "forge": "上一爐還沒出爐。", "score": "上一句還在掂量，稍等。",
 }
@@ -5385,43 +3775,6 @@ def test_only_a_timeout_changes_the_other_ways_a_queue_hands_back_the_fallback(g
     monkeypatch.setattr(server, "QUEUE", llm_queue.LlmQueue(slots=1, bot_cap=0))
     game.state.player.bot = BotProfile(personality="積極", seed=1)  # 假人的存檔：bot_cap 是 0，一件都排不進去
     assert server.model_call(game, lambda: pytest.fail("不該叫"), fallback="退路", busy="上一件還在掂量。") == "退路"
-
-
-def test_the_refusals_reach_the_page_as_a_short_message(client, monkeypatch):
-    """被擋下來的請求回 400 與那一句話（前端的 api() 會把 error 跳成提示），不是 500。"""
-    monkeypatch.setattr(server, "QUEUE", _ScriptedQueue("busy", "busy"))
-    _a_player_with_insights(client)
-    forged = client.post("/api/menxia/forge", json={"insights": ["feng", "huo"]})
-    assert forged.status_code == 400 and forged.json() == {"error": "上一爐還沒出爐。"}
-    assert open_world().lookup_insight_recipe(FENG_HUO) is None
-    game = server.game_for("沈青衫")
-    from tianxia.models import Effect, FreeTextChoice
-
-    event = next(iter(server.CONTENT.events.values()))
-    monkeypatch.setattr(event, "free_text", FreeTextChoice(prompt="自己想辦法……", stat="str", effect=Effect(text="成了。")))
-    server.act(game, lambda g: setattr(g.state, "pending_event", event.id))
-    answered = client.post("/api/answer", json={"text": "大喊官兵來了"})
-    assert answered.status_code == 400 and answered.json() == {"error": "上一句還在掂量，稍等。"}
-    assert client.get("/api/main").json()["event_free_text"] == "自己想辦法……"  # 眼前的事還在原地
-
-
-def test_a_queue_timeout_reaches_the_page_as_the_same_kind_of_short_message(client, monkeypatch):
-    """排太久的拒絕跟重複的那一件走同一條路：400 與那一句話（前端的 api() 會跳成提示），什麼都沒登記、沒收、沒擲骰。"""
-    monkeypatch.setattr(server, "QUEUE", _ScriptedQueue("timeout", "timeout"))
-    _a_player_with_insights(client)
-    forged = client.post("/api/menxia/forge", json={"insights": ["feng", "huo"]})
-    assert forged.status_code == 400 and forged.json() == {"error": server.BUSY_QUEUE_TIMEOUT}
-    assert open_world().lookup_insight_recipe(FENG_HUO) is None and open_characters().load("沈青衫").player.stats["xinde"] == 100
-    game = server.game_for("沈青衫")
-    from tianxia.models import Effect, FreeTextChoice
-
-    event = next(iter(server.CONTENT.events.values()))
-    monkeypatch.setattr(event, "free_text", FreeTextChoice(prompt="自己想辦法……", stat="str", effect=Effect(text="成了。")))
-    server.act(game, lambda g: setattr(g.state, "pending_event", event.id))
-    answered = client.post("/api/answer", json={"text": "大喊官兵來了"})
-    assert answered.status_code == 400 and answered.json() == {"error": server.BUSY_QUEUE_TIMEOUT}
-    assert not any(e.title.endswith("隨口應對") for e in open_characters().load("沈青衫").journal)
-    assert client.get("/api/main").json()["event_free_text"] == "自己想辦法……"  # 眼前的事還在原地
 
 
 def test_a_refused_dialogue_reaches_the_page_as_a_short_message(client, monkeypatch):
@@ -5628,52 +3981,6 @@ def test_in_lock_model_calls_and_the_scheduler_never_wait_in_the_queue(game, mon
     assert sent == [server.CONTENT.config.in_lock_model_timeout]  # 鎖內真的叫了模型（短逾時的複本）
     server.world_step()
     assert queue.calls == []
-
-
-def test_the_forge_endpoint_goes_through_a_real_queue(client, monkeypatch):
-    """佇列開著、端對端（HTTP → 開爐 → 排隊 → 模型取名 → 登記）：名字是模型取的，做完佇列是空的。"""
-    queue = llm_queue.LlmQueue(slots=1, bot_cap=1)
-    monkeypatch.setattr(server, "QUEUE", queue)
-    _a_player_with_insights(client)
-    asked = []
-    with _model(lambda model, messages: asked.append(queue.snapshot()) or "旋風腿"):
-        out = client.post("/api/menxia/forge", json={"insights": ["feng", "huo"]})
-    assert out.status_code == 200 and "旋風腿" in out.json()["message"]
-    assert asked == [{"running": 1, "waiting": 0}]  # 模型叫的時候，這一件正在佇列裡跑
-    assert queue.snapshot() == {"running": 0, "waiting": 0}
-
-
-def test_a_duplicate_forge_is_refused_and_the_first_one_registers_the_models_name(monkeypatch):
-    """同一個玩家兩個分頁同時開同一爐（審查 M2、控制者裁示，取代原本「重複的那一件拿退路」）：第二件被擋下來，不走 C 段，
-    什麼都不登記、什麼都不收，回一句「上一爐還沒出爐。」；模型只叫一次，第一件登記的是模型取的名字、心得只扣一次。
-    以前第二件拿 NO_NAME 先進鎖，這個配方這一季就用退路字表的名字登記，第一件模型取的名字被丟掉。"""
-    queue = llm_queue.LlmQueue(slots=2, bot_cap=1)
-    monkeypatch.setattr(server, "QUEUE", queue)
-    game = _forger()
-    started, release = threading.Event(), threading.Event()
-    asked, first = [], {}
-
-    def reply(model, messages):
-        asked.append(1)
-        started.set()
-        release.wait(5)
-        return "旋風腿"
-
-    with _model(reply):
-        thread = threading.Thread(target=lambda: first.update(msgs=server.forge(game, None, ["feng", "huo"])))
-        thread.start()
-        assert started.wait(2)
-        with pytest.raises(server.GameError, match="上一爐還沒出爐"):
-            server.forge(game, None, ["feng", "huo"])  # 第一件還在模型那邊的時候，第二件被擋下來
-        assert open_world().lookup_insight_recipe(FENG_HUO) is None  # 第二件什麼都沒登記
-        assert open_characters().load("沈青衫").player.stats["xinde"] == 100  # 也什麼都沒收
-        release.set()
-        thread.join(5)
-    assert asked == [1]  # 模型只被叫一次（第一件的）
-    assert open_world().lookup_insight_recipe(FENG_HUO).name == "旋風腿"  # 登記的是模型取的名字，不是退路字表的
-    assert first["msgs"] is not None
-    assert open_characters().load("沈青衫").player.stats["xinde"] == 95  # 只收一次
-    assert queue.snapshot() == {"running": 0, "waiting": 0}
 
 
 def test_make_queue_and_the_startup_line_follow_the_switch(monkeypatch):
@@ -5914,65 +4221,6 @@ def test_watch_queue_shows_the_count_ahead_only_while_someone_is_ahead():
     assert out["more"] == 0  # 收掉之後沒有再問
 
 
-def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
-    """審查 M-2：開爐被擋下來（另一個分頁的上一爐還沒出爐，伺服器回 400）之後，煉製頁上方不能還寫著「爐火正旺。……請稍候」：
-    重畫之前結果那一格（S.forgeResult，2026-10-10 起寫在開爐旁邊）要換成那一句拒絕（api() 丟的 Error 帶著伺服器的話），
-    爐裡放的東西留著；成功的路訊息換成結果、爐子清空（Joy 2026-10-12），伺服器回「沒合成」的拒絕話時東西留著。頁面不捲到最上面。在 node 裡真的跑 forge()（假的 DOM、api 與 renderPage）。"""
-    import json
-
-    if webharness.NODE is None:
-        pytest.skip("沒有裝 node")
-    js = webharness.app_source()
-    parts = [
-        re.search(r"(?m)^  const esc = .*;$", js).group(0),
-        re.search(r"(?m)^  const FORGE_WAIT = .*;$", js).group(0),
-        re.search(r"(?ms)^  const failText = .*?\);$", js).group(0),
-        _js_function(js, "function watchQueue(") + "\n  }",
-        js[js.index("\n  // ── 送出指令的回饋 ──"):js.index("\n  // ── 送出指令的回饋（完）──")],
-        _js_function(js, "async function forge(") + "\n  }",
-        _js_function(js, "function trimForgeSel(") + "\n  }",
-    ]
-    script = "\n".join(parts) + """
-    globalThis.setTimeout = () => 0;  // watchQueue 的計時器不真的跑
-    let S, seen, button, bar, api;
-    const document = { getElementById: (id) => (id === "forge" ? button : bar), querySelector: () => null };
-    let scrolled = 0;
-    const window = { scrollTo() { scrolled += 1; } };
-    const forgeBody = () => ({});
-    const renderPage = () => seen.push(S.forgeResult && S.forgeResult.html);
-    const guideKey = () => null, updateForgeLine = () => {}, keepPlace = (draw) => draw(), showMadeCard = () => {}, kilnBurst = () => {}, secretPop = () => {};
-    const renderTop = () => {};
-    const setMain = () => {};
-    const run = async (answer) => {
-      S = { busy: false, message: "", offline: false, forgeSel: [{ type: "art", id: "a" }, { type: "ins", id: "i" }], forgeLine: "舊說明", menxia: null };
-      seen = [];
-      button = { disabled: false, textContent: "開爐", classList: { add() {} } };
-      bar = { textContent: "" };
-      api = answer;
-      await forge();
-      return { renderedWith: seen, message: S.forgeResult.html, waiting: button.textContent, sel: S.forgeSel.length, line: S.forgeLine, busy: S.busy, scrolled };
-    };
-    (async () => {
-      const refused = await run(async () => { throw new Error("上一爐還沒出爐。"); });
-      const done = await run(async () => ({ menxia: { owned_arts: [{ id: "a" }], insights: [{ id: "i" }] }, message: "<p>煉成了。</p>", main: {}, made: true }));
-      const declined = await run(async () => ({ menxia: { owned_arts: [{ id: "a" }], insights: [{ id: "i" }] }, message: "<p>你已經有了。</p>", main: {}, made: false }));
-      const offline = await run(async () => { S.offline = true; throw new Error("fetch failed"); });
-      console.log(JSON.stringify({ refused, done, declined, offline }));
-    })();
-    """
-    done = webharness.node(script)
-    assert done.returncode == 0, done.stderr
-    out = json.loads(done.stdout)
-    refused = out["refused"]
-    assert refused["waiting"].startswith("爐火正旺")  # 等的時候寫的字
-    assert refused["renderedWith"] == ["上一爐還沒出爐。"] and refused["message"] == "上一爐還沒出爐。"  # 重畫的時候已經換成那一句
-    assert refused["sel"] == 2 and refused["line"] == "舊說明" and refused["busy"] is False  # 爐裡的東西留著、可以再按
-    assert out["done"]["renderedWith"] == ["<p>煉成了。</p>"] and out["done"]["sel"] == 0 and out["done"]["line"] == ""  # 合成了：爐子清空（Joy 2026-10-12）
-    assert out["declined"]["renderedWith"] == ["<p>你已經有了。</p>"] and out["declined"]["sel"] == 2  # 被拒絕、沒合成：東西留在爐裡
-    assert "爐火正旺" not in out["offline"]["message"]  # 別的錯（例如斷線）也不再停在「爐火正旺」
-    assert out["done"]["scrolled"] == 0  # 開爐之後不捲到最上面（企劃者 2026-10-10「點完又會跳到畫面最上面」）
-
-
 def test_app_js_parses():
     """node --check 網頁的三個檔（main.js、map.js、app.js；沒裝 node 就略過）。"""
     import shutil
@@ -6004,13 +4252,6 @@ def test_the_page_loads_the_three_scripts_in_order_and_app_js_last():
     assert webharness.app_source().rstrip().endswith('api("/api/me").then(enter).catch(() => { S.stage = "gate"; render(); });\n})();')
 
 
-# ── 伺服器推送（線上架構推送計畫）──────────────────────────────────────
-# 開關是 Config.push_events（預設關）：關著 server.HUB 是 None，/api/events 是 404，頁面照舊每 10 秒輪詢；
-# 開著，每個動作做完通知這個角色開著的其他分頁，背景的看守發現公開的世界變了就通知所有分頁，頁面收到再去抓 /api/main。
-
-ME = "沈青衫".casefold()
-
-
 class _OneShot(server_push.PushHub):
     """一訂閱就送一則再收尾，TestClient 才拿得到整份回應（不會結束的串流 TestClient 等不完）。"""
 
@@ -6018,16 +4259,6 @@ class _OneShot(server_push.PushHub):
         super().subscribe(name, loop, queue)
         self.notify(name)
         self.close()
-
-
-@pytest.fixture
-def told(monkeypatch):
-    """推送開著、但不真的送：記下每一次 notify（名號, 哪一種）。"""
-    hub = server_push.PushHub()
-    calls: list[tuple[str, str]] = []
-    monkeypatch.setattr(hub, "notify", lambda name, kind="self": calls.append((name, kind)) or 0)
-    monkeypatch.setattr(server, "HUB", hub)
-    return calls
 
 
 def _get_events(client):
@@ -6169,40 +4400,6 @@ def test_choosing_an_event_option_notifies(client, told):
     assert told == [(ME, "self")]
 
 
-def test_the_other_action_endpoints_notify_once_each(client, told, monkeypatch):
-    """/api/do、/api/menxia/*、/api/travel、/api/answer 做完也各通知一次（鎖已經放掉）。"""
-    monkeypatch.setattr(server.CONTENT.config, "practice_injury_chance", 0.0)
-    _player(client)
-    game = server.game_for("沈青衫")
-    nearby = next(o["id"][5:] for o in client.get("/api/main").json()["options"] if o["id"].startswith("move:"))
-    for path, body in (("/api/do/anonymous", {"value": True}), ("/api/menxia/heal", {})):
-        told.clear()
-        assert client.post(path, json=body).status_code == 200, path
-        assert told == [(ME, "self")], path
-    from tianxia.models import FreeTextChoice
-
-    event = next(iter(server.CONTENT.events.values()))
-    monkeypatch.setattr(event, "free_text", FreeTextChoice(prompt="自己想辦法……", stat="str"))
-    server.act(game, lambda g: setattr(g.state, "pending_event", event.id))
-    told.clear()
-    with mock.patch.object(server.event_llm, "judge_event_gamble", return_value=server.event_llm.EventVerdict(50)):
-        assert client.post("/api/answer", json={"text": "大喊官兵來了"}).status_code == 200
-    assert told == [(ME, "self")]  # 評分、擲骰、潤色分好幾次進鎖，但一個請求只通知一次
-    server.act(game, lambda g: setattr(g.state, "pending_event", None))  # 事件沒選完的話，輿圖那顆按鈕是灰的
-    told.clear()
-    assert client.post("/api/travel", json={"place": nearby}).json()["arrived"] is True
-    assert told == [(ME, "self")]
-
-
-def test_a_travel_that_was_refused_does_not_notify(client, told):
-    """按舊按鈕、走不成：什麼都沒變，其他分頁不必刷新。"""
-    _player(client)
-    told.clear()
-    here = server.game_for("沈青衫").state.player.location
-    assert client.post("/api/travel", json={"place": here}).json()["arrived"] is False
-    assert told == []
-
-
 def test_an_action_that_failed_or_only_reads_does_not_notify(client, told):
     """動作丟例外時交易整筆撤回、什麼都沒變：不通知。唯讀的端點更不通知。"""
     _player(client)
@@ -6273,23 +4470,6 @@ def test_current_fingerprint_follows_the_public_world():
     assert server.current_fingerprint() != before
 
 
-def test_the_fingerprint_ignores_the_clock_the_schedule_and_who_acts(client):
-    """預檢 F4：世界時間與 season_last_real 每一次同步、每一下排程都在動，不能算進指紋，不然每個分頁每幾秒就被叫醒；
-    決戰裡誰加入、這一回合出手了幾個（預檢 F2）畫面上看不到，也不算。"""
-    open_world().mutate(lambda st: None)
-    before = server.current_fingerprint()
-    open_world().mutate(lambda st: (setattr(st, "season_last_real", 9e9), setattr(st.season, "time", st.season.time + 3600)))
-    assert server.current_fingerprint() == before
-    _a_showdown_fighter(client)
-    with_battle = server.current_fingerprint()
-    assert with_battle != before  # 決戰開了：大家都看得到
-    client.post("/api/choose", json={"id": "battle:join:guan"})  # 又一個人加入：看不到
-    open_world().mutate_battle(lambda b: b.round.pending_actions.__setitem__("沈青衫", "safe"))
-    assert server.current_fingerprint() == with_battle
-    open_world().mutate_battle(lambda b: setattr(b, "trend", b.trend + 1))  # 戰局動了：看得到
-    assert server.current_fingerprint() != with_battle
-
-
 def test_pausing_and_resuming_the_season_clock_change_the_fingerprint():
     """暫停賽季時鐘，全服每個人的選單都變成一顆灰的；繼續又變回來：這是大家都看得到的變化，開著的分頁要被叫醒（不然停機前
     最久要等慢速輪詢 60 秒，繼續之後每個人還對著一顆灰的按鈕等一分鐘）。算的是「有沒有暫停」，不是停了幾分鐘：
@@ -6307,331 +4487,6 @@ def test_pausing_and_resuming_the_season_clock_change_the_fingerprint():
     assert world.resume_clock(server.CONTENT, 5000.0) is not None
     resumed = server.current_fingerprint()
     assert resumed != paused and resumed == before
-
-
-# 推送指紋的欄位分類（最終審查 m5）：全服共用的世界狀態（SharedWorldState、它的賽季 WorldState、進行中的決戰 BattleInstance）
-# 每一個欄位，不是「算進指紋」（底下的改法真的讓指紋變，下面的測試會試）、就是「不算」（寫一句為什麼）。以後誰加了新欄位，
-# 兩邊都沒有就紅——到時候要決定：它改了，全服每個人的畫面看得出來嗎？看得出來就要算進去（不然開著的分頁最久 60 秒才知道），
-# 看不出來（或不能讓人看出來）就寫進「不算」。暫停（paused_at）就是這樣漏過一次。
-_SEASON = "season"  # 容器欄位：它自己不算，裡面的欄位各自分類（WorldState 的欄位在 "WorldState" 那一組）
-FINGERPRINTED = {
-    "SharedWorldState": {
-        "season_number": lambda st: setattr(st, "season_number", st.season_number + 1),
-        "season_opened": lambda st: setattr(st, "season_opened", False),  # 籌備中：階段變了
-        "paused_at": lambda st: setattr(st, "paused_at", 1000.0),
-        "season": _SEASON,
-        "active_battle": lambda st: setattr(st, "active_battle", None),  # 決戰收掉
-        # 奪璽單挑（玉璽碎片設計 5.10、13.3）：全服觀戰，回合推進、出招，開著的分頁要更新
-        "seal_duels": lambda st: st.seal_duels.append(_seal_duel()),
-        # 攻城戰（領地爭奪第二批）：每一場同決戰，開集結、回合推進、收場，開著的分頁要更新
-        "sieges": lambda st: st.sieges.append(battle_instance.BattleInstance(battle_id="changshe_fire")),
-    },
-    "WorldState": {
-        "trends": lambda st: st.season.trends.__setitem__("t", st.season.trends["t"] + 1),  # 浮現的那一條
-        "revealed": lambda st: st.season.revealed.add("h"),  # 隱藏的那一條浮現了
-        "rumors": lambda st: st.season.rumors.append(Rumor(time=0.0, text="天下大事", layer="world")),
-        "chronicle": lambda st: st.season.chronicle.append(Rumor(time=0.0, text="江湖史一筆")),
-        "ended": lambda st: setattr(st.season, "ended", True),  # 休季：階段變了
-        "ending_title": lambda st: setattr(st.season, "ending_title", "天下大亂"),
-        "storyline": lambda st: setattr(st.season, "storyline", "另一條主線"),
-        "act": lambda st: setattr(st.season, "act", st.season.act + 1),
-        "timeline": lambda st: st.season.timeline.__setitem__("uprising", TimelineResult(key="fixed", time=0.0)),
-        "showdowns_opened": lambda st: st.season.showdowns_opened.__setitem__("changshe_fire", "changshe_fire"),
-        "figures": lambda st: st.season.figures.__setitem__("lu_zhi", FigureState(prestige=70)),
-    },
-    "BattleInstance": {
-        "battle_id": lambda st: setattr(st.active_battle, "battle_id", "wancheng"),
-        "phase": lambda st: setattr(st.active_battle, "phase", "active"),
-        "round_number": lambda st: setattr(st.active_battle, "round_number", 1),
-        "trend": lambda st: setattr(st.active_battle, "trend", 55),
-        # 「已送出 X／在場 Y」（試玩回饋 2026-10-08）：兩軍有人出手，開著的分頁要更新那個數
-        "round": lambda st: (
-            setattr(st.active_battle, "phase", "active"),
-            st.active_battle.participants.__setitem__("甲", battle_instance.BattleParticipant(name="甲", faction="guan", neili=1, neili_cap=1)),
-            st.active_battle.round.pending_actions.__setitem__("甲", "guan_hold"),
-        ),
-        # 放手一搏的劇情回合結算後才補上（Joy 2026-10-13）：補上的那一下場景的字變了
-        "tales": lambda st: st.active_battle.tales.append(battle_instance.GambleTale(
-            round=1, act_index=0, name="甲", faction="guan", text="火攻", won=True, fixed="x", numbers="y",
-        )),
-    },
-}
-NOT_IN_THE_FINGERPRINT = {
-    "SharedWorldState": {
-        "companion_tag_counts": "跟人物對話才用的記數，不在共用的畫面上",
-        "companion_drift_note": "同伴的性情句，只在跟他對話時用",
-        "companion_drift_synthesized_at": "性情語意化的記數，不在畫面上",
-        "companions": "同伴被招走、升級只影響門下頁與招募鈕，那是各人自己的畫面（自己的動作走 self 通知），別人下次輪詢才補也不礙事",
-        "event_flavor": "事件的潤色句，一次寫好之後不變，跟著事件的公告出現",
-        "jade_seal_fragments": "玉璽碎片的歸屬，只在持有者的畫面",
-        "season_last_real": "賽季時鐘的對時點：每次同步、每一下排程都在動，算進去每幾秒就叫醒全服（推送計畫 F4）",
-        "tianji": "換季才加一，同時 season_number 也變了",
-        "seal": "碎片的歸屬：現世、易手、隱沒都寫天下大事（傳聞流水號已在指紋裡）；密鹽不能讓人看出來（13.3）",
-        "mingtie_reports": "名帖的檢舉：誰檢舉了誰不能讓人看出來；藏起來的那一張別人下次打開才補",
-        "mingtie_removed": "管理者撤下的名帖：被撤的人江湖紀錄一句（自己的動作走 self 通知），收過的人下次打開才補",
-        "mingtie_cleared": "管理者放回的名帖，同上",
-        "divine": "神器輪替的全服登記：開季換季時才挑；原品與仿品數在打造、定名那一下改，傳聞與江湖史已在指紋裡",
-        "siege_records": "攻城戰的流水號（存檔時照 sieges 寫）；sieges 本身算進指紋",
-        # 3b-2 接線了（main.sortie_card、main.sorties）；搬進指紋要在 server_push.world_fingerprint 加一格、server.current_fingerprint 傳
-        # shared.sorties——server_push 是雲端側的檔，交雲端側改（計畫 4.0 之三第 5 條）
-        "sorties": "出陣約戰（減法季批 3b）：接線了，但推送指紋的那一格在雲端側的 server_push，等他們改；之前開著的分頁照輪詢看到別人貼的約戰",
-    },
-    "WorldState": {
-        "time": "時鐘一直在走，靠慢速輪詢更新（排程每 10 秒推一次，算進去會一直叫醒全服）",
-        "flags": "世界旗標只是條件，不直接畫在共用畫面上（推送計畫 F4）",
-        "flag_times": "旗標第一次成立的時間，同上",
-        "chapter_weights": "章回主線做成的份量：畫面上只有章回卡那一行（各人自己的卡，下次輪詢才補也不礙事），改歷史在大事結算那一刻才看得出來",
-        "chapter_done": "章回做成的人數：同上，只寫在各人自己的章回卡上",
-        "fired_thresholds": "門檻觸發過的記號；畫面看的是它帶來的傳聞與大勢",
-        "sim_accum": "不滿一小時的時間累積器",
-        "life_turn": "人物每日行事做到第幾輪的記號；畫面看的是它帶來的傳聞（傳聞流水號已在指紋裡）",
-        "whereabouts": "人物走動時一定同時寫一則傳聞（傳聞流水號已在指紋裡），誰在這裡下次輪詢就補",
-        "feasts": "開席、散席都寫天下大事（傳聞流水號已在指紋裡）；席上別人敬的那一句只畫在入席的人的場景，下次輪詢才補也不礙事",
-        "feast_seq": "宴席的流水號，跟 feasts 一起寫",
-        "plans": "盤算公告、結算都寫天下大事（傳聞流水號已在指紋裡）；兩邊各幾人只畫在江湖頁的盤算卡，下次輪詢才補也不礙事",
-        "stops_done": "行程每一站做完了沒，做的那一下都寫天下大事",
-        "deeds": "世界記事：人物對話與此地舊事才讀，寫的那一下都有天下大事或江湖紀錄",
-        "deed_seq": "世界記事的流水號，跟 deeds 一起寫",
-        "places": "地點的樣子（地點會變樣）：變樣那一下都有天下大事或世界記事一起寫；照時間轉重建、回太平不寫存檔，畫面下次輪詢自己現算",
-        "inscriptions": "走一趟的留言：只在別人下一次走一趟、路上抽到才看得到，不在共用的畫面上",
-        "inscription_seq": "留言的流水號，跟 inscriptions 一起寫",
-        "yuedan": "月旦評發出去那一刻寫天下大事與江湖史（都在指紋裡）；還沒發的那一批誰都看不到",
-        "yuedan_week": "評到第幾週的記號，跟 yuedan 一起寫",
-        "rallies": "求援委託只在那一方的人的懸賞卡（各人自己的畫面），掛單時寫一則陣營傳聞",
-        "ending_text": "收季那一刻跟 ended、ending_title 一起寫入",
-        "ending_id": "同上",
-        "final_trends": "同上（結算卡的資料）",
-        "final_rankings": "同上（結算卡的資料）",
-        "final_tiers": "同上（結局卡的資料：收季那一刻跟 ended 一起寫，減法季批 3c）",
-        "act_reached": "隊伍數與統御上限的內部計數，不畫在共用畫面上",
-        "marks": "地方痕跡只畫成模糊人數，改了讓每個分頁多刷新一次會洩漏有人做了看不見的事（推送計畫 F4）",
-        "marks_fired": "痕跡過門檻那一刻寫一則地方傳聞（傳聞流水號在指紋裡；世界層那一句 2026-10-25 拿掉）；江湖史在季末",
-        "mark_helpers": "誰替痕跡出過力只用來記本人的行狀，不畫在共用畫面上（改了讓每個分頁刷新會洩漏有人做了看不見的事，同 marks）",
-        "stance_counts": "人物心意的全服計數（減法季批 6）：只畫在跟他談的人自己的人物頁（自己的動作走 self 通知）；算進去會洩漏有人跟他說了話（同 marks）",
-        "stance_week": "心意計數是哪一週的記號，玩家看不到",
-        "persona": "人物性子此刻的值（功能包 persona）：只畫在點人物那一層的簡介；換段那一刻另寫傳聞（傳聞流水號已在指紋裡）",
-        "persona_day": "人物性子結算到第幾天的記號，玩家看不到",
-        "persona_push": "人物性子今天的淨推力：玩家看不到；算進去會洩漏有人跟他說了話（同 stance_counts）",
-        "persona_tug": "同上（今天的總份數）",
-        "persona_torn": "拉鋸只在結算那一刻變（每天一次），畫在簡介上；簡介跟著人物那一層重讀",
-        "persona_log": "換段紀錄：換的那一刻另寫傳聞（傳聞流水號已在指紋裡）",
-        "god_names": "特殊頓悟全服神品意境的名字（只拿來擋重名），不畫在共用畫面上；首悟上江湖史走傳聞流水號",
-        "god_firsts": "特殊頓悟每個模板這一季第一個悟出的人（江湖史那一句走傳聞流水號），不畫在共用畫面上",
-        "stance_active": "人物此刻照哪一個心意做事：換的那一刻另寫天下大事（傳聞流水號已在指紋裡）；週初歸零跟著週初的掛鉤",
-        "pending_battle": "背景推進記下要開的戰鬥，開成集結之後 active_battle 的指紋就變了",
-        "season_one": "開季時蓋的章，開季之後不變",
-        "season21": "開季時蓋的章（21 天季），開季之後不變",
-        "precise_actions": "開季時蓋的章（一類一顆），開季之後不變",
-        "cal_offset": "開季時蓋的章（21 天季季曆的偏移），開季之後不變",
-        "cal_offset_history": "21 天季暫停再繼續時才多一筆（FB-332）：繼續那一下季的時間與排定本來就跟著變",
-        "length_days": "同上",
-        "locks": "伏筆鎖定不能露出來（推送計畫 Review Focus 1）",
-        "lock_losers": "同上",
-        "event_mods": "一般伏筆的修正，畫面上看不到（推送計畫 F4）",
-        "event_bonus": "時刻表結果帶來的修正，同上",
-        "schedule": "只畫成『下一件大事』的倒數；時鐘本來就靠慢速輪詢，管理者改排定很少見（推送計畫沒納入）",
-        "hooked_week": "週初掛鉤的內部記號",
-        "hooked_day": "21 天季每天掛鉤的內部記號",
-        "showdowns_waiting": "排隊等著開的決戰記號，開成集結之後 active_battle 的指紋就變了",
-        "showdown_opened_at": "開集結那一刻（輿圖歸週用），跟 showdowns_opened 一起寫，那一下指紋已經變了（FB-563）",
-        "showdowns_cancelled": "管理者取消的決戰：取消那一下另寫天下大事（傳聞流水號已在指紋裡），輿圖不列它下次輪詢才補（FB-563）",
-        "orders": "陣營軍令只有那個陣營看得到（推送計畫 F4）",
-        "plots": "集體密謀只有自己陣營的人看得到（發起的軍情是陣營軍情，不進天下大事的流水號）；算進去，別的陣營會從『又被叫醒了』看出對方有動靜（乙二）",
-        "promoted_today": "晉升的每日彙整，進陣營軍情，不是共用畫面",
-        "trend_accum": "不足一點的推力累積器（推送計畫 F4）",
-        "active_pushers": "人數緩衝的記錄，畫面上看不到（推送計畫 F4）",
-        "invites": "玩家之間的邀請只有發的人與收的人看得到，伺服器做完動作直接叫醒他們兩個的分頁（Game.touched）；算進去會叫醒全服",
-        "spar_tally": "切磋的每日次數，畫面上看不到",
-        "gift_tally": "贈物的每日次數（FB-116），只在玩家卡上那一顆鈕灰不灰，打開卡才重問",
-        "discuss_tally": "論武的每日次數（FB-116），只在玩家卡上那一顆鈕灰不灰，打開卡才重問",
-        "raids": "截殺的冷卻，只在打開玩家卡時看得到（截殺當下 touched 叫醒被截殺的人）",
-        "ambushes": "埋伏是看不見的（設伏劫道）：中伏的那一下 touched 叫醒伏兵",
-        "figure_guards": "護衛的崗只寫在挑戰鈕的「身邊有 N 人護衛」與自家人的按鈕上；站崗、擋下都是某個人自己的動作，別人下次輪詢才補也不礙事",
-        "aid_tally": "犒軍、探望、聲威回復的每日記數，畫面上看不到",
-        "guard_credits": "護衛擋下挑戰、等著補給護衛的那幾句，只在護衛自己同步時領",
-        "supply": "屯糧練兵的量只在自家人的按鈕上（自己的動作走 self 通知），開集結那一刻寫天下大事",
-        "bounties": "懸賞榜只在城裡打開第二層選單時看得到，揭、交差都是自己的動作（通緝當下 touched 叫醒被通緝的人）",
-        "bounty_seq": "懸賞的流水號，玩家看不到",
-        "armaments": "陣營的軍備存量（素材與經濟）：捐的人自己那一下的畫面就更新；同陣營其他人的存量等下一次輪詢，不必為它叫醒全服的分頁",
-        "bounty_week": "懸賞自動掛單掛到第幾週，玩家看不到",
-        "bounty_day": "21 天季懸賞每天掛單掛到第幾天，玩家看不到",
-        "raided": "被截殺過的冷卻，只在打開玩家卡時看得到",
-        "clashes": "混戰寫進截殺冷卻的那幾筆（FB-607：拒絕話照實寫），跟 raids 一起寫、一樣只在打開玩家卡時看得到",
-        "clashed": "混戰被撞的護身是混戰寫的（FB-607），跟 raided 一起寫、一樣只在打開玩家卡時看得到",
-        "arena": "擂台的分身與名次只在打開擂台、看擂台榜時看得到；稱號在狀態列，守擂的人的戰報與俸在他自己同步時補",
-        "arena_pairs": "挑擂的同一對冷卻，只在打開擂台時看得到",
-        "arena_seq": "擂台的流水號，玩家看不到",
-        "arena_closed": "擂台這一季收了沒（季末排名寫進江湖史與傳聞，那一下指紋就變了）",
-        "arena_day": "擂台的俸記到哪一天，玩家看不到（俸在本人同步時補）",
-        "tavern_walls": "酒肆的題壁只在坐進那一間酒肆時看得到；坐在裡面的人照輪詢每十秒重抓",
-        "tavern_whispers": "酒肆的風聲在被打聽的人自己同步時補（寫風聲的人另外叫醒他的分頁，Game.touched）",
-        "tavern_treats": "請全店喝酒只在坐進那一間酒肆時看得到；請的那一下另有地方傳聞",
-        "tavern_hits": "雇殺手（第三批）只在本人同步時結算與補",
-        "tavern_hit_seq": "雇殺手的流水號，玩家看不到",
-        "tavern_chatter": "酒客閒談（第四批）只在坐進那一間酒肆時看得到",
-        "echoes": "首創名望回饋的帳，只在首創者自己同步時補一則紀錄；湊滿時那一句傳聞進 rumors，那一下指紋就變了",
-        "seat_ledger": "第四階席次的貢獻帳，畫面上看不到；陣營私有，跟 orders、plots 一樣（正式版丁）",
-        "seats": "在任名單只改那個陣營的人自己的頭銜，上任的消息是陣營軍情；算進去，別的陣營會從『又被叫醒了』看出對方有人上任（同 orders、plots，正式版丁）",
-        "general_gifts": "名將贈禮給了誰，只寫在拿到的人自己的江湖紀錄裡（裝備四欄 6.4）",
-        "secret_sets": "「裝滿」秘方這一季誰先暗合；傳聞與江湖史另有自己的欄位，這裡只記先後",
-        "signature_arms": "名將本命兵器給了誰，只寫在拿到的人自己的江湖紀錄裡；江湖史與天下大事傳聞進 chronicle、rumors，那一下指紋就變了（兵器設計 4.10）",
-        "tianji": "開季時蓋進季裡的天機，開季之後不變（週初掛單的重賞亂數用）",
-        "forge_divine_per_kind": "開季時蓋的章（素材與經濟），開季之後不變",
-        "forge_split_clues": "開季時蓋的章（素材與經濟），開季之後不變",
-        "divine_lineup": "開季時蓋的章（神器輪替），開季之後不變",
-        "renown_scale": "開季時蓋的章（名聲的門檻倍數），開季之後不變",
-        "mandate": "天命之季的章：蓋章時另寫天下大事（傳聞流水號已在指紋裡）",
-        "mandate_result": "天命之爭定下來時跟時間軸、天下大事一起寫入",
-        "territory": "地盤的控制方只跟著戰線、割據（trends）與大事（timeline）改；易手的那一下另寫天下大事（傳聞流水號已在指紋裡），第一次算不發也不必叫醒誰",
-        "conquest_on": "開季時蓋的章（領地爭奪），開季之後不變",
-        "jianfa_on": "開季時蓋的章（減法季），開季之後不變",
-        "attrs_v2": "開季時蓋的章（五項屬性），開季之後不變",
-        "conquest": "領地爭奪的開季種類、偏移與進度：易手另寫天下大事（傳聞流水號已在指紋裡），偏移跟著 trends 一起改；"
-                    "進度不露數字、只回推的人自己那一句話",
-        "xingshi": "〈天下形勢〉收下的文章：收下那一刻另寫天下大事與江湖史（都在指紋裡）；見聞「形勢」頁自己去讀，不叫醒全服",
-        "xingshi_ticket": "還在等模型寫的那一張單，誰都看不到",
-        "xingshi_mark": "上一篇讀到哪裡的記號，玩家看不到",
-        "seal_acts": "玉璽碎片的獨門行動（改版第 2 批）：起用那一下另寫天下大事與江湖史（都在指紋裡）；引將期滿回原處改的是 figures（算進指紋）",
-    },
-    "BattleInstance": {
-        "muster_deadline_real": "現實時間的期限，畫面上的倒數靠輪詢（推送計畫 F4）",
-        "participants": "誰加入、誰出手了，畫面上看不到；這一回合送出幾個的人數算在 round 那一格（推送計畫 F2）",
-        "act_index": "換幕只在 round_number 加一的那一下發生",
-        "narrative_log": "戰報的敘事一回合結算才加一行，那一下 round_number 也變了",
-        "tactic_kinds": "戰法名 → kind 只在回合結算時跟著 narrative_log 一起加，那一下 round_number 也變了",
-        "last_mix": "上一回合兩邊的出招比例，一回合結算才改，那一下 round_number 也變了（每個人的份量與上一回合的結果在 participants 裡，同它）",
-        "outcome_title": "收場時跟 phase 一起寫入",
-        "outcome_text": "同上",
-        "outcome_world_flags": "同上",
-        "outcome_trend_delta": "同上",
-        "end_time": "同上",
-        "unfinished_text": "同上",
-        "unfinished": "同上",
-        "record_id": "資料庫裡的流水號，不是畫面",
-        "rounds": "還沒寫進資料庫的回合緩衝，不是畫面",
-        "trend_start": "開打時就定了，跟 phase 一起寫入",
-        "swings": "每回合戰局怎麼走，一回合結算才加一筆，那一下 round_number 也變了",
-        "mvps": "每回合的 MVP（looks 的 mvp.crown），一回合結算才加一筆，那一下 round_number 也變了",
-        "marked": "誰在這一幕顯眼，只在回合結算時改，那一下 round_number 也變了",
-        "last_targets": "上一回合誰被點名，只在回合結算時改，那一下 round_number 也變了",
-        "outcome_reason": "收場時跟 phase 一起寫入",
-        "outcome_side": "收場時跟 phase 一起寫入（軍餉看誰贏）",
-        "outcome_margin": "收場時跟 phase 一起寫入",
-        "highlight": "最有戲的放手一搏：跟著回合結算變（回合已經算進指紋），收場時寫進傳聞",
-        "seal_emerge": "現世擲中了：集結那一刻另寫天下大事（3.4），指紋本來就變了",
-        "seal_shard": "璽動牽動哪一片：另寫天下大事（4.3）",
-        "seal_holder": "同上",
-        "seal_holder_faction": "同上（快照，畫面上看不到）",
-        "seal_holder_side": "同上",
-        "seal_notes": "收場時跟 phase 一起寫入（戰報那一行）",
-        "seal_lean": "天命之爭開集結那一刻快照（集結公告另寫天下大事，指紋本來就變了）",
-        "supply_lean": "屯糧練兵開集結那一刻快照（集結公告另寫天下大事，指紋本來就變了）",
-        "front_note": "起點照哪一條戰線：開集結那一刻快照（另寫天下大事，指紋本來就變了），之後不再改",
-        "commanders": "上陣的大勢人物：開集結那一刻派上來（另寫天下大事），氣血與敗走只在回合結算時改，那一下 round_number 也變了",
-        "orders": "主將令：回合結算那一下換，round_number 也變了",
-        "siege": "攻城戰打哪一塊、誰攻：開集結那一刻就定了（跟 phase 一起寫入）；收場的易手另寫天下大事（傳聞流水號已在指紋裡）",
-    },
-}
-
-
-def _seal_duel():
-    from tianxia.world_state import SealDuel, SealSide
-
-    side = SealSide(name="甲", power=50.0, hp=100.0, hp_cap=100.0)
-    return SealDuel(id="1:chishou", shard="chishou", phase="active", starts_real=0.0, challenger=side, holder=side.model_copy(update={"name": "乙"}))
-
-
-WORLD_MODELS = {"SharedWorldState": SharedWorldState, "WorldState": WorldState, "BattleInstance": battle_instance.BattleInstance}
-
-
-def test_every_shared_world_field_is_classified_for_the_push_fingerprint():
-    """新欄位兩邊都沒寫就紅：逼加欄位的人當場決定它算不算進推送的指紋。"""
-    for name, model in WORLD_MODELS.items():
-        counted, ignored = set(FINGERPRINTED[name]), set(NOT_IN_THE_FINGERPRINT[name])
-        assert not counted & ignored, f"{name} 同時在兩邊：{sorted(counted & ignored)}"
-        assert set(model.model_fields) == counted | ignored, (
-            f"{name} 的欄位沒分類或寫錯了：沒分類 {sorted(set(model.model_fields) - counted - ignored)}，"
-            f"不存在 {sorted((counted | ignored) - set(model.model_fields))}——見 FINGERPRINTED／NOT_IN_THE_FINGERPRINT 上面的說明"
-        )
-        assert all(reason.strip() for reason in NOT_IN_THE_FINGERPRINT[name].values()), name
-
-
-@pytest.mark.parametrize(
-    ("name", "field"),
-    [(name, field) for name, fields in FINGERPRINTED.items() for field, change in fields.items() if change != _SEASON],
-)
-def test_every_field_counted_in_the_push_fingerprint_really_changes_it(name, field):
-    """上面說「算進指紋」的欄位，真的改了就讓 server.current_fingerprint() 變（不是只寫在清單上）。每個欄位自己一個資料庫。"""
-    world = open_world()
-    world.seed_first_season(server.CONTENT)
-    if world.season_phase() == "preparing":
-        world.open_season(server.CONTENT, 1000.0)
-
-    def setup(st):
-        st.season.trends, st.season.revealed = {"t": 10, "h": 5}, {"t"}  # 一條浮現的、一條隱藏的
-        st.active_battle = battle_instance.BattleInstance(battle_id="changshe_fire")
-
-    world.mutate(setup)
-    before = server.current_fingerprint()
-    world.mutate(FINGERPRINTED[name][field])
-    assert server.current_fingerprint() != before, f"{name}.{field} 改了，指紋沒變"
-
-
-def _three_read_fingerprint() -> str:
-    """推送看守原本的讀法：三次各自的快照，還把這一季每一則傳聞與江湖史讀回來數。新的讀法（一次快照加 MAX／COUNT）要跟它一樣。"""
-    world = open_world()
-    shared = world.read()
-    return server_push.world_fingerprint(
-        shared.season_number, shared.season_phase(), world.get_season(), world.get_battle(),
-        paused=shared.paused_at is not None,
-    )
-
-
-def test_the_one_snapshot_fingerprint_is_the_old_three_read_one_on_every_state():
-    """m2：同樣的東西算進去、同樣的東西不算（F2 的決戰、F4 的排除項），在一連串不同的狀態裡每一步都跟舊的算法一樣，
-    該變的變、不該變的不變。"""
-    world = open_world()
-    content = server.CONTENT
-    revealed = []
-
-    def trend_up(season):
-        key = revealed[0]
-        season.trends[key] += 1
-
-    def nudge_trend():
-        world.mutate_season(trend_up)
-
-    def pick_revealed():
-        revealed.append(next(iter(world.get_season().revealed)))
-
-    def rumors(*items):
-        return lambda: world.mutate_season(lambda s: s.rumors.extend(items))
-
-    steps = [  # (這一步, 指紋會不會變)
-        (lambda: world.seed_first_season(content), True),
-        (pick_revealed, False),
-        (rumors(Rumor(time=1.0, text="天下大事", layer="world")), True),
-        (rumors(Rumor(time=1.0, text="軍情", layer="faction", faction="guan"),
-                Rumor(time=1.0, text="地方", layer="local", region="yingchuan"),
-                Rumor(time=1.0, text="只有你", layer="personal", character="甲")), False),
-        (rumors(Rumor(time=3.0, text="又一則天下大事", layer="world")), True),
-        (lambda: world.mutate_season(lambda s: s.chronicle.append(Rumor(time=2.0, text="江湖史一筆"))), True),
-        (nudge_trend, True),
-        (lambda: world.mutate_season(lambda s: s.locks.__setitem__("changshe_fire", Lock(side="guan", name="甲", time=1.0))), False),
-        (lambda: world.start_battle(content.battles["huangjin_showdown"], now=0.0), True),
-        (lambda: world.mutate_battle(lambda b: battle_instance.join_faction(b, "乙玩家", "huang", neili_cap=320.0)), False),
-        (lambda: world.mutate_battle(lambda b: setattr(b, "trend", b.trend + 3)), True),
-        (lambda: world.mutate_season(lambda s: s.timeline.__setitem__("uprising", TimelineResult(key="fixed", time=0.0))), True),
-        (lambda: world.mutate_season(lambda s: setattr(s, "ended", True)), True),
-        (lambda: world.next_season(content, now=1.0), True),
-    ]
-    assert server.current_fingerprint() == _three_read_fingerprint()  # 還沒有賽季的空資料庫
-    for number, (step, changes) in enumerate(steps):
-        before = server.current_fingerprint()
-        step()
-        now = server.current_fingerprint()
-        assert now == _three_read_fingerprint(), number
-        assert (now != before) is changes, number
 
 
 def test_the_fingerprint_is_read_once_without_loading_the_rumor_and_chronicle_rows(monkeypatch):
@@ -6840,186 +4695,6 @@ def test_world_step_does_not_move_a_paused_season():
     assert world.get_season().time == pytest.approx(stopped + 10 * scale)
 
 
-def test_a_paused_season_never_asks_the_model(client, monkeypatch):
-    """暫停中，鎖外三段（對話、大場面、開爐、隨口應對）在第一段就擋，送模型的單子連問都不問引擎要
-    （只看回的 400 分不出第一段有沒有擋：第三段進鎖後會回同一句，白叫一次模型）。"""
-    _player(client)
-    assert server.game_for("沈青衫").world.pause_clock(time.time())
-    asked = []
-    for name in ("dialogue_request", "fight_request", "forge_request", "free_text_request"):
-        monkeypatch.setattr(Game, name, lambda self, *a, _name=name, **k: asked.append(_name))
-    for path, body in (
-        ("/api/choose", {"id": "act:socialize"}), ("/api/choose", {"id": "act:train"}),
-        ("/api/menxia/forge", {"art": "x", "insights": ["y"]}), ("/api/answer", {"text": "上前勸架"}),
-    ):
-        assert client.post(path, json=body).status_code == 400, path
-    assert asked == []
-
-
-# ── 有所感的畫布（悟意境設計 0.2、0.2a）────────────────────
-
-def _into_draw(game):
-    """把這個角色放進感悟狀態（選對做法、擲中了）：站到一個探索悟得到意境的地點，開一張有所感的卡。"""
-    import random as _random
-
-    from tianxia import insights, sensing
-
-    def setup(g):
-        loc = next(l for l in g.content.locations.values() if insights.explore_gives(l, g.content) and not l.prologue_only)
-        g.state.player.location = loc.id
-        scene = sensing.pick_scene(loc, g.content, _random.Random(0))
-        sensing.start(g.state, g.content, scene, _random.Random(0))
-        pool = insights.pool_attributes(loc, g.content)
-        g.state.player.sensing.stage = "draw"
-        g.state.player.sensing.method = next(m.attribute for m in scene.methods if m.attribute in pool)
-
-    server.act(game, setup)
-
-
-def _new_shape(game):
-    """一筆會悟出自己新意境（要取名）的現成筆畫；這一處每一筆都落回基本意境時是 None。"""
-    from tianxia import glyph
-
-    for points in glyph.SAMPLES.values():
-        req = game.sense_request(points)
-        if not isinstance(req, str) and req.needs_name:
-            return points
-    return None
-
-
-def test_drawing_a_new_shape_asks_the_model_outside_the_lock_with_the_picture(client):
-    _player(client)
-    game = next(iter(server.GAMES.values()))
-    _into_draw(game)
-    main = client.get("/api/main").json()
-    assert [o["id"] for o in main["options"]] == ["sense:draw", "sense:let"]
-    points = _new_shape(game)
-    assert points is not None
-    seen = {}
-
-    def fake_name(client_, content, facts, image="", budget=None, person=None):
-        seen["image"], seen["locked"] = image, game.world.db.writing()
-        return "湖心月", "如一泓靜水，綿柔不盡。", "看圖"
-
-    with mock.patch.object(server.insight_llm, "name", fake_name):
-        r = client.post("/api/sense", json={"points": points, "png": "AAAA"})
-    assert r.status_code == 200
-    assert seen == {"image": "AAAA", "locked": False}
-    assert not any(o["id"].startswith("sense:") for o in r.json()["main"]["options"])
-    own = game.state.player.own_insights
-    assert [i.name for i in own.values()] == ["湖心月"] and list(own.values())[0].glyph
-    assert list(own.values())[0].note == "如一泓靜水，綿柔不盡。"
-    assert game.state.journal[0].title.startswith("有所感・")
-
-
-def test_a_stroke_that_cannot_be_read_is_refused_and_keeps_the_state(client):
-    _player(client)
-    game = next(iter(server.GAMES.values()))
-    _into_draw(game)
-    r = client.post("/api/sense", json={"points": [[1, 1, 0]], "png": ""})
-    assert r.status_code == 400 and "點了一下" in r.json()["error"]
-    assert game.state.player.sensing is not None and game.state.player.sensing.stage == "draw"
-
-
-def test_sending_a_stroke_without_sensing_is_refused(client):
-    _player(client)
-    from tianxia import glyph
-
-    assert client.post("/api/sense", json={"points": glyph.SAMPLES["剛"]}).status_code == 400
-
-
-def test_the_canvas_line_reads_the_stroke_without_touching_the_game(client):
-    _player(client)
-    from tianxia import glyph
-
-    assert client.post("/api/sense_read", json={"points": glyph.SAMPLES["柔"]}).json() == {"ok": True}
-    assert client.post("/api/sense_read", json={"points": "x"}).json()["problem"]
-
-
-def test_the_canvas_warms_the_model(client):
-    _player(client)
-    with mock.patch.object(server.insight_llm, "warm", return_value=True) as warm:
-        assert client.post("/api/sense_warm").json() == {"ok": True}
-    warm.assert_called_once()
-
-
-# ── 玩家之間的互動（第一層）────────────────────────────────
-
-
-def test_two_players_in_the_same_place_see_each_other_and_open_a_card(client):
-    """兩個人都略過序章、站在同一個起點：江湖畫面的 here 列出對方（陣營括號），/api/peer 給玩家卡；人不在了 card 是 None。"""
-    _player(client, "shen_01", "沈青衫")
-    other = TestClient(server.app)
-    _player(other, "lin_01", "林小竹")
-    here = client.get("/api/main").json()["here"]
-    assert here == [{"name": "林小竹", "side": "散人"}]
-    got = client.get("/api/peer", params={"name": "林小竹"}).json()
-    assert got["card"]["name"] == "林小竹" and got["card"]["level"] >= 1 and isinstance(got["card"]["actions"], list)
-    assert client.get("/api/peer", params={"name": "沒這個人"}).json() == {"card": None, "gone": social.GONE}
-    out = client.post("/api/peer/act", json={"name": "林小竹", "action": "no-such", "amount": "x"}).json()
-    assert "沒有這個動作" in out["message"] and out["card"]["name"] == "林小竹"
-
-
-def test_a_greeting_and_a_gift_go_through_the_endpoints(client):
-    """第二層：甲向乙挑釁（附一句話）、送素材；乙的江湖畫面 calls 有那一行，按回應鈕之後兩邊都清掉。"""
-    _player(client, "shen_02", "沈青衫")
-    other = TestClient(server.app)
-    _player(other, "lin_02", "林小竹")
-    out = client.post("/api/peer/act", json={"name": "林小竹", "action": "greet", "arg": "taunt", "text": "改天見識見識"}).json()
-    assert "你向林小竹斜眼打量，出言挑釁：「改天見識見識」" in out["message"]
-    state = open_characters().load("沈青衫")
-    state.player.materials = {next(iter(server.CONTENT.materials)): 5}
-    open_characters().save(state)
-    mid = next(iter(server.CONTENT.materials))
-    gift = client.post("/api/peer/act", json={"name": "林小竹", "action": "gift", "arg": "material", "choice": mid, "amount": 2}).json()
-    assert "送給了林小竹" in gift["message"]
-    [call] = other.get("/api/main").json()["calls"]
-    assert call["text"] == "沈青衫斜眼打量你，出言挑釁：「改天見識見識」"
-    other.post("/api/choose", json={"id": call["options"][0]["id"]})
-    main = other.get("/api/main").json()
-    assert main["calls"] == [] and main["party"] is None
-    assert any("冷眼以對" in line for e in open_characters().load("沈青衫").journal for line in e.lines)
-    left = other.post("/api/party/leave", json={}).json()
-    assert "沒有跟著誰" in left["message"]
-
-
-def test_fb245_answering_a_discussion_while_he_is_busy_does_not_call_the_model(content, world, client, monkeypatch):
-    """FB-245：/api/peer/act 答應論武，發邀請的那個人正忙（這一張邀請已經成不了）：prepare_peer 的 A 段不開取名單子，模型一次都不叫，
-    直接回「他此刻正忙」那一句、邀請作廢；他閒下來之後再邀、再答，照舊叫一次模型取名。測試內容的兩個角色（同 test_discuss），
-    端點的拿鎖、存檔那一套（act、look、_open_request）換成直接做，prepare_peer、peer_act 照真的走。"""
-    from test_discuss import NAME, NOW, CountingClient, _change, _invite, _load, _make
-
-    from conftest import install_season_one
-    from tianxia.characters import CharacterStore
-
-    monkeypatch.setattr(OllamaClient, "from_config", classmethod(lambda cls, cfg: None))  # 不准碰模型的 port
-    install_season_one(content)
-    content.config.auto_open_first_season = True
-    _make(content, world, "甲", insights=("feng",))
-    _make(content, world, "乙", wugong="fist", insights=("huo",))
-    _invite(content, world, item="insight:feng")  # 甲出「風」；乙出「火」是新配方（合併），成得了就要取名
-    _change(world, "甲", lambda p: setattr(p, "busy_until", 1e9))  # 閉關中：選單上沒有探索，同進了鐵匠鋪
-    fake = CountingClient()
-    game = Game(content, CharacterStore(world.db).load("乙"), random.Random(0), world)
-    game.client = fake
-    game.sync(NOW)
-    monkeypatch.setattr(server, "_game", lambda request: game)
-    monkeypatch.setattr(server, "act", lambda g, action, **k: action(g))
-    monkeypatch.setattr(server, "look", lambda g, view: view(g) if view is not server.main_view else None)
-    monkeypatch.setattr(server, "_open_request", lambda g, open_it: (server._monotonic(), open_it()))
-    monkeypatch.setattr(server, "_tell_tabs", lambda g: None)
-    answer = {"name": "甲", "action": "discuss", "arg": "yes:insight:huo"}
-    r = client.post("/api/peer/act", json=answer).json()
-    assert fake.calls == [] and r["brief"] == "甲此刻正忙，騰不出手來論武。" and r["message"] == f"<p>{r['brief']}</p>\n"
-    assert world.get_season().invites == [] and _load(world, "甲").journal[0].title == "論武不成・乙"
-    _change(world, "甲", lambda p: setattr(p, "busy_until", None))  # 他閒下來了：再邀、再答，這一次照舊取名
-    game.state.world = world.get_season()
-    _invite(content, world, item="insight:feng")
-    game.state.world = world.get_season()
-    r = client.post("/api/peer/act", json=answer).json()
-    assert len(fake.calls) == 1 and NAME[0] in r["message"]
-
-
 def test_the_fingerprint_follows_the_seal_duel_but_not_who_was_seen():
     """奪璽單挑：回合 +1、親自出了一手，指紋變；last_seen（每 15 秒就可能動一次）變了不算（5.10）。"""
     world = open_world()
@@ -7079,49 +4754,3 @@ def test_the_first_request_after_a_restart_posts_the_wanted_notice(client):
     client.get("/api/main")
     posted = [b for b in open_world().get_season().bounties if b.auto_by == "陣營" and b.target == "沈青衫"]
     assert len(posted) == 1 and posted[0].faction == "huang"
-
-
-def test_epiphany_think_names_outside_the_lock(monkeypatch):
-    """特殊頓悟的「靜心思名」走三段式：A 鎖內開單、B 鎖外請模型（model_call：在鎖裡被叫到會丟錯）、C 鎖內交回 Game.epiphany_names；不在等著取名照一般的按鈕走。"""
-    from tianxia import epiphany
-
-    game = _forger()
-    ask = epiphany.NameAsk("頓悟1", "god_x", [])
-    seen = {}
-
-    def propose(client, content, request, budget=None, person=None):
-        seen["request"] = request
-        return ["寒潭映月"]
-
-    monkeypatch.setattr(Game, "epiphany_request", lambda self: ask)
-    monkeypatch.setattr(epiphany, "propose_names", propose)
-    monkeypatch.setattr(Game, "epiphany_names", lambda self, request, names: [f"{request.god}:{names[0]}"])
-    assert server.choose(game, server.EPIPHANY_THINK) == ["god_x:寒潭映月"]
-    assert seen["request"] is ask
-    monkeypatch.setattr(Game, "epiphany_request", lambda self: None)
-    monkeypatch.setattr(epiphany, "propose_names", mock.Mock(side_effect=AssertionError("不該叫模型")))
-    server.choose(game, server.EPIPHANY_THINK)
-
-
-def test_main_view_drops_the_battle_scene_when_its_own_poll_settles_the_battle():
-    """U-06（手機介面自檢 2026-10-31）：場景先讀、選單才把決戰推到收場——以前「剛剛」已經寫了結果，場景還停在最後一回合
-    「已送出 0／在場 0」。現在同一次回的場景就回到地點；U-08：上過陣的人全倒下了，這一下就收場，不等回合逾時。"""
-    from jianfa_kit import jianfa_game, ready
-
-    game = ready(jianfa_game("week7", name="Rayal"), side="guan", loc="changshe", level=20)
-    game.now = 1000.0
-    game.admin_start_showdown("changshe_fire", game.now)
-    game.choose("battle:join:guan")
-    game.now = game.world.get_battle().muster_deadline_real + 1
-    game.options()
-    assert game.world.get_battle().phase == "active"
-
-    def fall(battle):
-        for p in battle.participants.values():
-            p.eliminated = True
-    game.world.mutate_battle(fall)
-    game.now += 5  # 遠不到回合逾時
-    view = server.main_view(game)
-    assert game.world.get_battle().phase == "ended"
-    assert "回合" not in view["scene"] and "在場" not in view["scene"]
-    assert "長社" in view["scene"]  # 回到地點描述；結果在「剛剛」與戰報

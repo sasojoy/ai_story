@@ -215,7 +215,6 @@ from .features.peers import pair_actions as peers_pair_actions  # 過渡：Game 
 # peers2（全部拆包第 38 批）：切磋、論武、截殺的 28 個方法搬進玩家互動包；Game 留 13 個一行委派（論武 4、截殺 9；切磋沒有外面的呼叫端）
 from .features.peers import discuss_actions as peers_discuss_actions  # 過渡：Game 上論武的一行委派
 from .features.peers import raid_actions as peers_raid_actions  # 過渡：Game 上截殺的一行委派
-from .features.peers.discuss_actions import DISCUSS_SAME, _refusal  # noqa: F401  過渡：tests/arts/test_discuss.py 從 engine 拿
 from .features.faction import join_actions as faction_join  # 過渡：Game 上投靠與拜入門派的 4 個一行委派（全部拆包第 35 批）
 from .features.faction import lean_actions as faction_lean  # 過渡：Game 上豪強改幫的 2 個一行委派（全部拆包第 35 批）
 from .features.faction import defect_actions as faction_defect  # 過渡：Game 上叛投的 2 個一行委派（全部拆包第 35 批）

@@ -55,7 +55,6 @@
   `calls` 的內容與先後、預期表照登記表換主人改，斷言的意思不變；第 35 批 PM 認定第 2 條認了，比照第 34 批認定第 4 條，寫在手冊第十五節）。
 - `tests/figures/test_gentry_allied.py`（47）、`tests/core/test_gentry_ledgers.py`（16）、`tests/core/test_factions.py`（2）、`tests/core/test_faction_events.py`（3）：豪強、兩本帳、陣營規模與事件。
 - `tests/figures/test_promotions_huang.py`（56）、`test_promotions_high.py`（130）、`test_seats.py`（83）、`test_rumor_layers.py`（70）：只有幾處 `import defection`（晉升、席次、傳聞分層）。
-- `tests/web/test_gentry_allied_web.py`（2）：網頁（第 3 階）。
 - 「你這一步」的去投靠那一格（第 36 批）：`tests/bots/test_step.py`（9：去投靠的目標是最近的投靠點、先後在新手目標之後）、`tests/map/test_weekcard.py`（7：散人的卡最後一件是去投靠）；格的先後與登記由核心契約 `tests/core/test_contract_core.py`（`# core_step`）鎖住。
 - `tests/core/test_feature_boundaries.py`、`tests/core/test_contract_features.py`（核心契約）：這一包的邊界、前綴、欄位、換季都在裡面守。
 
@@ -77,3 +76,11 @@
 - 江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `sides_card`、`ending`。
 - 改 `sides.py` `test_for` 挑不到、另外要跑（`-n 4`）：`tests/core/test_contract_core.py tests/core/test_contract_features.py tests/core/test_feature_boundaries.py tests/map/test_weekcard.py tianxia/features/guide/tests/test_opening.py tests/bots/test_step.py tests/core/test_chapters.py tests/figures/test_week_unlock.py tianxia/features/companions/tests/test_errands_weekcard.py tests/server/test_server.py`；`tianxia/features/faction/tests/test_sides_card.py` 整檔 slow，改到它才跑。
 - 畫面：`web/faction.js`（`sidesTableHtml`、`sidesFirstHtml`，全部拆包第 67 批從 `main.js` 切出來，一個字不改；沒有網頁測試執行，靠 `facade` 軌比字與實機）；`main.js`、`app.js` 叫它們。
+
+## 第 61 批搬進來的測試（混合測試檔歸位）
+
+整檔搬進 `tests/`（只搬位置、不改斷言；模組層標 `whole_content`，內容照舊是整份）：`test_gentry_allied_web.py`（原 `tests/web/`）。
+
+照條拆來：`test_faction_facade.py`（6 條，從 `tests/core/test_engine.py` 拆來）；兩邊都用的小工具在 `tests/kit/`（`engine_kit`、`server_kit`、`jianghu_kit`）。
+
+這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
