@@ -18,11 +18,13 @@ import random
 import re
 from typing import NamedTuple
 
-from . import battle_instance, seal, tactics
-from .core import duel_base as duel_rules  # 單挑底層（全部拆包第 12 批進核心：頭目戰、擂台在單挑包，奪璽單挑之後進玉璽包，不能 import 單挑包）
-from .battle_instance import CAVALRY_MOVES, DEFAULT_FREE_TEXT_SUCCESS_RATE, BattleParticipant
-from .models import MOVES, Content, DuelTuning, SealTuning
-from .world_state import SealDuel, SealEvent, SealSide, SharedWorldState
+from tianxia import battle_instance, tactics
+from tianxia.core import duel_base as duel_rules  # 單挑底層（全部拆包第 12 批進核心：頭目戰、擂台在單挑包，奪璽單挑之後進玉璽包，不能 import 單挑包）
+from tianxia.battle_instance import CAVALRY_MOVES, DEFAULT_FREE_TEXT_SUCCESS_RATE, BattleParticipant
+from tianxia.models import MOVES, Content, DuelTuning, SealTuning
+from tianxia.world_state import SealDuel, SealEvent, SealSide, SharedWorldState
+
+from . import seal
 
 SIDES = ("challenger", "holder")
 TEXT = "text"  # pending 裡放手一搏的那一手
@@ -117,7 +119,7 @@ def faced(content, a: SealSide, b: SealSide) -> None:
     """五項屬性的季：兩邊的威力與份量照對方真正的五項重算（team.pvp_faced；企劃者 2026-11-04）。任一邊沒卡（舊的季）不動。"""
     if a.card is None or b.card is None:
         return
-    from . import team  # 延後 import：只有這裡用得到
+    from tianxia import team  # 延後 import：只有這裡用得到
     ca, cb = a.card, b.card
     a.power, a.scores, _ = team.pvp_faced(content, a.power, a.scores, ca, cb)
     b.power, b.scores, _ = team.pvp_faced(content, b.power, b.scores, cb, ca)
