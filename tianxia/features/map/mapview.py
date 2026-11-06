@@ -8,14 +8,15 @@ from __future__ import annotations
 import math
 from html import escape
 
-from tianxia import atlas, orders  # 過渡：待搬（地點與路的資料、視野：atlas 第 50 批拆兩半〔第 49 批 PM 認定第 2 條〕，留下的那一半不進包）
+from tianxia import atlas, orders  # 共用規則層（atlas 核心那一半：地點與路的資料、視野——RoadSpot、road_hops、road_spot、routes、views、way_to、whole_minutes；第 50 批收進）
 from tianxia import conquest, mounts, territory  # 共用規則層
-from tianxia.atlas import KNOWN, Odds  # 過渡：待搬（同上）
+from tianxia.atlas import KNOWN  # 共用規則層（同上）
 from tianxia.models import Content, Location, MapLabel, MapLayout, MapRegion
 from tianxia.rules import side_of
 from tianxia.state import GameState
 
-from . import mapart
+from . import layers, mapart  # layers：同一包的圖層、詳情、勝算（第 50 批從 atlas 拆出來）
+from .layers import Odds
 from .mapart import fmt
 
 NODE_SIZE = {"current": 13, "visible": 13}  # 圓盤半徑
@@ -65,12 +66,12 @@ LEGEND_RING = "外圈：綠安全／橙危險／紅兇險　⚔ 可遊歷"
 # 待 joy 潤（FB-251）：出陣開著時 ⚔ 照地盤畫（armed_places）。不能比 LEGEND_RING 長：375 寬一行只放得下那麼多（「可出陣攻打」把「打」擠到第二行，FB-256）
 LEGEND_RING_SORTIE = "外圈：綠安全／橙危險／紅兇險　⚔ 可攻打"
 LEGEND_CONTROL = "地點的底色：官軍藍、黃巾黃、豪強綠，是此刻誰佔著"  # 待 joy 潤：局勢層開著地盤時多的那一句
-LEGEND_STRIKE = f"{atlas.STRIKE_MARK} 本週軍令要打擊的人物"  # 局勢層：有標記時多一行（FB-072）；全圖開放，目標的所在都知道
+LEGEND_STRIKE = f"{layers.STRIKE_MARK} 本週軍令要打擊的人物"  # 局勢層：有標記時多一行（FB-072）；全圖開放，目標的所在都知道
 LEGEND_STORY = "★ 這一幕主線的目標　✦ 最近 {days:g} 天的大事與傳聞"  # 天數照傳聞板的長度（legend_data 照內容填）
 LEGEND_LAYERS = {
     "situation": "⚑ 龍頭人物（會自己行動的江湖人物）常出沒　大區越紅，大勢越凶",
     "enemies": "底色同外圈　最險：最難對付的對手與勝算",
-    "story": LEGEND_STORY.format(days=atlas.NEWS_DAYS),  # 預設的天數；真正送出去的在 legend_data
+    "story": LEGEND_STORY.format(days=layers.NEWS_DAYS),  # 預設的天數；真正送出去的在 legend_data
     "routes": "數字：步行要幾分鐘（走路程最短的路）　粗線：到選定地點的路",
 }
 RIVER_TEXT = "#4F7FA3"
@@ -245,13 +246,13 @@ def legend_data(state: GameState, content: Content, layer: str = "situation") ->
     """輿圖的圖例，照這一層給網頁疊在地圖框角落的一層（不畫進 SVG：畫在圖裡會跟著平移、縮放，放大時就看不見了）。
     icons 是六種地點圖示（每個是一張自成一體的小 SVG，畫法同地圖上的圖示）；states 是視野狀態怎麼畫；ring 是外圈；
     layer 是這一層的說明（認不得的圖層是空字串）；strike 是局勢層有本週打擊軍令的標記時多的那一句說明，沒有就是空字串
-    （跟 render_map 標 ◎ 同一個條件，見 atlas.strike_marks；小地圖沒有圖例）。全是字串，原樣就是 JSON。"""
-    strike_places, strike_regions = atlas.strike_marks(state, content) if layer == "situation" else (set(), set())
+    （跟 render_map 標 ◎ 同一個條件，見 layers.strike_marks；小地圖沒有圖例）。全是字串，原樣就是 JSON。"""
+    strike_places, strike_regions = layers.strike_marks(state, content) if layer == "situation" else (set(), set())
     return {
         "icons": [{"kind": kind, "label": text, "svg": mapart.icon_svg(kind)} for kind, text in LEGEND_ICONS],
         "states": LEGEND_STATES,
         "ring": LEGEND_RING_SORTIE if territory.on(content) else LEGEND_RING,
-        "layer": LEGEND_STORY.format(days=atlas.news_days(content)) if layer == "story" else (
+        "layer": LEGEND_STORY.format(days=layers.news_days(content)) if layer == "story" else (
             LEGEND_LAYERS.get(layer, "") + (f"　{LEGEND_CONTROL}" if layer == "situation" and territory.on(content) else "")
             + (f"，{LEGEND_NEUTRAL}" if layer == "situation" and conquest.on(content, state.world) else "")),
         "strike": LEGEND_STRIKE if strike_places or strike_regions else "",
@@ -263,18 +264,18 @@ def _layer_marks(
     strike_places: set[str] | frozenset[str] = frozenset(),
 ) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
     """這一層要加的東西，只給摸清的地點：（名字前的記號, 名字底下的小字, 圓盤換的顏色）。
-    strike_places 是本週打擊軍令的目標所在（atlas.strike_marks 的第一份，已經是摸清的），只有局勢層用。"""
+    strike_places 是本週打擊軍令的目標所在（layers.strike_marks 的第一份，已經是摸清的），只有局勢層用。"""
     prefixes: dict[str, str] = {}
     notes: dict[str, str] = {}
     discs: dict[str, str] = {}
     known = [loc_id for loc_id, view in views.items() if view in KNOWN]
     if layer == "situation":
         for loc_id in known:
-            people = atlas.haunters(state, content, loc_id)
+            people = layers.haunters(state, content, loc_id)
             if people:
                 notes[loc_id] = f"⚑ {'、'.join(people)} 常出沒"
             if loc_id in strike_places:
-                prefixes[loc_id] = f"{atlas.STRIKE_MARK} "
+                prefixes[loc_id] = f"{layers.STRIKE_MARK} "
             side = territory.controller(state.world, content, loc_id)
             if side in CONTROL_DISC:  # 地盤易手（設計 4.3 第 2 點；完整的勢力版圖是第 7 塊）
                 discs[loc_id] = CONTROL_DISC[side]
@@ -285,12 +286,12 @@ def _layer_marks(
         for loc_id in known:
             loc = content.locations[loc_id]
             discs[loc_id] = mapart.mix(DANGER_RING[loc.danger], mapart.DISC, ENEMY_DISC)
-            worst = atlas.worst_foe(content, loc, odds, state.player.faction, state.world) if odds is not None else None
+            worst = layers.worst_foe(content, loc, odds, state.player.faction, state.world) if odds is not None else None
             if worst:
                 notes[loc_id] = f"最險：{worst[0]} {worst[1]}"
     elif layer == "story":
-        goals = atlas.goal_places(state, content)
-        news = atlas.news_places(state, content)  # 聽得到的才標（傳聞分層設計第九節）
+        goals = layers.goal_places(state, content)
+        news = layers.news_places(state, content)  # 聽得到的才標（傳聞分層設計第九節）
         for loc_id in known:
             marks = ("★" if loc_id in goals else "") + ("✦" if loc_id in news else "")
             if marks:
@@ -320,7 +321,7 @@ def _you(content: Content, spot: atlas.RoadSpot) -> tuple[float, float, str]:
     那一點，以及往前走的方向箭頭（照兩站的直線方向）。"""
     behind, control, ahead = _road_curve(content, spot)
     x, y = mapart.bezier_point(behind, control, ahead, spot.done)
-    return x, y, atlas.direction(behind, ahead)
+    return x, y, layers.direction(behind, ahead)
 
 
 def _you_mark(content: Content, spot: atlas.RoadSpot, you: tuple[float, float, str], taken: list[Taken]) -> str:
@@ -418,8 +419,8 @@ def _region_labels(
     marked：本週打擊軍令的目標在這個大區、而且他的所在還沒摸清（FB-072），名稱前加打擊記號；擺位置的範圍照實際寫的字算。"""
     m = content.map
     bg = m.background
-    trends = atlas.region_trends(state, content, region) if layer == "situation" else []
-    name = f"{atlas.STRIKE_MARK} {region.name}" if marked else region.name
+    trends = layers.region_trends(state, content, region) if layer == "situation" else []
+    name = f"{layers.STRIKE_MARK} {region.name}" if marked else region.name
     out = [_text(region.label_x, region.label_y, name, REGION_SIZE, region.text_fill, bg)]
     taken.append((text_box(region.label_x, region.label_y, name, REGION_SIZE), TEXT_WEIGHT))
     if trends:
@@ -536,7 +537,7 @@ def render_map(
     """大地圖：layer 是 atlas.LAYERS 其中之一，selected 是被選的地點（加粗標示）。
     大地圖照原尺寸畫在可捲動的框裡（地圖上的遠近就是真正的路程，縮到欄寬字會太小；見地圖擴充與移動設計）。
     敵情層要傳 odds（Game.odds）才會寫出「最險」；其餘圖層不用、也不會算勝算。
-    局勢層另外標本週打擊軍令的目標（atlas.strike_marks，FB-072）：所在摸清了，地名前加 ◎；沒摸清就加在它所屬的大區名稱前，
+    局勢層另外標本週打擊軍令的目標（layers.strike_marks，FB-072）：所在摸清了，地名前加 ◎；沒摸清就加在它所屬的大區名稱前，
     不標那個沒摸清的地點。圖例不畫在圖裡（legend_data 另外給網頁，疊在地圖框角落）；小地圖也沒有。
 
     底下是紙色，大區、河、山頭與樹、雙線外框、大區名稱與大勢、河名、路依序畫上去（輿圖美術設計）：外框蓋在山頭上面、
@@ -548,7 +549,7 @@ def render_map(
     bg = m.background
     views = atlas.views(state, content)
     # 局勢層：本週打擊軍令的目標（FB-072）——所在摸清了標在地點名字前，沒摸清標在它所屬的大區名稱前（圖例那一行見 legend_data）
-    strike_places, strike_regions = atlas.strike_marks(state, content) if layer == "situation" else (set(), set())
+    strike_places, strike_regions = layers.strike_marks(state, content) if layer == "situation" else (set(), set())
     prefixes, notes, discs = _layer_marks(state, content, layer, views, odds, strike_places)
     spot = atlas.road_spot(state, content)
     you = _you(content, spot) if spot is not None else None  # 在路上：「你」畫在兩站之間（路上設計 3.4）
@@ -791,7 +792,7 @@ def render_minimap(state: GameState, content: Content) -> str:
         labels.append((lines, _label_spots(loc.x, loc.y, reach[loc.id], lines, bounds[0])))
         looks.append((TEXT_DARK if view in KNOWN else TEXT_MUTED, view == "current"))
     for loc in _edge_targets(state, content, views, centre, window):
-        text = f"{atlas.direction(centre, (loc.x, loc.y))} {loc.name}"
+        text = f"{layers.direction(centre, (loc.x, loc.y))} {loc.name}"
         labels.append(([(text, ARROW_SIZE)], _edge_spots(centre, loc, text, ARROW_SIZE, bounds)))
         looks.append((TEXT_MUTED, False))
     if you is not None:

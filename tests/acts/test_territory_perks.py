@@ -6,7 +6,8 @@ import random
 import pytest
 
 from conftest import classic_rules, real_content
-from tianxia import atlas, mapview, mounts, rules, smithing, team
+from tianxia import mapview, mounts, rules, smithing, team
+from tianxia.features.map import layers
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.models import Condition
@@ -47,4 +48,4 @@ def test_the_situation_layer_paints_who_holds_each_place():
     svg = mapview.render_map(s, c, "situation")
     assert mapview.CONTROL_DISC["huang"] in svg
     assert mapview.LEGEND_CONTROL in mapview.legend_data(s, c, "situation")["layer"]
-    assert "此刻由黃巾軍控制" in atlas.detail_text(s, c, "huangjin_camp", game.odds)
+    assert "此刻由黃巾軍控制" in layers.detail_text(s, c, "huangjin_camp", game.odds)

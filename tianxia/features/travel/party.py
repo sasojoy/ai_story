@@ -6,11 +6,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import atlas  # 過渡：待搬（輿圖：路程、結伴的體力與手上有事的檢查，第 50 批）
+from tianxia import atlas  # 共用規則層（輿圖：路程、結伴的體力與手上有事的檢查；第 50 批收進）
 from tianxia import gender, materials, mounts
 from tianxia.characters import CharacterStore, name_key
 from tianxia.core import presence
 from tianxia.core.services import ROAD_TASKS
+from tianxia.core.travel_base import following  # noqa: F401  atlas.travel_block 問的「跟著誰同行」（全部拆包第 50 批）在核心的 core/travel_base，re-export 同一個
 from tianxia.state import Tagalong
 
 from . import road_actions

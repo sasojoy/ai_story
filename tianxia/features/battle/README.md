@@ -62,3 +62,4 @@
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
 
 **全部拆包第 40 批（core_world2：六個舊模組收進共用規則層）合完重印**：包 → 舊模組 **3 處**（`muster.py` → `atlas`、`progress.py` → `seal`、`view.py` → `seal`）；`view.py` → `figure_life`、`generals.py` → `figures`、`sieges.py` → `orders` 這 3 處第 40 批收進共用規則層，不算過渡（原本 6 處）：`generals.py`、`sieges.py` 那兩行的註改寫成「共用規則層（…第 40 批收進）」，`view.py` 那一行還有 `seal`，「過渡：待搬」照留。
+**全部拆包第 50 批（輿圖二：`atlas` 收進共用規則層）合完重印**：包 → 舊模組 **2 處**（`progress.py` → `seal`、`view.py` → `seal`）；`muster.py` 那一行（`allied`、`atlas`、`battle_instance`、`roster`、`siege`）都是共用規則層了，行尾註改寫。

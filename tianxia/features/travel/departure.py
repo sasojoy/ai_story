@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import atlas  # 過渡：待搬（輿圖：路程、走法、抵達時刻，第 50 批）
+from tianxia import atlas  # 共用規則層（輿圖：路程、走法、抵達時刻；第 50 批收進）
 from tianxia import bounties  # 過渡：待搬（第 45 批）
 from tianxia import equipment, journal, mounts, precise
 from tianxia.core import features as features_core

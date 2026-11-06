@@ -28,6 +28,15 @@
 - smith_base.py（core_world2：全部拆包第 40 批，第 41 批 PM 認定第 4 條）：打造單子「讀」的那一小半——GO_VERB、is_forge_step、is_step_line、
   draft_here、draft_stale（與 here、ARMOR_KIND、單子回話的八句常數）；engine 的 choose、_drop_stale_references、sync 讀它，鐵匠鋪包的 smithing
   re-export 同一批。同 event_check 不進 MODULES。
+# map2（全部拆包第 50 批「輿圖二」：atlas 收進共用規則層，讀包認領的欄位改問核心；計畫 docs/superpowers/plans/2026-11-07-輿圖包-第2批.md 1.5、1.6）
+- explore_base.py：探索表的小字與小函式——LOSE_WORD、六種地點（TOWN…CAMP）、四類事（EVENT…INSIGHT、KINDS、FILL）、PLACE_WORDS、BEAT_MOSTLY、
+  BALANCED、match、kind_of、mostly_of、table_weights、mostly_in、hint_in、terrain_tags；第 49 批寄放在 services.py 檔尾 # map 那一段，第 50 批
+  一個字沒改移過來（services.py 不留 re-export）。探索包的 explore_rules、explore_actions、有所感包的 sensing、輿圖包的 mapdata re-export 同一批。
+  跟探索包的 features/explore/explore_base.py（第 18 批）同檔名、不同模組，一律寫完整路徑。同 event_check 不進 MODULES。
+- travel_base.py：結伴同行「只讀」的那一小半——跟著誰走在路上（following：tagalong 與 journey 都有值時回帶頭的人的名號）；共用規則層的
+  atlas.travel_block 經它問，只讀移動包認領的 PlayerState.tagalong，不寫（寫與清照舊是移動包的 party）。移動包的 party re-export 同一個。
+  同 event_check 不進 MODULES。
+- omen_base.py 再收 fs_answering（正在答最後一步的題：PlayerState.fs_asking 有值）：atlas.travel_block 經它問，軍情包的 fs_rules re-export 同一個。
 
 第一階 ctx 就是 Game 本身，不另包一層（手冊 3.3）。
 """

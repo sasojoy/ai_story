@@ -122,11 +122,7 @@ def cell_note(why: str) -> str:
     return CELL_STUCK
 
 
-def on(content: Content, world: WorldState | None) -> bool:
-    """約戰在這一季開著：減法季的 sortie_duel 子開關（rules.jianfa：設定＋開季的章）、出陣開著、領地爭奪在這一季生效（約戰貼在區塊上）。"""
-    from tianxia import rules  # noqa: PLC0415  rules → … → conquest：延後 import，免得載入時繞成環（核心的 tianxia.rules，不是包裡的出陣 rules）
-
-    return rules.jianfa(content, world, "sortie_duel") and sortie.on(content) and conquest.on(content, world)
+on = conquest.duel_on  # 第 50 批：本體搬到共用層 conquest.duel_on（atlas 也問），這裡留同一個函式物件
 
 
 def progress_scale(content: Content) -> float:

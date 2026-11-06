@@ -14,7 +14,7 @@ README.md 寫這一包做什麼、導覽與設計稿。
 """
 from __future__ import annotations
 
-from tianxia import atlas  # 過渡：待搬（輿圖：路程、走法、折返的路）
+from tianxia import atlas  # 共用規則層（輿圖：路程、走法、折返的路；第 50 批收進）
 from tianxia.core.features import Feature, Outcome, Verb
 from tianxia.core.services import ROAD_TASKS
 

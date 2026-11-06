@@ -211,26 +211,26 @@ def test_beating_bocai_out_marks_him_defeated_and_stops_his_sim_player(real, wor
 
 
 def test_huangfusong_out_stops_his_pushes_and_leaves_the_map(real, world):
-    from tianxia import atlas
+    from tianxia.features.map import layers
     from tianxia.world import sim_active
     game = _player(real, world, "黃甲", "huang", "changshe")
     figures.defeat(game.state, real, "huangfusong", 100)
     s = game.state
     hfs = next(sim for sim in real.scenario.sim_players if sim.name == "皇甫嵩")
     assert not sim_active(hfs, s, real) and sim_active(hfs, s)  # 不給 content 的舊呼叫照舊
-    assert "皇甫嵩" not in atlas.haunters(s, real, "changshe") and "皇甫嵩" not in atlas.haunters(s, real, "yingchuan")
+    assert "皇甫嵩" not in layers.haunters(s, real, "changshe") and "皇甫嵩" not in layers.haunters(s, real, "yingchuan")
     assert "act:challenge:zhujun" in _ids(_player(real, world, "黃乙", "huang", "changshe"))
 
 
 def test_the_switch_off_brings_back_the_leaders_even_after_a_retirement(real, world):
-    from tianxia import atlas
+    from tianxia.features.map import layers
     from tianxia.world import sim_active
     game = _player(real, world, "黃甲", "huang", "changshe")
     figures.defeat(game.state, real, "huangfusong", 100)
     real.config.figure_challenge_every_season = False
     s = game.state
     hfs = next(sim for sim in real.scenario.sim_players if sim.name == "皇甫嵩")
-    assert sim_active(hfs, s, real) and "皇甫嵩" in atlas.haunters(s, real, "changshe")
+    assert sim_active(hfs, s, real) and "皇甫嵩" in layers.haunters(s, real, "changshe")
     assert figures.placed_characters(s, real) == {}
 
 
@@ -330,28 +330,28 @@ def test_challenge_treasures_stop_at_two_a_season(real, world):
 
 
 def _detail(game, loc):
-    from tianxia import atlas
+    from tianxia.features.map import layers
     game.state.player.visited.add(loc)
-    return atlas.detail_text(game.state, game.content, loc, lambda squad_id: "")
+    return layers.detail_text(game.state, game.content, loc, lambda squad_id: "")
 
 
 def test_the_map_lists_the_figures_here_in_a_fourteen_day_season(real, world):
     """設計 3.8：沒有時刻表的季，龍頭人物那一段只有人物此刻就站在這裡才寫聲威、情誼；其餘站在這裡的大勢人物列在
     「此地的大勢人物」，戰線空著的寫「按兵不動」，聲威會回時寫「沒人去打……慢慢回來」。緊急開關關著時一個字都不變。"""
-    from tianxia import atlas
+    from tianxia.features.map import layers
     game = _player(real, world, "官甲", "guan", "huangjin_camp")
     camp = _detail(game, "huangjin_camp")
-    assert "聲威 60" in camp and atlas.REGEN_NOTE in camp and atlas.HERE_TITLE not in camp  # 波才併在龍頭人物那一段
+    assert "聲威 60" in camp and layers.REGEN_NOTE in camp and layers.HERE_TITLE not in camp  # 波才併在龍頭人物那一段
     nanyang = _detail(game, "nanyang_huangjin_camp")
-    assert atlas.HERE_TITLE in nanyang and "張曼成" in nanyang and "趙弘" in nanyang and atlas.IDLE_NOTE in nanyang
+    assert layers.HERE_TITLE in nanyang and "張曼成" in nanyang and "趙弘" in nanyang and layers.IDLE_NOTE in nanyang
     assert "沒有龍頭人物在此出沒" not in nanyang
     ford = _detail(game, "mengjin_ford")
-    assert "董卓" in ford and atlas.IDLE_NOTE in ford and "沒有龍頭人物在此出沒" not in ford
-    assert "聲威" not in atlas.leader_text(game.state, real, "皇甫嵩", "yingchuan")  # 人物站在長社，潁川那一段不寫聲威
-    assert "聲威" in atlas.leader_text(game.state, real, "皇甫嵩", "changshe")
+    assert "董卓" in ford and layers.IDLE_NOTE in ford and "沒有龍頭人物在此出沒" not in ford
+    assert "聲威" not in layers.leader_text(game.state, real, "皇甫嵩", "yingchuan")  # 人物站在長社，潁川那一段不寫聲威
+    assert "聲威" in layers.leader_text(game.state, real, "皇甫嵩", "changshe")
     real.config.figure_challenge_every_season = False
     off = _detail(game, "nanyang_huangjin_camp")
-    assert atlas.HERE_TITLE not in off and "聲威" not in _detail(game, "huangjin_camp")
+    assert layers.HERE_TITLE not in off and "聲威" not in _detail(game, "huangjin_camp")
 
 
 def test_the_howto_explains_challenges_in_a_fourteen_day_season(real, world):

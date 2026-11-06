@@ -24,6 +24,7 @@
 - `player_fields = ("picking_market",)`（馬市第二層選單開著）。
 - `carried = ()`：換季全部跟著新角色重來。
 - 不認領：`held_gear`（核心的 `PlayerState` 與共用層 `treasures` 都讀）、`figure_wins`（大勢人物包的）、`shop_line`／`shop_clue`／`shop_hold`（七間店共用，屬核心）。`Game._affinity_before`（`choose` 與核心 `event_check` 的 `answer_event`、`answer_branch` 寫、`people_here` 讀的暫時旗標）列在 `core/services.py` 四、寄放，屬性留在 `Game.__init__`。
+- 共用規則層的 `atlas.travel_block` 直接讀 `picking_market`（動身被擋的那一句；全部拆包第 50 批照實記下，第 56 批選單收接縫時改成掛鉤、一張先後表）。
 
 ## 委派與留在原位的接縫
 

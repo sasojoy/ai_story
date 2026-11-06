@@ -20,7 +20,8 @@ import json
 from test_seal_web import DRIVER, _seal_admin, _sheet, m  # noqa: F401  m 是夾具
 import test_map_web
 from conquest_kit import conquest_game, go, join, plain_game
-from tianxia import atlas, conquest, mapview
+from tianxia import conquest, mapview
+from tianxia.features.map import layers
 from conftest import classic_rules, real_content
 import math
 import random
@@ -422,9 +423,9 @@ def test_map_state_marks_neutral_blocks():
 def test_detail_line_says_neutral():
     game = _game()
     s, c = game.state, game.content
-    assert conquest.NEUTRAL_LINE in atlas.detail_text(s, c, "nanyang_wilds", game.odds)
+    assert conquest.NEUTRAL_LINE in layers.detail_text(s, c, "nanyang_wilds", game.odds)
     conquest.set_control(s.world, c, "nanyang_wilds", "huang")
-    assert conquest.NEUTRAL_HELD in atlas.detail_text(s, c, "nanyang_wilds", game.odds)
+    assert conquest.NEUTRAL_HELD in layers.detail_text(s, c, "nanyang_wilds", game.odds)
 
 
 def test_old_svg_paints_the_neutral_disc_and_legend():

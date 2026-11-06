@@ -10,6 +10,7 @@ import pytest
 
 from conftest import real_content
 from tianxia import atlas, figures, howto, mapview
+from tianxia.features.map import layers
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 from tianxia.state import Order
@@ -37,7 +38,7 @@ def test_a_new_character_can_head_for_jizhou_and_youzhou_at_once():
         buttons = game.travel_options(loc_id)
         assert buttons and all(b.enabled for b in buttons)
         detail = game.place_detail(loc_id)
-        assert detail.startswith(f"### {c.locations[loc_id].name}") and atlas.UNKNOWN not in detail
+        assert detail.startswith(f"### {c.locations[loc_id].name}") and layers.UNKNOWN not in detail
         assert (c.locations[loc_id].name, loc_id) in game.map_places()
     game.travel("guangzong", "dash")
     assert game.state.player.location == "guangzong"
@@ -112,7 +113,7 @@ def test_order_cards_never_say_a_place_is_unexplored():
     assert f"他現在在{c.locations[figures.state_of(s, c, 'luzhi').location].name}" in strike
     for how in (strike, *sieges):
         assert "摸清" not in how
-    places, regions = atlas.strike_marks(s, c)
+    places, regions = layers.strike_marks(s, c)
     assert places and not regions  # 局勢層把 ◎ 標在地點上，不再退到大區
 
 
