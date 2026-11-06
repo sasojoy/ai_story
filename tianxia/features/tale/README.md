@@ -29,7 +29,7 @@
 
 ## 測試
 
-整檔搬進 `tests/`：`test_tale.py`（寫法與存放）、`test_tale_page.py`（戰記頁的標記）、`test_tale_package.py`（有登記、兩條路由、殼啟動時經掛鉤開執行緒）。`pytest tianxia/features/tale/tests -n 4`。
+整檔搬進 `tests/`：`test_tale.py`（寫法與存放；有一條 `@pytest.mark.smoke`，手冊 4.1 第三級每一包至少一條，`tests/core/test_test_for.py` 守）、`test_tale_page.py`（戰記頁的標記）、`test_tale_package.py`（有登記、兩條路由、殼啟動時經掛鉤開執行緒）。`pytest tianxia/features/tale/tests -n 4`。
 
 **另外要跑的混合檔**（含戰記的測試，但檔案不屬於這一包，不拆；`test_for` 改這一包挑不到）：
 

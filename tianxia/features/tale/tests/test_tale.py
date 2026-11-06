@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import pytest
 from conftest import real_content
 
 from tianxia.battle_instance import BattleInstance, BattleParticipant, BattleRoundRecord, GambleMoment
@@ -91,6 +92,7 @@ def test_the_cast_puts_the_most_dramatic_first_and_writes_a_fact_for_each():
 # ── 組成整篇（模型寫的字只是填空）──
 
 
+@pytest.mark.smoke
 def test_without_a_model_every_beat_still_has_the_engine_line():
     page = tale.plain(_material())
     assert page.status == "ready" and page.title == "黃巾決戰戰記" and page.result == "黃巾大勝"
