@@ -25,6 +25,8 @@ ADMIN = "掌門"
 MUTATIONS: dict[str, tuple] = {}
 MUTANT_PROFILE: dict[str, str] = {}
 TRACK_REQUIRES: dict[str, str] = {}  # 只有部分根起得來的軌（軌名 → 根上要有的檔）：沒有那個檔的根，compare、selftest 略過這一軌（_tracks_on）
+FULL_SAME_AS: dict[str, str] = {}  # 整段跟另一軌一模一樣的軌（軌名 → 那一軌）：compare 清單上兩軌都在時整段只跑那一軌（register_track 的 full_same_as）
+SECONDS: dict[str, float] = {}  # 這一次 compare 每個子行程跑了幾秒（log 的主檔名 → 秒）；沒跑的不在表上
 
 
 # ═══════════════════════════ 調度（compare、selftest） ═══════════════════════════
@@ -44,8 +46,10 @@ def _tracks_on(tracks: list[str], root: Path) -> list[str]:
 
 def _child(args: list[str], log: Path) -> None:
     env = {**os.environ, "PYTHONHASHSEED": "0", "PYTHONIOENCODING": "utf-8"}
+    started = time.monotonic()
     with log.open("w", encoding="utf-8") as fh:
         done = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1] / "same_behavior.py"), *args], env=env, stdout=fh, stderr=subprocess.STDOUT)
+    SECONDS[log.stem] = time.monotonic() - started
     if done.returncode != 0:
         tail = log.read_text(encoding="utf-8", errors="replace")[-3000:]
         raise RuntimeError(f"{' '.join(args[:3])} 結束碼 {done.returncode}：\n{tail}")
@@ -78,10 +82,32 @@ def _bot_runs(tracks: list[str]) -> list[tuple[str, str]]:
     return [(seats, p) for seats, (profiles, _) in BOT_SEATS.items() if seats in tracks for p in profiles]
 
 
+def _print_seconds(label: str, outputs: dict, bot_out: dict, twins: dict[str, str]) -> None:
+    """每格每個子行程幾秒、最慢的十格（照那一格跑過的秒數加總）。這幾行不准出現閘門當紅的字（wave_gate.red_lines）。"""
+    totals: dict[str, float] = {}
+
+    def line(name: str, n: str, kinds: tuple[tuple[str, str], ...], twin: str = "") -> None:
+        cells = []
+        for word, stem in kinds:
+            spent = SECONDS.get(f"{label}_{stem}_{n}")
+            totals[name] = totals.get(name, 0.0) + (spent or 0.0)
+            cells.append(f"{word} {spent:.1f}" if spent is not None else (f"{word} 同 {twin}" if twin and stem in ("base", "head") else f"{word} 快取"))
+        print(f"秒數 {name} " + " ".join(cells))
+
+    for t, p in outputs:
+        line(f"{t} {p}", f"{t}_{p}", (("base", "base"), ("head", "head"), ("前半", "base1"), ("後半", "head2")), twins.get(t, ""))
+    for seats, p in bot_out:
+        line(f"假人 {seats} {p}", f"{seats}_{p}", (("base", "bots_base"), ("head", "bots_head")))
+    for name, spent in sorted(totals.items(), key=lambda kv: -kv[1])[:10]:
+        print(f"最慢 {spent:.1f} {name}")
+
+
 def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int, bots: bool, label: str = "compare",
             tracks: list[str] | None = None) -> bool:
     tmp.mkdir(parents=True, exist_ok=True)
     tracks = tracks or list(TRACK_NAMES)
+    SECONDS.clear()
+    twins = {t: FULL_SAME_AS[t] for t in tracks if FULL_SAME_AS.get(t) in tracks}  # 清單上有那一軌才省；只有這一軌就照舊自己跑
     chains, outputs = [], {}
     for t in tracks:
         for p in profiles:
@@ -90,8 +116,11 @@ def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int
             dbs = {k: tmp / f"{label}_{k}_{n}.db" for k in ("base", "head", "half")}
             outputs[(t, p)] = o
             run = ["--tmp", str(tmp), "--track", t]
-            chains.append([(["run", str(base), p, str(o["base"]), *run, "--db", str(dbs["base"])], tmp / f"{label}_base_{n}.log")])
-            chains.append([(["run", str(head), p, str(o["head"]), *run, "--db", str(dbs["head"])], tmp / f"{label}_head_{n}.log")])
+            if t in twins:  # 整段比那一軌跑出來的（檔名照命名算，清單的先後不影響）；後半照舊接，宣告過時會紅
+                o["base"], o["head"] = (tmp / f"{label}_{k}_{twins[t]}_{p}.txt" for k in ("base", "head"))
+            else:
+                chains.append([(["run", str(base), p, str(o["base"]), *run, "--db", str(dbs["base"])], tmp / f"{label}_base_{n}.log")])
+                chains.append([(["run", str(head), p, str(o["head"]), *run, "--db", str(dbs["head"])], tmp / f"{label}_head_{n}.log")])
             chains.append([
                 (["run", str(base), p, str(o["base1"]), *run, "--db", str(dbs["half"]), "--part", "first"], tmp / f"{label}_base1_{n}.log"),
                 (["run", str(head), p, str(o["head2"]), *run, "--db", str(dbs["half"]), "--part", "second"], tmp / f"{label}_head2_{n}.log"),
@@ -115,7 +144,7 @@ def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int
         same, half = hb == hh, hb == hx
         ok &= same and half
         print(f"{t:6} {p:9} 整段 base {nb} 行 {bb} 位元組 {hb[:16]}｜head {hh[:16]} {'一樣' if same else '不一樣'}"
-              f"｜base 前半＋head 後半 {hx[:16]} {'一樣' if half else '不一樣'}")
+              f"｜base 前半＋head 後半 {hx[:16]} {'一樣' if half else '不一樣'}" + (f"（整段同 {twins[t]}）" if t in twins else ""))
         if not same:
             print("  " + _first_diff(o["base"].read_bytes(), o["head"].read_bytes()))
         if not half:
@@ -127,6 +156,7 @@ def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int
         print(f"假人 {seats:6} {p:9} {nb} 行 {bb} 位元組 base {hb[:16]}｜head {hh[:16]} {'一樣' if hb == hh else '不一樣'}")
         if hb != hh:
             print("  " + _first_diff(o["base"].read_bytes(), o["head"].read_bytes()))
+    _print_seconds(label, outputs, bot_out, twins)
     return ok
 
 
@@ -191,6 +221,11 @@ def selftest(base: Path, tmp: Path, profiles: list[str], workers: int, tracks: l
             line += f"｜改一個字 {'抓得到' if caught else '抓不到'}"
             if caught:
                 line += "（" + _first_diff(o["a"].read_bytes(), o["mut"].read_bytes()).split("：")[0] + "）"
+        twin = FULL_SAME_AS.get(t)
+        if twin in tracks:  # 宣告整段同一軌：selftest 照舊跑兩次，多比一次宣告還成不成立
+            alike = ha == _digest(outs[(twin, p)]["a"])[0]
+            ok &= alike
+            line += f"｜整段同 {twin} {'一樣' if alike else '不一樣'}"
         print(line)
         if ha != hb:
             print("  " + _first_diff(o["a"].read_bytes(), o["b"].read_bytes()))
@@ -351,8 +386,15 @@ BOT_SEATS: dict[str, tuple[tuple[str, ...], Callable[..., None]]] = {}  # bots -
 SUBCOMMANDS: dict[str, Callable[[list[str]], int]] = {}  # 子命令名 → 處理函式（整串引數給它）；入口的 main 先查這張表
 
 
-def register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
-    """再開一軌（TRACKS、MUTATIONS、MUTANT_PROFILE 三張表一起登記；同一個軌名再登記一次，TRACKS 丟 ValueError）。TRACK_NAMES 由 load_tracks 照檔名算。"""
+def register_track(name: str, scenario: type, mutation: tuple, profile: str, *, full_same_as: str = "") -> None:
+    """再開一軌（TRACKS、MUTATIONS、MUTANT_PROFILE 三張表一起登記；同一個軌名再登記一次，TRACKS 丟 ValueError）。TRACK_NAMES 由 load_tracks 照檔名算。
+    full_same_as：這一軌跟那一軌同一套段落、只有切點不同，整段一個位元組都一樣（那一軌要先登記）。compare 清單上兩軌都在時省這一軌的 base、head 整段；
+    後半照舊比那一軌的 base，宣告過時會紅。"""
+    if full_same_as:
+        twin = TRACKS.get(full_same_as)
+        if twin is None or not issubclass(scenario, twin) or scenario.PHASES_FIRST + scenario.PHASES_SECOND != twin.PHASES_FIRST + twin.PHASES_SECOND:
+            raise ValueError(f"軌 {name} 不能宣告整段同 {full_same_as}：要是它的子類別、段落接起來要一樣")
+        FULL_SAME_AS[name] = full_same_as
     TRACKS[name] = scenario
     MUTATIONS[name] = mutation
     MUTANT_PROFILE[name] = profile
