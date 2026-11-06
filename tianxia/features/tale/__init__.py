@@ -32,5 +32,10 @@ class TaleFeature(Feature):
         """殼開、測試停：只有 server.main 經 start_threads 叫到這裡；TALES_STOP、TALES_THREAD 留殼（tests/conftest.py 收尾認這兩個名字）。"""
         shell.start_tales(shell.CONTENT.config)
 
+    def outlock(self, shell):
+        from . import routes  # noqa: PLC0415  只在殼建鎖外工作時才 import（同 routes 掛鉤）
+
+        return routes.outlock(shell)
+
 
 FEATURE = TaleFeature()

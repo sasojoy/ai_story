@@ -4,9 +4,10 @@
 not_while_preparing 原本掛在 Game 的委派上、包裡的函式沒有：表不再經過委派，所以名冊那三條的擋法掛在表上（同一支裝飾器，包裡的函式不動）。"""
 from fastapi import APIRouter, Request
 
+from tianxia.core.features import Outlock, OutlockJob
 from tianxia.core.services import not_while_preparing
 
-from . import actions, talk_log
+from . import actions, letters, talk_log
 
 
 def main_actions(shell) -> dict:
@@ -56,3 +57,70 @@ def router(shell) -> APIRouter:
                 "meets": store.meets(shell.name_key(p.name), cid), "lines": lines, "more": more or len(rows) > talk_log.PAGE}
 
     return r
+
+
+# ── 鎖外工作（原本寫在 server.py，全部拆包第 69 批）：殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）；模型呼叫絕不進鎖 ──
+
+
+def outlock(shell) -> Outlock:
+    return Outlock(jobs=(
+        OutlockJob("letter", lambda game: _letter_waiting(shell, game), lambda game, got: write_letter(shell, game)),
+    ))
+
+
+LETTER_RUNNING: set[str] = set()  # 正在背景重寫書信的角色（一人一條；名號）
+
+
+def _letter_waiting(shell, game) -> bool:
+    """有一封信等著模型照他的口氣重寫、模型叫得到、這個人還沒有一條在寫（write_letter）。行動鎖內叫。"""
+    if not shell.TALE_THREADS or game.client is None or game.state.player.name in LETTER_RUNNING:
+        return False
+    return game.letter_request() is not None
+
+
+def write_letter(shell, game) -> bool:
+    """書信（大勢人物擴充第二批，letters.py）：開一個背景執行緒重寫。A 鎖內拿單子（Game.letter_request）→ B 鎖外請模型寫
+    （letters.write，預算 Config.figure_life.letter_write_budget_seconds；排隊時當假人排、排在真人後面）→ C 鎖內重驗同一封才換
+    （Game.apply_letter；寫不出來照固定句）。開了回 True。呼叫端不能握著行動鎖。"""
+    name = game.state.player.name
+    with shell.TALE_LOCK:
+        if name in LETTER_RUNNING:
+            return False
+        LETTER_RUNNING.add(name)
+
+    def job() -> None:
+        try:
+            shell.letter_once(game)
+        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，信照固定句
+            shell.traceback.print_exc()
+        finally:
+            with shell.TALE_LOCK:
+                LETTER_RUNNING.discard(name)
+
+    shell.threading.Thread(target=job, name="letter", daemon=True).start()
+    return True
+
+
+def letter_once(shell, game) -> bool:
+    """重寫一封（write_letter 的那一圈；測試直接叫）：換了回 True。呼叫端不能握著行動鎖。"""
+    with shell._locked(game):
+        note = game.letter_request()
+    if note is None:
+        return False
+    budget = game.content.config.figure_life.letter_write_budget_seconds
+    started = shell._monotonic()
+
+    def ask() -> str:
+        return letters.write(shell.within_budget(game.client, budget - (shell._monotonic() - started)), note)
+
+    if shell.QUEUE is None:
+        text = ask()
+    else:
+        try:
+            text = shell.QUEUE.run(game.state.player.name, ask, fallback="", bot=True, wait=budget)
+        except (shell.Busy, shell.QueueTimeout):
+            text = ""
+    with shell._locked(game):
+        done = game.apply_letter(note, text)
+        shell.open_characters().save(game.state)
+    return done

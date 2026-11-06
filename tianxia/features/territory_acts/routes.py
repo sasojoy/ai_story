@@ -8,9 +8,9 @@
 """
 from fastapi import APIRouter, Request
 
-from tianxia.core.features import AdminTool
+from tianxia.core.features import AdminTool, Outlock, OutlockJob
 
-from . import admin_actions, letter_actions, xingshi_actions
+from . import admin_actions, letter_actions, xingshi, xingshi_actions
 
 
 def main_actions(shell) -> dict:
@@ -48,3 +48,77 @@ def router(shell) -> APIRouter:
         return shell.look(game, lambda g: xingshi_actions.view(g))
 
     return r
+
+
+# ── 鎖外工作（原本寫在 server.py，全部拆包第 69 批）：殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）；模型呼叫絕不進鎖 ──
+
+
+def outlock(shell) -> Outlock:
+    return Outlock(jobs=(
+        OutlockJob("xingshi", lambda game: shell._xingshi_waiting(game), lambda game, got: write_xingshi(shell, game)),
+    ))
+
+
+# 〈天下形勢〉（領地爭奪第三批 A；tianxia/xingshi.py）：每天 22:00 換天那一刻開一張單，這裡在背景請模型照事實寫一篇。
+# 全服同時只有一條在寫（XINGSHI_RUNNING）；佇列開著時當成假人排在真人後面（名號是 XINGSHI_OWNER，不是任何一個角色）。
+XINGSHI_RUNNING: set[str] = set()
+XINGSHI_OWNER = "§史官"
+XINGSHI_SKIPPED = object()  # 佇列沒讓這一趟跑（假人的名額被佔、排不到）：跟「模型寫不出來」分開——前者單子放回去下一輪再試
+
+
+def _xingshi_waiting(shell, game) -> bool:
+    """有一張〈天下形勢〉的單等著模型寫、模型叫得到、還沒有一條在寫（write_xingshi）。行動鎖內叫。只有 main() 打開 TALE_THREADS 的正式伺服器
+    才開背景執行緒（測試直接叫 xingshi_once）；假人程式的 Game 沒有 client，不叫模型。"""
+    if not shell.TALE_THREADS or game.client is None or XINGSHI_RUNNING:
+        return False
+    return game.xingshi_waiting()
+
+
+def write_xingshi(shell, game) -> bool:
+    """開一個背景執行緒寫〈天下形勢〉。A 鎖內拿單子（Game.xingshi_request，記 taken）→ B 鎖外請模型寫（xingshi.write，預算
+    Config.xingshi.budget_seconds；排隊時當假人排）→ C 鎖內重驗同一張單才收（Game.settle_xingshi；寫不出來照固定段）。開了回 True。
+    呼叫端不能握著行動鎖。"""
+    with shell.TALE_LOCK:
+        if XINGSHI_RUNNING:
+            return False
+        XINGSHI_RUNNING.add("xingshi")
+
+    def job() -> None:
+        try:
+            shell.xingshi_once(game)
+        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，那一篇過了 grace_seconds 照固定段收
+            shell.traceback.print_exc()
+        finally:
+            with shell.TALE_LOCK:
+                XINGSHI_RUNNING.clear()
+
+    shell.threading.Thread(target=job, name="xingshi", daemon=True).start()
+    return True
+
+
+def xingshi_once(shell, game) -> bool:
+    """寫一篇（write_xingshi 的那一圈；測試直接叫）：收了回 True。呼叫端不能握著行動鎖。
+    佇列沒讓這一趟跑（假人的名額被佔、排不到）：不照固定段收，單子放回去（Game.release_xingshi），隔 retry_seconds 下一輪再試；
+    寬限（grace_seconds）到了還沒寫成，由換天（Game._conquest_tick → 地盤包 xingshi_actions.grace）照固定段收（PM，第三批 A 回報之後）。模型叫了卻寫不出來照舊馬上照固定段。"""
+    with shell._locked(game):
+        request = game.xingshi_request()
+    if request is None:
+        return False
+    budget = game.content.config.xingshi.budget_seconds
+    started = shell._monotonic()
+
+    def ask() -> str | None:
+        return xingshi.write(shell.within_budget(game.client, budget - (shell._monotonic() - started)), request)
+
+    if shell.QUEUE is None:
+        essay = ask()
+    else:
+        try:  # 排在真人的評分後面（當成假人排）
+            essay = shell.QUEUE.run(XINGSHI_OWNER, ask, fallback=XINGSHI_SKIPPED, bot=True, wait=min(budget, 120))
+        except (shell.Busy, shell.QueueTimeout):
+            essay = XINGSHI_SKIPPED
+    with shell._locked(game):  # 收下那一刻寫天下大事：推送的指紋跟著變，開著的分頁會更新
+        if essay is XINGSHI_SKIPPED:
+            game.release_xingshi(request)
+            return False
+        return game.settle_xingshi(request, essay)

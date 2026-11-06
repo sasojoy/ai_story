@@ -82,6 +82,11 @@ from tianxia.core import omen_base  # 門下頁的伏筆物品：核心的查詢
 from tianxia.features.map import views as map_views  # 輿圖的 /api/map 資料與底圖快取：全部拆包第 49 批搬進輿圖包（殼留同一個物件的別名）  # 殼留薄包裝：`map_view` 要 `md`（第 49 批 PM 認定第 10 條）
 from tianxia.features.feast import rules as feasts  # 宴客自己寫的敬酒詞：鎖外評分（三段式還在殼裡，過渡）
 from tianxia.features.notify import routes as notify_routes  # 手機通知：全部拆包第 53 批搬進手機通知包；殼留 state 與 4 個一行薄包裝（main 印一行、same_behavior 與測試叫）
+from tianxia.features.bout import routes as bout_routes  # 鎖外工作（全部拆包第 69 批）：本體在各包 routes.py，殼留一行包裝給測試與 same_behavior 叫（同 tale_routes）
+from tianxia.features.companions import routes as companions_routes
+from tianxia.features.figure_acts import routes as figure_acts_routes
+from tianxia.features.tavern import routes as tavern_routes
+from tianxia.features.territory_acts import routes as territory_acts_routes
 from tianxia.features.tale import routes as tale_routes  # 戰記：全部拆包第 52 批搬進戰記包；殼留 state 與 8 個一行薄包裝（act、look、main_view 原位叫）
 from tianxia.features.socialize import intros as socialize_intros  # 點大勢人物的簡介（主幹合回 D 段；/api/main 組「此地人物」那一排時疊上去，同 figure_face 留在殼的 _main_view_body）
 from tianxia.models import FREE_TEXT_MAX
@@ -481,25 +486,20 @@ def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
         msgs = action(game)
         _log_talk(game, said, liked)
         open_characters().save(game.state)
-        tales = _tales_waiting(game)
-        crowd = _crowd_waiting(game)
-        chat = _chatter_waiting(game)
-        mail = _letter_waiting(game)
-        review = _yuedan_waiting(game)
-        essay = _xingshi_waiting(game)
-    if tales:
-        narrate_battle(game)
-    if crowd:
-        write_crowd(game)
-    if chat:
-        write_chatter(game, chat)
-    if mail:
-        write_letter(game)
-    if review:
-        write_yuedan(game)
-    if essay:
-        write_xingshi(game)
+        waiting = _outlock_waiting(game)
+    _outlock_start(game, waiting)
     return msgs
+
+
+def _outlock_waiting(game: Game) -> list[tuple[features_core.OutlockJob, object]]:
+    """放鎖之後要開的背景寫字（各包 routes.py 的 outlock 掛鉤；OUTLOCK_JOBS 照 features_core.OUTLOCK_ORDER 排）：行動鎖內照順序問一輪，有的記下來。問的都只讀、不叫模型。"""
+    return [(job, got) for job in OUTLOCK_JOBS if (got := job.waiting(game))]
+
+
+def _outlock_start(game: Game, waiting: list[tuple[features_core.OutlockJob, object]]) -> None:
+    """鎖放掉之後照順序開（_outlock_waiting 問到的那幾條）。呼叫端不能握著行動鎖。"""
+    for job, got in waiting:
+        job.start(game, got)
 
 
 def _tales_waiting(game: Game) -> bool:
@@ -534,26 +534,10 @@ def act_look(game: Game, action, view) -> tuple[list[str] | None, object]:
                 shown = view(game)
         except Exception as exc:  # 見上：畫面自己的寫入已經撤回，先讓鎖放掉，再丟出去
             failure = exc
-        tales = failure is None and _tales_waiting(game)
-        crowd = failure is None and _crowd_waiting(game)
-        chat = _chatter_waiting(game) if failure is None else None
-        mail = failure is None and _letter_waiting(game)
-        review = failure is None and _yuedan_waiting(game)
-        essay = failure is None and _xingshi_waiting(game)
+        waiting = _outlock_waiting(game) if failure is None else []
     if failure is not None:
         raise failure
-    if tales:
-        narrate_battle(game)
-    if crowd:
-        write_crowd(game)
-    if chat:
-        write_chatter(game, chat)
-    if mail:
-        write_letter(game)
-    if review:
-        write_yuedan(game)
-    if essay:
-        write_xingshi(game)
+    _outlock_start(game, waiting)
     return msgs, shown
 
 
@@ -1410,182 +1394,20 @@ def flavor_once(game: Game, job: FlavorJob) -> bool:
     return done
 
 
-LETTER_RUNNING: set[str] = set()  # 正在背景重寫書信的角色（一人一條；名號）
-
-
-def _letter_waiting(game: Game) -> bool:
-    """有一封信等著模型照他的口氣重寫、模型叫得到、這個人還沒有一條在寫（write_letter）。行動鎖內叫。"""
-    if not TALE_THREADS or game.client is None or game.state.player.name in LETTER_RUNNING:
-        return False
-    return game.letter_request() is not None
-
-
-def write_letter(game: Game) -> bool:
-    """書信（大勢人物擴充第二批，letters.py）：開一個背景執行緒重寫。A 鎖內拿單子（Game.letter_request）→ B 鎖外請模型寫
-    （letters.write，預算 Config.figure_life.letter_write_budget_seconds；排隊時當假人排、排在真人後面）→ C 鎖內重驗同一封才換
-    （Game.apply_letter；寫不出來照固定句）。開了回 True。呼叫端不能握著行動鎖。"""
-    name = game.state.player.name
-    with TALE_LOCK:
-        if name in LETTER_RUNNING:
-            return False
-        LETTER_RUNNING.add(name)
-
-    def job() -> None:
-        try:
-            letter_once(game)
-        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，信照固定句
-            traceback.print_exc()
-        finally:
-            with TALE_LOCK:
-                LETTER_RUNNING.discard(name)
-
-    threading.Thread(target=job, name="letter", daemon=True).start()
-    return True
-
-
 def letter_once(game: Game) -> bool:
-    """重寫一封（write_letter 的那一圈；測試直接叫）：換了回 True。呼叫端不能握著行動鎖。"""
-    with _locked(game):
-        note = game.letter_request()
-    if note is None:
-        return False
-    budget = game.content.config.figure_life.letter_write_budget_seconds
-    started = _monotonic()
-
-    def ask() -> str:
-        return letters.write(within_budget(game.client, budget - (_monotonic() - started)), note)
-
-    if QUEUE is None:
-        text = ask()
-    else:
-        try:
-            text = QUEUE.run(game.state.player.name, ask, fallback="", bot=True, wait=budget)
-        except (Busy, QueueTimeout):
-            text = ""
-    with _locked(game):
-        done = game.apply_letter(note, text)
-        open_characters().save(game.state)
-    return done
-
-
-YUEDAN_RUNNING: set[str] = set()  # 月旦評正在背景寫（全服一條：有東西就是有一條在寫）
-
-
-def _yuedan_waiting(game: Game) -> bool:
-    """這一週的月旦評等著模型寫評語、模型叫得到、還沒有一條在寫（write_yuedan）。行動鎖內叫。"""
-    if not TALE_THREADS or game.client is None or YUEDAN_RUNNING:
-        return False
-    return game.yuedan_request() is not None
-
-
-def write_yuedan(game: Game) -> bool:
-    """月旦評（大勢人物擴充第三批，yuedan.py）：開一個背景執行緒寫評語。A 鎖內拿單子（Game.yuedan_request）→ B 鎖外請模型寫
-    （yuedan.write，預算 Config.figure_life.yuedan_budget_seconds；排隊時當假人排）→ C 鎖內重驗同一批才換上並發出去
-    （Game.apply_yuedan；寫不出來照固定句發）。開了回 True。呼叫端不能握著行動鎖。"""
-    with TALE_LOCK:
-        if YUEDAN_RUNNING:
-            return False
-        YUEDAN_RUNNING.add("yuedan")
-
-    def job() -> None:
-        try:
-            yuedan_once(game)
-        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，評語照固定句（等太久由季的事發）
-            traceback.print_exc()
-        finally:
-            with TALE_LOCK:
-                YUEDAN_RUNNING.clear()
-
-    threading.Thread(target=job, name="yuedan", daemon=True).start()
-    return True
+    return companions_routes.letter_once(sys.modules[__name__], game)
 
 
 def yuedan_once(game: Game) -> bool:
-    """寫一批（write_yuedan 的那一圈；測試直接叫）：發了回 True。呼叫端不能握著行動鎖。"""
-    with _locked(game):
-        note = game.yuedan_request()
-    if note is None:
-        return False
-    budget = game.content.config.figure_life.yuedan_budget_seconds
-    started = _monotonic()
-
-    def ask() -> dict:
-        return yuedan.write(within_budget(game.client, budget - (_monotonic() - started)), note)
-
-    if QUEUE is None:
-        lines = ask()
-    else:
-        try:
-            lines = QUEUE.run(game.state.player.name, ask, fallback={}, bot=True, wait=budget)
-        except (Busy, QueueTimeout):
-            lines = {}
-    with _locked(game):
-        return game.apply_yuedan(note, lines)
-
-
-# 〈天下形勢〉（領地爭奪第三批 A；tianxia/xingshi.py）：每天 22:00 換天那一刻開一張單，這裡在背景請模型照事實寫一篇。
-# 全服同時只有一條在寫（XINGSHI_RUNNING）；佇列開著時當成假人排在真人後面（名號是 XINGSHI_OWNER，不是任何一個角色）。
-XINGSHI_RUNNING: set[str] = set()
-XINGSHI_OWNER = "§史官"
-XINGSHI_SKIPPED = object()  # 佇列沒讓這一趟跑（假人的名額被佔、排不到）：跟「模型寫不出來」分開——前者單子放回去下一輪再試
+    return figure_acts_routes.yuedan_once(sys.modules[__name__], game)
 
 
 def _xingshi_waiting(game: Game) -> bool:
-    """有一張〈天下形勢〉的單等著模型寫、模型叫得到、還沒有一條在寫（write_xingshi）。行動鎖內叫。只有 main() 打開 TALE_THREADS 的正式伺服器
-    才開背景執行緒（測試直接叫 xingshi_once）；假人程式的 Game 沒有 client，不叫模型。"""
-    if not TALE_THREADS or game.client is None or XINGSHI_RUNNING:
-        return False
-    return game.xingshi_waiting()
-
-
-def write_xingshi(game: Game) -> bool:
-    """開一個背景執行緒寫〈天下形勢〉。A 鎖內拿單子（Game.xingshi_request，記 taken）→ B 鎖外請模型寫（xingshi.write，預算
-    Config.xingshi.budget_seconds；排隊時當假人排）→ C 鎖內重驗同一張單才收（Game.settle_xingshi；寫不出來照固定段）。開了回 True。
-    呼叫端不能握著行動鎖。"""
-    with TALE_LOCK:
-        if XINGSHI_RUNNING:
-            return False
-        XINGSHI_RUNNING.add("xingshi")
-
-    def job() -> None:
-        try:
-            xingshi_once(game)
-        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，那一篇過了 grace_seconds 照固定段收
-            traceback.print_exc()
-        finally:
-            with TALE_LOCK:
-                XINGSHI_RUNNING.clear()
-
-    threading.Thread(target=job, name="xingshi", daemon=True).start()
-    return True
+    return territory_acts_routes._xingshi_waiting(sys.modules[__name__], game)
 
 
 def xingshi_once(game: Game) -> bool:
-    """寫一篇（write_xingshi 的那一圈；測試直接叫）：收了回 True。呼叫端不能握著行動鎖。
-    佇列沒讓這一趟跑（假人的名額被佔、排不到）：不照固定段收，單子放回去（Game.release_xingshi），隔 retry_seconds 下一輪再試；
-    寬限（grace_seconds）到了還沒寫成，由換天（Game._conquest_tick → 地盤包 xingshi_actions.grace）照固定段收（PM，第三批 A 回報之後）。模型叫了卻寫不出來照舊馬上照固定段。"""
-    with _locked(game):
-        request = game.xingshi_request()
-    if request is None:
-        return False
-    budget = game.content.config.xingshi.budget_seconds
-    started = _monotonic()
-
-    def ask() -> str | None:
-        return xingshi.write(within_budget(game.client, budget - (_monotonic() - started)), request)
-
-    if QUEUE is None:
-        essay = ask()
-    else:
-        try:  # 排在真人的評分後面（當成假人排）
-            essay = QUEUE.run(XINGSHI_OWNER, ask, fallback=XINGSHI_SKIPPED, bot=True, wait=min(budget, 120))
-        except (Busy, QueueTimeout):
-            essay = XINGSHI_SKIPPED
-    with _locked(game):  # 收下那一刻寫天下大事：推送的指紋跟著變，開著的分頁會更新
-        if essay is XINGSHI_SKIPPED:
-            game.release_xingshi(request)
-            return False
-        return game.settle_xingshi(request, essay)
+    return territory_acts_routes.xingshi_once(sys.modules[__name__], game)
 
 
 def feast_text(game: Game, text: str) -> list[str]:
@@ -1621,118 +1443,12 @@ def persuade_text(game: Game, errand_id: str, text: str) -> list[str]:
     return act(game, lambda g: g.persuade(request, rate))
 
 
-CROWD_RUNNING: set[str] = set()  # 正在背景重寫場邊那一句的角色（一人一條；名號鍵）
-
-
-def _crowd_waiting(game: Game) -> bool:
-    """擂台有一句場邊事件等著模型重寫、模型叫得到、這個人還沒有一條在寫（write_crowd）。行動鎖內叫。"""
-    if not TALE_THREADS or game.client is None or game.state.player.arena_crowd_note is None:
-        return False
-    return game.state.player.name not in CROWD_RUNNING
-
-
-def write_crowd(game: Game) -> bool:
-    """擂台場邊那一句（arena_crowd）：開一個背景執行緒重寫。A 鎖內拿單子（Game.arena_crowd_request）→ B 鎖外請模型寫
-    （arena_crowd.write_line，預算 Config.arena.crowd.write_budget_seconds；排隊時當假人排）→ C 鎖內重驗同一張單子才換
-    （Game.apply_arena_crowd；寫不出來照固定句）。開了回 True。呼叫端不能握著行動鎖。"""
-    name = game.state.player.name
-    with TALE_LOCK:
-        if name in CROWD_RUNNING:
-            return False
-        CROWD_RUNNING.add(name)
-
-    def job() -> None:
-        try:
-            crowd_once(game)
-        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，那一句照固定句
-            traceback.print_exc()
-        finally:
-            with TALE_LOCK:
-                CROWD_RUNNING.discard(name)
-
-    threading.Thread(target=job, name="arena-crowd", daemon=True).start()
-    return True
-
-
 def crowd_once(game: Game) -> bool:
-    """重寫一句（write_crowd 的那一圈；測試直接叫）：換了回 True。呼叫端不能握著行動鎖。"""
-    with _locked(game):
-        note = game.arena_crowd_request()
-    if note is None:
-        return False
-    budget = game.content.config.arena.crowd.write_budget_seconds
-    started = _monotonic()
-
-    def ask() -> str:
-        return arena_crowd.write_line(within_budget(game.client, budget - (_monotonic() - started)), note)
-
-    if QUEUE is None:
-        text = ask()
-    else:
-        try:
-            text = QUEUE.run(game.state.player.name, ask, fallback="", bot=True, wait=budget)
-        except (Busy, QueueTimeout):
-            text = ""
-    with _locked(game):
-        done = game.apply_arena_crowd(note, text)
-        open_characters().save(game.state)
-    return done
-
-
-CHATTER_RUNNING: set[str] = set()  # 正在背景寫鄰桌閒談的酒肆（一間一條；地點 id）
-
-
-def _chatter_waiting(game: Game) -> str | None:
-    """這個人開著的酒肆該換一段閒談、模型叫得到、這一間還沒有一條在寫（write_chatter）：回地點 id。行動鎖內叫。"""
-    if not TALE_THREADS or game.client is None or game.tavern_chatter_request() is None:
-        return None
-    place = game.state.player.location
-    return None if place in CHATTER_RUNNING else place
-
-
-def write_chatter(game: Game, place: str) -> bool:
-    """酒肆鄰桌閒談：開一個背景執行緒寫一段。A 鎖內拿單子（Game.tavern_chatter_request）→ B 鎖外請模型寫（tavern.chatter_write，
-    預算 Config.tavern.ask_budget_seconds；排隊時當假人排在真人後面）→ C 鎖內重驗才記（Game.apply_tavern_chatter；寫不出來記空的，
-    這一陣子照固定句）。開了回 True。呼叫端不能握著行動鎖。"""
-    with TALE_LOCK:
-        if place in CHATTER_RUNNING:
-            return False
-        CHATTER_RUNNING.add(place)
-
-    def job() -> None:
-        try:
-            chatter_once(game)
-        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，閒談照固定句
-            traceback.print_exc()
-        finally:
-            with TALE_LOCK:
-                CHATTER_RUNNING.discard(place)
-
-    threading.Thread(target=job, name="tavern-chatter", daemon=True).start()
-    return True
+    return bout_routes.crowd_once(sys.modules[__name__], game)
 
 
 def chatter_once(game: Game) -> bool:
-    """寫一段（write_chatter 的那一圈；測試直接叫）：記了寫好的回 True。呼叫端不能握著行動鎖。"""
-    with _locked(game):
-        request = game.tavern_chatter_request()
-    if request is None:
-        return False
-    budget = game.content.config.tavern.ask_budget_seconds
-    started = _monotonic()
-
-    def ask() -> list[str]:
-        return tavern.chatter_write(within_budget(game.client, budget - (_monotonic() - started)), request)
-
-    if QUEUE is None:
-        lines = ask()
-    else:
-        try:
-            lines = QUEUE.run(TALE_OWNER, ask, fallback=[], bot=True, wait=budget)
-        except (Busy, QueueTimeout):
-            lines = []
-    with _locked(game):
-        return game.apply_tavern_chatter(request, lines)
+    return tavern_routes.chatter_once(sys.modules[__name__], game)
 
 
 def duel_text(game: Game, text: str) -> list[str]:
@@ -2693,6 +2409,7 @@ MAIN_ACTIONS = features_core.action_table(MAIN_ACTION_ORDER, {
     "growth": lambda g, b: g.pick_growth(str(b.get("preset", "")), b.get("split") if isinstance(b.get("split"), dict) else None),
     "pill": lambda g, b: g.take_stamina_pill(),  # 狀態列體力條上的「丹」：吃一顆回體丹（企劃者 2026-10-07 內測贈送）
 }, features_core.main_actions(sys.modules[__name__]))
+OUTLOCK_JOBS = features_core.outlock_jobs(sys.modules[__name__])  # 放鎖之後要開的背景寫字（各包 routes.py 的 outlock 掛鉤；act、act_look 照這張問與開）
 # 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、不再提示、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」
 PAUSE_OK_ACTIONS = frozenset({"anonymous", "gender", "hints_off", "story_seen", "skip_tutorial", "view_map", "view_orders", "guide_ack"})
