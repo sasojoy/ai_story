@@ -362,7 +362,9 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `tianxia/core/omen_base.py`（主人：軍情包）：伏筆讀的那一半 `fs_active`（包裡叫 `fs_rules.active`）、`event_ids`、`held_items`、`heard_texts`
   （與填字的 `fill`、`_fragment_text`、`_version`、`_front`、`chain`、`_event`、`_figure_name`、`tianji_answer`、`_tianji`、`TIANJI_SLOTS`）；機緣讀的那一半
   `opp_active`（包裡叫 `opp_rules.active`）、`heard_clues`；新的 `clue_count(state, item_id)`（條件 `clue_items` 讀 `PlayerState.clue_items`）。
-  events、narration、rumor_view、殼的門下頁、rules.check_condition 讀
+  events、narration、rumor_view、殼的門下頁、rules.check_condition 讀；
+  map2（全部拆包第 50 批）：新的 `fs_answering(state)`（正在答最後一步的題，讀 `PlayerState.fs_asking`；共用規則層 `atlas.travel_block` 問，
+  軍情包 `fs_rules` re-export 同一個物件）
 - `tianxia/story_base.py`（共用規則層；主人：一條線包）：`waiting`、`doable`（章回卡讀，原本在 `features/story/storyline.py`）、新的
   `mark_of(state, line, mark)`（條件 `story_marks`、`story_marks_max` 讀 `PlayerState.storylines`）
 - `tianxia/core/feast_base.py`（主人：宴客包）：`on`、`find`、`is_open`、`open_feasts`、`hosting`、`toasted`、`_key`（人物活起來問誰在擺宴、書信的邀宴問開著的宴）。

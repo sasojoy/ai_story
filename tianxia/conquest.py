@@ -39,7 +39,9 @@ def on(content: Content, world: WorldState | None = None) -> bool:
 
 def duel_on(content: Content, world: WorldState | None) -> bool:
     """約戰在這一季開著：減法季的 sortie_duel 子開關（rules.jianfa：設定＋開季的章）、出陣開著、領地爭奪在這一季生效（約戰貼在區塊上）。
-    全部拆包第 50 批從出陣包 duel_rules.on 搬來：atlas 要問、又不能 import 出陣包；出陣包 re-export 同一個函式物件。"""
+    全部拆包第 50 批從出陣包 duel_rules.on 搬來：atlas 要問、又不能 import 出陣包；出陣包 re-export 同一個函式物件。
+    另外跑：改這一個 scripts/test_for.py 照共用規則層挑（自己檔名的 test_conquest*＋煙霧＋邊界），挑不到本體還在 duel_rules 時挑的出陣包
+    tianxia/features/sortie/tests（15 個檔，test_sortie_duel_road_duty、test_sortie_report 兩個整檔 slow），另外跑那一包的 tests（第 50 批審查）。"""
     return rules.jianfa(content, world, "sortie_duel") and territory.on(content) and on(content, world)
 
 

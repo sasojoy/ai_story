@@ -7,6 +7,9 @@ ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的
 `_explore_weights`、`_explore_can`、`_legend_find`、`_wild_foes`（測試與 scripts/same_behavior.py 在 Game 上換掉它們，包裡直接叫模組函式就換不到）；
 `_explore_outcome`、`_here_squads` 沒有人換過，包內直接叫。擲骰順序（頭目 → 奇遇 → 比重抽一支 → 野怪／事件）、`_legend_find` 機率 0 不擲、
 序章裡不撿破境丹也不擲，都照原本；`ctx.rng` 就是原本的 `self.rng`。
+
+跟核心的 tianxia/core/explore_base.py（全部拆包第 50 批）同檔名、不同模組：這一份是探索包的探索的底，那一份是核心的探索表小函式
+（LOSE_WORD、六種地點與四類事、「多半」那兩個字、terrain_tags）；兩份照留、不改名（第 50 批 PM 認定第 5 條）。
 """
 from __future__ import annotations
 

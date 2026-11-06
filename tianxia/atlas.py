@@ -2,7 +2,7 @@
 軍令卡的寫法與打擊點、「安排前往」的條件，與大地圖四個圖層的名字（LAYERS）。畫圖在輿圖包的 mapview.py。
 
 共用規則層（registry.SHARED；全部拆包第 50 批「輿圖二」拆兩半之後收進）：核心的 engine、content、rules 與移動、地盤、設伏、軍情、出陣、
-人物情誼、酒肆、決戰、引導、輿圖十包、假人都讀；跟核心一樣不 import 包——出陣開著沒問 territory.on、約戰開著沒問共用層的
+人物情誼、酒肆、決戰、引導、輿圖十包、假人都讀；跟核心一樣不 import 包——出陣開著改問 territory.on、約戰開著改問共用層的
 conquest.duel_on，正在答題、跟著誰同行問核心的 omen_base.fs_answering、travel_base.following。圖層、詳情、勝算那一半
 （四個圖層要標的東西、地點詳情、標題那一行、大地圖選得到的地點）在輿圖包 tianxia/features/map/layers.py，這一半一處都不讀它。
 改這一份 scripts/test_for.py 只挑自己檔名的 tests/map/test_atlas.py＋煙霧＋邊界（第 15 批 PM 認定第 3 條；收進來之前它 import 十五個模組、

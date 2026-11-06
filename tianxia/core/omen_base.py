@@ -238,5 +238,7 @@ def clue_count(state: GameState, item_id: str) -> int:
 # ── map2：安排前往問的（全部拆包第 50 批；軍情包 fs_rules re-export）──
 def fs_answering(state: GameState) -> bool:
     """正在答最後一步的題（PlayerState.fs_asking，軍情包認領）：共用規則層 atlas.travel_block 照它擋「先作罷才能安排前往」——
-    共用層不直接讀包的欄位（全部拆包第 50 批，照第 40 批 clue_count）。"""
+    共用層不直接讀包的欄位（全部拆包第 50 批，照第 40 批 clue_count）。
+    另外跑：改這一個 scripts/test_for.py 照核心挑（核心測試＋煙霧＋寫到這一份的），挑不全本體還在 fs_rules 那一邊時挑的軍情包
+    tianxia/features/military/tests（7 個檔），另外跑那一包的 tests（第 50 批審查）。"""
     return state.player.fs_asking is not None

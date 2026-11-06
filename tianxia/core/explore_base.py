@@ -6,7 +6,8 @@
 原本的模組 re-export 同一個物件：`explore_rules.kind_of is explore_base.kind_of`、`explore_actions.LOSE_WORD is explore_base.LOSE_WORD`、
 `sensing.terrain_tags is explore_base.terrain_tags`、`mapdata.LOSE_WORD is explore_base.LOSE_WORD`。
 
-跟探索包的 tianxia/features/explore/explore_base.py（第 18 批）同檔名、不同模組：一律寫完整路徑 `from tianxia.core import explore_base`。
+跟探索包的 tianxia/features/explore/explore_base.py（第 18 批）同檔名、不同模組：這一份是核心的探索表小函式，那一份是探索包的探索的底
+（舊探索 Game 上的 8 個方法）；兩份照留、不改名（第 50 批 PM 認定第 5 條），一律寫完整路徑 `from tianxia.core import explore_base`。
 同 omen_base、convoy_base 不進 MODULES（tianxia/core/ 底下的檔本來就是核心）。
 """
 from __future__ import annotations

@@ -17783,8 +17783,9 @@ class MapScenario(Scenario):
     **網頁檔**：`GET /static/map.js` 的整檔 sha256（網頁拿到的內容一個位元組不變）與 `/` 載入它的那一行、載入版本號。
     **寫到一半**：地圖本身沒有寫到一半的狀態（每個畫面從存檔現算）；前半停在有人走在路上、有人剛擺好地盤進度的那一刻，後半新程式接手：
     路上的人走到、畫面照存檔的 journey 現算。**假人**：假人不看地圖（沒有任何 /api/map 的呼叫），碰到輿圖的只有 `bot_policy` 的
-    `_toward_battle` 叫 `Game.travel_options`——它要有決戰在集結才走得到，這一軌的假人段沒有開決戰（season21 量過一次也沒走到），
-    所以這一段只比假人跑完的存檔與世界雜湊，`travel_options` 由 /api/map 的地點詳情與 /api/travel 走到。
+    `_toward_battle` 叫 `Game.travel_options`——它要有決戰在集結才走得到：第 49 批這一段沒有開決戰（season21 量過一次也沒走到），
+    map2（第 50 批）起 bots 段先開一場決戰的集結（長社火攻已經結算時開廣宗；測試內容沒有陣營不開，見下面 bots 那一條），
+    season21、week7 各走到 8 次。假人跑完照舊比存檔與世界雜湊，`travel_options` 另由 /api/map 的地點詳情與 /api/travel 走到。
     **map2（全部拆包第 50 批：atlas 拆兩半，圖層那一半進輿圖包 layers.py）補的**，切點與段落見 PHASES（下面「走到」的都在 dev/map-2 Task 1
     那一筆實跑、逐函式數過呼叫次數）：
     - orders_how：/api/main 的本週軍令卡（atlas.order_how）。管理者重發之外，照內容每一種模板官軍、黃巾各擺一道（orders._build），所以
@@ -18096,7 +18097,7 @@ class MapScenario(Scenario):
             self.server.MAP_BASE.clear()
 
     def details(self) -> None:
-        """map2：詳情欄（atlas.detail_text 與它叫的圖層那一半：大區的大勢、地盤、龍頭人物〔常出沒、此地的大勢人物、出兵之前的「第 N 週起」、
+        """map2：詳情欄（輿圖包 layers.detail_text〔拆之前在 atlas〕與它叫的圖層那一半：大區的大勢、地盤、龍頭人物〔常出沒、此地的大勢人物、出兵之前的「第 N 週起」、
         按兵不動、聲威會回〕、敵情〔自己陣營的操練〕、意境與地利、劇情〔主線目標、最近的傳聞、這一帶離得遠〕、路線）一處一處點：
         官軍、黃巾每一個畫得出來的地點各點一次，散人與序章新人點頭尾兩處。"""
         for who in (self.GUAN, self.HUANG):
