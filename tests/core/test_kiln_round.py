@@ -1,4 +1,5 @@
 """小太極（煉製頁縮起來的開爐鈕）只畫圓：鈕與太極的 svg 都不能有長方形的光暈（Joy 2026-10-18 iPhone 上的方底）。"""
+# 畫法在 web/craft.js（全部拆包第 64 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 import re
 from pathlib import Path
 import webharness

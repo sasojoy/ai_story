@@ -1,6 +1,7 @@
 """修練頁與煉製頁的畫面（arts-polish-1：W2、W5、W7、W9）。
 web/app.js 沒有建置步驟、也沒有前端測試框架：這裡把兩頁的函式從原始碼切出來交給 node 跑（不相干的畫法換成一行的假貨），
 檢查出來的 HTML 與按鈕按下去之後的動作。node 由 tests/webharness.py 跑（切函式的 fn、konst 也在那裡）；沒有 node 就略過。"""
+# 畫法在 web/cultivation.js、web/craft.js（全部拆包第 64 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import json
@@ -26,6 +27,9 @@ const parts = [
   ...input.consts.map(konst),
   // 卷軸卡的零件（品質印、機率條、十成格、療傷鈕、庫的篩選……）：「// ── 修練 ──」到 pagePractice 之間整段照抄
   src.slice(src.indexOf("\n  // ── 修練 ──"), src.indexOf("\n  function pagePractice(")),
+  // 第 64 批切檔之後：原本這一段裡留在 app.js 的（切完連在一起）與搬去 craft.js 的火柴人（breakAnim 用）
+  src.slice(src.indexOf("\n  const QUALITY_SEAL"), src.indexOf("\n  const createShort =")),
+  src.slice(src.indexOf("\n  const RIG ="), src.indexOf("\n  }\n", src.indexOf("\n  function figBody(")) + 4),
   // artFilter…：煉製頁挑東西那一排的篩選（arts-polish-2 FB-085），pageCraft 畫的時候要用
   ...["forgeBody", "forgeReady", "pagePractice", "pageCraft", "artFilter", "setArtFilter", "showArts", "filterChips",
     "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "previewCardHtml", "forgeLineHtml", "craftSheetHtml", "craftSheetInner", "potGlow", "kilnPeek", "manualRows", "manualEntry", "bookIcon", ...input.fns].map(fn),

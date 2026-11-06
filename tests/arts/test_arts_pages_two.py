@@ -1,6 +1,7 @@
 """修練頁與煉製頁的第二批修整（arts-polish-2：QA 實機走一遍的 FB-081～085）。
 一節一個 FB：引擎與伺服器的部分直接跑；web/app.js 沒有建置步驟、也沒有前端測試框架，網頁的部分把函式從原始碼切出來
 交給 node 跑（不相干的畫法換成一行的假貨；node 由 tests/webharness.py 跑），沒有 node 就略過那幾個。"""
+# 畫法在 web/cultivation.js、web/craft.js（全部拆包第 64 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import json
@@ -34,6 +35,9 @@ const parts = [
   ...input.consts.map(konst),
   // 卷軸卡的零件（品質印、十成格、療傷鈕、庫的篩選……）：「// ── 修練 ──」到 pagePractice 之間整段照抄（跟 test_arts_pages.py 同一個切法）
   src.slice(src.indexOf("\n  // ── 修練 ──"), src.indexOf("\n  function pagePractice(")),
+  // 第 64 批切檔之後：原本這一段裡留在 app.js 的（切完連在一起）與搬去 craft.js 的火柴人（breakAnim 用）
+  src.slice(src.indexOf("\n  const QUALITY_SEAL"), src.indexOf("\n  const createShort =")),
+  src.slice(src.indexOf("\n  const RIG ="), src.indexOf("\n  }\n", src.indexOf("\n  function figBody(")) + 4),
   ...input.fns.map(fn),
   input.stubs || "",
   "return { " + [...input.fns, ...input.consts, "libFilter", "setLibFilter", "meltView", "meltShown", "meltPickShown"].join(", ") + " };",  // 後面這幾個在上面那一段裡

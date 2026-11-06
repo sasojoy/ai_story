@@ -2,6 +2,7 @@
 常常丟上去按合成才知道」）：爐裡只合意境（Joy 2026-10-21）；合不了的灰掉、寫原因、點了只說為什麼；開爐之後頁面不捲、
 結果寫在開爐底下、爐裡的東西留著。不替玩家列出合得出來的組合（企劃者同日退回：「這樣改不就變成玩家腦都不用動」）。
 資料是真的引擎給的（skillview.forge_picks），畫面在 tests/test_prologue_web.py 的假瀏覽器裡跑。"""
+# 畫法在 web/craft.js（全部拆包第 64 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import pytest
