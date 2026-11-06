@@ -1068,7 +1068,7 @@ def test_the_fight_card_head_is_one_heading_and_one_paragraph():
 def _app_functions_in_node(js: str, script: str) -> str:
     """把 app.js 裡幾個不碰畫面的函式（戰鬥卡片的折疊、看完整戰報、數字行）拿出來在 node 裡跑，回傳 script 印出的東西；
     網頁沒有測試框架，這是唯一真的執行過它們的地方。這台沒裝 node 就略過（行為由下面的標記測試擋住兩邊對不上）。
-    node 由 tests/webharness.py 跑。"""
+    node 由 tests/kit/webharness.py 跑。"""
     if webharness.NODE is None:
         pytest.skip("沒有裝 node")
     names = ("ROUNDS_MARK", "TALE_MARK", "ROUND_BITS", "reportLink", "TRAIT_LEAD")
@@ -4679,7 +4679,7 @@ def test_the_resume_confirmation_does_not_promise_that_every_pause_is_taken_off(
 
 def test_world_step_does_not_move_a_paused_season():
     """伺服器排程的一下（world_step）暫停中什麼都不推——過了三個季長也不收季；繼續之後從停的那一刻接著走。
-    打到一半的決戰那一路見 tests/test_season_pause.py::test_the_scheduler_tick_waits_out_the_pause。"""
+    打到一半的決戰那一路見 tests/core/test_season_pause.py::test_the_scheduler_tick_waits_out_the_pause。"""
     world = open_world()
     scale = server.CONTENT.config.time_scale
     server.world_step(lambda: 1000.0)  # 記下時鐘

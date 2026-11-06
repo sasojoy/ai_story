@@ -1,5 +1,5 @@
 """戰記包（全部拆包第 52 批）：有登記、兩條路由掛著、殼啟動時經 threads 掛鉤開寫戰記的執行緒（殼開、測試停：測試不叫 start_threads，
-tests/conftest.py 收尾認 server.TALES_STOP、TALES_THREAD 這幾個名字）。寫法與存放在 test_tale.py，標記在 test_tale_page.py，畫面在 tests/web/test_tale_web.py。"""
+tests/conftest.py 收尾認 server.TALES_STOP、TALES_THREAD 這幾個名字）。寫法與存放在 test_tale.py，標記在 test_tale_page.py，畫面在 tianxia/features/tale/tests/test_tale_web.py。"""
 from __future__ import annotations
 
 import sys

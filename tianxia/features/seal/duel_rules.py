@@ -67,7 +67,7 @@ def claims_shard(story: str) -> bool:
 
 
 class TextRequest(NamedTuple):
-    """放手一搏的 A 段開的單子（Game.seal_text_request → server.seal_text → Game.seal_gamble）。"""
+    """放手一搏的 A 段開的單子（Game.seal_text_request → routes.seal_text → Game.seal_gamble）。"""
 
     duel: str
     round: int

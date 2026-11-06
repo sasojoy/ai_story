@@ -69,7 +69,7 @@ def test_only_the_two_armies_can_rewrite_a_big_event(on):
 
 
 def test_pushing_a_front_is_only_some_places_and_the_note_row_says_which(on):
-    # 遊歷的說法（出陣開著時只在戰線地點才有出陣、每一處都推，說法換成 howto.SORTIE_PLACES，見 tests/test_core_loop_howto.py）
+    # 遊歷的說法（出陣開著時只在戰線地點才有出陣、每一處都推，說法換成 howto.SORTIE_PLACES，見 tianxia/features/guide/tests/test_core_loop_howto.py）
     on = classic_rules(on)
     quiet =[loc for loc in on.locations.values() if loc.enemies and not loc.train_trend]
     assert any(loc.id == "yingshui" for loc in quiet)  # 潁水河畔有對手、不推線：所以不能說「在戰線上遊歷打贏就推」
@@ -109,7 +109,7 @@ def _page_fb112(on):
 
 def test_the_how_to_page_says_only_some_places_push_too(on):
     """審查 M4：玩法說明「遊歷」那一項以前寫「打贏或操練多半還會推動戰局」——豪強的操練從來不推、潁水河畔什麼都不推。
-    「遊歷」那一項只在出陣關著時才有（開著時是「出陣」，見 tests/test_core_loop_howto.py）。"""
+    「遊歷」那一項只在出陣關著時才有（開著時是「出陣」，見 tianxia/features/guide/tests/test_core_loop_howto.py）。"""
     text = _page_fb112(classic_rules(on))
     assert "多半還會" not in text
     train = next(line for line in text.splitlines() if line.startswith("- **遊歷**"))

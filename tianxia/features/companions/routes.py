@@ -1,6 +1,6 @@
 """人物情誼的 API（功能包 tianxia/features/companions/；原本寫在 server.py，開發規範手冊 3.2）：殼（server 模組，參數 shell）照 FEATURES 掛。
 這個檔只在殼掛路由時才 import（引擎與假人程式不碰網頁框架）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
-書信小卡、名冊的動作表（原本寫在 server.py 的 MAIN_ACTIONS、MENXIA_ACTIONS，全部拆包第 68 批）：殼照 FEATURES 接（main_actions、menxia_actions 掛鉤）；名冊的核對（join、leave、release 在鎖裡先查名冊）與勸降的鎖外三段式留在殼。
+書信小卡、名冊的動作表（原本寫在 server.py 的 MAIN_ACTIONS、MENXIA_ACTIONS，全部拆包第 68 批）：殼照 FEATURES 接（main_actions、menxia_actions 掛鉤）；名冊的核對（join、leave、release 在鎖裡先查名冊）留在殼；勸降、重寫信、對話的鎖外三段式第 69 批搬進這個檔（outlock）。
 not_while_preparing 原本掛在 Game 的委派上、包裡的函式沒有：表不再經過委派，所以名冊那三條的擋法掛在表上（同一支裝飾器，包裡的函式不動）。"""
 from fastapi import APIRouter, Request
 

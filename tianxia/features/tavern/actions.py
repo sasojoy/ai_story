@@ -710,7 +710,7 @@ def tavern_ask_facts(ctx: Game, question: str = "") -> tuple[tuple[str, ...], tu
 
 
 def tavern_chatter_request(ctx: Game) -> tavern_rules.ChatterRequest | None:
-    """A 段（鎖內、只讀）：酒肆開著、這一間的閒談該換了，就開一張單（server.write_chatter 在背景請模型寫）。"""
+    """A 段（鎖內、只讀）：酒肆開著、這一間的閒談該換了，就開一張單（routes.write_chatter 在背景請模型寫）。"""
     s, c = ctx.state, ctx.content
     loc = s.player.location
     if not tavern_open(ctx) or not tavern_rules.chatter_due(s.world, c, loc):

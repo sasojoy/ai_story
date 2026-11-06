@@ -1,4 +1,4 @@
-"""戰鬥卡片底下「你聽到一件事：…」那一句（FB-074）：伺服器在那一行標 tx-hearsay（tests/test_journal.py），網頁把它收成一行、
+"""戰鬥卡片底下「你聽到一件事：…」那一句（FB-074）：伺服器在那一行標 tx-hearsay（tests/core/test_journal.py），網頁把它收成一行、
 放不下加「…」，點了看全文。這裡把網頁的兩個函式（decorateHearsay、hearToggle）從 web/app.js 切出來在 node 裡跑，
 再檢查樣式。沒有 node 就略過（樣式的檢查照樣跑）。"""
 from __future__ import annotations

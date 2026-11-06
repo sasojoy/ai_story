@@ -3,7 +3,7 @@
 「→」後面那個空白放在 .nb 外面（一個行內區塊尾巴上的空白會被瀏覽器吃掉，「→這個配方」就貼在一起）：它是普通的、可摺的空白，
 也是一個換行機會，落在行尾或行頭時自己消失。
 伺服器給的標籤文字一個字都沒改（待 joy 潤的字照舊）；這裡餵真的標籤格式（smithing.GO_LABEL 等）給 app.js 的假瀏覽器
-（tests/test_prologue_web.py），檢查切出來的小段、跳脫、與 CSS 那一條。沒有 node 就略過。排版本身（折在哪一行）要瀏覽器才看得到，不在這裡。"""
+（tests/web/test_prologue_web.py），檢查切出來的小段、跳脫、與 CSS 那一條。沒有 node 就略過。排版本身（折在哪一行）要瀏覽器才看得到，不在這裡。"""
 from __future__ import annotations
 
 import html

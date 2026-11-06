@@ -11,7 +11,7 @@ from pathlib import Path
 # 測試照區塊分資料夾（2026-10-27 測試整理 2；資料夾對 CLAUDE.md 的區塊表）：tests/kit/ 是共用工具（webharness、conquest_kit……），
 # 各資料夾的測試檔照舊互相 import（from test_prologue_web import run），所以每個資料夾都放上 sys.path。資料夾之間檔名不能重複。
 # 功能包的 tests/（tianxia/features/<包>/tests/）也放上去：搬進包的測試檔還有別的資料夾的測試在 import（出陣第 1 批：
-# tests/acts/test_econ_gather_sortie.py 借 test_sortie 的 _game、_fight；只跑那一個檔時 tianxia/features/conftest.py 不會載入）
+# tianxia/features/sortie/tests/test_econ_gather_sortie.py 借 test_sortie 的 _game、_fight；只跑那一個檔時 tianxia/features/conftest.py 不會載入）
 _TESTS = Path(__file__).resolve().parent
 for _d in [*sorted(p for p in _TESTS.iterdir() if p.is_dir() and p.name not in ("fixtures", "__pycache__")),
            *sorted(p for p in (_TESTS.parent / "tianxia" / "features").glob("*/tests") if p.is_dir())]:
@@ -136,7 +136,7 @@ def old_attrs(content: Content) -> Content:
 
 def no_week_unlock(content: Content) -> Content:
     """功能照週解鎖（減法季 6.6，Config.jianfa.week_unlock）關掉，回傳同一份內容：用 week7／season21 的正式內容、開季第一天就要進
-    擂台、懸賞榜的舊測試叫它（那兩樣在減法季第 2 週才開；鐵匠鋪 2026-10-27、自創 2026-10-28 起開季就有）；解鎖本身的測試在 tests/test_week_unlock.py。"""
+    擂台、懸賞榜的舊測試叫它（那兩樣在減法季第 2 週才開；鐵匠鋪 2026-10-27、自創 2026-10-28 起開季就有）；解鎖本身的測試在 tests/figures/test_week_unlock.py。"""
     content.config.jianfa.week_unlock = False
     return content
 
@@ -163,7 +163,7 @@ def renown_on(content: Content) -> Content:
 
 def renown_unscaled(content: Content) -> Content:
     """名聲門檻不乘季長倍數（Config.renown.scale 關掉，開季不蓋 renown_scale 的章），回傳同一份內容：名聲的測試寫的是門檻的原數
-    （名望 10／25／50／90），以前靠 2.5 天週末季的倍數剛好是 1；週末季封存後（2026-10-25）改叫它。倍數本身在 tests/test_renown.py 測。"""
+    （名望 10／25／50／90），以前靠 2.5 天週末季的倍數剛好是 1；週末季封存後（2026-10-25）改叫它。倍數本身在 tests/core/test_renown.py 測。"""
     content.config.renown.scale = False
     return content
 
@@ -201,14 +201,14 @@ def no_real_ollama_flavor_calls(monkeypatch):
     fixture content 的 ollama_url（指向故意關閉的 port，見 tests/fixtures/content/
     config.json）各自真的嘗試連線一次才失敗——雖然每次只要 ~2 秒，但乘上整個套件的測試
     數量會拖到以分鐘計。預設回傳空字串（等同「這次沒有潤色句」，跟真的連不上時的行為
-    一致），需要真的驗證 flavor 呼叫內容的測試（tests/test_flavor.py、test_engine.py 的
+    一致），需要真的驗證 flavor 呼叫內容的測試（tests/core/test_flavor.py、test_engine.py 的
     重遊/重複事件測試）自己用 mock.patch.object 覆蓋這個預設值即可。
 
     同一個理由也適用於 chat_structured——battle_instance.py::assess_action_success_rate
     現在每次自訂戰鬥行動送出都會呼叫一次，不假掉的話同樣會對關閉的 port 真的連線才
     失敗（優雅退回保底值，不影響測試正確性，只是拖慢）。這裡讓它直接拋例外，模擬
     「連不上」，跟真正連不上時的行為（各呼叫端自己的 graceful fallback）一致；
-    tests/test_real_content.py 用真實內容時已經有自己的 autouse fixture 蓋掉這個
+    tests/season/test_real_content.py 用真實內容時已經有自己的 autouse fixture 蓋掉這個
     預設值，那邊不受影響。"""
     from tianxia.ollama_client import OllamaClient
 
@@ -229,7 +229,7 @@ def no_host_power_save(monkeypatch, tmp_path_factory):
     """測試不看這台主機的省電模式（tianxia/power_save.py）：旗標檔是 repo 裡的 .local/power_save，
     主機上開著省電模式的時候，client.keep_alive 會回 5m，於是 test_ollama_client.py 那幾個
     「keep_alive 照設定」的測試整組掛掉（2026-10-18 實機踩到）。每個測試都指到一個不存在的旗標、
-    環境變數也清掉；要測省電模式本身的在 tests/test_power_save.py 裡自己設。"""
+    環境變數也清掉；要測省電模式本身的在 tests/bots/test_power_save.py 裡自己設。"""
     from tianxia import power_save
 
     monkeypatch.delenv(power_save.ENV, raising=False)

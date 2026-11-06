@@ -617,7 +617,7 @@ def test_the_howto_page_has_every_section_and_reads_the_config(game):
     span = re.search(r"新手期：開季後的(.*?)內", text).group(1)  # 新手期的現實時間是換算出來的（季長、季曆）
     cycle = howto.day_every(game.content, game.state.world)  # 交友輪數的「每個遊戲日」也是換算出來的（季長，企劃者 2026-10-08）
     assert f"同一位人物{cycle}最多 9 輪" in text
-    # 「名望」那一節（explain-2）的數字讀的是內容（事件給的範圍、求見門檻、拜師的名望），在 tests/test_explain2.py 對過內容
+    # 「名望」那一節（explain-2）的數字讀的是內容（事件給的範圍、求見門檻、拜師的名望），在 tests/arts/test_explain2.py 對過內容
     fame = re.search(r"#### 名望\n(?:- .*\n)+", text).group(0)
     numbers = set(re.findall(r"\d+(?:\.\d+)?", text.replace(span, "").replace(cycle, "").replace(fame, "")))
     assert numbers <= allowed, numbers - allowed  # 沒有一個數是寫死在句子裡的
@@ -671,7 +671,7 @@ def test_the_full_stamina_note_shows_when_nearly_full(game):
 
     game.skip_tutorial()
     game.state.player.stamina = game.content.config.stamina_max * 0.95
-    assert guide.FULL_STAMINA_NOTE in guide.next_hint(game.state, game.content, game.world)  # 滿了另一句（FB-108，tests/test_guide.py）
+    assert guide.FULL_STAMINA_NOTE in guide.next_hint(game.state, game.content, game.world)  # 滿了另一句（FB-108，tianxia/features/guide/tests/test_guide.py）
 
 
 def test_the_newbie_window_in_real_hours_says_what_it_gives(on):

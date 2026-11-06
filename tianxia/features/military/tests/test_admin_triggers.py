@@ -3,7 +3,7 @@
 每一顆鈕都叫自然那條路用的同一個函式：測試照「雙胞胎」比——兩份一模一樣的世界，一份讓自然的路走（週一的掛鉤、時刻表、
 同步時發的召見、行動之後聽到的線索），一份按鈕，比按完之後的世界與角色。拒絕的每一種都有一個測試。
 
-用真實內容（content/）、週末設定的開關（季長 2.5 天）；人數上限 250（第 4 階兩席，跟 tests/test_seats.py 一樣）。
+用真實內容（content/）、週末設定的開關（季長 2.5 天）；人數上限 250（第 4 階兩席，跟 tests/figures/test_seats.py 一樣）。
 現實時間由測試給（game.now），time_scale 是 1；管理者是「管」。"""
 from __future__ import annotations
 
@@ -262,7 +262,7 @@ def test_an_early_start_counts_as_happened_so_the_date_passes_quietly(on):
     assert after.time > season.schedule["changshe_fire"] and "changshe_fire" not in after.showdowns_waiting
     assert admin.world.get_battle() is None  # 沒有第二場
     assert [battle.record_id for _, battle in admin.world.ended_battles()] == [first]
-    # 開過、取消了、沒有結果：照舊開不了，說怎麼收尾（FB-099，見 tests/test_admin_timetable.py）
+    # 開過、取消了、沒有結果：照舊開不了，說怎麼收尾（FB-099，見 tests/figures/test_admin_timetable.py）
     assert admin.admin_start_showdown("changshe_fire", past) == ["（長社火攻開打後被取消，還沒有結果；要收尾請用「定結果」。）"]
 
 

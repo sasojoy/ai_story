@@ -54,7 +54,7 @@ def test_the_endpoint_reads_this_seasons_log_with_affinity_gains(monkeypatch, tm
         state, content = St(), server.CONTENT
 
     monkeypatch.setattr(server, "_game", lambda request: G())
-    # 主幹合回 D 段：路由搬進人物情誼包（找法同 tests/web/test_craft_web.py 的 /api/forge_line：這一版 FastAPI 的 app.routes 不攤開 include_router 的路由）
+    # 主幹合回 D 段：路由搬進人物情誼包（找法同 tianxia/features/craft/tests/test_craft_web.py 的 /api/forge_line：這一版 FastAPI 的 app.routes 不攤開 include_router 的路由）
     api_talk_log = next(r.endpoint for rt in features_core.routers(server) for r in rt.routes if r.path == "/api/talk_log")
     server.TALK_LOG.add("甲", 1, [
         {"figure": "huangfusong", "at": 1.0, "stamp": "第 1 週・週一 08:00", "place": "長社", "role": "user", "text": "「將軍。」", "affinity": 4},

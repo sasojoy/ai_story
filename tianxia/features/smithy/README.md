@@ -57,7 +57,7 @@
 
 - `tests/gear/` 底下上面那七個，加 `test_armor.py`（44）、`test_weapons.py`（109）、`test_four_tiers.py`（47）、`test_board_cards.py`（11）、`test_renown_discount.py`（3）、`test_signature_arms.py`（25）、`test_shop2.py`、`test_shop_polish.py`。
 - `tests/bots/test_bot_policy.py`（鐵匠鋪的分數、`_smith_want`）、`tests/core/test_economy.py`、`tests/core/test_shop_width.py`、`tests/season/test_sim_scripts.py`。
-- `tianxia/features/cultivation/tests/test_ultimates.py`（`bind_art`）、`tests/server/test_server.py`（`/api/do/smith_*`、`/api/menxia/…`）。
+- `tianxia/features/cultivation/tests/test_ultimates.py`（`bind_art`）、`tests/server/test_server.py`（`/api/do/smith_*`、`/api/menxia/…`）、`tests/server/test_action_tables.py`（動作表的主人與先後）。
 - 網頁（第 61 批搬進這一包的 `tests/`）：`tianxia/features/smithy/tests/test_kiln_round.py`、`tianxia/features/smithy/tests/test_smith_labels_web.py`（8）、`test_shop_web.py`（61，slow 7）、`test_shop2_web.py`、`test_tier4_shop_web.py`（7）、`test_smith_divine_web.py`。改 `web/smithy.js` 時 `test_for` 照檔名挑得到 `test_shop_web`、`test_smith_divine_web`、`test_tier4_shop_web`、`test_shop2_web`、`test_econ_web`、`test_shop_width`、`test_shell_web`；挑不到、要另外跑的：`tests/server/test_server.py -k "page or version or scripts"`（那個檔太大，檔名刻意不寫進去；第 61 批搬走的 18 條只是名字帶 page，測的是各包自己的資料，不用跟）、`tests/bots/test_server_bots.py`（掃字）。
 
 `scripts/same_behavior.py` 的 `smithy` 軌（`--tracks smithy`，三種設定）：整段、半舊半新、軌裡的假人段都跟搬之前一樣。

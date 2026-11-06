@@ -2,7 +2,7 @@
 （IntersectionObserver，至少一半進了可視範圍）停留約 1.5 秒，才送 /api/do/view_orders；卡片離開畫面就重新計時。
 
 把 web/app.js 裡那一段（從 ORDERS_SEEN_MS 到 watchOrders 結束）切出來在 node 裡跑，餵假的 document、IntersectionObserver、計時器與 api；
-node 由 tests/webharness.py 跑；沒有 node 就略過。"""
+node 由 tests/kit/webharness.py 跑；沒有 node 就略過。"""
 # 畫法在 web/guide.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
@@ -444,4 +444,4 @@ def test_the_page_calls_it_after_every_draw_and_resets_it_on_login_and_logout():
     assert "resetOrdersWatch();" in enter
     logout = next(line for line in js.splitlines() if 'case "logout":' in line)
     assert "resetOrdersWatch();" in logout
-    assert "ordersSeen: false" in js[js.index("\n  const S = {"):js.index("\n  const $app")]
+    assert "ordersSeen: false" in js[js.index("\n  const S = {"):js.index("\n  };", js.index("\n  const S = {"))]

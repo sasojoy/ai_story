@@ -309,7 +309,7 @@ def test_a_line_for_another_pot_is_not_shown_as_ready(content, world):
     assert old["ready"] and 'class="odds"' not in html and 'data-act="shop-go" disabled' in html
 
 
-# ── 設計第七節補測：店面上定名被拒絕，剛打的字留在框裡（同修練頁那一張，tests/test_weapons_web.py）──
+# ── 設計第七節補測：店面上定名被拒絕，剛打的字留在框裡（同修練頁那一張，tests/web/test_weapons_web.py）──
 
 _SHOP_DIVINE_REFUSED = """return (async () => {
   T.ctx.FormData = function (form) { return Object.entries(form.data); };  // 假瀏覽器沒有 FormData：表單的欄位直接給

@@ -1,4 +1,4 @@
-"""減法季批 6（人物心意、託付與來信；主機側計畫第七節）的測試建法。批 2 接線在建的 tests/jianfa_kit.py 還不在 feature/jianfa 上，
+"""減法季批 6（人物心意、託付與來信；主機側計畫第七節）的測試建法。批 2 接線在建的 tests/kit/jianfa_kit.py 還不在 feature/jianfa 上，
 同名的檔不在這一批建。用正式內容的 season21（三位人物的心意與託付就是正式內容寫的那幾筆）照伺服器開一季；模型一律是假的。"""
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
 HOUR, DAY = 3600, 86400
-MON = 1792339200  # 2026-10-19 週一 00:00（台灣），同 tests/test_week_unlock.py
+MON = 1792339200  # 2026-10-19 週一 00:00（台灣），同 tests/figures/test_week_unlock.py
 LUZHI, BOCAI, HUANGFU = "luzhi", "bocai", "huangfusong"
 CAMP = "luzhi_camp"  # 盧植開季在這裡（talk_at）
 

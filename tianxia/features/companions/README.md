@@ -44,7 +44,7 @@
 - 交友與求見開口（`_socialize`、`_precise_socialize`、`_call` × `_open_dialogue`）：交友求見第 21 批搬進 `socialize` 包，那一包經 `ctx._open_dialogue` 問，核心原位不再叫它。
 - 叛投之後的食言：全部拆包第 32 批接上核心的叛投掛鉤（`DEFECT_ORDER` 的 `after` 位置，排在同伴回江湖 `leave_behind` 之後；回話的先後算行為），不再是這裡的接縫。場景文字（`_own_scene_text` × `_last_talk_line`）：位置算行為。
 
-別的舊模組經別名碰這一包（3.11）：`bot_policy`（`stances.bot_pick`）、`server`（`letters.mail_day`、`letters.write`、`companion_agent`〔鎖外三段式的 `prepare_turn`、`PreparedTurn`〕；鎖外重寫信、勸降、對話的三段式照舊在殼）、`scripts/try_*.py`、`scripts/figure_ask_trial.py`。`server` 的 `main_view`、`MAIN_ACTIONS`（`letter_read`、`letter_decline`）、`MENXIA_ACTIONS`（`join`、`leave`、`release`）照舊叫 `Game` 委派（總表第 66、68 批）。出陣包的 `act:train` 並肩出陣那一句（`BACKED_LINE`、`PLAN_MISS`）搬進核心 `services`，出陣包不再 import `parley`。
+別的舊模組經別名碰這一包（3.11）：`bot_policy`（`stances.bot_pick`）、`server`（`letters.mail_day`、`letters.write`、`companion_agent`〔鎖外三段式的 `prepare_turn`、`PreparedTurn`〕；鎖外重寫信、勸降、對話的三段式第 69 批搬進這一包的 `routes.py`，`server` 留一行包裝）、`scripts/try_*.py`、`scripts/figure_ask_trial.py`。`server` 的 `main_view`、`MAIN_ACTIONS`（`letter_read`、`letter_decline`）、`MENXIA_ACTIONS`（`join`、`leave`、`release`）照舊叫 `Game` 委派（總表第 66、68 批）。出陣包的 `act:train` 並肩出陣那一句（`BACKED_LINE`、`PLAN_MISS`）搬進核心 `services`，出陣包不再 import `parley`。
 
 ## 過渡（手冊 3.11）
 
@@ -60,6 +60,7 @@
 
 - 這一包的（第 19 批整檔搬進來，審查修正加 6 條；第 20 批再搬 109 條、加 `test_talk_bots` 15 條，共 269 條，全部不是 slow，`-n 4` 約 12 秒）：`tests/test_companions.py`（17：十五位、招募、放走、叛投帶不走）、`test_recruit_gate.py`（5：情誼門檻）、`test_errands.py`（15）、`test_errands_fix6.py`（16）、`test_errands_weekcard.py`（4）、`test_stances.py`（21）、`test_stances_bots.py`（5）、`test_stances_fix6.py`（9）、`test_stances_server.py`（7，連 `/api/figure` 與勸降三段式）、`test_stances_tie.py`（17）、`test_relations_letters.py`（24：書信與委託）、`test_companions_smoke.py`（1）；第 20 批：`test_companion_agent.py`（45：對話的組單子、好感度查表、記憶整理、本命武學）、`test_parley.py`（22：NPC 智能 2.0 的清單、擲骰、條件、食言）、`test_parley_schema.py`（13：送出去的 schema 與必填欄位）、`test_parley_two.py`（18：他主動開口、先做後付、帶路、商量打法）、`test_talk_memo.py`（11：「上回」）、`test_talk_bots.py`（15：假人只按告辭，新寫的）。`tests/kit/stances_kit.py` 留在 kit。
 - **`test_for` 挑不到的、另外要跑的**（這一輪不搬、不拆）：
+  - 動作表（書信小卡、名冊）：`tests/server/test_action_tables.py`（主人與先後）。
   - 改世界那一半（`tianxia/stance_world.py`）：共用規則層只挑自己檔名的測試＋煙霧＋邊界（總表第六節第 5 條），沒有 `test_stance_world`——連這一包一起跑。
   - 改 `talk_view`：`tests/web/test_revamp_web.py`（對話框，`test_for` 挑不到）。
   - 網頁：`test_errands_web.py`（4，slow）、`test_parley_web.py`（2，slow）第 61 批搬進這一包（整檔 slow，`test_for` 不含 slow，要跑加 `--slow` 或直接給檔名）；還在別處的：`tianxia/features/guide/tests/test_opening_web.py`、`tests/web/test_hero_mates_web.py`（`from test_companions import _player`）、`tests/web/test_say_web.py`（2，slow）。

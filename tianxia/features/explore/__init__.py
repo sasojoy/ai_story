@@ -53,7 +53,7 @@ class ExploreFeature(Feature):
     def verbs(self) -> tuple[Verb, ...]:
         """act:explore 那一格的主人（act 子動詞，全部拆包第 11 批；原本 Game 上四處叫 _outing_on 的那幾行，判斷照抄）：探索一顆開著
         （outing_on：減法季 explore_one、不在序章裡）時，按下去是出門一趟（_act 最前面）、紀錄標題「出門一趟・某地」、行動列只剩那一顆
-        「探索」、底下那一行寫這一處多半給什麼；關著每一樣都回 None，核心照舊（舊探索、序章寫好的那幾步）。建一次就留著，
+        「探索」、底下那一行寫這一處多半給什麼；關著時按下去、標題、那一格回 None，核心照舊（舊探索、序章寫好的那幾步），底下那一行回舊探索那一行（outing_note，第 59 批併進來，核心不再寫）。建一次就留著，
         每一格在叫的那一下才照模組屬性找 explore_actions 的函式（monkeypatch 照樣有效；tests/core/test_contract_features.py 守）。"""
         if self._verbs is None:
             from tianxia import journal  # noqa: PLC0415

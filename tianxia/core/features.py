@@ -720,7 +720,7 @@ def act(ctx: Game, verb: str, prepared: Any) -> list[str] | None:
 
 
 def act_title(ctx: Game, verb: str) -> str | None:
-    """act:<verb> 那一下江湖紀錄的標題（Game._action_title 那張表之前；表照 arg 查、不看 kind，這裡也一樣）。帶後綴的（第 57 批）問 tail_title。"""
+    """act:<verb> 那一下江湖紀錄的標題（Game._action_title 那張表之前；表照 arg 查、不看 kind，這裡也一樣，kind 的門在呼叫端：帶後綴的與銀兩那四樣要 kind == "act"）。帶後綴的（第 57 批）問 tail_title。"""
     head, sep, tail = verb.partition(":")
     for v in _verbs(None, head):
         if sep:
@@ -806,7 +806,7 @@ class WorldHook:
 # 與核心自己的那幾格）。寫死在這裡、不照 FEATURES 的先後：同一個位置包與舊模組穿插（step 的宴客夾在人物行事與盤算之間、月旦評排最後；
 # muster 的龍頭上陣排在屯糧與玉璽之後），照 FEATURES 只排得出「所有包擠在同一個位置」。之後舊模組成包只是那一格換主人，表不動。
 # 改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。改格的本體或這張表另外要跑（scripts/test_for.py 挑不全）：tests/map/test_atlas.py、tests/core/ 的 test_explain、test_social、test_prologue，
-# tests/gear/test_shop.py，tests/figures/ 的 test_day_scale、test_gentry_allied、test_orders，與 scripts/same_behavior.py 的 stack 一軌（兩層以上疊著的先後只有它比）。
+# tianxia/features/smithy/tests/test_shop.py，tests/figures/ 的 test_day_scale、test_gentry_allied、test_orders，與 scripts/same_behavior.py 的 stack 一軌（兩層以上疊著的先後只有它比）。
 #
 # 位置    核心在哪裡問                                                         run 的簽名                                   回傳
 # step    world.advance_world_state 每一步：sim_tick 之後、季還沒收（季曆交界之前）  (vehicle, content, store, step)               bounties、figures.revive、seal_acts 的 list 接進訊息；其餘 None
@@ -1257,7 +1257,7 @@ class MenuHook:
 # 選單與動身的順序表：位置 → 那一個位置的格，照換成掛鉤之前一行一行的先後。順序就是行為（誰先接管整個選單、「此地還能做」誰排前面、動身被擋先說哪一句都算），
 # 所以寫死、連核心自己的格一起列。包登記自己那一格（Feature.menus()），其餘由核心代叫（engine._MENU_CORE、atlas._BLOCK_CORE、travel/departure._DEPART_CORE）。
 # 改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。改格的本體或這張表另外要跑（scripts/test_for.py 挑不全）：tests/map/test_atlas.py、tests/core/ 的 test_explain、test_social、test_prologue，
-# tests/gear/test_shop.py，tests/figures/ 的 test_day_scale、test_gentry_allied、test_orders，與 scripts/same_behavior.py 的 stack 一軌（兩層以上疊著的先後只有它比）。
+# tianxia/features/smithy/tests/test_shop.py，tests/figures/ 的 test_day_scale、test_gentry_allied、test_orders，與 scripts/same_behavior.py 的 stack 一軌（兩層以上疊著的先後只有它比）。
 #
 # 位置    核心在哪裡問                                          run 的簽名                 怎麼叫
 # tick    Game.options 最前面（tick=True 才問）                   (ctx)                      menu_run，回傳不接

@@ -1,5 +1,5 @@
 """散人玩法的網頁那一半：狀態列展開時的遊俠名號（俠名、下一階、這一階的好處）與江湖頁的懸賞卡（手上揭了的、看懸賞榜）。
-餵真的引擎給的 /api/main 給 app.js（tests/test_prologue_web.py 的假瀏覽器）。沒有node 就略過。"""
+餵真的引擎給的 /api/main 給 app.js（tests/web/test_prologue_web.py 的假瀏覽器）。沒有node 就略過。"""
 from __future__ import annotations
 
 import pytest

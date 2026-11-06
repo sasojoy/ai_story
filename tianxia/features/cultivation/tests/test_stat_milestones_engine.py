@@ -1,6 +1,6 @@
 """減法季屬性五段的引擎接線（減法季整合設計 4.5；主機側計畫 Task 2-5）：升級不再給點，第 10、20、30、40、50 級各 5 點；每一點的效果加倍
 （威力 6%、閃避 4%、感悟 6、持有 4 格），氣血上限、狀態列、打起來同一個數；配點那一刻寫前後；境界卡 main.milestone；假人照路配滿一項；
-江湖水漲的事件加難乘 event_bump_scale；戰報結果段寫屬性起作用的那一句。純規則在 tests/test_stat_milestones.py。正式設定 2026-10-28 起 `stat_milestones` 關著（升級照舊每級給點，FB-899），
+江湖水漲的事件加難乘 event_bump_scale；戰報結果段寫屬性起作用的那一句。純規則在 tianxia/features/cultivation/tests/test_stat_milestones.py。正式設定 2026-10-28 起 `stat_milestones` 關著（升級照舊每級給點，FB-899），
 所以這個檔每一局都自己把子開關打開（`jianfa_game(stat_milestones=True)`）；關著時怎麼走在 tests/core/test_jianfa_switch.py。用正式內容，整個檔標 slow。"""
 from __future__ import annotations
 

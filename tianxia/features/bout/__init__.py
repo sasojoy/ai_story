@@ -12,8 +12,8 @@ docs/superpowers/plans/2026-11-03-單挑包-第1批.md）。README.md 寫這一�
 
 拿 duel、arena 兩個前綴：假人看到這兩種選項怎麼按問這一包（bot_pick）。原位接上第 11 批掛鉤的：坐在擂台邊與進擂台那一顆、收店
 （店面登記 shops）、打開擂台與那一下的標題（act 子動詞 verbs）、報名與挑人（choose）、擂台打到一半的三招與認輸（menu）、
-場邊事件的內容檢查（check_content）。沒有對應掛鉤、留在 Game 原位叫一行委派的（灰掉的挑擂鈕、場景卡、
-sync 的補送、閉關中與路上的入口、店面那一頁、戰力快照抄防具、奪璽單挑的陣營名、舊探索撞上頭目）寫在 README。
+場邊事件的內容檢查（check_content）、sync 的補送（seams）、閉關中與路上的入口與店面那一頁打到一半那一行（menus）。
+沒有對應掛鉤、留在 Game 原位叫一行委派的（灰掉的挑擂鈕、場景卡、戰力快照抄防具、奪璽單挑的陣營名、舊探索撞上頭目）寫在 README。
 """
 from __future__ import annotations
 
@@ -86,8 +86,8 @@ class BoutFeature(Feature):
     def shops(self) -> tuple[Shop, ...]:
         """店面登記：擂台是「舊的六間店」的最後一間（原本 Game 上七間店共用的那幾處，擂台那幾行照抄；排在 FEATURES 最後＝酒肆後面）——
         坐在擂台邊（picking_arena）選單整個是擂台那一串（arena_actions.arena_options）；此地還能做裡「擂台」那一顆（arena.here：開著、季在跑、
-        不在序章、到了開擂台的那一週；哪裡都有）；店面那一頁的 key 是 arena（坐著、這裡也還開著；打到一半那一行只讀存檔，留在
-        Game._shop_open 原位）；動身、此地不開了收起來（picking_arena = False）。閉關中、在路上的入口不是「此地還能做」，留在原位叫
+        不在序章、到了開擂台的那一週；哪裡都有）；店面那一頁的 key 是 arena（坐著、這裡也還開著；打到一半那一行只讀存檔，是
+        MENU_ORDER 的 open 那一格，第 56 批）；動身、此地不開了收起來（picking_arena = False）。閉關中、在路上的入口不是「此地還能做」，接
         MENU_ORDER 的 busy、road 那兩格（第 56 批）。建一次就留著，每一格在叫的那一下才照模組屬性找函式（monkeypatch 照樣有效）。"""
         if self._shops is None:
             from . import arena_actions  # noqa: PLC0415

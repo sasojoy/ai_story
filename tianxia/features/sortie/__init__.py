@@ -12,7 +12,7 @@
 約戰的 sortie:*（第 2 批拿了前綴）不在選單上，Game.choose 查選單之前經 choose_unlisted 接走；窗滿了的約戰經 on_due 結算（三處都是第 11 批
 的接縫掛鉤，下面）。假人：act:train、act:duty 的分數與約戰卡上的事在 bots.py（第 60 批，Verb.bot 問；其餘條件還在 bot_policy）。
 換季照帶今天出陣的次數（carried 那兩格）第 55 批起是 season.carry 的 sortie 那一格、不掛 on_season_start：遊戲當下的掛鉤只叫
-開著的包（同商城的 carried；dev/sortie-1 審查，tests/test_sortie_season_carry.py 守）。
+開著的包（同商城的 carried；dev/sortie-1 審查，tianxia/features/sortie/tests/test_sortie_season_carry.py 守）。
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from tianxia.core.features import Feature, HowtoHook, SeamHook, StatusHook, Verb
 
 class SortieFeature(Feature):
     name = "sortie"
-    web = ("sortie.js", "sortie.css")  # 出陣約戰的封招與前往（全部拆包第 66 批從 app.js 切出來）；出陣那一格的卡與樣子（全部拆包第 67 批從 main.js、style.css 切出來）；出陣那一格的卡與樣子（全部拆包第 67 批從 main.js、style.css 切出來）
+    web = ("sortie.js", "sortie.css")  # 出陣約戰的封招與前往（全部拆包第 66 批從 app.js 切出來）；出陣那一格的卡與樣子（全部拆包第 67 批從 main.js、style.css 切出來）
     # 出陣約戰（第 2 批）的三個動作：sortie:go:<三招>、sortie:answer:<約戰 id>:<三招>、sortie:join:<約戰 id>。不在選單上（封招的組合放不進去），
     # Game.choose 最前面就接走（查選單、建 Draft 之前；關著的季照舊「此刻無法這麼做」），所以這一包不接 choose 掛鉤。假人：bot_policy.score
     # 沒有 sortie: 那一段（選單上本來就沒有它們），bot_pick 照預設回 None＝不按，跟原本落到 score 最後的 return None 一樣。

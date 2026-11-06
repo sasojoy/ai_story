@@ -33,7 +33,7 @@ def open_audience(ctx) -> list[str]:
 def press(ctx, prepared: Any) -> list[str]:
     """act:socialize 按下去（原本 Game._act 最後那一段，全部拆包第 57 批照原位的先後搬來；先後算行為）：先問召見、再扣體力；在召見的地點交友端出晉升奇遇（計畫 T5；
     一類一顆開著時不再換掉，正式季整合 2.10，應召照舊在「此地還能做」），這一支不排提示；其餘交友、第一次交友排一條「情誼有什麼用」（explain-1，碰到才說；說過就不再說，眼前有事件、對話時排著等）。
-    ctx._socialize 經 Game 叫：tests/core/test_explain.py 換掉的是 Game 上的名字。"""
+    ctx._socialize 經 Game 叫：tianxia/features/guide/tests/test_explain.py 換掉的是 Game 上的名字。"""
     promotion = ranks.summons_event(ctx.state, ctx.content)
     ctx.state.player.stamina -= ctx._action_costs()["socialize"]
     if promotion is not None and not precise.on(ctx.content, ctx.state.world):

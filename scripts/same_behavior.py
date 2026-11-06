@@ -3442,7 +3442,7 @@ class BattleScenario(Scenario):
                      and self.world.get_companion(cid).owner is None), None)
 
     def give_mate(self, who: str, side: str | None) -> None:
-        """名下一位同伴（招進來、放進隊伍、情誼 80），同 tests/battle/test_companions_battle._ride_in。"""
+        """名下一位同伴（招進來、放進隊伍、情誼 80），同 tianxia/features/battle/tests/test_companions_battle._ride_in。"""
         cid = self.mate_for(side)
         if cid is None:
             emit(f"{who} 名下的同伴（歷史武將同行關著）", None)
@@ -23140,10 +23140,10 @@ class PlacardScenario(HeraldScenario):
     梅子衿手上有求援與兩件書信委託；蘇硯冰押著一張通緝還沒到期；陸觀潮坐在榜前、bounty_pick 指著一張求兵還沒交。
     後半：新程式接著交那一件、跨過掛單那一刻、交差（打贏、探索、抵達）、護衛辦成求援、退押金；假人（BotRunner 官軍、黃巾各一，走 bot_policy 的
     act:bounties 與 bounty:；整季機器人 bot.take_bounties）；收季時還坐在榜前的人、開下一季。
-    測試內容沒有陣營：開場在記憶體裡補三個陣營（同 tests/ranger/test_bounties.py 的 beta_setup；前半、後半各補一次），規則關著的季走 start、step 兩格。
+    測試內容沒有陣營：開場在記憶體裡補三個陣營（同 tianxia/features/bounties/tests/test_bounties.py 的 beta_setup；前半、後半各補一次），規則關著的季走 start、step 兩格。
     掛單（head 上讀輸出量的）：season21、week7 都是每天一批（issue_day：bounty_day 動、bounty_week 是 0），week 那一格的 issue 回空；issue 的本體只有測試內容經 tick 走到。
     這一軌走不到的（讀輸出量過）：測試內容的求兵（兵器關著，交不出）、大勢人物、人物倒下、改幫、事件拜入門派、酒肆、系統通緝（名聲關著）；season21 的新手揭通緝（新手連榜都看不到）、
-    season21 開局那封信（快轉到開榜那一段時過了期，week7 走到）；任何設定下 NOT_HELD、NO_TAKE（選單上不會有那一顆，不在選單上的走 FB-162，只有 tests/gear/test_shop2.py 直接叫 _bounty）；
+    season21 開局那封信（快轉到開榜那一段時過了期，week7 走到）；任何設定下 NOT_HELD、NO_TAKE（選單上不會有那一顆，不在選單上的走 FB-162，只有 tianxia/features/gear/tests/test_shop2.py 直接叫 _bounty）；
     榜開著動身（atlas.travel_block 擋掉，departure 那一行 close_board 只清掌櫃那一句，每一軌動身都走到）；官府通緝的惡名 BEATEN_OFFICIAL（crossblade 那一軌）；
     一類一顆關著的三句討伐說法（STRIKE_PRECISE 那幾句：直接叫 how 的那一軌）。"""
 
@@ -25384,7 +25384,7 @@ class StackScenario(MapScenario):
     - leave_town：不坐在店裡、身上留著舊的掌櫃那一句、停在哪一頁、挑到哪一張、帶路的人，動身之後一起清掉（出發那幾行不看坐不坐在店裡）。
     - machines：兩位假人也疊著（談著、求見、懸賞榜、鐵匠鋪、馬市、酒肆、答話），BotRunner 三輪照先後一層一層按掉（正式內容才上線）。ended：喬問樵疊著收季：休季的選單、賽季已結束那一句。
 
-    **這一軌走不到的**（實跑數過）：序章那三支（測試內容與正式內容都不在序章：前往的「師父的話」、行動列底下回空、此地還能做的調息與體力玩法回空；tests/core/test_prologue.py 守）；
+    **這一軌走不到的**（實跑數過）：序章那三支（測試內容與正式內容都不在序章：前往的「師父的話」、行動列底下回空、此地還能做的調息與體力玩法回空；tianxia/features/guide/tests/test_prologue.py 守）；
     宴席那一層（features_core.menu 這一批不動，宴客的軌走到）；休季用列傳的票（zhuan 一軌走到）；測試內容沒有頭目戰、有所感、陣營、懸賞榜、鐵匠鋪、馬市、軍需官、打點、答話，
     擺了也一讀就收（「疊上去的」那一行照寫，下一層看得到）；week7 馬市關著（同上）。"""
 

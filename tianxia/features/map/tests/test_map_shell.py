@@ -20,7 +20,7 @@ def test_map_view_gives_the_legend_as_data_for_the_layer_shown(game):
     legend = server.look(game, lambda g: server.map_view(g, "enemies", None))["legend"]
     assert legend["layer"] == mapview.LEGEND_LAYERS["enemies"] and len(legend["icons"]) == 6
     assert all(item["svg"].startswith("<svg") and item["label"] for item in legend["icons"])
-    # 不帶設定的正式內容沒有第一季規則、沒有地盤與出陣：⚔ 那一句是遊歷的說法（出陣開著是 LEGEND_RING_SORTIE，見 tests/test_mapview.py）
+    # 不帶設定的正式內容沒有第一季規則、沒有地盤與出陣：⚔ 那一句是遊歷的說法（出陣開著是 LEGEND_RING_SORTIE，見 tianxia/features/map/tests/test_mapview.py）
     assert legend["states"] == mapview.LEGEND_STATES and legend["ring"] == mapview.LEGEND_RING and legend["strike"] == ""
     fallback = server.look(game, lambda g: server.map_view(g, "沒這層", None))["legend"]
     # 預設那一層是局勢層：沒有地盤，不多那一句誰佔著（地盤開著才有，出陣探索與地盤設計 4.3）

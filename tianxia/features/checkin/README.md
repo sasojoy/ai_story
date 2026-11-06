@@ -36,6 +36,8 @@
 
 網頁測試：`test_checkin_web.py`（江湖頁的簽到小標；整檔跑 node，沒有 node 就略過）第 61 批搬進這一包的 `tests/`，`test_for` 挑得到。
 
+另外要跑的：`tests/server/test_action_tables.py`（動作表的主人與先後，`test_for` 挑不到）。
+
 ```
 python scripts/test_for.py --base HEAD tianxia/features/checkin/actions.py
 ```

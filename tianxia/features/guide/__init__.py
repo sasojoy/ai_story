@@ -19,7 +19,7 @@ from tianxia.core.features import DefectHook, Feature, HowtoHook, SeamHook, Stat
 
 class GuideFeature(Feature):
     name = "guide"
-    web = ("guide.js", "guide.css")  # 引導的發光與閃一閃、入伍段看過軍令、玩法說明與重看序章（全部拆包第 66 批從 app.js 切出來）；路線發光、新手目標、說書人的框與樣子（全部拆包第 67 批從 main.js、style.css 切出來；.onb-dim 那幾條要蓋別人，留 style.css）；路線發光、新手目標、說書人的框與樣子（全部拆包第 67 批從 main.js、style.css 切出來；.onb-dim 那幾條要蓋別人，留 style.css）
+    web = ("guide.js", "guide.css")  # 引導的發光與閃一閃、入伍段看過軍令、玩法說明與重看序章（全部拆包第 66 批從 app.js 切出來）；路線發光、新手目標、說書人的框與樣子（全部拆包第 67 批從 main.js、style.css 切出來；.onb-dim 那幾條要蓋別人，留 style.css）
     prefix = None  # 沒有自己的選項（見模組說明）
     # content.py 照它到這一包的 content/ 載；檔名照舊。events/opening.json、events/prologue.json 是開局與序章的事件池（全部拆包第 63 批），
     # 跟 opening.json（開局第一分鐘）是不同的檔

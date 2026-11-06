@@ -526,7 +526,7 @@ def test_a_saved_draft_that_the_content_no_longer_supports_is_dropped_on_load(co
 
 @pytest.fixture
 def lock_events(monkeypatch):
-    """記錄行動鎖「拿到、放掉」的順序（同 tests/test_server.py 的 lock_events）。"""
+    """記錄行動鎖「拿到、放掉」的順序（同 tests/server/test_server.py 的 lock_events）。"""
     from tianxia.sqlite_world import SqliteWorldStore
     events = []
     real = SqliteWorldStore.action_lock
@@ -544,7 +544,7 @@ def lock_events(monkeypatch):
 
 @pytest.fixture
 def server_ready(monkeypatch):
-    """伺服器的兩支測試用（照 tests/test_server.py 的 season_already_open、fresh_server_memory、model_breaker_closed；那三個是
+    """伺服器的兩支測試用（照 tests/server/test_server.py 的 season_already_open、fresh_server_memory、model_breaker_closed；那三個是
     test_server.py 自己的 autouse，這個檔沒有）。server.CONTENT 是正式內容，content/config.json 沒寫 auto_open_first_season
     （models.py 預設 False）：不打開的話 server.game_for 開出來的世界停在籌備中，季停在籌備中時選單只剩 season:preparing，打造被拒。角色快取、登入狀態、排程那一份 Game、模型佇列、斷路器都是 server 的
     模組狀態，前後都清（不然 GAMES 裡留著上一個測試開在別的暫存資料庫上的 Game）。一定要在 server.game_for 之前生效：
@@ -565,7 +565,7 @@ def server_ready(monkeypatch):
 
 
 def _server_forger(name):
-    """伺服器上這個角色唯一的那份 Game（照 tests/test_server.py::_forger）：站在起點的城鎮、單子挑好了拳套、存進資料庫（進鎖會重讀）。
+    """伺服器上這個角色唯一的那份 Game（照 tests/server/test_server.py::_forger）：站在起點的城鎮、單子挑好了拳套、存進資料庫（進鎖會重讀）。
     呼叫它的測試要帶 server_ready（季要開著、伺服器記憶體要清過）。"""
     import server
     from tianxia.characters import open_characters

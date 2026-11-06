@@ -522,7 +522,7 @@ def test_a_stale_option_with_no_reason_of_its_own_gets_the_general_line_fb162(be
 
 def test_only_a_missing_bounty_option_gets_the_new_line_fb162(beta_setup):
     """範圍：不是懸賞的選項不在選單上，照舊「（此刻無法這麼做。）」、不是 Refused；在選單上、只是灰著的懸賞選項（bounty:empty）也照舊
-    （tests/test_bounties.py）；在選單上的真選項回一般的清單。"""
+    （tianxia/features/bounties/tests/test_bounties.py）；在選單上的真選項回一般的清單。"""
     content, world = beta_setup
     b, good, _ = _two_tabs(content, world)
     _do(content, world, "丙", lambda g: g.choose("bounty:unpick"))

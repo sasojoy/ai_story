@@ -32,7 +32,7 @@ DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "shopHtml", "openM
 HOUR = 3600
 DAY = 24 * HOUR
 T0 = DAY - 8 * HOUR + 20000 * DAY + 9 * HOUR  # 某一天台灣早上九點（同 test_mall）
-REF = re.compile(r"^[A-Za-z0-9_-]{8,64}$")  # 伺服器照用的編號（server.MALL_REF）
+REF = re.compile(r"^[A-Za-z0-9_-]{8,64}$")  # 伺服器照用的編號（包的 routes.MALL_REF）
 
 
 def run(m, script, S=None, responses=None):
@@ -40,7 +40,7 @@ def run(m, script, S=None, responses=None):
 
 
 def _click(dataset: str) -> str:
-    """送一次點擊給 app.js 的 click 處理器（同 tests/test_shop2_web.py::_click）。"""
+    """送一次點擊給 app.js 的 click 處理器（同 tianxia/features/gear/tests/test_shop2_web.py::_click）。"""
     return ("await T.docListeners.click[0]({ target: { closest: () => ({ dataset: " + dataset
             + ", classList: { contains: () => false, add() {}, remove() {} }, isConnected: false }) } });")
 

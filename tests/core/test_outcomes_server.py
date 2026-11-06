@@ -19,7 +19,7 @@ PLOW = "yc_wilds_plow"
 
 @pytest.fixture(autouse=True)
 def _server_state(monkeypatch):
-    """同 tests/test_server.py 的幾個 autouse：一季已經開打、排程不開、佇列關著、斷路器關著、伺服器記憶體從空的開始。"""
+    """同 tests/server/test_server.py 的幾個 autouse：一季已經開打、排程不開、佇列關著、斷路器關著、伺服器記憶體從空的開始。"""
     monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", True)
     monkeypatch.setattr(server.CONTENT.config, "world_tick_seconds", 0)
     monkeypatch.setattr(server, "_breaker_until", None, raising=False)

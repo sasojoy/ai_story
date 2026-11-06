@@ -1,7 +1,7 @@
 """名聲複驗（2026-10-16）：價錢後面打折的原因在網頁上怎麼畫。
 FB-296：鐵匠鋪店面「素材」頁的升階格子只寫「5 兩」，伺服器給了 cost_note（「（威震州郡・九折）」）網頁沒畫。
 FB-297：375 寬折行斷在詞中間（「九／折」「八五／折」，宛城那顆三段的最後一行只剩「折））」）：每一段「稱號・N折」包成不折行的小段
-（FB-132 的 .nb），字一個不改。真引擎的資料餵給 app.js 的假瀏覽器（tests/test_prologue_web.py、test_econ_web.py）。"""
+（FB-132 的 .nb），字一個不改。真引擎的資料餵給 app.js 的假瀏覽器（tests/web/test_prologue_web.py、test_econ_web.py）。"""
 from __future__ import annotations
 
 import html

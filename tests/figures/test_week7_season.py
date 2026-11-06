@@ -575,7 +575,7 @@ def test_admin_view_labels_and_lines(profile, monkeypatch):
 # ── 原 test_fb501_week7_words_web.py（整檔搬進來） ──
 # FB-501 的網頁那一半（7 天濃縮季 QA 第 7 件清單）：軍令卡、大事小標、季末結算卡、輿圖（天下怎麼變、總覽、地點的易手、正在看第幾段、
 # 比第幾段）、管理者（每週的事、立刻發軍令、開季、暫停、繼續、重發軍令、輪替席次）在 7 天季照段（或今日）寫；21 天季、週末照原本的字。
-# 在 node 裡跑整支 app.js（tests/webharness.py），餵伺服器真的會給的資料；沒有 node 就略過。
+# 在 node 裡跑整支 app.js（tests/kit/webharness.py），餵伺服器真的會給的資料；沒有 node 就略過。
 
 # 輿圖第三版第 4 批：總覽（overviewHtml）挪到卡底下（cardExtras）、地點的卡換成 placeCard、「天下」那一條（hudHtml）拿掉了，
 # 比第幾段改看版圖變化那一格（timelineHtml 的處數底下）

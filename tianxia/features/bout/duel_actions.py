@@ -30,7 +30,7 @@ from . import arena_rules as arena
 from . import duel_rules
 from .duel_rules import DUEL_GAMBLE_NOTE, DuelTextRequest
 
-FLEE_ID = "duel:flee"  # 抽身退走（＝ engine.DUEL_FLEE：整季機器人不按它，bot.pick 從 engine 拿）
+FLEE_ID = "duel:flee"  # 抽身退走（＝ engine.DUEL_FLEE：整季機器人不按它，bot.pick 問這一包的 bots.idle）
 
 
 def duel_start(ctx, boss: DuelBoss) -> list[str]:

@@ -1,5 +1,5 @@
 """正式季整合第 9 批：銀兩出口（設計 6.5；12.3 第 39、40、42 條）。只在 21 天季（season21 設定），週末與 14 天一個字都不變。
-五樣收進「打點」那一間店（第 9 批畫面乙，tests/test_dadian_shop.py）：這裡的測試先進店（_shop），選項 id 照舊。"""
+五樣收進「打點」那一間店（第 9 批畫面乙，tianxia/features/outlets/tests/test_dadian_shop.py）：這裡的測試先進店（_shop），選項 id 照舊。"""
 from __future__ import annotations
 
 import random

@@ -1,7 +1,7 @@
 """煉製頁的網頁那一半（企劃者 2026-10-10「合成流程也很麻煩畫面跳來跳去……武學數量很多的時候，很難選，而且合過的意境不能合，
 常常丟上去按合成才知道」）：爐裡只合意境（Joy 2026-10-21）；合不了的灰掉、寫原因、點了只說為什麼；開爐之後頁面不捲、
 結果寫在開爐底下、爐裡的東西留著。不替玩家列出合得出來的組合（企劃者同日退回：「這樣改不就變成玩家腦都不用動」）。
-資料是真的引擎給的（skillview.forge_picks），畫面在 tests/test_prologue_web.py 的假瀏覽器裡跑。"""
+資料是真的引擎給的（skillview.forge_picks），畫面在 tests/web/test_prologue_web.py 的假瀏覽器裡跑。"""
 # 畫法在 web/craft.js（全部拆包第 64 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
@@ -337,7 +337,7 @@ def test_a_merge_preview_writes_the_true_meaning_percent_after_the_fire(made):
     from tianxia import skillview
 
     game = made
-    game.content.traits.high.append(next(h for h in real_content().traits.high if h.attribute == "陽"))  # 同 tests/arts/test_fusion.py：風＋火合出陽、那一路有真意
+    game.content.traits.high.append(next(h for h in real_content().traits.high if h.attribute == "陽"))  # 同 tianxia/features/craft/tests/test_fusion.py：風＋火合出陽、那一路有真意
     v = skillview.forge_preview(game.state, game.content, game.world, ["feng", "huo"])
     assert v["kind"] == "合併" and isinstance(v["grand_pct"], int)
     card = _preview_card(game, v)

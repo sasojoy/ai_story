@@ -629,7 +629,7 @@ GAME_DELEGATE_CALLERS.update({
 GAME_IMPORTS |= {"tianxia.features.companions.talk_actions", "tianxia.features.companions.parley_actions"}
 GAME_DELEGATES |= {
     # 搬進包的 29 個方法（第 20 批審查把 _talk、_road_say 換成 choose 掛鉤）留 11 個（9 個私有）：server 與測試在叫的 dialogue_request、say_max、_checked_prepared、_parley_lists、_parley_prompt、_parley_options、
-    # _annal_talk（tests/core/test_annals.py 直接叫）；
+    # _annal_talk（tianxia/features/zhuan/tests/test_annals.py 直接叫）；
     # 核心原位叫的 _open_dialogue（交友與求見開口，第 21 批）、_last_talk_line（場景文字）、_parley_road_option（路上的選單）；
     # 出陣包經 ctx 問的 _parley_backing_here。其餘 16 個（_dialogue_unavailable、_prepared_turn、_parley_finish……）只有包裡叫，沒有委派
     "dialogue_request", "say_max", "_checked_prepared", "_parley_lists", "_parley_prompt", "_parley_options", "_annal_talk", "_open_dialogue",
@@ -702,7 +702,7 @@ GAME_DELEGATE_CALLERS.update({
 # cultivation（全部拆包第 23 批「修練」：改練、練成、意境裝卸、熔煉、絕學與破境丹、破境卡、傳功、配點搬進修練包 tianxia/features/cultivation/；計畫
 # docs/superpowers/plans/2026-11-01-修練包-第1批.md 1.6）：這一批加的集中在這一段（並行的拆包線不跟別人的行穿插；拿掉的在原處）
 # 22 個動作（actions）、11 個修練頁的唯讀資料（view）的一行委派；原本那兩行 `from . import ascend`、`from . import (..., chuangong, ...,
-# cultivation, ...)` 現在是別名，engine 不再用，拿掉。MELT_MANY_PROLOGUE（序章裡批量熔煉那一句）搬進包，tests/core/test_prologue.py 照舊從 engine 拿
+# cultivation, ...)` 現在是別名，engine 不再用，拿掉。MELT_MANY_PROLOGUE（序章裡批量熔煉那一句）搬進包，tianxia/features/guide/tests/test_prologue.py 照舊從 engine 拿
 GAME_IMPORTS |= {"tianxia.features.cultivation.actions", "tianxia.features.cultivation.view"}
 GAME_DELEGATES |= {
     # server（MENXIA_ACTIONS、menxia_view、main_view 的境界卡、/api/do/allocate、破境卡那一句的三段式）、假人（bot、bot_policy）、測試在叫的：
@@ -1051,7 +1051,7 @@ GAME_DIRECT.update({
 # 28 個方法搬進 spar_actions、discuss_actions、raid_actions，Game 留 13 個一行委派（論武 4、截殺 9；切磋沒有外面的呼叫端）。第 37 批那一段的格一個字不改，
 # 這一批的增減集中在這一段（並行的拆包線不跟別人的行穿插）：_PEERS_PENDING 的 7 筆（GAME_DIRECT）與 _PEERS_38 的 6 筆（GAME_DELEGATE_CALLERS）隨方法搬走拿掉；
 # engine 對 invites、social 的過渡 import 沒人用了；_pair_left 沒人叫了（切磋、論武包內直接叫 pair_actions），委派拿掉。engine 多 import 論武、截殺兩個動作檔
-# （13 個委派用；DISCUSS_SAME、_refusal 那一行是 tests/arts/test_discuss.py 從 engine 拿的過渡）。結伴同行（_join、join_refusal）是第 48 批的，不動。
+# （13 個委派用；DISCUSS_SAME、_refusal 那一行是 tianxia/features/peers/tests/test_discuss.py 從 engine 拿的過渡）。結伴同行（_join、join_refusal）是第 48 批的，不動。
 GAME_IMPORTS -= {"tianxia.features.peers.invites", "tianxia.features.peers.social"}
 GAME_IMPORTS |= {"tianxia.features.peers.discuss_actions", "tianxia.features.peers.raid_actions"}
 GAME_DELEGATES -= {"_pair_left"}
@@ -1167,7 +1167,7 @@ GAME_IMPORTS |= {
 GAME_DELEGATES |= {
     # server（MAIN_ACTIONS 的 smith_forge、smith_sell、smith_upgrade、smith_furnace，MENXIA_ACTIONS 的 repair_item、temper_item、name_divine、bind_art，
     # 包的 /api/smith_line 路由）、假人（bot.trade_at_smith、bot.keep_book_names）、測試在叫的；_smith_options 是核心原位選單叫的；
-    # _smith_clue 是測試換掉的（包裡經 ctx 叫，services.py 二、查詢服務 # smithy）；_smith 是 tests/gear/test_shop2.py 直接叫的（計畫 1.1 寫沒有呼叫端，量錯了一個）
+    # _smith_clue 是測試換掉的（包裡經 ctx 叫，services.py 二、查詢服務 # smithy）；_smith 是 tianxia/features/gear/tests/test_shop2.py 直接叫的（計畫 1.1 寫沒有呼叫端，量錯了一個）
     "_smith_options", "_smith", "_smith_clue", "smith_line", "smith_forge", "smith_furnace", "smith_sell", "smith_upgrade",
     "repair_item", "temper_item", "name_divine", "bind_art",
 }
@@ -2345,7 +2345,7 @@ for _pair in (("conquest", "seal_acts"), ("figures", "seal_acts"), ("figure_life
 # 事件五格、世界層四格、你這一步兩格、叛投 stranded 那一格改由包登記。
 GAME_IMPORTS |= {"tianxia.features.bounties.actions"}
 GAME_DELEGATES |= {
-    # 核心原位選單叫的（_bounty_options）、tests/gear/test_shop2.py 直接叫的（_bounty，同 _smith）、截殺與設伏經 ctx 叫的（_raid_bounty，services.py 二 # bounties）
+    # 核心原位選單叫的（_bounty_options）、tianxia/features/gear/tests/test_shop2.py 直接叫的（_bounty，同 _smith）、截殺與設伏經 ctx 叫的（_raid_bounty，services.py 二 # bounties）
     "_bounty_options", "_bounty", "_raid_bounty",
     # 核心原位叫的（下面 GAME_DELEGATE_CALLERS）
     "_bounty_deliver", "_bounty_post_auto", "_bounty_stale", "_bounty_status",
@@ -2490,7 +2490,7 @@ ATLAS_PACKAGE_FIELDS |= {"duel", "arena", "picking_arena", "pending_companion", 
 
 # core_seams（全部拆包第 57 批「分派與標題收接縫」；計畫 docs/superpowers/plans/2026-11-06-分派標題收接縫-第57批.md 四、五）：這一批的增減集中在這一段（核心批，沒有新包）。
 # _act 其餘的子動詞、_action_title 那幾支、_fight_squad 的挑戰本人接進 Verb（帶後綴的走 tail_*）；choose「選單上、不建紀錄」那幾支換成 MENU_ORDER["quick"]。GAME_DIRECT 維持 1。
-# 只剩這幾處呼叫的委派拿掉（tests、scripts、server、bot 三支、包都查過）；留著的：_socialize（tests/core/test_explain.py 換）、_challenge（scripts/measure_challenge.py 換）、
+# 只剩這幾處呼叫的委派拿掉（tests、scripts、server、bot 三支、包都查過）；留著的：_socialize（tianxia/features/guide/tests/test_explain.py 換）、_challenge（scripts/measure_challenge.py 換）、
 # _figure_squad（test_rise 等直接叫）、_battle_choose（test_engine 等直接叫）、_rest（scripts/same_behavior.py 直接叫）
 GAME_DELEGATES -= {
     "_recruit", "_recruit_one", "_rank2", "_rank_action", "_take_convoy", "_silver_act", "_rank2_action", "_seal_act", "_duel_act", "_arena_act", "_errand_ask", "_sense_canvas",

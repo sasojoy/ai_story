@@ -1,5 +1,5 @@
 """玩法說明（explain-1）的網頁部分：行動列底下那幾行、體力條點開的說明、設定抽屜的「玩法說明」。
-照 tests/test_prologue_web.py 的做法把整支 app.js 放進 node 的假瀏覽器，餵它真的引擎給的 /api/main；沒有 node 就略過。"""
+照 tests/web/test_prologue_web.py 的做法把整支 app.js 放進 node 的假瀏覽器，餵它真的引擎給的 /api/main；沒有 node 就略過。"""
 from __future__ import annotations
 
 import random
@@ -298,7 +298,7 @@ def test_a_talked_out_lone_audience_cell_says_so_briefly_and_the_tap_names_the_m
 
     content = real_content("week7")
     content.config.auto_open_first_season = True
-    content.config.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
+    content.config.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/core/test_precise_actions.py，設計 8.4）
     game = Game.new(content, "沈浪", rng=random.Random(0))
     game.client = None
     p = game.state.player

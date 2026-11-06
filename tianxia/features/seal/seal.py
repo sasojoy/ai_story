@@ -88,7 +88,7 @@ def shard_text(content: Content, shard_id: str) -> str:
 
 def copy_heirloom(state: GameState, content: Content, reg: SealRegistry | None) -> None:
     """抄本照登記重抄（7.4）：登記說是你的就寫上，不是（或碎片關著、reg 是 None）就清掉；重抄幾次結果都一樣。順便設本人氣血上限的
-    倍數（螭首）。碎片關著時呼叫端傳 None、不讀資料庫（Game._copy_heirloom）。"""
+    倍數（螭首）。碎片關著時呼叫端傳 None、不讀資料庫（包的 actions.copy_heirloom）。"""
     p = state.player
     shard = shard_of(reg, p.name) if reg is not None and on(content) else None
     if shard is None or shard.id not in content.seal:
@@ -510,7 +510,7 @@ def sink(reg: SealRegistry, season: int, seen: dict[str, float | None], now: flo
 # core_effects（全部拆包第 32 批「效果與叛投掛鉤」）：rules.apply_effect 的兩格（符文殘片、舊鏈的玉璽碎片），原本那兩段逐字搬；
 # 第 27 批起由玉璽包登記那兩格（SealFeature.effects()；原本核心 rules._EFFECT_CORE 延後 import 代叫）。先後在 core/features.py 的 EFFECT_ORDER。
 # 改這兩格時 test_for 往上找停在核心的 rules，挑不到釘住它們的測試：另外跑 tests/core/test_rules.py（舊鏈的玉璽碎片 5 條）、
-# tests/figures/test_promotions_huang.py（符文殘片）、tests/seal/test_seal.py（rules.py 模組說明「改效果那幾格要跑的測試」）。
+# tests/figures/test_promotions_huang.py（符文殘片）、tianxia/features/seal/tests/test_seal.py（rules.py 模組說明「改效果那幾格要跑的測試」）。
 
 
 def effect_runic(r: EffectRun) -> list[str]:

@@ -1,4 +1,4 @@
-"""FB-138：修練頁「裝備」那一塊，每一段都要說得出「哪裡買得到、哪裡得來」——新角色身上什麼都沒有時，網頁畫一塊精簡的（見 tests/test_weapons_web.py），
+"""FB-138：修練頁「裝備」那一塊，每一段都要說得出「哪裡買得到、哪裡得來」——新角色身上什麼都沒有時，網頁畫一塊精簡的（見 tests/web/test_weapons_web.py），
 地點資料出在 skillview.gear_rows 每一段的 where：鐵匠鋪看「城鎮」標籤、馬市看「馬市」標籤、寶物寫來源，一律從內容讀，不寫死地名。"""
 from __future__ import annotations
 

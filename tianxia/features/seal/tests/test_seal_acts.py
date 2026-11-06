@@ -29,7 +29,7 @@ pytestmark = pytest.mark.whole_content
 
 ACTS = {"xuanniu": "yinjiang", "yunzhuan": "banzhao", "chenglu": "chenglu", "chizhang": "chuanxi", "guixin": "shouxin"}
 NUMBERS = {"uses": 2, "gap_days": 3, "days": 1, "sense_points": 10, "cultivate": 1.2, "stamina": 1.5, "push": 1.25, "affinity": 2.0,
-           "hold_hours": 12, "mend_days": 1}  # 後兩個是第 3 批（鎮地、補缺；tests/test_seal_acts3.py）
+           "hold_hours": 12, "mend_days": 1}  # 後兩個是第 3 批（鎮地、補缺；tianxia/features/seal/tests/test_seal_acts3.py）
 
 
 def acts_on(content):
@@ -45,7 +45,7 @@ def acts_on(content):
 @pytest.mark.slow
 def test_the_real_content_gives_seven_shards_their_acts():
     """設計第三章：玄紐引將、雲篆頒詔、承露承露、赤璋傳檄、歸心收心；螭首鎮地、金角補缺（第 3 批接上：這一條原本鎖「這兩片沒有行動」，
-    照設計第七章第 3 條翻過來，第 3 批的測試在 tests/test_seal_acts3.py）。數字是【預設】。"""
+    照設計第七章第 3 條翻過來，第 3 批的測試在 tianxia/features/seal/tests/test_seal_acts3.py）。數字是【預設】。"""
     c = real_content()
     assert {sid: s.act for sid, s in c.seal.items() if s.act} == {**ACTS, "chishou": "zhendi", "jinjiao": "bujue"}
     assert c.config.seal.revamp.acts.model_dump() == pytest.approx(NUMBERS)
@@ -241,7 +241,7 @@ def _use(c, w, name="懷璽", target="", side="", now=10.0):
 
 
 def _uses(w):
-    return w.seal_state().registry.uses  # FB-695：起用另記一欄，不在 history（tests/seal/test_seal.py 的 FB-695 那一段）
+    return w.seal_state().registry.uses  # FB-695：起用另記一欄，不在 history（tianxia/features/seal/tests/test_seal.py 的 FB-695 那一段）
 
 
 @pytest.mark.slow

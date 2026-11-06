@@ -1250,7 +1250,7 @@ NAME = "沈浪"
 
 def _content(hide: float = 1.0, find: float = 1.0, profile: str = "season21"):
     """正式內容（21 天季）、領地爭奪打開；hide／find 是這一批的兩個機率（1.0＝一定藏、一定撿到，好測）。"""
-    c = no_jianfa(conquest_rules(real_content(profile)))  # 這一份直接問探索撿碎片那一下（_explore_here）；出門一趟撿碎片在 tests/test_explore_one.py
+    c = no_jianfa(conquest_rules(real_content(profile)))  # 這一份直接問探索撿碎片那一下（_explore_here）；出門一趟撿碎片在 tianxia/features/explore/tests/test_explore_one.py
     c.config.seal.cache.hide_chance, c.config.seal.cache.find_chance = hide, find
     return c
 

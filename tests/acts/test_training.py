@@ -17,7 +17,7 @@ NOW = MON + 10 * HOUR
 
 
 def _game(at="yingchuan", level=None, name="沈浪"):
-    c = classic_explore(real_content("week7"))  # 城外分級（減法季探索一顆開著時沒有，tests/test_explore_one.py）
+    c = classic_explore(real_content("week7"))  # 城外分級（減法季探索一顆開著時沒有，tianxia/features/explore/tests/test_explore_one.py）
     c.config.train_event_chance = 0.0
     store = open_world()
     store.seed_first_season(c)

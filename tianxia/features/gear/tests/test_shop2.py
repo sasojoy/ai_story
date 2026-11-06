@@ -17,7 +17,7 @@ pytestmark = pytest.mark.whole_content
 
 LINES = {shop: {key: [f"{shop}說{key}之一。", f"{shop}說{key}之二。"] for key in keys} for shop, keys in shopview.SITUATIONS.items()}
 NOW = 1000.0
-WEEK = 10_000_000.0  # 測試裡的懸賞一律掛到很久以後（同 tests/test_bounties.py）
+WEEK = 10_000_000.0  # 測試裡的懸賞一律掛到很久以後（同 tianxia/features/bounties/tests/test_bounties.py）
 SWORD = dict(id="兵:1", slot="weapon", name="試劍", kind="劍", attribute="剛", tier=1, quality="下品")
 SCOUT = dict(kind="scout", faction="guan", silver=10, deeds=2, location="lake")
 STRIKE = dict(kind="strike", faction="guan", silver=20, deeds=3, location="lake", squad="thug")
@@ -29,7 +29,7 @@ def _horse(hid="騎:1", name="青驄駒", tier=2, quality="中品", edge=100):
 
 
 def _market(content, world, silver=200, horse=None, name="試馬"):
-    """坐騎開著、測試內容的小鎮臨時加上「馬市」標籤（同 tests/test_mounts.py::_market_game）、店面的字照 LINES；
+    """坐騎開著、測試內容的小鎮臨時加上「馬市」標籤（同 tests/gear/test_mounts.py::_market_game）、店面的字照 LINES；
     背包：精鐵砂 ×2（一階，餵得了）。走進馬市（act:market）。"""
     from tianxia.engine import Game
 
@@ -48,7 +48,7 @@ def _market(content, world, silver=200, horse=None, name="試馬"):
 
 
 def _board(content, world, posts=(), name="試榜", faction=None):
-    """劇本兩個陣營（官軍 join_at 小鎮、黃巾 join_at 湖邊，同 tests/test_bounties.py 的 setup）、兵器開著（求兵要）、店面的字照 LINES。
+    """劇本兩個陣營（官軍 join_at 小鎮、黃巾 join_at 湖邊，同 tianxia/features/bounties/tests/test_bounties.py 的 setup）、兵器開著（求兵要）、店面的字照 LINES。
     posts 有東西時先把開季自動掛的單拿掉、照順序貼這幾張（同 test_bounties._post，掛到很久以後），直接貼在這一份 Game 的季上再存季；
     沒給就照季上原本的（另一個角色先貼好的）。走進懸賞榜（act:bounties）。"""
     from tianxia import rules

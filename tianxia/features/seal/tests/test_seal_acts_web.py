@@ -1,6 +1,6 @@
 """玉璽碎片改版第 2 批的網頁（企劃者 2026-10-21 挑了乙；草圖 docs/superpowers/specs/2026-10-21-玉璽碎片改版-草圖/第2批/）：修練頁傳承那一列的鈕、
 選目標的那一層（店面樣式：招牌、剩幾次、一人一列、灰掉寫原因、散人照店面頁籤挑一邊）、問句、送 /api/do/seal_use；江湖頁碎片卡那一行提醒。
-餵真的引擎給的 /api/main（正式內容、21 天季）給 app.js（tests/test_prologue_web.py 的假瀏覽器）。沒有 node 就略過。
+餵真的引擎給的 /api/main（正式內容、21 天季）給 app.js（tests/web/test_prologue_web.py 的假瀏覽器）。沒有 node 就略過。
 窄螢幕不橫捲要真的排版：假瀏覽器量不到，這裡守 CSS 原文，幾何在瀏覽器裡量（375／360／320，數字寫在草圖的 README）。"""
 # 畫法在 web/seal.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
@@ -218,7 +218,7 @@ def test_the_text_is_escaped():
 
 def test_the_layer_css_follows_the_shop_and_the_640_column():
     """窄螢幕不橫捲靠店面那一層既有的排法（.shop-row 是 flex、名字那一格可以縮、鈕不折），電腦寬照遊戲那一欄 640px（FB-225）；
-    自己寫的字級一律 em（店面那一段不必補電腦寬的雙胞胎，tests/test_desktop_type.py）。"""
+    自己寫的字級一律 em（店面那一段不必補電腦寬的雙胞胎，tests/core/test_desktop_type.py）。"""
     assert ".shop-seal .seal-row .winfo { min-width: 0; }" in CSS
     seal_rules = [line for line in CSS.splitlines() if ".shop-seal" in line]
     assert seal_rules and not any(re.search(r"font(-size)?:[^;]*\d+px", line) for line in seal_rules if "shop-layer.shop-seal" not in line)
@@ -228,7 +228,7 @@ def test_the_layer_css_follows_the_shop_and_the_640_column():
     assert CSS.index(".shop-layer.shop-seal {") > first  # 電腦寬那一段以後（test_bounty_tags 照第一個 641px 切手機那一半）
 
 
-# ── 第 3 批：鎮地、補缺（領地爭奪打開的 21 天季；tests/test_seal_acts3.py 的建法）──
+# ── 第 3 批：鎮地、補缺（領地爭奪打開的 21 天季；tianxia/features/seal/tests/test_seal_acts3.py 的建法）──
 
 def _land(shard, *, side, at):
     from test_seal_acts3 import _holder as land_holder

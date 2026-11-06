@@ -1,5 +1,5 @@
 """裝備的網頁那一半（兵器設計 3.6、裝備四欄設計 2.5）：修練頁的「裝備」塊——每一欄一段，身上那件、裝備庫每件一行與「換上」鈕；字都跳脫；沒東西就不畫。
-餵真的引擎給的 /api/main 與 /api/menxia 給 app.js（tests/test_prologue_web.py 的假瀏覽器）。沒有 node 就略過。"""
+餵真的引擎給的 /api/main 與 /api/menxia 給 app.js（tests/web/test_prologue_web.py 的假瀏覽器）。沒有 node 就略過。"""
 # 畫法在 web/gear.js（全部拆包第 65 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 

@@ -1,7 +1,7 @@
 """鐵匠鋪的「神器」頁（鐵匠鋪與合成流程 3.8，E 批網頁；企劃者 2026-10-29 三張對比圖選丙、「乙 守 5.10」）：
 輪替季才有這一頁與架上那一行；上半「江湖已見」只列這一季已經有人打出原品的（加上只有自己看得到的「鑄譜上有・尚無人打出」），
 下半收藏冊每一件一格，沒人打出過的畫「？」、不帶任何資料。這一季輪到、還沒人打出、自己也沒打中過的那一件，畫面上不出現它的名字。
-資料是真的引擎給的（shopview.divine_view，test_shop2 的 _divine_ctx），畫面在 tests/test_shop_web.py 的假瀏覽器裡跑。"""
+資料是真的引擎給的（shopview.divine_view，test_shop2 的 _divine_ctx），畫面在 tianxia/features/smithy/tests/test_shop_web.py 的假瀏覽器裡跑。"""
 # 畫法在 web/smithy.js（全部拆包第 65 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 

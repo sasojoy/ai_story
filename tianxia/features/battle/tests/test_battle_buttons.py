@@ -1,6 +1,6 @@
 """決戰三招的按鈕（決戰改版 1 Task 4）：引擎給的標籤是「選項名（強攻・82 分）」，網頁把括號裡的招與分數拆到按鈕右邊的小字，
 名字長（十一、十二個字）時才不會把一顆按鈕折成兩行（375px 上一顆按鈕的字只有約 285px）。
-web/app.js 沒有建置步驟：這裡把那個小函式從原始碼切出來交給 node 跑（tests/webharness.py），看出來的 HTML。沒有 node 就略過。"""
+web/app.js 沒有建置步驟：這裡把那個小函式從原始碼切出來交給 node 跑（tests/kit/webharness.py），看出來的 HTML。沒有 node 就略過。"""
 from __future__ import annotations
 
 import re

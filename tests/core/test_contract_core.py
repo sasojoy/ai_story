@@ -991,7 +991,7 @@ def _every_bus_slot(calls):
 
 
 def _won(tier="大勝"):
-    """這一場照 tier 打完（team.fight 帶 tier，同 tests/battle/test_drill_gates_engine.py）。"""
+    """這一場照 tier 打完（team.fight 帶 tier，同 tianxia/features/explore/tests/test_drill_gates_engine.py）。"""
     from unittest import mock
 
     from tianxia import team

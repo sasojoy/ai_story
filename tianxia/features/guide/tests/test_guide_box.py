@@ -100,7 +100,7 @@ def test_the_box_key_is_the_step_not_the_sentence(game):
 def test_a_pending_event_blanks_the_steps_short_line_so_the_collapsed_box_shows_the_pending_sentence(game, monkeypatch):
     """FB-076：序章之外的步驟也可能寫了收起來那一行（TutorialStep.line，例：「師父：回『江湖』按『探索』」）。事件待處理時框上的話換成
     「先把眼前的「…」了結」，收起來那一行也得跟著換——不然收著的框寫著這一步的短提示、跟事件擋著路互相矛盾。所以待處理時 line 送空字串
-    （網頁收起來那一行是 `line || text`），了結之後原樣回來。序章自己在事件出現時整個框都不畫（tests/test_prologue.py），不歸這裡。"""
+    （網頁收起來那一行是 `line || text`），了結之後原樣回來。序章自己在事件出現時整個框都不畫（tianxia/features/guide/tests/test_prologue.py），不歸這裡。"""
     monkeypatch.setattr(game.content.tutorial.steps[1], "line", "說書人：去湖邊")
     game.state.player.tutorial_step = 1
     assert game.guide_box()["line"] == "說書人：去湖邊" and game.guide_box()["text"] == STEP_TWO

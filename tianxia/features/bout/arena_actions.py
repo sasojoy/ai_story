@@ -11,7 +11,7 @@ arena_sign）、報名與挑擂的標題（choose 掛鉤 → arena_title）、�
   補送：deliver_arena
 
 留在 Game 的經 ctx：單打服務（_player_hp_and_cap、_battle_power、_battle_scores、_battle_role、_file_battle）、記錄（_write、_save_season）、
-回體丹那一套的今天（_pill_day）、模型（client、_quick_client）、形象包的 arena_look、arena_move（查詢服務；這一包的 tests/test_arena.py
+回體丹那一套的今天（_pill_day）、模型（client、_quick_client）、形象包的 arena_look、arena_move（查詢服務；這一包的 tianxia/features/bout/tests/test_arena.py
 換掉 Game.arena_look）；這一包被換掉的委派 _arena_bare（tianxia/features/seal/tests/test_seal_revamp_hidden.py 換掉它）也經 ctx。
 """
 from __future__ import annotations

@@ -110,7 +110,7 @@ def test_games_on_the_server_carry_the_memory_and_plain_games_do_not(monkeypatch
     assert _game().odds_memo is None
 
 
-# ── 網頁（node 跑整支 app.js，同 tests/web/test_map_web.py）──
+# ── 網頁（node 跑整支 app.js，同 tianxia/features/map/tests/test_map_web.py）──
 # 一張到底（企劃者 2026-10-30）：一張能自由拖縮的天下，拖縮的每一幀只換兩層的 transform；這幾條照新的函式守同一件事
 # （拖的時候不換游標、會跳的東西在字那一層、藏起來不收點擊不跳、登出清乾淨、切分頁地圖常駐）
 NAMES = ["S", "pageMap", "groundSvg", "marksHtml", "drawMarks", "mapReady", "setMapDrawer", "renderPage", "forgetMap", "enter"]

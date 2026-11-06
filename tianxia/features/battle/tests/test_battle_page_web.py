@@ -262,7 +262,7 @@ def test_the_button_label_is_escaped(on):
 #
 # 現在 web/app.js 的 musterJoins 也認 battle:escort:，挑同伴那一步畫在場景卡戰場名字那一行底下（跟加入同一個位置），一顆一行
 # （鈕上寫份量與氣血，四顆擠一排放不下），旁邊那一小句說挑了才算加入（MUSTER_NOTE.escort，待 joy 潤）；摺疊裡不再列。
-# 晚到（battle:join_late）挑同伴也一樣。網頁照 tests/test_jianghu_page_web.py 的做法用真實內容、真的 /api/main。
+# 晚到（battle:join_late）挑同伴也一樣。網頁照 tests/web/test_jianghu_page_web.py 的做法用真實內容、真的 /api/main。
 
 PICK = re.compile(r'data-id="(battle:escort:\w+)"')
 

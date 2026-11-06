@@ -9,7 +9,7 @@
   mingtie_actions.py：名帖的動作與管理者看檢舉、撤下、放回——原本是 Game 上的 31 個方法（Game 留一行委派）
 - routes.py：/api/peer、/api/peer/act、/api/mingtie、/api/mingtie/{op}；bots.py：假人收到打招呼、結伴邀請、名帖的回法與做名帖、遞名帖、答切磋、答論武、截殺
 - 玩家互動二（全部拆包第 38 批）：spar.py／spar_actions.py（切磋）、discuss.py／discuss_actions.py（論武，三段式首創取名的 A 段 request、C 段 discuss；B 段殼的接線
-  server.prepare_peer、screen_peer 留在 server.py，手冊 G10）、raid.py／raid_actions.py（截殺，含策馬脫身）——卡的模組原本是 tianxia/spar.py、discuss.py、raid.py（那三個名字留成別名），
+  第 69 批從 server.py 搬進 routes.py 的 prepare_peer、screen_peer，手冊 G10）、raid.py／raid_actions.py（截殺，含策馬脫身）——卡的模組原本是 tianxia/spar.py、discuss.py、raid.py（那三個名字留成別名），
   動作原本是 Game 上的 28 個方法（Game 留 13 個一行委派）
 
 邀請框是一個前綴三種意思：invite:yes|no|cancel:<編號> 是打招呼（挑釁）、名帖、切磋、論武、結伴同行共用的選項。這一包拿前綴與 choose，

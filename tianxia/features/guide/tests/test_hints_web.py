@@ -1,7 +1,7 @@
 """碰到才說的網頁那一半（新手引導計畫三 Task 2；Task 1 審查 I-1）。
 
 提示是在動作做完的那一下上框、記說過、記進江湖紀錄的；修練失敗、改練、合成、熔煉這些動作都在修練頁、煉製頁做，可是網頁以前只在江湖頁畫對話框
-（修練、煉製頁只在序章畫師父）。這裡把整支 app.js 放進 node 的假瀏覽器（見 tests/test_prologue_web.py 的 DRIVER），餵**真的**引擎給的
+（修練、煉製頁只在序章畫師父）。這裡把整支 app.js 放進 node 的假瀏覽器（見 tests/web/test_prologue_web.py 的 DRIVER），餵**真的**引擎給的
 /api/main 與 /api/menxia：提示的框要畫在修練頁與煉製頁最上面、「知道了」按下去框就沒了；說書人的步驟、結語、入伍段的框仍只在江湖頁。
 沒有 node 就略過。"""
 from __future__ import annotations

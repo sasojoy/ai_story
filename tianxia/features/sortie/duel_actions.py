@@ -9,7 +9,7 @@ ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的
 照舊，是包裡的 duel_rules、rules）。函式名＝原本的方法名去掉前導底線，兩個例外：`_sortie_duel_tick` 是 `duel_tick`（跟
 `sortie_duel_tick` 分開）、`_duel_power_of` 是 `duel_power_of(state, content, world)`（原本就是 staticmethod）。Game 上留 16 個一行委派
 （server、假人、測試與核心原位還在叫：三處結算、選單那一格、choose 最前面、行動列底下那一行、_act、守勢行動、輿圖）。包裡互相叫直接叫
-這裡與 actions 的函式；只有 `sorties_left` 經 ctx 叫（tests/bots/test_bot_policy_conquest.py 換掉 Game.sorties_left，換掉的才打得到）。
+這裡與 actions 的函式；只有 `sorties_left` 經 ctx 叫（tianxia/features/sortie/tests/test_bot_policy_conquest.py 換掉 Game.sorties_left，換掉的才打得到）。
 一場結算開好幾份 Game（duel_party → ctx._load_kin，存回 ctx._save_kin）：別人那一份上做的直接叫這裡的函式（duel_void(g, …)、
 duel_report(g, …)），軍令記在 attacker、defender 那兩份上（_order_credit，服務清單的過渡）。
 """

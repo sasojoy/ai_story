@@ -42,7 +42,7 @@ class _PicksEvent(random.Random):
 
 def test_socializing_at_the_generals_mansion_reaches_yuanshaos_meeting(game):
     """大將軍府有何進、袁紹兩位人物，也有袁紹的結識事件：交友只走事件、從不開口，所以結識事件發得出來。"""
-    game.state.world.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
+    game.state.world.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/core/test_precise_actions.py，設計 8.4）
     game.state.player.location = "dajiangjun_fu"
     game.state.player.stats["fame"] = 99  # 兩位都見得到也一樣：交友不找人
     game.state.player.fortune = True

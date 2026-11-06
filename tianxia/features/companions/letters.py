@@ -263,7 +263,7 @@ def decline(state: GameState, content: Content, letter_id: int) -> list[str]:
     return [DECLINED.format(who=_name(content, letter.sender))]
 
 
-# ── 模型照他的口氣重寫（鎖外；server.write_letter）────────────
+# ── 模型照他的口氣重寫（鎖外；包的 routes.write_letter）────────────
 
 
 class LetterNote(BaseModel):

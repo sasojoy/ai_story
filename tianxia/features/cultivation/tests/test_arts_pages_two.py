@@ -1,6 +1,6 @@
 """修練頁與煉製頁的第二批修整（arts-polish-2：QA 實機走一遍的 FB-081～085）。
 一節一個 FB：引擎與伺服器的部分直接跑；web/app.js 沒有建置步驟、也沒有前端測試框架，網頁的部分把函式從原始碼切出來
-交給 node 跑（不相干的畫法換成一行的假貨；node 由 tests/webharness.py 跑），沒有 node 就略過那幾個。"""
+交給 node 跑（不相干的畫法換成一行的假貨；node 由 tests/kit/webharness.py 跑），沒有 node 就略過那幾個。"""
 # 畫法在 web/cultivation.js、web/craft.js（全部拆包第 64 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 # 畫法在 web/guide.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations

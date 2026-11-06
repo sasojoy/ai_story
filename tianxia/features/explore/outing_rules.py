@@ -251,7 +251,7 @@ def wave_beat(names: list[str], rng: random.Random) -> OutingBeat | None:
     return OutingBeat(kind=TRACE, text=WAVE_LINE.format(name=rng.choice(sorted(names))))
 
 
-# ── 遊記（設計稿第七節）：結算卡上的帳一個字都不靠模型；底下三四句遊記是模型寫的，鎖外三段式（server.outing_tale），
+# ── 遊記（設計稿第七節）：結算卡上的帳一個字都不靠模型；底下三四句遊記是模型寫的，鎖外三段式（包的 routes.outing_tale），
 # 不准有數字、不准提遊戲；叫不動、不合用就留空，畫面用照每一段拼的模板（template_tale）。只有自己看得到，可以收進行狀 ──
 
 def zh_count(n: int) -> str:

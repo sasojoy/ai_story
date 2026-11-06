@@ -18,7 +18,7 @@ from tianxia.world_state import fresh_season, stamp_season
 
 
 def _game(faction="guan", at="yingchuan", classic=False, profile="week7"):
-    c = real_content(profile)  # 地盤拔河的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開；翻地的輿圖資料在 tests/test_world_map.py）
+    c = real_content(profile)  # 地盤拔河的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開；翻地的輿圖資料在 tianxia/features/map/tests/test_world_map.py）
     c.config.auto_open_first_season = True
     if classic:
         classic_rules(c)
@@ -798,7 +798,7 @@ def test_the_default_schedules_do_not_move(profile):
 
 # ── FB-258（2026-10-31 從 tests/map/test_map_qa_fb.py 併進來）────────
 # 輿圖升級 QA 的回饋（docs/superpowers/feedback/試玩回饋.md 的 FB-258～264，PM 2026-10-15 定的修法）：疊層的資料那一半。
-# 網頁那一半在 tests/test_map_web.py。正式內容、週末設定。
+# 網頁那一半在 tianxia/features/map/tests/test_map_web.py。正式內容、週末設定。
 
 
 def _game_fb258(faction="guan", at="yingchuan"):

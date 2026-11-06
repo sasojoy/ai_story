@@ -72,7 +72,7 @@ def _guide(script, scene="", **extra):
 # （離開大區的「這回合不出手」、倒下的「你已經倒下」）。兩個正規式（BATTLE_ROUND、BATTLE_MINE）寫在 app.js、這裡用真的戰場驗：
 # 戰鬥那條線（FB-109、FB-113）改了 _battle_scene_text 的寫法，這裡就紅。
 #
-# 網頁用真實內容（週末設定）的宛城之戰、真的 /api/main，照 tests/test_prologue_web.py 的做法把整支 app.js 放進 node
+# 網頁用真實內容（週末設定）的宛城之戰、真的 /api/main，照 tests/web/test_prologue_web.py 的做法把整支 app.js 放進 node
 # （scripts/test_for.py 改到 app.js 時靠這個檔名挑到這裡）。
 
 BATTLE = "wancheng_jia"  # 宛城之戰（南陽）
@@ -176,7 +176,7 @@ def _sided(html):
 # renderPage() 也一樣。現在摺疊的開合記在 S.here（玩家自己開關的、這一處），重畫照它補回。附帶 guide-3b 審查 Minor 11：入伍段第一道軍令
 # 那一步（框上帶 glow act:duty）摺疊本來每次重畫都自動打開、跟收起它的玩家打架——現在每一處只在那一步開頭自動打開一次，之後照玩家的。
 #
-# 網頁沒有建置步驟也沒有瀏覽器：照 tests/test_prologue_web.py 的做法，把整支 app.js 放進 node 的假瀏覽器，餵它真的引擎給的 /api/main，
+# 網頁沒有建置步驟也沒有瀏覽器：照 tests/web/test_prologue_web.py 的做法，把整支 app.js 放進 node 的假瀏覽器，餵它真的引擎給的 /api/main，
 # 用假的 toggle 事件當玩家點開、收起摺疊，看重畫出來的 HTML。假 DOM 裡 details 的開合就是 HTML 裡有沒有 open：驗的是「重畫畫出什麼」。
 
 # 驅動程式共用的小工具：fold() 讀頁面上那個摺疊現在畫成開著（true）、收著（false）、沒畫（null）；toggle(open) 送一個玩家點開／收起

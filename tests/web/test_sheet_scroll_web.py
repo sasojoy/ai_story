@@ -5,7 +5,7 @@
 修法：暗處的滾輪照樣捲抽屜（點暗處照舊關掉抽屜）；管理者的抽屜頂上多一顆「管理者工具 ›」（2026-11-01 起連到自己一頁的管理頁 /admin）。
 審查 M-3：滾輪只掛在暗處（畫抽屜時），不掛整份文件；ctrl＋滾輪（縮放）不攔。審查 M-2：抽屜開著時重畫（查玩家、補抓資料）停在原地。
 
-照 tests/test_prologue_web.py 的做法把整支 app.js 放進 node 的假瀏覽器跑；沒有 node 就略過。"""
+照 tests/web/test_prologue_web.py 的做法把整支 app.js 放進 node 的假瀏覽器跑；沒有 node 就略過。"""
 from __future__ import annotations
 
 import random

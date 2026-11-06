@@ -794,7 +794,7 @@ class PlayerState(BaseModel):
     figure_wins: dict[str, int] = Field(default_factory=dict)  # 這一季挑戰打贏大勢人物本人的次數：人物 id → 幾次（大勝、險勝；本命兵器「打贏三次」，Game._challenge）。角色每季重來自然清掉；叛投不清
     figure_dented: dict[str, int] = Field(default_factory=dict)  # 人物 id → 上一次打贏他而扣到聲威是第幾個遊戲日（figure_dent_once_per_day；叛投不清）
     figure_rare_drops: int = 0  # 這一季挑戰本人掉了幾個三階（兩條來源合算：預設表、保證的那一個；丁 (c) 的一人一季上限 figure_rare_cap；換季跟著新角色歸零）
-    # 寄放著、等裝備庫有空位才補發的（6.5：懸賞的重賞、名將贈禮）：Game._deliver_held_gear 同步與快轉時補（閉關中也補）。不存在 Bounty 上：懸賞下榜就跟著不見了
+    # 寄放著、等裝備庫有空位才補發的（6.5：懸賞的重賞、名將贈禮）：裝備包 gift_actions.deliver_held_gear 同步與快轉時補（閉關中也補）。不存在 Bounty 上：懸賞下榜就跟著不見了
     held_gear: list[Equipment] = Field(default_factory=list)
     forge_counts: dict[str, int] = Field(default_factory=dict)  # 裝備的組合鍵（兵器「兵|」、防具「鎧|」）→ 這一季你打過幾次（熟手，兵器設計 4.3）；換季跟著角色重來
     shop_line: str = ""  # 店面上掌櫃那一句的情況鍵（店裡最後一件事：進門、買了、打完一爐……；店面獨立介面設計 1.4、6.1）：收起店時清掉
@@ -989,7 +989,7 @@ class PlayerState(BaseModel):
     # 這一季已經補進江湖紀錄的時刻表大事 id（FB-038，見 Game._deliver_big_events）。大事 id 每季都一樣，
     # 所以這份每季重來：換季時新角色自然是空的（跟 battle_results_seen 不同，不跨季保留）
     events_seen: list[str] = Field(default_factory=list)
-    # 已經通知過（或不必通知）的絕學定名（FB-083，Game._deliver_renames）：武學 id。自己定的、拿到時就已經是定過名的、
+    # 已經通知過（或不必通知）的絕學定名（FB-083，修練包 actions.deliver_renames）：武學 id。自己定的、拿到時就已經是定過名的、
     # 通知過的都記在這裡，同一門只通知一次。武學跟著季走，所以這份也每季重來
     renames_told: list[str] = Field(default_factory=list)
     # 行狀（玩家傳，tianxia/annals.py）：這一季值得寫進傳裡的事，照份量留最多 Config.biography.cap 則。角色每季重來，換季前存進

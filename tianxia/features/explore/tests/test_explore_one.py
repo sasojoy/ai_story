@@ -4,7 +4,7 @@
 事件端出 pending_event。用正式內容（season21）開局（以前整個檔標 slow，2026-10-31 起只有超過一秒的那幾條標）。
 
 2d（企劃者 2026-10-26「只抽一件事情，然後體力先維持不動」，同天體力改 15）：以前連抽三拍，這個檔斷言三拍與體力 18 的測試照新規則改；
-一趟只有一件事的整體行為在 tests/test_explore_one_single.py。"""
+一趟只有一件事的整體行為在 tianxia/features/explore/tests/test_explore_one_single.py。"""
 from __future__ import annotations
 
 from unittest import mock

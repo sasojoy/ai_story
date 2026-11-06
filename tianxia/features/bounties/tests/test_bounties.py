@@ -555,7 +555,7 @@ def _due(content, season, week):
 def test_due_text_follows_the_season_and_says_season_end_past_the_last_day():
     """期限的寫法（懸賞榜設計 3.5）：規則關著寫「第N天 HH:MM」；到季末或過了季末一律「到季末」——
     14 天的季第 11、12 週掛的單到期是第 336、364 小時，不寫這一季沒有的「第15天 00:00」「第16天 04:00」。
-    （第一季週曆的「第 N 週・週X HH:MM」只有封存的週末季用；21 天、7 天季的寫法見 tests/test_season21_daily.py。）"""
+    （第一季週曆的「第 N 週・週X HH:MM」只有封存的週末季用；21 天、7 天季的寫法見 tests/ranger/test_season21_daily.py。）"""
     beta = real_content()
     season = _beta_season(beta)
     assert [_due(beta, season, week) for week in (1, 10, 11, 12)] == ["第3天 08:00", "第13天 20:00", "到季末", "到季末"]

@@ -1,4 +1,4 @@
-"""名聲的畫面（名聲設計十一之二：1B、2C、3B、4B、5B、6B）：餵真的引擎資料給 app.js（tests/test_prologue_web.py 的假瀏覽器）。"""
+"""名聲的畫面（名聲設計十一之二：1B、2C、3B、4B、5B、6B）：餵真的引擎資料給 app.js（tests/web/test_prologue_web.py 的假瀏覽器）。"""
 # 畫法在 web/battle.js、web/peers.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 import copy
 import random

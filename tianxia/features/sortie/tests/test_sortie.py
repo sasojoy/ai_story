@@ -25,7 +25,7 @@ def _game(faction="huang", at="runan_wilds", profile="week7", name="沈浪"):
     c = conquest_rules(real_content(profile))  # 出陣約戰關掉，攻一下就打一場；翻地與爭搶本身在 tests/acts/test_conquest_*.py
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
-    # 第 4 批之前的出陣獎勵（三成、不掉東西）：新規則在 tests/test_sortie_rewards.py（設計 8.4）
+    # 第 4 批之前的出陣獎勵（三成、不掉東西）：新規則在 tianxia/features/sortie/tests/test_sortie_rewards.py（設計 8.4）
     c.config.precise_actions = False
     c.config.four_tiers.enabled = False
     game = Game.new(c, name, rng=random.Random(0), world=open_world())

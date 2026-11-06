@@ -58,7 +58,7 @@ def test_a_new_character_starts_with_the_starter_arts(content, world, new_season
 
 def test_there_is_no_self_created_art_any_more(game):
     """行為上也沒有（審查 F18）：就算兩個欄位都空著、手上心得銀兩都有，選單也不給自創，硬送自創的選項 id 只會被擋回；
-    伺服器那一側的拒絕在 tests/test_server.py。"""
+    伺服器那一側的拒絕在 tests/server/test_server.py。"""
     member = game.state.player.member
     member.neigong_id = member.wugong_id = None
     game.state.player.stats.update(xinde=500, silver=500)

@@ -1,7 +1,7 @@
 """補寫事件的獎勵上限：三份補寫的事件池共用這一個檢查（以前三個檔各寫一份）。
-- 探索補寫：content/events/explore_<大區>.json（tests/test_explore_variety.py）；
-- 城鎮交友補寫：content/events/social_<大區>.json（tests/test_socialize_variety.py）；
-- 新大區的探索事件：content/events/<大區>.json（tests/test_events_new_regions.py）。大地圖上的大區（content/map.json）有自己
+- 探索補寫：content/events/explore_<大區>.json（tianxia/features/explore/tests/test_explore_variety.py）；
+- 城鎮交友補寫：content/events/social_<大區>.json（tianxia/features/socialize/tests/test_socialize_variety.py）；
+- 新大區的探索事件：content/events/<大區>.json（tests/core/test_events_new_regions.py）。大地圖上的大區（content/map.json）有自己
   事件檔的都算，不寫死是哪幾個：多一個大區的事件檔，它的上限照樣有人查。
 每個選項結果（effect、fail_effect 各自）都要在上限之內；各池子的上限照原本各檔寫的，不全一樣（POOLS）。
 選項幾個、檢定的屬性與難度、要不要 fail_effect、傳聞幾則這些結構上的檢查留在各自的檔案。"""

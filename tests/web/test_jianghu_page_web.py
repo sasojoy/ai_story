@@ -1004,7 +1004,7 @@ def test_the_art_and_extra_folds_are_styled():
 #    行動列被推下去也不重收。現在 renderTop 重畫狀態列前後量一次 #top 的高度，變了就重量（fitTopMoved）；fitFirstScreen 自己收 💡、
 #    還原 💡 時也會重畫狀態列，那時不算（S.fitting），不會一直重量。
 #
-# 假頁面照 tests/test_jianghu_page_web.py 的驅動程式（從 app.js 切出 FB-107 那一段；scripts/test_for.py 靠 import 與 app.js 這個名字挑到這裡）。
+# 假頁面照 tests/web/test_jianghu_page_web.py 的驅動程式（從 app.js 切出 FB-107 那一段；scripts/test_for.py 靠 import 與 app.js 這個名字挑到這裡）。
 
 # ── 1. 網址列收起、跑出來：基準不跟著跑 ─────────────────────────────
 
@@ -1492,7 +1492,7 @@ def test_a_glow_outside_any_fold_is_unchanged(glowing):
 # 集結那一句（「選擇陣營加入；集結期間照常行動。」）是戰鬥引擎寫的（Game._battle_scene_text），另一條線正在改戰鬥那一段：
 # fix-1008 裁示不動它，「在哪裡加入」寫在網頁上、鈕的旁邊（web/app.js 的 MUSTER_NOTE），集結那一句照伺服器給的原樣畫。
 #
-# 網頁用真實內容（週末設定）的廣宗決戰、真的 /api/main，照 tests/test_prologue_web.py 的做法把整支 app.js 放進 node
+# 網頁用真實內容（週末設定）的廣宗決戰、真的 /api/main，照 tests/web/test_prologue_web.py 的做法把整支 app.js 放進 node
 # （scripts/test_for.py 改到 app.js 時靠這個檔名挑到這裡）。句子待 joy 潤：那一小句照 app.js 的 MUSTER_NOTE、MUSTER_ARROW 比對，
 # 不在這裡再寫一次字面；這裡只認事實（哪一顆、在哪、指向哪）。
 
@@ -1669,7 +1669,7 @@ def test_every_grey_cell_sub_fits_the_cell():
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 @pytest.mark.slow
 def test_without_server_notes_the_grey_cell_still_draws_no_note_row():
-    """伺服器沒給這一格的說明（舊版、序章裡是空的）：底下那一行照舊不畫（tests/test_explain_web.py::test_no_notes_without_server_notes 的約定），
+    """伺服器沒給這一格的說明（舊版、序章裡是空的）：底下那一行照舊不畫（tianxia/features/guide/tests/test_explain_web.py::test_no_notes_without_server_notes 的約定），
     有沒有那一行由伺服器說了算，網頁只換句子；格子照樣寫短的。"""
     m = server.main_view(_game("yingchuan"))
     m["action_notes"] = {}
@@ -1683,7 +1683,7 @@ def test_without_server_notes_the_grey_cell_still_draws_no_note_row():
 def test_the_other_grey_reasons_keep_their_cells_and_notes():
     """名望還差：四格時放得下、格子照寫。FB-670（練功多一格，五格每格約 62 px、320 寬約 51 px，灰格小字最多四個字）起，
     「名望還差 15」在 320 寬會被切，改照這一張的做法：格子寫「名望不夠」，還差多少帶句號寫在底下那一行。
-    新規則的其他灰格在 tests/test_jianghu_page_web.py。"""
+    新規則的其他灰格在 tests/web/test_jianghu_page_web.py。"""
     game = _game("changshe")
     bar = _bar(game)
     assert "<b>交友</b><small>名望不夠</small>" in _cell(bar, "social") and "名望還差 15" not in _face(_cell(bar, "social"))
@@ -1718,7 +1718,7 @@ PRACTICE = "explore:practice"
 def _content(profile):
     c = real_content(profile)
     c.config.training.enabled = False
-    no_jianfa(c)  # 減法季探索一顆開著時沒有練功這一格（tests/test_explore_one.py）：這一份測的是舊的練功格
+    no_jianfa(c)  # 減法季探索一顆開著時沒有練功這一格（tianxia/features/explore/tests/test_explore_one.py）：這一份測的是舊的練功格
     return c
 
 

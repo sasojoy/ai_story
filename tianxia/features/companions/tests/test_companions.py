@@ -1,5 +1,5 @@
 """歷史武將同行（docs/superpowers/specs/2026-10-18-歷史武將同行-design.md）：十五位不是大勢人物的歷史武將照陣營招進名下、
-全服唯一、一人三位、情誼放慢、放走、叛投帶不走。決戰裡的同伴在 tests/test_companions_battle.py。"""
+全服唯一、一人三位、情誼放慢、放走、叛投帶不走。決戰裡的同伴在 tianxia/features/battle/tests/test_companions_battle.py。"""
 from __future__ import annotations
 
 import random
@@ -90,7 +90,7 @@ NEW_NINE = {"wangyun", "gongsunzan", "tangzhou", "xuchu", "zhangyan", "xushao", 
 def test_every_recruitable_companion_has_arts_and_power(real, world):
     """十五位都有一門武學、一門內功；新補的九位挑現有內容的武學（不新造名字）、不帶本命戰法、不是絕學；招到之後威力不是 0。
     main 的 d0ca2c25（Joy 2026-10-21）給學來的下品武學各帶一個小戰法，九位起始的下品武學也帶：不是本命戰法（FB-640，
-    原本斷言 tactic 是 None；本命與小戰法的分法在 tests/test_signature_arts.py）。"""
+    原本斷言 tactic 是 None；本命與小戰法的分法在 tests/arts/test_signature_arts.py）。"""
     from tianxia import team
 
     for cid in FIFTEEN:

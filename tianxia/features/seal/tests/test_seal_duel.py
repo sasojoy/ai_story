@@ -38,7 +38,7 @@ def _shared(content, duel=None, holder="懷璽"):
 
 def test_the_pure_pieces_draw_exactly_one_number_each():
     """duel.py 抽出來的純函式：gamble_roll 只取一次亂數、push_of 不取（luck 是呼叫端擲好的）；軍師 +10。
-    頭目戰（exchange、gamble、verdict）照舊——tests/test_duel.py 一個字都不改照樣全過，是主要的保證。"""
+    頭目戰（exchange、gamble、verdict）照舊——tianxia/features/bout/tests/test_duel.py 一個字都不改照樣全過，是主要的保證。"""
     tuning, battle = DuelTuning(), BattleTuning()
     rng, ref = random.Random(5), random.Random(5)
     duel_rules.gamble_roll(50, 300.0, 80.0, "wis", tuning, battle, rng)

@@ -3,7 +3,7 @@
 是 False，接 on_drop_stale 就不跑了），所以放這裡。核心本體（tianxia/core/ 底下的檔），不進 MODULES。
 
 反方向（第 36 批認定第 1 條）：解 base、head 比過 test_for.pick（features/gear/signature_arms.py、seats、treasures、forge_secrets、plans、ranks、equipment、mounts），
-一個都沒少挑；改這一檔 test_for 照舊挑到 tests/gear/test_signature_arms.py 與核心測試。
+一個都沒少挑；改這一檔 test_for 照舊挑到 tianxia/features/gear/tests/test_signature_arms.py 與核心測試。
 """
 from __future__ import annotations
 

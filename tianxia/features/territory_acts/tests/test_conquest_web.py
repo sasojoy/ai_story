@@ -376,7 +376,7 @@ def test_fb578_main_view_carries_the_marker():
 
 # ── 原 test_conquest_seal_web.py（整檔搬進來） ──
 # 領地爭奪第三批 B（計畫 Task 14）的網頁那一半：管理者「玉璽」一組，領地爭奪的季「強制現世」換成「現在藏一片」。
-# 餵 Game.admin_seal_choices 給的 hide 旗標給 app.js（tests/test_seal_web.py 的假瀏覽器）。沒有 node 就略過。
+# 餵 Game.admin_seal_choices 給的 hide 旗標給 app.js（tianxia/features/seal/tests/test_seal_web.py 的假瀏覽器）。沒有 node 就略過。
 
 def _admin(hide: bool) -> dict:
     admin = _seal_admin()

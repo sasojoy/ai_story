@@ -1,6 +1,6 @@
 """戰記（Joy 2026-10-29，原稱「戰役話本」）：決戰收場之後，說書人把那一場寫成一篇話本，全服一份。
 戰報頁右上的「戰記 ›」與江湖史的目錄都讀它（畫面在 `web/tale.js` 的 taleLink／taleHtml／taleIndexHtml，
-契約見 `tests/web/test_tale_web.py`）；產生、寫法、存放在這裡與同一包的 `routes.py`。
+契約見 `tianxia/features/tale/tests/test_tale_web.py`）；產生、寫法、存放在這裡與同一包的 `routes.py`。
 
 分工照總則（CLAUDE.md「數值全部由規則引擎決定」）：
 
