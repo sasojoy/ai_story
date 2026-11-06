@@ -64,6 +64,12 @@ class BoutFeature(Feature):
 
         return bots.score(option)
 
+    def bot_idle(self, ctx, option):
+        """整季機器人不按抽身退走、認輸下台（原本 bot.pick 那張清單；要比相等，不問 enabled）。"""
+        from . import bots  # noqa: PLC0415
+
+        return bots.idle(option)
+
     def check_content(self, content, need) -> None:
         """場邊事件的固定句（content/arena_crowd.json）：原本是 content.check_arena_crowd（核心不 import 包，搬進來；content.validate 的
         check_features 叫，排在 check_art 前面——只有兩樣同時寫壞時錯誤的先後不一樣）。開關關著也照驗（缺種類那一條自己看開關）。"""
@@ -102,7 +108,7 @@ class BoutFeature(Feature):
             from . import arena_actions  # noqa: PLC0415
 
             self._verbs = (Verb("arena", run=lambda ctx, prepared: arena_actions.arena_open(ctx),
-                                title=lambda ctx: arena_actions.arena_sign(ctx)),)
+                                title=lambda ctx: arena_actions.arena_sign(ctx), bot=lambda ctx, profile: None, bot_skip=True),)  # 假人：由 take_turn 的 _arena 決定（不交給打分數，不然開了又返回）
         return self._verbs
 
     # core_world（全部拆包第 25 批「世界層掛鉤」）

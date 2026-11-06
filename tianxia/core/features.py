@@ -120,7 +120,7 @@ class Verb:
     tail_title: Callable[[Any, str], str | None] | None = None  # Game._action_title：這一下江湖紀錄的整個標題（ctx, 後綴）
     tail_squad: Callable[[Any, str], Squad | None] | None = None  # Game._fight_squad 最前面：這一下打哪一路（ctx, 後綴）
     # core_bots（全部拆包第 60 批）：假人怎麼按這一格。bot、tail_bot 是 bot_policy.score 問的分數（ctx, 名牌[, 後綴]），回 None 是不按；這一格沒寫（None）算沒主人，
-    # bot_policy 照舊落到 ACT_SCORES.get(arg, 0.0)，0.0 是隨機挑得到的、不是不按，別寫成 never。bot_skip、tail_bot_skip 是 bot.pick 不按（只是打開一張卡、一直按得下去）
+    # bot_policy 照舊落到 ACT_SCORES.get(arg, 0.0)，0.0 是隨機挑得到的、不是不按，別寫成回 None 的格。bot_skip、tail_bot_skip 是 bot.pick 不按（只是打開一張卡、一直按得下去）
     bot: Callable[[Any, Any], float | None] | None = None
     tail_bot: Callable[[Any, Any, str], float | None] | None = None
     bot_skip: bool = False
@@ -691,11 +691,6 @@ def act_squad(ctx: Game, verb: str) -> Squad | None:
 
 
 # core_bots（全部拆包第 60 批「假人殼收尾」）
-
-
-def never(*_args: Any) -> None:
-    """Verb.bot、tail_bot 的「假人不按」：只是打開一張卡、或不交給打分數的那幾格。"""
-    return None
 
 
 def act_score(ctx: Game, verb: str, profile: Any) -> tuple[bool, float | None]:

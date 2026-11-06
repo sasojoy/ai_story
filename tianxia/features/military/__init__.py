@@ -21,6 +21,7 @@ class MilitaryFeature(Feature):
     name = "military"
     # 第 34 批：機緣 opp:<…>（交東西、嘗試、拼圖、呈交、指認、請命、響應、各做一處）與伏筆 fs:<鏈>、fs:<鏈>:<選項>、fs:leave
     prefix = ("opp", "fs")
+    bot_always = ("fs:", "opp:")  # 伏筆的最後一步、機緣的選項：這一版假人不做（計畫 T7、正式版乙一；原本 bot.FORESHADOW_OPTIONS，第 60 批）
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：押著的糧車、第 2 階今天做了幾次、第 3／4 階這週做了幾次（第 33 批）；
     # 伏筆 7 個（聽過的片段、拿到的物品、計數、做完的鏈、冷卻、正在答的鏈與已答的題）與機緣 8 個（做完的、次數、拿到的東西、各處的戰線、
     # 聽過的線索、試過的時段、拼圖湊了哪幾樣、結算過的密謀）（第 34 批）。換季全部跟著新角色重來
@@ -177,7 +178,7 @@ class MilitaryFeature(Feature):
             from tianxia import ranks  # noqa: PLC0415  共用規則層（階級 ranks，第 40 批收進）
             from tianxia.core.services import RANK_ACTION_PREFIX  # noqa: PLC0415
 
-            from . import convoy_actions, opp_actions, step_actions  # noqa: PLC0415
+            from . import bots, convoy_actions, opp_actions, step_actions  # noqa: PLC0415
 
             def here(ctx) -> str:
                 return ctx.content.locations[ctx.state.player.location].name
@@ -191,11 +192,12 @@ class MilitaryFeature(Feature):
                 return f"{name}・{here(ctx)}"
 
             self._verbs = (
-                Verb("rank2", run=lambda ctx, prepared: step_actions.rank2(ctx), title=rank2_title),
+                Verb("rank2", run=lambda ctx, prepared: step_actions.rank2(ctx), title=rank2_title, bot=lambda ctx, profile: bots.RANK2_SCORE),
                 Verb(RANK_ACTION_PREFIX.split(":")[1], tail_run=lambda ctx, prepared, tail: step_actions.rank_action(ctx, tail), tail_title=rank_title),
-                Verb("convoy", run=lambda ctx, prepared: convoy_actions.take_convoy(ctx), title=lambda ctx: f"接下糧車・{here(ctx)}"),
+                Verb("convoy", run=lambda ctx, prepared: convoy_actions.take_convoy(ctx), title=lambda ctx: f"接下糧車・{here(ctx)}",
+                     bot=lambda ctx, profile: bots.CONVOY_SCORE),
                 Verb("summons", run=lambda ctx, prepared: ctx._present(ctx.content.events[ranks.summons_event(ctx.state, ctx.content)]),
-                     title=lambda ctx: f"應召・{here(ctx)}"),
+                     title=lambda ctx: f"應召・{here(ctx)}", bot=lambda ctx, profile: bots.SUMMONS_SCORE),
             )
         return self._verbs
 

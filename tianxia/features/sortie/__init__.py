@@ -10,7 +10,7 @@
 行動列那一格、底下那一行、按下去、紀錄標題），第 17 批連打的那一場（扣體力、並肩出陣、出陣或遊歷）、地盤關著的舊遊歷那一格與那一行、
 「這一下打哪一路」（大場面判讀，Verb.squad）、守勢行動 act:duty（按下去；鈕在軍令的那幾顆裡、照舊經 Game._duty_option）一起收進來。
 約戰的 sortie:*（第 2 批拿了前綴）不在選單上，Game.choose 查選單之前經 choose_unlisted 接走；窗滿了的約戰經 on_due 結算（三處都是第 11 批
-的接縫掛鉤，下面）。假人照舊走 bot_policy（act: 是核心的前綴，act:train、act:duty 那兩支總表第 60 批照子動詞分）。
+的接縫掛鉤，下面）。假人：act:train、act:duty 的分數與約戰卡上的事在 bots.py（第 60 批，Verb.bot 問；其餘條件還在 bot_policy）。
 換季照帶今天出陣的次數（carried 那兩格）第 55 批起是 season.carry 的 sortie 那一格、不掛 on_season_start：遊戲當下的掛鉤只叫
 開著的包（同商城的 carried；dev/sortie-1 審查，tests/test_sortie_season_carry.py 守）。
 """
@@ -23,7 +23,7 @@ class SortieFeature(Feature):
     name = "sortie"
     # 出陣約戰（第 2 批）的三個動作：sortie:go:<三招>、sortie:answer:<約戰 id>:<三招>、sortie:join:<約戰 id>。不在選單上（封招的組合放不進去），
     # Game.choose 最前面就接走（查選單、建 Draft 之前；關著的季照舊「此刻無法這麼做」），所以這一包不接 choose 掛鉤。假人：bot_policy.score
-    # 沒有 sortie: 那一段（選單上本來就沒有它們），bot_pick 照預設回 None＝不按，跟原本落到 score 最後的 return None 一樣；不開 bots.py。
+    # 沒有 sortie: 那一段（選單上本來就沒有它們），bot_pick 照預設回 None＝不按，跟原本落到 score 最後的 return None 一樣。
     # act:train（出陣那一格）、act:duty（守勢）照舊是核心的前綴
     prefix: str | None = "sortie"
     # 今天出陣幾次（換日同回體丹）、這一季出陣攻打打贏掉過幾件寶物與良駒（treasures.sortie_rare 的一季上限）；
@@ -55,7 +55,7 @@ class SortieFeature(Feature):
         第 17 批）：按下去（train_actions.duty）；鈕在軍令那幾顆裡（軍情包 order_options 經 ctx 叫 Game._duty_option）；紀錄標題寫陣營自己的名字（巡哨、傳道、保境安民；第 57 批從核心那張表搬來）。
         建一次就留著，每一格在叫的那一下才照模組屬性找函式（monkeypatch 照樣有效；tests/core/test_contract_features.py 守）。"""
         if self._verbs is None:
-            from . import actions, duel_rules, train_actions  # noqa: PLC0415
+            from . import actions, bots, duel_rules, train_actions  # noqa: PLC0415
 
             def title(ctx):
                 return f"{actions.train_title(ctx)}・{ctx.content.locations[ctx.state.player.location].name}"
@@ -68,8 +68,8 @@ class SortieFeature(Feature):
                 Verb("train", run=lambda ctx, prepared: actions.train_run(ctx, prepared), title=title,
                      cell=lambda ctx, loc, cost, odds: actions.train_cell(ctx, loc, cost, odds),
                      note=lambda ctx, loc: actions.train_note(ctx, loc), picks=(duel_rules.PICK,),
-                     squad=lambda ctx: train_actions.train_squad(ctx)),
-                Verb("duty", run=lambda ctx, prepared: train_actions.duty(ctx), title=duty_title),
+                     squad=lambda ctx: train_actions.train_squad(ctx), bot=lambda ctx, profile: bots.train(ctx, profile)),
+                Verb("duty", run=lambda ctx, prepared: train_actions.duty(ctx), title=duty_title, bot=lambda ctx, profile: bots.duty(ctx)),
             )
         return self._verbs
 

@@ -2478,6 +2478,33 @@ CORE_DELEGATE_CALLERS.update({
                                                   "epiphany_names 上；包不能 import engine，第 24 批搬進核心的共用小函式。「做完一件事」第 57 批量過不開事件（計畫第四節）",
 })
 
+# core_bots（全部拆包第 60 批「假人殼收尾」；計畫 docs/superpowers/plans/2026-11-06-假人殼收尾-第60批.md 九）：這一批的增減集中在這一段（核心批，沒有新包）。
+# bot_policy 不再叫 Game 的私有方法。_duel_power 沒人叫了（tests、scripts、server、bot 三支、包都查過），拿掉；留著的：_side、_conquest_side、_sortie_foes（別的包還叫）、_tavern_price、_tavern_hit_problem（test_tavern 直接叫）
+GAME_DELEGATES -= {"_duel_power"}
+
+
+def private_touches(source: str) -> list[str]:
+    """碰了別的物件私有成員的地方（x._y；self 的、雙底線的不算）。"""
+    return [f"{node.lineno} {node.attr}" for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Attribute) and node.attr.startswith("_")
+            and not node.attr.startswith("__") and not (isinstance(node.value, ast.Name) and node.value.id == "self")]
+
+
+def test_the_bot_shell_touches_nothing_private_on_the_game():
+    """假人的殼（bot_policy、bot、bot_runner、server_bots）只走 Game 的公開行動與服務（總表第 60 列）：不准碰別的物件的私有成員。"""
+    assert private_touches("def f(game):\n    return game._side()\n") == ["2 _side"]  # 掃描本身抓得到
+    assert private_touches("class A:\n    def f(self):\n        return self._x, self.__class__\n") == []
+    for name in ("bot_policy.py", "bot.py", "bot_runner.py", "server_bots.py"):
+        assert private_touches((TIANXIA / name).read_text(encoding="utf-8")) == [], name
+
+
+def test_bot_pick_asks_the_packages_for_what_it_skips():
+    """bot.pick 的「永遠按得下去」只問各包的宣告（features_core.bot_idle）：act: 字面只剩沒有主人的 act:heal（第 57 批第四節）與挑戰本人照勝算挑那兩行（不是「永遠按得下去」，計畫第四節）。"""
+    tree = ast.parse((TIANXIA / "bot.py").read_text(encoding="utf-8"))
+    pick = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "pick")
+    words = {node.value for stmt in pick.body[1:] for node in ast.walk(stmt) if isinstance(node, ast.Constant) and isinstance(node.value, str)}
+    assert {w for w in words if w.startswith("act:")} == {"act:heal", "act:challenge:"}
+    assert not {w for w in words if ":" in w} - {"act:heal", "act:challenge:", ":", "battle:join", "choice:"}  # 別的前綴也問宣告（加入決戰、結識一定接受不是「永遠按得下去」）
+
 
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py
     import io

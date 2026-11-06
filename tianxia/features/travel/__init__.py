@@ -68,7 +68,7 @@ class TravelFeature(Feature):
             from . import go_actions, party  # noqa: PLC0415
 
             self._verbs = (
-                Verb("halt", run=lambda ctx, prepared: go_actions.halt(ctx), title=lambda ctx: "喊停"),
+                Verb("halt", run=lambda ctx, prepared: go_actions.halt(ctx), title=lambda ctx: "喊停", bot_skip=True),
                 Verb("part", run=lambda ctx, prepared: party.part_ways(ctx), title=lambda ctx: "分道揚鑣"),
             )
         return self._verbs

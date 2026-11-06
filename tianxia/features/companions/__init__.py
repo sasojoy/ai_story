@@ -14,7 +14,8 @@ from tianxia.core.features import DefectHook, Feature, MenuHook, Outcome, SeamHo
 class CompanionsFeature(Feature):
     name = "companions"
     prefix = ("errand", "talk", "parley")  # 託付（errand:<動詞>:<id>）；整季機器人不按（要寫字、不收託付）；人物對話 talk:*、帶路的路上 parley:road（假人只按告辭，見 bots.py）
-    bot_always = ("errand:",)  # 整季機器人不收託付，萬一有也不按（勸降要寫字；原本 bot.pick 的排除清單）
+    # 整季機器人不收託付，萬一有也不按（勸降要寫字；原本 bot.pick 的排除清單）；對話的片段與機緣的話題（原本 bot.FORESHADOW_OPTIONS，第 60 批）：這一版假人不做伏筆也不做機緣
+    bot_always = ("errand:", "talk:clue:", "talk:opp:")
     content = ("events/stances.json",)  # 人物心意開的事件（總表附錄甲）；content.py 照舊讀（第 62 批起照它載）；檔名照舊
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）。換季全部跟著新角色重來；parted_done（同伴回江湖的減半記號）第 7 批決戰包認領了，第 7 批 PM 認定第 4 條留到這一包再看：
     # 寫它的 settle_partings 還在決戰包，這一批照留
@@ -52,6 +53,12 @@ class CompanionsFeature(Feature):
         from . import bots  # noqa: PLC0415
 
         return bots.score(option)
+
+    def bot_idle(self, ctx, option):
+        """整季機器人不按對話的「自己說」「商量打法」、帶路的路上說一句（要寫一句話，機器人寫不出有意義的做法；原本 bot.pick 比相等的 TEXT_TALKS，第 60 批；不問 enabled）。"""
+        from tianxia.core.services import TEXT_TALKS  # noqa: PLC0415
+
+        return option.id in TEXT_TALKS
 
     def routes(self, shell):
         from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）
@@ -135,6 +142,7 @@ class CompanionsFeature(Feature):
                 "recruit", run=lambda ctx, prepared: actions.recruit(ctx), title=lambda ctx: f"招募・{here(ctx)}",
                 tail_run=lambda ctx, prepared, tail: actions.recruit_one(ctx, tail),
                 tail_title=lambda ctx, tail: f"招募・{ctx.content.characters[tail].name}" if tail in ctx.content.characters else None,
+                tail_bot=lambda ctx, profile, tail: None, tail_bot_skip=True,  # 招募歷史武將（歷史武將同行第七節）：假人不招。act:recruit 不寫 bot：照舊 ACT_SCORES 的 0.0
             ),)
         return self._verbs
 

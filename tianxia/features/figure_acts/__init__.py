@@ -88,11 +88,14 @@ class FigureActsFeature(Feature):
         if self._verbs is None:
             from tianxia import figures  # noqa: PLC0415  共用規則層（人物表 figures，第 40 批收進）
 
+            from . import bots  # noqa: PLC0415
+
             self._verbs = (Verb(
                 "challenge",
                 tail_run=lambda ctx, prepared, tail: ctx._challenge(tail),
                 tail_title=lambda ctx, tail: f"挑戰・{figures.name_of(ctx.content, tail)}",
                 tail_squad=lambda ctx, tail: ctx._figure_squad(tail) if tail in ctx.content.figures else None,
+                tail_bot=lambda ctx, profile, tail: bots.challenge(ctx, tail),
             ),)
         return self._verbs
 

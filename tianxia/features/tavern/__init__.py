@@ -79,7 +79,8 @@ class TavernFeature(Feature):
         if self._verbs is None:
             from . import actions  # noqa: PLC0415
 
-            self._verbs = (Verb("tavern", run=lambda ctx, prepared: actions.tavern_enter(ctx), title=lambda ctx: actions.tavern_sign(ctx)),)
+            self._verbs = (Verb("tavern", run=lambda ctx, prepared: actions.tavern_enter(ctx), title=lambda ctx: actions.tavern_sign(ctx),
+                                bot=lambda ctx, profile: None, bot_skip=True),)  # 假人：不交給打分數（只是打開酒肆），打聽由 take_turn 的 _tavern 另外做（bots.visit）
         return self._verbs
 
     def on_away(self, ctx, away_from) -> None:

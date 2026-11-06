@@ -116,8 +116,8 @@ class OutletsFeature(Feature):
                 return Verb(what, run=lambda ctx, prepared: press(ctx, what), title=lambda ctx: f"{sign}・{here(ctx)}")
 
             self._verbs = (
-                Verb("donate", run=open_donate, title=lambda ctx: f"{economy.DONATE_TITLE}・{here(ctx)}"),
-                Verb("dadian", run=open_dadian, title=lambda ctx: f"{silver.SHOP}・{here(ctx)}"),
+                Verb("donate", run=open_donate, title=lambda ctx: f"{economy.DONATE_TITLE}・{here(ctx)}", bot=lambda ctx, profile: None, bot_skip=True),  # 假人只是打開一串，捐由 bot.donate_spare 直接捐
+                Verb("dadian", run=open_dadian, title=lambda ctx: f"{silver.SHOP}・{here(ctx)}", bot=lambda ctx, profile: None, bot_skip=True),  # 假人不進（只是打開一間店）
                 silver_verb("silver_donate", silver.DONATE_TITLE),
                 silver_verb("mentor", silver.MENTOR_TITLE),
                 silver_verb("furnace", silver.FURNACE_TITLE),

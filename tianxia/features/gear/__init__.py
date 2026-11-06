@@ -56,10 +56,11 @@ class GearFeature(Feature):
         if self._verbs is None:
             from tianxia import mounts  # noqa: PLC0415
 
-            from . import market_actions  # noqa: PLC0415
+            from . import bots, market_actions  # noqa: PLC0415
 
             self._verbs = (Verb("market", run=lambda ctx, prepared: market_actions.enter(ctx),
-                                title=lambda ctx: f"{mounts.MARKET}・{ctx.content.locations[ctx.state.player.location].name}"),)
+                                title=lambda ctx: f"{mounts.MARKET}・{ctx.content.locations[ctx.state.player.location].name}",
+                                bot=lambda ctx, profile: bots.enter(ctx), bot_skip=True),)
         return self._verbs
 
     # core_seams（全部拆包第 55 批「補算與換季收接縫」）

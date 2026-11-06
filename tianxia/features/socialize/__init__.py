@@ -45,6 +45,12 @@ class SocializeFeature(Feature):
 
         return bots.score(option)
 
+    def bot_idle(self, ctx, option):
+        """整季機器人不按名望不夠的求見（原本 bot.pick 那一條；不問 enabled）。"""
+        from . import bots  # noqa: PLC0415
+
+        return bots.idle_call(ctx, option)
+
     # core_seams（全部拆包第 55 批「補算與換季收接縫」）
     _seams: tuple[SeamHook, ...] | None = None
 
@@ -79,14 +85,15 @@ class SocializeFeature(Feature):
     def verbs(self) -> tuple[Verb, ...]:
         """act:call（打開求見名單，不花體力）與 act:socialize（扣體力、晉升奇遇或交友）：按下去與紀錄標題（原本 Game._act、_action_title 原位）；不問 enabled。"""
         if self._verbs is None:
-            from . import actions  # noqa: PLC0415
+            from . import actions, bots  # noqa: PLC0415
 
             def here(ctx) -> str:
                 return ctx.content.locations[ctx.state.player.location].name
 
             self._verbs = (
-                Verb("call", run=lambda ctx, prepared: actions.open_audience(ctx), title=lambda ctx: f"求見・{here(ctx)}"),
-                Verb("socialize", run=lambda ctx, prepared: actions.press(ctx, prepared), title=lambda ctx: f"交友・{here(ctx)}"),
+                Verb("call", run=lambda ctx, prepared: actions.open_audience(ctx), title=lambda ctx: f"求見・{here(ctx)}", bot=lambda ctx, profile: None),
+                Verb("socialize", run=lambda ctx, prepared: actions.press(ctx, prepared), title=lambda ctx: f"交友・{here(ctx)}",
+                     bot=lambda ctx, profile: bots.act_socialize(ctx)),
             )
         return self._verbs
 

@@ -38,6 +38,10 @@ class StoryFeature(Feature):
 
         return Outcome(title=actions.story_title(ctx, arg), run=lambda: actions.story_act(ctx, arg))
 
+    def bot_idle(self, ctx, option) -> bool:
+        """答題的「先擱著」（story:<線>:later）：擱著之後那一顆又按得下去，整季機器人不按、答題照隨機答完（原本 bot.pick 那一條，第 60 批；不問 enabled）。"""
+        return option.id.endswith(":later")
+
     def scene(self, ctx):
         """自己眼前的場景卡（接縫掛鉤，第 11 批；原本 Game._own_scene_text 有所感、取名之後的一支）：一條線的答題；沒有答題是 None。
         不問 enabled（原位本來就不看開關）。排在有所感包、宴客包之後（FEATURES 的順序），第一個不是 None 的算。"""

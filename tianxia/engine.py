@@ -3161,9 +3161,6 @@ class Game:
     def duel_on(self) -> bool:
         return sortie_duel_actions.duel_on(self)
 
-    def _duel_power(self) -> float:
-        return sortie_duel_actions.duel_power(self)
-
     def duel_convoy_here(self) -> bool:
         return sortie_duel_actions.duel_convoy_here(self)
 

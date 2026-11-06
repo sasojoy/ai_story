@@ -88,7 +88,7 @@ class GuideFeature(Feature):
             from . import actions  # noqa: PLC0415
 
             self._verbs = (Verb("rest", run=lambda ctx, prepared: actions.rest(ctx),
-                                title=lambda ctx: f"調息・{ctx.content.locations[ctx.state.player.location].name}"),)
+                                title=lambda ctx: f"調息・{ctx.content.locations[ctx.state.player.location].name}", bot_skip=True),)
         return self._verbs
 
 

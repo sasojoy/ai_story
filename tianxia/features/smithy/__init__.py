@@ -60,10 +60,11 @@ class SmithyFeature(Feature):
         if self._verbs is None:
             from tianxia import weapons  # noqa: PLC0415
 
-            from . import shelf_actions  # noqa: PLC0415
+            from . import bots, shelf_actions  # noqa: PLC0415
 
             self._verbs = (Verb("smith", run=lambda ctx, prepared: shelf_actions.enter(ctx),
-                                title=lambda ctx: f"{weapons.SMITH}・{ctx.content.locations[ctx.state.player.location].name}"),)
+                                title=lambda ctx: f"{weapons.SMITH}・{ctx.content.locations[ctx.state.player.location].name}",
+                                bot=lambda ctx, profile: bots.enter(ctx), bot_skip=True),)
         return self._verbs
 
     def routes(self, shell):

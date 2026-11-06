@@ -38,6 +38,10 @@ class SenseFeature(Feature):
 
         return Outcome(title=actions.sense_title(ctx), run=lambda: actions.sense(ctx, arg))
 
+    def bot_idle(self, ctx, option) -> bool:
+        """特殊頓悟取名的「自己寫」（dunwu:own）：要寫字，按了只回一句叫出輸入框，一直按得下去；整季機器人先按靜心思名、再從三個候選裡挑（原本 bot.pick 那一條，第 60 批；不問 enabled）。"""
+        return option.id == "dunwu:own"
+
     def scene(self, ctx):
         """自己眼前的場景卡（接縫掛鉤，第 11 批；原本 Game._own_scene_text 宴客那一行之後的兩支）：有所感的卡、特殊頓悟取名那一張；
         都不是是 None。不問 enabled（原位本來就不看開關）。"""

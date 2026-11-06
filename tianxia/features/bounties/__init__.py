@@ -58,10 +58,11 @@ class BountiesFeature(Feature):
         if self._verbs is None:
             from tianxia.core import bounty_base  # noqa: PLC0415
 
-            from . import actions  # noqa: PLC0415
+            from . import actions, bots  # noqa: PLC0415
 
             self._verbs = (Verb("bounties", run=lambda ctx, prepared: actions.enter(ctx),
-                                title=lambda ctx: f"{bounty_base.BOARD}・{ctx.content.locations[ctx.state.player.location].name}"),)
+                                title=lambda ctx: f"{bounty_base.BOARD}・{ctx.content.locations[ctx.state.player.location].name}",
+                                bot=lambda ctx, profile: bots.enter(ctx), bot_skip=True),)
         return self._verbs
 
     _bus: tuple[BusHook, ...] | None = None
