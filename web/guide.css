@@ -1,0 +1,9 @@
+/* 天下大勢：新手目標的樣式（全部拆包第 67 批從 style.css 切出來，規則一個字不改；載入的先後在 index.html，同權重後蓋前）。 */
+
+/* 新手目標：本週卡「為什麼」裡一次三條，每條右邊「去做」 */
+.nb-goals { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.nb-goal { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.nb-goal > div { min-width: 0; display: grid; }
+.nb-goal b { font-weight: 600; }
+.nb-goal small { color: var(--ink-2); font-size: 12px; }
+.nb-btns { display: flex; gap: 4px; flex: none; }

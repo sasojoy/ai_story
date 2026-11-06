@@ -18,7 +18,7 @@ class CultivationFeature(Feature):
     # （落到最後的 return None），拿了前綴之後 bot_pick 照預設回 None＝不按，跟原本一樣；學藝是 bot_policy.tend_arts 的 _learn_here
     # 直接 choose 的。不開 bots.py
     prefix = "learn"
-    web = ("cultivation.js",)  # 俠客頁的畫法（全部拆包第 64 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。css 第 67 批才切
+    web = ("cultivation.js", "cultivation.css")  # 俠客頁的畫法（全部拆包第 64 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。css 第 67 批才切
     # 等著定名的那一門、定名通知過的、剛破境還沒看過的破境卡、每一門服丹沒衝開幾次、境界卡記的那一級：換季都跟著新角色重來
     player_fields = ("naming", "renames_told", "ascension", "legend_fails", "milestone_due")
     carried: tuple[str, ...] = ()

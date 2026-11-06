@@ -682,7 +682,7 @@ def test_the_folded_parts_never_hold_the_gains_or_the_result(on):
 
 
 def _css() -> str:
-    return re.sub(r"/\*.*?\*/", "", (ROOT / "web" / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    return re.sub(r"/\*.*?\*/", "", (ROOT / "web" / "style.css").read_text(encoding="utf-8") + (ROOT / "web" / "battle.css").read_text(encoding="utf-8") + (ROOT / "web" / "companions.css").read_text(encoding="utf-8") + (ROOT / "web" / "peers.css").read_text(encoding="utf-8"), flags=re.S)
 
 
 def _rules(css, needle):
@@ -904,7 +904,7 @@ def test_refitting_opens_the_letter_again_once_the_duel_is_gone():
 
 @node
 def test_the_folded_letter_hides_its_body_and_the_push_question_in_css():
-    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    css = (ROOT / "web" / "companions.css").read_text(encoding="utf-8")
     assert ".card.letter.fit-letter > .letter-body, .card.letter.fit-letter + .push-ask { display: none; }" in css
 
 
@@ -2076,7 +2076,7 @@ def test_the_button_label_is_escaped(on):
 
 
 def _css_rule(selector):
-    css = re.sub(r"/\*.*?\*/", "", (ROOT_fb105 / "web" / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    css = re.sub(r"/\*.*?\*/", "", (ROOT_fb105 / "web" / "style.css").read_text(encoding="utf-8") + (ROOT_fb105 / "web" / "battle.css").read_text(encoding="utf-8"), flags=re.S)
     found = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", css)
     assert found, f"style.css 裡找不到 {selector}"
     return {k.strip(): v.strip() for k, v in (part.split(":", 1) for part in found.group(1).split(";") if ":" in part)}

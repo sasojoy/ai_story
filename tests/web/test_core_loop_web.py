@@ -264,7 +264,7 @@ def test_a_narrow_phone_lets_the_duel_text_wrap_and_keeps_the_place_whole():
     import re
     from pathlib import Path
 
-    css = (Path(__file__).parents[2] / "web" / "style.css").read_text(encoding="utf-8").replace("\r\n", "\n")
+    css = (Path(__file__).parents[2] / "web" / "sortie.css").read_text(encoding="utf-8").replace("\r\n", "\n")
     assert re.search(r"(?m)^\.sx-drow \.sx-dt \{[^}]*white-space: nowrap;[^}]*text-overflow: ellipsis", css)  # 平常（360、375）照舊一行
     narrow = re.search(r"@media \(max-width: 340px\) \{\n((?:  [^\n]*\n)+)\}", css)
     assert narrow and ".sx-drow .sx-dt { white-space: normal; overflow: visible; text-overflow: clip; }" in narrow.group(1)

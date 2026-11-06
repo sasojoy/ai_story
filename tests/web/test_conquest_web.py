@@ -107,7 +107,7 @@ def test_strip_segments_do_not_break_inside():
 
 
 def test_strip_css_rules():
-    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    css = (ROOT / "web" / "battle.css").read_text(encoding="utf-8")
     assert ".scene > p.siege-strip {" in css  # 蓋過 .scene > p:first-child 的大字
     assert ".scene .muster-head > p.siege-strip {" in css
 
@@ -237,7 +237,7 @@ def test_fb576_single_join_button_clears_the_strip():
     """FB-576（QA 第三批 A）：只有一顆加入鈕的攻城集結，攻城條自己佔一行、「報名在這裡」與鈕排在它底下；鈕照 FB-105 的 −8px 往上吃，
     6px 的列距吃掉還多 2px，鈕的上緣壓到條的下緣（375／360／320 都量到 2px）。條底下那一排的鈕上邊至少留 2px：
     列距（.muster-head 的 gap 第一個值）＋鈕的 margin-top ≥ 2。名字旁邊的那一顆（沒有攻城條、FB-105）、.wide、.pick 不動。"""
-    css = re.sub(r"/\*.*?\*/", "", (ROOT / "web" / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    css = re.sub(r"/\*.*?\*/", "", (ROOT / "web" / "battle.css").read_text(encoding="utf-8"), flags=re.S)
     phone = css.split("@media (min-width: 641px)")[0]
     gap = float(_rule(phone, ".scene .muster-head")["gap"].split()[0].removesuffix("px"))
     found = re.search(r"\.scene \.muster-head > p\.siege-strip ~ \.muster-join:not\(\.wide\):not\(\.pick\) \.btn\s*\{([^}]*)\}", phone)
@@ -250,7 +250,7 @@ def test_fb576_single_join_button_clears_the_strip():
 
 def test_fb553_stacked_row_takes_its_own_line():
     """.pick 那一排另起一行、一顆一行、鈕佔滿那一行（字長也只往下折，不往右撐）。"""
-    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8").split("@media (min-width: 641px)")[0]
+    css = (ROOT / "web" / "battle.css").read_text(encoding="utf-8").split("@media (min-width: 641px)")[0]
     assert ".scene .muster-join.pick { flex-basis: 100%; flex-direction: column; }" in css
     assert re.search(r"\.scene \.muster-join\.pick \.btn \{ width: 100%; min-width: 0;", css)
 

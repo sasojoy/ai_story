@@ -595,7 +595,7 @@ def test_the_tag_hangs_on_the_fire():
     有小籤時中間那一欄也寫 em：照舊 72px 的話電腦寬（字級 ×1.3）小籤壓到兩邊料格的下角 11px（實機量的）；沒有小籤（銀兩出口關著）照舊。"""
     import re
 
-    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    css = (server.WEB / "smithy.css").read_text(encoding="utf-8")
     assert re.search(r"\.shop-layer \.furnace:has\(> \.fu-fire\) \{ grid-template-columns: 1fr [0-9.]+em 1fr; \}", css)
     assert "grid-template-columns: 1fr 72px 1fr;" in css  # 沒有小籤的爐子照舊
     assert re.search(r"\.shop-layer \.furnace \.fu-fire \{[^}]*position: relative", css)
@@ -665,7 +665,7 @@ def test_tapping_a_furnace_that_cannot_look_says_the_whole_line_and_sends_nothin
 def test_the_hot_fire_stops_for_reduced_motion():
     import re
 
-    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    css = (server.WEB / "smithy.css").read_text(encoding="utf-8")
     assert re.search(r"\.shop-layer \.furnace\.hot:not\(\.firing\) \.flame svg \{[^}]*animation: fu-hot", css)
     # 同一個選擇器（權重一樣，排在後面才蓋得過）
     assert "@media (prefers-reduced-motion: reduce) { .shop-layer .furnace.hot:not(.firing) .flame svg { animation: none; } }" in css
@@ -882,7 +882,7 @@ def test_rack_rows_keep_words_whole_and_the_buttons_sit_two_by_two_on_the_right(
     assert dull.index('class="rk-pick') < dull.index('class="winfo"') < dull.index('class="rk-btns"')  # 二乘二照這個順序排：換上、修／淬煉、拆解
     assert [a for a in re.findall(r'data-act="([\w-]+)"', dull[dull.index('class="rk-btns"'):])][:4] == [
         "shop-wield", "rack-repair", "rack-temper", "shop-dismantle"]
-    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    css = (server.WEB / "smithy.css").read_text(encoding="utf-8")
     assert re.search(r"\.shop-layer \.rk-row \{ display: grid; grid-template-columns: auto minmax\(0, 1fr\) [0-9.]+em;", css)
     assert re.search(r"\.shop-layer \.rk-btns \{ grid-column: 3; grid-row: 1; display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);", css)
     assert re.search(r"\.shop-layer \.rk-btn \{ flex-direction: column;", css)

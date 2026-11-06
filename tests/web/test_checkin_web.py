@@ -95,7 +95,7 @@ def test_two_gift_label_splits_into_two_lines():
     html = run(_m(day=6, week=_week(6)))["part"]["panel"]
     assert '<span class="g"><span class="gl">丹2</span><span class="gl">＋四階</span></span>' in html
     assert '<span class="g">30 兩</span>' in html and '<span class="g">丹 2</span>' in html
-    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    css = (ROOT / "web" / "checkin.css").read_text(encoding="utf-8")
     assert ".ck-day .g .gl { display: block; }" in css
 
 
@@ -104,7 +104,7 @@ def test_the_signed_stamp_sits_on_the_top_corner():
     不碰底下那一行獎勵字（天數置中，兩位數也不到右邊那一截）。"""
     import re
 
-    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    css = (ROOT / "web" / "checkin.css").read_text(encoding="utf-8")
     rule = re.search(r"\.ck-day\.got::after \{([^}]*)\}", css).group(1)
     assert re.search(r"(?<![-\w])top: -\d+px", rule) and "bottom" not in rule
     size = int(re.search(r"(?<![-\w])width: (\d+)px", rule).group(1))

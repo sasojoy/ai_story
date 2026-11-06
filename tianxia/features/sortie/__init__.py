@@ -21,7 +21,7 @@ from tianxia.core.features import Feature, StatusHook, Verb, slot_some
 
 class SortieFeature(Feature):
     name = "sortie"
-    web = ("sortie.js",)  # 出陣約戰的封招與前往（全部拆包第 66 批從 app.js 切出來）
+    web = ("sortie.js", "sortie.css")  # 出陣約戰的封招與前往（全部拆包第 66 批從 app.js 切出來）
     # 出陣約戰（第 2 批）的三個動作：sortie:go:<三招>、sortie:answer:<約戰 id>:<三招>、sortie:join:<約戰 id>。不在選單上（封招的組合放不進去），
     # Game.choose 最前面就接走（查選單、建 Draft 之前；關著的季照舊「此刻無法這麼做」），所以這一包不接 choose 掛鉤。假人：bot_policy.score
     # 沒有 sortie: 那一段（選單上本來就沒有它們），bot_pick 照預設回 None＝不按，跟原本落到 score 最後的 return None 一樣；不開 bots.py。

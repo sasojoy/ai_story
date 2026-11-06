@@ -29,7 +29,7 @@ from tianxia.core.features import Feature, StatusHook, WorldHook, slot_some
 
 class BattleFeature(Feature):
     name = "battle"
-    web = ("battle.js",)  # 全部拆包第 67 批從 main.js 切出來
+    web = ("battle.js", "battle.css")  # 全部拆包第 67 批從 main.js 切出來
     prefix: str | None = "battle"  # 全部拆包第 7 批拿的：battle:join／enlist／escort／act……（選項照舊由 Game 的 _battle_menu 委派給，分派照舊在 Game.choose 原位）
     content = ("battles.json",)  # 決戰與攻城範本（content.py 照舊讀；攻城的規則在 siege.py，共用規則層）
     # 補過的決戰（跨季照帶：決戰常把季收掉，下一季才回來的人也要補、而且只補一次）、這一季參戰幾場與首功幾次（玩家卡、名帖）。

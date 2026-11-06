@@ -198,7 +198,7 @@ def test_no_album_cell_class_hits_a_site_wide_rule():
     sheets = "\n".join(f.read_text(encoding="utf-8") for f in sorted(server.WEB.glob("*.css")))  # 頁面載的每一份樣式表
     bare = {k for k in classes if re.search(r"(?m)^\." + re.escape(k) + r"\s*[{,]", sheets)}  # 有一條就是這個 class 開頭、沒加範圍的
     assert "dv-now" in classes and "now" not in classes and not bare
-    assert ".shop-layer .dv-cell.dv-now {" in (server.WEB / "style.css").read_text(encoding="utf-8")
+    assert ".shop-layer .dv-cell.dv-now {" in (server.WEB / "smithy.css").read_text(encoding="utf-8")
 
 
 # ── 收藏冊的樣子：企劃者 2026-11-03 從三張對比圖挑「乙 圓印」（原本做的是寫名字的方格）──
@@ -209,7 +209,7 @@ def test_the_album_is_round_seals_five_a_row():
     有的亮、這一季打出的框粗、點著的外圈一道、沒人打出過的「？」虛線淡（照舊那幾個 class）。"""
     import re
 
-    css = (server.WEB / "style.css").read_text(encoding="utf-8")
+    css = (server.WEB / "smithy.css").read_text(encoding="utf-8")
     album = re.search(r"\.shop-layer \.dv-album \{([^}]*)\}", css)
     assert album and "grid-template-columns: repeat(5, minmax(0, 1fr))" in album.group(1) and "justify-items: center" in album.group(1)
     cell = re.search(r"\.shop-layer \.dv-cell \{([^}]*)\}", css)
