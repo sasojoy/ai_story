@@ -20,6 +20,7 @@ from test_prologue_web import DRIVER as BASE_DRIVER
 import server
 import webharness
 from tianxia import discuss, engine, social
+from tianxia.features.peers import discuss_actions
 
 pytestmark = pytest.mark.whole_content
 
@@ -333,7 +334,7 @@ def test_fb245_a_pick_that_cannot_fit_is_refused_without_the_model(content, worl
     _make(content, world, "乙", insights=("huo", "feng"))  # 兩個人都有「風」
     _invite(content, world)
     if why == "same_insight":
-        item, line = "insight:feng", engine.DISCUSS_SAME
+        item, line = "insight:feng", discuss_actions.DISCUSS_SAME
     else:
         _change(world, "甲", lambda p: p.stats.__setitem__("xinde", 0))
         item, line = "insight:huo", "甲那邊合不成：他的心得不夠。"
@@ -535,7 +536,7 @@ def test_nothing_fits_one_gray_button_says_why(twins):
     _invite(content, world)
     rows = _answers(_card(content, world, "乙", "甲"))
     assert [(b["label"], b["enabled"], b["note"]) for b in rows] == [
-        (discuss.ANSWER_NONE, False, engine.DISCUSS_SAME), ("婉拒論武", True, ""),
+        (discuss.ANSWER_NONE, False, discuss_actions.DISCUSS_SAME), ("婉拒論武", True, ""),
     ]
 
 
@@ -553,7 +554,7 @@ def test_a_pick_that_does_not_fit_keeps_the_invitation(twins):
     content, world = twins
     _invite(content, world, "insight:feng")  # 甲出「風」；乙的「風」是同一樣，「火」＋風才合得成
     msgs = _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:insight:feng", "proposed": (None, "")}))[0]
-    assert msgs == [engine.DISCUSS_SAME]
+    assert msgs == [discuss_actions.DISCUSS_SAME]
     assert len(world.get_season().invites) == 1  # 換一樣再答
     assert not any(e.title.startswith("論武不成") for e in _load(world, "甲").journal)
     msgs = _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:insight:huo", "proposed": ("烈焰境", "")}))[0]
@@ -1062,7 +1063,7 @@ def test_fb243_their_side_refusal_is_written_from_your_side(twins):
 
     content, world = twins
     _invite(content, world, "insight:feng")  # 甲出「風」，乙出「火」
-    own_words = engine._refusal("這兩個合起來還是「風火境」，你已經悟得了。", "已經有了")  # 寫給甲看的那一句
+    own_words = discuss_actions._refusal("這兩個合起來還是「風火境」，你已經悟得了。", "已經有了")  # 寫給甲看的那一句
     game = _do(content, world, "乙", lambda g: g)[1]
     peer = SimpleNamespace(state=_load(world, "甲"), discuss_problem=lambda *args: own_words)
     line = game.discuss_item_problem(world.get_season().invites[0], peer, "insight:huo")
