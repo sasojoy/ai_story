@@ -46,8 +46,14 @@ class TalkLogHttp(sb.SocializeScenario):
     def __init__(self, root: Path, profile: str, db: Path):
         super().__init__(root, profile, db)
         self.TestClient = RealClient
-        import uvicorn
+        import types
 
+        import uvicorn
+        import uvicorn.server
+
+        # uvicorn 每秒在伺服器那條線叫一次 time.time 更新 Date 表頭（server.on_tick）；碰上換過的鐘會推 0.5 秒，落在哪一步看牆上的時間，
+        # 兩趟就差那一步的時刻（第一次比 base 對 head 碰到）。Date 不進輸出，給它一個定值。
+        uvicorn.server.time = types.SimpleNamespace(time=lambda: sb.CLOCK0)
         config = uvicorn.Config(self.server.app, host="127.0.0.1", port=PORT[0], lifespan="off", log_level="warning")
         self.uvicorn = uvicorn.Server(config)
         threading.Thread(target=self.uvicorn.run, daemon=True).start()
