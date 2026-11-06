@@ -3463,6 +3463,41 @@ class HireRules(_Strict):
     ])
 
 
+class PersonaStage(_Strict):
+    """人物性子的一段（content/personas.json；功能包 features/persona）：text 是這一段的他（對話提示與簡介的「如今」都用），
+    short 是一句說法（簡介的變化紀錄「第 N 週・週X 起，<short>」、換段那一刻的傳聞「有人說<名字>近來<short>。」）。"""
+
+    text: str
+    short: str
+
+
+class PersonaAxis(_Strict):
+    """人物的一條性子（兩頭的一把尺、五段；設計稿「人物性子會變」，Joy 2026-11-06「可以」）。ends 是兩頭的叫法（也是模型歸類填的字），
+    hints 是怎樣算在把他往那一頭推（照 ends 的順序，給模型看）；start 是史實的起點（第幾段，0 是 ends[0] 那一頭的盡頭）；
+    stages 五段，照 ends[0] → ends[1] 的順序。"""
+
+    id: str
+    ends: tuple[str, str]
+    hints: tuple[str, str]
+    start: int = Field(ge=0, le=4)
+    stages: list[PersonaStage] = Field(min_length=5, max_length=5)
+
+
+class PersonaShiftRules(_Strict):
+    """人物性子會變（功能包 features/persona；設計稿 https://claude.ai/artifact/R8w6aMxgeH89djeKYC7n5U，Joy 2026-11-06「可以」）。
+    全服跟人物說話，模型只歸「這句在把他往哪一頭推」，引擎照下面的數字每天 00:00 結算一次。預設關：關著一個位元組都不變（舊的性情漂移照舊）。
+    數字都是【草】。"""
+
+    enabled: bool = False
+    # 情誼到多少、這一筆算幾份（由小到大）：不到第一檔的不算（不熟的人說的話他聽不進去）
+    bands: list[tuple[int, int]] = Field(default_factory=lambda: [(30, 1), (60, 2), (80, 3)])
+    min_net: int = Field(default=3, ge=1)  # 一天的淨推力不到幾份不動
+    points: int = Field(default=2, ge=1)  # 一份推幾點
+    daily_cap: int = Field(default=8, ge=1)  # 一天最多動幾點（一段 40 點：最快五天一段）
+    decay: int = Field(default=2, ge=0)  # 一整天沒人推，往本性回幾點
+    reach: int = Field(default=2, ge=0, le=4)  # 最多離史實的起點幾段（本性難移）
+
+
 class LegacyRules(_Strict):
     """傳承（tianxia/features/legacy；設計 docs/superpowers/specs/2026-11-04-屬性與跨季-架構方向v2.md 第六、七節）：正氣、邪氣、機緣三項
     只在換季那一刻照上一季的傳結算一次（季中不動），識海帶一份神品意境到下一季、解封才用得到。預設關：關著一個位元組都不變。
@@ -4212,6 +4247,7 @@ class Config(_Strict):
     epiphany: EpiphanyRules = Field(default_factory=EpiphanyRules)  # 特殊頓悟（見 EpiphanyRules）
     hire: HireRules = Field(default_factory=HireRules)  # 一般 NPC 同伴：五項屬性的季在酒肆花銀兩招（見 HireRules；features/hire）
     legacy: LegacyRules = Field(default_factory=LegacyRules)  # 傳承：正氣、邪氣、機緣與識海（見 LegacyRules；features/legacy）
+    persona_shift: PersonaShiftRules = Field(default_factory=PersonaShiftRules)  # 人物性子會變（見 PersonaShiftRules；features/persona）
     xingshi: XingshiTuning = Field(default_factory=XingshiTuning)  # 〈天下形勢〉：領地爭奪每天一篇的旁白（見 XingshiTuning）
     ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）
     figure_aid: FigureAidRules = Field(default_factory=FigureAidRules)  # 護衛、犒軍、探望大勢人物（見 FigureAidRules）
@@ -5587,6 +5623,7 @@ class Content(_Strict):
     looks: dict[str, Look] = Field(default_factory=dict)  # 擂台形象（content/looks.json，照 id、照檔案的順序）；沒有這個檔就是空的（只有預設的斗笠小子）
     itineraries: list[Itinerary] = Field(default_factory=list)  # 人物的行程（content/itineraries.json，世界活起來）；沒有這個檔就是沒有
     relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有
+    personas: dict[str, list[PersonaAxis]] = Field(default_factory=dict)  # 人物性子（content/personas.json，features/persona）：對話人物 id → 兩條性子；沒有這個檔就是空的
     gather_branches: dict[str, GatherBranch] = Field(default_factory=dict)  # 找素材分支（content/gather_branches.json，照內容的順序）；沒有這個檔就是空的（分支關著）
     mark_rules: list[MarkRule] = Field(default_factory=list)  # 地方痕跡過門檻（content/mark_rules.json，減法季批 4）；沒有這個檔就是空的
     # 探索一顆出門一趟的段落句子（content/outing_lines.json，減法季批 2；explore_one.paragraph 讀、探索包 checks.check_outing_lines 驗）：
