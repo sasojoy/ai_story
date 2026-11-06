@@ -18,28 +18,25 @@ from . import arts as arts_mod
 from . import attrset  # 五項屬性（屬性與跨季架構 v2 第三節）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
-    allied, armor, atlas, battlelog, calendar, clinic, conquest, create, divine, economy, encounter, equipment,
+    allied, armor, atlas, battlelog, calendar, clinic, conquest, divine, economy, encounter, equipment,
     fight_llm, figures, forge_secrets, gender, insight_fx, insights, journal, library, martial_arts, place_state, plans,
-    materials, mounts, naming, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal_acts, secret_recipes, sensing,
+    materials, mounts, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal_acts, secret_recipes, sensing,
     shopview, signature, skillview,
     sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, zh,
 )
 from . import flavor
 from .flavor import FlavorJob
-from . import epiphany  # 特殊頓悟（登記一條線的鉤子；企劃者 2026-10-26）
 from . import tiers  # 事件分級：場景卡上那一行「州郡大事」「天下大事」
-from . import outing as outing_rules  # 走一趟（企劃者 2026-10-29～30）：探索一次走一、三、五段
 from . import growth  # 減法季批 2：三道閘、屬性五段的純規則（開關走 rules.jianfa；探索一顆搬進了探索包）
 from . import speech
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
-from . import tavern as tavern_rules  # 酒肆（企劃者 2026-10-18）；叫 tavern_rules：跟其他 *_rules 一樣避開區域變數
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
 # 減法季批 4：隨口應對分岔、痕跡看得見、貢獻（三陣營四勝利的 wins.credit）；別名避開這個檔裡叫 marks、outcomes 的區域變數
 from . import marks as marks_rules
 from . import outcomes as outcome_rules
 from . import wins as wins_rules
-from .models import FreeTextChoice, Outcome, StoryDef, StoryStage
+from .models import FreeTextChoice, Outcome
 from .rules import jianfa
 from . import step as step_rules  # 本週卡「你這一步」（減法季批 3c）；叫 step_rules：這個檔裡有區域變數叫 step
 from . import wins  # 三陣營四勝利（減法季批 3c）：豪強兩本帳、傾向、季末四階
@@ -51,15 +48,12 @@ from . import training
 # guide（全部拆包第 22 批）：新手引導的本體在 tianxia/features/guide/；Game._note_action 叫的是這裡的 note_action（別名 tianxia.guide，
 # tests/core/test_engine.py 換的是 tianxia.engine.note_action），其餘的委派叫包的 actions
 from .guide import note_action
-from .features.guide import actions as guide_actions
 from .journal import LOG_BREAK, Draft
 from .core import bounty_base  # 懸賞榜「別人讀」的那一半（全部拆包第 45 批：收店、榜的入口、投靠那一下作廢、翻頁不寫紀錄、第 2 週才開）
-from .features.bounties import actions as bounties_actions  # 過渡：Game 上懸賞榜的一行委派（全部拆包第 45 批）
-from .features.map import actions as map_actions  # 輿圖：全部拆包第 49 批（13 個一行委派：搬的 11 個方法＋探索包問的 _map_open_places、_map_mostly_here）
 from .martial_arts import QUALITIES  # （cultivation：is_renamed 跟著 _deliver_renames 搬進修練包，拿掉）
 from .models import (
-    EXPLORE_BRANCHES, FREE_TEXT_MAX, BattleDef, Check, Choice, Content, Effect, Event, ExploreBranch, FactionDef, Location,
-    DuelBoss, PromotionDef, RoadKind, Squad, Threshold, TimetableEvent, TravelMode, TutorialStep, WorldEvent,
+    EXPLORE_BRANCHES, FREE_TEXT_MAX, Check, Choice, Content, Effect, Event, FactionDef, Location,
+    RoadKind, Squad, Threshold, TimetableEvent, TravelMode, TutorialStep, WorldEvent,
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
@@ -83,10 +77,6 @@ from .core.services import NO_SUCH_PLAYER, PAUSED_TEXT, WalletService, drill_sha
 from .core.services import BIG_FIGHT_WAIT  # sortie（全部拆包第 17 批）：大場面按鈕上的字搬進核心的共用的字（出陣包的遊歷鈕也用）
 from .core.services import PLAN_OPTION, ROAD_SAY, SAY_MAX, SAY_OPTION, TEXT_TALKS, say_text  # noqa: F401  companions（全部拆包第 20 批）：「自己說」那三顆的 id 與那句話能不能送，搬進核心的共用的字
 from .core.services import SNUB_NOTE, SOCIAL_NO_ONE  # noqa: F401  socialize（全部拆包第 21 批）：交友求見的三個共用的字搬進核心的共用的字（SOCIAL_NO_ONE、SNUB_NOTE 測試從 engine 拿）
-from .features.travel import go_actions as travel_go, menu as travel_menu  # 過渡：Game 上移動的 6 個一行委派（全部拆包第 47 批；原本 9 個，第 48 批拿掉 3 個）
-from .features.travel import departure as travel_departure, party as travel_party  # 過渡：Game 上移動的 8 個一行委派（全部拆包第 48 批）
-from .features.stamina_plays import ambush_actions  # 過渡：Game 上設伏的 4 個一行委派（全部拆包第 39 批）
-from .features.seclusion import actions as seclusion_actions  # 過渡：Game 上閉關的 3 個一行委派（全部拆包第 39 批）
 from .core.services import ROAD_REWARD_TASKS, ROAD_TASKS  # noqa: F401  travel（全部拆包第 47 批）：路上小事的名稱表與有收穫的那兩樣搬進核心的共用的字（from tianxia.engine import ROAD_TASKS 照舊拿得到）
 from .core.services import MOVE_BLOCKED, RaidSpoils  # stamina_plays（全部拆包第 39 批）：移動被擋的標籤與設伏／截殺共用的贏家帳
 from .core.services import HutReward  # guide（全部拆包第 22 批）：序章步驟的獎勵那一行的記號（原本 import 自 guide）
@@ -94,44 +84,22 @@ from .core.services import HutReward  # guide（全部拆包第 22 批）：序�
 # 兩個測試檔在拿；choose、answer_event 照舊掛 @_outing_watch）
 from .core.services import PREPARING_REFUSAL, PREPARING_TEXT  # noqa: F401
 from .core.services import outing_watch as _outing_watch
-from .features.sense import actions as sense_actions  # 過渡：Game 上有所感與頓悟的 8 個一行委派、7 個服務（全部拆包第 24 批）
-from .features.zhuan import actions as zhuan_actions  # 過渡：Game 上列傳的 9 個一行委派（全部拆包第 29 批）
 # explore
-from .features.explore import explore_actions  # 過渡：Game 上探索一顆的 9 個一行委派（主動搬六包第 3＋4 批）
-from .features.explore import explore_base  # 過渡：Game 上舊探索的底 6 個一行委派（全部拆包第 18 批）
-from .features.explore import outing_actions  # 過渡：Game 上走一趟的 9 個一行委派（主動搬六包第 3＋4 批）
-from .features.looks import actions as looks_actions  # 過渡：Game.arena_look 留一行委派（擂台記形象）
-from .features.feast import actions as feast_actions  # 過渡：Game.feast_*（server 的三段式）與場景卡留一行委派
 # tavern（擺在宴客與出陣之間：別條拆包線在 core.services 之後、出陣那一行之後各加一段，不貼在一起）
-from .features.outlets import donate_actions as outlets_donate  # 過渡：Game 上捐軍備的 5 個一行委派（全部拆包第 43 批）
-from .features.outlets import silver_actions as outlets_silver  # 過渡：Game 上銀兩出口的 3 個一行委派（全部拆包第 43 批）
-from .features.tavern import actions as tavern_actions  # 過渡：Game 上酒肆的 19 個一行委派（主動搬六包第 10 批）
-from .features.sortie import actions as sortie_actions  # 過渡：Game 上出陣的 13 個一行委派（主動搬六包第 1 批）
-from .features.sortie import duel_actions as sortie_duel_actions  # 過渡：Game 上出陣約戰的 16 個一行委派（主動搬六包第 2 批）
 from .features.sortie.rules import CLASH_OPEN, CLASH_THEIRS_WON, CLASH_WON  # noqa: F401  過渡：tianxia/features/peers/tests/test_raid.py 從 engine 拿
 # sortie（全部拆包第 17 批）：舊遊歷、操練、守勢的 8 個一行委派；必敗先問的那兩句搬進包（test_orders、test_mounts、test_prologue_web 從 engine 拿）
-from .features.sortie import train_actions as sortie_train_actions  # 過渡：Game 上舊遊歷、操練、守勢的 8 個一行委派（全部拆包第 17 批）
 from .features.sortie.rules import TRAIN_CONFIRM, TRAIN_CONFIRM_RIDING  # noqa: F401  過渡：三個測試檔從 engine 拿
 # battle
 from .features.battle import rules as battle_rules  # 過渡：決戰的字（Game.BATTLE_GAMBLE_* 類別屬性、委派的型別註記）
-from .features.battle import view as battle_view  # 過渡：Game 上決戰「看」那一半的 22 個一行委派（主動搬六包第 5 批）
-from .features.battle import admin as battle_admin  # 過渡：Game 上管理者的決戰工具 6 個一行委派（全部拆包第 6 批）
-from .features.battle import sieges as battle_sieges  # 過渡：Game 上攻城的 6 個一行委派（全部拆包第 6 批）
-from .features.battle import muster as battle_muster  # 過渡：Game 上集結、投效、挑同伴的 13 個一行委派（全部拆包第 7 批）
-from .features.battle import progress as battle_progress  # 過渡：Game 上推進與結算的 14 個一行委派（全部拆包第 8 批）
 from .features.battle.rules import (  # noqa: F401  過渡：測試從 engine 拿（test_companions_battle、test_followers_matter、
     ESCORT_MUSTER, ESCORT_SCENE, RESTORED_NOTE, ROUND_BLOCKS, TROOPS_LINE, TROOPS_REPORT,  # test_showdown_full_report、test_battle_round_blocks）
     ESCORT_PICK,  # 第 7 批：挑同伴那一句（test_companions_battle 從 engine 讀）
 )
 # bout
-from .features.bout import duel_actions as bout_duel  # 過渡：Game 上頭目戰的一行委派（全部拆包第 12 批）
-from .features.bout import arena_actions as bout_arena  # 過渡：Game 上擂台的一行委派（全部拆包第 12 批）
 from .features.bout import duel_rules as bout_rules  # 過渡：Game.DUEL_GAMBLE_NOTE 類別屬性、委派的型別註記（DuelTextRequest）
 # companions（全部拆包第 19 批：人物情誼一）
 from .features.companions import actions as companions_actions  # 過渡：Game 上人物情誼的 29 個一行委派（招募、名下、心意、託付、書信）
 # companions（全部拆包第 20 批：人物情誼二）
-from .features.companions import parley_actions as companions_parley  # 過渡：Game 上 NPC 智能 2.0 的一行委派（條件與清單、路上的選項、並肩出陣）
-from .features.companions import talk_actions as companions_talk  # 過渡：Game 上人物對話的一行委派（A 段開單、C 段重驗、開口、一輪、帶路的路上說一句）
 
 if TYPE_CHECKING:  # 型別註記用（companion_agent、parley 搬進人物情誼包之後 engine 不再 import 它們；Game 上的委派只轉手）
     from .features.companions import companion_agent, parley
@@ -140,59 +108,24 @@ if TYPE_CHECKING:  # 型別註記用（companion_agent、parley 搬進人物情�
 # `# sense` 那一行 import）；
 # 修練頁的 33 個一行委派（原本 engine 那兩行 import 的 cultivation、chuangong 與 `from . import ascend` 現在是修練包的別名，engine 不再用，拿掉）
 from .core.services import not_while_preparing as _not_while_preparing
-from .features.socialize import actions as socialize_actions  # 過渡：Game 上交友求見的一行委派（全部拆包第 21 批）
-from .features.socialize import menus as socialize_menus  # 過渡：同上（選單、求見名單與畫面說明）
-from .features.socialize import view as socialize_view  # 過渡：同上（見不見得到、次數、交友會做什麼）
-from .features.craft import actions as craft_actions  # 過渡：Game 上煉製頁開爐與自創的 16 個一行委派（全部拆包第 44 批）
 # seal（全部拆包第 27 批）：Game 上玉璽碎片季流程的 11 個一行委派（核心原位、殼的 ADMIN_ACTIONS、決戰包經 ctx、測試與量表腳本叫的）。
 # 第 28 批（玉璽二）：碎片卡、獨門行動、奪璽單挑、管理者六個也搬進包（Game 留 22 個一行委派）；頂端的 seal_rules 與 seal_duel 沒人用了，拿掉
-from .features.seal import actions as seal_actions
-from .features.seal import admin as seal_admin
-from .features.seal import card as seal_card  # 過渡：Game 上碎片卡與獨門行動的一行委派（第 28 批）
-from .features.seal import duel_actions as seal_duel_actions  # 過渡：Game 上奪璽單挑的一行委派（第 28 批）
 # smithy（全部拆包第 41 批）：Game 上鐵匠鋪的 12 個一行委派（server、假人、測試與核心原位的選單叫的）
-from .features.smithy import shelf_actions as smithy_shelf
-from .features.smithy import forge_actions as smithy_forge
-from .features.smithy import trade_actions as smithy_trade
-from .features.smithy import gear_actions as smithy_gear
-from .features.smithy import divine_actions as smithy_divine
-from .features.smithy import clue as smithy_clue
-from .features.gear import market_actions as gear_market  # 過渡：Game 上馬市選單與選擇的 2 個一行委派（全部拆包第 42 批）
-from .features.gear import bench_actions as gear_bench  # 過渡：Game 上修練頁換上、餵馬、拆解的 4 個一行委派（全部拆包第 42 批）
-from .features.gear import gift_actions as gear_gifts  # 過渡：Game 上寄放補送、名將贈禮、本命兵器的 5 個一行委派（全部拆包第 42 批）
-from .features.gear import views as gear_views  # 過渡：Game 上修練頁裝備與神器譜的 2 個一行委派（全部拆包第 42 批）
-from .features.cultivation import actions as cultivation_actions  # 過渡：Game 上修練頁動作的 22 個一行委派（全部拆包第 23 批）
-from .features.cultivation import view as cultivation_view  # 過渡：Game 上修練頁唯讀資料的 11 個一行委派（全部拆包第 23 批）
 from .features.cultivation.actions import MELT_MANY_PROLOGUE  # noqa: F401  過渡：tianxia/features/guide/tests/test_prologue.py 從 engine 拿
 # checkin（全部拆包第 30 批）：回體丹那一套歸核心，簽到開著沒、掉回體丹那一句搬進核心的共用小函式（Game._pill_find 用）
 from .core.services import PILL_FOUND, checkin_on
 # story（全部拆包第 30 批）：一條線的底座（共用規則層：JOURNAL、場景圖、題目文字、線的定義）；10 個一行委派（章回 chapters 的模組層 import 搬到包的 actions.py：載入時登記 TASKS）
 from . import story_base
-from .features.story import actions as story_actions  # 過渡：Game 上一條線的 10 個一行委派
 # figure_acts（全部拆包第 31 批）：大勢人物的行動（挑戰本人、護衛犒軍探望、盤算、月旦評、管理者救回人物）的 14 個一行委派
-from .features.figure_acts import admin_actions as figure_admin_actions  # 過渡：Game 上管理者救回人物的 2 個一行委派
-from .features.figure_acts import challenge as figure_challenge  # 過渡：Game 上挑戰本人的一行委派
 from .features.figure_acts import plan_actions as figure_plan_actions  # 過渡：Game 上盤算的 3 個一行委派
-from .features.figure_acts import yuedan_actions as figure_yuedan_actions  # 過渡：Game 上月旦評的 2 個一行委派
 # checkin（全部拆包第 30 批）：每日簽到的 3 個一行委派
-from .features.checkin import actions as checkin_actions  # 過渡：Game 上簽到的 3 個一行委派
 # military（全部拆包第 33 批）：第 3、4 階行動的選項 id 前綴搬進核心的共用的字（軍情包的選單產生它、Verb 認它，第 57 批；這裡留這個名字：features/military/tests 從 engine 拿）
 from .core.services import RANK_ACTION_PREFIX
 # 軍令卡、押糧、第 2 階與第 3／4 階行動、席次抄帳、管理者的軍令與召見的 15 個一行委派
-from .features.military import admin_actions as military_admin_actions  # 過渡：Game 上管理者重發軍令、輪替席次、發召見的 4 個一行委派
-from .features.military import order_actions as military_order_actions  # 過渡：Game 上軍令卡與記功的 4 個一行委派
-from .features.military import seat_actions as military_seat_actions  # 過渡：Game 上席次抄帳的一行委派
-from .features.military import fs_actions as military_fs_actions  # 過渡：Game 上伏筆的一行委派（第 34 批）
-from .features.military import opp_actions as military_opp_actions  # 過渡：Game 上機緣的一行委派（第 34 批）
 # territory_acts（全部拆包第 46 批）：戰書與攻城時段、22:00 換天與分紅補送、〈天下形勢〉、地盤畫面、管理者救場的 20 個一行委派
-from .features.territory_acts import admin_actions as territory_admin  # 過渡：Game 上管理者救場工具的 5 個一行委派
-from .features.territory_acts import day_actions as territory_day  # 過渡：Game 上換天與分紅補送的 2 個一行委派（engine 五處直接叫，沒有掛鉤）
-from .features.territory_acts import letter_actions as territory_letter  # 過渡：Game 上戰書的 2 個一行委派
-from .features.territory_acts import view as territory_view  # 過渡：Game 上地盤畫面的 2 個一行委派
-from .features.territory_acts import xingshi_actions as territory_xingshi  # 過渡：Game 上〈天下形勢〉的 9 個一行委派
 from .state import (
-    ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, CrowdNote, GameState, JournalEntry, Mingtie, Rumor,
-    StoryCard, StoryProgress, TierResult, WorldState, XingshiEssay,
+    ONBOARDING_VERSION, PLAYER, BattleRecord, Convoy, GameState, JournalEntry, Mingtie, Rumor,
+    TierResult,
     new_game_state,
 )
 from .world import (
@@ -208,17 +141,7 @@ from .core import signature_base  # 本命兵器的名字照內容讀（core_sea
 from .core import smith_base  # 打造單子讀的那一小半（全部拆包第 40 批，第 41 批 PM 認定第 4 條：choose 併成一則、讀檔與 sync 清單子，不經舊名 smithing）
 # peers（全部拆包第 37 批）：玩家卡、邀請框、打招呼、贈物、名帖的 31 個方法搬進玩家互動包，Game 留 21 個一行委派（另加月旦評那一句）；
 # 名帖遞帖的登記（mingtie_card）改在包載入時做；原本那兩行 invites、social 的 import 是切磋、論武還在原位用的，第 38 批搬進包之後沒人用，拿掉了
-from .features.peers import actions as peers_actions  # 過渡：Game 上玩家卡與此地還有的一行委派
-from .features.peers import invite_actions as peers_invite_actions  # 過渡：Game 上邀請框的一行委派
-from .features.peers import mingtie_actions as peers_mingtie_actions  # 過渡：Game 上名帖的一行委派
-from .features.peers import pair_actions as peers_pair_actions  # 過渡：Game 上同一對人的帳的一行委派
 # peers2（全部拆包第 38 批）：切磋、論武、截殺的 28 個方法搬進玩家互動包；Game 留 13 個一行委派（論武 4、截殺 9；切磋沒有外面的呼叫端）
-from .features.peers import discuss_actions as peers_discuss_actions  # 過渡：Game 上論武的一行委派
-from .features.peers import raid_actions as peers_raid_actions  # 過渡：Game 上截殺的一行委派
-from .features.faction import join_actions as faction_join  # 過渡：Game 上投靠與拜入門派的 4 個一行委派（全部拆包第 35 批）
-from .features.faction import lean_actions as faction_lean  # 過渡：Game 上豪強改幫的 2 個一行委派（全部拆包第 35 批）
-from .features.faction import defect_actions as faction_defect  # 過渡：Game 上叛投的 2 個一行委派（全部拆包第 35 批）
-from .features.faction import ending_actions as faction_ending  # 過渡：Game 上季末與三方卡的 5 個一行委派（全部拆包第 35 批）
 from .features.peers.invite_actions import INVITE_LAPSED, INVITE_LAPSED_AWAY  # noqa: F401  邀請沒成局的兩句：tianxia/features/peers/tests/test_discuss.py 從 engine 拿
 from .core import arena_ranks, duel_base  # 擂台的名次與稱號、單挑底層（全部拆包第 12 批：留核心；擂台、頭目戰本身在單挑包）
 from .core.event_check import EVIL_ANNAL, FREE_TEXT_OPTION, FreeTextOutcome, FreeTextRequest
