@@ -558,6 +558,22 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 # notify（全部拆包第 53 批；查詢服務，主人人物情誼包：手機通知包 routes.py 的看守一輪〔_notice_keys〕在行動鎖內經 game 叫，Game 上一行委派）
 - `ctx.morning_mail(now)`（到了送信日替他送今天的信；送了回 True）
 
+# shell_server（全部拆包第 69 批；三段式的 A、C 段：鎖外那一段搬進各包 routes.py，A、C 照舊經 Game 的委派叫——假人走同一批委派、測試換 Game.xxx 要打得到；同戰記第 52 批那三個。只給各包自己的 routes.py 接三段式，別包不叫）
+- 決戰：`ctx.battle_text_request(text)`、`ctx.submit_battle_custom_action(text, rate)`
+- 單挑：`ctx.arena_crowd_request()`、`ctx.apply_arena_crowd(note, text)`、`ctx.duel_text_request(text)`、`ctx.duel_gamble(...)`
+- 人物情誼：`ctx.letter_request()`、`ctx.apply_letter(note, text)`、`ctx.persuade_request(errand_id, text)`、`ctx.persuade(request, rate)`、`ctx.dialogue_request(option_id, text)`、`ctx.say_max()`
+- 煉製：`ctx.create_request(text)`、`ctx.create_intent(text, reading=)`、`ctx.create_reread_request(text)`、`ctx.create_reread(text, reading)`、`ctx.forge_request(art_id, insight_ids)`
+- 修練：`ctx.ascend_request()`、`ctx.ascend_line(request, value)`
+- 探索：`ctx.outing_tale_request()`、`ctx.outing_say(preset, text, verdict)`、`ctx.outing_set_tale(text, request)`
+- 宴客：`ctx.feast_text_request(text)`、`ctx.feast_toast(text, rate, request)`
+- 大勢人物的行動：`ctx.yuedan_request()`、`ctx.apply_yuedan(note, lines)`
+- 玩家互動：`ctx.peer_request(name, action, params)`
+- 玉璽：`ctx.seal_text_request(text)`、`ctx.seal_gamble(...)`
+- 有所感：`ctx.epiphany_request()`、`ctx.epiphany_names(request, names)`、`ctx.sense_request(points, image)`、`ctx.sense_draw(request, proposed)`
+- 酒肆：`ctx.tavern_chatter_request()`、`ctx.apply_tavern_chatter(request, lines)`、`ctx.tavern_ask_request(text)`、`ctx.tavern_ask(question, reply, request=)`
+- 地盤：`ctx.xingshi_waiting()`、`ctx.xingshi_request()`、`ctx.settle_xingshi(request, essay)`、`ctx.release_xingshi(request)`
+- 列傳：`ctx.biography_request(season, rewrite)`、`ctx.write_biography(request, text, now, verdicts=)`
+
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """
 from __future__ import annotations

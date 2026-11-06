@@ -67,11 +67,13 @@ from starlette.concurrency import run_in_threadpool
 import console
 import server_push
 from llm_queue import Busy, LlmQueue, QueueTimeout
+# 這一行的先後算行為，名字沒人用了也不拿：import 當下照順序登記（例：social 要排在 engine 帶進來的 wanted 前面，core.cards.ACTIONS 才是玩家卡按鈕原本的先後；
+# 全部拆包第 69 批搬走鎖外工作之後 arena_crowd、ascend、biography、duel、outing、seal_duel、social、tavern、yuedan 殼已經不用，留著只為了這個順序）。
 from tianxia import (
-    battle_instance, flavor, battlelog, calendar, companion_agent, create, divine, epiphany, event_llm, fight_llm, gender, insight_llm, leaderboard, letters, might,
-    naming, narration,
+    arena_crowd, ascend, battle_instance, flavor, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, fight_llm, gender, insight_llm, leaderboard, letters, might,
+    naming, narration, outing,
     ollama_client, power_save, rules,
-    precise, seal, server_bots, sortie, speech, team, timetable, training, treasures, weekcard, xingshi,
+    precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
     talk_log, zhuan_end,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, SESSION_SECONDS, AccountError, AccountStore, SessionStore, normalize
