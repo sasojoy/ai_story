@@ -22,6 +22,7 @@
 | bot_pick(ctx, option)、bot_always | bot_policy.score（假人看到這一顆的分數，None 是不按）；bot.pick 排除的前綴（永遠按得下去的） |
 | admin_tools(shell)、routes(shell) | server：/api/do/{op} 的管理者工具、掛路由（shell 是 server 模組） |
 | main_actions(shell)、menxia_actions(shell) | server：建 MAIN_ACTIONS（/api/do/{op}）、MENXIA_ACTIONS（/api/menxia/{op}）兩張表：{op: fn(g, body)}，照 action_table 排回寫死的順序。**手冊 3.3 表外**（全部拆包第 68 批，見檔尾 shell_server 那一段） |
+| outlock(shell) | server：/api/do/{op} 先接走的鎖外三段式（ops）與放鎖之後要開的背景寫字（jobs），殼啟動時問、不看 enabled、登記的全掛；jobs 的先後是寫死的 OUTLOCK_ORDER。**手冊 3.3 表外**（全部拆包第 69 批，總表第六節第 1 條寫明的跨包機制，見檔尾 shell_server 那一段） |
 | threads(shell) | server.main（殼開、測試停：只有 main 叫 start_threads，測試不叫；不回東西。全部拆包第 52 批，開給戰記與第 53 批的看守） |
 | check_content(content, need)、web、content | content.validate（關著的包照驗）；index.html 的檔；content.py 讀的檔。check_content **手冊 3.3 表外**（見下） |
 
@@ -69,7 +70,7 @@ ctx 第一階就是 Game；功能包只准叫 services.py 那張清單上的方�
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
 from .option import Option
@@ -156,6 +157,7 @@ class FeatureHooks(Protocol):
     def admin_tools(self, shell: Any) -> dict[str, AdminTool]: ...
     def main_actions(self, shell: Any) -> dict[str, Callable[[Any, dict], Any]]: ...  # shell_server
     def menxia_actions(self, shell: Any) -> dict[str, Callable[[Any, dict], Any]]: ...  # shell_server
+    def outlock(self, shell: Any) -> Outlock: ...  # shell_server
     def routes(self, shell: Any) -> Any: ...
     def check_content(self, content: Content, need: Callable[[bool, str], None]) -> None: ...
     # ── 接縫掛鉤（第 11 批；不問 enabled，Shop.menu、Shop.entry、Verb.cell 除外）──
@@ -241,6 +243,9 @@ class Feature:
 
     def menxia_actions(self, shell: Any) -> dict[str, Callable[[Any, dict], Any]]:  # shell_server
         return {}
+
+    def outlock(self, shell: Any) -> Outlock:  # shell_server
+        return Outlock()
 
     def routes(self, shell: Any) -> Any:
         return None
@@ -1026,3 +1031,50 @@ def action_table(order: tuple[str, ...], core: dict[str, Callable[[Any, dict], A
     for op, fn in merged.items():
         table.setdefault(op, fn)
     return table
+
+
+# ── shell_server（全部拆包第 69 批「伺服器分包二」；計畫 docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md 第四節）：
+# 鎖外工作（三段式的 B 段與放鎖之後才開的背景寫字）進各包的 routes.py，殼只留框架。同 main_actions：殼啟動時問、不看 enabled（原本這幾條本來就不看包的開關）、
+# 登記的全掛。模型呼叫絕不進鎖：ops 在 api_do 裡、鎖外叫；jobs 的 waiting 在鎖內問（只讀、不叫模型），start 放鎖之後才開。 ──
+
+
+# 放鎖之後要開的背景寫字，先後就是這一張（原本 server.act 那六行的順序；問與開都照它，順序算行為）。戰記的 tale_round 照舊在 threads 掛鉤（定時背景，不是動作之後才開）。
+OUTLOCK_ORDER: tuple[str, ...] = ("tale", "crowd", "chatter", "letter", "yuedan", "xingshi")
+
+
+@dataclass(frozen=True)
+class OutlockJob:
+    """放鎖之後才開的一條背景寫字。waiting(game)：行動鎖內問（只讀、不叫模型），回真值才算有；start(game, got)：鎖放掉之後才叫，got 是 waiting 回的那個值（酒肆閒談是地點 id）。"""
+
+    slot: str  # OUTLOCK_ORDER 上的一格
+    waiting: Callable[[Any], Any]
+    start: Callable[[Any, Any], Any]
+
+
+@dataclass(frozen=True)
+class Outlock:
+    """一包的鎖外工作。ops：/api/do/{op} 先接走的那幾條 {op: fn(game, body)}，自己拿鎖、自己照三段式走（不經 act 包一層）；jobs：放鎖之後要開的背景寫字。"""
+
+    ops: dict[str, Callable[[Any, dict], Any]] = field(default_factory=dict)
+    jobs: tuple[OutlockJob, ...] = ()
+
+
+def outlock_ops(shell: Any) -> dict[str, Callable[[Any, dict], Any]]:
+    """各包的鎖外 /api/do/{op}（殼的 OUTLOCK_OPS；關著的包也列，各動作自己回一句）。兩包同名丟例外。"""
+    return _merged_actions([f.outlock(shell).ops for f in registered()], "鎖外工作")
+
+
+def outlock_jobs(shell: Any) -> tuple[OutlockJob, ...]:
+    """各包的背景寫字（殼的 OUTLOCK_JOBS），照 OUTLOCK_ORDER 排。格不在表上、兩包同格、表上沒人登記都丟例外（開機就知道）。"""
+    by_slot: dict[str, OutlockJob] = {}
+    for f in registered():
+        for job in f.outlock(shell).jobs:
+            if job.slot not in OUTLOCK_ORDER:
+                raise ValueError(f"背景寫字 {job.slot} 不在 OUTLOCK_ORDER")
+            if job.slot in by_slot:
+                raise ValueError(f"背景寫字 {job.slot} 兩包都有")
+            by_slot[job.slot] = job
+    missing = [slot for slot in OUTLOCK_ORDER if slot not in by_slot]
+    if missing:
+        raise ValueError(f"背景寫字 {missing} 沒有人登記")
+    return tuple(by_slot[slot] for slot in OUTLOCK_ORDER)
