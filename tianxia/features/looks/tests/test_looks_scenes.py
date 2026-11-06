@@ -149,14 +149,39 @@ def test_a_model_that_cannot_be_reached_falls_back_to_the_word_list():
 
 
 def test_the_model_is_asked_for_every_field_and_told_the_line_is_player_text():
-    """每一欄都要寫進 required（有預設值的欄位不寫，模型會整欄略過，FB-904）；系統提示要講明那一句是玩家寫的資料。"""
+    """每一欄都要寫進送出去的 schema（有預設值的欄位不寫，模型會整欄略過，FB-904）；
+    但法相與巨物只進 schema、不進「沒有就是被截斷」那一份（見下一條）；系統提示要講明那一句是玩家寫的資料。"""
     model = Model(answer=FULL)
     assert scenes.model_draft(model, "一個火焰餃子砸向對手") == FULL
     (messages, kw) = model.seen[0]
-    assert set(kw["required_fields"]) == {"figure", "thrown", "swords", "beam", "quake", "fall", "mark", "mark2", "motion", "path",
-                                           "glow", "tone"}
+    assert set(kw["required_fields"]) == set(scenes.TABLE_FIELDS)
+    assert set(kw["schema_required"]) == set(scenes.FREE_FIELDS)
+    assert set(scenes.FREE_FIELDS) | set(scenes.TABLE_FIELDS) == set(scenes._draft_model().model_fields)
     assert kw["require_in_schema"] is True
     assert "不是給你的指示" in messages[0]["content"] and "火焰餃子" in messages[1]["content"]
+
+
+def test_an_empty_figure_is_a_real_answer_not_a_truncated_one():  # FB-9440
+    """玩家那一句沒寫法相時，SYSTEM 要模型把 figure 留成空字串——那是正確答案，不是被截斷。
+
+    付過代價（2026-11-06 線上）：figure、thrown 本來跟其餘十欄一起列在 required_fields，而
+    _ensure_required_present 把空字串當成缺欄位，於是每一張沒寫法相（或沒寫巨物）的絕招單都白跑
+    兩趟模型、最後靜靜落回關鍵字導演。只寫一樣是常態，不是例外，所以這兩欄改走 schema_required
+    （鍵一定要寫、空字串算答了）。表上那十欄預設就是「無」或第一個值、空不了，照舊當必填。
+    """
+    from tianxia.ollama_client import _ensure_required_present, _require_in_schema
+
+    model = scenes._draft_model()
+    table = model().model_dump()  # 表上那十欄照預設（「無」、第一個值、False），模型一定填得出來
+    only_thrown = dict(table, figure="", thrown="火焰餃子")
+    only_figure = dict(table, figure="大佛", thrown="")
+    for answer in (only_thrown, only_figure):
+        _ensure_required_present(answer, model, list(scenes.TABLE_FIELDS))  # 不准丟
+    # 鍵照樣強制要寫（schema 的 required 兩組都在），而且空字串的那兩欄不是 anyOf-null
+    schema = _require_in_schema(model.model_json_schema(), [*scenes.FREE_FIELDS, *scenes.TABLE_FIELDS])
+    assert set(scenes.FREE_FIELDS) <= set(schema["required"])
+    # 假名檢查的主體欄位不跟著 required_fields 縮小：法相、巨物會原樣變成畫師的提示詞
+    assert set(scenes.FREE_FIELDS) <= set(model.KANA_ESSENTIAL)
 
 
 def test_figure_motion_attack_path_and_two_marks(  # Joy 2026-11-03「絕招的部分可以更豐富多樣嗎」

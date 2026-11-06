@@ -50,6 +50,8 @@ from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 
 # legacy、hire（合回 develop 2026-11-06，PM 認定第 4 條：獨立包；FEATURES 裡緊接在 bout 後面，develop 的相對位置）
 from ..features import legacy  # 傳承
 from ..features import hire  # 招募同伴
+# persona（合回 develop 第 4 段 2026-11-06，PM 定：留成包、規則本體在共用層 persona_rules；FEATURES 裡緊接在 hire 後面，develop 的相對位置）
+from ..features import persona  # 人物性子
 # stamina_plays
 from ..features import stamina_plays  # 體力玩法（設伏、屯糧）：全部拆包第 39 批。choose 與 bot_pick 的前綴 ambush／works 與別的包不重疊；world() 的格有表序；選項不走 FEATURES（見該包 actions.py）
 # seclusion
@@ -120,6 +122,8 @@ FEATURES: list[Feature] = [
     # legacy、hire（develop 的相對位置：緊接在 bout 後面）
     legacy.FEATURE,
     hire.FEATURE,
+    # persona（develop 的相對位置：緊接在 hire 後面；只有 on_sync 與 check_content，沒有選項、選單、店面）
+    persona.FEATURE,
     # stamina_plays（排在 bout 後面：choose 前綴與別的包不重疊，順序不影響結果）
     stamina_plays.FEATURE,
     # seclusion
@@ -257,6 +261,9 @@ SHARED: dict[str, str] = {
     # seal（全部拆包第 51 批「玉璽三」：seal_acts 拆兩半，包這一半是 features/seal/acts.py）
     "seal_acts": "璽效查詢（引將釘人、頒詔、承露、傳檄、收心、鎮地的此刻生效與期滿回原處）：核心的 world、rules、team 讀；"
                  "懸賞、人物、宴客、修練、有所感、出陣包與領地爭奪、人物活起來、盤算都讀",
+    # persona（合回 develop 第 4 段，PM 定：人物性子留成包，純規則搬到這一層）
+    "persona_rules": "人物性子的純規則（值與段、記一筆、每天結算、換段、對話提示、簡介）：人物情誼包的 companion_agent 每一輪對話都叫 ends_for、prompt_lines、hear、covers、NONE，"
+                     "手上沒有 ctx；殼的簡介 figure_intro 讀 view；人物性子包的 rules re-export 同一批物件。只 import 核心的 calendar、rules、models、state",
 }
 
 # seal（全部拆包第 51 批「玉璽三」：seal_acts 的登記在上面 SHARED 字面量最後一格；這裡改寫四格說明；
