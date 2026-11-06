@@ -1,4 +1,4 @@
-"""戰記（tianxia/tale.py；Joy 2026-10-29，原稱戰役話本）：收場的決戰整理成料 → 模型寫字 → 組成一篇 → 存進旁邊的小檔。
+"""戰記（tianxia/features/tale/tale.py；Joy 2026-10-29，原稱戰役話本）：收場的決戰整理成料 → 模型寫字 → 組成一篇 → 存進旁邊的小檔。
 
 守三件事：**玩家原話一字不改**（不經過模型）、**模型寫壞或叫不動照樣有一篇可看**（模板版）、
 **模型寫的字不准夾阿拉伯數字或「假人」那幾個字**。畫面那一半在 tests/web/test_tale_web.py。
@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from conftest import real_content
 
-from tianxia import tale
 from tianxia.battle_instance import BattleInstance, BattleParticipant, BattleRoundRecord, GambleMoment
+from tianxia.features.tale import tale
 
 SIDES = {"guan": "官軍", "huang": "黃巾軍"}
 

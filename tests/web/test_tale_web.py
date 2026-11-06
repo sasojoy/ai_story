@@ -71,7 +71,7 @@ def test_the_link_is_live_only_when_the_tale_is_ready(m):
 
 def test_the_tale_opens_the_standalone_page_in_a_layer(m):
     """戰記頁（Joy 2026-11-04 獨立一頁、可以分享）：遊戲裡疊一層全螢幕，開伺服器畫的那一頁（?in=1）；內文的畫法在 tale_html.py
-    （tests/server/test_tale_page.py）。網址照跳脫。"""
+    （tianxia/features/tale/tests/test_tale_page.py）。網址照跳脫。"""
     page = run(m, f"return H.taleHtml({json.dumps(TALE, ensure_ascii=False)});")
     assert '<div class="zj-layer"><iframe src="/zhanji/abc123?in=1" title="長社火攻戰記"' in page
     assert 'allow="web-share; clipboard-write"' in page and "‹ 戰報" in page

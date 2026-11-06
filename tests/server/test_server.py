@@ -380,7 +380,7 @@ def test_reports_view_is_empty_with_no_battles(game):
 
 
 # ── 戰記（Joy 2026-10-29，原稱戰役話本）：/api/tale 的三種狀態、背景寫一篇、江湖史目錄的開關 ──
-# 寫法與存放的測試在 tests/battle/test_tale.py，這裡只管伺服器這一側。
+# 寫法與存放的測試在 tianxia/features/tale/tests/test_tale.py，這裡只管伺服器這一側。
 
 
 def _tale_store(tmp_path, monkeypatch):
