@@ -17,7 +17,8 @@ arena_sign）、報名與挑擂的標題（choose 掛鉤 → arena_title）、�
 from __future__ import annotations
 
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
-from tianxia import battle_instance, battlelog, encounter, renown, tactics, treasures
+from tianxia import battlelog, encounter, renown, tactics, treasures
+from tianxia.core import battle_base as battle_instance
 from tianxia import attrset, gender, team
 from tianxia.characters import name_key
 from tianxia.core import duel_base

@@ -9,7 +9,8 @@
 """
 from __future__ import annotations
 
-from tianxia import battle_instance, battlelog, conquest, library, renown, treasures  # 共用規則層
+from tianxia import battlelog, conquest, library, renown, treasures  # 共用規則層
+from tianxia.core import battle_base as battle_instance  # 決戰的資料型別與判定（第 54 批進核心）
 from tianxia import journal
 from tianxia import seal_duel  # 過渡：待搬（第 28 批：奪璽單挑；收場的字 WIN_VERDICTS、side_tier、CALL、CALL_QA）
 from tianxia.core import annal_base as annals

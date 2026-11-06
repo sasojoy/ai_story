@@ -18,7 +18,7 @@ from . import arts as arts_mod
 from . import attrset  # 五項屬性（屬性與跨季架構 v2 第三節）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
-    allied, armor, atlas, battle_instance, battlelog, bounties, calendar, clinic, conquest, create, divine, economy, encounter, equipment,
+    allied, armor, atlas, battlelog, bounties, calendar, clinic, conquest, create, divine, economy, encounter, equipment,
     fight_llm, figures, forge_secrets, gender, howto, insight_fx, insights, journal, library, martial_arts, place_state, plans,
     materials, mounts, naming, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skillview,
@@ -74,6 +74,7 @@ from .sqlite_world import open_world
 from .wallet import Wallet
 from .core import annal_base as annals  # 行狀記一筆（第 29 批之二）
 from .core import features as features_core  # 核心照 FEATURES 問每一包（開發規範手冊 3.3）
+from .core import battle_base as battle_instance  # battle（全部拆包第 54 批）：決戰的資料型別與判定（核心本體）；規則那一半在決戰包，Game 上沒有方法讀它
 from .core import seal_base  # seal（全部拆包第 27 批）：管理者「定結果」替天命之爭定天命、江湖史七格讀玉璽「讀」的那一小半（核心本體）
 from .core.option import IDLE_MARK, Option  # 選單上的一顆（搬進核心：功能包要做選項）；閒著的選單一定有的那一顆（走一趟要認它）
 from .core.services import NO_SUCH_PLAYER, PAUSED_TEXT, WalletService, drill_share, wallet_on  # 共用的字與小函式、錢包服務（3.10）

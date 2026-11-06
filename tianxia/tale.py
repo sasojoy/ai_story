@@ -24,7 +24,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from . import zh
-from .battle_instance import CENTER, BattleInstance, BattleRoundRecord, GambleMoment, claims_a_kill
+from .core.battle_base import CENTER, BattleInstance, BattleRoundRecord, GambleMoment, claims_a_kill
 from .models import BattleDef
 
 CAST_MAX = 8  # 名錄最多寫幾個人（企劃者 2026-11-04「篇幅都很短」：原本 6，11 人的場子漏掉一半）

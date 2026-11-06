@@ -276,7 +276,7 @@ def pvp_ratio(content: Content, card: dict | None, foe: dict | None) -> float:
 def pvp_unrole(content: Content, role: str, scores: dict[str, float]) -> tuple[str, dict[str, float]]:
     """五項屬性的季、玩家對打（擂台、奪璽單挑）不給職位加成（企劃者 2026-11-04 平衡總表：盾陣的固守、三成氣血疊在一起，
     全統御在中低段贏六成多；斥候加的奇襲是最弱的一招）：拿掉職位、份量把拿手那一招多的那一截除回去。職位留在全服決戰的大場面。"""
-    from . import battle_instance  # 延後 import：只有這裡用得到
+    from .core import battle_base as battle_instance  # 延後 import：只有這裡用得到
     move = battle_instance.ROLE_MOVES.get(role)
     if not role:
         return role, scores
@@ -302,7 +302,7 @@ def pvp_faced(content: Content, power: float, scores: dict[str, float], card: di
     ratio = pvp_ratio(content, card, foe)
     if ratio == 1.0:
         return power, scores, bare
-    from . import battle_instance  # 延後 import：只有這裡用得到
+    from .core import battle_base as battle_instance  # 延後 import：只有這裡用得到
     tuning = content.config.battle
     new = power * ratio
     step = battle_instance.strength(tuning, new) / max(1e-9, battle_instance.strength(tuning, power))

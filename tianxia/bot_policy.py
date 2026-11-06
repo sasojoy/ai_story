@@ -9,10 +9,11 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, epiphany, forge_secrets, library, naming, orders, outing, precise, rules, sensing, server_bots, sortie, stances, team
+from . import allied, arena, atlas, bot, bounties, conquest, cultivation, duel, epiphany, forge_secrets, library, naming, orders, outing, precise, rules, sensing, server_bots, sortie, stances, team
 from . import sortie_duel  # 出陣約戰（減法季批 3b）
 from . import tavern as tavern_rules  # 酒肆殺手：失手加價
 from .bot import allocate_points, can_practise, wants_heal
+from .core import battle_base as battle_instance
 from .core import features as features_core
 from .engine import FREE_TEXT_OPTION, Game, Option
 # 決戰（battle:）的分數搬進決戰包的 bots.py（全部拆包第 7 批；score 先問那一包）：這兩個名字照舊在這裡（tests/bots/test_bot_policy.py、

@@ -19,8 +19,9 @@ import random
 import secrets
 from typing import TYPE_CHECKING
 
-from tianxia import battle_instance, treasures
-from tianxia.battle_instance import BattleInstance
+from tianxia import treasures
+from tianxia.core import battle_base as battle_instance
+from tianxia.core.battle_base import BattleInstance
 from tianxia.models import BattleDef, Content, SealTuning
 from tianxia.state import Equipment, GameState, Rumor, WorldState
 from tianxia.world_state import JADE_SEAL_FRAGMENT_COUNT, SealCache, SealEvent, SealRegistry, SealShard, SealUse, SharedWorldState, WorldStateStore

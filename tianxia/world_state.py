@@ -21,7 +21,7 @@ from typing import Any, Literal, NamedTuple, Protocol
 
 from pydantic import BaseModel, Field, model_serializer, model_validator
 
-from .battle_instance import BattleInstance, BattleRoundRecord, SiegeInfo
+from .core.battle_base import BattleInstance, BattleRoundRecord, SiegeInfo
 from .martial_arts import Insight, MartialArt
 from .models import DEFAULT_SEASON_DAYS, BattleDef, Content
 from .state import GearFind, Rumor, SignatureClaim, WeaponRecipe, WorldState

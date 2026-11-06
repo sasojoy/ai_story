@@ -152,8 +152,6 @@ SHARED: dict[str, str] = {
     "rise": "江湖水漲（大場面、頭目跟得上變強的人）：核心的 rules 讀；單打服務的劇情戰與勝算都經它",
     "battlelog": "戰報的資料與拆得失：核心的 journal 讀；決戰、探索、出陣、酒肆四包都寫戰報",
     "fight_llm": "大場面的模型判讀（三段式的單子與夾過的優勢）：單打服務（fight_request、_checked_fight）與殼的 prepare_fight 用，每一種打一場都可能經它",
-    "battle_instance": "全服決戰與攻城的資料型別與回合規則：核心的 world_state、sqlite_world 存它的資料型別；決戰包、siege、奪璽單挑、擂台都讀"
-                       "（總表第 54 批拆兩半：規則那一半進決戰包、資料型別留下）",
     # 武學與裝備的規則（22 個；總表寫 25 個，fusion、skillview、shopview 先不收：讀了之後成包的有所感、自創、修練、玉璽、鐵匠鋪、擂台、懸賞，
     # 理由在 tests/core/test_feature_boundaries.py 的 SHARED_LATER）：核心的 team、content 算威力、驗內容都讀，修練、煉製、鐵匠鋪、裝備好幾包共用
     "martial_arts": "武學的品質、熟練度、威力：核心的 content、rules、state、team、world_state、sqlite_world 都讀；二十幾個舊模組在用",

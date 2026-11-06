@@ -19,7 +19,7 @@ from tianxia.rules import add_rumor, display_name
 from tianxia.state import GameState, PlayerState
 
 if TYPE_CHECKING:
-    from tianxia.battle_instance import BattleInstance
+    from tianxia.core.battle_base import BattleInstance
 
 
 def enlisted(battle: BattleInstance | None, name: str) -> bool:

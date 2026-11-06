@@ -20,7 +20,8 @@ from __future__ import annotations
 
 import math
 
-from tianxia import allied, atlas, battle_instance, roster, siege  # 共用規則層（豪強依附、輿圖的大區與路線 atlas〔第 50 批收進〕、戰鬥規則核心、同伴、攻城）
+from tianxia import allied, atlas, roster, siege  # 共用規則層（豪強依附、輿圖的大區與路線 atlas〔第 50 批收進〕、同伴、攻城）
+from . import instance as battle_instance  # 這一包的回合規則（第 54 批搬進來）
 from tianxia import attrset, journal, team
 from tianxia.core.option import Option
 from tianxia.models import BattleDef
