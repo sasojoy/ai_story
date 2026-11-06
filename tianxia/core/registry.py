@@ -66,6 +66,8 @@ from ..features import faction  # 陣營：全部拆包第 35 批（接 faction:
 from ..features import gear  # 裝備（馬市、換上、拆解、餵馬、寄放補送、名將贈禮、本命兵器、神器譜）：全部拆包第 42 批（choose 前綴 market 與 act:market 的 Verb、content；沒有路由、沒有店面登記）
 # seal
 from ..features import seal  # 玉璽碎片的季流程：全部拆包第 27 批（沒有前綴、選項、選單、店面、路由；事件、世界層、效果的格都有表序，排在哪裡結果都一樣）
+# bounties
+from ..features import bounties  # 懸賞榜：全部拆包第 45 批（choose 前綴 bounty 與 act:bounties 的 Verb；事件、世界層、你這一步、叛投的格都有表序；沒有店面登記，排在哪裡結果都一樣）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -130,6 +132,8 @@ FEATURES: list[Feature] = [
     gear.FEATURE,
     # seal（排在 gear 後面〔照合併先後〕：沒有選項、選單、店面、路由；bus、world、effects 的格照 BUS_ORDER、WORLD_ORDER、EFFECT_ORDER 定先後，順序不影響結果）
     seal.FEATURE,
+    # bounties
+    bounties.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 
@@ -232,7 +236,7 @@ SHARED: dict[str, str] = {
     "figures": "大勢人物（聲威、在場、退場與回來、自然回復與犒軍共用一天的上限 aid_*）：核心的 world〔世界一步〕、rules、timetable 讀；"
                "決戰、人物情誼、大勢人物、軍情、銀兩出口、酒肆、引導、輿圖八包都叫（讀璽效 seal_acts 記在邊界測試的 SHARED_PENDING：第 51 批）",
     "figure_life": "人物活起來（人物此刻在哪、心事、募兵、走動、求援；每一位對話人物設宴是世界層 life 那一格）：核心的 world 每一步叫；"
-                   "宴客、大勢人物、酒肆、決戰、人物情誼五包都讀（讀璽效 seal_acts、懸賞 bounties 記在 SHARED_PENDING；輿圖的大區 atlas 第 50 批收進這一層）",
+                   "宴客、大勢人物、酒肆、決戰、人物情誼五包都讀（讀璽效 seal_acts 記在 SHARED_PENDING；懸賞第 45 批成包，求援與人物懸賞改讀核心 core/bounty_base；輿圖的大區 atlas 第 50 批收進這一層）",
     "plans": "人物的盤算（每一步推、送到的那一下）：核心的 world 每一步叫、engine.sync 送；人物活起來、大勢人物包的盤算行動讀"
              "（讀璽效 seal_acts 記在 SHARED_PENDING：第 51 批）",
     "orders": "軍令（每週與每天發令、截糧的站、目標）：核心的 world 週初與每天叫；決戰、軍情、出陣、引導、輿圖五包與假人、見聞的分層讀",

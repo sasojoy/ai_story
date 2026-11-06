@@ -56,11 +56,11 @@
   （每一個效果欄位歸哪一格寫在 EFFECT_FIELDS），不問 enabled |
 | defection()（DefectHook） | 叛投那一刻的格（core_effects）：defection.clear_progress（clear）、defection.defect（leave、stranded）、陣營包
   defect_actions.defect_step 確定那一支（after；第 35 批前是 Game._defect_step）四個位置，照檔尾寫死的順序表 DEFECT_ORDER 一格一格叫（各包清自己的進度），不問 enabled |
-| bus()（BusHook） | 一種事件的格（core_eventbus：全部拆包第 26 批）：ctx.publish 的七個發布點（打贏一場、出門一趟、舊探索、抵達、截殺打贏、
-  決戰收場），照檔尾寫死的順序表 BUS_ORDER 一格一格叫，不問 enabled |
+| bus()（BusHook） | 一種事件的格（core_eventbus：全部拆包第 26 批）：ctx.publish 的七個發布點（打贏一場〔兩處〕、出門一趟、舊探索、抵達、截殺打贏、
+  人物託付〔護衛、犒軍〕、決戰收場），照檔尾寫死的順序表 BUS_ORDER 一格一格叫，不問 enabled |
 | steps()（StepHook） | 「你這一步」的格（core_step：全部拆包第 36 批）：本週卡「眼下要事」的候選（weekcard._steps 叫 step.items）與四勝利開著時補目標
-  （step.finish 照每一件 _ref 的第一個字找回那一格的 place），照檔尾寫死的順序表 STEP_ORDER 一格一格叫（包登記自己那一格、懸賞榜兩格由
-  step._STEP_CORE 核心代叫），不問 enabled |
+  （step.finish 照每一件 _ref 的第一個字找回那一格的 place），照檔尾寫死的順序表 STEP_ORDER 一格一格叫（包登記自己那一格；懸賞榜兩格第 45 批
+  由懸賞榜包登記），不問 enabled |
 
 ctx 第一階就是 Game；功能包只准叫 services.py 那張清單上的方法。
 """
@@ -740,8 +740,8 @@ class DefectHook:
 
 
 # 叛投那一刻各包清自己的進度：位置 → 那一個位置的格，照換成掛鉤之前一行一行的先後（同 WORLD_ORDER：包與還沒成包的舊模組穿插，寫死在這裡）。
-# 包登記自己那一格（Feature.defection()），其餘由核心代叫——現在只剩 defection._STRANDED_CORE（懸賞，主人還是舊模組 bounties；defection 第 35 批
-# 搬進陣營包、舊名是別名）；defection._CLEAR_CORE／_LEAVE_CORE、engine._DEFECT_AFTER_CORE 第 35 批拿掉（progress、leave_behind 改由陣營包登記）。
+# 包登記自己那一格（Feature.defection()）。核心代叫的都空了：defection._STRANDED_CORE 第 45 批留 {}（懸賞榜包登記 stranded 那一格）；defection._CLEAR_CORE／_LEAVE_CORE、
+# engine._DEFECT_AFTER_CORE 第 35 批拿掉（progress、leave_behind 改由陣營包登記）。
 # 改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。
 #
 # 位置      核心在哪裡問                                                      run 的簽名                       回傳
@@ -835,7 +835,7 @@ class BusHook:
 
 # 事件 → 訂閱的格，照換成事件之前一行裡的呼叫先後。同一下兩個訂閱者的先後就是回話與存檔寫入的先後（outing：打探懸賞→撿玉璽碎片；
 # arrive：交糧車→護送懸賞；調了就抓得到，計畫 1.9），所以寫死。包登記自己那一格（Feature.bus()），其餘由 engine._BUS_CORE 代叫（還沒成包的
-# 舊模組，標批號）。之後懸賞（第 45 批）、玉璽（第 27 批）成包只是那一格換主人，表不動。改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。
+# 舊模組，標批號；懸賞第 45 批、玉璽第 27 批成包之後每一列都空了，表不動，只有第 45 批加了 aid 那一列，PM 點頭）。改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。
 # 「集結開始」是世界層 WORLD_ORDER["muster"] 的 seal 那一格（第 25 批），不在這裡。
 #
 # 事件        發布點（位置不動）                                                                 run 的簽名                         回傳
@@ -843,7 +843,8 @@ class BusHook:
 # outing      探索包 explore_one 收尾                                                             (ctx, loc_id)                      接
 # explore     探索包 explore_base.explore（舊探索，序章外）                                        (ctx, loc_id)                      接
 # arrive      移動包 departure.arrive 抵達一站（Game._arrive 留一行委派）                           (ctx, loc_id)                      接
-# raid_win    Game._raid_bounty（截殺、設伏打贏）                                                  (ctx, target)                      接
+# raid_win    懸賞榜包 actions.raid_bounty（截殺、設伏打贏；Game._raid_bounty 留一行委派）              (ctx, target)                      接
+# aid         大勢人物包 aid_actions（護衛、犒軍辦成：他發的求援委託算辦成；第 45 批開的）              (ctx, cid)                         接
 # battle_end  決戰包 progress.settle_showdown（時刻表決戰收場，讀回季之前）                         (ctx, battle, definition, result)  不接（None）
 BUS_ORDER: dict[str, tuple[str, ...]] = {
     "win": ("bounties",),
@@ -851,6 +852,7 @@ BUS_ORDER: dict[str, tuple[str, ...]] = {
     "explore": ("bounties",),
     "arrive": ("convoy", "bounties"),
     "raid_win": ("bounties",),
+    "aid": ("bounties",),  # bounties（全部拆包第 45 批：人物託付開成事件，PM 點頭，只加這一列）
     "battle_end": ("seal",),
 }
 
@@ -911,14 +913,14 @@ class StepHook:
 
 # 「你這一步」的順序表：照換成掛鉤之前 weekcard._steps 一段一段接的先後（整合設計 6.1：託付 → 軍令 → 揭了的懸賞 → 伏筆 → 新手目標 → 去投靠；
 # 託付量下來是兩格）。先後就是行為（卡上的先後、「換一件事」從哪一件排起：計畫 1.9 任兩格對調都抓得到），寫死在這裡、不照 FEATURES。包登記
-# 自己那一格（Feature.steps()），其餘由核心代叫（step._STEP_CORE：還沒成包的懸賞榜，第 45 批）。章回那一件不在這裡（weekcard 排在最前面、
+# 自己那一格（Feature.steps()）；懸賞榜兩格第 45 批成包，step._STEP_CORE 空了。章回那一件不在這裡（weekcard 排在最前面、
 # 不跟著輪）。改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。
 #
 # 格          主人                                  寫的 kind    ref（_ref 第一個字）  place 補什麼（四勝利開著）
 # errand      人物情誼 companions                   errand       —（自己帶 id、target） —
-# commission  懸賞 bounties（核心代叫，第 45 批）    errand       errand                那一張委託或求援的地點（護送是終點）
+# commission  懸賞 bounties                          errand       errand                那一張委託或求援的地點（護送是終點）
 # order       軍情 military                         order        order                 那道軍令去哪裡做（最近的摸清了的）；護糧還沒接糧車多 then（終點）
-# bounty      懸賞 bounties（核心代叫，第 45 批）    bounty       bounty                那一張懸賞的地點（護送是終點、打探討伐是地點）
+# bounty      懸賞 bounties                          bounty       bounty                那一張懸賞的地點（護送是終點、打探討伐是地點）
 # foreshadow  軍情 military                         foreshadow   foreshadow            伏筆那一趟的地點
 # newbie      新手引導 guide                        newbie       newbie                新手目標「去做」帶去的地點
 # join        陣營 faction                          join         join                  最近的投靠點

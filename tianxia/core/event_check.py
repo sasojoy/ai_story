@@ -42,7 +42,8 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel
 
 from . import annal_base as annals
-from .. import battlelog, bounties, event_llm, forge_secrets, journal, narration, secret_recipes, story_base, team, tiers
+from . import bounty_base
+from .. import battlelog, event_llm, forge_secrets, journal, narration, secret_recipes, story_base, team, tiers
 from .. import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有端出事件那一下會叫；照 engine 的叫法）
 from .. import outcomes as outcome_rules
 from .. import prologue as prologue_rules
@@ -132,7 +133,7 @@ def event_option_view(ctx) -> dict[str, dict] | None:
         return None
     out: dict[str, dict] = {}
     for i, ch in visible_choices(c.events[s.pending_event], s, c):
-        act = ch.text + bounties.join_note(s, c, ch)
+        act = ch.text + bounty_base.join_note(s, c, ch)
         if ch.combat:
             squad = ctx._story_squad(c.squads[ch.combat])
             odds = team.estimate(s, c, ctx.world, squad.id, difficulty=squad.difficulty, memo=ctx.odds_memo)
@@ -148,14 +149,14 @@ def event_option_view(ctx) -> dict[str, dict] | None:
 def choice_label_of(ctx, choice: Choice, odds: bool) -> str:
     """動手的選項寫對手與勝算，後面照樣接體力的代價（輸了多扣的，企劃者裁決 E6；events.stamina_note）；
     有檢定的寫一行「（屬性 數值：心裡話）」（events.choice_label）。拜入陣營名下的門派、而且手上有新陣營接不了的懸賞時，
-    最後多一個括號講會作廢幾張（bounties.join_note，FB-159）。"""
+    最後多一個括號講會作廢幾張（bounty_base.join_note，FB-159）。"""
     if choice.combat and odds:
         squad = ctx._story_squad(ctx.content.squads[choice.combat])
         odds_text = team.estimate(ctx.state, ctx.content, ctx.world, squad.id, difficulty=squad.difficulty)
         label = f"{choice.text}（對手：{squad.name}・{odds_text}）{stamina_note(choice, ctx.content)}"
     else:
         label = choice_label(choice, ctx.state, ctx.content, ctx.world)
-    return label + bounties.join_note(ctx.state, ctx.content, choice)
+    return label + bounty_base.join_note(ctx.state, ctx.content, choice)
 
 
 # ── 固定選項：檢定、打一場、效果 ──
