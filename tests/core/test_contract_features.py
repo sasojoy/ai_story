@@ -339,7 +339,10 @@ def test_the_core_and_the_packages_fill_every_world_slot_exactly_once():
     assert owners == {("step", "feast"): "feast", ("step", "yuedan"): "figure_acts", ("close", "arena"): "bout",
                       ("muster", "generals"): "battle", ("next", "inscriptions"): "explore",
                       ("muster", "works"): "stamina_plays",  # 全部拆包第 39 批
-                      ("life", "feast"): "feast"}  # core_world2（全部拆包第 40 批）
+                      ("life", "feast"): "feast",  # core_world2（全部拆包第 40 批）
+                      # 全部拆包第 27 批：玉璽包登記五格（原本核心代叫 world._MUSTER_CORE、sqlite_world 的 _open_core、_next_core、_RETIRE_CORE 那幾格）
+                      ("muster", "seal"): "seal", ("open", "seal.cache"): "seal", ("next", "seal.mandate"): "seal",
+                      ("next", "seal.cache"): "seal", ("retire", "seal"): "seal"}
     assert set(core) == set(features_core.WORLD_ORDER)
     for at, order in features_core.WORLD_ORDER.items():
         own = set(features_core.world_hooks(at))

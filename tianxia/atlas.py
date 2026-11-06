@@ -8,9 +8,9 @@ conquest.duel_on，正在答題、跟著誰同行問核心的 omen_base.fs_answe
 改這一份 scripts/test_for.py 只挑自己檔名的 tests/map/test_atlas.py＋煙霧＋邊界（第 15 批 PM 認定第 3 條；收進來之前它 import 十五個模組、
 算彙整的模組，往上找挑到 86 個檔）。另外跑（-n 4）直接 import 它的：tests/acts/ 的 test_clinic、test_conquest_flip、test_conquest_rules、
 test_conquest_siege；tests/arts/test_renown_lessons；tests/core/ 的 test_engine、test_outcomes_content、test_prologue、test_rules、test_social；
-tests/figures/ 的 test_gentry_allied、test_orders；tests/gear/test_mounts；tests/seal/ 的 test_seal、test_seal_duel、test_seal_mandate；
+tests/figures/ 的 test_gentry_allied、test_orders；tests/gear/test_mounts；tests/seal/ 的 test_seal、test_seal_duel；
 tests/server/ 的 test_push_resistance、test_server、test_web_push；tianxia/features/ 的 bout/tests/test_arena、test_bout_seams、
-companions/tests/test_companions、map/tests/test_mapdata、test_mapview、test_open_map、test_real_map、sortie/tests/test_sortie、test_sortie_duel、
+companions/tests/test_companions、map/tests/test_mapdata、test_mapview、test_open_map、test_real_map、seal/tests/test_seal_mandate（第 27 批從 tests/seal/ 搬過去）、sortie/tests/test_sortie、test_sortie_duel、
 test_sortie_duel_words；slow 的 tests/season/test_real_content、faction/tests/test_four_wins_lean_anytime、map/tests/test_world_map。
 改安排前往（travel_block）另跑移動包 tianxia/features/travel/tests；改 order_how、siege_how 另跑 tianxia/features/sortie/tests/test_sortie_duel_howto
 與 tests/figures/test_orders。step.py 說明「反過來也挑不到」那一串也跑。
