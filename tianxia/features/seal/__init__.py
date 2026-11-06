@@ -30,7 +30,7 @@ class SealFeature(Feature):
     # 核心換季（_reset_player_for_new_season）兩個都照帶；heirloom 換季後建 Game 時照登記重抄（copy_heirloom），所以不算帶走的
     player_fields = ("heirloom", "seal_seen")
     carried: tuple[str, ...] = ("seal_seen",)
-    # 七片碎片（content.py 照舊讀、照舊驗：_validate_seal 留原處，不接 check_content，第 34 批認定第 2 條）；檔名照舊
+    # 七片碎片（content.py 照它到這一包的 content/ 載、照舊驗：_validate_seal 留原處，不接 check_content，第 34 批認定第 2 條）；檔名照舊
     content = ("seal.json",)
 
     def enabled(self, ctx) -> bool:

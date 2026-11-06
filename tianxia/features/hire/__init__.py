@@ -2,7 +2,7 @@
 企劃者 2026-11-04 照建議：五型在酒肆花銀兩招、名字隨機）。README.md 寫這一包做什麼、導覽與設計稿。
 
 - actions.py：「此地還能做」裡每一型一顆（此地酒肆還沒有主的第一位）、按下去付錢入隊
-- 人在 content/hire.json（scripts/make_hirelings.py 照 Config.hire 生；載進人物表、標 hire_type／hire_at）
+- 人在這一包的 content/hire.json（scripts/make_hirelings.py 照 Config.hire 生；載進人物表、標 hire_type／hire_at）
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ BOT_SCORE = 6.0  # 假人：銀兩夠、名下沒滿，路過酒肆偶爾招一�
 class HireFeature(Feature):
     name = "hire"
     prefix = "hire"  # hire:<人物 id>
-    content = ("hire.json",)  # content.py 照舊讀進人物表
+    content = ("hire.json",)  # content.py 照它到這一包的 content/ 載進人物表
     player_fields: tuple[str, ...] = ()
     carried: tuple[str, ...] = ()
 

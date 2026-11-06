@@ -17,7 +17,7 @@ class FactionFeature(Feature):
     prefix = ("faction", "defect", "sect")  # faction:…（投靠、確認、選邊、改幫）、defect:…（叛投）、sect:<事件>（拜入門派）
     bot_always = ("defect:", "faction:lean:")  # 叛投、改幫隨時按得下去：整季機器人不按（原本 bot.pick 的排除；機器人不換邊）
     player_fields = ("pending_faction", "pending_defect", "pending_ally")  # 按了投靠／叛投還在確認畫面上、挑好的依附那一軍；換季照新角色重來
-    content = ("sects.json", "events/sects.json")  # 門派與拜入門派的事件（總表附錄甲：歸陣營）；content.py 照舊讀（第 62 批起照它載）；檔名照舊
+    content = ("sects.json", "events/sects.json")  # 門派與拜入門派的事件（總表附錄甲：歸陣營）；content.py 照它到這一包的 content/ 載；檔名照舊
     carried: tuple[str, ...] = ()
     _defection: tuple[DefectHook, ...] | None = None
 

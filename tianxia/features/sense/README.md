@@ -16,7 +16,7 @@
 
 - `player_fields`：`sensing`、`sense_serial`、`sense_misses`（有所感那一份、流水號、選錯的帳）、`epiphanies`、`epiphany_dry`、`god_naming`（特殊頓悟這一季的次數與保底、等著取名的那一個；後三個在 `state.QUIET_DEFAULTS`）。換季全部跟著新角色重來，`carried` 空的。
 - 不列的：私有意境 `own_insights`／`own_serial`（共用規則層 `insights` 的，合成 `fusion` 也寫）；季上的 `WorldState.god_names`、`god_firsts`（核心的季）；`WorldStateStore.claim_insight_first`（核心）。
-- 內容：`content/insight_scenes.json`（`content` 宣告；`content.py` 照舊讀、`content.check_insight_scenes` 照舊驗——核心沒有 import 這一包，不動）；神品意境的四十個模板在 `content/traits.json` 的 `god`（共用的功效表，`content.validate` 驗）。
+- 內容：這一包的 `content/insight_scenes.json`（`content` 宣告；`content.py` 照它到這一包的 `content/` 載、`content.check_insight_scenes` 照舊驗——核心沒有 import 這一包，不動）；神品意境的四十個模板在 `content/traits.json` 的 `god`（共用的功效表，`content.validate` 驗）。
 
 ## 委派與留在原位的接縫
 

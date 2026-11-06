@@ -13,7 +13,7 @@
   （選單、動作、對話備料、假人讀同一份）、交友會直接開口的人物 `socialize_figure`、`deep_interaction_target`、`audience_hall`、
   假人判斷 `starts_dialogue`、`is_futile`；結識事件 `meet_event`、福緣送得出的人 `fortune_free`。核心的 `rules.can_meet`（伏筆偷聽也用）是另一個，這裡 import 成 `core_can_meet`。
 - `menus.py`：交友那一顆 `socialize_option`、一類一顆的交友 `precise_social_option`、求見的第二層名單 `audience_options`、求見畫面的說明 `audience_intro`；江湖頁「此地人物」那一排 `figures_here_view`（主幹合回 D 段從 `Game` 搬來：`talk.via`、`talk.why`、`aid`，只讀。它要問求見名單，所以放這裡不放 `view.py`：`menus` import `view`，反過來就循環）。陣營的名字走共用層 `figures.side_name`（人物情誼包的 `talk_view` 也問它）。
-- `intros.py`（主幹合回 D 段從 `server.py` 搬來）：點大勢人物的簡介 `figure_intro`、`FIGURE_INTROS`。import 時讀一次 `content/figure_intros.json`（正式內容、測試內容都讀 repo 這一份，不看設定），只有殼 import（`_main_view_body` 疊到 `figures_here[].intro`），引擎與假人程式不多讀。
+- `intros.py`（主幹合回 D 段從 `server.py` 搬來）：點大勢人物的簡介 `figure_intro`、`FIGURE_INTROS`。import 時讀一次 這一包的 `content/figure_intros.json`（正式內容、測試內容都讀 repo 這一份，不看設定），只有殼 import（`_main_view_body` 疊到 `figures_here[].intro`），引擎與假人程式不多讀。
 - `actions.py`：交友見不到人時的打發話 `no_audience_line`（會排提示、花亂數，不是純讀，所以不放 `view.py`）、交友 `socialize`（舊寫法）與 `precise_socialize`（一類一顆）、指名求見 `call`、被打發 `brush_off`、記一輪 `count_talk`、福緣 `fortune_gift`、`deliver_fortune`、
   沒碰上人物時抽事件 `encounter`、紀錄標題 `call_title`。
 - `bots.py`：假人看到 `call:` 的選項怎麼按（原本 `bot_policy.score` 的 call 那一段）——只按「返回」，`call:<人物>` 一律不按（名望不夠的求見永遠按得下去，不能給分）。
@@ -26,7 +26,7 @@
 
 - `player_fields`：`talks_today`（`{人物: [第幾個遊戲日, 當天已聊幾輪]}`，遊戲日跟著季長縮）、`picking_audience`（求見名單開著）；`carried = ()`，換季全部跟著新角色重來。
   （第 20 批審查把這兩個留給這一批。）
-- 內容：`content/events/social_nanyang_yingchuan.json`、`social_north.json`、`social_runan.json`（交友事件；`content` 宣告，`content.py` 照舊讀）。
+- 內容：這一包的 `content/events/social_nanyang_yingchuan.json`、`social_north.json`、`social_runan.json`（交友事件；`content` 宣告，`content.py` 照它到這一包的 `content/` 載）。`figure_intros.json`（人物簡介）也宣告在 `content`：`Content` 不讀它，只有 `intros.py` 讀（全部拆包第 62 批）。
   `recruit.json` 分區調查列在這一包，但招募（`_recruit*`）附錄甲裁給人物情誼，這一批不宣告，等 PM 定。
 - 共用的字：`AUDIENCE_HALL_FIGURES`、`SNUB_NOTE`、`SOCIAL_NO_ONE` 在核心 `core/services.py`（核心的選單、`sync`、挑戰本人也讀；`engine` 照舊 import 回來）；`SOCIAL_TALK`、
   `SOCIAL_LIST_INTRO`、`AUDIENCE_MEET` 在 `view.py`；`SOCIAL_LIST_TITLE` 留在 `engine.py`（場景文字讀）。
@@ -59,7 +59,7 @@
 ## 測試
 
 - 這一包的（`tianxia/features/socialize/tests/`，14 條，全部不是 slow，`-n 4` 約 7 秒）：`test_socialize_variety.py`（4：城鎮的交友不能每次都抽到茶館說書，補寫的事件在
-  `content/events/social_*.json`；第 21 批整檔從 `tests/core/` 搬進來，只改了 `CONTENT_DIR` 的路徑層數）、`test_socialize_smoke.py`（1，`smoke`：week7 的官軍在長社按交友打開名單、
+  這一包的 `content/events/social_*.json`；第 21 批整檔從 `tests/core/` 搬進來，只改了 `CONTENT_DIR` 的路徑層數）、`test_socialize_smoke.py`（1，`smoke`：week7 的官軍在長社按交友打開名單、
   點皇甫嵩，沒有模型他無心多談、名單收起）、`test_socialize_bots.py`（`call:back` 0.0、`call:<人物>` 不按、policy 問這一包）、`socialize_stage.py`（契約測試擺局面：平常）。
 - **`test_for` 挑不到的、另外要跑的**（混著別的功能，這一輪不搬、不拆）：`tests/core/test_precise_actions.py`（`_social_plan`、`_deliver_fortune`）、`tests/figures/test_day_scale.py`
   （`_talks_left`、`_talked_out_note`、`_audience_intro`）、`tests/figures/test_promotions_high.py`（`_brush_off`）、`tests/arts/test_hints.py`、`tests/arts/test_renown_explain.py`、

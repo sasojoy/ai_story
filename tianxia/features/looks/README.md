@@ -6,7 +6,7 @@
 
 | 檔 | 是什麼 |
 |---|---|
-| `__init__.py` | 登記（`LooksFeature`）：`enabled`＝商城開著＋`content/looks.json` 有東西、`routes`、`check_content`（id 當資料夾名、名字過命名過濾） |
+| `__init__.py` | 登記（`LooksFeature`）：`enabled`＝商城開著＋這一包的 `content/looks.json` 有東西、`routes`、`check_content`（id 當資料夾名、名字過命名過濾） |
 | `rules.py` | 純規則：買到哪幾套（`owned`，照核心 `core.services.look_ids`）、穿哪一套（`worn`／`wear`，記在 `mall_entitlements` 的 `look`／`wear`）、假人挑哪一套（`bot_look`）、畫面資料（`view`） |
 | `actions.py` | `look_of`（`Game.arena_look` 的一行委派叫它）、`view`、`wear`；第二批 `order`、`admin_view`／`admin_upload`／`admin_release`／`admin_reject`、`gen_mode`（`TIANXIA_LOOK_GEN`） |
 | `orders.py` | 自建形象的訂單（第二批）：下單、狀態、圖的檔頭驗證與存放（資料庫旁邊的 `looks/u<id>/`）、假的生圖器、上架與退回、給生圖工具的提示詞 |

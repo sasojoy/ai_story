@@ -21,7 +21,7 @@ from . import zhuan_end
 class ZhuanFeature(Feature):
     name = "zhuan"
     prefix = "zhuan"
-    content = ("verdicts.json",)  # content.py 照舊讀（核心沒有 import 這一包）；驗證在下面的 check_content
+    content = ("verdicts.json",)  # content.py 照它到這一包的 content/ 載（核心沒有 import 這一包）；驗證在下面的 check_content
     # 沒有認領的 PlayerState 欄位：annals、annals_mark、xingshi_seen 是行狀，核心 core/annal_base.py 管；列傳存在資料庫的 biographies 表、票在錢包裡
     player_fields: tuple[str, ...] = ()
     carried: tuple[str, ...] = ()

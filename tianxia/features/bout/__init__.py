@@ -23,7 +23,7 @@ from tianxia.core.features import Feature, Outcome, Shop, Verb, WorldHook
 class BoutFeature(Feature):
     name = "bout"
     prefix = ("duel", "arena")  # duel:<招>、duel:flee；arena:<招>、arena:yield、arena:join、arena:fight:<名號鍵>、arena:back、arena:none
-    content = ("duels.json", "arena_crowd.json")  # 頭目、場邊事件的固定句（content.py 照舊讀）
+    content = ("duels.json", "arena_crowd.json")  # 頭目、場邊事件的固定句（content.py 照它到這一包的 content/ 載）
     # 頭目戰：正在打的那一場、這一季（與這一週）遇上幾次的帳、上一場開打的時刻；擂台：正在打的那一場、剛打完的收場卡、坐在擂台邊、
     # 今天挑了幾次（記在哪一天）、場邊事件每一種落在自己身上是哪一天、還等著模型重寫的那一句——換季都跟著新角色重來
     player_fields = ("duel", "duel_tally", "duel_last", "arena", "arena_last", "picking_arena", "arena_day", "arena_today",

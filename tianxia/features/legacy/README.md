@@ -17,7 +17,7 @@
 **量表**：`scripts/measure_legacy.py`（只算真人；讀一份資料庫裡每個角色「此刻換季的話」會拿到多少、九成位對齊的建議權重；`--demo` 看三種人連玩幾季的走向）。
 **畫面**（企劃者 2026-11-04「要有真的傳承、識海的感覺」）：狀態列展開名號時一行入口（`web/legacy.js` 的 `legacyHtml`；呼叫處、四個點擊 case 與 `prepShihaiHtml` 留在 `web/app.js`），按了打開整頁的傳承（`legacyPageHtml`，`S.legacy = "main"`：月夜山影、三卷墨水到門就蓋朱印、每項三片竹簡＝門路，按一片看長句）與識海（`S.legacy = "shihai"`：深海、封印符紙、時境悟三道封印、破封、開季還沒挑的候選；有候選時第一個畫面自己打開一次）。讀 `main.legacy`（`actions.status`：values、gains、tracks、shihai）；還沒結算過、身上也沒有神品的人不畫。樣子在 `web/legacy.css`，測試 `tests/test_legacy_web.py`。圖（水墨背景、符紙、卷軸、竹簡）等企劃者給，放 `web/img/legacy/`。
 **九道門路**（Joy 11/4「照建議」；門檻 5、10、20【草】；`Config.legacy.doors` 寫哪一樣看哪一個旗標，判斷一律走 `renown.legacy_door`，開關關著一律是假）：
-- 正氣：① 潁川書院不看惡名（`content/events/sects.json` 的 `yingchuan_join` 條件 `any_of` 讀 `legacy_zheng_1`）、正派武學第一段肯教（`library.learn_problem` 走 `renown.open_to("lessons")`）；② 第一段的俠選項不看路與段（`Game.options` 走 `renown.open_to("choices")`）；③ 敬俠的人物換季那一刻起始好感 +`regard_bonus`（10）。
+- 正氣：① 潁川書院不看惡名（陣營包 `content/events/sects.json` 的 `yingchuan_join` 條件 `any_of` 讀 `legacy_zheng_1`）、正派武學第一段肯教（`library.learn_problem` 走 `renown.open_to("lessons")`）；② 第一段的俠選項不看路與段（`Game.options` 走 `renown.open_to("choices")`）；③ 敬俠的人物換季那一刻起始好感 +`regard_bonus`（10）。
 - 邪氣：① 寇一路第一段的武學肯教（綠林門路）；② 第一段的寇選項；③ 喜狠的人物起始好感 +10。
 - 機緣：① 頓悟沒中再擲一次（`epiphany.roll`）；② 奇遇的比重再乘 1 + `qiyu_boost`（0.5；`events.qiyu_multiplier`）；③ 長篇奇事沒中再擲一次（`storyline.roll_start`）。
 - 門路只開到 `door_tier`（1）段；官府通緝、黑市、醫館打折照舊只看名聲（`renown.meets`）。

@@ -55,7 +55,7 @@
 
 ## 內容歸屬
 
-`content/seal.json`（七片）；`content.py` 照舊讀、照舊驗（`_validate_seal` 留原處、不接 `check_content`，第 34 批認定第 2 條）。`Config.seal`（`SealTuning`）留在 `models.py`。時刻表上標 `seal`（`emerge`／`stir`）與 `mandate_only` 的決戰在 `content/timetable.json`；`content.mandate_timetable` 只准 `timetable.py`、`content.py`、`models.py` 與 `core/seal_base.py` 讀（`test_seal_mandate.py` 守門）。
+這一包的 `content/seal.json`（七片）；`content.py` 照它到這一包的 `content/` 載、照舊驗（`_validate_seal` 留原處、不接 `check_content`，第 34 批認定第 2 條）。`Config.seal`（`SealTuning`）留在 `models.py`。時刻表上標 `seal`（`emerge`／`stir`）與 `mandate_only` 的決戰在 `content/timetable.json`；`content.mandate_timetable` 只准 `timetable.py`、`content.py`、`models.py` 與 `core/seal_base.py` 讀（`test_seal_mandate.py` 守門）。
 
 ## 測試
 

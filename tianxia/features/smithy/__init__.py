@@ -23,7 +23,7 @@ from tianxia.core.features import Feature, Outcome, Verb
 class SmithyFeature(Feature):
     name = "smithy"
     prefix = "smith"  # smith:buy:<種類>、smith:repair、smith:forge-go:…、smith:page:<頁>、smith:back 等；入口 act:smith 是核心的前綴
-    content = ("forge_secrets.json", "tier4_named.json")  # content.py 照舊讀（打造的隱藏配方與神器譜、四階名器名字表）
+    content = ("forge_secrets.json", "tier4_named.json")  # content.py 照它到這一包的 content/ 載（打造的隱藏配方與神器譜、四階名器名字表）
     # 鐵匠鋪開著沒、停在哪一頁、一步一步的單子、鐵匠這一季講過神器的規矩沒有（smith_rule 是這一次進門要講的那一句）：換季全部跟著新角色重來
     # 店面共用的 shop_line／shop_line_seed／shop_hold／shop_clue（七間店共用，核心）與 furnace_day／furnace_ready（銀兩出口包）不在這裡
     bot_always = ("smith:page:",)  # 切頁一直按得下去、不花體力：整季機器人不按（原本寫在 bot.py 的排除清單，拿掉，只剩這裡）
