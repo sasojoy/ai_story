@@ -42,3 +42,5 @@
 **事件的發布點**（全部拆包第 26 批「事件機制」；順序在核心 `core/features.py` 的 `BUS_ORDER`）：`explore_actions.outing_fight` 遭遇打贏（不是城裡）發 `win`（懸賞討伐）、`explore_actions.explore_one` 收尾發 `outing`（懸賞打探→撿玉璽碎片）、`explore_base.explore` 舊探索（序章外）發 `explore`（懸賞打探）；位置照原本直接叫懸賞與 `ctx._seal_find` 的那一行，回話照舊接回 `done`、`extras`、`scouted`。這一包不再直接叫 `bounties.on_*`、`ctx._seal_find`（懸賞那幾格第 45 批由懸賞榜包登記；撿碎片那一格第 27 批起玉璽包登記）。改這幾行時連 `tests/ranger/test_bounties.py`、`tests/acts/test_conquest_rules.py` 一起跑。
 
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+
+**動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `main_actions`：`outing`；`admin_tools`：`outing_erase`。留言（`outing_say`）與遊記（`outing_tale`）是鎖外三段式，留在殼。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。

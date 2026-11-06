@@ -15,7 +15,7 @@
 - `gear_actions.py`：`repair_item`、`temper_item`、`gear_work`（修練頁裝備庫那一列的修與淬煉，走 `/api/menxia/…`）。
 - `divine_actions.py`：`name_divine`、`bind_art`（`@_not_while_preparing` 裝飾器留在 `Game` 的委派上）。
 - `clue.py`：`smith_clue`（鐵匠順口；包裡其餘各檔一律經 `ctx._smith_clue` 叫，因為測試換掉 `Game._smith_clue`）。
-- `routes.py`：`/api/smith_line`（原本寫在 `server.py`；殼照 `FEATURES` 掛）。
+- `routes.py`：`/api/smith_line`（原本寫在 `server.py`；殼照 `FEATURES` 掛）與動作表（見最後一段）。
 - `bots.py`：假人看到 `smith:` 的選項怎麼按（原本 `bot_policy.score` 的 smith 那一段）與 `want`（原本 `bot_policy._smith_want`）。`act:smith`（進鐵匠鋪）的分數在 `bot_policy` 的 `act:` 那一段（前綴 `act` 是核心的），繼續呼叫 `_smith_want`（一行委派到這裡）。整季機器人與假人共用的底層（`bot.smith_want`、`forge_step`、`forge_ready`、`trade_at_smith`、`keep_book_names`）不搬，它們叫 `Game` 的公開方法。
 - 掛鉤：`prefix = "smith"`；`choose` 接 `smith:*`（標題 `smithing.title(arg)`，在動作之前拿）；`verbs()` 一個 `Verb("smith")`（`run` 走進鐵匠鋪、`title` 是「鐵匠鋪・此地」）；`routes`；`content`（`forge_secrets.json`、`tier4_named.json`）；`bot_pick` 問 `bots.score`；`enabled`＝武器或防具開著、或此刻還坐在鐵匠鋪裡（開關在坐著時被關掉，離開還按得到；不看第一季開關）。
 
@@ -66,3 +66,5 @@
 過渡 import 共 5 行（shopview 兩處、fusion 兩行、bot；邊界測試的「包 → 舊模組」列 5 行）：`shelf_actions`、`forge_actions` 到 `shopview`（店面的畫面資料，邊界測試的 SHARED_LATER）、`smithing` 到 `fusion`（合成與揣摩，SHARED_LATER；兩行，一行是 `QualityOdds`）、`bots` 到 `bot`（整季機器人與假人共用的底層，總表歸「假人三支不搬」；函式裡延後 import）。
 
 **行狀記一筆 import 核心**（第 41 批合併時改，第 41 批 PM 認定第 10 條）：開發時 `smithing` 是 `from tianxia import annals, fusion` 一行；第 29 批之二把行狀拆兩半之後，舊名 `tianxia.annals` 是指到列傳包 `standing.py` 的別名（經別名 import 就是包 import 包，邊界測試擋），合併時拆成兩行：`from tianxia import fusion`（過渡）與 `from tianxia.core import annal_base as annals`（核心本體，不算過渡；包裡只用 `annals.note`、`annals.DEED`，都在記一筆那一半）。
+
+**動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `main_actions`：`smith_forge`、`smith_sell`、`smith_upgrade`、`smith_furnace`；`menxia_actions`：`name_divine`、`bind_art`、`repair_item`、`temper_item`。`api_do` 回 `forged` 那一格（`op == "smith_forge"`）留在殼。 `name_divine`、`bind_art` 的 `Game` 的委派上掛著 `@_not_while_preparing`、包裡的函式沒有，所以表上那一條包 `not_while_preparing(lambda g, b: …)`（同一支裝飾器），籌備中的擋法不丟。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。

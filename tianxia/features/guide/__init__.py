@@ -7,7 +7,7 @@
 - actions.py：原本 Game 上的 31 個方法（Game 留 24 個一行委派）與核心原位叫的 12 個服務的本體
 - checks.py：內容檢查（碰到才說那一塊，原本在 content.validate）
 
-這一包沒有選項前綴：它的動作走 server 的 MAIN_ACTIONS（hints_off、skip_tutorial、view_map、view_orders、view_tab、guide_ack、
+這一包沒有選項前綴：它的動作走 routes.py 的 main_actions（殼的 MAIN_ACTIONS，第 68 批；hints_off、skip_tutorial、view_map、view_orders、view_tab、guide_ack、
 newbie_drifter）與 /api/prologue，選單上的那幾顆是別人的（act:rest 是核心 act: 的子動詞、開局三選一是事件的 choice:、投靠是 faction:）。
 所以 options、menu、choose、bot_pick 都是預設的；enabled 一直是 True（引導、提示、新手目標、開局各有自己的開關，包本身沒有總開關）。
 """

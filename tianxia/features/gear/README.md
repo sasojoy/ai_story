@@ -16,7 +16,7 @@
 - `gift_actions.py`：`deliver_held_gear`（寄放補送）、`general_gifts`（名將贈禮）、`people_here`（此刻在身邊的人物）、`gift_entry`（贈禮另起一則江湖紀錄）、`signature_arms_due`（本命兵器）。
 - `views.py`：`gear_rows`（修練頁裝備那一塊）、`divine_book_view`（見聞榜單的神器譜）。
 - `bots.py`：假人看到 `market:` 的選項怎麼按（原本 `bot_policy.score` 的 market 兩行）；`MARKET_SCORE` 在這裡重寫一份同值常數（8.0），`bot_policy.MARKET_SCORE` 名字照舊。
-- 掛鉤：`prefix = "market"`（`market:buy`、`market:feed`、`market:wield:<id>`、`market:back`）；`choose` 接 `market:*`（標題「馬市」）；`verbs()` 一個 `Verb("market")`（`run` 走進馬市、`title` 是「馬市・此地」，照舊寫江湖紀錄、不宣告 `picks`）；`content = ("gear.json",)`；`bot_pick`。**沒有路由**：`/api/menxia` 的 `wield`、`dismantle`、`feed`、`dismantle_many`、`menxia_view` 的 `gear` 鍵、`/api/boards` 的神器譜、`/api/board_card` 的裝備卡都留在殼，叫 `Game` 的委派。
+- 掛鉤：`prefix = "market"`（`market:buy`、`market:feed`、`market:wield:<id>`、`market:back`）；`choose` 接 `market:*`（標題「馬市」）；`verbs()` 一個 `Verb("market")`（`run` 走進馬市、`title` 是「馬市・此地」，照舊寫江湖紀錄、不宣告 `picks`）；`content = ("gear.json",)`；`bot_pick`。**沒有 `APIRouter`**：`/api/menxia` 的 `wield`、`dismantle`、`feed`、`dismantle_many` 第 68 批搬進 `routes.py` 的 `menxia_actions`；`menxia_view` 的 `gear` 鍵、`/api/boards` 的神器譜、`/api/board_card` 的裝備卡都留在殼，叫 `Game` 的委派。
 - `enabled`：兵器、防具、坐騎、寶物四欄各看自己的 `enabled`（不看第一季開關，裝備四欄設計 2.6），**或此刻還坐在馬市裡**（開關在坐著的時候被關掉，照樣按得到離開）。
 
 ## 認領的欄位（手冊 3.5：留在原地）
@@ -49,3 +49,5 @@
 - **混合檔不拆**（一個檔裡有這一包的也有別包的）：`tests/gear/test_mounts.py`、`test_weapons.py`、`test_armor.py`、`test_board_cards.py`、`test_forge_divine.py`、`test_shop.py`，`tests/bots/test_bot_policy.py`、`tests/core/test_shop_width.py`、`tests/server/test_server.py`（`/api/boards` 的神器譜）、`tests/seal/test_seal.py`（`dismantle_weapon`）、`tests/season/test_sim_scripts.py`（量表腳本）。
 - **另外要跑的**（`test_for` 不會因為改這一包挑到）：`tests/season/test_sim_scripts.py` 的 `measure_mounts`、`measure_treasures` 兩條 slow（量表腳本換掉的是 `mounts.buy`／`mounts.feed`、`treasures.gifts_due`／`treasures.deliver_held` 與 `Game.wield_weapon`，包裡一律照模組屬性叫，換得到）；`tests/server/test_server.py`、`tests/web/test_shop2_web.py`（殼與網頁）。
 - 一起跑（包的 tests、上面的混合檔與「另外要跑的」；venv 的 python）：`python -m pytest -q -n 4 tianxia/features/gear/tests tests/gear/test_mounts.py tests/gear/test_weapons.py tests/gear/test_armor.py tests/gear/test_board_cards.py tests/gear/test_forge_divine.py tests/gear/test_shop.py tests/bots/test_bot_policy.py tests/core/test_shop_width.py tests/server/test_server.py tests/seal/test_seal.py tests/web/test_shop2_web.py`；量表兩條是 slow，另跑 `python -m pytest -q tests/season/test_sim_scripts.py -m "slow or not slow" -k "mounts_measure or treasures_measure"`。
+
+**動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `menxia_actions`：`wield`、`dismantle`、`feed`、`dismantle_many`。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。

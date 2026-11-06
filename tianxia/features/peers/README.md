@@ -77,3 +77,5 @@
 ## 量到的（第 37 批 Task 5）
 
 包的測試 14 條 6.8 秒；改包任一檔挑到 219 條；過渡 3 處；Game 委派 21 個加 `_yuedan_line`；`GAME_DIRECT` 7 個（切磋、論武，第 38 批拿掉）；`engine.py` 9,369 行。`same_behavior` 的 `peers`、`tavern`、`roam` 三軌三種設定整段、半舊半新逐位元組一樣。細節見計畫 5.4。
+
+**動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `admin_tools`：`mingtie_remove`、`mingtie_restore`。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。

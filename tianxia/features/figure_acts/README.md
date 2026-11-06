@@ -49,3 +49,5 @@
   `tianxia/features/sortie/tests/test_sortie_rewards.py`（`tier4`）、`tests/seal/test_seal_revamp.py`（`figure_squad`）、`tests/seal/test_seal_engine.py`（16／41）、`tests/seal/test_seal_duel.py`（12／27）
 - 假人：`tests/bots/test_bot_policy.py` 這一類（`aid:`、`act:challenge:` 的分數）
 - 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/figure_acts/challenge.py`
+
+**動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `admin_tools`：`revive_figure`。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。

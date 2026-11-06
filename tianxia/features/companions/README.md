@@ -17,7 +17,7 @@
 - `stances.py`（行動那一半：跟人物說話記一筆、人物頁、行狀、假人挑心意）、`errands.py`、`letters.py`：舊名 `tianxia/stances.py`、`errands.py`、`letters.py` 留成 `sys.modules` 別名（同一個模組物件，`monkeypatch.setattr(letters, "write", …)` 照樣有效）。
 - **心意的世界那一半在共用規則層 `tianxia/stance_world.py`**（這一週的計數、誰照哪一個做事、門檻、換手、每週歸零）：核心的 `rules`、事件檢定與舊模組 `world`、`figures`、`events` 讀它；`stances.py` re-export，`from tianxia import stances; stances.check(...)` 照舊。
 - `talk_log.py`（主幹合回 D 段從 `tianxia/talk_log.py` 整檔搬來，程式一字不改）：往來紀錄的小檔 `<db>-talk.sqlite`（兩季以前搬去 `<db>-talk-archive.sqlite`，不進角色存檔）與動作前後比出多談的幾輪（`snapshot`、`affinity_before`、`new_lines`）。舊名留 `sys.modules` 別名（同一個模組物件）。
-- `routes.py`：`/api/figure`（原本在 `server.py`）、`/api/talk_log`（主幹合回 D 段；只讀，不拿行動鎖）。
+- `routes.py`：`/api/figure`（原本在 `server.py`）、`/api/talk_log`（主幹合回 D 段；只讀，不拿行動鎖）與動作表（見最後一段）。
 - 掛鉤：`enabled` 一直是 True（招募 `Config.companions`、書信 `Config.figure_life.letters`、心意與託付 `Config.jianfa`、NPC 智能 2.0 `Config.parley` 各有自己的開關，包本身沒有總開關）；`prefix = ("errand", "talk", "parley")`；`choose`（`errand:` 那幾顆，加上 `talk:`、`parley:road`，見下）；`bot_pick`（`talk:`、`parley:`）；`routes`；`bot_always`（`errand:`：整季機器人不收託付，原本寫在 `bot.pick` 的清單）；`player_fields`；叛投那一刻的格 `defection()`（`after` 位置的 `parley`：`parley_actions.forsake_all`，欠著的都算食言；全部拆包第 32 批）。
 - 「你這一步」的格 `steps()`（全部拆包第 36 批；順序在核心的 `STEP_ORDER`，排最前面）：`errand`（身上還在辦的人物託付，`errands.step_items`；原本 `weekcard._steps` 第一行直接叫）。自己帶好 `id` 與 `target`、不掛 `_ref`，所以沒有 `ref`、`place`；託付關著（`errands.on`）回空的，不問 `enabled`。懸賞列裡的委託（書信附的、求援）是懸賞榜包那一格（`commission`，第 45 批換主人），不在這一包。釘住這一格的測試是這一包的 `tests/test_errands_weekcard.py`。
 - **`bots.py` 只管 `talk:`、`parley:`**：`bot_policy.score` 沒有 `errand:` 那一段（`take_turn` 打分數之前就濾掉，那一行留著）；假人直接記一筆心意走 `Game.voice_stance`（`bot_policy.voice_stance` 叫，不是選項）；假人不跟人物閒聊、不求事，萬一停在對話裡只按「告辭」（`take_turn` 也會先 `choose("talk:leave")`）。
@@ -72,3 +72,5 @@
 - **鎖外三段式的 B 段不在這一包**：`server.prepare_dialogue`、`server.say` 叫的 `companion_agent.prepare_turn` 在殼裡（模型不在鎖裡）；A 段 `dialogue_request`、C 段 `checked_prepared` 在這一包。`tests/server/test_server.py` 換掉的 `companion_agent.generate_turn`（別名是同一個模組物件，換得到）。
 
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+
+**動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `main_actions`：`letter_read`、`letter_decline`；`menxia_actions`：`join`、`leave`、`release`。名冊的核對（`api_menxia_do` 在鎖裡先查 `roster_lines`）與勸降（`persuade_text`）留在殼。 `join`、`leave`、`release` 的 `Game` 的委派上掛著 `@_not_while_preparing`、包裡的函式沒有，所以表上那一條包 `not_while_preparing(lambda g, b: …)`（同一支裝飾器），籌備中的擋法不丟。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
