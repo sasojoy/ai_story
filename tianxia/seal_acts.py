@@ -19,9 +19,12 @@
   import 的鏈很長，conquest、figures、figure_life、team、rules、sensing、cultivation 都會叫這裡）。不擲骰、不讀時鐘。字待 joy 潤。
 - 改這一份 scripts/test_for.py 挑得比以前少（全部拆包第 50 批量的）：atlas 拆兩半之後 import 的模組少於 AGGREGATOR_FANOUT（15），不再算彙整的
   模組，往上找會穿過它，依賴這一份的模組從 12 個變成 17 個、import 它們的測試檔 141 個，超過 IMPORT_CAP（120），只挑直接 import 它的 6 個
-  （tests/seal/ 的 test_seal、test_seal_acts、test_seal_acts3、test_seal_acts_hidden，tests/figures/test_plans、tests/web/test_seal_acts_web）
+  （tests/seal/ 的 test_seal、test_seal_acts、test_seal_acts3，玉璽包的 tianxia/features/seal/tests/test_seal_acts_hidden〔第 27 批從 tests/seal/ 搬過去〕，
+  tests/figures/test_plans、tests/web/test_seal_acts_web）
   ＋核心測試＋煙霧；以前經 atlas、chiefs、conquest、figure_life、figures、howto、orders、plans 挑到的另外 110 個留給每日整套。
-  另外跑（-n 4）：tests/seal/ 整個資料夾、tests/acts/ 的 test_conquest_flip、test_conquest_rules、test_conquest_siege，要當場全驗用 --all。"""
+  另外跑（-n 4）：tests/seal/ 整個資料夾、玉璽包的 tianxia/features/seal/tests/ 整個資料夾（第 27 批從 tests/seal/ 搬過去四個檔：test_seal_mandate、
+  test_seal_revamp_hidden、test_seal_revamp_sidedoor、test_seal_acts_hidden）、tests/acts/ 的 test_conquest_flip、test_conquest_rules、
+  test_conquest_siege，要當場全驗用 --all。"""
 from __future__ import annotations
 
 import math

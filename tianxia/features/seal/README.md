@@ -41,7 +41,7 @@
 
 ## 過渡（手冊 3.11）
 
-- 包 → 舊模組：`actions.py` → `seal_duel`（奪璽單挑的字 `WIN_VERDICTS`、`side_tier`、`CALL`、`CALL_QA`；第 28 批）、`seal.py` → `atlas`（函式裡，藏碎片要認大區；第 50 批）。
+- 包 → 舊模組：`actions.py` → `seal_duel`（奪璽單挑的字 `WIN_VERDICTS`、`side_tier`、`CALL`、`CALL_QA`；第 28 批）。`seal.py` 函式裡讀的 `atlas`（藏碎片要認大區）開發時是舊模組，第 50 批收進了共用規則層：合進 `split/trunk` 之後不算過渡，那一行的註改成「共用規則層」。
 - 舊模組 → 包（經舊名 `tianxia.seal`）：engine（`seal_rules`）、`bot_runner`（叫醒持璽的假人）、`howto`、`skillview`、`seal_duel`、`seal_acts`（函式裡）、殼 `server.py`、`run_bots.py`（`ensure_salt`）、`scripts/measure_seal.py`（也直接換包的 `actions.settle`）、`measure_tactics.py`、`same_behavior.py`。`SHARED_PENDING` 的四條 `(conquest|figures|figure_life|plans, seal_acts)`：`seal_acts` 函式裡 import `seal`，連帶載入玉璽包。
 
 ## 內容歸屬
@@ -51,7 +51,7 @@
 ## 測試
 
 - 包裡（`tests/`，第 27 批整檔搬來的五個只改路徑字串，第 41 批認定第 6 條：沒有人用裸名 import 的）：`test_seal_mandate.py`（天命之季與天命之爭；守門 `test_only_the_gatekeepers_read_the_mandate_timetable` 的範圍加了包的資料夾、白名單加 `core/seal_base.py` 與包的 `seal.py`，判斷不動）、`test_seal_revamp_hidden.py`、`test_seal_revamp_sidedoor.py`（持有者平時藏起來、側門看不穿）、`test_seal_acts_hidden.py`（獨門行動不具名）、`test_measure_seal_args.py`（量表腳本的參數，原本在 `tests/season/`），加上新寫的 `test_seal_smoke.py`（包的宣告與格、舊名是同一個模組、week7 探索一顆走到藏處撿到）與 `seal_stage.py`（契約測試擺「懷璽」的局面）。
-- **留 `tests/seal/`**（被別的檔用裸名 import，第 61 批或第 28 批再看）：`test_seal.py`（`test_seal_acts`、`duel`、`engine`、`mandate`、`revamp`、`revamp_hidden`、`revamp_sidedoor` 拿）、`test_seal_engine.py`（`test_seal_duel`、`test_seal_mandate` 拿）、`test_seal_revamp.py`（`test_seal_duel`、`acts`、`revamp_hidden`、`revamp_sidedoor` 拿）、`test_seal_acts.py`、`test_seal_acts3.py`（`tests/web/test_seal_acts_web.py` 拿）。`test_seal_duel.py` 是第 28 批；`test_wins_tiers.py` 歸核心（`final_owner.json`）。`test_seal.py` 掃原始碼找 `exclude_if` 的那一條，範圍改成跟搬之前同一批（`tianxia/*.py`）再加包的資料夾（只改範圍）。
+- **留 `tests/seal/`**（被別的檔用裸名 import，第 61 批或第 28 批再看）：`test_seal.py`（`test_seal_acts`、`duel`、`engine`、`mandate`、`revamp`、`revamp_hidden`、`revamp_sidedoor` 拿）、`test_seal_engine.py`（`test_seal_duel`、`test_seal_mandate` 拿）、`test_seal_revamp.py`（`test_seal_duel`、`acts`、`revamp_hidden`、`revamp_sidedoor` 拿）、`test_seal_acts.py`、`test_seal_acts3.py`（`tests/web/test_seal_acts_web.py` 拿）。`test_seal_duel.py` 是第 28 批；`test_wins_tiers.py` 歸核心（`final_owner.json`）。`test_seal.py` 掃原始碼找 `exclude_if` 的那一條，範圍改成跟搬之前同一批（`tianxia/*.py`）再加包的資料夾與核心本體 `core/seal_base.py`（只改範圍；`core/seal_base.py` 是合進 `split/trunk` 時補的，審查 nit）。
 - **另外要跑的混合檔與核心代叫**（`test_for` 改這一包挑不到，或只挑到一部分）：
   - 留在 `tests/seal/` 的那幾個（上一條）與 `tests/web/test_seal_web.py`、`tests/web/test_seal_acts_web.py`、`tests/core/test_social.py`（import `seal`）。
   - 效果的兩格：`tests/core/test_rules.py`（舊鏈的玉璽碎片 5 條）、`tests/figures/test_promotions_huang.py`（符文殘片，含叛投不清殘片）。
@@ -64,4 +64,4 @@
 
 ## 量到的（第 27 批 Task 5）
 
-包的測試 83 條（含 slow 11）`-n 4` 11.9 秒；改包任一檔挑到 83 條（加核心契約與邊界一共 357 條）；包 → 舊模組 2 處（`actions.py` → `seal_duel`、`seal.py` → `atlas`）；Game 委派 11 個；`GAME_DIRECT` 13 個（第 28 批收）、`GAME_DELEGATE_CALLERS` 9 對（修正輪 `sync` 那一對改接 `deliver_results` 掛鉤，剩 8 對）；`engine.py` 6,626 行（搬之前 6,954）。`same_behavior` 全部 42 軌與 `explore-compare` 三種設定整段、半舊半新、假人逐位元組一樣；`measure_seal.py --seeds 1 --force-stir --holders 7`（week7，約 6 分鐘）搬之前、之後印的數字一樣。細節見計畫 `docs/superpowers/plans/2026-11-07-玉璽包-第1批.md` 第五節。
+包的測試 83 條（含 slow 11）`-n 4` 11.9 秒；改包任一檔挑到 83 條（加核心契約與邊界一共 357 條）；包 → 舊模組 2 處（`actions.py` → `seal_duel`、`seal.py` → `atlas`；合進 `split/trunk` 重印剩 1 處：`atlas` 第 50 批收進了共用規則層）；Game 委派 11 個；`GAME_DIRECT` 13 個（第 28 批收）、`GAME_DELEGATE_CALLERS` 9 對（修正輪 `sync` 那一對改接 `deliver_results` 掛鉤，剩 8 對）；`engine.py` 6,626 行（搬之前 6,954）。`same_behavior` 全部 42 軌與 `explore-compare` 三種設定整段、半舊半新、假人逐位元組一樣；`measure_seal.py --seeds 1 --force-stir --holders 7`（week7，約 6 分鐘）搬之前、之後印的數字一樣。細節見計畫 `docs/superpowers/plans/2026-11-07-玉璽包-第1批.md` 第五節。

@@ -798,9 +798,10 @@ def test_empty_uses_leave_no_key_on_any_pydantic_2():
 
     assert getattr(SealRegistry.model_fields["uses"], "exclude_if", None) is None
     used = []
-    # 全部拆包第 27 批：seal 成了玉璽包 seal.py 的別名，seal.__file__ 的資料夾變成包的資料夾——掃跟搬之前同一批（tianxia/*.py）再加包的資料夾（只改範圍）
+    # 全部拆包第 27 批：seal 成了玉璽包 seal.py 的別名，seal.__file__ 的資料夾變成包的資料夾——掃跟搬之前同一批（tianxia/*.py）再加包的資料夾（只改範圍）；
+    # 原本 seal.py 的 187 行搬去核心本體 core/seal_base.py，也掃（第 27 批合併時補，審查 nit，PM 認定第 7 條）
     src = Path(seal.__file__).resolve().parents[2]  # tianxia/
-    for path in sorted([*src.glob("*.py"), *(src / "features" / "seal").glob("*.py")]):
+    for path in sorted([*src.glob("*.py"), *(src / "features" / "seal").glob("*.py"), src / "core" / "seal_base.py"]):
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if isinstance(node, ast.Call) and any(k.arg == "exclude_if" for k in node.keywords):
                 used.append(f"{path.name}:{node.lineno}")

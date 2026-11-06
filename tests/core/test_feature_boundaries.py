@@ -1422,7 +1422,7 @@ def test_the_shared_rules_layer_only_imports_the_core_and_itself():
 def test_a_pending_target_that_imports_a_package_says_it_drags_the_package_in():
     """SHARED_PENDING 的對象自己 import 了包的（bounties 經舊名 letters、parley、sortie import 人物情誼包與出陣包；以前還有 atlas 經舊名 sortie
     import 出陣包，第 50 批 atlas 收進共用規則層、不再 import 包，指到它的六條收掉）：import 那個共用規則層的模組，包就跟著載進來
-    （import figure_life 叫到 bounties 的那幾個函式時載入人物情誼、出陣兩包；seal_acts 一包都不載）。上面那幾條只看共用規則層自己的 import，
+    （import figure_life 叫到 bounties 的那幾個函式時載入人物情誼、出陣兩包；seal_acts 函式裡 import seal〔第 27 批成了玉璽包的別名〕，叫到它就連帶載入玉璽包）。上面那幾條只看共用規則層自己的 import，
     看不到這一層，所以理由要寫明「連帶載入」與那幾包的名字；對象不再 import 包了，「連帶載入」那句也拿掉（第 15 批審查修正）。
     只驗對象直接的 import；經對象再往下一層的（chapters 經舊名 storyline 載一條線包）寫在理由裡，這裡不驗。"""
     for (name, old), why in SHARED_PENDING.items():
