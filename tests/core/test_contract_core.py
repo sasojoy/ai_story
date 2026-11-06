@@ -1931,3 +1931,106 @@ def test_every_act_verb_has_the_owner_in_the_plan():
     }
     tails = {v.verb for f in features_core.registered() for v in f.verbs() if v.tail_run is not None}
     assert tails == {"recruit", "rank", "bribe", "challenge"}
+
+
+# core_bots（全部拆包第 60 批「假人殼收尾」；計畫 docs/superpowers/plans/2026-11-06-假人殼收尾-第60批.md 第一、九節）
+
+
+def test_the_bot_slots_on_the_verbs_are_the_ones_in_the_plan():
+    """假人怎麼按 act: 那幾格，逐字鎖住（計畫第二節）：一格一主，不開順序表。有 bot 格的是 bot_policy.score 問主人的；沒寫的落到 ACT_SCORES.get(arg, 0.0)，0.0 是隨機挑得到的、不是不按。
+    bot_skip、tail_bot_skip 與 bot_always 是 bot.pick 不按的（永遠按得下去）。"""
+    verbs = [v for f in features_core.registered() for v in f.verbs()]
+    assert {v.verb for v in verbs if v.bot is not None} == {
+        "explore", "tavern", "train", "duty", "call", "socialize", "rank2", "convoy", "summons", "donate", "dadian", "smith", "arena", "market", "bounties",
+    }
+    assert {v.verb for v in verbs if v.tail_bot is not None} == {"recruit", "challenge"}
+    assert {v.verb for v in verbs if v.bot_skip} == {"rest", "halt", "bounties", "smith", "market", "arena", "donate", "dadian", "tavern"}
+    assert {v.verb for v in verbs if v.tail_bot_skip} == {"recruit"}
+    assert sorted(features_core.bot_always()) == [
+        "aid:", "ambush:", "dadian:", "defect:", "donate:", "errand:", "faction:lean:", "feast:", "fs:", "invite:", "legacy:skip", "opp:", "road:", "smith:page:",
+        "talk:clue:", "talk:opp:", "tavern:", "works:",
+    ]
+
+
+def test_the_scores_written_twice_stay_the_same_number():
+    """包裡照鐵匠鋪前例重寫一份的分數（模組層不碰 bot_policy），跟 bot_policy 留著的那個名字同值（計畫第二節）。"""
+    from tianxia import bot_policy as bp
+    from tianxia.features.bounties import bots as bounties_bots
+    from tianxia.features.gear import bots as gear_bots
+    from tianxia.features.military import bots as military_bots
+    from tianxia.features.smithy import bots as smithy_bots
+    from tianxia.features.socialize import bots as socialize_bots
+
+    assert bounties_bots.BOUNTY_SCORE == bp.BOUNTY_SCORE and gear_bots.MARKET_SCORE == bp.MARKET_SCORE
+    assert smithy_bots.SMITH_SCORE == bp.SMITH_SCORE and smithy_bots.FORGE_SCORE == bp.FORGE_SCORE
+    assert socialize_bots.ACT_SCORE == bp.ACT_SCORES["socialize"]
+    assert military_bots.RANK2_SCORE == bp.DUTY_SCORE and military_bots.CONVOY_SCORE == bp.ORDER_SCORE and military_bots.SUMMONS_SCORE == bp.SUMMONS_SCORE
+
+
+class Scored(Fake):
+    """假包：三格 act 子動詞（有分數也不按的、回 None 的、只有按下去的）與一顆有條件的「按了也白按」。"""
+
+    def verbs(self):
+        return (
+            Verb("fakebot", bot=lambda g, profile: 5.5, tail_bot=lambda g, profile, tail: None if tail == "不按" else 6.5, bot_skip=True),
+            Verb("fakenone", bot=lambda g, profile: None, tail_bot_skip=True),
+            Verb("fakeplain", run=lambda g, prepared: ["只有按下去。"]),
+        )
+
+    def bot_idle(self, ctx, option):
+        self._note("bot_idle", option.id)
+        return option.id == "fake:idle"
+
+
+@pytest.fixture
+def scored(monkeypatch):
+    f = Scored(open_=False)  # 關著也照問：這幾格原位本來就不看開關
+    monkeypatch.setattr(registry, "FEATURES", [f])
+    return f
+
+
+def test_act_score_tells_a_no_from_no_owner(game, scored):
+    """(有沒有主人, 分數)：格回 None 是主人說不按；那一格沒寫算沒主人，核心照舊落到 ACT_SCORES。帶後綴問 tail_bot，沒有 tail_bot 也算沒主人。"""
+    assert features_core.act_score(game, "fakebot", None) == (True, 5.5)
+    assert features_core.act_score(game, "fakebot:甲", None) == (True, 6.5)
+    assert features_core.act_score(game, "fakebot:不按", None) == (True, None)
+    assert features_core.act_score(game, "fakenone", None) == (True, None)
+    assert features_core.act_score(game, "fakenone:甲", None) == (False, None)
+    assert features_core.act_score(game, "fakeplain", None) == (False, None)
+    assert features_core.act_score(game, "nosuch", None) == (False, None)
+
+
+def test_bot_idle_asks_the_prefix_the_verb_and_the_owner(game, scored):
+    """四條路：包宣告的前綴（問到就不再問主人）、act:<verb> 的 bot_skip（比相等）、act:<verb>:<後綴> 的 tail_bot_skip（比開頭）、選項主人的 bot_idle。不是任何一包的選項是 False。"""
+    def idle(option_id):
+        return features_core.bot_idle(game, Option(id=option_id, label=""))
+
+    assert idle("fake:wait") and scored.calls == []
+    assert idle("act:fakebot") and not idle("act:fakebot:甲")
+    assert idle("act:fakenone:甲") and idle("act:fakenone:") and not idle("act:fakenone")
+    assert not idle("act:fakeplain") and not idle("act:nosuch") and not idle("nokind")
+    assert scored.calls == []  # act: 不是任何一包的前綴，不問主人
+    assert idle("fake:idle") and not idle("fake:do") and scored.calls == [("bot_idle", "fake:idle"), ("bot_idle", "fake:do")]
+
+
+def test_the_bots_reach_the_package_through_the_verb_slots(game, scored):
+    """bot_policy.score 的 act: 那一段與 bot.pick 的排除真的走到假包；沒有主人的落到 ACT_SCORES（兩鍵留著），act:heal 兩邊都留在核心。"""
+    from tianxia import bot, bot_policy
+    from tianxia.state import BotProfile
+
+    g = _made(game)
+    profile = BotProfile(personality="普通", seed=1)
+
+    def score(option_id):
+        return bot_policy.score(g, Option(id=option_id, label=""), profile)
+
+    def picked(option_id):
+        return bot.pick(g, [Option(id=option_id, label="")], random.Random(0))
+
+    assert score("act:fakebot") == 5.5 and score("act:fakebot:甲") == 6.5 and score("act:fakebot:不按") is None and score("act:fakenone") is None
+    assert score("act:fakeplain") == 0.0 and score("act:fakeplain:甲") == 0.0 and score("act:nosuch") == 0.0
+    assert score("act:explore") == bot_policy.ACT_SCORES["explore"] and score("act:socialize") == bot_policy.ACT_SCORES["socialize"]
+    assert score("act:heal") is None  # 不在醫館：核心那兩行
+    assert picked("act:fakeplain") == "act:fakeplain" and picked("fake:do") == "fake:do"
+    for option_id in ("act:fakebot", "act:fakenone:甲", "fake:wait", "fake:idle", "act:heal", "choice:free"):
+        assert picked(option_id) is None, option_id

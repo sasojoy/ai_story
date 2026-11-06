@@ -16,7 +16,7 @@
 - `intros.py`（主幹合回 D 段從 `server.py` 搬來）：點大勢人物的簡介 `figure_intro`、`FIGURE_INTROS`。import 時讀一次 `content/figure_intros.json`（正式內容、測試內容都讀 repo 這一份，不看設定），只有殼 import（`_main_view_body` 疊到 `figures_here[].intro`），引擎與假人程式不多讀。
 - `actions.py`：交友見不到人時的打發話 `no_audience_line`（會排提示、花亂數，不是純讀，所以不放 `view.py`）、交友 `socialize`（舊寫法）與 `precise_socialize`（一類一顆）、指名求見 `call`、被打發 `brush_off`、記一輪 `count_talk`、福緣 `fortune_gift`、`deliver_fortune`、
   沒碰上人物時抽事件 `encounter`、紀錄標題 `call_title`。
-- `bots.py`：假人看到 `call:` 的選項怎麼按（原本 `bot_policy.score` 的 call 那一段）——只按「返回」，`call:<人物>` 一律不按（名望不夠的求見永遠按得下去，不能給分）。
+- `bots.py`：假人看到 `call:` 的選項怎麼按（原本 `bot_policy.score` 的 call 那一段）——只按「返回」，`call:<人物>` 一律不按（名望不夠的求見永遠按得下去，不能給分）。`act:call` 不按、`act:socialize`（`act_socialize`）第 60 批接進 `Verb.bot`；`Feature.bot_idle` 問 `idle_call`（整季機器人不按名望不夠的求見）。改 `bots.py` 的 `act:` 分數時另外跑 `tests/bots/test_bot_policy.py`、`tests/bots/test_bot_policy_conquest.py`、`tests/bots/test_bot_policy_stuck.py`（`test_for` 挑不到，第 60 批）。
 - 掛鉤：`enabled` 一直是 True（一類一顆 `precise`、福緣 `roster` 各有自己的開關，包本身沒有總開關）；`prefix = "call"`；`choose` 接 `call:`（`Outcome.title` 在動作之前拿，
   `prepared` 經 `ctx._talk_turn` 寄放）；`bot_pick` 問 `bots.score`；`bot_always` 不宣告。`menu`、`scene` 沒接（見下）。
 - 對話（`ctx._open_dialogue`）、事件呈現（`ctx._present`）、引導提示（`ctx._hint`）、閉門不見（`ctx._snubbed_character`）都經 `ctx`，不 import 人物情誼包；人物情誼包經 `ctx` 問這一包的
@@ -45,7 +45,7 @@
   名單夾在叛投確認與懸賞榜中間、畫面夾在叛投之後，接成掛鉤就改了它們並存時誰先；位置算行為，所以不接。
 - 收起求見名單接 `on_drop_stale`（`_drop_stale_references` 最後那一個掛鉤；只差序章收尾挪人之後的地點）。福緣到期自己送上門第 55 批換成 `local` 的 `fortune` 那一格（夾在別的補算中間，`on_sync` 沒有對應的位置）。
 - `choose` 做完之後的 `_guide(self._note_action("socialize"))`（`kind == "call" and arg != "back"`）與前段的 `_checked_prepared`：留在 `choose` 原位（掛鉤沒有「做完記引導」的位置）。
-- 核心的表：`models.py` 的 `ALLOW_FAMILIES`（有 `call:`）與 `act:call`、`act:socialize`；`server.py` 備料判斷、`bot.py` 排除「名望不夠、會被打發的求見」（問 `can_meet_figure`）不動。
+- 核心的表：`models.py` 的 `ALLOW_FAMILIES`（有 `call:`）與 `act:call`、`act:socialize`；`server.py` 備料判斷、整季機器人排除「名望不夠、會被打發的求見」第 60 批搬成這一包的 `bot_idle`（照舊問 `ctx.can_meet_figure`）。
 - `howto.py` 的 `social_line`、`call_line`、`CALL_LINE`（玩法說明的文字）留核心（引導與說明頁共用）。
 - 組 `/api/main` 的 `figures_here` 那幾行留在殼（`server._main_view_body`）：包給 `figures_here_view` 與 `figure_intro`，像 `figure_face` 要讀 `web/img`，留殼。
 

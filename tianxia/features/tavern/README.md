@@ -7,9 +7,9 @@
 
 ## 裡面有什麼
 
-- `rules.py`：純規則（原 `tianxia/tavern.py`）。`ask.py`：問酒家照問句找事實（原 `tianxia/tavern_ask.py`）。兩個舊名都留成 `sys.modules` 別名（同一個模組物件）：`bot_policy`、`howto`（名望來源）、`server`（`chatter_write`、`ask_write`）、`scripts/try_tavern_ask.py` 與測試照舊 import 舊名，`monkeypatch.setattr(tavern, ...)` 照樣打得到包裡。
+- `rules.py`：純規則（原 `tianxia/tavern.py`）。`ask.py`：問酒家照問句找事實（原 `tianxia/tavern_ask.py`）。兩個舊名都留成 `sys.modules` 別名（同一個模組物件）：`howto`（名望來源）、`server`（`chatter_write`、`ask_write`）、`scripts/try_tavern_ask.py` 與測試照舊 import 舊名，`monkeypatch.setattr(tavern, ...)` 照樣打得到包裡。
 - `actions.py`：原本 `Game` 上酒肆的 43 個方法，加 `tavern_sign`（`act:tavern` 那一下紀錄的標題）。
-- `bots.py`：假人看到 `tavern:*` 怎麼按（原 `bot_policy.score` 那一段：只按出酒肆）。打聽那一步（`bot_policy._tavern`、`TAVERN_CHANCE`、`TAVERN_RESERVE`、`TAVERN_ASKS`）是 `take_turn` 的一步，不是分數，照舊在 `bot_policy`（測試直接換它們）。
+- `bots.py`：假人看到 `tavern:*` 怎麼按（原 `bot_policy.score` 那一段：只按出酒肆）。打聽那一步第 60 批搬來（`visit`、`TAVERN_RESERVE`、`TAVERN_ASKS`）：`bot_policy._tavern` 留一行、`TAVERN_CHANCE` 留在 `bot_policy`（叫的那一下才讀，`test_tavern`、`scripts/same_behavior.py` 換的是它的屬性）。`act:tavern`：`Verb.bot` 回 None、`bot_skip`。模組層不准碰 engine、`bot_policy`（`bot_policy` 模組層 import 這個檔）。改 `bots.py` 的 `act:` 分數時另外跑 `tests/bots/test_bot_policy.py`、`tests/bots/test_bot_policy_conquest.py`、`tests/bots/test_bot_policy_stuck.py`（`test_for` 挑不到，第 60 批）。
 - 掛鉤：`enabled`（`rules.on` 或此刻還坐在酒肆裡）、`choose`（`tavern:*`）、`bot_pick`、`bot_always = ("tavern:",)`（`bot.py` 的排除清單原本也寫了一個，第 11 批拿掉那一個，只剩這裡）；第 11 批的接縫掛鉤見下面「委派與留在原位的接縫」。
 
 - 題壁、問酒家的禁字 `BANNED_WORDS` 合 develop 時（2026-11-01，PM 定）搬進核心 `tianxia/naming.py`：探索包的走一趟留言也擋同三個字，包不能 import 別的包。`rules.py` 從 `naming` re-export，`tavern.BANNED_WORDS` 照舊拿得到。

@@ -15,7 +15,7 @@
 | `arena_crowd.py` | 場邊事件（原 `tianxia/arena_crowd.py`；別名）：底細、候選、擲、套用、模型判觀眾反應與重寫那一句；`check_content`（原 `content.check_arena_crowd`） |
 | `duel_actions.py` | 原本 `Game` 上頭目戰的 16 個方法（名字去掉前導底線）＋頭目的查詢 `boss_ready`（只有三選一的練功問的三個第 13 批一起拿掉）＋打到一半的選單 `duel_menu`（三招與抽身；審查修正從 `_everyday_options` 搬來）；頭目戰、擂台共用的放手一搏輸入框與重驗、本命戰法的亂數、陣營名也在這裡 |
 | `arena_actions.py` | 原本 `Game` 上擂台的 22 個方法（`_arena` → `arena_choice`、`_arena_crowd` → `roll_crowd`）＋原位接上掛鉤的那幾段（`fight_menu`、`entry_option`、`close`、`arena_open`、`arena_sign`、`arena_title`、`arena_fight_problem`） |
-| `bots.py` | 假人看到 `duel:`、`arena:` 怎麼按（原 `bot_policy.score` 那兩段：頭目戰的招在 `take_turn` 前面就照架勢出了、一律 None；擂台只按返回）。報名、更新分身、挑一場（`bot_policy._arena`）與打到一半的出招（`duel_move`）是 `take_turn` 的步驟，照舊在 `bot_policy` |
+| `bots.py` | 假人看到 `duel:`、`arena:` 怎麼按（原 `bot_policy.score` 那兩段：頭目戰的招在 `take_turn` 前面就照架勢出了、一律 None；擂台只按返回）。報名、更新分身、挑一場（`bot_policy._arena`）與打到一半的出招（`duel_move`）是 `take_turn` 的步驟，照舊在 `bot_policy`。第 60 批：`act:arena` 的 `Verb.bot` 回 None、`bot_skip`；`idle`（`Feature.bot_idle`）整季機器人不按 `duel:flee`、`arena:yield` |
 
 **留在核心的兩塊**（別包也在用，包不能 import 包）：單挑底層 `tianxia/core/duel_base.py`（剋、推力、挨打、防具、放手一搏擲一次、勝負、架勢、氣勢的字、選單上的一招、`Scene`：頭目戰、擂台、奪璽單挑共用；奪璽單挑 `seal_duel.py`、店面 `shopview.py` import 它）、擂台的名次與稱號 `tianxia/core/arena_ranks.py`（查詢服務：酒肆包的名氣、名帖、玩家卡、榜單、事件分級、江湖史的歷屆擂主、本週卡讀）。`duel_rules`、`arena_rules` 從這兩份 re-export 同一批函式物件，`tianxia.duel.push_of`、`tianxia.arena.title_of` 照舊拿得到。
 

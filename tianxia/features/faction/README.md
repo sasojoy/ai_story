@@ -35,7 +35,7 @@
 `_faction_pending_options`（選單接管整個選單的待確認三段，位置固定）、`_defect_options`（選單的叛投迴圈）、`_defect_scene`（叛投確認畫面的場景）。`_ally_options`、`_left_names` 沒有原位的呼叫端，不留委派。
 其餘 `_faction_step`、`_bot_lean`、`_lean_step`、`_defect_step`、`_leave_behind`、`_tier_outlook`、`_gentry_now` 只有包裡叫，沒有委派。
 核心原位接掛鉤的：`choose` 的 `faction`／`defect`／`sect` 與 `_action_title` 的 `faction`／`defect`（`Outcome`）、`bot_policy.score` 的 `defect`／`sect`、`bot.py` 的 `defect:`／`faction:lean:` 排除（`bot_always`）、叛投兩格（`_CLEAR_CORE`、`_DEFECT_AFTER_CORE` 拿掉）。
-還留在原位的：`bot_policy.take_turn` 的選項濾掉 `faction:lean:`／`defect:`（裡面還有別包與核心的前綴，且不用 `bot_always`）、`bot_policy._toward_faction`（投靠與確認，不經 `score`）、`bot.py` 的 `sect:` 看過才排除（條件式）。
+還留在原位的：`bot_policy.take_turn` 的選項濾掉 `faction:lean:`／`defect:`（裡面還有別包與核心的前綴，且不用 `bot_always`）、`bot_policy._toward_faction`（投靠與確認，不經 `score`）。整季機器人 `sect:` 看過才排除（條件式）第 60 批搬成這一包的 `Feature.bot_idle`。
 核心還直接碰這一包認領欄位或前綴的：`options` 的 `defect:cancel`（叛投確認畫面上的「再想想」，`pending_defect` 有值時核心原位加進戰鬥選單）、`_own_scene_text` 選邊與投靠確認的場景判斷（叛投那一段已是 `_defect_scene` 委派）、`atlas.py` 讀 `pending_faction`／`pending_defect`；這幾處沒有掛鉤可接，位置算行為，留原位。
 包裡自己叫自己的 `four_wins` 一律直接叫（沒有測試換掉它）；`Game._four_wins` 只剩決戰包經 ctx 問的那一條（`services.py` 二、查詢服務 `# faction`）。
 叛投確認畫面問押糧經核心的 `core/convoy_base.py`（第 35 批 PM 認定第 3 條認了，照 `omen_base` 前例；它只讀軍情包認領的 `PlayerState.convoy`、不寫，`held(state)` 一個函式）。
