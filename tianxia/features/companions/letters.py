@@ -173,7 +173,7 @@ def task_id(task: Bounty) -> int:
 def commission(state: GameState, content: Content, cid: str, rng: random.Random) -> Bounty | None:
     """cid 託的一件事：在他所在的那一區，討伐（他是交戰兩軍、那一區有對頭站著的地方）、打探（危險度 2 以上、不是城鎮）、
     護送（把東西送到那一區另一個城鎮）挑一種。那一區什麼都沒有就照全圖挑。都挑不出來回 None。"""
-    from tianxia import atlas  # noqa: PLC0415  過渡：待搬（atlas → world → rules：延後載入；第 50 批路線那一半進共用規則層）
+    from tianxia import atlas  # noqa: PLC0415  共用規則層（atlas → world → rules：延後載入；第 50 批收進）
 
     w, p = state.world, state.player
     side = figure_life.side_of(content, cid)

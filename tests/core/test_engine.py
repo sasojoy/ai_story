@@ -13,6 +13,7 @@ from tianxia import (
     atlas, battle_instance, battlelog, calendar, companion_agent, encounter, fight_llm, flavor, front_lines, guide,
     library, rules, skillview, team, traits,
 )
+from tianxia.features.map import layers
 from tianxia.characters import open_characters
 from tianxia.content import load_content
 from tianxia.engine import Game, Option
@@ -6158,7 +6159,7 @@ def test_timestamps_read_like_the_calendar_when_the_season_is_season_one(content
     assert "第 1 週・週一 01:00　張角率三十六方同時起義。" in game.chronicle_text()
     assert "第 1 週・週一 01:00　三十六方同日起事。" in game.rumors_text()
     assert "第 1 週・週一 00:00" in game.journal_html(1, 5)  # 開季那一則
-    assert "第 1 週・週一 01:00" in atlas.header_text(game.state, content)
+    assert "第 1 週・週一 01:00" in layers.header_text(game.state, content)
 
 
 def test_timestamps_are_unchanged_with_the_switch_off(game):
@@ -6167,7 +6168,7 @@ def test_timestamps_are_unchanged_with_the_switch_off(game):
     game.notice("測試")
     assert "剛剛　第1天 01:05" in game.latest_entry_html()
     assert "第1天　測試大事。" in game.chronicle_text()
-    assert "第1天 01:05" in atlas.header_text(game.state, game.content)
+    assert "第1天 01:05" in layers.header_text(game.state, game.content)
 
 
 # ── 地點描寫隨世界旗標換版（計畫 T8：宛城的 desc_when）──────────────────────

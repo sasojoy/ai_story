@@ -27,6 +27,7 @@
 
 - `player_fields`：`pending_faction`、`pending_defect`、`pending_ally`（按了投靠／叛投還在確認畫面上、挑好的依附那一軍）；`carried` 沒有（換季重來）。
 - 不認領：`faction`、`ally`、`sect`、`season_title`（身份，核心與 `social.affiliation` 到處讀）；`defected`（叛投寫它，但 `battle_instance`、狀態列、`guide` 都讀）；`ledgers`、`lean_changed`（`wins.set_lean` 在共用規則層寫，叛投時 `_clear_own` 清）。
+- 共用規則層的 `atlas.travel_block` 直接讀 `pending_faction`、`pending_defect`（動身被擋的那一句；全部拆包第 50 批照實記下，第 56 批選單收接縫時改成掛鉤、一張先後表）。
 
 ## 委派與留在原位的接縫
 

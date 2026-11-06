@@ -326,11 +326,12 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx.map_mostly()`（主人 explore：輿圖第一層名字旁的兩個字，每一處站過去之後的比重；原本列在三、過渡 explore）
 - `ctx._map_open_places()`、`ctx._map_mostly_here()`（主人 map：畫得出來的地點；腳下這一處「多半給什麼」那一句。探索包原本直接 import `mapview.open_places`、
   `mapdata.mostly_here`，輿圖成包之後包不能 import 包，改經 Game 的一行委派問輿圖包）
-- `ctx._map_foes(loc_id)`、`ctx._fierce_line(loc)`（主人 map：自己叫自己，經 Game 的一行委派——測試換掉 `Game._map_foes` 看地點卡的對手跟著變）
+- `ctx._map_foes(loc_id)`（主人 map：自己叫自己，經 Game 的一行委派——測試換掉 `Game._map_foes` 看地點卡的對手跟著變）；`_fierce_line` 第 50 批起
+  包裡直接叫同檔的 `fierce_line`（沒有測試換掉它），`Game._fierce_line` 一行委派留著：same_behavior 的 strip 軌直接叫
 - `ctx.map_base(viewer=)`、`ctx.map_state()`、`ctx.map_places()`、`ctx.map_header()`、`ctx.world_map_svg(layer, selected)`、`ctx.map_legend(layer)`、`ctx.place_detail(loc_id)`、
   `ctx.travel_options(loc_id)`、`ctx.MAP_LAYERS`（主人 map：`views.map_view`、`views.map_base_view` 這兩個 API 資料函式與 `routes.py` 的 /api/map/state 經 Game 的委派叫，server 與測試換掉的都看得到；
   `MAP_LAYERS` 是 Game 的類別屬性，就是 `atlas.LAYERS`）
-- 另外兩個共用的字與小函式不在 Game 上、從這個模組 import（最底下 # map 那一段）：`LOSE_WORD`（勝算的「必敗」，探索包挑懸賞、輿圖包標淡都讀）、
+- 另外兩個共用的字與小函式不在 Game 上、從核心的 `tianxia/core/explore_base.py` import（第 50 批移過去；第 49 批寄放在這裡）：`LOSE_WORD`（勝算的「必敗」，探索包挑懸賞、輿圖包標淡都讀）、
   探索表的小字（`kind_of`、`hint_in`、`mostly_in`……，輿圖名字旁的退路讀）、`terrain_tags`（地形標籤，有所感與輿圖地點卡共用）
 
 # smithy（全部拆包第 41 批「鐵匠鋪」；主人：鐵匠鋪包。本體在 tianxia/features/smithy/，Game 留一行委派回答別的包；計畫 docs/superpowers/plans/2026-11-06-鐵匠鋪包-第1批.md 1.3）。
@@ -361,7 +362,9 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `tianxia/core/omen_base.py`（主人：軍情包）：伏筆讀的那一半 `fs_active`（包裡叫 `fs_rules.active`）、`event_ids`、`held_items`、`heard_texts`
   （與填字的 `fill`、`_fragment_text`、`_version`、`_front`、`chain`、`_event`、`_figure_name`、`tianji_answer`、`_tianji`、`TIANJI_SLOTS`）；機緣讀的那一半
   `opp_active`（包裡叫 `opp_rules.active`）、`heard_clues`；新的 `clue_count(state, item_id)`（條件 `clue_items` 讀 `PlayerState.clue_items`）。
-  events、narration、rumor_view、殼的門下頁、rules.check_condition 讀
+  events、narration、rumor_view、殼的門下頁、rules.check_condition 讀；
+  map2（全部拆包第 50 批）：新的 `fs_answering(state)`（正在答最後一步的題，讀 `PlayerState.fs_asking`；共用規則層 `atlas.travel_block` 問，
+  軍情包 `fs_rules` re-export 同一個物件）
 - `tianxia/story_base.py`（共用規則層；主人：一條線包）：`waiting`、`doable`（章回卡讀，原本在 `features/story/storyline.py`）、新的
   `mark_of(state, line, mark)`（條件 `story_marks`、`story_marks_max` 讀 `PlayerState.storylines`）
 - `tianxia/core/feast_base.py`（主人：宴客包）：`on`、`find`、`is_open`、`open_feasts`、`hosting`、`toasted`、`_key`（人物活起來問誰在擺宴、書信的邀宴問開著的宴）。
@@ -531,16 +534,14 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 from __future__ import annotations
 
 import functools  # sense（第 24 批）：outing_watch 用
-from collections.abc import Iterable, Mapping  # map（第 49 批）：探索表的小函式用
 from dataclasses import dataclass  # stamina_plays（第 39 批）：RaidSpoils 用
 from typing import TYPE_CHECKING, NamedTuple  # zhuan（第 29 批）：Writer 用
 
 from .. import calendar  # checkin（第 30 批）：checkin_on 用
-from ..models import Content, Location  # Location：map（第 49 批）terrain_tags 的型別
+from ..models import Content
 from ..wallet import Purchase, Wallet
 
 if TYPE_CHECKING:
-    from ..jianfa_numbers import ExploreOneTable, JianfaNumbers  # map（第 49 批）：探索表的小函式
     from ..engine import Game
     from ..state import GameState, WorldState  # companions（note_cheer 的型別）；checkin（checkin_on 的型別）
 
@@ -824,62 +825,3 @@ def writers(state: GameState, content: Content, season: WorldState) -> list[Writ
             out[cid] = AFFINITY
             room -= 1
     return [Writer(cid, reason) for cid, reason in out.items()]
-
-
-# map（全部拆包第 49 批「輿圖一」）：下面三樣原本分別寫在 tianxia/mapdata.py（LOSE_WORD）、探索包的 explore_rules.py（六種地點、四類事、「多半」那兩個字的算法）、
-# 有所感包的 sensing.py（terrain_tags）；輿圖包要用、又不能 import 探索包與有所感包，搬到這裡（純函式，照 config 與地點的標籤算，不碰 Game），
-# 原本的模組 re-export（`mapdata.LOSE_WORD is services.LOSE_WORD`、`explore_rules.kind_of is services.kind_of`、`sensing.terrain_tags is services.terrain_tags`）；寄放：第 50 批移到核心小模組（第 49 批 PM 認定第 3 條）
-LOSE_WORD = "必敗"  # 這種勝算的出陣建議照樣列，但排到最後、網頁畫淡（企劃者 10/15 從對比圖選乙）；探索挑懸賞時對這一路是必敗就不強制
-
-TOWN, TEMPLE, FORD, WILD, HILL, CAMP = "town", "temple", "ford", "wild", "hill", "camp"  # 六種地點（jianfa_numbers.ExploreKind）
-EVENT, ENCOUNTER, MATERIAL, INSIGHT = "event", "encounter", "material", "insight"
-KINDS = (EVENT, ENCOUNTER, MATERIAL, INSIGHT)  # 一趟可能發生的四類事（比重的鍵照這個順序）
-FILL = MATERIAL  # 什麼都抽不出來（比重全是 0）補素材
-PLACE_WORDS = {TOWN: "城裡", TEMPLE: "寺裡", FORD: "渡口", WILD: "野外", HILL: "山裡", CAMP: "營裡"}
-BEAT_MOSTLY = {EVENT: "多事", ENCOUNTER: "多敵", MATERIAL: "多料", INSIGHT: "多悟"}  # 比重最高的那一類寫成哪兩個字
-BALANCED = "參半"  # 最高的有兩類以上並列
-
-
-def match(cfg: JianfaNumbers, tags: Iterable[str]) -> ExploreOneTable | None:
-    """這組地點標籤靠自己對得上哪一張表：照 `explore_tables` 的順序，第一張有共同標籤的；一個都對不上是 None。
-    內容驗證（每個正式地點都歸得到一張）問它；探索本身問 `kind_of`。"""
-    have = set(tags)
-    return next((t for t in cfg.explore_tables if have & set(t.tags)), None)
-
-
-def kind_of(cfg: JianfaNumbers, loc) -> ExploreOneTable:
-    """這一處用哪一張表：`match`；標籤一張都對不上的歸最後一張（野）。"""
-    return match(cfg, loc.tags) or cfg.explore_tables[-1]
-
-
-def mostly_of(weights: Mapping[str, float]) -> str:
-    """「多半」那兩個字照比重寫：四類裡比重最高的那一類（BEAT_MOSTLY），並列最高寫「參半」；全是 0 的那一趟補素材（FILL）所以寫「多料」。"""
-    top = max((weights.get(kind, 0) for kind in KINDS), default=0)
-    if top <= 0:
-        return BEAT_MOSTLY[FILL]
-    best = [kind for kind in KINDS if weights.get(kind, 0) == top]
-    return BALANCED if len(best) > 1 else BEAT_MOSTLY[best[0]]
-
-
-def table_weights(table: ExploreOneTable) -> dict[str, int]:
-    """一張表的四欄（事件、遭遇、素材、感悟），照 KINDS 的順序。"""
-    return {EVENT: table.event, ENCOUNTER: table.encounter, MATERIAL: table.material, INSIGHT: table.insight}
-
-
-def mostly_in(table: ExploreOneTable) -> str:
-    """這一種地點的「多半」兩個字，照它的表算（沒有危險度、不看誰站在那裡）：序章裡沒有比重可看時輿圖名字旁的退路
-    （平常是 Game.map_mostly 照每一處自己的比重，tail_of）。"""
-    return mostly_of(table_weights(table))
-
-
-def hint_in(table: ExploreOneTable) -> str:
-    """這一種地點的小字，照它的表算（沒有危險度）：玩法說明列六張表的樣子、沒有比重可看時的退路。"""
-    return PLACE_WORDS[table.kind] + mostly_in(table)
-
-
-def terrain_tags(loc: Location) -> list[str]:
-    """地點標籤裡的地形（河畔、城鎮……）：設施的標籤（馬市，裝備四欄 5.5；醫館，clinic.CLINIC_TAG；酒肆，tavern.TAG）不算地形。
-    有所感標題的括號與輿圖抽屜名字旁的地形（意境提示設計第五節）共用。"""
-    from .. import mounts  # noqa: PLC0415  共用規則層
-
-    return [tag for tag in loc.tags if tag not in (mounts.MARKET_TAG, "醫館", "酒肆")]

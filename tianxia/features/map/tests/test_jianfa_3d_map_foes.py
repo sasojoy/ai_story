@@ -2,7 +2,7 @@
 
 修之前（QA 複驗 3b 修正輪）：黃巾新角色站汝南學宮，輿圖推薦第一是涿郡、沒有勝算字，地點卡寫「此地的對手 沒有對手」，
 實際在那裡出陣打的是官軍的守軍（官軍的城沒有官軍的隊伍站著時，conquest.sortie_foes 退回 Scenario.territory.side_garrison：
-官軍巡騎、郡國兵），必敗。輿圖走 atlas.foes → territory.squads_at，算不到這個退回；約戰關著（只關 sortie_duel）同一個缺口早就在
+官軍巡騎、郡國兵），必敗。輿圖走 layers.foes → territory.squads_at，算不到這個退回；約戰關著（只關 sortie_duel）同一個缺口早就在
 （標攻卻沒有勝算字的有 14 處），有的地方甚至寫了勝算字、卻是別的隊伍的（潁水河畔寫「有把握」，出陣鈕寫「必敗」）。
 
 不變量（開季、季中；week7、season21；兩軍；約戰開、只關 sortie_duel）：地點卡標「攻」的每一處
@@ -16,7 +16,8 @@ import re
 import pytest
 
 from duel_kit import duel_content, duel_world, game_of, MOVES, NOW, seat
-from tianxia import atlas, conquest, conquest_day, mapdata, orders
+from tianxia import conquest, conquest_day, mapdata, orders
+from tianxia.features.map import layers
 from tianxia.characters import CharacterStore
 from tianxia.state import Order, SiegeSlot
 from tianxia.engine import Game
@@ -26,7 +27,7 @@ pytestmark = pytest.mark.slow  # 建 Game、載正式內容
 START = {"guan": "yingchuan_wilds", "huang": "runan_academy"}  # 潁川郊野（官軍）、汝南學宮（黃巾）：開季就站得到的出陣起點
 # 季中：兩邊各拿下幾塊（含官軍的城被黃巾拿下、中立地被官軍拿下），冷卻都過了
 MID = [("runan_wilds", "guan"), ("nanyang_road", "huang"), ("yingchuan", "huang"), ("hilltop_wilds", "guan")]
-WORDS = atlas.ODDS_ORDER
+WORDS = layers.ODDS_ORDER
 ODDS_AT_END = re.compile(r"・([^・（）]+)）$")
 
 
@@ -48,7 +49,7 @@ def _attacks(state) -> list[str]:
 
 
 def _worst(squads: list[dict]) -> str:
-    return max((q["odds"] for q in squads if q["odds"] != atlas.DRILL), key=WORDS.index)
+    return max((q["odds"] for q in squads if q["odds"] != layers.DRILL), key=WORDS.index)
 
 
 def _stand(c, world, side: str, loc: str, now: float = NOW):
@@ -82,7 +83,7 @@ def test_every_attack_place_lists_its_foes_with_an_odds_word(profile, side, off,
         assert info["odds"] is not None, f"{name}：標了攻、卻沒有勝算字"
         assert all(q["odds"] in WORDS for q in info["squads"]), f"{name}：有一路對手沒有勝算字 {info['squads']}"
         assert info["odds"]["word"] == _worst(info["squads"]), name
-        assert not any(q["odds"] == atlas.DRILL for q in info["squads"]), f"{name}：攻打的對手不會是自己人 {info['squads']}"
+        assert not any(q["odds"] == layers.DRILL for q in info["squads"]), f"{name}：攻打的對手不會是自己人 {info['squads']}"
 
 
 @pytest.mark.parametrize(("profile", "side", "mid"), [(p, s, m) for p in ("week7", "season21") for s in ("guan", "huang") for m in (False, True)])
@@ -148,7 +149,7 @@ def test_fb858_zhuo_county_lists_both_garrison_squads_while_duels_are_off():
 
 @pytest.mark.parametrize("off", [False, True], ids=["約戰開", "只關約戰"])
 def test_places_that_are_not_attacks_keep_the_old_listing(off):
-    """不是攻的地方（自家的守、不在爭奪之列、搶不下來）一個字不變：對手照 atlas.foes（站的隊伍，自己人寫操練）。"""
+    """不是攻的地方（自家的守、不在爭奪之列、搶不下來）一個字不變：對手照 layers.foes（站的隊伍，自己人寫操練）。"""
     c, world = _setup("week7", off, True)
     seat(c, world, "甲", "guan", START["guan"])
     game = game_of(c, world, "甲")
@@ -163,7 +164,7 @@ def test_places_that_are_not_attacks_keep_the_old_listing(off):
         if not off and loc in conquest.blocks(c) and conquest.holder(season, c, loc) != "guan" and game._duel_squad(loc) is not None \
                 and conquest.push_problem(season, c, "guan", loc, "attack") is not None:
             continue
-        expected = atlas.foes(c, c.locations[loc], lambda sid, at=loc: game.odds(sid, at=at), "guan", game.state.world)
+        expected = layers.foes(c, c.locations[loc], lambda sid, at=loc: game.odds(sid, at=at), "guan", game.state.world)
         assert [(q["name"], q["odds"]) for q in info["squads"]] == expected, loc
         kept += 1
     assert kept > 20
@@ -233,7 +234,7 @@ def test_suggestion_order_follows_the_existing_rule_once_the_odds_are_there():
 
 # ── FB-878（2026-10-31 從 tests/map/test_fb878_map_foes_shut.py 併進來）────────
 # FB-878（PM 從減法季 3d 驗收接過來）：約戰開著，現在攻不了的敵方、中立區塊（跟自家領地不相連、剛易手冷卻中、被戰書凍結），輿圖地點卡
-# 以前照舊列站在那裡的隊伍（atlas.foes）——黃巾開季站汝南學宮看潁水河畔寫「河灘潑皮 穩勝、偷網賊 有把握」，真的打進去（連上了、貼約戰）
+# 以前照舊列站在那裡的隊伍（layers.foes）——黃巾開季站汝南學宮看潁水河畔寫「河灘潑皮 穩勝、偷網賊 有把握」，真的打進去（連上了、貼約戰）
 # 迎戰的是守軍郡國兵，必敗。改成跟 3d 標攻的地方同一份規則：對手與勝算照貼約戰時會迎戰的守軍那一路（Game._duel_squad）；攻不了的原因、
 # 「出陣」那一格（不標攻、不推薦）照舊。搶不下來的（大本營、廣宗）沒有守軍迎戰，照舊列站的隊伍；約戰關著的季照 3d 的規則不動。
 #
@@ -288,7 +289,7 @@ def test_a_place_you_cannot_attack_yet_names_the_garrison_that_would_answer(prof
         squad = game._duel_squad(loc)
         if squad is None:  # 搶不下來（大本營、廣宗）：沒有守軍迎戰，照舊列站的隊伍
             assert why == conquest.WHY_OUT, f"{name}：{why}"
-            expected = atlas.foes(c, c.locations[loc], lambda sid, at=loc: game.odds(sid, at=at), side, game.state.world)
+            expected = layers.foes(c, c.locations[loc], lambda sid, at=loc: game.odds(sid, at=at), side, game.state.world)
             assert [(q["name"], q["odds"]) for q in info["squads"]] == expected, name
             continue
         word = game.odds(squad.id, at=loc)
@@ -345,5 +346,5 @@ def test_with_duels_off_the_cards_follow_3d(profile):
             expected = [c.squads[sid].name for sid in game._sortie_foes(c.locations[loc])]
             assert [q["name"] for q in info["squads"]] == expected, loc
         else:
-            expected = atlas.foes(c, c.locations[loc], lambda sid, at=loc: game.odds(sid, at=at), "huang", game.state.world)
+            expected = layers.foes(c, c.locations[loc], lambda sid, at=loc: game.odds(sid, at=at), "huang", game.state.world)
             assert [(q["name"], q["odds"]) for q in info["squads"]] == expected, loc

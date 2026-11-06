@@ -11,7 +11,8 @@ import re
 from unittest import mock
 
 from conftest import FixedRandom, no_plans, no_territory, real_content
-from tianxia import atlas, battle_instance, battlelog, bot_policy, calendar, figures, team, timetable, world
+from tianxia import battle_instance, battlelog, bot_policy, calendar, figures, team, timetable, world
+from tianxia.features.map import layers
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game, Option
 from tianxia.events import event_candidates
@@ -397,27 +398,27 @@ def test_sim_players_stand_down_in_season_one(on):
 
 def test_the_map_shows_the_figures_where_they_stand(on):
     s = _season(on)
-    assert atlas.haunters(s, on, "changshe") == ["皇甫嵩", "朱儁", "傅燮"]
-    assert atlas.haunters(s, on, "mengjin_ford") == ["董卓"]  # 不推戰線也在地圖上（內容表 1.1）
-    assert atlas.haunters(s, on, "deep_mountain") == []  # beta 的虛擬玩家董卓不再標在嵩山深處
-    assert atlas.leader_activity(s, on, "波才") == "每天約出手 1 次，讓潁川汝南上升"
-    assert atlas.leader_activity(s, on, "皇甫嵩") == "每天約出手 1 次，讓潁川汝南下降（第 2 週起）"
-    assert atlas.leader_activity(s, on, "董卓") == atlas.LEADER_QUIET
-    assert "- 聲威 60（越高越難打）。" in atlas.leader_text(s, on, "波才")
+    assert layers.haunters(s, on, "changshe") == ["皇甫嵩", "朱儁", "傅燮"]
+    assert layers.haunters(s, on, "mengjin_ford") == ["董卓"]  # 不推戰線也在地圖上（內容表 1.1）
+    assert layers.haunters(s, on, "deep_mountain") == []  # beta 的虛擬玩家董卓不再標在嵩山深處
+    assert layers.leader_activity(s, on, "波才") == "每天約出手 1 次，讓潁川汝南上升"
+    assert layers.leader_activity(s, on, "皇甫嵩") == "每天約出手 1 次，讓潁川汝南下降（第 2 週起）"
+    assert layers.leader_activity(s, on, "董卓") == layers.LEADER_QUIET
+    assert "- 聲威 60（越高越難打）。" in layers.leader_text(s, on, "波才")
     s.world.figures["luzhi"].status = "jailed"
-    assert atlas.haunters(s, on, "luzhi_camp") == []
+    assert layers.haunters(s, on, "luzhi_camp") == []
 
 
 def test_the_map_keeps_the_sim_players_with_the_switch_off(real):
     """規則關著的季照舊標虛擬玩家（龍頭人物）。挑戰每季都有（設計 3.8）：緊急開關關著時，給了地點也不寫聲威；開著時人物此刻
     就站在這裡才寫（黃巾別部營寨的波才寫、潁川的皇甫嵩不寫——他站在長社）。"""
     s = _season(real)
-    assert atlas.haunters(s, real, "huangjin_camp") == ["波才"]
-    assert atlas.haunters(s, real, "mengjin_ford") == []
-    assert "聲威" in atlas.leader_text(s, real, "波才", "huangjin_camp")
-    assert "聲威" not in atlas.leader_text(s, real, "皇甫嵩", "yingchuan")
+    assert layers.haunters(s, real, "huangjin_camp") == ["波才"]
+    assert layers.haunters(s, real, "mengjin_ford") == []
+    assert "聲威" in layers.leader_text(s, real, "波才", "huangjin_camp")
+    assert "聲威" not in layers.leader_text(s, real, "皇甫嵩", "yingchuan")
     real.config.figure_challenge_every_season = False
-    assert "聲威" not in atlas.leader_text(s, real, "波才", "huangjin_camp")
+    assert "聲威" not in layers.leader_text(s, real, "波才", "huangjin_camp")
 
 
 # ── Task 4：人物結局、接手、打贏扣聲威 ───────────────────

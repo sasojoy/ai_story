@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import atlas, materials  # 過渡：待搬（輿圖：路程與所在大區）
+from tianxia import atlas, materials  # 共用規則層（輿圖：路程與所在大區，第 50 批收進；素材 materials）
 from tianxia.models import RoadKind
 from tianxia.rules import apply_effect, audible, day_turn, ears_of, game_day, here_regions
 

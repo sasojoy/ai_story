@@ -176,7 +176,8 @@ def test_an_aggregator_is_picked_but_not_walked_through(monkeypatch):
 
 def test_a_low_module_with_too_many_dependents_runs_core_and_smoke_instead(monkeypatch):
     """tactics、zh 這種底層模組往上找會挑到兩、三百個檔：超過 IMPORT_CAP 只挑直接 import 的，加核心測試＋煙霧。
-    （shared：tactics、zh 第 15 批進了共用規則層，照上面那一條挑；這一條換成還是舊模組的 seal_acts——經 conquest、atlas 往上兩百多個檔。）"""
+    （shared：tactics、zh 第 15 批進了共用規則層，照上面那一條挑；這一條換成還是舊模組的 seal_acts——經 conquest、figures 往上一百多個檔。
+    map2：第 50 批 atlas 收進共用規則層之後量的，依賴它的模組 17 個、import 它們的測試檔 141 個，還是超過壓低的上限 100，例子不用換。）"""
     # 陣營第 35 批：defection 搬進包（舊名是沒有 import 的別名），seal_acts 往上找到的檔從超過上限掉到剛好 120 個（IMPORT_CAP 是「超過」才算），
     # 守的是「超過就只挑直接 import 的」這個做法，不是 120 這個數：把上限壓到 100，讓它不再貼著邊界
     monkeypatch.setattr(test_for, "IMPORT_CAP", 100)

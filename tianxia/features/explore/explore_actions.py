@@ -32,7 +32,7 @@ from tianxia import renown  # 共用規則層（名聲：頭目的倍數）
 from tianxia import story_base  # 共用規則層（一條線的底座：開頭擲不擲中）
 from tianxia import territory  # 共用規則層（地盤：這一處此刻歸誰）
 from tianxia.core.option import Option
-from tianxia.core.services import LOSE_WORD  # 勝算的「必敗」（輿圖包也讀；全部拆包第 49 批搬到核心的服務檔）
+from tianxia.core.explore_base import LOSE_WORD  # 勝算的「必敗」（輿圖包也讀；全部拆包第 49 批搬到核心的服務檔、第 50 批移到核心的 core/explore_base.py）
 from tianxia.events import event_candidates, pick_event  # 過渡：待搬（事件：候選、抽一則）
 from tianxia.models import DuelBoss, Location, Squad
 from tianxia.rules import jianfa

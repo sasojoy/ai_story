@@ -1,9 +1,11 @@
 import pytest
 
 from tianxia.atlas import (
-    Route, TravelBlock, TravelOption, detail_text, direction, foes, goal_places, haunters, is_known, known_locations, leg_minutes,
-    place_choices, recent_news, region_of, region_trends, road_hops, road_spot, routes, travel_block, travel_options,
-    travel_refusal, travel_seconds, travel_stamina, views, way_to, whole_minutes, worst_foe,
+    Route, TravelBlock, TravelOption, is_known, known_locations, leg_minutes, region_of, road_hops, road_spot, routes, travel_block,
+    travel_options, travel_refusal, travel_seconds, travel_stamina, views, way_to, whole_minutes,
+)
+from tianxia.features.map.layers import (  # 第 50 批：atlas 的圖層、詳情、勝算那一半進了輿圖包
+    detail_text, direction, foes, goal_places, haunters, place_choices, recent_news, region_trends, worst_foe,
 )
 from tianxia import insight_fx
 from tianxia.models import Condition, Connection, Location, SimPlayer
