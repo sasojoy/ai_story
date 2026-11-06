@@ -9,7 +9,9 @@
    結束碼 0 才綠、其他算紅，輸出在 web.txt。head 上沒有那個檔（第 77 批順延）就印一行、result.json 的 web 寫沒跑，不擋。
 
 用法（Windows 上用 venv 的 python）：
-  python docs/superpowers/pm-workflows/wave_gate.py --base <sha> --head <sha> [--name 波A] [--no-suite] [--no-compare] [--web]
+  python docs/superpowers/pm-workflows/wave_gate.py --base <sha> --head <sha> [--name 波A] [--no-suite] [--no-compare] [--web] [--cache]
+--cache 預設關：只給 compare 開，base 的結果留在 <主要 clone>/.local/wave_gate/cache（scripts/sb/cache.py）。同一波修正後重跑才省；要省到第二次，第一次就要帶
+（第一次全沒命中，跑的跟不帶一樣、只多存檔）。進 develop、上 main 的那一次不開：鍵漏掉相依會假綠。
 結果在 <主要 clone>/.local/wave_gate/<head 前 8 碼>/：gate.log、result.json、done（最後才寫，等它就好）。
 結束碼 0 全綠、1 有紅。不推任何東西、不改 verified.txt（全面檢查的基準由 PM 記）。
 
@@ -108,6 +110,7 @@ def main() -> int:
     ap.add_argument("--no-compare", action="store_true")
     ap.add_argument("--jobs", default="")
     ap.add_argument("--web", action="store_true", help="前面都跑完之後跑網頁比對（scripts/webqa/gate.py）")
+    ap.add_argument("--cache", action="store_true", help="同一波修正後重跑才開；進 develop、上 main 的那一次不開")
     a = ap.parse_args()
 
     here = Path(__file__).resolve().parent
@@ -125,7 +128,9 @@ def main() -> int:
     env = {**os.environ, "PYTHONIOENCODING": "utf-8", "TIANXIA_DB": str(work / "tmp" / "gate.db")}
     py = sys.executable
     root = work / "head"
-    result: dict = {"name": a.name, "base": base, "head": head, "started": f"{dt.datetime.now():%m-%d %H:%M}"}
+    result: dict = {"name": a.name, "base": base, "head": head, "started": f"{dt.datetime.now():%m-%d %H:%M}", "cache": a.cache}
+    if a.cache:
+        print("這一次開了快取，不能當進 develop、上 main 的依據", flush=True)
 
     scan = subprocess.run([py, str(root / "docs" / "superpowers" / "pm-workflows" / "undef_scan.py"), "tianxia", "server.py", "scripts", "tests"],
                           cwd=root, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -142,7 +147,8 @@ def main() -> int:
         unpack(repo, base, work / "base")
         both = ["--base", str(work / "base"), "--head", str(root)]
         extra = (["--tracks", a.tracks] if a.tracks else []) + (["--jobs", a.jobs] if a.jobs else [])
-        running["compare"] = start([py, script, "compare", *both, "--tmp", str(work / "tmp" / "cmp"), *extra], root, env, out / "compare.txt")
+        cached = ["--cache", str(repo / ".local" / "wave_gate" / "cache")] if a.cache else []  # 只給 compare；explore-compare 不快取
+        running["compare"] = start([py, script, "compare", *both, "--tmp", str(work / "tmp" / "cmp"), *extra, *cached], root, env, out / "compare.txt")
         if not a.tracks:
             running["explore"] = start([py, script, "explore-compare", *both, "--tmp", str(work / "tmp" / "exp")], root, env, out / "explore.txt")
     if not a.no_suite:

@@ -16,6 +16,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from sb import cache
+
 PROFILES = ("season21", "week7", "test")  # 拿掉二（甲）：none、weekend 關門，不再是可以選的設定
 TRACK_NAMES: tuple[str, ...] = ()  # 全部的軌：load_tracks 載完才算（sortie、duel 在前，再照檔名排，同一檔照登記先後）；別的檔讀 harness.TRACK_NAMES，不要 from … import（拿到舊的空值）
 CLOCK0 = 1792900800.0  # 2026-10-25 04:00 UTC（台灣 12:00；1792900800 mod 86400 = 14400）
@@ -70,16 +72,42 @@ def _first_diff(a: bytes, b: bytes) -> str:
     return f"前 {min(len(la), len(lb))} 行一樣，行數 {len(la)}／{len(lb)}"
 
 
-def _run_set(chains: list[list[tuple[list[str], Path]]], workers: int) -> None:
-    """chains：每一串是先後要跑的幾個子行程（引數, log）——前半＋後半是同一串；串與串之間平行跑。"""
+def _run_set(chains: list[list], workers: int) -> None:
+    """chains：每一串是先後要跑的幾步——（引數, log）是子行程，可叫的就叫（快取的還原、跑完存起來）；前半＋後半是同一串；串與串之間平行跑。"""
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-        for f in [pool.submit(lambda chain=chain: [_child(*step) for step in chain]) for chain in chains]:
+        for f in [pool.submit(lambda chain=chain: [step() if callable(step) else _child(*step) for step in chain]) for chain in chains]:
             f.result()
 
 
 def _bot_runs(tracks: list[str]) -> list[tuple[str, str]]:
     """（seats, 設定）：每一軌登記的假人（register_bots）跑它登記的那幾種設定；軌不在清單上的不跑。"""
     return [(seats, p) for seats, (profiles, _) in BOT_SEATS.items() if seats in tracks for p in profiles]
+
+
+def _db_files(db: Path) -> list[Path]:
+    """這個資料庫寫出來的每樣東西：<主檔名>-*（旁邊的小檔、-vapid.pem、資料夾）與 <主檔名>.db*（-wal、-shm、.state.json、各軌的 .db.<軌>.json）。
+    前半的快照一定走這裡：_wipe_db 那張清單少 -vapid.pem 與 .db.<軌>.json，少抄的話後半換一把鑰匙或直接炸。"""
+    return [p for p in db.parent.iterdir() if p.name.startswith((f"{db.stem}-", db.name))]
+
+
+def _base_step(step: tuple, folder: Path | None, cell: str, out: Path, db: Path | None = None):
+    """base 那一步。沒開快取：原樣。命中：換成還原，不開子行程。沒命中：跑完存起來（子行程結束碼非 0 時 _child 丟例外，壞的存不進去）。"""
+    if folder is None:
+        return step
+    if cache.hit(folder, cell):
+
+        def restore() -> None:
+            for path in _db_files(db) if db else ():  # --part second 不會自己清
+                shutil.rmtree(path) if path.is_dir() else path.unlink()
+            cache.restore(folder, cell, out, db)
+
+        return restore
+
+    def run_and_save() -> None:
+        _child(*step)
+        cache.save(folder, cell, out, _db_files(db) if db else (), db.stem if db else "")
+
+    return run_and_save
 
 
 def _print_seconds(label: str, outputs: dict, bot_out: dict, twins: dict[str, str]) -> None:
@@ -103,11 +131,12 @@ def _print_seconds(label: str, outputs: dict, bot_out: dict, twins: dict[str, st
 
 
 def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int, bots: bool, label: str = "compare",
-            tracks: list[str] | None = None) -> bool:
+            tracks: list[str] | None = None, cache_dir: Path | None = None) -> bool:
     tmp.mkdir(parents=True, exist_ok=True)
     tracks = tracks or list(TRACK_NAMES)
     SECONDS.clear()
     twins = {t: FULL_SAME_AS[t] for t in tracks if FULL_SAME_AS.get(t) in tracks}  # 清單上有那一軌才省；只有這一軌就照舊自己跑
+    folder = cache.open_folder(cache_dir, base, Path(__file__).resolve().parents[1]) if cache_dir else None  # sb/cache.py；鍵只看 base，head 永遠跑
     chains, outputs = [], {}
     for t in tracks:
         for p in profiles:
@@ -119,10 +148,12 @@ def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int
             if t in twins:  # 整段比那一軌跑出來的（檔名照命名算，清單的先後不影響）；後半照舊接，宣告過時會紅
                 o["base"], o["head"] = (tmp / f"{label}_{k}_{twins[t]}_{p}.txt" for k in ("base", "head"))
             else:
-                chains.append([(["run", str(base), p, str(o["base"]), *run, "--db", str(dbs["base"])], tmp / f"{label}_base_{n}.log")])
+                chains.append([_base_step((["run", str(base), p, str(o["base"]), *run, "--db", str(dbs["base"])], tmp / f"{label}_base_{n}.log"),
+                                          folder, f"all_{n}", o["base"])])
                 chains.append([(["run", str(head), p, str(o["head"]), *run, "--db", str(dbs["head"])], tmp / f"{label}_head_{n}.log")])
             chains.append([
-                (["run", str(base), p, str(o["base1"]), *run, "--db", str(dbs["half"]), "--part", "first"], tmp / f"{label}_base1_{n}.log"),
+                _base_step((["run", str(base), p, str(o["base1"]), *run, "--db", str(dbs["half"]), "--part", "first"], tmp / f"{label}_base1_{n}.log"),
+                           folder, f"first_{n}", o["base1"], dbs["half"]),
                 (["run", str(head), p, str(o["head2"]), *run, "--db", str(dbs["half"]), "--part", "second"], tmp / f"{label}_head2_{n}.log"),
             ])
     bot_out = {}
@@ -131,8 +162,9 @@ def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int
             n = f"{seats}_{p}"
             bot_out[(seats, p)] = {k: tmp / f"{label}_bots_{k}_{n}.txt" for k in ("base", "head")}
             for k, root in (("base", base), ("head", head)):
-                chains.append([(["bots", str(root), p, str(bot_out[(seats, p)][k]), "--tmp", str(tmp / f"{label}_bots_{k}_{n}"),
-                                 "--seats", seats], tmp / f"{label}_bots_{k}_{n}.log")])
+                step = (["bots", str(root), p, str(bot_out[(seats, p)][k]), "--tmp", str(tmp / f"{label}_bots_{k}_{n}"),
+                         "--seats", seats], tmp / f"{label}_bots_{k}_{n}.log")
+                chains.append([_base_step(step, folder, f"bots_{n}", bot_out[(seats, p)][k]) if k == "base" else step])
     started = time.time()
     _run_set(chains, workers)
     ok = True
@@ -157,6 +189,8 @@ def compare(base: Path, head: Path, tmp: Path, profiles: list[str], workers: int
         if hb != hh:
             print("  " + _first_diff(o["base"].read_bytes(), o["head"].read_bytes()))
     _print_seconds(label, outputs, bot_out, twins)
+    if folder:
+        print(f"快取：命中 {cache.hits} 格、沒命中 {cache.misses} 格、{folder} {cache.megabytes(folder):.0f} MB")
     return ok
 
 
@@ -176,7 +210,38 @@ def _mutant(base: Path, tmp: Path, track: str) -> Path:
     raise RuntimeError("找不到要改的那一句")
 
 
-def selftest(base: Path, tmp: Path, profiles: list[str], workers: int, tracks: list[str] | None = None) -> bool:
+def _selftest_cache(base: Path, tmp: Path, profiles: list[str], workers: int, tracks: list[str], mutants: dict[str, Path], cache_dir: Path) -> bool:
+    """selftest --cache：快取本身穩不穩，每一軌在 MUTANT_PROFILE 那一種設定跑四次 compare。這幾次 compare 自己會印「不一樣」，這裡只看回傳值與命中數。
+    1. compare(base, base)（快取 A）：先填，要全部一樣。
+    2. 同一對再跑：要有命中、全部一樣。前半快照接後半的雜湊等於整段就是這一條。
+    3. compare(base, mutant)：base 要有命中、要抓到不一樣。開快取時改一個字照樣抓得到。
+    4. compare(mutant, base)（快取 B，先抄一份 A：A 要留給下一軌；空的快取本來就全部沒命中，等於沒驗）：要全部沒命中、要抓到不一樣。base 改一個字不會假綠。"""
+    a, b = cache_dir / "selftest_a", cache_dir / "selftest_b"
+    shutil.rmtree(a, ignore_errors=True)
+    ok = True
+    for t in tracks:
+        p = MUTANT_PROFILE[t]
+        if p not in profiles:
+            continue
+        fill = compare(base, base, tmp, [p], workers, True, "selfcache1", [t], a)
+        filled = cache.misses
+        again = compare(base, base, tmp, [p], workers, True, "selfcache2", [t], a)
+        hit2, miss2 = cache.hits, cache.misses
+        caught_head = not compare(base, mutants[t], tmp, [p], workers, True, "selfcache3", [t], a)
+        hit3 = cache.hits
+        shutil.rmtree(b, ignore_errors=True)
+        shutil.copytree(a, b)
+        caught_base = not compare(mutants[t], base, tmp, [p], workers, True, "selfcache4", [t], b)
+        hit4, miss4 = cache.hits, cache.misses
+        ok &= fill and filled > 0 and again and hit2 > 0 and miss2 == 0 and caught_head and hit3 > 0 and caught_base and hit4 == 0 and miss4 > 0
+        print(f"快取 {t} {p} 填 {filled}{'' if fill else ' 不一樣'}｜再跑命中 {hit2} 沒命中 {miss2} {'一樣' if again else '不一樣'}"
+              f"｜改 head 命中 {hit3} {'抓得到' if caught_head else '抓不到'}｜改 base 命中 {hit4} 沒命中 {miss4} {'抓得到' if caught_base else '抓不到'}")
+    shutil.rmtree(a, ignore_errors=True)
+    shutil.rmtree(b, ignore_errors=True)
+    return ok
+
+
+def selftest(base: Path, tmp: Path, profiles: list[str], workers: int, tracks: list[str] | None = None, cache_dir: Path | None = None) -> bool:
     """比對本身穩不穩：同一份跑兩次一樣、前半＋後半（base 接 base）＝整段、改一個字（mutant，每一軌在 MUTANT_PROFILE 那一種設定跑）抓得到差。"""
     tmp.mkdir(parents=True, exist_ok=True)
     tracks = tracks or list(TRACK_NAMES)
@@ -238,6 +303,8 @@ def selftest(base: Path, tmp: Path, profiles: list[str], workers: int, tracks: l
         print(f"假人 {seats:6} {p:9} {na} 行 {ba} 位元組 跑兩次 {'一樣' if ha == hb else '不一樣'}")
         if ha != hb:
             print("  " + _first_diff(o["a"].read_bytes(), o["b"].read_bytes()))
+    if cache_dir:
+        ok &= _selftest_cache(base, tmp, profiles, workers, tracks, mutants, cache_dir)
     return ok
 
 

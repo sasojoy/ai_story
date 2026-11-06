@@ -8,12 +8,15 @@ sortie 是第 1 批的（Scenario：出陣本體、混戰、出陣回報），du
 
 用法（python 不加 -I：-I 會連 PYTHONHASHSEED 一起忽略；子行程自己帶 PYTHONHASHSEED=0）：
   python scripts/same_behavior.py compare --base <根> --head <根> --tmp <暫存資料夾> [--profiles none,weekend,...] [--tracks sortie,duel]
-      [--jobs 4] [--no-bots]
-  python scripts/same_behavior.py selftest --base <根> --tmp <暫存資料夾> [--tracks ...]   同一份跑兩次一樣、前半＋後半＝整段、改一個字抓得到
+      [--jobs 4] [--no-bots] [--cache <資料夾>]
+  python scripts/same_behavior.py selftest --base <根> --tmp <暫存資料夾> [--tracks ...] [--cache <資料夾>]   同一份跑兩次一樣、前半＋後半＝整段、改一個字抓得到
   python scripts/same_behavior.py run <根> <設定> <輸出檔> --tmp <暫存資料夾> [--track sortie|duel] [--part all|first|second] [--db <資料庫檔>]
   python scripts/same_behavior.py bots <根> <設定> <輸出檔> --tmp <暫存資料夾> [--seats sortie|duel]
 
 設定：none（不帶）、weekend、season21、week7，與 test（tests/fixtures/content，測試內容）。
+
+--cache（第二輪第 71 批，scripts/sb/cache.py）：預設關。base 的結果存起來，根與腳本都沒變就不再跑，head 永遠跑；只給同一波修正後重跑用，進 develop、上 main 的那一次不開。
+selftest --cache 多驗快取本身（每一軌四次 compare，只帶幾軌）。
 
 固定的那幾層（不固定的話同一份程式跑兩次就不一樣，比對本身不穩）：
 - 亂數：伺服器每個請求都 Game(CONTENT, state) 不傳 rng（engine 的 `self.rng = rng or random.Random()`）——這裡把
@@ -95,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
         x.add_argument("--profiles", default=",".join(PROFILES))
         x.add_argument("--tracks", default=",".join(harness.TRACK_NAMES))
         x.add_argument("--jobs", type=int, default=4)
+        x.add_argument("--cache", default="", help="快取資料夾；不帶就不開")
     a = ap.parse_args(args)
     if a.cmd == "run":
         tmp = Path(a.tmp)
@@ -116,10 +120,11 @@ def main(argv: list[str] | None = None) -> int:
     if not tracks:  # compare、selftest 拿到空清單會跑全部
         print("這個根沒有要跑的軌")
         return 0
+    cache_dir = Path(a.cache).resolve() if a.cache else None
     if a.cmd == "compare":
-        ok = compare(Path(a.base).resolve(), Path(a.head).resolve(), Path(a.tmp), profiles, a.jobs, not a.no_bots, tracks=tracks)
+        ok = compare(Path(a.base).resolve(), Path(a.head).resolve(), Path(a.tmp), profiles, a.jobs, not a.no_bots, tracks=tracks, cache_dir=cache_dir)
     else:
-        ok = selftest(Path(a.base).resolve(), Path(a.tmp), profiles, a.jobs, tracks=tracks)
+        ok = selftest(Path(a.base).resolve(), Path(a.tmp), profiles, a.jobs, tracks=tracks, cache_dir=cache_dir)
     print("全部一樣" if ok else "有不一樣的")
     return 0 if ok else 1
 
