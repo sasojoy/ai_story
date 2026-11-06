@@ -32,7 +32,7 @@ from pydantic import TypeAdapter
 
 from . import allied, calendar, divine, log_archive
 from .core import features as features_core  # 世界層的掛鉤（core_world：全部拆包第 25 批）：開季、換季那幾格
-from .battle_instance import BattleInstance, BattleRoundRecord, SiegeInfo, shift_deadlines, start_muster
+from .core.battle_base import BattleInstance, BattleRoundRecord, SiegeInfo, shift_deadlines, start_muster
 from .characters import name_key
 from .database import Database, open_database
 from .characters import name_key

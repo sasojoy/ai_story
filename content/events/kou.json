@@ -117,7 +117,7 @@
         "text": "假意入夥，伺機探聽",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "grade": "normal", "shift": 1
         },
         "effect": {
           "text": "你混進了黃巾軍的隊伍，對方還沒起疑。",
@@ -343,7 +343,7 @@
         },
         "check": {
           "stat": "con",
-          "difficulty": 6
+          "grade": "normal", "shift": 1
         },
         "effect": {
           "text": "你在哨船上守到天明，兩次看見對岸有小船想偷渡，都被你喝了回去。哨船上的頭目記下了你的名號。",
@@ -380,7 +380,7 @@
         },
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "grade": "normal", "shift": 1
         },
         "effect": {
           "text": "你割斷繩子，帶著漁民從亂葬崗摸了出去。",

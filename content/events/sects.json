@@ -14,9 +14,18 @@
       "flags_none": [
         "叛出:yingchuan_academy"
       ],
-      "max_stats": {
-        "evil": 9
-      }
+      "any_of": [
+        {
+          "max_stats": {
+            "evil": 9
+          }
+        },
+        {
+          "flags_all": [
+            "legacy_zheng_1"
+          ]
+        }
+      ]
     },
     "text": "潁川書院的門生迎上來：「近來世道不寧，經師有令，廣招品行端正的士子，共議天下大勢。」",
     "choices": [

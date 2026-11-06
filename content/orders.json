@@ -111,16 +111,16 @@
     "haoqiang": {"name": "保境安民", "text": "你帶人在{地點}修補了幾段籬牆，替鄉里趕走了一夥遊蕩的散兵。"}
   },
   "rank2": {
-    "guan": {"name": "招降黃巾散兵", "check": {"stat": "wis", "difficulty": 6},
+    "guan": {"name": "招降黃巾散兵", "check": {"stat": "wis", "grade": "normal", "shift": 1},
              "ok": "你在{地點}放出話去：願降者不殺，給糧遣散。幾個黃巾散兵扔下竹槍，跪在路邊。",
              "fail": "你在{地點}喊了半天，對面的黃巾散兵只朝你丟石頭。"},
-    "huang": {"name": "施符水收人心", "check": {"stat": "wis", "difficulty": 6},
+    "huang": {"name": "施符水收人心", "check": {"stat": "wis", "grade": "normal", "shift": 1},
               "ok": "你在{地點}的村口畫符化水，一個發熱的孩子喝下之後睡安穩了，他娘跪下來給你磕頭。",
               "fail": "你在{地點}畫了符、化了水，那家人道了謝，眼神裡卻還是將信將疑。"}
   },
   "rank_actions": [
     {"id": "incite", "faction": "huang", "rank": 3, "name": "在一地煽動起事", "stamina": 20, "weekly": 3,
-     "tags": ["城鎮"], "check": {"stat": "wis", "difficulty": 7}, "push": 5,
+     "tags": ["城鎮"], "check": {"stat": "wis", "grade": "hard"}, "push": 5,
      "ok": "你在{地點}的市集上振臂一呼：「蒼天已死，黃天當立！」幾十個鄉民扯下頭巾，換上了黃的。",
      "fail": "你在{地點}喊了半天，圍觀的人一鬨而散，怕官府來抓。"},
     {"id": "fortify", "faction": "haoqiang", "rank": 3, "name": "修築塢堡", "stamina": 20, "weekly": 3,

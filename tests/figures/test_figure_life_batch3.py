@@ -6,6 +6,7 @@ from __future__ import annotations
 import pytest
 
 from conftest import real_content
+from bounty_ctx import bounty_ctx
 from tianxia import bounties, calendar, figure_life, figures, yuedan
 from tianxia.state import GameState, PlayerState
 from tianxia.world_state import fresh_season
@@ -147,9 +148,9 @@ def test_only_his_side_sees_it_and_the_first_three_get_paid(c):
     assert bounties.rallies(s, c) == []
     s.player.faction = "guan"
     assert bounties.rallies(s, c) == [b]
-    assert any(row.get("commission") and row["title"].startswith("求援・") for row in bounties.status(s, c, None))
+    assert any(row.get("commission") and row["title"].startswith("求援・") for row in bounties.status(bounty_ctx(s, c)))
     silver = s.player.stats.get("silver", 0)
-    msgs = (bounties.on_win(s, c, None, b.location, b.squad) if b.kind == "strike" else bounties.on_explore(s, c, None, b.location))
+    msgs = (bounties.on_win(bounty_ctx(s, c), b.location, b.squad) if b.kind == "strike" else bounties.on_explore(bounty_ctx(s, c), b.location))
     assert any("求援你辦成了" in m for m in msgs)
     assert s.player.stats["silver"] == silver + c.config.figure_life.rally_silver
     assert s.player.affinities["qinjie"] == c.config.figure_life.rally_affinity
@@ -166,8 +167,8 @@ def test_guarding_or_rallying_him_counts(c):
     _anxious(s, c, "qinjie")
     figure_life._maybe_rally(s, c, "qinjie", 1)
     s.player.faction = "guan"
-    assert any("求援你辦成了" in m for m in bounties.on_aid(s, c, "qinjie"))
-    assert bounties.on_aid(s, c, "qinjie") == []
+    assert any("求援你辦成了" in m for m in bounties.on_aid(bounty_ctx(s, c), "qinjie"))
+    assert bounties.on_aid(bounty_ctx(s, c), "qinjie") == []
 
 
 def test_a_calm_figure_does_not_call(c):

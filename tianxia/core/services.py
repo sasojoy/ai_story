@@ -70,7 +70,7 @@
   `ctx._fight_gone(fight)`（C 段的重驗與「選項不在了」）、`ctx._judged(squad)`、`ctx._fight_with(squad, judged, **kw)`、
   `ctx._narrate(record, result, judged)`、`ctx._style_note(squad, result)`、`ctx._terrain_note()`
 - 勝算：`ctx.odds(squad_id, at=None)`（鈕上寫的那一個）
-- 單次判定與收場：`ctx._squad_encounter(squad_id, wild=False, as_sortie=False)`、`ctx._take_toll(tier, wild=, clash=)`、
+- 單次判定與收場：`ctx._squad_encounter(squad_id, wild=False, as_sortie=False)`、`ctx._take_toll(tier, wild=, clash=, squad=)`、
   `ctx._player_hp_and_cap()`、`ctx._player_hp()`、`ctx._hp_facts(healed=())`、`ctx._play_rounds(...)`（同上）、`ctx._trait_say(...)`、
   `ctx._trait_lines(...)`、`ctx._record_exp(...)`（同上）、`ctx._battle_rewards(squad, record, max_tier=None)`、`ctx._thin_drops(drops, record)`、
   `ctx._tier3(squad, record, chance, tag, source)`、`ctx._seize(record, draw=False)`（附錄甲裁核心）、`ctx._lose_silver(record)`、`ctx._file_battle(...)`（同上）
@@ -168,7 +168,7 @@
 
 事件（全部拆包第 26 批）
 # core_eventbus
-- `ctx.publish(event, *args)`：一包發生的事、別包跟著動——照核心的 BUS_ORDER 叫每一格（win、outing、explore、arrive、raid_win、battle_end；
+- `ctx.publish(event, *args)`：一包發生的事、別包跟著動——照核心的 BUS_ORDER 叫每一格（win、outing、explore、arrive、raid_win、aid、battle_end；
   簽名與回傳見 tianxia/core/features.py 的 # core_eventbus）。
 
 # faction（全部拆包第 35 批「陣營」；陣營包要叫的核心服務，主人都是核心）
@@ -237,6 +237,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 # companions（全部拆包第 19 批）
 - `ctx._settle_partings(write=True)`（主人決戰：決戰收場時從你身邊回江湖的人，情誼乘 parted_keep；按招募之前先結清。本體第 7 批在 `features/battle/muster.py`，總表第 19 列「先做」列成查詢服務）
 - `ctx._recruit_target()`、`ctx._recruitable_here()`（主人人物情誼：此地有沒有招得了的人；新手引導碰到才說的 h_recruit 問。第 22 批原本記在三、過渡）
+- `ctx._chuangong_ready()`（主人修練：傳功開著、有傳得起的一門；新手引導碰到才說的 h_chuangong 問）
 # companions（全部拆包第 20 批：人物對話與 NPC 智能 2.0 的本體搬進人物情誼包，Game 留一行委派回答別的包）
 - `ctx._parley_backing_here()`（主人人物情誼：並肩出陣——今天答應陪你、你在他那一帶的那位人物；出陣包 act:train 打的那一場包在外面問它。原本記在三、過渡 sortie 那一段）
 # sense（全部拆包第 24 批：有所感包回答別的包、有所感包問探索包）
@@ -406,6 +407,11 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._mandate_settle(winner, record, battle_name)`（天命之爭定下來：玉璽包自己的委派——`scripts/measure_seal.py` 換掉 `Game._mandate_settle`、
   核心的管理者「定結果」也叫，包裡收場那一下經 ctx 叫，換掉的才打得到）
 
+# bounties（全部拆包第 45 批「懸賞榜」：新包 tianxia/features/bounties/；計畫 docs/superpowers/plans/2026-11-07-懸賞榜包-第1批.md）
+- `ctx._raid_bounty(target)`（主人懸賞榜：伏兵贏了、揭了通緝他就交差，截殺也叫；本體在包的 actions.raid_bounty，事件 raid_win 的發布點跟著搬、位置不動；Game 留一行委派）
+- `ctx._letter_thank(task)`（主人人物情誼：求援委託辦成了，那位人物寫一封道謝信；懸賞榜包 rules._complete_rally 叫）
+- `ctx._parley_settle_task(task_id, cid)`、`ctx._parley_keep(cid, cond)`、`ctx._parley_owed_line(name)`、`ctx._parley_ask_label(ask_id)`（主人人物情誼：委託辦成了，欠他的那一件清掉、記一筆守約、他會兌現的那一句、答應你的那一件的字；懸賞榜包 rules._complete_commission、commission_reward 叫，PM 認定乙案）
+
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
 explore（主動搬六包第 3＋4 批加的這一段）
@@ -466,7 +472,7 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 
 # guide（全部拆包第 22 批：新手引導包叫的、主人還沒搬的）
 - 假人走序章（`_graduate`）照每一步的完成條件做的那幾下：`ctx.slot_insight(art, insight)`、`ctx.switch_art(art)`、`ctx.practice(kind)`、
-  `ctx.allocate_stat(stat)`、`ctx.melt_art(art)`（主人修練 features/cultivation）、`ctx.forge(main, aux)`（主人煉製：第 44 批成包，改列二、查詢服務 `# craft` 那一段）
+  `ctx.allocate_stat(stat)`、`ctx.pick_growth(preset)`（五項屬性的季，序章配點那一步；主人修練 features/cultivation，本體 actions.pick_growth，Game 留三步）、`ctx.melt_art(art)`（主人修練 features/cultivation）、`ctx.forge(main, aux)`（主人煉製：第 44 批成包，改列二、查詢服務 `# craft` 那一段）
 - `ctx._hint_triggers(only)`（這一包自己的委派：tests/arts/test_hints.py 換掉 game._hint_triggers，包裡經 ctx 叫，換掉的才打得到；
   呼叫端改完就拿掉）
 
@@ -478,8 +484,7 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 （`ctx._signature_arms`：全部拆包第 42 批裝備成包，改列二、查詢服務 `# gear`）
 
 # stamina_plays（全部拆包第 39 批「體力玩法＋閉關」：設伏劫道、屯糧練兵搬進 features/stamina_plays；計畫 docs/superpowers/plans/2026-11-06-體力玩法閉關-第39批.md 1.3）
-- `ctx._raid_bounty(target)`（主人懸賞榜〔第 45 批〕：伏兵贏了、揭了通緝他就交差，截殺也叫；本體留在 Game 上，懸賞榜成包時改成二、查詢服務）。
-  設伏要叫的其餘 Game 方法（`_side`、`_raid_key`、`_load_kin`、`_save_kin`、`_spar_power`、`_spar_mirror`、`_file_battle`、`_play_rounds`、
+- 設伏要叫的其餘 Game 方法（`_side`、`_raid_key`、`_load_kin`、`_save_kin`、`_spar_power`、`_spar_mirror`、`_file_battle`、`_play_rounds`、
   `_last_wear`、`_idle`、`_log`、`_write`、`stamp`、`_cost_option`、`_draft`、`touched`）上面已經列了，這一包只記「誰在用」。
 # peers（全部拆包第 37 批：答應邀請時分派給還沒搬的切磋、論武、結伴同行；切磋、論武第 38 批搬進包，`answer_invite` 包內直接叫，那幾條拿掉）
 （結伴同行的 `ctx._join(inv, other)`、`ctx.join_refusal(leader)` 主人成包了（第 48 批），改列二、查詢服務 `# travel`；`answer_invite` 照邀請的種類叫它們）
@@ -501,9 +506,13 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 - `ctx.travel_refusal(loc_id, mode)`（主人移動：Game 上的一行委派；`travel` 經它叫自己的檢查，因為測試換掉 `game.travel_refusal` 來繞過檢查）
 - `ctx.travel(dest_id, mode)`（主人移動：Game 上的一行委派；`/api/travel` 的路由經它叫，測試與假人照舊叫 `Game.travel`）
 
-# seal（全部拆包第 27 批「玉璽一」：玉璽包叫的、本體還在 Game 上的第 28 批方法）
-- `ctx._seal_challenge(battle, definition, reg, tianji, winner, margin, need, held)`（主人玉璽，第 28 批搬：時刻表決戰收場時璽動那一場挑挑戰者、
-  開奪璽單挑；包的 `actions.settle` 照原本的先後叫——先挑挑戰者、再挑現世的得主、再喚回）
+# seal（全部拆包第 28 批「玉璽二」：奪璽單挑、碎片卡、獨門行動、管理者六個搬進玉璽包；第 27 批留的 `ctx._seal_challenge` 搬進同一包、改直接叫，不再是服務）
+- `ctx._seal_challengers(battle, side, need, holder, blocked, held)`、`ctx._seal_spectators(definition, battle, held)`（主人玉璽自己的委派：包的
+  `duel_actions.challenge` 挑挑戰者的候選時經 ctx 叫，因為 `scripts/measure_seal.py` 換的是 `Game._seal_challengers`／`_seal_spectators`）
+- `ctx._showdown_status(tick=False)`（主人**決戰包**：這一刻時刻表決戰開打到哪、璽動在不在；碎片卡與背景輪詢讀，攻城戰不璽動）
+- `ctx._duel_side()`（主人**單挑包**：自己是哪一邊〔陣營名〕；奪璽放手一搏的單子寫）、`ctx._duel_cut()`（主人**單挑包**：防具照存檔現算的減損，
+  奪璽單挑雙方的快照用；也叫別人的 Game，`kin._duel_cut()`）
+- `ctx.own_request`（Game 上的旗標：這一下是不是玩家自己的請求；奪璽單挑推進時只有自己的請求才記 last_seen）
 
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 
@@ -542,6 +551,12 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 
 # gear（全部拆包第 42 批）
 - `ctx._affinity_before`（`choose` 與核心 `event_check` 的 `answer_event`、`answer_branch` 寫、`_people_here` 讀的暫時旗標：這一下之前的情誼；屬性留在 `Game.__init__`，照鐵匠鋪 `smith_result`）
+
+# tale（全部拆包第 52 批；查詢服務，主人決戰包：戰記包 routes.py 的補劇情 narrate_* 經 game 叫的三個委派）
+- `ctx.battle_tale_request()`（A 段開單）、`ctx.apply_battle_tales(request, stories)`（C 段重驗才補）、`ctx._tale_battles()`（有沒有等著補的）
+
+# notify（全部拆包第 53 批；查詢服務，主人人物情誼包：手機通知包 routes.py 的看守一輪〔_notice_keys〕在行動鎖內經 game 叫，Game 上一行委派）
+- `ctx.morning_mail(now)`（到了送信日替他送今天的信；送了回 True）
 
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """

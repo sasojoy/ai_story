@@ -24,7 +24,7 @@ from typing import Callable, NamedTuple
 from pydantic import BaseModel, ConfigDict, Field, create_model, field_validator
 
 from . import zh
-from .battle_instance import DEFAULT_FREE_TEXT_SUCCESS_RATE, SuccessRateJudgment
+from .core.battle_base import DEFAULT_FREE_TEXT_SUCCESS_RATE, SuccessRateJudgment
 from .models import Event, Outcome
 from .ollama_client import OllamaClient
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from tianxia import arts as arts_mod  # 共用規則層
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
+from tianxia import attrset  # 核心（五項屬性）
 from tianxia import growth, journal, library, naming, team
 from tianxia import prologue as prologue_rules  # 序章（共用規則層；Game.new 有個參數也叫 prologue，照 engine 叫 prologue_rules）
 from tianxia import skillview  # 過渡：待搬（修練頁的說明：熔了還能重學、配點那一句；共用規則層 SHARED_LATER）
@@ -287,6 +288,8 @@ def allocate_stat(ctx, stat: str) -> list[str]:
     配成了才寫江湖紀錄，連按幾次（玩家、假人都一樣）併成一則「配點」；被拒絕（沒有點、到頂、沒這項屬性）
     只回一句話，不留紀錄（武學與成長計畫 F12）。"""
     p, cfg = ctx.state.player, ctx.content.config
+    if attrset.on(ctx.content, ctx.state.world):
+        return allocate_v2(ctx, stat)
     name = cfg.stat_names.get(stat, stat)
     if stat not in team.COMBAT_STATS:
         return ctx._log(["（沒有這項屬性。）"])
@@ -313,6 +316,36 @@ def allocate_stat(ctx, stat: str) -> list[str]:
     return ctx._log([f"{said or f'{name} +1'}{left}"])
 
 
+def allocate_v2(ctx, stat: str) -> list[str]:
+    """五項屬性的季的配點（attrset）：送的點加到一項（PlayerState.attr_alloc），沒有上限；寫法同舊的配點。（原本 Game._allocate_v2，只有 allocate_stat 叫）"""
+    p, c = ctx.state.player, ctx.content
+    if stat not in attrset.keys(c):
+        return ctx._log(["（沒有這項屬性。）"])
+    if p.stat_points <= 0:
+        return ctx._log([f"沒有可以分配的屬性點，每 {c.config.attributes.v2.bonus_every} 級送一次。"])
+    name = attrset.names(c, ctx.state.world).get(stat, stat)
+    p.stat_points -= 1
+    p.attr_alloc[stat] = p.attr_alloc.get(stat, 0) + 1
+    journal.add_entry(ctx.state, JournalEntry(time=ctx.state.world.time, title=journal.ALLOCATE, changes=[f"{name} +1"]), merge=True)
+    left = f"（還有 {p.stat_points} 點可以分配）" if p.stat_points else ""
+    ctx._guide(ctx._note_action("allocate"))
+    return ctx._log([f"{name} +1{left}"])
+
+
+def pick_growth(ctx, preset: str, custom: dict | None) -> list[str]:
+    """挑成長配比的本體（籌備中、這一季沒有配比、已定這三步留在 Game.pick_growth，Refused 只在 engine）：
+    自己配的整理、查問題、定下、寫紀錄。（原本 Game.pick_growth 的後半）"""
+    s, c = ctx.state, ctx.content
+    custom = {str(k): v for k, v in (custom or {}).items()} if isinstance(custom, dict) else None
+    problem = attrset.growth_problem(c, preset, custom)
+    if problem:
+        return ctx._log([problem])
+    line = attrset.pick(s, c, preset, custom)
+    journal.add_entry(s, JournalEntry(time=s.world.time, title="成長配比", lines=[line]))  # 一整句：寫成敘事（數值變化的小框放不下，手機上會撐出畫面）
+    ctx._guide(ctx._note_action("allocate"))  # 五項屬性的季，序章配點那一步就是挑成長配比（升一級沒有點可配）
+    return ctx._log([line])
+
+
 def allocate_line(ctx, stat: str, was: float, power: float) -> str:
     """配點那一句（減法季屬性五段，設計 4.5）：「臂力 8 → 9：武學威力 +6%，此刻全隊 182 → 193」——前後威力用 team.fresh_power
     （滿血、不看對手）各算一次，沒變（身法、悟性、博聞）就不寫全隊那一段。待 joy 潤。（原本 Game._allocate_line，只有 allocate_stat 叫）"""
@@ -334,6 +367,11 @@ def milestone_card(ctx) -> dict | None:
 
 
 # ── 傳功門下 ──
+
+
+def chuangong_ready(ctx) -> bool:
+    """傳功開著、有傳得起的一門（新手引導碰到才說的 h_chuangong 問，經 Game 一行委派 _chuangong_ready；包不能 import 包）。"""
+    return chuangong_rules.on(ctx.content) and chuangong_rules.cheapest(ctx.state, ctx.content, ctx.world) is not None
 
 
 @not_while_preparing

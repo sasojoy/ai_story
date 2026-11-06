@@ -654,6 +654,8 @@ GAME_DELEGATE_CALLERS.update({
     # （原本這裡有 ("_socialize", "_open_dialogue")、("_precise_socialize", ...)、("_call", ...) 三筆：第 21 批交友求見搬進 socialize 包，包裡經 ctx._open_dialogue 問，拿掉）
     ("_defect_step", "_parley_forsake"): "叛投之後欠著的都算食言（NPC 智能 2.1）：接在 defection.defect 與 _leave_behind 之後，回話的先後算行為；叛投第 36 批再看",
 })
+# companions（主幹合回 D 段：此地人物那一排、對話框進包，計畫 docs/superpowers/plans/2026-11-06-develop合回-D.md）：殼在叫的兩個一行委派；figures_here_view 的本體在交友求見包，talk_view 在人物情誼包
+GAME_DELEGATES |= {"figures_here_view", "talk_view"}
 # sense（全部拆包第 24 批「有所感與頓悟」：新包 tianxia/features/sense/；計畫 docs/superpowers/plans/2026-11-01-有所感包-第1批.md 1.4、1.5）：
 # 四張名單的有所感那幾筆集中在這一段（並行的拆包線不跟別人的行穿插；拿掉的在原處）。核心原位碰有所感的那幾處，能接第 11 批掛鉤的接上
 # （choose 掛鉤接 sense:、scene 掛鉤接場景卡），接不了的改叫 Game 上一行的服務委派、記進 GAME_DELEGATE_CALLERS 寫理由（不新增 GAME_DIRECT）
@@ -1420,9 +1422,9 @@ def test_the_shared_rules_layer_only_imports_the_core_and_itself():
 
 
 def test_a_pending_target_that_imports_a_package_says_it_drags_the_package_in():
-    """SHARED_PENDING 的對象自己 import 了包的（bounties 經舊名 letters、parley、sortie import 人物情誼包與出陣包；以前還有 atlas 經舊名 sortie
-    import 出陣包，第 50 批 atlas 收進共用規則層、不再 import 包，指到它的六條收掉）：import 那個共用規則層的模組，包就跟著載進來
-    （import figure_life 叫到 bounties 的那幾個函式時載入人物情誼、出陣兩包；seal_acts 函式裡 import seal〔第 27 批成了玉璽包的別名〕，叫到它就連帶載入玉璽包）。上面那幾條只看共用規則層自己的 import，
+    """SHARED_PENDING 的對象自己 import 了包的（以前有 bounties 經舊名 letters、parley、sortie import 人物情誼包與出陣包，第 45 批成包、figure_life 改讀核心 bounty_base，那一條收掉；
+    atlas 經舊名 sortie import 出陣包，第 50 批 atlas 收進共用規則層、不再 import 包，指到它的六條收掉）：import 那個共用規則層的模組，包就跟著載進來
+    （seal_acts 函式裡 import seal〔第 27 批成了玉璽包的別名〕，叫到它就連帶載入玉璽包）。上面那幾條只看共用規則層自己的 import，
     看不到這一層，所以理由要寫明「連帶載入」與那幾包的名字；對象不再 import 包了，「連帶載入」那句也拿掉（第 15 批審查修正）。
     只驗對象直接的 import；經對象再往下一層的（chapters 經舊名 storyline 載一條線包）寫在理由裡，這裡不驗。"""
     for (name, old), why in SHARED_PENDING.items():
@@ -1447,9 +1449,9 @@ def test_the_shared_scanner_catches_an_old_module():
     """outside_imports 本身抓得到（不然上面那一條永遠綠）：最外層、函式裡、import tianxia.x 都算；TYPE_CHECKING、tianxia/core/、核心本體、
     同一層、from tianxia import 名字、標準庫不算；包與別名不在這裡算（是上面那一條）。"""
     m = "tianxia.timetable"
-    assert outside_imports("from . import seal_acts, territory\n", m) == {"seal_acts"}  # 第 40 批：原本的例子 figures 收進了共用規則層；第 50 批：atlas 也收進了共用規則層，換成 seal_acts（第 51 批才收；bounties、seal 第 45、27 批會搬，不拿來當例子）
-    # 第 25 批：原本的例子 world 收進了核心本體；第 27 批：seal 成了玉璽包的別名（包與別名不在這裡算），換一個這一波還是舊模組的 tale（戰記第 52 批才搬）
-    assert outside_imports("def f():\n    from .tale import gather\n", m) == {"tale"}
+    assert outside_imports("from . import fusion, territory\n", m) == {"fusion"}  # 第 40 批：原本的例子 figures 收進了共用規則層；第 50 批：atlas 也收進了共用規則層，換成 seal_acts；第 51 批 seal_acts 也收進了共用規則層，換成 fusion（總表寫了、先不收的 SHARED_LATER，還是舊模組）
+    # 第 25 批：原本的例子 world 收進了核心本體；第 27 批：seal 成了玉璽包的別名（包與別名不在這裡算）；第 52 批：tale 也成了戰記包的別名，換 bot（舊模組、之後不成包、這一波不動）
+    assert outside_imports("def f():\n    from .bot import pick\n", m) == {"bot"}
     assert outside_imports("def f():\n    from .world import _season_vehicle\n", m) == set()
     assert outside_imports("import tianxia.engine\n", m) == {"engine"}
     assert outside_imports("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from .engine import Game\n", m) == set()
@@ -1578,9 +1580,8 @@ CORE_EVENT_DELEGATES = {  # Game 上本體只有一行 `return event_check.<名>
 #   ("event_check.answer_event", "_gift_entry")：features/gear：效果加了情誼，另起一則贈禮
 #   ("event_check.answer_event", "_report_seat")：features/orders：效果推了大勢、記了貢獻，第四階席次的帳也抄
 #   answer_branch 叫同樣那 7 個（一共 15 對）。
-# import 那一向沒有名單：event_check 第 37 行 import 的 bounties（總表歸 features/bounties）、foreshadow（歸 features/orders）成包、
-# 舊名留成別名時，test_the_core_never_imports_a_feature_package_except_the_registry 會抓到（核心只准 engine.py 的 GAME_IMPORTS）；
-# 那一批交 PM 定：開一張核心的 import 名單，或那一包開查詢服務、event_check 改經 ctx 叫。
+# import 那一向沒有名單：核心 import 了成包的舊名時，test_the_core_never_imports_a_feature_package_except_the_registry 會抓到（核心只准 engine.py 的 GAME_IMPORTS）。
+# event_check 原本 import 的 bounties（join_note）第 45 批 PM 定改讀核心 core/bounty_base（第 45 行），foreshadow 第 34 批改讀核心 omen_base。
 CORE_DELEGATE_CALLERS: dict[tuple[str, str], str] = {}
 # guide（全部拆包第 22 批）：上面註解裡寫好的 features/guide 那 6 對（answer_event、answer_branch × _begin_enlistment、_greet_rejoin、_check_hints）
 # 新手引導搬成包、它們成了委派，照註解記進來（理由在 # guide 那一段的 CORE_DELEGATE_CALLERS_GUIDE）
@@ -1781,7 +1782,7 @@ def test_the_service_scanner_catches_a_game_method_off_the_list():
     ("from tianxia.features import feast\n", "別的包"),
     ("from tianxia.features.feast import rules\n", "別的包"),
     ("from ..feast import rules\n", "別的包"),
-    ("from tianxia import bounties\n", "舊模組"),  # shared：原本的例子 library 第 15 批登記進共用規則層，換一個還是舊模組的
+    ("from tianxia import shopview\n", "舊模組"),  # shared：原本的例子 library 第 15 批登記進共用規則層，換一個還是舊模組的；bounties 第 45 批成包，再換 shopview（SHARED_LATER，還是舊模組）
     ("from tianxia import engine\n", "舊模組"),
     ("import tianxia.server_bots\n", "舊模組"),
     # 舊名留成的別名（tianxia/feasts.py 把 sys.modules 換成宴客包的 rules）就是那一包：註了過渡也擋
@@ -1803,8 +1804,8 @@ def test_the_old_names_left_as_aliases_are_known():
                          "outing": "explore", "explore_one": "explore",
                          # tavern
                          "tavern": "tavern", "tavern_ask": "tavern",
-                         # battle（全部拆包第 7 批：tianxia/escorts.py；第 8 批：tianxia/generals.py）
-                         "escorts": "battle", "generals": "battle",
+                         # battle（全部拆包第 7 批：tianxia/escorts.py；第 8 批：tianxia/generals.py；第 54 批：tianxia/battle_instance.py）
+                         "escorts": "battle", "generals": "battle", "battle_instance": "battle",
                          # guide（全部拆包第 22 批：tianxia/guide.py、hints.py、newbie.py、opening.py、enlist.py）
                          "guide": "guide", "hints": "guide", "newbie": "guide", "opening": "guide", "enlist": "guide",
                          # stamina_plays（全部拆包第 39 批：tianxia/ambush.py、works.py）
@@ -1815,6 +1816,8 @@ def test_the_old_names_left_as_aliases_are_known():
                          "stances": "companions", "errands": "companions", "letters": "companions",
                          # companions（全部拆包第 20 批：tianxia/companion_agent.py、parley.py）
                          "companion_agent": "companions", "parley": "companions",
+                         # companions（主幹合回 D 段：tianxia/talk_log.py）
+                         "talk_log": "companions",
                          # sense（全部拆包第 24 批：tianxia/sensing.py、epiphany.py、glyph.py、insight_llm.py）
                          "sensing": "sense", "epiphany": "sense", "glyph": "sense", "insight_llm": "sense",
                          # cultivation（全部拆包第 23 批：tianxia/cultivation.py、chuangong.py、ascend.py）
@@ -1850,7 +1853,15 @@ def test_the_old_names_left_as_aliases_are_known():
                          # gear（全部拆包第 42 批：tianxia/signature_arms.py）
                          "signature_arms": "gear",
                          # seal（全部拆包第 27 批：tianxia/seal.py；包名跟別名同字，同 cultivation、guide）
-                         "seal": "seal"}
+                         "seal": "seal",
+                         # bounties（全部拆包第 45 批：tianxia/bounties.py、wanted.py；包名跟別名同字，同 cultivation、guide、seal）
+                         "bounties": "bounties", "wanted": "bounties",
+                         # seal（全部拆包第 28 批：tianxia/seal_duel.py 指到 seal/duel_rules.py）
+                         "seal_duel": "seal",
+                         # tale（全部拆包第 52 批：tianxia/tale.py；包名跟別名同字，同 cultivation、guide）
+                         "tale": "tale",
+                         # notify（全部拆包第 53 批：tianxia/notices.py；包名不叫 push，tianxia/push.py 是推力規則）
+                         "notices": "notify"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 
@@ -1859,12 +1870,12 @@ def test_a_mark_with_no_old_module_left_is_caught():
     assert stale_marks("from tianxia import siege  # 過渡：待搬\n", "tianxia.features.battle.view") == [1]
     assert stale_marks("from tianxia import journal, team  # 過渡：待搬\n", "tianxia.features.battle.view") == [1]
     # shared：原本的例子 conquest 第 15 批登記進共用規則層，換一個還是舊模組的
-    assert stale_marks("from tianxia import bounties, siege  # 過渡：待搬\n", "tianxia.features.battle.view") == []
+    assert stale_marks("from tianxia import shopview, siege  # 過渡：待搬\n", "tianxia.features.battle.view") == []  # 第 45 批：原本的例子 bounties 成包，換還是舊模組的 shopview
     assert stale_marks("from tianxia import siege\n", "tianxia.features.battle.view") == []
 
 
 @pytest.mark.parametrize("source", [
-    "from tianxia import bounties  # 過渡：待搬\n",  # shared：原本的例子 library 第 15 批登記進共用規則層
+    "from tianxia import shopview  # 過渡：待搬\n",  # shared：原本的例子 library 第 15 批登記進共用規則層；bounties 第 45 批成包，再換 shopview（還是舊模組）
     "from tianxia import library\n",  # shared：共用規則層（第 15 批）不必註
     "from tianxia import siege\n",  # 共用規則層（registry.SHARED，第 11 批）：不必註
     "from tianxia.siege import title\n",
@@ -2023,7 +2034,7 @@ CORE_DELEGATE_CALLERS.update({
 # 發布點之外不直接叫事件的訂閱者（計畫 1.7、Task 4）：懸賞的四種交差（bounties.on_win／on_explore／on_arrive／on_raid_win）、玉璽的撿碎片與收場
 # （_seal_find、_seal_settle：第 27 批玉璽成包、兩格改由玉璽包登記之後，Game 上只剩給測試的一行委派，包與 engine 照樣不准叫）、
 # 交糧車（_convoy_arrives，已拿掉），在 engine.py 與每一包的 .py（測試除外）只准出現在核心代叫表 engine._BUS_CORE 裡；
-# 別處要聽，登記事件的格（Feature.bus()），先後照核心的 BUS_ORDER。bounties.on_aid（人物託付交差）不在總表的四種裡，不管（交 PM）。
+# 別處要聽，登記事件的格（Feature.bus()），先後照核心的 BUS_ORDER。bounties.on_aid（人物託付交差）第 45 批開成事件 aid（PM 點頭），在 # bounties 那一段加進來。
 BUS_SUBSCRIBERS = {("bounties", "on_win"), ("bounties", "on_explore"), ("bounties", "on_arrive"), ("bounties", "on_raid_win")}
 BUS_METHODS = {"_seal_find", "_seal_settle", "_convoy_arrives"}
 
@@ -2060,7 +2071,7 @@ def test_nobody_calls_an_event_subscriber_outside_the_publish_points():
            "_BUS_CORE = {'win': {'bounties': lambda ctx, loc_id, squad_id: bounties.on_win(ctx.state, ctx.content, ctx.world, loc_id, squad_id)},\n"
            "             'outing': {'seal': lambda ctx, loc_id: ctx._seal_find(loc_id)}}\n"
            "def aid(s, c, who):\n    return bounties.on_aid(s, c, who) + bounties.mine(s, c)\n")
-    assert bus_bypasses(old) == [2, 4, 4, 6, 8, 8, 10]
+    assert bus_bypasses(old) == [2, 4, 4, 6, 8, 8, 10, 14]  # 14：人物託付第 45 批開成事件 aid，on_aid 也算訂閱者（mine 不算）
 
 
 # core_step（全部拆包第 36 批「你這一步」；計畫 docs/superpowers/plans/2026-11-06-你這一步-第36批.md 1.4、2.6）：step、weekcard 不再 import 包
@@ -2088,7 +2099,7 @@ def test_step_and_weekcard_joined_the_core_and_reach_no_package():
                     "from . import step as step_rules\n"
                     "from . import opening as opening_rules\n"
                     "from . import prologue as prologue_rules\n")
-    old_step = "from . import atlas, bounties, foreshadow, orders\nfrom .rules import jianfa\n"
+    old_step = "from . import atlas, foreshadow, orders\nfrom .rules import jianfa\n"  # 第 45 批：bounties 成包之後多回一筆，拿掉（照第 40 批認定第 15 條），這個例子只驗 foreshadow 那一包
     assert _package_imports_of(old_weekcard, "tianxia.weekcard") == [(1, "companions"), (1, "military"), (1, "story"), (3, "guide")]
     assert _package_imports_of(old_step, "tianxia.step") == [(1, "military")]
     assert not [e for e in transitional_imports() if e.endswith(" tianxia.step") or e.endswith(" tianxia.weekcard")]
@@ -2285,6 +2296,84 @@ SHARED_LATER["skillview"] = ("門下頁的說明（彙整）：讀自創 create�
                              "鐵匠鋪 smithing（第 41 批已成包，經舊名別名）；那幾包成包、改成查詢服務之後再收（輿圖 atlas 第 50 批收進了共用規則層）")
 for _pair in (("conquest", "seal_acts"), ("figures", "seal_acts"), ("figure_life", "seal_acts"), ("plans", "seal_acts")):
     SHARED_PENDING[_pair] += "；seal_acts 函式裡 import seal（第 27 批成了玉璽包的別名），叫到它就連帶載入玉璽包"
+
+# bounties（全部拆包第 45 批「懸賞榜」：新包 tianxia/features/bounties/；計畫 docs/superpowers/plans/2026-11-07-懸賞榜包-第1批.md）：這一批加的集中在這一段
+# （並行的拆包線不跟別人的行穿插；拿掉別人段裡的格一律用 del、-=、discard）。4 個方法（_bounty_options、_bounty、post_wanted、_raid_bounty）搬進 actions.py，Game 留 _bounty_options、_bounty、_raid_bounty
+# 與 sync、own_turn_checks、choose、status_data 碰懸賞榜的 4 個一行委派，加人物情誼包回答懸賞榜包的 5 個（道謝信、守約、兌現；PM 認定乙案）。post_wanted 沒人叫（wanted.run 直接叫包），不留。
+# engine 不再 import 舊名 bounties（別人讀的那一半在核心 core/bounty_base），所以 GAME_DIRECT 不加。choose 的 bounty:、_action_title 的兩格、_act 的 act:bounties 換成 choose 掛鉤與 Verb，拿掉；
+# 事件五格、世界層四格、你這一步兩格、叛投 stranded 那一格改由包登記。
+GAME_IMPORTS |= {"tianxia.features.bounties.actions"}
+GAME_DELEGATES |= {
+    # 核心原位選單叫的（_bounty_options）、tests/gear/test_shop2.py 直接叫的（_bounty，同 _smith）、截殺與設伏經 ctx 叫的（_raid_bounty，services.py 二 # bounties）
+    "_bounty_options", "_bounty", "_raid_bounty",
+    # 核心原位叫的（下面 GAME_DELEGATE_CALLERS）
+    "_bounty_deliver", "_bounty_post_auto", "_bounty_stale", "_bounty_status",
+    # 懸賞榜包經 ctx 問人物情誼包的（services.py 二 # bounties）
+    "_letter_thank", "_parley_settle_task", "_parley_keep", "_parley_owed_line", "_parley_ask_label",
+}
+_BOUNTY_SHOP = ("懸賞榜不登記店面（PM 認定：三間店排給第 56 批選單收接縫）：「此地還能做」的入口順序 懸賞榜 → 鐵匠鋪 → 馬市 → 搬成包的店，`features_core._shops` 照 FEATURES 走，酒肆排在 smithy、gear 前面，"
+                "要維持就得挪包或開寫死的店面順序表；sync 只收鐵匠鋪、馬市，懸賞榜登記 drop_shops 會在 sync 多收一次")
+GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_bounty_options"): _BOUNTY_SHOP,
+    ("sync", "_bounty_deliver"): ("退押金與作廢在 _settle_partings 之後、_settle_plots 之前，江湖紀錄的先後算行為；on_sync 只問開著的包（active）而 deliver_* 不問 active"
+                                  "（季收了也要退押金、也要補作廢那一句），位置也在前面（功能包的補算），接不了"),
+    ("own_turn_checks", "_bounty_post_auto"): "系統通緝要在「賽季時鐘暫停」那一道之後（暫停中世界不變）；on_own_turn 掛鉤在暫停那一道之前，位置不同接不了",
+    ("choose", "_bounty_stale"): "FB-162 被搶的那一句回 Refused（伺服器照它跳提示）；choose_unlisted 回 list、而且在查選單之前，位置與回傳都不同，照 FB-195 馬市那一支留原位",
+    ("status_data", "_bounty_status"): "懸賞卡是 status_data 裡的 \"bounties\" 那一格；Feature.status 合進頂層另一個鍵（main.xxx），位置不同接不了",
+})
+BUS_SUBSCRIBERS |= {("bounties", "on_aid")}  # 人物託付第 45 批開成事件 aid（PM 點頭，BUS_ORDER 只加這一列）
+del SHARED_PENDING[("figure_life", "bounties")]  # figure_life 讀的 RALLY_POSTED、how、enemy_name、post_rally、post_figure 全部在核心 core/bounty_base（呼叫點位置與粒度不動），不必在 WORLD_ORDER["life"] 加格
+SHARED_LATER["shopview"] = SHARED_LATER["shopview"].replace("懸賞 bounties（第 45 批）", "懸賞 bounties（第 45 批已成包，經舊名別名）")
+
+
+# seal（全部拆包第 28 批「玉璽二」：奪璽單挑、碎片卡、七種獨門行動、管理者六個搬進包；計畫 docs/superpowers/plans/2026-11-06-玉璽包-第2批.md）：
+# 這一批加的集中在這一段（拿掉第 27 批那一段的格一律在這裡 del、pop、-=）。tianxia/seal_duel.py 成了指到 features/seal/duel_rules.py 的別名；
+# engine 頂端的 seal_rules（tianxia.seal）與 seal_duel 沒人用，拿掉。Game 留 22 個一行委派（_seal_act_season 只有 seal_use 叫，包內互叫、不留）。
+GAME_IMPORTS -= {"tianxia.seal"}
+GAME_IMPORTS |= {"tianxia.features.seal.card", "tianxia.features.seal.duel_actions"}
+GAME_DELEGATES |= {
+    # 核心原位叫的：_seal_tick（world_tick、options）、_seal_options（options）、_seal_act（choose）、seal_view／seal_duel_card／seal_watch（status_data）；
+    # 殼叫的：seal_free_text_prompt／note、seal_text_request、seal_gamble（server.py seal_text、free_text 欄）、seal_use（MAIN_ACTIONS）、
+    # 六個 admin_seal_*（ADMIN_ACTIONS）；量表與包內經 ctx 叫的：_seal_challengers、_seal_spectators（scripts/measure_seal.py 換它們）；
+    # 只剩測試叫的：_seal_side_of（seal_use 也有測試換 Game.seal_use）。_seal_challenge、_my_seal_duel 沒有呼叫端，不留委派
+    "_seal_challengers", "_seal_spectators", "_seal_side_of", "_seal_tick", "_seal_options", "_seal_act",
+    "seal_free_text_prompt", "seal_free_text_note", "seal_text_request", "seal_gamble", "seal_duel_card", "seal_watch",
+    "seal_view", "seal_use",
+    "admin_seal_stir", "admin_seal_assign", "admin_seal_duel", "admin_seal_fix", "admin_seal_cancel", "admin_seal_choices",
+}
+for _name in ("_seal_challenge", "_seal_challengers", "_seal_spectators", "_seal_side_of", "_my_seal_duel", "_seal_tick", "seal_view", "seal_use",
+              "seal_duel_card", "seal_watch", "admin_seal_assign", "admin_seal_duel", "admin_seal_choices"):
+    del GAME_DIRECT[_name]  # 第 27 批留的「過渡：第 28 批收」13 筆
+for _pair in (("_seal_tick", "_deliver_seal_results"), ("_seal_act", "_deliver_seal_results"), ("seal_gamble", "_deliver_seal_results"),
+              ("admin_seal_cancel", "_deliver_seal_results"), ("seal_view", "_showdown_status"), ("seal_watch", "_showdown_status"),
+              ("seal_text_request", "_duel_side")):
+    GAME_DELEGATE_CALLERS.pop(_pair)  # 本體搬進包：現在是包經 ctx 叫，列在 tianxia/core/services.py 的 # seal
+GAME_DELEGATE_CALLERS.update({
+    ("world_tick", "_seal_tick"): "每 10 秒的世界推進順手推奪璽單挑，排在 _battle_status(tick=True) 後面、_deliver_battle_results 前面：on_sync 掛鉤只問開著的包"
+                                  "（core/features.py 的 active），碎片關著時 _seal_tick 自己第一行就 return，位置與先後卻要原位——過渡：第 55 批（補算與換季收接縫）收",
+    ("options", "_seal_tick"): "選單（tick=True）跟決戰一樣誰輪詢誰推：在 _battle_status 之後、讀選單之前；options 掛鉤是讀選單的一段、位置在 _everyday_options 內，推進不能放那裡",
+    ("options", "_seal_options"): "單挑的三招擺在選單最前面，排在決戰選單（_battle_menu）前面、不看包是否開著：menu 掛鉤只問開著的包，且位置在 _everyday_options 內，"
+                                  "接不了——過渡：第 57 批（選單上、不建紀錄的 seal:／duel:／arena:／battle: 四包一起接）收",
+    ("choose", "_seal_act"): "選單上的一招（seal:<招>）：「選單上、不建紀錄」那一格，同 duel:／battle:，不是 choose 掛鉤（那個會建紀錄）——過渡：第 57 批收",
+    ("status_data", "seal_view"): "狀態列的碎片卡（status_data[\"seal\"]）：鍵的順序算行為（排在 seal_duel 之後、seal_watch 之前），狀態列掛鉤是總表第 66 批",
+    ("status_data", "seal_duel_card"): "狀態列的奪璽卡（status_data[\"seal_duel\"]）：同上，鍵的順序算行為",
+    ("status_data", "seal_watch"): "狀態列的背景輪詢旗標（status_data[\"seal_watch\"]）：同上，鍵的順序算行為",
+})
+
+# seal（全部拆包第 51 批「玉璽三」：tianxia/seal_acts.py 拆兩半；計畫 docs/superpowers/plans/2026-11-06-玉璽包-第3批.md）：
+# 這一批加的集中在這一段。16 個璽效查詢（別包讀的）留在共用規則層 tianxia/seal_acts.py，登記進 registry.SHARED（見 registry.py 的 # seal 段）；
+# 目標、灰掉的原因、碎片卡、字句進玉璽包 features/seal/acts.py（舊名不留別名：共用層不能 import 包）。四條排定項收掉（共用層讀共用層）；
+# 包 → 舊模組的 seal_acts 過渡標記拿掉（companion_agent、cultivation、feast/rules、sense/sensing、sortie/duel_actions 與核心 world.py 讀的是共用層）。
+for _pair in (("conquest", "seal_acts"), ("figures", "seal_acts"), ("figure_life", "seal_acts"), ("plans", "seal_acts")):
+    del SHARED_PENDING[_pair]
+
+# merge_back（主幹合回 develop 第 1 段，2026-11-06）：develop 新加的 9 個 Game 方法先修到能跑。暫時的三筆第 2 段 A、D 收完了（pick_growth、figures_here_view），一條不剩。
+# _allocate_v2 這一段就進了修練包（allocate_stat 的本體在包裡，只有它叫）；pick_growth 合回 2A 搬了本體（Game 留三步，一行私有委派 _apply_growth）；_season_prep、season_prep_view、_attr_rows、place_state_view 留核心（PM 認定第 6、7 條）；
+# 新手引導碰到才說的 h_chuangong 問修練包：一行委派 _chuangong_ready（前例 _recruit_target）。
+GAME_DELEGATES |= {"_chuangong_ready", "_apply_growth"}  # _apply_growth：挑成長配比的本體（合回 2A，修練包 actions.pick_growth；前例 _arena_fight_problem）
+GAME_DELEGATE_CALLERS.update({
+    ("pick_growth", "_apply_growth"): "五項屬性的季挑成長配比（序章配點那一步，升一級沒有點可配）：三步（籌備中擋、這一季沒有配比、已定回 Refused）留在 Game，Refused 只在 engine；其餘本體在修練包 actions.pick_growth（合回 2A 已收）",
+})
 
 
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py

@@ -20,8 +20,9 @@ from __future__ import annotations
 
 import math
 
-from tianxia import allied, atlas, battle_instance, roster, siege  # 共用規則層（豪強依附、輿圖的大區與路線 atlas〔第 50 批收進〕、戰鬥規則核心、同伴、攻城）
-from tianxia import journal, team
+from tianxia import allied, atlas, roster, siege  # 共用規則層（豪強依附、輿圖的大區與路線 atlas〔第 50 批收進〕、同伴、攻城）
+from . import instance as battle_instance  # 這一包的回合規則（第 54 批搬進來）
+from tianxia import attrset, journal, team
 from tianxia.core.option import Option
 from tianxia.models import BattleDef
 from tianxia.state import JournalEntry
@@ -57,7 +58,7 @@ def ally_follows_battle(ctx) -> list[str]:
 
 def escort_choices(ctx) -> list[str]:
     """加入決戰時挑得到的同伴：名下的（歷史武將同行第五節）。開關關著是空的（照舊一下就加入）。"""
-    if not roster.on(ctx.content):
+    if not roster.on(ctx.content, ctx.state.world):
         return []
     return [cid for cid in roster.owned_companions(ctx.world, ctx.state.player.name) if cid in ctx.content.characters]
 
@@ -542,6 +543,8 @@ def submit_battle_action(
     如果結算完變成 ended，一定是這次送出的行動剛好造成的，不用再跟「結算前是不是
     已經 ended」比對。"""
     captured: dict[str, list[str]] = {"msgs": []}
+    if success_rate is not None and name == ctx.state.player.name:  # 魅力略為提高放手一搏（五項屬性的季；企劃者 2026-11-04）
+        success_rate = int(success_rate) + round(attrset.charm(ctx.state, ctx.content, "gamble"))
     ult = ctx._battle_ult() if success_rate is not None and name == ctx.state.player.name else None  # 回合首功用（looks）
 
     def _apply(b: battle_instance.BattleInstance) -> None:

@@ -22,7 +22,8 @@ from __future__ import annotations
 import random
 from typing import NamedTuple
 
-from tianxia import battle_instance, tactics
+from tianxia import tactics
+from tianxia.core import battle_base as battle_instance
 from tianxia import prologue as prologue_rules
 from tianxia.characters import name_key
 from tianxia.core.arena_ranks import (  # noqa: F401  擂台的名次與稱號留在核心當查詢服務（全部拆包第 12 批）：同一批函式物件與字，arena.title_of 這些照舊拿得到
@@ -328,13 +329,21 @@ def exchange_full(fight: ArenaFight, move: str, content: Content, rng: random.Ra
         push += round(step.push)
         my_hp = (my_hp if step.a_hit else 0) - round(step.a_hp * me.hp_cap)
         foe_hp = (foe_hp if step.b_hit else 0) - round(step.b_hp * foe.hp_cap)
-        lines = list(step.lines)
+        lines += list(step.lines)
         guarded, said = tactics.guard_pool(fight.bout, "a", me.hp, my_hp, me.hp_cap)
         my_hp = round(guarded)
         lines += said
         guarded, said = tactics.guard_pool(fight.bout, "b", foe.hp, foe_hp, foe.hp_cap)
         foe_hp = round(guarded)
         lines += said
+    # 五項屬性的季：身法讓挨的那一下有機會閃掉——不掉氣血、這一回合的氣勢也推不動他（同閃成僵持；ArenaSide.dodge，faced 填；
+    # 舊的季是 0，不擲骰、亂數一個都不多用）
+    if me.dodge > 0 and my_hp > 0 and rng.random() < me.dodge:
+        my_hp, push = 0, max(0, push)
+        lines.append("你身形一閃，這一下打空了")
+    if foe.dodge > 0 and foe_hp > 0 and rng.random() < foe.dodge:
+        foe_hp, push = 0, min(0, push)
+        lines.append(f"{foe.name}身形一閃，這一下打空了")
     my_hp, foe_hp = _pool(me, my_hp), _pool(foe, foe_hp)
     before = fight.edge
     fight.edge = _clamp(fight.edge + push)

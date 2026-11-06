@@ -16,7 +16,8 @@ from typing import NamedTuple
 
 from pydantic import BaseModel
 
-from tianxia import battle_instance, calendar, prologue, tactics
+from tianxia import calendar, prologue, tactics
+from tianxia.core import battle_base as battle_instance
 from tianxia.core.duel_base import (  # noqa: F401  單挑底層進了核心（全部拆包第 12 批）：同一批函式物件，duel.push_of 這些照舊拿得到
     TELLS, Scene, blow_taken, counter, edge_words, gamble_roll, harm_of, move_label, push_of, success_of, verdict_at,
 )

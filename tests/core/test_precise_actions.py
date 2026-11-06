@@ -284,7 +284,7 @@ def test_a_strike_bounty_says_practice_where_precise_is_on():
     b = _strike(game)
     line = bounties.how(game.content, b, game.state)
     assert "尋敵" in line and "找素材" not in line
-    rows = bounties.status(game.state, game.content, game.world)
+    rows = bounties.status(game)
     assert any(r["id"] == "b1" and r["how"] == line for r in rows)
     game.state.world.precise_actions = False  # 沒蓋章的季照舊
     assert "找素材撞上" in bounties.how(game.content, b, game.state)

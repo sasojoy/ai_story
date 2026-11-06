@@ -16,8 +16,9 @@ from __future__ import annotations
 import random
 
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
-from tianxia import battle_instance, battlelog, encounter, materials, renown, rise, rounds, tactics, treasures
-from tianxia import gender, team
+from tianxia import battlelog, encounter, materials, renown, rise, rounds, tactics, treasures
+from tianxia.core import battle_base as battle_instance
+from tianxia import attrset, gender, team
 from tianxia.core import duel_base
 from tianxia.core.option import Option
 from tianxia.core.services import PAUSED_TEXT
@@ -44,7 +45,7 @@ def duel_start(ctx, boss: DuelBoss) -> list[str]:
         power=power, scores=ctx._battle_scores(mounted=False), role=ctx._battle_role(),
         # 頭目戰不算騎兵：設計 2.1 的三個用途沒有頭目戰
         # 江湖水漲：照你的武學威力浮上來；玉璽碎片的戰力不浮上去（改版 PM 五之一 2），沒碎片時跟 power 一樣
-        difficulty=rise.duel(c, boss.difficulty, ctx._battle_power(seal=False), p.duel_tally.get(key, 0)),
+        difficulty=rise.duel(c, boss.difficulty, ctx._battle_power(seal=False), p.duel_tally.get(key, 0), world=s.world),
         cut=duel_cut(ctx),  # 防具（鐵匠鋪與合成流程 3.9）：開打這一刻身上那件的減損抄下來，他打中你的那一下乘 1 − 它；頭目沒有防具
     )
     p.duel_tally[key] = p.duel_tally.get(key, 0) + 1
@@ -182,6 +183,7 @@ def duel_gamble(
     s.player.guide_done = []
     boss, _ = duel_rules.foe_of(c, duel)
     fired: list[str] = []
+    llm_rate = int(llm_rate) + round(attrset.charm(s, c, "gamble"))  # 魅力略為提高放手一搏（五項屬性的季；企劃者 2026-11-04）
     won, delta, hp, _ = duel_rules.gamble(duel, int(llm_rate), c.config.duel, c.config.battle, ctx.rng,
                                           c.config.tactics, bout_rng(ctx, "頭目戰", duel.boss, duel.round), fired)
     story = (stories or ("", ""))[0 if won else 1]

@@ -16,10 +16,10 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 
 NAMES_START = 'wholeApp(["S", '
 assert PROLOGUE_DRIVER.count(NAMES_START) == 1
-DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "taleHtml", "taleLink", "taleIndexHtml", "pageNews", ')
+DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "taleHtml", "taleLink", "taleIndexHtml", "taleClose", "pageNews", ')
 
 TALE = {
-    "status": "ready", "title": "長社火攻戰記", "season": 8, "battle_name": "長社火攻", "result": "黃巾大勝", "made_at": 0,
+    "status": "ready", "page": "/zhanji/abc123?in=1", "url": "https://tianxiadashi.com/zhanji/abc123", "title": "長社火攻戰記", "season": 8, "battle_name": "長社火攻", "result": "黃巾大勝", "made_at": 0,
     "acts": [
         {"title": "長社城下", "scenes": [
             {"head": "暮色", "text": "暮色將近，霜刃立於陣前。\n她看著城頭，嘴角一勾。", "said": {"who": "霜刃", "side": "黃巾", "line": "包圍城頭那一隊"}},
@@ -69,22 +69,21 @@ def test_the_link_is_live_only_when_the_tale_is_ready(m):
     assert link({"41": {"status": "none"}}) == "" and link({}) == "" and link({"41": {"status": "ready"}}, None) == ""
 
 
-def test_the_tale_page_draws_acts_said_lines_and_the_cast(m):
+def test_the_tale_opens_the_standalone_page_in_a_layer(m):
+    """戰記頁（Joy 2026-11-04 獨立一頁、可以分享）：遊戲裡疊一層全螢幕，開伺服器畫的那一頁（?in=1）；內文的畫法在 tale_html.py
+    （tianxia/features/tale/tests/test_tale_page.py）。網址照跳脫。"""
     page = run(m, f"return H.taleHtml({json.dumps(TALE, ensure_ascii=False)});")
-    assert "<h2>長社火攻戰記</h2>" in page and "第 8 季・黃巾大勝" in page
-    assert '<span class="no">第一回</span>長社城下' in page and '<span class="no">第二回</span>夜風將起' in page
-    assert "<p>暮色將近，霜刃立於陣前。</p><p>她看著城頭，嘴角一勾。</p>" in page  # 一行一段
-    assert '<span class="who">霜刃・黃巾</span><span class="line">「包圍城頭那一隊」</span>' in page
-    assert '<p class="huaben-banner">入夜之後，黃巾已經摸到城根。</p>' in page
-    assert page.count("<li>") == 2 and '<span class="cast-side">黃巾</span>' in page and "倒在天亮之前。" in page
-    assert '<h4></h4>' not in page  # 沒有小標的那一回不畫空的小標
-
-
-def test_the_tale_page_escapes_what_it_is_given(m):
-    bad = {**TALE, "battle_name": "<b>x</b>", "acts": [{"title": "t", "scenes": [{"head": "", "text": "<img src=x>"}]}], "cast": []}
+    assert '<div class="zj-layer"><iframe src="/zhanji/abc123?in=1" title="長社火攻戰記"' in page
+    assert 'allow="web-share; clipboard-write"' in page and "‹ 戰報" in page
+    bad = {**TALE, "page": '/zhanji/x"><img src=x>', "battle_name": "<b>x</b>"}
     page = run(m, f"return H.taleHtml({json.dumps(bad, ensure_ascii=False)});")
-    assert "<b>x</b>" not in page and "<img" not in page and "&lt;img src=x&gt;" in page
-    assert "huaben-cast" not in page  # 名錄是空的就不畫那一段
+    assert "<img" not in page and "<b>x</b>" not in page and "&lt;b&gt;x&lt;/b&gt;戰記" in page
+
+
+def test_the_layer_closes_on_the_pages_back_message(m):
+    """那一頁頂條的「‹ 返回」postMessage({zhanji: "close"})：收起來回到戰報。"""
+    out = run(m, "H.S.taleOpen = 41; H.taleClose(); return String(H.S.taleOpen);")
+    assert out == "null"
 
 
 def test_pending_and_none_pages_say_so(m):
@@ -97,8 +96,8 @@ def test_open_a_report_then_the_tale_and_back(m):
     r = clicks(m, [{"act": "report", "id": "3"}, {"act": "tale", "id": "41"}, {"act": "tale-back"}], TALE)
     report, tale, back = r["out"]
     assert "‹ 全部戰報" in report and 'data-act="tale" data-id="41"' in report
-    assert "<h2>長社火攻戰記</h2>" in tale and "‹ 戰報" in tale and "全部戰報" not in tale
-    assert "‹ 全部戰報" in back and "<h2>長社火攻戰記</h2>" not in back
+    assert 'iframe src="/zhanji/abc123?in=1"' in tale and "‹ 戰報" in tale and "全部戰報" not in tale
+    assert "‹ 全部戰報" in back and "iframe" not in back
     assert "/api/tale/41" in r["calls"]
 
 
@@ -122,5 +121,5 @@ def test_the_chronicle_lists_tales_only_when_the_server_sends_them(m):
     assert "長社火攻戰記" in page  # 目錄也寫「<戰名>戰記」
     r = clicks(m, [{"act": "tale", "id": "41"}, {"act": "tale-back"}], TALE, S={"tab": "news", "news": "chronicle"}, main=listed)
     tale, back = r["out"]
-    assert "‹ 江湖史" in tale and "<h2>長社火攻戰記</h2>" in tale
+    assert "‹ 江湖史" in tale and 'iframe src="/zhanji/abc123?in=1"' in tale
     assert 'class="list huaben-index"' in back

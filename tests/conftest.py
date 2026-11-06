@@ -105,6 +105,13 @@ def classic_rules(content: Content) -> Content:
     return content
 
 
+def old_attrs(content: Content) -> Content:
+    """五項屬性（Config.attributes.v2）關掉，回傳同一份內容：week7、season21 的正式設定 2026-11-05 起打開（Joy「下一季新的功能都會上」），
+    測舊的五屬性（臂力根骨博聞、每級給點、每點 3%、配點五段、事件照點數比）本身的舊測試叫它；五項屬性的測試在 tests/core/test_attrset.py。"""
+    content.config.attributes.v2.enabled = False
+    return content
+
+
 def no_week_unlock(content: Content) -> Content:
     """功能照週解鎖（減法季 6.6，Config.jianfa.week_unlock）關掉，回傳同一份內容：用 week7／season21 的正式內容、開季第一天就要進
     擂台、懸賞榜的舊測試叫它（那兩樣在減法季第 2 週才開；鐵匠鋪 2026-10-27、自創 2026-10-28 起開季就有）；解鎖本身的測試在 tests/test_week_unlock.py。"""
@@ -256,6 +263,12 @@ def no_leftover_web_push(monkeypatch, tmp_path):
     server.PUSH_STOP.clear()
     server.HUB = None
     server.QUEUE = None  # 模型佇列（同上兩份設定開著）：下一個測試從關著開始
+    server.SCHEDULER_STOP.set()  # 排程（config.json 的 world_tick_seconds 開著）：叫過 main 的測試留著它，它在下一個測試的暫存資料庫上讀，撞上 close_all 就把 worker 整個弄當
+    if server.SCHEDULER_THREAD is not None:
+        server.SCHEDULER_THREAD.join(5.0)
+    server.SCHEDULER_THREAD = None
+    server.SCHEDULER_STOP.clear()
+    server.WORLD_GAME = None
 
 
 @pytest.fixture(autouse=True)

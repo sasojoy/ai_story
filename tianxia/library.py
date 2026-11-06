@@ -51,7 +51,7 @@ def holding_cap(content: Content, level: int, lore: float, season=None) -> int:
 def cap_of(state: GameState, content: Content) -> int:
     """這個人現在的持有上限：照自己的等級與博聞，加上萬寶閣買的擴充（PlayerState.holding_bonus，只這一季）。"""
     p = state.player
-    return holding_cap(content, p.member.level, p.stats.get(team.LORE, team.BASE_STAT), state.world) + p.holding_bonus
+    return holding_cap(content, p.member.level, team.v1_stat(state, content, team.LORE), state.world) + p.holding_bonus
 
 
 def full(state: GameState, content: Content) -> bool:
@@ -111,7 +111,7 @@ def learn_problem(state: GameState, content: Content, skill: SkillDef) -> str | 
         if rule.title is not None:  # 名聲 5.1：正邪武學看善惡稱號（走那條路、到那一段）
             if not renown.on(content, "lessons"):
                 return LESSON_CLOSED
-            if not renown.meets(state, content, rule.title.path, rule.title.tier):
+            if not renown.open_to(state, content, "lessons", rule.title.path, rule.title.tier):  # 傳承的門路也開得了第一段
                 return TITLE_NEED.format(title=renown.named(renown.VIRTUE_TITLES[rule.title.path][rule.title.tier], state))
         need = int(rule.fame * renown.scale(state.world) + 0.5)  # 名聲 2.4：拜師的名望門檻跟求見同一個理由乘季長倍數
         if p.stats.get("fame", 0) < need:

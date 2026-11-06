@@ -9,6 +9,7 @@ import random
 import pytest
 
 from conftest import install_season_one, real_content
+from bounty_ctx import bounty_ctx
 from tianxia import bot, bot_policy, bounties, calendar, ranger, rules
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
@@ -143,7 +144,7 @@ def test_the_board_stays_with_the_season_one_switch_off(beta_setup):
     _do(content, world, "丙", lambda g: g.choose("act:bounties"))
     assert "俠名 +2" in _ids(content, world, "丙")[f"bounty:take:{b.id}"].label
     _do(content, world, "丙", lambda g: g.choose(f"bounty:take:{b.id}"))
-    msgs, game = _direct(content, world, "丙", lambda g: bounties.on_explore(g.state, g.content, g.world, "lake"))
+    msgs, game = _direct(content, world, "丙", lambda g: bounties.on_explore(g, "lake"))
     assert msgs[0].startswith("【懸賞】") and game.state.player.ranger_deeds == 2
 
 
@@ -187,7 +188,7 @@ def test_a_faction_member_only_sees_and_takes_his_own_side_at_half_pay(setup):
     assert "俠名" not in menu[f"bounty:take:{ours.id}"].label  # 陣營的人名號凍結
     assert _direct(content, world, "甲", lambda g: bounties.take(g.state, g.content, theirs.id))[0] == ["這一張不是給你接的。"]
     _direct(content, world, "甲", lambda g: bounties.take(g.state, g.content, ours.id))
-    msgs, game = _direct(content, world, "甲", lambda g: bounties.on_win(g.state, g.content, g.world, "lake", "thug"))
+    msgs, game = _direct(content, world, "甲", lambda g: bounties.on_win(g, "lake", "thug"))
     assert f"銀兩 +{round(20 * content.config.bounties.faction_share)}" in msgs
     assert game.state.player.ranger_deeds == 0
 
@@ -196,11 +197,11 @@ def test_strike_counts_any_enemy_squad_at_that_place(setup):
     content, world = setup
     b = _post(world, kind="strike", faction="guan", silver=20, deeds=3, location="lake", squad="thug")
     _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))
-    assert _direct(content, world, "丙", lambda g: bounties.on_win(g.state, g.content, g.world, "town", "thug"))[0] == []
+    assert _direct(content, world, "丙", lambda g: bounties.on_win(g, "town", "thug"))[0] == []
     content.squads["thug"].faction = "guan"  # 自己人：不算
-    assert _direct(content, world, "丙", lambda g: bounties.on_win(g.state, g.content, g.world, "lake", "thug"))[0] == []
+    assert _direct(content, world, "丙", lambda g: bounties.on_win(g, "lake", "thug"))[0] == []
     content.squads["thug"].faction = "huang"
-    msgs, _ = _direct(content, world, "丙", lambda g: bounties.on_win(g.state, g.content, g.world, "lake", "thug"))
+    msgs, _ = _direct(content, world, "丙", lambda g: bounties.on_win(g, "lake", "thug"))
     assert msgs[0].startswith("【懸賞】") and "俠名 +3" in msgs
 
 
@@ -214,7 +215,7 @@ def test_escort_is_taken_at_the_start_and_done_on_arrival(setup):
         return bounties.take(g.state, g.content, b.id)
 
     assert _direct(content, world, "丙", at_lake)[0][0].startswith("你揭下了")
-    msgs, _ = _direct(content, world, "丙", lambda g: bounties.on_arrive(g.state, g.content, g.world, "town"))
+    msgs, _ = _direct(content, world, "丙", lambda g: bounties.on_arrive(g, "town"))
     assert msgs and _load(world, "丙").player.bounties_done == 1
 
 
@@ -225,7 +226,7 @@ def test_at_most_max_taken_and_quota_runs_out(setup):
     second = _post(world, kind="scout", faction="huang", silver=10, deeds=2, location="cave")
     _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, first.id))
     assert "先交了差" in _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, second.id))[0][0]
-    _, game = _direct(content, world, "丙", lambda g: bounties.on_explore(g.state, g.content, g.world, "lake"))
+    _, game = _direct(content, world, "丙", lambda g: bounties.on_explore(g, "lake"))
     assert first.id not in {x.id for x in bounties.open_bounties(game.state, content)}  # 名額用完下榜
 
 
@@ -236,7 +237,7 @@ def test_tier_four_loners_get_the_silver_bonus(setup):
     def strong(g):
         g.state.player.ranger_good = content.config.ranger.thresholds[-1]
         bounties.take(g.state, g.content, b.id)
-        return bounties.on_explore(g.state, g.content, g.world, "lake")
+        return bounties.on_explore(g, "lake")
 
     msgs, game = _direct(content, world, "丙", strong)
     assert ranger.tier(game.state, content) == 4 and f"銀兩 +{round(20 * content.config.ranger.bounty_bonus)}" in msgs
@@ -372,7 +373,7 @@ def test_a_board_emptied_while_open_says_so_above_back(setup):
     _do(content, world, "甲", lambda g: g.choose("act:bounties"))
     assert list(_ids(content, world, "甲")) == [f"bounty:take:{scout.id}", "bounty:back"]  # 還有單的時候不畫那一行
     _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, scout.id))
-    _direct(content, world, "丙", lambda g: bounties.on_explore(g.state, g.content, g.world, "lake"))  # 丙交了差，名額 1 滿了
+    _direct(content, world, "丙", lambda g: bounties.on_explore(g, "lake"))  # 丙交了差，名額 1 滿了
     menu = _ids(content, world, "甲")
     assert list(menu) == ["bounty:empty", "bounty:back"]
     assert not menu["bounty:empty"].enabled and menu["bounty:empty"].label == bounties.BOARD_EMPTY and menu["bounty:back"].enabled
@@ -596,7 +597,7 @@ def test_a_bounty_filled_by_others_or_expired_says_so_once(setup):
     for name in ("甲", "丙"):
         _direct(content, world, name, lambda g: bounties.take(g.state, g.content, full.id))
     _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, late.id))
-    _direct(content, world, "甲", lambda g: bounties.on_explore(g.state, g.content, g.world, "lake"))  # 甲先交了：名額滿
+    _direct(content, world, "甲", lambda g: bounties.on_explore(g, "lake"))  # 甲先交了：名額滿
     world.mutate_season(lambda s: setattr(next(x for x in s.bounties if x.id == late.id), "expires", 0.0))
     _, game = _do(content, world, "丙", lambda g: None)
     told = [line for e in game.state.journal if e.title == bounties.BOARD for line in e.lines]
@@ -1122,7 +1123,7 @@ def test_a_season_end_bounty_lasts_until_the_season_closes_then_every_held_bount
     assert game.status_data()["bounties"] == []
     s, c = game.state, content
     assert bounties.open_bounties(s, c) == [] and bounties.mine(s, c) == [] and bounties.visible(s, c) == []
-    assert bounties.status(s, c, world) == [] and not bounties.board_here(s, c)
+    assert bounties.status(bounty_ctx(s, c, world)) == [] and not bounties.board_here(s, c)
     left = next(b for b in s.world.bounties if b.id == arms.id)  # 求兵一樣：榜上看不到、交不了，也沒有作廢的話（沒人揭）
     assert left.id not in {b.id for b in bounties.visible(s, c)} and bounties.give_problem(s, c, world, left, "x") == bounties.NOT_NOW
     assert bounties.give_choice(s, c, world) is None

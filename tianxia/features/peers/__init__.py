@@ -1,7 +1,7 @@
 """玩家互動一（此地還有、玩家卡、邀請框、打招呼、贈物、名帖）。功能包，開發規範手冊 3.2；全部拆包第 37 批搬進來
 （計畫 docs/superpowers/plans/2026-11-06-玩家互動包-第1批.md）。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
-- social.py：玩家卡與卡上動作的登記表（ACTIONS、CardAction、CardButton）、贈物、打招呼（原 tianxia/social.py；那個名字留成指到這裡的別名）。
+- social.py：玩家卡、贈物、打招呼（原 tianxia/social.py；那個名字留成指到這裡的別名）。卡上動作的登記表（ACTIONS、CardAction、CardButton、register）在核心 tianxia/core/cards.py（第 45 批），social re-export 同一批物件。
   「此地還有」的判斷與狀態列的身分字不在這裡：核心的查詢服務 tianxia/core/presence.py（social 從那裡 re-export 同一批函式物件）
 - invites.py：邀請的帳（原 tianxia/invites.py，別名）；mingtie.py：名帖的規則（原 tianxia/mingtie.py，別名）；
   mingtie_card.py：遞名帖掛上玩家卡（原 tianxia/mingtie_card.py，別名；載入這一包時登記進 social.ACTIONS）

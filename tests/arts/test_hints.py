@@ -81,7 +81,8 @@ def test_every_known_hint_id_is_one_of_the_eighteen():
 
     # 設計 5.2 的十八條，加上 explain-1 的 h_bond（第一次交友或談話：情誼有什麼用；事件型，不看狀態）
     # 新手引導重做（2026-10-22）：拿掉 h_refine_fail，多五條（h_drill_done 是事件型）
-    assert len(hints.KNOWN) == 23 and {"h_snubbed", "h_mandate", "h_merge", "h_figure", "h_bond", "h_tavern"} <= hints.KNOWN
+    # 補新手教學多十一條、歷練快滿了（h_lilian）一條
+    assert len(hints.KNOWN) == 35 and {"h_snubbed", "h_mandate", "h_merge", "h_figure", "h_bond", "h_tavern"} <= hints.KNOWN
     assert "h_refine_fail" not in hints.KNOWN
     assert hints.EVENT_ONLY == {"h_snubbed", "h_mandate", "h_bond", "h_drill_done"}
 
@@ -1394,3 +1395,131 @@ def test_queue_note_follows_the_same_gates_as_the_queue(game):
     game.state.player.bot = BotProfile(personality="普通", seed=1)
     assert hints.queue_note(game.state, note) is False
     assert game.state.player.hint_queue == []
+
+
+# ── 補新手教學（2026-11-05）：截殺自保、簽到、萬寶閣、形象、玉璽碎片、宴客、傳功、坐騎、寶物、地點變樣、戰記 ─────────────
+
+NEW_HINTS = ("h_raid_guard", "h_checkin", "h_mall", "h_looks", "h_seal", "h_feast", "h_chuangong", "h_mount", "h_treasure",
+             "h_place", "h_tale")
+
+
+def _new_on(game):
+    return [h for h in game._hint_triggers(set(NEW_HINTS)) if h in NEW_HINTS]
+
+
+def test_the_new_hints_stay_quiet_for_a_fresh_character(game):
+    game.skip_tutorial()
+    assert _new_on(game) == []
+
+
+def test_raid_guard_after_the_newbie_period_or_the_first_raid(game, monkeypatch):
+    from tianxia import roster
+    from tianxia.characters import name_key
+
+    game.skip_tutorial()
+    p = game.state.player
+    monkeypatch.setattr(game.content.config.raid, "enabled", True)
+    monkeypatch.setattr(roster, "raid_newbie", lambda s, c: False)
+    assert _new_on(game) == []  # 散人過了新手期也截不到（只有被通緝的才截得到）：不說
+    p.faction = "guan"
+    assert _new_on(game) == ["h_raid_guard"]
+    monkeypatch.setattr(roster, "raid_newbie", lambda s, c: True)
+    assert _new_on(game) == []  # 還在新手期
+    p.faction = None
+    game.state.world.raided[name_key(p.name)] = game.state.world.time  # 被人截過一次：散人、新手期也說
+    assert _new_on(game) == ["h_raid_guard"]
+    monkeypatch.setattr(game.content.config.raid, "enabled", False)
+    assert _new_on(game) == []
+
+
+def test_checkin_on_the_second_day(game, monkeypatch):
+    from tianxia.core import services
+
+    game.skip_tutorial()
+    monkeypatch.setattr(services, "checkin_on", lambda c, w: True)
+    game.state.player.checkin_days = [1]
+    assert _new_on(game) == []
+    game.state.player.checkin_days = [1, 2]
+    assert _new_on(game) == ["h_checkin"]
+
+
+def test_mall_waits_for_level_five_and_looks_for_the_first_arena(game, monkeypatch):
+    game.skip_tutorial()
+    monkeypatch.setattr(game.content.config.mall, "enabled", True)
+    monkeypatch.setitem(game.content.looks, "x", None)
+    game.state.player.member.level = 4
+    assert _new_on(game) == []
+    game.state.player.member.level = 5
+    assert _new_on(game) == ["h_mall"]
+    game.state.battles = [_lost_fight(kind="arena", tier="大勝")]
+    assert _new_on(game) == ["h_mall", "h_looks"]
+    monkeypatch.setattr(game.content.config.mall, "enabled", False)
+    assert _new_on(game) == []
+
+
+def test_seal_chuangong_place_follow_their_own_rules(game, monkeypatch):
+    from tianxia import chuangong, place_state
+    from tianxia.characters import name_key
+    from tianxia.core import seal_base
+
+    game.skip_tutorial()
+    monkeypatch.setattr(seal_base, "on", lambda c: True)
+    monkeypatch.setattr(seal_base, "holders", lambda reg: set())
+    monkeypatch.setattr(chuangong, "on", lambda c: True)
+    monkeypatch.setattr(chuangong, "cheapest", lambda s, c, w: None)
+    monkeypatch.setattr(place_state, "on", lambda c: True)
+    assert _new_on(game) == []  # 太平、沒碎片、傳不起
+    monkeypatch.setattr(seal_base, "holders", lambda reg: {name_key(game.state.player.name)})
+    monkeypatch.setattr(chuangong, "cheapest", lambda s, c, w: object())
+    monkeypatch.setattr(place_state, "kind_at", lambda w, c, loc: place_state.WAR)
+    assert _new_on(game) == ["h_seal", "h_chuangong", "h_place"]
+
+
+def test_feast_only_where_a_feast_is_open(game):
+    from tianxia.state import Feast
+
+    game.skip_tutorial()
+    w, p = game.state.world, game.state.player
+    w.feasts.append(Feast(id=1, host="x", place="lake" if p.location != "lake" else "town", start=w.time, end=w.time + 100))
+    assert _new_on(game) == []  # 擺在別處
+    w.feasts.append(Feast(id=2, host="x", place=p.location, start=w.time, end=w.time + 100))
+    assert _new_on(game) == ["h_feast"]
+    w.feasts[-1].settled = True
+    assert _new_on(game) == []
+
+
+def test_mount_treasure_and_tale(game, monkeypatch):
+    from tianxia import equipment, mounts, treasures
+
+    game.skip_tutorial()
+    monkeypatch.setattr(mounts, "on", lambda c: True)
+    monkeypatch.setattr(treasures, "on", lambda c: True)
+    assert _new_on(game) == []
+    monkeypatch.setattr(equipment, "in_slot", lambda p, slot: [object()] if slot == "mount" else [])
+    assert _new_on(game) == ["h_mount"]
+    monkeypatch.setattr(equipment, "in_slot", lambda p, slot: [object()])
+    assert _new_on(game) == ["h_mount", "h_treasure"]
+    monkeypatch.setattr(equipment, "in_slot", lambda p, slot: [])
+    game.state.battles = [_lost_fight(kind="showdown", tier="官軍大勝")]
+    assert _new_on(game) == ["h_tale"]
+
+
+def test_a_new_hint_shows_once_through_the_queue(game):
+    _with(game.content, "h_tale")
+    game.skip_tutorial()
+    game.state.battles = [_lost_fight(kind="showdown", tier="官軍大勝")]
+    game._check_hints()
+    assert _key(game) == "h_tale"
+    game.guide_ack()
+    game._check_hints()
+    assert game.guide_box() is None and "h_tale" in game.state.player.hints_seen
+
+
+def test_the_real_new_hints_name_the_right_places(real):
+    """補新手教學的十一條（待 joy 潤）：點名的鈕與頁照畫面上的字；截殺那一條講清楚下線也會被截、要在城裡下線。"""
+    by_id = {h.id: h.text for h in real.hints.hints}
+    assert set(NEW_HINTS) <= set(by_id)
+    assert "下了線" in by_id["h_raid_guard"] and "城" in by_id["h_raid_guard"]
+    assert "『簽到』" in by_id["h_checkin"] and "萬寶閣" in by_id["h_mall"] and "『形象』" in by_id["h_looks"]
+    assert "『傳承』" in by_id["h_seal"] and "『傳功』" in by_id["h_chuangong"] and "『邸報』" in by_id["h_place"]
+    assert "『戰記 ›』" in by_id["h_tale"] and "『公開分享』" in by_id["h_tale"]

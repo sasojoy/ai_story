@@ -288,7 +288,7 @@
   function inkName(name) {
     return name.includes("・") ? name.split(/(?<=・)/).map((t) => `<span class="nb">${esc(t)}</span>`).join("") : esc(name);
   }
-  const inkCell = (key, name, sub, icon, attrs, cls, note = "") => `<button class="act-ink${cls}" data-key="${key}" data-glow="act:${key}" ${attrs}>
+  const inkCell = (key, name, sub, icon, attrs, cls, note = "") => `<button class="act-ink${cls}" data-key="${key}" data-glow="act:${key}" ${attrs}>${ink(key)}
       <svg class="ink-icon" viewBox="0 0 24 24" aria-hidden="true">${icon}</svg><b>${inkName(name)}</b><small>${esc(sub)}</small>${
       note ? `<small class="ink-note ${ODDS_TONE[note] || ""}">${esc(note)}</small>` : ""}</button>`;
 
@@ -627,10 +627,13 @@
     const hotHere = extras.some((o) => guideGlow().includes(o.id)) || extras.some(persuadingNow); // 勸降的輸入框叫出來了：摺疊要開著
     // 論武的「答應」（選單上那一顆引擎不收、是灰的）：場景底下那一列帶了 peer，這裡同一顆也畫成打開他的玩家卡（FB-117，callPeers）
     const peers = callPeers(m);
+    S.hereExtras = extras;
+    if (typeof revampOn === "function" && revampOn(m) && !hotHere && !guiding) return `${sealRow}${summonsRow}${drawn0(cells)}${moveCard}${exploreCard}${sortiePanelHtml(m)}${sortieAnswering(m) ? "" : sortieDuelsHtml(m)}`; // 介面重整：摺疊換成此地可為那一排
     const here = extras.length ? `<details class="fold here"${hereFold(m, hotHere) ? " open" : ""}><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => persuadingNow(o) ? persuadeForm(o) : peers[o.id] ? `
         <button class="btn" data-act="peer-answer" data-name="${esc(peers[o.id])}"><span>${esc(o.label)}</span></button>` : `
         <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${dealHtml(o.label)}</span></button>`).join("")}</div></details>` : "";
     const drawn = cells.filter(Boolean); // 序章裡沒亮的格子是空字串；一格都沒有、也沒有「此地還能做」時整條不畫
+    function drawn0(cs) { const d = cs.filter(Boolean); return d.length ? `<div class="act-bar" role="group" aria-label="行動" style="--cells:${Math.max(4, d.length)}">${d.join("")}</div>` : ""; }
     // 出陣約戰（丙）：出陣前那張卡（或應戰那一張）展開在行動列底下，約戰卡一張一行接在它下面（應戰時收起，同一張卡已經寫著那一場）
     const duelPanel = sortiePanelHtml(m);
     const duelList = sortieAnswering(m) ? "" : sortieDuelsHtml(m);
@@ -1454,12 +1457,37 @@
   function sceneArtHtml(a) {
     const sub = a.sub ? `<span class="sub">${esc(a.sub)}</span>` : "";
     const time = a.time ? `<span class="time">${esc(a.time)}</span>` : "";
-    return `<figure class="scene-art ${esc(a.kind)}"><img src="${esc(a.src)}" alt="" decoding="async"><figcaption><b>${esc(a.title)}</b>${sub}${time}</figcaption></figure>`;
+    // 地點會變樣（世界活起來第二批）：戰火、淪陷、饑荒、重建的地點多一個 mood-<kind>，畫換色調（太平沒有 mood，一字不變）
+    return `<figure class="scene-art ${esc(a.kind)}${a.mood ? ` mood-${esc(a.mood)}` : ""}"><img src="${esc(a.src)}" alt="" decoding="async"><figcaption><b>${esc(a.title)}</b>${sub}${time}</figcaption></figure>`;
   }
   function sceneUnderArt(m) {
     if (!m.art || !m.art.head || !(m.scene || "").startsWith(m.art.head)) return m;
     return { ...m, scene: m.scene.slice(m.art.head.length).replace(/^\n/, "") };
   }
+  // 江湖頁頂上的常駐提示條（企劃者 2026-11-05「舊玩家根本不會知道要去哪邊點點數」「識海入口藏在現在那個位子…至少需要導引」）：
+  // 五項屬性的季有沒配的送點：「有 N 點可配」，點了在原地攤開＋鈕；識海（main.legacy.shihai）封著一份：寫解封還差什麼，解得開時發光，
+  // 點了進識海頁。舊的季（沒有 status.growth）、傳承關著（沒有 main.legacy）一顆都不畫
+  function jhHintsHtml(m) {
+    const s = m.status || {}, out = [];
+    const pts = s.growth ? s.stat_points | 0 : 0;
+    if (pts) {
+      const open = !!S.allocOpen;
+      out.push(`<button class="jh-hint ready" data-act="alloc-toggle" aria-expanded="${open}"><span>有 <b>${pts}</b> 點屬性可配</span><i>${open ? "收起 ▴" : "去配 ▾"}</i></button>`);
+      if (open) out.push(`<div class="jh-alloc">${(s.attrs || []).map(([k, v, key]) =>
+        `<button class="btn small" data-act="allocate" data-stat="${esc(key)}">＋${esc(k)}<small>${esc(String(v))}</small></button>`).join("")}</div>`);
+    }
+    const sh = m.legacy && m.legacy.shihai;
+    if (sh && sh.offers && sh.offers.length) {
+      out.push(`<button class="jh-hint ready" data-act="legacy-view" data-v="shihai"><span>識海：上一季的神品意境還沒挑</span><i>去看 ›</i></button>`);
+    } else if (sh && sh.sealed) {
+      const left = (sh.need || []).filter((n) => !n.ok).map((n) => n.text);
+      const ready = !left.length && !sh.held && !(sh.sealed.names || []).length;
+      const why = sh.sealed.names && sh.sealed.names.length ? "要先換個名字" : ready ? "可以解封了" : sh.held && !left.length ? "身上已有一份神品" : `解封還差：${left.join("、")}`;
+      out.push(`<button class="jh-hint${ready || (sh.sealed.names || []).length ? " ready" : ""}" data-act="legacy-view" data-v="shihai"><span>識海封著「${esc(sh.sealed.name)}」・${esc(why)}</span><i>›</i></button>`);
+    }
+    return out.length ? `<div class="jh-hints">${out.join("")}</div>` : "";
+  }
+
   function pageJianghu() {
     const m = S.main;
     // 「剛剛」（A4）：預設只露出開頭幾行，太長的（例如新角色的開場故事）收著、點「展開全文」看完，不在卡片裡捲。
@@ -1571,14 +1599,27 @@
     const guideUp = pro() ? guide : "", guideDown = pro() ? "" : guide;
     // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以那一排小標與說書人的框都排在選項底下——
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
-    if (m.on_road) return `${resultCard}${letter}${letterCard}${pushAsk}${now}${scene}${links}${free}${menu}${guide}${sidesFirstHtml(m)}${weekCardHtml(m)}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+    const hints = jhHintsHtml(m);
+    if (m.on_road) return `${hints}${resultCard}${letter}${letterCard}${pushAsk}${now}${scene}${links}${free}${menu}${guide}${sidesFirstHtml(m)}${weekCardHtml(m)}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     // 決戰輪到你出招的回合（FB-136）：三招緊接在場景底下，放手一搏的輸入框與說書人的框排在三招後面（同在路上，這一刻要按的排前面）。
     // 開打那一刻場景多了戰局條、這一幕的開場、騎兵那一句，框與輸入框再排在上面的話三招整排落到分頁列底下（14 天、騎著馬、框還在：855～999）
     if (myTurn) {
-      return `${resultCard}${peek}${letter}${now}${scene}${links}${menu}${peopleAfter}${free}${guide}${senseNotes}${weekCard}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+      return `${hints}${resultCard}${peek}${letter}${now}${scene}${links}${menu}${peopleAfter}${free}${guide}${senseNotes}${weekCard}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     }
     const planCard = planHtml(m.plan) + placeDeedsHtml(m.place_deeds); // 世界活起來：行動列與眼下要事底下（四顆行動鈕一定在第一屏）
-    return `${resultCard}${peek}${letter}${now}${scene}${links}${guideUp}${free}${menu}${senseNotes}${weekCard}${planCard}${guideDown}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+    if (m.art && m.art.kind === "place") S.lastPlaceArt = m.art.src; // 對話那一層的底圖（vnBack）
+    if (typeof revampOn === "function" && revampOn(m) && !masterTalks) { // 介面重整（見檔尾「介面重整」那一段）
+      const parts = dutyParts(m, { orderCard, bountyCard, planCard, weekCard, sealMine, sealCard });
+      const inner = siegeStrip(withGauge(musterScene(m, roundBlocks(battleScene(sceneUnderArt(m)), m.battle_gauge)), m.battle_gauge, battleMvpHtml(m)), m.siege);
+      const clamp = !S.sceneRvOpen && !/<button|<form/.test(inner);
+      const social = m.party || (m.calls && m.calls.length) ? socialHtml(m) : "";
+      const sceneR = `<section class="card scene rv${m.art ? " has-art" : ""}${tierClass(m)}">${m.art ? sceneArtHtml(m.art) : ""}${now ? `<div class="rv-now">${now}</div>` : ""}${tierTag(m)}<div class="rv-scene${clamp ? " clamp" : ""}"${clamp || S.sceneRvOpen ? ' data-act="rv-scene" role="button" tabindex="0"' : ""}>${inner}</div>${social}</section>`;
+      const extras = S.hereExtras || [];
+      const layers = (S.dutyOpen ? dutySheetHtml(parts) : "") + (S.hereAll ? hereAllHtml(m, extras) : "") + (S.figLog ? figLogHtml() : S.fig ? figPickHtml(m) : "");
+      return `${hints}${resultCard}${peek}${letter}${sceneR}${links}${free}${dutyCardHtml(m, parts)}${menu}${sealCard}${senseNotes}${hereRowHtml(m, extras)}${peopleRowHtml(m)}${guideDown}${skip}${layers}`;
+    }
+    if (typeof uiV2 === "function" && uiV2() && m.talk && !m.card) return `${hints}${resultCard}${vnTalkHtml(m, menu)}${free}${guide}`; // 跟大勢人物說話：浮在最上層的對話框
+    return `${hints}${resultCard}${peek}${letter}${now}${scene}${links}${guideUp}${free}${menu}${senseNotes}${weekCard}${planCard}${guideDown}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
   }
 
   // 此地還有誰（玩家之間的互動第一層，企劃者 2026-10-08）：場景卡底下一行，名字點了打開玩家卡（peerHtml）。
@@ -1879,3 +1920,234 @@
     return `<span class="fchips" role="group" aria-label="篩選">${ART_FILTERS.map((f) => `<button type="button" class="fchip${f === now ? " on" : ""}" data-act="art-filter" data-page="${page}" data-filter="${f}" aria-pressed="${f === now}">${f}</button>`).join("")}</span>`;
   }
 
+
+  // ── 介面重整（2026-11-05；Joy「操作簡單 回饋直覺 畫面有質感」，設計稿 DteufxiW32frkMzxaJHWo5，Joy 挑「四塊一次做」）──
+  // 江湖頁閒著的時候：場景卡（「剛剛」疊在圖底下）、要事一張卡（點了往上拉一張清單）、四顆行動、此地可為一排圓章、此地人物一排。
+  // 以前排在底下的軍令、懸賞、盤算、玉璽、本週卡低的那一半都收進要事清單；「此地還能做 N 件事」的摺疊換成圓章與「全部」。
+  // 序章、初入江湖（要你按的鈕在摺疊裡）、路上、決戰出招、事件與對話都照舊（revampOn 是假）。
+  // uiV2()：介面重整之後一律是新版面（2026-11-06 合進 develop、舊測試搬完）。序章、初入江湖、路上、決戰出招、事件照舊（revampOn 是假）。
+  // 只切幾個函式出來測的舊測試沒有這一段，所以用到的地方寫 typeof uiV2 === "function"，切出來時照舊版面
+  const uiV2 = () => true; // 介面重整之後只有新版面；舊版面的分支（序章、初入江湖照舊）之後一起清
+  const revampOn = (m) => uiV2() && idleMenu(m) && !pro() && !onb() && !m.on_road;
+  // 此地可為的圓章圖（web/img/here/，第一批圖）：選項 id 或開頭 → 圖名；沒有圖的畫一個墨圈寫第一個字
+  const HERE_ART = [["act:bounties", "bounty"], ["act:arena", "arena"], ["act:dadian", "bribe"], ["act:tavern", "tavern"], ["act:heal", "clinic"],
+    ["act:market", "horses"], ["act:smith", "smith"], ["feast:", "feast"], ["act:feast", "feast"], ["faction:", "faction"], ["defect:", "faction"]];
+  const hereArt = (id) => (HERE_ART.find(([k]) => id === k || (k.endsWith(":") && id.startsWith(k))) || [])[1] || "";
+  const HERE_ROW = 5; // 一屏放得下幾個圓章：多過這個數（或名字寫不完）時標題旁多一個「全部」列整串的全名
+  const HERE_ALL = "全部"; // 待 joy 潤
+  const PEOPLE_HEAD = "此地人物"; // 待 joy 潤
+  const HERE_HEAD = "此地可為"; // 待 joy 潤
+  // 點了人物才畫的那幾顆（護衛、犒軍、挑戰本人），與搬去酒肆的招募：不進此地可為
+  const FIG_ACT = /^(aid:guard:|aid:rally:|act:challenge:)/;
+  const HIRE = /^hire:/;
+  // 行動列四格的墨圖（web/img/acts/，金色水墨）：格子的 key → 圖名
+  const ACT_ART = { explore: "explore", train: "sortie", social: "social", move: "move" };
+  const ink = (key) => (ACT_ART[key] ? `<img class="ink-img" src="/static/img/acts/${ACT_ART[key]}.webp" alt="" aria-hidden="true">` : "");
+
+  // 此地可為的先後（Joy 2026-11-06「未了之事如果是可以做的時候優先級應該做高，如果時機未到可以放在後面」）：
+  // 發光的（序章指路）、論武的答應、做得了的未了之事（story:）排最前；再來是按得下去的；按不下去的在後；時機未到的未了之事最後。
+  // 同一級照伺服器的順序（sort 是穩定的）
+  const STORY = /^story:/;
+  function hereSort(list, glow, peers) {
+    const rank = (o) => (glow.includes(o.id) || peers[o.id] || (o.enabled && STORY.test(o.id)) ? 0 : o.enabled ? 1 : STORY.test(o.id) ? 3 : 2);
+    return [...list].sort((a, b) => rank(a) - rank(b));
+  }
+  // 此地可為：圓章一排（照伺服器的順序，發光的、按得下去的排前面），「全部 N ›」打開整串（S.hereAll）
+  function hereRowHtml(m, extras) {
+    const list = extras.filter((o) => !FIG_ACT.test(o.id) && !HIRE.test(o.id));
+    if (!list.length) return "";
+    const glow = guideGlow();
+    const peers = callPeers(m); // 論武的「答應」：引擎不收那一顆，點了打開對方的玩家卡（同「全部」那一串，FB-117）
+    const row = hereSort(list, glow, peers); // 一排橫滑（Joy 11/6「應該是要可以滑動的」）：全部畫出來，「全部」照舊列整串的全名
+    const seal = (o) => {
+      const [label, detail] = optParts(o);
+      const art = hereArt(o.id);
+      const n = /^(\d+) 張$/.exec(detail);
+      const attrs = peers[o.id] ? `data-act="peer-answer" data-name="${esc(peers[o.id])}"` : o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : o.note || detail ? `data-act="opt-why" data-id="${esc(o.id)}" data-why="${esc(o.note || `${detail}。`)}" aria-disabled="true"` : "disabled";
+      return `<button class="here-seal${o.enabled || peers[o.id] ? "" : " off"}" ${attrs}><span class="hs-tile${art ? "" : " ink"}">${art ? `<img src="/static/img/here/${art}.webp" alt="">` : `<i>${esc(label.slice(0, 1))}</i>`}${n ? `<b class="hs-n">${n[1]}</b>` : ""}</span><span class="hs-name">${esc(label.replace(/^(.{0,5}).*$/, "$1"))}</span></button>`;
+    };
+    return `<section class="here-row"><div class="hr-head"><span>${HERE_HEAD}</span>${list.length > HERE_ROW || list.some((o) => optParts(o)[0].length > 5)
+      ? `<button class="linkish" data-act="here-all">${HERE_ALL} ${list.length} ›</button>` : ""}</div><div class="hr-seals">${row.map(seal).join("")}</div></section>`;
+  }
+  function hereAllHtml(m, extras) {
+    const tavernHere = extras.some((o) => o.id === "act:tavern"); // 此地沒有酒肆（或酒肆關著）時招募留在全部裡，不會找不到
+    const list = extras.filter((o) => !FIG_ACT.test(o.id) && (!HIRE.test(o.id) || !tavernHere));
+    const peers = callPeers(m);
+    return `<div class="sheet-bg" data-act="here-all-close"></div><div class="sheet here-all" role="dialog" aria-label="${HERE_HEAD}"><div class="grip"></div>
+      <div class="top-row"><h3 style="flex:1">${HERE_HEAD}</h3><button class="btn small ghost" data-act="here-all-close">關閉</button></div>
+      <div class="options">${hereSort(list, guideGlow(), peers).map((o) => persuadingNow(o) ? persuadeForm(o) : peers[o.id]
+        ? `<button class="btn" data-act="peer-answer" data-name="${esc(peers[o.id])}"><span>${esc(o.label)}</span></button>`
+        : `<button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${dealHtml(o.label)}</span></button>`).join("")}</div></div>`;
+  }
+
+  // 此地人物：大勢人物（藍）與江湖人（綠）一排小籤，一籤一個頭像、名字、身分那一行。點大勢人物打開「點人物之後」（S.fig），
+  // 點江湖人照舊打開玩家卡。人多時同「此地還有」先列 HERE_SHOW 個
+  function peopleRowHtml(m) {
+    const figs = m.figures_here || [];
+    const all = m.here || [];
+    if (!figs.length && !all.length) return "";
+    const open = true; // 一排橫滑（Joy 11/6）：此地的人全部畫出來，滑著看
+    const players = all;
+    const face = (src, name) => (src ? `<span class="pc-face"><img src="${esc(src)}" alt=""></span>` : `<span class="pc-face pc-ch">${esc(name.slice(0, 1))}</span>`);
+    const chips = figs.map((f) => `<button class="person fig" data-act="fig-open" data-id="${esc(f.id)}">${face(f.face, f.name)}<span class="pc-t"><b>${esc(f.name)}</b><small>大勢人物・${esc(f.talk.via ? "可交談" : f.talk.why || "")}</small></span></button>`)
+      .concat(players.map((p) => `<button class="person peer" data-act="peer" data-name="${esc(p.name)}">${face(null, p.name)}<span class="pc-t"><b>${esc(p.name)}</b><small>江湖人・${esc(p.side)}</small></span></button>`));
+    return `<section class="people-row"><div class="hr-head"><span>${PEOPLE_HEAD}</span>${open ? "" : `<button class="linkish" data-act="here-more">還有 ${all.length - HERE_SHOW} 人 ›</button>`}</div><div class="pr-chips">${chips.join("")}</div></section>`;
+  }
+
+  // 要事：軍令、懸賞、盤算、本週卡、玉璽、託付……收成一張卡（第一行是最要緊的那一件），點了往上拉一張清單（S.dutyOpen），清單裡照舊是原本那幾張卡
+  const DUTY_HEAD = "要事"; // 待 joy 潤
+  const DUTY_NOTE = "此地舊事、人物閒話在「見聞」"; // 待 joy 潤
+  function dutyCardHtml(m, parts) {
+    const got = parts.filter((p) => p.html);
+    if (!got.length) return "";
+    const chips = got.map((p) => `<span class="dc-chip">${esc(p.name)}${p.n ? ` ${p.n}` : ""}</span>`).join("");
+    const first = got[0];
+    return `<button class="card duty-card" data-act="duty-open" aria-expanded="${!!S.dutyOpen}"><span class="dc-head"><b>${DUTY_HEAD} <i>${got.length}</i></b><span>全部 ›</span></span>
+      <span class="dc-first"><span class="dc-seal">${esc(first.seal)}</span><span class="dc-line">${esc(first.line || first.name)}</span></span><span class="dc-chips">${chips}</span></button>`;
+  }
+  function dutySheetHtml(parts) {
+    return `<div class="sheet-bg" data-act="duty-close"></div><div class="sheet duty-sheet" role="dialog" aria-label="${DUTY_HEAD}"><div class="grip"></div>
+      <div class="top-row"><h3 style="flex:1">${DUTY_HEAD}</h3><button class="btn small ghost" data-act="duty-close">關閉</button></div>
+      ${parts.filter((p) => p.html).map((p) => p.html).join("")}<p class="muted duty-note">${DUTY_NOTE}</p></div>`;
+  }
+  const firstText = (html) => { const t = document.createElement("template"); t.innerHTML = html; const el = t.content.querySelector("h3, summary, b, strong, p"); return el ? el.textContent.trim().slice(0, 24) : ""; };
+  function dutyParts(m, blocks) {
+    const orders = (m.orders || []).length, bounties = (m.status && m.status.bounties || []).length;
+    return [
+      { key: "orders", name: "軍令", seal: "令", n: orders || "", html: blocks.orderCard, line: (m.orders && m.orders[0] && (m.orders[0].title || m.orders[0].text)) || "" },
+      { key: "bounty", name: "懸賞", seal: "賞", n: bounties || "", html: blocks.bountyCard, line: "" },
+      { key: "plan", name: "盤算", seal: "謀", n: "", html: blocks.planCard, line: "" },
+      { key: "week", name: "本週", seal: "週", n: "", html: blocks.weekCard, line: "" },
+      { key: "seal", name: "玉璽", seal: "璽", n: "", html: blocks.sealMine, line: "" }, // 正在打的奪璽（sealCard）有倒數、要你出招：不收，畫在行動列底下
+    ].map((p, i) => ({ ...p, line: p.line || (p.html ? firstText(p.html) : ""), now: dutyNow(p.html), i }))
+      .sort((a, b) => (b.now - a.now) || (a.i - b.i)); // 現在做得了的（卡上有一顆按得下去的鈕）排前面，時機未到的在後面；同一級照原本的順序
+  }
+  // 要事那一張卡此刻做得了嗎：卡裡有一顆按得下去、會真的去做的鈕（choose、去輿圖、出招），收合、說明那種不算
+  const DUTY_GO = /data-act="(choose|tab)"|class="[^"]*\bprimary\b/;
+  function dutyNow(html) {
+    return (String(html || "").match(/<button\b[^>]*>/g) || []).some((b) => DUTY_GO.test(b) && !/\sdisabled\b/.test(b)) ? 1 : 0;
+  }
+
+  // ── 點人物之後（設計稿 Talk-Pick）：浮在最上層，立繪在左下、右邊三顆大鈕（交談／護衛／往來紀錄），底下宣紙框寫他是誰 ──
+  const FIG_TALK = "交談", FIG_LOG = "往來紀錄"; // 待 joy 潤
+  function figOf(id) { return ((S.main && S.main.figures_here) || []).find((f) => f.id === id); }
+  function figPickHtml(m) {
+    const f = figOf(S.fig);
+    if (!f) { S.fig = null; return ""; }
+    const byId = Object.fromEntries(m.options.map((o) => [o.id, o]));
+    const acts = f.aid.map((id) => byId[id]).filter(Boolean).map((o) => {
+      let [label, detail] = optParts(o); // eslint-disable-line prefer-const
+      const name = label.replace(/^(護衛|犒軍|挑戰).*$/, "$1").replace(/・.*$/, "");
+      detail = detail.split("）（").pop(); // 「聲威 60/60・20 兩）（聲威已滿」只留最後那一句
+      return `<button class="vn-act${o.id.startsWith("act:challenge:") ? " red" : o.id.startsWith("aid:guard:") ? " red" : ""}" ${o.enabled ? `data-act="fig-act" data-id="${esc(o.id)}"` : `data-act="opt-why" data-why="${esc(detail ? `${detail}。` : "")}" aria-disabled="true"`}${o.enabled ? "" : ' data-off="1"'}><b>${esc(name)}</b><small>${esc(detail)}</small></button>`;
+    }).join("");
+    const talk = f.talk.via
+      ? `<button class="vn-act dark" data-act="fig-talk" data-id="${esc(f.id)}"><b>${FIG_TALK}</b><small>情誼 ${f.affinity}</small></button>`
+      : `<button class="vn-act dark" data-act="opt-why" data-why="${esc(`${f.talk.why || ""}。`)}" aria-disabled="true" data-off="1"><b>${FIG_TALK}</b><small>${esc(f.talk.why || "")}</small></button>`;
+    return `<div class="vn-layer pick" role="dialog" aria-label="${esc(f.name)}">${vnBack(m)}${f.face ? `<img class="vn-fig" src="${esc(f.face)}" alt="">` : ""}
+      <button class="vn-x" data-act="fig-close" aria-label="關閉">×</button>
+      <div class="vn-acts">${talk}${acts}<button class="vn-act paper" data-act="fig-log" data-id="${esc(f.id)}"><b>${FIG_LOG}</b></button></div>
+      ${vnBox(f.name, f.side, `${figIntroHtml(f.intro, f.side)}<p class="vn-say muted">${f.talk.via ? "他看了你一眼，等你開口。" : esc(f.talk.why || "")}</p>`)}</div>`; // 待 joy 潤：他看了你一眼，等你開口。
+  }
+  // 人物簡介（Joy 11/6「不是所有玩家都那麼了解三國裡面的角色」；server.figure_intro）：身分、是誰、本性；性子隨互動變了（設計稿「人物性子會變」，
+  // 另一串做）時多「如今」一格與變化紀錄，沒變之前不畫這兩格
+  const INTRO_NATURE = "本性", INTRO_NOW = "如今"; // 待 joy 潤
+  // 每樣只寫一次（PM 11/6）：陣營看名牌旁的籤，身分那一行去掉開頭同一個陣營；情誼在「交談」鈕底下，框底不再寫
+  function figIntroHtml(i, side = "") {
+    if (!i) return "";
+    const role = side && i.role ? i.role.replace(new RegExp(`^${side}・`), "") : i.role;
+    const row = (cls, k, v) => `<p class="${cls}"><b>${k}</b><span>${esc(v)}</span></p>`;
+    const hist = (i.history || []).length ? `<ul class="vi-hist">${i.history.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>` : "";
+    return `<div class="vn-intro">${role ? `<p class="vi-role">${esc(role)}</p>` : ""}${i.who ? `<p class="vi-who">${esc(i.who)}</p>` : ""}${i.nature
+      ? row("vi-nature", INTRO_NATURE, i.nature) : ""}${i.now ? row("vi-now", INTRO_NOW, i.now) : ""}${hist}</div>`;
+  }
+  // 對話底下那一塊：場景照片暗下來（最後一次站在地點時的那張圖，S.lastPlaceArt），沒有就是墨色
+  function vnBack(m) {
+    if (m.art && m.art.kind === "place") S.lastPlaceArt = m.art.src;
+    return `<div class="vn-bg"${S.lastPlaceArt ? ` style="background-image:url('${esc(S.lastPlaceArt)}')"` : ""}></div>`;
+  }
+  function vnBox(name, side, body, foot) {
+    return `<div class="vn-box"><div class="vn-plate"><svg viewBox="0 0 140 40" aria-hidden="true"><path d="M3 22 C20 8 70 6 110 9 C124 10 134 13 138 18 C132 28 112 33 84 33 C56 34 22 36 6 31 C2 29 1 25 3 22 Z"/></svg><b>${esc(name)}</b></span>${side ? `<i>${esc(side)}</i>` : ""}</div>
+      <div class="vn-paper">${body}${foot ? `<div class="vn-foot">${foot}</div>` : ""}</div></div>`;
+  }
+  // ── 人物對話（設計稿 Talk，Joy 11/5「講話的頁面是浮在最上面…有點像是文字向的戀愛遊戲對話」）：正在跟大勢人物說話（m.talk）時整頁換成這一層。
+  // 選項照舊是同一串（menu：talk:N、自己說、告辭、開口求他做事），排在右上；他說的話（場景）在宣紙框裡，這一輪的得失（情誼 +N）疊在框頂
+  function vnTalkHtml(m, menu) {
+    const t = m.talk;
+    // 場景的第一段是「**名字**（情誼 N）」：名字在名牌上、情誼在框底，不寫第二次
+    const scene = (sceneUnderArt(m).scene || "").replace(new RegExp(`^<p><strong>${t.name}</strong>[^<]*</p>\\s*`), "");
+    const [, chips] = m.now ? splitChips(m.now) : ["", ""];
+    return `<div class="vn-layer talk" role="dialog" aria-label="與${esc(t.name)}說話">${vnBack(m)}${t.face ? `<img class="vn-fig" src="${esc(t.face)}" alt="">` : ""}
+      <div class="vn-menu">${menu}</div>
+      ${vnBox(t.name, t.side, `${chips ? `<div class="vn-chips">${chips}</div>` : ""}<div class="vn-say">${scene}</div>`, `情誼 ${t.affinity}`)}</div>`;
+  }
+
+  // ── 往來紀錄（設計稿 Talk-Log）：你跟這位人物說過的話，照日子分段；這一季／上一季。資料在伺服器旁邊的小檔（/api/talk_log）──
+  async function openFigLog(id, season = "now") {
+    await busy(async () => {
+      const r = await api(`/api/talk_log?id=${encodeURIComponent(id)}&season=${season}`);
+      S.figLog = { ...r, season };
+      renderPage();
+    });
+  }
+  async function moreFigLog() {
+    const L = S.figLog;
+    if (!L || !L.more || !L.lines.length) return;
+    await busy(async () => {
+      const r = await api(`/api/talk_log?id=${encodeURIComponent(L.id)}&season=${L.season}&before=${L.lines[L.lines.length - 1].id}`);
+      S.figLog = { ...L, lines: L.lines.concat(r.lines), more: r.more };
+      renderPage();
+    });
+  }
+  function figLogHtml() {
+    const L = S.figLog;
+    const face = L.face ? `<span class="pc-face big"><img src="${esc(L.face)}" alt=""></span>` : `<span class="pc-face big pc-ch">${esc((L.name || "").slice(0, 1))}</span>`;
+    // 一天一段、新的那天在上面；同一天裡照說話的先後（伺服器給的是新的在前，這裡每段倒回來）
+    const groups = [];
+    for (const x of L.lines || []) {
+      const head = `${x.stamp.replace(/\s\d\d:\d\d$/, "")}・${x.place}`;
+      if (!groups.length || groups[groups.length - 1].head !== head) groups.push({ head, lines: [] });
+      groups[groups.length - 1].lines.unshift(x);
+    }
+    const rows = groups.map((g) => `<div class="tl-day"><span></span>${esc(g.head)}<span></span></div>${g.lines.map((x) => {
+      const gain = x.gain ? `<div class="tl-gain${x.gain < 0 ? " down" : ""}">情誼 ${x.gain > 0 ? "+" : ""}${x.gain}</div>` : "";
+      return `<div class="tl-line ${x.role === "user" ? "me" : "them"}"><div class="tl-bubble">${esc(x.text)}</div></div>${gain}`;
+    }).join("")}`);
+    return `<div class="vn-layer log" role="dialog" aria-label="與${esc(L.name)}的往來"><div class="tl-sheet">
+      <div class="tl-head">${face}<div class="tl-title"><b>與${esc(L.name)}的往來</b><small>見過 ${L.meets | 0} 次・情誼 ${L.affinity | 0}</small></div><button class="btn small ghost" data-act="fig-log-close">返回</button></div>
+      <div class="tl-tabs"><button class="${L.season === "now" ? "on" : ""}" data-act="fig-log-season" data-s="now">這一季</button><button class="${L.season === "prev" ? "on" : ""}" data-act="fig-log-season" data-s="prev">上一季</button></div>
+      <div class="tl-list">${rows.length ? rows.join("") : `<p class="muted tl-empty">${L.season === "prev" ? "上一季沒有跟他說過話。" : "這一季還沒跟他說過話。"}</p>`}
+      ${L.more ? '<button class="linkish tl-more" data-act="fig-log-more">更早的 ▾</button>' : ""}</div></div></div>`; // 待 joy 潤：兩句空的
+  }
+  // 交談：照伺服器寫的順序按（一類一顆的交友直接開口是一下；名單是「交友」再「指名」兩下），一路不停，最後一下等人物回話
+  // 酒肆裡的招募（介面重整：招募從此地搬進酒肆）：先出酒肆（tavern:back）再按 hire:<id>，跟按選單上那一顆一樣
+  const HIRE_HEAD = "招募同伴"; // 待 joy 潤
+  const HIRE_NOTE = "招了就跟你出酒肆上路。"; // 待 joy 潤
+  function tavHireHtml() {
+    const list = uiV2() ? (S.main && S.main.hires) || [] : []; // 伺服器坐在酒肆裡才給（tianxia/features/hire 的 status）
+    if (!list.length) return "";
+    return `<h4 class="tav-h">${HIRE_HEAD}<small>${HIRE_NOTE}</small></h4><div class="options tav-hire">${list.map((o) =>
+      `<button class="btn" data-act="tav-hire" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${dealHtml(o.label)}</span></button>`).join("")}</div>`;
+  }
+  async function tavHire(id) {
+    let ok = false;
+    await busy(async () => { const r = await api("/api/choose", { id: "tavern:back" }); applyMain(r.main); ok = true; });
+    if (!ok || !(S.main.options || []).some((o) => o.id === id)) { renderPage(); return; }
+    renderPage();
+    await choose(document.querySelector(`[data-id="${CSS.escape(id)}"]`) || document.body, id);
+  }
+
+  async function figTalk(id) {
+    const f = figOf(id);
+    if (!f || !f.talk.via) return;
+    S.fig = null;
+    const via = f.talk.via.slice();
+    const last = via.pop();
+    for (const step of via) {
+      let ok = false;
+      await busy(async () => { const r = await api("/api/choose", { id: step }); applyMain(r.main); ok = true; });
+      if (!ok || !(S.main.options || []).some((o) => o.id === last)) { renderPage(); return; }
+    }
+    renderPage();
+    await choose(document.querySelector(`[data-id="${CSS.escape(last)}"]`) || document.body, last);
+  }

@@ -12,7 +12,7 @@
         "text": "跟押人的什長說，瘸子上不了陣",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "grade": "normal", "shift": 1
         },
         "effect": {
           "text": "什長想想也是，解開繩子把後生推了出來。他娘拉著兒子，向你連連磕頭。",
@@ -72,7 +72,7 @@
         "text": "幫他把帳算清楚",
         "check": {
           "stat": "wis",
-          "difficulty": 6
+          "grade": "normal", "shift": 1
         },
         "effect": {
           "text": "你一夜就把帳理清了。小頭目塞給你一包錢，說營裡正缺識字的人。",
@@ -160,7 +160,7 @@
         "text": "蹚進河裡，幫船家把船推離淺灘",
         "check": {
           "stat": "str",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你奮力一推，糧船順流滑了出去，嘍囉們撲了個空。爬上岸時，你發現手裡還攥著一塊從河底摸上來的沉甸甸的圓石。",
@@ -196,8 +196,8 @@
       {
         "text": "進縣衙替百姓說話",
         "check": {
-          "stat": "wis",
-          "difficulty": 5
+          "stat": "wis", "v2": "cha",
+          "grade": "normal"
         },
         "effect": {
           "text": "縣丞聽你說完逃難人家的苦處，答應寬限一個月。告示前的人都向你拱手。",
@@ -250,7 +250,7 @@
         "text": "帶著他在逃難的人群裡四處打聽",
         "check": {
           "stat": "wis",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "問了一下午，總算在城東的破廟裡找到了他娘。孩子撲進娘懷裡，哭得說不出話。",
@@ -302,7 +302,7 @@
         "text": "把他藏好，替他引開追兵",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "grade": "normal", "shift": 1
         },
         "effect": {
           "text": "你往反方向跑了一段，故意弄出聲響，追兵果然跟了過去。回來時斥候已經不見了，地上留著幾枚錢。",
@@ -358,7 +358,7 @@
         },
         "check": {
           "stat": "con",
-          "difficulty": 6
+          "grade": "normal", "shift": 1
         },
         "effect": {
           "text": "他是營裡派出去探路的弟兄。你背著他繞開馬蹄聲，天黑前進了營門，渠帥記下了你的名號。",

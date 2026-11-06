@@ -47,6 +47,11 @@ from ..features import smithy  # 鐵匠鋪：全部拆包第 41 批（choose 前
 from ..features import territory_acts  # 地盤的行動與畫面：全部拆包第 46 批（只接 /api/xingshi、管理者五個工具與〈天下形勢〉句型的 check_content，排在哪裡結果都一樣；22:00 換天沒有掛鉤，留 Game 的委派原位）
 # bout
 from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）；後面接的 stamina_plays、seclusion（第 39 批）與 peers（第 37 批）沒有店面登記、沒有 menu 掛鉤，bout 的店面與 menu 位置不變
+# legacy、hire（合回 develop 2026-11-06，PM 認定第 4 條：獨立包；FEATURES 裡緊接在 bout 後面，develop 的相對位置）
+from ..features import legacy  # 傳承
+from ..features import hire  # 招募同伴
+# persona（合回 develop 第 4 段 2026-11-06，PM 定：留成包、規則本體在共用層 persona_rules；FEATURES 裡緊接在 hire 後面，develop 的相對位置）
+from ..features import persona  # 人物性子
 # stamina_plays
 from ..features import stamina_plays  # 體力玩法（設伏、屯糧）：全部拆包第 39 批。choose 與 bot_pick 的前綴 ambush／works 與別的包不重疊；world() 的格有表序；選項不走 FEATURES（見該包 actions.py）
 # seclusion
@@ -63,6 +68,12 @@ from ..features import faction  # 陣營：全部拆包第 35 批（接 faction:
 from ..features import gear  # 裝備（馬市、換上、拆解、餵馬、寄放補送、名將贈禮、本命兵器、神器譜）：全部拆包第 42 批（choose 前綴 market 與 act:market 的 Verb、content；沒有路由、沒有店面登記）
 # seal
 from ..features import seal  # 玉璽碎片的季流程：全部拆包第 27 批（沒有前綴、選項、選單、店面、路由；事件、世界層、效果的格都有表序，排在哪裡結果都一樣）
+# bounties
+from ..features import bounties  # 懸賞榜：全部拆包第 45 批（choose 前綴 bounty 與 act:bounties 的 Verb；事件、世界層、你這一步、叛投的格都有表序；沒有店面登記，排在哪裡結果都一樣）
+# tale
+from ..features import tale  # 戰記：全部拆包第 52 批（只接 routes 與 threads，沒有選項、選單、店面；路徑與別的路由不重疊，順序不影響結果）
+# notify
+from ..features import notify  # 手機通知：全部拆包第 53 批（只接 routes 與 threads，沒有選項、選單、店面；五條 /api/push 與 /sw.js 的路徑跟別的路由不重疊，順序不影響結果）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -108,6 +119,11 @@ FEATURES: list[Feature] = [
     # bout（店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4。
     # 後面接的 stamina_plays、seclusion、peers 沒有店面登記、沒有 menu 掛鉤，bout 的店面與 menu 位置不變）
     bout.FEATURE,
+    # legacy、hire（develop 的相對位置：緊接在 bout 後面）
+    legacy.FEATURE,
+    hire.FEATURE,
+    # persona（develop 的相對位置：緊接在 hire 後面；只有 on_sync 與 check_content，沒有選項、選單、店面）
+    persona.FEATURE,
     # stamina_plays（排在 bout 後面：choose 前綴與別的包不重疊，順序不影響結果）
     stamina_plays.FEATURE,
     # seclusion
@@ -124,6 +140,12 @@ FEATURES: list[Feature] = [
     gear.FEATURE,
     # seal（排在 gear 後面〔照合併先後〕：沒有選項、選單、店面、路由；bus、world、effects 的格照 BUS_ORDER、WORLD_ORDER、EFFECT_ORDER 定先後，順序不影響結果）
     seal.FEATURE,
+    # bounties
+    bounties.FEATURE,
+    # tale（排在最後〔照合併先後〕：只有 routes 與 threads，路徑與別的路由不重疊，順序不影響結果）
+    tale.FEATURE,
+    # notify（排在最後〔照合併先後〕：只有 routes 與 threads，路徑與別的路由不重疊，順序不影響結果）
+    notify.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 
@@ -146,8 +168,6 @@ SHARED: dict[str, str] = {
     "rise": "江湖水漲（大場面、頭目跟得上變強的人）：核心的 rules 讀；單打服務的劇情戰與勝算都經它",
     "battlelog": "戰報的資料與拆得失：核心的 journal 讀；決戰、探索、出陣、酒肆四包都寫戰報",
     "fight_llm": "大場面的模型判讀（三段式的單子與夾過的優勢）：單打服務（fight_request、_checked_fight）與殼的 prepare_fight 用，每一種打一場都可能經它",
-    "battle_instance": "全服決戰與攻城的資料型別與回合規則：核心的 world_state、sqlite_world 存它的資料型別；決戰包、siege、奪璽單挑、擂台都讀"
-                       "（總表第 54 批拆兩半：規則那一半進決戰包、資料型別留下）",
     # 武學與裝備的規則（22 個；總表寫 25 個，fusion、skillview、shopview 先不收：讀了之後成包的有所感、自創、修練、玉璽、鐵匠鋪、擂台、懸賞，
     # 理由在 tests/core/test_feature_boundaries.py 的 SHARED_LATER）：核心的 team、content 算威力、驗內容都讀，修練、煉製、鐵匠鋪、裝備好幾包共用
     "martial_arts": "武學的品質、熟練度、威力：核心的 content、rules、state、team、world_state、sqlite_world 都讀；二十幾個舊模組在用",
@@ -182,6 +202,8 @@ SHARED: dict[str, str] = {
     "wins": "三陣營四勝利（豪強兩本帳、季末四階）：核心的 content、rules 讀；決戰、出陣兩包與列傳、軍情都叫",
     "relations": "人物之間的關係：大勢人物、人物活起來、懸賞、人物對話讀",
     "deeds": "世界記事（你做的事被世界記住）：探索包的走一趟、人物活起來、章回都讀",
+    "place_state": "地點會變樣（太平、戰火、淪陷、饑荒、重建；世界活起來第二批）：核心的 rules 讀（事件條件），地盤、領地爭奪、時刻表、"
+                   "坐騎（馬市開不開）、人物活起來、盤算都改它或讀它",
     "seats": "第四階席次與每週輪替：叛投、晉升、世界一步讀（讀的 ranks 稱號第 40 批收進這一層）",
     "factions": "陣營規模的換算：席次 seats 讀；陣營包（features/faction，第 35 批）也讀",
     "week_unlock": "功能照週解鎖與三週主題：擂台、懸賞、輿圖、本週卡讀",
@@ -224,7 +246,7 @@ SHARED: dict[str, str] = {
     "figures": "大勢人物（聲威、在場、退場與回來、自然回復與犒軍共用一天的上限 aid_*）：核心的 world〔世界一步〕、rules、timetable 讀；"
                "決戰、人物情誼、大勢人物、軍情、銀兩出口、酒肆、引導、輿圖八包都叫（讀璽效 seal_acts 記在邊界測試的 SHARED_PENDING：第 51 批）",
     "figure_life": "人物活起來（人物此刻在哪、心事、募兵、走動、求援；每一位對話人物設宴是世界層 life 那一格）：核心的 world 每一步叫；"
-                   "宴客、大勢人物、酒肆、決戰、人物情誼五包都讀（讀璽效 seal_acts、懸賞 bounties 記在 SHARED_PENDING；輿圖的大區 atlas 第 50 批收進這一層）",
+                   "宴客、大勢人物、酒肆、決戰、人物情誼五包都讀（讀璽效 seal_acts 記在 SHARED_PENDING；懸賞第 45 批成包，求援與人物懸賞改讀核心 core/bounty_base；輿圖的大區 atlas 第 50 批收進這一層）",
     "plans": "人物的盤算（每一步推、送到的那一下）：核心的 world 每一步叫、engine.sync 送；人物活起來、大勢人物包的盤算行動讀"
              "（讀璽效 seal_acts 記在 SHARED_PENDING：第 51 批）",
     "orders": "軍令（每週與每天發令、截糧的站、目標）：核心的 world 週初與每天叫；決戰、軍情、出陣、引導、輿圖五包與假人、見聞的分層讀",
@@ -236,4 +258,22 @@ SHARED: dict[str, str] = {
     # map2（全部拆包第 50 批「輿圖二」：atlas 拆兩半，這一半不再 import 出陣包、讀包認領的 fs_asking、tagalong 改問核心的 omen_base、travel_base）
     "atlas": "江湖輿圖的地點、大區、路線與走法時間、軍令卡的寫法與打擊點、安排前往的條件（圖層、詳情、勝算那一半第 50 批進了輿圖包 layers.py）："
              "核心的 engine、content、rules 讀；移動、地盤、設伏、軍情、出陣、人物情誼、酒肆、決戰、引導、輿圖十包與假人都讀",
+    # seal（全部拆包第 51 批「玉璽三」：seal_acts 拆兩半，包這一半是 features/seal/acts.py）
+    "seal_acts": "璽效查詢（引將釘人、頒詔、承露、傳檄、收心、鎮地的此刻生效與期滿回原處）：核心的 world、rules、team 讀；"
+                 "懸賞、人物、宴客、修練、有所感、出陣包與領地爭奪、人物活起來、盤算都讀",
+    # persona（合回 develop 第 4 段，PM 定：人物性子留成包，純規則搬到這一層）
+    "persona_rules": "人物性子的純規則（值與段、記一筆、每天結算、換段、對話提示、簡介）：人物情誼包的 companion_agent 每一輪對話都叫 ends_for、prompt_lines、hear、covers、NONE，"
+                     "手上沒有 ctx；殼的簡介 figure_intro 讀 view；人物性子包的 rules re-export 同一批物件。只 import 核心的 calendar、rules、models、state",
 }
+
+# seal（全部拆包第 51 批「玉璽三」：seal_acts 的登記在上面 SHARED 字面量最後一格；這裡改寫四格說明；
+# 計畫 docs/superpowers/plans/2026-11-06-玉璽包-第3批.md）：集中在這一段，上面別人的行不動，conquest、figures、figure_life、plans 四格的說明在這裡改寫。
+for _name, _old in (("conquest", "（讀璽效 seal_acts 記在邊界測試的 SHARED_PENDING：第 51 批那一半進這一層）"),
+                    ("figures", "（讀璽效 seal_acts 記在邊界測試的 SHARED_PENDING：第 51 批）"),
+                    ("plans", "（讀璽效 seal_acts 記在 SHARED_PENDING：第 51 批）")):
+    assert _old in SHARED[_name], _name
+    SHARED[_name] = SHARED[_name].replace(_old, "（讀璽效 seal_acts：第 51 批進了這一層）")
+_old = "讀璽效 seal_acts 記在 SHARED_PENDING；"  # 懸賞第 45 批成包，同一格的懸賞那一句是它自己改的
+assert _old in SHARED["figure_life"]
+SHARED["figure_life"] = SHARED["figure_life"].replace(_old, "讀璽效 seal_acts 第 51 批進了這一層；")
+

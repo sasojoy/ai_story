@@ -18,7 +18,7 @@
         },
         "check": {
           "stat": "str",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "醉漢疼得齜牙咧嘴，全招了：狼頭牌是黃巾別部營寨的暗記，他是黃巾營寨安插在城裡的眼線。你將他扭送官府。",
@@ -38,7 +38,7 @@
         "text": "裝作沒看見，暗中跟蹤",
         "check": {
           "stat": "agi",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "你遠遠吊在他身後，一路跟到官道邊一座破倉庫。",
@@ -54,7 +54,7 @@
         "text": "扶他起身，順手摸走鐵牌",
         "check": {
           "stat": "agi",
-          "difficulty": 3,
+          "grade": "easy", "shift": -1,
           "practice": "evil"
         },
         "effect": {
@@ -83,7 +83,7 @@
         },
         "check": {
           "stat": "str",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "你在他耳邊說了一句「黃天當立」，醉漢酒醒了一半，悄悄把城裡官府近日的動靜都說給你聽。",
@@ -200,7 +200,7 @@
         "text": "當場服下",
         "check": {
           "stat": "wis",
-          "difficulty": 5,
+          "grade": "normal",
           "by": "self"
         },
         "effect": {
@@ -302,7 +302,7 @@
         "text": "坐下靜聽",
         "check": {
           "stat": "wis",
-          "difficulty": 4,
+          "grade": "easy",
           "by": "self"
         },
         "effect": {
@@ -353,7 +353,7 @@
         "text": "上前勸架",
         "check": {
           "stat": "str",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你一手一個把人分開，眾人見你手勁驚人，都不敢再鬧。",
@@ -373,7 +373,7 @@
         "text": "趁亂撿走地上的錢袋",
         "check": {
           "stat": "agi",
-          "difficulty": 5,
+          "grade": "normal",
           "practice": "evil"
         },
         "effect": {
@@ -401,7 +401,7 @@
         },
         "check": {
           "stat": "str",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你一手一個把兩邊的人按在桌上，說要調停得先付錢。兩邊都乖乖掏了一份，掌櫃還連聲道謝。",
@@ -449,7 +449,7 @@
         "text": "上台和說書先生對幾句",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "grade": "normal", "shift": 1,
           "by": "self"
         },
         "effect": {
@@ -509,7 +509,7 @@
         "text": "向他打聽黃巾軍的動靜",
         "check": {
           "stat": "wis",
-          "difficulty": 3
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "漁翁指了指湖心：「黃巾營寨的船，每逢初一十五就出來。」你暗暗記下。",
@@ -551,7 +551,7 @@
         "text": "爬上大樹躲避",
         "check": {
           "stat": "agi",
-          "difficulty": 4
+          "grade": "easy"
         },
         "effect": {
           "text": "你攀上高枝，狼群轉了幾圈悻悻而去。"
@@ -614,7 +614,7 @@
         "text": "靜下心來細想",
         "check": {
           "stat": "wis",
-          "difficulty": 4,
+          "grade": "easy",
           "by": "self"
         },
         "effect": {
@@ -735,7 +735,7 @@
         "text": "請教調息之法",
         "check": {
           "stat": "wis",
-          "difficulty": 4,
+          "grade": "easy",
           "by": "self"
         },
         "effect": {
@@ -818,7 +818,7 @@
         },
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "grade": "normal", "shift": 1,
           "by": "self"
         },
         "effect": {
@@ -861,7 +861,7 @@
         "text": "問老僧能否取走那截鐵樁",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "grade": "normal", "shift": 1,
           "by": "self"
         },
         "effect": {

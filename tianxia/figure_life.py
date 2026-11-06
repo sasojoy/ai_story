@@ -13,7 +13,7 @@
 
 共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包與舊名的別名——誰在擺宴、開著的宴問核心的查詢服務 core/feast_base，
 設宴是世界層 life 那一格（core/features.py 的 WORLD_ORDER；宴客包登記，tick 每一輪每一位對話人物叫一次、在求援之前）。讀璽效 seal_acts、
-輿圖的大區 atlas、懸賞 bounties 記在邊界測試的 SHARED_PENDING。改這一份 scripts/test_for.py 只挑自己檔名的 tests/figures/test_figure_life.py、
+輿圖的大區 atlas 記在邊界測試的 SHARED_PENDING；求援與人物懸賞（post_rally、post_figure、RALLY_POSTED、how、enemy_name）讀核心 core/bounty_base（第 45 批）。改這一份 scripts/test_for.py 只挑自己檔名的 tests/figures/test_figure_life.py、
 test_figure_life_batch3.py＋煙霧＋邊界；收進來之前挑到的另外跑（-n 4）：tests/figures/test_plans.py、tests/seal/test_seal_acts.py、
 tianxia/features/companions/tests/ 的 test_companions、test_parley_schema、test_parley_two、test_relations_letters、tianxia/features/feast/tests/test_feast.py；
 世界一步代叫它（world._STEP_CORE），world.py 說明「另外跑」那一串也跑。"""
@@ -167,7 +167,7 @@ RALLY_MOODS = ("焦慮",)  # 戰線吃緊、聲威大損：對自己陣營全部
 
 
 def _maybe_rally(state: GameState, content: Content, cid: str, turn: int) -> None:
-    """心事焦慮的大勢人物擲 rally_chance，對自己陣營全部人發一件求援委託（bounties.post_rally），陣營軍情一句。"""
+    """心事焦慮的大勢人物擲 rally_chance，對自己陣營全部人發一件求援委託（core/bounty_base.post_rally），陣營軍情一句。"""
     tuning = content.config.figure_life
     fid = figures.of_character(content, cid)
     if not tuning.rallies or fid is None or figures.state_of(state, content, fid).status != "active":
@@ -176,14 +176,14 @@ def _maybe_rally(state: GameState, content: Content, cid: str, turn: int) -> Non
         return
     if random.Random(f"求援|{state.world.tianji}|{cid}|{turn}").random() >= tuning.rally_chance:
         return
-    from . import bounties  # noqa: PLC0415  bounties → territory → …：延後載入
+    from .core import bounty_base  # noqa: PLC0415  bounty_base → territory → …：延後載入
 
-    made = bounties.post_rally(state, content, cid)
+    made = bounty_base.post_rally(state, content, cid)
     if made is None:
         return
     side = made.faction
-    add_rumor(state, bounties.RALLY_POSTED.format(who=content.characters[cid].name, side=content.scenario.faction_name(side, side),
-                                                  how=bounties.how(content, made, world=state.world)),  # 陣營的傳聞：照陣營的人寫（FB-435：要給 world）
+    add_rumor(state, bounty_base.RALLY_POSTED.format(who=content.characters[cid].name, side=content.scenario.faction_name(side, side),
+                                                  how=bounty_base.how(content, made, world=state.world)),  # 陣營的傳聞：照陣營的人寫（FB-435：要給 world）
               made.location, content=content, layer="faction", faction=side)
 
 
@@ -224,6 +224,9 @@ def _move(state: GameState, content: Content, cid: str, fid: str | None, rng: ra
     options = [loc for loc in ch.haunts if loc != here]
     if not options:
         return
+    from . import place_state  # noqa: PLC0415  地點會變樣（世界活起來第二批）：戰火、淪陷的地方不晃過去（都是的話照舊挑）
+
+    options = [loc for loc in options if not place_state.shunned(state.world, content, loc)] or options
     dest = rng.choice(options)
     _place_at(state, content, cid, fid, dest)
     if fid is not None:
@@ -362,18 +365,18 @@ def _rush_to(state: GameState, content: Content, cid: str, region: str | None, s
 
 def _post(state: GameState, content: Content, cid: str, motive: str, region: str | None, spot: str | None,
           fallen: str, posted: set[str]) -> list[str]:
-    from . import bounties  # noqa: PLC0415  bounties → territory → …：延後載入
+    from .core import bounty_base  # noqa: PLC0415  bounty_base → territory → …：延後載入
 
     side = side_of(content, cid)
     if side is None or side in posted:
         return []
-    made = bounties.post_figure(state, content, cid, motive, region, spot)
+    made = bounty_base.post_figure(state, content, cid, motive, region, spot)
     if made is None:
         return []
     posted.add(side)
     tmpl = REVENGE_LINE if motive == "復仇" else HUNT_LINE
     return [tmpl.format(who=content.characters[cid].name, place=_place(content, made.location),
-                        enemy=bounties.enemy_name(content, made), fallen=fallen)]
+                        enemy=bounty_base.enemy_name(content, made), fallen=fallen)]
 
 
 # ── 風聞 ─────────────────────────────────────────────────
@@ -414,7 +417,7 @@ def spread(state: GameState, content: Content, kind: str, target: str, *, at: st
         notes.append(text)
         del notes[:-tuning.hearsay_keep]
         before = p.affinities.get(cid, 0)
-        p.affinities[cid] = max(0, min(100, before + renown.warmed(content, delta)))  # 加的放慢（Config.affinity_gain_scale）
+        p.affinities[cid] = max(0, min(100, before + renown.warmed(content, delta, state)))  # 加的放慢（Config.affinity_gain_scale）
         moved = p.affinities[cid] - before
         if moved:
             deltas.setdefault(moved, []).append(ch.name)

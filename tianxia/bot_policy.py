@@ -9,10 +9,11 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, epiphany, forge_secrets, library, naming, orders, outing, precise, rules, sensing, server_bots, sortie, stances, team
+from . import allied, arena, atlas, bot, bounties, conquest, cultivation, duel, epiphany, forge_secrets, library, naming, orders, outing, precise, rules, sensing, server_bots, sortie, stances, team
 from . import sortie_duel  # 出陣約戰（減法季批 3b）
 from . import tavern as tavern_rules  # 酒肆殺手：失手加價
 from .bot import allocate_points, can_practise, wants_heal
+from .core import battle_base as battle_instance
 from .core import features as features_core
 from .engine import FREE_TEXT_OPTION, Game, Option
 # 決戰（battle:）的分數搬進決戰包的 bots.py（全部拆包第 7 批；score 先問那一包）：這兩個名字照舊在這裡（tests/bots/test_bot_policy.py、
@@ -417,6 +418,7 @@ def _answer_discuss(game: Game, rng: random.Random, slot: NamingSlot | None) -> 
     return got
 
 
+GROWTH_SCORE = 100.0  # 開季準備卡上照名號那一套配比（只剩這幾顆可按）
 TEACH_PER_TICK = 3  # 假人一輪最多傳幾下功（真人也是一下一下按的）
 
 
@@ -697,10 +699,11 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     owned, value = features_core.bot_pick(game, option)  # 搬成包的功能：假人看到這一顆怎麼按問那一包（開發規範手冊 3.8；宴客 feast:）
     if owned:
         return value
+    if kind == "growth":  # 開季準備卡挑配比：照名號那一套（bot.growth_key），其餘不按
+        return GROWTH_SCORE if arg == bot.growth_key(game) else None
     # （opp：機緣，假人不做，正式版乙一；全部拆包第 34 批搬進 features/military/bots.py，上面的 features_core.bot_pick 問它。對話裡的 talk:opp: 由人物情誼包的 bots.py 回 None）
     # 決戰（battle:）搬進功能包：假人的分數在 features/battle/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 7 批）
-    if kind == "seal":
-        return None  # 奪璽單挑：假人一律被代打（玉璽碎片設計 14.1），選單上就算出現也不按；在不在場只看 last_seen，假人永遠不記
+    # 奪璽單挑（seal:）搬進功能包：假人一律被代打，分數在 features/seal/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 28 批）
     # 頭目戰（duel:）、擂台（arena:）搬進功能包：假人的分數在 features/bout/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 12 批）
     if kind == "choice":
         event = game.content.events[game.state.pending_event]
@@ -708,13 +711,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         moved = rules.resolve_trends(game.content, game.state.world, effect.trend, game.state.player.location)
         return effect_score(effect, _goals(game, profile), moved)
     # 對話（talk:、parley:）搬進功能包：假人只按告辭，分數在 features/companions/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 20 批）
-    if kind == "bounty":  # 懸賞榜上：揭得下的去揭，揭滿了或沒得揭就返回；不放棄手上的
-        verb = arg.partition(":")[0]
-        if verb in ("pick", "give"):  # 求兵：只交 bounties.give_choice 指的那一張、那一件（不隨機，懸賞榜設計 9.3）
-            move = bounties.give_choice(game.state, game.content, game.world)
-            wanted = None if move is None else f"bounty:pick:{move[0]}" if verb == "pick" else f"bounty:give:{move[0]}:{move[1]}"
-            return BOUNTY_SCORE if option.id == wanted else None
-        return BOUNTY_SCORE if verb == "take" else 0.0 if verb in ("back", "unpick") else None
+    # 懸賞榜（bounty:）搬進功能包：假人的分數在 features/bounties/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 45 批）
     # 鐵匠鋪（smith:）搬進功能包：假人的分數在 features/smithy/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 41 批）
     # 酒肆（tavern:）搬進功能包：假人的分數在 features/tavern/bots.py，上面的 features_core.bot_pick 問它（主動搬六包第 10 批）
     # 馬市（market:）搬進功能包：假人的分數在 features/gear/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 42 批）

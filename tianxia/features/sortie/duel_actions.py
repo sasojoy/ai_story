@@ -34,7 +34,7 @@ from tianxia import prologue as prologue_rules  # 共用規則層（序章裡沒
 from tianxia import push  # 共用規則層（人數緩衝、貢獻、活躍名單）
 from tianxia import ranger  # 共用規則層（遊俠名號：經驗倍數）
 from tianxia import ranks  # 共用規則層（晉升：離下一階還差多少；第 40 批收進）
-from tianxia import seal_acts  # 過渡：待搬（玉璽：傳檄的倍數、補位的人在哪一區）
+from tianxia import seal_acts  # 共用規則層（璽效查詢，第 51 批）
 from tianxia import server_bots  # 過渡：待搬（這一季的假人：補位）
 from tianxia import treasures  # 共用規則層（寶物：內傷、經驗心得的加成）
 from tianxia import wins  # 共用規則層（三陣營四勝利：貢獻記在哪一軍）
@@ -682,7 +682,7 @@ def duel_toll(ctx: Game, share: float, lost: bool) -> list[str]:
     hurt = 0.0
     if share > 0:
         cut = min(c.config.armor.total_cap, team.armor_cut(s, c, ctx.world))
-        lost_hp, hurt = team._apply_toll(c, p.member, share * (1 - cut), agi=p.stats.get("agi", team.BASE_STAT),
+        lost_hp, hurt = team._apply_toll(c, p.member, share * (1 - cut), agi=team.v1_stat(s, c, "agi"),
                                          con=team.con_of(s, c, ctx.world, PLAYER), injury=treasures.amount(s, c, "injury"))
         if round(lost_hp) > 0:
             msgs.append(f"氣血 -{lost_hp:.0f}")

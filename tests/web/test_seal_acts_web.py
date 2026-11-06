@@ -18,6 +18,7 @@ import server
 import webharness
 from conftest import real_content
 from tianxia import seal, seal_acts
+from tianxia.features.seal import acts
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -81,7 +82,7 @@ def test_the_heirloom_row_gets_a_button_and_the_card_a_line():
     c, w, m = _view()
     row = run(m, 'return H.heirloomRow({name: "玄紐", effect_text: "戰力 ×1.1"}, H.sealActNow());')
     assert 'data-act="seal-act"' in row and "引將・剩 2 次" in row and "disabled" not in row
-    page = run(m, "return H.pageJianghu();")
+    page = run(m, "return H.pageJianghu();", S={"tab": "jianghu", "dutyOpen": True})  # 介面重整：碎片卡在要事清單裡
     assert "獨門行動・引將：這一季還能起用 2 次" in page and 'data-act="seal-act-go"' in page
 
 
@@ -103,7 +104,7 @@ def test_a_used_up_or_cooling_act_greys_the_button_and_says_why():
     row = run(m, 'return H.heirloomRow({name: "雲篆", effect_text: "x"}, H.sealActNow());')
     assert re.search(r'data-act="seal-act" disabled title="[^"]*之後才能再起用', row)
     assert row.count('<small class="rwhy">') == 2 and "生效中" in row  # 原因與生效中的那一句寫在這一列底下（手機沒有 title 可看）
-    page = run(m, "return H.pageJianghu();")
+    page = run(m, "return H.pageJianghu();", S={"tab": "jianghu", "dutyOpen": True})  # 介面重整：碎片卡在要事清單裡
     assert "獨門行動・頒詔：這一季還能起用 1 次" in page
 
 
@@ -114,7 +115,7 @@ def test_the_layer_lists_every_figure_with_where_he_is_and_greys_the_ones_here()
     assert '<span class="shop-sign">引將</span>' in html and "剩 2 次" in html and 'data-act="seal-act-close"' in html
     rows = {name: (tid, off, why) for name, tid, off, why in _rows(html)}
     assert rows["秦頡"] == ("qinjie", False, "") and "此刻在宛城" in html  # 沒有行程的人照舊按得下去
-    assert rows["波才"] == ("bocai", True, seal_acts.CLASH_PLAN) and "此刻在黃巾別部營寨" in html  # FB-9038：他的盤算公告就在第一天之內，灰掉寫原因
+    assert rows["波才"] == ("bocai", True, acts.CLASH_PLAN) and "此刻在黃巾別部營寨" in html  # FB-9038：他的盤算公告就在第一天之內，灰掉寫原因
     assert rows["皇甫嵩"] == ("huangfusong", True, "已經在這裡") and rows["朱儁"][1:] == (True, "已經在這裡")
     assert "彭脫" not in rows
     assert html.count("<b>") == len(m["status"]["seal"]["act"]["targets"])

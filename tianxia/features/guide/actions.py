@@ -7,8 +7,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tianxia import atlas, figures  # 共用規則層（輿圖 atlas 第 50 批收進、大勢人物 figures 第 40 批收進）
+from tianxia import equipment, mounts, place_state, treasures  # 共用規則層
 from tianxia import howto  # 過渡：待搬
-from tianxia import insight_fx, training, journal, library, martial_arts, team  # 核心、共用規則層
+from tianxia.characters import name_key
+from tianxia import attrset, insight_fx, training, journal, library, martial_arts, roster, team  # 核心、共用規則層
+from tianxia.core import seal_base, services  # 核心：碰到才說的玉璽碎片、簽到問核心的查詢服務（包不能 import 包）
 from tianxia import prologue as prologue_rules  # 共用規則層；Game.new 有個參數也叫 prologue，跟 engine 一樣叫 prologue_rules
 from tianxia import step as step_rules  # 核心本體（第 36 批收進 MODULES）：「你這一步」的 REF、place
 from tianxia.models import TutorialStep
@@ -25,6 +28,14 @@ GRADUATE_TRIES = 12  # graduate 每一步最多試幾次；照著走卻一直前
 PROLOGUE_TABS = ("practice", "craft")  # 序章裡打開這兩頁才記旗標（原 Game.PROLOGUE_TABS）
 NO_REST = "（打坐已經拿掉了：體力會隨時辰自己回來，急用就服回體丹。）"  # 舊分頁按到 act:rest
 
+
+
+def hire_here(ctx) -> bool:
+    """五項屬性的季，此地酒肆有還沒有主的人可招（招募同伴包 hire；這裡照內容與名冊判，不 import 別的功能包）：h_recruit 改指向酒肆招募。"""
+    s, c = ctx.state, ctx.content
+    if not (c.config.hire.enabled and attrset.on(c, s.world)):
+        return False
+    return any(ch.hire_at == s.player.location and roster.owned_by(ctx.world, cid) is None for cid, ch in c.characters.items())
 
 def note_gift(ctx: Game) -> None:
     """建角色時送了回體丹：江湖紀錄開場那一則多一行（explain-1：以前送了二十顆卻沒有任何紀錄）。接在開場那一則裡、不另起一則：
@@ -109,6 +120,13 @@ def graduate_pass(ctx: Game, step: TutorialStep) -> bool:
         ctx.choose(f"act:{goal.action}")
     elif goal.action == "pill":  # 序章服回體丹（新手引導重做）：假人也真的服一顆（同真人，看不出來）
         ctx.take_stamina_pill(pill_only=True)
+    elif goal.action == "allocate" and attrset.on(c, ctx.state.world):  # 五項屬性的季：這一步是挑成長配比（同真人）
+        if p.growth_preset is None:
+            ctx.pick_growth(ctx.rng.choice([preset.key for preset in c.config.attributes.v2.presets]))
+        elif p.stat_points > 0:
+            ctx.allocate_stat(ctx.rng.choice(attrset.keys(c)))
+        else:
+            return False
     elif goal.action == "allocate":
         open_stats = [k for k in team.COMBAT_STATS if p.stats.get(k, 0) < c.config.stat_cap]
         if not open_stats:
@@ -187,7 +205,7 @@ def guide_box(ctx: Game) -> dict | None:
             "speaker": rules.speaker_of(c, step), "key": step.id, "scene": fill(step.scene), "text": fill(rules.step_text(s, c)),
             # 收起來那一行（網頁用 line || text）：待處理時話已經換成「先把眼前的「…」了結」，這一步自己的短提示不能留著
             # ——收著的框寫著短提示、跟事件擋著路互相矛盾（序章之外的步驟也可能有 line；序章自己在事件出現時整個框不畫，見上）
-            "line": "" if pending else fill(step.line), "done": list(p.guide_done), "end": False, "pending": pending,
+            "line": "" if pending else fill(rules.step_words(s, c, step)[1]), "done": list(p.guide_done), "end": False, "pending": pending,
         }
         if step.paged:  # 話太長的序章步驟：網頁照空一行切成幾頁（只有分頁的步驟才帶這個鍵）
             box["paged"] = True
@@ -290,7 +308,7 @@ def hint_triggers(ctx: Game, only: set[str] | None = None) -> list[str]:
     # 「這裡能學新的底」：只算現在學得了的（learn 擋下的——名望、學費、門派、陣營、持有滿了——都不算，不然師父說能學、按下去卻是「學不了」）
     if want("h_basic_art") and any(problem is None for _, problem in library.lessons_here(s, c)):
         on.append("h_basic_art")
-    if want("h_recruit") and (ctx._recruit_target() is not None or ctx._recruitable_here()):
+    if want("h_recruit") and (ctx._recruit_target() is not None or ctx._recruitable_here() or hire_here(ctx)):
         on.append("h_recruit")
     if want("h_free_text") and s.pending_event:
         event = c.events.get(s.pending_event)
@@ -317,6 +335,48 @@ def hint_triggers(ctx: Game, only: set[str] | None = None) -> list[str]:
     # 大勢人物本人（人物表上的人，第一季的規則開著才有）：不是「這裡有可以交友的人物」（_figures_here 連陶謙、曹操、劉備也列，F1）
     if want("h_figure") and season_one(c, s.world) and figures.present_at(s, c, p.location):
         on.append("h_figure")
+    on += _more_triggers(ctx, want)
+    return on
+
+
+SETTLED_LEVEL = 5  # 簽到、萬寶閣這種「不是碰到一個玩法」的：升到這一級（新手目標第一條）才說，開局那幾步不被打斷
+
+
+def _more_triggers(ctx: Game, want) -> list[str]:
+    """補新手教學（2026-11-05）的十一條：截殺自保、簽到、萬寶閣、形象、玉璽碎片、宴客、傳功、坐騎、寶物、地點變樣、戰記分享；加上歷練快滿了。"""
+    s, c, p = ctx.state, ctx.content, ctx.state.player
+    w = s.world
+    on: list[str] = []
+    # 截殺自保：過了截殺的新手期（而且投靠了一方，散人只有被通緝才截得到），或第一次被人截殺過
+    if want("h_raid_guard") and c.config.raid.enabled and not w.ended and c.scenario.factions and (
+            name_key(p.name) in w.raided or (p.faction is not None and not roster.raid_newbie(s, c))):
+        on.append("h_raid_guard")
+    if want("h_checkin") and services.checkin_on(c, w) and len(p.checkin_days) >= 2:  # 第二天又來：簽到是天天的事
+        on.append("h_checkin")
+    if want("h_mall") and c.config.mall.enabled and p.member.level >= SETTLED_LEVEL:
+        on.append("h_mall")
+    # 形象：上過一次擂台（看過自己那副模樣）；形象開著＝商城開著而且有形象可賣（looks.rules.on 同一條；包不能 import 包）
+    if want("h_looks") and c.config.mall.enabled and c.looks and any(r.kind == "arena" for r in s.battles):
+        on.append("h_looks")
+    if want("h_seal") and seal_base.on(c) and seal_base.key(p.name) in seal_base.holders(ctx.world.seal_state().registry):
+        on.append("h_seal")
+    # 宴客：人在擺著的宴席那裡（同 feast.rules.is_open；包不能 import 包）
+    if want("h_feast") and any(not f.settled and f.start <= w.time < f.end and f.place == p.location for f in w.feasts):
+        on.append("h_feast")
+    if want("h_chuangong") and ctx._chuangong_ready():
+        on.append("h_chuangong")
+    if want("h_mount") and mounts.on(c) and (p.mount is not None or equipment.in_slot(p, "mount")):
+        on.append("h_mount")
+    if want("h_treasure") and treasures.on(c) and (p.treasure is not None or equipment.in_slot(p, "treasure")):
+        on.append("h_treasure")
+    if want("h_place") and place_state.on(c) and place_state.kind_at(w, c, p.location) != place_state.PEACE:
+        on.append("h_place")
+    # 戰記：打完一場決戰或奪璽單挑（只有這兩種有戰記）
+    if want("h_tale") and any(r.kind in ("showdown", "seal") for r in s.battles):
+        on.append("h_tale")
+    # 歷練快滿了（五項屬性的季）：這一季從事件得來的屬性到 event_hint_at（到頂之前說一次，再磨下去長進有限）
+    if want("h_lilian") and attrset.on(c, w) and attrset.event_total(s) >= c.config.attributes.v2.event_hint_at:
+        on.append("h_lilian")
     return on
 
 

@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 from conftest import real_content
+from tianxia import attrset
 from tianxia.engine import Game
 from tianxia.models import Content
 from tianxia.sqlite_world import open_world
@@ -25,12 +26,15 @@ def jianfa_rules(content: Content, **flags: bool) -> Content:
         if not hasattr(cfg, part):
             raise AttributeError(f"JianfaRules 沒有子開關 {part}")
         setattr(cfg, part, on)
+    if flags.get("stat_milestones"):  # 配點五段是舊的五屬性（每點加倍）：五項屬性的季沒有配點五段，測它照舊屬性
+        content.config.attributes.v2.enabled = False
     return content
 
 
 def no_jianfa(content: Content) -> Content:
     """減法季之前的規則（Config.jianfa 關著）：正式內容的 season21、week7 是開的，測舊規則的測試在 helper 裡叫它；回傳同一份內容。"""
     content.config.jianfa.enabled = False
+    content.config.attributes.v2.enabled = False  # 減法季之前的規則也是舊的五屬性（五項屬性 2026-11-05 起在 week7、season21 打開）
     return content
 
 
@@ -53,9 +57,12 @@ def _new(content: Content, name: str, world=None) -> Game:
     return game
 
 
-def jianfa_game(profile: str = "season21", name: str = "沈浪", world=None, **flags: bool) -> Game:
-    """正式內容、開季時就蓋了減法季的章的一局；flags 是子開關（見 jianfa_rules）。"""
-    return _new(jianfa_rules(real_content(profile), **flags), name, world)
+def jianfa_game(profile: str = "season21", name: str = "沈浪", world=None, v2: bool = True, **flags: bool) -> Game:
+    """正式內容、開季時就蓋了減法季的章的一局；flags 是子開關（見 jianfa_rules）。v2=False：五項屬性關掉（測舊的五屬性本身）。"""
+    content = jianfa_rules(real_content(profile), **flags)
+    if not v2:
+        content.config.attributes.v2.enabled = False
+    return _new(content, name, world)
 
 
 def plain_game(profile: str = "season21", name: str = "沈浪", world=None) -> Game:
@@ -75,4 +82,14 @@ def ready(game: Game, side: str | None = None, loc: str | None = None, level: in
     if level is not None:
         p.member.level, p.member.exp = level, 0
     p.stamina = float(c.config.stamina_max)
+    past_prep(game)
+    return game
+
+
+def past_prep(game: Game) -> Game:
+    """開季準備卡過了（企劃者 2026-11-05）：五項屬性的季還沒挑配比的照預設那一套（直接寫存檔，同 ready 的其他幾格）；
+    測開季準備卡本身的把 growth_preset 設回 None。"""
+    p, c = game.state.player, game.content
+    if attrset.on(c, game.state.world) and p.growth_preset is None:
+        p.growth_preset = c.config.attributes.v2.default_preset
     return game

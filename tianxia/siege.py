@@ -24,8 +24,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import atlas, battle_instance, chiefs, conquest, territory
-from .battle_instance import GUARD, Commander, SiegeInfo
+from . import atlas, chiefs, conquest, territory
+from .core import battle_base as battle_instance
+from .core.battle_base import GUARD, Commander, SiegeInfo
 from .models import BattleDef, Content
 from .state import DayNote, GameState, Rumor, SiegeSlot, WorldState
 

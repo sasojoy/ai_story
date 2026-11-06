@@ -20,7 +20,8 @@ _deliver_seal_results（決戰收場的 _seal_settle 改發事件 battle_end：c
 """
 from __future__ import annotations
 
-from tianxia import allied, battle_instance, siege, territory, timetable  # 共用規則層（豪強依附、戰鬥規則核心、攻城、地盤、時刻表）
+from tianxia import allied, siege, territory, timetable  # 共用規則層（豪強依附、攻城、地盤、時刻表）
+from . import instance as battle_instance  # 這一包的回合規則（第 54 批搬進來）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章；照 engine 的叫法）
 from tianxia.core import seal_base  # 核心本體（玉璽「讀」的那一小半：天命之爭、保底收場、天命未定那一句；全部拆包第 27 批）
 from tianxia.models import BattleDef

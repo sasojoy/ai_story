@@ -69,6 +69,7 @@ def _own_ids(feature, game) -> list[str]:
     ids = []
     for _ in _stages(feature, game):
         ids += [o.id for o in feature.options(game)] + [o.id for o in (feature.menu(game) or [])]
+        ids += [o.id for o in (feature.prep(game) or [])]  # 開季準備卡那一步（prep；None 是這一包沒有要在卡上給的）
         ids += [o.id for shop in feature.shops() if shop.inside(game) for o in shop.menu(game)]
     return ids
 
@@ -252,6 +253,23 @@ def test_a_closed_package_gives_nothing(feature, monkeypatch):
         assert game.choose(option_id) == ["（此刻無法這麼做。）"]
 
 
+@pytest.mark.parametrize("feature", [f for f in FEATURES if type(f).prep is not features_core.Feature.prep], ids=lambda f: f.name)
+def test_a_closed_package_gives_nothing_on_the_prep_card(feature, monkeypatch):
+    """開季準備卡那一步（prep）：要在「它給得出東西」的那一種局面當場關才驗得到。上一條擺到最後一種局面才關，傳承的候選
+    那時已經封掉，開著也是 None。沒有一種局面給得出東西，就是局面檔沒擺到，一樣算紅。"""
+    game = _game()
+    reached = 0
+    for _ in _stages(feature, game):
+        if not feature.prep(game):
+            continue
+        reached += 1
+        assert any(_starts(o.id, feature) for o in features_core.prep(game) or [])
+        with monkeypatch.context() as closed:
+            closed.setattr(type(feature), "enabled", lambda self, ctx: False)
+            assert features_core.prep(game) is None
+    assert reached
+
+
 def _dirty(annotation, default):
     """換季前把欄位擺成一個跟預設不一樣的值。"""
     origin = typing.get_origin(annotation)
@@ -299,6 +317,8 @@ def test_dirty_moves_every_kind_of_field_off_its_default(field):
 def test_a_new_season_keeps_only_what_the_package_carries(feature):
     c = real_content("week7")
     c.config.auto_open_first_season = True
+    # 傳承（week7 2026-11-05 起打開）換季那一刻會結算、改寫帶著的那一份：這裡只驗「帶不帶」，結算本身在 features/legacy/tests
+    c.config.legacy.enabled = False
     world = open_world()
     game = Game.new(c, "換季客", rng=random.Random(0), world=world)
     game.skip_tutorial()
@@ -342,7 +362,9 @@ def test_the_core_and_the_packages_fill_every_world_slot_exactly_once():
                       ("life", "feast"): "feast",  # core_world2（全部拆包第 40 批）
                       # 全部拆包第 27 批：玉璽包登記五格（原本核心代叫 world._MUSTER_CORE、sqlite_world 的 _open_core、_next_core、_RETIRE_CORE 那幾格）
                       ("muster", "seal"): "seal", ("open", "seal.cache"): "seal", ("next", "seal.mandate"): "seal",
-                      ("next", "seal.cache"): "seal", ("retire", "seal"): "seal"}
+                      ("next", "seal.cache"): "seal", ("retire", "seal"): "seal",
+                      # 全部拆包第 45 批：懸賞榜包登記四格（原本核心代叫 world._STEP_CORE、_WEEK_CORE、_DAY_CORE、_START_CORE 那幾格）
+                      ("step", "bounties"): "bounties", ("week", "bounties"): "bounties", ("day", "bounties"): "bounties", ("start", "bounties"): "bounties"}
     assert set(core) == set(features_core.WORLD_ORDER)
     for at, order in features_core.WORLD_ORDER.items():
         own = set(features_core.world_hooks(at))

@@ -365,8 +365,8 @@ def test_the_admin_page_shows_now_values_and_greys_what_cannot_be_done(client):
     assert f'{first["label"]}（{value}）' in page and f'id="ad-value" type="number" value="{value}"' in page  # 定戰況先填現在的值
     assert 'data-op="cancel_battle" disabled' in page and "沒有在打的決戰" in page  # 沒在打：取消決戰灰掉
     assert 'data-act="ad-find"' in page and 'data-act="ad-gen"' in page  # 重設密碼：找帳號、產生臨時密碼
-    for title in ("賽季與時鐘", "決戰與時刻表", "大勢與事件", "玩家與帳號"):
-        assert f'<span class="ad-sec-title">{title}</span>' in page, title
+    for key, title in (("season", "賽季與時鐘"), ("battle", "決戰與時刻表"), ("trend", "大勢與事件"), ("player", "玩家與帳號")):
+        assert f'data-act="ad-tab" data-tab="{key}">{title}</button>' in page, title  # 介面重整：一塊一個分頁籤
 
 
 RESET = """return (async () => {

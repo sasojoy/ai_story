@@ -6,6 +6,7 @@ from unittest import mock
 
 import pytest
 
+from bounty_ctx import bounty_ctx
 from tianxia import bounties, companion_agent, figure_life, parley, relations, team
 from tianxia.companion_agent import CompanionTurn
 from tianxia.engine import PLAN_OPTION, ROAD_SAY
@@ -123,7 +124,7 @@ def test_doing_a_terms_commission_counts_as_kept(talking):
     _say(talking, _turn(ask="spar", willing=0, condition="scout:lake"), dice=100)
     talking.choose("talk:terms:yes")
     task = s.player.letters[-1].task
-    bounties._complete_commission(s, c, task)
+    bounties._complete_commission(bounty_ctx(s, c), task)
     record = s.player.parley_records["mate"]
     assert (record.promised, record.kept) == (1, 1) and s.player.parley_owed["mate"] == "spar"
 
@@ -148,7 +149,7 @@ def test_a_worried_figure_asks_first_and_the_ask_becomes_a_commission(on, game):
     p = game.state.player
     assert msgs[0].startswith("你接下了韓鐵的請託：替他打探湖邊") and p.parley_debts["mate"].kind == "plea"
     task = p.letters[-1].task
-    done = bounties._complete_commission(game.state, game.content, task)
+    done = bounties._complete_commission(game, task)
     assert "下回見到韓鐵，他會兌現答應你的事。" in done
     assert p.parley_owed["mate"] == "spar" and "mate" not in p.parley_debts and p.parley_records["mate"].kept == 1
 

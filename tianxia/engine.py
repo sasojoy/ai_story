@@ -15,11 +15,12 @@ from typing import TYPE_CHECKING, Any
 
 from . import arts as arts_mod
 # （cultivation：破境卡 ascend 全部拆包第 23 批搬進修練包，engine 不再用，拿掉）
+from . import attrset  # 五項屬性（屬性與跨季架構 v2 第三節）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
-    allied, armor, atlas, battle_instance, battlelog, bounties, calendar, clinic, conquest, create, divine, economy, encounter, equipment,
-    fight_llm, figures, forge_secrets, gender, howto, insight_fx, insights, journal, library, martial_arts, plans,
-    materials, mounts, naming, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal_acts, seal_duel, seats, secret_recipes, sensing,
+    allied, armor, atlas, battlelog, calendar, clinic, conquest, create, divine, economy, encounter, equipment,
+    fight_llm, figures, forge_secrets, gender, howto, insight_fx, insights, journal, library, martial_arts, place_state, plans,
+    materials, mounts, naming, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal_acts, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skillview,
     sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, zh,
 )
@@ -29,7 +30,6 @@ from . import epiphany  # 特殊頓悟（登記一條線的鉤子；企劃者 20
 from . import tiers  # 事件分級：場景卡上那一行「州郡大事」「天下大事」
 from . import outing as outing_rules  # 走一趟（企劃者 2026-10-29～30）：探索一次走一、三、五段
 from . import growth  # 減法季批 2：三道閘、屬性五段的純規則（開關走 rules.jianfa；探索一顆搬進了探索包）
-from . import wanted as _wanted_card  # noqa: F401  通緝登記進玩家卡的動作表（social.ACTIONS）
 from . import speech
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from . import tavern as tavern_rules  # 酒肆（企劃者 2026-10-18）；叫 tavern_rules：跟其他 *_rules 一樣避開區域變數
@@ -53,6 +53,8 @@ from . import training
 from .guide import note_action
 from .features.guide import actions as guide_actions
 from .journal import LOG_BREAK, Draft
+from .core import bounty_base  # 懸賞榜「別人讀」的那一半（全部拆包第 45 批：收店、榜的入口、投靠那一下作廢、翻頁不寫紀錄、第 2 週才開）
+from .features.bounties import actions as bounties_actions  # 過渡：Game 上懸賞榜的一行委派（全部拆包第 45 批）
 from .features.map import actions as map_actions  # 輿圖：全部拆包第 49 批（13 個一行委派：搬的 11 個方法＋探索包問的 _map_open_places、_map_mostly_here）
 from .martial_arts import QUALITIES  # （cultivation：is_renamed 跟著 _deliver_renames 搬進修練包，拿掉）
 from .models import (
@@ -73,6 +75,7 @@ from .sqlite_world import open_world
 from .wallet import Wallet
 from .core import annal_base as annals  # 行狀記一筆（第 29 批之二）
 from .core import features as features_core  # 核心照 FEATURES 問每一包（開發規範手冊 3.3）
+from .core import battle_base as battle_instance  # battle（全部拆包第 54 批）：決戰的資料型別與判定（核心本體）；規則那一半在決戰包，Game 上沒有方法讀它
 from .core import seal_base  # seal（全部拆包第 27 批）：管理者「定結果」替天命之爭定天命、江湖史七格讀玉璽「讀」的那一小半（核心本體）
 from .core.option import IDLE_MARK, Option  # 選單上的一顆（搬進核心：功能包要做選項）；閒著的選單一定有的那一顆（走一趟要認它）
 from .core.services import NO_SUCH_PLAYER, PAUSED_TEXT, WalletService, drill_share, wallet_on  # 共用的字與小函式、錢包服務（3.10）
@@ -143,10 +146,11 @@ from .features.socialize import menus as socialize_menus  # 過渡：同上（�
 from .features.socialize import view as socialize_view  # 過渡：同上（見不見得到、次數、交友會做什麼）
 from .features.craft import actions as craft_actions  # 過渡：Game 上煉製頁開爐與自創的 16 個一行委派（全部拆包第 44 批）
 # seal（全部拆包第 27 批）：Game 上玉璽碎片季流程的 11 個一行委派（核心原位、殼的 ADMIN_ACTIONS、決戰包經 ctx、測試與量表腳本叫的）。
-# 頂端那一串的 seal 挪到這裡、改叫 seal_rules（舊名成了指到玉璽包的別名：還沒搬的第 28 批方法讀它）；figure_life、fusion 第 38 批之後 engine 裡沒人用，拿掉
-from . import seal as seal_rules  # 叫 seal_rules 同 prologue_rules、tavern_rules：戰力快照 _battle_power、_battle_scores、_spar_power 的參數也叫 seal
+# 第 28 批（玉璽二）：碎片卡、獨門行動、奪璽單挑、管理者六個也搬進包（Game 留 22 個一行委派）；頂端的 seal_rules 與 seal_duel 沒人用了，拿掉
 from .features.seal import actions as seal_actions
 from .features.seal import admin as seal_admin
+from .features.seal import card as seal_card  # 過渡：Game 上碎片卡與獨門行動的一行委派（第 28 批）
+from .features.seal import duel_actions as seal_duel_actions  # 過渡：Game 上奪璽單挑的一行委派（第 28 批）
 # smithy（全部拆包第 41 批）：Game 上鐵匠鋪的 12 個一行委派（server、假人、測試與核心原位的選單叫的）
 from .features.smithy import shelf_actions as smithy_shelf
 from .features.smithy import forge_actions as smithy_forge
@@ -199,7 +203,7 @@ from .world import (
     _season_vehicle, advance_world_state, check_thresholds, end_season, evaluate_ending, fire_by_id,
     resume_season_clock, settle_season_start, start_pending_battle,
 )
-from .world_state import SealDuel, SealSide, WorldStateStore, season_length_days
+from .world_state import WorldStateStore, season_length_days
 # core-events：事件檢定是核心本體（tianxia/core/event_check.py，全部拆包第 16 批）。排在上面的 import 都做完之後：那一份 import 的模組這時都已經
 # 載入，載入的先後一個都不變；模組層的四個名字照名字拿回來（server、假人、測試 `from tianxia.engine import FREE_TEXT_OPTION` 照舊）
 from .core import event_check  # 事件檢定的本體（Game 上留一行委派）
@@ -298,6 +302,9 @@ class Refused(list):
 
 # 賽季籌備中的 PREPARING_TEXT、PREPARING_REFUSAL（全部拆包第 24 批）與裝飾器 _not_while_preparing（第 23 批）搬進核心的共用的字與小函式
 # （tianxia/core/services.py）：上面 import 回來，`from tianxia.engine import PREPARING_REFUSAL` 照舊拿得到
+GROWTH_PREFIX = "growth:"  # 開季準備卡上挑成長配比的鈕（growth:<配比>；growth:custom 只打開自己配的那一塊）
+GROWTH_LOCKED = "這一季的成長配比已經定了，下一季開季再挑。"
+GROWTH_CUSTOM_ASK = "（在卡上自己配五項，配好按「定下來」。）"
 # 測試期間一鍵補滿體力（Config.beta_free_refill，企劃者 2026-10-07）。以下四句與鈕上的字（Config.beta_free_refill_label）全是新寫的，待 joy 潤：
 REFILL_TITLE = "補滿體力"  # 江湖紀錄那一則的標題（joy 的丹是「服下回體丹」）
 REFILL_LINE = "你運了口氣，體力回滿了。"  # 補滿成功時寫進紀錄的那一句
@@ -323,17 +330,16 @@ SHOP_ACTS = frozenset({"smith", "bounties", "market", "arena"})  # 初入江湖�
 # （＝ features/bout/arena_rules.BACK_ID，全部拆包第 12 批）
 LEAVE_SHOP_IDS = frozenset({"bounty:back", "smith:back", mounts.BACK, "arena:back", "tavern:back"})
 # （叛投 after 位置的 leave_behind 那一格：全部拆包第 35 批改由陣營包登記〔FactionFeature.defection()〕，原本核心代叫的 _DEFECT_AFTER_CORE 拿掉；食言〔parley〕是人物情誼包登記的）
-# core_eventbus（全部拆包第 26 批）：事件的格由核心代叫的那幾格（還沒成包的舊模組）。每一格在叫的那一下才照模組屬性找函式
-# （bounties.on_win…：測試與量表腳本換掉的照樣打得到）。BUS_ORDER 在 core/features.py；契約測試讀這一份。
+# core_eventbus（全部拆包第 26 批）：事件的格由核心代叫的那幾格（還沒成包的舊模組）。BUS_ORDER 在 core/features.py；契約測試讀這一份。
+# 懸賞的五格（win、outing、explore、arrive、raid_win 的 bounties）與第 45 批開的 aid 全部拆包第 45 批由懸賞榜包登記（BountiesFeature.bus()），每一列都空了留 {}
 # 玉璽的兩格（outing、battle_end 的 seal）全部拆包第 27 批改由玉璽包登記（SealFeature.bus()）；battle_end 那一列空了留 {}（契約鎖 keys 跟 BUS_ORDER 一樣）
 _BUS_CORE: dict[str, dict[str, Callable[..., Any]]] = {
-    "win": {"bounties": lambda ctx, loc_id, squad_id: bounties.on_win(ctx.state, ctx.content, ctx.world, loc_id, squad_id)},  # 過渡：待搬（第 45 批：懸賞榜包登記）
-    "outing": {
-        "bounties": lambda ctx, loc_id: bounties.on_explore(ctx.state, ctx.content, ctx.world, loc_id),  # 過渡：待搬（第 45 批）
-    },
-    "explore": {"bounties": lambda ctx, loc_id: bounties.on_explore(ctx.state, ctx.content, ctx.world, loc_id)},  # 過渡：待搬（第 45 批）
-    "arrive": {"bounties": lambda ctx, loc_id: bounties.on_arrive(ctx.state, ctx.content, ctx.world, loc_id)},  # 過渡：待搬（第 45 批）；convoy 那一格軍情包登記
-    "raid_win": {"bounties": lambda ctx, target: bounties.on_raid_win(ctx.state, ctx.content, ctx.world, target)},  # 過渡：待搬（第 45 批）
+    "win": {},
+    "outing": {},
+    "explore": {},
+    "arrive": {},
+    "raid_win": {},
+    "aid": {},
     "battle_end": {},
 }
 
@@ -495,6 +501,9 @@ class Game:
             prologue_rules.skip_onboarding(game.state, content)  # 假人、機器人、腳本：初入江湖是給網頁上的真人看的
             if prologue_rules.has(content):
                 game.state.player.stamina = float(content.config.stamina_max)
+            if attrset.on(content, game.state.world) and game.state.player.growth_preset is None:
+                # 序章算走過：五項屬性的季序章那一步就是挑配比，照預設那一套（開季準備卡是給網頁上建的真人與換季的人看的）
+                game.state.player.growth_preset = content.config.attributes.v2.default_preset
         p = game.state.player
         p.visited.add(p.location)
         gift = content.config.beta_gift and content.config.beta_gift_stamina_pills > 0
@@ -644,6 +653,7 @@ class Game:
         # 長篇奇事（企劃者 2026-10-27）：紀念物一輩子帶著；跨季的旗標（例：隆中藏書）在新角色身上再立一次
         fresh.player.keepsakes, fresh.player.lasting = list(old.player.keepsakes), list(old.player.lasting)
         fresh.player.flags |= set(old.player.lasting)
+        fresh.player.legacy = old.player.legacy  # 傳承（features/legacy）：照帶不看開關（同出陣那兩格）；結算在包的 on_season_start
         fresh.player.season_number = season_number
         self.state = fresh
         self.state.world = self.world.get_season()  # 開場那一則記此刻的季時間（FB-052：以前記成新存檔的 0）
@@ -689,8 +699,8 @@ class Game:
         lost_place = p.location not in c.locations
         if lost_place:
             p.location = c.scenario.start_location
-        if p.picking_bounty and not bounties.board_here(s, c):
-            bounties.close_board(p)  # 懸賞榜關了（Config.bounties.enabled、劇本沒有陣營）、人不在城鎮了：收起懸賞榜，挑到哪一張與榜吏那一句一併清掉
+        if p.picking_bounty and not bounty_base.board_here(s, c):
+            bounty_base.close_board(p)  # 懸賞榜關了（Config.bounties.enabled、劇本沒有陣營）、人不在城鎮了：收起懸賞榜，挑到哪一張與榜吏那一句一併清掉
         if p.picking_smith and not equipment.smith_open(s, c):
             equipment.close_smith(p)  # 武器、防具都關了、人不在城鎮了：收起鐵匠鋪，打造的單子與停在哪一頁一起清
         if p.smith_draft is not None and (
@@ -897,14 +907,7 @@ class Game:
         self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
         self._auto_checkin()  # 每日簽到自動領（Joy 2026-10-24 挑江湖頁乙案：簽到不放鈕）；要挑四階的日子留給玩家挑
         self._settle_partings()  # 歷史武將同行：從你身邊回江湖的人，情誼減半（9.6；補戰報時已經算過的不再算）
-        refunds = bounties.deliver_refunds(self.state, self.content)  # 掛的通緝沒人揭成：押金退回
-        if refunds:
-            self._write(bounties.BOARD, refunds)
-            self._save_season()
-        lapses = bounties.deliver_lapses(self.state, self.content)  # 揭了的被別人交滿名額、或過了期限：拿掉名字、補一句（FB-121）
-        if lapses:
-            self._write(bounties.BOARD, lapses)
-            self._save_season()
+        self._bounty_deliver()  # 掛的通緝沒人揭成：押金退回；揭了的被別人交滿名額、或過了期限：拿掉名字、補一句（FB-121）
         settled = self._settle_plots()  # 不在線時收場的密謀，回來第一次同步就結算（正式版乙二）
         if settled:
             self._write("密謀", settled)
@@ -951,10 +954,12 @@ class Game:
             return
         if self.now - away_from < c.config.away_hours * HOUR:
             return
-        lines, total = rumor_view.away_lines(s, c, since, self.stamp)
+        gazette = rumor_view.gazette_on(c)  # 世界活起來第二批：上線邸報（你去過的地方、你認識的人、誰提起了你）；關著照舊那一長串
+        lines, total = (rumor_view.gazette_lines if gazette else rumor_view.away_lines)(s, c, since, self.stamp)
         if lines:
             tag = rumor_view.AWAY_TAG.format(n=total)
-            journal.add_entry(s, JournalEntry(time=s.world.time, title=journal.AWAY, tag=tag, lines=lines))
+            title = journal.GAZETTE if gazette else journal.AWAY
+            journal.add_entry(s, JournalEntry(time=s.world.time, title=title, tag=tag, lines=lines))
 
     def advance(self, seconds: float) -> list[str]:
         """玩家主動「等待」固定一段遊戲時間（快轉按鈕）：進行中時，直接在 self.state.world
@@ -1001,7 +1006,7 @@ class Game:
         """第 2 週才開的功能裡這一季真的有的（減法季 6.6；week_unlock.WEEK2 的順序）：擂台、懸賞榜。
         紀錄那一行、本週卡那一句照它列；一樣都沒有是空的。"""
         s, c = self.state, self.content
-        have = {"arena": arena_ranks.on(c), "bounties": bounties.active(s, c)}
+        have = {"arena": arena_ranks.on(c), "bounties": bounty_base.active(s, c)}
         return [name for key, name in week_unlock.WEEK2.items() if have.get(key)]
 
     def _week_unlock_tick(self) -> None:
@@ -1024,17 +1029,14 @@ class Game:
         self.own_turn_checks()
 
     def own_turn_checks(self) -> None:
-        """本人這一輪（mark_seen；假人程式自己那一輪也叫）：系統通緝這一週還沒掛就掛（bounties.post_auto，名聲 4.6、5.4），被掛的那幾句
+        """本人這一輪（mark_seen；假人程式自己那一輪也叫）：系統通緝這一週還沒掛就掛（懸賞榜包 rules.post_auto，名聲 4.6、5.4），被掛的那幾句
         寫進一則「懸賞」紀錄。結伴同行的人、管理者查玩家、玩家卡動到別人建的 Game 都不叫、不掛。
         最前面問功能包（on_own_turn，接縫掛鉤，第 11 批）：商城包的封測元寶在這裡發——錢包第一次進來的那一下，真人假人一樣；暫停中照發（帳跟世界無關）。"""
         self.own_turn = True
         features_core.on_own_turn(self)
         if self.world.paused_at() is not None:  # 賽季時鐘暫停中世界不變（線上架構 8.3）：mark_seen 在 server.act 的暫停擋之前
             return
-        posted = bounties.post_auto(self.state, self.content)
-        if posted:
-            self._write(bounties.BOARD, posted)
-            self._save_season()
+        self._bounty_post_auto()
 
     def _copy_heirloom(self) -> None:
         """抄本照全服登記重抄（玉璽包 actions；sync 與 _drop_stale_references 原位叫：碎片關著時也要叫、把抄本清掉）。"""
@@ -1102,6 +1104,9 @@ class Game:
             return [Option(id="season:preparing", label=PREPARING_TEXT, enabled=False)]
         if s.world.ended:  # 休季：列傳為終點開著、手上有列傳的票時多幾顆用票的鈕（減法季批 7b；關著、沒票一顆不多）
             return [Option(id="season:resting", label="休季中，等待管理者開啟下一季", enabled=False)] + self._zhuan_options()
+        prep = self._season_prep()  # 開季準備（企劃者 2026-11-05）：成長配比、識海，做完才能做別的事；排在事件（開局三選一）前面
+        if prep is not None:
+            return prep
         if s.pending_event:
             event = c.events[s.pending_event]
             opts = []
@@ -1113,7 +1118,7 @@ class Game:
                 if ch.needs is not None:  # 名聲 5.3：俠寇選項——開關關著不出現；稱號不夠灰掉寫要什麼；按得下去照樣標俠寇（5B）
                     if not renown.on(c, "virtue_choices"):
                         continue
-                    ok = renown.meets(s, c, ch.needs.path, ch.needs.tier)
+                    ok = renown.open_to(s, c, "choices", ch.needs.path, ch.needs.tier)  # 傳承的門路也開得了第一段
                     opt.enabled, opt.tag = ok, ch.needs.path
                     opt.note = "" if ok else renown.needs_line(s, ch.needs.path, ch.needs.tier)
                 opts.append(opt)
@@ -1236,9 +1241,9 @@ class Game:
         opts += self._omen_options(loc.id)  # 機緣：交東西、天時地利（正式版乙一）、伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有（軍情，第 34 批）
         opts += self._errand_options()  # 託付（減法季批 6）：人在託付的地點才有那一顆；關著是空的
         opts += self._invite_options()  # 玩家之間的邀請（切磋）：別人發給你的、你發出去還在等的
-        shown = bounties.visible(s, c) if bounties.board_here(s, c) else []
+        shown = bounty_base.visible(s, c) if bounty_base.board_here(s, c) else []
         if shown:  # 懸賞榜：城鎮類的地點、有看得到的單才有（FB-121：張數只算看得到的，0 張不畫）；只是打開第二層選單，不花體力
-            opts.append(Option(id="act:bounties", label=f"{bounties.BOARD}（{len(shown)} 張）"))
+            opts.append(Option(id="act:bounties", label=f"{bounty_base.BOARD}（{len(shown)} 張）"))
         if equipment.smith_open(s, c):  # 鐵匠鋪（兵器設計 4.1；裝備四欄 4.6：武器或防具開著就開門）：只是打開第二層選單，不花體力
             opts.append(Option(id="act:smith", label=weapons.SMITH))
         if mounts.market_here(s, c):  # 馬市（裝備四欄 5.5，帶「馬市」標籤的城鎮）：只是打開第二層選單，不花體力
@@ -1336,6 +1341,9 @@ class Game:
     def set_move_mode(self, mode: str) -> None:
         """主畫面的「走法」切換（本體在 tianxia/features/travel/menu.py；留一行委派給 server、腳本與測試）。"""
         travel_menu.set_move_mode(self, mode)
+
+    def _chuangong_ready(self) -> bool:
+        return cultivation_actions.chuangong_ready(self)
 
     def _recruit_target(self) -> str | None:
         return companions_actions.recruit_target(self)
@@ -1706,7 +1714,7 @@ class Game:
         if option is None and option_id.startswith("bounty:"):
             # FB-162：懸賞選項已經不在選單上（兩個分頁搶同一張，慢的那一頁）：回這一步為什麼不成的那一句，不寫江湖紀錄；
             # 回傳值是 Refused，伺服器照它把同一句傳去網頁跳提示（server.api_choose）
-            return Refused(self._log([bounties.stale_line(self.state, self.content, self.world, option_id.partition(":")[2])]))
+            return Refused(self._log(self._bounty_stale(option_id.partition(":")[2])))
         if (option is None or not option.enabled) and option_id.startswith("market:"):
             # FB-195：馬市的選項已經不在選單上或灰掉了（兩個分頁搶，慢的那一頁的鈕還亮著）：同懸賞榜 FB-162，回為什麼不成的那一句
             # （Refused，伺服器傳去網頁跳提示），馬販那一句換成那個原因；不寫江湖紀錄
@@ -1729,6 +1737,9 @@ class Game:
                 return Refused([f"（{problem}。）"])
         if option is None or not option.enabled:
             return self._log([self._fight_gone(fight) if fight is not None else "（此刻無法這麼做。）"])
+        if option_id.startswith(GROWTH_PREFIX):  # 開季準備卡挑配比：pick_growth 自己寫紀錄（自己配要五項的數字，走 /api/growth）
+            preset = option_id.removeprefix(GROWTH_PREFIX)
+            return self._log([GROWTH_CUSTOM_ASK]) if preset == attrset.CUSTOM else self.pick_growth(preset)
         faction_before = self.state.player.faction  # 這一下才投靠的人才開始入伍段（見 _begin_enlistment）
         self.state.battle_card = None
         self.state.player.guide_done = []  # 對話框上一次完成的那幾行，下一次行動就清掉
@@ -1774,8 +1785,7 @@ class Game:
             # （opp：機緣、fs：伏筆的最後一步，全部拆包第 34 批換成軍情包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             # （sense：有所感選做法、順其自然，全部拆包第 24 批換成有所感包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             # （invite：邀請的答應、婉拒、收回，全部拆包第 37 批換成玩家互動包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
-            elif kind == "bounty":
-                msgs = self._bounty(arg)
+            # （bounty：懸賞榜第二、三層選單上的每一顆，全部拆包第 45 批換成懸賞榜包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉；FB-162 被搶的那一句仍在上面 choose 前段）
             # （smith：鐵匠鋪第二層選單上的每一顆，全部拆包第 41 批換成鐵匠鋪包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             # （market：馬市第二層選單上的每一顆，全部拆包第 42 批換成裝備包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉；FB-195 被搶的那一句仍在上面 choose 前段）
             # （donate：軍需官那一串的選擇；dadian：打點那一間店的離開。全部拆包第 43 批換成銀兩出口包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
@@ -1796,7 +1806,7 @@ class Game:
             self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
             self._greet_rejoin(faction_before)  # 入伍段早就走完的人再投靠：引薦人打個招呼（新手引導計畫三）
             if faction_before is None and self.state.player.faction is not None:  # 這一下才投靠（確認，或拜入陣營名下的門派）：手上新陣營接不了的懸賞作廢、說一聲（FB-151）；叛投在 defection.defect 裡做
-                msgs += bounties.drop_stranded(self.state, self.content, self._side())
+                msgs += bounty_base.drop_stranded(self.state, self.content, self._side())
             msgs += self._hear_after_stamina(stamina)
             if kind == "choice":  # 選了事件的選項：序章的遇險、拜師、四景（新手引導計畫一）
                 msgs += self._guide(self._note_action("choice"))
@@ -1823,13 +1833,13 @@ class Game:
             # 打造的每一步（挑種類、主料、輔料、開爐、上一步、不打了）併成一則「打造」：一爐一則，不是一步一則。
             # 打開單子那一步（"forge"）不併、另起一則：_mergeable_head 只看最新一則是不是同標題，不然連打兩爐（或打開又不打了）
             # 會全部併進上一爐那一則。懸賞榜：打開榜那一則的標題是「懸賞榜・此地」，每次來都另起一則；挑一件、回到懸賞榜只是翻頁，
-            # 只有那一句回話時不寫紀錄（bounties.is_browse_line）；交出、揭下、放棄、返回各一則（FB-161：交出不再跟挑、回併成一則，
+            # 只有那一句回話時不寫紀錄（bounty_base.is_browse_line）；交出、揭下、放棄、返回各一則（FB-161：交出不再跟挑、回併成一則，
             # 連交幾張時各寫各的得失）
             entry = self._draft.entry(self.state.world.time, msgs)
             # 鐵匠鋪切頁（裝備四欄設計 4.6）只是換一頁：沒有別的事（訊息、數值變化、引導）就不寫紀錄，不然每切一次多一則「鐵匠鋪」
             quiet = kind == "smith" and arg.startswith("page:") and not (entry.lines or entry.changes or entry.guide)
-            quiet = quiet or (kind == "bounty" and arg.partition(":")[0] in bounties.BROWSE_VERBS and not (entry.changes or entry.guide)
-                              and all(bounties.is_browse_line(line) for line in entry.lines))
+            quiet = quiet or (kind == "bounty" and arg.partition(":")[0] in bounty_base.BROWSE_VERBS and not (entry.changes or entry.guide)
+                              and all(bounty_base.is_browse_line(line) for line in entry.lines))
             quiet = quiet or (picked_only and entry.lines in [[reply] for reply in features_core.pick_replies()]
                               and not (entry.changes or entry.guide))
             if not quiet:
@@ -1894,6 +1904,12 @@ class Game:
 
     def figure_view(self, cid: str) -> dict | None:
         return companions_actions.figure_view(self, cid)
+
+    def figures_here_view(self) -> list[dict]:
+        return socialize_menus.figures_here_view(self)
+
+    def talk_view(self) -> dict | None:
+        return companions_talk.talk_view(self)
 
     # ── 託付與勸降（減法季批 6）：本體同上 ────────────
 
@@ -1984,8 +2000,7 @@ class Game:
         # （fs：「作罷」「<這一趟>・<所在>」，全部拆包第 34 批換成軍情包 choose 掛鉤的 Outcome.title，拿掉）
         # （road：折返跟「前往」同一個標題、路上小事寫它自己的名字，全部拆包第 47 批換成移動包 choose 掛鉤的 Outcome.title，拿掉）
         # （opp：機緣的標題，全部拆包第 34 批換成軍情包 choose 掛鉤的 Outcome.title，拿掉）
-        if kind == "bounty":
-            return bounties.BOARD
+        # （bounty：「懸賞榜」，全部拆包第 45 批換成懸賞榜包 choose 掛鉤的 Outcome.title，拿掉）
         # （smith：鐵匠鋪的標題，全部拆包第 41 批換成鐵匠鋪包 choose 掛鉤的 Outcome.title，拿掉）
         # （market：馬市的標題，全部拆包第 42 批換成裝備包 choose 掛鉤的 Outcome.title，拿掉）
         # （donate、dadian 的標題：全部拆包第 43 批換成銀兩出口包 choose 掛鉤的 Outcome.title 與 act 子動詞的 Verb.title，拿掉）
@@ -2022,7 +2037,7 @@ class Game:
             "recruit": f"招募・{here}", "rest": f"調息・{here}", "summons": f"應召・{here}",
             "duty": f"{duty.name if duty else '守勢'}・{here}", "convoy": f"接下糧車・{here}",
             "rank2": f"{action2.name if action2 else '第二階行動'}・{here}",
-            "bounties": f"{bounties.BOARD}・{here}",
+            # （bounties：「懸賞榜・此地」由懸賞榜包的 act 子動詞給，上面 owned 那一行；全部拆包第 45 批）
             # （smith：「鐵匠鋪・此地」由鐵匠鋪包的 act 子動詞給，上面 owned 那一行；全部拆包第 41 批）
             # （market：「馬市・此地」由裝備包的 act 子動詞給，上面 owned 那一行；全部拆包第 42 批）
             # （arena：「擂台・此地」由單挑包的 act 子動詞給，上面 owned 那一行；全部拆包第 12 批）
@@ -2206,6 +2221,13 @@ class Game:
     def plan_view(self) -> dict | None:
         return figure_plan_actions.plan_view(self)
 
+    def place_state_view(self) -> dict | None:
+        """地點會變樣（main.place_state）：此刻所在地的樣子 {kind, name, line}；太平、在路上、關著是 None。"""
+        s = self.state
+        if s.player.journey is not None:
+            return None
+        return place_state.view(s.world, self.content, s.player.location)
+
     def place_deeds_view(self) -> list[dict] | None:
         return figure_plan_actions.place_deeds_view(self)
 
@@ -2268,12 +2290,7 @@ class Game:
             return self._rank_action(action_id)
         if what == "convoy":
             return self._take_convoy()
-        if what == "bounties":
-            p = self.state.player
-            # 打開懸賞榜（見 _bounty_options），不花體力；每次打開都從第二層開始（第三層是替一張求兵挑東西）
-            p.picking_bounty, p.bounty_pick, p.shop_clue = True, None, ""
-            self._shop_say("enter")  # 店面上榜吏那一句（店面獨立介面設計 1.4）
-            return [f"你擠到{bounties.BOARD}前，看上面貼了些什麼。"]
+        # （bounties：打開懸賞榜，全部拆包第 45 批換成懸賞榜包的 act 子動詞〔上面 features_core.act 接走〕，拿掉）
         # （smith：打開鐵匠鋪，全部拆包第 41 批換成鐵匠鋪包的 act 子動詞〔上面 features_core.act 接走〕，拿掉）
         # （market：打開馬市，全部拆包第 42 批換成裝備包的 act 子動詞〔上面 features_core.act 接走〕，拿掉）
         # （act:arena：打開擂台由單挑包的 act 子動詞接走，最上面 features_core.act 那一行；全部拆包第 12 批）
@@ -2531,80 +2548,43 @@ class Game:
     def _audience_options(self) -> list[Option]:
         return socialize_menus.audience_options(self)
 
+    # ── 懸賞榜：本體在 tianxia/features/bounties/（全部拆包第 45 批），這裡留一行委派 ─────
     def _bounty_options(self) -> list[Option]:
-        """懸賞榜的第二層選單（bounties.py）：交得出的求兵每張一顆「交出…」（按了到第三層挑一件；排最前面，當場就能交），
-        手上的每一張一顆「放棄」，榜上其他看得到的每一張一顆「揭下」（揭不了的灰掉、寫為什麼），交不出的求兵收成一行灰掉的，
-        最後是永遠按得下去的「返回」；上面全空（榜開著時單被別人交光）就多一行灰掉的 bounty:empty（FB-156）。都不花體力。列的是 bounties.visible（別的陣營的、自己交過的不列），跟閒著的選單寫的張數一樣
-        （灰掉那一行照它包含幾張算）。bounty_pick 指著一張還交得出的求兵時整份換成第三層（bounties.hand_in_options）；
-        那一張下榜了、交不出了就當它不存在，照第二層畫（懸賞榜設計 4.3、4.4）。"""
-        s, c = self.state, self.content
-        shown = bounties.visible(s, c)
-        picked = next((b for b in shown if b.id == s.player.bounty_pick and b.kind in bounties.GIVE_KINDS), None)
-        items = bounties.fitting(s, c, self.world, picked) if picked is not None else []
-        if items:
-            return bounties.hand_in_options(s, c, self.world, picked, items)
-        mine = {b.id for b in bounties.mine(s, c)}
-        ready, opts, stuck = [], [], []
-        for b in shown:
-            if b.kind in bounties.GIVE_KINDS:  # 求兵不用揭
-                have = bounties.fitting(s, c, self.world, b)
-                if have:
-                    ready.append(Option(id=f"bounty:pick:{b.id}", label=bounties.pick_label(s, c, b, len(have))))
-                else:
-                    stuck.append(b)
-                continue
-            line = (f"{bounties.issuer(c, b)}・{bounties.title(c, b)}：{bounties.how(c, b, self.state)}"
-                    f"（{bounties.reward_text(s, c, b)}；{bounties.due_line(s, c, b)}）")  # 期限與名額（FB-121 第 5 件）
-            if b.id in mine:
-                opts.append(Option(id=f"bounty:drop:{b.id}", label=f"放棄 {line}"))
-                continue
-            problem = bounties.take_problem(s, c, b)
-            opts.append(Option(id=f"bounty:take:{b.id}", label=f"揭下 {line}" + (f"（{problem}）" if problem else ""),
-                               enabled=problem is None))
-        if stuck:
-            kept = {b.id: tail for b in stuck if (tail := bounties.only_original(s, b))}  # 只有神器原品或本命兵器對得上的那幾張照實寫（FB-145）
-            opts.append(Option(id="bounty:none", label=bounties.stuck_label(c, stuck, kept), enabled=False))
-        if not ready and not opts:  # 榜開著的時候，看得到的單被別人交光了：不能只剩「返回」（FB-156）
-            opts.append(Option(id="bounty:empty", label=bounties.BOARD_EMPTY, enabled=False))
-        return ready + opts + [Option(id="bounty:back", label="返回")]
+        return bounties_actions.options(self)
 
-    def _bounty(self, arg: str) -> list[str]:
-        """懸賞榜上的選擇：揭下、放棄、交出…（到第三層挑一件）、回到懸賞榜、交出，或返回（收起懸賞榜）。做完榜還開著，可以接著挑。
-        交出的 id 是「give:懸賞 id:東西 id」：兵器 id「兵:3」帶冒號，懸賞 id（b17）沒有，所以只切一次。"""
-        s, c = self.state, self.content
-        verb, _, rest = arg.partition(":")
-        if verb == "back":
-            bounties.close_board(s.player)
-            return ["你離開了懸賞榜。"]
-        if verb == "take":
-            b = next((x for x in bounties.open_bounties(s, c) if x.id == rest), None)
-            self._shop_after(bounties.take_problem(s, c, b) if b is not None else bounties.GONE, "take", shopview.board_key)  # 1.4
-            return bounties.take(s, c, rest)
-        if verb == "drop":
-            msgs = bounties.drop(s, c, rest)
-            self._shop_say("refused" if msgs == [bounties.NOT_HELD] else "drop")
-            return msgs
-        if verb == "pick":
-            b = next((x for x in s.world.bounties if x.id == rest), None)
-            if b is None:
-                self._shop_say("refused")
-                return [bounties.GONE]
-            s.player.bounty_pick = rest
-            self._shop_say("pick")
-            return [bounties.pick_line(c, b)]
-        if verb == "unpick":
-            s.player.bounty_pick = None
-            return [bounties.UNPICKED]
-        if verb == "give":
-            bounty_id, _, item = rest.partition(":")
-            msgs = bounties.give(s, c, self.world, bounty_id, item)
-            if msgs[0].startswith(bounties.GIVEN_PREFIX):
-                s.player.bounty_pick = None  # 交完回到第二層，可以接著交別張
-                self._shop_say("give")
-            else:
-                self._shop_say("refused")
-            return msgs
-        return ["（此刻無法這麼做。）"]
+    def _bounty(self, arg: str) -> list[str]:  # tests/gear/test_shop2.py 直接叫（同 _smith）
+        return bounties_actions.bounty(self, arg)
+
+    def _bounty_deliver(self) -> None:  # sync 中段（退押金、作廢）
+        bounties_actions.deliver(self)
+
+    def _bounty_post_auto(self) -> None:  # own_turn_checks 暫停那一道之後（系統通緝）
+        bounties_actions.post_auto(self)
+
+    def _bounty_stale(self, arg: str) -> list[str]:  # choose 前段 FB-162（回 Refused，choose_unlisted 回 list，留原位）
+        return bounties_actions.stale(self, arg)
+
+    def _bounty_status(self) -> list[dict]:  # status_data 的懸賞卡
+        return bounties_actions.status(self)
+
+    def _raid_bounty(self, target: str) -> list[str]:  # 查詢服務（截殺、設伏打贏；事件 raid_win 的發布點在包裡）
+        return bounties_actions.raid_bounty(self, target)
+
+    # 人物情誼包回答懸賞榜包（道謝信、守約、兌現；services.py 二、查詢服務 # bounties）
+    def _letter_thank(self, task) -> list[str]:
+        return companions_actions.letter_thank(self, task)
+
+    def _parley_settle_task(self, task_id: str, cid: str | None) -> bool:
+        return companions_parley.settle_task(self, task_id, cid)
+
+    def _parley_keep(self, cid: str, cond: str) -> None:
+        companions_parley.keep(self, cid, cond)
+
+    def _parley_owed_line(self, name: str) -> str:
+        return companions_parley.owed_line(name)
+
+    def _parley_ask_label(self, ask_id: str) -> str:
+        return companions_parley.ask_label(self, ask_id)
 
     def _smith_options(self) -> list[Option]:
         return smithy_shelf.smith_options(self)
@@ -2640,7 +2620,7 @@ class Game:
             return "arena"
         # （坐在擂台邊：單挑包的店面登記，最後那一行 features_core.shop_open；全部拆包第 12 批）
         if p.picking_bounty:
-            return "board" if bounties.board_here(s, c) else None
+            return "board" if bounty_base.board_here(s, c) else None
         if p.picking_smith:
             return "smith" if p.smith_draft is None and equipment.smith_open(s, c) else None
         if p.picking_market:
@@ -2858,6 +2838,9 @@ class Game:
 
     def _battle_role(self) -> str:
         """進場的職位（試玩回饋 2026-10-08）：本人最突出的屬性（battle_instance.role_for）。真人、散人臨時投效、假人都走這裡。"""
+        if attrset.on(self.content, self.state.world):  # 五項屬性的季：照新的五項比（舊的四項有上限曲線，上限不同會偏向悟性）
+            stats = {old: attrset.value(self.state, self.content, new) for old, new in self.content.config.attributes.v2.legacy.items()}
+            return battle_instance.role_for(stats, team.COMBAT_STATS)
         stats = team.member_stats(self.state, self.content, self.world, team.PLAYER)
         return battle_instance.role_for(stats, team.COMBAT_STATS)
 
@@ -2898,6 +2881,9 @@ class Game:
         bare = self._seal_bare()
         if bare is not None:  # 玉璽碎片改版：只有戴著碎片才多這一鍵（沒碎片、改版關著時這一包一個字不變）
             marks["seal_bare"] = bare
+        card = team.pvp_card(self.state, self.content, self.world)
+        if card is not None:  # 五項屬性的季才多這一鍵（奪璽單挑照對手重算）；舊的季一個字不變
+            marks["card"] = card
         return marks
 
     def _seal_bare(self) -> battle_instance.SealBare | None:
@@ -3002,168 +2988,29 @@ class Game:
         """時刻表決戰收場時的玉璽碎片（玉璽包 actions；事件 battle_end 的 seal 那一格直接叫包的，這一行只剩測試叫）。"""
         seal_actions.settle(self, battle, definition, result)
 
-    def _seal_challenge(
-        self, battle, definition: BattleDef, reg, tianji: int, winner: str, margin: str, need: int, held: set[str],
-    ) -> SealDuel | None:
-        """璽動那一場收場：持有者那一方打得怎樣（照璽動那一刻的快照，4.5）；不是大勝就挑挑戰者（4.6）、照 5.3 抓雙方的快照、開一場
-        下戰書的單挑（還沒寫進去，呼叫端的 world.mutate 寫）。挑不出人回 None（懷璽不失、算動過）。"""
-        cfg = self.content.config.seal
-        holder = battle.seal_holder
-        snap = battle.seal_holder_side
-        moved = snap is not None and self.world.faction_of(holder) != battle.seal_holder_faction  # 璽動之後陣營變了：算旁觀、不套過濾
-        side = None if moved else snap
-        tier = seal_rules.tier_for(side, winner, margin)
-        if tier == "大勝" or not winner:
-            return None
-        armies = [f.id for f in definition.factions]
-        foe = winner if side is None else next((f for f in armies if f != side), winner)
-        blocked = None if side is None else battle.seal_holder_faction  # 只在快照陣營沒變時擋「自己人合演轉手」
-        rows = self._seal_challengers(battle, foe, need, holder, blocked, held)
-        if len(battle.participants) < cfg.small_battle:
-            rows += self._seal_spectators(definition, battle, held)
-        shard = reg.shards[battle.seal_shard]
-        name = seal_rules.weighted_pick([(n, m) for n, m, _ in rows], seal_rules.dice(reg.salt, tianji, "seal-duel", battle.record_id),
-                                  cfg.challenger_pool, prefer=shard.former)
-        if name is None:
-            return None
-        challenger = next(s for n, _, s in rows if n == name)
-        me = battle.participants.get(holder)
-        guarded = me is not None and me.acted_rounds >= need  # 護璽：自己出手滿門檻（臨時投效的散人也算，只多這一條，4.5）
-        keeper = seal_duel.side_from_participant(me, battle.seal_holder_faction) if me is not None else self._seal_side_of(holder)
-        cap = min(cfg.cap, cfg.cap * cfg.side_factor.get(tier, 0.0) * (cfg.guard if guarded else 1.0))
-        return seal_duel.open_duel(
-            f"{battle.record_id}:{shard.id}", shard.id, battle.record_id, definition.timetable_event, definition.name, tier, cap,
-            challenger, keeper, self.now, cfg,
-        )
-
     def _seal_challengers(self, battle, side: str, need: int, holder: str, blocked: str | None, held: set[str]) -> list:
-        """挑戰者的候選（4.6）：那一邊（交戰兩軍之一）的參戰者、自己出手滿 need 回合、不是持有者、手上沒有碎片、這一季沒叛投過與
-        不在新手期（加入時的快照）、此刻名冊上的陣營不跟持有者的快照陣營相同（blocked；None 不擋）。回（名號, 戰功, 快照）；不看假人。"""
-        tuning = self.content.config.battle
-        out = []
-        for p in battle.participants.values():
-            if p.faction != side or not seal_rules.challenger_ok(p, need, held, holder):  # 同畫面那一句（hint_names，FB-177）
-                continue
-            now_faction = self.world.faction_of(p.name)
-            if blocked is not None and now_faction == blocked:
-                continue
-            out.append((p.name, battle_instance.merit(tuning, p), seal_duel.side_from_participant(p, now_faction)))
-        return out
+        """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
+        return seal_duel_actions.challengers(self, battle, side, need, holder, blocked, held)
 
     def _seal_spectators(self, definition: BattleDef, battle, held: set[str]) -> list:
-        """小伺服器的退路（PM 癸；計畫「要 PM 定的」第 2 條）：收場那一刻人在決戰的大區、presence_seconds 內同步過、不在路上、名冊上
-        不是交戰兩軍（散人、地方豪強：Joy 2026-10-13 起豪強在決戰跟散人一樣臨時投效）、不是參戰者也不是持有者、不在新手期與序章、這一季沒叛投過、手上沒有碎片的人。戰功當 0；身手照他的存檔算（不存回去）。"""
-        if not hasattr(self.world, "db") or definition.region is None:
-            return []
-        store = CharacterStore(self.world.db)
-        since = self.now - self.content.config.presence_seconds
-        region = definition.region
-        armies = {f.id for f in definition.factions}
-        here = [loc for loc in self.content.locations if (r := atlas.region_of(self.content, loc)) is not None and r.id == region]
-        out = []
-        for loc in here:
-            for state in store.present(loc, since):
-                name = state.player.name
-                if (name in battle.participants or seal_rules.key(name) == seal_rules.key(battle.seal_holder) or seal_rules.key(name) in held
-                        or state.player.journey is not None or state.player.defected or self.world.faction_of(name) in armies):
-                    continue
-                kin = self._kin(state)
-                if roster.newbie(kin.state, self.content) or prologue_rules.active(kin.state, self.content):
-                    continue
-                out.append((name, 0, seal_duel.side_from(  # 不含玉璽碎片的戰力（改版：奪璽單挑不吃；手上有碎片的本來就擋掉了）
-                    name, None, kin._battle_power(seal=False), kin._battle_scores(mounted=False, seal=False), kin._battle_role(),
-                    kin._battle_neili_cap(), kit=team.self_side(kin.state, self.content, kin.world), cut=kin._duel_cut(),  # 防具照他的存檔現算（3.9）
-                )))
-        return out
+        """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
+        return seal_duel_actions.spectators(self, definition, battle, held)
 
-    def _seal_side_of(self, name: str) -> SealSide:
-        """沒參戰的持有者的快照（5.3）：觸發結算的人就是他用 self；否則讀他的存檔建一份不叫模型的 Game（不 sync、不存回、不記 last_seen），
-        讀不到（沒有資料庫）就照新角色。這一季沒上線過（seen_real，舊存檔退回 last_real，早於 opened_real；opened_real 是 None 一律當
-        上線過）記成 fresh、身手照新角色。"""
-        opened = self.world.seal_state().registry.opened_real
-        game = self if seal_rules.key(self.state.player.name) == seal_rules.key(name) else (self._load_kin(name) or self._kin(new_game_state(self.content, name)))
-        seen = game.state.player.seen_real if game.state.player.seen_real is not None else game.state.last_real
-        fresh = opened is not None and (seen is None or seen < opened)
-        if fresh and game is not self:
-            game = self._kin(new_game_state(self.content, name))
-        return seal_duel.side_from(  # 不含玉璽碎片的戰力（改版：奪璽單挑不吃，碎片才搶得走）
-            name, self.world.faction_of(name), game._battle_power(seal=False), game._battle_scores(mounted=False, seal=False),
-            game._battle_role(), game._battle_neili_cap(), fresh=fresh, kit=team.self_side(game.state, self.content, game.world),
-            cut=game._duel_cut(),  # 沒參戰的持有者：防具照他的存檔現算（鐵匠鋪與合成流程 3.9；fresh 的是新角色，沒穿＝0）
-        )
-
-    def _my_seal_duel(self) -> tuple[SealDuel | None, str | None]:
-        """排第一的那一場奪璽單挑，與自己是哪一邊（不在裡面是 None）。"""
-        duels = self.world.seal_state().duels if seal_rules.on(self.content) else []
-        if not duels:
-            return None, None
-        return duels[0], seal_duel.side_of(duels[0], self.state.player.name)
+    def _seal_side_of(self, name: str) -> Any:
+        """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
+        return seal_duel_actions.side_of(self, name)
 
     def _seal_tick(self) -> None:
-        """把奪璽單挑推到現在（5.4）：options(tick=True) 與 world_tick 叫，一次最多結算一回合。自己的請求（own_request）而且自己是一方時
-        順便記 last_seen（15 秒最多寫一次）。先讀一次 world 那一列，沒事做就不開 mutate（每 10 秒的輪詢不寫）。季、角色都不動；
-        自己是一方就順便補給自己（_deliver_seal_results，Task 10）。"""
-        if not seal_rules.on(self.content):
-            return
-        view = self.world.seal_state()
-        if not view.duels or view.paused:
-            return
-        duel = view.duels[0]
-        me = self.state.player.name
-        who = seal_duel.side_of(duel, me) if me else None
-        cfg = self.content.config.seal
-        if not seal_duel.needs_write(duel, who, self.now, cfg, own=self.own_request, ended=self.state.world.ended):
-            return
-
-        def _apply(shared) -> None:
-            if self.own_request and who is not None and shared.seal_duels and shared.seal_duels[0].id == duel.id:
-                seal_duel.note_seen(shared.seal_duels[0], who, self.now, cfg)
-            seal_duel.advance(shared, self.content, self.now)
-
-        self.world.mutate(_apply)
-        self._deliver_seal_results()  # 自己是一方、剛好由自己收場時當場看得到（不是一方時什麼都不做）
+        """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
+        return seal_duel_actions.tick(self)
 
     def _seal_options(self) -> list[Option]:
-        """單挑的一方、這一場開打了：三招（寫剋哪一招）擺在選單最前面；送過了換成一顆灰的「已出招」；這一回合判成不在場的三招灰掉、
-        寫中性的字（5.5，不寫代打）。放手一搏走輸入框（seal_free_text_prompt，Task 9），選單上沒有。"""
-        duel, who = self._my_seal_duel()
-        if duel is None or who is None or duel.phase != "active":
-            return []
-        cfg = self.content.config.seal
-        problem = seal_duel.submit_problem(duel, who, cfg)
-        if problem == seal_duel.SENT:
-            left = max(0, int((duel.opened_real or self.now) + cfg.round_seconds - self.now))
-            label = f"（{seal_duel.SENT}：已出招 {seal_duel.sent(duel)}／2，最遲 {left // 60} 分 {left % 60} 秒）"
-            return [Option(id="seal:waiting", label=label, enabled=False)]
-        late = f"（{problem}）" if problem else ""
-        held = tactics.locks(duel.bout, seal_duel.BOUT_SIDE[who]).no_moves  # 本命戰法：卸勁、只攻不守
-        return [Option(id=f"seal:{m}", label=duel_base.move_label(m) + late + (tactics.lock_note(m) if m in held else ""),
-                       enabled=problem is None and m not in held) for m in MOVES]
+        """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
+        return seal_duel_actions.options(self)
 
     def _seal_act(self, move: str) -> list[str]:
-        """選單上的一招（seal:<招>）：在一次 world.mutate 裡重驗、記下這一手，然後推一步（湊齊了而且滿 20 秒才結算）。"""
-        if move not in MOVES:
-            return ["（此刻無法這麼做。）"]
-        out: list[str] = []
-        me, cfg = self.state.player.name, self.content.config.seal
-
-        def _apply(shared) -> None:
-            duel = shared.seal_duels[0] if shared.seal_duels else None
-            who = seal_duel.side_of(duel, me) if duel is not None else None
-            problem = seal_duel.GONE if who is None else seal_duel.submit_problem(duel, who, cfg)
-            if not problem and move in tactics.locks(duel.bout, seal_duel.BOUT_SIDE[who]).no_moves:
-                problem = tactics.NO_MOVE.strip("（）").format(move=move)
-            if problem:
-                out.append(f"（{problem}）")
-                return
-            seal_duel.submit(duel, who, move=move)
-            seal_duel.note_seen(duel, who, self.now, cfg)
-            out.append(f"你出了{move}。")
-            out.extend(seal_duel.advance(shared, self.content, self.now))
-
-        self.world.mutate(_apply)
-        self._deliver_seal_results()
-        return out
+        """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
+        return seal_duel_actions.act(self, move)
 
     # 本體在 tianxia/features/battle/progress.py（全部拆包第 8 批：推進與結算），這裡留一行委派
     def _apply_outcome_trends_and_flags(self, season: WorldState, battle: battle_instance.BattleInstance) -> None:
@@ -3441,7 +3288,7 @@ class Game:
             msgs += extra
         elif result.tier == "落敗":
             msgs += self._lose_silver(record)
-        toll, hp_lost, facts = self._take_toll(result.tier, wild=wild, clash=result.clash)
+        toll, hp_lost, facts = self._take_toll(result.tier, wild=wild, clash=result.clash, squad=squad)
         record.changes += toll
         msgs += toll
         self._play_rounds(record, squad, result.tier, hp_lost, facts, clash=result.clash)
@@ -3789,7 +3636,8 @@ class Game:
         now, cap = self._player_hp_and_cap()
         return TollFacts(wounded=now < cap, low_hp=now <= LOW_HP_RATIO * cap, healed=healed)
 
-    def _take_toll(self, tier: str, *, wild: bool = False, clash: tactics.Clash | None = None) -> tuple[list[str], int, TollFacts]:
+    def _take_toll(self, tier: str, *, wild: bool = False, clash: tactics.Clash | None = None, squad: Squad | None = None,
+                   ) -> tuple[list[str], int, TollFacts]:
         """照結果扣這一場的氣血（team.take_encounter_toll），回傳（訊息, 本人真的掉了多少氣血, 寫演出句要的事實）。掉的量緊貼著
         扣氣血的前後量（計畫三 G4）：打贏升級會讓上限變高，開打前量的話回合裡寫的跟戰報「氣血 -N」對不上。四捨五入跟訊息的
         「:.0f」是同一個數（兩者都對同一個浮點數做銀行家捨入）。
@@ -3801,8 +3649,8 @@ class Game:
         本命戰法回的與自扣的氣血（Clash.hp：本人與同伴）在最後改。"""
         before, cap = self._player_hp_and_cap()
         share = 1 - clash.blocked_share() if clash is not None else 1.0
-        saved, spared = team.toll_saved(self.state, self.content, self.world, tier, wild=wild, share=share)  # 扣之前量：化勁、不動這一場改了多少
-        toll = team.take_encounter_toll(self.state, self.content, self.world, tier, wild=wild, share=share)
+        saved, spared = team.toll_saved(self.state, self.content, self.world, tier, wild=wild, share=share, squad=squad)  # 扣之前量：化勁、不動這一場改了多少
+        toll = team.take_encounter_toll(self.state, self.content, self.world, tier, wild=wild, share=share, squad=squad)
         hp_lost = round(before - self._player_hp())  # 回血之前量：回合裡寫的扣血不受吸取與回春影響
         healed: list[str] = []  # 吸取、回春以前在這裡打完回血；本命戰法第三批起在回合裡回（Clash.hp）
         gained: list[tuple[str, int]] = []
@@ -3833,7 +3681,7 @@ class Game:
         rng = random.Random(f"{p.name}|{record.id}")
         lo = traits.loadout(s, c, self.world)
         foe = rounds.Foe(name=squad.name, attribute=squad.attribute, agility=rounds.foe_agility(squad.difficulty))
-        our_agility = float(p.stats.get("agi", team.BASE_STAT))
+        our_agility = float(team.v1_stat(s, c, "agi"))
         fighters = team.fighters(s, c, self.world)
         if clash is not None:
             played = rounds.from_clash(clash, fighters, foe, our_agility, hp_lost, rng)
@@ -3903,7 +3751,7 @@ class Game:
         """劇情戰的對手：大場面（is_big）照江湖水漲浮上來（全隊威力 × big_scale，不看打贏幾次：劇情戰多半一次性）；
         其餘、序章照內容寫的。勝算（_choice_label）、備料（_fight_squad）、打起來（_event_battle）都照這一份。"""
         s, c = self.state, self.content
-        if not rise.on(c) or not self.is_big(squad) or prologue_rules.active(s, c):
+        if not rise.on(c, s.world) or not self.is_big(squad) or prologue_rules.active(s, c):
             return squad
         level = rise.big(c, squad.difficulty, team.power_vs(s, c, self.world, squad, fresh=True, terrain=False, seal=False))  # 地利、碎片不浮
         return squad if level == squad.difficulty else squad.model_copy(update={"difficulty": round(level, 1)})
@@ -4633,6 +4481,44 @@ class Game:
         ))
         return self._log([REFILL_LINE, gained])
 
+    def _season_prep(self) -> list[Option] | None:
+        """開季準備卡（企劃者 2026-11-05「至少需要導引」）：進新的一季第一個畫面，依序 ① 挑這一季的成長配比（五項屬性的季、還沒挑）
+        ② 功能包的開季準備（傳承：識海的候選封一份或不帶）。做完才能做別的事，所以接管整個選單；不在選單上的動作照舊各自擋。
+        序章裡不問（序章那一步就是挑配比，跟這張卡不重複問）。沒有要準備的回 None。"""
+        s, c = self.state, self.content
+        if prologue_rules.active(s, c):
+            return None
+        if attrset.on(c, s.world) and s.player.growth_preset is None:
+            return [Option(id=f"{GROWTH_PREFIX}{p['key']}", label=f"這一季照「{p['name']}」長")
+                    for p in attrset.view(s, c)["presets"]] + [Option(id=f"{GROWTH_PREFIX}{attrset.CUSTOM}", label="自己配")]
+        return features_core.prep(self)
+
+    def season_prep_view(self) -> dict | None:
+        """江湖畫面的 main.prep（網頁畫開季準備卡）：step 是 growth（挑配比，鈕照 main.status.growth 畫）或 feature（功能包的那一步，
+        選項照選單畫：傳承的識海）；steps 是這一張卡有幾步（五項屬性的季有挑配比那一步，功能包還有要準備的多一步）。沒有要準備的是 None。"""
+        prep = self._season_prep()
+        if prep is None:
+            return None
+        growth = any(o.id.startswith(GROWTH_PREFIX) for o in prep)
+        steps = (["growth"] if attrset.on(self.content, self.state.world) else []) + (["feature"] if features_core.prep(self) is not None else [])
+        return {"step": "growth" if growth else "feature", "steps": steps}
+
+    @_not_while_preparing
+    def pick_growth(self, preset: str, custom: dict | None = None) -> list[str]:
+        """挑這一季的成長配比（屬性與跨季架構 v2 3.1：五套預設或自己配，合計固定）：只有五項屬性的季有。
+        一季只挑一次、挑了就鎖（企劃者 2026-11-05「加點是隨時都可以調整？感覺有點奇怪」）：序章那一步或開季準備卡上挑；
+        還沒挑的人照 default_preset 長。"""
+        s, c = self.state, self.content
+        if not attrset.on(c, s.world):
+            return self._log(["（這一季沒有成長配比。）"])
+        if s.player.growth_preset is not None:
+            return Refused(self._log([GROWTH_LOCKED]))
+        return self._apply_growth(preset, custom)
+
+    def _apply_growth(self, preset: str, custom: dict | None) -> list[str]:
+        """挑成長配比的本體（修練包 actions.pick_growth；籌備中、沒有配比、已定這三步留在 pick_growth）。"""
+        return cultivation_actions.pick_growth(self, preset, custom)
+
     def allocate_stat(self, stat: str) -> list[str]:
         """把升級得到的屬性點分配到一項（修練包 actions.allocate_stat；配點那一句 actions.allocate_line；籌備中被擋）。"""
         return cultivation_actions.allocate_stat(self, stat)
@@ -4704,7 +4590,8 @@ class Game:
         """這個人切磋時的威力：只算本人（同伴、部下不上場），照對手身上那一門武學的屬性算相剋，吃自己的氣血係數與加成。
         seal=False 不含玉璽碎片的戰力（買兇的殺手照它浮上來，同江湖水漲）。"""
         s, c, w = who.state, who.content, who.world
-        members, conditions, boosts = team._fighters(s, c, w, seal=seal)
+        with team.facing_player(c, s, against.state, against.world):  # 五項屬性的季：照對手本人的五項對抗（他的統御擋你的武力）
+            members, conditions, boosts = team._fighters(s, c, w, seal=seal)
         return encounter.member_power(
             members[0], team.team_arts(s, c, w), team.worn_attribute(against.state, c, against.world), conditions[0], boosts[0],
         )
@@ -4757,21 +4644,6 @@ class Game:
     def _raid_fled(self, other: Game) -> list[str]:
         """玩家互動包 raid_actions.fled 的一行委派（全部拆包第 38 批；包裡經 ctx 叫；scripts/sim_season_one.py 換掉它數跑掉幾次）。"""
         return peers_raid_actions.fled(self, other)
-
-    def post_wanted(self, other: Game, amount: int) -> list[str]:
-        """通緝 other（玩家卡的「通緝」）：押金從你身上扣、掛上懸賞榜（bounties.post）；成了寫一則江湖紀錄、存季。"""
-        msgs = bounties.post(self.state, self.content, other.state, amount)
-        if msgs and msgs[0].startswith("你押了"):
-            self._write(bounties.BOARD, msgs)
-            self._save_season()
-        return msgs
-
-    def _raid_bounty(self, target: str) -> list[str]:
-        """截殺打贏、揭了通緝他的懸賞：交差（賞銀、散人的俠名），補進這一則江湖紀錄。"""
-        msgs = self.publish("raid_win", target)  # 事件 raid_win（第 26 批）：通緝交差
-        if msgs and self._draft is None:
-            self._write(bounties.BOARD, msgs)
-        return msgs
 
     def _raid_spoils(self, loser: Game, evil: int = 0) -> RaidSpoils:
         """玩家互動包 raid_actions.take_spoils 的一行委派（全部拆包第 38 批；包裡經 ctx 叫；scripts/sim_season_one.py 換掉它）。"""
@@ -4845,187 +4717,39 @@ class Game:
         return bout_duel.duel_text_request(self, text)
 
     def seal_free_text_prompt(self) -> str | None:
-        """奪璽單挑的放手一搏輸入框（5.7）：自己是一方、這一回合在場、還沒出手、這一場還沒搏滿兩次才有。"""
-        duel, who = self._my_seal_duel()
-        if duel is None or who is None or seal_duel.submit_problem(duel, who, self.content.config.seal, text=True):
-            return None
-        return seal_duel.PROMPT
+        """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
+        return seal_duel_actions.free_text_prompt(self)
 
     def seal_free_text_note(self) -> str | None:
-        return seal_duel.GAMBLE_NOTE if self.seal_free_text_prompt() is not None else None
+        """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
+        return seal_duel_actions.free_text_note(self)
 
-    def seal_text_request(self, text: str) -> seal_duel.TextRequest | list[str]:
-        """奪璽放手一搏的 A 段（鎖內、只讀，5.7）：驗證他是這場單挑的一方、這一回合開始時判他在場、還沒送出、還能搏、文字 20 字以內，
-        開單子（單挑 id、回合、哪一邊、文字、名號、場景、對手那一行）。判成不在場的這一回合不開單。"""
-        if self.world.paused_at() is not None:
-            return [f"（{PAUSED_TEXT}。）"]
-        duel, who = self._my_seal_duel()
-        if duel is None or who is None:
-            return ["（此刻無法這麼做。）"]
-        problem = seal_duel.submit_problem(duel, who, self.content.config.seal, text=True)
-        if problem:
-            return [f"（{problem}）"]
-        text = text.strip()[:FREE_TEXT_MAX]
-        if not text:
-            return ["（請先輸入你想做的事。）"]
-        me, foe = getattr(duel, who), getattr(duel, seal_duel.other(who))
-        title, scene_text = seal_duel.scene(duel, who, self.content)
-        return seal_duel.TextRequest(
-            duel=duel.id, round=duel.round, side=who, text=text, name=me.name, faction_name=self._duel_side(),
-            title=title, scene=scene_text, target=seal_duel.foe_line(me, foe, self.content), sex=gender.of(self.state),
-        )
+    def seal_text_request(self, text: str) -> Any:
+        """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
+        return seal_duel_actions.text_request(self, text)
 
     def seal_gamble(
         self, text: str, rate: int | None = None, stories: tuple[str, str] | None = None,
-        request: seal_duel.TextRequest | None = None,
+        request: Any = None,
     ) -> list[str]:
-        """奪璽放手一搏的 C 段（5.7）：鎖內重驗，同一場、同一回合、同一邊、同一句才採用，記進 pending（送出不等於結算，湊齊而且滿 20 秒才算）。
-        回合對不上直接回「這一回合已經結算」，不重評、不套用（鎖內重評會把第 r 回合寫的那一句套到第 r＋1 回合；頭目戰、擂台同一條）。
-        沒給 request（腳本、測試）就在這裡開單；沒給分數就用 _quick_client 在鎖內評，評不到是 40。"""
-        if request is None:
-            request = self.seal_text_request(text)
-            if isinstance(request, list):
-                return self._log(request)
-        if rate is None:
-            verdict = battle_instance.assess_gamble(
-                self._quick_client(), duel_base.Scene(request.title, request.scene), request.faction_name, request.text, request.name,
-                setting=seal_duel.SETTING, place=seal_duel.PLACE, target=request.target, sex=request.sex,
-            )
-            rate, stories = verdict.rate, (verdict.win, verdict.lose)
-        checked = text.strip()[:FREE_TEXT_MAX]
-        me, cfg = self.state.player.name, self.content.config.seal
-        out: list[str] = []
-
-        def _apply(shared) -> None:
-            duel = shared.seal_duels[0] if shared.seal_duels else None
-            if duel is None or duel.id != request.duel or duel.round != request.round or duel.phase != "active":
-                out.append(f"（{seal_duel.GONE}）")
-                return
-            who = seal_duel.side_of(duel, me)
-            if who != request.side or checked != request.text:
-                out.append(f"（{seal_duel.RESEND}）")
-                return
-            problem = seal_duel.submit_problem(duel, who, cfg, text=True)
-            if problem:
-                out.append(f"（{problem}）")
-                return
-            seal_duel.submit(duel, who, text=checked, rate=rate, stories=stories)
-            seal_duel.note_seen(duel, who, self.now, cfg)
-            out.append(f"你放手一搏：「{checked}」")
-            out.extend(seal_duel.advance(shared, self.content, self.now))
-
-        self.world.mutate(_apply)
-        self._deliver_seal_results()
-        return self._log(out)
+        """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
+        return seal_duel_actions.gamble(self, text, rate, stories, request)
 
     def seal_view(self) -> dict | None:
-        """持有者的碎片卡（第十節，status_data["seal"]）：哪一片與效果、這一季動過沒（新得之季此季不動／此季已動過／此季可能被牽動）、
-        此刻被牽動時那一句、這一季標了 seal 還沒到的決戰時刻（Game.stamp）。不寫機率。不是持有者是 None。"""
-        c = self.content
-        if not seal_rules.on(c):
-            return None
-        view = self.world.seal_state()
-        shard = seal_rules.shard_of(view.registry, self.state.player.name)
-        if shard is None or shard.id not in c.seal:
-            return None
-        if seal_rules.mandate_now(view.registry, view.season):  # 天命之季沒有新主保護（8.2）
-            state = seal_rules.CARD_STIRRED if shard.stirred_season == view.season else seal_rules.CARD_MANDATE
-        else:
-            state = seal_rules.CARD_NEW if shard.since_season == view.season else seal_rules.CARD_STIRRED if shard.stirred_season == view.season else seal_rules.CARD_CALM
-        status = self._showdown_status(tick=False)  # 璽動只在時刻表決戰（攻城戰不璽動）
-        stir = seal_rules.STIR_MINE.format(shard=c.seal[shard.id].name) if status is not None and status[0].seal_shard == shard.id else ""
-        w = self.state.world
-        dates = [
-            self.stamp(timetable.when(_season_vehicle(c, w), c, e)) for e in timetable.events(w, c)
-            if (e.seal or e.mandate_only) and e.id not in w.timeline and e.id not in w.showdowns_opened
-        ] if season_one(c, w) else []
-        out = {"name": c.seal[shard.id].name, "effect_text": seal_rules.shard_text(c, shard.id), "state": seal_rules.card_state(c, state),
-               "stir": stir, "dates": dates}
-        if seal_acts.on(c):  # 獨門行動（改版第 2、3 批）：改版關著不多這一鍵（一個字都不變）；這一片沒有行動是 None
-            out["act"] = seal_acts.view(self.state, c, seal_rules.filled(view.registry, c), view.season, **self._seal_act_season())
-        return out
-
-    def _seal_act_season(self) -> dict:
-        """seal_acts.problem／view 要的季況：季在跑（籌備、休季都不是）、賽季時鐘停著、時刻怎麼寫（Game.stamp）。"""
-        return {"running": self.world.season_phase() == "running" and not self.state.world.ended,
-                "paused": self.world.paused_at() is not None, "stamp": self.stamp}
+        """本體在玉璽包 tianxia/features/seal/card.py（第 28 批），這裡一行委派。"""
+        return seal_card.view(self)
 
     def seal_use(self, target: str = "", side: str = "") -> list[str]:
-        """起用懷中那一片的獨門行動（玉璽碎片改版第 2、3 批；MAIN_ACTIONS["seal_use"]）：target 是指定的目標（引將的大勢人物、傳檄的戰線、
-        收心的人物、鎮地與補缺的區塊；頒詔、承露不用），side 是散人挑的那一軍（傳檄、鎮地、補缺）。不花體力、不花銀兩（PM 五之一 7）。
-        補缺當場把那一塊退回原主（conquest.restore，照翻地的規則記一次易手）；鎮地只記在季上（conquest.push_problem 讀）。
-        先照 seal_acts.problem／target_problem 驗（按不下去回原因、什麼都不動）；登記那一筆在 world.mutate 裡整個重驗（碎片剛被搶走、
-        次數剛用完就落空），記次數與一筆 use（只給管理者看：有名號）；季上記一筆生效中的（不記是誰）、引將把人物搬過來；天下大事與
-        江湖史各一句（不寫是誰，企劃者）；自己一則江湖紀錄與一則行狀。戰報不寫。假人不叫這裡（設計第四章【PM】）。"""
-        c, s = self.content, self.state
-        if not seal_acts.on(c):
-            return self._log(["（此刻無法這麼做。）"])
-        view = self.world.seal_state()
-        reg = seal_rules.filled(view.registry, c)
-        why = seal_acts.problem(s, c, reg, view.season, **self._seal_act_season())
-        held = seal_acts.mine(s, c, reg)
-        if why is None and held is not None:
-            why = seal_acts.target_problem(s, c, held[1], target, side)
-        if why is not None or held is None:
-            return self._log([f"（{why or seal_acts.NO_SHARD}）"])
-        shard_id, kind = held[0].id, held[1]
-        act = seal_acts.plan(s, c, shard_id, kind, target, side)
-        what = seal_acts.what_text(c, act)
-        me, w = s.player.name, s.world
-        left: list[int] = []
-
-        def _apply(shared) -> None:
-            r = seal_rules.filled(shared.seal, c)
-            now = seal_rules.shard_of(r, me)
-            number = shared.season_number
-            if now is None or now.id != shard_id or seal_acts.left(now, number, c) <= 0:
-                return
-            ready = seal_acts.ready_at(now, number, c, w)
-            if ready is not None and w.time + seal_acts.EPS < ready:
-                return
-            seal_acts.note_use(now, number, w.time)
-            seal_rules.log_use(r, number, shard=shard_id, holder=me, act=kind, what=what, at=w.time)  # 另記一欄（FB-695）
-            left.append(seal_acts.left(now, number, c))
-
-        self.world.mutate(_apply)
-        if not left:
-            return self._log(["（此刻無法這麼做。）"])
-        if kind == "yinjiang":
-            seal_acts.pull(s, c, act)
-        w.seal_acts.append(act)
-        public = seal_acts.public_text(c, act)
-        seal_rules.rumor(w, public)  # 天下大事（world 層、不帶地點與人）
-        seal_rules.chronicle(w, public)
-        if kind == "bujue":  # 補缺：當場退回原主（「收復」那一句天下大事與江湖史照易手寫，排在起用那一句之後）
-            conquest.restore(w, c, act.target, act.side)
-        name = c.seal[shard_id].name
-        line = seal_acts.MINE.format(shard=name, what=what, left=left[0])
-        self._write(seal_rules.SEAL_TITLE, [line], tag=f"『{name}』")
-        annals.note(s, c, annals.SEAL, seal_acts.ANNAL.format(shard=name, what=what), 4)  # 酒肆打聽不到這一類（FB-643）
-        self._save_season()
-        return self._log([line])
+        """本體在玉璽包 tianxia/features/seal/card.py（第 28 批），這裡一行委派。"""
+        return seal_card.use(self, target, side)
 
     def seal_duel_card(self) -> dict | None:
-        """江湖頁的「奪璽」卡（5.10）：排第一的那一場，全服看得到；沒有是 None。"""
-        duels = self.world.seal_state().duels if seal_rules.on(self.content) else []
-        if not duels:
-            return None
-        paused = self.world.paused_at()  # 暫停中倒數停在按下暫停的那一刻（同決戰那一格，FB-179）
-        return seal_duel.card(duels[0], self.state.player.name or None, self.now if paused is None else paused, self.content)
+        """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
+        return seal_duel_actions.duel_card(self)
 
     def seal_watch(self) -> bool:
-        """網頁在背景也要輪詢（5.5）：自己是單挑的一方；或此刻有一場被璽動、還沒收場的決戰，自己是那一片的持有者或那一場的參戰者
-        （挑戰者要到收場才確定）。"""
-        if not seal_rules.on(self.content):
-            return False
-        _, who = self._my_seal_duel()
-        if who is not None:
-            return True
-        status = self._showdown_status(tick=False)  # 璽動只在時刻表決戰（攻城戰不璽動）
-        if status is None or not status[0].seal_shard:
-            return False
-        battle, me = status[0], self.state.player.name
-        return seal_rules.key(battle.seal_holder) == seal_rules.key(me) or me in battle.participants
+        """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
+        return seal_duel_actions.watch(self)
 
     def _duel_side(self) -> str:
         return bout_duel.duel_side(self)
@@ -5678,106 +5402,24 @@ class Game:
         return seal_admin.emerge(self, shard_id)
 
     def admin_seal_stir(self, shard_id: str) -> list[str]:
-        """下一場標了 seal 的決戰必定牽動這一片（略過 7%、新主保護與次數上限；那一片要有主）。"""
-        refusal = self._admin_refusal("強制璽動")
-        if refusal:
-            return self._log(refusal)
-        shard = self.world.seal_state().registry.shards.get(shard_id)
-        if shard is None or shard.state != "held":
-            return self._log(["（這一片現在沒有主人，牽動不了。）"])
-        self.world.mutate(lambda st: setattr(st.seal, "force_stir", shard_id))
-        self._write("強制璽動", [f"下一場標了璽動的決戰，必定牽動『{self.content.seal[shard_id].name}』。"], tag="管理者")
-        return self._log(["（下一場標了璽動的決戰，必定牽動這一片。）"])
+        """本體在玉璽包 tianxia/features/seal/admin.py（第 28 批），這裡一行委派。"""
+        return seal_admin.stir(self, shard_id)
 
     def admin_seal_assign(self, shard_id: str, name: str, state: str = "held") -> list[str]:
-        """把一片直接記到某個名號名下（held，一人一片照擋、這一季有新主保護），或收回成未現世（hidden）、改成隱沒（sunk）。
-        只改登記，不讀、不存他的存檔（「這一季上線過」看 seen_real，管理者工具碰不到它）；抄本與紀錄等他同步時補（登記記一筆 assign）。"""
-        refusal = self._admin_refusal("指定持有者")
-        if refusal:
-            return self._log(refusal)
-        if shard_id not in self.content.seal or state not in ("held", "hidden", "sunk") or (state == "held" and not name.strip()):
-            return self._log(["（看不懂要怎麼改。）"])
-        out: list[str] = []
-
-        def _apply(shared) -> None:
-            reg = seal_rules.filled(shared.seal, self.content)
-            shard = reg.shards[shard_id]
-            if state == "held":
-                other = seal_rules.shard_of(reg, name)
-                if other is not None and other.id != shard_id:
-                    out.append(f"（{name}手上已經有『{self.content.seal[other.id].name}』了：一人一片。）")
-                    return
-            before = shard.holder
-            shard.state, shard.holder = state, (name.strip() if state == "held" else None)
-            shard.since_season = shared.season_number if state == "held" else shard.since_season
-            if state == "held":
-                shard.emerged_round = shard.emerged_round or reg.round
-            seal_rules.log(reg, shared.season_number, "assign", shard=shard_id, holder=shard.holder, other=before)
-            out.append(f"（『{self.content.seal[shard_id].name}』改成{seal_rules.BOOK_STATES[state].format(holder=shard.holder or '')}。）")
-
-        self.world.mutate(_apply)
-        self._write("指定持有者", out, tag="管理者")
-        return self._log(out)
+        """本體在玉璽包 tianxia/features/seal/admin.py（第 28 批），這裡一行委派。"""
+        return seal_admin.assign(self, shard_id, name, state)
 
     def admin_seal_duel(self, shard_id: str, challenger: str, factor: float, now: float) -> list[str]:
-        """立刻對這一片開一場奪璽單挑，指定挑戰者，局勢係數可選（預設 1.0，上限照舊 25%）。正式伺服器只能掛在最近一場剛收場、
-        還沒開過單挑的時刻表決戰上（SealRegistry.last_showdown，公告照那一場寫）；Config.seal.qa_tools 開著時不必有決戰。
-        雙方的快照照 5.3「沒參戰」那一列（_seal_side_of）；挑戰者也要過一人一片。"""
-        refusal = self._admin_refusal("強制開單挑")
-        if refusal:
-            return self._log(refusal)
-        c, cfg = self.content, self.content.config.seal
-        view = self.world.seal_state()
-        reg = seal_rules.filled(view.registry, c)
-        shard = reg.shards.get(shard_id)
-        if shard is None or shard.state != "held" or not challenger.strip() or seal_rules.key(challenger) in seal_rules.holders(reg):
-            return self._log(["（這一片沒有主人，或挑戰者手上已經有碎片。）"])
-        hung = reg.last_showdown is not None and not reg.last_showdown_dueled
-        if not hung and not cfg.qa_tools:
-            return self._log(["（正式伺服器的奪璽單挑只能掛在剛收場的時刻表決戰上；那一場不在、或已經開過單挑。）"])
-        if view.duels:
-            return self._log(["（已經有一場奪璽單挑在打。）"])
-        self.now = now
-        cap = min(cfg.cap, cfg.cap * max(0.0, min(1.0, factor)))
-        duel_id = f"{reg.last_showdown}:{shard_id}" if hung else f"qa{reg.seq + 1}:{shard_id}"
-        duel = seal_duel.open_duel(
-            duel_id, shard_id, reg.last_showdown if hung else None, None, reg.last_showdown_where if hung else "", "旁觀", cap,
-            self._seal_side_of(challenger), self._seal_side_of(shard.holder), now, cfg,
-        )
-        line = (seal_duel.CALL if hung else seal_duel.CALL_QA).format(
-            challenger=duel.challenger.name, holder=duel.holder.name, shard=c.seal[shard_id].name)
-
-        def _apply(shared) -> None:
-            shared.seal_duels.append(duel)
-            seal_rules.filled(shared.seal, c).last_showdown_dueled = True
-            seal_rules.rumor(shared.season, line)
-
-        self.world.mutate(_apply)
-        self._write("強制開單挑", [line], tag="管理者")
-        return self._log([line])
+        """本體在玉璽包 tianxia/features/seal/admin.py（第 28 批），這裡一行委派。"""
+        return seal_admin.duel(self, shard_id, challenger, factor, now)
 
     def admin_seal_fix(self, take: bool) -> list[str]:
-        """正在打的那一場，指定再擲中或不中（QA 用，同時刻表的「定結果」）；公告照常。"""
-        refusal = self._admin_refusal("定單挑的結果")
-        if refusal:
-            return self._log(refusal)
-        if not self.world.seal_state().duels:
-            return self._log(["（沒有奪璽單挑在打。）"])
-        self.world.mutate(lambda st: setattr(st.seal_duels[0], "fixed", bool(take)))
-        return self._log([f"（這一場收場時{'易主' if take else '懷璽不失'}。）"])
+        """本體在玉璽包 tianxia/features/seal/admin.py（第 28 批），這裡一行委派。"""
+        return seal_admin.fix(self, take)
 
     def admin_seal_cancel(self) -> list[str]:
-        """取消正在打（或下戰書中）的那一場：記成未分勝負，碎片留在原主；只寫天下大事。"""
-        refusal = self._admin_refusal("取消單挑")
-        if refusal:
-            return self._log(refusal)
-        if not self.world.seal_state().duels:
-            return self._log(["（沒有奪璽單挑在打。）"])
-        out: list[str] = []
-        self.world.mutate(lambda st: out.append(seal_duel.finish(st, st.seal_duels[0], self.content, None, self.now).text))
-        self._deliver_seal_results()
-        self._write("取消單挑", out, tag="管理者")
-        return self._log(out)
+        """本體在玉璽包 tianxia/features/seal/admin.py（第 28 批），這裡一行委派。"""
+        return seal_admin.cancel(self)
 
     def admin_seal_sink_check(self, now: float) -> list[str]:
         """管理者「隱沒判斷」（玉璽包 admin，殼的 ADMIN_ACTIONS 與測試叫）。"""
@@ -5788,30 +5430,8 @@ class Game:
         return seal_admin.mandate(self, when)
 
     def admin_seal_choices(self) -> dict | None:
-        """設定頁「玉璽」一組要的：七片與狀態、有沒有單挑在打、剛收場的決戰還能不能掛單挑、qa_tools、天命之季蓋了沒（mandate：
-        "now" 這一季、"next" 下一季、"" 沒有）與劇本有沒有天命之爭（mandate_ok，玉璽二）。碎片關著是 None。"""
-        c = self.content
-        if not seal_rules.on(c):
-            return None
-        view = self.world.seal_state()
-        reg = seal_rules.filled(view.registry, c)
-        out = {
-            "shards": [{"id": s, "name": c.seal[s].name, "state": reg.shards[s].state, "holder": reg.shards[s].holder or ""} for s in c.seal],
-            "duel": bool(view.duels), "hung": reg.last_showdown is not None and not reg.last_showdown_dueled,
-            "where": reg.last_showdown_where, "qa": c.config.seal.qa_tools,
-            "mandate": "now" if seal_rules.mandate_now(reg, view.season) else "next" if reg.mandate_pending else "",  # 兩個章一起蓋，讀登記那一份（不必 get_season）
-            "mandate_ok": seal_rules.mandate_event(c) is not None and seal_rules.mandate_battle(c) is not None,
-            # 領地爭奪的季「強制現世」是「現在藏一片」（網頁換鈕上的字）；只給有沒有，不給藏在哪
-            "hide": seal_rules.conquest_season(c, self.state.world),
-        }
-        if seal_acts.on(c):  # 獨門行動（改版第 2 批）：這一季誰起用了哪一片、什麼時候、指定了什麼（救場用，設計【PM】5）；改版關著不多這一鍵
-            out["uses"] = [
-                {"shard": c.seal[e.shard].name if e.shard in c.seal else e.shard, "who": e.holder,
-                 "act": seal_acts.NAMES.get(e.act, e.act), "when": self.stamp(e.at) if e.at is not None else "",
-                 "what": e.what}
-                for e in reg.uses if e.season == view.season  # FB-695：起用另記在 uses（舊資料讀進來時從 history 搬過來）
-            ]
-        return out
+        """本體在玉璽包 tianxia/features/seal/admin.py（第 28 批），這裡一行委派。"""
+        return seal_admin.choices(self)
 
     def admin_issue_orders(self) -> list[str]:
         return military_admin_actions.issue_orders(self)  # 軍情（全部拆包第 33 批）：本體在 tianxia/features/military/admin_actions.py
@@ -6005,9 +5625,13 @@ class Game:
 
     def location_text(self) -> str:
         loc = self.content.locations[self.state.player.location]
+        # 地點會變樣（世界活起來第二批）：不是太平的地方，地名那一行底下多一段「〔戰火〕這一帶剛打過仗……」；地名那一行不動
+        # （有畫時網頁照 scene_art 的 head 把它拿掉、疊在畫上）。太平、關著一個字都不變
+        mood = place_state.view(self.state.world, self.content, loc.id)
+        head = f"【{loc.name}】危險 {'★' * loc.danger}" + (f"\n\n〔{place_state.NAMES[mood['kind']]}〕{mood['line']}" if mood is not None else "")
         if jianfa(self.content, self.state.world, "marks_visible"):  # 減法季批 4：痕跡過了門檻，描寫多接一段（marks.describe）
-            return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{marks_rules.describe(loc, self.state.world, self.content)}"
-        return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{loc.describe(self.state.world.flags)}"  # 宛城的描寫隨版本換
+            return f"{head}\n\n{marks_rules.describe(loc, self.state.world, self.content)}"
+        return f"{head}\n\n{loc.describe(self.state.world.flags)}"  # 宛城的描寫隨版本換
 
     def scene_art(self) -> dict | None:
         """江湖頁場景卡上面那張圖（減法季批 8 圖像版；減法季整合設計第八章、第一批圖提示單）。回 {kind, path, title, sub, head}：
@@ -6043,7 +5667,12 @@ class Game:
         else:
             region = atlas.region_of(c, loc.id)
             path = f"places/{region.id}" if region is not None else "places/world"
-        return {"kind": "place", "path": path, "title": loc.name, "sub": f"危險 {'★' * loc.danger}", "head": f"【{loc.name}】危險 {'★' * loc.danger}"}
+        art = {"kind": "place", "path": path, "title": loc.name, "sub": f"危險 {'★' * loc.danger}", "head": f"【{loc.name}】危險 {'★' * loc.danger}"}
+        mood = place_state.view(s.world, c, loc.id)  # 地點會變樣：疊在畫上的那一行多寫此刻的樣子，畫照樣子換色調（網頁的 mood-<kind>）
+        if mood is not None:
+            art["sub"] += f"・{mood['name']}"
+            art["mood"] = mood["kind"]
+        return art
 
     def method_help(self, option_ids: Iterable[str]) -> dict | None:
         return sense_actions.method_help(self, option_ids)  # 有所感做法底下的兩行小字：本體在有所感包（全部拆包第 24 批）
@@ -6114,6 +5743,14 @@ class Game:
         """功能包合進江湖畫面頂層的資料（FEATURES 的 status，照清單的順序；例：商城的入口 main.mall）。server.main_view 放在原本商城那一格。"""
         return features_core.status(self)
 
+    def _attr_rows(self, names: dict[str, str]) -> list[tuple[str, int, str]]:
+        """狀態列的屬性（名字, 數值, 鍵）：舊的季照存檔的五屬性；五項屬性的季照 attrset 算（武力、統御……）。"""
+        s, c = self.state, self.content
+        if attrset.on(c, s.world):
+            shown = attrset.names(c, s.world)
+            return [(shown[k], int(attrset.value(s, c, k)), k) for k in attrset.keys(c)]
+        return [(names[k], s.player.stats[k], k) for k in team.COMBAT_STATS]
+
     def status_data(self) -> dict:
         """狀態列的資料（數字與短字串），網頁前端照這份自己排版；status_text 是同一份資料的文字版。"""
         s, c = self.state, self.content
@@ -6132,7 +5769,7 @@ class Game:
             "ranger": ranger.status(s, c),  # 散人的遊俠名號（名號、階、俠名、下一階）；陣營的人、劇本沒有陣營、名聲開著是 None
             "renown": renown.status(s, c),  # 名聲（狀態列 1B、2C 的稱號與說明卡）；名聲關著是 None
             # 手上揭了的懸賞（標題、怎麼完成、賞、期限與名額），加上身上有合用東西的求兵（多一個 have）；懸賞榜關著是空的
-            "bounties": bounties.status(s, c, self.world),
+            "bounties": self._bounty_status(),
             # 武學譜（口訣與秘方）：這一季聽過口訣或合中過的秘方，一條一筆 {"clues": [聽過的口訣], "solved": 名號或 None}
             "manual": secret_recipes.view(s, c, self.world),
             "manual_total": secret_recipes.progress(s, c, self.world)[1],  # 武學譜入口的分母：這一季全服共有幾條（不是「你聽過的」）
@@ -6175,9 +5812,12 @@ class Game:
             "silver": p.stats.get("silver", 0),
             "xinde": p.stats.get("xinde", 0),
             "minor": [(names[k], p.stats.get(k, 0)) for k in ("fame", "good", "evil")],
-            "attrs": [(names[k], p.stats[k], k) for k in team.COMBAT_STATS],  # 第三項是鍵：配點鈕送它（allocate_stat）
+            "attrs": self._attr_rows(names),  # 第三項是鍵：配點鈕送它（allocate_stat）
             "stat_points": p.stat_points,
-            "stat_cap": c.config.stat_cap,
+            "stat_cap": c.config.stat_cap if not attrset.on(c, s.world) else 10**9,  # 五項屬性的季沒有上限
+            **({"growth": attrset.view(s, c)} if attrset.on(c, s.world) else {}),  # 挑成長配比的那一塊（屬性與跨季架構 v2 3.1）
+            # 歷練：這一季從事件得來的屬性有多少、上限多少（展開的屬性底下那一條，企劃者 2026-11-05）
+            **({"lilian": {"have": attrset.event_total(s), "cap": c.config.attributes.v2.event_cap}} if attrset.on(c, s.world) else {}),
             # ＋鈕底下那一行：五項各管什麼、事件檢定也看它們（計畫二最終審查 M2）；網頁只在有點可配時畫
             "stat_uses": skillview.stat_uses(c, s),  # 減法季屬性五段開著時寫「現在給你什麼」的數字（設計 4.5）
             "stat_uses_note": skillview.STAT_CHECK_NOTE,

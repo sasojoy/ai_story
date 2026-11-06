@@ -14,6 +14,8 @@
   只能觀戰與整個取代畫面、份量快照補上（Game 留 14 個一行委派）
 - generals.py：全部拆包第 8 批整個從 tianxia/generals.py 搬來（龍頭上陣：開集結派人上陣、陣前那一行、收場扣聲威；舊名是別名）——挑法 on、pick
   留在共用規則層 tianxia/chiefs.py（siege 也讀），這裡 re-export
+- instance.py：全部拆包第 54 批從 tianxia/battle_instance.py 搬來（集結、出招、結算回合、戰局條與論功的字、鎖外評分與補劇情，111 個名字；舊名是別名）——
+  資料型別與別處要讀的判定（63 個名字）在核心 tianxia/core/battle_base.py，這裡 re-export 同一批物件
 
 全部拆包第 7 批拿了 battle: 前綴：假人看到 battle: 的選項怎麼按問這一包（bot_pick → bots.py，原本是 bot_policy.score 的 battle 那一段）。
 battle: 的分派照舊在 Game.choose 原位（查完選單、清掉「剛剛」與引導之後、建紀錄之前那一支，叫 Game._battle_choose 的委派）：choose_unlisted

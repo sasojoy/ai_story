@@ -1726,6 +1726,12 @@ def test_a_story_is_cleaned_before_it_can_be_played():
     assert bi.clean_story("沈青：韓甲早看穿妳的小伎倆。", "沈青") == ""
     assert bi.clean_story("你好一刀劈開塵土。", "你好") == "你好一刀劈開塵土。"
     assert bi.clean_story("陸乙：塵土迷了韓甲的眼。", "陸乙") == "陸乙，塵土迷了韓甲的眼。"
+    # 企劃者 2026-11-04：名號裡本來就有阿拉伯數字（管理者建的角色，例「Rayal2」）時，數字那一關不算它——
+    # 不挖掉的話模型只要提到他整段就被丟掉、改播固定句（那一場 24 次放手一搏有 7 次旁白是空的，7 次都是提到他）
+    assert bi.clean_story("箭雨攢向霜刃。", "Rayal2") == "Rayal2箭雨攢向霜刃。"
+    assert bi.clean_story("Rayal2一箭射倒了霜刃。", "Rayal2", ("霜刃",)) == "Rayal2一箭射倒了霜刃。"
+    assert bi.clean_story("霜刃側身閃開Rayal2的箭。", "霜刃", ("集火Rayal2", "Rayal2")) == "霜刃側身閃開Rayal2的箭。"
+    assert bi.clean_story("Rayal2帶著3萬分身殺過去。", "Rayal2") == ""  # 模型自己寫的數字照樣擋
 
 
 def test_one_model_call_rates_the_gamble_and_writes_both_stories():

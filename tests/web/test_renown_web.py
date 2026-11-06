@@ -51,18 +51,20 @@ def test_collapsed_bar_has_a_titles_line(m):
     assert '<span class="rn-fame">名動一方</span>' in top and '<span class="rn-xia">一方豪俠</span>' in top
 
 
-def test_expanded_bar_has_the_line_and_the_strip(m):
-    top = run(m, "return H.topHtml();", S={"showMore": True})
-    assert 'class="who-renown"' in top and "rn-strip" not in top  # 還沒點開
-    assert "名望 27　善名" not in top  # minor 那一行拿掉了（名聲那一行取代）
-    top = run(m, "return H.topHtml();", S={"showMore": True, "renownOpen": True})
-    assert 'class="rn-strip"' in top and "再 23 到威震州郡" in top and "再 12 到州郡大俠" in top
-    assert "名望從哪裡來" not in top or "事件的選擇" in top
+def test_the_attrs_tab_has_the_strip_and_the_bar_does_not(m):
+    """介面重整：名聲那一條（名望、善惡兩階的進度）在俠客頁的「屬性」（H.heroMoreHtml），狀態列不再攤開。"""
+    assert "rn-strip" not in run(m, "return H.topHtml();", S={"showMore": True, "renownOpen": True})
+    more = run(m, "return H.heroMoreHtml(H.S.main.status);")
+    # Joy 2026-11-06「這一定要預設展開那麼多說明？」：名望、善名、惡名一行，階梯與來源收在「怎麼來」後面
+    assert "rn-strip" not in more and more.count("<em>名望</em>") == 1 and 'data-act="renown-toggle"' in more
+    more = run(m, "return H.heroMoreHtml(H.S.main.status);", S={"renownOpen": True})
+    assert 'class="rn-strip"' in more and "再 23 到威震州郡" in more and "再 12 到州郡大俠" in more
+    assert "名望 27　善名" not in more  # 文字版那一行拿掉了
 
 
 def test_a_dot_shows_that_tier(m):
-    top = run(m, "return H.topHtml();", S={"showMore": True, "renownOpen": True, "renownDot": "fame:4"})
-    assert "天下聞名" in top and "擂台上排在你後面 5 名內的人挑得到你" in top
+    more = run(m, "return H.heroMoreHtml(H.S.main.status);", S={"renownOpen": True, "renownDot": "fame:4"})
+    assert "天下聞名" in more and "擂台上排在你後面 5 名內的人挑得到你" in more
 
 
 def test_tight_bar_moves_the_virtue_title_into_the_name_row(m):
@@ -72,8 +74,8 @@ def test_tight_bar_moves_the_virtue_title_into_the_name_row(m):
 
 def test_switch_off_draws_the_old_bar(m):
     m["status"]["renown"] = None
-    top = run(m, "return H.topHtml();", S={"showMore": True})
-    assert "who-renown" not in top and "名望 27　善名 18" in top
+    more = run(m, "return H.heroMoreHtml(H.S.main.status);")
+    assert "rn-strip" not in more and "<em>名望</em><b>27</b>" in more and "<em>善名</em><b>18</b>" in more and "renown-toggle" not in more
 
 
 def test_peer_card_has_title_chips_and_a_generic_note(m):
@@ -131,9 +133,9 @@ def test_the_gold_tag_opens_the_renown_card(m):
     out = run(m, """return (async () => {
   const click = (act) => T.docListeners.click[0]({ target: { closest: () => ({ dataset: { act }, classList: { contains: () => false, add() {}, remove() {} } }) } });
   await click("renown-open");
-  return { more: H.S.showMore, open: H.S.renownOpen };
+  return { tab: H.S.heroTab, page: H.S.tab, open: H.S.renownOpen };
 })();""")
-    assert out == {"more": True, "open": True}
+    assert out == {"tab": "attrs", "page": "practice", "open": True}  # 介面重整：去俠客頁的「屬性」看名聲那一條
 
 
 def test_howto_entry_says_renown(m):

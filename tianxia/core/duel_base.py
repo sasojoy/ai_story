@@ -1,6 +1,6 @@
 """單挑底層（全部拆包第 12 批：總表 3.2 第 12 列「單挑底層移進核心」、附錄甲「duel 拆兩半，底層留核心」）。
 
-頭目戰（單挑包）、擂台（單挑包）、奪璽單挑（tianxia/seal_duel.py，之後進玉璽包）三種一對一的打法共用的回合引擎：剋、一招的推力、
+頭目戰（單挑包）、擂台（單挑包）、奪璽單挑（已進玉璽包 tianxia/features/seal/duel_rules.py）三種一對一的打法共用的回合引擎：剋、一招的推力、
 挨的打、乘過防具之後挨多少、放手一搏擲一次、勝負、架勢的句子、氣勢的一句話、選單上的一招、給模型評放手一搏的場景。
 只算數字與句子，不碰存檔、不碰 Game。原本寫在 tianxia/duel.py，函式照抄、名字不變；單挑包的 duel_rules（舊名 tianxia.duel）
 從這裡 re-export 同一批函式物件，`from tianxia import duel` 照舊拿得到。別的包要用一律 import 這裡（包不能 import 包）。
@@ -10,7 +10,7 @@ from __future__ import annotations
 import random
 from typing import NamedTuple
 
-from .. import battle_instance
+from . import battle_base as battle_instance
 from ..models import BEATS, BattleTuning, DuelTuning
 
 # 他出招之前你看到的架勢（每一招兩句，挑一句）。文字待內容方改

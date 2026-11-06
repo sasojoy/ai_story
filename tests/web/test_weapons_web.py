@@ -17,9 +17,10 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 def _practice(m, menxia, S=None):
     """俠客頁改版（Joy 2026-10-26）之後每一欄的裝備庫（身上那件、換上、拆解、餵）在點了那一格才升起的抽屜裡：
     整頁接上每一欄的抽屜各畫一次，照舊在同一串字裡找。"""
-    out = [run(m, "return H.pagePractice();", menxia=menxia, S=S or {})]
+    S = {"heroTab": "gear", **(S or {})}  # 介面重整：裝備在俠客頁的「裝備」分頁
+    out = [run(m, "return H.pagePractice();", menxia=menxia, S=S)]
     for g in ((menxia or {}).get("gear") or {}).get("slots", []):
-        out.append(run(m, "return H.pagePractice();", menxia=menxia, S={**(S or {}), "pdrawer": {"t": "gear", "key": g["slot"]}}))
+        out.append(run(m, "return H.pagePractice();", menxia=menxia, S={**S, "pdrawer": {"t": "gear", "key": g["slot"]}}))
     return "".join(out)
 
 
@@ -100,7 +101,7 @@ def test_a_player_with_no_gear_still_gets_four_empty_cells_saying_where_to_get_e
     每格虛線框：欄名、「空著」、哪裡買得到；沒有裝備庫的格數。馬市的地名、鐵匠鋪在哪都是伺服器照內容給的 where，網頁不寫死。"""
     m, x = views
     x["gear"] = _where_gear()
-    page = run(m, "return H.pagePractice();", menxia=x)
+    page = run(m, "return H.pagePractice();", menxia=x, S={"heroTab": "gear"})
     block = _gear_sec(page)
     assert "<h3>裝備</h3>" in block and "裝備庫" not in block
     for slot, label in (("weapon", "武器"), ("armor", "防具"), ("mount", "坐騎"), ("treasure", "寶物")):
@@ -117,7 +118,7 @@ def test_the_gear_cells_skip_unknown_slots_and_escape_the_text(views):
     x["gear"]["slots"][2]["where"] = "<b>馬市</b>在<i>這裡</i>"
     x["gear"]["slots"][3]["where"] = ""  # 內容裡沒有那種地點：寫空著的那一句
     x["gear"]["slots"].append({"slot": "future", "label": "未來", "empty": "什麼都沒有。", "note": "", "where": "某處", "worn": None, "rack": []})
-    page = run(m, "return H.pagePractice();", menxia=x)
+    page = run(m, "return H.pagePractice();", menxia=x, S={"heroTab": "gear"})
     assert 'data-key="future"' not in page and "什麼都沒有" not in page
     assert "&lt;b&gt;馬市&lt;/b&gt;在&lt;i&gt;這裡&lt;/i&gt;" in page and "<b>馬市</b>在" not in page
     treasure = _gear_sec(page).split('data-key="treasure"')[1].split("</button>")[0]
@@ -131,12 +132,12 @@ def test_a_worn_piece_fills_its_cell_and_the_drawer_has_the_rack(views):
     x["gear"]["slots"][0]["worn"] = _row()
     x["gear"]["slots"][0]["rack"] = [_row(id="兵:9", name="備刃")]
     x["gear"]["held_note"] = "寄放著：【叩關玉】"
-    page = run(m, "return H.pagePractice();", menxia=x)
+    page = run(m, "return H.pagePractice();", menxia=x, S={"heroTab": "gear"})
     block = _gear_sec(page)
     weapon = block.split('data-key="weapon"')[1].split("</button>")[0]
     assert "【試刃】" in weapon and "裝備庫還有 1 件" in weapon and 'class="gc-edge"' in weapon
     assert "裝備庫 " in block and "寄放著：【叩關玉】" in block
-    drawer = run(m, "return H.pagePractice();", menxia=x, S={"pdrawer": {"t": "gear", "key": "weapon"}})
+    drawer = run(m, "return H.pagePractice();", menxia=x, S={"heroTab": "gear", "pdrawer": {"t": "gear", "key": "weapon"}})
     sheet = drawer.split('class="sheet pr-sheet"')[1]
     assert '<div class="gear"><section class="gear-slot" data-slot="weapon"' in sheet and "【備刃】" in sheet and 'data-act="wield"' in sheet
 

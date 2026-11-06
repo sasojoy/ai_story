@@ -2,22 +2,22 @@
 抄本重抄、探索撿到、戴著碎片的份量快照、天命之爭的份量加權、補送、奪璽單挑的戰報、天命之爭定天命、時刻表決戰收場。
 
 - 包裡互叫直接叫函式（補送 deliver_results 叫 file_seal、copy_heirloom；撿到 seal_find 叫 deliver_results）；叫回 Game 的都經 ctx：
-  第 28 批還在 Game 上的 _seal_challenge、自己的委派 _mandate_settle（scripts/measure_seal.py 換掉 Game._mandate_settle，經 ctx 才打得到）。
+  同包的 duel_actions.challenge（第 28 批搬進來，直接叫）、自己的委派 _mandate_settle（scripts/measure_seal.py 換掉 Game._mandate_settle，經 ctx 才打得到）。
 - 事件 outing 的 seal 那一格叫 seal_find、battle_end 的 seal 那一格叫 settle（__init__.py 的 bus()，在叫的那一下才照模組屬性找：
   scripts/measure_seal.py 換掉這裡的 settle）。碎片的規則叫 seal.<名字>（模組屬性：tests/acts/test_conquest_rules.py 換掉 seal.find）。
 - 擲骰一律是 seal.dice（密鹽），不碰 Game.rng；取數的先後照原本。
 """
 from __future__ import annotations
 
-from tianxia import battle_instance, battlelog, conquest, library, renown, treasures  # 共用規則層
+from tianxia import battlelog, conquest, library, renown, treasures  # 共用規則層
+from tianxia.core import battle_base as battle_instance  # 決戰的資料型別與判定（第 54 批進核心）
 from tianxia import journal
-from tianxia import seal_duel  # 過渡：待搬（第 28 批：奪璽單挑；收場的字 WIN_VERDICTS、side_tier、CALL、CALL_QA）
 from tianxia.core import annal_base as annals
 from tianxia.models import BattleDef
 from tianxia.rules import learn_skill
 from tianxia.state import BattleRecord, JournalEntry
 
-from . import seal
+from . import duel_actions, duel_rules, seal
 
 
 def copy_heirloom(ctx) -> None:
@@ -155,7 +155,7 @@ def file_seal(ctx, e, shard: str, same: bool) -> None:
         other = e.other if e.kind == "take" else e.holder  # 挑戰者看的是持有者
     else:
         other = challenger  # 持有者看的是挑戰者
-    won = e.result in seal_duel.WIN_VERDICTS
+    won = e.result in duel_rules.WIN_VERDICTS
     if e.kind == "take":
         head, fame = (seal.WON, 0) if mine == "challenger" else (seal.LOST, cfg.fame["lose"])
     elif mine == "holder":
@@ -175,7 +175,7 @@ def file_seal(ctx, e, shard: str, same: bool) -> None:
     when = e.at if same and e.at is not None else s.world.time  # 單挑收場那一刻（FB-175）；跨季才回來照補送那一刻
     record = BattleRecord(
         id=s.battle_seq + 1, time=when, location=f"{label}{e.where or '陣前'}", kind="seal", event=f"『{shard}』",
-        opponent=other, ours=[], tier=seal_duel.side_tier(e.result, e.edge, mine, c.config.duel), our_power=0.0, difficulty=0.0,
+        opponent=other, ours=[], tier=duel_rules.side_tier(e.result, e.edge, mine, c.config.duel), our_power=0.0, difficulty=0.0,
         notes=notes, changes=list(changes),
         rounds=list(e.lines),
     )
@@ -243,7 +243,7 @@ def settle(ctx, battle: battle_instance.BattleInstance, definition: BattleDef, r
     shard_now = reg.shards.get(battle.seal_shard or "")
     if (not deserted and shard_now is not None and battle.seal_holder
             and seal.key(shard_now.holder) == seal.key(battle.seal_holder)):
-        duel = ctx._seal_challenge(battle, definition, reg, view.tianji, winner, margin, need, held)
+        duel = duel_actions.challenge(ctx, battle, definition, reg, view.tianji, winner, margin, need, held)
         if duel is not None:
             picked.add(seal.key(duel.challenger.name))
             notes.append(seal.DUEL_NOTE.format(challenger=duel.challenger.name, holder=duel.holder.name))
@@ -267,7 +267,7 @@ def settle(ctx, battle: battle_instance.BattleInstance, definition: BattleDef, r
             if duel is not None:
                 shared.seal_duels.append(duel)
                 reg_.last_showdown_dueled = True
-                call = seal_duel.CALL if duel.challenger.name in battle.participants else seal_duel.CALL_QA  # 旁觀散人沒有「戰功居前」
+                call = duel_rules.CALL if duel.challenger.name in battle.participants else duel_rules.CALL_QA  # 旁觀散人沒有「戰功居前」
                 seal.rumor(shared.season, call.format(challenger=duel.challenger.name, holder=duel.holder.name, shard=shard_label))
             elif battle.seal_holder:
                 seal.rumor(shared.season, seal.no_duel_text(c, battle.seal_holder, shard_label))  # 改版：不點名

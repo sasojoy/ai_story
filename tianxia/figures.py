@@ -95,6 +95,13 @@ def of_character(content: Content, character_id: str) -> str | None:
     return next((fid for fid, fig in content.figures.items() if fig.character == character_id), None)
 
 
+def side_name(content: Content, fid: str | None) -> str:
+    """大勢人物站哪一邊（陣營的名字）；不是大勢人物、劇本沒有那個陣營是空字串。"""
+    fig = content.figures.get(fid) if fid else None
+    found = content.scenario.find_faction(fig.faction) if fig is not None else None
+    return found.name if found is not None else ""
+
+
 def challenge_on(content: Content, world: WorldState) -> bool:
     """這一季有沒有「挑戰大勢人物本人」（挑戰每季都有設計 3.1）：人物表有人、劇本有陣營才有；第一季的規則開著一定有（打擊軍令
     靠它交差），其他季看 Config.figure_challenge_every_season（主機的退路：關掉就回到「只有第一季」）。"""

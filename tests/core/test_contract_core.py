@@ -185,6 +185,15 @@ def test_admin_tools_merge_and_refuse_the_same_name_twice(monkeypatch):
         features_core.admin_tools(None)
 
 
+def test_start_threads_asks_every_registered_package_even_a_closed_one(monkeypatch):
+    """背景執行緒（全部拆包第 52 批）：殼啟動時照清單問登記的每一包、不看 enabled（那時候還沒有 ctx），參數是殼；不回東西。"""
+    one, two = Seams(open_=False), Seams()
+    monkeypatch.setattr(registry, "FEATURES", [one, two])
+    shell = object()
+    assert features_core.start_threads(shell) is None
+    assert one.calls == [("threads", shell)] and two.calls == [("threads", shell)]
+
+
 def test_owner_of_goes_by_the_prefix(fake):
     assert features_core.owner_of("fake:do") is fake
     assert features_core.owner_of("fakeish:do") is None and features_core.owner_of("act:explore") is None
@@ -238,6 +247,9 @@ class Seams(Fake):
 
     def on_season_close(self, ctx, reread):  # battle（全部拆包第 8 批）
         self._note("on_season_close", reread)
+
+    def threads(self, shell):  # tale（全部拆包第 52 批）
+        self._note("threads", shell)
 
     def shops(self):
         return (Shop(key="fakeshop", inside=lambda g: self.in_shop, here=lambda g: self.shop_here,
@@ -783,7 +795,8 @@ def test_the_core_and_the_packages_take_every_effect_and_defection_slot_exactly_
         "seal": ["runic", "shard"]}  # 全部拆包第 27 批：符文殘片、舊鏈的玉璽碎片改由玉璽包登記（rules._EFFECT_CORE 少這兩格）
     assert {f.name: [(h.at, h.slot) for h in f.defection()] for f in fs if f.defection()} == {
         "military": [("clear", "convoy"), ("clear", "opportunities"), ("leave", "plots")], "guide": [("clear", "hints")], "companions": [("after", "parley")],
-        "faction": [("clear", "progress"), ("after", "leave_behind")]}
+        "faction": [("clear", "progress"), ("after", "leave_behind")],
+        "bounties": [("stranded", "bounties")]}  # 全部拆包第 45 批：原本陣營包 defection._STRANDED_CORE 代叫，換主人
 
 
 # core_eventbus（全部拆包第 26 批「事件機制」；計畫 docs/superpowers/plans/2026-11-06-事件機制-第26批.md 1.2、2.1、Task 2）
@@ -811,6 +824,7 @@ def test_the_bus_order_is_the_table_in_the_plan():
         "explore": ("bounties",),
         "arrive": ("convoy", "bounties"),
         "raid_win": ("bounties",),
+        "aid": ("bounties",),  # 全部拆包第 45 批：人物託付開成事件（PM 點頭，只加這一列）
         "battle_end": ("seal",),
     }
     assert Feature().bus() == ()
@@ -975,12 +989,13 @@ def test_the_core_and_the_packages_take_every_event_slot_exactly_once():
         assert mine.keys() | engine._BUS_CORE[event].keys() == set(order), event
     fs = features_core.registered()
     assert {f.name: [(h.event, h.slot) for h in f.bus()] for f in fs if f.bus()} == {
-        "military": [("arrive", "convoy")], "seal": [("outing", "seal"), ("battle_end", "seal")]}
+        "military": [("arrive", "convoy")], "seal": [("outing", "seal"), ("battle_end", "seal")],
+        # 全部拆包第 45 批：懸賞榜包登記六格（原本 engine._BUS_CORE 那五格，加 aid），_BUS_CORE 每一列都空了
+        "bounties": [("win", "bounties"), ("outing", "bounties"), ("explore", "bounties"), ("arrive", "bounties"), ("raid_win", "bounties"), ("aid", "bounties")]}
 
 
 def test_the_core_slots_look_up_the_old_functions_when_called(game, monkeypatch):
-    """核心代叫的格在叫的那一下才照模組屬性找（bounties.on_*）：換掉的照樣打得到，參數是原本那一個呼叫的（state、content、world 是 ctx 上的
-    同一份）；照真的 FEATURES，抵達那一刻先交糧車（軍情包那一格，也照模組屬性找）再護送，探索收尾先打探懸賞再撿碎片、決戰收場叫玉璽
+    """懸賞榜包那幾格在叫的那一下才照模組屬性找（bounties.on_*，舊名是包 rules 的別名，全部拆包第 45 批換主人、第一個參數改 ctx）：換掉的照樣打得到；照真的 FEATURES，抵達那一刻先交糧車（軍情包那一格，也照模組屬性找）再護送，探索收尾先打探懸賞再撿碎片、決戰收場叫玉璽
     （全部拆包第 27 批：玉璽包那兩格照包的模組屬性找 actions.seal_find、actions.settle，原本是 Game 上的 _seal_find、_seal_settle）。"""
     from tianxia import bounties
     from tianxia.features.military import convoy_actions
@@ -991,7 +1006,6 @@ def test_the_core_slots_look_up_the_old_functions_when_called(game, monkeypatch)
     def note(name, back):
         return lambda *args: calls.append((name, args)) or back
 
-    s, c, w = game.state, game.content, game.world
     for name in ("on_win", "on_explore", "on_arrive", "on_raid_win"):
         monkeypatch.setattr(bounties, name, note(name, [name]))
     monkeypatch.setattr(convoy_actions, "convoy_arrives", note("convoy_arrives", ["糧車"]))
@@ -1004,11 +1018,11 @@ def test_the_core_slots_look_up_the_old_functions_when_called(game, monkeypatch)
     assert game.publish("raid_win", "某人") == ["on_raid_win"]
     assert game.publish("battle_end", "battle", "definition", "result") == []
     assert calls == [
-        ("on_win", (s, c, w, "lake", "thug")),
-        ("on_explore", (s, c, w, "lake")), ("seal_find", (game, "lake")),
-        ("on_explore", (s, c, w, "lake")),
-        ("convoy_arrives", (game, "lake")), ("on_arrive", (s, c, w, "lake")),
-        ("on_raid_win", (s, c, w, "某人")),
+        ("on_win", (game, "lake", "thug")),
+        ("on_explore", (game, "lake")), ("seal_find", (game, "lake")),
+        ("on_explore", (game, "lake")),
+        ("convoy_arrives", (game, "lake")), ("on_arrive", (game, "lake")),
+        ("on_raid_win", (game, "某人")),
         ("settle", (game, "battle", "definition", "result")),
     ]
 
@@ -1185,26 +1199,27 @@ def test_the_week_card_asks_the_step_slots_with_the_shells_status_and_orders(mon
 
 
 def test_the_core_and_the_packages_take_every_step_slot_exactly_once():
-    """核心代叫的格（step._STEP_CORE：懸賞榜的委託與懸賞，第 45 批）與包登記的格（照真的 FEATURES）合起來剛好是表上的格、沒有重疊、ref 不重複：
-    沒有一格默默不排、也沒有一格兩邊都寫。主人照計畫 1.2 量的：託付是人物情誼包、軍令與伏筆是軍情包、新手目標是新手引導包、去投靠是陣營包；
+    """核心代叫的格（step._STEP_CORE：第 45 批懸賞榜成包之後空了）與包登記的格（照真的 FEATURES）合起來剛好是表上的格、沒有重疊、ref 不重複：
+    沒有一格默默不排、也沒有一格兩邊都寫。主人照計畫 1.2 量的：託付是人物情誼包、委託與懸賞是懸賞榜包、軍令與伏筆是軍情包、新手目標是新手引導包、去投靠是陣營包；
     有 ref 的格都有 place（託付自己帶 target，兩個都沒有）。"""
     from tianxia import step as step_rules
 
     mine = features_core.step_hooks()
     assert not mine.keys() & step_rules._STEP_CORE.keys()
     assert mine.keys() | step_rules._STEP_CORE.keys() == set(features_core.STEP_ORDER)
-    assert set(step_rules._STEP_CORE) == {"commission", "bounty"}
+    assert set(step_rules._STEP_CORE) == set()  # 全部拆包第 45 批：commission、bounty 換主人
     table = features_core.step_table(step_rules._STEP_CORE)
     assert [h.slot for h in table] == list(features_core.STEP_ORDER)
     assert [h.ref for h in table] == [None, "errand", "order", "bounty", "foreshadow", "newbie", "join"]
     assert all((h.ref is None) == (h.place is None) for h in table)
     fs = features_core.registered()
     assert {f.name: [h.slot for h in f.steps()] for f in fs if f.steps()} == {
-        "companions": ["errand"], "military": ["order", "foreshadow"], "guide": ["newbie"], "faction": ["join"]}
+        "companions": ["errand"], "military": ["order", "foreshadow"], "guide": ["newbie"], "faction": ["join"],
+        "bounties": ["commission", "bounty"]}  # 全部拆包第 45 批
 
 
 def test_the_step_slots_look_up_their_functions_when_called(monkeypatch):
-    """每一格在叫的那一下才照模組屬性找（核心代叫的懸賞榜兩格找 tianxia.bounties，包的格找自己的模組）：換掉的照樣打得到，參數照傳
+    """每一格在叫的那一下才照模組屬性找（懸賞榜兩格找舊名 tianxia.bounties，第 45 批成了包 rules 的別名；包的格找自己的模組）：換掉的照樣打得到，參數照傳
     （軍令那一格拿殼傳進來的 orders、新手目標那一格拿 status；託付、伏筆、去投靠讀 ctx 上的 state 與 content）。"""
     from wins_kit import wins_game
 

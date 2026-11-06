@@ -164,6 +164,8 @@ NOT_CORE_TESTS = frozenset({"journal", "world"})
 # core_step（全部拆包第 36 批）：step、weekcard 收進核心本體，同 world 先不收它們的 test_step（9 條）、test_weekcard（8 條）——改別的核心模組
 # 不多跑這 17 條；改 step.py、weekcard.py 照舊跑它們（自己檔名的測試）。
 NOT_CORE_TESTS = NOT_CORE_TESTS | {"step", "weekcard"}
+# merge_back（主幹合回 develop，2026-11-06，PM 認定第 1 條）：attrset 進核心本體，同 world、step 先不收它的 test_attrset（467 行）；改 attrset.py 照舊跑它（自己檔名的測試）。
+NOT_CORE_TESTS = NOT_CORE_TESTS | {"attrset"}
 # 「核心測試」除了核心模組自己檔名的，再收 tests/core/ 底下這幾種（core_tests）：Game 門面、核心契約、邊界、錢包服務
 CORE_GLOBS = ("test_engine*.py", "test_contract*.py", "test_feature_boundaries.py", "test_wallet.py")
 # 功能包改了跟著那一包跑的「核心契約」（tests/core/ 底下；手冊 4.1 第三級：選項帶前綴、choose 不吃別包的、關著不給、換季、邊界）

@@ -193,6 +193,7 @@ def test_the_rise_floats_without_the_terrain(content, world, monkeypatch):
 def test_the_figure_rise_floats_without_the_terrain(monkeypatch):
     c = real_content("week7")
     c.config.auto_open_first_season = True
+    c.config.attributes.v2.enabled = False  # 江湖水漲的人物（舊的五屬性）；五項屬性的季人物照等級長（attrset.figure_squad），沒有水漲
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     asked: list[dict] = []
     real = team.power_vs

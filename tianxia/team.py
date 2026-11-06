@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from collections.abc import Callable
 
-from . import armor, calendar, encounter, equipment, mounts, rounds, seal_acts, signature, styles, tactics, traits, treasures, weapons
+from . import armor, attrset, calendar, encounter, equipment, mounts, rounds, seal_acts, signature, styles, tactics, traits, treasures, weapons
 from . import growth  # 減法季三道閘、屬性五段的純規則（growth 只在函式裡反過來 import team）
 from . import terrain as terrain_mod  # 地利（_styled_fighters 的參數 terrain 是開關，模組另取名字）
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, power_at, with_quality
@@ -76,12 +76,257 @@ def stat_factor(content: Content, value: float, season=None) -> float:
     return max(encounter.BOOST_FLOOR, 1 + stat_bonus(content, value, season))
 
 
+# ── 屬性的讀法（屬性與跨季架構 v2 第二節 2.1；第十節 ① 骨架）──────────────────────────────────────────
+# 任何模組要「屬性換成效果」一律走 attr_effect（或沒有存檔的部下、量表走 hook_effect）：效果表在 Config.attributes.effects，
+# 有哪幾個鉤子寫在 ATTR_HOOKS。新功能要讀屬性：在這裡加一個鉤子、在效果表掛一條，不在程式裡寫死公式。
+# tests/core/test_attributes.py 掃 tianxia/ 直接讀屬性鍵的地方（只准少、不准多）。
+
+ATTR_HOOKS = {
+    "outer": "外功的加成（encounter.Boost.outer）",
+    "inner": "內功的加成（encounter.Boost.inner）",
+    "dodge": "落敗閃成僵持的機會（dodge_chance，寶物另外加、最後夾在 0～1）",
+    "guard": "一場少掉幾成氣血（take_encounter_toll；五項屬性的季才有：統御對他的武力）",
+}
+
+
+def _guard(state: GameState, content: Content, world: WorldStateStore, squad) -> float:
+    """本人這一場少掉幾成氣血（屬性與跨季架構 v2 第三節：統御管防禦）：五項屬性的季照效果表的 guard 對這一隊（squad）的屬性；
+    舊的季是 0（一個字都不變）。"""
+    if not attrset.on(content, getattr(state, "world", None)):
+        return 0.0
+    with facing(state, content, squad):
+        return attr_effect(state, content, world, PLAYER, "guard")
+
+
+def stat_keys(state: GameState, content: Content) -> tuple[str, ...]:
+    """這一季本人有哪幾項屬性（狀態列、配點鈕的順序）：五項屬性的季是 attrset.keys，其餘照 COMBAT_STATS。"""
+    return attrset.keys(content) if attrset.on(content, getattr(state, "world", None)) else COMBAT_STATS
+
+
+def v1_stat(state: GameState, content: Content, key: str, default: float = BASE_STAT) -> float:
+    """本人舊尺度的一項屬性（key 是舊的鍵：str、agi、con、wis、lore），給還沒改寫成效果表的舊公式讀。舊的季照存檔
+    （沒有這一項當 default）；五項屬性的季照 legacy 對到新的一項、換回舊尺度（attrset.v1_value），對不到的（博聞）當基準。"""
+    return attrset.legacy(state, content, key, default)
+
+
+def attr_value(state: GameState, content: Content, world: WorldStateStore, key: str, attr: str) -> float:
+    """名冊上這個人（key：PLAYER 或同伴的 id）的一項屬性：本人照存檔（沒有這一項當 BASE_STAT；五項屬性的季照 v1_stat），
+    同伴照 member_stats。"""
+    if key == PLAYER:
+        return v1_stat(state, content, attr)
+    return member_stats(state, content, world, key)[attr]
+
+
+def _curve(content: Content, row, value: float, rival: float | None, season) -> float:
+    if row.curve == "linear":
+        rate = per_point(content, season, row.per) if isinstance(row.per, str) else row.per
+        return rate * (value - row.origin)
+    if row.curve == "contest":
+        return row.cap * math.tanh((value - (row.origin if rival is None else rival)) / row.scale)
+    got = 0.0
+    for threshold, amount in row.steps:  # tiers：門檻由小到大（content 驗），到了哪一格給哪一格
+        if value >= threshold:
+            got = amount
+    return got
+
+
+def hook_effect(content: Content, hook: str, values, rivals=None, season=None) -> float:
+    """效果表上掛在 hook 的每一條相加：values 是這個人的屬性（鍵 → 值；缺的當 BASE_STAT），rivals 是對手的（contest 用；
+    沒給時對上 origin）。season（這一季的 WorldState）照 per_point：減法季每點加倍；None 一律舊數字。沒掛任何一條是 0。"""
+    total = None
+    for row in content.config.attributes.effects:
+        if row.hook != hook:
+            continue
+        rival = None if rivals is None else rivals.get(row.attr, BASE_STAT)
+        got = _curve(content, row, values.get(row.attr, BASE_STAT), rival, season)
+        total = got if total is None else total + got  # 只掛一條時就是那一條，一個位元都不多動
+    return 0.0 if total is None else total
+
+
+_FOE: ContextVar[dict | None] = ContextVar("foe", default=None)
+_PVP: ContextVar[bool] = ContextVar("pvp", default=False)  # 對手是玩家（facing_player）：效果再乘 pvp_scale
+
+
+@contextmanager
+def facing(state: GameState, content: Content, squad, level: float | None = None):
+    """這一仗的對手（五項屬性的季，屬性與跨季架構 v2 第四節）：仗裡算加成的地方（attr_effect）照它的屬性對抗；舊的季什麼都不做。"""
+    if not attrset.on(content, getattr(state, "world", None)) or squad is None:
+        yield
+        return
+    token = _FOE.set(attrset.foe_values(content, squad, level))
+    try:
+        yield
+    finally:
+        _FOE.reset(token)
+
+
+def v2_values(state: GameState, content: Content, world: WorldStateStore, key: str) -> dict[str, float]:
+    """五項屬性的季，名冊上這個人的五項：本人照 attrset；同伴照他內容寫的舊屬性換過來（第 4 批換成型與資質）。"""
+    if key == PLAYER:
+        return attrset.values(state, content)
+    progress = world.get_companion(key)
+    return attrset.from_v1(content, progress.level, member_stats(state, content, world, key))
+
+
+def _v2_curve(content: Content, row, mine: float, other: float, pvp: bool = False) -> float:
+    """新尺度的一條效果（我 − 他）。玩家對玩家（pvp）與 contest_relative 開著時差距照兩邊的平均換成比例（尺度跟著等級長：
+    第 1 級 50 對 50 跟原本一樣，第 30 級差同樣幾成就是同樣的效果），不然等級一高，每級差一兩點就整條拉滿（企劃者 2026-11-04
+    擔心全點武力的平衡；對 NPC 的照第 ② 階段量好的絕對差，contest_relative 預設關）。"""
+    if row.curve != "contest" or not (pvp or content.config.attributes.v2.contest_relative):
+        return _curve(content, row, mine, other, None)
+    mid = max(1.0, (mine + other) / 2)
+    return row.cap * math.tanh((mine - other) / (row.scale * mid / row.origin))
+
+
+def _v2_effect(state: GameState, content: Content, world: WorldStateStore, key: str, hook: str, rival) -> float | None:
+    """五項屬性的季、效果表（v2）寫了這個鉤子：照新尺度對抗（我 − 他）；他沒給時照這一仗的對手（facing），再沒有就是同等級的平均人。"""
+    rows = [r for r in content.config.attributes.v2.effects if r.hook == hook]
+    if not rows or not attrset.on(content, getattr(state, "world", None)):
+        return None
+    mine = v2_values(state, content, world, key)
+    foe = rival or _FOE.get()
+    if foe is None:
+        flat = attrset.expect(content, state.player.member.level)
+        foe = {k: flat for k in attrset.keys(content)}
+    pvp = _PVP.get() and rival is None
+    cuts = counter_cuts(state, content, world) if key == PLAYER else NO_CUTS
+    total = sum(_v2_row(content, row, mine, foe, cuts, _FOE_CUTS.get() if pvp else NO_CUTS, pvp) for row in rows)
+    return total * content.config.attributes.v2.pvp_scale if pvp else total
+
+
+NO_CUTS: dict[str, float] = {}
+_FOE_CUTS: ContextVar[dict] = ContextVar("foe_cuts", default=NO_CUTS)  # 對手是玩家時，他身上剋屬性的功效（counter_cuts）
+
+
+def _v2_row(content: Content, row, mine: dict, foe: dict, my_cuts: dict, foe_cuts: dict, pvp: bool) -> float:
+    """效果表的一條（我的 row.attr 對他的 against）：剋屬性的功效先打折（企劃者 2026-11-04 點頭的武學調整）——
+    我身上的破甲、沉勁讓他的統御少算、料敵讓他的身法少算、化勁回瀾讓他的武力少算；他身上的化勁回瀾讓我的武力少算。"""
+    key = content.config.attributes.v2.against.get(row.attr, row.attr)
+    other = foe.get(key, row.origin) * (1 - my_cuts.get(key, 0.0))
+    value = mine.get(row.attr, row.origin) * (1 - foe_cuts.get(row.attr, 0.0) if row.attr == "str" else 1.0)
+    return _v2_curve(content, row, value, other, pvp)
+
+
+def counter_cuts(state: GameState, content: Content, world: WorldStateStore) -> dict[str, float]:
+    """本人身上剋屬性的功效（五項屬性的季；舊的季是空的）：對手的哪一項少算幾成（Config.attributes.v2.counter_hooks）。
+    帶著那一個功效（任一門、任一層）就算，同一項取最大的。world 是 None（dodge_chance 這類不經 world 的純函式）不算：
+    身上的武學要 world 才解得出來（全服登記的合成武學；2026-11-05 量表腳本在這裡炸過）。"""
+    cfg = content.config.attributes.v2
+    if world is None or not cfg.counter_hooks or not attrset.on(content, getattr(state, "world", None)):
+        return NO_CUTS
+    layers = traits.loadout(state, content, world).layers
+    out: dict[str, float] = {}
+    for hook, (attr, cut) in cfg.counter_hooks.items():
+        if layers.get(hook, 0) > 0:
+            out[attr] = max(out.get(attr, 0.0), cut)
+    return out
+
+
+@contextmanager
+def facing_player(content: Content, me: GameState, them: GameState, them_world: WorldStateStore | None = None):
+    """玩家對玩家、兩邊都是活的（切磋、論武、截殺）：仗裡算加成的地方照對手本人的五項對抗（企劃者 2026-11-04「全部點武力
+    會不會沒人打得過他」：對手的統御才擋得住你的武力）。舊的季什麼都不做。"""
+    if not attrset.on(content, getattr(me, "world", None)):
+        yield
+        return
+    token, pvp = _FOE.set(attrset.values(them, content)), _PVP.set(True)
+    cuts = _FOE_CUTS.set(counter_cuts(them, content, them_world) if them_world is not None else NO_CUTS)
+    try:
+        yield
+    finally:
+        _FOE.reset(token)
+        _PVP.reset(pvp)
+        _FOE_CUTS.reset(cuts)
+
+
+def pvp_card(state: GameState, content: Content, world: WorldStateStore) -> dict | None:
+    """快照上場的玩家對玩家（擂台的分身、奪璽單挑）：快照那一刻的威力是對上同等級的平均人算的；這張卡記著重算要的東西
+    （五項、當時的外功內功加成、內功那一項的份量），開打時再照真正的對手換一次（pvp_faced）。舊的季是 None。"""
+    if not attrset.on(content, getattr(state, "world", None)):
+        return None
+    member = state.player.member
+    arts = team_arts(state, content, world)
+    neigong = arts.get(member.neigong_id) if member.neigong_id else None
+    share = power_at(neigong, member.neigong_level) / inner_div(content, state.world) if neigong is not None else 0.0
+    return {"attrs": attrset.values(state, content), "outer": attr_effect(state, content, world, PLAYER, "outer"),
+            "inner": attr_effect(state, content, world, PLAYER, "inner"), "share": share,
+            "cuts": dict(counter_cuts(state, content, world))}
+
+
+def _v2_from(content: Content, hook: str, card: dict, foe: dict) -> float:
+    """玩家對玩家的一個鉤子（照比例的差距，pvp_ratio 用；還沒乘 pvp_scale）。card、foe 是兩邊的卡（剋屬性的功效在 cuts）。"""
+    mine, theirs = card["attrs"], foe["attrs"]
+    return sum(_v2_row(content, row, mine, theirs, card.get("cuts", NO_CUTS), foe.get("cuts", NO_CUTS), True)
+               for row in content.config.attributes.v2.effects if row.hook == hook)
+
+
+def pvp_ratio(content: Content, card: dict | None, foe: dict | None) -> float:
+    """這張卡的威力對上 foe（對手的卡）該乘幾倍：外功、內功的加成換成對上他的那一份（member_power 的形狀：
+    (1＋外)×(1＋內功份量×(1＋內))）。任一邊沒卡（舊的季、舊的快照）是 1。"""
+    if not card or not foe:
+        return 1.0
+    floor, pvp = encounter.BOOST_FLOOR, content.config.attributes.v2.pvp_scale
+    outer = _v2_from(content, "outer", card, foe) * pvp
+    inner = _v2_from(content, "inner", card, foe) * pvp
+    share = card["share"]
+    return (max(floor, 1 + outer) / max(floor, 1 + card["outer"])
+            * (1 + share * max(floor, 1 + inner)) / (1 + share * max(floor, 1 + card["inner"])))
+
+
+def pvp_unrole(content: Content, role: str, scores: dict[str, float]) -> tuple[str, dict[str, float]]:
+    """五項屬性的季、玩家對打（擂台、奪璽單挑）不給職位加成（企劃者 2026-11-04 平衡總表：盾陣的固守、三成氣血疊在一起，
+    全統御在中低段贏六成多；斥候加的奇襲是最弱的一招）：拿掉職位、份量把拿手那一招多的那一截除回去。職位留在全服決戰的大場面。"""
+    from .core import battle_base as battle_instance  # 延後 import：只有這裡用得到
+    move = battle_instance.ROLE_MOVES.get(role)
+    if not role:
+        return role, scores
+    bonus = 1 + content.config.battle.role_move_bonus
+    return "", {m: (round(v / bonus, 1) if m == move else v) for m, v in scores.items()}
+
+
+def pvp_dodge(content: Content, card: dict | None, foe: dict | None) -> float:
+    """快照對打（擂台）挨打的那一下閃掉的機會：身法對他的身法（效果表的 dodge，乘 pvp_scale），料敵讓他的身法少算；沒卡是 0。
+    擂台以前完全不看身法（企劃者 2026-11-04 平衡總表：全身法在擂台只贏兩成）。"""
+    if not card or not foe:
+        return 0.0
+    cfg = content.config.attributes.v2
+    rows = [row.model_copy(update={"cap": cfg.pvp_dodge_cap}) for row in cfg.effects if row.hook == "dodge"]
+    total = sum(_v2_row(content, row, card["attrs"], foe["attrs"], card.get("cuts", NO_CUTS), foe.get("cuts", NO_CUTS), True)
+                for row in rows)
+    return max(0.0, total * cfg.pvp_scale)
+
+
+def pvp_faced(content: Content, power: float, scores: dict[str, float], card: dict | None, foe: dict | None,
+              bare: float | None = None) -> tuple[float, dict[str, float], float | None]:
+    """快照的威力、份量（還有不含碎片的那一份）照真正的對手重算（pvp_ratio）；份量照實力（battle_instance.strength）的比例。"""
+    ratio = pvp_ratio(content, card, foe)
+    if ratio == 1.0:
+        return power, scores, bare
+    from .core import battle_base as battle_instance  # 延後 import：只有這裡用得到
+    tuning = content.config.battle
+    new = power * ratio
+    step = battle_instance.strength(tuning, new) / max(1e-9, battle_instance.strength(tuning, power))
+    return new, {m: round(v * step, 1) for m, v in scores.items()}, None if bare is None else bare * ratio
+
+
+def attr_effect(state: GameState, content: Content, world: WorldStateStore, key: str, hook: str, rival=None) -> float:
+    """名冊上這個人在 hook 這一個讀點的效果（第二節 2.1「team.attr_effect(誰, 鉤子, 對手)」）：照效果表、照這一季的每點效果。
+    rival 是對手的屬性（鍵 → 值），contest 曲線才用得到。五項屬性的季、v2 的效果表寫了這個鉤子時照新尺度對抗（_v2_effect）。"""
+    v2 = _v2_effect(state, content, world, key, hook, rival)
+    if v2 is not None:
+        return v2
+    attrs = {row.attr for row in content.config.attributes.effects if row.hook == hook}
+    values = {attr: (con_of(state, content, world, key) if attr == "con" else attr_value(state, content, world, key, attr))
+              for attr in attrs}  # 根骨照舊只從 con_of 讀
+    return hook_effect(content, hook, values, rival, getattr(state, "world", None))
+
+
 def con_of(state: GameState, content: Content, world: WorldStateStore, key: str) -> float:
     """名冊上這個人（key：PLAYER 或同伴的 id）的根骨，只從這裡讀：氣血四個函式的 con、內功的加成、一場的內傷。
     本人照存檔；同伴照 member_stats（內容的起始值加每級成長，人物資質設計 14.2；原本一律是基準）。
     認 key 不認物件：拿到玩家 Member 的複本也照樣是本人。"""
     if key == PLAYER:
-        return float(state.player.stats.get("con", BASE_STAT))
+        return float(v1_stat(state, content, "con"))
     return member_stats(state, content, world, key)["con"]
 
 
@@ -93,7 +338,7 @@ def member_stats(state: GameState, content: Content, world: WorldStateStore, key
     """這個人的五屬性。玩家本人就是存檔裡的數字（升級給點、自己分配，武學與成長設計 6.2，不再每級自動長）；
     同伴照舊是第 1 級的屬性加上每級成長，同伴的內容沒寫的屬性（博聞）當基準。"""
     if key == PLAYER:
-        return {k: float(state.player.stats.get(k, 0)) for k in COMBAT_STATS}
+        return {k: float(v1_stat(state, content, k, 0)) for k in COMBAT_STATS}
     character = content.characters[key]
     progress = world.get_companion(key)
     steps = growth_steps(content.config, progress.level)  # 30 級以後每 2 級長一步，同本人的屬性點
@@ -693,7 +938,10 @@ def points_between(cfg, before: int, after: int) -> int:
 def level_points(state: GameState, content: Content, before: int, after: int) -> int:
     """本人從第 before 級升到第 after 級拿到幾點屬性（升級的五個地方都走這一個：grant_team_exp、決戰軍餉、翻地分紅、切磋、頭目戰）。
     減法季屬性五段（Config.jianfa 的 stat_milestones）開著：升級不給點，跨過一個境界（milestone_levels）給 stat_points_per_milestone，
-    跨過的最後那一級記進 PlayerState.milestone_due（境界卡，Game.milestone_card；配完點清掉）；關著照 points_between。"""
+    跨過的最後那一級記進 PlayerState.milestone_due（境界卡，Game.milestone_card；配完點清掉）；關著照 points_between。
+    五項屬性的季（attrset.on）：每級照配比自己長（讀的時候算），這裡只給每 bonus_every 級送的點（attrset.bonus_between）。"""
+    if attrset.on(content, getattr(state, "world", None)):
+        return attrset.bonus_between(content, before, after)
     if not _jianfa(state, content, "stat_milestones"):
         return points_between(content.config, before, after)
     cfg = content.config.jianfa
@@ -953,7 +1201,7 @@ def player_boost(state: GameState, content: Content, world: WorldStateStore, *, 
     正邪共鳴（5.1、7.4）。搭配至少是 BOOST_FLOOR、共鳴至少是 1，所以乘出來的 factor 不會低於下限。
     再乘身上兵器的加成（兵器設計第三節）與玉璽碎片的戰力（改版第三章，treasures.power_scale：沒碎片、開關關著是 1）。
     seal=False 不乘碎片：奪璽單挑的快照與江湖水漲的浮動難度照這一份（改版：碎片搶得走、強者的 +10% 不被對手同步吃掉）。"""
-    stats, member = state.player.stats, state.player.member
+    member = state.player.member
     wugong = player_art(state, content, world, member.wugong_id)
     neigong = player_art(state, content, world, member.neigong_id)
     factor = (pairing(content, wugong, neigong) * resonance(state, content, wugong) * resonance(state, content, neigong)
@@ -963,10 +1211,10 @@ def player_boost(state: GameState, content: Content, world: WorldStateStore, *, 
         factor *= scale
     if _BACKED.get() != 1.0:  # 並肩出陣：同上，沒有人陪的仗一個位元也不動
         factor *= _BACKED.get()
-    return encounter.Boost(  # 每一點的效果照這一季（stat_bonus 的 season：減法季每點加倍）
-        outer=stat_bonus(content, stats.get("str", BASE_STAT), state.world),
-        inner=stat_bonus(content, con_of(state, content, world, PLAYER), state.world),
-        factor=factor,
+    return encounter.Boost(  # 每一點的效果照這一季（效果表的 per：減法季每點加倍）
+        outer=attr_effect(state, content, world, PLAYER, "outer"),
+        inner=attr_effect(state, content, world, PLAYER, "inner"),
+        factor=factor, inner_div=inner_div(content, getattr(state, "world", None)),
     )
 
 
@@ -977,10 +1225,15 @@ def mate_boost(state: GameState, content: Content, world: WorldStateStore, key: 
     wugong = resolve_art(progress.wugong_id, content, world)
     neigong = resolve_art(progress.neigong_id, content, world)
     return encounter.Boost(
-        outer=stat_bonus(content, member_stats(state, content, world, key)["str"], state.world),
-        inner=stat_bonus(content, con_of(state, content, world, key), state.world),  # 根骨只從 con_of 讀
-        factor=pairing(content, wugong, neigong),
+        outer=attr_effect(state, content, world, key, "outer"),
+        inner=attr_effect(state, content, world, key, "inner"),  # 根骨只從 con_of 讀（attr_effect 裡）
+        factor=pairing(content, wugong, neigong), inner_div=inner_div(content, getattr(state, "world", None)),
     )
+
+
+def inner_div(content: Content, season) -> float:
+    """內功份量的除數：五項屬性的季照 neigong_divisor（內功加重）；舊的季照舊（encounter.NEIGONG_BONUS_DIVISOR）。"""
+    return content.config.attributes.v2.neigong_divisor if attrset.on(content, season) else encounter.NEIGONG_BONUS_DIVISOR
 
 
 def follower_strength(content: Content, follower: FollowerDef, drill: FollowerDrill | None = None) -> int:
@@ -991,7 +1244,7 @@ def follower_strength(content: Content, follower: FollowerDef, drill: FollowerDr
 def follower_boost(content: Content, follower: FollowerDef, drill: FollowerDrill | None = None, season=None) -> encounter.Boost:
     """部下的加成（人物資質設計 14.3）：只有一門武學，吃模板的臂力（加傳功傳的）；沒有內功、不算搭配與共鳴。部下以前完全沒有加成。
     season 見 stat_bonus（減法季每點加倍）。"""
-    return encounter.Boost(outer=stat_bonus(content, follower_strength(content, follower, drill), season))
+    return encounter.Boost(outer=hook_effect(content, "outer", {"str": follower_strength(content, follower, drill)}, season=season))
 
 
 def team_boosts(state: GameState, content: Content, world: WorldStateStore, *, seal: bool = True) -> list[encounter.Boost]:
@@ -1008,9 +1261,11 @@ def team_boosts(state: GameState, content: Content, world: WorldStateStore, *, s
 def dodge_chance(state: GameState, content: Content) -> float:
     """本人的身法讓落敗有機會閃成僵持（人物資質設計 14.4）：比 5 每多一點 dodge_per_point，夾在 0～1；同伴不另外算。
     金角 +3 個百分點（玉璽碎片設計 7.1）。每一點照這一季（per_point：減法季每點加倍）。"""
-    agi = float(state.player.stats.get("agi", BASE_STAT))
-    rate = per_point(content, getattr(state, "world", None), "dodge_per_point")
-    return min(1.0, max(0.0, (agi - BASE_STAT) * rate + treasures.amount(state, content, "dodge")))
+    mine = {row.attr: float(v1_stat(state, content, row.attr))  # 只有本人：不經 world（量表與純函式也叫得到）
+            for row in content.config.attributes.effects if row.hook == "dodge"}
+    v2 = _v2_effect(state, content, None, PLAYER, "dodge", None)  # 五項屬性的季：身法對身法（本人不經 world）
+    return min(1.0, max(0.0, (v2 if v2 is not None else hook_effect(content, "dodge", mine, season=getattr(state, "world", None)))
+                        + treasures.amount(state, content, "dodge")))
 
 
 def armor_cut(state: GameState, content: Content, world: WorldStateStore) -> float:
@@ -1029,6 +1284,7 @@ def duel_armor_cut(state: GameState, content: Content, world: WorldStateStore) -
 
 def take_encounter_toll(
     state: GameState, content: Content, world: WorldStateStore, tier: str, *, wild: bool = False, share: float = 1.0,
+    squad=None,
 ) -> list[str]:
     """一場遭遇戰打完的氣血代價（氣血設計 §1.3）：按結果扣氣血，其中一部分變成內傷。
 
@@ -1044,6 +1300,7 @@ def take_encounter_toll(
     `Config.armor.total_cap`；同伴不吃防具。
     share：對手真的打到你的回合佔幾成（本命戰法讓他定身、打空、打到自己、化影的回合不算，tactics.Clash.blocked_share）；平常是 1。
     本人帶螭首（玉璽碎片改版，treasures.amount 的 injury）時變成內傷的那一份再乘它；同伴不吃。
+    squad：這一場的對手。五項屬性的季本人照統御對他的武力少掉幾成（_guard）；舊的季不看。
     """
     cfg = content.config
     fraction = cfg.encounter_neili_loss.get(tier, 0.0) * (cfg.wild_neili_loss_factor if wild else 1.0) * max(0.0, share)
@@ -1051,14 +1308,15 @@ def take_encounter_toll(
         return []
     stats = state.player.stats
     msgs = []
+    guard = _guard(state, content, world, squad)
     for key in team_keys(state):
         if key == PLAYER:
             lo = traits.loadout(state, content, world)
             # 化勁（13.2）＋防具（裝備四欄 4.3），合計夾在 total_cap；防具關著時 armor_cut 是 0、化勁上限 50% 本來就低於 60%，數字不變
             cut = min(cfg.armor.total_cap, traits.amount(content, lo, "toll_cut") + armor_cut(state, content, world))
             lost, hurt = _apply_toll(
-                content, state.player.member, fraction * (1 - cut),
-                agi=stats.get("agi", BASE_STAT), con=con_of(state, content, world, PLAYER),
+                content, state.player.member, fraction * (1 - cut) * (1 - guard),
+                agi=v1_stat(state, content, "agi"), con=con_of(state, content, world, PLAYER),
                 injury=treasures.amount(state, content, "injury"),  # 螭首（玉璽碎片改版）：變成內傷的減半；沒帶是 1
                 season=state.world,
             )
@@ -1077,6 +1335,7 @@ def take_encounter_toll(
 
 def toll_saved(
     state: GameState, content: Content, world: WorldStateStore, tier: str, *, wild: bool = False, share: float = 1.0,
+    squad=None,
 ) -> tuple[int, int]:
     """（化勁少扣的氣血, 不動免掉的內傷）（FB-084）：這一場本人真的扣的，跟拿掉那一個功效照一般算的差。
     各自只拿掉它自己那一個（化勁看氣血、不動看內傷），所以兩個數字不互相混。防具（裝備四欄設計 4.3）不是功效、一直留著：
@@ -1086,13 +1345,14 @@ def toll_saved(
     沒有這兩個功效（只有防具也算沒有）、或這個結果不扣氣血，是 (0, 0)。"""
     cfg = content.config
     fraction = cfg.encounter_neili_loss.get(tier, 0.0) * (cfg.wild_neili_loss_factor if wild else 1.0) * max(0.0, share)
+    fraction *= 1 - _guard(state, content, world, squad)  # 五項屬性的季：統御少掉的那一份兩邊都算（舊的季是 0）
     lo = traits.loadout(state, content, world)
     cut, still = traits.amount(content, lo, "toll_cut"), False  # 不動以前免內傷；第三批起改成不受定身、卸勁（tactics.py），這裡恆為 False
     if fraction <= 0 or (cut <= 0 and not still):
         return 0, 0
     worn = min(cfg.armor.total_cap, armor_cut(state, content, world))
     total = min(cfg.armor.total_cap, cut + worn)
-    agi, con = state.player.stats.get("agi", BASE_STAT), con_of(state, content, world, PLAYER)
+    agi, con = v1_stat(state, content, "agi"), con_of(state, content, world, PLAYER)
 
     def toll(cut_: float, injury: float) -> tuple[float, float]:
         return _apply_toll(
@@ -1122,6 +1382,18 @@ def _apply_toll(
 
 
 def fight(
+    state: GameState, content: Content, world: WorldStateStore, squad_id: str, rng: random.Random,
+    *, difficulty: float | None = None, shift: float = 0.0, dodge: bool = True, tier: str | None = None,
+    draw_floor: float | None = None,
+) -> encounter.EncounterResult:
+    """見 _fight；五項屬性的季照這一隊（難度換過的照換過的）的屬性對抗（facing）。"""
+    squad = content.squads[squad_id]
+    with facing(state, content, squad if difficulty is None else squad.model_copy(update={"difficulty": difficulty})):
+        return _fight(state, content, world, squad_id, rng, difficulty=difficulty, shift=shift, dodge=dodge, tier=tier,
+                      draw_floor=draw_floor)
+
+
+def _fight(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, rng: random.Random,
     *, difficulty: float | None = None, shift: float = 0.0, dodge: bool = True, tier: str | None = None,
     draw_floor: float | None = None,
@@ -1308,7 +1580,7 @@ def tactic_ctx(state: GameState, content: Content, world: WorldStateStore, squad
     mount = p.mount if mounts.on(content) else None
     owner = territory.controller(state.world, content, p.location) if p.faction else None
     return tactics.Ctx(
-        foe=squad.name, our_agility=float(p.stats.get("agi", BASE_STAT)), foe_agility=rounds.foe_agility(difficulty),
+        foe=squad.name, our_agility=float(v1_stat(state, content, "agi")), foe_agility=rounds.foe_agility(difficulty),
         night=calendar.is_night(state.world.time, content, state.world), mount_tier=mount.tier if mount is not None else 0,
         good=int(p.stats.get("good", 0)), evil=int(p.stats.get("evil", 0)), followers=len(follower_rows(state, content)),
         foe_faction=squad.faction, own_turf=owner is not None and owner == p.faction,
@@ -1326,7 +1598,7 @@ def self_side(state: GameState, content: Content, world: WorldStateStore, *, mou
         return None
     mount = p.mount if mounted and mounts.on(content) else None
     return tactics.side_for(holders, tactics.Ctx(
-        foe="", our_agility=float(p.stats.get("agi", BASE_STAT)), night=calendar.is_night(state.world.time, content, state.world),
+        foe="", our_agility=float(v1_stat(state, content, "agi")), night=calendar.is_night(state.world.time, content, state.world),
         mount_tier=mount.tier if mount is not None else 0, good=int(p.stats.get("good", 0)), evil=int(p.stats.get("evil", 0)),
         followers=len(follower_rows(state, content)) if troops else 0, foe_faction=None, team=[PLAYER],
     ))
@@ -1408,6 +1680,16 @@ def _odds_text(wins: int, draws: int, runs: int) -> str:
 
 
 def estimate(
+    state: GameState, content: Content, world: WorldStateStore, squad_id: str, *, difficulty: float | None = None,
+    draw_floor: float | None = None, memo: OddsMemo | None = None, at: str | None = None,
+) -> str:
+    """見 _estimate；五項屬性的季照這一隊的屬性對抗（facing），勝算跟真的打照同一把尺。"""
+    squad = content.squads[squad_id]
+    with facing(state, content, squad if difficulty is None else squad.model_copy(update={"difficulty": difficulty})):
+        return _estimate(state, content, world, squad_id, difficulty=difficulty, draw_floor=draw_floor, memo=memo, at=at)
+
+
+def _estimate(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, *, difficulty: float | None = None,
     draw_floor: float | None = None, memo: OddsMemo | None = None, at: str | None = None,
 ) -> str:

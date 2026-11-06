@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import journal, prologue, treasures
+from tianxia import journal, prologue, team, treasures
 from tianxia.state import JournalEntry
 
 if TYPE_CHECKING:
@@ -43,7 +43,7 @@ def finish(ctx: Game, end_time: float) -> list[str]:
     hours = (end_time - p.seclusion_start) / HOUR
     # 寶物「閉關心得」（裝備四欄 6.2）：照出關那一刻身上那件算——寶物隨時能換（2.3【定】，企劃者 2026-10-11），閉關到一半換上也算
     bonus = 1 + treasures.amount(ctx.state, ctx.content, "seclusion")
-    amount = round(hours * cfg.seclusion_xinde_per_hour * (1 + p.stats["wis"] / 20) * bonus)
+    amount = round(hours * cfg.seclusion_xinde_per_hour * (1 + team.v1_stat(ctx.state, ctx.content, "wis", 0) / 20) * bonus)
     p.busy_until = None
     p.seclusion_done = end_time  # 天時地利的「心靜」：出關之後一陣子開爐（fusion.setting_points）
     p.stats["xinde"] = p.stats.get("xinde", 0) + amount

@@ -19,9 +19,9 @@ from types import SimpleNamespace
 
 from pydantic import BaseModel, Field
 
-from tianxia import gender, insight_fx, insights, naming, precise, treasures  # 核心、共用規則層
+from tianxia import attrset, gender, insight_fx, insights, naming, precise, treasures  # 核心、共用規則層
 from tianxia.core.explore_base import terrain_tags  # noqa: F401  地形標籤：輿圖包也要讀，全部拆包第 49 批搬到 core/services.py、第 50 批移到核心的 core/explore_base.py，這裡 re-export
-from tianxia import seal_acts  # 過渡：待搬（玉璽碎片的頒詔：靜心感悟擲中多幾個百分點）
+from tianxia import seal_acts  # 共用規則層（璽效查詢，第 51 批）
 from tianxia.martial_arts import Insight
 from tianxia.models import Content, InsightScene, Location
 from tianxia.ollama_client import OllamaClient
@@ -138,7 +138,7 @@ def rate(state: GameState, content: Content, loc: Location, method: str | None =
     method 是選的做法的屬性：等於這一處最濃那一種的屬性時，基本值再加 Config.insight_strong.sense_points（意境提示設計第二節），
     跟寶物一樣夾在上限。卡上不寫這個數字（Q4：只有場景線索，不寫成算）。"""
     cfg = content.config
-    wis = state.player.stats.get("wis", 5)
+    wis = attrset.legacy(state, content, "wis", 5)
     low, high = cfg.sense_rate_range
     from tianxia import team  # noqa: PLC0415  延後 import（team → … 一路載入）
 

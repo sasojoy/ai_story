@@ -180,8 +180,10 @@ def test_a_low_module_with_too_many_dependents_runs_core_and_smoke_instead(monke
     map2：第 50 批 atlas 收進共用規則層之後量的，依賴它的模組 17 個、import 它們的測試檔 141 個，還是超過壓低的上限 100，例子不用換。）"""
     # 陣營第 35 批：defection 搬進包（舊名是沒有 import 的別名），seal_acts 往上找到的檔從超過上限掉到剛好 120 個（IMPORT_CAP 是「超過」才算），
     # 守的是「超過就只挑直接 import 的」這個做法，不是 120 這個數：把上限壓到 100，讓它不再貼著邊界
-    monkeypatch.setattr(test_for, "IMPORT_CAP", 100)
-    picked = test_for.pick(["tianxia/seal_acts.py"])
+    # 玉璽第 51 批：seal_acts 收進共用規則層（照上面那一條挑），例子換成還是真正的舊模組 fusion（依賴它的模組 1 個、import 它的測試檔量到 33 個；
+    # 其餘沒搬的檔 sensing、seal、smithing 是只有幾行的別名，不算）：沒有一個舊模組超過 100，所以上限壓到 30（直接 import 它的測試檔 27 個，在上限之內）；scripts/test_for.py 的 IMPORT_CAP 不動
+    monkeypatch.setattr(test_for, "IMPORT_CAP", 30)
+    picked = test_for.pick(["tianxia/fusion.py"])
     assert picked.core and picked.smoke
     assert len(picked.files) < test_for.IMPORT_CAP
     assert any("太多" in w for w in picked.why)
@@ -196,6 +198,10 @@ def test_a_module_engine_imports_to_register_picks_the_tests_that_name_its_actio
     用到、沒有人 import：照登記的動作名挑寫到它的測試檔。讓 wanted.buttons 回 []，test_bounties 與 test_sanren_web 會紅。"""
     assert kind in test_for.registered_actions(module)
     assert expected <= _names([f"tianxia/{module}.py"])
+    if module == "wanted":
+        # 第 45 批：wanted 搬進懸賞榜包（舊名是別名，登記改在包的 __init__.py，registered_actions 照樣認）。真正的檔在包裡：改它照包的規矩挑那一包的 tests/＋核心契約，
+        # 挑得到搬進包的 test_renown_wanted；test_bounties、test_sanren_web 留原處（第 61 批），寫在包 README「另外要跑的」（改舊名別名才照動作名挑）
+        assert "test_renown_wanted.py" in _names(["tianxia/features/bounties/wanted.py"])
     assert test_for.registered_actions("might") == ()
 
 
@@ -666,7 +672,7 @@ def test_the_smoke_set_covers_every_block():
     煙霧不能也是 slow：單獨跑 -m smoke 會蓋掉 addopts 的 not slow（那一條就跑了、兩分鐘的保證破了），test_for 照
     -m "not slow" 跑又會悄悄把它濾掉（那一塊的煙霧少一條）。"""
     ids = test_for.smoke_ids()
-    assert 100 <= len(ids) <= 150 and len(set(ids)) == len(ids)
+    assert 100 <= len(ids) <= 170 and len(set(ids)) == len(ids)
     slow = [i for i in ids if _slow_smoke(test_for._text(ROOT / i.split("::")[0]), i.split("::")[1:])]
     assert not slow, f"煙霧不能標 slow：{slow}"
     # 手冊 4.3「搬成包的區塊，煙霧改成那一包 tests/ 裡的一條」：tianxia/features/<包>/tests/ 的算那一包（商城的在 mall 包裡）
@@ -706,7 +712,9 @@ def test_a_feature_packages_web_file_picks_that_package_not_the_app_js_batch():
     mall_tests = {p.name for p in (test_for.FEATURES / "mall" / "tests").rglob("test_*.py")}
     contract = {p.name for p in test_for.contract_tests()}
     js = test_for.pick(["web/mall.js"])
-    assert {p.name for p in js.files} == mall_tests | contract and not js.core and not js.smoke
+    # 寫到 web/mall.js 檔名的別包測試照檔名跟（絕招例句每一句都收得下，#166）
+    assert {p.name for p in js.files} == mall_tests | contract | {"test_looks_scenes.py"}
+    assert not js.core and not js.smoke
     assert "test_server.py" not in {p.name for p in js.files}
     assert not {p.name for p in js.files} & (_names(["web/app.js"]) - mall_tests - contract)
     css = {p.name for p in test_for.pick(["web/mall.css"]).files}
@@ -1019,6 +1027,8 @@ def test_a_reexported_name_counts_only_when_written_after_the_module_word():
 
 STAGE_PACKAGES = ["bout", "battle", "checkin", "companions", "feast", "figure_acts", "guide", "looks", "outlets", "sense", "socialize", "story", "territory_acts", "zhuan"]  # 有 <包>_stage.py 的包（銀兩出口是第 43 批加的；引導是第 22 批合進 develop 的，第 12 批合併時補上；人物情誼是第 19 批、有所感是第 24 批、交友求見是第 21 批、大勢人物是第 31 批合進 split/trunk 時補上；列傳是第 29 批加的；地盤是第 46 批加的）
 STAGE_PACKAGES += ["seal"]  # seal（全部拆包第 27 批）：玉璽包的 seal_stage.py（擺「懷璽」：有登記、有抄本）；接在這裡、不改上一行（並行的拆包線各寫各的一行）
+STAGE_PACKAGES += ["legacy", "hire"]  # 合回 develop（2026-11-06）：傳承、招募的 <包>_stage.py
+STAGE_PACKAGES += ["persona"]  # 人物性子（develop cf927227，合回第 4 段）：persona_stage.py
 
 
 def test_the_stage_packages_are_every_package_with_a_stage_file():

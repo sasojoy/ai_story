@@ -9,7 +9,7 @@
 rules → territory 只在 rules.change_trend 裡延後 import；這裡 import rules 整個模組、呼叫時才取屬性。"""
 from __future__ import annotations
 
-from . import calendar, renown, rules
+from . import calendar, place_state, renown, rules
 from .models import FRONT_KEY, Content
 from .state import GameState, Rumor, TerritoryState, TerritoryWeek, WorldState
 
@@ -81,6 +81,7 @@ def _announce(world: WorldState, content: Content, t: TerritoryState, before: di
             text = line.format(place=content.locations[loc_id].name, side=content.scenario.faction_name(side, side))
             world.rumors.append(Rumor(time=world.time, text=text, location=loc_id, layer="world"))
             world.chronicle.append(Rumor(time=world.time, text=text))
+            place_state.flipped(world, content, loc_id, side)  # 地點會變樣：落入黃巾之手算淪陷、拿回來算收復
     _remember(t)
 
 
@@ -190,14 +191,16 @@ def price_here(state: GameState, content: Content, heal: bool = False) -> float:
     療傷、打造工錢、升階工錢、買馬都走這裡；輿圖詳情欄照舊只寫地盤（那是地點的，mapdata 讀 price_factor）。
     heal：療傷那一條（_land_here：領地爭奪的新手期在敵方領地不加價）。
     放在 territory 而不是 renown：territory → rules → renown，renown 再 import territory 就繞成環。"""
-    return _land_here(state, content, heal) * renown.price_factor(state, content)
+    return _land_here(state, content, heal) * renown.price_factor(state, content) * place_state.factor(state.world, content, state.player.location)
 
 
 def price_parts(state: GameState, content: Content, heal: bool = False) -> list[str]:
     """價錢打折的原因，一樣一段：「自家地盤・九折」「名動一方・九四折」（名聲 4.1 的寫法）；名聲關著、兩樣都沒有是空的。
     醫館另有俠的那一半（renown.clinic_part），skillview.heal_note 接在後面、寫在同一個括號裡（FB-294）。heal 同 price_here。"""
+    here = place_state.factor(state.world, content, state.player.location)  # 地點會變樣：戰火、饑荒的市價（不看名聲的開關：是這裡的樣子）
+    place = [f"{place_state.NAMES[place_state.kind_at(state.world, content, state.player.location)]}・{renown.discount_word(here)}"] if here != 1.0 else []
     if not renown.on(content, "discount"):
-        return []
+        return place
     parts = []
     land = _land_here(state, content, heal)
     if land != 1.0:
@@ -205,7 +208,7 @@ def price_parts(state: GameState, content: Content, heal: bool = False) -> list[
     fame = renown.price_factor(state, content)
     if fame != 1.0:
         parts.append(f"{renown.fame_title(state, content)}・{renown.discount_word(fame)}")
-    return parts
+    return parts + place
 
 
 def price_note(state: GameState, content: Content) -> str:

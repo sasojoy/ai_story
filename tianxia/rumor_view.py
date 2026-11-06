@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from . import calendar, orders
+from . import calendar, deeds, orders
 from .core import omen_base  # 聽過的伏筆片段與機緣線索：核心的查詢服務（全部拆包第 40 批，原本經舊名 foreshadow、opportunities 讀軍情包）
 from .models import Content
 from .rules import Ears, audible, ears_of
@@ -31,6 +31,12 @@ AWAY_LINE = "〔{label}〕{when}　{text}"  # 「你不在的時候」的一行�
 AWAY_MORE = "另有 {n} 則沒列出來，到「見聞」的傳聞翻。"  # 摘要放不下時的最後一行（待 joy 潤；算在 Config.away_max 那幾行裡）
 AWAY_TAG = "共 {n} 則"
 LOCAL_REPEAT = "（×{n}）"  # 所在大區那一段同一句傳聞出現 N 次、合成一行時接在句尾（待 joy 潤；N > 1 才寫）
+# 上線邸報（世界活起來第二批；gazette_lines）：三段的標題、一行、其餘的消息（待 joy 潤）
+GAZETTE_PLACES = "〔你去過的地方〕"
+GAZETTE_PEOPLE = "〔你認識的人〕"
+GAZETTE_YOU = "〔誰提起了你〕"
+GAZETTE_LINE = "{when}　{text}"
+GAZETTE_MORE = "另有 {n} 則天下傳聞，到「見聞」翻。"
 FACTION_KEYS = (orders.ISSUED, orders.ISSUED_DAY, orders.DONE)  # 陣營軍情的「要點」：軍令發布與達成（議事、刺探有了再把它們的開頭加進來）
 
 
@@ -151,3 +157,54 @@ def _newest_only(sections: list[list[tuple[str, Rumor]]]) -> list[list[tuple[str
             if at is None or r.time > sections[at[0]][at[1]][1].time:
                 best[r.text] = (s, i)
     return [[row for i, row in enumerate(section) if best[row[1].text] == (s, i)] for s, section in enumerate(sections)]
+
+
+def gazette_on(content: Content) -> bool:
+    """上線邸報開著：世界記事開著（Config.plans.enabled）且 Config.plans.gazette。"""
+    return deeds.on(content) and content.config.plans.gazette
+
+
+def gazette_lines(
+    state: GameState, content: Content, since: float | None, when: Callable[[float], str],
+) -> tuple[list[str], int]:
+    """上線邸報（世界活起來第二批；設計稿第四節「你去過的地方怎麼了、你認識的人怎麼了、誰提起了你」）：since（世界秒；None＝這一季從頭）之後的
+    1. 你去過的地方（PlayerState.visited）發生的世界記事：盤算的結果、人物到了哪、地點變樣、章回；
+    2. 你認識的人（情誼大於 0、帶在身邊的同伴）的世界記事（上一段列過的不再列）；
+    3. 誰提起了你：你出過力的世界記事，加上聽得到的傳聞裡寫到你名號的。
+    每段最多 Config.plans.gazette_rows 行（留最新的，照時間先後排），段前一行標題；沒有的段不寫。最後一行寫「另有 N 則天下傳聞」
+    （舊的那一份 away_lines 一共幾則；沒有就不寫）。三段都沒有時照舊回 away_lines（這段期間世界沒動到你的事，照舊給那一長串）。
+    回傳（那幾行, 一共幾則：三段的行數加上傳聞的則數）。"""
+    p = state.player
+    rows = content.config.plans.gazette_rows
+    fresh = [d for d in state.world.deeds if since is None or d.time > since]
+    key = p.name.casefold()
+    mine = [d for d in fresh if any(a.casefold() == key for a in d.actors)]
+    taken = {d.id for d in mine}
+    places = [d for d in fresh if d.id not in taken and d.place in p.visited]
+    taken |= {d.id for d in places}
+    known = {cid for cid, n in p.affinities.items() if n > 0} | set(p.team)
+    people = [d for d in fresh if d.id not in taken and known & set(d.figures)]
+    ears = ears_of(state, content)
+    said = {d.text for d in mine}
+    named = [r for r in state.world.rumors if (since is None or r.time > since) and len(p.name) >= 2 and p.name in r.text
+             and r.text not in said and audible(r, ears)]
+    you = sorted([(d.time, d.text) for d in mine] + [(r.time, r.text) for r in named])
+    sections = [
+        (GAZETTE_PLACES, [(d.time, d.text) for d in places]),
+        (GAZETTE_PEOPLE, [(d.time, d.text) for d in people]),
+        (GAZETTE_YOU, you),
+    ]
+    old, total = away_lines(state, content, since, when)
+    if not any(items for _, items in sections):
+        return old, total
+    lines: list[str] = []
+    count = 0
+    for title, items in sections:
+        if not items:
+            continue
+        lines.append(title)
+        lines += [GAZETTE_LINE.format(when=when(t), text=text) for t, text in items[-rows:]]
+        count += len(items)
+    if total:
+        lines.append(GAZETTE_MORE.format(n=total))
+    return lines, count + total

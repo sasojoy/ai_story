@@ -33,7 +33,7 @@ from tianxia.rules import EffectRun, apply_effect, check_condition, day_seconds,
 from tianxia.state import GameState, StoryCard, StoryProgress
 from tianxia.story_base import (  # noqa: F401  底座（共用規則層）：每一個名字照舊從 storyline 拿得到
     HISTORY, JOURNAL, OPTION, WORLD, _SAID, _VARY, EndHook, FightHook, TaskCheck, END_HOOKS, FIGHT_HOOKS, REFRESH_HOOKS, TASK_LEFT, TASKS,
-    _close_brace, _enter, _split_else, active, current, definition, heard, here, on, open_quiz, question_text, roll_start, room,
+    _close_brace, _enter, _split_else, active, current, definition, heard, here, on, open_quiz, question_text, roll_start, room, _luck_again,
     stage_art, start, vary,
 )
 from tianxia.story_base import doable, waiting  # noqa: F401  core_world2：章回卡與條件也讀（全部拆包第 40 批搬進底座），re-export 同一個

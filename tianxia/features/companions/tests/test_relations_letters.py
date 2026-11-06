@@ -6,6 +6,7 @@ import pytest
 
 from conftest import real_content
 from stances_kit import at, real_game
+from bounty_ctx import bounty_ctx
 from tianxia import bounties, calendar, figure_life, figures, letters, relations
 from tianxia.content import ContentError, validate
 from tianxia.models import RelationDef
@@ -97,7 +98,7 @@ def test_handing_in_a_revenge_bounty_warms_the_poster(c):
     b = next(b for b in s.world.bounties if b.motive == "復仇")
     s.player.faction = "huang"
     bounties.take(s, c, b.id)
-    msgs = bounties.on_win(s, c, None, b.location, b.squad)
+    msgs = bounties.on_win(bounty_ctx(s, c), b.location, b.squad)
     assert s.player.affinities.get(b.figure) == c.config.figure_life.revenge_affinity
     assert any("情誼 +" in m for m in msgs)
 
@@ -137,11 +138,11 @@ def test_finishing_a_commission_pays_and_warms(c):
     t = s.player.letters[-1].task
     silver = s.player.stats.get("silver", 0)
     if t.kind == "strike":
-        msgs = bounties.on_win(s, c, None, t.location, t.squad)
+        msgs = bounties.on_win(bounty_ctx(s, c), t.location, t.squad)
     elif t.kind == "scout":
-        msgs = bounties.on_explore(s, c, None, t.location)
+        msgs = bounties.on_explore(bounty_ctx(s, c), t.location)
     else:
-        msgs = bounties.on_arrive(s, c, None, t.end)
+        msgs = bounties.on_arrive(bounty_ctx(s, c), t.end)
     assert any("託你的事辦成了" in m for m in msgs)
     assert s.player.stats["silver"] == silver + c.config.figure_life.commission_silver
     assert s.player.affinities["qinjie"] == 40 + c.config.figure_life.commission_affinity
@@ -251,7 +252,7 @@ def test_the_card_shows_the_newest_unread_letter(c):
     assert view["sender"] == "秦頡" and view["task"]["live"]
     letters.read(s, view["id"])
     assert letters.view(s, c) is None
-    assert any(row.get("commission") for row in bounties.status(s, c, None))  # 委託留在懸賞卡上
+    assert any(row.get("commission") for row in bounties.status(bounty_ctx(s, c)))  # 委託留在懸賞卡上
 
 
 def test_the_model_rewrite_only_lands_on_the_same_letter(c):

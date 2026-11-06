@@ -219,7 +219,7 @@ def test_a_scout_condition_becomes_a_commission_and_he_pays_back(talking):
     assert letter.kind == "條件" and letter.task.kind == "scout" and letter.task.parley_ask == "spar"
     from tianxia import bounties
 
-    done = bounties._complete_commission(talking.state, talking.content, letter.task)
+    done = bounties._complete_commission(talking, letter.task)
     assert "下回見到韓鐵，他會兌現答應你的事。" in done and p.parley_owed["mate"] == "spar"
     button = next(o for o in talking.options(odds=False) if o.id == "talk:owed")
     assert button.label == "請韓鐵兌現：指點一招"

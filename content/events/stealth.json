@@ -12,7 +12,7 @@
         "text": "扛起鹽擔，從泥巷繞出鎮外",
         "check": {
           "stat": "con",
-          "difficulty": 5,
+          "grade": "normal",
           "practice": "evil"
         },
         "effect": {
@@ -30,8 +30,8 @@
       {
         "text": "上前攔住市吏，替漢子說情",
         "check": {
-          "stat": "wis",
-          "difficulty": 3
+          "stat": "wis", "v2": "cha",
+          "grade": "easy", "shift": -1
         },
         "effect": {
           "text": "你說今年鹽貴，鄉民吃不起鹽。市吏想了想，只沒收了一半，放漢子走了。",
@@ -80,7 +80,7 @@
           "tag": "扛擔：替他把鹽擔弄出鎮去",
           "check": {
             "stat": "con",
-            "difficulty": 5
+            "grade": "normal"
           },
           "effect": {
             "text": "一擔鹽死沉，你咬牙走了半里泥路，總算避開差役。漢子把一半的鹽錢塞給你。",
@@ -104,8 +104,8 @@
           "id": "plead",
           "tag": "說情：攔住市吏替他講話",
           "check": {
-            "stat": "wis",
-            "difficulty": 3
+            "stat": "wis", "v2": "cha",
+            "grade": "easy", "shift": -1
           },
           "effect": {
             "text": "你說今年鹽貴，鄉民吃不起鹽。市吏想了想，只沒收了一半，放漢子走了。",
@@ -129,7 +129,7 @@
           "tag": "引開：弄出動靜、把差役引到別處",
           "check": {
             "stat": "agi",
-            "difficulty": 4
+            "grade": "easy"
           },
           "effect": {
             "text": "你撞翻了一籠雞，差役追著滿街亂跑的雞轉了半天，鹽販早挑著擔子出了鎮。",
@@ -153,7 +153,7 @@
           "tag": "告發：把鹽販指給差役、討幾個賞錢",
           "check": {
             "stat": "wis",
-            "difficulty": 3
+            "grade": "easy", "shift": -1
           },
           "effect": {
             "text": "你朝差役努了努嘴，指給他們看泥巷的方向。市吏賞了你幾個錢，鹽販被扭住時回頭看了你一眼。",
@@ -194,8 +194,8 @@
       {
         "text": "去找隊率，當面說清口糧的帳",
         "check": {
-          "stat": "wis",
-          "difficulty": 6
+          "stat": "wis", "v2": "cha",
+          "grade": "normal", "shift": 1
         },
         "effect": {
           "text": "你把每人每日該領的糧算給隊率聽，旁邊的兵都聽見了。隊率只好補發口糧，新卒也回了營。",
@@ -216,7 +216,7 @@
         "text": "趁夜帶他穿過兩軍之間的空地",
         "check": {
           "stat": "agi",
-          "difficulty": 7,
+          "grade": "hard",
           "practice": "evil"
         },
         "effect": {
@@ -253,7 +253,7 @@
         "text": "搶了錢袋就跑",
         "check": {
           "stat": "agi",
-          "difficulty": 4,
+          "grade": "easy",
           "practice": "evil"
         },
         "effect": {
@@ -293,7 +293,7 @@
         "text": "搶了鐵牌就跑",
         "check": {
           "stat": "agi",
-          "difficulty": 4,
+          "grade": "easy",
           "practice": "evil"
         },
         "effect": {
@@ -338,7 +338,7 @@
         "text": "挑著擔子從菜畦衝出去",
         "check": {
           "stat": "agi",
-          "difficulty": 5,
+          "grade": "normal",
           "practice": "evil"
         },
         "effect": {
@@ -382,7 +382,7 @@
         "text": "拉著新卒拔腿就跑",
         "check": {
           "stat": "agi",
-          "difficulty": 6,
+          "grade": "normal", "shift": 1,
           "practice": "evil"
         },
         "effect": {

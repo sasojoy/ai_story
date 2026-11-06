@@ -14,7 +14,7 @@ def _even(game) -> Check:
 
 
 def test_jianfa_eases_every_check_by_the_configured_points():
-    game = jianfa_game()
+    game = jianfa_game(v2=False)  # 舊的五屬性照點數比（五項屬性的放寬在 tests/core/test_attrset.py）
     ease = game.content.config.jianfa.event_ease
     assert ease == 1.5  # 待企劃者定（前後對照表）
     outlook = rules.check_outlook(_even(game), game.state, game.content, game.world)
@@ -23,7 +23,7 @@ def test_jianfa_eases_every_check_by_the_configured_points():
 
 
 def test_ease_zero_and_plain_seasons_keep_even_odds():
-    game = jianfa_game()
+    game = jianfa_game(v2=False)  # 舊的五屬性照點數比（五項屬性的放寬在 tests/core/test_attrset.py）
     game.content.config.jianfa.event_ease = 0
     assert rules.check_chance(_even(game), game.state, game.content, game.world) == pytest.approx(0.5)
     off = plain_game()
@@ -31,6 +31,6 @@ def test_ease_zero_and_plain_seasons_keep_even_odds():
 
 
 def test_the_ceiling_still_holds():
-    game = jianfa_game()
+    game = jianfa_game(v2=False)  # 舊的五屬性照點數比（五項屬性的放寬在 tests/core/test_attrset.py）
     check = Check(stat="agi", difficulty=0)
     assert rules.check_chance(check, game.state, game.content, game.world) == pytest.approx(0.95)
