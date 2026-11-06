@@ -24,7 +24,7 @@
   - 世界層（`world()`；位置照 `WORLD_ORDER`、簽名照原樣）：`muster` 的 `seal`（集結那一刻擲現世與璽動，`seal.on_muster`；「集結開始」就是這一格、不另開事件）、`open` 的 `seal.cache`、`next` 的 `seal.mandate`（`content.seal` 與 `Config.seal.enabled` 都開著才叫）與 `seal.cache`、`retire` 的 `seal`（回寫了上一季的江湖史沒）。`state.seal.opened_real = now` 那兩行是核心寫核心的資料，留在 `sqlite_world`。
   - 接縫（第 11 批）：`deliver_results`（`sync` 收場補送那一格：玉璽碎片的事補送到自己手上，`actions.deliver_results`；排在決戰包後面）。
   - 效果（`effects()`；位置照 `EFFECT_ORDER`）：`runic`（符文殘片；在叫的那一下才從 `tianxia.rules` 拿 `season_one`，PM 認定不統一成 import 時綁定）、`shard`（舊鏈的玉璽碎片，不認領欄位）。
-- `name = "seal"`、`prefix = "seal"`（第 28 批登記；`menu`、`choose` 不接：選單是 `MENU_ORDER["front"]` 的 `seal` 那一格〔第 56 批；排在決戰選單前面、不看包是否開著〕、`choose` 的 `seal:` 是「選單上、不建紀錄」的 `MENU_ORDER["quick"]` 那一格〔第 57 批〕；沒有路由，管理者的 `seal_*` 與 `seal_text`、`seal_use` 留在殼）、`bot_pick`、`enabled` 照 `seal.on`、`content = ("seal.json",)`。
+- `name = "seal"`、`prefix = "seal"`（第 28 批登記；`menu`、`choose` 不接：選單是 `MENU_ORDER["front"]` 的 `seal` 那一格〔第 56 批；排在決戰選單前面、不看包是否開著〕、`choose` 的 `seal:` 是「選單上、不建紀錄」的 `MENU_ORDER["quick"]` 那一格〔第 57 批〕；沒有 `APIRouter`；管理者的 `seal_*`、`seal_use` 第 68 批搬進 `routes.py`，`seal_text` 是鎖外三段式，第 69 批也搬進來、接 `outlock` 掛鉤）、`bot_pick`、`enabled` 照 `seal.on`、`content = ("seal.json",)`。
 
 ## 認領的欄位（手冊 3.5：留在原地）
 
@@ -92,3 +92,7 @@
 
 - 畫面：`web/seal.js`（奪璽卡、碎片卡與獨門行動）、`web/seal.css`（獨門行動，第 67 批；奪璽卡的 `.order-*` 跟軍令、懸賞共用，留 `style.css`）；點擊分派的 `case`、`sealWatched`、`sealTitle` 留 `app.js`。
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`status` 表 `seal`（`seal_duel`、`seal`、`seal_watch` 三個鍵）。
+
+**動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `main_actions`：`seal_use`；`admin_tools`：`seal_emerge`、`seal_stir`、`seal_assign`、`seal_duel`、`seal_fix`、`seal_cancel`、`seal_sink_check`、`seal_mandate`（時間 `shell.time.time()`，引擎不讀時鐘）。`admin_seal_stir` 的委派搬完之後沒人叫（寫進回報）。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
+
+**鎖外工作**（全部拆包第 69 批；原本寫在 `server.py`，計畫 `docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md`）：`routes.py` 的 `seal_text`（奪璽單挑的放手一搏，`/api/do/seal_text`，`outlock` 掛鉤）；`GambleVerdict`、`assess_gamble`、保底值照舊經 `shell.battle_instance`，`Scene` 用 `tianxia.core.duel_base.Scene`（單挑包 `duel.Scene` 是它 re-export 的同一個）。A、C 段照舊經 `Game` 的委派（假人走同一批、測試換 `Game.xxx` 打得到），模型呼叫絕不進鎖；殼的東西一律 `shell.<名字>` 當下讀，函式名不改（`tests/server/test_server.py` 的 `_users_in_server` 掃各包 `routes.py` 認這些名字，參數要叫 `shell`、不要先存成變數）；開執行緒寫 `shell.threading.Thread`、`shell.traceback`，不在包裡 `import threading`（`zhuan` 軌換的是殼上那個）。另外要跑的（`test_for` 挑不到）：`tests/server/test_outlock.py`。

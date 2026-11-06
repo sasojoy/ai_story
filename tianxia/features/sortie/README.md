@@ -73,3 +73,5 @@
 
 - 畫面：`web/sortie.js`（約戰的封招與前往，沒有網頁測試執行，靠 `facade` 軌比字與實機；出陣那一格的卡 `SX_*`、`sortiePanelHtml`、`sortieDuelsHtml` 第 67 批從 `main.js` 切進來）、`web/sortie.css`。`FIT_DUEL_BTN`、`fitDuelRow` 跟著第一屏收合在 `web/fit.js`。
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `sortie`、`sortie_cards`（`sortie_card`、`sorties`）。
+
+**動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `main_actions`：`sortie_go`、`sortie_answer`、`sortie_join`（`shell._moves` 留在殼）。`sortie_answer`、`sortie_join` 的委派搬完之後沒人叫（寫進回報）。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。

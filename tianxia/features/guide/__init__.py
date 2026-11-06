@@ -8,7 +8,7 @@
 - checks.py：內容檢查（碰到才說那一塊，原本在 content.validate）
 - howto.py：玩法說明的底與組裝（第 59 批：原 tianxia/howto.py 拆進 17 包，各節在各包的 howto.py，順序在核心 HOWTO_ORDER）；routes.py：/api/howto
 
-這一包沒有選項前綴：它的動作走 server 的 MAIN_ACTIONS（hints_off、skip_tutorial、view_map、view_orders、view_tab、guide_ack、
+這一包沒有選項前綴：它的動作走 routes.py 的 main_actions（殼的 MAIN_ACTIONS，第 68 批；hints_off、skip_tutorial、view_map、view_orders、view_tab、guide_ack、
 newbie_drifter）與 /api/prologue，選單上的那幾顆是別人的（開局三選一是事件的 choice:、投靠是 faction:）；序章教體力那一步的 act:rest 接 act 子動詞（verbs，第 57 批）。
 所以 options、menu、choose、bot_pick 都是預設的；enabled 一直是 True（引導、提示、新手目標、開局各有自己的開關，包本身沒有總開關）。
 """
@@ -131,6 +131,11 @@ class GuideFeature(Feature):
                 StatusHook("main", "glow", lambda ctx, frame: actions.glow_slot(ctx, frame)),
             )
         return self._status_slots
+
+    def main_actions(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.main_actions(shell)
 
 
 FEATURE = GuideFeature()

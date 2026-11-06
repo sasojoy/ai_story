@@ -113,5 +113,15 @@ class SmithyFeature(Feature):
 
         return (HowtoHook("forge", lambda content, season, page: words.forge_section(content, season)),)
 
+    def main_actions(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.main_actions(shell)
+
+    def menxia_actions(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.menxia_actions(shell)
+
 
 FEATURE = SmithyFeature()

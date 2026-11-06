@@ -174,6 +174,11 @@ class OutletsFeature(Feature):
             )
         return self._status_slots
 
+    def main_actions(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.main_actions(shell)
+
 
 def _carry_season(ctx, old, fresh) -> None:
     fresh.player.donate_day, fresh.player.donated_today = old.player.donate_day, old.player.donated_today  # 換季不能多捐一輪

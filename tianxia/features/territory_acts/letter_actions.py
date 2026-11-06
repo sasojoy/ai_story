@@ -1,5 +1,5 @@
 """下戰書（功能包 territory_acts；全部拆包第 46 批）：今天是第幾天、下不了戰書的那一句、下戰書。原本 Game 上的 _letter_key、letter_problem、conquest_letter，
-名字去掉前導底線、第一個參數是 ctx。會改狀態的只有 conquest_letter（路由 MAIN_ACTIONS["conquest_letter"] 照舊在 server.py 叫 Game 的委派）。
+名字去掉前導底線、第一個參數是 ctx。會改狀態的只有 conquest_letter（MAIN_ACTIONS["conquest_letter"] 在這一包的 routes.py，全部拆包第 68 批）。
 """
 from __future__ import annotations
 

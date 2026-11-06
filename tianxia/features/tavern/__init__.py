@@ -129,5 +129,15 @@ class TavernFeature(Feature):
 
         return (HowtoHook("fame_tavern", lambda content, season, page: words.fame_tavern(content)),)
 
+    def main_actions(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.main_actions(shell)
+
+    def outlock(self, shell):
+        from . import routes  # noqa: PLC0415  只在殼建鎖外工作時才 import（同 routes 掛鉤）
+
+        return routes.outlock(shell)
+
 
 FEATURE = TavernFeature()

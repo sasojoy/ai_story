@@ -71,3 +71,5 @@
 
 - 畫面：`web/guide.js`（引導的發光與閃一閃、入伍段看過軍令、玩法說明與重看序章；路線發光、新手目標、說書人的框、`proGuide` 第 67 批從 `main.js` 切進來）、`web/guide.css`（新手目標；`.onb-dim`、`.glow`、`.lit` 要蓋別人，留 `style.css`）；點擊分派的 `case`、`choose` 留 `app.js`。
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`status` 表 `newbie`；`main` 表 `guide`（`guide`、`prologue`、`onboard`）、`glow`（`actions.glow_slot` 改已經合進去的 `view["guide"]`，沒有鍵）。
+
+**動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `main_actions`：`hints_off`（回 `None`，同委派）、`skip_tutorial`、`view_map`、`view_orders`、`view_tab`、`guide_ack`、`newbie_drifter`。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。

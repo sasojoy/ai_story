@@ -85,6 +85,16 @@ class TerritoryActsFeature(Feature):
             )
         return self._status_slots
 
+    def main_actions(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.main_actions(shell)
+
+    def outlock(self, shell):
+        from . import routes  # noqa: PLC0415  只在殼建鎖外工作時才 import（同 routes 掛鉤）
+
+        return routes.outlock(shell)
+
 
 def _turn_in_sync(ctx) -> None:
     """sync 那一下換天（第一個看到新的一天的人觸發）：回的那幾句不進回話（照原位不接）。"""

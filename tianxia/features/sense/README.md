@@ -9,7 +9,7 @@
 
 - `sensing.py`（原 `tianxia/sensing.py`：有所感的規則）、`epiphany.py`（原 `tianxia/epiphany.py`：特殊頓悟；import 的時候登記一條線的鉤子 `storyline.TASKS`／`TASK_LEFT`／`REFRESH_HOOKS`／`FIGHT_HOOKS`／`END_HOOKS`）、`glyph.py`（原 `tianxia/glyph.py`：讀筆畫）、`insight_llm.py`（原 `tianxia/insight_llm.py`：看圖取名的 B 段）——四個舊名都留成 `sys.modules` 別名（同一個模組物件，`mock.patch.object(epiphany, "_trial")`、`server.insight_llm.warm` 這一類照樣換得到）。
 - `actions.py`：原本 `Game` 上的 10 個方法（名字去掉前導底線、第一個參數 `ctx`；`sense_draw`、`epiphany_names` 掛核心的 `outing_watch`），`scene` 掛鉤的本體，核心原位、探索包、引導包叫的 7 個服務的本體（`sense_missed`、`sense_drop_stale`、`sense_menu`、`sense_start`、`sense_canvas`、`epiphany_title`、`prologue_choice`）。
-- `routes.py`：`/api/sense`、`/api/sense_read`、`/api/sense_warm`（原本寫在 `server.py`；殼照 `FEATURES` 掛，函式名照舊）。畫完那一筆的鎖外三段式照舊是殼的 `server.sense_draw`、靜心思名照舊是 `server.epiphany_think`（鎖外工作的掛鉤是總表第 69 批）。
+- `routes.py`：`/api/sense`、`/api/sense_read`、`/api/sense_warm`（原本寫在 `server.py`；殼照 `FEATURES` 掛，函式名照舊）。畫完那一筆的鎖外三段式 `sense_draw`、靜心思名 `epiphany_think` 第 69 批也搬進來（見最後一段）。
 - 掛鉤：`enabled` 一直是 True（有沒有場景看內容、特殊頓悟看 `Config.epiphany`）；`prefix = ("sense", "dunwu")`；`choose` 只吃 `sense:`（標題「有所感・場景」）；`scene`（接縫掛鉤：有所感的卡、取名那一張，排在宴客之後）；`routes`；`content`（`insight_scenes.json`）；`player_fields`。**沒有 `bots.py`**：`bot_policy.score` 本來就沒有 `sense:`、`dunwu:` 那一段（落到最後的 None），拿了前綴之後 `bot_pick` 預設回 None，一樣不按（手冊第十五節第 2 批）；假人的有所感、取名照舊在 `bot_policy.take_turn` 的 `_sense`、`_god_name` 與 `bot.py` 的 `sense_pick`／`sense_stroke`，叫 Game 的委派。整季機器人不按 `dunwu:own` 第 60 批搬成這一包的 `Feature.bot_idle`（要比相等）。
 
 ## 認領的欄位（手冊 3.5：留在原地）
@@ -29,7 +29,7 @@
 - 舊探索（留給序章與測試內容；本體在探索包 `explore_base.py`，經 `ctx` 叫）：`_insight_blocked` 的 `_sense_missed`、`_explore_can` 的 `_sense_missed`；`_explore_outcome` 的 `_sense_start`（序章四景）、`_sense_here`（落在悟意境那一支）。
 - 裝飾器 `_outing_watch` 搬進核心（`tianxia/core/services.py` 的 `outing_watch`；`Game.choose`、`answer_event` 照舊掛），經 `ctx._outing_watched` 叫探索包的委派，記在 `CORE_DELEGATE_CALLERS`。籌備中那兩句 `PREPARING_TEXT`、`PREPARING_REFUSAL` 也搬進核心（`sense_request` 籌備中回它；第 23 批同時搬了同樣兩句，合進 `split/trunk` 時留這一份，裝飾器 `not_while_preparing` 是第 23 批的）。
 - 包 import 包的地雷先拆：探索包 `explore_actions.outing_weights` 改問 `ctx._sense_missed(loc)`、引導包 `actions.graduate_pass` 改問 `ctx._sense_prologue_choice()`。
-- 一行沒動的：`server.py` 的 `sense_draw`（鎖外三段式）、`epiphany_think`、`api_choose` 自己寫名字被擋回給表單那一句；`bot.py`、`bot_policy.py`、`bot_runner.py`；`fusion`（`own_name`、`add_own`：舊模組 → 包，過渡；它還在共用規則層的 `SHARED_LATER`，同時還讀 `annals`）、`mapdata`（`terrain_tags`）；網頁。
+- 一行沒動的：`server.py` 的 `api_choose` 自己寫名字被擋回給表單那一句；`bot.py`、`bot_policy.py`、`bot_runner.py`；`fusion`（`own_name`、`add_own`：舊模組 → 包，過渡；它還在共用規則層的 `SHARED_LATER`，同時還讀 `annals`）、`mapdata`（`terrain_tags`）；網頁。
 
 ## 過渡（手冊 3.11）
 
@@ -59,3 +59,5 @@
 
 - 畫面：`web/sense.js`（有所感的畫布、悟來的那一筆、神品意境取名，`OWN_NAME_*` 第 67 批從 `main.js` 切進來）；`choose` 裡的 `SENSE_DRAW` 留 `app.js`。
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `sense_help`。
+
+**鎖外工作**（全部拆包第 69 批；原本寫在 `server.py`，計畫 `docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md`）：`routes.py` 的 `epiphany_think`（靜心思名；殼留一行包裝，`choose` 與測試叫）、`sense_draw`（`/api/sense` 叫同檔的）、`SENSE_PNG_MAX`。`EPIPHANY_THINK`、`EPIPHANY_OWN`、`BUSY_*`、`choose` 的分派留殼。沒有 `/api/do/` 的 op，不接 `outlock` 掛鉤。A、C 段照舊經 `Game` 的委派（假人走同一批、測試換 `Game.xxx` 打得到），模型呼叫絕不進鎖；殼的東西一律 `shell.<名字>` 當下讀，函式名不改（`tests/server/test_server.py` 的 `_users_in_server` 掃各包 `routes.py` 認這些名字，參數要叫 `shell`、不要先存成變數）；開執行緒寫 `shell.threading.Thread`、`shell.traceback`，不在包裡 `import threading`（`zhuan` 軌換的是殼上那個）。另外要跑的（`test_for` 挑不到）：`tests/server/test_server.py`、`tests/server/test_outlock.py`。

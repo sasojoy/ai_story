@@ -7,7 +7,7 @@
 
 ## 裡面有什麼
 
-- `rules.py`：純規則（原 `tianxia/tavern.py`）。`ask.py`：問酒家照問句找事實（原 `tianxia/tavern_ask.py`）。兩個舊名都留成 `sys.modules` 別名（同一個模組物件）：`howto`（名望來源）、`server`（`chatter_write`、`ask_write`）、`scripts/try_tavern_ask.py` 與測試照舊 import 舊名，`monkeypatch.setattr(tavern, ...)` 照樣打得到包裡。
+- `rules.py`：純規則（原 `tianxia/tavern.py`）。`ask.py`：問酒家照問句找事實（原 `tianxia/tavern_ask.py`）。兩個舊名都留成 `sys.modules` 別名（同一個模組物件）：`howto`（名望來源）、`server`（第 69 批起殼已經不用，留著只為了 import 順序，見 `server.py` 頂上那行註解）、`scripts/try_tavern_ask.py` 與測試照舊 import 舊名，`monkeypatch.setattr(tavern, ...)` 照樣打得到包裡。
 - `actions.py`：原本 `Game` 上酒肆的 43 個方法，加 `tavern_sign`（`act:tavern` 那一下紀錄的標題）。
 - `bots.py`：假人看到 `tavern:*` 怎麼按（原 `bot_policy.score` 那一段：只按出酒肆）。打聽那一步第 60 批搬來（`visit`、`TAVERN_RESERVE`、`TAVERN_ASKS`）：`bot_policy._tavern` 留一行、`TAVERN_CHANCE` 留在 `bot_policy`（叫的那一下才讀，`test_tavern`、`scripts/same_behavior.py` 換的是它的屬性）。`act:tavern`：`Verb.bot` 回 None、`bot_skip`。模組層不准碰 engine、`bot_policy`（`bot_policy` 模組層 import 這個檔）。改 `bots.py` 的 `act:` 分數時另外跑 `tests/bots/test_bot_policy.py`、`tests/bots/test_bot_policy_conquest.py`、`tests/bots/test_bot_policy_stuck.py`（`test_for` 挑不到，第 60 批）。
 - 掛鉤：`enabled`（`rules.on` 或此刻還坐在酒肆裡）、`choose`（`tavern:*`）、`bot_pick`、`bot_always = ("tavern:",)`（`bot.py` 的排除清單原本也寫了一個，第 11 批拿掉那一個，只剩這裡）；第 11 批的接縫掛鉤見下面「委派與留在原位的接縫」。
@@ -28,7 +28,7 @@
 - 店面登記 `shops()`（`Shop("tavern", …)`）：坐在酒肆裡時選單整個是酒肆那一串（`_everyday_options` 擂台之後）、「此地還能做」裡的 `act:tavern` 入口（馬市之後）、`_shop_open`、`_depart` 收店、`sync` 與 `_drop_stale_references` 的「人不在酒肆了就收店」。
 - act 子動詞 `verbs()`（`Verb("tavern", …)`）：`_act` 的 `act:tavern` → `actions.tavern_enter`、`_action_title` 的招牌。
 - `on_away`（`sync` 下線那一段的殺手）、`deliver_notices`（三個 deliver：照舊不看酒肆開關，關掉之後雇主照樣領退款、風聲照樣送到）、`after_action`（`choose` 最後那一下殺手檢查）。
-- 還在原位的：`shop_view` 的 `if shop == "tavern": return self.tavern_view()`（鐵匠鋪那條線緊貼著它改，第 41 批）、`_hint_triggers`、`_newbie_go`（引導，第 22 批）、`_idle`（只讀 `picking_tavern`）、`LEAVE_SHOP_IDS`（寫字面 `"tavern:back"`）；`server.py` 的 `MAIN_ACTIONS["tavern"]`、`tavern_ask` 三段式、鄰桌閒談的背景執行緒（`write_chatter`、`chatter_once`）。
+- 還在原位的：`shop_view` 的 `if shop == "tavern": return self.tavern_view()`（鐵匠鋪那條線緊貼著它改，第 41 批）、`_hint_triggers`、`_newbie_go`（引導，第 22 批）、`_idle`（只讀 `picking_tavern`）、`LEAVE_SHOP_IDS`（寫字面 `"tavern:back"`）；`server.py` 的 `MAIN_ACTIONS["tavern"]`（第 68 批進 `routes.py`）；`tavern_ask` 三段式、鄰桌閒談的背景執行緒（`write_chatter`、`chatter_once`）第 69 批也進 `routes.py`。
 
 ## 過渡（手冊 3.11）
 
@@ -50,3 +50,7 @@
 **第 56 批（選單收接縫，核心批）**：`idle/tavern`、`block/tavern` 是這一包登記的格；`tavern:board` 改叫核心 `bounty_base.sit_at_board`；先後在 `core/features.py` 的 `MENU_ORDER`；上面寫「留委派」「原位」的以這一句為準。
 
 `howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（別節中間的插句（`fame_tavern`，核心 `HOWTO_INSERTS`）），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
+
+**動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `main_actions`：`tavern`。問酒家（`tavern_ask`）是鎖外三段式，第 69 批也搬進來（見下一段）。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
+
+**鎖外工作**（全部拆包第 69 批；原本寫在 `server.py`，計畫 `docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md`）：`routes.py` 的 `tavern_ask`（`/api/do/tavern_ask`，`outlock` 掛鉤）、鄰桌閒談 `_chatter_waiting`、`write_chatter`、`chatter_once`、`CHATTER_RUNNING`（那一格 `chatter`，`waiting` 回地點 id、交給 `write_chatter`；殼留一行包裝 `chatter_once`）。A、C 段照舊經 `Game` 的委派（假人走同一批、測試換 `Game.xxx` 打得到），模型呼叫絕不進鎖；殼的東西一律 `shell.<名字>` 當下讀，函式名不改（`tests/server/test_server.py` 的 `_users_in_server` 掃各包 `routes.py` 認這些名字，參數要叫 `shell`、不要先存成變數）；開執行緒寫 `shell.threading.Thread`、`shell.traceback`，不在包裡 `import threading`（`zhuan` 軌換的是殼上那個）。另外要跑的（`test_for` 挑不到）：`tests/server/test_server.py`、`tests/arts/test_in_lock_model_timeout.py`、`tests/server/test_outlock.py`。

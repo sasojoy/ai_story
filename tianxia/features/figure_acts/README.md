@@ -14,7 +14,7 @@
 | `challenge.py` | 挑戰本人 13 個：`snubbed`、`snubbed_character`、`options`、`odds`、`figure_squad`、`challenge`、`win_reward`、`draw`、`rout`、`treasure`、`tier3`、`tier4`、`held_tier3` |
 | `aid_actions.py` | 護衛犒軍探望：`options`、`act`、`title`、`deliver_guard_credits`（同步補名望與心得） |
 | `plan_actions.py` | 盤算：`options`、`act`、`title`、`plan_view`（江湖頁的盤算卡）、`place_deeds_view`（此地舊事） |
-| `yuedan_actions.py` | 月旦評 A 段（`request`）、C 段（`apply`）；B 段在 `server.yuedan_once` → `yuedan.write` |
+| `yuedan_actions.py` | 月旦評 A 段（`request`）、C 段（`apply`）；B 段在 `routes.py` 的 `yuedan_once` → `yuedan.write` |
 | `admin_actions.py` | 管理者「叫回人物」：`fallen`、`revive_figure` |
 | `figure_aid.py`、`yuedan.py` | 規則模組（舊名 `tianxia/figure_aid.py`、`tianxia/yuedan.py` 留成指到同一個模組的別名；`figure_aid` 跟自然回復共用上限的那五個函式第 40 批搬進共用規則層 `figures`，這裡 re-export 同一個物件） |
 
@@ -63,3 +63,7 @@
 
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `plan`、`place_deeds`。
 - 畫面：`web/figure_acts.js`（`planHtml`、`placeDeedsHtml`）、`web/figure_acts.css`（全部拆包第 67 批從 `main.js`、`style.css` 切出來，一個字不改）。
+
+**動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `admin_tools`：`revive_figure`。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
+
+**鎖外工作**（全部拆包第 69 批；原本寫在 `server.py`，計畫 `docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md`）：`routes.py` 的月旦評 `_yuedan_waiting`、`write_yuedan`、`yuedan_once`、`YUEDAN_RUNNING`（`outlock` 掛鉤那一格 `yuedan`；殼留一行包裝 `yuedan_once`）。A、C 段照舊經 `Game` 的委派（假人走同一批、測試換 `Game.xxx` 打得到），模型呼叫絕不進鎖；殼的東西一律 `shell.<名字>` 當下讀，函式名不改（`tests/server/test_server.py` 的 `_users_in_server` 掃各包 `routes.py` 認這些名字，參數要叫 `shell`、不要先存成變數）；開執行緒寫 `shell.threading.Thread`、`shell.traceback`，不在包裡 `import threading`（`zhuan` 軌換的是殼上那個）。另外要跑的（`test_for` 挑不到）：`tests/server/test_outlock.py`。

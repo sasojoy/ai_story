@@ -21,10 +21,10 @@
 - `spar.py`／`discuss.py`／`raid.py`（原 `tianxia/spar.py`、`discuss.py`、`raid.py`，舊名是別名）：切磋、論武、截殺掛上玩家卡，載入這一包時登記進 `social.ACTIONS`（切磋 50、論武 55、截殺 60；通緝 65 還在 `engine.py` 頂端登記，第 45 批）。
 - `spar_actions.py`：7 個——`who_problem`（論武、截殺也問）、`left`、`answer_problem`、`refusal`、`send`、`spar`、`spar_record`。
 - `discuss_actions.py`：12 個——`left`、`items`、`cost_of`、`refusal`、`send`、`forge_pair`、`request`（A 段）、`forge`、`merge_problem`、`invite_problem`、`item_problem`、`discuss`（C 段），加 `DISCUSS_SAME`、`THEIR_SIDE`、`_refusal`。
-  三段式的 B 段（`server.prepare_peer`、`screen_peer`）照手冊 G10 留在 `server.py`，經 `shell.` 叫。
+  三段式的 B 段（`prepare_peer`、`screen_peer`）第 69 批進了 `routes.py`，路由照舊經 `shell.` 叫（殼留一行包裝：`tests/arts/test_discuss.py` 換 `server.prepare_peer`、`server.screen_peer`）。
 - `raid_actions.py`：9 個——`is_shown`、`refusal`、`odds_word`、`targets`、`raid`、`flee_odds`、`fled`、`take_spoils`、`raid_record`，加 `RAID_AFTER_CLASH`、`RAID_SHIELD_CLASH`。
   打贏的交差 `ctx._raid_bounty` 是事件 `raid_win` 的發布點（第 45 批搬進懸賞榜包 `actions.raid_bounty`，位置不動）；懸賞榜的 `hunting`、`official_hit`、`BEATEN_OFFICIAL` 三處第 45 批改讀核心 `core/bounty_base`。
-- `routes.py`：`/api/peer`、`/api/peer/act`、`/api/mingtie`、`/api/mingtie/{op}`。鎖外三段式的 `screen_peer`、`prepare_peer`（論武的首創取名）與 `screen_text`、`boards_now` 留在殼，經 `shell.` 叫。
+- `routes.py`：`/api/peer`、`/api/peer/act`、`/api/mingtie`、`/api/mingtie/{op}`。鎖外三段式的 `screen_peer`、`prepare_peer`（論武的首創取名，第 69 批搬進來）；`screen_text`（探索包也用）、`boards_now` 留在殼，經 `shell.` 叫。
 - `bots.py`：假人收到打招呼、結伴邀請、名帖的回法（`answer_call`、`_roll` 與那幾個比例）、做名帖（`_make_card`）、遞名帖（`_hand_card`），以及第 38 批搬來的答切磋（`_answer_invite`）、答論武（`answer_discuss`，首創要取名時回一份資料、由 `bot_policy._answer_discuss` 包成 `DiscussJob`；`DiscussJob` 照鐵匠鋪 `ForgeJob` 的前例留在 `bot_policy`）、截殺（`_raid`）與 `INVITE_YES`、`RAID_CHANCE`、`RAID_ODDS`（`bot_policy` 的 `CHALLENGE_ODDS` 還有 `score` 在用，所以包裡寫一份同值）；`bot_policy` 照舊 import 這幾個名字。叫它們的順序（`take_turn`）一個字不動。
 - 掛鉤：`prefix = "invite"`；`choose` 接 `invite:*`（標題在動作之前拿）；`bot_always = ("invite:",)`；`on_season_start` 把這一季值得留名的頭銜寫進 `title_book`（原本在 `Game._reset_player_for_new_season`）；`routes`；
   `enabled` 一直是 `True`（名帖開關 `Config.mingtie.enabled` 只管名帖那幾顆，不管整包）。`content = ("mingtie.json",)`（名帖現成的畫與假人的自題句庫，`content.py` 照它到這一包的 `content/` 載）。
@@ -86,3 +86,7 @@
 
 - 畫面：`web/peers.js`（名帖的畫法與畫布；此地還有誰、邀請、`socialHtml`、玩家卡、`peerAct` 第 67 批從 `main.js` 切進來）、`web/peers.css`；點擊分派的 `case` 留 `app.js`。
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`status` 表 `invites`（第一季才有）；`main` 表 `peers`（`here`、`calls`）。
+
+**動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `admin_tools`：`mingtie_remove`、`mingtie_restore`。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
+
+**鎖外工作**（全部拆包第 69 批；原本寫在 `server.py`，計畫 `docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md`）：`routes.py` 的 `prepare_peer`、`screen_peer`（路由照舊經 `shell.`；殼留一行包裝）。`screen_text` 探索包也用，留殼；`naming` 經 `shell.naming`。沒有 `/api/do/` 的 op，不接 `outlock` 掛鉤。A、C 段照舊經 `Game` 的委派（假人走同一批、測試換 `Game.xxx` 打得到），模型呼叫絕不進鎖；殼的東西一律 `shell.<名字>` 當下讀，函式名不改（`tests/server/test_server.py` 的 `_users_in_server` 掃各包 `routes.py` 認這些名字，參數要叫 `shell`、不要先存成變數）；開執行緒寫 `shell.threading.Thread`、`shell.traceback`，不在包裡 `import threading`（`zhuan` 軌換的是殼上那個）。另外要跑的（`test_for` 挑不到）：`tests/arts/test_discuss.py`、`tests/server/test_outlock.py`。

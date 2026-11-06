@@ -5,7 +5,7 @@
 - seal.py：碎片的規則與字句（原 tianxia/seal.py 整份；那個名字留成指到這裡的 sys.modules 別名）。核心與決戰包讀的那一小半在核心本體
   tianxia/core/seal_base.py，這裡 re-export 同一批。
 - actions.py：原本 Game 上的季流程（抄本、撿到、份量快照與加權、補送、奪璽單挑的戰報、定天命、收場）；Game 留一行委派
-- admin.py：管理者的強制現世（含現在藏一片）、隱沒判斷、蓋天命之季；Game 留一行委派（殼的 ADMIN_ACTIONS 叫）
+- admin.py：管理者的強制現世（含現在藏一片）、隱沒判斷、蓋天命之季；Game 留一行委派（測試、管理頁的讀取叫）；管理者工具在 routes.py 的 admin_tools（全部拆包第 68 批）
 - season.py：開季藏一片、天命之季的章、舊季收尾（原本核心 sqlite_world 的三段）
 
 第 28 批「玉璽二」再搬進來（計畫 docs/superpowers/plans/2026-11-06-玉璽包-第2批.md）：
@@ -14,7 +14,7 @@
 - card.py：碎片卡與七種獨門行動（規則讀同包 acts.py；第 51 批「玉璽三」：acts.py 是原 seal_acts 的包這一半，璽效查詢那一半留在共用規則層 tianxia/seal_acts.py）；admin.py 加強制璽動、指定、開單挑、定結果、取消、管理頁一組
 - bots.py：假人看到 seal: 一律不按
 
-選項前綴 seal:（bot_pick 問 bots.score；menu、choose 不接；選單上的一招是 MENU_ORDER["quick"] 的 seal 那一格，第 57 批）、沒有路由（管理者的 seal_* 與 seal_text、seal_use 留在殼、叫委派）。
+選項前綴 seal:（bot_pick 問 bots.score；menu、choose 不接；選單上的一招是 MENU_ORDER["quick"] 的 seal 那一格，第 57 批）、沒有 APIRouter（管理者的 seal_*、seal_use 在 routes.py 的 admin_tools、main_actions，全部拆包第 68 批；seal_text 是鎖外三段式，留在殼）。
 掛鉤：事件 outing、battle_end 的 seal 兩格（bus）、世界層 muster、open、next×2、retire 五格（world）、效果 runic、shard 兩格（effects）、
 接縫 deliver_results（sync 的收場補送）、補算與換季四格（seams，第 55 批）；都不問 enabled（格裡自己問 content.seal、Config.seal.enabled：散去不看開關、隱沒看開關）。
 """
@@ -162,6 +162,21 @@ class SealFeature(Feature):
                 StatusHook("status", "seal", lambda ctx, frame: {"seal_duel": duel_actions.duel_card(ctx), "seal": card.view(ctx), "seal_watch": duel_actions.watch(ctx)}),
             )
         return self._status_slots
+
+    def main_actions(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.main_actions(shell)
+
+    def admin_tools(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.admin_tools(shell)
+
+    def outlock(self, shell):
+        from . import routes  # noqa: PLC0415  只在殼建鎖外工作時才 import（同 routes 掛鉤）
+
+        return routes.outlock(shell)
 
 
 def _carry_season(ctx, old, fresh) -> None:

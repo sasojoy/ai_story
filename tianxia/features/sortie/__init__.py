@@ -117,6 +117,11 @@ class SortieFeature(Feature):
             )
         return self._status_slots
 
+    def main_actions(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.main_actions(shell)
+
 
 def _carry_season(ctx, old, fresh) -> None:
     fresh.player.sortie_day, fresh.player.sorties_today = old.player.sortie_day, old.player.sorties_today  # 換季不能多出一輪陣

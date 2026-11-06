@@ -42,3 +42,5 @@
 ## 畫面與狀態列（全部拆包第 66 批）
 
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `tales`（經 `frame.shell.tale_index`，殼的薄包裝）。
+
+**鎖外工作**（全部拆包第 69 批；原本寫在 `server.py`，計畫 `docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md`）：放手一搏的劇情（`shell._tales_waiting`、`shell.narrate_battle`）接上 `outlock` 掛鉤那一格 `tale`（排第一，`features_core.OUTLOCK_ORDER`）：動作之後在鎖內問、放鎖才開；本體第 52 批就在這一包。定時背景的 `tale_round` 不是動作之後才開，照舊走 `threads` 掛鉤。另外要跑的（`test_for` 挑不到）：`tests/server/test_outlock.py`。

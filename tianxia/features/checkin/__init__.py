@@ -4,7 +4,7 @@
 - checkin.py：簽到的規則（原 tianxia/checkin.py，舊名留成別名；`on`、`PILL_FOUND` 是核心 core/services.py 的 checkin_on、PILL_FOUND，這裡 re-export）
 - actions.py：原本 Game 上的 3 個方法（check_in、_auto_checkin、checkin_view；Game 留 3 個一行委派）的本體
 
-沒有選項前綴（簽到不放鈕：江湖頁的小標，/api/do/checkin 在殼的 MAIN_ACTIONS，照舊叫 Game.check_in）、沒有路由、沒有假人分數（假人叫的是 Game.checkin_view、check_in）。
+沒有選項前綴（簽到不放鈕：江湖頁的小標，/api/do/checkin 在 routes.py 的 main_actions，全部拆包第 68 批）、沒有 APIRouter、沒有假人分數（假人叫的是 Game.checkin_view、check_in）。
 """
 from __future__ import annotations
 
@@ -48,6 +48,11 @@ class CheckinFeature(Feature):
                 StatusHook("status", "checkin", lambda ctx, frame: slot_some("checkin", actions.checkin_view(ctx))),
             )
         return self._status_slots
+
+    def main_actions(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.main_actions(shell)
 
 
 FEATURE = CheckinFeature()

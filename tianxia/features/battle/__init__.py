@@ -155,6 +155,16 @@ class BattleFeature(Feature):
             )
         return self._status_slots
 
+    def admin_tools(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.admin_tools(shell)
+
+    def outlock(self, shell):
+        from . import routes  # noqa: PLC0415  只在殼建鎖外工作時才 import（同 routes 掛鉤）
+
+        return routes.outlock(shell)
+
 
 def _quiet(_) -> None:
     """回傳不接的格一定回 None（seam_lines 只收 list 或 None，list 會併進回話）。"""

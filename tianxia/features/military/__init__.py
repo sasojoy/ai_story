@@ -9,7 +9,7 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 包名不叫 `orders`：`tianxia/orders.py`（軍令的規則）、`ranks.py`、`seats.py` 這一批不搬（共用規則層，第 40 批收進），包裡照 `registry.SHARED` import。
 
 沒有選項前綴：`act:rank2`、`act:convoy`、`act:summons`、`act:rank:<行動>` 都是 act 子動詞，第 57 批接進 verbs（按下去與紀錄標題；`act:rank:<行動>` 帶後綴走 tail_*）；抄帳、管理者的鈕在核心原位叫
-Game 上的一行委派（理由在 tests/core/test_feature_boundaries.py 的 `# military` 那一段）；沒有路由（server.py 的 `orders`、`convoy` 兩個鍵與管理者三顆鈕照舊叫 Game）。
+Game 上的一行委派（理由在 tests/core/test_feature_boundaries.py 的 `# military` 那一段）；沒有 APIRouter（server.py 的 `orders`、`convoy` 兩個鍵照舊叫 Game；管理者工具在 routes.py 的 admin_tools，全部拆包第 68 批）。
 假人分數（`act:rank2`、`act:convoy`、`act:summons`）留在 bot_policy.score 的 act 分支原位。
 """
 from __future__ import annotations
@@ -215,6 +215,11 @@ class MilitaryFeature(Feature):
                 StatusHook("main", "convoy", lambda ctx, frame: slot_some("convoy", order_actions.convoy_line(ctx))),
             )
         return self._status_slots
+
+    def admin_tools(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.admin_tools(shell)
 
 
 FEATURE = MilitaryFeature()

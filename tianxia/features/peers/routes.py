@@ -3,14 +3,24 @@
 這個檔只在殼掛路由時才 import（引擎與假人程式不碰網頁框架）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
 
 玩家卡按鈕的鎖外三段式（挑釁那一句的審、論武的首創取名：shell.screen_peer、shell.prepare_peer，A 鎖內開單、B 鎖外取名、C 是這裡的 peer_act；A 段 discuss_actions.request、C 段 discuss_actions.discuss 第 38 批搬進包了），照手冊 G10 殼的接線
-留在 server.py，這裡經 shell. 叫。名帖定稿那一句的審（shell.screen_text）也在殼。
+第 69 批搬進這個檔，路由照舊經 shell. 叫（tests/arts/test_discuss.py 換 server.prepare_peer、server.screen_peer）。名帖定稿那一句的審（shell.screen_text，探索包也用）留在殼。
 """
 from fastapi import APIRouter, Body, HTTPException, Request
 
 from tianxia import speech
 from tianxia.core import presence
+from tianxia.core.features import AdminTool, no_gate
 
 from . import actions, mingtie_actions, social
+
+
+def admin_tools(shell) -> dict[str, AdminTool]:
+    """名帖檢舉（Joy 2026-10-19）：撤下清掉畫與自題，放回是看過沒事。原本寫在 server.py 的 ADMIN_ACTIONS（全部拆包第 68 批）；暫停中照做（paused_ok 預設 True，同原本那一條）。
+    mingtie_remove 動到別人的存檔：做完也叫他的分頁刷新，名單是殼的 PLAYER_ADMIN_ACTIONS。"""
+    return {
+        "mingtie_remove": AdminTool(no_gate, lambda g, b: mingtie_actions.admin_remove(g, str(b.get("name", "")), shell._int(b.get("version"), 0))),
+        "mingtie_restore": AdminTool(no_gate, lambda g, b: mingtie_actions.admin_restore(g, str(b.get("name", "")), shell._int(b.get("version"), 0))),
+    }
 
 
 def router(shell) -> APIRouter:
@@ -77,3 +87,34 @@ def router(shell) -> APIRouter:
         return {"mingtie": shell.look(game, lambda g: mingtie_actions.view(g, board)), "message": shell.joined(msgs)}
 
     return r
+
+
+# ── 鎖外工作（原本寫在 server.py，全部拆包第 69 批）：殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）；模型呼叫絕不進鎖 ──
+
+
+def prepare_peer(shell, game, name: str, action: str, params: dict) -> tuple[str | None, str] | None:
+    """玩家卡上要先請模型的互動（social.CardAction.request；論武答應時的首創取名）：照開爐的三段式（prepare_forge），
+    A 在鎖內問 Game.peer_request、B 在鎖外 naming.generate，回傳（名字, 說明）交給 C（peer_act 的 params["proposed"]）。
+    這一種互動不需要模型是 None（不多拿一次鎖）；需要、但這一爐不必取名是 NO_NAME。"""
+    handler = social.ACTIONS.get(action)
+    if handler is None or handler.request is None:
+        return None
+    started, request = shell._open_request(game, lambda: game.peer_request(name, action, params))
+    if request is None:
+        return shell.NO_NAME
+    total = game.content.config.naming_budget_seconds
+
+    def name_it():
+        budget = max(0.0, total - (shell._monotonic() - started))
+        return shell.naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
+
+    return shell.model_call(game, name_it, fallback=shell.NO_NAME, left=total - (shell._monotonic() - started), busy=shell.BUSY_FORGE)
+
+
+def screen_peer(shell, game, name: str, action: str, params: dict) -> str:
+    """玩家卡上帶一句話的互動（social.CardAction.screen；挑釁）：要審就審，不要審是空字串。只讀引擎，不拿鎖（那一句只是字）。"""
+    handler = social.ACTIONS.get(action)
+    if handler is None or handler.screen is None:
+        return ""
+    got = handler.screen(game, game, params)  # 只看 params（那一句），不讀對方；對方那一份 C 段才拿
+    return "" if got is None else shell.screen_text(game, got[0], got[1])

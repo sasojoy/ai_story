@@ -44,7 +44,7 @@
 - `_report_seat`：`choose`、`travel` 與事件檢定的兩處（`answer_event`、`answer_branch`）叫，位置固定（回話與紀錄的先後算行為），沒有掛鉤可接；同步那一下第 55 批換成 `sync.deliver` 的 `seat` 那一格。
 - 抵達那一刻經事件 `arrive` 的 `convoy` 那一格（`FEATURE.bus()`：`convoy_actions.convoy_arrives`，排在懸賞護送之前，順序在核心的 `BUS_ORDER`；第 26 批起，委派 `_convoy_arrives` 拿掉）。`_order_credit`：核心的單打服務（`_squad_encounter`）打贏之後記功；出陣、決戰、大勢人物也經 `ctx._order_credit` 叫。
 - 「你這一步」的格（`FEATURE.steps()`，全部拆包第 36 批；順序在核心的 `STEP_ORDER`）：`order`（`order_actions.step_items`／`step_place`：沒做完的軍令一道一件、目標是最近的摸清了的那一處、護糧還沒接這一道的糧車多 `then`；`ORDER_GAIN` 從 `weekcard` 搬來，字一個不改；原本 `weekcard._steps` 的軍令那一段與 `step._order_places`、`_target`、`_then` 的軍令那一支）、`foreshadow`（`fs_actions.step_items`／`step_place`：讀伏筆的 `next_step`、`next_trip` 就是這一格回答，核心不再經舊名 `foreshadow` 讀，第 34 批 PM 認定第 1 條）。`step_items` 讀殼算好傳進來的 `orders_view` 那一份、不重算；不問 `enabled`；目標的最近一處問新手引導包的查詢服務 `ctx._nearest_to`、地點寫法用核心 `tianxia.step.place`。
-- `server.py` 的 `orders`、`convoy` 兩個鍵（`/api/main`）與管理者三顆鈕（`/api/do` 的路由留原位，批次表第二節；`ADMIN_ACTIONS` 只是查表用的 dict，照包分是第 68 批）照舊叫 Game 的委派。
+- `server.py` 的 `orders`、`convoy` 兩個鍵（`/api/main`）照舊叫 Game 的委派；管理者三顆鈕第 68 批搬進 `routes.py` 的 `admin_tools`（鈕的順序在 `web/admin.js`，`ADMIN_ACTIONS` 只是查表用的 dict，第 33 批認定第 2 條收掉）。
 - `orders.py`（軍令規則）、`ranks.py`、`seats.py` 不在這一包（共用規則層；`orders`、`ranks` 全部拆包第 40 批收進 `registry.SHARED`）。
 - **第 34 批留在核心／共用層的接縫**（理由在邊界測試 `# military` 的第二段）：答題中的選單（`_fs_asking_options`，位置在店面之後、閉關之前）與場景文字（`_fs_asking_text`，在拜入／投靠／叛投／求見的畫面之後）、閒著的選單上機緣與伏筆最後一步（`_omen_options`，夾在 `_rank_action_options` 與託付之間）、遊歷打贏之後的官銀與密謀一處（`_fs_after_win`、`_opp_on_win`；第 26 批量過留原位：夾在懸賞那一個發布點前面、讀先算好的記功，只在單打服務那一處有）、`_hear_after_stamina`（`choose` 結尾與 `travel`，伏筆先機緣後、共用 `self.rng`）、`_settle_plots`（`sync` 與 `choose` 結尾）。都因位置固定或順序算行為，沒有對應的掛鉤。
 - **查詢服務 `tianxia/core/omen_base.py`**（核心本體）：核心的 `rules`（`grain_min` 的需求量換算；第 40 批起 `check_condition` 的 `clue_items` 也經它的 `clue_count` 讀）、`content`（天機表、題目）、共用規則層的 `ranks`（召見問這一階的機緣做過沒）、叛投確認畫面（`in_plot`）讀機緣、伏筆的「只讀」那一半，不 import 本包；`fs_rules`、`opp_rules` 從它 re-export 同一批名字。第 40 批多收了伏筆、機緣「讀」的那一半：`fs_active`、`event_ids`、`held_items`、`heard_texts`（連同填字那一串）、`opp_active`、`heard_clues`，另加新的 `clue_count`（`fs_rules`、`opp_rules` 照原名 re-export 同一個物件）。`content.py` 的 `check_foreshadows`、`check_opportunities` 因為夾在別的檢查中間、吃 `known` 與幾個局部變數，接不了 `check_content` 掛鉤（錯誤訊息的先後算行為），留在核心。
@@ -96,3 +96,5 @@
 
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `convoy`（軍令 `orders` 那一格留殼：本週卡也讀同一份）。
 - 畫面：`web/military.js`（`ordersHtml`）、`web/military.css`（全部拆包第 67 批從 `main.js`、`style.css` 切出來，一個字不改）；`.order-*` 跟懸賞、奪璽卡共用，留 `style.css`。
+
+**動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `admin_tools`：`issue_orders`、`rotate_seats`、`summon`、`give_opportunity`、`give_fragment`。動到別人存檔的名單 `PLAYER_ADMIN_ACTIONS` 留在殼。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。

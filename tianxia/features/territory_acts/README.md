@@ -27,9 +27,9 @@
 ## 還留在原位的接縫（理由在 `tests/core/test_feature_boundaries.py` 的 `# territory_acts` 那一段）
 
 - **22:00 換天不接世界層**：世界層的 `day` 格是 21 天季的曆日，不是現實 22:00 的換天；換天與分紅在 `world_tick`、`sync`、`advance` 三處（五格，第 55 批換成 `SEAM_ORDER` 的 `tick`、`sync.deliver`、`advance.turn`）排在別的結算之間，順序就是行為（`_xingshi_grace` 在「季收了、日子沒往前」之前，`late` 的存季只在那一條路上存）。`Game` 上那兩個委派留給測試，`WORLD_ORDER` 不動。
-- **〈天下形勢〉的 B 段與背景執行緒**（`server.write_xingshi`、`xingshi_once`、`XINGSHI_RUNNING`）：用殼的佇列、預算、`TALE_THREADS`，留在 `server.py`（同月旦評 `write_yuedan`）。
+- **〈天下形勢〉的 B 段與背景執行緒**（`write_xingshi`、`xingshi_once`、`XINGSHI_RUNNING`）：第 69 批進了 `routes.py`（同月旦評 `write_yuedan`，見最後一段），照舊用殼的佇列、預算、`TALE_THREADS`。
 - `admin_choices` 的 `xingshi`、`conquest` 兩格照舊叫 `Game` 的委派（`/api/main` 的 `conquest`、`xingshi`、`xingshi_mark` 第 66 批改走 `status_slots`，`Game.xingshi_mark` 拿掉）。
-- `MAIN_ACTIONS["conquest_letter"]`（玩家下戰書）留在殼。**管理者那一個叫 `admin_conquest_letter`，不叫 `conquest_letter`**：`api_do` 先查功能包的管理者工具，同名會把玩家的下戰書整個蓋掉（FB-609）。
+- `MAIN_ACTIONS["conquest_letter"]`（玩家下戰書）第 68 批搬進 `routes.py` 的 `main_actions`。**管理者那一個叫 `admin_conquest_letter`，不叫 `conquest_letter`**：`api_do` 先查功能包的管理者工具，同名會把玩家的下戰書整個蓋掉（FB-609）。
 - `Game._conquest_side`（陣營是哪一軍）、`_sieges`、`_joinable`、`_cancel_siege`、`_flavor_sink`：包經 `ctx` 叫（服務清單）。
 - 沒有選項前綴：戰書走 `/api/do/conquest_letter`，不在選單上；假人不下戰書（`bot_policy` 只讀 `conquest` 規則）。
 
@@ -62,3 +62,7 @@
 
 - 畫面：`web/territory_acts.js`（見聞的〈天下形勢〉）、`web/territory_acts.css`（第 67 批）。
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `conquest`、`xingshi`（`xingshi`、`xingshi_mark`）。
+
+**動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `main_actions`：`conquest_letter`（玩家下戰書；管理者的 `admin_conquest_letter` 第 46 批就在 `admin_tools`，不同名）。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
+
+**鎖外工作**（全部拆包第 69 批；原本寫在 `server.py`，計畫 `docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md`）：`routes.py` 的〈天下形勢〉`_xingshi_waiting`、`write_xingshi`、`xingshi_once`、`XINGSHI_RUNNING`、`XINGSHI_OWNER`、`XINGSHI_SKIPPED`（`outlock` 掛鉤那一格 `xingshi`；殼留一行包裝 `_xingshi_waiting`、`xingshi_once`）。A、C 段照舊經 `Game` 的委派（假人走同一批、測試換 `Game.xxx` 打得到），模型呼叫絕不進鎖；殼的東西一律 `shell.<名字>` 當下讀，函式名不改（`tests/server/test_server.py` 的 `_users_in_server` 掃各包 `routes.py` 認這些名字，參數要叫 `shell`、不要先存成變數）；開執行緒寫 `shell.threading.Thread`、`shell.traceback`，不在包裡 `import threading`（`zhuan` 軌換的是殼上那個）。另外要跑的（`test_for` 挑不到）：`tests/server/test_outlock.py`。
