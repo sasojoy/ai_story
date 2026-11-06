@@ -22,7 +22,8 @@ from __future__ import annotations
 import random
 from typing import NamedTuple
 
-from tianxia import battle_instance, tactics
+from tianxia import tactics
+from tianxia.core import battle_base as battle_instance
 from tianxia import prologue as prologue_rules
 from tianxia.characters import name_key
 from tianxia.core.arena_ranks import (  # noqa: F401  擂台的名次與稱號留在核心當查詢服務（全部拆包第 12 批）：同一批函式物件與字，arena.title_of 這些照舊拿得到

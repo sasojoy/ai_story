@@ -15,8 +15,9 @@ mandate_battle）與 chronicle_text（on、chronicle_block、mandate_now）、�
 """
 from __future__ import annotations
 
-from .. import battle_instance, treasures
-from ..battle_instance import BattleInstance
+from .. import treasures
+from . import battle_base as battle_instance
+from .battle_base import BattleInstance
 from ..characters import name_key
 from ..models import BattleDef, Content, SealTuning, TimetableEvent
 from ..world_state import SealRegistry, SealShard

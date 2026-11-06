@@ -16,7 +16,8 @@ from __future__ import annotations
 import random
 
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
-from tianxia import battle_instance, battlelog, encounter, materials, renown, rise, rounds, tactics, treasures
+from tianxia import battlelog, encounter, materials, renown, rise, rounds, tactics, treasures
+from tianxia.core import battle_base as battle_instance
 from tianxia import attrset, gender, team
 from tianxia.core import duel_base
 from tianxia.core.option import Option

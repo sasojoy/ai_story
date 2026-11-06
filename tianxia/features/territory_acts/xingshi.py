@@ -18,7 +18,7 @@ import re
 from pydantic import BaseModel
 
 from tianxia import conquest, rules, siege, territory, zh
-from tianxia.battle_instance import GUARD, GUARD_SIDE
+from tianxia.core.battle_base import GUARD, GUARD_SIDE
 from tianxia.models import Content
 from tianxia.state import DayNote, WorldState
 

@@ -34,7 +34,8 @@ from typing import Any
 
 # 核心本體（全部拆包第 25 批收進 tianxia/core/__init__.py 的 MODULES）：不 import 功能包與舊名的別名。宴客的散席、月旦評、擂台的前三名、
 # 龍頭上陣、題壁照帶由各包登記世界層的格（tianxia/core/features.py 的 WORLD_ORDER），還沒成包、不在共用規則層的舊模組由這裡代叫（標批號）
-from . import battle_instance, calendar, flavor, renown, seats, territory, timetable, wins  # 核心本體與共用規則層
+from . import calendar, flavor, renown, seats, territory, timetable, wins  # 核心本體與共用規則層
+from .core import battle_base as battle_instance  # 決戰的資料型別與判定（全部拆包第 54 批進核心）
 from . import figure_life  # 共用規則層（人物活起來，全部拆包第 40 批收進）
 from . import figures  # 共用規則層（大勢人物，全部拆包第 40 批收進）
 from . import leaderboard  # 過渡：待搬（SHARED_LATER：裝備第 42 批已成包，signature_arms 經舊名別名；gear_card 讀本命兵器改成查詢服務、skillview 收進來之後再收）

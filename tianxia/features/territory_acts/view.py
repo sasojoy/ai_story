@@ -4,7 +4,8 @@
 from __future__ import annotations
 
 from tianxia import atlas  # 共用規則層（輿圖資料 atlas，第 50 批收進）
-from tianxia import battle_instance, conquest
+from tianxia import conquest
+from tianxia.core import battle_base as battle_instance
 from tianxia import ranks  # 共用規則層（階級 ranks，第 40 批收進）
 from tianxia.models import Content
 

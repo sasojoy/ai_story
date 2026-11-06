@@ -1802,8 +1802,8 @@ def test_the_old_names_left_as_aliases_are_known():
                          "outing": "explore", "explore_one": "explore",
                          # tavern
                          "tavern": "tavern", "tavern_ask": "tavern",
-                         # battle（全部拆包第 7 批：tianxia/escorts.py；第 8 批：tianxia/generals.py）
-                         "escorts": "battle", "generals": "battle",
+                         # battle（全部拆包第 7 批：tianxia/escorts.py；第 8 批：tianxia/generals.py；第 54 批：tianxia/battle_instance.py）
+                         "escorts": "battle", "generals": "battle", "battle_instance": "battle",
                          # guide（全部拆包第 22 批：tianxia/guide.py、hints.py、newbie.py、opening.py、enlist.py）
                          "guide": "guide", "hints": "guide", "newbie": "guide", "opening": "guide", "enlist": "guide",
                          # stamina_plays（全部拆包第 39 批：tianxia/ambush.py、works.py）

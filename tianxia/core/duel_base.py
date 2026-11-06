@@ -10,7 +10,7 @@ from __future__ import annotations
 import random
 from typing import NamedTuple
 
-from .. import battle_instance
+from . import battle_base as battle_instance
 from ..models import BEATS, BattleTuning, DuelTuning
 
 # 他出招之前你看到的架勢（每一招兩句，挑一句）。文字待內容方改

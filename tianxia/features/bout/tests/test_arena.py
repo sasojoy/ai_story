@@ -305,7 +305,8 @@ def test_a_gamble_rides_the_boss_duel_box_and_tells_the_model_who_it_faces(ring)
 
 def test_a_stale_arena_rating_says_the_round_is_over(ring, monkeypatch):
     """M-05：擂台的單子是上一回合開的就回「這一回合已經結算」，不在鎖內重評、不套用。"""
-    from tianxia import battle_instance, duel
+    from tianxia import duel
+    from tianxia.core import battle_base as battle_instance  # 全部拆包第 54 批：arena_actions 沒給分數時讀核心的 assess_gamble，換這一格才打得到
 
     content, world = ring
     _join(content, world, "乙")

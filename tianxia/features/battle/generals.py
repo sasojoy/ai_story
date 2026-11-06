@@ -12,7 +12,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import battle_instance, figures  # 共用規則層（戰鬥規則核心；大勢人物：敗走扣聲威，第 40 批收進）
+from tianxia import figures  # 共用規則層（大勢人物：敗走扣聲威，第 40 批收進）
+from . import instance as battle_instance  # 這一包的回合規則（第 54 批搬進來）
 from tianxia.chiefs import on, pick  # noqa: F401  共用規則層（龍頭上陣的挑法）：這一包的 on_muster 用、照舊 re-export 給 generals.on、generals.pick
 from tianxia.models import BattleDef, Content
 from tianxia.state import Rumor

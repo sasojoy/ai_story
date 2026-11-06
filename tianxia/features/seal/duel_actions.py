@@ -9,7 +9,8 @@
 """
 from __future__ import annotations
 
-from tianxia import atlas, attrset, battle_instance, gender, roster, tactics, team  # 共用規則層
+from tianxia import atlas, attrset, gender, roster, tactics, team  # 共用規則層
+from tianxia.core import battle_base as battle_instance  # 決戰的資料型別與判定（第 54 批進核心）
 from tianxia import prologue as prologue_rules
 from tianxia.characters import CharacterStore
 from tianxia.core import duel_base

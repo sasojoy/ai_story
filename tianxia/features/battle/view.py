@@ -20,7 +20,8 @@ import random
 
 from tianxia import calendar, gender, journal, team
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
-from tianxia import battle_instance, battlelog, tactics  # 共用規則層（戰鬥規則核心）
+from tianxia import battlelog, tactics  # 共用規則層
+from . import instance as battle_instance  # 這一包的回合規則（第 54 批搬進來）
 from tianxia import conquest, siege  # 共用規則層（地盤與攻城）
 from tianxia import four_tiers, materials, mounts, renown, roster  # 共用規則層（四階料、素材、坐騎、名聲、同伴；絕學的契機第 23 批改叫 ctx._seize_chance）
 from tianxia import figure_life, front_lines, wins  # 共用規則層（人物活起來、戰線、三陣營四勝利）

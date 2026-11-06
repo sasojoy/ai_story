@@ -19,7 +19,7 @@ import math
 from dataclasses import dataclass, field
 
 from . import calendar, place_state, rules, seal_acts, territory
-from .battle_instance import CENTER, FrontNote
+from .core.battle_base import CENTER, FrontNote
 from .characters import name_key
 from .models import BattleDef, BlockDef, Content
 from .state import (

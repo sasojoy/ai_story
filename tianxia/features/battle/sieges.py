@@ -18,7 +18,8 @@ _cancel_siege、_settle_siege：核心不再叫它，可是 tests/test_siege_set
 """
 from __future__ import annotations
 
-from tianxia import allied, battle_instance, conquest, orders, siege  # 共用規則層（豪強依附、戰鬥規則核心、地盤、軍令〔第 40 批收進〕、siege；registry.SHARED）
+from tianxia import allied, conquest, orders, siege  # 共用規則層（豪強依附、地盤、軍令〔第 40 批收進〕、siege；registry.SHARED）
+from . import instance as battle_instance  # 這一包的回合規則（第 54 批搬進來）
 from tianxia.characters import name_key
 from tianxia.models import BattleDef
 from tianxia.state import Rumor, WorldState
