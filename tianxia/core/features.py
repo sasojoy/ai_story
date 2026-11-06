@@ -4,7 +4,7 @@
 兩種掛鉤看 enabled 的方式不一樣（手冊 3.3 寫「關著的包一個掛鉤都不叫」，指的是第一種；PM 10/31 認可，3.3 由 PM 補註）：
 - 遊戲當下的（options、menu、choose、status、on_sync、on_day、on_season_*、on_drop_stale、bot_pick）：每一次先問 enabled(ctx)，
   關著的包一個都不叫（tests/core/test_contract_core.py、test_contract_features.py 守）。
-- 殼啟動、載入內容時的（routes、admin_tools、threads、check_content、bot_always，與宣告的 web、content）：那時候還沒有 ctx（沒有角色、
+- 殼啟動、載入內容時的（routes、admin_tools、main_actions、menxia_actions、threads、check_content、bot_always，與宣告的 web、content）：那時候還沒有 ctx（沒有角色、
   開關可能在季中被管理者切換），所以不看 enabled、登記的包全部照掛：路由與管理者工具由各自的 gate 在關著時回 404（搬包之前
   商城在 server 裡也是照掛再 404）、內容照驗（檔案寫壞了早點知道）、永遠按得下去的前綴照排除（關著的包選單上本來就沒有它們）。
 
@@ -21,6 +21,7 @@
 | on_drop_stale(ctx) | Game._drop_stale_references 最後 |
 | bot_pick(ctx, option)、bot_always | bot_policy.score（假人看到這一顆的分數，None 是不按）；bot.pick 排除的前綴（永遠按得下去的） |
 | admin_tools(shell)、routes(shell) | server：/api/do/{op} 的管理者工具、掛路由（shell 是 server 模組） |
+| main_actions(shell)、menxia_actions(shell) | server：建 MAIN_ACTIONS（/api/do/{op}）、MENXIA_ACTIONS（/api/menxia/{op}）兩張表：{op: fn(g, body)}，照 action_table 排回寫死的順序。**手冊 3.3 表外**（全部拆包第 68 批，見檔尾 shell_server 那一段） |
 | threads(shell) | server.main（殼開、測試停：只有 main 叫 start_threads，測試不叫；不回東西。全部拆包第 52 批，開給戰記與第 53 批的看守） |
 | check_content(content, need)、web、content | content.validate（關著的包照驗）；index.html 的檔；content.py 讀的檔。check_content **手冊 3.3 表外**（見下） |
 
@@ -153,6 +154,8 @@ class FeatureHooks(Protocol):
     def on_drop_stale(self, ctx: Game) -> None: ...
     def bot_pick(self, ctx: Game, option: Option) -> float | None: ...
     def admin_tools(self, shell: Any) -> dict[str, AdminTool]: ...
+    def main_actions(self, shell: Any) -> dict[str, Callable[[Any, dict], Any]]: ...  # shell_server
+    def menxia_actions(self, shell: Any) -> dict[str, Callable[[Any, dict], Any]]: ...  # shell_server
     def routes(self, shell: Any) -> Any: ...
     def check_content(self, content: Content, need: Callable[[bool, str], None]) -> None: ...
     # ── 接縫掛鉤（第 11 批；不問 enabled，Shop.menu、Shop.entry、Verb.cell 除外）──
@@ -231,6 +234,12 @@ class Feature:
         return None
 
     def admin_tools(self, shell: Any) -> dict[str, AdminTool]:
+        return {}
+
+    def main_actions(self, shell: Any) -> dict[str, Callable[[Any, dict], Any]]:  # shell_server
+        return {}
+
+    def menxia_actions(self, shell: Any) -> dict[str, Callable[[Any, dict], Any]]:  # shell_server
         return {}
 
     def routes(self, shell: Any) -> Any:
@@ -971,3 +980,49 @@ def step_table(core: dict[str, StepHook]) -> list[StepHook]:
 def step_places(core: dict[str, StepHook]) -> dict[str, Callable[..., Any]]:
     """{ref: place}：step.finish 照每一件 _ref 的第一個字找回那一格補目標（沒有 ref 或沒有 place 的格不列）。"""
     return {h.ref: h.place for h in step_table(core) if h.ref is not None and h.place is not None}
+
+
+# ── shell_server（全部拆包第 68 批「伺服器分包一」；計畫 docs/superpowers/plans/2026-11-06-伺服器分包-第68批.md 第五節）：
+# 殼的 MAIN_ACTIONS、MENXIA_ACTIONS 照包分（Feature.main_actions、menxia_actions）；管理者那一張走現成的 admin_tools，這裡只多一個沒有總開關的 gate。
+# 兩個新掛鉤同 admin_tools：殼啟動時問、不看 enabled、登記的全掛、兩包同名丟例外。 ──
+
+
+def no_gate() -> None:
+    """沒有總開關的管理者工具共用（原本 ADMIN_ACTIONS 那些本來就沒有 404）：什麼都不擋，各動作自己驗。"""
+
+
+def _merged_actions(tables: list[dict[str, Callable[[Any, dict], Any]]], label: str) -> dict[str, Callable[[Any, dict], Any]]:
+    out: dict[str, Callable[[Any, dict], Any]] = {}
+    for table in tables:
+        for op, fn in table.items():
+            if op in out:
+                raise ValueError(f"{label} {op} 兩包都有")
+            out[op] = fn
+    return out
+
+
+def main_actions(shell: Any) -> dict[str, Callable[[Any, dict], Any]]:
+    """各包的 /api/do/{op}（殼的 MAIN_ACTIONS；關著的包也列，各動作自己回一句）。兩包同名丟例外。"""
+    return _merged_actions([f.main_actions(shell) for f in registered()], "玩家動作")
+
+
+def menxia_actions(shell: Any) -> dict[str, Callable[[Any, dict], Any]]:
+    """各包的 /api/menxia/{op}（殼的 MENXIA_ACTIONS；關著的包也列，各動作自己回一句）。兩包同名丟例外。"""
+    return _merged_actions([f.menxia_actions(shell) for f in registered()], "修練頁動作")
+
+
+def action_table(order: tuple[str, ...], core: dict[str, Callable[[Any, dict], Any]],
+                 packages: dict[str, Callable[[Any, dict], Any]]) -> dict[str, Callable[[Any, dict], Any]]:
+    """殼的一張動作表（普通 dict，測試照舊 setitem、取值）：照寫死的 order 排，核心留在殼的與各包的穿插。
+    order 上有、沒人提供丟例外（包登記漏了，開機就知道）；核心與包同名丟例外；order 外的（之後新包加的）接在後面。"""
+    both = sorted(set(core) & set(packages))
+    if both:
+        raise ValueError(f"動作 {both} 殼與包都有")
+    merged = {**core, **packages}
+    missing = [op for op in order if op not in merged]
+    if missing:
+        raise ValueError(f"動作 {missing} 沒有人提供")
+    table = {op: merged[op] for op in order}
+    for op, fn in merged.items():
+        table.setdefault(op, fn)
+    return table

@@ -185,6 +185,48 @@ def test_admin_tools_merge_and_refuse_the_same_name_twice(monkeypatch):
         features_core.admin_tools(None)
 
 
+def test_main_and_menxia_actions_merge_and_refuse_the_same_name_twice(monkeypatch):
+    """shell_server（全部拆包第 68 批）：殼的兩張動作表照包分，同 admin_tools：不看 enabled、兩包同名丟例外，參數是殼。"""
+    seen = []
+
+    class Pack(Feature):
+        name = "fake_pack"
+
+        def enabled(self, ctx):
+            raise AssertionError("殼建表時沒有 ctx，不問 enabled")
+
+        def main_actions(self, shell):
+            seen.append(shell)
+            return {"fake_go": lambda g, b: ["走。"]}
+
+        def menxia_actions(self, shell):
+            seen.append(shell)
+            return {"fake_sit": lambda g, b: ["坐。"]}
+
+    shell = object()
+    monkeypatch.setattr(registry, "FEATURES", [Pack(), Feature()])
+    assert list(features_core.main_actions(shell)) == ["fake_go"] and list(features_core.menxia_actions(shell)) == ["fake_sit"]
+    assert seen == [shell, shell]
+    monkeypatch.setattr(registry, "FEATURES", [Pack(), Pack()])
+    with pytest.raises(ValueError):
+        features_core.main_actions(shell)
+    with pytest.raises(ValueError):
+        features_core.menxia_actions(shell)
+
+
+def test_action_table_keeps_the_written_order_and_refuses_what_does_not_add_up():
+    """action_table：照寫死的 order 排（核心與包穿插）、回普通 dict；order 上沒人提供、核心與包同名都丟例外；order 外的接在後面。"""
+    a, b, c, d = (lambda g, body: [name] for name in "abcd")
+    table = features_core.action_table(("x", "y", "z"), {"y": b}, {"z": c, "x": a, "later": d})
+    assert type(table) is dict and list(table) == ["x", "y", "z", "later"]
+    assert (table["x"], table["y"], table["z"], table["later"]) == (a, b, c, d)
+    with pytest.raises(ValueError):
+        features_core.action_table(("x", "gone"), {}, {"x": a})
+    with pytest.raises(ValueError):
+        features_core.action_table(("x",), {"x": a}, {"x": b})
+    assert features_core.no_gate() is None  # 沒有總開關的管理者工具：什麼都不擋
+
+
 def test_start_threads_asks_every_registered_package_even_a_closed_one(monkeypatch):
     """背景執行緒（全部拆包第 52 批）：殼啟動時照清單問登記的每一包、不看 enabled（那時候還沒有 ctx），參數是殼；不回東西。"""
     one, two = Seams(open_=False), Seams()
