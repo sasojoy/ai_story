@@ -165,7 +165,9 @@ def resolve_grades(content: Content) -> None:
 
 
 # core_content（全部拆包第 62 批：內容照包分；計畫 docs/superpowers/plans/2026-11-06-內容照包分-第62批.md）：各包宣告的內容檔
-# （Feature.content）住在 tianxia/features/<包>/content/<rel>，其餘的（config.json、profiles/、核心的與還沒分的事件池）住在 content/<rel>。
+# （Feature.content）住在 tianxia/features/<包>/content/<rel>，其餘的（config.json、profiles/、核心的事件池）住在 content/<rel>。
+# 第 63 批（計畫 docs/superpowers/plans/2026-11-06-內容照包分-第63批.md）：測試內容同一個判準，包宣告了這個 rel 而且有檔的住在 tianxia/features/<包>/tests/content/<rel>，
+# 其餘的住在 tests/fixtures/content/<rel>。
 REAL_ROOT = Path(__file__).resolve().parent.parent / "content"  # 真實內容（同 LOCAL_DIR 的寫法）
 TEST_ROOT = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "content"  # 測試內容（第 63 批；同 REAL_ROOT，正式機沒有 tests/ 也不礙事：只比路徑）
 

@@ -10,7 +10,7 @@
 
 | 檔 | 是什麼 |
 |---|---|
-| `__init__.py` | 登記（`ExploreFeature`）：`enabled`＝`rules.jianfa(..., "explore_one")`（不擲骰）、`web = ("outing.js",)`（本來就是獨立的檔，位置不動）、`content = ("outing_lines.json",)`、`player_fields`、`check_content`；`prefix` 是 None（那一格是核心的 `act:explore`） |
+| `__init__.py` | 登記（`ExploreFeature`）：`enabled`＝`rules.jianfa(..., "explore_one")`（不擲骰）、`web = ("outing.js",)`（本來就是獨立的檔，位置不動）、`content`（`outing_lines.json`；探索補寫的事件池 `events/explore_*.json` 六個，全部拆包第 63 批）、`player_fields`、`check_content`；`prefix` 是 None（那一格是核心的 `act:explore`） |
 | `checks.py` | 內容驗證：探索表（每個地點歸得到一張、城裡的地痞、旅人事件）與段落句子（這一包的 `content/outing_lines.json`）。原本是核心 `content.py` 的 `check_explore_one`、`check_outing_lines`（核心不 import 包）；「旅人」與至少幾則（`TRAVELER_TAG`、`TRAVELER_MIN`）照舊寫在核心，這裡讀那兩個模組屬性 |
 | `explore_rules.py` | 探索一顆的純規則（原 `tianxia/explore_one.py`；那個名字留成別名）：表、比重、抽、自己的亂數、鈕上的小字、段落句子、帳 |
 | `explore_actions.py` | 原本 `Game` 上探索一顆的 15 個方法與模組層的 `OutingPlan` |
@@ -31,6 +31,7 @@
 
 **改這一包時 `test_for` 挑不到、要另外跑的**（混在別人檔裡的測試，這一輪不拆，批次表第二節）：改包的檔只挑這一包的 `tests/` 與核心契約，下面這幾個蓋著搬過來的程式卻不在包裡——
 - 三道閘的接線（`fight_gate`、45 級以後的經驗）：`tests/battle/test_drill_gates_engine.py`（也驗核心 `_record_exp`，算混合檔）。
+- 探索事件池（`content/events/explore_*.json`）的獎勵上限：`tests/core/test_event_reward_caps.py`（只寫 `explore_` 前綴，照檔名挑不到；搬進包之前就是這樣）。
 - 屬性五段與探索一顆的互動：`tests/battle/test_stat_milestones_engine.py`（整檔 slow）；走一趟、探索一顆的開關與表：`tests/core/test_jianfa_switch.py`（整檔 slow）；一條線的開頭、特殊頓悟的倍數：`tianxia/features/story/tests/test_storyline.py`、`tianxia/features/story/tests/test_story_wangyue.py`（整檔 slow）；週解鎖的四格小字：`tests/figures/test_week_unlock.py`；真實內容：`tests/season/test_real_content.py`。
 - 練功分級與新手目標：`tests/acts/test_training.py`（8 條，分級加新手目標，新手目標歸引導包）；野怪與練功點：`tests/acts/test_practice_spots.py`（1 條，整檔是出陣的練功點）；舊探索的比重與說明那一行：`tests/core/test_explain.py`、`tests/arts/test_explain2.py`、`tests/gear/test_treasures.py`（破境丹門檻、`_explore_weights` 帶寶物）、`tests/figures/test_day_scale.py`、`tests/map/test_atlas.py`；`tianxia/features/bout/tests/test_duel.py`（頭目戰換掉 `_explore_weights`）。
 - 自家領地多給一個（`home_gather`，第 13 批搬進來）：`tests/acts/test_conquest_rules.py`（`test_gather_bonus_only_at_home`；包裡的 `test_explore_package.py` 只驗換得掉，不執行本體）。

@@ -301,7 +301,8 @@ def isolated_database(tmp_path, monkeypatch):
 
 @pytest.fixture
 def content():
-    """測試內容（tests/fixtures/content）：這個測試自己的一份（cached_content 的複本），怎麼改都不會漏到別的測試。"""
+    """測試內容（tests/fixtures/content 加各包的 tests/content）：這個測試自己的一份（cached_content 的複本），怎麼改都不會漏到別的測試。
+    包的測試用 tianxia/features/conftest.py 那一份（只載核心加那一包，全部拆包第 63 批）。"""
     return cached_content(FIXTURE)
 
 
