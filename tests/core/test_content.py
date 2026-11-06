@@ -1,11 +1,10 @@
 import json
-import shutil
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from conftest import FIXTURE, copy_real_content
+from conftest import FIXTURE, copy_real_content, copy_test_content
 from tianxia import naming
 from tianxia.content import ContentError, load_content, profile_line, validate
 from tianxia.models import (
@@ -19,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def copy_fixture(tmp_path):
     dest = tmp_path / "content"
-    shutil.copytree(FIXTURE, dest)
+    copy_test_content(dest)
     return dest
 
 

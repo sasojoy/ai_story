@@ -94,6 +94,17 @@ def copy_real_content(dest: Path) -> None:
         shutil.copyfile(path, dest / rel)
 
 
+def copy_test_content(dest: Path) -> None:
+    """測試內容抄成一份攤平的（tests/fixtures/content 整份加各包的測試內容，都在 dest/<rel>，全部拆包第 63 批之前的樣子）：抄一份、改一個檔、看 load_content 擋不擋的測試用。
+    dest 不是測試內容的根，load_content 照舊攤平讀（content._locate）。"""
+    from tianxia.core.features import pack_test_content
+
+    shutil.copytree(FIXTURE, dest)
+    for rel, path in pack_test_content().items():
+        (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, dest / rel)
+
+
 def real_content(profile=None) -> Content:
     """正式內容（content/）的複本；profile 是設定覆寫檔（例如 "week7"）。"""
     return cached_content(REAL_CONTENT, profile)
@@ -327,7 +338,7 @@ def _prologue_master(tmp_path_factory):
     測試不直接用它：要改內容再載入的測試（驗證）用 prologue_root（自己的一份複本），只要載入好的內容用 prologue_content。
     prologue_root 每次複製前後、以及工作階段結束時，都檢查這個資料夾裡每個檔都沒被改過。"""
     root = tmp_path_factory.mktemp("prologue") / "prologue_content"
-    shutil.copytree(FIXTURE, root)
+    copy_test_content(root)
     for name in ("tutorial.json", "preset_recipes.json", "insight_scenes.json"):
         shutil.copy(PROLOGUE / name, root / name)
     shutil.copy(PROLOGUE / "events.json", root / "events" / "prologue.json")
@@ -389,7 +400,7 @@ def _hints_master(tmp_path_factory):
     （五條）。測試內容的劇本沒有陣營、也沒有入伍段：補一個 guan（官軍，join_at 空），引薦人的名字就用陣營名「官軍」。
     跟序章母本一樣：測試不直接用它（hints_root 給自己的一份複本、hints_content 給載入好的複本），每次複製前後都檢查沒被改過。"""
     root = tmp_path_factory.mktemp("hints") / "hints_content"
-    shutil.copytree(FIXTURE, root)
+    copy_test_content(root)
     shutil.copy(HINTS / "hints.json", root / "hints.json")
     scenario = json.loads((root / "scenario.json").read_text(encoding="utf-8"))
     scenario["factions"] = [{"id": "guan", "name": "官軍", "join_at": []}]

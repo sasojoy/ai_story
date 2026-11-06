@@ -228,6 +228,13 @@ def test_a_pack_content_file_takes_the_content_route_and_the_pack_route():
     assert {"test_content.py", "test_real_content.py", "test_mall_content.py", "test_contract_features.py"} <= names
 
 
+def test_a_pack_test_content_file_takes_the_fixture_route_and_the_pack_route():
+    """全部拆包第 63 批：包裡的測試內容同 tests/fixtures/（寫到那個檔名的）再加那一包的 tests/；不補的話落進測試檔那一支，什麼都挑不到。"""
+    names = _names(["tianxia/features/travel/tests/content/road_sights.json"])
+    assert {"test_content.py", "test_travel_smoke.py"} <= names
+    assert "test_real_content.py" not in names  # 測試內容不走真實內容那一條
+
+
 def test_the_promotion_and_rank_action_content_picks_the_tests_that_pin_it():
     """第一季正式版丙一、丙二、戊一的測試檔用真實內容釘住晉升奇遇與第 3、4 階行動：改那幾個內容檔時要挑到它們（整合審查 M2）。"""
     promotions = {"test_promotions_high.py", "test_promotions_huang.py"}

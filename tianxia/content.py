@@ -167,13 +167,23 @@ def resolve_grades(content: Content) -> None:
 # core_content（全部拆包第 62 批：內容照包分；計畫 docs/superpowers/plans/2026-11-06-內容照包分-第62批.md）：各包宣告的內容檔
 # （Feature.content）住在 tianxia/features/<包>/content/<rel>，其餘的（config.json、profiles/、核心的與還沒分的事件池）住在 content/<rel>。
 REAL_ROOT = Path(__file__).resolve().parent.parent / "content"  # 真實內容（同 LOCAL_DIR 的寫法）
+TEST_ROOT = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "content"  # 測試內容（第 63 批；同 REAL_ROOT，正式機沒有 tests/ 也不礙事：只比路徑）
 
 
 def _locate(root: Path) -> dict[str, Path]:
-    """這個根上哪些檔要去包裡找（rel → 真的在哪）。只有真實的 content/ 才去：其他的根（測試內容、測試的 tmp 副本、序章母本）照舊攤平讀
-    root/<rel>。不能「根上找不到就去包裡找」：測試內容靠「沒有這個檔就是空的」（沒有 mall.json 就沒有商品）。
+    """這個根上哪些檔要去包裡找（rel → 真的在哪）。只有真實的 content/ 與測試內容（tests/fixtures/content，第 63 批）才去：其他的根（測試的 tmp 副本、
+    序章母本）照舊攤平讀 root/<rel>。不能「根上找不到就去包裡找」：測試內容靠「沒有這個檔就是空的」（沒有 mall.json 就沒有商品），所以測試內容只收包裡真的有的（pack_test_content）。
     宣告了卻沒有檔、content/ 底下還留著同一份都當場報錯：load_content 裡一堆 .exists() 判斷式，不報的話檔案搬丟了會靜靜變成空的。"""
-    if root.resolve() != REAL_ROOT:
+    resolved = root.resolve()
+    if resolved == TEST_ROOT:
+        from .core.features import pack_test_content  # noqa: PLC0415  同下面的 pack_content
+
+        tests = pack_test_content()
+        for rel, path in tests.items():
+            if (root / rel).exists():
+                raise ContentError(f"內容檔 {rel} 兩處都有：{path} 與 {root / rel}")
+        return tests
+    if resolved != REAL_ROOT:
         return {}
     from .core.features import pack_content  # noqa: PLC0415  同 check_features：登記的包延後載入（包會 import 核心）
 

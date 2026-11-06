@@ -4,12 +4,11 @@ tianxia/features/<包>/content/，content.py 只有真實的根才去包裡找�
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 
 import pytest
 
-from conftest import FIXTURE, real_content
+from conftest import copy_test_content, real_content
 from tianxia import content as content_mod
 from tianxia.content import ContentError, content_path, load_content, real_event_files, real_files
 from tianxia.core import features, registry
@@ -60,7 +59,7 @@ def test_event_files_sort_by_name_across_packs():
 def test_other_roots_stay_flat_and_never_fall_back_to_the_packs(tmp_path):
     """測試內容靠「沒有這個檔就是空的」（沒有 mall.json 就沒有商品）：掉回包裡就變了。"""
     root = tmp_path / "content"
-    shutil.copytree(FIXTURE, root)
+    copy_test_content(root)
     assert not (root / "mall.json").exists()
     assert load_content(root).mall == {}
 

@@ -904,13 +904,12 @@ def test_bots_never_pick_foreshadow_options(fs, world):
 
 
 def test_missing_or_empty_foreshadows_file_is_empty(tmp_path):
-    from conftest import FIXTURE
+    from conftest import FIXTURE, copy_test_content
 
     assert load_content(FIXTURE).foreshadows == Foreshadows()
-    import shutil
 
     root = tmp_path / "content"
-    shutil.copytree(FIXTURE, root)
+    copy_test_content(root)
     (root / "foreshadows.json").write_text("", encoding="utf-8")
     assert load_content(root).foreshadows == Foreshadows()
     (root / "foreshadows.json").write_text('{"items": [], "chains": []}', encoding="utf-8")

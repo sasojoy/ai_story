@@ -55,6 +55,7 @@
   （webharness）跑整支頁面、真的執行它的網頁測試（test_mall_web）連 slow 一起跑，跟改到的測試檔一樣（runs_js）。
 - tests/ 裡的測試檔：跑它自己，連 slow 一起（改了就是要跑它；挑到的其他檔照舊不含 slow，所以分兩次跑）；
   tests/kit/ 這類共用工具：import 它的測試檔；tests/fixtures/：寫到那個檔名的測試檔。
+  包裡的測試內容（tianxia/features/<包>/tests/content/，全部拆包第 63 批）：同 tests/fixtures/，再加那一包的 tests/。
 - tests/conftest.py：hunk 落在哪個函式、fixture 或常數 → 用到它的測試檔（from conftest import、fixture 參數；conftest 裡
   別的 fixture 用到它的連那一個的使用者）；autouse 的 fixture、最外層的 import 與 sys.path、或用到的檔超過 CONFTEST_CAP 個
   （content、game 這種）→ 煙霧。整套留給每日整套。
@@ -1251,6 +1252,11 @@ def pick(files: list[str], base: str | None = None,
             hit = {t for t in tests if path.name in _text(t)}
             result.files |= hit
             result.why.append(f"{f}：寫到 {path.name} 的 {len(hit)} 個檔")
+            continue
+        if f.startswith("tianxia/features/") and path.parts[3:5] == ("tests", "content"):  # core_content：包裡的測試內容（第 63 批），不補就落進下面那一支、什麼都挑不到
+            hit = {t for t in tests if path.name in _text(t)}
+            result.files |= hit | set((FEATURES / path.parts[2] / "tests").rglob("test_*.py"))
+            result.why.append(f"{f}：寫到 {path.name} 的 {len(hit)} 個檔＋{path.parts[2]} 這一包的 tests/")
             continue
         if f.startswith("tests/") or (f.startswith("tianxia/features/") and "/tests/" in f):
             if path.name.startswith("test_") and path.suffix == ".py":
