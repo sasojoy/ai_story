@@ -26,6 +26,9 @@ sortie 是第 1 批的（Scenario：出陣本體、混戰、出陣回報），du
   大場面判讀那一步換成回固定判讀的（Judgment(advantage=8)），act:train 走 server.may_judge_fight → prepare_fight 那一條。
 - 資料庫轉成文字：每一張表、每一列（列照 repr 排序：列的先後不是行為）；帳號的 salt、hash 抹掉（每次隨機）。
 
+開季準備卡（develop 的五項屬性與傳承；合回第 0 段補）：卡接管整個選單，不按的話之後每一步都被擋、兩邊一樣擋，比對等於空驗。Scenario.call 看到回應裡的
+main.prep 就照預設配比按 growth:、識海按 legacy:skip（clear_prep，這幾下照樣寫進輸出）；籌備中、休季不按。沒有 main.prep 的根一步都不多，輸出跟以前一個位元組都不差。
+
 半舊半新（批次表「舊程式寫到一半、新程式接手」）：--part first 跑完那一軌的 PHASES_FIRST 停（存下步數），--part second 開同一個
 資料庫接著跑 PHASES_SECOND。compare 比「base 整段」＝「base 前半＋head 後半」；selftest 比「base 整段」＝「base 前半＋base 後半」。
 """
@@ -319,6 +322,18 @@ def _setup_child(root: Path, profile: str, db: Path) -> None:
     ollama_client.OllamaClient.from_config = classmethod(from_config)
 
 
+def _wipe_db(db: Path) -> None:
+    """同一個暫存資料夾跑第二次之前清掉上一次的資料庫與旁邊的小檔（小檔的名字是 <主檔名去掉副檔名>-xxx.sqlite，不接在主檔名後面）：
+    留著的話舊的往來紀錄、戰記、封存會被讀到，「同一份跑兩次一樣」就不穩。"""
+    sides = ("talk", "talk-archive", "tale", "narration", "archive", "push")
+    names = [db.name, f"{db.name}.state.json"] + [f"{db.stem}-{side}.sqlite" for side in sides]
+    for name in names:
+        for suffix in ("", "-wal", "-shm"):
+            p = db.with_name(name + suffix)
+            if p.exists():
+                p.unlink()
+
+
 def emit(tag: str, value) -> None:
     BUF.write(f"## {STEP[0]:04d} {tag}\n")
     BUF.write(json.dumps(value, ensure_ascii=False) + "\n")
@@ -387,7 +402,9 @@ class Scenario:
         random.seed(STEP[0])
         self.server.GAMES.clear()  # 每個請求重建 Game（rng 只看資料庫與這一步）
 
-    def call(self, who: str, method: str, url: str, body: dict | None = None):
+    auto_prep = True  # 開季準備卡出現時自己按掉（clear_prep）；自己走那張卡的軌（growth、legacy）關掉
+
+    def request(self, who: str, method: str, url: str, body: dict | None = None):
         self.begin()
         client = self.clients[who]
         r = client.post(url, json=body if body is not None else {}) if method == "POST" else client.get(url)
@@ -397,6 +414,33 @@ class Scenario:
             data = r.text[:300]
         emit(f"{who} {method} {url} {json.dumps(body, ensure_ascii=False) if body else ''} {r.status_code}", data)
         return r.status_code, data
+
+    def call(self, who: str, method: str, url: str, body: dict | None = None):
+        status, data = self.request(who, method, url, body)
+        if not self.auto_prep or self.prep_of(data) is None or {"season:preparing", "season:resting"} & set(self.ids(data)):
+            return status, data  # 籌備中、休季也寫著 main.prep，但選單不是那張卡（挑配比在籌備中只回一句）：開季之後的第一下才按
+        fresh = self.clear_prep(who, data)
+        chose = body.get("id", "") if isinstance(body, dict) and url == "/api/choose" else ""
+        if (method == "GET" and url == "/api/main") or (chose and not chose.startswith(("growth:", "legacy:"))):
+            return self.request(who, method, url, body)  # 卡接管選單時那一下沒按到（或讀到的是卡）：清掉之後照原本要做的再做一次
+        return status, {**data, "main": fresh["main"]} if isinstance(data, dict) and "main" in data else data
+
+    @staticmethod
+    def prep_of(data):
+        """回應裡的開季準備卡（main.prep；五項屬性的季、傳承才有，沒有這兩樣的根永遠是 None）。"""
+        main = data.get("main", data) if isinstance(data, dict) else None
+        return main.get("prep") if isinstance(main, dict) else None
+
+    def clear_prep(self, who: str, data) -> dict:
+        """按掉開季準備卡（合回 develop 第 0 段）：卡接管整個選單，不按的話之後每一步都被擋、兩邊一樣擋，比對等於空驗。
+        配比照 default_preset、識海不帶。卡在人物第一次看到畫面就出現（建角色、跳過教學、換季後第一下），這幾下照樣寫進輸出。回最後一下的回應。"""
+        for _ in range(4):  # 最多配比、識海兩步；再多是卡按不掉，直接停，不要空跑
+            step = self.prep_of(data)["step"]
+            pick = f"growth:{self.c.config.attributes.v2.default_preset}" if step == "growth" else "legacy:skip"
+            _, data = self.request(who, "POST", "/api/choose", {"id": pick})
+            if self.prep_of(data) is None:
+                return data
+        raise RuntimeError(f"{who} 的開季準備卡按不掉：{self.prep_of(data)}")
 
     def main(self, who: str):
         return self.call(who, "GET", "/api/main")[1]
@@ -1512,10 +1556,7 @@ def main(argv: list[str] | None = None) -> int:
         tmp.mkdir(parents=True, exist_ok=True)
         db = Path(a.db) if a.db else tmp / f"sb_{a.profile}.db"
         if a.part in ("all", "first"):
-            for suffix in ("", "-wal", "-shm", "-push.sqlite", ".state.json"):
-                p = Path(str(db) + suffix)
-                if p.exists():
-                    p.unlink()
+            _wipe_db(db)
         _setup_child(Path(a.root).resolve(), a.profile, db)
         TRACKS[a.track](Path(a.root).resolve(), a.profile, db).run(a.part, Path(a.out))
         sys.stdout.flush()
@@ -2340,10 +2381,7 @@ def _explore_entry(main_fn):
             tmp.mkdir(parents=True, exist_ok=True)
             db = Path(a.db) if a.db else tmp / f"sbx_{a.profile}.db"
             if a.part in ("all", "first"):
-                for suffix in ("", "-wal", "-shm", "-push.sqlite", ".state.json"):
-                    p = Path(str(db) + suffix)
-                    if p.exists():
-                        p.unlink()
+                _wipe_db(db)
             _setup_child(Path(a.root).resolve(), a.profile, db)
             ExploreScenario(Path(a.root).resolve(), a.profile, db).run(a.part, Path(a.out))
             sys.stdout.flush()
@@ -9164,8 +9202,9 @@ def _arts_entry(main_fn):
 
 main = _arts_entry(main)
 # 改一個字（selftest）：配點沒有點那一句（搬之前在 engine.py 的 allocate_stat、之後在 features/cultivation/actions.py），week7 墨池配點那一下抓到
+# 改一個字（合回 develop 第 0 段換過）：原本改的是舊配點那一句，五項屬性的季（week7、season21）走 _allocate_v2、碰不到；換成練成絕學定名那一句
 _register_track("arts", ArtsScenario, (("tianxia/features/cultivation/actions.py", "tianxia/engine.py"),
-                                       ("沒有可以分配的屬性點，升級才會有。", "沒有可以分配的屬性點，升級才會有！")), "week7")
+                                       ("練成絕學的人，定名", "練成絕學的人，命名")), "week7")
 
 
 # ═══════════════════════════ talk：人物對話二軌（全部拆包第 20 批，dev/companions-2） ═══════════════════════════
@@ -16571,12 +16610,10 @@ class HeraldScenario(ExploreScenario):
 
     def wild_spot(self) -> str | None:
         """出門一趟打得到有陣營的對手的地方（照 id 排第一個；每一個野怪都是官軍或黃巾的優先）：遭遇打贏才交得了討伐。"""
-        from tianxia import precise
-
         g = self.game(self.LONE)
         best = None
         for loc_id, loc in sorted(self.c.locations.items()):
-            if precise.is_town(self.c, loc):
+            if self.c.config.explore_mix_of(loc.tags).kind == "town":  # precise.is_town（develop 的 precise 沒有這一個名字）
                 continue
             foes = list(g._wild_foes(loc))
             sides = [f.faction for f in foes]
@@ -17429,7 +17466,10 @@ class RoadmateScenario(TravelScenario):
 
     def invite(self, sender: str, target: str) -> None:
         """記一張結伴同行的邀請（kind 是 travel；玩家卡上沒有入口了，只剩舊的邀請照舊走完）。"""
-        from tianxia.features.peers import invites
+        try:
+            from tianxia.features.peers import invites
+        except ImportError:  # develop：還沒搬進包
+            from tianxia import invites
 
         with self.world.action_lock():
             loc = self.chars.load(sender).player.location
