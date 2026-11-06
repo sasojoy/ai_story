@@ -53,3 +53,4 @@
 ## 畫面與狀態列（全部拆包第 66 批）
 
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `plan`、`place_deeds`。
+- 畫面：`web/figure_acts.js`（`planHtml`、`placeDeedsHtml`）、`web/figure_acts.css`（全部拆包第 67 批從 `main.js`、`style.css` 切出來，一個字不改）。

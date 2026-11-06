@@ -89,3 +89,4 @@
 ## 畫面與狀態列（全部拆包第 66 批）
 
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `convoy`（軍令 `orders` 那一格留殼：本週卡也讀同一份）。
+- 畫面：`web/military.js`（`ordersHtml`）、`web/military.css`（全部拆包第 67 批從 `main.js`、`style.css` 切出來，一個字不改）；`.order-*` 跟懸賞、奪璽卡共用，留 `style.css`。

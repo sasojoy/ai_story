@@ -19,7 +19,7 @@ from . import wanted as _wanted_card  # noqa: F401  通緝登記進玩家卡的�
 
 class BountiesFeature(Feature):
     name = "bounties"
-    web = ("bounties.js", "bounties.css")  # 懸賞榜的畫法（全部拆包第 65 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。css 第 67 批才切
+    web = ("bounties.js", "bounties.css")  # 懸賞榜的畫法（全部拆包第 65 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。rewardChips、bountiesHtml 與賞的樣子第 67 批從 main.js、style.css 切出來；榜的樣子在 style.css 的店面那一段（電腦寬那一塊靠先後蓋，第 67 批搬不動）
     prefix = "bounty"  # bounty:take:<id>、drop、pick、give:<id>:<東西>、unpick、back；灰掉的 more、none、empty 按不下去；入口 act:bounties 是核心的前綴
     # 榜開著沒、第三層指著哪一張：換季跟著新角色重來。bounties_done 是交差的總數（寫在 rules._complete；新手目標、行狀、傳承讀）
     # 店面共用的 shop_line／shop_clue／shop_hold（七間店共用，核心）不在這裡；Bounty 類別與 WorldState.bounties、rallies、bounty_seq、bounty_week、bounty_day 的定義在核心 state.py

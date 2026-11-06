@@ -53,4 +53,4 @@ python scripts/test_for.py --base HEAD tianxia/features/story/actions.py tests/c
 
 ## 畫面與狀態列（全部拆包第 66 批）
 
-- 畫面：`web/story.js`（特殊事件的跳顯框；沒有網頁測試執行，靠 `facade` 軌比字與實機）；點擊分派的 `case` 留 `app.js`。
+- 畫面：`web/story.js`（特殊事件的跳顯框；沒有網頁測試執行，靠 `facade` 軌比字與實機）、`web/story.css`（第 67 批）；點擊分派的 `case` 留 `app.js`。

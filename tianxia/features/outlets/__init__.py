@@ -17,7 +17,7 @@ from tianxia.core.features import Feature, Outcome, Shop, StatusHook, Verb
 
 class OutletsFeature(Feature):
     name = "outlets"
-    web = ("outlets.js",)  # 軍需帳與打點帳簿的畫法（全部拆包第 65 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。css 第 67 批才切
+    web = ("outlets.js",)  # 軍需帳與打點帳簿的畫法（全部拆包第 65 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。樣子在 style.css 的店面那一段（電腦寬那一塊靠先後蓋，第 67 批搬不動）
     prefix = ("donate", "dadian")  # donate:room、donate:<素材>:<個數>、donate:back（軍需官那一串）；dadian:back（打點那一間店）；入口 act:donate、act:dadian 是核心的前綴
     bot_always = ("donate:", "dadian:")  # 坐在店裡一直按得下去：整季機器人不按（bot.py 的排除清單原本也寫了這兩個，拿掉，只剩這裡）
     # 軍需官那一串與打點那一間店開著沒、今天捐了多少（素材、銀兩）、名師指點與看火候請了沒用、這一季買了幾顆破境丹、今天打點過誰：

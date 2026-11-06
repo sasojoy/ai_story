@@ -15,7 +15,7 @@ from tianxia.core.features import Feature, Outcome, StatusHook
 
 class SenseFeature(Feature):
     name = "sense"
-    web = ("sense.js",)  # 有所感的畫布、悟來的那一筆、神品意境取名（全部拆包第 66 批從 app.js 切出來）
+    web = ("sense.js",)  # 有所感的畫布、悟來的那一筆、神品意境取名（全部拆包第 66 批從 app.js 切出來）；OWN_NAME_* 第 67 批從 main.js 切進來；OWN_NAME_* 第 67 批從 main.js 切進來
     # sense:<做法>、sense:draw、sense:let（有所感）；dunwu:think、dunwu:<候選>、dunwu:own（特殊頓悟取名）。Feature.prefix 收 tuple（第 11 批）
     prefix = ("sense", "dunwu")
     content = ("insight_scenes.json",)  # content.py 照舊讀、content.check_insight_scenes 照舊驗（核心沒有 import 這一包）；檔名照舊

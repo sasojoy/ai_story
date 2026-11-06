@@ -19,7 +19,7 @@ from tianxia.core.features import BusHook, DefectHook, EffectHook, Feature, Outc
 
 class MilitaryFeature(Feature):
     name = "military"
-    web = ("military.js", "military.css")  # 全部拆包第 67 批從 main.js 切出來
+    web = ("military.js", "military.css")  # 本週軍令那張卡（全部拆包第 67 批從 main.js、style.css 切出來）
     # 第 34 批：機緣 opp:<…>（交東西、嘗試、拼圖、呈交、指認、請命、響應、各做一處）與伏筆 fs:<鏈>、fs:<鏈>:<選項>、fs:leave
     prefix = ("opp", "fs")
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：押著的糧車、第 2 階今天做了幾次、第 3／4 階這週做了幾次（第 33 批）；

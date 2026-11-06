@@ -37,7 +37,7 @@
 
 **事件**：`raid_win` 的發布點在 `actions.raid_bounty`；`aid_actions.py` 發 `aid`；其餘四種發布點在各包。`bus_bypasses` 擋 `bounties.on_*` 這種名字，所以包的 `bus()` 寫 `rules.on_*`。
 
-**過渡 import（這一包到舊模組）1 處**：`actions.py` → `shopview`（`board_key`；`SHARED_LATER`）。`rules.py` 讀的 `allied`、`equipment`、`materials`、`ranger`、`renown`、`roster`、`territory`、`treasures`、`weapons` 都在共用規則層。舊模組經別名碰這一包：`bot.py`、`bot_policy.py`、`shopview.py`、`scripts/`（`measure_sanren.py`、`sim_server_bots.py`）。懸賞榜的畫法（`boardHtml`、`paperHtml`、`boardUnpick`、`boardZoom`、`boardClose`、`boardLeave`、`boardHanded`、`STAMP_MS`）在 `web/bounties.js`（全部拆包第 65 批從 `app.js` 逐行切出來，90 行；`web = ("bounties.js",)`；計畫 `2026-11-06-網頁殼化-第65批.md`），點擊分派的 `case`、店面的框留在 `app.js`（殼）；`main.js` 的 `bountiesHtml`、`rewardChips` 第 67 批才切。
+**過渡 import（這一包到舊模組）1 處**：`actions.py` → `shopview`（`board_key`；`SHARED_LATER`）。`rules.py` 讀的 `allied`、`equipment`、`materials`、`ranger`、`renown`、`roster`、`territory`、`treasures`、`weapons` 都在共用規則層。舊模組經別名碰這一包：`bot.py`、`bot_policy.py`、`shopview.py`、`scripts/`（`measure_sanren.py`、`sim_server_bots.py`）。懸賞榜的畫法（`boardHtml`、`paperHtml`、`boardUnpick`、`boardZoom`、`boardClose`、`boardLeave`、`boardHanded`、`STAMP_MS`）在 `web/bounties.js`（全部拆包第 65 批從 `app.js` 逐行切出來，90 行；`web = ("bounties.js",)`；計畫 `2026-11-06-網頁殼化-第65批.md`），點擊分派的 `case`、店面的框留在 `app.js`（殼）；`bountiesHtml`、`rewardChips` 與賞的樣子 `web/bounties.css` 第 67 批從 `main.js`、`style.css` 切進來；榜的樣子在 `style.css` 的店面那一段。
 
 ## 測試
 

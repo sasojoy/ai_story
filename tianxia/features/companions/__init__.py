@@ -13,7 +13,7 @@ from tianxia.core.features import DefectHook, Feature, Outcome, StatusHook, Step
 
 class CompanionsFeature(Feature):
     name = "companions"
-    web = ("companions.js", "companions.css")  # 託付的勸降那一句（全部拆包第 66 批從 app.js 切出來）
+    web = ("companions.js", "companions.css")  # 託付的勸降那一句（全部拆包第 66 批從 app.js 切出來）；書信、點人物、對話、往來紀錄與樣子（全部拆包第 67 批從 main.js、style.css 切出來）；書信、點人物、對話、往來紀錄與樣子（全部拆包第 67 批從 main.js、style.css 切出來）
     prefix = ("errand", "talk", "parley")  # 託付（errand:<動詞>:<id>）；整季機器人不按（要寫字、不收託付）；人物對話 talk:*、帶路的路上 parley:road（假人只按告辭，見 bots.py）
     bot_always = ("errand:",)  # 整季機器人不收託付，萬一有也不按（勸降要寫字；原本 bot.pick 的排除清單）
     content = ("events/stances.json",)  # 人物心意開的事件（總表附錄甲）；content.py 照舊讀（第 62 批起照它載）；檔名照舊

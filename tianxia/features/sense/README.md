@@ -51,5 +51,5 @@
 
 ## 畫面與狀態列（全部拆包第 66 批）
 
-- 畫面：`web/sense.js`（有所感的畫布、悟來的那一筆、神品意境取名）；`choose` 裡的 `SENSE_DRAW` 留 `app.js`。
+- 畫面：`web/sense.js`（有所感的畫布、悟來的那一筆、神品意境取名，`OWN_NAME_*` 第 67 批從 `main.js` 切進來）；`choose` 裡的 `SENSE_DRAW` 留 `app.js`。
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `sense_help`。

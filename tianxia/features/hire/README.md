@@ -10,6 +10,7 @@
 - 人：`content/hire.json`，`scripts/make_hirelings.py` 照 `Config.hire` 生（每間帶「酒肆」標籤的地點每型 `per_tavern` 位；名字姓加兩字隨機、種子固定；屬性照資質換成舊四項，跟人物表一樣 2～9）。改了型或酒肆就重跑；`--check` 比對。內容的 `hire_type`、`hire_at` 由 `content.validate` 驗。
 - 放走：修練頁名冊的「放他回江湖」照舊（核心 roster）；換季跟其他同伴一樣重獲自由。
 - 假人：按得下去就給 `BOT_SCORE`。
+- 畫面：`web/hire.js`（`tavHireHtml`、`tavHire`，全部拆包第 67 批從 `main.js` 切出來，一個字不改；沒有網頁測試執行，靠 `facade` 軌比字與實機）。
 
 ## 測試
 

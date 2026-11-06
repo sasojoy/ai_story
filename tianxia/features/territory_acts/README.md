@@ -56,5 +56,5 @@
 
 ## 畫面與狀態列（全部拆包第 66 批）
 
-- 畫面：`web/territory_acts.js`（見聞的〈天下形勢〉）。
+- 畫面：`web/territory_acts.js`（見聞的〈天下形勢〉）、`web/territory_acts.css`（第 67 批）。
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `conquest`、`xingshi`（`xingshi`、`xingshi_mark`）。

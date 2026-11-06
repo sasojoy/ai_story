@@ -19,7 +19,7 @@ from tianxia.core.features import Feature, Outcome, Verb
 
 class GearFeature(Feature):
     name = "gear"
-    web = ("gear.js",)  # 裝備格與馬市的畫法（全部拆包第 65 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。css 第 67 批才切
+    web = ("gear.js",)  # 裝備格與馬市的畫法（全部拆包第 65 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。樣子在 style.css 的店面那一段（電腦寬那一塊靠先後蓋，第 67 批搬不動）
     prefix = "market"  # market:buy、market:feed、market:wield:<id>、market:back；入口 act:market 是核心的前綴
     content = ("gear.json",)  # content.py 照舊讀（check_gear、check_signature_arms 留在 content.py，不接 check_content）
     player_fields = ("picking_market",)  # 馬市第二層選單開著沒：換季跟著新角色重來。held_gear 核心與共用層也讀、figure_wins 是大勢人物包的，不認領

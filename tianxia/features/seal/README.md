@@ -82,5 +82,5 @@
 
 ## 畫面與狀態列（全部拆包第 66 批）
 
-- 畫面：`web/seal.js`（奪璽卡、碎片卡與獨門行動）；點擊分派的 `case`、`sealWatched`、`sealTitle` 留 `app.js`。
+- 畫面：`web/seal.js`（奪璽卡、碎片卡與獨門行動）、`web/seal.css`（獨門行動，第 67 批；奪璽卡的 `.order-*` 跟軍令、懸賞共用，留 `style.css`）；點擊分派的 `case`、`sealWatched`、`sealTitle` 留 `app.js`。
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`status` 表 `seal`（`seal_duel`、`seal`、`seal_watch` 三個鍵）。

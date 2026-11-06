@@ -16,7 +16,7 @@ from tianxia.core.features import EffectHook, Feature, Outcome
 
 class StoryFeature(Feature):
     name = "story"
-    web = ("story.js", "story.css")  # 特殊事件的跳顯框（全部拆包第 66 批從 app.js 切出來）
+    web = ("story.js", "story.css")  # 特殊事件的跳顯框（全部拆包第 66 批從 app.js 切出來；樣子第 67 批從 style.css 切出來）
     prefix = "story"  # story:<線>、story:<線>:a<答案序號>、story:<線>:later
     # content/events/ 底下四個長篇奇事的段落事件檔（content.py 照舊讀；content/storylines.json 混著章回主線的線，不宣告：章回批再看）
     content = ("events/story_fuzhi.json", "events/story_maier.json", "events/story_wangyue.json", "events/story_wolong.json")

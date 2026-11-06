@@ -17,7 +17,7 @@ from tianxia.core.features import Feature, StatusHook
 class NotifyFeature(Feature):
     name = "notify"
     prefix = None  # 沒有選項：通知是設定頁與看守的事
-    web = ("notify.js", "notify.css")  # 設定頁的手機通知、怎麼收到那一頁、信底下問一次與訂閱（全部拆包第 66 批從 app.js 切出來）；web/sw.js 留原位不宣告（web_scripts 會把 .js 排成 script，/sw.js 由這一包的路由讀）
+    web = ("notify.js", "notify.css")  # 設定頁的手機通知、怎麼收到那一頁、信底下問一次與訂閱（全部拆包第 66 批從 app.js 切出來；樣子第 67 批從 style.css 切出來）；web/sw.js 留原位不宣告（web_scripts 會把 .js 排成 script，/sw.js 由這一包的路由讀）
     content: tuple[str, ...] = ()
     player_fields: tuple[str, ...] = ()
     carried: tuple[str, ...] = ()

@@ -22,7 +22,7 @@ from tianxia.core.features import Feature, Outcome, Verb
 
 class SmithyFeature(Feature):
     name = "smithy"
-    web = ("smithy.js", "smithy.css")  # 鐵匠鋪的畫法（全部拆包第 65 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。css 第 67 批才切
+    web = ("smithy.js", "smithy.css")  # 鐵匠鋪的畫法（全部拆包第 65 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。合成流程的樣子第 67 批從 style.css 切出來；架上的樣子在 style.css 的店面那一段（電腦寬那一塊靠先後蓋，第 67 批搬不動）
     prefix = "smith"  # smith:buy:<種類>、smith:repair、smith:forge-go:…、smith:page:<頁>、smith:back 等；入口 act:smith 是核心的前綴
     content = ("forge_secrets.json", "tier4_named.json")  # content.py 照舊讀（打造的隱藏配方與神器譜、四階名器名字表）
     # 鐵匠鋪開著沒、停在哪一頁、一步一步的單子、鐵匠這一季講過神器的規矩沒有（smith_rule 是這一次進門要講的那一句）：換季全部跟著新角色重來

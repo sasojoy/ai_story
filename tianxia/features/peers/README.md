@@ -80,5 +80,5 @@
 
 ## 畫面與狀態列（全部拆包第 66 批）
 
-- 畫面：`web/peers.js`（名帖的畫法與畫布）；點擊分派的 `case` 留 `app.js`。
+- 畫面：`web/peers.js`（名帖的畫法與畫布；此地還有誰、邀請、`socialHtml`、玩家卡、`peerAct` 第 67 批從 `main.js` 切進來）、`web/peers.css`；點擊分派的 `case` 留 `app.js`。
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`status` 表 `invites`（第一季才有）；`main` 表 `peers`（`here`、`calls`）。

@@ -39,7 +39,7 @@
 - `_act` 叫 `_silver_act`：`act:bribe:<人物>` 帶後綴，`Verb` 認不得（總表第 57 批才擴）。
 - `shop_view` 叫 `_bribe_targets`。
 - 外面（server、假人）叫的：`donate`、`donate_items`（`/api/do/donate`）、`can_donate_here`（`bot.donate_spare`）。
-- 網頁的畫法（`donatePicks`、`dadianHtml`、`donateHtml`、`donateCell`、`donateStep`、`donateTierOne`、`donateGo`）在 `web/outlets.js`（全部拆包第 65 批從 `app.js` 逐行切出來，110 行；`web = ("outlets.js",)`；計畫 `2026-11-06-網頁殼化-第65批.md`）。留在 `app.js`（殼）的：點擊分派的 `case`、店面的框（`shopHtml`、`shopNoteHtml`、`renderShop`）。樣子還在 `style.css`（第 67 批才切）。
+- 網頁的畫法（`donatePicks`、`dadianHtml`、`donateHtml`、`donateCell`、`donateStep`、`donateTierOne`、`donateGo`）在 `web/outlets.js`（全部拆包第 65 批從 `app.js` 逐行切出來，110 行；`web = ("outlets.js",)`；計畫 `2026-11-06-網頁殼化-第65批.md`）。留在 `app.js`（殼）的：點擊分派的 `case`、店面的框（`shopHtml`、`shopNoteHtml`、`renderShop`）。樣子在 `style.css` 的店面那一段（`@media (min-width: 641px)` 用 `:where(.shop-layer)` 壓權重、靠先後蓋手機那幾條，第 67 批搬不動）。
 
 ## 測試
 

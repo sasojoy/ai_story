@@ -10,7 +10,7 @@
 
 | 檔 | 是什麼 |
 |---|---|
-| `__init__.py` | 登記（`ExploreFeature`）：`enabled`＝`rules.jianfa(..., "explore_one")`（不擲骰）、`web = ("outing.js",)`（本來就是獨立的檔，位置不動）、`content = ("outing_lines.json",)`、`player_fields`、`check_content`；`prefix` 是 None（那一格是核心的 `act:explore`） |
+| `__init__.py` | 登記（`ExploreFeature`）：`enabled`＝`rules.jianfa(..., "explore_one")`（不擲骰）、`web = ("outing.js", "explore.js", "explore.css")`（`outing.js` 本來就是獨立的檔；找素材的分支輪 `gatherWheel` 與走一趟的樣子第 67 批從 `main.js`、`style.css` 切出來）、`content = ("outing_lines.json",)`、`player_fields`、`check_content`；`prefix` 是 None（那一格是核心的 `act:explore`） |
 | `checks.py` | 內容驗證：探索表（每個地點歸得到一張、城裡的地痞、旅人事件）與段落句子（`content/outing_lines.json`）。原本是核心 `content.py` 的 `check_explore_one`、`check_outing_lines`（核心不 import 包）；「旅人」與至少幾則（`TRAVELER_TAG`、`TRAVELER_MIN`）照舊寫在核心，這裡讀那兩個模組屬性 |
 | `explore_rules.py` | 探索一顆的純規則（原 `tianxia/explore_one.py`；那個名字留成別名）：表、比重、抽、自己的亂數、鈕上的小字、段落句子、帳 |
 | `explore_actions.py` | 原本 `Game` 上探索一顆的 15 個方法與模組層的 `OutingPlan` |
@@ -46,3 +46,4 @@
 ## 畫面與狀態列（全部拆包第 66 批）
 
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `outing`、`mostly`。
+- 畫面：`web/outing.js`（走一趟）、`web/explore.js`（`gatherWheel`，全部拆包第 67 批從 `main.js` 切出來，沒有網頁測試執行，靠 `facade` 軌比字與實機）、`web/explore.css`（全部拆包第 67 批從 `style.css` 切出來）。

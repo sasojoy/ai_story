@@ -14,7 +14,7 @@ from tianxia.core.services import checkin_on
 
 class CheckinFeature(Feature):
     name = "checkin"
-    web = ("checkin.js", "checkin.css")  # 全部拆包第 67 批從 main.js 切出來
+    web = ("checkin.js", "checkin.css")  # 簽到的小卡與挑一樣（全部拆包第 67 批從 main.js、style.css 切出來）
     prefix = None  # 沒有選項 id（簽到是江湖頁的小標）
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：這一季簽過的是第幾天、第 6、13、20 天自己挑的四階。換季跟著新角色清空
     player_fields = ("checkin_days", "checkin_picks")

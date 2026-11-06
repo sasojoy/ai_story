@@ -16,7 +16,7 @@
 - `gift_actions.py`：`deliver_held_gear`（寄放補送）、`general_gifts`（名將贈禮）、`people_here`（此刻在身邊的人物）、`gift_entry`（贈禮另起一則江湖紀錄）、`signature_arms_due`（本命兵器）。
 - `views.py`：`gear_rows`（修練頁裝備那一塊）、`divine_book_view`（見聞榜單的神器譜）。
 - `bots.py`：假人看到 `market:` 的選項怎麼按（原本 `bot_policy.score` 的 market 兩行）；`MARKET_SCORE` 在這裡重寫一份同值常數（8.0），`bot_policy.MARKET_SCORE` 名字照舊。
-- `web/gear.js`（檔照手冊 G9 在 `web/`，`web = ("gear.js",)`）：裝備格與馬市的畫法（全部拆包第 65 批從 `app.js` 逐行切出來，57 行；計畫 `2026-11-06-網頁殼化-第65批.md`）——俠客頁裝備那一段的一格 `gearEffect`、`gearCell`，坐騎圖 `horseImg`，馬市 `marketHtml`、`horseCard`。留在 `app.js`（殼）的：點擊分派的 `case`、店面的框（`shopHtml`、`renderShop`）、`HERO_GEAR_NAMES`、`GEAR_ICONS`。樣子還在 `style.css`（第 67 批才切）。
+- `web/gear.js`（檔照手冊 G9 在 `web/`，`web = ("gear.js",)`）：裝備格與馬市的畫法（全部拆包第 65 批從 `app.js` 逐行切出來，57 行；計畫 `2026-11-06-網頁殼化-第65批.md`）——俠客頁裝備那一段的一格 `gearEffect`、`gearCell`，坐騎圖 `horseImg`，馬市 `marketHtml`、`horseCard`。留在 `app.js`（殼）的：點擊分派的 `case`、店面的框（`shopHtml`、`renderShop`）、`HERO_GEAR_NAMES`、`GEAR_ICONS`。樣子在 `style.css` 的店面那一段（`@media (min-width: 641px)` 用 `:where(.shop-layer)` 壓權重、靠先後蓋手機那幾條，第 67 批搬不動）。
 - 掛鉤：`prefix = "market"`（`market:buy`、`market:feed`、`market:wield:<id>`、`market:back`）；`choose` 接 `market:*`（標題「馬市」）；`verbs()` 一個 `Verb("market")`（`run` 走進馬市、`title` 是「馬市・此地」，照舊寫江湖紀錄、不宣告 `picks`）；`content = ("gear.json",)`；`bot_pick`。**沒有路由**：`/api/menxia` 的 `wield`、`dismantle`、`feed`、`dismantle_many`、`menxia_view` 的 `gear` 鍵、`/api/boards` 的神器譜、`/api/board_card` 的裝備卡都留在殼，叫 `Game` 的委派。
 - `enabled`：兵器、防具、坐騎、寶物四欄各看自己的 `enabled`（不看第一季開關，裝備四欄設計 2.6），**或此刻還坐在馬市裡**（開關在坐著的時候被關掉，照樣按得到離開）。
 

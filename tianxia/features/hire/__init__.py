@@ -13,7 +13,7 @@ BOT_SCORE = 6.0  # 假人：銀兩夠、名下沒滿，路過酒肆偶爾招一�
 
 class HireFeature(Feature):
     name = "hire"
-    web = ("hire.js",)  # 全部拆包第 67 批從 main.js 切出來
+    web = ("hire.js",)  # 酒肆裡的招募同伴（全部拆包第 67 批從 main.js 切出來）
     prefix = "hire"  # hire:<人物 id>
     content = ("hire.json",)  # content.py 照舊讀進人物表
     player_fields: tuple[str, ...] = ()

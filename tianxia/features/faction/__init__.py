@@ -14,7 +14,7 @@ from tianxia.core.features import DefectHook, Feature, Outcome, StatusHook, Step
 
 class FactionFeature(Feature):
     name = "faction"
-    web = ("faction.js",)  # 全部拆包第 67 批從 main.js 切出來
+    web = ("faction.js",)  # 三方卡的表與先投一方（全部拆包第 67 批從 main.js 切出來）
     prefix = ("faction", "defect", "sect")  # faction:…（投靠、確認、選邊、改幫）、defect:…（叛投）、sect:<事件>（拜入門派）
     bot_always = ("defect:", "faction:lean:")  # 叛投、改幫隨時按得下去：整季機器人不按（原本 bot.pick 的排除；機器人不換邊）
     player_fields = ("pending_faction", "pending_defect", "pending_ally")  # 按了投靠／叛投還在確認畫面上、挑好的依附那一軍；換季照新角色重來

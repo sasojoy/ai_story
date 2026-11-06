@@ -75,5 +75,5 @@
 
 ## 畫面與狀態列（全部拆包第 66 批）
 
-- 畫面：`web/companions.js`（託付的勸降那一句）。
+- 畫面：`web/companions.js`（託付的勸降那一句；書信、點人物、對話、往來紀錄、`figTalk` 第 67 批從 `main.js` 切進來）、`web/companions.css`。
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `say_max`、`companions`（`talk_actions.main_slot`：`talk`、`figure`、`errands`，`face` 經 `frame.shell.figure_face`）、`letter`。

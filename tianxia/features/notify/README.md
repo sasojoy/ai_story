@@ -25,7 +25,7 @@
 
 - 殼 `server.py` 留 **state 的宣告**（測試與 `tests/conftest.py` 認這幾個名字，包一律 `shell.<名字>` 當下讀、當下寫，不快取）：`WEB_PUSH`、`NOTICE_STOP`、`NOTICE_THREAD`、`NOTICE_SENT`、`MAIL_DONE`、`VAPID_FILE`，與測試讀的字串 `NOTICE_TITLE`、`PUSH_WELCOME`、`PUSH_TEST`、`PUSH_NOT_HERE`。
 - 殼留 **4 個一行薄包裝**：`start_web_push`、`notice_round`（預設參數 `clock=time.time` 寫在包裝上）、`_notice_keys`、`web_push_line`（`main()` 印、`same_behavior` 與測試從 `server.` 叫）。
-- 手機通知的畫面（設定頁、`pushAskHtml`）在 `web/notify.js`（第 66 批）；`web/sw.js`、`manifest.webmanifest` 留 `web/` 原位、不進 `Feature.web`（`web_scripts` 會把 `.js` 排成 script）。
+- 手機通知的畫面（設定頁、`pushAskHtml`）在 `web/notify.js`（第 66 批）、`web/notify.css`（第 67 批）；`web/sw.js`、`manifest.webmanifest` 留 `web/` 原位、不進 `Feature.web`（`web_scripts` 會把 `.js` 排成 script）。
 
 ## 測試
 
