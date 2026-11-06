@@ -8,7 +8,19 @@
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from ..state import GameState
+
+
+@dataclass(frozen=True)
+class TravelBlock:
+    """現在不能安排前往的原因（話只寫一次，在 atlas.travel_block 那張順序表 MENU_ORDER["block"] 的那一格）。to_jianghu：要回江湖頁了結才解得開（待處理的事件、交談中、
+    求見中、投靠或叛投待確認、答話中；FB-063），頁面照這個旗標多給「回江湖」，不去解析中文。閉關、賽季結束不是。
+    core_seams（全部拆包第 56 批）：動身被擋的格分到各包，都要回它，所以從 atlas 搬來；atlas re-export 同一個類別（tests/map/test_atlas.py 從 atlas 拿）。"""
+
+    reason: str
+    to_jianghu: bool = False
 
 
 def following(state: GameState) -> str | None:

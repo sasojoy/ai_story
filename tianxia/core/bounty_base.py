@@ -79,6 +79,16 @@ def close_board(p: PlayerState) -> None:
     p.shop_line, p.shop_clue, p.shop_hold = "", "", ""
 
 
+def sit_at_board(p: PlayerState) -> None:
+    """坐到榜前（core_seams，全部拆包第 56 批）：酒肆牆上的懸賞榜那一下只打開榜，不像 bounties.actions.enter 另外清挑到哪一張、掌櫃那一句。"""
+    p.picking_bounty = True
+
+
+def done_count(p: PlayerState) -> int:
+    """這一季完成了幾張懸賞（core_seams，全部拆包第 56 批）：新手目標、傳、傳承的量表讀它，不直接碰懸賞榜包認領的欄位。"""
+    return p.bounties_done
+
+
 def quota(content: Content) -> int:
     cfg = content.config
     return max(cfg.bounties.quota_min, math.ceil(cfg.bounties.quota_base * cfg.server_max_players / 100))

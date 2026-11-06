@@ -64,6 +64,8 @@
   由懸賞榜包登記），不問 enabled |
 | seams()（SeamHook） | 補算與換季的格（core_seams：全部拆包第 55 批）：Game.sync、advance、world_tick、_advance_player_local、own_turn_checks、_drop_stale_references、
   _reset_player_for_new_season 裡各包那一段，照檔尾寫死的順序表 SEAM_ORDER 一格一格叫（包與核心的段穿插），不問 enabled |
+| menus()（MenuHook） | 選單與動身的格（core_seams：全部拆包第 56 批）：Game.options、_everyday_options、action_notes、_idle、_shop_open、_stamina_play_options、atlas.travel_block、
+  移動包的出發收店裡各包那一段，照檔尾寫死的順序表 MENU_ORDER 一格一格問（包與核心的格穿插），不問 enabled |
 
 ctx 第一階就是 Game；功能包只准叫 services.py 那張清單上的方法。
 """
@@ -183,6 +185,8 @@ class FeatureHooks(Protocol):
     def steps(self) -> tuple[StepHook, ...]: ...
     # core_seams（全部拆包第 55 批：補算與換季的格，先後在 SEAM_ORDER；不問 enabled）
     def seams(self) -> tuple[SeamHook, ...]: ...
+    # core_seams（全部拆包第 56 批：選單與動身的格，先後在 MENU_ORDER；不問 enabled）
+    def menus(self) -> tuple[MenuHook, ...]: ...
     # tale（全部拆包第 52 批：殼啟動時開這一包的背景執行緒；只有 server.main 叫，測試不叫；不問 enabled，殼啟動還沒有 ctx）
     def threads(self, shell: Any) -> None: ...
 
@@ -301,6 +305,9 @@ class Feature:
         return ()
 
     def seams(self) -> tuple[SeamHook, ...]:
+        return ()
+
+    def menus(self) -> tuple[MenuHook, ...]:
         return ()
 
     def __repr__(self) -> str:
@@ -1083,3 +1090,110 @@ def seam_lines(at: str, core: dict[str, Callable[..., Any]], *args: Any) -> list
             raise TypeError(f"補算與換季 {at} 的格只准回 list 或 None，回了 {type(got).__name__}")
         lines += got
     return lines
+
+
+# core_seams（全部拆包第 56 批「選單收接縫」；計畫 docs/superpowers/plans/2026-11-06-選單收接縫-第56批.md 一、二、七）
+
+
+@dataclass(frozen=True)
+class MenuHook:
+    """選單與動身的一格（Feature.menus() 回一串）：核心在 at 那個位置照 MENU_ORDER[at] 一格一格問，輪到 slot 就叫 run。照 registered() 問、不看 enabled
+    （原位那幾行本來就不看包的開關；menu、options、on_drop_stale 只問開著的包，所以接不了，第 42 批認定第 7 條）。run 的簽名照位置（MENU_ORDER 底下那張）；
+    包的 run 在叫的那一下才照模組屬性或 ctx 找（monkeypatch 照樣有效）。"""
+
+    at: str
+    slot: str
+    run: Callable[..., Any]
+
+
+# 選單與動身的順序表：位置 → 那一個位置的格，照換成掛鉤之前一行一行的先後。順序就是行為（誰先接管整個選單、「此地還能做」誰排前面、動身被擋先說哪一句都算），
+# 所以寫死、連核心自己的格一起列。包登記自己那一格（Feature.menus()），其餘由核心代叫（engine._MENU_CORE、atlas._BLOCK_CORE、travel/departure._DEPART_CORE）。
+# 改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。
+#
+# 位置    核心在哪裡問                                          run 的簽名                 怎麼叫
+# tick    Game.options 最前面（tick=True 才問）                   (ctx)                      menu_run，回傳不接
+# front   Game.options：決戰的鈕與平常的選單前面（兩處）            (ctx)                      menu_lines
+# rest    Game._everyday_options 休季那一顆後面                   (ctx)                      menu_lines
+# take    Game._everyday_options 事件之後：此刻接管整個選單的       (ctx)                      menu_first（空的 [] 也算接管：髒存檔的待確認畫面真的是空選單）
+# busy    Game._everyday_options 閉關中                           (ctx)                      menu_lines
+# road    Game._everyday_options 在路上                           (ctx, journey)             menu_lines
+# here    Game._everyday_options 站在地點上（序章的過濾之前）       (ctx, loc, cost, odds)     menu_lines
+# plays   Game._stamina_play_options 序章、休季那一道之後           (ctx)                      menu_lines
+# notes   Game.action_notes 探索、出陣那兩行之後                   (ctx, ids, loc)            menu_run，回 dict，照順序 update（鍵的順序算行為）
+# idle    Game._idle 前五樣（籌備、休季、事件、閉關、路上）之後      (ctx)                      menu_any（有一格是真的就不算閒著）
+# open    Game._shop_open                                         (ctx)                      menu_first（"" 是坐著、這裡不開門；核心 or None）
+# depart  移動包 departure.depart 最前面：動身了，店收起來          (ctx)                      menu_run，回傳不接
+# block   atlas.travel_block：現在不能安排前往的原因               (state, content)           menu_first（沒有 ctx：party 拿別人的 state 問，格裡一律讀傳進來的）
+MENU_ORDER: dict[str, tuple[str, ...]] = {
+    "tick": ("seal",),
+    "front": ("seal",),
+    "rest": ("zhuan",),
+    "take": ("duel", "menu", "sense", "story", "talk", "faction", "audience", "bounties", "smithy", "gear", "shops", "omen"),
+    "busy": ("seclusion", "arena"),
+    "road": ("head", "parley", "halt", "tasks", "arena"),
+    "here": ("explore", "train", "challenge", "summons", "story", "sect", "social", "recruit", "move", "lessons", "join", "defect", "lean",
+             "order", "rank2", "rank", "omen", "errand", "invite", "bounties", "smithy", "gear", "shops", "plays", "heal", "donate", "dadian", "rest"),
+    "plays": ("head", "aid", "options", "plan"),
+    "notes": ("socialize",),
+    "idle": ("audience", "bounties", "smithy", "omen", "sense", "duel", "gear", "outlets", "tavern", "arena", "faction"),
+    "open": ("arena", "bounties", "smithy", "gear", "shops"),
+    "depart": ("bounties", "escort", "smithy", "gear", "shops"),
+    "block": ("ended", "prologue", "event", "bout", "talk", "audience", "bounties", "smithy", "gear", "outlets", "tavern", "faction", "omen", "follow", "busy", "ambush"),
+}
+
+
+def menu_hooks(at: str) -> dict[str, Callable[..., Any]]:
+    """at 那個位置包登記的格 {slot: run}：照 registered()、不看 enabled。每一次都驗登記的全部格：表上沒有的格、同一格登記兩次（兩包或同一包）
+    都丟 ValueError（同 seam_hooks）。"""
+    if at not in MENU_ORDER:
+        raise ValueError(f"選單與動身沒有 {at} 這個位置")
+    own: dict[str, Callable[..., Any]] = {}
+    for f in registered():
+        for hook in f.menus():
+            if hook.slot not in MENU_ORDER.get(hook.at, ()):
+                raise ValueError(f"{f.name} 登記了選單與動身表上沒有的格 {hook.at}/{hook.slot}")
+            if hook.at == at:
+                if hook.slot in own:
+                    raise ValueError(f"選單與動身的 {at}/{hook.slot} 登記了兩次（{f.name}）")
+                own[hook.slot] = hook.run
+    return own
+
+
+def _menu_slots(at: str, core: dict[str, Callable[..., Any]]) -> list[Callable[..., Any]]:
+    """照 MENU_ORDER[at] 排好的每一格：包登記了用包的，沒有用 core 那一份（核心代叫的格）；兩邊都沒有（那一格的包沒登記：契約測試換掉 FEATURES 時）跳過。
+    core 寫了表上沒有的格丟 ValueError（打錯字的格不會默默不跑）。"""
+    own = menu_hooks(at)  # 沒有這個位置在這裡丟
+    order = MENU_ORDER[at]
+    if not core.keys() <= set(order):
+        raise ValueError(f"核心代叫了選單與動身 {at} 表上沒有的格 {sorted(core.keys() - set(order))}")
+    return [run for slot in order if (run := own.get(slot) or core.get(slot)) is not None]
+
+
+def menu_run(at: str, core: dict[str, Callable[..., Any]], *args: Any) -> list[Any]:
+    """每一格都叫，回每一格的回傳值（照順序、跳過的不算）：接不接由呼叫端照位置決定。"""
+    return [run(*args) for run in _menu_slots(at, core)]
+
+
+def menu_first(at: str, core: dict[str, Callable[..., Any]], *args: Any) -> Any:
+    """一格一格叫，第一個不是 None 的就回它、後面的不叫；都是 None 回 None。空的 [] 也算（take：選單整個被接管，只是一顆都沒有）。"""
+    for run in _menu_slots(at, core):
+        got = run(*args)
+        if got is not None:
+            return got
+    return None
+
+
+def menu_lines(at: str, core: dict[str, Callable[..., Any]], *args: Any) -> list[Any]:
+    """每一格都叫，照順序接成一串。每一格只准回 list，回別的丟 TypeError（回字串會被一個字一個字接進選單、回 None 是有一支漏了 return：當場紅）。"""
+    lines: list[Any] = []
+    for run in _menu_slots(at, core):
+        got = run(*args)
+        if not isinstance(got, list):
+            raise TypeError(f"選單與動身 {at} 的格只准回 list，回了 {type(got).__name__}")
+        lines += got
+    return lines
+
+
+def menu_any(at: str, core: dict[str, Callable[..., Any]], *args: Any) -> bool:
+    """一格一格叫，第一個真值就停、回 True；都不是回 False。"""
+    return any(run(*args) for run in _menu_slots(at, core))

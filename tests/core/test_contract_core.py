@@ -9,7 +9,7 @@ import pytest
 from conftest import next_season
 from tianxia.core import features as features_core
 from tianxia.core import registry
-from tianxia.core.features import AdminTool, BusHook, DefectHook, EffectHook, Feature, Outcome, SeamHook, Shop, Verb, WorldHook
+from tianxia.core.features import AdminTool, BusHook, DefectHook, EffectHook, Feature, MenuHook, Outcome, SeamHook, Shop, Verb, WorldHook
 from tianxia.core.option import Option
 from tianxia.engine import Game
 
@@ -1563,3 +1563,126 @@ def test_the_game_walks_the_seams_at_the_season_turnover(game, monkeypatch):
     assert fresh is not old and fresh.player.season_number == number
     assert fresh.player.affinities == {"某人": 8}
     assert (fresh.player.pill_day, fresh.player.pills_today) == (77, 3)
+
+
+# core_seams（全部拆包第 56 批「選單收接縫」；計畫 docs/superpowers/plans/2026-11-06-選單收接縫-第56批.md 一、五、七）
+class Menuy(Feature):
+    """只登記選單與動身的格的假包；open 是 enabled 的答案（這些格不問它）。"""
+
+    name = "menuy"
+
+    def __init__(self, hooks, open_=True):
+        self.hooks, self.open = tuple(hooks), open_
+
+    def enabled(self, ctx):
+        return self.open
+
+    def menus(self):
+        return self.hooks
+
+
+def test_the_menu_order_is_the_table_in_the_plan():
+    """順序就是行為：每一個位置的格照換成掛鉤之前一行一行的先後（計畫第一節），連核心自己的格一起列，一格不挪。改這張表先過 PM。"""
+    assert features_core.MENU_ORDER == {
+        "tick": ("seal",),
+        "front": ("seal",),
+        "rest": ("zhuan",),
+        "take": ("duel", "menu", "sense", "story", "talk", "faction", "audience", "bounties", "smithy", "gear", "shops", "omen"),
+        "busy": ("seclusion", "arena"),
+        "road": ("head", "parley", "halt", "tasks", "arena"),
+        "here": ("explore", "train", "challenge", "summons", "story", "sect", "social", "recruit", "move", "lessons", "join", "defect", "lean",
+                 "order", "rank2", "rank", "omen", "errand", "invite", "bounties", "smithy", "gear", "shops", "plays", "heal", "donate", "dadian", "rest"),
+        "plays": ("head", "aid", "options", "plan"),
+        "notes": ("socialize",),
+        "idle": ("audience", "bounties", "smithy", "omen", "sense", "duel", "gear", "outlets", "tavern", "arena", "faction"),
+        "open": ("arena", "bounties", "smithy", "gear", "shops"),
+        "depart": ("bounties", "escort", "smithy", "gear", "shops"),
+        "block": ("ended", "prologue", "event", "bout", "talk", "audience", "bounties", "smithy", "gear", "outlets", "tavern", "faction", "omen", "follow", "busy", "ambush"),
+    }
+    assert Feature().menus() == ()
+
+
+def test_a_package_can_only_take_a_menu_slot_on_the_table_and_only_one_package_a_slot(monkeypatch):
+    """包登記的格都在表上、同一格只有一包：表外的格（哪一個位置都驗）、沒有的位置、兩包（或同一包兩次）登記同一格，menu_hooks 都丟 ValueError；
+    核心代叫的打錯字、沒有這個位置也丟。"""
+    run = lambda *a: None  # noqa: E731
+    monkeypatch.setattr(registry, "FEATURES", [Menuy([MenuHook("idle", "nobody", run)])])
+    with pytest.raises(ValueError):
+        features_core.menu_hooks("tick")
+    monkeypatch.setattr(registry, "FEATURES", [Menuy([MenuHook("nothing", "seal", run)])])
+    with pytest.raises(ValueError):
+        features_core.menu_hooks("tick")
+    monkeypatch.setattr(registry, "FEATURES", [Menuy([MenuHook("tick", "seal", run)]), Menuy([MenuHook("tick", "seal", run)])])
+    with pytest.raises(ValueError):
+        features_core.menu_hooks("tick")
+    monkeypatch.setattr(registry, "FEATURES", [Menuy([MenuHook("tick", "seal", run), MenuHook("tick", "seal", run)])])
+    with pytest.raises(ValueError):
+        features_core.menu_hooks("tick")
+    monkeypatch.setattr(registry, "FEATURES", [])
+    with pytest.raises(ValueError):
+        features_core.menu_hooks("nothing")
+    for call in (features_core.menu_run, features_core.menu_first, features_core.menu_lines, features_core.menu_any):
+        with pytest.raises(ValueError):
+            call("tick", {"sea": run}, "ctx")
+        with pytest.raises(ValueError):
+            call("nothing", {}, "ctx")
+
+
+def test_the_menu_slots_go_in_the_table_order_and_ask_a_closed_package_too(monkeypatch):
+    """menu_run 照表的順序叫：包登記的與核心代叫的穿插，照表、不照登記的先後；關著的包照叫（原位不看開關）；那一格的包沒登記就跳過（契約測試換掉 FEATURES 時）。回每一格的回傳值。"""
+    calls = []
+
+    def note(who, slot, back=None):
+        return lambda *args: calls.append((who, slot, args)) or back
+
+    monkeypatch.setattr(registry, "FEATURES", [Menuy(
+        [MenuHook("depart", "shops", note("pack", "shops", "收")), MenuHook("depart", "bounties", note("pack", "bounties"))], open_=False)])
+    got = features_core.menu_run("depart", {"escort": note("core", "escort")}, "ctx")
+    assert [(who, slot) for who, slot, _ in calls] == [("pack", "bounties"), ("core", "escort"), ("pack", "shops")]
+    assert got == [None, None, "收"]
+    assert all(args == ("ctx",) for _, _, args in calls)
+    monkeypatch.setattr(registry, "FEATURES", [])
+    assert features_core.menu_run("depart", {}, "ctx") == []
+
+
+def test_menu_first_stops_at_the_first_answer_and_an_empty_list_is_an_answer(monkeypatch):
+    """menu_first 一格一格叫，第一個不是 None 就停、後面的不叫。空的 [] 算接管（take：髒存檔的待確認畫面真的是空選單；用 if got 會掉到下一格）、"" 也算（open：坐著、這裡不開門）；都是 None 回 None。"""
+    calls = []
+
+    def note(slot, back):
+        return lambda *args: calls.append(slot) or back
+
+    monkeypatch.setattr(registry, "FEATURES", [Menuy([
+        MenuHook("take", "duel", note("duel", None)), MenuHook("take", "sense", note("sense", [])), MenuHook("take", "omen", note("omen", ["答"]))])])
+    assert features_core.menu_first("take", {"menu": note("menu", None)}, "ctx") == []
+    assert calls == ["duel", "menu", "sense"]
+    monkeypatch.setattr(registry, "FEATURES", [Menuy([MenuHook("open", "arena", note("arena", "")), MenuHook("open", "gear", note("gear", "market"))])])
+    assert features_core.menu_first("open", {}, "ctx") == ""
+    monkeypatch.setattr(registry, "FEATURES", [Menuy([MenuHook("take", "duel", note("duel", None))])])
+    assert features_core.menu_first("take", {}, "ctx") is None
+
+
+@pytest.mark.parametrize("wrong", [None, "一顆", ("一顆",), 7, True])
+def test_menu_lines_takes_only_lists(monkeypatch, wrong):
+    """menu_lines 照順序接成一串；格只准回 list：回字串（一個字一個字接進選單）、回 None（有一支漏了 return）、回 tuple 當場紅。"""
+    monkeypatch.setattr(registry, "FEATURES", [Menuy([
+        MenuHook("busy", "seclusion", lambda ctx: ["出關"]), MenuHook("busy", "arena", lambda ctx: ["擂台"])])])
+    assert features_core.menu_lines("busy", {}, "ctx") == ["出關", "擂台"]
+    monkeypatch.setattr(registry, "FEATURES", [Menuy([MenuHook("busy", "arena", lambda ctx: wrong)])])
+    with pytest.raises(TypeError):
+        features_core.menu_lines("busy", {}, "ctx")
+
+
+def test_menu_any_stops_at_the_first_true(monkeypatch):
+    """menu_any 一格一格叫，第一個真值就停、回 True；都不是回 False（Game._idle 拿它接在前五樣後面，回的是 bool）。"""
+    calls = []
+
+    def note(slot, back):
+        return lambda *args: calls.append(slot) or back
+
+    monkeypatch.setattr(registry, "FEATURES", [Menuy([
+        MenuHook("idle", "audience", note("audience", False)), MenuHook("idle", "smithy", note("smithy", 1)), MenuHook("idle", "faction", note("faction", True))])])
+    assert features_core.menu_any("idle", {}, "ctx") is True
+    assert calls == ["audience", "smithy"]
+    monkeypatch.setattr(registry, "FEATURES", [Menuy([MenuHook("idle", "audience", note("audience", False))])])
+    assert features_core.menu_any("idle", {}, "ctx") is False
