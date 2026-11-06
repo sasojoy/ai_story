@@ -3,7 +3,7 @@
 只有第一季的規則開著（rules.season_one）才有這些；開關關著時狀態列照舊寫「門派・陣營」。
 
 共用規則層（全部拆包第 40 批收進 registry.SHARED）：不 import 功能包與舊名的別名。改這一份 scripts/test_for.py 只挑自己檔名的
-tests/battle/test_ranks.py＋煙霧＋邊界；收進來之前挑到的另外跑（-n 4）：tests/acts/test_conquest_siege、tests/arts/test_explain2、
+tests/battle/test_ranks.py＋煙霧＋邊界；收進來之前挑到的另外跑（-n 4）：tests/acts/test_conquest_siege、tianxia/features/guide/tests/test_explain2、
 tests/core/test_precise_actions、tests/figures/ 的 test_admin_triggers、test_gentry_allied、test_promotions_high、test_promotions_huang、
 test_rumor_layers、test_season21_caps、test_seats、test_week7_season。"""
 from __future__ import annotations
