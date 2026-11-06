@@ -1974,12 +1974,25 @@ PAGE = versioned_page(features_core.with_scripts((WEB / "index.html").read_bytes
 NO_CACHE = {"Cache-Control": "no-cache"}  # 每次都向伺服器確認（有 ETag，沒變就是 304）；不用 immutable：開發時改了檔沒重開，會被瀏覽器釘死
 
 
+LONG_CACHE = "max-age=31536000, immutable"
+NEVER_LONG_CACHED = {"index.html", "sw.js"}  # 這兩支網址不能換：釘住了就更不了版
+
+
+def cached_for_good(path: str, query: bytes) -> bool:
+    """線上（設了 TIANXIA_PUBLIC_URL）而且 ?v= 等於那個檔現在的內容雜湊。雜湊每次當場算：改了檔沒重開，舊網址對不上就照舊 no-cache，
+    蓋上 immutable 的回應內容一定等於網址上的雜湊。"""
+    if not os.environ.get(PUBLIC_URL_ENV) or path.lower() in NEVER_LONG_CACHED or not query.startswith(b"v="):
+        return False
+    return query == b"v=" + content_version((WEB / path).read_bytes()).encode()
+
+
 class WebFiles(StaticFiles):
-    """/static 的每個回應都加 no-cache；不然瀏覽器會用啟發式快取，更版後留著舊檔好幾個小時。"""
+    """/static 的回應都標明快取：線上的版本網址長快取（`cached_for_good`），其餘 no-cache；不然瀏覽器會用啟發式快取，更版後留著舊檔好幾個小時。"""
 
     async def get_response(self, path, scope):
         response = await super().get_response(path, scope)
-        response.headers["Cache-Control"] = "no-cache"
+        long_cache = await run_in_threadpool(cached_for_good, path, scope.get("query_string", b""))
+        response.headers["Cache-Control"] = LONG_CACHE if long_cache else "no-cache"
         return response
 
 

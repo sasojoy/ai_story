@@ -2584,6 +2584,60 @@ def test_the_unversioned_urls_are_not_cached_either(client):
     assert client.get("/journal.css").headers["Cache-Control"] == "no-cache"
 
 
+def test_the_versioned_urls_are_cached_for_good_only_online_with_the_right_hash(client, monkeypatch):
+    """設了 TIANXIA_PUBLIC_URL（線上）、?v= 又等於那個檔現在的內容雜湊，才回長快取；HEAD 與 304 也一樣，
+    已經快取舊標頭的手機再驗一次就換成新標頭，上線不用換網址、不用清快取。"""
+    monkeypatch.setenv(server.PUBLIC_URL_ENV, "https://tianxiadashi.com")
+    long_cache = "max-age=31536000, immutable"
+    # 頁面給的網址就是拿得到長快取的網址
+    app_js = _version_of((server.WEB / "app.js").read_bytes())
+    assert re.search(r'"(/static/app\.js\?v=[^"]+)"', client.get("/").text)[1] == f"/static/app.js?v={app_js}"
+    for name in ("app.js", "style.css", "icon-180.png"):
+        url = f"/static/{name}?v={_version_of((server.WEB / name).read_bytes())}"
+        got = client.get(url)
+        assert got.status_code == 200, url
+        assert got.headers["Cache-Control"] == long_cache, url
+        head = client.head(url)
+        assert head.status_code == 200, url
+        assert head.headers["Cache-Control"] == long_cache, url
+        again = client.get(url, headers={"If-None-Match": got.headers["ETag"]})
+        assert again.status_code == 304, url
+        assert again.headers["Cache-Control"] == long_cache, url
+
+
+def test_every_other_url_still_asks_each_time(client, monkeypatch):
+    """其餘照舊 no-cache（各打一次）：改了檔沒重開，舊網址的 ?v= 對不上就還是會問；首頁、管理頁、sw.js 與自己路由的檔不會被釘死。"""
+
+    def version_of(name):
+        return _version_of((server.WEB / name).read_bytes())
+
+    def asks_each_time(url):
+        got = client.get(url)
+        assert got.status_code == 200, url
+        assert got.headers["Cache-Control"] == "no-cache", url
+
+    app_js = f"/static/app.js?v={version_of('app.js')}"
+    monkeypatch.setenv(server.PUBLIC_URL_ENV, "https://tianxiadashi.com")
+    for url in (
+        "/static/app.js",
+        "/static/app.js?v=0000000000",
+        f"{app_js}&x=1",
+        "/",
+        "/admin",
+        "/sw.js",
+        f"/static/sw.js?v={version_of('sw.js')}",
+        f"/static/index.html?v={version_of('index.html')}",
+        f"/journal.css?v={_version_of(server.JOURNAL_CSS.encode('utf-8'))}",
+        f"/manifest.webmanifest?v={version_of('manifest.webmanifest')}",
+    ):
+        asks_each_time(url)
+    # 環境變數空字串算沒設，跟拿掉一樣
+    monkeypatch.setenv(server.PUBLIC_URL_ENV, "")
+    asks_each_time(app_js)
+    monkeypatch.delenv(server.PUBLIC_URL_ENV)
+    asks_each_time(app_js)
+
+
 def test_the_version_follows_the_content():
     assert server.content_version(b"abc") == server.content_version(b"abc")
     assert server.content_version(b"abc") != server.content_version(b"abd")
