@@ -4,12 +4,12 @@
 """
 from __future__ import annotations
 
-from tianxia import seal_acts  # 過渡：待搬（第 51 批：璽效查詢進共用規則層；管理頁的玉璽一組讀 seal_acts.on、NAMES）
+from tianxia import seal_acts  # 共用規則層（璽效查詢：on）
 from tianxia import timetable  # 共用規則層
 from tianxia.characters import CharacterStore
 from tianxia.rules import season_one
 
-from . import duel_actions, duel_rules, seal
+from . import acts, duel_actions, duel_rules, seal
 
 
 def emerge(ctx, shard_id: str = "") -> list[str]:
@@ -238,7 +238,7 @@ def choices(ctx) -> dict | None:
     if seal_acts.on(c):  # 獨門行動（改版第 2 批）：這一季誰起用了哪一片、什麼時候、指定了什麼（救場用，設計【PM】5）；改版關著不多這一鍵
         out["uses"] = [
             {"shard": c.seal[e.shard].name if e.shard in c.seal else e.shard, "who": e.holder,
-             "act": seal_acts.NAMES.get(e.act, e.act), "when": ctx.stamp(e.at) if e.at is not None else "",
+             "act": acts.NAMES.get(e.act, e.act), "when": ctx.stamp(e.at) if e.at is not None else "",
              "what": e.what}
             for e in reg.uses if e.season == view.season  # FB-695：起用另記在 uses（舊資料讀進來時從 history 搬過來）
         ]

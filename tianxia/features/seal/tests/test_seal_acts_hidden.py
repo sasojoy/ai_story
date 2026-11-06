@@ -13,7 +13,8 @@ import pytest
 
 import server
 from conftest import real_content
-from tianxia import leaderboard, seal, seal_acts, social, tavern
+from tianxia import leaderboard, seal, social, tavern
+from tianxia.features.seal import acts
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -120,9 +121,9 @@ def test_the_guard_has_teeth(monkeypatch):
         acting[:] = [self.state.player.name]
         return use(self, *args, **kwargs)
 
-    public = seal_acts.public_text
+    public = acts.public_text
     monkeypatch.setattr(Game, "seal_use", leaky_use)
-    monkeypatch.setattr(seal_acts, "public_text", lambda content, act: public(content, act) + "".join(acting))
+    monkeypatch.setattr(acts, "public_text", lambda content, act: public(content, act) + "".join(acting))
     a, b = _world("yunzhuan", "甲客"), _world("yunzhuan", "乙客")
     differs = {key for key in a if a[key] != b[key]}
     assert {"rumors", "history", "chronicle"} <= differs, differs
