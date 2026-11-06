@@ -1,5 +1,6 @@
 """scripts/css_order_check.py 自己的測試：0 對才算過，所以它看漏的就是沒人驗的（第 B 波審查：揣摩預覽卡的 .mc-tags i 對 .lv i）。"""
 import importlib.util
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -83,3 +84,10 @@ def test_direct_children_of_different_parents_cannot_clash(tool):
     assert tool.sel_of(".muster-head > p").parent == {"muster-head"}
     assert tool.sel_of(".muster-head p").parent == frozenset()
     assert tool.sel_of(".a .b > p").parent == {"b"}
+
+
+def test_real_sheets_keep_the_level_cells_over_the_tag_pill():
+    """揣摩預覽卡的重數格同時中 .mc-tags i 與 .lv i（權重一樣），要 .lv i 排後面，不然沒亮的那格變成籤的底色與圓角。"""
+    order = re.findall(r'href="/static/([^"]+\.css)"', (ROOT / "web" / "index.html").read_text(encoding="utf-8"))
+    text = "\n".join((ROOT / "web" / name).read_text(encoding="utf-8") for name in order)
+    assert text.index("\n.mc-tags i {") < text.index("\n.lv i {")

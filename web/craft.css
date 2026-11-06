@@ -98,7 +98,6 @@
 .mc-verdict .down { color: var(--bad); }
 .mc-note { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
 .mc-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
-.mc-tags i { font-style: normal; font-size: 12px; line-height: 1.6; padding: 0 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--card-2); }
 .mc-tags i small { margin-left: 3px; color: var(--ink-2); font-size: 11px; }
 .mc-tags i em { font-style: normal; font-weight: 700; margin-right: 3px; }
 .mc-tags i em { display: inline-block; margin-right: 4px; padding: 0 4px; border-radius: 4px; font-size: 11px; line-height: 1.5; color: #fff; background: #8a7f70; }
