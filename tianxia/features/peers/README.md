@@ -21,7 +21,7 @@
 - `spar.py`／`discuss.py`／`raid.py`（原 `tianxia/spar.py`、`discuss.py`、`raid.py`，舊名是別名）：切磋、論武、截殺掛上玩家卡，載入這一包時登記進 `social.ACTIONS`（切磋 50、論武 55、截殺 60；通緝 65 還在 `engine.py` 頂端登記，第 45 批）。
 - `spar_actions.py`：7 個——`who_problem`（論武、截殺也問）、`left`、`answer_problem`、`refusal`、`send`、`spar`、`spar_record`。
 - `discuss_actions.py`：12 個——`left`、`items`、`cost_of`、`refusal`、`send`、`forge_pair`、`request`（A 段）、`forge`、`merge_problem`、`invite_problem`、`item_problem`、`discuss`（C 段），加 `DISCUSS_SAME`、`THEIR_SIDE`、`_refusal`。
-  三段式的 B 段（`prepare_peer`、`screen_peer`）第 69 批進了 `routes.py`，路由照舊經 `shell.` 叫（殼留一行包裝：`tests/arts/test_discuss.py` 換 `server.prepare_peer`、`server.screen_peer`）。
+  三段式的 B 段（`prepare_peer`、`screen_peer`）第 69 批進了 `routes.py`，路由照舊經 `shell.` 叫（殼留一行包裝：`tianxia/features/peers/tests/test_discuss.py` 換 `server.prepare_peer`、`server.screen_peer`）。
 - `raid_actions.py`：9 個——`is_shown`、`refusal`、`odds_word`、`targets`、`raid`、`flee_odds`、`fled`、`take_spoils`、`raid_record`，加 `RAID_AFTER_CLASH`、`RAID_SHIELD_CLASH`。
   打贏的交差 `ctx._raid_bounty` 是事件 `raid_win` 的發布點（第 45 批搬進懸賞榜包 `actions.raid_bounty`，位置不動）；懸賞榜的 `hunting`、`official_hit`、`BEATEN_OFFICIAL` 三處第 45 批改讀核心 `core/bounty_base`。
 - `routes.py`：`/api/peer`、`/api/peer/act`、`/api/mingtie`、`/api/mingtie/{op}`。鎖外三段式的 `screen_peer`、`prepare_peer`（論武的首創取名，第 69 批搬進來）；`screen_text`（探索包也用）、`boards_now` 留在殼，經 `shell.` 叫。
@@ -44,7 +44,7 @@
 核心原位接掛鉤的：`choose` 與 `_action_title` 的 `invite`（`Outcome`）、換季的頭銜簿（`on_season_start`）、`bot.py` 的 `invite:` 排除（`bot_always`）。
 留委派、記進 `GAME_DELEGATE_CALLERS` 的：`_everyday_options` 叫 `_invite_options`（選單的順序是行為）；
 結伴同行（移動包 `party.join`、`join_refusal`，第 48 批；Game 留一行委派）在包裡經 `ctx` 叫 `_tell_sender`、`_peer`，不再記進 `GAME_DELEGATE_CALLERS`。第 38 批把第 37 批的 `GAME_DIRECT` 7 個（切磋、論武直接用這一包的 `social`、`invites`）與 `_PEERS_38` 的 6 筆呼叫端都拿掉；
-`engine.py` 對 `invites`、`social` 的 import 也拿掉了，多 import 論武、截殺兩個動作檔（13 個委派用）與 `DISCUSS_SAME`、`_refusal` 一行（`tests/arts/test_discuss.py` 從 `engine` 拿的過渡）。
+`engine.py` 對 `invites`、`social` 的 import 也拿掉了，多 import 論武、截殺兩個動作檔（13 個委派用）與 `DISCUSS_SAME`、`_refusal` 一行（`test_discuss.py` 從 `engine` 拿的過渡；第 61 批拿掉，`test_discuss` 改讀 `discuss_actions`）。
 懸賞榜第 45 批成包，截殺讀的 `hunting`、`official_hit`、`BEATEN_OFFICIAL` 三處改讀核心 `core/bounty_base`。
 論武的 `discuss_actions` 還 import 舊模組 `fusion`（合成與揣摩，在 `SHARED_LATER`，標「過渡：待搬」），所以包到舊模組共 3 處：`mingtie.py`、`bots.py` 的 `leaderboard`，加 `fusion`。
 網頁那一半（`MT_INKS` 等）第 3 階才切，這一批不碰 `web/`。
@@ -53,7 +53,7 @@
 
 `tianxia/features/peers/tests/`（整檔屬於這一包的，原樣搬來，只改檔頭的路徑字串）：
 
-- `test_mingtie.py`（13 條，原 `tests/bots/test_mingtie.py`）：名帖（定稿的檢查、遞與回帖、檢舉與撤下放回、假人做名帖與遞名帖）與審一句話。借 `tests/core/test_social.py` 的小工具（`NOW`、`_as`、`_done`、`_player`）。
+- `test_mingtie.py`（13 條，原 `tests/bots/test_mingtie.py`）：名帖（定稿的檢查、遞與回帖、檢舉與撤下放回、假人做名帖與遞名帖）與審一句話。借 `tianxia/features/peers/tests/test_social.py` 的小工具（`NOW`、`_as`、`_done`、`_player`）。
 - `test_spar.py`（18 個測試函式、參數展開 23 條，原 `tests/battle/test_spar.py`，第 38 批整檔搬）：切磋（邀請、答應、婉拒、收回、戰報與經驗、假人答切磋）；改的只有路徑字串。
 - `test_raid.py`（21 個測試函式、參數展開 26 條，原 `tests/ranger/test_raid.py`，第 38 批整檔搬）：截殺（敵對陣營、散人揭通緝、城鎮擋、新手期、冷卻與護身、混戰過的拒絕話、打贏打輸平手、假人截殺）；
   內有 5 條是混戰、設伏的呼叫端（`_melee_record`、`_ambush_record`），整檔不拆；改的只有路徑字串與假人的 patch（`monkeypatch.setattr(bots, "RAID_CHANCE", 1.0)` 改成 patch 包的 `bots`）。
@@ -63,10 +63,9 @@
 
 **不搬、另外要跑的混合檔**（含這一包的測試，但整檔不屬於這一包，不拆；數字是用到這一包的條數／全檔）：
 
-- `tests/core/test_social.py`（19／27）：此地還有、玩家卡、贈物、挑釁與回禮、假人回的步調；另外 8 條是結伴同行（移動包）、求見被打發（交友求見包）與網頁字寬（網頁），所以整檔不搬。其他測試檔經 `from test_social import …` 借它的小工具。
-- `tests/arts/test_discuss.py`（論武；59 條，`test_social`、`test_server` 用裸名從它拿小工具、它自己又有網頁測試，第 41 批認定第 6 條不搬，歸第 61 批）、`tests/ranger/test_bounties.py`（8／56）：通緝（第 45 批成包，檔案留原處歸第 61 批）。
-  `tests/core/test_social.py` 整檔也留著（第 37 批認定第 6 條寫「第 38 批搬結伴時再看」，結伴同行是移動包；27 條裡真的是結伴的只有 3 條，不拆，歸第 61 批）。
-- `tests/gear/test_mounts.py`（3／53）、`tianxia/features/seal/tests/test_seal_revamp_sidedoor.py`（6／15）、`tests/server/test_server.py`（4／385）、`tests/web/test_sanren_web.py`（1／6）、`tianxia/features/mall/tests/test_mall_bots.py`（1／3）、`tianxia/features/faction/tests/test_gentry_allied_fixes.py`（2／13）：各只有幾處經 `peer_card`、`peer_act`、`peers_here`。
+- `test_social.py`、`test_discuss.py` 第 61 批整檔搬進這一包的 `tests/`（不拆：`test_social` 27 條裡另有 8 條是結伴同行、求見被打發與網頁字寬；其他測試檔照舊經 `from test_social import …` 借它的小工具）。
+- `tianxia/features/bounties/tests/test_bounties.py`（8／56）：通緝（第 45 批成包，第 61 批搬進懸賞榜包）。
+- `tests/gear/test_mounts.py`（3／53）、`tianxia/features/seal/tests/test_seal_revamp_sidedoor.py`（6／15）、`tests/server/test_server.py`（4／385）、`tianxia/features/bounties/tests/test_sanren_web.py`（1／6）、`tianxia/features/mall/tests/test_mall_bots.py`（1／3）、`tianxia/features/faction/tests/test_gentry_allied_fixes.py`（2／13）：各只有幾處經 `peer_card`、`peer_act`、`peers_here`。
 - `tests/core/test_presence_window.py`（5 條）：「此地還有」的窗口（24 小時）與主機端兩支腳本刻意不跟著拉長——窗口的判斷已是核心的查詢服務（`core/presence.py`），這份留在核心測試；酒肆的 `tianxia/features/tavern/tests/test_tavern_seek_presence.py` 守「酒家說得出『此刻』不能比『此地還有』寬」，兩份不重複（一個管設定與腳本，一個管酒肆的查人），都原樣過。
 - `tests/core/test_feature_boundaries.py`、`tests/core/test_contract_features.py`（核心契約）：這一包的邊界、前綴、欄位、換季都在裡面守。
 
@@ -89,4 +88,12 @@
 
 **動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `admin_tools`：`mingtie_remove`、`mingtie_restore`。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
 
-**鎖外工作**（全部拆包第 69 批；原本寫在 `server.py`，計畫 `docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md`）：`routes.py` 的 `prepare_peer`、`screen_peer`（路由照舊經 `shell.`；殼留一行包裝）。`screen_text` 探索包也用，留殼；`naming` 經 `shell.naming`。沒有 `/api/do/` 的 op，不接 `outlock` 掛鉤。A、C 段照舊經 `Game` 的委派（假人走同一批、測試換 `Game.xxx` 打得到），模型呼叫絕不進鎖；殼的東西一律 `shell.<名字>` 當下讀，函式名不改（`tests/server/test_server.py` 的 `_users_in_server` 掃各包 `routes.py` 認這些名字，參數要叫 `shell`、不要先存成變數）；開執行緒寫 `shell.threading.Thread`、`shell.traceback`，不在包裡 `import threading`（`zhuan` 軌換的是殼上那個）。另外要跑的（`test_for` 挑不到）：`tests/arts/test_discuss.py`、`tests/server/test_outlock.py`。
+**鎖外工作**（全部拆包第 69 批；原本寫在 `server.py`，計畫 `docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md`）：`routes.py` 的 `prepare_peer`、`screen_peer`（路由照舊經 `shell.`；殼留一行包裝）。`screen_text` 探索包也用，留殼；`naming` 經 `shell.naming`。沒有 `/api/do/` 的 op，不接 `outlock` 掛鉤。A、C 段照舊經 `Game` 的委派（假人走同一批、測試換 `Game.xxx` 打得到），模型呼叫絕不進鎖；殼的東西一律 `shell.<名字>` 當下讀，函式名不改（`tests/server/test_server.py` 的 `_users_in_server` 掃各包 `routes.py` 認這些名字，參數要叫 `shell`、不要先存成變數）；開執行緒寫 `shell.threading.Thread`、`shell.traceback`，不在包裡 `import threading`（`zhuan` 軌換的是殼上那個）。另外要跑的（`test_for` 挑不到）：`tianxia/features/peers/tests/test_discuss.py`、`tests/server/test_outlock.py`。
+
+## 第 61 批搬進來的測試（混合測試檔歸位）
+
+整檔搬進 `tests/`（只搬位置、不改斷言；模組層標 `whole_content`，內容照舊是整份）：`test_discuss.py`（原 `tests/arts/`）、`test_social.py`（原 `tests/core/`）。
+
+照條拆來：`test_peers_page_web.py`（2 條，從 `tests/web/test_jianghu_page_web.py` 拆來）、`test_peers_shell.py`（3 條，從 `tests/server/test_server.py` 拆來）；兩邊都用的小工具在 `tests/kit/`（`engine_kit`、`server_kit`、`jianghu_kit`）。
+
+這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。

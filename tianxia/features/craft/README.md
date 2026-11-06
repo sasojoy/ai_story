@@ -26,11 +26,10 @@
 - `skillview`（`create_mod.icon_pose`、`marks_of`、`look_text`、`tier_of`）與 `fusion`（合成與揣摩，`SHARED_LATER`）照舊；包的 `actions.py` import 它們，行尾註「過渡：待搬」。
 
 **改這一包時 `test_for` 挑不到、要另外跑的**（混在別人檔裡的測試，批次表第二節不拆）：
-- `tests/arts/test_forge_picks.py`（3 條）：只測 `skillview.forge_picks`（不經 `Game`），歸 skillview／fusion，留原位。
-- `tests/arts/test_fusion.py`、`test_fusion_design.py`（合成與揣摩，`fusion` 不搬）、`tests/arts/test_skillview.py`、`tests/arts/test_arts_pages_two.py`（煉製頁；連網頁）。
-- 直接 `import create`、走別名的混合檔：`tests/core/test_journal.py`、`tests/figures/test_week_unlock.py`、`tests/seal/test_seal.py`、`test_seal_revamp.py`、`tianxia/features/cultivation/tests/test_ascend.py`。
-- 網頁：改 `web/craft.js` 時 `test_for` 照檔名挑得到 `test_arts_pages`、`test_arts_pages_two`、`test_craft_web`、`test_kiln_round`、`test_shell_web`（每支 js 獨立載入，唯一抓得到跨檔載入順序錯的）。挑不到、要另外跑的：`tests/web/test_prologue_web.py`（整支頁面會走到煉製頁）、`tests/server/test_server.py -k "page or version or scripts"`（那個檔太大，檔名刻意不寫進去）、`tests/bots/test_server_bots.py`（掃字）。
-- 一起跑：`scripts/test_for.py --base <分支> <改的包檔> tests/arts/test_fusion.py tests/arts/test_skillview.py tests/web/test_craft_web.py`。
+- `tests/arts/test_skillview.py`、`tianxia/features/cultivation/tests/test_arts_pages_two.py`（煉製頁；連網頁）。
+- 直接 `import create`、走別名的混合檔：`tests/core/test_journal.py`、`tests/figures/test_week_unlock.py`、`tianxia/features/seal/tests/test_seal.py`、`test_seal_revamp.py`、`tianxia/features/cultivation/tests/test_ascend.py`。
+- 網頁：改 `web/craft.js` 時 `test_for` 照檔名挑得到 `test_arts_pages`、`test_arts_pages_two`、`test_craft_web`、`test_kiln_round`、`test_shell_web`（每支 js 獨立載入，唯一抓得到跨檔載入順序錯的）。挑不到、要另外跑的：`tests/web/test_prologue_web.py`（整支頁面會走到煉製頁）、`tests/server/test_server.py -k "page or version or scripts"`（那個檔太大，檔名刻意不寫進去；第 61 批搬走的 18 條只是名字帶 page，這一包的那 6 條在 `test_craft_shell.py`，`test_for` 挑得到）、`tests/bots/test_server_bots.py`（掃字）。
+- 一起跑：`scripts/test_for.py --base <分支> <改的包檔> tianxia/features/craft/tests/test_fusion.py tests/arts/test_skillview.py tianxia/features/craft/tests/test_craft_web.py`。
 
 **過渡 import**（註「過渡：待搬」）：`actions.py` 2 行（`fusion`、`skillview`，共用規則層 `SHARED_LATER`）、`create.py` 1 行（`annals`，行狀第 29 批）。核心本體與共用規則層（含新的 `pose`）不算過渡。舊模組 → 包多 1 個別名（`tianxia/create.py`）與 engine 委派的兩行 import（`craft_actions`、`create`），另有 `bot.py`、`skillview.py`、`server.py`、`scripts/` 走別名（舊模組 → 包 224 → 239）。共用規則層 64 → 65 個模組（新增 `pose`）；`SHARED_PENDING` 14 → 13 條。
 
@@ -43,3 +42,11 @@
 **動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `menxia_actions`：`create_begin`、`create_pose`、`create_back`、`create_name`、`create_cancel`、`create_reroll`。開爐（`MENXIA_ACTIONS["forge"]`）與立意的三段式第 69 批也搬進來（見下一段）。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
 
 **鎖外工作**（全部拆包第 69 批；原本寫在 `server.py`，計畫 `docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md`）：`routes.py` 的 `prepare_forge`、`forge`、`forge_args`、`_forge_without_naming`（`MENXIA_ACTIONS["forge"]`）、`create_intent`、`create_reread`（`/api/do/create_*`，`outlock` 掛鉤）。殼留一行包裝：`prepare_forge`、`forge`、`forge_args`、`create_reread`；`api_menxia_do` 的 `forge` 分支留殼。`naming` 經 `shell.naming`（寫 import 會多一條包 → 舊模組）。A、C 段照舊經 `Game` 的委派（假人走同一批、測試換 `Game.xxx` 打得到），模型呼叫絕不進鎖；殼的東西一律 `shell.<名字>` 當下讀，函式名不改（`tests/server/test_server.py` 的 `_users_in_server` 掃各包 `routes.py` 認這些名字，參數要叫 `shell`、不要先存成變數）；開執行緒寫 `shell.threading.Thread`、`shell.traceback`，不在包裡 `import threading`（`zhuan` 軌換的是殼上那個）。另外要跑的（`test_for` 挑不到）：`tests/server/test_server.py`、`tests/arts/test_in_lock_model_timeout.py`、`tests/server/test_outlock.py`。
+
+## 第 61 批搬進來的測試（混合測試檔歸位）
+
+整檔搬進 `tests/`（只搬位置、不改斷言；模組層標 `whole_content`，內容照舊是整份）：`test_craft_web.py`（原 `tests/web/`）、`test_forge_picks.py`（原 `tests/arts/`）、`test_fusion.py`（原 `tests/arts/`）、`test_fusion_design.py`（原 `tests/arts/`）。
+
+照條拆來：`test_craft_facade.py`（1 條，從 `tests/core/test_engine.py` 拆來）、`test_craft_shell.py`（22 條，從 `tests/server/test_server.py` 拆來）；兩邊都用的小工具在 `tests/kit/`（`engine_kit`、`server_kit`、`jianghu_kit`）。
+
+這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。

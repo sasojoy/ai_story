@@ -40,7 +40,7 @@
 ## 還留在核心原位的接縫（理由在 `tests/core/test_feature_boundaries.py` 的 `# military` 那一段）
 
 - `act:rank2`、`act:convoy`、`act:summons`、`act:rank:<行動>`：第 57 批接進 `Verb`（按下去與紀錄標題；`act:rank:<行動>` 帶後綴走 `tail_run`、`tail_title`，`Verb` 的名字照 `RANK_ACTION_PREFIX` 算，前綴只寫一次）；選單第 56 批是 `MENU_ORDER["here"]` 的 `order`、`rank2`、`rank` 那三格。
-- `_summons_hop`（往召見地點）：假人移動的分數，留 `bot_policy`（移動包的 `move:` 讀）。`rank2`、`convoy`、`summons` 的分數第 60 批搬進 `bots.py`（`Verb.bot`），`bot_always` 加 `fs:`、`opp:`（原本 `bot.FORESHADOW_OPTIONS`）。改 `bots.py` 的 `act:` 分數時另外跑 `tests/bots/test_bot_policy.py`、`tests/bots/test_bot_policy_conquest.py`、`tests/bots/test_bot_policy_stuck.py`（`test_for` 挑不到，第 60 批）。
+- `_summons_hop`（往召見地點）：假人移動的分數，留 `bot_policy`（移動包的 `move:` 讀）。`rank2`、`convoy`、`summons` 的分數第 60 批搬進 `bots.py`（`Verb.bot`），`bot_always` 加 `fs:`、`opp:`（原本 `bot.FORESHADOW_OPTIONS`）。改 `bots.py` 的 `act:` 分數時另外跑 `tests/bots/test_bot_policy.py`、`tianxia/features/sortie/tests/test_bot_policy_conquest.py`、`tests/bots/test_bot_policy_stuck.py`（`test_for` 挑不到，第 60 批）。
 - `_report_seat`：`choose`、`travel` 與事件檢定的兩處（`answer_event`、`answer_branch`）叫，位置固定（回話與紀錄的先後算行為），沒有掛鉤可接；同步那一下第 55 批換成 `sync.deliver` 的 `seat` 那一格。
 - 抵達那一刻經事件 `arrive` 的 `convoy` 那一格（`FEATURE.bus()`：`convoy_actions.convoy_arrives`，排在懸賞護送之前，順序在核心的 `BUS_ORDER`；第 26 批起，委派 `_convoy_arrives` 拿掉）。`_order_credit`：核心的單打服務（`_squad_encounter`）打贏之後記功；出陣、決戰、大勢人物也經 `ctx._order_credit` 叫。
 - 「你這一步」的格（`FEATURE.steps()`，全部拆包第 36 批；順序在核心的 `STEP_ORDER`）：`order`（`order_actions.step_items`／`step_place`：沒做完的軍令一道一件、目標是最近的摸清了的那一處、護糧還沒接這一道的糧車多 `then`；`ORDER_GAIN` 從 `weekcard` 搬來，字一個不改；原本 `weekcard._steps` 的軍令那一段與 `step._order_places`、`_target`、`_then` 的軍令那一支）、`foreshadow`（`fs_actions.step_items`／`step_place`：讀伏筆的 `next_step`、`next_trip` 就是這一格回答，核心不再經舊名 `foreshadow` 讀，第 34 批 PM 認定第 1 條）。`step_items` 讀殼算好傳進來的 `orders_view` 那一份、不重算；不問 `enabled`；目標的最近一處問新手引導包的查詢服務 `ctx._nearest_to`、地點寫法用核心 `tianxia.step.place`。
@@ -80,9 +80,8 @@
   `tianxia/features/faction/tests/test_defection.py`（2／41）、`tests/figures/test_gentry_allied.py`（`_summons_plan`）、`tests/ranger/test_season21_daily.py`（2／29）、`tests/figures/test_week7_season.py`
 - 抵達那一刻交糧車（事件 `arrive` 的 `convoy` 那一格，第 26 批）：上面的 `tests/figures/test_orders.py`（糧車）；格的先後與登記由核心契約 `tests/core/test_contract_core.py`（`# core_eventbus`）鎖住。
 - 「你這一步」的 `order`、`foreshadow` 兩格（第 36 批）：`tests/bots/test_step.py`（2／9：軍令的目標與 `then`、伏筆的目標〔換 `tianxia.foreshadow.next_trip`〕）、`tests/map/test_weekcard.py`（2／7：卡上的先後、新角色沒有伏筆那一件）；格的先後與登記由核心契約 `tests/core/test_contract_core.py`（`# core_step`）鎖住。
-- 第 2 階行動與召見：`tests/figures/test_admin_triggers.py`（14／31）
-- 機緣與伏筆（第 34 批，粗數）：`tests/figures/test_promotions_huang.py`（32／56，第 4 階機緣與晉升）、`tests/figures/test_admin_triggers.py`（13／31，給機緣、給片段）、`tests/figures/test_rumor_layers.py`（11／70，見聞頁的片段與線索）、`tests/arts/test_hints.py`（9／108）、`tests/web/test_admin_triggers_web.py`（4／16，管理頁兩顆鈕與選單）、`tests/core/test_prologue.py`（3／101，序章不抽片段）、`tests/core/test_contract_core.py`（效果與叛投的格）、`tests/figures/test_promotions_high.py`、`tests/figures/test_gentry_allied.py`、`tianxia/features/faction/tests/test_defection.py`（叛投確認畫面問 `in_plot`）、`tests/core/test_rules.py`、`tests/core/test_content.py`（驗內容讀天機表與題目）
-- 引導與網頁：`tianxia/features/guide/tests/test_opening.py`（2／9，`orders_view`）、`tests/map/test_weekcard.py`、`tests/core/test_prologue.py`（2／101）、`tests/web/test_prologue_web.py`（3／81）、`tests/web/test_jianghu_page_web.py`（1／134）
+- 機緣與伏筆（第 34 批，粗數）：`tests/figures/test_promotions_huang.py`（32／56，第 4 階機緣與晉升）、`tests/figures/test_rumor_layers.py`（11／70，見聞頁的片段與線索）、`tianxia/features/guide/tests/test_hints.py`（9／108）、`tests/web/test_admin_triggers_web.py`（4／16，管理頁兩顆鈕與選單）、`tianxia/features/guide/tests/test_prologue.py`（3／101，序章不抽片段）、`tests/core/test_contract_core.py`（效果與叛投的格）、`tests/figures/test_promotions_high.py`、`tests/figures/test_gentry_allied.py`、`tianxia/features/faction/tests/test_defection.py`（叛投確認畫面問 `in_plot`）、`tests/core/test_rules.py`、`tests/core/test_content.py`（驗內容讀天機表與題目）
+- 引導與網頁：`tianxia/features/guide/tests/test_opening.py`（2／9，`orders_view`）、`tests/map/test_weekcard.py`、`tianxia/features/guide/tests/test_prologue.py`（2／101）、`tests/web/test_prologue_web.py`（3／81）、`tests/web/test_jianghu_page_web.py`（1／134）
 - 別包叫進來的：`tianxia/features/sortie/tests/test_sortie.py`（出陣不花出陣次數）、`tests/server/test_server.py`（2／385）
 - 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/military/order_actions.py`
 
@@ -98,3 +97,11 @@
 - 畫面：`web/military.js`（`ordersHtml`）、`web/military.css`（全部拆包第 67 批從 `main.js`、`style.css` 切出來，一個字不改）；`.order-*` 跟懸賞、奪璽卡共用，留 `style.css`。
 
 **動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `admin_tools`：`issue_orders`、`rotate_seats`、`summon`、`give_opportunity`、`give_fragment`。動到別人存檔的名單 `PLAYER_ADMIN_ACTIONS` 留在殼。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
+
+## 第 61 批搬進來的測試（混合測試檔歸位）
+
+整檔搬進 `tests/`（只搬位置、不改斷言；模組層標 `whole_content`，內容照舊是整份）：`test_admin_triggers.py`（原 `tests/figures/`）。
+
+照條拆來：`test_military_shell.py`（1 條，從 `tests/server/test_server.py` 拆來）；兩邊都用的小工具在 `tests/kit/`（`engine_kit`、`server_kit`、`jianghu_kit`）。
+
+這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。

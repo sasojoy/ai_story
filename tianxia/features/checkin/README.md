@@ -34,10 +34,10 @@
 
 `tests/` 底下：`test_checkin.py`（24 條：表、領、斷簽、序章與開局第一分鐘、回體丹掉落、假人，從 `tests/figures/` 整檔搬來）、煙霧 `test_checkin_smoke.py`（正式內容 season21：第 1 天自動領、同一天被擋、第 6 天等挑）與契約測試擺局面用的 `checkin_stage.py`。全部不含 slow，共 25 條。
 
-另外要跑的（網頁測試，第 3 階跟網頁一起搬，不在這一包）：`tests/web/test_checkin_web.py`（江湖頁的簽到小標；整檔跑 node，沒有 node 就略過）。
+網頁測試：`test_checkin_web.py`（江湖頁的簽到小標；整檔跑 node，沒有 node 就略過）第 61 批搬進這一包的 `tests/`，`test_for` 挑得到。
 
 ```
-python scripts/test_for.py --base HEAD tianxia/features/checkin/actions.py tests/web/test_checkin_web.py
+python scripts/test_for.py --base HEAD tianxia/features/checkin/actions.py
 ```
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `checkin`（`actions.auto_checkin`；`Game._auto_checkin` 留給測試）。
@@ -48,3 +48,9 @@ python scripts/test_for.py --base HEAD tianxia/features/checkin/actions.py tests
 - 畫面：`web/checkin.js`（`checkinPeek`、`checkinPickHtml`）、`web/checkin.css`（全部拆包第 67 批從 `main.js`、`style.css` 切出來，一個字不改）；`web/main.js` 的本週卡叫它們。
 
 **動作表**（全部拆包第 68 批；原本寫在 `server.py`）：`routes.py` 的 `main_actions`：`checkin`。 `checkin` 的 `Game` 的委派上掛著 `@_not_while_preparing`、包裡的函式沒有，所以表上那一條包 `not_while_preparing(lambda g, b: …)`（同一支裝飾器），籌備中的擋法不丟。 殼的 `MAIN_ACTION_ORDER`、`MENXIA_ACTION_ORDER` 寫死表的先後（`action_table`；少一個開機就丟例外），暫停中照做的名單 `PAUSE_OK_ACTIONS` 留在殼。`scripts/same_behavior.py` 的 `switchboard` 一軌逐字記包裡的函式收到什麼。`Game` 的委派一個沒拿（假人、測試還在叫）。
+
+## 第 61 批搬進來的測試（混合測試檔歸位）
+
+整檔搬進 `tests/`（只搬位置、不改斷言；模組層標 `whole_content`，內容照舊是整份）：`test_checkin_web.py`（原 `tests/web/`）。
+
+這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。

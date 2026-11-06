@@ -33,8 +33,7 @@
 
 **另外要跑的混合檔**（含手機通知的測試，但檔案不屬於這一包，不拆；`test_for` 改這一包挑不到）：
 
-- `tests/server/test_server.py -k "main or users or push"`（`_users_in_server` 掃 `server.py` 與各包 `routes.py`、`test_main_starts…`）
-- `tests/web/test_push_how_web.py`（畫面；`web/` 沒動，不必跑）
+- `tests/server/test_server.py -k "main or users or push"`（`_users_in_server` 掃 `server.py` 與各包 `routes.py`、`test_main_starts…`）、`tianxia/features/battle/tests/test_battle_shell.py -k push`（推送指紋那兩條，第 61 批搬去決戰包）
 - `tianxia/features/companions/tests/test_relations_letters.py`（`Game.morning_mail`）
 
 注意：`tests/server/test_push.py` 測的是推力規則（`tianxia/push.py`），不是這一包的（總表附錄丙把它歸手機通知是誤判）。
@@ -44,3 +43,9 @@
 ## 畫面與狀態列（全部拆包第 66 批）
 
 - 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `web_push`（`frame.shell.WEB_PUSH` 是殼的 state）。
+
+## 第 61 批搬進來的測試（混合測試檔歸位）
+
+整檔搬進 `tests/`（只搬位置、不改斷言；模組層標 `whole_content`，內容照舊是整份）：`test_push_how_web.py`（原 `tests/web/`）。
+
+這些檔改這一包時 `test_for` 挑得到（整檔 slow 的要加 `--slow` 或直接給檔名）；上面寫「另外要跑」而路徑在這一包 `tests/` 底下的不用另外跑。上面寫 `tests/core/test_engine.py`、`tests/server/test_server.py`、`tests/web/test_jianghu_page_web.py` 找不到的那一條，條名不變，搬到各包的 `test_<包>_facade.py`、`test_<包>_shell.py`、`test_<包>_page_web.py` 了。
