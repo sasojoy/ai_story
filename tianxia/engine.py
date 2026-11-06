@@ -871,9 +871,9 @@ class Game:
             journal.add_entry(self.state, news, merge=True)
         self._deliver_big_events()  # 這一季的時刻表大事人人有份：沒看過的補上，推進的人也走這一條（FB-038）
         # 收場補送（接縫掛鉤，第 11 批）：決戰包——先補場上沒有份量快照的自己（上線前就在決戰裡；排程的 world_tick 不走這裡。原本是緊接著的
-        # 前一行，全部拆包第 8 批併進這一格），再補下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）
+        # 前一行，全部拆包第 8 批併進這一格），再補下線時收場的決戰，回來第一次同步就補上（休季、籌備中也一樣，FB-027）；玉璽包接著補
+        # 碎片的事：現世、單挑收場、隱沒（5.9），下線時發生的回來補（原本緊接著的下一行 _deliver_seal_results，全部拆包第 27 批併進這一格）
         features_core.deliver_results(self)
-        self._deliver_seal_results()  # 玉璽碎片：現世、單挑收場、隱沒（5.9），下線時發生的回來補
         self._deliver_renames()  # 手上的絕學被人定了名：下一次同步補一則紀錄（FB-083）
         self._deliver_echoes()  # 別人照著你首創的配方合了出來：補名望（首創名望回饋）
         self._deliver_guard_credits()  # 護衛：下線時替人物擋下的挑戰，回來補名望與心得
@@ -2987,7 +2987,7 @@ class Game:
         return battle_progress.merit_line(self, battle, definition)
 
     def _deliver_seal_results(self) -> None:
-        """玉璽碎片的事補送到自己手上（玉璽包 actions；sync、第 28 批的奪璽單挑那幾個方法原位叫，決戰包 progress 經 ctx 叫）。"""
+        """玉璽碎片的事補送到自己手上（玉璽包 actions；第 28 批的奪璽單挑那幾個方法原位叫，決戰包 progress 經 ctx 叫；sync 走 deliver_results 掛鉤）。"""
         seal_actions.deliver_results(self)
 
     def _file_seal(self, e, shard: str, same: bool) -> None:

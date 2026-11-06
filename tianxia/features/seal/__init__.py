@@ -9,8 +9,8 @@
 - season.py：開季藏一片、天命之季的章、舊季收尾（原本核心 sqlite_world 的三段）
 
 沒有選項前綴（seal: 是第 28 批：碎片卡、七種獨門行動、奪璽單挑）、沒有路由（管理者的 seal_* 留在殼的 ADMIN_ACTIONS、叫委派）。
-掛鉤：事件 outing、battle_end 的 seal 兩格（bus）、世界層 muster、open、next×2、retire 五格（world）、效果 runic、shard 兩格（effects）；
-都不問 enabled（格裡自己問 content.seal、Config.seal.enabled：散去不看開關、隱沒看開關）。
+掛鉤：事件 outing、battle_end 的 seal 兩格（bus）、世界層 muster、open、next×2、retire 五格（world）、效果 runic、shard 兩格（effects）、
+接縫 deliver_results（sync 的收場補送）；都不問 enabled（格裡自己問 content.seal、Config.seal.enabled：散去不看開關、隱沒看開關）。
 """
 from __future__ import annotations
 
@@ -32,6 +32,14 @@ class SealFeature(Feature):
         from . import seal  # noqa: PLC0415
 
         return seal.on(ctx.content)
+
+    # 接縫掛鉤（第 11 批）
+    def deliver_results(self, ctx) -> None:
+        """收場補送那一格（sync；原本緊接在 features_core.deliver_results 後面的 Game._deliver_seal_results）：玉璽碎片的事補送到自己
+        手上（actions.deliver_results）。不問 enabled（補送本身只看 content.seal：主機關掉開關也照補）；排在決戰包後面，先後跟原本一樣。"""
+        from . import actions  # noqa: PLC0415
+
+        actions.deliver_results(ctx)
 
     # core_eventbus（全部拆包第 26 批「事件機制」）
     _bus: tuple[BusHook, ...] | None = None

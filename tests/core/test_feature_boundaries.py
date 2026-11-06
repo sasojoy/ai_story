@@ -2204,7 +2204,8 @@ def test_check_condition_touches_no_package_field():
 # tavern_rules：戰力快照 _battle_power、_battle_scores、_spar_power 的參數也叫 seal，不改名的話 game_links 把那三個也算成碰包）。
 GAME_IMPORTS |= {"tianxia.seal", "tianxia.features.seal.actions", "tianxia.features.seal.admin"}
 GAME_DELEGATES |= {
-    # 核心原位叫的：_copy_heirloom（sync、_drop_stale_references）、_deliver_seal_results（sync 與第 28 批的四個）、_seal_bare（_battle_marks）、
+    # 核心原位叫的：_copy_heirloom（sync、_drop_stale_references）、_deliver_seal_results（第 28 批的四個；sync 那一行修正輪改接 deliver_results
+    # 掛鉤：那個掛鉤照 registered() 問、不看開關，決戰包先、玉璽包後，先後跟原本緊接著的兩行一樣）、_seal_bare（_battle_marks）、
     # _mandate_settle（admin_resolve_event；包的收場經 ctx 叫，scripts/measure_seal.py 換它）；決戰包經 ctx 叫的：_mandate_weight、_seal_bare、
     # _deliver_seal_results；只剩測試叫的：_seal_find（test_conquest_rules）、_seal_settle（test_seal、test_seal_engine、test_seal_mandate、
     # test_seal_revamp_hidden）、_file_seal（test_seal_duel）；殼的 ADMIN_ACTIONS 與測試叫的：三個 admin_seal_*
@@ -2232,9 +2233,8 @@ GAME_DELEGATE_CALLERS.update({
     ("admin_resolve_event", "_mandate_settle"): "管理者「定結果」替天命之爭定天命：時刻表的救場工具是核心，接在 timetable.resolve 與存季之後、讀回季之前，"
                                                 "沒有對應的掛鉤",
     ("sync", "_copy_heirloom"): "抄本照全服登記重抄：接不了 on_sync 是開關——core/features.py 的 on_sync 只問開著的包（active），碎片關著時"
-                                "（SealFeature.enabled 是 False）這裡照樣要叫、傳 None 把抄本清掉；位置在補送之後也算行為——過渡：第 55 批（補算與換季收接縫）收",
-    ("sync", "_deliver_seal_results"): "玉璽碎片的事補送：位置固定在補送決戰戰報之後、_deliver_held_gear 之前（江湖紀錄的先後算行為）；on_sync 只問開著的包，"
-                                       "補送本身只看 content.seal（主機關掉開關也照補）——過渡：第 55 批收",
+                                "（SealFeature.enabled 是 False）這裡照樣要叫、傳 None 把抄本清掉；位置也要在 _advance_player_local 之前（承露照整段"
+                                "離線時間算體力回復，7.4），on_sync 在補送之後——過渡：第 55 批（補算與換季收接縫）收",
     ("_drop_stale_references", "_copy_heirloom"): "清失效參照時照登記重抄抄本：on_drop_stale 只問開著的包，碎片關著時照樣要叫、把抄本清掉——過渡：第 55 批收",
     ("_seal_tick", "_deliver_seal_results"): "奪璽單挑推完補送（第 28 批的方法本體還在 Game）——過渡：第 28 批收",
     ("_seal_act", "_deliver_seal_results"): "按了奪璽單挑的一招之後補送（第 28 批）——過渡：第 28 批收",

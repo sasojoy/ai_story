@@ -18,6 +18,7 @@
 - 掛鉤（`__init__.py`，都不問 `enabled`，格裡自己問 `content.seal`、`Config.seal.enabled`：**散去不看開關、隱沒看開關**）：
   - 事件（`bus()`；位置照核心 `BUS_ORDER`）：`outing` 的 `seal`（探索一顆收尾撿碎片，排在打探懸賞之後；回 `list[str]`）、`battle_end` 的 `seal`（時刻表決戰收場，回 `None`）。發布點照舊在探索包 `explore_actions.explore_one`、決戰包 `progress.settle_showdown`。收場之後的補送 `ctx._deliver_seal_results()` 是查詢服務，**不併進 `battle_end`**（第 26 批認定第 3 條）。
   - 世界層（`world()`；位置照 `WORLD_ORDER`、簽名照原樣）：`muster` 的 `seal`（集結那一刻擲現世與璽動，`seal.on_muster`；「集結開始」就是這一格、不另開事件）、`open` 的 `seal.cache`、`next` 的 `seal.mandate`（`content.seal` 與 `Config.seal.enabled` 都開著才叫）與 `seal.cache`、`retire` 的 `seal`（回寫了上一季的江湖史沒）。`state.seal.opened_real = now` 那兩行是核心寫核心的資料，留在 `sqlite_world`。
+  - 接縫（第 11 批）：`deliver_results`（`sync` 收場補送那一格：玉璽碎片的事補送到自己手上，`actions.deliver_results`；排在決戰包後面）。
   - 效果（`effects()`；位置照 `EFFECT_ORDER`）：`runic`（符文殘片；在叫的那一下才從 `tianxia.rules` 拿 `season_one`，PM 認定不統一成 import 時綁定）、`shard`（舊鏈的玉璽碎片，不認領欄位）。
 - `name = "seal"`、`prefix = None`（沒有選項、選單、店面、路由）、`enabled` 照 `seal.on`、`content = ("seal.json",)`。
 
@@ -33,7 +34,8 @@
 
 `Game` 留 11 個一行委派：`_copy_heirloom`、`_deliver_seal_results`、`_seal_bare`、`_mandate_settle`（核心原位叫）、`_mandate_weight`（決戰包經 `ctx`）、`_seal_find`、`_seal_settle`、`_file_seal`（**只剩測試叫**：寫進手冊「拆完之後的收尾：只剩測試叫的委派」，第 42 批認定第 3 條）、`admin_seal_emerge`、`admin_seal_sink_check`、`admin_seal_mandate`（殼的 `ADMIN_ACTIONS` 與測試）。`_admin_seal_hide` 只有強制現世叫（包內互叫），不留。
 
-- `GAME_DELEGATE_CALLERS` 9 對：`_battle_marks → _seal_bare`（戰力快照是單打服務）、`admin_resolve_event → _mandate_settle`（時刻表的救場工具是核心）、`sync → _copy_heirloom`、`sync → _deliver_seal_results`、`_drop_stale_references → _copy_heirloom`（**接不了 `on_sync`／`on_drop_stale` 是開關**：那兩個掛鉤只問開著的包，碎片關著時 `_copy_heirloom` 照樣要叫、傳 `None` 把抄本清掉；第 42 批認定第 7 條；第 55 批收）、第 28 批的 `_seal_tick`／`_seal_act`／`seal_gamble`／`admin_seal_cancel` 各配 `_deliver_seal_results`。
+- `GAME_DELEGATE_CALLERS` 8 對：`_battle_marks → _seal_bare`（戰力快照是單打服務）、`admin_resolve_event → _mandate_settle`（時刻表的救場工具是核心）、`sync → _copy_heirloom`、`_drop_stale_references → _copy_heirloom`（**接不了 `on_sync`／`on_drop_stale` 是開關**：那兩個掛鉤只問開著的包，碎片關著時 `_copy_heirloom` 照樣要叫、傳 `None` 把抄本清掉；第 42 批認定第 7 條；第 55 批收）、第 28 批的 `_seal_tick`／`_seal_act`／`seal_gamble`／`admin_seal_cancel` 各配 `_deliver_seal_results`。
+- `sync` 的玉璽補送（原本緊接在 `features_core.deliver_results(self)` 後面的 `self._deliver_seal_results()`）修正輪改接接縫掛鉤 `deliver_results`（`SealFeature.deliver_results` 叫 `actions.deliver_results`）：那個掛鉤照 `registered()` 問、不看開關，只有 `sync` 叫；決戰包排在前面、玉璽包排在後面，先後跟原本那兩行一樣。委派 `_deliver_seal_results` 照留（第 28 批的四個方法與決戰包 `progress.py` 經 `ctx` 叫）。
 - `GAME_DIRECT` 13 筆（過渡：第 28 批收）：還沒搬的第 28 批方法本體直接讀玉璽包的規則與字句（`_seal_challenge`、`_seal_challengers`、`_seal_spectators`、`_seal_side_of`、`_my_seal_duel`、`_seal_tick`、`seal_view`、`seal_use`、`seal_duel_card`、`seal_watch`、`admin_seal_assign`、`admin_seal_duel`、`admin_seal_choices`）。engine 經舊名 import，改叫 `seal_rules`（同 `prologue_rules`、`tavern_rules`：戰力快照 `_battle_power`、`_battle_scores`、`_spar_power` 的參數也叫 `seal`）。
 - 選項前綴 `seal:`（碎片卡、獨門行動、奪璽單挑）在 engine 的 `options`、`choose`、`_shop_open`、`_seal_options` 與 `bot_policy.score`：第 28 批。
 
@@ -62,4 +64,4 @@
 
 ## 量到的（第 27 批 Task 5）
 
-包的測試 83 條（含 slow 11）`-n 4` 11.9 秒；改包任一檔挑到 83 條（加核心契約與邊界一共 357 條）；包 → 舊模組 2 處（`actions.py` → `seal_duel`、`seal.py` → `atlas`）；Game 委派 11 個；`GAME_DIRECT` 13 個（第 28 批收）、`GAME_DELEGATE_CALLERS` 9 對；`engine.py` 6,626 行（搬之前 6,954）。`same_behavior` 全部 42 軌與 `explore-compare` 三種設定整段、半舊半新、假人逐位元組一樣；`measure_seal.py --seeds 1 --force-stir --holders 7`（week7，約 6 分鐘）搬之前、之後印的數字一樣。細節見計畫 `docs/superpowers/plans/2026-11-07-玉璽包-第1批.md` 第五節。
+包的測試 83 條（含 slow 11）`-n 4` 11.9 秒；改包任一檔挑到 83 條（加核心契約與邊界一共 357 條）；包 → 舊模組 2 處（`actions.py` → `seal_duel`、`seal.py` → `atlas`）；Game 委派 11 個；`GAME_DIRECT` 13 個（第 28 批收）、`GAME_DELEGATE_CALLERS` 9 對（修正輪 `sync` 那一對改接 `deliver_results` 掛鉤，剩 8 對）；`engine.py` 6,626 行（搬之前 6,954）。`same_behavior` 全部 42 軌與 `explore-compare` 三種設定整段、半舊半新、假人逐位元組一樣；`measure_seal.py --seeds 1 --force-stir --holders 7`（week7，約 6 分鐘）搬之前、之後印的數字一樣。細節見計畫 `docs/superpowers/plans/2026-11-07-玉璽包-第1批.md` 第五節。
