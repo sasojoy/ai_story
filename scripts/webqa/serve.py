@@ -37,7 +37,7 @@ random.seed(0)
 import server  # noqa: E402
 
 # every name of server.py this file reaches for
-PATCH_NAMES = ("CONTENT", "app", "main", "narration_round", "BOARDS_CACHE", "GAMES", "world_step", "WORLD_GAME", "_monotonic", "open_characters")
+PATCH_NAMES = ("CONTENT", "app", "main", "narration_round", "BOARDS_CACHE", "GAMES", "world_step", "WORLD_GAME", "_monotonic", "open_characters", "start_scheduler")
 # the seal module draws its shard secrets from here; it has lived in two places
 SEAL_MODULES = ("tianxia.features.seal.seal", "tianxia.seal")
 
@@ -64,6 +64,9 @@ if missing:
 assert server.CONTENT.config.ollama_url == "http://127.0.0.1:9", server.CONTENT.config.ollama_url
 server._monotonic = lambda: CLOCK["now"]
 server.narration_round = lambda *a, **k: None
+# The world only moves on requests. The scheduler ticks on the wall clock, so whether a tick lands before or after the walk's next
+# request differs from side to side: wave D saw a xingshi essay written on one side only because of it.
+server.start_scheduler = lambda interval: None
 _seal.secrets = types.SimpleNamespace(token_hex=lambda n=16: "ab" * n)
 
 from fastapi import Body, Request  # noqa: E402
@@ -73,7 +76,7 @@ from tianxia.sqlite_world import open_world  # noqa: E402
 
 
 # Writers a request kicks off and leaves running: the next request would see their work on one side and not on the other.
-WRITERS = ("xingshi", "event-flavor")
+WRITERS = ("xingshi", "event-flavor", "battle-tales", "arena-crowd", "letter", "yuedan")
 
 
 def _writers_done(seconds: float = 8.0) -> None:

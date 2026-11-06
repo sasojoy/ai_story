@@ -320,6 +320,15 @@ export const flows = [
     await c.ev(`sessionStorage.removeItem("__qa_nohold"); 0`);
     await c.load("/");
   }],
+  ["tale_done", async (c) => {
+    // the chronicle writer holds the model queue; the day's essay queued behind it would be skipped on one side and written on the other
+    for (let t = 0; t < 30; t++) {
+      const seen = [];
+      for (let id = 1; id < 8; id++) { const r = await c.api("p1", `/api/tale/${id}`); seen.push(r.json && r.json.status); }
+      if (!seen.includes("pending")) break;
+      await c.sleep(1000);
+    }
+  }],
   x_week2,
   ["week_card", async (c) => {
     // the letter card covers the strip; the step card only shows for someone with a step to take
