@@ -1448,8 +1448,8 @@ def test_the_shared_scanner_catches_an_old_module():
     同一層、from tianxia import 名字、標準庫不算；包與別名不在這裡算（是上面那一條）。"""
     m = "tianxia.timetable"
     assert outside_imports("from . import fusion, territory\n", m) == {"fusion"}  # 第 40 批：原本的例子 figures 收進了共用規則層；第 50 批：atlas 也收進了共用規則層，換成 seal_acts；第 51 批 seal_acts 也收進了共用規則層，換成 fusion（總表寫了、先不收的 SHARED_LATER，還是舊模組）
-    # 第 25 批：原本的例子 world 收進了核心本體；第 27 批：seal 成了玉璽包的別名（包與別名不在這裡算），換一個這一波還是舊模組的 tale（戰記第 52 批才搬）
-    assert outside_imports("def f():\n    from .tale import gather\n", m) == {"tale"}
+    # 第 25 批：原本的例子 world 收進了核心本體；第 27 批：seal 成了玉璽包的別名（包與別名不在這裡算）；第 52 批：tale 也成了戰記包的別名，換 bot（舊模組、之後不成包、這一波不動）
+    assert outside_imports("def f():\n    from .bot import pick\n", m) == {"bot"}
     assert outside_imports("def f():\n    from .world import _season_vehicle\n", m) == set()
     assert outside_imports("import tianxia.engine\n", m) == {"engine"}
     assert outside_imports("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from .engine import Game\n", m) == set()
@@ -1853,7 +1853,11 @@ def test_the_old_names_left_as_aliases_are_known():
                          # bounties（全部拆包第 45 批：tianxia/bounties.py、wanted.py；包名跟別名同字，同 cultivation、guide、seal）
                          "bounties": "bounties", "wanted": "bounties",
                          # seal（全部拆包第 28 批：tianxia/seal_duel.py 指到 seal/duel_rules.py）
-                         "seal_duel": "seal"}
+                         "seal_duel": "seal",
+                         # tale（全部拆包第 52 批：tianxia/tale.py；包名跟別名同字，同 cultivation、guide）
+                         "tale": "tale",
+                         # notify（全部拆包第 53 批：tianxia/notices.py；包名不叫 push，tianxia/push.py 是推力規則）
+                         "notices": "notify"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 

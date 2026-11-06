@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-import tale_html
+from tianxia.features.tale import tale_html
 
 VIEW = {
     "title": "長社火攻戰記", "battle_name": "長社火攻", "season": 8, "result": "黃巾大勝", "stamp": "黃巾大勝",

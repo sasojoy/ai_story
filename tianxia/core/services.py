@@ -552,6 +552,12 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 # gear（全部拆包第 42 批）
 - `ctx._affinity_before`（`choose` 與核心 `event_check` 的 `answer_event`、`answer_branch` 寫、`_people_here` 讀的暫時旗標：這一下之前的情誼；屬性留在 `Game.__init__`，照鐵匠鋪 `smith_result`）
 
+# tale（全部拆包第 52 批；查詢服務，主人決戰包：戰記包 routes.py 的補劇情 narrate_* 經 game 叫的三個委派）
+- `ctx.battle_tale_request()`（A 段開單）、`ctx.apply_battle_tales(request, stories)`（C 段重驗才補）、`ctx._tale_battles()`（有沒有等著補的）
+
+# notify（全部拆包第 53 批；查詢服務，主人人物情誼包：手機通知包 routes.py 的看守一輪〔_notice_keys〕在行動鎖內經 game 叫，Game 上一行委派）
+- `ctx.morning_mail(now)`（到了送信日替他送今天的信；送了回 True）
+
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """
 from __future__ import annotations

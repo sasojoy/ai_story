@@ -1,14 +1,15 @@
-"""戰記（tianxia/tale.py；Joy 2026-10-29，原稱戰役話本）：收場的決戰整理成料 → 模型寫字 → 組成一篇 → 存進旁邊的小檔。
+"""戰記（tianxia/features/tale/tale.py；Joy 2026-10-29，原稱戰役話本）：收場的決戰整理成料 → 模型寫字 → 組成一篇 → 存進旁邊的小檔。
 
 守三件事：**玩家原話一字不改**（不經過模型）、**模型寫壞或叫不動照樣有一篇可看**（模板版）、
 **模型寫的字不准夾阿拉伯數字或「假人」那幾個字**。畫面那一半在 tests/web/test_tale_web.py。
 """
 from __future__ import annotations
 
+import pytest
 from conftest import real_content
 
-from tianxia import tale
 from tianxia.battle_instance import BattleInstance, BattleParticipant, BattleRoundRecord, GambleMoment
+from tianxia.features.tale import tale
 
 SIDES = {"guan": "官軍", "huang": "黃巾軍"}
 
@@ -91,6 +92,7 @@ def test_the_cast_puts_the_most_dramatic_first_and_writes_a_fact_for_each():
 # ── 組成整篇（模型寫的字只是填空）──
 
 
+@pytest.mark.smoke
 def test_without_a_model_every_beat_still_has_the_engine_line():
     page = tale.plain(_material())
     assert page.status == "ready" and page.title == "黃巾決戰戰記" and page.result == "黃巾大勝"
