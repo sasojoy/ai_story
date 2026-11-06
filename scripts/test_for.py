@@ -48,6 +48,7 @@
   搬進功能包的登記〔mingtie_card，第 37 批〕改在包的 __init__.py 寫同樣的 `as _x  # noqa: F401`，照樣認）。
 - content/：test_content.py ＋ test_real_content.py ＋ 寫到那個檔名的測試檔，照舊不含 slow：test_real_content.py 用真實內容
   跑整季的那幾條是 slow（--slow 才跑、每日整套會跑），其他的（事件難度帶 DIFFICULTY_BANDS 的鎖、地點走得到……）每次都跑。
+  包裡的內容檔（tianxia/features/<包>/content/，全部拆包第 62 批）兩條都走：內容這一條＋那一包的 tests/＋核心契約。
 - web/：寫到那個檔名的測試檔（main.js 照 app.js 挑），加上 test_server.py。功能包登記的網頁檔
   （各包 __init__.py 的 web，例 web/mall.js、web/mall.css、web/outing.js；feature_web）→ 那一包的 tests/＋核心契約（CONTRACT_GLOBS）
   ＋寫到那個檔名的（店面的 CSS 守門），不照 app.js 挑、不加 test_server.py（PM 2026-10-31）。包的 js 另外：包裡用假瀏覽器
@@ -1217,6 +1218,14 @@ def pick(files: list[str], base: str | None = None,
     def own_named(mod: str) -> set[Path]:
         return {t for t in tests if t.stem == f"test_{mod}" or t.stem.startswith(f"test_{mod}_")}
 
+    def content_route(path: Path) -> None:
+        # test_real_content.py 147 條只有整季那 11 條是 slow：其他的（事件難度帶 DIFFICULTY_BANDS、地點走得到……）照
+        # 「不含 slow」跟著跑，約 25 秒；整季那幾條 --slow 才跑（手冊 4.3 不要的是用真實內容跑整季）
+        for name in ("test_content.py", REAL_CONTENT_TEST):
+            if name in named:
+                result.files.add(named[name])
+        result.files |= {t for t in tests if path.name in _text(t)}
+
     def core_and_smoke() -> None:
         result.core = result.smoke = True
 
@@ -1259,6 +1268,8 @@ def pick(files: list[str], base: str | None = None,
             continue
         if f.startswith("tianxia/features/"):
             parts = f.split("/")
+            if parts[3:4] == ["content"]:  # 包裡的內容檔（全部拆包第 62 批）：內容那一條＋下面包那一條
+                content_route(path)
             pkg_tests = FEATURES / parts[2] / "tests" if len(parts) > 3 else None
             if pkg_tests is not None:
                 result.files |= set(pkg_tests.rglob("test_*.py")) if pkg_tests.is_dir() else set()
@@ -1350,12 +1361,7 @@ def pick(files: list[str], base: str | None = None,
                     result.why.append(f"{f}：engine 為了登記才 import 它（動作 {kind}）→ 寫到 \"{kind}\" 的 {len(hit)} 個檔")
             continue
         if f.startswith("content/"):
-            # test_real_content.py 147 條只有整季那 11 條是 slow：其他的（事件難度帶 DIFFICULTY_BANDS、地點走得到……）照
-            # 「不含 slow」跟著跑，約 25 秒；整季那幾條 --slow 才跑（手冊 4.3 不要的是用真實內容跑整季）
-            for name in ("test_content.py", REAL_CONTENT_TEST):
-                if name in named:
-                    result.files.add(named[name])
-            result.files |= {t for t in tests if path.name in _text(t)}
+            content_route(path)
             continue
         owner = feature_web().get(path.name) if f.startswith("web/") and f.count("/") == 1 else None
         if owner is not None:  # 功能包的網頁檔（web/mall.js）：那一包的 tests/＋核心契約，不照 app.js 挑（PM 10/31）

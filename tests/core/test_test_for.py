@@ -222,11 +222,17 @@ def test_content_picks_its_tests_and_the_fast_part_of_real_content():
     assert _marker(both) == "slow or not slow" and "tests/season/test_real_content.py" in both
 
 
+def test_a_pack_content_file_takes_the_content_route_and_the_pack_route():
+    """全部拆包第 62 批：內容檔搬進包之後照舊走內容那一條（不補的話改 mall.json 挑不到 test_content.py），再加那一包的 tests/。"""
+    names = _names(["tianxia/features/mall/content/mall.json"])
+    assert {"test_content.py", "test_real_content.py", "test_mall_content.py", "test_contract_features.py"} <= names
+
+
 def test_the_promotion_and_rank_action_content_picks_the_tests_that_pin_it():
     """第一季正式版丙一、丙二、戊一的測試檔用真實內容釘住晉升奇遇與第 3、4 階行動：改那幾個內容檔時要挑到它們（整合審查 M2）。"""
     promotions = {"test_promotions_high.py", "test_promotions_huang.py"}
-    assert promotions <= _names(["content/promotions.json"])
-    assert promotions <= _names(["content/events/promotion.json"])
+    assert promotions <= _names(["tianxia/features/military/content/promotions.json"])
+    assert promotions <= _names(["tianxia/features/military/content/events/promotion.json"])
     assert "test_rank_actions.py" in _names(["content/orders.json"])
 
 
