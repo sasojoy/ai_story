@@ -170,11 +170,14 @@ REAL_ROOT = Path(__file__).resolve().parent.parent / "content"  # 真實內容�
 TEST_ROOT = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "content"  # 測試內容（第 63 批；同 REAL_ROOT，正式機沒有 tests/ 也不礙事：只比路徑）
 
 
-def _locate(root: Path) -> dict[str, Path]:
+def _locate(root: Path, only: str | None = None) -> dict[str, Path]:
     """這個根上哪些檔要去包裡找（rel → 真的在哪）。只有真實的 content/ 與測試內容（tests/fixtures/content，第 63 批）才去：其他的根（測試的 tmp 副本、
     序章母本）照舊攤平讀 root/<rel>。不能「根上找不到就去包裡找」：測試內容靠「沒有這個檔就是空的」（沒有 mall.json 就沒有商品），所以測試內容只收包裡真的有的（pack_test_content）。
-    宣告了卻沒有檔、content/ 底下還留著同一份都當場報錯：load_content 裡一堆 .exists() 判斷式，不報的話檔案搬丟了會靜靜變成空的。"""
+    宣告了卻沒有檔、content/ 底下還留著同一份都當場報錯：load_content 裡一堆 .exists() 判斷式，不報的話檔案搬丟了會靜靜變成空的。
+    only（只載核心加一包，第二級測試用）只有測試內容可以；兩處都有的先照整份查，再濾。"""
     resolved = root.resolve()
+    if only is not None and resolved != TEST_ROOT:
+        raise ContentError(f"只有測試內容可以只載一包（{only}）：{root} 不是 {TEST_ROOT}")
     if resolved == TEST_ROOT:
         from .core.features import pack_test_content  # noqa: PLC0415  同下面的 pack_content
 
@@ -182,7 +185,7 @@ def _locate(root: Path) -> dict[str, Path]:
         for rel, path in tests.items():
             if (root / rel).exists():
                 raise ContentError(f"內容檔 {rel} 兩處都有：{path} 與 {root / rel}")
-        return tests
+        return tests if only is None else pack_test_content(only)
     if resolved != REAL_ROOT:
         return {}
     from .core.features import pack_content  # noqa: PLC0415  同 check_features：登記的包延後載入（包會 import 核心）
@@ -220,14 +223,19 @@ def real_event_files() -> list[Path]:
     return _event_files(REAL_ROOT, _locate(REAL_ROOT))
 
 
-def load_content(root: Path, profile: str | None = None) -> Content:
+def load_content(root: Path, profile: str | None = None, *, only: str | None = None) -> Content:
     """profile 給了就把 profiles/<profile>.json 的鍵蓋在 config.json 上（例如 week7 一次打開季曆與 7 天的季），
-    不必手改 config.json；覆寫檔只能寫 Config 有的欄位，拼錯在載入當下就報錯。"""
+    不必手改 config.json；覆寫檔只能寫 Config 有的欄位，拼錯在載入當下就報錯。
+    only 是測試用（全部拆包第 63 批，只有測試內容可以）：只載核心加這一包，別包的測試內容當空的；這樣的內容不驗（別包的內容不在，一定報錯），validate 碰到它報 RuntimeError。"""
     root = Path(root)
-    packs = _locate(root)
+    packs = _locate(root, only)
 
     def at(rel: str) -> Path:
         return packs.get(rel, root / rel)
+
+    def required(rel: str, empty):
+        """這幾格沒有 .exists()：攤平的根少了照舊當場炸；只載一包時別包的檔本來就不在，才當空的。"""
+        return empty if only is not None and not at(rel).exists() else _read(at(rel))
 
     events: dict[str, Event] = {}
     for path in _event_files(root, packs):
@@ -255,12 +263,12 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         check_voice=_check_voice(at("check_voice.json")),
         front_lines=_front_lines(at("front_lines.json")),
         banned_names=_read(at("banned_names.json")),
-        sects=_index(Sect, _read(at("sects.json"))),
+        sects=_index(Sect, required("sects.json", [])),
         characters=_index(CharacterDef, _read(at("characters.json"))
                           + (_read(at("hire.json")) if at("hire.json").exists() else [])),  # 一般 NPC 同伴（features/hire）
         squads=_index(Squad, _read(at("squads.json"))),
         battles=_index(BattleDef, _read(at("battles.json"))) if at("battles.json").exists() else {},
-        road_sights=_index(RoadSight, _read(at("road_sights.json"))),
+        road_sights=_index(RoadSight, required("road_sights.json", [])),
         timetable=[e for e in timetable_events if not e.mandate_only],
         mandate_timetable=[e for e in timetable_events if e.mandate_only],  # 天命之爭（玉璽二）：只有蓋了章的季看得到（timetable.events）
         foreshadows=_foreshadows(at("foreshadows.json")),
@@ -299,7 +307,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         if at("insight_scenes.json").exists() else {},
         events=events,
         map=MapLayout(**_read(at("map.json"))),
-        tutorial=Tutorial(**_read(at("tutorial.json"))),
+        tutorial=Tutorial(**required("tutorial.json", {})),
         opening=Opening(**_read(at("opening.json"))) if at("opening.json").exists() else None,  # 開局第一分鐘（減法季批 7）
         hints=Hints(**_read(at("hints.json"))) if at("hints.json").exists() else Hints(),
         art=ArtBook(**_read(at("art.json"))) if at("art.json").exists() else ArtBook(),  # 圖的分類表（減法季批 8）
@@ -310,7 +318,10 @@ def load_content(root: Path, profile: str | None = None) -> Content:
     if at("attributes_v2.json").exists():  # 五項屬性（屬性與跨季架構 v2 第三節）：顯示名照季讀（attrset.names），不蓋 stat_names
         content.attributes_v2 = [_build(StatDef, raw) for raw in _read(at("attributes_v2.json"))]
     resolve_grades(content)
-    validate(content)
+    if only is None:
+        validate(content)
+    else:
+        content._only_pack = only
     _scale_marks(content, content.config.mark_threshold_scale)
     return content
 
@@ -2329,6 +2340,8 @@ def check_attributes(c: Content, need) -> None:
 
 
 def validate(c: Content) -> None:
+    if c._only_pack is not None:  # core_content（第 63 批）。不能用 ContentError：只載一包一定驗不過，沒寫 match 的 pytest.raises(ContentError) 會假綠
+        raise RuntimeError(f"這份內容只載了 {c._only_pack} 這一包，不能拿來驗內容：測試標 @pytest.mark.whole_content 拿整份")
     errors: list[str] = []
     from .atlas import region_of  # noqa: PLC0415  延後 import：atlas → world → rules 一路載入，content 不必一開始就依賴它們
 

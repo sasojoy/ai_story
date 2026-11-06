@@ -328,13 +328,17 @@ def pack_content() -> dict[str, Path]:
     return files
 
 
-def pack_test_content() -> dict[str, Path]:
+def pack_test_content(only: str | None = None) -> dict[str, Path]:
     """各包的測試內容（全部拆包第 63 批）：rel → tianxia/features/<包>/tests/content/<rel>，判準同真實內容：Feature.content 宣告了這個 rel 才歸包，
-    照 registry.DECLARED 的順序（理由同 pack_content）。**檔在才收**：測試內容靠「沒有這個檔就是空的」（沒有 mall.json 就沒有商品），包宣告了不等於測試內容也要有。"""
+    照 registry.DECLARED 的順序（理由同 pack_content）。**檔在才收**：測試內容靠「沒有這個檔就是空的」（沒有 mall.json 就沒有商品），包宣告了不等於測試內容也要有。
+    only 給了只留那一包的（load_content(only=)），不是登記的包就報錯。"""
+    from ..content import ContentError  # noqa: PLC0415  同 pack_content
     from .registry import DECLARED  # noqa: PLC0415  同 pack_content
 
+    if only is not None and only not in {f.name for f in DECLARED}:
+        raise ContentError(f"沒有 {only} 這一包，不能只載它的內容")
     home = Path(__file__).resolve().parent.parent / "features"
-    candidates = ((rel, home / f.name / "tests" / "content" / rel) for f in DECLARED for rel in f.content)
+    candidates = ((rel, home / f.name / "tests" / "content" / rel) for f in DECLARED if only in (None, f.name) for rel in f.content)
     return {rel: path for rel, path in candidates if path.is_file()}
 
 

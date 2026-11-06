@@ -4,14 +4,16 @@ tianxia/features/<包>/content/，content.py 只有真實的根才去包裡找�
 from __future__ import annotations
 
 import json
+import pickle
 from pathlib import Path
 
 import pytest
 
-from conftest import copy_test_content, real_content
+from conftest import FIXTURE, copy_test_content, real_content
 from tianxia import content as content_mod
 from tianxia.content import ContentError, content_path, load_content, real_event_files, real_files
 from tianxia.core import features, registry
+from tianxia.models import Content, CreateForms
 
 REAL_ROOT = content_mod.REAL_ROOT
 HOME = Path(content_mod.__file__).resolve().parent / "features"
@@ -79,6 +81,83 @@ def test_a_declared_file_that_is_gone_is_refused(tmp_path, monkeypatch):
     monkeypatch.setattr(features, "pack_content", lambda: {"gone.json": root / "pack" / "gone.json"})
     with pytest.raises(ContentError, match="gone.json"):
         load_content(root)
+
+
+def test_the_moved_event_pools_are_in_the_packs_that_own_them():
+    """全部拆包第 63 批（計畫第一節）：搬到哪都不改抽籤先後，所以這裡只釘歸屬。沒人認領的留在 content/events。"""
+    owners = {
+        "explore": {f"explore_{region}.json" for region in ("jizhou", "luoyang", "nanyang", "runan", "yingchuan", "youzhou")},
+        "socialize": {"recruit.json"}, "sortie": {"train_aftermath.json"}, "guide": {"opening.json", "prologue.json"},
+    }
+    files = {path.name: path for path in real_event_files()}
+    for pack, names in owners.items():
+        for name in names:
+            assert files[name].parent == HOME / pack / "content" / "events", name
+    assert not any((REAL_ROOT / "events" / name).exists() for names in owners.values() for name in names)
+
+
+TEST_PACKS = {"tutorial.json": "guide", "road_sights.json": "travel", "create_forms.json": "craft", "sects.json": "faction"}
+
+
+def test_test_content_in_the_packs_is_exactly_these_four():
+    """搬丟了不會報錯（.exists() 判成空的），所以正好幾個寫死：計畫第二節。events/test.json 不拆：dict 先後就是抽籤先後。"""
+    found = features.pack_test_content()
+    assert found == {rel: HOME / pack / "tests" / "content" / rel for rel, pack in TEST_PACKS.items()}
+    assert set(HOME.glob("*/tests/content/**/*.json")) == set(found.values())  # 沒宣告的檔不會多放在包裡
+    assert not any((FIXTURE / rel).exists() for rel in found)
+
+
+def test_a_test_content_file_in_both_places_is_refused(tmp_path, monkeypatch):
+    root = tmp_path.resolve()
+    monkeypatch.setattr(content_mod, "TEST_ROOT", root)
+    (root / "sects.json").write_text("[]", encoding="utf-8")
+    with pytest.raises(ContentError, match="sects.json 兩處都有"):
+        load_content(root)
+
+
+def test_a_flat_copy_of_the_test_content_is_the_same_content(tmp_path):
+    root = tmp_path / "content"
+    copy_test_content(root)
+    assert load_content(root).model_dump_json() == load_content(FIXTURE).model_dump_json()
+
+
+def test_only_one_pack_is_the_whole_test_content_without_the_other_three():
+    """只差那三格，多一步少一步都會紅（只載一包的路不驗，其他步驟照跑）。"""
+    only = load_content(FIXTURE, only="guide")
+    assert only.tutorial.steps and not only.sects and not only.road_sights and only.create_forms == CreateForms()
+    whole = load_content(FIXTURE)
+    assert whole.sects and whole.road_sights and whole.create_forms != CreateForms()
+    whole.sects, whole.road_sights, whole.create_forms = {}, {}, CreateForms()
+    assert only.model_dump_json() == whole.model_dump_json()
+
+
+def test_a_pack_without_test_content_gets_only_the_core():
+    only = load_content(FIXTURE, only="mall")
+    assert not only.tutorial.steps and not only.sects and not only.road_sights and only.events
+
+
+@pytest.mark.parametrize("root, only", [(REAL_ROOT, "guide"), (FIXTURE, "nowhere")])
+def test_only_is_for_a_registered_pack_on_the_test_content(root, only):
+    with pytest.raises(ContentError, match=only):
+        load_content(root, only=only)
+
+
+def test_a_flat_root_missing_a_required_file_still_fails_on_the_spot(tmp_path):
+    """.exists() 是只載一包才有的路；攤平的根少了 sects.json 照舊當場炸，不靜靜變成空的。"""
+    root = tmp_path / "content"
+    copy_test_content(root)
+    (root / "sects.json").unlink()
+    with pytest.raises(FileNotFoundError):
+        load_content(root)
+
+
+def test_validate_refuses_a_single_pack_content_even_after_a_copy():
+    """不是 ContentError：只載一包一定驗不過，沒寫 match 的 pytest.raises(ContentError) 會假綠。pickle 是 cached_content 發複本的做法。"""
+    only = load_content(FIXTURE, only="travel")
+    for copy in (only, pickle.loads(pickle.dumps(only)), only.model_copy()):
+        with pytest.raises(RuntimeError, match="whole_content"):
+            content_mod.validate(copy)
+    assert "_only_pack" not in Content.model_fields and "_only_pack" not in only.model_dump_json()
 
 
 def test_two_packs_cannot_declare_the_same_file(monkeypatch):

@@ -17,6 +17,8 @@ from tianxia.engine import Game, Option
 from tianxia.models import Condition, Effect, Foreshadows
 from tianxia.state import BotProfile, FigureState, GameState, Lock, TimelineResult
 
+pytestmark = pytest.mark.whole_content  # fs 經 install_foreshadows 走 validate，要整份測試內容（全部拆包第 63 批）
+
 DAY = 86400
 
 

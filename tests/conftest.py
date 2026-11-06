@@ -60,25 +60,25 @@ def _dump(content: Content) -> bytes:
     return pickle.dumps(content, pickle.HIGHEST_PROTOCOL)
 
 
-def _content_key(root, profile) -> tuple:
-    """快取的鍵：哪個資料夾、哪份設定覆寫檔，再加上 load_content 會併進管理者名單的兩樣（content._with_local_admins）：
+def _content_key(root, profile, only=None) -> tuple:
+    """快取的鍵：哪個資料夾、哪份設定覆寫檔、只載哪一包，再加上 load_content 會併進管理者名單的兩樣（content._with_local_admins）：
     這台機器的 `.local/admins.txt`（路徑與內容）與環境變數 `TIANXIA_ADMINS`。動了這兩樣的測試拿到的是另一份母本。
     ADMINS_FILE 在呼叫的當下讀，所以 monkeypatch 換掉它也算數。"""
     admins_file = Path(content_mod.ADMINS_FILE)
     local = admins_file.read_text(encoding="utf-8") if admins_file.exists() else None
-    return str(Path(root).resolve()), profile, str(admins_file), local, os.environ.get("TIANXIA_ADMINS")
+    return str(Path(root).resolve()), profile, str(admins_file), local, os.environ.get("TIANXIA_ADMINS"), only
 
 
-def cached_content(root, profile=None) -> Content:
-    """root 的內容（profile 是設定覆寫檔）：這個工作階段第一次要的時候完整載入、驗證一次當母本，每次都給一份新的複本
+def cached_content(root, profile=None, only=None) -> Content:
+    """root 的內容（profile 是設定覆寫檔；only 是只載核心加一包，全部拆包第 63 批，只有測試內容可以、這一份不驗）：這個工作階段第一次要的時候完整載入、驗證一次當母本，每次都給一份新的複本
     （第一次也是複本，母本誰都拿不到）。兩件事要知道：
     - 母本是在第一個要它的測試當下建的，那個測試當時的環境（monkeypatch 過的東西）會跟著進母本、再進之後每一份複本。
       所以 patch 了載入或驗證路徑（load_content、validate 會碰到的東西）的測試不要用這裡，自己直接 load_content。
     - 鍵不看資料夾裡的檔：root 在一個工作階段裡不能改（正式內容、測試內容、序章母本資料夾都不改）。要改檔再載入的測試
       用自己的一份資料夾（prologue_root、copy_fixture）直接 load_content。"""
-    key = _content_key(root, profile)
+    key = _content_key(root, profile, only)
     if key not in _MASTERS:
-        master = load_content(root, profile)
+        master = load_content(root, profile, only=only)
         _MASTERS[key] = (master, _dump(master))
     return pickle.loads(_MASTERS[key][1])
 

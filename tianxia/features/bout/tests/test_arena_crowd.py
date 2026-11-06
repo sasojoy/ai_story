@@ -187,6 +187,7 @@ def test_write_line_rejects_numbers_and_missing_names():
     assert arena_crowd.write_line(_Fake(error=RuntimeError()), note) == ""
 
 
+@pytest.mark.whole_content  # 驗內容（validate）要整份（全部拆包第 63 批）
 def test_content_lines_are_checked(content):
     content.arena_crowd = {"patron": ["{helper}丟了 3 顆花生"]}
     with pytest.raises(ContentError):
