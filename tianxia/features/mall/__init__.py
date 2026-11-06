@@ -1,7 +1,7 @@
 """商城（萬寶閣）：元寶錢包的賣與記帳、月卡、易名帖、管理者工具（功能包；開發規範手冊 3.2、3.10）。README.md 寫這一包做什麼、導覽與設計稿。
 
 - rules.py：純規則（原 tianxia/mall.py；那個名字留成指到這裡的別名）；rename.py：易名帖換名號的規矩
-- actions.py：原本 Game 上的 mall_*（Game 留一行委派）；routes.py：/api/mall/…（殼照 FEATURES 掛）
+- actions.py：原本 Game 上的 mall_*（全部拆包第 58 批起 Game 不留委派）；routes.py：/api/mall/…（殼照 FEATURES 掛）
 - 錢包（tianxia/wallet.py）與票的庫存、消耗（ctx.wallet）是核心的服務：別的功能用票叫核心，不叫這一包
 """
 from __future__ import annotations
