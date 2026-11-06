@@ -42,6 +42,11 @@
   hint_names、merit_hint）、璽動那一句 stir_text、起點偏移與那一句（lean_shift、lean_text、shift_text、MANDATE_SCENE、MANDATE_WEIGHT）、江湖史七格
   （chronicle_block、sink_text 與 BOOK_*）；核心的 world、engine 的管理者「定結果」與江湖史、決戰包的 view、progress 讀它，玉璽包的 seal.py
   re-export 同一批。同 event_check 不進 MODULES。
+- battle_base.py（battle：全部拆包第 54 批）：全服決戰的資料型別與「讀」的那一半——全服狀態存的 BattleInstance、BattleRoundRecord、SiegeInfo 這些型別，加上核心、
+  共用規則層、舊模組、別的包非讀不可的判定（move_scores、idle、merit、call_orders、outcome_reason、result_at、start_muster、shift_deadlines、assess_gamble、clean_story……，
+  共 63 個名字）；world_state、sqlite_world、world、team、duel_base、seal_base、chiefs、conquest、event_llm、siege、tale、seal_duel、bot_policy、bot_runner、engine 與
+  bout、seal、territory_acts、looks、faction 幾包讀它。規則那一半在決戰包 features/battle/instance.py，它 re-export 這裡的名字；舊名 tianxia/battle_instance.py 是指到
+  instance 的 sys.modules 別名。同 event_check 不進 MODULES。
 
 第一階 ctx 就是 Game 本身，不另包一層（手冊 3.3）。
 """
