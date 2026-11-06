@@ -220,3 +220,12 @@ def test_every_axis_starts_inside_its_bounds(cid):
     for axis in c.personas[cid]:
         lo, hi = persona.bounds(c, axis)
         assert lo <= persona.center(axis.start) <= hi and persona.stage_of(persona.center(axis.start)) == axis.start
+
+
+def test_every_character_you_can_talk_to_has_an_intro():
+    """Joy 11/6「人物簡介都要補上」：人物表上每一位對話人物（招來的一般同伴不算）都有身分、是誰、本性。"""
+    import server
+
+    c = real_game().content
+    people = [cid for cid, ch in c.characters.items() if ch.deep_interaction and not getattr(ch, "hire_type", None)]
+    assert people and [cid for cid in people if not (server.FIGURE_INTROS.get(cid) or {}).get("nature")] == []
