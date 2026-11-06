@@ -29,6 +29,8 @@ const MERGE_PORT = A.merge_port || 0
 const FIX_PORT = A.fix_port || 0
 const MERGE_INTO = A.merge_extra || '' // 合併時要多合的東西（PM 寫）
 
+const halted_word = (x) => !!x && !/^(無|沒有|none|no|n\/a)?[。.]?$/i.test(String(x).trim())  // 子代理回「無」不算停下來（A 波合併踩過）
+const GATE_BASE = A.gate_base || MERGE_BASE  // 閘門比對的基準；合併之後基準又有新提交時另外給
 const COMMON = `
 共通的規矩（這台機器）：
 - repo ${ROOT}。這份 clone 的 \`git fetch origin\` 不更新 dev/*、feature/*、wave/*：一律明確 fetch（\`git fetch origin +refs/heads/<分支>:refs/remotes/origin/<分支>\`）。推完 \`git ls-remote\` 確認。**每做完一個 Task 就推一次**。
@@ -124,10 +126,10 @@ async function buildLine(line) {
   for (const b of line.batches) {
     const p1 = await agent(P1(b, base), devOpts(b, 'plan'))
     if (!p1) return { line: line.name, done, stopped: `第 ${b.n} 批第一段沒有結果` }
-    if (p1.stopped) return { line: line.name, done, stopped: `第 ${b.n} 批：${p1.stopped}`, partial: p1 }
+    if (halted_word(p1.stopped)) return { line: line.name, done, stopped: `第 ${b.n} 批：${p1.stopped}`, partial: p1 }
     const p2 = await agent(P2(b, p1), devOpts(b, 'move'))
     if (!p2) return { line: line.name, done, stopped: `第 ${b.n} 批第二段沒有結果`, partial: p1 }
-    if (p2.stopped) return { line: line.name, done, stopped: `第 ${b.n} 批：${p2.stopped}`, partial: p2 }
+    if (halted_word(p2.stopped)) return { line: line.name, done, stopped: `第 ${b.n} 批：${p2.stopped}`, partial: p2 }
     done.push({ n: b.n, title: b.title, dev: b.dev, head: p2.head, base, tests: p2.tests, decided: [...(p1.decided || []), ...(p2.decided || [])], leftovers: [...(p1.leftovers || []), ...(p2.leftovers || [])], report: p2.report })
     base = p2.head
   }
@@ -154,12 +156,12 @@ ${MERGE_INTO ? '**另外要合的（PM 寫）**：\n' + MERGE_INTO + '\n' : ''}
 衝突照「程式為準」：兩邊的行都留；共用登記檔（邊界清單、services.py、registry.py、FEATURES、same_behavior、\`aliases()\`、\`bot_policy\`）各包的段都留、照 FEATURES 的順序接。**git 自己合好的也逐檔看**：兩邊各自的增刪行，合好的那一筆都要在。一條線把舊模組搬走、另一條線還在改舊位置的，改動照新位置寫回去。
 合完**只跑**：\`python ${TOOLS}/undef_scan.py tianxia server.py\` 0 個；\`python -m pytest -q -n 4 tests/core/test_feature_boundaries.py tests/core/test_contract_core.py tests/core/test_contract_features.py\` 過。紅了修（合起來才壞的一個 commit）。**整套、比對不跑**：下一關一次跑。
 推 \`git push origin HEAD:${WAVE_BRANCH}\`。回報 head、撞了什麼怎麼解、跑的結果。解不了才寫 stopped。`, { label: `merge:wave${WAVE}`, phase: 'Merge', schema: MERGE_SCHEMA, isolation: 'worktree' })
-if (!merged || merged.stopped) return { wave: WAVE, built, merged, stopped: merged ? merged.stopped : '合併沒有結果' }
+if (!merged || halted_word(merged.stopped)) return { wave: WAVE, built, merged, stopped: merged ? merged.stopped : '合併沒有結果' }
 
 const PM_TOOLS = A.pm_tools || 'C:/Ray/專案/天下大勢/.claude/worktrees/pm-1103/docs/superpowers/pm-workflows'  // 主要 clone 在 main 上，工具在 PM 的工作樹
 const runGate = (head, label) => agent(`你只做一件事：跑一次閘門腳本，等它跑完，回報結果。不改任何檔、不推任何東西、不修任何東西。
 1. 用 PowerShell 分離啟動（不要 tee、不要前景跑，它要 15～30 分鐘；先建 ${SP}\\wave${WAVE}\\ 這個資料夾）：
-\`Start-Process -WindowStyle Hidden -FilePath "${PY}" -ArgumentList '${PM_TOOLS}/wave_gate.py','--base','${MERGE_BASE}','--head','${head}','--name','wave${WAVE}' -WorkingDirectory "${ROOT}" -RedirectStandardOutput "${SP}\\wave${WAVE}\\gate.out" -RedirectStandardError "${SP}\\wave${WAVE}\\gate.err"\`
+\`Start-Process -WindowStyle Hidden -FilePath "${PY}" -ArgumentList '${PM_TOOLS}/wave_gate.py','--base','${GATE_BASE}','--head','${head}','--name','wave${WAVE}' -WorkingDirectory "${ROOT}" -RedirectStandardOutput "${SP}\\wave${WAVE}\\gate.out" -RedirectStandardError "${SP}\\wave${WAVE}\\gate.err"\`
 2. 重複跑 \`& "${PY}" "${PM_TOOLS}/wait_file.py" "${ROOT}\\.local\\wave_gate\\${head.slice(0, 8)}\\done" 570\`（工具逾時設 600000），直到印出 done。不要做別的事，也不要讀別的檔。超過 90 分鐘還沒好，看 gate.out 與 gate.err 的最後 20 行，當成紅回報。
 3. 讀 \`${ROOT}\\.local\\wave_gate\\${head.slice(0, 8)}\\result.json\`，全文放進 result，green 照裡面的 green。`, { label, phase: 'Gate', schema: GATE_SCHEMA, model: 'sonnet' })
 
@@ -181,7 +183,7 @@ const gate = await gatePromise
 let check = null
 if (A.web_check) {
   phase('Check')
-  check = await agent(`你是《天下大勢》的 QA 子代理，驗**第 ${WAVE} 波動到的畫面**（波次模式：一波一次，企劃者 11/06）。照 .claude/skills/tianxia-qa/SKILL.md 在實機看：head ${merged.head} 對 base ${MERGE_BASE}，同一個局面並排截圖（375 淺、375 深、1280）、逐像素比、主控台 0 錯誤、網路沒有 4xx／5xx。**不重跑測試、不比資料庫。**
+  check = await agent(`你是《天下大勢》的 QA 子代理，驗**第 ${WAVE} 波動到的畫面**（波次模式：一波一次，企劃者 11/06）。照 .claude/skills/tianxia-qa/SKILL.md 在實機看：head ${merged.head} 對 base ${GATE_BASE}，同一個局面並排截圖（375 淺、375 深、1280）、逐像素比、主控台 0 錯誤、網路沒有 4xx／5xx。**不重跑測試、不比資料庫。**
 ${COMMON}
 埠 ${A.web_check.ports}，分主機名（127.0.0.1 對 localhost）。要看的：${A.web_check.steps}
 回報 same、走了哪些步驟、差異、截圖路徑。收的時候伺服器 taskkill /T、刪暫存大檔。`, { label: `check:wave${WAVE}`, phase: 'Check', schema: { type: 'object', properties: { same: { type: 'boolean' }, steps: { type: 'string' }, diffs: { type: 'array', items: { type: 'string' } }, report: { type: 'string' } }, required: ['same', 'steps', 'diffs', 'report'] } })
@@ -197,7 +199,7 @@ ${WAVE_RULE}
 分支：明確 fetch ${WAVE_BRANCH}；\`git switch -c ${WAVE_BRANCH}-fix origin/${WAVE_BRANCH}\`（同名已存在就加 -work），修完快轉推回 \`${WAVE_BRANCH}\`。埠 ${FIX_PORT}，暫存 ${SP}\\wave${WAVE}\\fix\\。
 這一波的線：
 ${lineList}
-**閘門**（base ${MERGE_BASE}、head ${merged.head}；完整輸出在 ${ROOT}\\.local\\wave_gate\\${merged.head.slice(0, 8)}\\）：
+**閘門**（base ${GATE_BASE}、head ${merged.head}；完整輸出在 ${ROOT}\\.local\\wave_gate\\${merged.head.slice(0, 8)}\\）：
 ${gate ? gate.result : '閘門沒有結果：先用同樣的參數跑一次 wave_gate.py'}
 **審查的發現**：
 ${JSON.stringify(findings, null, 1)}
