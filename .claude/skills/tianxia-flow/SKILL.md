@@ -28,7 +28,7 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
   - **上 `main`** 一律從 `develop` 合、合之前跑整套含 slow（下面「上 main」）。**Joy 本人（Joy 自己推，或 Joy 當下明說要推的那一次；雲端 session 不自己決定直推）可以直推 `main`**：推什麼由 Joy 決定，修線上問題以外的新功能、新商品也可以（企劃者 2026-11-05「照現在，Joy 決定」；以前只限維運與緊急修正）；推完照舊跟企劃者說一聲（哪一筆、改了哪個方法）。PM 下一次合併照舊先把 `main` 合進 `develop`，改到已經搬走的方法就照抄進包（搬包中的那一批重跑前後對照），之後照舊追進拆分主幹（`split/trunk`）。
   - `develop`、`main` **不開** GitHub 分支保護，照規矩口頭遵守（企劃者 10/31，手冊第十一節第 1 題）。
 - 流向只有一條：批的工作樹分支 → 功能分支 → `develop` →（內測）→ `main`。**不要從功能分支或工作樹直接合 `main`。**
-- **架構拆分繼續在 `split/trunk` 上做，每一波同步回 `develop`**（企劃者 2026-11-06 問了合回之後在哪裡拆，選「繼續在 split/trunk 拆」；`CLAUDE.md`「工作目錄與分支」）：主幹在 `<合回那一筆>` 合回 `develop`，從這一筆起 `develop` 就是新架構。剩下的批走 `dev/<x>` → `wave/<波>` → `split/trunk`（手冊 4.2「波次模式：一波一驗」），每一波進主幹之後 PM 整包同步回 `develop` 一次；沒過閘門的不進 `split/trunk`、也不進 `develop`。總表、交接、手冊跟著每一波回來，兩波之間最新的那一份在 `split/trunk`。
+- **架構拆分繼續在 `split/trunk` 上做，每一波同步回 `develop`**（企劃者 2026-11-06 問了合回之後在哪裡拆，選「繼續在 split/trunk 拆」；`CLAUDE.md`「工作目錄與分支」）：主幹在 tag `develop-merge-back-20261106` 合回 `develop`，從這一筆起 `develop` 就是新架構。剩下的批走 `dev/<x>` → `wave/<波>` → `split/trunk`（手冊 4.2「波次模式：一波一驗」），每一波進主幹之後 PM 整包同步回 `develop` 一次；沒過閘門的不進 `split/trunk`、也不進 `develop`。總表、交接、手冊跟著每一波回來，兩波之間最新的那一份在 `split/trunk`。
 - `main` 有新東西（Joy 推的）時，下一次合併的人先把 `main` 合進 `develop`、再把 `develop` 合進功能分支（`git merge --no-ff`，不 rebase 已經推上去的分支）。衝突照「程式為準」解，解不了的問 PM。
 - 每次推上去都確認推到了：`git merge-base --is-ancestor HEAD origin/<分支>`（別的 session 也會動同一份 clone）。
 - 線上伺服器照舊跑 `main`（Joy 部署）。**內測 `develop` 在這台主機跑**（企劃者 2026-10-31，手冊第十一節第 5 題）：另一個資料庫、另一個埠，不碰線上那一份；先開一次 21 天的季（`season21`）試玩。程式只從 `origin/develop` 更新、換到每日整套綠的那一筆。對外網址、埠、叫不叫模型**待定**（企劃者還沒定）。做法在 `docs/superpowers/feedback/beta-主機端操作.md`「內測 develop」；開季、收季、換程式都記進交接第一節。

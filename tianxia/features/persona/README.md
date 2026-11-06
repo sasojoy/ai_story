@@ -3,7 +3,7 @@
 - **做什麼**：全服的人跟人物說話，會一點一點把他的性子往某一頭推；推夠了他換一段，說話的樣子跟著變，簡介寫「如今」與變化紀錄。
 - **導覽**：`docs/guide/大勢人物與賽季.md` 的「人物性子」那一節。
 - **設計稿**：https://claude.ai/artifact/R8w6aMxgeH89djeKYC7n5U（Joy 2026-11-06「可以」；換季選「全部歸回本性」）。
-- **開關**：`Config.persona_shift.enabled`（預設關；正式內容與三種設定都還關著）。關著一個位元組都不變：舊的性情漂移照舊。
+- **開關**：`Config.persona_shift.enabled`（預設關；`season21`、`week7` 設定打開，Joy 11/6）。關著一個位元組都不變：舊的性情漂移照舊。
 
 | 檔 | 是什麼 |
 |---|---|
@@ -18,3 +18,7 @@
 `actions.py` 留包裡（要記行狀；行狀經核心 `core/annal_base`）。`server.figure_intro(cid, game)` 讀 `persona_rules.view`， 把如今與變化紀錄接進簡介（`figure_intro` 留在殼）。
 **認領的欄位**：`PlayerState.persona_notes`（換季不帶）；季上 `WorldState.persona*`（換季整個重來＝全部歸回本性）。
 **數字**（`PersonaShiftRules`，全是【草】）：情誼 30／60／80 算 1／2／3 份；一天淨推力不到 3 份不動；一份 2 點、一天最多 8 點、一段 40 點；沒人推回 2 點；最多離起點 2 段。
+
+## 程式在哪、另外要跑的
+
+規則本體在共用層 `tianxia/persona_rules.py`（人物情誼包的 `companion_agent` 要叫，包不准讀包；手冊第十五節「波次 A 的 PM 認定」第 8 條），這裡的 `rules.py` re-export 同一批物件。改 `persona_rules.py` 時 `test_for` 挑不到下面這些，自己跑：`tianxia/features/persona/tests`，`tianxia/features/companions/tests` 裡寫到 `companion_agent` 的檔。
