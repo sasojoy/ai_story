@@ -258,7 +258,14 @@ WAVES["B"] = dict(
     merge_port=8277, fix_port=8278,
     web_check=dict(ports="8279、8280", steps="每一頁都看：江湖頁（本週卡、三方卡）、修練（改練、意境、熔煉、配點）、煉製與自創、鐵匠鋪、馬市、銀兩出口、酒肆、懸賞榜、擂台、玩家卡、有所感、引導框、玉璽碎片卡、列傳、戰記頁、通知開關、出陣、移動、地盤、輿圖、管理頁。"),
 )
-WAVES["C"] = dict(lines=[dict(name="測試歸位", batches=[b61])], merge_port=8281, fix_port=8282)
+EXTRA_LENSES_C = [
+    dict(key="takein", text="**新進來的東西不能掉，位置要對**。這一波把 develop 的大決戰面板（sasojoy/ai_story#180，`34e4ca8f..c543d3d0`）與 main 的神品意境一人兩份（`ca258cc6`）合進已經切好的新架構。閘門比的是 `4033ddc0`（develop＋main，舊位置）對 head，只抓得到情境走得到的，面板是新功能，多半沒有軌走到。逐 hunk 核對：兩個提交的每一段增刪在 head 上都找得到（位置可以不同）。`web/app.js`、`web/main.js`、`web/index.html` 每一段；`web/battle.js`、`web/battle.css` 兩邊同名合起來的結果，字面都在、先後沒變；js 頂層有沒有 TDZ，每個頂層讀的識別字對到定義的檔與載入順序；`WEB_ORDER`、`APP_FILES`、`web_scripts()` 一致；`css_order_check.py` 對 `4033ddc0`。`battles.json`：用真的 `load_content` 在 `4033ddc0` 與 head 各載 season21、week7、不帶設定，`model_dump_json` 比雜湊。`test_battle_panel`、`test_battle_gauge`、#180 動過的 jianghu 測試、`test_epiphany`、`test_legacy` 都在、收集得到（`--collect-only`）。battle 包 `__init__.py` 那 8 行接到哪、面板資料真的出現在 `/api/main`（行程內 TestClient，不開埠）。`tianxia/arts.py`、`features/legacy/actions.py`、`models.py` 的改動字面都在。"),
+]
+WAVES["C"] = dict(
+    lines=[dict(name="測試歸位", batches=[b61])], merge_port=8281, fix_port=8282,
+    extra_lenses=EXTRA_LENSES_C,
+    web_check=dict(ports="8283、8284", steps="**只看這一波新合的畫面，其他畫面上一波比過了（B 波 1482 鏡，same=true）**。工具可以重用：C:\\Users\\ray61\\AppData\\Local\\Temp\\claude\\81800b313c89d0f8\\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\\scratchpad\\waveB\\qaBui\\tools（`unpack.py`、`go.py`、`detail.py`；出陣與決戰那幾鏡的場景寫好了，先讀檔頭）。看：(1) 大決戰面板：集結、開打、出招不跳提示、放手一搏的輸入框、倒數、主將血條、戰報、陣中氣血、關鍵時刻覆蓋、收場；決戰期間本週條不寫兩軍數字。(2) 煉製頁的預覽卡放兩份同一路意境：`.lv i` 沒亮那一格的底色與圓角跟 base 一樣（B 波修過，這是第一次走真實流程）。(3) 江湖頁、修練頁各一鏡當煙霧。**不超過 80 鏡、約 60 分鐘**，到了就交，沒走到的寫清楚。"),
+)
 
 
 def leftovers_for(path):
@@ -286,6 +293,8 @@ def main():
     ap.add_argument("--finish", default="", help="開發回來的 built（JSON 檔）；有給就只合併、閘門、審查、修正")
     ap.add_argument("--merge-base", default="")
     ap.add_argument("--merge-extra", default="", help="合併時要多合的東西（文字檔）")
+    ap.add_argument("--gate-base", default="", help="閘門比對的基準；合併時又合了 develop、main 就給它們合起來那一筆")
+    ap.add_argument("--after-merge", default="", help="合完、閘門之前的文件輪（文字檔）")
     ap.add_argument("--opus", action="store_true", help="每一批都用 Opus（沒有逐批審查時比較保險）")
     ap.add_argument("--leftovers", default="", help="上一波開發回來的 built（JSON 檔）：寫到某一批的 leftovers 接進那一批的派工")
     a = ap.parse_args()
@@ -300,6 +309,10 @@ def main():
             args["extra_lenses"] = w["extra_lenses"]
         if a.merge_extra:
             args["merge_extra"] = Path(a.merge_extra).read_text(encoding="utf-8")
+        if a.gate_base:
+            args["gate_base"] = a.gate_base
+        if a.after_merge:
+            args["after_merge"] = Path(a.after_merge).read_text(encoding="utf-8")
         name = f"wave-{a.wave}-finish.js"
     else:
         args["stop_after_build"] = True
