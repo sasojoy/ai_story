@@ -19,7 +19,7 @@ def test_the_package_declares_what_it_owns_and_the_old_name_is_the_same_module()
     from tianxia.features.seal import FEATURE
     from tianxia.features.seal import seal
 
-    assert old is seal and FEATURES[-1] is FEATURE
+    assert old is seal and FEATURE in FEATURES  # 登記了就好：下一個新包照 new_feature.py 排在最後，不該讓這一條紅
     assert FEATURE.name == "seal" and FEATURE.prefix is None and FEATURE.content == ("seal.json",)
     assert FEATURE.player_fields == ("heirloom", "seal_seen") and FEATURE.carried == ("seal_seen",)
     assert [(h.event, h.slot) for h in FEATURE.bus()] == [("outing", "seal"), ("battle_end", "seal")]
