@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from tianxia import allied, wins
 from tianxia import step as step_rules  # 核心本體（第 36 批收進 MODULES）：「你這一步」的 REF、place
-from tianxia import bounties  # 過渡：待搬（第 45 批：懸賞榜；手上揭著、投靠之後接不了的懸賞）
+from tianxia.core import bounty_base
 from tianxia.core.option import Option
 from tianxia.events import event_candidates  # 過渡：待搬（事件：這裡抽得到的拜門派事件）
 from tianxia.rules import STANCE_NAMES, season_one
@@ -123,8 +123,8 @@ def faction_prompt(ctx, faction) -> str:
     if allied.on(ctx.content, ctx.state.world) and faction.allies and p.pending_ally is None:  # 豪強分屬兩軍：先挑一邊
         return allied.ALLY_PICK.format(counts=counts)
     side = p.pending_ally or faction.id  # 依附的豪強接的是那一軍的懸賞
-    held = bounties.stranded(ctx.state, ctx.content, side)  # 手上揭著、投靠之後接不了的懸賞（FB-151）；沒有就一個字不多
-    lost = bounties.STRANDED_JOIN.format(n=len(held)) if held else ""
+    held = bounty_base.stranded(ctx.state, ctx.content, side)  # 手上揭著、投靠之後接不了的懸賞（FB-151）；沒有就一個字不多
+    lost = bounty_base.STRANDED_JOIN.format(n=len(held)) if held else ""
     return f"投靠後這一季不能改投（叛投另論）。{lost}{counts}。確定投靠{allied.label(ctx.content, faction.id, p.pending_ally)}？"
 
 

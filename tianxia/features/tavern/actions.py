@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 from tianxia import team
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import battlelog  # 共用規則層（戰報：殺手那一場）
-from tianxia import bounties  # 過渡：待搬（懸賞榜：通緝名單、牆上的榜）
+from tianxia.core import bounty_base
 from tianxia import encounter  # 共用規則層（單次判定：殺手那一場；測試換掉 encounter.resolve_encounter）
 from tianxia import equipment  # 共用規則層（店沒開時那一句 NOT_NOW）
 from tianxia import renown  # 共用規則層（名望、惡名、名望段）
@@ -82,7 +82,7 @@ def tavern_options(ctx: Game) -> list[Option]:
         problem = problem or tavern_rules.pay_problem(s, price)
         text = label.format(price=price)
         opts.append(Option(id=oid, label=text if problem is None else f"{text}・{problem}", enabled=problem is None))
-    if bounties.board_here(s, c) and bounties.visible(s, c):
+    if bounty_base.board_here(s, c) and bounty_base.visible(s, c):
         opts.append(Option(id=tavern_rules.BOARD_ID, label=tavern_rules.BOARD_LABEL))
     return opts + [Option(id=tavern_rules.BACK_ID, label=tavern_rules.BACK_LABEL)]
 
@@ -95,7 +95,7 @@ def tavern_choice(ctx: Game, arg: str) -> list[str]:
         tavern_rules.close(ctx.state)
         ctx.state.player.picking_bounty = True
         ctx._shop_say("enter")
-        return [f"你走到牆邊，看起{bounties.BOARD}。"]
+        return [f"你走到牆邊，看起{bounty_base.BOARD}。"]
     return tavern_run(ctx, arg)
 
 
@@ -148,7 +148,7 @@ def tavern_short(ctx: Game, base: int) -> list[str]:
 
 def tavern_wanted(ctx: Game) -> set[str]:
     """身上有通緝的名號鍵（名氣 +1）。"""
-    return {name_key(b.target) for b in bounties.open_bounties(ctx.state, ctx.content) if b.kind == "wanted" and b.target}
+    return {name_key(b.target) for b in bounty_base.open_bounties(ctx.state, ctx.content) if b.kind == "wanted" and b.target}
 
 
 def tavern_news(ctx: Game) -> list[str]:
@@ -856,5 +856,5 @@ def tavern_view(ctx: Game) -> dict:
         "materials": mats,
         "whispers": tavern_rules.whisper_view(c, s),
         "hidden": tavern_rules.HIDE_ALREADY.format(when=ctx.stamp(p.hidden_until)) if p.hidden_until > s.world.time else "",
-        "board": tavern_rules.BOARD_ID if bounties.board_here(s, c) and bounties.visible(s, c) else "",
+        "board": tavern_rules.BOARD_ID if bounty_base.board_here(s, c) and bounty_base.visible(s, c) else "",
     }

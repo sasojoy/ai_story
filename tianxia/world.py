@@ -18,7 +18,7 @@
     tests/seal/test_seal_engine.py（換季把沒收場的奪璽單挑記成未分勝負）、tests/seal/test_seal_acts.py、tests/acts/test_conquest_rules.py、
     tianxia/features/stamina_plays/tests/test_stamina_plays.py、tests/core/test_chapters.py、tests/core/test_marks_wired.py、tianxia/features/looks/tests/test_looks_mvp.py
 - 與 scripts/same_behavior.py 的 world 一軌（compare --tracks world，season21、week7、test 三種）。
-- 反過來：改這裡代叫的舊模組（bounties、seal_acts……；works 第 39 批已成包、改由體力玩法包登記 muster 的 works 那一格；seal 第 27 批成包、
+- 反過來：改這裡代叫的舊模組（seal_acts……；bounties 第 45 批已成包、改由懸賞榜包登記 step、week、day、start 的 bounties 那四格，懸賞榜包 README「另外要跑的」照抄上面那一串；works 第 39 批已成包、改由體力玩法包登記 muster 的 works 那一格；seal 第 27 批成包、
   改由玉璽包登記 muster 的 seal 那一格，玉璽包 README「另外要跑的」照抄上面那一串）時，test_for 往上找走到核心的
   world 就停，挑不到 tests/core/test_world.py 與上面那一串（第 25 批之前 world 是舊模組、會挑到）。改了它們的簽名或回傳值，另外跑
   tests/core/test_world.py 與上面那一串；要不要讓 test_for 自己並上交 PM（計畫第六節）。這裡代叫的 figure_life、figures、orders、plans、ranks
@@ -35,7 +35,6 @@ from typing import Any
 # 核心本體（全部拆包第 25 批收進 tianxia/core/__init__.py 的 MODULES）：不 import 功能包與舊名的別名。宴客的散席、月旦評、擂台的前三名、
 # 龍頭上陣、題壁照帶由各包登記世界層的格（tianxia/core/features.py 的 WORLD_ORDER），還沒成包、不在共用規則層的舊模組由這裡代叫（標批號）
 from . import battle_instance, calendar, flavor, renown, seats, territory, timetable, wins  # 核心本體與共用規則層
-from . import bounties  # 過渡：待搬（第 45 批：懸賞榜成包）
 from . import figure_life  # 共用規則層（人物活起來，全部拆包第 40 批收進）
 from . import figures  # 共用規則層（大勢人物，全部拆包第 40 批收進）
 from . import leaderboard  # 過渡：待搬（SHARED_LATER：裝備第 42 批已成包，signature_arms 經舊名別名；gear_card 讀本命兵器改成查詢服務、skillview 收進來之後再收）
@@ -84,16 +83,14 @@ def _slot(at: str, slot: str, core: dict[str, Hook]) -> Hook:
 _WEEK_CORE: dict[str, Hook] = {
     "seats": lambda state, content, rng: seats.rotate(state, content, state.world.hooked_week),  # 第四階輪替（正式版丁）：排在發令之前
     "orders": lambda state, content, rng: orders.issue(state, content, state.world.hooked_week, rng),
-    "bounties": lambda state, content, rng: bounties.issue(state, content, state.world.hooked_week, rng),  # 懸賞榜：兩個陣營各掛討伐、打探、護送
     "stances": lambda state, content, rng: stance_rules.weekly_reset(state, content, state.world.hooked_week),  # 人物心意（減法季批 6）：每週歸零；關著不碰季
 }
 
 # 世界層 day 那幾格核心代叫的（features.WORLD_ORDER["day"]）：21 天季每天 00:00（正式季整合設計 7.1、7.2），季曆每跨進新的一天各跑一次，
 # 排在週初那一串之後、那一刻的大事之前（跑的時候 hooked_day 已經是剛跨進的那一天）。軍令、懸賞在 21 天季改走這一串，週初那一串略過
-# （orders.issue、bounties.issue）
+# （orders.issue、懸賞榜包 rules.issue）
 _DAY_CORE: dict[str, Hook] = {
     "orders": lambda state, content, rng: orders.issue_day(state, content, state.world.hooked_day, rng),
-    "bounties": lambda state, content, rng: bounties.issue_day(state, content, state.world.hooked_day, rng),  # 懸賞榜：每天一批（7.2）
     "stances": lambda state, content, rng: stance_rules.daily(state, content),  # 人物心意（減法季批 6）：持重的每天拉下對面的進度；關著什麼都不做
 }
 
@@ -729,7 +726,7 @@ def settle_season_start(season: WorldState, content: Content, rng: random.Random
     不跑每曆時的事。不補這一下，要等到第一個曆時交界（約 1 分 47 秒）第一件大事才出現，本週大事那時還是空的。
     開關關著、這一季開季時沒開（舊季）、或已經跑過（hooked_week 不是 0：週初掛鉤從沒跑過才是還沒開季結算）時不跑季的事，
     所以重複呼叫也安全。呼叫端在開季之後、不在任何 mutate 裡（見 Game._settle_season_start）。
-    規則關著的季只掛第 1 週的懸賞（bounties.tick；不碰 hooked_week，同一週只掛一次）：管理者開季後第一眼看到的榜不是空的。"""
+    規則關著的季只掛第 1 週的懸賞（懸賞榜包 rules.tick，start 那一格；不碰 hooked_week，同一週只掛一次）：管理者開季後第一眼看到的榜不是空的。"""
     if not calendar.season_one_on(season, content):  # 世界層 start（全部拆包第 25 批）：懸賞那一格核心代叫
         return [] if season.ended else _results(features_core.world_run("start", _START_CORE, _season_vehicle(content, season), content, rng))
     if season.hooked_week != 0 or season.ended:
@@ -737,10 +734,8 @@ def settle_season_start(season: WorldState, content: Content, rng: random.Random
     return season_events(_season_vehicle(content, season), content, rng)
 
 
-# 世界層 start 那一格核心代叫的（features.WORLD_ORDER["start"]）：規則關著的季開季那一刻掛第 1 週的懸賞
-_START_CORE: dict[str, Hook] = {
-    "bounties": lambda state, content, rng: bounties.tick(state, content),
-}
+# 世界層 start 那一格（features.WORLD_ORDER["start"]）：規則關著的季開季那一刻掛第 1 週的懸賞，全部拆包第 45 批改由懸賞榜包登記（BountiesFeature.world()）；這裡空了留 {}
+_START_CORE: dict[str, Hook] = {}
 
 
 def _season_due(season: WorldState, content: Content) -> bool:
@@ -756,13 +751,7 @@ def _to_next_cal_hour(time: float, cal_hour: float) -> float:
 
 
 # 世界層 step 那幾格核心代叫的（features.WORLD_ORDER["step"]；簽名 (vehicle, content, store, step)，vehicle.world 就是推著的那一季）。
-# 宴客的散席（feast）與月旦評（yuedan）是包登記的格。原本沒接回傳值的格照樣回 None（接進訊息的只有懸賞、人物回來、引將期滿三格）。
-def _step_bounties(vehicle: GameState, content: Content, store: WorldStateStore | None, step: float) -> list[str] | None:
-    """第一季規則關著的季：季曆跨進新的一週就掛這一週的懸賞（只掛這一週，懸賞榜設計第三節）。原本是 advance_world_state 裡
-    cal_hour is None 那一支：cal_hour 是 None 就是 season_one_on 不成立（一次推進裡不變），bounties.tick 不收季。"""
-    return None if calendar.season_one_on(vehicle.world, content) else bounties.tick(vehicle, content)
-
-
+# 宴客的散席（feast）、月旦評（yuedan）與懸賞（bounties，第 45 批）是包登記的格。原本沒接回傳值的格照樣回 None（接進訊息的只有懸賞、人物回來、引將期滿三格）。
 def _step_recover(vehicle: GameState, content: Content, store: WorldStateStore | None, step: float) -> None:
     """甲 (b)：被打下來的聲威慢慢回。沒有時刻表的季，加上 21 天的第一季（正式季第 6 批）；recover 自己照 figures.upkept 擋掉
     週末的第一季。以前只在上面那一支（第一季規則關著）叫，21 天季永遠走不到（FB-350）"""
@@ -780,7 +769,6 @@ def _step_plans(vehicle: GameState, content: Content, store: WorldStateStore | N
 
 
 _STEP_CORE: dict[str, Callable[[GameState, Content, WorldStateStore | None, float], list[str] | None]] = {
-    "bounties": _step_bounties,
     "figures.recover": _step_recover,
     # 被挑戰打退的人物過幾個季曆天回來（PM 2026-10-16，兩種季都有）
     "figures.revive": lambda vehicle, content, store, step: figures.revive(vehicle, content),

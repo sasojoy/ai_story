@@ -27,6 +27,11 @@ FOLLOWER_IN_TEAM = "部下一直跟著你出戰，不用加入，也不能移出
 # ── 招募 ────────────────────────────────────────────────
 
 
+def letter_thank(ctx, task) -> list[str]:
+    """求援委託辦成了，那位人物寫一封道謝信（letters.thank；懸賞榜包經 ctx._letter_thank 問，全部拆包第 45 批）。"""
+    return letters.thank(ctx.state, ctx.content, task)
+
+
 def recruit_target(ctx) -> str | None:
     """這個地點目前能嘗試招募的人（自由之身、recruit_at 是這裡、情誼到門檻 roster.affinity_ok）；沒有就是 None。"""
     s, c = ctx.state, ctx.content

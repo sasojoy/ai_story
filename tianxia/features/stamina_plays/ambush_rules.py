@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from tianxia import atlas  # 共用規則層（輿圖的開放 atlas.is_unlocked，第 50 批收進）
 from tianxia import allied, roster
-from tianxia import bounties  # 過渡：待搬（第 45 批：懸賞榜成包；has_prey、hostile 讀 bounties.mine、bounties.hunting）
+from tianxia.core import bounty_base
 from tianxia.characters import name_key
 from tianxia.core.services import MOVE_BLOCKED  # noqa: F401  共用的字在核心（核心的移動被擋要用），這裡 re-export 同一個字串
 from tianxia.models import Content
@@ -103,7 +103,7 @@ def has_prey(state: GameState, content: Content) -> bool:
     """這個人設伏劫得到人嗎：投靠了陣營（有敵對的一方），或揭了通緝（散人只劫得了他揭的那個人）。"""
     if allied.side_of(state, content) is not None:
         return True
-    return any(b.kind == "wanted" for b in bounties.mine(state, content))
+    return any(b.kind == "wanted" for b in bounty_base.mine(state, content))
 
 
 def hostile(owner: GameState, passer: GameState, content: Content) -> bool:
@@ -111,7 +111,7 @@ def hostile(owner: GameState, passer: GameState, content: Content) -> bool:
     mine, theirs = allied.side_of(owner, content), allied.side_of(passer, content)
     if mine is not None and theirs is not None and mine != theirs:
         return True
-    return bounties.hunting(owner, content, passer.player.name)
+    return bounty_base.hunting(owner, content, passer.player.name)
 
 
 def maybe_hostile(world: WorldState, a: Ambush, side: str | None, name: str) -> bool:

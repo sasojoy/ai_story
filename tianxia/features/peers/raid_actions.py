@@ -15,7 +15,7 @@ import random
 from typing import TYPE_CHECKING
 
 from tianxia import battlelog, calendar, encounter, figure_life, gender, mounts, renown, roster, team, wins
-from tianxia import bounties  # 過渡：待搬（第 45 批：懸賞榜）
+from tianxia.core import bounty_base
 from tianxia.characters import name_key
 from tianxia.core import annal_base as annals
 from tianxia.core import presence
@@ -43,7 +43,7 @@ def is_shown(ctx, other: Game) -> bool:
         return False
     if mine is not None and theirs is not None and mine != theirs:
         return True
-    return bounties.hunting(ctx.state, ctx.content, other.state.player.name)
+    return bounty_base.hunting(ctx.state, ctx.content, other.state.player.name)
 
 
 def refusal(ctx, other: Game) -> str | None:
@@ -125,7 +125,7 @@ def raid(ctx, other: Game) -> list[str]:
     else:
         winner = loser = None
     # 名聲 5.4：交差之前先判會不會交到官府通緝（打贏了、手上揭著他的官府通緝），把惡名少的那一點算進輸的那一邊，兩邊的戰報才寫得到
-    official = winner is ctx and renown.on(c, "official_wanted") and bounties.official_hit(s, c, them.name)
+    official = winner is ctx and renown.on(c, "official_wanted") and bounty_base.official_hit(s, c, them.name)
     spoils = winner._raid_spoils(loser, evil=c.config.renown.official_evil_loss if official else 0) if winner is not None else None
     ctx.touched.add(them.name)
     other._raid_record(mirrored, me.name, ours, ctx, spoils, attacker=False, shown=ours_shown)
@@ -221,7 +221,7 @@ def raid_record(
         if spoils.hp > 0:
             record.changes.append(f"氣血 -{spoils.hp}")
         if spoils.evil:  # 名聲 5.4
-            record.changes.append(bounties.BEATEN_OFFICIAL.format(n=spoils.evil, winner=spoils.winner))
+            record.changes.append(bounty_base.BEATEN_OFFICIAL.format(n=spoils.evil, winner=spoils.winner))
         story = f"你攔下{rival}動手，卻不是{gender.pronoun(rival_game.state)}的對手，只得丟下銀兩脫身。" if attacker else \
             f"{rival}半路截殺你，你不敵，丟下銀兩脫身。"
     record.notes.append(story)

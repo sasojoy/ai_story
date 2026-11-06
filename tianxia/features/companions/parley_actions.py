@@ -19,6 +19,26 @@ from tianxia.state import Journey, Letter, ParleyBacking, ParleyDebt, ParleyTerm
 from . import companion_agent, parley
 
 
+def settle_task(ctx, task_id: str, cid: str | None) -> bool:
+    """一件委託辦成了（懸賞榜包 rules._complete_commission 經 ctx._parley_settle_task 問，全部拆包第 45 批；本體 parley.settle_task）。"""
+    return parley.settle_task(ctx.state, ctx.content, task_id, cid)
+
+
+def keep(ctx, cid: str, cond: str) -> None:
+    """記一筆守約（同上；本體 parley.keep）。"""
+    parley.keep(ctx.state, ctx.content, cid, cond)
+
+
+def owed_line(name: str) -> str:
+    """「下回見到他，他會兌現答應你的事」那一句（同上；parley.COMMISSION_OWED）。"""
+    return parley.COMMISSION_OWED.format(name=name)
+
+
+def ask_label(ctx, ask_id: str) -> str:
+    """答應你的那一件寫給人看的字（懸賞榜包 rules.commission_reward 經 ctx._parley_ask_label 問；本體 parley.ask_label）。"""
+    return parley.ask_label(ctx.content, ask_id)
+
+
 def finish(ctx, cid: str, decision: parley.Decision | None) -> list[str]:
     """NPC 智能 2.0那一輪的收尾：結果那一句，答應了就當場做（帶路會在這裡動身）；先做後付另外記下你欠他的那一件。"""
     if decision is None or decision.kind is None:

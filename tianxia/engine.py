@@ -18,7 +18,7 @@ from . import arts as arts_mod
 from . import attrset  # 五項屬性（屬性與跨季架構 v2 第三節）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
-    allied, armor, atlas, battle_instance, battlelog, bounties, calendar, clinic, conquest, create, divine, economy, encounter, equipment,
+    allied, armor, atlas, battle_instance, battlelog, calendar, clinic, conquest, create, divine, economy, encounter, equipment,
     fight_llm, figures, forge_secrets, gender, howto, insight_fx, insights, journal, library, martial_arts, place_state, plans,
     materials, mounts, naming, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skillview,
@@ -30,7 +30,6 @@ from . import epiphany  # 特殊頓悟（登記一條線的鉤子；企劃者 20
 from . import tiers  # 事件分級：場景卡上那一行「州郡大事」「天下大事」
 from . import outing as outing_rules  # 走一趟（企劃者 2026-10-29～30）：探索一次走一、三、五段
 from . import growth  # 減法季批 2：三道閘、屬性五段的純規則（開關走 rules.jianfa；探索一顆搬進了探索包）
-from . import wanted as _wanted_card  # noqa: F401  通緝登記進玩家卡的動作表（social.ACTIONS）
 from . import speech
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from . import tavern as tavern_rules  # 酒肆（企劃者 2026-10-18）；叫 tavern_rules：跟其他 *_rules 一樣避開區域變數
@@ -54,6 +53,8 @@ from . import training
 from .guide import note_action
 from .features.guide import actions as guide_actions
 from .journal import LOG_BREAK, Draft
+from .core import bounty_base  # 懸賞榜「別人讀」的那一半（全部拆包第 45 批：收店、榜的入口、投靠那一下作廢、翻頁不寫紀錄、第 2 週才開）
+from .features.bounties import actions as bounties_actions  # 過渡：Game 上懸賞榜的一行委派（全部拆包第 45 批）
 from .features.map import actions as map_actions  # 輿圖：全部拆包第 49 批（13 個一行委派：搬的 11 個方法＋探索包問的 _map_open_places、_map_mostly_here）
 from .martial_arts import QUALITIES  # （cultivation：is_renamed 跟著 _deliver_renames 搬進修練包，拿掉）
 from .models import (
@@ -327,17 +328,16 @@ SHOP_ACTS = frozenset({"smith", "bounties", "market", "arena"})  # 初入江湖�
 # （＝ features/bout/arena_rules.BACK_ID，全部拆包第 12 批）
 LEAVE_SHOP_IDS = frozenset({"bounty:back", "smith:back", mounts.BACK, "arena:back", "tavern:back"})
 # （叛投 after 位置的 leave_behind 那一格：全部拆包第 35 批改由陣營包登記〔FactionFeature.defection()〕，原本核心代叫的 _DEFECT_AFTER_CORE 拿掉；食言〔parley〕是人物情誼包登記的）
-# core_eventbus（全部拆包第 26 批）：事件的格由核心代叫的那幾格（還沒成包的舊模組）。每一格在叫的那一下才照模組屬性找函式
-# （bounties.on_win…：測試與量表腳本換掉的照樣打得到）。BUS_ORDER 在 core/features.py；契約測試讀這一份。
+# core_eventbus（全部拆包第 26 批）：事件的格由核心代叫的那幾格（還沒成包的舊模組）。BUS_ORDER 在 core/features.py；契約測試讀這一份。
+# 懸賞的五格（win、outing、explore、arrive、raid_win 的 bounties）與第 45 批開的 aid 全部拆包第 45 批由懸賞榜包登記（BountiesFeature.bus()），每一列都空了留 {}
 # 玉璽的兩格（outing、battle_end 的 seal）全部拆包第 27 批改由玉璽包登記（SealFeature.bus()）；battle_end 那一列空了留 {}（契約鎖 keys 跟 BUS_ORDER 一樣）
 _BUS_CORE: dict[str, dict[str, Callable[..., Any]]] = {
-    "win": {"bounties": lambda ctx, loc_id, squad_id: bounties.on_win(ctx.state, ctx.content, ctx.world, loc_id, squad_id)},  # 過渡：待搬（第 45 批：懸賞榜包登記）
-    "outing": {
-        "bounties": lambda ctx, loc_id: bounties.on_explore(ctx.state, ctx.content, ctx.world, loc_id),  # 過渡：待搬（第 45 批）
-    },
-    "explore": {"bounties": lambda ctx, loc_id: bounties.on_explore(ctx.state, ctx.content, ctx.world, loc_id)},  # 過渡：待搬（第 45 批）
-    "arrive": {"bounties": lambda ctx, loc_id: bounties.on_arrive(ctx.state, ctx.content, ctx.world, loc_id)},  # 過渡：待搬（第 45 批）；convoy 那一格軍情包登記
-    "raid_win": {"bounties": lambda ctx, target: bounties.on_raid_win(ctx.state, ctx.content, ctx.world, target)},  # 過渡：待搬（第 45 批）
+    "win": {},
+    "outing": {},
+    "explore": {},
+    "arrive": {},
+    "raid_win": {},
+    "aid": {},
     "battle_end": {},
 }
 
@@ -697,8 +697,8 @@ class Game:
         lost_place = p.location not in c.locations
         if lost_place:
             p.location = c.scenario.start_location
-        if p.picking_bounty and not bounties.board_here(s, c):
-            bounties.close_board(p)  # 懸賞榜關了（Config.bounties.enabled、劇本沒有陣營）、人不在城鎮了：收起懸賞榜，挑到哪一張與榜吏那一句一併清掉
+        if p.picking_bounty and not bounty_base.board_here(s, c):
+            bounty_base.close_board(p)  # 懸賞榜關了（Config.bounties.enabled、劇本沒有陣營）、人不在城鎮了：收起懸賞榜，挑到哪一張與榜吏那一句一併清掉
         if p.picking_smith and not equipment.smith_open(s, c):
             equipment.close_smith(p)  # 武器、防具都關了、人不在城鎮了：收起鐵匠鋪，打造的單子與停在哪一頁一起清
         if p.smith_draft is not None and (
@@ -905,14 +905,7 @@ class Game:
         self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
         self._auto_checkin()  # 每日簽到自動領（Joy 2026-10-24 挑江湖頁乙案：簽到不放鈕）；要挑四階的日子留給玩家挑
         self._settle_partings()  # 歷史武將同行：從你身邊回江湖的人，情誼減半（9.6；補戰報時已經算過的不再算）
-        refunds = bounties.deliver_refunds(self.state, self.content)  # 掛的通緝沒人揭成：押金退回
-        if refunds:
-            self._write(bounties.BOARD, refunds)
-            self._save_season()
-        lapses = bounties.deliver_lapses(self.state, self.content)  # 揭了的被別人交滿名額、或過了期限：拿掉名字、補一句（FB-121）
-        if lapses:
-            self._write(bounties.BOARD, lapses)
-            self._save_season()
+        self._bounty_deliver()  # 掛的通緝沒人揭成：押金退回；揭了的被別人交滿名額、或過了期限：拿掉名字、補一句（FB-121）
         settled = self._settle_plots()  # 不在線時收場的密謀，回來第一次同步就結算（正式版乙二）
         if settled:
             self._write("密謀", settled)
@@ -1011,7 +1004,7 @@ class Game:
         """第 2 週才開的功能裡這一季真的有的（減法季 6.6；week_unlock.WEEK2 的順序）：擂台、懸賞榜。
         紀錄那一行、本週卡那一句照它列；一樣都沒有是空的。"""
         s, c = self.state, self.content
-        have = {"arena": arena_ranks.on(c), "bounties": bounties.active(s, c)}
+        have = {"arena": arena_ranks.on(c), "bounties": bounty_base.active(s, c)}
         return [name for key, name in week_unlock.WEEK2.items() if have.get(key)]
 
     def _week_unlock_tick(self) -> None:
@@ -1034,17 +1027,14 @@ class Game:
         self.own_turn_checks()
 
     def own_turn_checks(self) -> None:
-        """本人這一輪（mark_seen；假人程式自己那一輪也叫）：系統通緝這一週還沒掛就掛（bounties.post_auto，名聲 4.6、5.4），被掛的那幾句
+        """本人這一輪（mark_seen；假人程式自己那一輪也叫）：系統通緝這一週還沒掛就掛（懸賞榜包 rules.post_auto，名聲 4.6、5.4），被掛的那幾句
         寫進一則「懸賞」紀錄。結伴同行的人、管理者查玩家、玩家卡動到別人建的 Game 都不叫、不掛。
         最前面問功能包（on_own_turn，接縫掛鉤，第 11 批）：商城包的封測元寶在這裡發——錢包第一次進來的那一下，真人假人一樣；暫停中照發（帳跟世界無關）。"""
         self.own_turn = True
         features_core.on_own_turn(self)
         if self.world.paused_at() is not None:  # 賽季時鐘暫停中世界不變（線上架構 8.3）：mark_seen 在 server.act 的暫停擋之前
             return
-        posted = bounties.post_auto(self.state, self.content)
-        if posted:
-            self._write(bounties.BOARD, posted)
-            self._save_season()
+        self._bounty_post_auto()
 
     def _copy_heirloom(self) -> None:
         """抄本照全服登記重抄（玉璽包 actions；sync 與 _drop_stale_references 原位叫：碎片關著時也要叫、把抄本清掉）。"""
@@ -1249,9 +1239,9 @@ class Game:
         opts += self._omen_options(loc.id)  # 機緣：交東西、天時地利（正式版乙一）、伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有（軍情，第 34 批）
         opts += self._errand_options()  # 託付（減法季批 6）：人在託付的地點才有那一顆；關著是空的
         opts += self._invite_options()  # 玩家之間的邀請（切磋）：別人發給你的、你發出去還在等的
-        shown = bounties.visible(s, c) if bounties.board_here(s, c) else []
+        shown = bounty_base.visible(s, c) if bounty_base.board_here(s, c) else []
         if shown:  # 懸賞榜：城鎮類的地點、有看得到的單才有（FB-121：張數只算看得到的，0 張不畫）；只是打開第二層選單，不花體力
-            opts.append(Option(id="act:bounties", label=f"{bounties.BOARD}（{len(shown)} 張）"))
+            opts.append(Option(id="act:bounties", label=f"{bounty_base.BOARD}（{len(shown)} 張）"))
         if equipment.smith_open(s, c):  # 鐵匠鋪（兵器設計 4.1；裝備四欄 4.6：武器或防具開著就開門）：只是打開第二層選單，不花體力
             opts.append(Option(id="act:smith", label=weapons.SMITH))
         if mounts.market_here(s, c):  # 馬市（裝備四欄 5.5，帶「馬市」標籤的城鎮）：只是打開第二層選單，不花體力
@@ -1722,7 +1712,7 @@ class Game:
         if option is None and option_id.startswith("bounty:"):
             # FB-162：懸賞選項已經不在選單上（兩個分頁搶同一張，慢的那一頁）：回這一步為什麼不成的那一句，不寫江湖紀錄；
             # 回傳值是 Refused，伺服器照它把同一句傳去網頁跳提示（server.api_choose）
-            return Refused(self._log([bounties.stale_line(self.state, self.content, self.world, option_id.partition(":")[2])]))
+            return Refused(self._log(self._bounty_stale(option_id.partition(":")[2])))
         if (option is None or not option.enabled) and option_id.startswith("market:"):
             # FB-195：馬市的選項已經不在選單上或灰掉了（兩個分頁搶，慢的那一頁的鈕還亮著）：同懸賞榜 FB-162，回為什麼不成的那一句
             # （Refused，伺服器傳去網頁跳提示），馬販那一句換成那個原因；不寫江湖紀錄
@@ -1793,8 +1783,7 @@ class Game:
             # （opp：機緣、fs：伏筆的最後一步，全部拆包第 34 批換成軍情包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             # （sense：有所感選做法、順其自然，全部拆包第 24 批換成有所感包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             # （invite：邀請的答應、婉拒、收回，全部拆包第 37 批換成玩家互動包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
-            elif kind == "bounty":
-                msgs = self._bounty(arg)
+            # （bounty：懸賞榜第二、三層選單上的每一顆，全部拆包第 45 批換成懸賞榜包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉；FB-162 被搶的那一句仍在上面 choose 前段）
             # （smith：鐵匠鋪第二層選單上的每一顆，全部拆包第 41 批換成鐵匠鋪包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
             # （market：馬市第二層選單上的每一顆，全部拆包第 42 批換成裝備包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉；FB-195 被搶的那一句仍在上面 choose 前段）
             # （donate：軍需官那一串的選擇；dadian：打點那一間店的離開。全部拆包第 43 批換成銀兩出口包的 choose 掛鉤〔上面 features_core.choose 接走〕，拿掉）
@@ -1815,7 +1804,7 @@ class Game:
             self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
             self._greet_rejoin(faction_before)  # 入伍段早就走完的人再投靠：引薦人打個招呼（新手引導計畫三）
             if faction_before is None and self.state.player.faction is not None:  # 這一下才投靠（確認，或拜入陣營名下的門派）：手上新陣營接不了的懸賞作廢、說一聲（FB-151）；叛投在 defection.defect 裡做
-                msgs += bounties.drop_stranded(self.state, self.content, self._side())
+                msgs += bounty_base.drop_stranded(self.state, self.content, self._side())
             msgs += self._hear_after_stamina(stamina)
             if kind == "choice":  # 選了事件的選項：序章的遇險、拜師、四景（新手引導計畫一）
                 msgs += self._guide(self._note_action("choice"))
@@ -1842,13 +1831,13 @@ class Game:
             # 打造的每一步（挑種類、主料、輔料、開爐、上一步、不打了）併成一則「打造」：一爐一則，不是一步一則。
             # 打開單子那一步（"forge"）不併、另起一則：_mergeable_head 只看最新一則是不是同標題，不然連打兩爐（或打開又不打了）
             # 會全部併進上一爐那一則。懸賞榜：打開榜那一則的標題是「懸賞榜・此地」，每次來都另起一則；挑一件、回到懸賞榜只是翻頁，
-            # 只有那一句回話時不寫紀錄（bounties.is_browse_line）；交出、揭下、放棄、返回各一則（FB-161：交出不再跟挑、回併成一則，
+            # 只有那一句回話時不寫紀錄（bounty_base.is_browse_line）；交出、揭下、放棄、返回各一則（FB-161：交出不再跟挑、回併成一則，
             # 連交幾張時各寫各的得失）
             entry = self._draft.entry(self.state.world.time, msgs)
             # 鐵匠鋪切頁（裝備四欄設計 4.6）只是換一頁：沒有別的事（訊息、數值變化、引導）就不寫紀錄，不然每切一次多一則「鐵匠鋪」
             quiet = kind == "smith" and arg.startswith("page:") and not (entry.lines or entry.changes or entry.guide)
-            quiet = quiet or (kind == "bounty" and arg.partition(":")[0] in bounties.BROWSE_VERBS and not (entry.changes or entry.guide)
-                              and all(bounties.is_browse_line(line) for line in entry.lines))
+            quiet = quiet or (kind == "bounty" and arg.partition(":")[0] in bounty_base.BROWSE_VERBS and not (entry.changes or entry.guide)
+                              and all(bounty_base.is_browse_line(line) for line in entry.lines))
             quiet = quiet or (picked_only and entry.lines in [[reply] for reply in features_core.pick_replies()]
                               and not (entry.changes or entry.guide))
             if not quiet:
@@ -2048,8 +2037,7 @@ class Game:
         # （fs：「作罷」「<這一趟>・<所在>」，全部拆包第 34 批換成軍情包 choose 掛鉤的 Outcome.title，拿掉）
         # （road：折返跟「前往」同一個標題、路上小事寫它自己的名字，全部拆包第 47 批換成移動包 choose 掛鉤的 Outcome.title，拿掉）
         # （opp：機緣的標題，全部拆包第 34 批換成軍情包 choose 掛鉤的 Outcome.title，拿掉）
-        if kind == "bounty":
-            return bounties.BOARD
+        # （bounty：「懸賞榜」，全部拆包第 45 批換成懸賞榜包 choose 掛鉤的 Outcome.title，拿掉）
         # （smith：鐵匠鋪的標題，全部拆包第 41 批換成鐵匠鋪包 choose 掛鉤的 Outcome.title，拿掉）
         # （market：馬市的標題，全部拆包第 42 批換成裝備包 choose 掛鉤的 Outcome.title，拿掉）
         # （donate、dadian 的標題：全部拆包第 43 批換成銀兩出口包 choose 掛鉤的 Outcome.title 與 act 子動詞的 Verb.title，拿掉）
@@ -2086,7 +2074,7 @@ class Game:
             "recruit": f"招募・{here}", "rest": f"調息・{here}", "summons": f"應召・{here}",
             "duty": f"{duty.name if duty else '守勢'}・{here}", "convoy": f"接下糧車・{here}",
             "rank2": f"{action2.name if action2 else '第二階行動'}・{here}",
-            "bounties": f"{bounties.BOARD}・{here}",
+            # （bounties：「懸賞榜・此地」由懸賞榜包的 act 子動詞給，上面 owned 那一行；全部拆包第 45 批）
             # （smith：「鐵匠鋪・此地」由鐵匠鋪包的 act 子動詞給，上面 owned 那一行；全部拆包第 41 批）
             # （market：「馬市・此地」由裝備包的 act 子動詞給，上面 owned 那一行；全部拆包第 42 批）
             # （arena：「擂台・此地」由單挑包的 act 子動詞給，上面 owned 那一行；全部拆包第 12 批）
@@ -2339,12 +2327,7 @@ class Game:
             return self._rank_action(action_id)
         if what == "convoy":
             return self._take_convoy()
-        if what == "bounties":
-            p = self.state.player
-            # 打開懸賞榜（見 _bounty_options），不花體力；每次打開都從第二層開始（第三層是替一張求兵挑東西）
-            p.picking_bounty, p.bounty_pick, p.shop_clue = True, None, ""
-            self._shop_say("enter")  # 店面上榜吏那一句（店面獨立介面設計 1.4）
-            return [f"你擠到{bounties.BOARD}前，看上面貼了些什麼。"]
+        # （bounties：打開懸賞榜，全部拆包第 45 批換成懸賞榜包的 act 子動詞〔上面 features_core.act 接走〕，拿掉）
         # （smith：打開鐵匠鋪，全部拆包第 41 批換成鐵匠鋪包的 act 子動詞〔上面 features_core.act 接走〕，拿掉）
         # （market：打開馬市，全部拆包第 42 批換成裝備包的 act 子動詞〔上面 features_core.act 接走〕，拿掉）
         # （act:arena：打開擂台由單挑包的 act 子動詞接走，最上面 features_core.act 那一行；全部拆包第 12 批）
@@ -2602,80 +2585,43 @@ class Game:
     def _audience_options(self) -> list[Option]:
         return socialize_menus.audience_options(self)
 
+    # ── 懸賞榜：本體在 tianxia/features/bounties/（全部拆包第 45 批），這裡留一行委派 ─────
     def _bounty_options(self) -> list[Option]:
-        """懸賞榜的第二層選單（bounties.py）：交得出的求兵每張一顆「交出…」（按了到第三層挑一件；排最前面，當場就能交），
-        手上的每一張一顆「放棄」，榜上其他看得到的每一張一顆「揭下」（揭不了的灰掉、寫為什麼），交不出的求兵收成一行灰掉的，
-        最後是永遠按得下去的「返回」；上面全空（榜開著時單被別人交光）就多一行灰掉的 bounty:empty（FB-156）。都不花體力。列的是 bounties.visible（別的陣營的、自己交過的不列），跟閒著的選單寫的張數一樣
-        （灰掉那一行照它包含幾張算）。bounty_pick 指著一張還交得出的求兵時整份換成第三層（bounties.hand_in_options）；
-        那一張下榜了、交不出了就當它不存在，照第二層畫（懸賞榜設計 4.3、4.4）。"""
-        s, c = self.state, self.content
-        shown = bounties.visible(s, c)
-        picked = next((b for b in shown if b.id == s.player.bounty_pick and b.kind in bounties.GIVE_KINDS), None)
-        items = bounties.fitting(s, c, self.world, picked) if picked is not None else []
-        if items:
-            return bounties.hand_in_options(s, c, self.world, picked, items)
-        mine = {b.id for b in bounties.mine(s, c)}
-        ready, opts, stuck = [], [], []
-        for b in shown:
-            if b.kind in bounties.GIVE_KINDS:  # 求兵不用揭
-                have = bounties.fitting(s, c, self.world, b)
-                if have:
-                    ready.append(Option(id=f"bounty:pick:{b.id}", label=bounties.pick_label(s, c, b, len(have))))
-                else:
-                    stuck.append(b)
-                continue
-            line = (f"{bounties.issuer(c, b)}・{bounties.title(c, b)}：{bounties.how(c, b, self.state)}"
-                    f"（{bounties.reward_text(s, c, b)}；{bounties.due_line(s, c, b)}）")  # 期限與名額（FB-121 第 5 件）
-            if b.id in mine:
-                opts.append(Option(id=f"bounty:drop:{b.id}", label=f"放棄 {line}"))
-                continue
-            problem = bounties.take_problem(s, c, b)
-            opts.append(Option(id=f"bounty:take:{b.id}", label=f"揭下 {line}" + (f"（{problem}）" if problem else ""),
-                               enabled=problem is None))
-        if stuck:
-            kept = {b.id: tail for b in stuck if (tail := bounties.only_original(s, b))}  # 只有神器原品或本命兵器對得上的那幾張照實寫（FB-145）
-            opts.append(Option(id="bounty:none", label=bounties.stuck_label(c, stuck, kept), enabled=False))
-        if not ready and not opts:  # 榜開著的時候，看得到的單被別人交光了：不能只剩「返回」（FB-156）
-            opts.append(Option(id="bounty:empty", label=bounties.BOARD_EMPTY, enabled=False))
-        return ready + opts + [Option(id="bounty:back", label="返回")]
+        return bounties_actions.options(self)
 
-    def _bounty(self, arg: str) -> list[str]:
-        """懸賞榜上的選擇：揭下、放棄、交出…（到第三層挑一件）、回到懸賞榜、交出，或返回（收起懸賞榜）。做完榜還開著，可以接著挑。
-        交出的 id 是「give:懸賞 id:東西 id」：兵器 id「兵:3」帶冒號，懸賞 id（b17）沒有，所以只切一次。"""
-        s, c = self.state, self.content
-        verb, _, rest = arg.partition(":")
-        if verb == "back":
-            bounties.close_board(s.player)
-            return ["你離開了懸賞榜。"]
-        if verb == "take":
-            b = next((x for x in bounties.open_bounties(s, c) if x.id == rest), None)
-            self._shop_after(bounties.take_problem(s, c, b) if b is not None else bounties.GONE, "take", shopview.board_key)  # 1.4
-            return bounties.take(s, c, rest)
-        if verb == "drop":
-            msgs = bounties.drop(s, c, rest)
-            self._shop_say("refused" if msgs == [bounties.NOT_HELD] else "drop")
-            return msgs
-        if verb == "pick":
-            b = next((x for x in s.world.bounties if x.id == rest), None)
-            if b is None:
-                self._shop_say("refused")
-                return [bounties.GONE]
-            s.player.bounty_pick = rest
-            self._shop_say("pick")
-            return [bounties.pick_line(c, b)]
-        if verb == "unpick":
-            s.player.bounty_pick = None
-            return [bounties.UNPICKED]
-        if verb == "give":
-            bounty_id, _, item = rest.partition(":")
-            msgs = bounties.give(s, c, self.world, bounty_id, item)
-            if msgs[0].startswith(bounties.GIVEN_PREFIX):
-                s.player.bounty_pick = None  # 交完回到第二層，可以接著交別張
-                self._shop_say("give")
-            else:
-                self._shop_say("refused")
-            return msgs
-        return ["（此刻無法這麼做。）"]
+    def _bounty(self, arg: str) -> list[str]:  # tests/gear/test_shop2.py 直接叫（同 _smith）
+        return bounties_actions.bounty(self, arg)
+
+    def _bounty_deliver(self) -> None:  # sync 中段（退押金、作廢）
+        bounties_actions.deliver(self)
+
+    def _bounty_post_auto(self) -> None:  # own_turn_checks 暫停那一道之後（系統通緝）
+        bounties_actions.post_auto(self)
+
+    def _bounty_stale(self, arg: str) -> list[str]:  # choose 前段 FB-162（回 Refused，choose_unlisted 回 list，留原位）
+        return bounties_actions.stale(self, arg)
+
+    def _bounty_status(self) -> list[dict]:  # status_data 的懸賞卡
+        return bounties_actions.status(self)
+
+    def _raid_bounty(self, target: str) -> list[str]:  # 查詢服務（截殺、設伏打贏；事件 raid_win 的發布點在包裡）
+        return bounties_actions.raid_bounty(self, target)
+
+    # 人物情誼包回答懸賞榜包（道謝信、守約、兌現；services.py 二、查詢服務 # bounties）
+    def _letter_thank(self, task) -> list[str]:
+        return companions_actions.letter_thank(self, task)
+
+    def _parley_settle_task(self, task_id: str, cid: str | None) -> bool:
+        return companions_parley.settle_task(self, task_id, cid)
+
+    def _parley_keep(self, cid: str, cond: str) -> None:
+        companions_parley.keep(self, cid, cond)
+
+    def _parley_owed_line(self, name: str) -> str:
+        return companions_parley.owed_line(name)
+
+    def _parley_ask_label(self, ask_id: str) -> str:
+        return companions_parley.ask_label(self, ask_id)
 
     def _smith_options(self) -> list[Option]:
         return smithy_shelf.smith_options(self)
@@ -2711,7 +2657,7 @@ class Game:
             return "arena"
         # （坐在擂台邊：單挑包的店面登記，最後那一行 features_core.shop_open；全部拆包第 12 批）
         if p.picking_bounty:
-            return "board" if bounties.board_here(s, c) else None
+            return "board" if bounty_base.board_here(s, c) else None
         if p.picking_smith:
             return "smith" if p.smith_draft is None and equipment.smith_open(s, c) else None
         if p.picking_market:
@@ -4881,21 +4827,6 @@ class Game:
         """玩家互動包 raid_actions.fled 的一行委派（全部拆包第 38 批；包裡經 ctx 叫；scripts/sim_season_one.py 換掉它數跑掉幾次）。"""
         return peers_raid_actions.fled(self, other)
 
-    def post_wanted(self, other: Game, amount: int) -> list[str]:
-        """通緝 other（玩家卡的「通緝」）：押金從你身上扣、掛上懸賞榜（bounties.post）；成了寫一則江湖紀錄、存季。"""
-        msgs = bounties.post(self.state, self.content, other.state, amount)
-        if msgs and msgs[0].startswith("你押了"):
-            self._write(bounties.BOARD, msgs)
-            self._save_season()
-        return msgs
-
-    def _raid_bounty(self, target: str) -> list[str]:
-        """截殺打贏、揭了通緝他的懸賞：交差（賞銀、散人的俠名），補進這一則江湖紀錄。"""
-        msgs = self.publish("raid_win", target)  # 事件 raid_win（第 26 批）：通緝交差
-        if msgs and self._draft is None:
-            self._write(bounties.BOARD, msgs)
-        return msgs
-
     def _raid_spoils(self, loser: Game, evil: int = 0) -> RaidSpoils:
         """玩家互動包 raid_actions.take_spoils 的一行委派（全部拆包第 38 批；包裡經 ctx 叫；scripts/sim_season_one.py 換掉它）。"""
         return peers_raid_actions.take_spoils(self, loser, evil)
@@ -6275,7 +6206,7 @@ class Game:
             "ranger": ranger.status(s, c),  # 散人的遊俠名號（名號、階、俠名、下一階）；陣營的人、劇本沒有陣營、名聲開著是 None
             "renown": renown.status(s, c),  # 名聲（狀態列 1B、2C 的稱號與說明卡）；名聲關著是 None
             # 手上揭了的懸賞（標題、怎麼完成、賞、期限與名額），加上身上有合用東西的求兵（多一個 have）；懸賞榜關著是空的
-            "bounties": bounties.status(s, c, self.world),
+            "bounties": self._bounty_status(),
             # 武學譜（口訣與秘方）：這一季聽過口訣或合中過的秘方，一條一筆 {"clues": [聽過的口訣], "solved": 名號或 None}
             "manual": secret_recipes.view(s, c, self.world),
             "manual_total": secret_recipes.progress(s, c, self.world)[1],  # 武學譜入口的分母：這一季全服共有幾條（不是「你聽過的」）

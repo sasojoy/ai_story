@@ -6,7 +6,6 @@ _deliver_echoes 與 deliver_notices 之間），所以 Game 留一行委派原�
 """
 from __future__ import annotations
 
-from tianxia import bounties  # 過渡：待搬（懸賞 bounties）
 from tianxia import calendar, renown, wins
 from tianxia import figures  # 共用規則層（大勢人物 figures，第 40 批收進）
 from tianxia.core.option import Option
@@ -95,7 +94,7 @@ def act(ctx, arg: str) -> list[str]:
         hours = figure_aid.visit(s, c, fid)
         msgs = [figure_aid.VISIT_DONE.format(name=fig.name, hours=figure_aid.hours_text(hours))]
     if verb in ("guard", "rally") and fig.character:  # 求援委託（第三批）：護衛、犒軍他也算辦成
-        msgs += bounties.on_aid(s, c, fig.character)
+        msgs += ctx.publish("aid", fig.character)
     if ctx._draft is not None:
         ctx._draft.changes += changes
     if season_one(c, s.world) and cfg.contrib_push:

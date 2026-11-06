@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tianxia import atlas  # 共用規則層（輿圖：路程、走法、抵達時刻；第 50 批收進）
-from tianxia import bounties  # 過渡：待搬（第 45 批）
+from tianxia.core import bounty_base
 from tianxia import equipment, journal, mounts, precise
 from tianxia.core import features as features_core
 from tianxia.journal import Draft
@@ -28,7 +28,7 @@ def depart(ctx: Game, route: atlas.Route, mode: TravelMode, pace: float | None =
     新路程整個取代原本那一趟；原本已經扣的趕路體力不退。剛出發就折返（見 atlas.returns_at_once）不扣體力、當下就回到原地。
     騎著馬的體力與步調照出發這一刻的坐騎（裝備四欄 5.3）。"""
     s, c = ctx.state, ctx.content
-    bounties.close_board(s.player)  # 動身了：城鎮的第二層選單（懸賞榜、鐵匠鋪）收起來，不留在路上
+    bounty_base.close_board(s.player)  # 動身了：城鎮的第二層選單（懸賞榜、鐵匠鋪）收起來，不留在路上
     s.player.parley_escort = None  # NPC 智能 2.1：自己動身就不是誰帶的路了（帶路那一支出發之後再寫回去）
     equipment.close_smith(s.player)  # 鐵匠鋪連同打造到一半的單子、停在哪一頁一起收
     mounts.close_market(s.player)  # 馬市也收起來（裝備四欄 5.5）
