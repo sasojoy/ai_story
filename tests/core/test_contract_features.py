@@ -393,4 +393,4 @@ def test_the_core_and_the_packages_take_every_status_slot_exactly_once(monkeypat
     assert core.keys() == features_core.STATUS_ORDER.keys()
     for table, order in features_core.STATUS_ORDER.items():
         own = set(features_core.status_hooks(table))
-        assert not own & core[table] and own | core[table] == set(order), table
+        assert not own & core[table] and set(order) <= own | core[table], table  # 表外的格是包接在表尾的（第二輪第 74 批），這裡只管表上的一格不少
