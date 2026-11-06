@@ -18212,7 +18212,8 @@ class MapScenario(Scenario):
         self.three_views(self.GUAN, "開關都還原")
 
     def web(self) -> None:
-        """網頁檔：map.js 的整檔 sha256、長度、型別與快取標頭；載入它的那一行與各檔的版本號（index.html 的 script／link）。"""
+        """網頁檔：map.js 的整檔 sha256、長度、型別與快取標頭；index.html 載入 map.js 與 app.js 的那兩行與先後、樣式表。
+        app.js 不比整檔雜湊、也不比別的 script：這一軌守的是 map.js，別的批把一段搬出 app.js、開自己的檔是刻意的（例：web/legacy.js），比了只會紅。"""
         import re
 
         who = self.GUAN
@@ -18220,10 +18221,11 @@ class MapScenario(Scenario):
         client = self.clients[who]
         for url in ("/static/map.js", "/static/app.js", "/static/沒有這個檔.js"):
             r = client.get(url)
-            emit(f"GET {url}", [r.status_code, len(r.content), hashlib.sha256(r.content).hexdigest(),
-                                r.headers.get("content-type"), r.headers.get("cache-control")])
+            body = [] if url == "/static/app.js" else [len(r.content), hashlib.sha256(r.content).hexdigest()]
+            emit(f"GET {url}", [r.status_code, *body, r.headers.get("content-type"), r.headers.get("cache-control")])
         page = client.get("/")
-        emit("GET / 載入的檔", [page.status_code, re.findall(r'<script src="([^"]+)"', page.text),
+        scripts = re.findall(r'<script src="([^"]+)"', page.text)
+        emit("GET / 載入的檔", [page.status_code, [s for s in scripts if s.rsplit("/", 1)[-1] in ("map.js", "app.js")],
                                  re.findall(r'<link rel="stylesheet" href="([^"]+)"', page.text)])
 
     def road(self) -> None:
