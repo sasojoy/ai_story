@@ -566,6 +566,11 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 # （tests/core/test_explain.py、scripts/measure_challenge.py）；`_present`、`_action_costs`、`_hint` 已經在一、共用服務
 - `ctx._socialize(prepared)`（交友那一下的本體：交友求見包）、`ctx._challenge(fid)`（挑戰本人按下去：大勢人物包）、`ctx._figure_squad(fid)`（挑戰本人對手那一路，江湖水漲算過：大勢人物包）
 
+# core_bots（全部拆包第 60 批；假人殼收尾，計畫 docs/superpowers/plans/2026-11-06-假人殼收尾-第60批.md 七、九）：act: 那幾格的分數搬進包的 bots.py，條件經 ctx 叫，
+# scripts/same_behavior.py 的 abacus 軌換掉 Game 上的名字時才打得到（`_side`、`challenge_odds`、`outing_plan`、`duel_on` 已經在清單上）
+- `ctx.fatigue_next()`（探索包：下一場的疲勞）、`ctx.socialize_starts_dialogue()`、`ctx.socialize_is_futile()`、`ctx.can_meet_figure(fid)`（交友求見包：開口是不是對話、會不會白跑、求見見不見得到）、
+  `ctx.sortie_mode()`、`ctx.duel_convoy_here()`（出陣包：這一下攻或守、運糧隊在不在這裡）
+
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """
 from __future__ import annotations

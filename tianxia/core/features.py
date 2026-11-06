@@ -20,6 +20,7 @@
 | on_season_end(ctx)、on_season_start(ctx, old) | Game._reset_player_for_new_season（舊的那一季要丟之前；新的存檔接上之後、開場那一則之前） |
 | on_drop_stale(ctx) | Game._drop_stale_references 最後 |
 | bot_pick(ctx, option)、bot_always | bot_policy.score（假人看到這一顆的分數，None 是不按）；bot.pick 排除的前綴（永遠按得下去的） |
+| bot_idle(ctx, option) | core_bots（全部拆包第 60 批）：bot.pick 排除裡有條件、或要比相等的那幾顆（此刻按了也白按）；前綴放不下才寫這一格。不問 enabled（舊濾網不看開關，關著的包選單上本來就沒有它們） |
 | admin_tools(shell)、routes(shell) | server：/api/do/{op} 的管理者工具、掛路由（shell 是 server 模組） |
 | threads(shell) | server.main（殼開、測試停：只有 main 叫 start_threads，測試不叫；不回東西。全部拆包第 52 批，開給戰記與第 53 批的看守） |
 | check_content(content, need)、web、content | content.validate（關著的包照驗）；index.html 的檔；content.py 讀的檔。check_content **手冊 3.3 表外**（見下） |
@@ -51,7 +52,8 @@
 | shops()（Shop） | 店面登記：店裡那一串（_everyday_options）、進店那一顆、哪一間開著（_shop_open）、動身收店（_depart）、此地不開了收店（sync、_drop_stale_references） |
 | verbs()（Verb） | act 子動詞：_act 最前面、_action_title、行動列那一格（_everyday_options）、行動列底下那一行（action_notes）、只打開一張卡的回話（choose）；
   這一下打哪一路（_fight_squad 最前面：大場面判讀問；sortie：全部拆包第 17 批多開的一格 squad）。帶後綴的 act:<verb>:<後綴>（全部拆包第 57 批：tail_run、tail_title、tail_squad）問同一張表；
-  只有 act:heal 與舊探索 act:explore 留在 _act 原位（計畫 docs/superpowers/plans/2026-11-06-分派標題收接縫-第57批.md 第四節） |
+  只有 act:heal 與舊探索 act:explore 留在 _act 原位（計畫 docs/superpowers/plans/2026-11-06-分派標題收接縫-第57批.md 第四節）。
+  假人（core_bots，全部拆包第 60 批：bot、tail_bot、bot_skip、tail_bot_skip）：bot_policy.score 的 act: 那一段問 act_score，bot.pick 問 bot_idle；都不問 enabled（計畫 docs/superpowers/plans/2026-11-06-假人殼收尾-第60批.md 第一節） |
 | world()（WorldHook） | 世界層的格（core_world：全部拆包第 25 批）：world.advance_world_state 每一步、season_events 的週初與每天、settle_season_start、
   end_season、_open_claimed；sqlite_world 的開季與換季；figure_life.tick 每一位對話人物（life，第 40 批）。照檔尾那張寫死的順序表 WORLD_ORDER 一格一格叫（包與還沒成包的舊模組穿插），不問 enabled |
 | effects()（EffectHook） | 一則效果的格（core_effects：全部拆包第 32 批）：rules.apply_effect 從頭到尾一段一格，照檔尾寫死的順序表 EFFECT_ORDER 一格一格叫
@@ -117,6 +119,12 @@ class Verb:
     tail_run: Callable[[Any, Any, str], list[str] | None] | None = None  # Game._act 最前面：按下去（ctx, prepared, 後綴）
     tail_title: Callable[[Any, str], str | None] | None = None  # Game._action_title：這一下江湖紀錄的整個標題（ctx, 後綴）
     tail_squad: Callable[[Any, str], Squad | None] | None = None  # Game._fight_squad 最前面：這一下打哪一路（ctx, 後綴）
+    # core_bots（全部拆包第 60 批）：假人怎麼按這一格。bot、tail_bot 是 bot_policy.score 問的分數（ctx, 名牌[, 後綴]），回 None 是不按；這一格沒寫（None）算沒主人，
+    # bot_policy 照舊落到 ACT_SCORES.get(arg, 0.0)，0.0 是隨機挑得到的、不是不按，別寫成 never。bot_skip、tail_bot_skip 是 bot.pick 不按（只是打開一張卡、一直按得下去）
+    bot: Callable[[Any, Any], float | None] | None = None
+    tail_bot: Callable[[Any, Any, str], float | None] | None = None
+    bot_skip: bool = False
+    tail_bot_skip: bool = False
 
 
 @dataclass(frozen=True)
@@ -163,6 +171,7 @@ class FeatureHooks(Protocol):
     def on_season_start(self, ctx: Game, old: GameState) -> None: ...
     def on_drop_stale(self, ctx: Game) -> None: ...
     def bot_pick(self, ctx: Game, option: Option) -> float | None: ...
+    def bot_idle(self, ctx: Game, option: Option) -> bool: ...  # core_bots（全部拆包第 60 批）：不問 enabled
     def admin_tools(self, shell: Any) -> dict[str, AdminTool]: ...
     def routes(self, shell: Any) -> Any: ...
     def check_content(self, content: Content, need: Callable[[bool, str], None]) -> None: ...
@@ -244,6 +253,9 @@ class Feature:
 
     def bot_pick(self, ctx: Game, option: Option) -> float | None:
         return None
+
+    def bot_idle(self, ctx: Game, option: Option) -> bool:
+        return False
 
     def admin_tools(self, shell: Any) -> dict[str, AdminTool]:
         return {}
@@ -425,6 +437,25 @@ def bot_pick(ctx: Game, option: Option) -> tuple[bool, float | None]:
 def bot_always() -> tuple[str, ...]:
     """各包宣告永遠按得下去的前綴（bot.pick 排除；關著的包也算，選單上本來就沒有它們）。"""
     return tuple(p for f in registered() for p in f.bot_always)
+
+
+# core_bots（全部拆包第 60 批「假人殼收尾」；計畫 docs/superpowers/plans/2026-11-06-假人殼收尾-第60批.md 第一節）
+
+
+def bot_idle(ctx: Game, option: Option) -> bool:
+    """這一顆是不是「一直按得下去、按了也白按」（bot.pick 排除，不然「沒得按就推進時間」的訊號會失效）：包宣告的前綴（bot_always）、
+    act:<verb> 那一格的 bot_skip、act:<verb>:<後綴> 那一格的 tail_bot_skip、選項主人的 bot_idle（有條件的、要比相等的）。都是只讀的濾網，互相沒有先後；
+    不問 enabled（舊濾網不看開關，關著的包選單上本來就沒有它們）。"""
+    oid = option.id
+    if oid.startswith(bot_always()):
+        return True
+    kind, _, rest = oid.partition(":")
+    if kind == "act":
+        head, sep, _ = rest.partition(":")
+        if any(v.tail_bot_skip if sep else v.bot_skip for v in _verbs(None, head)):
+            return True
+    owner = owner_of(oid)
+    return owner is not None and owner.bot_idle(ctx, option)
 
 
 def admin_tools(shell: Any) -> dict[str, AdminTool]:
@@ -657,6 +688,26 @@ def act_squad(ctx: Game, verb: str) -> Squad | None:
         if got is not None:
             return got
     return None
+
+
+# core_bots（全部拆包第 60 批「假人殼收尾」）
+
+
+def never(*_args: Any) -> None:
+    """Verb.bot、tail_bot 的「假人不按」：只是打開一張卡、或不交給打分數的那幾格。"""
+    return None
+
+
+def act_score(ctx: Game, verb: str, profile: Any) -> tuple[bool, float | None]:
+    """(這一格有沒有主人打分數, 假人的分數)：bot_policy.score 的 act: 那一段問。主人回 None 是不按；那一格沒寫算沒主人（owned=False），bot_policy 照舊落到
+    ACT_SCORES.get(arg, 0.0)。不問 enabled（原位不看開關，同 act、act_title；不開順序表：一格一主，沒有「同一下誰先」，第 57 批第一節）。帶後綴的問 tail_bot。"""
+    head, sep, tail = verb.partition(":")
+    for v in _verbs(None, head):
+        if sep and v.tail_bot is not None:
+            return True, v.tail_bot(ctx, profile, tail)
+        if not sep and v.bot is not None:
+            return True, v.bot(ctx, profile)
+    return False, None
 
 
 # core_world（全部拆包第 25 批「世界層掛鉤」；計畫 docs/superpowers/plans/2026-11-05-世界層掛鉤-第25批.md 1.4、2.1）
