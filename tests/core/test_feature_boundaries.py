@@ -1852,7 +1852,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # seal（全部拆包第 27 批：tianxia/seal.py；包名跟別名同字，同 cultivation、guide）
                          "seal": "seal",
                          # tale（全部拆包第 52 批：tianxia/tale.py；包名跟別名同字，同 cultivation、guide）
-                         "tale": "tale"}
+                         "tale": "tale",
+                         # notify（全部拆包第 53 批：tianxia/notices.py；包名不叫 push，tianxia/push.py 是推力規則）
+                         "notices": "notify"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 

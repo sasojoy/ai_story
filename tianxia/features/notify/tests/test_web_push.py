@@ -1,5 +1,6 @@
-"""手機通知（減法季整合設計第十章「回來的理由」，批 9）：Web Push 的加密與簽名（server_push）、五種事（tianxia/notices.py）、
-09:00 來信（letters.mail_day、Game.morning_mail）、伺服器的訂閱 API 與看守（server.notice_round）。"""
+"""手機通知（減法季整合設計第十章「回來的理由」，批 9）：Web Push 的加密與簽名（features/notify/webpush.py，舊名 server_push 再匯出）、
+五種事（features/notify/notices.py，舊名 tianxia/notices.py）、09:00 來信（letters.mail_day、Game.morning_mail）、伺服器的訂閱 API 與看守
+（features/notify/routes.py，殼的 server.notice_round）。全部拆包第 53 批從 tests/server/ 整檔搬進包，只改說明字。"""
 from __future__ import annotations
 
 import json
@@ -27,6 +28,7 @@ HOUR = 3600
 
 # ── 加密與簽名 ──
 
+@pytest.mark.smoke
 def test_encryption_matches_the_rfc_8291_example():
     """RFC 8291 附錄 A 的例子：同一把臨時金鑰、同一個 salt，加密出來一個位元組都不差。"""
     key = ec.derive_private_key(int.from_bytes(server_push.unb64url("yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw"), "big"), ec.SECP256R1())

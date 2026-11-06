@@ -81,10 +81,9 @@ from tianxia.core import features as features_core  # 功能包：殼照 FEATURE
 from tianxia.core import omen_base  # 門下頁的伏筆物品：核心的查詢服務（全部拆包第 40 批，原本經舊名 foreshadow 讀軍情包）
 from tianxia.features.map import views as map_views  # 輿圖的 /api/map 資料與底圖快取：全部拆包第 49 批搬進輿圖包（殼留同一個物件的別名）  # 殼留薄包裝：`map_view` 要 `md`（第 49 批 PM 認定第 10 條）
 from tianxia.features.feast import rules as feasts  # 宴客自己寫的敬酒詞：鎖外評分（三段式還在殼裡，過渡）
+from tianxia.features.notify import routes as notify_routes  # 手機通知：全部拆包第 53 批搬進手機通知包；殼留 state 與 4 個一行薄包裝（main 印一行、same_behavior 與測試叫）
 from tianxia.features.tale import routes as tale_routes  # 戰記：全部拆包第 52 批搬進戰記包；殼留 state 與 8 個一行薄包裝（act、look、main_view 原位叫）
 from tianxia.models import FREE_TEXT_MAX
-from tianxia.notices import KINDS as NOTICE_KINDS
-from tianxia.notices import current as current_notices
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.sqlite_world import open_world
 from tianxia.ollama_client import OllamaClient
@@ -770,85 +769,21 @@ PUSH_NOT_HERE = "這台裝置還沒開手機通知：先勾「手機通知」。
 VAPID_FILE = ROOT / ".local" / "webpush_vapid.pem"  # 這台主機的 VAPID 金鑰：第一次開時產生；換了它，所有人要重開一次通知
 
 
-def push_store_path() -> Path:
-    """訂閱的小檔：遊戲資料庫旁邊、同名多「-push.sqlite」（TIANXIA_DB 換了檔，它跟著換）。"""
-    db = default_path()
-    return db.with_name(f"{db.stem}-push.sqlite")
-
-
 def web_push_line(config) -> str:
-    if not config.web_push.enabled:
-        return "手機通知：關"
-    if not server_push.AVAILABLE:
-        return "手機通知：關（這台主機沒裝 cryptography：pip install -r requirements.txt）"
-    return f"手機通知：開（每 {config.web_push.watch_seconds:g} 秒看一次開了通知的人；金鑰 {VAPID_FILE}）"
+    return notify_routes.web_push_line(sys.modules[__name__], config)
 
 
 def start_web_push(config, post=None) -> server_push.WebPush | None:
-    """開關開著、cryptography 在：建 WEB_PUSH、開看守執行緒（daemon）；不然什麼都不做、回 None。只有 main() 與測試呼叫。
-    簽名的 sub 照 TIANXIA_PUBLIC_URL（固定網域），沒設就寫固定網域本身（推送服務只認 https 或 mailto）。"""
-    global WEB_PUSH, NOTICE_THREAD
-    if not config.web_push.enabled or not server_push.AVAILABLE:
-        return None
-    subject = os.environ.get("TIANXIA_PUBLIC_URL") or "https://tianxiadashi.com"
-    WEB_PUSH = server_push.WebPush(server_push.PushStore(push_store_path()), server_push.Vapid(VAPID_FILE, subject), post=post)
-    failures = _StepFailures(time.monotonic, "通知的看守")
-
-    def loop() -> None:
-        while not NOTICE_STOP.wait(config.web_push.watch_seconds):
-            try:
-                notice_round()
-            except Exception as e:  # noqa: BLE001  看守不能因為一輪出錯就停
-                failures.failed(e)
-            failures.tick()
-
-    NOTICE_THREAD = threading.Thread(target=loop, daemon=True, name="notice-watch")
-    NOTICE_THREAD.start()
-    return WEB_PUSH
+    """看守與訂閱的本體在 tianxia/features/notify/routes.py（全部拆包第 53 批）；main() 經 features_core.start_threads 開、測試直接叫這一行。"""
+    return notify_routes.start_web_push(sys.modules[__name__], config, post)
 
 
 def _notice_keys(game: Game, account_key: str, now: float) -> tuple[list, bool]:
-    """行動鎖內：到了送信的時刻先替他送今天的信（送了就存角色；開著的分頁照常輪詢就看得到，不叫 HUB：只有動作的端點叫，
-    見 _tell_tabs），回傳（五種事, 正在玩）。
-    正在玩：quiet_seconds 之內同步過（分頁開著），畫面上已經看得到，不必再跳。"""
-    day = letters.mail_day(game.content, game.state.world, now)
-    if day is not None and MAIL_DONE.get(account_key) != day:
-        if game.morning_mail(now):
-            open_characters().save(game.state)
-        MAIL_DONE[account_key] = day
-    last = game.state.last_real
-    busy = last is not None and now - last < game.content.config.web_push.quiet_seconds
-    return current_notices(game.state, game.content, game.world.get_battle(), game.world.sortie_duels()), busy
+    return notify_routes._notice_keys(sys.modules[__name__], game, account_key, now)
 
 
 def notice_round(clock: Callable[[], float] = time.time) -> int:
-    """看守的一輪：開了通知的每一個帳號進一次鎖（_notice_keys），鎖外比上一輪、新的才跳（一人一輪最多 per_round 則，
-    多的下一輪再跳）。第一次看到這個帳號只記下、不跳。回傳跳了幾則（測試用）。"""
-    push = WEB_PUSH
-    if push is None:
-        return 0
-    cfg = CONTENT.config.web_push
-    sent_total = 0
-    for account_key in push.store.accounts():
-        account = account_store().get(account_key)
-        if account is None or account.character is None:
-            continue
-        game = game_for(account.character)
-        with _locked(game):
-            now = clock()
-            notes, busy = _notice_keys(game, account_key, now)
-        keys = {n.key for n in notes}
-        seen = NOTICE_SENT.get(account_key)
-        if seen is None or busy:
-            NOTICE_SENT[account_key] = keys
-            continue
-        off = push.store.kinds_off(account_key)  # 設定頁關掉的那幾種：不跳，也記成看過（之後打開不會補跳一串舊的）
-        muted = {n.key for n in notes if n.key not in seen and n.kind in off}
-        fresh = [n for n in notes if n.key not in seen and n.kind not in off]
-        for n in fresh[:cfg.per_round]:
-            sent_total += bool(push.send(account_key, NOTICE_TITLE, n.text, tag=n.kind, now=now))
-        NOTICE_SENT[account_key] = (keys & seen) | muted | {n.key for n in fresh[:cfg.per_round]}
-    return sent_total
+    return notify_routes.notice_round(sys.modules[__name__], clock)
 
 
 # ── 事件旁白每週改寫（減法季整合設計第十章，批 10；tianxia/narration.py）──
@@ -3382,79 +3317,7 @@ async def api_events(request: Request):
     )
 
 
-def _web_push() -> server_push.WebPush:
-    push = WEB_PUSH
-    if push is None:
-        raise HTTPException(404)
-    return push
-
-
-@app.get("/api/push")
-def api_push(request: Request):
-    """手機通知（減法季批 9）：瀏覽器訂閱要的那一串公鑰，加上五種通知各開著沒（設定頁一種一個開關，預設全開）。開關關著 404。"""
-    push = _web_push()
-    off = push.store.kinds_off(_account(request))
-    return {"key": push.vapid.public, "kinds": {k: k not in off for k in NOTICE_KINDS}}
-
-
-@app.post("/api/push/prefs")
-def api_push_prefs(request: Request, body: dict = Body(...)):
-    """開或關一種通知：{kind, on}。存在這個帳號（每一台裝置一樣）。"""
-    push = _web_push()
-    kind = str(body.get("kind", ""))
-    if kind not in NOTICE_KINDS:
-        raise GameError("沒有這一種通知。")
-    off = push.store.set_kind(_account(request), kind, bool(body.get("on")))
-    return {"kinds": {k: k not in off for k in NOTICE_KINDS}}
-
-
-@app.post("/api/push/test")
-def api_push_test(request: Request, body: dict = Body(...)):
-    """設定頁「傳一則測試通知」：{endpoint}。當場對這一台送一則，送不出去把原因回給畫面（{sent: false, error}）。"""
-    push = _web_push()
-    account_key = _account(request)
-    endpoint = str(body.get("endpoint", ""))
-    device = next((d for d in push.store.devices(account_key) if d["endpoint"] == endpoint), None)
-    if device is None:
-        return {"sent": False, "error": PUSH_NOT_HERE}
-    why = push.deliver(device, NOTICE_TITLE, PUSH_TEST, tag="test")
-    return {"sent": why is None, "error": why or ""}
-
-
-@app.post("/api/push/subscribe")
-def api_push_subscribe(request: Request, body: dict = Body(...)):
-    """這台裝置開通知：{endpoint, keys: {p256dh, auth}, quiet}（瀏覽器 PushSubscription 的 JSON，多一個 quiet）。
-    位址不是認得的推送服務就不收。開了先把他身上現有的事記成看過（不會一開就跳一串舊信）；不是 quiet 就送一則「開了」的通知，
-    手機上當場看得到通不通（主機驗收也看這一則）。"""
-    push = _web_push()
-    account_key = _account(request)
-    endpoint = str(body.get("endpoint", ""))
-    keys = body.get("keys") if isinstance(body.get("keys"), dict) else {}
-    p256dh, auth = str(keys.get("p256dh", "")), str(keys.get("auth", ""))
-    if len(endpoint) > 1024 or not server_push.push_host_ok(endpoint) or not (40 <= len(p256dh) <= 200 and 8 <= len(auth) <= 64):
-        raise GameError("這個瀏覽器給的通知位址不對，換一個瀏覽器試試。")  # 待 joy 潤
-    push.store.add(account_key, endpoint, p256dh, auth, time.time(), CONTENT.config.web_push.max_devices)
-    game = _game(request)
-    with _locked(game):
-        notes = current_notices(game.state, game.content, game.world.get_battle(), game.world.sortie_duels())
-    NOTICE_SENT[account_key] = {n.key for n in notes}
-    if not body.get("quiet"):
-        threading.Thread(target=push.send, args=(account_key, NOTICE_TITLE, PUSH_WELCOME), kwargs={"tag": "welcome"}, daemon=True).start()
-    return {"on": True}
-
-
-@app.post("/api/push/unsubscribe")
-def api_push_unsubscribe(request: Request, body: dict = Body(...)):
-    """這台裝置關通知：{endpoint}。只刪得掉自己帳號的。"""
-    push = _web_push()
-    push.store.remove(str(body.get("endpoint", "")), _account(request))
-    return {"on": False}
-
-
-@app.get("/sw.js")
-def service_worker():
-    """手機通知的 service worker：放在根目錄，管得到整個網站（/static 底下的管不到 /）。"""
-    return Response((WEB / "sw.js").read_bytes(), media_type="text/javascript", headers=NO_CACHE)
+# 手機通知的五條 /api/push 與 /sw.js：本體在 tianxia/features/notify/routes.py（全部拆包第 53 批），殼照 FEATURES 掛（features_core.routers）。
 
 
 @app.get("/manifest.webmanifest")
@@ -3592,10 +3455,9 @@ def main(argv: list[str] | None = None) -> None:
     print(push_line(CONTENT.config), flush=True)
     start_push(CONTENT.config)  # 開關關著什麼都不做：HUB 是 None、/api/events 是 404
     print(web_push_line(CONTENT.config), flush=True)
-    start_web_push(CONTENT.config)  # 開關關著、沒裝 cryptography 什麼都不做：WEB_PUSH 是 None
     print(narration_line(CONTENT.config), flush=True)
     start_narration(CONTENT.config)  # 減法季的開關關著只建小檔、不開執行緒
-    features_core.start_threads(sys.modules[__name__])  # 各包的背景執行緒（殼開、測試停）。戰記：小檔一定建，執行緒照樣開（叫不動模型就寫模板版）
+    features_core.start_threads(sys.modules[__name__])  # 各包的背景執行緒（殼開、測試停）。戰記：小檔一定建，執行緒照樣開（叫不動模型就寫模板版）。手機通知：開關關著、沒裝 cryptography 什麼都不做（WEB_PUSH 是 None）
     if args.lan:
         print("已開放區網連線：同一個網路裡的裝置都連得到。", flush=True)
     # timeout_graceful_shutdown：uvicorn 關機時會等進行中的回應收完，而 SSE 串流永遠不會自己收完，Ctrl+C 一下就卡住

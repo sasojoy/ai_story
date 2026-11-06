@@ -68,6 +68,8 @@ from ..features import gear  # 裝備（馬市、換上、拆解、餵馬、寄�
 from ..features import seal  # 玉璽碎片的季流程：全部拆包第 27 批（沒有前綴、選項、選單、店面、路由；事件、世界層、效果的格都有表序，排在哪裡結果都一樣）
 # tale
 from ..features import tale  # 戰記：全部拆包第 52 批（只接 routes 與 threads，沒有選項、選單、店面；路徑與別的路由不重疊，順序不影響結果）
+# notify
+from ..features import notify  # 手機通知：全部拆包第 53 批（只接 routes 與 threads，沒有選項、選單、店面；五條 /api/push 與 /sw.js 的路徑跟別的路由不重疊，順序不影響結果）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -134,6 +136,8 @@ FEATURES: list[Feature] = [
     seal.FEATURE,
     # tale（排在最後〔照合併先後〕：只有 routes 與 threads，路徑與別的路由不重疊，順序不影響結果）
     tale.FEATURE,
+    # notify（排在最後〔照合併先後〕：只有 routes 與 threads，路徑與別的路由不重疊，順序不影響結果）
+    notify.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 
