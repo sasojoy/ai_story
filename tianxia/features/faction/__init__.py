@@ -116,7 +116,9 @@ class FactionFeature(Feature):
             from . import ending_actions, sides  # noqa: PLC0415
 
             self._status_slots = (
+                # 三方卡（減法季批 1，整合設計 3.4）：劇本沒有陣營、序章裡、休季沒有這個鍵
                 StatusHook("main", "sides_card", lambda ctx, frame: slot_some("sides_card", sides.sides_card(ctx))),
+                # 三陣營四勝利的結局卡（減法季批 3c；計畫 1.3 欄位表的 main.ending）：關著的季沒有這個鍵。批 3c 的「你這一步」與三方卡資料補在 week_card、sides_card 裡，這裡不另送一份
                 StatusHook("main", "ending", lambda ctx, frame: slot_some("ending", ending_actions.ending_card(ctx))),
             )
         return self._status_slots

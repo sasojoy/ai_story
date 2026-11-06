@@ -39,6 +39,7 @@ class TaleFeature(Feature):
         """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
         if self._status_slots is None:
             self._status_slots = (
+                # 江湖史最上面那排「戰記」：[{battle_id, title, season, result}]，新的在前；開關關著是空的（本體經殼的薄包裝 server.tale_index）
                 StatusHook("main", "tales", lambda ctx, frame: {"tales": frame.shell.tale_index(ctx)}),
             )
         return self._status_slots

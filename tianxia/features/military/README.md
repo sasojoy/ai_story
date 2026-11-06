@@ -85,3 +85,7 @@
 - 引導與網頁：`tianxia/features/guide/tests/test_opening.py`（2／9，`orders_view`）、`tests/map/test_weekcard.py`、`tests/core/test_prologue.py`（2／101）、`tests/web/test_prologue_web.py`（3／81）、`tests/web/test_jianghu_page_web.py`（1／134）
 - 別包叫進來的：`tianxia/features/sortie/tests/test_sortie.py`（出陣不花出陣次數）、`tests/server/test_server.py`（2／385）
 - 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/military/order_actions.py`
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `convoy`（軍令 `orders` 那一格留殼：本週卡也讀同一份）。

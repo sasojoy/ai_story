@@ -20,7 +20,7 @@
 **接到掛鉤的**：`_drop_stale_references` 的 `create.prune(s, c)` → `on_drop_stale`（原本接在 `arts_mod.prune` 之後、`p.naming` 之前，現在接在最後；`create.prune` 只動 `p.creating`，中間到 `features_core.on_drop_stale` 沒有任何一行讀 `creating`，結果不變）；`/api/forge_line` → `routes`。
 
 **還留在原位的**（`tests/core/test_feature_boundaries.py` 的 `GAME_DELEGATE_CALLERS` 逐條寫理由）：
-- `status_data` 的 `create` 鍵叫 `create_view`（狀態列的鍵順序，總表第 66 批）。
+- 狀態列的 `create` 那一格：`status_slots`（第 66 批；位置在 `STATUS_ORDER`）。`create_view` 委派留給測試。
 - 鎖外三段式的 B 段留在 `server.py`（總表第 69 批鎖外工作的掛鉤，同第 24 批 `sense_draw`）：`prepare_forge`（`naming.generate`）、`create_intent`（`create.read`）、`create_reread`（`create.read_or_none`）、`forge`／`_forge_without_naming`、`MENXIA_ACTIONS` 的 `forge`／`create_*` 八個、`api_menxia_do` 的 `forge` 分支、`menxia_view` 的 `forge_line` 與 `create`。
 - 假人三支（`bot.py`：`pick_forge`、`forge_and_cultivate`、`create_art`；`bot_policy.py`：`tend_arts`、`_forge`、`apply_job`；`bot_runner.py`：`_name_and_apply`）照舊直接叫 `Game` 的公開方法與 `create.allowed/price/forms_of/preset`（走別名），沒有 `bots.py`（手冊 3.8 之後才拆）。
 - `skillview`（`create_mod.icon_pose`、`marks_of`、`look_text`、`tier_of`）與 `fusion`（合成與揣摩，`SHARED_LATER`）照舊；包的 `actions.py` import 它們，行尾註「過渡：待搬」。
@@ -35,3 +35,7 @@
 **過渡 import**（註「過渡：待搬」）：`actions.py` 2 行（`fusion`、`skillview`，共用規則層 `SHARED_LATER`）、`create.py` 1 行（`annals`，行狀第 29 批）。核心本體與共用規則層（含新的 `pose`）不算過渡。舊模組 → 包多 1 個別名（`tianxia/create.py`）與 engine 委派的兩行 import（`craft_actions`、`create`），另有 `bot.py`、`skillview.py`、`server.py`、`scripts/` 走別名（舊模組 → 包 224 → 239）。共用規則層 64 → 65 個模組（新增 `pose`）；`SHARED_PENDING` 14 → 13 條。
 
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`status` 表 `create`。

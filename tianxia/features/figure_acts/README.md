@@ -49,3 +49,7 @@
   `tianxia/features/sortie/tests/test_sortie_rewards.py`（`tier4`）、`tests/seal/test_seal_revamp.py`（`figure_squad`）、`tests/seal/test_seal_engine.py`（16／41）、`tests/seal/test_seal_duel.py`（12／27）
 - 假人：`tests/bots/test_bot_policy.py` 這一類（`aid:`、`act:challenge:` 的分數）
 - 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/figure_acts/challenge.py`
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `plan`、`place_deeds`。

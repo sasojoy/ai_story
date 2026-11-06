@@ -74,7 +74,9 @@ class PeersFeature(Feature):
             from . import actions, invite_actions  # noqa: PLC0415
 
             self._status_slots = (
+                # 玩家卡要的邀請：收到的與發出去還在等的（第一季才有）
                 StatusHook("status", "invites", lambda ctx, frame: {"invites": invite_actions.status(ctx)} if rules.season_one(ctx.content, ctx.state.world) else {}),
+                # 此地還有誰（玩家之間的互動第一層）：[{name, side}]，路上、序章裡是空的；別人遞給你、還沒回的邀請（第二層），回應鈕是選單上的 invite: 選項
                 StatusHook("main", "peers", lambda ctx, frame: {"here": actions.peers_here(ctx), "calls": actions.calls_here(ctx)}),
             )
         return self._status_slots

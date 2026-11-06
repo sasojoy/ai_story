@@ -41,6 +41,7 @@ class NotifyFeature(Feature):
         """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
         if self._status_slots is None:
             self._status_slots = (
+                # 手機通知（減法季批 9）：設定頁畫不畫那一顆、第一次來信問不問（WEB_PUSH 是殼的 state）
                 StatusHook("main", "web_push", lambda ctx, frame: {"web_push": frame.shell.WEB_PUSH is not None}),
             )
         return self._status_slots

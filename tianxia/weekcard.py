@@ -1,22 +1,19 @@
-"""江湖頁最上面的本週卡與三方卡（減法季批 1，整合設計 6.1、3.4、6.8）：只讀、只組字，不改狀態、不擲骰。
+"""江湖頁最上面的本週卡（減法季批 1，整合設計 6.1、6.8）：只讀、只組字，不改狀態、不擲骰。
 
 - 本週卡（week_card）吃掉以前那一排小標裡的主線、態勢、簽到與狀態列的「下一件」、黃底提示句。三行：
   第 N 週＋兩軍的態勢；這一週的主題一句（Scenario.week_themes，21 天季三週各一句，7 天的季照季長切成前、中、後段）；
   「你這一步」：未完成的託付（委託）→ 軍令 → 揭了的懸賞 → 伏筆的下一步 → 新手目標 → 去投靠，照順序列出來，網頁的「換一件事」挑下一個。
-- 三方卡（sides_card）：官軍、黃巾（減法季四個勝利條件開著的季多地方豪強）各一欄：要做到、現在、贏了給、投靠在哪。
-  還沒投靠的人江湖頁最上面就是它。
+- 三方卡（main.sides_card）全部拆包第 66 批搬進陣營包 tianxia/features/faction/sides.py（核心不 import 包）；開局三選一還沒選時兩張卡都不畫，
+  這裡直接讀核心的 content.opening 與 pending_event（同 guide/opening.py 的 pending）。
 
-畫面的改動不掛開關（整合設計第十二章）：每一種季都是這張卡；規則關著的季三方卡只寫兩軍。
-豪強的「此刻幫誰」與兩本帳是批 3c 的欄位：四勝利開著的季照 Game.sides_card 補（`lean` 是此刻幫的那一軍 id，豪強那一格「現在」寫兩本帳，
-「贏了給」照 Config.jianfa.tiers，多 `join_at` 投靠點的分鐘）；拿不到那一份時那一格照舊寫 HAOQIANG_NOW_PENDING。
-字待 joy 潤。
+畫面的改動不掛開關（整合設計第十二章）：每一種季都是這張卡。字待 joy 潤。
 
 「你這一步」的候選由各包登記的格組（全部拆包第 36 批：step.items 照 core/features.py 的 STEP_ORDER 一格一格叫，懸賞榜兩格核心代叫），
 這裡不再直接叫包、讀包的欄位。核心本體（第 36 批收進 MODULES）：不 import 功能包；章回（chapters）是共用規則層（第 40 批收進）。
 - scripts/test_for.py：改這個檔跑核心測試＋煙霧＋自己檔名的 tests/map/test_weekcard.py（NOT_CORE_TESTS：改別的核心模組不多跑它）。
 - 不寫 weekcard 檔名的混合檔 test_for 挑不到，另外跑（-n 4，不含 slow）：tests/bots/test_step.py、tests/core/test_chapters.py、
   tests/figures/test_week_unlock.py、tianxia/features/companions/tests/test_errands_weekcard.py、tianxia/features/guide/tests/test_opening.py；
-  slow 的 tianxia/features/faction/tests/test_sides_card.py、tests/web/test_week_card_web.py 要跑就 --slow。
+  slow 的 tests/web/test_week_card_web.py 要跑就 --slow。
 - 反過來，改這裡 import 的 chapters（共用規則層）時 test_for 只挑它自己檔名的 test_chapters＋煙霧＋邊界，上面那一串照舊另外跑：
   見 step.py 說明「反過來也挑不到」那一條（bounties、atlas、orders 等一起在那裡）。
 """

@@ -31,7 +31,7 @@
 
 ## 委派與留在原位的接縫
 
-`Game` 留 41 個一行委派（第 32 批拿掉 `_parley_forsake`：叛投改接核心的叛投掛鉤；主幹合回 D 段加 `talk_view`，只有殼在叫）：第 19 批 27 個（`_stance_before`、`_stance_credit` 兩個第 20 批拿掉了，只有搬走的 `_talk`、`_road_say` 在叫，現在包裡互相叫）加第 20 批 14 個——server 與測試在叫的 `dialogue_request`、`say_max`、`_checked_prepared`、`_parley_lists`、`_parley_prompt`、`_parley_options`、`_annal_talk`（`test_annals` 直接叫）；核心原位叫的 `_open_dialogue`（交友與求見開口，第 21 批）、`_last_talk_line`、`affinity_text`（場景文字與談話那張人物卡）、`_parley_road_option`（路上的選單）、`_talk_options`（跟人物談著的整個選單）；出陣包經 `ctx` 問的 `_parley_backing_here`。其餘 16 個（`_dialogue_unavailable`、`_parley_finish`、`_parley_decide`……與 `_prepared_turn`）只有包裡叫，沒有委派；`add_to_team`、`remove_from_team`、`release_companion` 帶 `@_not_while_preparing`；`_errand_act`、`_errand_reward`、`_errand_persuade` 只有包裡叫，沒有委派。`Game.SELF_IN_TEAM`、`FOLLOWER_IN_TEAM` 指到包的常數（`test_ranks` 讀）；`Game._persuade_said`、`Game._parley_decision` 是寄放（`choose` 前段與包都讀寫）。
+`Game` 留 39 個一行委派（第 32 批拿掉 `_parley_forsake`：叛投改接核心的叛投掛鉤；第 66 批拿掉 `talk_view`、`errands_view`：`/api/main` 改走 `status_slots`）：第 19 批 27 個（`_stance_before`、`_stance_credit` 兩個第 20 批拿掉了，只有搬走的 `_talk`、`_road_say` 在叫，現在包裡互相叫）加第 20 批 14 個——server 與測試在叫的 `dialogue_request`、`say_max`、`_checked_prepared`、`_parley_lists`、`_parley_prompt`、`_parley_options`、`_annal_talk`（`test_annals` 直接叫）；核心原位叫的 `_open_dialogue`（交友與求見開口，第 21 批）、`_last_talk_line`、`affinity_text`（場景文字與談話那張人物卡）、`_parley_road_option`（路上的選單）、`_talk_options`（跟人物談著的整個選單）；出陣包經 `ctx` 問的 `_parley_backing_here`。其餘 16 個（`_dialogue_unavailable`、`_parley_finish`、`_parley_decide`……與 `_prepared_turn`）只有包裡叫，沒有委派；`add_to_team`、`remove_from_team`、`release_companion` 帶 `@_not_while_preparing`；`_errand_act`、`_errand_reward`、`_errand_persuade` 只有包裡叫，沒有委派。`Game.SELF_IN_TEAM`、`FOLLOWER_IN_TEAM` 指到包的常數（`test_ranks` 讀）；`Game._persuade_said`、`Game._parley_decision` 是寄放（`choose` 前段與包都讀寫）。
 
 往來紀錄留在殼的：`TALK_LOG`、`talk_store`、`_log_talk` 與 `server.act` 動作前後那兩行（鎖外包裝；`after_action` 拿不到動作前的那一份，接不了掛鉤）。殼的 `from tianxia import talk_log` 走別名不改；路由一律當下讀 `shell._game`、`shell.talk_store`、`shell.name_key`、`shell.figure_face`（測試換掉的看得到）。
 
@@ -72,3 +72,8 @@
 - **鎖外三段式的 B 段不在這一包**：`server.prepare_dialogue`、`server.say` 叫的 `companion_agent.prepare_turn` 在殼裡（模型不在鎖裡）；A 段 `dialogue_request`、C 段 `checked_prepared` 在這一包。`tests/server/test_server.py` 換掉的 `companion_agent.generate_turn`（別名是同一個模組物件，換得到）。
 
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 畫面：`web/companions.js`（託付的勸降那一句）。
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `say_max`、`companions`（`talk_actions.main_slot`：`talk`、`figure`、`errands`，`face` 經 `frame.shell.figure_face`）、`letter`。

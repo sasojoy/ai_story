@@ -60,6 +60,7 @@ class SenseFeature(Feature):
             from . import actions  # noqa: PLC0415
 
             self._status_slots = (
+                # 有所感選做法那一步（explain-2）：做法鈕上寫的心意（選項 id → 剛柔快慢）與鈕底下兩行小字；不在選做法是 None
                 StatusHook("main", "sense_help", lambda ctx, frame: {"sense_help": actions.method_help(ctx, (o.id for o in frame.options))}),
             )
         return self._status_slots

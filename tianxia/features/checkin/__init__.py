@@ -32,6 +32,7 @@ class CheckinFeature(Feature):
             from . import actions  # noqa: PLC0415
 
             self._status_slots = (
+                # 每日簽到（21 天季，正式季整合 6.2）：關著、序章裡沒有這個鍵，畫面照舊
                 StatusHook("status", "checkin", lambda ctx, frame: slot_some("checkin", actions.checkin_view(ctx))),
             )
         return self._status_slots

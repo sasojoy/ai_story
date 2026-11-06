@@ -40,3 +40,8 @@
 - `tests/core/test_jianfa_switch.py`（9 條）、`tests/core/test_gender.py`（9 條）、`tests/bots/test_zh.py`（25 條）：各有一兩條碰 `zhuan_end`／`biography` 的字
 
 改這一包時連它們一起跑：`python scripts/test_for.py --base HEAD tianxia/features/zhuan/actions.py`，再視需要加上面幾個檔。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 畫面：`web/zhuan.js`（玩家傳那一層與行狀）。
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `zhuan`（`actions.main_slot`，圖檔網址經 `frame.shell.zhuan_art_src`）。

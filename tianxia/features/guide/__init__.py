@@ -72,7 +72,9 @@ class GuideFeature(Feature):
             from . import actions  # noqa: PLC0415
 
             self._status_slots = (
+                # 新手目標（新手引導重做）：引導走完、新手期裡才有
                 StatusHook("status", "newbie", lambda ctx, frame: {"newbie": actions.newbie_view(ctx)}),
+                # 行動列上方的說書人對話框（引導重做設計 8.1）；序章（新手引導計畫一）與初入江湖（第四段）要亮的畫面元件、要發光的鈕；不在那一段是 None
                 StatusHook("main", "guide", lambda ctx, frame: {"guide": actions.guide_box(ctx), "prologue": actions.prologue_view(ctx),
                                                                 "onboard": actions.onboard_view(ctx)}),
                 StatusHook("main", "glow", lambda ctx, frame: actions.glow_slot(ctx, frame)),

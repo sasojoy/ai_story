@@ -118,8 +118,10 @@ class BattleFeature(Feature):
             from . import view  # noqa: PLC0415
 
             self._status_slots = (
+                # 決戰的即時戰局條（Joy 2026-10-10）：場景裡畫著的這一場（集結、開打），與「剛剛」是一場決戰時收場那一刻的
                 StatusHook("main", "gauges", lambda ctx, frame: {"battle_gauge": view.battle_gauge(ctx),
                                                                  "card_gauge": view.card_gauge(ctx) if frame.card is not None else None}),
+                # 領地爭奪第三批 A：場景裡畫的是攻城戰時，最上面那一條「攻城・地點｜守方：某某」（企劃者挑甲；決戰沒有這個鍵）
                 StatusHook("main", "siege", lambda ctx, frame: slot_some("siege", view.siege_banner(ctx))),
             )
         return self._status_slots

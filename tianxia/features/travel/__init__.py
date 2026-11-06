@@ -83,8 +83,11 @@ class TravelFeature(Feature):
             from . import departure, party  # noqa: PLC0415
 
             self._status_slots = (
+                # 在路上的那一句；不在路上是 None
                 StatusHook("status", "journey", lambda ctx, frame: {"journey": None if ctx.state.player.journey is None else departure.journey_line(ctx)}),
+                # 在路上（路上設計 3.3）：頁面在選項底下多放三個捷徑（輿圖、修練、煉製）。看的是選單本身：參戰者在決戰大區裡走動時選單是戰鬥選項，那時不放捷徑
                 StatusHook("main", "on_road", lambda ctx, frame: {"on_road": any(o.id == "act:on_road" for o in frame.options)}),
+                # 結伴同行的那一行；沒有是 None
                 StatusHook("main", "party", lambda ctx, frame: {"party": party.party_view(ctx)}),
             )
         return self._status_slots

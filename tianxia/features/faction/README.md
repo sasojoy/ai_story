@@ -64,3 +64,9 @@
 過渡 import 1 處（行尾標「過渡：待搬」；全部拆包第 45 批合完重印）：懸賞榜第 45 批成包，`join_actions.py`、`lean_actions.py`、`defection.py` 改讀核心 `core/bounty_base`（`stranded`、`STRANDED_*`、`drop_stranded`）；
 `events.event_candidates`（`join_actions.py`：拜入門派那一顆）。`ranks`（階與稱號；`defection.py`）第 40 批收進共用規則層，不算過渡（原本 5 處）。叛投的 `stranded` 格第 45 批由懸賞榜包登記（`BountiesFeature.defection()`），`_STRANDED_CORE` 空了留 `{}`。
 確認畫面讀押糧不直接碰軍情包的欄位：問核心的 `core/convoy_base.py`（`held(state)`，同 `omen_base` 的先例；它只讀軍情包認領的 `convoy`，不寫）。
+
+## 三方卡與江湖畫面的格（全部拆包第 66 批）
+
+- `sides.py`：三方卡 `sides_card`（連 `_bar`、`_goal`、`_places`、`WIN_GIVES`、`WIN_GIVES_OLD`、`HAOQIANG_GOAL`、`HAOQIANG_NOW_PENDING`，原本在 `tianxia/weekcard.py`，字一個不改；核心不 import 包，舊名不留別名）。豪強那一格的補充問同包的 `ending_actions.sides_card`、`tier_hint`；`game._opening_pending()` 經 `ctx`（`core/services.py` 有寫）。
+- 江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `sides_card`、`ending`。
+- 改 `sides.py` `test_for` 挑不到、另外要跑（`-n 4`）：`tests/core/test_contract_core.py tests/core/test_contract_features.py tests/core/test_feature_boundaries.py tests/map/test_weekcard.py tianxia/features/guide/tests/test_opening.py tests/bots/test_step.py tests/core/test_chapters.py tests/figures/test_week_unlock.py tianxia/features/companions/tests/test_errands_weekcard.py tests/server/test_server.py`；`tianxia/features/faction/tests/test_sides_card.py` 整檔 slow，改到它才跑。

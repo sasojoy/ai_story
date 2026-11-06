@@ -21,7 +21,7 @@
 核心原位碰簽到的兩處沒有第 11 批掛鉤可接，改叫 `Game` 上一行的委派，記進邊界測試 `GAME_DELEGATE_CALLERS` 的 `# checkin` 那一段，**沒有新增 `GAME_DIRECT`**：
 
 - `sync` 的 `_auto_checkin`：在補送裝備（`_deliver_held_gear`）之後；`on_sync` 掛鉤在它前面，江湖紀錄的先後算行為。
-- `status_data` 的 `checkin_view`：`data["checkin"]` 在 `howto_entry` 之後、`fronts` 之前，鍵的順序算行為；`feature_status` 是 `main` 的頂層。
+- 狀態列的 `checkin` 那一格（`status_slots`，第 66 批；位置在 `STATUS_ORDER`：`howto_entry` 之後、`fronts` 之前）；`feature_status` 是 `main` 的頂層。
 - `Game._pill_find`：直接叫核心的 `checkin_on`、`PILL_FOUND`。
 
 ## 過渡（手冊 3.11）
@@ -39,3 +39,7 @@
 ```
 python scripts/test_for.py --base HEAD tianxia/features/checkin/actions.py tests/web/test_checkin_web.py
 ```
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`status` 表 `checkin`（None 沒有鍵）。

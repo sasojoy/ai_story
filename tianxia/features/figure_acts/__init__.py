@@ -58,7 +58,9 @@ class FigureActsFeature(Feature):
             from . import plan_actions  # noqa: PLC0415
 
             self._status_slots = (
+                # 世界活起來：全服開著的盤算裡最切身的一件（江湖頁行動列底下一張卡）；沒有開著的就沒有這個鍵
                 StatusHook("main", "plan", lambda ctx, frame: slot_some("plan", plan_actions.plan_view(ctx))),
+                # 世界活起來：此地舊事（場景卡底下最近的幾筆世界記事）；沒有就沒有這個鍵
                 StatusHook("main", "place_deeds", lambda ctx, frame: slot_some("place_deeds", plan_actions.place_deeds_view(ctx))),
             )
         return self._status_slots

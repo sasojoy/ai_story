@@ -54,6 +54,7 @@ class SocializeFeature(Feature):
             from . import intros, menus  # noqa: PLC0415
 
             self._status_slots = (
+                # 介面重整（2026-11-05）：此地人物那一排；像在 web/img/figures/full/<id>.webp 才給 face（殼的 figure_face）
                 StatusHook("main", "figures_here", lambda ctx, frame: {"figures_here": [
                     {**f, "face": frame.shell.figure_face(f["id"]), "intro": intros.figure_intro(f["id"])} for f in menus.figures_here_view(ctx)]}),
             )

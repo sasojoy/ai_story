@@ -53,7 +53,9 @@ class TerritoryActsFeature(Feature):
             from . import view, xingshi, xingshi_actions  # noqa: PLC0415
 
             self._status_slots = (
+                # 領地爭奪：戰書排的攻城、每一塊的翻地資料、能不能下戰書（開關關著、季收了沒有這個鍵）
                 StatusHook("main", "conquest", lambda ctx, frame: slot_some("conquest", view.conquest_view(ctx))),
+                # 〈天下形勢〉開著的季：見聞多一顆「形勢」（文章另外讀 /api/xingshi）；FB-578 xingshi_mark：最新一篇的篇次＋有沒有一張還在寫，變了停在「形勢」頁的網頁就重抓
                 StatusHook("main", "xingshi", lambda ctx, frame: {"xingshi": True, "xingshi_mark": xingshi_actions.mark(ctx)} if xingshi.on(ctx.content, ctx.state.world) else {}),
             )
         return self._status_slots

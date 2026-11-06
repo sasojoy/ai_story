@@ -21,7 +21,7 @@ class OutletsFeature(Feature):
     prefix = ("donate", "dadian")  # donate:room、donate:<素材>:<個數>、donate:back（軍需官那一串）；dadian:back（打點那一間店）；入口 act:donate、act:dadian 是核心的前綴
     bot_always = ("donate:", "dadian:")  # 坐在店裡一直按得下去：整季機器人不按（bot.py 的排除清單原本也寫了這兩個，拿掉，只剩這裡）
     # 軍需官那一串與打點那一間店開著沒、今天捐了多少（素材、銀兩）、名師指點與看火候請了沒用、這一季買了幾顆破境丹、今天打點過誰：
-    # 換季全部跟著新角色重來（軍備存量 World.armaments 是全服帳，由 donate_actions.credit 寫、核心 status_data 經 armament_view 讀）
+    # 換季全部跟著新角色重來（軍備存量 World.armaments 是全服帳，由 donate_actions.credit 寫、狀態列的 armament 那一格〔status_slots〕經 armament_view 讀）
     player_fields = ("picking_donate", "picking_dadian", "donate_day", "donated_today", "silver_donate_day", "silver_donated",
                      "mentor_day", "mentor_ready", "furnace_day", "furnace_ready", "legend_silver_bought", "bribed")
     carried = ("donate_day", "donated_today")  # 換季不能多捐一輪（Game._reset_player_for_new_season 照帶，同出陣的 sortie_day；不看開關）
@@ -132,6 +132,7 @@ class OutletsFeature(Feature):
             from . import donate_actions  # noqa: PLC0415
 
             self._status_slots = (
+                # 陣營的軍備存量（素材與經濟設計第六節）；散人、捐軍備關著是 None
                 StatusHook("status", "armament", lambda ctx, frame: {"armament": donate_actions.armament_view(ctx)}),
             )
         return self._status_slots

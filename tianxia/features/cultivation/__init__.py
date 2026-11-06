@@ -44,7 +44,9 @@ class CultivationFeature(Feature):
             from . import actions  # noqa: PLC0415
 
             self._status_slots = (
+                # 剛破境、還沒看過的破境卡
                 StatusHook("status", "ascension", lambda ctx, frame: {"ascension": actions.ascend_view(ctx)}),
+                # 減法季屬性五段的境界卡（主機側計畫欄位表 main.milestone）：到了境界、點還沒配完才有這個鍵
                 StatusHook("main", "milestone", lambda ctx, frame: slot_some("milestone", actions.milestone_card(ctx))),
             )
         return self._status_slots

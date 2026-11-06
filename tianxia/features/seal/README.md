@@ -1,6 +1,6 @@
 # 玉璽碎片（`tianxia/features/seal/`）
 
-七片傳國玉璽碎片的季流程：時刻表決戰集結那一刻擲現世與璽動、領地爭奪的季開季藏一片與探索撿到、時刻表決戰收場（挑挑戰者、現世的得主、喚回）、補送到每個人手上、天命之季與天命之爭、換季的隱沒與散去，與管理者的強制現世（現在藏一片）、隱沒判斷、蓋天命之季。全部拆包第 27 批「玉璽一」搬進來（引擎那一半；網頁 `web/` 第 3 階才切，`app.js` 歸這一包的那幾個是第 66 批）。
+七片傳國玉璽碎片的季流程：時刻表決戰集結那一刻擲現世與璽動、領地爭奪的季開季藏一片與探索撿到、時刻表決戰收場（挑挑戰者、現世的得主、喚回）、補送到每個人手上、天命之季與天命之爭、換季的隱沒與散去，與管理者的強制現世（現在藏一片）、隱沒判斷、蓋天命之季。全部拆包第 27 批「玉璽一」搬進來（引擎那一半；網頁 `web/seal.js` 第 66 批從 `app.js` 切出來）。
 
 **第 28 批「玉璽二」搬進來的**：奪璽單挑的純規則（`duel_rules.py`，原 `tianxia/seal_duel.py` 整份）、奪璽單挑的玩法（`duel_actions.py`）、碎片卡與七種獨門行動（`card.py`）、管理者六個（`admin.py` 加 `stir`、`assign`、`duel`、`fix`、`cancel`、`choices`）、`seal:` 前綴與假人那一段（`bots.py`）。Game 上 22 個一行委派（`_seal_act_season` 只有 `seal_use` 叫、包內互叫，不留）。獨門行動的規則 `tianxia/seal_acts.py`（761 行）第 51 批才拆，`card.py`、`admin.py` 讀它（過渡）。
 
@@ -38,7 +38,7 @@
 
 `Game` 留 11 個一行委派：`_copy_heirloom`、`_deliver_seal_results`、`_seal_bare`、`_mandate_settle`（核心原位叫）、`_mandate_weight`（決戰包經 `ctx`）、`_seal_find`、`_seal_settle`、`_file_seal`（**只剩測試叫**：寫進手冊「拆完之後的收尾：只剩測試叫的委派」，第 42 批認定第 3 條）、`admin_seal_emerge`、`admin_seal_sink_check`、`admin_seal_mandate`（殼的 `ADMIN_ACTIONS` 與測試）。`_admin_seal_hide` 只有強制現世叫（包內互叫），不留。
 
-第 28 批再加 22 個一行委派（共 33 個）：`_seal_challenge`、`_seal_challengers`、`_seal_spectators`、`_seal_side_of`、`_my_seal_duel`（量表 `scripts/measure_seal.py` 與測試叫；`_seal_challengers`、`_seal_spectators` 包內經 `ctx` 叫）、`_seal_tick`、`_seal_options`、`_seal_act`、`seal_view`、`seal_duel_card`、`seal_watch`（`world_tick`／`options`／`choose`／`status_data` 原位叫）、`seal_free_text_prompt`、`seal_free_text_note`、`seal_text_request`、`seal_gamble`、`seal_use`（殼的 `server.py` 叫；測試換 `Game.seal_use`，所以一定留）、`admin_seal_stir`、`admin_seal_assign`、`admin_seal_duel`、`admin_seal_fix`、`admin_seal_cancel`、`admin_seal_choices`（殼的 `ADMIN_ACTIONS`）。`GAME_DIRECT` 16 → 3（第 27 批留的 13 筆「過渡：第 28 批收」全收了）；`GAME_DELEGATE_CALLERS` 刪 7 對（`_deliver_seal_results`、`_showdown_status`、`_duel_side` 改成包經 `ctx` 叫，列在 `core/services.py` 的 `# seal`）、加 7 對（`world_tick`／`options → _seal_tick`、`options → _seal_options`、`choose → _seal_act`、`status_data → seal_view`／`seal_duel_card`／`seal_watch`；理由在邊界測試）。
+第 28 批再加 22 個一行委派（共 33 個）：`_seal_challenge`、`_seal_challengers`、`_seal_spectators`、`_seal_side_of`、`_my_seal_duel`（量表 `scripts/measure_seal.py` 與測試叫；`_seal_challengers`、`_seal_spectators` 包內經 `ctx` 叫）、`_seal_tick`、`_seal_options`、`_seal_act`（`world_tick`／`options`／`choose` 原位叫）、`seal_view`、`seal_duel_card`（測試叫；`seal_watch` 第 66 批拿掉，狀態列三個鍵改走 `status_slots`）、`seal_free_text_prompt`、`seal_free_text_note`、`seal_text_request`、`seal_gamble`、`seal_use`（殼的 `server.py` 叫；測試換 `Game.seal_use`，所以一定留）、`admin_seal_stir`、`admin_seal_assign`、`admin_seal_duel`、`admin_seal_fix`、`admin_seal_cancel`、`admin_seal_choices`（殼的 `ADMIN_ACTIONS`）。`GAME_DIRECT` 16 → 3（第 27 批留的 13 筆「過渡：第 28 批收」全收了）；`GAME_DELEGATE_CALLERS` 刪 7 對（`_deliver_seal_results`、`_showdown_status`、`_duel_side` 改成包經 `ctx` 叫，列在 `core/services.py` 的 `# seal`）、加 7 對（`world_tick`／`options → _seal_tick`、`options → _seal_options`、`choose → _seal_act`；`status_data` 那三對第 66 批刪；理由在邊界測試）。
 
 - `GAME_DELEGATE_CALLERS` 8 對：`_battle_marks → _seal_bare`（戰力快照是單打服務）、`admin_resolve_event → _mandate_settle`（時刻表的救場工具是核心）、`sync → _copy_heirloom`、`_drop_stale_references → _copy_heirloom`（**接不了 `on_sync`／`on_drop_stale` 是開關**：那兩個掛鉤只問開著的包，碎片關著時 `_copy_heirloom` 照樣要叫、傳 `None` 把抄本清掉；第 42 批認定第 7 條；第 55 批收）、第 28 批的 `_seal_tick`／`_seal_act`／`seal_gamble`／`admin_seal_cancel` 各配 `_deliver_seal_results`。
 - `sync` 的玉璽補送（原本緊接在 `features_core.deliver_results(self)` 後面的 `self._deliver_seal_results()`）修正輪改接接縫掛鉤 `deliver_results`（`SealFeature.deliver_results` 叫 `actions.deliver_results`）：那個掛鉤照 `registered()` 問、不看開關，只有 `sync` 叫；決戰包排在前面、玉璽包排在後面，先後跟原本那兩行一樣。委派 `_deliver_seal_results` 照留（第 28 批的四個方法與決戰包 `progress.py` 經 `ctx` 叫）。
@@ -79,3 +79,8 @@
 ## 量到的（第 28 批）
 
 `Game` 委派 556 → 578；`GAME_DIRECT` 16 → 3、直連 197 → 184；`GAME_IMPORTS` 92 → 93（拿掉 `tianxia.seal`、加 `card`、`duel_actions`）。`engine.py` 頂端的 `seal_rules`、`seal_duel` 拿掉。包裡 `tests/` 129 條。`selftest` 目標句（`MUTATIONS` 45、`EXPLORE_MUTATIONS` 4）在搬完的檔裡都找得到一次；新軌 `carve` 的目標句在 `duel_actions.py`。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 畫面：`web/seal.js`（奪璽卡、碎片卡與獨門行動）；點擊分派的 `case`、`sealWatched`、`sealTitle` 留 `app.js`。
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`status` 表 `seal`（`seal_duel`、`seal`、`seal_watch` 三個鍵）。

@@ -3972,7 +3972,7 @@ class Game:
         return atlas.whole_minutes(max(0.0, world_seconds) / self.content.config.time_scale / 60)
 
     def _journey_line(self) -> str:
-        """在路上的那一句（本體在 tianxia/features/travel/departure.py；留一行委派給 status_data）。"""
+        """在路上的那一句（本體在 tianxia/features/travel/departure.py；狀態列的 journey 那一格直接叫本體，這一行照 services.py 留著）。"""
         return travel_departure.journey_line(self)
 
     def travel(self, dest_id: str, mode: TravelMode = "walk") -> list[str]:
@@ -5521,7 +5521,7 @@ class Game:
         travel_party.party_expires(self)
 
     def party_view(self) -> dict | None:
-        """場景底下結伴同行的那一行（本體在 tianxia/features/travel/party.py；留一行委派給殼的 /api/main）。"""
+        """場景底下結伴同行的那一行（本體在 tianxia/features/travel/party.py；/api/main 的 party 那一格直接叫本體，這一行留給測試）。"""
         return travel_party.party_view(self)
 
     # ── 管理者：玩家個人劇情（管理者觸發鈕第 2 組）──────────────────────

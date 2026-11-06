@@ -49,6 +49,7 @@ class CraftFeature(Feature):
             from . import actions  # noqa: PLC0415
 
             self._status_slots = (
+                # 自創武學那一塊（煉製頁）
                 StatusHook("status", "create", lambda ctx, frame: {"create": actions.view(ctx)}),
             )
         return self._status_slots

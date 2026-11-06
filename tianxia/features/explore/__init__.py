@@ -91,7 +91,9 @@ class ExploreFeature(Feature):
             from . import explore_actions, outing_actions  # noqa: PLC0415
 
             self._status_slots = (
+                # 走一趟：探索鈕的段數選單（picker）與這一趟（trip）；關著是 None、網頁照舊一顆探索
                 StatusHook("main", "outing", lambda ctx, frame: {"outing": outing_actions.outing_view(ctx)}),
+                # 四格探索那一格的小字「城裡多事」（整合設計 6.3，批 5）；在路上沒有這個鍵。減法季探索一顆開著時照出門一趟那一張表（批 2）
                 StatusHook("main", "mostly", lambda ctx, frame: {"mostly": mostly} if (mostly := explore_actions.mostly_here(ctx)) else {}),
             )
         return self._status_slots

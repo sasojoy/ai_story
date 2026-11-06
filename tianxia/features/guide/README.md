@@ -1,6 +1,6 @@
 # 新手引導（`tianxia/features/guide/`）
 
-草廬之後的引導框（說書人、初入江湖的老周）、碰到才說的提示、新手目標、開局第一分鐘（城門口三選一與第一封託付）、入伍段（引薦人帶兩步）、序章的畫面與重看。全部拆包第 22 批（引導一）搬進來（計畫 `docs/superpowers/plans/2026-11-01-新手引導包-第1批.md`）；玩法說明（`howto`）是第 59 批（引導二）。網頁那一半（`web/app.js` 的 `onb`、`guideGlow`、`watchOrders` 那幾個）第 3 階再切。
+草廬之後的引導框（說書人、初入江湖的老周）、碰到才說的提示、新手目標、開局第一分鐘（城門口三選一與第一封託付）、入伍段（引薦人帶兩步）、序章的畫面與重看。全部拆包第 22 批（引導一）搬進來（計畫 `docs/superpowers/plans/2026-11-01-新手引導包-第1批.md`）；玩法說明（`howto`）是第 59 批（引導二）。網頁那一半（`onb`、`guideGlow`、`watchOrders` 那幾個）第 66 批切進 `web/guide.js`。
 
 - 導覽：`docs/guide/核心與存檔.md` 的「新手引導（功能包 `tianxia/features/guide/`）」那一節。
 - 設計稿：沒有版本號——新手引導重做設計（Joy 2026-10-22，https://claude.ai/artifact/Eb25MwPveJMYSf5Ge4mDyx：第四節入伍段、第五節碰到才說、第六節新手目標、第七節略過與換季、8.1 對話框）；新手引導計畫一～三（`docs/superpowers/plans/2026-10-06-新手引導-1-序章.md`、`-2-入伍段.md`、`-3-碰到才說.md`）；開局第一分鐘：減法季整合設計 6.7。
@@ -29,7 +29,7 @@
 - 做完一件事引導跟著走（`_note_action`）：`choose` 七處、`_order_credit`、`_faction_step`、`_arrive`、`take_stamina_pill`、`_menxia_entry`——歸總表第 57 批（分派與標題收接縫，那一批量了再決定要不要開成事件；第 26 批 PM 認定第 6 條，第 26 批不開）（配點 `allocate_stat` 第 23 批進修練包，那裡的 `_note_action`、`_check_hints` 都經 `ctx` 叫）。
 - 碰到才說（`_check_hints`、`_hint`）：`choose`、`sync`、`travel`、`_menxia_entry`、`_act`、`_brush_off`、`_open_dialogue`，與核心 `event_check.answer_event`、`answer_branch`（連 `_begin_enlistment`、`_greet_rejoin`）。
 - 開局（`_opening_*`）：`choose`、`check_in`、`_auto_checkin`、`checkin_view`、`now_entry_html`、`Game.new`。
-- 換季照帶（`_reset_player_for_new_season`：`_enlist_done`、`_base_step_count`、`_tutorial_intro`）、清失效參照一開頭（`_mark_veteran`）、`sync` 的引薦人結語（`_enlist_expire`）、核心的引導框服務（`_note_guide` 的 `_guide_speakers`）、狀態列的任務卡（`status_data` 的 `newbie_view`）、`act:rest`（`_act` 的 `_rest`）。
+- 換季照帶（`_reset_player_for_new_season`：`_enlist_done`、`_base_step_count`、`_tutorial_intro`）、清失效參照一開頭（`_mark_veteran`）、`sync` 的引薦人結語（`_enlist_expire`）、核心的引導框服務（`_note_guide` 的 `_guide_speakers`）、`act:rest`（`_act` 的 `_rest`）。
 - 掃描看不到的：`Game.new`（classmethod，用 `game.` 叫）的 `_opening_on`、`_opening_begin`、`_tutorial_intro`、`_graduate`、`_note_gift`；舊模組 `step.py` 叫 `game._nearest_to`（第 36 批起 `step.py` 收進核心本體、不再叫它：改由軍情包、陣營包那兩格經 `ctx._nearest_to` 問）。
 
 **`note_action` 被測試換掉的那一層**：`tests/core/test_engine.py` 換的是 `tianxia.engine.note_action`（看 `args[3]`／`args[-1]`），所以 `Game._note_action` 的本體叫 engine 模組層那個名字（`from .guide import note_action`：別名）；包裡的 `view_orders`、`view_map`、`view_tab` 與出陣包的六處（`actions.py`、`duel_actions.py` 四處；守勢 `train_actions.duty` 兩處：原本的 `Game._duty` 第 17 批進了出陣包，這一批合進 develop 時改）都經 `ctx._note_action`。包裡互相叫直接叫函式，只有被測試換掉的 `_hint_triggers`（`test_hints` 換掉 `game._hint_triggers`）經 `ctx`。
@@ -51,3 +51,8 @@
   - 換掉 `tianxia.engine.note_action` 的 `tests/core/test_engine.py`；`_newbie_go` 的 `tests/acts/test_training.py`；本週卡「你這一步」的 `tests/bots/test_step.py`、`tests/map/test_weekcard.py`（第 36 批起新手目標是這一包登記的 `newbie` 那一格，先後由核心契約 `tests/core/test_contract_core.py` 的 `# core_step` 鎖住）；開局擋簽到的 `tianxia/features/checkin/tests/test_checkin.py`；入伍段與軍令的 `tests/figures/test_orders.py`、`test_promotions_high.py`、`test_gentry_allied.py`；任務卡的 `tests/core/test_world.py`、`tests/figures/test_calendar.py`、`test_finale.py`、`test_season21_frame.py`、`tests/ranger/test_season21_daily.py`；提示與玩法說明的 `tests/core/test_explain.py`；探索包的 `test_explore_one_polish.py`（`hints`）、`test_explore_one_fix.py`（`newbie_view`）；`tests/season/test_real_content.py`、`tests/server/test_server.py`。
   - 改這一包時連它們一起跑：`python scripts/test_for.py --base HEAD tianxia/features/guide/actions.py tests/core/test_prologue.py tests/arts/test_hints.py tests/web/test_prologue_web.py tests/web/test_hints_web.py tests/web/test_enlist_web.py tests/web/test_opening_web.py tests/core/test_engine.py tests/acts/test_training.py tests/bots/test_step.py tianxia/features/checkin/tests/test_checkin.py tests/figures/test_orders.py tests/figures/test_promotions_high.py tests/figures/test_gentry_allied.py tests/core/test_world.py tests/figures/test_calendar.py tests/figures/test_finale.py tests/figures/test_season21_frame.py tests/ranger/test_season21_daily.py tests/core/test_explain.py tianxia/features/explore/tests/test_explore_one_polish.py tianxia/features/explore/tests/test_explore_one_fix.py tests/season/test_real_content.py tests/server/test_server.py`（上面列的 23 個檔一個不漏；寫在指令裡的測試檔 `test_for` 連 slow 一起跑，`test_real_content` 用真實內容跑整季的那幾條最慢。假人走序章的 `test_real_content::test_bots_and_scripts_skip_the_real_prologue_and_look_like_graduates` 不是 slow，`actions.graduate_pass` 改壞了只有它抓得到）。
 - 前後一字不變：`scripts/same_behavior.py` 的 `guide` 一軌（`--tracks guide`）。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 畫面：`web/guide.js`（引導的發光與閃一閃、入伍段看過軍令、玩法說明與重看序章）；點擊分派的 `case`、`choose` 留 `app.js`。
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`status` 表 `newbie`；`main` 表 `guide`（`guide`、`prologue`、`onboard`）、`glow`（`actions.glow_slot` 改已經合進去的 `view["guide"]`，沒有鍵）。

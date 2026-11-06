@@ -630,7 +630,7 @@ def dadian_view(state: GameState, content: Content, *, day: int, room: int, base
 
 def donate_view(state: GameState, content: Content, day: int) -> dict:
     """大本營的軍需帳（素材與經濟設計第六節；Game.shop_view 在軍需官那一串開著時給）：招牌、軍需官那一句、出店（donate:back）、
-    陣營四種軍備的存量（同 Game.armament_view 的順序）、今天還能捐幾點與上限，背包裡每一種素材一格（照剛柔快慢、再照階排：份量、
+    陣營四種軍備的存量（同銀兩出口包 armament_view 的順序）、今天還能捐幾點與上限，背包裡每一種素材一格（照剛柔快慢、再照階排：份量、
     今天最多收得下幾個 take〔economy.donate_take〕、捐不了的原因〔economy.donate_problem〕、進哪一樣軍備）。捐出送
     MAIN_ACTIONS["donate"] 的 items（挑好的幾種一起捐，一則紀錄）。day 是回體丹的換日。"""
     p = state.player

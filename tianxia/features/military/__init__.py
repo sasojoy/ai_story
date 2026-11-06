@@ -142,6 +142,7 @@ class MilitaryFeature(Feature):
             from . import order_actions  # noqa: PLC0415
 
             self._status_slots = (
+                # 押著的糧車（T6 審查 I3）：軍令卡上寫一行
                 StatusHook("main", "convoy", lambda ctx, frame: slot_some("convoy", order_actions.convoy_line(ctx))),
             )
         return self._status_slots

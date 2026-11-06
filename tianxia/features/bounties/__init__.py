@@ -134,6 +134,7 @@ class BountiesFeature(Feature):
             from . import actions  # noqa: PLC0415
 
             self._status_slots = (
+                # 手上揭了的懸賞（標題、怎麼完成、賞、期限與名額），加上身上有合用東西的求兵（多一個 have）；懸賞榜關著是空的
                 StatusHook("status", "bounties", lambda ctx, frame: {"bounties": actions.status(ctx)}),
             )
         return self._status_slots

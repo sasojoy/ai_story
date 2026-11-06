@@ -93,8 +93,10 @@ class CompanionsFeature(Feature):
             from . import actions, talk_actions  # noqa: PLC0415
 
             self._status_slots = (
+                # 「自己說」最多幾個字（NPC 智能 2.0 開著時比較長，網頁的輸入框照它）
                 StatusHook("main", "say_max", lambda ctx, frame: {"say_max": talk_actions.say_max(ctx)}),
                 StatusHook("main", "companions", lambda ctx, frame: talk_actions.main_slot(ctx, frame)),
+                # 書信（大勢人物擴充第二批）：江湖頁「剛剛」上面一張小卡；沒有沒看過的信就沒有這個鍵
                 StatusHook("main", "letter", lambda ctx, frame: slot_some("letter", actions.letter_view(ctx))),
             )
         return self._status_slots

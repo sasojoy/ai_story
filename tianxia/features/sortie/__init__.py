@@ -88,7 +88,9 @@ class SortieFeature(Feature):
             from . import duel_actions, rules  # noqa: PLC0415
 
             self._status_slots = (
+                # 出陣開著（出陣探索與地盤設計第二節）：行動列那一格叫「出陣」、等候的話換一句；關著時照舊「遊歷」
                 StatusHook("main", "sortie", lambda ctx, frame: {"sortie": rules.on(ctx.content)}),
+                # 出陣約戰（減法季批 3b，計畫 1.3）：出陣前那張卡與約戰卡清單；約戰關著沒有這兩個鍵
                 StatusHook("main", "sortie_cards", lambda ctx, frame: {**slot_some("sortie_card", duel_actions.sortie_card(ctx)),
                                                                        **slot_some("sorties", duel_actions.sortie_cards(ctx))}),
             )
