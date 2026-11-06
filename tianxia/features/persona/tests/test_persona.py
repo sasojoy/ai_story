@@ -42,13 +42,14 @@ def next_day(g):
 
 def test_real_content_has_twelve_people_with_two_axes_each():
     c = real_game().content
+    assert real_game(profile="week7").content.config.persona_shift.enabled and c.config.persona_shift.enabled  # Joy 11/6「打開」
     assert len(c.personas) == 12 and all(len(rows) == 2 for rows in c.personas.values())
     assert {"zhangfei", "caocao", "liubei", "guanyu", "luzhi", "bocai"} <= set(c.personas)
 
 
 def test_closed_changes_nothing():
     """開關關著：沒有叫法、提示詞一個字不多、舊的性情漂移照讀、記不了、簡介沒有如今。"""
-    g = real_game()
+    g = real_game(setup=lambda c: setattr(c.config.persona_shift, "enabled", False))
     s, c = g.state, g.content
     assert persona.ends_for(c, LUZHI) == () and persona.prompt_lines(s, c, LUZHI) == "" and not persona.covers(c, LUZHI)
     assert persona.record(s, c, LUZHI, "圓融", 90) == 0 and persona.view(s, c, LUZHI) is None
