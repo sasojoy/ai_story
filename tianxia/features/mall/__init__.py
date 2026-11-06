@@ -6,7 +6,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature
+from tianxia.core.features import Feature, SeamHook
 
 
 class MallFeature(Feature):
@@ -57,6 +57,21 @@ class MallFeature(Feature):
             if item.name in seen:
                 need(False, f"商城 {item.id}：跟 {seen[item.name]} 同名「{item.name}」")
             seen.setdefault(item.name, item.id)
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """season.carry 的 mall 那一格（順序在 SEAM_ORDER；不看開關：on_season_start 只問開著的包，花元寶買的不能換季就不見）。"""
+        if self._seams is None:
+            self._seams = (SeamHook("season.carry", "mall", _carry_season),)
+        return self._seams
+
+
+def _carry_season(ctx, old, fresh) -> None:
+    # 破境丹、重悟帖萬寶閣賣（花元寶買的不能換季就不見），同回體丹剩下的帶著走（Joy 2026-10-21「再研究一下有沒有什麼瑕疵」）
+    fresh.player.legend_items = old.player.legend_items
+    fresh.player.create_rerolls = old.player.create_rerolls
 
 
 FEATURE = MallFeature()

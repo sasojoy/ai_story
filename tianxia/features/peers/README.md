@@ -32,7 +32,7 @@
 ## 認領的欄位（手冊 3.5：留在原地）
 
 - `player_fields`：`mingtie`、`mingtie_box`、`mingtie_day`、`mingtie_made`、`mingtie_sent`、`mingtie_hidden`、`taunt_muted`、`gift_day`、`gifts_today`。
-- `carried`：全部（自己的名帖、收到的、檢舉過的、不接誰的挑釁話、一天的次數都跨季；`Game._reset_player_for_new_season` 照抄那幾行，留在核心）。
+- `carried`：全部（自己的名帖、收到的、檢舉過的、不接誰的挑釁話、一天的次數都跨季；第 55 批起是 `season.carry` 的 `peers` 那一格〔`actions.carry_season`〕）。
 - 不認領：`title_book`（過去幾季掙到的頭銜，名帖印得出來）——換季時要加上這一季掙到的，不是原樣帶走，由 `on_season_start` 接；`tagalong`（結伴同行的跟隨）屬移動包。
 - 全服帳（`SharedWorldState`，不分季）：`mingtie_reports`、`mingtie_removed`、`mingtie_cleared`；這一季的 `WorldState`：`invites`、`gift_tally`。第 38 批的 `spar_tally`、`discuss_tally`、`raids`、`raided`（混戰、設伏共用）、`clashes`、`clashed`（混戰寫、截殺的拒絕話讀）：資料在核心、不認領。沒有 `PlayerState` 欄位，資料表沒改。
 
@@ -77,3 +77,7 @@
 ## 量到的（第 37 批 Task 5）
 
 包的測試 14 條 6.8 秒；改包任一檔挑到 219 條；過渡 3 處；Game 委派 21 個加 `_yuedan_line`；`GAME_DIRECT` 7 個（切磋、論武，第 38 批拿掉）；`engine.py` 9,369 行。`same_behavior` 的 `peers`、`tavern`、`roam` 三軌三種設定整段、半舊半新逐位元組一樣。細節見計畫 5.4。
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`season.carry` 的 `peers`（`actions.carry_season`：名帖與一天的次數，不看開關）。
+
+**第 56 批（選單收接縫，核心批）**：`here/invite` 是這一包登記的格；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_invite_options` 拿掉；上面寫「留委派」「原位」的以這一句為準。

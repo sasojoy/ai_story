@@ -10,7 +10,7 @@
 - `sensing.py`（原 `tianxia/sensing.py`：有所感的規則）、`epiphany.py`（原 `tianxia/epiphany.py`：特殊頓悟；import 的時候登記一條線的鉤子 `storyline.TASKS`／`TASK_LEFT`／`REFRESH_HOOKS`／`FIGHT_HOOKS`／`END_HOOKS`）、`glyph.py`（原 `tianxia/glyph.py`：讀筆畫）、`insight_llm.py`（原 `tianxia/insight_llm.py`：看圖取名的 B 段）——四個舊名都留成 `sys.modules` 別名（同一個模組物件，`mock.patch.object(epiphany, "_trial")`、`server.insight_llm.warm` 這一類照樣換得到）。
 - `actions.py`：原本 `Game` 上的 10 個方法（名字去掉前導底線、第一個參數 `ctx`；`sense_draw`、`epiphany_names` 掛核心的 `outing_watch`），`scene` 掛鉤的本體，核心原位、探索包、引導包叫的 7 個服務的本體（`sense_missed`、`sense_drop_stale`、`sense_menu`、`sense_start`、`sense_canvas`、`epiphany_title`、`prologue_choice`）。
 - `routes.py`：`/api/sense`、`/api/sense_read`、`/api/sense_warm`（原本寫在 `server.py`；殼照 `FEATURES` 掛，函式名照舊）。畫完那一筆的鎖外三段式照舊是殼的 `server.sense_draw`、靜心思名照舊是 `server.epiphany_think`（鎖外工作的掛鉤是總表第 69 批）。
-- 掛鉤：`enabled` 一直是 True（有沒有場景看內容、特殊頓悟看 `Config.epiphany`）；`prefix = ("sense", "dunwu")`；`choose` 只吃 `sense:`（標題「有所感・場景」）；`scene`（接縫掛鉤：有所感的卡、取名那一張，排在宴客之後）；`routes`；`content`（`insight_scenes.json`）；`player_fields`。**沒有 `bots.py`**：`bot_policy.score` 本來就沒有 `sense:`、`dunwu:` 那一段（落到最後的 None），拿了前綴之後 `bot_pick` 預設回 None，一樣不按（手冊第十五節第 2 批）；假人的有所感、取名照舊在 `bot_policy.take_turn` 的 `_sense`、`_god_name` 與 `bot.py` 的 `sense_pick`／`sense_stroke`，叫 Game 的委派。
+- 掛鉤：`enabled` 一直是 True（有沒有場景看內容、特殊頓悟看 `Config.epiphany`）；`prefix = ("sense", "dunwu")`；`choose` 只吃 `sense:`（標題「有所感・場景」）；`scene`（接縫掛鉤：有所感的卡、取名那一張，排在宴客之後）；`routes`；`content`（`insight_scenes.json`）；`player_fields`。**沒有 `bots.py`**：`bot_policy.score` 本來就沒有 `sense:`、`dunwu:` 那一段（落到最後的 None），拿了前綴之後 `bot_pick` 預設回 None，一樣不按（手冊第十五節第 2 批）；假人的有所感、取名照舊在 `bot_policy.take_turn` 的 `_sense`、`_god_name` 與 `bot.py` 的 `sense_pick`／`sense_stroke`，叫 Game 的委派。整季機器人不按 `dunwu:own` 第 60 批搬成這一包的 `Feature.bot_idle`（要比相等）。
 
 ## 認領的欄位（手冊 3.5：留在原地）
 
@@ -24,8 +24,8 @@
 
 核心原位碰有所感的那幾處（計畫 1.4）：能接第 11 批掛鉤的接上——`choose` 掛鉤接 `sense:`、`scene` 掛鉤接場景卡（就在原本那一行）；接不了的改叫上面的服務、記進邊界測試 `GAME_DELEGATE_CALLERS` 的 `# sense` 那一段（11 對，各寫理由），**沒有新增 `GAME_DIRECT`**（原本那一筆 `_sense` 讀探索包的 `rare_boost` 換成查詢服務、拿掉）：
 
-- 清失效參照中段的 `_sense_drop_stale`（後面的收店讀 `player.sensing`，`on_drop_stale` 在最後）；選單的 `_sense_menu`（`menu` 掛鉤之後一行，擂台第 12 批進了那個掛鉤；這一格接上 `menu` 掛鉤留給總表第 57 批，第 24 批 PM 認定第 2 條）。
-- `choose`：`sense:draw` 只叫出畫布（`_sense_canvas`，建紀錄之前那一格，同 `battle:`）；`dunwu:` 要帶自己寫的名字（`text`），`choose` 掛鉤不帶，留在原位的 elif 叫 `_epiphany_name`，標題 `_action_title` 叫 `_epiphany_title`。
+- 清失效參照 `stale.early` 那一格（第 55 批，委派拿掉；後面的收店讀 `player.sensing`，`on_drop_stale` 在最後）；選單第 56 批是 `MENU_ORDER["take"]` 的 `sense` 那一格（擂台之後、一條線的答題之前；`menu` 掛鉤在擂台前面，接不了）。
+- `choose`：`sense:draw` 只叫出畫布第 57 批是 `MENU_ORDER["quick"]` 的 `canvas` 那一格（委派 `_sense_canvas` 拿掉）；`dunwu:` 要帶自己寫的名字（`text`），`choose` 掛鉤不帶，留在原位的 elif 叫 `_epiphany_name`，標題 `_action_title` 叫 `_epiphany_title`。
 - 舊探索（留給序章與測試內容；本體在探索包 `explore_base.py`，經 `ctx` 叫）：`_insight_blocked` 的 `_sense_missed`、`_explore_can` 的 `_sense_missed`；`_explore_outcome` 的 `_sense_start`（序章四景）、`_sense_here`（落在悟意境那一支）。
 - 裝飾器 `_outing_watch` 搬進核心（`tianxia/core/services.py` 的 `outing_watch`；`Game.choose`、`answer_event` 照舊掛），經 `ctx._outing_watched` 叫探索包的委派，記在 `CORE_DELEGATE_CALLERS`。籌備中那兩句 `PREPARING_TEXT`、`PREPARING_REFUSAL` 也搬進核心（`sense_request` 籌備中回它；第 23 批同時搬了同樣兩句，合進 `split/trunk` 時留這一份，裝飾器 `not_while_preparing` 是第 23 批的）。
 - 包 import 包的地雷先拆：探索包 `explore_actions.outing_weights` 改問 `ctx._sense_missed(loc)`、引導包 `actions.graduate_pass` 改問 `ctx._sense_prologue_choice()`。
@@ -48,3 +48,7 @@
 - 前後一字不變：`scripts/same_behavior.py` 的 `sense` 一軌（`--tracks sense`）。
 
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`stale.early` 的 `sense`（`actions.sense_drop_stale`）。
+
+**第 56 批（選單收接縫，核心批）**：`take/sense`、`idle/sense` 是這一包登記的格；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_sense_menu` 拿掉；上面寫「留委派」「原位」的以這一句為準。

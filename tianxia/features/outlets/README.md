@@ -13,7 +13,7 @@
   `credit`（捐素材、捐銀兩共用：軍備存量、貢獻、推大本營那一條線）、`armament_view`（江湖頁的陣營軍備存量）。
 - `silver_actions.py`：原本 `Game` 上的 8 個方法——`silver_options`（打點那一間店裡的幾樣）、`bribe_targets`、`silver_act`（五樣的分派）、`close_dadian`、`bribe`、`furnace`、`mentor`、`silver_donate`。
   `_at_clinic_town`（附錄甲裁核心）留在 `Game`，包裡經 ctx 叫。
-- `bots.py`：假人看到 `donate:`、`dadian:` 的選項怎麼按（原本 `bot_policy.score` 的 dadian、donate 兩段）——萬一停在店裡只會離開。`act:donate`、`act:dadian` 的分數（None）是 act 子動詞，前綴 `act` 是核心的，留在 `bot_policy` 原位。
+- `bots.py`：假人看到 `donate:`、`dadian:` 的選項怎麼按（原本 `bot_policy.score` 的 dadian、donate 兩段）——萬一停在店裡只會離開。`act:donate`、`act:dadian`（第 60 批接進 Verb）：`bot` 回 None（假人不進）、`bot_skip`（整季機器人不按）；`silver_donate`、`mentor`、`furnace`、`buy_legend`、`bribe:` 不寫，照舊落到 `ACT_SCORES` 的 0.0（隨機挑得到，不是不按）。
 - 數字與字不在包裡：`tianxia/silver.py`（銀兩出口）、`tianxia/economy.py`（捐軍備）、店面那一頁的資料 `shopview.dadian_view`、`donate_view` 中 `shopview` 還沒收進 `registry.SHARED`（邊界測試的 SHARED_LATER），是過渡 import。
 - 掛鉤：`prefix = ("donate", "dadian")`；`choose` 接 `donate:*`、`dadian:*`（標題在動作之前拿）；`bot_pick` 問 `bots.score`；`bot_always = ("donate:", "dadian:")`；
   `enabled`＝捐軍備開著、銀兩出口開著、或此刻還坐在其中一間店裡（開關在坐著時被關掉，離開還按得到）。
@@ -24,10 +24,10 @@
 
 - `player_fields`：`picking_donate`、`picking_dadian`（兩間店開著沒）、`donate_day`、`donated_today`（捐素材今天捐了多少點）、`silver_donate_day`、`silver_donated`（捐銀兩今天捐了幾兩）、`mentor_day`、`mentor_ready`（名師指點）、
   `furnace_day`、`furnace_ready`（看火候）、`legend_silver_bought`（這一季用銀兩買了幾顆破境丹）、`bribed`（今天打點過誰）。
-- `carried = ("donate_day", "donated_today")`：換季不能多捐一輪（`Game._reset_player_for_new_season` 照帶，不看開關）；其餘換季跟著新角色重來。
+- `carried = ("donate_day", "donated_today")`：換季不能多捐一輪（`season.carry` 的 `outlets` 那一格照帶，第 55 批；不看開關）；其餘換季跟著新角色重來。
 - 不認領：`legend_items`（破境丹的數量）屬修練包、商城也帶；`shop_line`、`shop_clue`、`shop_hold`（七間店共用的掌櫃那一句）屬核心。
 - `World.armaments`（各陣營軍備存量）是全服帳：由這一包的 `credit` 寫、核心 `status_data` 經 `armament_view` 讀；沒有 `PlayerState` 欄位。
-- 共用規則層的 `atlas.travel_block` 直接讀 `picking_dadian`、`picking_donate`（動身被擋的那一句；全部拆包第 50 批照實記下，第 56 批選單收接縫時改成掛鉤、一張先後表）。
+- 動身被擋（`atlas.travel_block`）：第 56 批選單收接縫起這一包登記 `MENU_ORDER["block"]` 自己那一格，讀 `picking_dadian`、`picking_donate` 的只剩包裡；字與先後一字不動（`atlas` 不再讀）。
 
 ## 委派與留在原位的接縫
 
@@ -36,7 +36,7 @@
 留委派、記進 `GAME_DELEGATE_CALLERS` 的：
 
 - `_everyday_options` 叫 `_donate_option`、`_silver_options`：「此地還能做」裡捐軍備與打點兩顆入口排在療傷之後，順序是行為（`/api/main` 的選項一顆一顆逐位元組）；若放進 `Shop.entry` 會跑到療傷前面。
-- `_act` 叫 `_silver_act`：`act:bribe:<人物>` 帶後綴，`Verb` 認不得（總表第 57 批才擴）。
+- `act:bribe:<人物>`：第 57 批接進 `Verb` 的 `tail_run`、`tail_title`（走銀兩四樣同一支 `press`），四樣的標題也接進 `Verb.title`，核心不再有銀兩那幾行。
 - `shop_view` 叫 `_bribe_targets`；`status_data` 叫 `armament_view`。
 - 外面（server、假人）叫的：`donate`、`donate_items`（`/api/do/donate`）、`can_donate_here`（`bot.donate_spare`）。
 - 網頁那一半（`donatePicks`、`dadianHtml`、`donateHtml`、`donateCell`、`donateStep`、`donateTierOne`、`donateGo`）第 65 批才切，這一批不碰 `web/`。
@@ -61,3 +61,9 @@
 ## 過渡（手冊 3.11）
 
 過渡 import 共 1 處（全部拆包第 40 批合完重印）：`donate_actions` 到 `shopview`。`silver_actions` 到 `figures` 那一處第 40 批 `figures` 收進共用規則層，不算過渡（原本 2 處）。
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`season.carry` 的 `outlets`（今天捐過的照帶，不看開關）。
+
+**第 56 批（選單收接縫，核心批）**：`here/donate`、`here/dadian`、`idle/outlets`、`block/outlets` 是這一包登記的格；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_donate_option`、`_silver_options` 拿掉；上面寫「留委派」「原位」的以這一句為準。
+
+**第 57 批（分派與標題收接縫，核心批）**：委派 `_silver_act` 拿掉（上面「留 8 個」以這一句為準），engine 不再 import `silver`。

@@ -164,3 +164,9 @@ def armament_view(ctx) -> dict | None:
         "stock": [{"name": name, "attribute": attribute, "points": stock.get(attribute, 0)}
                   for attribute, name in c.config.economy.armaments.items()],
     }
+
+
+def here_cell(ctx, loc, cost, odds) -> list[Option]:
+    """here/donate 那一格（core_seams，全部拆包第 56 批；原本在 Game._everyday_options）：大本營的捐軍備那一顆，這裡沒有是空的。"""
+    donate = donate_option(ctx)
+    return [] if donate is None else [donate]

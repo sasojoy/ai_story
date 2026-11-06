@@ -2,12 +2,12 @@
 
 - actions.py：原本 Game 上的 seclusion_refusal、seclude、_finish_seclusion（Game 留一行委派給 server 的修練頁、_advance_player_local 與測試）
 
-閉關鈕在修練頁（server 的 /api/do/seclude → Game.seclude）；閉關中選單只剩 act:break 與擂台入口（核心 _everyday_options 原位，總表第 57 批才碰）。
+閉關鈕在修練頁（server 的 /api/do/seclude → Game.seclude）；閉關中選單只剩 act:break 與擂台入口（MENU_ORDER["busy"] 的 seclusion、arena 兩格，第 56 批）。
 按 act:break 提早出關由這一包的 Verb("break") 接走。沒有選項前綴、沒有選單、沒有 bots.py（假人不閉關）。
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Verb
+from tianxia.core.features import Feature, MenuHook, SeamHook, Verb
 
 
 class SeclusionFeature(Feature):
@@ -30,6 +30,30 @@ class SeclusionFeature(Feature):
 
             self._verbs = (Verb("break", run=lambda ctx, prepared: actions.finish(ctx, ctx.state.world.time)),)
         return self._verbs
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """local 的 seclusion 那一格（順序在 SEAM_ORDER；不問 enabled）：補算自己的時間最後，自己滿時的出關（actions.finish_due），排在福緣之前。"""
+        if self._seams is None:
+            from . import actions  # noqa: PLC0415
+
+            self._seams = (SeamHook("local", "seclusion", lambda ctx: actions.finish_due(ctx)),)
+        return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單的一格（順序在 MENU_ORDER；不問 enabled）：閉關中的「提前出關」。"""
+        if self._menus is None:
+            from . import actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("busy", "seclusion", lambda ctx: actions.busy_cell(ctx)),
+            )
+        return self._menus
 
 
 FEATURE = SeclusionFeature()

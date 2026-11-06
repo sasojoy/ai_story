@@ -1,5 +1,5 @@
 """豪強改幫（三陣營四勝利，設計 3.2；全部拆包第 35 批；原本是 Game 上的 _lean_options、_lean_anytime、_lean_step，本體一字沒改，self 換成 ctx）。
-Game 留一行委派的：_lean_options（選單原位在叫）、_lean_anytime（choose 查選單之前不在選單上的「改幫…」）；_lean_step 只有投靠那一串叫（join_actions.faction_step）。
+Game 留一行委派的：_lean_anytime（choose 查選單之前不在選單上的「改幫…」）；_lean_step 只有投靠那一串叫（join_actions.faction_step）。lean_options 第 56 批起是 here/lean 那一格，委派拿掉。
 """
 from __future__ import annotations
 

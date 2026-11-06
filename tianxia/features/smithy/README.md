@@ -16,7 +16,7 @@
 - `divine_actions.py`：`name_divine`、`bind_art`（`@_not_while_preparing` 裝飾器留在 `Game` 的委派上）。
 - `clue.py`：`smith_clue`（鐵匠順口；包裡其餘各檔一律經 `ctx._smith_clue` 叫，因為測試換掉 `Game._smith_clue`）。
 - `routes.py`：`/api/smith_line`（原本寫在 `server.py`；殼照 `FEATURES` 掛）。
-- `bots.py`：假人看到 `smith:` 的選項怎麼按（原本 `bot_policy.score` 的 smith 那一段）與 `want`（原本 `bot_policy._smith_want`）。`act:smith`（進鐵匠鋪）的分數在 `bot_policy` 的 `act:` 那一段（前綴 `act` 是核心的），繼續呼叫 `_smith_want`（一行委派到這裡）。整季機器人與假人共用的底層（`bot.smith_want`、`forge_step`、`forge_ready`、`trade_at_smith`、`keep_book_names`）不搬，它們叫 `Game` 的公開方法。
+- `bots.py`：假人看到 `smith:` 的選項怎麼按（原本 `bot_policy.score` 的 smith 那一段）與 `want`（原本 `bot_policy._smith_want`）。`act:smith`（進鐵匠鋪）的分數第 60 批搬來（`enter`，`Verb.bot` 問；`bot.pick` 不按是 `Verb.bot_skip`）；`bot_policy._smith_want` 名字留著（一行委派到這裡，測試讀）。改 `bots.py` 的 `act:` 分數時另外跑 `tests/bots/test_bot_policy.py`、`tests/bots/test_bot_policy_conquest.py`、`tests/bots/test_bot_policy_stuck.py`（`test_for` 挑不到，第 60 批）。整季機器人與假人共用的底層（`bot.smith_want`、`forge_step`、`forge_ready`、`trade_at_smith`、`keep_book_names`）不搬，它們叫 `Game` 的公開方法。
 - 掛鉤：`prefix = "smith"`；`choose` 接 `smith:*`（標題 `smithing.title(arg)`，在動作之前拿）；`verbs()` 一個 `Verb("smith")`（`run` 走進鐵匠鋪、`title` 是「鐵匠鋪・此地」）；`routes`；`content`（`forge_secrets.json`、`tier4_named.json`）；`bot_pick` 問 `bots.score`；`enabled`＝武器或防具開著、或此刻還坐在鐵匠鋪裡（開關在坐著時被關掉，離開還按得到；不看第一季開關）。
 
 ## 認領的欄位（手冊 3.5：留在原地）
@@ -24,13 +24,13 @@
 - `player_fields`：`picking_smith`（店開著）、`smith_page`（停在哪一頁）、`smith_draft`（一步一步的單子）、`smith_rule`（這一次進門要講的神器規矩）、`smith_rules_told`（這一季講過的）。
 - `carried = ()`：換季全部跟著新角色重來。
 - 不認領：`shop_line`、`shop_line_seed`、`shop_hold`、`shop_clue`（七間店共用的掌櫃那一句，屬核心）、`furnace_day`／`furnace_ready`（看火候，銀兩出口包已認領）。`SmithDraft` 類別在核心 `state.py`。
-- 共用規則層的 `atlas.travel_block` 直接讀 `picking_smith`（動身被擋的那一句；全部拆包第 50 批照實記下，第 56 批選單收接縫時改成掛鉤、一張先後表）。
+- 動身被擋（`atlas.travel_block`）：第 56 批選單收接縫起這一包登記 `MENU_ORDER["block"]` 自己那一格，讀 `picking_smith` 的只剩包裡；字與先後一字不動（`atlas` 不再讀）。
 
 ## 委派與留在原位的接縫
 
-`Game` 留 12 個一行委派：`_smith_options`（核心原位選單叫）、`_smith`（`tests/gear/test_shop2.py` 直接叫）、`_smith_clue`（測試換掉它）、`smith_line`、`smith_forge`、`smith_furnace`、`smith_sell`、`smith_upgrade`（`server.py` 的 `MAIN_ACTIONS`、整季機器人與假人、測試叫）、`repair_item`、`temper_item`、`name_divine`、`bind_art`（`MENXIA_ACTIONS`、假人、測試叫）；其餘 11 個方法只有包裡叫，沒有委派。
+`Game` 留 11 個一行委派（`_smith_options` 第 56 批換成 `take` 那一格，拿掉）：`_smith`（`tests/gear/test_shop2.py` 直接叫）、`_smith_clue`（測試換掉它）、`smith_line`、`smith_forge`、`smith_furnace`、`smith_sell`、`smith_upgrade`（`server.py` 的 `MAIN_ACTIONS`、整季機器人與假人、測試叫）、`repair_item`、`temper_item`、`name_divine`、`bind_art`（`MENXIA_ACTIONS`、假人、測試叫）；其餘 11 個方法只有包裡叫，沒有委派。
 
-**店面登記（`Shop`）這一批不登記**（計畫 1.9 量出四條）：「此地還能做」的入口順序是 懸賞榜 → 鐵匠鋪 → 馬市 → 搬成包的店，搬進登記就排到馬市後面（`/api/main` 的選項順序變）；選單順序同；`here` 有兩個意思（`_shop_open` 要單子沒開著，收店要 `smith_open`），`Shop.here` 只有一個；同一排的懸賞榜（第 45 批，`features/bounties`）、馬市（第 42 批，`features/gear`）成了包但同樣不登記，三間排給第 56 批。這些留在 `Game` 原位：`_everyday_options` 的 `picking_smith` 選單與 `act:smith` 入口、`_shop_open`、`shop_view` 的 smith 分支、`_drop_stale_references`／`sync` 的收店、`_depart` 的 `close_smith`、`_idle`。**PM 定案**（第 41 批 PM 認定第 1 條）：第 42 批（馬市）與第 45 批（懸賞榜）比較晚合的那一批，把懸賞榜、鐵匠鋪、馬市三間一起排進 `Shop`，入口先後維持 懸賞榜 → 鐵匠鋪 → 馬市（先後就是行為）；若非得讓 `Shop` 分兩個「此地」判斷（改核心）才行，先回報 PM。
+**店面登記（`Shop`）不登記，走 `MENU_ORDER`**（第 41 批計畫 1.9 量過，第 56 批選單收接縫定案，計畫第四節）：入口先後 懸賞榜 → 鐵匠鋪 → 馬市 → 搬成包的店是行為，`_shops` 照 `FEATURES` 走、酒肆與銀兩出口會排到前面；`here` 有兩個意思（`_shop_open` 要單子沒開著，收店要 `smith_open`），`Shop.here` 只有一個；`close_shops` 只收坐著的，出發那一行不看坐不坐著（`smith_page`、`smith_rule` 不坐在店裡也要清）。所以這一包登記 `menus()` 的格：`take`、`here`、`idle`、`open`、`depart`、`block`，先後在 `MENU_ORDER`；`shop_view` 的 smith 分支與 `sync.close`、`stale.mid` 的收店（第 55 批）不動。
 
 核心原位讀 `smithing`（經舊名別名）的三處記在邊界測試的 `GAME_DIRECT`：`choose`（打造那幾步併成一則：`GO_VERB`、`is_forge_step`、`is_step_line`；切頁不寫紀錄），`_drop_stale_references`、`sync`（`draft_here`、`draft_stale`，單子那一欄關了就清）。位置在寫紀錄與收店的中段，沒有對應的掛鉤。這三筆先認（第 41 批 PM 認定第 4 條）；**全部拆包第 40 批（核心批）收了**：五個純函式連同它們讀的常數（`ARMOR_KIND`、問句與回報那幾句）與 `here` 抽到核心小模組 `tianxia/core/smith_base.py`（照 `omen_base`），`smithing.py` 照原名 re-export 同一個物件；`engine` 的 `choose`、`_drop_stale_references`、`sync` 三處改讀 `smith_base`、不再 import `smithing`，邊界測試那三筆 `GAME_DIRECT` 還原（11 → 8）、`GAME_IMPORTS` 拿掉 `tianxia.smithing`（84 → 83）。
 
@@ -63,6 +63,8 @@
 
 ## 過渡（手冊 3.11）
 
-過渡 import 共 5 行（shopview 兩處、fusion 兩行、bot；邊界測試的「包 → 舊模組」列 5 行）：`shelf_actions`、`forge_actions` 到 `shopview`（店面的畫面資料，邊界測試的 SHARED_LATER）、`smithing` 到 `fusion`（合成與揣摩，SHARED_LATER；兩行，一行是 `QualityOdds`）、`bots` 到 `bot`（整季機器人與假人共用的底層，總表歸「假人三支不搬」；函式裡延後 import）。
+過渡 import 共 6 行（shopview 兩處、fusion 兩行、bot 兩處〔`want`、第 60 批的 `enter`〕；邊界測試的「包 → 舊模組」列 6 行）：`shelf_actions`、`forge_actions` 到 `shopview`（店面的畫面資料，邊界測試的 SHARED_LATER）、`smithing` 到 `fusion`（合成與揣摩，SHARED_LATER；兩行，一行是 `QualityOdds`）、`bots` 到 `bot`（整季機器人與假人共用的底層，總表歸「假人三支不搬」；函式裡延後 import）。
 
 **行狀記一筆 import 核心**（第 41 批合併時改，第 41 批 PM 認定第 10 條）：開發時 `smithing` 是 `from tianxia import annals, fusion` 一行；第 29 批之二把行狀拆兩半之後，舊名 `tianxia.annals` 是指到列傳包 `standing.py` 的別名（經別名 import 就是包 import 包，邊界測試擋），合併時拆成兩行：`from tianxia import fusion`（過渡）與 `from tianxia.core import annal_base as annals`（核心本體，不算過渡；包裡只用 `annals.note`、`annals.DEED`，都在記一筆那一半）。
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.close` 的 `smithy`（`shelf_actions.sync_close`）、`stale.mid` 的 `smithy`（`shelf_actions.drop_stale`）：收店與清單子，**兩段條件不一樣，不合併**。

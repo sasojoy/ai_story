@@ -1,5 +1,5 @@
 """季末與三方卡（三陣營四勝利，減法季整合設計第三章；全部拆包第 35 批；原本是 Game 上的 _season_grant、_four_wins、ending_card、_tier_outlook、
-tier_hint、_gentry_now、sides_card，本體一字沒改，self 換成 ctx）。Game 留一行委派的：_season_grant（換季開場）、_four_wins（核心與決戰包都在問）、
+tier_hint、_gentry_now、sides_card，本體一字沒改，self 換成 ctx）。Game 留一行委派的（_season_grant 第 55 批換成 season.grant 那一格）：_four_wins（核心與決戰包都在問）、
 ending_card（season_result、server）、tier_hint、sides_card（weekcard、server）；_tier_outlook、_gentry_now 只有包裡叫（沒有委派）。
 """
 from __future__ import annotations

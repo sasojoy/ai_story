@@ -1013,7 +1013,7 @@ class PlayerState(BaseModel):
     bounties_done: int = 0  # 這一季完成了幾張懸賞（量表與人物卡用）
     picking_bounty: bool = False  # 打開了懸賞榜（第二層選單，不花體力）
     # 懸賞榜第三層：正在替哪一張求兵挑東西（懸賞 id，懸賞榜設計 4.4）。按「交出…」記下；回到懸賞榜、返回、交完、打開懸賞榜時清掉。
-    # 那一張下榜了、交不出了，選單當它不存在（Game._bounty_options），所以存檔修補、出發都不必另外收
+    # 那一張下榜了、交不出了，選單當它不存在（懸賞榜包 actions.options），所以存檔修補、出發都不必另外收
     bounty_pick: str | None = None
     contrib: int = 0  # 本季替目前陣營推大勢記下的貢獻（散人不記）
     contrib_weeks: dict[int, int] = Field(default_factory=dict)  # 季曆第幾週 → 那一週記的貢獻
@@ -1933,7 +1933,7 @@ class WorldState(BaseModel):
     @classmethod
     def _drop_retired_bounties(cls, value: list[Bounty]) -> list[Bounty]:
         """求藝（kind "art"）企劃者 2026-10-21 拿掉（「懸賞榜直接把武學拿掉」）：那之前開的季，榜上可能還掛著求藝，讀進來就丟掉，
-        引擎與畫面再也碰不到這一種（沒人揭過，交過的賞早就發了，丟了不欠誰）。玩家的 bounty_pick 指著它的，選單當它不存在（Game._bounty_options）。"""
+        引擎與畫面再也碰不到這一種（沒人揭過，交過的賞早就發了，丟了不欠誰）。玩家的 bounty_pick 指著它的，選單當它不存在（懸賞榜包 actions.options）。"""
         return [b for b in value if b.kind not in RETIRED_BOUNTY_KINDS]
 
     @model_serializer(mode="wrap")

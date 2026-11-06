@@ -26,7 +26,7 @@
 
 ## 還留在原位的接縫（理由在 `tests/core/test_feature_boundaries.py` 的 `# territory_acts` 那一段）
 
-- **22:00 換天沒有掛鉤可接**：世界層的 `day` 格是 21 天季的曆日，不是現實 22:00 的換天；`Game._conquest_tick`、`_deliver_conquest` 在 `engine.py` 的 `world_tick`、`sync`、`advance` 三處（五個呼叫）排在別的結算之間，順序就是行為（`_xingshi_grace` 在「季收了、日子沒往前」之前，`late` 的存季只在那一條路上存）。所以兩個方法在 `Game` 上留委派，`WORLD_ORDER` 不動。
+- **22:00 換天不接世界層**：世界層的 `day` 格是 21 天季的曆日，不是現實 22:00 的換天；換天與分紅在 `world_tick`、`sync`、`advance` 三處（五格，第 55 批換成 `SEAM_ORDER` 的 `tick`、`sync.deliver`、`advance.turn`）排在別的結算之間，順序就是行為（`_xingshi_grace` 在「季收了、日子沒往前」之前，`late` 的存季只在那一條路上存）。`Game` 上那兩個委派留給測試，`WORLD_ORDER` 不動。
 - **〈天下形勢〉的 B 段與背景執行緒**（`server.write_xingshi`、`xingshi_once`、`XINGSHI_RUNNING`）：用殼的佇列、預算、`TALE_THREADS`，留在 `server.py`（同月旦評 `write_yuedan`）。
 - `server.main_view` 的 `conquest`、`xingshi`、`xingshi_mark` 三個鍵、`admin_choices` 的 `xingshi`、`conquest` 兩格：鍵的順序是行為（第 66 批「狀態列掛鉤」才處理），照舊叫 `Game` 的委派。
 - `MAIN_ACTIONS["conquest_letter"]`（玩家下戰書）留在殼。**管理者那一個叫 `admin_conquest_letter`，不叫 `conquest_letter`**：`api_do` 先查功能包的管理者工具，同名會把玩家的下戰書整個蓋掉（FB-609）。
@@ -53,3 +53,5 @@
 - 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/territory_acts/day_actions.py`
 
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `conquest`（`day_actions.conquest_tick(ctx, True)`，回傳不接）、`conquest.deliver`；`advance.turn` 的 `conquest`（`conquest_tick(ctx, False)`，回話接進 `msgs`）、`conquest.deliver`；`tick` 的 `conquest`（`conquest_tick(ctx, True)`，回話接進 `msgs`）。

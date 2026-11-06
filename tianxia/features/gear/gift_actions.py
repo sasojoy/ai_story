@@ -1,5 +1,5 @@
 """寄放補送、名將贈禮與本命兵器（全部拆包第 42 批；裝備四欄設計 6.4 名將贈禮、6.5 寄放；兵器設計 4.10 本命兵器）。原本 Game 上的 5 個方法，
-Game 留五個一行委派：_deliver_held_gear（sync、advance 叫，位置固定在 _deliver_big_events 之後）、_general_gifts、_signature_arms、_gift_entry
+Game 留四個一行委派（deliver_held_gear 第 55 批換成 sync.deliver、advance.held 的 held_gear 那一格）：_general_gifts、_signature_arms、_gift_entry
 （choose 後半與核心事件檢定的 answer_event、answer_branch 叫；大勢人物包的挑戰本人也經 ctx 叫 _signature_arms）、_people_here（測試直接叫）。
 計畫 docs/superpowers/plans/2026-11-07-裝備包-第1批.md 1.1。第一個參數 ctx 是 Game（手冊 3.3）。
 規則照模組屬性叫（treasures.gifts_due、treasures.deliver_held……：量表腳本換掉模組上的，這裡照樣打得到）。"""

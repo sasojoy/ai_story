@@ -13,7 +13,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature
+from tianxia.core.features import Feature, MenuHook, SeamHook
 
 from . import zhuan_end
 
@@ -46,6 +46,30 @@ class ZhuanFeature(Feature):
         from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）
 
         return routes.router(shell)
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """sync.deliver 的 zhuan 那一格（順序在 SEAM_ORDER；不問 enabled）：〈天下形勢〉寫到名號、季末論功各記一則行狀（心意的行狀之後、書信之前）。"""
+        if self._seams is None:
+            from . import actions  # noqa: PLC0415
+
+            self._seams = (SeamHook("sync.deliver", "zhuan", lambda ctx: actions.tick(ctx)),)
+        return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單的一格（順序在 MENU_ORDER；不問 enabled）：休季那一顆後面，列傳為終點開著、手上有列傳的票時多幾顆用票的鈕（減法季批 7b；關著、沒票一顆不多）。"""
+        if self._menus is None:
+            from . import actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("rest", "zhuan", lambda ctx: actions.options(ctx)),
+            )
+        return self._menus
 
 
 FEATURE = ZhuanFeature()

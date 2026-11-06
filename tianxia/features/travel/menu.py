@@ -1,6 +1,6 @@
 """移動的選單（功能包 tianxia/features/travel/；原本是 Game._move_option、_back_way、_back_option、_road_task_options、set_move_mode，
 全部拆包第 47 批）。ctx 是 Game（第一階）。選單的順序算行為（「前往」夾在求見、招募之後、拜師之前；路上那串是折返、帶路一句、喊停、路上小事、擂台），
-所以不能改成 Feature.options 登記（會排進 FEATURES 的順序）：Game 原位那幾行只叫委派。"""
+所以不能改成 Feature.options 登記（會排進 FEATURES 的順序）：第 56 批起是 MENU_ORDER 的 road、here/move 那幾格（這一包在 menus() 登記）。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -82,3 +82,30 @@ def road_task_options(ctx: Game, j: Journey) -> list[Option]:
 def set_move_mode(ctx: Game, mode: str) -> None:
     """主畫面的「走法」切換：之後選單上的「前往」用這種走法；不認得的走法當成步行。不存檔（見 Game.__init__ 的 move_mode）。"""
     ctx.move_mode = mode if mode in atlas.MODES else "walk"
+
+
+def road_head(ctx: Game, j: Journey) -> list[Option]:
+    """road/head 那一格（core_seams，全部拆包第 56 批；原本在 Game._everyday_options）：路上那一行；跟著人結伴同行時路線由帶頭的人定，自己只能分道揚鑣（玩家互動第二層），
+    不然折返（路上設計 3.2；改去別處在大地圖上安排）。"""
+    s, c = ctx.state, ctx.content
+    end = c.locations[j.path[j.last]].name
+    opts = [Option(id="act:on_road", label=f"（在路上，{ctx.stamp(j.arrive_at[j.last])} 抵達{end}）", enabled=False)]
+    if s.player.tagalong is not None:
+        opts.append(Option(id="act:part", label=f"分道揚鑣（不再跟著{s.player.tagalong.leader}，之後自己走）"))
+    else:
+        opts.append(back_option(ctx))
+    return opts
+
+
+def road_halt(ctx: Game, j: Journey) -> list[Option]:
+    """road/halt 那一格（core_seams，全部拆包第 56 批；原本在 Game._everyday_options）：還有下一站、還沒喊過停才有；跟著人結伴同行時沒有。"""
+    s, c = ctx.state, ctx.content
+    if s.player.tagalong is None and j.stop_at is None and j.reached < j.last:
+        return [Option(id="act:halt", label=f"喊停（到{c.locations[j.path[j.reached]].name}就停下）")]
+    return []
+
+
+def move_options(ctx: Game, loc) -> list[Option]:
+    """here/move 那一格（core_seams，全部拆包第 56 批；原本在 Game._everyday_options）：相鄰地點一處一顆；世界旗標沒開、序章的草廬（只給站在那裡的人）不列。"""
+    s, c = ctx.state, ctx.content
+    return [move_option(ctx, loc.id, dest_id) for dest_id in loc.connections if atlas.is_unlocked(c.locations[dest_id], s, c)]

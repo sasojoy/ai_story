@@ -8,6 +8,7 @@ from __future__ import annotations
 from tianxia import economy, equipment, materials, prologue as prologue_rules, silver
 from tianxia import figures  # 共用規則層（大勢人物：此地在場的人物；第 40 批收進）
 from tianxia.core.option import Option
+from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 
 from .donate_actions import credit
 
@@ -115,3 +116,18 @@ def silver_donate(ctx) -> list[str]:
     msgs += credit(ctx, {materials.GRAIN_ATTRIBUTE: points})
     ctx._save_season()
     return msgs
+
+
+def here_cell(ctx, loc, cost, odds) -> list[Option]:
+    """here/dadian 那一格（core_seams，全部拆包第 56 批；原本在 Game._everyday_options）：銀兩出口（21 天季，正式季整合 6.5）：五樣收進「打點」那一間店（第 9 批畫面乙），不花體力。"""
+    return [Option(id="act:dadian", label=silver.SHOP)] if silver_options(ctx) else []
+
+
+def travel_block(state, content) -> TravelBlock | None:
+    """block/outlets 那一格（core_seams，全部拆包第 56 批；原本在 atlas.travel_block，字與先後一字不動；待 joy 潤）：打點（21 天季的銀兩出口）、大本營的捐軍備（素材與經濟設計第六節）。"""
+    p = state.player
+    if p.picking_dadian:
+        return TravelBlock("還在茶樓雅間裡，先離開才能安排前往", to_jianghu=True)
+    if p.picking_donate:
+        return TravelBlock("還在軍需官帳前，先離開才能安排前往", to_jianghu=True)
+    return None

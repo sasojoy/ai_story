@@ -20,6 +20,7 @@
 | on_season_end(ctx)、on_season_start(ctx, old) | Game._reset_player_for_new_season（舊的那一季要丟之前；新的存檔接上之後、開場那一則之前） |
 | on_drop_stale(ctx) | Game._drop_stale_references 最後 |
 | bot_pick(ctx, option)、bot_always | bot_policy.score（假人看到這一顆的分數，None 是不按）；bot.pick 排除的前綴（永遠按得下去的） |
+| bot_idle(ctx, option) | core_bots（全部拆包第 60 批）：bot.pick 排除裡有條件、或要比相等的那幾顆（此刻按了也白按）；前綴放不下才寫這一格。不問 enabled（舊濾網不看開關，關著的包選單上本來就沒有它們） |
 | admin_tools(shell)、routes(shell) | server：/api/do/{op} 的管理者工具、掛路由（shell 是 server 模組） |
 | threads(shell) | server.main（殼開、測試停：只有 main 叫 start_threads，測試不叫；不回東西。全部拆包第 52 批，開給戰記與第 53 批的看守） |
 | check_content(content, need)、web、content | content.validate（關著的包照驗）；index.html 的檔；content.py 讀的檔。check_content **手冊 3.3 表外**（見下） |
@@ -50,7 +51,9 @@
 | on_season_close(ctx, reread) | Game.admin_end_season 讀回收季那一份季之後、補大事之前（reread=False）；Game.admin_next_season 休季時、開下一季之前（reread=True：收兵之前讀回手上那一份季）——收季的收兵（決戰；全部拆包第 8 批） |
 | shops()（Shop） | 店面登記：店裡那一串（_everyday_options）、進店那一顆、哪一間開著（_shop_open）、動身收店（_depart）、此地不開了收店（sync、_drop_stale_references） |
 | verbs()（Verb） | act 子動詞：_act 最前面、_action_title、行動列那一格（_everyday_options）、行動列底下那一行（action_notes）、只打開一張卡的回話（choose）；
-  這一下打哪一路（_fight_squad 最前面：大場面判讀問；sortie：全部拆包第 17 批多開的一格 squad） |
+  這一下打哪一路（_fight_squad 最前面：大場面判讀問；sortie：全部拆包第 17 批多開的一格 squad）。帶後綴的 act:<verb>:<後綴>（全部拆包第 57 批：tail_run、tail_title、tail_squad）問同一張表；
+  只有 act:heal 與舊探索 act:explore 留在 _act 原位（計畫 docs/superpowers/plans/2026-11-06-分派標題收接縫-第57批.md 第四節）。
+  假人（core_bots，全部拆包第 60 批：bot、tail_bot、bot_skip、tail_bot_skip）：bot_policy.score 的 act: 那一段問 act_score，bot.pick 問 bot_idle；都不問 enabled（計畫 docs/superpowers/plans/2026-11-06-假人殼收尾-第60批.md 第一節） |
 | world()（WorldHook） | 世界層的格（core_world：全部拆包第 25 批）：world.advance_world_state 每一步、season_events 的週初與每天、settle_season_start、
   end_season、_open_claimed；sqlite_world 的開季與換季；figure_life.tick 每一位對話人物（life，第 40 批）。照檔尾那張寫死的順序表 WORLD_ORDER 一格一格叫（包與還沒成包的舊模組穿插），不問 enabled |
 | effects()（EffectHook） | 一則效果的格（core_effects：全部拆包第 32 批）：rules.apply_effect 從頭到尾一段一格，照檔尾寫死的順序表 EFFECT_ORDER 一格一格叫
@@ -62,6 +65,10 @@
 | steps()（StepHook） | 「你這一步」的格（core_step：全部拆包第 36 批）：本週卡「眼下要事」的候選（weekcard._steps 叫 step.items）與四勝利開著時補目標
   （step.finish 照每一件 _ref 的第一個字找回那一格的 place），照檔尾寫死的順序表 STEP_ORDER 一格一格叫（包登記自己那一格；懸賞榜兩格第 45 批
   由懸賞榜包登記），不問 enabled |
+| seams()（SeamHook） | 補算與換季的格（core_seams：全部拆包第 55 批）：Game.sync、advance、world_tick、_advance_player_local、own_turn_checks、_drop_stale_references、
+  _reset_player_for_new_season 裡各包那一段，照檔尾寫死的順序表 SEAM_ORDER 一格一格叫（包與核心的段穿插），不問 enabled |
+| menus()（MenuHook） | 選單與動身的格（core_seams：全部拆包第 56 批）：Game.options、_everyday_options、action_notes、_idle、_shop_open、_stamina_play_options、atlas.travel_block、
+  移動包的出發收店裡各包那一段，第 57 批加 Game.choose 那幾顆「選單上、不建紀錄」的（quick），照檔尾寫死的順序表 MENU_ORDER 一格一格問（包與核心的格穿插），不問 enabled |
 
 ctx 第一階就是 Game；功能包只准叫 services.py 那張清單上的方法。
 """
@@ -81,8 +88,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Shop:
-    """店面登記（第 11 批）：一間開在城裡、坐進去選單整個換成那間店的店。核心在七間店共用的那幾處照清單問（舊的六間還在 engine，
-    搬成包的店接在它們後面）。每一樣都拿 ctx（Game）。"""
+    """店面登記（第 11 批）：一間開在城裡、坐進去選單整個換成那間店的店。核心在店共用的那幾處照清單問，排在 MENU_ORDER 的 shops 那一格（懸賞榜、鐵匠鋪、馬市不登記，
+    走 MENU_ORDER 自己的格，第 56 批計畫第四節）。每一樣都拿 ctx（Game）。"""
 
     key: str  # Game._shop_open 回的字（店面那一頁畫哪一間；server 的 main_view 照它）
     inside: Callable[[Any], bool]  # 此刻坐在店裡（picking_*）
@@ -94,8 +101,10 @@ class Shop:
 
 @dataclass(frozen=True)
 class Verb:
-    """act:<verb> 那一格的主人（act 子動詞；第 11 批先開給主人已經成包的三格，總表第 57 批其餘的接上同一張表）。每一樣都可以是 None，
-    回 None 也一樣：照舊由核心做（核心那一支還在：舊探索、遊歷……）。"""
+    """act:<verb> 那一格的主人（act 子動詞；第 11 批先開給主人已經成包的三格，全部拆包第 57 批把其餘的接上同一張表，只留 act:heal 與舊探索）。每一樣都可以是 None，
+    回 None 也一樣：照舊由核心做（核心那一支還在：舊探索、療傷）。
+    選項帶後綴的（act:<verb>:<後綴>，第 57 批）：verb 寫冒號前那一段，按下去、標題、打哪一路問 tail_* 那三格，同一個 Verb 可以同時管 act:recruit 與 act:recruit:<人物>；
+    行動列那一格、底下那一行、picks 只認沒有後綴的。一格一主、子動詞互斥，沒有先後，不開順序表（tests/core/test_contract_core.py、test_contract_features.py 鎖 {verb: 包}、不准兩包認同一格）。"""
 
     verb: str
     run: Callable[[Any, Any], list[str] | None] | None = None  # Game._act 最前面：按下去（ctx, prepared）
@@ -106,6 +115,16 @@ class Verb:
     # sortie（全部拆包第 17 批「出陣三」多開的一格；第 11 批計畫第五節第 1 條預告的「這一下打不打仗」）：Game._fight_squad 最前面，
     # 這一格按下去會打哪一路（大場面判讀、鎖外 A 段與鎖內 C 段的重驗都問它）；不打仗是 None（核心照舊往下，act: 那幾格往下也是 None）
     squad: Callable[[Any], Squad | None] | None = None
+    # core_seams（全部拆包第 57 批）：帶後綴的那一下
+    tail_run: Callable[[Any, Any, str], list[str] | None] | None = None  # Game._act 最前面：按下去（ctx, prepared, 後綴）
+    tail_title: Callable[[Any, str], str | None] | None = None  # Game._action_title：這一下江湖紀錄的整個標題（ctx, 後綴）
+    tail_squad: Callable[[Any, str], Squad | None] | None = None  # Game._fight_squad 最前面：這一下打哪一路（ctx, 後綴）
+    # core_bots（全部拆包第 60 批）：假人怎麼按這一格。bot、tail_bot 是 bot_policy.score 問的分數（ctx, 名牌[, 後綴]），回 None 是不按；這一格沒寫（None）算沒主人，
+    # bot_policy 照舊落到 ACT_SCORES.get(arg, 0.0)，0.0 是隨機挑得到的、不是不按，別寫成回 None 的格。bot_skip、tail_bot_skip 是 bot.pick 不按（只是打開一張卡、一直按得下去）
+    bot: Callable[[Any, Any], float | None] | None = None
+    tail_bot: Callable[[Any, Any, str], float | None] | None = None
+    bot_skip: bool = False
+    tail_bot_skip: bool = False
 
 
 @dataclass(frozen=True)
@@ -152,6 +171,7 @@ class FeatureHooks(Protocol):
     def on_season_start(self, ctx: Game, old: GameState) -> None: ...
     def on_drop_stale(self, ctx: Game) -> None: ...
     def bot_pick(self, ctx: Game, option: Option) -> float | None: ...
+    def bot_idle(self, ctx: Game, option: Option) -> bool: ...  # core_bots（全部拆包第 60 批）：不問 enabled
     def admin_tools(self, shell: Any) -> dict[str, AdminTool]: ...
     def routes(self, shell: Any) -> Any: ...
     def check_content(self, content: Content, need: Callable[[bool, str], None]) -> None: ...
@@ -179,6 +199,10 @@ class FeatureHooks(Protocol):
     def bus(self) -> tuple[BusHook, ...]: ...
     # core_step（全部拆包第 36 批：「你這一步」的格，先後在 STEP_ORDER；不問 enabled）
     def steps(self) -> tuple[StepHook, ...]: ...
+    # core_seams（全部拆包第 55 批：補算與換季的格，先後在 SEAM_ORDER；不問 enabled）
+    def seams(self) -> tuple[SeamHook, ...]: ...
+    # core_seams（全部拆包第 56 批：選單與動身的格，先後在 MENU_ORDER；不問 enabled）
+    def menus(self) -> tuple[MenuHook, ...]: ...
     # tale（全部拆包第 52 批：殼啟動時開這一包的背景執行緒；只有 server.main 叫，測試不叫；不問 enabled，殼啟動還沒有 ctx）
     def threads(self, shell: Any) -> None: ...
 
@@ -229,6 +253,9 @@ class Feature:
 
     def bot_pick(self, ctx: Game, option: Option) -> float | None:
         return None
+
+    def bot_idle(self, ctx: Game, option: Option) -> bool:
+        return False
 
     def admin_tools(self, shell: Any) -> dict[str, AdminTool]:
         return {}
@@ -294,6 +321,12 @@ class Feature:
         return ()
 
     def steps(self) -> tuple[StepHook, ...]:
+        return ()
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        return ()
+
+    def menus(self) -> tuple[MenuHook, ...]:
         return ()
 
     def __repr__(self) -> str:
@@ -404,6 +437,25 @@ def bot_pick(ctx: Game, option: Option) -> tuple[bool, float | None]:
 def bot_always() -> tuple[str, ...]:
     """各包宣告永遠按得下去的前綴（bot.pick 排除；關著的包也算，選單上本來就沒有它們）。"""
     return tuple(p for f in registered() for p in f.bot_always)
+
+
+# core_bots（全部拆包第 60 批「假人殼收尾」；計畫 docs/superpowers/plans/2026-11-06-假人殼收尾-第60批.md 第一節）
+
+
+def bot_idle(ctx: Game, option: Option) -> bool:
+    """這一顆是不是「一直按得下去、按了也白按」（bot.pick 排除，不然「沒得按就推進時間」的訊號會失效）：包宣告的前綴（bot_always）、
+    act:<verb> 那一格的 bot_skip、act:<verb>:<後綴> 那一格的 tail_bot_skip、選項主人的 bot_idle（有條件的、要比相等的）。都是只讀的濾網，互相沒有先後；
+    不問 enabled（舊濾網不看開關，關著的包選單上本來就沒有它們）。"""
+    oid = option.id
+    if oid.startswith(bot_always()):
+        return True
+    kind, _, rest = oid.partition(":")
+    if kind == "act":
+        head, sep, _ = rest.partition(":")
+        if any(v.tail_bot_skip if sep else v.bot_skip for v in _verbs(None, head)):
+            return True
+    owner = owner_of(oid)
+    return owner is not None and owner.bot_idle(ctx, option)
 
 
 def admin_tools(shell: Any) -> dict[str, AdminTool]:
@@ -573,18 +625,26 @@ def _verbs(ctx: Game | None, verb: str) -> list[Verb]:
 
 
 def act(ctx: Game, verb: str, prepared: Any) -> list[str] | None:
-    """act:<verb> 按下去（Game._act 最前面）：主人接了回那幾句；都不接是 None，核心照舊。"""
-    for v in _verbs(None, verb):
-        got = v.run(ctx, prepared) if v.run is not None else None
+    """act:<verb> 按下去（Game._act 最前面）：主人接了回那幾句；都不接是 None，核心照舊。帶後綴的（<verb>:<後綴>，第 57 批）問 tail_run。"""
+    head, sep, tail = verb.partition(":")
+    for v in _verbs(None, head):
+        if sep:
+            got = v.tail_run(ctx, prepared, tail) if v.tail_run is not None else None
+        else:
+            got = v.run(ctx, prepared) if v.run is not None else None
         if got is not None:
             return got
     return None
 
 
 def act_title(ctx: Game, verb: str) -> str | None:
-    """act:<verb> 那一下江湖紀錄的標題（Game._action_title 那張表之前；表照 arg 查、不看 kind，這裡也一樣）。"""
-    for v in _verbs(None, verb):
-        got = v.title(ctx) if v.title is not None else None
+    """act:<verb> 那一下江湖紀錄的標題（Game._action_title 那張表之前；表照 arg 查、不看 kind，這裡也一樣）。帶後綴的（第 57 批）問 tail_title。"""
+    head, sep, tail = verb.partition(":")
+    for v in _verbs(None, head):
+        if sep:
+            got = v.tail_title(ctx, tail) if v.tail_title is not None else None
+        else:
+            got = v.title(ctx) if v.title is not None else None
         if got is not None:
             return got
     return None
@@ -618,12 +678,31 @@ def pick_replies(verb: str | None = None) -> tuple[str, ...]:
 
 def act_squad(ctx: Game, verb: str) -> Squad | None:
     """act:<verb> 按下去會打哪一路（Game._fight_squad 最前面；Verb.squad）：主人回那一路；不打仗、都不接是 None，核心照舊往下。
-    不問 enabled（原位那一支本來就不看開關，同 run、title、note）。"""
-    for v in _verbs(None, verb):
-        got = v.squad(ctx) if v.squad is not None else None
+    不問 enabled（原位那一支本來就不看開關，同 run、title、note）。帶後綴的（第 57 批）問 tail_squad。"""
+    head, sep, tail = verb.partition(":")
+    for v in _verbs(None, head):
+        if sep:
+            got = v.tail_squad(ctx, tail) if v.tail_squad is not None else None
+        else:
+            got = v.squad(ctx) if v.squad is not None else None
         if got is not None:
             return got
     return None
+
+
+# core_bots（全部拆包第 60 批「假人殼收尾」）
+
+
+def act_score(ctx: Game, verb: str, profile: Any) -> tuple[bool, float | None]:
+    """(這一格有沒有主人打分數, 假人的分數)：bot_policy.score 的 act: 那一段問。主人回 None 是不按；那一格沒寫算沒主人（owned=False），bot_policy 照舊落到
+    ACT_SCORES.get(arg, 0.0)。不問 enabled（原位不看開關，同 act、act_title；不開順序表：一格一主，沒有「同一下誰先」，第 57 批第一節）。帶後綴的問 tail_bot。"""
+    head, sep, tail = verb.partition(":")
+    for v in _verbs(None, head):
+        if sep and v.tail_bot is not None:
+            return True, v.tail_bot(ctx, profile, tail)
+        if not sep and v.bot is not None:
+            return True, v.bot(ctx, profile)
+    return False, None
 
 
 # core_world（全部拆包第 25 批「世界層掛鉤」；計畫 docs/superpowers/plans/2026-11-05-世界層掛鉤-第25批.md 1.4、2.1）
@@ -644,7 +723,8 @@ class WorldHook:
 # 包登記自己那一格（Feature.world()），其餘由核心代叫（world.py、sqlite_world.py 裡的一張 {格: 函式}：還沒成包、不在共用規則層的舊模組，
 # 與核心自己的那幾格）。寫死在這裡、不照 FEATURES 的先後：同一個位置包與舊模組穿插（step 的宴客夾在人物行事與盤算之間、月旦評排最後；
 # muster 的龍頭上陣排在屯糧與玉璽之後），照 FEATURES 只排得出「所有包擠在同一個位置」。之後舊模組成包只是那一格換主人，表不動。
-# 改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。
+# 改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。改格的本體或這張表另外要跑（scripts/test_for.py 挑不全）：tests/map/test_atlas.py、tests/core/ 的 test_explain、test_social、test_prologue，
+# tests/gear/test_shop.py，tests/figures/ 的 test_day_scale、test_gentry_allied、test_orders，與 scripts/same_behavior.py 的 stack 一軌（兩層以上疊著的先後只有它比）。
 #
 # 位置    核心在哪裡問                                                         run 的簽名                                   回傳
 # step    world.advance_world_state 每一步：sim_tick 之後、季還沒收（季曆交界之前）  (vehicle, content, store, step)               bounties、figures.revive、seal_acts 的 list 接進訊息；其餘 None
@@ -971,3 +1051,218 @@ def step_table(core: dict[str, StepHook]) -> list[StepHook]:
 def step_places(core: dict[str, StepHook]) -> dict[str, Callable[..., Any]]:
     """{ref: place}：step.finish 照每一件 _ref 的第一個字找回那一格補目標（沒有 ref 或沒有 place 的格不列）。"""
     return {h.ref: h.place for h in step_table(core) if h.ref is not None and h.place is not None}
+
+
+# core_seams（全部拆包第 55 批「補算與換季收接縫」；計畫 docs/superpowers/plans/2026-11-06-補算換季收接縫-第55批.md 一、二、六）
+
+
+@dataclass(frozen=True)
+class SeamHook:
+    """補算與換季的一格（Feature.seams() 回一串）：核心在 at 那個位置照 SEAM_ORDER[at] 一格一格叫，輪到 slot 就叫 run。照 registered() 問、
+    不看 enabled（原位那幾行本來就不看包的開關：碎片關著照樣要重抄、把抄本清掉；on_sync、on_drop_stale、on_season_* 只問開著的包，所以接不了，
+    第 42 批認定第 7 條）。run 的簽名照位置（SEAM_ORDER 底下那張）；包的 run 在叫的那一下才照模組屬性或 ctx 找（monkeypatch 照樣有效）。"""
+
+    at: str
+    slot: str
+    run: Callable[..., Any]
+
+
+# 補算與換季的順序表：位置 → 那一個位置的格，照換成掛鉤之前一行一行的呼叫順序。順序就是行為（同一下誰先誰後、江湖紀錄的先後、世界旗標、亂數抽到的順序都算；
+# test_seats 那條「抄帳排在抵達與密謀之後」就是 sync.deliver 的 seat 在 arrive、plots 之後的守門），所以寫死、連核心自己的段一起列。包登記自己那一格（Feature.seams()），
+# 其餘由核心代叫（engine._SEAM_CORE；要用區域變數的 day、on_sync 由 Game._sync_core 回 closure）。改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。
+#
+# 位置            核心在哪裡問                                                   run 的簽名            回傳
+# local           Game._advance_player_local 最後（體力氣血回完）                 (ctx)                 接進 msgs
+# sync.heirloom   Game.sync 補算自己的時間之前（承露照整段離線時間算體力回復）      (ctx)                 不接
+# sync.close      Game.sync 補算完下線那一段之後：收店、收伏、抵達                 (ctx)                 接成 arrived（只有 arrive 回字）
+# sync.deliver    Game.sync 寫完江湖大事之後：補送到席次                           (ctx)                 接成回話（依序 plots、summons、seat；其餘回 None）
+# advance.arrive  Game.advance 跨日之後                                           (ctx)                 接成 arrived
+# advance.turn    Game.advance 抵達之後、存季之前                                 (ctx)                 接進 msgs（只有 conquest 回字）
+# advance.held    Game.advance 最後                                               (ctx)                 不接
+# tick            Game.world_tick 到時的結算（on_due）之後                         (ctx)                 接進 msgs（只有 conquest 回字）
+# own_turn        Game.own_turn_checks 暫停那一道之後                              (ctx)                 不接
+# season.carry    Game._reset_player_for_new_season 建好新存檔之後：照帶的欄位      (ctx, old, fresh)     不接（self.state 還是舊的：格裡只准讀 old、fresh、ctx.content）
+# season.grant    Game._reset_player_for_new_season 開場那一則之後                  (ctx, old)            不接
+# stale.first     Game._drop_stale_references 最前面（對齊賽季之前，換季會清掉陣營） (ctx)                 不接
+# stale.early     同上，補體丹之後、所在地之前                                     (ctx)                 不接
+# stale.mid       同上，所在地之後、路上之前                                       (ctx)                 不接
+# stale.road      同上，隊伍之前                                                   (ctx, lost_place)     不接
+# stale.late      同上，等著取名之後、主線之前                                     (ctx)                 不接
+SEAM_ORDER: dict[str, tuple[str, ...]] = {
+    "local": ("seclusion", "fortune"),
+    "sync.heirloom": ("seal",),
+    "sync.close": ("smithy", "gear", "shops", "ambush", "arrive"),
+    "sync.deliver": ("big_events", "results", "renames", "echoes", "guard", "notices", "conquest", "conquest.deliver", "arena",
+                     "marks", "stances", "zhuan", "mail", "plans", "day", "on_sync", "held_gear", "checkin", "partings", "bounties",
+                     "plots", "summons", "story", "seat", "enlist", "hints", "party"),
+    "advance.arrive": ("arrive",),
+    "advance.turn": ("conquest", "conquest.deliver", "due"),
+    "advance.held": ("held_gear",),
+    "tick": ("conquest", "battle", "seal"),
+    "own_turn": ("bounties",),
+    "season.carry": ("guide", "ties", "companions", "self", "mall", "sortie", "outlets", "battle", "seal", "rack", "peers", "story", "legacy"),
+    "season.grant": ("faction",),
+    "stale.first": ("guide",),
+    "stale.early": ("cultivation", "resting", "sense", "companions"),
+    "stale.mid": ("bounties", "smithy", "gear", "shops", "treasures", "forge", "signature", "seal"),
+    "stale.road": ("travel",),
+    "stale.late": ("figure_acts",),
+}
+
+
+def seam_hooks(at: str) -> dict[str, Callable[..., Any]]:
+    """at 那個位置包登記的格 {slot: run}：照 registered()、不看 enabled。每一次都驗登記的全部格：表上沒有的格、同一格登記兩次（兩包或同一包）
+    都丟 ValueError（同 world_hooks、bus_hooks）。"""
+    if at not in SEAM_ORDER:
+        raise ValueError(f"補算與換季沒有 {at} 這個位置")
+    own: dict[str, Callable[..., Any]] = {}
+    for f in registered():
+        for hook in f.seams():
+            if hook.slot not in SEAM_ORDER.get(hook.at, ()):
+                raise ValueError(f"{f.name} 登記了補算與換季表上沒有的格 {hook.at}/{hook.slot}")
+            if hook.at == at:
+                if hook.slot in own:
+                    raise ValueError(f"補算與換季的 {at}/{hook.slot} 登記了兩次（{f.name}）")
+                own[hook.slot] = hook.run
+    return own
+
+
+def seam_run(at: str, core: dict[str, Callable[..., Any]], *args: Any,
+             hooks: dict[str, Callable[..., Any]] | None = None) -> list[Any]:
+    """照 SEAM_ORDER[at] 走每一格：包登記了叫包的，沒有叫 core 那一份（核心代叫的格）；兩邊都沒有（那一格的包沒登記：契約測試換掉 FEATURES 時）
+    跳過。回每一格的回傳值（照順序、跳過的不算）：接不接由呼叫端照位置決定。core 寫了表上沒有的格丟 ValueError（打錯字的格不會默默不跑）。"""
+    own = seam_hooks(at) if hooks is None else hooks  # 沒有這個位置在 seam_hooks 丟
+    order = SEAM_ORDER.get(at)
+    if order is None:
+        raise ValueError(f"補算與換季沒有 {at} 這個位置")
+    if not core.keys() <= set(order):
+        raise ValueError(f"核心代叫了補算與換季 {at} 表上沒有的格 {sorted(core.keys() - set(order))}")
+    out: list[Any] = []
+    for slot in order:
+        run = own.get(slot) or core.get(slot)
+        if run is not None:
+            out.append(run(*args))
+    return out
+
+
+def seam_lines(at: str, core: dict[str, Callable[..., Any]], *args: Any) -> list[str]:
+    """同 seam_run，把每一格回的那幾句照順序接成一串。每一格只准回 list 或 None，回別的丟 TypeError（回字串會被一個字一個字接進回話、回 tuple
+    是把某個回傳值漏接：當場紅，不要默默進回話）；回傳不接的格（sync.deliver 的 conquest、partings、story……）包成回 None。"""
+    lines: list[str] = []
+    for got in seam_run(at, core, *args):
+        if got is None:
+            continue
+        if not isinstance(got, list):
+            raise TypeError(f"補算與換季 {at} 的格只准回 list 或 None，回了 {type(got).__name__}")
+        lines += got
+    return lines
+
+
+# core_seams（全部拆包第 56 批「選單收接縫」；計畫 docs/superpowers/plans/2026-11-06-選單收接縫-第56批.md 一、二、七）
+
+
+@dataclass(frozen=True)
+class MenuHook:
+    """選單與動身的一格（Feature.menus() 回一串）：核心在 at 那個位置照 MENU_ORDER[at] 一格一格問，輪到 slot 就叫 run。照 registered() 問、不看 enabled
+    （原位那幾行本來就不看包的開關；menu、options、on_drop_stale 只問開著的包，所以接不了，第 42 批認定第 7 條）。run 的簽名照位置（MENU_ORDER 底下那張）；
+    包的 run 在叫的那一下才照模組屬性或 ctx 找（monkeypatch 照樣有效）。"""
+
+    at: str
+    slot: str
+    run: Callable[..., Any]
+
+
+# 選單與動身的順序表：位置 → 那一個位置的格，照換成掛鉤之前一行一行的先後。順序就是行為（誰先接管整個選單、「此地還能做」誰排前面、動身被擋先說哪一句都算），
+# 所以寫死、連核心自己的格一起列。包登記自己那一格（Feature.menus()），其餘由核心代叫（engine._MENU_CORE、atlas._BLOCK_CORE、travel/departure._DEPART_CORE）。
+# 改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。改格的本體或這張表另外要跑（scripts/test_for.py 挑不全）：tests/map/test_atlas.py、tests/core/ 的 test_explain、test_social、test_prologue，
+# tests/gear/test_shop.py，tests/figures/ 的 test_day_scale、test_gentry_allied、test_orders，與 scripts/same_behavior.py 的 stack 一軌（兩層以上疊著的先後只有它比）。
+#
+# 位置    核心在哪裡問                                          run 的簽名                 怎麼叫
+# tick    Game.options 最前面（tick=True 才問）                   (ctx)                      menu_run，回傳不接
+# front   Game.options：決戰的鈕與平常的選單前面（兩處）            (ctx)                      menu_lines
+# rest    Game._everyday_options 休季那一顆後面                   (ctx)                      menu_lines
+# take    Game._everyday_options 事件之後：此刻接管整個選單的       (ctx)                      menu_first（空的 [] 也算接管：髒存檔的待確認畫面真的是空選單）
+# busy    Game._everyday_options 閉關中                           (ctx)                      menu_lines
+# road    Game._everyday_options 在路上                           (ctx, journey)             menu_lines
+# here    Game._everyday_options 站在地點上（序章的過濾之前）       (ctx, loc, cost, odds)     menu_lines
+# plays   Game._stamina_play_options 序章、休季那一道之後           (ctx)                      menu_lines
+# notes   Game.action_notes 探索、出陣那兩行之後                   (ctx, ids, loc)            menu_run，回 dict，照順序 update（鍵的順序算行為）
+# idle    Game._idle 前五樣（籌備、休季、事件、閉關、路上）之後      (ctx)                      menu_any（有一格是真的就不算閒著）
+# open    Game._shop_open                                         (ctx)                      menu_first（"" 是坐著、這裡不開門；核心 or None）
+# depart  移動包 departure.depart 最前面：動身了，店收起來          (ctx)                      menu_run，回傳不接
+# block   atlas.travel_block：現在不能安排前往的原因               (state, content)           menu_first（沒有 ctx：party 拿別人的 state 問，格裡一律讀傳進來的）
+# quick   Game.choose 查完選單、清掉「剛剛」與引導之後、建紀錄之前  (ctx, kind, arg, option_id)  menu_first（第 57 批：選單上、不建紀錄的那幾顆；回的話由核心 _log 一次，格裡不寫紀錄。回 None 照舊往下）
+MENU_ORDER: dict[str, tuple[str, ...]] = {
+    "tick": ("seal",),
+    "front": ("seal",),
+    "rest": ("zhuan",),
+    "take": ("duel", "menu", "sense", "story", "talk", "faction", "audience", "bounties", "smithy", "gear", "shops", "omen"),
+    "busy": ("seclusion", "arena"),
+    "road": ("head", "parley", "halt", "tasks", "arena"),
+    "here": ("explore", "train", "challenge", "summons", "story", "sect", "social", "recruit", "move", "lessons", "join", "defect", "lean",
+             "order", "rank2", "rank", "omen", "errand", "invite", "bounties", "smithy", "gear", "shops", "plays", "heal", "donate", "dadian", "rest"),
+    "plays": ("head", "aid", "options", "plan"),
+    "notes": ("socialize",),
+    "idle": ("audience", "bounties", "smithy", "omen", "sense", "duel", "gear", "outlets", "tavern", "arena", "faction"),
+    "open": ("arena", "bounties", "smithy", "gear", "shops"),
+    "depart": ("bounties", "escort", "smithy", "gear", "shops"),
+    "block": ("ended", "prologue", "event", "bout", "talk", "audience", "bounties", "smithy", "gear", "outlets", "tavern", "faction", "omen", "follow", "busy", "ambush"),
+    "quick": ("battle", "seal", "duel", "arena", "errand", "canvas"),  # core_seams（全部拆包第 57 批）
+}
+
+
+def menu_hooks(at: str) -> dict[str, Callable[..., Any]]:
+    """at 那個位置包登記的格 {slot: run}：照 registered()、不看 enabled。每一次都驗登記的全部格：表上沒有的格、同一格登記兩次（兩包或同一包）
+    都丟 ValueError（同 seam_hooks）。"""
+    if at not in MENU_ORDER:
+        raise ValueError(f"選單與動身沒有 {at} 這個位置")
+    own: dict[str, Callable[..., Any]] = {}
+    for f in registered():
+        for hook in f.menus():
+            if hook.slot not in MENU_ORDER.get(hook.at, ()):
+                raise ValueError(f"{f.name} 登記了選單與動身表上沒有的格 {hook.at}/{hook.slot}")
+            if hook.at == at:
+                if hook.slot in own:
+                    raise ValueError(f"選單與動身的 {at}/{hook.slot} 登記了兩次（{f.name}）")
+                own[hook.slot] = hook.run
+    return own
+
+
+def _menu_slots(at: str, core: dict[str, Callable[..., Any]]) -> list[Callable[..., Any]]:
+    """照 MENU_ORDER[at] 排好的每一格：包登記了用包的，沒有用 core 那一份（核心代叫的格）；兩邊都沒有（那一格的包沒登記：契約測試換掉 FEATURES 時）跳過。
+    core 寫了表上沒有的格丟 ValueError（打錯字的格不會默默不跑）。"""
+    own = menu_hooks(at)  # 沒有這個位置在這裡丟
+    order = MENU_ORDER[at]
+    if not core.keys() <= set(order):
+        raise ValueError(f"核心代叫了選單與動身 {at} 表上沒有的格 {sorted(core.keys() - set(order))}")
+    return [run for slot in order if (run := own.get(slot) or core.get(slot)) is not None]
+
+
+def menu_run(at: str, core: dict[str, Callable[..., Any]], *args: Any) -> list[Any]:
+    """每一格都叫，回每一格的回傳值（照順序、跳過的不算）：接不接由呼叫端照位置決定。"""
+    return [run(*args) for run in _menu_slots(at, core)]
+
+
+def menu_first(at: str, core: dict[str, Callable[..., Any]], *args: Any) -> Any:
+    """一格一格叫，第一個不是 None 的就回它、後面的不叫；都是 None 回 None。空的 [] 也算（take：選單整個被接管，只是一顆都沒有）。"""
+    for run in _menu_slots(at, core):
+        got = run(*args)
+        if got is not None:
+            return got
+    return None
+
+
+def menu_lines(at: str, core: dict[str, Callable[..., Any]], *args: Any) -> list[Any]:
+    """每一格都叫，照順序接成一串。每一格只准回 list，回別的丟 TypeError（回字串會被一個字一個字接進選單、回 None 是有一支漏了 return：當場紅）。"""
+    lines: list[Any] = []
+    for run in _menu_slots(at, core):
+        got = run(*args)
+        if not isinstance(got, list):
+            raise TypeError(f"選單與動身 {at} 的格只准回 list，回了 {type(got).__name__}")
+        lines += got
+    return lines
+
+
+def menu_any(at: str, core: dict[str, Callable[..., Any]], *args: Any) -> bool:
+    """一格一格叫，第一個真值就停、回 True；都不是回 False。"""
+    return any(run(*args) for run in _menu_slots(at, core))

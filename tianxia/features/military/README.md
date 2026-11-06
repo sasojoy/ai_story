@@ -23,7 +23,7 @@
 | `fs_rules.py` | 伏筆的規則（原 `tianxia/foreshadow.py`，舊名是別名）：聽片段、對話片段、最後一步、答題、官銀、天機、效果三格 |
 | `opp_actions.py` | 機緣的動作：`settle_plots`、`give_opportunity`，與核心原位要問機緣的委派本體（選單、打贏記一處、第 2 階行動名字、管理頁選單、對話話題、之後記次數）；`HEARD_TITLE` |
 | `fs_actions.py` | 伏筆的動作：`foreshadow`（`fs:` 按下去）、`hear_after_stamina`（伏筆先、機緣後）、`give_fragment`，與核心原位要問伏筆的委派本體（答題選單與場景、閒著的選單、打贏官銀、事件片段、對話片段、管理頁選單） |
-| `bots.py` | 假人看到 `opp:`、`fs:` 都不按 |
+| `bots.py` | 假人看到 `opp:`、`fs:` 都不按；第 2 階行動、接下糧車、應召的分數（第 60 批，`Verb.bot`，常數同值） |
 
 `Game` 留 15 個一行委派（第 33 批）：`_order_options`、`_rank2_options`、`_rank_action_options`、`_rank2`、`_rank_action`、`_take_convoy`、`_convoy_arrives`、`_order_credit`、
 `_report_seat`、`_summons_plan`、`orders_view`、`convoy_line`、`admin_issue_orders`、`admin_rotate_seats`、`admin_summon`；`_check_cost_note`、`_rank_action_line` 只有包裡自己叫，沒有委派。
@@ -39,9 +39,9 @@
 
 ## 還留在核心原位的接縫（理由在 `tests/core/test_feature_boundaries.py` 的 `# military` 那一段）
 
-- `act:rank2`、`act:convoy`、`act:rank:<行動>`：核心 `_act` 的 act 子動詞（總表第 57 批才擴 `Verb`），選單三段（`_everyday_options`，順序算行為）和按下去（`_act`）留在核心原位叫 Game 的委派。
-- `act:summons`（人已在召見地點時按的應召）、`_summons_hop`（往召見地點）、`bot_policy.score` 的 `rank2`、`convoy`、`summons` 分數、`_summons_hop`：假人行動列的分數，留原位。
-- `_report_seat`：`sync`、`choose`、`travel` 與事件檢定的兩處（`answer_event`、`answer_branch`）叫，位置固定（回話與紀錄的先後算行為），沒有掛鉤可接。
+- `act:rank2`、`act:convoy`、`act:summons`、`act:rank:<行動>`：第 57 批接進 `Verb`（按下去與紀錄標題；`act:rank:<行動>` 帶後綴走 `tail_run`、`tail_title`，`Verb` 的名字照 `RANK_ACTION_PREFIX` 算，前綴只寫一次）；選單第 56 批是 `MENU_ORDER["here"]` 的 `order`、`rank2`、`rank` 那三格。
+- `_summons_hop`（往召見地點）：假人移動的分數，留 `bot_policy`（移動包的 `move:` 讀）。`rank2`、`convoy`、`summons` 的分數第 60 批搬進 `bots.py`（`Verb.bot`），`bot_always` 加 `fs:`、`opp:`（原本 `bot.FORESHADOW_OPTIONS`）。改 `bots.py` 的 `act:` 分數時另外跑 `tests/bots/test_bot_policy.py`、`tests/bots/test_bot_policy_conquest.py`、`tests/bots/test_bot_policy_stuck.py`（`test_for` 挑不到，第 60 批）。
+- `_report_seat`：`choose`、`travel` 與事件檢定的兩處（`answer_event`、`answer_branch`）叫，位置固定（回話與紀錄的先後算行為），沒有掛鉤可接；同步那一下第 55 批換成 `sync.deliver` 的 `seat` 那一格。
 - 抵達那一刻經事件 `arrive` 的 `convoy` 那一格（`FEATURE.bus()`：`convoy_actions.convoy_arrives`，排在懸賞護送之前，順序在核心的 `BUS_ORDER`；第 26 批起，委派 `_convoy_arrives` 拿掉）。`_order_credit`：核心的單打服務（`_squad_encounter`）打贏之後記功；出陣、決戰、大勢人物也經 `ctx._order_credit` 叫。
 - 「你這一步」的格（`FEATURE.steps()`，全部拆包第 36 批；順序在核心的 `STEP_ORDER`）：`order`（`order_actions.step_items`／`step_place`：沒做完的軍令一道一件、目標是最近的摸清了的那一處、護糧還沒接這一道的糧車多 `then`；`ORDER_GAIN` 從 `weekcard` 搬來，字一個不改；原本 `weekcard._steps` 的軍令那一段與 `step._order_places`、`_target`、`_then` 的軍令那一支）、`foreshadow`（`fs_actions.step_items`／`step_place`：讀伏筆的 `next_step`、`next_trip` 就是這一格回答，核心不再經舊名 `foreshadow` 讀，第 34 批 PM 認定第 1 條）。`step_items` 讀殼算好傳進來的 `orders_view` 那一份、不重算；不問 `enabled`；目標的最近一處問新手引導包的查詢服務 `ctx._nearest_to`、地點寫法用核心 `tianxia.step.place`。
 - `server.py` 的 `orders`、`convoy` 兩個鍵（`/api/main`）與管理者三顆鈕（`/api/do` 的路由留原位，批次表第二節；`ADMIN_ACTIONS` 只是查表用的 dict，照包分是第 68 批）照舊叫 Game 的委派。
@@ -85,3 +85,9 @@
 - 引導與網頁：`tianxia/features/guide/tests/test_opening.py`（2／9，`orders_view`）、`tests/map/test_weekcard.py`、`tests/core/test_prologue.py`（2／101）、`tests/web/test_prologue_web.py`（3／81）、`tests/web/test_jianghu_page_web.py`（1／134）
 - 別包叫進來的：`tianxia/features/sortie/tests/test_sortie.py`（出陣不花出陣次數）、`tests/server/test_server.py`（2／385）
 - 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/military/order_actions.py`
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `plots`（`opp_actions.deliver_plots`，經 `ctx._settle_plots`，寫「密謀」、存季）、`seat`（`seat_actions.deliver_seat`，寫「席次」）：兩格的回話都進同步的回話；`seat` 排在 `arrive`、`plots` 之後（`tests/figures/test_seats.py` 守）。
+
+**第 56 批（選單收接縫，核心批）**：`take/omen`、`here/order`、`here/rank2`、`here/rank`、`here/omen`、`idle/omen` 是這一包登記的格（`fs_asking` 包外三處都改問核心 `omen_base.fs_answering`）；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_order_options`、`_rank2_options`、`_rank_action_options`、`_fs_asking_options`、`_omen_options` 拿掉；上面寫「留委派」「原位」的以這一句為準。
+
+**第 57 批（分派與標題收接縫，核心批）**：`verbs()` 是新開的（`rank2`、`rank`、`convoy`、`summons`）。委派 `_rank2`、`_rank_action`、`_take_convoy`、`_rank2_action` 拿掉，engine 不再 import `step_actions`、`convoy_actions`；engine 模組層的 `_rank_action_id` 拿掉；`RANK_ACTION_PREFIX` 留在 engine（`features/military/tests` 從那裡拿）。上面寫「留委派」「原位」的以這一句為準。應召經 `ctx._present`、照模組屬性問 `ranks.summons_event`：`tests/bots/test_event_rotation.py`、`tests/core/test_engine.py`（`-k summons`）換的是這兩個名字，改這幾格另外跑。

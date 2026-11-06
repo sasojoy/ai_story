@@ -20,7 +20,7 @@
 
 核心原位碰簽到的兩處沒有第 11 批掛鉤可接，改叫 `Game` 上一行的委派，記進邊界測試 `GAME_DELEGATE_CALLERS` 的 `# checkin` 那一段，**沒有新增 `GAME_DIRECT`**：
 
-- `sync` 的 `_auto_checkin`：在補送裝備（`_deliver_held_gear`）之後；`on_sync` 掛鉤在它前面，江湖紀錄的先後算行為。
+- `sync.deliver` 的 `checkin` 那一格（第 55 批）：在補送裝備（`held_gear`）之後；`on_sync` 掛鉤在它前面，江湖紀錄的先後算行為。
 - `status_data` 的 `checkin_view`：`data["checkin"]` 在 `howto_entry` 之後、`fronts` 之前，鍵的順序算行為；`feature_status` 是 `main` 的頂層。
 - `Game._pill_find`：直接叫核心的 `checkin_on`、`PILL_FOUND`。
 
@@ -39,3 +39,5 @@
 ```
 python scripts/test_for.py --base HEAD tianxia/features/checkin/actions.py tests/web/test_checkin_web.py
 ```
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `checkin`（`actions.auto_checkin`；`Game._auto_checkin` 留給測試）。

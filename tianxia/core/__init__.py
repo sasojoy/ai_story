@@ -26,8 +26,10 @@
 - feast_base.py（core_world2：全部拆包第 40 批）：宴席「讀」的那一半——on、find、is_open、open_feasts、hosting、toasted；人物活起來 figure_life
   （共用規則層）問誰在擺宴、書信的邀宴問開著的宴，宴客包的 rules re-export 同一批。設宴（寫）是世界層 life 那一格。同 event_check 不進 MODULES。
 - smith_base.py（core_world2：全部拆包第 40 批，第 41 批 PM 認定第 4 條）：打造單子「讀」的那一小半——GO_VERB、is_forge_step、is_step_line、
-  draft_here、draft_stale（與 here、ARMOR_KIND、單子回話的八句常數）；engine 的 choose、_drop_stale_references、sync 讀它，鐵匠鋪包的 smithing
+  draft_here、draft_stale（與 here、ARMOR_KIND、單子回話的八句常數）；engine 的 choose 與鐵匠鋪包收店那兩格（第 55 批）讀它，鐵匠鋪包的 smithing
   re-export 同一批。同 event_check 不進 MODULES。
+- signature_base.py（core_seams：全部拆包第 55 批）：本命兵器「清失效參照」那一小半——owned、refresh_names；stale.mid 的 signature 那一格（engine._SEAM_CORE）讀它，
+  裝備包的 signature_arms re-export 同一批。同 event_check 不進 MODULES。
 # map2（全部拆包第 50 批「輿圖二」：atlas 收進共用規則層，讀包認領的欄位改問核心；計畫 docs/superpowers/plans/2026-11-07-輿圖包-第2批.md 1.5、1.6）
 - explore_base.py：探索表的小字與小函式——LOSE_WORD、六種地點（TOWN…CAMP）、四類事（EVENT…INSIGHT、KINDS、FILL）、PLACE_WORDS、BEAT_MOSTLY、
   BALANCED、match、kind_of、mostly_of、table_weights、mostly_in、hint_in、terrain_tags；第 49 批寄放在 services.py 檔尾 # map 那一段，第 50 批

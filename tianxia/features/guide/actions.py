@@ -651,3 +651,39 @@ def mark_veteran(ctx: Game) -> bool:
 
 def enlist_expire(ctx: Game) -> list[str]:
     return enlist.expire(ctx.state, ctx.content)
+
+
+def deliver_enlist(ctx: Game) -> None:
+    """sync.deliver 的 enlist 那一格（core_seams，全部拆包第 55 批）：第一道軍令一週還沒做完：引薦人照樣說結語（FB-094）；說的話記進江湖紀錄。不進回話。"""
+    ctx._guide(enlist_expire(ctx))
+
+
+def carry_season(ctx: Game, old, fresh) -> None:
+    """season.carry 的 guide 那一格，排最前面（core_seams，全部拆包第 55 批；照原位搬，不看開關）。序章的 begin、skip_onboarding 會寫 fresh，後面的格照蓋，跟原本一樣。"""
+    c = ctx.content
+    # 做完或略過（skip_tutorial 也是設成步數）：看不分季的那幾步；第一季多的兩步排在後面，回鍋的人接著做（計畫 T6）。
+    # 舊存檔先換算成新引導的步數（設計 7.2）
+    step = prologue_rules.migrated_step(old.player, c)
+    carried = step >= base_step_count(ctx)
+    if carried:
+        fresh.player.tutorial_step = step
+        fresh.player.guide_skipped = old.player.guide_skipped  # 略過的人換季也不畫對話框（畫面批次審查 I4）
+    elif prologue_rules.has(c):
+        if step < c.tutorial.prologue_steps and not old.player.bot:
+            prologue_rules.begin(fresh, c)  # 序章沒走完就換季：回草廬從第一步重來（Review Focus 5）
+        else:
+            # 序章走完了、後面的步驟還沒做完（或是假人、腳本）：從序章之後的起始步重來，不再回草廬；假人不走初入江湖
+            t = c.tutorial
+            fresh.player.tutorial_step = t.prologue_steps
+            if old.player.bot:
+                prologue_rules.skip_onboarding(fresh, c)
+    if enlist_done(ctx, old):
+        fresh.player.enlist_step = old.player.enlist_step  # 入伍段只走一次（設計 7.1）；沒走完的下一季投靠時從頭走
+    # 碰到才說（新手引導計畫三）：說過的與「不再提示」的開關帶到下一季，排著還沒上框的不帶（沒說過，下一季碰到還會說）。
+    # 引導走完的回鍋玩家，開季時師父送你下山一句（設計 7.1）；略過引導的人沒有要誰帶（控制者裁示），假人、關了提示的、內容沒寫的也不送
+    fresh.player.hints_seen = set(old.player.hints_seen)
+    fresh.player.hints_off = old.player.hints_off
+    book = c.hints
+    if carried and not old.player.guide_skipped and not old.player.bot and not old.player.hints_off and book.season_return:
+        fresh.player.hint_queue = [HintNote(id="s_return", speaker=book.head, text=book.season_return)]
+    fresh.player.newbie_marks, fresh.player.newbie_done = old.player.newbie_marks, old.player.newbie_done  # 新手目標只有一輪

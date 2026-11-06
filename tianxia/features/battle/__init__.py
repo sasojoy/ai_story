@@ -18,18 +18,18 @@
   資料型別與別處要讀的判定（63 個名字）在核心 tianxia/core/battle_base.py，這裡 re-export 同一批物件
 
 全部拆包第 7 批拿了 battle: 前綴：假人看到 battle: 的選項怎麼按問這一包（bot_pick → bots.py，原本是 bot_policy.score 的 battle 那一段）。
-battle: 的分派照舊在 Game.choose 原位（查完選單、清掉「剛剛」與引導之後、建紀錄之前那一支，叫 Game._battle_choose 的委派）：choose_unlisted
+battle: 的分派是 MENU_ORDER["quick"] 的 battle 那一格（全部拆包第 57 批；查完選單、清掉「剛剛」與引導之後、建紀錄之前）：choose_unlisted
 在查選單之前、choose 掛鉤會建紀錄，都不是那個位置（計畫 2026-11-01-決戰包-第3批.md 1.4），所以 choose 掛鉤照預設回 None。
-換季照帶補過的決戰（carried 那一格）照舊寫在 Game._reset_player_for_new_season、不掛 on_season_start（同出陣第 1 批審查之後的做法）。
+換季照帶補過的決戰（carried 那一格）第 55 批起是 season.carry 的 battle 那一格、不掛 on_season_start（同出陣第 1 批審查之後的做法）。
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, WorldHook
+from tianxia.core.features import Feature, MenuHook, SeamHook, WorldHook
 
 
 class BattleFeature(Feature):
     name = "battle"
-    prefix: str | None = "battle"  # 全部拆包第 7 批拿的：battle:join／enlist／escort／act……（選項照舊由 Game 的 _battle_menu 委派給，分派照舊在 Game.choose 原位）
+    prefix: str | None = "battle"  # 全部拆包第 7 批拿的：battle:join／enlist／escort／act……（選項照舊由 Game 的 _battle_menu 委派給，分派是 MENU_ORDER["quick"] 那一格，第 57 批）
     content = ("battles.json",)  # 決戰與攻城範本（content.py 照舊讀；攻城的規則在 siege.py，共用規則層）
     # 補過的決戰（跨季照帶：決戰常把季收掉，下一季才回來的人也要補、而且只補一次）、這一季參戰幾場與首功幾次（玩家卡、名帖）。
     # showdowns_restored（補回被洗掉的戰報，一季查一次）也是這一包的，但每一季第一次同步就寫成那一季的編號：契約測試的「換季回到預設」
@@ -37,7 +37,7 @@ class BattleFeature(Feature):
     # 第 7 批（集結、挑同伴）再認兩格：escort_pick（按了加入、還在挑誰隨你上陣）、parted_done（同伴回江湖、情誼已經減半、全服的記號還沒清；
     # muster.settle_partings 讀寫）——換季都跟著新角色重來
     player_fields = ("battle_results_seen", "showdowns", "top_merits", "escort_pick", "parted_done")
-    carried = ("battle_results_seen",)  # Game._reset_player_for_new_season 照帶（不看開關，同商城、出陣的 carried）
+    carried = ("battle_results_seen",)  # season.carry 那一格照帶（不看開關，同商城、出陣的 carried）
 
     def enabled(self, ctx) -> bool:
         """內容裡有決戰（battles.json）就有：決戰本身沒有開關（beta、第一季、減法季都打）。遊戲當下的掛鉤全是預設的空的，開著關著結果都一樣；
@@ -108,6 +108,42 @@ class BattleFeature(Feature):
 
             self._world = (WorldHook("muster", "generals", lambda *args: generals.world_muster(*args)),)
         return self._world
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """補算與換季的三格（順序在 SEAM_ORDER；不問 enabled）：sync 同伴回江湖（muster.settle_partings，回傳不接）、排程那一下推一次決戰（經 ctx._battle_status：
+        test_engine、test_hints 換掉 Game 上的名字才打得到；回傳不接）、換季照帶補過的決戰。"""
+        if self._seams is None:
+            from . import muster  # noqa: PLC0415
+
+            self._seams = (
+                SeamHook("sync.deliver", "partings", lambda ctx: _quiet(muster.settle_partings(ctx, True))),
+                SeamHook("tick", "battle", lambda ctx: _quiet(ctx._battle_status(tick=True))),
+                SeamHook("season.carry", "battle", _carry_season),
+            )
+        return self._seams
+
+    # core_seams（全部拆包第 57 批「分派與標題收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """quick 的 battle 那一格（順序在 MENU_ORDER；不問 enabled）：決戰選項不走 Draft（加入與趕到由 battle_choose 自己寫一則紀錄，每回合的出招不寫，FB-030）。
+        決戰那幾顆與平常的選單怎麼接、整個取代、只能看三種結果留在 Game.options 原位（第 56 批計畫第四節）。"""
+        if self._menus is None:
+            from . import muster  # noqa: PLC0415
+
+            self._menus = (MenuHook("quick", "battle", lambda ctx, kind, arg, option_id: muster.battle_choose(ctx, arg) if kind == "battle" else None),)
+        return self._menus
+
+
+def _quiet(_) -> None:
+    """回傳不接的格一定回 None（seam_lines 只收 list 或 None，list 會併進回話）。"""
+
+
+def _carry_season(ctx, old, fresh) -> None:
+    fresh.player.battle_results_seen = old.player.battle_results_seen  # 補送過的決戰不再補一次（FB-027）
 
 
 FEATURE = BattleFeature()

@@ -3,13 +3,13 @@
 README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
 選項前綴 `aid:`（`aid:guard:<人物>`、`aid:rally:<人物>`、`aid:visit:<人物>`）與 `plan:`（`plan:help:<站>`、`plan:block:<站>`）：choose 接掛鉤（標題一起給）。
-挑戰本人（`act:challenge:<人物>`）是核心 act 子動詞，帶後綴接不了 Verb（總表第 57 批），選單、按下去、標題留在核心原位叫 Game 的委派；選單末段
-`opts + _aid_options() + features_core.options + _plan_options()` 護衛在包選項之前、盤算在之後，夾著 `options` 掛鉤，所以兩個選單也是原位的委派（理由在邊界測試）。
+挑戰本人（`act:challenge:<人物>`）接 act 子動詞（verbs，帶後綴走 tail_*，第 57 批：按下去、標題、這一下打哪一路）；選單是 `MENU_ORDER["here"]` 的 challenge 那一格，選單末段
+`MENU_ORDER["plays"]` 護衛在包選項之前、盤算在之後，夾著 `options` 掛鉤：這一包登記 `plays/aid`、`plays/plan` 那兩格（第 56 批）。
 enabled 一直是 True（沒有自己的總開關：護衛看 Config.figure_aid、盤算看 Config.plans、挑戰本人看 figures.challenge_on，各在動作裡驗）。
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, WorldHook
+from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Verb, WorldHook
 
 
 class FigureActsFeature(Feature):
@@ -48,6 +48,56 @@ class FigureActsFeature(Feature):
 
             self._world = (WorldHook("step", "yuedan", lambda *args: yuedan.world_step(*args)),)
         return self._world
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """補算與換季的兩格（順序在 SEAM_ORDER；不問 enabled）：護衛下線時擋下的挑戰回來補名望與心得（aid_actions.deliver_guard_credits：夾在首創名望回饋與 deliver_notices 之間）；
+        讀檔清閉門不見的人（challenge.drop_stale）。"""
+        if self._seams is None:
+            from . import aid_actions, challenge  # noqa: PLC0415
+
+            self._seams = (
+                SeamHook("sync.deliver", "guard", lambda ctx: aid_actions.deliver_guard_credits(ctx)),
+                SeamHook("stale.late", "figure_acts", lambda ctx: challenge.drop_stale(ctx)),
+            )
+        return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單的格（順序在 MENU_ORDER；不問 enabled）：此地的挑戰本人；體力玩法那一串裡的護衛（包選項之前）、盤算（包選項之後）。"""
+        if self._menus is None:
+            from . import aid_actions, challenge, plan_actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("here", "challenge", lambda ctx, loc, cost, odds: challenge.options(ctx, odds)),
+                MenuHook("plays", "aid", lambda ctx: aid_actions.options(ctx)),
+                MenuHook("plays", "plan", lambda ctx: plan_actions.options(ctx)),
+            )
+        return self._menus
+
+    # core_seams（全部拆包第 57 批「分派與標題收接縫」）
+    _verbs: tuple[Verb, ...] | None = None
+
+    def verbs(self) -> tuple[Verb, ...]:
+        """挑戰本人 act:challenge:<人物>（原本 Game._act、_action_title、_fight_squad 原位；不問 enabled）：按下去、紀錄標題、這一下打哪一路（難度照他此刻的聲威與江湖水漲；人物表上沒有他不打）。
+        按下去與打哪一路經 ctx 叫（scripts/measure_challenge.py 換掉 Game._challenge；服務清單 # core_seams）。"""
+        if self._verbs is None:
+            from tianxia import figures  # noqa: PLC0415  共用規則層（人物表 figures，第 40 批收進）
+
+            from . import bots  # noqa: PLC0415
+
+            self._verbs = (Verb(
+                "challenge",
+                tail_run=lambda ctx, prepared, tail: ctx._challenge(tail),
+                tail_title=lambda ctx, tail: f"挑戰・{figures.name_of(ctx.content, tail)}",
+                tail_squad=lambda ctx, tail: ctx._figure_squad(tail) if tail in ctx.content.figures else None,
+                tail_bot=lambda ctx, profile, tail: bots.challenge(ctx, tail),
+            ),)
+        return self._verbs
 
 
 FEATURE = FigureActsFeature()

@@ -15,7 +15,7 @@
 - `menus.py`：交友那一顆 `socialize_option`、一類一顆的交友 `precise_social_option`、求見的第二層名單 `audience_options`、求見畫面的說明 `audience_intro`；江湖頁「此地人物」那一排 `figures_here_view`（主幹合回 D 段從 `Game` 搬來：`talk.via`、`talk.why`、`aid`，只讀。它要問求見名單，所以放這裡不放 `view.py`：`menus` import `view`，反過來就循環）。陣營的名字走共用層 `figures.side_name`（人物情誼包的 `talk_view` 也問它）。
 - `actions.py`：交友見不到人時的打發話 `no_audience_line`（會排提示、花亂數，不是純讀，所以不放 `view.py`）、交友 `socialize`（舊寫法）與 `precise_socialize`（一類一顆）、指名求見 `call`、被打發 `brush_off`、記一輪 `count_talk`、福緣 `fortune_gift`、`deliver_fortune`、
   沒碰上人物時抽事件 `encounter`、紀錄標題 `call_title`。
-- `bots.py`：假人看到 `call:` 的選項怎麼按（原本 `bot_policy.score` 的 call 那一段）——只按「返回」，`call:<人物>` 一律不按（名望不夠的求見永遠按得下去，不能給分）。
+- `bots.py`：假人看到 `call:` 的選項怎麼按（原本 `bot_policy.score` 的 call 那一段）——只按「返回」，`call:<人物>` 一律不按（名望不夠的求見永遠按得下去，不能給分）。`act:call` 不按、`act:socialize`（`act_socialize`）第 60 批接進 `Verb.bot`；`Feature.bot_idle` 問 `idle_call`（整季機器人不按名望不夠的求見）。改 `bots.py` 的 `act:` 分數時另外跑 `tests/bots/test_bot_policy.py`、`tests/bots/test_bot_policy_conquest.py`、`tests/bots/test_bot_policy_stuck.py`（`test_for` 挑不到，第 60 批）。
 - 掛鉤：`enabled` 一直是 True（一類一顆 `precise`、福緣 `roster` 各有自己的開關，包本身沒有總開關）；`prefix = "call"`；`choose` 接 `call:`（`Outcome.title` 在動作之前拿，
   `prepared` 經 `ctx._talk_turn` 寄放）；`bot_pick` 問 `bots.score`；`bot_always` 不宣告。`menu`、`scene` 沒接（見下）。
 - 對話（`ctx._open_dialogue`）、事件呈現（`ctx._present`）、引導提示（`ctx._hint`）、閉門不見（`ctx._snubbed_character`）都經 `ctx`，不 import 人物情誼包；人物情誼包經 `ctx` 問這一包的
@@ -29,7 +29,7 @@
   `recruit.json` 分區調查列在這一包，但招募（`_recruit*`）附錄甲裁給人物情誼，這一批不宣告，等 PM 定。
 - 共用的字：`AUDIENCE_HALL_FIGURES`、`SNUB_NOTE`、`SOCIAL_NO_ONE` 在核心 `core/services.py`（核心的選單、`sync`、挑戰本人也讀；`engine` 照舊 import 回來）；`SOCIAL_TALK`、
   `SOCIAL_LIST_INTRO`、`AUDIENCE_MEET` 在 `view.py`；`SOCIAL_LIST_TITLE` 留在 `engine.py`（場景文字讀）。
-- 共用規則層的 `atlas.travel_block` 直接讀 `picking_audience`（動身被擋的那一句；全部拆包第 50 批照實記下，第 56 批選單收接縫時改成掛鉤、一張先後表）。
+- 動身被擋（`atlas.travel_block`）：第 56 批選單收接縫起這一包登記 `MENU_ORDER["block"]` 自己那一格，讀 `picking_audience` 的只剩包裡；字與先後一字不動（`atlas` 不再讀）。
 
 ## 委派與留在原位的接縫
 
@@ -39,12 +39,12 @@
 
 留委派、記進 `GAME_DELEGATE_CALLERS` 的：
 
-- `act:socialize`、`act:call`（`_act` × `_socialize`，`_everyday_options`、`action_notes` 的交友與求見那幾行）：核心 `act:` 的子動詞，第 57 批接進 `Verb`。單人地點的「求見某某」那一顆同在這幾行裡。
+- `act:socialize`、`act:call`：第 57 批接進 `Verb`（按下去與紀錄標題，本體 `actions.press`、`actions.open_audience`）；選單與底下那幾行第 56 批是 `here/social`、`notes/socialize`，單人地點的「求見某某」那一顆同在這幾行裡。
 - 求見名單（`_everyday_options` × `_audience_options`）與求見畫面（`_own_scene_text` × `_audience_intro`）：`menu`、`scene` 掛鉤坐在談著、選邊、投靠確認、叛投確認那幾個 `picking_*` 之前，
   名單夾在叛投確認與懸賞榜中間、畫面夾在叛投之後，接成掛鉤就改了它們並存時誰先；位置算行為，所以不接。
-- 收起求見名單接 `on_drop_stale`（`_drop_stale_references` 最後那一個掛鉤；只差序章收尾挪人之後的地點）。福緣到期自己送上門（`_advance_player_local` × `_deliver_fortune`）：夾在別的補算中間，`on_sync` 沒有對應的位置。
+- 收起求見名單接 `on_drop_stale`（`_drop_stale_references` 最後那一個掛鉤；只差序章收尾挪人之後的地點）。福緣到期自己送上門第 55 批換成 `local` 的 `fortune` 那一格（夾在別的補算中間，`on_sync` 沒有對應的位置）。
 - `choose` 做完之後的 `_guide(self._note_action("socialize"))`（`kind == "call" and arg != "back"`）與前段的 `_checked_prepared`：留在 `choose` 原位（掛鉤沒有「做完記引導」的位置）。
-- 核心的表：`models.py` 的 `ALLOW_FAMILIES`（有 `call:`）與 `act:call`、`act:socialize`；`server.py` 備料判斷、`bot.py` 排除「名望不夠、會被打發的求見」（問 `can_meet_figure`）不動。
+- 核心的表：`models.py` 的 `ALLOW_FAMILIES`（有 `call:`）與 `act:call`、`act:socialize`；`server.py` 備料判斷、整季機器人排除「名望不夠、會被打發的求見」第 60 批搬成這一包的 `bot_idle`（照舊問 `ctx.can_meet_figure`）。
 - `howto.py` 的 `social_line`、`call_line`、`CALL_LINE`（玩法說明的文字）留核心（引導與說明頁共用）。
 - 組 `/api/main` 的 `figures_here` 那幾行留在殼（`server._main_view_body`）：包給 `figures_here_view`；像 `figure_face` 要讀 `web/img`，留殼。點大勢人物的簡介 `figure_intro`、`FIGURE_INTROS` 也留殼（`server.py`，合回第 4 段搬回來：要讀人物性子的 `persona_rules.view`，放包裡會變成包讀包）。
 
@@ -66,3 +66,9 @@
   （`socialize_*`）、`tests/figures/test_figures.py`、`tests/server/test_server.py`、`tests/seal/test_seal.py`／`test_seal_revamp.py`（`_talk_cap`）、`tests/core/test_explain.py`、
   `tests/core/test_social.py`、`tests/season/test_real_content.py`（`_deep_interaction_target`）。網頁測試（`tests/web/test_explain_web.py`、`test_jianghu_page_web.py`）第 3 階。改 `figures_here_view`、`server.figure_intro` 另跑 `tests/web/test_revamp_web.py`（此地人物那一排與簡介，`test_for` 挑不到）。
 - 前後一字不變：`scripts/same_behavior.py` 的 `socialize` 軌（`--tracks socialize,companions,talk,guide`）；此地人物那一排與對話框是 `here` 軌（主幹合回 D 段）。
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`local` 的 `fortune`（`actions.fortune_due`，原位的判斷搬過來；`Game._deliver_fortune` 留給測試）。
+
+**第 56 批（選單收接縫，核心批）**：`take/audience`、`here/social`、`notes/socialize`、`idle/audience`、`block/audience` 是這一包登記的格（`_everyday_options` 那一段搬進 `menus.here_cell`，`action_notes` 那一段搬進 `menus.action_notes`，鍵的順序算行為；讀 `howto` 是過渡，第 59 批收）；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_precise_social_option`、`_socialize_option`、`_fame_gap`、`_audience_options` 拿掉（第 57 批的 `Verb.cell`、`Verb.note` 不必再開）；上面寫「留委派」「原位」的以這一句為準。
+
+**第 57 批（分派與標題收接縫，核心批）**：`verbs()` 是新開的（`call`、`socialize`）。`actions.press` 照原位的先後一字搬：先問召見、再扣體力、端晉升奇遇（這一支不排提示）或交友、排 `h_bond`；委派 `_socialize` 留著、格裡經 `ctx` 叫（`tests/core/test_explain.py` 換 Game 上的名字）。改這兩格另外跑：`tests/core/test_explain.py`、`tests/core/test_social.py`、`tests/bots/test_event_rotation.py`、`tests/core/test_engine.py -k "summons or call or socialize"`。

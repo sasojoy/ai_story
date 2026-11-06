@@ -807,7 +807,7 @@ def board_view(state: GameState, content: Content, world: WorldStateStore) -> di
     揭著的在前、交得出的求兵其次、其餘照現在的順序。每一張寫哪一方掛的、標題、要做什麼、賞、期限與名額（紙上的 due_line、告示上短的 due_short，FB-196）、重賞、求兵
     你有幾件合用（fitting）；底下那一顆照現在的選項 id：揭著的「放棄」（bounty:drop，問句在網頁）、求兵「交出…」（bounty:pick，
     交不出照 only_original 或 NO_FIT）、其餘「揭下」（bounty:take，揭不了照 take_problem）。第三層開著（bounty_pick 指著一張還交得出的；
-    同 Game._bounty_options 的判法）時多 picked 與 hand_in（hand_in_options 的每一顆，回到懸賞榜那一顆除外）。掛單的人（通緝的 poster）
+    同懸賞榜包 actions.options 的判法）時多 picked 與 hand_in（hand_in_options 的每一顆，回到懸賞榜那一顆除外）。掛單的人（通緝的 poster）
     不寫：照現在的選單寫陣營，畫面不露出誰是假人（設計 6.6）。"""
     p = state.player
     shown = bounties.visible(state, content)
@@ -816,7 +816,7 @@ def board_view(state: GameState, content: Content, world: WorldStateStore) -> di
     picked = next((b for b in shown if b.id == p.bounty_pick and b.kind in bounties.GIVE_KINDS), None)
     picked_items = bounties.fitting(state, content, world, picked) if picked is not None else []
     if not picked_items:
-        picked = None  # 那一張下榜了、交不出了就當它不存在（同 _bounty_options）
+        picked = None  # 那一張下榜了、交不出了就當它不存在（同懸賞榜包 actions.options）
     ranked = []
     for order, b in enumerate(shown):
         title = bounties.title(content, b)

@@ -14,12 +14,12 @@
 
 邀請框是一個前綴三種意思：invite:yes|no|cancel:<編號> 是打招呼（挑釁）、名帖、切磋、論武、結伴同行共用的選項。這一包拿前綴與 choose，
 答應時照邀請的種類分派；切磋 spar_actions.spar、論武 discuss_actions.discuss（第 38 批）在包裡、包內直接叫，結伴同行（移動包 party.join，Game._join 留一行委派）經 ctx 叫。
-enabled 一直是 True（沒有整包的總開關：名帖開關 Config.mingtie.enabled 只管名帖那幾顆）。選單上怎麼排（Game._everyday_options 的 _invite_options）
-位置固定，留原位叫委派。
+enabled 一直是 True（沒有整包的總開關：名帖開關 Config.mingtie.enabled 只管名帖那幾顆）。選單上怎麼排是 MENU_ORDER["here"] 的 invite 那一格
+（第 56 批）。
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome
+from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook
 
 from . import mingtie_card as _mingtie_card  # noqa: F401  遞名帖登記進玩家卡的動作表（social.ACTIONS）；載入這一包就登記（原本 engine.py 頂端 import 它；scripts/test_for.py 認這個寫法）
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）；原本 engine.py 頂端 import tianxia.discuss（全部拆包第 38 批）
@@ -62,6 +62,30 @@ class PeersFeature(Feature):
         from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）
 
         return routes.router(shell)
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """season.carry 的 peers 那一格（順序在 SEAM_ORDER；不看開關）：名帖與一天的次數（actions.carry_season）。"""
+        if self._seams is None:
+            from . import actions  # noqa: PLC0415
+
+            self._seams = (SeamHook("season.carry", "peers", lambda ctx, old, fresh: actions.carry_season(ctx, old, fresh)),)
+        return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單的一格（順序在 MENU_ORDER；不問 enabled）：玩家之間的邀請：別人發給你的、你發出去還在等的。"""
+        if self._menus is None:
+            from . import invite_actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("here", "invite", lambda ctx, loc, cost, odds: invite_actions.options(ctx)),
+            )
+        return self._menus
 
 
 FEATURE = PeersFeature()

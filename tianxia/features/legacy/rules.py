@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 
+from tianxia.core import bounty_base  # 核心（這一季完成了幾張懸賞，core_seams）
 from tianxia.models import Content, LegacyRules, LegacyTier
 from tianxia.state import GameState, LegacyBook
 
@@ -31,7 +32,7 @@ def inputs(old: GameState, content: Content) -> dict[str, float]:
     p = old.player
     known = set(content.characters) | set(content.figures)
     return {
-        "tasks": float(p.bounties_done + sum(1 for e in p.errands if e.status == "done")),
+        "tasks": float(bounty_base.done_count(p) + sum(1 for e in p.errands if e.status == "done")),
         "merit": float(max(0, p.contrib) + p.showdowns + p.top_merits),
         "fame": float(max(0, p.stats.get("fame", 0))),
         "relations": float(sum(max(0, v) for k, v in p.affinities.items() if k in known)),

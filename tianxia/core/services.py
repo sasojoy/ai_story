@@ -382,7 +382,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._arrivals()`（補算已經到了的站，一站一站抵達；sync、advance 叫，`stamina_plays` 包測試、`test_seats` 直接叫；包內在別人那份 Game 上也叫 `other._arrivals()`）
 - `ctx._arrive(loc_id)`（抵達一站；事件 `arrive` 的發布點，核心契約測試直接叫它鎖事件接法）、`ctx._journey_line()`（`/api/main` 的 `journey` 那一句）
 - `ctx._join(inv, other)`（答應結伴同行；玩家互動包 `answer_invite` 叫）、`ctx.join_refusal(leader)`（答應跟某人結伴，不行的原因；假人回結伴邀請〔`bots.answer_call`〕先問它）、
-  `ctx._party_expires()`（sync 叫：答應了、帶頭的人過了 `party_wait_seconds` 沒動身就散）、`ctx.party_view()`（殼的 `/api/main` 的 `party` 鍵）
+  `ctx.party_view()`（殼的 `/api/main` 的 `party` 鍵）
 - 移動包要叫、上面還沒列的核心與別包的 Game 方法：`ctx._ambush_check(came_from, stop, when)`（主人體力玩法包，Game 留委派；`_arrivals` 迴圈中途每換一段查一次伏兵）、
   `ctx._hide(msg)`、`ctx._guide(...)`、`ctx._note_action(action)`、`ctx.location_text()`、`ctx._flavor_sink()`、`ctx._kin(state)`、`ctx._load_kin(name)`、`ctx._save_kin(game)`、
   `ctx._peer(name)`、`ctx._tell_sender(inv, other, why=None)`、`ctx._write(...)`、`ctx.touched`、`ctx._real_minutes(world_seconds)`（核心：留在 Game，核心的 `place_minutes` 與輿圖包也叫）
@@ -558,6 +558,19 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 # notify（全部拆包第 53 批；查詢服務，主人人物情誼包：手機通知包 routes.py 的看守一輪〔_notice_keys〕在行動鎖內經 game 叫，Game 上一行委派）
 - `ctx.morning_mail(now)`（到了送信日替他送今天的信；送了回 True）
 
+# core_seams（全部拆包第 55 批；補算與換季的格，計畫 docs/superpowers/plans/2026-11-06-補算換季收接縫-第55批.md 五）：sync 的 plots 那一格（軍情包）經 ctx 叫，
+# 測試換掉 Game 上的名字時才打得到（tests/figures/test_seats.py、features/smithy/tests/test_weapons_forge.py）
+- `ctx._settle_plots()`（不在線時收場的密謀結算；回那幾句）
+
+# core_seams（全部拆包第 57 批；act 子動詞接進 Verb，計畫 docs/superpowers/plans/2026-11-06-分派標題收接縫-第57批.md 六）：格裡經 ctx 叫，測試、腳本換掉 Game 上的名字時才打得到
+# （tests/core/test_explain.py、scripts/measure_challenge.py）；`_present`、`_action_costs`、`_hint` 已經在一、共用服務
+- `ctx._socialize(prepared)`（交友那一下的本體：交友求見包）、`ctx._challenge(fid)`（挑戰本人按下去：大勢人物包）、`ctx._figure_squad(fid)`（挑戰本人對手那一路，江湖水漲算過：大勢人物包）
+
+# core_bots（全部拆包第 60 批；假人殼收尾，計畫 docs/superpowers/plans/2026-11-06-假人殼收尾-第60批.md 七、九）：act: 那幾格的分數搬進包的 bots.py，條件經 ctx 叫，
+# scripts/same_behavior.py 的 abacus 軌換掉 Game 上的名字時才打得到（`_side`、`challenge_odds`、`outing_plan`、`duel_on` 已經在清單上）
+- `ctx.fatigue_next()`（探索包：下一場的疲勞）、`ctx.socialize_starts_dialogue()`、`ctx.socialize_is_futile()`、`ctx.can_meet_figure(fid)`（交友求見包：開口是不是對話、會不會白跑、求見見不見得到）、
+  `ctx.sortie_mode()`、`ctx.duel_convoy_here()`（出陣包：這一下攻或守、運糧隊在不在這裡）
+
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """
 from __future__ import annotations
@@ -579,7 +592,7 @@ PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，�
 NO_SUCH_PLAYER = "（江湖上沒有「{name}」這個人。）"  # 管理者查不到名號（玩家個人劇情、商城查帳；只有管理者看得到）
 # military（全部拆包第 33 批：原本寫在 engine.py；軍情包的第 3、4 階行動選單要產生它、又不能 import engine，搬到這裡，engine 照舊叫得到）
 RANK_ACTION_PREFIX = "act:rank:"  # 第 3、4 階行動的選項 id 前綴（act:rank:<行動 id>，正式版戊一）；models.ALLOW_FAMILIES 也列它，原始碼裡要真的有
-# stamina_plays（全部拆包第 39 批：原本寫在 tianxia/ambush.py；核心的移動被擋〔engine 的 _move_option〕要用、核心不能 import 包，搬到這裡，
+# stamina_plays（全部拆包第 39 批：原本寫在 tianxia/ambush.py；移動被擋〔移動包 menu.move_option〕要用、核心不能 import 包，搬到這裡，
 # ambush.MOVE_BLOCKED 照舊是同一個字串）
 MOVE_BLOCKED = "守著埋伏"
 # stamina_plays（全部拆包第 39 批：原本寫在 engine.py；設伏的贏家帳〔包〕與截殺〔核心〕共用，包不能 import engine，搬到這裡，
@@ -825,7 +838,7 @@ def illustration_for(state: GameState, content: Content, season: WorldState) -> 
 
 def art_problem(state: GameState, content: Content, season: WorldState) -> str | None:
     """列傳插畫票這一季用不用得上（FB-845）：用不上就不賣，回商城那一列灰掉要寫的原因；用得上是 None。
-    沒投靠劇本裡的陣營的人（散人）列傳配不了插畫；休季時已經得第一階的人插畫白送（Game._zhuan_options 也是這兩條），
+    沒投靠劇本裡的陣營的人（散人）列傳配不了插畫；休季時已經得第一階的人插畫白送（列傳包 actions.options 也是這兩條），
     季中看不出會是第幾階，照舊賣。"""
     p = state.player
     if content.scenario.find_faction(p.faction) is None:

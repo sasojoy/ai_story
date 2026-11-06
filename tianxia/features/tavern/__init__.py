@@ -13,7 +13,7 @@ on_away、deliver_notices、after_action，下面）。這一包另接 tavern:* 
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, Shop, Verb
+from tianxia.core.features import Feature, MenuHook, Outcome, Shop, Verb
 
 
 class TavernFeature(Feature):
@@ -79,7 +79,8 @@ class TavernFeature(Feature):
         if self._verbs is None:
             from . import actions  # noqa: PLC0415
 
-            self._verbs = (Verb("tavern", run=lambda ctx, prepared: actions.tavern_enter(ctx), title=lambda ctx: actions.tavern_sign(ctx)),)
+            self._verbs = (Verb("tavern", run=lambda ctx, prepared: actions.tavern_enter(ctx), title=lambda ctx: actions.tavern_sign(ctx),
+                                bot=lambda ctx, profile: None, bot_skip=True),)  # 假人：不交給打分數（只是打開酒肆），打聽由 take_turn 的 _tavern 另外做（bots.visit）
         return self._verbs
 
     def on_away(self, ctx, away_from) -> None:
@@ -105,6 +106,20 @@ class TavernFeature(Feature):
         from . import actions  # noqa: PLC0415
 
         return actions.tavern_hit_check(ctx)
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：坐在酒肆裡不算閒著；動身被擋。"""
+        if self._menus is None:
+            from . import actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("idle", "tavern", lambda ctx: ctx.state.player.picking_tavern),
+                MenuHook("block", "tavern", lambda state, content: actions.travel_block(state, content)),
+            )
+        return self._menus
 
 
 FEATURE = TavernFeature()

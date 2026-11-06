@@ -8,11 +8,11 @@
 
 兩間店（軍需官那一串、「打點」那一間）接第 11 批的店面登記（shops）：坐在店裡的選單、哪一間開著、動身與此地不開了收店；進店那兩顆
 （「此地還能做」裡的捐軍備、打點）留在 Game 原位，因為它們排在療傷之後（順序算行為），Shop.entry 回 None。act:donate、act:dadian 與銀兩出口
-四樣（silver_donate、mentor、furnace、buy_legend）接 act 子動詞（verbs）；bribe:<人物> 帶後綴接不了 Verb，留在核心 _act 叫委派。
+四樣（silver_donate、mentor、furnace、buy_legend）與打點門路 bribe:<人物>（帶後綴，第 57 批）接 act 子動詞（verbs）。
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, Shop, Verb
+from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Shop, Verb
 
 
 class OutletsFeature(Feature):
@@ -23,7 +23,7 @@ class OutletsFeature(Feature):
     # 換季全部跟著新角色重來（軍備存量 World.armaments 是全服帳，由 donate_actions.credit 寫、核心 status_data 經 armament_view 讀）
     player_fields = ("picking_donate", "picking_dadian", "donate_day", "donated_today", "silver_donate_day", "silver_donated",
                      "mentor_day", "mentor_ready", "furnace_day", "furnace_ready", "legend_silver_bought", "bribed")
-    carried = ("donate_day", "donated_today")  # 換季不能多捐一輪（Game._reset_player_for_new_season 照帶，同出陣的 sortie_day；不看開關）
+    carried = ("donate_day", "donated_today")  # 換季不能多捐一輪（season.carry 那一格照帶，同出陣的 sortie_day；不看開關）
 
     def enabled(self, ctx) -> bool:
         """捐軍備開著（Config.economy.donate）、銀兩出口開著（silver.on），或此刻還坐在店裡：開關在坐著的時候被關掉（沒經過 sync 收店）
@@ -63,7 +63,7 @@ class OutletsFeature(Feature):
     def shops(self) -> tuple[Shop, ...]:
         """店面登記：軍需官那一串（坐著 picking_donate；這裡開著＝人在自家大本營；收起 economy.close_donate）與「打點」那一間店（坐著 picking_dadian；
         這裡開著＝銀兩出口這裡還有得做；選單是這裡做得了的幾樣加離開）。進店那兩顆（entry）回 None：「此地還能做」裡捐軍備與打點排在療傷之後，
-        入口留在 Game._everyday_options 原位（經 Game 的 _donate_option、_silver_options 委派；順序算行為）。建一次就留著，
+        入口是 MENU_ORDER["here"] 的 donate、dadian 那兩格（第 56 批；排在療傷後面，順序算行為）。建一次就留著，
         每一格在叫的那一下才照模組屬性找函式（monkeypatch 照樣有效）。"""
         if self._shops is None:
             from tianxia import economy, silver  # noqa: PLC0415
@@ -85,10 +85,10 @@ class OutletsFeature(Feature):
     _verbs: tuple[Verb, ...] | None = None
 
     def verbs(self) -> tuple[Verb, ...]:
-        """act 子動詞：donate（打開軍需官那一串，不花體力）、dadian（打開打點那一間店，不花體力）與銀兩出口四樣（silver_donate、mentor、furnace、
-        buy_legend；打點那一間店開著時掮客換一句）。標題只接兩間店的招牌；四樣的標題與 bribe:<人物> 的標題留在核心 _action_title 原位。"""
+        """act 子動詞：donate（打開軍需官那一串，不花體力）、dadian（打開打點那一間店，不花體力）與銀兩出口五樣（silver_donate、mentor、furnace、
+        buy_legend，與帶後綴的打點門路 bribe:<人物>，第 57 批；都不花體力，打點那一間店開著時掮客換一句）。標題：兩間店的招牌、四樣的「招牌・此地」、打點門路的「打點・那個人」（第 57 批）。"""
         if self._verbs is None:
-            from tianxia import economy, silver  # noqa: PLC0415
+            from tianxia import economy, figures, silver  # noqa: PLC0415
 
             from . import silver_actions  # noqa: PLC0415
 
@@ -106,21 +106,55 @@ class OutletsFeature(Feature):
                 ctx._shop_say("enter")
                 return [silver.SHOP_ENTERED]
 
-            def silver_verb(what: str) -> Verb:
-                def run(ctx, prepared):
-                    msgs = silver_actions.silver_act(ctx, what)  # 銀兩出口（21 天季，正式季整合 6.5）：都不花體力
-                    if ctx.state.player.picking_dadian:
-                        ctx._shop_say("done")  # 打點那一間店裡記了一筆：掮客換一句
-                    return msgs
+            def press(ctx, what: str) -> list[str]:
+                msgs = silver_actions.silver_act(ctx, what)  # 銀兩出口（21 天季，正式季整合 6.5）：都不花體力
+                if ctx.state.player.picking_dadian:
+                    ctx._shop_say("done")  # 打點那一間店裡記了一筆：掮客換一句
+                return msgs
 
-                return Verb(what, run=run)
+            def silver_verb(what: str, sign: str) -> Verb:
+                return Verb(what, run=lambda ctx, prepared: press(ctx, what), title=lambda ctx: f"{sign}・{here(ctx)}")
 
             self._verbs = (
-                Verb("donate", run=open_donate, title=lambda ctx: f"{economy.DONATE_TITLE}・{here(ctx)}"),
-                Verb("dadian", run=open_dadian, title=lambda ctx: f"{silver.SHOP}・{here(ctx)}"),
-                *(silver_verb(what) for what in ("silver_donate", "mentor", "furnace", "buy_legend")),
+                Verb("donate", run=open_donate, title=lambda ctx: f"{economy.DONATE_TITLE}・{here(ctx)}", bot=lambda ctx, profile: None, bot_skip=True),  # 假人只是打開一串，捐由 bot.donate_spare 直接捐
+                Verb("dadian", run=open_dadian, title=lambda ctx: f"{silver.SHOP}・{here(ctx)}", bot=lambda ctx, profile: None, bot_skip=True),  # 假人不進（只是打開一間店）
+                silver_verb("silver_donate", silver.DONATE_TITLE),
+                silver_verb("mentor", silver.MENTOR_TITLE),
+                silver_verb("furnace", silver.FURNACE_TITLE),
+                silver_verb("buy_legend", silver.LEGEND_TITLE),
+                Verb("bribe", tail_run=lambda ctx, prepared, tail: press(ctx, f"bribe:{tail}"),
+                     tail_title=lambda ctx, tail: f"{silver.BRIBE_TITLE}・{figures.name_of(ctx.content, tail)}"),
             )
         return self._verbs
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """season.carry 的 outlets 那一格（順序在 SEAM_ORDER；不看開關，同出陣的 sortie_day）。"""
+        if self._seams is None:
+            self._seams = (SeamHook("season.carry", "outlets", _carry_season),)
+        return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：此地的捐軍備、打點（排在療傷後面，所以不是 Shop.entry）；坐在店裡不算閒著；動身被擋。"""
+        if self._menus is None:
+            from . import donate_actions, silver_actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("here", "donate", lambda ctx, loc, cost, odds: donate_actions.here_cell(ctx, loc, cost, odds)),
+                MenuHook("here", "dadian", lambda ctx, loc, cost, odds: silver_actions.here_cell(ctx, loc, cost, odds)),
+                MenuHook("idle", "outlets", lambda ctx: ctx.state.player.picking_donate or ctx.state.player.picking_dadian),
+                MenuHook("block", "outlets", lambda state, content: silver_actions.travel_block(state, content)),
+            )
+        return self._menus
+
+
+def _carry_season(ctx, old, fresh) -> None:
+    fresh.player.donate_day, fresh.player.donated_today = old.player.donate_day, old.player.donated_today  # 換季不能多捐一輪
 
 
 FEATURE = OutletsFeature()

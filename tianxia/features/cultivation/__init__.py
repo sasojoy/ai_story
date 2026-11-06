@@ -8,7 +8,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome
+from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook
 
 
 class CultivationFeature(Feature):
@@ -33,6 +33,34 @@ class CultivationFeature(Feature):
         from . import actions  # noqa: PLC0415
 
         return Outcome(title=actions.learn_title(ctx, arg), run=lambda: actions.learn(ctx, arg))
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """補算與換季的兩格（順序在 SEAM_ORDER；不問 enabled）：別人替手上那一門定了名，同步補一則（actions.deliver_renames：玉璽補送之後、首創名望回饋之前）；
+        讀檔拿掉追風步的舊品質（actions.drop_old_zhuifeng：要在 arts.migrate 之前）。"""
+        if self._seams is None:
+            from . import actions  # noqa: PLC0415
+
+            self._seams = (
+                SeamHook("sync.deliver", "renames", lambda ctx: actions.deliver_renames(ctx)),
+                SeamHook("stale.early", "cultivation", lambda ctx: actions.drop_old_zhuifeng(ctx)),
+            )
+        return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單的一格（順序在 MENU_ORDER；不問 enabled）：此地的拜師學藝。"""
+        if self._menus is None:
+            from . import actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("here", "lessons", lambda ctx, loc, cost, odds: actions.lesson_options(ctx)),
+            )
+        return self._menus
 
 
 FEATURE = CultivationFeature()

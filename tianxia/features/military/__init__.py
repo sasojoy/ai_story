@@ -8,19 +8,20 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 
 包名不叫 `orders`：`tianxia/orders.py`（軍令的規則）、`ranks.py`、`seats.py` 這一批不搬（共用規則層，第 40 批收進），包裡照 `registry.SHARED` import。
 
-沒有選項前綴：`act:rank2`、`act:convoy`、`act:summons`、`act:rank:<行動>` 都是核心 `_act` 的 act 子動詞（行動列），選單那三段、按下去、抄帳、管理者的鈕都在核心原位叫
-Game 上的一行委派（理由在 tests/core/test_feature_boundaries.py 的 `# military` 那一段）；掛鉤只有叛投那一刻的格（defection：clear 位置的 convoy，第 32 批）；沒有路由（server.py 的 `orders`、`convoy` 兩個鍵與管理者三顆鈕照舊叫 Game）。
+沒有選項前綴：`act:rank2`、`act:convoy`、`act:summons`、`act:rank:<行動>` 都是 act 子動詞，第 57 批接進 verbs（按下去與紀錄標題；`act:rank:<行動>` 帶後綴走 tail_*）；抄帳、管理者的鈕在核心原位叫
+Game 上的一行委派（理由在 tests/core/test_feature_boundaries.py 的 `# military` 那一段）；沒有路由（server.py 的 `orders`、`convoy` 兩個鍵與管理者三顆鈕照舊叫 Game）。
 假人分數（`act:rank2`、`act:convoy`、`act:summons`）留在 bot_policy.score 的 act 分支原位。
 """
 from __future__ import annotations
 
-from tianxia.core.features import BusHook, DefectHook, EffectHook, Feature, Outcome, StepHook
+from tianxia.core.features import BusHook, DefectHook, EffectHook, Feature, MenuHook, Outcome, SeamHook, StepHook, Verb
 
 
 class MilitaryFeature(Feature):
     name = "military"
     # 第 34 批：機緣 opp:<…>（交東西、嘗試、拼圖、呈交、指認、請命、響應、各做一處）與伏筆 fs:<鏈>、fs:<鏈>:<選項>、fs:leave
     prefix = ("opp", "fs")
+    bot_always = ("fs:", "opp:")  # 伏筆的最後一步、機緣的選項：這一版假人不做（計畫 T7、正式版乙一；原本 bot.FORESHADOW_OPTIONS，第 60 批）
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：押著的糧車、第 2 階今天做了幾次、第 3／4 階這週做了幾次（第 33 批）；
     # 伏筆 7 個（聽過的片段、拿到的物品、計數、做完的鏈、冷卻、正在答的鏈與已答的題）與機緣 8 個（做完的、次數、拿到的東西、各處的戰線、
     # 聽過的線索、試過的時段、拼圖湊了哪幾樣、結算過的密謀）（第 34 批）。換季全部跟著新角色重來
@@ -132,6 +133,73 @@ class MilitaryFeature(Feature):
                          place=lambda ctx, ref: fs_actions.step_place(ctx, ref)),
             )
         return self._steps
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """sync.deliver 的兩格（順序在 SEAM_ORDER；不問 enabled）：密謀結算（opp_actions.deliver_plots）、席次抄帳與補缺（seat_actions.deliver_seat，排在抵達與密謀之後，test_seats 守）。"""
+        if self._seams is None:
+            from . import opp_actions, seat_actions  # noqa: PLC0415
+
+            self._seams = (
+                SeamHook("sync.deliver", "plots", lambda ctx: opp_actions.deliver_plots(ctx)),
+                SeamHook("sync.deliver", "seat", lambda ctx: seat_actions.deliver_seat(ctx)),
+            )
+        return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單的格（順序在 MENU_ORDER；不問 enabled）：伏筆的最後一步正在答題接管整個選單（店面之後、閉關之前）、不算閒著；此地的軍令、第 2 階、第 3、4 階、機緣與伏筆。"""
+        if self._menus is None:
+            from tianxia.core import omen_base  # noqa: PLC0415
+            from . import fs_actions, order_actions, step_actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("take", "omen", lambda ctx: fs_actions.asking_options(ctx) if omen_base.fs_answering(ctx.state) else None),
+                MenuHook("here", "order", lambda ctx, loc, cost, odds: order_actions.order_options(ctx, loc)),
+                MenuHook("here", "rank2", lambda ctx, loc, cost, odds: step_actions.rank2_options(ctx, loc)),
+                MenuHook("here", "rank", lambda ctx, loc, cost, odds: step_actions.rank_action_options(ctx, loc)),
+                MenuHook("here", "omen", lambda ctx, loc, cost, odds: fs_actions.omen_options(ctx, loc.id)),
+                MenuHook("idle", "omen", lambda ctx: omen_base.fs_answering(ctx.state)),
+            )
+        return self._menus
+
+    # core_seams（全部拆包第 57 批「分派與標題收接縫」）
+    _verbs: tuple[Verb, ...] | None = None
+
+    def verbs(self) -> tuple[Verb, ...]:
+        """act 子動詞的四格（按下去與紀錄標題，原本 Game._act、_action_title 原位；不問 enabled）：第 2 階行動（標題寫它自己的名字：招降黃巾散兵、施符水收人心）、
+        第 3、4 階行動（act:rank:<行動>，前綴只在 RANK_ACTION_PREFIX 寫一次；標題寫它自己的名字，choose 已經驗過選項在選單上，一定找得到）、接下糧車、應召。
+        應召經 ctx._present、照模組屬性問 ranks.summons_event（tests/bots/test_event_rotation.py、tests/core/test_engine.py 換掉的是這兩個名字）。"""
+        if self._verbs is None:
+            from tianxia import ranks  # noqa: PLC0415  共用規則層（階級 ranks，第 40 批收進）
+            from tianxia.core.services import RANK_ACTION_PREFIX  # noqa: PLC0415
+
+            from . import bots, convoy_actions, opp_actions, step_actions  # noqa: PLC0415
+
+            def here(ctx) -> str:
+                return ctx.content.locations[ctx.state.player.location].name
+
+            def rank2_title(ctx) -> str:
+                action2 = opp_actions.rank2_action(ctx)
+                return f"{action2.name if action2 else '第二階行動'}・{here(ctx)}"
+
+            def rank_title(ctx, tail: str) -> str:
+                name = next(a.name for a in ctx.content.orders.rank_actions if a.id == tail)
+                return f"{name}・{here(ctx)}"
+
+            self._verbs = (
+                Verb("rank2", run=lambda ctx, prepared: step_actions.rank2(ctx), title=rank2_title, bot=lambda ctx, profile: bots.RANK2_SCORE),
+                Verb(RANK_ACTION_PREFIX.split(":")[1], tail_run=lambda ctx, prepared, tail: step_actions.rank_action(ctx, tail), tail_title=rank_title),
+                Verb("convoy", run=lambda ctx, prepared: convoy_actions.take_convoy(ctx), title=lambda ctx: f"接下糧車・{here(ctx)}",
+                     bot=lambda ctx, profile: bots.CONVOY_SCORE),
+                Verb("summons", run=lambda ctx, prepared: ctx._present(ctx.content.events[ranks.summons_event(ctx.state, ctx.content)]),
+                     title=lambda ctx: f"應召・{here(ctx)}", bot=lambda ctx, profile: bots.SUMMONS_SCORE),
+            )
+        return self._verbs
 
 
 FEATURE = MilitaryFeature()

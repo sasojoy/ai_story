@@ -11,7 +11,7 @@
 
 這一批不拿選項前綴（prefix 是 None）：那一格的 id 照留核心的 act:explore（IDLE_MARK；跟扣體力、晉升奇遇、序章的舊探索、
 探索三選一纏在一起），分派留在 Game._act；走一趟沒有自己的選項，走 /api/do/outing。所以這一包只接 enabled、欄位、內容驗證與網頁檔，
-假人照舊走 bot_policy、bot.py。
+假人：act:explore 的分數在 bots.py（第 60 批，Verb.bot 問），挑幾段、走完那一句照舊在 bot.py。
 """
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ class ExploreFeature(Feature):
         if self._verbs is None:
             from tianxia import journal  # noqa: PLC0415
 
-            from . import explore_actions  # noqa: PLC0415
+            from . import bots, explore_actions  # noqa: PLC0415
 
             def on(ctx):
                 return explore_actions.outing_on(ctx)
@@ -67,6 +67,7 @@ class ExploreFeature(Feature):
                 title=title,
                 cell=lambda ctx, loc, cost, odds: [explore_actions.outing_option(ctx, loc)] if on(ctx) else None,
                 note=lambda ctx, loc: explore_actions.outing_note(ctx, loc),
+                bot=lambda ctx, profile: bots.score(ctx),
             ),)
         return self._verbs
 

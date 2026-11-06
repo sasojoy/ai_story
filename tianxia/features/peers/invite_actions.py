@@ -2,7 +2,7 @@
 answer_on_card、_greet_back、_tell_sender、_invite_status；全部拆包第 37 批搬進來，行為一個字不變）。
 
 這一包拿 invite: 前綴與 choose 掛鉤；答應時照邀請的種類分派：打招呼 greet_back、名帖 mingtie_actions.swap、切磋 spar_actions.spar、論武 discuss_actions.discuss（第 38 批）都在包裡，
-結伴同行 _join（移動包）留在 Game，經 ctx 叫。選單上怎麼排（Game._everyday_options 第 1295 行）不能動，所以 Game 留 _invite_options 的委派。
+結伴同行 _join（移動包）留在 Game，經 ctx 叫。選單上怎麼排是 MENU_ORDER["here"] 的 invite 那一格（第 56 批）。
 """
 from __future__ import annotations
 

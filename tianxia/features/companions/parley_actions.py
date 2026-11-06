@@ -11,6 +11,7 @@ import random
 
 from tianxia import atlas, figure_life  # 共用規則層（輿圖路線 atlas 第 50 批收進、人物活起來 figure_life）
 from tianxia import materials, prologue as prologue_rules
+from tianxia.core import travel_base  # 核心（跟著誰同行：跟著的人路上不跟帶路的人說話，core_seams）
 from tianxia.core.option import Option
 from tianxia.core.services import PLAN_OPTION, ROAD_SAY
 from tianxia.rules import game_day
@@ -155,7 +156,7 @@ def do(ctx, cid: str, ask_id: str) -> list[str]:
         s.player.stamina += cost  # 他帶的路：照他的腳程走（比步行快），體力一分不扣
         if ctx._draft is not None and f"體力 -{cost}" in ctx._draft.changes:
             ctx._draft.changes.remove(f"體力 -{cost}")
-        if s.player.journey is not None:  # 第二批：路上每到一站可以跟他說一句（_parley_road_option）
+        if s.player.journey is not None:  # 第二批：路上每到一站可以跟他說一句（road_option，road/parley 那一格）
             s.player.parley_escort, s.player.parley_road_leg = cid, -1
         return msgs
     if kind == "sortie":
@@ -395,3 +396,11 @@ def backing_here(ctx) -> str | None:
 def forsake_all(ctx) -> list[str]:
     """叛投之後欠著的都算食言（Game._defect_step 在 defection.defect 之後接這一句；原本直接叫 parley.forsake_all）。"""
     return parley.forsake_all(ctx.state, ctx.content)
+
+
+def road_cell(ctx, j: Journey) -> list[Option]:
+    """road/parley 那一格（core_seams，全部拆包第 56 批）：NPC 智能 2.1，他帶你走的這一趟，每到一站跟他說一句。跟著人結伴同行時路線由帶頭的人定，這一格沒有（原本那一支早一步 return）。"""
+    if travel_base.following(ctx.state) is not None:
+        return []
+    road = road_option(ctx, j)
+    return [] if road is None else [road]

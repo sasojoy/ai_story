@@ -9,7 +9,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, Outcome, StepHook
+from tianxia.core.features import DefectHook, Feature, MenuHook, Outcome, SeamHook, StepHook
 
 
 class FactionFeature(Feature):
@@ -80,6 +80,10 @@ class FactionFeature(Feature):
 
         return bots.score(option)
 
+    def bot_idle(self, ctx, option):
+        """拜入門派 sect:<事件>（一類一顆）：不花體力、婉拒之後還在，同 act:rest；只在第一次看到那一則時按得下去（整季機器人還是隨機挑，婉拒的就不再按。原本 bot.pick 那一條；不問 enabled）。"""
+        return option.id.startswith("sect:") and option.id.partition(":")[2] in ctx.state.player.seen_events
+
     def defection(self) -> tuple[DefectHook, ...]:
         """叛投：clear 位置的 progress 那一格（階、召見、部下、貢獻、兩本帳、捐獻；原本 defection._CLEAR_CORE）與 after 位置的 leave_behind 那一格
         （寫了新陣營不合的同伴當場回江湖；原本 engine._DEFECT_AFTER_CORE）：不問 enabled。位置在 DEFECT_ORDER，一個字不動。
@@ -106,6 +110,36 @@ class FactionFeature(Feature):
             self._steps = (StepHook("join", lambda ctx, status, orders: join_actions.join_step_items(ctx), ref="join",
                                     place=lambda ctx, ref: join_actions.join_step_place(ctx, ref)),)
         return self._steps
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """season.grant 的 faction 那一格（順序在 SEAM_ORDER；不問 enabled：on_season_start 在開場那一則之前、這一格在它之後）：上一季論了功的人起手資源與稱號（ending_actions.season_grant）。"""
+        if self._seams is None:
+            from . import ending_actions  # noqa: PLC0415
+
+            self._seams = (SeamHook("season.grant", "faction", lambda ctx, old: ending_actions.season_grant(ctx, old)),)
+        return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：待確認的畫面接管整個選單（空的也算，髒存檔）；此地的拜入、投靠、叛投、改幫；還沒挑依附哪一邊不算閒著；動身被擋。"""
+        if self._menus is None:
+            from . import defect_actions, join_actions, lean_actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("take", "faction", lambda ctx: join_actions.pending_options(ctx)),
+                MenuHook("here", "sect", lambda ctx, loc, cost, odds: join_actions.sect_cell(ctx)),
+                MenuHook("here", "join", lambda ctx, loc, cost, odds: join_actions.join_options(ctx)),
+                MenuHook("here", "defect", lambda ctx, loc, cost, odds: defect_actions.defect_options(ctx)),
+                MenuHook("here", "lean", lambda ctx, loc, cost, odds: lean_actions.lean_options(ctx)),
+                MenuHook("idle", "faction", lambda ctx: join_actions.picking_ally(ctx)),
+                MenuHook("block", "faction", lambda state, content: join_actions.travel_block(state, content)),
+            )
+        return self._menus
 
 
 FEATURE = FactionFeature()

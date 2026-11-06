@@ -13,7 +13,7 @@
 - `talk_actions.py`（第 20 批）：原本 `Game` 上人物對話的 9 個方法——對話的 A 段 `dialogue_request`、C 段重驗 `checked_prepared`、開口 `open_dialogue`、一輪 `talk`、帶路的路上說一句 `road_say`、「自己說」最多幾個字 `say_max`、談話畫面的「上回」`last_talk_line`、一輪寫進行狀 `annal_talk`、模型叫不動 `dialogue_unavailable`——加上原位搬來的 `talk_options`（`_everyday_options` 裡跟人物談著的整個選單），與對話框 `talk_view`（正在跟誰說話；主幹合回 D 段從 `Game` 搬來，陣營的名字走共用層 `figures.side_name`）。
 - `parley_actions.py`（第 20 批）：原本 `Game` 上 NPC 智能 2.0 的 19 個方法（名字去掉前導的 `_parley_`）——兩份清單與提示 `lists`、`prompt`、C 段驗並擲骰 `decide`、他答應的事真的去做 `do`、先做後付 `owe`、接不接條件與還債 `answer`、`pay`、他主動開口求你 `plea_*`、出陣前商量打法 `plan_*`、帶路的路上 `road_option`、並肩出陣 `backing_here`——加上 `forsake_all`（叛投之後欠著的都算食言）。
 - `companion_agent.py`、`parley.py`（第 20 批）：人物對話的模型三段式（組單子 `build_request`、請模型 `prepare_turn`、套用 `start_dialogue`／`continue_dialogue`／`say_dialogue`）與 NPC 智能 2.0 的純規則。舊名 `tianxia/companion_agent.py`、`parley.py` 留成 `sys.modules` 別名；`companion_agent.prepared_turn`（採用鎖外生成的結果）是原本 `Game._prepared_turn`。好感度 tag 表 `AFFINITY_TAG_DELTAS`、`DIALOGUE_TAGS` 在核心 `models.py`（核心的 `content.py` 驗內容要讀）。
-- `bots.py`（第 20 批）：假人看到 `talk:`、`parley:` 的選項怎麼按（原本 `bot_policy.score` 的 talk 那一段）——只按「告辭」。
+- `bots.py`（第 20 批）：假人看到 `talk:`、`parley:` 的選項怎麼按（原本 `bot_policy.score` 的 talk 那一段）——只按「告辭」。第 60 批：`act:recruit:<人物>` 假人不招（`Verb.tail_bot` 回 None、`tail_bot_skip`；`act:recruit` 不寫，照舊 `ACT_SCORES` 的 0.0）；`bot_always` 加 `talk:clue:`、`talk:opp:`，`Feature.bot_idle` 比相等 `TEXT_TALKS`（都原本在 `bot.pick`）。
 - `stances.py`（行動那一半：跟人物說話記一筆、人物頁、行狀、假人挑心意）、`errands.py`、`letters.py`：舊名 `tianxia/stances.py`、`errands.py`、`letters.py` 留成 `sys.modules` 別名（同一個模組物件，`monkeypatch.setattr(letters, "write", …)` 照樣有效）。
 - **心意的世界那一半在共用規則層 `tianxia/stance_world.py`**（這一週的計數、誰照哪一個做事、門檻、換手、每週歸零）：核心的 `rules`、事件檢定與舊模組 `world`、`figures`、`events` 讀它；`stances.py` re-export，`from tianxia import stances; stances.check(...)` 照舊。
 - `talk_log.py`（主幹合回 D 段從 `tianxia/talk_log.py` 整檔搬來，程式一字不改）：往來紀錄的小檔 `<db>-talk.sqlite`（兩季以前搬去 `<db>-talk-archive.sqlite`，不進角色存檔）與動作前後比出多談的幾輪（`snapshot`、`affinity_before`、`new_lines`）。舊名留 `sys.modules` 別名（同一個模組物件）。
@@ -27,7 +27,7 @@
 - `player_fields`：`stance_notes`、`errands`、`letters`、`letter_day`、`letter_seq`、`cheers`（換季全部跟著新角色重來）；第 20 批補認領：對話的 `pending_companion`、`dialogue_history`、`used_dialogue_options`、`last_offered_dialogue`、`turns_since_consolidation`、`talk_memos`、`talk_prev`，與 NPC 智能 2.0 的 `parley_days`、`parley_terms`、`parley_owed`、`parley_backing`、`parley_debts`、`parley_records`、`parley_escort`、`parley_road_leg`（都是這一季的，換季重來）。`carried`（換季照帶，`Game._reset_player_for_new_season`）是 `dialogue_history`、`used_dialogue_options`、`turns_since_consolidation`；`history_start` 是從 `dialogue_history` 的長度算的，不另認領。`talks_today`、`picking_audience` 留給第 21 批（交友求見）。`parted_done`（同伴回江湖的減半記號）第 7 批決戰包認領了，寫它的 `settle_partings` 還在決戰包，照留。
 - 季上的：`WorldState.stance_counts`、`stance_active`、`stance_week`（世界那一半讀寫，`stance_world`）；全服名下：`CompanionProgress`（共用規則層 `roster`）。
 - 內容：`content/events/stances.json`（`content` 宣告；`content.py` 照舊讀）；人物表上的 `stances`、`errands` 在 `content/figures.json`、驗證在 `content.py`（核心，這一批不動）。
-- 共用規則層的 `atlas.travel_block` 直接讀 `pending_companion`（動身被擋的那一句；全部拆包第 50 批照實記下，第 56 批選單收接縫時改成掛鉤、一張先後表）。
+- 動身被擋（`atlas.travel_block`）：第 56 批選單收接縫起這一包登記 `MENU_ORDER["block"]` 自己那一格，讀 `pending_companion` 的只剩包裡；字與先後一字不動（`atlas` 不再讀）。
 
 ## 委派與留在原位的接縫
 
@@ -38,9 +38,9 @@
 核心原位碰這一包的都沒有第 11 批的掛鉤，改叫委派、記進邊界測試的 `GAME_DELEGATE_CALLERS`，**沒有新增 `GAME_DIRECT`**：
 
 - 選單（`_everyday_options` × `_recruit_options`、`_errand_options`、`_talk_options`、`_parley_road_option`）：選項的順序算行為，`options` 掛鉤在體力玩法之後、`menu` 掛鉤要照包排（總表第 55～57 批）。
-- 同步（`sync` × `_stance_annals`、`_deliver_mail`）：紀錄與行狀的先後算行為，`deliver_notices`、`on_sync` 位置不對。欠人物的事過了期限（`parley.lapse`）第 20 批併進 `deliver_mail`（第 19 批是 `sync` 先叫、把句子傳進去）。
-- `act:recruit`、`act:recruit:<id>`（`_act` × `_recruit`、`_recruit_one`）：核心 `act:` 的子動詞，第 57 批接進 `Verb`。`choose` 的 FB-363 與 `_action_title` 的招募那一格也留給第 57 批。
-- `choose` 前段：勸降只叫出輸入框（`_errand_ask`，同 `battle:`，第 7 批 PM 認定第 1 條）；進鎖後重驗（`_checked_prepared`）、「自己說」的字數（`say_max`）仍在 `choose` 前段（`talk:`、`parley:road` 之外的 `act:`、`call:` 也要驗）。**`talk:`、`parley:road` 按下去第 20 批審查接上了 `choose` 掛鉤**：驗過的 `prepared` 與那句話經 `ctx._talk_turn`、`ctx._talk_said` 寄放（同勸降的 `_persuade_said`），標題（「交談・某人」「同行・某人」）在動作之前拿；`Game._talk`、`_road_say` 兩個委派跟著拿掉。
+- 同步（第 55 批起是 `sync.deliver` 的 `stances`、`mail` 兩格，委派拿掉）：紀錄與行狀的先後算行為，`deliver_notices`、`on_sync` 位置不對。欠人物的事過了期限（`parley.lapse`）第 20 批併進 `deliver_mail`（第 19 批是 `sync` 先叫、把句子傳進去）。
+- `act:recruit`、`act:recruit:<id>`：第 57 批接進 `Verb`（同一個 `Verb` 的 `run`、`title` 與 `tail_run`、`tail_title`；`_action_title` 的招募那一格跟著搬）。`choose` 的 FB-363（兩個分頁搶人，回 `Refused`，那個類別只在 engine、包 import 不到）留在 `Game.choose` 前段（第 57 批計畫第四節，位置不動）。
+- `choose` 前段：勸降只叫出輸入框第 57 批換成 `MENU_ORDER["quick"]` 的 `errand` 那一格（委派 `_errand_ask` 拿掉）；進鎖後重驗（`_checked_prepared`）、「自己說」的字數（`say_max`）仍在 `choose` 前段（`talk:`、`parley:road` 之外的 `act:`、`call:` 也要驗）。**`talk:`、`parley:road` 按下去第 20 批審查接上了 `choose` 掛鉤**：驗過的 `prepared` 與那句話經 `ctx._talk_turn`、`ctx._talk_said` 寄放（同勸降的 `_persuade_said`），標題（「交談・某人」「同行・某人」）在動作之前拿；`Game._talk`、`_road_say` 兩個委派跟著拿掉。
 - 交友與求見開口（`_socialize`、`_precise_socialize`、`_call` × `_open_dialogue`）：交友求見第 21 批搬進 `socialize` 包，那一包經 `ctx._open_dialogue` 問，核心原位不再叫它。
 - 叛投之後的食言：全部拆包第 32 批接上核心的叛投掛鉤（`DEFECT_ORDER` 的 `after` 位置，排在同伴回江湖 `leave_behind` 之後；回話的先後算行為），不再是這裡的接縫。場景文字（`_own_scene_text` × `_last_talk_line`）：位置算行為。
 
@@ -72,3 +72,9 @@
 - **鎖外三段式的 B 段不在這一包**：`server.prepare_dialogue`、`server.say` 叫的 `companion_agent.prepare_turn` 在殼裡（模型不在鎖裡）；A 段 `dialogue_request`、C 段 `checked_prepared` 在這一包。`tests/server/test_server.py` 換掉的 `companion_agent.generate_turn`（別名是同一個模組物件，換得到）。
 
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `stances`（`actions.stance_annals`）、`mail`（`actions.deliver_mail(ctx, ctx.now)`：`now` 是 `sync` 開頭設的）；`stale.early` 的 `companions`（`actions.drop_stale`，舊的招募確認）；`season.carry` 的 `companions`（`actions.carry_season`，對話歷史）。
+
+**第 56 批（選單收接縫，核心批）**：`take/talk`、`road/parley`、`here/recruit`、`here/errand`、`block/talk` 是這一包登記的格；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_talk_options`、`_parley_road_option`、`_recruit_options`、`_errand_options` 拿掉；上面寫「留委派」「原位」的以這一句為準。
+
+**第 57 批（分派與標題收接縫，核心批）**：`verbs()` 是新開的（`recruit`）；`quick/errand` 是這一包登記的格（回 None 照舊往下走 `choose` 掛鉤：送信、探營是 `errand:` 的正常路）。委派 `_recruit`、`_recruit_one`、`_errand_ask` 拿掉；上面寫「留委派」「原位」的以這一句為準。selftest：`levy` 一軌的目標句 `招募・{c` 在 `__init__.py` 的 `tail_title` 那一行，舊招募那一格用 `here(ctx)`，不要內聯（內聯了那個目標句會出現兩次）。同一件事比對走 `scripts/same_behavior.py`（招募某一位與調息另開 `levy` 一軌）。

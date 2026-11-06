@@ -12,12 +12,12 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 - routes.py：/api/smith_line（原本寫在 server.py）
 - bots.py：假人的分數（原本 bot_policy.score 的 smith 那一段與 _smith_want）
 
-接縫掛鉤：choose（smith:*）、verbs（act:smith 進店與紀錄標題）、routes、content、bot_pick。店面登記（Shop）這一批不登記（計畫 1.9：「此地還能做」的入口順序、
-選單順序、_shop_open 與收店的 here 兩個意思、同一排的懸賞榜與馬市還沒成包）：選單、入口、_shop_open、sync 與 _drop_stale_references 與 _depart 的收店都留在 Game 原位。
+接縫掛鉤：choose（smith:*）、verbs（act:smith 進店與紀錄標題）、routes、content、bot_pick。店面登記（Shop）不登記、走 MENU_ORDER（第 56 批選單收接縫定案，計畫第四節：「此地還能做」的入口順序、
+選單順序、_shop_open 與收店的 here 兩個意思）：menus() 登記選單、入口、_shop_open、出發收店、動身被擋那幾格；sync.close、stale.mid 的收店是 seams()（第 55 批）。
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, Verb
+from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Verb
 
 
 class SmithyFeature(Feature):
@@ -56,20 +56,54 @@ class SmithyFeature(Feature):
 
     def verbs(self) -> tuple[Verb, ...]:
         """act:smith 的主人（act 子動詞）：按下去走進鐵匠鋪（shelf_actions.enter：不花體力、單子從頭開始、停在第一個開著的那一頁；原本 Game._act 中段那幾行）、
-        紀錄標題「鐵匠鋪・此地」（原本 Game._action_title 那張表的 smith）。進店那一顆（此地還能做）在 Game._everyday_options 原位（計畫 1.9）。"""
+        紀錄標題「鐵匠鋪・此地」（原本 Game._action_title 那張表的 smith）。進店那一顆（此地還能做）是 here/smithy 那一格（第 56 批；計畫 1.9）。"""
         if self._verbs is None:
             from tianxia import weapons  # noqa: PLC0415
 
-            from . import shelf_actions  # noqa: PLC0415
+            from . import bots, shelf_actions  # noqa: PLC0415
 
             self._verbs = (Verb("smith", run=lambda ctx, prepared: shelf_actions.enter(ctx),
-                                title=lambda ctx: f"{weapons.SMITH}・{ctx.content.locations[ctx.state.player.location].name}"),)
+                                title=lambda ctx: f"{weapons.SMITH}・{ctx.content.locations[ctx.state.player.location].name}",
+                                bot=lambda ctx, profile: bots.enter(ctx), bot_skip=True),)
         return self._verbs
 
     def routes(self, shell):
         from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）
 
         return routes.router(shell)
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """補算與換季的兩格（順序在 SEAM_ORDER；不問 enabled）：sync 收店（shelf_actions.sync_close）、清失效參照收店（shelf_actions.drop_stale）。"""
+        if self._seams is None:
+            from . import shelf_actions  # noqa: PLC0415
+
+            self._seams = (
+                SeamHook("sync.close", "smithy", lambda ctx: shelf_actions.sync_close(ctx)),
+                SeamHook("stale.mid", "smithy", lambda ctx: shelf_actions.drop_stale(ctx)),
+            )
+        return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：鐵匠鋪不進店面登記 Shop（計畫第四節：here 有兩個意思：_shop_open 是「單子沒開著且開門」、收店是「開門」；出發不看坐不坐著都要清）：坐著接管整個選單、不算閒著、店面那一頁、動身收起來、動身被擋；此地那一顆。"""
+        if self._menus is None:
+            from tianxia import equipment  # noqa: PLC0415
+            from . import shelf_actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("take", "smithy", lambda ctx: shelf_actions.smith_options(ctx) if ctx.state.player.picking_smith else None),
+                MenuHook("here", "smithy", lambda ctx, loc, cost, odds: shelf_actions.here_cell(ctx, loc, cost, odds)),
+                MenuHook("idle", "smithy", lambda ctx: ctx.state.player.picking_smith),
+                MenuHook("open", "smithy", lambda ctx: shelf_actions.open_cell(ctx)),
+                MenuHook("depart", "smithy", lambda ctx: equipment.close_smith(ctx.state.player)),
+                MenuHook("block", "smithy", lambda state, content: shelf_actions.travel_block(state, content)),
+            )
+        return self._menus
 
 
 FEATURE = SmithyFeature()

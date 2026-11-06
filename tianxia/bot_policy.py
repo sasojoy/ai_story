@@ -9,9 +9,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from . import allied, arena, atlas, bot, bounties, conquest, cultivation, duel, epiphany, forge_secrets, library, naming, orders, outing, precise, rules, sensing, server_bots, sortie, stances, team
-from . import sortie_duel  # 出陣約戰（減法季批 3b）
-from . import tavern as tavern_rules  # 酒肆殺手：失手加價
+from . import allied, arena, atlas, bot, bounties, conquest, cultivation, duel, epiphany, forge_secrets, library, naming, orders, outing, rules, sensing, server_bots, stances, team
 from .bot import allocate_points, can_practise, wants_heal
 from .core import battle_base as battle_instance
 from .core import features as features_core
@@ -19,7 +17,11 @@ from .engine import FREE_TEXT_OPTION, Game, Option
 # 決戰（battle:）的分數搬進決戰包的 bots.py（全部拆包第 7 批；score 先問那一包）：這兩個名字照舊在這裡（tests/bots/test_bot_policy.py、
 # tests/season/test_real_content.py 直接叫，同一個函式、同一個數）
 from .features.battle.bots import JOIN_BATTLE_SCORE, battle_score as _battle_score  # noqa: F401
+from .features.bounties.bots import takeable as _takeable  # noqa: F401  懸賞榜上有沒有揭得下的：全部拆包第 60 批搬進懸賞榜包（tests 讀 bot_policy._takeable，同一個函式）
 from .features.smithy import bots as smithy_bots  # 過渡：_smith_want 的一行委派（全部拆包第 41 批）
+from .features.sortie import bots as sortie_bots  # 舊模組 → 包：_sortie_win 問出陣會打的那幾路（全部拆包第 60 批）
+from .features.sortie.bots import duel_play  # 約戰卡上的事：全部拆包第 60 批搬進出陣包（take_turn 與 tests 讀這個名字）
+from .features.tavern import bots as tavern_bots  # 舊模組 → 包：_tavern 的本體（全部拆包第 60 批）
 from .features.travel import bots as travel_bots  # 舊模組 → 包：move: 的分數（全部拆包第 47 批）  # 過渡：掛鉤沒有 profile（第 47 批 PM 認定第 2 條）
 from .features.peers.bots import (  # noqa: F401  打招呼、名帖的回法與比例：全部拆包第 37 批搬進玩家互動包（tests 讀 bot_policy.answer_call、REPLY_MIN_SECONDS）
     GREET_REPLY_SHARE, MINGTIE_ACCEPT_SHARE, MINGTIE_REJECT_SHARE, MINGTIE_SEND_CHANCE, REPLY_MIN_SECONDS, REPLY_SPREAD_SECONDS,
@@ -49,8 +51,7 @@ DUTY_SCORE = 0.5  # 守勢行動本身（不替軍令記功時）：低於探索
 PRACTICE_SCORE = 1.0
 # 背包裡的一階素材少於 NEED_MATERIAL_BELOW 個：多半給素材的那一趟再加這一份。計畫寫 0.5，那樣缺素材的探索（1.5）會跟挑戰本人（CHALLENGE_SCORE 1.5）
 # 打平，挑戰本人該比探索高（見 CHALLENGE_SCORE 的說明），所以壓在 0.3
-NEED_MATERIAL_SCORE = 0.3
-NEED_MATERIAL_BELOW = 6
+NEED_MATERIAL_SCORE = 0.3  # （NEED_MATERIAL_BELOW 搬進探索包 features/explore/bots.py，全部拆包第 60 批）
 # 召見（計畫 T5）：一季一次、演完才晉升帶部下，到了就應召、沒到就往那裡走，都比軍令優先
 SUMMONS_SCORE = 50.0
 SUMMONS_MOVE_SCORE = 15.0
@@ -76,6 +77,11 @@ CLINIC_MOVE_SCORE = 20.0  # 內傷重了往醫館走（bot.clinic_hop）：高�
 # 內傷到 bot.CLINIC_URGENT 以上：往醫館走、在醫館療傷都排在軍令（ORDER_SCORE 30＋遊歷的大勢分）與召見（SUMMONS_SCORE 50）前面
 # （PM 2026-10-12：只給 CLINIC_MOVE_SCORE 時被軍令拉走的假人一季平均帶著三四成內傷）
 CLINIC_URGENT_SCORE = 100.0
+
+
+def _side(game: Game) -> str | None:
+    """敵我的一個讀法（同 Game._side 的本體 allied.side_of）：豪強分屬兩軍的季，豪強是依附的那一軍；其他人是自己的陣營（散人 None）。"""
+    return allied.side_of(game.state, game.content)
 
 
 def _crippled(game: Game) -> bool:
@@ -244,45 +250,14 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     return msgs + game.choose(bot.duel_go(game, choice, rng)) if choice else msgs
 
 
-# ── 出陣約戰（減法季批 3b-3；整合設計 4.3、5.7「假人可以應約戰、封招，不可以寫字」）──
-ANSWER_AFTER = 0.5  # 窗開過這麼多才應（前一半留給同一邊的真人先應；到時沒人應另有補位）【預設】
-ANSWER_POWER_FLOOR = 0.7  # 應戰：自己的威力至少是攻方的這麼多才應（「威力不被壓太多」）【預設】
-JOIN_CHANCE = 1 / 3  # 同袍的約戰去同去的機會（每個假人每一場擲一次，同一場永遠一樣）【預設】
-
-
-def duel_play(game: Game, profile: BotProfile, rng: random.Random) -> list[str] | None:
-    """約戰卡上的事（Game.sortie_cards）：對面貼的、同一區、窗開過一半、還有應戰次數與體力（卡上的 can_answer）、自己的威力不被壓太多的就應
-    （封招 bot.duel_moves）；同袍貼的約三分之一同去（卡上的 can_join：同一區、還有出陣次數）。不會應自己陣營的（那一張是同去）。都沒有是 None。"""
-    if not game.duel_on():
-        return None
-    cards = game.sortie_cards() or []
-    if not cards:
-        return None
-    duels = game.world.sortie_duels()
-    power: float | None = None
-    for card in cards:
-        duel = duels.get(card["id"])
-        if duel is None or duel.status not in ("open", "answered"):
-            continue
-        if card["role"] == "answer" and card["can_answer"]:
-            if game.now - duel.opened_at < ANSWER_AFTER * (duel.expires_at - duel.opened_at):
-                continue
-            power = game._duel_power() if power is None else power
-            if power < duel.attacker.power * ANSWER_POWER_FLOOR:
-                continue
-            return game.choose(f"{sortie_duel.PREFIX}answer:{duel.id}:{','.join(bot.duel_moves(rng))}")
-        if card["role"] == "join" and card["can_join"]:
-            if random.Random(f"{profile.seed}|同去|{duel.id}").random() >= JOIN_CHANCE:
-                continue
-            return game.choose(f"{sortie_duel.PREFIX}join:{duel.id}")
-    return None
+# 出陣約戰（減法季批 3b-3）：應對面的約戰、同袍的同去（duel_play、ANSWER_AFTER、ANSWER_POWER_FLOOR、JOIN_CHANCE）搬進出陣包 features/sortie/bots.py，全部拆包第 60 批；上面 import 回來
 
 
 def _duel_value(game: Game, loc_id: str) -> float:
     """約戰開著的季在這一塊貼約戰對自己陣營的分（同 effect_score 的一點抵十分）：推得動（conquest.push_problem 的攻）、打得贏守軍（不是 _outmatched）、
     今天還有出陣次數才有，量照名目量。"""
-    s, c, side = game.state, game.content, game._conquest_side()
-    if side is None or loc_id not in conquest.blocks(c) or game.sorties_left() <= 0:
+    s, c, side = game.state, game.content, _side(game)
+    if side not in conquest.SIDES or loc_id not in conquest.blocks(c) or game.sorties_left() <= 0:  # 散人、不是兩軍的不推
         return 0.0
     if conquest.push_problem(s.world, c, side, loc_id, "attack") is not None or _outmatched(game, loc_id):
         return 0.0
@@ -352,60 +327,13 @@ def _arena(game: Game, rng: random.Random) -> list[str] | None:
     return msgs
 
 
-# 酒肆（tianxia/tavern.py）：人在有酒肆的城鎮、手上銀兩比這一下的價錢多 TAVERN_RESERVE 時，每一輪 TAVERN_CHANCE 的機會進去問一件事、
-# 問完出門。真人會打聽人，假人也要會：不然「有人打聽你」的風聲只會來自真人，看得出誰是假人。問什麼照 TAVERN_ASKS 的權重擲；
-# 打聽人挑在座的客人、問過的名號或這一區的大勢人物，打聽素材挑一階、二階的；偶爾對查到過的人雇最便宜的那一檔殺手
-# （「有人出錢買你」不能只來自真人；同陣營也雇，跟真人一樣不限，企劃者 2026-10-27）；失手過的照加價後的價錢量銀兩。不寫題壁、不請酒、不藏行跡、不反查。
+# 酒肆：每一輪 TAVERN_CHANCE 的機會進去問一件事、問完出門（本體與 TAVERN_RESERVE、TAVERN_ASKS 搬進酒肆包 features/tavern/bots.py，全部拆包第 60 批；機會留在這裡，叫的那一下才讀，測試換的是這個屬性）
 TAVERN_CHANCE = 0.03
-TAVERN_RESERVE = 30
-TAVERN_ASKS = (("news", 5), ("seek", 3), ("material", 2), ("ties", 1), ("hit", 0.5))
 
 
 def _tavern(game: Game, rng: random.Random) -> list[str] | None:
     """進酒肆問一件事、出門；這一輪不做是 None。選單上沒有「酒肆」時不擲骰。"""
-    s = game.state
-    if "act:tavern" not in {o.id for o in game.options(odds=False, tick=False) if o.enabled}:
-        return None
-    if rng.random() >= TAVERN_CHANCE:
-        return None
-    op = rng.choices([k for k, _ in TAVERN_ASKS], weights=[w for _, w in TAVERN_ASKS])[0]
-    t = game.content.config.tavern
-    price = game._tavern_price({"news": t.news_price, "seek": t.seek_price, "ties": t.ties_price,
-                                "hit": t.hit_prices[0]}.get(op, max(t.material_prices.values())))
-    if s.player.stats.get("silver", 0) < price + TAVERN_RESERVE:
-        return None
-    msgs = game.choose("act:tavern")
-    view = game.tavern_view()
-    target = ""
-    if op in ("seek", "ties"):
-        names = list(view["guests"]) + list(view["known"])
-        if not names or rng.random() < 0.4:
-            figures = [game.content.characters[f.character].name for f in game.content.figures.values()
-                       if f.character in game.content.characters]
-            names = names + figures
-        target = rng.choice(names) if names else ""
-        if not target:
-            op = "news"
-    elif op == "hit":
-        purse = s.player.stats.get("silver", 0) - TAVERN_RESERVE
-        foes = [n for n in view["known"] if game._tavern_hit_problem(n, 0)[0] is None
-                and game._tavern_price(tavern_rules.hit_price_base(game.content, 0, tavern_rules.hit_streak(
-                    s.world, s.player.name, n, t.hit_fail_max))) <= purse]
-        if foes:
-            msgs += game.tavern_do("hit", rng.choice(foes), "0")
-            if s.player.picking_tavern:
-                msgs += game.choose(view["back"])
-            return msgs
-        op = "news"
-    elif op == "material":
-        mats = [m["id"] for m in view["materials"] if m["tier"] <= 2]
-        target = rng.choice(mats) if mats else ""
-        if not target:
-            op = "news"
-    msgs += game.tavern_do(op, target)
-    if s.player.picking_tavern:
-        msgs += game.choose(view["back"])
-    return msgs
+    return tavern_bots.visit(game, rng, TAVERN_CHANCE)
 
 
 def _answer_discuss(game: Game, rng: random.Random, slot: NamingSlot | None) -> list[str] | None:
@@ -693,7 +621,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     kind, _, arg = option.id.partition(":")
     # （defect：假人不叛投〔計畫甲〕；sect：假人不拜門派；faction: 原本落到最後的 None。全部拆包第 35 批搬進陣營包的 bots.py，下面 features_core.bot_pick 問它）
     # （ambush、works：設伏、屯糧由 take_turn 的 _stamina_play 做，不交給打分數；全部拆包第 39 批換成體力玩法包的 bots.py，下面 features_core.bot_pick 問到；
-    # 護衛、犒軍、探望 aid: 同理，假人沒有要按的，大勢人物包不開 bots.py，全部拆包第 31 批）
+    # 護衛、犒軍、探望 aid: 同理，假人沒有要按的，bot_pick 照預設回 None，全部拆包第 31 批）
     if kind == "move":  # 往哪裡走：移動包的分數要 profile（測試傳的不一定是 game.state.player.bot），所以在掛鉤之前直接問（全部拆包第 47 批）
         return travel_bots.score(game, option, profile)
     owned, value = features_core.bot_pick(game, option)  # 搬成包的功能：假人看到這一顆怎麼按問那一包（開發規範手冊 3.8；宴客 feast:）
@@ -717,96 +645,16 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     # 馬市（market:）搬進功能包：假人的分數在 features/gear/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 42 批）
     # 求見（call:）搬進功能包：假人只按返回，分數在 features/socialize/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 21 批）
     # 往哪裡走（move:）搬進功能包：分數在 features/travel/bots.py，上面 features_core.bot_pick 之前那一行問它（要 profile，掛鉤沒有；全部拆包第 47 批）
-    if kind == "act":
-        if arg == "tavern":
-            return None  # 酒肆：不交給打分數（只是打開酒肆），打聽由 take_turn 另外做
-        plan = game.outing_plan() if arg == "explore" else None
-        if plan is not None:  # 減法季探索一顆：「探索」就是出門一趟（有體力才按得下去）
-            return _outing_score(game, plan)
-        if arg.startswith("challenge:") and _crippled(game):
-            return None
-        if arg.startswith("challenge:"):  # 挑戰本人：打得贏才去（打不贏的、閉門不見的按不下去，本來就不在候選裡）
-            fid = arg.partition(":")[2]
-            odds = game.challenge_odds(fid)
-            if orders.strike_on(game.state, game.content, game._side(), fid):  # 打擊軍令點名他（計畫 T6；豪強分屬兩軍照依附那一軍）
-                return ORDER_SCORE + CHALLENGE_SCORE if odds in STRIKE_ODDS else None
-            return CHALLENGE_SCORE if odds in CHALLENGE_ODDS else None
-        if arg == "call":
-            return None
-        if arg == "bounties":  # 懸賞榜：有揭得下的才打開（不然只是開了又返回）
-            return BOUNTY_SCORE if _takeable(game) else None
-        if arg == "smith":  # 鐵匠鋪：有要換、要買、要修、要打的才進去（不然只是開了又離開）；湊得出一爐又付得起再多 FORGE_SCORE
-            if not _smith_want(game):
-                return None
-            return SMITH_SCORE + (FORGE_SCORE if bot.forge_ready(game) else 0.0)
-        if arg == "arena":  # 擂台：由 _arena 決定（不交給打分數，不然開了又返回）
-            return None
-        if arg == "market":  # 馬市：有要換、要買、要餵的才進去（不然只是開了又離開；不寫的話會落到 ACT_SCORES 的 0.0、進去就卡住）
-            return MARKET_SCORE if bot.market_want(game) else None
+    if kind == "act":  # act:<子動詞>：分數問那一格的主人（Verb.bot、tail_bot，全部拆包第 60 批）；只有醫館療傷沒有主人（第 57 批第四節）
         if arg == "heal":  # 醫館療傷：look_after 已經先療了，萬一還在選單上（照顧動作沒輪到）付得起就按
             return _clinic_score(game) if wants_heal(game) else None
-        if arg == "explore" and _bounty_here(game, "scout"):
-            return BOUNTY_SCORE
-        if arg == "socialize" and (game.socialize_starts_dialogue() or game.socialize_is_futile()):
-            return None
-        if arg == "train":  # 出陣（關著時遊歷）
-            if _crippled(game):
-                return None
-            s, c = game.state, game.content
-            convoy = game.duel_on() and game.duel_convoy_here()  # 約戰開著：運糧隊經過時出陣是截糧（自家的地方也打）
-            if not convoy and _cannot_push(game, s.player.location):  # 領地爭奪：推不動的地方不出陣（翻地 QA 順帶：真人看得出有人一直在推不動的地方出陣）
-                return None
-            if _outmatched(game, s.player.location):  # 領地爭奪：贏面太低的地方不攻（打輸不推，只扣血掉銀兩）；去練功、去贏得了的地方
-                return None
-            bonus = ORDER_SCORE if orders.win_counts(s, c, game._side(), s.player.location) else 0.0
-            if sortie.on(c) and game.sortie_mode() == "hold" and orders.duty_counts(s, c, game._side(), s.player.location):
-                bonus += ORDER_SCORE  # 出陣的守算一次守城（同守勢行動）
-            bonus += BOUNTY_SCORE if _bounty_here(game, "strike") else 0.0
-            bonus += PRACTICE_SCORE if precise.on(c, s.world) else 0.0  # 一類一顆：出陣照舊排在練功前面（9.2）
-            return TRAIN_SCORE + _train_value(game, profile) + bonus
-        if arg == "duty":  # 守勢行動（計畫 T6）：替守城記功才值得做；約戰開著時不算守城（減法季批 3b：守是應戰）
-            s = game.state
-            counts = not game.duel_on() and orders.duty_counts(s, game.content, game._side(), s.player.location)
-            return DUTY_SCORE + (ORDER_SCORE if counts else 0.0)
-        if arg == "rank2":  # 第 2 階行動（正式版乙一）：跟守勢行動一樣的底分；替軍令記功的加分是計畫戊的事
-            return DUTY_SCORE
-        if arg == "convoy":  # 接下糧車：只在有護糧軍令的起點出現
-            return ORDER_SCORE
-        if arg == "summons":  # 應召（計畫 T5）：只在召見的地點出現
-            return SUMMONS_SCORE
-        if arg == "dadian":  # 打點（21 天季的銀兩出口收成的一間店）：假人不進（只是打開一間店，同鐵匠鋪沒事不進）
-            return None
-        # 捐軍備：只是打開軍需官那一串，捐由 look_after 的 bot.donate_spare 直接捐。以前落到 ACT_SCORES 的 0.0，隨手挑的那一半會按開、
-        # 那一串的鈕又都不打分，假人就停在大本營的軍需官前面一整季（2026-10-22 量 7 天季時看到：季末十三個假人有七到十個卡在這裡）
-        if arg == "donate":
-            return None
-        if arg.startswith("recruit:"):
-            return None  # 招募歷史武將（歷史武將同行第七節）：假人不招
-        return ACT_SCORES.get(arg, 0.0)
+        owned, value = features_core.act_score(game, arg, profile)
+        return value if owned else ACT_SCORES.get(arg, 0.0)
     # 打點那一間店（dadian:）、軍需官那一串（donate:）搬進功能包：假人只會離開，分數在 features/outlets/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 43 批）
     return None
 
 
 OUTING_SCORE = PRACTICE_SCORE  # 減法季探索一顆（整合設計 4.1）：出門一趟是經驗與素材的大宗，同以前的練功；出陣照舊排在它前面（出陣另加 PRACTICE_SCORE）
-OUTING_CRIPPLED_SHARE = 0.5  # 內傷重又付不起醫館（_crippled）時，遭遇佔比重這麼多以上的地方（這一趟有這麼大的機會遇敵）不出門（同不去練功）
-
-
-def _outing_score(game: Game, plan) -> float | None:
-    """探索一顆的分數（Game.outing_plan 那一份比重）：底分 OUTING_SCORE，遭遇佔比重的那一份（一趟只抽一件事，就是這一趟遇敵的機會；接了討伐懸賞是整趟）乘下一場的疲勞（Game.fatigue_next：減法季三道閘，
-    今天打得多了遭遇的收穫少，出門的意願跟著降；三道閘關著是 1）；接了這裡的討伐懸賞、這裡有打探懸賞各加 BOUNTY_SCORE；缺素材而這裡素材的比重
-    不比遭遇低再加 NEED_MATERIAL_SCORE。內傷重、付不起醫館的不去多半遇敵的地方（去城裡、寺裡攢錢）。"""
-    w = plan.weights
-    total = sum(w.values()) or 1
-    fight = w.get("encounter", 0) / total
-    if fight >= OUTING_CRIPPLED_SHARE and _crippled(game):
-        return None
-    tired = game.fatigue_next()
-    value = OUTING_SCORE if tired >= 1 else OUTING_SCORE * (1 - fight * (1 - tired))
-    value += BOUNTY_SCORE if plan.how == "bounty" else 0.0
-    value += BOUNTY_SCORE if _bounty_here(game, "scout") else 0.0
-    if _short_of_materials(game) and w.get("material", 0) >= w.get("encounter", 0):
-        value += NEED_MATERIAL_SCORE
-    return value
 
 
 def effect_score(effect: Effect, goals: dict[str, int], trend: dict[str, int] | None = None) -> float:
@@ -892,7 +740,7 @@ def _toward_faction(game: Game, faction_id: str, ids: list[str]) -> str | None:
 
 
 def _goals(game: Game, profile: BotProfile) -> dict[str, int]:
-    faction_id = game._side() or profile.faction  # 豪強分屬兩軍：依附那一軍的目標
+    faction_id = _side(game) or profile.faction  # 豪強分屬兩軍：依附那一軍的目標
     if faction_id is None:
         return {}
     return rules.resolve_goals(game.content, game.state.world, game.content.scenario.faction(faction_id).goals)  # 開關關著時三條戰線都算黃巾聲勢
@@ -905,7 +753,7 @@ def _home(game: Game, profile: BotProfile) -> set[str]:
     faction_id = game.state.player.faction or profile.faction
     if faction_id is None:
         return set()
-    front = _losing_front(game, game._side() or faction_id)
+    front = _losing_front(game, _side(game) or faction_id)
     if front is not None:
         return set(_front_locations(game.content, front))
     join_at = game.content.scenario.faction(faction_id).join_at
@@ -920,7 +768,7 @@ def _front_locations(content: Content, front: str) -> list[str]:
 def _front_hop(game: Game, profile: BotProfile) -> str | None:
     """第一季濃縮版：假人還沒到己方輸得最多的那條戰線上，往那條戰線路程最近的地點走的下一站（鄰居裡沒有戰線上的地點時，
     光看「目的地在不在地盤」沒有方向，會亂走）；已經在戰線上、走不到、沒有這種戰線（開關關著、豪強、散人）時是 None。"""
-    faction_id = game._side() or profile.faction  # 豪強分屬兩軍：依附那一軍輸得最多的戰線
+    faction_id = _side(game) or profile.faction  # 豪強分屬兩軍：依附那一軍輸得最多的戰線
     front = _losing_front(game, faction_id) if faction_id is not None else None
     return None if front is None else next_hop(game, _front_locations(game.content, front))
 
@@ -944,27 +792,9 @@ def _summons_hop(game: Game) -> str | None:
     return next_hop(game, [summons.location]) if summons is not None else None
 
 
-def _takeable(game: Game) -> bool:
-    """此地的懸賞榜上有揭得下的，或有交得出的求兵（bounties.give_choice）：假人為了交東西也會打開榜（懸賞榜設計 9.3）。
-    假人不為了交東西繞路（bounties.targets 不列求兵）。
-    手上已經揭了的不算（榜上那一張是「放棄」、沒有「揭下」）：以前算進來，揭著一張還沒交的假人每路過有懸賞榜的城鎮就打開、什麼都揭不了又關上，
-    下一輪又打開（2026-10-22 量 7 天季：前三天十三個假人開了又關上九十到一百四十次，每一次白花兩輪）。"""
-    s, c = game.state, game.content
-    held = {b.id for b in bounties.mine(s, c)}
-    if any(b.id not in held and bounties.can_take(s, b) and bounties.take_problem(s, c, b) is None for b in bounties.open_bounties(s, c)):
-        return True
-    return bounties.give_choice(s, c, game.world) is not None
-
-
 def _smith_want(game: Game) -> str | None:
-    """此刻在鐵匠鋪最該按的那一顆（本體在鐵匠鋪包的 bots.want；act:smith 的分數在這個檔，繼續叫它）。"""
+    """此刻在鐵匠鋪最該按的那一顆（本體在鐵匠鋪包的 bots.want；tests 讀這個名字）。"""
     return smithy_bots.want(game)
-
-
-def _short_of_materials(game: Game) -> bool:
-    """背包裡的一階素材少於 NEED_MATERIAL_BELOW 個（修兵器、餵馬、糧草都吃一階）。"""
-    mats = game.content.materials
-    return sum(n for mid, n in game.state.player.materials.items() if mid in mats and mats[mid].tier == 1) < NEED_MATERIAL_BELOW
 
 
 def _bounty_here(game: Game, kind: str) -> bool:
@@ -988,7 +818,7 @@ def _order_hop(game: Game) -> str | None:
 
 
 def _order_hop_now(game: Game) -> str | None:
-    s, c, side = game.state, game.content, game._side()
+    s, c, side = game.state, game.content, _side(game)
     places = orders.targets(s, c, side)
     if places and conquest.on(c, s.world):
         others = set(orders.targets(s, c, side, skip=frozenset({"intercept"})))
@@ -1002,7 +832,7 @@ def _order_hop_now(game: Game) -> str | None:
 def _cannot_push(game: Game, loc_id: str | None) -> bool:
     """領地爭奪的季，在這一塊出陣（自家的守、別人的與中立地的攻）推不動進度（conquest.push_problem）。不是區塊、開關關著、散人都是假（照舊）。"""
     s, c = game.state, game.content
-    side = game._side()
+    side = _side(game)
     if loc_id is None or side is None or not conquest.on(c, s.world) or loc_id not in conquest.blocks(c):
         return False
     # 約戰開著（減法季批 3b）：出陣只有貼約戰（攻），自家的地方等對面來約、推不動
@@ -1018,11 +848,11 @@ SORTIE_WIN_FLOOR = 0.4
 
 
 def _sortie_win(game: Game, loc_id: str) -> float:
-    """在這一塊出陣攻打贏的機會（領地爭奪）：那裡出陣會打的每一路（Game._sortie_foes，出陣照 Game.rng 挑一路）照勝算的字（Game.odds，
+    """在這一塊出陣攻打贏的機會（領地爭奪）：那裡出陣會打的每一路（sortie_bots.foes，出陣照 Game.rng 挑一路）照勝算的字（Game.odds，
     照那一處的地利）換成機會再平均。沒有對手是 0。"""
     def compute() -> float:
         loc = game.content.locations[loc_id]
-        foes = game._sortie_foes(loc)
+        foes = sortie_bots.foes(game, loc)
         if not foes:
             return 0.0
         at = None if loc_id == game.state.player.location else loc_id
@@ -1035,7 +865,7 @@ def _outmatched(game: Game, loc_id: str | None) -> bool:
     """領地爭奪的季，這一塊要出陣攻打（不是自家的、搶得下來的區塊）而且贏面不到 SORTIE_WIN_FLOOR。開關關著、不是區塊、自家的（守不必打）、
     散人都是假（照舊）。"""
     s, c = game.state, game.content
-    side = game._side()
+    side = _side(game)
     if loc_id is None or side is None or not conquest.on(c, s.world) or loc_id not in conquest.blocks(c):
         return False
     if conquest.holder(s.world, c, loc_id) == side or not conquest.capturable(c, loc_id):
@@ -1052,7 +882,7 @@ FOCUS_MOVE_SCORE = 6.0
 def _focus_hop(game: Game) -> str | None:
     """往這一邊最該推的那一塊路程最近的那一站（領地爭奪）：推得動（conquest.push_problem 是 None）、打得贏（不是 _outmatched）的目標裡，
     這一邊的條最高的那幾塊（並列都算）。今天的出陣次數用完、已經在那裡、開關關著、散人都是 None。"""
-    s, c, side = game.state, game.content, game._side()
+    s, c, side = game.state, game.content, _side(game)
     if side is None or not conquest.on(c, s.world) or game.sorties_left() <= 0:
         return None
 
