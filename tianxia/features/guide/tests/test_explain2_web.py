@@ -14,7 +14,7 @@ import server
 import webharness
 from tianxia.engine import Game
 
-pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
+pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.whole_content]
 
 
 def _season_one(**over):

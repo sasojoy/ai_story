@@ -18,7 +18,8 @@ from conftest import classic_rules, real_content
 from tianxia import howto, renown, rules, timetable
 from tianxia.engine import Game
 
-ROOT = Path(__file__).parents[2]
+ROOT = Path(__file__).parents[4]
+pytestmark = pytest.mark.whole_content
 
 
 def _war(content, name="甲"):

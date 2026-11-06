@@ -16,13 +16,17 @@
   ＋ tests/core/ 的核心契約、邊界、錢包服務測試（CORE_GLOBS），不含 slow；「煙霧」＝ 標了 @pytest.mark.smoke 的
   （每個區塊約 10 條）。
 - tianxia/features/<包>/**：那一包的 tests/ ＋ 核心契約（tests/core/test_contract*.py 與邊界 test_feature_boundaries.py，
-  CONTRACT_GLOBS：手冊 4.1 第三級的核心契約含邊界測試，改包最容易踩的就是 import 了別的包）。
+  CONTRACT_GLOBS：手冊 4.1 第三級的核心契約含邊界測試，改包最容易踩的就是 import 了別的包）。test_contract_features.py 逐包參數化的那幾條
+  只跑 [<包>]（別的包那幾格 --deselect，第二輪第 75 批；改核心、改到契約檔本身、--all、整套與閘門全跑）。
 - 核心（tianxia/core/**，與 tianxia/core/__init__.py 的 MODULES：手冊 3.1 的 state、models、content、rules、calendar、
   sqlite_world、world_state、characters、accounts、database、team、gender、naming，3.10 的 wallet，PM 10/31 的 journal，全部拆包第 25 批的 world、
   第 32 批的 log_archive（它的 test_log_archive 收進核心測試）、第 36 批的 step、weekcard（NOT_CORE_TESTS）；
   邊界測試照同一份）：核心測試＋煙霧＋檔名是 test_<模組>… 的。tianxia/core/ 底下掛鉤與清單（CORE_LISTS：features、services、
   registry、__init__）以外的（event_check.py：第 16 批從 Game 搬來的事件檢定）再並上寫到改到的函式名（連模組名）、Game 委派名、
   類別與常數的測試檔，模組裡直接叫它的函式一路往上算（core_module_callers；第 16 批修正，PM 11/03 照第 11 批修正輪的做法）。
+  tianxia/core/services_list.md（服務清單，第二輪第 74 批）只有邊界測試讀，只挑 test_feature_boundaries.py。
+  核心服務檔（CORE_SERVICES：combat、pushing、pills、status_view、page_view、scene_view，第二輪第 75 批）不走這一條：hunk 落在函式、類別、常數上 →
+  名字的功能群（檔名有名字第一個認得的字的測試檔，連模組裡用到它的；service_groups）＋這個檔的底＋自己檔名的＋邊界測試；函式以外或指名了卻沒有差 → 核心測試＋煙霧。
 - 共用規則層（tianxia/core/registry.py 的 SHARED，全部拆包第 15 批登記；照語法樹讀、跟邊界測試同一份）：自己檔名的測試（同核心）
   ＋煙霧＋邊界測試 test_feature_boundaries.py，不跑核心測試、不照「誰 import 它」挑也不往上找（總表第六節第 5 條；依賴它的測試
   留給合併閘門與每日整套，要當場驗就直接給那幾個測試檔或 --all）。
@@ -49,6 +53,7 @@
   （webharness）跑整支頁面、真的執行它的網頁測試（test_mall_web）連 slow 一起跑，跟改到的測試檔一樣（runs_js）。
 - tests/ 裡的測試檔：跑它自己，連 slow 一起（改了就是要跑它；挑到的其他檔照舊不含 slow，所以分兩次跑）；
   tests/kit/ 這類共用工具：import 它的測試檔；tests/fixtures/：寫到那個檔名的測試檔。
+  「import 它」都順著 tests/kit/ 往下找一層（reached，第二輪第 75 批：test_battle_page_web → jianghu_kit → webharness）；web/ 的「寫到檔名」也看 kit 的內文（web_text，KIT_TEXT_BLIND 不算）。
   包裡的測試內容（tianxia/features/<包>/tests/content/，全部拆包第 63 批）：同 tests/fixtures/，再加那一包的 tests/ 與 test_content_packs.py。
 - tests/conftest.py：hunk 落在哪個函式、fixture 或常數 → 用到它的測試檔（from conftest import、fixture 參數；conftest 裡
   別的 fixture 用到它的連那一個的使用者）；autouse 的 fixture、最外層的 import 與 sys.path、或用到的檔超過 CONFTEST_CAP 個
@@ -173,6 +178,9 @@ HUNK_FILES = {"tianxia/engine.py"}  # 看 hunk 落在哪個方法的（委派 �
 # _tavern_price、_pill_day……；核心契約與邊界測試固定跟著核心走（改核心照核心測試挑到〔CORE_GLOBS〕、改包與包的委派照核心契約挑到〔contract_tests〕）。
 # 改 scripts/test_for.py 照舊挑到 test_test_for（檔名 test_<模組>）。
 TEXT_BLIND = frozenset({"test_test_for.py", "test_feature_boundaries.py", "test_contract_core.py", "test_contract_features.py"})
+# 第二輪第 75 批：逐包參數化的核心契約。改包時那幾條只跑 [<包>]，別的包那幾格用 --deselect 拿掉（整套與閘門不走 test_for，照舊全跑）；
+# 跨包的問題（這一包新給的 id 被別包的 choose 吃掉）這裡抓不到，留給波末閘門（同企劃者 11/04 的取捨）。
+PER_PACKAGE_CONTRACT = "test_contract_features.py"
 
 
 @dataclass
@@ -187,6 +195,7 @@ class Pick:
     smoke: bool = False
     everything: bool = False
     why: list[str] = field(default_factory=list)
+    contract_only: set[str] = field(default_factory=set)  # 逐包的核心契約只跑這幾包（空的＝不限；core、改到契約檔本身也不限，_contract_deselect）
 
     @property
     def empty(self) -> bool:
@@ -329,6 +338,29 @@ def imported(test: Path) -> frozenset[str]:
                 if name:
                     names.add(name.split(".")[1] if name.startswith("tianxia.") else name.split(".")[0])
     return frozenset(names)
+
+
+# 第二輪第 75 批（C 波審查的 nit）：測試經 tests/kit/ 的小工具用到的（test_battle_page_web → jianghu_kit → webharness；
+# *_shell → server_kit → server_push），順著 kit 往下找一層也算。只有 tests/kit/ 底下這幾個，測試檔互相 import 的不算。
+KIT = TESTS / "kit"
+# 找「寫到 js 檔名」不看的 kit：webharness 的 APP_FILES 寫滿每一支 js（算進來改哪一支都挑到它的 99 個使用者）；server_kit 只在小工具 _js_function 的說明字寫到 app.js（算進來多 15 個 *_shell，它們不跑畫面）
+KIT_TEXT_BLIND = frozenset({"webharness", "server_kit"})
+
+
+@functools.lru_cache(maxsize=None)
+def _kits(test: Path) -> tuple[Path, ...]:
+    return tuple(k for k in (KIT / f"{n}.py" for n in sorted(imported(test))) if k.is_file())
+
+
+@functools.lru_cache(maxsize=None)
+def reached(test: Path) -> frozenset[str]:
+    """這個測試檔 import 的本專案模組，加上它 import 的 kit 再 import 的（往下一層）。"""
+    return imported(test).union(*(imported(k) for k in _kits(test)))
+
+
+def web_text(test: Path) -> str:
+    """找「寫到某一支 js 的檔名」時看的字：測試檔本身＋它 import 的 kit（webharness 不算）。"""
+    return _text(test) + "".join(_text(k) for k in _kits(test) if k.stem not in KIT_TEXT_BLIND)
 
 
 # ── tianxia/ 模組之間的 import 圖（10/31 測試自檢 T-02）────────────────
@@ -636,7 +668,8 @@ def _game_one_liners(src: str) -> dict[str, tuple[str, str]]:
 def engine_delegates(src: str) -> dict[str, str]:
     """engine.py 裡 Game 上的一行委派 → 它委派給哪一包（全部拆包第 11 批）：方法的本體（說明字之後）只有一句
     `return <名字>.<函式>(self, …)`（或不 return 的那一句），<名字> 是最外層 `from .features.<包> import <模組> [as <名字>]` 進來的。
-    邊界測試的 GAME_DELEGATES 是同一批方法（那一份另外記理由；這裡照原始碼認，不必兩邊同步）。"""
+    第二輪第 72 批起 engine.py 上沒有這種方法了（搬進各包 game_api.py，改表照 tianxia/features/<包>/** 那一條加 game_api_callers）；
+    留著給 base 還在第 72 批之前的 diff 認舊檔。"""
     tree = _parse(src)
     if tree is None:
         return {}
@@ -687,6 +720,18 @@ def engine_groups(hunk_list: list[Hunk], old_src: str,
             callers |= named
             why.append(f"{name}：不是委派 → 核心測試＋煙霧" + (f"＋寫到 {name} 的 {len(named)} 個檔" if named else ""))
     return core, why, packages, callers
+
+
+GAME_API_NAME = re.compile(r'(?:^\s*"|^def )(\w+)')
+
+
+def game_api_callers(f: str, base: str, hunks_of: dict | None) -> set[Path]:
+    """features/<包>/game_api.py 的 hunk 落在哪幾個名字（TABLE 的鍵、小 def）→ 內文寫到它們的測試檔（同 engine_groups 對一行委派的做法）。"""
+    given = (hunks_of or {}).get(f)
+    hunk_list = (given if given is not None else hunks(f, base))[0]
+    names = {name for hunk in hunk_list for side in hunk for _, text in side for name in GAME_API_NAME.findall(text)}
+    by_text = _index()
+    return {path for name in names for path in by_text.get(name, frozenset())}
 
 
 # ── core-events（全部拆包第 16 批修正，PM 2026-11-03）：改核心本體裡掛鉤、清單以外的模組 ─────────────
@@ -791,17 +836,8 @@ def _core_spans(src: str) -> list[tuple[str, int, int, object]]:
     return out
 
 
-def core_module_callers(module: str, hunk_list: list[Hunk], old_src: str,
-                        new_src: str) -> tuple[set[Path], list[str]]:
-    """tianxia/core/<module>.py 的 hunk → （寫到改到的名字的測試檔, 為什麼）；核心測試＋煙霧另外一定加。
-    hunk 落在哪個最外層的函式、類別、常數 → 連模組裡直接叫它、用到它的（一路往上：只有 answer_event 在叫的 answer_branch、
-    deed_credit 沒留委派，照 answer_event 挑；經 ctx.<委派> 叫的不算）→ 每一個的：
-    - 函式：Game 上委派給它的方法名（_present、_choose、answer_event；照 engine.py 認，core_delegates），加上模組名與函式名寫在
-      同一個檔裡的（函式名本身太常見：present、apply），再加經照抄它的模組或那個模組的舊名寫的（`duel.push_of`、`arena.title_for`：
-      core_reexports、names_through；全部拆包第 12 批審查修正）；
-    - 類別、常數：那個識別字（EVIL_ANNAL、FreeTextRequest：engine 照名字 import 回來，測試從 engine 拿）。
-    跟 base 沒有差（指名了這個檔）照整個檔算；挑到的超過 IMPORT_CAP 個檔不一個一個挑（只剩核心測試＋煙霧）。說明、import 這種
-    函式以外的行不挑。經 choose、探索走、不寫名字的混合檔（test_explore、test_real_content）照第 11 批認定 4 列在模組的說明。"""
+def _core_refs(old_src: str, new_src: str) -> tuple[dict[str, set[str]], set[str], dict[str, set[str]]]:
+    """（名字 → 它用到的最外層名字, 哪些是函式, 名字 → 模組裡用到它的）：新舊兩份的聯集。"""
     refs: dict[str, set[str]] = collections.defaultdict(set)
     funcs: set[str] = set()
     for src in (old_src, new_src):
@@ -813,6 +849,32 @@ def core_module_callers(module: str, hunk_list: list[Hunk], old_src: str,
     for name, ids in refs.items():
         for i in ids & set(refs):
             users[i].add(name)
+    return refs, funcs, users
+
+
+def _callers_up(seed: str, users: dict[str, set[str]]) -> set[str]:
+    """seed 連模組裡直接叫它、用到它的，一路往上。"""
+    seen, todo = {seed}, [seed]
+    while todo:
+        for u in users.get(todo.pop(), ()):
+            if u not in seen:
+                seen.add(u)
+                todo.append(u)
+    return seen
+
+
+def core_module_callers(module: str, hunk_list: list[Hunk], old_src: str,
+                        new_src: str) -> tuple[set[Path], list[str]]:
+    """tianxia/core/<module>.py 的 hunk → （寫到改到的名字的測試檔, 為什麼）；核心測試＋煙霧另外一定加。
+    hunk 落在哪個最外層的函式、類別、常數 → 連模組裡直接叫它、用到它的（一路往上：只有 answer_event 在叫的 answer_branch、
+    deed_credit 沒留委派，照 answer_event 挑；經 ctx.<委派> 叫的不算）→ 每一個的：
+    - 函式：Game 上委派給它的方法名（_present、_choose、answer_event；照 engine.py 認，core_delegates），加上模組名與函式名寫在
+      同一個檔裡的（函式名本身太常見：present、apply），再加經照抄它的模組或那個模組的舊名寫的（`duel.push_of`、`arena.title_for`：
+      core_reexports、names_through；全部拆包第 12 批審查修正）；
+    - 類別、常數：那個識別字（EVIL_ANNAL、FreeTextRequest：engine 照名字 import 回來，測試從 engine 拿）。
+    跟 base 沒有差（指名了這個檔）照整個檔算；挑到的超過 IMPORT_CAP 個檔不一個一個挑（只剩核心測試＋煙霧）。說明、import 這種
+    函式以外的行不挑。經 choose、探索走、不寫名字的混合檔（test_explore、test_real_content）照第 11 批認定 4 列在模組的說明。"""
+    refs, funcs, users = _core_refs(old_src, new_src)
     delegates: dict[str, set[str]] = collections.defaultdict(set)
     for method, (mod, func) in core_delegates(_engine_src()).items():
         if mod == module:
@@ -825,12 +887,7 @@ def core_module_callers(module: str, hunk_list: list[Hunk], old_src: str,
     files: set[Path] = set()
     why: list[str] = []
     for seed in seeds:
-        seen, todo = {seed}, [seed]
-        while todo:
-            for u in users.get(todo.pop(), ()):
-                if u not in seen:
-                    seen.add(u)
-                    todo.append(u)
+        seen = _callers_up(seed, users)
         terms: set[str] = set()
         hit: set[Path] = set()
         for n in seen:
@@ -864,6 +921,62 @@ def core_module_callers(module: str, hunk_list: list[Hunk], old_src: str,
     if len(files) > IMPORT_CAP:
         return set(), [*why, f"寫到那幾個名字的測試檔有 {len(files)} 個，太多 → 只有核心測試＋煙霧（其他留給每日整套；要當場驗用 --all）"]
     return files, why
+
+
+# ── 核心服務檔（第二輪第 75 批；E 波第 79～81、91 批才開檔，規則先寫好，測試用假檔名驗）──────────────
+# 這幾個檔裝的是從 Game 搬來的單一功能本體（push_trend、take_stamina_pill……），不是掛鉤：照核心那一條（核心測試＋煙霧＋寫到名字的）
+# 改一個函式要跑兩千多條（量：engine 上的 push_trend 2,616 條）。所以 hunk 落在函式、類別、常數上 → 名字的功能群＋這個檔的底＋自己檔名的＋
+# 邊界測試（push_trend → test_push*，202 條）。函式以外（import、說明、模組層）或指名了卻沒有差 → 照舊核心測試＋煙霧。
+# 寫到那個名字、可是檔名不是這一群的（test_opportunities 442 條只拿 push_trend 當準備動作）不挑：留給閘門，why 寫幾個檔，要當場驗就直接給檔名。
+CORE_SERVICES: dict[str, tuple[str, ...]] = {  # 模組 → 這個檔的底（改哪個函式都跑）；開檔的那一批照實調
+    "combat": ("battle", "squad"),
+    "pushing": ("push",),
+    "pills": ("pill", "stamina"),
+    "status_view": ("status", "jianghu"),
+    "page_view": ("jianghu", "shop"),
+    "scene_view": ("scene",),
+}
+# 名字裡這些字不是功能：拿來對測試檔名會誤中（test_free_text、test_real_content、test_for_world、_player_hp_and_cap、_reset_player_for_new_season）
+SERVICE_STOP = frozenset({"and", "for", "free", "real", "text", "line", "lines", "core", "new", "set", "get", "day", "daily", "base", "local", "load", "take", "data"})
+
+
+def word_tests(word: str) -> set[Path]:
+    """檔名（test_ 後面照底線拆）有這個字的測試檔。"""
+    return {t for t in all_tests() if t.name not in TEXT_BLIND and word in t.stem.split("_")[1:]}
+
+
+def service_word(name: str) -> str:
+    """名字裡第一個有測試檔叫這個字的字（push_trend → push；take_stamina_pill → stamina；pills_left_today → pill）；沒有回空字串。"""
+    for part in _parts(name):
+        for word in (part, part[:-1]) if part.endswith("s") else (part,):
+            if word not in SERVICE_STOP and word_tests(word):
+                return word
+    return ""
+
+
+def service_groups(module: str, hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[set[Path], bool, list[str]]:
+    """tianxia/core/<服務檔>.py 的 hunk → （測試檔, 要不要核心測試＋煙霧, 為什麼）。"""
+    if not hunk_list:
+        return set(), True, ["跟 base 沒有差異，照整個檔算 → 核心測試＋煙霧"]
+    spots = _split(hunk_list, old_src, new_src, lambda s: [x[:3] for x in _core_spans(s)])
+    _, _, users = _core_refs(old_src, new_src)
+    by_text = _index()
+    files = set().union(*(word_tests(w) for w in CORE_SERVICES[module]))
+    why = [f"這個檔的底 {'、'.join(CORE_SERVICES[module])} → {len(files)} 個檔"]
+    for seed in sorted(n for n in spots if n is not None):
+        seen = _callers_up(seed, users)
+        words = {w for w in map(service_word, seen) if w}
+        hit = set().union(*(word_tests(w) for w in words)) if words else set()
+        files |= hit
+        left = set(by_text.get(seed, frozenset())) - files
+        why.append(f"{seed}" + (f"（連模組裡用到它的 {len(seen) - 1} 個）" if len(seen) > 1 else "") + (f" → {'、'.join(sorted(words))} 那一群 {len(hit)} 個檔" if words else " → 名字認不出功能")
+                   + (f"；寫到 {seed} 的另外 {len(left)} 個檔不挑（留給閘門，要當場驗直接給檔名）" if left else ""))
+    core = None in spots or len(files) > IMPORT_CAP
+    if None in spots:
+        why.append("函式以外（import、說明、模組層）→ 核心測試＋煙霧")
+    elif core:
+        why.append(f"挑到 {len(files)} 個檔，太多 → 核心測試＋煙霧")
+    return files, core, why
 
 
 _CONFTEST_IMPORT = re.compile(r"^[ \t]*from[ \t]+conftest[ \t]+import[ \t]+(\([^)]*\)|[^\n]*)", re.M)
@@ -1007,9 +1120,10 @@ def pick(files: list[str], base: str | None = None,
                 # 算成那一包（第 22 批 PM 認定第 1 條，第 12 批合併時補）：那一包的 tests/＋核心契約，同改包裡的任一檔
                 result.files |= set((FEATURES / path.parts[2] / "tests").rglob("test_*.py"))
                 result.files |= contract_tests()
+                result.contract_only.add(path.parts[2])
                 result.why.append(f"{f}：{path.parts[2]} 這一包擺局面的檔（契約測試照路徑載入）→ {path.parts[2]} 這一包的 tests/＋核心契約")
             elif path.suffix == ".py":  # 測試共用的小工具：import 它的測試檔
-                result.files |= {t for t in tests if path.stem in imported(t)}
+                result.files |= {t for t in tests if path.stem in reached(t)}
             continue
         if f.startswith("tianxia/features/"):
             parts = f.split("/")
@@ -1019,10 +1133,28 @@ def pick(files: list[str], base: str | None = None,
             if pkg_tests is not None:
                 result.files |= set(pkg_tests.rglob("test_*.py")) if pkg_tests.is_dir() else set()
                 result.files |= contract_tests()
+                result.contract_only.add(parts[2])
                 result.why.append(f"{f}：{parts[2]} 這一包的 tests/＋核心契約")
+                if path.name == "game_api.py":  # 第二輪第 72 批：engine 上的一行委派搬進表，照舊併上內文寫到那個名字的測試檔（包外直接叫它的）
+                    writers = game_api_callers(f, base, hunks_of)
+                    result.files |= writers
+                    result.why.append(f"{f}：表上改到的名字 → 寫到它們的 {len(writers)} 個檔")
             else:
                 core_and_smoke()
                 result.why.append(f"{f}：功能包的登記 → 核心測試＋煙霧")
+            continue
+        if f == "tianxia/core/services_list.md":  # core_api（第二輪第 74 批）：只有邊界測試讀，不算改核心
+            result.files |= {t for t in tests if t.name == BOUNDARY_TEST}
+            result.why.append(f"{f}：服務清單 → 邊界測試")
+            continue
+        if f.startswith("tianxia/core/") and path.suffix == ".py" and f == f"tianxia/core/{path.name}" and path.stem in CORE_SERVICES:
+            given = (hunks_of or {}).get(f)
+            hunk_list, old_src, new_src = given if given is not None else hunks(f, base)
+            found, core, why = service_groups(path.stem, hunk_list, old_src, new_src)
+            result.files |= found | own_named(path.stem) | {t for t in tests if t.name == BOUNDARY_TEST}
+            if core:
+                core_and_smoke()
+            result.why.extend(f"{f}：{w}" for w in why)
             continue
         if f.startswith("tianxia/core/"):
             core_and_smoke()
@@ -1057,6 +1189,7 @@ def pick(files: list[str], base: str | None = None,
                 core_and_smoke()
             else:  # 核心契約與邊界測試一律帶（第 11 批審查）：Game 新叫了一個包的名字，只有邊界測試的 GAME_* 名單抓得到
                 result.files |= contract_tests()
+                result.contract_only |= packages
                 why = [*why, "engine.py 有改動 → 核心契約與邊界測試（GAME_* 名單只有邊界測試守）"]
             result.why.extend(f"{f}：{w}" for w in why)
             continue
@@ -1074,13 +1207,13 @@ def pick(files: list[str], base: str | None = None,
         if path.suffix == ".py" and (f.startswith("tianxia/") or f.startswith("scripts/") or "/" not in f):
             mod = path.stem
             first = _first_word(mod)  # mingtie_card 也挑 test_mingtie.py（檔名是模組名的第一個字）
-            result.files |= {t for t in tests if mod in imported(t) or t.stem == f"test_{mod}"
+            result.files |= {t for t in tests if mod in reached(t) or t.stem == f"test_{mod}"
                              or t.stem.startswith(f"test_{mod}_") or (first != mod and t.stem == f"test_{first}")
                              or (f.startswith("scripts/") and f"{mod}.py" in _text(t))}
             if f == f"tianxia/{path.name}":
                 ups = dependents(mod)
                 if ups:
-                    via = {t for t in tests if imported(t) & ups} - result.files
+                    via = {t for t in tests if reached(t) & ups} - result.files
                     if len(via) > IMPORT_CAP:
                         core_and_smoke()
                         result.why.append(f"{f}：依賴它的模組有 {len(ups)} 個、import 它們的測試檔 {len(via)} 個，太多"
@@ -1104,15 +1237,16 @@ def pick(files: list[str], base: str | None = None,
             pkg_files = set(pkg_tests.rglob("test_*.py")) if pkg_tests.is_dir() else set()
             result.files |= pkg_files
             result.files |= contract_tests()
+            result.contract_only.add(owner)
             # 寫到那個檔名的（店面的 CSS 守門讀包的樣式）：整個檔名，「mall.js」不算「mall.json」裡的那一段
             exact = re.compile(rf"(?<![\w.]){re.escape(path.name)}(?!\w)")
-            named_it = {t for t in tests if t.name not in TEXT_BLIND and exact.search(_text(t))}
+            named_it = {t for t in tests if t.name not in TEXT_BLIND and exact.search(web_text(t))}
             result.files |= named_it
             others = sorted(t.name for t in named_it if not t.is_relative_to(pkg_tests))
             # 包的 js 只有包裡用假瀏覽器（webharness 載入 APP_FILES）跑整支頁面的測試會真的執行它，而那種測試常整個檔標 slow
             # （test_mall_web）：照「不含 slow」挑等於沒有一條在跑它（10/31 審查：插一行 function ((( 照預設 134 passed）。
             # 那幾個連 slow 一起跑，跟改到的測試檔一樣；樣式表不是 webharness 跑的，照舊。
-            runs_js = {t for t in pkg_files if "webharness" in imported(t)} if path.suffix == ".js" else set()
+            runs_js = {t for t in pkg_files if "webharness" in reached(t)} if path.suffix == ".js" else set()
             result.runs_js |= runs_js
             result.why.append(f"{f}：{owner} 這一包的網頁檔 → 那一包的 tests/＋核心契約"
                               + (f"＋寫到 {path.name} 的 {'、'.join(others)}" if others else "")
@@ -1124,7 +1258,7 @@ def pick(files: list[str], base: str | None = None,
                 result.files.add(named[SERVER_TEST])
             # 江湖頁（main.js）是從 app.js 切出來的：測試照舊寫「app.js」，也算寫到它們（走一趟的 outing.js 是探索包的、輿圖的 map.js 是輿圖包的〔第 49 批〕，上面那一支）
             names = {path.name, "app.js"} if path.name in WEB_SCRIPTS else {path.name}
-            result.files |= {t for t in tests if any(n in _text(t) for n in names)}
+            result.files |= {t for t in tests if any(n in web_text(t) for n in names)}
             continue
         result.why.append(f"{f}：不是程式、內容或測試，不跑")
     return result
@@ -1160,13 +1294,35 @@ def _slow_split(chosen: Pick, slow: bool) -> list[tuple[list[str], str]]:
     return runs + [(sorted(_rel(p) for p in mine), "slow or not slow")]
 
 
-def _command(goal: list[str], marker: str, extra: list[str], everything: bool, args_file: Path | None) -> list[str]:
+def per_package_contract_tests(path: Path) -> list[str]:
+    """test_contract_features.py 裡逐包參數化的測試（@pytest.mark.parametrize("feature", …)）。照語法樹讀。"""
+    found = []
+    for node in _ast(_text(path)).body:
+        if isinstance(node, ast.FunctionDef) and any(
+                isinstance(d, ast.Call) and getattr(d.func, "attr", "") == "parametrize"
+                and d.args and isinstance(d.args[0], ast.Constant) and d.args[0].value == "feature" for d in node.decorator_list):
+            found.append(node.name)
+    return found
+
+
+def _contract_deselect(chosen: Pick, goal: list[str]) -> list[str]:
+    """逐包的核心契約只留 chosen.contract_only 那幾包的 --deselect。改核心、改到契約檔本身、整套都不限。"""
+    path = CORE_TESTS / PER_PACKAGE_CONTRACT
+    if (chosen.everything or chosen.core or not chosen.contract_only or path in chosen.own or _rel(path) not in goal):
+        return []
+    others = sorted(p.name for p in FEATURES.iterdir() if (p / "__init__.py").is_file() and p.name not in chosen.contract_only)
+    return [f"--deselect={_rel(path)}::{test}[{name}]" for test in per_package_contract_tests(path) for name in others]
+
+
+def _command(goal: list[str], marker: str, extra: list[str], everything: bool, args_file: Path | None,
+             deselect: list[str] = ()) -> list[str]:
     cmd = [sys.executable, "-m", "pytest", "-q", "-m", marker]
-    if args_file is not None and sum(len(g) + 1 for g in goal) > 8000:
-        args_file.write_text("\n".join(goal) + "\n", encoding="utf-8")
+    listed = [*goal, *deselect]
+    if args_file is not None and sum(len(g) + 1 for g in listed) > 8000:
+        args_file.write_text("\n".join(listed) + "\n", encoding="utf-8")
         cmd.append(f"@{args_file}")
     else:
-        cmd += goal
+        cmd += listed
     cmd += extra
     many = everything or len({g.split("::")[0] for g in goal}) >= PARALLEL_FROM
     asked = any(a in ("-n", "--numprocesses", "no:xdist") or a.startswith(("--numprocesses=", "-pno:xdist"))
@@ -1179,7 +1335,8 @@ def _command(goal: list[str], marker: str, extra: list[str], everything: bool, a
 def pytest_commands(chosen: Pick, slow: bool, extra: list[str], tmp: Path | None = None) -> list[list[str]]:
     """跑 pytest 的指令（一個；改到的測試檔有 slow 時兩個，見 _slow_split）。目標太多（Windows 一行最多三萬多字）時
     寫進 tmp 底下的檔，用 pytest 的 @檔名。"""
-    return [_command(goal, marker, extra, chosen.everything, None if tmp is None else tmp / f"targets-{i}.txt")
+    return [_command(goal, marker, extra, chosen.everything, None if tmp is None else tmp / f"targets-{i}.txt",
+                     _contract_deselect(chosen, goal))
             for i, (goal, marker) in enumerate(_slow_split(chosen, slow))]
 
 
@@ -1230,6 +1387,8 @@ def describe(chosen: Pick, slow: bool = False) -> list[str]:
         lines.append("執行改到的包 js 的網頁測試連 slow 一起跑：" + " ".join(web))
     if _slow_only(chosen) and not slow:
         lines.append("整個檔標 slow、這一次不跑（要跑加 --slow）：" + " ".join(_slow_only(chosen)))
+    if not chosen.everything and _contract_deselect(chosen, targets(chosen)):
+        lines.append(f"核心契約逐包那幾條只跑 {'、'.join(f'[{n}]' for n in sorted(chosen.contract_only))}（別的包那幾格留給整套與閘門）")
     if chosen.core:
         lines.append(f"核心測試：核心模組自己的測試＋test_engine，不含 slow（{len(core_tests())} 個檔）")
     if chosen.smoke:

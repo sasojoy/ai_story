@@ -28,7 +28,7 @@ from tianxia import world as worldmod  # noqa: E402
 from tianxia.content import serving_profile, load_content, profile_line  # noqa: E402
 
 TREND = "huangjin"
-TRAINING = ("_drill", "_squad_encounter", "_sortie_hold")  # 出陣（出陣探索與地盤）：攻走 _squad_encounter，守與攪局走 _sortie_hold
+TRAINING = ("drill", "_squad_encounter", "sortie_hold")  # 出陣（出陣探索與地盤）：攻走 _squad_encounter，守與攪局走 _sortie_hold
 
 
 def _caller(names: tuple[str, ...], depth: int) -> str | None:
@@ -59,10 +59,10 @@ def main() -> None:
         if trend_id == TREND:
             trajectory[season["n"]].append((state.world.time / 86400, after))
             if after != before:
-                kind = {"_drill": "操練", "_squad_encounter": "真打贏", "_sortie_hold": "出陣守／攪局", "sim_tick": "虛擬玩家",
-                        "apply_effect": "事件"}.get(_caller(("_drill", "_squad_encounter", "_sortie_hold", "sim_tick", "apply_effect"), 9), "其他")
-                game = next((fr.frame.f_locals["self"] for fr in inspect.stack()[1:10]
-                             if isinstance(fr.frame.f_locals.get("self"), engine.Game)), None)
+                kind = {"drill": "操練", "_squad_encounter": "真打贏", "sortie_hold": "出陣守／攪局", "sim_tick": "虛擬玩家",
+                        "apply_effect": "事件"}.get(_caller(("drill", "_squad_encounter", "sortie_hold", "sim_tick", "apply_effect"), 9), "其他")
+                game = next((who for fr in inspect.stack()[1:10]
+                             for who in (fr.frame.f_locals.get("self"), fr.frame.f_locals.get("ctx")) if isinstance(who, engine.Game)), None)
                 faction = (game.state.player.faction or "散人") if game is not None else "—"
                 sources[season["n"]][(kind, faction)] += after - before
         return out
@@ -79,9 +79,9 @@ def main() -> None:
         training = _caller(TRAINING, 6)
         if training is None or trend_id != TREND:
             return value  # 假人評估地點時也會呼叫，只有真的遊歷才算
-        if training == "_drill" and args.variant == "zero":
+        if training == "drill" and args.variant == "zero":
             return 0
-        if training == "_drill" and args.variant == "half":
+        if training == "drill" and args.variant == "half":
             value = int(value / 2)
         if args.cap:
             key = (season["n"], self.state.player.name, int(self.state.world.time // 86400))

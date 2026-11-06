@@ -74,9 +74,9 @@
 | howto()（HowtoHook） | 玩法說明的格（全部拆包第 59 批「引導二」）：設定抽屜那一頁（guide/howto.py 的 page）照檔尾寫死的順序表 HOWTO_ORDER 一格一格接；
   別節中間的插句（判斷在別包）走 HOWTO_INSERTS（howto_insert），不問 enabled |
 | status_slots()（StatusHook） | 狀態列（Game.status_data）與江湖畫面（server._main_view_body）的格（shell_web：全部拆包第 66 批）：照檔尾寫死的順序表 STATUS_ORDER
-  一格一格叫、回的鍵照順序合（JSON 鍵的先後、叫的先後都算行為；關著的包原位那幾行本來就照叫），不問 enabled |
+  一格一格叫、回的鍵照順序合（JSON 鍵的先後、叫的先後都算行為；關著的包原位那幾行本來就照叫），不問 enabled；表外的格接在表尾（第二輪第 74 批） |
 
-ctx 第一階就是 Game；功能包只准叫 services.py 那張清單上的方法。
+ctx 第一階就是 Game；功能包只准叫 services_list.md 那張清單上的方法，和自己這一包的委派。
 """
 from __future__ import annotations
 
@@ -1463,7 +1463,8 @@ class MainFrame:
 
 
 # 狀態列與江湖畫面的順序表：照換成掛鉤之前 Game.status_data、server._main_view_body 一段一段寫的先後。先後就是行為（JSON 鍵的先後閘門逐位元組比；
-# 叫的先後也算：選單會推進全服戰鬥），寫死在這裡、不照 FEATURES。包登記自己那幾格（Feature.status_slots()）；核心的格是 engine 的 status_data、
+# 叫的先後也算：選單會推進全服戰鬥），寫死在這裡、不照 FEATURES。表上的格一格不挪；新包的格不用列進來，表外的接在表尾、照登記的先後（第二輪第 74 批，同 action_table）。
+# 包登記自己那幾格（Feature.status_slots()）；核心的格是 engine 的 status_data、
 # 殼的格是 server._main_view_body 傳進來的閉包。改這張表先過 PM（性質同 BUS_ORDER）；tests/core/test_contract_core.py 逐字鎖住。條件鍵的判斷（is not None
 # 才放、if mostly、if orders）照原位搬，不統一。
 #
@@ -1551,16 +1552,16 @@ def slot_some(key: str, value: Any) -> dict:
 
 
 def status_hooks(table: str) -> dict[str, Callable[[Any, Any], dict]]:
-    """table 那一張包登記的格 {slot: run}：照 registered()、不看 enabled。每一次都驗登記的全部格：表上沒有的表或格、同一格登記兩次（兩包或同一包）
-    都丟 ValueError（同 bus_hooks、step_hooks）。"""
+    """table 那一張包登記的格 {slot: run}：照 registered()、不看 enabled。每一次都驗登記的全部格：表名不在 STATUS_ORDER、同一格登記兩次（兩包或同一包）
+    都丟 ValueError（同 bus_hooks、step_hooks）。格不在那張表上不丟：是新包接在表尾的，status_run 照登記的先後叫（第二輪第 74 批）。"""
     if table not in STATUS_ORDER:
         raise ValueError(f"狀態列沒有 {table} 這一張表")
     own: dict[str, Callable[[Any, Any], dict]] = {}
     seen: set[tuple[str, str]] = set()
     for f in registered():
         for hook in f.status_slots():
-            if hook.slot not in STATUS_ORDER.get(hook.table, ()):
-                raise ValueError(f"{f.name} 登記了狀態列表上沒有的格 {hook.table}/{hook.slot}")
+            if hook.table not in STATUS_ORDER:
+                raise ValueError(f"{f.name} 登記了狀態列沒有的表 {hook.table}/{hook.slot}")
             if (hook.table, hook.slot) in seen:
                 raise ValueError(f"狀態列的 {hook.table}/{hook.slot} 登記了兩次（{f.name}）")
             seen.add((hook.table, hook.slot))
@@ -1571,14 +1572,15 @@ def status_hooks(table: str) -> dict[str, Callable[[Any, Any], dict]]:
 
 def status_run(table: str, core: dict[str, Callable[[Any, Any], dict]], frame: Any, ctx: Game) -> dict:
     """照 STATUS_ORDER[table] 走每一格：包登記了叫包的，沒有叫 core 那一份（核心或殼的閉包）；兩邊都沒有（那一格的包沒登記：契約測試換掉 FEATURES 時）
-    跳過。每一格回的 dict 照順序合進 frame（main 表是 frame.view），回那一份。core 寫了表上沒有的格丟 ValueError（打錯字的格不會默默不跑）；
-    某一格回的不是 dict 丟 TypeError。"""
+    跳過。走完表再走包登記的表外格（接在表尾，照登記的先後）。每一格回的 dict 照順序合進 frame（main 表是 frame.view），回那一份。core 寫了表上沒有的格
+    丟 ValueError（只有包能接尾巴；核心打錯字的格不會默默不跑）；某一格回的不是 dict 丟 TypeError。"""
     own = status_hooks(table)  # 沒有這一張表在 status_hooks 丟
     order = STATUS_ORDER[table]
-    if not core.keys() <= set(order):
-        raise ValueError(f"核心代叫了狀態列 {table} 表上沒有的格 {sorted(core.keys() - set(order))}")
+    on_table = set(order)
+    if not core.keys() <= on_table:
+        raise ValueError(f"核心代叫了狀態列 {table} 表上沒有的格 {sorted(core.keys() - on_table)}")
     into = frame.view if isinstance(frame, MainFrame) else frame
-    for slot in order:
+    for slot in (*order, *(s for s in own if s not in on_table)):
         run = own.get(slot) or core.get(slot)
         if run is None:
             continue
@@ -1641,6 +1643,7 @@ def action_table(order: tuple[str, ...], core: dict[str, Callable[[Any, dict], A
 
 
 # 放鎖之後要開的背景寫字，先後就是這一張（原本 server.act 那六行的順序；問與開都照它，順序算行為）。戰記的 tale_round 照舊在 threads 掛鉤（定時背景，不是動作之後才開）。
+# 表上的格一格不挪；新包的格不用列進來，表外的接在表尾、照登記的先後（第二輪第 74 批，同 action_table）。
 OUTLOCK_ORDER: tuple[str, ...] = ("tale", "crowd", "chatter", "letter", "yuedan", "xingshi")
 
 
@@ -1648,7 +1651,7 @@ OUTLOCK_ORDER: tuple[str, ...] = ("tale", "crowd", "chatter", "letter", "yuedan"
 class OutlockJob:
     """放鎖之後才開的一條背景寫字。waiting(game)：行動鎖內問（只讀、不叫模型），回真值才算有；start(game, got)：鎖放掉之後才叫，got 是 waiting 回的那個值（酒肆閒談是地點 id）。"""
 
-    slot: str  # OUTLOCK_ORDER 上的一格
+    slot: str  # OUTLOCK_ORDER 上的一格，或包自己接在表尾的格
     waiting: Callable[[Any], Any]
     start: Callable[[Any, Any], Any]
 
@@ -1667,16 +1670,43 @@ def outlock_ops(shell: Any) -> dict[str, Callable[[Any, dict], Any]]:
 
 
 def outlock_jobs(shell: Any) -> tuple[OutlockJob, ...]:
-    """各包的背景寫字（殼的 OUTLOCK_JOBS），照 OUTLOCK_ORDER 排。格不在表上、兩包同格、表上沒人登記都丟例外（開機就知道）。"""
+    """各包的背景寫字（殼的 OUTLOCK_JOBS），照 OUTLOCK_ORDER 排，表外的格接在表尾（照登記的先後）。兩包同格、表上沒人登記都丟例外（開機就知道）。"""
     by_slot: dict[str, OutlockJob] = {}
     for f in registered():
         for job in f.outlock(shell).jobs:
-            if job.slot not in OUTLOCK_ORDER:
-                raise ValueError(f"背景寫字 {job.slot} 不在 OUTLOCK_ORDER")
             if job.slot in by_slot:
                 raise ValueError(f"背景寫字 {job.slot} 兩包都有")
             by_slot[job.slot] = job
     missing = [slot for slot in OUTLOCK_ORDER if slot not in by_slot]
     if missing:
         raise ValueError(f"背景寫字 {missing} 沒有人登記")
-    return tuple(by_slot[slot] for slot in OUTLOCK_ORDER)
+    return (*(by_slot[slot] for slot in OUTLOCK_ORDER), *(job for slot, job in by_slot.items() if slot not in OUTLOCK_ORDER))
+
+
+# core_api（第二輪第 72 批「一行委派進各包的表」；計畫 docs/superpowers/plans/2026-11-07-第二輪-第72批.md）：
+# Game 上包的一行委派搬進 features/<包>/game_api.py 的 TABLE（名字 → 函式本身），engine.py 檔尾掛一次，`g.xxx` 照舊。
+def game_api_tables() -> dict[str, dict[str, Callable]]:
+    """各包的 TABLE：照資料夾名排序、檔在才收。不經 registry：`import tianxia.engine` 這一刻 registry 還沒載，它一載就多載一串包，
+    sys.modules 的先後會變；用 import_module，因為這裡只讀表、不用包的東西。"""
+    import importlib  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+
+    root = Path(__file__).resolve().parent.parent / "features"
+    return {path.parent.name: importlib.import_module(f"tianxia.features.{path.parent.name}.game_api").TABLE
+            for path in sorted(root.glob("*/game_api.py"))}
+
+
+def attach_game_api(cls: type, tables: dict[str, dict[str, Callable]] | None = None) -> None:
+    """把 TABLE 掛上類別（setattr 函式本身，不包）。同名丟例外：類別本體已經有、或兩包都掛同一個名字；先全部查完才掛。"""
+    tables = game_api_tables() if tables is None else tables
+    owners: dict[str, str] = {}
+    for package, table in tables.items():
+        for name in table:
+            if name in vars(cls):
+                raise ValueError(f"{package}/game_api.py 的 {name}：{cls.__name__} 上已經有這個名字")
+            if name in owners:
+                raise ValueError(f"{package}/game_api.py 的 {name}：{owners[name]} 也掛了這個名字")
+            owners[name] = package
+    for table in tables.values():
+        for name, func in table.items():
+            setattr(cls, name, func)

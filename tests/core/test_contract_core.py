@@ -242,14 +242,16 @@ def test_outlock_merges_ops_and_refuses_the_same_op_twice(monkeypatch):
 
 
 def test_outlock_jobs_follow_the_written_order_and_refuse_what_does_not_add_up(monkeypatch):
-    """背景寫字照 OUTLOCK_ORDER 排（不照 FEATURES 的先後）；格不在表上、兩包同格、表上沒人登記都丟例外。"""
+    """背景寫字照 OUTLOCK_ORDER 排（不照 FEATURES 的先後）；表外的格接在表尾、照登記的先後（第二輪第 74 批）；兩包同格、表上沒人登記都丟例外。"""
     order = features_core.OUTLOCK_ORDER
     assert order == ("tale", "crowd", "chatter", "letter", "yuedan", "xingshi")
     monkeypatch.setattr(registry, "FEATURES", [_outlock_pack(slots=order[3:]), Feature(), _outlock_pack(slots=reversed(order[:3]))])
     assert [job.slot for job in features_core.outlock_jobs(object())] == list(order)
+    monkeypatch.setattr(registry, "FEATURES", [_outlock_pack(slots=("fake_slot", "fake_later")), _outlock_pack(slots=reversed(order))])
+    assert [job.slot for job in features_core.outlock_jobs(object())] == [*order, "fake_slot", "fake_later"]
     for packs in (
-        [_outlock_pack(slots=(*order, "fake_slot"))],  # 格不在表上
         [_outlock_pack(slots=order), _outlock_pack(slots=order[:1])],  # 兩包同格
+        [_outlock_pack(slots=(*order, "fake_slot")), _outlock_pack(slots=("fake_slot",))],  # 表外的格一樣不能兩包同格
         [_outlock_pack(slots=order[1:])],  # 表上沒人登記
     ):
         monkeypatch.setattr(registry, "FEATURES", packs)
@@ -2253,11 +2255,13 @@ def _slot(table, slot, keys=None):
     return features_core.StatusHook(table, slot, lambda ctx, frame: {k: slot for k in (keys or (slot,))})
 
 
-def test_a_package_can_only_take_a_status_slot_on_the_table_and_only_one_package_a_slot(monkeypatch):
-    """表上沒有的表或格、兩包（或同一包兩次）登記同一格，status_hooks 都丟 ValueError（問別的表也丟：每一次都驗全部）；核心代叫的寫了表外的格，status_run 丟。"""
-    monkeypatch.setattr(registry, "FEATURES", [Slotter([_slot("status", "nosuch")])])
-    with pytest.raises(ValueError):
-        features_core.status_hooks("status")
+def test_a_package_slot_off_the_table_goes_to_the_tail_and_only_one_package_a_slot(monkeypatch):
+    """包的格不在表上：status_hooks 收下、status_run 走完表再照登記的先後叫，鍵排在最後（第二輪第 74 批，同 action_table）。表名打錯、兩包（或同一包兩次）登記同一格，
+    status_hooks 都丟 ValueError（問別的表也丟：每一次都驗全部）；核心代叫的寫了表外的格，status_run 照丟（只有包能接尾巴）。"""
+    monkeypatch.setattr(registry, "FEATURES", [Slotter([_slot("status", "nosuch"), _slot("status", "invites")]), Slotter([_slot("status", "later"), _slot("status", "head")])])
+    assert list(features_core.status_hooks("status")) == ["nosuch", "invites", "later", "head"]
+    assert features_core.status_hooks("main") == {}  # 別的表不收它們
+    assert list(features_core.status_run("status", {}, {}, None)) == ["head", "invites", "nosuch", "later"]
     monkeypatch.setattr(registry, "FEATURES", [Slotter([_slot("nosuch", "head")])])
     with pytest.raises(ValueError):
         features_core.status_hooks("status")

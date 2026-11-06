@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, Private
 from pydantic_core import core_schema
 
 from .jianfa_numbers import ExploreMix, JianfaNumbers
+# ── tuning import（new_feature.py 接在這一行前面）──
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
 ActionKind = Literal["explore", "train", "socialize"]
@@ -4302,6 +4303,7 @@ class Config(_Strict):
     # 伺服器自己的排程（線上架構設計第四節）：每幾秒推一次全服的事（世界時間、時刻表、開決戰、決戰逾時、季末）；
     # 0＝關（預設），世界照舊等有人連線才推。設計的預設是 10；由設定檔或 content/profiles 打開（打開哪一份由 PM 驗收後決定）
     world_tick_seconds: float = Field(default=0, ge=0)
+    # ── tuning 欄位（new_feature.py 接在這一行前面：新包的子模型在 tianxia/core/tuning/<包>.py）──
 
     @field_validator("world_tick_seconds")
     @classmethod

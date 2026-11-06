@@ -1,10 +1,12 @@
 """生一個功能包的骨架（開發規範手冊 3.4 第 2 條）：python scripts/new_feature.py <包名> --title <中文名> --guide <導覽區塊>
 
 做的事：
-- tianxia/features/<包名>/__init__.py：登記用的 Feature（name、prefix、enabled 先回 False，其餘掛鉤都是預設的空的）
+- tianxia/features/<包名>/__init__.py：登記用的 Feature（name、prefix、enabled 讀 Config.<包名>.enabled〔預設 False〕，其餘掛鉤都是預設的空的）
 - tianxia/features/<包名>/README.md：這一包做什麼、導覽在哪一節、設計稿（三行，等著填）
 - tianxia/features/<包名>/tests/test_<包名>_smoke.py：一條煙霧測試（登記了、關著一個選項都不給）
 - tianxia/features/<包名>/tests/<包名>_stage.py：契約測試擺局面用的（tests/core/test_contract_features.py；先什麼都不擺）
+- tianxia/core/tuning/<包名>.py：這一包的 Config 子模型（enabled 先是 False；這一包的數字加在這裡，手冊第十五節「波次 B、C」第 15 條）
+- tianxia/models.py：照標記接兩行（import 與 Config.<包名> 一格）
 - docs/guide/<導覽區塊>.md 最後加一節的標題
 - tianxia/core/registry.py 的 FEATURES 登記（照標記加 import 與清單各一行，排在最後）
 - tests/core/test_test_for.py 的 STAGE_PACKAGES 接一行（有 <包名>_stage.py 的包都要登記；--root 的資料夾沒有這個檔就不做）
@@ -14,7 +16,7 @@
 - 畫面寫 web/<包名>.js、web/<包名>.css、寫進 Feature.web。js 的 script 標籤由伺服器照它生成，不要手改 index.html 的 script；
   css 的 link 手寫在 index.html（style.css 後面），js 手加進 tests/kit/webharness.APP_FILES（跟頁面同一個先後）；tests/core/test_contract_features.py 守。
 
-包名：小寫英文字母開頭、只有小寫英數與底線；不能跟已經有的包、tianxia/ 底下的模組、任何測試檔撞名。
+包名：小寫英文字母開頭、只有小寫英數與底線；不能跟已經有的包、tianxia/ 底下的模組、任何測試檔、tuning 檔、Config 已有的格撞名。
 --root 給別的資料夾就在那裡生（測試用）。
 """
 from __future__ import annotations
@@ -28,10 +30,12 @@ ROOT = Path(__file__).resolve().parent.parent
 NAME = re.compile(r"[a-z][a-z0-9_]*")
 IMPORT_MARK = "# ── import（new_feature.py 接在這一行前面）──"
 LIST_MARK = "    # ── 清單（new_feature.py 接在這一行前面）──"
+TUNING_IMPORT_MARK = "# ── tuning import（new_feature.py 接在這一行前面）──"
+TUNING_FIELD_MARK = "    # ── tuning 欄位（new_feature.py 接在這一行前面：新包的子模型在 tianxia/core/tuning/<包>.py）──"
 
 
-def _camel(name: str) -> str:
-    return "".join(part.capitalize() for part in name.split("_")) + "Feature"
+def _camel(name: str, suffix: str = "Feature") -> str:
+    return "".join(part.capitalize() for part in name.split("_")) + suffix
 
 
 def _write(path: Path, text: str) -> None:
@@ -67,6 +71,21 @@ def _add_stage(root: Path, name: str, title: str) -> Path | None:
     return path
 
 
+def _models_problem(root: Path, name: str) -> str | None:
+    """models.py 接得上去嗎：兩個標記都在、class <Camel>Tuning 與 Config 的 <包>: 那一格都還沒有（生到一半才發現就留下半套了）。"""
+    path = root / "tianxia" / "models.py"
+    text = path.read_bytes().decode("utf-8").replace("\r\n", "\n") if path.exists() else ""
+    for mark in (TUNING_IMPORT_MARK, TUNING_FIELD_MARK):
+        if text.count(mark) != 1:
+            return f"tianxia/models.py 裡找不到（或不只一個）標記：{mark}"
+    if f"class {_camel(name, 'Tuning')}" in text:
+        return f"tianxia/models.py 已經有 class {_camel(name, 'Tuning')}"
+    body = text[text.index("\nclass Config("):text.index(TUNING_FIELD_MARK)]
+    if f"\n    {name}: " in body:
+        return f"Config 已經有 {name} 這一格（換個包名）"
+    return None
+
+
 def problem(root: Path, name: str, guide: str) -> str | None:
     if not NAME.fullmatch(name):
         return f"包名「{name}」要是小寫英文字母開頭、只有小寫英數與底線"
@@ -79,7 +98,9 @@ def problem(root: Path, name: str, guide: str) -> str | None:
         return f"測試檔名撞了：{sorted(taken)}（檔名全 repo 不能重複）"
     if not (root / "docs" / "guide" / f"{guide}.md").exists():
         return f"沒有 docs/guide/{guide}.md（--guide 給 CLAUDE.md 區塊表上那一塊的名字）"
-    return None
+    if (root / "tianxia" / "core" / "tuning" / f"{name}.py").exists():
+        return f"已經有 tianxia/core/tuning/{name}.py"
+    return _models_problem(root, name)
 
 
 def make(root: Path, name: str, title: str, guide: str) -> list[Path]:
@@ -89,6 +110,7 @@ def make(root: Path, name: str, title: str, guide: str) -> list[Path]:
         raise SystemExit(why)
     pkg = root / "tianxia" / "features" / name
     cls = _camel(name)
+    tuning = _camel(name, "Tuning")
     made = {
         pkg / "__init__.py": f'''"""{title}（功能包；開發規範手冊 3.2）。這一包做什麼、導覽在哪一節、設計稿是哪一份：README.md。
 
@@ -110,7 +132,7 @@ class {cls}(Feature):
     carried: tuple[str, ...] = ()  # 上面那些裡換季照帶走的
 
     def enabled(self, ctx) -> bool:
-        return False  # 接上 Config.{name}.enabled（Config 加欄位先過 PM：手冊 3.5）
+        return ctx.content.config.{name}.enabled  # 數字在 tianxia/core/tuning/{name}.py（Config.{name}）
 
 
 FEATURE = {cls}()
@@ -140,6 +162,17 @@ def test_{name}_is_registered_and_quiet_while_closed(game):
 def stages(game):
     yield "平常"
 ''',
+        root / "tianxia" / "core" / "tuning" / f"{name}.py": f'''"""{title}的數字（Config.{name}；手冊第十五節「波次 B、C」第 15 條）。不 import models（models 引用這裡），所以不繼承 _Strict，自己寫 extra="forbid"。"""
+from __future__ import annotations
+
+from pydantic import BaseModel, ConfigDict
+
+
+class {tuning}(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+''',
     }
     for path, text in made.items():
         _write(path, text)
@@ -152,8 +185,11 @@ def stages(game):
     registry = root / "tianxia" / "core" / "registry.py"
     _edit(registry, IMPORT_MARK, f"from ..features import {name}  # {title}")
     _edit(registry, LIST_MARK, f"    {name}.FEATURE,")
+    models = root / "tianxia" / "models.py"
+    _edit(models, TUNING_IMPORT_MARK, f"from .core.tuning.{name} import {tuning}  # {title}")
+    _edit(models, TUNING_FIELD_MARK, f"    {name}: {tuning} = Field(default_factory={tuning})  # {title}（tianxia/core/tuning/{name}.py）")
     stage = _add_stage(root, name, title)
-    return [*made, guide_path, registry, *([stage] if stage else [])]
+    return [*made, guide_path, registry, models, *([stage] if stage else [])]
 
 
 def main(argv: list[str] | None = None) -> int:
