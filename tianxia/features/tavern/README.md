@@ -19,6 +19,7 @@
 - `PlayerState`：`picking_tavern`、`tavern_notes`、`tavern_heard`、`tavern_known`、`tavern_treat_day`、`whispers`、`hidden_until`、`tavern_watches`、`tavern_guard_until`、`tavern_shield_until`（換季全部跟著新角色重來，`carried` 是空的）。
 - `WorldState`：`tavern_walls`、`tavern_whispers`、`tavern_treats`、`tavern_hits`、`tavern_hit_seq`、`tavern_chatter`（照季存）。
 - `state.py` 的 `TavernNote`、`Whisper`、`WallNote`、`TavernWatch`、`TavernHit`；`models.py` 的 `Config.tavern`（`TavernTuning`）。
+- 共用規則層的 `atlas.travel_block` 直接讀 `picking_tavern`（動身被擋的那一句；全部拆包第 50 批照實記下，第 56 批選單收接縫時改成掛鉤、一張先後表）。
 
 ## 委派與留在原位的接縫
 
@@ -32,6 +33,7 @@
 ## 過渡（手冊 3.11）
 
 - 包 → 還沒搬的舊模組（全部拆包第 40 批合完重印 **3 處**：`actions.py` → `bounties`、`shopview`，`rules.py` → `atlas`；`figures`〔`rules.py`、`ask.py` 函式裡〕、`figure_life`〔`rules.py` 函式裡三處〕第 40 批收進共用規則層，不算過渡，原本 8 處；`annals` 第 29 批之二改 import 核心；以下是更早的寫法）12 處：`actions.py` 4（`annals`、`bounties`、`shopview`、`social`）、`rules.py` 7（`annals`、`atlas`、`figures`，函式裡的 `arena`、`figure_life` 三處）、`ask.py` 1（`figures`）。原本 24 處；`battlelog`、`encounter`、`equipment`、`renown`、`roster`、`territory`、`treasures`、`prologue`、`allied`、`zh` 全部拆包第 15 批登記進共用規則層（`tianxia/core/registry.py` 的 `SHARED`），那幾行行尾改註「共用規則層」，不算過渡。
+- 第 50 批合完重印 **2 處**：`actions.py` → `bounties`、`shopview`；`rules.py` 讀 `atlas` 的大區第 50 批收進共用規則層，改註。
 - 服務清單（`tianxia/core/services.py`）這一包加的：`_shop_say`、`_shop_after`、`_idle`、`_last_wear`（共用）、`_battle_now`（過渡，決戰）、`_tavern_seek_exact`、`_tavern_reply`（寄放）。
 
 ## 測試

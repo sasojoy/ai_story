@@ -16,7 +16,12 @@
   那一塊換了主人當場結束（hold_lapse：conquest._announce、set_control 叫）。補缺：當場退回原主（conquest.restore，Game.seal_use 叫），
   目標照翻地帳記的最近一次易手（BlockFight.flipped_at、flipped_from）。兩種都只在領地爭奪的季（conquest.on），不然灰著（NO_CONQUEST）。
 - 只 import models、state、calendar、world_state、treasures；allied、atlas、conquest、figures、rules、timetable 在函式裡延後 import（它們反過來
-  import 的鏈很長，conquest、figures、figure_life、team、rules、sensing、cultivation 都會叫這裡）。不擲骰、不讀時鐘。字待 joy 潤。"""
+  import 的鏈很長，conquest、figures、figure_life、team、rules、sensing、cultivation 都會叫這裡）。不擲骰、不讀時鐘。字待 joy 潤。
+- 改這一份 scripts/test_for.py 挑得比以前少（全部拆包第 50 批量的）：atlas 拆兩半之後 import 的模組少於 AGGREGATOR_FANOUT（15），不再算彙整的
+  模組，往上找會穿過它，依賴這一份的模組從 12 個變成 17 個、import 它們的測試檔 141 個，超過 IMPORT_CAP（120），只挑直接 import 它的 6 個
+  （tests/seal/ 的 test_seal、test_seal_acts、test_seal_acts3、test_seal_acts_hidden，tests/figures/test_plans、tests/web/test_seal_acts_web）
+  ＋核心測試＋煙霧；以前經 atlas、chiefs、conquest、figure_life、figures、howto、orders、plans 挑到的另外 110 個留給每日整套。
+  另外跑（-n 4）：tests/seal/ 整個資料夾、tests/acts/ 的 test_conquest_flip、test_conquest_rules、test_conquest_siege，要當場全驗用 --all。"""
 from __future__ import annotations
 
 import math

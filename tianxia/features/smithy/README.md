@@ -24,6 +24,7 @@
 - `player_fields`：`picking_smith`（店開著）、`smith_page`（停在哪一頁）、`smith_draft`（一步一步的單子）、`smith_rule`（這一次進門要講的神器規矩）、`smith_rules_told`（這一季講過的）。
 - `carried = ()`：換季全部跟著新角色重來。
 - 不認領：`shop_line`、`shop_line_seed`、`shop_hold`、`shop_clue`（七間店共用的掌櫃那一句，屬核心）、`furnace_day`／`furnace_ready`（看火候，銀兩出口包已認領）。`SmithDraft` 類別在核心 `state.py`。
+- 共用規則層的 `atlas.travel_block` 直接讀 `picking_smith`（動身被擋的那一句；全部拆包第 50 批照實記下，第 56 批選單收接縫時改成掛鉤、一張先後表）。
 
 ## 委派與留在原位的接縫
 
