@@ -1,5 +1,5 @@
 """裝備（修練頁的換上、拆解〔含批量〕、餵馬，馬市的買餵換上，寄放補送，名將贈禮，名將本命兵器，神器譜）。功能包，開發規範手冊 3.2；
-全部拆包第 42 批搬進來（引擎那一半；網頁那一半 web/ 第 3 階才切）。包名 gear 跟測試資料夾 tests/gear/、內容欄位 Content.gear（content/gear.json 讀進來的
+全部拆包第 42 批搬進來（引擎那一半）；網頁的畫法在 web/gear.js（第 65 批）。包名 gear 跟測試資料夾 tests/gear/、內容欄位 Content.gear（content/gear.json 讀進來的
 GearBook）同字，不是同一件事：這裡是功能包，另兩個是舊的名字。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
 - signature_arms.py：名將本命兵器的規則（原 tianxia/signature_arms.py；那個名字留成指到這裡的別名）

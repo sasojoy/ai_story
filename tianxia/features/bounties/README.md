@@ -37,16 +37,17 @@
 
 **事件**：`raid_win` 的發布點在 `actions.raid_bounty`；`aid_actions.py` 發 `aid`；其餘四種發布點在各包。`bus_bypasses` 擋 `bounties.on_*` 這種名字，所以包的 `bus()` 寫 `rules.on_*`。
 
-**過渡 import（這一包到舊模組）1 處**：`actions.py` → `shopview`（`board_key`；`SHARED_LATER`）。`rules.py` 讀的 `allied`、`equipment`、`materials`、`ranger`、`renown`、`roster`、`territory`、`treasures`、`weapons` 都在共用規則層。舊模組經別名碰這一包：`bot.py`、`bot_policy.py`、`shopview.py`、`scripts/`（`measure_sanren.py`、`sim_server_bots.py`）。`web/` 歸第 65 批（`boardHtml`、`paperHtml`、`boardUnpick`、`boardZoom`、`boardClose`、`boardLeave`、`boardHanded`、`STAMP_MS`）、第 67 批（`bountiesHtml`、`rewardChips`）。
+**過渡 import（這一包到舊模組）1 處**：`actions.py` → `shopview`（`board_key`；`SHARED_LATER`）。`rules.py` 讀的 `allied`、`equipment`、`materials`、`ranger`、`renown`、`roster`、`territory`、`treasures`、`weapons` 都在共用規則層。舊模組經別名碰這一包：`bot.py`、`bot_policy.py`、`shopview.py`、`scripts/`（`measure_sanren.py`、`sim_server_bots.py`）。懸賞榜的畫法（`boardHtml`、`paperHtml`、`boardUnpick`、`boardZoom`、`boardClose`、`boardLeave`、`boardHanded`、`STAMP_MS`）在 `web/bounties.js`（全部拆包第 65 批從 `app.js` 逐行切出來，90 行；`web = ("bounties.js",)`；計畫 `2026-11-06-網頁殼化-第65批.md`），點擊分派的 `case`、店面的框留在 `app.js`（殼）；`main.js` 的 `bountiesHtml`、`rewardChips` 第 67 批才切。
 
 ## 測試
 
 **這一包的 `tests/`**（`test_for` 改這一包跑）：`test_bounties_smoke.py`（新寫的煙霧）、`test_renown_prize.py`、`test_renown_wanted.py`（第 41 批認定第 6 條：只整檔搬沒人用裸名 import、不是網頁類的）。
 
-**留原處**：`tests/ranger/test_bounties.py`、`tests/bots/test_bounty_hand_in.py`（被裸名 import，第 61 批）、`test_bounty_tags.py`、`tests/web/test_sanren_web.py`（網頁類）、`test_season21_daily.py`（混合檔）。
+**留原處**：`tests/ranger/test_bounties.py`、`tests/bots/test_bounty_hand_in.py`（被裸名 import，第 61 批）、`test_bounty_tags.py`、`tests/web/test_sanren_web.py`（網頁類）、`test_season21_daily.py`（混合檔）。改 `web/bounties.js` 時 `test_for` 照檔名挑得到 `test_shop2_web`、`test_bounty_tags`、`test_shop_polish`、`test_shop_width`、`test_shell_web`。
 
 **另外要跑的**（`test_for` 挑不到；改這一包開發與修正另跑，`-n 4`，不含 slow）：
 
+- 網頁：`tests/server/test_server.py -k "page or version or scripts"`（那個檔太大，檔名刻意不寫進去）、`tests/bots/test_server_bots.py`（掃字）。
 - 留原處的那幾個：`tests/ranger/test_bounties.py`、`tests/bots/test_bounty_hand_in.py`、`tests/ranger/test_bounty_tags.py`、`tests/web/test_sanren_web.py`、`tests/ranger/test_season21_daily.py`。
 - 「你這一步」：`tests/bots/test_step.py`、`tests/map/test_weekcard.py` 與 `tianxia/step.py` 模組說明列的那一串（`tests/core/test_chapters.py`、`tests/figures/test_week_unlock.py`、`tianxia/features/companions/tests/test_errands_weekcard.py`、`tianxia/features/guide/tests/test_opening.py`）。
 - 世界層四格（第 25 批認定第 7 條）：`tests/core/test_world.py` 與 `tianxia/world.py` 模組說明「另外要跑的」那一串——`tests/figures/test_timetable.py`、`test_seats.py`、`tests/core/test_season_pause.py`、`tianxia/features/companions/tests/test_stances_tie.py`、`tests/figures/test_week7_season.py`、`test_season21_frame.py`、`test_season21_caps.py`、`test_plans.py`、`test_figure_life.py`、`test_figure_attrition.py`、`tests/battle/test_fronts.py`、`tests/figures/test_front_lines.py`、`test_finale.py`、`test_admin_triggers.py`、`test_calendar.py`、`tests/seal/test_seal.py`、`test_seal_engine.py`、`test_seal_acts.py`、`tests/acts/test_conquest_rules.py`、`tianxia/features/stamina_plays/tests/test_stamina_plays.py`、`tests/core/test_marks_wired.py`、`tianxia/features/looks/tests/test_looks_mvp.py`。

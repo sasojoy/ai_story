@@ -39,7 +39,7 @@
 - `_act` 叫 `_silver_act`：`act:bribe:<人物>` 帶後綴，`Verb` 認不得（總表第 57 批才擴）。
 - `shop_view` 叫 `_bribe_targets`；`status_data` 叫 `armament_view`。
 - 外面（server、假人）叫的：`donate`、`donate_items`（`/api/do/donate`）、`can_donate_here`（`bot.donate_spare`）。
-- 網頁那一半（`donatePicks`、`dadianHtml`、`donateHtml`、`donateCell`、`donateStep`、`donateTierOne`、`donateGo`）第 65 批才切，這一批不碰 `web/`。
+- 網頁的畫法（`donatePicks`、`dadianHtml`、`donateHtml`、`donateCell`、`donateStep`、`donateTierOne`、`donateGo`）在 `web/outlets.js`（全部拆包第 65 批從 `app.js` 逐行切出來，110 行；`web = ("outlets.js",)`；計畫 `2026-11-06-網頁殼化-第65批.md`）。留在 `app.js`（殼）的：點擊分派的 `case`、店面的框（`shopHtml`、`shopNoteHtml`、`renderShop`）。樣子還在 `style.css`（第 67 批才切）。
 
 ## 測試
 
@@ -55,7 +55,7 @@
 
 - `tests/gear/test_shop.py`：店面那一頁混合檔（鐵匠鋪、馬市、打點、軍需帳都在裡面）。
 - `tests/bots/test_bot_policy_stuck.py`：假人卡在店裡那一類（含坐在軍需官、打點店裡只會離開）。
-- `tests/web/test_econ_web.py`：捐軍備與軍備存量的網頁測試（網頁，第 3 階才切）。
+- `tests/web/test_econ_web.py`：捐軍備與軍備存量的網頁測試（網頁類，留原處）。改 `web/outlets.js` 時 `test_for` 照檔名挑得到它、`test_shop_width`、`test_shell_web`；挑不到、要另外跑的：`tests/server/test_server.py -k "page or version or scripts"`（那個檔太大，檔名刻意不寫進去）、`tests/bots/test_server_bots.py`（掃字）。
 - `tests/figures/test_gentry_allied.py`：一條（`test_donate_goes_to_the_side_stock`，豪強捐軍備進依附那一軍的存量）。
 
 ## 過渡（手冊 3.11）

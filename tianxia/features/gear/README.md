@@ -1,6 +1,6 @@
 # 裝備（`tianxia/features/gear/`）
 
-修練頁的換上、拆解（含批量）、餵馬，馬市的買、餵、換上，寄放的重賞與贈禮補送，名將贈禮，名將本命兵器，見聞榜單的神器譜。全部拆包第 42 批搬進來（引擎那一半；網頁那一半 `web/` 第 3 階才切，`app.js` 的 `gearEffect`、`gearCell`、`horseImg`、`marketHtml`、`horseCard` 歸第 65 批）。
+修練頁的換上、拆解（含批量）、餵馬，馬市的買、餵、換上，寄放的重賞與贈禮補送，名將贈禮，名將本命兵器，見聞榜單的神器譜。全部拆包第 42 批搬進來（引擎那一半）；網頁的畫法在 `web/gear.js`（第 65 批）。
 
 **包名 `gear` 跟兩個同字的東西不是同一件事**：`tests/gear/` 是舊的測試資料夾（兵器、防具、坐騎、寶物、鐵匠鋪一起放，下面「混合檔」），`Content.gear` 是 `content/gear.json` 讀進來的 `GearBook`（寶物、名駒、贈禮、本命兵器的內容表）。這裡的 `gear` 是功能包。
 
@@ -16,6 +16,7 @@
 - `gift_actions.py`：`deliver_held_gear`（寄放補送）、`general_gifts`（名將贈禮）、`people_here`（此刻在身邊的人物）、`gift_entry`（贈禮另起一則江湖紀錄）、`signature_arms_due`（本命兵器）。
 - `views.py`：`gear_rows`（修練頁裝備那一塊）、`divine_book_view`（見聞榜單的神器譜）。
 - `bots.py`：假人看到 `market:` 的選項怎麼按（原本 `bot_policy.score` 的 market 兩行）；`MARKET_SCORE` 在這裡重寫一份同值常數（8.0），`bot_policy.MARKET_SCORE` 名字照舊。
+- `web/gear.js`（檔照手冊 G9 在 `web/`，`web = ("gear.js",)`）：裝備格與馬市的畫法（全部拆包第 65 批從 `app.js` 逐行切出來，57 行；計畫 `2026-11-06-網頁殼化-第65批.md`）——俠客頁裝備那一段的一格 `gearEffect`、`gearCell`，坐騎圖 `horseImg`，馬市 `marketHtml`、`horseCard`。留在 `app.js`（殼）的：點擊分派的 `case`、店面的框（`shopHtml`、`renderShop`）、`HERO_GEAR_NAMES`、`GEAR_ICONS`。樣子還在 `style.css`（第 67 批才切）。
 - 掛鉤：`prefix = "market"`（`market:buy`、`market:feed`、`market:wield:<id>`、`market:back`）；`choose` 接 `market:*`（標題「馬市」）；`verbs()` 一個 `Verb("market")`（`run` 走進馬市、`title` 是「馬市・此地」，照舊寫江湖紀錄、不宣告 `picks`）；`content = ("gear.json",)`；`bot_pick`。**沒有路由**：`/api/menxia` 的 `wield`、`dismantle`、`feed`、`dismantle_many`、`menxia_view` 的 `gear` 鍵、`/api/boards` 的神器譜、`/api/board_card` 的裝備卡都留在殼，叫 `Game` 的委派。
 - `enabled`：兵器、防具、坐騎、寶物四欄各看自己的 `enabled`（不看第一季開關，裝備四欄設計 2.6），**或此刻還坐在馬市裡**（開關在坐著的時候被關掉，照樣按得到離開）。
 
@@ -45,7 +46,7 @@
 
 - 包裡：`tests/test_gear_where.py`（修練頁每一段「哪裡買得到」，從內容讀地點）、`tests/test_gear_smoke.py`（煙霧：進馬市、買、離開，包的宣告，假人分數，修練頁委派）。
 - **留原處**（被別的測試用裸名 import，照第 41 批認定第 6 條歸第 61 批）：`tests/gear/test_shop2.py`、`test_treasures.py`、`test_signature_arms.py`、`tests/web/test_shop2_web.py`。
-- **網頁類，留原處**（第 3 階）：`tests/gear/test_horse_art.py`（import `server` 查 `web/`）、`test_shop_polish.py`（走網頁 harness）。
+- **網頁類，留原處**：`tests/gear/test_horse_art.py`（import `server` 查 `web/`）、`test_shop_polish.py`（走網頁 harness）。改 `web/gear.js` 時 `test_for` 照檔名挑得到 `test_shop2_web`、`test_weapons_web`、`test_arts_pages`、`test_shop_width`、`test_shell_web`；挑不到、要另外跑的：`tests/server/test_server.py -k "page or version or scripts"`（那個檔太大，檔名刻意不寫進去）、`tests/bots/test_server_bots.py`（掃字）。
 - **混合檔不拆**（一個檔裡有這一包的也有別包的）：`tests/gear/test_mounts.py`、`test_weapons.py`、`test_armor.py`、`test_board_cards.py`、`test_forge_divine.py`、`test_shop.py`，`tests/bots/test_bot_policy.py`、`tests/core/test_shop_width.py`、`tests/server/test_server.py`（`/api/boards` 的神器譜）、`tests/seal/test_seal.py`（`dismantle_weapon`）、`tests/season/test_sim_scripts.py`（量表腳本）。
 - **另外要跑的**（`test_for` 不會因為改這一包挑到）：`tests/season/test_sim_scripts.py` 的 `measure_mounts`、`measure_treasures` 兩條 slow（量表腳本換掉的是 `mounts.buy`／`mounts.feed`、`treasures.gifts_due`／`treasures.deliver_held` 與 `Game.wield_weapon`，包裡一律照模組屬性叫，換得到）；`tests/server/test_server.py`、`tests/web/test_shop2_web.py`（殼與網頁）。
 - 一起跑（包的 tests、上面的混合檔與「另外要跑的」；venv 的 python）：`python -m pytest -q -n 4 tianxia/features/gear/tests tests/gear/test_mounts.py tests/gear/test_weapons.py tests/gear/test_armor.py tests/gear/test_board_cards.py tests/gear/test_forge_divine.py tests/gear/test_shop.py tests/bots/test_bot_policy.py tests/core/test_shop_width.py tests/server/test_server.py tests/seal/test_seal.py tests/web/test_shop2_web.py`；量表兩條是 slow，另跑 `python -m pytest -q tests/season/test_sim_scripts.py -m "slow or not slow" -k "mounts_measure or treasures_measure"`。
