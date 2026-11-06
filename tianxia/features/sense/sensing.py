@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from tianxia import attrset, gender, insight_fx, insights, naming, precise, treasures  # 核心、共用規則層
 from tianxia.core.explore_base import terrain_tags  # noqa: F401  地形標籤：輿圖包也要讀，全部拆包第 49 批搬到 core/services.py、第 50 批移到核心的 core/explore_base.py，這裡 re-export
-from tianxia import seal_acts  # 過渡：待搬（玉璽碎片的頒詔：靜心感悟擲中多幾個百分點）
+from tianxia import seal_acts  # 共用規則層（璽效查詢，第 51 批）
 from tianxia.martial_arts import Insight
 from tianxia.models import Content, InsightScene, Location
 from tianxia.ollama_client import OllamaClient

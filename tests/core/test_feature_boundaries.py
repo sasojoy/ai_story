@@ -1447,7 +1447,7 @@ def test_the_shared_scanner_catches_an_old_module():
     """outside_imports 本身抓得到（不然上面那一條永遠綠）：最外層、函式裡、import tianxia.x 都算；TYPE_CHECKING、tianxia/core/、核心本體、
     同一層、from tianxia import 名字、標準庫不算；包與別名不在這裡算（是上面那一條）。"""
     m = "tianxia.timetable"
-    assert outside_imports("from . import seal_acts, territory\n", m) == {"seal_acts"}  # 第 40 批：原本的例子 figures 收進了共用規則層；第 50 批：atlas 也收進了共用規則層，換成 seal_acts（第 51 批才收；bounties、seal 第 45、27 批會搬，不拿來當例子）
+    assert outside_imports("from . import fusion, territory\n", m) == {"fusion"}  # 第 40 批：原本的例子 figures 收進了共用規則層；第 50 批：atlas 也收進了共用規則層，換成 seal_acts；第 51 批 seal_acts 也收進了共用規則層，換成 fusion（總表寫了、先不收的 SHARED_LATER，還是舊模組）
     # 第 25 批：原本的例子 world 收進了核心本體；第 27 批：seal 成了玉璽包的別名（包與別名不在這裡算），換一個這一波還是舊模組的 tale（戰記第 52 批才搬）
     assert outside_imports("def f():\n    from .tale import gather\n", m) == {"tale"}
     assert outside_imports("def f():\n    from .world import _season_vehicle\n", m) == set()
@@ -2321,6 +2321,13 @@ GAME_DELEGATE_CALLERS.update({
     ("status_data", "seal_duel_card"): "狀態列的奪璽卡（status_data[\"seal_duel\"]）：同上，鍵的順序算行為",
     ("status_data", "seal_watch"): "狀態列的背景輪詢旗標（status_data[\"seal_watch\"]）：同上，鍵的順序算行為",
 })
+
+# seal（全部拆包第 51 批「玉璽三」：tianxia/seal_acts.py 拆兩半；計畫 docs/superpowers/plans/2026-11-06-玉璽包-第3批.md）：
+# 這一批加的集中在這一段。16 個璽效查詢（別包讀的）留在共用規則層 tianxia/seal_acts.py，登記進 registry.SHARED（見 registry.py 的 # seal 段）；
+# 目標、灰掉的原因、碎片卡、字句進玉璽包 features/seal/acts.py（舊名不留別名：共用層不能 import 包）。四條排定項收掉（共用層讀共用層）；
+# 包 → 舊模組的 seal_acts 過渡標記拿掉（companion_agent、cultivation、feast/rules、sense/sensing、sortie/duel_actions 與核心 world.py 讀的是共用層）。
+for _pair in (("conquest", "seal_acts"), ("figures", "seal_acts"), ("figure_life", "seal_acts"), ("plans", "seal_acts")):
+    del SHARED_PENDING[_pair]
 
 # merge_back（主幹合回 develop 第 1 段，2026-11-06）：develop 新加的 9 個 Game 方法先修到能跑。暫時的三筆寫明第 2 段哪一塊收，最後的閘門要確認一條都不剩。
 # _allocate_v2 這一段就進了修練包（allocate_stat 的本體在包裡，只有它叫）；_season_prep、season_prep_view、_attr_rows、place_state_view 留核心（PM 認定第 6、7 條）；
