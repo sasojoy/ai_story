@@ -87,3 +87,5 @@
 - 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/military/order_actions.py`
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `plots`（`opp_actions.deliver_plots`，經 `ctx._settle_plots`，寫「密謀」、存季）、`seat`（`seat_actions.deliver_seat`，寫「席次」）：兩格的回話都進同步的回話；`seat` 排在 `arrive`、`plots` 之後（`tests/figures/test_seats.py` 守）。
+
+**第 56 批（選單收接縫，核心批）**：`take/omen`、`here/order`、`here/rank2`、`here/rank`、`here/omen`、`idle/omen` 是這一包登記的格（`fs_asking` 包外三處都改問核心 `omen_base.fs_answering`）；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_order_options`、`_rank2_options`、`_rank_action_options`、`_fs_asking_options`、`_omen_options` 拿掉；上面寫「留委派」「原位」的以這一句為準。

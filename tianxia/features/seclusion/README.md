@@ -15,3 +15,5 @@
 **另外要跑的混合檔**（閉關散在這些檔裡，這一輪不拆；數字是 `seclude`／`_finish_seclusion`／`seclusion_refusal` 出現的次數）：`tests/core/test_engine.py`（7）、`tests/core/test_prologue.py`（5）、`tests/core/test_journal.py`（3）、`tests/ranger/test_bounties.py`（3）、`tests/gear/test_treasures.py`（2）、`tests/figures/test_foreshadow.py`（2）、`tests/gear/test_mounts.py`（1）、`tests/bots/test_stamina_refill.py`（1）；網頁那一頭 `tests/web/test_prologue_web.py` 等（打 `/api/do/seclude`，這一批沒動 `web/`）。改閉關任一檔時另外跑它們。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`local` 的 `seclusion`（`actions.finish_due`，原位的判斷搬過來；`Game._finish_seclusion` 留給測試）。
+
+**第 56 批（選單收接縫，核心批）**：`busy/seclusion`（`act:break` 那一顆）是這一包登記的格；先後在 `core/features.py` 的 `MENU_ORDER`；上面寫「留委派」「原位」的以這一句為準。

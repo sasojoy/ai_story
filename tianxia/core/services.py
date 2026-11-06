@@ -583,7 +583,7 @@ PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，�
 NO_SUCH_PLAYER = "（江湖上沒有「{name}」這個人。）"  # 管理者查不到名號（玩家個人劇情、商城查帳；只有管理者看得到）
 # military（全部拆包第 33 批：原本寫在 engine.py；軍情包的第 3、4 階行動選單要產生它、又不能 import engine，搬到這裡，engine 照舊叫得到）
 RANK_ACTION_PREFIX = "act:rank:"  # 第 3、4 階行動的選項 id 前綴（act:rank:<行動 id>，正式版戊一）；models.ALLOW_FAMILIES 也列它，原始碼裡要真的有
-# stamina_plays（全部拆包第 39 批：原本寫在 tianxia/ambush.py；核心的移動被擋〔engine 的 _move_option〕要用、核心不能 import 包，搬到這裡，
+# stamina_plays（全部拆包第 39 批：原本寫在 tianxia/ambush.py；移動被擋〔移動包 menu.move_option〕要用、核心不能 import 包，搬到這裡，
 # ambush.MOVE_BLOCKED 照舊是同一個字串）
 MOVE_BLOCKED = "守著埋伏"
 # stamina_plays（全部拆包第 39 批：原本寫在 engine.py；設伏的贏家帳〔包〕與截殺〔核心〕共用，包不能 import engine，搬到這裡，
@@ -829,7 +829,7 @@ def illustration_for(state: GameState, content: Content, season: WorldState) -> 
 
 def art_problem(state: GameState, content: Content, season: WorldState) -> str | None:
     """列傳插畫票這一季用不用得上（FB-845）：用不上就不賣，回商城那一列灰掉要寫的原因；用得上是 None。
-    沒投靠劇本裡的陣營的人（散人）列傳配不了插畫；休季時已經得第一階的人插畫白送（Game._zhuan_options 也是這兩條），
+    沒投靠劇本裡的陣營的人（散人）列傳配不了插畫；休季時已經得第一階的人插畫白送（列傳包 actions.options 也是這兩條），
     季中看不出會是第幾階，照舊賣。"""
     p = state.player
     if content.scenario.find_faction(p.faction) is None:

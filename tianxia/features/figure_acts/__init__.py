@@ -4,7 +4,7 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 
 選項前綴 `aid:`（`aid:guard:<人物>`、`aid:rally:<人物>`、`aid:visit:<人物>`）與 `plan:`（`plan:help:<站>`、`plan:block:<站>`）：choose 接掛鉤（標題一起給）。
 挑戰本人（`act:challenge:<人物>`）是核心 act 子動詞，帶後綴接不了 Verb（總表第 57 批），選單、按下去、標題留在核心原位叫 Game 的委派；選單末段
-`opts + _aid_options() + features_core.options + _plan_options()` 護衛在包選項之前、盤算在之後，夾著 `options` 掛鉤，所以兩個選單也是原位的委派（理由在邊界測試）。
+`MENU_ORDER["plays"]` 護衛在包選項之前、盤算在之後，夾著 `options` 掛鉤：這一包登記 `plays/aid`、`plays/plan` 那兩格（第 56 批）。
 enabled 一直是 True（沒有自己的總開關：護衛看 Config.figure_aid、盤算看 Config.plans、挑戰本人看 figures.challenge_on，各在動作裡驗）。
 """
 from __future__ import annotations

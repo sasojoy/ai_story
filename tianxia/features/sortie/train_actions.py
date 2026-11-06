@@ -4,7 +4,7 @@
 ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx、sortie 模組換成 rules）。
 函式名＝原本的方法名去掉前導底線，一個例外：`_train_note` 是 `foes_note`（跟 actions.train_note〔行動列底下那一行〕分開）。另外兩個是從
 Game 原位收來的：`train_fight`（`Game._act` 的 train 那一支：扣體力、並肩出陣、出陣或遊歷）、`train_squad`（`Game._fight_squad` 的
-act:train 那一支）。Game 留 8 個一行委派（核心的單打服務 `_squad_encounter`、軍情的 `_order_options`、假人、測試、腳本還在叫）。
+act:train 那一支）。Game 留 8 個一行委派（核心的單打服務 `_squad_encounter`、軍情的 `order_options`、假人、測試、腳本還在叫）。
 包裡互相叫直接叫這裡與 actions、duel_actions 的函式；測試、腳本換掉的經 ctx 叫，換掉的才打得到：`ctx._train()`、`ctx._sortie()`、
 `ctx.train_trend_push(...)`、`ctx._train_push(...)`、`ctx._parley_backing_here()`、`ctx.sorties_left()`，與本來就在 Game 上的服務
 （`ctx.odds`、`ctx._push_room`、`ctx.push_trend`、`ctx._present`、`ctx._order_credit`……）。

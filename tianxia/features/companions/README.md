@@ -27,7 +27,7 @@
 - `player_fields`：`stance_notes`、`errands`、`letters`、`letter_day`、`letter_seq`、`cheers`（換季全部跟著新角色重來）；第 20 批補認領：對話的 `pending_companion`、`dialogue_history`、`used_dialogue_options`、`last_offered_dialogue`、`turns_since_consolidation`、`talk_memos`、`talk_prev`，與 NPC 智能 2.0 的 `parley_days`、`parley_terms`、`parley_owed`、`parley_backing`、`parley_debts`、`parley_records`、`parley_escort`、`parley_road_leg`（都是這一季的，換季重來）。`carried`（換季照帶，`Game._reset_player_for_new_season`）是 `dialogue_history`、`used_dialogue_options`、`turns_since_consolidation`；`history_start` 是從 `dialogue_history` 的長度算的，不另認領。`talks_today`、`picking_audience` 留給第 21 批（交友求見）。`parted_done`（同伴回江湖的減半記號）第 7 批決戰包認領了，寫它的 `settle_partings` 還在決戰包，照留。
 - 季上的：`WorldState.stance_counts`、`stance_active`、`stance_week`（世界那一半讀寫，`stance_world`）；全服名下：`CompanionProgress`（共用規則層 `roster`）。
 - 內容：`content/events/stances.json`（`content` 宣告；`content.py` 照舊讀）；人物表上的 `stances`、`errands` 在 `content/figures.json`、驗證在 `content.py`（核心，這一批不動）。
-- 共用規則層的 `atlas.travel_block` 直接讀 `pending_companion`（動身被擋的那一句；全部拆包第 50 批照實記下，第 56 批選單收接縫時改成掛鉤、一張先後表）。
+- 動身被擋（`atlas.travel_block`）：第 56 批選單收接縫起這一包登記 `MENU_ORDER["block"]` 自己那一格，讀 `pending_companion` 的只剩包裡；字與先後一字不動（`atlas` 不再讀）。
 
 ## 委派與留在原位的接縫
 
@@ -74,3 +74,5 @@
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `stances`（`actions.stance_annals`）、`mail`（`actions.deliver_mail(ctx, ctx.now)`：`now` 是 `sync` 開頭設的）；`stale.early` 的 `companions`（`actions.drop_stale`，舊的招募確認）；`season.carry` 的 `companions`（`actions.carry_season`，對話歷史）。
+
+**第 56 批（選單收接縫，核心批）**：`take/talk`、`road/parley`、`here/recruit`、`here/errand`、`block/talk` 是這一包登記的格；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_talk_options`、`_parley_road_option`、`_recruit_options`、`_errand_options` 拿掉；上面寫「留委派」「原位」的以這一句為準。

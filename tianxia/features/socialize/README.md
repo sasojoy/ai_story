@@ -30,7 +30,7 @@
   `recruit.json` 分區調查列在這一包，但招募（`_recruit*`）附錄甲裁給人物情誼，這一批不宣告，等 PM 定。
 - 共用的字：`AUDIENCE_HALL_FIGURES`、`SNUB_NOTE`、`SOCIAL_NO_ONE` 在核心 `core/services.py`（核心的選單、`sync`、挑戰本人也讀；`engine` 照舊 import 回來）；`SOCIAL_TALK`、
   `SOCIAL_LIST_INTRO`、`AUDIENCE_MEET` 在 `view.py`；`SOCIAL_LIST_TITLE` 留在 `engine.py`（場景文字讀）。
-- 共用規則層的 `atlas.travel_block` 直接讀 `picking_audience`（動身被擋的那一句；全部拆包第 50 批照實記下，第 56 批選單收接縫時改成掛鉤、一張先後表）。
+- 動身被擋（`atlas.travel_block`）：第 56 批選單收接縫起這一包登記 `MENU_ORDER["block"]` 自己那一格，讀 `picking_audience` 的只剩包裡；字與先後一字不動（`atlas` 不再讀）。
 
 ## 委派與留在原位的接縫
 
@@ -69,3 +69,5 @@
 - 前後一字不變：`scripts/same_behavior.py` 的 `socialize` 軌（`--tracks socialize,companions,talk,guide`）；此地人物那一排與對話框是 `here` 軌（主幹合回 D 段）。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`local` 的 `fortune`（`actions.fortune_due`，原位的判斷搬過來；`Game._deliver_fortune` 留給測試）。
+
+**第 56 批（選單收接縫，核心批）**：`take/audience`、`here/social`、`notes/socialize`、`idle/audience`、`block/audience` 是這一包登記的格（`_everyday_options` 那一段搬進 `menus.here_cell`，`action_notes` 那一段搬進 `menus.action_notes`，鍵的順序算行為；讀 `howto` 是過渡，第 59 批收）；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_precise_social_option`、`_socialize_option`、`_fame_gap`、`_audience_options` 拿掉（第 57 批的 `Verb.cell`、`Verb.note` 不必再開）；上面寫「留委派」「原位」的以這一句為準。

@@ -81,3 +81,5 @@
 `Game` 委派 556 → 578；`GAME_DIRECT` 16 → 3、直連 197 → 184；`GAME_IMPORTS` 92 → 93（拿掉 `tianxia.seal`、加 `card`、`duel_actions`）。`engine.py` 頂端的 `seal_rules`、`seal_duel` 拿掉。包裡 `tests/` 129 條。`selftest` 目標句（`MUTATIONS` 45、`EXPLORE_MUTATIONS` 4）在搬完的檔裡都找得到一次；新軌 `carve` 的目標句在 `duel_actions.py`。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.heirloom`、`stale.mid` 的 `seal` 重抄抄本（`actions.copy_heirloom`：碎片關著時也要叫、傳 `None` 把抄本清掉，所以接不了 `on_sync`、`on_drop_stale`）；`tick` 的 `seal` 推奪璽單挑（`duel_actions.tick`）；`season.carry` 的 `seal` 照帶 `heirloom`、`seal_seen`。
+
+**第 56 批（選單收接縫，核心批）**：`tick`、`front` 是這一包登記的格（原本 `options` 原位叫 `_seal_tick`、`_seal_options`）；先後在 `core/features.py` 的 `MENU_ORDER`；那兩個委派拿掉；上面寫「留委派」「原位」的以這一句為準。

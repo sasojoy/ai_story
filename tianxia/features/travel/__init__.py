@@ -1,7 +1,7 @@
 """移動（一）：移動選單（步行、疾行）、路上三樣小事、路上見聞、喊停、折返、安排前往（功能包，開發規範手冊 3.2；全部拆包第 47 批）。
 README.md 寫這一包做什麼、導覽與設計稿。
 
-- menu.py：原本 Game 上的 _move_option、_back_way、_back_option、_road_task_options、set_move_mode（Game 留一行委派給選單、server、測試）
+- menu.py：原本 Game 上的 _move_option、_back_way、_back_option、_road_task_options、set_move_mode（只有 set_move_mode 留一行委派給 server、測試；選單那幾個第 56 批換成 road、here 的格）
 - road_actions.py：原本 Game 上的 _move、_road、_road_*、_road_sight（第 48 批 _arrivals 搬進 departure.py，直接叫 sight；委派拿掉）
 - go_actions.py：原本 Game 上的 _halt、travel、travel_refusal（travel、travel_refusal 留委派）
 - departure.py：原本 Game 上的 _depart、_arrivals、_arrive、_journey_line（第 48 批；都留一行委派）

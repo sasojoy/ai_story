@@ -63,7 +63,7 @@ class OutletsFeature(Feature):
     def shops(self) -> tuple[Shop, ...]:
         """店面登記：軍需官那一串（坐著 picking_donate；這裡開著＝人在自家大本營；收起 economy.close_donate）與「打點」那一間店（坐著 picking_dadian；
         這裡開著＝銀兩出口這裡還有得做；選單是這裡做得了的幾樣加離開）。進店那兩顆（entry）回 None：「此地還能做」裡捐軍備與打點排在療傷之後，
-        入口留在 Game._everyday_options 原位（經 Game 的 _donate_option、_silver_options 委派；順序算行為）。建一次就留著，
+        入口是 MENU_ORDER["here"] 的 donate、dadian 那兩格（第 56 批；排在療傷後面，順序算行為）。建一次就留著，
         每一格在叫的那一下才照模組屬性找函式（monkeypatch 照樣有效）。"""
         if self._shops is None:
             from tianxia import economy, silver  # noqa: PLC0415

@@ -156,7 +156,7 @@ def do(ctx, cid: str, ask_id: str) -> list[str]:
         s.player.stamina += cost  # 他帶的路：照他的腳程走（比步行快），體力一分不扣
         if ctx._draft is not None and f"體力 -{cost}" in ctx._draft.changes:
             ctx._draft.changes.remove(f"體力 -{cost}")
-        if s.player.journey is not None:  # 第二批：路上每到一站可以跟他說一句（_parley_road_option）
+        if s.player.journey is not None:  # 第二批：路上每到一站可以跟他說一句（road_option，road/parley 那一格）
             s.player.parley_escort, s.player.parley_road_leg = cid, -1
         return msgs
     if kind == "sortie":

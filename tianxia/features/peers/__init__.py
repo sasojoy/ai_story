@@ -14,8 +14,8 @@
 
 邀請框是一個前綴三種意思：invite:yes|no|cancel:<編號> 是打招呼（挑釁）、名帖、切磋、論武、結伴同行共用的選項。這一包拿前綴與 choose，
 答應時照邀請的種類分派；切磋 spar_actions.spar、論武 discuss_actions.discuss（第 38 批）在包裡、包內直接叫，結伴同行（移動包 party.join，Game._join 留一行委派）經 ctx 叫。
-enabled 一直是 True（沒有整包的總開關：名帖開關 Config.mingtie.enabled 只管名帖那幾顆）。選單上怎麼排（Game._everyday_options 的 _invite_options）
-位置固定，留原位叫委派。
+enabled 一直是 True（沒有整包的總開關：名帖開關 Config.mingtie.enabled 只管名帖那幾顆）。選單上怎麼排是 MENU_ORDER["here"] 的 invite 那一格
+（第 56 批）。
 """
 from __future__ import annotations
 

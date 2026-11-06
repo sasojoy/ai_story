@@ -52,7 +52,7 @@ class SortieFeature(Feature):
         """act:train 那一格的主人（act 子動詞，第 11 批；actions.py 的 train_*）：行動列那一格（問 enabled）、底下那一行、按下去（約戰開著時
         打開那張卡；其餘打那一場：train_actions.train_fight，第 17 批）、紀錄標題（出陣／雪恥／遊歷・某地：關著照舊寫遊歷，所以不問 enabled）、
         只打開那張卡的回話（sortie_duel.PICK：不算做過、不寫紀錄）、這一下打哪一路（Verb.squad：大場面判讀，第 17 批）。act:duty（守勢，
-        第 17 批）：按下去（train_actions.duty）；鈕在軍令那幾顆裡（Game._order_options 叫 Game._duty_option），標題照舊在核心那張表。
+        第 17 批）：按下去（train_actions.duty）；鈕在軍令那幾顆裡（軍情包 order_options 經 ctx 叫 Game._duty_option），標題照舊在核心那張表。
         建一次就留著，每一格在叫的那一下才照模組屬性找函式（monkeypatch 照樣有效；tests/core/test_contract_features.py 守）。"""
         if self._verbs is None:
             from . import actions, duel_rules, train_actions  # noqa: PLC0415

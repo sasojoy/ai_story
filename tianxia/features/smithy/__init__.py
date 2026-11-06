@@ -12,8 +12,8 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 - routes.py：/api/smith_line（原本寫在 server.py）
 - bots.py：假人的分數（原本 bot_policy.score 的 smith 那一段與 _smith_want）
 
-接縫掛鉤：choose（smith:*）、verbs（act:smith 進店與紀錄標題）、routes、content、bot_pick。店面登記（Shop）這一批不登記（計畫 1.9：「此地還能做」的入口順序、
-選單順序、_shop_open 與收店的 here 兩個意思、同一排的懸賞榜與馬市還沒成包）：選單、入口、_shop_open、sync 與 _drop_stale_references 與 _depart 的收店都留在 Game 原位。
+接縫掛鉤：choose（smith:*）、verbs（act:smith 進店與紀錄標題）、routes、content、bot_pick。店面登記（Shop）不登記、走 MENU_ORDER（第 56 批選單收接縫定案，計畫第四節：「此地還能做」的入口順序、
+選單順序、_shop_open 與收店的 here 兩個意思）：menus() 登記選單、入口、_shop_open、出發收店、動身被擋那幾格；sync.close、stale.mid 的收店是 seams()（第 55 批）。
 """
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ class SmithyFeature(Feature):
 
     def verbs(self) -> tuple[Verb, ...]:
         """act:smith 的主人（act 子動詞）：按下去走進鐵匠鋪（shelf_actions.enter：不花體力、單子從頭開始、停在第一個開著的那一頁；原本 Game._act 中段那幾行）、
-        紀錄標題「鐵匠鋪・此地」（原本 Game._action_title 那張表的 smith）。進店那一顆（此地還能做）在 Game._everyday_options 原位（計畫 1.9）。"""
+        紀錄標題「鐵匠鋪・此地」（原本 Game._action_title 那張表的 smith）。進店那一顆（此地還能做）是 here/smithy 那一格（第 56 批；計畫 1.9）。"""
         if self._verbs is None:
             from tianxia import weapons  # noqa: PLC0415
 

@@ -10,7 +10,7 @@ GearBook）同字，不是同一件事：這裡是功能包，另兩個是舊的
 - bots.py：假人的分數（原本 bot_policy.score 的 market 那兩行）
 
 接縫掛鉤：choose（market:*）、verbs（act:market 進門與紀錄標題）、content、bot_pick。沒有路由（/api/menxia 的四個動作、/api/boards、/api/board_card 都留在殼，叫 Game 的委派）。
-店面登記（Shop）這一批不登記（計畫 1.9，同鐵匠鋪：入口順序 懸賞榜 → 鐵匠鋪 → 馬市、選單與收店都留在 Game 原位，第 45 批三間一起排）。
+店面登記（Shop）不登記、走 MENU_ORDER（第 56 批選單收接縫定案，計畫第四節；同鐵匠鋪：入口順序 懸賞榜 → 鐵匠鋪 → 馬市是行為）：menus() 登記選單、入口、_shop_open、出發收店、動身被擋那幾格。
 """
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ class GearFeature(Feature):
 
     def verbs(self) -> tuple[Verb, ...]:
         """act:market 的主人（act 子動詞）：按下去走進馬市（market_actions.enter：不花體力、馬販那一句；原本 Game._act 中段那幾行）、
-        紀錄標題「馬市・此地」（原本 Game._action_title 那張表的 market）。進店那一顆（此地還能做）在 Game._everyday_options 原位（計畫 1.9）。"""
+        紀錄標題「馬市・此地」（原本 Game._action_title 那張表的 market）。進店那一顆（此地還能做）是 here/gear 那一格（第 56 批；計畫 1.9）。"""
         if self._verbs is None:
             from tianxia import mounts  # noqa: PLC0415
 

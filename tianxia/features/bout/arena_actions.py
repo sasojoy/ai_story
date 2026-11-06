@@ -480,7 +480,7 @@ def fight_menu(ctx) -> list[Option]:
 
 
 def entry_option(ctx) -> Option | None:
-    """「此地還能做」裡那一顆（原本 _everyday_options 最後那一行的 _arena_entry；店面登記 Shop.entry 回一顆或 None）。"""
+    """「此地還能做」裡那一顆（原本 _everyday_options 最後那一行；店面登記 Shop.entry 回一顆或 None；閉關中、路上是 busy、road 那兩格，第 56 批）。"""
     found = arena_entry(ctx)
     return found[0] if found else None
 

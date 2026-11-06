@@ -395,7 +395,7 @@ def finish(shared: SharedWorldState, duel: SealDuel, content: Content, result: s
 
 
 def advance(shared: SharedWorldState, content: Content, now: float) -> list[str]:
-    """把排第一的那一場推一步（_seal_tick、送出一手之後都叫），一次最多結算一回合：下戰書時間到了就開打（先重驗）；回合該結算就結算、
+    """把排第一的那一場推一步（duel_actions.tick、送出一手之後都叫），一次最多結算一回合：下戰書時間到了就開打（先重驗）；回合該結算就結算、
     分出勝負就收場，否則開下一回合。暫停中不推；季已經結束（自然收季、管理者收季）就記成沒打完（5.11）。回傳這一步寫的那幾句。"""
     if not shared.seal_duels or shared.paused_at is not None:
         return []
@@ -423,7 +423,7 @@ def advance(shared: SharedWorldState, content: Content, now: float) -> list[str]
 
 
 def needs_write(duel: SealDuel, who: str | None, now: float, cfg: SealTuning, *, own: bool, ended: bool) -> bool:
-    """_seal_tick 要不要開一次 world.mutate（每 10 秒的輪詢不能每次都寫）：季結束了、要記自己的 last_seen、下戰書到點、回合該結算。"""
+    """duel_actions.tick 要不要開一次 world.mutate（每 10 秒的輪詢不能每次都寫）：季結束了、要記自己的 last_seen、下戰書到點、回合該結算。"""
     if ended:
         return True
     if own and who is not None:

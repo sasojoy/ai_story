@@ -1,5 +1,5 @@
 """馬市（全部拆包第 42 批；裝備四欄設計 5.5）：第二層選單與選單上的選擇、進門。原本 Game 上的 2 個方法（_market_options、_market）加 _act 裡 act:market 的三行，
-Game 留 _market_options、_market 兩個一行委派（核心原位的選單 _everyday_options 與測試叫）。choose 的 market: 由包的 choose 掛鉤接走（Outcome.run 叫 market）；
+Game 留 _market 一行委派（測試叫；market_options 第 56 批起是 take/gear 那一格，委派拿掉）。choose 的 market: 由包的 choose 掛鉤接走（Outcome.run 叫 market）；
 act:market 由包的 act 子動詞接走（enter）。選單開著與否（picking_market）、入口、收店不登記 Shop，留在 Game 原位（計畫 1.9）。
 計畫 docs/superpowers/plans/2026-11-07-裝備包-第1批.md 1.1。第一個參數 ctx 是 Game（手冊 3.3）。
 規則照模組屬性叫（mounts.buy、mounts.feed……：量表腳本換掉模組上的，這裡照樣打得到）。"""

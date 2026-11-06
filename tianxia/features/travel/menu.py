@@ -1,6 +1,6 @@
 """移動的選單（功能包 tianxia/features/travel/；原本是 Game._move_option、_back_way、_back_option、_road_task_options、set_move_mode，
 全部拆包第 47 批）。ctx 是 Game（第一階）。選單的順序算行為（「前往」夾在求見、招募之後、拜師之前；路上那串是折返、帶路一句、喊停、路上小事、擂台），
-所以不能改成 Feature.options 登記（會排進 FEATURES 的順序）：Game 原位那幾行只叫委派。"""
+所以不能改成 Feature.options 登記（會排進 FEATURES 的順序）：第 56 批起是 MENU_ORDER 的 road、here/move 那幾格（這一包在 menus() 登記）。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

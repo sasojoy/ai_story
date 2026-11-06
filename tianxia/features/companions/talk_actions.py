@@ -227,7 +227,7 @@ def road_say(ctx, prepared: companion_agent.PreparedTurn | None, said: str | Non
 
 
 def talk_options(ctx) -> list[Option]:
-    """跟人物談著的時候的整個選單（Game._everyday_options 裡 pending_companion 那一段，位置算行為，原位叫委派 Game._talk_options）：
+    """跟人物談著的時候的整個選單（Game._everyday_options 裡 pending_companion 那一段，位置算行為，第 56 批起是 take/talk 那一格）：
     上一輪給的選項（花體力）、自己說、伏筆的片段與機緣的話題（固定文字、不花體力）、NPC 智能 2.0 的條件與欠的事，最後一定有「告辭」。"""
     s, c = ctx.state, ctx.content
     dialogue_options, _ = companion_agent.offered(s, s.player.pending_companion)

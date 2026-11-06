@@ -16,7 +16,7 @@
 | `tests/` | `test_stamina_plays.py`、`test_stamina_plays_off.py`（原 `tests/acts/`，整檔搬）、`test_stamina_plays_smoke.py` |
 
 **認領的欄位**（3.5，留在原地）：`PlayerState.ambush`（`AmbushPost`，換季照 `_reset_player_for_new_season` 重來）；`WorldState.ambushes`、`supply`、`forts`（`Fort`，修築工事拿掉後欄位留著，只在 `state.py` 註解提到）；`BattleState.supply_lean`（決戰包的，屯糧只寫它）；`Config.ambush`（`AmbushRules`）、`Config.stockpile`（`StockpileRules`）。
-共用規則層的 `atlas.travel_block` 直接讀 `ambush`（守著埋伏不能移動）（動身被擋的那一句；全部拆包第 50 批照實記下，第 56 批選單收接縫時改成掛鉤、一張先後表）。
+動身被擋（`atlas.travel_block`，守著埋伏不能移動）：第 56 批選單收接縫起這一包登記 `MENU_ORDER["block"]` 的 `ambush` 那一格，字與先後一字不動（`atlas` 不再讀）。
 **世界層的格**（core_world：全部拆包第 25 批；第 39 批換主人）：開集結那一刻結算屯糧是世界層 `muster` 的 `works` 那一格（`__init__.py` 的 `world()` → `works_rules.on_muster`；位置在 `WORLD_ORDER` 的「起點」之後、「玉璽」之前，一個字不動；不問 `enabled`，判斷在 `on_muster` 裡）。
 **選單順序（不能改成 `Feature.options`）**：「設伏／收伏 → 屯糧 → 護衛（`_aid_options`）→ 功能包的選項（`features_core.options`）→ 盤算（`_plan_options`）」。設伏屯糧改成 `Feature.options` 會排進 `FEATURES` 的順序、跑到護衛之後。所以 `Game._stamina_play_options` 留著當接縫，前半叫 `actions.options`。
 **接縫的位置不能動**（位置就是行為）：`sync.close` 的 `ambush` 那一格（第 55 批；`shops` 之後、`arrive` 之前）、`_arrivals` 迴圈中途的 `_ambush_check`（每換一段才查）、移動被擋（`engine.py` 的 `_move_option`，讀 `p.ambush` 與核心的 `MOVE_BLOCKED`）。
@@ -32,3 +32,5 @@
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.close` 的 `ambush`（`ambush_actions.expire`）。
+
+**第 56 批（選單收接縫，核心批）**：`plays/head`、`block/ambush` 是這一包登記的格；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_stamina_play_head` 拿掉；上面寫「留委派」「原位」的以這一句為準。

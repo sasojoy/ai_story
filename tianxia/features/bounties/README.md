@@ -23,13 +23,13 @@
 - `player_fields`：`picking_bounty`（榜開著）、`bounty_pick`（第三層指著哪一張求兵）、`bounties_done`（交差的總數，寫在 `rules._complete`）。
 - `carried = ()`：換季全部跟著新角色重來。
 - 不認領：`shop_line`、`shop_clue`、`shop_hold`（七間店共用，核心）；`Bounty` 類別與 `WorldState.bounties`、`rallies`、`bounty_seq`、`bounty_week`、`bounty_day` 的定義留 `state.py`；`Config.bounties` 留 `models.py`、`content.py` 的 `check_bounties` 留原處（第 34 批認定第 2 條）。
-- 包外直接讀寫的（第 34 批認定第 9 條，照實記、寫哪一批收）：`atlas.travel_block` 讀 `picking_bounty`（第 50 批記的另外 13 個欄位排第 56 批，這是第 14 個）、酒肆包 `tavern:board` 直接寫 `picking_bounty`、核心 `Game._idle` 讀 `picking_bounty`（都是第 56 批選單收接縫）；`bot.py` 讀 `picking_bounty`、`shopview` 讀 `bounty_pick`（舊模組，假人底層與 `SHARED_LATER`）；引導包 `newbie.py`、列傳包 `standing.py`、傳承包 `legacy/rules.py` 讀 `bounties_done`（總表第 56 批）。反過來：這一包的 `open_commissions`（在核心 `bounty_base`）讀人物情誼包認領的 `PlayerState.letters`，`_complete_commission` 寫 `parley_owed`。
+- 包外直接讀寫的（第 34 批認定第 9 條，照實記、寫哪一批收）：~~`atlas.travel_block` 讀 `picking_bounty`、酒肆包 `tavern:board` 直接寫 `picking_bounty`、核心 `Game._idle` 讀 `picking_bounty`~~（第 56 批選單收接縫收了：`block`、`idle` 那兩格是這一包登記的，酒肆改叫核心 `bounty_base.sit_at_board`，只設這一欄、不清挑到哪一張）；`bot.py` 讀 `picking_bounty`、`shopview` 讀 `bounty_pick`（舊模組，假人底層與 `SHARED_LATER`）；~~引導包 `newbie.py`、列傳包 `standing.py`、傳承包 `legacy/rules.py` 讀 `bounties_done`~~（第 56 批收了：三處改問核心 `bounty_base.done_count`）。反過來：這一包的 `open_commissions`（在核心 `bounty_base`）讀人物情誼包認領的 `PlayerState.letters`，`_complete_commission` 寫 `parley_owed`。
 
 ## 委派與留在原位的接縫
 
-**`Game` 留的一行委派**：`_bounty_options`（`_everyday_options`）、`_bounty`（`tests/gear/test_shop2.py` 直接叫，同 `_smith`）、`_raid_bounty`（查詢服務，截殺與設伏）、`_bounty_stale`（`choose`）、`_bounty_status`（`status_data`）。人物情誼包回答這一包（服務清單二 `# bounties`，PM 認定乙案）：`_letter_thank`、`_parley_settle_task`、`_parley_keep`、`_parley_owed_line`、`_parley_ask_label`。`post_wanted` 沒人叫，不留。
+**`Game` 留的一行委派**：`_bounty`（`tests/gear/test_shop2.py` 直接叫，同 `_smith`）、`_raid_bounty`（查詢服務，截殺與設伏）、`_bounty_stale`（`choose`）、`_bounty_status`（`status_data`）。人物情誼包回答這一包（服務清單二 `# bounties`，PM 認定乙案）：`_letter_thank`、`_parley_settle_task`、`_parley_keep`、`_parley_owed_line`、`_parley_ask_label`。`post_wanted` 沒人叫，不留。
 
-**三間店不排進 `Shop`（PM 認定，排給第 56 批選單收接縫）**：`features_core._shops` 照 `FEATURES` 走，酒肆排在 `smithy`、`gear` 前面，要維持「懸賞榜 → 鐵匠鋪 → 馬市 → 其他店」就得挪包或開寫死的店面順序表；`sync` 只收鐵匠鋪、馬市，懸賞榜登記了 `drop_shops` 會在 `sync` 多收一次；鐵匠鋪 `here` 兩個意思。所以這些留原位：`_everyday_options` 的入口與 `picking_bounty` 選單、`_shop_open`、`shop_view` 的 `board` 那一支、`_drop_stale_references`、`_idle`、移動包 `departure.py` 收店那四行（先後不動）。`SHOP_ACTS`、`LEAVE_SHOP_IDS` 不動。
+**三間店不排進 `Shop`，走 `MENU_ORDER`（第 56 批選單收接縫的結論，計畫第四節）**：量到四條——(1)`features_core._shops` 照 `FEATURES` 走，酒肆、銀兩出口排在鐵匠鋪、馬市前面，懸賞榜最後，要維持「懸賞榜 → 鐵匠鋪 → 馬市 → 其他店」就得挪包；(2)`drop_shops` 在 `sync.close` 也跑，懸賞榜今天只有 `stale.mid` 收，進 `Shop` 就多收一次；(3)鐵匠鋪 `here` 兩個意思（`_shop_open` 是單子沒開著且開門，收店是開門）；(4)`close_shops` 只收坐著的，出發那三行不看坐不坐著（`shop_line`、`smith_page`、`smith_rule`、`bounty_pick` 不坐在店裡也要清）。所以這一包登記 `menus()` 的格：`take`、`here`、`idle`、`open`、`depart`、`block`，先後在 `MENU_ORDER`；`shop_view` 的 `board` 那一支與 `stale.mid` 的收店不動。`SHOP_ACTS`、`LEAVE_SHOP_IDS` 不動。
 
 **原位讀 `core/bounty_base` 的（engine 不再 import 舊名 `bounties`，所以 `GAME_DIRECT` 不加）**：`choose` 的 `BROWSE_VERBS`、`is_browse_line`（翻頁不寫紀錄，照鐵匠鋪 `page:`）、投靠那一下的 `drop_stranded`、`week_unlock_names` 的 `active`、`_drop_stale_references`、`_shop_open`、`_everyday_options` 的 `board_here`、`visible`、`BOARD`、`close_board`。掛鉤逐項查過：`on_sync`、`on_drop_stale` 只問開著的包（`active`）而原位不看開關，`on_own_turn` 在暫停那一道之前（系統通緝要在之後），`choose_unlisted` 回 list（FB-162 回 `Refused`），`Feature.status` 是頂層另一個鍵（理由在邊界測試 `# bounties` 那一段）。
 
@@ -60,3 +60,5 @@
 **反方向**（第 36 批認定第 1 條）：見計畫第五節；這一批對 import 的舊模組各量一次 `test_for.pick`，少挑到的寫進計畫。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `bounties`（`actions.deliver`）；`own_turn` 的 `bounties`（`actions.post_auto`：暫停那一道之後，`on_own_turn` 在它之前）；`stale.mid` 的 `bounties`（`actions.drop_stale`，收懸賞榜）。
+
+**第 56 批（選單收接縫，核心批）**：委派 `_bounty_options` 拿掉；`GAME_DELEGATE_CALLERS` 的 `_everyday_options → _bounty_options` 拿掉。

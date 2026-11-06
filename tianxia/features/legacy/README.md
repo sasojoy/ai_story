@@ -24,3 +24,5 @@
 **權重**（Joy 11/4）：tasks 40、merit 0.1、fame 1、relations 1（正式站 60 個真人的九成位對齊），good、evil 1。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`season.carry` 的 `legacy`（傳承照帶，不看開關；結算在 `on_season_start`）。
+
+**第 56 批（選單收接縫，核心批）**：`rules.py` 讀懸賞的張數改問核心 `bounty_base.done_count`；先後在 `core/features.py` 的 `MENU_ORDER`；上面寫「留委派」「原位」的以這一句為準。

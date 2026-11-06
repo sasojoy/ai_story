@@ -27,7 +27,7 @@
 
 - `player_fields`：`pending_faction`、`pending_defect`、`pending_ally`（按了投靠／叛投還在確認畫面上、挑好的依附那一軍）；`carried` 沒有（換季重來）。
 - 不認領：`faction`、`ally`、`sect`、`season_title`（身份，核心與 `social.affiliation` 到處讀）；`defected`（叛投寫它，但 `battle_instance`、狀態列、`guide` 都讀）；`ledgers`、`lean_changed`（`wins.set_lean` 在共用規則層寫，叛投時 `_clear_own` 清）。
-- 共用規則層的 `atlas.travel_block` 直接讀 `pending_faction`、`pending_defect`（動身被擋的那一句；全部拆包第 50 批照實記下，第 56 批選單收接縫時改成掛鉤、一張先後表）。
+- 動身被擋（`atlas.travel_block`）：第 56 批選單收接縫起這一包登記 `MENU_ORDER["block"]` 自己那一格，讀 `pending_faction`、`pending_defect` 的只剩包裡；字與先後一字不動（`atlas` 不再讀）。
 
 ## 委派與留在原位的接縫
 
@@ -66,3 +66,5 @@
 確認畫面讀押糧不直接碰軍情包的欄位：問核心的 `core/convoy_base.py`（`held(state)`，同 `omen_base` 的先例；它只讀軍情包認領的 `convoy`，不寫）。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`season.grant` 的 `faction`（`ending_actions.season_grant`：開場那一則之後，`on_season_start` 在它之前）。
+
+**第 56 批（選單收接縫，核心批）**：`take/faction`、`here/sect`、`here/join`、`here/defect`、`here/lean`、`idle/faction`、`block/faction` 是這一包登記的格（投靠那幾顆從 `_everyday_options` 搬進 `join_actions.join_options`）；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_sect_options`、`_lean_options`、`_faction_pending_options`、`_defect_options` 拿掉；上面寫「留委派」「原位」的以這一句為準。

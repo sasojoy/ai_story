@@ -8,7 +8,7 @@
 - bots.py：假人的分數（原本 bot_policy.score 的 bounty 那一段）
 
 接縫掛鉤：choose（bounty:*）、verbs（act:bounties 打開榜與紀錄標題）、bot_pick、bus（六種事件交差）、world（step、week、day、start 掛單）、steps（commission、bounty）、defection（stranded）。
-店面登記（Shop）這一批不登記（PM 認定：鐵匠鋪、馬市、懸賞榜三間排給第 56 批選單收接縫）：選單、入口、_shop_open、_drop_stale_references 與出發的收店都留在原位。
+店面登記（Shop）不登記、走 MENU_ORDER（第 56 批選單收接縫定案，計畫第四節：入口排在鐵匠鋪、馬市前面；drop_shops 會在 sync.close 多收一次）：menus() 登記選單、入口、_shop_open、出發收店、動身被擋那幾格。
 """
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ class BountiesFeature(Feature):
 
     def verbs(self) -> tuple[Verb, ...]:
         """act:bounties 的主人（act 子動詞）：按下去打開榜（actions.enter：不花體力、從第二層開始、榜吏那一句；原本 Game._act 中段那幾行）、
-        紀錄標題「懸賞榜・此地」（原本 Game._action_title 那張表的 bounties）。進榜那一顆（此地還能做）在 Game._everyday_options 原位（第 56 批）。"""
+        紀錄標題「懸賞榜・此地」（原本 Game._action_title 那張表的 bounties）。進榜那一顆（此地還能做）是 here/bounties 那一格（第 56 批）。"""
         if self._verbs is None:
             from tianxia.core import bounty_base  # noqa: PLC0415
 

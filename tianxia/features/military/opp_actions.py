@@ -52,7 +52,7 @@ def give_opportunity(ctx, name: str, opp_id: str) -> list[str]:
 
 
 def place_options(ctx, loc_id: str) -> list:
-    """閒著的選單上機緣的選項：交東西、天時地利、拼圖、推理、密謀（正式版乙一）。核心原位夾在 _rank_action_options 與伏筆最後一步、託付之間。"""
+    """閒著的選單上機緣的選項：交東西、天時地利、拼圖、推理、密謀（正式版乙一）。MENU_ORDER["here"] 的 omen 那一格夾在 rank 與 errand 之間，伏筆最後一步排在它後面。"""
     return opp_rules.place_options(ctx.state, ctx.content, loc_id)
 
 

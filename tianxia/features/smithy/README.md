@@ -24,13 +24,13 @@
 - `player_fields`：`picking_smith`（店開著）、`smith_page`（停在哪一頁）、`smith_draft`（一步一步的單子）、`smith_rule`（這一次進門要講的神器規矩）、`smith_rules_told`（這一季講過的）。
 - `carried = ()`：換季全部跟著新角色重來。
 - 不認領：`shop_line`、`shop_line_seed`、`shop_hold`、`shop_clue`（七間店共用的掌櫃那一句，屬核心）、`furnace_day`／`furnace_ready`（看火候，銀兩出口包已認領）。`SmithDraft` 類別在核心 `state.py`。
-- 共用規則層的 `atlas.travel_block` 直接讀 `picking_smith`（動身被擋的那一句；全部拆包第 50 批照實記下，第 56 批選單收接縫時改成掛鉤、一張先後表）。
+- 動身被擋（`atlas.travel_block`）：第 56 批選單收接縫起這一包登記 `MENU_ORDER["block"]` 自己那一格，讀 `picking_smith` 的只剩包裡；字與先後一字不動（`atlas` 不再讀）。
 
 ## 委派與留在原位的接縫
 
-`Game` 留 12 個一行委派：`_smith_options`（核心原位選單叫）、`_smith`（`tests/gear/test_shop2.py` 直接叫）、`_smith_clue`（測試換掉它）、`smith_line`、`smith_forge`、`smith_furnace`、`smith_sell`、`smith_upgrade`（`server.py` 的 `MAIN_ACTIONS`、整季機器人與假人、測試叫）、`repair_item`、`temper_item`、`name_divine`、`bind_art`（`MENXIA_ACTIONS`、假人、測試叫）；其餘 11 個方法只有包裡叫，沒有委派。
+`Game` 留 11 個一行委派（`_smith_options` 第 56 批換成 `take` 那一格，拿掉）：`_smith`（`tests/gear/test_shop2.py` 直接叫）、`_smith_clue`（測試換掉它）、`smith_line`、`smith_forge`、`smith_furnace`、`smith_sell`、`smith_upgrade`（`server.py` 的 `MAIN_ACTIONS`、整季機器人與假人、測試叫）、`repair_item`、`temper_item`、`name_divine`、`bind_art`（`MENXIA_ACTIONS`、假人、測試叫）；其餘 11 個方法只有包裡叫，沒有委派。
 
-**店面登記（`Shop`）這一批不登記**（計畫 1.9 量出四條）：「此地還能做」的入口順序是 懸賞榜 → 鐵匠鋪 → 馬市 → 搬成包的店，搬進登記就排到馬市後面（`/api/main` 的選項順序變）；選單順序同；`here` 有兩個意思（`_shop_open` 要單子沒開著，收店要 `smith_open`），`Shop.here` 只有一個；同一排的懸賞榜（第 45 批，`features/bounties`）、馬市（第 42 批，`features/gear`）成了包但同樣不登記，三間排給第 56 批。這些留在 `Game` 原位：`_everyday_options` 的 `picking_smith` 選單與 `act:smith` 入口、`_shop_open`、`shop_view` 的 smith 分支、`_drop_stale_references`／`sync` 的收店、`_depart` 的 `close_smith`、`_idle`。**PM 定案**（第 41 批 PM 認定第 1 條）：第 42 批（馬市）與第 45 批（懸賞榜）比較晚合的那一批，把懸賞榜、鐵匠鋪、馬市三間一起排進 `Shop`，入口先後維持 懸賞榜 → 鐵匠鋪 → 馬市（先後就是行為）；若非得讓 `Shop` 分兩個「此地」判斷（改核心）才行，先回報 PM。
+**店面登記（`Shop`）不登記，走 `MENU_ORDER`**（第 41 批計畫 1.9 量過，第 56 批選單收接縫定案，計畫第四節）：入口先後 懸賞榜 → 鐵匠鋪 → 馬市 → 搬成包的店是行為，`_shops` 照 `FEATURES` 走、酒肆與銀兩出口會排到前面；`here` 有兩個意思（`_shop_open` 要單子沒開著，收店要 `smith_open`），`Shop.here` 只有一個；`close_shops` 只收坐著的，出發那一行不看坐不坐著（`smith_page`、`smith_rule` 不坐在店裡也要清）。所以這一包登記 `menus()` 的格：`take`、`here`、`idle`、`open`、`depart`、`block`，先後在 `MENU_ORDER`；`shop_view` 的 smith 分支與 `sync.close`、`stale.mid` 的收店（第 55 批）不動。
 
 核心原位讀 `smithing`（經舊名別名）的三處記在邊界測試的 `GAME_DIRECT`：`choose`（打造那幾步併成一則：`GO_VERB`、`is_forge_step`、`is_step_line`；切頁不寫紀錄），`_drop_stale_references`、`sync`（`draft_here`、`draft_stale`，單子那一欄關了就清）。位置在寫紀錄與收店的中段，沒有對應的掛鉤。這三筆先認（第 41 批 PM 認定第 4 條）；**全部拆包第 40 批（核心批）收了**：五個純函式連同它們讀的常數（`ARMOR_KIND`、問句與回報那幾句）與 `here` 抽到核心小模組 `tianxia/core/smith_base.py`（照 `omen_base`），`smithing.py` 照原名 re-export 同一個物件；`engine` 的 `choose`、`_drop_stale_references`、`sync` 三處改讀 `smith_base`、不再 import `smithing`，邊界測試那三筆 `GAME_DIRECT` 還原（11 → 8）、`GAME_IMPORTS` 拿掉 `tianxia.smithing`（84 → 83）。
 

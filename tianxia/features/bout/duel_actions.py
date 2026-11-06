@@ -3,7 +3,7 @@
 戰法的亂數、陣營名）也在這裡，擂台那一份（arena_actions）直接叫。
 
 - 撞上與收場：duel_start、duel_act、duel_after、duel_finish；打到一半的選單：duel_menu（審查修正：原本留在 Game._everyday_options 的
-  那一段，Game 留一行委派 _duel_menu）；場景：duel_scene、bout_lines；放手一搏（頭目戰、擂台共用的鎖外三段式）：
+  那一段，第 56 批起是 take/duel 那一格）；場景：duel_scene、bout_lines；放手一搏（頭目戰、擂台共用的鎖外三段式）：
   duel_free_text_prompt、duel_free_text_note、duel_text_check、duel_text_request、duel_gamble、stale_duel_request；戰法的亂數 bout_rng、
   陣營名 duel_side；防具的減損快照 duel_cut（戰力快照 Game._battle_gear 也叫它的委派：奪璽單挑吃防具）
 - 頭目的查詢：boss_face（那一面的名字）、boss_ready——探索包、舊探索經 Game 的委派問
@@ -69,8 +69,8 @@ def duel_start(ctx, boss: DuelBoss) -> list[str]:
 
 
 def duel_menu(ctx) -> list[Option]:
-    """頭目戰打到一半的選單（原本 Game._everyday_options 在 features_core.menu 前面一行那一支；審查修正搬進來，Game 留一行委派
-    _duel_menu）：三招與抽身；放手一搏走輸入框（duel_free_text_prompt），選單上沒有。"""
+    """頭目戰打到一半的選單（原本 Game._everyday_options 在 features_core.menu 前面一行那一支；審查修正搬進來，第 56 批起是
+    take/duel 那一格）：三招與抽身；放手一搏走輸入框（duel_free_text_prompt），選單上沒有。"""
     held = tactics.locks(ctx.state.player.duel.bout).no_moves  # 本命戰法：卸勁出不了強攻、只攻不守出不了固守
     return [Option(id=f"duel:{move}", label=duel_base.move_label(move) + (tactics.lock_note(move) if move in held else ""),
                    enabled=move not in held) for move in MOVES] + [

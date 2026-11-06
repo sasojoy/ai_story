@@ -19,7 +19,7 @@
 - `PlayerState`：`picking_tavern`、`tavern_notes`、`tavern_heard`、`tavern_known`、`tavern_treat_day`、`whispers`、`hidden_until`、`tavern_watches`、`tavern_guard_until`、`tavern_shield_until`（換季全部跟著新角色重來，`carried` 是空的）。
 - `WorldState`：`tavern_walls`、`tavern_whispers`、`tavern_treats`、`tavern_hits`、`tavern_hit_seq`、`tavern_chatter`（照季存）。
 - `state.py` 的 `TavernNote`、`Whisper`、`WallNote`、`TavernWatch`、`TavernHit`；`models.py` 的 `Config.tavern`（`TavernTuning`）。
-- 共用規則層的 `atlas.travel_block` 直接讀 `picking_tavern`（動身被擋的那一句；全部拆包第 50 批照實記下，第 56 批選單收接縫時改成掛鉤、一張先後表）。
+- 動身被擋（`atlas.travel_block`）：第 56 批選單收接縫起這一包登記 `MENU_ORDER["block"]` 自己那一格，讀 `picking_tavern` 的只剩包裡；字與先後一字不動（`atlas` 不再讀）。
 
 ## 委派與留在原位的接縫
 
@@ -45,3 +45,5 @@
 - 前後一字不變：`scripts/same_behavior.py` 的 `tavern` 一軌（`--tracks tavern`）。
 
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+
+**第 56 批（選單收接縫，核心批）**：`idle/tavern`、`block/tavern` 是這一包登記的格；`tavern:board` 改叫核心 `bounty_base.sit_at_board`；先後在 `core/features.py` 的 `MENU_ORDER`；上面寫「留委派」「原位」的以這一句為準。

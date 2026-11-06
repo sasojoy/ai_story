@@ -86,7 +86,7 @@ def card(game: Game, other: Game) -> dict:
 # Joy 2026-10-19「玩家互動把那些沒什麼意義或是會被拿來當 bug 刷的拿掉或是優化」：拿掉互贈銀兩、結伴同行、請教（Joy 定），
 # 贈回體丹與敬酒（PM 建議，Joy「照建議」）；抱拳換成互贈名帖（mingtie_card.py），挑釁可以附一句話（speech 擋髒話）。
 # 挑釁與名帖是邀請（invites.py，跟切磋同一套：存在這一季的 WorldState.invites，invite_ttl_seconds 沒回就作廢——對方下線、
-# 假人沒理都是這樣）。收到的列在閒著的選單上（invite:<回應>:<編號>，Game._invite_options），場景底下也畫一份（calls），
+# 假人沒理都是這樣）。收到的列在閒著的選單上（invite:<回應>:<編號>，invite_actions.options），場景底下也畫一份（calls），
 # 回應走 choose（Game._invite → answer_invite）。回應是固定的；挑釁附的那一句只有發的人寫（假人不寫自由文字，真人也多半不寫）。
 # 結伴同行的引擎（移動包 party.join、lead，tagalong）還在，只是卡上沒有入口了：拿掉之前答應的那一趟照舊走完。
 
@@ -161,7 +161,7 @@ def _call_option(option, inv) -> dict:
 
 def calls(game: Game) -> list[dict]:
     """場景底下「別人遞給你、還沒回的」：[{text, options: [{id, label, enabled, peer?}]}]，舊的在前。回應鈕就是選單上的那幾個選項
-    （Game._invite_options，invite:<回應>:<編號>），所以只在選單上真的有時才畫（閒著、人在發邀請的那個地點）；
+    （invite_actions.options，invite:<回應>:<編號>），所以只在選單上真的有時才畫（閒著、人在發邀請的那個地點）；
     論武的答應那一顆帶 peer，網頁打開他的玩家卡（_call_option）。"""
     menu = {o.id: o for o in game.options(odds=False, tick=False) if o.id.startswith("invite:")}
     rows = []
