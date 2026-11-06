@@ -9,7 +9,7 @@
 
 | 檔 | 是什麼 |
 |---|---|
-| `__init__.py` | 登記（`BoutFeature`）：`prefix = ("duel", "arena")`；`enabled`＝內容有頭目、或擂台開著、或此刻還在頭目戰／擂台上／坐在擂台邊（開關在坐著、打著的時候被關掉照樣出得去，同酒肆）；`content` 宣告 `duels.json`、`arena_crowd.json`（`content.py` 照舊讀）；掛鉤 `menu`、`choose`、`bot_pick`、`check_content`、`shops`、`verbs`（下面） |
+| `__init__.py` | 登記（`BoutFeature`）：`prefix = ("duel", "arena")`；`enabled`＝內容有頭目、或擂台開著、或此刻還在頭目戰／擂台上／坐在擂台邊（開關在坐著、打著的時候被關掉照樣出得去，同酒肆）；`content` 宣告 `duels.json`、`arena_crowd.json`（`content.py` 照它到這一包的 `content/` 載）；掛鉤 `menu`、`choose`、`bot_pick`、`check_content`、`shops`、`verbs`（下面） |
 | `duel_rules.py` | 頭目戰的純規則（原 `tianxia/duel.py`；舊名留成 `sys.modules` 別名）：次數與冷卻的帳、遇得上哪一隻、面貌、他的招與架勢、出一招、放手一搏、勝負、`SETTING`／`PLACE`／`STALE`／`RESEND`、`COUNTER_WORDS`；鎖外三段式的單子 `DuelTextRequest` 與輸入框底下那一句 `DUEL_GAMBLE_NOTE`（原本寫在 `engine.py`） |
 | `arena_rules.py` | 擂台的純規則（原 `tianxia/arena.py`；別名）：守擂的分身、挑得到誰、冷卻與次數、一場的推進、俸、收季排名、擂台那一頁的字 |
 | `arena_crowd.py` | 場邊事件（原 `tianxia/arena_crowd.py`；別名）：底細、候選、擲、套用、模型判觀眾反應與重寫那一句；`check_content`（原 `content.check_arena_crowd`） |
@@ -41,7 +41,7 @@
 
 ## 測試
 
-- 這一包的：`tests/test_duel.py`（頭目戰 28 條，1 條 smoke；`tests/gear/test_mounts.py`、`tests/seal/test_seal_revamp.py` 照舊 `from test_duel import _boss`）、`test_arena.py`（擂台 37 條，1 條 smoke）、`test_arena_crowd.py`（場邊事件 13 條，1 條 smoke；從 `test_arena` 拿 `ring` 那幾個輔助）、`bout_stage.py`（契約測試擺局面：坐在擂台邊、擂台打到一半）。全部拆包第 12 批從 `tests/battle/` 整檔搬來，斷言一字沒改（`test_arena_crowd` 讀 `content/arena_crowd.json` 的路徑從 `parents[2]` 換成 `parents[4]`）。審查修正另加 `test_bout_seams.py`（14 條：接上掛鉤的收店與動身收店、假人在擂台邊只按返回、坐著時開關被關掉照樣開著、更新分身照此刻的形象、單挑底層勝負的門檻、戰績那一句的連勝——以前只有 `same_behavior` 守，審查的變異 M14、M6、M7、M8、C3、C4 包加混合檔一條都不紅）。一共 92 條、沒有 slow，`-n 4` 約 15 秒。`pytest tianxia/features/bout/tests -n 4 -m "slow or not slow"`。
+- 這一包的：`tests/test_duel.py`（頭目戰 28 條，1 條 smoke；`tests/gear/test_mounts.py`、`tests/seal/test_seal_revamp.py` 照舊 `from test_duel import _boss`）、`test_arena.py`（擂台 37 條，1 條 smoke）、`test_arena_crowd.py`（場邊事件 13 條，1 條 smoke；從 `test_arena` 拿 `ring` 那幾個輔助）、`bout_stage.py`（契約測試擺局面：坐在擂台邊、擂台打到一半）。全部拆包第 12 批從 `tests/battle/` 整檔搬來，斷言一字沒改（`test_arena_crowd` 讀 `arena_crowd.json` 的路徑從 `parents[2]` 換成 `parents[4]`；第 62 批內容檔搬進包，再換成 `parents[1]`）。審查修正另加 `test_bout_seams.py`（14 條：接上掛鉤的收店與動身收店、假人在擂台邊只按返回、坐著時開關被關掉照樣開著、更新分身照此刻的形象、單挑底層勝負的門檻、戰績那一句的連勝——以前只有 `same_behavior` 守，審查的變異 M14、M6、M7、M8、C3、C4 包加混合檔一條都不紅）。一共 92 條、沒有 slow，`-n 4` 約 15 秒。`pytest tianxia/features/bout/tests -n 4 -m "slow or not slow"`。
 - **`test_for` 挑不到的混在別人檔裡的**（這一輪不拆，同出陣、酒肆）：
   - 頭目戰：`tests/battle/test_rise.py`（江湖水漲浮頭目的難度）、`test_tactics_bouts.py`（頭目戰、擂台的本命戰法）、`test_maxed_xinde.py`（滿級換心得）、`tests/core/test_precise_actions.py`（一類一顆）、`tests/gear/test_mounts.py`（`from test_duel import _boss`）、`tests/seal/test_seal_revamp.py`（同上，碎片不浮頭目）、`tests/server/test_server.py`（`/api/do/duel_text` 的鎖外三段式）、`tests/bots/test_zh.py`。
   - 擂台：`tests/battle/test_renown_arena.py`（名聲 4.7）、`tests/core/test_event_tiers.py`（擂主的分級）、`tianxia/features/guide/tests/test_onboard.py`（原 `tests/core/`，第 22 批搬進引導包，合進 develop 時改路徑）、`tests/figures/test_week7_season.py`、`test_week_unlock.py`（第 2 週才開擂台）、`tianxia/features/seal/tests/test_seal_revamp_hidden.py`（換掉 `Game._arena_bare`）、`tianxia/features/seal/tests/test_seal_revamp_sidedoor.py`、`tests/seal/test_seal_duel.py`（奪璽單挑用單挑底層）、`tests/server/test_web_push.py`。

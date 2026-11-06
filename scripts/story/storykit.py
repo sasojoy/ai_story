@@ -56,8 +56,9 @@ def event(eid: str, title: str, image: str, text: str, choices: list, free_text:
 
 
 def write(root: Path, file_name: str, events: list, line: dict, squads: list | None = None) -> None:
-    """事件寫成 content/events/<file_name>；線換掉 storylines.json 裡同 id 的那一條（沒有就加在後面）；隊伍同理。"""
-    (root / "events" / file_name).write_text(json.dumps(events, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    """root 是 <repo>/content。事件寫成一條線包的 content/events/<file_name>（全部拆包第 62 批搬過去的）；線換掉 root/storylines.json 裡同 id 的
+    那一條（沒有就加在後面）；隊伍同理（squads.json 也在 root）。"""
+    (root.parent / "tianxia" / "features" / "story" / "content" / "events" / file_name).write_text(json.dumps(events, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     path = root / "storylines.json"
     lines = json.loads(path.read_text(encoding="utf-8"))
     lines = [x for x in lines if x["id"] != line["id"]] + [line]

@@ -212,7 +212,7 @@ def test_a_module_picks_the_tests_named_after_its_first_word():
 def test_content_picks_its_tests_and_the_fast_part_of_real_content():
     """內容改了挑 test_content.py、寫到那個檔名的，加 test_real_content.py 不是 slow 的那些（147 條只有整季那 11 條是 slow；
     其他的含事件難度帶 DIFFICULTY_BANDS 的鎖、地點走得到，-n 4 約 25 秒）。整季那幾條照舊要 --slow（手冊 4.3 的本意）。"""
-    picked = test_for.pick(["content/events/explore_jizhou.json"])
+    picked = test_for.pick(["content/events/jizhou.json"])  # 留在 content/ 的事件池（explore_* 全部拆包第 63 批搬進探索包）
     assert {"test_content.py", "test_real_content.py"} <= {p.name for p in picked.files}
     (cmd,) = test_for.pytest_commands(picked, slow=False, extra=[])
     assert _marker(cmd) == "not slow"
@@ -222,11 +222,24 @@ def test_content_picks_its_tests_and_the_fast_part_of_real_content():
     assert _marker(both) == "slow or not slow" and "tests/season/test_real_content.py" in both
 
 
+def test_a_pack_content_file_takes_the_content_route_and_the_pack_route():
+    """全部拆包第 62 批：內容檔搬進包之後照舊走內容那一條（不補的話改 mall.json 挑不到 test_content.py），再加那一包的 tests/。"""
+    names = _names(["tianxia/features/mall/content/mall.json"])
+    assert {"test_content.py", "test_real_content.py", "test_mall_content.py", "test_contract_features.py"} <= names
+
+
+def test_a_pack_test_content_file_takes_the_fixture_route_and_the_pack_route():
+    """全部拆包第 63 批：包裡的測試內容同 tests/fixtures/（寫到那個檔名的）再加那一包的 tests/；不補的話落進測試檔那一支，什麼都挑不到。"""
+    names = _names(["tianxia/features/travel/tests/content/road_sights.json"])
+    assert {"test_content.py", "test_travel_smoke.py"} <= names
+    assert "test_real_content.py" not in names  # 測試內容不走真實內容那一條
+
+
 def test_the_promotion_and_rank_action_content_picks_the_tests_that_pin_it():
     """第一季正式版丙一、丙二、戊一的測試檔用真實內容釘住晉升奇遇與第 3、4 階行動：改那幾個內容檔時要挑到它們（整合審查 M2）。"""
     promotions = {"test_promotions_high.py", "test_promotions_huang.py"}
-    assert promotions <= _names(["content/promotions.json"])
-    assert promotions <= _names(["content/events/promotion.json"])
+    assert promotions <= _names(["tianxia/features/military/content/promotions.json"])
+    assert promotions <= _names(["tianxia/features/military/content/events/promotion.json"])
     assert "test_rank_actions.py" in _names(["content/orders.json"])
 
 

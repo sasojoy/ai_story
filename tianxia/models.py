@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, field_validator, model_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, PrivateAttr, field_validator, model_serializer, model_validator
 from pydantic_core import core_schema
 
 from .jianfa_numbers import ExploreMix, JianfaNumbers
@@ -3433,7 +3433,7 @@ class HireRules(_Strict):
 
 
 class PersonaStage(_Strict):
-    """人物性子的一段（content/personas.json；功能包 features/persona）：text 是這一段的他（對話提示與簡介的「如今」都用），
+    """人物性子的一段（features/persona/content/personas.json；功能包 features/persona）：text 是這一段的他（對話提示與簡介的「如今」都用），
     short 是一句說法（簡介的變化紀錄「第 N 週・週X 起，<short>」、換段那一刻的傳聞「有人說<名字>近來<short>。」）。"""
 
     text: str
@@ -5593,7 +5593,7 @@ class Content(_Strict):
     looks: dict[str, Look] = Field(default_factory=dict)  # 擂台形象（content/looks.json，照 id、照檔案的順序）；沒有這個檔就是空的（只有預設的斗笠小子）
     itineraries: list[Itinerary] = Field(default_factory=list)  # 人物的行程（content/itineraries.json，世界活起來）；沒有這個檔就是沒有
     relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有
-    personas: dict[str, list[PersonaAxis]] = Field(default_factory=dict)  # 人物性子（content/personas.json，features/persona）：對話人物 id → 兩條性子；沒有這個檔就是空的
+    personas: dict[str, list[PersonaAxis]] = Field(default_factory=dict)  # 人物性子（features/persona/content/personas.json，features/persona）：對話人物 id → 兩條性子；沒有這個檔就是空的
     mark_rules: list[MarkRule] = Field(default_factory=list)  # 地方痕跡過門檻（content/mark_rules.json，減法季批 4）；沒有這個檔就是空的
     # 探索一顆出門一趟的段落句子（content/outing_lines.json，減法季批 2；explore_one.paragraph 讀、探索包 checks.check_outing_lines 驗）：
     # 拍的類 → 結果 → 句子；沒有這個檔就是空的（照 explore_one.FALLBACK 寫）
@@ -5610,6 +5610,10 @@ class Content(_Strict):
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示
     check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）
     create_forms: CreateForms = Field(default_factory=CreateForms)  # 自創武學的兵器偏向、起點架式、關鍵字表（content/create_forms.json）
+
+    # core_content（全部拆包第 63 批）：這一份只載了哪一包（load_content(only=)，只有測試內容、只有測試用；validate 看它）。不是欄位：不進 model_fields、
+    # 不進序列化；pickle、deepcopy、model_copy 都帶著（測試的複本也擋得住）
+    _only_pack: str | None = PrivateAttr(default=None)
 
     def banned_name_list(self) -> list[str]:
         """取名、潤色、題壁要擋的專有名詞：開關（Config.banned_names_on）關著時是空的，名單本身照樣留在 banned_names。"""

@@ -16,7 +16,7 @@
 | `view.py` | 地盤畫面：`conquest_view`、`siege_you`、`region_name`、`siege_live`、`siege_join`、`siege_margin`、`admin_choices`（管理者頁的下拉選單）；`SIEGE_STATUS`、`siege_status_text` |
 | `admin_actions.py` | 管理者救場：`conquest_set`、`conquest_progress`、`conquest_letter`、`conquest_cancel` |
 | `routes.py` | `GET /api/xingshi`；`admin_tools`：`conquest_set`、`conquest_progress`、`admin_conquest_letter`、`conquest_cancel`、`xingshi_now` |
-| `conquest_day.py`、`xingshi.py` | 規則模組（舊名 `tianxia/conquest_day.py`、`tianxia/xingshi.py` 留成指到同一個模組的別名）；`xingshi.check_lines` 驗 `content/xingshi_lines.json` 的句型（原本在 `content.py`） |
+| `conquest_day.py`、`xingshi.py` | 規則模組（舊名 `tianxia/conquest_day.py`、`tianxia/xingshi.py` 留成指到同一個模組的別名）；`xingshi.check_lines` 驗 這一包的 `content/xingshi_lines.json` 的句型（原本在 `content.py`） |
 
 `conquest_day` 的 `void`、`note_void`、`today`（連 `_rumor`）先搬進了共用規則層 `conquest`（`siege`、`orders` 就不必 import 包），`conquest_day` 裡留同名的 import。
 

@@ -7,7 +7,7 @@
 ## 裡面有什麼
 
 - `actions.py`：「此地還能做」裡每一型一顆（此地酒肆那一型還沒有主的第一位）；銀兩不夠、名下滿了（`Config.companions.max_owned`）灰掉。按下去付 `Config.hire.cost` 兩、`try_recruit`（全服唯一、名下上限在同一筆寫入裡判）、配起始武學、入隊。
-- 人：`content/hire.json`，`scripts/make_hirelings.py` 照 `Config.hire` 生（每間帶「酒肆」標籤的地點每型 `per_tavern` 位；名字姓加兩字隨機、種子固定；屬性照資質換成舊四項，跟人物表一樣 2～9）。改了型或酒肆就重跑；`--check` 比對。內容的 `hire_type`、`hire_at` 由 `content.validate` 驗。
+- 人：這一包的 `content/hire.json`，`scripts/make_hirelings.py` 照 `Config.hire` 生（每間帶「酒肆」標籤的地點每型 `per_tavern` 位；名字姓加兩字隨機、種子固定；屬性照資質換成舊四項，跟人物表一樣 2～9）。改了型或酒肆就重跑；`--check` 比對。內容的 `hire_type`、`hire_at` 由 `content.validate` 驗。
 - 放走：修練頁名冊的「放他回江湖」照舊（核心 roster）；換季跟其他同伴一樣重獲自由。
 - 假人：按得下去就給 `BOT_SCORE`。
 

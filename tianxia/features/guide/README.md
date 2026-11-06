@@ -21,7 +21,7 @@
 
 - `player_fields`：`guide_done`、`guide_outro`、`enlist_end`、`enlist_since`、`hint_queue`（換季跟著新角色重來）；`hints_seen`、`hints_off`、`newbie_marks`、`newbie_done`（`carried`：換季照帶，照舊在 `Game._reset_player_for_new_season` 原位帶）。
 - 另外是這一包的、可是「做到才帶」的：`tutorial_step`（做到不分季的那幾步才帶）、`guide_skipped`（同上）、`enlist_step`（走完才帶）——契約測試的換季那一條擺不出這種條件，不列進 `player_fields`。`onboarding`（引導照哪一版記的）是核心的版本章。
-- 內容：`content/tutorial.json`、`hints.json`、`opening.json`（`content` 宣告；`content.py` 照舊讀）。
+- 內容：這一包的 `content/tutorial.json`、`hints.json`、`opening.json`，開局與序章的事件池 `content/events/opening.json`、`prologue.json`（全部拆包第 63 批；跟 `opening.json` 是不同的檔）（`content` 宣告；`content.py` 照它到這一包的 `content/` 載）。測試內容的 `tutorial.json` 在 `tests/content/`（第 63 批）。
 
 ## 委派與留在原位的接縫
 

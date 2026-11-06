@@ -31,7 +31,7 @@ class PeersFeature(Feature):
     name = "peers"
     prefix = "invite"  # invite:yes|no|cancel:<編號>：打招呼的回禮（invite:cold|retort|…）也是同一個前綴
     web = ()  # app.js 的 MT_INKS 等歸這一包，網頁第 3 階才切
-    content = ("mingtie.json",)  # 名帖現成的畫與假人的自題句庫；content.py 照舊讀（MingtieContent）
+    content = ("mingtie.json",)  # 名帖現成的畫與假人的自題句庫；content.py 照它到這一包的 content/ 載（MingtieContent）
     bot_always = ("invite:",)  # 邀請的選項一直按得下去（收回、回禮）：整季機器人不按（bot.py 的排除清單原本也寫了一個，拿掉那一個，只剩這裡）
     # 名帖與贈物一天的次數：自己那一張、收到的、檢舉過的、不接誰的挑釁話、定稿與遞帖的次數記在哪一天、贈物的次數——全部跨季帶走
     # （Game._reset_player_for_new_season 照抄；title_book 也是名帖的，但換季時要加上這一季掙到的頭銜，由 on_season_start 接，不算原樣帶走）

@@ -17,7 +17,7 @@
 
 - `player_fields`：`storylines`（這一季開過的線與進度，收了的也留著）、`story_open`（答題停在哪一條）、`story_cards`（等著跳出來的卡）、`keepsakes`（紀念物）、`lasting`（跨季旗標）。
 - `carried`：`keepsakes`、`lasting`（`season.carry` 的 `story` 那一格帶到下一季，並把 `lasting` 併進旗標）；其餘換季跟著新角色重來。
-- 內容：`content/events/story_fuzhi.json`、`story_maier.json`、`story_wangyue.json`、`story_wolong.json`（`content` 宣告）。`content/storylines.json` 混著章回主線的線（`ch_*`），不宣告（章回批再看）。
+- 內容：這一包的 `content/events/story_fuzhi.json`、`story_maier.json`、`story_wangyue.json`、`story_wolong.json`（`content` 宣告）。`content/storylines.json` 混著章回主線的線（`ch_*`），不宣告（章回批再看）。
 
 ## 委派與留在原位的接縫
 

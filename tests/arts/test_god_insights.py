@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import json
-import shutil
-from pathlib import Path
 
 import pytest
 
-from conftest import real_content
+from conftest import copy_real_content, real_content
 from tianxia import insight_fx, traits
 from tianxia.content import ContentError, load_content
 from tianxia.models import GOD_FORMS
@@ -41,9 +39,8 @@ def test_a_god_template_resolves_like_a_grand():
 
 
 def test_two_templates_on_one_path_and_form_are_refused(tmp_path):
-    src = Path(__file__).resolve().parents[2] / "content"
     root = tmp_path / "content"
-    shutil.copytree(src, root)
+    copy_real_content(root)
     path = root / "traits.json"
     book = json.loads(path.read_text(encoding="utf-8"))
     twin = dict(book["god"][0], id="god_twin", name="雙生神品", tactic=dict(book["god"][0]["tactic"], name="雙生神品"))

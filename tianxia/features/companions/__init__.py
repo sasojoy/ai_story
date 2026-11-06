@@ -16,7 +16,7 @@ class CompanionsFeature(Feature):
     prefix = ("errand", "talk", "parley")  # 託付（errand:<動詞>:<id>）；整季機器人不按（要寫字、不收託付）；人物對話 talk:*、帶路的路上 parley:road（假人只按告辭，見 bots.py）
     # 整季機器人不收託付，萬一有也不按（勸降要寫字；原本 bot.pick 的排除清單）；對話的片段與機緣的話題（原本 bot.FORESHADOW_OPTIONS，第 60 批）：這一版假人不做伏筆也不做機緣
     bot_always = ("errand:", "talk:clue:", "talk:opp:")
-    content = ("events/stances.json",)  # 人物心意開的事件（總表附錄甲）；content.py 照舊讀（第 62 批起照它載）；檔名照舊
+    content = ("events/stances.json",)  # 人物心意開的事件（總表附錄甲）；content.py 照它到這一包的 content/ 載；檔名照舊
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）。換季全部跟著新角色重來；parted_done（同伴回江湖的減半記號）第 7 批決戰包認領了，第 7 批 PM 認定第 4 條留到這一包再看：
     # 寫它的 settle_partings 還在決戰包，這一批照留
     player_fields = (

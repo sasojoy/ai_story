@@ -5,7 +5,7 @@
 - 導覽：`docs/guide/核心與存檔.md`（行狀 `annals`、寫傳 `biography`）、`docs/guide/商城.md`（「列傳為終點的四件」與重修列傳）。`大勢人物與賽季.md` 沒有列傳這一節。
 - 設計稿：減法季整合設計第九章（列傳為終點）；玩家傳第一、二批沒有獨立的設計稿檔，規則寫在上面兩份導覽那兩節。
 - 開關：`Config.jianfa.zhuan_end` 加開季的章（`zhuan_end.on`）。關著什麼都不做、商城不上架三張票；行狀本身看 `Config.biography` 與核心的 `annal_base.on`（`tianxia/core/annal_base.py`）。
-- 內容：`content/verdicts.json`（人物評曰的固定句，包宣告 `content = ("verdicts.json",)`，驗證在 `ZhuanFeature.check_content`）。
+- 內容：這一包的 `content/verdicts.json`（人物評曰的固定句，包宣告 `content = ("verdicts.json",)`，驗證在 `ZhuanFeature.check_content`）。
 
 ## 補充說明（這一包的東西在哪）
 

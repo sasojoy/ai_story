@@ -30,7 +30,7 @@ from tianxia.core.features import Feature, MenuHook, SeamHook, WorldHook
 class BattleFeature(Feature):
     name = "battle"
     prefix: str | None = "battle"  # 全部拆包第 7 批拿的：battle:join／enlist／escort／act……（選項照舊由 Game 的 _battle_menu 委派給，分派是 MENU_ORDER["quick"] 那一格，第 57 批）
-    content = ("battles.json",)  # 決戰與攻城範本（content.py 照舊讀；攻城的規則在 siege.py，共用規則層）
+    content = ("battles.json",)  # 決戰與攻城範本（content.py 照它到這一包的 content/ 載；攻城的規則在 siege.py，共用規則層）
     # 補過的決戰（跨季照帶：決戰常把季收掉，下一季才回來的人也要補、而且只補一次）、這一季參戰幾場與首功幾次（玩家卡、名帖）。
     # showdowns_restored（補回被洗掉的戰報，一季查一次）也是這一包的，但每一季第一次同步就寫成那一季的編號：契約測試的「換季回到預設」
     # 對它不成立，不放進來（README 照列）

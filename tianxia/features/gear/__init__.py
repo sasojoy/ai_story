@@ -20,7 +20,7 @@ from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Verb
 class GearFeature(Feature):
     name = "gear"
     prefix = "market"  # market:buy、market:feed、market:wield:<id>、market:back；入口 act:market 是核心的前綴
-    content = ("gear.json",)  # content.py 照舊讀（check_gear、check_signature_arms 留在 content.py，不接 check_content）
+    content = ("gear.json",)  # content.py 照它到這一包的 content/ 載（check_gear、check_signature_arms 留在 content.py，不接 check_content）
     player_fields = ("picking_market",)  # 馬市第二層選單開著沒：換季跟著新角色重來。held_gear 核心與共用層也讀、figure_wins 是大勢人物包的，不認領
     carried: tuple[str, ...] = ()
 

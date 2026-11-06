@@ -6,7 +6,7 @@
 
 | 檔 | 是什麼 |
 |---|---|
-| `__init__.py` | 登記（`CraftFeature`）：`enabled` 一直是 True（自創有沒有開看 `Config.arts.create_xinde`，由 `create.allowed` 擋）；`prefix` 是 None——**沒有選項前綴、沒有 `choose`**：煉製頁全是網頁按鈕打 `/api/menxia/<op>`、`/api/do/<op>`。掛鉤只有 `routes`、`content`（`create_forms.json`；`preset_recipes.json` 是序章、命名、引導共用的，不歸這一包）、`on_drop_stale`（`create.prune`：舊三步單子收掉）、`player_fields` |
+| `__init__.py` | 登記（`CraftFeature`）：`enabled` 一直是 True（自創有沒有開看 `Config.arts.create_xinde`，由 `create.allowed` 擋）；`prefix` 是 None——**沒有選項前綴、沒有 `choose`**：煉製頁全是網頁按鈕打 `/api/menxia/<op>`、`/api/do/<op>`。掛鉤只有 `routes`、`content`（`create_forms.json`，測試內容那一份在 `tests/content/`，全部拆包第 63 批；`preset_recipes.json` 是序章、命名、引導共用的，不歸這一包）、`on_drop_stale`（`create.prune`：舊三步單子收掉）、`player_fields` |
 | `create.py` | 自創的規則（原 `tianxia/create.py`，906 行；那個名字留成 `sys.modules` 別名，同一個模組物件）。擺式的幾何（`POSE_KEYS`、`stance_of`、`pose_read`、`preset`、`icon_pose`……）抽到共用規則層 `tianxia/pose.py`（`moves.stance_of_art` 認勢要用），`create` 照名字 re-export，`create.stance_of`、`create.preset` 照舊拿得到 |
 | `actions.py` | 原本 `Game` 上的 16 個方法：開爐 `forge_request`（A）、`forge`（C）、`forge_line`、`forge_preview`、`forge_picks`；自創 `begin`、`pose`、`intent_request`（A）、`intent`（C）、`reread_request`（A）、`reread`（C）、`reroll`、`back`、`name`、`cancel`、`view`。九個動作掛核心的 `@not_while_preparing`；三個 A 段自己問 `ctx._preparing()` |
 | `routes.py` | `/api/forge_line`（原本寫在 `server.py`；殼照 `FEATURES` 掛）。`forge_args` 留在殼（`MENXIA_ACTIONS["forge"]` 與 `api_menxia_do` 也叫它） |

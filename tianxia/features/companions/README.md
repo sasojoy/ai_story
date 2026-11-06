@@ -26,7 +26,7 @@
 
 - `player_fields`：`stance_notes`、`errands`、`letters`、`letter_day`、`letter_seq`、`cheers`（換季全部跟著新角色重來）；第 20 批補認領：對話的 `pending_companion`、`dialogue_history`、`used_dialogue_options`、`last_offered_dialogue`、`turns_since_consolidation`、`talk_memos`、`talk_prev`，與 NPC 智能 2.0 的 `parley_days`、`parley_terms`、`parley_owed`、`parley_backing`、`parley_debts`、`parley_records`、`parley_escort`、`parley_road_leg`（都是這一季的，換季重來）。`carried`（換季照帶，`Game._reset_player_for_new_season`）是 `dialogue_history`、`used_dialogue_options`、`turns_since_consolidation`；`history_start` 是從 `dialogue_history` 的長度算的，不另認領。`talks_today`、`picking_audience` 留給第 21 批（交友求見）。`parted_done`（同伴回江湖的減半記號）第 7 批決戰包認領了，寫它的 `settle_partings` 還在決戰包，照留。
 - 季上的：`WorldState.stance_counts`、`stance_active`、`stance_week`（世界那一半讀寫，`stance_world`）；全服名下：`CompanionProgress`（共用規則層 `roster`）。
-- 內容：`content/events/stances.json`（`content` 宣告；`content.py` 照舊讀）；人物表上的 `stances`、`errands` 在 `content/figures.json`、驗證在 `content.py`（核心，這一批不動）。
+- 內容：這一包的 `content/events/stances.json`（`content` 宣告；`content.py` 照它到這一包的 `content/` 載）；人物表上的 `stances`、`errands` 在 `content/figures.json`、驗證在 `content.py`（核心，這一批不動）。
 - 動身被擋（`atlas.travel_block`）：第 56 批選單收接縫起這一包登記 `MENU_ORDER["block"]` 自己那一格，讀 `pending_companion` 的只剩包裡；字與先後一字不動（`atlas` 不再讀）。
 
 ## 委派與留在原位的接縫

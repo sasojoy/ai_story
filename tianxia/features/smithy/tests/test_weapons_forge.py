@@ -313,6 +313,7 @@ def test_kind_problem_wants_this_kinds_word_and_no_other_kinds(content):
     assert weapons.kind_problem("劍", "厚背劍") == weapons.SHOP_CLASH  # 鐵匠鋪架上的現成兵器名
 
 
+@pytest.mark.whole_content  # 驗內容（validate）要整份（全部拆包第 63 批）
 def test_validate_checks_the_weapon_fallback_names(content):
     from tianxia.content import ContentError, validate
     content.craft_names.weapon = ["刀"]  # 「某刀劍」看起來是兩種兵器：載入當下就要報錯
@@ -871,6 +872,7 @@ def test_table_names_follow_main_and_aux_and_never_repeat(content):
     assert not hasattr(weapons, "fallback_name")
 
 
+@pytest.mark.whole_content  # 驗內容（validate）要整份（全部拆包第 63 批）
 def test_validate_wants_enough_distinct_table_characters(content):
     from tianxia.content import ContentError, validate
     content.craft_names.weapon = list("霜霜霆雷")  # 測試內容 4 種素材：字數夠，可是重複

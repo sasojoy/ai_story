@@ -17,7 +17,7 @@ from tianxia.core.features import EffectHook, Feature, MenuHook, Outcome, SeamHo
 class StoryFeature(Feature):
     name = "story"
     prefix = "story"  # story:<線>、story:<線>:a<答案序號>、story:<線>:later
-    # content/events/ 底下四個長篇奇事的段落事件檔（content.py 照舊讀；content/storylines.json 混著章回主線的線，不宣告：章回批再看）
+    # 這一包 content/events/ 底下四個長篇奇事的段落事件檔（content.py 照它到這一包的 content/ 載；根上的 content/storylines.json 混著章回主線的線，不宣告：章回批再看）
     content = ("events/story_fuzhi.json", "events/story_maier.json", "events/story_wangyue.json", "events/story_wolong.json")
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：這一季開過的線與進度、答題停在哪一條、等著跳出來的卡、紀念物與跨季旗標。
     # 紀念物與跨季旗標換季跟著角色（Game._reset_player_for_new_season），其餘換季重來

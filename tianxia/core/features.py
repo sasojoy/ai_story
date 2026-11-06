@@ -23,7 +23,7 @@
 | bot_idle(ctx, option) | core_bots（全部拆包第 60 批）：bot.pick 排除裡有條件、或要比相等的那幾顆（此刻按了也白按）；前綴放不下才寫這一格。不問 enabled（舊濾網不看開關，關著的包選單上本來就沒有它們） |
 | admin_tools(shell)、routes(shell) | server：/api/do/{op} 的管理者工具、掛路由（shell 是 server 模組） |
 | threads(shell) | server.main（殼開、測試停：只有 main 叫 start_threads，測試不叫；不回東西。全部拆包第 52 批，開給戰記與第 53 批的看守） |
-| check_content(content, need)、web、content | content.validate（關著的包照驗）；index.html 的檔；content.py 讀的檔。check_content **手冊 3.3 表外**（見下） |
+| check_content(content, need)、web、content | content.validate（關著的包照驗）；index.html 的檔；content.py 讀的檔（第 62 批起在包裡的 content/，pack_content；第 63 批起測試內容在包裡的 tests/content/，pack_test_content）。check_content **手冊 3.3 表外**（見下） |
 
 比手冊 3.3「就這幾個，不多開」那張表多開了兩個（第 1 階開的，PM 10/31 認可，理由照下面；手冊 3.3 由 PM 補；之後再要加先過 PM）：
 - menu：現行的 _everyday_options 裡一包有兩個位置——接管整個選單（坐在席上、店開著……十幾樣都是）與接在「此地還能做」裡（options），
@@ -78,6 +78,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 from .option import Option
@@ -156,7 +157,7 @@ class FeatureHooks(Protocol):
     # 分派照清單、照 tuple 的順序找第一個對上的（owner_of）；兩包不能宣告同一個前綴（tests/core/test_contract_features.py）
     prefix: str | tuple[str, ...] | None
     web: tuple[str, ...]  # web/ 底下這一包的檔（index.html 照舊順序載入；第 3 階才由伺服器照它生成）
-    content: tuple[str, ...]  # content/ 底下這一包的檔（第 1、2 階 content.py 照舊全部讀）
+    content: tuple[str, ...]  # 這一包的內容檔，相對於 tianxia/features/<包>/content/（第 62 批起 content.py 照 pack_content 去那裡讀；寫法同它以前在 content/ 底下，例 events/x.json；第 63 批起同一個 rel 的測試內容在 tests/content/<rel>，有才算）
     bot_always: tuple[str, ...]  # 永遠按得下去的選項前綴：整季機器人（bot.pick）不按，不然「沒得按就推進時間」的訊號會失效
     player_fields: tuple[str, ...]  # 這一包認領的 PlayerState 欄位（3.5；README 照列）
     carried: tuple[str, ...]  # 上面那些裡換季照帶走的；其餘換季跟著新角色重來（契約測試照它驗）
@@ -348,6 +349,37 @@ def registered() -> list[Feature]:
     from .registry import FEATURES  # noqa: PLC0415
 
     return FEATURES
+
+
+# core_content（全部拆包第 62 批：內容照包分）
+def pack_content() -> dict[str, Path]:
+    """各包宣告的內容檔：rel（宣告的字串，同它以前在 content/ 底下的相對路徑）→ tianxia/features/<包>/content/<rel>，照 registry.DECLARED 的順序
+    （不讀 FEATURES，理由在 DECLARED 那裡）。同一個 rel 兩包都宣告就報錯（用 rel 認、不用檔名認：sects.json 與 events/sects.json 是兩個檔）。"""
+    from ..content import ContentError  # noqa: PLC0415  只有 content.py 叫這一支（content.py 延後 import 這裡）
+    from .registry import DECLARED  # noqa: PLC0415
+
+    home = Path(__file__).resolve().parent.parent / "features"
+    files: dict[str, Path] = {}
+    for f in DECLARED:
+        for rel in f.content:
+            if rel in files:
+                raise ContentError(f"內容檔 {rel} 有兩包宣告（{f.name} 與 {files[rel]}）")
+            files[rel] = home / f.name / "content" / rel
+    return files
+
+
+def pack_test_content(only: str | None = None) -> dict[str, Path]:
+    """各包的測試內容（全部拆包第 63 批）：rel → tianxia/features/<包>/tests/content/<rel>，判準同真實內容：Feature.content 宣告了這個 rel 才歸包，
+    照 registry.DECLARED 的順序（理由同 pack_content）。**檔在才收**：測試內容靠「沒有這個檔就是空的」（沒有 mall.json 就沒有商品），包宣告了不等於測試內容也要有。
+    only 給了只留那一包的（load_content(only=)），不是登記的包就報錯。"""
+    from ..content import ContentError  # noqa: PLC0415  同 pack_content
+    from .registry import DECLARED  # noqa: PLC0415  同 pack_content
+
+    if only is not None and only not in {f.name for f in DECLARED}:
+        raise ContentError(f"沒有 {only} 這一包，不能只載它的內容")
+    home = Path(__file__).resolve().parent.parent / "features"
+    candidates = ((rel, home / f.name / "tests" / "content" / rel) for f in DECLARED if only in (None, f.name) for rel in f.content)
+    return {rel: path for rel, path in candidates if path.is_file()}
 
 
 def active(ctx: Game) -> list[Feature]:

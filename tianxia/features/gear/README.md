@@ -2,7 +2,7 @@
 
 修練頁的換上、拆解（含批量）、餵馬，馬市的買、餵、換上，寄放的重賞與贈禮補送，名將贈禮，名將本命兵器，見聞榜單的神器譜。全部拆包第 42 批搬進來（引擎那一半；網頁那一半 `web/` 第 3 階才切，`app.js` 的 `gearEffect`、`gearCell`、`horseImg`、`marketHtml`、`horseCard` 歸第 65 批）。
 
-**包名 `gear` 跟兩個同字的東西不是同一件事**：`tests/gear/` 是舊的測試資料夾（兵器、防具、坐騎、寶物、鐵匠鋪一起放，下面「混合檔」），`Content.gear` 是 `content/gear.json` 讀進來的 `GearBook`（寶物、名駒、贈禮、本命兵器的內容表）。這裡的 `gear` 是功能包。
+**包名 `gear` 跟兩個同字的東西不是同一件事**：`tests/gear/` 是舊的測試資料夾（兵器、防具、坐騎、寶物、鐵匠鋪一起放，下面「混合檔」），`Content.gear` 是 這一包的 `content/gear.json` 讀進來的 `GearBook`（寶物、名駒、贈禮、本命兵器的內容表）。這裡的 `gear` 是功能包。
 
 - 導覽：`docs/guide/裝備與店面.md`（兵器、防具、坐騎、寶物、馬市、神器、本命兵器）。
 - 設計稿：裝備四欄設計（5.5 馬市、2.3 換上、5.4 餵馬、6.4 名將贈禮、6.5 寄放、4.8 拆解）；兵器設計（`2026-10-09-兵器-design.md` 4.7.1 拆解、4.10 本命兵器）；打造隱藏配方設計 5.5 神器譜；鐵匠鋪與合成流程 3.4 批量拆解。
@@ -37,7 +37,7 @@
 - `CORE_DELEGATE_CALLERS`：`event_check.answer_event`、`answer_branch` 各叫 `_general_gifts`、`_signature_arms`、`_gift_entry`（事件檢定是核心本體，贈禮在效果套完之後）。
 - `GAME_DIRECT`：`_drop_stale_references` 讀 `signature_arms.refresh_names`（經舊名別名；會改 `item.name`、要讀 `owned`）。接不了 `on_drop_stale` 的原因是開關、不是位置：`core/features.py` 的 `on_drop_stale` 只問開著的包，原位的 `refresh_names` 不看開關，四欄都關著時 `GearFeature.enabled` 是 False，接進掛鉤就不跑了（第 42 批 PM 認定第 1 條）；歸第 55 批（補算與換季收接縫），照第 40 批 `smith_base` 的前例把 `refresh_names` 放進共用層或核心的 `*_base` 再收。
 
-## 讀 `content/gear.json` 的人
+## 讀 這一包的 `content/gear.json` 的人
 
 `content.py` 的 `check_gear`、`check_signature_arms` 留在 `content.py`、不接 `check_content`（第 34 批認定第 2 條：會動第一個錯誤的先後）。誰在讀 `Content.gear`：共用層 `treasures`、`tactics`；核心 `team`、`naming`、`content`；`SHARED_LATER` 的 `leaderboard`（`gear_card` 讀 `signature_arms`，函式裡經舊名別名）；`mounts` 不讀。
 

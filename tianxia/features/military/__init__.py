@@ -31,7 +31,7 @@ class MilitaryFeature(Feature):
         "opp_done", "opp_counts", "opp_items", "opp_fronts", "opp_clues", "opp_tried", "opp_pieces", "opp_settled",
     )
     carried: tuple[str, ...] = ()
-    # 第 2 階晉升奇遇與晉升表（第 33 批）、機緣、伏筆與準備事件（第 34 批；總表附錄甲）；content.py 照舊讀（第 62 批起照它載）；檔名照舊
+    # 第 2 階晉升奇遇與晉升表（第 33 批）、機緣、伏筆與準備事件（第 34 批；總表附錄甲）；content.py 照它到這一包的 content/ 載；檔名照舊
     content = ("promotions.json", "events/promotion.json", "opportunities.json", "foreshadows.json", "events/foreshadow_fragments.json", "events/foreshadow_prep.json")
 
     def enabled(self, ctx) -> bool:

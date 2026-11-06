@@ -60,27 +60,49 @@ def _dump(content: Content) -> bytes:
     return pickle.dumps(content, pickle.HIGHEST_PROTOCOL)
 
 
-def _content_key(root, profile) -> tuple:
-    """快取的鍵：哪個資料夾、哪份設定覆寫檔，再加上 load_content 會併進管理者名單的兩樣（content._with_local_admins）：
+def _content_key(root, profile, only=None) -> tuple:
+    """快取的鍵：哪個資料夾、哪份設定覆寫檔、只載哪一包，再加上 load_content 會併進管理者名單的兩樣（content._with_local_admins）：
     這台機器的 `.local/admins.txt`（路徑與內容）與環境變數 `TIANXIA_ADMINS`。動了這兩樣的測試拿到的是另一份母本。
     ADMINS_FILE 在呼叫的當下讀，所以 monkeypatch 換掉它也算數。"""
     admins_file = Path(content_mod.ADMINS_FILE)
     local = admins_file.read_text(encoding="utf-8") if admins_file.exists() else None
-    return str(Path(root).resolve()), profile, str(admins_file), local, os.environ.get("TIANXIA_ADMINS")
+    return str(Path(root).resolve()), profile, str(admins_file), local, os.environ.get("TIANXIA_ADMINS"), only
 
 
-def cached_content(root, profile=None) -> Content:
-    """root 的內容（profile 是設定覆寫檔）：這個工作階段第一次要的時候完整載入、驗證一次當母本，每次都給一份新的複本
+def cached_content(root, profile=None, only=None) -> Content:
+    """root 的內容（profile 是設定覆寫檔；only 是只載核心加一包，全部拆包第 63 批，只有測試內容可以、這一份不驗）：這個工作階段第一次要的時候完整載入、驗證一次當母本，每次都給一份新的複本
     （第一次也是複本，母本誰都拿不到）。兩件事要知道：
     - 母本是在第一個要它的測試當下建的，那個測試當時的環境（monkeypatch 過的東西）會跟著進母本、再進之後每一份複本。
       所以 patch 了載入或驗證路徑（load_content、validate 會碰到的東西）的測試不要用這裡，自己直接 load_content。
     - 鍵不看資料夾裡的檔：root 在一個工作階段裡不能改（正式內容、測試內容、序章母本資料夾都不改）。要改檔再載入的測試
       用自己的一份資料夾（prologue_root、copy_fixture）直接 load_content。"""
-    key = _content_key(root, profile)
+    key = _content_key(root, profile, only)
     if key not in _MASTERS:
-        master = load_content(root, profile)
+        master = load_content(root, profile, only=only)
         _MASTERS[key] = (master, _dump(master))
     return pickle.loads(_MASTERS[key][1])
+
+
+def copy_real_content(dest: Path) -> None:
+    """真實內容抄成一份攤平的（content/ 整份加各包宣告的檔，都在 dest/<rel>，全部拆包第 62 批之前的樣子）：抄一份、改一個檔、看 load_content 擋不擋的測試用。
+    dest 不是真實的根，load_content 照舊攤平讀（content._locate）。"""
+    from tianxia.core.features import pack_content
+
+    shutil.copytree(REAL_CONTENT, dest)
+    for rel, path in pack_content().items():
+        (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, dest / rel)
+
+
+def copy_test_content(dest: Path) -> None:
+    """測試內容抄成一份攤平的（tests/fixtures/content 整份加各包的測試內容，都在 dest/<rel>，全部拆包第 63 批之前的樣子）：抄一份、改一個檔、看 load_content 擋不擋的測試用。
+    dest 不是測試內容的根，load_content 照舊攤平讀（content._locate）。"""
+    from tianxia.core.features import pack_test_content
+
+    shutil.copytree(FIXTURE, dest)
+    for rel, path in pack_test_content().items():
+        (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, dest / rel)
 
 
 def real_content(profile=None) -> Content:
@@ -285,7 +307,8 @@ def isolated_database(tmp_path, monkeypatch):
 
 @pytest.fixture
 def content():
-    """測試內容（tests/fixtures/content）：這個測試自己的一份（cached_content 的複本），怎麼改都不會漏到別的測試。"""
+    """測試內容（tests/fixtures/content 加各包的 tests/content）：這個測試自己的一份（cached_content 的複本），怎麼改都不會漏到別的測試。
+    包的測試用 tianxia/features/conftest.py 那一份（只載核心加那一包，全部拆包第 63 批）。"""
     return cached_content(FIXTURE)
 
 
@@ -322,7 +345,7 @@ def _prologue_master(tmp_path_factory):
     測試不直接用它：要改內容再載入的測試（驗證）用 prologue_root（自己的一份複本），只要載入好的內容用 prologue_content。
     prologue_root 每次複製前後、以及工作階段結束時，都檢查這個資料夾裡每個檔都沒被改過。"""
     root = tmp_path_factory.mktemp("prologue") / "prologue_content"
-    shutil.copytree(FIXTURE, root)
+    copy_test_content(root)
     for name in ("tutorial.json", "preset_recipes.json", "insight_scenes.json"):
         shutil.copy(PROLOGUE / name, root / name)
     shutil.copy(PROLOGUE / "events.json", root / "events" / "prologue.json")
@@ -384,7 +407,7 @@ def _hints_master(tmp_path_factory):
     （五條）。測試內容的劇本沒有陣營、也沒有入伍段：補一個 guan（官軍，join_at 空），引薦人的名字就用陣營名「官軍」。
     跟序章母本一樣：測試不直接用它（hints_root 給自己的一份複本、hints_content 給載入好的複本），每次複製前後都檢查沒被改過。"""
     root = tmp_path_factory.mktemp("hints") / "hints_content"
-    shutil.copytree(FIXTURE, root)
+    copy_test_content(root)
     shutil.copy(HINTS / "hints.json", root / "hints.json")
     scenario = json.loads((root / "scenario.json").read_text(encoding="utf-8"))
     scenario["factions"] = [{"id": "guan", "name": "官軍", "join_at": []}]

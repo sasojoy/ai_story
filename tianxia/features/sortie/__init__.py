@@ -26,6 +26,7 @@ class SortieFeature(Feature):
     # 沒有 sortie: 那一段（選單上本來就沒有它們），bot_pick 照預設回 None＝不按，跟原本落到 score 最後的 return None 一樣。
     # act:train（出陣那一格）、act:duty（守勢）照舊是核心的前綴
     prefix: str | None = "sortie"
+    content = ("events/train_aftermath.json",)  # 遊歷打完接的戰後事件（全部拆包第 63 批）；content.py 照它到這一包的 content/ 載；檔名照舊
     # 今天出陣幾次（換日同回體丹）、這一季出陣攻打打贏掉過幾件寶物與良駒（treasures.sortie_rare 的一季上限）；
     # 約戰（第 2 批）：今天應戰幾次（換日同回體丹）、下一次出陣與應戰的冷卻（現實秒）、巡哨那一點貢獻記在哪一天幾次（都在 state.QUIET_DEFAULTS）
     player_fields = ("sortie_day", "sorties_today", "sortie_treasures", "sortie_horses",

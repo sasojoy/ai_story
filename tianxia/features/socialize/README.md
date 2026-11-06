@@ -25,8 +25,8 @@
 
 - `player_fields`：`talks_today`（`{人物: [第幾個遊戲日, 當天已聊幾輪]}`，遊戲日跟著季長縮）、`picking_audience`（求見名單開著）；`carried = ()`，換季全部跟著新角色重來。
   （第 20 批審查把這兩個留給這一批。）
-- 內容：`content/events/social_nanyang_yingchuan.json`、`social_north.json`、`social_runan.json`（交友事件；`content` 宣告，`content.py` 照舊讀）。
-  `recruit.json` 分區調查列在這一包，但招募（`_recruit*`）附錄甲裁給人物情誼，這一批不宣告，等 PM 定。
+- 內容：這一包的 `content/events/recruit.json`、`social_nanyang_yingchuan.json`、`social_north.json`、`social_runan.json`（交友事件；`content` 宣告，`content.py` 照它到這一包的 `content/` 載）。`figure_intros.json`（人物簡介）留在 `content/`：只有殼的 `server.py` 讀，`Content` 不讀、這一包不宣告。
+  `recruit.json` 第 63 批歸這一包：7 則的 `actions` 都是 `socialize`、沒有 `recruit` 效果（跟附錄甲裁給人物情誼的招募 `_recruit*` 無關）。
 - 共用的字：`AUDIENCE_HALL_FIGURES`、`SNUB_NOTE`、`SOCIAL_NO_ONE` 在核心 `core/services.py`（核心的選單、`sync`、挑戰本人也讀；`engine` 照舊 import 回來）；`SOCIAL_TALK`、
   `SOCIAL_LIST_INTRO`、`AUDIENCE_MEET` 在 `view.py`；`SOCIAL_LIST_TITLE` 留在 `engine.py`（場景文字讀）。
 - 動身被擋（`atlas.travel_block`）：第 56 批選單收接縫起這一包登記 `MENU_ORDER["block"]` 自己那一格，讀 `picking_audience` 的只剩包裡；字與先後一字不動（`atlas` 不再讀）。
@@ -58,7 +58,7 @@
 ## 測試
 
 - 這一包的（`tianxia/features/socialize/tests/`，14 條，全部不是 slow，`-n 4` 約 7 秒）：`test_socialize_variety.py`（4：城鎮的交友不能每次都抽到茶館說書，補寫的事件在
-  `content/events/social_*.json`；第 21 批整檔從 `tests/core/` 搬進來，只改了 `CONTENT_DIR` 的路徑層數）、`test_socialize_smoke.py`（1，`smoke`：week7 的官軍在長社按交友打開名單、
+  這一包的 `content/events/social_*.json`；第 21 批整檔從 `tests/core/` 搬進來，只改了 `CONTENT_DIR` 的路徑層數）、`test_socialize_smoke.py`（1，`smoke`：week7 的官軍在長社按交友打開名單、
   點皇甫嵩，沒有模型他無心多談、名單收起）、`test_socialize_bots.py`（`call:back` 0.0、`call:<人物>` 不按、policy 問這一包）、`socialize_stage.py`（契約測試擺局面：平常）。
 - **`test_for` 挑不到的、另外要跑的**（混著別的功能，這一輪不搬、不拆）：`tests/core/test_precise_actions.py`（`_social_plan`、`_deliver_fortune`）、`tests/figures/test_day_scale.py`
   （`_talks_left`、`_talked_out_note`、`_audience_intro`）、`tests/figures/test_promotions_high.py`（`_brush_off`）、`tests/arts/test_hints.py`、`tests/arts/test_renown_explain.py`、

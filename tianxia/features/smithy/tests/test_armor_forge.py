@@ -99,6 +99,7 @@ def test_armor_table_names_follow_main_and_aux_and_never_repeat(content):
             assert naming.name_problem(name, content) is None and armor.word_problem(name) is None
 
 
+@pytest.mark.whole_content  # 驗內容（validate）要整份（全部拆包第 63 批）
 def test_validate_checks_the_armor_table(content):
     from tianxia.content import ContentError, validate
     content.craft_names.armor = ["刀", "霜", "雲", "紋"]  # 「某刀甲」看起來像兵器：載入當下就要報錯

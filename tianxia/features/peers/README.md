@@ -27,7 +27,7 @@
 - `routes.py`：`/api/peer`、`/api/peer/act`、`/api/mingtie`、`/api/mingtie/{op}`。鎖外三段式的 `screen_peer`、`prepare_peer`（論武的首創取名）與 `screen_text`、`boards_now` 留在殼，經 `shell.` 叫。
 - `bots.py`：假人收到打招呼、結伴邀請、名帖的回法（`answer_call`、`_roll` 與那幾個比例）、做名帖（`_make_card`）、遞名帖（`_hand_card`），以及第 38 批搬來的答切磋（`_answer_invite`）、答論武（`answer_discuss`，首創要取名時回一份資料、由 `bot_policy._answer_discuss` 包成 `DiscussJob`；`DiscussJob` 照鐵匠鋪 `ForgeJob` 的前例留在 `bot_policy`）、截殺（`_raid`）與 `INVITE_YES`、`RAID_CHANCE`、`RAID_ODDS`（`bot_policy` 的 `CHALLENGE_ODDS` 還有 `score` 在用，所以包裡寫一份同值）；`bot_policy` 照舊 import 這幾個名字。叫它們的順序（`take_turn`）一個字不動。
 - 掛鉤：`prefix = "invite"`；`choose` 接 `invite:*`（標題在動作之前拿）；`bot_always = ("invite:",)`；`on_season_start` 把這一季值得留名的頭銜寫進 `title_book`（原本在 `Game._reset_player_for_new_season`）；`routes`；
-  `enabled` 一直是 `True`（名帖開關 `Config.mingtie.enabled` 只管名帖那幾顆，不管整包）。`content = ("mingtie.json",)`（名帖現成的畫與假人的自題句庫，`content.py` 照舊讀）。
+  `enabled` 一直是 `True`（名帖開關 `Config.mingtie.enabled` 只管名帖那幾顆，不管整包）。`content = ("mingtie.json",)`（名帖現成的畫與假人的自題句庫，`content.py` 照它到這一包的 `content/` 載）。
 
 ## 認領的欄位（手冊 3.5：留在原地）
 

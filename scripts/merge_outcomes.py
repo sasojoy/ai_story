@@ -40,12 +40,12 @@ def _write(path: Path, data, fmt) -> None:
     path.write_bytes((text.replace("\n", "\r\n") if crlf else text).encode("utf-8"))
 
 
-def merge(draft_path: Path, events_dir: Path) -> tuple[list[str], list[dict]]:
+def merge(draft_path: Path, event_files: list[Path]) -> tuple[list[str], list[dict]]:
     """併進去的事件 id、沒併的草稿（needs_free_text）。"""
     draft = json.loads(draft_path.read_bytes().decode("utf-8"))
     files = {}
     where = {}
-    for path in sorted(events_dir.glob("*.json")):
+    for path in event_files:
         data, fmt = _read(path)
         files[path] = (data, fmt)
         for event in data:
@@ -74,13 +74,13 @@ def merge(draft_path: Path, events_dir: Path) -> tuple[list[str], list[dict]]:
 def main(argv: list[str]) -> int:
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     draft_path = Path(argv[0]) if argv else ROOT / "content" / "events_outcomes.json"
-    merged, deferred = merge(draft_path, ROOT / "content" / "events")
+    from tianxia.content import load_content, real_event_files  # noqa: PLC0415  載入要讀剛寫好的檔；各包宣告的事件檔不在 content/events（全部拆包第 62 批）
+
+    merged, deferred = merge(draft_path, real_event_files())
     print(f"併進 {len(merged)} 則：{'、'.join(merged)}")
     for entry in deferred:
         print(f"沒併（事件沒有 free_text，要跟開關一起補）：{entry['id']}")
         print(json.dumps(entry, ensure_ascii=False, indent=1))
-    from tianxia.content import load_content  # noqa: PLC0415  寫完才載：載入要讀剛寫好的檔
-
     for profile in [None, *sorted(p.stem for p in (ROOT / "content" / "profiles").glob("*.json"))]:
         load_content(ROOT / "content", profile)
         print(f"載入 {profile or '預設'}：過")

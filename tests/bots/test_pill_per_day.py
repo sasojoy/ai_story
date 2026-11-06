@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import random
-from pathlib import Path
 
 import pytest
 from conftest import next_season, real_content
@@ -15,7 +14,6 @@ from tianxia import bot
 from tianxia.engine import HOUR, PILL_DAY_FULL, Game
 from tianxia.sqlite_world import open_world
 
-ROOT = Path(__file__).resolve().parents[2]
 DAY = 24 * HOUR
 # 1970-01-02 00:00（台灣時間）＝ 1970-01-01 16:00 UTC：換日那一刻
 MIDNIGHT_TW = DAY - 8 * HOUR
@@ -117,9 +115,10 @@ def test_the_real_content_caps_at_two_a_day_and_five_while_new():
 
 def test_the_tutorial_names_the_real_cap():
     """序章師父那句話寫死了一天幾顆（內容讀不到 Config）：改上限時要一起改，這裡鎖住兩邊對得上。"""
+    from tianxia.content import content_path
     from tianxia.engine import _cn_count
     content = real_content()
-    text = json.dumps(json.load(open(ROOT / "content" / "tutorial.json", encoding="utf-8")), ensure_ascii=False)
+    text = json.dumps(json.load(open(content_path("tutorial.json"), encoding="utf-8")), ensure_ascii=False)
     cfg = content.config
     assert f"一天能服{_cn_count(cfg.newbie_pills_per_day)}顆，之後一天{_cn_count(cfg.stamina_pills_per_day)}顆" in text
 

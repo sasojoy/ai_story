@@ -306,8 +306,10 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
             for value in node:
                 scan(value, where)
 
-    for path in sorted((ROOT / "content").rglob("*.json")):
-        scan(json.loads(path.read_text(encoding="utf-8")), path.relative_to(ROOT / "content").as_posix())
+    from tianxia.content import real_files
+
+    for rel, path in real_files().items():
+        scan(json.loads(path.read_text(encoding="utf-8")), rel)
     # 頭目的名望寫在 fame 欄位，不是 stats；奇事（一條線）結局的效果跟事件同一套，寫在 storylines.json
     assert givers and all(where.startswith("events/") or where == "storylines.json" for where in givers), sorted(set(givers))
 

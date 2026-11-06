@@ -13,8 +13,8 @@ from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHoo
 class SocializeFeature(Feature):
     name = "socialize"
     prefix = "call"  # 指名求見：call:<人物>、call:back（假人只按返回，見 bots.py）
-    content = (  # 交友事件（總表附錄甲）；content.py 照舊讀（第 62 批起照它載）；檔名照舊。recruit.json 招募的事件檔歸誰交 PM 定（計畫「交 PM 定的」第 1 條）
-        "events/social_nanyang_yingchuan.json", "events/social_north.json", "events/social_runan.json",
+    content = (  # 交友事件（總表附錄甲）；檔名照舊。recruit.json 全部是交友的事件（actions 都是 socialize，全部拆包第 63 批歸這一包）
+        "events/recruit.json", "events/social_nanyang_yingchuan.json", "events/social_north.json", "events/social_runan.json",
     )
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：每位人物這個遊戲日談了幾輪、求見名單開著。換季全部跟著新角色重來
     player_fields = ("talks_today", "picking_audience")

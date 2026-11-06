@@ -10,6 +10,8 @@ from tianxia.engine import Game
 from tianxia.martial_arts import Insight
 from tianxia.models import InsightScene, SenseMethod
 
+pytestmark = pytest.mark.whole_content  # 這一檔的測試有走 validate 的，要整份測試內容（全部拆包第 63 批）
+
 SCENE = InsightScene(
     id="lake_wind", title="湖風", text="風吹過湖面，停過腳的{痕跡}。", tags=["湖畔"], hints=["柔"],
     methods=[SenseMethod(attribute=a, text=t) for a, t in (("柔", "看水"), ("剛", "打水"), ("快", "追風"), ("慢", "靜坐"))],

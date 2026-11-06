@@ -6,7 +6,7 @@
 
 | 檔 | 是什麼 |
 |---|---|
-| `__init__.py` | 登記（`TravelFeature`）：`enabled`＝一律開著（`choose`、`bot_pick` 原位本來就不看開關）、`prefix`＝`move`、`road`（`choose` 回 `Outcome`：標題先算，前往寫「前往 <地點>」、折返跟前往同一個標題、路上小事寫它自己的名字）、`bot_always`＝`road:`、`verbs()`＝`halt`（`run`＝`go_actions.halt`、`title`＝「喊停」）與 `part`（`run`＝`party.part_ways`、`title`＝「分道揚鑣」）、`routes`、`content`＝`road_sights.json` |
+| `__init__.py` | 登記（`TravelFeature`）：`enabled`＝一律開著（`choose`、`bot_pick` 原位本來就不看開關）、`prefix`＝`move`、`road`（`choose` 回 `Outcome`：標題先算，前往寫「前往 <地點>」、折返跟前往同一個標題、路上小事寫它自己的名字）、`bot_always`＝`road:`、`verbs()`＝`halt`（`run`＝`go_actions.halt`、`title`＝「喊停」）與 `part`（`run`＝`party.part_ways`、`title`＝「分道揚鑣」）、`routes`、`content`＝`road_sights.json`（測試內容那一份在 `tests/content/`，全部拆包第 63 批） |
 | `menu.py` | 原本 `Game._move_option`、`_back_way`、`_back_option`、`_road_task_options`、`set_move_mode`；`Game` 留 4 個一行委派（`_back_way` 只有包自己叫，沒有委派） |
 | `road_actions.py` | 原本 `Game._move`、`_road`、`_road_ends`、`_road_rewards_used`、`_road_reward_due`、`_count_road_reward`、`_road_reopen`、`_road_think`、`_road_ask`、`_road_gather`、`_road_sight`；第 48 批 `Game` 上 `_road_reward_due`、`_count_road_reward`、`_road_sight` 三個委派拿掉（`party.share_road`、`departure.arrivals` 直接叫）；`think`／`ask`／`gather` 把收穫跟訊息一起回傳（`(訊息, 收穫)`），`road` 再交給 `party.share_road`，`Game._road_gain` 不再寄放 |
 | `departure.py` | 原本 `Game._depart`、`_arrivals`、`_arrive`、`_journey_line`；`Game` 留 4 個一行委派（`_depart` 給人物帶路、腳本與測試，包內的 `go_actions`／`road_actions` 照舊經 `ctx._depart` 叫；`_arrivals` 給 `sync`、`advance`；`_arrive` 給核心契約測試鎖事件接法；`_journey_line` 給 `status_data`）。`_real_minutes` 留核心 |
