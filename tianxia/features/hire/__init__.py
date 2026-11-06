@@ -35,6 +35,16 @@ class HireFeature(Feature):
 
         return Outcome(title=actions.TITLE, run=lambda: actions.act(ctx, arg))
 
+    def status(self, ctx):
+        """坐在酒肆裡時，此地能招的那幾位（介面重整 2026-11-05：網頁把招募畫在酒肆的聽消息那一頁；坐進酒肆後選單只剩酒肆那幾顆，
+        按下去時網頁先出酒肆再按 hire:<id>）。沒坐在酒肆裡不給這個鍵。"""
+        if not ctx.state.player.picking_tavern:
+            return {}
+        from . import actions  # noqa: PLC0415
+
+        hires = [{"id": o.id, "label": o.label, "enabled": o.enabled} for o in actions.options(ctx)]
+        return {"hires": hires} if hires else {}
+
     def bot_pick(self, ctx, option):
         return BOT_SCORE if option.enabled else None
 

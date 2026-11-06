@@ -60,3 +60,13 @@ def test_quiet_in_the_old_season():
     feature = next(f for f in FEATURES if f.name == "hire")
     assert feature.enabled(g) is False
     assert not any(o.id.startswith("hire:") for o in g.options())
+
+
+def test_sitting_in_the_tavern_lists_the_hires_for_the_page():
+    """介面重整：坐在酒肆裡時，畫面拿到此地能招的那幾位（按下去先出酒肆再招）；沒坐在酒肆裡不給。"""
+    g = hire_game()
+    assert "hires" not in g.feature_status()
+    g.state.player.picking_tavern = True
+    hires = g.feature_status()["hires"]
+    assert len(hires) == len(g.content.config.hire.types)
+    assert all(h["id"].startswith("hire:") and h["enabled"] for h in hires)
