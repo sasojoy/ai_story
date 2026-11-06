@@ -5989,8 +5989,8 @@ def test_the_page_loads_the_three_scripts_in_order_and_app_js_last():
     三個檔都是一般的 script、頂層的名字同在一個全域裡，所以不能重名，也不能再包 IIFE。"""
     import re as _re
 
-    html = (server.WEB / "index.html").read_text(encoding="utf-8")
-    assert _re.findall(r'<script src="/static/([^"]+)"></script>', html) == list(webharness.APP_FILES)
+    html = server.PAGE  # 第 64 批起 script 標籤由伺服器生成（features_core.with_scripts），web/index.html 裡只有一行標記
+    assert _re.findall(r'<script src="/static/([^"?]+)\?v=[0-9a-f]{10}"></script>', html) == list(webharness.APP_FILES)
     names: dict[str, str] = {}
     for name in webharness.APP_FILES:
         js = (server.WEB / name).read_text(encoding="utf-8").replace("\r\n", "\n")

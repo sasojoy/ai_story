@@ -2596,7 +2596,7 @@ def versioned_page(html: str, version_of: Callable[[str], str]) -> str:
 
 
 # 啟動時算一次；index.html 指到 web/ 裡沒有的檔，這裡就丟例外
-PAGE = versioned_page((WEB / "index.html").read_bytes().decode("utf-8"), asset_version)
+PAGE = versioned_page(features_core.with_scripts((WEB / "index.html").read_bytes().decode("utf-8")), asset_version)
 NO_CACHE = {"Cache-Control": "no-cache"}  # 每次都向伺服器確認（有 ETag，沒變就是 304）；不用 immutable：開發時改了檔沒重開，會被瀏覽器釘死
 
 

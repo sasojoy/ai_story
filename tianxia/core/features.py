@@ -441,6 +441,27 @@ def web_files() -> list[str]:
     return [name for f in registered() for name in f.web]
 
 
+# ── shell_web（全部拆包第 64 批；計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第64批.md 第三節）：/ 的 script 由伺服器生成 ──
+# 頁面上載入 js 的先後（性質同 BUS_ORDER：先後就是行為）。不是 FEATURES 的順序：這幾支一直是這個先後，頂層敘述照這個順序跑；
+# shell.js 最先（包一載入就叫 registerPage），app.js 最後（它最後一行才啟動，排在包檔前面的話 enter 可能在包檔到之前跑）。
+WEB_ORDER = ("shell.js", "main.js", "map.js", "outing.js", "mall.js", "legacy.js", "arena_anim.js", "arena_scene.js", "admin.js", "app.js")
+WEB_MARK = "<!--scripts-->"  # web/index.html 裡換成一串 script 標籤的那個標記
+
+
+def web_scripts() -> list[str]:
+    """/ 載入的 js：WEB_ORDER（除了 app.js），接著各包登記、不在 WEB_ORDER 的 js（照 FEATURES），最後 app.js。之後新包只要寫 Feature.web。"""
+    head = [name for name in WEB_ORDER if name != "app.js"]
+    return head + [name for name in web_files() if name.endswith(".js") and name not in WEB_ORDER] + ["app.js"]
+
+
+def with_scripts(html: str) -> str:
+    """把 index.html 的標記換成一串 script 標籤，行尾跟檔案一樣。標記不是剛好一個就丟例外（同 server.versioned_page：啟動時就壞，不默默送壞頁）。"""
+    if html.count(WEB_MARK) != 1:
+        raise ValueError(f"index.html 要有剛好一個 {WEB_MARK}，現在有 {html.count(WEB_MARK)} 個")
+    newline = "\r\n" if "\r\n" in html else "\n"
+    return html.replace(WEB_MARK, newline.join(f'<script src="/static/{name}"></script>' for name in web_scripts()))
+
+
 # ── 接縫掛鉤（第 11 批；計畫 docs/superpowers/plans/2026-11-01-核心收接縫.md 1.3 寫每一個在哪兩行之間）──
 # 不問 enabled 的照清單問登記的每一包（registered）：原位那幾行本來就不看包的開關，包照搬原位的判斷。
 # 給選項的三樣（shop_menu、shop_entries、act_cell）照遊戲當下的掛鉤問開著的包（active）。
