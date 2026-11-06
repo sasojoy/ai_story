@@ -37,6 +37,7 @@ class BattleFeature(Feature):
     # 第 7 批（集結、挑同伴）再認兩格：escort_pick（按了加入、還在挑誰隨你上陣）、parted_done（同伴回江湖、情誼已經減半、全服的記號還沒清；
     # muster.settle_partings 讀寫）——換季都跟著新角色重來
     player_fields = ("battle_results_seen", "showdowns", "top_merits", "escort_pick", "parted_done")
+    web = ("battle.js", "battle.css")  # 江湖頁最上面的戰場面板與關鍵時刻的覆蓋（panel.py 給資料；Joy 2026-11-06 大決戰優化）
     carried = ("battle_results_seen",)  # Game._reset_player_for_new_season 照帶（不看開關，同商城、出陣的 carried）
 
     def enabled(self, ctx) -> bool:
@@ -50,6 +51,13 @@ class BattleFeature(Feature):
         from . import bots  # noqa: PLC0415
 
         return bots.score(ctx, option)
+
+    def status(self, ctx) -> dict:
+        """江湖頁最上面的戰場面板（main.battle_panel；Joy 2026-11-06 大決戰優化，panel.py）：此刻看的那一場在集結或開打才有這個鍵。"""
+        from . import panel  # noqa: PLC0415
+
+        shown = panel.battle_panel(ctx)
+        return {"battle_panel": shown} if shown is not None else {}
 
     # ── 接縫掛鉤（全部拆包第 11 批：原本在 Game 原位直接叫這一包的那幾行；不問 enabled）──
 
