@@ -23,5 +23,14 @@ class TaleFeature(Feature):
     def enabled(self, ctx) -> bool:
         return True  # 同輿圖包：這一包沒有遊戲當下的掛鉤，沒有誰問這個（戰記沒有開關：start_tales 一定開；江湖史的目錄看殼的 TALES_IN_CHRONICLE）
 
+    def routes(self, shell):
+        from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）
+
+        return routes.router(shell)
+
+    def threads(self, shell) -> None:
+        """殼開、測試停：只有 server.main 經 start_threads 叫到這裡；TALES_STOP、TALES_THREAD 留殼（tests/conftest.py 收尾認這兩個名字）。"""
+        shell.start_tales(shell.CONTENT.config)
+
 
 FEATURE = TaleFeature()

@@ -120,7 +120,7 @@ def result_html(view: dict) -> str:
 
 
 def page(view: dict, *, url: str, image: str, embedded: bool = False) -> str:
-    """一篇戰記。view 是 server.tale_page_view 拼好的那一份（標題、封面、兩邊、幾幕、名錄……）；url 是分享網址，image 是預覽圖網址。
+    """一篇戰記。view 是 routes.tale_page_view 拼好的那一份（標題、封面、兩邊、幾幕、名錄……）；url 是分享網址，image 是預覽圖網址。
     embedded：遊戲裡那一層（?in=1）。"""
     title = view["title"]
     lead = view.get("lead") or view.get("sub") or ""
