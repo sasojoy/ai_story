@@ -37,6 +37,7 @@ main.prep 就照預設配比按 growth:、識海按 legacy:skip（clear_prep，�
 
 檔案（第二輪第 70 批）：這支只留入口，路徑與指令不變。調度與固定層在 scripts/sb/harness.py；Scenario、DuelScenario、它們的假人在 scripts/sb/base.py；
 其餘每段軌一檔 scripts/sb/tracks/<軌>.py。新軌只加檔：檔尾 register_track(...)（有假人再 register_bots，新子命令登記 SUBCOMMANDS）；軌名重複載入時就擋。
+整段跟另一軌同一套段落、只有切點不同的軌帶 full_same_as（第二輪第 71 批，例：muster 同 battle）：兩軌都在清單上時 compare 省它的整段，後半照舊比，宣告過時會紅。
 """
 from __future__ import annotations
 
