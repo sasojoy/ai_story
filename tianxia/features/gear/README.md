@@ -30,7 +30,7 @@
 
 `Game` 留 13 個一行委派：`_market_options`（核心原位選單叫）、`_market`、`_people_here`（測試直接叫）、`wield_weapon`、`feed_mount`、`dismantle_weapon`、`dismantle_many`（server 的 `MENXIA_ACTIONS`、假人 `bot.feed_mount`／`bot.wear_better`）、`_deliver_held_gear`（`sync`、`advance` 叫，位置固定在 `_deliver_big_events` 之後，不接 `on_sync`）、`_general_gifts`、`_signature_arms`、`_gift_entry`（`choose` 後半與核心事件檢定叫；`_signature_arms` 還有大勢人物包的挑戰本人經 `ctx` 叫，列在 `core/services.py` 二、查詢服務）、`gear_rows`、`divine_book_view`（server）。
 
-**店面登記（`Shop`）這一批不登記**（計畫 1.9，同鐵匠鋪，第 41 批 PM 認定第 1 條）：「此地還能做」的入口順序是 懸賞榜 → 鐵匠鋪 → 馬市，三間比較晚合的那一批（照排程是第 45 批懸賞榜）一起排進 `Shop`。這些留在 `Game` 原位：`_everyday_options` 的 `picking_market` 選單與 `act:market` 入口、`_shop_open`、`shop_view` 的 market 分支、`_drop_stale_references`／`sync` 的收店、`_depart` 的 `mounts.close_market`（第 48 批搬進移動包時帶著走）、`_idle`，以及 `choose` 裡 FB-195 被搶的那一句（`mounts.stale_problem`，在 `choose` 掛鉤之前）。
+**店面登記（`Shop`）這一批不登記**（計畫 1.9，同鐵匠鋪，第 41 批 PM 認定第 1 條）：「此地還能做」的入口順序是 懸賞榜 → 鐵匠鋪 → 馬市，三間第 45 批量過，PM 認定排給第 56 批選單收接縫（要改 `Shop` 才接得上）。這些留在 `Game` 原位：`_everyday_options` 的 `picking_market` 選單與 `act:market` 入口、`_shop_open`、`shop_view` 的 market 分支、`_drop_stale_references`／`sync` 的收店、`_depart` 的 `mounts.close_market`（第 48 批搬進移動包時帶著走）、`_idle`，以及 `choose` 裡 FB-195 被搶的那一句（`mounts.stale_problem`，在 `choose` 掛鉤之前）。
 
 核心原位碰這一包的，邊界測試（`tests/core/test_feature_boundaries.py` 的 `# gear` 段）逐條記理由：
 - `GAME_DELEGATE_CALLERS`：`_everyday_options → _market_options`；`sync`、`advance → _deliver_held_gear`；`choose → _general_gifts`、`_signature_arms`、`_gift_entry`（位置固定）。

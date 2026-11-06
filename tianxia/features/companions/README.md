@@ -18,7 +18,7 @@
 - **心意的世界那一半在共用規則層 `tianxia/stance_world.py`**（這一週的計數、誰照哪一個做事、門檻、換手、每週歸零）：核心的 `rules`、事件檢定與舊模組 `world`、`figures`、`events` 讀它；`stances.py` re-export，`from tianxia import stances; stances.check(...)` 照舊。
 - `routes.py`：`/api/figure`（原本在 `server.py`）。
 - 掛鉤：`enabled` 一直是 True（招募 `Config.companions`、書信 `Config.figure_life.letters`、心意與託付 `Config.jianfa`、NPC 智能 2.0 `Config.parley` 各有自己的開關，包本身沒有總開關）；`prefix = ("errand", "talk", "parley")`；`choose`（`errand:` 那幾顆，加上 `talk:`、`parley:road`，見下）；`bot_pick`（`talk:`、`parley:`）；`routes`；`bot_always`（`errand:`：整季機器人不收託付，原本寫在 `bot.pick` 的清單）；`player_fields`；叛投那一刻的格 `defection()`（`after` 位置的 `parley`：`parley_actions.forsake_all`，欠著的都算食言；全部拆包第 32 批）。
-- 「你這一步」的格 `steps()`（全部拆包第 36 批；順序在核心的 `STEP_ORDER`，排最前面）：`errand`（身上還在辦的人物託付，`errands.step_items`；原本 `weekcard._steps` 第一行直接叫）。自己帶好 `id` 與 `target`、不掛 `_ref`，所以沒有 `ref`、`place`；託付關著（`errands.on`）回空的，不問 `enabled`。懸賞列裡的委託（書信附的、求援）是懸賞榜那一格（`commission`，核心代叫，第 45 批），不在這一包。釘住這一格的測試是這一包的 `tests/test_errands_weekcard.py`。
+- 「你這一步」的格 `steps()`（全部拆包第 36 批；順序在核心的 `STEP_ORDER`，排最前面）：`errand`（身上還在辦的人物託付，`errands.step_items`；原本 `weekcard._steps` 第一行直接叫）。自己帶好 `id` 與 `target`、不掛 `_ref`，所以沒有 `ref`、`place`；託付關著（`errands.on`）回空的，不問 `enabled`。懸賞列裡的委託（書信附的、求援）是懸賞榜包那一格（`commission`，第 45 批換主人），不在這一包。釘住這一格的測試是這一包的 `tests/test_errands_weekcard.py`。
 - **`bots.py` 只管 `talk:`、`parley:`**：`bot_policy.score` 沒有 `errand:` 那一段（`take_turn` 打分數之前就濾掉，那一行留著）；假人直接記一筆心意走 `Game.voice_stance`（`bot_policy.voice_stance` 叫，不是選項）；假人不跟人物閒聊、不求事，萬一停在對話裡只按「告辭」（`take_turn` 也會先 `choose("talk:leave")`）。
 
 ## 認領的欄位（手冊 3.5：留在原地）
@@ -41,11 +41,12 @@
 - 交友與求見開口（`_socialize`、`_precise_socialize`、`_call` × `_open_dialogue`）：交友求見第 21 批搬進 `socialize` 包，那一包經 `ctx._open_dialogue` 問，核心原位不再叫它。
 - 叛投之後的食言：全部拆包第 32 批接上核心的叛投掛鉤（`DEFECT_ORDER` 的 `after` 位置，排在同伴回江湖 `leave_behind` 之後；回話的先後算行為），不再是這裡的接縫。場景文字（`_own_scene_text` × `_last_talk_line`）：位置算行為。
 
-別的舊模組經別名碰這一包（3.11）：`bot_policy`（`stances.bot_pick`）、`bounties`（`letters.thank`；`parley` 延後載入）、`server`（`letters.mail_day`、`letters.write`、`companion_agent`〔鎖外三段式的 `prepare_turn`、`PreparedTurn`〕；鎖外重寫信、勸降、對話的三段式照舊在殼）、`scripts/try_*.py`、`scripts/figure_ask_trial.py`。`server` 的 `main_view`、`MAIN_ACTIONS`（`letter_read`、`letter_decline`）、`MENXIA_ACTIONS`（`join`、`leave`、`release`）照舊叫 `Game` 委派（總表第 66、68 批）。出陣包的 `act:train` 並肩出陣那一句（`BACKED_LINE`、`PLAN_MISS`）搬進核心 `services`，出陣包不再 import `parley`。
+別的舊模組經別名碰這一包（3.11）：`bot_policy`（`stances.bot_pick`）、`server`（`letters.mail_day`、`letters.write`、`companion_agent`〔鎖外三段式的 `prepare_turn`、`PreparedTurn`〕；鎖外重寫信、勸降、對話的三段式照舊在殼）、`scripts/try_*.py`、`scripts/figure_ask_trial.py`。`server` 的 `main_view`、`MAIN_ACTIONS`（`letter_read`、`letter_decline`）、`MENXIA_ACTIONS`（`join`、`leave`、`release`）照舊叫 `Game` 委派（總表第 66、68 批）。出陣包的 `act:train` 並肩出陣那一句（`BACKED_LINE`、`PLAN_MISS`）搬進核心 `services`，出陣包不再 import `parley`。
 
 ## 過渡（手冊 3.11）
 
 - 包 → 還沒搬的舊模組（全部拆包第 40 批合完重印：7 處、6 行）：`errands.py`（`atlas` 第 50 批，函式裡）、`letters.py`（`bounties` 第 45 批；`atlas`，函式裡）、`parley_actions.py`（`atlas`）、`companion_agent.py`（`seal_acts` 第 51 批；函式裡的 `world` 第 25 批收進核心本體，註拿掉）、`parley.py`（`atlas`、`bounties`）。原本也算過渡的 `figures`、`figure_life`、`ranks`（`actions.py`、`errands.py`、`stances.py`、`talk_actions.py`、`letters.py`、`parley_actions.py`、`companion_agent.py`、`parley.py` 共 9 處）第 40 批收進共用規則層，不算過渡，行尾註改寫成「共用規則層（第 40 批收進）」；`annals` 第 29 批之二、`foreshadow` 與 `opportunities` 第 34 批早就拿掉了。
+- 第 45 批合完重印 **1 處**：`companion_agent.py` → `seal_acts`；`letters.py`、`parley.py` 讀懸賞榜改讀核心 `core/bounty_base`。懸賞榜包寫的那一半（道謝信、守約、兌現）經 `Game` 的 5 個一行委派問這一包（`_letter_thank`、`_parley_settle_task`、`_parley_keep`、`_parley_owed_line`、`_parley_ask_label`，PM 認定乙案）；`letters.view` 沒有 ctx，書信卡的賞叫 `bounty_base.commission_line`。
 - 第 50 批合完重印 **3 處**：`companion_agent.py` → `seal_acts`、`letters.py` → `bounties`、`parley.py` → `bounties`（原本 `atlas`、`bounties`、`figure_life`、`figures` 同一行，拆成兩行）；`errands.py`、`letters.py` 函式裡、`parley_actions.py` 讀的 `atlas` 第 50 批收進共用規則層，改註。
 - **`letters._feast_letter` 問 `figure_life.feast_invites`**：書信不能 import 宴客包（包 import 包）；第 40 批 `figure_life` 收進共用規則層，`feast_invites` 改讀核心的 `core/feast_base`（宴客包 re-export 同一批），設宴改成世界層 `life` 那一格（宴客包登記），`figure_life` 不再 import 宴客包。
 - `figure_life.spread` 記道賀走核心 `services.note_cheer`（`letters.note_cheer` 是同一個函式）；`_settle_partings` 是決戰包的查詢服務（服務清單二）。

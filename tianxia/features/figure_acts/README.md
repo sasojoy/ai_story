@@ -30,7 +30,7 @@
 - 選單末段 `護衛 + features_core.options + 盤算`：護衛那串在包選項之前、盤算在之後，`options` 掛鉤接不了，Game 留 `_aid_options`、`_plan_options` 的委派。
 - `sync` 的 `_deliver_guard_credits`：夾在 `_deliver_echoes` 與 `deliver_notices` 之間，留委派（接成 `deliver_notices` 掛鉤，酒肆的會跑在它前面，行狀順序會變）。
 - `figures.py` 的 `figure_aid.restore` 全部拆包第 40 批換掉：犒軍與自然回復共用一天上限的那五個函式（`on`、`_day`、`_life`、`left_today`、`restore`）搬進共用規則層 `figures`（`aid_` 開頭），`figures.recover` 直接叫自己的 `aid_restore`，`figure_aid.py` 照原名 re-export 同一個物件。`social.py` 已經不讀 `yuedan.line_for`（第 40 批合完量的：只剩 `engine` 的委派經包讀）。
-- 過渡 import（第 40 批合完重印）2 處：`aid_actions.py` → `bounties`、`yuedan.py` 函式裡 → `leaderboard`；原本的 `figures`、`figure_life`、`plans`（8 處）第 40 批收進共用規則層，不算過渡。
+- 過渡 import（第 45 批合完重印）1 處：`yuedan.py` 函式裡 → `leaderboard`；`aid_actions.py` 第 45 批改發事件 `ctx.publish("aid", ...)`（護衛、犒軍辦成：懸賞榜包交差，位置不動），不再 import 舊名 `bounties`；原本的 `figures`、`figure_life`、`plans`（8 處）第 40 批收進共用規則層，不算過渡。
 - 世界層的格（core_world：全部拆包第 25 批）：月旦評每一步（原本 `world.py` 經別名叫 `yuedan.tick`）是世界層 `step` 的 `yuedan` 那一格（`__init__.py` 的 `world()` → `yuedan.world_step`；排在盤算之後、那一步最後，先後在核心的 `WORLD_ORDER`；不問 `enabled`）。
 - `bot_policy._stamina_play` 的 `("ambush:set:", "works:", "aid:")`、`models.ALLOW_FAMILIES` 的 `aid:`、`plan:`、`act:challenge:` 字串：核心原位。
 

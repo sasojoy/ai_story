@@ -45,6 +45,7 @@
 ## 過渡（手冊 3.11）
 
 過渡 import 共 4 行（包到舊模組，都標了「# 過渡：待搬」；全部拆包第 40 批合完重印 5 處，原本 9 處）：`actions`→`atlas`；`mapdata`→`atlas`、`bounties`；`mapview`→`atlas`（兩行，一行是 `atlas.KNOWN`、`atlas.Odds`）。同幾行的 `orders`、`figures` 第 40 批收進共用規則層，不算過渡（行尾註照留：同一行還有 `atlas`）。`atlas` 拆兩半（圖層那一半進包）留給總表第 50 批（計畫 Task 6，第 49 批 PM 認定第 2 條；這幾行的註寫「atlas 第 50 批拆兩半」），做完 `actions`、`mapview`、`mapdata` 對 `atlas` 的過渡會少一部分（留在 `atlas` 的是地點與路的資料，移動、地盤、設伏都在讀，不進包）。舊模組到包有 `engine.py` 的 `GAME_IMPORTS` 一行（`tianxia.features.map.actions`）與四個別名（`mapview`、`mapart`、`mapdata`、`worldgeo`）。
+**第 45 批合完重印 0 處**：`mapdata` 的 `mine` 改讀核心 `core/bounty_base`。
 **第 50 批合完重印 1 處**：`mapdata`→`bounties`（第 45 批懸賞榜；原本 `atlas`、`bounties`、`figures`、`orders` 同一行，拆成兩行，`atlas`、`figures`、`orders` 那一行註「共用規則層」）。`actions`、`mapview` 讀 `atlas` 的那幾行改註「共用規則層」（`atlas` 第 50 批收進 `registry.SHARED`）；`mapview` 的 `from tianxia.atlas import KNOWN, Odds` 拆成 `KNOWN`（共用規則層）與 `from .layers import Odds`。
 
 ## 測試

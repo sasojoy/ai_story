@@ -2,7 +2,7 @@
 
 此地還有誰、玩家卡與卡上的動作登記表、邀請框（打招呼、名帖、切磋、論武、結伴同行共用的 `invite:` 選項）、打招呼、贈物、名帖（定稿、遞、回帖、檢舉、管理者撤下與放回）。全部拆包第 37 批搬進來，行為一個字不變。
 第 38 批再搬進來：切磋、論武（三段式首創取名）、截殺（含策馬脫身），與假人答切磋、答論武、截殺（`spar`、`discuss`、`raid` 三個模組，舊名留別名）。
-通緝（`wanted.py`）是第 45 批，還在原位；結伴同行（`_join`、`join_refusal`）第 48 批搬進移動包（`tianxia/features/travel/party.py`，Game 留一行委派）。
+通緝（`wanted.py`）第 45 批搬進懸賞榜包（`tianxia/features/bounties/`），卡上動作的登記表搬進核心 `core/cards.py`；結伴同行（`_join`、`join_refusal`）第 48 批搬進移動包（`tianxia/features/travel/party.py`，Game 留一行委派）。
 
 - 導覽：`docs/guide/散人與玩家互動.md`（玩家卡、切磋、論武）。
 - 設計稿：玩家互動（企劃者 2026-10-08）；名帖（Joy 2026-10-19，設計稿 https://claude.ai/artifact/YLTXjaX77DJRsCmMX57xAi）。
@@ -10,7 +10,7 @@
 
 ## 裡面有什麼
 
-- `social.py`（原 `tianxia/social.py`，舊名是別名）：玩家卡 `card`、卡上動作的登記表 `ACTIONS`／`CardAction`／`CardButton`／`register`（切磋、論武、截殺、通緝也登記進同一張）、贈物、打招呼（`Gesture`、`calls`）。
+- `social.py`（原 `tianxia/social.py`，舊名是別名）：玩家卡 `card`、贈物、打招呼（`Gesture`、`calls`）。卡上動作的登記表 `ACTIONS`／`CardAction`／`CardButton`／`register`（切磋、論武、截殺、通緝也登記進同一張）在核心 `tianxia/core/cards.py`（第 45 批），`social` re-export 同一批物件。
   「此地還有」的判斷（`here`、`visible`）與身分字（`side`、`affiliation`、`GONE`）不在這裡：先拆成核心的查詢服務 `tianxia/core/presence.py`（窗口 `Config.presence_seconds`），`social` 從那裡 re-export 同一批函式物件；
   酒肆（客人名單、查人）、探索（結算卡的「此地還有」）、狀態列都直接問核心。
 - `invites.py`（原 `tianxia/invites.py`）：邀請的帳（`WorldState.invites`）；`mingtie.py`（原 `tianxia/mingtie.py`）：名帖的規則；`mingtie_card.py`（原 `tianxia/mingtie_card.py`）：遞名帖掛上玩家卡，載入這一包時登記進 `social.ACTIONS`（原本是 `engine.py` 頂端 import 它）。四個舊名都是指到同一個模組物件的別名。
@@ -23,7 +23,7 @@
 - `discuss_actions.py`：12 個——`left`、`items`、`cost_of`、`refusal`、`send`、`forge_pair`、`request`（A 段）、`forge`、`merge_problem`、`invite_problem`、`item_problem`、`discuss`（C 段），加 `DISCUSS_SAME`、`THEIR_SIDE`、`_refusal`。
   三段式的 B 段（`server.prepare_peer`、`screen_peer`）照手冊 G10 留在 `server.py`，經 `shell.` 叫。
 - `raid_actions.py`：9 個——`is_shown`、`refusal`、`odds_word`、`targets`、`raid`、`flee_odds`、`fled`、`take_spoils`、`raid_record`，加 `RAID_AFTER_CLASH`、`RAID_SHIELD_CLASH`。
-  打贏的交差 `ctx._raid_bounty` 是事件 `raid_win` 的發布點（懸賞榜，第 45 批），位置不動；懸賞榜的 `hunting`、`official_hit`、`BEATEN_OFFICIAL` 三處讀法標過渡（第 45 批）。
+  打贏的交差 `ctx._raid_bounty` 是事件 `raid_win` 的發布點（第 45 批搬進懸賞榜包 `actions.raid_bounty`，位置不動）；懸賞榜的 `hunting`、`official_hit`、`BEATEN_OFFICIAL` 三處第 45 批改讀核心 `core/bounty_base`。
 - `routes.py`：`/api/peer`、`/api/peer/act`、`/api/mingtie`、`/api/mingtie/{op}`。鎖外三段式的 `screen_peer`、`prepare_peer`（論武的首創取名）與 `screen_text`、`boards_now` 留在殼，經 `shell.` 叫。
 - `bots.py`：假人收到打招呼、結伴邀請、名帖的回法（`answer_call`、`_roll` 與那幾個比例）、做名帖（`_make_card`）、遞名帖（`_hand_card`），以及第 38 批搬來的答切磋（`_answer_invite`）、答論武（`answer_discuss`，首創要取名時回一份資料、由 `bot_policy._answer_discuss` 包成 `DiscussJob`；`DiscussJob` 照鐵匠鋪 `ForgeJob` 的前例留在 `bot_policy`）、截殺（`_raid`）與 `INVITE_YES`、`RAID_CHANCE`、`RAID_ODDS`（`bot_policy` 的 `CHALLENGE_ODDS` 還有 `score` 在用，所以包裡寫一份同值）；`bot_policy` 照舊 import 這幾個名字。叫它們的順序（`take_turn`）一個字不動。
 - 掛鉤：`prefix = "invite"`；`choose` 接 `invite:*`（標題在動作之前拿）；`bot_always = ("invite:",)`；`on_season_start` 把這一季值得留名的頭銜寫進 `title_book`（原本在 `Game._reset_player_for_new_season`）；`routes`；
@@ -45,8 +45,8 @@
 留委派、記進 `GAME_DELEGATE_CALLERS` 的：`_everyday_options` 叫 `_invite_options`（選單的順序是行為）、`status_data` 叫 `_invite_status`（鍵的順序是行為，總表第 66 批才接 status 掛鉤）；
 結伴同行（移動包 `party.join`、`join_refusal`，第 48 批；Game 留一行委派）在包裡經 `ctx` 叫 `_tell_sender`、`_peer`，不再記進 `GAME_DELEGATE_CALLERS`。第 38 批把第 37 批的 `GAME_DIRECT` 7 個（切磋、論武直接用這一包的 `social`、`invites`）與 `_PEERS_38` 的 6 筆呼叫端都拿掉；
 `engine.py` 對 `invites`、`social` 的 import 也拿掉了，多 import 論武、截殺兩個動作檔（13 個委派用）與 `DISCUSS_SAME`、`_refusal` 一行（`tests/arts/test_discuss.py` 從 `engine` 拿的過渡）。
-懸賞榜（`bounties`）是舊模組，截殺 import 它一行、用 `hunting`、`official_hit`、`BEATEN_OFFICIAL` 三處，標「過渡：待搬（第 45 批）」。
-論武的 `discuss_actions` 還 import 舊模組 `fusion`（合成與揣摩，在 `SHARED_LATER`，標「過渡：待搬」），所以包到舊模組共 4 處：`mingtie.py`、`bots.py` 的 `leaderboard`，加 `bounties`、`fusion`。
+懸賞榜第 45 批成包，截殺讀的 `hunting`、`official_hit`、`BEATEN_OFFICIAL` 三處改讀核心 `core/bounty_base`。
+論武的 `discuss_actions` 還 import 舊模組 `fusion`（合成與揣摩，在 `SHARED_LATER`，標「過渡：待搬」），所以包到舊模組共 3 處：`mingtie.py`、`bots.py` 的 `leaderboard`，加 `fusion`。
 網頁那一半（`MT_INKS` 等）第 3 階才切，這一批不碰 `web/`。
 
 ## 測試
@@ -64,7 +64,7 @@
 **不搬、另外要跑的混合檔**（含這一包的測試，但整檔不屬於這一包，不拆；數字是用到這一包的條數／全檔）：
 
 - `tests/core/test_social.py`（19／27）：此地還有、玩家卡、贈物、挑釁與回禮、假人回的步調；另外 8 條是結伴同行（移動包）、求見被打發（交友求見包）與網頁字寬（網頁），所以整檔不搬。其他測試檔經 `from test_social import …` 借它的小工具。
-- `tests/arts/test_discuss.py`（論武；59 條，`test_social`、`test_server` 用裸名從它拿小工具、它自己又有網頁測試，第 41 批認定第 6 條不搬，歸第 61 批）、`tests/ranger/test_bounties.py`（8／56）：通緝（第 45 批）。
+- `tests/arts/test_discuss.py`（論武；59 條，`test_social`、`test_server` 用裸名從它拿小工具、它自己又有網頁測試，第 41 批認定第 6 條不搬，歸第 61 批）、`tests/ranger/test_bounties.py`（8／56）：通緝（第 45 批成包，檔案留原處歸第 61 批）。
   `tests/core/test_social.py` 整檔也留著（第 37 批認定第 6 條寫「第 38 批搬結伴時再看」，結伴同行是移動包；27 條裡真的是結伴的只有 3 條，不拆，歸第 61 批）。
 - `tests/gear/test_mounts.py`（3／53）、`tianxia/features/seal/tests/test_seal_revamp_sidedoor.py`（6／15）、`tests/server/test_server.py`（4／385）、`tests/web/test_sanren_web.py`（1／6）、`tianxia/features/mall/tests/test_mall_bots.py`（1／3）、`tianxia/features/faction/tests/test_gentry_allied_fixes.py`（2／13）：各只有幾處經 `peer_card`、`peer_act`、`peers_here`。
 - `tests/core/test_presence_window.py`（5 條）：「此地還有」的窗口（24 小時）與主機端兩支腳本刻意不跟著拉長——窗口的判斷已是核心的查詢服務（`core/presence.py`），這份留在核心測試；酒肆的 `tianxia/features/tavern/tests/test_tavern_seek_presence.py` 守「酒家說得出『此刻』不能比『此地還有』寬」，兩份不重複（一個管設定與腳本，一個管酒肆的查人），都原樣過。
@@ -72,7 +72,7 @@
 
 ## 過渡（手冊 3.11）
 
-過渡 import 4 處（全部拆包第 38 批合完重印）：`mingtie.py` 函式裡到 `leaderboard`（賽季榜單）；`bots.py` 到 `leaderboard`（名帖頭銜的榜單名次）；第 38 批加的 `discuss_actions.py` 到 `fusion`（合成與揣摩，`SHARED_LATER`）與 `raid_actions.py` 到 `bounties`（懸賞榜，標「待搬（第 45 批）」）。`mingtie.py` 到 `ranks`（階級的稱號）第 40 批收進共用規則層，不算過渡（原本 3 處）。
+過渡 import 3 處（全部拆包第 45 批合完重印）：`mingtie.py` 函式裡到 `leaderboard`（賽季榜單）；`bots.py` 到 `leaderboard`（名帖頭銜的榜單名次）；第 38 批加的 `discuss_actions.py` 到 `fusion`（合成與揣摩，`SHARED_LATER`）；`raid_actions.py` 到 `bounties` 第 45 批改讀核心 `core/bounty_base`。`mingtie.py` 到 `ranks`（階級的稱號）第 40 批收進共用規則層，不算過渡（原本 3 處）。
 
 ## 量到的（第 37 批 Task 5）
 
