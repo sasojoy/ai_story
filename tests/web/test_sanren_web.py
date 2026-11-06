@@ -105,7 +105,7 @@ def test_the_expanded_name_shows_how_far_the_next_level_is(setup):  # noqa: F811
     m = _view(content, world, "丙")
     m["status"]["level"], m["status"]["exp"] = 31, {"have": 120, "need": 372}
     top = run(m, "return H.heroMoreHtml(H.S.main.status);")  # 介面重整：在俠客頁的「屬性」
-    assert "經驗 120／372，再 252 升第 32 級" in top
+    assert "經驗 120／372<small>升第 32 級</small>" in top and "--w:32%" in top  # 屬性頁重整（Joy 11/6）：一條細條
     assert "who-exp" not in run(m, "return H.topHtml();")
     m["status"]["exp"] = None
     assert "經驗已到頂" in run(m, "return H.heroMoreHtml(H.S.main.status);")

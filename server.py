@@ -136,6 +136,27 @@ def figure_face(cid: str) -> str | None:
     return f"/static/img/figures/full/{cid}.webp" if cid and (WEB / "img" / "figures" / "full" / f"{cid}.webp").is_file() else None
 
 
+def _figure_intros() -> dict:
+    """點大勢人物那一層的人物簡介（content/figure_intros.json；給不熟三國的玩家看，Joy 11/6）：沒有這個檔就是空的，畫面不畫簡介。"""
+    try:
+        data = json.loads((ROOT / "content" / "figure_intros.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in data.items() if not k.startswith("_") and isinstance(v, dict)}
+
+
+FIGURE_INTROS = _figure_intros()
+
+
+def figure_intro(cid: str) -> dict | None:
+    """{who 是誰, role 身分, nature 本性, now 如今, history 變化紀錄}。性子隨全服的互動改變是另一串在做（設計稿「人物性子會變」）：
+    那一套開了之後 now 寫如今那一段、history 一行一筆（「第 1 週・週五 起，脾氣沒那麼火爆了」）；還沒做之前 now 是 None、history 是空的，畫面不畫這兩格。"""
+    row = FIGURE_INTROS.get(cid)
+    if not row:
+        return None
+    return {"who": row.get("who", ""), "role": row.get("role", ""), "nature": row.get("nature", ""), "now": None, "history": []}
+
+
 def horse_art() -> list[str]:
     """web/ 裡真的有的馬圖（web/horse-<鍵>.webp，鍵見 mounts.COAT_ART、STEED_ART）：網頁只對這些鍵放圖，其餘照舊畫色塊。"""
     return sorted(path.stem.removeprefix("horse-") for path in WEB.glob("horse-*.webp"))
@@ -2163,7 +2184,7 @@ def _main_view_body(game: Game) -> dict:
     if sides is not None:
         view["sides_card"] = sides
     # 介面重整（2026-11-05）：此地人物那一排、正在說話的那一位（浮在最上層的對話框），像在 web/img/figures/full/<id>.webp 才給 face
-    view["figures_here"] = [{**f, "face": figure_face(f["id"])} for f in game.figures_here_view()]
+    view["figures_here"] = [{**f, "face": figure_face(f["id"]), "intro": figure_intro(f["id"])} for f in game.figures_here_view()]
     talk_now = game.talk_view()
     if talk_now is not None:
         view["talk"] = {**talk_now, "face": figure_face(talk_now["id"])}
