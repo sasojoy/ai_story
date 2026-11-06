@@ -58,3 +58,8 @@
 **第 57 批（分派與標題收接縫，核心批）**：`verbs()` 是新開的（`challenge`，帶後綴）。`(_act, _challenge)`、`(_fight_squad, _figure_squad)` 兩對拿掉。
 
 `howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「挑戰大勢人物」那一節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `plan`、`place_deeds`。
+- 畫面：`web/figure_acts.js`（`planHtml`、`placeDeedsHtml`）、`web/figure_acts.css`（全部拆包第 67 批從 `main.js`、`style.css` 切出來，一個字不改）。

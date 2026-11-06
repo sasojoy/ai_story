@@ -1,6 +1,6 @@
 # 有所感與頓悟（`tianxia/features/sense/`）
 
-探索撞上有所感（卡上三四個做法、選對擲中進感悟狀態、一筆畫下心中的形或順其自然）、自己畫字悟出的私有意境（看圖取名的三段式、首悟紀錄）、特殊頓悟（擲中感悟時再擲：心靈拷問 → 心境小試 → 心魔 → 取名，收進一份神品意境）。全部拆包第 24 批搬進來（計畫 `docs/superpowers/plans/2026-11-01-有所感包-第1批.md`）。網頁那一半（`web/app.js` 的 `SENSE_DRAW`、`SENSE_SIZE`、畫布、`godName`……）第 3 階再切。
+探索撞上有所感（卡上三四個做法、選對擲中進感悟狀態、一筆畫下心中的形或順其自然）、自己畫字悟出的私有意境（看圖取名的三段式、首悟紀錄）、特殊頓悟（擲中感悟時再擲：心靈拷問 → 心境小試 → 心魔 → 取名，收進一份神品意境）。全部拆包第 24 批搬進來（計畫 `docs/superpowers/plans/2026-11-01-有所感包-第1批.md`）。網頁那一半（`SENSE_DRAW`、`SENSE_SIZE`、畫布、`godName`……）第 66 批切進 `web/sense.js`。
 
 - 導覽：`docs/guide/武學與成長.md` 的「有所感與頓悟（功能包 `tianxia/features/sense/`）」那一節；規則細節照舊在那一份的 `tianxia/epiphany.py` 那一條與〈行動與地盤〉的靜心感悟。
 - 設計稿：沒有版本號——悟意境設計（企劃者 2026-10-06「甲案加乙案」：第零節有所感、0.2 看圖取名、0.2a 退路與暖機、0.2b 私有意境與首悟）；意境提示設計（第一、二節：每個地點最濃的意境）；特殊頓悟設計稿（企劃者 2026-10-26，https://claude.ai/artifact/EBUqqzK3dPMpjwYTdRzLs3）。
@@ -29,7 +29,7 @@
 - 舊探索（留給序章與測試內容；本體在探索包 `explore_base.py`，經 `ctx` 叫）：`_insight_blocked` 的 `_sense_missed`、`_explore_can` 的 `_sense_missed`；`_explore_outcome` 的 `_sense_start`（序章四景）、`_sense_here`（落在悟意境那一支）。
 - 裝飾器 `_outing_watch` 搬進核心（`tianxia/core/services.py` 的 `outing_watch`；`Game.choose`、`answer_event` 照舊掛），經 `ctx._outing_watched` 叫探索包的委派，記在 `CORE_DELEGATE_CALLERS`。籌備中那兩句 `PREPARING_TEXT`、`PREPARING_REFUSAL` 也搬進核心（`sense_request` 籌備中回它；第 23 批同時搬了同樣兩句，合進 `split/trunk` 時留這一份，裝飾器 `not_while_preparing` 是第 23 批的）。
 - 包 import 包的地雷先拆：探索包 `explore_actions.outing_weights` 改問 `ctx._sense_missed(loc)`、引導包 `actions.graduate_pass` 改問 `ctx._sense_prologue_choice()`。
-- 一行沒動的：`server.py` 的 `sense_draw`（鎖外三段式）、`epiphany_think`、`main_view` 的 `sense_help`、`api_choose` 自己寫名字被擋回給表單那一句；`bot.py`、`bot_policy.py`、`bot_runner.py`；`fusion`（`own_name`、`add_own`：舊模組 → 包，過渡；它還在共用規則層的 `SHARED_LATER`，同時還讀 `annals`）、`mapdata`（`terrain_tags`）；網頁。
+- 一行沒動的：`server.py` 的 `sense_draw`（鎖外三段式）、`epiphany_think`、`api_choose` 自己寫名字被擋回給表單那一句；`bot.py`、`bot_policy.py`、`bot_runner.py`；`fusion`（`own_name`、`add_own`：舊模組 → 包，過渡；它還在共用規則層的 `SHARED_LATER`，同時還讀 `annals`）、`mapdata`（`terrain_tags`）；網頁。
 
 ## 過渡（手冊 3.11）
 
@@ -54,3 +54,8 @@
 **第 56 批（選單收接縫，核心批）**：`take/sense`、`idle/sense` 是這一包登記的格；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_sense_menu` 拿掉；上面寫「留委派」「原位」的以這一句為準。
 
 `howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「意境」那一節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 畫面：`web/sense.js`（有所感的畫布、悟來的那一筆、神品意境取名，`OWN_NAME_*` 第 67 批從 `main.js` 切進來）；`choose` 裡的 `SENSE_DRAW` 留 `app.js`。
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `sense_help`。

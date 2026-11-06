@@ -91,3 +91,8 @@
 **第 56 批（選單收接縫，核心批）**：`take/omen`、`here/order`、`here/rank2`、`here/rank`、`here/omen`、`idle/omen` 是這一包登記的格（`fs_asking` 包外三處都改問核心 `omen_base.fs_answering`）；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_order_options`、`_rank2_options`、`_rank_action_options`、`_fs_asking_options`、`_omen_options` 拿掉；上面寫「留委派」「原位」的以這一句為準。
 
 **第 57 批（分派與標題收接縫，核心批）**：`verbs()` 是新開的（`rank2`、`rank`、`convoy`、`summons`）。委派 `_rank2`、`_rank_action`、`_take_convoy`、`_rank2_action` 拿掉，engine 不再 import `step_actions`、`convoy_actions`；engine 模組層的 `_rank_action_id` 拿掉；`RANK_ACTION_PREFIX` 留在 engine（`features/military/tests` 從那裡拿）。上面寫「留委派」「原位」的以這一句為準。應召經 `ctx._present`、照模組屬性問 `ranks.summons_event`：`tests/bots/test_event_rotation.py`、`tests/core/test_engine.py`（`-k summons`）換的是這兩個名字，改這幾格另外跑。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `convoy`（軍令 `orders` 那一格留殼：本週卡也讀同一份）。
+- 畫面：`web/military.js`（`ordersHtml`）、`web/military.css`（全部拆包第 67 批從 `main.js`、`style.css` 切出來，一個字不改）；`.order-*` 跟懸賞、奪璽卡共用，留 `style.css`。

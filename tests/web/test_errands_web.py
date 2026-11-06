@@ -1,5 +1,7 @@
 """託付的畫面（減法季批 6，FB-829）：此地的「勸降」按了就地換成二十字的輸入框、送 POST /api/do/persuade_text；
 託付的信卡畫那一件（做什麼、到哪裡、期限）與「婉拒」，婉拒走引擎原有的 letter_decline。餵真的引擎資料給 app.js（假瀏覽器）。"""
+# 畫法在 web/companions.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
+# 畫法在 web/peers.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import pytest

@@ -27007,5 +27007,201 @@ _shelf_register_track("shelf", ShelfScenario, (("tianxia/features/smithy/content
 TRACK_REQUIRES["shelf"] = "content/figure_intros.json"  # 這一軌讀 server.FIGURE_INTROS；合回 develop 第 1 段之前的主幹沒有這個檔（_tracks_on 看的是 base）
 
 
+# ── shell_web（全部拆包第 64 批：網頁殼化）────────────────────────────────────────
+import re  # noqa: E402（這幾段以前都在函式裡 import；這一段的模組層要用）
+
+# 以前就在 / 上的 js：照現在的先後。殼化切出來的新檔（base 沒有）從 / 的比對裡拿掉，它們的內容算進「所有 js 的行」。
+FACADE_SCRIPTS = ("main.js", "map.js", "outing.js", "mall.js", "legacy.js", "arena_anim.js", "arena_scene.js", "admin.js", "app.js")
+LOOM_OLD_SHEETS = ("style.css", "mall.css", "zhuan.css", "legacy.css")  # 以前就在 / 上的樣式：照現在的先後（第 67 批切出去的新檔排在 style.css 與 mall.css 之間）
+FACADE_SHELL_FILES = {"shell.js"}  # 殼的掛鉤本身（新加的，不是切出來的）：base 沒有這一支，由網頁測試守
+# 殼化本來就要改的那幾行（renderPage 那張分頁表、包檔尾的登記）：兩邊都不算，其餘每一行要一樣多
+FACADE_SHELL_LINES = re.compile(r"\bregisterPage\(|^\s*const fn = \{ jianghu: pageJianghu\b")
+
+
+def _facade_page(html: str) -> str:
+    """/ 的 HTML 除了多出來的 script 標籤與版本號之外一個字不變：?v= 抹掉（檔案變了版本本來就變，對不對另外驗），新檔的標籤連那一行拿掉。
+    第 67 批：從 style.css 切出去的樣式同樣（新檔的 link 與它們上面那一行註解拿掉，它們的內容與先後由 drape 軌比）。"""
+    html = re.sub(r"\?v=[0-9a-f]{10}", "", html)
+    html = re.sub(r"<!-- 第 67 批從 style\.css 切出去的樣式[^\n]*-->\r?\n", "", html)
+    html = re.sub(r'<link rel="stylesheet" href="/static/([^"]+)">\r?\n', lambda m: m[0] if m[1] in LOOM_OLD_SHEETS else "", html)
+    return re.sub(r'<script src="/static/([^"]+)"></script>\r?\n', lambda m: m[0] if m[1] in FACADE_SCRIPTS else "", html)
+
+
+class FacadeScenario(Scenario):
+    """網頁的門面一軌（全部拆包第 64 批；--track facade，自己一個資料庫）。班底的名字都是原創（PM 11/04）。
+    這一批搬的是網頁（web/app.js 切出修練、煉製）與 / 怎麼生出來；API 一條都沒動，別的軌比的是 API，走不到這裡。
+    page 三種人（沒登入、玩家、管理者）各打 / 與 /admin：狀態碼、型別、快取標頭、整份 HTML（照 _facade_page，連行尾都比）、/admin 跟 / 是不是同一份。
+    scripts 照 / 真的載入的那幾支一支一支抓：以前就有的（FACADE_SCRIPTS）寫狀態碼、型別、快取標頭；每一支的 ?v= 是不是那支檔內容的前十碼；
+    「所有 js 的行」：每一支去掉檔頭（"use strict"; 以前的說明）之後的每一行（不含空行與 FACADE_SHELL_LINES）排序取 sha256，加上行數——
+    切檔只換位置，所以這一個數字兩邊要一樣；改到任何一行就紅（selftest 的改一個字就是這一條抓的）。只驗每一行還在，不驗先後：先後由切檔腳本的逐段比對與網頁測試守。
+    半舊半新：這一包沒有寫到一半的狀態（/ 開機時算一次、不碰存檔）。切在玩家登入著、/ 已經拿過的那一刻；後半是新程式重新開機，同樣三種人再打一遍。
+    這一軌走不到的：瀏覽器真的執行這些檔（切檔之後的載入順序由網頁測試與波末實機驗）；/static/index.html 這個沒有人連的裸檔。
+    假人：碰不到（假人只透過 Game 的公開行動做事，不抓網頁），所以沒有假人段；web/ 掃字另有測試。"""
+
+    PLAYERS = {"簷下客": "guan"}
+    NEWBIE = "叩門人"
+    PHASES_FIRST = ["setup", "page", "scripts", "half"]
+    PHASES_SECOND = ["resume", "page_again", "scripts_again"]
+    GUEST = "簷下客"
+
+    def viewers(self) -> list[tuple[str, object]]:
+        return [("沒登入", self.TestClient(self.server.app)), (self.GUEST, self.clients[self.GUEST]), (ADMIN, self.clients[ADMIN])]
+
+    def page(self) -> None:
+        for who, client in self.viewers():
+            self.begin()
+            root, admin = client.get("/"), client.get("/admin")
+            emit(f"{who} GET /", [root.status_code, root.headers.get("content-type"), root.headers.get("cache-control"), _facade_page(root.text)])
+            emit(f"{who} GET /admin", [admin.status_code, admin.headers.get("content-type"), admin.headers.get("cache-control"), admin.text == root.text])
+
+    def page_again(self) -> None:
+        self.page()
+
+    def scripts(self) -> None:
+        self.begin()
+        client = self.clients[self.GUEST]
+        html = client.get("/").text
+        lines: list[str] = []
+        versions_ok = True
+        for name, version in re.findall(r'<script src="/static/([^"?]+)\?v=([0-9a-f]{10})"></script>', html):
+            r = client.get(f"/static/{name}")
+            versions_ok &= hashlib.sha256(r.content).hexdigest()[:10] == version
+            if name in FACADE_SCRIPTS:
+                emit(f"GET /static/{name}", [r.status_code, r.headers.get("content-type"), r.headers.get("cache-control")])
+            if name not in FACADE_SHELL_FILES:
+                body = r.text.replace("\r\n", "\n").split('"use strict";', 1)[1]
+                lines += [ln for ln in body.split("\n") if ln.strip() and not FACADE_SHELL_LINES.search(ln)]
+        emit("每一支的版本號都是內容的前十碼", versions_ok)
+        emit("所有 js 的行（排序）", [len(lines), hashlib.sha256("\n".join(sorted(lines)).encode("utf-8")).hexdigest()])
+        emit("/ 沒帶版本號的 script", re.findall(r'<script src="([^"?]+)"></script>', html))
+
+    def scripts_again(self) -> None:
+        self.scripts()
+
+    def half(self) -> None:
+        """切點：玩家登入著、/ 拿過了（這一包沒有別的半途狀態）；存檔裡有什麼照資料庫雜湊比。"""
+        self.main(self.GUEST)
+
+    def resume(self) -> None:
+        self.login_all()
+
+
+def _facade_map_web(self: MapScenario) -> None:
+    """map 軌的網頁檔段（取代 MapScenario.web）：map.js 照舊比整檔 sha256、/ 載入它的那一行與 link 的版本號。
+    以前還比 /static/app.js 整檔與 / 的每一支 script：殼化每一批都切 app.js、加新檔，那兩樣改由 facade 軌比（整份 HTML、所有 js 的行）。"""
+    who = self.GUAN
+    self.begin()
+    client = self.clients[who]
+    for url in ("/static/map.js", "/static/沒有這個檔.js"):
+        r = client.get(url)
+        emit(f"GET {url}", [r.status_code, len(r.content), hashlib.sha256(r.content).hexdigest(),
+                            r.headers.get("content-type"), r.headers.get("cache-control")])
+    page = client.get("/")
+    # 第 67 批起 style.css 會變、也切出新的樣式：link 只比以前就有的那幾支、版本號抹掉（樣式的內容與先後由 drape 軌比）
+    links = [re.sub(r"\?v=[0-9a-f]{10}$", "", h) for h in re.findall(r'<link rel="stylesheet" href="([^"]+)"', page.text)]
+    emit("GET / 載入的檔", [page.status_code, [s for s in re.findall(r'<script src="([^"]+)"', page.text) if s.startswith("/static/map.js")],
+                             [h for h in links if not h.startswith("/static/") or h[len("/static/"):] in LOOM_OLD_SHEETS]])
+
+
+MapScenario.web = _facade_map_web
+
+
+def _facade_register_track(name: str, scenario: type, mutation: tuple, profile: str) -> None:
+    """再開一軌（TRACKS、TRACK_NAMES、MUTATIONS、MUTANT_PROFILE 四張表一起登記；同 _beacon_register_track，名字分開免得幾塊都在時互相蓋掉）。"""
+    global TRACK_NAMES
+    TRACKS[name] = scenario
+    TRACK_NAMES = (*TRACK_NAMES, name)
+    MUTATIONS[name] = mutation
+    MUTANT_PROFILE[name] = profile
+
+
+# 改一個字（selftest）：修練頁換一門的那一句（swapListHtml；第 64 批從 app.js 切到 cultivation.js，兩處找）
+_facade_register_track("facade", FacadeScenario, (("web/cultivation.js", "web/app.js"), ("功法庫裡沒有別的", "功法庫裡沒有其他的")), "week7")
+
+
+# ── shell_web（全部拆包第 67 批：style.css 照包分）─────────────────────────────────────
+LOOM_HEAD = re.compile(r"^/\* 天下大勢：.*全部拆包第 67 批從 style\.css 切出來.*\*/$")  # 新檔第一行的說明（base 沒有）
+
+
+def _drape_rules(css: str, media: str, sink: dict) -> None:
+    """照瀏覽器讀的順序把樣式攤平：(media 條件, 選擇器, 屬性) → [值, ...]。多一個 } 不吃掉（瀏覽器會把它算進下一條的選擇器、那一條作廢），所以指紋連這種作廢也比。"""
+    i, n = 0, len(css)
+    while i < n:
+        brace = css.find("{", i)
+        if brace < 0:
+            return
+        semi = css.find(";", i, brace)  # 頂層的 @import 這種
+        if semi >= 0 and css[i:semi].lstrip().startswith("@"):
+            i = semi + 1
+            continue
+        depth, j = 1, brace + 1
+        while j < n and depth:
+            if css[j] == "{":
+                depth += 1
+            elif css[j] == "}":
+                depth -= 1
+            j += 1
+        head, body = " ".join(css[i:brace].split()), css[brace + 1:j - 1]
+        if head.startswith(("@media", "@supports")):
+            _drape_rules(body, f"{media} & {head}" if media else head, sink)
+        elif head.startswith("@"):
+            sink.setdefault((media, head, ""), []).append(" ".join(body.split()))  # @keyframes 同名後蓋前、@font-face：整段當一個值
+        else:
+            for sel in re.split(r",(?![^()]*\))", head):
+                for decl in re.split(r";(?![^()\"']*[\"')])", body):
+                    if ":" in decl:
+                        prop, value = decl.split(":", 1)
+                        sink.setdefault((media, sel.strip(), prop.strip().lower()), []).append(" ".join(value.split()))
+        i = j
+
+
+class DrapeScenario(FacadeScenario):
+    """樣式的一軌（全部拆包第 67 批；--track drape，自己一個資料庫）。班底的名字都是原創（PM 11/04）。
+    別的軌比的是 API 與 js，樣式一個字都走不到；這一批把 web/style.css 切到各包的 web/<包>.css，同權重後蓋前，先後就是行為，所以另開這一軌。
+    sheets 照 / 真的載入的 link 一支一支抓：
+    以前就有的（LOOM_OLD_SHEETS）寫狀態碼、型別、快取標頭與先後；每一支的 ?v= 是不是內容的前十碼；
+    「所有 css 的行」：每一支去掉新檔第一行說明之後的每一行（不含空行）排序取 sha256，加上行數——切檔只換位置，這個數字兩邊要一樣，改到任何一行就紅（selftest 改一個字就是這一條抓的）；
+    「同選擇器同屬性的值」：照載入順序把規則攤平，(media, 選擇器, 屬性) → 值的序列，整張取 sha256——同一個選擇器在兩處寫同一個屬性、搬完誰蓋誰反了就紅，多一個 } 作廢的那一條也算在裡面。
+    這一軌走不到的：兩個不同的選擇器打到同一個元素時誰蓋誰（要看畫面，切檔時由 scripts/css_order_check.py 與波末實機守）；瀏覽器真的算出來的樣子。
+    半舊半新：樣式沒有寫到一半的狀態（/ 開機時算一次、不碰存檔）。切在玩家登入著、/ 已經拿過的那一刻；後半是新程式重新開機，同樣再抓一遍。
+    假人：碰不到（假人只透過 Game 的公開行動做事，不抓網頁），所以沒有假人段；web/ 掃字另有測試。"""
+
+    PLAYERS = {"織機客": "guan"}
+    NEWBIE = "穿梭人"
+    PHASES_FIRST = ["setup", "sheets", "half"]
+    PHASES_SECOND = ["resume", "sheets_again"]
+    GUEST = "織機客"
+
+    def sheets(self) -> None:
+        self.begin()
+        client = self.clients[self.GUEST]
+        html = client.get("/").text
+        found = re.findall(r'<link rel="stylesheet" href="/static/([^"?]+)\?v=([0-9a-f]{10})">', html)
+        emit("/ 載入的舊樣式（先後）", [name for name, _ in found if name in LOOM_OLD_SHEETS])
+        lines: list[str] = []
+        rules: dict = {}
+        versions_ok = True
+        for name, version in found:
+            r = client.get(f"/static/{name}")
+            versions_ok &= hashlib.sha256(r.content).hexdigest()[:10] == version
+            if name in LOOM_OLD_SHEETS:
+                emit(f"GET /static/{name}", [r.status_code, r.headers.get("content-type"), r.headers.get("cache-control")])
+            body = r.text.replace("\r\n", "\n")
+            lines += [ln for ln in body.split("\n") if ln.strip() and not LOOM_HEAD.match(ln)]
+            _drape_rules(re.sub(r"/\*.*?\*/", "", body, flags=re.S), "", rules)
+        emit("每一支的版本號都是內容的前十碼", versions_ok)
+        emit("所有 css 的行（排序）", [len(lines), hashlib.sha256("\n".join(sorted(lines)).encode("utf-8")).hexdigest()])
+        flat = json.dumps(sorted((list(k), v) for k, v in rules.items()), ensure_ascii=False)
+        emit("同選擇器同屬性的值（照載入順序）", [len(rules), hashlib.sha256(flat.encode("utf-8")).hexdigest()])
+        emit("/ 沒帶版本號的樣式", re.findall(r'<link rel="stylesheet" href="(/static/[^"?]+)">', html))
+
+    def sheets_again(self) -> None:
+        self.sheets()
+
+
+# 改一個字（selftest）：簽到第四階小字的字級（第 67 批從 style.css 切到 checkin.css，兩處找）
+_facade_register_track("drape", DrapeScenario, (("web/checkin.css", "web/style.css"), (".ck-p4 small { font: 10.5px", ".ck-p4 small { font: 10.6px")), "week7")
+
+
 if __name__ == "__main__":
     sys.exit(main())

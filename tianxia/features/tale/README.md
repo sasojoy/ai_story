@@ -25,7 +25,7 @@
 - 殼 `server.py` 留 **state 的宣告**（測試與 `tests/conftest.py` 認這幾個名字，包一律 `shell.<名字>` 當下讀、當下寫，不快取）：`TALES`、`TALES_CLIENT`、`TALES_STOP`、`TALES_THREAD`、`TALES_IN_CHRONICLE`、`TALE_COVER_DIR`、`TALE_LOCK`、`TALE_RUNNING`、`TALE_OWNER`、`TALE_THREADS`（`TALE_THREADS` 另外六處也看：潤色、書信、月旦、形勢、擂台場邊、酒肆閒談；`main()` 開它的那一行不動）。第 53 批照同一個形狀（包的 `threads` 叫殼的 `start_*`，STOP、THREAD 留殼）。
 - 殼留 **8 個一行薄包裝**：`_tales_waiting`、`narrate_battle`、`narrate_once`、`tale_view`、`tale_cover`、`tale_index`、`start_tales`、`tale_round`。`act`、`look`、`main_view` 原位叫，先後算行為；`test_server`、`test_battle_tales`、`same_behavior` 從 `server.` 叫。`tale_round` 的預設參數 `clock=time.time` 寫在包裝上（`same_behavior` 先換 `time.time` 才 import server）。包裡互叫也經 `shell.<名字>`，測試換掉的看得到。
 - `_tale_ref`（`server.py`，`reports_view` 旁邊，只讀 `battlelog`）沒搬：派工單沒點名。
-- `web/app.js` 的戰記（`taleLink`／`taleHtml`／`taleIndexHtml`）歸總表第 66 批（網頁殼化三）。
+- 戰記的畫面（`taleLink`／`taleHtml`／`taleIndexHtml`）在 `web/tale.js`（第 66 批從 `app.js` 切出來）；`tale.css` 只有戰記頁自己連，不進 `Feature.web`。`tests/web/test_tale_web.py` 用假的 `/api/tale`，留 `tests/web/`。
 
 ## 測試
 
@@ -38,3 +38,7 @@
 - `tests/server/test_server.py -k "tale or queue or scheduler"`（`_users_in_server("QUEUE")` 掃本包 `routes.py` 看 `narrate_once`、`tale_round`）
 
 前後比對：`same_behavior` 的 `scribe` 一軌（三種設定、整段與半舊半新）。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `tales`（經 `frame.shell.tale_index`，殼的薄包裝）。

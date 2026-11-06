@@ -31,7 +31,7 @@
 
 ## 委派與留在原位的接縫
 
-`Game` 留 41 個一行委派（第 32 批拿掉 `_parley_forsake`：叛投改接核心的叛投掛鉤；主幹合回 D 段加 `talk_view`，只有殼在叫）：第 19 批 27 個（`_stance_before`、`_stance_credit` 兩個第 20 批拿掉了，只有搬走的 `_talk`、`_road_say` 在叫，現在包裡互相叫）加第 20 批 14 個——server 與測試在叫的 `dialogue_request`、`say_max`、`_checked_prepared`、`_parley_lists`、`_parley_prompt`、`_parley_options`、`_annal_talk`（`test_annals` 直接叫）；核心原位叫的 `_open_dialogue`（交友與求見開口，第 21 批）、`_last_talk_line`、`affinity_text`（場景文字與談話那張人物卡）、`_parley_road_option`（路上的選單）、`_talk_options`（跟人物談著的整個選單）；出陣包經 `ctx` 問的 `_parley_backing_here`。其餘 16 個（`_dialogue_unavailable`、`_parley_finish`、`_parley_decide`……與 `_prepared_turn`）只有包裡叫，沒有委派；`add_to_team`、`remove_from_team`、`release_companion` 帶 `@_not_while_preparing`；`_errand_act`、`_errand_reward`、`_errand_persuade` 只有包裡叫，沒有委派。`Game.SELF_IN_TEAM`、`FOLLOWER_IN_TEAM` 指到包的常數（`test_ranks` 讀）；`Game._persuade_said`、`Game._parley_decision` 是寄放（`choose` 前段與包都讀寫）。
+`Game` 留 39 個一行委派（第 32 批拿掉 `_parley_forsake`：叛投改接核心的叛投掛鉤；第 66 批拿掉 `talk_view`、`errands_view`：`/api/main` 改走 `status_slots`）：第 19 批 27 個（`_stance_before`、`_stance_credit` 兩個第 20 批拿掉了，只有搬走的 `_talk`、`_road_say` 在叫，現在包裡互相叫）加第 20 批 14 個——server 與測試在叫的 `dialogue_request`、`say_max`、`_checked_prepared`、`_parley_lists`、`_parley_prompt`、`_parley_options`、`_annal_talk`（`test_annals` 直接叫）；核心原位叫的 `_open_dialogue`（交友與求見開口，第 21 批）、`_last_talk_line`、`affinity_text`（場景文字與談話那張人物卡）、`_parley_road_option`（路上的選單）、`_talk_options`（跟人物談著的整個選單）；出陣包經 `ctx` 問的 `_parley_backing_here`。其餘 16 個（`_dialogue_unavailable`、`_parley_finish`、`_parley_decide`……與 `_prepared_turn`）只有包裡叫，沒有委派；`add_to_team`、`remove_from_team`、`release_companion` 帶 `@_not_while_preparing`；`_errand_act`、`_errand_reward`、`_errand_persuade` 只有包裡叫，沒有委派。`Game.SELF_IN_TEAM`、`FOLLOWER_IN_TEAM` 指到包的常數（`test_ranks` 讀）；`Game._persuade_said`、`Game._parley_decision` 是寄放（`choose` 前段與包都讀寫）。
 
 往來紀錄留在殼的：`TALK_LOG`、`talk_store`、`_log_talk` 與 `server.act` 動作前後那兩行（鎖外包裝；`after_action` 拿不到動作前的那一份，接不了掛鉤）。殼的 `from tianxia import talk_log` 走別名不改；路由一律當下讀 `shell._game`、`shell.talk_store`、`shell.name_key`、`shell.figure_face`（測試換掉的看得到）。
 
@@ -80,3 +80,8 @@
 **第 57 批（分派與標題收接縫，核心批）**：`verbs()` 是新開的（`recruit`）；`quick/errand` 是這一包登記的格（回 None 照舊往下走 `choose` 掛鉤：送信、探營是 `errand:` 的正常路）。委派 `_recruit`、`_recruit_one`、`_errand_ask` 拿掉；上面寫「留委派」「原位」的以這一句為準。selftest：`levy` 一軌的目標句 `招募・{c` 在 `__init__.py` 的 `tail_title` 那一行，舊招募那一格用 `here(ctx)`，不要內聯（內聯了那個目標句會出現兩次）。同一件事比對走 `scripts/same_behavior.py`（招募某一位與調息另開 `levy` 一軌）。
 
 `howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「情誼」那一節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 畫面：`web/companions.js`（託付的勸降那一句；書信、點人物、對話、往來紀錄、`figTalk` 第 67 批從 `main.js` 切進來）、`web/companions.css`。
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `say_max`、`companions`（`talk_actions.main_slot`：`talk`、`figure`、`errands`，`face` 經 `frame.shell.figure_face`）、`letter`。

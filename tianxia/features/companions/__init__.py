@@ -8,11 +8,12 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, HowtoHook, MenuHook, Outcome, SeamHook, StepHook, Verb
+from tianxia.core.features import DefectHook, Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook, StepHook, Verb, slot_some
 
 
 class CompanionsFeature(Feature):
     name = "companions"
+    web = ("companions.js", "companions.css")  # 託付的勸降那一句（全部拆包第 66 批從 app.js 切出來）；書信、點人物、對話、往來紀錄與樣子（全部拆包第 67 批從 main.js、style.css 切出來）；書信、點人物、對話、往來紀錄與樣子（全部拆包第 67 批從 main.js、style.css 切出來）
     prefix = ("errand", "talk", "parley")  # 託付（errand:<動詞>:<id>）；整季機器人不按（要寫字、不收託付）；人物對話 talk:*、帶路的路上 parley:road（假人只按告辭，見 bots.py）
     # 整季機器人不收託付，萬一有也不按（勸降要寫字；原本 bot.pick 的排除清單）；對話的片段與機緣的話題（原本 bot.FORESHADOW_OPTIONS，第 60 批）：這一版假人不做伏筆也不做機緣
     bot_always = ("errand:", "talk:clue:", "talk:opp:")
@@ -152,6 +153,23 @@ class CompanionsFeature(Feature):
         from . import howto as words  # noqa: PLC0415
 
         return (HowtoHook("bond", lambda content, season, page: words.bond_section(content, season, page.recruitable)),)
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import actions, talk_actions  # noqa: PLC0415
+
+            self._status_slots = (
+                # 「自己說」最多幾個字（NPC 智能 2.0 開著時比較長，網頁的輸入框照它）
+                StatusHook("main", "say_max", lambda ctx, frame: {"say_max": talk_actions.say_max(ctx)}),
+                StatusHook("main", "companions", lambda ctx, frame: talk_actions.main_slot(ctx, frame)),
+                # 書信（大勢人物擴充第二批）：江湖頁「剛剛」上面一張小卡；沒有沒看過的信就沒有這個鍵
+                StatusHook("main", "letter", lambda ctx, frame: slot_some("letter", actions.letter_view(ctx))),
+            )
+        return self._status_slots
 
 
 FEATURE = CompanionsFeature()

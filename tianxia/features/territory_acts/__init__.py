@@ -13,11 +13,12 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, HowtoHook, SeamHook
+from tianxia.core.features import Feature, HowtoHook, SeamHook, StatusHook, slot_some
 
 
 class TerritoryActsFeature(Feature):
     name = "territory_acts"
+    web = ("territory_acts.js", "territory_acts.css")  # 見聞的〈天下形勢〉（全部拆包第 66 批從 app.js 切出來；樣子第 67 批從 style.css 切出來）
     prefix = None  # 地盤的動作走 /api/do/conquest_letter 與管理者工具，選單上沒有這一包的選項
     # 沒有 PlayerState 欄位：WorldState.conquest、xingshi、xingshi_ticket、xingshi_mark 是全服的帳，留在 state.py
     player_fields: tuple[str, ...] = ()
@@ -67,6 +68,22 @@ class TerritoryActsFeature(Feature):
         from . import howto as words  # noqa: PLC0415
 
         return (HowtoHook("land", lambda content, season, page: words.land_section(content, season)),)
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import view, xingshi, xingshi_actions  # noqa: PLC0415
+
+            self._status_slots = (
+                # 領地爭奪：戰書排的攻城、每一塊的翻地資料、能不能下戰書（開關關著、季收了沒有這個鍵）
+                StatusHook("main", "conquest", lambda ctx, frame: slot_some("conquest", view.conquest_view(ctx))),
+                # 〈天下形勢〉開著的季：見聞多一顆「形勢」（文章另外讀 /api/xingshi）；FB-578 xingshi_mark：最新一篇的篇次＋有沒有一張還在寫，變了停在「形勢」頁的網頁就重抓
+                StatusHook("main", "xingshi", lambda ctx, frame: {"xingshi": True, "xingshi_mark": xingshi_actions.mark(ctx)} if xingshi.on(ctx.content, ctx.state.world) else {}),
+            )
+        return self._status_slots
 
 
 def _turn_in_sync(ctx) -> None:

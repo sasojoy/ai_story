@@ -15,13 +15,13 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, HowtoHook, Verb, WorldHook
+from tianxia.core.features import Feature, HowtoHook, StatusHook, Verb, WorldHook
 
 
 class ExploreFeature(Feature):
     name = "explore"
     prefix: str | None = None  # act:explore 是核心的 act 前綴；走一趟沒有選項（/api/do/outing、outing_say、outing_tale、outing_erase）
-    web = ("outing.js",)  # 走一趟的畫面（本來就是獨立的檔；這一輪不切網頁，位置不動、index.html 照舊手寫）
+    web = ("outing.js", "explore.js", "explore.css")  # 走一趟的畫面 outing.js（本來就是獨立的檔）；找素材的分支輪 explore.js 與樣子 explore.css（全部拆包第 67 批從 main.js、style.css 切出來）
     content = (  # content.py 照它到這一包的 content/ 載；檔名照舊（批次表第二節）
         "outing_lines.json",  # 出門一趟回來那一段的句子
         # 探索補寫的事件池（全部拆包第 63 批）
@@ -94,6 +94,22 @@ class ExploreFeature(Feature):
         from . import howto as words  # noqa: PLC0415
 
         return (HowtoHook("explore", lambda content, season, page: words.explore_section(content, season)),)
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import explore_actions, outing_actions  # noqa: PLC0415
+
+            self._status_slots = (
+                # 走一趟：探索鈕的段數選單（picker）與這一趟（trip）；關著是 None、網頁照舊一顆探索
+                StatusHook("main", "outing", lambda ctx, frame: {"outing": outing_actions.outing_view(ctx)}),
+                # 四格探索那一格的小字「城裡多事」（整合設計 6.3，批 5）；在路上沒有這個鍵。減法季探索一顆開著時照出門一趟那一張表（批 2）
+                StatusHook("main", "mostly", lambda ctx, frame: {"mostly": mostly} if (mostly := explore_actions.mostly_here(ctx)) else {}),
+            )
+        return self._status_slots
 
 
 FEATURE = ExploreFeature()

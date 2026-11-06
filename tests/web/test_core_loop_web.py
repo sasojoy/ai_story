@@ -1,4 +1,5 @@
 """行動列：出陣那一格寫今日剩幾次（出陣探索與地盤設計第七節）。沒有 node 就略過。"""
+# 畫法在 web/guide.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import random
@@ -263,7 +264,7 @@ def test_a_narrow_phone_lets_the_duel_text_wrap_and_keeps_the_place_whole():
     import re
     from pathlib import Path
 
-    css = (Path(__file__).parents[2] / "web" / "style.css").read_text(encoding="utf-8").replace("\r\n", "\n")
+    css = (Path(__file__).parents[2] / "web" / "sortie.css").read_text(encoding="utf-8").replace("\r\n", "\n")
     assert re.search(r"(?m)^\.sx-drow \.sx-dt \{[^}]*white-space: nowrap;[^}]*text-overflow: ellipsis", css)  # 平常（360、375）照舊一行
     narrow = re.search(r"@media \(max-width: 340px\) \{\n((?:  [^\n]*\n)+)\}", css)
     assert narrow and ".sx-drow .sx-dt { white-space: normal; overflow: visible; text-overflow: clip; }" in narrow.group(1)

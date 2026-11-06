@@ -157,7 +157,7 @@ JOIN_STEP = "先投一方：{places}。"  # 待 joy 潤：散人「眼下要事�
 
 
 def _join_place_names(ctx, faction) -> list[str]:
-    """這一方的投靠點的地名（同 weekcard._places：三方卡照用那一份，這裡抄一份，包不 import weekcard）。"""
+    """這一方的投靠點的地名（同 sides._places：三方卡照用那一份，這裡抄一份）。"""
     locs = ctx.content.locations
     return [locs[x].name for x in faction.join_at if x in locs]
 

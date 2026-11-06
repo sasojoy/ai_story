@@ -70,3 +70,10 @@
 **第 56 批（選單收接縫，核心批）**：`take/faction`、`here/sect`、`here/join`、`here/defect`、`here/lean`、`idle/faction`、`block/faction` 是這一包登記的格（投靠那幾顆從 `_everyday_options` 搬進 `join_actions.join_options`）；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_sect_options`、`_lean_options`、`_faction_pending_options`、`_defect_options` 拿掉；上面寫「留委派」「原位」的以這一句為準。
 
 `howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「投靠與軍令」「各陣營有什麼不同」兩節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
+
+## 三方卡與江湖畫面的格（全部拆包第 66 批）
+
+- `sides.py`：三方卡 `sides_card`（連 `_bar`、`_goal`、`_places`、`WIN_GIVES`、`WIN_GIVES_OLD`、`HAOQIANG_GOAL`、`HAOQIANG_NOW_PENDING`，原本在 `tianxia/weekcard.py`，字一個不改；核心不 import 包，舊名不留別名）。豪強那一格的補充問同包的 `ending_actions.sides_card`、`tier_hint`；`game._opening_pending()` 經 `ctx`（`core/services.py` 有寫）。
+- 江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `sides_card`、`ending`。
+- 改 `sides.py` `test_for` 挑不到、另外要跑（`-n 4`）：`tests/core/test_contract_core.py tests/core/test_contract_features.py tests/core/test_feature_boundaries.py tests/map/test_weekcard.py tianxia/features/guide/tests/test_opening.py tests/bots/test_step.py tests/core/test_chapters.py tests/figures/test_week_unlock.py tianxia/features/companions/tests/test_errands_weekcard.py tests/server/test_server.py`；`tianxia/features/faction/tests/test_sides_card.py` 整檔 slow，改到它才跑。
+- 畫面：`web/faction.js`（`sidesTableHtml`、`sidesFirstHtml`，全部拆包第 67 批從 `main.js` 切出來，一個字不改；沒有網頁測試執行，靠 `facade` 軌比字與實機）；`main.js`、`app.js` 叫它們。

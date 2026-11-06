@@ -9,11 +9,12 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, HowtoHook, MenuHook, Outcome, SeamHook, StepHook
+from tianxia.core.features import DefectHook, Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook, StepHook, slot_some
 
 
 class FactionFeature(Feature):
     name = "faction"
+    web = ("faction.js",)  # 三方卡的表與先投一方（全部拆包第 67 批從 main.js 切出來）
     prefix = ("faction", "defect", "sect")  # faction:…（投靠、確認、選邊、改幫）、defect:…（叛投）、sect:<事件>（拜入門派）
     bot_always = ("defect:", "faction:lean:")  # 叛投、改幫隨時按得下去：整季機器人不按（原本 bot.pick 的排除；機器人不換邊）
     player_fields = ("pending_faction", "pending_defect", "pending_ally")  # 按了投靠／叛投還在確認畫面上、挑好的依附那一軍；換季照新角色重來
@@ -150,6 +151,22 @@ class FactionFeature(Feature):
             HowtoHook("join", lambda content, season, page: words.join_section(content, season)),
             HowtoHook("factions", lambda content, season, page: words.factions_section(content, season)),
         )
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import ending_actions, sides  # noqa: PLC0415
+
+            self._status_slots = (
+                # 三方卡（減法季批 1，整合設計 3.4）：劇本沒有陣營、序章裡、休季沒有這個鍵
+                StatusHook("main", "sides_card", lambda ctx, frame: slot_some("sides_card", sides.sides_card(ctx))),
+                # 三陣營四勝利的結局卡（減法季批 3c；計畫 1.3 欄位表的 main.ending）：關著的季沒有這個鍵。批 3c 的「你這一步」與三方卡資料補在 week_card、sides_card 裡，這裡不另送一份
+                StatusHook("main", "ending", lambda ctx, frame: slot_some("ending", ending_actions.ending_card(ctx))),
+            )
+        return self._status_slots
 
 
 FEATURE = FactionFeature()

@@ -7,6 +7,7 @@
 - 設定頁的管理者區多一組商城：查帳、補發、扣回、退一筆。
 假瀏覽器照 test_prologue_web 那一套跑整支 app.js（同 test_shop2_web）；商城的畫面在 web/mall.js、樣式在 web/mall.css（開發規範手冊 3.7
 第 1 階從 app.js、style.css 切出來；webharness 照 index.html 的順序把 mall.js 接在 app.js 前面）。"""
+# 畫法在 web/zhuan.js、web/peers.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import copy

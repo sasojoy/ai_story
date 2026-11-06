@@ -13,13 +13,14 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, MenuHook, SeamHook
+from tianxia.core.features import Feature, MenuHook, SeamHook, StatusHook
 
 from . import zhuan_end
 
 
 class ZhuanFeature(Feature):
     name = "zhuan"
+    web = ("zhuan.js",)  # 玩家傳那一層與行狀（全部拆包第 66 批從 app.js 切出來）
     prefix = "zhuan"
     content = ("verdicts.json",)  # content.py 照它到這一包的 content/ 載（核心沒有 import 這一包）；驗證在下面的 check_content
     # 沒有認領的 PlayerState 欄位：annals、annals_mark、xingshi_seen 是行狀，核心 core/annal_base.py 管；列傳存在資料庫的 biographies 表、票在錢包裡
@@ -70,6 +71,19 @@ class ZhuanFeature(Feature):
                 MenuHook("rest", "zhuan", lambda ctx: actions.options(ctx)),
             )
         return self._menus
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import actions  # noqa: PLC0415
+
+            self._status_slots = (
+                StatusHook("main", "zhuan", lambda ctx, frame: actions.main_slot(ctx, frame)),
+            )
+        return self._status_slots
 
 
 FEATURE = ZhuanFeature()

@@ -1,4 +1,6 @@
 """江湖頁的畫面：第一屏與行動列、此地還能做的摺疊、狀態列、剛剛的卡片。原本一張回饋單一個檔（FB-087、105、107、120、123、135、136、198、360、663、664、670、671），2026-10-27 測試整理 1b 併成這一檔；各段開頭照抄原本那一檔的說明。"""
+# 畫法在 web/guide.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
+# 畫法在 web/battle.js、web/peers.js、web/sortie.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 import re
 from pathlib import Path
@@ -680,7 +682,7 @@ def test_the_folded_parts_never_hold_the_gains_or_the_result(on):
 
 
 def _css() -> str:
-    return re.sub(r"/\*.*?\*/", "", (ROOT / "web" / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    return re.sub(r"/\*.*?\*/", "", (ROOT / "web" / "style.css").read_text(encoding="utf-8") + (ROOT / "web" / "battle.css").read_text(encoding="utf-8") + (ROOT / "web" / "companions.css").read_text(encoding="utf-8") + (ROOT / "web" / "peers.css").read_text(encoding="utf-8"), flags=re.S)
 
 
 def _rules(css, needle):
@@ -863,7 +865,7 @@ def test_the_selector_follows_the_real_markup_the_duel_card_draws():
     first = bar[bar.index('<div class="sx-drow'):]
     first = first[:first.index("</div>")]  # 第一張那一行（裡面只有 span 與一顆鈕，沒有再巢一層 div）
     assert '<button class="btn small primary" data-act="sortie-answer" data-id="d1">應戰</button>' in first and "<div" not in first[4:]
-    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    src = (ROOT / "web" / "fit.js").read_text(encoding="utf-8")
     sel = re.search(r"const FIT_DUEL_BTN = ('[^']*'\s*\+\s*'[^']*');", src).group(1)
     assert '#page > .act-bar + #sortie-duels > .sx-drow:first-of-type > [data-act="sortie-answer"]' in sel and '[data-act="sortie-join"]' in sel
     grey = run_prologue_web({**m, "sorties": [{**row, "can_answer": False, "why_not": "今日應戰 3 次已用完"}]}, "return H.actionBar(H.S.main);")
@@ -902,7 +904,7 @@ def test_refitting_opens_the_letter_again_once_the_duel_is_gone():
 
 @node
 def test_the_folded_letter_hides_its_body_and_the_push_question_in_css():
-    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    css = (ROOT / "web" / "companions.css").read_text(encoding="utf-8")
     assert ".card.letter.fit-letter > .letter-body, .card.letter.fit-letter + .push-ask { display: none; }" in css
 
 
@@ -1112,7 +1114,7 @@ def test_the_description_selector_follows_the_real_scene_markup(on, with_art):
     norm = lambda text: " ".join(re.sub(r"<[^>]*>", "", text).split())  # noqa: E731
     assert [norm(k["text"]) for k in picked] == [norm(d) for d in desc]
     assert "calls" in {k["attrs"].get("class") for k in card if k["tag"] == "div"} and not any("calls" in k["attrs"].get("class", "") for k in kids)
-    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    src = (ROOT / "web" / "fit.js").read_text(encoding="utf-8")
     assert 'scene.querySelectorAll(":scope > p:not([class])")' in src and 'document.querySelector("#page > .card.scene:not(.road)").querySelector(":scope > .scene-art")' in src
     assert 'card.querySelector(":scope > .rv-scene") || card' in src
 
@@ -2074,7 +2076,7 @@ def test_the_button_label_is_escaped(on):
 
 
 def _css_rule(selector):
-    css = re.sub(r"/\*.*?\*/", "", (ROOT_fb105 / "web" / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    css = re.sub(r"/\*.*?\*/", "", (ROOT_fb105 / "web" / "style.css").read_text(encoding="utf-8") + (ROOT_fb105 / "web" / "battle.css").read_text(encoding="utf-8"), flags=re.S)
     found = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", css)
     assert found, f"style.css 裡找不到 {selector}"
     return {k.strip(): v.strip() for k, v in (part.split(":", 1) for part in found.group(1).split(";") if ":" in part)}

@@ -8,12 +8,13 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, SeamHook
+from tianxia.core.features import Feature, SeamHook, StatusHook, slot_some
 from tianxia.core.services import checkin_on
 
 
 class CheckinFeature(Feature):
     name = "checkin"
+    web = ("checkin.js", "checkin.css")  # 簽到的小卡與挑一樣（全部拆包第 67 批從 main.js、style.css 切出來）
     prefix = None  # 沒有選項 id（簽到是江湖頁的小標）
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：這一季簽過的是第幾天、第 6、13、20 天自己挑的四階。換季跟著新角色清空
     player_fields = ("checkin_days", "checkin_picks")
@@ -33,6 +34,20 @@ class CheckinFeature(Feature):
 
             self._seams = (SeamHook("sync.deliver", "checkin", lambda ctx: actions.auto_checkin(ctx)),)
         return self._seams
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import actions  # noqa: PLC0415
+
+            self._status_slots = (
+                # 每日簽到（21 天季，正式季整合 6.2）：關著、序章裡沒有這個鍵，畫面照舊
+                StatusHook("status", "checkin", lambda ctx, frame: slot_some("checkin", actions.checkin_view(ctx))),
+            )
+        return self._status_slots
 
 
 FEATURE = CheckinFeature()

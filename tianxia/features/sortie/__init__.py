@@ -16,11 +16,12 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, HowtoHook, SeamHook, Verb
+from tianxia.core.features import Feature, HowtoHook, SeamHook, StatusHook, Verb, slot_some
 
 
 class SortieFeature(Feature):
     name = "sortie"
+    web = ("sortie.js", "sortie.css")  # 出陣約戰的封招與前往（全部拆包第 66 批從 app.js 切出來）；出陣那一格的卡與樣子（全部拆包第 67 批從 main.js、style.css 切出來）；出陣那一格的卡與樣子（全部拆包第 67 批從 main.js、style.css 切出來）
     # 出陣約戰（第 2 批）的三個動作：sortie:go:<三招>、sortie:answer:<約戰 id>:<三招>、sortie:join:<約戰 id>。不在選單上（封招的組合放不進去），
     # Game.choose 最前面就接走（查選單、建 Draft 之前；關著的季照舊「此刻無法這麼做」），所以這一包不接 choose 掛鉤。假人：bot_policy.score
     # 沒有 sortie: 那一段（選單上本來就沒有它們），bot_pick 照預設回 None＝不按，跟原本落到 score 最後的 return None 一樣。
@@ -98,6 +99,23 @@ class SortieFeature(Feature):
         from . import howto as words  # noqa: PLC0415
 
         return (HowtoHook("sortie", lambda content, season, page: words.sortie_section(content, season)),)
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import duel_actions, rules  # noqa: PLC0415
+
+            self._status_slots = (
+                # 出陣開著（出陣探索與地盤設計第二節）：行動列那一格叫「出陣」、等候的話換一句；關著時照舊「遊歷」
+                StatusHook("main", "sortie", lambda ctx, frame: {"sortie": rules.on(ctx.content)}),
+                # 出陣約戰（減法季批 3b，計畫 1.3）：出陣前那張卡與約戰卡清單；約戰關著沒有這兩個鍵
+                StatusHook("main", "sortie_cards", lambda ctx, frame: {**slot_some("sortie_card", duel_actions.sortie_card(ctx)),
+                                                                       **slot_some("sorties", duel_actions.sortie_cards(ctx))}),
+            )
+        return self._status_slots
 
 
 def _carry_season(ctx, old, fresh) -> None:

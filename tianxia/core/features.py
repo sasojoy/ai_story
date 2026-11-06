@@ -15,7 +15,7 @@
 | menu(ctx) | Game._everyday_options：這一包此刻接管整個選單（坐在宴席上、店開著那一類）；第一個不是 None 的算。**手冊 3.3 表外**（見下） |
 | prep(ctx) | Game._season_prep：開季準備卡（企劃者 2026-11-05），挑完成長配比之後這一包此刻接管整個選單，排在事件（開局三選一）前面；第一個不是 None 的算。**手冊 3.3 表外**（傳承的識海；跟 menu 差在位置：menu 在事件之後） |
 | choose(ctx, kind, arg) | Game.choose 建這一下的紀錄（Draft）之前：只吃自己前綴的 id，吃不到回 None，核心問下一包 |
-| status(ctx) | Game.feature_status → server.main_view（合進江湖畫面的頂層，例：商城的入口 main.mall） |
+| status(ctx) | Game.feature_status → server.main_view（合進江湖畫面的頂層，例：商城的入口 main.mall）；整體是 main 表（status_slots）的 features 那一格 |
 | on_sync(ctx, elapsed)、on_day(ctx) | Game.sync（elapsed 是這一次補算的自己的秒數；on_day 是回體丹那一天換了：照 _pill_day，含快轉推過的 advanced_real，所以 Game.advance 跨過 00:00 也叫） |
 | on_season_end(ctx)、on_season_start(ctx, old) | Game._reset_player_for_new_season（舊的那一季要丟之前；新的存檔接上之後、開場那一則之前） |
 | on_drop_stale(ctx) | Game._drop_stale_references 最後 |
@@ -23,7 +23,7 @@
 | bot_idle(ctx, option) | core_bots（全部拆包第 60 批）：bot.pick 排除裡有條件、或要比相等的那幾顆（此刻按了也白按）；前綴放不下才寫這一格。不問 enabled（舊濾網不看開關，關著的包選單上本來就沒有它們） |
 | admin_tools(shell)、routes(shell) | server：/api/do/{op} 的管理者工具、掛路由（shell 是 server 模組） |
 | threads(shell) | server.main（殼開、測試停：只有 main 叫 start_threads，測試不叫；不回東西。全部拆包第 52 批，開給戰記與第 53 批的看守） |
-| check_content(content, need)、web、content | content.validate（關著的包照驗）；index.html 的檔；content.py 讀的檔（第 62 批起在包裡的 content/，pack_content；第 63 批起測試內容在包裡的 tests/content/，pack_test_content）。check_content **手冊 3.3 表外**（見下） |
+| check_content(content, need)、web、content | content.validate（關著的包照驗）；/ 的 script 標籤（web_scripts、with_scripts；css 的 link 還是 index.html 手寫）；content.py 讀的檔（第 62 批起在包裡的 content/，pack_content；第 63 批起測試內容在包裡的 tests/content/，pack_test_content）。check_content **手冊 3.3 表外**（見下） |
 
 比手冊 3.3「就這幾個，不多開」那張表多開了兩個（第 1 階開的，PM 10/31 認可，理由照下面；手冊 3.3 由 PM 補；之後再要加先過 PM）：
 - menu：現行的 _everyday_options 裡一包有兩個位置——接管整個選單（坐在席上、店開著……十幾樣都是）與接在「此地還能做」裡（options），
@@ -71,13 +71,15 @@
   移動包的出發收店裡各包那一段，第 57 批加 Game.choose 那幾顆「選單上、不建紀錄」的（quick），照檔尾寫死的順序表 MENU_ORDER 一格一格問（包與核心的格穿插），不問 enabled |
 | howto()（HowtoHook） | 玩法說明的格（全部拆包第 59 批「引導二」）：設定抽屜那一頁（guide/howto.py 的 page）照檔尾寫死的順序表 HOWTO_ORDER 一格一格接；
   別節中間的插句（判斷在別包）走 HOWTO_INSERTS（howto_insert），不問 enabled |
+| status_slots()（StatusHook） | 狀態列（Game.status_data）與江湖畫面（server._main_view_body）的格（shell_web：全部拆包第 66 批）：照檔尾寫死的順序表 STATUS_ORDER
+  一格一格叫、回的鍵照順序合（JSON 鍵的先後、叫的先後都算行為；關著的包原位那幾行本來就照叫），不問 enabled |
 
 ctx 第一階就是 Game；功能包只准叫 services.py 那張清單上的方法。
 """
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -156,7 +158,7 @@ class FeatureHooks(Protocol):
     # 選項 id 的前綴（「feast」→ feast:join:3）；沒有選項的包是 None。一包兩三個前綴寫 tuple（第 11 批，PM 定：單挑、銀兩出口、有所感、陣營都會用到），
     # 分派照清單、照 tuple 的順序找第一個對上的（owner_of）；兩包不能宣告同一個前綴（tests/core/test_contract_features.py）
     prefix: str | tuple[str, ...] | None
-    web: tuple[str, ...]  # web/ 底下這一包的檔（index.html 照舊順序載入；第 3 階才由伺服器照它生成）
+    web: tuple[str, ...]  # web/ 底下這一包的檔：js 的 script 標籤由伺服器照它生成（web_scripts、with_scripts）；css 的 link 還是 index.html 手寫（第 67 批）
     content: tuple[str, ...]  # 這一包的內容檔，相對於 tianxia/features/<包>/content/（第 62 批起 content.py 照 pack_content 去那裡讀；寫法同它以前在 content/ 底下，例 events/x.json；第 63 批起同一個 rel 的測試內容在 tests/content/<rel>，有才算）
     bot_always: tuple[str, ...]  # 永遠按得下去的選項前綴：整季機器人（bot.pick）不按，不然「沒得按就推進時間」的訊號會失效
     player_fields: tuple[str, ...]  # 這一包認領的 PlayerState 欄位（3.5；README 照列）
@@ -210,6 +212,8 @@ class FeatureHooks(Protocol):
     def howto(self) -> tuple[HowtoHook, ...]: ...
     # tale（全部拆包第 52 批：殼啟動時開這一包的背景執行緒；只有 server.main 叫，測試不叫；不問 enabled，殼啟動還沒有 ctx）
     def threads(self, shell: Any) -> None: ...
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled）
+    def status_slots(self) -> tuple[StatusHook, ...]: ...
 
 
 class Feature:
@@ -335,6 +339,9 @@ class Feature:
         return ()
 
     def howto(self) -> tuple[HowtoHook, ...]:
+        return ()
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
         return ()
 
     def __repr__(self) -> str:
@@ -527,9 +534,31 @@ def check_content(content: Content, need: Callable[[bool, str], None]) -> None:
 
 
 def web_files() -> list[str]:
-    """各包登記的網頁檔（web/ 底下，照 FEATURES 的順序）。第 3 階才由伺服器照它生成 index.html；在那之前 index.html 與
+    """各包登記的網頁檔（web/ 底下，照 FEATURES 的順序）。js 由伺服器照它生成 / 的 script 標籤（下面的 web_scripts、with_scripts）；css 的 link 與
     tests/kit/webharness.APP_FILES 是手寫的，tests/core/test_contract_features.py 照這一份對它們，店面的 CSS 測試照它讀包的樣式。"""
     return [name for f in registered() for name in f.web]
+
+
+# ── shell_web（全部拆包第 64 批；計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第64批.md 第三節）：/ 的 script 由伺服器生成 ──
+# 頁面上載入 js 的先後（性質同 BUS_ORDER：先後就是行為）。不是 FEATURES 的順序：這幾支一直是這個先後，頂層敘述照這個順序跑；
+# shell.js 最先（包一載入就叫 registerPage），app.js 最後（它最後一行才啟動，排在包檔前面的話 enter 可能在包檔到之前跑）；
+# state.js、fit.js 是第 66 批從 app.js 切出來的殼：state.js 不能排在 admin.js 前面（S 的字面值在載入當下叫 admin.js 的 onAdminPath）。
+WEB_ORDER = ("shell.js", "main.js", "map.js", "outing.js", "mall.js", "legacy.js", "arena_anim.js", "arena_scene.js", "admin.js", "state.js", "fit.js", "app.js")
+WEB_MARK = "<!--scripts-->"  # web/index.html 裡換成一串 script 標籤的那個標記
+
+
+def web_scripts() -> list[str]:
+    """/ 載入的 js：WEB_ORDER（除了 app.js），接著各包登記、不在 WEB_ORDER 的 js（照 FEATURES），最後 app.js。之後新包只要寫 Feature.web。"""
+    head = [name for name in WEB_ORDER if name != "app.js"]
+    return head + [name for name in web_files() if name.endswith(".js") and name not in WEB_ORDER] + ["app.js"]
+
+
+def with_scripts(html: str) -> str:
+    """把 index.html 的標記換成一串 script 標籤，行尾跟檔案一樣。標記不是剛好一個就丟例外（同 server.versioned_page：啟動時就壞，不默默送壞頁）。"""
+    if html.count(WEB_MARK) != 1:
+        raise ValueError(f"index.html 要有剛好一個 {WEB_MARK}，現在有 {html.count(WEB_MARK)} 個")
+    newline = "\r\n" if "\r\n" in html else "\n"
+    return html.replace(WEB_MARK, newline.join(f'<script src="/static/{name}"></script>' for name in web_scripts()))
 
 
 # ── 接縫掛鉤（第 11 批；計畫 docs/superpowers/plans/2026-11-01-核心收接縫.md 1.3 寫每一個在哪兩行之間）──
@@ -1388,3 +1417,159 @@ def howto_insert(slot: str, content: Content, season: WorldState) -> list[str]:
         raise ValueError(f"玩法說明沒有 {slot} 這個插句")
     hook = howto_hooks().get(slot)
     return [] if hook is None else hook.lines(content, season, HowtoPage())
+
+
+# ── shell_web（全部拆包第 66 批；計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第66批.md 第四節）：狀態列與 /api/main 的格 ──
+
+
+@dataclass(frozen=True)
+class StatusHook:
+    """狀態列（table "status"，Game.status_data）或江湖畫面（table "main"，server._main_view_body）的一格（Feature.status_slots() 回一串）：
+    status_run 照 STATUS_ORDER[table] 一格一格叫 run(ctx, frame)，回的鍵照順序合進去（這一下沒有鍵回 {}，回別的丟 TypeError）。frame：status 表是
+    目前合到一半的那一份 dict，main 表是 MainFrame。照 registered() 問、不看 enabled（原位那幾行本來就不看包的開關，關著的也要有 null）。
+    包的函式在叫的那一下才照模組屬性找（monkeypatch 照樣有效）。"""
+
+    table: str
+    slot: str
+    run: Callable[[Any, Any], dict]
+
+
+@dataclass
+class MainFrame:
+    """main 表每一格拿到的：status、options、card 是殼一開頭算好的（會推進全服戰鬥的選單只叫一次，所以照原本的順序一格一格叫，不是先全叫完再排鍵）；
+    view 是合到一半的畫面（入伍段的 glow 那一格改 view["guide"]）；shell 是 server 模組（同 routes(shell)：server.figure_face 這些照舊打得到）；
+    orders 是 orders 那一格算好留給 week_card 那一格的（殼的兩格，核心的本週卡也讀同一份）。"""
+
+    status: dict
+    options: list
+    card: Any
+    view: dict
+    shell: Any
+    orders: list = field(default_factory=list)
+
+
+# 狀態列與江湖畫面的順序表：照換成掛鉤之前 Game.status_data、server._main_view_body 一段一段寫的先後。先後就是行為（JSON 鍵的先後閘門逐位元組比；
+# 叫的先後也算：選單會推進全服戰鬥），寫死在這裡、不照 FEATURES。包登記自己那幾格（Feature.status_slots()）；核心的格是 engine 的 status_data、
+# 殼的格是 server._main_view_body 傳進來的閉包。改這張表先過 PM（性質同 BUS_ORDER）；tests/core/test_contract_core.py 逐字鎖住。條件鍵的判斷（is not None
+# 才放、if mostly、if orders）照原位搬，不統一。
+#
+# status 表（Game.status_data）
+# 格            主人                 鍵
+# head          核心                 name, affiliation, ranger, renown
+# bounties      懸賞 bounties        bounties
+# manual        核心                 manual, manual_total
+# seal          玉璽 seal            seal_duel, seal, seal_watch
+# armament      銀兩出口 outlets     armament
+# forge_manual  核心                 forge_manual
+# create        煉製與自創 craft     create
+# ascension     修練 cultivation     ascension
+# self          核心                 anonymous … pills
+# newbie        引導 guide           newbie
+# vitals        核心                 hp … busy_hours（含 growth、lilian 兩個條件鍵）
+# journey       移動 travel          journey
+# calendar      核心                 calendar, next_event（第一季）
+# help          核心                 stamina_help, howto_entry（讀 frame["pills"]）
+# checkin       簽到 checkin         checkin（None 沒有鍵）
+# war           核心                 fronts … war_help（第一季）
+# invites       玩家互動 peers       invites（第一季）
+#
+# main 表（server._main_view_body）
+# 格            主人                     鍵
+# screen        殼                       status, quest, scene, art, options
+# outing        探索 explore             outing
+# say_max       人物情誼 companions      say_max
+# sortie        出陣 sortie              sortie
+# modes         殼                       precise, training
+# action_notes  殼                       action_notes
+# sense_help    有所感 sense             sense_help
+# on_road       移動 travel              on_road
+# free_text     殼                       free_text, free_text_note, free_op, event_free_text, event_tier, story_cards, keepsakes, card, card_id
+# gauges        決戰 battle              battle_gauge, card_gauge
+# journal       殼                       latest, journal, older, now, front
+# peers         玩家互動 peers           here, calls
+# party         移動 travel              party
+# news          殼                       bulletin, trends, rumors, chronicle
+# tales         戰記 tale                tales
+# admin         殼                       admin, paused
+# guide         引導 guide               guide, prologue, onboard
+# horse_art     殼                       horse_art
+# push          殼                       push, push_spread
+# web_push      手機通知 notify          web_push
+# shop          殼                       shop
+# prep          殼                       prep
+# milestone     修練 cultivation         milestone
+# features      殼                       Game.feature_status()（FEATURES 的 status：mall、looks、legacy、hire）
+# glow          引導 guide               改 view["guide"]["glow"]，沒有鍵
+# fronts        殼                       fronts
+# orders        殼                       orders（順手存 frame.orders）
+# week_card     殼                       week_card
+# mostly        探索 explore             mostly
+# sides_card    陣營 faction             sides_card
+# figures_here  交友求見 socialize       figures_here
+# companions    人物情誼 companions      talk, figure, errands
+# event_opts    殼                       event_opts
+# rumor_layers  殼                       rumor_layers
+# convoy        軍情 military            convoy
+# conquest      地盤 territory_acts      conquest
+# sortie_cards  出陣 sortie              sortie_card, sorties
+# siege         決戰 battle              siege
+# xingshi       地盤 territory_acts      xingshi, xingshi_mark
+# plan          大勢人物的行動 figure_acts  plan
+# place_state   殼                       place_state
+# place_deeds   大勢人物的行動 figure_acts  place_deeds
+# letter        人物情誼 companions      letter
+# zhuan         列傳 zhuan               zhuan
+# season_result 殼                       season_result
+# ending        陣營 faction             ending
+STATUS_ORDER: dict[str, tuple[str, ...]] = {
+    "status": ("head", "bounties", "manual", "seal", "armament", "forge_manual", "create", "ascension", "self", "newbie", "vitals", "journey",
+               "calendar", "help", "checkin", "war", "invites"),
+    "main": ("screen", "outing", "say_max", "sortie", "modes", "action_notes", "sense_help", "on_road", "free_text", "gauges", "journal", "peers",
+             "party", "news", "tales", "admin", "guide", "horse_art", "push", "web_push", "shop", "prep", "milestone", "features", "glow", "fronts",
+             "orders", "week_card", "mostly", "sides_card", "figures_here", "companions", "event_opts", "rumor_layers", "convoy", "conquest",
+             "sortie_cards", "siege", "xingshi", "plan", "place_state", "place_deeds", "letter", "zhuan", "season_result", "ending"),
+}
+
+
+def slot_some(key: str, value: Any) -> dict:
+    """「不是 None 才有這個鍵」那幾格的寫法（if mostly、if orders 那種看真假的照原位自己寫）。"""
+    return {} if value is None else {key: value}
+
+
+def status_hooks(table: str) -> dict[str, Callable[[Any, Any], dict]]:
+    """table 那一張包登記的格 {slot: run}：照 registered()、不看 enabled。每一次都驗登記的全部格：表上沒有的表或格、同一格登記兩次（兩包或同一包）
+    都丟 ValueError（同 bus_hooks、step_hooks）。"""
+    if table not in STATUS_ORDER:
+        raise ValueError(f"狀態列沒有 {table} 這一張表")
+    own: dict[str, Callable[[Any, Any], dict]] = {}
+    seen: set[tuple[str, str]] = set()
+    for f in registered():
+        for hook in f.status_slots():
+            if hook.slot not in STATUS_ORDER.get(hook.table, ()):
+                raise ValueError(f"{f.name} 登記了狀態列表上沒有的格 {hook.table}/{hook.slot}")
+            if (hook.table, hook.slot) in seen:
+                raise ValueError(f"狀態列的 {hook.table}/{hook.slot} 登記了兩次（{f.name}）")
+            seen.add((hook.table, hook.slot))
+            if hook.table == table:
+                own[hook.slot] = hook.run
+    return own
+
+
+def status_run(table: str, core: dict[str, Callable[[Any, Any], dict]], frame: Any, ctx: Game) -> dict:
+    """照 STATUS_ORDER[table] 走每一格：包登記了叫包的，沒有叫 core 那一份（核心或殼的閉包）；兩邊都沒有（那一格的包沒登記：契約測試換掉 FEATURES 時）
+    跳過。每一格回的 dict 照順序合進 frame（main 表是 frame.view），回那一份。core 寫了表上沒有的格丟 ValueError（打錯字的格不會默默不跑）；
+    某一格回的不是 dict 丟 TypeError。"""
+    own = status_hooks(table)  # 沒有這一張表在 status_hooks 丟
+    order = STATUS_ORDER[table]
+    if not core.keys() <= set(order):
+        raise ValueError(f"核心代叫了狀態列 {table} 表上沒有的格 {sorted(core.keys() - set(order))}")
+    into = frame.view if isinstance(frame, MainFrame) else frame
+    for slot in order:
+        run = own.get(slot) or core.get(slot)
+        if run is None:
+            continue
+        got = run(ctx, frame)
+        if not isinstance(got, dict):
+            raise TypeError(f"狀態列的 {table}/{slot} 回的不是 dict：{type(got).__name__}")
+        into.update(got)
+    return into

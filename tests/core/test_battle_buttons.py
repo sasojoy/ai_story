@@ -91,7 +91,7 @@ def test_a_raw_html_tag_in_a_quoted_line_is_still_escaped():
 
 
 def _css_rule(selector):
-    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8") + (ROOT / "web" / "battle.css").read_text(encoding="utf-8")
     found = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", css)
     assert found, f"style.css 裡找不到 {selector}"
     return {k.strip(): v.strip() for k, v in (part.split(":", 1) for part in found.group(1).split(";") if ":" in part)}

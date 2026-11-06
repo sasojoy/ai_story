@@ -1304,8 +1304,10 @@ def test_the_allocate_buttons_say_what_each_stat_does():
     """M2：＋鈕底下那一行（五項各管什麼）跟＋鈕畫在同一個條件裡——有點可配才出現；用的是伺服器送的 stat_uses 與
     stat_uses_note，網頁不寫死屬性的用途。"""
     js = webharness.app_source()
-    start = js.index('data-act="allocate" data-stat="${esc(key)}" data-glow="allocate"')  # 狀態列那一排（江湖頁頂上提示條攤開的另有一排）
-    line = js[js.rindex("\n", 0, start):js.index("\n", start)]
+    # 狀態列那一排在 app.js（第 64 批起俠客頁那一排切去修練包的檔、接起來排在 app.js 前面，所以這一行照 app.js 找）
+    shell = (webharness.WEB / "app.js").read_text(encoding="utf-8").replace("\r\n", "\n")
+    start = shell.index('data-act="allocate" data-stat="${esc(key)}" data-glow="allocate"')  # 狀態列那一排（江湖頁頂上提示條攤開的另有一排）
+    line = shell[shell.rindex("\n", 0, start):shell.index("\n", start)]
     assert line.strip().startswith("${s.stat_points ?") and "statUsesHtml(s)" in line
     helper = js[js.index("function statUsesHtml"):]
     helper = helper[:helper.index("\n  }\n")]
@@ -5989,8 +5991,8 @@ def test_the_page_loads_the_three_scripts_in_order_and_app_js_last():
     三個檔都是一般的 script、頂層的名字同在一個全域裡，所以不能重名，也不能再包 IIFE。"""
     import re as _re
 
-    html = (server.WEB / "index.html").read_text(encoding="utf-8")
-    assert _re.findall(r'<script src="/static/([^"]+)"></script>', html) == list(webharness.APP_FILES)
+    html = server.PAGE  # 第 64 批起 script 標籤由伺服器生成（features_core.with_scripts），web/index.html 裡只有一行標記
+    assert _re.findall(r'<script src="/static/([^"?]+)\?v=[0-9a-f]{10}"></script>', html) == list(webharness.APP_FILES)
     names: dict[str, str] = {}
     for name in webharness.APP_FILES:
         js = (server.WEB / name).read_text(encoding="utf-8").replace("\r\n", "\n")

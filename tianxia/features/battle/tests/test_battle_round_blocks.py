@@ -2,6 +2,7 @@
 
 引擎（Game._round_blocks）把場景上最近五段戰況寫成「##### 第 N 回合」加一行一條的清單、新的在上；網頁（app.js 的 roundBlocks）把最新
 那一回合整段攤開，舊的幾回合各收成一行（回合數＋誰佔上風那一句），點了攤開，攤開了哪幾回合記在 S.roundsOpen、輪詢重畫照樣開著。"""
+# 畫法在 web/battle.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import re

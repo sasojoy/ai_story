@@ -38,11 +38,11 @@
 
 ## 委派與留在原位的接縫
 
-`Game` 現在留 33 個一行委派：第 38 批加了 13 個（論武 `discuss_items`、`_discuss_cost`、`discuss_problem`、`discuss_item_problem`，截殺 `raid_shown`、`raid_refusal`、`raid_odds`、`raid_targets`、`raid`、`raid_flee_odds`、`_raid_fled`、`_raid_spoils`、`_raid_record`），拿掉沒人叫的 `_pair_left`，其餘 20 個是第 37 批留的（下面括號裡第 37 批的清單，`_pair_left` 除外）（`peers_here`、`_peer`、`peer_card`、`peer_request`、`peer_act`、`calls_here`、`_invite_options`、`_invite`、`answer_invite`、`_tell_sender`、`_invite_status`、
+`Game` 現在留 32 個一行委派（第 66 批拿掉 `_invite_status`，狀態列改走 `status_slots`）：第 38 批加了 13 個（論武 `discuss_items`、`_discuss_cost`、`discuss_problem`、`discuss_item_problem`，截殺 `raid_shown`、`raid_refusal`、`raid_odds`、`raid_targets`、`raid`、`raid_flee_odds`、`_raid_fled`、`_raid_spoils`、`_raid_record`），拿掉沒人叫的 `_pair_left`，其餘 20 個是第 37 批留的（下面括號裡第 37 批的清單，`_pair_left` 除外）（`peers_here`、`_peer`、`peer_card`、`peer_request`、`peer_act`、`calls_here`、`_invite_options`、`_invite`、`answer_invite`、`_tell_sender`、
 `gift_day_left`、`_spar_pair`、`_pair_left`、`_pair_tick`、`mingtie_view`、`make_mingtie`、`report_mingtie`、`admin_mingtie_reports`、`admin_mingtie_remove`、`admin_mingtie_restore`，其中管理者三個給 server 的 `admin_choices`、`ADMIN_ACTIONS`），
 另加 `_yuedan_line`（玩家卡的月旦評那一句，主人是大勢人物包，包經 `ctx` 叫）。其餘 10 個方法只有包裡叫，沒有委派。
 核心原位接掛鉤的：`choose` 與 `_action_title` 的 `invite`（`Outcome`）、換季的頭銜簿（`on_season_start`）、`bot.py` 的 `invite:` 排除（`bot_always`）。
-留委派、記進 `GAME_DELEGATE_CALLERS` 的：`_everyday_options` 叫 `_invite_options`（選單的順序是行為）、`status_data` 叫 `_invite_status`（鍵的順序是行為，總表第 66 批才接 status 掛鉤）；
+留委派、記進 `GAME_DELEGATE_CALLERS` 的：`_everyday_options` 叫 `_invite_options`（選單的順序是行為）；
 結伴同行（移動包 `party.join`、`join_refusal`，第 48 批；Game 留一行委派）在包裡經 `ctx` 叫 `_tell_sender`、`_peer`，不再記進 `GAME_DELEGATE_CALLERS`。第 38 批把第 37 批的 `GAME_DIRECT` 7 個（切磋、論武直接用這一包的 `social`、`invites`）與 `_PEERS_38` 的 6 筆呼叫端都拿掉；
 `engine.py` 對 `invites`、`social` 的 import 也拿掉了，多 import 論武、截殺兩個動作檔（13 個委派用）與 `DISCUSS_SAME`、`_refusal` 一行（`tests/arts/test_discuss.py` 從 `engine` 拿的過渡）。
 懸賞榜第 45 批成包，截殺讀的 `hunting`、`official_hit`、`BEATEN_OFFICIAL` 三處改讀核心 `core/bounty_base`。
@@ -81,3 +81,8 @@
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`season.carry` 的 `peers`（`actions.carry_season`：名帖與一天的次數，不看開關）。
 
 **第 56 批（選單收接縫，核心批）**：`here/invite` 是這一包登記的格；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_invite_options` 拿掉；上面寫「留委派」「原位」的以這一句為準。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 畫面：`web/peers.js`（名帖的畫法與畫布；此地還有誰、邀請、`socialHtml`、玩家卡、`peerAct` 第 67 批從 `main.js` 切進來）、`web/peers.css`；點擊分派的 `case` 留 `app.js`。
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`status` 表 `invites`（第一季才有）；`main` 表 `peers`（`here`、`calls`）。

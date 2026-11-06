@@ -1,0 +1,239 @@
+/* 天下大勢：煉製與自創的樣式（全部拆包第 67 批從 style.css 切出來，規則一個字不改；載入的先後在 index.html，同權重後蓋前）。 */
+
+/* 煉製頁（企劃者 2026-10-10）：合不了的灰掉、寫兩三個字的原因；清單的篩選；結果就寫在開爐底下 */
+.chip.no { opacity: 0.5; border-style: dashed; }
+.chip.no .why { font-style: normal; color: var(--ink-2); }
+.craft-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.craft-filter select.input { width: auto; flex: 1 1 88px; min-width: 88px; padding: 6px 6px; font-size: 16px; } /* 不能低於 16px：iOS 一點就放大整頁（Joy 2026-10-22「畫面會縮放一下」） */
+.craft-filter .fchip { flex: 0 0 auto; }
+.forge-result { margin: 0 0 12px; }
+/* 太極爐一直看得到（Joy 2026-10-17）：大爐子捲出狀態列底下時，同一座爐縮成一條固定在狀態列底下（.kiln.compact）——
+   左右兩格、中間小太極就是開爐鈕、底下一行開不了爐的原因；.kiln-wrap 撐著大爐子的高度，縮起來頁面不跳 */
+.kiln-mini { display: none; }
+.kiln.compact { position: fixed; top: var(--top-h, 0px); left: 0; right: 0; z-index: 15; max-width: 640px; margin: 0 auto; padding: 8px 16px;
+  background: color-mix(in srgb, var(--paper) 98%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line); box-shadow: 0 6px 14px -10px rgba(0, 0, 0, 0.35); animation: kiln-drop 0.18s ease-out; }
+.kiln.compact .kiln-big { display: none; }
+.kiln.compact .kiln-mini { display: block; }
+@keyframes kiln-drop { from { transform: translateY(-12px); opacity: 0; } }
+.kiln.compact.still { animation: none; } /* 重畫前就縮著（fixedKiln 的 quiet）：不再掉下來一次 */
+.kiln-hub { flex: none; width: 60px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  padding: 0; border: 0; background: none; color: var(--ink-2); font: 600 11px var(--serif); cursor: pointer; }
+.kiln-hub:disabled { cursor: default; }
+.kiln-taichi { width: 44px; height: 44px; display: block; overflow: visible; border-radius: 50%; }
+.kiln-hub:disabled .kiln-taichi { opacity: 0.55; }
+.kiln-hub.ready { color: var(--gold); }
+/* 小太極的金邊與火光一律是 SVG 裡的圓（.kiln-ring、.kiln-ember），不用 box-shadow：iPhone Safari 在爐火正旺時把鈕的長方形光暈
+   畫成一塊方底（Joy 2026-10-18「太極爐破圖根本沒修好」）。鈕本身永遠不畫底色、陰影、濾鏡 */
+.kiln-hub, .kiln-hub.glow, .kiln-hub.forging { box-shadow: none; filter: none; background: none; -webkit-tap-highlight-color: transparent; }
+.kiln-hub.glow, .kiln-hub.forging { animation: none; }
+.kiln-ring { fill: none; stroke: var(--gold); stroke-width: 0; }
+.kiln-ember { fill: none; stroke: #f0a23a; stroke-width: 5; opacity: 0; }
+.kiln-hub.ready .kiln-ring, .kiln-hub.glow .kiln-ring, .kiln-hub.forging .kiln-ring { stroke-width: 2; }
+.kiln-hub.ready .kiln-ember { opacity: 0.3; }
+.kiln-hub.glow .kiln-ember { animation: kiln-ember 2s ease-in-out infinite; }
+.kiln-hub.forging .kiln-ember { animation: kiln-ember 1.6s ease-in-out infinite; }
+@keyframes kiln-ember { 0%, 100% { opacity: 0.12; } 50% { opacity: 0.7; } }
+@media (prefers-reduced-motion: reduce) { .kiln-hub.glow .kiln-ember, .kiln-hub.forging .kiln-ember { animation: none; opacity: 0.5; } }
+.kiln-hub.forging .kiln-taichi .w-spin { animation-duration: 0.6s; }
+/* 剛放進去的那一格閃一下（大爐子裡的格子也是） */
+.w-slot.flash rect { animation: w-slot-flash 0.9s ease-out; }
+@keyframes w-slot-flash { 0% { fill: rgba(240, 160, 58, 0.95); stroke-width: 3; } 100% { fill: rgba(42, 36, 29, 0.92); stroke-width: 1.4; } }
+/* 開爐成了：太極猛轉一圈，新武學的卡從爐裡冒出來 */
+.w-spin.burst { animation: w-burst 0.9s cubic-bezier(.2, .7, .3, 1) 1 !important; }
+@keyframes w-burst { from { transform: rotate(0); } to { transform: rotate(720deg); } }
+/* 只淡入、往下落一點，不縮放（Joy 2026-10-22「意境合成完畢畫面會縮放一下」）；意境卡自己會翻面（.ins-card.reveal），外框不再疊一次 */
+.made-card.emerge { animation: mc-emerge 0.45s ease-out; }
+.made-card.ins-made.emerge { animation: none; }
+@keyframes mc-emerge { 0% { opacity: 0; transform: translateY(-12px); box-shadow: 0 0 30px 10px rgba(240, 160, 58, 0.7); } 100% { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .w-spin.burst, .made-card.emerge, .kiln.compact, .w-slot.flash rect { animation: none !important; } }
+.kiln-row { display: flex; align-items: stretch; gap: 6px; }
+.kiln-slot { flex: 1 1 0; min-width: 0; position: relative; display: flex; flex-direction: column; justify-content: center; gap: 1px;
+  padding: 5px 18px 5px 9px; border-radius: 10px; border: 1.5px dashed var(--line); background: var(--card); color: var(--ink); text-align: left; font: inherit; }
+.kiln-slot b { font: 600 14px var(--serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kiln-slot small { font-size: 11px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kiln-slot.empty { align-items: center; padding: 5px 8px; }
+.kiln-slot.full { border-style: solid; border-color: color-mix(in srgb, var(--gold) 55%, var(--line)); cursor: pointer; }
+.kiln-slot.full.r3 { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 10%, var(--card)); }
+.kiln-slot > i { position: absolute; top: 3px; right: 6px; font-style: normal; font-size: 12px; color: var(--ink-2); }
+.kiln-slot.flash { animation: kiln-flash 0.9s ease-out; }
+/* 鎖在爐裡（Joy 2026-10-19）：格子右下角一顆小「鎖」，鎖著時金底；大爐子的格子外角一顆小圓（.w-pin） */
+.kiln-cell { flex: 1 1 0; min-width: 0; position: relative; display: flex; }
+.kiln-cell .kiln-slot { flex: 1 1 0; }
+.kiln-slot.locked { border-color: var(--gold); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 45%, transparent); }
+.kiln-pin { position: absolute; right: 3px; bottom: 3px; width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--card); color: var(--ink-2); font: 600 10px var(--serif); line-height: 18px; cursor: pointer; }
+.kiln-pin.on { background: var(--gold); border-color: var(--gold); color: #2a241d; }
+.w-pin { cursor: pointer; }
+.w-pin circle { fill: rgba(42, 36, 29, 0.9); stroke: rgba(251, 247, 239, 0.45); stroke-width: 0.8; }
+.w-pin.on circle { fill: var(--gold); stroke: var(--gold); }
+.w-pin-t { font-size: 6.5px; font-weight: 700; fill: rgba(251, 247, 239, 0.8); text-anchor: middle; pointer-events: none; }
+.w-pin.on .w-pin-t { fill: #2a241d; }
+.w-slot.locked rect { stroke: #f0c060; stroke-width: 2; }
+@keyframes kiln-flash { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--gold) 80%, transparent); background: color-mix(in srgb, var(--gold) 35%, var(--card)); }
+  100% { box-shadow: 0 0 0 10px transparent; } }
+/* 挑東西放進爐的抽屜（Joy 2026-10-19「點格子開抽屜」）：同設定抽屜的 .sheet，清單在裡面自己捲 */
+.craft-sheet { max-height: 80vh; }
+.craft-sheet .label { margin-top: 8px; }
+.btn.pot-open { width: 100%; margin: 0 0 12px; }
+.w-slot[data-act="pot-open"] { cursor: pointer; }
+.kiln-slot.empty[data-act="pot-open"] { cursor: pointer; font: inherit; color: inherit; background: none; }
+.kiln-peek { display: flex; align-items: center; gap: 8px; width: 100%; margin: 6px 0 0; padding: 0; border: 0; background: none; text-align: left; color: var(--ink); font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.kiln-peek > span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.kiln-peek b { font: 600 13px var(--serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kiln-peek small { font-size: 11px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kiln-peek .qseal { width: 22px; height: 22px; font-size: 13px; }
+.kiln-warn { margin: 6px 0 0; font-size: 12px; line-height: 1.4; color: var(--bad); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+@media (prefers-reduced-motion: reduce) { .kiln-slot.flash { animation: none; outline: 2px solid var(--gold); } }
+/* 開爐成了：合出來的那一樣的卡（Joy 2026-10-17） */
+.made-card { margin: 0 0 10px; padding: 12px; border-radius: var(--radius); border: 1.5px solid var(--gold); background: var(--card); box-shadow: var(--shadow); }
+.mc-head { display: flex; align-items: center; gap: 10px; }
+.mc-head > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mc-head b { font: 700 17px var(--serif); }
+.mc-head small { font-size: 12px; color: var(--ink-2); }
+.mc-power { flex: none; display: flex; flex-direction: column; align-items: center; font-size: 11px; color: var(--ink-2); }
+.mc-power b { font: 700 20px var(--serif); color: var(--ink); }
+.mc-verdict { margin: 8px 0 0; font-size: 13px; }
+.mc-verdict .up { color: var(--ok); }
+.mc-verdict .down { color: var(--bad); }
+.mc-note { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
+.mc-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.mc-tags i { font-style: normal; font-size: 12px; line-height: 1.6; padding: 0 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--card-2); }
+.mc-tags i small { margin-left: 3px; color: var(--ink-2); font-size: 11px; }
+.mc-tags i em { font-style: normal; font-weight: 700; margin-right: 3px; }
+.mc-tags i em { display: inline-block; margin-right: 4px; padding: 0 4px; border-radius: 4px; font-size: 11px; line-height: 1.5; color: #fff; background: #8a7f70; }
+.mc-tags i.t2 { border-color: #5f86a8; }
+.mc-tags i.t2 em { background: #4f7699; }
+.mc-tags i.t3, .mc-tags i.t4 { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 14%, var(--card)); font-weight: 600; }
+.mc-tags i.t3 em, .mc-tags i.t4 em { background: #b8862b; }
+.mc-tags i.off { border-style: dashed; color: var(--ink-2); background: none; }
+.mc-tags i.off em { background: none; color: var(--ink-2); border: 1px dashed var(--line); }
+.mc-tags i.hi { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 50%, var(--line)); }
+.made-card.preview { border-style: dashed; border-color: color-mix(in srgb, var(--gold) 60%, var(--line)); box-shadow: none; } /* 預覽卡：還沒開爐，虛線框 */
+.made-card.preview .mc-power small { font-size: 11px; color: var(--ink-2); margin-left: 1px; }
+.made-card.preview .mc-verdict .near { color: var(--gold); }
+.mc-cost { margin: 8px 0 0; font-size: 12px; color: var(--ink-2); }
+.card.create .mc-cost.short { color: var(--bad); font-weight: 600; } /* 心得不夠開始自創：原地寫還差多少（U-04） */
+.card.create > .btn.primary { margin-top: 10px; } /* 說明那一行不被底下的大鈕壓住 */
+.made-card .kiln-warn { -webkit-line-clamp: unset; }
+.odds.fixed em { font-style: normal; font-weight: 600; margin-left: 4px; }
+.made-card .fold { margin: 10px 0 0; }
+.made-card > .btn { margin-top: 10px; }
+
+/* 一門武學的圖示：自創時擺的火柴人（沒擺過的照兵器挑一個起手式） */
+svg.fig { flex: none; color: var(--ink); overflow: visible; }
+svg.fig .bone { fill: none; stroke: currentColor; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+svg.fig circle.bone { fill: var(--card); }
+svg.fig .blade { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; }
+svg.fig .blade.thick { stroke-width: 5; }
+svg.fig .blade.bow { stroke-width: 3; }
+.card-fig { width: 42px; height: 52px; margin-left: auto; padding: 3px; border-radius: 10px; background: var(--card-2); color: var(--ink-2); }
+.acard .hd .card-fig ~ .worn { margin-left: 0; }
+.tile-fig { width: 46px; height: 58px; }
+.cr-fig { width: 64px; height: 80px; }
+.cr-fig.big { width: 84px; height: 104px; }
+.insight .ins-skill { color: var(--ink); }
+/* 自創武學那一塊（煉製頁爐子底下）：每一行左邊一個小標、右邊選項；品級機率一行三個印 */
+.card.create .crow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 8px 0; }
+.card.create .crow > span:first-child { flex: none; width: 5.5em; font-size: 12px; color: var(--ink-2); }
+.card.create .crow .input { flex: 1; min-width: 0; }
+.card.create .crow > small { flex-basis: 100%; }
+.fchips.wrap { flex-wrap: wrap; }
+.card.create .acts { display: flex; gap: 8px; margin-top: 10px; }
+.card.create .acts .btn { flex: 1; }
+.create-sum { margin: 0 0 4px; font-size: 13px; }
+.odds-line { display: flex; align-items: center; gap: 4px; margin: 0 0 6px; font-size: 12px; color: var(--ink-2); }
+
+/* 自創五步（執器→擺式→立意→成形→立名）：步驟一排、兵器一格一張小圖、擺式左邊拖曳的大圖右邊說明、成形一排玉環 */
+.cr-steps { display: flex; gap: 4px; margin: 0 0 10px; padding: 0; list-style: none; counter-reset: cr; }
+.cr-steps li { flex: 1; min-width: 0; padding: 4px 0 3px; border-bottom: 2px solid var(--line); font-size: 12px; color: var(--ink-2); text-align: center; white-space: nowrap; }
+.cr-steps li.done { border-color: color-mix(in srgb, var(--gold) 60%, var(--line)); color: var(--ink); }
+.cr-steps li.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.cr-forms { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin: 8px 0; }
+.cr-form { display: grid; justify-items: center; gap: 3px; padding: 8px 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); cursor: pointer; text-align: center; }
+.cr-form b { font: 700 15px var(--serif); }
+.cr-form small { font-size: 11px; color: var(--ink-2); line-height: 1.35; }
+.cr-form.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent) inset; }
+.cr-bias { display: flex; gap: 3px; min-height: 22px; }
+.cr-rig { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 12px; align-items: start; margin: 6px 0; }
+@media (max-width: 420px) { .cr-rig { grid-template-columns: 1fr; justify-items: center; } }
+#create-rig { width: 100%; max-width: 220px; aspect-ratio: 220 / 240; border-radius: 12px; background: var(--card-2); color: var(--ink);
+  touch-action: none; user-select: none; -webkit-user-select: none; }
+#create-rig .ground { stroke: var(--line); stroke-width: 2; stroke-dasharray: 4 5; }
+#create-rig .jt { fill: var(--gold); stroke: var(--card); stroke-width: 2; pointer-events: none; }
+#create-rig .jhit { fill: transparent; cursor: grab; }
+#create-rig .jhit:active { cursor: grabbing; }
+.cr-side { min-width: 0; }
+.cr-side .fchips { margin: 4px 0 8px; }
+.cr-read { margin: 6px 0 2px; font: 700 15px var(--serif); color: var(--accent); }
+.cr-mini, .cr-made { display: flex; align-items: center; gap: 10px; margin: 4px 0 8px; padding: 6px 10px; border-radius: 12px; background: var(--card-2); }
+.cr-mini p, .cr-made p { margin: 0; }
+.cr-made > div { min-width: 0; }
+.cr-rings { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
+.cr-ring { display: grid; justify-items: center; gap: 2px; min-width: 64px; }
+.cr-ring small { font-size: 11px; color: var(--ink); }
+.cr-ring em { font-style: normal; font-size: 10.5px; color: var(--ink-2); }
+.card.create p.small { font-size: 12px; }
+.card.create .acts { flex-wrap: wrap; }
+.card.create .acts:has(.btn:nth-child(3)) .btn.primary { flex-basis: 100%; }
+
+/* 自創單獨一頁（Joy 2026-10-21）：那一頁的標題列（入口在「自己」頁底下，.self-go） */
+.cr-bar {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 2px 0 6px; border-bottom: 1px solid var(--line);
+}
+.cr-bar .book-back { color: var(--ink); }
+.cr-bar-title { font-weight: 600; letter-spacing: 4px; }
+.cr-left { margin: 4px 0 8px; }
+/* 以意成招（招式與絕學稿案第二節）：勢、火候、撞出來的品相 */
+.cr-stance { margin: .4em 0 .1em; }
+/* 擺式：四個勢怎麼擺、對應哪個時機，現在擺的那一個亮；底下稀有路數那八格（Joy 2026-10-22） */
+.cr-stance-box { display: grid; gap: 6px; margin: 10px 0 4px; padding: 10px 12px; border-radius: 12px; background: var(--card-2); }
+.cr-now { margin: 0; font-size: 14px; }
+.cr-now b { color: var(--accent); font-family: var(--serif); }
+.cr-stances { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.cr-stances li { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; padding: 4px 8px; border-radius: 8px; font-size: 13px; color: var(--ink-2); }
+.cr-stances li b { color: var(--ink); font-family: var(--serif); }
+.cr-stances li small { font-size: 12px; }
+.cr-stances li.on { background: color-mix(in srgb, var(--accent) 12%, var(--card)); color: var(--ink); }
+.cr-stances li.on b { color: var(--accent); }
+.cr-stance-box p.muted.small { margin: 2px 0 0; }
+.cr-stance .fire-生 { color: var(--ink-2); }
+.cr-stance .fire-熟 { color: var(--accent); }
+.cr-stance .fire-透 { color: var(--gold); }
+.cr-look { margin: .3em 0; font-weight: 600; letter-spacing: .05em; }
+.cr-look.tier-珍 { color: #8a5cc2; }
+.cr-look.tier-神 { color: var(--gold); }
+.cr-move { font-size: 1.05em; }
+/* 撞到稀有路數（Joy 2026-10-23）：成形那一句、招那一行後面的小章 */
+.cr-rare { margin: .4em 0 .2em; font-weight: 600; color: var(--gold); }
+.rare-tag { display: inline-block; margin-left: .35em; padding: 0 .45em; border: 1px solid var(--gold); border-radius: .3em; color: var(--gold); font-size: .82em; line-height: 1.45; vertical-align: .08em; white-space: nowrap; }
+
+/* 爐火四段 */
+.fire { display: inline-flex; align-items: center; gap: 6px; }
+.fire svg { height: 18px; width: auto; flex: none; }
+.fire path { fill: #c8873c; }
+.fire.f0 path { fill: #b9a58c; }
+.fire.f2 path { fill: #e0702a; }
+.fire.f3 path { fill: #f3c54a; filter: drop-shadow(0 0 3px rgba(255, 200, 80, 0.9)); }
+.fire b { font-family: var(--serif); }
+.fire > span { font-size: 13px; color: var(--ink-2); }
+.fire.small { margin-left: auto; flex: none; }
+.fire.small svg { height: 14px; }
+.mc-verdict .fire { display: flex; flex-wrap: wrap; }
+/* 出爐的排場：爐火一閃、卡翻面、品相印最後蓋上；珍以上多一道光（一秒半，不擋操作） */
+.ins-card.reveal { animation: ic-flip 0.9s ease-out both; transform-origin: 50% 0; }
+.ins-card.reveal .look { animation: ic-stamp 0.35s 0.95s ease-out both; }
+.ins-card.reveal.rare { animation: ic-flip 0.9s ease-out both, ic-glow 1.4s 0.9s ease-out; }
+@keyframes ic-flip { 0% { opacity: 0; transform: perspective(600px) rotateX(70deg); filter: brightness(2.2); } 60% { filter: brightness(1.3); } 100% { opacity: 1; transform: none; filter: none; } }
+@keyframes ic-stamp { 0% { opacity: 0; transform: scale(2.4); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes ic-glow { 0% { box-shadow: 0 0 0 0 rgba(255, 200, 80, 0); } 40% { box-shadow: 0 0 22px 6px rgba(255, 200, 80, 0.55); } 100% { box-shadow: 0 0 0 0 rgba(255, 200, 80, 0); } }
+@media (prefers-reduced-motion: reduce) { .ins-card.reveal, .ins-card.reveal .look { animation: none; } }
+
+/* 武學譜分兩段（app.js bookHtml 的 MANUAL_PARTS；Joy 2026-10-25）：段名橫在兩疊書頁之間，朱色一條線 */
+.leaf-part { display: flex; align-items: baseline; gap: .6em; margin: 1.2rem 4px .4rem; padding-bottom: .3rem; border-bottom: 2px solid var(--bk-seal);
+  font: 700 1.05rem var(--bk-serif); color: var(--bk-ink); }
+.leaf-part:first-child { margin-top: .2rem; }
+.leaf-part small { font: 400 .8rem var(--sans, inherit); color: var(--bk-ink-2); }
+
+/* 煉製頁合併的預覽卡（3.5）：火候字後面「真意 N%」（爐火那一排的一格，間距照那一排），金字、不拆行 */
+.made-card .mc-grand { font-weight: 600; color: var(--gold); white-space: nowrap; }

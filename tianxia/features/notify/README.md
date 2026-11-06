@@ -11,7 +11,7 @@
 
 - `notices.py`（原 `tianxia/notices.py`，舊名留成 `sys.modules` 別名）：五種事，純函式，只讀存檔與決戰。
 - `webpush.py`（原 `server_push.py` 下半段，連同 `cryptography` 的 try-import）：RFC 8291 加密、RFC 8292 VAPID 簽名、`PushStore`、`WebPush`。沒有 tianxia 的 import。`server_push.py` 檔尾把十四個名字原樣再匯出（`server.py`、測試、`same_behavior` 讀 `server_push.<名字>`）。
-- `routes.py`：看守一輪 `notice_round`、`_notice_keys`、開看守 `start_web_push`、`web_push_line`，加上五條 `/api/push*` 與 `/sw.js`（路由搬、`web/sw.js` 檔不搬，歸第 66 批）。
+- `routes.py`：看守一輪 `notice_round`、`_notice_keys`、開看守 `start_web_push`、`web_push_line`，加上五條 `/api/push*` 與 `/sw.js`（路由搬、`web/sw.js` 檔留在 `web/` 原位）。
 - 掛鉤只接 `routes`、`threads`。`threads` 叫殼的 `start_web_push`；`main()` 原本在 `print(web_push_line(...))` 下一行直接叫它，現在經 `start_threads`（晚幾行、在 `start_narration` 之後，都在 `uvicorn.run` 之前，沒有輸出、沒有順序依賴；退版：把那一行放回去、`threads` 改回 `None`）。`enabled` 回 `True`。
 - 選項前綴：沒有。`choose`、`bot_policy.py`、`bot.py`、`bot_runner.py` 都沒有手機通知。假人沒有帳號，進不了訂閱名單。
 - 核心要用的：`tianxia/core/services.py` 的 `# notify`：看守在行動鎖內叫 `game.morning_mail(now)`（主人人物情誼包，Game 上一行委派）。
@@ -25,7 +25,7 @@
 
 - 殼 `server.py` 留 **state 的宣告**（測試與 `tests/conftest.py` 認這幾個名字，包一律 `shell.<名字>` 當下讀、當下寫，不快取）：`WEB_PUSH`、`NOTICE_STOP`、`NOTICE_THREAD`、`NOTICE_SENT`、`MAIL_DONE`、`VAPID_FILE`，與測試讀的字串 `NOTICE_TITLE`、`PUSH_WELCOME`、`PUSH_TEST`、`PUSH_NOT_HERE`。
 - 殼留 **4 個一行薄包裝**：`start_web_push`、`notice_round`（預設參數 `clock=time.time` 寫在包裝上）、`_notice_keys`、`web_push_line`（`main()` 印、`same_behavior` 與測試從 `server.` 叫）。
-- `web/` 的手機通知（設定頁、`pushAskHtml`、`web/sw.js`、`manifest.webmanifest`）歸總表第 66 批。
+- 手機通知的畫面（設定頁、`pushAskHtml`）在 `web/notify.js`（第 66 批）、`web/notify.css`（第 67 批）；`web/sw.js`、`manifest.webmanifest` 留 `web/` 原位、不進 `Feature.web`（`web_scripts` 會把 `.js` 排成 script）。
 
 ## 測試
 
@@ -40,3 +40,7 @@
 注意：`tests/server/test_push.py` 測的是推力規則（`tianxia/push.py`），不是這一包的（總表附錄丙把它歸手機通知是誤判）。
 
 前後比對：`same_behavior` 的 `beacon` 一軌（三種設定、整段與半舊半新）；`companions`（叫 `server._notice_keys`）、`duel`（叫 `notices.current`）。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `web_push`（`frame.shell.WEB_PUSH` 是殼的 state）。

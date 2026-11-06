@@ -24,11 +24,12 @@ battle: 的分派是 MENU_ORDER["quick"] 的 battle 那一格（全部拆包第 
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, MenuHook, SeamHook, WorldHook
+from tianxia.core.features import Feature, MenuHook, SeamHook, StatusHook, WorldHook, slot_some
 
 
 class BattleFeature(Feature):
     name = "battle"
+    web = ("battle.js", "battle.css")  # 集結、戰場、戰局條、MVP、攻城條（全部拆包第 67 批從 main.js、style.css 切出來）
     prefix: str | None = "battle"  # 全部拆包第 7 批拿的：battle:join／enlist／escort／act……（選項照舊由 Game 的 _battle_menu 委派給，分派是 MENU_ORDER["quick"] 那一格，第 57 批）
     content = ("battles.json",)  # 決戰與攻城範本（content.py 照它到這一包的 content/ 載；攻城的規則在 siege.py，共用規則層）
     # 補過的決戰（跨季照帶：決戰常把季收掉，下一季才回來的人也要補、而且只補一次）、這一季參戰幾場與首功幾次（玩家卡、名帖）。
@@ -136,6 +137,23 @@ class BattleFeature(Feature):
 
             self._menus = (MenuHook("quick", "battle", lambda ctx, kind, arg, option_id: muster.battle_choose(ctx, arg) if kind == "battle" else None),)
         return self._menus
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import view  # noqa: PLC0415
+
+            self._status_slots = (
+                # 決戰的即時戰局條（Joy 2026-10-10）：場景裡畫著的這一場（集結、開打），與「剛剛」是一場決戰時收場那一刻的
+                StatusHook("main", "gauges", lambda ctx, frame: {"battle_gauge": view.battle_gauge(ctx),
+                                                                 "card_gauge": view.card_gauge(ctx) if frame.card is not None else None}),
+                # 領地爭奪第三批 A：場景裡畫的是攻城戰時，最上面那一條「攻城・地點｜守方：某某」（企劃者挑甲；決戰沒有這個鍵）
+                StatusHook("main", "siege", lambda ctx, frame: slot_some("siege", view.siege_banner(ctx))),
+            )
+        return self._status_slots
 
 
 def _quiet(_) -> None:

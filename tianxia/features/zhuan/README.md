@@ -44,3 +44,8 @@
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `zhuan`（`actions.tick`）。換季最前面那幾行（`_zhuan_past`、`_story_close_season`、`_zhuan_profile`）留在原位：`past` 這個值要從第一行傳到第三行，掛鉤沒有傳值的位置。
 
 **第 56 批（選單收接縫，核心批）**：`rest` 是這一包登記的格（休季那一顆後面）；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_zhuan_options` 拿掉；上面寫「留委派」「原位」的以這一句為準。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 畫面：`web/zhuan.js`（玩家傳那一層與行狀）。
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `zhuan`（`actions.main_slot`，圖檔網址經 `frame.shell.zhuan_art_src`）。

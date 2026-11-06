@@ -28,7 +28,7 @@
 
 - **22:00 換天不接世界層**：世界層的 `day` 格是 21 天季的曆日，不是現實 22:00 的換天；換天與分紅在 `world_tick`、`sync`、`advance` 三處（五格，第 55 批換成 `SEAM_ORDER` 的 `tick`、`sync.deliver`、`advance.turn`）排在別的結算之間，順序就是行為（`_xingshi_grace` 在「季收了、日子沒往前」之前，`late` 的存季只在那一條路上存）。`Game` 上那兩個委派留給測試，`WORLD_ORDER` 不動。
 - **〈天下形勢〉的 B 段與背景執行緒**（`server.write_xingshi`、`xingshi_once`、`XINGSHI_RUNNING`）：用殼的佇列、預算、`TALE_THREADS`，留在 `server.py`（同月旦評 `write_yuedan`）。
-- `server.main_view` 的 `conquest`、`xingshi`、`xingshi_mark` 三個鍵、`admin_choices` 的 `xingshi`、`conquest` 兩格：鍵的順序是行為（第 66 批「狀態列掛鉤」才處理），照舊叫 `Game` 的委派。
+- `admin_choices` 的 `xingshi`、`conquest` 兩格照舊叫 `Game` 的委派（`/api/main` 的 `conquest`、`xingshi`、`xingshi_mark` 第 66 批改走 `status_slots`，`Game.xingshi_mark` 拿掉）。
 - `MAIN_ACTIONS["conquest_letter"]`（玩家下戰書）留在殼。**管理者那一個叫 `admin_conquest_letter`，不叫 `conquest_letter`**：`api_do` 先查功能包的管理者工具，同名會把玩家的下戰書整個蓋掉（FB-609）。
 - `Game._conquest_side`（陣營是哪一軍）、`_sieges`、`_joinable`、`_cancel_siege`、`_flavor_sink`：包經 `ctx` 叫（服務清單）。
 - 沒有選項前綴：戰書走 `/api/do/conquest_letter`，不在選單上；假人不下戰書（`bot_policy` 只讀 `conquest` 規則）。
@@ -57,3 +57,8 @@
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `conquest`（`day_actions.conquest_tick(ctx, True)`，回傳不接）、`conquest.deliver`；`advance.turn` 的 `conquest`（`conquest_tick(ctx, False)`，回話接進 `msgs`）、`conquest.deliver`；`tick` 的 `conquest`（`conquest_tick(ctx, True)`，回話接進 `msgs`）。
 
 `howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「地盤」那一節（碎片的來源那一句問玉璽包，插句 `land_seal`）），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 畫面：`web/territory_acts.js`（見聞的〈天下形勢〉）、`web/territory_acts.css`（第 67 批）。
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `conquest`、`xingshi`（`xingshi`、`xingshi_mark`）。

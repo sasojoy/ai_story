@@ -1,0 +1,28 @@
+/* 天下大勢：人物情誼的樣式（全部拆包第 67 批從 style.css 切出來，規則一個字不改；載入的先後在 index.html，同權重後蓋前）。 */
+
+/* 書信（大勢人物擴充第二批）：「剛剛」上面一張小卡，收著只有一行 */
+.card.letter { padding: 0; border-left: 3px solid var(--gold); }
+.letter-head { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 8px 12px; border: 0; background: none;
+  color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.letter-head b { flex: none; font-family: var(--serif); }
+.letter-k { flex: none; font-size: 12px; padding: 1px 6px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); }
+.letter-peek { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ink-2); font-size: 14px; }
+.letter-arrow { flex: none; margin-left: auto; color: var(--ink-2); }
+.letter-body { padding: 0 12px 12px; }
+/* 第一屏收法 1a（FB-9110）：攤開的託付信收成標題一行、底下問通知那一張先不畫，讓約戰那一行露出來；點標題照樣攤開 */
+.card.letter.fit-letter > .letter-body, .card.letter.fit-letter + .push-ask { display: none; }
+.letter-body p { margin: 0 0 6px; font-family: var(--serif); line-height: 1.7; }
+.letter-sign { text-align: right; color: var(--ink-2); }
+.letter-task { padding: 8px 0; border-top: 1px solid var(--line); margin-bottom: 8px; }
+.letter-body .row { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* 點人物那一層的人物簡介：身分一行小字、是誰一句、本性（朱色小標）；性子變了時多「如今」（玉色）與變化紀錄 */
+.vn-intro { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; padding-bottom: 8px; border-bottom: 1px dashed #d8c7a5; }
+.vn-intro p { margin: 0; line-height: 1.6; }
+.vi-role { font: 12px var(--sans); color: #7a6a55; letter-spacing: 1px; }
+.vi-who { font: 15px var(--kai); color: #2a231b; }
+.vi-nature, .vi-now { display: flex; gap: 8px; font-size: 13px; color: #3d342a; }
+.vi-nature b, .vi-now b { flex: none; font: 700 12px var(--kai); color: #a3342a; border: 1px solid currentColor; border-radius: 3px; padding: 0 4px; height: 20px; line-height: 18px; margin-top: 1px; }
+.vi-now span { background: #e6efe6; border-radius: 3px; padding: 0 4px; }
+.vi-now b { color: #3f7a68; }
+.vi-hist { margin: 0; padding-left: 64px; list-style: none; font-size: 12px; color: #7a6a55; line-height: 1.6; }

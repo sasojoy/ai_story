@@ -34,7 +34,7 @@
 - 核心的單打服務 `_squad_encounter`：遇上自家隊伍改操練（`self._drill`）、遊歷打贏推大勢（`self.train_trend_push`；留原位（第 26 批量過：推大勢夾在記功、地盤進度之前，結果交給 `push_trend`，不在發布點上），行尾標「# 留原位：第 26 批」）、序章那一場戰報標題寫「雪恥」（`sortie.on`、`PROLOGUE_FIGHT`：戰報在單打服務裡建、裡面就存檔，從包外改不到；要拿掉得在單打服務開「這一場戰報叫什麼」的位置，交 PM）。軍情 `_order_options` 叫 `_duty_option`（總表第 33 批）。`_action_title` 那張表的 `train`（`Verb.title` 先答，表那一格只是沒有主人時的字）；`duty`（陣營自己的名字）第 57 批接進 `Verb.title`。
 - 「打完之後」（PM 定第 11 批不開掛鉤，第 26 批量過留原位）：`_squad_encounter` 的 as_sortie 打贏回頭叫 `_sortie_rewards`（出陣包與核心二選一、接在 msgs 最前面不進 extra，不在懸賞那一個發布點上）、約戰開著時不推進度（是查詢，決定記功與推進度走哪一支，不是事件）；行尾標「# 留原位：第 26 批」。
 - `_push_progress`（地盤）寫、`_sortie` 讀的四個旗標（`_clash_won`、`_sortie_marked`、`_sortie_moved`、`_sortie_flipped`，服務清單的寄放段）；輿圖（`map_state`、`_map_foes`：輿圖的線還在飛）。
-- `server`：`main_view` 的 `sortie`、`front`、`sortie_card`、`sorties` 四個鍵（鍵的順序算行為）、`may_judge_fight`、`MAIN_ACTIONS` 的 `sortie_go`、`sortie_answer`、`sortie_join` 與 `_moves`、通知 `current_notices(..., world.sortie_duels())`。
+- `server`：`main_view` 的 `front`（`sortie`、`sortie_card`、`sorties` 第 66 批改走 `status_slots`，位置在 `STATUS_ORDER`）、`may_judge_fight`、`MAIN_ACTIONS` 的 `sortie_go`、`sortie_answer`、`sortie_join` 與 `_moves`、通知 `current_notices(..., world.sortie_duels())`。
 - 假人：`act:train`、`act:duty` 的分數與 `duel_play` 第 60 批搬進 `bots.py`（`Verb.bot`）；`Game._duel_power` 沒人叫了，拿掉（`duel_play` 直接叫 `duel_actions.duel_power`；委派 528 → 527）。移動分數在移動包，`bot.py` 約戰開著時把 `act:train` 換成 `sortie:go` 那兩行；`bot_policy` 的出陣那幾段（`_train_value`〔`game.train_trend_push`〕、`_sortie_win`〔問 `bots.foes`〕、`_outmatched`、`_focus_hop`……）與 `_duel_value`、`take_turn` 那幾行，`bot.duel_go`／`duel_moves`、`bot_runner._duel_tick`——照舊叫 Game 的公開方法與 `sortie_duel` 這個舊名。
 - 舊模組：`howto` 的 `duel_line`、`duel_lines`、`CONQUEST_JOIN_DUEL`，`notices._duels`、`DUEL_SOURCES`，`atlas.SIEGE_AREA_DUEL`，`annals.DUEL`，`biography` 的 TIES。網頁一行沒動。
 - `tests/core/test_feature_boundaries.py` 的 `GAME_DIRECT`、`GAME_DELEGATE_CALLERS` 逐條寫理由（第 2 批時 11 個、31 對；第 11 批之後出陣與約戰剩 `GAME_DIRECT` 7 個〔`_act`、`_squad_encounter`、`_train_squad_ids`、`_duty_option`、`_duty`、`map_state`、`_map_foes`〕、`GAME_DELEGATE_CALLERS` 17 對；第 17 批之後剩 `GAME_DIRECT` 3 個〔`_squad_encounter`、`map_state`、`_map_foes`〕、`GAME_DELEGATE_CALLERS` 11 對：拿掉 9 對、加 `(_squad_encounter, _drill)`、`(_squad_encounter, train_trend_push)`、`(_order_options, _duty_option)` 3 對）。
@@ -68,3 +68,8 @@
 `howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（遊歷、出陣、約戰那一行與說明頁出陣那幾條），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
 
 **第 59 批合完重印 2 處**：`duel_actions.py` → `server_bots`；`train_actions.py` → `events`（三處 `howto` 改讀包裡那一份）。`rules.NAME` 的字搬到共用層 `territory.SORTIE_NAME`（玩法說明的新手引導、大勢人物兩包要讀，包不准 import 包）。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 畫面：`web/sortie.js`（約戰的封招與前往，沒有網頁測試執行，靠 `facade` 軌比字與實機；出陣那一格的卡 `SX_*`、`sortiePanelHtml`、`sortieDuelsHtml` 第 67 批從 `main.js` 切進來）、`web/sortie.css`。`FIT_DUEL_BTN`、`fitDuelRow` 跟著第一屏收合在 `web/fit.js`。
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `sortie`、`sortie_cards`（`sortie_card`、`sorties`）。

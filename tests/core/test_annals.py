@@ -1,4 +1,5 @@
 """玩家傳第一批：行狀（tianxia/annals.py）、存進資料庫第 5 版的 biographies、見聞的「行狀」頁。"""
+# 畫法在 web/zhuan.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import json

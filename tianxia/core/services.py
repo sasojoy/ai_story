@@ -379,14 +379,14 @@ explore（主動搬六包第 3＋4 批加的這一段）
   `figures.recover` 直接叫，大勢人物包的 `figure_aid` re-export 回原名（`on`、`left_today`、`restore`……）
 
 # travel（全部拆包第 48 批「移動二」：出發與抵達的補算、在路上那一行字、結伴同行搬進 features/travel；計畫 docs/superpowers/plans/2026-11-07-移動包-第2批.md 1.8）。
-# 本體搬進包，Game 留一行委派（呼叫端不在移動包：sync、advance、status_data、殼、玩家互動包、人物對話、腳本與測試換掉的）；包經 ctx 叫自己的委派，
+# 本體搬進包，Game 留一行委派（呼叫端不在移動包：sync、advance、玩家互動包、人物對話、腳本與測試換掉的）；包經 ctx 叫自己的委派，
 # 測試換掉 Game 上的名字（例 `_depart`、`_arrivals`）時包裡才打得到：
 - `ctx._depart(route, mode, pace=None)`（出發：收店、散掉答應了卻先走的結伴、扣體力、排抵達時刻、帶跟著的人一起；人物帶路答應之後他親自帶你動身，步調照他的腳程；
   路上折返、改道也走它）
 - `ctx._arrivals()`（補算已經到了的站，一站一站抵達；sync、advance 叫，`stamina_plays` 包測試、`test_seats` 直接叫；包內在別人那份 Game 上也叫 `other._arrivals()`）
-- `ctx._arrive(loc_id)`（抵達一站；事件 `arrive` 的發布點，核心契約測試直接叫它鎖事件接法）、`ctx._journey_line()`（`/api/main` 的 `journey` 那一句）
+- `ctx._arrive(loc_id)`（抵達一站；事件 `arrive` 的發布點，核心契約測試直接叫它鎖事件接法）、`ctx._journey_line()`（在路上那一句；狀態列 `journey` 那一格第 66 批起直接叫本體）
 - `ctx._join(inv, other)`（答應結伴同行；玩家互動包 `answer_invite` 叫）、`ctx.join_refusal(leader)`（答應跟某人結伴，不行的原因；假人回結伴邀請〔`bots.answer_call`〕先問它）、
-  `ctx.party_view()`（殼的 `/api/main` 的 `party` 鍵）
+  `ctx.party_view()`（結伴那一行；`/api/main` 的 `party` 那一格第 66 批起直接叫本體）
 - 移動包要叫、上面還沒列的核心與別包的 Game 方法：`ctx._ambush_check(came_from, stop, when)`（主人體力玩法包，Game 留委派；`_arrivals` 迴圈中途每換一段查一次伏兵）、
   `ctx._hide(msg)`、`ctx._guide(...)`、`ctx._note_action(action)`、`ctx.location_text()`、`ctx._flavor_sink()`、`ctx._kin(state)`、`ctx._load_kin(name)`、`ctx._save_kin(game)`、
   `ctx._peer(name)`、`ctx._tell_sender(inv, other, why=None)`、`ctx._write(...)`、`ctx.touched`、`ctx._real_minutes(world_seconds)`（核心：留在 Game，核心的 `place_minutes` 與輿圖包也叫）

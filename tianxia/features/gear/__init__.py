@@ -1,5 +1,5 @@
 """裝備（修練頁的換上、拆解〔含批量〕、餵馬，馬市的買餵換上，寄放補送，名將贈禮，名將本命兵器，神器譜）。功能包，開發規範手冊 3.2；
-全部拆包第 42 批搬進來（引擎那一半；網頁那一半 web/ 第 3 階才切）。包名 gear 跟測試資料夾 tests/gear/、內容欄位 Content.gear（content/gear.json 讀進來的
+全部拆包第 42 批搬進來（引擎那一半）；網頁的畫法在 web/gear.js（第 65 批）。包名 gear 跟測試資料夾 tests/gear/、內容欄位 Content.gear（content/gear.json 讀進來的
 GearBook）同字，不是同一件事：這裡是功能包，另兩個是舊的名字。README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留在原位的接縫。
 
 - signature_arms.py：名將本命兵器的規則（原 tianxia/signature_arms.py；那個名字留成指到這裡的別名）
@@ -19,6 +19,7 @@ from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Verb
 
 class GearFeature(Feature):
     name = "gear"
+    web = ("gear.js",)  # 裝備格與馬市的畫法（全部拆包第 65 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。樣子在 style.css 的店面那一段（電腦寬那一塊靠先後蓋，第 67 批搬不動）
     prefix = "market"  # market:buy、market:feed、market:wield:<id>、market:back；入口 act:market 是核心的前綴
     content = ("gear.json",)  # content.py 照它到這一包的 content/ 載（check_gear、check_signature_arms 留在 content.py，不接 check_content）
     player_fields = ("picking_market",)  # 馬市第二層選單開著沒：換季跟著新角色重來。held_gear 核心與共用層也讀、figure_wins 是大勢人物包的，不認領

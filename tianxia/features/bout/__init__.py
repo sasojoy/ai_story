@@ -21,6 +21,7 @@ from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Shop, Ve
 
 class BoutFeature(Feature):
     name = "bout"
+    web = ("bout.js",)  # 擂台的畫法（全部拆包第 65 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。樣子在 style.css 的店面那一段（電腦寬那一塊靠先後蓋，第 67 批搬不動）
     prefix = ("duel", "arena")  # duel:<招>、duel:flee；arena:<招>、arena:yield、arena:join、arena:fight:<名號鍵>、arena:back、arena:none
     content = ("duels.json", "arena_crowd.json")  # 頭目、場邊事件的固定句（content.py 照它到這一包的 content/ 載）
     # 頭目戰：正在打的那一場、這一季（與這一週）遇上幾次的帳、上一場開打的時刻；擂台：正在打的那一場、剛打完的收場卡、坐在擂台邊、

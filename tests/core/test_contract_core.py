@@ -2133,3 +2133,90 @@ def test_the_howto_page_is_the_table_joined_and_slots_look_up_their_functions_wh
         line for hook in table for line in hook.lines(content, season, view))
     monkeypatch.setattr(sense_words, "insight_section", lambda content, season: ["第五十九批換掉的"])
     assert "第五十九批換掉的" in guide_words.page(content, season, recruitable=False)
+
+
+# shell_web（全部拆包第 66 批；計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第66批.md 第四節）：狀態列與江湖畫面的格
+class Slotter(Feature):
+    """只登記狀態列格的假包；open 是 enabled 的答案（狀態列的格不問它）。"""
+
+    name = "slotter"
+
+    def __init__(self, hooks, open_=True):
+        self.hooks, self.open = tuple(hooks), open_
+
+    def enabled(self, ctx):
+        return self.open
+
+    def status_slots(self):
+        return self.hooks
+
+
+def test_the_status_order_is_the_table_in_the_plan():
+    """順序就是行為（JSON 鍵的先後閘門逐位元組比，叫的先後也算）：一格不挪。改這張表先過 PM。"""
+    assert features_core.STATUS_ORDER == {
+        "status": ("head", "bounties", "manual", "seal", "armament", "forge_manual", "create", "ascension", "self", "newbie", "vitals", "journey",
+                   "calendar", "help", "checkin", "war", "invites"),
+        "main": ("screen", "outing", "say_max", "sortie", "modes", "action_notes", "sense_help", "on_road", "free_text", "gauges", "journal", "peers",
+                 "party", "news", "tales", "admin", "guide", "horse_art", "push", "web_push", "shop", "prep", "milestone", "features", "glow", "fronts",
+                 "orders", "week_card", "mostly", "sides_card", "figures_here", "companions", "event_opts", "rumor_layers", "convoy", "conquest",
+                 "sortie_cards", "siege", "xingshi", "plan", "place_state", "place_deeds", "letter", "zhuan", "season_result", "ending"),
+    }
+    assert Feature().status_slots() == ()
+
+
+def _slot(table, slot, keys=None):
+    return features_core.StatusHook(table, slot, lambda ctx, frame: {k: slot for k in (keys or (slot,))})
+
+
+def test_a_package_can_only_take_a_status_slot_on_the_table_and_only_one_package_a_slot(monkeypatch):
+    """表上沒有的表或格、兩包（或同一包兩次）登記同一格，status_hooks 都丟 ValueError（問別的表也丟：每一次都驗全部）；核心代叫的寫了表外的格，status_run 丟。"""
+    monkeypatch.setattr(registry, "FEATURES", [Slotter([_slot("status", "nosuch")])])
+    with pytest.raises(ValueError):
+        features_core.status_hooks("status")
+    monkeypatch.setattr(registry, "FEATURES", [Slotter([_slot("nosuch", "head")])])
+    with pytest.raises(ValueError):
+        features_core.status_hooks("status")
+    monkeypatch.setattr(registry, "FEATURES", [Slotter([_slot("main", "plan")]), Slotter([_slot("main", "plan")])])
+    with pytest.raises(ValueError):
+        features_core.status_hooks("status")
+    monkeypatch.setattr(registry, "FEATURES", [Slotter([_slot("main", "plan"), _slot("main", "plan")])])
+    with pytest.raises(ValueError):
+        features_core.status_hooks("main")
+    monkeypatch.setattr(registry, "FEATURES", [])
+    assert features_core.status_hooks("status") == {} and features_core.status_hooks("main") == {}
+    with pytest.raises(ValueError):
+        features_core.status_hooks("nosuch")
+    with pytest.raises(ValueError):
+        features_core.status_run("status", {"nosuch": lambda ctx, frame: {}}, {}, None)
+
+
+def test_the_status_run_goes_down_the_table_and_merges_the_keys_in_that_order(monkeypatch):
+    """照表叫、不照 FEATURES：包的優先、否則核心，兩邊都沒有跳過；關著的包照叫；回的鍵照順序合；status 表的 frame 就是合到一半的那一份。"""
+    monkeypatch.setattr(registry, "FEATURES", [Slotter([_slot("status", "war"), _slot("status", "seal", ("seal_duel", "seal"))], open_=False), Slotter([_slot("status", "head")])])
+    seen = []
+
+    def manual(ctx, frame):
+        seen.append(list(frame))
+        return {"manual": 1}
+
+    out = features_core.status_run("status", {"manual": manual, "head": lambda ctx, frame: {"core_head": True}, "vitals": lambda ctx, frame: {}}, {}, None)
+    assert list(out) == ["head", "manual", "seal_duel", "seal", "war"] and "core_head" not in out
+    assert seen == [["head"]]
+
+
+def test_the_main_table_merges_into_the_view_of_the_frame(monkeypatch):
+    """main 表的 frame 是 MainFrame：鍵合進 frame.view，回的就是那一份；一格可以看 frame 上別的東西、改已經合進去的（glow 那一格）。"""
+    monkeypatch.setattr(registry, "FEATURES", [Slotter([_slot("main", "guide"),
+                                                        features_core.StatusHook("main", "glow", lambda ctx, frame: frame.view.update(guide="改過") or {})])])
+    frame = features_core.MainFrame({}, [], None, {}, None)
+    out = features_core.status_run("main", {"screen": lambda ctx, f: {"status": f.status}}, frame, None)
+    assert out is frame.view and list(out) == ["status", "guide"] and out["guide"] == "改過"
+    assert frame.orders == []
+
+
+@pytest.mark.parametrize("bad", [None, "字串", [("鍵", 1)]])
+def test_a_status_slot_must_answer_with_a_dict(monkeypatch, bad):
+    """沒有鍵回 {}；回別的（None、字串、串列）丟 TypeError，不默默少鍵。"""
+    monkeypatch.setattr(registry, "FEATURES", [Slotter([features_core.StatusHook("status", "head", lambda ctx, frame: bad)])])
+    with pytest.raises(TypeError):
+        features_core.status_run("status", {}, {}, None)

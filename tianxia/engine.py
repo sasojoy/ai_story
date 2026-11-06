@@ -1170,8 +1170,6 @@ class Game:
         p = self.state.player
         return p.journey is None and clinic.CLINIC_TAG in (self.content.locations[p.location].tags or [])
 
-    def armament_view(self) -> dict | None:
-        return outlets_donate.armament_view(self)
 
     def set_move_mode(self, mode: str) -> None:
         """主畫面的「走法」切換（本體在 tianxia/features/travel/menu.py；留一行委派給 server、腳本與測試）。"""
@@ -1688,20 +1686,12 @@ class Game:
     def figure_view(self, cid: str) -> dict | None:
         return companions_actions.figure_view(self, cid)
 
-    def figures_here_view(self) -> list[dict]:
-        return socialize_menus.figures_here_view(self)
-
-    def talk_view(self) -> dict | None:
-        return companions_talk.talk_view(self)
-
     # ── 託付與勸降（減法季批 6）：本體同上 ────────────
 
     _persuade_said: tuple | None = None  # 勸降的 C 段（人物情誼包 actions.persuade）交給 choose 的單子與模型的分數（服務清單四、寄放）
     _talk_turn: companion_agent.PreparedTurn | None = None  # choose 前段驗過的那一輪對話（鎖外生成好的）與那句話，交給人物情誼包的 choose 掛鉤（服務清單四、寄放）
     _talk_said: str | None = None
 
-    def errands_view(self) -> list[dict] | None:
-        return companions_actions.errands_view(self)
 
     def persuade_request(self, errand_id: str, text: str) -> companions_actions.errand_rules.PersuadeRequest | list[str]:
         return companions_actions.persuade_request(self, errand_id, text)
@@ -1935,8 +1925,6 @@ class Game:
 
     # ── 人物的行程與盤算（世界活起來；tianxia/plans.py、deeds.py）──
 
-    def plan_view(self) -> dict | None:
-        return figure_plan_actions.plan_view(self)
 
     def place_state_view(self) -> dict | None:
         """地點會變樣（main.place_state）：此刻所在地的樣子 {kind, name, line}；太平、在路上、關著是 None。"""
@@ -1944,9 +1932,6 @@ class Game:
         if s.player.journey is not None:
             return None
         return place_state.view(s.world, self.content, s.player.location)
-
-    def place_deeds_view(self) -> list[dict] | None:
-        return figure_plan_actions.place_deeds_view(self)
 
     # ── 宴客（搬進功能包 tianxia/features/feast/；server 的三段式照舊叫 Game 的這三個，過渡留一行委派）──
 
@@ -2204,9 +2189,6 @@ class Game:
 
     def _bounty_stale(self, arg: str) -> list[str]:  # choose 前段 FB-162（回 Refused，choose_unlisted 回 list，留原位）
         return bounties_actions.stale(self, arg)
-
-    def _bounty_status(self) -> list[dict]:  # status_data 的懸賞卡
-        return bounties_actions.status(self)
 
     def _raid_bounty(self, target: str) -> list[str]:  # 查詢服務（截殺、設伏打贏；事件 raid_win 的發布點在包裡）
         return bounties_actions.raid_bounty(self, target)
@@ -3548,7 +3530,7 @@ class Game:
         return atlas.whole_minutes(max(0.0, world_seconds) / self.content.config.time_scale / 60)
 
     def _journey_line(self) -> str:
-        """在路上的那一句（本體在 tianxia/features/travel/departure.py；留一行委派給 status_data）。"""
+        """在路上的那一句（本體在 tianxia/features/travel/departure.py；狀態列的 journey 那一格直接叫本體，這一行照 services.py 留著）。"""
         return travel_departure.journey_line(self)
 
     def travel(self, dest_id: str, mode: TravelMode = "walk") -> list[str]:
@@ -3711,10 +3693,6 @@ class Game:
     def _seize_chance(self, ratio: float) -> list[str]:
         """絕學的契機（修練包 actions.seize_chance；服務清單二、查詢服務）：核心的單打服務 _seize 與決戰包的收場補送叫它。"""
         return cultivation_actions.seize_chance(self, ratio)
-
-    def ascend_view(self) -> dict | None:
-        """剛破境、還沒看過的破境卡（修練包 actions.ascend_view）：status_data 的 ascension 那一格照原位叫（鍵的順序算行為）。"""
-        return cultivation_actions.ascend_view(self)
 
     @_not_while_preparing
     def name_divine(self, item_id: str, name: str = "", keep: bool = False) -> list[str]:
@@ -3926,9 +3904,6 @@ class Game:
     def xingshi_view(self) -> dict:
         return territory_xingshi.view(self)
 
-    def xingshi_mark(self) -> str:
-        return territory_xingshi.mark(self)
-
     def admin_xingshi_now(self) -> list[str]:
         return territory_xingshi.admin_now(self)
 
@@ -4044,10 +4019,6 @@ class Game:
     def allocate_stat(self, stat: str) -> list[str]:
         """把升級得到的屬性點分配到一項（修練包 actions.allocate_stat；配點那一句 actions.allocate_line；籌備中被擋）。"""
         return cultivation_actions.allocate_stat(self, stat)
-
-    def milestone_card(self) -> dict | None:
-        """境界卡（修練包 actions.milestone_card；server 的 main_view 照它放 main.milestone）。"""
-        return cultivation_actions.milestone_card(self)
 
     # ── 玩家之間的邀請與切磋（玩家互動第二層，企劃者 2026-10-08「互動的兩層也可以派下去做了」）──────────
     # 切磋掛在玩家卡上（玩家互動包 spar.py 載入時登記進 social.ACTIONS，動作在 spar_actions.py，全部拆包第 38 批）：發邀請、答應、婉拒、收回都是按的那個人自己的動作，
@@ -4252,10 +4223,6 @@ class Game:
     def seal_duel_card(self) -> dict | None:
         """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
         return seal_duel_actions.duel_card(self)
-
-    def seal_watch(self) -> bool:
-        """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
-        return seal_duel_actions.watch(self)
 
     def _duel_side(self) -> str:
         return bout_duel.duel_side(self)
@@ -5040,7 +5007,7 @@ class Game:
         return travel_party.join_refusal(self, leader)
 
     def party_view(self) -> dict | None:
-        """場景底下結伴同行的那一行（本體在 tianxia/features/travel/party.py；留一行委派給殼的 /api/main）。"""
+        """場景底下結伴同行的那一行（本體在 tianxia/features/travel/party.py；/api/main 的 party 那一格直接叫本體，這一行留給測試）。"""
         return travel_party.party_view(self)
 
     # ── 管理者：玩家個人劇情（管理者觸發鈕第 2 組）──────────────────────
@@ -5251,7 +5218,8 @@ class Game:
         return guide_actions.war_help(self)
 
     def status_data(self) -> dict:
-        """狀態列的資料（數字與短字串），網頁前端照這份自己排版；status_text 是同一份資料的文字版。"""
+        """狀態列的資料（數字與短字串），網頁前端照這份自己排版；status_text 是同一份資料的文字版。照 core/features.py 的 STATUS_ORDER["status"]
+        一格一格合（全部拆包第 66 批：鍵的先後算行為）：包的格在各包的 status_slots，核心的格是這裡的閉包。"""
         s, c = self.state, self.content
         p, w = s.player, s.world
         names = c.config.stat_names
@@ -5262,101 +5230,111 @@ class Game:
             mate_now, mate_cap = team.member_neili(c, progress, team.con_of(s, c, self.world, cid), season=w)
             mates.append({"name": c.characters[cid].name, "level": progress.level,
                           "hp": round(mate_now), "hp_max": round(mate_cap)})
-        data = {
-            "name": p.name,
-            "affiliation": presence.affiliation(s, c),
-            "ranger": ranger.status(s, c),  # 散人的遊俠名號（名號、階、俠名、下一階）；陣營的人、劇本沒有陣營、名聲開著是 None
-            "renown": renown.status(s, c),  # 名聲（狀態列 1B、2C 的稱號與說明卡）；名聲關著是 None
-            # 手上揭了的懸賞（標題、怎麼完成、賞、期限與名額），加上身上有合用東西的求兵（多一個 have）；懸賞榜關著是空的
-            "bounties": self._bounty_status(),
-            # 武學譜（口訣與秘方）：這一季聽過口訣或合中過的秘方，一條一筆 {"clues": [聽過的口訣], "solved": 名號或 None}
-            "manual": secret_recipes.view(s, c, self.world),
-            "manual_total": secret_recipes.progress(s, c, self.world)[1],  # 武學譜入口的分母：這一季全服共有幾條（不是「你聽過的」）
-            "seal_duel": self.seal_duel_card(),  # 奪璽卡（玉璽碎片設計 5.10）：全服看得到；沒有單挑是 None
-            "seal": self.seal_view(),  # 持有者的碎片卡（玉璽碎片設計第十節）
-            "seal_watch": self.seal_watch(),  # 為真時網頁在背景也輪詢、輪到出招改分頁標題（5.5）
-            "armament": self.armament_view(),  # 陣營的軍備存量（素材與經濟設計第六節）；散人、捐軍備關著是 None
+
+        def head(ctx, data) -> dict:
+            return {
+                "name": p.name,
+                "affiliation": presence.affiliation(s, c),
+                "ranger": ranger.status(s, c),  # 散人的遊俠名號（名號、階、俠名、下一階）；陣營的人、劇本沒有陣營、名聲開著是 None
+                "renown": renown.status(s, c),  # 名聲（狀態列 1B、2C 的稱號與說明卡）；名聲關著是 None
+            }
+
+        def manual(ctx, data) -> dict:
+            return {
+                # 武學譜（口訣與秘方）：這一季聽過口訣或合中過的秘方，一條一筆 {"clues": [聽過的口訣], "solved": 名號或 None}
+                "manual": secret_recipes.view(s, c, self.world),
+                "manual_total": secret_recipes.progress(s, c, self.world)[1],  # 武學譜入口的分母：這一季全服共有幾條（不是「你聽過的」）
+            }
+
+        def forge_manual(ctx, data) -> dict:
             # 鑄譜（打造的隱藏配方）：這一季聽過口訣或打中過的，一條一筆 {"clues", "solved", "recipe"}（打造隱藏配方設計 6.3）
-            "forge_manual": forge_secrets.view(s, c, self.world),
-            "create": self.create_view(),  # 自創武學那一塊（煉製頁；tianxia/create.py）
-            "ascension": self.ascend_view(),  # 剛破境、還沒看過的破境卡（修練包；鍵的順序算行為，叫委派）
-            "anonymous": p.anonymous,
-            "gender": gender.of(p),  # 性別：修練頁的人物面板照它換男女版（web/app.js 的 HERO_FIGURES）
-            "gender_chosen": p.gender_chosen,  # 選過了沒：設定頁沒選過的舊角色給一次改的機會
-            "hints_off": p.hints_off,  # 設定頁「不再提示」的勾（新手引導計畫三）
-            "level": p.member.level,
-            "exp": team.exp_view(c, p.member),  # 這一級攢了多少、升下一級要多少（狀態列展開那一行）；滿級是 None
-            "location": c.locations[p.location].name,
-            "season": p.season_number,  # 第幾季；週次每一季都從 1 起，網頁記「看過哪一季哪一週的大事」要帶它
-            "day": int(w.time // DAY) + 1,
-            "clock": f"{int(w.time % DAY // HOUR):02d}:{int(w.time % HOUR // 60):02d}",
-            "season_days": season_length_days(w, c),  # 這一季蓋章的季長（舊季照它自己的章，不跟著設定變）
-            "stamina": int(p.stamina),
-            "stamina_max": c.config.stamina_max,
-            # 回體丹（企劃者 2026-10-07）：有丹、而且不在草廬序章裡才給，網頁照它在體力條旁畫「服丹」鈕（體力滿了鈕是灰的）
-            # 測試期間一鍵補滿（Config.beta_free_refill）打開時：沒有丹也給（鈕照樣畫），多一個鍵 refill＝鈕上的字，網頁見它就寫
-            # 「補滿」不寫「丹 N」；關著時這個鍵不存在，整份跟 joy 的一個字不差
-            "pills": None if (p.stamina_pills <= 0 and not c.config.beta_free_refill) or (
-                prologue_rules.active(s, c) and not prologue_rules.pills_open(s, c)) else {
-                "name": c.config.stamina_pill_name, "count": p.stamina_pills, "restore": c.config.stamina_pill_restore,
-                "full": p.stamina >= c.config.stamina_max,
-                # 今天還能服幾顆（一天的上限，台灣時間 00:00 換日，企劃者 2026-10-12）；不限（stamina_pills_per_day 0）時沒有這個鍵
-                **({"today": self.pills_left_today()} if c.config.stamina_pills_per_day > 0 else {}),
-                **({"refill": c.config.beta_free_refill_label} if c.config.beta_free_refill and not prologue_rules.active(s, c) else {}),
-            },
-            "newbie": self.newbie_view(),  # 新手目標（新手引導重做；tianxia/newbie.py）：引導走完、新手期裡才有
-            "hp": round(now),  # 跟角色卡（skillview.member_card 的 {:.0f}）同一種進位：兩邊寫出來的數字一樣
-            "hp_max": round(cap),
-            "injury": int(p.member.injury),
-            "silver": p.stats.get("silver", 0),
-            "xinde": p.stats.get("xinde", 0),
-            "minor": [(names[k], p.stats.get(k, 0)) for k in ("fame", "good", "evil")],
-            "attrs": self._attr_rows(names),  # 第三項是鍵：配點鈕送它（allocate_stat）
-            "stat_points": p.stat_points,
-            "stat_cap": c.config.stat_cap if not attrset.on(c, s.world) else 10**9,  # 五項屬性的季沒有上限
-            **({"growth": attrset.view(s, c)} if attrset.on(c, s.world) else {}),  # 挑成長配比的那一塊（屬性與跨季架構 v2 3.1）
-            # 歷練：這一季從事件得來的屬性有多少、上限多少（展開的屬性底下那一條，企劃者 2026-11-05）
-            **({"lilian": {"have": attrset.event_total(s), "cap": c.config.attributes.v2.event_cap}} if attrset.on(c, s.world) else {}),
-            # ＋鈕底下那一行：五項各管什麼、事件檢定也看它們（計畫二最終審查 M2）；網頁只在有點可配時畫
-            "stat_uses": skillview.stat_uses(c, s),  # 減法季屬性五段開著時寫「現在給你什麼」的數字（設計 4.5）
-            "stat_uses_note": skillview.STAT_CHECK_NOTE,
-            # 心得付得起、又真的有事可做時才有；籌備中練成、合成都被擋，不提示（explain-2 審查 Minor 1）
-            "hint": None if self._preparing() else skillview.practice_hint(s, c),
-            "team": mates,
-            "busy_hours": None if p.busy_until is None else round((p.busy_until - w.time) / HOUR / c.config.time_scale, 1),  # 現實小時
-            "journey": None if p.journey is None else self._journey_line(),
-            **self._calendar_status(),  # 第一季：季曆與下一件大事的倒數；開關關著時沒有這兩欄
-        }
-        # 點體力條看的說明（explain-1）：怎麼回、新手期、回體丹（一天的上限）或補滿，數字全讀設定；體力條上沒有那顆鈕（序章、沒丹）就不提它
-        newbie = roster.newbie(s, c, c.config.newbie_stamina_days)
-        data["stamina_help"] = self._stamina_help(newbie, data["pills"] is not None)
-        # 江湖頁行動列底下的「玩法說明」入口（explain-2）：新手期（跟體力回復加快同一段，newbie_stamina_days）才有、序章裡沒有（師父會說）；
-        # 過了新手期只剩設定抽屜那一顆
-        data["howto_entry"] = newbie and not prologue_rules.active(s, c)
-        checkin_card = self.checkin_view()  # 每日簽到（21 天季，正式季整合 6.2）：關著、序章裡沒有這個鍵，畫面照舊
-        if checkin_card is not None:
-            data["checkin"] = checkin_card
-        if season_one(c, w):  # 第一季濃縮版：江湖頁的三條戰況與三方態勢；開關關著時沒有這兩個鍵，畫面照舊
+            return {"forge_manual": forge_secrets.view(s, c, self.world)}
+
+        def self_row(ctx, data) -> dict:
+            return {
+                "anonymous": p.anonymous,
+                "gender": gender.of(p),  # 性別：修練頁的人物面板照它換男女版（web/app.js 的 HERO_FIGURES）
+                "gender_chosen": p.gender_chosen,  # 選過了沒：設定頁沒選過的舊角色給一次改的機會
+                "hints_off": p.hints_off,  # 設定頁「不再提示」的勾（新手引導計畫三）
+                "level": p.member.level,
+                "exp": team.exp_view(c, p.member),  # 這一級攢了多少、升下一級要多少（狀態列展開那一行）；滿級是 None
+                "location": c.locations[p.location].name,
+                "season": p.season_number,  # 第幾季；週次每一季都從 1 起，網頁記「看過哪一季哪一週的大事」要帶它
+                "day": int(w.time // DAY) + 1,
+                "clock": f"{int(w.time % DAY // HOUR):02d}:{int(w.time % HOUR // 60):02d}",
+                "season_days": season_length_days(w, c),  # 這一季蓋章的季長（舊季照它自己的章，不跟著設定變）
+                "stamina": int(p.stamina),
+                "stamina_max": c.config.stamina_max,
+                # 回體丹（企劃者 2026-10-07）：有丹、而且不在草廬序章裡才給，網頁照它在體力條旁畫「服丹」鈕（體力滿了鈕是灰的）
+                # 測試期間一鍵補滿（Config.beta_free_refill）打開時：沒有丹也給（鈕照樣畫），多一個鍵 refill＝鈕上的字，網頁見它就寫
+                # 「補滿」不寫「丹 N」；關著時這個鍵不存在，整份跟 joy 的一個字不差
+                "pills": None if (p.stamina_pills <= 0 and not c.config.beta_free_refill) or (
+                    prologue_rules.active(s, c) and not prologue_rules.pills_open(s, c)) else {
+                    "name": c.config.stamina_pill_name, "count": p.stamina_pills, "restore": c.config.stamina_pill_restore,
+                    "full": p.stamina >= c.config.stamina_max,
+                    # 今天還能服幾顆（一天的上限，台灣時間 00:00 換日，企劃者 2026-10-12）；不限（stamina_pills_per_day 0）時沒有這個鍵
+                    **({"today": self.pills_left_today()} if c.config.stamina_pills_per_day > 0 else {}),
+                    **({"refill": c.config.beta_free_refill_label} if c.config.beta_free_refill and not prologue_rules.active(s, c) else {}),
+                },
+            }
+
+        def vitals(ctx, data) -> dict:
+            return {
+                "hp": round(now),  # 跟角色卡（skillview.member_card 的 {:.0f}）同一種進位：兩邊寫出來的數字一樣
+                "hp_max": round(cap),
+                "injury": int(p.member.injury),
+                "silver": p.stats.get("silver", 0),
+                "xinde": p.stats.get("xinde", 0),
+                "minor": [(names[k], p.stats.get(k, 0)) for k in ("fame", "good", "evil")],
+                "attrs": self._attr_rows(names),  # 第三項是鍵：配點鈕送它（allocate_stat）
+                "stat_points": p.stat_points,
+                "stat_cap": c.config.stat_cap if not attrset.on(c, s.world) else 10**9,  # 五項屬性的季沒有上限
+                **({"growth": attrset.view(s, c)} if attrset.on(c, s.world) else {}),  # 挑成長配比的那一塊（屬性與跨季架構 v2 3.1）
+                # 歷練：這一季從事件得來的屬性有多少、上限多少（展開的屬性底下那一條，企劃者 2026-11-05）
+                **({"lilian": {"have": attrset.event_total(s), "cap": c.config.attributes.v2.event_cap}} if attrset.on(c, s.world) else {}),
+                # ＋鈕底下那一行：五項各管什麼、事件檢定也看它們（計畫二最終審查 M2）；網頁只在有點可配時畫
+                "stat_uses": skillview.stat_uses(c, s),  # 減法季屬性五段開著時寫「現在給你什麼」的數字（設計 4.5）
+                "stat_uses_note": skillview.STAT_CHECK_NOTE,
+                # 心得付得起、又真的有事可做時才有；籌備中練成、合成都被擋，不提示（explain-2 審查 Minor 1）
+                "hint": None if self._preparing() else skillview.practice_hint(s, c),
+                "team": mates,
+                "busy_hours": None if p.busy_until is None else round((p.busy_until - w.time) / HOUR / c.config.time_scale, 1),  # 現實小時
+            }
+
+        def help_row(ctx, data) -> dict:
+            # 點體力條看的說明（explain-1）：怎麼回、新手期、回體丹（一天的上限）或補滿，數字全讀設定；體力條上沒有那顆鈕（序章、沒丹）就不提它
+            newbie = roster.newbie(s, c, c.config.newbie_stamina_days)
+            return {
+                "stamina_help": self._stamina_help(newbie, data["pills"] is not None),
+                # 江湖頁行動列底下的「玩法說明」入口（explain-2）：新手期（跟體力回復加快同一段，newbie_stamina_days）才有、序章裡沒有（師父會說）；
+                # 過了新手期只剩設定抽屜那一顆
+                "howto_entry": newbie and not prologue_rules.active(s, c),
+            }
+
+        def war(ctx, data) -> dict:
+            if not season_one(c, w):  # 第一季濃縮版：江湖頁的三條戰況與三方態勢；開關關著時沒有這兩個鍵，畫面照舊
+                return {}
             # FB-065：圖卡畫亂局帶（兩端讀設定，跟 in_chaos 同一份、含兩端）、標出在亂局裡的戰線；態勢那一行的說明也由這裡給，
             # 前端不寫死 35／65，也不自己數條數。全服公開的戰況，誰看都一樣
             in_the_chaos = set(chaos_fronts(s, c))
-            data["fronts"] = [
-                {"id": tid, "name": trend_name(c, tid), "value": trend_value(s, c, tid), "chaos": tid in in_the_chaos}
-                for tid in front_ids(c)
-            ]
-            data["chaos_band"] = {"low": c.config.chaos_low, "high": c.config.chaos_high}
-            data["stances"] = stances(s, c)
-            data["stance_notes"] = {"sum": stance_sum_note(c)}
-            data["stance_rule"] = stance_rule_note(s, c)  # 態勢卡底下的收季規則（正式版辛）
-            # 點戰況圖卡、態勢、大事、主線看的說明（explain-2）：這一季在打什麼、亂局、大事怎麼定、你能怎麼出力。
-            # 門檻讀設定、此刻在亂局的讀 chaos_fronts、大事的件數讀時刻表（howto.war_help）；網頁點開才畫，不推動第一屏
-            data["war_help"] = self._war_help()
-            data["invites"] = self._invite_status()
-        return data
+            return {
+                "fronts": [
+                    {"id": tid, "name": trend_name(c, tid), "value": trend_value(s, c, tid), "chaos": tid in in_the_chaos}
+                    for tid in front_ids(c)
+                ],
+                "chaos_band": {"low": c.config.chaos_low, "high": c.config.chaos_high},
+                "stances": stances(s, c),
+                "stance_notes": {"sum": stance_sum_note(c)},
+                "stance_rule": stance_rule_note(s, c),  # 態勢卡底下的收季規則（正式版辛）
+                # 點戰況圖卡、態勢、大事、主線看的說明（explain-2）：這一季在打什麼、亂局、大事怎麼定、你能怎麼出力。
+                # 門檻讀設定、此刻在亂局的讀 chaos_fronts、大事的件數讀時刻表（howto.war_help）；網頁點開才畫，不推動第一屏
+                "war_help": self._war_help(),
+            }
 
-    def _invite_status(self) -> dict:
-        """玩家卡要的邀請：收到的與發出去還在等的（玩家互動包 invite_actions.status）。"""
-        return peers_invite_actions.status(self)
+        core = {"head": head, "manual": manual, "forge_manual": forge_manual, "self": self_row, "vitals": vitals,
+                "calendar": lambda ctx, data: self._calendar_status(),  # 第一季：季曆與下一件大事的倒數；開關關著時沒有這兩欄
+                "help": help_row, "war": war}
+        return features_core.status_run("status", core, {}, self)
 
     def _calendar_status(self) -> dict:
         """狀態列的季曆（第 N 週、週幾、幾點）與下一件大事：季曆時刻 at，加上倒數 in_seconds。倒數是現實秒：(大事時刻 − 世界秒) ÷ time_scale。"""

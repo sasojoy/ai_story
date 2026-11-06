@@ -27,7 +27,7 @@
 
 ## 委派與留在原位的接縫
 
-**`Game` 留的一行委派**：`_bounty`（`tests/gear/test_shop2.py` 直接叫，同 `_smith`）、`_raid_bounty`（查詢服務，截殺與設伏）、`_bounty_stale`（`choose`）、`_bounty_status`（`status_data`）。人物情誼包回答這一包（服務清單二 `# bounties`，PM 認定乙案）：`_letter_thank`、`_parley_settle_task`、`_parley_keep`、`_parley_owed_line`、`_parley_ask_label`。`post_wanted` 沒人叫，不留。
+**`Game` 留的一行委派**：`_bounty`（`tests/gear/test_shop2.py` 直接叫，同 `_smith`）、`_raid_bounty`（查詢服務，截殺與設伏）、`_bounty_stale`（`choose`）（`_bounty_status` 第 66 批拿掉：懸賞卡改走 `status_slots`）。人物情誼包回答這一包（服務清單二 `# bounties`，PM 認定乙案）：`_letter_thank`、`_parley_settle_task`、`_parley_keep`、`_parley_owed_line`、`_parley_ask_label`。`post_wanted` 沒人叫，不留。
 
 **三間店不排進 `Shop`，走 `MENU_ORDER`（第 56 批選單收接縫的結論，計畫第四節）**：量到四條——(1)`features_core._shops` 照 `FEATURES` 走，酒肆、銀兩出口排在鐵匠鋪、馬市前面，懸賞榜最後，要維持「懸賞榜 → 鐵匠鋪 → 馬市 → 其他店」就得挪包；(2)`drop_shops` 在 `sync.close` 也跑，懸賞榜今天只有 `stale.mid` 收，進 `Shop` 就多收一次；(3)鐵匠鋪 `here` 兩個意思（`_shop_open` 是單子沒開著且開門，收店是開門）；(4)`close_shops` 只收坐著的，出發那三行不看坐不坐著（`shop_line`、`smith_page`、`smith_rule`、`bounty_pick` 不坐在店裡也要清）。所以這一包登記 `menus()` 的格：`take`、`here`、`idle`、`open`、`depart`、`block`，先後在 `MENU_ORDER`；`shop_view` 的 `board` 那一支與 `stale.mid` 的收店不動。`SHOP_ACTS`、`LEAVE_SHOP_IDS` 不動。
 
@@ -37,16 +37,17 @@
 
 **事件**：`raid_win` 的發布點在 `actions.raid_bounty`；`aid_actions.py` 發 `aid`；其餘四種發布點在各包。`bus_bypasses` 擋 `bounties.on_*` 這種名字，所以包的 `bus()` 寫 `rules.on_*`。
 
-**過渡 import（這一包到舊模組）1 處**：`actions.py` → `shopview`（`board_key`；`SHARED_LATER`）。`rules.py` 讀的 `allied`、`equipment`、`materials`、`ranger`、`renown`、`roster`、`territory`、`treasures`、`weapons` 都在共用規則層。舊模組經別名碰這一包：`bot.py`、`bot_policy.py`、`shopview.py`、`scripts/`（`measure_sanren.py`、`sim_server_bots.py`）。`web/` 歸第 65 批（`boardHtml`、`paperHtml`、`boardUnpick`、`boardZoom`、`boardClose`、`boardLeave`、`boardHanded`、`STAMP_MS`）、第 67 批（`bountiesHtml`、`rewardChips`）。
+**過渡 import（這一包到舊模組）1 處**：`actions.py` → `shopview`（`board_key`；`SHARED_LATER`）。`rules.py` 讀的 `allied`、`equipment`、`materials`、`ranger`、`renown`、`roster`、`territory`、`treasures`、`weapons` 都在共用規則層。舊模組經別名碰這一包：`bot.py`、`bot_policy.py`、`shopview.py`、`scripts/`（`measure_sanren.py`、`sim_server_bots.py`）。懸賞榜的畫法（`boardHtml`、`paperHtml`、`boardUnpick`、`boardZoom`、`boardClose`、`boardLeave`、`boardHanded`、`STAMP_MS`）在 `web/bounties.js`（全部拆包第 65 批從 `app.js` 逐行切出來，90 行；`web = ("bounties.js",)`；計畫 `2026-11-06-網頁殼化-第65批.md`），點擊分派的 `case`、店面的框留在 `app.js`（殼）；`bountiesHtml`、`rewardChips` 與賞的樣子 `web/bounties.css` 第 67 批從 `main.js`、`style.css` 切進來；榜的樣子在 `style.css` 的店面那一段。
 
 ## 測試
 
 **這一包的 `tests/`**（`test_for` 改這一包跑）：`test_bounties_smoke.py`（新寫的煙霧）、`test_renown_prize.py`、`test_renown_wanted.py`（第 41 批認定第 6 條：只整檔搬沒人用裸名 import、不是網頁類的）。
 
-**留原處**：`tests/ranger/test_bounties.py`、`tests/bots/test_bounty_hand_in.py`（被裸名 import，第 61 批）、`test_bounty_tags.py`、`tests/web/test_sanren_web.py`（網頁類）、`test_season21_daily.py`（混合檔）。
+**留原處**：`tests/ranger/test_bounties.py`、`tests/bots/test_bounty_hand_in.py`（被裸名 import，第 61 批）、`test_bounty_tags.py`、`tests/web/test_sanren_web.py`（網頁類）、`test_season21_daily.py`（混合檔）。改 `web/bounties.js` 時 `test_for` 照檔名挑得到 `test_shop2_web`、`test_bounty_tags`、`test_shop_polish`、`test_shop_width`、`test_shell_web`。
 
 **另外要跑的**（`test_for` 挑不到；改這一包開發與修正另跑，`-n 4`，不含 slow）：
 
+- 網頁：`tests/server/test_server.py -k "page or version or scripts"`（那個檔太大，檔名刻意不寫進去）、`tests/bots/test_server_bots.py`（掃字）。
 - 留原處的那幾個：`tests/ranger/test_bounties.py`、`tests/bots/test_bounty_hand_in.py`、`tests/ranger/test_bounty_tags.py`、`tests/web/test_sanren_web.py`、`tests/ranger/test_season21_daily.py`。
 - 「你這一步」：`tests/bots/test_step.py`、`tests/map/test_weekcard.py` 與 `tianxia/step.py` 模組說明列的那一串（`tests/core/test_chapters.py`、`tests/figures/test_week_unlock.py`、`tianxia/features/companions/tests/test_errands_weekcard.py`、`tianxia/features/guide/tests/test_opening.py`）。
 - 世界層四格（第 25 批認定第 7 條）：`tests/core/test_world.py` 與 `tianxia/world.py` 模組說明「另外要跑的」那一串——`tests/figures/test_timetable.py`、`test_seats.py`、`tests/core/test_season_pause.py`、`tianxia/features/companions/tests/test_stances_tie.py`、`tests/figures/test_week7_season.py`、`test_season21_frame.py`、`test_season21_caps.py`、`test_plans.py`、`test_figure_life.py`、`test_figure_attrition.py`、`tests/battle/test_fronts.py`、`tests/figures/test_front_lines.py`、`test_finale.py`、`test_admin_triggers.py`、`test_calendar.py`、`tests/seal/test_seal.py`、`test_seal_engine.py`、`test_seal_acts.py`、`tests/acts/test_conquest_rules.py`、`tianxia/features/stamina_plays/tests/test_stamina_plays.py`、`tests/core/test_marks_wired.py`、`tianxia/features/looks/tests/test_looks_mvp.py`。
@@ -62,3 +63,7 @@
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `bounties`（`actions.deliver`）；`own_turn` 的 `bounties`（`actions.post_auto`：暫停那一道之後，`on_own_turn` 在它之前）；`stale.mid` 的 `bounties`（`actions.drop_stale`，收懸賞榜）。
 
 **第 56 批（選單收接縫，核心批）**：委派 `_bounty_options` 拿掉；`GAME_DELEGATE_CALLERS` 的 `_everyday_options → _bounty_options` 拿掉。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`status` 表 `bounties`。

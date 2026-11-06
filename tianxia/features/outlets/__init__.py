@@ -1,5 +1,5 @@
 """銀兩出口與捐軍備（大本營的軍需官那一串：捐素材；21 天季的「打點」那一間店：捐銀兩、名師指點、買破境丹、看火候、打點門路與帳簿）。
-功能包，開發規範手冊 3.2；全部拆包第 43 批搬進來（引擎那一半；網頁那一半 donatePicks、dadianHtml 等第 65 批才切）。README.md 寫這一包做什麼、
+功能包，開發規範手冊 3.2；全部拆包第 43 批搬進來（引擎那一半）；網頁的畫法 donatePicks、dadianHtml 等在 web/outlets.js（第 65 批）。README.md 寫這一包做什麼、
 認領的欄位、還留在原位的接縫。
 
 - donate_actions.py：捐軍備（原本 Game 上的 9 個方法，Game 留一行委派）
@@ -12,15 +12,16 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHook, Shop, Verb
+from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHook, Shop, StatusHook, Verb
 
 
 class OutletsFeature(Feature):
     name = "outlets"
+    web = ("outlets.js",)  # 軍需帳與打點帳簿的畫法（全部拆包第 65 批從 app.js 切出來）；點擊分派的 case 照舊在 app.js（殼）。樣子在 style.css 的店面那一段（電腦寬那一塊靠先後蓋，第 67 批搬不動）
     prefix = ("donate", "dadian")  # donate:room、donate:<素材>:<個數>、donate:back（軍需官那一串）；dadian:back（打點那一間店）；入口 act:donate、act:dadian 是核心的前綴
     bot_always = ("donate:", "dadian:")  # 坐在店裡一直按得下去：整季機器人不按（bot.py 的排除清單原本也寫了這兩個，拿掉，只剩這裡）
     # 軍需官那一串與打點那一間店開著沒、今天捐了多少（素材、銀兩）、名師指點與看火候請了沒用、這一季買了幾顆破境丹、今天打點過誰：
-    # 換季全部跟著新角色重來（軍備存量 World.armaments 是全服帳，由 donate_actions.credit 寫、核心 status_data 經 armament_view 讀）
+    # 換季全部跟著新角色重來（軍備存量 World.armaments 是全服帳，由 donate_actions.credit 寫、狀態列的 armament 那一格〔status_slots〕經 armament_view 讀）
     player_fields = ("picking_donate", "picking_dadian", "donate_day", "donated_today", "silver_donate_day", "silver_donated",
                      "mentor_day", "mentor_ready", "furnace_day", "furnace_ready", "legend_silver_bought", "bribed")
     carried = ("donate_day", "donated_today")  # 換季不能多捐一輪（season.carry 那一格照帶，同出陣的 sortie_day；不看開關）
@@ -158,6 +159,20 @@ class OutletsFeature(Feature):
         from . import howto as words  # noqa: PLC0415
 
         return (HowtoHook("economy", lambda content, season, page: words.economy_section(content, season)),)
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import donate_actions  # noqa: PLC0415
+
+            self._status_slots = (
+                # 陣營的軍備存量（素材與經濟設計第六節）；散人、捐軍備關著是 None
+                StatusHook("status", "armament", lambda ctx, frame: {"armament": donate_actions.armament_view(ctx)}),
+            )
+        return self._status_slots
 
 
 def _carry_season(ctx, old, fresh) -> None:

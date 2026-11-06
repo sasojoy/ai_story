@@ -273,3 +273,19 @@ def road_title(ctx) -> str:
 def travel_block(state, content) -> TravelBlock | None:
     """block/talk 那一格（core_seams，全部拆包第 56 批；原本在 atlas.travel_block，字一字不動）：跟人物談著。"""
     return TravelBlock("交談中，先告辭才能安排前往", to_jianghu=True) if state.player.pending_companion else None
+
+
+def main_slot(ctx, frame) -> dict:
+    """main 表的 companions 那一格（全部拆包第 66 批）：鍵照 talk、figure、errands 的先後，沒有就沒有那個鍵。像在 web/img/figures/full/<id>.webp 才給 face（server.figure_face）。"""
+    out: dict = {}
+    talk_now = talk_view(ctx)  # 正在說話的那一位（浮在最上層的對話框）
+    if talk_now is not None:
+        out["talk"] = {**talk_now, "face": frame.shell.figure_face(talk_now["id"])}
+    talking = ctx.state.player.pending_companion  # 人物頁（減法季批 6）：正在跟他談的那一位的心意條；關著、他沒有心意沒有這個鍵
+    figure = actions.figure_view(ctx, talking) if talking else None
+    if figure is not None:
+        out["figure"] = figure
+    errands_now = actions.errands_view(ctx)  # 託付清單（減法季批 6，主機側計畫 1.3 的 main.errands）；託付關著沒有這個鍵
+    if errands_now is not None:
+        out["errands"] = errands_now
+    return out

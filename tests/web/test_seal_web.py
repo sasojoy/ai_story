@@ -1,5 +1,6 @@
 """奪璽的網頁那一半（玉璽碎片設計 5.5、5.10、第十節）：江湖頁的奪璽卡、送出放手一搏、背景輪詢與分頁標題、修練頁的傳承那一列。
 餵真的引擎給的 /api/main 給 app.js（tests/test_prologue_web.py 的假瀏覽器）。沒有 node 就略過。"""
+# 畫法在 web/seal.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import random

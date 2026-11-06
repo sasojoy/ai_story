@@ -2,6 +2,7 @@
 選目標的那一層（店面樣式：招牌、剩幾次、一人一列、灰掉寫原因、散人照店面頁籤挑一邊）、問句、送 /api/do/seal_use；江湖頁碎片卡那一行提醒。
 餵真的引擎給的 /api/main（正式內容、21 天季）給 app.js（tests/test_prologue_web.py 的假瀏覽器）。沒有 node 就略過。
 窄螢幕不橫捲要真的排版：假瀏覽器量不到，這裡守 CSS 原文，幾何在瀏覽器裡量（375／360／320，數字寫在草圖的 README）。"""
+# 畫法在 web/seal.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import json
@@ -30,7 +31,7 @@ NAMES_START = 'wholeApp(["S", '
 assert PROLOGUE_DRIVER.count(NAMES_START) == 1
 DRIVER = PROLOGUE_DRIVER.replace(
     NAMES_START, 'wholeApp(["S", "heirloomRow", "sealActHtml", "sealActLine", "sealActNow", "sealHtml", "sealActPolled", ')
-CSS = (Path(__file__).resolve().parents[2] / "web" / "style.css").read_text(encoding="utf-8")
+CSS = (Path(__file__).resolve().parents[2] / "web" / "style.css").read_text(encoding="utf-8") + (Path(__file__).resolve().parents[2] / "web" / "seal.css").read_text(encoding="utf-8")
 
 # 一顆一顆點（同 test_admin_triggers_web.CLICK）：點完記下 #app 畫了什麼與跳出來的問句；ask-yes 只在 input.yes 為真時按
 CLICK = """return (async () => {

@@ -15,12 +15,13 @@ README.md 寫這一包做什麼、導覽與設計稿。
 from __future__ import annotations
 
 from tianxia import atlas  # 共用規則層（輿圖：路程、走法、折返的路；第 50 批收進）
-from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHook, Verb
+from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook, Verb
 from tianxia.core.services import ROAD_TASKS
 
 
 class TravelFeature(Feature):
     name = "travel"
+    web = ("travel.js",)  # 走法、路上的捷徑與往輿圖那一處（全部拆包第 66 批從 app.js 切出來）
     prefix = ("move", "road")  # move:<地點>[:<走法>]；road:back[:<走法>]、road:think／ask／gather
     bot_always = ("road:",)  # 路上小事按完還有、折返隨時能按：整季機器人不按（原本 bot.pick 的排除；move: 不在這裡，站著的時候它是正常的選項）
     player_fields = ("leg_actions", "recent_sights", "road_rewards_today", "tagalong")  # 這一段做過的路上小事、最近看過的見聞、今天拿過幾次路上收穫、跟著誰結伴同行；換季照 _reset_player_for_new_season 重來
@@ -112,6 +113,24 @@ class TravelFeature(Feature):
         from . import howto as words  # noqa: PLC0415
 
         return (HowtoHook("travel", lambda content, season, page: words.travel_section()),)
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import departure, party  # noqa: PLC0415
+
+            self._status_slots = (
+                # 在路上的那一句；不在路上是 None
+                StatusHook("status", "journey", lambda ctx, frame: {"journey": None if ctx.state.player.journey is None else departure.journey_line(ctx)}),
+                # 在路上（路上設計 3.3）：頁面在選項底下多放三個捷徑（輿圖、修練、煉製）。看的是選單本身：參戰者在決戰大區裡走動時選單是戰鬥選項，那時不放捷徑
+                StatusHook("main", "on_road", lambda ctx, frame: {"on_road": any(o.id == "act:on_road" for o in frame.options)}),
+                # 結伴同行的那一行；沒有是 None
+                StatusHook("main", "party", lambda ctx, frame: {"party": party.party_view(ctx)}),
+            )
+        return self._status_slots
 
 
 FEATURE = TravelFeature()

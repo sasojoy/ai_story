@@ -10,11 +10,12 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHook
+from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook
 
 
 class SenseFeature(Feature):
     name = "sense"
+    web = ("sense.js",)  # 有所感的畫布、悟來的那一筆、神品意境取名（全部拆包第 66 批從 app.js 切出來）；OWN_NAME_* 第 67 批從 main.js 切進來；OWN_NAME_* 第 67 批從 main.js 切進來
     # sense:<做法>、sense:draw、sense:let（有所感）；dunwu:think、dunwu:<候選>、dunwu:own（特殊頓悟取名）。Feature.prefix 收 tuple（第 11 批）
     prefix = ("sense", "dunwu")
     content = ("insight_scenes.json",)  # content.py 照它到這一包的 content/ 載、content.check_insight_scenes 照舊驗（核心沒有 import 這一包）；檔名照舊
@@ -87,6 +88,20 @@ class SenseFeature(Feature):
         from . import howto as words  # noqa: PLC0415
 
         return (HowtoHook("insight", lambda content, season, page: words.insight_section(content, season)),)
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import actions  # noqa: PLC0415
+
+            self._status_slots = (
+                # 有所感選做法那一步（explain-2）：做法鈕上寫的心意（選項 id → 剛柔快慢）與鈕底下兩行小字；不在選做法是 None
+                StatusHook("main", "sense_help", lambda ctx, frame: {"sense_help": actions.method_help(ctx, (o.id for o in frame.options))}),
+            )
+        return self._status_slots
 
 
 FEATURE = SenseFeature()

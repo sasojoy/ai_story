@@ -14,11 +14,12 @@ newbie_drifter）與 /api/prologue，選單上的那幾顆是別人的（開局�
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, HowtoHook, SeamHook, StepHook, Verb
+from tianxia.core.features import DefectHook, Feature, HowtoHook, SeamHook, StatusHook, StepHook, Verb
 
 
 class GuideFeature(Feature):
     name = "guide"
+    web = ("guide.js", "guide.css")  # 引導的發光與閃一閃、入伍段看過軍令、玩法說明與重看序章（全部拆包第 66 批從 app.js 切出來）；路線發光、新手目標、說書人的框與樣子（全部拆包第 67 批從 main.js、style.css 切出來；.onb-dim 那幾條要蓋別人，留 style.css）；路線發光、新手目標、說書人的框與樣子（全部拆包第 67 批從 main.js、style.css 切出來；.onb-dim 那幾條要蓋別人，留 style.css）
     prefix = None  # 沒有自己的選項（見模組說明）
     # content.py 照它到這一包的 content/ 載；檔名照舊。events/opening.json、events/prologue.json 是開局與序章的事件池（全部拆包第 63 批），
     # 跟 opening.json（開局第一分鐘）是不同的檔
@@ -112,6 +113,24 @@ class GuideFeature(Feature):
             HowtoHook("fame", lambda content, season, page: words.fame_section(content, season)),
             HowtoHook("bag", lambda content, season, page: words.bag_section()),
         )
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import actions  # noqa: PLC0415
+
+            self._status_slots = (
+                # 新手目標（新手引導重做）：引導走完、新手期裡才有
+                StatusHook("status", "newbie", lambda ctx, frame: {"newbie": actions.newbie_view(ctx)}),
+                # 行動列上方的說書人對話框（引導重做設計 8.1）；序章（新手引導計畫一）與初入江湖（第四段）要亮的畫面元件、要發光的鈕；不在那一段是 None
+                StatusHook("main", "guide", lambda ctx, frame: {"guide": actions.guide_box(ctx), "prologue": actions.prologue_view(ctx),
+                                                                "onboard": actions.onboard_view(ctx)}),
+                StatusHook("main", "glow", lambda ctx, frame: actions.glow_slot(ctx, frame)),
+            )
+        return self._status_slots
 
 
 FEATURE = GuideFeature()

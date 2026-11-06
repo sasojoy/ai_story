@@ -9,11 +9,12 @@ enabled 一直是 True（沒有自己的總開關：護衛看 Config.figure_aid�
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHook, Verb, WorldHook
+from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHook, StatusHook, Verb, WorldHook, slot_some
 
 
 class FigureActsFeature(Feature):
     name = "figure_acts"
+    web = ("figure_acts.js", "figure_acts.css")  # 盤算卡與此地舊事（全部拆包第 67 批從 main.js、style.css 切出來）
     prefix = ("aid", "plan")  # aid:guard／rally／visit:<人物>、plan:help／block:<站>
     bot_always = ("aid:",)  # 整季機器人：護衛、犒軍、探望不按（原本寫在 bot.py 的排除清單；plan: 照舊按得到）
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：閉門不見到幾時、這一季打贏每位人物幾次、聲威哪天扣過、三階與四階的帳、領過盤算結果的站。換季全部跟著新角色重來
@@ -105,6 +106,22 @@ class FigureActsFeature(Feature):
         from . import howto as words  # noqa: PLC0415
 
         return (HowtoHook("challenge", lambda content, season, page: words.challenge_section(content, season)),)
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import plan_actions  # noqa: PLC0415
+
+            self._status_slots = (
+                # 世界活起來：全服開著的盤算裡最切身的一件（江湖頁行動列底下一張卡）；沒有開著的就沒有這個鍵
+                StatusHook("main", "plan", lambda ctx, frame: slot_some("plan", plan_actions.plan_view(ctx))),
+                # 世界活起來：此地舊事（場景卡底下最近的幾筆世界記事）；沒有就沒有這個鍵
+                StatusHook("main", "place_deeds", lambda ctx, frame: slot_some("place_deeds", plan_actions.place_deeds_view(ctx))),
+            )
+        return self._status_slots
 
 
 FEATURE = FigureActsFeature()

@@ -1,5 +1,6 @@
 """21 天季懸賞的賞拆成小籤（企劃者挑第 5 批畫面第三組丙）：江湖頁懸賞卡、懸賞榜放大的紙一樣一格，告示右上角一個寫銀兩的小朱印。
 字與數字照伺服器給的（bounties.reward_tags）；週末與 14 天的季照舊那一行，一個字都不變。"""
+# 畫法在 web/bounties.js（全部拆包第 65 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import pytest

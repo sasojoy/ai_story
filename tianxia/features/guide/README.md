@@ -1,6 +1,6 @@
 # 新手引導（`tianxia/features/guide/`）
 
-草廬之後的引導框（說書人、初入江湖的老周）、碰到才說的提示、新手目標、開局第一分鐘（城門口三選一與第一封託付）、入伍段（引薦人帶兩步）、序章的畫面與重看。全部拆包第 22 批（引導一）搬進來（計畫 `docs/superpowers/plans/2026-11-01-新手引導包-第1批.md`）；玩法說明（`howto`）是第 59 批（引導二）。網頁那一半（`web/app.js` 的 `onb`、`guideGlow`、`watchOrders` 那幾個）第 3 階再切。
+草廬之後的引導框（說書人、初入江湖的老周）、碰到才說的提示、新手目標、開局第一分鐘（城門口三選一與第一封託付）、入伍段（引薦人帶兩步）、序章的畫面與重看。全部拆包第 22 批（引導一）搬進來（計畫 `docs/superpowers/plans/2026-11-01-新手引導包-第1批.md`）；玩法說明（`howto`）是第 59 批（引導二）。網頁那一半（`onb`、`guideGlow`、`watchOrders` 那幾個）第 66 批切進 `web/guide.js`。
 
 - 導覽：`docs/guide/核心與存檔.md` 的「新手引導（功能包 `tianxia/features/guide/`）」那一節。
 - 設計稿：沒有版本號——新手引導重做設計（Joy 2026-10-22，https://claude.ai/artifact/Eb25MwPveJMYSf5Ge4mDyx：第四節入伍段、第五節碰到才說、第六節新手目標、第七節略過與換季、8.1 對話框）；新手引導計畫一～三（`docs/superpowers/plans/2026-10-06-新手引導-1-序章.md`、`-2-入伍段.md`、`-3-碰到才說.md`）；開局第一分鐘：減法季整合設計 6.7。
@@ -32,7 +32,7 @@
 - 做完一件事引導跟著走（`_note_action`）：`choose` 五行、`take_stamina_pill`、`_menxia_entry` 留在核心原位。**第 57 批量過，不開事件**（第 26 批認定第 6 條交那一批量；計畫第四節）：`BUS_ORDER` 沒有「做完一個動作」這種事件，開新事件要過 PM；最接近的 `arrive` 也接不了（`departure.arrive` 的 `left` 要在 `note_action` 之後算，訂閱者的回話會排到它前面）；`choose` 那幾行之間夾著 `_opening_deliver`，`_menxia_entry` 還把 `HutReward` 拆進 changes，都是位置就是行為。進了包的（`faction/join_actions.py`、`travel/departure.py`）已經經 `ctx`（配點 `allocate_stat` 第 23 批進修練包，那裡的 `_note_action`、`_check_hints` 都經 `ctx` 叫）。
 - 碰到才說（`_check_hints`、`_hint`）：`choose`、`sync`、`travel`、`_menxia_entry`、`_act`、`_brush_off`、`_open_dialogue`，與核心 `event_check.answer_event`、`answer_branch`（連 `_begin_enlistment`、`_greet_rejoin`）。
 - 開局（`_opening_*`）：`choose`、`check_in`、`_auto_checkin`、`checkin_view`、`now_entry_html`、`Game.new`。
-- 換季開場那一則的引導（`_reset_player_for_new_season` 的 `_tutorial_intro`：是 `_write` 的引數）、核心的引導框服務（`_note_guide` 的 `_guide_speakers`）、狀態列的任務卡（`status_data` 的 `newbie_view`）、`act:rest`（`_act` 的 `_rest`）。
+- 換季開場那一則的引導（`_reset_player_for_new_season` 的 `_tutorial_intro`：是 `_write` 的引數）、核心的引導框服務（`_note_guide` 的 `_guide_speakers`）、`act:rest`（`_act` 的 `_rest`）。
 - 掃描看不到的：`Game.new`（classmethod，用 `game.` 叫）的 `_opening_on`、`_opening_begin`、`_tutorial_intro`、`_graduate`、`_note_gift`；舊模組 `step.py` 叫 `game._nearest_to`（第 36 批起 `step.py` 收進核心本體、不再叫它：改由軍情包、陣營包那兩格經 `ctx._nearest_to` 問）。
 
 **`note_action` 被測試換掉的那一層**：`tests/core/test_engine.py` 換的是 `tianxia.engine.note_action`（看 `args[3]`／`args[-1]`），所以 `Game._note_action` 的本體叫 engine 模組層那個名字（`from .guide import note_action`：別名）；包裡的 `view_orders`、`view_map`、`view_tab` 與出陣包的六處（`actions.py`、`duel_actions.py` 四處；守勢 `train_actions.duty` 兩處：原本的 `Game._duty` 第 17 批進了出陣包，這一批合進 develop 時改）都經 `ctx._note_action`。包裡互相叫直接叫函式，只有被測試換掉的 `_hint_triggers`（`test_hints` 換掉 `game._hint_triggers`）經 `ctx`。
@@ -66,3 +66,8 @@
 **第 56 批（選單收接縫，核心批）**：`newbie.py` 讀懸賞的張數改問核心 `bounty_base.done_count`；先後在 `core/features.py` 的 `MENU_ORDER`；上面寫「留委派」「原位」的以這一句為準。
 
 **第 57 批（分派與標題收接縫，核心批）**：`verbs()` 是新開的（`rest`：按下去與紀錄標題）。委派 `_rest` 留著（`scripts/same_behavior.py` 直接叫）。改這一格另外跑 `tests/core/test_prologue.py`、`tests/core/test_engine.py -k rest`；序章以外走不到，`same_behavior` 的 `levy` 一軌在鎖裡換掉 `prologue.instant_rest` 才按得到。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 畫面：`web/guide.js`（引導的發光與閃一閃、入伍段看過軍令、玩法說明與重看序章；路線發光、新手目標、說書人的框、`proGuide` 第 67 批從 `main.js` 切進來）、`web/guide.css`（新手目標；`.onb-dim`、`.glow`、`.lit` 要蓋別人，留 `style.css`）；點擊分派的 `case`、`choose` 留 `app.js`。
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`status` 表 `newbie`；`main` 表 `guide`（`guide`、`prologue`、`onboard`）、`glow`（`actions.glow_slot` 改已經合進去的 `view["guide"]`，沒有鍵）。

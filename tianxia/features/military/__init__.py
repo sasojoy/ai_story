@@ -14,11 +14,12 @@ Game 上的一行委派（理由在 tests/core/test_feature_boundaries.py 的 `#
 """
 from __future__ import annotations
 
-from tianxia.core.features import BusHook, DefectHook, EffectHook, Feature, MenuHook, Outcome, SeamHook, StepHook, Verb
+from tianxia.core.features import BusHook, DefectHook, EffectHook, Feature, MenuHook, Outcome, SeamHook, StatusHook, StepHook, Verb, slot_some
 
 
 class MilitaryFeature(Feature):
     name = "military"
+    web = ("military.js", "military.css")  # 本週軍令那張卡（全部拆包第 67 批從 main.js、style.css 切出來）
     # 第 34 批：機緣 opp:<…>（交東西、嘗試、拼圖、呈交、指認、請命、響應、各做一處）與伏筆 fs:<鏈>、fs:<鏈>:<選項>、fs:leave
     prefix = ("opp", "fs")
     bot_always = ("fs:", "opp:")  # 伏筆的最後一步、機緣的選項：這一版假人不做（計畫 T7、正式版乙一；原本 bot.FORESHADOW_OPTIONS，第 60 批）
@@ -200,6 +201,20 @@ class MilitaryFeature(Feature):
                      title=lambda ctx: f"應召・{here(ctx)}", bot=lambda ctx, profile: bots.SUMMONS_SCORE),
             )
         return self._verbs
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import order_actions  # noqa: PLC0415
+
+            self._status_slots = (
+                # 押著的糧車（T6 審查 I3）：軍令卡上寫一行
+                StatusHook("main", "convoy", lambda ctx, frame: slot_some("convoy", order_actions.convoy_line(ctx))),
+            )
+        return self._status_slots
 
 
 FEATURE = MilitaryFeature()

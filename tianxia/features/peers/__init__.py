@@ -19,7 +19,7 @@ enabled 一直是 True（沒有整包的總開關：名帖開關 Config.mingtie.
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook
+from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, StatusHook
 
 from . import mingtie_card as _mingtie_card  # noqa: F401  遞名帖登記進玩家卡的動作表（social.ACTIONS）；載入這一包就登記（原本 engine.py 頂端 import 它；scripts/test_for.py 認這個寫法）
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）；原本 engine.py 頂端 import tianxia.discuss（全部拆包第 38 批）
@@ -30,7 +30,7 @@ from . import spar as _spar_card  # noqa: F401  切磋登記進玩家卡的動�
 class PeersFeature(Feature):
     name = "peers"
     prefix = "invite"  # invite:yes|no|cancel:<編號>：打招呼的回禮（invite:cold|retort|…）也是同一個前綴
-    web = ()  # app.js 的 MT_INKS 等歸這一包，網頁第 3 階才切
+    web = ("peers.js", "peers.css")  # 名帖的畫法與畫布（全部拆包第 66 批從 app.js 切出來）；此地還有誰、邀請、玩家卡與樣子（全部拆包第 67 批從 main.js、style.css 切出來）；點擊分派的 case 照舊在 app.js（殼）
     content = ("mingtie.json",)  # 名帖現成的畫與假人的自題句庫；content.py 照它到這一包的 content/ 載（MingtieContent）
     bot_always = ("invite:",)  # 邀請的選項一直按得下去（收回、回禮）：整季機器人不按（bot.py 的排除清單原本也寫了一個，拿掉那一個，只剩這裡）
     # 名帖與贈物一天的次數：自己那一張、收到的、檢舉過的、不接誰的挑釁話、定稿與遞帖的次數記在哪一天、贈物的次數——全部跨季帶走
@@ -86,6 +86,24 @@ class PeersFeature(Feature):
                 MenuHook("here", "invite", lambda ctx, loc, cost, odds: invite_actions.options(ctx)),
             )
         return self._menus
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from tianxia import rules  # noqa: PLC0415
+
+            from . import actions, invite_actions  # noqa: PLC0415
+
+            self._status_slots = (
+                # 玩家卡要的邀請：收到的與發出去還在等的（第一季才有）
+                StatusHook("status", "invites", lambda ctx, frame: {"invites": invite_actions.status(ctx)} if rules.season_one(ctx.content, ctx.state.world) else {}),
+                # 此地還有誰（玩家之間的互動第一層）：[{name, side}]，路上、序章裡是空的；別人遞給你、還沒回的邀請（第二層），回應鈕是選單上的 invite: 選項
+                StatusHook("main", "peers", lambda ctx, frame: {"here": actions.peers_here(ctx), "calls": actions.calls_here(ctx)}),
+            )
+        return self._status_slots
 
 
 FEATURE = PeersFeature()

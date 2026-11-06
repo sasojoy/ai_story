@@ -1,6 +1,6 @@
 # 鐵匠鋪（`tianxia/features/smithy/`）
 
-帶地盤福利的城鎮裡的一間店：架上買、修、淬煉、換上、拆解（兵器頁、防具頁），一步一步打造與店面直接開爐，打造的隱藏配方與鐵匠順口，神器原品定名與以器配招，素材頁的收購與升階，打造頁爐火的看火候。全部拆包第 41 批搬進來（引擎那一半），行為一個字不變。網頁那一半（`web/` 的鐵匠鋪畫面）第 3 階才切，這一批不碰。
+帶地盤福利的城鎮裡的一間店：架上買、修、淬煉、換上、拆解（兵器頁、防具頁），一步一步打造與店面直接開爐，打造的隱藏配方與鐵匠順口，神器原品定名與以器配招，素材頁的收購與升階，打造頁爐火的看火候。全部拆包第 41 批搬進來（引擎那一半），行為一個字不變。網頁的畫法在 `web/smithy.js`（第 65 批）。
 
 - 導覽：`docs/guide/裝備與店面.md`（鐵匠鋪、兵器、防具、神器、打造隱藏配方）。
 - 設計稿：`docs/superpowers/specs/2026-10-29-鐵匠鋪與合成流程*`、兵器設計（`2026-10-09-兵器-design.md`）、裝備四欄設計、素材與經濟設計（第四、五節：升階與收購）、打造隱藏配方設計。
@@ -17,6 +17,7 @@
 - `clue.py`：`smith_clue`（鐵匠順口；包裡其餘各檔一律經 `ctx._smith_clue` 叫，因為測試換掉 `Game._smith_clue`）。
 - `routes.py`：`/api/smith_line`（原本寫在 `server.py`；殼照 `FEATURES` 掛）。
 - `bots.py`：假人看到 `smith:` 的選項怎麼按（原本 `bot_policy.score` 的 smith 那一段）與 `want`（原本 `bot_policy._smith_want`）。`act:smith`（進鐵匠鋪）的分數第 60 批搬來（`enter`，`Verb.bot` 問；`bot.pick` 不按是 `Verb.bot_skip`）；`bot_policy._smith_want` 名字留著（一行委派到這裡，測試讀）。改 `bots.py` 的 `act:` 分數時另外跑 `tests/bots/test_bot_policy.py`、`tests/bots/test_bot_policy_conquest.py`、`tests/bots/test_bot_policy_stuck.py`（`test_for` 挑不到，第 60 批）。整季機器人與假人共用的底層（`bot.smith_want`、`forge_step`、`forge_ready`、`trade_at_smith`、`keep_book_names`）不搬，它們叫 `Game` 的公開方法。
+- `web/smithy.js`（檔照手冊 G9 在 `web/`，`web = ("smithy.js",)`）：鐵匠鋪的畫法（全部拆包第 65 批從 `app.js` 逐行切出來，519 行；計畫 `2026-11-06-網頁殼化-第65批.md`）——`smithHtml`、架上 `shelfHtml`、打造 `forgePageHtml`（看火候 `furnace*`、就地熬 `brew*`、開爐與出爐卡 `revealHtml`、神器定名 `divineFormHtml`）、裝備庫 `rackHtml`、素材頁 `tradeHtml`、神器頁 `divineHtml`。留在 `app.js`（殼）的：點擊分派的 `case`、店面的框（`SHOP_ATTR`、`shopHtml`、`shopNoteHtml`、`shopDo`、`renderShop`、`shopPolled`）、`reduceMotion`。合成流程的樣子在 `web/smithy.css`（第 67 批，載入先後在 `index.html`）；架上的樣子在 `style.css` 的店面那一段（`@media (min-width: 641px)` 用 `:where(.shop-layer)` 壓權重、靠先後蓋手機那幾條，第 67 批搬不動）。
 - 掛鉤：`prefix = "smith"`；`choose` 接 `smith:*`（標題 `smithing.title(arg)`，在動作之前拿）；`verbs()` 一個 `Verb("smith")`（`run` 走進鐵匠鋪、`title` 是「鐵匠鋪・此地」）；`routes`；`content`（`forge_secrets.json`、`tier4_named.json`）；`bot_pick` 問 `bots.score`；`enabled`＝武器或防具開著、或此刻還坐在鐵匠鋪裡（開關在坐著時被關掉，離開還按得到；不看第一季開關）。
 
 ## 認領的欄位（手冊 3.5：留在原地）
@@ -57,7 +58,7 @@
 - `tests/gear/` 底下上面那七個，加 `test_armor.py`（44）、`test_weapons.py`（109）、`test_four_tiers.py`（47）、`test_board_cards.py`（11）、`test_renown_discount.py`（3）、`test_signature_arms.py`（25）、`test_shop2.py`、`test_shop_polish.py`。
 - `tests/bots/test_bot_policy.py`（鐵匠鋪的分數、`_smith_want`）、`tests/core/test_economy.py`、`tests/core/test_shop_width.py`、`tests/season/test_sim_scripts.py`。
 - `tests/arts/test_ultimates.py`（`bind_art`）、`tests/server/test_server.py`（`/api/do/smith_*`、`/api/menxia/…`）。
-- 網頁（第 3 階才切）：`tests/core/test_kiln_round.py`、`tests/web/test_smith_labels_web.py`（8）、`test_shop_web.py`（61，slow 7）、`test_shop2_web.py`、`test_tier4_shop_web.py`（7）、`test_smith_divine_web.py`。
+- 網頁（測試檔留原處）：`tests/core/test_kiln_round.py`、`tests/web/test_smith_labels_web.py`（8）、`test_shop_web.py`（61，slow 7）、`test_shop2_web.py`、`test_tier4_shop_web.py`（7）、`test_smith_divine_web.py`。改 `web/smithy.js` 時 `test_for` 照檔名挑得到 `test_shop_web`、`test_smith_divine_web`、`test_tier4_shop_web`、`test_shop2_web`、`test_econ_web`、`test_shop_width`、`test_shell_web`；挑不到、要另外跑的：`tests/server/test_server.py -k "page or version or scripts"`（那個檔太大，檔名刻意不寫進去）、`tests/bots/test_server_bots.py`（掃字）。
 
 `scripts/same_behavior.py` 的 `smithy` 軌（`--tracks smithy`，三種設定）：整段、半舊半新、軌裡的假人段都跟搬之前一樣。
 

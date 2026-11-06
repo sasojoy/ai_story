@@ -1,6 +1,7 @@
 """素材與經濟 B6 的網頁（企劃者 2026-10-15 挑草圖 A1＋B3＋C1）：鐵匠鋪多第五頁「素材」（上半升階、下半收購）、大本營的捐軍備做成店面那樣的
 「軍需帳」、江湖頁戰況卡底下一行陣營軍備。假瀏覽器照 tests/test_shop2_web.py 跑整支 app.js；CSS 照原字查（375 寬不撐開、不折行）。
 正式內容、週末設定（Config.economy 預設開）。"""
+# 畫法在 web/smithy.js、web/outlets.js（全部拆包第 65 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import random

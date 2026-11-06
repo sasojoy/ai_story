@@ -1,6 +1,8 @@
 """神品意境「自己取一個名字…」（FB-901）：按了不送 /api/choose，就地換成六字的輸入框，送出時 /api/choose 帶 text。
 以前這一顆按下去只回一句「（寫下你替它取的名字。）」寫進江湖紀錄，網頁上沒有輸入框、也沒人收那個 text，等於按不動。
 餵真的引擎資料給 app.js（假瀏覽器）。"""
+# 畫法在 web/sense.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
+# 畫法在 web/peers.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 from unittest import mock

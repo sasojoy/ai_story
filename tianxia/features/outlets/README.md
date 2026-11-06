@@ -26,20 +26,20 @@
   `furnace_day`、`furnace_ready`（看火候）、`legend_silver_bought`（這一季用銀兩買了幾顆破境丹）、`bribed`（今天打點過誰）。
 - `carried = ("donate_day", "donated_today")`：換季不能多捐一輪（`season.carry` 的 `outlets` 那一格照帶，第 55 批；不看開關）；其餘換季跟著新角色重來。
 - 不認領：`legend_items`（破境丹的數量）屬修練包、商城也帶；`shop_line`、`shop_clue`、`shop_hold`（七間店共用的掌櫃那一句）屬核心。
-- `World.armaments`（各陣營軍備存量）是全服帳：由這一包的 `credit` 寫、核心 `status_data` 經 `armament_view` 讀；沒有 `PlayerState` 欄位。
+- `World.armaments`（各陣營軍備存量）是全服帳：由這一包的 `credit` 寫、狀態列的 `armament` 那一格（`status_slots`）經 `armament_view` 讀；沒有 `PlayerState` 欄位。
 - 動身被擋（`atlas.travel_block`）：第 56 批選單收接縫起這一包登記 `MENU_ORDER["block"]` 自己那一格，讀 `picking_dadian`、`picking_donate` 的只剩包裡；字與先後一字不動（`atlas` 不再讀）。
 
 ## 委派與留在原位的接縫
 
-`Game` 留 8 個一行委派（`can_donate_here`、`_donate_option`、`donate`、`donate_items`、`_silver_options`、`_bribe_targets`、`_silver_act`、`armament_view`）；其餘 9 個方法只有包裡叫，沒有委派。**沒有新增 `GAME_DIRECT`**。
+`Game` 留 7 個一行委派（`can_donate_here`、`_donate_option`、`donate`、`donate_items`、`_silver_options`、`_bribe_targets`、`_silver_act`；`armament_view` 第 66 批拿掉）；其餘 9 個方法只有包裡叫，沒有委派。**沒有新增 `GAME_DIRECT`**。
 核心原位接掛鉤的：`sync` 與 `_drop_stale_references`（`drop_shops`）、`_depart`（`close_shops`）、`_shop_open`、`_everyday_options` 坐在店裡的選單（`shop_menu`）、`_act`（`Verb.run`）、`choose`（`Outcome`）、`_action_title`（`Outcome.title`、`Verb.title`）。
 留委派、記進 `GAME_DELEGATE_CALLERS` 的：
 
 - `_everyday_options` 叫 `_donate_option`、`_silver_options`：「此地還能做」裡捐軍備與打點兩顆入口排在療傷之後，順序是行為（`/api/main` 的選項一顆一顆逐位元組）；若放進 `Shop.entry` 會跑到療傷前面。
 - `act:bribe:<人物>`：第 57 批接進 `Verb` 的 `tail_run`、`tail_title`（走銀兩四樣同一支 `press`），四樣的標題也接進 `Verb.title`，核心不再有銀兩那幾行。
-- `shop_view` 叫 `_bribe_targets`；`status_data` 叫 `armament_view`。
+- `shop_view` 叫 `_bribe_targets`。
 - 外面（server、假人）叫的：`donate`、`donate_items`（`/api/do/donate`）、`can_donate_here`（`bot.donate_spare`）。
-- 網頁那一半（`donatePicks`、`dadianHtml`、`donateHtml`、`donateCell`、`donateStep`、`donateTierOne`、`donateGo`）第 65 批才切，這一批不碰 `web/`。
+- 網頁的畫法（`donatePicks`、`dadianHtml`、`donateHtml`、`donateCell`、`donateStep`、`donateTierOne`、`donateGo`）在 `web/outlets.js`（全部拆包第 65 批從 `app.js` 逐行切出來，110 行；`web = ("outlets.js",)`；計畫 `2026-11-06-網頁殼化-第65批.md`）。留在 `app.js`（殼）的：點擊分派的 `case`、店面的框（`shopHtml`、`shopNoteHtml`、`renderShop`）。樣子在 `style.css` 的店面那一段（`@media (min-width: 641px)` 用 `:where(.shop-layer)` 壓權重、靠先後蓋手機那幾條，第 67 批搬不動）。
 
 ## 測試
 
@@ -55,7 +55,7 @@
 
 - `tests/gear/test_shop.py`：店面那一頁混合檔（鐵匠鋪、馬市、打點、軍需帳都在裡面）。
 - `tests/bots/test_bot_policy_stuck.py`：假人卡在店裡那一類（含坐在軍需官、打點店裡只會離開）。
-- `tests/web/test_econ_web.py`：捐軍備與軍備存量的網頁測試（網頁，第 3 階才切）。
+- `tests/web/test_econ_web.py`：捐軍備與軍備存量的網頁測試（網頁類，留原處）。改 `web/outlets.js` 時 `test_for` 照檔名挑得到它、`test_shop_width`、`test_shell_web`；挑不到、要另外跑的：`tests/server/test_server.py -k "page or version or scripts"`（那個檔太大，檔名刻意不寫進去）、`tests/bots/test_server_bots.py`（掃字）。
 - `tests/figures/test_gentry_allied.py`：一條（`test_donate_goes_to_the_side_stock`，豪強捐軍備進依附那一軍的存量）。
 
 ## 過渡（手冊 3.11）
@@ -69,3 +69,7 @@
 **第 57 批（分派與標題收接縫，核心批）**：委派 `_silver_act` 拿掉（上面「留 8 個」以這一句為準），engine 不再 import `silver`。
 
 `howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「素材的出路」那一節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`status` 表 `armament`。

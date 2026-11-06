@@ -20,11 +20,12 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import BusHook, EffectHook, Feature, HowtoHook, MenuHook, SeamHook, WorldHook
+from tianxia.core.features import BusHook, EffectHook, Feature, HowtoHook, MenuHook, SeamHook, StatusHook, WorldHook
 
 
 class SealFeature(Feature):
     name = "seal"
+    web = ("seal.js", "seal.css")  # 奪璽卡、碎片卡與獨門行動（全部拆包第 66 批從 app.js 切出來；獨門行動的樣子第 67 批從 style.css 切出來）；sealWatched、sealTitle 留在 app.js 伺服器推送那一段
     prefix = "seal"  # 選項前綴 seal:（碎片卡、獨門行動、奪璽單挑的三招）；第 28 批登記，choose、menu 不接（MENU_ORDER 的 front、quick 那兩格）
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：抄本 heirloom（傳承那一格，照全服登記重抄）、補送到第幾號 seal_seen。
     # 換季（season.carry 那一格）兩個都照帶；heirloom 換季後建 Game 時照登記重抄（copy_heirloom），所以不算帶走的
@@ -147,6 +148,20 @@ class SealFeature(Feature):
             HowtoHook("fame_seal", lambda content, season, page: words.fame_seal(content)),
             HowtoHook("land_seal", lambda content, season, page: words.land_seal(content)),
         )
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import card, duel_actions  # noqa: PLC0415
+
+            self._status_slots = (
+                # 奪璽卡（玉璽碎片設計 5.10）：全服看得到，沒有單挑是 None；持有者的碎片卡（第十節）；seal_watch 為真時網頁在背景也輪詢、輪到出招改分頁標題（5.5）
+                StatusHook("status", "seal", lambda ctx, frame: {"seal_duel": duel_actions.duel_card(ctx), "seal": card.view(ctx), "seal_watch": duel_actions.watch(ctx)}),
+            )
+        return self._status_slots
 
 
 def _carry_season(ctx, old, fresh) -> None:

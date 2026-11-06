@@ -297,3 +297,13 @@ def choose_unlisted(ctx: Game, option_id: str) -> list[str] | None:
     if option_id.startswith(zhuan_end.PREFIX) and any(o.id == option_id and o.enabled for o in ctx.options(odds=False)):
         return ctx._log(act(ctx, option_id))
     return None
+
+
+def main_slot(ctx: Game, frame) -> dict:
+    """main 表的 zhuan 那一格（全部拆包第 66 批）：休季：江湖頁最上面的「讀你的傳」（玩家傳第二批）；季還在跑、沒有行狀沒有這個鍵。"""
+    zhuan = entry(ctx)
+    if zhuan is None:
+        return {}
+    if zhuan.get("illustration"):  # 列傳插畫（減法季批 7b）：圖檔在才給網址，沒有是 None
+        zhuan["illustration_src"] = frame.shell.zhuan_art_src(zhuan["illustration"])
+    return {"zhuan": zhuan}

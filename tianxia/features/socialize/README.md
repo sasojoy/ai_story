@@ -33,7 +33,7 @@
 
 ## 委派與留在原位的接縫
 
-`Game` 留 21 個一行委派（邊界測試的 `GAME_DELEGATES`）；31 個方法裡另外 10 個只有包裡叫，沒有委派。主幹合回 D 段再加一個 `figures_here_view`（只有殼在叫）。**沒有新增 `GAME_DIRECT`**。核心原位碰這一包的，接掛鉤的兩個：
+`Game` 留 21 個一行委派（邊界測試的 `GAME_DELEGATES`）；31 個方法裡另外 10 個只有包裡叫，沒有委派。主幹合回 D 段加的 `figures_here_view` 第 66 批拿掉（`/api/main` 改走 `status_slots`）。**沒有新增 `GAME_DIRECT`**。核心原位碰這一包的，接掛鉤的兩個：
 
 - `choose` 的 `call:`、`_action_title` 的 `call:` 那一格（換成 `Outcome.title`）。
 
@@ -46,7 +46,7 @@
 - `choose` 做完之後的 `_guide(self._note_action("socialize"))`（`kind == "call" and arg != "back"`）與前段的 `_checked_prepared`：留在 `choose` 原位（掛鉤沒有「做完記引導」的位置）。
 - 核心的表：`models.py` 的 `ALLOW_FAMILIES`（有 `call:`）與 `act:call`、`act:socialize`；`server.py` 備料判斷、整季機器人排除「名望不夠、會被打發的求見」第 60 批搬成這一包的 `bot_idle`（照舊問 `ctx.can_meet_figure`）。
 - 行動列底下交友、求見那幾行（第 59 批搬進 `menus.action_notes`，句子在這一包的 `howto.py`）：第 56 批起是 `notes/socialize` 那一格，`Game.action_notes` 不留委派（第 59 批的 `_social_notes` 合第 B 波時收掉）。
-- 組 `/api/main` 的 `figures_here` 那幾行留在殼（`server._main_view_body`）：包給 `figures_here_view`；像 `figure_face` 要讀 `web/img`，留殼。點大勢人物的簡介 `figure_intro`、`FIGURE_INTROS` 也留殼（`server.py`，合回第 4 段搬回來：要讀人物性子的 `persona_rules.view`，放包裡會變成包讀包）。
+- `/api/main` 的 `figures_here` 那一格（`status_slots`，第 66 批）：包給 `figures_here_view`；像 `figure_face` 要讀 `web/img`，留殼、經 `frame.shell` 叫。點大勢人物的簡介 `figure_intro`、`FIGURE_INTROS` 也留殼（`server.py`，合回第 4 段搬回來：要讀人物性子的 `persona_rules.view`，放包裡會變成包讀包），一樣經 `frame.shell` 叫、帶 `ctx`。
 
 ## 過渡（手冊 3.11）
 
@@ -74,3 +74,7 @@
 **第 57 批（分派與標題收接縫，核心批）**：`verbs()` 是新開的（`call`、`socialize`）。`actions.press` 照原位的先後一字搬：先問召見、再扣體力、端晉升奇遇（這一支不排提示）或交友、排 `h_bond`；委派 `_socialize` 留著、格裡經 `ctx` 叫（`tests/core/test_explain.py` 換 Game 上的名字）。改這兩格另外跑：`tests/core/test_explain.py`、`tests/core/test_social.py`、`tests/bots/test_event_rotation.py`、`tests/core/test_engine.py -k "summons or call or socialize"`。
 
 `howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（交友、求見那幾行與說明頁交友那一條），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `figures_here`。

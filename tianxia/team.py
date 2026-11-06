@@ -938,7 +938,7 @@ def points_between(cfg, before: int, after: int) -> int:
 def level_points(state: GameState, content: Content, before: int, after: int) -> int:
     """本人從第 before 級升到第 after 級拿到幾點屬性（升級的五個地方都走這一個：grant_team_exp、決戰軍餉、翻地分紅、切磋、頭目戰）。
     減法季屬性五段（Config.jianfa 的 stat_milestones）開著：升級不給點，跨過一個境界（milestone_levels）給 stat_points_per_milestone，
-    跨過的最後那一級記進 PlayerState.milestone_due（境界卡，Game.milestone_card；配完點清掉）；關著照 points_between。
+    跨過的最後那一級記進 PlayerState.milestone_due（境界卡，修練包 actions.milestone_card；配完點清掉）；關著照 points_between。
     五項屬性的季（attrset.on）：每級照配比自己長（讀的時候算），這裡只給每 bonus_every 級送的點（attrset.bonus_between）。"""
     if attrset.on(content, getattr(state, "world", None)):
         return attrset.bonus_between(content, before, after)

@@ -9,7 +9,7 @@
 | `__init__.py` | 登記（`TravelFeature`）：`enabled`＝一律開著（`choose`、`bot_pick` 原位本來就不看開關）、`prefix`＝`move`、`road`（`choose` 回 `Outcome`：標題先算，前往寫「前往 <地點>」、折返跟前往同一個標題、路上小事寫它自己的名字）、`bot_always`＝`road:`、`verbs()`＝`halt`（`run`＝`go_actions.halt`、`title`＝「喊停」）與 `part`（`run`＝`party.part_ways`、`title`＝「分道揚鑣」）、`routes`、`content`＝`road_sights.json`（測試內容那一份在 `tests/content/`，全部拆包第 63 批） |
 | `menu.py` | 原本 `Game._move_option`、`_back_way`、`_back_option`、`_road_task_options`、`set_move_mode`；`Game` 留 4 個一行委派（`_back_way` 只有包自己叫，沒有委派） |
 | `road_actions.py` | 原本 `Game._move`、`_road`、`_road_ends`、`_road_rewards_used`、`_road_reward_due`、`_count_road_reward`、`_road_reopen`、`_road_think`、`_road_ask`、`_road_gather`、`_road_sight`；第 48 批 `Game` 上 `_road_reward_due`、`_count_road_reward`、`_road_sight` 三個委派拿掉（`party.share_road`、`departure.arrivals` 直接叫）；`think`／`ask`／`gather` 把收穫跟訊息一起回傳（`(訊息, 收穫)`），`road` 再交給 `party.share_road`，`Game._road_gain` 不再寄放 |
-| `departure.py` | 原本 `Game._depart`、`_arrivals`、`_arrive`、`_journey_line`；`Game` 留 4 個一行委派（`_depart` 給人物帶路、腳本與測試，包內的 `go_actions`／`road_actions` 照舊經 `ctx._depart` 叫；`_arrivals` 給 `sync`、`advance`；`_arrive` 給核心契約測試鎖事件接法；`_journey_line` 給 `status_data`）。`_real_minutes` 留核心 |
+| `departure.py` | 原本 `Game._depart`、`_arrivals`、`_arrive`、`_journey_line`；`Game` 留 4 個一行委派（`_depart` 給人物帶路、腳本與測試，包內的 `go_actions`／`road_actions` 照舊經 `ctx._depart` 叫；`_arrivals` 給 `sync`、`advance`；`_arrive` 給核心契約測試鎖事件接法；`_journey_line` 照 `core/services.py` 留著，狀態列的 `journey` 那一格第 66 批起直接叫本體）。`_real_minutes` 留核心 |
 | `party.py` | 原本 `Game._join`、`join_refusal`、`_party_expires`、`_party`、`party_view`、`leave_party`、`_part_ways`、`_lead`、`_partners`、`_share_road`；`Game` 留 3 個一行委派（`_join` 給玩家互動包、`join_refusal` 給假人回結伴邀請、`party_view` 給殼的 `/api/main`；`_party_expires` 第 55 批換成 `sync.deliver` 的 `party` 那一格，拿掉），其餘呼叫端都在包內 |
 | `go_actions.py` | 原本 `Game._halt`、`travel`、`travel_refusal`；`Game` 留 `travel`、`travel_refusal` 兩個一行委派 |
 | `bots.py` | 假人的分數（原 `bot_policy.score` 的 `move:` 那一段）：要 `profile` 與 `bot_policy` 的七個私有函式，經 `from tianxia import bot_policy` 延後 import（過渡） |
@@ -37,3 +37,8 @@
 **第 56 批（選單收接縫，核心批）**：路上那一串（`road`：`head`、`halt`、`tasks`）與此地的前往（`here/move`）是這一包登記的格，`menu.py` 新開 `road_head`、`road_halt`、`move_options`；委派 `_move_option`、`_back_option`、`_road_task_options` 拿掉。
 
 `howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（說明頁移動那一條），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
+
+## 畫面與狀態列（全部拆包第 66 批）
+
+- 畫面：`web/travel.js`（走法、路上的捷徑與往輿圖那一處）。
+- 狀態列與江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`status` 表 `journey`；`main` 表 `on_road`、`party`。

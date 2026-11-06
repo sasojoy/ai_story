@@ -165,7 +165,7 @@ def router(shell) -> APIRouter:
 
     @r.get("/sw.js")
     def service_worker():
-        """手機通知的 service worker：放在根目錄，管得到整個網站（/static 底下的管不到 /）。檔在 web/sw.js（歸網頁殼化，第 66 批）。"""
+        """手機通知的 service worker：放在根目錄，管得到整個網站（/static 底下的管不到 /）。檔在 web/sw.js（留原位，不進 Feature.web：web_scripts 會把 .js 排成 script）。"""
         return Response((shell.WEB / "sw.js").read_bytes(), media_type="text/javascript", headers=shell.NO_CACHE)
 
     return r

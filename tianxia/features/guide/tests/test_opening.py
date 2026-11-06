@@ -9,6 +9,7 @@ import pytest
 from conftest import real_content
 
 from tianxia import letters, opening, prologue, weekcard
+from tianxia.features.faction import sides as faction_sides
 from tianxia.engine import Game
 
 
@@ -32,7 +33,7 @@ def test_a_new_player_starts_at_the_gate_with_the_three_way_choice_and_no_hut(on
     assert not prologue.active(s, on) and prologue.onboard_step(s, on) is None  # 草廬與老周那幾步都略過
     assert s.player.stamina == on.config.stamina_max
     assert [o.id for o in g.options()] == ["choice:0", "choice:1", "choice:2"]
-    assert weekcard.week_card(g, g.status_data(), g.orders_view()) is None and weekcard.sides_card(g) is None  # 選完才畫
+    assert weekcard.week_card(g, g.status_data(), g.orders_view()) is None and faction_sides.sides_card(g) is None  # 選完才畫
     assert not s.player.letters
 
 
@@ -63,7 +64,7 @@ def test_the_week_card_appears_after_the_choice_with_the_errand_first(on):
     g.choose("choice:0")
     status = g.status_data()
     card = weekcard.week_card(g, status, g.orders_view())
-    assert card is not None and weekcard.sides_card(g) is not None
+    assert card is not None and faction_sides.sides_card(g) is not None
     assert card["steps"][0]["kind"] == "errand" and "長社" in card["steps"][0]["text"] and card["steps"][0]["who"] == "傅燮"
     assert any(s["kind"] == "newbie" for s in card["steps"])  # 新手八步退到本週卡與「為什麼」
 

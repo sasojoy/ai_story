@@ -3,6 +3,7 @@
 
 把 web/app.js 裡那一段（從 ORDERS_SEEN_MS 到 watchOrders 結束）切出來在 node 裡跑，餵假的 document、IntersectionObserver、計時器與 api；
 node 由 tests/webharness.py 跑；沒有 node 就略過。"""
+# 畫法在 web/guide.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import pytest
