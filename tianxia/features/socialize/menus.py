@@ -1,12 +1,13 @@
-"""交友求見的選單與求見畫面（功能包 socialize；全部拆包第 21 批）：交友那一顆、一類一顆的交友那一顆、求見的第二層選單（名單）、求見畫面的說明。
+"""交友求見的選單與求見畫面（功能包 socialize；全部拆包第 21 批）：交友那一顆、一類一顆的交友那一顆、求見的第二層選單（名單）、求見畫面的說明，
+還有江湖頁「此地人物」那一排（figures_here_view；主幹合回第 2 段 D，它要問求見名單，所以放這裡不放 view.py：view 不 import menus）。
 原本 Game 上的 4 個方法，名字去掉前導底線、第一個參數是 ctx。選單上「單人求見」那一顆（call:<人物>，行動列放在交友後面）與 act:call 那一格是 act 子動詞
 （總表第 57 批），留在核心原位叫這裡的服務。
 """
 from __future__ import annotations
 
-from tianxia import precise, roster
+from tianxia import figures, precise, prologue as prologue_rules, roster
 from tianxia.core.option import Option
-from tianxia.core.services import SNUB_NOTE
+from tianxia.core.services import AUDIENCE_HALL_FIGURES, SNUB_NOTE
 from tianxia.events import has_events_here  # 過渡：待搬（事件：這個地點有沒有）
 
 from . import view
@@ -80,3 +81,34 @@ def audience_intro(ctx) -> str:
     else:
         head = f"{here}有好幾位人物，挑一位求見。每位人物各算各的，最多談 {per_day} 輪，{again}；名望不夠的會被打發。"
     return head + (f"\n\n你跟他們的情誼：{bonds}。" if bonds else "")
+
+
+def figures_here_view(ctx) -> list[dict]:
+    """江湖頁「此地人物」那一排（介面重整 2026-11-05）：這裡此刻的大勢人物，一位一筆
+    {id, name, side, affinity, talk: {via, why}, aid: [選項 id]}。talk.via 是「交談」要依序按的選項（一類一顆的交友直接開口是
+    ["act:socialize"]、名單是 ["act:call", "call:<id>"]）；說不上話是 None、why 寫原因。aid 是選單上跟他有關的那幾顆
+    （護衛、犒軍、挑戰本人），網頁點了人物才畫。只讀，不扣體力；路上、序章、事件與對話中、季收了是空的（決戰蓋著場景時選單是戰鬥的，網頁不畫這一排）。"""
+    s, c = ctx.state, ctx.content
+    p = s.player
+    if p.journey is not None or s.pending_event or p.pending_companion or prologue_rules.active(s, c) or s.world.ended:
+        return []
+    people = ctx._figures_here()
+    kind, arg = view.social_plan(ctx) if precise.on(c, s.world) else (None, None)
+    listed = {o.id: o for o in audience_options(ctx)} if len(people) >= AUDIENCE_HALL_FIGURES or kind == "list" else {}
+    out = []
+    for cid in people:
+        ch = c.characters[cid]
+        fid = figures.of_character(c, cid)
+        side = figures.side_name(c, fid)
+        via = None
+        if kind == "talk" and arg == cid:
+            via = ["act:socialize"]
+        elif f"call:{cid}" in listed and listed[f"call:{cid}"].enabled:
+            via = ["act:call", f"call:{cid}"]
+        elif not precise.on(c, s.world) and len(people) == 1 and view.talkable(ctx, cid):
+            via = [f"call:{cid}"]
+        why = None if via else (view.why_not_talk(ctx, cid) if not view.talkable(ctx, cid) else "先按「交友」")
+        aid = [f"aid:guard:{fid}", f"aid:rally:{fid}", f"act:challenge:{fid}"] if fid else []
+        out.append({"id": cid, "name": ch.name, "side": side, "affinity": p.affinities.get(cid, 0),
+                    "talk": {"via": via, "why": why}, "aid": aid})
+    return out

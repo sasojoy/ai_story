@@ -1906,49 +1906,10 @@ class Game:
         return companions_actions.figure_view(self, cid)
 
     def figures_here_view(self) -> list[dict]:
-        """江湖頁「此地人物」那一排（介面重整 2026-11-05）：這裡此刻的大勢人物，一位一筆
-        {id, name, side, affinity, talk: {via, why}, aid: [選項 id]}。talk.via 是「交談」要依序按的選項（一類一顆的交友直接開口是
-        ["act:socialize"]、名單是 ["act:call", "call:<id>"]）；說不上話是 None、why 寫原因。aid 是選單上跟他有關的那幾顆
-        （護衛、犒軍、挑戰本人），網頁點了人物才畫。只讀，不扣體力；路上、序章、事件與對話中、季收了是空的（決戰蓋著場景時選單是戰鬥的，網頁不畫這一排）。"""
-        s, c = self.state, self.content
-        p = s.player
-        if p.journey is not None or s.pending_event or p.pending_companion or prologue_rules.active(s, c) or s.world.ended:
-            return []
-        people = self._figures_here()
-        kind, arg = self._social_plan() if precise.on(c, s.world) else (None, None)
-        listed = {o.id: o for o in self._audience_options()} if len(people) >= AUDIENCE_HALL_FIGURES or kind == "list" else {}
-        out = []
-        for cid in people:
-            ch = c.characters[cid]
-            fid = figures.of_character(c, cid)
-            side = self._figure_side_name(fid)
-            via = None
-            if kind == "talk" and arg == cid:
-                via = ["act:socialize"]
-            elif f"call:{cid}" in listed and listed[f"call:{cid}"].enabled:
-                via = ["act:call", f"call:{cid}"]
-            elif not precise.on(c, s.world) and len(people) == 1 and socialize_view.talkable(self, cid):
-                via = [f"call:{cid}"]
-            why = None if via else (socialize_view.why_not_talk(self, cid) if not socialize_view.talkable(self, cid) else "先按「交友」")
-            aid = [f"aid:guard:{fid}", f"aid:rally:{fid}", f"act:challenge:{fid}"] if fid else []
-            out.append({"id": cid, "name": ch.name, "side": side, "affinity": p.affinities.get(cid, 0),
-                        "talk": {"via": via, "why": why}, "aid": aid})
-        return out
-
-    def _figure_side_name(self, fid: str | None) -> str:
-        """大勢人物站哪一邊（陣營的名字）；不是大勢人物、劇本沒有那個陣營是空字串。"""
-        fig = self.content.figures.get(fid) if fid else None
-        found = self.content.scenario.find_faction(fig.faction) if fig is not None else None
-        return found.name if found is not None else ""
+        return socialize_menus.figures_here_view(self)
 
     def talk_view(self) -> dict | None:
-        """正在跟誰說話（介面重整的對話框）：{id, name, side, affinity}；沒在對話是 None。"""
-        s, c = self.state, self.content
-        cid = s.player.pending_companion
-        if not cid or cid not in c.characters:
-            return None
-        side = self._figure_side_name(figures.of_character(c, cid))
-        return {"id": cid, "name": c.characters[cid].name, "side": side, "affinity": s.player.affinities.get(cid, 0)}
+        return companions_talk.talk_view(self)
 
     # ── 託付與勸降（減法季批 6）：本體同上 ────────────
 
