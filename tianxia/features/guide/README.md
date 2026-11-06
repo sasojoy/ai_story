@@ -26,7 +26,7 @@
 
 核心原位碰引導的那幾處都沒有第 11 批的掛鉤，改叫上面的服務、記進邊界測試的 `GAME_DELEGATE_CALLERS`（35 對；全部拆包第 24 批有所感的 `_sense_apply`、`sense_draw` 搬進有所感包、包裡經 ctx 叫，剩 33 對）與 `CORE_DELEGATE_CALLERS`（事件檢定 6 對），**沒有新增 `GAME_DIRECT`**（原本兩筆 `_hint_triggers`、`_newbie_go` 讀酒肆的拿掉）：
 
-- 做完一件事引導跟著走（`_note_action`）：`choose` 七處、`_order_credit`、`_faction_step`、`_arrive`、`take_stamina_pill`、`_menxia_entry`——歸總表第 57 批（分派與標題收接縫，那一批量了再決定要不要開成事件；第 26 批 PM 認定第 6 條，第 26 批不開）（配點 `allocate_stat` 第 23 批進修練包，那裡的 `_note_action`、`_check_hints` 都經 `ctx` 叫）。
+- 做完一件事引導跟著走（`_note_action`）：`choose` 五行、`take_stamina_pill`、`_menxia_entry` 留在核心原位。**第 57 批量過，不開事件**（第 26 批認定第 6 條交那一批量；計畫第四節）：`BUS_ORDER` 沒有「做完一個動作」這種事件，開新事件要過 PM；最接近的 `arrive` 也接不了（`departure.arrive` 的 `left` 要在 `note_action` 之後算，訂閱者的回話會排到它前面）；`choose` 那幾行之間夾著 `_opening_deliver`，`_menxia_entry` 還把 `HutReward` 拆進 changes，都是位置就是行為。進了包的（`faction/join_actions.py`、`travel/departure.py`）已經經 `ctx`（配點 `allocate_stat` 第 23 批進修練包，那裡的 `_note_action`、`_check_hints` 都經 `ctx` 叫）。
 - 碰到才說（`_check_hints`、`_hint`）：`choose`、`sync`、`travel`、`_menxia_entry`、`_act`、`_brush_off`、`_open_dialogue`，與核心 `event_check.answer_event`、`answer_branch`（連 `_begin_enlistment`、`_greet_rejoin`）。
 - 開局（`_opening_*`）：`choose`、`check_in`、`_auto_checkin`、`checkin_view`、`now_entry_html`、`Game.new`。
 - 換季開場那一則的引導（`_reset_player_for_new_season` 的 `_tutorial_intro`：是 `_write` 的引數）、核心的引導框服務（`_note_guide` 的 `_guide_speakers`）、狀態列的任務卡（`status_data` 的 `newbie_view`）、`act:rest`（`_act` 的 `_rest`）。
@@ -55,3 +55,5 @@
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `enlist`（`actions.deliver_enlist`）、`hints`（經 `ctx._check_hints`）；`stale.first` 的 `guide`（`actions.mark_veteran`：要在對齊賽季之前）；`season.carry` 的 `guide`（`actions.carry_season`，排最前面）。`_base_step_count`、`_enlist_done`、`_mark_veteran`、`_enlist_expire` 四個委派第 55 批拿掉。
 
 **第 56 批（選單收接縫，核心批）**：`newbie.py` 讀懸賞的張數改問核心 `bounty_base.done_count`；先後在 `core/features.py` 的 `MENU_ORDER`；上面寫「留委派」「原位」的以這一句為準。
+
+**第 57 批（分派與標題收接縫，核心批）**：`verbs()` 是新開的（`rest`：按下去與紀錄標題）。委派 `_rest` 留著（`scripts/same_behavior.py` 直接叫）。改這一格另外跑 `tests/core/test_prologue.py`、`tests/core/test_engine.py -k rest`；序章以外走不到，`same_behavior` 的 `levy` 一軌在鎖裡換掉 `prologue.instant_rest` 才按得到。

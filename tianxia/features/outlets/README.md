@@ -36,7 +36,7 @@
 留委派、記進 `GAME_DELEGATE_CALLERS` 的：
 
 - `_everyday_options` 叫 `_donate_option`、`_silver_options`：「此地還能做」裡捐軍備與打點兩顆入口排在療傷之後，順序是行為（`/api/main` 的選項一顆一顆逐位元組）；若放進 `Shop.entry` 會跑到療傷前面。
-- `_act` 叫 `_silver_act`：`act:bribe:<人物>` 帶後綴，`Verb` 認不得（總表第 57 批才擴）。
+- `act:bribe:<人物>`：第 57 批接進 `Verb` 的 `tail_run`、`tail_title`（走銀兩四樣同一支 `press`），四樣的標題也接進 `Verb.title`，核心不再有銀兩那幾行。
 - `shop_view` 叫 `_bribe_targets`；`status_data` 叫 `armament_view`。
 - 外面（server、假人）叫的：`donate`、`donate_items`（`/api/do/donate`）、`can_donate_here`（`bot.donate_spare`）。
 - 網頁那一半（`donatePicks`、`dadianHtml`、`donateHtml`、`donateCell`、`donateStep`、`donateTierOne`、`donateGo`）第 65 批才切，這一批不碰 `web/`。
@@ -65,3 +65,5 @@
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`season.carry` 的 `outlets`（今天捐過的照帶，不看開關）。
 
 **第 56 批（選單收接縫，核心批）**：`here/donate`、`here/dadian`、`idle/outlets`、`block/outlets` 是這一包登記的格；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_donate_option`、`_silver_options` 拿掉；上面寫「留委派」「原位」的以這一句為準。
+
+**第 57 批（分派與標題收接縫，核心批）**：委派 `_silver_act` 拿掉（上面「留 8 個」以這一句為準），engine 不再 import `silver`。

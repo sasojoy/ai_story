@@ -40,7 +40,7 @@
 
 留委派、記進 `GAME_DELEGATE_CALLERS` 的：
 
-- `act:socialize`、`act:call`（`_act` × `_socialize`，`_everyday_options`、`action_notes` 的交友與求見那幾行）：核心 `act:` 的子動詞，第 57 批接進 `Verb`。單人地點的「求見某某」那一顆同在這幾行裡。
+- `act:socialize`、`act:call`：第 57 批接進 `Verb`（按下去與紀錄標題，本體 `actions.press`、`actions.open_audience`）；選單與底下那幾行第 56 批是 `here/social`、`notes/socialize`，單人地點的「求見某某」那一顆同在這幾行裡。
 - 求見名單（`_everyday_options` × `_audience_options`）與求見畫面（`_own_scene_text` × `_audience_intro`）：`menu`、`scene` 掛鉤坐在談著、選邊、投靠確認、叛投確認那幾個 `picking_*` 之前，
   名單夾在叛投確認與懸賞榜中間、畫面夾在叛投之後，接成掛鉤就改了它們並存時誰先；位置算行為，所以不接。
 - 收起求見名單接 `on_drop_stale`（`_drop_stale_references` 最後那一個掛鉤；只差序章收尾挪人之後的地點）。福緣到期自己送上門第 55 批換成 `local` 的 `fortune` 那一格（夾在別的補算中間，`on_sync` 沒有對應的位置）。
@@ -71,3 +71,5 @@
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`local` 的 `fortune`（`actions.fortune_due`，原位的判斷搬過來；`Game._deliver_fortune` 留給測試）。
 
 **第 56 批（選單收接縫，核心批）**：`take/audience`、`here/social`、`notes/socialize`、`idle/audience`、`block/audience` 是這一包登記的格（`_everyday_options` 那一段搬進 `menus.here_cell`，`action_notes` 那一段搬進 `menus.action_notes`，鍵的順序算行為；讀 `howto` 是過渡，第 59 批收）；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_precise_social_option`、`_socialize_option`、`_fame_gap`、`_audience_options` 拿掉（第 57 批的 `Verb.cell`、`Verb.note` 不必再開）；上面寫「留委派」「原位」的以這一句為準。
+
+**第 57 批（分派與標題收接縫，核心批）**：`verbs()` 是新開的（`call`、`socialize`）。`actions.press` 照原位的先後一字搬：先問召見、再扣體力、端晉升奇遇（這一支不排提示）或交友、排 `h_bond`；委派 `_socialize` 留著、格裡經 `ctx` 叫（`tests/core/test_explain.py` 換 Game 上的名字）。改這兩格另外跑：`tests/core/test_explain.py`、`tests/core/test_social.py`、`tests/bots/test_event_rotation.py`、`tests/core/test_engine.py -k "summons or call or socialize"`。

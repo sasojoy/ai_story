@@ -39,8 +39,8 @@
 
 - 選單（`_everyday_options` × `_recruit_options`、`_errand_options`、`_talk_options`、`_parley_road_option`）：選項的順序算行為，`options` 掛鉤在體力玩法之後、`menu` 掛鉤要照包排（總表第 55～57 批）。
 - 同步（第 55 批起是 `sync.deliver` 的 `stances`、`mail` 兩格，委派拿掉）：紀錄與行狀的先後算行為，`deliver_notices`、`on_sync` 位置不對。欠人物的事過了期限（`parley.lapse`）第 20 批併進 `deliver_mail`（第 19 批是 `sync` 先叫、把句子傳進去）。
-- `act:recruit`、`act:recruit:<id>`（`_act` × `_recruit`、`_recruit_one`）：核心 `act:` 的子動詞，第 57 批接進 `Verb`。`choose` 的 FB-363 與 `_action_title` 的招募那一格也留給第 57 批。
-- `choose` 前段：勸降只叫出輸入框（`_errand_ask`，同 `battle:`，第 7 批 PM 認定第 1 條）；進鎖後重驗（`_checked_prepared`）、「自己說」的字數（`say_max`）仍在 `choose` 前段（`talk:`、`parley:road` 之外的 `act:`、`call:` 也要驗）。**`talk:`、`parley:road` 按下去第 20 批審查接上了 `choose` 掛鉤**：驗過的 `prepared` 與那句話經 `ctx._talk_turn`、`ctx._talk_said` 寄放（同勸降的 `_persuade_said`），標題（「交談・某人」「同行・某人」）在動作之前拿；`Game._talk`、`_road_say` 兩個委派跟著拿掉。
+- `act:recruit`、`act:recruit:<id>`：第 57 批接進 `Verb`（同一個 `Verb` 的 `run`、`title` 與 `tail_run`、`tail_title`；`_action_title` 的招募那一格跟著搬）。`choose` 的 FB-363（兩個分頁搶人，回 `Refused`，那個類別只在 engine、包 import 不到）留在 `Game.choose` 前段（第 57 批計畫第四節，位置不動）。
+- `choose` 前段：勸降只叫出輸入框第 57 批換成 `MENU_ORDER["quick"]` 的 `errand` 那一格（委派 `_errand_ask` 拿掉）；進鎖後重驗（`_checked_prepared`）、「自己說」的字數（`say_max`）仍在 `choose` 前段（`talk:`、`parley:road` 之外的 `act:`、`call:` 也要驗）。**`talk:`、`parley:road` 按下去第 20 批審查接上了 `choose` 掛鉤**：驗過的 `prepared` 與那句話經 `ctx._talk_turn`、`ctx._talk_said` 寄放（同勸降的 `_persuade_said`），標題（「交談・某人」「同行・某人」）在動作之前拿；`Game._talk`、`_road_say` 兩個委派跟著拿掉。
 - 交友與求見開口（`_socialize`、`_precise_socialize`、`_call` × `_open_dialogue`）：交友求見第 21 批搬進 `socialize` 包，那一包經 `ctx._open_dialogue` 問，核心原位不再叫它。
 - 叛投之後的食言：全部拆包第 32 批接上核心的叛投掛鉤（`DEFECT_ORDER` 的 `after` 位置，排在同伴回江湖 `leave_behind` 之後；回話的先後算行為），不再是這裡的接縫。場景文字（`_own_scene_text` × `_last_talk_line`）：位置算行為。
 
@@ -76,3 +76,5 @@
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `stances`（`actions.stance_annals`）、`mail`（`actions.deliver_mail(ctx, ctx.now)`：`now` 是 `sync` 開頭設的）；`stale.early` 的 `companions`（`actions.drop_stale`，舊的招募確認）；`season.carry` 的 `companions`（`actions.carry_season`，對話歷史）。
 
 **第 56 批（選單收接縫，核心批）**：`take/talk`、`road/parley`、`here/recruit`、`here/errand`、`block/talk` 是這一包登記的格；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_talk_options`、`_parley_road_option`、`_recruit_options`、`_errand_options` 拿掉；上面寫「留委派」「原位」的以這一句為準。
+
+**第 57 批（分派與標題收接縫，核心批）**：`verbs()` 是新開的（`recruit`）；`quick/errand` 是這一包登記的格（回 None 照舊往下走 `choose` 掛鉤：送信、探營是 `errand:` 的正常路）。委派 `_recruit`、`_recruit_one`、`_errand_ask` 拿掉；上面寫「留委派」「原位」的以這一句為準。selftest：`levy` 一軌的目標句 `招募・{c` 在 `__init__.py` 的 `tail_title` 那一行，舊招募那一格用 `here(ctx)`，不要內聯（內聯了那個目標句會出現兩次）。同一件事比對走 `scripts/same_behavior.py`（招募某一位與調息另開 `levy` 一軌）。

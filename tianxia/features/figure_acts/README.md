@@ -26,7 +26,7 @@
 
 ## 還留在核心原位的接縫（理由在 `tests/core/test_feature_boundaries.py` 的 `# figure_acts` 那一段）
 
-- `act:challenge:<人物>`：`_everyday_options` 的選單那一格、`_act` 的按下去、`_action_title`、`_fight_squad` 的對手隊伍——act 子動詞帶後綴接不了 `Verb`（總表第 57 批），Game 留 `_challenge_options`、`_challenge`、`_figure_squad`、`_snubbed_character`、`challenge_odds` 的一行委派。
+- `act:challenge:<人物>`：第 57 批接進 `Verb` 的 `tail_run`、`tail_title`、`tail_squad`（按下去、標題、對手隊伍）；選單第 56 批是 `here/challenge` 那一格。Game 留 `_challenge_options`、`_challenge`（`scripts/measure_challenge.py` 換，格裡經 `ctx` 叫）、`_figure_squad`（`test_rise` 等直接叫，格裡經 `ctx` 叫）、`_snubbed_character`、`challenge_odds` 的一行委派。
 - 選單末段 `護衛 + features_core.options + 盤算`：護衛那串在包選項之前、盤算在之後，`options` 掛鉤接不了，Game 留 `_aid_options`、`_plan_options` 的委派。
 - `sync.deliver` 的 `guard` 那一格（第 55 批，委派拿掉）：夾在 `echoes` 與 `notices` 之間（接成 `deliver_notices` 掛鉤，酒肆的會跑在它前面，行狀順序會變）。
 - `figures.py` 的 `figure_aid.restore` 全部拆包第 40 批換掉：犒軍與自然回復共用一天上限的那五個函式（`on`、`_day`、`_life`、`left_today`、`restore`）搬進共用規則層 `figures`（`aid_` 開頭），`figures.recover` 直接叫自己的 `aid_restore`，`figure_aid.py` 照原名 re-export 同一個物件。`social.py` 已經不讀 `yuedan.line_for`（第 40 批合完量的：只剩 `engine` 的委派經包讀）。
@@ -53,3 +53,5 @@
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `guard`（`aid_actions.deliver_guard_credits`）；`stale.late` 的 `figure_acts`（`challenge.drop_stale`，清 `snubbed_until`）。
 
 **第 56 批（選單收接縫，核心批）**：`here/challenge`、`plays/aid`、`plays/plan` 是這一包登記的格；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_aid_options`、`_plan_options` 拿掉（`_challenge_options` 測試在叫，留著）；上面寫「留委派」「原位」的以這一句為準。
+
+**第 57 批（分派與標題收接縫，核心批）**：`verbs()` 是新開的（`challenge`，帶後綴）。`(_act, _challenge)`、`(_fight_squad, _figure_squad)` 兩對拿掉。

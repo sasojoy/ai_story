@@ -1598,6 +1598,7 @@ def test_the_menu_order_is_the_table_in_the_plan():
         "open": ("arena", "bounties", "smithy", "gear", "shops"),
         "depart": ("bounties", "escort", "smithy", "gear", "shops"),
         "block": ("ended", "prologue", "event", "bout", "talk", "audience", "bounties", "smithy", "gear", "outlets", "tavern", "faction", "omen", "follow", "busy", "ambush"),
+        "quick": ("battle", "seal", "duel", "arena", "errand", "canvas"),  # 第 57 批
     }
     assert Feature().menus() == ()
 
@@ -1708,12 +1709,13 @@ def test_the_core_and_the_packages_take_every_menu_slot_exactly_once():
         assert mine.keys() | theirs == set(order), at
     got = {f.name: sorted((h.at, h.slot) for h in f.menus()) for f in features_core.registered() if f.menus()}
     assert got == {
-        "seal": sorted([("tick", "seal"), ("front", "seal")]),
+        "seal": sorted([("tick", "seal"), ("front", "seal"), ("quick", "seal")]),
+        "battle": [("quick", "battle")],
         "zhuan": [("rest", "zhuan")],
-        "bout": sorted([("take", "duel"), ("busy", "arena"), ("road", "arena"), ("idle", "duel"), ("idle", "arena"), ("open", "arena"), ("block", "bout")]),
-        "sense": sorted([("take", "sense"), ("idle", "sense")]),
+        "bout": sorted([("take", "duel"), ("busy", "arena"), ("road", "arena"), ("idle", "duel"), ("idle", "arena"), ("open", "arena"), ("block", "bout"), ("quick", "duel"), ("quick", "arena")]),
+        "sense": sorted([("take", "sense"), ("idle", "sense"), ("quick", "canvas")]),
         "story": sorted([("take", "story"), ("here", "story")]),
-        "companions": sorted([("take", "talk"), ("road", "parley"), ("here", "recruit"), ("here", "errand"), ("block", "talk")]),
+        "companions": sorted([("take", "talk"), ("road", "parley"), ("here", "recruit"), ("here", "errand"), ("block", "talk"), ("quick", "errand")]),
         "faction": sorted([("take", "faction"), ("here", "sect"), ("here", "join"), ("here", "defect"), ("here", "lean"), ("idle", "faction"), ("block", "faction")]),
         "socialize": sorted([("take", "audience"), ("here", "social"), ("notes", "socialize"), ("idle", "audience"), ("block", "audience")]),
         "bounties": sorted([("take", "bounties"), ("here", "bounties"), ("idle", "bounties"), ("open", "bounties"), ("depart", "bounties"), ("block", "bounties")]),
@@ -1823,3 +1825,109 @@ def test_the_departure_row_clears_in_the_table_order(game, monkeypatch):
     features_core.menu_run("depart", departure._DEPART_CORE, game)
     assert calls == _package_menu_slots("depart")
     assert game.state.player.parley_escort is None
+
+
+# core_seams（全部拆包第 57 批「分派與標題收接縫」；計畫 docs/superpowers/plans/2026-11-06-分派標題收接縫-第57批.md 一、五）
+class Quicky(Menuy):
+    """選單上放一顆假的、choose 掛鉤接 fake:（看 quick 回 None 有沒有往下走）。"""
+
+    def choose(self, ctx, kind, arg):
+        return Outcome(title="假的", run=lambda: ["走到 choose 掛鉤。"]) if kind == "fake" else None
+
+
+def test_the_quick_row_answers_after_the_menu_check_and_before_the_journal(game, monkeypatch):
+    """Game.choose 的 quick：不在選單上不問；查完選單、清掉「剛剛」與引導之後照表的先後問；第一個不是 None 的就是回話（空的 [] 也算接管），後面的不問、_log 一次、不建紀錄；
+    都回 None 照舊往下走 choose 掛鉤。"""
+    calls, answers = [], {}
+
+    def slot(name):
+        return lambda ctx, *args: calls.append((name, *args)) or answers.get(name)
+
+    monkeypatch.setattr(registry, "FEATURES", [Quicky([
+        MenuHook("take", "gear", lambda ctx: [Option(id="fake:go", label="假的那一顆")]),
+        *(MenuHook("quick", name, slot(name)) for name in features_core.MENU_ORDER["quick"]),
+    ])])
+    g = _made(game)
+    assert g.choose("fake:gone") == ["（此刻無法這麼做。）"]
+    assert not calls
+
+    answers["duel"] = ["出了一招。"]
+    g.state.player.guide_done = ["上一次完成的"]
+    journal, log = len(g.state.journal), len(g.state.log)
+    assert g.choose("fake:go") == ["出了一招。"]
+    assert calls == [(name, "fake", "go", "fake:go") for name in ("battle", "seal", "duel")]
+    assert len(g.state.journal) == journal
+    assert g.state.log[log] == "出了一招。" and len(g.state.log) == log + 2  # 那一句加一個分隔：_log 只有一次
+    assert g.state.player.guide_done == []
+
+    calls.clear()
+    answers["duel"] = []
+    assert g.choose("fake:go") == []
+    assert [c[0] for c in calls] == ["battle", "seal", "duel"]
+
+    calls.clear()
+    answers.clear()
+    assert "走到 choose 掛鉤。" in g.choose("fake:go")
+    assert [c[0] for c in calls] == list(features_core.MENU_ORDER["quick"])
+    assert len(g.state.journal) == journal + 1
+
+
+class Tailed(Feature):
+    """帶後綴的 act 子動詞的假包（關著：這幾格不問 enabled）。plainverb 只有沒後綴的那幾格。"""
+
+    name = "tailed"
+
+    def __init__(self):
+        self.calls = []
+
+    def enabled(self, ctx):
+        return False
+
+    def verbs(self):
+        def note(*got):
+            self.calls.append(got)
+
+        return (
+            Verb("fakeverb", run=lambda g, prepared: note("run", prepared) or ["沒有後綴。"], title=lambda g: "沒有後綴的標題",
+                 tail_run=lambda g, prepared, tail: note("tail_run", prepared, tail) or ["有後綴。"], tail_title=lambda g, tail: f"標題・{tail}",
+                 tail_squad=lambda g, tail: g.content.squads["thug"] if tail == "打" else None),
+            Verb("plainverb", run=lambda g, prepared: ["只有沒後綴的。"], title=lambda g: "只有沒後綴的標題", squad=lambda g: g.content.squads["thug"]),
+        )
+
+
+def test_a_verb_with_a_tail_gets_the_tail_and_a_verb_without_one_falls_to_the_core(game, monkeypatch):
+    """act:<verb>:<後綴>：按下去、標題、打哪一路問 tail_*，拿到第一個冒號後面整段（可以再有冒號、可以是空的），run 不被叫；同一個 Verb 也管沒有後綴的那一下。
+    主人沒有 tail_* 回 None，核心照舊：_act 不認得是 KeyError、標題「提前出關」、不打仗。"""
+    tailed = Tailed()
+    monkeypatch.setattr(registry, "FEATURES", [tailed])
+    g = _made(game)
+    assert g._act("fakeverb:甲", "那一輪") == ["有後綴。"]
+    assert g._act("fakeverb:甲:乙") == ["有後綴。"] and g._act("fakeverb:") == ["有後綴。"]
+    assert tailed.calls == [("tail_run", "那一輪", "甲"), ("tail_run", None, "甲:乙"), ("tail_run", None, "")]
+    tailed.calls.clear()
+    assert g._act("fakeverb") == ["沒有後綴。"]
+    assert tailed.calls == [("run", None)]
+    assert g._action_title("act", "fakeverb:甲") == "標題・甲" and g._action_title("act", "fakeverb") == "沒有後綴的標題"
+    thug = g.content.squads["thug"]
+    assert g._fight_squad("act:fakeverb:打") is thug
+    assert g._fight_squad("act:fakeverb:不打") is None and g._fight_squad("act:fakeverb") is None
+
+    assert features_core.act(g, "plainverb:乙", None) is None
+    with pytest.raises(KeyError):
+        g._act("plainverb:乙")
+    assert g._action_title("act", "plainverb:乙") == "提前出關"
+    assert g._fight_squad("act:plainverb:乙") is None and g._fight_squad("act:plainverb") is thug
+
+
+def test_every_act_verb_has_the_owner_in_the_plan():
+    """一格一主，逐字鎖住（計畫第二、五節）；只有這四格帶後綴。act:heal 與舊探索留在 Game._act 原位（explore 這一格的主人回 None 才走到舊探索）。"""
+    owners = {v.verb: f.name for f in features_core.registered() for v in f.verbs()}
+    assert owners == {
+        "explore": "explore", "tavern": "tavern", "train": "sortie", "duty": "sortie", "rest": "guide", "recruit": "companions",
+        "call": "socialize", "socialize": "socialize", "challenge": "figure_acts",
+        "rank2": "military", "rank": "military", "convoy": "military", "summons": "military",
+        "donate": "outlets", "dadian": "outlets", "silver_donate": "outlets", "mentor": "outlets", "furnace": "outlets", "buy_legend": "outlets", "bribe": "outlets",
+        "smith": "smithy", "arena": "bout", "break": "seclusion", "halt": "travel", "part": "travel", "market": "gear", "bounties": "bounties",
+    }
+    tails = {v.verb for f in features_core.registered() for v in f.verbs() if v.tail_run is not None}
+    assert tails == {"recruit", "rank", "bribe", "challenge"}

@@ -39,7 +39,7 @@
 
 ## 還留在核心原位的接縫（理由在 `tests/core/test_feature_boundaries.py` 的 `# military` 那一段）
 
-- `act:rank2`、`act:convoy`、`act:rank:<行動>`：核心 `_act` 的 act 子動詞（總表第 57 批才擴 `Verb`），選單三段（`_everyday_options`，順序算行為）和按下去（`_act`）留在核心原位叫 Game 的委派。
+- `act:rank2`、`act:convoy`、`act:summons`、`act:rank:<行動>`：第 57 批接進 `Verb`（按下去與紀錄標題；`act:rank:<行動>` 帶後綴走 `tail_run`、`tail_title`，`Verb` 的名字照 `RANK_ACTION_PREFIX` 算，前綴只寫一次）；選單第 56 批是 `MENU_ORDER["here"]` 的 `order`、`rank2`、`rank` 那三格。
 - `act:summons`（人已在召見地點時按的應召）、`_summons_hop`（往召見地點）、`bot_policy.score` 的 `rank2`、`convoy`、`summons` 分數、`_summons_hop`：假人行動列的分數，留原位。
 - `_report_seat`：`choose`、`travel` 與事件檢定的兩處（`answer_event`、`answer_branch`）叫，位置固定（回話與紀錄的先後算行為），沒有掛鉤可接；同步那一下第 55 批換成 `sync.deliver` 的 `seat` 那一格。
 - 抵達那一刻經事件 `arrive` 的 `convoy` 那一格（`FEATURE.bus()`：`convoy_actions.convoy_arrives`，排在懸賞護送之前，順序在核心的 `BUS_ORDER`；第 26 批起，委派 `_convoy_arrives` 拿掉）。`_order_credit`：核心的單打服務（`_squad_encounter`）打贏之後記功；出陣、決戰、大勢人物也經 `ctx._order_credit` 叫。
@@ -89,3 +89,5 @@
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `plots`（`opp_actions.deliver_plots`，經 `ctx._settle_plots`，寫「密謀」、存季）、`seat`（`seat_actions.deliver_seat`，寫「席次」）：兩格的回話都進同步的回話；`seat` 排在 `arrive`、`plots` 之後（`tests/figures/test_seats.py` 守）。
 
 **第 56 批（選單收接縫，核心批）**：`take/omen`、`here/order`、`here/rank2`、`here/rank`、`here/omen`、`idle/omen` 是這一包登記的格（`fs_asking` 包外三處都改問核心 `omen_base.fs_answering`）；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_order_options`、`_rank2_options`、`_rank_action_options`、`_fs_asking_options`、`_omen_options` 拿掉；上面寫「留委派」「原位」的以這一句為準。
+
+**第 57 批（分派與標題收接縫，核心批）**：`verbs()` 是新開的（`rank2`、`rank`、`convoy`、`summons`）。委派 `_rank2`、`_rank_action`、`_take_convoy`、`_rank2_action` 拿掉，engine 不再 import `step_actions`、`convoy_actions`；engine 模組層的 `_rank_action_id` 拿掉；`RANK_ACTION_PREFIX` 留在 engine（`features/military/tests` 從那裡拿）。上面寫「留委派」「原位」的以這一句為準。應召經 `ctx._present`、照模組屬性問 `ranks.summons_event`：`tests/bots/test_event_rotation.py`、`tests/core/test_engine.py`（`-k summons`）換的是這兩個名字，改這幾格另外跑。
