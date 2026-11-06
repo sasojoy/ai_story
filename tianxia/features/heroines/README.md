@@ -14,7 +14,7 @@
 | `checks.py` | `content/heroines.json` 的檢查（人物、奇事、結局、兩段、固定文字不准有的字） |
 | `tests/` | `test_heroines.py`（10 條，1 條 slow）、`test_heroines_smoke.py`（2 條 smoke）、`heroines_stage.py` |
 
-**接在別處的**：`figures.placed_characters` 問共用規則層的 `figures.heroine_ending`（`rules.ending_of` 也走它）（還不出現的女子不在任何地方：求見、交友、地圖都沒有她）；`companion_agent` 叫 `role`（提示開頭扮演誰）、`prompt_lines`（故事之後、你們之間、分寸）、`clean`（`_apply_turn` 開頭：寫回來的與玩家打的過一次）。網頁：設定抽屜的 `adultRow`（`web/app.js`，打開先跳確認卡）。
+**接在別處的**：`figures.placed_characters` 問共用規則層的 `figures.heroine_ending`（`rules.ending_of` 也走它）（`heroines.json` 的 `stay` 寫了結局之後換去的地點；還不出現的女子不在任何地方：求見、交友、地圖都沒有她）；`companion_agent` 叫 `role`（提示開頭扮演誰）、`prompt_lines`（故事之後、你們之間、分寸）、`clean`（`_apply_turn` 開頭：寫回來的與玩家打的過一次）。網頁：設定抽屜的 `adultRow`（`web/app.js`，打開先跳確認卡）。
 **認領的欄位**：`PlayerState.heroines`（`HeroineNotes`：steps、scene、declined；換季重來）、`PlayerState.heroines_adult`（成人內容的開關；`carried`，換季在 on_season_start 照帶）。
 **不寫進**：傳聞、江湖史、行狀、列傳。隱線兩段只寫一則自己的江湖紀錄（標題是她的名字）。
 **緊急關**：拿掉 `content/heroines.json` 某一位的 `scenes` 就沒有隱線（她照舊出場、照舊交談，提示照「只寫交情」）。整個檔拿掉她會一直站在 talk_at（沒有出場條件了），要連人物表那一位一起拿掉。

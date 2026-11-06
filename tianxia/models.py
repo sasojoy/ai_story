@@ -3481,10 +3481,12 @@ class HeroineScene(_Strict):
 class HeroineDef(_Strict):
     """一位女子（content/heroines.json；功能包 features/heroines）：line 是她出場的那一條奇事（storylines.json 的 id）；
     endings 是走到哪幾個結局她會留下來（結局 id → 給模型的「故事之後」那一段）；hidden 是哪幾個結局之後開得了隱線；
-    scenes 是隱線的兩段；prompt 是隱線走到第幾段之後給模型的那一句（段 → 句子）。"""
+    scenes 是隱線的兩段；prompt 是隱線走到第幾段之後給模型的那一句（段 → 句子）；stay 是哪幾個結局之後她換了地方
+    （結局 id → 地點 id；沒寫的留在人物表的 talk_at）。"""
 
     line: str
     endings: dict[str, str] = Field(min_length=1)
+    stay: dict[str, str] = Field(default_factory=dict)
     hidden: list[str] = Field(default_factory=list)
     scenes: list[HeroineScene] = Field(default_factory=list)
     prompt: dict[int, str] = Field(default_factory=dict)

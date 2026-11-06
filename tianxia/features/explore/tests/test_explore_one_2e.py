@@ -193,6 +193,7 @@ def _closes(game, story: str) -> bool:
 
 def test_the_out_of_your_league_close_is_only_written_when_you_won_and_it_cut_the_pay():
     game = ready(jianfa_game(), side="guan", loc="yingchuan", level=30)  # 城裡的地痞：難度 8，三十級低三檔
+    game.content.storylines["duruo"].start.chance = 0  # 陽翟書肆的〈代筆〉（女子與隱線）擲中會先開，這裡測的是出門打地痞
     assert _closes(game, _story(game, "大勝"))
     assert _closes(game, _story(game, "險勝"))
     assert not _closes(game, _story(game, "僵持"))  # 平手：沒拿到什麼，也不是因為對手檔

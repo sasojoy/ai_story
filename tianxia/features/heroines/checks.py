@@ -18,6 +18,8 @@ def check(content, need) -> None:
         ends = {e.id for e in line.endings} if line is not None else set()
         need(set(hd.endings) <= ends, f"{where}：endings 有奇事裡沒有的結局 {sorted(set(hd.endings) - ends)}")
         need(set(hd.hidden) <= set(hd.endings), f"{where}：hidden 要是 endings 裡的結局")
+        need(set(hd.stay) <= set(hd.endings), f"{where}：stay 要是 endings 裡的結局")
+        need(all(loc in content.locations for loc in hd.stay.values()), f"{where}：stay 有地圖上沒有的地點")
         steps = sorted(s.step for s in hd.scenes)
         need(steps in ([], [3, 4]), f"{where}：隱線要剛好兩段（3、4），現在是 {steps}")
         if steps == [3, 4]:

@@ -95,6 +95,7 @@ def test_the_event_trip_leaves_a_pending_event():
 
 def test_town_encounters_are_street_toughs_that_push_nothing_and_count_no_bounty():
     game = ready(jianfa_game(), side="guan", loc="yingchuan")
+    game.content.storylines["duruo"].start.chance = 0  # 陽翟書肆的〈代筆〉（女子與隱線）擲中會先開，這裡測的是出門打地痞
     c, p = game.content, game.state.player
     plan = game.outing_plan()
     assert plan.kind == explore_one.TOWN and plan.how == "town" and plan.foe.id == "dipi"

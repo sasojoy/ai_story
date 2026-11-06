@@ -164,3 +164,65 @@ def test_the_settings_row_shows_the_switch():
     assert actions.status(game) == {"heroines": {"adult": False}}
     actions.set_adult(game, True)
     assert actions.status(game) == {"heroines": {"adult": True}}
+
+
+def _walk(game, line: str, steps: list[tuple[str | None, float, str, int]]):
+    """從探索擲中開到最後一步：steps 每一步是（地點〔None 是第一幕，探索開的〕、等幾天、端出的事件、按第幾顆）。"""
+    s = game.state
+    start = game.content.storylines[line].start
+    start.chance, start.condition = 1.0, Condition()
+    for loc, wait, event, pick in steps:
+        if loc is None:
+            with mock.patch.object(explore_one, "draw", return_value=explore_one.MATERIAL):
+                game.choose("act:explore")
+        else:
+            s.world.time += int(wait * day_seconds(game.content, s.world)) + 1
+            s.player.location, s.player.journey = loc, None
+            game.choose(f"story:{line}")
+        assert s.pending_event == event
+        with mock.patch("random.Random.random", return_value=0.0):  # 檢定一律過
+            game.choose(f"choice:{pick}")
+    game.sync(game.now)
+    return s.player.storylines[line]
+
+
+def test_su_gu_stays_where_her_ending_sends_her():
+    game = _game(loc="julu_altar")
+    p = game.state.player
+    p.storylines["sugu"] = StoryProgress(line="sugu", ending="zuihou", ended_at=game.state.world.time)
+    assert "sugu" in game._figures_here()  # 最後一扇：留在道壇（talk_at）
+    p.storylines["sugu"].ending = "sui"
+    assert "sugu" not in game._figures_here()  # 隨地公將軍去：在下曲陽
+    p.location = "xiaquyang"
+    assert "sugu" in game._figures_here()
+    p.storylines["sugu"].ending = "huijia"
+    p.location = "guangzong"
+    assert "sugu" in game._figures_here()
+
+
+@pytest.mark.slow
+def test_white_earth_walked_to_going_home():
+    game = _game(loc="julu_altar")
+    progress = _walk(game, "sugu", [(None, 0, "sugu_1", 1), ("xiaquyang", 0, "sugu_2", 1), ("guangzong", 0.25, "sugu_3", 0),
+                                    ("julu_altar", 0.25, "sugu_4", 0)])
+    assert progress.ending == "huijia" and progress.marks.get("問") == 1 and progress.marks.get("說") == 1
+    assert game.state.player.affinities["sugu"] > 0 and "sugu" not in game._figures_here()
+    game.state.player.location = "guangzong"
+    assert "sugu" in game._figures_here()
+
+
+@pytest.mark.slow
+def test_the_ghostwriter_gives_her_brother_the_draft_only_after_swapping_it():
+    game = _game(loc="yingchuan")
+    progress = _walk(game, "duruo", [(None, 0, "duruo_1", 0), ("yingchuan_academy", 0.25, "duruo_2", 0),
+                                     ("dajiangjun_fu", 0.5, "duruo_3", 0), ("yingchuan", 0.25, "duruo_4", 1)])
+    assert progress.marks.get("換") == 1 and progress.ending == "gege"
+    assert "duruo" in game._figures_here()
+    other = _game(loc="yingchuan")
+    s = other.state
+    _walk(other, "duruo", [(None, 0, "duruo_1", 0), ("yingchuan_academy", 0.25, "duruo_2", 2), ("dajiangjun_fu", 0.5, "duruo_3", 2)])
+    s.world.time += int(0.25 * day_seconds(other.content, s.world)) + 1
+    s.player.location = "yingchuan"
+    other.choose("story:duruo")
+    labels = [o.label for o in other.options(odds=False)]
+    assert "把她的原稿交給杜衡" not in labels  # 沒換回原稿：給不了哥哥

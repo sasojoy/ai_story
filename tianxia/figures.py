@@ -145,7 +145,10 @@ def placed_characters(state: GameState, content: Content) -> dict[str, str | Non
     out: dict[str, str | None] = {}
     if life_on(content):  # 人物活起來：不是大勢人物的人物照每日行事走到的地方（沒走過的照 talk_at，不寫）
         out.update(state.world.whereabouts)
-    out.update({cid: None for cid in content.heroines if heroine_ending(state, content, cid) is None})  # 女子：還沒走完她那一條奇事的不在任何地方
+    for cid, hd in content.heroines.items():  # 女子：還沒走完她那一條奇事的不在任何地方；結局換了地方的（stay）在那裡
+        ending = heroine_ending(state, content, cid)
+        if ending is None or ending in hd.stay:
+            out[cid] = None if ending is None else hd.stay[ending]
     if not challenge_on(content, state.world):
         return out
     for fid, fig in content.figures.items():
