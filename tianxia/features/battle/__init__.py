@@ -29,7 +29,9 @@ from tianxia.core.features import Feature, MenuHook, SeamHook, StatusHook, World
 
 class BattleFeature(Feature):
     name = "battle"
-    web = ("battle.js", "battle.css")  # 集結、戰場、戰局條、MVP、攻城條（全部拆包第 67 批從 main.js、style.css 切出來）
+    web = ("battle.js", "battle.css", "battle_panel.css")  # 集結、戰場、戰局條、MVP、攻城條（全部拆包第 67 批從 main.js、style.css 切出來）
+    # 江湖頁最上面的戰場面板與關鍵時刻的覆蓋（battle.js 的後半、battle_panel.css；panel.py 給資料；Joy 2026-11-06 大決戰優化）
+    # battle_panel.css 排在 legacy.css 後面（web/index.html），同權重的它說了算；battle.css 排在 style.css 緊接著
     prefix: str | None = "battle"  # 全部拆包第 7 批拿的：battle:join／enlist／escort／act……（選項照舊由 Game 的 _battle_menu 委派給，分派是 MENU_ORDER["quick"] 那一格，第 57 批）
     content = ("battles.json",)  # 決戰與攻城範本（content.py 照它到這一包的 content/ 載；攻城的規則在 siege.py，共用規則層）
     # 補過的決戰（跨季照帶：決戰常把季收掉，下一季才回來的人也要補、而且只補一次）、這一季參戰幾場與首功幾次（玩家卡、名帖）。
@@ -51,6 +53,13 @@ class BattleFeature(Feature):
         from . import bots  # noqa: PLC0415
 
         return bots.score(ctx, option)
+
+    def status(self, ctx) -> dict:
+        """江湖頁最上面的戰場面板（main.battle_panel；Joy 2026-11-06 大決戰優化，panel.py）：此刻看的那一場在集結或開打才有這個鍵。"""
+        from . import panel  # noqa: PLC0415
+
+        shown = panel.battle_panel(ctx)
+        return {"battle_panel": shown} if shown is not None else {}
 
     # ── 接縫掛鉤（全部拆包第 11 批：原本在 Game 原位直接叫這一包的那幾行；不問 enabled）──
 

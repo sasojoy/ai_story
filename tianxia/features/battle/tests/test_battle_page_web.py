@@ -181,7 +181,9 @@ def test_once_you_joined_the_page_is_what_it_was(on):
         m = server.main_view(game)
         page = _page(m)
         assert "muster-" not in page, who
-        assert _scene(page) == m["scene"], who
+        # 大決戰優化（Joy 2026-11-06，方案甲）：戰場的名字寫在最上面的戰場面板（web/battle.js），場景卡不再寫第二次
+        name = f'<p><strong>{m["battle_panel"]["name"]}</strong></p>\n'
+        assert m["scene"].startswith(name) and _scene(page) == m["scene"].removeprefix(name), who
         assert first in _fold(page), who  # 灰的「已加入」／「已臨時投效」還在摺疊裡
 
 
@@ -315,7 +317,8 @@ def test_fb136_in_a_battle_round_the_three_moves_come_right_after_the_scene(batt
     m = {**server.main_view(fighter), "guide": SHOWDOWN_BOX}
     assert m["free_text"] is not None and [o["id"] for o in m["options"] if o["id"].startswith("battle:act:")]
     page = run_prologue_web(m, "return H.pageJianghu();")
-    scene, moves = page.index('<section class="card scene">'), page.index('<div class="options">')
-    free, box = page.index('<form class="free"'), page.index('<section class="card guide"')
-    assert scene < moves < free < box
-    assert page.index('data-id="battle:act:') < free  # 三招都在輸入框前面（選單那一塊裡）
+    # 大決戰優化（Joy 2026-11-06，方案甲）起：三招與輸入框排進最上面的戰場面板（web/battle.js），場景卡在面板底下
+    panel, moves = page.index('<section class="bp"'), page.index('<div class="bp-moves"')
+    free, scene, box = page.index('<form class="free"'), page.index('<section class="card scene">'), page.index('<section class="card guide"')
+    assert panel < moves < free < scene < box
+    assert page.index('data-id="battle:act:') < free  # 三招都在輸入框前面（面板裡）

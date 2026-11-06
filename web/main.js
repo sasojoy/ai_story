@@ -529,6 +529,8 @@
     const at = String(text || "").indexOf("：");
     return at > 0 ? [text.slice(0, at), text.slice(at + 1)] : [text, ""];
   }
+  // 決戰期間（戰場面板開著）本週條不寫兩軍態勢的兩個數字：面板底下的戰局條也是兩個數字，玩家分不清（PM 2026-11-06 看截圖）；
+  // 點開「為什麼」照舊看得到大勢
   function weekCardHtml(m, part) {
     const w = m.week_card;
     if (!w || !shown("quest")) return "";
@@ -542,7 +544,7 @@
     // 灰線（第 N 週、主題、兩軍態勢）整條是一顆鈕、點了攤開「為什麼」；右邊一顆 × 收到明天。灰線底下那一行小字跟著它收
     const hideStrip = wkHidden(m, "strip");
     const strip = hideStrip ? "" : `<div class="wk-stripbar"><button id="week" class="wk-strip${open === "why" ? " on" : ""}" data-act="wk" data-id="why" aria-expanded="${open === "why"}" aria-label="${esc(w.label)}${esc(w.when)}，點了看為什麼">`
-      + `<b class="wk-seg">${esc(w.when)}</b>${w.theme ? `<span class="wk-th">${esc(w.theme)}</span>` : '<span class="wk-th"></span>'}${w.sides ? wkSidesHtml(w.sides) : ""}<i class="wk-chev" aria-hidden="true"></i></button>${x("strip")}</div>`;
+      + `<b class="wk-seg">${esc(w.when)}</b>${w.theme ? `<span class="wk-th">${esc(w.theme)}</span>` : '<span class="wk-th"></span>'}${w.sides && !(typeof bpOn === "function" && bpOn(m)) ? wkSidesHtml(w.sides) : ""}<i class="wk-chev" aria-hidden="true"></i></button>${x("strip")}</div>`;
     const panel = !hideStrip && open === "why" ? `<div class="card wk-panel why">${whyHtml(m)}</div>` : "";
     // 灰線底下一行小字（批 5，整合設計 6.8）：第 3 週「離贏還差多少」、第 2 週的功能剛開了那一句、45 級之後那一句；都沒有不畫
     const notes = [w.gap, w.unlock, w.cap].filter(Boolean);
@@ -894,7 +896,7 @@
     const scene = masterTalks ? ""
       : m.on_road
         ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
-        : `<section class="card scene${m.art ? " has-art" : ""}${tierClass(m)}">${m.art ? sceneArtHtml(m.art) : ""}${tierTag(m)}${siegeStrip(withGauge(musterScene(m, roundBlocks(battleScene(sceneUnderArt(m)), m.battle_gauge)), m.battle_gauge, battleMvpHtml(m)), m.siege)}${myTurn ? "" : people}</section>`;
+        : `<section class="card scene${m.art ? " has-art" : ""}${tierClass(m)}">${m.art ? sceneArtHtml(m.art) : ""}${tierTag(m)}${battleInner(m)}${myTurn ? "" : people}</section>`;
     const peopleAfter = myTurn && people && !masterTalks && !m.on_road ? `<section class="card people-after">${people}</section>` : "";
     const week = peekWeek(m);
     // 本週卡（減法季批 1，整合設計 6.1）排在最上面、「剛剛」之前（在路上排到選項底下，FB-055）：吃掉以前那一排小標。來信到了換成來信（回了信或收起來才換回本週卡）；
@@ -930,6 +932,12 @@
     if (m.on_road) return `${hints}${resultCard}${letter}${letterCard}${pushAsk}${now}${scene}${links}${free}${menu}${guide}${sidesFirstHtml(m)}${weekCardHtml(m)}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     // 決戰輪到你出招的回合（FB-136）：三招緊接在場景底下，放手一搏的輸入框與說書人的框排在三招後面（同在路上，這一刻要按的排前面）。
     // 開打那一刻場景多了戰局條、這一幕的開場、騎兵那一句，框與輸入框再排在上面的話三招整排落到分頁列底下（14 天、騎著馬、框還在：855～999）
+    // 戰場面板（battle.js，Joy 2026-11-06 大決戰優化，設計稿方案甲）：開打、集結時排在最上面，出招鈕與放手一搏的輸入框緊接在面板裡；
+    // 本週卡、「剛剛」與場景卡排到面板底下（第一屏是倒數、主將、出招）
+    const bp = typeof bpOn === "function" && bpOn(m) ? bpPanelHtml(m, myTurn ? free : "") : "";
+    if (bp && myTurn) {
+      return `${hints}${resultCard}${bp}${bpDropMoves(menu)}${scene}${peopleAfter}${guide}${letter}${peek}${now}${links}${senseNotes}${weekCard}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+    }
     if (myTurn) {
       return `${hints}${resultCard}${peek}${letter}${now}${scene}${links}${menu}${peopleAfter}${free}${guide}${senseNotes}${weekCard}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     }
@@ -937,16 +945,16 @@
     if (m.art && m.art.kind === "place") S.lastPlaceArt = m.art.src; // 對話那一層的底圖（vnBack）
     if (typeof revampOn === "function" && revampOn(m) && !masterTalks) { // 介面重整（見檔尾「介面重整」那一段）
       const parts = dutyParts(m, { orderCard, bountyCard, planCard, weekCard, sealMine, sealCard });
-      const inner = siegeStrip(withGauge(musterScene(m, roundBlocks(battleScene(sceneUnderArt(m)), m.battle_gauge)), m.battle_gauge, battleMvpHtml(m)), m.siege);
+      const inner = battleInner(m);
       const clamp = !S.sceneRvOpen && !/<button|<form/.test(inner);
       const social = m.party || (m.calls && m.calls.length) ? socialHtml(m) : "";
       const sceneR = `<section class="card scene rv${m.art ? " has-art" : ""}${tierClass(m)}">${m.art ? sceneArtHtml(m.art) : ""}${now ? `<div class="rv-now">${now}</div>` : ""}${tierTag(m)}<div class="rv-scene${clamp ? " clamp" : ""}"${clamp || S.sceneRvOpen ? ' data-act="rv-scene" role="button" tabindex="0"' : ""}>${inner}</div>${social}</section>`;
       const extras = S.hereExtras || [];
       const layers = (S.dutyOpen ? dutySheetHtml(parts) : "") + (S.hereAll ? hereAllHtml(m, extras) : "") + (S.figLog ? figLogHtml() : S.fig ? figPickHtml(m) : "");
-      return `${hints}${resultCard}${peek}${letter}${sceneR}${links}${free}${dutyCardHtml(m, parts)}${menu}${sealCard}${senseNotes}${hereRowHtml(m, extras)}${peopleRowHtml(m)}${guideDown}${skip}${layers}`;
+      return `${hints}${resultCard}${bp}${peek}${letter}${sceneR}${links}${free}${dutyCardHtml(m, parts)}${bp ? bpDropMoves(menu) : menu}${sealCard}${senseNotes}${hereRowHtml(m, extras)}${peopleRowHtml(m)}${guideDown}${skip}${layers}`;
     }
     if (typeof uiV2 === "function" && uiV2() && m.talk && !m.card) return `${hints}${resultCard}${vnTalkHtml(m, menu)}${free}${guide}`; // 跟大勢人物說話：浮在最上層的對話框
-    return `${hints}${resultCard}${peek}${letter}${now}${scene}${links}${guideUp}${free}${menu}${senseNotes}${weekCard}${planCard}${guideDown}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+    return `${hints}${resultCard}${bp}${peek}${letter}${now}${scene}${links}${guideUp}${free}${bp ? bpDropMoves(menu) : menu}${senseNotes}${weekCard}${planCard}${guideDown}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
   }
 
 
