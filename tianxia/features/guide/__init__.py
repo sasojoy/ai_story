@@ -18,6 +18,7 @@ from tianxia.core.features import DefectHook, Feature, StepHook
 
 class GuideFeature(Feature):
     name = "guide"
+    web = ("guide.js",)  # 引導的發光與閃一閃、入伍段看過軍令、玩法說明與重看序章（全部拆包第 66 批從 app.js 切出來）
     prefix = None  # 沒有自己的選項（見模組說明）
     content = ("tutorial.json", "hints.json", "opening.json")  # content.py 照舊讀（第 62 批起照它載）；檔名照舊
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）。換季照帶的四格（說過的提示、不再提示、新手目標的兩本帳）照舊在 Game._reset_player_for_new_season

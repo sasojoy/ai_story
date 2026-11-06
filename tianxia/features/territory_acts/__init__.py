@@ -18,6 +18,7 @@ from tianxia.core.features import Feature
 
 class TerritoryActsFeature(Feature):
     name = "territory_acts"
+    web = ("territory_acts.js",)  # 見聞的〈天下形勢〉（全部拆包第 66 批從 app.js 切出來）
     prefix = None  # 地盤的動作走 /api/do/conquest_letter 與管理者工具，選單上沒有這一包的選項
     # 沒有 PlayerState 欄位：WorldState.conquest、xingshi、xingshi_ticket、xingshi_mark 是全服的帳，留在 state.py
     player_fields: tuple[str, ...] = ()

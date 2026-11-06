@@ -21,6 +21,7 @@ from tianxia.core.services import ROAD_TASKS
 
 class TravelFeature(Feature):
     name = "travel"
+    web = ("travel.js",)  # 走法、路上的捷徑與往輿圖那一處（全部拆包第 66 批從 app.js 切出來）
     prefix = ("move", "road")  # move:<地點>[:<走法>]；road:back[:<走法>]、road:think／ask／gather
     bot_always = ("road:",)  # 路上小事按完還有、折返隨時能按：整季機器人不按（原本 bot.pick 的排除；move: 不在這裡，站著的時候它是正常的選項）
     player_fields = ("leg_actions", "recent_sights", "road_rewards_today", "tagalong")  # 這一段做過的路上小事、最近看過的見聞、今天拿過幾次路上收穫、跟著誰結伴同行；換季照 _reset_player_for_new_season 重來

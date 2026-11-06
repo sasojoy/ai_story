@@ -443,8 +443,9 @@ def web_files() -> list[str]:
 
 # ── shell_web（全部拆包第 64 批；計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第64批.md 第三節）：/ 的 script 由伺服器生成 ──
 # 頁面上載入 js 的先後（性質同 BUS_ORDER：先後就是行為）。不是 FEATURES 的順序：這幾支一直是這個先後，頂層敘述照這個順序跑；
-# shell.js 最先（包一載入就叫 registerPage），app.js 最後（它最後一行才啟動，排在包檔前面的話 enter 可能在包檔到之前跑）。
-WEB_ORDER = ("shell.js", "main.js", "map.js", "outing.js", "mall.js", "legacy.js", "arena_anim.js", "arena_scene.js", "admin.js", "app.js")
+# shell.js 最先（包一載入就叫 registerPage），app.js 最後（它最後一行才啟動，排在包檔前面的話 enter 可能在包檔到之前跑）；
+# state.js、fit.js 是第 66 批從 app.js 切出來的殼：state.js 不能排在 admin.js 前面（S 的字面值在載入當下叫 admin.js 的 onAdminPath）。
+WEB_ORDER = ("shell.js", "main.js", "map.js", "outing.js", "mall.js", "legacy.js", "arena_anim.js", "arena_scene.js", "admin.js", "state.js", "fit.js", "app.js")
 WEB_MARK = "<!--scripts-->"  # web/index.html 裡換成一串 script 標籤的那個標記
 
 

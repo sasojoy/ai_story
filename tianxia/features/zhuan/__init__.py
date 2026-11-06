@@ -20,6 +20,7 @@ from . import zhuan_end
 
 class ZhuanFeature(Feature):
     name = "zhuan"
+    web = ("zhuan.js",)  # 玩家傳那一層與行狀（全部拆包第 66 批從 app.js 切出來）
     prefix = "zhuan"
     content = ("verdicts.json",)  # content.py 照舊讀（核心沒有 import 這一包）；驗證在下面的 check_content
     # 沒有認領的 PlayerState 欄位：annals、annals_mark、xingshi_seen 是行狀，核心 core/annal_base.py 管；列傳存在資料庫的 biographies 表、票在錢包裡

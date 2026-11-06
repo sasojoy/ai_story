@@ -25,6 +25,7 @@ from tianxia.core.features import BusHook, EffectHook, Feature, WorldHook
 
 class SealFeature(Feature):
     name = "seal"
+    web = ("seal.js",)  # 奪璽卡、碎片卡與獨門行動（全部拆包第 66 批從 app.js 切出來）；sealWatched、sealTitle 留在 app.js 伺服器推送那一段
     prefix = "seal"  # 選項前綴 seal:（碎片卡、獨門行動、奪璽單挑的三招）；第 28 批登記，choose、menu 不接（engine 的 options／choose 原位叫委派）
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：抄本 heirloom（傳承那一格，照全服登記重抄）、補送到第幾號 seal_seen。
     # 核心換季（_reset_player_for_new_season）兩個都照帶；heirloom 換季後建 Game 時照登記重抄（copy_heirloom），所以不算帶走的

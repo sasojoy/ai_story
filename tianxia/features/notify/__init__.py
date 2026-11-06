@@ -17,7 +17,7 @@ from tianxia.core.features import Feature
 class NotifyFeature(Feature):
     name = "notify"
     prefix = None  # 沒有選項：通知是設定頁與看守的事
-    web: tuple[str, ...] = ()  # 設定頁的「手機通知」與 sw.js 歸網頁殼化（總表第 66 批）
+    web = ("notify.js",)  # 設定頁的手機通知、怎麼收到那一頁、信底下問一次與訂閱（全部拆包第 66 批從 app.js 切出來）；web/sw.js 留原位不宣告（web_scripts 會把 .js 排成 script，/sw.js 由這一包的路由讀）
     content: tuple[str, ...] = ()
     player_fields: tuple[str, ...] = ()
     carried: tuple[str, ...] = ()

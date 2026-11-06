@@ -15,7 +15,7 @@ from tianxia.core.features import Feature
 class TaleFeature(Feature):
     name = "tale"
     prefix = None  # 沒有選項：戰記是只讀的畫面，寫的是背景執行緒
-    web: tuple[str, ...] = ()  # tale.css 不在 index.html（只有戰記頁自己連）；app.js 的戰記歸總表第 66 批
+    web = ("tale.js",)  # 戰報頁的戰記連結、戰記那一層與目錄（全部拆包第 66 批從 app.js 切出來）；tale.css 不宣告（宣告的 css 都要有 link，它只有戰記頁自己連）
     content: tuple[str, ...] = ()
     player_fields: tuple[str, ...] = ()
     carried: tuple[str, ...] = ()
