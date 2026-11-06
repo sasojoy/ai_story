@@ -1,0 +1,427 @@
+"""The web comparison gate: walk the same screens on two commits and say whether anything a player can see changed.
+
+    python scripts/webqa/gate.py --base <sha> --head <sha> --out <dir>
+
+Exit 0 green, 1 real differences, 2 the tool broke (no browser, node or PIL; a server did not start; a patch target is gone;
+the driver died; a flow threw; a scene that has to be reached was not). Everything below --out is throwaway except summary.json,
+report.txt and red/. Noise is classified by noise.py; only what is left counts.
+"""
+import argparse
+import concurrent.futures
+import glob
+import hashlib
+import io
+import json
+import os
+import shutil
+import socket
+import subprocess
+import sys
+import threading
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+REPO = os.path.dirname(os.path.dirname(HERE))
+ROUNDS = ("main", "x", "y", "z", "v", "c", "cs", "extra")
+MUST_REACH = os.path.join(HERE, "must_reach.txt")
+FORBIDDEN_PORTS = {7861}
+DETACHED = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS if os.name == "nt" else 0
+STATIC_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".ico", ".woff", ".woff2", ".mp3", ".ogg")
+MUTATIONS = ("card-padding", "css-last")
+PORT_LOCK = threading.Lock()
+
+
+class ToolBroke(Exception):
+    """Something the comparison stands on is not there: exit 2, whatever the pages look like."""
+
+
+def find_chrome(arg: str | None) -> str:
+    want = arg or os.environ.get("TIANXIA_WEBQA_CHROME")
+    if want:
+        if not os.path.exists(want):
+            raise ToolBroke(f"no browser at {want}")
+        return want
+    root = os.path.join(os.environ.get("LOCALAPPDATA", ""), "ms-playwright", "chromium-*", "chrome-win64", "chrome.exe")
+    found = sorted(glob.glob(root), key=lambda p: int("".join(c for c in p.split("chromium-")[1].split(os.sep)[0] if c.isdigit()) or 0))
+    if not found:
+        raise ToolBroke("no browser: give --chrome or TIANXIA_WEBQA_CHROME (this tool does not download one)")
+    return found[-1]
+
+
+def find_node(arg: str | None) -> str:
+    want = arg or shutil.which("node")
+    if not want or not os.path.exists(want):
+        raise ToolBroke("no node: give --node")
+    return want
+
+
+def need_pil() -> None:
+    try:
+        import PIL  # noqa: F401
+    except ImportError as e:
+        raise ToolBroke("no PIL in this python (requirements-studio.txt)") from e
+
+
+def port_free(port: int) -> bool:
+    with socket.socket() as s:
+        s.settimeout(0.3)
+        return s.connect_ex(("127.0.0.1", port)) != 0
+
+
+def free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def pick_ports(arg: str | None, what: str) -> tuple[int, int]:
+    if arg:
+        try:
+            a, b = (int(x) for x in arg.split(","))
+        except ValueError as e:
+            raise ToolBroke(f"--{what} wants two numbers, a,b") from e
+    else:
+        a, b = free_port(), free_port()
+    for p in (a, b):
+        if p in FORBIDDEN_PORTS:
+            raise ToolBroke(f"port {p} is the real server's")
+        if not port_free(p):
+            raise ToolBroke(f"port {p} is taken")
+    if a == b:
+        raise ToolBroke("two ports, not one")
+    return a, b
+
+
+def kill_tree(pid: int) -> None:
+    subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
+
+
+def clean_env() -> dict:
+    """Nothing from outside decides how the walk goes: no QA_*, no TIANXIA_* (admins, database, profile, public url). The hash seed stays fixed or sets come out in another order."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("QA_", "TIANXIA_"))}
+    env.update(PYTHONIOENCODING="utf-8", PYTHONHASHSEED="0")
+    return env
+
+
+def mutate(copy: str, which: str) -> None:
+    """Selftest only: a change the gate has to catch."""
+    if which == "card-padding":
+        p = os.path.join(copy, "web", "style.css")
+        with open(p, encoding="utf-8", newline="") as f:
+            t = f.read()
+        marker = "\n.card {"
+        i = t.find(marker)
+        if i < 0:
+            raise ToolBroke("mutate card-padding: no .card rule")
+        j = t.index("}", i)
+        with open(p, "w", encoding="utf-8", newline="") as f:
+            f.write(t[:j] + "  padding: 31px 23px;\n" + t[j:])
+    elif which == "css-last":
+        p = os.path.join(copy, "web", "index.html")
+        with open(p, encoding="utf-8", newline="") as f:
+            lines = f.read().split("\n")
+        mine = [i for i, x in enumerate(lines) if "stylesheet" in x and "/static/style.css" in x]
+        links = [i for i, x in enumerate(lines) if "stylesheet" in x and "/static/" in x]
+        if len(mine) != 1:
+            raise ToolBroke("mutate css-last: no single style.css link")
+        line = lines.pop(mine[0])
+        lines.insert(links[-1], line)
+        with open(p, "w", encoding="utf-8", newline="") as f:
+            f.write("\n".join(lines))
+    else:
+        raise ToolBroke(f"no mutation {which}")
+
+
+def static_digest(web: str) -> dict:
+    out = {}
+    for root, _, files in os.walk(web):
+        for n in files:
+            if n.lower().endswith(STATIC_EXT):
+                p = os.path.join(root, n)
+                with open(p, "rb") as f:
+                    out[os.path.relpath(p, web).replace(os.sep, "/")] = hashlib.sha256(f.read()).hexdigest()[:16]
+    return out
+
+
+class Server:
+    def __init__(self, label, copy, port, db, profile, logs, env):
+        self.label, self.port = label, port
+        self.out = open(os.path.join(logs, f"{label}.server.out"), "wb")
+        self.err = open(os.path.join(logs, f"{label}.server.err"), "wb")
+        self.errpath = self.err.name
+        self.proc = subprocess.Popen([sys.executable, "-u", os.path.join(HERE, "serve.py"), copy, str(port), db, profile], stdout=self.out, stderr=self.err, env=env, cwd=os.path.dirname(db),
+                                     creationflags=DETACHED)
+
+    def wait_up(self, seconds=120):
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < seconds:
+            code = self.proc.poll()
+            if code is not None:
+                self.out.flush()
+                with open(self.out.name, encoding="utf-8", errors="replace") as f:
+                    said = f.read()[-400:]
+                with open(self.errpath, encoding="utf-8", errors="replace") as f:
+                    said += f.read()[-800:]
+                raise ToolBroke(f"{self.label} server stopped with {code}: {said}")
+            if not port_free(self.port):
+                return
+            time.sleep(0.4)
+        raise ToolBroke(f"{self.label} server did not start in {seconds}s")
+
+    def stop(self):
+        kill_tree(self.proc.pid)
+        self.out.close()
+        self.err.close()
+
+
+def run_round(name, args, work, copies, ports, cdps, origins, env_base) -> dict:
+    """One round: fresh servers, fresh databases, two walks side by side. State does not cross rounds."""
+    import compare
+
+    folder = os.path.join(work, name)
+    os.makedirs(folder)
+    env = dict(env_base, QA_ROUND=name, TIANXIA_WEBQA_CHROME=args.chrome)
+    if args.corpus == "fast":
+        env["QA_FAST"] = "0"
+    if args.only:
+        env["QA_ONLY"] = args.only
+    if args.quick:
+        env["QA_QUICK"] = "1"
+    servers, drivers = [], []
+    t0 = time.monotonic()
+    while not all(port_free(p) for p in (*ports, *cdps)):  # the last round's processes are on their way out
+        if time.monotonic() - t0 > 20:
+            raise ToolBroke(f"ports still taken after the last round: {ports} {cdps}")
+        time.sleep(0.5)
+    try:
+        rows = (("base", copies[0], ports[0], f"http://{origins[0]}", f"http://127.0.0.1:{ports[0]}", cdps[0]), ("head", copies[1], ports[1], f"http://{origins[1]}", f"http://127.0.0.1:{ports[1]}", cdps[1]))
+        for label, copy, port, *_ in rows:
+            servers.append(Server(label, copy, port, os.path.join(folder, f"{label}.db"), args.profile, folder, env))
+        for s in servers:
+            s.wait_up()
+        walks = []
+        for label, _, _, page, api, cdp in rows:
+            walk = os.path.join(folder, label)
+            os.makedirs(walk)
+            walks.append(walk)
+            drivers.append(subprocess.Popen([args.node, "--no-warnings", os.path.join(HERE, "driver.mjs"), label, page, api, walk, str(cdp)],
+                                            stdout=open(os.path.join(folder, f"{label}.driver.out"), "wb"), stderr=open(os.path.join(folder, f"{label}.driver.err"), "wb"), env=env, cwd=folder, creationflags=DETACHED))
+        for d in drivers:
+            d.wait()
+    finally:
+        for d in drivers:
+            if d.poll() is None:
+                kill_tree(d.pid)
+        for s in servers:
+            s.stop()
+    for walk, d, label in zip(walks, drivers, ("base", "head")):
+        if not os.path.exists(os.path.join(walk, "report.json")):
+            with open(os.path.join(folder, f"{label}.driver.err"), encoding="utf-8", errors="replace") as f:
+                raise ToolBroke(f"{label} driver left no report (exit {d.returncode}): {f.read()[-800:]}")
+    walked = time.monotonic() - t0
+    out = compare.compare(walks[0], walks[1], origins, os.path.join(args.out, "red"), red_budget=args.red_left)
+    args.red_left -= out["red_images"]
+    out["seconds"] = round(walked)
+    out["compare_seconds"] = round(time.monotonic() - t0 - walked)
+    if args.keep:
+        out["walks"] = walks
+    if args.keep_corpus:
+        for walk, label in zip(walks, ("base", "head")):
+            shutil.copytree(os.path.join(walk, "dom"), os.path.join(args.keep_corpus, name, label, "dom"), dirs_exist_ok=True)
+    if not args.keep:
+        shutil.rmtree(folder, ignore_errors=True)
+    return out
+
+
+def must_reach_rows(rounds) -> dict:
+    rows = {}
+    if os.path.exists(MUST_REACH):
+        with open(MUST_REACH, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    r, name = line.split(":", 1)
+                    rows.setdefault(r, []).append(name)
+    return {r: v for r, v in rows.items() if r in rounds}
+
+
+def apply_expect(real, expect):
+    import noise
+
+    kept, excused = [], []
+    for row in real:
+        hit = noise.matches_expect(expect, row["scene"], row["class"])
+        if hit:
+            excused.append({**row, "reason": hit.get("reason", "")})
+        else:
+            kept.append(row)
+    return kept, excused
+
+
+def write_report(out_dir: str, summary: dict, per_round: dict) -> None:
+    lines = [f"webqa {summary['base']} -> {summary['head']}: {'GREEN' if summary['green'] else 'RED' if summary['exit'] == 1 else 'TOOL BROKE'} (exit {summary['exit']})",
+             f"scenes {summary['scenes']} shots {summary['shots']} identical {summary['same_shots']} seconds {summary['seconds']}",
+             f"noise {summary['noise']}", f"fingerprint {summary['fingerprint']}", ""]
+    for t in summary["tool"]:
+        lines.append(f"TOOL {t}")
+    for row in summary["real"]:
+        lines.append(f"REAL {row['round']}:{row['scene']} {row['class']} {json.dumps(row['detail'], ensure_ascii=False)[:600]}")
+    for row in summary["expected"]:
+        lines.append(f"EXPECTED {row['round']}:{row['scene']} {row['class']} because {row['reason']}")
+    lines.append("")
+    for r, v in per_round.items():
+        lines.append(f"round {r}: scenes {v['scenes']} shots {v['shots']} identical {v['same_shots']} noise {v['noise']} walk {v.get('seconds')}s compare {v.get('compare_seconds')}s")
+        for k, x in v.get("info", {}).items():
+            lines.append(f"  {k}: {x[:12]}")
+    cov = summary.get("coverage")
+    if cov:
+        lines.append(f"page functions called {cov['called']} / {cov['functions']} (information only)")
+    if summary["not_reached"]:
+        lines.append("")
+        lines.append("not reached (both or either side; click results that differ are REAL above):")
+        lines += [f"  {x[:200]}" for x in summary["not_reached"]]
+    with open(os.path.join(out_dir, "report.txt"), "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def run(args) -> int:
+    t0 = time.monotonic()
+    summary = {"base": args.base, "head": args.head, "green": False, "exit": 2, "real": [], "expected": [], "noise": {}, "scenes": 0, "shots": 0, "same_shots": 0, "noise_rows": [], "not_reached": [], "missing_must_reach": [], "tool": [], "seconds": 0,
+               "fingerprint": {}, "corpus": args.corpus, "profile": args.profile, "rounds": []}
+    per_round = {}
+    work = os.path.join(args.out, "_work")
+    try:
+        shutil.rmtree(work, ignore_errors=True)
+        os.makedirs(work)
+        args.chrome = find_chrome(args.chrome)
+        args.node = find_node(args.node)
+        need_pil()
+        fixed_ports = pick_ports(args.ports, "ports") if args.ports else None  # checked early, before anything is unpacked
+        fixed_cdps = pick_ports(args.cdp_ports, "cdp-ports") if args.cdp_ports else None
+        if fixed_ports or fixed_cdps:
+            args.jobs = 1  # one pair of ports, one round at a time
+        rounds = [r.strip() for r in args.rounds.split(",") if r.strip()] if args.rounds else list(ROUNDS)
+        for r in rounds:
+            if not os.path.exists(os.path.join(HERE, "flows", f"{r}.mjs")):
+                raise ToolBroke(f"no round {r}")
+        summary["rounds"] = rounds
+        import unpack
+
+        copies = (unpack.unpack(args.repo, args.base, os.path.join(work, "copy_base")), unpack.unpack(args.repo, args.head, os.path.join(work, "copy_head")))
+        if args.mutate:
+            mutate(copies[1], args.mutate)
+        sa, sb = static_digest(os.path.join(copies[0], "web")), static_digest(os.path.join(copies[1], "web"))
+        for name in sorted(set(sa) | set(sb)):
+            if sa.get(name) != sb.get(name):
+                summary["real"].append({"round": "(static)", "scene": name, "class": "static-file", "detail": [sa.get(name), sb.get(name)]})
+        expect = []
+        if args.expect:
+            with open(args.expect, encoding="utf-8") as f:
+                expect = json.load(f)
+        env = clean_env()
+        args.red_left = 40
+        coverage = {}
+        must = must_reach_rows(rounds) if args.profile == "season21" and not args.only and not args.no_must_reach else {}
+        def one(r):
+            with PORT_LOCK:
+                ports, cdps = fixed_ports or pick_ports(None, "ports"), fixed_cdps or pick_ports(None, "cdp-ports")
+            print(f"== round {r} on {ports}", flush=True)
+            hosts = ("localhost", "127.0.0.1") if args.swap_hosts else ("127.0.0.1", "localhost")
+            return run_round(r, args, work, copies, ports, cdps, (f"{hosts[0]}:{ports[0]}", f"{hosts[1]}:{ports[1]}"), env)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
+            results = list(pool.map(one, rounds))
+        for r, out in zip(rounds, results):
+            per_round[r] = out
+            print(f"   {r}: scenes {out['scenes']} shots {out['shots']} real {len(out['real'])} noise {out['noise']} tool {len(out['tool'])} {out['seconds']}s", flush=True)
+            kept, excused = apply_expect(out["real"], expect)
+            summary["real"] += [{"round": r, **x} for x in kept]
+            summary["expected"] += [{"round": r, **x} for x in excused]
+            for k, v in out["noise"].items():
+                summary["noise"][k] = summary["noise"].get(k, 0) + v
+            summary["scenes"] += out["scenes"]
+            summary["shots"] += out["shots"]
+            summary["same_shots"] += out["same_shots"]
+            summary["not_reached"] += [f"{r}: {x}" for x in out["not_reached"]]
+            summary["tool"] += [f"{r}: {x}" for x in out["tool"]]
+            summary["fingerprint"][r] = out.get("fingerprint")
+            summary["noise_rows"] += [{"round": r, **x} for x in out["noise_rows"]]
+            for file, functions in out.get("coverage", {}).items():
+                mine = coverage.setdefault(file, {})
+                for fn, hit in functions.items():
+                    mine[fn] = mine.get(fn, False) or hit
+            reached = {n.split("_", 1)[-1] for n in out["scene_names"]}
+            for name in must.get(r, []):
+                if name not in reached:
+                    summary["missing_must_reach"].append(f"{r}:{name}")
+        if summary["missing_must_reach"]:
+            summary["tool"].append("scenes that have to be reached were not: " + ", ".join(summary["missing_must_reach"][:20]))
+        total = sum(len(v) for v in coverage.values())
+        summary["coverage"] = {"functions": total, "called": sum(1 for v in coverage.values() for hit in v.values() if hit), "not_called": {k: sorted(fn for fn, hit in v.items() if not hit) for k, v in sorted(coverage.items()) if not all(v.values())}}
+        summary["exit"] = 2 if summary["tool"] else 1 if summary["real"] else 0
+        summary["green"] = summary["exit"] == 0
+    except ToolBroke as e:
+        summary["tool"].append(str(e))
+        summary["exit"] = 2
+    except Exception as e:  # anything else that dies here is the tool, not the pages
+        import traceback
+
+        summary["tool"].append(f"{type(e).__name__}: {e}\n{traceback.format_exc()[-1200:]}")
+        summary["exit"] = 2
+    finally:
+        summary["seconds"] = round(time.monotonic() - t0)
+        if args.write_must_reach and summary["exit"] != 2:
+            with open(MUST_REACH, "w", encoding="utf-8", newline="\n") as f:
+                f.write("# Scene names (without the running number) the fast walk has to reach, round:scene. Regenerate with gate.py --write-must-reach.\n")
+                for r, v in per_round.items():
+                    for n in v["scene_names"]:
+                        f.write(f"{r}:{n.split('_', 1)[-1]}\n")
+        os.makedirs(args.out, exist_ok=True)
+        with open(os.path.join(args.out, "summary.json"), "w", encoding="utf-8") as f:
+            json.dump(summary, f, ensure_ascii=False, indent=1)
+        write_report(args.out, summary, per_round)
+        if not args.keep:
+            shutil.rmtree(work, ignore_errors=True)
+    print(f"webqa exit {summary['exit']}: real {len(summary['real'])} noise {summary['noise']} tool {len(summary['tool'])} seconds {summary['seconds']}", flush=True)
+    for t in summary["tool"]:
+        print("TOOL", t[:500], flush=True)
+    return summary["exit"]
+
+
+def parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--base", required=True)
+    ap.add_argument("--head", required=True)
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--repo", default=REPO, help="the clone the two commits are in")
+    ap.add_argument("--ports", help="a,b; default two free ones. 7861 is refused")
+    ap.add_argument("--cdp-ports", help="a,b; default two free ones")
+    ap.add_argument("--chrome", help="default TIANXIA_WEBQA_CHROME, then the newest ms-playwright chromium")
+    ap.add_argument("--node", help="default node on PATH")
+    ap.add_argument("--profile", default="season21")
+    ap.add_argument("--jobs", type=int, default=2, help="rounds walked at the same time, each on its own free ports; --ports means one at a time")
+    ap.add_argument("--rounds", help="comma separated; default all: " + ",".join(ROUNDS))
+    ap.add_argument("--corpus", choices=("fast", "full"), default="fast", help="fast: no crawls")
+    ap.add_argument("--expect", help="json file: [{scene: regex, class: dom|style|pixel|main|..., reason: text}]. A row only counts when it matches a difference")
+    ap.add_argument("--keep", action="store_true", help="keep the copies, databases and raw walks")
+    ap.add_argument("--keep-corpus", help="keep the DOM snapshots here, for replay.py")
+    ap.add_argument("--mutate", choices=MUTATIONS, help="selftest only: break the head on purpose")
+    ap.add_argument("--quick", action="store_true", help="clicks, the DOM and /api/main only, no pictures and no styles: a look that the flows still walk, not a verdict")
+    ap.add_argument("--only", help="comma separated flow names inside the round (reproductions); turns off the must-reach check")
+    ap.add_argument("--no-must-reach", action="store_true", help="for walking old commits")
+    ap.add_argument("--swap-hosts", action="store_true", help="base on localhost, head on 127.0.0.1: does a difference follow the host or the code")
+    ap.add_argument("--write-must-reach", action="store_true", help="write must_reach.txt from this walk")
+    return ap
+
+
+def main(argv=None) -> int:
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+    args = parser().parse_args(argv)
+    args.out = os.path.abspath(args.out)
+    os.makedirs(args.out, exist_ok=True)
+    return run(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
