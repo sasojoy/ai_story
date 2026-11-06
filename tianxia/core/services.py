@@ -472,7 +472,7 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 
 # guide（全部拆包第 22 批：新手引導包叫的、主人還沒搬的）
 - 假人走序章（`_graduate`）照每一步的完成條件做的那幾下：`ctx.slot_insight(art, insight)`、`ctx.switch_art(art)`、`ctx.practice(kind)`、
-  `ctx.allocate_stat(stat)`、`ctx.pick_growth(preset)`（五項屬性的季，序章配點那一步；主人修練 features/cultivation，第 2 段 A 搬）、`ctx.melt_art(art)`（主人修練 features/cultivation）、`ctx.forge(main, aux)`（主人煉製：第 44 批成包，改列二、查詢服務 `# craft` 那一段）
+  `ctx.allocate_stat(stat)`、`ctx.pick_growth(preset)`（五項屬性的季，序章配點那一步；主人修練 features/cultivation，本體 actions.pick_growth，Game 留三步）、`ctx.melt_art(art)`（主人修練 features/cultivation）、`ctx.forge(main, aux)`（主人煉製：第 44 批成包，改列二、查詢服務 `# craft` 那一段）
 - `ctx._hint_triggers(only)`（這一包自己的委派：tests/arts/test_hints.py 換掉 game._hint_triggers，包裡經 ctx 叫，換掉的才打得到；
   呼叫端改完就拿掉）
 

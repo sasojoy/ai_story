@@ -332,6 +332,20 @@ def allocate_v2(ctx, stat: str) -> list[str]:
     return ctx._log([f"{name} +1{left}"])
 
 
+def pick_growth(ctx, preset: str, custom: dict | None) -> list[str]:
+    """挑成長配比的本體（籌備中、這一季沒有配比、已定這三步留在 Game.pick_growth，Refused 只在 engine）：
+    自己配的整理、查問題、定下、寫紀錄。（原本 Game.pick_growth 的後半）"""
+    s, c = ctx.state, ctx.content
+    custom = {str(k): v for k, v in (custom or {}).items()} if isinstance(custom, dict) else None
+    problem = attrset.growth_problem(c, preset, custom)
+    if problem:
+        return ctx._log([problem])
+    line = attrset.pick(s, c, preset, custom)
+    journal.add_entry(s, JournalEntry(time=s.world.time, title="成長配比", lines=[line]))  # 一整句：寫成敘事（數值變化的小框放不下，手機上會撐出畫面）
+    ctx._guide(ctx._note_action("allocate"))  # 五項屬性的季，序章配點那一步就是挑成長配比（升一級沒有點可配）
+    return ctx._log([line])
+
+
 def allocate_line(ctx, stat: str, was: float, power: float) -> str:
     """配點那一句（減法季屬性五段，設計 4.5）：「臂力 8 → 9：武學威力 +6%，此刻全隊 182 → 193」——前後威力用 team.fresh_power
     （滿血、不看對手）各算一次，沒變（身法、悟性、博聞）就不寫全隊那一段。待 joy 潤。（原本 Game._allocate_line，只有 allocate_stat 叫）"""
