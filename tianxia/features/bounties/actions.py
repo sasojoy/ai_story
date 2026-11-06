@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import shopview  # 過渡：待搬（店面的畫面資料，SHARED_LATER）
 from tianxia.core.option import Option
+from tianxia.core import bounty_base  # 核心（榜的入口與收店：清失效參照那一格讀，core_seams）
 
 from . import rules
 
@@ -144,3 +145,11 @@ def stale(ctx: Game, arg: str) -> list[str]:
 def status(ctx: Game) -> list[dict]:
     """Game.status_data 的 "bounties"：手上揭了的與身上有合用東西的求兵（rules.status）。"""
     return rules.status(ctx)
+
+
+def drop_stale(ctx: Game) -> None:
+    """stale.mid 的 bounties 那一格（core_seams，全部拆包第 55 批；照原位搬）：懸賞榜關了（Config.bounties.enabled、劇本沒有陣營）、人不在城鎮了：
+    收起懸賞榜，挑到哪一張與榜吏那一句一併清掉。"""
+    s, c = ctx.state, ctx.content
+    if s.player.picking_bounty and not bounty_base.board_here(s, c):
+        bounty_base.close_board(s.player)

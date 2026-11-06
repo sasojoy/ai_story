@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from tianxia import battlelog, journal, team  # 共用規則層（戰報）、核心
 from tianxia import chapters  # 共用規則層（章回主線，第 40 批收進：模組層 import，載入時登記 story_base.TASKS）
 from tianxia.core.option import Option
+from tianxia import story_base  # 共用規則層（一條線的底座：紀錄的標題）
 from tianxia.models import Squad, StoryDef, StoryStage
 from tianxia.rules import fill_marks
 from tianxia.state import StoryCard, StoryProgress
@@ -171,3 +172,17 @@ def scene(ctx: Game) -> str | None:
         return None
     line = storyline.definition(c, s.player.storylines[s.player.story_open])
     return f"**{line.title}**\n\n{question}"
+
+
+def deliver_story(ctx: Game) -> None:
+    """sync.deliver 的 story 那一格（core_seams，全部拆包第 55 批；照原位搬）：不在線時過了的期限、休季時還沒收的（此事未了），回來第一次同步就走。不進回話。"""
+    story = story_tick(ctx)
+    if story:
+        ctx._write(story_base.JOURNAL, story)
+
+
+def carry_season(ctx: Game, old, fresh) -> None:
+    """season.carry 的 story 那一格（core_seams，全部拆包第 55 批；照原位搬，不看開關）：長篇奇事（企劃者 2026-10-27）：紀念物一輩子帶著；
+    跨季的旗標（例：隆中藏書）在新角色身上再立一次。"""
+    fresh.player.keepsakes, fresh.player.lasting = list(old.player.keepsakes), list(old.player.lasting)
+    fresh.player.flags |= set(old.player.lasting)

@@ -9,7 +9,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, Outcome, StepHook
+from tianxia.core.features import DefectHook, Feature, Outcome, SeamHook, StepHook
 
 
 class FactionFeature(Feature):
@@ -106,6 +106,17 @@ class FactionFeature(Feature):
             self._steps = (StepHook("join", lambda ctx, status, orders: join_actions.join_step_items(ctx), ref="join",
                                     place=lambda ctx, ref: join_actions.join_step_place(ctx, ref)),)
         return self._steps
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """season.grant 的 faction 那一格（順序在 SEAM_ORDER；不問 enabled：on_season_start 在開場那一則之前、這一格在它之後）：上一季論了功的人起手資源與稱號（ending_actions.season_grant）。"""
+        if self._seams is None:
+            from . import ending_actions  # noqa: PLC0415
+
+            self._seams = (SeamHook("season.grant", "faction", lambda ctx, old: ending_actions.season_grant(ctx, old)),)
+        return self._seams
 
 
 FEATURE = FactionFeature()

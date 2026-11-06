@@ -9,7 +9,7 @@ enabled 一直是 True（沒有自己的總開關：護衛看 Config.figure_aid�
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, WorldHook
+from tianxia.core.features import Feature, Outcome, SeamHook, WorldHook
 
 
 class FigureActsFeature(Feature):
@@ -48,6 +48,21 @@ class FigureActsFeature(Feature):
 
             self._world = (WorldHook("step", "yuedan", lambda *args: yuedan.world_step(*args)),)
         return self._world
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """補算與換季的兩格（順序在 SEAM_ORDER；不問 enabled）：護衛下線時擋下的挑戰回來補名望與心得（aid_actions.deliver_guard_credits：夾在首創名望回饋與 deliver_notices 之間）；
+        讀檔清閉門不見的人（challenge.drop_stale）。"""
+        if self._seams is None:
+            from . import aid_actions, challenge  # noqa: PLC0415
+
+            self._seams = (
+                SeamHook("sync.deliver", "guard", lambda ctx: aid_actions.deliver_guard_credits(ctx)),
+                SeamHook("stale.late", "figure_acts", lambda ctx: challenge.drop_stale(ctx)),
+            )
+        return self._seams
 
 
 FEATURE = FigureActsFeature()

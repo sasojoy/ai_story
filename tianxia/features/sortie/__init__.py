@@ -16,7 +16,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Verb
+from tianxia.core.features import Feature, SeamHook, Verb
 
 
 class SortieFeature(Feature):
@@ -77,6 +77,19 @@ class SortieFeature(Feature):
         if option_id.startswith(duel_rules.PREFIX) and duel_actions.duel_on(ctx):
             return duel_actions.duel_choice(ctx, option_id)
         return None
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """season.carry 的 sortie 那一格（順序在 SEAM_ORDER；不看開關：地盤關著的那一季也帶，同商城的 legend_items、create_rerolls；dev/sortie-1 審查，features/sortie/tests/test_sortie_season_carry.py）。"""
+        if self._seams is None:
+            self._seams = (SeamHook("season.carry", "sortie", _carry_season),)
+        return self._seams
+
+
+def _carry_season(ctx, old, fresh) -> None:
+    fresh.player.sortie_day, fresh.player.sorties_today = old.player.sortie_day, old.player.sorties_today  # 換季不能多出一輪陣
 
 
 FEATURE = SortieFeature()

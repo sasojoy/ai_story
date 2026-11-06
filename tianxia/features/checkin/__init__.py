@@ -8,7 +8,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature
+from tianxia.core.features import Feature, SeamHook
 from tianxia.core.services import checkin_on
 
 
@@ -22,6 +22,17 @@ class CheckinFeature(Feature):
     def enabled(self, ctx) -> bool:
         """簽到開著沒（設定打開、21 天季、還沒收季）。沒有任何掛鉤吃這個開關：Game.check_in、_auto_checkin、checkin_view 本來就各自問 checkin.on。"""
         return checkin_on(ctx.content, ctx.state.world)
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """sync.deliver 的 checkin 那一格（順序在 SEAM_ORDER；不問 enabled）：每日簽到自動領（補送寄放之後，江湖紀錄的先後算行為）。"""
+        if self._seams is None:
+            from . import actions  # noqa: PLC0415
+
+            self._seams = (SeamHook("sync.deliver", "checkin", lambda ctx: actions.auto_checkin(ctx)),)
+        return self._seams
 
 
 FEATURE = CheckinFeature()

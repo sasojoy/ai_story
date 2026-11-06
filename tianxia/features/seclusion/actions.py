@@ -55,3 +55,11 @@ def finish(ctx: Game, end_time: float) -> list[str]:
     else:
         journal.add_entry(ctx.state, JournalEntry(time=end_time, title="出關", tag=tag, changes=[change]))
     return [msg]
+
+
+def finish_due(ctx: Game) -> list[str] | None:
+    """local 的 seclusion 那一格（core_seams，全部拆包第 55 批；原位的判斷搬過來）：閉關到期了就出關（回的那幾句接進補算的回話）。"""
+    p = ctx.state.player
+    if p.busy_until is not None and ctx.state.world.time >= p.busy_until:
+        return finish(ctx, p.busy_until)
+    return None

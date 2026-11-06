@@ -9,7 +9,7 @@ README.md 寫這一包做什麼、導覽與設計稿。
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, WorldHook
+from tianxia.core.features import Feature, Outcome, SeamHook, WorldHook
 
 
 class StaminaPlaysFeature(Feature):
@@ -55,6 +55,17 @@ class StaminaPlaysFeature(Feature):
 
             self._world = (WorldHook("muster", "works", lambda store, content, definition, start, now: works_rules.on_muster(store, content, definition)),)
         return self._world
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """sync.close 的 ambush 那一格（順序在 SEAM_ORDER；不問 enabled）：守著的埋伏到時刻了、或季上那一筆已經沒了（被打退、換季）：收起來。"""
+        if self._seams is None:
+            from . import ambush_actions  # noqa: PLC0415
+
+            self._seams = (SeamHook("sync.close", "ambush", lambda ctx: ambush_actions.expire(ctx)),)
+        return self._seams
 
 
 FEATURE = StaminaPlaysFeature()

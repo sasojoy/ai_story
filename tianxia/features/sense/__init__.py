@@ -10,7 +10,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome
+from tianxia.core.features import Feature, Outcome, SeamHook
 
 
 class SenseFeature(Feature):
@@ -49,6 +49,17 @@ class SenseFeature(Feature):
         from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）
 
         return routes.router(shell)
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """stale.early 的 sense 那一格（順序在 SEAM_ORDER；不問 enabled）：有所感的場景被拿掉、人不在那裡了：作廢（後面的收店讀它，所以不放 on_drop_stale）。"""
+        if self._seams is None:
+            from . import actions  # noqa: PLC0415
+
+            self._seams = (SeamHook("stale.early", "sense", lambda ctx: actions.sense_drop_stale(ctx)),)
+        return self._seams
 
 
 FEATURE = SenseFeature()

@@ -20,7 +20,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import BusHook, EffectHook, Feature, WorldHook
+from tianxia.core.features import BusHook, EffectHook, Feature, SeamHook, WorldHook
 
 
 class SealFeature(Feature):
@@ -104,6 +104,28 @@ class SealFeature(Feature):
                 EffectHook("shard", lambda r: seal.effect_shard(r)),
             )
         return self._effects
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """補算與換季的四格（順序在 SEAM_ORDER；不問 enabled）：sync 補算自己的時間之前、清失效參照中段照登記重抄抄本（actions.copy_heirloom：碎片關著時也要叫、
+        把抄本清掉，on_sync、on_drop_stale 只問開著的包，接不了）；排程那一下推奪璽單挑（duel_actions.tick）；換季照帶。建一次就留著，在叫的那一下才照模組屬性找。"""
+        if self._seams is None:
+            from . import actions, duel_actions  # noqa: PLC0415
+
+            self._seams = (
+                SeamHook("sync.heirloom", "seal", lambda ctx: actions.copy_heirloom(ctx)),
+                SeamHook("stale.mid", "seal", lambda ctx: actions.copy_heirloom(ctx)),
+                SeamHook("tick", "seal", lambda ctx: duel_actions.tick(ctx)),
+                SeamHook("season.carry", "seal", _carry_season),
+            )
+        return self._seams
+
+
+def _carry_season(ctx, old, fresh) -> None:
+    fresh.player.heirloom = old.player.heirloom  # 玉璽碎片的抄本與補送的進度跨季帶走（玉璽碎片設計 7.5；同步時本來就照登記重抄）
+    fresh.player.seal_seen = old.player.seal_seen
 
 
 FEATURE = SealFeature()

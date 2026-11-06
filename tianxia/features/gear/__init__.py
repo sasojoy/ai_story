@@ -14,7 +14,7 @@ GearBook）同字，不是同一件事：這裡是功能包，另兩個是舊的
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, Verb
+from tianxia.core.features import Feature, Outcome, SeamHook, Verb
 
 
 class GearFeature(Feature):
@@ -61,6 +61,23 @@ class GearFeature(Feature):
             self._verbs = (Verb("market", run=lambda ctx, prepared: market_actions.enter(ctx),
                                 title=lambda ctx: f"{mounts.MARKET}・{ctx.content.locations[ctx.state.player.location].name}"),)
         return self._verbs
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """補算與換季的四格（順序在 SEAM_ORDER；不問 enabled）：sync、清失效參照收馬市（market_actions.close_gone）；sync、advance 補寄放的東西
+        （gift_actions.deliver_held_gear，位置固定在 _deliver_big_events 之後：on_sync 只問開著的包、advance 沒有 on_sync）。"""
+        if self._seams is None:
+            from . import gift_actions, market_actions  # noqa: PLC0415
+
+            self._seams = (
+                SeamHook("sync.close", "gear", lambda ctx: market_actions.close_gone(ctx)),
+                SeamHook("stale.mid", "gear", lambda ctx: market_actions.close_gone(ctx)),
+                SeamHook("sync.deliver", "held_gear", lambda ctx: gift_actions.deliver_held_gear(ctx)),
+                SeamHook("advance.held", "held_gear", lambda ctx: gift_actions.deliver_held_gear(ctx)),
+            )
+        return self._seams
 
 
 FEATURE = GearFeature()

@@ -178,3 +178,10 @@ def no_audience_line(ctx) -> str:
                 return f"{ch.name}事忙，過一陣子才得空。"  # FB-102，待 joy 潤
             return f"{ch.name}事忙，要到 {moment} 之後才得空。" if moment else f"{ch.name}事忙，這一季之內都不得空。"
     return "此地無人可訪，你只好悻悻離去。"
+
+
+def fortune_due(ctx) -> list[str] | None:
+    """local 的 fortune 那一格（core_seams，全部拆包第 55 批；原位的判斷搬過來）：福緣到期自己送上門（回的那幾句接進補算的回話）。"""
+    if roster.fortune_overdue(ctx.state, ctx.content):
+        return deliver_fortune(ctx)
+    return None

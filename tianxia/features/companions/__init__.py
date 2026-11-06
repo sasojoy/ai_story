@@ -8,7 +8,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, Outcome, StepHook
+from tianxia.core.features import DefectHook, Feature, Outcome, SeamHook, StepHook
 
 
 class CompanionsFeature(Feature):
@@ -82,6 +82,23 @@ class CompanionsFeature(Feature):
 
             self._steps = (StepHook("errand", lambda ctx, status, orders: errands.step_items(ctx.state, ctx.content)),)
         return self._steps
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """補算與換季的四格（順序在 SEAM_ORDER；不問 enabled）：sync 記心意的行狀（actions.stance_annals）、書信那一格（actions.deliver_mail，時間讀 ctx.now：sync 開頭設的）；
+        讀檔清招募確認；換季照帶對話歷史。"""
+        if self._seams is None:
+            from . import actions  # noqa: PLC0415
+
+            self._seams = (
+                SeamHook("sync.deliver", "stances", lambda ctx: actions.stance_annals(ctx)),
+                SeamHook("sync.deliver", "mail", lambda ctx: actions.deliver_mail(ctx, ctx.now)),
+                SeamHook("stale.early", "companions", lambda ctx: actions.drop_stale(ctx)),
+                SeamHook("season.carry", "companions", lambda ctx, old, fresh: actions.carry_season(ctx, old, fresh)),
+            )
+        return self._seams
 
 
 FEATURE = CompanionsFeature()

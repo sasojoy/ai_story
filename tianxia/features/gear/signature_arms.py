@@ -8,12 +8,13 @@
 - 拿到時江湖史一行、天下大事傳聞一句（具名）；上神器譜（book_rows，forge_secrets.divine_book 併進去，跨季讀 seasons 表）。
 - 不擲骰：兩條路都是門檻，不碰 Game.rng（FB-129）。
 
-只 import models、state、weapons、treasures、figures、rules（共用規則層與核心）。全部拆包第 42 批搬進裝備包 tianxia/features/gear/；舊名 tianxia/signature_arms.py
-留成指到這裡的別名（engine 的 _drop_stale_references 讀 refresh_names、leaderboard.gear_card、測試）。
+只 import models、state、weapons、treasures、figures、rules、core.signature_base（共用規則層與核心）。全部拆包第 42 批搬進裝備包 tianxia/features/gear/；舊名 tianxia/signature_arms.py
+留成指到這裡的別名（leaderboard.gear_card、測試）；engine 的 _drop_stale_references 第 55 批起讀核心的 core/signature_base.py。
 """
 from __future__ import annotations
 
 from tianxia import figures, treasures, weapons  # 共用規則層
+from tianxia.core.signature_base import owned, refresh_names  # noqa: F401  核心（core_seams，全部拆包第 55 批：清失效參照讀的那一小半搬進核心，這裡 re-export 同一批）
 from tianxia.models import Content, SignatureArmDef  # 核心
 from tianxia.rules import add_chronicle, add_rumor  # 核心
 from tianxia.state import Equipment, GameState, PlayerState, SignatureClaim  # 核心
@@ -34,26 +35,11 @@ HOW = {"gift": "親手相贈", "seized": "屢敗之後被奪走"}  # 待 joy 潤
 BOOK_LINE = "- 第 {season} 季　【{arm}】　{noun}・屬{attribute}　{general}的本命兵器，{how}，在{owner}手上"
 
 
-def owned(p: PlayerState) -> list[Equipment]:
-    """身上、裝備庫、寄放的本命兵器。"""
-    return [item for item in (p.weapon, *p.rack, *p.held_gear) if item is not None and item.signature is not None]
-
-
 def new_arm(state: GameState, arm: SignatureArmDef) -> Equipment:
     """新的一把本命兵器（四欄共用的流水號 +1，id「兵:N」）：三階上品、神器原品（加成照 original_base），signature 記人物 id。"""
     item = weapons.new_weapon(state, name=arm.name, kind=arm.kind, attribute=arm.attribute, tier=3, quality="上品", original=True)
     item.signature = arm.character
     return item
-
-
-def refresh_names(p: PlayerState, content: Content) -> None:
-    """讀檔時照內容重寫本命兵器的名字（name 只當備份；同 treasures.refresh_names）：joy 改了名字，手上的跟著改；內容拿掉了那一把
-    留著舊名字（加成照神器原品，不看內容）。Game._drop_stale_references 每次建 Game 都叫。"""
-    table = {arm.character: arm for arm in content.gear.signature_arms}
-    for item in owned(p):
-        arm = table.get(item.signature)
-        if arm is not None:
-            item.name = arm.name
 
 
 def due(state: GameState, content: Content, *, beaten: str | None = None,

@@ -82,3 +82,13 @@ def hear_topic(ctx, companion_id: str, topic: str) -> list[str]:
 def after_success(ctx, kind: str, loc_id: str) -> list[str]:
     """第 2 階行動成功、守勢行動之後替累積型機緣記一次（kind 是 rank2 或 duty）。"""
     return opp_rules.after_success(ctx.state, ctx.content, kind, loc_id, ctx.rng)
+
+
+def deliver_plots(ctx) -> list[str]:
+    """sync.deliver 的 plots 那一格（core_seams，全部拆包第 55 批；照原位搬）：不在線時收場的密謀，回來第一次同步就結算（正式版乙二）。
+    經 ctx._settle_plots：test_seats、test_weapons_forge 換掉 Game 上的名字才打得到。回的那幾句進同步的回話。"""
+    settled = ctx._settle_plots()
+    if settled:
+        ctx._write("密謀", settled)
+        ctx._save_season()  # 逾期的密謀在這裡改成作罷，那是共用賽季的一份
+    return settled

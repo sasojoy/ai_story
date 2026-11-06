@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from tianxia import atlas, materials  # 共用規則層（輿圖：路程與所在大區，第 50 批收進；素材 materials）
 from tianxia.models import RoadKind
+from tianxia.core.services import ROAD_TASKS  # 核心（路上小事的名稱表）
 from tianxia.rules import apply_effect, audible, day_turn, ears_of, game_day, here_regions
 
 from . import menu, party
@@ -140,3 +141,18 @@ def sight(ctx: Game, road: RoadKind, loc_id: str, when: float | None = None) -> 
         return [pick.text]
     count_reward(ctx, "sight", day)
     return [pick.text] + apply_effect(pick.effect, s, c, ctx.world, push=ctx.push_trend)
+
+
+def drop_stale(ctx: Game, lost_place: bool) -> None:
+    """stale.road 的 travel 那一格（core_seams，全部拆包第 55 批；照原位搬）：腳下這段路不在了就清、路上的小事與見聞只留內容還有的。"""
+    c, p = ctx.content, ctx.state.player
+    j = p.journey
+    if j is not None and (
+        lost_place  # 所在地被拿掉、改回起點：腳下這段路已經不存在
+        or any(loc_id not in c.locations for loc_id in j.path)
+        or (j.origin is not None and j.origin not in c.locations)  # 改道後半段路的起點（見 atlas.road_spot）
+    ):
+        p.journey = None
+        p.leg_actions = set()  # 這段路不在了：下次出發是新的一段
+    p.leg_actions &= set(ROAD_TASKS)
+    p.recent_sights = [sight_id for sight_id in p.recent_sights if sight_id in c.road_sights]

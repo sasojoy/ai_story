@@ -7,7 +7,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome
+from tianxia.core.features import Feature, Outcome, SeamHook
 
 
 class SocializeFeature(Feature):
@@ -44,6 +44,17 @@ class SocializeFeature(Feature):
         from . import bots  # noqa: PLC0415
 
         return bots.score(option)
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """local 的 fortune 那一格（順序在 SEAM_ORDER；不問 enabled）：福緣到期自己送上門（actions.fortune_due），排在閉關收尾之後。"""
+        if self._seams is None:
+            from . import actions  # noqa: PLC0415
+
+            self._seams = (SeamHook("local", "fortune", lambda ctx: actions.fortune_due(ctx)),)
+        return self._seams
 
 
 FEATURE = SocializeFeature()

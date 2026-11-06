@@ -24,7 +24,7 @@ battle: 的分派照舊在 Game.choose 原位（查完選單、清掉「剛剛�
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, WorldHook
+from tianxia.core.features import Feature, SeamHook, WorldHook
 
 
 class BattleFeature(Feature):
@@ -108,6 +108,30 @@ class BattleFeature(Feature):
 
             self._world = (WorldHook("muster", "generals", lambda *args: generals.world_muster(*args)),)
         return self._world
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """補算與換季的三格（順序在 SEAM_ORDER；不問 enabled）：sync 同伴回江湖（muster.settle_partings，回傳不接）、排程那一下推一次決戰（經 ctx._battle_status：
+        test_engine、test_hints 換掉 Game 上的名字才打得到；回傳不接）、換季照帶補過的決戰。"""
+        if self._seams is None:
+            from . import muster  # noqa: PLC0415
+
+            self._seams = (
+                SeamHook("sync.deliver", "partings", lambda ctx: _quiet(muster.settle_partings(ctx, True))),
+                SeamHook("tick", "battle", lambda ctx: _quiet(ctx._battle_status(tick=True))),
+                SeamHook("season.carry", "battle", _carry_season),
+            )
+        return self._seams
+
+
+def _quiet(_) -> None:
+    """回傳不接的格一定回 None（seam_lines 只收 list 或 None，list 會併進回話）。"""
+
+
+def _carry_season(ctx, old, fresh) -> None:
+    fresh.player.battle_results_seen = old.player.battle_results_seen  # 補送過的決戰不再補一次（FB-027）
 
 
 FEATURE = BattleFeature()

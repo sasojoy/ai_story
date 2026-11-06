@@ -16,6 +16,7 @@ from tianxia import silver  # 共用規則層
 from tianxia import team  # 核心
 from tianxia import shopview  # 過渡：待搬（店面的畫面資料，SHARED_LATER）
 from tianxia.core.option import Option  # 核心
+from tianxia.core import smith_base  # 核心（打造單子讀的那一小半：收店那兩格讀，core_seams）
 
 from . import smithing
 from . import forge_actions
@@ -250,3 +251,25 @@ def enter(ctx: Game) -> list[str]:
     ctx._shop_say("enter")  # 店面上掌櫃那一句（店面獨立介面設計 1.4）
     ctx.state.player.smith_rule = shopview.next_rule(ctx.state, ctx.content)  # 背包有四階時鐵匠講一句神器的規矩（正式季整合 5.10）
     return [f"你走進{weapons.SMITH}，爐火燒得正旺。"]
+
+
+def sync_close(ctx: Game) -> None:
+    """sync.close 的 smithy 那一格（core_seams，全部拆包第 55 批；照原位搬）：同步時開關關了、人被挪走了收店，單子那一欄關了清單子。
+    條件跟清失效參照那一格不一樣（drop_stale），不合併。"""
+    s, c = ctx.state, ctx.content
+    if s.player.picking_smith and not equipment.smith_open(s, c):
+        equipment.close_smith(s.player)  # 開關關了、人不在城鎮了（內容改版、管理者挪人）：收起鐵匠鋪，單子與頁一起清
+    if s.player.smith_draft is not None and not smith_base.draft_here(s, c, s.player.smith_draft):
+        s.player.smith_draft = None  # 單子那一欄關了、另一欄還開著：鐵匠鋪照開（另一頁），這張單子清掉
+
+
+def drop_stale(ctx: Game) -> None:
+    """stale.mid 的 smithy 那一格（core_seams，全部拆包第 55 批；照原位搬）：讀檔時收店與清單子。"""
+    s, c = ctx.state, ctx.content
+    p = s.player
+    if p.picking_smith and not equipment.smith_open(s, c):
+        equipment.close_smith(p)  # 武器、防具都關了、人不在城鎮了：收起鐵匠鋪，打造的單子與停在哪一頁一起清
+    if p.smith_draft is not None and (
+        not p.picking_smith or not smith_base.draft_here(s, c, p.smith_draft) or smith_base.draft_stale(c, p.smith_draft)
+    ):
+        p.smith_draft = None  # 單子只在鐵匠鋪開著、那一欄也開著時有意義（兵器的單子看武器、防具的單子看防具：一欄關了另一欄還開著，鐵匠鋪照開，那一欄的單子要清）；內容改版拿掉了單子上的種類或素材：選單畫不出來，從頭來

@@ -11,7 +11,7 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 """
 from __future__ import annotations
 
-from tianxia.core.features import EffectHook, Feature, Outcome
+from tianxia.core.features import EffectHook, Feature, Outcome, SeamHook
 
 
 class StoryFeature(Feature):
@@ -56,6 +56,20 @@ class StoryFeature(Feature):
 
             self._effects = (EffectHook("story", lambda r: storyline.effect_step(r)),)
         return self._effects
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """補算與換季的兩格（順序在 SEAM_ORDER；不問 enabled）：sync 走一步（actions.deliver_story：召見之後、席次之前）、換季照帶紀念物與跨季旗標（actions.carry_season）。"""
+        if self._seams is None:
+            from . import actions  # noqa: PLC0415
+
+            self._seams = (
+                SeamHook("sync.deliver", "story", lambda ctx: actions.deliver_story(ctx)),
+                SeamHook("season.carry", "story", lambda ctx, old, fresh: actions.carry_season(ctx, old, fresh)),
+            )
+        return self._seams
 
 
 FEATURE = StoryFeature()

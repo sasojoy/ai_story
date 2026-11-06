@@ -275,3 +275,9 @@ def held_tier3(ctx) -> int:
     """背包裡的三階素材合計（_challenge 照它算挑戰本人這一場的預設表掉了幾個三階，記進 figure_rare_drops）。"""
     mats = ctx.content.materials
     return sum(n for mid, n in ctx.state.player.materials.items() if n > 0 and mid in mats and mats[mid].tier == 3)
+
+
+def drop_stale(ctx) -> None:
+    """stale.late 的 figure_acts 那一格（core_seams，全部拆包第 55 批；照原位搬）：內容改版拿掉的大勢人物（T4）。"""
+    p, c = ctx.state.player, ctx.content
+    p.snubbed_until = {k: v for k, v in p.snubbed_until.items() if k in c.figures}

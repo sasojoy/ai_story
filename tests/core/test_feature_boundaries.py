@@ -2375,6 +2375,39 @@ GAME_DELEGATE_CALLERS.update({
     ("pick_growth", "_apply_growth"): "五項屬性的季挑成長配比（序章配點那一步，升一級沒有點可配）：三步（籌備中擋、這一季沒有配比、已定回 Refused）留在 Game，Refused 只在 engine；其餘本體在修練包 actions.pick_growth（合回 2A 已收）",
 })
 
+# core_seams（全部拆包第 55 批「補算與換季收接縫」；計畫 docs/superpowers/plans/2026-11-06-補算換季收接縫-第55批.md 四）：這一批的增減集中在這一段（核心批，沒有新包）。
+# sync、advance、world_tick、_advance_player_local、own_turn_checks、_drop_stale_references、_reset_player_for_new_season 裡各包那一段換成 SEAM_ORDER 的格，包登記自己那一格。
+# GAME_DIRECT 2 → 1：signature_arms.refresh_names 搬進核心的 core/signature_base.py（照第 40 批 smith_base 的前例），engine 不再 import 舊名。
+del GAME_DIRECT["_drop_stale_references"]
+GAME_IMPORTS -= {"tianxia.signature_arms"}
+# 只剩這幾處呼叫的委派拿掉（量過沒有測試、腳本、包叫）；留著的（_ambush_expire、_arrivals、_conquest_tick、_deliver_conquest、_deliver_arena、_auto_checkin、_settle_partings、
+# _settle_plots、_story_tick、_report_seat、_check_hints、_battle_status、_seal_tick、_drop_old_zhuifeng、_finish_seclusion、_deliver_fortune）測試或包在叫
+GAME_DELEGATES -= {
+    "_copy_heirloom", "_deliver_renames", "_deliver_guard_credits", "_stance_annals", "_zhuan_tick", "_deliver_mail", "_deliver_held_gear", "_bounty_deliver",
+    "_enlist_expire", "_party_expires", "_mark_veteran", "_sense_drop_stale", "_base_step_count", "_enlist_done", "_season_grant", "_bounty_post_auto",
+}
+for _pair in (
+    ("sync", "_copy_heirloom"), ("sync", "_settle_partings"), ("sync", "_check_hints"), ("sync", "_enlist_expire"), ("sync", "_deliver_arena"), ("sync", "_stance_annals"),
+    ("sync", "_deliver_mail"), ("sync", "_deliver_renames"), ("sync", "_story_tick"), ("sync", "_auto_checkin"), ("sync", "_zhuan_tick"), ("sync", "_deliver_guard_credits"),
+    ("sync", "_report_seat"), ("sync", "_settle_plots"), ("sync", "_conquest_tick"), ("sync", "_deliver_conquest"), ("sync", "_ambush_expire"), ("sync", "_arrivals"),
+    ("sync", "_party_expires"), ("sync", "_deliver_held_gear"), ("sync", "_bounty_deliver"),
+    ("advance", "_conquest_tick"), ("advance", "_deliver_conquest"), ("advance", "_arrivals"), ("advance", "_deliver_held_gear"),
+    ("world_tick", "_battle_status"), ("world_tick", "_conquest_tick"), ("world_tick", "_seal_tick"),
+    ("own_turn_checks", "_bounty_post_auto"),
+    ("_advance_player_local", "_finish_seclusion"), ("_advance_player_local", "_deliver_fortune"),
+    ("_drop_stale_references", "_mark_veteran"), ("_drop_stale_references", "_sense_drop_stale"), ("_drop_stale_references", "_drop_old_zhuifeng"),
+    ("_drop_stale_references", "_copy_heirloom"),
+    ("_reset_player_for_new_season", "_base_step_count"), ("_reset_player_for_new_season", "_enlist_done"), ("_reset_player_for_new_season", "_season_grant"),
+):
+    del GAME_DELEGATE_CALLERS[_pair]
+# 留在原位的四對：理由改寫（計畫第三節）。查過 core/features.py：on_season_end、on_season_start 只問開著的包（active）、這幾行不看開關；season.carry 那一串也不是這個位置
+GAME_DELEGATE_CALLERS.update({
+    ("_reset_player_for_new_season", "_zhuan_past"): "換季最前面補季末論功與〈天下形勢〉，回的 past 要傳給第三行的 _zhuan_profile、中間夾一條線收尾：掛鉤沒有傳值的位置，硬開一格要多一份暫存；不接",
+    ("_reset_player_for_new_season", "_story_close_season"): "還沒收的線要在 world.save_annals 存上一季的行狀之前寫「此事未了」進傳，夾在 _zhuan_past 與 _zhuan_profile 中間（同上）；on_season_end 在 save_annals 之後、又只問開著的包",
+    ("_reset_player_for_new_season", "_zhuan_profile"): "換季存行狀（save_annals 的第四個引數）時的身家，讀第一行的 past（同上）",
+    ("_reset_player_for_new_season", "_tutorial_intro"): "開場那一則江湖紀錄（_write）的引數：是引數不是一段，沒有格可接",
+})
+
 
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py
     import io

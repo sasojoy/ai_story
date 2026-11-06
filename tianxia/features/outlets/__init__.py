@@ -12,7 +12,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, Shop, Verb
+from tianxia.core.features import Feature, Outcome, SeamHook, Shop, Verb
 
 
 class OutletsFeature(Feature):
@@ -121,6 +121,19 @@ class OutletsFeature(Feature):
                 *(silver_verb(what) for what in ("silver_donate", "mentor", "furnace", "buy_legend")),
             )
         return self._verbs
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """season.carry 的 outlets 那一格（順序在 SEAM_ORDER；不看開關，同出陣的 sortie_day）。"""
+        if self._seams is None:
+            self._seams = (SeamHook("season.carry", "outlets", _carry_season),)
+        return self._seams
+
+
+def _carry_season(ctx, old, fresh) -> None:
+    fresh.player.donate_day, fresh.player.donated_today = old.player.donate_day, old.player.donated_today  # 換季不能多捐一輪
 
 
 FEATURE = OutletsFeature()

@@ -12,7 +12,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import BusHook, DefectHook, Feature, Outcome, StepHook, Verb, WorldHook
+from tianxia.core.features import BusHook, DefectHook, Feature, Outcome, SeamHook, StepHook, Verb, WorldHook
 
 from . import wanted as _wanted_card  # noqa: F401  通緝登記進玩家卡的動作表（core/cards.py 的 ACTIONS）；載入這一包就登記（原本 engine.py 頂端 import 它；scripts/test_for.py 認這個寫法）
 
@@ -123,6 +123,22 @@ class BountiesFeature(Feature):
 
             self._defection = (DefectHook("stranded", "bounties", lambda s, c, side: bounty_base.drop_stranded(s, c, side)),)
         return self._defection
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """補算與換季的三格（順序在 SEAM_ORDER；不問 enabled：on_sync、on_own_turn 問的不是這個位置）：sync 退押金與作廢（actions.deliver）、本人這一輪暫停那一道之後的系統通緝（actions.post_auto）、
+        清失效參照收懸賞榜（actions.drop_stale）。"""
+        if self._seams is None:
+            from . import actions  # noqa: PLC0415
+
+            self._seams = (
+                SeamHook("sync.deliver", "bounties", lambda ctx: actions.deliver(ctx)),
+                SeamHook("own_turn", "bounties", lambda ctx: actions.post_auto(ctx)),
+                SeamHook("stale.mid", "bounties", lambda ctx: actions.drop_stale(ctx)),
+            )
+        return self._seams
 
 
 FEATURE = BountiesFeature()

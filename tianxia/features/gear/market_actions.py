@@ -62,3 +62,10 @@ def enter(ctx: Game) -> list[str]:
     p.picking_market, p.shop_clue = True, ""  # 打開馬市（見 market_options），不花體力
     ctx._shop_say("enter")  # 店面上馬販那一句（1.4）
     return [mounts.ENTERED]
+
+
+def close_gone(ctx: Game) -> None:
+    """sync.close、stale.mid 的 gear 那一格（core_seams，全部拆包第 55 批；原位兩處寫的是同一句）：坐騎關了、人不在馬市了（內容改版、管理者挪人）：
+    收起馬市（裝備四欄 5.5），馬販那一句一併清掉。"""
+    if ctx.state.player.picking_market and not mounts.market_here(ctx.state, ctx.content):
+        mounts.close_market(ctx.state.player)

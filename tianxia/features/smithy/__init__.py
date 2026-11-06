@@ -17,7 +17,7 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, Verb
+from tianxia.core.features import Feature, Outcome, SeamHook, Verb
 
 
 class SmithyFeature(Feature):
@@ -70,6 +70,20 @@ class SmithyFeature(Feature):
         from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）
 
         return routes.router(shell)
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """補算與換季的兩格（順序在 SEAM_ORDER；不問 enabled）：sync 收店（shelf_actions.sync_close）、清失效參照收店（shelf_actions.drop_stale）。"""
+        if self._seams is None:
+            from . import shelf_actions  # noqa: PLC0415
+
+            self._seams = (
+                SeamHook("sync.close", "smithy", lambda ctx: shelf_actions.sync_close(ctx)),
+                SeamHook("stale.mid", "smithy", lambda ctx: shelf_actions.drop_stale(ctx)),
+            )
+        return self._seams
 
 
 FEATURE = SmithyFeature()

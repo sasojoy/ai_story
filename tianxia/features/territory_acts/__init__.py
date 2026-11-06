@@ -13,7 +13,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature
+from tianxia.core.features import Feature, SeamHook
 
 
 class TerritoryActsFeature(Feature):
@@ -42,6 +42,31 @@ class TerritoryActsFeature(Feature):
         from . import xingshi  # noqa: PLC0415
 
         xingshi.check_lines(content, need)
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """補算與換季的五格（順序在 SEAM_ORDER；不問 enabled：22:00 換天不是世界層的 day 格）：sync、advance、排程那一下換天（day_actions.conquest_tick；
+        sync 的回傳丟掉、advance 的存檔留給它自己那一下一起存）；sync、advance 補翻地的分紅與守城功（day_actions.deliver_conquest）。"""
+        if self._seams is None:
+            from . import day_actions  # noqa: PLC0415
+
+            self._seams = (
+                SeamHook("sync.deliver", "conquest", _turn_in_sync),
+                SeamHook("sync.deliver", "conquest.deliver", lambda ctx: day_actions.deliver_conquest(ctx)),
+                SeamHook("advance.turn", "conquest", lambda ctx: day_actions.conquest_tick(ctx, False)),
+                SeamHook("advance.turn", "conquest.deliver", lambda ctx: day_actions.deliver_conquest(ctx)),
+                SeamHook("tick", "conquest", lambda ctx: day_actions.conquest_tick(ctx, True)),
+            )
+        return self._seams
+
+
+def _turn_in_sync(ctx) -> None:
+    """sync 那一下換天（第一個看到新的一天的人觸發）：回的那幾句不進回話（照原位不接）。"""
+    from . import day_actions  # noqa: PLC0415
+
+    day_actions.conquest_tick(ctx, True)
 
 
 FEATURE = TerritoryActsFeature()

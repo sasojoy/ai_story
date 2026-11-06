@@ -17,7 +17,7 @@ sync 的補送、閉關中與路上的入口、店面那一頁、戰力快照抄
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, Shop, Verb, WorldHook
+from tianxia.core.features import Feature, Outcome, SeamHook, Shop, Verb, WorldHook
 
 
 class BoutFeature(Feature):
@@ -117,6 +117,17 @@ class BoutFeature(Feature):
 
             self._world = (WorldHook("close", "arena", lambda *args: arena_rules.world_close(*args)),)
         return self._world
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """sync.deliver 的 arena 那一格（順序在 SEAM_ORDER；不問 enabled）：擂台被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢。"""
+        if self._seams is None:
+            from . import arena_actions  # noqa: PLC0415
+
+            self._seams = (SeamHook("sync.deliver", "arena", lambda ctx: arena_actions.deliver_arena(ctx)),)
+        return self._seams
 
 
 FEATURE = BoutFeature()

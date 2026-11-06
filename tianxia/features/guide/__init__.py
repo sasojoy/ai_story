@@ -13,7 +13,7 @@ newbie_drifter）與 /api/prologue，選單上的那幾顆是別人的（act:res
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, StepHook
+from tianxia.core.features import DefectHook, Feature, SeamHook, StepHook
 
 
 class GuideFeature(Feature):
@@ -61,6 +61,23 @@ class GuideFeature(Feature):
             self._steps = (StepHook("newbie", lambda ctx, status, orders: actions.newbie_step_items(ctx, status), ref="newbie",
                                     place=lambda ctx, ref: actions.newbie_step_place(ctx, ref)),)
         return self._steps
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """補算與換季的四格（順序在 SEAM_ORDER；不問 enabled）：sync 引薦人的結語（actions.deliver_enlist）、碰到才說（經 ctx._check_hints：test_hints 換掉 Game 上的名字才打得到）；
+        清失效參照最前面蓋老手（actions.mark_veteran：要在換季之前，換季會把陣營清掉）；換季照帶（actions.carry_season）。"""
+        if self._seams is None:
+            from . import actions  # noqa: PLC0415
+
+            self._seams = (
+                SeamHook("sync.deliver", "enlist", lambda ctx: actions.deliver_enlist(ctx)),
+                SeamHook("sync.deliver", "hints", lambda ctx: ctx._check_hints()),
+                SeamHook("stale.first", "guide", lambda ctx: actions.mark_veteran(ctx)),
+                SeamHook("season.carry", "guide", lambda ctx, old, fresh: actions.carry_season(ctx, old, fresh)),
+            )
+        return self._seams
 
 
 FEATURE = GuideFeature()

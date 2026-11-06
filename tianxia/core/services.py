@@ -382,7 +382,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._arrivals()`（補算已經到了的站，一站一站抵達；sync、advance 叫，`stamina_plays` 包測試、`test_seats` 直接叫；包內在別人那份 Game 上也叫 `other._arrivals()`）
 - `ctx._arrive(loc_id)`（抵達一站；事件 `arrive` 的發布點，核心契約測試直接叫它鎖事件接法）、`ctx._journey_line()`（`/api/main` 的 `journey` 那一句）
 - `ctx._join(inv, other)`（答應結伴同行；玩家互動包 `answer_invite` 叫）、`ctx.join_refusal(leader)`（答應跟某人結伴，不行的原因；假人回結伴邀請〔`bots.answer_call`〕先問它）、
-  `ctx._party_expires()`（sync 叫：答應了、帶頭的人過了 `party_wait_seconds` 沒動身就散）、`ctx.party_view()`（殼的 `/api/main` 的 `party` 鍵）
+  `ctx.party_view()`（殼的 `/api/main` 的 `party` 鍵）
 - 移動包要叫、上面還沒列的核心與別包的 Game 方法：`ctx._ambush_check(came_from, stop, when)`（主人體力玩法包，Game 留委派；`_arrivals` 迴圈中途每換一段查一次伏兵）、
   `ctx._hide(msg)`、`ctx._guide(...)`、`ctx._note_action(action)`、`ctx.location_text()`、`ctx._flavor_sink()`、`ctx._kin(state)`、`ctx._load_kin(name)`、`ctx._save_kin(game)`、
   `ctx._peer(name)`、`ctx._tell_sender(inv, other, why=None)`、`ctx._write(...)`、`ctx.touched`、`ctx._real_minutes(world_seconds)`（核心：留在 Game，核心的 `place_minutes` 與輿圖包也叫）

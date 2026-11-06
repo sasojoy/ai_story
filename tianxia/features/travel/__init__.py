@@ -15,7 +15,7 @@ README.md 寫這一包做什麼、導覽與設計稿。
 from __future__ import annotations
 
 from tianxia import atlas  # 共用規則層（輿圖：路程、走法、折返的路；第 50 批收進）
-from tianxia.core.features import Feature, Outcome, Verb
+from tianxia.core.features import Feature, Outcome, SeamHook, Verb
 from tianxia.core.services import ROAD_TASKS
 
 
@@ -72,6 +72,23 @@ class TravelFeature(Feature):
                 Verb("part", run=lambda ctx, prepared: party.part_ways(ctx), title=lambda ctx: "分道揚鑣"),
             )
         return self._verbs
+
+    # core_seams（全部拆包第 55 批「補算與換季收接縫」）
+    _seams: tuple[SeamHook, ...] | None = None
+
+    def seams(self) -> tuple[SeamHook, ...]:
+        """補算與換季的四格（順序在 SEAM_ORDER；不問 enabled）：sync、advance 補算抵達（經 ctx._arrivals：test_seats 換掉 Game 上的名字才打得到）、
+        sync 最後散掉沒動身的結伴（party.party_expires）、清失效參照的路（road_actions.drop_stale）。"""
+        if self._seams is None:
+            from . import party, road_actions  # noqa: PLC0415
+
+            self._seams = (
+                SeamHook("sync.close", "arrive", lambda ctx: ctx._arrivals()),
+                SeamHook("advance.arrive", "arrive", lambda ctx: ctx._arrivals()),
+                SeamHook("sync.deliver", "party", lambda ctx: party.party_expires(ctx)),
+                SeamHook("stale.road", "travel", lambda ctx, lost_place: road_actions.drop_stale(ctx, lost_place)),
+            )
+        return self._seams
 
 
 FEATURE = TravelFeature()
