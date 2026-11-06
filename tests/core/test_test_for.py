@@ -1277,4 +1277,5 @@ def test_a_game_api_change_listed_first_keeps_the_content_and_web_routes():
     hunks_of = _added(rel, GAME_API, 2)
     names = {p.name for p in test_for.pick([rel, "content/events.json"], base="HEAD", hunks_of=hunks_of).files}
     assert {"test_content.py", "test_real_content.py", "test_content_packs.py"} <= names
-    assert "test_server.py" in {p.name for p in test_for.pick([rel, "web/app.js"], base="HEAD", hunks_of=hunks_of).files}
+    # web/icon.svg：test_server.py 沒寫到這個檔名，只有 web/ 那一條的 SERVER_TEST 挑得到（web/app.js 它有寫到，壞了也挑得到，驗不出來）
+    assert "test_server.py" in {p.name for p in test_for.pick([rel, "web/icon.svg"], base="HEAD", hunks_of=hunks_of).files}
