@@ -53,9 +53,7 @@ APP_FILES = ("main.js", "map.js", "outing.js", "mall.js", "arena_anim.js", "aren
 def app_source() -> str:
     """三個檔照載入順序接起來、包回以前那一個 IIFE（「整支 app.js」）：切函式、wholeApp、掃字都照這一份。換行統一成 \n。"""
     parts = [(WEB / name).read_text(encoding="utf-8").replace("\r\n", "\n") for name in APP_FILES]
-    # 介面重整（2026-11-05，分支上給 Joy 試的那一版）：舊的網頁測試照舊測原本的版面（TIANXIA_UI_CLASSIC）；新版面的測試在
-    # tests/web/test_revamp_web.py，傳 S.uiV2 打開。Joy 說好、要合之前，舊測試一條一條搬到新版面、拿掉這一行
-    return "(() => {\nvar TIANXIA_UI_CLASSIC = true;\n" + "".join(parts) + "})();\n"
+    return "(() => {\n" + "".join(parts) + "})();\n"
 
 
 def _combined() -> Path:

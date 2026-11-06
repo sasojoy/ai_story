@@ -435,12 +435,13 @@ def test_the_scene_and_the_fold_draw_it_as_a_button_that_opens_the_card(pair):
     content, world = pair
     _invite(content, world)
     m = _main(content, world, "乙")
-    out = run(m, "return { scene: H.socialHtml(m), peers: H.callPeers(m), bar: H.actionBar(m) };")
+    out = run(m, "H.S.hereAll = true; return { scene: H.socialHtml(m), peers: H.callPeers(m), bar: H.pageJianghu() };")
     yes_id = next(o["id"] for c in m["calls"] for o in c["options"] if o.get("peer"))
     assert f'<button class="btn small" data-act="peer-answer" data-name="甲">{social.PICK_TO_ANSWER}</button>' in out["scene"]
     assert out["peers"] == {yes_id: "甲"}
-    # 「此地還能做」裡同一顆（選單上的全名）也畫成打開玩家卡，按得下去
+    # 此地可為「全部」那一串裡同一顆（選單上的全名）也畫成打開玩家卡，按得下去；那一排的圓章也是（介面重整）
     assert '<button class="btn" data-act="peer-answer" data-name="甲"><span>答應甲的論武（在對方的玩家卡上挑你要出的）</span></button>' in out["bar"]
+    assert '<button class="here-seal" data-act="peer-answer" data-name="甲">' in out["bar"].split('class="here-row"')[1]
     assert f'data-id="{yes_id}"' not in out["bar"]
 
 
@@ -900,8 +901,7 @@ def test_on_your_battle_turn_the_people_here_come_after_the_three_moves(pair):
     m = _main(content, world, "乙")
     m["here"] = [{"name": f"路人{i}", "side": "散人"} for i in range(8)]
     plain = run(m, "return H.pageJianghu();")
-    scene = plain.index('<section class="card scene">')
-    assert scene < plain.index('<div class="here">') < plain.index("</section>", scene)  # 平常：在場景卡裡
+    assert '<div class="here">' not in plain and "路人7" in plain.split('class="people-row"')[1]  # 平常：此地人物那一排（介面重整）
     moves = [{"id": f"battle:act:guan_{k}", "label": k, "enabled": True, "wait": "", "confirm": "", "confirm_yes": ""}
              for k in ("strong", "hold", "raid")]
     turn = run({**m, "options": moves}, "return H.pageJianghu();")

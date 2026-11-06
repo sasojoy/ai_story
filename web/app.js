@@ -1404,10 +1404,10 @@
     //     （有畫時疊在畫上；沒有畫時是場景卡第一段）都不是描述，不收
     { key: "desc", run: () => {
       if (!fitDuelRow()) return false;
-      const scene = document.querySelector("#page > .card.scene:not(.road)");
+      const scene = sceneBody();
       if (!scene || scene.querySelector(":scope > hr") || !idleMenu(S.main) || S.ownOpen === fitOwnKey()) return false;
       const paras = [...scene.querySelectorAll(":scope > p:not([class])")];
-      if (!scene.querySelector(":scope > .scene-art")) paras.shift(); // 沒有畫：第一段是「【地名】危險 ★★」那一條，不是描述
+      if (!document.querySelector("#page > .card.scene:not(.road)").querySelector(":scope > .scene-art")) paras.shift(); // 沒有畫：第一段是「【地名】危險 ★★」那一條，不是描述
       const any = fitClip(paras);
       if (any) scene.classList.add("fit-own"); // 跟第 7 步同一個記號（ownOpen、fitReset 照樣拿掉）
       return any;
@@ -1415,7 +1415,7 @@
     // 7. 決戰集結、只能觀戰時，場景卡在戰場底下接著所在地（分隔線之後）：閒著時那是地點的描述，每段收成一行、點了攤開（S.ownOpen）。
     //    有事件、有所感、對話時分隔線之後是那件事本身（joy 的字），不收
     { key: "own", run: () => {
-      const scene = document.querySelector("#page > .card.scene:not(.road)");
+      const scene = sceneBody();
       if (!scene || !scene.querySelector(":scope > hr") || !idleMenu(S.main) || S.ownOpen === fitOwnKey()) return false;
       scene.classList.add("fit-own");
       return fitClip(scene.querySelectorAll(":scope > hr ~ p"));
@@ -1425,7 +1425,7 @@
     //    沒有鈕（人不在那個大區、加入過了、觀戰）時從名字底下算起——別的大區集結時那一句「…這場決戰在南陽，人要到了那裡…」兩行高，
     //    以前沒有鈕就從來不收（走查）。數字收不進一行的那一句不收（fitClip）
     { key: "muster", run: () => {
-      const scene = document.querySelector("#page > .card.scene:not(.road)");
+      const scene = sceneBody();
       if (!scene || !scene.querySelector(":scope > hr") || S.ownOpen === fitOwnKey()) return false;
       if (scene.querySelector(":scope > .battle-shut")) return false; // 只能觀戰的人自己攤開的開打中的戰場（FB-120）：不收
       const head = scene.querySelector(":scope > .muster-head") || scene.querySelector(":scope > p");
@@ -1599,10 +1599,15 @@
     el.classList.toggle("open", open);
     el.setAttribute("aria-expanded", String(open));
   }
+  // 場景卡裡放場景文字的那一層：介面重整的場景卡把文字包在 .rv-scene 裡（上面疊「剛剛」、底下結伴與邀請），舊的場景卡就是卡本身
+  function sceneBody() {
+    const card = document.querySelector("#page > .card.scene:not(.road)");
+    return card && (card.querySelector(":scope > .rv-scene") || card);
+  }
   // 決戰時收成一行的那幾段（所在地、集結那一句）：點了攤開（原地，不重畫）；記住這一處的這一場攤開過（fitOwnKey），重畫時不再收
   function ownOpen() {
     S.ownOpen = fitOwnKey();
-    const scene = document.querySelector("#page > .card.scene:not(.road)");
+    const scene = sceneBody();
     if (!scene) return;
     scene.classList.remove("fit-own", "fit-muster");
     fitUnclip(scene);
@@ -2737,7 +2742,7 @@
         : tab === "gear" ? `${gearBlock}${keeps}`
         : tab === "mates" ? rosterBlock
         : `${selfStatsHtml(s)}${heroMoreHtml(s)}${fold("rules", "修練的規矩", x.rules)}`;
-      return `${heroPanel(x, s)}${tabs}<div class="msg" id="mx-msg">${S.message}</div>${page}${meltGo}${meltOn ? "" : drawerHtml}`;
+      return `${proGuide()}${heroPanel(x, s)}${tabs}<div class="msg" id="mx-msg">${S.message}</div>${page}${meltGo}${meltOn ? "" : drawerHtml}`;
     }
     return `
       ${proGuide()}
@@ -2762,7 +2767,7 @@
   function heroMoreHtml(s) {
     const team = s.team.map((m) => `🧍 ${esc(m.name)} 第${m.level}級 氣血 ${m.hp}/${m.hp_max}`).join("　");
     return `<section class="self-sec hero-more" aria-label="經驗與成長"><div class="self-hd"><h3>經驗與成長</h3><small class="muted">第 ${s.level} 級</small></div>
-      ${expHtml(s)}${s.renown ? `<div class="hm-renown">${renownStripHtml(s.renown)}</div>` : ""}
+      ${expHtml(s)}${s.renown ? `<div class="hm-renown">${renownStripHtml(s.renown)}</div>` : rangerHtml(s.ranger)}
       <div class="more-stats">${s.renown ? "" : `${s.minor.map(([k, v]) => `${esc(k)} ${v}`).join("　")}　｜　`}${s.attrs.map(([k, v]) => `${esc(k)} ${v}`).join("　")}
         ${s.stat_points ? `<div class="pts-label"><b class="pts">可配 ${s.stat_points} 點</b></div><div class="row alloc">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" data-glow="allocate" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>${statUsesHtml(s)}` : ""}
         ${s.growth ? growthHtml(s.growth) : ""}
@@ -5720,6 +5725,7 @@
         S.persuading = false;
         S.wheelSel = null; // 收起展開的移動
         S.sortieAnswer = null; // 出陣約戰應戰那張卡也收起
+        S.hereAll = false; S.dutyOpen = false; S.fig = null; // 介面重整：從「全部」、要事清單、點人物那一層按下去的，做成了就收起那一層（被擋下來時留著）
         applyMain(r.main);
         if (id.startsWith("bounty:give:")) boardHanded(id, shopBefore); // 店面的懸賞榜：交差了蓋朱印（第四節）
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -6373,7 +6379,10 @@
         case "renown-toggle": S.renownOpen = !S.renownOpen; S.renownDot = null; renderTop(); break; // 2C：展開時「名聲」那一行
         case "renown-dot": S.renownDot = S.renownDot === el.dataset.dot ? null : el.dataset.dot; renderTop(); break; // 點圓點看那一段
         case "renown-sanren": S.renownSanren = !S.renownSanren; renderTop(); break; // 散人另有的好處
-        case "renown-open": S.showMore = true; S.renownOpen = true; S.renownDot = null; renderTop(); window.scrollTo(0, 0); break; // 6B：金色的「名號傳開」
+        case "renown-open": // 6B：金色的「名號傳開」；介面重整之後名聲那一條在俠客頁的「屬性」（狀態列不再攤開）
+          S.renownOpen = true; S.renownDot = null;
+          if ((typeof uiV2 === "function" && uiV2()) && !pro() && !onb()) { S.heroTab = "attrs"; await goTab("practice"); window.scrollTo(0, 0); break; }
+          S.showMore = true; renderTop(); window.scrollTo(0, 0); break;
         case "renown-peer": peerRenownToggle(el); break; // 3B：玩家卡的稱號小籤，原地攤開說明（不重畫整張卡）
         case "fronts-help": frontsTap(); break; // 點戰況圖卡：底下攤開／收起這一季在打什麼、亂局、怎麼推（explain-2）
         case "checkin": await doMain("checkin", el.dataset.attr ? { attribute: el.dataset.attr } : {}); break; // 「簽到」小標攤開的領取鈕（四階的日子帶屬性）
@@ -7347,8 +7356,6 @@
       const open = S.foldOpen || (S.foldOpen = new Set());
       if (box.open) open.add(box.dataset.fold); else open.delete(box.dataset.fold);
     }
-    // 管理頁的一塊攤開、收起（admin.js）：這台裝置記著；「形象與招式訂單」第一次攤開時抓訂單
-    else if (box instanceof Element && box.matches("details.ad-sec")) adminSecToggled(box);
     // 見聞「形勢」攤開、收起哪一篇（xingshiHtml）：記篇次，重畫照樣（最新那一篇收起來也記得）
     else if (box instanceof Element && box.matches("details.xs-essay")) {
       (S.xingshiOpen || (S.xingshiOpen = new Map())).set(Number(box.dataset.n), box.open);

@@ -400,6 +400,8 @@ powershell -ExecutionPolicy Bypass -File C:\Users\User\.claude\tianxia-wake.ps1 
 
 **封存檔**（2026-10-31，審查 S-12）：開下一季時，上上季的傳聞與決戰回合紀錄會搬到資料庫旁邊的 `tianxia-archive.sqlite`（跟著 `TIANXIA_DB` 換名字），遊戲本身不再讀它、是備用的。備份腳本只備份主檔，要留著封存的資料就把這個檔一起複製走（換季之後做一次就好，它只在換季時變）。
 
+**往來紀錄**（2026-11-06，介面重整）：玩家跟大勢人物說過的話記在資料庫旁邊的 `tianxia-talk.sqlite`，兩季以前的搬到 `tianxia-talk-archive.sqlite`（都跟著 `TIANXIA_DB` 換名字）。備份腳本只備份主檔，這兩個檔跟封存檔一樣自己複製走（伺服器開著也可以複製，最多少掉剛寫的那幾句）。丟了只是看不到舊的往來紀錄，遊戲照玩。
+
 **手動備份**：換程式、收季、出事之前做。手動備份永遠留著，不會被刪。
 
 ```powershell

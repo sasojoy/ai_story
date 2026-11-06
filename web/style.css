@@ -3865,18 +3865,27 @@ svg.fig .blade.bow { stroke-width: 3; }
 .here-row, .people-row { margin: 0 2px 12px; }
 .hr-head { display: flex; justify-content: space-between; align-items: baseline; margin: 0 2px 8px; font: 700 14px var(--kai); color: var(--ink-2); letter-spacing: 2px; }
 .hr-head .linkish { font: 13px var(--sans); letter-spacing: 0; }
-.hr-seals { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
-.here-seal { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: 0; padding: 0; font: inherit; color: var(--ink); cursor: pointer; }
+/* 一排橫滑（Joy 11/6）：右邊淡出一截，看得出還有；捲軸藏起來 */
+.hr-seals, .pr-chips { display: flex; flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: none;
+  margin: 0 -2px; padding: 4px 2px 6px; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+.hr-seals::-webkit-scrollbar, .pr-chips::-webkit-scrollbar { display: none; }
+.hr-seals { gap: 10px; }
+.hr-seals > *, .pr-chips > * { flex: none; scroll-snap-align: start; }
+.here-seal { width: 62px; display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: 0; padding: 0; font: inherit; color: var(--ink); cursor: pointer; }
 .hs-tile { position: relative; width: 56px; height: 56px; border-radius: 50%; overflow: visible; display: grid; place-items: center;
   background: radial-gradient(circle at 50% 45%, #fbf6ea 55%, #e8dcc3); box-shadow: inset 0 0 0 1.5px var(--ink), 0 2px 6px rgba(40, 25, 10, 0.18); }
 .hs-tile img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; mix-blend-mode: multiply; }
 .hs-tile i { font: 700 22px var(--kai); font-style: normal; color: var(--ink); }
+/* 沒有圖的（巡哨、學武學、招募……）：墨團底、金字，跟行動列四格同一路（Joy 11/6「沒圖片會全白」） */
+.hs-tile.ink { background: radial-gradient(circle at 48% 42%, #4a4036 0 38%, #2b2620 62%, #1e1a16); box-shadow: 0 0 0 1.5px #1e1a16, 0 2px 6px rgba(40, 25, 10, 0.25); }
+.hs-tile.ink::before { content: ""; position: absolute; inset: 4px; border-radius: 50%; border: 1px solid rgba(231, 201, 138, 0.35); }
+.hs-tile.ink i { color: #e7c98a; font-size: 24px; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4); }
 .hs-n { position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--accent); color: #fff; font: 700 11px/18px var(--sans); text-align: center; }
 .hs-name { font: 13px var(--kai); white-space: nowrap; }
 .here-seal.off { opacity: 0.45; }
 .here-seal:active .hs-tile { transform: scale(0.94); }
 /* 此地人物：一籤一個頭像、名字、身分 */
-.pr-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.pr-chips { gap: 8px; }
 .person { display: flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px; border-radius: 26px; border: 1px solid var(--line); background: var(--card); font: inherit; color: inherit; cursor: pointer; text-align: left; box-shadow: var(--shadow); }
 .person.fig { border-color: color-mix(in srgb, var(--rn-xia) 45%, var(--line)); }
 .person.peer { border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
@@ -3951,7 +3960,7 @@ svg.fig .blade.bow { stroke-width: 3; }
 .tl-empty { text-align: center; margin-top: 40px; }
 .tl-more { align-self: center; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .hs-tile { background: radial-gradient(circle at 50% 45%, #efe6d3 55%, #cdbd9d); }
+  :root:not([data-theme="light"]) .hs-tile:not(.ink) { background: radial-gradient(circle at 50% 45%, #efe6d3 55%, #cdbd9d); }
 }
 .who-col { flex: 1; min-width: 0; }
 .card.scene.rv.has-art > .scene-art figcaption { padding-bottom: 30px; }
