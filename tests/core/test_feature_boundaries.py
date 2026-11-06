@@ -2367,7 +2367,7 @@ GAME_DELEGATE_CALLERS.update({
 for _pair in (("conquest", "seal_acts"), ("figures", "seal_acts"), ("figure_life", "seal_acts"), ("plans", "seal_acts")):
     del SHARED_PENDING[_pair]
 
-# merge_back（主幹合回 develop 第 1 段，2026-11-06）：develop 新加的 9 個 Game 方法先修到能跑。暫時的三筆寫明第 2 段哪一塊收，最後的閘門要確認一條都不剩。
+# merge_back（主幹合回 develop 第 1 段，2026-11-06）：develop 新加的 9 個 Game 方法先修到能跑。暫時的三筆第 2 段 A、D 收完了（pick_growth、figures_here_view），一條不剩。
 # _allocate_v2 這一段就進了修練包（allocate_stat 的本體在包裡，只有它叫）；pick_growth 合回 2A 搬了本體（Game 留三步，一行私有委派 _apply_growth）；_season_prep、season_prep_view、_attr_rows、place_state_view 留核心（PM 認定第 6、7 條）；
 # 新手引導碰到才說的 h_chuangong 問修練包：一行委派 _chuangong_ready（前例 _recruit_target）。
 GAME_DELEGATES |= {"_chuangong_ready", "_apply_growth"}  # _apply_growth：挑成長配比的本體（合回 2A，修練包 actions.pick_growth；前例 _arena_fight_problem）

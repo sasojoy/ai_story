@@ -33,7 +33,7 @@
 
 ## 過渡（手冊 3.11）
 
-- 包 → 還沒搬的舊模組：`epiphany.py` 1 行（`annals`；`story_base` 是共用規則層）、`sensing.py` 1 行（`seal_acts`：頒詔）。
+- 包 → 還沒搬的舊模組：第 51 批合完重印 **0 處**。`epiphany.py` 讀的 `annals` 第 29 批之二改 import 核心（`story_base` 是共用規則層）；`sensing.py` 讀的 `seal_acts`（頒詔）留原名收進共用規則層（第 51 批），改註。
 - 舊模組 → 包：engine 3 行（`features.sense.actions`、別名 `sensing`、`epiphany`）、四個別名檔；還沒搬的 `fusion`、`mapdata`、`bot`、`bot_policy`、`bot_runner`、server（`insight_llm`、`epiphany`）、腳本。
 - 服務清單（`tianxia/core/services.py`）這一包加的：一、共用 `outing_watch`、`PREPARING_TEXT`、`PREPARING_REFUSAL`；二、查詢 `_sense_here`（從三、過渡 explore 那一行搬來）、`_sense_missed`、`_sense_prologue_choice`（這一包回答別的包），`_rare_boost`（主人 explore）。包裡叫回 Game 的另有 `_outcome`、`_preparing`、`_log`、`_draft`、`_check_hints`、`_save_season`、`_quick_client`、`_guide`、`_note_action`（都已在清單）。
 
