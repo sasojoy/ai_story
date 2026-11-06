@@ -1,7 +1,9 @@
 """修練的動作表（功能包 tianxia/features/cultivation/；原本寫在 server.py 的 MAIN_ACTIONS、MENXIA_ACTIONS，全部拆包第 68 批）：殼照 FEATURES 接（main_actions、menxia_actions 掛鉤）。
 這個檔只在殼建動作表時才 import（__init__ 的掛鉤裡面才 from . import routes）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
 破境卡那一句（/api/do/ascend_line）是鎖外三段式，留在殼。_int_of、_id_list、KINDS 留在殼（裝備包、殼也用）。"""
-from . import actions
+from tianxia.core.features import Outlock
+
+from . import actions, ascend
 
 
 def main_actions(shell) -> dict:
@@ -30,3 +32,27 @@ def menxia_actions(shell) -> dict:
         # 傳功門下（Config.chuangong）：名冊上點的那個人（person）練一項（what：neigong／wugong／str／agi／con）；引擎照 lessons 驗
         "chuangong": lambda g, b: actions.chuangong(g, str(b.get("person") or ""), str(b.get("what") or "")),
     }
+
+
+# ── 鎖外工作（原本寫在 server.py，全部拆包第 69 批）：殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）；模型呼叫絕不進鎖 ──
+
+
+def outlock(shell) -> Outlock:
+    return Outlock(ops={
+        "ascend_line": lambda g, b: ascend_line(shell, g),  # 破境卡那一句：模型在行動鎖外寫（見 ascend_line）
+    })
+
+
+def ascend_line(shell, game) -> list[str]:
+    """破境卡那一句（tianxia/ascend.py），三段同 create_intent：A Game.ascend_request（只讀）→ B 鎖外 ascend.read
+    （預算同隨口應對）→ C Game.ascend_line 存回卡上（卡換了就不存）。叫不動照套句。"""
+    started, request = shell._open_request(game, game.ascend_request)
+    if request is None:
+        return []
+    total = game.content.config.free_text_budget_seconds
+
+    def writing():
+        return ascend.read(shell.within_budget(game.client, total - (shell._monotonic() - started)), request)
+
+    value = shell.model_call(game, writing, fallback=ascend.fallback(request), left=total - (shell._monotonic() - started), busy=shell.BUSY_FREE_TEXT)
+    return shell.act(game, lambda g: g.ascend_line(request, value))

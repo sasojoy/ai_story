@@ -80,10 +80,12 @@ from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_
 from tianxia.core import features as features_core  # 功能包：殼照 FEATURES 掛管理者工具與路由（開發規範手冊 3.1）
 from tianxia.core import omen_base  # 門下頁的伏筆物品：核心的查詢服務（全部拆包第 40 批，原本經舊名 foreshadow 讀軍情包）
 from tianxia.features.map import views as map_views  # 輿圖的 /api/map 資料與底圖快取：全部拆包第 49 批搬進輿圖包（殼留同一個物件的別名）  # 殼留薄包裝：`map_view` 要 `md`（第 49 批 PM 認定第 10 條）
-from tianxia.features.feast import rules as feasts  # 宴客自己寫的敬酒詞：鎖外評分（三段式還在殼裡，過渡）
 from tianxia.features.notify import routes as notify_routes  # 手機通知：全部拆包第 53 批搬進手機通知包；殼留 state 與 4 個一行薄包裝（main 印一行、same_behavior 與測試叫）
-from tianxia.features.bout import routes as bout_routes  # 鎖外工作（全部拆包第 69 批）：本體在各包 routes.py，殼留一行包裝給測試與 same_behavior 叫（同 tale_routes）
+from tianxia.features.battle import routes as battle_routes  # 鎖外工作（全部拆包第 69 批）：本體在各包 routes.py，殼留一行包裝給測試與 same_behavior 叫（同 tale_routes）
+from tianxia.features.bout import routes as bout_routes
 from tianxia.features.companions import routes as companions_routes
+from tianxia.features.craft import routes as craft_routes
+from tianxia.features.feast import routes as feast_routes
 from tianxia.features.figure_acts import routes as figure_acts_routes
 from tianxia.features.tavern import routes as tavern_routes
 from tianxia.features.territory_acts import routes as territory_acts_routes
@@ -1302,32 +1304,7 @@ def answer_event(game: Game, text: str) -> list[str] | None:
 
 
 def battle_text(game: Game, text: str) -> list[str]:
-    """決戰的放手一搏，跟 answer_event 一樣分三段（試玩回饋 2026-10-08：以前成功率在行動鎖裡評，最多等 in_lock_model_timeout 秒，
-    全服所有人的動作都跟著等）：
-      A（鎖內、很快）同步時間，問引擎這句話現在送不送得出去（Game.battle_text_request）；不行就回那一句、模型一次都不叫；
-      B（鎖外、很慢）請模型評成功率（model_call：佇列開著要排隊），預算是 Config.free_text_budget_seconds 扣掉 A 段與排隊花掉的，
-        模型失敗、太慢一律保底值；同一個人上一句還在評、或排太久沒輪到，照隨口應對擋下來、什麼都不送；
-      C（鎖內、很快）Game.submit_battle_custom_action 重驗還送得出去，才帶著評好的分送出（可能湊滿這一回合而結算）。"""
-    started, request = _open_request(game, lambda: game.battle_text_request(text))
-    if isinstance(request, list):
-        return request
-    act_ = CONTENT.battles[request.battle_id].acts[request.act_index]
-    total = game.content.config.free_text_budget_seconds
-
-    fallback = battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE
-
-    def score():
-        client = within_budget(game.client, total - (_monotonic() - started))
-        if client is None and game.client is not None:
-            return fallback  # 等鎖、排隊把整份預算用完了：不叫模型，保底值、固定句
-        # 只評成功率（Joy 2026-10-13：二十人同一回合各搏一次也要每一個都評到）；劇情等回合結算後 narrate_battle 一整批寫
-        return battle_instance.score_gamble(
-            client, act_, request.faction_name, request.text, request.name, target=request.target, sex=request.sex,
-        )
-
-    left = total - (_monotonic() - started)
-    rate = model_call(game, score, fallback=fallback, left=left, busy=BUSY_FREE_TEXT, max_wait=left)
-    return act(game, lambda g: g.submit_battle_custom_action(request.text, rate))
+    return battle_routes.battle_text(sys.modules[__name__], game, text)
 
 
 # 決戰放手一搏的劇情：本體在 tianxia/features/tale/routes.py（全部拆包第 52 批）；state 留殼，包照 shell.<名字> 當下讀寫。
@@ -1411,36 +1388,11 @@ def xingshi_once(game: Game) -> bool:
 
 
 def feast_text(game: Game, text: str) -> list[str]:
-    """自己寫的敬酒詞（宴客，大勢人物擴充第三批），三段：A Game.feast_text_request（只讀）→ B 鎖外請模型評一個分數
-    （feasts.score，預算 Config.figure_life.feast_score_budget_seconds；評不到照 feasts.DEFAULT_SCORE）→ C Game.feast_toast
-    重驗同一場、同一句才記。"""
-    started, request = _open_request(game, lambda: game.feast_text_request(text))
-    if isinstance(request, list):
-        return request
-    total = game.content.config.figure_life.feast_score_budget_seconds
-
-    def ask() -> int:
-        return feasts.score(within_budget(game.client, total - (_monotonic() - started)), request)
-
-    rate = model_call(game, ask, fallback=feasts.DEFAULT_SCORE, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
-    return act(game, lambda g: g.feast_toast(request.text, rate, request))
+    return feast_routes.feast_text(sys.modules[__name__], game, text)
 
 
 def persuade_text(game: Game, errand_id: str, text: str) -> list[str]:
-    """勸降（減法季批 6，整合設計 5.9），三段同 feast_text：A Game.persuade_request（只讀：那一件還在辦、人在那裡、字是 1～20 字）→
-    B 鎖外請模型評那一句（event_llm.rate_persuasion，預算同隨口應對 free_text_budget_seconds）→ C Game.persuade 重驗同一件、同一句才
-    扣體力擲骰。模型叫不動（評不到、逾時、沒有模型）是 None：照批 4 的慣例落到最保守的結果，什麼都不發生、那一件照舊在。
-    排隊被擋丟 GameError（BUSY_FREE_TEXT、BUSY_QUEUE_TIMEOUT），不扣體力。"""
-    started, request = _open_request(game, lambda: game.persuade_request(errand_id, text))
-    if isinstance(request, list):
-        return request
-    total = game.content.config.free_text_budget_seconds
-
-    def ask() -> int | None:
-        return event_llm.rate_persuasion(within_budget(game.client, total - (_monotonic() - started)), request)
-
-    rate = model_call(game, ask, fallback=None, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
-    return act(game, lambda g: g.persuade(request, rate))
+    return companions_routes.persuade_text(sys.modules[__name__], game, errand_id, text)
 
 
 def crowd_once(game: Game) -> bool:
@@ -1452,138 +1404,11 @@ def chatter_once(game: Game) -> bool:
 
 
 def duel_text(game: Game, text: str) -> list[str]:
-    """單人頭目戰的放手一搏，三段同 battle_text：A Game.duel_text_request（只讀）→ B 鎖外請模型評成功率、寫成敗兩版劇情
-    （預算同隨口應對）→ C Game.duel_gamble 重驗同一隻、同一回合、同一句才用評好的分，對不上回「這一回合已經結算」、不重評。"""
-    started, request = _open_request(game, lambda: game.duel_text_request(text))
-    if isinstance(request, list):
-        return request
-    total = game.content.config.free_text_budget_seconds
-    fallback = battle_instance.GambleVerdict(battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE)
-    scene = duel.Scene(request.title, request.scene)
-
-    def score():
-        client = within_budget(game.client, total - (_monotonic() - started))
-        if client is None and game.client is not None:
-            return fallback, ""
-        verdict = battle_instance.assess_gamble(
-            client, scene, request.faction_name, request.text, request.name, setting=request.setting or duel.SETTING,
-            place=request.place or duel.PLACE, target=request.target, sex=request.sex,  # 擂台帶對手那一行與擂台的場合（Game.duel_text_request）
-        )
-        crowd = ""
-        if request.boss.startswith("arena:") and arena_crowd.on(game.content):  # 擂台：另問一次台下觀眾的反應（評分那一次的提示不動）
-            crowd = arena_crowd.judge_gamble(within_budget(game.client, total - (_monotonic() - started)), request.text,
-                                             request.title, request.name)
-        return verdict, crowd
-
-    verdict, crowd = model_call(game, score, fallback=(fallback, ""), left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
-    return act(game, lambda g: g.duel_gamble(request.text, verdict.rate, (verdict.win, verdict.lose), request=request, crowd=crowd))
-
-
-def create_intent(game: Game, body: dict) -> list[str]:
-    """自創武學的立意（tianxia/create.py），三段同 duel_text：A Game.create_request（只讀）→ B 鎖外 create.read 讀這一句意
-    （分數、最多兩路屬性、正邪；預算同隨口應對）→ C Game.create_intent(reading=) 整個重驗再成形。叫不動照關鍵字表讀。"""
-    text = str(body.get("text") or "")[:create.INTENT_MAX * 2]
-    started, request = _open_request(game, lambda: game.create_request(text))
-    if isinstance(request, list):
-        return request
-    total = game.content.config.free_text_budget_seconds
-
-    def reading():
-        return create.read(within_budget(game.client, total - (_monotonic() - started)), request, game.content)
-
-    value = model_call(
-        game, reading, fallback=create.fallback_read(game.content, request.text),
-        left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT,
-    )
-    return act(game, lambda g: g.create_intent(request.text, reading=value))
+    return bout_routes.duel_text(sys.modules[__name__], game, text)
 
 
 def create_reread(game: Game, body: dict) -> list[str]:
-    """重悟帖的第二個用法：重讀這句意（可以改寫），三段同 create_intent：A Game.create_reread_request → B 鎖外 create.read_or_none
-    → C Game.create_reread(reading=)。叫不動（None）就什麼都不改、不扣帖（不照關鍵字表讀）。"""
-    text = str(body.get("text") or "")[:create.INTENT_MAX * 2]
-    started, request = _open_request(game, lambda: game.create_reread_request(text))
-    if isinstance(request, list):
-        return request
-    total = game.content.config.free_text_budget_seconds
-
-    def reading():
-        return create.read_or_none(within_budget(game.client, total - (_monotonic() - started)), request)
-
-    value = model_call(game, reading, fallback=None, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
-    return act(game, lambda g: g.create_reread(request.text, value))
-
-
-def ascend_line(game: Game) -> list[str]:
-    """破境卡那一句（tianxia/ascend.py），三段同 create_intent：A Game.ascend_request（只讀）→ B 鎖外 ascend.read
-    （預算同隨口應對）→ C Game.ascend_line 存回卡上（卡換了就不存）。叫不動照套句。"""
-    started, request = _open_request(game, game.ascend_request)
-    if request is None:
-        return []
-    total = game.content.config.free_text_budget_seconds
-
-    def writing():
-        return ascend.read(within_budget(game.client, total - (_monotonic() - started)), request)
-
-    value = model_call(game, writing, fallback=ascend.fallback(request), left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
-    return act(game, lambda g: g.ascend_line(request, value))
-
-
-def tavern_ask(game: Game, text: str) -> list[str]:
-    """問酒家（酒肆，設計第八節），三段：A Game.tavern_ask_request（只讀；問到秘密的單子不叫模型）→ B 鎖外 tavern.ask_write
-    （預算 Config.tavern.ask_budget_seconds）→ C Game.tavern_ask 重驗同一間、同一句再收錢；叫不動模型退全額。"""
-    started, request = _open_request(game, lambda: game.tavern_ask_request(text))
-    if isinstance(request, list):
-        return request
-    total = game.content.config.tavern.ask_budget_seconds
-
-    def write():
-        client = within_budget(game.client, total - (_monotonic() - started))
-        return tavern.ask_write(client, request)
-
-    reply = None if request.secret else model_call(game, write, fallback=None, left=total - (_monotonic() - started),
-                                                     busy=BUSY_FREE_TEXT)
-    return act(game, lambda g: g.tavern_ask(request.question, reply, request=request))
-
-
-def outing_tale(game: Game) -> list[str]:
-    """走一趟的遊記（tianxia/outing.py），三段：A Game.outing_tale_request（只讀；收了、還沒請過才開單）→ B 鎖外 outing.tale_write
-    （預算 Config.jianfa.outing_tale_seconds）→ C Game.outing_set_tale 照同一趟才收；叫不動、不合用記成請過了，畫面用模板。"""
-    started, request = _open_request(game, game.outing_tale_request)
-    if isinstance(request, list):
-        return request
-    total = game.content.config.jianfa.outing_tale_seconds
-
-    def write():
-        client = within_budget(game.client, total - (_monotonic() - started))
-        return outing.tale_write(client, request)
-
-    text = model_call(game, write, fallback=None, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
-    return act(game, lambda g: g.outing_set_tale(text, request))
-
-
-def seal_text(game: Game, text: str) -> list[str]:
-    """奪璽單挑的放手一搏（玉璽碎片設計 5.7），三段同 duel_text：A Game.seal_text_request（只讀；判成不在場的回合不開單）→
-    B 鎖外請模型評成功率、寫成敗兩版劇情（預算同隨口應對，評不到 40）→ C Game.seal_gamble 重驗同一場、同一回合、同一邊、同一句才用，
-    回合對不上直接回「這一回合已經結算」，不在鎖內重評。"""
-    started, request = _open_request(game, lambda: game.seal_text_request(text))
-    if isinstance(request, list):
-        return request
-    total = game.content.config.free_text_budget_seconds
-    fallback = battle_instance.GambleVerdict(battle_instance.DEFAULT_FREE_TEXT_SUCCESS_RATE)
-    scene = duel.Scene(request.title, request.scene)
-
-    def score():
-        client = within_budget(game.client, total - (_monotonic() - started))
-        if client is None and game.client is not None:
-            return fallback
-        return battle_instance.assess_gamble(
-            client, scene, request.faction_name, request.text, request.name,
-            setting=seal_duel.SETTING, place=seal_duel.PLACE, target=request.target, sex=request.sex,
-        )
-
-    verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
-    return act(game, lambda g: g.seal_gamble(request.text, verdict.rate, (verdict.win, verdict.lose), request=request))
+    return craft_routes.create_reread(sys.modules[__name__], game, body)
 
 
 # ── 畫面資料 ──────────────────────────────────────────
@@ -2409,6 +2234,7 @@ MAIN_ACTIONS = features_core.action_table(MAIN_ACTION_ORDER, {
     "growth": lambda g, b: g.pick_growth(str(b.get("preset", "")), b.get("split") if isinstance(b.get("split"), dict) else None),
     "pill": lambda g, b: g.take_stamina_pill(),  # 狀態列體力條上的「丹」：吃一顆回體丹（企劃者 2026-10-07 內測贈送）
 }, features_core.main_actions(sys.modules[__name__]))
+OUTLOCK_OPS = features_core.outlock_ops(sys.modules[__name__])  # /api/do/{op} 先接走的鎖外三段式（各包 routes.py 的 outlock 掛鉤；api_do 排在管理者工具之後、MAIN_ACTIONS 之前）
 OUTLOCK_JOBS = features_core.outlock_jobs(sys.modules[__name__])  # 放鎖之後要開的背景寫字（各包 routes.py 的 outlock 掛鉤；act、act_look 照這張問與開）
 # 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、不再提示、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」
@@ -2497,31 +2323,8 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         if not game.is_admin():
             raise GameError("只有管理者能這麼做。")
         msgs = act(game, lambda g: ADMIN_ACTIONS[op](g, body), paused_ok=True)  # 暫停中要按得到「繼續」；其他的引擎自己擋
-    elif op == "outing_say":  # 走一趟留言：自己寫的那一句先在行動鎖外審（speech.judge），預設句不必審
-        text = speech.clean(str(body.get("text", ""))[:200])
-        preset = _int(body.get("preset"), -1)
-        verdict = screen_text(game, text, speech.MOTTO) if preset < 0 and text else ""
-        msgs = act(game, lambda g: g.outing_say(preset, text, verdict))
-    elif op == "outing_tale":  # 走一趟的遊記：模型在行動鎖外寫（見 outing_tale）
-        msgs = outing_tale(game)
-    elif op == "battle_text":  # 放手一搏：成功率在行動鎖外評（見 battle_text）
-        msgs = battle_text(game, str(body.get("text", "")))
-    elif op == "seal_text":  # 奪璽單挑的放手一搏：同上（見 seal_text）
-        msgs = seal_text(game, str(body.get("text", "")))
-    elif op == "duel_text":  # 頭目戰的放手一搏：同上（見 duel_text）
-        msgs = duel_text(game, str(body.get("text", "")))
-    elif op == "create_intent":  # 自創武學的形意：意分在行動鎖外評（見 create_intent）
-        msgs = create_intent(game, body)
-    elif op == "create_reread":  # 重悟帖：重讀這句意，意分在行動鎖外評（見 create_reread）
-        msgs = create_reread(game, body)
-    elif op == "ascend_line":  # 破境卡那一句：模型在行動鎖外寫（見 ascend_line）
-        msgs = ascend_line(game)
-    elif op == "tavern_ask":  # 問酒家：回話在行動鎖外寫（見 tavern_ask）
-        msgs = tavern_ask(game, str(body.get("text", ""))[:60])
-    elif op == "feast_text":  # 宴席上自己寫的敬酒詞：分數在行動鎖外評（見 feast_text）
-        msgs = feast_text(game, str(body.get("text", "")))
-    elif op == "persuade_text":  # 託付的勸降（減法季批 6）：那一句在行動鎖外評（見 persuade_text）；id 是那一件託付
-        msgs = persuade_text(game, str(body.get("id", ""))[:20], str(body.get("text", ""))[:60])
+    elif op in OUTLOCK_OPS:  # 鎖外的三段式（各包 routes.py 的 outlock 掛鉤）：A、C 段自己拿鎖，B 段叫模型不握鎖，所以不包在 act 裡
+        msgs = OUTLOCK_OPS[op](game, body)
     elif op in MAIN_ACTIONS:
         msgs = act(game, lambda g: MAIN_ACTIONS[op](g, body), paused_ok=op in PAUSE_OK_ACTIONS)
     else:

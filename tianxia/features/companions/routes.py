@@ -4,6 +4,7 @@
 not_while_preparing 原本掛在 Game 的委派上、包裡的函式沒有：表不再經過委派，所以名冊那三條的擋法掛在表上（同一支裝飾器，包裡的函式不動）。"""
 from fastapi import APIRouter, Request
 
+from tianxia import event_llm
 from tianxia.core.features import Outlock, OutlockJob
 from tianxia.core.services import not_while_preparing
 
@@ -63,9 +64,15 @@ def router(shell) -> APIRouter:
 
 
 def outlock(shell) -> Outlock:
-    return Outlock(jobs=(
-        OutlockJob("letter", lambda game: _letter_waiting(shell, game), lambda game, got: write_letter(shell, game)),
-    ))
+    return Outlock(
+        ops={
+            # 託付的勸降（減法季批 6）：那一句在行動鎖外評（見 persuade_text）；id 是那一件託付
+            "persuade_text": lambda g, b: shell.persuade_text(g, str(b.get("id", ""))[:20], str(b.get("text", ""))[:60]),
+        },
+        jobs=(
+            OutlockJob("letter", lambda game: _letter_waiting(shell, game), lambda game, got: write_letter(shell, game)),
+        ),
+    )
 
 
 LETTER_RUNNING: set[str] = set()  # 正在背景重寫書信的角色（一人一條；名號）
@@ -124,3 +131,20 @@ def letter_once(shell, game) -> bool:
         done = game.apply_letter(note, text)
         shell.open_characters().save(game.state)
     return done
+
+
+def persuade_text(shell, game, errand_id: str, text: str) -> list[str]:
+    """勸降（減法季批 6，整合設計 5.9），三段同 feast_text：A Game.persuade_request（只讀：那一件還在辦、人在那裡、字是 1～20 字）→
+    B 鎖外請模型評那一句（event_llm.rate_persuasion，預算同隨口應對 free_text_budget_seconds）→ C Game.persuade 重驗同一件、同一句才
+    扣體力擲骰。模型叫不動（評不到、逾時、沒有模型）是 None：照批 4 的慣例落到最保守的結果，什麼都不發生、那一件照舊在。
+    排隊被擋丟 GameError（BUSY_FREE_TEXT、BUSY_QUEUE_TIMEOUT），不扣體力。"""
+    started, request = shell._open_request(game, lambda: game.persuade_request(errand_id, text))
+    if isinstance(request, list):
+        return request
+    total = game.content.config.free_text_budget_seconds
+
+    def ask() -> int | None:
+        return event_llm.rate_persuasion(shell.within_budget(game.client, total - (shell._monotonic() - started)), request)
+
+    rate = shell.model_call(game, ask, fallback=None, left=total - (shell._monotonic() - started), busy=shell.BUSY_FREE_TEXT)
+    return shell.act(game, lambda g: g.persuade(request, rate))

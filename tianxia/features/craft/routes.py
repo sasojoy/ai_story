@@ -5,6 +5,8 @@ forge_args 留在殼（MENXIA_ACTIONS 的 forge 與 api_menxia_do 也叫它）�
 自創的動作表（原本寫在 server.py 的 MENXIA_ACTIONS，全部拆包第 68 批）：殼照 FEATURES 接（menxia_actions 掛鉤）。"""
 from fastapi import APIRouter, Body, Request
 
+from tianxia.core.features import Outlock
+
 from . import actions, create
 
 
@@ -35,3 +37,48 @@ def router(shell) -> APIRouter:
         })
 
     return r
+
+
+# ── 鎖外工作（原本寫在 server.py，全部拆包第 69 批）：殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）；模型呼叫絕不進鎖 ──
+
+
+def outlock(shell) -> Outlock:
+    return Outlock(ops={
+        "create_intent": lambda g, b: create_intent(shell, g, b),  # 自創武學的形意：意分在行動鎖外評（見 create_intent）
+        "create_reread": lambda g, b: shell.create_reread(g, b),  # 重悟帖：重讀這句意，意分在行動鎖外評（見 create_reread）
+    })
+
+
+def create_intent(shell, game, body: dict) -> list[str]:
+    """自創武學的立意（tianxia/create.py），三段同 duel_text：A Game.create_request（只讀）→ B 鎖外 create.read 讀這一句意
+    （分數、最多兩路屬性、正邪；預算同隨口應對）→ C Game.create_intent(reading=) 整個重驗再成形。叫不動照關鍵字表讀。"""
+    text = str(body.get("text") or "")[:create.INTENT_MAX * 2]
+    started, request = shell._open_request(game, lambda: game.create_request(text))
+    if isinstance(request, list):
+        return request
+    total = game.content.config.free_text_budget_seconds
+
+    def reading():
+        return create.read(shell.within_budget(game.client, total - (shell._monotonic() - started)), request, game.content)
+
+    value = shell.model_call(
+        game, reading, fallback=create.fallback_read(game.content, request.text),
+        left=total - (shell._monotonic() - started), busy=shell.BUSY_FREE_TEXT,
+    )
+    return shell.act(game, lambda g: g.create_intent(request.text, reading=value))
+
+
+def create_reread(shell, game, body: dict) -> list[str]:
+    """重悟帖的第二個用法：重讀這句意（可以改寫），三段同 create_intent：A Game.create_reread_request → B 鎖外 create.read_or_none
+    → C Game.create_reread(reading=)。叫不動（None）就什麼都不改、不扣帖（不照關鍵字表讀）。"""
+    text = str(body.get("text") or "")[:create.INTENT_MAX * 2]
+    started, request = shell._open_request(game, lambda: game.create_reread_request(text))
+    if isinstance(request, list):
+        return request
+    total = game.content.config.free_text_budget_seconds
+
+    def reading():
+        return create.read_or_none(shell.within_budget(game.client, total - (shell._monotonic() - started)), request)
+
+    value = shell.model_call(game, reading, fallback=None, left=total - (shell._monotonic() - started), busy=shell.BUSY_FREE_TEXT)
+    return shell.act(game, lambda g: g.create_reread(request.text, value))
