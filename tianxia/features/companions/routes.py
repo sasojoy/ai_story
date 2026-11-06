@@ -1,9 +1,27 @@
 """人物情誼的 API（功能包 tianxia/features/companions/；原本寫在 server.py，開發規範手冊 3.2）：殼（server 模組，參數 shell）照 FEATURES 掛。
 這個檔只在殼掛路由時才 import（引擎與假人程式不碰網頁框架）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
-名冊、書信小卡、勸降的動作照舊走 server 的 /api/menxia/{op}、/api/do/{op}（動作表總表第 68 批才照包分），這裡只有這一包整條自己的路由（第 3 階之前先做的那一件）。"""
+書信小卡、名冊的動作表（原本寫在 server.py 的 MAIN_ACTIONS、MENXIA_ACTIONS，全部拆包第 68 批）：殼照 FEATURES 接（main_actions、menxia_actions 掛鉤）；名冊的核對（join、leave、release 在鎖裡先查名冊）與勸降的鎖外三段式留在殼。
+not_while_preparing 原本掛在 Game 的委派上、包裡的函式沒有：表不再經過委派，所以名冊那三條的擋法掛在表上（同一支裝飾器，包裡的函式不動）。"""
 from fastapi import APIRouter, Request
 
+from tianxia.core.services import not_while_preparing
+
 from . import actions, talk_log
+
+
+def main_actions(shell) -> dict:
+    return {
+        "letter_read": lambda g, b: actions.read_letter(g, shell._int(b.get("id"), -1)),  # 書信小卡的「收起」（大勢人物擴充第二批）
+        "letter_decline": lambda g, b: actions.decline_letter(g, shell._int(b.get("id"), -1)),  # 書信小卡的「婉拒」：委託作罷
+    }
+
+
+def menxia_actions(shell) -> dict:
+    return {
+        "join": not_while_preparing(lambda g, b: actions.add_to_team(g, str(b.get("person") or ""))),
+        "leave": not_while_preparing(lambda g, b: actions.remove_from_team(g, str(b.get("person") or ""))),
+        "release": not_while_preparing(lambda g, b: actions.release_companion(g, str(b.get("person") or ""))),  # 放他回江湖（歷史武將同行）：引擎驗是不是你名下的
+    }
 
 
 def router(shell) -> APIRouter:

@@ -106,5 +106,10 @@ class TavernFeature(Feature):
 
         return actions.tavern_hit_check(ctx)
 
+    def main_actions(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.main_actions(shell)
+
 
 FEATURE = TavernFeature()

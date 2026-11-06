@@ -109,5 +109,10 @@ class BattleFeature(Feature):
             self._world = (WorldHook("muster", "generals", lambda *args: generals.world_muster(*args)),)
         return self._world
 
+    def admin_tools(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.admin_tools(shell)
+
 
 FEATURE = BattleFeature()

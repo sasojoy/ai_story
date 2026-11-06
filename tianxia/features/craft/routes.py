@@ -1,8 +1,23 @@
 """煉製頁的 API（功能包 tianxia/features/craft/；原本寫在 server.py，全部拆包第 44 批照有所感的做法搬進來）：殼（server 模組，參數 shell）
 照 FEATURES 掛（server 的 features_core.routers 那一行；前面沒有吃得到 /api/forge_line 的帶參數路由，先後不影響）。
 這個檔只在殼掛路由時才 import（引擎與假人程式不碰網頁框架）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
-forge_args 留在殼（MENXIA_ACTIONS 的 forge 與 api_menxia_do 也叫它）；開爐與立意的鎖外三段式（B 段叫模型）照舊在殼的 server.py，這裡只接路由。"""
+forge_args 留在殼（MENXIA_ACTIONS 的 forge 與 api_menxia_do 也叫它）；開爐與立意的鎖外三段式（B 段叫模型）照舊在殼的 server.py，這裡只接路由。
+自創的動作表（原本寫在 server.py 的 MENXIA_ACTIONS，全部拆包第 68 批）：殼照 FEATURES 接（menxia_actions 掛鉤）。"""
 from fastapi import APIRouter, Body, Request
+
+from . import actions, create
+
+
+def menxia_actions(shell) -> dict:
+    return {
+        # 自創武學（tianxia/create.py）：執器、擺式、回頭、立名、擱下；立意走 /api/do/create_intent（三段式，模型讀這一句意）
+        "create_begin": lambda g, b: actions.begin(g, str(b.get("kind") or ""), str(b.get("form") or "")),
+        "create_pose": lambda g, b: actions.pose(g, b.get("pose") if isinstance(b.get("pose"), dict) else {}),
+        "create_back": lambda g, b: actions.back(g, str(b.get("to") or "")),
+        "create_name": lambda g, b: actions.name(g, str(b.get("name") or ""), str(b.get("move") or "")[:create.MOVE_MAX * 2]),
+        "create_cancel": lambda g, b: actions.cancel(g),
+        "create_reroll": lambda g, b: actions.reroll(g),  # 重悟帖：成了形直接重骰（萬寶閣，Joy 2026-10-21）
+    }
 
 
 def router(shell) -> APIRouter:

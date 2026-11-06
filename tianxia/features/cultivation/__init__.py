@@ -34,5 +34,15 @@ class CultivationFeature(Feature):
 
         return Outcome(title=actions.learn_title(ctx, arg), run=lambda: actions.learn(ctx, arg))
 
+    def main_actions(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.main_actions(shell)
+
+    def menxia_actions(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.menxia_actions(shell)
+
 
 FEATURE = CultivationFeature()

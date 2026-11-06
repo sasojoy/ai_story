@@ -31,5 +31,10 @@ class SeclusionFeature(Feature):
             self._verbs = (Verb("break", run=lambda ctx, prepared: actions.finish(ctx, ctx.state.world.time)),)
         return self._verbs
 
+    def main_actions(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.main_actions(shell)
+
 
 FEATURE = SeclusionFeature()

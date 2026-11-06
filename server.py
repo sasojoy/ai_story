@@ -2680,56 +2680,23 @@ def api_main(request: Request):
 
 # 江湖畫面上的動作：回傳 {main, message}。引擎的訊息本來就會寫進江湖紀錄，這裡的 message
 # 只有不寫紀錄的動作（例如管理者的操作）才用得到，前端拿它跳一句提示。
-MAIN_ACTIONS = {
-    "seclude": lambda g, b: g.seclude(_int(b.get("hours"), 8)),
-    # 店面的直接開爐（店面獨立介面設計 6.3）：打的是同一個 smithing.forge；出爐卡在 game.smith_result，api_do 一起回
-    "smith_forge": lambda g, b: g.smith_forge(str(b.get("kind", "")), str(b.get("main", "")), str(b.get("aux", ""))),
-    # 鐵匠鋪的素材買賣（素材與經濟設計第四、五節）：收購一次賣 count 個、升階一次換一個
-    "smith_sell": lambda g, b: g.smith_sell(str(b.get("material", "")), max(1, _int(b.get("count"), 1))),
-    "smith_upgrade": lambda g, b: g.smith_upgrade(str(b.get("attribute", "")), _int(b.get("tier"), 0)),
-    # 打造頁爐火上的「看火候」（鐵匠鋪與合成流程 3.2）：叫同一支 silver.furnace；店開著時選單上沒有 act:furnace，所以另開這一個
-    "smith_furnace": lambda g, b: g.smith_furnace(),
-    # 自家大本營捐軍備（素材與經濟設計第六節）：一次捐一種素材 count 個（上限切一半：收得下的收）；軍需帳那一頁送 items
-    # （[{material, count}, …]，挑好的幾種一起捐、一則紀錄）
-    "donate": lambda g, b: g.donate_items(donate_items(b)) if "items" in b else g.donate(str(b.get("material", "")), max(1, _int(b.get("count"), 1))),
-    # 酒肆那一頁（企劃者 2026-10-18）：op 是 news、seek、ties、material、wall、treat、hide、trace；target 是名號或素材 id、text 是題壁那一句
-    "tavern": lambda g, b: g.tavern_do(str(b.get("op", "")), str(b.get("target", ""))[:20], str(b.get("text", ""))[:40]),
+# 全部拆包第 68 批照包分：功能包的在各包 routes.py 的 main_actions（開發規範手冊 3.3；殼照 FEATURES 接），原位只留本體還在 Game 的這幾條。表的先後照寫死的這一張（action_table）。
+MAIN_ACTION_ORDER = (
+    "seclude", "smith_forge", "smith_sell", "smith_upgrade", "smith_furnace", "donate", "tavern", "anonymous", "gender", "story_seen",
+    "letter_read", "letter_decline", "hints_off", "skip_tutorial", "view_map", "view_orders", "view_tab", "guide_ack", "allocate", "growth",
+    "newbie_drifter", "pill", "checkin", "conquest_letter", "seal_use", "sortie_go", "sortie_answer", "sortie_join", "outing",
+)
+MAIN_ACTIONS = features_core.action_table(MAIN_ACTION_ORDER, {
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),
     "gender": lambda g, b: g.set_gender(str(b.get("value", ""))),  # 設定頁：還沒選過性別的舊角色選一次（PM 2026-10-12）
-    "story_seen": lambda g, b: g.story_seen(),  # 特殊事件的跳顯框按「收下」：看過的卡清掉
-    "letter_read": lambda g, b: g.read_letter(_int(b.get("id"), -1)),  # 書信小卡的「收起」（大勢人物擴充第二批）
-    "letter_decline": lambda g, b: g.decline_letter(_int(b.get("id"), -1)),  # 書信小卡的「婉拒」：委託作罷
-    "hints_off": lambda g, b: g.set_hints_off(bool(b.get("value"))),  # 設定頁的「不再提示」（碰到才說，新手引導計畫三）
-    "skip_tutorial": lambda g, b: g.skip_tutorial(),
-    "view_map": lambda g, b: g.view_map(),
-    "view_orders": lambda g, b: g.view_orders(),  # 入伍段第一步：軍令卡出現在畫面上（新手引導計畫二）
-    "view_tab": lambda g, b: g.view_tab(str(b.get("tab", ""))),  # 序章裡打開修練、煉製頁（新手引導計畫一）
-    "guide_ack": lambda g, b: g.guide_ack(),  # 對話框的結語按「知道了」
-    "allocate": lambda g, b: g.allocate_stat(str(b.get("stat", ""))),  # 狀態列的配點鈕：升級得到的屬性點加到一項
     # 五項屬性的季的成長配比（屬性與跨季架構 v2 3.1）：preset 是五套之一或 custom（custom 帶 split：鍵 → 每級幾點）
     "growth": lambda g, b: g.pick_growth(str(b.get("preset", "")), b.get("split") if isinstance(b.get("split"), dict) else None),
-    "newbie_drifter": lambda g, b: g.newbie_drifter(),  # 任務卡「新手目標」的「就當散人」（新手引導重做）
     "pill": lambda g, b: g.take_stamina_pill(),  # 狀態列體力條上的「丹」：吃一顆回體丹（企劃者 2026-10-07 內測贈送）
-    # 江湖頁「簽到」小標攤開的領取鈕（21 天季，正式季整合 6.2）：四階的日子帶 attribute（剛柔快慢）
-    "checkin": lambda g, b: g.check_in(str(b.get("attribute", ""))[:2]),
-    # 領地爭奪：下戰書（翻地與爭搶，輿圖簡化設計 4.4；這一週在任的第 4 階、自己那一邊在這一塊的進度到門檻）。每天投票拿掉了（PM 2026-10-20）
-    "conquest_letter": lambda g, b: g.conquest_letter(str(b.get("loc", ""))),
-    # 玉璽碎片改版第 2 批：起用懷中那一片的獨門行動。target 是指定的目標（大勢人物、戰線、人物 id），side 是散人傳檄挑的那一軍；
-    # 玩家的叫 seal_use，跟管理者那一組 seal_* 不同名（FB-609）
-    "seal_use": lambda g, b: g.seal_use(str(b.get("target", ""))[:40], str(b.get("side", ""))[:20]),
-    # 出陣約戰（減法季批 3b；main.sortie_card、main.sorties）：moves 是三招（清單，或「強攻,固守,奇襲」），id 是約戰卡上的 id。
-    # 引擎在 world.mutate 裡重驗（兩個人同時應戰，先到的那一位是守方）；關著的季回「此刻無法這麼做」
-    "sortie_go": lambda g, b: g.sortie_go(_moves(b.get("moves"))),
-    "sortie_answer": lambda g, b: g.sortie_answer(str(b.get("id", ""))[:80], _moves(b.get("moves"))),
-    "sortie_join": lambda g, b: g.sortie_join(str(b.get("id", ""))[:80]),
-    # 走一趟（tianxia/outing.py）：n 是段數（1／3／5）就出發；0 或沒帶是停在要選的事上、選完接著走。沿路的事在 main.outing.trip
-    "outing": lambda g, b: g.outing_go(_int(b.get("n"), 0)),
-}
+}, features_core.main_actions(sys.modules[__name__]))
 # 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、不再提示、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」
 PAUSE_OK_ACTIONS = frozenset({"anonymous", "gender", "hints_off", "story_seen", "skip_tutorial", "view_map", "view_orders", "guide_ack"})
 ADMIN_ACTIONS = {
-    "outing_erase": lambda g, b: g.admin_erase_inscription(_int(b.get("id"), 0)),  # 走一趟的留言：管理者抹掉一則
     "open_season": lambda g, b: g.admin_open_season(time.time()),
     "end_season": lambda g, b: g.admin_end_season(time.time()),
     "next_season": lambda g, b: g.admin_next_season(time.time()),
@@ -2737,7 +2704,6 @@ ADMIN_ACTIONS = {
     "pause_clock": lambda g, b: g.admin_pause_clock(time.time()),
     "resume_clock": lambda g, b: g.admin_resume_clock(time.time()),
     "fast_forward": lambda g, b: g.advance(_int(b.get("hours"), 1) * 3600),
-    "start_battle": lambda g, b: g.admin_start_battle(str(b.get("id", "")), time.time()),
     "fire": lambda g, b: g.admin_fire(str(b.get("id", ""))),
     "push_trend": lambda g, b: g.admin_push_trend(str(b.get("id", "")), _int(b.get("amount"), 0)),
     # 時刻表與救場（計畫 T10）：現實時間由伺服器給，引擎不讀時鐘
@@ -2747,29 +2713,7 @@ ADMIN_ACTIONS = {
     # 領地爭奪的五個救場工具（conquest_set、conquest_progress、admin_conquest_letter、conquest_cancel、xingshi_now）搬進 tianxia/features/territory_acts/routes.py 的 admin_tools（全部拆包第 46 批）
     "resolve_event": lambda g, b: g.admin_resolve_event(str(b.get("id", "")), str(b.get("key", ""))),
     "clear_lock": lambda g, b: g.admin_clear_lock(str(b.get("id", ""))),
-    "cancel_battle": lambda g, b: g.admin_cancel_battle(),
-    "revive_figure": lambda g, b: g.admin_revive_figure(str(b.get("id", ""))),
-    # 管理者觸發鈕（企劃者 2026-10-07）：每週的事照週一的做法立刻再做一次
-    "issue_orders": lambda g, b: g.admin_issue_orders(),
-    "rotate_seats": lambda g, b: g.admin_rotate_seats(),
-    # 三場大戲：照時刻表開（跟「立刻開戰」同一條路），開過就算開過
-    "start_showdown": lambda g, b: g.admin_start_showdown(str(b.get("id", "")), time.time()),
-    # 玩家個人劇情：name 是那個玩家的名號，在這一把行動鎖裡讀他的存檔、補算、做完存回去（見 Game._admin_target）
-    "summon": lambda g, b: g.admin_summon(str(b.get("name", ""))),
-    "give_opportunity": lambda g, b: g.admin_give_opportunity(str(b.get("name", "")), str(b.get("id", ""))),
-    "give_fragment": lambda g, b: g.admin_give_fragment(str(b.get("name", "")), str(b.get("id", ""))),
-    # 玉璽碎片（玉璽碎片設計第十二節）：效果跟自然發生一樣，公告不寫管理者
-    "seal_emerge": lambda g, b: g.admin_seal_emerge(str(b.get("id", ""))),
-    "seal_stir": lambda g, b: g.admin_seal_stir(str(b.get("id", ""))),
-    "seal_assign": lambda g, b: g.admin_seal_assign(str(b.get("id", "")), str(b.get("name", "")), str(b.get("state", "held"))),
-    "seal_duel": lambda g, b: g.admin_seal_duel(str(b.get("id", "")), str(b.get("name", "")), _float(b.get("factor"), 1.0), time.time()),
-    "seal_fix": lambda g, b: g.admin_seal_fix(b.get("take") is True),
-    "seal_cancel": lambda g, b: g.admin_seal_cancel(),
-    "seal_sink_check": lambda g, b: g.admin_seal_sink_check(time.time()),
-    "seal_mandate": lambda g, b: g.admin_seal_mandate(str(b.get("when", ""))),
-    # 名帖檢舉（Joy 2026-10-19）：撤下清掉畫與自題，放回是看過沒事
-    "mingtie_remove": lambda g, b: g.admin_mingtie_remove(str(b.get("name", "")), _int(b.get("version"), 0)),
-    "mingtie_restore": lambda g, b: g.admin_mingtie_restore(str(b.get("name", "")), _int(b.get("version"), 0)),
+    # 走一趟的留言、開戰與三場大戲、復活人物、每週觸發鈕與玩家個人劇情、玉璽碎片、名帖檢舉（20 個）搬進各包 routes.py 的 admin_tools（全部拆包第 68 批；下面 FEATURE_ADMIN_ACTIONS 接）
 }
 PLAYER_ADMIN_ACTIONS = frozenset({"summon", "give_opportunity", "give_fragment", "mingtie_remove"})  # 動到別人的存檔：做完也叫他的分頁刷新
 
@@ -2896,51 +2840,18 @@ def _id_list(value) -> list[str]:
     return [str(v) for v in value if isinstance(v, str)] if isinstance(value, list) else []
 
 
-MENXIA_ACTIONS = {
-    "practice": lambda g, b: g.practice(str(b.get("kind") or KINDS[0])),
+# 全部拆包第 68 批照包分：功能包的在各包 routes.py 的 menxia_actions（殼照 FEATURES 接），原位只留療傷（本體還在 Game）與開爐（第 69 批）。表的先後照寫死的這一張（action_table）。
+MENXIA_ACTION_ORDER = (
+    "practice", "heal", "forge", "switch", "slot", "unslot", "create_begin", "create_pose", "create_back", "create_name", "create_cancel", "create_reroll",
+    "ascend_dismiss", "cultivate", "melt", "melt_insight", "melt_many", "name", "name_divine", "bind_art", "join", "leave", "release",
+    "wield", "dismantle", "feed", "repair_item", "temper_item", "dismantle_many", "chuangong",
+)
+MENXIA_ACTIONS = features_core.action_table(MENXIA_ACTION_ORDER, {
     "heal": lambda g, b: g.heal(),
     # 一武學＋一意境、兩武學＝合成，兩意境＝合併。端點走 forge()（A 鎖內備料 → B 鎖外取名或挑 → C 鎖內登記），不走這一條；
     # 這裡也帶 NO_NAME，就算有人直接拿它在鎖裡呼叫，也不會叫模型
     "forge": lambda g, b: _forge_without_naming(g, *forge_args(b)),
-    "switch": lambda g, b: g.switch_art(str(b.get("art") or "")),
-    # 武學重構：把意境裝進武學的意境槽、或拆下來（修練頁與煉製頁都走這裡；不花心得體力）
-    "slot": lambda g, b: g.slot_insight(
-        str(b.get("art") or ""), str(b.get("insight") or ""), _int_of(b.get("index")) if b.get("index") is not None else None,
-    ),
-    "unslot": lambda g, b: g.unslot_insight(str(b.get("art") or ""), str(b.get("insight") or "")),
-    # 自創武學（tianxia/create.py）：執器、擺式、回頭、立名、擱下；立意走 /api/do/create_intent（三段式，模型讀這一句意）
-    "create_begin": lambda g, b: g.create_begin(str(b.get("kind") or ""), str(b.get("form") or "")),
-    "create_pose": lambda g, b: g.create_pose(b.get("pose") if isinstance(b.get("pose"), dict) else {}),
-    "create_back": lambda g, b: g.create_back(str(b.get("to") or "")),
-    "create_name": lambda g, b: g.create_name(str(b.get("name") or ""), str(b.get("move") or "")[:create.MOVE_MAX * 2]),
-    "create_cancel": lambda g, b: g.create_cancel(),
-    "create_reroll": lambda g, b: g.create_reroll(),  # 重悟帖：成了形直接重骰（萬寶閣，Joy 2026-10-21）
-    "ascend_dismiss": lambda g, b: g.ascend_dismiss(),  # 看過破境卡了
-    # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾
-    "cultivate": lambda g, b: g.cultivate(str(b.get("art") or ""), use_legend=b.get("use_legend") is True),
-    "melt": lambda g, b: g.melt_art(str(b.get("art") or "")),  # 功法庫裡的一門熔成心得
-    "melt_insight": lambda g, b: g.melt_insight(str(b.get("insight") or "")),
-    # 批量熔煉：勾好的武學（arts）與意境（insights）一次熔完；不是串列的當沒勾
-    "melt_many": lambda g, b: g.melt_many(_id_list(b.get("arts")), _id_list(b.get("insights"))),
-    "name": lambda g, b: g.name_mastered(str(b.get("name") or "")),  # 第一個練成絕學的人替它取正式名字
-    # 神器原品定名（打造隱藏配方設計 5.2）：自己打的名字，或 keep 是「沿用譜名」；keep 只認真正的布林 true（同 use_legend）
-    "name_divine": lambda g, b: g.name_divine(str(b.get("weapon") or ""), str(b.get("name") or ""), keep=b.get("keep") is True),
-    "bind_art": lambda g, b: g.bind_art(str(b.get("weapon") or ""), str(b.get("art") or "")),
-    "join": lambda g, b: g.add_to_team(str(b.get("person") or "")),
-    "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
-    "release": lambda g, b: g.release_companion(str(b.get("person") or "")),  # 放他回江湖（歷史武將同行）：引擎驗是不是你名下的
-    "wield": lambda g, b: g.wield_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件換到身上它那一欄（兵器設計 2.2、裝備四欄 2.3）：武器、防具、坐騎、寶物都走這裡，網頁照舊送 weapon 這個鍵
-    "dismantle": lambda g, b: g.dismantle_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件拆成一個素材（兵器設計 4.7.1、裝備四欄 4.8）：坐騎、寶物不能拆
-    "feed": lambda g, b: g.feed_mount(),
-    # 裝備庫那一列的「修」「淬煉」（鐵匠鋪與合成流程 3.4）：item 是裝備庫那一件的 id（兵:N、甲:N；舊網頁送 weapon 也收），修好淬完還在裝備庫、不換上；
-    # 擋法同店裡的直接開爐（鐵匠鋪開著、那一串是眼前的選單）。身上那件照舊送選項 id（smith:repair 等），不走這裡
-    "repair_item": lambda g, b: g.repair_item(str(b.get("item") or b.get("weapon") or "")),
-    "temper_item": lambda g, b: g.temper_item(str(b.get("item") or b.get("weapon") or "")),
-    # 裝備庫勾好的一次拆完（鐵匠鋪與合成流程 3.4）：items 是 id 的串列（不是串列的當沒勾）；不擋地點、拆不了的跳過寫原因、一則修練紀錄
-    "dismantle_many": lambda g, b: g.dismantle_many(_id_list(b.get("items"))),
-    # 傳功門下（Config.chuangong）：名冊上點的那個人（person）練一項（what：neigong／wugong／str／agi／con）；引擎照 lessons 驗
-    "chuangong": lambda g, b: g.chuangong(str(b.get("person") or ""), str(b.get("what") or "")),  # 身上那匹餵一個一階素材（裝備四欄 5.4）：閒著時哪裡都能餵
-}
+}, features_core.menxia_actions(sys.modules[__name__]))
 
 
 # （/api/peer、/api/peer/act：全部拆包第 37 批搬進玩家互動包 tianxia/features/peers/routes.py，殼照 FEATURES 掛；鎖外的 screen_peer、prepare_peer 照手冊 G10 留在殼：A 段 discuss_actions.request、C 段 discuss_actions.discuss 在包裡，第 38 批）

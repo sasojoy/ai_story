@@ -3,14 +3,21 @@
 
 - GET /api/xingshi：見聞的「形勢」（這一季每天一篇的〈天下形勢〉；只讀，不叫模型——文章在背景寫，server.write_xingshi 留在殼）
 - 管理者五個救場工具：op 名字照舊。立刻下戰書叫 admin_conquest_letter、不叫 conquest_letter：api_do 先查功能包的管理者工具，同名會把玩家的下戰書
-  （MAIN_ACTIONS["conquest_letter"]，留在殼）整個蓋掉（FB-609）。領地爭奪、〈天下形勢〉關著時各動作自己回一句（跟原本一樣，沒有 404）。
+  （MAIN_ACTIONS["conquest_letter"]，全部拆包第 68 批搬進這個檔的 main_actions）整個蓋掉（FB-609）。領地爭奪、〈天下形勢〉關著時各動作自己回一句（跟原本一樣，沒有 404）。
 這個檔只在殼掛路由時才 import（引擎與假人程式不碰網頁框架）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
 """
 from fastapi import APIRouter, Request
 
 from tianxia.core.features import AdminTool
 
-from . import admin_actions, xingshi_actions
+from . import admin_actions, letter_actions, xingshi_actions
+
+
+def main_actions(shell) -> dict:
+    return {
+        # 領地爭奪：下戰書（翻地與爭搶，輿圖簡化設計 4.4；這一週在任的第 4 階、自己那一邊在這一塊的進度到門檻）。每天投票拿掉了（PM 2026-10-20）
+        "conquest_letter": lambda g, b: letter_actions.conquest_letter(g, str(b.get("loc", ""))),
+    }
 
 
 def _gate() -> None:

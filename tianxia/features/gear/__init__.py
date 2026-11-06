@@ -9,7 +9,7 @@ GearBook）同字，不是同一件事：這裡是功能包，另兩個是舊的
 - views.py：修練頁裝備那一塊、見聞榜單的神器譜（2 個）
 - bots.py：假人的分數（原本 bot_policy.score 的 market 那兩行）
 
-接縫掛鉤：choose（market:*）、verbs（act:market 進門與紀錄標題）、content、bot_pick。沒有路由（/api/menxia 的四個動作、/api/boards、/api/board_card 都留在殼，叫 Game 的委派）。
+接縫掛鉤：choose（market:*）、verbs（act:market 進門與紀錄標題）、content、bot_pick。沒有 APIRouter（/api/menxia 的四個動作在 routes.py 的 menxia_actions，全部拆包第 68 批；/api/boards、/api/board_card 留在殼，叫 Game 的委派）。
 店面登記（Shop）這一批不登記（計畫 1.9，同鐵匠鋪：入口順序 懸賞榜 → 鐵匠鋪 → 馬市、選單與收店都留在 Game 原位，第 45 批三間一起排）。
 """
 from __future__ import annotations
@@ -61,6 +61,11 @@ class GearFeature(Feature):
             self._verbs = (Verb("market", run=lambda ctx, prepared: market_actions.enter(ctx),
                                 title=lambda ctx: f"{mounts.MARKET}・{ctx.content.locations[ctx.state.player.location].name}"),)
         return self._verbs
+
+    def menxia_actions(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.menxia_actions(shell)
 
 
 FEATURE = GearFeature()

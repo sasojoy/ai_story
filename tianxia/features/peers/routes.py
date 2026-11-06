@@ -9,8 +9,18 @@ from fastapi import APIRouter, Body, HTTPException, Request
 
 from tianxia import speech
 from tianxia.core import presence
+from tianxia.core.features import AdminTool, no_gate
 
 from . import actions, mingtie_actions, social
+
+
+def admin_tools(shell) -> dict[str, AdminTool]:
+    """名帖檢舉（Joy 2026-10-19）：撤下清掉畫與自題，放回是看過沒事。原本寫在 server.py 的 ADMIN_ACTIONS（全部拆包第 68 批）；暫停中照做（paused_ok 預設 True，同原本那一條）。
+    mingtie_remove 動到別人的存檔：做完也叫他的分頁刷新，名單是殼的 PLAYER_ADMIN_ACTIONS。"""
+    return {
+        "mingtie_remove": AdminTool(no_gate, lambda g, b: mingtie_actions.admin_remove(g, str(b.get("name", "")), shell._int(b.get("version"), 0))),
+        "mingtie_restore": AdminTool(no_gate, lambda g, b: mingtie_actions.admin_restore(g, str(b.get("name", "")), shell._int(b.get("version"), 0))),
+    }
 
 
 def router(shell) -> APIRouter:

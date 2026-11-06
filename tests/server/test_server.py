@@ -776,7 +776,7 @@ def test_join_and_leave_check_the_roster_inside_the_actions_own_lock(client, mon
         return real(self)
 
     monkeypatch.setattr(Game, "roster_lines", roster_spy)
-    monkeypatch.setattr(Game, "remove_from_team", lambda self, person: lock_events.append("leave") or [])
+    monkeypatch.setattr("tianxia.features.companions.actions.remove_from_team", lambda ctx, person: lock_events.append("leave") or [])  # 第 68 批：動作表直接叫包，不經 Game 的委派
     lock_events.clear()
     assert client.post("/api/menxia/leave", json={"person": "player"}).status_code == 200
     leave = lock_events.index("leave")

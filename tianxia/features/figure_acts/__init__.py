@@ -49,5 +49,10 @@ class FigureActsFeature(Feature):
             self._world = (WorldHook("step", "yuedan", lambda *args: yuedan.world_step(*args)),)
         return self._world
 
+    def admin_tools(self, shell) -> dict:
+        from . import routes  # noqa: PLC0415  只在殼建動作表時才 import（同 routes 掛鉤）
+
+        return routes.admin_tools(shell)
+
 
 FEATURE = FigureActsFeature()

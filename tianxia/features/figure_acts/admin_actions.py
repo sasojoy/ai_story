@@ -1,5 +1,5 @@
 """管理者救回人物（功能包 figure_acts；全部拆包第 31 批）：叫回選單、把一位退場或重創的大勢人物叫回來。原本 Game 上的 2 個方法，名字去掉前導底線、
-第一個參數是 ctx。會改狀態。路由（/api/do/revive_figure、/api/admin 的 fallen）照舊在 server.py 叫 Game 的委派。
+第一個參數是 ctx。會改狀態。/api/do/revive_figure 在這一包的 routes.py（全部拆包第 68 批）；/api/admin 的 fallen 照舊在 server.py 叫 Game 的委派。
 """
 from __future__ import annotations
 
