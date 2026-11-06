@@ -635,11 +635,11 @@ def test_only_the_first_to_finish_a_prize_strike_gets_the_treasure(board):
     assert note in bounties.reward_text(game.state, content, game.state.world.bounties[-1])  # 榜上寫「另有重賞：寶物一件」
     for name in ("丙", "丁"):
         _direct(content, world, name, lambda g: bounties.take(g.state, g.content, b.id))
-    msgs, game = _direct(content, world, "丙", lambda g: bounties.on_win(g.state, g.content, g.world, "lake", "thug"))
+    msgs, game = _direct(content, world, "丙", lambda g: bounties.on_win(g, "lake", "thug"))
     p = game.state.player
     assert treasures.PRIZE_GOT.format(issuer="官軍") in msgs and p.treasure is not None and content.gear.treasures[p.treasure.template].pool
     assert note not in bounties.reward_text(game.state, content, game.state.world.bounties[-1])  # 給出去了，榜上不再寫
-    msgs, game = _direct(content, world, "丁", lambda g: bounties.on_win(g.state, g.content, g.world, "lake", "thug"))
+    msgs, game = _direct(content, world, "丁", lambda g: bounties.on_win(g, "lake", "thug"))
     assert game.state.player.treasure is None and treasures.PRIZE_GOT.format(issuer="官軍") not in msgs
     assert any(m.startswith("【懸賞】") for m in msgs)  # 第二個人照舊拿銀兩經驗
 
@@ -654,7 +654,7 @@ def test_a_prize_with_no_room_waits_in_held_gear_and_arrives_later(board):
     def full_then_win(g):
         p = g.state.player
         p.treasure, p.rack = _item("audience", "寶:90"), [_item("win_material", "寶:91")]
-        return bounties.on_win(g.state, g.content, g.world, "lake", "thug")
+        return bounties.on_win(g, "lake", "thug")
 
     msgs, game = _direct(content, world, "丙", full_then_win)
     [held] = game.state.player.held_gear
@@ -670,7 +670,7 @@ def test_a_horse_prize_is_a_good_horse_rolled_on_season_name_and_bounty(board):
     content, world = board
     b = _strike(world, "horse")
     _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))
-    msgs, game = _direct(content, world, "丙", lambda g: bounties.on_win(g.state, g.content, g.world, "lake", "thug"))
+    msgs, game = _direct(content, world, "丙", lambda g: bounties.on_win(g, "lake", "thug"))
     rng = random.Random(f"bounty-prize|{world.get_season_number()}|丙|{b.id}")
     coat = rng.choice(mounts.COATS)
     table = content.config.treasures.horse_quality

@@ -8,7 +8,7 @@ import hashlib
 from collections.abc import Callable
 
 from tianxia import atlas, figures, orders  # 共用規則層（atlas 核心那一半：地點與路的資料；第 50 批拆兩半，圖層與勝算在同一包的 layers）
-from tianxia import bounties  # 過渡：待搬（懸賞榜，第 45 批）
+from tianxia.core import bounty_base
 from tianxia import calendar, conquest, equipment, insights, materials, mounts, rules, terrain, territory, timetable, week_unlock
 from tianxia.core import explore_base  # 探索表的小字、地形標籤、勝算的「必敗」：探索包、有所感包的純函式搬到核心的服務檔（第 49 批）、第 50 批移到核心的 core/explore_base.py
 from tianxia.models import Content, FactionDef, Location
@@ -345,7 +345,7 @@ def _sortie_order(state: GameState, content: Content, faction: str | None, loc_i
 def _bounty_marks(state: GameState, content: Content) -> dict[str, str]:
     """你揭著的懸賞在哪裡交差（地點 → 種類）；護送起點終點都標。"""
     marks: dict[str, str] = {}
-    for b in bounties.mine(state, content):
+    for b in bounty_base.mine(state, content):
         word = BOUNTY_WORDS.get(b.kind)
         for loc in (b.location, b.end if b.kind == "escort" else None):
             if word and loc:

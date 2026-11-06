@@ -4,7 +4,7 @@ Game 留一行委派的：_lean_options（選單原位在叫）、_lean_anytime�
 from __future__ import annotations
 
 from tianxia import wins
-from tianxia import bounties  # 過渡：待搬（第 45 批：懸賞榜；改幫之後新的那一邊接不了的懸賞作廢）
+from tianxia.core import bounty_base
 from tianxia.core.option import Option
 from .ending_actions import four_wins
 
@@ -51,4 +51,4 @@ def lean_step(ctx, side: str) -> list[str]:
             del w.active_pushers[old]
     new_name = c.scenario.faction_name(side, side)
     msgs = [wins.LEAN_DONE.format(side=new_name, old=c.scenario.faction_name(old, old) if old else new_name)]
-    return msgs + bounties.drop_stranded(s, c, side, lean=True) + ctx._ally_follows_battle()  # 作廢那一句寫「改幫」，不是投靠、叛投的「改投」（FB-811）
+    return msgs + bounty_base.drop_stranded(s, c, side, lean=True) + ctx._ally_follows_battle()  # 作廢那一句寫「改幫」，不是投靠、叛投的「改投」（FB-811）

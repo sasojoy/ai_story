@@ -196,6 +196,10 @@ def test_a_module_engine_imports_to_register_picks_the_tests_that_name_its_actio
     用到、沒有人 import：照登記的動作名挑寫到它的測試檔。讓 wanted.buttons 回 []，test_bounties 與 test_sanren_web 會紅。"""
     assert kind in test_for.registered_actions(module)
     assert expected <= _names([f"tianxia/{module}.py"])
+    if module == "wanted":
+        # 第 45 批：wanted 搬進懸賞榜包（舊名是別名，登記改在包的 __init__.py，registered_actions 照樣認）。真正的檔在包裡：改它照包的規矩挑那一包的 tests/＋核心契約，
+        # 挑得到搬進包的 test_renown_wanted；test_bounties、test_sanren_web 留原處（第 61 批），寫在包 README「另外要跑的」（改舊名別名才照動作名挑）
+        assert "test_renown_wanted.py" in _names(["tianxia/features/bounties/wanted.py"])
     assert test_for.registered_actions("might") == ()
 
 

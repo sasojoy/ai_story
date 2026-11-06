@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tianxia import allied, roster, seats, wins
-from tianxia import bounties  # 過渡：待搬（第 45 批：懸賞榜；手上揭著的舊陣營懸賞作廢）
+from tianxia.core import bounty_base
 from tianxia import ranks  # 共用規則層（階與稱號，第 40 批收進）
 from tianxia.core import convoy_base, omen_base
 from tianxia.core import features as features_core  # 核心：叛投那一刻各包清自己的進度（core_effects：全部拆包第 32 批，DEFECT_ORDER）
@@ -136,9 +136,9 @@ def prompt(
         lost.append(f"離開{sect.name}、這一季拜不回去")
     if p.contrib > 0:
         lost.append(f"這一季替{old.name}記下的功勞全部作廢")
-    held = bounties.stranded(state, content, ally or target.id)
+    held = bounty_base.stranded(state, content, ally or target.id)
     if held:  # 手上揭著的懸賞（FB-151）：新陣營的人接不了舊陣營掛的單，確定的那一下 defect() 拿掉名字
-        lost.append(bounties.STRANDED_LOST.format(n=len(held), faction=old.name))
+        lost.append(bounty_base.STRANDED_LOST.format(n=len(held), faction=old.name))
     if companions:  # 歷史武將同行 9.5：寫了 side、跟新陣營不合的同伴帶不走（defect_actions.leave_behind 放回江湖）；名字由呼叫端給（要查全服名冊）
         lost.append(roster.DEFECT_LOST.format(names="、".join(companions)))
     verb = slot_label(state, content, target, ally)  # 「叛投官軍」；豪強分屬兩軍時也可能是「改投官軍」「改依附黃巾軍」
@@ -182,12 +182,13 @@ def _clear_own(p: PlayerState) -> None:
 # （clear 的 opportunities〔機緣的完成、計數、物品全部作廢，聽過的線索留著，裁決 E5.2〕與 leave 的 plots〔還開著的集體密謀退出，
 # 做過的那幾處不再算，乙二、企劃者 2026-10-06 裁決〕：全部拆包第 34 批換成軍情包登記，拿掉）
 # 手上舊陣營掛的懸賞作廢、每張一句（FB-151）；改的是共用的季，Game.choose 結尾統一存
-_STRANDED_CORE = {"bounties": lambda s, c, side: bounties.drop_stranded(s, c, side)}  # 過渡：待搬（第 45 批）懸賞包登記；留在陣營包（主人是舊模組）
+# 全部拆包第 45 批改由懸賞榜包登記（BountiesFeature.defection()），這裡空了留 {}
+_STRANDED_CORE: dict = {}
 
 
 def defect(state: GameState, content: Content, target: FactionDef, ally: str | None = None) -> list[str]:
     """真的叛投：離開舊陣營的門派、讓出舊陣營的第四階席次（帳與這一週的名單，seats.leave）、清掉舊陣營的進度、改投、
-    記下這一季叛投過、退出舊陣營的活躍名單，發三則傳聞，手上新陣營接不了的懸賞拿掉名字（bounties.drop_stranded，FB-151）。
+    記下這一季叛投過、退出舊陣營的活躍名單，發三則傳聞，手上新陣營接不了的懸賞拿掉名字（bounty_base.drop_stranded，懸賞榜包登記的 stranded 那一格，FB-151）。
     呼叫端（defect_actions.defect_step）先確認過還在投靠點、還能叛投。
     豪強分屬兩軍的季（企劃者 2026-10-15 第 2 題甲）：ally 是新的依附；名字照 allied.label 寫（「地方豪強（依附官軍）」），
     活躍名單照那一邊清；換到同一邊（例：依附官軍的豪強改投官軍）只發一則那一邊的軍情「某某從甲改投乙」（新寫）。

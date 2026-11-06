@@ -168,7 +168,7 @@ def test_a_strike_bounty_here_makes_the_trip_that_bounty():
     game = ready(jianfa_game(), side="guan", loc="yingshui")
     foe = game._wild_foes(game.content.locations["yingshui"])[0]
     bounty = mock.Mock(kind="strike", location="yingshui", squad=foe.id)
-    with mock.patch("tianxia.bounties.mine", return_value=[bounty]):
+    with mock.patch("tianxia.core.bounty_base.mine", return_value=[bounty]):
         plan = game.outing_plan()
         assert plan.how == "bounty" and plan.foe.id == foe.id and plan.hint == "渡口有賞" and plan.boss is None
         assert game.mostly_here() == "渡口有賞"  # 四格那一格的小字跟鈕同一個字（/api/main 的 mostly）

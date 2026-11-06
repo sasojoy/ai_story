@@ -539,3 +539,14 @@ def test_fb220_every_card_button_wraps_its_name(content):
     out = run(server.main_view(_player(content, "甲")), script)
     assert '<span class="pa-name">抱拳</span></button>' in out and '<span class="pa-name">切磋</span><small>體力 6・勝算 五五波</small>' in out
     assert 'data-act="peer-pick"><span class="pa-name">論武</span></button>' in out
+
+
+def test_the_card_registry_is_one_table_in_the_core():
+    """玩家卡的登記表搬進核心 core/cards.py（全部拆包第 45 批）：social re-export 同一批物件，玩家互動包、懸賞榜包的通緝都登記進同一張；卡上照 (order, id) 排，通緝 65 的位置不變。"""
+    from tianxia import social
+    from tianxia.core import cards
+
+    assert social.ACTIONS is cards.ACTIONS and social.register is cards.register
+    assert social.CardButton is cards.CardButton and social.CardAction is cards.CardAction
+    assert sorted((a.order, k) for k, a in cards.ACTIONS.items()) == [
+        (10, "greet"), (15, "mingtie"), (20, "gift"), (50, "spar"), (55, "discuss"), (60, "raid"), (65, "wanted")]

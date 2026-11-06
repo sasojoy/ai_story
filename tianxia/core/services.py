@@ -168,7 +168,7 @@
 
 事件（全部拆包第 26 批）
 # core_eventbus
-- `ctx.publish(event, *args)`：一包發生的事、別包跟著動——照核心的 BUS_ORDER 叫每一格（win、outing、explore、arrive、raid_win、battle_end；
+- `ctx.publish(event, *args)`：一包發生的事、別包跟著動——照核心的 BUS_ORDER 叫每一格（win、outing、explore、arrive、raid_win、aid、battle_end；
   簽名與回傳見 tianxia/core/features.py 的 # core_eventbus）。
 
 # faction（全部拆包第 35 批「陣營」；陣營包要叫的核心服務，主人都是核心）
@@ -407,6 +407,11 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._mandate_settle(winner, record, battle_name)`（天命之爭定下來：玉璽包自己的委派——`scripts/measure_seal.py` 換掉 `Game._mandate_settle`、
   核心的管理者「定結果」也叫，包裡收場那一下經 ctx 叫，換掉的才打得到）
 
+# bounties（全部拆包第 45 批「懸賞榜」：新包 tianxia/features/bounties/；計畫 docs/superpowers/plans/2026-11-07-懸賞榜包-第1批.md）
+- `ctx._raid_bounty(target)`（主人懸賞榜：伏兵贏了、揭了通緝他就交差，截殺也叫；本體在包的 actions.raid_bounty，事件 raid_win 的發布點跟著搬、位置不動；Game 留一行委派）
+- `ctx._letter_thank(task)`（主人人物情誼：求援委託辦成了，那位人物寫一封道謝信；懸賞榜包 rules._complete_rally 叫）
+- `ctx._parley_settle_task(task_id, cid)`、`ctx._parley_keep(cid, cond)`、`ctx._parley_owed_line(name)`、`ctx._parley_ask_label(ask_id)`（主人人物情誼：委託辦成了，欠他的那一件清掉、記一筆守約、他會兌現的那一句、答應你的那一件的字；懸賞榜包 rules._complete_commission、commission_reward 叫，PM 認定乙案）
+
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
 explore（主動搬六包第 3＋4 批加的這一段）
@@ -479,8 +484,7 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 （`ctx._signature_arms`：全部拆包第 42 批裝備成包，改列二、查詢服務 `# gear`）
 
 # stamina_plays（全部拆包第 39 批「體力玩法＋閉關」：設伏劫道、屯糧練兵搬進 features/stamina_plays；計畫 docs/superpowers/plans/2026-11-06-體力玩法閉關-第39批.md 1.3）
-- `ctx._raid_bounty(target)`（主人懸賞榜〔第 45 批〕：伏兵贏了、揭了通緝他就交差，截殺也叫；本體留在 Game 上，懸賞榜成包時改成二、查詢服務）。
-  設伏要叫的其餘 Game 方法（`_side`、`_raid_key`、`_load_kin`、`_save_kin`、`_spar_power`、`_spar_mirror`、`_file_battle`、`_play_rounds`、
+- 設伏要叫的其餘 Game 方法（`_side`、`_raid_key`、`_load_kin`、`_save_kin`、`_spar_power`、`_spar_mirror`、`_file_battle`、`_play_rounds`、
   `_last_wear`、`_idle`、`_log`、`_write`、`stamp`、`_cost_option`、`_draft`、`touched`）上面已經列了，這一包只記「誰在用」。
 # peers（全部拆包第 37 批：答應邀請時分派給還沒搬的切磋、論武、結伴同行；切磋、論武第 38 批搬進包，`answer_invite` 包內直接叫，那幾條拿掉）
 （結伴同行的 `ctx._join(inv, other)`、`ctx.join_refusal(leader)` 主人成包了（第 48 批），改列二、查詢服務 `# travel`；`answer_invite` 照邀請的種類叫它們）

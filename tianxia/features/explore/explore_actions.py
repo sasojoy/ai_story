@@ -20,7 +20,7 @@ import random
 from dataclasses import dataclass
 
 from tianxia import battlelog  # 共用規則層（戰報：出門一趟・遭遇的標籤、拆得失）
-from tianxia import bounties  # 過渡：待搬（懸賞榜：討伐那一路 bounties.mine；交差改發事件了，第 26 批）
+from tianxia.core import bounty_base
 from tianxia import conquest  # 共用規則層（站在自家領地多給的那一個）
 from tianxia import events as event_rules  # 過渡：待搬（事件：抽不抽得到、藏起來的、照輪替抽）
 from tianxia import growth  # 共用規則層（三道閘：今天第幾場、疲勞、對手的檔）
@@ -71,7 +71,7 @@ def outing_foe(ctx, loc: Location, kind: str) -> tuple[str | None, Squad | None]
     就又是它。自家營寨（營類、此刻歸自己這一邊、有自家的隊伍）是跟同袍比劃（spar，_sortie_host 那一路）；否則這裡此刻站的、
     不是自家的隊伍裡最弱的一路（foe）；城類的地點自己沒有對手才換成地痞（town，Config.jianfa.town_foes 的第一路）。都沒有是 (None, None)。"""
     s, c = ctx.state, ctx.content
-    for b in bounties.mine(s, c):
+    for b in bounty_base.mine(s, c):
         if b.kind == "strike" and b.location == loc.id and b.squad in c.squads and not ctx._drills_with(c.squads[b.squad]):
             if ctx.odds(b.squad) == LOSE_WORD:
                 continue  # 打不贏的懸賞不強制：這一處當作沒有它（沒有放棄，手上還揭著）

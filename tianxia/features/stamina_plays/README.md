@@ -20,8 +20,8 @@
 **世界層的格**（core_world：全部拆包第 25 批；第 39 批換主人）：開集結那一刻結算屯糧是世界層 `muster` 的 `works` 那一格（`__init__.py` 的 `world()` → `works_rules.on_muster`；位置在 `WORLD_ORDER` 的「起點」之後、「玉璽」之前，一個字不動；不問 `enabled`，判斷在 `on_muster` 裡）。
 **選單順序（不能改成 `Feature.options`）**：「設伏／收伏 → 屯糧 → 護衛（`_aid_options`）→ 功能包的選項（`features_core.options`）→ 盤算（`_plan_options`）」。設伏屯糧改成 `Feature.options` 會排進 `FEATURES` 的順序、跑到護衛之後。所以 `Game._stamina_play_options` 留著當接縫，前半叫 `actions.options`。
 **接縫在原位的位置不能動**（位置就是行為）：`sync` 的 `_ambush_expire`（`drop_shops` 之後、`_arrivals` 之前）、`_arrivals` 迴圈中途的 `_ambush_check`（每換一段才查）、移動被擋（`engine.py` 的 `_move_option`，讀 `p.ambush` 與核心的 `MOVE_BLOCKED`）。
-**過渡**：`ambush_rules.py` import `bounties`（`has_prey`、`hostile`，第 45 批懸賞榜成包）、`atlas`（第 50 批）；`ambush_actions.py` import `annals`（行狀）；設伏贏了揭通緝交差走 `ctx._raid_bounty`（服務清單三、過渡，主人懸賞榜）。假人的 `_stamina_play`（`bot_policy.py`）挑 `ambush:set:`、`works:`、`aid:`，叫 `game.choose` 公開動作，留在原位。`tianxia/howto.py`、`scripts/measure_stamina_plays.py`、`test_conquest_flip.py` 用舊名 `ambush`、`works`（別名，同一個模組物件）。
-第 50 批合完重印 **1 處**：`ambush_rules.py` → `bounties`（第 45 批）；`atlas`（只叫 `is_unlocked`）第 50 批收進共用規則層，改註（接第 39 批第 1 條）。
+**過渡**：`ambush_rules.py` 的 `has_prey`、`hostile` 第 45 批改讀核心 `core/bounty_base`（`mine`、`hunting`）；`atlas`（第 50 批）；`ambush_actions.py` import `annals`（行狀）；設伏贏了揭通緝交差走 `ctx._raid_bounty`（服務清單二、查詢服務 `# bounties`，第 45 批）。假人的 `_stamina_play`（`bot_policy.py`）挑 `ambush:set:`、`works:`、`aid:`，叫 `game.choose` 公開動作，留在原位。`tianxia/howto.py`、`scripts/measure_stamina_plays.py`、`test_conquest_flip.py` 用舊名 `ambush`、`works`（別名，同一個模組物件）。
+第 45 批合完重印 **0 處**。第 50 批合完重印 **1 處**：`ambush_rules.py` → `bounties`（第 45 批）；`atlas`（只叫 `is_unlocked`）第 50 批收進共用規則層，改註（接第 39 批第 1 條）。
 **審查守的**：`encounter.resolve_encounter` 一律用模組屬性叫（`same_behavior` 的 `stamina` 軌換掉這個屬性強制伏兵必勝／必敗）；`_ambush_fight` 的亂數用 `random.Random(f"設伏|…")`、不動 `Game.rng`；兩個人之間的函式（`fight`、`record`）帶兩個 ctx。
 **另外要跑的混合檔**（設伏、屯糧的用法散在別人的檔裡，這一輪不拆；改包任一檔時 `test_for` 挑不到，合併閘門要跑「相關的 slow」就靠這一張清單）：
 - `tests/gear/test_four_tiers.py`（叫 `_ambush_spoils`）、`tianxia/features/peers/tests/test_raid.py`（叫 `_ambush_record`）、`tests/acts/test_conquest_flip.py`（import `works` 舊名）。

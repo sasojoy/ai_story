@@ -17,7 +17,7 @@ import random
 from dataclasses import dataclass
 
 from tianxia import atlas, figure_life, figures  # 共用規則層（輿圖路線 atlas 第 50 批收進、人物活起來、大勢人物）
-from tianxia import bounties  # 過渡：待搬（懸賞 bounties 第 45 批）
+from tianxia.core import bounty_base
 from tianxia import calendar, materials
 from tianxia.calendar import DAY
 from tianxia.core.services import BACKED_LINE, PLAN_MISS  # noqa: F401
@@ -130,7 +130,7 @@ def region_of(state: GameState, content: Content, cid: str) -> str | None:
 def enemy(state: GameState, content: Content, cid: str, side: str | None) -> bool:
     """你跟他是不是敵對的兩方：交戰兩軍、各站一邊才算（散人、豪強、站中立的人物都不算）。"""
     his = figure_life.side_of(content, cid)
-    return side is not None and his is not None and bounties.ENEMY.get(side) == his
+    return side is not None and his is not None and bounty_base.ENEMY.get(side) == his
 
 
 def can_leave(state: GameState, content: Content) -> bool:
@@ -175,7 +175,7 @@ def intel_facts(state: GameState, content: Content, cid: str) -> list[str]:
     """給情報講的事：跟他敵對的大勢人物（他沒站邊就是全部）此刻在哪、心事如何，他那一區的先、最多 intel_count 件。
     只講公開得到的事實（人物在哪、心事）；誰在哪裡設伏永遠不講。"""
     side = figure_life.side_of(content, cid)
-    foe = bounties.ENEMY.get(side or "")
+    foe = bounty_base.ENEMY.get(side or "")
     region = region_of(state, content, cid)
     rows: list[tuple[int, str]] = []
     for fid, fig in content.figures.items():
@@ -298,14 +298,14 @@ def condition_items(state: GameState, content: Content, cid: str, rng: random.Ra
         return region is None or figure_life._region(content, loc_id) == region
 
     scouts = [loc_id for loc_id, loc in content.locations.items()
-              if loc.danger >= 2 and not bounties.is_town(content, loc_id) and bounties._opened(loc, w) and near(loc_id)
+              if loc.danger >= 2 and not bounty_base.is_town(content, loc_id) and bounty_base._opened(loc, w) and near(loc_id)
               and loc_id != state.player.location]  # 叫你打探你正站著的地方沒有意思
     if scouts:
         loc = rng.choice(sorted(scouts))
         items.append(Item(f"scout:{loc}", f"替他打探{_place(content, loc)}", detail=f"玩家先去{_place(content, loc)}探索一回"))
     side = figure_life.side_of(content, cid)
-    if side in bounties.ENEMY:
-        strikes = sorted(x for x in bounties._strike_spots(content, w, side, set()) if near(x[0]))
+    if side in bounty_base.ENEMY:
+        strikes = sorted(x for x in bounty_base._strike_spots(content, w, side, set()) if near(x[0]))
         if strikes:
             loc, squad = rng.choice(strikes)
             items.append(Item(f"strike:{loc}:{squad}", f"替他討伐{_place(content, loc)}",
@@ -428,7 +428,7 @@ def result_line(content: Content, cid: str, decision: Decision, due: str = "") -
 
 
 def commission(state: GameState, content: Content, cid: str, condition: Item, ask: Item, seq: int) -> Bounty | None:
-    """打探、討伐的條件掛成一件委託（同書信的委託：只在你身上、照懸賞榜交差）；辦成了他欠你 ask 那一件（bounties._complete_commission）。"""
+    """打探、討伐的條件掛成一件委託（同書信的委託：只在你身上、照懸賞榜交差）；辦成了他欠你 ask 那一件（懸賞榜包 rules._complete_commission）。"""
     kind, _, rest = condition.id.partition(":")
     w = state.world
     tuning = content.config.figure_life
@@ -442,7 +442,7 @@ def commission(state: GameState, content: Content, cid: str, condition: Item, as
     else:
         return None
     return Bounty(
-        id=f"c{seq}", faction=side if side in bounties.ENEMY else None,
+        id=f"c{seq}", faction=side if side in bounty_base.ENEMY else None,
         week=calendar.point(w.time, content, w).week,
         expires=w.time + tuning.commission_days * DAY,
         silver=0, deeds=0, figure=cid, motive="委託", parley_ask=ask.id, **spec,
@@ -571,7 +571,7 @@ def forsake_all(state: GameState, content: Content) -> list[str]:
 
 
 def settle_task(state: GameState, content: Content, task_id: str, cid: str | None) -> bool:
-    """一件委託辦成了（bounties._complete_commission）：是欠他的那一件就清掉、記一筆守約；回 True 表示是NPC 智能 2.0的委託。"""
+    """一件委託辦成了（懸賞榜包 rules._complete_commission）：是欠他的那一件就清掉、記一筆守約；回 True 表示是NPC 智能 2.0的委託。"""
     p = state.player
     if cid is None:
         return False

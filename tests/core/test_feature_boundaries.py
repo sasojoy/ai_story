@@ -1420,9 +1420,9 @@ def test_the_shared_rules_layer_only_imports_the_core_and_itself():
 
 
 def test_a_pending_target_that_imports_a_package_says_it_drags_the_package_in():
-    """SHARED_PENDING 的對象自己 import 了包的（bounties 經舊名 letters、parley、sortie import 人物情誼包與出陣包；以前還有 atlas 經舊名 sortie
-    import 出陣包，第 50 批 atlas 收進共用規則層、不再 import 包，指到它的六條收掉）：import 那個共用規則層的模組，包就跟著載進來
-    （import figure_life 叫到 bounties 的那幾個函式時載入人物情誼、出陣兩包；seal_acts 函式裡 import seal〔第 27 批成了玉璽包的別名〕，叫到它就連帶載入玉璽包）。上面那幾條只看共用規則層自己的 import，
+    """SHARED_PENDING 的對象自己 import 了包的（以前有 bounties 經舊名 letters、parley、sortie import 人物情誼包與出陣包，第 45 批成包、figure_life 改讀核心 bounty_base，那一條收掉；
+    atlas 經舊名 sortie import 出陣包，第 50 批 atlas 收進共用規則層、不再 import 包，指到它的六條收掉）：import 那個共用規則層的模組，包就跟著載進來
+    （seal_acts 函式裡 import seal〔第 27 批成了玉璽包的別名〕，叫到它就連帶載入玉璽包）。上面那幾條只看共用規則層自己的 import，
     看不到這一層，所以理由要寫明「連帶載入」與那幾包的名字；對象不再 import 包了，「連帶載入」那句也拿掉（第 15 批審查修正）。
     只驗對象直接的 import；經對象再往下一層的（chapters 經舊名 storyline 載一條線包）寫在理由裡，這裡不驗。"""
     for (name, old), why in SHARED_PENDING.items():
@@ -1578,9 +1578,8 @@ CORE_EVENT_DELEGATES = {  # Game 上本體只有一行 `return event_check.<名>
 #   ("event_check.answer_event", "_gift_entry")：features/gear：效果加了情誼，另起一則贈禮
 #   ("event_check.answer_event", "_report_seat")：features/orders：效果推了大勢、記了貢獻，第四階席次的帳也抄
 #   answer_branch 叫同樣那 7 個（一共 15 對）。
-# import 那一向沒有名單：event_check 第 37 行 import 的 bounties（總表歸 features/bounties）、foreshadow（歸 features/orders）成包、
-# 舊名留成別名時，test_the_core_never_imports_a_feature_package_except_the_registry 會抓到（核心只准 engine.py 的 GAME_IMPORTS）；
-# 那一批交 PM 定：開一張核心的 import 名單，或那一包開查詢服務、event_check 改經 ctx 叫。
+# import 那一向沒有名單：核心 import 了成包的舊名時，test_the_core_never_imports_a_feature_package_except_the_registry 會抓到（核心只准 engine.py 的 GAME_IMPORTS）。
+# event_check 原本 import 的 bounties（join_note）第 45 批 PM 定改讀核心 core/bounty_base（第 45 行），foreshadow 第 34 批改讀核心 omen_base。
 CORE_DELEGATE_CALLERS: dict[tuple[str, str], str] = {}
 # guide（全部拆包第 22 批）：上面註解裡寫好的 features/guide 那 6 對（answer_event、answer_branch × _begin_enlistment、_greet_rejoin、_check_hints）
 # 新手引導搬成包、它們成了委派，照註解記進來（理由在 # guide 那一段的 CORE_DELEGATE_CALLERS_GUIDE）
@@ -1781,7 +1780,7 @@ def test_the_service_scanner_catches_a_game_method_off_the_list():
     ("from tianxia.features import feast\n", "別的包"),
     ("from tianxia.features.feast import rules\n", "別的包"),
     ("from ..feast import rules\n", "別的包"),
-    ("from tianxia import bounties\n", "舊模組"),  # shared：原本的例子 library 第 15 批登記進共用規則層，換一個還是舊模組的
+    ("from tianxia import shopview\n", "舊模組"),  # shared：原本的例子 library 第 15 批登記進共用規則層，換一個還是舊模組的；bounties 第 45 批成包，再換 shopview（SHARED_LATER，還是舊模組）
     ("from tianxia import engine\n", "舊模組"),
     ("import tianxia.server_bots\n", "舊模組"),
     # 舊名留成的別名（tianxia/feasts.py 把 sys.modules 換成宴客包的 rules）就是那一包：註了過渡也擋
@@ -1850,7 +1849,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # gear（全部拆包第 42 批：tianxia/signature_arms.py）
                          "signature_arms": "gear",
                          # seal（全部拆包第 27 批：tianxia/seal.py；包名跟別名同字，同 cultivation、guide）
-                         "seal": "seal"}
+                         "seal": "seal",
+                         # bounties（全部拆包第 45 批：tianxia/bounties.py、wanted.py；包名跟別名同字，同 cultivation、guide、seal）
+                         "bounties": "bounties", "wanted": "bounties"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 
@@ -1859,12 +1860,12 @@ def test_a_mark_with_no_old_module_left_is_caught():
     assert stale_marks("from tianxia import siege  # 過渡：待搬\n", "tianxia.features.battle.view") == [1]
     assert stale_marks("from tianxia import journal, team  # 過渡：待搬\n", "tianxia.features.battle.view") == [1]
     # shared：原本的例子 conquest 第 15 批登記進共用規則層，換一個還是舊模組的
-    assert stale_marks("from tianxia import bounties, siege  # 過渡：待搬\n", "tianxia.features.battle.view") == []
+    assert stale_marks("from tianxia import shopview, siege  # 過渡：待搬\n", "tianxia.features.battle.view") == []  # 第 45 批：原本的例子 bounties 成包，換還是舊模組的 shopview
     assert stale_marks("from tianxia import siege\n", "tianxia.features.battle.view") == []
 
 
 @pytest.mark.parametrize("source", [
-    "from tianxia import bounties  # 過渡：待搬\n",  # shared：原本的例子 library 第 15 批登記進共用規則層
+    "from tianxia import shopview  # 過渡：待搬\n",  # shared：原本的例子 library 第 15 批登記進共用規則層；bounties 第 45 批成包，再換 shopview（還是舊模組）
     "from tianxia import library\n",  # shared：共用規則層（第 15 批）不必註
     "from tianxia import siege\n",  # 共用規則層（registry.SHARED，第 11 批）：不必註
     "from tianxia.siege import title\n",
@@ -2023,7 +2024,7 @@ CORE_DELEGATE_CALLERS.update({
 # 發布點之外不直接叫事件的訂閱者（計畫 1.7、Task 4）：懸賞的四種交差（bounties.on_win／on_explore／on_arrive／on_raid_win）、玉璽的撿碎片與收場
 # （_seal_find、_seal_settle：第 27 批玉璽成包、兩格改由玉璽包登記之後，Game 上只剩給測試的一行委派，包與 engine 照樣不准叫）、
 # 交糧車（_convoy_arrives，已拿掉），在 engine.py 與每一包的 .py（測試除外）只准出現在核心代叫表 engine._BUS_CORE 裡；
-# 別處要聽，登記事件的格（Feature.bus()），先後照核心的 BUS_ORDER。bounties.on_aid（人物託付交差）不在總表的四種裡，不管（交 PM）。
+# 別處要聽，登記事件的格（Feature.bus()），先後照核心的 BUS_ORDER。bounties.on_aid（人物託付交差）第 45 批開成事件 aid（PM 點頭），在 # bounties 那一段加進來。
 BUS_SUBSCRIBERS = {("bounties", "on_win"), ("bounties", "on_explore"), ("bounties", "on_arrive"), ("bounties", "on_raid_win")}
 BUS_METHODS = {"_seal_find", "_seal_settle", "_convoy_arrives"}
 
@@ -2060,7 +2061,7 @@ def test_nobody_calls_an_event_subscriber_outside_the_publish_points():
            "_BUS_CORE = {'win': {'bounties': lambda ctx, loc_id, squad_id: bounties.on_win(ctx.state, ctx.content, ctx.world, loc_id, squad_id)},\n"
            "             'outing': {'seal': lambda ctx, loc_id: ctx._seal_find(loc_id)}}\n"
            "def aid(s, c, who):\n    return bounties.on_aid(s, c, who) + bounties.mine(s, c)\n")
-    assert bus_bypasses(old) == [2, 4, 4, 6, 8, 8, 10]
+    assert bus_bypasses(old) == [2, 4, 4, 6, 8, 8, 10, 14]  # 14：人物託付第 45 批開成事件 aid，on_aid 也算訂閱者（mine 不算）
 
 
 # core_step（全部拆包第 36 批「你這一步」；計畫 docs/superpowers/plans/2026-11-06-你這一步-第36批.md 1.4、2.6）：step、weekcard 不再 import 包
@@ -2088,7 +2089,7 @@ def test_step_and_weekcard_joined_the_core_and_reach_no_package():
                     "from . import step as step_rules\n"
                     "from . import opening as opening_rules\n"
                     "from . import prologue as prologue_rules\n")
-    old_step = "from . import atlas, bounties, foreshadow, orders\nfrom .rules import jianfa\n"
+    old_step = "from . import atlas, foreshadow, orders\nfrom .rules import jianfa\n"  # 第 45 批：bounties 成包之後多回一筆，拿掉（照第 40 批認定第 15 條），這個例子只驗 foreshadow 那一包
     assert _package_imports_of(old_weekcard, "tianxia.weekcard") == [(1, "companions"), (1, "military"), (1, "story"), (3, "guide")]
     assert _package_imports_of(old_step, "tianxia.step") == [(1, "military")]
     assert not [e for e in transitional_imports() if e.endswith(" tianxia.step") or e.endswith(" tianxia.weekcard")]
@@ -2285,6 +2286,35 @@ SHARED_LATER["skillview"] = ("門下頁的說明（彙整）：讀自創 create�
                              "鐵匠鋪 smithing（第 41 批已成包，經舊名別名）；那幾包成包、改成查詢服務之後再收（輿圖 atlas 第 50 批收進了共用規則層）")
 for _pair in (("conquest", "seal_acts"), ("figures", "seal_acts"), ("figure_life", "seal_acts"), ("plans", "seal_acts")):
     SHARED_PENDING[_pair] += "；seal_acts 函式裡 import seal（第 27 批成了玉璽包的別名），叫到它就連帶載入玉璽包"
+
+# bounties（全部拆包第 45 批「懸賞榜」：新包 tianxia/features/bounties/；計畫 docs/superpowers/plans/2026-11-07-懸賞榜包-第1批.md）：這一批加的集中在這一段
+# （並行的拆包線不跟別人的行穿插；拿掉別人段裡的格一律用 del、-=、discard）。4 個方法（_bounty_options、_bounty、post_wanted、_raid_bounty）搬進 actions.py，Game 留 _bounty_options、_bounty、_raid_bounty
+# 與 sync、own_turn_checks、choose、status_data 碰懸賞榜的 4 個一行委派，加人物情誼包回答懸賞榜包的 5 個（道謝信、守約、兌現；PM 認定乙案）。post_wanted 沒人叫（wanted.run 直接叫包），不留。
+# engine 不再 import 舊名 bounties（別人讀的那一半在核心 core/bounty_base），所以 GAME_DIRECT 不加。choose 的 bounty:、_action_title 的兩格、_act 的 act:bounties 換成 choose 掛鉤與 Verb，拿掉；
+# 事件五格、世界層四格、你這一步兩格、叛投 stranded 那一格改由包登記。
+GAME_IMPORTS |= {"tianxia.features.bounties.actions"}
+GAME_DELEGATES |= {
+    # 核心原位選單叫的（_bounty_options）、tests/gear/test_shop2.py 直接叫的（_bounty，同 _smith）、截殺與設伏經 ctx 叫的（_raid_bounty，services.py 二 # bounties）
+    "_bounty_options", "_bounty", "_raid_bounty",
+    # 核心原位叫的（下面 GAME_DELEGATE_CALLERS）
+    "_bounty_deliver", "_bounty_post_auto", "_bounty_stale", "_bounty_status",
+    # 懸賞榜包經 ctx 問人物情誼包的（services.py 二 # bounties）
+    "_letter_thank", "_parley_settle_task", "_parley_keep", "_parley_owed_line", "_parley_ask_label",
+}
+_BOUNTY_SHOP = ("懸賞榜不登記店面（PM 認定：三間店排給第 56 批選單收接縫）：「此地還能做」的入口順序 懸賞榜 → 鐵匠鋪 → 馬市 → 搬成包的店，`features_core._shops` 照 FEATURES 走，酒肆排在 smithy、gear 前面，"
+                "要維持就得挪包或開寫死的店面順序表；sync 只收鐵匠鋪、馬市，懸賞榜登記 drop_shops 會在 sync 多收一次")
+GAME_DELEGATE_CALLERS.update({
+    ("_everyday_options", "_bounty_options"): _BOUNTY_SHOP,
+    ("sync", "_bounty_deliver"): ("退押金與作廢在 _settle_partings 之後、_settle_plots 之前，江湖紀錄的先後算行為；on_sync 只問開著的包（active）而 deliver_* 不問 active"
+                                  "（季收了也要退押金、也要補作廢那一句），位置也在前面（功能包的補算），接不了"),
+    ("own_turn_checks", "_bounty_post_auto"): "系統通緝要在「賽季時鐘暫停」那一道之後（暫停中世界不變）；on_own_turn 掛鉤在暫停那一道之前，位置不同接不了",
+    ("choose", "_bounty_stale"): "FB-162 被搶的那一句回 Refused（伺服器照它跳提示）；choose_unlisted 回 list、而且在查選單之前，位置與回傳都不同，照 FB-195 馬市那一支留原位",
+    ("status_data", "_bounty_status"): "懸賞卡是 status_data 裡的 \"bounties\" 那一格；Feature.status 合進頂層另一個鍵（main.xxx），位置不同接不了",
+})
+BUS_SUBSCRIBERS |= {("bounties", "on_aid")}  # 人物託付第 45 批開成事件 aid（PM 點頭，BUS_ORDER 只加這一列）
+del SHARED_PENDING[("figure_life", "bounties")]  # figure_life 讀的 RALLY_POSTED、how、enemy_name、post_rally、post_figure 全部在核心 core/bounty_base（呼叫點位置與粒度不動），不必在 WORLD_ORDER["life"] 加格
+SHARED_LATER["shopview"] = SHARED_LATER["shopview"].replace("懸賞 bounties（第 45 批）", "懸賞 bounties（第 45 批已成包，經舊名別名）")
+
 
 # merge_back（主幹合回 develop 第 1 段，2026-11-06）：develop 新加的 9 個 Game 方法先修到能跑。暫時的三筆寫明第 2 段哪一塊收，最後的閘門要確認一條都不剩。
 # _allocate_v2 這一段就進了修練包（allocate_stat 的本體在包裡，只有它叫）；_season_prep、season_prep_view、_attr_rows、place_state_view 留核心（PM 認定第 6、7 條）；

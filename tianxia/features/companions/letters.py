@@ -4,7 +4,7 @@ https://claude.ai/code/artifact/03df3760-b4bd-417c-935f-96dda0f500c2 第五節�
 情誼到 letter_affinity 的人物，在規則觸發時派人送一封信，一人一個遊戲日最多一封：
 - 道賀：你剛做了他欣賞的事（figure_life.spread 讓他的情誼往上動的那幾件，記在 PlayerState.cheers），先寫這一種；
 - 求援：他此刻的心事是焦慮或悲憤（figure_life.mood_any），附一件委託（討伐、打探、護送，跟懸賞榜同一套；Bounty，motive「委託」，
-  只在你身上）。辦成了照 bounties._complete_commission：銀兩 commission_silver、他的情誼 +commission_affinity。
+  只在你身上）。辦成了照懸賞榜包 rules._complete_commission：銀兩 commission_silver、他的情誼 +commission_affinity。
   同一位人物身上還有一件沒辦完的委託就不再寫求援。
 寫信用自己一份亂數（天機｜名號｜遊戲日），不碰 Game.rng。信的固定句寫在這裡；伺服器鎖外請模型照他的口氣重寫（write、clean，
 三段式：Game.letter_request → write → Game.apply_letter），寫不出來照固定句。宴客的邀請是第三批。
@@ -16,7 +16,8 @@ import re
 
 from pydantic import BaseModel
 
-from tianxia import bounties, figure_life  # 過渡：待搬（懸賞第 45 批）
+from tianxia import figure_life
+from tianxia.core import bounty_base
 from tianxia import calendar, gender, prologue, rules, zh
 from tianxia.calendar import DAY
 from tianxia.core.services import CHEERS_KEEP, note_cheer  # noqa: F401  等著寫道賀信的那一格走核心（figure_life.spread 寫，全部拆包第 19 批）；舊名照舊讀得到
@@ -136,21 +137,21 @@ def _feast_letter(state: GameState, content: Content) -> Letter | None:
 
 
 def thank(state: GameState, content: Content, task: Bounty) -> list[str]:
-    """求援委託辦成了（bounties._complete_rally）：那位人物寫一封道謝信（不佔一天一封的額度：是回你的信）。回傳江湖紀錄的句子。"""
+    """求援委託辦成了（懸賞榜包 rules._complete_rally，經 ctx._letter_thank）：那位人物寫一封道謝信（不佔一天一封的額度：是回你的信）。回傳江湖紀錄的句子。"""
     cid = task.figure
     if not on(content) or cid is None or cid not in content.characters:
         return []
     p = state.player
     p.letters.append(Letter(id=_next_id(state), kind="道謝", sender=cid, at=state.world.time,
-                            about=bounties.title(content, task),
-                            text=THANK_TEXT.format(hero=gender.hero(p), task=bounties.title(content, task))))
+                            about=bounty_base.title(content, task),
+                            text=THANK_TEXT.format(hero=gender.hero(p), task=bounty_base.title(content, task))))
     del p.letters[:-content.config.figure_life.letters_keep]
     return [ARRIVED.format(who=_name(content, cid))]
 
 
 def _help_letter(state: GameState, content: Content, rng: random.Random) -> Letter | None:
     p, w = state.player, state.world
-    busy = {b.figure for b in bounties.open_commissions(state, content)}
+    busy = {b.figure for b in bounty_base.open_commissions(state, content)}
     asking = [(cid, mood) for cid in content.characters
               if cid not in busy and _reachable(state, content, cid)
               and (mood := figure_life.mood_any(state, content, cid)) in HELP_MOODS]
@@ -161,7 +162,7 @@ def _help_letter(state: GameState, content: Content, rng: random.Random) -> Lett
             continue
         place = figure_life.where(state, content, cid)
         text = HELP_TEXT[mood].format(hero=gender.hero(p), place=content.locations[place].name if place in content.locations else "",
-                                      task=bounties.how(content, task, state))
+                                      task=bounty_base.how(content, task, state))
         return Letter(id=task_id(task), kind="求援", sender=cid, at=w.time, mood=mood, text=text, task=task)
     return None
 
@@ -184,17 +185,17 @@ def commission(state: GameState, content: Content, cid: str, rng: random.Random)
         return region is None or (found is not None and found.id == region)
 
     choices: list[dict] = []
-    if side in bounties.ENEMY:
-        strikes = [x for x in bounties._strike_spots(content, w, side, set()) if near(x[0])]
+    if side in bounty_base.ENEMY:
+        strikes = [x for x in bounty_base._strike_spots(content, w, side, set()) if near(x[0])]
         if strikes:
             loc, squad = rng.choice(strikes)
             choices.append({"kind": "strike", "location": loc, "squad": squad})
     scouts = [loc_id for loc_id, loc in content.locations.items()
-              if loc.danger >= 2 and not bounties.is_town(content, loc_id) and bounties._opened(loc, w) and near(loc_id)]
+              if loc.danger >= 2 and not bounty_base.is_town(content, loc_id) and bounty_base._opened(loc, w) and near(loc_id)]
     if scouts:
         choices.append({"kind": "scout", "location": rng.choice(scouts)})
     towns = [loc_id for loc_id, loc in content.locations.items()
-             if bounties.is_town(content, loc_id) and bounties._opened(loc, w) and loc_id != p.location]
+             if bounty_base.is_town(content, loc_id) and bounty_base._opened(loc, w) and loc_id != p.location]
     ends = [t for t in towns if near(t)] or towns
     if ends:
         choices.append({"kind": "escort", "end": rng.choice(ends), "location": p.location})
@@ -203,7 +204,7 @@ def commission(state: GameState, content: Content, cid: str, rng: random.Random)
     spec = rng.choice(choices)
     tuning = content.config.figure_life
     return Bounty(
-        id=f"c{_next_id(state)}", faction=side if side in bounties.ENEMY else None,
+        id=f"c{_next_id(state)}", faction=side if side in bounty_base.ENEMY else None,
         week=calendar.point(w.time, content, w).week,
         expires=w.time + tuning.commission_days * DAY,
         silver=tuning.commission_silver, deeds=0, figure=cid, motive="委託", **spec,
@@ -228,10 +229,12 @@ def view(state: GameState, content: Content) -> dict | None:
            "open": letter.kind == "託付"}  # 開局那一封（opening.py）一到就攤開：人物開口的話要看得到，不是只露一行
     t = letter.task
     if t is not None:
+        from . import parley  # noqa: PLC0415  parley → figure_life：只在有委託的那一封信才用（委託的賞同一句字，core/bounty_base.commission_line）
+
         live = not letter.lapsed and not t.done_by and t.expires > state.world.time
-        out["task"] = {"title": bounties.title(content, t), "how": bounties.how(content, t, state),
-                       "reward": bounties.commission_reward(state, content, t),
-                       "due": f"期限 {bounties.due_text(t, content, state.world)}", "live": live,
+        out["task"] = {"title": bounty_base.title(content, t), "how": bounty_base.how(content, t, state),
+                       "reward": bounty_base.commission_line(content, t, parley.ask_label(content, t.parley_ask) if t.parley_ask else ""),
+                       "due": f"期限 {bounty_base.due_text(t, content, state.world)}", "live": live,
                        "state": "辦成了" if t.done_by else "作罷了" if letter.lapsed or not live else ""}
     errand = errands.letter_card(state, content, letter) if letter.kind == "託付" else None
     if errand is not None:  # 減法季批 6：託付的信附那一件（主機側計畫 1.3 的 main.errands 同一筆）；不是託付的信沒有這個鍵
@@ -298,7 +301,7 @@ def request(state: GameState, content: Content) -> LetterNote | None:
     ch = content.characters.get(letter.sender)
     persona = "；".join(x for x in ((ch.personality if ch else ""), (ch.situation if ch else "")) if x)
     errand = errands.by_letter(state, letter.id) if letter.kind == "託付" and letter.task is None else None
-    task = bounties.how(content, letter.task, state) if letter.task else errands.task_text(content, errand) if errand else ""
+    task = bounty_base.how(content, letter.task, state) if letter.task else errands.task_text(content, errand) if errand else ""
     return LetterNote(
         id=letter.id, kind=letter.kind, sender=letter.sender, sender_name=_name(content, letter.sender), persona=persona[:200],
         mood=letter.mood, about=letter.about, task=task,

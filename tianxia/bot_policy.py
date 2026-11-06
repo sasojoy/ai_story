@@ -711,13 +711,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         moved = rules.resolve_trends(game.content, game.state.world, effect.trend, game.state.player.location)
         return effect_score(effect, _goals(game, profile), moved)
     # 對話（talk:、parley:）搬進功能包：假人只按告辭，分數在 features/companions/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 20 批）
-    if kind == "bounty":  # 懸賞榜上：揭得下的去揭，揭滿了或沒得揭就返回；不放棄手上的
-        verb = arg.partition(":")[0]
-        if verb in ("pick", "give"):  # 求兵：只交 bounties.give_choice 指的那一張、那一件（不隨機，懸賞榜設計 9.3）
-            move = bounties.give_choice(game.state, game.content, game.world)
-            wanted = None if move is None else f"bounty:pick:{move[0]}" if verb == "pick" else f"bounty:give:{move[0]}:{move[1]}"
-            return BOUNTY_SCORE if option.id == wanted else None
-        return BOUNTY_SCORE if verb == "take" else 0.0 if verb in ("back", "unpick") else None
+    # 懸賞榜（bounty:）搬進功能包：假人的分數在 features/bounties/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 45 批）
     # 鐵匠鋪（smith:）搬進功能包：假人的分數在 features/smithy/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 41 批）
     # 酒肆（tavern:）搬進功能包：假人的分數在 features/tavern/bots.py，上面的 features_core.bot_pick 問它（主動搬六包第 10 批）
     # 馬市（market:）搬進功能包：假人的分數在 features/gear/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 42 批）

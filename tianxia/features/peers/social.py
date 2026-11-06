@@ -3,7 +3,7 @@
 第一層：看得到彼此。場景底下列「此地還有誰」（`here`），點名字打開一張玩家卡（`card`）：名號、門派・陣營・頭銜、等級、
 身上兩門武學（只寫名字與品質），以及卡上的動作鈕。
 
-卡上的動作是一張登記表（`ACTIONS`）：每一種互動寫一個 `CardAction`，用 `register` 登記，就會出現在每一張卡上——
+卡上的動作是一張登記表（`ACTIONS`，在核心 `tianxia/core/cards.py`，第 45 批；這裡 re-export）：每一種互動寫一個 `CardAction`，用 `register` 登記，就會出現在每一張卡上——
 `buttons` 決定這張卡上畫哪幾顆鈕（可以一顆都不畫），`run` 是按下去之後做的事。贈物、結伴同行、打招呼、切磋、論武都掛在這裡。
 「此地還有」（`here`）與身分字（`affiliation`）在 `tianxia/core/presence.py`（核心的查詢服務，第 37 批），這裡 re-export。
 引擎的門面是 `Game.peers_here`、`Game.peer_card`、`Game.peer_act`（拒絕的話與對方不在這裡都在那裡擋）。
@@ -12,12 +12,12 @@
 """
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from tianxia import four_tiers, gender, renown, team
 from tianxia.characters import name_key
+from tianxia.core.cards import ACTIONS, CardAction, CardButton, register  # noqa: F401  玩家卡的登記表搬進核心（第 45 批）：舊名照舊拿得到同一批物件
 from tianxia.core.presence import GONE, affiliation, here, side, visible  # noqa: F401  「此地還有」的判斷與身分字搬進核心（第 37 批）：舊名照舊拿得到同一批函式物件
 from tianxia.rules import day_turn
 from tianxia.state import GameState
@@ -47,61 +47,7 @@ def brief(msgs: list[str] | None) -> str:
     return first if len(first) <= BRIEF_MAX else first[:BRIEF_MAX] + "……"
 
 
-@dataclass
-class CardButton:
-    """玩家卡上的一顆鈕。id 是送回 /api/peer/act 的 action（同一種互動可以有好幾顆，例如每一種禮節一顆，用 arg 分開）。"""
-
-    action: str  # CardAction.id
-    label: str
-    arg: str = ""  # 同一種互動的哪一個（禮節、送哪一樣）；run 收到的 params["arg"]
-    note: str = ""  # 鈕上的小字（花多少、為什麼按不下去）
-    enabled: bool = True
-    confirm: str = ""  # 按下去之前先問一次的話；空的直接送
-    amount: int = 0  # >0：按下去要先填一個數量（amount_min～amount），送 params["amount"]
-    amount_min: int = 1  # 數量的下限（輸入框的 min 與提示字）：贈物是 1，通緝是 post_min（FB-121 第 6 件）
-    choices: list[dict] = field(default_factory=list)  # 有的話先挑一樣（[{id, label, max}]），送 params["choice"]；數量上限照那一樣的 max
-    # 同一種互動裡「每一樣東西一顆」的鈕（論武出哪一樣）：同一個 group 的鈕網頁收成一個下拉清單（每一項寫 pick）配一顆寫 group 的鈕，
-    # 卡片不會隨東西變多一直變長。空的照常一顆一顆畫
-    group: str = ""
-    pick: str = ""
-    # >0：按下去先攤開一格輸入框（可以留空），最多這麼多字，送 params["text"]（挑釁附一句話）；伺服器在行動鎖外先審過（speech）
-    text: int = 0
-
-    def view(self) -> dict:
-        return {
-            "action": self.action, "label": self.label, "arg": self.arg, "note": self.note,
-            "enabled": self.enabled, "confirm": self.confirm, "amount": self.amount, "amount_min": self.amount_min,
-            "choices": self.choices,
-            "group": self.group, "pick": self.pick, "text": self.text,
-        }
-
-
-@dataclass
-class CardAction:
-    """卡上的一種互動。buttons(game, other) 畫鈕；run(game, other, params) 做事、回給按的人看的訊息。
-    other 是對方那一份 Game（不叫模型、沒有補算時間：替別人寫東西不能讓他看起來剛剛上過線）；run 改了 other.state，
-    Game.peer_act 會存回去。數值一律由這裡的規則定，params 只是玩家挑的東西，要自己驗。"""
-
-    id: str
-    buttons: Callable[[Game, Game], list[CardButton]]
-    run: Callable[[Game, Game, dict], list[str]]
-    order: int = 100  # 卡上由上而下的順序（小的在前）
-    # 按下去之前要不要先請模型（論武的首創取名）：回 naming.NamingRequest 就由伺服器在行動鎖外取名（三段式的 A 段，只讀），
-    # 取好的（名字, 說明）放進 params["proposed"] 再交給 run；不給或回 None 照常直接 run
-    request: Callable[[Game, Game, dict], object] | None = None
-    # 帶玩家打的一句話（params["text"]）的互動：(那一句, speech 的種類) 交給伺服器在行動鎖外請模型審，結果放進 params["verdict"]；
-    # 不給或回 None 不審（C 段的字表照樣由 run 自己查）
-    screen: Callable[[Game, Game, dict], tuple[str, str] | None] | None = None
-
-
-ACTIONS: dict[str, CardAction] = {}
-
-
-def register(action: CardAction) -> CardAction:
-    ACTIONS[action.id] = action
-    return action
-
-
+# 玩家卡的動作登記表（CardButton、CardAction、ACTIONS、register）搬進核心 tianxia/core/cards.py（全部拆包第 45 批）：上面 import 回來，同一批物件
 def arts(other: Game) -> list[dict]:
     """身上兩門（內功、武學）：名字（改過名的照改過的寫）與他自己那一份的品質。沒有的那一欄不寫。"""
     s, c = other.state, other.content

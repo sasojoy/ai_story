@@ -43,6 +43,13 @@
   （chronicle_block、sink_text 與 BOOK_*）；核心的 world、engine 的管理者「定結果」與江湖史、決戰包的 view、progress 讀它，玉璽包的 seal.py
   re-export 同一批。同 event_check 不進 MODULES。
 
+# bounties（全部拆包第 45 批：懸賞榜成包；計畫 docs/superpowers/plans/2026-11-07-懸賞榜包-第1批.md）
+- cards.py：玩家卡的動作登記表——CardButton、CardAction、ACTIONS、register（原本在玩家互動包的 social.py，第 37 批 PM 認定第 3 條）；玩家互動包的卡模組與懸賞榜包的通緝都登記進這一張，
+  social re-export 同一批物件。同 event_check 不進 MODULES。
+- bounty_base.py：懸賞榜「別人讀」的那一半——字句（ENEMY、BOARD、OFFICIAL、STRANDED_*、LAPSED_SIDE、LAPSED_LEAN、BEATEN_OFFICIAL、RALLY_POSTED……）、榜（active、board_here、close_board、mine、visible、
+  open_bounties）、標題與怎麼完成（title、how、issuer、enemy_name）、接不接得了（can_take、stranded、join_note、drop_stranded、hunting、official_hit）、委託（open_commissions、commission_line）、
+  掛單的地點（_opened、_strike_spots）、人物掛的（post_rally、post_figure：會寫季，但只靠核心與共用層）；事件檢定、Game 原位、figure_life 與各包讀它，懸賞榜包的 rules re-export 同一批。同 event_check 不進 MODULES。
+
 第一階 ctx 就是 Game 本身，不另包一層（手冊 3.3）。
 """
 
@@ -60,7 +67,7 @@ MODULES = frozenset({
     "team", "gender", "naming", "wallet", "journal", "attrset",
     "world",
     "log_archive",
-    # core_step（全部拆包第 36 批）：step、weekcard 不再 import 包之後收進來（計畫 1.5 甲案）。它們還代叫懸賞榜（step._STEP_CORE）、
+    # core_step（全部拆包第 36 批）：step、weekcard 不再 import 包之後收進來（計畫 1.5 甲案）。懸賞榜兩格第 45 批由包登記（step._STEP_CORE 空了）；它們還
     # 讀章回（chapters），核心 → 舊模組這一版照舊不掃（同 world）
     "step", "weekcard",
 })
