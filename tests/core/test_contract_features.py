@@ -69,6 +69,7 @@ def _own_ids(feature, game) -> list[str]:
     ids = []
     for _ in _stages(feature, game):
         ids += [o.id for o in feature.options(game)] + [o.id for o in (feature.menu(game) or [])]
+        ids += [o.id for o in (feature.prep(game) or [])]  # 開季準備卡那一步（prep；None 是這一包沒有要在卡上給的）
         ids += [o.id for shop in feature.shops() if shop.inside(game) for o in shop.menu(game)]
     return ids
 
@@ -244,6 +245,7 @@ def test_a_closed_package_gives_nothing(feature, monkeypatch):
     assert all(features_core.act_cell(game, v.verb, loc, 0, False) is None for v in feature.verbs() if v.cell is not None)
     if feature.prefix is not None:
         assert not any(_starts(o.id, feature) for o in features_core.options(game))
+        assert not any(_starts(o.id, feature) for o in (features_core.prep(game) or []))  # 開季準備卡那一步：關著不給
     if feature.prefix is not None and feature.name not in MENU_BY_CORE:
         assert not any(_starts(o.id, feature) for o in game.options())
     for option_id in own:
