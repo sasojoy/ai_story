@@ -50,7 +50,8 @@
 | on_season_close(ctx, reread) | Game.admin_end_season 讀回收季那一份季之後、補大事之前（reread=False）；Game.admin_next_season 休季時、開下一季之前（reread=True：收兵之前讀回手上那一份季）——收季的收兵（決戰；全部拆包第 8 批） |
 | shops()（Shop） | 店面登記：店裡那一串（_everyday_options）、進店那一顆、哪一間開著（_shop_open）、動身收店（_depart）、此地不開了收店（sync、_drop_stale_references） |
 | verbs()（Verb） | act 子動詞：_act 最前面、_action_title、行動列那一格（_everyday_options）、行動列底下那一行（action_notes）、只打開一張卡的回話（choose）；
-  這一下打哪一路（_fight_squad 最前面：大場面判讀問；sortie：全部拆包第 17 批多開的一格 squad） |
+  這一下打哪一路（_fight_squad 最前面：大場面判讀問；sortie：全部拆包第 17 批多開的一格 squad）。帶後綴的 act:<verb>:<後綴>（全部拆包第 57 批：tail_run、tail_title、tail_squad）問同一張表；
+  只有 act:heal 與舊探索 act:explore 留在 _act 原位（計畫 docs/superpowers/plans/2026-11-06-分派標題收接縫-第57批.md 第四節） |
 | world()（WorldHook） | 世界層的格（core_world：全部拆包第 25 批）：world.advance_world_state 每一步、season_events 的週初與每天、settle_season_start、
   end_season、_open_claimed；sqlite_world 的開季與換季；figure_life.tick 每一位對話人物（life，第 40 批）。照檔尾那張寫死的順序表 WORLD_ORDER 一格一格叫（包與還沒成包的舊模組穿插），不問 enabled |
 | effects()（EffectHook） | 一則效果的格（core_effects：全部拆包第 32 批）：rules.apply_effect 從頭到尾一段一格，照檔尾寫死的順序表 EFFECT_ORDER 一格一格叫
@@ -65,7 +66,7 @@
 | seams()（SeamHook） | 補算與換季的格（core_seams：全部拆包第 55 批）：Game.sync、advance、world_tick、_advance_player_local、own_turn_checks、_drop_stale_references、
   _reset_player_for_new_season 裡各包那一段，照檔尾寫死的順序表 SEAM_ORDER 一格一格叫（包與核心的段穿插），不問 enabled |
 | menus()（MenuHook） | 選單與動身的格（core_seams：全部拆包第 56 批）：Game.options、_everyday_options、action_notes、_idle、_shop_open、_stamina_play_options、atlas.travel_block、
-  移動包的出發收店裡各包那一段，照檔尾寫死的順序表 MENU_ORDER 一格一格問（包與核心的格穿插），不問 enabled |
+  移動包的出發收店裡各包那一段，第 57 批加 Game.choose 那幾顆「選單上、不建紀錄」的（quick），照檔尾寫死的順序表 MENU_ORDER 一格一格問（包與核心的格穿插），不問 enabled |
 
 ctx 第一階就是 Game；功能包只准叫 services.py 那張清單上的方法。
 """
@@ -98,8 +99,10 @@ class Shop:
 
 @dataclass(frozen=True)
 class Verb:
-    """act:<verb> 那一格的主人（act 子動詞；第 11 批先開給主人已經成包的三格，總表第 57 批其餘的接上同一張表）。每一樣都可以是 None，
-    回 None 也一樣：照舊由核心做（核心那一支還在：舊探索、遊歷……）。"""
+    """act:<verb> 那一格的主人（act 子動詞；第 11 批先開給主人已經成包的三格，全部拆包第 57 批把其餘的接上同一張表，只留 act:heal 與舊探索）。每一樣都可以是 None，
+    回 None 也一樣：照舊由核心做（核心那一支還在：舊探索、療傷）。
+    選項帶後綴的（act:<verb>:<後綴>，第 57 批）：verb 寫冒號前那一段，按下去、標題、打哪一路問 tail_* 那三格，同一個 Verb 可以同時管 act:recruit 與 act:recruit:<人物>；
+    行動列那一格、底下那一行、picks 只認沒有後綴的。一格一主、子動詞互斥，沒有先後，不開順序表（tests/core/test_contract_core.py、test_contract_features.py 鎖 {verb: 包}、不准兩包認同一格）。"""
 
     verb: str
     run: Callable[[Any, Any], list[str] | None] | None = None  # Game._act 最前面：按下去（ctx, prepared）
@@ -110,6 +113,10 @@ class Verb:
     # sortie（全部拆包第 17 批「出陣三」多開的一格；第 11 批計畫第五節第 1 條預告的「這一下打不打仗」）：Game._fight_squad 最前面，
     # 這一格按下去會打哪一路（大場面判讀、鎖外 A 段與鎖內 C 段的重驗都問它）；不打仗是 None（核心照舊往下，act: 那幾格往下也是 None）
     squad: Callable[[Any], Squad | None] | None = None
+    # core_seams（全部拆包第 57 批）：帶後綴的那一下
+    tail_run: Callable[[Any, Any, str], list[str] | None] | None = None  # Game._act 最前面：按下去（ctx, prepared, 後綴）
+    tail_title: Callable[[Any, str], str | None] | None = None  # Game._action_title：這一下江湖紀錄的整個標題（ctx, 後綴）
+    tail_squad: Callable[[Any, str], Squad | None] | None = None  # Game._fight_squad 最前面：這一下打哪一路（ctx, 後綴）
 
 
 @dataclass(frozen=True)
@@ -587,18 +594,26 @@ def _verbs(ctx: Game | None, verb: str) -> list[Verb]:
 
 
 def act(ctx: Game, verb: str, prepared: Any) -> list[str] | None:
-    """act:<verb> 按下去（Game._act 最前面）：主人接了回那幾句；都不接是 None，核心照舊。"""
-    for v in _verbs(None, verb):
-        got = v.run(ctx, prepared) if v.run is not None else None
+    """act:<verb> 按下去（Game._act 最前面）：主人接了回那幾句；都不接是 None，核心照舊。帶後綴的（<verb>:<後綴>，第 57 批）問 tail_run。"""
+    head, sep, tail = verb.partition(":")
+    for v in _verbs(None, head):
+        if sep:
+            got = v.tail_run(ctx, prepared, tail) if v.tail_run is not None else None
+        else:
+            got = v.run(ctx, prepared) if v.run is not None else None
         if got is not None:
             return got
     return None
 
 
 def act_title(ctx: Game, verb: str) -> str | None:
-    """act:<verb> 那一下江湖紀錄的標題（Game._action_title 那張表之前；表照 arg 查、不看 kind，這裡也一樣）。"""
-    for v in _verbs(None, verb):
-        got = v.title(ctx) if v.title is not None else None
+    """act:<verb> 那一下江湖紀錄的標題（Game._action_title 那張表之前；表照 arg 查、不看 kind，這裡也一樣）。帶後綴的（第 57 批）問 tail_title。"""
+    head, sep, tail = verb.partition(":")
+    for v in _verbs(None, head):
+        if sep:
+            got = v.tail_title(ctx, tail) if v.tail_title is not None else None
+        else:
+            got = v.title(ctx) if v.title is not None else None
         if got is not None:
             return got
     return None
@@ -632,9 +647,13 @@ def pick_replies(verb: str | None = None) -> tuple[str, ...]:
 
 def act_squad(ctx: Game, verb: str) -> Squad | None:
     """act:<verb> 按下去會打哪一路（Game._fight_squad 最前面；Verb.squad）：主人回那一路；不打仗、都不接是 None，核心照舊往下。
-    不問 enabled（原位那一支本來就不看開關，同 run、title、note）。"""
-    for v in _verbs(None, verb):
-        got = v.squad(ctx) if v.squad is not None else None
+    不問 enabled（原位那一支本來就不看開關，同 run、title、note）。帶後綴的（第 57 批）問 tail_squad。"""
+    head, sep, tail = verb.partition(":")
+    for v in _verbs(None, head):
+        if sep:
+            got = v.tail_squad(ctx, tail) if v.tail_squad is not None else None
+        else:
+            got = v.squad(ctx) if v.squad is not None else None
         if got is not None:
             return got
     return None
@@ -1126,6 +1145,7 @@ class MenuHook:
 # open    Game._shop_open                                         (ctx)                      menu_first（"" 是坐著、這裡不開門；核心 or None）
 # depart  移動包 departure.depart 最前面：動身了，店收起來          (ctx)                      menu_run，回傳不接
 # block   atlas.travel_block：現在不能安排前往的原因               (state, content)           menu_first（沒有 ctx：party 拿別人的 state 問，格裡一律讀傳進來的）
+# quick   Game.choose 查完選單、清掉「剛剛」與引導之後、建紀錄之前  (ctx, kind, arg, option_id)  menu_first（第 57 批：選單上、不建紀錄的那幾顆；回的話由核心 _log 一次，格裡不寫紀錄。回 None 照舊往下）
 MENU_ORDER: dict[str, tuple[str, ...]] = {
     "tick": ("seal",),
     "front": ("seal",),
@@ -1141,6 +1161,7 @@ MENU_ORDER: dict[str, tuple[str, ...]] = {
     "open": ("arena", "bounties", "smithy", "gear", "shops"),
     "depart": ("bounties", "escort", "smithy", "gear", "shops"),
     "block": ("ended", "prologue", "event", "bout", "talk", "audience", "bounties", "smithy", "gear", "outlets", "tavern", "faction", "omen", "follow", "busy", "ambush"),
+    "quick": ("battle", "seal", "duel", "arena", "errand", "canvas"),  # core_seams（全部拆包第 57 批）
 }
 
 

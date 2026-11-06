@@ -562,6 +562,10 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 # 測試換掉 Game 上的名字時才打得到（tests/figures/test_seats.py、features/smithy/tests/test_weapons_forge.py）
 - `ctx._settle_plots()`（不在線時收場的密謀結算；回那幾句）
 
+# core_seams（全部拆包第 57 批；act 子動詞接進 Verb，計畫 docs/superpowers/plans/2026-11-06-分派標題收接縫-第57批.md 六）：格裡經 ctx 叫，測試、腳本換掉 Game 上的名字時才打得到
+# （tests/core/test_explain.py、scripts/measure_challenge.py）；`_present`、`_action_costs`、`_hint` 已經在一、共用服務
+- `ctx._socialize(prepared)`（交友那一下的本體：交友求見包）、`ctx._challenge(fid)`（挑戰本人按下去：大勢人物包）、`ctx._figure_squad(fid)`（挑戰本人對手那一路，江湖水漲算過：大勢人物包）
+
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """
 from __future__ import annotations
