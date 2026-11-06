@@ -779,7 +779,8 @@ def test_the_core_and_the_packages_take_every_effect_and_defection_slot_exactly_
         assert mine.keys() | core[at].keys() == set(order), at
     fs = features_core.registered()
     assert {f.name: [h.slot for h in f.effects()] for f in fs if f.effects()} == {
-        "story": ["story"], "military": ["grain", "fs_fragments", "foreshadow"]}
+        "story": ["story"], "military": ["grain", "fs_fragments", "foreshadow"],
+        "seal": ["runic", "shard"]}  # 全部拆包第 27 批：符文殘片、舊鏈的玉璽碎片改由玉璽包登記（rules._EFFECT_CORE 少這兩格）
     assert {f.name: [(h.at, h.slot) for h in f.defection()] for f in fs if f.defection()} == {
         "military": [("clear", "convoy"), ("clear", "opportunities"), ("leave", "plots")], "guide": [("clear", "hints")], "companions": [("after", "parley")],
         "faction": [("clear", "progress"), ("after", "leave_behind")]}
@@ -964,7 +965,7 @@ def test_the_explore_package_publishes_the_win_and_the_outing(monkeypatch):
 
 def test_the_core_and_the_packages_take_every_event_slot_exactly_once():
     """核心代叫的格（engine._BUS_CORE）與包登記的格（照真的 FEATURES）合起來剛好是表上的格、沒有重疊：沒有一格默默不跑、也沒有一格兩邊
-    都寫。現在包登記的只有軍情包的交糧車（計畫 1.5）。"""
+    都寫。包登記的是軍情包的交糧車（計畫 1.5）與玉璽包的撿碎片、收場（全部拆包第 27 批：_BUS_CORE 的 outing 只剩 bounties、battle_end 空了）。"""
     from tianxia import engine
 
     assert engine._BUS_CORE.keys() == features_core.BUS_ORDER.keys()
@@ -973,14 +974,17 @@ def test_the_core_and_the_packages_take_every_event_slot_exactly_once():
         assert not mine.keys() & engine._BUS_CORE[event].keys(), event
         assert mine.keys() | engine._BUS_CORE[event].keys() == set(order), event
     fs = features_core.registered()
-    assert {f.name: [(h.event, h.slot) for h in f.bus()] for f in fs if f.bus()} == {"military": [("arrive", "convoy")]}
+    assert {f.name: [(h.event, h.slot) for h in f.bus()] for f in fs if f.bus()} == {
+        "military": [("arrive", "convoy")], "seal": [("outing", "seal"), ("battle_end", "seal")]}
 
 
 def test_the_core_slots_look_up_the_old_functions_when_called(game, monkeypatch):
-    """核心代叫的格在叫的那一下才照模組屬性找（bounties.on_*、Game 上的 _seal_find、_seal_settle）：換掉的照樣打得到，參數是原本那一個呼叫
-    的（state、content、world 是 ctx 上的同一份）；照真的 FEATURES，抵達那一刻先交糧車（軍情包那一格，也照模組屬性找）再護送。"""
+    """核心代叫的格在叫的那一下才照模組屬性找（bounties.on_*）：換掉的照樣打得到，參數是原本那一個呼叫的（state、content、world 是 ctx 上的
+    同一份）；照真的 FEATURES，抵達那一刻先交糧車（軍情包那一格，也照模組屬性找）再護送，探索收尾先打探懸賞再撿碎片、決戰收場叫玉璽
+    （全部拆包第 27 批：玉璽包那兩格照包的模組屬性找 actions.seal_find、actions.settle，原本是 Game 上的 _seal_find、_seal_settle）。"""
     from tianxia import bounties
     from tianxia.features.military import convoy_actions
+    from tianxia.features.seal import actions as seal_actions
 
     calls = []
 
@@ -991,8 +995,8 @@ def test_the_core_slots_look_up_the_old_functions_when_called(game, monkeypatch)
     for name in ("on_win", "on_explore", "on_arrive", "on_raid_win"):
         monkeypatch.setattr(bounties, name, note(name, [name]))
     monkeypatch.setattr(convoy_actions, "convoy_arrives", note("convoy_arrives", ["糧車"]))
-    monkeypatch.setattr(game, "_seal_find", note("_seal_find", ["碎片"]))
-    monkeypatch.setattr(game, "_seal_settle", note("_seal_settle", None))
+    monkeypatch.setattr(seal_actions, "seal_find", note("seal_find", ["碎片"]))
+    monkeypatch.setattr(seal_actions, "settle", note("settle", None))
     assert game.publish("win", "lake", "thug") == ["on_win"]
     assert game.publish("outing", "lake") == ["on_explore", "碎片"]
     assert game.publish("explore", "lake") == ["on_explore"]
@@ -1001,11 +1005,11 @@ def test_the_core_slots_look_up_the_old_functions_when_called(game, monkeypatch)
     assert game.publish("battle_end", "battle", "definition", "result") == []
     assert calls == [
         ("on_win", (s, c, w, "lake", "thug")),
-        ("on_explore", (s, c, w, "lake")), ("_seal_find", ("lake",)),
+        ("on_explore", (s, c, w, "lake")), ("seal_find", (game, "lake")),
         ("on_explore", (s, c, w, "lake")),
         ("convoy_arrives", (game, "lake")), ("on_arrive", (s, c, w, "lake")),
         ("on_raid_win", (s, c, w, "某人")),
-        ("_seal_settle", ("battle", "definition", "result")),
+        ("settle", (game, "battle", "definition", "result")),
     ]
 
 

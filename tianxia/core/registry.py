@@ -61,6 +61,8 @@ from ..features import map as map_feature  # 輿圖：全部拆包第 49 批（�
 from ..features import faction  # 陣營：全部拆包第 35 批（接 faction:、defect:、sect: 三個前綴的 choose 與假人分數、叛投 clear／after 兩格；三個前綴與別的包都不重疊，排在哪裡結果都一樣）
 # gear
 from ..features import gear  # 裝備（馬市、換上、拆解、餵馬、寄放補送、名將贈禮、本命兵器、神器譜）：全部拆包第 42 批（choose 前綴 market 與 act:market 的 Verb、content；沒有路由、沒有店面登記）
+# seal
+from ..features import seal  # 玉璽碎片的季流程：全部拆包第 27 批（沒有前綴、選項、選單、店面、路由；事件、世界層、效果的格都有表序，排在哪裡結果都一樣）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
@@ -120,6 +122,8 @@ FEATURES: list[Feature] = [
     faction.FEATURE,
     # gear（排在 faction 後面〔照合併先後〕：choose 前綴 market 與別的包不重疊；Verb market 與別的包的 verb 不重疊；不登記 Shop，排在哪裡結果都一樣）
     gear.FEATURE,
+    # seal（排在 gear 後面〔照合併先後〕：沒有選項、選單、店面、路由；bus、world、effects 的格照 BUS_ORDER、WORLD_ORDER、EFFECT_ORDER 定先後，順序不影響結果）
+    seal.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]
 

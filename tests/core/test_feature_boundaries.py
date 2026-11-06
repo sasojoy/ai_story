@@ -1448,7 +1448,8 @@ def test_the_shared_scanner_catches_an_old_module():
     同一層、from tianxia import 名字、標準庫不算；包與別名不在這裡算（是上面那一條）。"""
     m = "tianxia.timetable"
     assert outside_imports("from . import atlas, territory\n", m) == {"atlas"}  # 第 40 批：原本的例子 figures 收進了共用規則層
-    assert outside_imports("def f():\n    from .seal import mandate_event\n", m) == {"seal"}  # 第 25 批：原本的例子 world 收進了核心本體
+    # 第 25 批：原本的例子 world 收進了核心本體；第 27 批：seal 成了玉璽包的別名（包與別名不在這裡算），換一個這一波還是舊模組的 tale（戰記第 52 批才搬）
+    assert outside_imports("def f():\n    from .tale import gather\n", m) == {"tale"}
     assert outside_imports("def f():\n    from .world import _season_vehicle\n", m) == set()
     assert outside_imports("import tianxia.engine\n", m) == {"engine"}
     assert outside_imports("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from .engine import Game\n", m) == set()
@@ -1847,7 +1848,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # faction（全部拆包第 35 批：tianxia/defection.py）
                          "defection": "faction",
                          # gear（全部拆包第 42 批：tianxia/signature_arms.py）
-                         "signature_arms": "gear"}
+                         "signature_arms": "gear",
+                         # seal（全部拆包第 27 批：tianxia/seal.py；包名跟別名同字，同 cultivation、guide）
+                         "seal": "seal"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 
@@ -2018,7 +2021,8 @@ CORE_DELEGATE_CALLERS.update({
 })
 
 # 發布點之外不直接叫事件的訂閱者（計畫 1.7、Task 4）：懸賞的四種交差（bounties.on_win／on_explore／on_arrive／on_raid_win）、玉璽的撿碎片與收場
-# （_seal_find、_seal_settle）、交糧車（_convoy_arrives，已拿掉），在 engine.py 與每一包的 .py（測試除外）只准出現在核心代叫表 engine._BUS_CORE 裡；
+# （_seal_find、_seal_settle：第 27 批玉璽成包、兩格改由玉璽包登記之後，Game 上只剩給測試的一行委派，包與 engine 照樣不准叫）、
+# 交糧車（_convoy_arrives，已拿掉），在 engine.py 與每一包的 .py（測試除外）只准出現在核心代叫表 engine._BUS_CORE 裡；
 # 別處要聽，登記事件的格（Feature.bus()），先後照核心的 BUS_ORDER。bounties.on_aid（人物託付交差）不在總表的四種裡，不管（交 PM）。
 BUS_SUBSCRIBERS = {("bounties", "on_win"), ("bounties", "on_explore"), ("bounties", "on_arrive"), ("bounties", "on_raid_win")}
 BUS_METHODS = {"_seal_find", "_seal_settle", "_convoy_arrives"}
@@ -2191,6 +2195,60 @@ def test_check_condition_touches_no_package_field():
            "    for key, need in cond.story_marks.items():\n        progress = p.storylines.get(key)\n"
            "    if any(p.clue_items.get(k, 0) < v for k, v in cond.clue_items.items()):\n        return False\n")
     assert condition_fields_touched(old) == ["4 storylines（story）", "5 clue_items（military）"]
+
+
+# seal（全部拆包第 27 批「玉璽一」：新包 tianxia/features/seal/；計畫 docs/superpowers/plans/2026-11-07-玉璽包-第1批.md 1.1、1.8）：
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插；拿掉別人段裡的格一律在這裡 del、-=，第 46 批認定第 3 條）。
+# 12 個方法搬進包（季流程 8 個、管理者 4 個），Game 留 11 個一行委派（_admin_seal_hide 只有強制現世叫，包內互叫、不留）。
+# tianxia/seal.py 成了指到包裡 seal.py 的別名：engine 照舊 import 它（還沒搬的第 28 批方法讀它），改叫 seal_rules（同 prologue_rules、
+# tavern_rules：戰力快照 _battle_power、_battle_scores、_spar_power 的參數也叫 seal，不改名的話 game_links 把那三個也算成碰包）。
+GAME_IMPORTS |= {"tianxia.seal", "tianxia.features.seal.actions", "tianxia.features.seal.admin"}
+GAME_DELEGATES |= {
+    # 核心原位叫的：_copy_heirloom（sync、_drop_stale_references）、_deliver_seal_results（sync 與第 28 批的四個）、_seal_bare（_battle_marks）、
+    # _mandate_settle（admin_resolve_event；包的收場經 ctx 叫，scripts/measure_seal.py 換它）；決戰包經 ctx 叫的：_mandate_weight、_seal_bare、
+    # _deliver_seal_results；只剩測試叫的：_seal_find（test_conquest_rules）、_seal_settle（test_seal、test_seal_engine、test_seal_mandate、
+    # test_seal_revamp_hidden）、_file_seal（test_seal_duel）；殼的 ADMIN_ACTIONS 與測試叫的：三個 admin_seal_*
+    "_copy_heirloom", "_seal_find", "_seal_bare", "_mandate_weight", "_deliver_seal_results", "_file_seal", "_mandate_settle", "_seal_settle",
+    "admin_seal_emerge", "admin_seal_sink_check", "admin_seal_mandate",
+}
+_SEAL28 = "還沒搬的第 28 批方法本體直接讀玉璽包的規則與字句（{what}），經舊名別名 tianxia.seal（engine 叫 seal_rules）——過渡：第 28 批收"
+GAME_DIRECT.update({
+    "_seal_challenge": _SEAL28.format(what="收場挑挑戰者：dice、tier_for〔scripts/measure_seal.py 換它〕、weighted_pick"),
+    "_seal_challengers": _SEAL28.format(what="合格的挑戰者：challenger_ok"),
+    "_seal_spectators": _SEAL28.format(what="旁觀散人：key"),
+    "_seal_side_of": _SEAL28.format(what="單挑的一方：key"),
+    "_my_seal_duel": _SEAL28.format(what="自己的那一場單挑：on"),
+    "_seal_tick": _SEAL28.format(what="推奪璽單挑：on"),
+    "seal_view": _SEAL28.format(what="碎片卡：on、filled、shard_of、shard_text、card_state、mandate_now 與 CARD_*、STIR_MINE"),
+    "seal_use": _SEAL28.format(what="起用獨門行動：filled、shard_of、log_use、rumor、chronicle、SEAL_TITLE"),
+    "seal_duel_card": _SEAL28.format(what="單挑卡：on"),
+    "seal_watch": _SEAL28.format(what="背景輪詢：on、key"),
+    "admin_seal_assign": _SEAL28.format(what="管理者指定：filled、shard_of、log、BOOK_STATES"),
+    "admin_seal_duel": _SEAL28.format(what="管理者開單挑：filled、holders、key、rumor"),
+    "admin_seal_choices": _SEAL28.format(what="管理頁的玉璽一組：on、filled、conquest_season、mandate_event、mandate_battle、mandate_now"),
+})
+GAME_DELEGATE_CALLERS.update({
+    ("_battle_marks", "_seal_bare"): "加入決戰那一刻的戰力快照（單打服務，核心）多一鍵 seal_bare：位置固定在快照組好之後、沒有對應的掛鉤",
+    ("admin_resolve_event", "_mandate_settle"): "管理者「定結果」替天命之爭定天命：時刻表的救場工具是核心，接在 timetable.resolve 與存季之後、讀回季之前，"
+                                                "沒有對應的掛鉤",
+    ("sync", "_copy_heirloom"): "抄本照全服登記重抄：接不了 on_sync 是開關——core/features.py 的 on_sync 只問開著的包（active），碎片關著時"
+                                "（SealFeature.enabled 是 False）這裡照樣要叫、傳 None 把抄本清掉；位置在補送之後也算行為——過渡：第 55 批（補算與換季收接縫）收",
+    ("sync", "_deliver_seal_results"): "玉璽碎片的事補送：位置固定在補送決戰戰報之後、_deliver_held_gear 之前（江湖紀錄的先後算行為）；on_sync 只問開著的包，"
+                                       "補送本身只看 content.seal（主機關掉開關也照補）——過渡：第 55 批收",
+    ("_drop_stale_references", "_copy_heirloom"): "清失效參照時照登記重抄抄本：on_drop_stale 只問開著的包，碎片關著時照樣要叫、把抄本清掉——過渡：第 55 批收",
+    ("_seal_tick", "_deliver_seal_results"): "奪璽單挑推完補送（第 28 批的方法本體還在 Game）——過渡：第 28 批收",
+    ("_seal_act", "_deliver_seal_results"): "按了奪璽單挑的一招之後補送（第 28 批）——過渡：第 28 批收",
+    ("seal_gamble", "_deliver_seal_results"): "奪璽單挑放手一搏之後補送（第 28 批）——過渡：第 28 批收",
+    ("admin_seal_cancel", "_deliver_seal_results"): "管理者取消單挑之後補送（第 28 批）——過渡：第 28 批收",
+})
+# battle 段（第 8 批）那兩條的理由改寫：玉璽一成包了，碎片卡與背景輪詢是第 28 批（在這裡重新賦值，不改別人的行）
+GAME_DELEGATE_CALLERS[("seal_view", "_showdown_status")] = ("玉璽碎片卡：這一片被璽動的那一場時刻表決戰（攻城戰不璽動）：碎片卡還在 Game 上"
+                                                            "（第 28 批：碎片卡與奪璽單挑）")
+GAME_DELEGATE_CALLERS[("seal_watch", "_showdown_status")] = "玉璽碎片：背景也要輪詢（持有者或參戰者）：同上（第 28 批）"
+SHARED_LATER["skillview"] = ("門下頁的說明（彙整）：讀自創 create（第 44 批）、修練 cultivation（第 23 批）、玉璽 seal（第 27 批已成包，經舊名別名）、"
+                             "鐵匠鋪 smithing（第 41 批已成包，經舊名別名）、輿圖 atlas；那幾包成包、改成查詢服務之後再收")
+for _pair in (("conquest", "seal_acts"), ("figures", "seal_acts"), ("figure_life", "seal_acts"), ("plans", "seal_acts")):
+    SHARED_PENDING[_pair] += "；seal_acts 函式裡 import seal（第 27 批成了玉璽包的別名），叫到它就連帶載入玉璽包"
 
 
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py
