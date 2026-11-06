@@ -56,7 +56,7 @@
   （每一個效果欄位歸哪一格寫在 EFFECT_FIELDS），不問 enabled |
 | defection()（DefectHook） | 叛投那一刻的格（core_effects）：defection.clear_progress（clear）、defection.defect（leave、stranded）、陣營包
   defect_actions.defect_step 確定那一支（after；第 35 批前是 Game._defect_step）四個位置，照檔尾寫死的順序表 DEFECT_ORDER 一格一格叫（各包清自己的進度），不問 enabled |
-| bus()（BusHook） | 一種事件的格（core_eventbus：全部拆包第 26 批）：ctx.publish 的七個發布點（打贏一場〔兩處〕、出門一趟、舊探索、抵達、截殺打贏、
+| bus()（BusHook） | 一種事件的格（core_eventbus：全部拆包第 26 批）：ctx.publish 的八個發布點（打贏一場〔兩處〕、出門一趟、舊探索、抵達、截殺打贏、
   人物託付〔護衛、犒軍〕、決戰收場），照檔尾寫死的順序表 BUS_ORDER 一格一格叫，不問 enabled |
 | steps()（StepHook） | 「你這一步」的格（core_step：全部拆包第 36 批）：本週卡「眼下要事」的候選（weekcard._steps 叫 step.items）與四勝利開著時補目標
   （step.finish 照每一件 _ref 的第一個字找回那一格的 place），照檔尾寫死的順序表 STEP_ORDER 一格一格叫（包登記自己那一格；懸賞榜兩格第 45 批

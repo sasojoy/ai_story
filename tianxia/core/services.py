@@ -168,7 +168,7 @@
 
 事件（全部拆包第 26 批）
 # core_eventbus
-- `ctx.publish(event, *args)`：一包發生的事、別包跟著動——照核心的 BUS_ORDER 叫每一格（win、outing、explore、arrive、raid_win、battle_end；
+- `ctx.publish(event, *args)`：一包發生的事、別包跟著動——照核心的 BUS_ORDER 叫每一格（win、outing、explore、arrive、raid_win、aid、battle_end；
   簽名與回傳見 tianxia/core/features.py 的 # core_eventbus）。
 
 # faction（全部拆包第 35 批「陣營」；陣營包要叫的核心服務，主人都是核心）
