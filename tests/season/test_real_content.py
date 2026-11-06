@@ -158,7 +158,14 @@ def _walk_the_hut(game, ambush="choice:0", attribute="快", luck=None):
 
         game.rng = FixedRandom(luck)
     game.choose("act:train")
-    game.allocate_stat("str")
+    from tianxia import attrset
+
+    if attrset.on(content, game.state.world):  # 五項屬性的季：升一級沒有點可配，這一步是挑成長配比
+        step = content.tutorial.steps[p.tutorial_step]
+        assert game.guide_box()["text"] == step.text_v2 and game.guide_box()["line"] == step.line_v2
+        game.pick_growth("warrior")
+    else:
+        game.allocate_stat("str")
     game.melt_art("manniu_quan")
     assert p.tutorial_step == 10
     return art
@@ -246,6 +253,16 @@ def test_bots_and_scripts_skip_the_real_prologue_and_look_like_graduates(content
     slotted = prologue.slotted_arts(bot.state, content, world)  # 武學重構：沒有師門功夫了，看的是裝了意境的基礎拳腳
     assert [a.id for a in slotted] == ["jichu_quanjiao"] and prologue.deepened(bot.state)
     assert "manniu_quan" not in bot.state.player.arts and not prologue.active(bot.state, content)
+
+
+def test_the_real_prologue_and_bots_get_through_in_five_attribute_seasons(content, world, monkeypatch):
+    """五項屬性的季（PM 2026-11-04 查新手教學）：每 10 級才送點，序章配點那一步改成挑成長配比，真人走得過、假人也略得過。"""
+    monkeypatch.setattr(content.config.attributes.v2, "enabled", True)  # 共用的內容：測完還原
+    human = Game.new(content, "真人", rng=random.Random(0), world=world, prologue=True)
+    _walk_the_real_prologue(human)
+    assert human.state.player.growth_preset == "warrior" and human.state.player.location == "yingchuan"
+    bot = Game.new(content, "假人", rng=random.Random(1), world=world, graduated=True)
+    assert bot.state.player.tutorial_step == len(content.tutorial.steps) and bot.state.player.growth_preset is not None
 
 
 @pytest.mark.parametrize("old_step, new_step", [(0, 18), (3, 18), (6, 18), (7, 18), (8, 18)])  # 序章十一步＋初入江湖七步（新手引導重做）
@@ -503,12 +520,29 @@ FORMER_RECRUITABLE = ["caocao", "liubei", "guanyu", "zhangfei", "sunjian", "yuan
 def test_all_eighteen_historical_figures_are_locked(content):
     """第一季設計第一節：大勢人物這一季都不開放招募（人物誌補遺加了波才、張曼成、趙弘，共 18 位；大勢人物擴充〔Joy 2026-10-17〕
     再加 13 位，共 31 位）。"""
-    assert len(content.characters) == 31
-    assert all(ch.kind == "locked" for ch in content.characters.values())
+    people = _figures_only(content)  # 一般 NPC 同伴（content/hire.json，features/hire）另外算
+    assert len(people) == 31
+    assert all(ch.kind == "locked" for ch in people)
+
+
+def _figures_only(content):
+    return [ch for ch in content.characters.values() if ch.hire_type is None]
+
+
+def test_hirelings_file_matches_the_generator():
+    """content/hire.json 是 scripts/make_hirelings.py 照 Config.hire 生的：改了型或酒肆要重跑（--check 比對）。"""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    out = subprocess.run([sys.executable, str(root / "scripts" / "make_hirelings.py"), "--check"], capture_output=True, text=True,
+                         encoding="utf-8", cwd=root)
+    assert out.returncode == 0, out.stdout + out.stderr
 
 
 def test_every_figure_has_a_place_to_talk_and_nobody_has_a_recruit_location(content):
-    for ch in content.characters.values():
+    for ch in _figures_only(content):
         assert ch.talk_at in content.locations, ch.id
         assert ch.recruit_at is None, ch.id
 
@@ -522,12 +556,13 @@ def test_the_former_recruitable_seven_keep_their_signature_skills(content):
 def test_every_figure_opts_into_deep_dialogue(content):
     """設計文件四.3：這一期黃巾之亂人物全部開放深度 LLM 對話（鎖定的龍頭人物也一樣，
     只是還沒有 recruit_at 讓玩家在地圖上找到他們，見 engine.py::_deep_interaction_target）。"""
-    assert all(ch.deep_interaction for ch in content.characters.values())
+    assert all(ch.deep_interaction for ch in _figures_only(content))
 
 
 def test_every_figure_has_three_brush_off_lines(content):
     """設計 9.1、內容表《打發話與回合句型》第一節：每位名將三句他自己口吻的打發話，不寫數字（名望與階級的落差由程式接在後面）。"""
-    for cid, ch in content.characters.items():
+    for ch in _figures_only(content):
+        cid = ch.id
         assert len(ch.brush_off) == 3 and len(set(ch.brush_off)) == 3, cid
         for line in ch.brush_off:
             assert line.strip() and len(line) <= 40 and not re.search(r"\d", line), (cid, line)
@@ -600,6 +635,9 @@ PLACEHOLDER_LINES |= {("h_basic_art", "text"), ("h_drill_done", "text"), ("h_fie
                       ("h_tavern", "text"), ("h_points", "text")}
 # 減法季探索一顆開著時操練練完那一句換成出門探索的說法（HintDef.explore_one，2026-10-26 批 2 小修），待 joy 潤；事實由 tests/test_explore_one_polish.py 管
 PLACEHOLDER_LINES |= {("h_drill_done", "explore_one")}
+# 補新手教學（2026-11-05，PM 盤點）新寫的十一句，待 joy 潤；事實由 tests/arts/test_hints.py 的 test_the_real_new_hints_name_the_right_places 管
+PLACEHOLDER_LINES |= {(hint_id, "text") for hint_id in ("h_raid_guard", "h_checkin", "h_mall", "h_looks", "h_seal", "h_feast",
+                                                       "h_chuangong", "h_mount", "h_treasure", "h_place", "h_tale")}
 RECRUITER_HINTS = ["h_foreshadow", "h_event_reveal", "h_promotion", "h_showdown", "h_figure"]  # 第 13～17 條
 DRIFTER_HINTS = {"h_foreshadow", "h_event_reveal", "h_figure"}  # 散人也聽得到的三條（師父講，第 13、14、17 條）
 
@@ -608,7 +646,7 @@ def test_the_real_hint_book_has_all_eighteen(content):
     from tianxia import hints
 
     ids = [h.id for h in content.hints.hints]
-    assert len(ids) == 23 and set(ids) == set(hints.KNOWN)  # KNOWN 裡的每一條都有內容（十八條＋explain-1 的 h_bond，新手引導重做拿掉一條、多五條）
+    assert len(ids) == 35 and set(ids) == set(hints.KNOWN)  # KNOWN 裡的每一條都有內容（十八條＋explain-1 的 h_bond，新手引導重做拿掉一條、多五條，補新手教學多十一條）
     assert content.hints.head == "想起師父說過" and content.hints.season_return.strip()
 
 
@@ -717,6 +755,8 @@ HINT_PINS = {
     ("h_figure", "huang"): "一條戰線的勝負都繫在他身上",
     ("h_figure", "haoqiang"): "要是當面輸了一場，也得先收攤避一避",
     ("h_figure", "drifter"): "那位就是能左右整條戰線的人物",
+    # 歷練快滿了（2026-11-05，企劃者「師父會說『刷』嗎，不要那麼跳離世界觀」之後 PM 定的整句）
+    ("h_lilian", "text"): "這一季你在江湖上的歷練已經夠深了，再磨下去，長進有限。",
 }
 
 
@@ -724,7 +764,7 @@ def test_every_hint_line_taken_from_the_design_keeps_its_pinned_sentence(content
     """提示書的三十三句：二十七句是設計 10.5 的原文（各釘一段），六句是待 joy 潤的（PLACEHOLDER_LINES：四句改成現在的事實、兩句是
     explain-1 新寫的 h_bond）；兩邊合起來正好是書裡的每一句，以後多寫一句沒釘也沒標待潤的，這裡會叫。開季那一句（10.6）整句釘。"""
     cells = _hint_cells(content)
-    assert len(cells) == 38 and not set(HINT_PINS) & PLACEHOLDER_LINES  # 新手引導重做：拿掉 h_refine_fail、多五條；批 2 小修：h_drill_done 多一句
+    assert len(cells) == 50 and not set(HINT_PINS) & PLACEHOLDER_LINES  # 新手引導重做：拿掉 h_refine_fail、多五條；批 2 小修：h_drill_done 多一句；補新手教學多十一句
     assert set(cells) == set(HINT_PINS) | PLACEHOLDER_LINES
     for key, sentence in HINT_PINS.items():
         assert sentence in cells[key], key

@@ -70,7 +70,7 @@
   `ctx._fight_gone(fight)`（C 段的重驗與「選項不在了」）、`ctx._judged(squad)`、`ctx._fight_with(squad, judged, **kw)`、
   `ctx._narrate(record, result, judged)`、`ctx._style_note(squad, result)`、`ctx._terrain_note()`
 - 勝算：`ctx.odds(squad_id, at=None)`（鈕上寫的那一個）
-- 單次判定與收場：`ctx._squad_encounter(squad_id, wild=False, as_sortie=False)`、`ctx._take_toll(tier, wild=, clash=)`、
+- 單次判定與收場：`ctx._squad_encounter(squad_id, wild=False, as_sortie=False)`、`ctx._take_toll(tier, wild=, clash=, squad=)`、
   `ctx._player_hp_and_cap()`、`ctx._player_hp()`、`ctx._hp_facts(healed=())`、`ctx._play_rounds(...)`（同上）、`ctx._trait_say(...)`、
   `ctx._trait_lines(...)`、`ctx._record_exp(...)`（同上）、`ctx._battle_rewards(squad, record, max_tier=None)`、`ctx._thin_drops(drops, record)`、
   `ctx._tier3(squad, record, chance, tag, source)`、`ctx._seize(record, draw=False)`（附錄甲裁核心）、`ctx._lose_silver(record)`、`ctx._file_battle(...)`（同上）
@@ -237,6 +237,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
 # companions（全部拆包第 19 批）
 - `ctx._settle_partings(write=True)`（主人決戰：決戰收場時從你身邊回江湖的人，情誼乘 parted_keep；按招募之前先結清。本體第 7 批在 `features/battle/muster.py`，總表第 19 列「先做」列成查詢服務）
 - `ctx._recruit_target()`、`ctx._recruitable_here()`（主人人物情誼：此地有沒有招得了的人；新手引導碰到才說的 h_recruit 問。第 22 批原本記在三、過渡）
+- `ctx._chuangong_ready()`（主人修練：傳功開著、有傳得起的一門；新手引導碰到才說的 h_chuangong 問）
 # companions（全部拆包第 20 批：人物對話與 NPC 智能 2.0 的本體搬進人物情誼包，Game 留一行委派回答別的包）
 - `ctx._parley_backing_here()`（主人人物情誼：並肩出陣——今天答應陪你、你在他那一帶的那位人物；出陣包 act:train 打的那一場包在外面問它。原本記在三、過渡 sortie 那一段）
 # sense（全部拆包第 24 批：有所感包回答別的包、有所感包問探索包）
@@ -466,7 +467,7 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 
 # guide（全部拆包第 22 批：新手引導包叫的、主人還沒搬的）
 - 假人走序章（`_graduate`）照每一步的完成條件做的那幾下：`ctx.slot_insight(art, insight)`、`ctx.switch_art(art)`、`ctx.practice(kind)`、
-  `ctx.allocate_stat(stat)`、`ctx.melt_art(art)`（主人修練 features/cultivation）、`ctx.forge(main, aux)`（主人煉製：第 44 批成包，改列二、查詢服務 `# craft` 那一段）
+  `ctx.allocate_stat(stat)`、`ctx.pick_growth(preset)`（五項屬性的季，序章配點那一步；主人修練 features/cultivation，第 2 段 A 搬）、`ctx.melt_art(art)`（主人修練 features/cultivation）、`ctx.forge(main, aux)`（主人煉製：第 44 批成包，改列二、查詢服務 `# craft` 那一段）
 - `ctx._hint_triggers(only)`（這一包自己的委派：tests/arts/test_hints.py 換掉 game._hint_triggers，包裡經 ctx 叫，換掉的才打得到；
   呼叫端改完就拿掉）
 

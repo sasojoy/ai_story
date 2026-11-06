@@ -99,7 +99,9 @@ def test_the_action_bar_sits_between_the_strip_and_the_step_card():
     m["guide"] = {"speaker": "想起師父說過", "text": "多學一門。", "end": True, "done": [], "pending": False}
     page = run(m, "return H.pageJianghu();")
     bar = page.index("act-bar")
-    assert page.index('id="week"') < bar < page.index("wk-card") < page.index('class="card guide"')
+    assert page.index('id="week"') < bar < page.index('class="card guide"')
+    # 介面重整：本週那一步（wk-card）收進要事清單，點了要事那張卡才拉上來
+    assert "wk-card" not in page and "wk-card" in run(m, "return H.pageJianghu();", S={"dutyOpen": True})
     assert 'data-act="guide-ack" aria-label="知道了"' in page  # 序章以外右上角一顆 ×，做的事同「知道了」
 
 
@@ -127,10 +129,10 @@ def test_why_opens_the_sides_table_the_next_event_and_the_howto_entry():
 
 def test_a_loner_gets_the_sides_card_first_and_a_member_does_not():
     loner = run(_main(), "return H.pageJianghu();")
-    assert '<details class="card sides-first">' in loner and loner.index("sides-first") < loner.index("wk-card")  # 收著：不把行動列推出第一屏
+    assert '<details class="card sides-first">' in loner and loner.index("sides-first") < loner.index("act-bar")  # 收著：不把行動列推出第一屏
     assert "官軍在長社" in loner
     assert '<details class="card sides-first" open>' in run(_main(), "return H.pageJianghu();", S={"sidesOpen": True})
-    member = run(_main(faction="guan"), "return H.pageJianghu();")
+    member = run(_main(faction="guan"), "return H.pageJianghu();", S={"dutyOpen": True})
     assert "sides-first" not in member and "wk-card" in member
 
 

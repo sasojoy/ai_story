@@ -20,9 +20,9 @@ assert PROLOGUE_DRIVER.count(NAMES_START) == 1
 DRIVER = PROLOGUE_DRIVER.replace(NAMES_START, 'wholeApp(["S", "sealDuelHtml", "sealWatched", "sealTitle", "sealHtml", "pageKey", "tickDue", ')
 
 
-def run(m, script):
+def run(m, script, S=None):
     """同 test_prologue_web.run（m 是 /api/main 回的那份）；script 裡可用 H、m、T（T.ctx.document 是假瀏覽器的 document）。"""
-    return webharness.run(DRIVER, {"m": m, "script": script, "S": {}, "menxia": None, "stored": {}, "responses": {}})
+    return webharness.run(DRIVER, {"m": m, "script": script, "S": S or {}, "menxia": None, "stored": {}, "responses": {}})
 
 
 def _card(**over):
@@ -41,7 +41,7 @@ def m(hints_content, world):
 
 def test_the_jianghu_page_draws_the_seal_card_escaped(m):
     m["status"]["seal_duel"] = _card()
-    page = run(m, "return H.pageJianghu();")
+    page = run(m, "return H.pageJianghu();", S={"dutyOpen": True})  # 介面重整：碎片卡在要事清單裡
     assert "奪璽" in page and "螭首" in page and "第 2／5 回合" in page and "已出招 1／2" in page and "1 分 15 秒" in page
     assert "<b>黃甲</b>" not in page and "&lt;b&gt;黃甲&lt;/b&gt;" in page
     assert "璽有靈" in page
@@ -49,16 +49,16 @@ def test_the_jianghu_page_draws_the_seal_card_escaped(m):
 
 def test_the_tell_is_drawn_only_when_the_server_sends_it(m):
     m["status"]["seal_duel"] = _card(mine=True, tell="他退了半步，門戶守得嚴嚴實實。", turn=True)
-    page = run(m, "return H.pageJianghu();")
+    page = run(m, "return H.pageJianghu();", S={"dutyOpen": True})  # 介面重整：碎片卡在要事清單裡
     assert "他退了半步" in page and "輪到你出招" in page
     m["status"]["seal_duel"] = _card(phase="muster", round=0, left=120)
-    page = run(m, "return H.pageJianghu();")
+    page = run(m, "return H.pageJianghu();", S={"dutyOpen": True})  # 介面重整：碎片卡在要事清單裡
     assert "2 分 0 秒後開打" in page and "已出招" not in page
 
 
 def test_the_input_box_posts_to_seal_text(m):
     m["free_text"], m["free_op"] = "寫下你陣前的一手（20 字內）", "seal_text"
-    page = run(m, "return H.pageJianghu();")
+    page = run(m, "return H.pageJianghu();", S={"dutyOpen": True})  # 介面重整：碎片卡在要事清單裡
     assert 'data-op="seal_text"' in page
 
 
@@ -92,7 +92,7 @@ def test_a_hidden_tab_polls_only_while_the_seal_is_watched():
 def test_the_holder_card_is_drawn(m):
     m["status"]["seal"] = {"name": "雲篆", "effect_text": "練成的心得 ×0.9", "state": "新得之季，此季不動", "stir": "",
                            "dates": ["第 6 週・週四 20:00", "第 11 週・週四 20:00"]}
-    page = run(m, "return H.pageJianghu();")
+    page = run(m, "return H.pageJianghu();", S={"dutyOpen": True})  # 介面重整：碎片卡在要事清單裡
     assert "『雲篆』" in page and "練成的心得 ×0.9" in page and "新得之季" in page and "第 6 週・週四 20:00" in page
 
 
@@ -147,7 +147,7 @@ def test_the_seal_moves_sit_above_the_action_bar_not_in_the_fold(m):
     moves = [{**base, "id": f"seal:{move}", "label": f"{move}（剋{beat}）", "enabled": True}
              for move, beat in (("強攻", "奇襲"), ("固守", "強攻"), ("奇襲", "固守"))]
     m["options"] = moves + m["options"]
-    page = run(m, "return H.pageJianghu();")
+    page = run(m, "return H.pageJianghu();", S={"dutyOpen": True})  # 介面重整：碎片卡在要事清單裡
     at = page.index('data-id="seal:強攻"')
     assert at < page.index('class="act-bar"')
     fold = page.find('class="fold here"')

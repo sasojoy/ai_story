@@ -1551,5 +1551,157 @@
       "say": "林中一聲長嘯，{foe}心頭發毛，這一回合推力大減",
       "minor": true
     }
+  },
+  {
+    "id": "leigu_tiqi",
+    "name": "擂鼓提氣法",
+    "kind": "內功",
+    "attribute": "剛",
+    "quality": "上品",
+    "learn": {
+      "at": "guan_camp",
+      "fame": 20,
+      "silver": 60
+    },
+    "desc": "軍中擂鼓時跟著鼓點提氣的法子，鼓聲越急，力氣越足。",
+    "tactic": {
+      "name": "鼓角連聲",
+      "timing": "心法",
+      "kind": "tiger",
+      "params": {
+        "stack_pct": 0.04,
+        "stacks": 4
+      },
+      "desc": "每打一回合推力 +{stack_pct}，最多 {stacks} 層；氣勢落後時一次疊兩層。",
+      "say": "鼓點一聲緊過一聲，力氣跟著一層層提上來",
+      "minor": true
+    }
+  },
+  {
+    "id": "kaibei_jin",
+    "name": "開碑勁",
+    "kind": "內功",
+    "attribute": "剛",
+    "quality": "上品",
+    "learn": {
+      "at": "changshe",
+      "fame": 20,
+      "silver": 60
+    },
+    "desc": "長社一戰的老兵傳下來的發勁法，一掌拍下，墓碑都裂。",
+    "tactic": {
+      "name": "開碑一喝",
+      "timing": "起手",
+      "kind": "awe",
+      "rate": 0.8,
+      "rounds": 2,
+      "params": {
+        "cut_pct": 0.2
+      },
+      "desc": "對手氣餒，這一回合推力 −{cut_pct}。",
+      "say": "吐氣開聲一喝，{foe}心頭一震，這一回合推力大減",
+      "minor": true
+    }
+  },
+  {
+    "id": "benlei_xi",
+    "name": "奔雷息",
+    "kind": "內功",
+    "attribute": "快",
+    "quality": "上品",
+    "learn": {
+      "at": "juma_river",
+      "fame": 20,
+      "silver": 60
+    },
+    "desc": "幽州騎手在馬背上換氣的法子，一口氣跑完一整段河灘。",
+    "tactic": {
+      "name": "奔雷換氣",
+      "timing": "出招",
+      "kind": "oath",
+      "rate": 0.2,
+      "params": {
+        "cost_pct": 0.08
+      },
+      "desc": "自扣氣血 {cost_pct}，下一回合連環、無隙。",
+      "say": "一口氣換得又急又快，下一回合搶在前頭",
+      "minor": true
+    }
+  },
+  {
+    "id": "yushui_changxi",
+    "name": "淯水長息",
+    "kind": "內功",
+    "attribute": "柔",
+    "quality": "上品",
+    "learn": {
+      "at": "yu_river",
+      "fame": 20,
+      "silver": 60
+    },
+    "desc": "南陽漁夫在淯水上撐篙養出來的長氣，一呼一吸跟著水流。",
+    "tactic": {
+      "name": "細水長流",
+      "timing": "心法",
+      "kind": "mend",
+      "params": {
+        "heal_pct": 0.035
+      },
+      "desc": "每回合開始回氣血 {heal_pct}。",
+      "say": "氣息像淯水一樣慢慢流過全身，氣血回了一些",
+      "minor": true
+    }
+  },
+  {
+    "id": "yunmen_tuwu",
+    "name": "雲門吐霧訣",
+    "kind": "內功",
+    "attribute": "虛",
+    "quality": "上品",
+    "learn": {
+      "at": "deep_mountain",
+      "fame": 20,
+      "silver": 60
+    },
+    "desc": "山中隱者吞吐雲氣的口訣，一口氣吐出去，四下就起了霧。",
+    "tactic": {
+      "name": "雲門吐霧",
+      "timing": "起手",
+      "kind": "fog",
+      "rate": 1.0,
+      "rounds": 1,
+      "params": {
+        "turns": 3,
+        "miss_pct": 0.22
+      },
+      "desc": "起霧 {turns} 回合：雙方出招 {miss_pct} 打空；你身法高過對手時只有對手會打空。",
+      "say": "一口長氣吐出，四下起霧 {turns} 回合",
+      "minor": true
+    }
+  },
+  {
+    "id": "qianjin_zhuiqi",
+    "name": "千斤墜氣",
+    "kind": "內功",
+    "attribute": "實",
+    "quality": "上品",
+    "learn": {
+      "at": "mengjin_ford",
+      "fame": 20,
+      "silver": 60
+    },
+    "desc": "渡口縴夫拉船練出的沉氣，兩腳一墜，十個人都拖不動。",
+    "tactic": {
+      "name": "縴夫墜樁",
+      "timing": "心法",
+      "kind": "hold_city",
+      "params": {
+        "guard_pct": 0.22,
+        "share_pct": 0.22
+      },
+      "desc": "固守的推力 +{guard_pct}，附帶借力：對手強攻你，他吃自己那一下的 {share_pct}。",
+      "say": "兩腳一墜，像釘在地上一樣立住",
+      "minor": true
+    }
   }
 ]

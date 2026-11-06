@@ -55,7 +55,7 @@ from collections import deque
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
-from fastapi import Body, FastAPI, HTTPException, Request, Response
+from fastapi import Body, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
@@ -63,13 +63,14 @@ from starlette.concurrency import run_in_threadpool
 
 import console
 import server_push
+import tale_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
     arena_crowd, ascend, battle_instance, flavor, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, fight_llm, gender, insight_llm, leaderboard, letters, might,
     naming, narration, outing,
     ollama_client, power_save, rules,
     precise, seal, seal_duel, server_bots, social, sortie, speech, tale, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
-    zhuan_end,
+    talk_log, zhuan_end,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, SESSION_SECONDS, AccountError, AccountStore, SessionStore, normalize
 from tianxia.content import env_profile, load_content, profile_line, serving_profile
@@ -103,10 +104,13 @@ def scene_art(game: Game, status: dict) -> dict | None:
         return None
     cal = status.get("calendar")
     when = cal["text"] if cal and cal.get("text") else f"第{status['day']}天 {status['clock']}"
-    return {
+    art = {
         "kind": got["kind"], "src": f"/static/img/{got['path']}.webp", "title": got["title"], "sub": got["sub"],
         "time": when if got["kind"] == "place" else "", "head": md(got["head"]),
     }
+    if got.get("mood"):  # 地點會變樣：戰火、淪陷、饑荒、重建的地點，畫換色調（網頁的 mood-<kind>）；太平沒有這個鍵
+        art["mood"] = got["mood"]
+    return art
 
 
 def story_cards(game: Game) -> list[dict]:
@@ -126,6 +130,32 @@ def zhuan_art_src(key: str | None) -> str | None:
         return None
     path = zhuan_end.art_path(key)
     return f"/static/img/{path}.webp" if (WEB / "img" / f"{path}.webp").is_file() else None
+
+
+def figure_face(cid: str) -> str | None:
+    """大勢人物的半身像（介面重整第一批圖，web/img/figures/full/<人物 id>.webp，去背）：檔案在才給網址，沒有是 None（網頁畫名字的第一個字）。"""
+    return f"/static/img/figures/full/{cid}.webp" if cid and (WEB / "img" / "figures" / "full" / f"{cid}.webp").is_file() else None
+
+
+def _figure_intros() -> dict:
+    """點大勢人物那一層的人物簡介（content/figure_intros.json；給不熟三國的玩家看，Joy 11/6）：沒有這個檔就是空的，畫面不畫簡介。"""
+    try:
+        data = json.loads((ROOT / "content" / "figure_intros.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in data.items() if not k.startswith("_") and isinstance(v, dict)}
+
+
+FIGURE_INTROS = _figure_intros()
+
+
+def figure_intro(cid: str) -> dict | None:
+    """{who 是誰, role 身分, nature 本性, now 如今, history 變化紀錄}。性子隨全服的互動改變是另一串在做（設計稿「人物性子會變」）：
+    那一套開了之後 now 寫如今那一段、history 一行一筆（「第 1 週・週五 起，脾氣沒那麼火爆了」）；還沒做之前 now 是 None、history 是空的，畫面不畫這兩格。"""
+    row = FIGURE_INTROS.get(cid)
+    if not row:
+        return None
+    return {"who": row.get("who", ""), "role": row.get("role", ""), "nature": row.get("nature", ""), "now": None, "history": []}
 
 
 def horse_art() -> list[str]:
@@ -468,7 +498,9 @@ def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
         _play_seen(game)
         if not paused_ok:
             _refuse_while_paused(game)
+        said, liked = talk_log.snapshot(game.state), talk_log.affinity_before(game.state)  # 往來紀錄：動作前後比，多出來的那幾輪記進小檔
         msgs = action(game)
+        _log_talk(game, said, liked)
         open_characters().save(game.state)
         tales = _tales_waiting(game)
         crowd = _crowd_waiting(game)
@@ -835,6 +867,38 @@ NARRATION_FAILS: dict[tuple[int, int, str], int] = {}  # （季, 週, 事件）�
 LAST_HUMAN = float("-inf")  # 最後一次有真人的請求（_play_seen）
 ONLINE_SECONDS = 600.0  # 省電模式下「有人在線」的窗口（跟 scripts/warm_keeper.py 同一個數，不讀 presence_seconds）
 NARRATION_KEY = "旁白改寫"  # 佇列裡的名號（不是任何角色：一人一件的規矩只管它自己）
+
+
+TALK_LOG: talk_log.TalkLogStore | None = None  # 往來紀錄的小檔（<db>-talk.sqlite）；第一次用到才開（talk_store）
+
+
+def talk_store() -> talk_log.TalkLogStore:
+    """往來紀錄的小檔：跟著現在的資料庫（TIANXIA_DB）走；換了資料庫（測試）就重開一份。"""
+    global TALK_LOG
+    db = default_path()
+    path = db.with_name(f"{db.stem}-talk.sqlite")
+    if TALK_LOG is None or TALK_LOG.path != path:
+        TALK_LOG = talk_log.TalkLogStore(path)
+    return TALK_LOG
+
+
+def _log_talk(game: Game, before: dict[str, int], liked: dict[str, int]) -> None:
+    """這一下多談的那幾輪記進往來紀錄（行動鎖裡叫）。寫不進去不擋動作：紀錄只是給人看的。假人不記。"""
+    s = game.state
+    if s.player.bot is not None:
+        return
+    lines = talk_log.new_lines(s, before)
+    if not lines:
+        return
+    loc = game.content.locations.get(s.player.location)
+    place = loc.name if loc is not None else ""
+    stamp = game.stamp(s.world.time)
+    rows = [{"figure": cid, "at": s.world.time, "stamp": stamp, "place": place, "role": role, "text": text,
+             "affinity": (liked if role == "user" else s.player.affinities).get(cid, 0)} for cid, role, text in lines]
+    try:
+        talk_store().add(name_key(s.player.name), s.player.season_number, rows)
+    except Exception:  # noqa: BLE001  小檔寫不進去（磁碟、鎖）：這一句不記，遊戲照走
+        traceback.print_exc()
 
 
 def narration_store_path() -> Path:
@@ -1418,7 +1482,8 @@ def narrate_once(game: Game) -> int | None:
     def ask() -> dict[str, str]:
         client = within_budget(game.client, budget - (_monotonic() - started))
         sides = [f.name for f in definition.factions]  # 兩軍的名字：失手那一句不准寫敵方受損（守門用）
-        return battle_instance.write_tales(client, act_, request.items, sides=sides)
+        # fallen 是引擎這一回合真的放倒的人：寫到死人的那一句要指名他們其中一位才算數（守門用）
+        return battle_instance.write_tales(client, act_, request.items, sides=sides, fallen=request.fallen)
 
     if QUEUE is None:
         stories = ask()
@@ -2076,6 +2141,9 @@ def _main_view_body(game: Game) -> dict:
     shop = game.shop_view([o.id for o in options])  # 店面（店面獨立介面設計 6.1）：開關開著、店開著、鐵匠鋪那一串是眼前的選單才有
     if shop is not None:
         view["shop"] = shop
+    prep = game.season_prep_view()  # 開季準備卡（企劃者 2026-11-05）：挑成長配比、識海；做完才能做別的事。沒有要準備的沒有這個鍵
+    if prep is not None:
+        view["prep"] = prep
     milestone = game.milestone_card()  # 減法季屬性五段的境界卡（主機側計畫欄位表 main.milestone）：到了境界、點還沒配完才有這個鍵
     if milestone is not None:
         view["milestone"] = milestone
@@ -2099,6 +2167,11 @@ def _main_view_body(game: Game) -> dict:
     sides = weekcard.sides_card(game)
     if sides is not None:
         view["sides_card"] = sides
+    # 介面重整（2026-11-05）：此地人物那一排、正在說話的那一位（浮在最上層的對話框），像在 web/img/figures/full/<id>.webp 才給 face
+    view["figures_here"] = [{**f, "face": figure_face(f["id"]), "intro": figure_intro(f["id"])} for f in game.figures_here_view()]
+    talk_now = game.talk_view()
+    if talk_now is not None:
+        view["talk"] = {**talk_now, "face": figure_face(talk_now["id"])}
     talking = game.state.player.pending_companion  # 人物頁（減法季批 6）：正在跟他談的那一位的心意條；關著、他沒有心意沒有這個鍵
     figure = game.figure_view(talking) if talking else None
     if figure is not None:
@@ -2134,6 +2207,9 @@ def _main_view_body(game: Game) -> dict:
     plan = game.plan_view()  # 世界活起來：全服開著的盤算裡最切身的一件（江湖頁行動列底下一張卡）；沒有開著的就沒有這個鍵
     if plan is not None:
         view["plan"] = plan
+    place_mood = game.place_state_view()  # 地點會變樣（世界活起來第二批）：此刻所在地的樣子；太平沒有這個鍵
+    if place_mood is not None:
+        view["place_state"] = place_mood
     place_deeds = game.place_deeds_view()  # 世界活起來：此地舊事（場景卡底下最近的幾筆世界記事）；沒有就沒有這個鍵
     if place_deeds is not None:
         view["place_deeds"] = place_deeds
@@ -2304,6 +2380,17 @@ PHASE_WORDS = {"preparing": "籌備中", "running": "進行中", "resting": "休
 BATTLE_PHASE_WORDS = {"muster": "集結中", "active": "開打了"}
 
 
+def _online_count(seconds: float | None = None) -> int:
+    """這 seconds 秒（預設 ONLINE_SECONDS）之內同步過的真人有幾個；只給管理頁看。讀不到就是 0。"""
+    since = time.time() - (ONLINE_SECONDS if seconds is None else seconds)
+    try:
+        with open_characters().db.snapshot() as conn:
+            row = conn.execute("SELECT COUNT(*) FROM characters WHERE is_bot = 0 AND json_extract(data, '$.last_real') >= ?", (since,)).fetchone()
+        return int(row[0] or 0)
+    except Exception:  # noqa: BLE001  管理頁的一格數字，讀不到不擋整頁
+        return 0
+
+
 def admin_now(game: Game) -> dict:
     """管理頁頂上的現況：按鈕按下去之前先看得到此刻的樣子（定戰況、推大勢、救場之前知道現在是多少）。呼叫端拿著行動鎖。"""
     world = game.state.world
@@ -2321,6 +2408,7 @@ def admin_now(game: Game) -> dict:
         "phase_text": PHASE_WORDS.get(game.world.season_phase(), ""),
         "when": game.stamp(world.time),
         "battle": fight,
+        "online": _online_count(),  # 管理頁四格的「在線」：ONLINE_SECONDS（10 分鐘）內來過的真人（介面重整 2026-11-05）
         "trends": [{"id": t.id, "label": t.name, "value": rules.world_trend_value(world, CONTENT, t.id)}
                    for t in CONTENT.scenario.trends],
     }
@@ -2753,6 +2841,8 @@ MAIN_ACTIONS = {
     "view_tab": lambda g, b: g.view_tab(str(b.get("tab", ""))),  # 序章裡打開修練、煉製頁（新手引導計畫一）
     "guide_ack": lambda g, b: g.guide_ack(),  # 對話框的結語按「知道了」
     "allocate": lambda g, b: g.allocate_stat(str(b.get("stat", ""))),  # 狀態列的配點鈕：升級得到的屬性點加到一項
+    # 五項屬性的季的成長配比（屬性與跨季架構 v2 3.1）：preset 是五套之一或 custom（custom 帶 split：鍵 → 每級幾點）
+    "growth": lambda g, b: g.pick_growth(str(b.get("preset", "")), b.get("split") if isinstance(b.get("split"), dict) else None),
     "newbie_drifter": lambda g, b: g.newbie_drifter(),  # 任務卡「新手目標」的「就當散人」（新手引導重做）
     "pill": lambda g, b: g.take_stamina_pill(),  # 狀態列體力條上的「丹」：吃一顆回體丹（企劃者 2026-10-07 內測贈送）
     # 江湖頁「簽到」小標攤開的領取鈕（21 天季，正式季整合 6.2）：四階的日子帶 attribute（剛柔快慢）
@@ -2991,6 +3081,29 @@ MENXIA_ACTIONS = {
 # （/api/peer、/api/peer/act：全部拆包第 37 批搬進玩家互動包 tianxia/features/peers/routes.py，殼照 FEATURES 掛；鎖外的 screen_peer、prepare_peer 照手冊 G10 留在殼：A 段 discuss_actions.request、C 段 discuss_actions.discuss 在包裡，第 38 批）
 
 
+# 第 2 段 D 收：往來紀錄的路由（介面重整）進人物情誼包 routes.py，跟 /api/figure 放一起
+@app.get("/api/talk_log")
+def api_talk_log(request: Request, id: str = "", season: str = "now", before: int = 0):
+    """往來紀錄（介面重整 2026-11-05）：你跟這位人物這一季（season=now）或上一季（prev）說過的話，新的在前、一次 talk_log.PAGE 句；
+    before 是上一頁最舊那一句的 id。情誼的增減照同一位人物前一句記下的情誼算。只讀，不拿行動鎖（讀的是旁邊的小檔與角色的名號）。"""
+    game = _game(request)
+    cid = str(id)[:40]
+    ch = game.content.characters.get(cid)
+    if ch is None:
+        return {"lines": [], "more": False}
+    p = game.state.player
+    number = p.season_number - (1 if season == "prev" else 0)
+    store = talk_store()
+    rows, more = store.page(name_key(p.name), cid, number, before or None, talk_log.PAGE + 1)
+    lines = []
+    for i, r in enumerate(rows[:talk_log.PAGE]):
+        said = rows[i + 1] if i + 1 < len(rows) and rows[i + 1]["role"] == "user" else None  # 同一輪玩家那一句記的是動作前的情誼
+        gain = r["affinity"] - said["affinity"] if said is not None and r["role"] == "assistant" else 0
+        lines.append({"id": r["id"], "stamp": r["stamp"], "place": r["place"], "role": r["role"], "text": r["text"], "gain": gain})
+    return {"id": cid, "name": ch.name, "face": figure_face(cid), "affinity": p.affinities.get(cid, 0),
+            "meets": store.meets(name_key(p.name), cid), "lines": lines, "more": more or len(rows) > talk_log.PAGE}
+
+
 # POST /api/party/leave 搬進 tianxia/features/travel/routes.py（api_party_leave；全部拆包第 48 批）
 
 
@@ -3072,15 +3185,77 @@ def api_reports(request: Request, id: int | None = None):
 # 寫法、產生、存放在 tianxia/tale.py 與下面這一段：收場之後由背景執行緒（tale_round）一篇一篇寫，
 # 存進資料庫旁邊的小檔 <db>-tale.sqlite（不動 SCHEMA_VERSION）。模型叫不動就存引擎自己拼的那一版（tale.plain），
 # 所以「史官還在落筆」只會是「還沒輪到它寫」，不會永遠卡著。
-def tale_view(battle_id: int) -> dict:
-    """一場的戰記：寫好了回整篇（ready）；是決戰、收場了、還沒寫好回 pending；其餘（不是決戰、沒這場、還沒接上）回 none。"""
+def tale_view(battle_id: int, request: Request | None = None) -> dict:
+    """一場的戰記：寫好了回整篇（ready）；是決戰、收場了、還沒寫好回 pending；其餘（不是決戰、沒這場、還沒接上）回 none。
+    寫好了另外帶分享網址（url，/zhanji/<代碼>）與遊戲裡那一層要開的頁（page，同一頁加 ?in=1；戰記分享頁，Joy 2026-11-04）。"""
     store = TALES
     if store is None:
         return {"status": "none"}
     written = store.get(battle_id)
     if written is not None:
-        return written.model_dump()
+        view = written.model_dump()
+        code = store.share_code(battle_id)
+        view["page"] = f"/zhanji/{code}?in=1"
+        if request is not None:
+            view["url"] = f"{public_base(request)}/zhanji/{code}"
+        return view
     return {"status": "pending"} if _tale_due(battle_id) else {"status": "none"}
+
+
+# 戰記頁的封面（web/img/tale/）：那一場自己的圖 > 攻城共用一張 > 那一區的地點圖 > 事件插圖 tale（企劃者的圖還沒到時用）
+TALE_COVER_DIR = WEB / "img" / "tale"
+TALE_SIEGE_COVER = "siege"
+TALE_DEFAULT_COVER = "default"
+TALE_COVER_ALIAS = {"wancheng_jia": "wancheng", "wancheng_yi": "wancheng"}  # 宛城兩場（甲、乙）共用一張
+TALE_LEAD_MAX = 80  # 分享預覽的摘要最多幾個字
+
+
+def tale_cover(definition) -> str:
+    """封面圖的網址（/static/...）；圖檔真的在才給那一張，照上面的順序往下找。"""
+    keys = [TALE_COVER_ALIAS.get(definition.id, definition.id)] if definition is not None else []
+    if definition is not None and definition.id.startswith("siege_"):
+        keys.append(TALE_SIEGE_COVER)
+    keys.append(TALE_DEFAULT_COVER)
+    for key in keys:
+        if (TALE_COVER_DIR / f"{key}.webp").is_file():
+            return f"/static/img/tale/{key}.webp"
+    region = getattr(definition, "region", None) if definition is not None else None
+    if region and (WEB / "img" / "places" / f"{region}.webp").is_file():
+        return f"/static/img/places/{region}.webp"
+    return "/static/img/events/tale.webp"
+
+
+def tale_page_view(record_id: int, written: tale.Tale) -> dict:
+    """戰記頁（tale_html.page）要的那一份：整篇加上封面、抬頭、兩邊（名字與顏色）、在場幾人、分享預覽的摘要。只讀。"""
+    battle = open_world().ended_battle(record_id)
+    definition = CONTENT.battles.get(battle.battle_id) if battle is not None else None
+    view = written.model_dump()
+    names = battle_instance.side_names(battle, definition) if battle is not None and definition is not None else {}
+    view["sides"] = [{"name": name, "cls": tale_html.SIDE_CLASS.get(side, "")} for side, name in names.items()]
+    view["present"] = len(battle.participants) if battle is not None else 0
+    view["title"] = written.title or f"{written.battle_name}{tale.TITLE_SUFFIX}"
+    view["kicker"] = f"天下大勢・第 {written.season} 季・{CONTENT.scenario.name}"
+    view["stamp"] = written.result
+    view["sub"] = battle.outcome_reason if battle is not None and battle.outcome_reason else ""
+    first = next((sc.text for a in written.acts for sc in a.scenes if sc.text.strip()), "")
+    line = first.strip().split("\n", 1)[0]
+    view["lead"] = line if len(line) <= TALE_LEAD_MAX else line[: TALE_LEAD_MAX - 1] + "…"
+    view["cover"] = tale_cover(definition)
+    return view
+
+
+@app.get("/zhanji/{code}")
+def tale_page(code: str, request: Request, embedded: str | None = Query(default=None, alias="in")):
+    """戰記頁（不用登入、唯讀；Joy 2026-11-04）：只認發出去的分享代碼，其餘一律 404。帶 Open Graph，貼到 LINE、FB 有預覽；
+    ?in=1 是遊戲裡戰報頁疊的那一層（頂條換成「‹ 返回」、不畫招攬）。"""
+    store = TALES
+    record_id = store.record_for(code) if store is not None else None
+    written = store.get(record_id) if record_id is not None else None
+    if written is None:
+        return HTMLResponse(tale_html.missing(), status_code=404)
+    base = public_base(request)
+    view = tale_page_view(record_id, written)
+    return HTMLResponse(tale_html.page(view, url=f"{base}/zhanji/{code}", image=f"{base}{view['cover']}", embedded=embedded == "1"))
 
 
 def _tale_due(record_id: int) -> bool:
@@ -3104,7 +3279,7 @@ def tale_index(game: Game) -> list[dict]:
 @app.get("/api/tale/{battle_id}")
 def api_tale(request: Request, battle_id: int):
     _game(request)  # 要登入，跟戰報一樣
-    return tale_view(battle_id)
+    return tale_view(battle_id, request)
 
 
 # ── 戰記怎麼寫出來：全服一條背景執行緒（start_tales，main() 開），每 TALE_ROUND_SECONDS 秒看一次這一季有沒有收場了
@@ -3115,7 +3290,10 @@ TALES_CLIENT = None  # 寫戰記用的 client（main() 照設定建；測試塞�
 TALES_STOP = threading.Event()
 TALES_THREAD: threading.Thread | None = None
 TALE_ROUND_SECONDS = 30.0  # 看一次的間隔（一季頂多十來場，寫完就閒著）
-TALE_BUDGET_SECONDS = 180.0  # 一篇的模型預算
+# 一篇的模型預算。2026-11-04 改成一幕一趟之後實測（第 8 季廣宗，3 幕 17 拍＋8 人的名錄，gemma4:12b）：
+# 四趟共 227 秒，180 秒會在名錄那一趟前就用完、名錄整段退回引擎那幾句。單趟還是最多 120 秒
+# （within_budget 取 min(client.timeout, 剩下的一半)），所以真人要等的上限沒變。
+TALE_BUDGET_SECONDS = 420.0
 TALE_OWNER_KEY = "戰記"  # 佇列裡的名號（不是任何角色）
 
 
@@ -3184,8 +3362,11 @@ def tale_round(clock: Callable[[], float] = time.time) -> int | None:
         return None
     budget, started = TALE_BUDGET_SECONDS, _monotonic()
 
+    def fresh():  # 一幕一趟：每一趟照「還剩多少」重算預算，用完回 None（剩下的幕照引擎那一句，不是整篇垮掉）
+        return within_budget(TALES_CLIENT, budget - (_monotonic() - started))
+
     def ask() -> tuple[dict, dict]:
-        return tale.write(within_budget(TALES_CLIENT, budget - (_monotonic() - started)), material)
+        return tale.write(fresh(), material, next_client=fresh)
 
     if QUEUE is None:
         scenes, cast = ask()

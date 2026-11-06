@@ -49,8 +49,10 @@ def test_a_treasure_raises_the_sensing_odds():
     with mock.patch.object(treasures, "amount", side_effect=lambda st, ct, key: 1.5 if key == "insight" else 1.0):
         assert sensing.rate(s, c, loc) == 85
         s.player.stats["wis"] = 15
+        s.player.attr_alloc["int"] = 1000  # 五項屬性的季（week7 2026-11-05 起）悟性照新的那一項
         assert sensing.rate(s, c, loc) == 95  # 夾在 sense_rate_range 的上限
         s.player.stats["wis"] = 5
+        s.player.attr_alloc["int"] = 0
         c.config.sense_treasure_points = 0
         assert sensing.rate(s, c, loc) == 70
 

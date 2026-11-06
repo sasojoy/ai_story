@@ -68,7 +68,7 @@
         "text": "盯住坐莊那人的袖口，當場拆穿",
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你一把抓住他的手腕，袖子裡滾出兩顆灌了鉛的骰子。眾人一哄而上，把他騙去的錢全分了回來，也分了你一份謝禮。",
@@ -100,7 +100,7 @@
         "text": "比力氣：一起去舉路邊那塊石碾",
         "check": {
           "stat": "str",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你把石碾舉過了頭，他舉到一半就放下了，紅著臉說服氣。",
@@ -121,7 +121,7 @@
         "text": "比腳程：跑到坡頂那棵老樹再回來",
         "check": {
           "stat": "agi",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你先摸到老樹，回到原地時他還在半坡上喘。",
@@ -159,7 +159,7 @@
         "text": "坐下來慢慢推敲那幾個記號",
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你看出那是一份聯絡的暗語，寫著哪天在哪裡交接糧草。你把信交給附近的亭長，他賞了你一筆錢，說要派人去守著。",
@@ -203,7 +203,7 @@
         "text": "請他當場餵招，把那一下拆給你看",
         "check": {
           "stat": "agi",
-          "difficulty": 5,
+          "grade": "normal",
           "by": "self"
         },
         "effect": {
@@ -262,7 +262,7 @@
         "text": "衝上去拉住韁繩",
         "check": {
           "stat": "str",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你死死拽住韁繩，騾子拖著你跑了十幾步才停下。夥計追上來千恩萬謝，硬塞給你一份謝禮。",
@@ -291,7 +291,7 @@
         "text": "趁夥計顧不上，撿一包貨揣走",
         "check": {
           "stat": "agi",
-          "difficulty": 5,
+          "grade": "normal",
           "practice": "evil"
         },
         "effect": {
@@ -318,7 +318,7 @@
         "text": "揣著貨包就跑",
         "check": {
           "stat": "agi",
-          "difficulty": 4,
+          "grade": "easy",
           "practice": "evil"
         },
         "effect": {

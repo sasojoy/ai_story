@@ -2286,6 +2286,19 @@ SHARED_LATER["skillview"] = ("門下頁的說明（彙整）：讀自創 create�
 for _pair in (("conquest", "seal_acts"), ("figures", "seal_acts"), ("figure_life", "seal_acts"), ("plans", "seal_acts")):
     SHARED_PENDING[_pair] += "；seal_acts 函式裡 import seal（第 27 批成了玉璽包的別名），叫到它就連帶載入玉璽包"
 
+# merge_back（主幹合回 develop 第 1 段，2026-11-06）：develop 新加的 9 個 Game 方法先修到能跑。暫時的三筆寫明第 2 段哪一塊收，最後的閘門要確認一條都不剩。
+# _allocate_v2 這一段就進了修練包（allocate_stat 的本體在包裡，只有它叫）；_season_prep、season_prep_view、_attr_rows、place_state_view 留核心（PM 認定第 6、7 條）；
+# _figure_side_name、talk_view 不碰包，第 2 段 D 一起搬。新手引導碰到才說的 h_chuangong 問修練包：一行委派 _chuangong_ready（前例 _recruit_target）。
+GAME_DELEGATES |= {"_chuangong_ready"}
+GAME_DIRECT.update({
+    "figures_here_view": "江湖頁「此地人物」那一排（介面重整）問交友求見包見不見得到（talkable、why_not_talk）——暫時：第 2 段 D 收（進 features/socialize/view.py，Game 留委派）",
+})
+GAME_DELEGATE_CALLERS.update({
+    ("figures_here_view", "_social_plan"): "同上：交友會做什麼——暫時：第 2 段 D 收",
+    ("figures_here_view", "_audience_options"): "同上：求見名單——暫時：第 2 段 D 收",
+    ("pick_growth", "_note_action"): "五項屬性的季挑成長配比（序章配點那一步，升一級沒有點可配）；" + _NOTE_HOOK + "——暫時：第 2 段 A 收（本體進修練包，Game 自己保留擋的三步）",
+})
+
 
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py
     import io

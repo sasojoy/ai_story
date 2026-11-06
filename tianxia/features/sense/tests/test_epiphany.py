@@ -65,6 +65,7 @@ def _think(game) -> None:
 def test_chances_halve_scale_with_wit_and_stop_at_the_season_cap():
     game = _game()
     s, c = game.state, game.content
+    c.config.attributes.v2.enabled = False  # 舊的悟性點數（每點 ×1.05）；五項屬性讀頓悟的上下限在 tests/core/test_attrset.py
     s.player.stats["wis"] = 5
     assert epiphany.chance(s, c) == pytest.approx(0.03)
     s.player.stats["wis"] = 7

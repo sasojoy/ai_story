@@ -85,6 +85,15 @@ const extra = L.extra ? el("extra", ["tx-extra"]) : null;
 const duelRow = L.duel ? el("duelrow", ["sx-drow"]) : null;
 const duelBtn = L.duel ? el("duelbtn", ["btn"], { parentElement: duelRow }) : null;
 if (extra) extra.querySelectorAll = (s) => (s === ":scope > .tx-line" ? Array.from({ length: L.extra }, () => ({})) : []);
+// 開局一到就攤開的託付信（收法 1a，FB-9110）：L.letter 是有一封攤開的；標題那一顆鈕與右邊的箭頭
+const letterHead = L.letter ? el("lhead", ["letter-head"]) : null;
+const letterArrow = L.letter ? el("larrow", ["letter-arrow"], { textContent: "▴" }) : null;
+if (letterHead) letterHead.setAttribute("aria-expanded", "true");
+const letter = L.letter ? el("letter", ["card", "letter", "open"]) : null;
+if (letter) {
+  letter.dataset.letter = "5";
+  letter.querySelector = (s) => (s === ":scope > .letter-head" ? letterHead : s === ".letter-arrow" ? letterArrow : null);
+}
 const box = L.box ? el("box", ["card", "guide"]) : null;
 const hint = L.hint ? el("hint", ["hint"]) : null;  // 狀態列的 💡（#top 裡）；收成一行看的是 S.hintTight（renderTop 照它畫）
 // 名聲（名聲設計十一之二）：狀態列名號底下那一行稱號（1B，收不收看 S.renownTight）與決戰本場戰功名字底下的稱號（4B，L.merit 是幾行）
@@ -139,7 +148,7 @@ if (callsBox) {
   callsBox.insertAdjacentHTML = () => { callsMore = makeMore("", true); };
 }
 // 每一樣收起來省多少 px（假的；真的看 375×812 估的數字）
-const SAVE = Object.assign({ art: 190, extra: 60, space: 30, cardSpace: 6, box: 22, hint: 20, renown: 20, line: 20, rounds: 23, merit: 6, own: 27, muster: 27, desc: 27, options: 22, call: 70, moreLine: 0, peek: 56, note: 18 }, input.save || {});
+const SAVE = Object.assign({ letter: 300, art: 190, extra: 60, space: 30, cardSpace: 6, box: 22, hint: 20, renown: 20, line: 20, rounds: 23, merit: 6, own: 27, muster: 27, desc: 27, options: 22, call: 70, moreLine: 0, peek: 56, note: 18 }, input.save || {});
 // 「剛剛」只留時間與標題（fit-title）時剩兩行 48px；只露三行（fit-short）時最多 72px
 const bodyHeight = () => (now && has(now, "fit-title") && !has(now, "open") ? Math.min(L.nowBody, 48)
   : now && has(now, "fit-short") ? Math.min(L.nowBody, 72) : Math.min(L.nowBody || 0, 120));
@@ -148,6 +157,7 @@ const bottom = () => {
   if (has(page, "fit-space")) b -= SAVE.space;
   if (card && has(card, "fit-space")) b -= SAVE.cardSpace;
   if (box && has(box, "fit-box")) b -= SAVE.box;
+  if (letter && has(letter, "fit-letter")) b -= SAVE.letter;
   if (hint && S.hintTight && !S.hintOpen) b -= SAVE.hint;
   if (renownLine && S.renownTight) b -= SAVE.renown;
   meritSmalls.forEach((x) => { if (has(x, "fit-hide")) b -= SAVE.merit; });
@@ -194,6 +204,8 @@ const where = {
   ".g-merit small.fit-hide": () => meritSmalls.filter((x) => has(x, "fit-hide")),
   ".fit-space": () => all.filter((x) => x !== page && has(x, "fit-space")),
   ".fit-box": () => all.filter((x) => has(x, "fit-box")),
+  "#page > .card.letter.open:not(.fit-letter)": () => (letter && !has(letter, "fit-letter") ? [letter] : []),
+  ".card.letter.fit-letter": () => (letter && has(letter, "fit-letter") ? [letter] : []),
   ".tx-tight": () => all.filter((x) => has(x, "tx-tight")),
   ".fit-fold": () => all.filter((x) => has(x, "fit-fold")),
   ".fit-art": () => all.filter((x) => has(x, "fit-art")),
@@ -260,6 +272,7 @@ const snap = () => ({
   renownTight: S.renownTight, merit: meritSmalls.map((x) => has(x, "fit-hide")),
   art: art ? [...art.classes].sort() : null, extra: extra ? [...extra.classes].sort() : null, extraAttrs: extra ? extra.attrs : null,
   desc: descParas.map((x) => [...x.classes].sort()), descAttrs: descParas.map((x) => ({ ...x.attrs })), descClassAttr: descParas.map((x) => x.getAttribute("class")), descHead: descHead ? [...descHead.classes].sort() : null,
+  letter: letter ? [[...letter.classes].sort(), letterHead.attrs["aria-expanded"], letterArrow.textContent] : null,
   peek: peek ? [...peek.classes].sort() : null, notes: notes.map((x) => has(x, "fit-hide")), nowWas: now ? now.dataset.fitWas || null : null,
 });
 finish(new Function("H", "S", "snap", "L", "W", "els", input.script || "H.fitFirstScreen(); return snap();")(
@@ -683,6 +696,8 @@ def test_each_step_only_touches_what_it_names():
         # 第 5c 步（extra）：戰鬥補充第一行以後的（點那一塊整塊攤開，extraOpen）
         ".battle-card .tx-extra.fit-extra > .tx-line ~ .tx-line",
         ".battle-card p.rounds-tale.fit-fold:not(.open)", ".battle-card ul.rounds.fit-fold:not(.open)", ".call.fit-hide",
+        # 第 1a 步（letter，FB-9110）：攤開的託付信收成標題一行、底下問通知那一張（點標題攤開，letterOpen）
+        ".card.letter.fit-letter > .letter-body, .card.letter.fit-letter + .push-ask",
         ".g-mcol li .rn-two small.fit-hide",  # 名聲 4B：本場戰功名字底下那一行稱號（名字照舊）
         # 第 10 步（choices）：「剛剛」的敘事（展開 .open 就回來）、灰掉的鈕底下那一行原因（在鈕的 title，點了說整句）、態勢那一排
         ".now.fit-title:not(.open) .tx-now > .tx-line, .now.fit-title:not(.open) .tx-now > .tx-heading, .now.fit-title:not(.open) .tx-now > .tx-glyph",
@@ -853,6 +868,42 @@ def test_the_selector_follows_the_real_markup_the_duel_card_draws():
     assert '#page > .act-bar + #sortie-duels > .sx-drow:first-of-type > [data-act="sortie-answer"]' in sel and '[data-act="sortie-join"]' in sel
     grey = run_prologue_web({**m, "sorties": [{**row, "can_answer": False, "why_not": "今日應戰 3 次已用完"}]}, "return H.actionBar(H.S.main);")
     assert 'data-act="sortie-answer"' not in grey  # 灰的那一行沒有可按的鈕：選擇器抓不到、量的還是行動列
+
+
+# ── 託付的信攤著時約戰那一行也要露出來（FB-9110）──────────────────────────────────────
+# 新人開局第一封就是一到就攤開的託付信（傅燮來信），信加上底下問手機通知那一張把約戰卡的應戰、同去擠到第二屏（375×812 第一顆鈕 1007～1041、
+# 分頁列頂 756）。量的是約戰那一行時，間距之後先把信收成標題一行（收法 1a，同玩家按標題收攏），點標題照樣攤開
+
+
+@node
+def test_an_open_letter_folds_to_its_title_to_bring_the_duel_row_up():
+    """756 − 16 = 740。行動列 690、約戰那一行再低 300（990）：間距 30 不夠，信收成標題一行（省 300）就放得下，場景的畫不動。"""
+    out = run({"bottom": 690, "actbar": True, "scene": True, "art": True, "letter": True, "duel": 300})
+    assert out["fitted"] == ["space", "letter"] and out["art"] == ["scene-art"]
+    assert out["letter"] == [["card", "fit-letter", "letter", "open"], "false", "›"]  # 點標題走「沒攤開 → 攤開」
+    assert out["bottom"] + 300 <= 740
+
+
+@node
+def test_the_letter_stays_open_without_an_answerable_duel_or_when_the_player_opened_it():
+    no_duel = run({"bottom": 900, "actbar": True, "scene": True, "art": True, "letter": True})
+    assert "letter" not in no_duel["fitted"] and no_duel["letter"] == [["card", "letter", "open"], "true", "▴"]
+    mine = run({"bottom": 690, "actbar": True, "scene": True, "art": True, "letter": True, "duel": 300}, S={"letterOpen": 5})
+    assert "letter" not in mine["fitted"] and mine["letter"][0] == ["card", "letter", "open"]
+
+
+@node
+def test_refitting_opens_the_letter_again_once_the_duel_is_gone():
+    script = "H.fitFirstScreen(); const tight = snap(); L.duel = 0; H.fitFirstScreen(); return { tight, roomy: snap() };"
+    out = run({"bottom": 690, "actbar": True, "scene": True, "art": True, "letter": True, "duel": 300}, script=script)
+    assert "letter" in out["tight"]["fitted"]
+    assert out["roomy"]["fitted"] == [] and out["roomy"]["letter"] == [["card", "letter", "open"], "true", "▴"]
+
+
+@node
+def test_the_folded_letter_hides_its_body_and_the_push_question_in_css():
+    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    assert ".card.letter.fit-letter > .letter-body, .card.letter.fit-letter + .push-ask { display: none; }" in css
 
 
 # ── 約戰那一行擠完還放不下：再把場景卡的地點描述收成一行（企劃者 2026-10-28「擠完再上」）──────────────────
@@ -1049,19 +1100,21 @@ def test_the_description_selector_follows_the_real_scene_markup(on, with_art):
     m["here"] = [{"name": "沈伯安", "side": "黃巾軍"}]
     m["calls"] = [{"text": "有人跟你打招呼", "options": [{"id": "invite:accept:1", "label": "回禮", "enabled": True}]}]
     m["party"] = {"text": "你與某人結伴同行", "lead": False}
-    kids = _scene_card(_html_tree(run_prologue_web(m, "return H.pageJianghu();")))["kids"]
-    drawn_art = any("scene-art" in k["attrs"].get("class", "") for k in kids)
+    card = _scene_card(_html_tree(run_prologue_web(m, "return H.pageJianghu();")))["kids"]
+    drawn_art = any("scene-art" in k["attrs"].get("class", "") for k in card)
     assert drawn_art is with_art
+    # 介面重整：場景文字包在 .rv-scene 裡（app.js 的 sceneBody），畫還是場景卡的直接孩子；結伴、邀請在卡底下，「此地還有」搬到此地人物那一排
+    kids = next(k for k in card if "rv-scene" in k["attrs"].get("class", "").split())["kids"]
     picked = [k for k in kids if k["tag"] == "p" and "class" not in k["attrs"]]
     if not drawn_art:
         assert picked[0]["text"].startswith("【")  # 第一段是地名那一條
         picked = picked[1:]
     norm = lambda text: " ".join(re.sub(r"<[^>]*>", "", text).split())  # noqa: E731
     assert [norm(k["text"]) for k in picked] == [norm(d) for d in desc]
-    divs = {k["attrs"].get("class") for k in kids if k["tag"] == "div"}
-    assert {"here", "calls"} <= divs and not any(k["tag"] == "p" and "here" in k["attrs"].get("class", "") for k in kids)
+    assert "calls" in {k["attrs"].get("class") for k in card if k["tag"] == "div"} and not any("calls" in k["attrs"].get("class", "") for k in kids)
     src = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
-    assert 'scene.querySelectorAll(":scope > p:not([class])")' in src and 'scene.querySelector(":scope > .scene-art")' in src
+    assert 'scene.querySelectorAll(":scope > p:not([class])")' in src and 'document.querySelector("#page > .card.scene:not(.road)").querySelector(":scope > .scene-art")' in src
+    assert 'card.querySelector(":scope > .rv-scene") || card' in src
 
 
 def test_the_art_and_extra_folds_are_styled():
@@ -1267,9 +1320,24 @@ def _consts():
     return webharness.run(driver, {})
 
 
+def _div_inner(html, head):
+    """html 裡開頭是 head 的那一個 <div …> 的內容（數 div 的層數找對應的收尾）；沒有這個 div 就原樣回傳。"""
+    start = html.find(head)
+    if start < 0:
+        return html
+    open_end = html.index(">", start) + 1
+    depth = 0
+    for tag in re.finditer(r"<(/?)div\b", html[start:]):
+        depth += -1 if tag.group(1) else 1
+        if depth == 0:
+            return html[open_end:start + tag.start()]
+    return html[open_end:]
+
+
 def _scene(page):
     """場景卡的內容，拿掉戰局條（它自己的測試在 test_battle_gauge.py）：這裡比的是伺服器給的那一段文字。"""
-    scene = re.search(r'<section class="card scene">(.*?)</section>', page, re.S).group(1)
+    scene = re.search(r'<section class="card scene(?: rv)?">(.*?)</section>', page, re.S).group(1)
+    scene = _div_inner(scene, '<div class="rv-scene')  # 介面重整：場景文字包在 rv-scene 裡（上面是「剛剛」那一條，下面是結伴與邀請）
     start = scene.find('<div class="gauge"')
     if start < 0:
         return scene
@@ -1520,75 +1588,55 @@ def quiet(glowing):
 
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-def test_a_fold_nobody_touched_stays_shut_and_no_fold_is_drawn_without_extras(quiet):
+def test_without_a_glow_the_seal_row_stands_in_for_the_fold_and_nothing_is_drawn_without_extras(quiet):
+    """介面重整：沒有發光的鈕時不畫「此地還能做」的摺疊，換成此地可為那一排圓章；此地沒有別的事可做時那一排也不畫。"""
     out = run_prologue_web(quiet, _script("""
       H.renderPage();
-      const shut = fold();
+      const first = { fold: fold(), row: T.els.page.innerHTML.includes('class="here-row"') };
       H.S.main = { ...H.S.main, options: H.S.main.options.filter((o) => ["act:explore", "act:train", "act:socialize"].includes(o.id)) };
-      return { shut, none: redraw() };"""))
-    assert out == {"shut": False, "none": None}
+      return { first, none: redraw(), row: T.els.page.innerHTML.includes('class="here-row"') };"""))
+    assert out == {"first": {"fold": None, "row": True}, "none": None, "row": False}
 
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-def test_a_fold_the_player_opened_stays_open_after_a_refused_actions_redraw(quiet):
-    """摺疊裡的鈕被伺服器擋下來（400：「對方還沒答話，稍等。」；排太久也是這一種），choose() 重畫整頁：摺疊照樣開著，剛按的那一顆還在。"""
+def test_the_all_sheet_stays_open_after_a_refused_actions_redraw_and_closes_once_it_goes_through(quiet):
+    """「全部」清單裡的鈕被伺服器擋下來（400：「對方還沒答話，稍等。」；排太久也是這一種），choose() 重畫整頁：清單照樣開著，剛按的那一顆還在；
+    做成了（伺服器收了）清單收起來，看得到結果。"""
+    sheet = 'class="sheet here-all"'
     out = run_prologue_web(quiet, _script("""return (async () => {
+      H.S.hereAll = true;
       H.renderPage();
-      const before = fold();
-      toggle(true); // 玩家點開「此地還能做」
+      const before = T.els.page.innerHTML.includes('%s');
       refuse("對方還沒答話，稍等。");
       T.els.page.innerHTML = ""; // 確認接下來的畫面是被擋下來之後重畫出來的
       await press("act:duty");
-      return { before, redrawn: T.els.page.innerHTML !== "", after: fold(), calls: T.calls.map((c) => [c[0], c[1].id]),
-               button: T.els.page.innerHTML.includes('data-id="act:duty"') };
-    })();"""))
-    assert out["before"] is False and out["calls"] == [["/api/choose", "act:duty"]]
-    assert out["redrawn"] is True and out["after"] is True and out["button"] is True
-
-
-@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-def test_a_fold_the_player_left_shut_stays_shut_after_a_refused_actions_redraw(quiet):
-    out = run_prologue_web(quiet, _script("""return (async () => {
-      H.renderPage();
-      toggle(true);
-      toggle(false); // 開了又收
-      refuse("這會兒人多，沒輪到你，稍後再試一次。");
+      const refused = { open: T.els.page.innerHTML.includes('%s'), button: T.els.page.innerHTML.includes('data-id="act:duty"'), calls: T.calls.map((c) => [c[0], c[1].id]) };
+      const main = H.S.main;
+      T.ctx.fetch = () => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ main }) });
+      delete T.qs[".options .btn.busy, .act-ink.busy"];
       await press("act:duty");
-      return { after: fold(), redrawn: T.els.page.innerHTML.includes("此地還能做") };
-    })();"""))
-    assert out == {"after": False, "redrawn": True}
+      H.renderPage();
+      return { before, refused, done: T.els.page.innerHTML.includes('%s') };
+    })();""" % (sheet, sheet, sheet)))
+    assert out["before"] is True and out["refused"] == {"open": True, "button": True, "calls": [["/api/choose", "act:duty"]]}
+    assert out["done"] is False
 
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-def test_a_fold_the_player_opened_stays_open_after_a_poll_redraw(quiet):
-    """輪詢帶來新的畫面（拿到有變的 main 之後 refreshPage → renderPage）：以前也把摺疊收起來。摺疊裡的件數變了（標題的字不同）也一樣。"""
+def test_the_all_sheet_stays_open_after_a_poll_redraw(quiet):
+    """輪詢帶來新的畫面（拿到有變的 main 之後 refreshPage → renderPage）：打開的「全部」清單照樣開著，件數照新的寫。"""
     out = run_prologue_web(quiet, _script("""return (async () => {
+      H.S.hereAll = true;
       H.renderPage();
-      toggle(true);
       const was = H.S.main;
       const fewer = was.options.filter((o) => o.id !== "act:duty");
       H.setMain({ ...was, now: "天色漸暗，營裡升起了炊煙。", options: fewer }); // 世界動了、此地少了一件事
       T.els.page.innerHTML = "";
       await H.refreshPage(was);
-      return { redrawn: T.els.page.innerHTML !== "", open: fold(), title: (T.els.page.innerHTML.match(/此地還能做 (\\d+) 件事/) || [])[1] };
+      const html = T.els.page.innerHTML;
+      return { open: html.includes('class="sheet here-all"'), duty: html.includes('data-id="act:duty"') };
     })();"""))
-    assert out["redrawn"] is True and out["open"] is True
-    before = run_prologue_web(quiet, _script("H.renderPage(); return (T.els.page.innerHTML.match(/此地還能做 (\\d+) 件事/) || [])[1];"))
-    assert int(out["title"]) == int(before) - 1  # 標題照新的件數寫，摺疊照樣開著
-
-
-@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-def test_the_fold_is_remembered_for_this_place_only(quiet):
-    """記的是這一處：走到別處，那裡的摺疊從收著開始（不然開過一次，每個城鎮都攤著一排按鈕）；回到原處、中間沒開關過別處，還是原樣。"""
-    out = run_prologue_web(quiet, _script("""
-      H.renderPage();
-      toggle(true);
-      const here = redraw();
-      H.S.main = %s;
-      const elsewhere = redraw();
-      H.S.main = %s;
-      return { here, elsewhere, back: redraw() };""" % (_json(_at(quiet, "別處")), _json(quiet))))
-    assert out == {"here": True, "elsewhere": False, "back": True}
+    assert out == {"open": True, "duty": False}
 
 
 # ── 入伍段第一道軍令那一步（guide-3b 審查 Minor 11）──────────────────────────────
@@ -1615,8 +1663,8 @@ def test_any_glowing_button_in_the_fold_opens_it_once_and_one_on_the_action_bar_
       toggle(false);
       return { begin, after: [redraw(), redraw()], auto: Object.keys(H.S.hereAuto).length };"""))
     assert out == {"begin": True, "after": [False, False], "auto": 1}
-    train = {**glowing, "guide": {**glowing["guide"], "glow": ["act:train"]}}
-    assert run_prologue_web(train, _script("return { open: redraw(), auto: Object.keys(H.S.hereAuto).length };")) == {"open": False, "auto": 0}
+    train = {**glowing, "guide": {**glowing["guide"], "glow": ["act:train"]}}  # 摺疊裡沒有發光的：照平常畫此地可為那一排（介面重整）
+    assert run_prologue_web(train, _script("return { open: redraw(), auto: Object.keys(H.S.hereAuto).length };")) == {"open": None, "auto": 0}
 
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
@@ -1661,7 +1709,7 @@ def test_a_player_who_closed_the_fold_before_the_step_began_gets_it_opened_once_
       const begin = redraw();
       toggle(false);
       return { before, begin, after: redraw() };""" % _json(glowing)))
-    assert out == {"before": False, "begin": True, "after": False}
+    assert out == {"before": None, "begin": True, "after": False}  # 還沒發光時是此地可為那一排（介面重整），沒有摺疊
 
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
@@ -1688,7 +1736,7 @@ def test_the_fold_without_a_glowing_duty_button_is_not_opened_by_the_step(glowin
     other = {"id": "learn:cuquan", "label": "學粗淺拳腳（學費 0 兩）", "enabled": True, "wait": "", "confirm": ""}  # 摺疊裡留一顆別的鈕，摺疊還畫得出來
     m = {**glowing, "options": [o for o in glowing["options"] if o["id"] != "act:duty"] + [other]}
     out = run_prologue_web(m, _script("H.renderPage(); return { open: fold(), auto: Object.keys(H.S.hereAuto) };"))
-    assert out == {"open": False, "auto": []}
+    assert out == {"open": None, "auto": []}  # 沒有要露出來的：照平常畫此地可為那一排（介面重整）
 
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
@@ -1837,11 +1885,13 @@ def _start_fighting(game):
 
 
 def _page(m):
-    return run_prologue_web(m, "return H.pageJianghu();")
+    # 介面重整：「此地還能做」的摺疊換成此地可為那一排圓章與「全部」清單；這裡打開「全部」，每一顆（灰的也是）都畫成一顆有 data-id 的鈕
+    return run_prologue_web(m, "H.S.hereAll = true; return H.pageJianghu();")
 
 
 def _fold(page):
-    hit = re.search(r'<details class="fold here"[^>]*>(.*?)</details>', page, re.S)
+    """此地可為的「全部」清單（舊的「此地還能做」摺疊；入伍段有發光的鈕時照舊是摺疊）。"""
+    hit = re.search(r'<div class="sheet here-all"[^>]*>(.*?)</div></div>$', page, re.S) or re.search(r'<details class="fold here"[^>]*>(.*?)</details>', page, re.S)
     return hit.group(1) if hit else ""
 
 
@@ -1877,7 +1927,7 @@ def test_the_join_button_sits_by_the_battles_name_and_leaves_the_fold(on):
                     'data-id="battle:join:guan"><span>加入【官軍】</span></button></div>')
     assert _consts_fb105()["arrow"]["join"] == "→"  # 鈕在右邊
     assert "battle:join:guan" not in _fold(page) and page.count('data-id="battle:join:guan"') == 1
-    assert "此地還能做" in page  # 摺疊照樣在（求見、拜師、巡哨），只是少了加入那一顆
+    assert 'class="here-row"' in page  # 此地可為照樣在（求見、拜師、巡哨），只是少了加入那一顆
     # 集結那一句（戰鬥引擎寫的）照伺服器給的原樣跟在名字那一行後面：網頁只換掉第一段（名字），其餘一個字不動
     rest = m["scene"].split("</p>\n", 1)[1]
     assert "集結中，還剩現實" in rest and scene.startswith('<div class="muster-head">') and rest in scene

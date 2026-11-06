@@ -431,7 +431,7 @@ def _apply_turn(
     delta = resolve_tag_delta(tag, character)
     cooled = renown.cold(state, content, companion_id, delta) if content is not None else delta
     chill = cooled != delta
-    delta = renown.warmed(content, cooled) if content is not None else cooled  # 情誼放慢（Config.affinity_gain_scale）
+    delta = renown.warmed(content, cooled, state) if content is not None else cooled  # 情誼放慢（Config.affinity_gain_scale）
     if content is not None:
         delta = seal_acts.warmer(state.world, content, companion_id, delta)  # 收心（玉璽碎片改版第 2 批）：一日之內加的情誼 ×2
     before = p.affinities.get(companion_id, 0)

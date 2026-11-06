@@ -11,6 +11,7 @@ import pytest
 from tianxia.content import load_content
 from tianxia.events import event_matches_location
 from tianxia.models import Condition
+from grade_kit import raw_difficulty
 
 CONTENT_DIR = Path(__file__).resolve().parents[4] / "content"
 EXPLORE_FILES = sorted((CONTENT_DIR / "events").glob("explore_*.json"))
@@ -78,7 +79,7 @@ def test_added_events_vary_their_checks_and_stay_within_limits(content, path):
         assert len({ck["stat"] for ck in checks}) >= 2, e["id"]  # 不同長處的人有不同的路
         for c in e["choices"]:
             if "check" in c:
-                assert c["check"]["stat"] in {"str", "agi", "con", "wis"} and 3 <= c["check"]["difficulty"] <= 8, e["id"]  # 難度帶另見 test_real_content.py::DIFFICULTY_BANDS
+                assert c["check"]["stat"] in {"str", "agi", "con", "wis"} and 3 <= raw_difficulty(c["check"]) <= 8, e["id"]  # 難度帶另見 test_real_content.py::DIFFICULTY_BANDS
             if "check" in c or "combat" in c:
                 assert "fail_effect" in c, e["id"]
             if "combat" in c:

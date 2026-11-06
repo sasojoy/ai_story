@@ -15,10 +15,11 @@ from typing import TYPE_CHECKING, Any
 
 from . import arts as arts_mod
 # （cultivation：破境卡 ascend 全部拆包第 23 批搬進修練包，engine 不再用，拿掉）
+from . import attrset  # 五項屬性（屬性與跨季架構 v2 第三節）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
     allied, armor, atlas, battle_instance, battlelog, bounties, calendar, clinic, conquest, create, divine, economy, encounter, equipment,
-    fight_llm, figures, forge_secrets, gender, howto, insight_fx, insights, journal, library, martial_arts, plans,
+    fight_llm, figures, forge_secrets, gender, howto, insight_fx, insights, journal, library, martial_arts, place_state, plans,
     materials, mounts, naming, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skillview,
     sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, zh,
@@ -298,6 +299,9 @@ class Refused(list):
 
 # 賽季籌備中的 PREPARING_TEXT、PREPARING_REFUSAL（全部拆包第 24 批）與裝飾器 _not_while_preparing（第 23 批）搬進核心的共用的字與小函式
 # （tianxia/core/services.py）：上面 import 回來，`from tianxia.engine import PREPARING_REFUSAL` 照舊拿得到
+GROWTH_PREFIX = "growth:"  # 開季準備卡上挑成長配比的鈕（growth:<配比>；growth:custom 只打開自己配的那一塊）
+GROWTH_LOCKED = "這一季的成長配比已經定了，下一季開季再挑。"
+GROWTH_CUSTOM_ASK = "（在卡上自己配五項，配好按「定下來」。）"
 # 測試期間一鍵補滿體力（Config.beta_free_refill，企劃者 2026-10-07）。以下四句與鈕上的字（Config.beta_free_refill_label）全是新寫的，待 joy 潤：
 REFILL_TITLE = "補滿體力"  # 江湖紀錄那一則的標題（joy 的丹是「服下回體丹」）
 REFILL_LINE = "你運了口氣，體力回滿了。"  # 補滿成功時寫進紀錄的那一句
@@ -495,6 +499,9 @@ class Game:
             prologue_rules.skip_onboarding(game.state, content)  # 假人、機器人、腳本：初入江湖是給網頁上的真人看的
             if prologue_rules.has(content):
                 game.state.player.stamina = float(content.config.stamina_max)
+            if attrset.on(content, game.state.world) and game.state.player.growth_preset is None:
+                # 序章算走過：五項屬性的季序章那一步就是挑配比，照預設那一套（開季準備卡是給網頁上建的真人與換季的人看的）
+                game.state.player.growth_preset = content.config.attributes.v2.default_preset
         p = game.state.player
         p.visited.add(p.location)
         gift = content.config.beta_gift and content.config.beta_gift_stamina_pills > 0
@@ -644,6 +651,7 @@ class Game:
         # 長篇奇事（企劃者 2026-10-27）：紀念物一輩子帶著；跨季的旗標（例：隆中藏書）在新角色身上再立一次
         fresh.player.keepsakes, fresh.player.lasting = list(old.player.keepsakes), list(old.player.lasting)
         fresh.player.flags |= set(old.player.lasting)
+        fresh.player.legacy = old.player.legacy  # 傳承（features/legacy）：照帶不看開關（同出陣那兩格）；結算在包的 on_season_start
         fresh.player.season_number = season_number
         self.state = fresh
         self.state.world = self.world.get_season()  # 開場那一則記此刻的季時間（FB-052：以前記成新存檔的 0）
@@ -951,10 +959,12 @@ class Game:
             return
         if self.now - away_from < c.config.away_hours * HOUR:
             return
-        lines, total = rumor_view.away_lines(s, c, since, self.stamp)
+        gazette = rumor_view.gazette_on(c)  # 世界活起來第二批：上線邸報（你去過的地方、你認識的人、誰提起了你）；關著照舊那一長串
+        lines, total = (rumor_view.gazette_lines if gazette else rumor_view.away_lines)(s, c, since, self.stamp)
         if lines:
             tag = rumor_view.AWAY_TAG.format(n=total)
-            journal.add_entry(s, JournalEntry(time=s.world.time, title=journal.AWAY, tag=tag, lines=lines))
+            title = journal.GAZETTE if gazette else journal.AWAY
+            journal.add_entry(s, JournalEntry(time=s.world.time, title=title, tag=tag, lines=lines))
 
     def advance(self, seconds: float) -> list[str]:
         """玩家主動「等待」固定一段遊戲時間（快轉按鈕）：進行中時，直接在 self.state.world
@@ -1102,6 +1112,9 @@ class Game:
             return [Option(id="season:preparing", label=PREPARING_TEXT, enabled=False)]
         if s.world.ended:  # 休季：列傳為終點開著、手上有列傳的票時多幾顆用票的鈕（減法季批 7b；關著、沒票一顆不多）
             return [Option(id="season:resting", label="休季中，等待管理者開啟下一季", enabled=False)] + self._zhuan_options()
+        prep = self._season_prep()  # 開季準備（企劃者 2026-11-05）：成長配比、識海，做完才能做別的事；排在事件（開局三選一）前面
+        if prep is not None:
+            return prep
         if s.pending_event:
             event = c.events[s.pending_event]
             opts = []
@@ -1113,7 +1126,7 @@ class Game:
                 if ch.needs is not None:  # 名聲 5.3：俠寇選項——開關關著不出現；稱號不夠灰掉寫要什麼；按得下去照樣標俠寇（5B）
                     if not renown.on(c, "virtue_choices"):
                         continue
-                    ok = renown.meets(s, c, ch.needs.path, ch.needs.tier)
+                    ok = renown.open_to(s, c, "choices", ch.needs.path, ch.needs.tier)  # 傳承的門路也開得了第一段
                     opt.enabled, opt.tag = ok, ch.needs.path
                     opt.note = "" if ok else renown.needs_line(s, ch.needs.path, ch.needs.tier)
                 opts.append(opt)
@@ -1336,6 +1349,9 @@ class Game:
     def set_move_mode(self, mode: str) -> None:
         """主畫面的「走法」切換（本體在 tianxia/features/travel/menu.py；留一行委派給 server、腳本與測試）。"""
         travel_menu.set_move_mode(self, mode)
+
+    def _chuangong_ready(self) -> bool:
+        return cultivation_actions.chuangong_ready(self)
 
     def _recruit_target(self) -> str | None:
         return companions_actions.recruit_target(self)
@@ -1729,6 +1745,9 @@ class Game:
                 return Refused([f"（{problem}。）"])
         if option is None or not option.enabled:
             return self._log([self._fight_gone(fight) if fight is not None else "（此刻無法這麼做。）"])
+        if option_id.startswith(GROWTH_PREFIX):  # 開季準備卡挑配比：pick_growth 自己寫紀錄（自己配要五項的數字，走 /api/growth）
+            preset = option_id.removeprefix(GROWTH_PREFIX)
+            return self._log([GROWTH_CUSTOM_ASK]) if preset == attrset.CUSTOM else self.pick_growth(preset)
         faction_before = self.state.player.faction  # 這一下才投靠的人才開始入伍段（見 _begin_enlistment）
         self.state.battle_card = None
         self.state.player.guide_done = []  # 對話框上一次完成的那幾行，下一次行動就清掉
@@ -1894,6 +1913,51 @@ class Game:
 
     def figure_view(self, cid: str) -> dict | None:
         return companions_actions.figure_view(self, cid)
+
+    def figures_here_view(self) -> list[dict]:
+        """江湖頁「此地人物」那一排（介面重整 2026-11-05）：這裡此刻的大勢人物，一位一筆
+        {id, name, side, affinity, talk: {via, why}, aid: [選項 id]}。talk.via 是「交談」要依序按的選項（一類一顆的交友直接開口是
+        ["act:socialize"]、名單是 ["act:call", "call:<id>"]）；說不上話是 None、why 寫原因。aid 是選單上跟他有關的那幾顆
+        （護衛、犒軍、挑戰本人），網頁點了人物才畫。只讀，不扣體力；路上、序章、事件與對話中、季收了是空的（決戰蓋著場景時選單是戰鬥的，網頁不畫這一排）。"""
+        s, c = self.state, self.content
+        p = s.player
+        if p.journey is not None or s.pending_event or p.pending_companion or prologue_rules.active(s, c) or s.world.ended:
+            return []
+        people = self._figures_here()
+        kind, arg = self._social_plan() if precise.on(c, s.world) else (None, None)
+        listed = {o.id: o for o in self._audience_options()} if len(people) >= AUDIENCE_HALL_FIGURES or kind == "list" else {}
+        out = []
+        for cid in people:
+            ch = c.characters[cid]
+            fid = figures.of_character(c, cid)
+            side = self._figure_side_name(fid)
+            via = None
+            if kind == "talk" and arg == cid:
+                via = ["act:socialize"]
+            elif f"call:{cid}" in listed and listed[f"call:{cid}"].enabled:
+                via = ["act:call", f"call:{cid}"]
+            elif not precise.on(c, s.world) and len(people) == 1 and socialize_view.talkable(self, cid):
+                via = [f"call:{cid}"]
+            why = None if via else (socialize_view.why_not_talk(self, cid) if not socialize_view.talkable(self, cid) else "先按「交友」")
+            aid = [f"aid:guard:{fid}", f"aid:rally:{fid}", f"act:challenge:{fid}"] if fid else []
+            out.append({"id": cid, "name": ch.name, "side": side, "affinity": p.affinities.get(cid, 0),
+                        "talk": {"via": via, "why": why}, "aid": aid})
+        return out
+
+    def _figure_side_name(self, fid: str | None) -> str:
+        """大勢人物站哪一邊（陣營的名字）；不是大勢人物、劇本沒有那個陣營是空字串。"""
+        fig = self.content.figures.get(fid) if fid else None
+        found = self.content.scenario.find_faction(fig.faction) if fig is not None else None
+        return found.name if found is not None else ""
+
+    def talk_view(self) -> dict | None:
+        """正在跟誰說話（介面重整的對話框）：{id, name, side, affinity}；沒在對話是 None。"""
+        s, c = self.state, self.content
+        cid = s.player.pending_companion
+        if not cid or cid not in c.characters:
+            return None
+        side = self._figure_side_name(figures.of_character(c, cid))
+        return {"id": cid, "name": c.characters[cid].name, "side": side, "affinity": s.player.affinities.get(cid, 0)}
 
     # ── 託付與勸降（減法季批 6）：本體同上 ────────────
 
@@ -2205,6 +2269,13 @@ class Game:
 
     def plan_view(self) -> dict | None:
         return figure_plan_actions.plan_view(self)
+
+    def place_state_view(self) -> dict | None:
+        """地點會變樣（main.place_state）：此刻所在地的樣子 {kind, name, line}；太平、在路上、關著是 None。"""
+        s = self.state
+        if s.player.journey is not None:
+            return None
+        return place_state.view(s.world, self.content, s.player.location)
 
     def place_deeds_view(self) -> list[dict] | None:
         return figure_plan_actions.place_deeds_view(self)
@@ -2858,6 +2929,9 @@ class Game:
 
     def _battle_role(self) -> str:
         """進場的職位（試玩回饋 2026-10-08）：本人最突出的屬性（battle_instance.role_for）。真人、散人臨時投效、假人都走這裡。"""
+        if attrset.on(self.content, self.state.world):  # 五項屬性的季：照新的五項比（舊的四項有上限曲線，上限不同會偏向悟性）
+            stats = {old: attrset.value(self.state, self.content, new) for old, new in self.content.config.attributes.v2.legacy.items()}
+            return battle_instance.role_for(stats, team.COMBAT_STATS)
         stats = team.member_stats(self.state, self.content, self.world, team.PLAYER)
         return battle_instance.role_for(stats, team.COMBAT_STATS)
 
@@ -2898,6 +2972,9 @@ class Game:
         bare = self._seal_bare()
         if bare is not None:  # 玉璽碎片改版：只有戴著碎片才多這一鍵（沒碎片、改版關著時這一包一個字不變）
             marks["seal_bare"] = bare
+        card = team.pvp_card(self.state, self.content, self.world)
+        if card is not None:  # 五項屬性的季才多這一鍵（奪璽單挑照對手重算）；舊的季一個字不變
+            marks["card"] = card
         return marks
 
     def _seal_bare(self) -> battle_instance.SealBare | None:
@@ -3031,6 +3108,7 @@ class Game:
         guarded = me is not None and me.acted_rounds >= need  # 護璽：自己出手滿門檻（臨時投效的散人也算，只多這一條，4.5）
         keeper = seal_duel.side_from_participant(me, battle.seal_holder_faction) if me is not None else self._seal_side_of(holder)
         cap = min(cfg.cap, cfg.cap * cfg.side_factor.get(tier, 0.0) * (cfg.guard if guarded else 1.0))
+        seal_duel.faced(self.content, challenger, keeper)  # 五項屬性的季：兩邊照對方真正的五項重算；舊的季不動
         return seal_duel.open_duel(
             f"{battle.record_id}:{shard.id}", shard.id, battle.record_id, definition.timetable_event, definition.name, tier, cap,
             challenger, keeper, self.now, cfg,
@@ -3073,6 +3151,7 @@ class Game:
                 out.append((name, 0, seal_duel.side_from(  # 不含玉璽碎片的戰力（改版：奪璽單挑不吃；手上有碎片的本來就擋掉了）
                     name, None, kin._battle_power(seal=False), kin._battle_scores(mounted=False, seal=False), kin._battle_role(),
                     kin._battle_neili_cap(), kit=team.self_side(kin.state, self.content, kin.world), cut=kin._duel_cut(),  # 防具照他的存檔現算（3.9）
+                    card=team.pvp_card(kin.state, self.content, kin.world),
                 )))
         return out
 
@@ -3090,6 +3169,7 @@ class Game:
             name, self.world.faction_of(name), game._battle_power(seal=False), game._battle_scores(mounted=False, seal=False),
             game._battle_role(), game._battle_neili_cap(), fresh=fresh, kit=team.self_side(game.state, self.content, game.world),
             cut=game._duel_cut(),  # 沒參戰的持有者：防具照他的存檔現算（鐵匠鋪與合成流程 3.9；fresh 的是新角色，沒穿＝0）
+            card=team.pvp_card(game.state, self.content, game.world),
         )
 
     def _my_seal_duel(self) -> tuple[SealDuel | None, str | None]:
@@ -3441,7 +3521,7 @@ class Game:
             msgs += extra
         elif result.tier == "落敗":
             msgs += self._lose_silver(record)
-        toll, hp_lost, facts = self._take_toll(result.tier, wild=wild, clash=result.clash)
+        toll, hp_lost, facts = self._take_toll(result.tier, wild=wild, clash=result.clash, squad=squad)
         record.changes += toll
         msgs += toll
         self._play_rounds(record, squad, result.tier, hp_lost, facts, clash=result.clash)
@@ -3789,7 +3869,8 @@ class Game:
         now, cap = self._player_hp_and_cap()
         return TollFacts(wounded=now < cap, low_hp=now <= LOW_HP_RATIO * cap, healed=healed)
 
-    def _take_toll(self, tier: str, *, wild: bool = False, clash: tactics.Clash | None = None) -> tuple[list[str], int, TollFacts]:
+    def _take_toll(self, tier: str, *, wild: bool = False, clash: tactics.Clash | None = None, squad: Squad | None = None,
+                   ) -> tuple[list[str], int, TollFacts]:
         """照結果扣這一場的氣血（team.take_encounter_toll），回傳（訊息, 本人真的掉了多少氣血, 寫演出句要的事實）。掉的量緊貼著
         扣氣血的前後量（計畫三 G4）：打贏升級會讓上限變高，開打前量的話回合裡寫的跟戰報「氣血 -N」對不上。四捨五入跟訊息的
         「:.0f」是同一個數（兩者都對同一個浮點數做銀行家捨入）。
@@ -3801,8 +3882,8 @@ class Game:
         本命戰法回的與自扣的氣血（Clash.hp：本人與同伴）在最後改。"""
         before, cap = self._player_hp_and_cap()
         share = 1 - clash.blocked_share() if clash is not None else 1.0
-        saved, spared = team.toll_saved(self.state, self.content, self.world, tier, wild=wild, share=share)  # 扣之前量：化勁、不動這一場改了多少
-        toll = team.take_encounter_toll(self.state, self.content, self.world, tier, wild=wild, share=share)
+        saved, spared = team.toll_saved(self.state, self.content, self.world, tier, wild=wild, share=share, squad=squad)  # 扣之前量：化勁、不動這一場改了多少
+        toll = team.take_encounter_toll(self.state, self.content, self.world, tier, wild=wild, share=share, squad=squad)
         hp_lost = round(before - self._player_hp())  # 回血之前量：回合裡寫的扣血不受吸取與回春影響
         healed: list[str] = []  # 吸取、回春以前在這裡打完回血；本命戰法第三批起在回合裡回（Clash.hp）
         gained: list[tuple[str, int]] = []
@@ -3833,7 +3914,7 @@ class Game:
         rng = random.Random(f"{p.name}|{record.id}")
         lo = traits.loadout(s, c, self.world)
         foe = rounds.Foe(name=squad.name, attribute=squad.attribute, agility=rounds.foe_agility(squad.difficulty))
-        our_agility = float(p.stats.get("agi", team.BASE_STAT))
+        our_agility = float(team.v1_stat(s, c, "agi"))
         fighters = team.fighters(s, c, self.world)
         if clash is not None:
             played = rounds.from_clash(clash, fighters, foe, our_agility, hp_lost, rng)
@@ -3903,7 +3984,7 @@ class Game:
         """劇情戰的對手：大場面（is_big）照江湖水漲浮上來（全隊威力 × big_scale，不看打贏幾次：劇情戰多半一次性）；
         其餘、序章照內容寫的。勝算（_choice_label）、備料（_fight_squad）、打起來（_event_battle）都照這一份。"""
         s, c = self.state, self.content
-        if not rise.on(c) or not self.is_big(squad) or prologue_rules.active(s, c):
+        if not rise.on(c, s.world) or not self.is_big(squad) or prologue_rules.active(s, c):
             return squad
         level = rise.big(c, squad.difficulty, team.power_vs(s, c, self.world, squad, fresh=True, terrain=False, seal=False))  # 地利、碎片不浮
         return squad if level == squad.difficulty else squad.model_copy(update={"difficulty": round(level, 1)})
@@ -4633,6 +4714,47 @@ class Game:
         ))
         return self._log([REFILL_LINE, gained])
 
+    def _season_prep(self) -> list[Option] | None:
+        """開季準備卡（企劃者 2026-11-05「至少需要導引」）：進新的一季第一個畫面，依序 ① 挑這一季的成長配比（五項屬性的季、還沒挑）
+        ② 功能包的開季準備（傳承：識海的候選封一份或不帶）。做完才能做別的事，所以接管整個選單；不在選單上的動作照舊各自擋。
+        序章裡不問（序章那一步就是挑配比，跟這張卡不重複問）。沒有要準備的回 None。"""
+        s, c = self.state, self.content
+        if prologue_rules.active(s, c):
+            return None
+        if attrset.on(c, s.world) and s.player.growth_preset is None:
+            return [Option(id=f"{GROWTH_PREFIX}{p['key']}", label=f"這一季照「{p['name']}」長")
+                    for p in attrset.view(s, c)["presets"]] + [Option(id=f"{GROWTH_PREFIX}{attrset.CUSTOM}", label="自己配")]
+        return features_core.prep(self)
+
+    def season_prep_view(self) -> dict | None:
+        """江湖畫面的 main.prep（網頁畫開季準備卡）：step 是 growth（挑配比，鈕照 main.status.growth 畫）或 feature（功能包的那一步，
+        選項照選單畫：傳承的識海）；steps 是這一張卡有幾步（五項屬性的季有挑配比那一步，功能包還有要準備的多一步）。沒有要準備的是 None。"""
+        prep = self._season_prep()
+        if prep is None:
+            return None
+        growth = any(o.id.startswith(GROWTH_PREFIX) for o in prep)
+        steps = (["growth"] if attrset.on(self.content, self.state.world) else []) + (["feature"] if features_core.prep(self) is not None else [])
+        return {"step": "growth" if growth else "feature", "steps": steps}
+
+    @_not_while_preparing
+    def pick_growth(self, preset: str, custom: dict | None = None) -> list[str]:
+        """挑這一季的成長配比（屬性與跨季架構 v2 3.1：五套預設或自己配，合計固定）：只有五項屬性的季有。
+        一季只挑一次、挑了就鎖（企劃者 2026-11-05「加點是隨時都可以調整？感覺有點奇怪」）：序章那一步或開季準備卡上挑；
+        還沒挑的人照 default_preset 長。"""
+        s, c = self.state, self.content
+        if not attrset.on(c, s.world):
+            return self._log(["（這一季沒有成長配比。）"])
+        if s.player.growth_preset is not None:
+            return Refused(self._log([GROWTH_LOCKED]))
+        custom = {str(k): v for k, v in (custom or {}).items()} if isinstance(custom, dict) else None
+        problem = attrset.growth_problem(c, preset, custom)
+        if problem:
+            return self._log([problem])
+        line = attrset.pick(s, c, preset, custom)
+        journal.add_entry(s, JournalEntry(time=s.world.time, title="成長配比", lines=[line]))  # 一整句：寫成敘事（數值變化的小框放不下，手機上會撐出畫面）
+        self._guide(self._note_action("allocate"))  # 五項屬性的季，序章配點那一步就是挑成長配比（升一級沒有點可配）
+        return self._log([line])
+
     def allocate_stat(self, stat: str) -> list[str]:
         """把升級得到的屬性點分配到一項（修練包 actions.allocate_stat；配點那一句 actions.allocate_line；籌備中被擋）。"""
         return cultivation_actions.allocate_stat(self, stat)
@@ -4704,7 +4826,8 @@ class Game:
         """這個人切磋時的威力：只算本人（同伴、部下不上場），照對手身上那一門武學的屬性算相剋，吃自己的氣血係數與加成。
         seal=False 不含玉璽碎片的戰力（買兇的殺手照它浮上來，同江湖水漲）。"""
         s, c, w = who.state, who.content, who.world
-        members, conditions, boosts = team._fighters(s, c, w, seal=seal)
+        with team.facing_player(c, s, against.state, against.world):  # 五項屬性的季：照對手本人的五項對抗（他的統御擋你的武力）
+            members, conditions, boosts = team._fighters(s, c, w, seal=seal)
         return encounter.member_power(
             members[0], team.team_arts(s, c, w), team.worn_attribute(against.state, c, against.world), conditions[0], boosts[0],
         )
@@ -4909,7 +5032,8 @@ class Game:
             if problem:
                 out.append(f"（{problem}）")
                 return
-            seal_duel.submit(duel, who, text=checked, rate=rate, stories=stories)
+            charmed = None if rate is None else int(rate) + round(attrset.charm(self.state, self.content, "gamble"))  # 魅力（五項屬性的季）
+            seal_duel.submit(duel, who, text=checked, rate=charmed, stories=stories)
             seal_duel.note_seen(duel, who, self.now, cfg)
             out.append(f"你放手一搏：「{checked}」")
             out.extend(seal_duel.advance(shared, self.content, self.now))
@@ -5740,9 +5864,11 @@ class Game:
         self.now = now
         cap = min(cfg.cap, cfg.cap * max(0.0, min(1.0, factor)))
         duel_id = f"{reg.last_showdown}:{shard_id}" if hung else f"qa{reg.seq + 1}:{shard_id}"
+        a, b = self._seal_side_of(challenger), self._seal_side_of(shard.holder)
+        seal_duel.faced(c, a, b)  # 五項屬性的季：兩邊照對方真正的五項重算；舊的季不動
         duel = seal_duel.open_duel(
             duel_id, shard_id, reg.last_showdown if hung else None, None, reg.last_showdown_where if hung else "", "旁觀", cap,
-            self._seal_side_of(challenger), self._seal_side_of(shard.holder), now, cfg,
+            a, b, now, cfg,
         )
         line = (seal_duel.CALL if hung else seal_duel.CALL_QA).format(
             challenger=duel.challenger.name, holder=duel.holder.name, shard=c.seal[shard_id].name)
@@ -6005,9 +6131,13 @@ class Game:
 
     def location_text(self) -> str:
         loc = self.content.locations[self.state.player.location]
+        # 地點會變樣（世界活起來第二批）：不是太平的地方，地名那一行底下多一段「〔戰火〕這一帶剛打過仗……」；地名那一行不動
+        # （有畫時網頁照 scene_art 的 head 把它拿掉、疊在畫上）。太平、關著一個字都不變
+        mood = place_state.view(self.state.world, self.content, loc.id)
+        head = f"【{loc.name}】危險 {'★' * loc.danger}" + (f"\n\n〔{place_state.NAMES[mood['kind']]}〕{mood['line']}" if mood is not None else "")
         if jianfa(self.content, self.state.world, "marks_visible"):  # 減法季批 4：痕跡過了門檻，描寫多接一段（marks.describe）
-            return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{marks_rules.describe(loc, self.state.world, self.content)}"
-        return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{loc.describe(self.state.world.flags)}"  # 宛城的描寫隨版本換
+            return f"{head}\n\n{marks_rules.describe(loc, self.state.world, self.content)}"
+        return f"{head}\n\n{loc.describe(self.state.world.flags)}"  # 宛城的描寫隨版本換
 
     def scene_art(self) -> dict | None:
         """江湖頁場景卡上面那張圖（減法季批 8 圖像版；減法季整合設計第八章、第一批圖提示單）。回 {kind, path, title, sub, head}：
@@ -6043,7 +6173,12 @@ class Game:
         else:
             region = atlas.region_of(c, loc.id)
             path = f"places/{region.id}" if region is not None else "places/world"
-        return {"kind": "place", "path": path, "title": loc.name, "sub": f"危險 {'★' * loc.danger}", "head": f"【{loc.name}】危險 {'★' * loc.danger}"}
+        art = {"kind": "place", "path": path, "title": loc.name, "sub": f"危險 {'★' * loc.danger}", "head": f"【{loc.name}】危險 {'★' * loc.danger}"}
+        mood = place_state.view(s.world, c, loc.id)  # 地點會變樣：疊在畫上的那一行多寫此刻的樣子，畫照樣子換色調（網頁的 mood-<kind>）
+        if mood is not None:
+            art["sub"] += f"・{mood['name']}"
+            art["mood"] = mood["kind"]
+        return art
 
     def method_help(self, option_ids: Iterable[str]) -> dict | None:
         return sense_actions.method_help(self, option_ids)  # 有所感做法底下的兩行小字：本體在有所感包（全部拆包第 24 批）
@@ -6114,6 +6249,14 @@ class Game:
         """功能包合進江湖畫面頂層的資料（FEATURES 的 status，照清單的順序；例：商城的入口 main.mall）。server.main_view 放在原本商城那一格。"""
         return features_core.status(self)
 
+    def _attr_rows(self, names: dict[str, str]) -> list[tuple[str, int, str]]:
+        """狀態列的屬性（名字, 數值, 鍵）：舊的季照存檔的五屬性；五項屬性的季照 attrset 算（武力、統御……）。"""
+        s, c = self.state, self.content
+        if attrset.on(c, s.world):
+            shown = attrset.names(c, s.world)
+            return [(shown[k], int(attrset.value(s, c, k)), k) for k in attrset.keys(c)]
+        return [(names[k], s.player.stats[k], k) for k in team.COMBAT_STATS]
+
     def status_data(self) -> dict:
         """狀態列的資料（數字與短字串），網頁前端照這份自己排版；status_text 是同一份資料的文字版。"""
         s, c = self.state, self.content
@@ -6175,9 +6318,12 @@ class Game:
             "silver": p.stats.get("silver", 0),
             "xinde": p.stats.get("xinde", 0),
             "minor": [(names[k], p.stats.get(k, 0)) for k in ("fame", "good", "evil")],
-            "attrs": [(names[k], p.stats[k], k) for k in team.COMBAT_STATS],  # 第三項是鍵：配點鈕送它（allocate_stat）
+            "attrs": self._attr_rows(names),  # 第三項是鍵：配點鈕送它（allocate_stat）
             "stat_points": p.stat_points,
-            "stat_cap": c.config.stat_cap,
+            "stat_cap": c.config.stat_cap if not attrset.on(c, s.world) else 10**9,  # 五項屬性的季沒有上限
+            **({"growth": attrset.view(s, c)} if attrset.on(c, s.world) else {}),  # 挑成長配比的那一塊（屬性與跨季架構 v2 3.1）
+            # 歷練：這一季從事件得來的屬性有多少、上限多少（展開的屬性底下那一條，企劃者 2026-11-05）
+            **({"lilian": {"have": attrset.event_total(s), "cap": c.config.attributes.v2.event_cap}} if attrset.on(c, s.world) else {}),
             # ＋鈕底下那一行：五項各管什麼、事件檢定也看它們（計畫二最終審查 M2）；網頁只在有點可配時畫
             "stat_uses": skillview.stat_uses(c, s),  # 減法季屬性五段開著時寫「現在給你什麼」的數字（設計 4.5）
             "stat_uses_note": skillview.STAT_CHECK_NOTE,

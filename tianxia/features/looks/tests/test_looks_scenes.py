@@ -193,3 +193,34 @@ def test_the_model_table_carries_motion_path_and_a_second_mark():
     b = {x["op"]: x for x in scenes.direct("大佛分身，佛掌從後方打出，雷電爆炸", "某招", draft)["beats"]}
     assert b["法相"]["motion"] == "分身" and b["巨物飛擊"]["path"] == "背後"
     assert b["異狀"]["kind"] == "雷擊" and b["異狀"]["also"] == "爆炸"
+
+
+def test_a_swirling_attack_does_not_spin_the_figure_and_a_sky_drop_is_not_a_descending_figure():
+    """「迴旋」是主攻的路線、「從天砸下」是砸下來的那一下：法相不跟著轉、不跟著從天上掉（Joy 11/5 要的示範句驗出來的）。"""
+    def beats(text):
+        return {b["op"]: b for b in scenes.direct(text)["beats"]}
+    b = beats("明王脈動，毒掌迴旋而出，對手中毒")
+    assert b["法相"]["motion"] == "脈動" and b["巨物飛擊"]["path"] == "迴旋"
+    b = beats("巨人現身，山岳從天砸下")
+    assert "motion" not in b["法相"] and b["巨物飛擊"]["path"] == "天降"
+    assert beats("金剛降臨，劍氣從地底竄出")["法相"]["motion"] == "天降"
+
+
+def test_the_shop_examples_show_off_every_motion_path_and_mark():
+    """萬寶閣「想不到就點」的絕招例句（web/mall.js MOVE_EXAMPLES；Joy 11/5 要例句演得出多種施放）：每一句都收得下（中文、字數），
+    合起來關鍵字導演就排得出每一種法相出場、主攻路線、對手異狀。"""
+    import re
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[4] / "web" / "mall.js").read_text(encoding="utf-8")
+    body = re.search(r"const MOVE_EXAMPLES = \[(.*?)\];", js, re.S).group(1)
+    lines = re.findall(r'"([^"]+)"', body)
+    assert "一劍寒光九萬里" in lines and len(lines) >= 9
+    seen: dict[str, set] = {"motion": set(), "path": set(), "mark": set()}
+    for text in lines:
+        assert scenes.text_problem(text) is None and len(text) <= scenes.MAX_TEXT, text
+        for b in scenes.direct(text)["beats"]:
+            seen["motion"].add(b.get("motion"))
+            seen["path"].add(b.get("path"))
+            seen["mark"].update({b.get("kind"), b.get("also")} if b["op"] == "異狀" else set())
+    assert set(scenes.MOTIONS[1:]) <= seen["motion"] and set(scenes.PATHS[1:]) <= seen["path"] and set(scenes.MARKS) <= seen["mark"]

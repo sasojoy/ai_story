@@ -50,14 +50,14 @@
 # CLAUDE.md 區塊表把它列在「核心與存檔」，每個功能都寫江湖紀錄；手冊 3.1 由 PM 補）。用到它的有兩處，都照這一份：
 # - tests/core/test_feature_boundaries.py：功能包能 import 的就是這幾個（加上 tianxia/core/），這幾個都不能 import 功能包；
 # - scripts/test_for.py：改了這幾個跑核心測試＋煙霧＋自己檔名的測試（照語法樹讀這一行、不 import；test_test_for 守兩邊一樣）。
-# 只寫字面的名字（test_for 用 ast.literal_eval 讀）。
+# 只寫字面的名字（test_for 用 ast.literal_eval 讀）。attrset（五項屬性，屬性與跨季架構 v2 第三節）跟 team 一起算核心：team、rules 讀它（合回 develop 2026-11-06，PM 認定第 1 條：tests/core/test_attrset.py 放進 test_for 的 NOT_CORE_TESTS，同 world、step）。
 # core_world（全部拆包第 25 批）：world（世界一步、週初與每天、開季結算、收季、開集結）改成世界層掛鉤（core/features.py 的 WORLD_ORDER）、
 # 不再 import 功能包之後收進來（總表第 15 列）。它還代叫幾個沒成包的舊模組（行尾標批號），核心 → 舊模組這一版照舊不掃（同 journal）。
 # core_effects（全部拆包第 32 批，第 25 批 PM 認定第 2 條）：log_archive（換季時封存舊季的傳聞與回合紀錄；只 import 標準函式庫，
 # 只有 sqlite_world 用）兩份名單都沒有，順手收進核心本體。它的 tests/core/test_log_archive.py（8 條）跟著進核心測試，不放進 NOT_CORE_TESTS。
 MODULES = frozenset({
     "state", "sqlite_world", "world_state", "characters", "accounts", "database", "rules", "calendar", "models", "content",
-    "team", "gender", "naming", "wallet", "journal",
+    "team", "gender", "naming", "wallet", "journal", "attrset",
     "world",
     "log_archive",
     # core_step（全部拆包第 36 批）：step、weekcard 不再 import 包之後收進來（計畫 1.5 甲案）。它們還代叫懸賞榜（step._STEP_CORE）、

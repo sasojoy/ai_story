@@ -129,7 +129,7 @@ def test_free_words_come_back_at_the_door_and_a_failed_last_word_ends_in_the_nam
     assert s.pending_event == "wangyue_4b" and progress.marks.get("跟蹤") == 1
     silver, evil = p.stats.get("silver", 0), p.stats.get("evil", 0)
     game.choose("choice:1")  # 拿錢
-    assert p.stats["silver"] == silver + 30 and p.stats["evil"] == evil + 2
+    assert p.stats["silver"] > silver and p.stats["evil"] == evil + 2  # 銀兩：五項屬性的季照等級換算（獎勵等級），不是寫死的 30
     _go(game, HILL, 0.25, "wangyue_4n")
     game.choose("choice:0")
     _go(game, ROAD, 0.5, "wangyue_5a")

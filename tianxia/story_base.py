@@ -170,7 +170,15 @@ def roll_start(state: GameState, content: Content, rng, boost: float = 1.0) -> S
             continue
         if rng.random() < start.chance * boost:
             return line
+        if _luck_again(state, content) and rng.random() < start.chance * boost:  # 傳承的機緣：沒中再擲一次（關著不擲、不動 rng）
+            return line
     return None
+
+
+def _luck_again(state: GameState, content: Content) -> bool:
+    from .renown import legacy_door  # noqa: PLC0415
+
+    return legacy_door(state, content, "storyline")
 
 
 def start(state: GameState, content: Content, line: StoryDef, custom: bool = True, card: bool = True) -> StoryProgress | None:

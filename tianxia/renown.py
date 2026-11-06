@@ -111,6 +111,21 @@ def titles(state: GameState, content: Content, fame_from: int = 1) -> list[str]:
     return out
 
 
+def legacy_door(state: GameState, content: Content, door: str) -> bool:
+    """傳承的門路（放在這裡：rules、library 都讀名聲，這一支不能放在 rules）（features/legacy；Config.legacy.doors）：開關開著、季初結算立了那一道的旗標。關著一律是假（不動亂數、一個字都不變）。"""
+    cfg = content.config.legacy
+    flag = cfg.doors.get(door) if cfg.enabled else None
+    return bool(flag) and flag in state.player.flags
+
+
+def open_to(state: GameState, content: Content, kind: str, way: str, tier: int) -> bool:
+    """俠寇選項（kind "choices"）、正邪武學（kind "lessons"）：照名聲走那條路、到那一段，或傳承開了那一道門路（只開到 Config.legacy.door_tier 段）。
+    官府通緝、黑市、醫館打折這些照舊只看 meets。"""
+    if meets(state, content, way, tier):
+        return True
+    return tier <= content.config.legacy.door_tier and legacy_door(state, content, f"{kind}_{way}")
+
+
 def meets(state: GameState, content: Content, way: str, tier: int) -> bool:
     """走 way 那一條路、到第 tier 段了沒（俠寇選項、正邪武學、官府通緝共用）。開關關著一律不成立。"""
     return path(state) == way and virtue_tier(state, content) >= tier
@@ -477,11 +492,15 @@ def _cold_to(state: GameState, content: Content, character_id: str) -> bool:
             and virtue_tier(state, content) >= 1)
 
 
-def warmed(content: Content, delta: int) -> int:
+def warmed(content: Content, delta: int, state: GameState | None = None) -> int:
     """情誼放慢（歷史武將同行第三節、9.4；Config.affinity_gain_scale）：加的那一筆乘倍數、四捨五入，原本加 1 以上的至少加 1；
-    扣的與 0 原樣，倍數 1 原樣。不存零頭、不改存檔。對話、事件、名聲起步、風聞加情誼之前都先過它。"""
+    扣的與 0 原樣，倍數 1 原樣。不存零頭、不改存檔。對話、事件、名聲起步、風聞加情誼之前都先過它。
+    給了 state 時，五項屬性的季再照魅力乘（attrset.charm「favor」：魅力高的人情誼長得快；企劃者 2026-11-04）。"""
     scale = content.config.affinity_gain_scale
-    if delta <= 0 or scale >= 1:
+    if state is not None and delta > 0:
+        from . import attrset  # noqa: PLC0415
+        scale *= 1 + attrset.charm(state, content, "favor")
+    if delta <= 0 or scale == 1:
         return delta
     return max(1, math.floor(delta * scale + 0.5 + 1e-9))  # 浮點：5×0.7 是 3.4999…，照十進位的 3.5 進位
 
@@ -501,7 +520,7 @@ def first_meet(state: GameState, content: Content, character_id: str) -> list[st
 
     def bump(n: int) -> int:
         before = p.affinities.get(character_id, 0)
-        p.affinities[character_id] = max(0, min(100, before + warmed(content, n)))
+        p.affinities[character_id] = max(0, min(100, before + warmed(content, n, state)))
         return p.affinities[character_id] - before
 
     flag = MEET_FAME_FLAG.format(cid=character_id)

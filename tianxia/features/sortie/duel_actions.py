@@ -682,7 +682,7 @@ def duel_toll(ctx: Game, share: float, lost: bool) -> list[str]:
     hurt = 0.0
     if share > 0:
         cut = min(c.config.armor.total_cap, team.armor_cut(s, c, ctx.world))
-        lost_hp, hurt = team._apply_toll(c, p.member, share * (1 - cut), agi=p.stats.get("agi", team.BASE_STAT),
+        lost_hp, hurt = team._apply_toll(c, p.member, share * (1 - cut), agi=team.v1_stat(s, c, "agi"),
                                          con=team.con_of(s, c, ctx.world, PLAYER), injury=treasures.amount(s, c, "injury"))
         if round(lost_hp) > 0:
             msgs.append(f"氣血 -{lost_hp:.0f}")

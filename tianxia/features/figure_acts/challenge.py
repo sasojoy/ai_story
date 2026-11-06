@@ -10,6 +10,7 @@ from __future__ import annotations
 import random
 
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
+from tianxia import attrset  # 核心（五項屬性）
 from tianxia import battlelog, calendar, deeds, four_tiers, materials, push, rise, team, treasures, wins
 from tianxia import figure_life  # 共用規則層（人物活起來 figure_life，第 40 批收進）
 from tianxia import figures  # 共用規則層（大勢人物 figures，第 40 批收進）
@@ -74,7 +75,7 @@ def odds(ctx, fid: str) -> str:
     """挑戰這位人物的勝算（跟遊歷同一套說法）：對手是代表本人的隊伍，難度照他此刻的聲威（figures.difficulty）與江湖水漲。"""
     squad = figure_squad(ctx, fid)
     return team.estimate(ctx.state, ctx.content, ctx.world, squad.id, difficulty=squad.difficulty,
-                         draw_floor=rise.draw_floor(ctx.content))
+                         draw_floor=rise.draw_floor(ctx.content, ctx.state.world))
 
 
 def figure_squad(ctx, fid: str) -> Squad:
@@ -82,7 +83,9 @@ def figure_squad(ctx, fid: str) -> Squad:
     倍數，倍數照你這一季打贏他幾次（figure_wins）往上加（rise.big）。勝算、備料（A、C 段）、打起來都照這一份。"""
     s, c = ctx.state, ctx.content
     squad = figures.squad_of(s, c, fid)
-    if not rise.on(c):
+    if attrset.on(c, s.world):
+        return attrset.figure_squad(c, s.world, squad, s.world.time)
+    if not rise.on(c, s.world):
         return squad
     # 地利不浮上去（武學隨地理環境 2.1）；玉璽碎片的戰力也不浮上去（改版 PM 五之一 2）
     power = team.power_vs(s, c, ctx.world, squad, fresh=True, terrain=False, seal=False)
@@ -104,7 +107,7 @@ def challenge(ctx, fid: str) -> list[str]:
     if not broke:  # 護衛擋下：這一次挑戰不成，不打他本人、不扣情誼（Joy 2026-10-17 第 6 條）
         return [figure_aid.BLOCKED_LINE.format(guard=post.name, name=fig.name)]
     judged = ctx._judged(squad)  # 挑戰本人一律是大場面：有鎖外的判讀就用（武學與成長設計 8.3）
-    result = ctx._fight_with(squad, judged, difficulty=squad.difficulty, draw_floor=rise.draw_floor(c))
+    result = ctx._fight_with(squad, judged, difficulty=squad.difficulty, draw_floor=rise.draw_floor(c, s.world))
     record = battlelog.new_record(s, c, ctx.world, squad, result, "event", event=f"挑戰{fig.name}")
     record.notes += ctx._style_note(squad, result) + ctx._terrain_note()
     ctx._narrate(record, result, judged)
@@ -135,7 +138,7 @@ def challenge(ctx, fid: str) -> list[str]:
         msgs += draw(ctx, fid, squad, record)
     elif result.tier == "落敗":
         msgs += ctx._lose_silver(record)
-    toll, hp_lost, facts = ctx._take_toll(result.tier, clash=result.clash)
+    toll, hp_lost, facts = ctx._take_toll(result.tier, clash=result.clash, squad=squad)
     record.changes += toll
     msgs += toll
     ctx._play_rounds(record, squad, result.tier, hp_lost, facts, clash=result.clash)  # squad 是照聲威的那一份：對手的身法跟著難度走

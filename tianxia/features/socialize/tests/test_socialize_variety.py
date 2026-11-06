@@ -11,6 +11,7 @@ import pytest
 from tianxia.content import load_content
 from tianxia.events import event_matches_location
 from tianxia.models import Condition
+from grade_kit import raw_difficulty
 
 CONTENT_DIR = Path(__file__).parents[4] / "content"
 SOCIAL_FILES = sorted((CONTENT_DIR / "events").glob("social_*.json"))
@@ -77,5 +78,5 @@ def test_added_socialize_events_vary_their_checks_and_stay_within_limits(content
         for c in [*e["choices"], *([e["free_text"]] if "free_text" in e else [])]:
             assert "combat" not in c, e["id"]
             if "check" in c:
-                assert c["check"]["stat"] in {"str", "agi", "con", "wis"} and 3 <= c["check"]["difficulty"] <= 7, e["id"]  # 難度帶另見 test_real_content.py::DIFFICULTY_BANDS
+                assert c["check"]["stat"] in {"str", "agi", "con", "wis"} and 3 <= raw_difficulty(c["check"]) <= 7, e["id"]  # 難度帶另見 test_real_content.py::DIFFICULTY_BANDS
                 assert "fail_effect" in c, e["id"]

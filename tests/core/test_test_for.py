@@ -666,7 +666,7 @@ def test_the_smoke_set_covers_every_block():
     煙霧不能也是 slow：單獨跑 -m smoke 會蓋掉 addopts 的 not slow（那一條就跑了、兩分鐘的保證破了），test_for 照
     -m "not slow" 跑又會悄悄把它濾掉（那一塊的煙霧少一條）。"""
     ids = test_for.smoke_ids()
-    assert 100 <= len(ids) <= 150 and len(set(ids)) == len(ids)
+    assert 100 <= len(ids) <= 170 and len(set(ids)) == len(ids)
     slow = [i for i in ids if _slow_smoke(test_for._text(ROOT / i.split("::")[0]), i.split("::")[1:])]
     assert not slow, f"煙霧不能標 slow：{slow}"
     # 手冊 4.3「搬成包的區塊，煙霧改成那一包 tests/ 裡的一條」：tianxia/features/<包>/tests/ 的算那一包（商城的在 mall 包裡）
@@ -706,7 +706,9 @@ def test_a_feature_packages_web_file_picks_that_package_not_the_app_js_batch():
     mall_tests = {p.name for p in (test_for.FEATURES / "mall" / "tests").rglob("test_*.py")}
     contract = {p.name for p in test_for.contract_tests()}
     js = test_for.pick(["web/mall.js"])
-    assert {p.name for p in js.files} == mall_tests | contract and not js.core and not js.smoke
+    # 寫到 web/mall.js 檔名的別包測試照檔名跟（絕招例句每一句都收得下，#166）
+    assert {p.name for p in js.files} == mall_tests | contract | {"test_looks_scenes.py"}
+    assert not js.core and not js.smoke
     assert "test_server.py" not in {p.name for p in js.files}
     assert not {p.name for p in js.files} & (_names(["web/app.js"]) - mall_tests - contract)
     css = {p.name for p in test_for.pick(["web/mall.css"]).files}
@@ -1019,6 +1021,7 @@ def test_a_reexported_name_counts_only_when_written_after_the_module_word():
 
 STAGE_PACKAGES = ["bout", "battle", "checkin", "companions", "feast", "figure_acts", "guide", "looks", "outlets", "sense", "socialize", "story", "territory_acts", "zhuan"]  # 有 <包>_stage.py 的包（銀兩出口是第 43 批加的；引導是第 22 批合進 develop 的，第 12 批合併時補上；人物情誼是第 19 批、有所感是第 24 批、交友求見是第 21 批、大勢人物是第 31 批合進 split/trunk 時補上；列傳是第 29 批加的；地盤是第 46 批加的）
 STAGE_PACKAGES += ["seal"]  # seal（全部拆包第 27 批）：玉璽包的 seal_stage.py（擺「懷璽」：有登記、有抄本）；接在這裡、不改上一行（並行的拆包線各寫各的一行）
+STAGE_PACKAGES += ["legacy", "hire"]  # 合回 develop（2026-11-06）：傳承、招募的 <包>_stage.py
 
 
 def test_the_stage_packages_are_every_package_with_a_stage_file():

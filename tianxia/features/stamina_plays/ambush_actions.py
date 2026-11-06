@@ -163,7 +163,7 @@ def spoils(ctx: Game, loser: Game) -> RaidSpoils:
         left -= got
     con = team.con_of(loser.state, c, loser.world, PLAYER)
     cut = team.armor_cut(loser.state, c, loser.world)
-    hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0,
+    hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=team.v1_stat(loser.state, c, "agi"), con=con, injury=0.0,
                              season=loser.state.world)
     contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None and season_one(c, ctx.state.world) else 0
     if contrib:

@@ -96,7 +96,7 @@ def explore_weights(ctx, loc: Location) -> list[tuple[ExploreBranch, float]]:
     探索真的擲骰（_explore_outcome）與行動列底下那一行（action_notes，explain-1）讀同一份：說的跟擲的不會走樣。"""
     s, c = ctx.state, ctx.content
     mix = c.config.explore_mix_of(loc.tags).weights
-    wis = team.stat_factor(c, s.player.stats.get("wis", team.BASE_STAT), s.world)
+    wis = team.stat_factor(c, team.v1_stat(s, c, "wis"), s.world)
     sharp = wis * treasures.amount(s, c, "insight")  # 寶物「探索悟意境」跟悟性疊乘（裝備四欄 6.2）
     return [
         (b, mix[b] * (sharp if b == "insight" else 1))

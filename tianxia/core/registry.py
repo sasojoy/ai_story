@@ -47,6 +47,9 @@ from ..features import smithy  # 鐵匠鋪：全部拆包第 41 批（choose 前
 from ..features import territory_acts  # 地盤的行動與畫面：全部拆包第 46 批（只接 /api/xingshi、管理者五個工具與〈天下形勢〉句型的 check_content，排在哪裡結果都一樣；22:00 換天沒有掛鉤，留 Game 的委派原位）
 # bout
 from ..features import bout  # 單挑（頭目戰、擂台）：全部拆包第 12 批。擂台的店面登記接在酒肆後面（「此地還能做」的入口原本就在酒肆之後）；後面接的 stamina_plays、seclusion（第 39 批）與 peers（第 37 批）沒有店面登記、沒有 menu 掛鉤，bout 的店面與 menu 位置不變
+# legacy、hire（合回 develop 2026-11-06，PM 認定第 4 條：獨立包；FEATURES 裡緊接在 bout 後面，develop 的相對位置）
+from ..features import legacy  # 傳承
+from ..features import hire  # 招募同伴
 # stamina_plays
 from ..features import stamina_plays  # 體力玩法（設伏、屯糧）：全部拆包第 39 批。choose 與 bot_pick 的前綴 ambush／works 與別的包不重疊；world() 的格有表序；選項不走 FEATURES（見該包 actions.py）
 # seclusion
@@ -108,6 +111,9 @@ FEATURES: list[Feature] = [
     # bout（店面登記的入口排在酒肆之後、menu 掛鉤排在宴客之後，都是原本那一行的位置；計畫 2026-11-03-單挑包-第1批.md 1.4。
     # 後面接的 stamina_plays、seclusion、peers 沒有店面登記、沒有 menu 掛鉤，bout 的店面與 menu 位置不變）
     bout.FEATURE,
+    # legacy、hire（develop 的相對位置：緊接在 bout 後面）
+    legacy.FEATURE,
+    hire.FEATURE,
     # stamina_plays（排在 bout 後面：choose 前綴與別的包不重疊，順序不影響結果）
     stamina_plays.FEATURE,
     # seclusion
@@ -182,6 +188,8 @@ SHARED: dict[str, str] = {
     "wins": "三陣營四勝利（豪強兩本帳、季末四階）：核心的 content、rules 讀；決戰、出陣兩包與列傳、軍情都叫",
     "relations": "人物之間的關係：大勢人物、人物活起來、懸賞、人物對話讀",
     "deeds": "世界記事（你做的事被世界記住）：探索包的走一趟、人物活起來、章回都讀",
+    "place_state": "地點會變樣（太平、戰火、淪陷、饑荒、重建；世界活起來第二批）：核心的 rules 讀（事件條件），地盤、領地爭奪、時刻表、"
+                   "坐騎（馬市開不開）、人物活起來、盤算都改它或讀它",
     "seats": "第四階席次與每週輪替：叛投、晉升、世界一步讀（讀的 ranks 稱號第 40 批收進這一層）",
     "factions": "陣營規模的換算：席次 seats 讀；陣營包（features/faction，第 35 批）也讀",
     "week_unlock": "功能照週解鎖與三週主題：擂台、懸賞、輿圖、本週卡讀",

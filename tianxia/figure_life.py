@@ -224,6 +224,9 @@ def _move(state: GameState, content: Content, cid: str, fid: str | None, rng: ra
     options = [loc for loc in ch.haunts if loc != here]
     if not options:
         return
+    from . import place_state  # noqa: PLC0415  地點會變樣（世界活起來第二批）：戰火、淪陷的地方不晃過去（都是的話照舊挑）
+
+    options = [loc for loc in options if not place_state.shunned(state.world, content, loc)] or options
     dest = rng.choice(options)
     _place_at(state, content, cid, fid, dest)
     if fid is not None:
@@ -414,7 +417,7 @@ def spread(state: GameState, content: Content, kind: str, target: str, *, at: st
         notes.append(text)
         del notes[:-tuning.hearsay_keep]
         before = p.affinities.get(cid, 0)
-        p.affinities[cid] = max(0, min(100, before + renown.warmed(content, delta)))  # 加的放慢（Config.affinity_gain_scale）
+        p.affinities[cid] = max(0, min(100, before + renown.warmed(content, delta, state)))  # 加的放慢（Config.affinity_gain_scale）
         moved = p.affinities[cid] - before
         if moved:
             deltas.setdefault(moved, []).append(ch.name)

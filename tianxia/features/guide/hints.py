@@ -22,6 +22,12 @@ KNOWN = frozenset({
     "h_bond",
     # 新手引導重做（2026-10-22）：今天的操練練完了（事件型）、練功連輸兩場、心得第一次夠自創、第一次到有酒肆的城、點數沒配又升一級
     "h_drill_done", "h_field_lose", "h_create", "h_tavern", "h_points",
+    # 補新手教學（2026-11-05，PM 盤點）：過了新手期或第一次被截（截殺自保）、簽到、萬寶閣、形象、玉璽碎片、宴客、傳功、坐騎、寶物、
+    # 地點變樣與上線邸報、戰記與列傳的分享頁。全是狀態提示（Game._hint_triggers）
+    "h_raid_guard", "h_checkin", "h_mall", "h_looks", "h_seal", "h_feast", "h_chuangong", "h_mount", "h_treasure", "h_place",
+    "h_tale",
+    # 歷練快滿了（2026-11-05，五項屬性的季才有）：這一季從事件得來的屬性到 Config.attributes.v2.event_hint_at
+    "h_lilian",
 })
 
 
@@ -65,6 +71,10 @@ def note_for(state: GameState, content: Content, hint_id: str) -> HintNote | Non
     if hint.by == "mentor":
         from tianxia.rules import jianfa  # noqa: PLC0415  rules 很大（content 也 import 這個模組），只在說話時才用
 
+        from tianxia import attrset  # noqa: PLC0415
+
+        if hint.attrs_v2 and attrset.on(content, state.world):  # 五項屬性的季的說法（HintDef.attrs_v2）
+            return HintNote(id=hint_id, speaker=h.head, text=fill(content, hint.attrs_v2))
         first = hint.season_one and calendar.season_one_on(state.world, content)  # 第一季才是真的那幾句（HintDef.season_one）
         outing = hint.explore_one and jianfa(content, state.world, "explore_one")  # 出門探索的說法（HintDef.explore_one）
         return HintNote(id=hint_id, speaker=h.head, text=fill(content, hint.explore_one if outing else hint.season_one if first else hint.text))

@@ -26,7 +26,7 @@
         "text": "趁亂把他拉出隊伍",
         "check": {
           "stat": "agi",
-          "difficulty": 7
+          "grade": "hard"
         },
         "effect": {
           "text": "你拉著少年鑽出人群，一路跑到壇外的麥田邊。他說家中還有老母，向你磕了個頭，往南去了。",
@@ -63,7 +63,7 @@
         "text": "坐下細聽",
         "check": {
           "stat": "wis",
-          "difficulty": 6,
+          "grade": "normal", "shift": 1,
           "by": "self"
         },
         "effect": {
@@ -138,7 +138,7 @@
         },
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "grade": "hard"
         },
         "effect": {
           "text": "一整天下來，你把城東幾座營壘的位置記了個大概，夜裡託人送去了城外的官軍營中。",
@@ -199,7 +199,7 @@
         },
         "check": {
           "stat": "wis",
-          "difficulty": 7
+          "grade": "hard"
         },
         "effect": {
           "text": "你一邊挑土一邊把各段的民夫點了一遍，報給監工哪一段缺人、哪一段偷懶。監工頭目收起鞭子，說營壘明天就能加高一層。",
@@ -231,7 +231,7 @@
         "text": "替他作保",
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你說他村子被燒，連戶籍都沒了，一路逃到這裡。書吏寫下了名字，漢子紅著眼向你作揖。",
@@ -285,7 +285,7 @@
         "text": "接弓試射",
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "grade": "normal", "shift": 1
         },
         "effect": {
           "text": "箭正中靶心，四周一陣喝采，屯長拍著你的肩膀把錢塞給你。",
@@ -361,7 +361,7 @@
         "text": "跟在車後，割斷一袋糧的繩子",
         "check": {
           "stat": "agi",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "一袋糧滾進了路邊的溝裡。等車隊走遠，你把糧扛去還給了農婦。",
@@ -401,8 +401,8 @@
       {
         "text": "跟守門的頭目說情",
         "check": {
-          "stat": "wis",
-          "difficulty": 6
+          "stat": "wis", "v2": "cha",
+          "grade": "normal", "shift": 1
         },
         "effect": {
           "text": "你說堡裡也要有人紡線餵豬，頭目想了想，多放了十幾個老人孩子進門。",
@@ -483,7 +483,7 @@
         "text": "幫船夫撐篙，多渡幾趟",
         "check": {
           "stat": "con",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你跟船夫輪流撐篙到天黑，多渡了三趟。船夫從河灘折了一把柳絲送你，說是編繩最韌的料。",

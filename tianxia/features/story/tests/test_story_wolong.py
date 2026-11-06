@@ -102,6 +102,7 @@ def test_shelf_path_after_reading_the_letter_and_handing_the_list_to_achou():
     _go(game, XINYE)
     _pick(game, "未了之事")
     s.player.stats["agi"] = 30  # 偷看要身法
+    s.player.attr_alloc["spd"] = 300  # 五項屬性的季（week7、season21 2026-11-05 起）身法照新的那一項
     s.player.stats["good"] = good = 5  # 善名夾在 0：先給一點，看得出偷看扣的那 1
     _pick(game, "從麻布裡把那封信拿出來看")
     assert s.pending_event == "wolong_4b" and s.player.stats["good"] == good - 1

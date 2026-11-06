@@ -40,7 +40,7 @@ def recruit_target(ctx) -> str | None:
 def recruit_targets(ctx) -> list[str]:
     """歷史武將同行（Config.companions）：此地此刻站著（_figures_here，照人物此刻的所在）、標了 recruitable、還沒有主、
     情誼到門檻（roster.affinity_ok，沒到的不畫鈕）的人。關著是空的（舊的 recruit_at 那一條照舊走 recruit_target）。"""
-    if not roster.on(ctx.content):
+    if not roster.on(ctx.content, ctx.state.world):
         return []
     return [
         cid for cid in ctx._figures_here()

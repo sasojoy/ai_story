@@ -177,7 +177,7 @@ def take_spoils(ctx, loser: Game, evil: int = 0) -> RaidSpoils:
     wp.stats["silver"] = wp.stats.get("silver", 0) + taken
     con = team.con_of(loser.state, c, loser.world, PLAYER)
     cut = team.armor_cut(loser.state, c, loser.world)  # 截殺輸的一方只吃防具（裝備四欄 4.4）：不吃化勁，也就不必夾合計上限
-    hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0,
+    hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=team.v1_stat(loser.state, c, "agi"), con=con, injury=0.0,
                              season=loser.state.world)
     # 散人（揭了通緝）不記貢獻；第一季規則關著的季沒有晉升，也不記（懸賞榜設計 2.2 第 4 點，寫法同軍餉 _showdown_pay）
     contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None and season_one(c, ctx.state.world) else 0

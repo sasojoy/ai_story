@@ -315,6 +315,29 @@ class InsightFx(BaseModel):
     grand: str | None = None
 
 
+class ShihaiSeal(BaseModel):
+    """識海裡封著的那一份神品意境（傳承，tianxia/features/legacy；架構方向 v2 第七節）：上一季季末自己選的，換季那一刻抄下整份。
+    解封之前不在自己的意境裡、裝不上；解封那一刻名字才照這一季登記（撞名就從 names 挑一個）。"""
+
+    insight: Insight
+    fx: InsightFx
+    season: int  # 從第幾季帶來的
+    names: list[str] = Field(default_factory=list)  # 解封時名字這一季已經有人先取了：換的候選（空的是還沒撞名）
+
+
+class LegacyBook(BaseModel):
+    """傳承（tianxia/features/legacy）：正氣、邪氣、機緣只在換季那一刻結算一次（季中不動）、跨季帶著走；識海選了哪一份、封著的那一份。"""
+
+    zheng: float = 0.0
+    xie: float = 0.0
+    luck: float = 0.0
+    settled: int = 0  # 結算過的季號（同一季只結算一次）
+    gains: dict[str, float] = Field(default_factory=dict)  # 這一季結算加了多少（顯示用：zheng／xie／luck）
+    pick: str | None = None  # 舊的（季中選）：2026-11-05 起不用，改成開季時從 offers 挑；留著讓舊存檔讀得進來
+    sealed: ShihaiSeal | None = None  # 從上一季帶來、還封著的那一份
+    offers: list[ShihaiSeal] = Field(default_factory=list)  # 開季那一刻抄下上一季身上的神品意境：做第一件事之前挑一份封進識海（或不帶）
+
+
 class Ascension(BaseModel):
     """破境卡（tianxia/ascend.py；招式與絕學稿案第三節）：剛破境的那一門，收場後跳出來的那一張。看過（dismiss）就收掉。"""
 
@@ -498,6 +521,8 @@ class ArenaSide(BaseModel):
     hp_cap: float
     bare: float | None = None  # 不含玉璽碎片戰力的威力（改版，FB-615）：只有戴著碎片才記；None＝power 本身就是給別人看的那一份
     cut: float = 0.0  # 這一邊的防具減損（挑的人是開打那一刻的、守的人是分身 ArenaEntry.cut）：對面打中這一邊的那一下乘 1 − 它（鐵匠鋪與合成流程 3.9）；舊存檔 0
+    card: dict | None = None  # 五項屬性的季：重算對上真正的對手要的東西（team.pvp_card）；舊的季、舊存檔 None
+    dodge: float = 0.0  # 五項屬性的季：挨打的那一下閃掉的機會（身法對他的身法，team.pvp_dodge；faced 開打時填）；舊的季 0
 
     @property
     def shown(self) -> float:
@@ -581,6 +606,7 @@ class ArenaEntry(BaseModel):
     arts: list[str] = Field(default_factory=list)  # 身上兩門武學的名字（選單上寫他守擂用什麼）
     kit: BoutSide | None = None  # 報名那一刻身上的本命戰法（team.self_side）；沒有是 None，舊存檔也是
     cut: float = 0.0  # 報名或更新分身那一刻的防具減損（含耐久，team.duel_armor_cut）：別人來挑時這一邊挨的打乘 1 − 它（鐵匠鋪與合成流程 3.9）；舊的分身沒有＝0
+    card: dict | None = None  # 五項屬性的季：報名、更新分身那一刻的五項與加成（team.pvp_card），開打時照挑的人重算；舊的季 None
     weapon: str = ""  # 擂台動畫：報名、更新分身那一刻手上兵器的種類（空字串＝空手；舊存檔也是）
     look: str = ""  # 擂台形象：報名、更新分身那一刻穿哪一套（空字串＝斗笠小子；舊存檔也是）
     move: str = ""  # 招式動畫：報名、更新分身那一刻出招疊哪一張光效（m<購買 id>；空字串＝沒有）
@@ -798,6 +824,11 @@ class PlayerState(BaseModel):
     own_insights: dict[str, Insight] = Field(default_factory=dict)
     own_serial: int = 0  # 私有意境的流水號
     stat_points: int = 0  # 升級得到、還沒分配的屬性點（武學與成長設計 6.2）
+    # ── 五項屬性（屬性與跨季架構 v2 第三節；attrset，新的季才用）──
+    growth_preset: str | None = None  # 這一季挑的成長配比（Config.attributes.v2.presets 的 key，或 "custom"）；None 照預設那一套
+    growth_custom: dict[str, int] = Field(default_factory=dict)  # 自己配的每級成長（growth_preset 是 "custom" 時）
+    attr_event: dict[str, int] = Field(default_factory=dict)  # 這一季從事件歷練得來的（新的鍵 → 點數，attrset.grant_event；合計最多 Config.attributes.v2.event_cap）
+    attr_alloc: dict[str, int] = Field(default_factory=dict)  # 送點自己配到哪幾項（鍵 → 點數）
     art_quality: dict[str, str] = Field(default_factory=dict)  # 功法 id → 自己那一份的品質（沒記＝全服登記的品質）
     art_mastery: dict[str, int] = Field(default_factory=dict)  # 功法 id → 修練往下一品失敗了幾次（熟練度）
     naming: str | None = None  # 第一個修到絕學、等著取正式名字的功法 id
@@ -1086,6 +1117,9 @@ class PlayerState(BaseModel):
     # 長篇奇事（企劃者 2026-10-27）：紀念物（沒有效果、不能賣，跨季跟著角色）、跨季的旗標（換季時再立進新角色的 flags）。都在 QUIET_DEFAULTS
     keepsakes: list[str] = Field(default_factory=list)
     lasting: list[str] = Field(default_factory=list)
+    # 傳承（tianxia/features/legacy）：正氣、邪氣、機緣與識海。跨季帶著走（Game._reset_player_for_new_season 照帶，結算在包的 on_season_start）；
+    # None 的時候不寫進存檔（QUIET_DEFAULTS）：開關關著存檔一個鍵都不多
+    legacy: LegacyBook | None = None
 
     @model_serializer(mode="wrap")
     def _drop_quiet_defaults(self, handler):
@@ -1110,6 +1144,8 @@ QUIET_DEFAULTS = (
     "storylines", "story_open", "story_cards",  # 一條線（特殊事件）
     "epiphanies", "epiphany_dry", "god_naming",  # 特殊頓悟
     "keepsakes", "lasting",  # 長篇奇事
+    "growth_preset", "growth_custom", "attr_alloc", "attr_event",  # 五項屬性（屬性與跨季架構 v2）
+    "legacy",  # 傳承（features/legacy）
 )
 
 
@@ -1432,7 +1468,7 @@ class Toast(BaseModel):
 
 class Deed(BaseModel):
     """世界記事的一筆（tianxia/deeds.py；世界活起來）：誰、在哪、做了什麼。kind：plan（盤算的結果）、move（人物照行程走到哪）、
-    beat（玩家打退大勢人物）、figure_fell（大勢人物退場或重創）；章回主線另寫 chapter。figures 是對話人物 id，actors 是玩家名號，
+    beat（玩家打退大勢人物）、figure_fell（大勢人物退場或重創）、place（地點變樣，place_state.py）；章回主線另寫 chapter。figures 是對話人物 id，actors 是玩家名號，
     side 是這件事算哪一方的（沒有是 None）。人物對話、此地舊事、章回都讀它。"""
 
     id: int
@@ -1443,6 +1479,17 @@ class Deed(BaseModel):
     actors: list[str] = Field(default_factory=list)
     side: str | None = None
     time: float = 0.0
+
+
+class PlaceMark(BaseModel):
+    """一個地點此刻的樣子（tianxia/place_state.py；世界活起來第二批「地點會變樣」）：kind 是 war 戰火、fallen 淪陷、famine 饑荒、
+    rebuild 重建；at 是哪一刻變的、until 是這一段到哪一刻（世界秒；None＝一直這樣，淪陷要有人收復才回來）。戰火、饑荒過了 until
+    接著重建 Config.plans.rebuild_days7，再之後就是太平（照時間算，不另外記）。side 是淪陷落入哪一方之手。"""
+
+    kind: str
+    at: float = 0.0
+    until: float | None = None
+    side: str | None = None
 
 
 class Plan(BaseModel):
@@ -1864,8 +1911,8 @@ class WorldState(BaseModel):
         data = handler(self)
         if isinstance(data, dict):
             for key in ("marks_fired", "mark_helpers", "final_tiers", "stance_counts", "stance_week", "stance_active", "god_names", "god_firsts",
-                        "chapter_weights", "chapter_done", "plans", "stops_done", "deeds", "deed_seq",
-                        "inscriptions", "inscription_seq"):
+                        "chapter_weights", "chapter_done", "plans", "stops_done", "deeds", "deed_seq", "places",
+                        "inscriptions", "inscription_seq", "attrs_v2"):
                 if key in data and not data[key]:
                     del data[key]
         return data
@@ -1879,6 +1926,8 @@ class WorldState(BaseModel):
     stops_done: dict[str, bool] = Field(default_factory=dict)
     deeds: list[Deed] = Field(default_factory=list)
     deed_seq: int = 0
+    # 地點會變樣（tianxia/place_state.py）：地點 id → 此刻的樣子；沒寫的地點是太平。換季整個重來
+    places: dict[str, PlaceMark] = Field(default_factory=dict)
     # 走一趟的留言（tianxia/outing.py）：每一處留最近 outing_keep 則；換季時預設句清掉、題壁墨寫的帶到下一季（sqlite_world.next_season）
     inscriptions: list[Inscription] = Field(default_factory=list)
     inscription_seq: int = 0
@@ -1938,6 +1987,7 @@ class WorldState(BaseModel):
     renown_scale: float | None = None  # 名聲的門檻乘幾倍（開季時蓋章，world_state.stamp_season）；None＝沒有章，倍數 1
     territory: TerritoryState | None = None  # 地盤易手（出陣探索與地盤設計第四節）；None＝還沒算過
     conquest_on: bool = False  # 舊的開季章（領地爭奪 2026-10-27 起沒有開關、不看章，conquest.on）；只留著讓舊存檔讀得進來
+    attrs_v2: bool = False  # 這一季開季時五項屬性（Config.attributes.v2）是不是開著（attrset.on）；舊季讀檔是 False，False 不寫進存檔
     jianfa_on: bool = False  # 這一季開季時減法季的規則是不是開著（Config.jianfa；rules.jianfa 還要設定也開著）；舊季讀檔是 False
     conquest: ConquestState | None = None  # 領地爭奪（tianxia/conquest.py）；None＝這一季還沒算過
     # 〈天下形勢〉（領地爭奪第三批 A，tianxia/xingshi.py）：這一季收下的每一篇（照先後，最多 Config.xingshi.keep 篇）、還在等模型的那一張單、

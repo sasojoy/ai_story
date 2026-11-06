@@ -56,7 +56,7 @@ def test_no_notes_without_server_notes():
 
 
 def test_the_conversation_view_shows_the_bond(content):
-    """談話畫面（場景卡）名字旁寫著情誼：伺服器把引擎的 Markdown 轉成 HTML，網頁照放（explain-1 第二項）。"""
+    """談話畫面（對話框）寫著情誼：伺服器把引擎的 Markdown 轉成 HTML，網頁照放（explain-1 第二項）。"""
     from unittest import mock
 
     from test_engine import FAKE_TURN
@@ -69,7 +69,8 @@ def test_the_conversation_view_shows_the_bond(content):
     with mock.patch.object(companion_agent, "_generate", return_value=FAKE_TURN):
         game.choose("act:socialize")
     page = run(_main(game), "return H.pageJianghu();")
-    assert re.search(r'<section class="card scene"><p><strong>韓鐵</strong>（情誼 12）</p>', page)
+    # 介面重整：談話是浮在最上層的對話框，名字在名牌上、情誼寫在框底
+    assert 'class="vn-layer talk"' in page and 'aria-label="與韓鐵說話"' in page and "情誼 12" in page
 
 
 # ── 點體力條看體力怎麼回 ─────────────────────────────────────────

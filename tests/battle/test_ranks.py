@@ -431,9 +431,10 @@ def test_follower_arts_are_upper_grade(real):
     其他本命武學照舊是絕學；基礎武學（武學與成長附錄 B）是下品。"""
     follower_arts = {f.wugong for f in real.followers.values()}
     basic_arts = {skill_id for skill_id, skill in real.skills.items() if skill.quality == "下品"}
+    upper_neigong = {skill_id for skill_id, skill in real.skills.items() if skill.quality == "上品" and skill.kind == "內功"}  # 六門上品內功（2026-11-04）
     assert not basic_arts & follower_arts
     for skill_id in real.skills:
-        expected = "上品" if skill_id in follower_arts else "下品" if skill_id in basic_arts else "絕學"
+        expected = "上品" if skill_id in follower_arts | upper_neigong else "下品" if skill_id in basic_arts else "絕學"
         assert team.resolve_art(skill_id, real, None).quality == expected, skill_id
     art = team.resolve_art("xingwu_qiang", real, None)
     power = encounter.member_power(Member(wugong_id="xingwu_qiang", wugong_level=3), {"xingwu_qiang": art})

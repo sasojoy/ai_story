@@ -17,7 +17,7 @@
         },
         "check": {
           "stat": "str",
-          "difficulty": 6,
+          "grade": "normal", "shift": 1,
           "by": "self"
         },
         "effect": {
@@ -44,7 +44,7 @@
         },
         "check": {
           "stat": "con",
-          "difficulty": 5,
+          "grade": "normal",
           "by": "self"
         },
         "effect": {
@@ -71,7 +71,7 @@
         },
         "check": {
           "stat": "agi",
-          "difficulty": 6
+          "grade": "normal", "shift": 1
         },
         "effect": {
           "text": "你趁亂溜到城下，把官軍幾時攻哪一面低聲報給牆頭的人。天亮時那一面的城頭早已堆滿了滾木礌石。",
@@ -111,7 +111,7 @@
         "text": "背起走不動的老人，護送他們去下曲陽城外的粥棚",
         "check": {
           "stat": "con",
-          "difficulty": 5,
+          "grade": "normal",
           "by": "self"
         },
         "effect": {
@@ -129,7 +129,7 @@
         "text": "替他們登記名冊、分派去處",
         "check": {
           "stat": "wis",
-          "difficulty": 5
+          "grade": "normal"
         },
         "effect": {
           "text": "你把一家家的人口、籍貫寫得清清楚楚，誰該去粥棚、誰能投親，一一分派妥當。書吏誇你辦事利落。",

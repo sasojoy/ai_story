@@ -267,6 +267,9 @@ APPROVED_TAG_MATCHED_EVENTS = {  # 新地點靠 tags 撞上沒寫 locations 的�
     "xia_grain", "xia_tipoff",
     # 事件分級擂主那道門（content/events/tiers.json）：上門挑戰、師父討教、外地刀客、徒弟求教、刺客，寫的是擂台上有名的人走到哪都會碰上
     "t2_door_challenger", "t2_master_spar", "t2_disciple_ask", "t3_tianxia_challenge", "t3_arena_assassin",
+    # 地點會變樣（content/events/places.json，世界活起來第二批）：看此刻的樣子（戰火、淪陷、饑荒、重建），哪一處變了樣都說得通
+    "ps_war_wounded", "ps_war_looters", "ps_fallen_curfew", "ps_fallen_hidden_school", "ps_famine_granary", "ps_famine_roots",
+    "ps_rebuild_beam", "ps_rebuild_market",
 }
 
 

@@ -7,6 +7,7 @@ web/zhuan.css（同一份標記；竹簡，不用武學譜那本書，企劃者 
 """
 from __future__ import annotations
 
+import re
 from html import escape
 
 from tianxia.features.zhuan import biography
@@ -28,6 +29,7 @@ SCRIPT = """
   var KEY="tx-zhuan-vertical",text=document.querySelector(".zh-text"),btn=document.getElementById("vert");
   function set(on){text.classList.toggle("vertical",on);btn.setAttribute("aria-pressed",on?"true":"false");}
   try{set(localStorage.getItem(KEY)==="1");}catch(e){}
+  document.addEventListener("click",function(){document.body.classList.add("zh-skip");},true);
   btn.addEventListener("click",function(){var on=!text.classList.contains("vertical");set(on);try{localStorage.setItem(KEY,on?"1":"0");}catch(e){}});
   function toast(msg){var d=document.createElement("div");d.className="toast";d.textContent=msg;document.body.appendChild(d);setTimeout(function(){d.remove();},2200);}
   document.getElementById("share").addEventListener("click",function(){
@@ -52,6 +54,16 @@ def seal(name: str) -> str:
     )
     return (f'<svg class="zh-seal" viewBox="0 0 52 52" role="img" aria-label="{escape(name)}"><rect x="2" y="2" width="48" height="48" rx="3"/>'
             f'<rect class="rim" x="5" y="5" width="42" height="42" rx="1.5"/>{glyphs}</svg>')
+
+
+def text(paras: list[str]) -> tuple[str, str]:
+    """正文與評（web/app.js 的 zhuanText 同一份標記）：第一段放大第一個字；「評曰」那一段拆出正文、另起一塊蓋「評」字印。"""
+    plain = [p for p in paras if not p.startswith("評曰")]
+    ping = next((p for p in paras if p.startswith("評曰")), None)
+    body = "".join(f'<p{" class=\"first\"" if i == 0 else ""}>{escape(p)}</p>' for i, p in enumerate(plain))
+    aside = (f'<aside class="zh-ping"><span class="chop">評</span><p>{escape(re.sub(r"^評曰[：:]?", "", ping))}</p></aside>'
+             if ping is not None else "")
+    return body, aside
 
 
 def head(title: str, sub: str) -> str:
@@ -87,9 +99,7 @@ def page(row: dict, scenario: str, url: str, image: str, extras: dict | None = N
     title = biography.title(name)
     paras = [p for p in row["text"].split("\n\n") if p.strip()]
     lead = biography.lead(row["text"])
-    body = "".join(
-        f'<p class="{"ping" if p.startswith("評曰") else ""}">{escape(p)}</p>' for p in paras
-    )
+    body, ping = text(paras)
     sub = f"天下大勢・第 {row['season']} 季・{scenario}"
     meta = "".join(
         f'<meta property="{k}" content="{escape(v)}">'
@@ -101,9 +111,9 @@ def page(row: dict, scenario: str, url: str, image: str, extras: dict | None = N
 <title>{escape(title)}・天下大勢</title><meta name="description" content="{escape(lead)}"><meta name="robots" content="noindex">
 {meta}<meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="/static/zhuan.css"><style>{css}</style></head>
-<body class="zh zh-bamboo">{head(title, sub)}
+<body class="zh zh-bamboo zh-play">{head(title, sub)}
 <div class="zh-tools"><button id="vert" aria-pressed="false">直書</button><button id="share">分享</button></div>
-<main class="zh-body">{art}<article class="zh-text">{body}</article><div class="zh-seals">{seal(name)}{mark}</div></main>
+<main class="zh-body">{art}<article class="zh-text">{body}</article>{ping}<div class="zh-seals">{seal(name)}{mark}</div></main>
 <footer>這是《天下大勢》裡一位江湖人物的列傳。<br><a href="/">也去江湖走一遭 ›</a></footer>
 <script>{SCRIPT}</script></body></html>"""
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextlib
 import json
 import re
+import secrets
 import sqlite3
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -23,18 +24,20 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from . import zh
-from .battle_instance import CENTER, BattleInstance, BattleRoundRecord, GambleMoment
+from .battle_instance import CENTER, BattleInstance, BattleRoundRecord, GambleMoment, claims_a_kill
 from .models import BattleDef
 
-CAST_MAX = 6  # 名錄最多寫幾個人
-GAMBLES_PER_ACT = 2  # 一幕最多挑幾次放手一搏寫成拍子（整篇才讀得下去）
-SCENE_MAX = 90  # 模型寫的一拍散文上限（字）
+CAST_MAX = 8  # 名錄最多寫幾個人（企劃者 2026-11-04「篇幅都很短」：原本 6，11 人的場子漏掉一半）
+GAMBLES_PER_ACT = 4  # 一幕最多挑幾次放手一搏寫成拍子（同上：原本 2——廣宗那一場真的發生 24 次，整篇只寫得出 6 次）
+SCENE_MAX = 120  # 模型寫的一拍散文上限（字）（同上：原本 90。提示詞裡寫成中文「一百二十」，改這裡要一起改）
 HEAD_MAX = 6  # 一拍的小標上限（字）
 CAST_LINE_MAX = 40  # 名錄一句的上限（字）
-NUM_PREDICT = 1400  # 一次把整篇寫完的預算的下限（小場面）
-# 預算照篇幅加（2026-10-31 主機實測：9 拍＋6 人的名錄 1400 寫得完，線上 12 拍＋6 人那一篇缺了 cast、整篇變模板句）。
-# 一拍九十字的散文加小標、JSON 的框，名錄一句四十字；只是上限，寫完就停，給寬不花時間
-PREDICT_PER_SCENE = 150
+NUM_PREDICT = 1400  # 一趟的預算的下限（小場面）
+# **一幕一趟、名錄一趟**（企劃者 2026-11-04 要更長、更連貫）：以前整篇一趟，而 within_budget 把單趟逾時壓到剩下的一半
+# （180 秒的預算＝一趟 90 秒），拍子一多就寫不完、整篇靜靜變成墊底句（2026-10-31 線上 12 拍那一篇就是）。
+# 拆開之後每一趟都比以前小，壞掉也只壞那一幕；總時間由呼叫端的 next_client 把關。
+# 一拍一百二十字的散文加小標、JSON 的框，名錄一句四十字；只是上限，寫完就停，給寬不花時間
+PREDICT_PER_SCENE = 190
 PREDICT_PER_CAST = 70
 PREDICT_BASE = 200
 
@@ -42,6 +45,7 @@ _DIGITS = re.compile(r"[0-9０-９]")  # 模型不准寫阿拉伯數字（數字
 _BANNED = ("遊戲", "系統", "玩家", "伺服器", "假人", "機器人", "bot", "BOT", "Bot")  # 「假人」那幾個字任何地方都不准出現
 _ZH = ("零", "一", "兩", "三", "四", "五", "六", "七", "八", "九", "十")
 
+SHARE_CODE_BYTES = 6  # 分享代碼的長度（token_urlsafe 的位元組數，八個字）
 TITLE_SUFFIX = "戰記"  # 標題一律「<戰名>戰記」（Joy 2026-10-29 改名時定的）
 LEAD_LINE = "{side}壓了上去。"  # 待 joy 潤
 EVEN_LINE = "兩邊誰也沒佔到便宜。"
@@ -113,6 +117,10 @@ class BeatFacts:
     id: str  # 「2-1」＝第二幕第一拍（模型照這個鍵回）
     fact: str
     said: Said | None = None
+    # 以下三樣戰報本來就有、以前沒帶進戰記（企劃者 2026-11-04「玩家有點另一個玩家，在戰報中有的互動到戰記被輕輕一筆帶過」）
+    target: str = ""  # 這一下點名衝著誰（GambleMoment.target）；沒點名是空的
+    won: bool | None = None  # 成了沒（None＝不是放手一搏那種拍子）
+    story: str = ""  # 戰報當場播出去的那一句（玩家已經讀過）：模型照它接著鋪開，模型寫壞也拿它當墊底，不要退回「某某放手一搏，成了」
 
 
 @dataclass(frozen=True)
@@ -168,6 +176,21 @@ def _lead_line(rounds: Sequence[BattleRoundRecord], names: dict[str, str], sides
     return LEAD_LINE.format(side=names.get(side, side))
 
 
+def _told(moment: GambleMoment, fell: Sequence[str]) -> str:
+    """這一搏當時播出去的那一句，能不能拿來當戰記的料。
+
+    寫到死人、而被寫死的那位其實沒倒下的就不要（回空字串，那一拍照引擎自己那一句）：
+    2026-11-04 之後戰鬥那一層已經擋著不寫（battle_instance.claims_a_kill），但**那一天以前打完的場次**
+    資料庫裡存的還是舊的那幾句——第 8 季廣宗那一篇就是這樣把沒倒下的人寫成被斬首的
+    （玩家自己喊「取其首級讓她下班！」，判成功，當場就照著播了）。"""
+    story = moment.story or ""
+    if not story or not claims_a_kill(story):
+        return story
+    if moment.target:  # 點名了：被寫死的就是他，他沒倒下這一句就不用
+        return story if moment.target in fell else ""
+    return story if any(name in story for name in fell) else ""
+
+
 def _dramatic(moments: Sequence[GambleMoment], highlight: GambleMoment | None) -> list[GambleMoment]:
     """這一幕挑哪幾次放手一搏：全場最有戲的那一次先（highlight），其餘成功的先、名號排序定序（同一場每次挑出來一樣）。"""
     picked = [m for m in moments if highlight is not None and (m.name, m.round) == (highlight.name, highlight.round)]
@@ -181,6 +204,7 @@ def gather(
 ) -> Material:
     """把收場的一場決戰整理成寫戰記的料。只讀，不碰狀態、不叫模型、不讀時鐘（時辰行走 stamp）。"""
     sides = [f.id for f in definition.factions]
+    fell = tuple(p.name for p in instance.participants.values() if p.fell_round)  # 真的倒下過的人（_told 用）
     by_act = _acts_of_rounds(rounds)
     act_of_round = {r.round_number: r.act_index for r in rounds}
     acts: list[ActFacts] = []
@@ -203,6 +227,7 @@ def gather(
                 id=f"{index + 1}-{len(beats) + 1}",
                 fact=line.format(name=moment.name),
                 said=Said(who=moment.name, side=side_names.get(moment.faction, moment.faction), line=moment.text),
+                target=moment.target, won=moment.won, story=_told(moment, fell),
             ))
         numbers = {r.round_number for r in group}
         fallen = sorted(p.name for p in instance.participants.values() if p.fell_round in numbers)
@@ -258,54 +283,102 @@ class CastLine(BaseModel):
     line: str
 
 
-class TaleReply(BaseModel):
+class ActReply(BaseModel):  # 一幕一趟
     scenes: list[SceneLine] = Field(default_factory=list)
+
+
+class CastReply(BaseModel):  # 名錄一趟
     cast: list[CastLine] = Field(default_factory=list)
 
 
 SYSTEM = (
-    "你是東漢末年的說書人，替剛打完的一場大戰寫話本。下面每一「拍」都是真的發生過的事，"
-    "替每一拍寫一小段：兩三句、九十字以內、繁體中文、半文白、第三人稱，用名號稱呼人。"
-    "只寫那一拍寫到的事，不要編造清單上沒有的人名、地名、兵器、傷亡，也不要改變勝負。"
+    "你是東漢末年的說書人，替剛打完的一場大戰寫話本。下面每一「拍」都是真的發生過的事，照順序替這一幕的每一拍寫一小段："
+    "三到五句、一百二十字以內、繁體中文、半文白、第三人稱，用名號稱呼人。"
+    "**這一幕要像一段連著的文字**：後一拍接著前一拍寫（前一拍誰得了手、誰倒下、戰線往哪邊去，下一拍接得上），"
+    "不要每一拍都從頭開始、不要每一拍都重講一次戰局。"
+    "不要編造清單上沒有的人名、地名、兵器、傷亡，也不要改變勝負。"
     "**不要寫任何阿拉伯數字**，不要寫標題編號、列點、不要提到遊戲、系統、玩家。"
     "有些拍子附了那個人當場喊的原話：原話會另外原樣引在那一段底下，散文裡**不要引用、不要轉述那句話**，寫他怎麼做、場面怎麼變。"
-    "每一拍只寫那一拍的主角，不要把別一拍的人寫進來。"
-    "head 是那一拍的小標（六個字以內，可以留空）。"
-    "另外替名錄上每個人各寫一句（四十字以內）：照給的事實寫，不要加沒給的戰績。"
-    "回傳 scenes（每一拍一筆，id 照抄）與 cast（每個人一筆，name 照抄）。"
+    "寫了「衝著誰」的那一拍，**那兩個人都要寫到**：寫他們怎麼碰上、對手怎麼應、這一下成了沒有。"
+    "除此之外一拍只寫那一拍的主角，不要把別一拍的主角寫進來。"
+    "附了「戰報上寫的是」的拍子，照那一句接著鋪開（同一件事寫細、寫進場面裡），不要改掉結果、也不要只是照抄。"
+    "head 是那一拍的小標：六個字以內、**每一拍都要給**，像章回的小標（例：「火起糧倉」「城頭斷箭」）。"
+    "回傳 scenes（這一幕每一拍一筆，id 照抄）。"
+)
+
+CAST_SYSTEM = (
+    "你是東漢末年的說書人，替剛打完的一場大戰寫話本的名錄。替名錄上每個人各寫一句（四十字以內）、繁體中文、半文白、第三人稱："
+    "照給的事實寫，不要加沒給的戰績、不要改變勝負。"
+    "**不要寫任何阿拉伯數字**，不要寫列點、不要提到遊戲、系統、玩家。每一句都用他的名號開頭。"
+    "回傳 cast（每個人一筆，name 照抄）。"
 )
 
 
-def messages(material: Material) -> list[dict[str, str]]:
-    lines: list[str] = []
-    for act in material.acts:
-        lines.append(f"【{act.title}】{act.setting}")
-        for beat in act.beats:
-            said = f"（他當場喊的是「{beat.said.line}」，這句會另外引在底下，散文裡不要引）" if beat.said is not None else ""
-            lines.append(f"  {beat.id}：{beat.fact}{said}")
-    cast = "\n".join(f"- {c.name}（{c.side}）：{c.fact}" for c in material.cast)
-    body = (
+def _beat_line(beat: BeatFacts) -> str:
+    """一拍寫給模型的那一行：引擎的事實，加上戰報有、以前沒帶進來的那幾樣（點名、成敗、當場播的那一句）。"""
+    bits: list[str] = []
+    if beat.said is not None:
+        bits.append(f"他當場喊的是「{beat.said.line}」，這句會另外原樣引在底下，散文裡不要引、不要轉述")
+    if beat.target:
+        bits.append(f"**衝著{beat.target}來的**，這一拍要寫到{beat.target}怎麼應")
+    if beat.won is not None:
+        bits.append("這一下成了" if beat.won else "這一下沒成")
+    if beat.story:
+        bits.append(f"戰報上寫的是「{beat.story}」")
+    return f"  {beat.id}：{beat.fact}" + (f"（{'；'.join(bits)}）" if bits else "")
+
+
+def _head(material: Material) -> str:
+    """每一趟都給的開頭：哪一場、結果，還有整場分幾幕（寫一幕的時候也知道自己在整篇的哪裡）。"""
+    acts = "、".join(f"「{a.title}」" for a in material.acts)
+    return (
         f"這一場：{material.battle_name}\n結果：{material.result}"
         + (f"（{material.reason}）" if material.reason else "")
-        + "\n\n" + "\n".join(lines) + f"\n\n名錄：\n{cast}"
+        + (f"\n整場分這幾幕：{acts}" if acts else "")
     )
+
+
+def act_messages(material: Material, act: ActFacts) -> list[dict[str, str]]:
+    """一幕一趟（企劃者 2026-11-04）：只給這一幕的拍子，整場的輪廓在開頭那幾行。"""
+    lines = "\n".join(_beat_line(beat) for beat in act.beats)
+    body = f"{_head(material)}\n\n要寫的是這一幕——【{act.title}】{act.setting}\n{lines}"
     return [{"role": "system", "content": SYSTEM}, {"role": "user", "content": body}]
 
 
-def clean(raw: str, limit: int) -> str:
-    """模型寫的一段驗過才用：轉繁體、去掉標記；有阿拉伯數字、太長、提到遊戲的丟掉（回空字串）。換行留著（網頁一行一段）。"""
-    text = zh.to_traditional(str(raw or ""))
-    text = re.sub(r"[*#>`]+", "", text)
-    text = re.sub(r"[ \t　]+", "", text).strip("\n").strip("「」『』\"'“”")
-    if not text or len(text) > limit or _DIGITS.search(text) or any(w in text for w in _BANNED):
-        return ""
+def cast_messages(material: Material) -> list[dict[str, str]]:
+    cast = "\n".join(f"- {c.name}（{c.side}）：{c.fact}" for c in material.cast)
+    return [{"role": "system", "content": CAST_SYSTEM},
+            {"role": "user", "content": f"{_head(material)}\n\n名錄：\n{cast}"}]
+
+
+def _without_names(text: str, names: Sequence[str]) -> str:
+    """比對「模型自己寫的字」用：把場上的名號從句子裡挖掉（長的先挖）。
+    名號裡本來就有阿拉伯數字（管理者建的角色，例「Rayal2」）時不挖的話，只要提到他整句都會被數字那一關丟掉——
+    企劃者 2026-11-04 讀到的那一篇裡，24 次放手一搏有 7 次旁白是空的、7 次都是提到他，戰記那兩拍也退成了墊底句。"""
+    for name in sorted({n for n in names if n}, key=len, reverse=True):
+        text = text.replace(name, "")
     return text
 
 
-def predict_budget(material: Material) -> int:
-    """這一篇給模型的輸出上限：照拍數與名錄人數加，不低於 NUM_PREDICT。"""
-    beats = sum(len(act.beats) for act in material.acts)
-    return max(NUM_PREDICT, PREDICT_BASE + PREDICT_PER_SCENE * beats + PREDICT_PER_CAST * len(material.cast))
+def clean(raw: str, limit: int, names: Sequence[str] = ()) -> str:
+    """模型寫的一段驗過才用：轉繁體、去掉標記；有阿拉伯數字、太長、提到遊戲的丟掉（回空字串）。換行留著（網頁一行一段）。
+    names 是場上的名號：數字那一關不算名號裡本來就有的（_without_names）。"""
+    text = zh.to_traditional(str(raw or ""))
+    text = re.sub(r"[*#>`]+", "", text)
+    text = re.sub(r"[ \t　]+", "", text).strip("\n").strip("「」『』\"'“”")
+    if not text or len(text) > limit or any(w in text for w in _BANNED):
+        return ""
+    return "" if _DIGITS.search(_without_names(text, names)) else text
+
+
+def act_budget(act: ActFacts) -> int:
+    """這一幕給模型的輸出上限：照拍數加，不低於 NUM_PREDICT。只是上限，寫完就停。"""
+    return max(NUM_PREDICT, PREDICT_BASE + PREDICT_PER_SCENE * len(act.beats))
+
+
+def cast_budget(material: Material) -> int:
+    """名錄那一趟的輸出上限。"""
+    return max(NUM_PREDICT, PREDICT_BASE + PREDICT_PER_CAST * len(material.cast))
 
 
 OTHER_NAME_MIN = 2  # 「寫到別的上陣的人」不認一個字的名號：單字（「霜」「城」）常常只是散文裡的普通字，會把該留的拍誤退成模板句
@@ -319,7 +392,10 @@ def _bare(text: str) -> str:
 def fits(beat: BeatFacts, text: str, others: Sequence[str]) -> bool:
     """模型寫的這一拍對不對得上這一拍（2026-10-31 線上那一篇：原話在散文裡又抄一次、第二拍寫成第三拍的人）。
     只看附了原話的那幾拍（放手一搏）：散文不准抄原話（原話底下另外引）、要寫到喊話的那個人、
-    不准寫到別的上陣的人（別一拍的主角）。開篇、倒下、戰局那幾拍寫到誰都照收。"""
+    不准寫到別的上陣的人（別一拍的主角）。開篇、倒下、戰局那幾拍寫到誰都照收。
+
+    **他點名的那個對手不算「別一拍的主角」**（企劃者 2026-11-04「玩家有點另一個玩家，在戰報中有的互動到戰記被輕輕一筆帶過」）：
+    以前對手剛好也被挑成拍子的話，寫出這兩個人交手就整段被退成墊底句——想看的互動是這一關擋掉的。"""
     if beat.said is None:
         return True
     line = _bare(beat.said.line)
@@ -327,7 +403,9 @@ def fits(beat: BeatFacts, text: str, others: Sequence[str]) -> bool:
         return False
     if beat.said.who and beat.said.who not in text:
         return False
-    return not any(len(name) >= OTHER_NAME_MIN and name in text and name not in beat.said.who for name in others)
+    kin = (beat.said.who, beat.target)  # 這一拍的主角與他點名的對手（接起來比會多出「馬上」這種假的子字串，所以一個一個比）
+    return not any(len(name) >= OTHER_NAME_MIN and name in text and not any(name in one for one in kin)
+                   for name in others)
 
 
 def _gamblers(material: Material) -> tuple[str, ...]:
@@ -335,31 +413,88 @@ def _gamblers(material: Material) -> tuple[str, ...]:
     return tuple(sorted({b.said.who for a in material.acts for b in a.beats if b.said is not None and b.said.who}))
 
 
-def write(client, material: Material) -> tuple[dict[str, tuple[str, str]], dict[str, str]]:
-    """B 段（鎖外）：請模型把整篇寫完。回（拍子 id → (小標, 散文), 名號 → 那一句）；叫不動、寫壞的不在裡面（照引擎那一句）。"""
-    if client is None:
-        return {}, {}
+def known_names(material: Material) -> tuple[str, ...]:
+    """場上的名號（名錄上的、喊話的、被點名的）：數字那一關不算它們裡面本來就有的數字（_without_names）。"""
+    out = {c.name for c in material.cast}
+    for act in material.acts:
+        for beat in act.beats:
+            if beat.said is not None:
+                out.add(beat.said.who)
+            out.add(beat.target)
+    return tuple(sorted(n for n in out if n))
+
+
+_INLINE_HEAD = re.compile(r"^[\s]*[【〔]([^】〕\n]{1,10})[】〕][\s　]*")
+
+
+def _head_out(head: str, text: str) -> tuple[str, str]:
+    """散文開頭的「【雙軍對峙】」一律拆掉；head 是空的才拿它當小標。
+
+    2026-11-04 第 8 季廣宗實測，同一篇裡兩種壞法都有：一幕的 head 欄全空、小標寫進散文第一行（16/17 拍），
+    另一幕 head 有填、散文開頭**又寫一次**（5 拍）。head 有預設值＝模型可以合法省略，提示詞講幾次都一樣，
+    所以在這裡收。拆在 clean 之前：不然【小標】會一起算進那一拍的字數上限、把該留的拍擠掉。"""
+    m = _INLINE_HEAD.match(text or "")
+    if m is None:
+        return head, text
+    return (head if head.strip() else m.group(1)), text[m.end():]
+
+
+def _write_act(client, material: Material, act: ActFacts, names: Sequence[str],
+               others: Sequence[str]) -> dict[str, tuple[str, str]]:
+    """一幕一趟：回這一幕的（拍子 id → (小標, 散文)）。叫不動、寫壞的不在裡面（那幾拍照引擎那一句）。"""
     try:
         reply = client.chat_structured(
-            messages(material), TaleReply, temperature=0.8, num_predict=predict_budget(material),
-            # 兩個欄位都有預設值：不寫進 required（而且語法強制）的話，模型回 {} 也算合法，整篇靜靜變成模板版
-            required_fields=["scenes", "cast"], require_in_schema=True,
+            act_messages(material, act), ActReply, temperature=0.8, num_predict=act_budget(act),
+            # scenes 有預設值：不寫進 required（而且語法強制）的話，模型回 {} 也算合法，這一幕靜靜變成墊底句
+            required_fields=["scenes"], require_in_schema=True,
         )
-    except Exception:  # noqa: BLE001 — 叫不動就用模板
-        return {}, {}
-    beats = {beat.id: beat for act in material.acts for beat in act.beats}
-    names = {c.name for c in material.cast}
+    except Exception:  # noqa: BLE001 — 叫不動就用墊底句
+        return {}
+    beats = {beat.id: beat for beat in act.beats}
+    out: dict[str, tuple[str, str]] = {}
+    for s in reply.scenes:
+        raw_head, raw_text = _head_out(s.head, s.text)
+        text = clean(raw_text, SCENE_MAX, names)
+        if s.id in beats and s.id not in out and text and fits(beats[s.id], text, others):
+            out[s.id] = (clean(raw_head, HEAD_MAX, names), text)
+    return out
+
+
+def _write_cast(client, material: Material, names: Sequence[str]) -> dict[str, str]:
+    """名錄那一趟：回（名號 → 那一句）。"""
+    try:
+        reply = client.chat_structured(
+            cast_messages(material), CastReply, temperature=0.8, num_predict=cast_budget(material),
+            required_fields=["cast"], require_in_schema=True,
+        )
+    except Exception:  # noqa: BLE001
+        return {}
+    want = {c.name for c in material.cast}
+    lines = ((c.name, clean(c.line, CAST_LINE_MAX, names)) for c in reply.cast)
+    return {name: line for name, line in lines if name in want and line}
+
+
+def write(client, material: Material, *,
+          next_client: Callable[[], object] | None = None) -> tuple[dict[str, tuple[str, str]], dict[str, str]]:
+    """B 段（鎖外）：**一幕一趟、名錄一趟**請模型寫（企劃者 2026-11-04 要更長、更連貫；以前整篇一趟）。
+    回（拍子 id → (小標, 散文), 名號 → 那一句）；叫不動、寫壞的不在裡面（照引擎那一句）。
+
+    `next_client` 每一趟給一個新的 client（呼叫端照剩下的時間重算預算，回 None＝時間用完了，剩下的照引擎那一句）；
+    不給就每一趟都用同一個。時間的帳在呼叫端算：這一份不讀電腦時鐘。"""
+    names = known_names(material)
     others = _gamblers(material)
     scenes: dict[str, tuple[str, str]] = {}
-    for s in reply.scenes:
-        text = clean(s.text, SCENE_MAX)
-        if s.id in beats and s.id not in scenes and text and fits(beats[s.id], text, others):
-            scenes[s.id] = (clean(s.head, HEAD_MAX), text)
+    use = client
+    for act in material.acts:
+        if use is None:
+            break  # 預算用完了：剩下的幕照引擎那一句（只少那幾幕，不是整篇垮掉）
+        scenes.update(_write_act(use, material, act, names, others))
+        use = next_client() if next_client is not None else client
     seen: dict[str, int] = {}
-    for _head, text in scenes.values():
+    for _small, text in scenes.values():
         seen[text] = seen.get(text, 0) + 1
     scenes = {k: v for k, v in scenes.items() if seen[v[1]] == 1}  # 同一段字掛在兩拍上：至少一拍配錯了，兩拍都照引擎那一句
-    cast = {c.name: clean(c.line, CAST_LINE_MAX) for c in reply.cast if c.name in names and clean(c.line, CAST_LINE_MAX)}
+    cast = _write_cast(use, material, names) if use is not None else {}
     return scenes, cast
 
 
@@ -376,8 +511,10 @@ def compose(
     acts: list[Act] = []
     for index, act in enumerate(material.acts):
         drawn = [
-            Scene(head=scenes.get(beat.id, ("", ""))[0], text=scenes.get(beat.id, ("", beat.fact))[1] or beat.fact,
-                  said=beat.said)
+            # 墊底的順序：模型寫的 → 戰報當場播的那一句（玩家已經讀過，接得上）→ 引擎的「某某放手一搏，成了」
+            # （企劃者 2026-11-04「有些直接寫放手一搏成了，感覺根本沒讀懂他的行為」）
+            Scene(head=scenes.get(beat.id, ("", ""))[0],
+                  text=scenes.get(beat.id, ("", ""))[1] or beat.story or beat.fact, said=beat.said)
             for beat in act.beats
         ]
         acts.append(Act(title=act.title, banner=act.banner, scenes=drawn,
@@ -406,6 +543,8 @@ class TaleStore:
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS tales (record_id INTEGER PRIMARY KEY, season INTEGER NOT NULL, "
                 "data TEXT NOT NULL, made_at REAL NOT NULL)")
+            # 分享代碼（戰記分享頁 /zhanji/<代碼>，Joy 2026-11-04）：一篇一個亂碼，猜不到別篇；第一次有人要網址時才發
+            conn.execute("CREATE TABLE IF NOT EXISTS shares (code TEXT PRIMARY KEY, record_id INTEGER NOT NULL UNIQUE)")
 
     def _conn(self) -> sqlite3.Connection:
         return sqlite3.connect(self.path, timeout=5)
@@ -425,6 +564,21 @@ class TaleStore:
         with contextlib.closing(self._conn()) as conn, conn:
             conn.execute("INSERT OR IGNORE INTO tales VALUES (?, ?, ?, ?)",
                          (record_id, tale.season, tale.model_dump_json(), tale.made_at))
+
+    def share_code(self, record_id: int) -> str:
+        """這一篇的分享代碼：有就回原本那個，沒有就發一個新的（兩個請求同時發，以先寫進去的為準）。"""
+        with contextlib.closing(self._conn()) as conn, conn:
+            row = conn.execute("SELECT code FROM shares WHERE record_id = ?", (record_id,)).fetchone()
+            if row:
+                return row[0]
+            conn.execute("INSERT OR IGNORE INTO shares VALUES (?, ?)", (secrets.token_urlsafe(SHARE_CODE_BYTES), record_id))
+            return conn.execute("SELECT code FROM shares WHERE record_id = ?", (record_id,)).fetchone()[0]
+
+    def record_for(self, code: str) -> int | None:
+        """分享代碼 → 流水號；不認得是 None。"""
+        with contextlib.closing(self._conn()) as conn:
+            row = conn.execute("SELECT record_id FROM shares WHERE code = ?", (code,)).fetchone()
+        return row[0] if row else None
 
     def done(self, season: int) -> set[int]:
         with contextlib.closing(self._conn()) as conn:

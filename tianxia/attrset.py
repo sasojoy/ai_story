@@ -1,0 +1,250 @@
+"""五項屬性（屬性與跨季架構 v2 第三節；第 ② 階段第 1 批，2026-11-04）：武力、統御、悟性、身法、魅力（Joy 11/4 定顯示名混搭；
+鍵 str、lead、int、spd、cha）。
+
+規則都在 Config.attributes.v2（AttrV2Rules）：主機開關加上開季時蓋的章（WorldState.attrs_v2）才算，正在跑的季一個字都不變。
+- 本人的值不存進存檔的 stats，讀的時候算：base ＋（等級 − 1）× 這一季的配比 ＋ 送點自己配的（PlayerState.attr_alloc）。
+  配比季初自己挑（五套預設或自己配，合計固定），沒挑的照 default_preset 長；季中改配比一律回溯。
+- 舊的鍵（臂力、身法、根骨、悟性）照 legacy 對到新的一項：內容的檢定照舊寫 agi、wis，不必改；博聞拔掉。
+- 事件給的屬性是「歷練」（grant_event，PlayerState.attr_event）：照給、換成新尺度，每人每季合計最多 event_cap，滿了改給心得。
+- 舊公式的讀點（氣血、內傷、損耗、修練、悟意境、打造、頓悟、感悟、閉關、戰法比快慢、職位）讀 v1_value：比同等級的平均人
+  高幾成，經過有上限的曲線（legacy_caps），換成舊公式讀得懂的點數。屬性沒有上限、效果有上限（企劃者 2026-11-04）。
+這個模組不 import team（team 反過來 import 這裡）。
+"""
+from __future__ import annotations
+
+import math
+
+from .models import Content
+from .state import GameState
+
+CUSTOM = "custom"
+V1_BASE = 5  # 舊尺度的起點（team.BASE_STAT）
+
+
+def on(content: Content, world) -> bool:
+    """這一季是五項屬性：主機的開關開著，而且這一季開季時蓋了章。world 是 WorldState（None 一律舊規則）。"""
+    return world is not None and content.config.attributes.v2.enabled and bool(getattr(world, "attrs_v2", False))
+
+
+def keys(content: Content) -> tuple[str, ...]:
+    return tuple(content.config.attributes.v2.keys)
+
+
+def key_of(content: Content, key: str) -> str | None:
+    """內容與舊程式寫的鍵在新的季是哪一項：新的鍵照原樣，舊的照 legacy 對過去；對不到（博聞、銀兩……）是 None。"""
+    cfg = content.config.attributes.v2
+    if key in cfg.keys:
+        return key
+    return cfg.legacy.get(key)
+
+
+def names(content: Content, world) -> dict[str, str]:
+    """這一季畫面上的名字（鍵 → 顯示名）：新的季五項照 content/attributes_v2.json（武力、統御……），其餘照 Config.stat_names。"""
+    out = dict(content.config.stat_names)
+    if on(content, world):
+        out.update({a.key: a.name for a in content.attributes_v2})
+    return out
+
+
+def preset(content: Content, key: str | None):
+    return next((p for p in content.config.attributes.v2.presets if p.key == key), None)
+
+
+def split(state: GameState, content: Content) -> dict[str, int]:
+    """這個人這一季每級怎麼長：自己配的、挑的那一套，或還沒挑時的預設。"""
+    p = state.player
+    if p.growth_preset == CUSTOM and p.growth_custom:
+        return dict(p.growth_custom)
+    chosen = preset(content, p.growth_preset) or preset(content, content.config.attributes.v2.default_preset)
+    return dict(chosen.split)
+
+
+def value(state: GameState, content: Content, key: str) -> float:
+    """本人這一項現在多少（key 是新的鍵）。"""
+    cfg = content.config.attributes.v2
+    level = state.player.member.level
+    p = state.player
+    return float(cfg.base + (level - 1) * split(state, content).get(key, 0) + p.attr_alloc.get(key, 0) + p.attr_event.get(key, 0))
+
+
+def event_total(state: GameState) -> int:
+    """這一季從事件歷練得來的合計（狀態列「歷練 N／event_cap」）。"""
+    return sum(state.player.attr_event.values())
+
+
+def grant_event(state: GameState, content: Content, old_key: str, delta: int) -> list[str]:
+    """事件寫的舊屬性 +delta（企劃者 2026-11-05「照給屬性，每季有上限」）：照 legacy 對到新的一項，一點舊的換 event_points 點新的，
+    記進這一季的 attr_event；這一季的合計到 event_cap 為止，過了的照 attr_xinde 改給心得（每一點舊的換幾點），對不到新的一項（博聞）全給心得。
+    扣的不扣。回給玩家看的話：「武力 +2（歷練 14／60）」；到頂那一下多一句（火候）；已經滿了的只寫心得。"""
+    cfg, p = content.config.attributes.v2, state.player
+    if delta <= 0:
+        return []
+    new, points = key_of(content, old_key), delta * cfg.event_points
+    gain = 0 if new is None else max(0, min(points, cfg.event_cap - event_total(state)))
+    msgs: list[str] = []
+    if gain:
+        p.attr_event[new] = p.attr_event.get(new, 0) + gain
+        msgs.append(f"{names(content, state.world).get(new, new)} +{gain}（歷練 {event_total(state)}／{cfg.event_cap}）")
+    left = points - gain
+    xinde = round(left * cfg.attr_xinde / max(1, cfg.event_points)) if left else 0
+    if xinde:
+        p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
+    if gain and event_total(state) >= cfg.event_cap:
+        msgs.append(f"這一季的歷練已到火候，此後所得，化為心得{f' +{xinde}' if xinde else ''}。")
+    elif xinde:
+        msgs.append(f"{content.config.stat_names.get('xinde', '心得')} +{xinde}")
+    return msgs
+
+
+def values(state: GameState, content: Content) -> dict[str, float]:
+    return {k: value(state, content, k) for k in keys(content)}
+
+
+def charm(state: GameState, content: Content, hook: str) -> float:
+    """魅力在 hook 這一處的效果（Config.attributes.v2.charm）：比同等級的平均人高幾成 r，高於平均拿 上限 × tanh(r ÷ legacy_scale)，
+    低於平均照另一個上限扣。舊的季、表上沒有這個鉤子是 0。"""
+    cfg = content.config.attributes.v2
+    caps = cfg.charm.get(hook)
+    if caps is None or not on(content, getattr(state, "world", None)):
+        return 0.0
+    avg = expect(content, state.player.member.level)
+    t = math.tanh((value(state, content, "cha") - avg) / avg / cfg.legacy_scale)
+    return caps[0] * t if t >= 0 else caps[1] * t
+
+
+def expect(content: Content, level: int, key: str | None = None) -> float:
+    """這個等級的「平均人」這一項有多少（第五節 expect(level, attr)）：均分的配比、送點也均分。key 先不分（五項一樣）。"""
+    cfg = content.config.attributes.v2
+    n = len(cfg.keys)
+    return cfg.base + (level - 1) * cfg.per_level / n + (level // cfg.bonus_every) * cfg.bonus_points / n
+
+
+def v1_value(state: GameState, content: Content, new_value: float, old_key: str | None = None) -> float:
+    """新尺度的值換成舊公式讀得懂的那一點數（企劃者 2026-11-04「要用新的屬性點的加法，不限於5～15」「新的屬性點架構是確定的」）：
+    不看幾點，看比同等級的平均人高幾成（r），效果＝上限 × tanh(r ÷ legacy_scale)，再換回舊公式「比 5 多幾點 × 每點 3%」的那一點數。
+    屬性本身沒有上限，效果有上限（legacy_caps，每一項舊的鍵一個）：氣血、內傷、損耗、修練、悟意境、打造、頓悟、感悟、閉關、
+    戰法比快慢、職位都經過這裡，練多高都不會失控。old_key 沒給（或表上沒有）照 legacy_caps 最小的那一個。"""
+    cfg = content.config.attributes.v2
+    level = max(1, state.player.member.level)
+    mean = expect(content, level)
+    r = (new_value - mean) / max(1.0, mean)
+    cap = cfg.legacy_caps.get(old_key or "", min(cfg.legacy_caps.values()) if cfg.legacy_caps else 0.3)
+    per = max(1e-9, content.config.stat_bonus_per_point)
+    return V1_BASE + cap * math.tanh(r / cfg.legacy_scale) / per
+
+
+def legacy(state: GameState, content: Content, key: str, default: float = V1_BASE) -> float:
+    """本人舊尺度的一項屬性（team.v1_stat 的本體；不 import team 的模組直接叫這裡）：舊的季照存檔（沒有這一項當 default），
+    五項屬性的季照 legacy 對到新的一項、換回舊尺度，對不到的（博聞）當基準。"""
+    if on(content, getattr(state, "world", None)):
+        new = key_of(content, key)
+        return v1_value(state, content, value(state, content, new), key) if new else float(V1_BASE)
+    return state.player.stats.get(key, default)
+
+
+def foe_level(content: Content, difficulty: float) -> float:
+    """對手的難度換成等級（Config.attributes.v2.foe_levels，中間照直線、兩頭夾住）。"""
+    table = content.config.attributes.v2.foe_levels
+    if difficulty <= table[0][0]:
+        return table[0][1]
+    for (p0, l0), (p1, l1) in zip(table, table[1:]):
+        if difficulty <= p1:
+            return l0 + (l1 - l0) * (difficulty - p0) / (p1 - p0)
+    return table[-1][1]
+
+
+def foe_difficulty(content: Content, level: float) -> float:
+    """foe_level 反過來：等級換成難度（中間照直線；比表上最高還高的照最後一段的斜率往外推）。"""
+    table = content.config.attributes.v2.foe_levels
+    if level <= table[0][1]:
+        return table[0][0]
+    for (p0, l0), (p1, l1) in zip(table, table[1:]):
+        if level <= l1:
+            return p0 + (p1 - p0) * (level - l0) / (l1 - l0)
+    (p0, l0), (p1, l1) = table[-2], table[-1]
+    return p1 + (p1 - p0) * (level - l1) / (l1 - l0)
+
+
+def figure_squad(content: Content, season, squad, now: float):
+    """挑戰大勢人物本人的那一路，等級跟著季曆長（figure_growth）：開季照難度換的等級，季末多 figure_growth 級；
+    難度照長上去的等級換回來，屬性也照它（Squad.level）。"""
+    from . import calendar
+
+    days = calendar.total_days(content, season) or 1
+    share = min(1.0, max(0.0, calendar.cal_days(now, content, season) / days))
+    level = foe_level(content, squad.difficulty) + content.config.attributes.v2.figure_growth * share
+    return squad.model_copy(update={"level": level, "difficulty": round(max(squad.difficulty, foe_difficulty(content, level)), 1)})
+
+
+def grown(content: Content, level: float, aptitude: float) -> float:
+    """資質 aptitude（平均是 foe_aptitude）的人長到 level 級，一項有多少：跟平均人同一條曲線，照資質放大縮小成長的那一截。"""
+    cfg = content.config.attributes.v2
+    return cfg.base + (expect(content, level) - cfg.base) * aptitude / cfg.foe_aptitude
+
+
+def foe_values(content: Content, squad, level: float | None = None) -> dict[str, float]:
+    """對手的五項（第四節「同一把尺」）：等級照隊伍寫的、沒寫照難度換；資質照隊伍寫的、沒寫當平均。"""
+    cfg = content.config.attributes.v2
+    lv = level if level is not None else (squad.level if getattr(squad, "level", None) else foe_level(content, squad.difficulty))
+    apt = getattr(squad, "aptitude", {}) or {}
+    return {k: grown(content, lv, apt.get(k, cfg.foe_aptitude)) for k in cfg.keys}
+
+
+def from_v1(content: Content, level: int, v1: dict[str, float]) -> dict[str, float]:
+    """舊尺度的人（同伴照內容寫的臂力、身法……）換成新的五項：對得到的照 legacy 反過來換，魅力這種沒有舊值的當平均人。"""
+    cfg = content.config.attributes.v2
+    ratio = cfg.per_level / max(1, content.config.stat_points_per_level)
+    back = {new: old for old, new in cfg.legacy.items()}
+    return {k: (cfg.base + (v1[back[k]] - V1_BASE) * ratio if back.get(k) in v1 else expect(content, level)) for k in cfg.keys}
+
+
+def bonus_between(content: Content, before: int, after: int) -> int:
+    """從第 before 級升到第 after 級送幾點（每 bonus_every 級 bonus_points 點）。"""
+    cfg = content.config.attributes.v2
+    return (after // cfg.bonus_every - before // cfg.bonus_every) * cfg.bonus_points
+
+
+def growth_problem(content: Content, key: str, custom: dict[str, int] | None = None) -> str | None:
+    """挑配比對不對：預設的五套之一，或自己配（五項寫齊、每項 custom_min～custom_max、合計 per_level）。對的回 None。"""
+    cfg = content.config.attributes.v2
+    if key != CUSTOM:
+        return None if preset(content, key) is not None else "（沒有這一套配比。）"
+    custom = custom or {}
+    names = {a.key: a.name for a in content.attributes_v2} or content.config.stat_names
+    if set(custom) != set(cfg.keys) or any(not isinstance(v, int) for v in custom.values()):
+        return f"自己配要寫齊{'、'.join(names.get(k, k) for k in cfg.keys)}。"
+    if any(v < cfg.custom_min for v in custom.values()):
+        return f"每一項每級至少長 {cfg.custom_min} 點。"
+    if any(v > cfg.custom_max for v in custom.values()):
+        return f"每一項每級最多長 {cfg.custom_max} 點。"
+    if sum(custom.values()) != cfg.per_level:
+        return f"五項合計要是 {cfg.per_level} 點（現在 {sum(custom.values())}）。"
+    return None
+
+
+def pick(state: GameState, content: Content, key: str, custom: dict[str, int] | None = None) -> str:
+    """挑這一季的配比（回溯：照現在的等級整條重算）。回一句給玩家看的話；挑不成回的是理由（呼叫端先問 growth_problem）。"""
+    p = state.player
+    p.growth_preset = key
+    p.growth_custom = dict(custom) if key == CUSTOM else {}
+    names = {a.key: a.name for a in content.attributes_v2} or content.config.stat_names
+    rows = split(state, content)
+    plan = "、".join(f"{names.get(k, k)} {rows[k]}" for k in keys(content))
+    title = "自己配" if key == CUSTOM else preset(content, key).name
+    return f"這一季照「{title}」長：每升一級 {plan}。"
+
+
+def view(state: GameState, content: Content) -> dict:
+    """狀態列的配比那一塊（網頁畫挑配比的鈕）：挑了哪一套、每一套怎麼長、自己配的規矩。"""
+    cfg = content.config.attributes.v2
+    names = {a.key: a.name for a in content.attributes_v2} or content.config.stat_names
+    return {
+        "chosen": state.player.growth_preset,
+        "presets": [{"key": p.key, "name": p.name, "split": [[names.get(k, k), p.split[k]] for k in cfg.keys]} for p in cfg.presets],
+        "keys": [[k, names.get(k, k)] for k in cfg.keys],
+        "per_level": cfg.per_level,
+        "custom_min": cfg.custom_min,
+        "custom_max": cfg.custom_max,
+        "event_cap": cfg.event_cap,  # 開季準備卡那一行：江湖歷練每一季最多長幾點
+        "now": [[names.get(k, k), v] for k, v in split(state, content).items()],
+    }
