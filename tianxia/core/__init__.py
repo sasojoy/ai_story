@@ -55,6 +55,10 @@
   open_bounties）、標題與怎麼完成（title、how、issuer、enemy_name）、接不接得了（can_take、stranded、join_note、drop_stranded、hunting、official_hit）、委託（open_commissions、commission_line）、
   掛單的地點（_opened、_strike_spots）、人物掛的（post_rally、post_figure：會寫季，但只靠核心與共用層）；事件檢定、Game 原位、figure_life 與各包讀它，懸賞榜包的 rules re-export 同一批。同 event_check 不進 MODULES。
 
+# mall（全部拆包第 58 批：商城收尾）
+- name_base.py：保留的名號——FAMOUS_NAMES、reserved_names（原本在假人的 server_bots，它 re-export 同一批物件）；建角色、易名帖、假人取名共用，
+  商城包問這裡、不 import 假人的模組。同 event_check 不進 MODULES。
+
 第一階 ctx 就是 Game 本身，不另包一層（手冊 3.3）。
 """
 

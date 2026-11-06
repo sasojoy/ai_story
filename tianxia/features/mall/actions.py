@@ -10,9 +10,9 @@ from typing import TYPE_CHECKING
 
 from tianxia import calendar
 from tianxia import journal  # 核心（江湖紀錄，PM 10/31）：帶 changes 的那一則 ctx._write 寫不了
-from tianxia import server_bots  # 過渡：待搬（保留的名號：易名帖撞名照建角色）
 from tianxia.accounts import NAME_TAKEN as NAME_IN_USE, AccountStore
 from tianxia.characters import CharacterStore, name_key
+from tianxia.core.name_base import reserved_names  # 保留的名號：易名帖撞名照建角色（全部拆包第 58 批）
 from tianxia.core.services import ART as ZHUAN_ART, NO_SUCH_PLAYER, art_problem  # 這一季用不上的列傳插畫票不賣（FB-845；全部拆包第 29 批進核心服務）
 from tianxia.rules import jianfa
 from tianxia.state import GameState, JournalEntry, Rumor
@@ -120,7 +120,7 @@ def rename_self(ctx: Game, new: str, taken: Callable[[str], bool] | None = None)
         return [mall.RENAME_SAME]
     if taken is None:
         store = CharacterStore(ctx.world.db)
-        reserved = {n.casefold() for n in server_bots.reserved_names(ctx.content)}
+        reserved = {n.casefold() for n in reserved_names(ctx.content)}
         taken = lambda n: store.exists(n) or n.casefold() in reserved  # noqa: E731
     if name_key(new) != name_key(old) and taken(new):
         return [NAME_IN_USE]
