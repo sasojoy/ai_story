@@ -2999,12 +2999,7 @@ def api_prologue(request: Request):
     return look(game, lambda g: {"text": md(g.prologue_recap())})
 
 
-@app.get("/api/howto")
-def api_howto(request: Request):
-    """設定抽屜的「玩法說明」（explain-1）：五個行動、體力、情誼、心得、意境、背包各一兩句，數字照設定（Markdown 轉成 HTML）。
-    不看個人狀態，網頁同一次載入只問一次。"""
-    game = _game(request)
-    return look(game, lambda g: {"text": md(g.howto_text())})
+# （/api/howto：全部拆包第 59 批搬進新手引導包 tianxia/features/guide/routes.py，殼照 FEATURES 掛）
 
 
 # （/api/sense、/api/sense_read、/api/sense_warm：全部拆包第 24 批搬進有所感包 tianxia/features/sense/routes.py，殼照 FEATURES 掛；

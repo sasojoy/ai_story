@@ -19,7 +19,7 @@ from . import attrset  # 五項屬性（屬性與跨季架構 v2 第三節）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
     allied, armor, atlas, battlelog, calendar, clinic, conquest, create, divine, economy, encounter, equipment,
-    fight_llm, figures, forge_secrets, gender, howto, insight_fx, insights, journal, library, martial_arts, place_state, plans,
+    fight_llm, figures, forge_secrets, gender, insight_fx, insights, journal, library, martial_arts, place_state, plans,
     materials, mounts, naming, orders, precise, push, ranger, ranks, renown, rise, roster, rounds, seal_acts, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skillview,
     sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, zh,
@@ -64,7 +64,7 @@ from .models import (
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
     HUANGJIN, add_rumor, add_season_rumor, add_world_flags, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
-    day_turn, ears_of, fill_marks, game_day, here_regions,
+    ears_of, fill_marks, game_day, here_regions,
     chaos_fronts, front_chip, front_ids, front_of, humanize,
     is_revealed, learn_skill, pushable, resolve_goals, resolve_trend, roll_check,
     season_one, season_one_off, stance_rule_note, stance_sum_note, stances, trend_name, trend_shown, trend_value,
@@ -535,9 +535,12 @@ class Game:
             return
         added = target - p.stamina_pills
         p.stamina_pills = target
-        self._write(cfg.stamina_pill_name, [howto.top_up_line(self.content, added)])
+        self._write(cfg.stamina_pill_name, [self._top_up_line(added)])
 
     # 本體在 tianxia/features/guide/actions.py（全部拆包第 22 批：新手引導），這裡留一行委派
+    def _top_up_line(self, added: int) -> str:
+        return guide_actions.top_up_line(self, added)
+
     def _graduate(self) -> None:
         guide_actions.graduate(self)
 
@@ -1398,41 +1401,19 @@ class Game:
         loc = c.locations[s.player.location]
         notes: dict[str, str] = {}
         # 探索那一行（act 子動詞的主人，接縫掛鉤，第 11 批）：探索包——減法季探索一顆開著時寫這一處多半給什麼（比重照擲骰用的那一份）
-        outing_note = features_core.act_note(self, "explore", loc) if "act:explore" in ids else None
-        if outing_note is not None:
-            notes["act:explore"] = outing_note
-        elif "act:explore" in ids:
-            legend = c.config.legend_item_name if c.config.explore_legend_chance > 0 else None
-            blocked = self._insight_blocked(loc)
-            kind, until = day_turn(c, s.world) if blocked else ("at", None)
-            notes["act:explore"] = howto.explore_line(self._explore_weights(loc), legend, blocked, until, later=kind == "later")
+        if "act:explore" in ids:
+            explore_note = features_core.act_note(self, "explore", loc)
+            if explore_note is not None:
+                notes["act:explore"] = explore_note
         if "act:train" in ids:  # 出陣那一行（act 子動詞的主人，接縫掛鉤，第 11 批）：出陣包——約戰開著寫約戰那一句、出陣開著寫出陣那一行；都不是寫舊遊歷那一行（第 17 批收進包）
             train_note = features_core.act_note(self, "train", loc)
             if train_note is not None:
                 notes["act:train"] = train_note
-        if "act:socialize" in ids:
-            figure = self._socialize_figure()
-            notes["act:socialize"] = howto.social_line(
-                None if figure is None else c.characters[figure].name, has_events_here(c, loc, "socialize"), self._audience_hall(),
-            )
-        if "act:call" in ids:
-            notes["act:call"] = howto.CALL_LINE
-        if not s.player.picking_audience:  # 只有一位人物時選單上直接列的「求見某某」（行動列交友那一格放它）
-            for option_id in ids:
-                cid = option_id.removeprefix("call:")
-                if option_id.startswith("call:") and cid in c.characters:
-                    # 跟選單上那一顆的判斷同一個次序、同一句話（FB-103：格子寫什麼，這一行就說什麼）：閉門不見寫整句（格子只放得下
-                    # 「閉門不見」）；見不到寫還差幾點名望、會被打發；談滿了寫整句連同換日的那一刻（格子只放得下「已談滿」，day-scale 審查 I1）
-                    name = c.characters[cid].name
-                    if self._snubbed_character(cid):
-                        notes[option_id] = SNUB_NOTE
-                    elif not self._can_meet(cid):
-                        notes[option_id] = howto.call_line(name, False, self._fame_gap(cid))
-                    elif self._talks_left(cid) == 0:
-                        notes[option_id] = self._talked_out_note()
-                    else:
-                        notes[option_id] = howto.call_line(name, True)
+        notes.update(self._social_notes(ids, loc))  # 交友、求見那幾行（第 59 批：交友求見包，同一個先後塞進去；這兩格接 Verb 是第 57 批的事）
         return notes
+
+    def _social_notes(self, ids: set[str], loc: Location) -> dict[str, str]:
+        return socialize_menus.action_notes(self, ids, loc)
 
     def _insight_blocked(self, loc: Location) -> bool:
         """探索那一行的悟意境那一支，是不是只因為這個遊戲日在這裡選錯過做法才拿掉（這裡本來悟得到、比重不是 0）：是的話那一行
@@ -2709,14 +2690,7 @@ class Game:
         return socialize_menus.audience_intro(self)
 
     def howto_text(self) -> str:
-        """設定抽屜的「玩法說明」（Markdown，explain-1 第四項；explain-2 加了這一季在打什麼、名望、投靠與軍令、三方、修練與煉製）：
-        數字讀設定（howto.page）。序章略過的人也看得到（設定抽屜誰都打得開；新手期江湖頁另有一個入口）。招募那一句只在內容裡
-        真的有人能招募時才寫。"""
-        c = self.content
-        rule = stance_rule_note(self.state, c) if season_one(c, self.state.world) else ""  # 「這一季在打什麼」那一節的收季規則（explain-2）
-        return howto.page(
-            c, self.state.world, recruitable=any(ch.kind == "recruitable" for ch in c.characters.values()), rule=rule,
-        )
+        return guide_actions.howto_text(self)
 
     def _last_talk_line(self, companion_id: str) -> str:
         return companions_talk.last_talk_line(self, companion_id)
@@ -5761,6 +5735,12 @@ class Game:
             return [(shown[k], int(attrset.value(s, c, k)), k) for k in attrset.keys(c)]
         return [(names[k], s.player.stats[k], k) for k in team.COMBAT_STATS]
 
+    def _stamina_help(self, newbie: bool, button: bool) -> list[str]:
+        return guide_actions.stamina_help(self, newbie, button)
+
+    def _war_help(self) -> dict[str, list[str]]:
+        return guide_actions.war_help(self)
+
     def status_data(self) -> dict:
         """狀態列的資料（數字與短字串），網頁前端照這份自己排版；status_text 是同一份資料的文字版。"""
         s, c = self.state, self.content
@@ -5840,10 +5820,7 @@ class Game:
         }
         # 點體力條看的說明（explain-1）：怎麼回、新手期、回體丹（一天的上限）或補滿，數字全讀設定；體力條上沒有那顆鈕（序章、沒丹）就不提它
         newbie = roster.newbie(s, c, c.config.newbie_stamina_days)
-        data["stamina_help"] = howto.stamina_lines(
-            c, w, newbie, p.stamina_pills, button=data["pills"] is not None, today=self.pills_left_today(),
-            card=self._pill_card_bonus() if c.config.stamina_pills_per_day > 0 else 0,  # 月卡（FB-480）：上限照 pill_cap 寫
-        )
+        data["stamina_help"] = self._stamina_help(newbie, data["pills"] is not None)
         # 江湖頁行動列底下的「玩法說明」入口（explain-2）：新手期（跟體力回復加快同一段，newbie_stamina_days）才有、序章裡沒有（師父會說）；
         # 過了新手期只剩設定抽屜那一顆
         data["howto_entry"] = newbie and not prologue_rules.active(s, c)
@@ -5864,7 +5841,7 @@ class Game:
             data["stance_rule"] = stance_rule_note(s, c)  # 態勢卡底下的收季規則（正式版辛）
             # 點戰況圖卡、態勢、大事、主線看的說明（explain-2）：這一季在打什麼、亂局、大事怎麼定、你能怎麼出力。
             # 門檻讀設定、此刻在亂局的讀 chaos_fronts、大事的件數讀時刻表（howto.war_help）；網頁點開才畫，不推動第一屏
-            data["war_help"] = howto.war_help(s, c)
+            data["war_help"] = self._war_help()
             data["invites"] = self._invite_status()
         return data
 

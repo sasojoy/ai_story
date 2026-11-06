@@ -10,7 +10,7 @@ from tianxia.core.option import Option
 from tianxia.core.services import AUDIENCE_HALL_FIGURES, SNUB_NOTE
 from tianxia.events import has_events_here  # 過渡：待搬（事件：這個地點有沒有）
 
-from . import view
+from . import howto, view
 from .view import AUDIENCE_MEET, SOCIAL_LIST_INTRO, SOCIAL_TALK
 
 
@@ -112,3 +112,32 @@ def figures_here_view(ctx) -> list[dict]:
         out.append({"id": cid, "name": ch.name, "side": side, "affinity": p.affinities.get(cid, 0),
                     "talk": {"via": via, "why": why}, "aid": aid})
     return out
+
+
+def action_notes(ctx, ids: set[str], loc) -> dict[str, str]:
+    """行動列底下交友、求見那幾行（全部拆包第 59 批從 Game.action_notes 搬來，先後照舊：act:socialize、act:call、call: 迴圈）。只給 ids 裡有的；只讀，不擲骰。"""
+    s, c = ctx.state, ctx.content
+    notes: dict[str, str] = {}
+    if "act:socialize" in ids:
+        figure = ctx._socialize_figure()
+        notes["act:socialize"] = howto.social_line(
+            None if figure is None else c.characters[figure].name, has_events_here(c, loc, "socialize"), ctx._audience_hall(),
+        )
+    if "act:call" in ids:
+        notes["act:call"] = howto.CALL_LINE
+    if not s.player.picking_audience:  # 只有一位人物時選單上直接列的「求見某某」（行動列交友那一格放它）
+        for option_id in ids:
+            cid = option_id.removeprefix("call:")
+            if option_id.startswith("call:") and cid in c.characters:
+                # 跟選單上那一顆的判斷同一個次序、同一句話（FB-103：格子寫什麼，這一行就說什麼）：閉門不見寫整句（格子只放得下
+                # 「閉門不見」）；見不到寫還差幾點名望、會被打發；談滿了寫整句連同換日的那一刻（格子只放得下「已談滿」，day-scale 審查 I1）
+                name = c.characters[cid].name
+                if ctx._snubbed_character(cid):
+                    notes[option_id] = SNUB_NOTE
+                elif not ctx._can_meet(cid):
+                    notes[option_id] = howto.call_line(name, False, ctx._fame_gap(cid))
+                elif ctx._talks_left(cid) == 0:
+                    notes[option_id] = ctx._talked_out_note()
+                else:
+                    notes[option_id] = howto.call_line(name, True)
+    return notes

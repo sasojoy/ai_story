@@ -35,7 +35,7 @@ from tianxia.core.option import Option
 from tianxia.core.explore_base import LOSE_WORD  # 勝算的「必敗」（輿圖包也讀；全部拆包第 49 批搬到核心的服務檔、第 50 批移到核心的 core/explore_base.py）
 from tianxia.events import event_candidates, pick_event  # 過渡：待搬（事件：候選、抽一則）
 from tianxia.models import DuelBoss, Location, Squad
-from tianxia.rules import jianfa
+from tianxia.rules import day_turn, jianfa
 
 from . import explore_rules, howto, outing_rules
 
@@ -175,9 +175,13 @@ def outing_option(ctx, loc: Location) -> Option:
 
 def outing_note(ctx, loc: Location) -> str | None:
     """行動列底下探索那一行（act 子動詞，第 11 批從 Game.action_notes 搬來）：探索一顆開著時寫這一處多半給什麼，比重照擲骰用的那一份
-    （經 ctx._outing_plan：測試換掉它）；關著是 None（核心照舊寫舊探索那一行）。"""
+    （經 ctx._outing_plan：測試換掉它）；關著寫舊探索那一行（第 59 批併進來：比重照 ctx._explore_weights、悟意境被拿掉照 ctx._insight_blocked）。"""
     if not outing_on(ctx):
-        return None
+        c = ctx.content
+        legend = c.config.legend_item_name if c.config.explore_legend_chance > 0 else None
+        blocked = ctx._insight_blocked(loc)
+        kind, until = day_turn(c, ctx.state.world) if blocked else ("at", None)
+        return howto.explore_line(ctx._explore_weights(loc), legend, blocked, until, later=kind == "later")
     plan = ctx._outing_plan(loc)
     return howto.outing_line(plan.weights, plan.foe_note)
 

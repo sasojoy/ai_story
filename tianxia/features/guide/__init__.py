@@ -62,6 +62,11 @@ class GuideFeature(Feature):
                                     place=lambda ctx, ref: actions.newbie_step_place(ctx, ref)),)
         return self._steps
 
+    def routes(self, shell):
+        from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）
+
+        return routes.router(shell)
+
     # howto（全部拆包第 59 批「引導二」）
     def howto(self) -> tuple[HowtoHook, ...]:
         """玩法說明的六格（season、act_head、growth、stamina、fame、bag）：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
