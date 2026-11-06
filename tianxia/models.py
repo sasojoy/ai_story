@@ -3517,6 +3517,11 @@ class EpiphanyRules(_Strict):
     wis_step: float = Field(default=0.05, ge=0)
     wis_cap: float = Field(default=1.5, ge=1)
     pity: int = Field(default=40, ge=0)  # 只管第一次：這一季擲中感悟這麼多次都沒頓悟，下一次必中；0 是不保底
+    # 神品意境一個人同時能有幾份（企劃者 2026-11-06「可以有兩份神品意境」；本來寫死一份）。
+    # 兩處都讀它：arts.slot_problem（同時裝幾份）與 features/legacy 的識海解封（身上有幾份就不給解）。
+    # 本來的一份會卡死識海：這一季自己先悟到一份，上一季封進識海的那一份就永遠解不開——而神品熔不得、
+    # 也不能合成（library.melt_insight_problem、fusion.merge_problem），玩家沒有任何辦法放掉它（正式站第 9 季踩到）。
+    god_cap: int = Field(default=2, ge=1)
     demon_scale: float = Field(default=0.95, gt=0)  # 心魔的難度＝你此刻的全隊威力 × 這個倍數（你自己的影子）
     retry_days: float = Field(default=1.0, ge=0)  # 心魔打輸了，過幾個遊戲日能再打（照季長，rules.day_seconds）
     # 心境小試抽到「靜候」那一種時要等幾個遊戲日（FB-902）：預設 1.0 是設計稿的「靜候一日」，
