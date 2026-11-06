@@ -20,7 +20,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import BusHook, EffectHook, Feature, MenuHook, SeamHook, WorldHook
+from tianxia.core.features import BusHook, EffectHook, Feature, HowtoHook, MenuHook, SeamHook, WorldHook
 
 
 class SealFeature(Feature):
@@ -137,6 +137,16 @@ class SealFeature(Feature):
                 MenuHook("quick", "seal", lambda ctx, kind, arg, option_id: duel_actions.act(ctx, arg) if kind == "seal" else None),
             )
         return self._menus
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的兩個插句（fame_seal、land_seal，核心 HOWTO_INSERTS）：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (
+            HowtoHook("fame_seal", lambda content, season, page: words.fame_seal(content)),
+            HowtoHook("land_seal", lambda content, season, page: words.land_seal(content)),
+        )
 
 
 def _carry_season(ctx, old, fresh) -> None:

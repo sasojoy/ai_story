@@ -8,7 +8,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, MenuHook, Outcome, SeamHook, StepHook, Verb
+from tianxia.core.features import DefectHook, Feature, HowtoHook, MenuHook, Outcome, SeamHook, StepHook, Verb
 
 
 class CompanionsFeature(Feature):
@@ -145,6 +145,13 @@ class CompanionsFeature(Feature):
                 tail_bot=lambda ctx, profile, tail: None, tail_bot_skip=True,  # 招募歷史武將（歷史武將同行第七節）：假人不招。act:recruit 不寫 bot：照舊 ACT_SCORES 的 0.0
             ),)
         return self._verbs
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的bond 那一格：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (HowtoHook("bond", lambda content, season, page: words.bond_section(content, season, page.recruitable)),)
 
 
 FEATURE = CompanionsFeature()

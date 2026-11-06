@@ -78,3 +78,5 @@
 **第 56 批（選單收接縫，核心批）**：`take/talk`、`road/parley`、`here/recruit`、`here/errand`、`block/talk` 是這一包登記的格；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_talk_options`、`_parley_road_option`、`_recruit_options`、`_errand_options` 拿掉；上面寫「留委派」「原位」的以這一句為準。
 
 **第 57 批（分派與標題收接縫，核心批）**：`verbs()` 是新開的（`recruit`）；`quick/errand` 是這一包登記的格（回 None 照舊往下走 `choose` 掛鉤：送信、探營是 `errand:` 的正常路）。委派 `_recruit`、`_recruit_one`、`_errand_ask` 拿掉；上面寫「留委派」「原位」的以這一句為準。selftest：`levy` 一軌的目標句 `招募・{c` 在 `__init__.py` 的 `tail_title` 那一行，舊招募那一格用 `here(ctx)`，不要內聯（內聯了那個目標句會出現兩次）。同一件事比對走 `scripts/same_behavior.py`（招募某一位與調息另開 `levy` 一軌）。
+
+`howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「情誼」那一節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。

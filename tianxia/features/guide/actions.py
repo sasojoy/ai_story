@@ -8,17 +8,16 @@ from typing import TYPE_CHECKING
 
 from tianxia import atlas, figures  # 共用規則層（輿圖 atlas 第 50 批收進、大勢人物 figures 第 40 批收進）
 from tianxia import equipment, mounts, place_state, treasures  # 共用規則層
-from tianxia import howto  # 過渡：待搬
 from tianxia.characters import name_key
 from tianxia import attrset, insight_fx, training, journal, library, martial_arts, roster, team  # 核心、共用規則層
 from tianxia.core import seal_base, services  # 核心：碰到才說的玉璽碎片、簽到問核心的查詢服務（包不能 import 包）
 from tianxia import prologue as prologue_rules  # 共用規則層；Game.new 有個參數也叫 prologue，跟 engine 一樣叫 prologue_rules
 from tianxia import step as step_rules  # 核心本體（第 36 批收進 MODULES）：「你這一步」的 REF、place
 from tianxia.models import TutorialStep
-from tianxia.rules import season_one
+from tianxia.rules import season_one, stance_rule_note
 from tianxia.state import HintNote
 
-from . import enlist, newbie, opening, rules
+from . import enlist, howto, newbie, opening, rules
 from . import hints as hint_rules  # 跟 engine 一樣叫 hint_rules：函式裡有區域變數叫 hints
 
 if TYPE_CHECKING:
@@ -687,3 +686,36 @@ def carry_season(ctx: Game, old, fresh) -> None:
     if carried and not old.player.guide_skipped and not old.player.bot and not old.player.hints_off and book.season_return:
         fresh.player.hint_queue = [HintNote(id="s_return", speaker=book.head, text=book.season_return)]
     fresh.player.newbie_marks, fresh.player.newbie_done = old.player.newbie_marks, old.player.newbie_done  # 新手目標只有一輪
+
+
+# ── 玩法說明（全部拆包第 59 批「引導二」）：Game 留一行委派的四個；句子在 howto.py，這裡只照這個人此刻的狀態把引數算好 ──
+
+
+def top_up_line(ctx: Game, added: int) -> str:
+    """回體丹補到送的數字那一行（Game._top_up_pills：讀檔那一刻，沒有掛鉤）。"""
+    return howto.top_up_line(ctx.content, added)
+
+
+def howto_text(ctx: Game) -> str:
+        """設定抽屜的「玩法說明」（Markdown，explain-1 第四項；explain-2 加了這一季在打什麼、名望、投靠與軍令、三方、修練與煉製）：
+        數字讀設定（howto.page）。序章略過的人也看得到（設定抽屜誰都打得開；新手期江湖頁另有一個入口）。招募那一句只在內容裡
+        真的有人能招募時才寫。"""
+        c = ctx.content
+        rule = stance_rule_note(ctx.state, c) if season_one(c, ctx.state.world) else ""  # 「這一季在打什麼」那一節的收季規則（explain-2）
+        return howto.page(
+            c, ctx.state.world, recruitable=any(ch.kind == "recruitable" for ch in c.characters.values()), rule=rule,
+        )
+
+
+def stamina_help(ctx: Game, newbie: bool, button: bool) -> list[str]:
+    """點體力條看的說明（status_data 的 stamina_help：status 掛鉤只問開著的包、鍵的順序算行為，第 66 批才收）。button：體力條上有沒有那顆鈕。"""
+    s, c = ctx.state, ctx.content
+    return howto.stamina_lines(
+        c, s.world, newbie, s.player.stamina_pills, button=button, today=ctx.pills_left_today(),
+        card=ctx._pill_card_bonus() if c.config.stamina_pills_per_day > 0 else 0,  # 月卡（FB-480）：上限照 pill_cap 寫
+    )
+
+
+def war_help(ctx: Game) -> dict[str, list[str]]:
+    """點戰況圖卡、態勢、大事、主線看的說明（status_data 的 war_help：同上）。"""
+    return howto.war_help(ctx.state, ctx.content)

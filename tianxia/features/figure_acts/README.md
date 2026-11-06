@@ -56,3 +56,5 @@
 **第 56 批（選單收接縫，核心批）**：`here/challenge`、`plays/aid`、`plays/plan` 是這一包登記的格；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_aid_options`、`_plan_options` 拿掉（`_challenge_options` 測試在叫，留著）；上面寫「留委派」「原位」的以這一句為準。
 
 **第 57 批（分派與標題收接縫，核心批）**：`verbs()` 是新開的（`challenge`，帶後綴）。`(_act, _challenge)`、`(_fight_squad, _figure_squad)` 兩對拿掉。
+
+`howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「挑戰大勢人物」那一節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。

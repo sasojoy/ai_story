@@ -35,3 +35,5 @@
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.close`、`advance.arrive` 的 `arrive`（經 `ctx._arrivals()`：`test_seats` 換掉 `Game` 上的名字才打得到）；`sync.deliver` 的 `party`（`party.party_expires`）；`stale.road` 的 `travel`（`road_actions.drop_stale(ctx, lost_place)`，`lost_place` 是核心算的）。
 
 **第 56 批（選單收接縫，核心批）**：路上那一串（`road`：`head`、`halt`、`tasks`）與此地的前往（`here/move`）是這一包登記的格，`menu.py` 新開 `road_head`、`road_halt`、`move_options`；委派 `_move_option`、`_back_option`、`_road_task_options` 拿掉。
+
+`howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（說明頁移動那一條），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。

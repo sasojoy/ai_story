@@ -2034,3 +2034,102 @@ def test_the_bots_reach_the_package_through_the_verb_slots(game, scored):
     assert picked("act:fakeplain") == "act:fakeplain" and picked("fake:do") == "fake:do"
     for option_id in ("act:fakebot", "act:fakenone:甲", "fake:wait", "fake:idle", "act:heal", "choice:free"):
         assert picked(option_id) is None, option_id
+
+
+# ── 玩法說明的格（全部拆包第 59 批「引導二」；計畫 docs/superpowers/plans/2026-11-06-玩法說明-第59批.md 第二節）──
+
+
+class Howtoer(Feature):
+    """只登記玩法說明的格的假包；open 是 enabled 的答案（玩法說明不問 enabled）。"""
+
+    name = "howtoer"
+
+    def __init__(self, hooks, open_=True):
+        self.hooks, self.open = tuple(hooks), open_
+
+    def enabled(self, ctx):
+        return self.open
+
+    def howto(self):
+        return self.hooks
+
+
+def test_the_howto_order_is_the_table_in_the_plan():
+    """順序就是行為：22 格照換成掛鉤之前 howto.page 一段一段接的先後，一格不挪；插句三格。改這張表先過 PM。"""
+    assert features_core.HOWTO_ORDER == (
+        "season", "act_head", "explore", "growth", "sortie", "socialize", "travel", "ambush", "stamina", "fame", "join", "factions", "land",
+        "bond", "challenge", "xinde", "pages", "forge", "insight", "bag", "economy", "mall")
+    assert features_core.HOWTO_INSERTS == ("fame_seal", "fame_tavern", "land_seal")
+    assert Feature().howto() == ()
+
+
+def test_a_package_can_only_take_a_howto_slot_on_the_table_and_only_one_package_a_slot(monkeypatch):
+    """包登記的格都在兩張表上、同一格只有一包：表外的格、兩包（或同一包兩次）登記同一格，howto_hooks、howto_table 都丟 ValueError。"""
+    hook = features_core.HowtoHook
+    none = lambda content, season, page: []  # noqa: E731
+    monkeypatch.setattr(registry, "FEATURES", [Howtoer([hook("no_such_slot", none)])])
+    with pytest.raises(ValueError):
+        features_core.howto_hooks()
+    with pytest.raises(ValueError):
+        features_core.howto_table()
+    monkeypatch.setattr(registry, "FEATURES", [Howtoer([hook("bag", none)]), Howtoer([hook("bag", none)])])
+    with pytest.raises(ValueError):
+        features_core.howto_hooks()
+    monkeypatch.setattr(registry, "FEATURES", [Howtoer([hook("fame_seal", none), hook("fame_seal", none)])])
+    with pytest.raises(ValueError):
+        features_core.howto_hooks()
+
+
+def test_the_howto_table_keeps_the_order_and_asks_closed_packages_too(monkeypatch):
+    """登記的先後不算數，照 HOWTO_ORDER 排；沒人登記的格跳過；關著的包照叫（玩法說明不看個人、不問 enabled）。"""
+    hook = features_core.HowtoHook
+    bag, season = hook("bag", lambda content, season, page: ["背"]), hook("season", lambda content, season, page: ["季"])
+    monkeypatch.setattr(registry, "FEATURES", [Howtoer([bag], open_=False), Howtoer([season])])
+    assert [h.slot for h in features_core.howto_table()] == ["season", "bag"]
+    assert [h.lines(None, None, features_core.HowtoPage()) for h in features_core.howto_table()] == [["季"], ["背"]]
+    monkeypatch.setattr(registry, "FEATURES", [])
+    assert features_core.howto_hooks() == {} and features_core.howto_table() == []
+
+
+def test_the_howto_insert_knows_only_its_table_and_says_nothing_when_nobody_took_it(monkeypatch):
+    """插句只認 HOWTO_INSERTS（表上的格、寫錯的字都丟）；沒人登記回 []；有人登記照 lines 回，page 是預設的 HowtoPage。"""
+    hook = features_core.HowtoHook
+    seen = []
+    monkeypatch.setattr(registry, "FEATURES", [])
+    assert features_core.howto_insert("fame_seal", None, None) == []
+    with pytest.raises(ValueError):
+        features_core.howto_insert("bag", None, None)
+    with pytest.raises(ValueError):
+        features_core.howto_insert("no_such_insert", None, None)
+    monkeypatch.setattr(registry, "FEATURES", [Howtoer([hook("land_seal", lambda content, season, page: seen.append(page) or ["句"])], open_=False)])
+    assert features_core.howto_insert("land_seal", None, None) == ["句"]
+    assert seen == [features_core.HowtoPage()] and seen[0].recruitable is False and seen[0].rule == ""
+
+
+def test_every_howto_slot_and_insert_has_exactly_one_package():
+    """照真的 FEATURES：22 格加 3 個插句都有主人、沒有一格默默不寫（主人照計畫第二節那張表）；沒有格留在核心。"""
+    assert set(features_core.howto_hooks()) == {*features_core.HOWTO_ORDER, *features_core.HOWTO_INSERTS}
+    assert [h.slot for h in features_core.howto_table()] == list(features_core.HOWTO_ORDER)
+    assert {f.name: [h.slot for h in f.howto()] for f in features_core.registered() if f.howto()} == {
+        "guide": ["season", "act_head", "growth", "stamina", "fame", "bag"], "explore": ["explore"], "sortie": ["sortie"],
+        "socialize": ["socialize"], "travel": ["travel"], "stamina_plays": ["ambush"], "faction": ["join", "factions"],
+        "territory_acts": ["land"], "companions": ["bond"], "figure_acts": ["challenge"], "cultivation": ["xinde", "pages"],
+        "smithy": ["forge"], "sense": ["insight"], "outlets": ["economy"], "mall": ["mall"],
+        "seal": ["fame_seal", "land_seal"], "tavern": ["fame_tavern"]}
+
+
+def test_the_howto_page_is_the_table_joined_and_slots_look_up_their_functions_when_called(monkeypatch):
+    """page 只把每一格接起來（順序就是表）；每一格在叫的那一下才照模組屬性找（換掉包裡的函式打得到）。"""
+    from conftest import real_content
+    from tianxia.features.guide import howto as guide_words
+    from tianxia.features.sense import howto as sense_words
+    from tianxia.world_state import fresh_season
+
+    content = real_content("season21")
+    season = fresh_season(content)
+    view = features_core.HowtoPage(recruitable=True, rule="收季規則")
+    table = features_core.howto_table()
+    assert guide_words.page(content, season, recruitable=True, rule="收季規則") == "\n".join(
+        line for hook in table for line in hook.lines(content, season, view))
+    monkeypatch.setattr(sense_words, "insight_section", lambda content, season: ["第五十九批換掉的"])
+    assert "第五十九批換掉的" in guide_words.page(content, season, recruitable=False)

@@ -10,7 +10,7 @@ from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一�
 from tianxia.core.services import AUDIENCE_HALL_FIGURES, SNUB_NOTE
 from tianxia.events import has_events_here  # 過渡：待搬（事件：這個地點有沒有）
 
-from . import view
+from . import howto, view
 from .view import AUDIENCE_MEET, SOCIAL_LIST_INTRO, SOCIAL_TALK
 
 
@@ -147,8 +147,6 @@ def here_cell(ctx, loc, cost: dict[str, int], odds: bool) -> list[Option]:
 
 def action_notes(ctx, ids: set[str], loc) -> dict[str, str]:
     """notes/socialize 那一格（core_seams，全部拆包第 56 批；原本在 Game.action_notes，鍵的順序算行為：交友、求見、單人求見）：行動列底下交友、求見那幾行。只給 ids 裡有的。"""
-    from tianxia import howto  # noqa: PLC0415  # 過渡：待搬（第 59 批收）
-
     s, c = ctx.state, ctx.content
     notes: dict[str, str] = {}
     if "act:socialize" in ids:

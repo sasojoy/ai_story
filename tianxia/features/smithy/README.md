@@ -68,3 +68,5 @@
 **行狀記一筆 import 核心**（第 41 批合併時改，第 41 批 PM 認定第 10 條）：開發時 `smithing` 是 `from tianxia import annals, fusion` 一行；第 29 批之二把行狀拆兩半之後，舊名 `tianxia.annals` 是指到列傳包 `standing.py` 的別名（經別名 import 就是包 import 包，邊界測試擋），合併時拆成兩行：`from tianxia import fusion`（過渡）與 `from tianxia.core import annal_base as annals`（核心本體，不算過渡；包裡只用 `annals.note`、`annals.DEED`，都在記一筆那一半）。
 
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.close` 的 `smithy`（`shelf_actions.sync_close`）、`stale.mid` 的 `smithy`（`shelf_actions.drop_stale`）：收店與清單子，**兩段條件不一樣，不合併**。
+
+`howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「鐵匠鋪與神器」那一節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。

@@ -13,7 +13,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, SeamHook
+from tianxia.core.features import Feature, HowtoHook, SeamHook
 
 
 class TerritoryActsFeature(Feature):
@@ -60,6 +60,13 @@ class TerritoryActsFeature(Feature):
                 SeamHook("tick", "conquest", lambda ctx: day_actions.conquest_tick(ctx, True)),
             )
         return self._seams
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的land 那一格：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (HowtoHook("land", lambda content, season, page: words.land_section(content, season)),)
 
 
 def _turn_in_sync(ctx) -> None:

@@ -13,7 +13,7 @@ on_away、deliver_notices、after_action，下面）。這一包另接 tavern:* 
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, MenuHook, Outcome, Shop, Verb
+from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, Shop, Verb
 
 
 class TavernFeature(Feature):
@@ -120,6 +120,13 @@ class TavernFeature(Feature):
                 MenuHook("block", "tavern", lambda state, content: actions.travel_block(state, content)),
             )
         return self._menus
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的插句 fame_tavern（核心 HOWTO_INSERTS）：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (HowtoHook("fame_tavern", lambda content, season, page: words.fame_tavern(content)),)
 
 
 FEATURE = TavernFeature()

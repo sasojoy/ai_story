@@ -67,3 +67,5 @@
 **第 56 批（選單收接縫，核心批）**：`here/donate`、`here/dadian`、`idle/outlets`、`block/outlets` 是這一包登記的格；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_donate_option`、`_silver_options` 拿掉；上面寫「留委派」「原位」的以這一句為準。
 
 **第 57 批（分派與標題收接縫，核心批）**：委派 `_silver_act` 拿掉（上面「留 8 個」以這一句為準），engine 不再 import `silver`。
+
+`howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「素材的出路」那一節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。

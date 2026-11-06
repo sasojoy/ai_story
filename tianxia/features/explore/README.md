@@ -43,3 +43,7 @@
 **事件的發布點**（全部拆包第 26 批「事件機制」；順序在核心 `core/features.py` 的 `BUS_ORDER`）：`explore_actions.outing_fight` 遭遇打贏（不是城裡）發 `win`（懸賞討伐）、`explore_actions.explore_one` 收尾發 `outing`（懸賞打探→撿玉璽碎片）、`explore_base.explore` 舊探索（序章外）發 `explore`（懸賞打探）；位置照原本直接叫懸賞與 `ctx._seal_find` 的那一行，回話照舊接回 `done`、`extras`、`scouted`。這一包不再直接叫 `bounties.on_*`、`ctx._seal_find`（懸賞那幾格第 45 批由懸賞榜包登記；撿碎片那一格第 27 批起玉璽包登記）。改這幾行時連 `tests/ranger/test_bounties.py`、`tests/acts/test_conquest_rules.py` 一起跑。
 
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+
+`howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（探索那一行與說明頁探索那一條），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
+
+**第 59 批合完重印**：`explore_actions.py` 的過渡剩 `events` 兩行（函式裡的 `howto` 改讀包裡那一份，拉到檔頭）。行動列底下舊探索那一行（`Game.action_notes` 原位）併進這一包的 `Verb.note`：`outing_note` 關著探索一顆時不再回 `None`，寫舊探索那一行（`ctx._explore_weights`、`ctx._insight_blocked`、`rules.day_turn`；engine 那一段只剩問 `act_note`）。

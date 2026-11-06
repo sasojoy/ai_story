@@ -22,3 +22,5 @@
 
 - 改 `core/name_base.py`：`tianxia/features/mall/tests/test_mall_card_daily.py`（易名帖撞保留的名號）、`tests/server/test_server.py`（註冊撞保留的名號）、`tests/bots/test_bot_runner.py`（假人取名）。核心的檔不往上走，`test_for` 只挑核心測試、煙霧與寫到這兩個名字的 `test_server_bots`、`test_figures`（第 58 批量過）。
 - 改 `actions.py` 的 `buy`、`purchase`、`view`：`tianxia/features/looks/tests/`、`tianxia/features/zhuan/tests/` 與 `tianxia/features/explore/tests/test_outing.py` 也叫它們（形象、列傳、走一趟的票）。`test_for` 挑這一包的 `tests/` 與契約、邊界，不會挑到別包的測試（第 58 批量過）。
+
+`howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「商城」那一節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。

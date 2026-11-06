@@ -85,3 +85,5 @@
 **第 56 批（選單收接縫，核心批）**：`tick`、`front` 是這一包登記的格（原本 `options` 原位叫 `_seal_tick`、`_seal_options`）；先後在 `core/features.py` 的 `MENU_ORDER`；那兩個委派拿掉；上面寫「留委派」「原位」的以這一句為準。
 
 **第 57 批（分派與標題收接縫，核心批）**：`quick/seal` 是這一包登記的格；委派 `_seal_act` 拿掉（上面寫它的以這一句為準，`(_seal_act, _deliver_seal_results)` 那一對第 28 批就在包裡經 `ctx` 叫了）。
+
+`howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（別節中間的兩處插句（`fame_seal`、`land_seal`，核心 `HOWTO_INSERTS`）），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。

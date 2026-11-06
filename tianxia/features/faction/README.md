@@ -68,3 +68,5 @@
 **補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`season.grant` 的 `faction`（`ending_actions.season_grant`：開場那一則之後，`on_season_start` 在它之前）。
 
 **第 56 批（選單收接縫，核心批）**：`take/faction`、`here/sect`、`here/join`、`here/defect`、`here/lean`、`idle/faction`、`block/faction` 是這一包登記的格（投靠那幾顆從 `_everyday_options` 搬進 `join_actions.join_options`）；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_sect_options`、`_lean_options`、`_faction_pending_options`、`_defect_options` 拿掉；上面寫「留委派」「原位」的以這一句為準。
+
+`howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「投靠與軍令」「各陣營有什麼不同」兩節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。

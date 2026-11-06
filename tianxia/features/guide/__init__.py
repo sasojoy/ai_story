@@ -6,6 +6,7 @@
   enlist.py：入伍段（原 tianxia/enlist.py）——舊名都留成別名
 - actions.py：原本 Game 上的 31 個方法（Game 留 24 個一行委派）與核心原位叫的 12 個服務的本體
 - checks.py：內容檢查（碰到才說那一塊，原本在 content.validate）
+- howto.py：玩法說明的底與組裝（第 59 批：原 tianxia/howto.py 拆進 17 包，各節在各包的 howto.py，順序在核心 HOWTO_ORDER）；routes.py：/api/howto
 
 這一包沒有選項前綴：它的動作走 server 的 MAIN_ACTIONS（hints_off、skip_tutorial、view_map、view_orders、view_tab、guide_ack、
 newbie_drifter）與 /api/prologue，選單上的那幾顆是別人的（開局三選一是事件的 choice:、投靠是 faction:）；序章教體力那一步的 act:rest 接 act 子動詞（verbs，第 57 批）。
@@ -13,7 +14,7 @@ newbie_drifter）與 /api/prologue，選單上的那幾顆是別人的（開局�
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, SeamHook, StepHook, Verb
+from tianxia.core.features import DefectHook, Feature, HowtoHook, SeamHook, StepHook, Verb
 
 
 class GuideFeature(Feature):
@@ -90,6 +91,25 @@ class GuideFeature(Feature):
             self._verbs = (Verb("rest", run=lambda ctx, prepared: actions.rest(ctx),
                                 title=lambda ctx: f"調息・{ctx.content.locations[ctx.state.player.location].name}", bot_skip=True),)
         return self._verbs
+
+    def routes(self, shell):
+        from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）
+
+        return routes.router(shell)
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的六格（season、act_head、growth、stamina、fame、bag）：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (
+            HowtoHook("season", lambda content, season, page: words.season_section(content, season, page.rule)),
+            HowtoHook("act_head", lambda content, season, page: words.act_head()),
+            HowtoHook("growth", lambda content, season, page: words.jianfa_growth_lines(content, season)),
+            HowtoHook("stamina", lambda content, season, page: words.stamina_section(content, season)),
+            HowtoHook("fame", lambda content, season, page: words.fame_section(content, season)),
+            HowtoHook("bag", lambda content, season, page: words.bag_section()),
+        )
 
 
 FEATURE = GuideFeature()

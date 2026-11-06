@@ -27,7 +27,6 @@ from tianxia import atlas  # 共用規則層（大區：同一區才應得了戰
 from tianxia import battlelog  # 共用規則層（戰報）
 from tianxia import conquest  # 共用規則層（地盤：區塊、進度、推、拉、集火、易手）
 from tianxia import encounter  # 共用規則層（整隊威力）
-from tianxia import howto  # 過渡：待搬（行動列底下那一行的句子）
 from tianxia import orders  # 共用規則層（軍令：截糧的運糧隊、攻城軍令對不對；第 40 批收進）
 from tianxia import precise  # 共用規則層（一類一顆：打贏的獎勵怎麼算）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章裡沒有約戰）
@@ -50,6 +49,7 @@ from tianxia.world_state import SortieDuel, SortieSide, WorldStateStore
 
 from . import actions as sortie_actions
 from . import duel_rules as sortie_duel
+from . import howto  # 行動列底下那一行的句子（第 59 批搬進包）
 from . import rules as sortie
 
 if TYPE_CHECKING:

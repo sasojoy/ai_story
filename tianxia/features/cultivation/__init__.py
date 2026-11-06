@@ -8,7 +8,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook
+from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHook
 
 
 class CultivationFeature(Feature):
@@ -61,6 +61,16 @@ class CultivationFeature(Feature):
                 MenuHook("here", "lessons", lambda ctx, loc, cost, odds: actions.lesson_options(ctx)),
             )
         return self._menus
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的xinde、pages 兩格：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (
+            HowtoHook("xinde", lambda content, season, page: words.xinde_section(content)),
+            HowtoHook("pages", lambda content, season, page: words.pages_section()),
+        )
 
 
 FEATURE = CultivationFeature()

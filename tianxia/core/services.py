@@ -113,6 +113,10 @@
 - 核心的：`ctx._preparing()`（籌備中）、`ctx._journal_guide(notes)`（引導的話記進這一則江湖紀錄的引導那幾行）、`ctx._free_text_of(event)`
   （這一則事件有沒有隨口應對：事件檢定的委派）
 - 共用的字：`HutReward`（序章步驟的獎勵那一行的記號，核心的 `_guide` 認它；原本在 `tianxia/guide.py`，搬到這個模組，引導包 re-export）
+# guide（全部拆包第 59 批「引導二」：玩法說明；計畫 docs/superpowers/plans/2026-11-06-玩法說明-第59批.md 第三節）
+- `ctx.howto_text()`（設定抽屜那一頁：/api/howto 的路由〔guide/routes.py〕照 server 原本的寫法問 Game；本體 guide/actions.py，留委派給路由與二十幾個測試）
+- `ctx._audience_hall()`、`ctx._fame_gap(companion_id)`、`ctx._talks_left(companion_id)`、`ctx._talked_out_note()`（主人交友求見：行動列底下交友、求見那幾行
+  〔socialize/menus.py 的 action_notes〕經 ctx 問，測試換掉的打得到）
 # sense（全部拆包第 24 批「有所感與頓悟」：搬進有所感包的動作要掛、要回的；原本在 engine.py 模組層，包不能 import engine，搬到這裡，engine 照舊叫得到）
 - 共用的小函式：`outing_watch`（裝飾器：走一趟停在要選的事上時，這一下選完的得失記在那一段——經 Game 上探索包的委派 `_outing_watched`
   〔核心叫它，記在邊界測試的 CORE_DELEGATE_CALLERS；包不必直接叫〕；

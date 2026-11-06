@@ -45,7 +45,7 @@
 - 收起求見名單接 `on_drop_stale`（`_drop_stale_references` 最後那一個掛鉤；只差序章收尾挪人之後的地點）。福緣到期自己送上門第 55 批換成 `local` 的 `fortune` 那一格（夾在別的補算中間，`on_sync` 沒有對應的位置）。
 - `choose` 做完之後的 `_guide(self._note_action("socialize"))`（`kind == "call" and arg != "back"`）與前段的 `_checked_prepared`：留在 `choose` 原位（掛鉤沒有「做完記引導」的位置）。
 - 核心的表：`models.py` 的 `ALLOW_FAMILIES`（有 `call:`）與 `act:call`、`act:socialize`；`server.py` 備料判斷、整季機器人排除「名望不夠、會被打發的求見」第 60 批搬成這一包的 `bot_idle`（照舊問 `ctx.can_meet_figure`）。
-- `howto.py` 的 `social_line`、`call_line`、`CALL_LINE`（玩法說明的文字）留核心（引導與說明頁共用）。
+- 行動列底下交友、求見那幾行（第 59 批搬進 `menus.action_notes`，句子在這一包的 `howto.py`）：第 56 批起是 `notes/socialize` 那一格，`Game.action_notes` 不留委派（第 59 批的 `_social_notes` 合第 B 波時收掉）。
 - 組 `/api/main` 的 `figures_here` 那幾行留在殼（`server._main_view_body`）：包給 `figures_here_view`；像 `figure_face` 要讀 `web/img`，留殼。點大勢人物的簡介 `figure_intro`、`FIGURE_INTROS` 也留殼（`server.py`，合回第 4 段搬回來：要讀人物性子的 `persona_rules.view`，放包裡會變成包讀包）。
 
 ## 過渡（手冊 3.11）
@@ -72,3 +72,5 @@
 **第 56 批（選單收接縫，核心批）**：`take/audience`、`here/social`、`notes/socialize`、`idle/audience`、`block/audience` 是這一包登記的格（`_everyday_options` 那一段搬進 `menus.here_cell`，`action_notes` 那一段搬進 `menus.action_notes`，鍵的順序算行為；讀 `howto` 是過渡，第 59 批收）；先後在 `core/features.py` 的 `MENU_ORDER`；委派 `_precise_social_option`、`_socialize_option`、`_fame_gap`、`_audience_options` 拿掉（第 57 批的 `Verb.cell`、`Verb.note` 不必再開）；上面寫「留委派」「原位」的以這一句為準。
 
 **第 57 批（分派與標題收接縫，核心批）**：`verbs()` 是新開的（`call`、`socialize`）。`actions.press` 照原位的先後一字搬：先問召見、再扣體力、端晉升奇遇（這一支不排提示）或交友、排 `h_bond`；委派 `_socialize` 留著、格裡經 `ctx` 叫（`tests/core/test_explain.py` 換 Game 上的名字）。改這兩格另外跑：`tests/core/test_explain.py`、`tests/core/test_social.py`、`tests/bots/test_event_rotation.py`、`tests/core/test_engine.py -k "summons or call or socialize"`。
+
+`howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（交友、求見那幾行與說明頁交友那一條），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。

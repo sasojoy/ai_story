@@ -6,7 +6,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, SeamHook
+from tianxia.core.features import Feature, HowtoHook, SeamHook
 
 
 class MallFeature(Feature):
@@ -66,6 +66,13 @@ class MallFeature(Feature):
         if self._seams is None:
             self._seams = (SeamHook("season.carry", "mall", _carry_season),)
         return self._seams
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的mall 那一格：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (HowtoHook("mall", lambda content, season, page: words.mall_section(content)),)
 
 
 def _carry_season(ctx, old, fresh) -> None:

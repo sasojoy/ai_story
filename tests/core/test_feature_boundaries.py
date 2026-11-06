@@ -2514,6 +2514,24 @@ GAME_DELEGATES -= {
 }
 GAME_IMPORTS -= {"tianxia.features.mall.actions"}
 
+# guide（全部拆包第 59 批「引導二」：玩法說明；計畫 docs/superpowers/plans/2026-11-06-玩法說明-第59批.md 第三節）：這一批加的集中在這一段。engine 不再 import howto
+# （tianxia.howto 本來就不在 GAME_IMPORTS；guide.actions、socialize.menus 都已在，GAME_IMPORTS 不動），句子在各包，engine 只留一行委派。
+GAME_DELEGATES |= {
+    "howto_text",  # 公開：/api/howto（guide/routes.py）與二十幾個測試叫
+    "_top_up_line", "_stamina_help", "_war_help",
+}
+_STATUS_HELP = "status 掛鉤（feature_status）只問開著的包、又合在 main_view 頂層，接不了 status_data 裡面這一格；鍵的順序算行為（總表第 66 批才收）"
+GAME_DELEGATE_CALLERS.update({
+    ("_top_up_pills", "_top_up_line"): "_top_up_pills 歸核心（總表附錄甲）：讀檔那一刻補回體丹、寫一行，那裡沒有掛鉤",
+    ("status_data", "_stamina_help"): "點體力條看的說明：" + _STATUS_HELP,
+    ("status_data", "_war_help"): "點戰況圖卡看的說明：" + _STATUS_HELP,
+})
+# 下面這幾對是別人段裡記的：探索那一行併進探索包的 Verb.note、交友求見那幾行搬進交友求見包（都經 ctx 問），Game.action_notes 不再直接叫
+for _pair in (("action_notes", "_explore_weights"), ("action_notes", "_socialize_figure"), ("action_notes", "_audience_hall"),
+              ("action_notes", "_can_meet"), ("action_notes", "_fame_gap"), ("action_notes", "_talks_left"), ("action_notes", "_talked_out_note"),
+              ("action_notes", "_snubbed_character")):
+    del GAME_DELEGATE_CALLERS[_pair]
+
 
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py
     import io

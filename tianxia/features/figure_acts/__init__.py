@@ -9,7 +9,7 @@ enabled 一直是 True（沒有自己的總開關：護衛看 Config.figure_aid�
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Verb, WorldHook
+from tianxia.core.features import Feature, HowtoHook, MenuHook, Outcome, SeamHook, Verb, WorldHook
 
 
 class FigureActsFeature(Feature):
@@ -98,6 +98,13 @@ class FigureActsFeature(Feature):
                 tail_bot=lambda ctx, profile, tail: bots.challenge(ctx, tail),
             ),)
         return self._verbs
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的challenge 那一格：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (HowtoHook("challenge", lambda content, season, page: words.challenge_section(content, season)),)
 
 
 FEATURE = FigureActsFeature()
