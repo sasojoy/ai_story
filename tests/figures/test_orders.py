@@ -13,6 +13,7 @@ import pytest
 
 from conftest import classic_rules
 from tianxia import atlas, calendar, enlist, figures, front_lines, mapview, orders, rules, team, timetable
+from tianxia.features.map import layers as map_layers  # 第 50 批：atlas 的圖層那一半（strike_marks、STRIKE_MARK）；同檔有區域變數叫 layers
 from tianxia.content import load_content
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
@@ -1110,7 +1111,7 @@ def _all_layers(game, content):
 def test_situation_layer_marks_a_known_strike_target_place(on, faction, fid, loc, region_id, region):
     game, _ = _strike_game(on, faction, fid)
     game.state.player.visited.add(loc)
-    assert atlas.strike_marks(game.state, on) == ({loc}, set())
+    assert map_layers.strike_marks(game.state, on) == ({loc}, set())
     layers = _all_layers(game, on)
     assert f"◎ {on.locations[loc].name}" in layers["situation"]
     assert f">◎ {region}</text>" not in layers["situation"]  # 地方摸清了，大區不必標
@@ -1121,38 +1122,38 @@ def test_situation_layer_marks_a_known_strike_target_place(on, faction, fid, loc
 def test_no_strike_mark_for_other_sides_loners_finished_orders_or_a_target_you_cannot_challenge(on):
     game, order = _strike_game(on, "guan", "bocai")
     game.state.player.visited.add("huangjin_camp")
-    assert atlas.strike_marks(game.state, on) == ({"huangjin_camp"}, set())
+    assert map_layers.strike_marks(game.state, on) == ({"huangjin_camp"}, set())
     nothing = (set(), set())
     game.state.player.faction = "huang"  # 別陣營的打擊，黃巾的人看不到
-    assert atlas.strike_marks(game.state, on) == nothing and "◎" not in mapview.render_map(game.state, on, "situation")
+    assert map_layers.strike_marks(game.state, on) == nothing and "◎" not in mapview.render_map(game.state, on, "situation")
     game.state.player.faction = None  # 散人
-    assert atlas.strike_marks(game.state, on) == nothing and "◎" not in mapview.render_map(game.state, on, "situation")
+    assert map_layers.strike_marks(game.state, on) == nothing and "◎" not in mapview.render_map(game.state, on, "situation")
     game.state.player.faction = "guan"
     order.done = True  # 已經達成
-    assert atlas.strike_marks(game.state, on) == nothing and "◎" not in mapview.render_map(game.state, on, "situation")
+    assert map_layers.strike_marks(game.state, on) == nothing and "◎" not in mapview.render_map(game.state, on, "situation")
     order.done = False
     game.state.world.figures["bocai"].front = None  # 他眼下挑戰不了：不指一個打不了的地方
-    assert atlas.strike_marks(game.state, on) == nothing and "◎" not in mapview.render_map(game.state, on, "situation")
+    assert map_layers.strike_marks(game.state, on) == nothing and "◎" not in mapview.render_map(game.state, on, "situation")
     game.state.world.figures["bocai"].front = "yingru"
     game.state.world.ended = True  # 休季
-    assert atlas.strike_marks(game.state, on) == nothing
+    assert map_layers.strike_marks(game.state, on) == nothing
 
 
 def test_only_strike_orders_mark_the_map(on):
     game = _game(on, faction="guan")
     _order(game, "siege", "guan", front="yingru")
     _order(game, "intercept", "guan", front="nanyang", location="nanyang_wilds")
-    assert atlas.strike_marks(game.state, on) == (set(), set())
+    assert map_layers.strike_marks(game.state, on) == (set(), set())
     assert "◎" not in mapview.render_map(game.state, on, "situation")
 
 
 def test_situation_legend_data_has_the_strike_line_only_when_the_mark_is_drawn(on):
     game, _ = _strike_game(on, "haoqiang", "zhangmancheng")
-    assert atlas.STRIKE_MARK in mapview.render_map(game.state, on, "situation")  # 圖上標了
+    assert map_layers.STRIKE_MARK in mapview.render_map(game.state, on, "situation")  # 圖上標了
     assert mapview.legend_data(game.state, on, "situation")["strike"] == mapview.LEGEND_STRIKE  # 圖例才多那一行
     assert mapview.legend_data(game.state, on, "enemies")["strike"] == ""  # 只有局勢層標它
     guan = _game(on, faction="guan")  # 這個陣營沒有打擊軍令：沒標，也沒有那一行
-    assert atlas.strike_marks(guan.state, on) == (set(), set())
+    assert map_layers.strike_marks(guan.state, on) == (set(), set())
     assert mapview.legend_data(guan.state, on, "situation")["strike"] == ""
 
 
@@ -1160,7 +1161,7 @@ def test_the_strike_line_is_not_drawn_into_the_svg(on):
     """打擊記號那一行說明跟其他圖例一樣由網頁疊（legend_data 的 strike）；圖上只有 ◎ 本身。"""
     game, _ = _strike_game(on, "haoqiang", "zhangmancheng")
     svg = mapview.render_map(game.state, on, "situation")
-    assert atlas.STRIKE_MARK in svg and mapview.LEGEND_STRIKE not in svg
+    assert map_layers.STRIKE_MARK in svg and mapview.LEGEND_STRIKE not in svg
 
 
 def test_marked_region_label_takes_the_box_of_the_text_actually_drawn(on):

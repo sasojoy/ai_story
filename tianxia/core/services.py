@@ -326,7 +326,8 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx.map_mostly()`（主人 explore：輿圖第一層名字旁的兩個字，每一處站過去之後的比重；原本列在三、過渡 explore）
 - `ctx._map_open_places()`、`ctx._map_mostly_here()`（主人 map：畫得出來的地點；腳下這一處「多半給什麼」那一句。探索包原本直接 import `mapview.open_places`、
   `mapdata.mostly_here`，輿圖成包之後包不能 import 包，改經 Game 的一行委派問輿圖包）
-- `ctx._map_foes(loc_id)`、`ctx._fierce_line(loc)`（主人 map：自己叫自己，經 Game 的一行委派——測試換掉 `Game._map_foes` 看地點卡的對手跟著變）
+- `ctx._map_foes(loc_id)`（主人 map：自己叫自己，經 Game 的一行委派——測試換掉 `Game._map_foes` 看地點卡的對手跟著變）；`_fierce_line` 第 50 批起
+  包裡直接叫同檔的 `fierce_line`（沒有測試換掉它），`Game._fierce_line` 一行委派留著：same_behavior 的 strip 軌直接叫
 - `ctx.map_base(viewer=)`、`ctx.map_state()`、`ctx.map_places()`、`ctx.map_header()`、`ctx.world_map_svg(layer, selected)`、`ctx.map_legend(layer)`、`ctx.place_detail(loc_id)`、
   `ctx.travel_options(loc_id)`、`ctx.MAP_LAYERS`（主人 map：`views.map_view`、`views.map_base_view` 這兩個 API 資料函式與 `routes.py` 的 /api/map/state 經 Game 的委派叫，server 與測試換掉的都看得到；
   `MAP_LAYERS` 是 Game 的類別屬性，就是 `atlas.LAYERS`）

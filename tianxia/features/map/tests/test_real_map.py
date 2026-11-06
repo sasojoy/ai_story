@@ -51,7 +51,7 @@ def content():
 
 
 def _detail(content, state, loc_id: str) -> str:
-    from tianxia.atlas import detail_text
+    from tianxia.features.map.layers import detail_text
 
     return detail_text(state, content, loc_id, lambda squad_id: "穩勝")
 

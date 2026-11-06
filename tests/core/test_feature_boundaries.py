@@ -1130,15 +1130,15 @@ GAME_DELEGATES |= {
 
 
 # map（全部拆包第 49 批「輿圖一」：新包 tianxia/features/map/；計畫 docs/superpowers/plans/2026-11-06-輿圖包-第1批.md 1.1、1.4、1.5）：
-# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。11 個方法搬進包，Game 留 11 個一行委派（_map_foes、_fierce_line 也留：測試換掉 Game._map_foes、
-# 包裡經 ctx 叫），另多兩個：探索包原本直接 import mapview、mapdata（open_places、mostly_here），成包之後包不能 import 包，改經 Game 的 _map_open_places、
+# 這一批加的集中在這一段（並行的拆包線不跟別人的行穿插）。11 個方法搬進包，Game 留 11 個一行委派（_map_foes 也留：測試換掉 Game._map_foes、
+# 包裡經 ctx 叫；_fierce_line 也留：same_behavior 的 strip 軌直接叫，包裡第 50 批起直接叫同檔的 fierce_line），另多兩個：探索包原本直接 import mapview、mapdata（open_places、mostly_here），成包之後包不能 import 包，改經 Game 的 _map_open_places、
 # _map_mostly_here 問輿圖包。沒有選項前綴、沒有掛鉤可接（輿圖是只讀的畫面）、沒有 GAME_DIRECT：原本 map_state、_map_foes 兩筆（sortie.on）拿掉，
 # 現在經 ctx 問出陣包的 _sortie_mode；原本 (map_base|map_state, map_mostly)、(map_state|_map_foes, _sortie_foes|duel_on|_duel_squad|sorties_left)、
 # (_fierce_line, _practice_tier) 十幾對是 Game 叫委派，現在是包裡經 ctx 叫（服務清單二、查詢服務 # map），拿掉。
 GAME_IMPORTS |= {"tianxia.features.map.actions"}
 GAME_DELEGATES |= {
     # server 的 map_base_view（底圖）、/api/map/state（疊層）、map_view（舊輿圖的圖層、標頭、地點、詳情、移動鈕）、/api/travel 走不成時帶的 map，bot_policy
-    # 的 travel_options（假人的移動選項），測試與腳本叫的；_map_foes、_fierce_line 包裡也經 ctx 叫（測試換掉 Game._map_foes）；_map_open_places、
+    # 的 travel_options（假人的移動選項），測試與腳本叫的；_map_foes 包裡也經 ctx 叫（測試換掉 Game._map_foes）、_fierce_line 是 same_behavior 的 strip 軌直接叫（第 50 批）；_map_open_places、
     # _map_mostly_here 是探索包的查詢
     "map_base", "map_state", "_map_foes", "_fierce_line", "world_map_svg", "minimap_svg", "map_legend", "map_header", "map_places", "place_detail",
     "travel_options", "_map_open_places", "_map_mostly_here",

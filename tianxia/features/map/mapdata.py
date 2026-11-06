@@ -14,7 +14,7 @@ from tianxia.core import explore_base  # 探索表的小字、地形標籤、勝
 from tianxia.models import Content, FactionDef, Location
 from tianxia.state import GameState, Order, TerritoryWeek, WorldState
 
-from . import mapart, mapview, worldgeo
+from . import layers, mapart, mapview, worldgeo  # layers：同一包的圖層、詳情、勝算（第 50 批從 atlas 拆出來）
 
 ODDS_TONE = {"穩勝": "safe", "有把握": "safe", "五五波": "ok", "難分勝負": "ok", "凶險": "risk", "必敗": "risk", "操練": "safe"}
 ODDS_SCORE = {"穩勝": 30, "有把握": 20, "五五波": 10}  # 今天去哪裡出陣的排法（設計第五節）：軍令 100、懸賞 50、勝算、減路上分鐘
@@ -100,7 +100,7 @@ def with_mostly(core: dict, key: str, mostly: dict[str, str]) -> dict:
 
 def insight_pool(loc: Location, content: Content) -> list[str]:
     """這一處悟得到的意境（意境提示設計第六節）：照 insights.explore_gives，最濃的排第一；序章草廬走寫死的四景、不抽池子，不列
-    （同 atlas.insight_names）。開關不看：抽屜的「此地能悟」是補漏。"""
+    （同 layers.insight_names）。開關不看：抽屜的「此地能悟」是補漏。"""
     if loc.prologue_only:
         return []
     gives = insights.explore_gives(loc, content)
@@ -300,7 +300,7 @@ def _week_place(state: GameState, content: Content, faction: str | None, places:
         [(loc, WEEK_ORDER.format(title=orders.title(content, o))) for o, spots in _order_spots(state, content, faction)
          for loc in order_spots(o, spots)],
         [(loc, WEEK_BOUNTY.format(kind=kind)) for loc, kind in _bounty_marks(state, content).items()],
-        [(loc, WEEK_GOAL) for loc in atlas.goal_places(state, content)],
+        [(loc, WEEK_GOAL) for loc in layers.goal_places(state, content)],
     ]
     for group in groups:
         near = [(reach(loc), loc, why) for loc, why in group if reach(loc) is not None]
@@ -311,13 +311,13 @@ def _week_place(state: GameState, content: Content, faction: str | None, places:
 
 
 def _foes(
-    state: GameState, content: Content, loc: Location, odds: atlas.Odds, faction: str | None, squad_ids: list[str] | None = None,
+    state: GameState, content: Content, loc: Location, odds: layers.Odds, faction: str | None, squad_ids: list[str] | None = None,
 ) -> list[tuple[str, str]]:
-    """這裡遇得上的隊伍與勝算（atlas.foes：自己陣營的寫「操練」），加上這週截糧帶來的敵方運糧隊（orders.extra_enemies，
+    """這裡遇得上的隊伍與勝算（layers.foes：自己陣營的寫「操練」），加上這週截糧帶來的敵方運糧隊（orders.extra_enemies，
     出陣攻的對手就有它）：截糧的地點歸自己時，那一處的對手就是糧隊（FB-258）。
     squad_ids 給了（FB-858）：領地爭奪開著、這一處是出陣攻（或約戰開著、此刻攻不了，FB-878），列出陣真的會打的那幾路（Game._map_foes），
     不查站的隊伍。"""
-    listed = atlas.foes(content, loc, odds, faction, state.world, squad_ids)
+    listed = layers.foes(content, loc, odds, faction, state.world, squad_ids)
     names = {name for name, _ in listed}
     for sid in orders.extra_enemies(state, content, loc.id, faction):
         squad = content.squads[sid]
@@ -327,9 +327,9 @@ def _foes(
 
 
 def _worst(listed: list[tuple[str, str]]) -> tuple[str, str] | None:
-    """最險的那一隊（同 atlas.worst_foe：操練不算）。"""
-    fights = [foe for foe in listed if foe[1] != atlas.DRILL]
-    return max(fights, key=lambda foe: atlas.ODDS_ORDER.index(foe[1])) if fights else None
+    """最險的那一隊（同 layers.worst_foe：操練不算）。"""
+    fights = [foe for foe in listed if foe[1] != layers.DRILL]
+    return max(fights, key=lambda foe: layers.ODDS_ORDER.index(foe[1])) if fights else None
 
 
 def _sortie_order(state: GameState, content: Content, faction: str | None, loc_id: str, how: str | None) -> str | None:
@@ -354,8 +354,8 @@ def _bounty_marks(state: GameState, content: Content) -> dict[str, str]:
 
 
 def _people(state: GameState, content: Content) -> dict[str, list[str]]:
-    """常出沒的龍頭人物（atlas.haunters）與此刻站在那裡的大勢人物（figures.placed_characters），同名只列一次。"""
-    out = {loc_id: list(atlas.haunters(state, content, loc_id)) for loc_id in content.locations}
+    """常出沒的龍頭人物（layers.haunters）與此刻站在那裡的大勢人物（figures.placed_characters），同名只列一次。"""
+    out = {loc_id: list(layers.haunters(state, content, loc_id)) for loc_id in content.locations}
     for cid, loc in figures.placed_characters(state, content).items():
         if loc and cid in content.characters and content.characters[cid].name not in out.get(loc, []):
             out.setdefault(loc, []).append(content.characters[cid].name)
@@ -545,7 +545,7 @@ def state(
     sorties_left 是今天還能出陣幾次（散人、出陣關著是 None）；real_minutes 把世界秒換成現實分鐘（Game._real_minutes）；
     sortie_foes(地點) 由 Game.map_state 給（FB-858，減法季 3d；每一處都問，問誰由它決定：標攻的地方，與約戰開著、此刻攻不了的敵方與中立區塊，
     FB-878）：領地爭奪開著，出陣真的會打的那幾路隊伍 id（Game._map_foes；地點卡的對手、勝算字、推薦排序都跟著它）；領地爭奪關著、沒給、
-    回 None 是照舊列站的隊伍（atlas.foes）。
+    回 None 是照舊列站的隊伍（layers.foes）。
     mostly 是看的人的名字旁（Game.map_mostly，2f）：key 要跟他手上的底圖（同一份 mostly）對得上，字變了網頁才會重抓底圖。
     convoy(地點) 由 Game.map_state 給（FB-9005）：約戰開著、出陣標攻、這週截糧的運糧隊正打那裡經過（行動列那一格寫「出陣・截糧」、按了打運糧隊）；
     真的才在那一處多一個 "convoy": True（沒給、不是的地方一個鍵都不多），網頁的卡寫「出陣・截糧」、不掛攻的勝算。
@@ -560,7 +560,7 @@ def state(
     s, c, w, p = state, content, state.world, state.player
     memo: dict[tuple[str, str | None], str] = {}
 
-    def odds_at(loc_id: str) -> atlas.Odds:
+    def odds_at(loc_id: str) -> layers.Odds:
         strong = terrain.strong_at(c, loc_id)
         lie = strong.id if strong is not None else None
 
@@ -577,7 +577,7 @@ def state(
     routes = atlas.routes(s, c) if p.journey is None else {}
     pace = mounts.pace(s, c)
     order_at, bounty_at = _order_marks(s, c, faction), _bounty_marks(s, c)
-    goals, news, people = set(atlas.goal_places(s, c)), atlas.news_places(s, c), _people(s, c)
+    goals, news, people = set(layers.goal_places(s, c)), layers.news_places(s, c), _people(s, c)
     armed = mapview.armed_places(s, c)  # ⚔ 標在哪裡：跟舊輿圖同一個判斷（FB-251）；出陣關著是 None，照內容的 enemies
     base_ids = territory.bases(c) if on else {}
     fixed = c.scenario.territory.fixed if on else {}

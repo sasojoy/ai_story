@@ -2,7 +2,9 @@
 map_header、map_places、place_detail、travel_options，Game 留一行委派，server 與假人照舊叫 Game）。ctx 就是 Game（第一階）。
 全部只讀，不擲骰、不動存檔；函式名＝原本的方法名去掉前導底線。
 
-`_map_foes`、`_fierce_line` 在這裡也經 ctx 叫（Game 上的一行委派）：測試換掉 Game._map_foes 看地點卡的對手跟著變（tianxia/features/map/tests/test_jianfa_3d_map_foes.py）。
+`_map_foes` 在這裡也經 ctx 叫（Game 上的一行委派）：測試換掉 Game._map_foes 看地點卡的對手跟著變（tianxia/features/map/tests/test_jianfa_3d_map_foes.py）。
+`_fierce_line` 沒有測試換掉它，包裡直接叫同檔的 fierce_line（第 50 批）；Game 上的一行委派留著：same_behavior 的 strip 軌直接叫 game._fierce_line。
+圖層、詳情、勝算（header_text、place_choices、detail_text）在同一包的 layers（第 50 批從 atlas 拆出來）。
 open_places、mostly_here 是探索包問輿圖包的兩個查詢（原本探索包直接 import mapview、mapdata；成包之後包不能 import 包，經 Game 的委派叫這裡）。
 """
 from __future__ import annotations
@@ -12,7 +14,7 @@ from typing import TYPE_CHECKING
 from tianxia import atlas, orders  # 共用規則層（atlas 核心那一半：移動的選項 TravelOption、travel_options；第 50 批拆兩半，圖層與詳情在同一包的 layers）
 from tianxia import conquest, territory, training  # 共用規則層
 
-from . import mapdata
+from . import layers, mapdata
 from .mapview import legend_data, open_places as _open_places, render_map, render_minimap
 
 if TYPE_CHECKING:
@@ -60,7 +62,7 @@ def map_state(ctx: Game) -> dict:
         convoy=(lambda loc_id: bool(orders.extra_enemies(s, c, loc_id, faction))) if duel else None,
     )
     for loc_id, info in out["places"].items():  # 地點卡上那一句這一帶多兇（尋敵分級，Joy 2026-10-22：不寫幾級）；沒有是空字串
-        info["fierce"] = ctx._fierce_line(c.locations[loc_id])
+        info["fierce"] = fierce_line(ctx, c.locations[loc_id])
     return out
 
 
@@ -70,7 +72,7 @@ def map_foes(ctx: Game, loc_id: str) -> list[str] | None:
     領地爭奪開著，約戰關著是出陣擲的那一批（_sortie_foes：conquest.sortie_foes——中立地那裡站的全部、別人的陣營區塊控制方的兵、那裡沒兵時
     退回 Scenario.territory.side_garrison——加上截糧的運糧隊），約戰開著是貼約戰時守軍迎戰挑的那一路（_duel_squad，經驗最高的一路）；
     截糧的運糧隊正打那裡經過的，出陣那一格照舊攻打運糧隊（_duel_entry），就只有運糧隊。領地爭奪關著、散人、不是區塊、沒有對手是 None＝
-    照舊列站的隊伍（atlas.foes）。只讀，不擲骰。"""
+    照舊列站的隊伍（layers.foes）。只讀，不擲骰。"""
     s, c = ctx.state, ctx.content
     side = ctx._side()
     if side is None or not territory.on(c) or not conquest.on(c, s.world) or loc_id not in conquest.blocks(c):
@@ -106,17 +108,17 @@ def map_legend(ctx: Game, layer: str = "situation") -> dict:
 
 
 def map_header(ctx: Game) -> str:
-    return atlas.header_text(ctx.state, ctx.content)
+    return layers.header_text(ctx.state, ctx.content)
 
 
 def map_places(ctx: Game) -> list[tuple[str, str]]:
-    return atlas.place_choices(ctx.state, ctx.content)
+    return layers.place_choices(ctx.state, ctx.content)
 
 
 def place_detail(ctx: Game, loc_id: str) -> str:
-    text = atlas.detail_text(ctx.state, ctx.content, loc_id, lambda squad_id: ctx.odds(squad_id, at=loc_id))  # 照那一處的地利
+    text = layers.detail_text(ctx.state, ctx.content, loc_id, lambda squad_id: ctx.odds(squad_id, at=loc_id))  # 照那一處的地利
     loc = ctx.content.locations.get(loc_id)
-    fierce = ctx._fierce_line(loc) if loc is not None else ""  # 尋敵分級：一句這一帶多兇（Joy 2026-10-22）
+    fierce = fierce_line(ctx, loc) if loc is not None else ""  # 尋敵分級：一句這一帶多兇（Joy 2026-10-22）
     return f"{text}\n\n{fierce}" if fierce else text
 
 
