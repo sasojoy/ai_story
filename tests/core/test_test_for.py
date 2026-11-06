@@ -373,6 +373,21 @@ def test_an_engine_delegate_picks_its_package_and_the_contract():
     assert not any("一行委派" in w for w in plain.why)
 
 
+GAME_API = 'TABLE = {\n    "_tavern_price": actions.tavern_price,\n    "check_in": actions.check_in,\n}\n'
+
+
+def test_a_game_api_hunk_picks_its_package_and_the_tests_that_write_that_name():
+    """第二輪第 72 批：一行委派搬進 features/<包>/game_api.py，改表上一格挑那一包的 tests/＋核心契約＋內文寫到那個名字的；另一格的不併。"""
+    rel = "tianxia/features/tavern/game_api.py"
+    picked = test_for.pick([rel], hunks_of=_added(rel, GAME_API, 2))
+    names = {p.name for p in picked.files}
+    assert {p.name for p in (test_for.FEATURES / "tavern" / "tests").rglob("test_*.py")} <= names
+    assert {p.name for p in test_for.contract_tests()} <= names
+    assert _writes("_tavern_price") <= names and any("寫到它們的" in w for w in picked.why)
+    others = _writes("check_in") - _writes("_tavern_price") - {p.name for p in (test_for.FEATURES / "tavern" / "tests").rglob("test_*.py")} - {p.name for p in test_for.contract_tests()}
+    assert others and not others & names
+
+
 def _writes(name: str) -> set[str]:
     """內文寫到這個識別字的測試檔（不照內文歸群的 TEXT_BLIND 不算）。"""
     word = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])")

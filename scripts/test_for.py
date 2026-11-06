@@ -636,7 +636,8 @@ def _game_one_liners(src: str) -> dict[str, tuple[str, str]]:
 def engine_delegates(src: str) -> dict[str, str]:
     """engine.py 裡 Game 上的一行委派 → 它委派給哪一包（全部拆包第 11 批）：方法的本體（說明字之後）只有一句
     `return <名字>.<函式>(self, …)`（或不 return 的那一句），<名字> 是最外層 `from .features.<包> import <模組> [as <名字>]` 進來的。
-    邊界測試的 GAME_DELEGATES 是同一批方法（那一份另外記理由；這裡照原始碼認，不必兩邊同步）。"""
+    第二輪第 72 批起 engine.py 上沒有這種方法了（搬進各包 game_api.py，改表照 tianxia/features/<包>/** 那一條加 game_api_callers）；
+    留著給 base 還在第 72 批之前的 diff 認舊檔。"""
     tree = _parse(src)
     if tree is None:
         return {}
@@ -687,6 +688,18 @@ def engine_groups(hunk_list: list[Hunk], old_src: str,
             callers |= named
             why.append(f"{name}：不是委派 → 核心測試＋煙霧" + (f"＋寫到 {name} 的 {len(named)} 個檔" if named else ""))
     return core, why, packages, callers
+
+
+GAME_API_NAME = re.compile(r'(?:^\s*"|^def )(\w+)')
+
+
+def game_api_callers(f: str, base: str, hunks_of: dict | None) -> set[Path]:
+    """features/<包>/game_api.py 的 hunk 落在哪幾個名字（TABLE 的鍵、小 def）→ 內文寫到它們的測試檔（同 engine_groups 對一行委派的做法）。"""
+    given = (hunks_of or {}).get(f)
+    hunk_list = (given if given is not None else hunks(f, base))[0]
+    names = {name for hunk in hunk_list for side in hunk for _, text in side for name in GAME_API_NAME.findall(text)}
+    by_text = _index()
+    return {path for name in names for path in by_text.get(name, frozenset())}
 
 
 # ── core-events（全部拆包第 16 批修正，PM 2026-11-03）：改核心本體裡掛鉤、清單以外的模組 ─────────────
@@ -1020,6 +1033,10 @@ def pick(files: list[str], base: str | None = None,
                 result.files |= set(pkg_tests.rglob("test_*.py")) if pkg_tests.is_dir() else set()
                 result.files |= contract_tests()
                 result.why.append(f"{f}：{parts[2]} 這一包的 tests/＋核心契約")
+                if path.name == "game_api.py":  # 第二輪第 72 批：engine 上的一行委派搬進表，照舊併上內文寫到那個名字的測試檔（包外直接叫它的）
+                    named = game_api_callers(f, base, hunks_of)
+                    result.files |= named
+                    result.why.append(f"{f}：表上改到的名字 → 寫到它們的 {len(named)} 個檔")
             else:
                 core_and_smoke()
                 result.why.append(f"{f}：功能包的登記 → 核心測試＋煙霧")

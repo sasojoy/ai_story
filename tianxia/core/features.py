@@ -1680,3 +1680,32 @@ def outlock_jobs(shell: Any) -> tuple[OutlockJob, ...]:
     if missing:
         raise ValueError(f"背景寫字 {missing} 沒有人登記")
     return tuple(by_slot[slot] for slot in OUTLOCK_ORDER)
+
+
+# core_api（第二輪第 72 批「一行委派進各包的表」；計畫 docs/superpowers/plans/2026-11-07-第二輪-第72批.md）：
+# Game 上包的一行委派搬進 features/<包>/game_api.py 的 TABLE（名字 → 函式本身），engine.py 檔尾掛一次，`g.xxx` 照舊。
+def game_api_tables() -> dict[str, dict[str, Callable]]:
+    """各包的 TABLE：照資料夾名排序、檔在才收。不經 registry：`import tianxia.engine` 這一刻 registry 還沒載，它一載就多載一串包，
+    sys.modules 的先後會變；用 import_module，因為這裡只讀表、不用包的東西。"""
+    import importlib  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+
+    root = Path(__file__).resolve().parent.parent / "features"
+    return {path.parent.name: importlib.import_module(f"tianxia.features.{path.parent.name}.game_api").TABLE
+            for path in sorted(root.glob("*/game_api.py"))}
+
+
+def attach_game_api(cls: type, tables: dict[str, dict[str, Callable]] | None = None) -> None:
+    """把 TABLE 掛上類別（setattr 函式本身，不包）。同名丟例外：類別本體已經有、或兩包都掛同一個名字；先全部查完才掛。"""
+    tables = game_api_tables() if tables is None else tables
+    owners: dict[str, str] = {}
+    for package, table in tables.items():
+        for name in table:
+            if name in vars(cls):
+                raise ValueError(f"{package}/game_api.py 的 {name}：{cls.__name__} 上已經有這個名字")
+            if name in owners:
+                raise ValueError(f"{package}/game_api.py 的 {name}：{owners[name]} 也掛了這個名字")
+            owners[name] = package
+    for table in tables.values():
+        for name, func in table.items():
+            setattr(cls, name, func)
