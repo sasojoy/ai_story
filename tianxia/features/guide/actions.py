@@ -708,7 +708,7 @@ def howto_text(ctx: Game) -> str:
 
 
 def stamina_help(ctx: Game, newbie: bool, button: bool) -> list[str]:
-    """點體力條看的說明（status_data 的 stamina_help：status 掛鉤只問開著的包、鍵的順序算行為，第 66 批才收）。button：體力條上有沒有那顆鈕。"""
+    """點體力條看的說明（status_data 表 help 那一格的 stamina_help；第 66 批的表裡，那一格留在核心、照舊叫委派）。button：體力條上有沒有那顆鈕。"""
     s, c = ctx.state, ctx.content
     return howto.stamina_lines(
         c, s.world, newbie, s.player.stamina_pills, button=button, today=ctx.pills_left_today(),
@@ -717,7 +717,7 @@ def stamina_help(ctx: Game, newbie: bool, button: bool) -> list[str]:
 
 
 def war_help(ctx: Game) -> dict[str, list[str]]:
-    """點戰況圖卡、態勢、大事、主線看的說明（status_data 的 war_help：同上）。"""
+    """點戰況圖卡、態勢、大事、主線看的說明（status_data 表 war 那一格的 war_help：同上）。"""
     return howto.war_help(ctx.state, ctx.content)
 
 

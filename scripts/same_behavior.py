@@ -1370,7 +1370,16 @@ class DuelScenario(Scenario):
         self.main("乙一")
 
 
-TRACKS = {"sortie": Scenario, "duel": DuelScenario}  # 第 1 批的一軌（出陣）、第 2 批的一軌（約戰）：各自一個資料庫、各自切一半
+class _TrackTable(dict):
+    """軌的表：同一個名字再登記一次就丟 ValueError。各批都有自己的 _*_register_track，全部走到這裡；不擋的話後登記的默默蓋掉前面那一軌，那一軌就少驗了（第 B 波碰到 loom、abacus 各撞一次）。"""
+
+    def __setitem__(self, name: str, scenario: type) -> None:
+        if name in self:
+            raise ValueError(f"軌名 {name} 登記了兩次：{self[name].__name__} 與 {scenario.__name__}")
+        super().__setitem__(name, scenario)
+
+
+TRACKS = _TrackTable({"sortie": Scenario, "duel": DuelScenario})  # 第 1 批的一軌（出陣）、第 2 批的一軌（約戰）：各自一個資料庫、各自切一半
 
 
 # ═══════════════════════════ 子行程：假人 ═══════════════════════════

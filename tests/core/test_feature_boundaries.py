@@ -2520,17 +2520,14 @@ GAME_DELEGATES |= {
     "howto_text",  # 公開：/api/howto（guide/routes.py）與二十幾個測試叫
     "_top_up_line", "_stamina_help", "_war_help",
 }
-_STATUS_HELP = "status 掛鉤（feature_status）只問開著的包、又合在 main_view 頂層，接不了 status_data 裡面這一格；鍵的順序算行為（總表第 66 批才收）"
+_STATUS_HELP = "第 66 批 status_data 的表裡這一格留在核心（同一格還有別的鍵），句子在新手引導包，經委派問"
 GAME_DELEGATE_CALLERS.update({
     ("_top_up_pills", "_top_up_line"): "_top_up_pills 歸核心（總表附錄甲）：讀檔那一刻補回體丹、寫一行，那裡沒有掛鉤",
     ("status_data", "_stamina_help"): "點體力條看的說明：" + _STATUS_HELP,
     ("status_data", "_war_help"): "點戰況圖卡看的說明：" + _STATUS_HELP,
 })
-# 下面這幾對是別人段裡記的：探索那一行併進探索包的 Verb.note、交友求見那幾行搬進交友求見包（都經 ctx 問），Game.action_notes 不再直接叫
-for _pair in (("action_notes", "_explore_weights"), ("action_notes", "_socialize_figure"), ("action_notes", "_audience_hall"),
-              ("action_notes", "_can_meet"), ("action_notes", "_fame_gap"), ("action_notes", "_talks_left"), ("action_notes", "_talked_out_note"),
-              ("action_notes", "_snubbed_character")):
-    del GAME_DELEGATE_CALLERS[_pair]
+# 下面這一對是別人段裡記的：探索那一行併進探索包的 Verb.note（經 ctx 問），Game.action_notes 不再直接叫（交友求見那幾對第 56 批的段已經拿掉）
+del GAME_DELEGATE_CALLERS[("action_notes", "_explore_weights")]
 
 
 # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格 STATUS_ORDER，計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第66批.md 第四節）
