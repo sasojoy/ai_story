@@ -83,6 +83,17 @@ def cached_content(root, profile=None) -> Content:
     return pickle.loads(_MASTERS[key][1])
 
 
+def copy_real_content(dest: Path) -> None:
+    """真實內容抄成一份攤平的（content/ 整份加各包宣告的檔，都在 dest/<rel>，全部拆包第 62 批之前的樣子）：抄一份、改一個檔、看 load_content 擋不擋的測試用。
+    dest 不是真實的根，load_content 照舊攤平讀（content._locate）。"""
+    from tianxia.core.features import pack_content
+
+    shutil.copytree(REAL_CONTENT, dest)
+    for rel, path in pack_content().items():
+        (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, dest / rel)
+
+
 def real_content(profile=None) -> Content:
     """正式內容（content/）的複本；profile 是設定覆寫檔（例如 "week7"）。"""
     return cached_content(REAL_CONTENT, profile)

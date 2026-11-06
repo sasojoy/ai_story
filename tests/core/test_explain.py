@@ -364,8 +364,10 @@ def _old_words_in(node, where, file, out):
 def test_the_old_words_left_in_content_are_the_listed_ones():
     import json
 
+    from tianxia.content import real_files
+
     out = set()
-    for path in sorted((ROOT / "content").rglob("*.json")):
+    for path in real_files().values():
         _old_words_in(json.loads(path.read_text(encoding="utf-8")), None, path.name, out)
     assert out == CONTENT_OLD_WORDS
 

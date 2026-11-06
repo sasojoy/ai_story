@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from conftest import real_content
+from tianxia.content import real_event_files
 
 CONTENT_DIR = Path(__file__).parents[2] / "content"
 EVENTS = CONTENT_DIR / "events"
@@ -28,7 +29,7 @@ POOLS = {
     "explore": ([*sorted(EVENTS.glob("explore_*.json"))], {
         "xinde": 15, "trend": True, "materials": True, "banned": (*ADDED, "learn_skills"), "free_text": False,
     }),
-    "social": ([*sorted(EVENTS.glob("social_*.json"))], {
+    "social": ([path for path in real_event_files() if path.name.startswith("social_")], {  # 交友包的（全部拆包第 62 批）
         "xinde": 12, "trend": False, "materials": False, "banned": (*ADDED, "learn_skills", "marks"), "free_text": True,
     }),
     "region": (REGION_FILES, {

@@ -14,7 +14,7 @@ from tianxia.models import Condition
 from grade_kit import raw_difficulty
 
 CONTENT_DIR = Path(__file__).parents[4] / "content"
-SOCIAL_FILES = sorted((CONTENT_DIR / "events").glob("social_*.json"))
+SOCIAL_FILES = sorted((Path(__file__).parents[1] / "content" / "events").glob("social_*.json"))  # 這一包的內容檔（全部拆包第 62 批搬進包）
 
 
 @pytest.fixture(scope="module")

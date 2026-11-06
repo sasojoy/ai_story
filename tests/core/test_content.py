@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from conftest import FIXTURE
+from conftest import FIXTURE, copy_real_content
 from tianxia import naming
 from tianxia.content import ContentError, load_content, profile_line, validate
 from tianxia.models import (
@@ -1503,10 +1503,8 @@ def test_location_desc_when_is_checked(tmp_path):
 
 def _real_copy(tmp_path):
     """真實內容的一份副本（fixture 內容沒有第一季的結局與季末大事）。"""
-    from pathlib import Path
-
     root = tmp_path / "content"
-    shutil.copytree(Path(__file__).parents[2] / "content", root)
+    copy_real_content(root)
     return root
 
 

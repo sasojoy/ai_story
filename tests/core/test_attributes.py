@@ -103,7 +103,7 @@ def test_real_content_writes_grades_and_the_bands_match_the_ruling():
         assert grade == key
         dc = {g.key: g.dc for g in real_content().config.checks.grades}[grade]
         assert dc + shift == d
-    leftover = [p.name for p in (ROOT / "content").rglob("*.json")
+    leftover = [p.name for p in content_mod.real_files().values()
                 if convert_grades.convert_text(p.read_text(encoding="utf-8"))[1]]
     assert leftover == [], f"還有寫舊難度的檢定：跑 python scripts/convert_grades.py checks --apply（{leftover}）"
 
