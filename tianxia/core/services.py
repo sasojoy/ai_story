@@ -574,7 +574,7 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 - `ctx.fatigue_next()`（探索包：下一場的疲勞）、`ctx.socialize_starts_dialogue()`、`ctx.socialize_is_futile()`、`ctx.can_meet_figure(fid)`（交友求見包：開口是不是對話、會不會白跑、求見見不見得到）、
   `ctx.sortie_mode()`、`ctx.duel_convoy_here()`（出陣包：這一下攻或守、運糧隊在不在這裡）
 
-# shell_server（全部拆包第 69 批；三段式的 A、C 段：鎖外那一段搬進各包 routes.py，A、C 照舊經 Game 的委派叫——假人走同一批委派、測試換 Game.xxx 要打得到；同戰記第 52 批那三個。只給各包自己的 routes.py 接三段式，別包不叫）
+# shell_server（全部拆包第 69 批；三段式的 A、C 段：鎖外那一段搬進各包 routes.py，A、C 照舊經 Game 的委派叫——假人走同一批委派、測試換 Game.xxx 要打得到；同戰記第 52 批那三個。只給各包自己的 routes.py 接三段式，別包不叫：test_feature_boundaries.py 的 RELAY_OWNERS 守，這一段加名字要一起加）
 - 決戰：`ctx.battle_text_request(text)`、`ctx.submit_battle_custom_action(text, rate)`
 - 單挑：`ctx.arena_crowd_request()`、`ctx.apply_arena_crowd(note, text)`、`ctx.duel_text_request(text)`、`ctx.duel_gamble(...)`
 - 人物情誼：`ctx.letter_request()`、`ctx.apply_letter(note, text)`、`ctx.persuade_request(errand_id, text)`、`ctx.persuade(request, rate)`、`ctx.dialogue_request(option_id, text)`、`ctx.say_max()`

@@ -1558,6 +1558,47 @@ def test_feature_packages_only_touch_the_service_list_on_the_game():
     assert found == []
 
 
+# shell_server（全部拆包第 69 批）：服務清單上三段式的 A、C 段，一次多 43 個名字，清單又不分包，上面那條看不出別包叫它們。
+# 這些是各包自己的委派，只准主人的 routes.py 接三段式；別包叫就是跨包（手冊 3.4 第 1 條；第 B 波審查）。
+RELAY_OWNERS = {
+    "battle": {"battle_text_request", "submit_battle_custom_action"},
+    "bout": {"arena_crowd_request", "apply_arena_crowd", "duel_text_request", "duel_gamble"},
+    "companions": {"letter_request", "apply_letter", "persuade_request", "persuade", "dialogue_request", "say_max"},
+    "craft": {"create_request", "create_intent", "create_reread_request", "create_reread", "forge_request"},
+    "cultivation": {"ascend_request", "ascend_line"},
+    "explore": {"outing_tale_request", "outing_say", "outing_set_tale"},
+    "feast": {"feast_text_request", "feast_toast"},
+    "figure_acts": {"yuedan_request", "apply_yuedan"},
+    "peers": {"peer_request"},
+    "seal": {"seal_text_request", "seal_gamble"},
+    "sense": {"epiphany_request", "epiphany_names", "sense_request", "sense_draw"},
+    "tavern": {"tavern_chatter_request", "apply_tavern_chatter", "tavern_ask_request", "tavern_ask"},
+    "territory_acts": {"xingshi_waiting", "xingshi_request", "settle_xingshi", "release_xingshi"},
+    "zhuan": {"biography_request", "write_biography"},
+}
+
+
+def foreign_relay_calls(source: str, module: str, package: str) -> list[str]:
+    """這一包經 Game 叫了別包三段式的名字。"""
+    owner = {name: pack for pack, names in RELAY_OWNERS.items() for name in names}
+    return [f"{module}:{node.lineno} {node.value.id}.{node.attr}（{owner[node.attr]} 的）" for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in CTX_NAMES
+            and owner.get(node.attr, package) != package]
+
+
+def test_the_three_stage_relay_names_are_only_called_by_their_owner():
+    text = SERVICES.read_text(encoding="utf-8")
+    listed = set(re.findall(r"`ctx\.(\w+)", text[text.index("# shell_server"):text.index("不在清單上的")]))
+    assert listed == set().union(*RELAY_OWNERS.values())  # 清單上那一段跟這張表不多不少
+    assert foreign_relay_calls("def f(ctx):\n    ctx.apply_letter(1, 2)\n", "x", "tavern")  # 真的看得到別包叫
+    assert not foreign_relay_calls("def f(ctx):\n    ctx.apply_letter(1, 2)\n", "x", "companions")
+    found = []
+    for name in _packages():
+        for path in _package_files(name):
+            found += foreign_relay_calls(path.read_text(encoding="utf-8"), _modname(path), name)
+    assert found == []
+
+
 # core-events（全部拆包第 16 批「事件檢定進核心」，計畫 docs/superpowers/plans/2026-11-01-事件檢定進核心.md）：事件檢定的本體從 Game 搬進
 # 核心本體 tianxia/core/event_check.py。以前那幾個方法在 Game 上，叫包的委派會被 game_links 記成 GAME_DELEGATE_CALLERS；搬進 tianxia/core/
 # 之後 game_links（只掃 engine.py）看不到，所以這裡補兩條：核心模組經 ctx 叫的不准是包的委派；Game 上叫 event_check 的只有那幾個一行的委派。
