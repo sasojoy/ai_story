@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from tianxia import atlas, figures  # 共用規則層（輿圖 atlas 第 50 批收進、大勢人物 figures 第 40 批收進）
 from tianxia import equipment, mounts, place_state, treasures  # 共用規則層
-from tianxia import howto  # 過渡：待搬
 from tianxia.characters import name_key
 from tianxia import attrset, insight_fx, training, journal, library, martial_arts, roster, team  # 核心、共用規則層
 from tianxia.core import seal_base, services  # 核心：碰到才說的玉璽碎片、簽到問核心的查詢服務（包不能 import 包）
@@ -18,7 +17,7 @@ from tianxia.models import TutorialStep
 from tianxia.rules import season_one
 from tianxia.state import HintNote
 
-from . import enlist, newbie, opening, rules
+from . import enlist, howto, newbie, opening, rules
 from . import hints as hint_rules  # 跟 engine 一樣叫 hint_rules：函式裡有區域變數叫 hints
 
 if TYPE_CHECKING:

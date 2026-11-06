@@ -13,7 +13,7 @@ newbie_drifter）與 /api/prologue，選單上的那幾顆是別人的（act:res
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, StepHook
+from tianxia.core.features import DefectHook, Feature, HowtoHook, StepHook
 
 
 class GuideFeature(Feature):
@@ -61,6 +61,20 @@ class GuideFeature(Feature):
             self._steps = (StepHook("newbie", lambda ctx, status, orders: actions.newbie_step_items(ctx, status), ref="newbie",
                                     place=lambda ctx, ref: actions.newbie_step_place(ctx, ref)),)
         return self._steps
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的六格（season、act_head、growth、stamina、fame、bag）：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (
+            HowtoHook("season", lambda content, season, page: words.season_section(content, season, page.rule)),
+            HowtoHook("act_head", lambda content, season, page: words.act_head()),
+            HowtoHook("growth", lambda content, season, page: words.jianfa_growth_lines(content, season)),
+            HowtoHook("stamina", lambda content, season, page: words.stamina_section(content, season)),
+            HowtoHook("fame", lambda content, season, page: words.fame_section(content, season)),
+            HowtoHook("bag", lambda content, season, page: words.bag_section()),
+        )
 
 
 FEATURE = GuideFeature()

@@ -15,7 +15,6 @@ import hashlib
 from typing import TYPE_CHECKING
 
 from tianxia import calendar, team
-from tianxia import howto  # 過渡：待搬（遊歷那一行的句子）
 from tianxia import materials  # 共用規則層（素材：打贏會不會掉）
 from tianxia import mounts  # 共用規則層（坐騎：必敗先問的那一句寫策馬脫身的機會）
 from tianxia import orders  # 共用規則層（軍令：截糧時那一帶的敵方運糧隊；第 40 批收進）
@@ -30,6 +29,7 @@ from tianxia.rules import front_of, resolve_trend
 
 from . import actions  # 出陣本體（第 1 批）：出陣開著時遊歷的對手池、守勢拿這一處自家那一路的數字
 from . import duel_actions  # 出陣約戰（第 2 批）：約戰開著時守勢收進此地、一天記一點貢獻，出陣那一格不打仗
+from . import howto  # 遊歷那一行的句子（第 59 批搬進包）
 from . import rules
 from .rules import TRAIN_CONFIRM, TRAIN_CONFIRM_RIDING
 

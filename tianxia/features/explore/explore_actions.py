@@ -37,7 +37,7 @@ from tianxia.events import event_candidates, pick_event  # 過渡：待搬（事
 from tianxia.models import DuelBoss, Location, Squad
 from tianxia.rules import jianfa
 
-from . import explore_rules, outing_rules
+from . import explore_rules, howto, outing_rules
 
 
 @dataclass(frozen=True)
@@ -178,8 +178,6 @@ def outing_note(ctx, loc: Location) -> str | None:
     （經 ctx._outing_plan：測試換掉它）；關著是 None（核心照舊寫舊探索那一行）。"""
     if not outing_on(ctx):
         return None
-    from tianxia import howto  # noqa: PLC0415  過渡：待搬（行動列底下那一行的句子；函式裡 import：howto 照舊 import explore_one 的舊名）
-
     plan = ctx._outing_plan(loc)
     return howto.outing_line(plan.weights, plan.foe_note)
 

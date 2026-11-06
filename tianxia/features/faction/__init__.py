@@ -9,7 +9,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, Outcome, StepHook
+from tianxia.core.features import DefectHook, Feature, HowtoHook, Outcome, StepHook
 
 
 class FactionFeature(Feature):
@@ -106,6 +106,16 @@ class FactionFeature(Feature):
             self._steps = (StepHook("join", lambda ctx, status, orders: join_actions.join_step_items(ctx), ref="join",
                                     place=lambda ctx, ref: join_actions.join_step_place(ctx, ref)),)
         return self._steps
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的join、factions 兩格：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (
+            HowtoHook("join", lambda content, season, page: words.join_section(content, season)),
+            HowtoHook("factions", lambda content, season, page: words.factions_section(content, season)),
+        )
 
 
 FEATURE = FactionFeature()

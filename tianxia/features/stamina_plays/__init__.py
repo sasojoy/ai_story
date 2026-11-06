@@ -9,7 +9,7 @@ README.md 寫這一包做什麼、導覽與設計稿。
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, WorldHook
+from tianxia.core.features import Feature, HowtoHook, Outcome, WorldHook
 
 
 class StaminaPlaysFeature(Feature):
@@ -55,6 +55,13 @@ class StaminaPlaysFeature(Feature):
 
             self._world = (WorldHook("muster", "works", lambda store, content, definition, start, now: works_rules.on_muster(store, content, definition)),)
         return self._world
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的ambush 那一格：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (HowtoHook("ambush", lambda content, season, page: words.ambush_lines(content)),)
 
 
 FEATURE = StaminaPlaysFeature()

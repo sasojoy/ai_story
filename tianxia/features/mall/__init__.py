@@ -6,7 +6,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature
+from tianxia.core.features import Feature, HowtoHook
 
 
 class MallFeature(Feature):
@@ -57,6 +57,13 @@ class MallFeature(Feature):
             if item.name in seen:
                 need(False, f"商城 {item.id}：跟 {seen[item.name]} 同名「{item.name}」")
             seen.setdefault(item.name, item.id)
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的mall 那一格：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (HowtoHook("mall", lambda content, season, page: words.mall_section(content)),)
 
 
 FEATURE = MallFeature()

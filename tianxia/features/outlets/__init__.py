@@ -12,7 +12,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, Shop, Verb
+from tianxia.core.features import Feature, HowtoHook, Outcome, Shop, Verb
 
 
 class OutletsFeature(Feature):
@@ -121,6 +121,13 @@ class OutletsFeature(Feature):
                 *(silver_verb(what) for what in ("silver_donate", "mentor", "furnace", "buy_legend")),
             )
         return self._verbs
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的economy 那一格：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (HowtoHook("economy", lambda content, season, page: words.economy_section(content, season)),)
 
 
 FEATURE = OutletsFeature()

@@ -7,7 +7,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome
+from tianxia.core.features import Feature, HowtoHook, Outcome
 
 
 class SocializeFeature(Feature):
@@ -44,6 +44,13 @@ class SocializeFeature(Feature):
         from . import bots  # noqa: PLC0415
 
         return bots.score(option)
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的socialize 那一格：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (HowtoHook("socialize", lambda content, season, page: words.socialize_section(content, season)),)
 
 
 FEATURE = SocializeFeature()

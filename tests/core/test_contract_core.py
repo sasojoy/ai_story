@@ -1385,3 +1385,32 @@ def test_the_howto_insert_knows_only_its_table_and_says_nothing_when_nobody_took
     monkeypatch.setattr(registry, "FEATURES", [Howtoer([hook("land_seal", lambda content, season, page: seen.append(page) or ["句"])], open_=False)])
     assert features_core.howto_insert("land_seal", None, None) == ["句"]
     assert seen == [features_core.HowtoPage()] and seen[0].recruitable is False and seen[0].rule == ""
+
+
+def test_every_howto_slot_and_insert_has_exactly_one_package():
+    """照真的 FEATURES：22 格加 3 個插句都有主人、沒有一格默默不寫（主人照計畫第二節那張表）；沒有格留在核心。"""
+    assert set(features_core.howto_hooks()) == {*features_core.HOWTO_ORDER, *features_core.HOWTO_INSERTS}
+    assert [h.slot for h in features_core.howto_table()] == list(features_core.HOWTO_ORDER)
+    assert {f.name: [h.slot for h in f.howto()] for f in features_core.registered() if f.howto()} == {
+        "guide": ["season", "act_head", "growth", "stamina", "fame", "bag"], "explore": ["explore"], "sortie": ["sortie"],
+        "socialize": ["socialize"], "travel": ["travel"], "stamina_plays": ["ambush"], "faction": ["join", "factions"],
+        "territory_acts": ["land"], "companions": ["bond"], "figure_acts": ["challenge"], "cultivation": ["xinde", "pages"],
+        "smithy": ["forge"], "sense": ["insight"], "outlets": ["economy"], "mall": ["mall"],
+        "seal": ["fame_seal", "land_seal"], "tavern": ["fame_tavern"]}
+
+
+def test_the_howto_page_is_the_table_joined_and_slots_look_up_their_functions_when_called(monkeypatch):
+    """page 只把每一格接起來（順序就是表）；每一格在叫的那一下才照模組屬性找（換掉包裡的函式打得到）。"""
+    from conftest import real_content
+    from tianxia.features.guide import howto as guide_words
+    from tianxia.features.sense import howto as sense_words
+    from tianxia.world_state import fresh_season
+
+    content = real_content("season21")
+    season = fresh_season(content)
+    view = features_core.HowtoPage(recruitable=True, rule="收季規則")
+    table = features_core.howto_table()
+    assert guide_words.page(content, season, recruitable=True, rule="收季規則") == "\n".join(
+        line for hook in table for line in hook.lines(content, season, view))
+    monkeypatch.setattr(sense_words, "insight_section", lambda content, season: ["第五十九批換掉的"])
+    assert "第五十九批換掉的" in guide_words.page(content, season, recruitable=False)

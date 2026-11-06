@@ -20,7 +20,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import BusHook, EffectHook, Feature, WorldHook
+from tianxia.core.features import BusHook, EffectHook, Feature, HowtoHook, WorldHook
 
 
 class SealFeature(Feature):
@@ -104,6 +104,16 @@ class SealFeature(Feature):
                 EffectHook("shard", lambda r: seal.effect_shard(r)),
             )
         return self._effects
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的兩個插句（fame_seal、land_seal，核心 HOWTO_INSERTS）：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (
+            HowtoHook("fame_seal", lambda content, season, page: words.fame_seal(content)),
+            HowtoHook("land_seal", lambda content, season, page: words.land_seal(content)),
+        )
 
 
 FEATURE = SealFeature()

@@ -16,7 +16,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Verb
+from tianxia.core.features import Feature, HowtoHook, Verb
 
 
 class SortieFeature(Feature):
@@ -77,6 +77,13 @@ class SortieFeature(Feature):
         if option_id.startswith(duel_rules.PREFIX) and duel_actions.duel_on(ctx):
             return duel_actions.duel_choice(ctx, option_id)
         return None
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的sortie 那一格：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (HowtoHook("sortie", lambda content, season, page: words.sortie_section(content, season)),)
 
 
 FEATURE = SortieFeature()

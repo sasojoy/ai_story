@@ -17,7 +17,7 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, Verb
+from tianxia.core.features import Feature, HowtoHook, Outcome, Verb
 
 
 class SmithyFeature(Feature):
@@ -70,6 +70,13 @@ class SmithyFeature(Feature):
         from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）
 
         return routes.router(shell)
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的forge 那一格：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (HowtoHook("forge", lambda content, season, page: words.forge_section(content, season)),)
 
 
 FEATURE = SmithyFeature()

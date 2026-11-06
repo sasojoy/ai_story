@@ -15,7 +15,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Verb, WorldHook
+from tianxia.core.features import Feature, HowtoHook, Verb, WorldHook
 
 
 class ExploreFeature(Feature):
@@ -81,6 +81,13 @@ class ExploreFeature(Feature):
 
             self._world = (WorldHook("next", "inscriptions", lambda *args: outing_rules.world_next(*args)),)
         return self._world
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的explore 那一格：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (HowtoHook("explore", lambda content, season, page: words.explore_section(content, season)),)
 
 
 FEATURE = ExploreFeature()

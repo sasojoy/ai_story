@@ -8,7 +8,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, Outcome, StepHook
+from tianxia.core.features import DefectHook, Feature, HowtoHook, Outcome, StepHook
 
 
 class CompanionsFeature(Feature):
@@ -82,6 +82,13 @@ class CompanionsFeature(Feature):
 
             self._steps = (StepHook("errand", lambda ctx, status, orders: errands.step_items(ctx.state, ctx.content)),)
         return self._steps
+
+    # howto（全部拆包第 59 批「引導二」）
+    def howto(self) -> tuple[HowtoHook, ...]:
+        """玩法說明的bond 那一格：順序在核心 HOWTO_ORDER，不問 enabled；在叫的那一下才照模組屬性找。"""
+        from . import howto as words  # noqa: PLC0415
+
+        return (HowtoHook("bond", lambda content, season, page: words.bond_section(content, season, page.recruitable)),)
 
 
 FEATURE = CompanionsFeature()
