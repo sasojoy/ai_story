@@ -399,11 +399,19 @@ def test_god_insights_cannot_be_merged_melted_or_stacked_in_slots():
     if other is not None:
         assert fusion.merge_problem(s, c, w, god_id, other) == fusion._refuse(fusion.GOD_KEPT, "神品")
     assert library.melt_insight_problem(s, c, w, god_id) == library.GOD_KEPT
-    s.player.insight_fx["悟:98"] = InsightFx(quality="上品", grand=s.player.insight_fx[god_id].grand)
-    s.player.insights.append("悟:98")
-    art = s.player.member.wugong_id
-    s.player.art_slots[art] = ["悟:98"]
-    assert arts.slot_problem(s, c, w, s.player.member.neigong_id, god_id) == arts.refuse(arts.GOD_ONE, "只裝一個")
+    # 神品同時能裝幾份看 Config.epiphany.god_cap（企劃者 2026-11-06 從一份改成兩份）
+    for n, extra in enumerate(("悟:98", "悟:97"), start=1):
+        s.player.insight_fx[extra] = InsightFx(quality="上品", grand=s.player.insight_fx[god_id].grand)
+        s.player.insights.append(extra)
+        s.player.art_slots.setdefault(f"假門{n}", [None])[0] = extra
+    cap = c.config.epiphany.god_cap
+    c.config.epiphany.god_cap = 2
+    assert arts.slot_problem(s, c, w, s.player.member.neigong_id, god_id) == arts.refuse(
+        arts.GOD_FULL.format(n=2), "神品滿了")  # 已經裝著兩份，第三份擋下來
+    c.config.epiphany.god_cap = 3
+    assert arts.slot_problem(s, c, w, s.player.member.neigong_id, god_id) != arts.refuse(
+        arts.GOD_FULL.format(n=3), "神品滿了")  # 上限放寬就裝得下
+    c.config.epiphany.god_cap = cap
 
 
 def test_season_cap_and_one_at_a_time():

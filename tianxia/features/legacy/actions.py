@@ -33,12 +33,12 @@ OFFER_NOTE = "上一季身上的神品意境可以挑一份封進識海（{names
 TAKEN = "這一季江湖上已經有一個神品意境叫「{name}」了，先取的人優先。替識海裡的那一份換個名字。"
 OPENED = "識海解封：神品意境「{name}」（屬{attribute}）回到你身上。"
 FITS = "這一份要裝在合得上屬{attribute}的武學上才生效；裝不上的話，先換一門武學。"
-HOLDING = "你身上已經有一份神品意境了：神品一人最多一份，先放掉那一份才解得開識海。"
+HOLDING = "你身上的神品意境已經有 {n} 份了：一個人最多這麼多，先放掉一份才解得開識海。"
 NOT_YET = "（此刻無法這麼做。）"
 WHY_TIME = "開季滿一天"
 WHY_LEVEL = "{level} 級以上"
 WHY_XINDE = "心得 {xinde}"
-WHY_HELD = "先放掉身上那一份神品"
+WHY_HELD = "先放掉一份身上的神品"
 # 傳承頁竹簡上的短名（門路的旗標 → 幾個字；長的那一句是 LegacyTier.text）
 SHORT = {
     "legacy_zheng_1": "書院不問惡名", "legacy_zheng_2": "俠義多一法", "legacy_zheng_3": "俠士相敬",
@@ -53,8 +53,15 @@ def _gods(state: GameState) -> list[str]:
     return [iid for iid in p.own_insights if insight_fx.is_god(state, iid)]
 
 
-def _held(state: GameState) -> bool:
-    return bool(_gods(state)) or state.player.god_naming is not None
+def _held(ctx) -> bool:
+    """身上的神品（含正在等著取名的那一份）滿了沒有；滿了就解不開識海。
+
+    上限是 Config.epiphany.god_cap（企劃者 2026-11-06「可以有兩份神品意境」）。本來寫死一份會把識海卡死：
+    這一季自己先悟到一份，上一季封進去的那一份就再也拿不出來——神品熔不得、也不能合成，玩家沒有辦法放掉它。
+    """
+    state = ctx.state
+    held = len(_gods(state)) + (1 if state.player.god_naming is not None else 0)
+    return held >= ctx.content.config.epiphany.god_cap
 
 
 def _blockers(ctx) -> list[str]:
@@ -82,7 +89,7 @@ def options(ctx) -> list[Option]:
         if sealed.names:
             out += [Option(id=f"legacy:name:{i}", label=NAME_LABEL.format(name=n)) for i, n in enumerate(sealed.names)]
         else:
-            why = _blockers(ctx) + ([WHY_HELD] if _held(ctx.state) else [])
+            why = _blockers(ctx) + ([WHY_HELD] if _held(ctx) else [])
             label = OPEN_WAIT.format(name=sealed.insight.name, why="、".join(why)) if why else OPEN_LABEL.format(name=sealed.insight.name)
             out.append(Option(id="legacy:open", label=label, enabled=not why))
     return out
@@ -146,8 +153,8 @@ def _open(ctx, choice: int | None) -> list[str]:
     sealed = book.sealed if book is not None else None
     if sealed is None or _blockers(ctx):
         return [NOT_YET]
-    if _held(ctx.state):
-        return [HOLDING]
+    if _held(ctx):
+        return [HOLDING.format(n=ctx.content.config.epiphany.god_cap)]
     if choice is None:
         if sealed.names:
             return [NOT_YET]
@@ -244,7 +251,7 @@ def status(ctx) -> dict:
                 "names": list(sealed.names),
             },
             "need": _needs(ctx),
-            "held": _held(ctx.state),
+            "held": _held(ctx),
             "offers": [{"name": o.insight.name, "attribute": o.insight.attribute, "season": o.season} for o in view.offers],
         },
     }}

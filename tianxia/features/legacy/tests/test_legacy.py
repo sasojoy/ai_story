@@ -181,15 +181,33 @@ def test_a_name_taken_this_season_asks_for_another():
     assert game.world.get_season().god_names[names[1]] == game.state.player.name
 
 
-def test_one_god_insight_at_a_time():
+def test_the_shihai_opens_while_you_are_under_the_god_cap():
+    """身上的神品沒滿就解得開（企劃者 2026-11-06「可以有兩份神品意境」，Config.epiphany.god_cap）。
+
+    本來寫死一份，結果識海會卡死：這一季自己先悟到一份，上一季封進去的那一份就再也拿不出來——
+    神品熔不得、也不能合成，玩家沒有任何辦法放掉它（正式站第 9 季踩到）。
+    """
     game, iid = god_game()
     next_season(game)
     game.choose("legacy:seal:0")
-    give_god(game, "斷水流雲")  # 這一季又悟了一份
+    give_god(game, "斷水流雲")  # 這一季又悟了一份：身上一份、識海一份，合起來剛好到頂
+    _unsealable(game)
+    assert game.content.config.epiphany.god_cap == 2
+    option = next(o for o in game.options() if o.id == "legacy:open")
+    assert option.enabled and actions.WHY_HELD not in option.label
+
+
+def test_the_shihai_stays_shut_once_the_god_cap_is_full():
+    game, iid = god_game()
+    next_season(game)
+    game.choose("legacy:seal:0")
+    give_god(game, "斷水流雲")
+    give_god(game, "孤星墜海")  # 兩份了，到頂
     _unsealable(game)
     option = next(o for o in game.options() if o.id == "legacy:open")
     assert not option.enabled and actions.WHY_HELD in option.label
-    assert actions._open(game, None) == [actions.HOLDING]  # 選單之外直接叫也擋
+    assert actions._open(game, None) == [  # 選單之外直接叫也擋
+        actions.HOLDING.format(n=game.content.config.epiphany.god_cap)]
 
 
 def test_bots_seal_first_and_unseal_like_people():
