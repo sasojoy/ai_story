@@ -17,7 +17,7 @@ sync 的補送、閉關中與路上的入口、店面那一頁、戰力快照抄
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, SeamHook, Shop, Verb, WorldHook
+from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Shop, Verb, WorldHook
 
 
 class BoutFeature(Feature):
@@ -128,6 +128,25 @@ class BoutFeature(Feature):
 
             self._seams = (SeamHook("sync.deliver", "arena", lambda ctx: arena_actions.deliver_arena(ctx)),)
         return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：頭目戰接管整個選單（排在 menu 掛鉤前面）；閉關中、路上也能上擂台（此地的入口是店面登記）；打到一半不算閒著；店面那一頁就是這一場；動身被擋。"""
+        if self._menus is None:
+            from . import arena_actions, duel_actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("take", "duel", lambda ctx: duel_actions.duel_menu(ctx) if ctx.state.player.duel is not None else None),
+                MenuHook("busy", "arena", lambda ctx: arena_actions.arena_entry(ctx)),
+                MenuHook("road", "arena", lambda ctx, j: arena_actions.arena_entry(ctx)),
+                MenuHook("idle", "duel", lambda ctx: ctx.state.player.duel is not None),
+                MenuHook("idle", "arena", lambda ctx: ctx.state.player.picking_arena or ctx.state.player.arena is not None),
+                MenuHook("open", "arena", lambda ctx: "arena" if ctx.state.player.arena is not None else None),
+                MenuHook("block", "bout", lambda state, content: arena_actions.travel_block(state, content)),
+            )
+        return self._menus
 
 
 FEATURE = BoutFeature()

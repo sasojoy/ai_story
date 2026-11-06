@@ -1686,3 +1686,140 @@ def test_menu_any_stops_at_the_first_true(monkeypatch):
     assert calls == ["audience", "smithy"]
     monkeypatch.setattr(registry, "FEATURES", [Menuy([MenuHook("idle", "audience", note("audience", False))])])
     assert features_core.menu_any("idle", {}, "ctx") is False
+
+
+def _menu_core_slots(at):
+    """核心代叫的格：engine._MENU_CORE、atlas._BLOCK_CORE、移動包 departure._DEPART_CORE 三份（atlas、departure 沒有 Game；這兩份只有一個位置）。"""
+    from tianxia import atlas, engine
+    from tianxia.features.travel import departure
+
+    return set({**engine._MENU_CORE, "block": atlas._BLOCK_CORE, "depart": departure._DEPART_CORE}.get(at, ()))
+
+
+def test_the_core_and_the_packages_take_every_menu_slot_exactly_once():
+    """核心代叫的格與包登記的格（照真的 FEATURES）合起來剛好是表上的格、沒有重疊：沒有一格默默不跑、也沒有一格兩邊都寫。誰登記哪一格照計畫第二節鎖住。"""
+    from tianxia import engine
+
+    assert set(engine._MENU_CORE) <= set(features_core.MENU_ORDER)
+    for at, order in features_core.MENU_ORDER.items():
+        mine = features_core.menu_hooks(at)
+        theirs = _menu_core_slots(at)
+        assert not mine.keys() & theirs, at
+        assert mine.keys() | theirs == set(order), at
+    got = {f.name: sorted((h.at, h.slot) for h in f.menus()) for f in features_core.registered() if f.menus()}
+    assert got == {
+        "seal": sorted([("tick", "seal"), ("front", "seal")]),
+        "zhuan": [("rest", "zhuan")],
+        "bout": sorted([("take", "duel"), ("busy", "arena"), ("road", "arena"), ("idle", "duel"), ("idle", "arena"), ("open", "arena"), ("block", "bout")]),
+        "sense": sorted([("take", "sense"), ("idle", "sense")]),
+        "story": sorted([("take", "story"), ("here", "story")]),
+        "companions": sorted([("take", "talk"), ("road", "parley"), ("here", "recruit"), ("here", "errand"), ("block", "talk")]),
+        "faction": sorted([("take", "faction"), ("here", "sect"), ("here", "join"), ("here", "defect"), ("here", "lean"), ("idle", "faction"), ("block", "faction")]),
+        "socialize": sorted([("take", "audience"), ("here", "social"), ("notes", "socialize"), ("idle", "audience"), ("block", "audience")]),
+        "bounties": sorted([("take", "bounties"), ("here", "bounties"), ("idle", "bounties"), ("open", "bounties"), ("depart", "bounties"), ("block", "bounties")]),
+        "smithy": sorted([("take", "smithy"), ("here", "smithy"), ("idle", "smithy"), ("open", "smithy"), ("depart", "smithy"), ("block", "smithy")]),
+        "gear": sorted([("take", "gear"), ("here", "gear"), ("idle", "gear"), ("open", "gear"), ("depart", "gear"), ("block", "gear")]),
+        "outlets": sorted([("here", "donate"), ("here", "dadian"), ("idle", "outlets"), ("block", "outlets")]),
+        "tavern": sorted([("idle", "tavern"), ("block", "tavern")]),
+        "military": sorted([("take", "omen"), ("here", "order"), ("here", "rank2"), ("here", "rank"), ("here", "omen"), ("idle", "omen")]),
+        "figure_acts": sorted([("here", "challenge"), ("plays", "aid"), ("plays", "plan")]),
+        "travel": sorted([("road", "head"), ("road", "halt"), ("road", "tasks"), ("here", "move")]),
+        "stamina_plays": sorted([("plays", "head"), ("block", "ambush")]),
+        "seclusion": [("busy", "seclusion")],
+        "cultivation": [("here", "lessons")],
+        "peers": [("here", "invite")],
+    }
+
+
+def _every_menu_slot(calls, answer):
+    """登記表上每一格包的格的假包（關著）：叫到就記 (位置, 格)、回 answer(位置, 格)。"""
+    def note(at, slot):
+        return lambda *args: calls.append((at, slot)) or answer(at, slot)
+
+    return Menuy([MenuHook(at, slot, note(at, slot)) for at, order in features_core.MENU_ORDER.items() for slot in order if slot not in _menu_core_slots(at)], open_=False)
+
+
+_MENU_EMPTY = {"front": [], "rest": [], "busy": [], "road": [], "here": [], "plays": [], "notes": {}}
+
+
+def _package_menu_slots(at):
+    return [(at, slot) for slot in features_core.MENU_ORDER[at] if slot not in _menu_core_slots(at)]
+
+
+def test_the_game_asks_the_menu_table_at_its_places(game, monkeypatch):
+    """Game.options、_idle、_shop_open、action_notes 在位置上問表：先後照表；tick=False 不問 tick；關著的包照問。換掉 FEATURES 之後包的格只叫假包。"""
+    calls = []
+    monkeypatch.setattr(registry, "FEATURES", [_every_menu_slot(calls, lambda at, slot: _MENU_EMPTY.get(at))])
+    game.options()
+    assert calls[:2] == [("tick", "seal"), ("front", "seal")]
+    assert [c for c in calls if c[0] == "take"] == _package_menu_slots("take")
+    assert [c for c in calls if c[0] == "here"] == _package_menu_slots("here")
+    calls.clear()
+    game.options(tick=False)
+    assert ("tick", "seal") not in calls
+    calls.clear()
+    assert game._idle() is True
+    assert calls == _package_menu_slots("idle")
+    calls.clear()
+    assert game._shop_open() is None
+    assert calls == _package_menu_slots("open")
+    calls.clear()
+    game.action_notes(["act:socialize"])
+    assert calls == [("notes", "socialize")]
+
+
+def test_the_game_takes_the_first_answer_of_the_take_row(game, monkeypatch):
+    """take 接管整個選單：第一個不是 None 的就是選單（空的也是），後面的不問；閉關、路上在 take 之後。"""
+    calls = []
+
+    def answer(at, slot):
+        if (at, slot) == ("take", "gear"):
+            return []
+        return _MENU_EMPTY.get(at)
+
+    monkeypatch.setattr(registry, "FEATURES", [_every_menu_slot(calls, answer)])
+    assert game._everyday_options(False) == []
+    assert ("take", "gear") in calls and ("take", "omen") not in calls
+    assert not [c for c in calls if c[0] == "here"]
+
+
+def test_the_shop_open_row_turns_an_empty_answer_into_none(game, monkeypatch):
+    """open 格回 "" 是坐著、這裡不開門：_shop_open 回 None，後面的不問（鐵匠鋪的單子開著、榜不在這裡）。"""
+    calls = []
+    monkeypatch.setattr(registry, "FEATURES", [_every_menu_slot(calls, lambda at, slot: "" if (at, slot) == ("open", "smithy") else None)])
+    assert game._shop_open() is None
+    assert calls == [("open", "arena"), ("open", "bounties"), ("open", "smithy")]
+
+
+def test_travel_block_walks_its_row_and_core_slots_sit_between_the_packages(game, monkeypatch):
+    """動身被擋照表：包的格與核心代叫的穿插。閉關（核心）在守著埋伏（包）前面：閉關中不問埋伏那一格；什麼都沒有回 None；格拿到的是傳進來的 state（結伴拿別人的 state 問）。"""
+    from tianxia import atlas
+
+    seen = []
+    calls = []
+    monkeypatch.setattr(registry, "FEATURES", [Menuy([
+        MenuHook("block", slot, (lambda slot: lambda state, content: calls.append(slot) or seen.append(state))(slot))
+        for slot in ("bout", "talk", "audience", "bounties", "smithy", "gear", "outlets", "tavern", "faction", "ambush")])])
+    state = game.state
+    state.world.ended = False
+    state.pending_event = None
+    assert atlas.travel_block(state, game.content) is None
+    assert calls == ["bout", "talk", "audience", "bounties", "smithy", "gear", "outlets", "tavern", "faction", "ambush"]
+    assert all(s is state for s in seen)
+    calls.clear()
+    state.player.busy_until = 1.0
+    blocked = atlas.travel_block(state, game.content)
+    assert blocked is not None and blocked.reason == "閉關中，不能安排前往" and not blocked.to_jianghu
+    assert "ambush" not in calls and calls[-1] == "faction"
+
+
+def test_the_departure_row_clears_in_the_table_order(game, monkeypatch):
+    """動身收店照表：懸賞榜、帶路、鐵匠鋪、馬市、店面登記的店。帶路（移動包代叫）夾在包的格中間。"""
+    from tianxia.features.travel import departure
+
+    calls = []
+    game.state.player.parley_escort = "某人"
+    monkeypatch.setattr(registry, "FEATURES", [_every_menu_slot(calls, lambda at, slot: None)])
+    features_core.menu_run("depart", departure._DEPART_CORE, game)
+    assert calls == _package_menu_slots("depart")
+    assert game.state.player.parley_escort is None

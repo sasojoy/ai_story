@@ -8,7 +8,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, SeamHook
+from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook
 
 
 class CultivationFeature(Feature):
@@ -48,6 +48,19 @@ class CultivationFeature(Feature):
                 SeamHook("stale.early", "cultivation", lambda ctx: actions.drop_old_zhuifeng(ctx)),
             )
         return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單的一格（順序在 MENU_ORDER；不問 enabled）：此地的拜師學藝。"""
+        if self._menus is None:
+            from . import actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("here", "lessons", lambda ctx, loc, cost, odds: actions.lesson_options(ctx)),
+            )
+        return self._menus
 
 
 FEATURE = CultivationFeature()

@@ -7,7 +7,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, SeamHook
+from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook
 
 
 class SocializeFeature(Feature):
@@ -55,6 +55,23 @@ class SocializeFeature(Feature):
 
             self._seams = (SeamHook("local", "fortune", lambda ctx: actions.fortune_due(ctx)),)
         return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：求見名單接管整個選單、不算閒著、動身被擋；此地的交友與求見、行動列底下那幾行。"""
+        if self._menus is None:
+            from . import menus  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("take", "audience", lambda ctx: menus.audience_options(ctx) if ctx.state.player.picking_audience else None),
+                MenuHook("here", "social", lambda ctx, loc, cost, odds: menus.here_cell(ctx, loc, cost, odds)),
+                MenuHook("notes", "socialize", lambda ctx, ids, loc: menus.action_notes(ctx, ids, loc)),
+                MenuHook("idle", "audience", lambda ctx: ctx.state.player.picking_audience),
+                MenuHook("block", "audience", lambda state, content: menus.travel_block(state, content)),
+            )
+        return self._menus
 
 
 FEATURE = SocializeFeature()

@@ -13,7 +13,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, SeamHook
+from tianxia.core.features import Feature, MenuHook, SeamHook
 
 from . import zhuan_end
 
@@ -57,6 +57,19 @@ class ZhuanFeature(Feature):
 
             self._seams = (SeamHook("sync.deliver", "zhuan", lambda ctx: actions.tick(ctx)),)
         return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單的一格（順序在 MENU_ORDER；不問 enabled）：休季那一顆後面，列傳為終點開著、手上有列傳的票時多幾顆用票的鈕（減法季批 7b；關著、沒票一顆不多）。"""
+        if self._menus is None:
+            from . import actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("rest", "zhuan", lambda ctx: actions.options(ctx)),
+            )
+        return self._menus
 
 
 FEATURE = ZhuanFeature()

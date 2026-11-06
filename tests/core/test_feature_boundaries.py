@@ -2408,6 +2408,45 @@ GAME_DELEGATE_CALLERS.update({
     ("_reset_player_for_new_season", "_tutorial_intro"): "開場那一則江湖紀錄（_write）的引數：是引數不是一段，沒有格可接",
 })
 
+# core_seams（全部拆包第 56 批「選單收接縫」；計畫 docs/superpowers/plans/2026-11-06-選單收接縫-第56批.md 四、五）：這一批的增減集中在這一段（核心批，沒有新包）。
+# options、_everyday_options、action_notes、_idle、_shop_open、_stamina_play_options、atlas.travel_block、出發收店裡各包那一段換成 MENU_ORDER 的格，包登記自己那一格。
+# GAME_DIRECT 維持 1（_squad_encounter，第 57 批）。_shop_open 三間店不進 Shop 的理由在計畫第四節與各包 menus() 的說明。
+# 只剩這幾處呼叫的委派拿掉（ast 量過：engine 這幾個方法以外、包、測試、腳本都沒有屬性或字串叫）；留著的（socialize_is_futile、_can_meet、_talks_left、_talked_out_note、_challenge_options、
+# _snubbed_character、_socialize_figure、_audience_hall、_stamina_play_options、_fs_asking_text）測試或包在叫
+GAME_DELEGATES -= {
+    "_duel_menu", "_arena_entry", "_recruit_options", "_errand_options", "_talk_options", "_parley_road_option", "_sense_menu", "_precise_social_option", "_socialize_option", "_fame_gap",
+    "_audience_options", "_story_menu", "_story_options", "_zhuan_options", "_order_options", "_rank2_options", "_rank_action_options", "_fs_asking_options", "_omen_options", "_donate_option",
+    "_silver_options", "_invite_options", "_move_option", "_back_option", "_road_task_options", "_smith_options", "_faction_pending_options", "_sect_options", "_defect_options", "_lean_options",
+    "_market_options", "_bounty_options", "_seal_tick", "_seal_options", "_stamina_play_head", "_aid_options", "_plan_options",
+}
+GAME_IMPORTS -= {"tianxia.features.stamina_plays.actions", "tianxia.features.figure_acts.aid_actions"}
+for _pair in (
+    ("_everyday_options", "_duel_menu"), ("_everyday_options", "_arena_entry"), ("_everyday_options", "_recruit_options"), ("_everyday_options", "_errand_options"),
+    ("_everyday_options", "_talk_options"), ("_everyday_options", "_parley_road_option"), ("_everyday_options", "_sense_menu"), ("_everyday_options", "_precise_social_option"),
+    ("_everyday_options", "_socialize_option"), ("_everyday_options", "socialize_is_futile"), ("_everyday_options", "_can_meet"), ("_everyday_options", "_fame_gap"),
+    ("_everyday_options", "_talks_left"), ("_everyday_options", "_talked_out_note"), ("_everyday_options", "_audience_options"), ("_everyday_options", "_story_menu"),
+    ("_everyday_options", "_story_options"), ("_everyday_options", "_zhuan_options"), ("_everyday_options", "_challenge_options"), ("_everyday_options", "_snubbed_character"),
+    ("_everyday_options", "_order_options"), ("_everyday_options", "_rank2_options"), ("_everyday_options", "_rank_action_options"), ("_everyday_options", "_fs_asking_options"),
+    ("_everyday_options", "_omen_options"), ("_everyday_options", "_donate_option"), ("_everyday_options", "_silver_options"), ("_everyday_options", "_invite_options"),
+    ("_everyday_options", "_move_option"), ("_everyday_options", "_back_option"), ("_everyday_options", "_road_task_options"), ("_everyday_options", "_smith_options"),
+    ("_everyday_options", "_faction_pending_options"), ("_everyday_options", "_sect_options"), ("_everyday_options", "_defect_options"), ("_everyday_options", "_lean_options"),
+    ("_everyday_options", "_market_options"), ("_everyday_options", "_bounty_options"),
+    ("action_notes", "_socialize_figure"), ("action_notes", "_audience_hall"), ("action_notes", "_can_meet"), ("action_notes", "_fame_gap"), ("action_notes", "_talks_left"),
+    ("action_notes", "_talked_out_note"), ("action_notes", "_snubbed_character"),
+    ("options", "_seal_tick"), ("options", "_seal_options"),
+    ("_stamina_play_options", "_stamina_play_head"), ("_stamina_play_options", "_aid_options"), ("_stamina_play_options", "_plan_options"),
+):
+    del GAME_DELEGATE_CALLERS[_pair]
+# options 留在原位的決戰四對：理由改寫（計畫第四節）。查過 core/features.py：MENU_ORDER 的格只回一串（lines）或第一個（first），這裡是三種結果；menu、options 掛鉤只問開著的包（active）
+_battle_why = ("battle_status 這個值從第一段傳到後面、中間夾暫停那一道，結果有「接在平常的選單前面」「整個取代（再接 defect:cancel）」「只能看」三種：MENU_ORDER 的格沒有這個回傳形狀，"
+               "menu、options 掛鉤又只問開著的包；不接（第 56 批）")
+GAME_DELEGATE_CALLERS.update({(_caller, _name): _battle_why for _caller, _name in (
+    ("options", "_battle_for_me"), ("options", "_watching_battle"), ("options", "_fighting"), ("options", "_battle_menu"),
+)})
+# atlas.travel_block 換之前直接讀的另外 14 格：改問 MENU_ORDER["block"]，各包登記自己那一格
+ATLAS_PACKAGE_FIELDS |= {"duel", "arena", "picking_arena", "pending_companion", "picking_audience", "picking_bounty", "picking_smith", "picking_market", "picking_dadian", "picking_donate",
+                         "picking_tavern", "pending_faction", "pending_defect", "ambush"}
+
 
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py
     import io

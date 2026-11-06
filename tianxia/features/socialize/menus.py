@@ -5,8 +5,9 @@
 """
 from __future__ import annotations
 
-from tianxia import figures, precise, prologue as prologue_rules, roster
+from tianxia import figures, precise, prologue as prologue_rules, ranks, roster
 from tianxia.core.option import Option
+from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.core.services import AUDIENCE_HALL_FIGURES, SNUB_NOTE
 from tianxia.events import has_events_here  # 過渡：待搬（事件：這個地點有沒有）
 
@@ -112,3 +113,70 @@ def figures_here_view(ctx) -> list[dict]:
         out.append({"id": cid, "name": ch.name, "side": side, "affinity": p.affinities.get(cid, 0),
                     "talk": {"via": via, "why": why}, "aid": aid})
     return out
+
+
+def here_cell(ctx, loc, cost: dict[str, int], odds: bool) -> list[Option]:
+    """here/social 那一格（core_seams，全部拆包第 56 批；原本在 Game._everyday_options，本體與先後一字不動）：一類一顆開著時是交友那一顆（交友只談話、求見併進交友，正式季整合 2.8；
+    拜入門派是前一格 here/sect），關著是舊的交友與求見。"""
+    s, c = ctx.state, ctx.content
+    if precise.on(c, s.world):
+        return [precise_social_option(ctx, cost["socialize"])]
+    people = ctx._figures_here()
+    opts: list[Option] = []
+    # 只有一位大勢人物、沒有交友事件、他又見不到（名望不夠、閉門不見、這個遊戲日談滿）、福緣也沒到、也不在召見的地點：
+    # 交友只會花 5 點體力換同一句打發，所以不給，這條路只剩不花體力的求見（下面）
+    only_the_door = len(people) == 1 and ranks.summons_event(s, c) is None and view.is_futile(ctx)
+    if (has_events_here(c, loc, "socialize") or 0 < len(people) < AUDIENCE_HALL_FIGURES) and not only_the_door:
+        # 兩位以上大勢人物的地點，交友只走福緣與地點事件、從不開口對話（見 socialize_figure），
+        # 所以只在有交友事件時才給；人物改由下面的「求見」指名
+        opts.append(socialize_option(ctx, people, cost["socialize"]))
+    if len(people) == 1:  # 只有一位：直接求見他，一直按得下去（武學與成長設計 9.1）
+        cid = people[0]
+        ch = c.characters[cid]
+        if ctx._snubbed_character(cid):
+            opts.append(Option(id=f"call:{cid}", label=f"求見{ch.name}（{SNUB_NOTE}）", enabled=False))
+        elif not ctx._can_meet(cid):
+            opts.append(Option(id=f"call:{cid}", label=f"求見{ch.name}（名望還差 {view.fame_gap(ctx, cid)}）"))  # 按下去走打發，見 brush_off
+        elif view.talks_left(ctx, cid) == 0:  # 求見一直都在：談滿了也留著、灰掉，說法跟求見名單一樣
+            opts.append(Option(id=f"call:{cid}", enabled=False, label=f"求見{ch.name}（{view.talked_out_note(ctx)}）"))
+        else:
+            opts.append(ctx._cost_option(f"call:{cid}", f"求見{ch.name}", cost["socialize"]))
+    if len(people) >= AUDIENCE_HALL_FIGURES:
+        opts.append(Option(id="act:call", label="求見"))  # 只是打開第二層選單，不花體力（見 audience_options）
+    return opts
+
+
+def action_notes(ctx, ids: set[str], loc) -> dict[str, str]:
+    """notes/socialize 那一格（core_seams，全部拆包第 56 批；原本在 Game.action_notes，鍵的順序算行為：交友、求見、單人求見）：行動列底下交友、求見那幾行。只給 ids 裡有的。"""
+    from tianxia import howto  # noqa: PLC0415  # 過渡：待搬（第 59 批收）
+
+    s, c = ctx.state, ctx.content
+    notes: dict[str, str] = {}
+    if "act:socialize" in ids:
+        figure = ctx._socialize_figure()
+        notes["act:socialize"] = howto.social_line(
+            None if figure is None else c.characters[figure].name, has_events_here(c, loc, "socialize"), view.audience_hall(ctx),
+        )
+    if "act:call" in ids:
+        notes["act:call"] = howto.CALL_LINE
+    if not s.player.picking_audience:  # 只有一位人物時選單上直接列的「求見某某」（行動列交友那一格放它）
+        for option_id in ids:
+            cid = option_id.removeprefix("call:")
+            if option_id.startswith("call:") and cid in c.characters:
+                # 跟選單上那一顆的判斷同一個次序、同一句話（FB-103：格子寫什麼，這一行就說什麼）：閉門不見寫整句（格子只放得下
+                # 「閉門不見」）；見不到寫還差幾點名望、會被打發；談滿了寫整句連同換日的那一刻（格子只放得下「已談滿」，day-scale 審查 I1）
+                name = c.characters[cid].name
+                if ctx._snubbed_character(cid):
+                    notes[option_id] = SNUB_NOTE
+                elif not ctx._can_meet(cid):
+                    notes[option_id] = howto.call_line(name, False, view.fame_gap(ctx, cid))
+                elif view.talks_left(ctx, cid) == 0:
+                    notes[option_id] = view.talked_out_note(ctx)
+                else:
+                    notes[option_id] = howto.call_line(name, True)
+    return notes
+
+
+def travel_block(state, content) -> TravelBlock | None:
+    """block/audience 那一格（core_seams，全部拆包第 56 批；原本在 atlas.travel_block，字一字不動）：求見名單開著。"""
+    return TravelBlock("求見中，先返回才能安排前往", to_jianghu=True) if state.player.picking_audience else None

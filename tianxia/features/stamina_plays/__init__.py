@@ -9,7 +9,7 @@ README.md 寫這一包做什麼、導覽與設計稿。
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, SeamHook, WorldHook
+from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, WorldHook
 
 
 class StaminaPlaysFeature(Feature):
@@ -66,6 +66,20 @@ class StaminaPlaysFeature(Feature):
 
             self._seams = (SeamHook("sync.close", "ambush", lambda ctx: ambush_actions.expire(ctx)),)
         return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：體力玩法那一串的頭（設伏、收伏、屯糧）；守著埋伏不能動身。"""
+        if self._menus is None:
+            from . import actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("plays", "head", lambda ctx: actions.options(ctx)),
+                MenuHook("block", "ambush", lambda state, content: actions.travel_block(state, content)),
+            )
+        return self._menus
 
 
 FEATURE = StaminaPlaysFeature()

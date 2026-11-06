@@ -16,6 +16,7 @@ from tianxia import silver  # 共用規則層
 from tianxia import team  # 核心
 from tianxia import shopview  # 過渡：待搬（店面的畫面資料，SHARED_LATER）
 from tianxia.core.option import Option  # 核心
+from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.core import smith_base  # 核心（打造單子讀的那一小半：收店那兩格讀，core_seams）
 
 from . import smithing
@@ -273,3 +274,22 @@ def drop_stale(ctx: Game) -> None:
         not p.picking_smith or not smith_base.draft_here(s, c, p.smith_draft) or smith_base.draft_stale(c, p.smith_draft)
     ):
         p.smith_draft = None  # 單子只在鐵匠鋪開著、那一欄也開著時有意義（兵器的單子看武器、防具的單子看防具：一欄關了另一欄還開著，鐵匠鋪照開，那一欄的單子要清）；內容改版拿掉了單子上的種類或素材：選單畫不出來，從頭來
+
+
+def here_cell(ctx: Game, loc, cost, odds) -> list[Option]:
+    """here/smithy 那一格（core_seams，全部拆包第 56 批；原本在 Game._everyday_options）：鐵匠鋪（兵器設計 4.1；裝備四欄 4.6：武器或防具開著就開門）：只是打開第二層選單，不花體力。"""
+    return [Option(id="act:smith", label=weapons.SMITH)] if equipment.smith_open(ctx.state, ctx.content) else []
+
+
+def open_cell(ctx: Game) -> str | None:
+    """open/smithy 那一格（core_seams，全部拆包第 56 批；原本在 Game._shop_open）：沒坐著是 None；一步一步的單子開著或這裡不開門了是 ""（核心 or None），不然 smith。"""
+    s, c = ctx.state, ctx.content
+    p = s.player
+    if not p.picking_smith:
+        return None
+    return "smith" if p.smith_draft is None and equipment.smith_open(s, c) else ""
+
+
+def travel_block(state, content) -> TravelBlock | None:
+    """block/smithy 那一格（core_seams，全部拆包第 56 批；原本在 atlas.travel_block，字一字不動）。"""
+    return TravelBlock("鐵匠鋪還開著，先離開才能安排前往", to_jianghu=True) if state.player.picking_smith else None

@@ -9,7 +9,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, Outcome, SeamHook, StepHook
+from tianxia.core.features import DefectHook, Feature, MenuHook, Outcome, SeamHook, StepHook
 
 
 class FactionFeature(Feature):
@@ -117,6 +117,25 @@ class FactionFeature(Feature):
 
             self._seams = (SeamHook("season.grant", "faction", lambda ctx, old: ending_actions.season_grant(ctx, old)),)
         return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：待確認的畫面接管整個選單（空的也算，髒存檔）；此地的拜入、投靠、叛投、改幫；還沒挑依附哪一邊不算閒著；動身被擋。"""
+        if self._menus is None:
+            from . import defect_actions, join_actions, lean_actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("take", "faction", lambda ctx: join_actions.pending_options(ctx)),
+                MenuHook("here", "sect", lambda ctx, loc, cost, odds: join_actions.sect_cell(ctx)),
+                MenuHook("here", "join", lambda ctx, loc, cost, odds: join_actions.join_options(ctx)),
+                MenuHook("here", "defect", lambda ctx, loc, cost, odds: defect_actions.defect_options(ctx)),
+                MenuHook("here", "lean", lambda ctx, loc, cost, odds: lean_actions.lean_options(ctx)),
+                MenuHook("idle", "faction", lambda ctx: join_actions.picking_ally(ctx)),
+                MenuHook("block", "faction", lambda state, content: join_actions.travel_block(state, content)),
+            )
+        return self._menus
 
 
 FEATURE = FactionFeature()

@@ -17,7 +17,7 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, SeamHook, Verb
+from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Verb
 
 
 class SmithyFeature(Feature):
@@ -84,6 +84,25 @@ class SmithyFeature(Feature):
                 SeamHook("stale.mid", "smithy", lambda ctx: shelf_actions.drop_stale(ctx)),
             )
         return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：鐵匠鋪不進店面登記 Shop（計畫第四節：here 有兩個意思：_shop_open 是「單子沒開著且開門」、收店是「開門」；出發不看坐不坐著都要清）：坐著接管整個選單、不算閒著、店面那一頁、動身收起來、動身被擋；此地那一顆。"""
+        if self._menus is None:
+            from tianxia import equipment  # noqa: PLC0415
+            from . import shelf_actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("take", "smithy", lambda ctx: shelf_actions.smith_options(ctx) if ctx.state.player.picking_smith else None),
+                MenuHook("here", "smithy", lambda ctx, loc, cost, odds: shelf_actions.here_cell(ctx, loc, cost, odds)),
+                MenuHook("idle", "smithy", lambda ctx: ctx.state.player.picking_smith),
+                MenuHook("open", "smithy", lambda ctx: shelf_actions.open_cell(ctx)),
+                MenuHook("depart", "smithy", lambda ctx: equipment.close_smith(ctx.state.player)),
+                MenuHook("block", "smithy", lambda state, content: shelf_actions.travel_block(state, content)),
+            )
+        return self._menus
 
 
 FEATURE = SmithyFeature()

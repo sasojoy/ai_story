@@ -11,7 +11,7 @@ README.md 寫這一包做什麼、導覽與設計稿、認領的欄位、還留�
 """
 from __future__ import annotations
 
-from tianxia.core.features import EffectHook, Feature, Outcome, SeamHook
+from tianxia.core.features import EffectHook, Feature, MenuHook, Outcome, SeamHook
 
 
 class StoryFeature(Feature):
@@ -70,6 +70,20 @@ class StoryFeature(Feature):
                 SeamHook("season.carry", "story", lambda ctx, old, fresh: actions.carry_season(ctx, old, fresh)),
             )
         return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單的兩格（順序在 MENU_ORDER；不問 enabled）：答題接管整個選單（在有所感之後）；此刻在這裡做得了的那一段一顆（應召之後、此地的人之前，options 掛鉤在最後面，位置不對）。"""
+        if self._menus is None:
+            from . import actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("take", "story", lambda ctx: actions.story_menu(ctx)),
+                MenuHook("here", "story", lambda ctx, loc, cost, odds: actions.story_options(ctx)),
+            )
+        return self._menus
 
 
 FEATURE = StoryFeature()

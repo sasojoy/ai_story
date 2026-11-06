@@ -12,7 +12,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, SeamHook, Shop, Verb
+from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Shop, Verb
 
 
 class OutletsFeature(Feature):
@@ -130,6 +130,22 @@ class OutletsFeature(Feature):
         if self._seams is None:
             self._seams = (SeamHook("season.carry", "outlets", _carry_season),)
         return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：此地的捐軍備、打點（排在療傷後面，所以不是 Shop.entry）；坐在店裡不算閒著；動身被擋。"""
+        if self._menus is None:
+            from . import donate_actions, silver_actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("here", "donate", lambda ctx, loc, cost, odds: donate_actions.here_cell(ctx, loc, cost, odds)),
+                MenuHook("here", "dadian", lambda ctx, loc, cost, odds: silver_actions.here_cell(ctx, loc, cost, odds)),
+                MenuHook("idle", "outlets", lambda ctx: ctx.state.player.picking_donate or ctx.state.player.picking_dadian),
+                MenuHook("block", "outlets", lambda state, content: silver_actions.travel_block(state, content)),
+            )
+        return self._menus
 
 
 def _carry_season(ctx, old, fresh) -> None:

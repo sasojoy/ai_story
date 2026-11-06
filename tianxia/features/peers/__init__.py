@@ -19,7 +19,7 @@ enabled 一直是 True（沒有整包的總開關：名帖開關 Config.mingtie.
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, SeamHook
+from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook
 
 from . import mingtie_card as _mingtie_card  # noqa: F401  遞名帖登記進玩家卡的動作表（social.ACTIONS）；載入這一包就登記（原本 engine.py 頂端 import 它；scripts/test_for.py 認這個寫法）
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）；原本 engine.py 頂端 import tianxia.discuss（全部拆包第 38 批）
@@ -73,6 +73,19 @@ class PeersFeature(Feature):
 
             self._seams = (SeamHook("season.carry", "peers", lambda ctx, old, fresh: actions.carry_season(ctx, old, fresh)),)
         return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單的一格（順序在 MENU_ORDER；不問 enabled）：玩家之間的邀請：別人發給你的、你發出去還在等的。"""
+        if self._menus is None:
+            from . import invite_actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("here", "invite", lambda ctx, loc, cost, odds: invite_actions.options(ctx)),
+            )
+        return self._menus
 
 
 FEATURE = PeersFeature()

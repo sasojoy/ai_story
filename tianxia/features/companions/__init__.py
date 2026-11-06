@@ -8,7 +8,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, Outcome, SeamHook, StepHook
+from tianxia.core.features import DefectHook, Feature, MenuHook, Outcome, SeamHook, StepHook
 
 
 class CompanionsFeature(Feature):
@@ -99,6 +99,23 @@ class CompanionsFeature(Feature):
                 SeamHook("season.carry", "companions", lambda ctx, old, fresh: actions.carry_season(ctx, old, fresh)),
             )
         return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：談著接管整個選單、動身被擋；他帶你走的路上每到一站說一句；此地的招募、託付。"""
+        if self._menus is None:
+            from . import actions, parley_actions, talk_actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("take", "talk", lambda ctx: talk_actions.talk_options(ctx) if ctx.state.player.pending_companion else None),
+                MenuHook("road", "parley", lambda ctx, j: parley_actions.road_cell(ctx, j)),
+                MenuHook("here", "recruit", lambda ctx, loc, cost, odds: actions.recruit_options(ctx)),
+                MenuHook("here", "errand", lambda ctx, loc, cost, odds: actions.errand_options(ctx)),
+                MenuHook("block", "talk", lambda state, content: talk_actions.travel_block(state, content)),
+            )
+        return self._menus
 
 
 FEATURE = CompanionsFeature()

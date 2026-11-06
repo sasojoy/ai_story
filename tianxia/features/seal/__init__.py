@@ -20,7 +20,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import BusHook, EffectHook, Feature, SeamHook, WorldHook
+from tianxia.core.features import BusHook, EffectHook, Feature, MenuHook, SeamHook, WorldHook
 
 
 class SealFeature(Feature):
@@ -121,6 +121,20 @@ class SealFeature(Feature):
                 SeamHook("season.carry", "seal", _carry_season),
             )
         return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單的兩格（順序在 MENU_ORDER；不問 enabled）：誰輪詢誰推奪璽單挑（tick，同決戰，5.4）；單挑的那幾顆排在決戰的鈕與平常的選單最前面（front）。"""
+        if self._menus is None:
+            from . import duel_actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("tick", "seal", lambda ctx: duel_actions.tick(ctx)),
+                MenuHook("front", "seal", lambda ctx: duel_actions.options(ctx)),
+            )
+        return self._menus
 
 
 def _carry_season(ctx, old, fresh) -> None:

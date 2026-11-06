@@ -15,7 +15,7 @@ README.md 寫這一包做什麼、導覽與設計稿。
 from __future__ import annotations
 
 from tianxia import atlas  # 共用規則層（輿圖：路程、走法、折返的路；第 50 批收進）
-from tianxia.core.features import Feature, Outcome, SeamHook, Verb
+from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Verb
 from tianxia.core.services import ROAD_TASKS
 
 
@@ -89,6 +89,22 @@ class TravelFeature(Feature):
                 SeamHook("stale.road", "travel", lambda ctx, lost_place: road_actions.drop_stale(ctx, lost_place)),
             )
         return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單的格（順序在 MENU_ORDER；不問 enabled）：路上那一行與折返或分道揚鑣、喊停、路上的小事；此地的前往。"""
+        if self._menus is None:
+            from . import menu  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("road", "head", lambda ctx, j: menu.road_head(ctx, j)),
+                MenuHook("road", "halt", lambda ctx, j: menu.road_halt(ctx, j)),
+                MenuHook("road", "tasks", lambda ctx, j: menu.road_task_options(ctx, j)),
+                MenuHook("here", "move", lambda ctx, loc, cost, odds: menu.move_options(ctx, loc)),
+            )
+        return self._menus
 
 
 FEATURE = TravelFeature()

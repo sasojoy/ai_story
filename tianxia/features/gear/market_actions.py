@@ -11,6 +11,7 @@ from tianxia import equipment  # 共用規則層
 from tianxia import mounts  # 共用規則層
 from tianxia import territory  # 共用規則層
 from tianxia.core.option import Option  # 核心
+from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 
 if TYPE_CHECKING:
     from tianxia.engine import Game
@@ -69,3 +70,21 @@ def close_gone(ctx: Game) -> None:
     收起馬市（裝備四欄 5.5），馬販那一句一併清掉。"""
     if ctx.state.player.picking_market and not mounts.market_here(ctx.state, ctx.content):
         mounts.close_market(ctx.state.player)
+
+
+def here_cell(ctx: Game, loc, cost, odds) -> list[Option]:
+    """here/gear 那一格（core_seams，全部拆包第 56 批；原本在 Game._everyday_options）：馬市（裝備四欄 5.5，帶「馬市」標籤的城鎮）：只是打開第二層選單，不花體力。"""
+    return [Option(id="act:market", label=mounts.MARKET)] if mounts.market_here(ctx.state, ctx.content) else []
+
+
+def open_cell(ctx: Game) -> str | None:
+    """open/gear 那一格（core_seams，全部拆包第 56 批；原本在 Game._shop_open）：沒坐著是 None；坐著、這裡還開著是 market，不開門了是 ""（核心 or None）。"""
+    s, c = ctx.state, ctx.content
+    if not s.player.picking_market:
+        return None
+    return "market" if mounts.market_here(s, c) else ""
+
+
+def travel_block(state, content) -> TravelBlock | None:
+    """block/gear 那一格（core_seams，全部拆包第 56 批；原本在 atlas.travel_block；待 joy 潤的字在 mounts）。"""
+    return TravelBlock(mounts.TRAVEL_BLOCKED, to_jianghu=True) if state.player.picking_market else None

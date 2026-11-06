@@ -12,7 +12,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import BusHook, DefectHook, Feature, Outcome, SeamHook, StepHook, Verb, WorldHook
+from tianxia.core.features import BusHook, DefectHook, Feature, MenuHook, Outcome, SeamHook, StepHook, Verb, WorldHook
 
 from . import wanted as _wanted_card  # noqa: F401  通緝登記進玩家卡的動作表（core/cards.py 的 ACTIONS）；載入這一包就登記（原本 engine.py 頂端 import 它；scripts/test_for.py 認這個寫法）
 
@@ -139,6 +139,25 @@ class BountiesFeature(Feature):
                 SeamHook("stale.mid", "bounties", lambda ctx: actions.drop_stale(ctx)),
             )
         return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：懸賞榜不進店面登記 Shop（計畫第四節：入口排在鐵匠鋪、馬市前面，_shops 照 FEATURES 排在最後；drop_shops 會多收一次）：榜開著接管整個選單、不算閒著、店面那一頁、動身收起來、動身被擋；此地那一顆。"""
+        if self._menus is None:
+            from tianxia.core import bounty_base  # noqa: PLC0415
+            from . import actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("take", "bounties", lambda ctx: actions.options(ctx) if ctx.state.player.picking_bounty else None),
+                MenuHook("here", "bounties", lambda ctx, loc, cost, odds: actions.here_cell(ctx, loc, cost, odds)),
+                MenuHook("idle", "bounties", lambda ctx: ctx.state.player.picking_bounty),
+                MenuHook("open", "bounties", lambda ctx: actions.open_cell(ctx)),
+                MenuHook("depart", "bounties", lambda ctx: bounty_base.close_board(ctx.state.player)),
+                MenuHook("block", "bounties", lambda state, content: actions.travel_block(state, content)),
+            )
+        return self._menus
 
 
 FEATURE = BountiesFeature()

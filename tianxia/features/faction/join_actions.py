@@ -11,10 +11,11 @@ join_step_place，只讀；JOIN_STEP 從 weekcard 搬來，字一個不改。
 """
 from __future__ import annotations
 
-from tianxia import allied, wins
+from tianxia import allied, precise, wins
 from tianxia import step as step_rules  # 核心本體（第 36 批收進 MODULES）：「你這一步」的 REF、place
 from tianxia.core import bounty_base
 from tianxia.core.option import Option
+from tianxia.core.travel_base import TravelBlock  # 核心（動身被擋那一句的型別，core_seams）
 from tianxia.events import event_candidates  # 過渡：待搬（事件：這裡抽得到的拜門派事件）
 from tianxia.rules import STANCE_NAMES, season_one
 
@@ -176,3 +177,33 @@ def join_step_place(ctx, ref: tuple) -> tuple:
     joins = {loc: f for f in reversed(c.scenario.factions) for loc in f.join_at if loc in c.locations}  # 一樣近照劇本陣營的順序
     where = ctx._nearest_to(set(joins)) if joins else None  # noqa: SLF001
     return (joins[where].id, step_rules.place(ctx, where), None) if where is not None else (None, None, None)
+
+
+def sect_cell(ctx) -> list[Option]:
+    """here/sect 那一格（core_seams，全部拆包第 56 批）：一類一顆開著時拜入門派另成一顆（正式季整合 2.7），排在交友前面；關著沒有（舊的走投靠那一顆）。"""
+    return sect_options(ctx) if precise.on(ctx.content, ctx.state.world) else []
+
+
+def join_options(ctx) -> list[Option]:
+    """here/join 那一格（core_seams，全部拆包第 56 批；原本在 Game._everyday_options）：散人站在陣營的投靠點，一個陣營一顆。"""
+    s, c = ctx.state, ctx.content
+    if s.player.faction is not None:
+        return []
+    return [Option(id=f"faction:{faction.id}", label=f"投靠{faction.name}") for faction in c.scenario.factions if s.player.location in faction.join_at]
+
+
+def picking_ally(ctx) -> bool:
+    """idle/faction 那一格（core_seams，全部拆包第 56 批）：拜入之後還沒挑依附哪一邊（豪強分屬兩軍）：先挑，不算閒著。"""
+    return allied.needs_ally(ctx.state, ctx.content)
+
+
+def travel_block(state, content) -> TravelBlock | None:
+    """block/faction 那一格（core_seams，全部拆包第 56 批；原本在 atlas.travel_block，字與先後一字不動）：投靠的確認畫面、拜入之後還沒挑依附哪一邊、叛投的確認畫面。"""
+    p = state.player
+    if p.pending_faction:
+        return TravelBlock("投靠還沒決定，先決定再安排前往", to_jianghu=True)
+    if allied.needs_ally(state, content):  # 拜入之後還沒挑依附哪一邊（豪強分屬兩軍）
+        return TravelBlock(allied.ALLY_FIRST, to_jianghu=True)
+    if p.pending_defect:
+        return TravelBlock("叛投還沒決定，先決定再安排前往", to_jianghu=True)
+    return None

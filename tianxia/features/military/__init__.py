@@ -14,7 +14,7 @@ Game 上的一行委派（理由在 tests/core/test_feature_boundaries.py 的 `#
 """
 from __future__ import annotations
 
-from tianxia.core.features import BusHook, DefectHook, EffectHook, Feature, Outcome, SeamHook, StepHook
+from tianxia.core.features import BusHook, DefectHook, EffectHook, Feature, MenuHook, Outcome, SeamHook, StepHook
 
 
 class MilitaryFeature(Feature):
@@ -146,6 +146,25 @@ class MilitaryFeature(Feature):
                 SeamHook("sync.deliver", "seat", lambda ctx: seat_actions.deliver_seat(ctx)),
             )
         return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單的格（順序在 MENU_ORDER；不問 enabled）：伏筆的最後一步正在答題接管整個選單（店面之後、閉關之前）、不算閒著；此地的軍令、第 2 階、第 3、4 階、機緣與伏筆。"""
+        if self._menus is None:
+            from tianxia.core import omen_base  # noqa: PLC0415
+            from . import fs_actions, order_actions, step_actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("take", "omen", lambda ctx: fs_actions.asking_options(ctx) if omen_base.fs_answering(ctx.state) else None),
+                MenuHook("here", "order", lambda ctx, loc, cost, odds: order_actions.order_options(ctx, loc)),
+                MenuHook("here", "rank2", lambda ctx, loc, cost, odds: step_actions.rank2_options(ctx, loc)),
+                MenuHook("here", "rank", lambda ctx, loc, cost, odds: step_actions.rank_action_options(ctx, loc)),
+                MenuHook("here", "omen", lambda ctx, loc, cost, odds: fs_actions.omen_options(ctx, loc.id)),
+                MenuHook("idle", "omen", lambda ctx: omen_base.fs_answering(ctx.state)),
+            )
+        return self._menus
 
 
 FEATURE = MilitaryFeature()

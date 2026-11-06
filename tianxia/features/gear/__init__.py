@@ -14,7 +14,7 @@ GearBook）同字，不是同一件事：這裡是功能包，另兩個是舊的
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, SeamHook, Verb
+from tianxia.core.features import Feature, MenuHook, Outcome, SeamHook, Verb
 
 
 class GearFeature(Feature):
@@ -78,6 +78,25 @@ class GearFeature(Feature):
                 SeamHook("advance.held", "held_gear", lambda ctx: gift_actions.deliver_held_gear(ctx)),
             )
         return self._seams
+
+    # core_seams（全部拆包第 56 批「選單收接縫」）
+    _menus: tuple[MenuHook, ...] | None = None
+
+    def menus(self) -> tuple[MenuHook, ...]:
+        """選單與動身的格（順序在 MENU_ORDER；不問 enabled）：馬市不進店面登記 Shop（計畫第四節：_shops 照 FEATURES，酒肆、銀兩出口會排到它前面；出發不看坐不坐著都要清）：坐著接管整個選單、不算閒著、店面那一頁、動身收起來、動身被擋；此地那一顆。"""
+        if self._menus is None:
+            from tianxia import mounts  # noqa: PLC0415
+            from . import market_actions  # noqa: PLC0415
+
+            self._menus = (
+                MenuHook("take", "gear", lambda ctx: market_actions.market_options(ctx) if ctx.state.player.picking_market else None),
+                MenuHook("here", "gear", lambda ctx, loc, cost, odds: market_actions.here_cell(ctx, loc, cost, odds)),
+                MenuHook("idle", "gear", lambda ctx: ctx.state.player.picking_market),
+                MenuHook("open", "gear", lambda ctx: market_actions.open_cell(ctx)),
+                MenuHook("depart", "gear", lambda ctx: mounts.close_market(ctx.state.player)),
+                MenuHook("block", "gear", lambda state, content: market_actions.travel_block(state, content)),
+            )
+        return self._menus
 
 
 FEATURE = GearFeature()
