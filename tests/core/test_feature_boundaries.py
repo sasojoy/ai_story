@@ -1850,7 +1850,9 @@ def test_the_old_names_left_as_aliases_are_known():
                          # gear（全部拆包第 42 批：tianxia/signature_arms.py）
                          "signature_arms": "gear",
                          # seal（全部拆包第 27 批：tianxia/seal.py；包名跟別名同字，同 cultivation、guide）
-                         "seal": "seal"}
+                         "seal": "seal",
+                         # seal（全部拆包第 28 批：tianxia/seal_duel.py 指到 seal/duel_rules.py）
+                         "seal_duel": "seal"}
     assert not [e for e in transitional_imports() if e.rsplit(" ", 1)[1].split(".")[1] in aliases()]
 
 
@@ -2285,6 +2287,40 @@ SHARED_LATER["skillview"] = ("門下頁的說明（彙整）：讀自創 create�
                              "鐵匠鋪 smithing（第 41 批已成包，經舊名別名）；那幾包成包、改成查詢服務之後再收（輿圖 atlas 第 50 批收進了共用規則層）")
 for _pair in (("conquest", "seal_acts"), ("figures", "seal_acts"), ("figure_life", "seal_acts"), ("plans", "seal_acts")):
     SHARED_PENDING[_pair] += "；seal_acts 函式裡 import seal（第 27 批成了玉璽包的別名），叫到它就連帶載入玉璽包"
+
+# seal（全部拆包第 28 批「玉璽二」：奪璽單挑、碎片卡、七種獨門行動、管理者六個搬進包；計畫 docs/superpowers/plans/2026-11-06-玉璽包-第2批.md）：
+# 這一批加的集中在這一段（拿掉第 27 批那一段的格一律在這裡 del、pop、-=）。tianxia/seal_duel.py 成了指到 features/seal/duel_rules.py 的別名；
+# engine 頂端的 seal_rules（tianxia.seal）與 seal_duel 沒人用，拿掉。Game 留 22 個一行委派（_seal_act_season 只有 seal_use 叫，包內互叫、不留）。
+GAME_IMPORTS -= {"tianxia.seal"}
+GAME_IMPORTS |= {"tianxia.features.seal.card", "tianxia.features.seal.duel_actions"}
+GAME_DELEGATES |= {
+    # 核心原位叫的：_seal_tick（world_tick、options）、_seal_options（options）、_seal_act（choose）、seal_view／seal_duel_card／seal_watch（status_data）；
+    # 殼叫的：seal_free_text_prompt／note、seal_text_request、seal_gamble（server.py seal_text、free_text 欄）、seal_use（MAIN_ACTIONS）、
+    # 六個 admin_seal_*（ADMIN_ACTIONS）；量表與測試叫的：_seal_challengers、_seal_spectators（scripts/measure_seal.py 換它們）、_seal_challenge、
+    # _seal_side_of、_my_seal_duel（測試；seal_use 也有測試換 Game.seal_use）
+    "_seal_challenge", "_seal_challengers", "_seal_spectators", "_seal_side_of", "_my_seal_duel", "_seal_tick", "_seal_options", "_seal_act",
+    "seal_free_text_prompt", "seal_free_text_note", "seal_text_request", "seal_gamble", "seal_duel_card", "seal_watch",
+    "seal_view", "seal_use",
+    "admin_seal_stir", "admin_seal_assign", "admin_seal_duel", "admin_seal_fix", "admin_seal_cancel", "admin_seal_choices",
+}
+for _name in ("_seal_challenge", "_seal_challengers", "_seal_spectators", "_seal_side_of", "_my_seal_duel", "_seal_tick", "seal_view", "seal_use",
+              "seal_duel_card", "seal_watch", "admin_seal_assign", "admin_seal_duel", "admin_seal_choices"):
+    del GAME_DIRECT[_name]  # 第 27 批留的「過渡：第 28 批收」13 筆
+for _pair in (("_seal_tick", "_deliver_seal_results"), ("_seal_act", "_deliver_seal_results"), ("seal_gamble", "_deliver_seal_results"),
+              ("admin_seal_cancel", "_deliver_seal_results"), ("seal_view", "_showdown_status"), ("seal_watch", "_showdown_status"),
+              ("seal_text_request", "_duel_side")):
+    GAME_DELEGATE_CALLERS.pop(_pair)  # 本體搬進包：現在是包經 ctx 叫，列在 tianxia/core/services.py 的 # seal
+GAME_DELEGATE_CALLERS.update({
+    ("world_tick", "_seal_tick"): "每 10 秒的世界推進順手推奪璽單挑，排在 _battle_status(tick=True) 後面、_deliver_battle_results 前面：on_sync 掛鉤只問開著的包"
+                                  "（core/features.py 的 active），碎片關著時 _seal_tick 自己第一行就 return，位置與先後卻要原位——過渡：第 55 批（補算與換季收接縫）收",
+    ("options", "_seal_tick"): "選單（tick=True）跟決戰一樣誰輪詢誰推：在 _battle_status 之後、讀選單之前；options 掛鉤是讀選單的一段、位置在 _everyday_options 內，推進不能放那裡",
+    ("options", "_seal_options"): "單挑的三招擺在選單最前面，排在決戰選單（_battle_menu）前面、不看包是否開著：menu 掛鉤只問開著的包，且位置在 _everyday_options 內，"
+                                  "接不了——過渡：第 57 批（選單上、不建紀錄的 seal:／duel:／arena:／battle: 四包一起接）收",
+    ("choose", "_seal_act"): "選單上的一招（seal:<招>）：「選單上、不建紀錄」那一格，同 duel:／battle:，不是 choose 掛鉤（那個會建紀錄）——過渡：第 57 批收",
+    ("status_data", "seal_view"): "狀態列的碎片卡（status_data[\"seal\"]）：鍵的順序算行為（排在 seal_duel 之後、seal_watch 之前），狀態列掛鉤是總表第 66 批",
+    ("status_data", "seal_duel_card"): "狀態列的奪璽卡（status_data[\"seal_duel\"]）：同上，鍵的順序算行為",
+    ("status_data", "seal_watch"): "狀態列的背景輪詢旗標（status_data[\"seal_watch\"]）：同上，鍵的順序算行為",
+})
 
 # merge_back（主幹合回 develop 第 1 段，2026-11-06）：develop 新加的 9 個 Game 方法先修到能跑。暫時的三筆寫明第 2 段哪一塊收，最後的閘門要確認一條都不剩。
 # _allocate_v2 這一段就進了修練包（allocate_stat 的本體在包裡，只有它叫）；_season_prep、season_prep_view、_attr_rows、place_state_view 留核心（PM 認定第 6、7 條）；

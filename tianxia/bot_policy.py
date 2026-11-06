@@ -702,8 +702,7 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return GROWTH_SCORE if arg == bot.growth_key(game) else None
     # （opp：機緣，假人不做，正式版乙一；全部拆包第 34 批搬進 features/military/bots.py，上面的 features_core.bot_pick 問它。對話裡的 talk:opp: 由人物情誼包的 bots.py 回 None）
     # 決戰（battle:）搬進功能包：假人的分數在 features/battle/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 7 批）
-    if kind == "seal":
-        return None  # 奪璽單挑：假人一律被代打（玉璽碎片設計 14.1），選單上就算出現也不按；在不在場只看 last_seen，假人永遠不記
+    # 奪璽單挑（seal:）搬進功能包：假人一律被代打，分數在 features/seal/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 28 批）
     # 頭目戰（duel:）、擂台（arena:）搬進功能包：假人的分數在 features/bout/bots.py，上面的 features_core.bot_pick 問它（全部拆包第 12 批）
     if kind == "choice":
         event = game.content.events[game.state.pending_event]

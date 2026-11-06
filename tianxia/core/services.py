@@ -502,9 +502,13 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 - `ctx.travel_refusal(loc_id, mode)`（主人移動：Game 上的一行委派；`travel` 經它叫自己的檢查，因為測試換掉 `game.travel_refusal` 來繞過檢查）
 - `ctx.travel(dest_id, mode)`（主人移動：Game 上的一行委派；`/api/travel` 的路由經它叫，測試與假人照舊叫 `Game.travel`）
 
-# seal（全部拆包第 27 批「玉璽一」：玉璽包叫的、本體還在 Game 上的第 28 批方法）
-- `ctx._seal_challenge(battle, definition, reg, tianji, winner, margin, need, held)`（主人玉璽，第 28 批搬：時刻表決戰收場時璽動那一場挑挑戰者、
-  開奪璽單挑；包的 `actions.settle` 照原本的先後叫——先挑挑戰者、再挑現世的得主、再喚回）
+# seal（全部拆包第 28 批「玉璽二」：奪璽單挑、碎片卡、獨門行動、管理者六個搬進玉璽包；第 27 批留的 `ctx._seal_challenge` 搬進同一包、改直接叫，不再是服務）
+- `ctx._seal_challengers(battle, side, need, holder, blocked, held)`、`ctx._seal_spectators(definition, battle, held)`（主人玉璽自己的委派：包的
+  `duel_actions.challenge` 挑挑戰者的候選時經 ctx 叫，因為 `scripts/measure_seal.py` 換的是 `Game._seal_challengers`／`_seal_spectators`）
+- `ctx._showdown_status(tick=False)`（主人**決戰包**：這一刻時刻表決戰開打到哪、璽動在不在；碎片卡與背景輪詢讀，攻城戰不璽動）
+- `ctx._duel_side()`（主人**單挑包**：自己是哪一邊〔陣營名〕；奪璽放手一搏的單子寫）、`ctx._duel_cut()`（主人**單挑包**：防具照存檔現算的減損，
+  奪璽單挑雙方的快照用；也叫別人的 Game，`kin._duel_cut()`）
+- `ctx.own_request`（Game 上的旗標：這一下是不是玩家自己的請求；奪璽單挑推進時只有自己的請求才記 last_seen）
 
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 
