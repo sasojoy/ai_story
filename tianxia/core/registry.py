@@ -270,3 +270,7 @@ _old = "讀璽效 seal_acts 記在 SHARED_PENDING；"  # 懸賞第 45 批成包�
 assert _old in SHARED["figure_life"]
 SHARED["figure_life"] = SHARED["figure_life"].replace(_old, "讀璽效 seal_acts 第 51 批進了這一層；")
 
+
+# core_content（全部拆包第 62 批：內容照包分）：內容檔在誰的資料夾由這一份定，core.features.pack_content 讀它、不讀 FEATURES。契約測試把 FEATURES
+# 換成假的包時（monkeypatch），內容的位置不跟著換：內容母本是第一個要它的測試當下建的（conftest.cached_content），碰上被換成 [] 就找不到檔。
+DECLARED = tuple(FEATURES)

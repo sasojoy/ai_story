@@ -1,18 +1,16 @@
 """點大勢人物那一層的人物簡介（功能包 socialize；主幹合回 D 段從 server.py 搬來）：跟著「此地人物」那一排走。
-單獨一個檔的理由：它在 import 時讀一次 content/figure_intros.json，只有殼 import 它，引擎與假人程式不多讀。
+單獨一個檔的理由：它在 import 時讀一次這一包的 content/figure_intros.json，只有殼 import 它，引擎與假人程式不多讀。
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
-
 
 def _figure_intros() -> dict:
-    """點大勢人物那一層的人物簡介（content/figure_intros.json；給不熟三國的玩家看，Joy 11/6）：沒有這個檔就是空的，畫面不畫簡介。"""
+    """點大勢人物那一層的人物簡介（這一包的 content/figure_intros.json；給不熟三國的玩家看，Joy 11/6）：沒有這個檔就是空的，畫面不畫簡介。"""
     try:
-        data = json.loads((ROOT / "content" / "figure_intros.json").read_text(encoding="utf-8"))
+        data = json.loads((Path(__file__).parent / "content" / "figure_intros.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     return {k: v for k, v in data.items() if not k.startswith("_") and isinstance(v, dict)}
