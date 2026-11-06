@@ -30,7 +30,7 @@
 
 ## 過渡（手冊 3.11）
 
-- 包 → 還沒搬的舊模組：沒有了（全部拆包第 40 批合完重印 0 處）：`actions.py` 那一行 `chapters` 第 40 批收進共用規則層，不算過渡，行尾註改寫成「共用規則層」；`storyline.py` 的 `annals` 第 29 批之二改 import 核心。共用層 `story_base` → `atlas`（`here` 的大區，第 50 批）記在邊界測試的 `SHARED_PENDING`；`story_base` → `chapters`（`vary` 的大事結果，函式裡）第 40 批起是共用層之間，不再記。
+- 包 → 還沒搬的舊模組：沒有了（全部拆包第 40 批合完重印 0 處）：`actions.py` 那一行 `chapters` 第 40 批收進共用規則層，不算過渡，行尾註改寫成「共用規則層」；`storyline.py` 的 `annals` 第 29 批之二改 import 核心。共用層 `story_base` → `atlas`（`here` 的大區）第 50 批起是共用層之間（`atlas` 收進 `registry.SHARED`），不再記；`story_base` → `chapters`（`vary` 的大事結果，函式裡）第 40 批起是共用層之間，不再記。
 - 章回的開回、收回（原本 `chapters.tick`，叫這一包的 `finish`）第 40 批整段搬進這一包：`storyline.chapter_tick`（`story_tick` 叫它，先後不變）；`chapters` 讀一條線的 `active`、`current`、`here`、`doable` 改讀底座 `story_base`（`waiting`、`doable` 與新的 `mark_of` 第 40 批搬進底座，`storyline.py` 照原名 re-export 同一個物件；`rules.check_condition` 的 `story_marks`、`story_marks_max` 經 `story_base.mark_of` 讀）；`chapters` 載入時往底座的 `story_base.TASKS` 登記章回的一拍，不 import 這一包。
 - 舊模組 → 包：`engine` 1 行（`story_actions`）、別名檔 `tianxia/storyline.py`；`bot`、腳本、測試（`weekcard` 第 36 批起收進核心，`OPTION` 改讀共用規則層的 `story_base`）。
 - 服務清單（`tianxia/core/services.py`）這一包加的：二、查詢 `# story` 一段（`ctx._story_begin`：探索包叫它，原本列在三、過渡 explore 那一行）；包裡叫回 `Game` 的其餘都已在清單（`_present`、`_story_squad`、`_judged`、`_fight_with`、`_style_note`、`_terrain_note`、`_narrate`、`_play_rounds`、`_hp_facts`、`_battle_rewards`、`_file_battle`、`_outcome`、`_save_season`）。

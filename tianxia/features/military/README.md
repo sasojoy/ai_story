@@ -34,6 +34,7 @@
 
 `convoy`（押著的糧車；這一包寫，叛投那一刻也由這一包清成 None）、`rank2_days`（第 2 階行動今天做了幾次）、`rank_action_weeks`（第 3、4 階行動這週做了幾次；`rank_rules.count` 寫）。
 第 34 批再認領 15 個：伏筆 7 個（`fragments`、`clue_items`、`fs_counters`、`fs_done`、`fs_cooldown_until`、`fs_asking`、`fs_asked`）、機緣 8 個（`opp_done`、`opp_counts`、`opp_items`、`opp_fronts`、`opp_clues`、`opp_tried`、`opp_pieces`、`opp_settled`）。叛投時 `opportunities` 那一格清掉機緣的進度，但 `opp_clues`、`opp_settled`、`fragments` 留著（企劃者裁決 E5.2：知道的事；結算過的密謀不會因為叛投再結算一次）。全服的集體密謀 `world.plots` 是共用賽季，不是 `PlayerState`，不認領。
+包外直接讀 `fs_asking` 的：共用規則層的 `atlas.travel_block`（正在答話，先作罷才能安排前往）第 50 批改問核心的 `omen_base.fs_answering`（`fs_rules` re-export 同一個函式）；`engine.py` 兩處（選單換成答題的那幾顆、條件裡的「不在答題中」）照舊直接讀，交 PM 排批。
 `donations`（押糧與捐糧效果都寫）、`summons`、`qualified`、`rank`、`contrib_weeks`、`rank_hinted`、`patron` 是共用或階級、席次規則層的，不認領。
 
 ## 還留在核心原位的接縫（理由在 `tests/core/test_feature_boundaries.py` 的 `# military` 那一段）
@@ -52,6 +53,7 @@
 ## 過渡（手冊 3.11）
 
 過渡 import 共 3 處（`test_feature_boundaries.py` 數，全部拆包第 40 批合完重印；第 33 批 8 處，第 34 批 11 處）：`order_actions`→`atlas`；`step_actions`→`events`；`fs_actions`→`atlas`。
+第 50 批合完重印 **1 處**：`step_actions`→`events`。`order_actions`（`order_how`、`_strike_place`、`is_known`）、`fs_actions`（`region_of`）讀 `atlas` 的改註「共用規則層」（`atlas` 第 50 批收進 `registry.SHARED`，接第 34 批第 6 條）。
 原本另外 8 處（`admin_actions`→`orders`、`ranks`；`convoy_actions`→`orders`；`order_actions`→`orders`；`rank_rules`→`ranks`；`fs_rules`→`figures`；`opp_rules`→`figures`、`ranks`）：`orders`、`ranks`、`figures` 第 40 批收進共用規則層（`registry.SHARED`），不算過渡，行尾註改寫成「共用規則層」；`atlas`（第 50 批）、`events` 等後面的批。
 服務清單（`tianxia/core/services.py`）這一包加的：`_order_credit`（共用服務，出陣、決戰、大勢人物也經 `ctx` 叫）、`RANK_ACTION_PREFIX`、`_duty_option`（出陣包的委派，`order_options` 叫它）。
 叛投那一刻經核心的叛投掛鉤（`core/features.py` 的 `DEFECT_ORDER`）`clear` 位置的 `convoy` 那一格清（`convoy_actions.defect_clear`：`p.convoy = None`，押著的糧車留給舊陣營；全部拆包第 32 批，原本 `defection.clear_progress` 直接寫）。軍令記下的貢獻（`contrib`、`contrib_weeks`）照舊由叛投自己的 `progress` 那一格清。釘住這一格的測試在包外、改這一包時 `test_for` 挑不到：`tianxia/features/faction/tests/test_defection.py::test_defect_resets_rank_and_old_progress`（叛投之後 `convoy` 是 None；下面「改這一包時連它們一起跑」那一串已經列了這個檔）。

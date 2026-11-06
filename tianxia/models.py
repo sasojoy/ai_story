@@ -3772,7 +3772,7 @@ class Config(_Strict):
     road_think_xinde: int = Field(default=3, ge=0)  # 邊走邊想：心得（一次遊歷大約 12～20）
     road_rumor_pool: int = Field(default=5, ge=1)  # 沿途打聽：從這一帶最近幾則傳聞裡挑一則
     # 傳聞分層（傳聞分層設計第三、八節；第一季的規則開著時才用，計畫 2026-10-06 傳聞分層一）
-    # 大區的傳聞板留最近幾天（季曆天，跟著 weekend 設定縮）；輿圖 ✦ 與詳情欄的「最近幾天」也用這一個（atlas.news_days）
+    # 大區的傳聞板留最近幾天（季曆天，跟著 weekend 設定縮）；輿圖 ✦ 與詳情欄的「最近幾天」也用這一個（layers.news_days）
     rumor_board_days: float = Field(default=3, gt=0)
     away_hours: float = Field(default=1, gt=0)  # 「你不在的時候」：離線超過幾個「現實」小時，再上線先看一份摘要（PM 2026-10-06）
     # 那一份摘要最多幾行（含放不下時最後那一行「另有 N 則」；天下大事、陣營軍情的要點、所在大區，照這個順序）。

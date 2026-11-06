@@ -23,6 +23,7 @@ from tianxia.core.omen_base import (  # noqa: F401  core_world2：伏筆「讀�
     TIANJI_SLOTS, _event, _figure_name, _fragment_text, _front, _tianji, _version, chain, event_ids, fill,
     fs_active as active, heard_texts, held_items, tianji_answer,
 )
+from tianxia.core.omen_base import fs_answering  # noqa: F401  map2：atlas.travel_block 問的「正在答題」（全部拆包第 50 批）也在 core/omen_base，re-export 同一個
 from tianxia.journal import fragment_line
 from tianxia.models import (
     Check, Content, FsAsk, FsChain, FsFinal, FsFragment, FsRequires, FsStep, FsWrong, Squad,

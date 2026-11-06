@@ -23,6 +23,7 @@
 
 - `PlayerState`：頭目戰 `duel`、`duel_tally`、`duel_last`；擂台 `arena`、`arena_last`、`picking_arena`、`arena_day`、`arena_today`、`arena_crowd_seen`、`arena_crowd_note`（換季全部跟著新角色重來，`carried` 是空的）。
 - `WorldState`（照季存）：`arena`（守擂的分身）、`arena_pairs`（同一對的冷卻）、`arena_seq`、`arena_closed`（季末前三名排過了）、`arena_day`（俸發到哪一天）。型別在 `state.py` 的 `ArenaEntry`、`ArenaFight`、`ArenaSide`、`ArenaReport`、`ArenaResult`、`CrowdNote`、`CrowdSide`、`DuelState`）；`models.py` 的 `Config.duel`（`DuelTuning`）、`Config.arena`（`ArenaTuning`、`ArenaCrowdTuning`）、`DuelBoss`、`DuelFoe`。
+- 共用規則層的 `atlas.travel_block` 直接讀 `duel`、`arena`、`picking_arena`（動身被擋的那一句；全部拆包第 50 批照實記下，第 56 批選單收接縫時改成掛鉤、一張先後表）。
 
 ## 委派與留在原位的接縫
 

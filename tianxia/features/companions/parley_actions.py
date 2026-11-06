@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import random
 
-from tianxia import atlas, figure_life  # 過渡：待搬（輿圖路線 atlas 第 50 批）
+from tianxia import atlas, figure_life  # 共用規則層（輿圖路線 atlas 第 50 批收進、人物活起來 figure_life）
 from tianxia import materials, prologue as prologue_rules
 from tianxia.core.option import Option
 from tianxia.core.services import PLAN_OPTION, ROAD_SAY

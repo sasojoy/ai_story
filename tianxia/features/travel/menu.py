@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import atlas  # 過渡：待搬（輿圖：路程、體力、時間的字）
+from tianxia import atlas  # 共用規則層（輿圖：路程、體力、時間的字；第 50 批收進）
 from tianxia.core.option import Option
 from tianxia.core.services import MOVE_BLOCKED, ROAD_REWARD_TASKS, ROAD_TASKS
 from tianxia.state import Journey

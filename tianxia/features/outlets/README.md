@@ -27,6 +27,7 @@
 - `carried = ("donate_day", "donated_today")`：換季不能多捐一輪（`Game._reset_player_for_new_season` 照帶，不看開關）；其餘換季跟著新角色重來。
 - 不認領：`legend_items`（破境丹的數量）屬修練包、商城也帶；`shop_line`、`shop_clue`、`shop_hold`（七間店共用的掌櫃那一句）屬核心。
 - `World.armaments`（各陣營軍備存量）是全服帳：由這一包的 `credit` 寫、核心 `status_data` 經 `armament_view` 讀；沒有 `PlayerState` 欄位。
+- 共用規則層的 `atlas.travel_block` 直接讀 `picking_dadian`、`picking_donate`（動身被擋的那一句；全部拆包第 50 批照實記下，第 56 批選單收接縫時改成掛鉤、一張先後表）。
 
 ## 委派與留在原位的接縫
 

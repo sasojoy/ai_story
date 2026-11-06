@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import math
 
-from tianxia import allied, atlas, battle_instance, roster, siege  # 過渡：待搬（豪強依附、輿圖、戰鬥規則核心、同伴；siege 是共用規則層 registry.SHARED）
+from tianxia import allied, atlas, battle_instance, roster, siege  # 共用規則層（豪強依附、輿圖的大區與路線 atlas〔第 50 批收進〕、戰鬥規則核心、同伴、攻城）
 from tianxia import journal, team
 from tianxia.core.option import Option
 from tianxia.models import BattleDef

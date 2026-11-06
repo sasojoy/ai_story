@@ -15,7 +15,8 @@ import pytest
 from conftest import classic_rules, real_content
 from test_explore import _lake
 
-from tianxia import atlas, companion_agent, hints, howto, rules, sensing
+from tianxia import companion_agent, hints, howto, rules, sensing
+from tianxia.features.map import layers
 from tianxia.engine import Game
 from tianxia.models import ExploreMix, HintDef, InsightScene, SenseMethod
 from tianxia.rules import day_ends_text, game_day
@@ -271,9 +272,9 @@ def test_the_map_figure_card_shows_the_bond(on):
     game = Game.new(on, "甲", rng=random.Random(0))
     fig = next(f for f in on.figures.values() if f.character is not None)
     game.state.player.affinities[fig.character] = 33
-    assert "- 你跟他的情誼 33（" in atlas.leader_text(game.state, on, fig.name)
+    assert "- 你跟他的情誼 33（" in layers.leader_text(game.state, on, fig.name)
     nobody = next(f for f in on.figures.values() if f.character is None)  # 彭脫這類沒有對話人物的：沒有情誼
-    assert "情誼" not in atlas.leader_text(game.state, on, nobody.name)
+    assert "情誼" not in layers.leader_text(game.state, on, nobody.name)
 
 
 OLD_WORDS = re.compile("好感|交情")

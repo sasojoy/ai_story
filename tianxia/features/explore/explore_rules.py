@@ -22,8 +22,8 @@ if TYPE_CHECKING:
     from tianxia.jianfa_numbers import ExploreOneTable, JianfaNumbers
 
 # 六種地點、四類事、「多半」那兩個字的算法（match、kind_of、table_weights、mostly_of、mostly_in、hint_in）：輿圖包要用、又不能 import 探索包，
-# 全部拆包第 49 批搬到 core/services.py（# map 那一段），這裡 re-export（`explore_rules.kind_of is services.kind_of`）
-from tianxia.core.services import (  # noqa: E402,F401
+# 全部拆包第 49 批搬到 core/services.py（# map 那一段）、第 50 批移到核心的 core/explore_base.py，這裡 re-export（`explore_rules.kind_of is explore_base.kind_of`）
+from tianxia.core.explore_base import (  # noqa: E402,F401
     BALANCED, BEAT_MOSTLY, CAMP, ENCOUNTER, EVENT, FILL, FORD, HILL, INSIGHT, KINDS, MATERIAL, PLACE_WORDS, TEMPLE, TOWN, WILD,
     hint_in, kind_of, match, mostly_in, mostly_of, table_weights,
 )

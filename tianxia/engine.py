@@ -5285,7 +5285,7 @@ class Game:
 
     # ── 大地圖 ────────────────────────────────────────────
 
-    # 本體在 tianxia/features/map/actions.py（全部拆包第 49 批：輿圖），這裡留一行委派（_map_foes、_fierce_line 測試會換掉，包裡也經 ctx 叫）
+    # 本體在 tianxia/features/map/actions.py（全部拆包第 49 批：輿圖），這裡留一行委派（_map_foes 測試會換掉、包裡也經 ctx 叫；_fierce_line 留給 same_behavior 的 strip 軌直接叫）
     def map_base(self, *, viewer: bool = True) -> dict:
         return map_actions.map_base(self, viewer=viewer)
 

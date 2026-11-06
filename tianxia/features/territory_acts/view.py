@@ -3,7 +3,7 @@
 """
 from __future__ import annotations
 
-from tianxia import atlas  # 過渡：待搬（輿圖資料 atlas）
+from tianxia import atlas  # 共用規則層（輿圖資料 atlas，第 50 批收進）
 from tianxia import battle_instance, conquest
 from tianxia import ranks  # 共用規則層（階級 ranks，第 40 批收進）
 from tianxia.models import Content

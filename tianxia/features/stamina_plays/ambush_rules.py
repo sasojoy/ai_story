@@ -14,7 +14,7 @@
 只讀寫傳進來的 GameState／WorldState；打、記帳、紀錄在 ambush_actions.py。"""
 from __future__ import annotations
 
-from tianxia import atlas  # 過渡：待搬（輿圖路線 atlas 第 50 批）
+from tianxia import atlas  # 共用規則層（輿圖的開放 atlas.is_unlocked，第 50 批收進）
 from tianxia import allied, roster
 from tianxia import bounties  # 過渡：待搬（第 45 批：懸賞榜成包；has_prey、hostile 讀 bounties.mine、bounties.hunting）
 from tianxia.characters import name_key

@@ -2,7 +2,7 @@
 搬到核心服務檔的小函式兩邊是同一個物件。行為本身（畫法、資料、疊層）由同一個資料夾裡搬進來的整檔測試守。"""
 import server
 from tianxia import mapart, mapdata, mapview, worldgeo
-from tianxia.core import services
+from tianxia.core import explore_base
 from tianxia.features.explore import explore_rules
 from tianxia.features.map import mapart as pkg_mapart
 from tianxia.features.map import mapdata as pkg_mapdata
@@ -29,7 +29,7 @@ def test_the_three_map_routes_are_mounted_by_the_package():
 
 
 def test_the_helpers_moved_to_the_core_service_file_are_the_same_objects():
-    assert mapdata.LOSE_WORD == services.LOSE_WORD == "必敗"
-    assert explore_rules.kind_of is services.kind_of and explore_rules.hint_in is services.hint_in
-    assert explore_rules.mostly_in is services.mostly_in and explore_rules.KINDS is services.KINDS
-    assert sensing.terrain_tags is services.terrain_tags
+    assert mapdata.LOSE_WORD == explore_base.LOSE_WORD == "必敗"
+    assert explore_rules.kind_of is explore_base.kind_of and explore_rules.hint_in is explore_base.hint_in
+    assert explore_rules.mostly_in is explore_base.mostly_in and explore_rules.KINDS is explore_base.KINDS
+    assert sensing.terrain_tags is explore_base.terrain_tags
