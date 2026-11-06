@@ -78,6 +78,7 @@ from tianxia.content import env_profile, load_content, profile_line
 from tianxia.characters import name_key, open_characters
 from tianxia.database import default_path, open_database
 from tianxia.flavor import FlavorJob
+from tianxia.features.persona import rules as persona_rules  # 人物性子：簡介的如今與變化紀錄（過渡：殼直接讀包的查詢）
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, TEXT_TALKS, Game, Refused
 from tianxia.core import features as features_core  # 功能包：殼照 FEATURES 掛管理者工具與路由（開發規範手冊 3.1）
 from tianxia.features.feast import rules as feasts  # 宴客自己寫的敬酒詞：鎖外評分（三段式還在殼裡，過渡）
@@ -148,13 +149,17 @@ def _figure_intros() -> dict:
 FIGURE_INTROS = _figure_intros()
 
 
-def figure_intro(cid: str) -> dict | None:
-    """{who 是誰, role 身分, nature 本性, now 如今, history 變化紀錄}。性子隨全服的互動改變是另一串在做（設計稿「人物性子會變」）：
-    那一套開了之後 now 寫如今那一段、history 一行一筆（「第 1 週・週五 起，脾氣沒那麼火爆了」）；還沒做之前 now 是 None、history 是空的，畫面不畫這兩格。"""
-    row = FIGURE_INTROS.get(cid)
-    if not row:
+def figure_intro(cid: str, game: Game | None = None) -> dict | None:
+    """{who 是誰, role 身分, nature 本性, now 如今, history 變化紀錄}。人物性子（功能包 persona，rules.view）開著、他換過段時
+    now 寫如今那一段、history 一行一筆（「第 1 週・週五 起，脾氣沒那麼火爆了」），拉鋸與「你勸過他 N 次」接在最後；
+    關著、沒換過段 now 是 None、history 是空的，畫面不畫這兩格。簡介檔沒寫他、他卻有性子的，只畫如今與紀錄。"""
+    row = FIGURE_INTROS.get(cid) or {}
+    shift = persona_rules.view(game.state, game.content, cid) if game is not None else None
+    if not row and not (shift and (shift["now"] or shift["history"])):
         return None
-    return {"who": row.get("who", ""), "role": row.get("role", ""), "nature": row.get("nature", ""), "now": None, "history": []}
+    extra = [x for x in ((shift or {}).get("torn"), (shift or {}).get("mine")) if x]
+    return {"who": row.get("who", ""), "role": row.get("role", ""), "nature": row.get("nature", ""),
+            "now": (shift or {}).get("now"), "history": [*(shift or {}).get("history", []), *extra] if shift else []}
 
 
 def horse_art() -> list[str]:
@@ -2184,7 +2189,7 @@ def _main_view_body(game: Game) -> dict:
     if sides is not None:
         view["sides_card"] = sides
     # 介面重整（2026-11-05）：此地人物那一排、正在說話的那一位（浮在最上層的對話框），像在 web/img/figures/full/<id>.webp 才給 face
-    view["figures_here"] = [{**f, "face": figure_face(f["id"]), "intro": figure_intro(f["id"])} for f in game.figures_here_view()]
+    view["figures_here"] = [{**f, "face": figure_face(f["id"]), "intro": figure_intro(f["id"], game)} for f in game.figures_here_view()]
     talk_now = game.talk_view()
     if talk_now is not None:
         view["talk"] = {**talk_now, "face": figure_face(talk_now["id"])}

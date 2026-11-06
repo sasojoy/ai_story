@@ -1029,6 +1029,7 @@ class PlayerState(BaseModel):
     # 減法季批 6（整合設計 5.4、5.5）：這一週跟哪幾位大勢人物記過心意（人物表 id → StanceNote，stances.py）、人物託你的事（errands.py）。
     # 空的時候不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多
     stance_notes: dict[str, StanceNote] = Field(default_factory=dict)
+    persona_notes: dict[str, PersonaNote] = Field(default_factory=dict)  # 人物性子（features/persona）：對話人物 id → 你推過他什麼
     errands: list[ErrandState] = Field(default_factory=list)
     # 上一季論功拿到的稱號（減法季設計 3.3；wins.settle 存在上一季的 WorldState.final_tiers，換季時 _reset_player_for_new_season 掛上）：
     # social.affiliation 接在後面；沒有是空字串（不寫進存檔）
@@ -1146,6 +1147,7 @@ QUIET_DEFAULTS = (
     "keepsakes", "lasting",  # 長篇奇事
     "growth_preset", "growth_custom", "attr_alloc", "attr_event",  # 五項屬性（屬性與跨季架構 v2）
     "legacy",  # 傳承（features/legacy）
+    "persona_notes",  # 人物性子（features/persona）
 )
 
 
@@ -1404,6 +1406,16 @@ class StoryCard(BaseModel):
     image: str | None = None
     ending: str = ""  # 結局的名字（end 才有）
     failed: bool = False
+
+
+class PersonaNote(BaseModel):
+    """你跟一位人物說過哪些在推他性子的話（功能包 features/persona；PlayerState.persona_notes）：一人一天一筆（day 是 rules.game_day），
+    said 是往哪一頭推過幾次（兩頭的叫法 → 次數；簡介寫「你勸過他 N 次」），told 是已經記過行狀的換段（WorldState.persona_log 的 seq）。"""
+
+    day: int = 0
+    said: dict[str, int] = Field(default_factory=dict)
+    first: dict[str, float] = Field(default_factory=dict)  # 第一次往那一頭推的世界秒：之前就換的段不算你勸成的
+    told: list[int] = Field(default_factory=list)
 
 
 class StanceNote(BaseModel):
@@ -1799,6 +1811,18 @@ class SealAct(BaseModel):
     side: str = ""  # 傳檄：這一次照哪一軍算；鎮地：替哪一軍鎮；補缺：退回給哪一軍
 
 
+class PersonaShift(BaseModel):
+    """人物的一條性子換了一段（功能包 features/persona；WorldState.persona_log）：seq 流水號、哪一位（對話人物 id）、哪一條、換到第幾段、
+    往哪一頭（ends 的叫法）、哪一刻（世界秒）。簡介的變化紀錄與勸過的人的行狀照它。"""
+
+    seq: int
+    who: str
+    axis: str
+    stage: int
+    toward: str
+    at: float
+
+
 class StanceOn(BaseModel):
     """一位大勢人物此刻照哪一個心意做事（WorldState.stance_active；stances.check 在到門檻那一刻寫）：哪一個、哪一刻、哪一週。"""
 
@@ -1842,6 +1866,14 @@ class WorldState(BaseModel):
     stance_counts: dict[str, dict[str, int]] = Field(default_factory=dict)
     stance_week: int = 0
     stance_active: dict[str, StanceOn] = Field(default_factory=dict)
+    # 人物性子（功能包 features/persona）：這一季每一條性子此刻的值（對話人物 id → 性子 id → -100～100；沒寫的照史實的起點）、
+    # 結算到第幾個遊戲日、今天記下的淨推力與總份數（往 ends[1] 是正）、上一次結算時在拉鋸的那幾條、換段的紀錄。換季整個重來（Joy 11/6「全部歸回本性」）
+    persona: dict[str, dict[str, int]] = Field(default_factory=dict)
+    persona_day: int = 0
+    persona_push: dict[str, dict[str, int]] = Field(default_factory=dict)
+    persona_tug: dict[str, dict[str, int]] = Field(default_factory=dict)
+    persona_torn: dict[str, list[str]] = Field(default_factory=dict)
+    persona_log: list[PersonaShift] = Field(default_factory=list)
     pending_battle: str | None = None  # 背景推進跨過開戰門檻時記下要開的戰鬥 id；那時人在 mutate_season 的
     # callback 裡，不能再 mutate 開戰（巢狀的 mutate 內層寫的會被蓋掉，會丟錯），callback 結束後由
     # world.start_pending_battle 開戰並清掉
@@ -1912,7 +1944,8 @@ class WorldState(BaseModel):
         if isinstance(data, dict):
             for key in ("marks_fired", "mark_helpers", "final_tiers", "stance_counts", "stance_week", "stance_active", "god_names", "god_firsts",
                         "chapter_weights", "chapter_done", "plans", "stops_done", "deeds", "deed_seq", "places",
-                        "inscriptions", "inscription_seq", "attrs_v2"):
+                        "inscriptions", "inscription_seq", "attrs_v2",
+                        "persona", "persona_day", "persona_push", "persona_tug", "persona_torn", "persona_log"):
                 if key in data and not data[key]:
                     del data[key]
         return data

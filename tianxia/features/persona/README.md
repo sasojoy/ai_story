@@ -1,0 +1,19 @@
+# 人物性子（`tianxia/features/persona/`）
+
+- **做什麼**：全服的人跟人物說話，會一點一點把他的性子往某一頭推；推夠了他換一段，說話的樣子跟著變，簡介寫「如今」與變化紀錄。
+- **導覽**：`docs/guide/大勢人物與賽季.md` 的「人物性子」那一節。
+- **設計稿**：https://claude.ai/artifact/R8w6aMxgeH89djeKYC7n5U（Joy 2026-11-06「可以」；換季選「全部歸回本性」）。
+- **開關**：`Config.persona_shift.enabled`（預設關；正式內容與三種設定都還關著）。關著一個位元組都不變：舊的性情漂移照舊。
+
+| 檔 | 是什麼 |
+|---|---|
+| `__init__.py` | 登記：`enabled`＝開關開著而且 `content/personas.json` 有人；`on_sync`（結算、行狀）；`check_content` |
+| `rules.py` | 純規則：值與段、記一筆（`record`／`hear`）、每天結算（`settle`，懶結算）、換段、行狀、對話提示（`prompt_lines`）、簡介（`view`） |
+| `actions.py` | 同步時替全服結算到今天（結算了就 `_save_season`）、記勸成的行狀（`annals.STANCE`） |
+| `checks.py` | `content/personas.json` 的檢查 |
+| `tests/` | `test_persona.py`、`test_persona_smoke.py`、`persona_stage.py` |
+
+**接在別處的**：`companion_agent`（舊模組）叫 `ends_for`（schema 多一個 enum 的 `persona`）、`prompt_lines`（提示多一段）、`hear`（記一筆、多一句）、
+`covers`（他歸這一包管時舊的性情漂移不讀也不寫）；`server.figure_intro(cid, game)` 讀 `rules.view`， 把如今與變化紀錄接進簡介。
+**認領的欄位**：`PlayerState.persona_notes`（換季不帶）；季上 `WorldState.persona*`（換季整個重來＝全部歸回本性）。
+**數字**（`PersonaShiftRules`，全是【草】）：情誼 30／60／80 算 1／2／3 份；一天淨推力不到 3 份不動；一份 2 點、一天最多 8 點、一段 40 點；沒人推回 2 點；最多離起點 2 段。
