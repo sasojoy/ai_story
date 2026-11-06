@@ -3081,27 +3081,7 @@ MENXIA_ACTIONS = {
 # （/api/peer、/api/peer/act：全部拆包第 37 批搬進玩家互動包 tianxia/features/peers/routes.py，殼照 FEATURES 掛；鎖外的 screen_peer、prepare_peer 照手冊 G10 留在殼：A 段 discuss_actions.request、C 段 discuss_actions.discuss 在包裡，第 38 批）
 
 
-# 第 2 段 D 收：往來紀錄的路由（介面重整）進人物情誼包 routes.py，跟 /api/figure 放一起
-@app.get("/api/talk_log")
-def api_talk_log(request: Request, id: str = "", season: str = "now", before: int = 0):
-    """往來紀錄（介面重整 2026-11-05）：你跟這位人物這一季（season=now）或上一季（prev）說過的話，新的在前、一次 talk_log.PAGE 句；
-    before 是上一頁最舊那一句的 id。情誼的增減照同一位人物前一句記下的情誼算。只讀，不拿行動鎖（讀的是旁邊的小檔與角色的名號）。"""
-    game = _game(request)
-    cid = str(id)[:40]
-    ch = game.content.characters.get(cid)
-    if ch is None:
-        return {"lines": [], "more": False}
-    p = game.state.player
-    number = p.season_number - (1 if season == "prev" else 0)
-    store = talk_store()
-    rows, more = store.page(name_key(p.name), cid, number, before or None, talk_log.PAGE + 1)
-    lines = []
-    for i, r in enumerate(rows[:talk_log.PAGE]):
-        said = rows[i + 1] if i + 1 < len(rows) and rows[i + 1]["role"] == "user" else None  # 同一輪玩家那一句記的是動作前的情誼
-        gain = r["affinity"] - said["affinity"] if said is not None and r["role"] == "assistant" else 0
-        lines.append({"id": r["id"], "stamp": r["stamp"], "place": r["place"], "role": r["role"], "text": r["text"], "gain": gain})
-    return {"id": cid, "name": ch.name, "face": figure_face(cid), "affinity": p.affinities.get(cid, 0),
-            "meets": store.meets(name_key(p.name), cid), "lines": lines, "more": more or len(rows) > talk_log.PAGE}
+# （/api/talk_log：主幹合回 D 段搬進人物情誼包 tianxia/features/companions/routes.py，殼照 FEATURES 掛；小檔的鎖外包裝 talk_store、_log_talk 與 act 前後那兩行留在殼：after_action 拿不到動作前的那一份）
 
 
 # POST /api/party/leave 搬進 tianxia/features/travel/routes.py（api_party_leave；全部拆包第 48 批）

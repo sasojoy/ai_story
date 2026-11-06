@@ -1817,6 +1817,8 @@ def test_the_old_names_left_as_aliases_are_known():
                          "stances": "companions", "errands": "companions", "letters": "companions",
                          # companions（全部拆包第 20 批：tianxia/companion_agent.py、parley.py）
                          "companion_agent": "companions", "parley": "companions",
+                         # companions（主幹合回 D 段：tianxia/talk_log.py）
+                         "talk_log": "companions",
                          # sense（全部拆包第 24 批：tianxia/sensing.py、epiphany.py、glyph.py、insight_llm.py）
                          "sensing": "sense", "epiphany": "sense", "glyph": "sense", "insight_llm": "sense",
                          # cultivation（全部拆包第 23 批：tianxia/cultivation.py、chuangong.py、ascend.py）

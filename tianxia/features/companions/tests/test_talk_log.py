@@ -1,10 +1,11 @@
-"""往來紀錄（介面重整 2026-11-05，tianxia/talk_log.py）：跟大勢人物說過的話一句一列記在資料庫旁邊的小檔，不進角色存檔；
+"""往來紀錄（介面重整 2026-11-05，tianxia/features/companions/talk_log.py）：跟大勢人物說過的話一句一列記在資料庫旁邊的小檔，不進角色存檔；
 打開才分頁讀；兩季以前的搬去封存檔。伺服器在每個動作前後數一次多談了幾輪（不改引擎）。"""
 
 from random import Random
 
 from tianxia import companion_agent, talk_log
 from tianxia.companion_agent import CompanionTurn
+from tianxia.core import features as features_core
 
 
 def _turn(narrative="他點了點頭。"):
@@ -53,13 +54,15 @@ def test_the_endpoint_reads_this_seasons_log_with_affinity_gains(monkeypatch, tm
         state, content = St(), server.CONTENT
 
     monkeypatch.setattr(server, "_game", lambda request: G())
+    # 主幹合回 D 段：路由搬進人物情誼包（找法同 tests/web/test_craft_web.py 的 /api/forge_line：這一版 FastAPI 的 app.routes 不攤開 include_router 的路由）
+    api_talk_log = next(r.endpoint for rt in features_core.routers(server) for r in rt.routes if r.path == "/api/talk_log")
     server.TALK_LOG.add("甲", 1, [
         {"figure": "huangfusong", "at": 1.0, "stamp": "第 1 週・週一 08:00", "place": "長社", "role": "user", "text": "「將軍。」", "affinity": 4},
         {"figure": "huangfusong", "at": 1.0, "stamp": "第 1 週・週一 08:00", "place": "長社", "role": "assistant", "text": "「坐。」", "affinity": 10},
     ])
-    out = server.api_talk_log(None, id="huangfusong")
+    out = api_talk_log(None, id="huangfusong")
     assert [x["text"] for x in out["lines"]] == ["「坐。」", "「將軍。」"]
     assert out["lines"][0]["gain"] == 6 and out["lines"][1]["gain"] == 0
     assert out["meets"] == 1 and out["affinity"] == 10
-    assert server.api_talk_log(None, id="huangfusong", season="prev")["lines"] == []
-    assert server.api_talk_log(None, id="nobody") == {"lines": [], "more": False}
+    assert api_talk_log(None, id="huangfusong", season="prev")["lines"] == []
+    assert api_talk_log(None, id="nobody") == {"lines": [], "more": False}
