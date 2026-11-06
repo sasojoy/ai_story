@@ -805,7 +805,7 @@ class WorldHook:
 # 包登記自己那一格（Feature.world()），其餘由核心代叫（world.py、sqlite_world.py 裡的一張 {格: 函式}：還沒成包、不在共用規則層的舊模組，
 # 與核心自己的那幾格）。寫死在這裡、不照 FEATURES 的先後：同一個位置包與舊模組穿插（step 的宴客夾在人物行事與盤算之間、月旦評排最後；
 # muster 的龍頭上陣排在屯糧與玉璽之後），照 FEATURES 只排得出「所有包擠在同一個位置」。之後舊模組成包只是那一格換主人，表不動。
-# 改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。改格的本體或這張表另外要跑（scripts/test_for.py 挑不全）：tests/map/test_atlas.py、tests/core/ 的 test_explain、test_social、test_prologue，
+# 改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。改格的本體或這張表另外要跑（scripts/test_for.py 挑不全）：tests/map/test_atlas.py、tianxia/features/guide/tests/ 的 test_explain、test_prologue、tianxia/features/peers/tests/test_social.py，
 # tianxia/features/smithy/tests/test_shop.py，tests/figures/ 的 test_day_scale、test_gentry_allied、test_orders，與 scripts/same_behavior.py 的 stack 一軌（兩層以上疊著的先後只有它比）。
 #
 # 位置    核心在哪裡問                                                         run 的簽名                                   回傳
@@ -1256,7 +1256,7 @@ class MenuHook:
 
 # 選單與動身的順序表：位置 → 那一個位置的格，照換成掛鉤之前一行一行的先後。順序就是行為（誰先接管整個選單、「此地還能做」誰排前面、動身被擋先說哪一句都算），
 # 所以寫死、連核心自己的格一起列。包登記自己那一格（Feature.menus()），其餘由核心代叫（engine._MENU_CORE、atlas._BLOCK_CORE、travel/departure._DEPART_CORE）。
-# 改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。改格的本體或這張表另外要跑（scripts/test_for.py 挑不全）：tests/map/test_atlas.py、tests/core/ 的 test_explain、test_social、test_prologue，
+# 改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。改格的本體或這張表另外要跑（scripts/test_for.py 挑不全）：tests/map/test_atlas.py、tianxia/features/guide/tests/ 的 test_explain、test_prologue、tianxia/features/peers/tests/test_social.py，
 # tianxia/features/smithy/tests/test_shop.py，tests/figures/ 的 test_day_scale、test_gentry_allied、test_orders，與 scripts/same_behavior.py 的 stack 一軌（兩層以上疊著的先後只有它比）。
 #
 # 位置    核心在哪裡問                                          run 的簽名                 怎麼叫

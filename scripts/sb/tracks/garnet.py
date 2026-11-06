@@ -13,7 +13,7 @@ from sb.tracks.carve import CarveScenario
 # heart_open、warmer、held、held_during、pinned、next_end、region_of、ends）照季上現在的樣子問一遍寫進輸出；
 # **半舊半新切在引將、鎮地、承露都生效中、還沒期滿的那一刻**（舊程式起用、新程式接著問、快轉到期滿）；
 # 後半：快轉過引將的期滿（回原處、天下大事一句）、鎮地期滿、換季前的終點；假人（BotRunner）在生效中的季裡跑幾輪（人物活起來、走動問 pinned）。
-# 這一段整塊是這一批的：接在檔尾、最後一行登記，PM 合的時候不跟別人的行穿插。角色與名字都是原創的（PM 11/04）。
+# 角色與名字都是原創的（PM 11/04）。
 
 
 class GarnetScenario(CarveScenario):

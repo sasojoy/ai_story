@@ -12,8 +12,7 @@ from sb.base import Scenario
 from sb.harness import ADMIN, CLOCK, STEP, emit, register_track
 
 # ═══════════════════════════ outlets：銀兩出口一軌（全部拆包第 43 批，dev/outlets-1） ═══════════════════════════
-# 銀兩出口與捐軍備（捐素材、捐銀兩、名師指點、買破境丹、看火候、打點門路與那一間「打點」店；`donate:`、`dadian:` 兩個前綴）。這一段整塊是
-# 這一批的，接在檔尾、最後一行是 `register_track`，PM 合的時候不跟別人的行穿插。計畫 docs/superpowers/plans/2026-11-05-銀兩出口包-第1批.md。
+# 銀兩出口與捐軍備（捐素材、捐銀兩、名師指點、買破境丹、看火候、打點門路與那一間「打點」店；`donate:`、`dadian:` 兩個前綴）。計畫 docs/superpowers/plans/2026-11-05-銀兩出口包-第1批.md。
 
 OUTLETS_NAMES = {"賀萬鈞": "guan", "裴雲舟": "huang", "邢孤雁": "guan", "霍青萍": None, "史臨淵": "guan", "駱風吟": "guan", "柳尋芳": "guan",
                  "計玄機": "guan", "石開山": "guan"}

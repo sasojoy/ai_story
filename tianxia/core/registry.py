@@ -169,7 +169,7 @@ SHARED: dict[str, str] = {
     "battlelog": "戰報的資料與拆得失：核心的 journal 讀；決戰、探索、出陣、酒肆四包都寫戰報",
     "fight_llm": "大場面的模型判讀（三段式的單子與夾過的優勢）：單打服務（fight_request、_checked_fight）與殼的 prepare_fight 用，每一種打一場都可能經它",
     # 武學與裝備的規則（22 個；總表寫 25 個，fusion、skillview、shopview 先不收：讀了之後成包的有所感、自創、修練、玉璽、鐵匠鋪、擂台、懸賞，
-    # 理由在 tests/core/test_feature_boundaries.py 的 SHARED_LATER）：核心的 team、content 算威力、驗內容都讀，修練、煉製、鐵匠鋪、裝備好幾包共用
+    # 理由在 tests/core/boundary_tables.py 的 SHARED_LATER）：核心的 team、content 算威力、驗內容都讀，修練、煉製、鐵匠鋪、裝備好幾包共用
     "martial_arts": "武學的品質、熟練度、威力：核心的 content、rules、state、team、world_state、sqlite_world 都讀；二十幾個舊模組在用",
     "arts": "武學的評分、裝卸、意境格（arts.score）：核心的 team 讀；修練、煉製、榜單、序章都叫",
     "insight_fx": "意境效果池與層數：武學 arts、意境 insights、功法庫、序章讀；修練、有所感成包之後也要",

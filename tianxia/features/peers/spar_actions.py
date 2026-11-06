@@ -1,5 +1,5 @@
 """切磋的動作（功能包 tianxia/features/peers/；原本是 Game 上的 _spar_problem、_spars_left、_spar_answer_problem、spar_refusal、spar_invite、_spar、
-_spar_record；全部拆包第 38 批搬進來，行為一個字不變）。ctx 是 Game；只叫 tianxia/core/services.py 那張清單上的方法。
+_spar_record；全部拆包第 38 批搬進來，行為一個字不變）。ctx 是 Game；只叫 tianxia/core/services_list.md 那張清單上的方法。
 
 切磋掛在玩家卡上（spar.py 登記進 social.ACTIONS）：發邀請、答應、婉拒、收回都是按的那個人自己的動作，在他自己那一把行動鎖裡做；
 對方那一份照 social 的做法拿（actions.peer：此刻在這裡的人、不補算時間、賽季接上這一份），做完存回去。邀請存在這一季的 WorldState.invites。

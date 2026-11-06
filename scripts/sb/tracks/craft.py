@@ -13,8 +13,7 @@ from sb.harness import ADMIN, CLOCK, MODEL, STEP, db_text, emit, register_track
 # ═══════════════════════════ craft：煉製與自創一軌（全部拆包第 44 批，dev/craft-1） ═══════════════════════════
 # 意境合成與揣摩（取名三段式 A、B、C：Game.forge_request／server.prepare_forge／Game.forge 的重驗；預覽 /api/forge_line）、自創五步
 # （執器、擺式、立意〔三段式〕、成形、立名）、重悟帖（重骰形、重讀這句意〔三段式〕）、作罷的本體從 engine.py 與 tianxia/create.py 搬進
-# tianxia/features/craft/（舊名留成別名；計畫 docs/superpowers/plans/2026-11-05-煉製自創包-第1批.md）。這一段整塊是這一批的：接在檔尾、
-# 最後一行登記（register_track），PM 合的時候不跟別人的行穿插。角色與意境、武學、招式的名字都是原創的（第 22 批 PM 認定第 3 條）。
+# tianxia/features/craft/（舊名留成別名；計畫 docs/superpowers/plans/2026-11-05-煉製自創包-第1批.md）。角色與意境、武學、招式的名字都是原創的（第 22 批 PM 認定第 3 條）。
 
 CRAFT_READ = {"score": 82, "attributes": ["柔", "虛"], "lean": "正", "move": "拂雲式", "say": "身子一擰便繞了過去"}
 CRAFT_REREAD = {"score": 71, "attributes": ["剛"], "lean": "邪", "move": "裂冰式", "say": "掌勢一沉便壓了下去"}

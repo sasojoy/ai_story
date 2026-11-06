@@ -11,8 +11,7 @@ from sb.harness import ADMIN, CLOCK, STEP, emit, register_track
 
 # ═══════════════════════════ world：世界層一軌（全部拆包第 25 批，dev/core-world-1） ═══════════════════════════
 # 世界層掛鉤（世界一步、每週、每天；世界層的開季與換季；全服收季；開集結）：world.py、sqlite_world.py 裡直接叫包與舊模組的地方改叫核心的
-# 掛鉤，world.py 收進核心本體（計畫 docs/superpowers/plans/2026-11-05-世界層掛鉤-第25批.md）。這一段整塊是這一批的：接在檔尾、最後一行登記
-# （register_track），PM 合的時候不跟別人的行穿插。角色的名字都是原創的（PM 11/04）。
+# 掛鉤，world.py 收進核心本體（計畫 docs/superpowers/plans/2026-11-05-世界層掛鉤-第25批.md）。角色的名字都是原創的（PM 11/04）。
 
 
 class WorldScenario(Scenario):

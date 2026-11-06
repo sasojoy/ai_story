@@ -3,7 +3,7 @@ Game 留 7 個一行委派（同步那一下第 55 批換成 sync.deliver 的 zh
 biography_request、write_biography、biography_view、share_biography）；其餘 11 個只在包內互相叫，直接拿掉。
 寫傳的三段式：A biography_request（request，鎖內只讀）→ B server.write_zhuan（鎖外叫模型，留在殼；鎖外工作的掛鉤是總表第 69 批）→
 C write_biography（write，鎖內重驗：request 再問一次，對不上就不存）。
-第一個參數 ctx 是 Game（手冊 3.3）；叫回 Game 的只用 tianxia/core/services.py 那張清單上的。"""
+第一個參數 ctx 是 Game（手冊 3.3）；叫回 Game 的只用 tianxia/core/services_list.md 那張清單上的。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

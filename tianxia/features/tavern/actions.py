@@ -1,6 +1,6 @@
 """酒肆的動作（功能包 tianxia/features/tavern/；原本是 Game 上酒肆的 43 個方法，開發規範手冊 3.2、主動搬六包第 10 批）。
 
-ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx；包裡互相叫直接叫這裡的
+ctx 是 Game（第一階）；只叫 tianxia/core/services_list.md 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx；包裡互相叫直接叫這裡的
 函式）。函式名＝原本的方法名去掉前導底線（`_tavern_news` → `tavern_news`、`_deliver_hits` → `deliver_hits`），兩個例外：公開的
 `tavern_ask` 是 `tavern_ask_reply`、私有的 `_tavern_ask` 是 `tavern_ask_once`——這裡 `tavern_ask` 是問酒家那個模組（ask.py）的名字，
 本體照舊寫 `tavern_ask.topics(...)`。另加一個 `tavern_sign`：`act:tavern` 那一下紀錄的標題（Game._action_title 經 act 子動詞的掛鉤叫，第 11 批）。

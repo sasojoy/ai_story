@@ -10,8 +10,7 @@ from sb.harness import ADMIN, CLOCK, MODEL, STEP, emit, register_track
 
 # ═══════════════════════════ zhuan：列傳一軌（全部拆包第 29 批，dev/zhuan-1） ═══════════════════════════
 # 列傳（tianxia/biography.py、zhuan_end.py、zhuan_html.py 與 Game 上寫傳、休季三顆、行狀頁的 20 個方法、server 的列傳那一段與 5 條路由、zhuan: 前綴）
-# 搬進新包 tianxia/features/zhuan/（舊名留成別名；計畫 docs/superpowers/plans/2026-11-04-列傳包-第1批.md）。這一段整塊是這一批的：接在檔尾、最後一行
-# 登記（register_track），PM 合的時候不跟別人的行穿插。角色的名字都是原創的（PM 11/04）。
+# 搬進新包 tianxia/features/zhuan/（舊名留成別名；計畫 docs/superpowers/plans/2026-11-04-列傳包-第1批.md）。角色的名字都是原創的（PM 11/04）。
 
 ZHUAN_FIGURES = ("luzhi", "zhujun", "caocao")  # 評曰與親筆評曰的人物（正式內容有；測試內容沒有就改拿人物表的前三位）
 

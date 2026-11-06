@@ -12,8 +12,7 @@ from sb.harness import ADMIN, CLOCK, MODEL, STEP, emit, register_track
 from sb.tracks.explore import ExploreScenario, _explore_rules
 
 # ═══════════════════════════ bout：單挑兩軌（全部拆包第 12 批，dev/bout-1） ═══════════════════════════
-# 單人頭目戰、擂台（含看台的場邊事件）搬進 tianxia/features/bout/（計畫 docs/superpowers/plans/2026-11-03-單挑包-第1批.md）。這一段整塊是這一批的：
-# 接在檔尾、最後兩行登記（register_track），PM 合的時候不跟別人的行穿插。同一套段落登記兩軌：bout 切在擂台報名之後、被挑之前
+# 單人頭目戰、擂台（含看台的場邊事件）搬進 tianxia/features/bout/（計畫 docs/superpowers/plans/2026-11-03-單挑包-第1批.md）。同一套段落登記兩軌：bout 切在擂台報名之後、被挑之前
 # （WorldState.arena 有人守擂、還沒人來挑；同一刻江小魚的頭目戰第一回合出過招、DuelState 寫進存檔），ring 切在擂台寫到一半（擂台打到一半、
 # 場邊那一句等著重寫、守擂的那一筆沒補、坐在擂台邊、記下的俸沒領；審查修正，取代原本切在頭目戰打到一半、跟 bout 重複的 boss 那一軌）。
 # 打法照 ExploreScenario 的小工具：抽到哪一類（探索一顆）、頭目的機率（Config.duel.explore_chance 換成 1）在要的那幾步換掉；勝負靠把

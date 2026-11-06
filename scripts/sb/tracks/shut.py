@@ -11,7 +11,7 @@ from sb.tracks.strip import StripScenario
 # 三種設定要一個字都不變，none、weekend 之後不再是可以選的設定（same_behavior 的 PROFILES 跟著改）。這一軌盯的是「關門之後 week7、season21、
 # test 還在讀」的那幾處：設定那一行與季長分岔的季曆（calendar、timetable：照現實天的程式碰上開季時沒蓋章的舊季，weekend_style）、
 # 初入江湖兩步（e2_drill、e4_field）與舊步數的對應、新手目標 field2 的兩種字、h_field_lose 的提示、懸賞與序章裡「尋敵」「操練」的字。
-# 名字一律原創（第 22 批認定第 3 條）。這一段整塊是這一批的：接在檔尾、最後一行登記，PM 合的時候不跟別人的行穿插。
+# 名字一律原創（第 22 批認定第 3 條）。
 
 
 class ShutScenario(StripScenario):

@@ -1,4 +1,4 @@
-"""擂台形象的動作（功能包 tianxia/features/looks/）。ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。"""
+"""擂台形象的動作（功能包 tianxia/features/looks/）。ctx 是 Game（第一階）；只叫 tianxia/core/services_list.md 那張清單上的方法。"""
 from __future__ import annotations
 
 import hashlib

@@ -12,7 +12,7 @@ from sb.harness import ADMIN, CLOCK, STEP, db_text, emit, register_track
 # ═══════════════════════════ gear：裝備一軌（全部拆包第 42 批，dev/gear-1） ═══════════════════════════
 # 裝備（馬市的買、餵、換上，修練頁 /api/menxia/{wield,dismantle,feed,dismantle_many}，寄放補送，名將贈禮與本命兵器，神器譜 /api/boards、/api/board_card）：
 # Game 上 13 個方法與 tianxia/signature_arms.py 之後搬進 tianxia/features/gear/（計畫 docs/superpowers/plans/2026-11-07-裝備包-第1批.md）。
-# 這一段整塊是這一批的：接在檔尾、最後一行登記（register_track），PM 合的時候不跟別人的行穿插。角色的名字都是原創的（第 22 批 PM 認定第 3 條）。
+# 角色的名字都是原創的（第 22 批 PM 認定第 3 條）。
 
 GEAR_BOTS = ["牧甲", "牧乙"]
 GEAR_SILVER = 6000

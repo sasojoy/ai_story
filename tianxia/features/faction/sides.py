@@ -62,7 +62,7 @@ def sides_card(game: Game) -> dict | None:
     四勝利開著的季（批 3c）：每一欄多 join_at、gives 照四階寫、豪強那一欄的 now 寫兩本帳；lean 是豪強此刻幫的那一軍 id；
     投靠了的人多 tier_hint（「第三階・還差 40」）、豪強多 ledger（{"guan": 120, "huang": 40}）。"""
     s, c = game.state, game.content
-    if not c.scenario.factions or s.world.ended or prologue_rules.active(s, c) or game._opening_pending():  # noqa: SLF001  開局三選一還沒選：先不畫（批 7）；經 ctx（services.py 有寫）
+    if not c.scenario.factions or s.world.ended or prologue_rules.active(s, c) or game._opening_pending():  # noqa: SLF001  開局三選一還沒選：先不畫（批 7）；經 ctx（services_list.md 有寫）
         return None
     four = rules.jianfa(c, s.world)
     standing = rules.stances(s, c) if rules.season_one(c, s.world) else None

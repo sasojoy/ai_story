@@ -12,8 +12,7 @@ from sb.harness import ADMIN, CLOCK, MODEL, STEP, emit, register_track
 
 # ═══════════════════════════ companions：人物情誼一軌（全部拆包第 19 批，dev/companions-1） ═══════════════════════════
 # 同伴招募與名下、心意、託付與勸降、來信與委託、/api/figure 的本體從 engine.py 搬進新包 tianxia/features/companions/（stances、errands、letters
-# 留成別名；心意的世界那一半進共用規則層 tianxia/stance_world.py；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第1批.md）。這一段整塊是這一批的：
-# 接在檔尾、最後一行登記（register_track），PM 合的時候不跟別人的行穿插。新開的軌用原創名字（第 22 批 PM 認定第 3 條）。
+# 留成別名；心意的世界那一半進共用規則層 tianxia/stance_world.py；計畫 docs/superpowers/plans/2026-11-04-人物情誼包-第1批.md）。新開的軌用原創名字（第 22 批 PM 認定第 3 條）。
 
 COMPANIONS_TALK = "他沉吟了一會，點了點頭。"  # 假模型寫的對話那一輪
 COMPANIONS_LETTER = "少俠台鑒：此事有勞，望勿推辭。"  # 假模型照他的口氣重寫的信

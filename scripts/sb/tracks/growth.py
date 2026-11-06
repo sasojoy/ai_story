@@ -10,7 +10,7 @@ from sb.harness import ADMIN, CLOCK, STEP, TRACK_REQUIRES, emit, register_track
 
 # ═══════════════════════════ growth、legacy（合回 develop 第 0 段） ═══════════════════════════
 # 主幹合回 develop（手冊第十五節「develop 合回的 PM 認定」；盤點 docs/superpowers/handoff/2026-11-06-develop合回盤點/）第 1 段拿這兩軌驗
-# FEATURES 的位置與換季帶走的東西。這一段整塊是第 0 段加的：接在檔尾、最後兩行登記。
+# FEATURES 的位置與換季帶走的東西。
 # 這兩軌只有 develop（與合回之後的主幹）起得來：五項屬性、傳承都是 develop 的功能。根上沒有那個檔時 compare、selftest 照 TRACK_REQUIRES 略過，
 # 直接 run 這兩軌會停下來寫理由，不會空跑。角色與意境的名字都是原創的。
 

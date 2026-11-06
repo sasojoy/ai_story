@@ -2,7 +2,7 @@
 第一個參數是 ctx（第一階就是 Game）。Game 留一行的委派給 server、核心原位、假人與測試；招募那一段選單、同步的書信那一格、`errand` 的標題原本寫在
 Game._everyday_options、sync、_action_title，也搬進來。
 
-包裡叫回 Game 的都在服務清單（tianxia/core/services.py）。這一批互相叫直接叫函式（沒有測試換掉這幾個；手冊第十五節「包裡叫回 Game 的方法經不經 ctx」）。
+包裡叫回 Game 的都在服務清單（tianxia/core/services_list.md）。這一批互相叫直接叫函式（沒有測試換掉這幾個；手冊第十五節「包裡叫回 Game 的方法經不經 ctx」）。
 """
 from __future__ import annotations
 

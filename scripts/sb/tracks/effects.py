@@ -12,8 +12,7 @@ from sb.harness import ADMIN, CLOCK, STEP, emit, register_track
 
 # ═══════════════════════════ effects：效果與叛投一軌（全部拆包第 32 批，dev/core-effects-1） ═══════════════════════════
 # 效果與叛投掛鉤（核心批）：rules.apply_effect 照效果欄位分派給主人（晉升、帶兵、招同伴、伏筆、碎片、屯糧、四勝利記帳，還有一條線的一步），
-# 叛投那一刻各包清自己的進度（計畫 docs/superpowers/plans/2026-11-06-效果與叛投掛鉤-第32批.md）。這一段整塊是這一批的：接在檔尾、最後一行登記
-# （register_track），PM 合的時候不跟別人的行穿插。角色的名字都是原創的（PM 11/04）。
+# 叛投那一刻各包清自己的進度（計畫 docs/superpowers/plans/2026-11-06-效果與叛投掛鉤-第32批.md）。角色的名字都是原創的（PM 11/04）。
 # 對照用的事件（FX_PREFIX 開頭）只加進這一個子行程手上的內容（actions 是空的：探索抽不到，只擺到眼前），效果的值照內容裡第一則寫了那個欄位的
 # 事件抄（沒有的照 fallback 補），base 與 head 加的一模一樣；只打公開的 API 按下去。
 

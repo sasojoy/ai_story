@@ -1,5 +1,5 @@
 """截殺的動作（功能包 tianxia/features/peers/；原本是 Game 上的 raid_shown、raid_refusal、raid_odds、raid_targets、raid、raid_flee_odds、_raid_fled、
-_raid_spoils、_raid_record；全部拆包第 38 批搬進來，行為一個字不變）。ctx 是 Game；只叫 tianxia/core/services.py 那張清單上的方法。
+_raid_spoils、_raid_record；全部拆包第 38 批搬進來，行為一個字不變）。ctx 是 Game；只叫 tianxia/core/services_list.md 那張清單上的方法。
 
 截殺（Config.raid；企劃者 2026-10-08 在決策卡選「有限制地開」）：玩家卡上的一顆鈕，不必對方同意。每季都有、不看第一季開關（企劃者 2026-10-10，懸賞榜設計 2.2）；
 Config.raid.enabled 是主機的緊急開關，關著時通緝一起收。兩個人都投靠了陣營、而且是不同陣營時才有；散人只能截殺自己揭了通緝的那個人。對方下線、在忙也照打：

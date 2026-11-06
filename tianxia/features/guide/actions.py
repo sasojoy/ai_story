@@ -1,6 +1,6 @@
 """新手引導包的動作（全部拆包第 22 批：原本 Game 上的 31 個方法，計畫 docs/superpowers/plans/2026-11-01-新手引導包-第1批.md 1.1）。
 Game 留 24 個一行委派（server、測試、別的功能在叫的），其餘 7 個只有這一包在叫。第一個參數 ctx 是 Game（手冊 3.3）；叫回 Game 的只用
-tianxia/core/services.py 那張清單上的；這一包互相叫直接叫函式，只有被測試換掉的 _hint_triggers 與 _note_action 經 ctx。
+tianxia/core/services_list.md 那張清單上的；這一包互相叫直接叫函式，只有被測試換掉的 _hint_triggers 與 _note_action 經 ctx。
 最後一段是核心原位與出陣包叫的服務（Game._opening_on……的本體）。"""
 from __future__ import annotations
 

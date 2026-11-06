@@ -11,8 +11,7 @@ from sb.harness import ADMIN, CLOCK, STEP, emit, register_track
 from sb.tracks.military import MilitaryScenario
 
 # ═══════════════════════════ omen：軍情二軌（全部拆包第 34 批，dev/military-2） ═══════════════════════════
-# 機緣（opp:）與伏筆（fs:）：出現、接下、做完、過期；效果帶伏筆的欄位；叛投時手上有機緣與密謀。這一段整塊是這一批的，接在檔尾、
-# 最後一行是 `register_track`，PM 合的時候不跟別人的行穿插。計畫 docs/superpowers/plans/2026-11-06-軍情包-第2批.md。
+# 機緣（opp:）與伏筆（fs:）：出現、接下、做完、過期；效果帶伏筆的欄位；叛投時手上有機緣與密謀。計畫 docs/superpowers/plans/2026-11-06-軍情包-第2批.md。
 
 OMEN_OPP = ("opp:",)
 

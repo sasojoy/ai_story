@@ -12,7 +12,6 @@ from sb.harness import ADMIN, CLOCK, STEP, emit, register_track
 # ═══════════════════════════ peers（全部拆包第 37 批「玩家互動一」，dev/peers-1）：peers 一軌 ═══════════════════════════
 # 此地還有、玩家卡、邀請框（invite:）、打招呼、贈物、名帖、/api/peer 與 /api/mingtie 四條路由（計畫 docs/superpowers/plans/2026-11-06-玩家互動包-第1批.md）。
 # 切磋、論武、截殺是第 38 批，這一軌只在玩家卡上看得到它們的鈕（card 一併進輸出），不按。名字一律原創（第 22 批認定第 3 條）。
-# 這一段整塊是這一批的：接在檔尾、最後一行登記，PM 合的時候不跟別人的行穿插。
 
 
 class PeersScenario(Scenario):

@@ -16,8 +16,7 @@ from sb.tracks.herald import HeraldScenario
 # 決戰：同一下屯糧、龍頭上陣也有動作——世界層 muster 的 front、works、seal、generals 四格）、決戰收場（事件 battle_end 的 seal 那一格）、
 # 離線的人同步補送、隱沒判斷、換季（世界層 retire：隱沒、沒收場的奪璽單挑記成未分勝負；next：天命之季的章、天命之季不藏）、天命之季的
 # 喚回與天命之爭（份量加權、定天命）、散去、管理者的 seal_mandate（now、next、cancel）、/api/main 的江湖史七格與碎片卡、管理頁的玉璽一組。
-# 計畫 docs/superpowers/plans/2026-11-07-玉璽包-第1批.md。這一段整塊是這一批的：接在檔尾、最後一行登記（register_track），PM 合的時候
-# 不跟別人的行穿插。角色的名字都是原創的（PM 11/04）。
+# 計畫 docs/superpowers/plans/2026-11-07-玉璽包-第1批.md。角色的名字都是原創的（PM 11/04）。
 # 固定密鹽（PM 認定）：same_behavior 走 TestClient、不經 server.main／run_bots.main，seal.ensure_salt 從沒叫到，別的軌的密鹽都是空字串、
 # 兩份程式一樣。這一軌只在開季前寫一個固定的非空密鹽（tianxia-qa 引擎驗收那一條）；子行程另外把 seal.secrets.token_hex 換成回固定值
 # （以防有路徑走到 ensure_salt）。既有的軌一個字不動。

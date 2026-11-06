@@ -4,7 +4,7 @@ README.md 寫這一包做什麼、導覽與設計稿。
 - menu.py：原本 Game 上的 _move_option、_back_way、_back_option、_road_task_options、set_move_mode（只有 set_move_mode 留一行委派給 server、測試；選單那幾個第 56 批換成 road、here 的格）
 - road_actions.py：原本 Game 上的 _move、_road、_road_*、_road_sight（第 48 批 _arrivals 搬進 departure.py，直接叫 sight；委派拿掉）
 - go_actions.py：原本 Game 上的 _halt、travel、travel_refusal（travel、travel_refusal 留委派）
-- departure.py：原本 Game 上的 _depart、_arrivals、_arrive、_journey_line（第 48 批；都留一行委派）
+- departure.py：原本 Game 上的 _depart、_arrivals、_arrive、_journey_line（第 48 批；前三個掛在 game_api.py 的表，_journey_line 沒人經 Game 叫，第二輪第 72 批拿掉）
 - party.py：原本 Game 上結伴同行的 _join、join_refusal、_party_expires、_party、party_view、leave_party、_part_ways、_lead、_partners、_share_road
   （_join、join_refusal、party_view 留委派；_party_expires 第 55 批換成 sync.deliver 的 party 那一格）
 - bots.py：假人的分數（原本 bot_policy.score 的 move: 那一段）

@@ -1,7 +1,7 @@
 """鐵匠鋪的架上（全部拆包第 41 批）：第二層選單（兵器頁、防具頁、素材頁，打造兵器…／打造防具…挑到一半時換成那一步）與選單上按下去的一下
 （切頁、買、修、換上、拆解、打造與淬煉的每一步、離開）。原本 Game 上的 8 個方法，Game 只留 smith_options 的一行委派（核心原位的選單叫它）；
 choose 的 smith: 由包的 choose 掛鉤接走（Outcome.run 叫 smith）。計畫 docs/superpowers/plans/2026-11-06-鐵匠鋪包-第1批.md 1.1。
-第一個參數 ctx 是 Game（手冊 3.3）；叫回 Game 的只用 tianxia/core/services.py 那張清單上的；這一包互相叫直接叫函式。
+第一個參數 ctx 是 Game（手冊 3.3）；叫回 Game 的只用 tianxia/core/services_list.md 那張清單上的；這一包互相叫直接叫函式。
 規則照模組屬性叫（weapons.buy、smithing.step……：測試換掉模組上的，這裡照樣打得到）。"""
 from __future__ import annotations
 

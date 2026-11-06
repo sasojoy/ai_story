@@ -12,7 +12,6 @@ from sb.tracks.strip import StripScenario
 # 序章草廬四景與探索的底：權重（_explore_weights、_explore_can）、野怪（_wild_foes、_here_squads）、自家營寨跟同袍比劃（_drills_with）、
 # 練功分級（_practice_tier）、撿破境丹（_legend_find）、舊探索本身（_explore、_explore_outcome；不帶設定、weekend、測試內容走它，
 # season21、week7 走出門一趟）。計畫 docs/superpowers/plans/2026-11-04-探索包-第3批.md。名字一律原創（第 22 批認定第 3 條）。
-# 這一段整塊是這一批的：接在檔尾、最後一行登記，PM 合的時候不跟別人的行穿插。
 
 
 class RoamScenario(StripScenario):

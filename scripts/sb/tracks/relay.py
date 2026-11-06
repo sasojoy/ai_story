@@ -10,7 +10,7 @@ from sb.harness import ADMIN, CLOCK, STEP, emit, register_track
 from sb.tracks.switchboard import SwitchboardScenario
 
 # ═══════════════════════════ 全部拆包第 69 批：三段式的鎖外那一段（relay 一軌）═══════════════════════════
-# 計畫 docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md 第二節。這一段整塊是這一批的：接在檔尾、最後一行登記（register_track）。
+# 計畫 docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md 第二節。
 
 RELAY_THREADS = ("battle-tales", "arena-crowd", "tavern-chatter", "letter", "yuedan", "xingshi", "event-flavor")  # 名字算行為（看守、Scribe 都認）
 RELAY_ONCE = ("crowd_once", "chatter_once", "letter_once", "yuedan_once", "xingshi_once")  # 測試與腳本直接叫的那幾支（殼留一行包裝）

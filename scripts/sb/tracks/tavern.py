@@ -11,8 +11,7 @@ from sb.base import Scenario
 from sb.harness import ADMIN, CLOCK, CLOCK0, MODEL, STEP, STEP_SECONDS, emit, register_track
 
 # ═══════════════════════════ tavern：酒肆一軌（主動搬六包第 10 批，dev/tavern-1） ═══════════════════════════
-# 酒肆的引擎那一半搬進 tianxia/features/tavern/（計畫 docs/superpowers/plans/2026-10-31-酒肆包-第1批.md）。這一段整塊是酒肆的：
-# 三條拆包線並行，接在檔尾、最後一行登記（register_track），PM 合的時候不跟別人的行穿插。
+# 酒肆的引擎那一半搬進 tianxia/features/tavern/（計畫 docs/superpowers/plans/2026-10-31-酒肆包-第1批.md）。
 
 # develop 0425589a 之後才要的兩個固定（註冊限流、資料庫第 9 版 sessions 的 token_hash 抹掉）：這一塊原本自己套一份（換掉 Scenario.__init__、
 # 模組層的 db_text），合 develop（2026-11-01）時 develop 已經放在共用那一層（Scenario.__init__、db_text），只留那一份。

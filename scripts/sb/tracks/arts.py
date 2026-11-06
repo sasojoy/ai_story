@@ -12,8 +12,7 @@ from sb.harness import ADMIN, BUF, CLOCK0, MODEL, _setup_child, db_text, emit, r
 
 # ═══════════════════════════ arts（全部拆包第 23 批「修練」，dev/arts-1）：arts 一軌 ═══════════════════════════
 # 改練、練成、意境裝卸、熔煉、絕學與破境丹、破境卡三段式、傳功、配點、拜師學藝（learn:）搬進修練包（計畫
-# docs/superpowers/plans/2026-11-01-修練包-第1批.md）。這一段整塊是這一批的：接在檔尾、最後兩行登記（register_track、假人的 --seats arts），
-# PM 合的時候不跟別人的行穿插。名號一律原創（PM 11/04）。
+# docs/superpowers/plans/2026-11-01-修練包-第1批.md）。名號一律原創（PM 11/04）。
 
 ARTS_LINE = "千招落盡，只剩你與那一腿，風聲都慢了下來。"  # 假模型寫的破境卡那一句：合格（八到四十字、沒有數字英文）、跟兩句套句都不一樣
 _ARTS_CLIENTS: dict[type, type] = {}

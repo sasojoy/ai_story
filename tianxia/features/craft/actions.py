@@ -1,5 +1,5 @@
 """煉製與自創包的動作（全部拆包第 44 批）：原本 Game 上煉製頁開爐與自創五步的 16 個方法，Game 留一行委派給 server、假人、測試與核心原位、引導包。
-計畫 docs/superpowers/plans/2026-11-05-煉製自創包-第1批.md 1.1。第一個參數 ctx 是 Game（手冊 3.3）；叫回 Game 的只用 tianxia/core/services.py 那張清單上的；
+計畫 docs/superpowers/plans/2026-11-05-煉製自創包-第1批.md 1.1。第一個參數 ctx 是 Game（手冊 3.3）；叫回 Game 的只用 tianxia/core/services_list.md 那張清單上的；
 這一包互相叫直接叫函式。規則照模組屬性叫（create.set_intent……：測試換掉模組上的，這裡照樣打得到）。
 
 鎖外三段式（A 開單、B 叫模型、C 重驗）照舊：

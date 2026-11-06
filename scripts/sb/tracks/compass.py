@@ -10,8 +10,7 @@ from sb.harness import ADMIN, CLOCK, STEP, emit, register_track
 # ═══════════════════════════ compass：「你這一步」一軌（全部拆包第 36 批，dev/core-step-1） ═══════════════════════════
 # 「你這一步」與本週卡（核心批）：本週卡的「眼下要事」（main.week_card.steps）照 託付 → 軍令 → 揭了的懸賞 → 伏筆 → 新手目標 → 去投靠 排，
 # 四勝利開著的季每一件補 target、id（護糧還沒接糧車多 then），「換一件事」（step:next，不在選單上、Game.choose 先接走）照今天按了幾次從那一件排起、
-# 隔天從頭。計畫 docs/superpowers/plans/2026-11-06-你這一步-第36批.md 1.8、1.9。這一段整塊是這一批的：接在檔尾、最後一行登記
-# （register_track），PM 合的時候不跟別人的行穿插。角色的名字都是原創的（PM 11/04）。懸賞單直接寫進季上的榜（CP_PREFIX 開頭、
+# 隔天從頭。計畫 docs/superpowers/plans/2026-11-06-你這一步-第36批.md 1.8、1.9。角色的名字都是原創的（PM 11/04）。懸賞單直接寫進季上的榜（CP_PREFIX 開頭、
 # 揭的人寫好），糧車直接擺進存檔，其餘只打公開的 API 按下去。
 
 CP_PREFIX = "cp_"

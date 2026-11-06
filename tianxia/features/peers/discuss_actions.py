@@ -1,6 +1,6 @@
 """論武的動作（功能包 tianxia/features/peers/；原本是 Game 上的 discusses_left、discuss_items、_discuss_cost、discuss_refusal、discuss_invite、
 _discuss_partner、discuss_request、_discuss_forge、discuss_problem、discuss_invite_problem、discuss_item_problem、_discuss；全部拆包第 38 批搬進來，行為一個字不變）。
-ctx 是 Game；只叫 tianxia/core/services.py 那張清單上的方法。
+ctx 是 Game；只叫 tianxia/core/services_list.md 那張清單上的方法。
 
 論武（玩家互動第二層）：兩個人各出一個意境合成一個新的，兩人都拿到；首創算兩人共有，價錢各付一半。走 fusion.merge（fusion.Partner：對方出的那一個不必是你的、
 不佔你的持有）；持有上限、「已經有了」照舊各自擋。武學不再拿來合（Joy 2026-10-21），論武跟著只剩意境。

@@ -1,5 +1,5 @@
 """懸賞榜的動作（原本 Game 上的 _bounty_options、_bounty、post_wanted、_raid_bounty 四個方法，與 _act 的 act:bounties、sync 的退押金與作廢、own_turn_checks 的系統通緝、
-choose 的 FB-162、status_data 的懸賞卡；全部拆包第 45 批）。第一個參數 ctx 是 Game（手冊 3.3）；叫回 Game 的只用 tianxia/core/services.py 那張清單上的。
+choose 的 FB-162、status_data 的懸賞卡；全部拆包第 45 批）。第一個參數 ctx 是 Game（手冊 3.3）；叫回 Game 的只用 tianxia/core/services_list.md 那張清單上的。
 規則照模組屬性叫（rules.take、rules.give……：測試與量表腳本換掉模組上的，這裡照樣打得到）。"""
 from __future__ import annotations
 

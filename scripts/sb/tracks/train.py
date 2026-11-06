@@ -13,7 +13,6 @@ from sb.harness import ADMIN, BUF, CLOCK, CLOCK0, MODEL, _setup_child, db_text, 
 
 # ═══════════════════════════ sortie（全部拆包第 17 批「出陣三」，dev/sortie-3）：train 一軌 ═══════════════════════════
 # 序章雪恥、舊遊歷、跟自家隊伍操練、守勢（act:duty）、遊歷推大勢收進出陣包（計畫 docs/superpowers/plans/2026-11-01-出陣包-第3批.md）。
-# 這一段整塊是這一批的：接在檔尾、最後兩行登記（register_track、假人的 --seats train），PM 合的時候不跟別人的行穿插。
 
 
 class TrainScenario(Scenario):

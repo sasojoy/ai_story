@@ -3,7 +3,7 @@
 `_here_squads`、撿破境丹 `_legend_find`、練功分級 `_practice_tier`。Game 留 6 個一行委派（`_explore_outcome`、`_here_squads` 只有這一包自己叫，
 不留）。
 
-ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx）。**經 ctx 叫的**：
+ctx 是 Game（第一階）；只叫 tianxia/core/services_list.md 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx）。**經 ctx 叫的**：
 `_explore_weights`、`_explore_can`、`_legend_find`、`_wild_foes`（測試與 scripts/same_behavior.py 在 Game 上換掉它們，包裡直接叫模組函式就換不到）；
 `_explore_outcome`、`_here_squads` 沒有人換過，包內直接叫。擲骰順序（頭目 → 奇遇 → 比重抽一支 → 野怪／事件）、`_legend_find` 機率 0 不擲、
 序章裡不撿破境丹也不擲，都照原本；`ctx.rng` 就是原本的 `self.rng`。

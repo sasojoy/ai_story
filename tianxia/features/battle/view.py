@@ -1,6 +1,6 @@
 """全服決戰「看」那一半（主動搬六包第 5 批）：原本 Game 上的 31 個方法，本體照抄、self 換成 ctx（第一階 ctx 就是 Game，開發規範手冊 3.3），
 包裡互相叫直接叫函式，模組層的字在 rules.py；「打」那一半（集結、投效、挑同伴、推進、結算、攻城、管理者——還在 Game，第 6～8 批搬）與別的功能
-一律經 ctx.<名>（tianxia/core/services.py 的清單：測試換掉的 Game 方法才打得到）。Game 留 22 個一行委派（server、核心原位、測試在叫），
+一律經 ctx.<名>（tianxia/core/services_list.md 的清單：測試換掉的 Game 方法才打得到）。Game 上的名字掛在 game_api.py 的表（server、核心原位、測試在叫），
 另外 9 個只有這裡叫。第 7 批之後集結、投效、挑同伴（在不在場、臨時投效、隨你出陣的同伴回江湖、送出一招）在 muster.py，直接叫；第 8 批之後
 推進與結算（此刻看的那一場 battle_for_me、battle_now、只能觀戰 watching_battle、改那一場 mutate_battle_of）在 progress.py、龍頭上陣在
 generals.py，直接叫（被測試換掉的 _battle_status 由 progress.battle_for_me 經 ctx 叫）。

@@ -15,7 +15,7 @@ from sb.base import Scenario
 from sb.harness import ADMIN, BUF, CLOCK0, PROFILES, SUBCOMMANDS, _digest, _first_diff, _run_set, _setup_child, _wipe_db, db_text, emit
 
 # ═══════════════════════════ explore（主動搬六包第 3＋4 批：走一趟、探索一顆） ═══════════════════════════
-# 這一段整段是第 3＋4 批加的（派工單：新情境寫成一段接在檔尾、一行登記）——情境 ExploreScenario（自己一個資料庫、自己切一半）、
+# 第 3＋4 批加的：情境 ExploreScenario（自己一個資料庫、自己切一半）、
 # 假人 explore_bots_run，與四個子命令 explore-run、explore-bots、explore-compare、explore-selftest。上面原本的 run、compare、selftest、
 # bots 一個字不動（出陣那一軌照舊用它們）；dev/sortie-2 把那幾個改成分軌（--track），合併之後可以把這一段收成 --track explore。
 #

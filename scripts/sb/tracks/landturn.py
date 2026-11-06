@@ -13,8 +13,7 @@ from sb.harness import ADMIN, CLOCK, CLOCK0, MODEL, STEP, STEP_SECONDS, emit, re
 
 # ═══════════════════════════ landturn：地盤一軌（全部拆包第 46 批，dev/territory-acts-1） ═══════════════════════════
 # 地盤（Game 上的戰書與攻城時段、22:00 換天、〈天下形勢〉三段式、地盤畫面的資料、分紅與守城功補送、管理者五個救場工具；tianxia/conquest_day.py、
-# xingshi.py；/api/xingshi）搬進新包 tianxia/features/territory_acts/（計畫 docs/superpowers/plans/2026-11-06-地盤包-第1批.md）。這一段整塊是這一批的：
-# 接在檔尾、`if __name__` 之前，最後一行登記（register_track），PM 合的時候不跟別人的行穿插。角色的名字都是原創的（PM 11/04）。
+# xingshi.py；/api/xingshi）搬進新包 tianxia/features/territory_acts/（計畫 docs/superpowers/plans/2026-11-06-地盤包-第1批.md）。角色的名字都是原創的（PM 11/04）。
 
 _LANDTURN_CLIENTS: dict[type, type] = {}
 LANDTURN_ESSAY = "天下形勢一日三變，官軍黃巾各據一方，鄉野之間人心浮動，商旅避路而行，驛馬晝夜不息，城中百姓閉戶觀望。" * 3

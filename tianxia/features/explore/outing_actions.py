@@ -1,6 +1,6 @@
 """走一趟的動作（功能包 tianxia/features/explore/；原本是 Game 上走一趟的 12 個方法，開發規範手冊 3.2、主動搬六包第 3＋4 批）。
 
-ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx）；函式名＝原本的方法名
+ctx 是 Game（第一階）；只叫 tianxia/core/services_list.md 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx）；函式名＝原本的方法名
 去掉前導底線（`_explore_ready` 是 `explore_ready`、`_outing_watched` 是 `outing_watched`，`_outing_walk`、`_outing_trace` 同）。
 Game 上留 9 個一行委派（server 的 /api/do/outing、outing_say、outing_tale〔鎖外三段式〕、outing_erase、/api/main 的 main.outing、
 bot.py、bot_policy.take_turn、測試，與 engine 模組層的 `_outing_watch` 還在叫）。包裡互相叫直接叫這裡的函式。

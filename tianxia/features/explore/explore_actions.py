@@ -3,7 +3,7 @@
 **名字陷阱**：名字帶 outing 的（`outing_on`、`outing_foe`、`outing_weights`、`outing_plan_at`、`outing_plan`、`outing_option`、
 `outing_fight`、`outing_event`、`outing_ledger`）是探索一顆（出門一趟只碰上一件事）的，不是走一趟；這一批兩樣都進這一包，不改名。
 
-ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx、explore_one 模組換成
+ctx 是 Game（第一階）；只叫 tianxia/core/services_list.md 那張清單上的方法。本體照搬、一個字不改（self 換成 ctx、explore_one 模組換成
 explore_rules）；函式名＝原本的方法名去掉前導底線，一個例外：`_outing_plan(loc)` 是 `outing_plan_at`（跟 `outing_plan()` 分開）。
 Game 上留 7 個一行委派（第 3＋4 批是 9 個；核心原位的選單那一格、`_act` 的 act:explore、行動列底下那一行、紀錄的標題在全部拆包
 第 11 批換成 act 子動詞的掛鉤〔__init__.py 的 verbs〕，`_outing_option`、`_explore_one` 拿掉；還在叫的：輿圖、server 的 mostly 與輿圖、

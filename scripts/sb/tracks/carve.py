@@ -15,8 +15,7 @@ from sb.tracks.relic import RelicScenario
 # 放手一搏（/api/do/seal_text：鎖外三段式，假模型連不上、評 DEFAULT_FREE_TEXT_SUCCESS_RATE）、管理者的 seal_fix（單挑前、單挑中）、
 # 管理頁的玉璽一組（admin_seal_choices，指定後的樣子）、假人在單挑裡（選單上 seal: 一顆都不按，被代打）。
 # 半舊半新切在單挑第一回合：一方（應長庚）出了招、另一方（卓遠岑）還沒——新程式接手後對方才出招、結算。
-# 計畫 docs/superpowers/plans/2026-11-06-玉璽包-第2批.md。這一段整塊是這一批的：接在檔尾、最後一行登記（register_track），
-# PM 合的時候不跟別人的行穿插。角色與名字都是原創的（PM 11/04）。
+# 計畫 docs/superpowers/plans/2026-11-06-玉璽包-第2批.md。角色與名字都是原創的（PM 11/04）。
 
 
 class CarveScenario(RelicScenario):

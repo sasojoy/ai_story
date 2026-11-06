@@ -13,8 +13,7 @@ from sb.harness import ADMIN, CLOCK, STEP, emit, register_track
 
 # ═══════════════════════════ military：軍情一軌（全部拆包第 33 批，dev/military-1） ═══════════════════════════
 # 軍情（軍令卡與應召、押糧、第 2 階行動、第 3／4 階行動、席次輪替與召見：Game 上 17 個方法與 rank_actions.py）搬進新包 tianxia/features/military/
-# （計畫 docs/superpowers/plans/2026-11-05-軍情包-第1批.md）。這一段整塊是這一批的：接在檔尾、最後一行登記（register_track），
-# PM 合的時候不跟別人的行穿插。角色的名字都是原創的（PM 11/04）。
+# （計畫 docs/superpowers/plans/2026-11-05-軍情包-第1批.md）。角色的名字都是原創的（PM 11/04）。
 
 
 class MilitaryScenario(Scenario):

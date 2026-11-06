@@ -12,8 +12,7 @@ from sb.harness import ADMIN, CLOCK, MUTATIONS, STEP, db_text, emit, register_tr
 # ═══════════════════════════ smithy：鐵匠鋪一軌（全部拆包第 41 批，dev/smithy-1） ═══════════════════════════
 # 鐵匠鋪（架上的買、修、淬煉、換上、拆解，一步一步打造與店面的直接開爐，隱藏配方與神器原品，神器定名、以器配招，收購升階，看火候，
 # 裝備庫那一列的修與淬煉，/api/smith_line 與每一個 smith: 動作）：Game 上 23 個方法與 tianxia/smithing.py 之後搬進 tianxia/features/smithy/
-# （計畫 docs/superpowers/plans/2026-11-06-鐵匠鋪包-第1批.md）。這一段整塊是這一批的：接在檔尾、最後一行登記（register_track），
-# PM 合的時候不跟別人的行穿插。角色的名字都是原創的（第 22 批 PM 認定第 3 條）。
+# （計畫 docs/superpowers/plans/2026-11-06-鐵匠鋪包-第1批.md）。角色的名字都是原創的（第 22 批 PM 認定第 3 條）。
 
 SMITHY_BOTS = ["匠甲", "匠乙"]
 SMITHY_SILVER = 6000

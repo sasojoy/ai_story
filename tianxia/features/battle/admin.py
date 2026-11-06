@@ -8,7 +8,7 @@ timetable_choices 與測試在叫），showdown_refusal 只有這裡叫。
 - admin_showdowns、showdown_refusal、cancelled_showdowns、admin_start_showdown：三場大戲那三顆鈕（管理者觸發鈕第 3 組；FB-099）
 
 包裡叫測試直接叫的那幾個（admin_battles、admin_start_battle、cancelled_showdowns）經 ctx（Game 的委派）；時刻表（_timetable_event、
-_timetable_refusal）、管理者外殼（_admin_refusal）也經 ctx（tianxia/core/services.py 的清單）；showdown_refusal 與第 8 批搬進 progress.py 的
+_timetable_refusal）、管理者外殼（_admin_refusal）也經 ctx（tianxia/core/services_list.md 的清單）；showdown_refusal 與第 8 批搬進 progress.py 的
 shelve_unfinished_battle（第 6 批時還在 Game、經 ctx 叫）直接叫。
 """
 from __future__ import annotations

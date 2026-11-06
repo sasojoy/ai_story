@@ -6,7 +6,7 @@ Game 留一行的委派給 server（dialogue_request、say_max）、核心原位
 鎖外三段式：A（鎖內很快）dialogue_request 開單、B（鎖外慢）server.prepare_dialogue 叫 companion_agent.prepare_turn 請模型、C（鎖內）Game.choose 的
 checked_prepared 重驗再套用；模型不在鎖裡，server 留的殼不動。NPC 智能 2.0 的部分在 parley_actions。
 
-包裡叫回 Game 的都在服務清單（tianxia/core/services.py）。這一批互相叫直接叫函式（沒有測試換掉這幾個）。
+包裡叫回 Game 的都在服務清單（tianxia/core/services_list.md）。這一批互相叫直接叫函式（沒有測試換掉這幾個）。
 """
 from __future__ import annotations
 

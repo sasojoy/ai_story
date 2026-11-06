@@ -1,5 +1,5 @@
 """修練包的動作（全部拆包第 23 批）：原本 Game 上修練頁的那幾個方法，Game 留一行委派給 server、假人、測試與核心原位。
-ctx 就是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的。搬進來的互相叫直接叫函式（allocate_stat → allocate_line）；
+ctx 就是 Game（第一階）；只叫 tianxia/core/services_list.md 那張清單上的。搬進來的互相叫直接叫函式（allocate_stat → allocate_line）；
 絕學的規則照模組屬性叫（cultivation.seize、cultivation.cultivate_problem……：測試換掉模組上的，這裡照樣打得到）。
 
 - 拜師學藝（learn:）：原本 Game.choose 的 learn 那一支、Game._action_title 的那一格（choose 掛鉤，__init__.py）

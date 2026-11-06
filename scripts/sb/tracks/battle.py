@@ -17,7 +17,6 @@ from sb.harness import ADMIN, CLOCK, CLOCK0, STEP, db_text, emit, register_track
 # 同一套段落另外登記成 muster 一軌、切在集結中）。
 # 第 8 批搬推進與結算、generals、收季的收兵（計畫 2026-11-01-決戰包-第4批.md：三軌的放手一搏穿著絕招〔回合首功〕；另開 progress 一軌
 # ProgressScenario：三場決戰三種收場、時間到了在排隊的那一場、假人出招、份量快照補上、管理者收季、季自然收掉、開下一季時收兵，切在打到第三回合）。
-# 這一段整塊是決戰的：四條拆包線並行，接在檔尾、最後一行登記（register_track），PM 合的時候不跟別人的行穿插。
 
 
 # develop 0425589a 之後才要的兩個固定（註冊限流、資料庫第 9 版 sessions 的 token_hash 抹掉）：這一塊原本自己套一份，

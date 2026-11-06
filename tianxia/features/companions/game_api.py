@@ -28,7 +28,7 @@ TABLE = {
     "letter_request": actions.letter_request,
     "apply_letter": actions.apply_letter,
     "_open_dialogue": talk_actions.open_dialogue,
-    # 人物情誼包回答懸賞榜包（道謝信、守約、兌現；services.py 二、查詢服務 # bounties）
+    # 人物情誼包回答懸賞榜包（道謝信、守約、兌現；services_list.md 二、查詢服務 # bounties）
     "_letter_thank": actions.letter_thank,
     "_parley_settle_task": parley_actions.settle_task,
     "_parley_keep": parley_actions.keep,

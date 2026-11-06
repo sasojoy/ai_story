@@ -14,7 +14,7 @@ from sb.tracks.peers import PeersScenario
 # ═══════════════════════════ crossblade（全部拆包第 38 批「玩家互動二」，dev/peers-2）：crossblade 一軌 ═══════════════════════════
 # 切磋、論武（三段式首創取名）、截殺（含策馬脫身），加上假人答切磋、答論武、截殺（計畫 docs/superpowers/plans/2026-11-07-玩家互動包-第2批.md）。
 # 第 37 批的 peers 軌只在玩家卡上看得到這三樣的鈕、不按；這一軌把它們按到底。結伴同行（travel 邀請答應走到 _join）是第 48 批的軌，這裡不走。
-# 這一段整塊是這一批的：接在檔尾、最後一行登記，PM 合的時候不跟別人的行穿插。名字一律原創（第 22 批認定第 3 條）。
+# 名字一律原創（第 22 批認定第 3 條）。
 
 
 class CrossbladeScenario(PeersScenario):

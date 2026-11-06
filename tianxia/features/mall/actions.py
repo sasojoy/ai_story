@@ -1,6 +1,6 @@
 """商城的動作（功能包 tianxia/features/mall/；原本是 Game 上的 mall_*、admin_mall_* 與幾個私有方法，開發規範手冊 3.2、3.10）。
 
-ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。Game 上不留委派（全部拆包第 58 批）：路由、測試都直接叫這裡。
+ctx 是 Game（第一階）；只叫 tianxia/core/services_list.md 那張清單上的方法。Game 上不留委派（全部拆包第 58 批）：路由、測試都直接叫這裡。
 """
 from __future__ import annotations
 
