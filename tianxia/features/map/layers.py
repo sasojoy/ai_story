@@ -9,6 +9,7 @@ docs/superpowers/plans/2026-11-07-輿圖包-第2批.md 1.1、1.2）。
 安排前往的條件與 LAYERS 那一半留在 atlas（共用規則層 registry.SHARED），這裡從它拿 KNOWN、views、is_known、region_of、_strike_place、
 MODES、mode_text、returns_at_once、way_to、_names 十個名字。舊名 atlas.<圖層> 不留別名（共用層不准 import 包）：輿圖包的 actions、
 mapview、mapdata 與測試照新的路徑讀。
+另外跑：改這一份 test_for 只挑包裡的 tests 與核心契約，包外直接測圖層的 10 個混合檔見這一包 README「另外要跑的混合檔」（附指令）。
 """
 from __future__ import annotations
 
