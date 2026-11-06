@@ -263,6 +263,12 @@ def no_leftover_web_push(monkeypatch, tmp_path):
     server.PUSH_STOP.clear()
     server.HUB = None
     server.QUEUE = None  # 模型佇列（同上兩份設定開著）：下一個測試從關著開始
+    server.SCHEDULER_STOP.set()  # 排程（config.json 的 world_tick_seconds 開著）：叫過 main 的測試留著它，它在下一個測試的暫存資料庫上讀，撞上 close_all 就把 worker 整個弄當
+    if server.SCHEDULER_THREAD is not None:
+        server.SCHEDULER_THREAD.join(5.0)
+    server.SCHEDULER_THREAD = None
+    server.SCHEDULER_STOP.clear()
+    server.WORLD_GAME = None
 
 
 @pytest.fixture(autouse=True)
