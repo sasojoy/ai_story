@@ -2,7 +2,7 @@
 
 七片傳國玉璽碎片的季流程：時刻表決戰集結那一刻擲現世與璽動、領地爭奪的季開季藏一片與探索撿到、時刻表決戰收場（挑挑戰者、現世的得主、喚回）、補送到每個人手上、天命之季與天命之爭、換季的隱沒與散去，與管理者的強制現世（現在藏一片）、隱沒判斷、蓋天命之季。全部拆包第 27 批「玉璽一」搬進來（引擎那一半；網頁 `web/` 第 3 階才切，`app.js` 歸這一包的那幾個是第 66 批）。
 
-**第 28 批「玉璽二」搬進來的**：奪璽單挑的純規則（`duel_rules.py`，原 `tianxia/seal_duel.py` 整份）、奪璽單挑的玩法（`duel_actions.py`）、碎片卡與七種獨門行動（`card.py`）、管理者六個（`admin.py` 加 `stir`、`assign`、`duel`、`fix`、`cancel`、`choices`）、`seal:` 前綴與假人那一段（`bots.py`）。Game 上 22 個一行委派（`_seal_act_season` 只有 `seal_use` 叫、包內互叫，不留）。獨門行動的規則 `tianxia/seal_acts.py`（761 行）第 51 批才拆，`card.py`、`admin.py` 讀它（過渡）。
+**第 28 批「玉璽二」搬進來的**：奪璽單挑的純規則（`duel_rules.py`，原 `tianxia/seal_duel.py` 整份）、奪璽單挑的玩法（`duel_actions.py`）、碎片卡與七種獨門行動（`card.py`）、管理者六個（`admin.py` 加 `stir`、`assign`、`duel`、`fix`、`cancel`、`choices`）、`seal:` 前綴與假人那一段（`bots.py`）。Game 上 20 個一行委派（`_seal_challenge`、`_my_seal_duel` 沒有呼叫端、不留；`_seal_act_season` 只有 `seal_use` 叫、包內互叫，不留）。獨門行動的規則 `tianxia/seal_acts.py`（761 行）第 51 批才拆，`card.py`、`admin.py` 讀它（過渡）。
 
 - 導覽：`docs/guide/玉璽碎片.md`。
 - 設計稿：`docs/superpowers/specs/2026-10-11-玉璽碎片-design.md`（現世、璽動、挑人、易手、隱沒、抄本、天命之季）、`docs/superpowers/specs/2026-10-21-玉璽碎片改版-design.md`（常駐效果、持有者平時藏起來）；領地爭奪設計 3.9、4.8（藏一片、探索撿到）。
