@@ -21,6 +21,7 @@ from test_mall import _items
 import server
 import webharness
 from tianxia.engine import Game
+from tianxia.features.mall import actions as mall_actions
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NAMES_START = 'wholeApp(["S", '
@@ -53,7 +54,7 @@ def _async(body: str) -> str:
 
 
 def _view(balance=5000, count=28, card=None):
-    """/api/mall 的形狀（Game.mall_view）：兩件丹、一張月卡；三十顆那一包元寶不夠。"""
+    """/api/mall 的形狀（actions.view）：兩件丹、一張月卡；三十顆那一包元寶不夠。"""
     return {
         "balance": balance, "card": card, "grant": 5000,
         "pills": {"name": "回體丹", "count": count, "today": 2, "cap": 3 if card else 2, "restore": 150, "bonus": 1},
@@ -122,7 +123,7 @@ def test_main_view_has_the_mall_entry_only_when_the_mall_is_on(m_on, m_off):
 
 def test_the_mall_view_tells_pills_what_each_item_gives_and_where_the_card_would_run_to(content):
     game = _game(content)
-    view = game.mall_view()
+    view = mall_actions.view(game)
     assert view["pills"] == {"name": content.config.stamina_pill_name, "count": 28, "today": 2, "cap": 2,
                              "restore": content.config.stamina_pill_restore, "bonus": 1}
     assert view["grant"] == 5000
@@ -137,8 +138,8 @@ def test_the_mall_view_tells_pills_what_each_item_gives_and_where_the_card_would
 def test_records_name_the_item_on_each_purchase_row(content):
     game = _game(content)
     item = next(iter(content.mall.values()))
-    game.mall_buy(item.id, "web-0001")
-    ledger = game.mall_records()["ledger"]
+    mall_actions.buy(game, item.id, "web-0001")
+    ledger = mall_actions.records(game)["ledger"]
     assert (ledger[0]["reason"], ledger[0]["item"], ledger[0]["refunded"]) == ("購買", item.name, False)
     assert ledger[1]["item"] is None  # 封測發放沒有商品
 
@@ -146,10 +147,10 @@ def test_records_name_the_item_on_each_purchase_row(content):
 def test_buying_tells_whether_it_went_through(content):
     game = _game(content)
     item = next(iter(content.mall.values()))
-    game.mall_buy(item.id, "web-0002")
-    assert game.mall_bought == item.id
-    game.mall_buy("沒有這件", "web-0003")
-    assert game.mall_bought is None
+    got = mall_actions.purchase(game, item.id, "web-0002")
+    assert got.bought == item.id
+    got = mall_actions.purchase(game, "沒有這件", "web-0003")
+    assert got.bought is None
 
 
 # ── 入口：乙（齒輪旁的錠子鈕）、丙（底部第六格）──

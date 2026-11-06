@@ -1548,7 +1548,7 @@ def off_list_calls(source: str, module: str, allowed: set[str]) -> list[str]:
 
 
 def test_feature_packages_only_touch_the_service_list_on_the_game():
-    """功能包經過 Game 只碰服務清單上的（手冊 3.3）：Game.mall_* 這一類委派是給還沒改的呼叫端過渡用的（3.10），包自己直接叫自己的 actions。"""
+    """功能包經過 Game 只碰服務清單上的（手冊 3.3）：Game 上的一行委派是給還沒改的呼叫端過渡用的（3.10），包自己直接叫自己的 actions。"""
     allowed = service_list()
     assert {"state", "content", "_log", "_wallet", "wallet"} <= allowed  # 清單讀得到
     found = []
@@ -2504,6 +2504,15 @@ def test_bot_pick_asks_the_packages_for_what_it_skips():
     words = {node.value for stmt in pick.body[1:] for node in ast.walk(stmt) if isinstance(node, ast.Constant) and isinstance(node.value, str)}
     assert {w for w in words if w.startswith("act:")} == {"act:heal", "act:challenge:"}
     assert not {w for w in words if ":" in w} - {"act:heal", "act:challenge:", ":", "battle:join", "choice:"}  # 別的前綴也問宣告（加入決戰、結識一定接受不是「永遠按得下去」）
+
+
+# mall（全部拆包第 58 批「商城收尾」；計畫 docs/superpowers/plans/2026-11-06-商城收尾-第58批.md）：engine 裡沒有人叫這 11 個（GAME_DELEGATE_CALLERS
+# 本來就沒有商城的格），路由早就直接叫包；測試與 same_behavior 改叫 actions 之後委派全拿掉，engine 不再 import 商城包。
+GAME_DELEGATES -= {
+    "mall_buy", "mall_entry", "mall_rename_left", "mall_rename", "mall_claim", "mall_view", "mall_records",
+    "admin_mall_reissue", "admin_mall_revoke", "admin_mall_refund", "admin_mall_ledger",
+}
+GAME_IMPORTS -= {"tianxia.features.mall.actions"}
 
 
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py

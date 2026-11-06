@@ -100,7 +100,6 @@ from .features.zhuan import actions as zhuan_actions  # 過渡：Game 上列傳�
 from .features.explore import explore_actions  # 過渡：Game 上探索一顆的 9 個一行委派（主動搬六包第 3＋4 批）
 from .features.explore import explore_base  # 過渡：Game 上舊探索的底 6 個一行委派（全部拆包第 18 批）
 from .features.explore import outing_actions  # 過渡：Game 上走一趟的 9 個一行委派（主動搬六包第 3＋4 批）
-from .features.mall import actions as mall_actions  # 過渡：Game.mall_* 留一行委派（開發規範手冊 3.10）
 from .features.looks import actions as looks_actions  # 過渡：Game.arena_look 留一行委派（擂台記形象）
 from .features.feast import actions as feast_actions  # 過渡：Game.feast_*（server 的三段式）與場景卡留一行委派
 # tavern（擺在宴客與出陣之間：別條拆包線在 core.services 之後、出陣那一行之後各加一段，不貼在一起）
@@ -529,9 +528,6 @@ class Game:
         self._fight: fight_llm.PreparedFight | None = None
         self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
         self.smith_result: dict | None = None  # 上一次 smith_forge 的出爐卡（server 的 /api/do/smith_forge 回給網頁）；被拒絕是 None
-        self.mall_bought: str | None = None  # 上一次 mall_buy 買成的商品 id（/api/mall/buy 回給網頁：成了換掌櫃道謝、不成換原因）；不成是 None
-        # 上一次 mall_buy 送的編號早就買好了（第一次的回應沒收到、同一個編號再送）：那一筆的商品 id，網頁照成了的樣子講（FB-491）；其餘是 None
-        self.mall_already: str | None = None
         # 上一次玩家卡動作的一句短話（peer_act 每次清掉；論武合成了才填，FB-242）：網頁等回應時卡已經關了或換了人，提示泡泡只講這一句
         self.peer_brief: str | None = None
         self.forged = False  # 上一次 forge() 真的合成了（被拒絕的是 False）：煉製頁拿它決定爐子要不要清空（server.api_menxia_do）
@@ -3974,7 +3970,7 @@ class Game:
         pill_cap 與體力條的說明（howto.stamina_lines 的 card，FB-480）都讀這一份，兩邊寫的上限才對得上。"""
         return self.wallet.card_bonus()
 
-    # ── 錢包（核心；開發規範手冊 3.10）與商城的一行委派（商城搬進功能包 tianxia/features/mall/：規則 rules.py、動作 actions.py）──
+    # ── 錢包（核心；開發規範手冊 3.10）──
 
     @property
     def wallet(self) -> WalletService:
@@ -3989,41 +3985,6 @@ class Game:
     def _mall_owner(self) -> str:
         """錢包的主人：角色名號的 casefold（同 characters.key、真人的 accounts.character_key；假人沒有帳號也有錢包）。"""
         return name_key(self.state.player.name)
-
-    # 過渡：server 與測試照舊叫 Game 的這幾個；第 2 階那一包的線再碰到時呼叫端改成直接叫包、委派拿掉（手冊 3.10）。
-    # 封測發放（原本的 _mall_grant）第 11 批換成 on_own_turn 掛鉤，委派拿掉
-    def mall_buy(self, item_id: str, ref: str, qty: int = 1) -> list[str]:
-        return mall_actions.buy(self, item_id, ref, qty)
-
-    def mall_entry(self) -> dict | None:
-        return mall_actions.entry(self)
-
-    def mall_rename_left(self) -> int:
-        return mall_actions.rename_left(self)
-
-    def mall_rename(self, new: str, taken: Callable[[str], bool] | None = None) -> list[str]:
-        return mall_actions.rename_self(self, new, taken)
-
-    def mall_claim(self) -> list[str]:
-        return mall_actions.claim(self)
-
-    def mall_view(self) -> dict | None:
-        return mall_actions.view(self)
-
-    def mall_records(self) -> dict | None:
-        return mall_actions.records(self)
-
-    def admin_mall_reissue(self, name: str, amount: int, note: str, ref: str) -> list[str]:
-        return mall_actions.admin_reissue(self, name, amount, note, ref)
-
-    def admin_mall_revoke(self, name: str, amount: int, note: str, ref: str) -> list[str]:
-        return mall_actions.admin_revoke(self, name, amount, note, ref)
-
-    def admin_mall_refund(self, name: str, purchase_id: int, note: str) -> list[str]:
-        return mall_actions.admin_refund(self, name, purchase_id, note)
-
-    def admin_mall_ledger(self, name: str) -> dict:
-        return mall_actions.admin_ledger(self, name)
 
     def pills_left_today(self) -> int | None:
         """今天還能服幾顆回體丹（pill_cap）；不限是 None。不看手上有幾顆。"""

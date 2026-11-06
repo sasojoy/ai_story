@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from tianxia import orders  # 共用規則層（軍令：打擊軍令有沒有點名他；照模組屬性叫，abacus 軌換掉 orders.strike_on）
+from tianxia import orders  # 共用規則層（軍令：打擊軍令有沒有點名他；照模組屬性叫，tally 軌換掉 orders.strike_on）
 
 
 def challenge(game, fid: str) -> float | None:

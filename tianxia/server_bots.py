@@ -9,7 +9,8 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from .models import Config, Content
+from .core.name_base import FAMOUS_NAMES, reserved_names  # noqa: F401  全部拆包第 58 批搬進核心，這裡 re-export 同一批物件
+from .models import Config
 from .state import BotProfile, Personality
 
 DAY = 86400
@@ -25,14 +26,6 @@ GIVEN = (
     "清澄淵澤濟濤浩洪源淳潤滿盈豐茂榮華英俊傑豪雄偉卓群翼輔弼佐佑贊襄承繼紹嗣先宗"
     "敬肅莊端正直方圓良善淑賢彥彬斌璋瑾瑜琰琮璧珪珣琦瓊瑤懷思念志謀略韜策計籌度量"
 )
-FAMOUS_NAMES = frozenset((  # 三國名人：上面的字庫組得出其中一些（趙雲、周瑜、馬超⋯⋯），假人不能頂著這些名號
-    "曹操 劉備 孫權 孫策 孫堅 關羽 張飛 趙雲 馬超 黃忠 魏延 諸葛亮 龐統 法正 姜維 周瑜 魯肅 呂蒙 陸遜 甘寧 "
-    "太史慈 周泰 黃蓋 程普 韓當 呂布 高順 張遼 陳宮 貂蟬 袁紹 袁術 顏良 文醜 董卓 李傕 郭汜 華雄 馬騰 韓遂 "
-    "公孫瓚 劉表 劉璋 劉焉 張魯 夏侯惇 夏侯淵 曹仁 曹洪 典韋 許褚 徐晃 張郃 于禁 樂進 李典 荀彧 荀攸 郭嘉 "
-    "賈詡 程昱 司馬懿 司馬昭 鄧艾 鍾會 孟獲 華佗 左慈 于吉 張角 張寶 張梁 皇甫嵩 朱儁 盧植 何進 陶謙 王允 "
-    "蔡邕 大喬 小喬 孫尚香 甄宓 關平 關興 張苞 馬岱 嚴顏 王平 廖化 糜竺 糜芳 簡雍 孫乾 徐庶 陳登 臧霸 張繡 "
-    "劉禪 曹丕 曹植 曹叡 蔣琬 費禕 董允"
-).split())
 
 
 @dataclass(frozen=True)
@@ -55,13 +48,6 @@ PERSONALITY_WEIGHTS: dict[Personality, int] = {"積極": 20, "普通": 50, "懶�
 
 def pick_personality(rng: random.Random) -> Personality:
     return rng.choices(list(PERSONALITY_WEIGHTS), weights=list(PERSONALITY_WEIGHTS.values()), k=1)[0]
-
-
-def reserved_names(content: Content) -> frozenset[str]:
-    """不能拿來當名號的名字（真人與假人共用，FB-004）：三國名人、遊戲內容裡的人物與大勢人物（跟著內容走；彭脫、韓忠
-    沒有對話人物，公告照樣寫他們的名字）、管理者的名號。"""
-    figures = {fig.name for fig in content.figures.values()}
-    return FAMOUS_NAMES | {ch.name for ch in content.characters.values()} | figures | frozenset(content.config.admins)
 
 
 def make_name(rng: random.Random, taken: set[str]) -> str:

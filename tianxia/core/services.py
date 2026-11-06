@@ -522,7 +522,6 @@ explore（主動搬六包第 3＋4 批加的這一段；都是 Game.__init__ 起
   `_outing_watch` 搬來〕套在 choose、answer_event 與有所感包的 epiphany_names、sense_draw 上，看它不再套一層）
 - `ctx._loot_scale`、`ctx._drop_scale`、`ctx._gate_scale`（遭遇那一場的戰利、掉落、經驗倍數：探索一顆的遭遇設、核心 `_battle_rewards` 讀）
 
-- `ctx.mall_bought`、`ctx.mall_already`（商城）：上一次 actions.buy 的結果（買成的商品 id；同一個編號早就買好的那一件），伺服器在鎖裡讀
 - `ctx._clash_won`、`ctx._sortie_marked`、`ctx._sortie_moved`、`ctx._sortie_flipped`（出陣）：Game.__init__ 起的、出陣那一下設、
   `_push_progress`（地盤，留在核心）寫與讀——混戰得勝的加成、記過一筆出陣沒、這一下推（拉）動了多少、推滿易手了沒（出陣回報讀）
 
@@ -567,7 +566,7 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 - `ctx._socialize(prepared)`（交友那一下的本體：交友求見包）、`ctx._challenge(fid)`（挑戰本人按下去：大勢人物包）、`ctx._figure_squad(fid)`（挑戰本人對手那一路，江湖水漲算過：大勢人物包）
 
 # core_bots（全部拆包第 60 批；假人殼收尾，計畫 docs/superpowers/plans/2026-11-06-假人殼收尾-第60批.md 七、九）：act: 那幾格的分數搬進包的 bots.py，條件經 ctx 叫，
-# scripts/same_behavior.py 的 abacus 軌換掉 Game 上的名字時才打得到（`_side`、`challenge_odds`、`outing_plan`、`duel_on` 已經在清單上）
+# scripts/same_behavior.py 的 tally 軌換掉 Game 上的名字時才打得到（`_side`、`challenge_odds`、`outing_plan`、`duel_on` 已經在清單上）
 - `ctx.fatigue_next()`（探索包：下一場的疲勞）、`ctx.socialize_starts_dialogue()`、`ctx.socialize_is_futile()`、`ctx.can_meet_figure(fid)`（交友求見包：開口是不是對話、會不會白跑、求見見不見得到）、
   `ctx.sortie_mode()`、`ctx.duel_convoy_here()`（出陣包：這一下攻或守、運糧隊在不在這裡）
 

@@ -10,6 +10,7 @@ from conftest import next_season
 from test_looks import T0, _game
 
 from tianxia.engine import Game
+from tianxia.features.mall import actions as mall_actions
 from tianxia.features.looks import actions, moves, orders
 from tianxia.martial_arts import generate_from_name
 from tianxia.models import Look, MallItem
@@ -214,8 +215,8 @@ def test_bad_uploads_and_the_shelf(on):
     assert "要是 PNG 或 WebP" in actions.admin_move_upload(admin, pid, b"not an image", "art1")[-1]
     assert "還沒有圖" in actions.admin_move_release(admin, pid)[-1]
     assert actions.admin_move_upload(game, pid, b"")[-1] == "（此刻無法這麼做。）"  # 不是管理者
-    assert "move_order" not in [i["id"] for i in game.mall_view()["items"]]
-    assert game.mall_buy("move_order", "buy-ref-0012")[-1] == "沒有這件商品。"
+    assert "move_order" not in [i["id"] for i in mall_actions.view(game)["items"]]
+    assert mall_actions.buy(game, "move_order", "buy-ref-0012")[-1] == "沒有這件商品。"
 
 
 def test_the_fake_generator_leaves_drawings_to_the_admin(on, monkeypatch):

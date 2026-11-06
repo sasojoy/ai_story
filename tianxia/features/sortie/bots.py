@@ -10,7 +10,7 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING
 
-from tianxia import orders, precise  # 共用規則層（照模組屬性叫，abacus 軌換掉 orders.win_counts、duty_counts、precise.on）
+from tianxia import orders, precise  # 共用規則層（照模組屬性叫，tally 軌換掉 orders.win_counts、duty_counts、precise.on）
 
 from . import actions, duel_actions, duel_rules, rules
 

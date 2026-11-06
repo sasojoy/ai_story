@@ -6,7 +6,7 @@
 以前的季（seasons 表的舊列、舊季的全服登記）也不動，只換這一季；列傳照鍵搬過來（篇名照當時的名號）。
 
 整個字串相等也可能撞到內容的 id（名號剛好叫某個地點、事件的 id），所以舊名號撞到內容裡任何一個字串鍵或 id 就不讓改（`clash`），
-回一句請找管理者，不冒險。功能包 tianxia/features/mall/（開發規範手冊 3.10）；Game.mall_rename（actions.rename）用它，
+回一句請找管理者，不冒險。功能包 tianxia/features/mall/（開發規範手冊 3.10）；actions.rename_self 用它，
 資料庫那一側（sqlite_world.rename_character）叫核心的 swap_json。"""
 from __future__ import annotations
 
