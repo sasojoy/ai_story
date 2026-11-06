@@ -7,8 +7,9 @@ style.css＋切出去的那幾支（mall.css 以前的）逐條對起來，找�
 0 對才算過；回傳碼 1 表示有。保守：判不出來就算可能（多報只會多留幾段在 style.css）。
 
 「可能打到同一個元素」怎麼算：主體的 class 要在 js、py 的同一個 class 屬性裡一起出現過（classList 加上去的算都可能）；
-祖先要包得住對方，照 js 函式的字面巢狀與呼叫圖算（設 innerHTML、等 API 的函式不展開）。
-抓不到的：class 字串由資料表組出來、又不是緊貼 ${} 的前綴。這種靠波末實機驗。
+祖先要包得住對方，照 js 函式的字面巢狀與呼叫圖算（設 innerHTML、等 API 的函式不展開）；放進標籤裡的區域變數
+（`<div class="mc-tags">${tags.join("")}</div>`）算它的內容，放進標籤裡的參數算呼叫端傳進去的東西。
+抓不到的：class 字串由資料表組出來、或先存進變數再放進 class 屬性，又不是緊貼 ${} 的前綴。這種靠波末實機驗。
 """
 from __future__ import annotations
 
@@ -300,6 +301,18 @@ LIT = re.compile(r"""\"([^\"\n]*)\"|'([^'\n]*)'|`([^`]*)`""")
 CLOSED_HOLE = re.compile(r"""^\s*[^?]*\?\s*(\"[^\"]*\"|'[^']*'|`[^`$]*`)\s*:\s*(\"[^\"]*\"|'[^']*'|`[^`$]*`)\s*$""")
 
 
+def hole_tokens(hole):
+    """class 屬性洞裡的字串：字面的 token，加上動態前綴（洞裡的 ` mood-${a.mood}`、"k-" + kind 算 mood-*、k-*）。"""
+    toks = set()
+    for g in LIT.finditer(hole):
+        s = next(x for x in g.groups() if x is not None)
+        found = TOKEN.findall(s)
+        toks |= set(found)
+        toks |= {x + "*" for x in found if x.endswith("-")}
+        toks |= {x + "*" for x in re.findall(r"([A-Za-z_][\w-]*)\$\{", s)}
+    return toks
+
+
 def inventory(paths):
     co: dict[str, set[str]] = {}
     open_attr: set[str] = set()
@@ -314,8 +327,7 @@ def inventory(paths):
             toks = set(lits)
             is_open = False
             for h in holes:
-                for m in LIT.finditer(h):
-                    toks |= set(TOKEN.findall(next(g for g in m.groups() if g is not None)))
+                toks |= hole_tokens(h)
                 if not CLOSED_HOLE.match(h):
                     is_open = True
                     open_holes.append((sorted(lits)[:4], h[:80], Path(p).name))
@@ -329,11 +341,12 @@ def inventory(paths):
 
 
 def prefix_hit(star, tok):
-    """star 是 "side-*" 這種。字根兩個字以內（r、t、g-、q-）只算兩個字以內的尾巴。"""
+    """star 是 "side-*" 這種。字根兩個字以內又沒有連字號的（r、t）只算兩個字以內的尾巴（r1、t12）；
+    g-、k-、q- 這種寫明了是前綴，後面接的是資料值（g-redgold、k-material），多長都算。"""
     stem = star[:-1]
     if not tok.startswith(stem):
         return False
-    return len(stem) > 2 or len(tok) - len(stem) <= 2
+    return len(stem) > 2 or stem.endswith("-") or len(tok) - len(stem) <= 2
 
 
 class Co:
@@ -503,6 +516,7 @@ class Sel:
     ids: frozenset
     pe: str
     anc: tuple   # tuple of frozenset (any-of)
+    parent: frozenset = frozenset()  # 主體左邊是「>」時，爸爸身上的 class
 
 
 @lru_cache(maxsize=None)
@@ -511,6 +525,7 @@ def sel_of(sel: str) -> Sel:
     if not comps:
         return Sel(sel, frozenset(), (), None, frozenset(), "", ())
     subj = comp_info(comps[-1][0])
+    parent = frozenset(comp_info(comps[-2][0])[0]) if len(comps) > 1 and comps[-1][1] == ">" else frozenset()
     anc = []
     # 從右往左：連接符是 + ~ 的左邊那一個不是祖先（是手足），不算進要求
     for idx in range(len(comps) - 1, 0, -1):
@@ -523,7 +538,7 @@ def sel_of(sel: str) -> Sel:
             anc.append(frozenset({c}))
         for a in ao:
             anc.append(frozenset(a))
-    return Sel(sel, frozenset(subj[0]), tuple(frozenset(a) for a in subj[1]), subj[2], frozenset(subj[3]), subj[4], tuple(anc))
+    return Sel(sel, frozenset(subj[0]), tuple(frozenset(a) for a in subj[1]), subj[2], frozenset(subj[3]), subj[4], tuple(anc), parent)
 
 
 VOID = {"img", "input", "br", "hr", "meta", "link", "source", "path", "circle", "line", "rect", "polyline", "polygon", "ellipse", "use"}
@@ -532,20 +547,119 @@ CALLRE = re.compile(r"(?<![\w$.])([A-Za-z_$][\w$]*)\(")
 MAPRE = re.compile(r"\.(?:map|filter|flatMap)\(([A-Za-z_$][\w$]*)[,)]")
 
 
+LOCALNAME = re.compile(r"(?<![\w$.])(?:const|let|var)\s+([A-Za-z_$][\w$]*)")
+PARAMS = re.compile(r"\s*(?:async\s+)?(?:function\s+[\w$]+\s*|(?:const|let|var)\s+[\w$]+\s*=\s*(?:async\s*)?)\(([^()]*)\)")
+
+
+def scan_end(body, i):
+    """從 i 往後找這個述句（或這組呼叫參數）的結尾：括號、字串、樣板與裡面的 ${} 都收完之後的分號，或多出來的右括號。"""
+    stack = []
+    n = len(body)
+    while i < n:
+        c = body[i]
+        if stack and stack[-1] == "`":
+            if c == "\\":
+                i += 2
+                continue
+            if c == "`":
+                stack.pop()
+            elif body.startswith("${", i):
+                stack.append("${")
+                i += 2
+                continue
+            i += 1
+            continue
+        if c in "\"'":
+            j = i + 1
+            while j < n and body[j] != c and body[j] != "\n":
+                j += 2 if body[j] == "\\" else 1
+            i = j + 1
+            continue
+        if c == "`" or c in "([{":
+            stack.append(c)
+        elif c in ")]}":
+            if not stack:
+                return i
+            stack.pop()
+        elif c == ";" and not stack:
+            return i
+        i += 1
+    return n
+
+
+def local_vars(body):
+    """函式裡的區域變數 → 它的內容（宣告的右邊，加上 x = …、x += …、x.push(…) 這幾種往裡面放東西的地方）。"""
+    first = len(body) - len(body.lstrip())
+    names = {m.group(1) for m in LOCALNAME.finditer(body) if m.start() != first}  # 第一個是這個函式自己的宣告
+    out = {n: set() for n in names}
+    if names:
+        alt = "|".join(re.escape(n) for n in sorted(names))
+        for m in re.finditer(r"(?<![\w$.])(" + alt + r")\s*(?:\+=|=(?![=>])|\.push\(|\.unshift\()", body):
+            out[m.group(1)].add(body[m.end():scan_end(body, m.end())])
+    return out
+
+
+def refs_re(names):
+    return re.compile(r"(?<![\w$.])(" + "|".join(re.escape(n) for n in sorted(names)) + r")(?![\w$])") if names else None
+
+
+def carried(text, vars_, calls, seen=None):
+    """一段程式放進標籤裡時帶進去的東西：寫到的 class、叫到的函式；寫到別的區域變數就跟著看。回 (class token, 函式名)。"""
+    seen = set() if seen is None else seen
+    toks = set()
+    for lits, holes in class_attrs(text):
+        toks |= lits
+        for h in holes:
+            toks |= hole_tokens(h)
+    callees = (set(CALLRE.findall(text)) | set(MAPRE.findall(text))) & calls
+    ref = refs_re(vars_)
+    for v in (set(ref.findall(text)) if ref else ()):
+        if v in seen:
+            continue
+        seen.add(v)
+        for chunk in vars_[v]:
+            more = carried(chunk, vars_, calls, seen)
+            toks |= more[0]
+            callees |= more[1]
+    return toks, callees
+
+
+def params_of(body):
+    m = PARAMS.match(body)
+    return set(re.findall(r"(?:^|,)\s*([A-Za-z_$][\w$]*)", m.group(1))) if m else set()
+
+
 def lexical(body, calls):
     """把函式本體當成一條 HTML 流，算字面上的巢狀。回 pairs：(外層 token, 內層 token 或 ("call", 名字))。
-    loose=True 表示收不起來（開收標籤對不上、或有 innerHTML 這種放進去的動作），呼叫端退回保守算法。"""
+    loose=True 表示收不起來（開收標籤對不上、或有 innerHTML 這種放進去的動作），呼叫端退回保守算法。
+    wrap：包住參數的外層 token（呼叫端傳進去的東西也算包在裡面，`.xxx` 取值的不算，那是資料）；vars：local_vars 的結果。"""
     stack = []  # [(tag, tokens)]
     pairs = set()
     seen = set()
     loose = bool(re.search(r"\.innerHTML|insertAdjacentHTML|\.append\(|appendChild", body))
     pos = 0
+    vars_ = local_vars(body)
+    ref = refs_re(vars_)
+    params = params_of(body) - set(vars_)
+    pref = re.compile(r"(?<![\w$.])(?:" + "|".join(re.escape(n) for n in sorted(params)) + r")(?![\w$])(?!\.(?!join\(|map\())") if params else None
+    wrap = set()
     def add_calls(text):
         names = (set(CALLRE.findall(text)) | set(MAPRE.findall(text))) & calls
         for n in names:
             for _, toks in stack:
                 for o in toks:
                     pairs.add((o, ("call", n)))
+        if not stack:
+            return
+        for v in (set(ref.findall(text)) if ref else ()):
+            in_toks, in_calls = carried("".join(vars_[v]), vars_, calls, {v})
+            for _, toks in stack:
+                for o in toks:
+                    pairs.update((o, t) for t in in_toks)
+                    pairs.update((o, ("call", n)) for n in in_calls)
+        if pref and pref.search(text):
+            for _, toks in stack:
+                wrap.update(toks)
     bad = 0
     for m in TAG.finditer(body):
         add_calls(body[pos:m.start()])
@@ -563,8 +677,7 @@ def lexical(body, calls):
         for lits, holes in class_attrs("<" + attrs + ">"):
             toks |= lits
             for h in holes:
-                for g in LIT.finditer(h):
-                    toks |= set(TOKEN.findall(next(x for x in g.groups() if x is not None)))
+                toks |= hole_tokens(h)
         add_calls(attrs)
         seen |= toks
         for _, outer in stack:
@@ -576,7 +689,7 @@ def lexical(body, calls):
     add_calls(body[pos:])
     if stack:
         bad += len(stack)
-    return {"pairs": pairs, "seen": seen, "loose": loose or bad > 0}
+    return {"pairs": pairs, "seen": seen, "loose": loose or bad > 0, "wrap": wrap, "vars": vars_}
 
 
 class Nest:
@@ -607,8 +720,7 @@ class Nest:
             for lits, holes in class_attrs(b):
                 toks |= lits
                 for h in holes:
-                    for g in LIT.finditer(h):
-                        toks |= set(TOKEN.findall(next(x for x in g.groups() if x is not None)))
+                    toks |= hole_tokens(h)
             for tk in toks:
                 self.emit.setdefault(tk, set()).add(f)
             self.lit_toks[f] = set()
@@ -625,6 +737,18 @@ class Nest:
         self.bodies = bodies
         for f, b in bodies.items():
             self.lex[f] = lexical(b, self.calls[f])
+        # 參數放進標籤裡的函式（fireHtml(fire, open, extra)）：每個呼叫的地方傳進去的東西，都算包在那些標籤裡面
+        self.arg_pairs: dict[str, set] = {}
+        wrappers = {}
+        for f, info in self.lex.items():
+            if info["wrap"]:
+                wrappers.setdefault(f.split("@")[0], []).append(f)
+        for g, b in bodies.items():
+            for m in CALLRE.finditer(b):
+                for f in wrappers.get(m.group(1), ()):
+                    in_toks, in_calls = carried(b[m.end():scan_end(b, m.end())], self.lex[g]["vars"], self.calls[g])
+                    for o in self.lex[f]["wrap"]:
+                        self.arg_pairs.setdefault(f, set()).update({(o, t) for t in in_toks} | {(o, ("call", n)) for n in in_calls})
         self.reach_cache = {}
         self.pre = [t for t in self.emit if t.endswith("*")]
         pytext = []
@@ -666,6 +790,8 @@ class Nest:
     def may_contain(self, x, y):
         if x == y:
             return True
+        if (x, y) in NOT_INSIDE:
+            return False
         if x in self.co.wild or y in self.co.wild:
             return True
         ex, ey = self.emitters(x), self.emitters(y)
@@ -675,6 +801,14 @@ class Nest:
         names_y = {y} | {t for t in self.pre if prefix_hit(t, y)}
         for f in ex:
             info = self.lex.get(f)
+            for outer, inner in self.arg_pairs.get(f, ()):
+                if outer not in names_x:
+                    continue
+                if isinstance(inner, tuple):
+                    if inner[1] not in self.driver and self.reach(inner[1]) & ey:
+                        return True
+                elif inner in names_y:
+                    return True
             if info is None or info["loose"]:
                 if self.reach(f) & ey:
                     return True
@@ -733,6 +867,11 @@ def can_same(a: Sel, b: Sel, nest: Nest) -> bool:
         return False
     if a.ids and b.ids and not (a.ids & b.ids):
         return False
+    # 兩邊都寫了「>」：爸爸是同一個元素，爸爸的 class 要能寫在一起（.muster-head > p 對 .rv-scene > p 打不到同一個 p）
+    for x in a.parent:
+        for y in b.parent:
+            if not co.can(x, y):
+                return False
     for x in a.sub:
         for y in b.sub:
             if not co.can(x, y):
@@ -827,6 +966,7 @@ def conflicts2(tops, rank, nest, leaves_cache=None):
 # ── 手動認定（讀過程式才寫）──────────────────────────────────────────────
 NOT_EVERYWHERE = {"peer-focus": {"btn", "small", "peer-acts"}}  # classList 加的，但只加在玩家卡那幾顆鈕上（peers.js 的 peerFocus）
 DEAD_CLASSES = ("insight",)  # 沒有任何 class 屬性寫到（"insight" 只是資料的 kind），規則碰不到元素
+NOT_INSIDE = {("vn-menu", "gather-branches")}  # vn-menu 放的是對話選單（companions.js 的 vnTalkHtml）；對話時選項只有 talk:*（talk_actions.py），沒有 explore:gather:*
 
 
 def head_sheets(head: Path) -> list[str]:
