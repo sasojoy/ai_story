@@ -112,6 +112,11 @@ def test_the_attrs_tab_shows_each_number_once_and_folds_every_explanation(wan):
     assert page.count("<em>名望</em>") == 1 and "rn-strip" not in page and "rn-src" not in page
     assert 'data-act="attr-help"' in page and 'class="stat-uses"' not in page
     assert 'class="xinde-tip"' in page and "🧍" not in page
+    # Joy 11/6「屬性那邊還有放態勢」：只放自己的成長——態勢在江湖頁、修練的規矩在武學那一頁、等級與氣血在人像卡與狀態列
+    assert "態勢" not in page and "修練的規矩" not in page and "第 " + str(s["level"]) + " 級" not in page.split('class="hero-tabs"')[1]
+    assert "氣血 " not in page.split('class="hero-tabs"')[0].split('class="hero-sub"')[1].split("</div></div>")[0]
+    arts = run(m, 'H.S.heroTab = "arts"; return H.pagePractice();', menxia=x)
+    assert "修練的規矩" in arts
     opened = run(m, 'H.S.heroTab = "attrs"; return H.pagePractice();', menxia=x, S={"attrHelp": True, "renownOpen": True, "xindeOpen": True})
     assert 'class="stat-uses"' in opened and 'class="rn-strip"' in opened and 'class="xinde-tip open"' in opened
 

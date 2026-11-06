@@ -2068,7 +2068,7 @@
     return `<section class="hero" aria-label="人物">
       <div class="hero-hd">
         <div><div class="hero-name">${esc(s.name)}</div><div class="hero-tag">${esc(s.affiliation)}</div></div>
-        <div class="hero-sub"><div>第 ${s.level | 0} 級</div><div>氣血 ${s.hp | 0}／${s.hp_max | 0}</div>${typeof x.might === "number" ? `<div class="hero-might">戰力 <b>${x.might | 0}</b></div>` : ""}${heroAnnalsHtml()}</div>
+        <div class="hero-sub"><div>第 ${s.level | 0} 級</div>${(typeof uiV2 === "function" && uiV2()) && !pro() ? "" : `<div>氣血 ${s.hp | 0}／${s.hp_max | 0}</div>`}${typeof x.might === "number" ? `<div class="hero-might">戰力 <b>${x.might | 0}</b></div>` : ""}${heroAnnalsHtml()}</div>
       </div>
       <div class="hero-stage">
         <div class="hero-halo" aria-hidden="true"></div>
@@ -2201,7 +2201,7 @@
       const cols = s.attrs.map(([k, v, key]) => `<div class="attr"><em>${esc(k)}</em><b>${v}</b>${pts
         ? `<button class="btn small alloc" data-act="allocate" data-stat="${esc(key)}" aria-label="${esc(k)}加一點" ${v >= s.stat_cap ? "disabled" : ""}>＋</button>` : ""}</div>`).join("");
       const help = s.stat_uses ? `<button class="linkish attr-q" data-act="attr-help" aria-expanded="${!!S.attrHelp}" aria-label="五項各管什麼">？</button>` : "";
-      const stats = shown("stats") ? `<div class="self-hd"><h3>屬性</h3><small class="muted">第 ${s.level | 0} 級</small>${pts ? `<b class="pts">可配 ${pts} 點</b>` : ""}${help}</div><div class="self-attrs">${cols}</div>${S.attrHelp ? statUsesHtml(s) : ""}` : "";
+      const stats = shown("stats") ? `<div class="self-hd"><h3>屬性</h3>${pts ? `<b class="pts">可配 ${pts} 點</b>` : ""}${help}</div><div class="self-attrs">${cols}</div>${S.attrHelp ? statUsesHtml(s) : ""}` : "";
       const tip = s.hint ? `<button class="xinde-tip${S.xindeOpen ? " open" : ""}" data-act="xinde-more" aria-expanded="${!!S.xindeOpen}">${esc(s.hint)}</button>` : "";
       const xinde = shown("xinde") ? `<div class="self-xinde one"><em>心得</em><b>${s.xinde | 0}</b>${tip}</div>` : "";
       return `<section class="self-stats self-sec" aria-label="心得與屬性">${stats}${xinde}</section>`;
@@ -2777,10 +2777,10 @@
     if ((typeof uiV2 === "function" && uiV2()) && !pro()) {
       const tab = HERO_TABS.some(([k]) => k === S.heroTab) ? S.heroTab : "arts";
       const tabs = `<div class="hero-tabs" role="tablist">${HERO_TABS.map(([k, n]) => `<button role="tab" class="${tab === k ? "on" : ""}" aria-selected="${tab === k}" data-act="hero-tab" data-tab="${k}">${n}</button>`).join("")}</div>`;
-      const page = tab === "arts" ? `${selfEntriesHtml(x)}${naming}${selfArtsHtml(x)}${attrNoteHtml(x)}<section class="self-sec lib-sec"><div class="self-hd"><h3>功法庫</h3><small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>${libBody}</section>`
+      const page = tab === "arts" ? `${selfEntriesHtml(x)}${naming}${selfArtsHtml(x)}${attrNoteHtml(x)}<section class="self-sec lib-sec"><div class="self-hd"><h3>功法庫</h3><small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>${libBody}</section>${fold("rules", "修練的規矩", x.rules)}`
         : tab === "gear" ? `${gearBlock}${keeps}`
         : tab === "mates" ? rosterBlock
-        : `${selfStatsHtml(s, true)}${heroMoreHtml(s)}${fold("rules", "修練的規矩", x.rules)}`;
+        : `${selfStatsHtml(s, true)}${heroMoreHtml(s)}`;
       return `${proGuide()}${heroPanel(x, s)}${tabs}<div class="msg" id="mx-msg">${S.message}</div>${page}${meltGo}${meltOn ? "" : drawerHtml}`;
     }
     return `
@@ -2803,7 +2803,8 @@
 
   const HERO_TABS = [["arts", "武學"], ["gear", "裝備"], ["mates", "門下"], ["attrs", "屬性"]]; // 待 joy 潤
   // 屬性頁（Joy 2026-11-06「這一定要預設展開那麼多說明？上面已經有屬性了下面還有文字版」）：屬性一份（上面那一格一欄，selfStatsHtml）、
-  // 名聲一份（名望、善名、惡名一行，點「怎麼來」才攤開那一條階梯與來源）、經驗與歷練兩條細條並排、成長一行、傳承一行、兩軍態勢一行。
+  // 名聲一份（名望、善名、惡名一行，點「怎麼來」才攤開那一條階梯與來源）、經驗與歷練兩條細條並排、成長一行、傳承一行。
+  // 只放跟自己成長有關的：兩軍態勢在江湖頁、修練的規矩（講武學與意境）在武學那一頁、等級在人像卡上
   // 同伴不在這裡重複（門下那一頁有）
   // 待 joy 潤：「怎麼來」「升第 N 級」
   const meterHtml = (cls, label, have, need) => `<div class="hm-meter ${cls}"><span>${label}</span><i style="--w:${need ? Math.min(100, Math.round((have / need) * 100)) : 100}%"></i></div>`;
@@ -2817,7 +2818,8 @@
     const how = r ? `<button class="linkish rn-how" data-act="renown-toggle" aria-expanded="${!!S.renownOpen}">怎麼來 ${S.renownOpen ? "▴" : "▾"}</button>` : "";
     const fame = `<section class="self-sec hm-fame" aria-label="名聲"><div class="hm-line">${nums}${titles}${how}</div>${r ? (S.renownOpen ? `<div class="hm-renown">${renownStripHtml(r)}</div>` : "") : rangerHtml(s.ranger)}</section>`;
     const alloc = s.stat_points && !shown("stats") ? `<div class="pts-label"><b class="pts">可配 ${s.stat_points} 點</b></div><div class="row alloc">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" data-glow="allocate" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>` : "";
-    const tail = (S.main && S.main.legacy ? legacyHtml(S.main.legacy) : "") + (s.stances && shown("stances") ? stancesHtml(s.stances, s.stance_notes) : "");
+    // 兩軍態勢不放這裡（Joy 2026-11-06「屬性那邊還有放態勢」）：那是戰局，不是自己的成長；江湖頁本週卡那一行有
+    const tail = S.main && S.main.legacy ? legacyHtml(S.main.legacy) : "";
     return `<section class="self-sec hero-more" aria-label="經驗與成長">${meters}<div class="more-stats">${alloc}${s.growth ? growthHtml(s.growth) : ""}</div></section>${fame}${tail ? `<section class="self-sec hm-tail">${tail}</section>` : ""}`;
   }
   // 點身上那一門（人像的光點、武學那一段）：抽屜底下列功法庫裡同一類的，每一門一行「換上」與換上後的戰力（Joy「點了…卻不能馬上換」）
