@@ -16,7 +16,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Verb
+from tianxia.core.features import Feature, StatusHook, Verb, slot_some
 
 
 class SortieFeature(Feature):
@@ -78,6 +78,21 @@ class SortieFeature(Feature):
         if option_id.startswith(duel_rules.PREFIX) and duel_actions.duel_on(ctx):
             return duel_actions.duel_choice(ctx, option_id)
         return None
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import duel_actions, rules  # noqa: PLC0415
+
+            self._status_slots = (
+                StatusHook("main", "sortie", lambda ctx, frame: {"sortie": rules.on(ctx.content)}),
+                StatusHook("main", "sortie_cards", lambda ctx, frame: {**slot_some("sortie_card", duel_actions.sortie_card(ctx)),
+                                                                       **slot_some("sorties", duel_actions.sortie_cards(ctx))}),
+            )
+        return self._status_slots
 
 
 FEATURE = SortieFeature()

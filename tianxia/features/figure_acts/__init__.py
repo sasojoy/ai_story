@@ -9,7 +9,7 @@ enabled 一直是 True（沒有自己的總開關：護衛看 Config.figure_aid�
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome, WorldHook
+from tianxia.core.features import Feature, Outcome, StatusHook, WorldHook, slot_some
 
 
 class FigureActsFeature(Feature):
@@ -48,6 +48,20 @@ class FigureActsFeature(Feature):
 
             self._world = (WorldHook("step", "yuedan", lambda *args: yuedan.world_step(*args)),)
         return self._world
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import plan_actions  # noqa: PLC0415
+
+            self._status_slots = (
+                StatusHook("main", "plan", lambda ctx, frame: slot_some("plan", plan_actions.plan_view(ctx))),
+                StatusHook("main", "place_deeds", lambda ctx, frame: slot_some("place_deeds", plan_actions.place_deeds_view(ctx))),
+            )
+        return self._status_slots
 
 
 FEATURE = FigureActsFeature()

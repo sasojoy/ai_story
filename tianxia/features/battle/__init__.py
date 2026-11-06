@@ -24,7 +24,7 @@ battle: 的分派照舊在 Game.choose 原位（查完選單、清掉「剛剛�
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, WorldHook
+from tianxia.core.features import Feature, StatusHook, WorldHook, slot_some
 
 
 class BattleFeature(Feature):
@@ -108,6 +108,21 @@ class BattleFeature(Feature):
 
             self._world = (WorldHook("muster", "generals", lambda *args: generals.world_muster(*args)),)
         return self._world
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import view  # noqa: PLC0415
+
+            self._status_slots = (
+                StatusHook("main", "gauges", lambda ctx, frame: {"battle_gauge": view.battle_gauge(ctx),
+                                                                 "card_gauge": view.card_gauge(ctx) if frame.card is not None else None}),
+                StatusHook("main", "siege", lambda ctx, frame: slot_some("siege", view.siege_banner(ctx))),
+            )
+        return self._status_slots
 
 
 FEATURE = BattleFeature()

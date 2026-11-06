@@ -11,7 +11,8 @@ import pytest
 
 import server
 from wins_kit import save, wins_content, wins_game
-from tianxia import calendar, rules, week_unlock, weekcard, wins
+from tianxia import calendar, rules, week_unlock, wins
+from tianxia.features.faction import sides as faction_sides
 
 pytestmark = pytest.mark.slow
 
@@ -33,7 +34,7 @@ def test_off_adds_nothing_to_the_batch_one_card():
     card = view["sides_card"]
     assert set(card) == {"cols", "joined", "lean"} and card["lean"] is None
     assert [col["id"] for col in card["cols"]] == ["guan", "huang"]
-    assert {col["gives"] for col in card["cols"]} == {weekcard.WIN_GIVES_OLD} and not any("join_at" in col for col in card["cols"])
+    assert {col["gives"] for col in card["cols"]} == {faction_sides.WIN_GIVES_OLD} and not any("join_at" in col for col in card["cols"])
 
 
 def test_on_fills_the_batch_one_card():
@@ -48,18 +49,18 @@ def test_on_fills_the_batch_one_card():
     assert card["tier_hint"] == game.tier_hint() == "未入階・還差 40" and "ledger" not in card
     for side, col in cols.items():  # 贏了給照四階、投靠點帶分鐘（批 3c 補進批 1 的卡）
         assert col["gives"] == mine[side]["reward"] and col["join_at"] == mine[side]["join_at"]
-    assert cols["haoqiang"]["now"] == mine["haoqiang"]["now"] != weekcard.HAOQIANG_NOW_PENDING
+    assert cols["haoqiang"]["now"] == mine["haoqiang"]["now"] != faction_sides.HAOQIANG_NOW_PENDING
     assert cols["guan"]["now"] == f"態勢 {_guan(game)}"  # 兩軍的「現在」照批 1
 
 
 def test_lean_ledger_and_hint_for_an_army_a_gentry_and_a_drifter():
-    army = weekcard.sides_card(wins_game(faction="guan", at="changshe"))
+    army = faction_sides.sides_card(wins_game(faction="guan", at="changshe"))
     assert army["lean"] is None and "ledger" not in army and army["tier_hint"]
     gentry = wins_game(name="乙客", faction="haoqiang", ally="huang", at="haozu_fort")
     gentry.state.player.ledgers = {"guan": 12}
-    card = weekcard.sides_card(gentry)
+    card = faction_sides.sides_card(gentry)
     assert (card["lean"], card["ledger"], card["tier_hint"]) == ("huang", {"guan": 12, "huang": 0}, gentry.tier_hint())
-    drifter = weekcard.sides_card(wins_game(name="丙客", at="changshe"))
+    drifter = faction_sides.sides_card(wins_game(name="丙客", at="changshe"))
     assert drifter["lean"] is None and "tier_hint" not in drifter and "ledger" not in drifter
 
 
@@ -112,13 +113,13 @@ def test_sides_card_data_three_columns():
     assert card["haoqiang"]["now"] == "依附官軍 0 人、依附黃巾軍 0 人"
     game.content.config.jianfa.tiers.titles["1:guan"] = "某某忠良"  # 稱號照設定寫
     assert "某某忠良" in game.sides_card()["guan"]["reward"]
-    assert "某某忠良" in next(col for col in weekcard.sides_card(game)["cols"] if col["id"] == "guan")["gives"]
+    assert "某某忠良" in next(col for col in faction_sides.sides_card(game)["cols"] if col["id"] == "guan")["gives"]
 
 
 def test_gentry_column_shows_own_books():
     game = wins_game(faction="haoqiang", ally="guan", at="zhuo_militia_hall")
     game.state.player.ledgers = {"guan": 120, "huang": 40}
-    card = weekcard.sides_card(game)
+    card = faction_sides.sides_card(game)
     assert card["lean"] == "guan"
     assert next(col for col in card["cols"] if col["id"] == "haoqiang")["now"] == "你此刻幫官軍・替官軍 120、替黃巾軍 40"
 

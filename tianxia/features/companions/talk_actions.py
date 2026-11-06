@@ -267,3 +267,19 @@ def road_title(ctx) -> str:
     """帶路的路上跟他說一句的標題：「同行・盧植」（原本 Game._action_title 的 parley 那一支；帶路的人不在人物表時選單上不會有這一顆，寫「同行」）。"""
     escort = ctx.state.player.parley_escort
     return f"同行・{ctx.content.characters[escort].name}" if escort in ctx.content.characters else "同行"
+
+
+def main_slot(ctx, frame) -> dict:
+    """main 表的 companions 那一格（全部拆包第 66 批）：鍵照 talk、figure、errands 的先後，沒有就沒有那個鍵。像在 web/img/figures/full/<id>.webp 才給 face（server.figure_face）。"""
+    out: dict = {}
+    talk_now = talk_view(ctx)  # 正在說話的那一位（浮在最上層的對話框）
+    if talk_now is not None:
+        out["talk"] = {**talk_now, "face": frame.shell.figure_face(talk_now["id"])}
+    talking = ctx.state.player.pending_companion  # 人物頁（減法季批 6）：正在跟他談的那一位的心意條；關著、他沒有心意沒有這個鍵
+    figure = actions.figure_view(ctx, talking) if talking else None
+    if figure is not None:
+        out["figure"] = figure
+    errands_now = actions.errands_view(ctx)  # 託付清單（減法季批 6，主機側計畫 1.3 的 main.errands）；託付關著沒有這個鍵
+    if errands_now is not None:
+        out["errands"] = errands_now
+    return out

@@ -20,7 +20,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import BusHook, EffectHook, Feature, WorldHook
+from tianxia.core.features import BusHook, EffectHook, Feature, StatusHook, WorldHook
 
 
 class SealFeature(Feature):
@@ -105,6 +105,19 @@ class SealFeature(Feature):
                 EffectHook("shard", lambda r: seal.effect_shard(r)),
             )
         return self._effects
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import card, duel_actions  # noqa: PLC0415
+
+            self._status_slots = (
+                StatusHook("status", "seal", lambda ctx, frame: {"seal_duel": duel_actions.duel_card(ctx), "seal": card.view(ctx), "seal_watch": duel_actions.watch(ctx)}),
+            )
+        return self._status_slots
 
 
 FEATURE = SealFeature()

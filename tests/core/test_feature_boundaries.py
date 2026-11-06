@@ -2376,6 +2376,21 @@ GAME_DELEGATE_CALLERS.update({
 })
 
 
+# shell_web（全部拆包第 66 批：狀態列與江湖畫面的格 STATUS_ORDER，計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第66批.md 第四節）
+# status_data 那 11 對改成包登記的格（status_slots，不問 enabled：原位那幾行本來就不看開關），Game.status_data 不再經委派碰包。
+for _callee in ("newbie_view", "ascend_view", "checkin_view", "create_view", "armament_view", "_invite_status", "_journey_line", "_bounty_status",
+                "seal_view", "seal_duel_card", "seal_watch"):
+    del GAME_DELEGATE_CALLERS[("status_data", _callee)]
+# 12 個委派只有 status_data 或 server._main_view_body 在叫，換成掛鉤之後沒人叫：拿掉（計畫第四節寫 8 個，照現行程式另有 armament_view、ascend_view、milestone_card、xingshi_mark）
+GAME_DELEGATES -= {
+    "figures_here_view", "talk_view", "errands_view", "plan_view", "place_deeds_view", "_bounty_status", "seal_watch", "_invite_status",
+    "armament_view", "ascend_view", "milestone_card", "xingshi_mark",
+}
+# 本週卡那 4 對收掉：sides_card 搬進陣營包 faction/sides.py（核心不再叫 sides_card、tier_hint、_opening_pending）；week_card 直接讀核心欄位（同 guide/opening.pending 那一行）
+for _pair in (("weekcard.sides_card", "_opening_pending"), ("weekcard.sides_card", "sides_card"), ("weekcard.sides_card", "tier_hint"), ("weekcard.week_card", "_opening_pending")):
+    del CORE_TOP_DELEGATE_CALLERS[_pair]
+
+
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py
     import io
     import sys

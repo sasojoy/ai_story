@@ -651,3 +651,11 @@ def mark_veteran(ctx: Game) -> bool:
 
 def enlist_expire(ctx: Game) -> list[str]:
     return enlist.expire(ctx.state, ctx.content)
+
+
+def glow_slot(ctx: Game, frame) -> dict:
+    """main 表的 glow 那一格（全部拆包第 66 批）：入伍段「出一次力」：選單上能完成它的那幾顆（FB-093）；網頁讓它們發光，「此地還能做」攤開。
+    改 guide 那一格已經合進去的 view["guide"]，自己沒有鍵。"""
+    if frame.view["guide"] is not None:
+        frame.view["guide"]["glow"] = enlist_glow(ctx, [o.id for o in frame.options if o.enabled])
+    return {}

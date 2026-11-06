@@ -11,7 +11,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature
+from tianxia.core.features import Feature, StatusHook
 
 
 class NotifyFeature(Feature):
@@ -33,6 +33,17 @@ class NotifyFeature(Feature):
     def threads(self, shell) -> None:
         """看守的執行緒：殼開（server.main 經 start_threads 叫到這裡），測試不叫、自己叫 start_web_push；NOTICE_STOP、NOTICE_THREAD 留殼（tests/conftest.py 收尾認這兩個名字）。"""
         shell.start_web_push(shell.CONTENT.config)
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            self._status_slots = (
+                StatusHook("main", "web_push", lambda ctx, frame: {"web_push": frame.shell.WEB_PUSH is not None}),
+            )
+        return self._status_slots
 
 
 FEATURE = NotifyFeature()

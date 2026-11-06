@@ -15,7 +15,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Verb, WorldHook
+from tianxia.core.features import Feature, StatusHook, Verb, WorldHook
 
 
 class ExploreFeature(Feature):
@@ -81,6 +81,20 @@ class ExploreFeature(Feature):
 
             self._world = (WorldHook("next", "inscriptions", lambda *args: outing_rules.world_next(*args)),)
         return self._world
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import explore_actions, outing_actions  # noqa: PLC0415
+
+            self._status_slots = (
+                StatusHook("main", "outing", lambda ctx, frame: {"outing": outing_actions.outing_view(ctx)}),
+                StatusHook("main", "mostly", lambda ctx, frame: {"mostly": mostly} if (mostly := explore_actions.mostly_here(ctx)) else {}),
+            )
+        return self._status_slots
 
 
 FEATURE = ExploreFeature()

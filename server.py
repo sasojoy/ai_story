@@ -68,7 +68,7 @@ from tianxia import (
     arena_crowd, ascend, battle_instance, flavor, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, fight_llm, gender, insight_llm, leaderboard, letters, might,
     naming, narration, outing,
     ollama_client, power_save, rules,
-    precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
+    precise, seal, seal_duel, server_bots, social, speech, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
     talk_log, zhuan_end,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, SESSION_SECONDS, AccountError, AccountStore, SessionStore, normalize
@@ -83,7 +83,6 @@ from tianxia.features.map import views as map_views  # 輿圖的 /api/map 資料
 from tianxia.features.feast import rules as feasts  # 宴客自己寫的敬酒詞：鎖外評分（三段式還在殼裡，過渡）
 from tianxia.features.notify import routes as notify_routes  # 手機通知：全部拆包第 53 批搬進手機通知包；殼留 state 與 4 個一行薄包裝（main 印一行、same_behavior 與測試叫）
 from tianxia.features.tale import routes as tale_routes  # 戰記：全部拆包第 52 批搬進戰記包；殼留 state 與 8 個一行薄包裝（act、look、main_view 原位叫）
-from tianxia.features.socialize import intros as socialize_intros  # 點大勢人物的簡介（主幹合回 D 段；/api/main 組「此地人物」那一排時疊上去，同 figure_face 留在殼的 _main_view_body）
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.sqlite_world import open_world
@@ -1929,175 +1928,105 @@ def _main_view_body(game: Game) -> dict:
         card = game.battle_card() if game.shows_battle_card() else None
         status, quest, scene = game.status_data(), md(game.quest_text()), md(game.scene_text())
     latest = game.journal_top_html()
-    view = {
-        "status": status,
-        "quest": quest,
-        "scene": scene,
-        "art": scene_art(game, status),  # 場景卡上面那張圖（減法季批 8）：事件插圖、人物像或地點的圖；沒有圖檔是 None、網頁一字不變
-        "options": [o.model_dump() for o in options],
-        # 走一趟（tianxia/outing.py）：探索鈕的段數選單（picker）與這一趟（trip）；關著是 None、網頁照舊一顆探索
-        "outing": game.outing_view(),
-        "say_max": game.say_max(),  # 「自己說」最多幾個字（NPC 智能 2.0開著時比較長，網頁的輸入框照它）
-        # 出陣開著（出陣探索與地盤設計第二節）：行動列那一格叫「出陣」、等候的話換一句；關著時照舊「遊歷」
-        "sortie": sortie.on(game.content),
-        # 一類一顆開著（正式季整合第二章）：應召畫成行動列上面一條金框橫幅（設計 9.1 第 1 組乙），不收在「此地還能做」
-        "precise": precise.on(game.content, game.state.world),
-        # 城裡操練與城外練功（新手引導重做，tianxia/training.py）：練功從探索三選一拿出來，在行動列自成一格
-        "training": training.on(game.content, game.state.world),
-        # 行動列底下那幾行（explain-1）：探索、遊歷、交友、求見這一下會怎樣（選項 id → 一句；序章裡是空的）
-        "action_notes": game.action_notes(o.id for o in options),
-        # 有所感選做法那一步（explain-2）：做法鈕上寫的心意（選項 id → 剛柔快慢）與鈕底下兩行小字；不在選做法是 None
-        "sense_help": game.method_help(o.id for o in options),
-        # 在路上（路上設計 3.3）：頁面在選項底下多放三個捷徑（輿圖、修練、煉製），那是頁面切換、不是引擎的行動。
-        # 看的是選單本身：參戰者在決戰大區裡走動時選單是戰鬥選項，那時不放捷徑
-        "on_road": any(o.id == "act:on_road" for o in options),
-        "free_text": game.battle_free_text_prompt() or game.seal_free_text_prompt() or game.duel_free_text_prompt()
-        or game.feast_free_text_prompt(),  # 宴席上自己寫的敬酒詞（第三批）
-        "free_text_note": game.battle_free_text_note() or game.seal_free_text_note() or game.duel_free_text_note(),  # 放手一搏輸入框旁邊：風險越高、失手時傷自己越重
-        # 輸入框送到哪裡：正在打的決戰 > 奪璽單挑 > 頭目戰（玉璽碎片設計 5.7）
-        "free_op": "battle_text" if game.battle_free_text_prompt() is not None
-        else "seal_text" if game.seal_free_text_prompt() is not None
-        else "feast_text" if game.feast_free_text_prompt() is not None else "duel_text",
-        "event_free_text": game.event_free_text_prompt(),
-        # 事件分級：眼前的事件是第二、三階時，場景卡頂上那一行（州郡大事、天下大事）與框色；第一階是 None、一字不變
-        "event_tier": game.event_tier(),
-        # 特殊事件的跳顯框（開頭、此事已了・入傳、此事未了）：照順序一張一張跳，「收下」送 story_seen 清掉；沒有是空的
-        "story_cards": story_cards(game),  # 眼前事件的隨口應對：選單上那一顆按下去叫出輸入框
-        "keepsakes": list(game.state.player.keepsakes),  # 長篇奇事的紀念物（俠客頁「紀念」那一段；沒有效果、不能賣）
-        # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 now；之後配了點也一樣（配點不換「剛剛」，計畫二最終審查 M1）
-        "card": md(card) if card is not None else None,
-        "card_id": game.battle_card_id() if card is not None else None,
-        # 決戰的即時戰局條（Joy 2026-10-10）：場景裡畫著的這一場（集結、開打），與「剛剛」是一場決戰時收場那一刻的
-        "battle_gauge": game.battle_gauge(),
-        "card_gauge": game.card_gauge() if card is not None else None,
-        # 江湖紀錄頁是 latest＋journal＋older 接起來的，從最新一則列起（最新一則就是卡片那一場時，latest 是卡片的補充）
-        "latest": latest,
-        "journal": game.journal_html(1, RECENT_ROWS),
-        "older": game.journal_html(1 + RECENT_ROWS, OLDER_ROWS),
-        # 江湖頁的「剛剛」：跟 latest 一樣，只是最新的幾則若只是本週大事（江湖頁那排小標「大事」點開的面板；休季是結算卡）上已經有全文的大事，
-        # 改放再前面那一則，同一段公告不寫兩次（FB-046）；最新的配點也越過，卡片與補充看的都是那一場那一則
-        "now": game.battle_extra_html(for_card=True) if card is not None else game.now_entry_html(),
-        # 出陣回報（企劃者 2026-10-23）：「剛剛」那一則是領地爭奪的出陣時，卡片底下的進度條、一句話與小籤（sortie.report）；不是 None
-        "front": game.now_front(),
-        # 小地圖（舊的江湖頁那一張）網頁已經不畫了：不再每次輪詢在鎖裡重畫、多送 30 KB（全面自檢 S-07）
-        # 此地還有誰（玩家之間的互動第一層）：[{name, side}]；路上、序章裡是空的。真人假人同一份（伺服器假人設計第五節）
-        "here": game.peers_here(),
-        "calls": game.calls_here(),  # 別人遞給你、還沒回的打招呼、結伴、切磋邀請（玩家互動第二層）；回應鈕是選單上的 invite: 選項
-        "party": game.party_view(),  # 結伴同行的那一行；沒有是 None
-        "bulletin": [md(text) for text in game.bulletin()],  # 江湖頁那排小標「大事」點開的本週大事（新的在前）；開關關著是空的
-        "trends": md(game.trends_text()),
-        "rumors": md(game.rumors_text()),
-        "chronicle": md(game.chronicle_text()),
-        "tales": tale_index(game),  # 江湖史最上面那排「戰記」：[{battle_id, title, season, result}]，新的在前；開關關著是空的
-        "admin": game.is_admin(),
-        "paused": game.paused_minutes(),  # 賽季時鐘停了幾分鐘；沒暫停是 None（設定頁的「暫停／繼續」）
-        "guide": game.guide_box(),  # 行動列上方的說書人對話框（引導重做設計 8.1）；略過或早就做完是 None
-        # 序章（新手引導計畫一）：要亮的畫面元件、要發光的鈕、略過連結；不在序章是 None，網頁照平常畫
-        "prologue": game.prologue_view(),
-        # 初入江湖（新手引導第四段）：出了草廬之後那幾步要亮的畫面元件、要發光的元件；不在初入江湖是 None
-        "onboard": game.onboard_view(),
-        "horse_art": horse_art(),  # 馬市與修練頁坐騎那一列：真的有圖檔的那幾個鍵，其餘照舊畫色塊
-        # 伺服器推送（線上架構設計 5.3）：頁面照 push 決定開不開 /api/events（開著時平常 60 秒才輪詢一次、有通知才刷新），
-        # push_spread 是收到「世界變了」之後各分頁重抓畫面要攤開的秒數（預檢 F3：全服同時重抓會在同一把行動鎖上排隊）
-        "push": HUB is not None,
-        "push_spread": game.content.config.push_world_min_seconds,
-        "web_push": WEB_PUSH is not None,  # 手機通知（減法季批 9）：設定頁畫不畫那一顆、第一次來信問不問
-    }
-    shop = game.shop_view([o.id for o in options])  # 店面（店面獨立介面設計 6.1）：開關開著、店開著、鐵匠鋪那一串是眼前的選單才有
-    if shop is not None:
-        view["shop"] = shop
-    prep = game.season_prep_view()  # 開季準備卡（企劃者 2026-11-05）：挑成長配比、識海；做完才能做別的事。沒有要準備的沒有這個鍵
-    if prep is not None:
-        view["prep"] = prep
-    milestone = game.milestone_card()  # 減法季屬性五段的境界卡（主機側計畫欄位表 main.milestone）：到了境界、點還沒配完才有這個鍵
-    if milestone is not None:
-        view["milestone"] = milestone
-    # 功能包的狀態（FEATURES 的 status，照清單的順序；開發規範手冊 3.3）：商城的入口 mall（齒輪旁的錠子鈕＋餘額、底部第六格）；關著沒有這個鍵
-    view.update(game.feature_status())
-    if view["guide"] is not None:  # 入伍段「出一次力」：選單上能完成它的那幾顆（FB-093）；網頁讓它們發光，「此地還能做」攤開
-        view["guide"]["glow"] = game.enlist_glow([o.id for o in options if o.enabled])
-    if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
-        view["fronts"] = status["fronts"]
-    orders = game.orders_view()  # 第一季：自己陣營的本週軍令（計畫 T6；散人、別陣營、開關關著時都沒有這個鍵）
-    if orders:
-        view["orders"] = orders
-    # 減法季批 1（整合設計 6.1、3.4）：江湖頁最上面的本週卡（主題、你這一步）與三方卡；序章裡、休季沒有這兩個鍵
-    week = weekcard.week_card(game, status, orders)
-    if week is not None:
-        view["week_card"] = week
-    # 四格探索那一格的小字「城裡多事」（整合設計 6.3，批 5）；在路上沒有這個鍵。減法季探索一顆開著時照出門一趟那一張表（批 2，Game.mostly_here）
-    mostly = game.mostly_here()
-    if mostly:
-        view["mostly"] = mostly
-    sides = weekcard.sides_card(game)
-    if sides is not None:
-        view["sides_card"] = sides
-    # 介面重整（2026-11-05）：此地人物那一排、正在說話的那一位（浮在最上層的對話框），像在 web/img/figures/full/<id>.webp 才給 face
-    view["figures_here"] = [{**f, "face": figure_face(f["id"]), "intro": socialize_intros.figure_intro(f["id"])} for f in game.figures_here_view()]
-    talk_now = game.talk_view()
-    if talk_now is not None:
-        view["talk"] = {**talk_now, "face": figure_face(talk_now["id"])}
-    talking = game.state.player.pending_companion  # 人物頁（減法季批 6）：正在跟他談的那一位的心意條；關著、他沒有心意沒有這個鍵
-    figure = game.figure_view(talking) if talking else None
-    if figure is not None:
-        view["figure"] = figure
-    errands_now = game.errands_view()  # 託付清單（減法季批 6，主機側計畫 1.3 的 main.errands）；託付關著沒有這個鍵
-    if errands_now is not None:
-        view["errands"] = errands_now
-    event_opts = game.event_option_view()  # 事件選項只留動作（整合設計 6.4）：選項 id → 動作、圖示、沒把握時的心裡話；沒有事件沒有這個鍵
-    if event_opts is not None:
-        view["event_opts"] = event_opts
-    layers = game.rumor_layers()  # 第一季：見聞頁的傳聞分四層（開關關著時不送，頁面照舊畫 rumors 那一條清單）
-    if layers is not None:
-        view["rumor_layers"] = [{**layer, "body": md(layer["body"])} for layer in layers]
-    convoy = game.convoy_line()  # 押著的糧車（T6 審查 I3）：軍令卡上寫一行
-    if convoy is not None:
-        view["convoy"] = convoy
-    conquest_view = game.conquest_view()  # 領地爭奪：戰書排的攻城、每一塊的翻地資料、能不能下戰書（開關關著、季收了沒有這個鍵）
-    if conquest_view is not None:
-        view["conquest"] = conquest_view
-    # 出陣約戰（減法季批 3b，計畫 1.3）：出陣前那張卡（main.sortie 已經是出陣開著的布林，卡放 sortie_card）與約戰卡清單；約戰關著沒有這兩個鍵
-    duel_card = game.sortie_card()
-    if duel_card is not None:
-        view["sortie_card"] = duel_card
-    duel_cards = game.sortie_cards()
-    if duel_cards is not None:
-        view["sorties"] = duel_cards
-    banner = game.siege_banner()  # 領地爭奪第三批 A：場景裡畫的是攻城戰時，最上面那一條「攻城・地點｜守方：某某」（企劃者挑甲；決戰沒有這個鍵）
-    if banner is not None:
-        view["siege"] = banner
-    if xingshi.on(game.content, game.state.world):  # 〈天下形勢〉開著的季：見聞多一顆「形勢」（文章另外讀 /api/xingshi；關著沒有這個鍵）
-        view["xingshi"] = True
-        view["xingshi_mark"] = game.xingshi_mark()  # FB-578：最新一篇的篇次＋有沒有一張還在寫；變了，停在「形勢」頁的網頁就重抓
-    plan = game.plan_view()  # 世界活起來：全服開著的盤算裡最切身的一件（江湖頁行動列底下一張卡）；沒有開著的就沒有這個鍵
-    if plan is not None:
-        view["plan"] = plan
-    place_mood = game.place_state_view()  # 地點會變樣（世界活起來第二批）：此刻所在地的樣子；太平沒有這個鍵
-    if place_mood is not None:
-        view["place_state"] = place_mood
-    place_deeds = game.place_deeds_view()  # 世界活起來：此地舊事（場景卡底下最近的幾筆世界記事）；沒有就沒有這個鍵
-    if place_deeds is not None:
-        view["place_deeds"] = place_deeds
-    letter = game.letter_view()  # 書信（大勢人物擴充第二批）：江湖頁「剛剛」上面一張小卡；沒有沒看過的信就沒有這個鍵
-    if letter is not None:
-        view["letter"] = letter
-    zhuan = game.biography_entry()  # 休季：江湖頁最上面的「讀你的傳」（玩家傳第二批）；季還在跑、沒有行狀是 None
-    if zhuan is not None:
-        if zhuan.get("illustration"):  # 列傳插畫（減法季批 7b）：圖檔在才給網址，沒有是 None
-            zhuan["illustration_src"] = zhuan_art_src(zhuan["illustration"])
-        view["zhuan"] = zhuan
-    result = game.season_result()  # 第一季休季：江湖頁最上面的結算卡（計畫 T9；開關關著、進行中都不送）
-    if result is not None:
-        view["season_result"] = {
+    some = features_core.slot_some
+
+    def free_text(ctx, frame) -> dict:
+        return {
+            "free_text": game.battle_free_text_prompt() or game.seal_free_text_prompt() or game.duel_free_text_prompt()
+            or game.feast_free_text_prompt(),  # 宴席上自己寫的敬酒詞（第三批）
+            "free_text_note": game.battle_free_text_note() or game.seal_free_text_note() or game.duel_free_text_note(),  # 放手一搏輸入框旁邊：風險越高、失手時傷自己越重
+            # 輸入框送到哪裡：正在打的決戰 > 奪璽單挑 > 頭目戰（玉璽碎片設計 5.7）
+            "free_op": "battle_text" if game.battle_free_text_prompt() is not None
+            else "seal_text" if game.seal_free_text_prompt() is not None
+            else "feast_text" if game.feast_free_text_prompt() is not None else "duel_text",
+            "event_free_text": game.event_free_text_prompt(),
+            # 事件分級：眼前的事件是第二、三階時，場景卡頂上那一行（州郡大事、天下大事）與框色；第一階是 None、一字不變
+            "event_tier": game.event_tier(),
+            # 特殊事件的跳顯框（開頭、此事已了・入傳、此事未了）：照順序一張一張跳，「收下」送 story_seen 清掉；沒有是空的
+            "story_cards": story_cards(game),  # 眼前事件的隨口應對：選單上那一顆按下去叫出輸入框
+            "keepsakes": list(game.state.player.keepsakes),  # 長篇奇事的紀念物（俠客頁「紀念」那一段；沒有效果、不能賣）
+            # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 now；之後配了點也一樣（配點不換「剛剛」，計畫二最終審查 M1）
+            "card": md(card) if card is not None else None,
+            "card_id": game.battle_card_id() if card is not None else None,
+        }
+
+    def journal(ctx, frame) -> dict:
+        return {
+            # 江湖紀錄頁是 latest＋journal＋older 接起來的，從最新一則列起（最新一則就是卡片那一場時，latest 是卡片的補充）
+            "latest": latest,
+            "journal": game.journal_html(1, RECENT_ROWS),
+            "older": game.journal_html(1 + RECENT_ROWS, OLDER_ROWS),
+            # 江湖頁的「剛剛」：跟 latest 一樣，只是最新的幾則若只是本週大事（江湖頁那排小標「大事」點開的面板；休季是結算卡）上已經有全文的大事，
+            # 改放再前面那一則，同一段公告不寫兩次（FB-046）；最新的配點也越過，卡片與補充看的都是那一場那一則
+            "now": game.battle_extra_html(for_card=True) if card is not None else game.now_entry_html(),
+            # 出陣回報（企劃者 2026-10-23）：「剛剛」那一則是領地爭奪的出陣時，卡片底下的進度條、一句話與小籤（sortie.report）；不是 None
+            "front": game.now_front(),
+            # 小地圖（舊的江湖頁那一張）網頁已經不畫了：不再每次輪詢在鎖裡重畫、多送 30 KB（全面自檢 S-07）
+        }
+
+    def orders_row(ctx, frame) -> dict:
+        frame.orders = game.orders_view()  # 第一季：自己陣營的本週軍令（計畫 T6；散人、別陣營、開關關著時都沒有這個鍵）
+        return {"orders": frame.orders} if frame.orders else {}
+
+    def rumor_layers(ctx, frame) -> dict:
+        layers = game.rumor_layers()  # 第一季：見聞頁的傳聞分四層（開關關著時不送，頁面照舊畫 rumors 那一條清單）
+        return {} if layers is None else {"rumor_layers": [{**layer, "body": md(layer["body"])} for layer in layers]}
+
+    def season_row(ctx, frame) -> dict:
+        result = game.season_result()  # 第一季休季：江湖頁最上面的結算卡（計畫 T9；開關關著、進行中都不送）
+        return {} if result is None else {"season_result": {
             **{key: value for key, value in result.items() if key != "ending"}, "text": md(result["text"]),
             "timeline": [{**row, "text": md(row["text"])} for row in result["timeline"]],
-        }
-    # 三陣營四勝利的結局卡（減法季批 3c；計畫 1.3 欄位表的 main.ending）：關著的季沒有這個鍵。本週卡「你這一步」與三方卡是批 1 的
-    # week_card、sides_card（上面），批 3c 的資料補在那裡面（step.finish、Game.sides_card、Game.tier_hint），這裡不另送一份
-    ending = game.ending_card()
-    if ending is not None:
-        view["ending"] = ending
-    return view
+        }}
+
+    # 殼的格（照 core/features.py 的 STATUS_ORDER["main"] 排進去，包的格在各包的 status_slots；全部拆包第 66 批，鍵的先後與叫的先後都算行為）
+    core = {
+        "screen": lambda ctx, frame: {
+            "status": status,
+            "quest": quest,
+            "scene": scene,
+            "art": scene_art(game, status),  # 場景卡上面那張圖（減法季批 8）：事件插圖、人物像或地點的圖；沒有圖檔是 None、網頁一字不變
+            "options": [o.model_dump() for o in options],
+        },
+        "modes": lambda ctx, frame: {
+            # 一類一顆開著（正式季整合第二章）：應召畫成行動列上面一條金框橫幅（設計 9.1 第 1 組乙），不收在「此地還能做」
+            "precise": precise.on(game.content, game.state.world),
+            # 城裡操練與城外練功（新手引導重做，tianxia/training.py）：練功從探索三選一拿出來，在行動列自成一格
+            "training": training.on(game.content, game.state.world),
+        },
+        # 行動列底下那幾行（explain-1）：探索、遊歷、交友、求見這一下會怎樣（選項 id → 一句；序章裡是空的）
+        "action_notes": lambda ctx, frame: {"action_notes": game.action_notes(o.id for o in options)},
+        "free_text": free_text,
+        "journal": journal,
+        "news": lambda ctx, frame: {
+            "bulletin": [md(text) for text in game.bulletin()],  # 江湖頁那排小標「大事」點開的本週大事（新的在前）；開關關著是空的
+            "trends": md(game.trends_text()),
+            "rumors": md(game.rumors_text()),
+            "chronicle": md(game.chronicle_text()),
+        },
+        "admin": lambda ctx, frame: {
+            "admin": game.is_admin(),
+            "paused": game.paused_minutes(),  # 賽季時鐘停了幾分鐘；沒暫停是 None（設定頁的「暫停／繼續」）
+        },
+        "horse_art": lambda ctx, frame: {"horse_art": horse_art()},  # 馬市與修練頁坐騎那一列：真的有圖檔的那幾個鍵，其餘照舊畫色塊
+        # 伺服器推送（線上架構設計 5.3）：頁面照 push 決定開不開 /api/events（開著時平常 60 秒才輪詢一次、有通知才刷新），
+        # push_spread 是收到「世界變了」之後各分頁重抓畫面要攤開的秒數（預檢 F3：全服同時重抓會在同一把行動鎖上排隊）
+        "push": lambda ctx, frame: {"push": HUB is not None, "push_spread": game.content.config.push_world_min_seconds},
+        "shop": lambda ctx, frame: some("shop", game.shop_view([o.id for o in options])),  # 店面（店面獨立介面設計 6.1）：開關開著、店開著、鐵匠鋪那一串是眼前的選單才有
+        "prep": lambda ctx, frame: some("prep", game.season_prep_view()),  # 開季準備卡（企劃者 2026-11-05）：挑成長配比、識海；做完才能做別的事。沒有要準備的沒有這個鍵
+        # 功能包的狀態（FEATURES 的 status，照清單的順序；開發規範手冊 3.3）：商城的入口 mall（齒輪旁的錠子鈕＋餘額、底部第六格）；關著沒有這個鍵
+        "features": lambda ctx, frame: game.feature_status(),
+        # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
+        "fronts": lambda ctx, frame: {"fronts": status["fronts"]} if "fronts" in status else {},
+        "orders": orders_row,
+        # 減法季批 1（整合設計 6.1、3.4）：江湖頁最上面的本週卡（主題、你這一步）；序章裡、休季沒有這個鍵（三方卡是陣營包的 sides_card 那一格）
+        "week_card": lambda ctx, frame: some("week_card", weekcard.week_card(game, status, frame.orders)),
+        "event_opts": lambda ctx, frame: some("event_opts", game.event_option_view()),  # 事件選項只留動作（整合設計 6.4）：選項 id → 動作、圖示、沒把握時的心裡話；沒有事件沒有這個鍵
+        "rumor_layers": rumor_layers,
+        "place_state": lambda ctx, frame: some("place_state", game.place_state_view()),  # 地點會變樣（世界活起來第二批）：此刻所在地的樣子；太平沒有這個鍵
+        "season_result": season_row,
+    }
+    return features_core.status_run("main", core, features_core.MainFrame(status, options, card, {}, sys.modules[__name__]), game)
 
 
 def menxia_view(game: Game, person: str | None = None) -> dict:

@@ -24,93 +24,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import calendar, rules, story_base, week_unlock, wins
+from . import calendar, story_base, week_unlock
 from . import chapters  # 共用規則層（章回，全部拆包第 40 批收進）
 from . import step as step_rules
 from . import prologue as prologue_rules
-from .rules import STANCE_NAMES
 from .week_unlock import phase  # noqa: F401  前、中、後段：批 5 搬到 week_unlock（功能解鎖也照它），舊名照舊從這裡讀得到
 
 if TYPE_CHECKING:
     from .engine import Game
 
 # JOIN_STEP（去投靠那一件）、ORDER_GAIN（軍令那一件的 reward）第 36 批跟著那一格搬進陣營包 join_actions、軍情包 order_actions，字一個不改
-HAOQIANG_NOW_PENDING = "替官軍、替黃巾各記一本帳"  # 待 joy 潤：兩本帳（批 3c）接上之前豪強那一格「現在」
-# 「贏了給」（整合設計 3.3 的四階；四個勝利條件開著的季才照這張寫，關著的季照舊是陣營輸贏與出力）
-WIN_GIVES = {
-    "guan": "出力最高的一成拿第一階；其餘照出力拿第三、四階",
-    "huang": "出力最高的一成拿第一階；其餘照出力拿第三、四階",
-    "haoqiang": "替贏的那一軍出力最多的一成拿第二階；其餘拿第三、四階",
-}
-WIN_GIVES_OLD = "季末照陣營輸贏與你出的力論功行賞"  # 待 joy 潤：規則關著的季
-HAOQIANG_GOAL = "挑一軍幫：幫的那一軍贏了就算你贏；季末只算你替贏的那一軍出的力；換邊隨時換，不算叛逃"
-
-
-def _bar(content, side: str) -> tuple[int, str] | None:
-    """這一方到幾分就是哪一種結局（第一季的結局表；只取寫得成「這一方幾分以上」的那一種，同 rules.stance_rule_note）。"""
-    best = None
-    for e in content.scenario.endings:
-        if not e.season_one:
-            continue
-        bar = rules._one_bar(e)
-        if bar is not None and bar[0] == side and (best is None or bar[1] < best[0]):
-            best = (bar[1], e.title)
-    return best
-
-
-def _goal(content, side: str, other: str) -> str:
-    text = f"季末態勢高過{STANCE_NAMES[other]}"
-    bar = _bar(content, side)
-    if bar is not None:
-        text += f"；{'壓' if side == 'guan' else '推'}到 {bar[0]} 就是「{bar[1]}」"
-    return text
-
-
-def _places(game: Game, faction) -> list[str]:
-    locs = game.content.locations
-    return [locs[x].name for x in faction.join_at if x in locs]
-
-
-def sides_card(game: Game) -> dict | None:
-    """三方卡（整合設計 3.4）：劇本沒有陣營、序章裡、休季是 None。欄位：
-    {"cols": [{"id", "name", "goal", "now", "gives", "where": [地名], "mine"}], "joined": bool, "lean": None}。
-    四勝利開著的季（批 3c）：每一欄多 join_at、gives 照四階寫、豪強那一欄的 now 寫兩本帳；lean 是豪強此刻幫的那一軍 id；
-    投靠了的人多 tier_hint（「第三階・還差 40」）、豪強多 ledger（{"guan": 120, "huang": 40}）。"""
-    s, c = game.state, game.content
-    if not c.scenario.factions or s.world.ended or prologue_rules.active(s, c) or game._opening_pending():  # noqa: SLF001  開局三選一還沒選：先不畫（批 7）
-        return None
-    four = rules.jianfa(c, s.world)
-    standing = rules.stances(s, c) if rules.season_one(c, s.world) else None
-    mine = s.player.faction
-    extra = game.sides_card() if four else None  # 批 3c（Game.sides_card）：豪強那一格的「現在」、贏了給（照 Config.jianfa.tiers）、投靠點的分鐘
-    cols = []
-    for f in c.scenario.factions:
-        if f.id in ("guan", "huang"):
-            other = "huang" if f.id == "guan" else "guan"
-            now = f"態勢 {standing[f.id]}" if standing is not None else ""
-            cols.append({"id": f.id, "name": STANCE_NAMES[f.id], "goal": _goal(c, f.id, other), "now": now,
-                         "gives": WIN_GIVES[f.id] if four else WIN_GIVES_OLD, "where": _places(game, f), "mine": mine == f.id})
-        elif four:  # 地方豪強（整合設計 3.1：兩本帳、幫哪一軍隨時換）
-            cols.append({"id": f.id, "name": f.name, "goal": HAOQIANG_GOAL, "now": HAOQIANG_NOW_PENDING,
-                         "gives": WIN_GIVES["haoqiang"], "where": _places(game, f), "mine": mine == f.id})
-    # 批 3c 接上了：贏了給照四階的稱號與比例寫、多一份投靠點的分鐘（join_at），豪強那一格「現在」寫兩本帳（看的人是豪強）或兩邊各幾人
-    for col in cols:
-        got = extra.get(col["id"]) if extra else None
-        if got is not None:
-            col["gives"], col["join_at"] = got["reward"], got["join_at"]
-            if c.scenario.faction(col["id"]).allies:
-                col["now"] = got["now"]
-    lean = wins.lean_of(s.player, c) if four else None  # 「你此刻幫誰」（批 3c）：豪強此刻幫的那一軍 id；其他人、關著是 None
-    out = {"cols": cols, "joined": mine is not None, "lean": lean}
-    if four:  # 批 3c：此刻就收季拿第幾階・離上一階還差多少（投靠了的人）、豪強的兩本帳（數字；那一格的「現在」是同一份的字）
-        hint = game.tier_hint()
-        if hint is not None:
-            out["tier_hint"] = hint
-        ledger = wins.ledger_view(s.player, c)
-        if ledger is not None:
-            out["ledger"] = ledger
-    return out
-
 
 def _steps(game: Game, status: dict, orders: list[dict]) -> list[dict]:
     """「眼下要事」（以前叫「你這一步」，Joy 2026-10-26 改名）的候選，照整合設計 6.1 的順序：託付（委託）→ 軍令 → 揭了的懸賞 → 伏筆 → 新手目標 → 去投靠。
@@ -158,7 +81,7 @@ def week_card(game: Game, status: dict, orders: list[dict]) -> dict | None:
      "unlock": 第 2 週的功能剛開了那一句或 None, "locked": 還沒開的那一句（給「為什麼」）或 None,
      "cap": 45 級之後那一句或 None, "gap": 第 3 週「離贏還差多少」或 None（批 5；week_unlock）}。"""
     s, c = game.state, game.content
-    if s.world.ended or prologue_rules.active(s, c) or game._opening_pending():  # noqa: SLF001  開局三選一還沒選：本週卡在信收起來之後才出現（批 7）
+    if s.world.ended or prologue_rules.active(s, c) or (c.opening is not None and s.pending_event == c.opening.event):  # 開局三選一還沒選：本週卡在信收起來之後才出現（批 7）
         return None
     cal = status.get("calendar")
     if cal is None:  # 規則關著的季（beta）沒有季曆：寫第幾天

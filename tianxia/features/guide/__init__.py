@@ -13,7 +13,7 @@ newbie_drifter）與 /api/prologue，選單上的那幾顆是別人的（act:res
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, StepHook
+from tianxia.core.features import DefectHook, Feature, StatusHook, StepHook
 
 
 class GuideFeature(Feature):
@@ -62,6 +62,22 @@ class GuideFeature(Feature):
             self._steps = (StepHook("newbie", lambda ctx, status, orders: actions.newbie_step_items(ctx, status), ref="newbie",
                                     place=lambda ctx, ref: actions.newbie_step_place(ctx, ref)),)
         return self._steps
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import actions  # noqa: PLC0415
+
+            self._status_slots = (
+                StatusHook("status", "newbie", lambda ctx, frame: {"newbie": actions.newbie_view(ctx)}),
+                StatusHook("main", "guide", lambda ctx, frame: {"guide": actions.guide_box(ctx), "prologue": actions.prologue_view(ctx),
+                                                                "onboard": actions.onboard_view(ctx)}),
+                StatusHook("main", "glow", lambda ctx, frame: actions.glow_slot(ctx, frame)),
+            )
+        return self._status_slots
 
 
 FEATURE = GuideFeature()

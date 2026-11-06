@@ -356,3 +356,24 @@ def test_the_core_and_the_packages_fill_every_world_slot_exactly_once():
         assert not own & set(core[at]) and own | set(core[at]) == set(order), at
     # 週初、每天那兩串照表建、一格一個函式（season_events 照串列的順序叫）
     assert len(world.WEEK_HOOKS) == len(features_core.WORLD_ORDER["week"]) and len(world.DAY_HOOKS) == len(features_core.WORLD_ORDER["day"])
+
+
+# shell_web（全部拆包第 66 批；計畫 docs/superpowers/plans/2026-11-06-網頁殼化-第66批.md 第四節）
+def test_the_core_and_the_packages_take_every_status_slot_exactly_once(monkeypatch):
+    """真的 FEATURES 登記的格＋核心、殼傳進 status_run 的格＝STATUS_ORDER，沒有重疊——不然 status_run 會叫包的那一份、核心那一份變死碼；少一格畫面就少鍵。"""
+    import server
+
+    real = features_core.status_run
+    core: dict[str, set[str]] = {}
+
+    def spy(table, slots, frame, ctx):
+        core[table] = set(slots)
+        return real(table, slots, frame, ctx)
+
+    monkeypatch.setattr(features_core, "status_run", spy)
+    view = server.main_view(_game())
+    assert list(view)[:5] == ["status", "quest", "scene", "art", "options"]
+    assert core.keys() == features_core.STATUS_ORDER.keys()
+    for table, order in features_core.STATUS_ORDER.items():
+        own = set(features_core.status_hooks(table))
+        assert not own & core[table] and own | core[table] == set(order), table

@@ -7,6 +7,7 @@ import pytest
 
 from conftest import real_content
 from tianxia import foreshadow, weekcard
+from tianxia.features.faction import sides as faction_sides
 from tianxia.engine import Game
 
 
@@ -56,27 +57,27 @@ def test_steps_follow_the_order_errand_order_bounty_newbie_join(on):
 
 def test_sides_card_writes_two_armies_when_the_four_wins_rule_is_off(on):
     g = _game(on)
-    sc = weekcard.sides_card(g)
+    sc = faction_sides.sides_card(g)
     ids = [col["id"] for col in sc["cols"]]
     assert ids[:2] == ["guan", "huang"] or set(ids) >= {"guan", "huang"}
     assert sc["joined"] is False and sc["lean"] is None
     for col in sc["cols"]:
         assert col["goal"] and col["where"] and col["mine"] is False
-        assert col["gives"] == weekcard.WIN_GIVES_OLD
+        assert col["gives"] == faction_sides.WIN_GIVES_OLD
 
 
 def test_sides_card_adds_the_gentry_when_four_wins_is_on(on):
     on.config.jianfa.enabled = True
     g = _game(on)
-    sc = weekcard.sides_card(g)
-    assert any(col["goal"] == weekcard.HAOQIANG_GOAL for col in sc["cols"])
+    sc = faction_sides.sides_card(g)
+    assert any(col["goal"] == faction_sides.HAOQIANG_GOAL for col in sc["cols"])
     assert {col["id"] for col in sc["cols"] if col["id"] in ("guan", "huang")} == {"guan", "huang"}
 
 
 def test_no_cards_without_factions(content):
     g = _game(content)
     if not content.scenario.factions:
-        assert weekcard.sides_card(g) is None
+        assert faction_sides.sides_card(g) is None
 
 
 def test_foreshadow_next_step_is_none_for_a_fresh_player(on):

@@ -9,7 +9,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import DefectHook, Feature, Outcome, StepHook
+from tianxia.core.features import DefectHook, Feature, Outcome, StatusHook, StepHook, slot_some
 
 
 class FactionFeature(Feature):
@@ -106,6 +106,20 @@ class FactionFeature(Feature):
             self._steps = (StepHook("join", lambda ctx, status, orders: join_actions.join_step_items(ctx), ref="join",
                                     place=lambda ctx, ref: join_actions.join_step_place(ctx, ref)),)
         return self._steps
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import ending_actions, sides  # noqa: PLC0415
+
+            self._status_slots = (
+                StatusHook("main", "sides_card", lambda ctx, frame: slot_some("sides_card", sides.sides_card(ctx))),
+                StatusHook("main", "ending", lambda ctx, frame: slot_some("ending", ending_actions.ending_card(ctx))),
+            )
+        return self._status_slots
 
 
 FEATURE = FactionFeature()

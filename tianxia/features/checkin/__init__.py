@@ -8,7 +8,7 @@
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature
+from tianxia.core.features import Feature, StatusHook, slot_some
 from tianxia.core.services import checkin_on
 
 
@@ -22,6 +22,19 @@ class CheckinFeature(Feature):
     def enabled(self, ctx) -> bool:
         """簽到開著沒（設定打開、21 天季、還沒收季）。沒有任何掛鉤吃這個開關：Game.check_in、_auto_checkin、checkin_view 本來就各自問 checkin.on。"""
         return checkin_on(ctx.content, ctx.state.world)
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from . import actions  # noqa: PLC0415
+
+            self._status_slots = (
+                StatusHook("status", "checkin", lambda ctx, frame: slot_some("checkin", actions.checkin_view(ctx))),
+            )
+        return self._status_slots
 
 
 FEATURE = CheckinFeature()

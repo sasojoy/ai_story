@@ -19,7 +19,7 @@ enabled 一直是 True（沒有整包的總開關：名帖開關 Config.mingtie.
 """
 from __future__ import annotations
 
-from tianxia.core.features import Feature, Outcome
+from tianxia.core.features import Feature, Outcome, StatusHook
 
 from . import mingtie_card as _mingtie_card  # noqa: F401  遞名帖登記進玩家卡的動作表（social.ACTIONS）；載入這一包就登記（原本 engine.py 頂端 import 它；scripts/test_for.py 認這個寫法）
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）；原本 engine.py 頂端 import tianxia.discuss（全部拆包第 38 批）
@@ -62,6 +62,22 @@ class PeersFeature(Feature):
         from . import routes  # noqa: PLC0415  只在殼掛的時候才 import（routes 用 fastapi）
 
         return routes.router(shell)
+
+    # shell_web（全部拆包第 66 批：狀態列與江湖畫面的格，先後在 STATUS_ORDER；不問 enabled，原位那幾行本來就不看包的開關）
+    _status_slots: tuple[StatusHook, ...] | None = None
+
+    def status_slots(self) -> tuple[StatusHook, ...]:
+        """建一次就留著，在叫的那一下才照模組屬性找（monkeypatch 照樣有效）；frame 見 core/features.py 的 StatusHook。"""
+        if self._status_slots is None:
+            from tianxia import rules  # noqa: PLC0415
+
+            from . import actions, invite_actions  # noqa: PLC0415
+
+            self._status_slots = (
+                StatusHook("status", "invites", lambda ctx, frame: {"invites": invite_actions.status(ctx)} if rules.season_one(ctx.content, ctx.state.world) else {}),
+                StatusHook("main", "peers", lambda ctx, frame: {"here": actions.peers_here(ctx), "calls": actions.calls_here(ctx)}),
+            )
+        return self._status_slots
 
 
 FEATURE = PeersFeature()
