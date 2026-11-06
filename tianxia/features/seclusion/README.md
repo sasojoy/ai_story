@@ -11,5 +11,7 @@
 | `tests/` | `test_seclusion_smoke.py` |
 
 **認領的欄位**（3.5，留在原地）：`PlayerState.seclusion_start`、`seclusion_done`（換季照 `_reset_player_for_new_season` 重來）；`Config.seclusion_xinde_per_hour`。`busy_until` 是核心的（遊歷、出陣也用），不認領。`fusion.py` 讀 `seclusion_done`（只讀狀態）。
-**接縫在原位**：`_advance_player_local` 的 `_finish_seclusion`（體力回復之後、財運之前，位置就是行為）；閉關中的選單（`_everyday_options`：`act:break` 與擂台入口併成一串）留在核心，總表第 57 批才碰。假人不閉關，沒有 `bots.py`。
+**接縫**：`local` 的 `seclusion` 那一格（第 55 批；體力回復之後、福緣之前，位置就是行為）；閉關中的選單（`_everyday_options`：`act:break` 與擂台入口併成一串）留在核心，總表第 57 批才碰。假人不閉關，沒有 `bots.py`。
 **另外要跑的混合檔**（閉關散在這些檔裡，這一輪不拆；數字是 `seclude`／`_finish_seclusion`／`seclusion_refusal` 出現的次數）：`tests/core/test_engine.py`（7）、`tests/core/test_prologue.py`（5）、`tests/core/test_journal.py`（3）、`tests/ranger/test_bounties.py`（3）、`tests/gear/test_treasures.py`（2）、`tests/figures/test_foreshadow.py`（2）、`tests/gear/test_mounts.py`（1）、`tests/bots/test_stamina_refill.py`（1）；網頁那一頭 `tests/web/test_prologue_web.py` 等（打 `/api/do/seclude`，這一批沒動 `web/`）。改閉關任一檔時另外跑它們。
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`local` 的 `seclusion`（`actions.finish_due`，原位的判斷搬過來；`Game._finish_seclusion` 留給測試）。

@@ -24,7 +24,7 @@
 
 - `player_fields`：`picking_donate`、`picking_dadian`（兩間店開著沒）、`donate_day`、`donated_today`（捐素材今天捐了多少點）、`silver_donate_day`、`silver_donated`（捐銀兩今天捐了幾兩）、`mentor_day`、`mentor_ready`（名師指點）、
   `furnace_day`、`furnace_ready`（看火候）、`legend_silver_bought`（這一季用銀兩買了幾顆破境丹）、`bribed`（今天打點過誰）。
-- `carried = ("donate_day", "donated_today")`：換季不能多捐一輪（`Game._reset_player_for_new_season` 照帶，不看開關）；其餘換季跟著新角色重來。
+- `carried = ("donate_day", "donated_today")`：換季不能多捐一輪（`season.carry` 的 `outlets` 那一格照帶，第 55 批；不看開關）；其餘換季跟著新角色重來。
 - 不認領：`legend_items`（破境丹的數量）屬修練包、商城也帶；`shop_line`、`shop_clue`、`shop_hold`（七間店共用的掌櫃那一句）屬核心。
 - `World.armaments`（各陣營軍備存量）是全服帳：由這一包的 `credit` 寫、核心 `status_data` 經 `armament_view` 讀；沒有 `PlayerState` 欄位。
 - 共用規則層的 `atlas.travel_block` 直接讀 `picking_dadian`、`picking_donate`（動身被擋的那一句；全部拆包第 50 批照實記下，第 56 批選單收接縫時改成掛鉤、一張先後表）。
@@ -61,3 +61,5 @@
 ## 過渡（手冊 3.11）
 
 過渡 import 共 1 處（全部拆包第 40 批合完重印）：`donate_actions` 到 `shopview`。`silver_actions` 到 `figures` 那一處第 40 批 `figures` 收進共用規則層，不算過渡（原本 2 處）。
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`season.carry` 的 `outlets`（今天捐過的照帶，不看開關）。

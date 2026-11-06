@@ -20,7 +20,7 @@
 全部拆包第 7 批拿了 battle: 前綴：假人看到 battle: 的選項怎麼按問這一包（bot_pick → bots.py，原本是 bot_policy.score 的 battle 那一段）。
 battle: 的分派照舊在 Game.choose 原位（查完選單、清掉「剛剛」與引導之後、建紀錄之前那一支，叫 Game._battle_choose 的委派）：choose_unlisted
 在查選單之前、choose 掛鉤會建紀錄，都不是那個位置（計畫 2026-11-01-決戰包-第3批.md 1.4），所以 choose 掛鉤照預設回 None。
-換季照帶補過的決戰（carried 那一格）照舊寫在 Game._reset_player_for_new_season、不掛 on_season_start（同出陣第 1 批審查之後的做法）。
+換季照帶補過的決戰（carried 那一格）第 55 批起是 season.carry 的 battle 那一格、不掛 on_season_start（同出陣第 1 批審查之後的做法）。
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ class BattleFeature(Feature):
     # 第 7 批（集結、挑同伴）再認兩格：escort_pick（按了加入、還在挑誰隨你上陣）、parted_done（同伴回江湖、情誼已經減半、全服的記號還沒清；
     # muster.settle_partings 讀寫）——換季都跟著新角色重來
     player_fields = ("battle_results_seen", "showdowns", "top_merits", "escort_pick", "parted_done")
-    carried = ("battle_results_seen",)  # Game._reset_player_for_new_season 照帶（不看開關，同商城、出陣的 carried）
+    carried = ("battle_results_seen",)  # season.carry 那一格照帶（不看開關，同商城、出陣的 carried）
 
     def enabled(self, ctx) -> bool:
         """內容裡有決戰（battles.json）就有：決戰本身沒有開關（beta、第一季、減法季都打）。遊戲當下的掛鉤全是預設的空的，開著關著結果都一樣；

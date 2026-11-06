@@ -28,7 +28,7 @@
 
 - `act:challenge:<人物>`：`_everyday_options` 的選單那一格、`_act` 的按下去、`_action_title`、`_fight_squad` 的對手隊伍——act 子動詞帶後綴接不了 `Verb`（總表第 57 批），Game 留 `_challenge_options`、`_challenge`、`_figure_squad`、`_snubbed_character`、`challenge_odds` 的一行委派。
 - 選單末段 `護衛 + features_core.options + 盤算`：護衛那串在包選項之前、盤算在之後，`options` 掛鉤接不了，Game 留 `_aid_options`、`_plan_options` 的委派。
-- `sync` 的 `_deliver_guard_credits`：夾在 `_deliver_echoes` 與 `deliver_notices` 之間，留委派（接成 `deliver_notices` 掛鉤，酒肆的會跑在它前面，行狀順序會變）。
+- `sync.deliver` 的 `guard` 那一格（第 55 批，委派拿掉）：夾在 `echoes` 與 `notices` 之間（接成 `deliver_notices` 掛鉤，酒肆的會跑在它前面，行狀順序會變）。
 - `figures.py` 的 `figure_aid.restore` 全部拆包第 40 批換掉：犒軍與自然回復共用一天上限的那五個函式（`on`、`_day`、`_life`、`left_today`、`restore`）搬進共用規則層 `figures`（`aid_` 開頭），`figures.recover` 直接叫自己的 `aid_restore`，`figure_aid.py` 照原名 re-export 同一個物件。`social.py` 已經不讀 `yuedan.line_for`（第 40 批合完量的：只剩 `engine` 的委派經包讀）。
 - 過渡 import（第 45 批合完重印）1 處：`yuedan.py` 函式裡 → `leaderboard`；`aid_actions.py` 第 45 批改發事件 `ctx.publish("aid", ...)`（護衛、犒軍辦成：懸賞榜包交差，位置不動），不再 import 舊名 `bounties`；原本的 `figures`、`figure_life`、`plans`（8 處）第 40 批收進共用規則層，不算過渡。
 - 世界層的格（core_world：全部拆包第 25 批）：月旦評每一步（原本 `world.py` 經別名叫 `yuedan.tick`）是世界層 `step` 的 `yuedan` 那一格（`__init__.py` 的 `world()` → `yuedan.world_step`；排在盤算之後、那一步最後，先後在核心的 `WORLD_ORDER`；不問 `enabled`）。
@@ -49,3 +49,5 @@
   `tianxia/features/sortie/tests/test_sortie_rewards.py`（`tier4`）、`tests/seal/test_seal_revamp.py`（`figure_squad`）、`tests/seal/test_seal_engine.py`（16／41）、`tests/seal/test_seal_duel.py`（12／27）
 - 假人：`tests/bots/test_bot_policy.py` 這一類（`aid:`、`act:challenge:` 的分數）
 - 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/figure_acts/challenge.py`
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `guard`（`aid_actions.deliver_guard_credits`）；`stale.late` 的 `figure_acts`（`challenge.drop_stale`，清 `snubbed_until`）。

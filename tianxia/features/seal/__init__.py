@@ -16,7 +16,7 @@
 
 選項前綴 seal:（bot_pick 問 bots.score；menu、choose 不接）、沒有路由（管理者的 seal_* 與 seal_text、seal_use 留在殼、叫委派）。
 掛鉤：事件 outing、battle_end 的 seal 兩格（bus）、世界層 muster、open、next×2、retire 五格（world）、效果 runic、shard 兩格（effects）、
-接縫 deliver_results（sync 的收場補送）；都不問 enabled（格裡自己問 content.seal、Config.seal.enabled：散去不看開關、隱沒看開關）。
+接縫 deliver_results（sync 的收場補送）、補算與換季四格（seams，第 55 批）；都不問 enabled（格裡自己問 content.seal、Config.seal.enabled：散去不看開關、隱沒看開關）。
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ class SealFeature(Feature):
     name = "seal"
     prefix = "seal"  # 選項前綴 seal:（碎片卡、獨門行動、奪璽單挑的三招）；第 28 批登記，choose、menu 不接（engine 的 options／choose 原位叫委派）
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：抄本 heirloom（傳承那一格，照全服登記重抄）、補送到第幾號 seal_seen。
-    # 核心換季（_reset_player_for_new_season）兩個都照帶；heirloom 換季後建 Game 時照登記重抄（copy_heirloom），所以不算帶走的
+    # 換季（season.carry 那一格）兩個都照帶；heirloom 換季後建 Game 時照登記重抄（copy_heirloom），所以不算帶走的
     player_fields = ("heirloom", "seal_seen")
     carried: tuple[str, ...] = ("seal_seen",)
     # 七片碎片（content.py 照舊讀、照舊驗：_validate_seal 留原處，不接 check_content，第 34 批認定第 2 條）；檔名照舊

@@ -43,7 +43,7 @@
 - `act:socialize`、`act:call`（`_act` × `_socialize`，`_everyday_options`、`action_notes` 的交友與求見那幾行）：核心 `act:` 的子動詞，第 57 批接進 `Verb`。單人地點的「求見某某」那一顆同在這幾行裡。
 - 求見名單（`_everyday_options` × `_audience_options`）與求見畫面（`_own_scene_text` × `_audience_intro`）：`menu`、`scene` 掛鉤坐在談著、選邊、投靠確認、叛投確認那幾個 `picking_*` 之前，
   名單夾在叛投確認與懸賞榜中間、畫面夾在叛投之後，接成掛鉤就改了它們並存時誰先；位置算行為，所以不接。
-- 收起求見名單接 `on_drop_stale`（`_drop_stale_references` 最後那一個掛鉤；只差序章收尾挪人之後的地點）。福緣到期自己送上門（`_advance_player_local` × `_deliver_fortune`）：夾在別的補算中間，`on_sync` 沒有對應的位置。
+- 收起求見名單接 `on_drop_stale`（`_drop_stale_references` 最後那一個掛鉤；只差序章收尾挪人之後的地點）。福緣到期自己送上門第 55 批換成 `local` 的 `fortune` 那一格（夾在別的補算中間，`on_sync` 沒有對應的位置）。
 - `choose` 做完之後的 `_guide(self._note_action("socialize"))`（`kind == "call" and arg != "back"`）與前段的 `_checked_prepared`：留在 `choose` 原位（掛鉤沒有「做完記引導」的位置）。
 - 核心的表：`models.py` 的 `ALLOW_FAMILIES`（有 `call:`）與 `act:call`、`act:socialize`；`server.py` 備料判斷、`bot.py` 排除「名望不夠、會被打發的求見」（問 `can_meet_figure`）不動。
 - `howto.py` 的 `social_line`、`call_line`、`CALL_LINE`（玩法說明的文字）留核心（引導與說明頁共用）。
@@ -67,3 +67,5 @@
   （`socialize_*`）、`tests/figures/test_figures.py`、`tests/server/test_server.py`、`tests/seal/test_seal.py`／`test_seal_revamp.py`（`_talk_cap`）、`tests/core/test_explain.py`、
   `tests/core/test_social.py`、`tests/season/test_real_content.py`（`_deep_interaction_target`）。網頁測試（`tests/web/test_explain_web.py`、`test_jianghu_page_web.py`）第 3 階。改 `figures_here_view`、`intros.py` 另跑 `tests/web/test_revamp_web.py`（此地人物那一排與簡介，`test_for` 挑不到）。
 - 前後一字不變：`scripts/same_behavior.py` 的 `socialize` 軌（`--tracks socialize,companions,talk,guide`）；此地人物那一排與對話框是 `here` 軌（主幹合回 D 段）。
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`local` 的 `fortune`（`actions.fortune_due`，原位的判斷搬過來；`Game._deliver_fortune` 留給測試）。

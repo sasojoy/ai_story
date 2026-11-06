@@ -12,7 +12,7 @@
 | `bots.py` | 假人的分數：開季封第一份 60、解封 40、撞名挑第一個候選 50；這一季不帶不按 |
 | `tests/` | `test_legacy.py`、`test_legacy_smoke.py`、`legacy_kit.py`（有神品的局面）、`legacy_stage.py`（契約測試擺局面） |
 
-**認領的欄位**（3.5）：`PlayerState.legacy`（`LegacyBook`、`ShihaiSeal`；`None` 不寫進存檔，在 `state.QUIET_DEFAULTS`）。換季照帶（`carried`）：照帶本身寫在 `Game._reset_player_for_new_season`、不看開關（同出陣那兩格）；結算在 `on_season_start`，只在開關開著時。`Config.legacy`。
+**認領的欄位**（3.5）：`PlayerState.legacy`（`LegacyBook`、`ShihaiSeal`；`None` 不寫進存檔，在 `state.QUIET_DEFAULTS`）。換季照帶（`carried`）：照帶本身第 55 批起是 `season.carry` 的 `legacy` 那一格、不看開關（同出陣那兩格）；結算在 `on_season_start`，只在開關開著時。`Config.legacy`。
 **旗標**：門路是玩家旗標 `legacy_<zheng|xie|luck>_<n>`（`LegacyRules.tiers`），每次換季照新的值重立（掉下去的拿掉）；內容用條件的 `flags_all` 讀。每一道開什麼見下面「九道門路」。
 **量表**：`scripts/measure_legacy.py`（只算真人；讀一份資料庫裡每個角色「此刻換季的話」會拿到多少、九成位對齊的建議權重；`--demo` 看三種人連玩幾季的走向）。
 **畫面**（企劃者 2026-11-04「要有真的傳承、識海的感覺」）：狀態列展開名號時一行入口（`web/legacy.js` 的 `legacyHtml`；呼叫處、四個點擊 case 與 `prepShihaiHtml` 留在 `web/app.js`），按了打開整頁的傳承（`legacyPageHtml`，`S.legacy = "main"`：月夜山影、三卷墨水到門就蓋朱印、每項三片竹簡＝門路，按一片看長句）與識海（`S.legacy = "shihai"`：深海、封印符紙、時境悟三道封印、破封、開季還沒挑的候選；有候選時第一個畫面自己打開一次）。讀 `main.legacy`（`actions.status`：values、gains、tracks、shihai）；還沒結算過、身上也沒有神品的人不畫。樣子在 `web/legacy.css`，測試 `tests/test_legacy_web.py`。圖（水墨背景、符紙、卷軸、竹簡）等企劃者給，放 `web/img/legacy/`。
@@ -22,3 +22,5 @@
 - 機緣：① 頓悟沒中再擲一次（`epiphany.roll`）；② 奇遇的比重再乘 1 + `qiyu_boost`（0.5；`events.qiyu_multiplier`）；③ 長篇奇事沒中再擲一次（`storyline.roll_start`）。
 - 門路只開到 `door_tier`（1）段；官府通緝、黑市、醫館打折照舊只看名聲（`renown.meets`）。
 **權重**（Joy 11/4）：tasks 40、merit 0.1、fame 1、relations 1（正式站 60 個真人的九成位對齊），good、evil 1。
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`season.carry` 的 `legacy`（傳承照帶，不看開關；結算在 `on_season_start`）。

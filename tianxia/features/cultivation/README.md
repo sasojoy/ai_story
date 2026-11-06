@@ -16,13 +16,13 @@
 
 **認領的欄位**（3.5，留在原地）：`PlayerState.naming`（等著定名的那一門）、`renames_told`（定名通知過的）、`ascension`（剛破境、還沒看過的破境卡）、`legend_fails`（每一門服丹沒衝開幾次）、`milestone_due`（境界卡記的那一級）；換季都跟著新角色重來（`carried` 空的）。其餘修練用到的（`art_quality`、`art_slots`、`art_levels`、`insights`、`stat_points`、`follower_drill`……）是武學、意境、隊伍的共用欄位，不認領；破境丹 `legend_items` 是商城包認領的（`carried`）。`WorldState` 沒有；全服的武學、改名、宗師榜在核心的 `sqlite_world`。`Config.chuangong`、`breakthrough`、`legend_*`、`cultivate_*`、`stat_*`、`JianfaRules.stat_milestones` 在 `models.py`。
 
-**Game 上留的一行委派**（33 個；server 的 `MENXIA_ACTIONS`、`menxia_view`、`main_view` 的境界卡、`/api/do/allocate`、`ascend_line` 三段式，假人 `bot`、`bot_policy`，測試與核心原位還在叫）：動作 22 個（上面 `actions.py` 那 18 個 `Game` 方法名、`_drop_old_zhuifeng`、`_deliver_renames`、`_seize_chance`、`ascend_view`）、唯讀資料 11 個（`view.py`）。包裡互相叫直接叫函式；**經 `ctx` 的**：服務清單上的共用服務（`_log`、`_xinde`、`_menxia_entry`、`_save_season`、`_guide`、`_solved_secrets`、`_note_solved`、`_preparing`、`_art_name`）、共用段的 `ctx._check_hints()`（主人新手引導；`tests/arts/test_hints.py` 換掉實例上的）、`ctx._note_action()`（同上；序章第 9 步配點，開發時 import `tianxia.guide.note_action`，第 22 批先合，合併時改的）、寄放 `ctx.forged`、`forged_thing`、`secret_solved`。絕學的規則照模組屬性叫（`cultivation.seize`、`cultivate_problem`……：`tests/figures/test_figures.py` 的 `mock.patch("tianxia.cultivation.seize")`、`test_hints` 換掉 `cultivate`、決戰包的 `test_showdown_delivery` 換掉 `seize`，照樣打得到）。
+**Game 上留的一行委派**（33 個；server 的 `MENXIA_ACTIONS`、`menxia_view`、`main_view` 的境界卡、`/api/do/allocate`、`ascend_line` 三段式，假人 `bot`、`bot_policy`，測試與核心原位還在叫）：動作 22 個（上面 `actions.py` 那 18 個 `Game` 方法名、`_drop_old_zhuifeng`、`_seize_chance`、`ascend_view`）、唯讀資料 11 個（`view.py`）。包裡互相叫直接叫函式；**經 `ctx` 的**：服務清單上的共用服務（`_log`、`_xinde`、`_menxia_entry`、`_save_season`、`_guide`、`_solved_secrets`、`_note_solved`、`_preparing`、`_art_name`）、共用段的 `ctx._check_hints()`（主人新手引導；`tests/arts/test_hints.py` 換掉實例上的）、`ctx._note_action()`（同上；序章第 9 步配點，開發時 import `tianxia.guide.note_action`，第 22 批先合，合併時改的）、寄放 `ctx.forged`、`forged_thing`、`secret_solved`。絕學的規則照模組屬性叫（`cultivation.seize`、`cultivate_problem`……：`tests/figures/test_figures.py` 的 `mock.patch("tianxia.cultivation.seize")`、`test_hints` 換掉 `cultivate`、決戰包的 `test_showdown_delivery` 換掉 `seize`，照樣打得到）。
 
 **接到掛鉤的**：`Game.choose` 的 `learn` 那一支與 `_action_title` 的那一格 → `choose` 掛鉤（`Outcome(title, run)`）。
 
 **還留在原位的**（不是核心的接縫，`tests/core/test_feature_boundaries.py` 的 `GAME_DELEGATE_CALLERS` 逐條寫理由，4 對）：
-- `_drop_stale_references` 叫 `_drop_old_zhuifeng`（在 `arts.migrate` 之前：槽數照品質算；`on_drop_stale` 在最後、位置不對）。
-- `sync` 叫 `_deliver_renames`（玉璽補送之後、首創名望回饋之前：江湖紀錄的先後算行為）。
+- 清失效參照 `stale.early` 那一格（第 55 批）叫 `drop_old_zhuifeng`（在 `arts.migrate` 之前：槽數照品質算；`on_drop_stale` 在最後、位置不對）。
+- `sync.deliver` 的 `renames` 那一格（第 55 批，委派拿掉；玉璽補送之後、首創名望回饋之前：江湖紀錄的先後算行為）。
 - 核心的單打服務 `_seize` 叫 `_seize_chance`（打贏一場之後修練包跟著擲；留原位（第 26 批量過：頓悟的契機在單打服務收尾、三處叫、野怪與僵持也算，不是懸賞那一下，回傳還要寫進戰報），行尾標「# 留原位：第 26 批」）；決戰包的收場補送經 `ctx._seize_chance`（服務清單二、查詢服務；原本 `view.py` import `cultivation`，第 23 批改掉、那一行的過渡註拿掉）。
 - `status_data` 的 `ascension` 那一格叫 `ascend_view`（狀態列的鍵順序，總表第 66 批）。
 - 序章 `_graduate_pass`（假人與腳本照步驟按）在引導包（第 22 批），經 `ctx.slot_insight`、`switch_art`、`practice`、`allocate_stat`、`melt_art` 叫這一包的委派（服務清單三、過渡 `# guide` 那一段；開發時多記的 5 對，合併時拿掉）。
@@ -39,3 +39,5 @@
 **過渡 import**（註「過渡：待搬」）：`actions.py` 2 行（`annals`、`skillview`〔共用規則層 `SHARED_LATER`〕）、`view.py` 1 行（`skillview`）、`cultivation.py` 1 行（`seal_acts`）、`ascend.py` 1 行（`annals`）——5 處（`python tests/core/test_feature_boundaries.py` 重印的；開發時還有 `guide` 的 `note_action` 那一行，第 22 批先合，合併時拿掉）。**第 51 批合完重印 2 處**：`actions.py`、`view.py` 各 1 行（`skillview`）；`cultivation.py` 讀的 `seal_acts` 留原名收進共用規則層（第 51 批），改註；`annals` 那兩行第 29 批之二改 import 核心。核心本體（`journal`、`team`、`naming`、`rules`、`state`、`models`、`world_state`）與共用規則層（`arts`、`library`、`growth`、`prologue`、`martial_arts`、`silver`、`treasures`、`traits`、`might`、`moves`、`tactics`、`zh`、`ollama_client`、`roster`）不算過渡。舊模組 → 包多 3 個別名（`tianxia/cultivation.py`、`chuangong.py`、`ascend.py`）與 engine 委派的兩行。
 
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `renames`（`actions.deliver_renames`）；`stale.early` 的 `cultivation`（`actions.drop_old_zhuifeng`；`Game._drop_old_zhuifeng` 留給測試）。

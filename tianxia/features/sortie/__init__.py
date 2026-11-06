@@ -11,7 +11,7 @@
 「這一下打哪一路」（大場面判讀，Verb.squad）、守勢行動 act:duty（按下去；鈕在軍令的那幾顆裡、照舊經 Game._duty_option）一起收進來。
 約戰的 sortie:*（第 2 批拿了前綴）不在選單上，Game.choose 查選單之前經 choose_unlisted 接走；窗滿了的約戰經 on_due 結算（三處都是第 11 批
 的接縫掛鉤，下面）。假人照舊走 bot_policy（act: 是核心的前綴，act:train、act:duty 那兩支總表第 60 批照子動詞分）。
-換季照帶今天出陣的次數（carried 那兩格）照舊寫在 Game._reset_player_for_new_season、不掛 on_season_start：遊戲當下的掛鉤只叫
+換季照帶今天出陣的次數（carried 那兩格）第 55 批起是 season.carry 的 sortie 那一格、不掛 on_season_start：遊戲當下的掛鉤只叫
 開著的包（同商城的 carried；dev/sortie-1 審查，tests/test_sortie_season_carry.py 守）。
 """
 from __future__ import annotations
@@ -30,7 +30,7 @@ class SortieFeature(Feature):
     # 約戰（第 2 批）：今天應戰幾次（換日同回體丹）、下一次出陣與應戰的冷卻（現實秒）、巡哨那一點貢獻記在哪一天幾次（都在 state.QUIET_DEFAULTS）
     player_fields = ("sortie_day", "sorties_today", "sortie_treasures", "sortie_horses",
                      "answer_day", "answers_today", "sortie_cooldown_until", "answer_cooldown_until", "duty_day", "duties_today")
-    carried = ("sortie_day", "sorties_today")  # 換季不能多出一輪陣（Game._reset_player_for_new_season 照帶）；掉寶的上限跟著新的一季重來
+    carried = ("sortie_day", "sorties_today")  # 換季不能多出一輪陣（season.carry 那一格照帶）；掉寶的上限跟著新的一季重來
 
     def enabled(self, ctx) -> bool:
         """一直開著（全部拆包第 17 批）：act:train 那一格每一季都是這一包的——地盤（＝領地爭奪，`rules.on`＝`territory.on`）開著是出陣

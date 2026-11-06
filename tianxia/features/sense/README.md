@@ -24,7 +24,7 @@
 
 核心原位碰有所感的那幾處（計畫 1.4）：能接第 11 批掛鉤的接上——`choose` 掛鉤接 `sense:`、`scene` 掛鉤接場景卡（就在原本那一行）；接不了的改叫上面的服務、記進邊界測試 `GAME_DELEGATE_CALLERS` 的 `# sense` 那一段（11 對，各寫理由），**沒有新增 `GAME_DIRECT`**（原本那一筆 `_sense` 讀探索包的 `rare_boost` 換成查詢服務、拿掉）：
 
-- 清失效參照中段的 `_sense_drop_stale`（後面的收店讀 `player.sensing`，`on_drop_stale` 在最後）；選單的 `_sense_menu`（`menu` 掛鉤之後一行，擂台第 12 批進了那個掛鉤；這一格接上 `menu` 掛鉤留給總表第 57 批，第 24 批 PM 認定第 2 條）。
+- 清失效參照 `stale.early` 那一格（第 55 批，委派拿掉；後面的收店讀 `player.sensing`，`on_drop_stale` 在最後）；選單的 `_sense_menu`（`menu` 掛鉤之後一行，擂台第 12 批進了那個掛鉤；這一格接上 `menu` 掛鉤留給總表第 57 批，第 24 批 PM 認定第 2 條）。
 - `choose`：`sense:draw` 只叫出畫布（`_sense_canvas`，建紀錄之前那一格，同 `battle:`）；`dunwu:` 要帶自己寫的名字（`text`），`choose` 掛鉤不帶，留在原位的 elif 叫 `_epiphany_name`，標題 `_action_title` 叫 `_epiphany_title`。
 - 舊探索（留給序章與測試內容；本體在探索包 `explore_base.py`，經 `ctx` 叫）：`_insight_blocked` 的 `_sense_missed`、`_explore_can` 的 `_sense_missed`；`_explore_outcome` 的 `_sense_start`（序章四景）、`_sense_here`（落在悟意境那一支）。
 - 裝飾器 `_outing_watch` 搬進核心（`tianxia/core/services.py` 的 `outing_watch`；`Game.choose`、`answer_event` 照舊掛），經 `ctx._outing_watched` 叫探索包的委派，記在 `CORE_DELEGATE_CALLERS`。籌備中那兩句 `PREPARING_TEXT`、`PREPARING_REFUSAL` 也搬進核心（`sense_request` 籌備中回它；第 23 批同時搬了同樣兩句，合進 `split/trunk` 時留這一份，裝飾器 `not_while_preparing` 是第 23 批的）。
@@ -48,3 +48,5 @@
 - 前後一字不變：`scripts/same_behavior.py` 的 `sense` 一軌（`--tracks sense`）。
 
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`stale.early` 的 `sense`（`actions.sense_drop_stale`）。

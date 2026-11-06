@@ -9,7 +9,7 @@ import pytest
 from conftest import next_season
 from tianxia.core import features as features_core
 from tianxia.core import registry
-from tianxia.core.features import AdminTool, BusHook, DefectHook, EffectHook, Feature, Outcome, Shop, Verb, WorldHook
+from tianxia.core.features import AdminTool, BusHook, DefectHook, EffectHook, Feature, Outcome, SeamHook, Shop, Verb, WorldHook
 from tianxia.core.option import Option
 from tianxia.engine import Game
 
@@ -1315,3 +1315,251 @@ def test_figure_life_opens_feasts_through_the_life_slot_one_figure_at_a_time(mon
     monkeypatch.setattr(registry, "FEATURES", [])
     tick_at(6)
     assert calls == [("rally", cid, 6) for cid in talkers]
+
+
+# core_seams（全部拆包第 55 批「補算與換季收接縫」；計畫 docs/superpowers/plans/2026-11-06-補算換季收接縫-第55批.md 一、四、六）
+class Seamy(Feature):
+    """只登記補算與換季的格的假包；open 是 enabled 的答案（這些格不問它）。"""
+
+    name = "seamy"
+
+    def __init__(self, hooks, open_=True):
+        self.hooks, self.open = tuple(hooks), open_
+
+    def enabled(self, ctx):
+        return self.open
+
+    def seams(self):
+        return self.hooks
+
+
+def test_the_seam_order_is_the_table_in_the_plan():
+    """順序就是行為：每一個位置的格照換成掛鉤之前一行一行的呼叫順序（計畫第一節），連核心自己的段一起列，一格不挪。改這張表先過 PM。"""
+    assert features_core.SEAM_ORDER == {
+        "local": ("seclusion", "fortune"),
+        "sync.heirloom": ("seal",),
+        "sync.close": ("smithy", "gear", "shops", "ambush", "arrive"),
+        "sync.deliver": ("big_events", "results", "renames", "echoes", "guard", "notices", "conquest", "conquest.deliver", "arena",
+                         "marks", "stances", "zhuan", "mail", "plans", "day", "on_sync", "held_gear", "checkin", "partings", "bounties",
+                         "plots", "summons", "story", "seat", "enlist", "hints", "party"),
+        "advance.arrive": ("arrive",),
+        "advance.turn": ("conquest", "conquest.deliver", "due"),
+        "advance.held": ("held_gear",),
+        "tick": ("conquest", "battle", "seal"),
+        "own_turn": ("bounties",),
+        "season.carry": ("guide", "ties", "companions", "self", "mall", "sortie", "outlets", "battle", "seal", "rack", "peers", "story", "legacy"),
+        "season.grant": ("faction",),
+        "stale.first": ("guide",),
+        "stale.early": ("cultivation", "resting", "sense", "companions"),
+        "stale.mid": ("bounties", "smithy", "gear", "shops", "treasures", "forge", "signature", "seal"),
+        "stale.road": ("travel",),
+        "stale.late": ("figure_acts",),
+    }
+    assert Feature().seams() == ()
+
+
+def test_a_package_can_only_take_a_seam_slot_on_the_table_and_only_one_package_a_slot(monkeypatch):
+    """包登記的格都在表上、同一格只有一包：表外的格（哪一個位置都驗）、沒有的位置、兩包（或同一包兩次）登記同一格，seam_hooks 都丟 ValueError；
+    核心代叫的打錯字、沒有這個位置也丟（seam_run）。"""
+    run = lambda *a: None  # noqa: E731
+    monkeypatch.setattr(registry, "FEATURES", [Seamy([SeamHook("local", "nobody", run)])])
+    with pytest.raises(ValueError):
+        features_core.seam_hooks("tick")
+    monkeypatch.setattr(registry, "FEATURES", [Seamy([SeamHook("nothing", "seal", run)])])
+    with pytest.raises(ValueError):
+        features_core.seam_hooks("tick")
+    monkeypatch.setattr(registry, "FEATURES", [Seamy([SeamHook("tick", "seal", run)]), Seamy([SeamHook("tick", "seal", run)])])
+    with pytest.raises(ValueError):
+        features_core.seam_hooks("tick")
+    monkeypatch.setattr(registry, "FEATURES", [Seamy([SeamHook("tick", "seal", run), SeamHook("tick", "seal", run)])])
+    with pytest.raises(ValueError):
+        features_core.seam_hooks("tick")
+    monkeypatch.setattr(registry, "FEATURES", [])
+    with pytest.raises(ValueError):
+        features_core.seam_hooks("nothing")
+    with pytest.raises(ValueError):
+        features_core.seam_run("tick", {"sea": run}, "ctx")
+    with pytest.raises(ValueError):
+        features_core.seam_run("nothing", {}, "ctx")
+    with pytest.raises(ValueError):
+        features_core.seam_run("nothing", {}, "ctx", hooks={})
+
+
+def test_the_seams_call_their_slots_in_the_table_order_and_ask_a_closed_package_too(monkeypatch):
+    """seam_run 照表的順序叫：包登記的與核心代叫的穿插，照表、不照登記的先後；關著的包照叫（原位不看開關）；那一格的包沒登記就跳過（契約測試換掉 FEATURES 時）。
+    回每一格的回傳值。"""
+    calls = []
+
+    def note(who, slot, back=None):
+        return lambda *args: calls.append((who, slot, args)) or back
+
+    monkeypatch.setattr(registry, "FEATURES", [Seamy(
+        [SeamHook("sync.close", "arrive", note("pack", "arrive", ["到了"])), SeamHook("sync.close", "smithy", note("pack", "smithy"))], open_=False)])
+    got = features_core.seam_run("sync.close", {"shops": note("core", "shops")}, "ctx")
+    assert [(who, slot) for who, slot, _ in calls] == [("pack", "smithy"), ("core", "shops"), ("pack", "arrive")]
+    assert got == [None, None, ["到了"]]
+    assert all(args == ("ctx",) for _, _, args in calls)
+    calls.clear()
+    monkeypatch.setattr(registry, "FEATURES", [])
+    assert features_core.seam_run("sync.close", {}, "ctx") == []
+    assert features_core.seam_run("tick", {}, "ctx", hooks={"seal": note("given", "seal", ["推"])}) == [["推"]]
+    assert calls == [("given", "seal", ("ctx",))]
+
+
+@pytest.mark.parametrize("wrong", ["一句話", ("一句話",), 7, True, {"一句話"}])
+def test_seam_lines_takes_lists_or_none_and_refuses_anything_else(monkeypatch, wrong):
+    """seam_lines 把每一格回的那幾句接成一串、None 不算；回字串（一個字一個字接進回話）、回 tuple（某個回傳值漏接）當場紅。"""
+    monkeypatch.setattr(registry, "FEATURES", [Seamy([
+        SeamHook("local", "seclusion", lambda ctx: ["出關"]), SeamHook("local", "fortune", lambda ctx: None)])])
+    assert features_core.seam_lines("local", {}, "ctx") == ["出關"]
+    monkeypatch.setattr(registry, "FEATURES", [Seamy([
+        SeamHook("local", "seclusion", lambda ctx: ["出關"]), SeamHook("local", "fortune", lambda ctx: ["福緣"])])])
+    assert features_core.seam_lines("local", {}, "ctx") == ["出關", "福緣"]
+    monkeypatch.setattr(registry, "FEATURES", [Seamy([SeamHook("local", "fortune", lambda ctx: wrong)])])
+    with pytest.raises(TypeError):
+        features_core.seam_lines("local", {}, "ctx")
+
+
+def _seam_core_slots(at):
+    """核心代叫的格：模組層 engine._SEAM_CORE，加 Game._sync_core 回的那兩格（要用 sync 的區域變數）。"""
+    from tianxia import engine
+
+    return set(engine._SEAM_CORE.get(at, ())) | (set(Game._sync_core(None, 0.0, None)) if at == "sync.deliver" else set())
+
+
+def test_the_core_and_the_packages_take_every_seam_slot_exactly_once():
+    """核心代叫的格與包登記的格（照真的 FEATURES）合起來剛好是表上的格、沒有重疊：沒有一格默默不跑、也沒有一格兩邊都寫。誰登記哪一格照計畫第二節鎖住。"""
+    from tianxia import engine
+
+    assert set(engine._SEAM_CORE) <= set(features_core.SEAM_ORDER)
+    for at, order in features_core.SEAM_ORDER.items():
+        mine = features_core.seam_hooks(at)
+        theirs = _seam_core_slots(at)
+        assert not mine.keys() & theirs, at
+        assert mine.keys() | theirs == set(order), at
+    got = {f.name: sorted((h.at, h.slot) for h in f.seams()) for f in features_core.registered() if f.seams()}
+    assert got == {
+        "seal": sorted([("sync.heirloom", "seal"), ("stale.mid", "seal"), ("tick", "seal"), ("season.carry", "seal")]),
+        "smithy": sorted([("sync.close", "smithy"), ("stale.mid", "smithy")]),
+        "gear": sorted([("sync.close", "gear"), ("stale.mid", "gear"), ("sync.deliver", "held_gear"), ("advance.held", "held_gear")]),
+        "stamina_plays": [("sync.close", "ambush")],
+        "travel": sorted([("sync.close", "arrive"), ("advance.arrive", "arrive"), ("sync.deliver", "party"), ("stale.road", "travel")]),
+        "cultivation": sorted([("sync.deliver", "renames"), ("stale.early", "cultivation")]),
+        "figure_acts": sorted([("sync.deliver", "guard"), ("stale.late", "figure_acts")]),
+        "territory_acts": sorted([("sync.deliver", "conquest"), ("sync.deliver", "conquest.deliver"), ("advance.turn", "conquest"),
+                                  ("advance.turn", "conquest.deliver"), ("tick", "conquest")]),
+        "bout": [("sync.deliver", "arena")],
+        "companions": sorted([("sync.deliver", "stances"), ("sync.deliver", "mail"), ("stale.early", "companions"), ("season.carry", "companions")]),
+        "zhuan": [("sync.deliver", "zhuan")],
+        "checkin": [("sync.deliver", "checkin")],
+        "battle": sorted([("sync.deliver", "partings"), ("tick", "battle"), ("season.carry", "battle")]),
+        "bounties": sorted([("sync.deliver", "bounties"), ("own_turn", "bounties"), ("stale.mid", "bounties")]),
+        "military": sorted([("sync.deliver", "plots"), ("sync.deliver", "seat")]),
+        "story": sorted([("sync.deliver", "story"), ("season.carry", "story")]),
+        "guide": sorted([("sync.deliver", "enlist"), ("sync.deliver", "hints"), ("stale.first", "guide"), ("season.carry", "guide")]),
+        "sense": [("stale.early", "sense")],
+        "seclusion": [("local", "seclusion")],
+        "socialize": [("local", "fortune")],
+        "faction": [("season.grant", "faction")],
+        "mall": [("season.carry", "mall")],
+        "sortie": [("season.carry", "sortie")],
+        "outlets": [("season.carry", "outlets")],
+        "peers": [("season.carry", "peers")],
+        "legacy": [("season.carry", "legacy")],
+    }
+
+
+# 回話接得到字的格：其餘照位置回 None
+_SEAM_LINES = {("local", "seclusion"), ("local", "fortune"), ("sync.close", "arrive"), ("sync.deliver", "plots"), ("sync.deliver", "seat"),
+               ("advance.arrive", "arrive"), ("advance.turn", "conquest"), ("tick", "conquest")}
+
+
+def _every_seam_slot(calls):
+    """登記表上每一格包的格的假包（關著）：叫到就記 (位置, 格, 參數)；回話接得到字的格回一句「位置/格」。"""
+    def note(at, slot):
+        return lambda *args: calls.append((at, slot, args)) or ([f"{at}/{slot}"] if (at, slot) in _SEAM_LINES else None)
+
+    return Seamy([SeamHook(at, slot, note(at, slot)) for at, order in features_core.SEAM_ORDER.items() for slot in order
+                  if slot not in _seam_core_slots(at)], open_=False)
+
+
+def _package_slots(*places):
+    return [(at, slot) for at in places for slot in features_core.SEAM_ORDER[at] if slot not in _seam_core_slots(at)]
+
+
+def test_the_game_walks_the_seams_at_sync_advance_and_tick(game, monkeypatch):
+    """Game.sync、advance、world_tick、own_turn_checks 在位置上問表：先後照表，回話接法照原本（sync：msgs + arrived + 密謀、席次；advance：msgs + arrived）；
+    第一次同步（還沒有上次的現實時間）沒有 local；暫停中不掛系統通緝。換掉 FEATURES 之後包的格只叫假包。"""
+    calls = []
+    monkeypatch.setattr(registry, "FEATURES", [_every_seam_slot(calls)])
+    words = {f"{at}/{slot}" for at, slot in _SEAM_LINES}
+    game.state.last_real = None
+    game.sync(1000.0)
+    assert [(at, slot) for at, slot, _ in calls] == _package_slots("sync.heirloom", "sync.close", "sync.deliver")
+    calls.clear()
+    reply = game.sync(2000.0)
+    assert [(at, slot) for at, slot, _ in calls] == _package_slots("sync.heirloom", "local", "sync.close", "sync.deliver")
+    assert all(args == (game,) for _, _, args in calls)
+    assert [line for line in reply if line in words] == ["local/seclusion", "local/fortune", "sync.close/arrive", "sync.deliver/plots", "sync.deliver/seat"]
+    calls.clear()
+    reply = game.advance(60.0)
+    assert [(at, slot) for at, slot, _ in calls] == _package_slots("local", "advance.arrive", "advance.turn", "advance.held")
+    assert [line for line in reply if line in words] == ["local/seclusion", "local/fortune", "advance.turn/conquest", "advance.arrive/arrive"]
+    calls.clear()
+    reply = game.world_tick(3000.0)
+    assert [(at, slot) for at, slot, _ in calls] == _package_slots("tick")
+    assert [line for line in reply if line in words] == ["tick/conquest"]
+    calls.clear()
+    game.own_turn_checks()
+    assert [(at, slot) for at, slot, _ in calls] == [("own_turn", "bounties")]
+    calls.clear()
+    monkeypatch.setattr(game.world, "paused_at", lambda: 1.0)
+    game.own_turn_checks()
+    assert calls == []
+
+
+def test_the_game_walks_the_seams_when_it_drops_stale_references(game, monkeypatch):
+    """_drop_stale_references：stale.first 排在對齊賽季之前（換季會把陣營清掉，老手要先蓋）、其餘照表；stale.road 拿到所在地被拿掉了沒。"""
+    calls = []
+    monkeypatch.setattr(registry, "FEATURES", [_every_seam_slot(calls)])
+    real = game._reconcile_season
+    monkeypatch.setattr(game, "_reconcile_season", lambda: (calls.append(("core", "reconcile", ())), real())[1])
+    game._drop_stale_references()
+    assert [(at, slot) for at, slot, _ in calls] == [("stale.first", "guide"), ("core", "reconcile"),
+                                                     *_package_slots("stale.early", "stale.mid", "stale.road", "stale.late")]
+    assert [args for at, _, args in calls if at == "stale.road"] == [(game, False)]
+    calls.clear()
+    game.state.player.location = "沒有這個地方"
+    game._drop_stale_references()
+    assert [args for at, _, args in calls if at == "stale.road"] == [(game, True)]
+    assert game.state.player.location == game.content.scenario.start_location
+
+
+def test_the_game_walks_the_seams_at_the_season_turnover(game, monkeypatch):
+    """_reset_player_for_new_season：season.carry 跑的時候 self.state 還是舊的（只准讀 old、fresh）、拿到 (ctx, old, fresh)；新的存檔接上、開場那一則之後才 season.grant，
+    拿到 (ctx, old)。核心代叫的三格照舊帶（好感度一成、一天幾次）。"""
+    from tianxia import journal
+
+    calls, seen = [], []
+    monkeypatch.setattr(registry, "FEATURES", [_every_seam_slot(calls)])
+    old = game.state
+    old.player.affinities = {"某人": 80}
+    old.player.pill_day, old.player.pills_today = 77, 3
+    number = old.player.season_number + 1
+    real_seam_run = features_core.seam_run
+
+    def spy(at, core, *args, hooks=None):
+        seen.append((at, game.state is old, game.state.journal[-1].tag if game.state.journal and at == "season.grant" else None))
+        return real_seam_run(at, core, *args, hooks=hooks)
+
+    monkeypatch.setattr(features_core, "seam_run", spy)
+    game._reset_player_for_new_season(number)
+    assert [(at, slot) for at, slot, _ in calls] == _package_slots("season.carry", "season.grant")
+    fresh = game.state
+    for at, _, args in calls:
+        assert args == ((game, old, fresh) if at == "season.carry" else (game, old))
+    assert [(at, was_old) for at, was_old, _ in seen] == [("season.carry", True), ("season.grant", False)]
+    assert seen[-1][2] == journal.SEASON_START  # 開場那一則已經寫了
+    assert fresh is not old and fresh.player.season_number == number
+    assert fresh.player.affinities == {"某人": 8}
+    assert (fresh.player.pill_day, fresh.player.pills_today) == (77, 3)

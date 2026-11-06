@@ -23,7 +23,7 @@ class OutletsFeature(Feature):
     # 換季全部跟著新角色重來（軍備存量 World.armaments 是全服帳，由 donate_actions.credit 寫、核心 status_data 經 armament_view 讀）
     player_fields = ("picking_donate", "picking_dadian", "donate_day", "donated_today", "silver_donate_day", "silver_donated",
                      "mentor_day", "mentor_ready", "furnace_day", "furnace_ready", "legend_silver_bought", "bribed")
-    carried = ("donate_day", "donated_today")  # 換季不能多捐一輪（Game._reset_player_for_new_season 照帶，同出陣的 sortie_day；不看開關）
+    carried = ("donate_day", "donated_today")  # 換季不能多捐一輪（season.carry 那一格照帶，同出陣的 sortie_day；不看開關）
 
     def enabled(self, ctx) -> bool:
         """捐軍備開著（Config.economy.donate）、銀兩出口開著（silver.on），或此刻還坐在店裡：開關在坐著的時候被關掉（沒經過 sync 收店）

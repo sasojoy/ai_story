@@ -38,7 +38,7 @@
 核心原位碰這一包的都沒有第 11 批的掛鉤，改叫委派、記進邊界測試的 `GAME_DELEGATE_CALLERS`，**沒有新增 `GAME_DIRECT`**：
 
 - 選單（`_everyday_options` × `_recruit_options`、`_errand_options`、`_talk_options`、`_parley_road_option`）：選項的順序算行為，`options` 掛鉤在體力玩法之後、`menu` 掛鉤要照包排（總表第 55～57 批）。
-- 同步（`sync` × `_stance_annals`、`_deliver_mail`）：紀錄與行狀的先後算行為，`deliver_notices`、`on_sync` 位置不對。欠人物的事過了期限（`parley.lapse`）第 20 批併進 `deliver_mail`（第 19 批是 `sync` 先叫、把句子傳進去）。
+- 同步（第 55 批起是 `sync.deliver` 的 `stances`、`mail` 兩格，委派拿掉）：紀錄與行狀的先後算行為，`deliver_notices`、`on_sync` 位置不對。欠人物的事過了期限（`parley.lapse`）第 20 批併進 `deliver_mail`（第 19 批是 `sync` 先叫、把句子傳進去）。
 - `act:recruit`、`act:recruit:<id>`（`_act` × `_recruit`、`_recruit_one`）：核心 `act:` 的子動詞，第 57 批接進 `Verb`。`choose` 的 FB-363 與 `_action_title` 的招募那一格也留給第 57 批。
 - `choose` 前段：勸降只叫出輸入框（`_errand_ask`，同 `battle:`，第 7 批 PM 認定第 1 條）；進鎖後重驗（`_checked_prepared`）、「自己說」的字數（`say_max`）仍在 `choose` 前段（`talk:`、`parley:road` 之外的 `act:`、`call:` 也要驗）。**`talk:`、`parley:road` 按下去第 20 批審查接上了 `choose` 掛鉤**：驗過的 `prepared` 與那句話經 `ctx._talk_turn`、`ctx._talk_said` 寄放（同勸降的 `_persuade_said`），標題（「交談・某人」「同行・某人」）在動作之前拿；`Game._talk`、`_road_say` 兩個委派跟著拿掉。
 - 交友與求見開口（`_socialize`、`_precise_socialize`、`_call` × `_open_dialogue`）：交友求見第 21 批搬進 `socialize` 包，那一包經 `ctx._open_dialogue` 問，核心原位不再叫它。
@@ -72,3 +72,5 @@
 - **鎖外三段式的 B 段不在這一包**：`server.prepare_dialogue`、`server.say` 叫的 `companion_agent.prepare_turn` 在殼裡（模型不在鎖裡）；A 段 `dialogue_request`、C 段 `checked_prepared` 在這一包。`tests/server/test_server.py` 換掉的 `companion_agent.generate_turn`（別名是同一個模組物件，換得到）。
 
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `stances`（`actions.stance_annals`）、`mail`（`actions.deliver_mail(ctx, ctx.now)`：`now` 是 `sync` 開頭設的）；`stale.early` 的 `companions`（`actions.drop_stale`，舊的招募確認）；`season.carry` 的 `companions`（`actions.carry_season`，對話歷史）。

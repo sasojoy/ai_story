@@ -23,7 +23,7 @@
 
 ## 還留在原位的接縫
 
-- `Game` 上 10 個一行委派：`_zhuan_past`（換季：`_reset_player_for_new_season` 最前面）、`_zhuan_profile`（第 29 批之二；換季存行狀：`save_annals` 的第四個引數）、`_zhuan_tick`（`sync` 的 `_stance_annals` 之後、`_deliver_mail` 之前）、`_zhuan_options`（`_everyday_options` 休季那一支）、`annals_view`、`biography_entry`（server `main_view`）、`biography_request`、`write_biography`、`biography_view`、`share_biography`。紀錄先後算行為，前四個不是掛鉤的位置，記在邊界測試的 `GAME_DELEGATE_CALLERS`。
+- `Game` 上 9 個一行委派：`_zhuan_past`（換季：`_reset_player_for_new_season` 最前面）、`_zhuan_profile`（第 29 批之二；換季存行狀：`save_annals` 的第四個引數）、`_zhuan_options`（`_everyday_options` 休季那一支）、`annals_view`、`biography_entry`（server `main_view`）、`biography_request`、`write_biography`、`biography_view`、`share_biography`。紀錄先後算行為，前三個不是掛鉤的位置，記在邊界測試的 `GAME_DELEGATE_CALLERS`。
 - B 段（鎖外叫模型）留在 `server.py`：`write_zhuan`、`verdict_text`、`ZHUAN_JOBS`、`ZHUAN_LOCK`，加上 `zhuan_view`、`zhuan_extras`、`zhuan_art_src`、`public_base`、`_season_arg`、`_zhuan_key`。`tests/server/test_server.py` 掃「鎖外叫模型的函式」認 `zhuan_job`、`verdict_text` 這幾個名字；鎖外工作的掛鉤是總表第 69 批，到時候再搬。
 - 根目錄 `zhuan_html.py` 是別名檔（`server.py` 舊的 import、`tests/core/test_desktop_type.py` 讀的路徑）；`tests/core/test_shop_width.py` 讀這個檔斷言「不含 zhuan-layer」，別名檔也成立，但斷言的實質變弱了（真正的內容在包裡）。
 - 行狀拆兩半（全部拆包第 29 批之二）：記一筆的那一半（`note`、`entry`、`watch`、種類常數）在核心 `tianxia/core/annal_base.py`，`biography.py`、`actions.py` 與各包記行狀都 import 它（不算過渡）；查詢與行狀頁那一半（`profile`、`standing`、`tier_*`、`xingshi_notes`、`rows`）在 `standing.py`。舊名 `tianxia/annals.py` 是指到 `standing.py` 的 `sys.modules` 別名（`standing` re-export 核心那一半，兩半的名字都拿得到、同一批物件；從這一批起舊名 `annals` 算列傳包，包要記一筆一律 `from tianxia.core import annal_base as annals`，不准再 `from tianxia import annals`）。換季存行狀時的身家 `profile` 核心不能 import 包，經 `Game._zhuan_profile` 一行委派（Game 上列傳的委派成了 10 個）。
@@ -40,3 +40,5 @@
 - `tests/core/test_jianfa_switch.py`（9 條）、`tests/core/test_gender.py`（9 條）、`tests/bots/test_zh.py`（25 條）：各有一兩條碰 `zhuan_end`／`biography` 的字
 
 改這一包時連它們一起跑：`python scripts/test_for.py --base HEAD tianxia/features/zhuan/actions.py`，再視需要加上面幾個檔。
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `zhuan`（`actions.tick`）。換季最前面那幾行（`_zhuan_past`、`_story_close_season`、`_zhuan_profile`）留在原位：`past` 這個值要從第一行傳到第三行，掛鉤沒有傳值的位置。

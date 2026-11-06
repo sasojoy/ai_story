@@ -6,7 +6,7 @@ README.md 寫這一包做什麼、導覽與設計稿。
 - go_actions.py：原本 Game 上的 _halt、travel、travel_refusal（travel、travel_refusal 留委派）
 - departure.py：原本 Game 上的 _depart、_arrivals、_arrive、_journey_line（第 48 批；都留一行委派）
 - party.py：原本 Game 上結伴同行的 _join、join_refusal、_party_expires、_party、party_view、leave_party、_part_ways、_lead、_partners、_share_road
-  （_join、join_refusal、_party_expires、party_view 留委派）
+  （_join、join_refusal、party_view 留委派；_party_expires 第 55 批換成 sync.deliver 的 party 那一格）
 - bots.py：假人的分數（原本 bot_policy.score 的 move: 那一段）
 - routes.py：POST /api/travel、POST /api/party/leave（原本 server.py 的 api_travel、api_party_leave）
 

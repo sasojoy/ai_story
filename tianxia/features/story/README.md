@@ -16,7 +16,7 @@
 ## 認領的欄位（手冊 3.5：留在原地）
 
 - `player_fields`：`storylines`（這一季開過的線與進度，收了的也留著）、`story_open`（答題停在哪一條）、`story_cards`（等著跳出來的卡）、`keepsakes`（紀念物）、`lasting`（跨季旗標）。
-- `carried`：`keepsakes`、`lasting`（`Game._reset_player_for_new_season` 帶到下一季，並把 `lasting` 併進旗標）；其餘換季跟著新角色重來。
+- `carried`：`keepsakes`、`lasting`（`season.carry` 的 `story` 那一格帶到下一季，並把 `lasting` 併進旗標）；其餘換季跟著新角色重來。
 - 內容：`content/events/story_fuzhi.json`、`story_maier.json`、`story_wangyue.json`、`story_wolong.json`（`content` 宣告）。`content/storylines.json` 混著章回主線的線（`ch_*`），不宣告（章回批再看）。
 
 ## 委派與留在原位的接縫
@@ -25,7 +25,7 @@
 
 - 答題的選單（`_everyday_options`）在有所感的 `_sense_menu` 之後，`menu` 掛鉤在它之前；「未了之事」那一顆在應召之後、此地的人之前，`options` 掛鉤在最後面——`/api/main` 的選項順序算行為。
 - 換季收線（`_reset_player_for_new_season`）要在 `world.save_annals` 存上一季的行狀之前，`on_season_end` 在它之後。
-- `sync`、`choose`、`_event_progress` 叫 `_story_tick`：每個動作結束那一格、同步在召見之後席次之前，不是掛鉤的位置。
+- `choose`、`_event_progress` 叫 `_story_tick`：每個動作結束那一格，不是掛鉤的位置；同步那一下第 55 批換成 `sync.deliver` 的 `story` 那一格（召見之後、席次之前）。
 - 標題與動作原本在 `_action_title` 與 `choose` 的 elif 鏈，換成 `choose` 掛鉤的 `Outcome(title, run)`。
 
 ## 過渡（手冊 3.11）
@@ -50,3 +50,5 @@ python scripts/test_for.py --base HEAD tianxia/features/story/actions.py tests/c
 ```
 
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `story`（`actions.deliver_story`，不進回話）；`season.carry` 的 `story`（`actions.carry_season`，紀念物與跨季旗標）。

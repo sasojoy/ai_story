@@ -27,7 +27,7 @@
 
 ## 委派與留在原位的接縫
 
-**`Game` 留的一行委派**：`_bounty_options`（`_everyday_options`）、`_bounty`（`tests/gear/test_shop2.py` 直接叫，同 `_smith`）、`_raid_bounty`（查詢服務，截殺與設伏）、`_bounty_deliver`（`sync`）、`_bounty_post_auto`（`own_turn_checks`）、`_bounty_stale`（`choose`）、`_bounty_status`（`status_data`）。人物情誼包回答這一包（服務清單二 `# bounties`，PM 認定乙案）：`_letter_thank`、`_parley_settle_task`、`_parley_keep`、`_parley_owed_line`、`_parley_ask_label`。`post_wanted` 沒人叫，不留。
+**`Game` 留的一行委派**：`_bounty_options`（`_everyday_options`）、`_bounty`（`tests/gear/test_shop2.py` 直接叫，同 `_smith`）、`_raid_bounty`（查詢服務，截殺與設伏）、`_bounty_stale`（`choose`）、`_bounty_status`（`status_data`）。人物情誼包回答這一包（服務清單二 `# bounties`，PM 認定乙案）：`_letter_thank`、`_parley_settle_task`、`_parley_keep`、`_parley_owed_line`、`_parley_ask_label`。`post_wanted` 沒人叫，不留。
 
 **三間店不排進 `Shop`（PM 認定，排給第 56 批選單收接縫）**：`features_core._shops` 照 `FEATURES` 走，酒肆排在 `smithy`、`gear` 前面，要維持「懸賞榜 → 鐵匠鋪 → 馬市 → 其他店」就得挪包或開寫死的店面順序表；`sync` 只收鐵匠鋪、馬市，懸賞榜登記了 `drop_shops` 會在 `sync` 多收一次；鐵匠鋪 `here` 兩個意思。所以這些留原位：`_everyday_options` 的入口與 `picking_bounty` 選單、`_shop_open`、`shop_view` 的 `board` 那一支、`_drop_stale_references`、`_idle`、移動包 `departure.py` 收店那四行（先後不動）。`SHOP_ACTS`、`LEAVE_SHOP_IDS` 不動。
 
@@ -58,3 +58,5 @@
 比對軌：`scripts/same_behavior.py` 的 `placard`（親手按 `bounty:*`、卡上通緝、系統通緝、退押金、作廢、`aid`、求援、人物倒下、假人）加 `herald`、`compass`、`world`。
 
 **反方向**（第 36 批認定第 1 條）：見計畫第五節；這一批對 import 的舊模組各量一次 `test_for.pick`，少挑到的寫進計畫。
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.deliver` 的 `bounties`（`actions.deliver`）；`own_turn` 的 `bounties`（`actions.post_auto`：暫停那一道之後，`on_own_turn` 在它之前）；`stale.mid` 的 `bounties`（`actions.drop_stale`，收懸賞榜）。

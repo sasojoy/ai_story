@@ -29,18 +29,18 @@
 ## 認領的欄位（手冊 3.5：留在原地）
 
 - `player_fields = ("heirloom", "seal_seen")`：傳承那一格的抄本、補送到全服登記第幾號。
-- `carried = ("seal_seen",)`（`tests/core/test_contract_features.py::test_a_new_season_keeps_only_what_the_package_carries[seal]` 實跑定）：核心換季（`Game._reset_player_for_new_season`）兩個都照帶，可是 `heirloom` 換季後建 `Game` 時照全服登記重抄（`copy_heirloom`），弄髒的值會被清掉，所以不算帶走的。
-- 包外讀寫這兩欄的（第 34 批認定第 9 條，照實記、排批）：核心換季重設（`_reset_player_for_new_season` 那兩行，核心本體，不動）；核心 `_lose_silver`（讀 `heirloom.name`，碎片保銀那一句；第 55 批或銀兩出口那一批看）；共用層 `treasures`（`amount`、`power_scale` 等讀傳承那一格；第 51 批與璽效查詢一起看）；`skillview`（`SHARED_LATER`，讀）；酒肆包 `features/tavern/rules.py`（讀；酒肆下一次動到時改查詢服務）；探索包測試 `test_explore_one.py`（讀）。陣營包 `defection` 不讀這兩欄。
+- `carried = ("seal_seen",)`（`tests/core/test_contract_features.py::test_a_new_season_keeps_only_what_the_package_carries[seal]` 實跑定）：換季（`season.carry` 的 `seal` 那一格，第 55 批）兩個都照帶，可是 `heirloom` 換季後建 `Game` 時照全服登記重抄（`copy_heirloom`），弄髒的值會被清掉，所以不算帶走的。
+- 包外讀寫這兩欄的（第 34 批認定第 9 條，照實記、排批）：核心 `_lose_silver`（讀 `heirloom.name`，碎片保銀那一句；第 55 批或銀兩出口那一批看）；共用層 `treasures`（`amount`、`power_scale` 等讀傳承那一格；第 51 批與璽效查詢一起看）；`skillview`（`SHARED_LATER`，讀）；酒肆包 `features/tavern/rules.py`（讀；酒肆下一次動到時改查詢服務）；探索包測試 `test_explore_one.py`（讀）。陣營包 `defection` 不讀這兩欄。
 - **這一包讀別包的欄位**：`actions.seal_find` 讀探索包認領的 `PlayerState.explore_seq`（這個人第幾次探索，撿碎片的骰子用）——排給第 55 批（補算收接縫）改查詢服務。
 - 資料在核心、不認領：`SharedWorldState.seal`（全服登記）、`seal_duels`、`jade_seal_fragments`（舊鏈的碎片），`WorldState.mandate`、`mandate_result`。
 
 ## 委派與留在原位的接縫（理由在 `tests/core/test_feature_boundaries.py` 的 `# seal` 那一段）
 
-`Game` 留 11 個一行委派：`_copy_heirloom`、`_deliver_seal_results`、`_seal_bare`、`_mandate_settle`（核心原位叫）、`_mandate_weight`（決戰包經 `ctx`）、`_seal_find`、`_seal_settle`、`_file_seal`（**只剩測試叫**：寫進手冊「拆完之後的收尾：只剩測試叫的委派」，第 42 批認定第 3 條）、`admin_seal_emerge`、`admin_seal_sink_check`、`admin_seal_mandate`（殼的 `ADMIN_ACTIONS` 與測試）。`_admin_seal_hide` 只有強制現世叫（包內互叫），不留。
+`Game` 留 10 個一行委派（`_copy_heirloom` 第 55 批換成 `sync.heirloom`、`stale.mid` 兩格，拿掉）：`_deliver_seal_results`、`_seal_bare`、`_mandate_settle`（核心原位叫）、`_mandate_weight`（決戰包經 `ctx`）、`_seal_find`、`_seal_settle`、`_file_seal`（**只剩測試叫**：寫進手冊「拆完之後的收尾：只剩測試叫的委派」，第 42 批認定第 3 條）、`admin_seal_emerge`、`admin_seal_sink_check`、`admin_seal_mandate`（殼的 `ADMIN_ACTIONS` 與測試）。`_admin_seal_hide` 只有強制現世叫（包內互叫），不留。
 
 第 28 批再加 22 個一行委派（共 33 個）：`_seal_challenge`、`_seal_challengers`、`_seal_spectators`、`_seal_side_of`、`_my_seal_duel`（量表 `scripts/measure_seal.py` 與測試叫；`_seal_challengers`、`_seal_spectators` 包內經 `ctx` 叫）、`_seal_tick`、`_seal_options`、`_seal_act`、`seal_view`、`seal_duel_card`、`seal_watch`（`world_tick`／`options`／`choose`／`status_data` 原位叫）、`seal_free_text_prompt`、`seal_free_text_note`、`seal_text_request`、`seal_gamble`、`seal_use`（殼的 `server.py` 叫；測試換 `Game.seal_use`，所以一定留）、`admin_seal_stir`、`admin_seal_assign`、`admin_seal_duel`、`admin_seal_fix`、`admin_seal_cancel`、`admin_seal_choices`（殼的 `ADMIN_ACTIONS`）。`GAME_DIRECT` 16 → 3（第 27 批留的 13 筆「過渡：第 28 批收」全收了）；`GAME_DELEGATE_CALLERS` 刪 7 對（`_deliver_seal_results`、`_showdown_status`、`_duel_side` 改成包經 `ctx` 叫，列在 `core/services.py` 的 `# seal`）、加 7 對（`world_tick`／`options → _seal_tick`、`options → _seal_options`、`choose → _seal_act`、`status_data → seal_view`／`seal_duel_card`／`seal_watch`；理由在邊界測試）。
 
-- `GAME_DELEGATE_CALLERS` 8 對：`_battle_marks → _seal_bare`（戰力快照是單打服務）、`admin_resolve_event → _mandate_settle`（時刻表的救場工具是核心）、`sync → _copy_heirloom`、`_drop_stale_references → _copy_heirloom`（**接不了 `on_sync`／`on_drop_stale` 是開關**：那兩個掛鉤只問開著的包，碎片關著時 `_copy_heirloom` 照樣要叫、傳 `None` 把抄本清掉；第 42 批認定第 7 條；第 55 批收）、第 28 批的 `_seal_tick`／`_seal_act`／`seal_gamble`／`admin_seal_cancel` 各配 `_deliver_seal_results`。
+- `GAME_DELEGATE_CALLERS` 6 對（`sync`、`_drop_stale_references → _copy_heirloom` 第 55 批換成格，拿掉）：`_battle_marks → _seal_bare`（戰力快照是單打服務）、`admin_resolve_event → _mandate_settle`（時刻表的救場工具是核心）、第 28 批的 `_seal_tick`／`_seal_act`／`seal_gamble`／`admin_seal_cancel` 各配 `_deliver_seal_results`。
 - `sync` 的玉璽補送（原本緊接在 `features_core.deliver_results(self)` 後面的 `self._deliver_seal_results()`）修正輪改接接縫掛鉤 `deliver_results`（`SealFeature.deliver_results` 叫 `actions.deliver_results`）：那個掛鉤照 `registered()` 問、不看開關，只有 `sync` 叫；決戰包排在前面、玉璽包排在後面，先後跟原本那兩行一樣。委派 `_deliver_seal_results` 照留（第 28 批的四個方法與決戰包 `progress.py` 經 `ctx` 叫）。
 - `GAME_DIRECT` 第 28 批全收（13 筆都拿掉；剩下 3 筆不是玉璽的）。
 - 選項前綴 `seal:` 在 engine 的 `options`（`_seal_options`）、`choose`（`_seal_act`）、`_shop_open`（`startswith(("battle:", "seal:"))` 核心的字面比對）原位；`bot_policy.score` 的那一段第 28 批搬進 `bots.py`。
@@ -79,3 +79,5 @@
 ## 量到的（第 28 批）
 
 `Game` 委派 556 → 578；`GAME_DIRECT` 16 → 3、直連 197 → 184；`GAME_IMPORTS` 92 → 93（拿掉 `tianxia.seal`、加 `card`、`duel_actions`）。`engine.py` 頂端的 `seal_rules`、`seal_duel` 拿掉。包裡 `tests/` 129 條。`selftest` 目標句（`MUTATIONS` 45、`EXPLORE_MUTATIONS` 4）在搬完的檔裡都找得到一次；新軌 `carve` 的目標句在 `duel_actions.py`。
+
+**補算與換季的格**（core_seams，全部拆包第 55 批；順序在 `core/features.py` 的 `SEAM_ORDER`，都不問 `enabled`，叫到才照模組屬性或 `ctx` 找）：`sync.heirloom`、`stale.mid` 的 `seal` 重抄抄本（`actions.copy_heirloom`：碎片關著時也要叫、傳 `None` 把抄本清掉，所以接不了 `on_sync`、`on_drop_stale`）；`tick` 的 `seal` 推奪璽單挑（`duel_actions.tick`）；`season.carry` 的 `seal` 照帶 `heirloom`、`seal_seen`。
