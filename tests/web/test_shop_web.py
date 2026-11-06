@@ -595,7 +595,7 @@ def test_the_tag_hangs_on_the_fire():
     有小籤時中間那一欄也寫 em：照舊 72px 的話電腦寬（字級 ×1.3）小籤壓到兩邊料格的下角 11px（實機量的）；沒有小籤（銀兩出口關著）照舊。"""
     import re
 
-    css = (server.WEB / "smithy.css").read_text(encoding="utf-8")
+    css = (server.WEB / "style.css").read_text(encoding="utf-8") + (server.WEB / "smithy.css").read_text(encoding="utf-8")
     assert re.search(r"\.shop-layer \.furnace:has\(> \.fu-fire\) \{ grid-template-columns: 1fr [0-9.]+em 1fr; \}", css)
     assert "grid-template-columns: 1fr 72px 1fr;" in css  # 沒有小籤的爐子照舊
     assert re.search(r"\.shop-layer \.furnace \.fu-fire \{[^}]*position: relative", css)
