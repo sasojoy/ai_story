@@ -212,7 +212,7 @@ def test_a_module_picks_the_tests_named_after_its_first_word():
 def test_content_picks_its_tests_and_the_fast_part_of_real_content():
     """內容改了挑 test_content.py、寫到那個檔名的，加 test_real_content.py 不是 slow 的那些（147 條只有整季那 11 條是 slow；
     其他的含事件難度帶 DIFFICULTY_BANDS 的鎖、地點走得到，-n 4 約 25 秒）。整季那幾條照舊要 --slow（手冊 4.3 的本意）。"""
-    picked = test_for.pick(["content/events/explore_jizhou.json"])
+    picked = test_for.pick(["content/events/jizhou.json"])  # 留在 content/ 的事件池（explore_* 全部拆包第 63 批搬進探索包）
     assert {"test_content.py", "test_real_content.py"} <= {p.name for p in picked.files}
     (cmd,) = test_for.pytest_commands(picked, slow=False, extra=[])
     assert _marker(cmd) == "not slow"

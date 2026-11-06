@@ -26,7 +26,7 @@ ADDED = ("flags_add", "world_flags_add", "next_event", "recruit", "join_sect")  
 # 池子 →（檔案, 檢查哪些上限）。xinde：心得最多給多少（None＝心得不能給）；trend、materials：要不要檢查大勢與素材；
 # banned：不能出現的效果；free_text：隨口應對的結果也算進去
 POOLS = {
-    "explore": ([*sorted(EVENTS.glob("explore_*.json"))], {
+    "explore": ([path for path in real_event_files() if path.name.startswith("explore_")], {  # 探索包的（全部拆包第 63 批）
         "xinde": 15, "trend": True, "materials": True, "banned": (*ADDED, "learn_skills"), "free_text": False,
     }),
     "social": ([path for path in real_event_files() if path.name.startswith("social_")], {  # 交友包的（全部拆包第 62 批）

@@ -19,7 +19,9 @@ from tianxia.core.features import DefectHook, Feature, StepHook
 class GuideFeature(Feature):
     name = "guide"
     prefix = None  # 沒有自己的選項（見模組說明）
-    content = ("tutorial.json", "hints.json", "opening.json")  # content.py 照它到這一包的 content/ 載；檔名照舊
+    # content.py 照它到這一包的 content/ 載；檔名照舊。events/opening.json、events/prologue.json 是開局與序章的事件池（全部拆包第 63 批），
+    # 跟 opening.json（開局第一分鐘）是不同的檔
+    content = ("tutorial.json", "hints.json", "opening.json", "events/opening.json", "events/prologue.json")
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）。換季照帶的四格（說過的提示、不再提示、新手目標的兩本帳）照舊在 Game._reset_player_for_new_season
     # 原位帶（不看包的開關）；做完的引導步數、略過、入伍段走完是「做到才帶」（tutorial_step、guide_skipped、enlist_step），契約測試的換季那一條
     # 擺不出這種條件，不列在這裡（README 照列）

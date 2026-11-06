@@ -36,7 +36,7 @@ def test_real_files_cover_both_places_by_their_old_relative_path():
     assert list(files) == sorted(files)
     assert files["sects.json"] == HOME / "faction" / "content" / "sects.json"
     assert files["events/sects.json"] == HOME / "faction" / "content" / "events" / "sects.json"  # 用相對路徑認、不用檔名認
-    assert files["events/opening.json"] == REAL_ROOT / "events" / "opening.json"  # 核心的事件池；guide 的 opening.json 是另一個檔
+    assert files["events/opening.json"] == HOME / "guide" / "content" / "events" / "opening.json"  # 同一包的兩個檔：開局的事件池與下面的開局第一分鐘
     assert files["opening.json"] == HOME / "guide" / "content" / "opening.json"
     assert files["profiles/week7.json"].is_file() and files["config.json"] == REAL_ROOT / "config.json"
     assert content_path("mall.json") == HOME / "mall" / "content" / "mall.json"
@@ -50,7 +50,9 @@ def test_event_files_sort_by_name_across_packs():
     assert names == sorted(names) and len(set(names)) == len(names)
     at = names.index
     assert at("explore_youzhou.json") < at("foreshadow_fragments.json") < at("foreshadow_prep.json") < at("general.json")
-    assert files[at("explore_youzhou.json")].parent == files[at("general.json")].parent != files[at("foreshadow_prep.json")].parent
+    assert files[at("explore_youzhou.json")].parent == HOME / "explore" / "content" / "events"
+    assert files[at("foreshadow_prep.json")].parent == HOME / "military" / "content" / "events"
+    assert files[at("general.json")].parent == REAL_ROOT / "events"
     in_order = [raw["id"] for path in files for raw in json.loads(path.read_text(encoding="utf-8"))]
     assert list(real_content().events) == in_order
 
