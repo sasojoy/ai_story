@@ -82,7 +82,7 @@ def test_the_heirloom_row_gets_a_button_and_the_card_a_line():
     c, w, m = _view()
     row = run(m, 'return H.heirloomRow({name: "玄紐", effect_text: "戰力 ×1.1"}, H.sealActNow());')
     assert 'data-act="seal-act"' in row and "引將・剩 2 次" in row and "disabled" not in row
-    page = run(m, "return H.pageJianghu();")
+    page = run(m, "return H.pageJianghu();", S={"tab": "jianghu", "dutyOpen": True})  # 介面重整：碎片卡在要事清單裡
     assert "獨門行動・引將：這一季還能起用 2 次" in page and 'data-act="seal-act-go"' in page
 
 
@@ -104,7 +104,7 @@ def test_a_used_up_or_cooling_act_greys_the_button_and_says_why():
     row = run(m, 'return H.heirloomRow({name: "雲篆", effect_text: "x"}, H.sealActNow());')
     assert re.search(r'data-act="seal-act" disabled title="[^"]*之後才能再起用', row)
     assert row.count('<small class="rwhy">') == 2 and "生效中" in row  # 原因與生效中的那一句寫在這一列底下（手機沒有 title 可看）
-    page = run(m, "return H.pageJianghu();")
+    page = run(m, "return H.pageJianghu();", S={"tab": "jianghu", "dutyOpen": True})  # 介面重整：碎片卡在要事清單裡
     assert "獨門行動・頒詔：這一季還能起用 1 次" in page
 
 

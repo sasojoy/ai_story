@@ -378,6 +378,23 @@ def db_text(path: Path) -> str:
 # ═══════════════════════════ 子行程：TestClient 情境 ═══════════════════════════
 
 
+@contextlib.contextmanager
+def _three_way_off(cfg):
+    """探索三選一（develop 還有，主幹第 13 批拿掉）：情境在記憶體裡關掉探索一顆（jianfa.explore_one、jianfa.enabled）的那幾下，develop 根的 act:explore
+    會開三選一，主幹是舊探索。這幾下兩邊都走舊探索才比得起來：develop 關 explore_modes，主幹關它以前連帶關掉的那三樣（同 BoutScenario.explore_modes_off）。"""
+    rows = [(cfg.explore_modes, "enabled", False)] if hasattr(cfg, "explore_modes") else []
+    if hasattr(cfg, "event_trend_share"):
+        rows += [(cfg, "precise_actions", False), (cfg, "event_trend_share", 1.0), (cfg, "sense_treasure_points", 0)]
+    saved = [(owner, key, getattr(owner, key)) for owner, key, _ in rows]
+    for owner, key, value in rows:
+        setattr(owner, key, value)
+    try:
+        yield
+    finally:
+        for owner, key, value in saved:
+            setattr(owner, key, value)
+
+
 class Scenario:
     """一種設定的整段情境。每一段（PHASES 的一個名字）是一個方法；段落結束寫資料庫的雜湊，最後寫整份資料庫。"""
 
@@ -11268,6 +11285,14 @@ class ShutScenario(StripScenario):
     PHASES_FIRST = ["setup", "settings", "calendar_view", "old_season", "tutorial", "goals", "field_lose", "boards", "half"]
     PHASES_SECOND = ["resume", "answer", "again", "bots", "season"]
 
+    def __init__(self, root: Path, profile: str, db: Path):
+        super().__init__(root, profile, db)
+        # 合回 develop 第 1 段之三：城裡操練第 13 批拿掉了（主幹 8eb13295），初入江湖 e2_drill 在主幹探索一下就過、develop 要操練一下。
+        # 這一軌的新人按的是探索，develop 根在記憶體裡換成主幹的條件才比得起來；主幹根本來就是 explore，一步都不多。
+        for step in self.c.tutorial.steps:
+            if step.id == "e2_drill" and step.done_when.action == "drill":
+                step.done_when.action = "explore"
+
     def fresh(self, who: str, gender: str = "男") -> None:
         """註冊一位新人、建角色（不略過引導）。"""
         self.clients[who] = self.TestClient(self.server.app)
@@ -16850,7 +16875,7 @@ class HeraldScenario(ExploreScenario):
             return
         where = self.chars.load(self.SCOUT).player.location
         self.post(self.bounty(f"scout_old_{self.SCOUT}", "scout", self.SCOUT, self.side(self.SCOUT) or "guan", location=where))
-        with self.tweak(self.c.config.jianfa, explore_one=False):
+        with self.tweak(self.c.config.jianfa, explore_one=False), _three_way_off(self.c.config):
             self.explore(self.SCOUT)
         self.me(self.SCOUT, "舊探索之後")
         self.world_view("舊探索之後")
@@ -19271,9 +19296,10 @@ class AllegianceScenario(EffectsScenario):
         before, jianfa.enabled = jianfa.enabled, False
         emit("這一下的設定", {"jianfa.enabled": jianfa.enabled, "before": before})
         try:
-            self.join_gentry(self.PS)
-            self.me(self.PS, "挑依附之後")
-            self.menu(self.PS, "四勝利關著", "faction:lean:")
+            with _three_way_off(self.c.config):
+                self.join_gentry(self.PS)
+                self.me(self.PS, "挑依附之後")
+                self.menu(self.PS, "四勝利關著", "faction:lean:")
         finally:
             jianfa.enabled = before
         self.world_view("挑依附之後")

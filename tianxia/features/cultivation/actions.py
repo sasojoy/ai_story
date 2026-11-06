@@ -369,12 +369,12 @@ def milestone_card(ctx) -> dict | None:
 # ── 傳功門下 ──
 
 
-@not_while_preparing
 def chuangong_ready(ctx) -> bool:
     """傳功開著、有傳得起的一門（新手引導碰到才說的 h_chuangong 問，經 Game 一行委派 _chuangong_ready；包不能 import 包）。"""
     return chuangong_rules.on(ctx.content) and chuangong_rules.cheapest(ctx.state, ctx.content, ctx.world) is not None
 
 
+@not_while_preparing
 def chuangong(ctx, key: str, what: str) -> list[str]:
     """傳功門下（Config.chuangong）：用心得替名冊上的同伴或部下練武學、加屬性（chuangong.teach）。
     傳成了寫進江湖紀錄（併進「修練」那一則）；傳不了只回那一句話，不寫紀錄。"""

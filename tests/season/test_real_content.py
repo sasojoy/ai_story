@@ -568,8 +568,9 @@ def test_every_figure_has_three_brush_off_lines(content):
             assert line.strip() and len(line) <= 40 and not re.search(r"\d", line), (cid, line)
 
 
-def test_a_newcomer_calling_on_a_figure_hears_one_of_his_own_lines_and_the_fame_gap(content):
-    content.config.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
+def test_a_newcomer_calling_on_a_figure_hears_one_of_his_own_lines_and_the_fame_gap(content, monkeypatch):
+    # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）；共用的內容，測完還原（以前留著，season_of 那幾季會跟著先後變）
+    monkeypatch.setattr(content.config, "precise_actions", False)
     game = Game.new(content, "試玩者", rng=random.Random(1))
     game.world.open_season(game.content, now=0.0)
     game.state.player.location = content.characters["luzhi"].talk_at
@@ -809,10 +810,11 @@ def test_meeting_events_mark_the_acquaintance_instead_of_handing_out_companions(
     assert "結識:caocao" in meet.condition.flags_none
 
 
-def test_the_fortune_turns_into_a_gift_when_nobody_can_be_recruited(content, tmp_path):
+def test_the_fortune_turns_into_a_gift_when_nobody_can_be_recruited(content, tmp_path, monkeypatch):
     from tianxia.sqlite_world import open_world
 
-    content.config.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
+    # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）；共用的內容，測完還原
+    monkeypatch.setattr(content.config, "precise_actions", False)
     game = Game.new(content, "測試俠客", rng=random.Random(0), world=open_world(tmp_path / "world.db"))
     msgs = game._deliver_fortune()
     assert any("賀禮" in m for m in msgs)
