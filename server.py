@@ -11,8 +11,11 @@
 - 資料庫是唯一的真實來源；同一個角色在伺服器上只有一份 `Game`（`GAMES`），每次進行動鎖都先從資料庫
   重讀角色（`_locked`）：同一個帳號開兩個分頁、換手機再登入，看到的都是最新存好的那一份，
   動作中途出錯撤回時，做到一半的改動也不會被下一個請求存回去（線上架構設計 5.1）。
-- 人物對話照舊在行動鎖外生成（`prepare_dialogue`），模型的 9~10 秒不會卡住全服。
-- 開爐的首次取名也在行動鎖外（`prepare_forge`／`forge`），整段有時間預算（`Config.naming_budget_seconds`），
+- 三段式的鎖外那一段（A 鎖內開單 → B 鎖外叫模型 → C 鎖內重驗再套用）與放鎖之後才開的背景寫字，全部拆包第 69 批搬進各包 `routes.py`，這個檔只留
+  框架（`model_call`、`within_budget`、`_open_request`、佇列）、分派（`choose`）、歸核心的那幾條（`prepare_fight`、`answer_event`、`write_flavor`）與給測試叫的一行包裝；
+  各包經 `outlock` 掛鉤接到 `api_do`（`OUTLOCK_OPS`）與 `act`、`act_look`（`OUTLOCK_JOBS`）。
+- 人物對話照舊在行動鎖外生成（人物情誼包的 `prepare_dialogue`），模型的 9~10 秒不會卡住全服。
+- 開爐的首次取名也在行動鎖外（煉製包的 `prepare_forge`／`forge`），整段有時間預算（`Config.naming_budget_seconds`），
   用完走退路字表，請求在 trycloudflare 切斷之前結束。
 - 大場面（挑戰大勢人物本人、打頭目）的判讀也在行動鎖外（`prepare_fight`），預算是 `Config.big_fight_budget_seconds`；
   一般的仗不問模型，備料與動作在同一次拿鎖裡做完。
@@ -65,10 +68,10 @@ import console
 import server_push
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, ascend, battle_instance, flavor, battlelog, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, fight_llm, gender, insight_llm, leaderboard, letters, might,
-    naming, narration, outing,
+    battle_instance, flavor, battlelog, calendar, companion_agent, create, divine, epiphany, event_llm, fight_llm, gender, insight_llm, leaderboard, letters, might,
+    naming, narration,
     ollama_client, power_save, rules,
-    precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
+    precise, seal, server_bots, sortie, speech, team, timetable, training, treasures, weekcard, xingshi,
     talk_log, zhuan_end,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, SESSION_SECONDS, AccountError, AccountStore, SessionStore, normalize
@@ -86,9 +89,12 @@ from tianxia.features.bout import routes as bout_routes
 from tianxia.features.companions import routes as companions_routes
 from tianxia.features.craft import routes as craft_routes
 from tianxia.features.feast import routes as feast_routes
+from tianxia.features.peers import routes as peers_routes
+from tianxia.features.sense import routes as sense_routes
 from tianxia.features.figure_acts import routes as figure_acts_routes
 from tianxia.features.tavern import routes as tavern_routes
 from tianxia.features.territory_acts import routes as territory_acts_routes
+from tianxia.features.zhuan import routes as zhuan_routes
 from tianxia.features.tale import routes as tale_routes  # 戰記：全部拆包第 52 批搬進戰記包；殼留 state 與 8 個一行薄包裝（act、look、main_view 原位叫）
 from tianxia.features.socialize import intros as socialize_intros  # 點大勢人物的簡介（主幹合回 D 段；/api/main 組「此地人物」那一排時疊上去，同 figure_face 留在殼的 _main_view_body）
 from tianxia.models import FREE_TEXT_MAX
@@ -994,45 +1000,11 @@ def _open_request(game: Game, open_it: Callable[[], object]) -> tuple[float, obj
 
 
 def prepare_dialogue(game: Game, option_id: str, text: str | None = None) -> companion_agent.PreparedTurn | None:
-    """對話選項在行動鎖外生成（企劃者 2026-10-03 核准的過渡做法，正解是線上架構第二階段的 LLM 佇列）。
-    模型一輪要 9~10 秒，整段包在鎖裡的話全服玩家與假人程式都得跟著等。分三段：
-      A（鎖內、很快）同步時間，問引擎這個選項現在會不會生成對話，會就拿到送模型的單子；同步的結果（共用賽季的推進
-        已經寫進資料庫、江湖大事寫進這個角色的江湖紀錄）要存起來，不然 C 段進鎖重讀就把它丟了；
-      B（鎖外、很慢）呼叫模型（model_call：佇列開著要排隊），失敗、太慢時單子裡的 turn 是 None；預算是
-        Config.dialogue_budget_seconds 扣掉 A 段（含等鎖）與排隊花掉的時間，引擎不讀時鐘，所以時間在這裡量（見 within_budget）；
-        佇列開著、同一個帳號的另一條連線已經在等這個人的回話（FB-077），或排超過等候的時間還沒輪到：跟開爐、隨口應對、大場面一樣
-        被擋下來——丟 GameError（BUSY_DIALOGUE、BUSY_QUEUE_TIMEOUT）、不走 C 段、什麼都不動（不寫紀錄、求見的選單還開著、不扣體力），
-        另一條連線的那一件照常套用。以前這種情況拿 cancelled 先進鎖，當成「生成不出對話」寫一行告辭、把選單收掉，之後那一件的回話
-        重驗對不上、套用不了，兩邊都沒談成；只有假人滿了（bot_cap）佇列直接給 cancelled，照舊取消那一輪；
-      C（鎖內、很快）由呼叫端把結果交給 Game.choose(prepared=...)，引擎進鎖後重新核對再套用。
-    這裡做 A 與 B，不會生成對話的選項（包含 talk:leave）回傳 None，由呼叫端走一般的 act()。
-    text 只有「自己說」（SAY_OPTION）用：玩家打的那一句（見 say）。"""
-    started, request = _open_request(game, lambda: game.dialogue_request(option_id, text))
-    if request is None:
-        return None
-    cancelled = companion_agent.PreparedTurn(request.option_id, request.companion_id, request.player_action, None)
-    total = game.content.config.dialogue_budget_seconds
-
-    def generate():
-        client = within_budget(game.client, total - (_monotonic() - started))
-        if client is None and game.client is not None:
-            return cancelled  # 等鎖、排隊把整份預算用完了：不叫模型，這一輪取消（跟模型叫不動一樣）
-        return companion_agent.prepare_turn(client, request)
-
-    return model_call(game, generate, fallback=cancelled, left=total - (_monotonic() - started), busy=BUSY_DIALOGUE)
+    return companions_routes.prepare_dialogue(sys.modules[__name__], game, option_id, text)
 
 
 def say(game: Game, text: str, option: str = SAY_OPTION) -> list[str] | None:
-    """跟人物對話時的「自己說」（企劃者 2026-10-08）：玩家打的那一句跟按選項走同一條三段式（prepare_dialogue）——
-    A 鎖內驗這句話能不能送（還在對話裡、按得下去、1～Game.say_max() 字）並開單，B 鎖外請模型歸類那句話、寫回應與下一輪選項，
-    C 鎖內 Game.choose(SAY_OPTION, prepared=…, text=…) 整個重驗再套用（好感度照模型挑的類別查表）。
-    送不出去（不在對話裡、字數不對）丟 GameError，什麼都不動。"""
-    if option not in TEXT_TALKS:  # NPC 智能 2.1：商量打法（talk:plan）、帶路的路上（parley:road）也走這一條
-        option = SAY_OPTION
-    prepared = prepare_dialogue(game, option, text)
-    if prepared is None:
-        raise GameError(f"寫一句 1～{game.say_max()} 字的話；交談已經結束的話，就不必再說了。")
-    return act(game, lambda g: g.choose(option, prepared=prepared, text=text))
+    return companions_routes.say(sys.modules[__name__], game, text, option)
 
 
 def may_generate_dialogue(option_id: str) -> bool:
@@ -1101,50 +1073,11 @@ NO_NAME: tuple[str | None, str] = (None, "")  # 開爐的 B 段沒取到名字�
 
 
 def prepare_forge(game: Game, art_id: str | None, insight_ids: list[str]) -> tuple[str | None, str]:
-    """開爐的首次取名或挑選在行動鎖外（最終審查 Critical 1）。首次合出來的配方要等模型取名（合到舊的、候選兩個以上時是
-    請模型從候選挑一個名字），以前整段包在行動鎖裡：
-    一次最多叫三次、每次最多等 OllamaClient.timeout（120 秒），全服玩家與假人程式都得跟著等，試玩走的 trycloudflare
-    也會在約 100 秒切斷請求。跟 prepare_dialogue 一樣分三段：
-      A（鎖內、很快）同步時間，問引擎這一爐要不要模型取名或挑（Game.forge_request），要就拿到單子；同步的結果要存起來，
-        不然 C 段進鎖重讀就把它丟了；
-      B（鎖外、很慢）naming.generate（model_call：佇列開著要排隊）：預算是 Config.naming_budget_seconds 扣掉 A 段（含等鎖）
-        與排隊花掉的時間，引擎不讀時鐘，所以時間在這裡量，輪到了才算；用完（輪到了、預算已經沒了）就回 (None, "")，C 段走退路字表（挑的話改由規則挑）；
-        排太久沒輪到被擋下來（BUSY_QUEUE_TIMEOUT，PM 2026-10-06），跟同一個人的第二件一樣丟 GameError、不走 C 段；
-      C（鎖內、很快）由呼叫端把結果交給 Game.forge(..., proposed=...)，引擎整個重驗再登記、收費。
-    這裡做 A 與 B，回傳 B 的結果（名字, 說明）；不必叫模型時是 NO_NAME。假人程式（bot_runner._name_and_apply）不經過 HTTP，
-    照樣走這三段：A 是 Game.forge_request(named_outside=True) 在 action_lock 裡，B 是它自己的 client 在鎖外叫 naming.generate
-    （預算 Config.bot_naming_budget_seconds，一次一件、至少隔 bot_naming_gap_seconds），C 是 bot_policy.apply_job 再進鎖交給
-    Game.forge(proposed=...)；絕學定名也是同一條路（Game.mastery_request、Game.name_mastered）。煉製只剩意境＋意境。"""
-    started, request = _open_request(game, lambda: game.forge_request(art_id, insight_ids))
-    if request is None:
-        return NO_NAME
-    total = game.content.config.naming_budget_seconds
-
-    def name_it():
-        budget = max(0.0, total - (_monotonic() - started))
-        # 角色名號的查詢是唯讀的快照、不拿行動鎖（FB-069：模型取到角色的名號就再取一次；C 段進鎖還會再擋一次）
-        return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
-
-    return model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started), busy=BUSY_FORGE)
+    return craft_routes.prepare_forge(sys.modules[__name__], game, art_id, insight_ids)
 
 
 def prepare_peer(game: Game, name: str, action: str, params: dict) -> tuple[str | None, str] | None:
-    """玩家卡上要先請模型的互動（social.CardAction.request；論武答應時的首創取名）：照開爐的三段式（prepare_forge），
-    A 在鎖內問 Game.peer_request、B 在鎖外 naming.generate，回傳（名字, 說明）交給 C（peer_act 的 params["proposed"]）。
-    這一種互動不需要模型是 None（不多拿一次鎖）；需要、但這一爐不必取名是 NO_NAME。"""
-    handler = social.ACTIONS.get(action)
-    if handler is None or handler.request is None:
-        return None
-    started, request = _open_request(game, lambda: game.peer_request(name, action, params))
-    if request is None:
-        return NO_NAME
-    total = game.content.config.naming_budget_seconds
-
-    def name_it():
-        budget = max(0.0, total - (_monotonic() - started))
-        return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
-
-    return model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started), busy=BUSY_FORGE)
+    return peers_routes.prepare_peer(sys.modules[__name__], game, name, action, params)
 
 
 SCREEN_BUDGET_SECONDS = 12.0  # 審一句話（挑釁、名帖自題）最多等模型幾秒：叫不動就只看字表照送
@@ -1167,23 +1100,11 @@ def screen_text(game: Game, text: str, kind: str) -> str:
 
 
 def screen_peer(game: Game, name: str, action: str, params: dict) -> str:
-    """玩家卡上帶一句話的互動（social.CardAction.screen；挑釁）：要審就審，不要審是空字串。只讀引擎，不拿鎖（那一句只是字）。"""
-    handler = social.ACTIONS.get(action)
-    if handler is None or handler.screen is None:
-        return ""
-    got = handler.screen(game, game, params)  # 只看 params（那一句），不讀對方；對方那一份 C 段才拿
-    return "" if got is None else screen_text(game, got[0], got[1])
+    return peers_routes.screen_peer(sys.modules[__name__], game, name, action, params)
 
 
 def forge(game: Game, art_id: str | None, insight_ids: list[str]) -> list[str] | None:
-    """開爐：A、B 在 prepare_forge，C 進鎖交給 Game.forge。proposed 一定給（不必叫模型時是 NO_NAME），
-    所以伺服器上的開爐永遠不會在鎖裡叫模型。同一爐連按兩下、重新整理再按、開兩個分頁：兩個請求可能都走完 A、B，
-    C 段重驗時第二個會看見配方有了、東西已經在你身上，什麼都不收（企劃者 2026-10-05：不能重複扣）。
-    模型佇列開著時，同一個人已經有一件在等模型（另一個分頁、另一台裝置），第二件在 B 段被擋下來：丟 GameError「上一爐還沒出爐。」
-    （BUSY_FORGE），不走 C 段、什麼都不登記、什麼都不收（審查 M2、控制者裁示；以前它拿 NO_NAME 先進鎖，這個配方這一季就用退路
-    字表的名字登記，第一件模型取的名字被丟掉）。不必叫模型的爐（配方已經有人合過）不經過佇列，兩個分頁照常都走得完。"""
-    proposed = prepare_forge(game, art_id, insight_ids)
-    return act(game, lambda g: g.forge(art_id, insight_ids, proposed=proposed))
+    return craft_routes.forge(sys.modules[__name__], game, art_id, insight_ids)
 
 
 EPIPHANY_THINK = f"{epiphany.OPTION}:{epiphany.THINK}"
@@ -1192,52 +1113,7 @@ BUSY_EPIPHANY = "還在想名字，稍等。"
 
 
 def epiphany_think(game: Game) -> list[str] | None:
-    """特殊頓悟的「靜心思名」，跟開爐取名一樣分三段：
-      A（鎖內、很快）同步時間，Game.epiphany_request 開單（只讀）；不在等著取名、已經想過了是 None，照一般的按鈕走（引擎回那一句）；
-      B（鎖外、很慢）epiphany.propose_names 請模型一次取三個（model_call 排隊），預算是 Config.naming_budget_seconds 扣掉 A 段；
-        取不到是空的；
-      C（鎖內、很快）Game.epiphany_names 重驗還是同一個神品、名字再過一次過濾，不夠三個用字表補。"""
-    started, request = _open_request(game, game.epiphany_request)
-    if request is None:
-        return act(game, lambda g: g.choose(EPIPHANY_THINK))
-    total = game.content.config.naming_budget_seconds
-
-    def name_it():
-        budget = max(0.0, total - (_monotonic() - started))
-        return epiphany.propose_names(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
-
-    names = model_call(game, name_it, fallback=[], left=total - (_monotonic() - started), busy=BUSY_EPIPHANY)
-    return act(game, lambda g: g.epiphany_names(request, names))
-
-
-SENSE_PNG_MAX = 300_000  # 畫布存的小 PNG（base64 字數）最多收這麼多；再大就不給模型看圖，只給文字特徵（畫布 256×256，實際約一兩萬字）
-
-
-def sense_draw(game: Game, points, png: str = "") -> list[str] | None:
-    """有所感畫完那一筆（悟意境設計 0.2、0.2a），跟開爐取名一樣分三段：
-      A（鎖內、很快）同步時間，Game.sense_request 讀那一筆、開單（只讀）；讀不出來（只點了一下、格式不對）回那一句話；
-      B（鎖外、很慢）要悟一個自己的新意境才叫模型：看圖取名，取不到再只給文字特徵（insight_llm.name，model_call 排隊）；
-        預算是 Config.sense_budget_seconds 扣掉 A 段（含等鎖）與排隊花掉的時間；落回基本意境的不叫；
-      C（鎖內、很快）Game.sense_draw 重驗還是同一次感悟、同一筆讀出同一個屬性才套用，名字再過一次過濾，取不到走退路字表。
-    PNG 只轉交給模型，不存（存的是規則取樣過的點位，畫縮圖用）。"""
-    image = png if isinstance(png, str) and len(png) <= SENSE_PNG_MAX else ""
-    started, request = _open_request(game, lambda: game.sense_request(points, image))
-    if isinstance(request, str):
-        raise GameError(request)
-    proposed = NO_NAME
-    if request.needs_name:
-        total = game.content.config.sense_budget_seconds
-
-        def name_it():
-            budget = max(0.0, total - (_monotonic() - started))
-            got = insight_llm.name(
-                game.client, game.content, request.facts, image=request.png, budget=budget,
-                person=game.world.is_character_name,
-            )
-            return got[0], got[1]
-
-        proposed = model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started), busy=BUSY_SENSE)
-    return act(game, lambda g: g.sense_draw(request, proposed))
+    return sense_routes.epiphany_think(sys.modules[__name__], game)
 
 
 def answer_event(game: Game, text: str) -> list[str] | None:
@@ -2337,14 +2213,7 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
 
 
 def forge_args(body: dict) -> tuple[str | None, list[str]]:
-    """煉製頁送來的東西：意境 id 們（爐裡只合意境）；舊網頁送來的武學 id 照傳，引擎回「爐裡只合意境」那一句。body 是客戶端寫的：
-    意境不是清單就當作沒放，形狀不對只會得到一句話，不會打出 500。"""
-    art, picked = body.get("art"), body.get("insights")
-    return str(art) if art else None, [str(i) for i in picked] if isinstance(picked, list) else []
-
-
-def _forge_without_naming(game: Game, art_id: str | None, insight_ids: list[str]) -> list[str]:
-    return game.forge(art_id, insight_ids, proposed=NO_NAME)
+    return craft_routes.forge_args(sys.modules[__name__], body)
 
 
 def _int_of(value) -> int:
@@ -2360,7 +2229,7 @@ def _id_list(value) -> list[str]:
     return [str(v) for v in value if isinstance(v, str)] if isinstance(value, list) else []
 
 
-# 全部拆包第 68 批照包分：功能包的在各包 routes.py 的 menxia_actions（殼照 FEATURES 接），原位只留療傷（本體還在 Game）與開爐（第 69 批）。表的先後照寫死的這一張（action_table）。
+# 全部拆包第 68 批照包分：功能包的在各包 routes.py 的 menxia_actions（殼照 FEATURES 接），原位只留療傷（本體還在 Game）；開爐那一條第 69 批進煉製包。表的先後照寫死的這一張（action_table）。
 MENXIA_ACTION_ORDER = (
     "practice", "heal", "forge", "switch", "slot", "unslot", "create_begin", "create_pose", "create_back", "create_name", "create_cancel", "create_reroll",
     "ascend_dismiss", "cultivate", "melt", "melt_insight", "melt_many", "name", "name_divine", "bind_art", "join", "leave", "release",
@@ -2368,13 +2237,10 @@ MENXIA_ACTION_ORDER = (
 )
 MENXIA_ACTIONS = features_core.action_table(MENXIA_ACTION_ORDER, {
     "heal": lambda g, b: g.heal(),
-    # 一武學＋一意境、兩武學＝合成，兩意境＝合併。端點走 forge()（A 鎖內備料 → B 鎖外取名或挑 → C 鎖內登記），不走這一條；
-    # 這裡也帶 NO_NAME，就算有人直接拿它在鎖裡呼叫，也不會叫模型
-    "forge": lambda g, b: _forge_without_naming(g, *forge_args(b)),
 }, features_core.menxia_actions(sys.modules[__name__]))
 
 
-# （/api/peer、/api/peer/act：全部拆包第 37 批搬進玩家互動包 tianxia/features/peers/routes.py，殼照 FEATURES 掛；鎖外的 screen_peer、prepare_peer 照手冊 G10 留在殼：A 段 discuss_actions.request、C 段 discuss_actions.discuss 在包裡，第 38 批）
+# （/api/peer、/api/peer/act：全部拆包第 37 批搬進玩家互動包 tianxia/features/peers/routes.py，殼照 FEATURES 掛；鎖外的 screen_peer、prepare_peer 第 69 批也進了那個檔，這裡留一行包裝給測試換；screen_text 兩包都用，留在殼）
 
 
 # （/api/talk_log：主幹合回 D 段搬進人物情誼包 tianxia/features/companions/routes.py，殼照 FEATURES 掛；小檔的鎖外包裝 talk_store、_log_talk 與 act 前後那兩行留在殼：after_action 拿不到動作前的那一份）
@@ -2439,11 +2305,11 @@ def api_howto(request: Request):
 
 
 # （/api/sense、/api/sense_read、/api/sense_warm：全部拆包第 24 批搬進有所感包 tianxia/features/sense/routes.py，殼照 FEATURES 掛；
-# 畫完那一筆的鎖外三段式照舊是這個檔的 sense_draw）
+# 畫完那一筆的鎖外三段式 sense_draw 第 69 批也進了那個檔）
 
 
 # （/api/forge_line：全部拆包第 44 批搬進煉製與自創包 tianxia/features/craft/routes.py，殼照 FEATURES 掛；forge_args 與開爐、立意的
-# 鎖外三段式〔prepare_forge、create_intent、create_reread〕照舊是這個檔的）
+# 鎖外三段式〔prepare_forge、create_intent、create_reread〕第 69 批也進了那個檔，這裡留一行包裝）
 
 
 # （/api/smith_line：全部拆包第 41 批搬進鐵匠鋪包 tianxia/features/smithy/routes.py，殼照 FEATURES 掛）
@@ -2559,62 +2425,7 @@ def _zhuan_key(game: Game, season: int) -> tuple[str, int]:
 
 
 def write_zhuan(game: Game, season: int, rewrite: bool) -> bool:
-    """開一個背景執行緒寫那一季的傳：A 鎖內開單 → B 鎖外請模型寫（model_call，佇列開著要排隊；預算 Config.biography.budget_seconds）
-    → C 鎖內重驗再存（Game.write_biography；模型寫不出來就照規則拼）。同一篇已經在寫就不再開；開了回 True。"""
-    key = _zhuan_key(game, season)
-    with ZHUAN_LOCK:
-        if key in ZHUAN_JOBS:
-            return False
-        ZHUAN_JOBS[key] = time.monotonic()
-
-    def zhuan_job() -> None:
-        try:
-            with _locked(game):
-                request = game.biography_request(season, rewrite)
-            if request is None:
-                return
-            budget = game.content.config.biography.budget_seconds
-            started = time.monotonic()
-
-            def ask() -> str | None:
-                return biography.write(game.client, request, budget - (time.monotonic() - started))
-
-            text = model_call(game, ask, fallback=None, left=budget)
-            if not request.verdicts:  # 關著的季、沒有人替你寫評曰：跟以前一模一樣
-                with _locked(game):
-                    game.write_biography(request, text, time.time())
-                return
-            verdicts = {job.fid: verdict_text(game, job) for job in request.verdicts}  # 寫完正文再逐條寫評曰（減法季批 7b-2）
-            with _locked(game):
-                game.write_biography(request, text, time.time(), verdicts=verdicts)
-        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，網頁問的時候照「還沒寫」
-            traceback.print_exc()
-        finally:
-            with ZHUAN_LOCK:
-                ZHUAN_JOBS.pop(key, None)
-
-    threading.Thread(target=zhuan_job, name=f"zhuan-{season}", daemon=True).start()
-    return True
-
-
-VERDICT_OWNER = "#評曰"  # 人物評曰在佇列裡的名號尾巴：跟這個人自己的請求分開排，當假人排在真人後面
-
-
-def verdict_text(game: Game, job) -> str:
-    """一條人物評曰（減法季批 7b-2；zhuan_job 在鎖外叫）：請模型照他的口氣寫一句（zhuan_end.write_verdict），預算
-    Config.jianfa.verdict_budget_seconds（含排隊）；佇列開著時當假人排、排在真人後面（同書信 letter_once）。寫不出來是空字串（照固定句）。"""
-    jf = game.content.config.jianfa
-    started = _monotonic()
-
-    def ask() -> str:
-        return zhuan_end.write_verdict(within_budget(game.client, jf.verdict_budget_seconds - (_monotonic() - started)), job, jf.verdict_chars)
-
-    if QUEUE is None:
-        return ask()
-    try:
-        return QUEUE.run(game.state.player.name.casefold() + VERDICT_OWNER, ask, fallback="", bot=True, wait=jf.verdict_budget_seconds)
-    except (Busy, QueueTimeout):
-        return ""
+    return zhuan_routes.write_zhuan(sys.modules[__name__], game, season, rewrite)
 
 
 def public_base(request: Request) -> str:
@@ -2646,7 +2457,7 @@ def _season_arg(value) -> int:
 
 
 # （/api/zhuan、/api/zhuan/write、/api/zhuan/share、/zhuan/{code}：全部拆包第 29 批搬進列傳包 tianxia/features/zhuan/routes.py，殼照 FEATURES 掛；
-# 寫傳的鎖外三段式 write_zhuan、verdict_text、傳的畫面 zhuan_view、公開頁的 zhuan_extras 留在殼——test_server 掃鎖外叫模型的函式認這幾個名字）
+# 寫傳的鎖外三段式 write_zhuan、verdict_text 第 69 批也進了那個檔，ZHUAN_JOBS、ZHUAN_LOCK、_zhuan_key 留這裡（zhuan_view、測試、same_behavior 在讀）；傳的畫面 zhuan_view、公開頁的 zhuan_extras 留在殼）
 
 
 def zhuan_extras(store, row: dict) -> dict:

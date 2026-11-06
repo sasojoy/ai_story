@@ -8,7 +8,7 @@ from tianxia import event_llm
 from tianxia.core.features import Outlock, OutlockJob
 from tianxia.core.services import not_while_preparing
 
-from . import actions, letters, talk_log
+from . import actions, companion_agent, letters, talk_log
 
 
 def main_actions(shell) -> dict:
@@ -148,3 +148,45 @@ def persuade_text(shell, game, errand_id: str, text: str) -> list[str]:
 
     rate = shell.model_call(game, ask, fallback=None, left=total - (shell._monotonic() - started), busy=shell.BUSY_FREE_TEXT)
     return shell.act(game, lambda g: g.persuade(request, rate))
+
+
+def prepare_dialogue(shell, game, option_id: str, text: str | None = None) -> companion_agent.PreparedTurn | None:
+    """對話選項在行動鎖外生成（企劃者 2026-10-03 核准的過渡做法，正解是線上架構第二階段的 LLM 佇列）。
+    模型一輪要 9~10 秒，整段包在鎖裡的話全服玩家與假人程式都得跟著等。分三段：
+      A（鎖內、很快）同步時間，問引擎這個選項現在會不會生成對話，會就拿到送模型的單子；同步的結果（共用賽季的推進
+        已經寫進資料庫、江湖大事寫進這個角色的江湖紀錄）要存起來，不然 C 段進鎖重讀就把它丟了；
+      B（鎖外、很慢）呼叫模型（model_call：佇列開著要排隊），失敗、太慢時單子裡的 turn 是 None；預算是
+        Config.dialogue_budget_seconds 扣掉 A 段（含等鎖）與排隊花掉的時間，引擎不讀時鐘，所以時間在這裡量（見 within_budget）；
+        佇列開著、同一個帳號的另一條連線已經在等這個人的回話（FB-077），或排超過等候的時間還沒輪到：跟開爐、隨口應對、大場面一樣
+        被擋下來——丟 GameError（BUSY_DIALOGUE、BUSY_QUEUE_TIMEOUT）、不走 C 段、什麼都不動（不寫紀錄、求見的選單還開著、不扣體力），
+        另一條連線的那一件照常套用。以前這種情況拿 cancelled 先進鎖，當成「生成不出對話」寫一行告辭、把選單收掉，之後那一件的回話
+        重驗對不上、套用不了，兩邊都沒談成；只有假人滿了（bot_cap）佇列直接給 cancelled，照舊取消那一輪；
+      C（鎖內、很快）由呼叫端把結果交給 Game.choose(prepared=...)，引擎進鎖後重新核對再套用。
+    這裡做 A 與 B，不會生成對話的選項（包含 talk:leave）回傳 None，由呼叫端走一般的 act()。
+    text 只有「自己說」（SAY_OPTION）用：玩家打的那一句（見 say）。"""
+    started, request = shell._open_request(game, lambda: game.dialogue_request(option_id, text))
+    if request is None:
+        return None
+    cancelled = companion_agent.PreparedTurn(request.option_id, request.companion_id, request.player_action, None)
+    total = game.content.config.dialogue_budget_seconds
+
+    def generate():
+        client = shell.within_budget(game.client, total - (shell._monotonic() - started))
+        if client is None and game.client is not None:
+            return cancelled  # 等鎖、排隊把整份預算用完了：不叫模型，這一輪取消（跟模型叫不動一樣）
+        return companion_agent.prepare_turn(client, request)
+
+    return shell.model_call(game, generate, fallback=cancelled, left=total - (shell._monotonic() - started), busy=shell.BUSY_DIALOGUE)
+
+
+def say(shell, game, text: str, option: str) -> list[str] | None:
+    """跟人物對話時的「自己說」（企劃者 2026-10-08）：玩家打的那一句跟按選項走同一條三段式（prepare_dialogue）——
+    A 鎖內驗這句話能不能送（還在對話裡、按得下去、1～Game.say_max() 字）並開單，B 鎖外請模型歸類那句話、寫回應與下一輪選項，
+    C 鎖內 Game.choose(SAY_OPTION, prepared=…, text=…) 整個重驗再套用（好感度照模型挑的類別查表）。
+    送不出去（不在對話裡、字數不對）丟 GameError，什麼都不動。"""
+    if option not in shell.TEXT_TALKS:  # NPC 智能 2.1：商量打法（talk:plan）、帶路的路上（parley:road）也走這一條
+        option = shell.SAY_OPTION
+    prepared = shell.prepare_dialogue(game, option, text)
+    if prepared is None:
+        raise shell.GameError(f"寫一句 1～{game.say_max()} 字的話；交談已經結束的話，就不必再說了。")
+    return shell.act(game, lambda g: g.choose(option, prepared=prepared, text=text))

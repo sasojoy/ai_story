@@ -87,3 +87,34 @@ def router(shell) -> APIRouter:
         return {"mingtie": shell.look(game, lambda g: mingtie_actions.view(g, board)), "message": shell.joined(msgs)}
 
     return r
+
+
+# ── 鎖外工作（原本寫在 server.py，全部拆包第 69 批）：殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）；模型呼叫絕不進鎖 ──
+
+
+def prepare_peer(shell, game, name: str, action: str, params: dict) -> tuple[str | None, str] | None:
+    """玩家卡上要先請模型的互動（social.CardAction.request；論武答應時的首創取名）：照開爐的三段式（prepare_forge），
+    A 在鎖內問 Game.peer_request、B 在鎖外 naming.generate，回傳（名字, 說明）交給 C（peer_act 的 params["proposed"]）。
+    這一種互動不需要模型是 None（不多拿一次鎖）；需要、但這一爐不必取名是 NO_NAME。"""
+    handler = social.ACTIONS.get(action)
+    if handler is None or handler.request is None:
+        return None
+    started, request = shell._open_request(game, lambda: game.peer_request(name, action, params))
+    if request is None:
+        return shell.NO_NAME
+    total = game.content.config.naming_budget_seconds
+
+    def name_it():
+        budget = max(0.0, total - (shell._monotonic() - started))
+        return shell.naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
+
+    return shell.model_call(game, name_it, fallback=shell.NO_NAME, left=total - (shell._monotonic() - started), busy=shell.BUSY_FORGE)
+
+
+def screen_peer(shell, game, name: str, action: str, params: dict) -> str:
+    """玩家卡上帶一句話的互動（social.CardAction.screen；挑釁）：要審就審，不要審是空字串。只讀引擎，不拿鎖（那一句只是字）。"""
+    handler = social.ACTIONS.get(action)
+    if handler is None or handler.screen is None:
+        return ""
+    got = handler.screen(game, game, params)  # 只看 params（那一句），不讀對方；對方那一份 C 段才拿
+    return "" if got is None else shell.screen_text(game, got[0], got[1])
