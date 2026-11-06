@@ -44,7 +44,7 @@ def _no_mall_words(seen: object) -> list[str]:
 
 
 def test_online_bots_take_the_grant_but_never_buy(on, monkeypatch):
-    """假人在線、每一輪都動：每個假人照樣拿到封測發放，一次都沒叫 mall_buy，帳上只有發放、沒有購買紀錄。"""
+    """假人在線、每一輪都動：每個假人照樣拿到封測發放，一次都沒叫 actions.buy、purchase，帳上只有發放、沒有購買紀錄。"""
     world = open_world()
     world.seed_first_season(on)
     _install(on)

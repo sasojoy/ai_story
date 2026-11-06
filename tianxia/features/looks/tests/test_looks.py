@@ -10,6 +10,7 @@ from conftest import next_season
 from tianxia.characters import CharacterStore
 from tianxia.core.registry import FEATURES
 from tianxia.engine import Game
+from tianxia.features.mall import actions as mall_actions
 from tianxia.features.looks import actions as looks_actions
 from tianxia.features.looks import orders, rules
 from tianxia.models import Look, MallItem
@@ -45,7 +46,7 @@ def _game(content, name="沈浪", world=None) -> Game:
 def test_buy_wear_and_the_arena_records_the_look(on):
     game = _game(on)
     assert game.arena_look() == "" and "look" not in game.feature_status()
-    game.mall_buy("look_moying", "ref-look-0001")
+    mall_actions.buy(game, "look_moying", "ref-look-0001")
     assert Wallet(game.world.db).balance("沈浪") == 4400
     view = looks_actions.view(game)
     assert view["worn"] == "" and [(lk["id"], lk["owned"]) for lk in view["looks"]] == [("", True), ("moying", True), ("jinshen", False)]
@@ -59,16 +60,16 @@ def test_buy_wear_and_the_arena_records_the_look(on):
 def test_cannot_wear_what_you_did_not_buy_and_cannot_buy_twice(on):
     game = _game(on)
     assert looks_actions.wear(game, "jinshen")[-1] == rules.NOT_OWNED
-    game.mall_buy("look_jinshen", "ref-look-0002")
-    assert game.mall_buy("look_jinshen", "ref-look-0003")[-1] == "你已經有「金身形象」這一套形象了。"
+    mall_actions.buy(game, "look_jinshen", "ref-look-0002")
+    assert mall_actions.buy(game, "look_jinshen", "ref-look-0003")[-1] == "你已經有「金身形象」這一套形象了。"
     assert Wallet(game.world.db).balance("沈浪") == 4400
-    item = next(i for i in game.mall_view()["items"] if i["id"] == "look_jinshen")
+    item = next(i for i in mall_actions.view(game)["items"] if i["id"] == "look_jinshen")
     assert item["can"] is False and item["look"] == "jinshen"
 
 
 def test_the_look_survives_a_new_season(on, world):
     game = _game(on, world=world)
-    game.mall_buy("look_moying", "ref-look-0004")
+    mall_actions.buy(game, "look_moying", "ref-look-0004")
     looks_actions.wear(game, "moying")
     next_season(on, world, game)
     assert game.arena_look() == "moying"
@@ -76,12 +77,12 @@ def test_the_look_survives_a_new_season(on, world):
 
 def test_a_refund_takes_the_look_back_to_the_default(on):
     game = _game(on)
-    game.mall_buy("look_moying", "ref-look-0005")
+    mall_actions.buy(game, "look_moying", "ref-look-0005")
     looks_actions.wear(game, "moying")
     pid = Wallet(game.world.db).purchases("沈浪")[0].id
     admin = Game.new(on, "管理者", rng=random.Random(1), world=game.world)
     admin.sync(T0)
-    out = admin.admin_mall_refund("沈浪", pid, "測試退款")
+    out = mall_actions.admin_refund(admin, "沈浪", pid, "測試退款")
     assert "形象「墨影」收回" in out[-1]
     assert game.arena_look() == ""
 

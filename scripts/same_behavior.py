@@ -12392,6 +12392,7 @@ class ZhuanScenario(Scenario):
         from tianxia import annals
         from tianxia.characters import name_key
         from tianxia.engine import Game
+        from tianxia.features.mall import actions as mall_actions
         from tianxia.state import BotProfile
         from tianxia.wallet import Wallet
 
@@ -12411,7 +12412,7 @@ class ZhuanScenario(Scenario):
                 self.begin()
                 g2 = Game(self.c, self.chars.load(name), world=self.world)
                 g2.client = None
-                emit(f"{name} 買紀念印", g2.mall_buy("zhuan_seal", "zhuan-bot-1"))
+                emit(f"{name} 買紀念印", mall_actions.buy(g2, "zhuan_seal", "zhuan-bot-1"))
                 self.chars.save(g2.state)
 
     def bot_rounds(self, tag: str, rounds: int) -> None:

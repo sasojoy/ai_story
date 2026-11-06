@@ -8,6 +8,7 @@ from jianfa_kit import jianfa_game, ready
 from tianxia import annals, calendar
 from tianxia.characters import CharacterStore, name_key
 from tianxia.engine import Game
+from tianxia.features.mall import actions as mall_actions
 from tianxia.wallet import Wallet
 
 ADMIN = "史館管理者"
@@ -25,7 +26,7 @@ def make_game(profile: str = "season21", side: str | None = "guan", **flags) -> 
 
 def row(game: Game, item_id: str) -> dict | None:
     """商城貨架上的那一列（沒上架是 None）。"""
-    return next((r for r in game.mall_view()["items"] if r["id"] == item_id), None)
+    return next((r for r in mall_actions.view(game)["items"] if r["id"] == item_id), None)
 
 
 def to_week(game: Game, week: int) -> None:

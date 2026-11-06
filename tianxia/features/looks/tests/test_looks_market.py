@@ -7,6 +7,7 @@ from test_looks import T0, _game
 from test_looks_orders import _admin, _upload_all
 
 from tianxia.features.looks import actions, market, orders
+from tianxia.features.mall import actions as mall_actions
 from tianxia.models import Look, MallItem
 from tianxia.wallet import Wallet
 
@@ -107,5 +108,5 @@ def test_bots_and_the_shelf_never_buy_it(on, world):
     bot = _game(on, name="假人乙", world=world)
     bot.state.player.bot = True
     assert actions.market_buy(bot, look, "mkt-ref-009")[-1] == market.NOT_OPEN
-    assert "look_market" not in [i["id"] for i in maker.mall_view()["items"]]
-    assert maker.mall_buy("look_market", "buy-ref-0013")[-1] == "沒有這件商品。"
+    assert "look_market" not in [i["id"] for i in mall_actions.view(maker)["items"]]
+    assert mall_actions.buy(maker, "look_market", "buy-ref-0013")[-1] == "沒有這件商品。"
