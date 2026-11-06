@@ -252,6 +252,22 @@ WAVES["B"] = dict(
 WAVES["C"] = dict(lines=[dict(name="測試歸位", batches=[b61])], merge_port=8281, fix_port=8282)
 
 
+def leftovers_for(path):
+    """上一波每一批回報的 leftovers，有寫到批號的歸給那一批（一句可以歸給好幾批）。"""
+    out = {}
+    for line in json.loads(Path(path).read_text(encoding="utf-8")):
+        for done in line["done"]:
+            for text in done.get("leftovers") or []:
+                numbers = set()
+                for m in re.finditer(r"(?:第\s*|[Bb]atch(?:es)?\s+)(\d+(?:\s*[、/，,和與及]\s*\d+)*)", text):
+                    numbers |= {int(x) for x in re.findall(r"\d+", m.group(1))}
+                for n in numbers:
+                    out.setdefault(n, [])
+                    if text not in out[n]:
+                        out[n].append(text)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("wave")
@@ -261,6 +277,7 @@ def main():
     ap.add_argument("--finish", default="", help="開發回來的 built（JSON 檔）；有給就只合併、閘門、審查、修正")
     ap.add_argument("--merge-base", default="")
     ap.add_argument("--merge-extra", default="", help="合併時要多合的東西（文字檔）")
+    ap.add_argument("--leftovers", default="", help="上一波開發回來的 built（JSON 檔）：寫到某一批的 leftovers 接進那一批的派工")
     a = ap.parse_args()
     w = WAVES[a.wave]
     args = {"wave": a.wave, "scratch": a.scratch, "branch": f"wave/{a.wave}", "merge_port": w["merge_port"], "fix_port": w["fix_port"]}
@@ -275,6 +292,11 @@ def main():
     else:
         args["stop_after_build"] = True
         args["lines"] = [dict(name=l["name"], base=a.base, batches=[f() for f in l["batches"]]) for l in w["lines"]]
+        left = leftovers_for(a.leftovers) if a.leftovers else {}
+        for line in args["lines"]:
+            for b in line["batches"]:
+                if left.get(b["n"]):
+                    b["body"] += "\n- **上一波的開發留給這一批的**（他們的話，照現行程式核對，對不上以程式為準）：\n" + "\n".join("  - " + x for x in left[b["n"]])
         name = f"wave-{a.wave}.js"
     meta_end = SRC.index("}\n", SRC.index("export const meta")) + 2
     body = re.sub(r"\bargs\b", "ARGS", SRC[meta_end:])
