@@ -12,7 +12,6 @@ Exit 0 same, 1 differs, 2 the tool broke.
 import argparse
 import hashlib
 import http.server
-import io
 import json
 import os
 import re
@@ -25,7 +24,11 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-import compare  # noqa: E402
+try:
+    import compare  # noqa: E402
+except ImportError as e:  # no PIL: the tool is what broke, not the pages
+    print("TOOL", e)
+    sys.exit(2)
 import gate  # noqa: E402
 import noise  # noqa: E402
 
@@ -176,7 +179,7 @@ def replay(corpus: str, a_web: str, b_web: str, out_dir: str, *, frozen=True, sh
 
 
 def main(argv=None) -> int:
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--corpus", required=True)
     ap.add_argument("--a-web", required=True)

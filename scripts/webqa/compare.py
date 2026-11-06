@@ -9,7 +9,6 @@ import collections
 import difflib
 import gzip
 import hashlib
-import io
 import json
 import os
 import sys
@@ -202,7 +201,10 @@ def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int
     def norm_steps(lines):
         return [noise.mask_common(x, hosts) for x in lines]
 
-    for name, x, y in (("steps", ra["steps"], rb["steps"]), ("api-calls", ra["apiCalls"], rb["apiCalls"])):
+    def no_polls(lines):  # how many times a flow asked whether the chronicle is written depends on when the writer got to it
+        return [x for x in lines if " /api/tale/" not in x]
+
+    for name, x, y in (("steps", ra["steps"], rb["steps"]), ("api-calls", no_polls(ra["apiCalls"]), no_polls(rb["apiCalls"]))):
         if norm_steps(x) != norm_steps(y):
             res.red("(walk)", name, list(difflib.unified_diff(norm_steps(x), norm_steps(y), lineterm="", n=0))[:30])
     for k in sorted(set(ra["facts"]) | set(rb["facts"])):
@@ -356,7 +358,7 @@ def compare(a: str, b: str, origins, red_dir: str | None = None, red_budget: int
 
 
 if __name__ == "__main__":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
     ap = argparse.ArgumentParser()
     ap.add_argument("a")
     ap.add_argument("b")

@@ -186,7 +186,7 @@ export const flows = [
     await c.click(ACT("mall-open"));
     await c.click('[data-act="mall-tab"][data-tab="look"]');
     await c.click('[data-act="look-seg"][data-seg="mine"]');
-    await c.click('[data-act="look-pick"]');
+    await c.click(`[data-act="look-pick"][data-id="${made && made.look}"]`);
     const wear = await c.step(ACT("look-wear"), "ml_look_wear", { who: "p2" });
     c.report.facts.look_wear = wear;
     await c.asPlayer("p1");

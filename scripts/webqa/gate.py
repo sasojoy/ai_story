@@ -10,7 +10,6 @@ import argparse
 import concurrent.futures
 import glob
 import hashlib
-import io
 import json
 import os
 import shutil
@@ -234,16 +233,46 @@ def run_round(name, args, work, copies, ports, cdps, origins, env_base) -> dict:
     return out
 
 
-def must_reach_rows(rounds) -> dict:
-    rows = {}
+def must_reach_rows(rounds) -> tuple[dict, set]:
+    """The names each round has to reach, and the rounds whose list came from a --quick walk (no pictures taken yet): those only warn."""
+    rows, quick = {}, set()
     if os.path.exists(MUST_REACH):
         with open(MUST_REACH, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
-                if line and not line.startswith("#"):
+                if line.startswith("# quick: "):
+                    quick.add(line[len("# quick: "):])
+                elif line and not line.startswith("#"):
                     r, name = line.split(":", 1)
                     rows.setdefault(r, []).append(name)
-    return {r: v for r, v in rows.items() if r in rounds}
+    return {r: v for r, v in rows.items() if r in rounds}, quick
+
+
+def write_must_reach(per_round: dict, quick: bool) -> None:
+    """The rounds of this walk are replaced, the others stay. A round from a --quick walk says so: pictures were not taken, so a click that depends on a window size may land elsewhere."""
+    rows, notes = {}, {}
+    if os.path.exists(MUST_REACH):
+        with open(MUST_REACH, encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if line.startswith("# quick: "):
+                    notes[line[len("# quick: "):]] = True
+                elif line and not line.startswith("#"):
+                    r, name = line.split(":", 1)
+                    rows.setdefault(r, []).append(name)
+    for r, v in per_round.items():
+        rows[r] = [n.split("_", 1)[-1] for n in v["scene_names"]]
+        notes.pop(r, None)
+        if quick:
+            notes[r] = True
+    with open(MUST_REACH, "w", encoding="utf-8", newline="\n") as f:
+        f.write("# Scene names (without the running number) the fast walk has to reach, round:scene. gate.py --write-must-reach replaces the rounds it walked.\n")
+        for r in ROUNDS:
+            if r in notes:
+                f.write(f"# quick: {r}\n")
+        for r in ROUNDS:
+            for name in rows.get(r, []):
+                f.write(f"{r}:{name}\n")
 
 
 def apply_expect(real, expect):
@@ -277,6 +306,8 @@ def write_report(out_dir: str, summary: dict, per_round: dict) -> None:
     cov = summary.get("coverage")
     if cov:
         lines.append(f"page functions called {cov['called']} / {cov['functions']} (information only)")
+    if summary["must_reach_quick_missing"]:
+        lines.append("must-reach list from a --quick walk, missed here (a warning until --write-must-reach on a real walk): " + ", ".join(summary["must_reach_quick_missing"][:40]))
     if summary["not_reached"]:
         lines.append("")
         lines.append("not reached (both or either side; click results that differ are REAL above):")
@@ -287,7 +318,7 @@ def write_report(out_dir: str, summary: dict, per_round: dict) -> None:
 
 def run(args) -> int:
     t0 = time.monotonic()
-    summary = {"base": args.base, "head": args.head, "green": False, "exit": 2, "real": [], "expected": [], "noise": {}, "scenes": 0, "shots": 0, "same_shots": 0, "noise_rows": [], "not_reached": [], "missing_must_reach": [], "tool": [], "seconds": 0,
+    summary = {"base": args.base, "head": args.head, "green": False, "exit": 2, "real": [], "expected": [], "noise": {}, "scenes": 0, "shots": 0, "same_shots": 0, "noise_rows": [], "not_reached": [], "missing_must_reach": [], "must_reach_quick_missing": [], "tool": [], "seconds": 0,
                "fingerprint": {}, "corpus": args.corpus, "profile": args.profile, "rounds": []}
     per_round = {}
     work = os.path.join(args.out, "_work")
@@ -322,19 +353,20 @@ def run(args) -> int:
         env = clean_env()
         args.red_left = 40
         coverage = {}
-        must = must_reach_rows(rounds) if args.profile == "season21" and not args.only and not args.no_must_reach else {}
+        must, soft = must_reach_rows(rounds) if args.profile == "season21" and not args.only and not args.no_must_reach else ({}, set())
         def one(r):
             with PORT_LOCK:
                 ports, cdps = fixed_ports or pick_ports(None, "ports"), fixed_cdps or pick_ports(None, "cdp-ports")
             print(f"== round {r} on {ports}", flush=True)
             hosts = ("localhost", "127.0.0.1") if args.swap_hosts else ("127.0.0.1", "localhost")
-            return run_round(r, args, work, copies, ports, cdps, (f"{hosts[0]}:{ports[0]}", f"{hosts[1]}:{ports[1]}"), env)
+            out = run_round(r, args, work, copies, ports, cdps, (f"{hosts[0]}:{ports[0]}", f"{hosts[1]}:{ports[1]}"), env)
+            print(f"   {r}: scenes {out['scenes']} shots {out['shots']} real {len(out['real'])} noise {out['noise']} tool {len(out['tool'])} {out['seconds']}s", flush=True)
+            return out
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
             results = list(pool.map(one, rounds))
         for r, out in zip(rounds, results):
             per_round[r] = out
-            print(f"   {r}: scenes {out['scenes']} shots {out['shots']} real {len(out['real'])} noise {out['noise']} tool {len(out['tool'])} {out['seconds']}s", flush=True)
             kept, excused = apply_expect(out["real"], expect)
             summary["real"] += [{"round": r, **x} for x in kept]
             summary["expected"] += [{"round": r, **x} for x in excused]
@@ -354,7 +386,7 @@ def run(args) -> int:
             reached = {n.split("_", 1)[-1] for n in out["scene_names"]}
             for name in must.get(r, []):
                 if name not in reached:
-                    summary["missing_must_reach"].append(f"{r}:{name}")
+                    summary["must_reach_quick_missing" if r in soft else "missing_must_reach"].append(f"{r}:{name}")
         if summary["missing_must_reach"]:
             summary["tool"].append("scenes that have to be reached were not: " + ", ".join(summary["missing_must_reach"][:20]))
         total = sum(len(v) for v in coverage.values())
@@ -372,11 +404,7 @@ def run(args) -> int:
     finally:
         summary["seconds"] = round(time.monotonic() - t0)
         if args.write_must_reach and summary["exit"] != 2:
-            with open(MUST_REACH, "w", encoding="utf-8", newline="\n") as f:
-                f.write("# Scene names (without the running number) the fast walk has to reach, round:scene. Regenerate with gate.py --write-must-reach.\n")
-                for r, v in per_round.items():
-                    for n in v["scene_names"]:
-                        f.write(f"{r}:{n.split('_', 1)[-1]}\n")
+            write_must_reach(per_round, quick=args.quick)
         os.makedirs(args.out, exist_ok=True)
         with open(os.path.join(args.out, "summary.json"), "w", encoding="utf-8") as f:
             json.dump(summary, f, ensure_ascii=False, indent=1)
@@ -416,7 +444,7 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
     args = parser().parse_args(argv)
     args.out = os.path.abspath(args.out)
     os.makedirs(args.out, exist_ok=True)

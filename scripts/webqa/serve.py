@@ -9,6 +9,7 @@ import importlib
 import os
 import random
 import sys
+import threading
 import time
 import traceback
 import types
@@ -66,17 +67,32 @@ server.narration_round = lambda *a, **k: None
 _seal.secrets = types.SimpleNamespace(token_hex=lambda n=16: "ab" * n)
 
 from fastapi import Body, Request  # noqa: E402
+from fastapi.concurrency import run_in_threadpool  # noqa: E402
 
 from tianxia.sqlite_world import open_world  # noqa: E402
+
+
+# Writers a request kicks off and leaves running: the next request would see their work on one side and not on the other.
+WRITERS = ("xingshi", "event-flavor")
+
+
+def _writers_done(seconds: float = 8.0) -> None:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline and any(t.name in WRITERS and t.is_alive() for t in threading.enumerate()):
+        time.sleep(0.02)
 
 
 @server.app.middleware("http")
 async def _freeze_each_request(request: Request, call_next):
     random.seed(0)
     server.BOARDS_CACHE.clear()
-    if not request.url.path.startswith("/static"):
+    static = request.url.path.startswith("/static")
+    if not static:
         server.GAMES.clear()
-    return await call_next(request)
+    response = await call_next(request)
+    if not static:
+        await run_in_threadpool(_writers_done)
+    return response
 
 
 _world_step = server.world_step

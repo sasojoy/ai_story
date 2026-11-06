@@ -69,7 +69,7 @@ out = 1`);
     await c.step('[data-act="ask-no"]', "x_seal_pick_no", { light: true });
     await c.step(ACT("seal-act-close"), "x_seal_act_close", { light: true });
     await c.py(`
-from tianxia.state import SealDuel, SealSide
+from tianxia.world_state import SealDuel, SealSide
 def side(name):
     return SealSide(name=name, power=80.0, scores={'強攻': 60.0, '固守': 60.0, '奇襲': 60.0}, role='', hp=300.0, hp_cap=300.0, last_seen=CLOCK['now'])
 def fn(shared):

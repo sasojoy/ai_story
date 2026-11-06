@@ -5,12 +5,11 @@
   3. Positive controls, both have to go red: .card padding changed, style.css moved to the end of the stylesheets.
      First through the corpus replay (quick), then through the c round.
 
-usage: python selftest.py --sha <x> --out <dir> [--ports a,b] [--cdp-ports a,b] [--chrome ...] [--node ...] [--replay-only]
+usage: python selftest.py --sha <x> --out <dir> [--ports a,b] [--cdp-ports a,b] [--chrome ...] [--node ...] [--replay-only | --walk-only] [--only flows]
 
 Exit 0 all held, 1 something did not. summary: <out>/selftest.json.
 """
 import argparse
-import io
 import json
 import os
 import shutil
@@ -28,6 +27,8 @@ import unpack  # noqa: E402
 def _gate(a, out_name, *extra) -> dict:
     out = os.path.join(a.out, out_name)
     argv = ["--base", a.sha, "--head", a.sha, "--out", out, "--rounds", "c", *extra]
+    if a.only:
+        argv += ["--only", a.only]
     for flag, value in (("--ports", a.ports), ("--cdp-ports", a.cdp_ports), ("--chrome", a.chrome), ("--node", a.node), ("--repo", a.repo)):
         if value:
             argv += [flag, value]
@@ -60,7 +61,7 @@ def _replay_controls(a, rows: list) -> None:
 
 
 def main(argv=None) -> int:
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sha", required=True)
     ap.add_argument("--out", required=True)
@@ -70,6 +71,8 @@ def main(argv=None) -> int:
     ap.add_argument("--chrome")
     ap.add_argument("--node")
     ap.add_argument("--replay-only", action="store_true", help="reuse the corpus already under --out, only the replay controls")
+    ap.add_argument("--walk-only", action="store_true", help="skip the replay controls")
+    ap.add_argument("--only", help="flows of the c round, for a shorter walk (accounts,smoke,craft is about 2.5 minutes a time, the whole round about 8)")
     a = ap.parse_args(argv)
     a.out = os.path.abspath(a.out)
     os.makedirs(a.out, exist_ok=True)
@@ -80,7 +83,8 @@ def main(argv=None) -> int:
         rows.append(("base against base is green", s1["code"] == 0, f"exit {s1['code']} real {len(s1['real'])} noise {s1['noise']} {s1['took']}s"))
         s2 = _gate(a, "same2")
         rows.append(("the same walk again has the same fingerprint", s1["fingerprint"] == s2["fingerprint"], f"{s1['fingerprint']} / {s2['fingerprint']} noise {s2['noise']}"))
-    _replay_controls(a, rows)
+    if not a.walk_only:
+        _replay_controls(a, rows)
     if not a.replay_only:
         for which in gate.MUTATIONS:
             s = _gate(a, "mut_" + which, "--mutate", which)
