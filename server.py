@@ -71,7 +71,7 @@ from tianxia import (
     naming, narration, outing,
     ollama_client, power_save, rules,
     precise, seal, seal_duel, server_bots, social, sortie, speech, tale, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
-    zhuan_end,
+    talk_log, zhuan_end,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, SESSION_SECONDS, AccountError, AccountStore, SessionStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -129,6 +129,11 @@ def zhuan_art_src(key: str | None) -> str | None:
         return None
     path = zhuan_end.art_path(key)
     return f"/static/img/{path}.webp" if (WEB / "img" / f"{path}.webp").is_file() else None
+
+
+def figure_face(cid: str) -> str | None:
+    """大勢人物的半身像（介面重整第一批圖，web/img/figures/full/<人物 id>.webp，去背）：檔案在才給網址，沒有是 None（網頁畫名字的第一個字）。"""
+    return f"/static/img/figures/full/{cid}.webp" if cid and (WEB / "img" / "figures" / "full" / f"{cid}.webp").is_file() else None
 
 
 def horse_art() -> list[str]:
@@ -471,7 +476,9 @@ def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
         _play_seen(game)
         if not paused_ok:
             _refuse_while_paused(game)
+        said, liked = talk_log.snapshot(game.state), talk_log.affinity_before(game.state)  # 往來紀錄：動作前後比，多出來的那幾輪記進小檔
         msgs = action(game)
+        _log_talk(game, said, liked)
         open_characters().save(game.state)
         tales = _tales_waiting(game)
         crowd = _crowd_waiting(game)
@@ -838,6 +845,38 @@ NARRATION_FAILS: dict[tuple[int, int, str], int] = {}  # （季, 週, 事件）�
 LAST_HUMAN = float("-inf")  # 最後一次有真人的請求（_play_seen）
 ONLINE_SECONDS = 600.0  # 省電模式下「有人在線」的窗口（跟 scripts/warm_keeper.py 同一個數，不讀 presence_seconds）
 NARRATION_KEY = "旁白改寫"  # 佇列裡的名號（不是任何角色：一人一件的規矩只管它自己）
+
+
+TALK_LOG: talk_log.TalkLogStore | None = None  # 往來紀錄的小檔（<db>-talk.sqlite）；第一次用到才開（talk_store）
+
+
+def talk_store() -> talk_log.TalkLogStore:
+    """往來紀錄的小檔：跟著現在的資料庫（TIANXIA_DB）走；換了資料庫（測試）就重開一份。"""
+    global TALK_LOG
+    db = default_path()
+    path = db.with_name(f"{db.stem}-talk.sqlite")
+    if TALK_LOG is None or TALK_LOG.path != path:
+        TALK_LOG = talk_log.TalkLogStore(path)
+    return TALK_LOG
+
+
+def _log_talk(game: Game, before: dict[str, int], liked: dict[str, int]) -> None:
+    """這一下多談的那幾輪記進往來紀錄（行動鎖裡叫）。寫不進去不擋動作：紀錄只是給人看的。假人不記。"""
+    s = game.state
+    if s.player.bot is not None:
+        return
+    lines = talk_log.new_lines(s, before)
+    if not lines:
+        return
+    loc = game.content.locations.get(s.player.location)
+    place = loc.name if loc is not None else ""
+    stamp = game.stamp(s.world.time)
+    rows = [{"figure": cid, "at": s.world.time, "stamp": stamp, "place": place, "role": role, "text": text,
+             "affinity": (liked if role == "user" else s.player.affinities).get(cid, 0)} for cid, role, text in lines]
+    try:
+        talk_store().add(name_key(s.player.name), s.player.season_number, rows)
+    except Exception:  # noqa: BLE001  小檔寫不進去（磁碟、鎖）：這一句不記，遊戲照走
+        traceback.print_exc()
 
 
 def narration_store_path() -> Path:
@@ -2123,6 +2162,11 @@ def _main_view_body(game: Game) -> dict:
     sides = weekcard.sides_card(game)
     if sides is not None:
         view["sides_card"] = sides
+    # 介面重整（2026-11-05）：此地人物那一排、正在說話的那一位（浮在最上層的對話框），像在 web/img/figures/full/<id>.webp 才給 face
+    view["figures_here"] = [{**f, "face": figure_face(f["id"])} for f in game.figures_here_view()]
+    talk_now = game.talk_view()
+    if talk_now is not None:
+        view["talk"] = {**talk_now, "face": figure_face(talk_now["id"])}
     talking = game.state.player.pending_companion  # 人物頁（減法季批 6）：正在跟他談的那一位的心意條；關著、他沒有心意沒有這個鍵
     figure = game.figure_view(talking) if talking else None
     if figure is not None:
@@ -2366,6 +2410,17 @@ PHASE_WORDS = {"preparing": "籌備中", "running": "進行中", "resting": "休
 BATTLE_PHASE_WORDS = {"muster": "集結中", "active": "開打了"}
 
 
+def _online_count(seconds: float | None = None) -> int:
+    """這 seconds 秒（預設 ONLINE_SECONDS）之內同步過的真人有幾個；只給管理頁看。讀不到就是 0。"""
+    since = time.time() - (ONLINE_SECONDS if seconds is None else seconds)
+    try:
+        with open_characters().db.snapshot() as conn:
+            row = conn.execute("SELECT COUNT(*) FROM characters WHERE is_bot = 0 AND json_extract(data, '$.last_real') >= ?", (since,)).fetchone()
+        return int(row[0] or 0)
+    except Exception:  # noqa: BLE001  管理頁的一格數字，讀不到不擋整頁
+        return 0
+
+
 def admin_now(game: Game) -> dict:
     """管理頁頂上的現況：按鈕按下去之前先看得到此刻的樣子（定戰況、推大勢、救場之前知道現在是多少）。呼叫端拿著行動鎖。"""
     world = game.state.world
@@ -2383,6 +2438,7 @@ def admin_now(game: Game) -> dict:
         "phase_text": PHASE_WORDS.get(game.world.season_phase(), ""),
         "when": game.stamp(world.time),
         "battle": fight,
+        "online": _online_count(),  # 管理頁四格的「在線」：ONLINE_SECONDS（10 分鐘）內來過的真人（介面重整 2026-11-05）
         "trends": [{"id": t.id, "label": t.name, "value": rules.world_trend_value(world, CONTENT, t.id)}
                    for t in CONTENT.scenario.trends],
     }
@@ -3074,6 +3130,28 @@ def api_figure(request: Request, id: str = ""):
     他託你的事（Game.figure_view）。關著、他什麼都沒有是 None。只讀。"""
     game = _game(request)
     return {"figure": look(game, lambda g: g.figure_view(str(id)[:40]))}
+
+
+@app.get("/api/talk_log")
+def api_talk_log(request: Request, id: str = "", season: str = "now", before: int = 0):
+    """往來紀錄（介面重整 2026-11-05）：你跟這位人物這一季（season=now）或上一季（prev）說過的話，新的在前、一次 talk_log.PAGE 句；
+    before 是上一頁最舊那一句的 id。情誼的增減照同一位人物前一句記下的情誼算。只讀，不拿行動鎖（讀的是旁邊的小檔與角色的名號）。"""
+    game = _game(request)
+    cid = str(id)[:40]
+    ch = game.content.characters.get(cid)
+    if ch is None:
+        return {"lines": [], "more": False}
+    p = game.state.player
+    number = p.season_number - (1 if season == "prev" else 0)
+    store = talk_store()
+    rows, more = store.page(name_key(p.name), cid, number, before or None, talk_log.PAGE + 1)
+    lines = []
+    for i, r in enumerate(rows[:talk_log.PAGE]):
+        said = rows[i + 1] if i + 1 < len(rows) and rows[i + 1]["role"] == "user" else None  # 同一輪玩家那一句記的是動作前的情誼
+        gain = r["affinity"] - said["affinity"] if said is not None and r["role"] == "assistant" else 0
+        lines.append({"id": r["id"], "stamp": r["stamp"], "place": r["place"], "role": r["role"], "text": r["text"], "gain": gain})
+    return {"id": cid, "name": ch.name, "face": figure_face(cid), "affinity": p.affinities.get(cid, 0),
+            "meets": store.meets(name_key(p.name), cid), "lines": lines, "more": more or len(rows) > talk_log.PAGE}
 
 
 @app.post("/api/peer/act")
