@@ -28,7 +28,7 @@ from .models import (
     BEST_OF, FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, PLACE_KINDS, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GearBook,
     GiftDef, Hints, MingtieContent, InsightDef, Location, Look, MallItem, MarkRule, MarkText, OppDef,
-    InsightScene, Opening, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
+    InsightScene, Opening, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, PersonaAxis, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
     SimRumor, SkillDef,
     SignatureArmDef, SteedDef, Squad, StoryDef, Tier4Named, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
@@ -226,6 +226,8 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         mall=_index(MallItem, _read(root / "mall.json")) if (root / "mall.json").exists() else {},  # 商城的商品（joy 寫）
         looks=_index(Look, _read(root / "looks.json")) if (root / "looks.json").exists() else {},  # 擂台形象（功能包 looks）
         relations=[_build(RelationDef, raw) for raw in _read(root / "relations.json")] if (root / "relations.json").exists() else [],
+        personas={cid: [_build(PersonaAxis, raw) for raw in rows] for cid, rows in _read(root / "personas.json").items() if not cid.startswith("_")}
+        if (root / "personas.json").exists() else {},  # 人物性子（features/persona）
         itineraries=[_build(Itinerary, raw) for raw in _read(root / "itineraries.json")] if (root / "itineraries.json").exists() else [],
         mark_rules=[_build(MarkRule, raw) for raw in _read(root / "mark_rules.json")] if (root / "mark_rules.json").exists() else [],
         outing_lines=_read(root / "outing_lines.json") if (root / "outing_lines.json").exists() else {},  # 探索一顆的段落（減法季批 2）

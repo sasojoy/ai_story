@@ -76,6 +76,7 @@ from tianxia.content import env_profile, load_content, profile_line, serving_pro
 from tianxia.characters import name_key, open_characters
 from tianxia.database import default_path, open_database
 from tianxia.flavor import FlavorJob
+from tianxia import persona_rules  # 人物性子：簡介的如今與變化紀錄（共用規則層）
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, TEXT_TALKS, Game, Refused
 from tianxia.core import features as features_core  # 功能包：殼照 FEATURES 掛管理者工具與路由（開發規範手冊 3.1）
 from tianxia.core import omen_base  # 門下頁的伏筆物品：核心的查詢服務（全部拆包第 40 批，原本經舊名 foreshadow 讀軍情包）
@@ -83,7 +84,6 @@ from tianxia.features.map import views as map_views  # 輿圖的 /api/map 資料
 from tianxia.features.feast import rules as feasts  # 宴客自己寫的敬酒詞：鎖外評分（三段式還在殼裡，過渡）
 from tianxia.features.notify import routes as notify_routes  # 手機通知：全部拆包第 53 批搬進手機通知包；殼留 state 與 4 個一行薄包裝（main 印一行、same_behavior 與測試叫）
 from tianxia.features.tale import routes as tale_routes  # 戰記：全部拆包第 52 批搬進戰記包；殼留 state 與 8 個一行薄包裝（act、look、main_view 原位叫）
-from tianxia.features.socialize import intros as socialize_intros  # 點大勢人物的簡介（主幹合回 D 段；/api/main 組「此地人物」那一排時疊上去，同 figure_face 留在殼的 _main_view_body）
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.sqlite_world import open_world
@@ -135,6 +135,31 @@ def zhuan_art_src(key: str | None) -> str | None:
 def figure_face(cid: str) -> str | None:
     """大勢人物的半身像（介面重整第一批圖，web/img/figures/full/<人物 id>.webp，去背）：檔案在才給網址，沒有是 None（網頁畫名字的第一個字）。"""
     return f"/static/img/figures/full/{cid}.webp" if cid and (WEB / "img" / "figures" / "full" / f"{cid}.webp").is_file() else None
+
+
+def _figure_intros() -> dict:
+    """點大勢人物那一層的人物簡介（content/figure_intros.json；給不熟三國的玩家看，Joy 11/6）：沒有這個檔就是空的，畫面不畫簡介。"""
+    try:
+        data = json.loads((ROOT / "content" / "figure_intros.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in data.items() if not k.startswith("_") and isinstance(v, dict)}
+
+
+FIGURE_INTROS = _figure_intros()
+
+
+def figure_intro(cid: str, game: Game | None = None) -> dict | None:
+    """{who 是誰, role 身分, nature 本性, now 如今, history 變化紀錄}。人物性子（功能包 persona；共用規則層 persona_rules.view）開著、他換過段時
+    now 寫如今那一段、history 一行一筆（「第 1 週・週五 起，脾氣沒那麼火爆了」），拉鋸與「你勸過他 N 次」接在最後；
+    關著、沒換過段 now 是 None、history 是空的，畫面不畫這兩格。簡介檔沒寫他、他卻有性子的，只畫如今與紀錄。"""
+    row = FIGURE_INTROS.get(cid) or {}
+    shift = persona_rules.view(game.state, game.content, cid) if game is not None else None
+    if not row and not (shift and (shift["now"] or shift["history"])):
+        return None
+    extra = [x for x in ((shift or {}).get("torn"), (shift or {}).get("mine")) if x]
+    return {"who": row.get("who", ""), "role": row.get("role", ""), "nature": row.get("nature", ""),
+            "now": (shift or {}).get("now"), "history": [*(shift or {}).get("history", []), *extra] if shift else []}
 
 
 def horse_art() -> list[str]:
@@ -2033,7 +2058,7 @@ def _main_view_body(game: Game) -> dict:
     if sides is not None:
         view["sides_card"] = sides
     # 介面重整（2026-11-05）：此地人物那一排、正在說話的那一位（浮在最上層的對話框），像在 web/img/figures/full/<id>.webp 才給 face
-    view["figures_here"] = [{**f, "face": figure_face(f["id"]), "intro": socialize_intros.figure_intro(f["id"])} for f in game.figures_here_view()]
+    view["figures_here"] = [{**f, "face": figure_face(f["id"]), "intro": figure_intro(f["id"], game)} for f in game.figures_here_view()]
     talk_now = game.talk_view()
     if talk_now is not None:
         view["talk"] = {**talk_now, "face": figure_face(talk_now["id"])}

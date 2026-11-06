@@ -22668,7 +22668,7 @@ _prep_register_track("legacy", LegacyScenario, (("tianxia/features/legacy/action
 
 # ═══════════════════════════ here、places（主幹合回 develop 第 2 段 D）═══════════════════════════
 # 計畫 docs/superpowers/plans/2026-11-06-develop合回-D.md。整段接在檔尾、最後兩行登記（_here_register_track），PM 合的時候不跟別人的行穿插。
-# here 盯這一批搬的 figures_here_view、talk_view、figures.side_name、figure_intro；places 盯留在原位的 place_state、place_state_view 與邸報（合回之前沒有一軌點名）。
+# here 盯這一批搬的 figures_here_view、talk_view、figures.side_name 與留在殼的 figure_intro（合回第 4 段搬回 server.py）；places 盯留在原位的 place_state、place_state_view 與邸報（合回之前沒有一軌點名）。
 # 往來紀錄（talk_log、/api/talk_log）不在這裡：小檔只清不比，這一批另外用兩台真伺服器比一次（計畫第六節）。角色的名字都是原創的。
 
 
