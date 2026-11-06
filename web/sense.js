@@ -156,3 +156,13 @@
       }
     });
   }
+
+  // 神品意境「自己取一個名字…」（epiphany.OPTION:OWN）：按了不送 /api/choose，就地換成輸入框（S.godNaming 記著），
+  // 送出時帶 text（godName）。以前這一顆按下去只回一句「（寫下你替它取的名字。）」，沒有地方寫，等於按不動（FB-901）
+  const OWN_NAME_ID = "dunwu:own";
+  const OWN_NAME_HINT = "這個境界叫什麼？（2～6 字）"; // 待 joy 潤：輸入框的提示
+  const OWN_NAME_GO = "就叫這個"; // 待 joy 潤：送出鈕
+  function ownNameForm(o) {
+    return `<form class="free answer own-name" id="own-name-form"><input class="input" name="text" maxlength="6" placeholder="${esc(OWN_NAME_HINT)}" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">${esc(OWN_NAME_GO)}</button></form>`;
+  }
+  const namingGodNow = (o) => S.godNaming && o.id === OWN_NAME_ID && o.enabled;

@@ -14,6 +14,7 @@ from tianxia.core.features import Feature, Outcome, StatusHook, WorldHook, slot_
 
 class FigureActsFeature(Feature):
     name = "figure_acts"
+    web = ("figure_acts.js",)  # 全部拆包第 67 批從 main.js 切出來
     prefix = ("aid", "plan")  # aid:guard／rally／visit:<人物>、plan:help／block:<站>
     bot_always = ("aid:",)  # 整季機器人：護衛、犒軍、探望不按（原本寫在 bot.py 的排除清單；plan: 照舊按得到）
     # 認領的 PlayerState 欄位（手冊 3.5：留在原地）：閉門不見到幾時、這一季打贏每位人物幾次、聲威哪天扣過、三階與四階的帳、領過盤算結果的站。換季全部跟著新角色重來

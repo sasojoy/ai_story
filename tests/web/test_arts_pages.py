@@ -3,6 +3,7 @@ web/app.js 沒有建置步驟、也沒有前端測試框架：這裡把兩頁的
 檢查出來的 HTML 與按鈕按下去之後的動作。node 由 tests/webharness.py 跑（切函式的 fn、konst 也在那裡）；沒有 node 就略過。"""
 # 畫法在 web/cultivation.js、web/craft.js（全部拆包第 64 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 # 畫法在 web/gear.js（全部拆包第 65 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
+# 畫法在 web/guide.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import json

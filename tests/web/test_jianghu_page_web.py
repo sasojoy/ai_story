@@ -1,5 +1,6 @@
 """江湖頁的畫面：第一屏與行動列、此地還能做的摺疊、狀態列、剛剛的卡片。原本一張回饋單一個檔（FB-087、105、107、120、123、135、136、198、360、663、664、670、671），2026-10-27 測試整理 1b 併成這一檔；各段開頭照抄原本那一檔的說明。"""
 # 畫法在 web/guide.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
+# 畫法在 web/battle.js、web/peers.js、web/sortie.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 import re
 from pathlib import Path

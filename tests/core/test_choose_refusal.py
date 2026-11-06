@@ -4,6 +4,7 @@
 選單上的按鈕（`.options .btn`）以前就會還原；閒著時那一排行動列的格子（`.act-ink`：交友、單獨的求見、遊歷）按下去也會換上
 「對方沉吟中…」「兩人對峙……」並標 busy，失敗之後沒有人把它還原，拒絕的提示三秒後消失，格子還寫著對方在回話。"""
 # 畫法在 web/sense.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
+# 畫法在 web/companions.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import pytest

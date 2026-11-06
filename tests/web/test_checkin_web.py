@@ -1,6 +1,7 @@
 """正式季整合第 7 批：每日簽到（設計 9.1 第 4 組丙）。減法季批 1 乙案（Joy 2026-10-24）起簽到不放鈕：每天第一次同步引擎自動領，
 本週卡上沒有簽到的字；要挑四階的日子本週卡底下冒一張小卡、四顆挑屬性的鈕。這一週七格（每天給什麼）收在「為什麼」裡（checkinPeek 的 panel）。
 把 main.js 的 checkinPeek、checkinPickHtml 與 weekCardHtml 切出來交給 node 跑；沒有 node 就略過。"""
+# 畫法在 web/checkin.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import random

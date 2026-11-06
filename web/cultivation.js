@@ -889,3 +889,35 @@
   }
 
   registerPage("practice", { render: pagePractice });
+
+  // 熔煉的問句（W9、FB-081）：整句由伺服器寫好、放在按鈕的 data-confirm（library.melt_confirm：有心得就寫退回多少，沒有就直說
+  // 只空出一格；基礎武學再接一句去哪裡重學，只說一次）。伺服器沒給（舊版）才用這句老問題
+  // 批量熔煉（修練頁功法庫）：勾、勾選篩出來的全部（meltPickShown）、確認之後一次送出
+  function meltToggle(key, id) {
+    if (!S.meltSel || !id) return;
+    const list = S.meltSel[key];
+    S.meltSel = { ...S.meltSel, [key]: list.includes(id) ? list.filter((v) => v !== id) : [...list, id] };
+    renderPage();
+  }
+  function askMeltMany(el) {
+    const sel = S.meltSel;
+    if (!sel || !(sel.arts.length + sel.ins.length)) return;
+    const parts = [sel.arts.length ? `${sel.arts.length} 門武學` : "", sel.ins.length ? `${sel.ins.length} 個意境` : ""].filter(Boolean).join("、");
+    const v = el.dataset.v | 0;
+    const warn = sel.ins.length ? "靠這些意境修練的武學，熔了就不能再修練。" : "";
+    ask(`把勾的 ${parts}一起熔掉？${v > 0 ? `心得 +${v}。` : ""}熔掉就沒了。${warn}`, "熔掉", async () => {
+      const body = { arts: sel.arts, insights: sel.ins };
+      S.meltSel = null;
+      await mx("melt_many", body);
+    });
+  }
+  const meltAskText = (el) => el.dataset.confirm || `把【${el.dataset.name}】熔成心得？熔掉就沒了。`;
+
+  // 熔煉與意境化成心得都先問一次，用頁面自己的確認層（ask，管理者工具用的那一個；FB-085）：以前是瀏覽器內建的確認框，
+  // 跟其他按鈕不一樣、手機上還會被擋掉。按「熔掉」才送，取消或點旁邊暗處什麼都不送
+  function askMelt(el) {
+    ask(meltAskText(el), "熔掉", () => mx("melt", { art: el.dataset.id }));
+  }
+  function askMeltInsight(el) {
+    ask(`把「${el.dataset.name}」化成心得？靠它的武學從此不能修練。`, "化成心得", () => mx("melt_insight", { insight: el.dataset.id }));
+  }

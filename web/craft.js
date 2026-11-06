@@ -822,3 +822,38 @@
   }
 
   registerPage("craft", { render: pageCraft });
+
+  // 功法清單的篩選（FB-085）：煉製頁一排四顆（全部／內功／武學／意境）；修練頁用卷軸卡自己的庫篩選（libFilter，也記在 localStorage）。
+  // 選擇記在這個瀏覽器的 localStorage（存不了就只在這一頁有效，讀不到就當沒選過）。
+  // 排序是伺服器排好的（skillview.art_rows：身上的先，再品質、成、名字），兩頁畫的是同一份，這裡只決定哪些要畫
+  const ART_FILTERS = ["全部", "內功", "武學", "意境"];
+  const filterKey = (page) => `tx-arts-filter-${page}`;
+  function artFilter(page) {
+    // 序章的煉製頁（第 4 步要放進爐子的基礎拳腳與剛悟到的意境）一律全列：瀏覽器記著的是上一個角色的篩選，不能把師父點名的藏起來
+    if (page === "craft" && pro()) return "全部";
+    S.artFilter = S.artFilter || {};
+    if (!(page in S.artFilter)) {
+      let saved = null;
+      try { saved = localStorage.getItem(filterKey(page)); } catch (e) { /* 讀不到就當沒選過 */ }
+      S.artFilter[page] = ART_FILTERS.includes(saved) ? saved : "全部";
+    }
+    return S.artFilter[page];
+  }
+  function setArtFilter(page, value) {
+    if (!ART_FILTERS.includes(value)) return;
+    S.artFilter = S.artFilter || {};
+    S.artFilter[page] = value;
+    try { localStorage.setItem(filterKey(page), value); } catch (e) { /* 存不了就只在這一頁有效 */ }
+  }
+  // 這一頁現在的篩選下，這一門武學要不要畫（選「意境」時武學一門都不畫）。煉製頁的意境一律畫：它是拿一門武學配一個意境的地方，
+  // 「內功」「武學」篩選不把意境整排藏起來（沒有提示會讓人以為意境不見了）；修練頁的庫另有卷軸卡的篩選（libFilter）
+  function showArts(page, art) {
+    const f = artFilter(page);
+    return f === "全部" || f === art.kind;
+  }
+  // 四顆小鈕排一行，併在煉製頁「功法」那一行標籤裡（第一屏不多一行）
+  function filterChips(page) {
+    if (page === "craft" && pro()) return ""; // 序章裡沒有篩選可選（artFilter 一律全列），不畫鈕
+    const now = artFilter(page);
+    return `<span class="fchips" role="group" aria-label="篩選">${ART_FILTERS.map((f) => `<button type="button" class="fchip${f === now ? " on" : ""}" data-act="art-filter" data-page="${page}" data-filter="${f}" aria-pressed="${f === now}">${f}</button>`).join("")}</span>`;
+  }

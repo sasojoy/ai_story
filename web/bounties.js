@@ -96,3 +96,32 @@
       if (S.main && S.main.shop) renderShop();
     }, STAMP_MS);
   }
+
+  // 手上揭了的懸賞，加上身上有合用兵器的求兵（status.bounties，bounties.status；後者多一行 have）：一張一行，怎麼交差、賞什麼。懸賞榜在城鎮才看得到，
+  // 選單上有 act:bounties 時卡底下一顆「看懸賞榜」（就是那個選項，按了走 choose），不在城鎮寫一句去哪裡看。
+  // 預設展開，收起來的狀態照手上那幾張記住（S.bountyShut）：揭了新的、交了差，清單變了就重新展開
+  // 21 天季的賞拆成小籤（企劃者挑第 5 批畫面第三組丙；bounties.reward_tags）：一樣一格，附的那一樣金框、重賞紅框。字與數字照伺服器給的
+  function rewardChips(tags) {
+    return `<div class="rtags">${tags.map((t) => `<span class="rtag${t.kind ? ` ${esc(t.kind)}` : ""}">${t.k ? `<em>${esc(t.k)}</em>` : ""}${esc(t.v)}</span>`).join("")}</div>`;
+  }
+
+  function bountiesHtml(list, options) {
+    const key = list.map((b) => b.id).join(",");
+    const board = (options || []).find((o) => o.id === "act:bounties");
+    const level = (list.find((b) => b.level) || {}).level; // 21 天季：「賞照你第 N 級」寫在卡頭
+    const rows = list.map((b) => `
+      <div class="order">
+        <div class="order-head"><b>${esc(b.title)}</b><span>${esc(b.issuer)}</span></div>
+        <div class="order-how">${esc(b.how)}</div>
+        ${b.tags ? `<div class="order-meta">${rewardChips(b.tags)}</div>` : `<div class="order-meta">${esc(b.reward)}</div>`}
+        ${b.due ? `<div class="order-meta">${esc(b.due)}</div>` : ""}
+        ${b.have ? `<div class="order-meta">${esc(b.have)}</div>` : ""}
+      </div>`).join("");
+    // 懸賞榜正開著（第二層「返回」或第三層「回到懸賞榜」，選單就是榜）：卡底下不再寫什麼
+    const open = (options || []).some((o) => o.id === "bounty:back" || o.id === "bounty:unpick");
+    const foot = open ? "" : board
+      ? `<button class="btn small" data-act="choose" data-id="act:bounties" ${board.enabled ? "" : "disabled"}>看懸賞榜</button>`
+      : '<div class="order-meta">到城鎮的懸賞榜前，可以揭新的、放棄，或交出合用的兵器。</div>';  // 待 joy 潤（2026-10-21 拿掉求藝：不再寫「功夫」）
+    return `<details class="fold bounties" data-key="${esc(key)}" ${S.bountyShut === key ? "" : "open"}>
+      <summary>🪧 懸賞（${list.length}）${level ? `<span class="order-level">${esc(level)}</span>` : ""}</summary><div class="fold-body">${rows}${foot ? `<div class="bounty-foot">${foot}</div>` : ""}</div></details>`;
+  }

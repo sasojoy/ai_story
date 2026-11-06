@@ -4,6 +4,7 @@ web/app.js 沒有建置步驟、也沒有前端測試框架：這裡把整支 ap
 檢查畫出來的 HTML 與發光的鈕。沒有 node 就略過。沒有瀏覽器可開，這是瀏覽器驗收那一步（手機寬度 375 的排版另看）的替身：
 驗的是「哪一步畫什麼、藏什麼、哪顆鈕發光」，不是長相。"""
 # 畫法在 web/guide.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
+# 畫法在 web/peers.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import json

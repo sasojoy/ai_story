@@ -5,6 +5,7 @@ webharness.app_source() 把每支 js 接成一個 IIFE，函式全提升，**抓
 同一個 vm context（跟瀏覽器一樣：頂層的 const 下一支看得到，還沒載入的碰了就 ReferenceError）。沒有 node 的那幾條略過。"""
 # 畫法在 web/smithy.js、web/gear.js、web/outlets.js、web/tavern.js、web/bounties.js、web/bout.js（全部拆包第 65 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 # 畫法在 web/notify.js、web/peers.js、web/guide.js、web/sense.js、web/seal.js、web/zhuan.js、web/sortie.js、web/travel.js、web/tale.js、web/story.js、web/companions.js、web/territory_acts.js、web/state.js、web/fit.js（全部拆包第 66 批從 app.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
+# 畫法在 web/battle.js、web/explore.js、web/military.js、web/figure_acts.js、web/checkin.js、web/faction.js、web/hire.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import pytest

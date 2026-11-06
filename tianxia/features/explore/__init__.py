@@ -21,7 +21,7 @@ from tianxia.core.features import Feature, StatusHook, Verb, WorldHook
 class ExploreFeature(Feature):
     name = "explore"
     prefix: str | None = None  # act:explore 是核心的 act 前綴；走一趟沒有選項（/api/do/outing、outing_say、outing_tale、outing_erase）
-    web = ("outing.js",)  # 走一趟的畫面（本來就是獨立的檔；這一輪不切網頁，位置不動、index.html 照舊手寫）
+    web = ("outing.js", "explore.js")  # 走一趟的畫面（本來就是獨立的檔；這一輪不切網頁，位置不動、index.html 照舊手寫）
     content = ("outing_lines.json",)  # 出門一趟回來那一段的句子（content.py 照舊讀；檔名照舊，批次表第二節）
     # 走一趟這一趟（outing）、探索一顆上一趟要選的那件事（outing_last）、第幾次探索（explore_seq）、
     # 遭遇的疲勞那一天與場數（fight_day、fights_today：三道閘的前一道）；換季全部跟著新角色重來

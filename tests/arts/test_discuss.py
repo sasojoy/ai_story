@@ -3,6 +3,7 @@
 煉製只剩意境＋意境（Joy 2026-10-21）：論武跟著只剩意境，武學不再拿出來論。
 
 兩個角色開在同一個資料庫；每一個動作照伺服器的做法先從資料庫重讀自己，做完存回去（同 test_spar）。"""
+# 畫法在 web/peers.js（全部拆包第 67 批從 main.js 切出來）；寫在這裡 test_for 改包檔時才挑得到
 from __future__ import annotations
 
 import random
