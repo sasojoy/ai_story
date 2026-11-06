@@ -190,7 +190,10 @@ class Effect(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("contribution", "story"))
+        return _drop_unset(handler(self), (
+            "contribution",
+            "story",
+        ))
 
 
 class Material(_Strict):
@@ -290,7 +293,11 @@ class Check(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        data = _drop_unset(handler(self), ("stats", "shift", "v2"))
+        data = _drop_unset(handler(self), (
+            "stats",
+            "shift",
+            "v2",
+        ))
         if isinstance(data, dict) and data.get("tier") == 1:
             del data["tier"]
         if isinstance(data, dict):  # 照內容寫的那一種寫回去：寫 grade 的不寫換算好的 difficulty，舊寫法不多一個 grade
@@ -476,7 +483,10 @@ class FreeTextChoice(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("outcomes", "outcomes_only"))
+        return _drop_unset(handler(self), (
+            "outcomes",
+            "outcomes_only",
+        ))
 
 
 class Event(_Strict):
@@ -804,7 +814,10 @@ class Location(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("desc_marks", "explore_mix"))
+        return _drop_unset(handler(self), (
+            "desc_marks",
+            "explore_mix",
+        ))
 
     def describe(self, world_flags: set[str]) -> str:
         """此刻的描寫：desc_when 裡第一個旗標成立的那一版，都不成立時是 description。"""
@@ -1403,12 +1416,32 @@ class TutorialGoal(_Strict):
 # 序章每一步 reveal 可以寫的畫面元件（網頁照它藏／亮，見 web/app.js 的 pro()）；content.validate 擋拼錯的
 REVEAL_KEYS = frozenset({
     "all",  # 全部亮齊（出師那一步）
-    "stamina", "hp", "silver", "xinde", "stats",  # 狀態列：體力、氣血、銀兩、心得、點名號展開屬性與配點
-    "tab:jianghu", "tab:practice", "tab:craft", "tab:map", "tab:news",  # 底下的分頁
+    # 狀態列：體力、氣血、銀兩、心得、點名號展開屬性與配點
+    "stamina",
+    "hp",
+    "silver",
+    "xinde",
+    "stats",
+    # 底下的分頁
+    "tab:jianghu",
+    "tab:practice",
+    "tab:craft",
+    "tab:map",
+    "tab:news",
     "tab:mall",  # 商城的兩個入口（底部第六格、齒輪旁的錠子鈕；網頁的 data-glow，商城開著才畫）：序章裡寫了才亮，出了草廬一律在（web/app.js 的 mallShown）
-    "act:explore", "act:train", "act:rest", "act:social", "act:move",  # 江湖頁行動列的五格
+    # 江湖頁行動列的五格
+    "act:explore",
+    "act:train",
+    "act:rest",
+    "act:social",
+    "act:move",
     "act:practice",  # 行動列的操練／練功那一格（新手引導重做，Config.training）
-    "board", "quest", "fronts", "orders", "minimap",  # 江湖頁的公告卡、主線與目標、戰況、軍令卡、小地圖
+    # 江湖頁的公告卡、主線與目標、戰況、軍令卡、小地圖
+    "board",
+    "quest",
+    "fronts",
+    "orders",
+    "minimap",
     "stances",  # 江湖頁最上面那一排小標裡的「態勢」（第一季才有）；跟公告卡（board）一起亮，見 Task 6 的 shown("stances")
 })
 # 序章每一步 glow 可以寫的鍵（網頁的 data-glow，見 web/guide.js 的 applyGlow）：亮得起來的元件加上修練頁、煉製頁裡的幾顆鈕。
@@ -1427,7 +1460,15 @@ GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({
 #   tests/season/test_real_content.py::test_every_idle_menu_id_is_one_the_prologue_allow_list_knows 整季隨機玩、對照每個閒著的選單，
 #   查「引擎做得出來的有沒有漏列」，但只看得到那一季玩到的 id。引擎多了閒著選單的行動，記得手動補進這兩個。
 ALLOW_FIXED = frozenset({
-    "act:explore", "act:train", "act:socialize", "act:rest", "act:summons", "act:call", "act:recruit", "act:duty", "act:convoy",
+    "act:explore",
+    "act:train",
+    "act:socialize",
+    "act:rest",
+    "act:summons",
+    "act:call",
+    "act:recruit",
+    "act:duty",
+    "act:convoy",
     "act:rank2",  # 第 2 階守勢行動（正式版乙一）
     "act:bounties",  # 懸賞榜（城鎮類的地點、有看得到的單；每季都有）
     "act:smith",  # 鐵匠鋪（兵器設計，城鎮類的地點）
@@ -1438,19 +1479,34 @@ ALLOW_FIXED = frozenset({
     "act:dadian",  # 打點（21 天季的銀兩出口收成一間店）
     "act:tavern",  # 酒肆（帶「酒肆」標籤的城鎮；tianxia/tavern.py）
     "act:drill",  # 城裡操練（新手引導重做；tianxia/training.py）
-    "ambush:lift", "works:stockpile",  # 後期體力玩法：收伏、屯糧練兵
+    # 後期體力玩法：收伏、屯糧練兵
+    "ambush:lift",
+    "works:stockpile",
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
 # act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）
 ALLOW_FAMILIES = (
-    "act:challenge:", "act:rank:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:",
+    "act:challenge:",
+    "act:rank:",
+    "call:",
+    "move:",
+    "learn:",
+    "faction:",
+    "defect:",
+    "opp:",
+    "fs:",
     "explore:",  # 探索三選一的三顆（第 13 批拿掉；初入江湖的 glow、allow 還寫到，第 14 批連這幾步一起清）
     "sect:",  # 拜入門派（一類一顆開著時從交友搬出來，sect:<事件 id>；序章裡不出現）
     "ambush:set:",  # 設伏劫道（ambush:set:<另一頭>；序章裡不出現）
-    "aid:guard:", "aid:rally:", "aid:visit:",  # 護著大勢人物（figure_aid；序章裡沒有陣營，不出現）
+    # 護著大勢人物（figure_aid；序章裡沒有陣營，不出現）
+    "aid:guard:",
+    "aid:rally:",
+    "aid:visit:",
     "act:recruit:",  # 招募歷史武將（act:recruit:<人物>，歷史武將同行；序章裡不出現）
     "feast:join:",  # 入席（宴客，tianxia/feasts.py；序章裡不出現）
-    "plan:help:", "plan:block:",  # 盤算（世界活起來，tianxia/plans.py；序章裡不出現）
+    # 盤算（世界活起來，tianxia/plans.py；序章裡不出現）
+    "plan:help:",
+    "plan:block:",
 )
 
 
@@ -1714,7 +1770,9 @@ class FactionDef(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("verdict_by",))
+        return _drop_unset(handler(self), (
+            "verdict_by",
+        ))
 
 
 class SeasonOneOff(_Strict):
@@ -4900,7 +4958,10 @@ class FigureDef(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("stances", "errands"))
+        return _drop_unset(handler(self), (
+            "stances",
+            "errands",
+        ))
 
 
 class TimetableOutcome(_Strict):
@@ -5628,4 +5689,9 @@ class Content(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("mark_rules", "outing_lines", "verdicts", "storylines"))  # 沒有痕跡規則、段落句子、評曰固定句的內容（測試內容）序列化一個鍵都不多
+        return _drop_unset(handler(self), (  # 沒有痕跡規則、段落句子、評曰固定句的內容（測試內容）序列化一個鍵都不多
+            "mark_rules",
+            "outing_lines",
+            "verdicts",
+            "storylines",
+        ))
