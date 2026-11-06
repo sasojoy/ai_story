@@ -12,6 +12,7 @@ from test_prologue_web import run as run_classic
 import server
 import webharness
 from tianxia.engine import Game
+from tianxia.features.socialize import intros
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 
@@ -154,7 +155,7 @@ def test_tapping_a_figure_shows_who_they_are_for_players_new_to_the_era(wan):
     import json
 
     figures = json.loads((server.ROOT / "content" / "figures.json").read_text(encoding="utf-8"))
-    assert all(server.figure_intro(f["id"]) and server.figure_intro(f["id"])["nature"] for f in figures)
+    assert all(intros.figure_intro(f["id"]) and intros.figure_intro(f["id"])["nature"] for f in figures)
     m = server.main_view(wan)
     hejin = next(f for f in m["figures_here"] if f["id"] == "hejin")
     assert hejin["intro"]["role"] and hejin["intro"]["now"] is None and hejin["intro"]["history"] == []
