@@ -2988,12 +2988,6 @@ class Game:
         """時刻表決戰收場時的玉璽碎片（玉璽包 actions；事件 battle_end 的 seal 那一格直接叫包的，這一行只剩測試叫）。"""
         seal_actions.settle(self, battle, definition, result)
 
-    def _seal_challenge(
-        self, battle, definition: BattleDef, reg, tianji: int, winner: str, margin: str, need: int, held: set[str],
-    ) -> Any:
-        """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
-        return seal_duel_actions.challenge(self, battle, definition, reg, tianji, winner, margin, need, held)
-
     def _seal_challengers(self, battle, side: str, need: int, holder: str, blocked: str | None, held: set[str]) -> list:
         """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
         return seal_duel_actions.challengers(self, battle, side, need, holder, blocked, held)
@@ -3005,10 +2999,6 @@ class Game:
     def _seal_side_of(self, name: str) -> Any:
         """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
         return seal_duel_actions.side_of(self, name)
-
-    def _my_seal_duel(self) -> Any:
-        """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""
-        return seal_duel_actions.my_duel(self)
 
     def _seal_tick(self) -> None:
         """本體在玉璽包 tianxia/features/seal/duel_actions.py（第 28 批），這裡一行委派。"""

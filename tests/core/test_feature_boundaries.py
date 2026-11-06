@@ -2334,9 +2334,9 @@ GAME_IMPORTS |= {"tianxia.features.seal.card", "tianxia.features.seal.duel_actio
 GAME_DELEGATES |= {
     # 核心原位叫的：_seal_tick（world_tick、options）、_seal_options（options）、_seal_act（choose）、seal_view／seal_duel_card／seal_watch（status_data）；
     # 殼叫的：seal_free_text_prompt／note、seal_text_request、seal_gamble（server.py seal_text、free_text 欄）、seal_use（MAIN_ACTIONS）、
-    # 六個 admin_seal_*（ADMIN_ACTIONS）；量表與測試叫的：_seal_challengers、_seal_spectators（scripts/measure_seal.py 換它們）、_seal_challenge、
-    # _seal_side_of、_my_seal_duel（測試；seal_use 也有測試換 Game.seal_use）
-    "_seal_challenge", "_seal_challengers", "_seal_spectators", "_seal_side_of", "_my_seal_duel", "_seal_tick", "_seal_options", "_seal_act",
+    # 六個 admin_seal_*（ADMIN_ACTIONS）；量表與包內經 ctx 叫的：_seal_challengers、_seal_spectators（scripts/measure_seal.py 換它們）；
+    # 只剩測試叫的：_seal_side_of（seal_use 也有測試換 Game.seal_use）。_seal_challenge、_my_seal_duel 沒有呼叫端，不留委派
+    "_seal_challengers", "_seal_spectators", "_seal_side_of", "_seal_tick", "_seal_options", "_seal_act",
     "seal_free_text_prompt", "seal_free_text_note", "seal_text_request", "seal_gamble", "seal_duel_card", "seal_watch",
     "seal_view", "seal_use",
     "admin_seal_stir", "admin_seal_assign", "admin_seal_duel", "admin_seal_fix", "admin_seal_cancel", "admin_seal_choices",
