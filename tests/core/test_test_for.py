@@ -988,7 +988,7 @@ def test_a_reexported_name_counts_only_when_written_after_the_module_word():
     assert not test_for.names_through(["arena"], "title_for", "c.config.arena.enabled = True\nleaderboard.title_for\n")
 
 
-STAGE_PACKAGES = ["bout", "battle", "feast", "guide", "looks", "legacy", "hire"]  # 有 <包>_stage.py 的包（引導是第 22 批合進 develop 的，第 12 批合併時補上）
+STAGE_PACKAGES = ["bout", "battle", "feast", "guide", "looks", "legacy", "hire", "persona"]  # 有 <包>_stage.py 的包（引導是第 22 批合進 develop 的，第 12 批合併時補上）
 
 
 def test_the_stage_packages_are_every_package_with_a_stage_file():
