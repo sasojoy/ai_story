@@ -1,7 +1,7 @@
 """宴客的鎖外工作（功能包 tianxia/features/feast/；原本寫在 server.py，全部拆包第 69 批）：殼（server 模組，參數 shell）照 FEATURES 接（outlock 掛鉤）；沒有路由（routes 掛鉤照舊回 None）。
 這個檔只在殼建鎖外工作時才 import（__init__ 的掛鉤裡面才 from . import routes；殼頂上留一行包裝也 import）；不 import 網頁框架。殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
 tests/server/test_server.py 的 _users_in_server 掃這個檔看函式名：裡面寫 shell.model_call，不要先存成別的變數。
-same_behavior 的 relay 軌 selftest 改 fallback=feasts.DEFAULT_SCORE 那一句（全檔要剛好一處）：不要拆行或改名。"""
+same_behavior 的 relay 軌 selftest 改 feast_text 裡 model_call 帶的保底分那一句（全檔要剛好一處，這段說明也不要照抄那一句）：不要拆行或改名。"""
 from tianxia.core.features import Outlock
 
 from . import rules as feasts

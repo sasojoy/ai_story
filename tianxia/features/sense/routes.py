@@ -1,7 +1,7 @@
 """有所感的 API（功能包 tianxia/features/sense/；原本寫在 server.py，全部拆包第 24 批照商城的做法搬進來）：殼（server 模組，參數 shell）
 照 FEATURES 掛（server 的 features_core.routers 那一行；前面沒有吃得到 /api/sense* 的帶參數路由，先後不影響）。
 這個檔只在殼掛路由時才 import（引擎與假人程式不碰網頁框架）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
-畫完那一筆的鎖外三段式（A、B、C，B 段叫模型）照舊在殼的 server.sense_draw（鎖外工作的掛鉤是總表第 69 批），這裡只接路由。"""
+畫完那一筆（sense_draw）與靜心思名（epiphany_think）的鎖外三段式（A、B、C，B 段叫模型）第 69 批搬進這個檔；分派與 EPIPHANY_THINK 留在殼的 choose。"""
 from fastapi import APIRouter, Body, Request
 
 from . import epiphany, glyph, insight_llm

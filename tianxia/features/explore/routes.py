@@ -1,6 +1,6 @@
 """走一趟的動作表（功能包 tianxia/features/explore/；原本寫在 server.py 的 MAIN_ACTIONS、ADMIN_ACTIONS，全部拆包第 68 批）：殼照 FEATURES 接（main_actions、admin_tools 掛鉤）。
 這個檔只在殼建動作表時才 import（__init__ 的掛鉤裡面才 from . import routes）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
-走一趟的留言（/api/do/outing_say，自己寫的那一句先在鎖外審）與遊記（/api/do/outing_tale）是鎖外三段式，留在殼。"""
+走一趟的留言（/api/do/outing_say，自己寫的那一句先在鎖外審）與遊記（/api/do/outing_tale）是鎖外三段式，第 69 批搬進這個檔（outlock 掛鉤）。"""
 from tianxia import speech
 from tianxia.core.features import AdminTool, Outlock, no_gate
 

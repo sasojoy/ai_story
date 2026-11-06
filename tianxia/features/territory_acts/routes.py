@@ -1,7 +1,7 @@
 """地盤的 API（功能包 tianxia/features/territory_acts/；原本寫在 server.py，開發規範手冊 3.2）：殼（server 模組，參數 shell）照 FEATURES 掛，
 /api/do/{op} 的管理者工具也照清單接（admin_tools）。
 
-- GET /api/xingshi：見聞的「形勢」（這一季每天一篇的〈天下形勢〉；只讀，不叫模型——文章在背景寫，server.write_xingshi 留在殼）
+- GET /api/xingshi：見聞的「形勢」（這一季每天一篇的〈天下形勢〉；只讀，不叫模型——文章在背景寫，這個檔的 write_xingshi，第 69 批從殼搬來）
 - 管理者五個救場工具：op 名字照舊。立刻下戰書叫 admin_conquest_letter、不叫 conquest_letter：api_do 先查功能包的管理者工具，同名會把玩家的下戰書
   （MAIN_ACTIONS["conquest_letter"]，全部拆包第 68 批搬進這個檔的 main_actions）整個蓋掉（FB-609）。領地爭奪、〈天下形勢〉關著時各動作自己回一句（跟原本一樣，沒有 404）。
 這個檔只在殼掛路由時才 import（引擎與假人程式不碰網頁框架）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。

@@ -38,3 +38,5 @@
 - `tests/server/test_server.py -k "tale or queue or scheduler"`（`_users_in_server("QUEUE")` 掃本包 `routes.py` 看 `narrate_once`、`tale_round`）
 
 前後比對：`same_behavior` 的 `scribe` 一軌（三種設定、整段與半舊半新）。
+
+**鎖外工作**（全部拆包第 69 批；原本寫在 `server.py`，計畫 `docs/superpowers/plans/2026-11-06-伺服器分包-第69批.md`）：放手一搏的劇情（`shell._tales_waiting`、`shell.narrate_battle`）接上 `outlock` 掛鉤那一格 `tale`（排第一，`features_core.OUTLOCK_ORDER`）：動作之後在鎖內問、放鎖才開；本體第 52 批就在這一包。定時背景的 `tale_round` 不是動作之後才開，照舊走 `threads` 掛鉤。另外要跑的（`test_for` 挑不到）：`tests/server/test_outlock.py`。

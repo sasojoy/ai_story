@@ -19,7 +19,7 @@ MAIN_OWNERS = {
     "seal_use": "seal", "sortie_go": "sortie", "sortie_answer": "sortie", "sortie_join": "sortie", "outing": "explore",
 }
 MENXIA_OWNERS = {
-    "practice": "cultivation", "heal": None, "forge": None, "switch": "cultivation", "slot": "cultivation", "unslot": "cultivation",
+    "practice": "cultivation", "heal": None, "forge": "craft", "switch": "cultivation", "slot": "cultivation", "unslot": "cultivation",
     "create_begin": "craft", "create_pose": "craft", "create_back": "craft", "create_name": "craft", "create_cancel": "craft", "create_reroll": "craft",
     "ascend_dismiss": "cultivation", "cultivate": "cultivation", "melt": "cultivation", "melt_insight": "cultivation", "melt_many": "cultivation",
     "name": "cultivation", "name_divine": "smithy", "bind_art": "smithy", "join": "companions", "leave": "companions", "release": "companions",

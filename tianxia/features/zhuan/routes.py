@@ -1,9 +1,8 @@
 """列傳的 API（功能包 tianxia/features/zhuan/；原本寫在 server.py，全部拆包第 29 批照有所感的做法搬進來）：殼（server 模組，參數 shell）
 照 FEATURES 掛（server 的 features_core.routers 那一行；路徑與別的路由不重疊，先後不影響）。
 這個檔只在殼掛路由時才 import（引擎與假人程式不碰網頁框架）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
-寫傳的鎖外三段式（A、B、C，B 段叫模型）、評曰的鎖外一條、傳的畫面 zhuan_view、公開頁的 extras 照舊在殼的
-server.write_zhuan／verdict_text／zhuan_view／zhuan_extras（tests/server/test_server.py 掃鎖外叫模型的函式認這幾個名字；鎖外工作的掛鉤是總表第 69 批），
-這裡只接路由。"""
+傳的畫面 zhuan_view、公開頁的 extras 照舊在殼的 server.zhuan_view／zhuan_extras。
+寫傳的鎖外三段式（write_zhuan，A、B、C，B 段叫模型）與評曰的鎖外一條（verdict_text）第 69 批搬進這個檔（tests/server/test_server.py 掃鎖外叫模型的函式認這幾個名字）。"""
 import secrets
 
 from fastapi import APIRouter, Body, Request

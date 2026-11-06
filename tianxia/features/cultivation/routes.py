@@ -1,6 +1,6 @@
 """修練的動作表（功能包 tianxia/features/cultivation/；原本寫在 server.py 的 MAIN_ACTIONS、MENXIA_ACTIONS，全部拆包第 68 批）：殼照 FEATURES 接（main_actions、menxia_actions 掛鉤）。
 這個檔只在殼建動作表時才 import（__init__ 的掛鉤裡面才 from . import routes）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
-破境卡那一句（/api/do/ascend_line）是鎖外三段式，留在殼。_int_of、_id_list、KINDS 留在殼（裝備包、殼也用）。"""
+破境卡那一句（/api/do/ascend_line）是鎖外三段式，第 69 批搬進這個檔（outlock 掛鉤）。_int_of、_id_list、KINDS 留在殼（裝備包、殼也用）。"""
 from tianxia.core.features import Outlock
 
 from . import actions, ascend

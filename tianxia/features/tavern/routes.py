@@ -1,6 +1,6 @@
 """酒肆的動作表（功能包 tianxia/features/tavern/；原本寫在 server.py 的 MAIN_ACTIONS，全部拆包第 68 批）：殼照 FEATURES 接（main_actions 掛鉤）。
 這個檔只在殼建動作表時才 import（__init__ 的掛鉤裡面才 from . import routes）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
-問酒家（/api/do/tavern_ask）是鎖外三段式，留在殼。"""
+問酒家（/api/do/tavern_ask）與鄰桌閒談的背景寫字是鎖外工作，第 69 批搬進這個檔（outlock 掛鉤；tests/server/test_server.py 的 _users_in_server 掃這個檔看函式名，裡面寫 shell.model_call、shell.QUEUE，不要先存成別的變數）。"""
 from tianxia.core.features import Outlock, OutlockJob
 
 from . import actions, rules as tavern

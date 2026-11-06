@@ -3,7 +3,7 @@
 這個檔只在殼掛路由時才 import（引擎與假人程式不碰網頁框架）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
 
 玩家卡按鈕的鎖外三段式（挑釁那一句的審、論武的首創取名：shell.screen_peer、shell.prepare_peer，A 鎖內開單、B 鎖外取名、C 是這裡的 peer_act；A 段 discuss_actions.request、C 段 discuss_actions.discuss 第 38 批搬進包了），照手冊 G10 殼的接線
-留在 server.py，這裡經 shell. 叫。名帖定稿那一句的審（shell.screen_text）也在殼。
+第 69 批搬進這個檔，路由照舊經 shell. 叫（tests/arts/test_discuss.py 換 server.prepare_peer、server.screen_peer）。名帖定稿那一句的審（shell.screen_text，探索包也用）留在殼。
 """
 from fastapi import APIRouter, Body, HTTPException, Request
 

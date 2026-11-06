@@ -1,5 +1,6 @@
 """大勢人物行動的管理者工具（功能包 tianxia/features/figure_acts/；原本寫在 server.py 的 ADMIN_ACTIONS，全部拆包第 68 批）：殼照 FEATURES 接（admin_tools 掛鉤）。
-這個檔只在殼建動作表時才 import（__init__ 的掛鉤裡面才 from . import routes）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。"""
+這個檔只在殼建動作表時才 import（__init__ 的掛鉤裡面才 from . import routes）；殼的東西一律照 shell.<名字> 當下讀（測試換掉的也看得到）。
+月旦評的背景寫字是鎖外工作，第 69 批搬進這個檔（outlock 掛鉤；tests/server/test_server.py 的 _users_in_server 掃這個檔看函式名，裡面寫 shell.QUEUE，不要先存成別的變數）。"""
 from tianxia.core.features import AdminTool, Outlock, OutlockJob, no_gate
 
 from . import admin_actions, yuedan

@@ -8,6 +8,7 @@ docs/superpowers/plans/2026-11-03-單挑包-第1批.md）。README.md 寫這一�
 - duel_actions.py、arena_actions.py：原本 Game 上頭目戰 16 個、擂台 22 個方法（Game 留 28 個一行委派，含 5 個新開的查詢與審查修正
   補的 _duel_menu）
 - bots.py：假人的分數（原本 bot_policy.score 的 duel、arena 那兩段）
+- routes.py：鎖外工作（放手一搏 duel_text、擂台場邊那一句；全部拆包第 69 批，outlock 掛鉤）
 
 拿 duel、arena 兩個前綴：假人看到這兩種選項怎麼按問這一包（bot_pick）。原位接上第 11 批掛鉤的：坐在擂台邊與進擂台那一顆、收店
 （店面登記 shops）、打開擂台與那一下的標題（act 子動詞 verbs）、報名與挑人（choose）、擂台打到一半的三招與認輸（menu）、
