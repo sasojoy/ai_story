@@ -292,12 +292,12 @@ def test_test_settings_pick_nothing_and_do_not_say_docs(capsys):
     assert test_for.main(["pyproject.toml", "--list"]) == 0
     out = capsys.readouterr().out
     assert "pyproject.toml" in out and "文件之類" not in out
-    assert _names(["tests/arts/test_fusion.py", "pyproject.toml"]) == {"test_fusion.py"}
+    assert _names(["tianxia/features/craft/tests/test_fusion.py", "pyproject.toml"]) == {"test_fusion.py"}
 
 
 def test_docs_pick_nothing_and_a_test_file_picks_itself():
     assert test_for.pick(["docs/superpowers/specs/x.md", "CLAUDE.md"]).empty
-    assert _names(["tests/arts/test_fusion.py"]) == {"test_fusion.py"}
+    assert _names(["tianxia/features/craft/tests/test_fusion.py"]) == {"test_fusion.py"}
 
 
 def test_an_engine_method_picks_its_group_and_not_everyone_who_imports_engine():
@@ -596,7 +596,7 @@ def test_a_package_file_on_this_tree_picks_only_that_package_and_the_contract(ch
 
 
 def test_slow_is_opt_in_and_three_files_run_on_four_workers():
-    three = test_for.Pick(files={ROOT / "tests/arts/test_fusion.py", ROOT / "tests/arts/test_naming.py",
+    three = test_for.Pick(files={ROOT / "tianxia/features/craft/tests/test_fusion.py", ROOT / "tests/arts/test_naming.py",
                                  ROOT / "tests/arts/test_library.py"})
     (cmd,) = test_for.pytest_commands(three, slow=False, extra=[])
     assert _marker(cmd) == "not slow"
@@ -606,7 +606,7 @@ def test_slow_is_opt_in_and_three_files_run_on_four_workers():
     assert _marker(both) == "slow or not slow"
     (mine,) = test_for.pytest_commands(three, slow=False, extra=["-n", "2"])
     assert mine.count("-n") == 1 and mine[mine.index("-n") + 1] == "2"
-    (one,) = test_for.pytest_commands(test_for.Pick(files={ROOT / "tests/arts/test_fusion.py"}), slow=False, extra=[])
+    (one,) = test_for.pytest_commands(test_for.Pick(files={ROOT / "tianxia/features/craft/tests/test_fusion.py"}), slow=False, extra=[])
     assert "-n" not in one
 
 
@@ -627,13 +627,13 @@ def test_a_changed_test_file_runs_with_its_slow_tests():
 def test_changed_slow_test_files_run_apart_from_the_rest_of_the_pick():
     """改到的測試檔連 slow 一起跑，其他挑到的照舊不含 slow：分兩次，改到的那幾個不在第一次裡重複跑。"""
     mixed = test_for.pick(["tests/core/test_event_tiers.py"])
-    mixed.files.add(ROOT / "tests/arts/test_fusion.py")
+    mixed.files.add(ROOT / "tianxia/features/craft/tests/test_fusion.py")
     mixed.core = True
     first, second = test_for.pytest_commands(mixed, slow=False, extra=[])
-    assert _marker(first) == "not slow" and "tests/arts/test_fusion.py" in first
+    assert _marker(first) == "not slow" and "tianxia/features/craft/tests/test_fusion.py" in first
     assert "tests/core/test_event_tiers.py" not in first and "tests/core/test_engine.py" in first
     assert _marker(second) == "slow or not slow" and second[-1] == "tests/core/test_event_tiers.py"
-    plain = test_for.pick(["tests/arts/test_fusion.py"])  # 沒有 slow 的測試檔：一次就好
+    plain = test_for.pick(["tianxia/features/craft/tests/test_fusion.py"])  # 沒有 slow 的測試檔：一次就好
     assert len(test_for.pytest_commands(plain, slow=False, extra=[])) == 1
     # 這個檔的字串裡寫了 "@pytest.mark.slow"（_slow_smoke 的例子），不是標記：也是一次就好
     assert not test_for.has_slow(ROOT / "tests/core/test_test_for.py")
@@ -648,7 +648,7 @@ def test_a_pick_that_is_all_slow_says_so_and_does_not_fail(capsys):
     assert "--slow" in capsys.readouterr().out
     assert test_for.finish([0, 5], picked, slow=False) == 0
     assert test_for.finish([1, 0], picked, slow=False) == 1
-    plain = test_for.Pick(files={ROOT / "tests/arts/test_fusion.py"})  # 不是 slow 濾掉的（例如 -- -k 濾光了）照 pytest 的
+    plain = test_for.Pick(files={ROOT / "tianxia/features/craft/tests/test_fusion.py"})  # 不是 slow 濾掉的（例如 -- -k 濾光了）照 pytest 的
     assert test_for.finish([5], plain, slow=False) == 5
 
 
@@ -827,14 +827,14 @@ def test_the_base_is_develop_unless_the_env_or_the_flag_says_otherwise(monkeypat
     （--base 最優先）。--list 第一行寫這一次跟哪個 base 比、是從哪裡來的。"""
     monkeypatch.delenv("TIANXIA_TEST_BASE", raising=False)
     assert test_for.default_base() == "origin/develop"
-    first = _first_line(capsys, ["tests/arts/test_fusion.py", "--list"])
+    first = _first_line(capsys, ["tianxia/features/craft/tests/test_fusion.py", "--list"])
     assert "origin/develop" in first and "預設" in first
     assert "origin/develop" in _first_line(capsys, ["CLAUDE.md", "--list"])  # 挑不到東西的也先寫 base
     monkeypatch.setenv("TIANXIA_TEST_BASE", "origin/main")
     assert test_for.default_base() == "origin/main"
-    first = _first_line(capsys, ["tests/arts/test_fusion.py", "--list"])
+    first = _first_line(capsys, ["tianxia/features/craft/tests/test_fusion.py", "--list"])
     assert "origin/main" in first and "TIANXIA_TEST_BASE" in first
-    first = _first_line(capsys, ["tests/arts/test_fusion.py", "--list", "--base", "origin/develop"])
+    first = _first_line(capsys, ["tianxia/features/craft/tests/test_fusion.py", "--list", "--base", "origin/develop"])
     assert "origin/develop" in first and "--base" in first
 
 
@@ -844,7 +844,7 @@ def test_a_base_that_was_never_fetched_stops_before_picking(monkeypatch, capsys)
     怎麼 fetch，然後停下、結束碼 2，一個檔都不挑、不跑。"""
     monkeypatch.delenv("TIANXIA_TEST_BASE", raising=False)
     fetch = "git fetch origin +refs/heads/feature/no-such-branch-1031:refs/remotes/origin/feature/no-such-branch-1031"
-    for argv in (["--list"], ["tianxia/models.py", "--list"], ["tianxia/models.py", "--count"], ["tests/arts/test_fusion.py"]):
+    for argv in (["--list"], ["tianxia/models.py", "--list"], ["tianxia/models.py", "--count"], ["tianxia/features/craft/tests/test_fusion.py"]):
         assert test_for.main([*argv, "--base", "origin/feature/no-such-branch-1031"]) == 2, argv
         out = capsys.readouterr().out
         first = out.splitlines()[0]
@@ -888,7 +888,7 @@ def test_the_long_tests_listed_first_still_exist_and_rank_in_order():
     assert conftest.long_first_rank(first) == 0
     assert conftest.long_first_rank("tests/season/test_real_content.py::test_bot_plays_a_full_season[2]") > 0
     assert conftest.long_first_rank("tests/season/test_sim_scripts.py::test_anything_else") == len(conftest.LONG_FIRST) - 2
-    assert conftest.long_first_rank("tests/arts/test_fusion.py::test_x") == len(conftest.LONG_FIRST)
+    assert conftest.long_first_rank("tianxia/features/craft/tests/test_fusion.py::test_x") == len(conftest.LONG_FIRST)
 
 
 def test_the_long_tests_are_spread_to_the_head_of_each_workers_first_chunk():
