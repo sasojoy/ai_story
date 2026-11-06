@@ -18224,8 +18224,8 @@ class MapScenario(Scenario):
             body = [] if url == "/static/app.js" else [len(r.content), hashlib.sha256(r.content).hexdigest()]
             emit(f"GET {url}", [r.status_code, *body, r.headers.get("content-type"), r.headers.get("cache-control")])
         page = client.get("/")
-        scripts = re.findall(r'<script src="([^"]+)"', page.text)
-        emit("GET / 載入的檔", [page.status_code, [s for s in scripts if s.rsplit("/", 1)[-1] in ("map.js", "app.js")],
+        scripts = [s for s in re.findall(r'<script src="([^"]+)"', page.text) if s.split("?")[0] in ("/static/map.js", "/static/app.js")]
+        emit("GET / 載入的檔", [page.status_code, [s.split("?")[0] if s.startswith("/static/app.js") else s for s in scripts],  # ?v= 是內容的雜湊：map.js 留、app.js 不留
                                  re.findall(r'<link rel="stylesheet" href="([^"]+)"', page.text)])
 
     def road(self) -> None:
