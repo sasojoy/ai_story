@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest import mock
 
+import pytest
 from conftest import real_content
 from jianfa_kit import _new, jianfa_rules, ready
 
@@ -31,6 +32,7 @@ def test_the_package_declares_what_it_owns_and_the_old_name_is_the_same_module()
         assert getattr(seal, name) is getattr(seal_base, name), name
 
 
+@pytest.mark.smoke
 def test_exploring_the_hiding_place_picks_up_the_shard():
     """week7（領地爭奪的季）：開季那一刻藏一片（hide_chance 開滿），站到藏處按探索一顆，撿到的機率開滿——登記記在自己名下、
     回話接撿到那一句、補送寫傳承那一格與「玉璽碎片」那一則紀錄。"""
