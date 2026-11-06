@@ -355,9 +355,10 @@ def b78():
 
 EXTRA_LENSES_D = [
     dict(key="tools", text="**驗證工具不能變鈍**。第 70、71 批把 same_behavior 搬成一軌一檔、加快取。逐軌比開工那一筆與 head：每一段情境的步驟、每一條 `MUTATIONS`、`EXPLORE_MUTATIONS` 的目標句（搬了檔之後 `_mutant` 還找得到嗎）、`_bot_runs`、半舊半新的切點；`compare` 用 head 的腳本跑 base 的根時 `scripts/sb/` 從哪裡載入；子行程的 `sys.path`；有沒有一軌因為載入順序、同名覆蓋而靜靜少跑（印軌數不夠，要逐軌確認跑到了）。快取預設真的關著嗎；開快取時鍵有沒有漏相依（繼承鏈的檔、Python 與依賴版本、內容檔）。`undef_scan` 擴到 `scripts/`、`tests/` 之後有沒有把真問題當白名單。"),
-    dict(key="delegates", text="**掛上去的函式跟委派要等價**（看 Q1，這條線可能不合，但要先驗）。第 72 批把一行委派換成表。逐個比開工那一筆的委派與 head 掛上去的函式：參數名與預設值（有沒有測試或包用關鍵字叫；`inspect.signature` 比一遍）；`self` 傳到哪；bound method 與 `Game.x` 當類別屬性讀（`patch.object(Game, 'x')`、`monkeypatch.setattr`、`getattr(Game, name)`、`hasattr`、`dir(Game)`、`callable` 的判斷有沒有因此變）；`@_not_while_preparing` 那 6 個有沒有保住；`staticmethod`、`classmethod` 與不傳 self 的 9 個；`same_behavior`、`bot_policy`、`server.py` 用字串叫的（`getattr(game, name)`、選項表）；pydantic、pickle、deepcopy 有沒有碰到 Game 上的屬性；import 先後（`sys.modules` 順序、`core.cards.ACTIONS` 登記順序）在 `server.py`、`run_bots.py`、單獨 `import tianxia.engine` 三種入口各印一次比。第 73 批的名單新舊逐張相等；第 74 批拿掉的服務名字真的沒人用（字串拼的 `ctx.<名字>` 也算）。"),
+    dict(key="delegates", text="**掛上去的函式跟委派要等價**（企劃者 11/07 答：搬）。第 72 批把一行委派換成表。逐個比開工那一筆的委派與 head 掛上去的函式：參數名與預設值（有沒有測試或包用關鍵字叫；`inspect.signature` 比一遍）；`self` 傳到哪；bound method 與 `Game.x` 當類別屬性讀（`patch.object(Game, 'x')`、`monkeypatch.setattr`、`getattr(Game, name)`、`hasattr`、`dir(Game)`、`callable` 的判斷有沒有因此變）；`@_not_while_preparing` 那 6 個有沒有保住；`staticmethod`、`classmethod` 與不傳 self 的 9 個；`same_behavior`、`bot_policy`、`server.py` 用字串叫的（`getattr(game, name)`、選項表）；pydantic、pickle、deepcopy 有沒有碰到 Game 上的屬性；import 先後（`sys.modules` 順序、`core.cards.ACTIONS` 登記順序）在 `server.py`、`run_bots.py`、單獨 `import tianxia.engine` 三種入口各印一次比。第 73 批的名單新舊逐張相等；第 74 批拿掉的服務名字真的沒人用（字串拼的 `ctx.<名字>` 也算）。"),
     dict(key="save", text="**存檔一個位元組都不能變**。第 76 批把 QUIET 清單改標到 `Field`。用真的 `PlayerState`、`WorldState`、`SharedWorldState`：開工那一筆與 head 各建預設物件、各載幾份舊存檔的 JSON（`tests/fixtures` 或自己造，含缺欄位的舊存檔），`model_dump_json`、`QUIET_DEFAULTS` 算出來的集合、鍵順序、`_drop_new_defaults` 的結果逐一比；有沒有哪個欄位因為多了 `json_schema_extra` 改變序列化或 schema。`ALLOW_FIXED`、`ALLOW_FAMILIES`、`REVEAL_KEYS` 集合相等。第 78 批：沒設 `TIANXIA_PUBLIC_URL`（這台開發、測試）行為一個位元組都不變；`/`、`/sw.js`、`index.html` 絕不長快取；雜湊怎麼算的，跟 `?v=` 產生的地方是同一支函式嗎。"),
 ]
+WEB_D = "**這一波 `web/` 沒動（第 78 批只動 `server.py` 的快取標頭），上面「照 tianxia-qa 並排截圖」不用做。這一關是第 77 批網頁比對工具的第一次全量，E 波切畫面要靠它。** 工具在 head 的 `scripts/webqa/`（先讀 `gate.py`、`selftest.py` 檔頭與 `C:\\Users\\ray61\\AppData\\Local\\Temp\\claude\\81800b313c89d0f8\\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\\scratchpad\\wf\\built-D-notes.txt` 第 77 批那一節；解一份 head 來跑）。都不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <檔> 570` 等，**不要前景跑**。不帶 `--ports`（預設 `--jobs 2`，各挑空埠，拒絕 7861）。\n1. `gate.py --base <base> --head <head> --out <暫存>\\\\web1 --write-must-reach`（fast）。量實際分鐘數，寫進回報。\n2. 看 `summary.json`、`report.txt`。結束碼 0 就把產生的 `must_reach.txt` 存到 `<暫存>\\\\web1\\\\must_reach.txt`，回報寫路徑（PM 提交）。結束碼 1、2：逐列分成①工具誤報（第 77 批點名第一候選：main 的天下形勢排在史官後面，`.xingshi_mark` 只有一邊寫好；再出現就把 `tale_done` 搬進 common）②這一波真的改了（第 72、76、78 批）。兩種都寫進 `diffs`、`same=false`，下一關會修。\n3. `selftest.py --sha <head> --out <暫存>\\\\self`（base 對 base 綠、跑兩次 fingerprint 全同、兩個正控制都紅；約 8 分一趟四趟，第 77 批只跑過 `--only accounts,smoke`）。\n4. 時間還夠才做：第 77 批第 6 項（`newbie_c05`、`pe_c07` 重現，指令在那一節）。\n**整關不超過 3 小時**，到了就交，沒走到的寫清楚。"
 WAVES["D"] = dict(
     round2=True,
     extra_lenses=EXTRA_LENSES_D,
@@ -369,6 +370,7 @@ WAVES["D"] = dict(
         dict(name="版本快取", batches=[b78]),
     ],
     merge_port=8295, fix_port=8296,
+    web_check=dict(ports="8297、8298", steps=WEB_D),
 )
 
 
