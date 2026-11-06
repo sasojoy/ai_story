@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tianxia import atlas, orders  # 過渡：待搬（地點與路的資料、詳情、移動的選項：atlas 第 50 批拆兩半〔第 49 批 PM 認定第 2 條〕，留下的那一半不進包）
+from tianxia import atlas, orders  # 共用規則層（atlas 核心那一半：移動的選項 TravelOption、travel_options；第 50 批拆兩半，圖層與詳情在同一包的 layers）
 from tianxia import conquest, territory, training  # 共用規則層
 
 from . import mapdata

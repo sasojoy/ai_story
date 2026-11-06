@@ -37,6 +37,12 @@ def on(content: Content, world: WorldState | None = None) -> bool:
     return territory.on(content)
 
 
+def duel_on(content: Content, world: WorldState | None) -> bool:
+    """約戰在這一季開著：減法季的 sortie_duel 子開關（rules.jianfa：設定＋開季的章）、出陣開著、領地爭奪在這一季生效（約戰貼在區塊上）。
+    全部拆包第 50 批從出陣包 duel_rules.on 搬來：atlas 要問、又不能 import 出陣包；出陣包 re-export 同一個函式物件。"""
+    return rules.jianfa(content, world, "sortie_duel") and territory.on(content) and on(content, world)
+
+
 def blocks(content: Content) -> dict[str, BlockDef]:
     """地點 → 區塊（Scenario.territory.blocks）；劇本沒寫是空的。"""
     t = content.scenario.territory

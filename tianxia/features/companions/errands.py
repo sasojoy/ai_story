@@ -218,7 +218,7 @@ def thank(state: GameState, content: Content, e: ErrandState) -> Letter:
 
 
 def _minutes(state: GameState, content: Content, loc: str) -> int:
-    from tianxia import atlas  # noqa: PLC0415  過渡：待搬（atlas → world → rules；第 50 批路線那一半進共用規則層）
+    from tianxia import atlas  # noqa: PLC0415  共用規則層（atlas → world → rules：延後載入；第 50 批收進）
 
     if state.player.location == loc and state.player.journey is None:
         return 0

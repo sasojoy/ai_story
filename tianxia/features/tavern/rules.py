@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from collections import deque
 
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
-from tianxia import atlas  # 過渡：待搬（大區：遠近）
+from tianxia import atlas  # 共用規則層（大區：遠近；第 50 批收進）
 from tianxia import figures  # 共用規則層（大勢人物：名氣、心事；第 40 批收進）
 from tianxia import gender
 from tianxia.core import presence  # 「此地還有」的窗口（核心的查詢服務，第 37 批）

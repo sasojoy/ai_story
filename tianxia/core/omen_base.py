@@ -233,3 +233,10 @@ def clue_count(state: GameState, item_id: str) -> int:
     """手上某一種伏筆物品的數量（PlayerState.clue_items，軍情包認領）：條件 clue_items（rules.check_condition）照它讀——
     核心不直接讀包的欄位（全部拆包第 40 批）。"""
     return state.player.clue_items.get(item_id, 0)
+
+
+# ── map2：安排前往問的（全部拆包第 50 批；軍情包 fs_rules re-export）──
+def fs_answering(state: GameState) -> bool:
+    """正在答最後一步的題（PlayerState.fs_asking，軍情包認領）：共用規則層 atlas.travel_block 照它擋「先作罷才能安排前往」——
+    共用層不直接讀包的欄位（全部拆包第 50 批，照第 40 批 clue_count）。"""
+    return state.player.fs_asking is not None

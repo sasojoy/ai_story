@@ -7,7 +7,7 @@ step_items、step_place，只讀；ORDER_GAIN 從 weekcard 搬來，字一個不
 from __future__ import annotations
 
 from tianxia import materials
-from tianxia import atlas, orders  # 過渡：待搬（輿圖 atlas 第 50 批）
+from tianxia import atlas, orders  # 共用規則層（軍令卡的寫法 atlas.order_how、打擊點 _strike_place、摸清 is_known，第 50 批收進；軍令 orders）
 from tianxia import step as step_rules  # 核心本體（第 36 批收進 MODULES）：「你這一步」的 REF、place
 from tianxia.core.option import Option
 from tianxia.models import Location

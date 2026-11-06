@@ -14,8 +14,9 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 
-from . import allied, conquest, figures, insights, mounts, orders, prologue, sortie, terrain, territory
+from . import allied, conquest, figures, insights, mounts, orders, prologue, terrain, territory
 from .calendar import point, stamp_text
+from .core import omen_base, travel_base  # 核心的查詢：正在答題（軍情包的 fs_asking）、跟著誰同行（移動包的 tagalong）；第 50 批
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .rules import (
     audible, ears_of, here_regions, is_revealed, pending_event_title, recent_seconds, resolve_trend, resolve_trends, season_one,
@@ -349,9 +350,7 @@ def siege_how(state: GameState, content: Content, order: Order) -> str:
     if conquest.on(content, state.world):
         if not places:
             return SIEGE_NONE_CONQUEST.format(front=front)
-        from . import sortie_duel  # noqa: PLC0415  sortie_duel → conquest → …：延後 import
-
-        duel = sortie_duel.on(content, state.world)
+        duel = conquest.duel_on(content, state.world)
         if len(places) > SIEGE_NAMED_MAX:
             return (SIEGE_AREA_DUEL if duel else SIEGE_AREA_CONQUEST).format(front=front)
         enemy = "" if duel else SIEGE_CONQUEST_FOE  # 約戰開著：打贏一場就記，不分對面是誰（真人、補位、守軍）
@@ -366,7 +365,7 @@ def siege_how(state: GameState, content: Content, order: Order) -> str:
             if area not in hidden:
                 hidden.append(area)
     note = "" if not hidden else SIEGE_SOME_UNSEEN if known else SIEGE_UNSEEN
-    template = SIEGE_AT_SORTIE if sortie.on(content) else SIEGE_AT
+    template = SIEGE_AT_SORTIE if territory.on(content) else SIEGE_AT
     return template.format(where="或".join(known + hidden), enemy=enemy, note=note)
 
 
@@ -392,12 +391,10 @@ def order_how(state: GameState, content: Content, order: Order) -> str:
             places = [loc_id for loc_id in listed if loc_id not in sieged]
             parts: list[str] = []
             if places:
-                from . import sortie_duel  # noqa: PLC0415  sortie_duel → conquest → …：延後 import
-
-                if sortie_duel.on(content, state.world):  # 約戰開著：守城記的是應戰守住（Game._duel_result 的 duty）
+                if conquest.duel_on(content, state.world):  # 約戰開著：守城記的是應戰守住（Game._duel_result 的 duty）
                     act = DEFEND_ACT_DUEL
                 else:
-                    act = (DEFEND_ACT_SORTIE if sortie.on(content) else DEFEND_ACT_PLAIN).format(duty=name)
+                    act = (DEFEND_ACT_SORTIE if territory.on(content) else DEFEND_ACT_PLAIN).format(duty=name)
                 if len(places) > SIEGE_NAMED_MAX:
                     parts.append(DEFEND_AREA_CONQUEST.format(front=front, act=act))
                 else:
@@ -407,7 +404,7 @@ def order_how(state: GameState, content: Content, order: Order) -> str:
             return "".join(parts)
         return f"在{front}一帶按「{name}」（收在「此地還能做」裡），做一次記一次。"
     if order.template == "intercept":
-        if sortie.on(content):
+        if territory.on(content):
             return INTERCEPT_SORTIE.format(place=place(order.location))
         return f"到{place(order.location)}或附近遊歷，撞上對面的運糧隊、打贏記一次。"
     if order.template == "escort":
@@ -782,10 +779,11 @@ def travel_block(state: GameState, content: Content) -> TravelBlock | None:
         return TravelBlock(allied.ALLY_FIRST, to_jianghu=True)
     if p.pending_defect:
         return TravelBlock("叛投還沒決定，先決定再安排前往", to_jianghu=True)
-    if p.fs_asking is not None:
+    if omen_base.fs_answering(state):  # 正在答題（軍情包認領的 fs_asking；第 50 批改問核心的 omen_base）
         return TravelBlock("正在答話，先作罷才能安排前往", to_jianghu=True)
-    if p.tagalong is not None and p.journey is not None:  # 結伴同行：路線由帶頭的人定（玩家互動第二層）
-        return TravelBlock(f"跟著{p.tagalong.leader}同行，要改道先分道揚鑣", to_jianghu=True)
+    leader = travel_base.following(state)  # 結伴同行：路線由帶頭的人定（玩家互動第二層；移動包認領的 tagalong，第 50 批改問核心的 travel_base）
+    if leader is not None:
+        return TravelBlock(f"跟著{leader}同行，要改道先分道揚鑣", to_jianghu=True)
     if p.busy_until is not None:
         return TravelBlock("閉關中，不能安排前往")
     if p.ambush is not None:  # 設伏劫道：守著埋伏不能移動（沒有分身）；待 joy 潤

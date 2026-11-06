@@ -7,9 +7,10 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 
-from tianxia import atlas, bounties, figures, orders  # 過渡：待搬（懸賞榜；地點與路的資料：atlas 第 50 批拆兩半〔第 49 批 PM 認定第 2 條〕，留下的那一半不進包）
+from tianxia import atlas, figures, orders  # 共用規則層（atlas 核心那一半：地點與路的資料；第 50 批拆兩半，圖層與勝算在同一包的 layers）
+from tianxia import bounties  # 過渡：待搬（懸賞榜，第 45 批）
 from tianxia import calendar, conquest, equipment, insights, materials, mounts, rules, terrain, territory, timetable, week_unlock
-from tianxia.core import services  # 探索表的小字、地形標籤、勝算的「必敗」：探索包、有所感包的純函式搬到核心的服務檔（第 49 批）
+from tianxia.core import explore_base  # 探索表的小字、地形標籤、勝算的「必敗」：探索包、有所感包的純函式搬到核心的服務檔（第 49 批）、第 50 批移到核心的 core/explore_base.py
 from tianxia.models import Content, FactionDef, Location
 from tianxia.state import GameState, Order, TerritoryWeek, WorldState
 
@@ -24,7 +25,7 @@ PRICE_OWN = "自家地盤：療傷、打造、買馬便宜 {pct}%"  # 待 joy �
 PRICE_ENEMY = "別人的地盤：療傷、打造、買馬貴 {pct}%"  # 待 joy 潤
 FIXED_ROW = "只照大事易手"  # 年表最後一組（廣宗）的名字，待 joy 潤
 SUGGEST_MAX = 3
-LOSE_WORD = services.LOSE_WORD  # 這種勝算的出陣建議照樣列，但排到最後、網頁畫淡（企劃者 10/15 從對比圖選乙）
+LOSE_WORD = explore_base.LOSE_WORD  # 這種勝算的出陣建議照樣列，但排到最後、網頁畫淡（企劃者 10/15 從對比圖選乙）
 # ── 天下圖（輿圖簡化設計 5.1、3.3；環形版 dev/map-2 的畫法，輿圖第三版第 3 批搬回真實地形）──
 WORLD_MARGIN = 70  # 取景框：開放的地點外框往外加多少（地圖單位）
 FALLBACK_INKS = ["#7A4E8C", "#2E7D7A", "#A0522D", "#5C6B2E", "#8C3B5A", "#3B5C8C"]  # 劇本沒寫 ink 的陣營照順序挑（待 joy 對色）
@@ -59,7 +60,7 @@ def mostly_here(state: GameState, content: Content) -> str:
     if loc is None or state.player.journey is not None:
         return ""
     if _outing_tables(state.world, content):
-        return services.hint_in(services.kind_of(content.config.jianfa, loc))
+        return explore_base.hint_in(explore_base.kind_of(content.config.jianfa, loc))
     return MOSTLY_HERE.get(mapview.GLYPHS[mapart.icon_kind(loc)], "")
 
 
@@ -75,7 +76,7 @@ def place_mostly(world: WorldState, content: Content, loc: Location, glyph: str,
     if _outing_tables(world, content):
         if mostly is not None and loc.id in mostly:
             return mostly[loc.id]
-        return services.mostly_in(services.kind_of(content.config.jianfa, loc))
+        return explore_base.mostly_in(explore_base.kind_of(content.config.jianfa, loc))
     return MOSTLY.get(glyph, "")
 
 
@@ -123,7 +124,7 @@ def base(state: GameState, content: Content, mostly: dict[str, str] | None = Non
             "id": loc_id, "name": loc.name, "x": loc.x, "y": loc.y, "glyph": glyph, "mostly": place_mostly(state.world, content, loc, glyph, mostly),
             "big": loc.important, "region": region.id if region is not None else None,
             "insights": insight_pool(loc, content), "strong": None if loc.prologue_only else insights.strong_of(loc, content),
-            "terrain": next(iter(services.terrain_tags(loc)), ""),
+            "terrain": next(iter(explore_base.terrain_tags(loc)), ""),
             "terrain_arts": terrain.place_line(content, loc_id),  # 地利那一行（武學隨地理環境）；沒有地利是空字串
         })
     edges = [[a, z] for a in shown for z in content.locations[a].connections if a < z and z in keep]

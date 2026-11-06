@@ -1420,9 +1420,9 @@ def test_the_shared_rules_layer_only_imports_the_core_and_itself():
 
 
 def test_a_pending_target_that_imports_a_package_says_it_drags_the_package_in():
-    """SHARED_PENDING 的對象自己 import 了包的（atlas 經舊名 sortie import 出陣包）：import 那個共用規則層的模組，
-    包就跟著載進來（import clinic、siege、chiefs〔第 8 批〕、story_base〔第 30 批〕實際載入出陣包；以前還經 world 載入宴客、單挑兩包，
-    第 25 批 world 收進核心本體、不再 import 包之後只剩出陣包；其餘一包都不載）。上面那幾條只看共用規則層自己的 import，
+    """SHARED_PENDING 的對象自己 import 了包的（bounties 經舊名 letters、parley、sortie import 人物情誼包與出陣包；以前還有 atlas 經舊名 sortie
+    import 出陣包，第 50 批 atlas 收進共用規則層、不再 import 包，指到它的六條收掉）：import 那個共用規則層的模組，包就跟著載進來
+    （import figure_life 叫到 bounties 的那幾個函式時載入人物情誼、出陣兩包；seal_acts 一包都不載）。上面那幾條只看共用規則層自己的 import，
     看不到這一層，所以理由要寫明「連帶載入」與那幾包的名字；對象不再 import 包了，「連帶載入」那句也拿掉（第 15 批審查修正）。
     只驗對象直接的 import；經對象再往下一層的（chapters 經舊名 storyline 載一條線包）寫在理由裡，這裡不驗。"""
     for (name, old), why in SHARED_PENDING.items():
@@ -1447,7 +1447,7 @@ def test_the_shared_scanner_catches_an_old_module():
     """outside_imports 本身抓得到（不然上面那一條永遠綠）：最外層、函式裡、import tianxia.x 都算；TYPE_CHECKING、tianxia/core/、核心本體、
     同一層、from tianxia import 名字、標準庫不算；包與別名不在這裡算（是上面那一條）。"""
     m = "tianxia.timetable"
-    assert outside_imports("from . import atlas, territory\n", m) == {"atlas"}  # 第 40 批：原本的例子 figures 收進了共用規則層
+    assert outside_imports("from . import seal_acts, territory\n", m) == {"seal_acts"}  # 第 40 批：原本的例子 figures 收進了共用規則層；第 50 批：atlas 也收進了共用規則層，換成 seal_acts（第 51 批才收；bounties、seal 第 45、27 批會搬，不拿來當例子）
     assert outside_imports("def f():\n    from .seal import mandate_event\n", m) == {"seal"}  # 第 25 批：原本的例子 world 收進了核心本體
     assert outside_imports("def f():\n    from .world import _season_vehicle\n", m) == set()
     assert outside_imports("import tianxia.engine\n", m) == {"engine"}
@@ -2191,6 +2191,41 @@ def test_check_condition_touches_no_package_field():
            "    for key, need in cond.story_marks.items():\n        progress = p.storylines.get(key)\n"
            "    if any(p.clue_items.get(k, 0) < v for k, v in cond.clue_items.items()):\n        return False\n")
     assert condition_fields_touched(old) == ["4 storylines（story）", "5 clue_items（military）"]
+
+
+# map2（全部拆包第 50 批「輿圖二」；計畫 docs/superpowers/plans/2026-11-07-輿圖包-第2批.md 1.3、1.5、1.9）：atlas 拆兩半，地點、大區、路線、
+# 走法時間、軍令卡的寫法、安排前往的條件那一半收進共用規則層（registry.SHARED 的 # map2 那一段）；圖層、詳情、勝算那一半進輿圖包 layers.py。
+# atlas 不再 import 出陣包（三處 sortie.on 換成 territory.on；sortie_duel.on 的本體搬成共用層的 conquest.duel_on，出陣包 duel_rules.on 是同一個
+# 函式物件），travel_block 讀的 fs_asking、tagalong 改問核心的 omen_base.fs_answering、travel_base.following。這一批加的都在這一段，別批的行照原樣
+# （同第 25、40、46 批 del 的寫法）：指到 atlas 的六條排定項收掉（SHARED_PENDING 11 → 5）。
+for _pair in (("siege", "atlas"), ("clinic", "atlas"), ("chiefs", "atlas"), ("story_base", "atlas"), ("figure_life", "atlas"), ("ranks", "atlas")):
+    del SHARED_PENDING[_pair]
+SHARED_LATER["skillview"] = ("門下頁的說明（彙整）：讀自創 create（第 44 批）、修練 cultivation（第 23 批）、玉璽 seal（第 27 批）、"
+                             "鐵匠鋪 smithing（第 41 批已成包，經舊名別名）；那幾包成包、改成查詢服務之後再收（輿圖 atlas 第 50 批收進了共用規則層）")
+ATLAS_PACKAGE_FIELDS = {"fs_asking", "tagalong"}  # travel_block 換之前直接讀的兩格（軍情包、移動包認領）
+
+
+def test_atlas_joined_the_shared_layer_and_imports_no_package_not_even_inside_a_function():
+    """atlas 在共用規則層裡、最外層與函式裡都不 import 包（出陣包 sortie、sortie_duel 換成共用層的 territory.on、conquest.duel_on），
+    不直接讀換之前讀的 fs_asking、tagalong（改問核心的 omen_base.fs_answering、travel_base.following）；兩邊留的是同一個函式物件。
+    先證明掃描看得到：換之前那三行（split/trunk febd38d8 的原文：atlas 第 17 行、siege_how 與 order_how 裡的延後 import）抓得到 3 處。"""
+    from tianxia import conquest, sortie_duel
+    from tianxia.core import omen_base, travel_base
+    from tianxia.features.military import fs_rules
+    from tianxia.features.sortie import duel_rules
+    from tianxia.features.travel import party
+
+    assert "atlas" in SHARED
+    assert _feature_imports(TIANXIA / "atlas.py") == []
+    tree = ast.parse((TIANXIA / "atlas.py").read_text(encoding="utf-8"))
+    assert not {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)} & ATLAS_PACKAGE_FIELDS
+    assert duel_rules.on is conquest.duel_on and sortie_duel.on is conquest.duel_on
+    assert fs_rules.fs_answering is omen_base.fs_answering and party.following is travel_base.following
+    old = ("from . import allied, conquest, figures, insights, mounts, orders, prologue, sortie, terrain, territory\n"
+           "def siege_how():\n    from . import sortie_duel\n"
+           "def order_how():\n    from . import sortie_duel\n")
+    assert _package_imports_of(old, "tianxia.atlas") == [(1, "sortie"), (3, "sortie"), (5, "sortie")]
+    assert not [e for e in reverse_imports() if e.startswith("tianxia/atlas.py:")]
 
 
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py

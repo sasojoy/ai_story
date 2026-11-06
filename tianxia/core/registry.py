@@ -187,7 +187,7 @@ SHARED: dict[str, str] = {
     "conquest": "領地爭奪的規則（區塊、進度、推、拉、易手）：核心的 content、rules 讀；決戰、出陣兩包與輿圖、軍令、之後的地盤包都叫"
                 "（讀璽效 seal_acts 記在邊界測試的 SHARED_PENDING：第 51 批那一半進這一層）",
     "clinic": "醫館（只在城鎮療傷、最近的醫館在哪）：核心的 team 讀；修練頁的療傷、名師指點、買破境丹都問（總表附錄甲：醫館是核心的服務）"
-              "（讀輿圖的路線 atlas 記在 SHARED_PENDING：第 50 批那一半進這一層）",
+              "（讀輿圖的路線 atlas：第 50 批收進這一層）",
     "ranger": "遊俠名號（散人的成長階梯、經驗倍數）：核心的 rules 讀，Game 的戰後獎勵與狀態列也叫；出陣包與懸賞（bounties）、同伴招募（roster）、"
               "玩家卡（social）、行狀（annals：列傳讀它記下的名號）都叫",
     "precise": "一類一顆（每一顆行動鈕只給一類東西）與算不算城鎮（is_town）：出陣、探索、引導三包的獎勵與懸賞、有所感、玩法說明讀",
@@ -212,7 +212,7 @@ SHARED: dict[str, str] = {
     "stance_world": "人物心意的世界那一半（這一週的計數、誰照哪一個做事、門檻、換手、每週歸零）：核心的 rules、事件檢定與舊模組 world、figures、events 都讀",
     # story（全部拆包第 30 批：storyline 拆兩半，換字那一小段與別包也要讀的底座在這一層，一條線自己的走法在一條線包）
     "story_base": "一條線的底座與換字：核心的 rules〔fill_marks 換字〕、事件檢定〔記自己寫的那一句〕讀；探索包的擲開頭、有所感包登記頓悟那一條線的鉤子也讀"
-                  "（讀輿圖的大區 atlas 記在邊界測試的 SHARED_PENDING；章回的大事結果 chapters 第 40 批收進這一層）",
+                  "（讀輿圖的大區 atlas 第 50 批、章回的大事結果 chapters 第 40 批收進這一層）",
     # craft（全部拆包第 44 批「煉製與自創」：create 進煉製包，認勢要用的擺式幾何抽出來留在這一層）
     "pose": "擺式的幾何（火柴人九個角度 → 勢與偏向，原本在 create.py）：以意成招 moves 認勢讀；煉製包的 create 照名字 re-export，門下頁的說明也讀",
     # core_world2（全部拆包第 40 批「世界模型二」：季的世界模型第一批之後收的六個，與量出來的 rumor_view；這幾個不 import 包，
@@ -220,13 +220,16 @@ SHARED: dict[str, str] = {
     "figures": "大勢人物（聲威、在場、退場與回來、自然回復與犒軍共用一天的上限 aid_*）：核心的 world〔世界一步〕、rules、timetable 讀；"
                "決戰、人物情誼、大勢人物、軍情、銀兩出口、酒肆、引導、輿圖八包都叫（讀璽效 seal_acts 記在邊界測試的 SHARED_PENDING：第 51 批）",
     "figure_life": "人物活起來（人物此刻在哪、心事、募兵、走動、求援；每一位對話人物設宴是世界層 life 那一格）：核心的 world 每一步叫；"
-                   "宴客、大勢人物、酒肆、決戰、人物情誼五包都讀（讀璽效 seal_acts、輿圖的大區 atlas、懸賞 bounties 記在 SHARED_PENDING）",
+                   "宴客、大勢人物、酒肆、決戰、人物情誼五包都讀（讀璽效 seal_acts、懸賞 bounties 記在 SHARED_PENDING；輿圖的大區 atlas 第 50 批收進這一層）",
     "plans": "人物的盤算（每一步推、送到的那一下）：核心的 world 每一步叫、engine.sync 送；人物活起來、大勢人物包的盤算行動讀"
              "（讀璽效 seal_acts 記在 SHARED_PENDING：第 51 批）",
     "orders": "軍令（每週與每天發令、截糧的站、目標）：核心的 world 週初與每天叫；決戰、軍情、出陣、引導、輿圖五包與假人、見聞的分層讀",
     "ranks": "階級與晉升（稱號、召見、提拔）：核心的 world、rules〔效果 patron、summons_next、promote〕與共用層的 seats 讀；"
-             "人物情誼、陣營、引導、軍情、玩家互動、交友、出陣、地盤行動、行路九包都讀（讀輿圖的大區 atlas 記在 SHARED_PENDING：第 50 批）",
+             "人物情誼、陣營、引導、軍情、玩家互動、交友、出陣、地盤行動、行路九包都讀（讀輿圖的大區 atlas：第 50 批收進這一層）",
     "chapters": "章回（主線一回一回的規則、份量、做成、卡；開回與收回在一條線包）：核心的 weekcard〔本週卡的章回那一件〕、world、content、"
                 "timetable 與底座 story_base 讀；一條線包叫",
     "rumor_view": "見聞的分層（天下、地方、個人線索）：核心的 engine〔見聞頁〕讀；個人線索讀伏筆、機緣（核心的查詢服務 omen_base）與軍令 orders",
+    # map2（全部拆包第 50 批「輿圖二」：atlas 拆兩半，這一半不再 import 出陣包、讀包認領的 fs_asking、tagalong 改問核心的 omen_base、travel_base）
+    "atlas": "江湖輿圖的地點、大區、路線與走法時間、軍令卡的寫法與打擊點、安排前往的條件（圖層、詳情、勝算那一半第 50 批進了輿圖包 layers.py）："
+             "核心的 engine、content、rules 讀；移動、地盤、設伏、軍情、出陣、人物情誼、酒肆、決戰、引導、輿圖十包與假人都讀",
 }

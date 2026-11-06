@@ -7,7 +7,7 @@ step_items、step_place，只讀——讀伏筆就是這一格回答，核心不
 """
 from __future__ import annotations
 
-from tianxia import atlas  # 過渡：待搬（輿圖 atlas，總表第 50 批：抽片段要知道所在地點的大區）
+from tianxia import atlas  # 共用規則層（輿圖的大區 atlas.region_of，第 50 批收進：抽片段要知道所在地點的大區）
 from tianxia import prologue as prologue_rules
 from tianxia import step as step_rules  # 核心本體（第 36 批收進 MODULES）：「你這一步」的 REF、place
 from tianxia.core.services import NO_SUCH_PLAYER
