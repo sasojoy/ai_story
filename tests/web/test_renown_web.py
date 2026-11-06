@@ -55,12 +55,15 @@ def test_the_attrs_tab_has_the_strip_and_the_bar_does_not(m):
     """介面重整：名聲那一條（名望、善惡兩階的進度）在俠客頁的「屬性」（H.heroMoreHtml），狀態列不再攤開。"""
     assert "rn-strip" not in run(m, "return H.topHtml();", S={"showMore": True, "renownOpen": True})
     more = run(m, "return H.heroMoreHtml(H.S.main.status);")
+    # Joy 2026-11-06「這一定要預設展開那麼多說明？」：名望、善名、惡名一行，階梯與來源收在「怎麼來」後面
+    assert "rn-strip" not in more and more.count("<em>名望</em>") == 1 and 'data-act="renown-toggle"' in more
+    more = run(m, "return H.heroMoreHtml(H.S.main.status);", S={"renownOpen": True})
     assert 'class="rn-strip"' in more and "再 23 到威震州郡" in more and "再 12 到州郡大俠" in more
-    assert "名望 27　善名" not in more  # minor 那一行拿掉了（名聲那一條取代）
+    assert "名望 27　善名" not in more  # 文字版那一行拿掉了
 
 
 def test_a_dot_shows_that_tier(m):
-    more = run(m, "return H.heroMoreHtml(H.S.main.status);", S={"renownDot": "fame:4"})
+    more = run(m, "return H.heroMoreHtml(H.S.main.status);", S={"renownOpen": True, "renownDot": "fame:4"})
     assert "天下聞名" in more and "擂台上排在你後面 5 名內的人挑得到你" in more
 
 
@@ -72,7 +75,7 @@ def test_tight_bar_moves_the_virtue_title_into_the_name_row(m):
 def test_switch_off_draws_the_old_bar(m):
     m["status"]["renown"] = None
     more = run(m, "return H.heroMoreHtml(H.S.main.status);")
-    assert "rn-strip" not in more and "名望 27　善名 18" in more
+    assert "rn-strip" not in more and "<em>名望</em><b>27</b>" in more and "<em>善名</em><b>18</b>" in more and "renown-toggle" not in more
 
 
 def test_peer_card_has_title_chips_and_a_generic_note(m):

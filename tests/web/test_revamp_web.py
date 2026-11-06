@@ -100,6 +100,45 @@ def test_the_hero_page_has_four_tabs_and_the_worn_drawer_lists_swaps(wan):
     assert "經驗與成長" in attrs
 
 
+def test_the_attrs_tab_shows_each_number_once_and_folds_every_explanation(wan):
+    """Joy 2026-11-06「這一定要預設展開那麼多說明？而且上面已經有屬性了下面還有文字版」：屬性一份、名望善惡一份，
+    說明（五項各管什麼、名聲的階梯與來源）點「？」「怎麼來」才開，心得提示一行，同伴不在這裡重複（門下那一頁有）。"""
+    m, x = server.main_view(wan), server.menxia_view(wan)
+    m["status"]["hint"] = "你已攢下 24 點心得，去「煉製」把兩個意境合成新的。"
+    s = m["status"]
+    page = run(m, 'H.S.heroTab = "attrs"; return H.pagePractice();', menxia=x)
+    for name, value, _ in s["attrs"]:
+        assert page.count(f"{name} {value}") == 0  # 文字版那一行拿掉了：只剩上面那一格一欄
+    assert page.count("<em>名望</em>") == 1 and "rn-strip" not in page and "rn-src" not in page
+    assert 'data-act="attr-help"' in page and 'class="stat-uses"' not in page
+    assert 'class="xinde-tip"' in page and "🧍" not in page
+    # Joy 11/6「屬性那邊還有放態勢」：只放自己的成長——態勢在江湖頁、修練的規矩在武學那一頁、等級與氣血在人像卡與狀態列
+    assert "態勢" not in page and "修練的規矩" not in page and "第 " + str(s["level"]) + " 級" not in page.split('class="hero-tabs"')[1]
+    assert "氣血 " not in page.split('class="hero-tabs"')[0].split('class="hero-sub"')[1].split("</div></div>")[0]
+    arts = run(m, 'H.S.heroTab = "arts"; return H.pagePractice();', menxia=x)
+    assert "修練的規矩" in arts
+    opened = run(m, 'H.S.heroTab = "attrs"; return H.pagePractice();', menxia=x, S={"attrHelp": True, "renownOpen": True, "xindeOpen": True})
+    assert 'class="stat-uses"' in opened and 'class="rn-strip"' in opened and 'class="xinde-tip open"' in opened
+
+
+def test_doable_unfinished_business_goes_first_and_not_yet_goes_last(wan):
+    """Joy 2026-11-06「未了之事如果是可以做的時候優先級應該做高，如果時機未到可以放在後面」：此地可為與「全部」那一串都照這個排。"""
+    m = server.main_view(wan)
+    opt = lambda i, label, on: {"id": i, "label": label, "enabled": on, "note": ""}  # noqa: E731
+    extras = [opt("act:shop", "鐵匠鋪", True), opt("story:a", "未了之事：去山裡找藥", True), opt("act:arena", "擂台（今天沒開）", False),
+              opt("story:b", "未了之事：等三更（時機未到）", False), opt("act:mounts", "馬市", True)]
+    order = run(m, f"return H.hereSort({__import__('json').dumps(extras, ensure_ascii=False)}, [], {{}}).map((o) => o.id).join(',');")
+    assert order == "story:a,act:shop,act:mounts,act:arena,story:b"
+
+
+def test_the_duty_card_leads_with_what_can_be_done_now(wan):
+    m = server.main_view(wan)
+    blocks = {"orderCard": '<section><h3>軍令</h3><button class="btn" disabled data-act="choose" data-id="x">還不能交</button></section>',
+              "bountyCard": '<section><h3>懸賞</h3><button class="btn" data-act="choose" data-id="y">接</button></section>'}
+    keys = run(m, f"return H.dutyParts(H.S.main, {__import__('json').dumps(blocks)}).filter((p) => p.html).map((p) => p.key).join(',');")
+    assert keys == "bounty,orders"
+
+
 def test_the_admin_page_has_tiles_tabs_and_a_hold_to_confirm_danger_zone(wan):
     wan.state.player.name = "Rayal"
     m = server.main_view(wan)
@@ -107,3 +146,22 @@ def test_the_admin_page_has_tiles_tabs_and_a_hold_to_confirm_danger_zone(wan):
     assert len(__import__("re").findall(r'class="ad-tile( hot)?"', page)) == 4 and 'data-act="ad-tab"' in page
     assert 'data-act="ad-hold" data-op="end_season"' in page and 'data-act="ad-hold" data-op="next_season"' in page
     assert 'data-act="admin" data-op="end_season"' not in page  # 收季只在危險區、要長按
+
+
+def test_tapping_a_figure_shows_who_they_are_for_players_new_to_the_era(wan):
+    """Joy 11/6「不是所有玩家都那麼了解三國裡面的角色」：點人物那一層寫身分、是誰、本性（content/figure_intros.json）；
+    性子隨互動變了（另一串做）時多「如今」與變化紀錄。每一位大勢人物都有一份。"""
+    import json
+
+    figures = json.loads((server.ROOT / "content" / "figures.json").read_text(encoding="utf-8"))
+    assert all(server.figure_intro(f["id"]) and server.figure_intro(f["id"])["nature"] for f in figures)
+    m = server.main_view(wan)
+    hejin = next(f for f in m["figures_here"] if f["id"] == "hejin")
+    assert hejin["intro"]["role"] and hejin["intro"]["now"] is None and hejin["intro"]["history"] == []
+    pick = run(m, 'H.S.fig = "hejin"; return H.pageJianghu();').split('class="vn-layer pick"')[1]
+    assert 'class="vn-intro"' in pick and hejin["intro"]["who"] in pick and "<b>本性</b>" in pick and "vi-now" not in pick and "vi-hist" not in pick
+    # 每樣只寫一次（PM 11/6）：陣營只在名牌旁的籤（身分行是「大將軍」不是「官軍・大將軍」），情誼只在「交談」鈕底下
+    assert pick.count("官軍") == 1 and '<p class="vi-role">大將軍</p>' in pick and pick.count(f"情誼 {hejin['affinity']}") == 1 and "vn-foot" not in pick
+    hejin["intro"].update(now="如今的樣子", history=["第 1 週・週五 起，沒那麼優柔了"])
+    pick = run(m, 'H.S.fig = "hejin"; return H.pageJianghu();').split('class="vn-layer pick"')[1]
+    assert '<p class="vi-now"><b>如今</b><span>如今的樣子</span></p>' in pick and "<li>第 1 週・週五 起，沒那麼優柔了</li>" in pick

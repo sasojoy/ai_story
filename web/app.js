@@ -670,6 +670,11 @@
     if (body) body.scrollTop = top;
   }
 
+  // 名聲那一條：狀態列裡的（舊介面）只重畫狀態列；介面重整之後在俠客頁的屬性那一頁，要重畫那一頁
+  function renownDraw() {
+    renderTop();
+    if (S.tab === "practice" && typeof uiV2 === "function" && uiV2()) renderPage();
+  }
   function renderTop() {
     if (S.prologueKey !== prologueKey()) { render(); return; } // 序章亮起了新的東西：分頁列與狀態列要一起換（render 會畫好發光）
     const el = document.getElementById("top");
@@ -1668,6 +1673,29 @@
     obs.observe(card);
   }
 
+  // 浮在最上層的那幾層（要事清單、此地可為「全部」、點人物、對話框、往來紀錄、設定抽屜）開著時：底下的頁面不跟著手指捲
+  // （Joy 11/6「點開要事的時候 手指滑動畫面會是拖曳要事下面的首頁部分」）。iOS 的 Safari 不理 body 的 overflow，所以把頁面釘住
+  // （position: fixed＋記下捲到哪），收起時捲回原處；層自己能捲的那一塊（.sheet、.tl-body、.vn-menu）照常捲、捲到底不帶動頁面（overscroll-behavior）
+  const LAYER_SEL = ".sheet, .vn-layer";
+  let lockedAt = null;
+  function syncScrollLock() {
+    const body = document.body;
+    if (!body || !body.classList) return;
+    const open = !!document.querySelector(LAYER_SEL);
+    if (open && lockedAt === null) {
+      lockedAt = window.scrollY || 0;
+      body.style.top = `-${lockedAt}px`;
+      body.classList.add("layer-open");
+    } else if (!open && lockedAt !== null) {
+      const y = lockedAt;
+      lockedAt = null;
+      body.classList.remove("layer-open");
+      body.style.top = "";
+      window.scrollTo(0, y);
+    }
+  }
+  if (typeof MutationObserver === "function" && document.body) new MutationObserver(syncScrollLock).observe(document.body, { childList: true, subtree: true });
+
   function afterPage() {
     watchOrders(); // 入伍段第一步：軍令卡在畫面上才算看過（離開江湖頁、框不是第一步時它自己收掉）
     if (S.tab === "jianghu") {
@@ -2040,7 +2068,7 @@
     return `<section class="hero" aria-label="人物">
       <div class="hero-hd">
         <div><div class="hero-name">${esc(s.name)}</div><div class="hero-tag">${esc(s.affiliation)}</div></div>
-        <div class="hero-sub"><div>第 ${s.level | 0} 級</div><div>氣血 ${s.hp | 0}／${s.hp_max | 0}</div>${typeof x.might === "number" ? `<div class="hero-might">戰力 <b>${x.might | 0}</b></div>` : ""}${heroAnnalsHtml()}</div>
+        <div class="hero-sub"><div>第 ${s.level | 0} 級</div>${(typeof uiV2 === "function" && uiV2()) && !pro() ? "" : `<div>氣血 ${s.hp | 0}／${s.hp_max | 0}</div>`}${typeof x.might === "number" ? `<div class="hero-might">戰力 <b>${x.might | 0}</b></div>` : ""}${heroAnnalsHtml()}</div>
       </div>
       <div class="hero-stage">
         <div class="hero-halo" aria-hidden="true"></div>
@@ -2165,8 +2193,19 @@
   }
   // 「屬性」那一段（以前在狀態列與點名號攤開的那一塊，整合設計 6.2）：五項一格一欄（名字、數字），有點可配時每格底下一顆「＋」、
   // 小標題右邊寫「可配 N 點」、格子底下一行五項各管什麼（statUsesHtml）；再一行名望、善名、惡名；心得一行在最底下（序章照舊點名號配）
-  function selfStatsHtml(s) {
+  // compact（介面重整的屬性頁）：名望善惡不在這裡（名聲那一段一份）、五項各管什麼收在「？」後面（S.attrHelp）、心得提示一行（點開看全文，S.xindeOpen）
+  function selfStatsHtml(s, compact = false) {
     if (!s || !s.attrs || (!shown("stats") && !shown("xinde"))) return "";
+    if (compact) {
+      const pts = s.stat_points | 0;
+      const cols = s.attrs.map(([k, v, key]) => `<div class="attr"><em>${esc(k)}</em><b>${v}</b>${pts
+        ? `<button class="btn small alloc" data-act="allocate" data-stat="${esc(key)}" aria-label="${esc(k)}加一點" ${v >= s.stat_cap ? "disabled" : ""}>＋</button>` : ""}</div>`).join("");
+      const help = s.stat_uses ? `<button class="linkish attr-q" data-act="attr-help" aria-expanded="${!!S.attrHelp}" aria-label="五項各管什麼">？</button>` : "";
+      const stats = shown("stats") ? `<div class="self-hd"><h3>屬性</h3>${pts ? `<b class="pts">可配 ${pts} 點</b>` : ""}${help}</div><div class="self-attrs">${cols}</div>${S.attrHelp ? statUsesHtml(s) : ""}` : "";
+      const tip = s.hint ? `<button class="xinde-tip${S.xindeOpen ? " open" : ""}" data-act="xinde-more" aria-expanded="${!!S.xindeOpen}">${esc(s.hint)}</button>` : "";
+      const xinde = shown("xinde") ? `<div class="self-xinde one"><em>心得</em><b>${s.xinde | 0}</b>${tip}</div>` : "";
+      return `<section class="self-stats self-sec" aria-label="心得與屬性">${stats}${xinde}</section>`;
+    }
     const pts = s.stat_points | 0;
     const cols = s.attrs.map(([k, v, key]) => `<div class="attr"><em>${esc(k)}</em><b>${v}</b>${pts
       ? `<button class="btn small alloc" data-act="allocate" data-stat="${esc(key)}" aria-label="${esc(k)}加一點" ${v >= s.stat_cap ? "disabled" : ""}>＋</button>` : ""}</div>`).join("");
@@ -2738,10 +2777,10 @@
     if ((typeof uiV2 === "function" && uiV2()) && !pro()) {
       const tab = HERO_TABS.some(([k]) => k === S.heroTab) ? S.heroTab : "arts";
       const tabs = `<div class="hero-tabs" role="tablist">${HERO_TABS.map(([k, n]) => `<button role="tab" class="${tab === k ? "on" : ""}" aria-selected="${tab === k}" data-act="hero-tab" data-tab="${k}">${n}</button>`).join("")}</div>`;
-      const page = tab === "arts" ? `${selfEntriesHtml(x)}${naming}${selfArtsHtml(x)}${attrNoteHtml(x)}<section class="self-sec lib-sec"><div class="self-hd"><h3>功法庫</h3><small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>${libBody}</section>`
+      const page = tab === "arts" ? `${selfEntriesHtml(x)}${naming}${selfArtsHtml(x)}${attrNoteHtml(x)}<section class="self-sec lib-sec"><div class="self-hd"><h3>功法庫</h3><small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small></div>${libBody}</section>${fold("rules", "修練的規矩", x.rules)}`
         : tab === "gear" ? `${gearBlock}${keeps}`
         : tab === "mates" ? rosterBlock
-        : `${selfStatsHtml(s)}${heroMoreHtml(s)}${fold("rules", "修練的規矩", x.rules)}`;
+        : `${selfStatsHtml(s, true)}${heroMoreHtml(s)}`;
       return `${proGuide()}${heroPanel(x, s)}${tabs}<div class="msg" id="mx-msg">${S.message}</div>${page}${meltGo}${meltOn ? "" : drawerHtml}`;
     }
     return `
@@ -2763,18 +2802,25 @@
   }
 
   const HERO_TABS = [["arts", "武學"], ["gear", "裝備"], ["mates", "門下"], ["attrs", "屬性"]]; // 待 joy 潤
-  // 屬性頁：以前狀態列點名號攤開的那一串（名望善惡、配點、成長、歷練、傳承、同伴、兩軍態勢），整段搬過來
+  // 屬性頁（Joy 2026-11-06「這一定要預設展開那麼多說明？上面已經有屬性了下面還有文字版」）：屬性一份（上面那一格一欄，selfStatsHtml）、
+  // 名聲一份（名望、善名、惡名一行，點「怎麼來」才攤開那一條階梯與來源）、經驗與歷練兩條細條並排、成長一行、傳承一行。
+  // 只放跟自己成長有關的：兩軍態勢在江湖頁、修練的規矩（講武學與意境）在武學那一頁、等級在人像卡上
+  // 同伴不在這裡重複（門下那一頁有）
+  // 待 joy 潤：「怎麼來」「升第 N 級」
+  const meterHtml = (cls, label, have, need) => `<div class="hm-meter ${cls}"><span>${label}</span><i style="--w:${need ? Math.min(100, Math.round((have / need) * 100)) : 100}%"></i></div>`;
   function heroMoreHtml(s) {
-    const team = s.team.map((m) => `🧍 ${esc(m.name)} 第${m.level}級 氣血 ${m.hp}/${m.hp_max}`).join("　");
-    return `<section class="self-sec hero-more" aria-label="經驗與成長"><div class="self-hd"><h3>經驗與成長</h3><small class="muted">第 ${s.level} 級</small></div>
-      ${expHtml(s)}${s.renown ? `<div class="hm-renown">${renownStripHtml(s.renown)}</div>` : rangerHtml(s.ranger)}
-      <div class="more-stats">${s.renown ? "" : `${s.minor.map(([k, v]) => `${esc(k)} ${v}`).join("　")}　｜　`}${s.attrs.map(([k, v]) => `${esc(k)} ${v}`).join("　")}
-        ${s.stat_points ? `<div class="pts-label"><b class="pts">可配 ${s.stat_points} 點</b></div><div class="row alloc">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" data-glow="allocate" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>${statUsesHtml(s)}` : ""}
-        ${s.growth ? growthHtml(s.growth) : ""}
-        ${s.lilian ? lilianHtml(s.lilian) : ""}
-        ${S.main && S.main.legacy ? legacyHtml(S.main.legacy) : ""}
-        ${team ? `<br>${team}` : ""}
-        ${s.stances && shown("stances") ? stancesHtml(s.stances, s.stance_notes) : ""}</div></section>`;
+    const exp = s.exp === undefined ? "" : !s.exp ? `<div class="hm-meter who-exp full"><span>經驗已到頂</span><i style="--w:100%"></i></div>`
+      : meterHtml("who-exp", `經驗 ${s.exp.have}／${s.exp.need}<small>升第 ${(s.level | 0) + 1} 級</small>`, s.exp.have, s.exp.need);
+    const meters = exp || s.lilian ? `<div class="hm-meters">${exp}${s.lilian ? lilianHtml(s.lilian) : ""}</div>` : "";
+    const r = s.renown;
+    const nums = (s.minor || []).map(([k, v]) => `<span><em>${esc(k)}</em><b>${v}</b></span>`).join("");
+    const titles = r && r.short && r.short.length ? `<span class="rn-titles">${rnTitleSpans(r).join("・")}</span>` : "";
+    const how = r ? `<button class="linkish rn-how" data-act="renown-toggle" aria-expanded="${!!S.renownOpen}">怎麼來 ${S.renownOpen ? "▴" : "▾"}</button>` : "";
+    const fame = `<section class="self-sec hm-fame" aria-label="名聲"><div class="hm-line">${nums}${titles}${how}</div>${r ? (S.renownOpen ? `<div class="hm-renown">${renownStripHtml(r)}</div>` : "") : rangerHtml(s.ranger)}</section>`;
+    const alloc = s.stat_points && !shown("stats") ? `<div class="pts-label"><b class="pts">可配 ${s.stat_points} 點</b></div><div class="row alloc">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" data-glow="allocate" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>` : "";
+    // 兩軍態勢不放這裡（Joy 2026-11-06「屬性那邊還有放態勢」）：那是戰局，不是自己的成長；江湖頁本週卡那一行有
+    const tail = S.main && S.main.legacy ? legacyHtml(S.main.legacy) : "";
+    return `<section class="self-sec hero-more" aria-label="經驗與成長">${meters}<div class="more-stats">${alloc}${s.growth ? growthHtml(s.growth) : ""}</div></section>${fame}${tail ? `<section class="self-sec hm-tail">${tail}</section>` : ""}`;
   }
   // 點身上那一門（人像的光點、武學那一段）：抽屜底下列功法庫裡同一類的，每一門一行「換上」與換上後的戰力（Joy「點了…卻不能馬上換」）
   function swapListHtml(x, kind) {
@@ -6376,9 +6422,11 @@
         case "guide-ack": await doMain("guide_ack"); break;
         case "stam-help": S.stamOpen = !S.stamOpen; renderTop(); break; // 點體力條：底下攤開／收起體力怎麼回（explain-1）；丹的鈕自己是一顆，點它不會走到這裡
         // 名聲（名聲設計十一之二）：狀態列只重畫它自己
-        case "renown-toggle": S.renownOpen = !S.renownOpen; S.renownDot = null; renderTop(); break; // 2C：展開時「名聲」那一行
-        case "renown-dot": S.renownDot = S.renownDot === el.dataset.dot ? null : el.dataset.dot; renderTop(); break; // 點圓點看那一段
-        case "renown-sanren": S.renownSanren = !S.renownSanren; renderTop(); break; // 散人另有的好處
+        case "renown-toggle": S.renownOpen = !S.renownOpen; S.renownDot = null; renownDraw(); break; // 2C：展開時「名聲」那一行；介面重整在屬性頁「怎麼來」
+        case "renown-dot": S.renownDot = S.renownDot === el.dataset.dot ? null : el.dataset.dot; renownDraw(); break; // 點圓點看那一段
+        case "renown-sanren": S.renownSanren = !S.renownSanren; renownDraw(); break; // 散人另有的好處
+        case "attr-help": S.attrHelp = !S.attrHelp; renderPage(); break; // 屬性頁的「？」：五項各管什麼
+        case "xinde-more": S.xindeOpen = !S.xindeOpen; renderPage(); break; // 屬性頁心得那一行：點開看整句提示
         case "renown-open": // 6B：金色的「名號傳開」；介面重整之後名聲那一條在俠客頁的「屬性」（狀態列不再攤開）
           S.renownOpen = true; S.renownDot = null;
           if ((typeof uiV2 === "function" && uiV2()) && !pro() && !onb()) { S.heroTab = "attrs"; await goTab("practice"); window.scrollTo(0, 0); break; }

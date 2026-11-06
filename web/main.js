@@ -1944,14 +1944,21 @@
   const ACT_ART = { explore: "explore", train: "sortie", social: "social", move: "move" };
   const ink = (key) => (ACT_ART[key] ? `<img class="ink-img" src="/static/img/acts/${ACT_ART[key]}.webp" alt="" aria-hidden="true">` : "");
 
+  // 此地可為的先後（Joy 2026-11-06「未了之事如果是可以做的時候優先級應該做高，如果時機未到可以放在後面」）：
+  // 發光的（序章指路）、論武的答應、做得了的未了之事（story:）排最前；再來是按得下去的；按不下去的在後；時機未到的未了之事最後。
+  // 同一級照伺服器的順序（sort 是穩定的）
+  const STORY = /^story:/;
+  function hereSort(list, glow, peers) {
+    const rank = (o) => (glow.includes(o.id) || peers[o.id] || (o.enabled && STORY.test(o.id)) ? 0 : o.enabled ? 1 : STORY.test(o.id) ? 3 : 2);
+    return [...list].sort((a, b) => rank(a) - rank(b));
+  }
   // 此地可為：圓章一排（照伺服器的順序，發光的、按得下去的排前面），「全部 N ›」打開整串（S.hereAll）
   function hereRowHtml(m, extras) {
     const list = extras.filter((o) => !FIG_ACT.test(o.id) && !HIRE.test(o.id));
     if (!list.length) return "";
     const glow = guideGlow();
     const peers = callPeers(m); // 論武的「答應」：引擎不收那一顆，點了打開對方的玩家卡（同「全部」那一串，FB-117）
-    const rank = (o) => (glow.includes(o.id) || peers[o.id] ? 0 : o.enabled ? 1 : 2);
-    const row = [...list].sort((a, b) => rank(a) - rank(b)); // 一排橫滑（Joy 11/6「應該是要可以滑動的」）：全部畫出來，「全部」照舊列整串的全名
+    const row = hereSort(list, glow, peers); // 一排橫滑（Joy 11/6「應該是要可以滑動的」）：全部畫出來，「全部」照舊列整串的全名
     const seal = (o) => {
       const [label, detail] = optParts(o);
       const art = hereArt(o.id);
@@ -1968,7 +1975,7 @@
     const peers = callPeers(m);
     return `<div class="sheet-bg" data-act="here-all-close"></div><div class="sheet here-all" role="dialog" aria-label="${HERE_HEAD}"><div class="grip"></div>
       <div class="top-row"><h3 style="flex:1">${HERE_HEAD}</h3><button class="btn small ghost" data-act="here-all-close">關閉</button></div>
-      <div class="options">${list.map((o) => persuadingNow(o) ? persuadeForm(o) : peers[o.id]
+      <div class="options">${hereSort(list, guideGlow(), peers).map((o) => persuadingNow(o) ? persuadeForm(o) : peers[o.id]
         ? `<button class="btn" data-act="peer-answer" data-name="${esc(peers[o.id])}"><span>${esc(o.label)}</span></button>`
         : `<button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${dealHtml(o.label)}</span></button>`).join("")}</div></div>`;
   }
@@ -2012,7 +2019,13 @@
       { key: "plan", name: "盤算", seal: "謀", n: "", html: blocks.planCard, line: "" },
       { key: "week", name: "本週", seal: "週", n: "", html: blocks.weekCard, line: "" },
       { key: "seal", name: "玉璽", seal: "璽", n: "", html: blocks.sealMine, line: "" }, // 正在打的奪璽（sealCard）有倒數、要你出招：不收，畫在行動列底下
-    ].map((p) => ({ ...p, line: p.line || (p.html ? firstText(p.html) : "") }));
+    ].map((p, i) => ({ ...p, line: p.line || (p.html ? firstText(p.html) : ""), now: dutyNow(p.html), i }))
+      .sort((a, b) => (b.now - a.now) || (a.i - b.i)); // 現在做得了的（卡上有一顆按得下去的鈕）排前面，時機未到的在後面；同一級照原本的順序
+  }
+  // 要事那一張卡此刻做得了嗎：卡裡有一顆按得下去、會真的去做的鈕（choose、去輿圖、出招），收合、說明那種不算
+  const DUTY_GO = /data-act="(choose|tab)"|class="[^"]*\bprimary\b/;
+  function dutyNow(html) {
+    return (String(html || "").match(/<button\b[^>]*>/g) || []).some((b) => DUTY_GO.test(b) && !/\sdisabled\b/.test(b)) ? 1 : 0;
   }
 
   // ── 點人物之後（設計稿 Talk-Pick）：浮在最上層，立繪在左下、右邊三顆大鈕（交談／護衛／往來紀錄），底下宣紙框寫他是誰 ──
@@ -2034,7 +2047,19 @@
     return `<div class="vn-layer pick" role="dialog" aria-label="${esc(f.name)}">${vnBack(m)}${f.face ? `<img class="vn-fig" src="${esc(f.face)}" alt="">` : ""}
       <button class="vn-x" data-act="fig-close" aria-label="關閉">×</button>
       <div class="vn-acts">${talk}${acts}<button class="vn-act paper" data-act="fig-log" data-id="${esc(f.id)}"><b>${FIG_LOG}</b></button></div>
-      ${vnBox(f.name, f.side, `<p class="vn-say muted">${f.talk.via ? "他看了你一眼，等你開口。" : esc(f.talk.why || "")}</p>`, `情誼 ${f.affinity}${f.side ? `・${esc(f.side)}` : ""}`)}</div>`; // 待 joy 潤：他看了你一眼，等你開口。
+      ${vnBox(f.name, f.side, `${figIntroHtml(f.intro, f.side)}<p class="vn-say muted">${f.talk.via ? "他看了你一眼，等你開口。" : esc(f.talk.why || "")}</p>`)}</div>`; // 待 joy 潤：他看了你一眼，等你開口。
+  }
+  // 人物簡介（Joy 11/6「不是所有玩家都那麼了解三國裡面的角色」；server.figure_intro）：身分、是誰、本性；性子隨互動變了（設計稿「人物性子會變」，
+  // 另一串做）時多「如今」一格與變化紀錄，沒變之前不畫這兩格
+  const INTRO_NATURE = "本性", INTRO_NOW = "如今"; // 待 joy 潤
+  // 每樣只寫一次（PM 11/6）：陣營看名牌旁的籤，身分那一行去掉開頭同一個陣營；情誼在「交談」鈕底下，框底不再寫
+  function figIntroHtml(i, side = "") {
+    if (!i) return "";
+    const role = side && i.role ? i.role.replace(new RegExp(`^${side}・`), "") : i.role;
+    const row = (cls, k, v) => `<p class="${cls}"><b>${k}</b><span>${esc(v)}</span></p>`;
+    const hist = (i.history || []).length ? `<ul class="vi-hist">${i.history.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>` : "";
+    return `<div class="vn-intro">${role ? `<p class="vi-role">${esc(role)}</p>` : ""}${i.who ? `<p class="vi-who">${esc(i.who)}</p>` : ""}${i.nature
+      ? row("vi-nature", INTRO_NATURE, i.nature) : ""}${i.now ? row("vi-now", INTRO_NOW, i.now) : ""}${hist}</div>`;
   }
   // 對話底下那一塊：場景照片暗下來（最後一次站在地點時的那張圖，S.lastPlaceArt），沒有就是墨色
   function vnBack(m) {

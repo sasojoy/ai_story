@@ -4008,3 +4008,39 @@ svg.fig .blade.bow { stroke-width: 3; }
 /* 介面重整：酒肆裡的招募（暗底上的鈕） */
 .tav-hire .btn{background:rgba(255,240,210,.07);color:#efe3c8;border:1px solid rgba(239,227,200,.28);box-shadow:none}
 .tav-hire .btn:disabled{opacity:.5}
+/* 浮層開著：底下的頁面釘住不捲（app.js 的 syncScrollLock）；層裡能捲的那一塊捲到底不帶動頁面 */
+body.layer-open { position: fixed; left: 0; right: 0; overflow: hidden; }
+.sheet, .tl-list, .vn-menu { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.sheet-bg, .vn-bg { touch-action: none; }
+/* 點人物那一層的人物簡介：身分一行小字、是誰一句、本性（朱色小標）；性子變了時多「如今」（玉色）與變化紀錄 */
+.vn-intro { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; padding-bottom: 8px; border-bottom: 1px dashed #d8c7a5; }
+.vn-intro p { margin: 0; line-height: 1.6; }
+.vi-role { font: 12px var(--sans); color: #7a6a55; letter-spacing: 1px; }
+.vi-who { font: 15px var(--kai); color: #2a231b; }
+.vi-nature, .vi-now { display: flex; gap: 8px; font-size: 13px; color: #3d342a; }
+.vi-nature b, .vi-now b { flex: none; font: 700 12px var(--kai); color: #a3342a; border: 1px solid currentColor; border-radius: 3px; padding: 0 4px; height: 20px; line-height: 18px; margin-top: 1px; }
+.vi-now span { background: #e6efe6; border-radius: 3px; padding: 0 4px; }
+.vi-now b { color: #3f7a68; }
+.vi-hist { margin: 0; padding-left: 64px; list-style: none; font-size: 12px; color: #7a6a55; line-height: 1.6; }
+/* 屬性頁（Joy 2026-11-06）：說明一律收起來；經驗、歷練兩條細條並排；名聲一行 */
+.self-hd .attr-q { margin-left: auto; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 50%; font: 600 12px/20px var(--sans); color: var(--ink-2); text-align: center; padding: 0; }
+.self-hd .pts + .attr-q { margin-left: 8px; }
+.self-xinde.one { flex-wrap: nowrap; align-items: center; min-width: 0; }
+.self-xinde .xinde-tip { flex: 1; min-width: 0; margin: 0; padding: 0; border: 0; background: none; font: 12px/1.5 var(--sans); color: var(--ink-2); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.self-xinde .xinde-tip.open { white-space: normal; }
+.hm-meters { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.hm-meters > :only-child { grid-column: 1 / -1; }
+.hm-meter, .hm-meters .lilian { margin: 0; font: 500 12px/1.5 var(--sans); color: var(--ink-2); min-width: 0; }
+.hm-meter span, .hm-meters .lilian span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-meter small { margin-left: 6px; opacity: .8; font-size: 11px; }
+.hm-meter i { display: block; position: relative; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: 2px; }
+.hm-meter i::before { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--w); background: var(--gold); border-radius: 2px; }
+.hero-more .more-stats:empty { display: none; }
+.hm-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; font-size: 14px; }
+.hm-line em { font-style: normal; color: var(--ink-2); margin-right: 4px; font-size: 13px; }
+.hm-line .rn-titles { font: 600 13px var(--serif); }
+.hm-line .rn-how { margin-left: auto; font-size: 12px; }
+.hm-fame .hm-renown { margin-top: 8px; }
+.hm-tail .lg-entry { margin: 0; }
+.hm-tail .stances-line { margin: 8px 0 0; }
+.gear-cell.empty .gc-fx { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; } /* 空的那一格：哪裡拿得到一行，點進抽屜看全文 */
