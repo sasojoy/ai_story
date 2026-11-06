@@ -21,6 +21,7 @@ from test_mall import _items
 import server
 import webharness
 from tianxia.engine import Game
+from tianxia.features.mall import actions as mall_actions
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NAMES_START = 'wholeApp(["S", '
@@ -146,10 +147,10 @@ def test_records_name_the_item_on_each_purchase_row(content):
 def test_buying_tells_whether_it_went_through(content):
     game = _game(content)
     item = next(iter(content.mall.values()))
-    game.mall_buy(item.id, "web-0002")
-    assert game.mall_bought == item.id
-    game.mall_buy("沒有這件", "web-0003")
-    assert game.mall_bought is None
+    got = mall_actions.purchase(game, item.id, "web-0002")
+    assert got.bought == item.id
+    got = mall_actions.purchase(game, "沒有這件", "web-0003")
+    assert got.bought is None
 
 
 # ── 入口：乙（齒輪旁的錠子鈕）、丙（底部第六格）──

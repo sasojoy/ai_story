@@ -1,11 +1,11 @@
 """商城的動作（功能包 tianxia/features/mall/；原本是 Game 上的 mall_*、admin_mall_* 與幾個私有方法，開發規範手冊 3.2、3.10）。
 
 ctx 是 Game（第一階）；只叫 tianxia/core/services.py 那張清單上的方法。Game.mall_* 留一行委派到這裡（server、測試照舊叫 Game）。
-商城的兩個屬性 ctx.mall_bought、ctx.mall_already 還住在 Game 上（伺服器在鎖裡讀，見 routes.py）。
 """
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from tianxia import calendar
@@ -37,29 +37,39 @@ def grant(ctx: Game) -> None:
         ))
 
 
+@dataclass(frozen=True)
+class Receipt:
+    """一次購買的結果（purchase）：lines 是回給玩家的句子；bought 是買成的商品 id（不成、含這個編號已經買過了是 None）；
+    already 是這個編號早就買好的那一筆的商品 id（第一次的回應沒收到、同一個編號再送，FB-491；其餘是 None）。"""
+    lines: list[str]
+    bought: str | None = None
+    already: str | None = None
+
+
 def buy(ctx: Game, item_id: str, ref: str, qty: int = 1) -> list[str]:
+    """買一件商品，只要回給玩家的句子（purchase 的 lines）。"""
+    return purchase(ctx, item_id, ref, qty).lines
+
+
+def purchase(ctx: Game, item_id: str, ref: str, qty: int = 1) -> Receipt:
     """買一件商品（mall.buy）：ref 是這一次購買的編號（網頁按下確認那一刻產，重送同一個不會買兩次）。成了寫一則「商城」
     江湖紀錄（變化寫元寶與拿到的東西）；不成、或這個編號已經買過了只回一句、不寫紀錄。伺服器在行動鎖裡叫：扣元寶、
-    寫購買紀錄、發貨同一筆交易。時間照回體丹那一套（pill_now、_pill_day），不讀時鐘。買成了 ctx.mall_bought 記那件的 id，
-    不成（含這個編號已經買過了）是 None；這個編號已經買過了 ctx.mall_already 記那一筆的商品 id（FB-491），其餘是 None。
+    寫購買紀錄、發貨同一筆交易。時間照回體丹那一套（pill_now、_pill_day），不讀時鐘。買成了、早就買過了照 Receipt 回。
     qty 是一次買幾件（Joy 2026-10-22），照 mall.buy 夾在限購剩的件數裡。"""
-    ctx.mall_bought = ctx.mall_already = None
     wallet = ctx._wallet()
     if wallet is None:
-        return ctx._log([mall.OFF])
+        return Receipt(ctx._log([mall.OFF]))
     result = mall.buy(
         ctx.state, ctx.content, wallet, item_id, ref,
         now=ctx.pill_now(), day=ctx._pill_day(), season=ctx.world.get_season_number(), qty=qty, moment=moment(ctx),
     )
     if isinstance(result, str):
         done = wallet.purchase_by_ref(mall.buy_ref(ctx._mall_owner(), ref))
-        ctx.mall_already = done.item if done is not None else None
-        return ctx._log([result])
+        return Receipt(ctx._log([result]), already=done.item if done is not None else None)
     journal.add_entry(ctx.state, JournalEntry(
         time=ctx.state.world.time, title=mall.TITLE, lines=result.lines, changes=result.changes,
     ))
-    ctx.mall_bought = result.item.id
-    return ctx._log(result.lines)
+    return Receipt(ctx._log(result.lines), bought=result.item.id)
 
 
 def moment(ctx: Game) -> mall.Moment:
