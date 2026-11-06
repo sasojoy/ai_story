@@ -14,6 +14,9 @@
 - 掛鉤：`enabled` 一直是 True（引導、提示、新手目標、開局各有自己的開關）、`check_content`、`player_fields`／`carried`、叛投那一刻的格 `defection()`（`clear` 位置的 `hints`：`hints.defect_clear`，舊陣營的引薦人排著還沒說的提示作廢；全部拆包第 32 批，原本 `defection.clear_progress` 直接寫 `hint_queue`；釘住這一格的測試在包外、改這一包時 `test_for` 挑不到：`tests/arts/test_hints.py::test_defecting_drops_the_old_sides_queued_hints_and_keeps_the_mentors`，下面「另外要跑的」那一串已經列了這個檔；`tianxia/features/faction/tests/test_defection.py::test_defecting_drops_the_old_sides_queued_hints` 測的是同一件事）。**沒有選項前綴**：動作走 `server.MAIN_ACTIONS`（`hints_off`、`skip_tutorial`、`view_map`、`view_orders`、`view_tab`、`guide_ack`、`newbie_drifter`）與 `/api/prologue`（`server.py` 一行沒動，照舊叫 Game 的委派）；選單上的那幾顆是別人的（`act:rest` 是核心 `act:` 的子動詞、開局三選一是事件的 `choice:`、投靠是 `faction:`），所以沒有 `bots.py`、`bot_policy` 不動。
 - 「你這一步」的格 `steps()`（全部拆包第 36 批；順序在核心的 `STEP_ORDER`：伏筆之後、去投靠之前）：`newbie`（`actions.newbie_step_items`／`newbie_step_place`：讀殼算好傳進來的 `status["newbie"]`〔`newbie_view` 那一份，不重算〕，每一條一件、多一個 `i`；目標是「去做」帶去的地點；原本 `weekcard._steps` 的新手目標那一段與 `step._target` 的新手目標那一支）。不問 `enabled`。`_nearest_to`（委派）第 36 批起也是查詢服務：軍情包的軍令、陣營包的去投靠那兩格補目標時經 `ctx._nearest_to` 問（原本舊模組 `step.py` 直接叫 `game._nearest_to`）。
 
+- `howto.py`（全部拆包第 59 批「引導二」；原 `tianxia/howto.py` 的底，字一個不動）：體力條點開的說明（`stamina_lines`）、建角色送回體丹那一行（`gift_line`）、戰況圖卡點開的說明（`war_help`）、名望與名聲怎麼來、設定抽屜那一頁（`page`：只照核心的 `howto_table()` 接起來）
+- `routes.py`：`/api/howto`（第 59 批從 `server.py` 搬來；`/api/prologue` 還在殼）
+
 ## 認領的欄位（手冊 3.5：留在原地）
 
 - `player_fields`：`guide_done`、`guide_outro`、`enlist_end`、`enlist_since`、`hint_queue`（換季跟著新角色重來）；`hints_seen`、`hints_off`、`newbie_marks`、`newbie_done`（`carried`：換季照帶，照舊在 `Game._reset_player_for_new_season` 原位帶）。
@@ -34,16 +37,22 @@
 
 **`note_action` 被測試換掉的那一層**：`tests/core/test_engine.py` 換的是 `tianxia.engine.note_action`（看 `args[3]`／`args[-1]`），所以 `Game._note_action` 的本體叫 engine 模組層那個名字（`from .guide import note_action`：別名）；包裡的 `view_orders`、`view_map`、`view_tab` 與出陣包的六處（`actions.py`、`duel_actions.py` 四處；守勢 `train_actions.duty` 兩處：原本的 `Game._duty` 第 17 批進了出陣包，這一批合進 develop 時改）都經 `ctx._note_action`。包裡互相叫直接叫函式，只有被測試換掉的 `_hint_triggers`（`test_hints` 換掉 `game._hint_triggers`）經 `ctx`。
 
+**玩法說明的掛鉤**（第 59 批；計畫 `docs/superpowers/plans/2026-11-06-玩法說明-第59批.md`）：`Feature.howto()`（`HowtoHook`、`HowtoPage`，`core/features.py` 檔尾）。那一頁的 22 格照核心寫死的 `HOWTO_ORDER` 接（順序就是行為，`test_contract_core` 逐字鎖；改表先過 PM），這一包交 `season`、`act_head`、`growth`、`stamina`、`fame`、`bag` 六格，其餘 16 包各交自己那一節；別節中間判斷在別包的句子走 `HOWTO_INSERTS`（`fame_seal`、`fame_tavern`、`land_seal`，主人玉璽、酒肆）。整包不看 `enabled`（判斷都在各節自己裡面，跟搬之前一樣）。兩包以上要用的 `section`、`tenth`、`order_pushers`、`SOME_PLACES` 在核心 `core/howto_base.py`。
+**Game 上這一批留的一行委派**：`howto_text`（路由與二十幾個測試）、`_top_up_line`（`_top_up_pills`：讀檔那一刻寫一行）、`_stamina_help`、`_war_help`（`status_data`：status 掛鉤只問開著的包、鍵的順序算行為，第 66 批才收）。
+
 ## 過渡（手冊 3.11）
 
 - 包 → 還沒搬的舊模組（全部拆包第 40 批合完重印 3 處，原本 6 處）：`opening.py` 1（`bounties`）、`actions.py` 1（`atlas`、`howto`；同一行的 `figures` 第 40 批收進共用規則層，不算過渡，註照留「過渡：待搬」；`rules.py` 的 `ranks`、`enlist.py` 的 `orders` 第 40 批收進共用規則層，註改寫成「共用規則層」；`world` 那一行全部拆包第 25 批收進核心本體，註拿掉；`create` 第 44 批煉製自創成包時拿掉：`h_create` 改問包的三個查詢服務 `ctx._create_on()`、`_create_allowed()`、`_create_price()`；`training` 第 18 批登記進共用規則層，不算過渡；`sensing` 全部拆包第 24 批有所感成包時拿掉：假人走序章那一下改問有所感包的查詢服務 `ctx._sense_prologue_choice()`）。
 - 第 45 批合完重印 **1 處**：`actions.py` → `howto`；`opening.py` 的 `issuer` 改讀核心 `core/bounty_base`。
 - 第 50 批合完重印 **2 處**：`opening.py` → `bounties`、`actions.py` → `howto`（原本 `atlas`、`figures`、`howto` 同一行，拆成兩行，`atlas`、`figures` 那一行註「共用規則層」）。`actions.py` 讀軍情包認領的 `fragments` 那一處照舊不收（第 34 批認定第 9 條；總表第 59 列）。
+- 第 59 批合完重印 **1 處**：`howto.py` 函式裡 → `events`（`fame_ranges` 的 `is_rare`）；`actions.py` 的 `howto` 改讀包裡那一份。舊名 `tianxia/howto.py` 留成重新匯出的殼（內容在 17 包，`sys.modules` 別名只能指一包），舊的頂層名字 110 個一個不少；沒有產品程式 import 它，二十幾個測試檔改完就拿掉（第 61 批之後）。
 - 服務清單（`tianxia/core/services.py`）這一包加的：一、共用 `_check_hints`、`_hint`、`_note_action`、`_preparing`、`_journal_guide`、`_free_text_of`、`HutReward`；二、查詢 `_at_battle`（決戰）、`_tavern_on`、`_tavern_here`、`_tavern_at`（酒肆）、`_recruit_target`、`_recruitable_here`（人物情誼；第 19 批成包，從過渡改成查詢服務）、`_create_on`、`_create_allowed`、`_create_price`、`forge`（煉製自創，第 44 批成包，從過渡改成查詢服務）；三、過渡 `slot_insight`、`switch_art`、`practice`、`allocate_stat`、`melt_art`（武學）、`_hint_triggers`（自己的委派）。
 
 ## 測試
 
 - 這一包的（整檔屬於這一包、第 22 批搬進來的）：`tests/test_guide.py`（23 條：說書人的步驟、下一步、任務卡；原 `tests/core/`）、`test_guide_box.py`（20：對話框；`parents[2]` 改 `parents[4]`）、`test_enlist.py`（53：入伍段）、`test_opening.py`（9：開局第一分鐘）、`test_guide_smoke.py`（1，smoke：week7 新角色在城門口選了一顆、託付送到、任務卡亮新手目標）；審查之後照總表與調查的歸屬再搬兩個：`test_onboard.py`（17：初入江湖的七步，原 `tests/core/`；調查 `area_core` 歸這一包）、`test_newbie_hours.py`（3：新手期照現實時數，測的是共用規則層 `roster.newbie`；總表附錄甲歸這一包）。`pytest tianxia/features/guide/tests -n 4 -m "slow or not slow"`：126 條約 14 秒。
+- 第 59 批搬進來的（玩法說明）：`test_core_loop_howto.py`、`test_econ_howto.py`（原 `tests/core/`）；新加 `test_howto_route.py`（`/api/howto` 掛得到）。
+- **改玩法說明的句子，`test_for` 只挑那一包，另外要跑的**：`tests/core/test_explain.py`、`tests/arts/test_explain2.py`、`tests/arts/test_stack_rule.py`、`tests/acts/test_conquest_flip.py`、`test_conquest_rules.py`、`test_conquest_siege.py`、`tests/battle/test_terrain_arts.py`、`tests/core/test_econ_divine.py`、`test_journal.py`、`test_precise_actions.py`、`test_renown_status.py`、`test_social.py`、`tests/figures/test_day_scale.py`、`test_season21_caps.py`、`test_week7_season.py`、`test_gentry_allied.py`、`tests/gear/test_four_tiers.py`、`tests/ranger/test_season21_daily.py`、`tests/server/test_set_password.py`、`tests/web/test_explain_web.py`、`test_explain2_web.py`。
 - **`test_for` 挑不到的、另外要跑的**（這一輪不搬、不拆）：
   - 測的是共用規則層 `prologue`（序章）的：`tests/core/test_prologue.py`（106 條，連假人走序章 `_graduate`；搬進來的話改包的檔會挑到 350 條，超過 300；調查 `area_core` 歸這一包，交 PM）。
   - 碰到才說的觸發看遍各包（決戰換掉 `_battle_status`、酒肆的 `h_tavern`、同伴、事件）：`tests/arts/test_hints.py`（122 條；搬進來的話改包的檔會挑到 347 條，超過 300；總表附錄甲歸這一包，交 PM）。

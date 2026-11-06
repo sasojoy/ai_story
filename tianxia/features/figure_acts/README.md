@@ -49,3 +49,5 @@
   `tianxia/features/sortie/tests/test_sortie_rewards.py`（`tier4`）、`tests/seal/test_seal_revamp.py`（`figure_squad`）、`tests/seal/test_seal_engine.py`（16／41）、`tests/seal/test_seal_duel.py`（12／27）
 - 假人：`tests/bots/test_bot_policy.py` 這一類（`aid:`、`act:challenge:` 的分數）
 - 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/figure_acts/challenge.py`
+
+`howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「挑戰大勢人物」那一節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。

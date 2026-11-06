@@ -53,3 +53,5 @@
 - 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/territory_acts/day_actions.py`
 
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+
+`howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「地盤」那一節（碎片的來源那一句問玉璽包，插句 `land_seal`）），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。

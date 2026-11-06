@@ -15,3 +15,5 @@
 
 **認領的欄位**（3.5，留在原地）：`PlayerState.holding_bonus`（只這一季）、`create_rerolls`、`legend_items`（換季帶著走，核心的換季照抄）；`Game.mall_bought`、`Game.mall_already`（伺服器在鎖裡讀）。資料庫第 6 版的三張表 `mall_purchases`、`mall_ledger`、`mall_entitlements`（`database.py`，核心）。
 **過渡**：`actions.py` import `server_bots`（保留的名號），註「過渡：待搬」（插畫票用不上不賣的 `art_problem`、`ART` 全部拆包第 29 批進核心服務 `core/services.py`，不再 import `zhuan_end`；`journal` 江湖紀錄 PM 10/31 定算核心，不再是過渡；`rules.py` import 的 `tianxia.library`〔功法庫上限〕全部拆包第 15 批登記進共用規則層，行尾改註「共用規則層」，不算過渡）；`howto.py`（玩法說明「商城」一節）、`scripts/mall_ledger.py` import 這一包。封測發放原本是 `own_turn_checks` 叫 `Game._mall_grant`，全部拆包第 11 批（核心收接縫）換成 `on_own_turn` 接縫掛鉤（`own_turn_checks` 最前面、暫停的檢查之前，不問 `enabled`），委派拿掉。
+
+`howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「商城」那一節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。

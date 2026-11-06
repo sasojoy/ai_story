@@ -6,6 +6,7 @@
   enlist.py：入伍段（原 tianxia/enlist.py）——舊名都留成別名
 - actions.py：原本 Game 上的 31 個方法（Game 留 24 個一行委派）與核心原位叫的 12 個服務的本體
 - checks.py：內容檢查（碰到才說那一塊，原本在 content.validate）
+- howto.py：玩法說明的底與組裝（第 59 批：原 tianxia/howto.py 拆進 17 包，各節在各包的 howto.py，順序在核心 HOWTO_ORDER）；routes.py：/api/howto
 
 這一包沒有選項前綴：它的動作走 server 的 MAIN_ACTIONS（hints_off、skip_tutorial、view_map、view_orders、view_tab、guide_ack、
 newbie_drifter）與 /api/prologue，選單上的那幾顆是別人的（act:rest 是核心 act: 的子動詞、開局三選一是事件的 choice:、投靠是 faction:）。

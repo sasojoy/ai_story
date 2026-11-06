@@ -39,3 +39,5 @@
 **過渡 import**（註「過渡：待搬」）：`actions.py` 2 行（`annals`、`skillview`〔共用規則層 `SHARED_LATER`〕）、`view.py` 1 行（`skillview`）、`cultivation.py` 1 行（`seal_acts`）、`ascend.py` 1 行（`annals`）——5 處（`python tests/core/test_feature_boundaries.py` 重印的；開發時還有 `guide` 的 `note_action` 那一行，第 22 批先合，合併時拿掉）。**第 51 批合完重印 2 處**：`actions.py`、`view.py` 各 1 行（`skillview`）；`cultivation.py` 讀的 `seal_acts` 留原名收進共用規則層（第 51 批），改註；`annals` 那兩行第 29 批之二改 import 核心。核心本體（`journal`、`team`、`naming`、`rules`、`state`、`models`、`world_state`）與共用規則層（`arts`、`library`、`growth`、`prologue`、`martial_arts`、`silver`、`treasures`、`traits`、`might`、`moves`、`tactics`、`zh`、`ollama_client`、`roster`）不算過渡。舊模組 → 包多 3 個別名（`tianxia/cultivation.py`、`chuangong.py`、`ascend.py`）與 engine 委派的兩行。
 
 **行狀記一筆改 import 核心**（全部拆包第 29 批之二）：本包原本「包 → `tianxia.annals`」的過渡 import 改成 `from tianxia.core import annal_base as annals`（核心本體，不算過渡，行尾註拿掉「過渡：待搬」）；上面各處寫到 `annals` 的過渡句（含處數）是這一批之前的舊寫法，現在那幾處不算過渡，數字一律以 `python tests/core/test_feature_boundaries.py` 重印為準（舊名 `tianxia/annals.py` 是指到列傳包 `standing.py` 的別名，那一份 re-export 核心那一半）。
+
+`howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「心得」「修練與煉製」兩節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。

@@ -64,3 +64,5 @@
 過渡 import 1 處（行尾標「過渡：待搬」；全部拆包第 45 批合完重印）：懸賞榜第 45 批成包，`join_actions.py`、`lean_actions.py`、`defection.py` 改讀核心 `core/bounty_base`（`stranded`、`STRANDED_*`、`drop_stranded`）；
 `events.event_candidates`（`join_actions.py`：拜入門派那一顆）。`ranks`（階與稱號；`defection.py`）第 40 批收進共用規則層，不算過渡（原本 5 處）。叛投的 `stranded` 格第 45 批由懸賞榜包登記（`BountiesFeature.defection()`），`_STRANDED_CORE` 空了留 `{}`。
 確認畫面讀押糧不直接碰軍情包的欄位：問核心的 `core/convoy_base.py`（`held(state)`，同 `omen_base` 的先例；它只讀軍情包認領的 `convoy`，不寫）。
+
+`howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「投靠與軍令」「各陣營有什麼不同」兩節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。

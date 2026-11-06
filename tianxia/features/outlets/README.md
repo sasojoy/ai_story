@@ -61,3 +61,5 @@
 ## 過渡（手冊 3.11）
 
 過渡 import 共 1 處（全部拆包第 40 批合完重印）：`donate_actions` 到 `shopview`。`silver_actions` 到 `figures` 那一處第 40 批 `figures` 收進共用規則層，不算過渡（原本 2 處）。
+
+`howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（「素材的出路」那一節），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。

@@ -79,3 +79,5 @@
 ## 量到的（第 28 批）
 
 `Game` 委派 556 → 578；`GAME_DIRECT` 16 → 3、直連 197 → 184；`GAME_IMPORTS` 92 → 93（拿掉 `tianxia.seal`、加 `card`、`duel_actions`）。`engine.py` 頂端的 `seal_rules`、`seal_duel` 拿掉。包裡 `tests/` 129 條。`selftest` 目標句（`MUTATIONS` 45、`EXPLORE_MUTATIONS` 4）在搬完的檔裡都找得到一次；新軌 `carve` 的目標句在 `duel_actions.py`。
+
+`howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（別節中間的兩處插句（`fame_seal`、`land_seal`，核心 `HOWTO_INSERTS`）），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。

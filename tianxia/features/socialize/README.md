@@ -46,7 +46,7 @@
 - 收起求見名單接 `on_drop_stale`（`_drop_stale_references` 最後那一個掛鉤；只差序章收尾挪人之後的地點）。福緣到期自己送上門（`_advance_player_local` × `_deliver_fortune`）：夾在別的補算中間，`on_sync` 沒有對應的位置。
 - `choose` 做完之後的 `_guide(self._note_action("socialize"))`（`kind == "call" and arg != "back"`）與前段的 `_checked_prepared`：留在 `choose` 原位（掛鉤沒有「做完記引導」的位置）。
 - 核心的表：`models.py` 的 `ALLOW_FAMILIES`（有 `call:`）與 `act:call`、`act:socialize`；`server.py` 備料判斷、`bot.py` 排除「名望不夠、會被打發的求見」（問 `can_meet_figure`）不動。
-- `howto.py` 的 `social_line`、`call_line`、`CALL_LINE`（玩法說明的文字）留核心（引導與說明頁共用）。
+- 行動列底下交友、求見那幾行（第 59 批搬進 `menus.action_notes`，句子在這一包的 `howto.py`）：`Game.action_notes` 留一行 `_social_notes`，這兩格還沒接 `Verb`（總表第 57 批；同在波次裡，兩條線都開 `Verb` 會撞 `test_contract_features` 的不重複）。
 - 組 `/api/main` 的 `figures_here` 那幾行留在殼（`server._main_view_body`）：包給 `figures_here_view` 與 `figure_intro`，像 `figure_face` 要讀 `web/img`，留殼。
 
 ## 過渡（手冊 3.11）
@@ -67,3 +67,5 @@
   （`socialize_*`）、`tests/figures/test_figures.py`、`tests/server/test_server.py`、`tests/seal/test_seal.py`／`test_seal_revamp.py`（`_talk_cap`）、`tests/core/test_explain.py`、
   `tests/core/test_social.py`、`tests/season/test_real_content.py`（`_deep_interaction_target`）。網頁測試（`tests/web/test_explain_web.py`、`test_jianghu_page_web.py`）第 3 階。改 `figures_here_view`、`intros.py` 另跑 `tests/web/test_revamp_web.py`（此地人物那一排與簡介，`test_for` 挑不到）。
 - 前後一字不變：`scripts/same_behavior.py` 的 `socialize` 軌（`--tracks socialize,companions,talk,guide`）；此地人物那一排與對話框是 `here` 軌（主幹合回 D 段）。
+
+`howto.py`（全部拆包第 59 批「引導二」）：玩法說明自己那一節（交友、求見那幾行與說明頁交友那一條），順序在核心 `HOWTO_ORDER`，掛鉤見新手引導包的 README。
