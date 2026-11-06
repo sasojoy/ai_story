@@ -76,7 +76,7 @@
 | status_slots()（StatusHook） | 狀態列（Game.status_data）與江湖畫面（server._main_view_body）的格（shell_web：全部拆包第 66 批）：照檔尾寫死的順序表 STATUS_ORDER
   一格一格叫、回的鍵照順序合（JSON 鍵的先後、叫的先後都算行為；關著的包原位那幾行本來就照叫），不問 enabled；表外的格接在表尾（第二輪第 74 批） |
 
-ctx 第一階就是 Game；功能包只准叫 services.py 那張清單上的方法。
+ctx 第一階就是 Game；功能包只准叫 services_list.md 那張清單上的方法，和自己這一包的委派。
 """
 from __future__ import annotations
 

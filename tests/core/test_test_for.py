@@ -1098,6 +1098,14 @@ def test_the_core_hooks_and_lists_still_pick_only_the_core_tests_and_smoke(modul
     assert picked.core and picked.smoke and not picked.files
 
 
+# core_api（第二輪第 74 批）
+def test_the_service_list_file_picks_only_the_boundary_test():
+    """服務清單搬成 tianxia/core/services_list.md：只有邊界測試讀它，改它不走核心測試＋煙霧（條件放在 tianxia/core/ 那一條前面）。"""
+    picked = test_for.pick(["tianxia/core/services_list.md"])
+    assert {p.name for p in picked.files} == {"test_feature_boundaries.py"}
+    assert not picked.core and not picked.smoke
+
+
 # core_step（全部拆包第 36 批「你這一步」）
 def test_the_core_tests_stay_what_the_pm_defined_when_step_and_weekcard_join_the_core():
     """step、weekcard 收進核心本體（第 36 批，計畫 1.5 甲案）同 world 只改「改了它挑什麼」：它們自己的 test_step（9 條）、test_weekcard（8 條）

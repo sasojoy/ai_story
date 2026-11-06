@@ -254,3 +254,75 @@ ARENA_RANK_READERS = ("features/peers/mingtie", "leaderboard")
 PREPARING_GUARDED = {"name_divine", "bind_art", "check_in", "add_to_team", "remove_from_team", "release_companion"}
 # 委派與本體參數名不同的（名字 → (委派的, 本體的)）：直接掛之後 g.x 的參數名是本體的，今天全 repo 沒有人用關鍵字傳這一格
 RENAMED_PARAMS = {"write_biography": ("request", "req"), "_ambush_record": ("spoils", "got")}
+
+# ── 各包之間的呼叫（core_api，第二輪第 74 批）──
+
+# 包經 Game 叫別包的委派（主人是各包 game_api.py 的 TABLE）：(誰叫, 主人) → 名字。跟全包掃到的逐對比，多了少了都紅。
+# 新的跨包呼叫：這裡加一列（或加進那一列的名字），名字也要同時列在 tianxia/core/services_list.md。一對一行、名字排序。
+CROSS_PACKAGE_CALLS = {
+    ("battle", "cultivation"): {"_seize_chance"},
+    ("battle", "faction"): {"_four_wins"},
+    ("battle", "looks"): {"_battle_ult", "_round_mvp"},
+    ("battle", "seal"): {"_deliver_seal_results", "_mandate_weight", "_seal_bare"},
+    ("bounties", "companions"): {"_letter_thank", "_parley_ask_label", "_parley_keep", "_parley_owed_line", "_parley_settle_task"},
+    ("bout", "looks"): {"arena_look", "arena_move"},
+    ("checkin", "guide"): {"_opening_gate", "_opening_pending"},
+    ("companions", "battle"): {"_settle_partings"},
+    ("companions", "guide"): {"_hint"},
+    ("companions", "military"): {"_fs_hear_talk", "_omen_talk_options", "_opp_hear_topic"},
+    ("companions", "socialize"): {"_can_meet", "_count_talk", "_socialize_figure"},
+    ("companions", "travel"): {"_depart"},
+    ("cultivation", "guide"): {"_check_hints"},
+    ("explore", "bout"): {"_boss_face", "_boss_ready", "_duel_start"},
+    ("explore", "map"): {"_map_mostly_here", "_map_open_places"},
+    ("explore", "sense"): {"_sense_here", "_sense_missed", "_sense_start"},
+    ("explore", "sortie"): {"_sortie_host"},
+    ("explore", "story"): {"_story_begin"},
+    ("faction", "battle"): {"_ally_follows_battle", "_battle_now"},
+    ("faction", "guide"): {"_nearest_to", "_opening_pending"},
+    ("figure_acts", "gear"): {"_signature_arms"},
+    ("figure_acts", "military"): {"_order_credit"},
+    ("guide", "battle"): {"_at_battle", "_battle_status", "_watching_battle"},
+    ("guide", "companions"): {"_recruit_target", "_recruitable_here"},
+    ("guide", "craft"): {"_create_allowed", "_create_on", "_create_price", "forge"},
+    ("guide", "cultivation"): {"_chuangong_ready", "allocate_stat", "melt_art", "practice", "slot_insight", "switch_art"},
+    ("guide", "explore"): {"_practice_tier"},
+    ("guide", "sense"): {"_sense_prologue_choice"},
+    ("guide", "tavern"): {"_tavern_at", "_tavern_here", "_tavern_on"},
+    ("looks", "battle"): {"_battle_for_me"},
+    ("map", "explore"): {"_practice_tier", "map_mostly"},
+    ("map", "sortie"): {"_duel_squad", "_sortie_foes", "_sortie_mode", "duel_on", "sorties_left"},
+    ("military", "guide"): {"_nearest_to"},
+    ("military", "sortie"): {"_duty_option"},
+    ("notify", "companions"): {"morning_mail"},
+    ("peers", "bounties"): {"_raid_bounty"},
+    ("peers", "figure_acts"): {"_yuedan_line"},
+    ("peers", "travel"): {"_join", "join_refusal"},
+    ("seal", "battle"): {"_showdown_status"},
+    ("seal", "bout"): {"_duel_cut", "_duel_side"},
+    ("sense", "explore"): {"_rare_boost"},
+    ("sense", "guide"): {"_check_hints"},
+    ("socialize", "companions"): {"_open_dialogue"},
+    ("socialize", "figure_acts"): {"_snubbed_character"},
+    ("socialize", "guide"): {"_hint"},
+    ("sortie", "companions"): {"_parley_backing_here"},
+    ("sortie", "explore"): {"_outing_on"},
+    ("sortie", "military"): {"_opp_after_success", "_order_credit"},
+    ("stamina_plays", "bounties"): {"_raid_bounty"},
+    ("tale", "battle"): {"_tale_battles", "apply_battle_tales", "battle_tale_request"},
+    ("tavern", "battle"): {"_battle_now"},
+    ("territory_acts", "battle"): {"_cancel_siege", "_joinable", "_sieges"},
+    ("travel", "battle"): {"_sync_battle_presence"},
+    ("travel", "guide"): {"_check_hints"},
+    ("travel", "military"): {"_hear_after_stamina", "_report_seat"},
+    ("travel", "peers"): {"_peer", "_tell_sender"},
+    ("travel", "stamina_plays"): {"_ambush_check"},
+}
+
+# 包經殼碰別包的模組（shell.<server.py 最外層 import 的模組>，指到別包）：(這一包, 模組的名字)。過渡，不准加，第 102 批收；跟全包掃到的比，多了少了都紅。
+SHELL_FOREIGN = {
+    ("bout", "battle_instance"),  # 3 處
+    ("notify", "letters"),  # 1 處
+    ("seal", "battle_instance"),  # 3 處
+    ("tale", "battle_instance"),  # 3 處
+}

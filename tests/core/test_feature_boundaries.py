@@ -35,6 +35,8 @@ from boundary_tables import (  # noqa: E402  名單（最後的值）在同一�
     PREPARING_GUARDED, RELAY_OWNERS, RENAMED_PARAMS,
     SHARED_CORE_WORLD2, SHARED_LATER, SHARED_PENDING,
     STEP_PACKAGE_READS,
+    # core_api（第二輪第 74 批）
+    CROSS_PACKAGE_CALLS, SHELL_FOREIGN,
 )
 TIANXIA = ROOT / "tianxia"
 FEATURES = TIANXIA / "features"
@@ -410,7 +412,7 @@ def test_every_transitional_import_points_at_an_old_module_not_the_core_or_a_pac
     assert stale == []
 
 
-SERVICES = TIANXIA / "core" / "services.py"
+SERVICES = TIANXIA / "core" / "services_list.md"
 CTX_NAMES = ("ctx", "g", "game")  # 功能包裡拿 Game 的變數名（掛鉤的 ctx、路由 lambda 的 g、路由裡的 game）
 # 約戰結算（出陣包 duel_actions.duel_result，主動搬六包第 2 批）另外兩份 Game 叫 attacker、defender（軍令 _order_credit 叫在它們上面）。
 # 包裡同名的也有約戰的一方（duel_rules 的 attacker、defender 是 SortieSide：attacker.model_copy），所以這兩個名字只算 Game 上真的有的名字
@@ -418,8 +420,8 @@ GAME_ALIASES = ("attacker", "defender")
 
 
 def service_list() -> set[str]:
-    """tianxia/core/services.py docstring 那張服務清單上的名字（寫成 `ctx.<名字>` 的）。"""
-    return set(re.findall(r"`ctx\.(\w+)", ast.get_docstring(ast.parse(SERVICES.read_text(encoding="utf-8"))) or ""))
+    """tianxia/core/services_list.md 那張服務清單上的名字（寫成 `ctx.<名字>` 的）。"""
+    return set(re.findall(r"`ctx\.(\w+)", SERVICES.read_text(encoding="utf-8")))
 
 
 def off_list_calls(source: str, module: str, allowed: set[str]) -> list[str]:
@@ -434,14 +436,19 @@ def off_list_calls(source: str, module: str, allowed: set[str]) -> list[str]:
     return out
 
 
+def allowed_for(package: str, allowed: set[str]) -> set[str]:
+    """這一包經 Game 放行的名字：清單上的，加上自己這一包的委派（第二輪第 74 批：包叫自己的不算離清單，主人從第 72 批的表讀）。"""
+    return allowed | {name for name, pack in game_api_names().items() if pack == package}
+
+
 def test_feature_packages_only_touch_the_service_list_on_the_game():
-    """功能包經過 Game 只碰服務清單上的（手冊 3.3）：Game 上的一行委派是給還沒改的呼叫端過渡用的（3.10），包自己直接叫自己的 actions。"""
+    """功能包經過 Game 只碰服務清單上的，和自己這一包的委派（手冊 3.3、第二輪第 74 批）。"""
     allowed = service_list()
     assert {"state", "content", "_log", "_wallet", "wallet"} <= allowed  # 清單讀得到
     found = []
     for name in _packages():
         for path in _package_files(name):
-            found += off_list_calls(path.read_text(encoding="utf-8"), _modname(path), allowed)
+            found += off_list_calls(path.read_text(encoding="utf-8"), _modname(path), allowed_for(name, allowed))
     assert found == []
 
 
@@ -454,9 +461,8 @@ def foreign_relay_calls(source: str, module: str, package: str) -> list[str]:
 
 
 def test_the_three_stage_relay_names_are_only_called_by_their_owner():
-    text = SERVICES.read_text(encoding="utf-8")
-    listed = set(re.findall(r"`ctx\.(\w+)", text[text.index("# shell_server"):text.index("不在清單上的")]))
-    assert listed == set().union(*RELAY_OWNERS.values())  # 清單上那一段跟這張表不多不少
+    owner = game_api_names()
+    assert {name for pack, names in RELAY_OWNERS.items() for name in names if owner.get(name) != pack} == set()  # 主人跟第 72 批的表對得上（第二輪第 74 批，以前對清單上那一段）
     assert foreign_relay_calls("def f(ctx):\n    ctx.apply_letter(1, 2)\n", "x", "tavern")  # 真的看得到別包叫
     assert not foreign_relay_calls("def f(ctx):\n    ctx.apply_letter(1, 2)\n", "x", "companions")
     found = []
@@ -629,6 +635,9 @@ def test_the_service_scanner_catches_a_game_method_off_the_list():
                           allowed) == ["m:2 attacker._tavern_price", "m:3 defender._tavern_price"]
     assert off_list_calls("def f(attacker):\n    attacker._order_credit(kind='win')\n    return attacker.model_copy(deep=True)\n", "m",
                           allowed) == []
+    # 自己這一包的委派放行、別包照抓（第二輪第 74 批）
+    assert off_list_calls("def f(ctx):\n    return ctx._tavern_price(1)\n", "m", allowed_for("tavern", allowed)) == []
+    assert off_list_calls("def f(ctx):\n    return ctx._tavern_price(1)\n", "m", allowed_for("mall", allowed)) == ["m:2 ctx._tavern_price"]
 
 
 @pytest.mark.parametrize("source, expected", [
@@ -957,6 +966,7 @@ def test_bot_pick_asks_the_packages_for_what_it_skips():
 
 
 # 包的一行委派不在 engine.py 了，GAME_DELEGATES 改從各包 game_api.py 的 TABLE 讀（語法樹，不 import）。
+@functools.lru_cache(maxsize=None)
 def game_api_names() -> dict[str, str]:
     """各包 game_api.py 的 TABLE 上的名字 → 包。"""
     out: dict[str, str] = {}
@@ -1028,6 +1038,95 @@ def test_the_delegates_whose_parameter_names_differ_are_never_called_by_keyword(
     assert found == []
 
 
+# ── core_api（第二輪第 74 批）：包與包之間的兩個鎖 ──
+
+
+def _game_attrs(source: str):
+    """原始碼裡每一個經 Game 碰的名字（node）：認法同 off_list_calls。"""
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and (
+                node.value.id in CTX_NAMES or (node.value.id in GAME_ALIASES and node.attr in game_members())):
+            yield node
+
+
+def cross_package_calls(source: str, package: str) -> dict[tuple[str, str], set[str]]:
+    """這一包經 Game 叫了別包的委派：{(這一包, 主人): {名字}}。只看第 72 批的表：Game 本體上的方法（例 _note_action）不算。"""
+    owner = game_api_names()
+    out: dict[tuple[str, str], set[str]] = {}
+    for node in _game_attrs(source):
+        if owner.get(node.attr, package) != package:
+            out.setdefault((package, owner[node.attr]), set()).add(node.attr)
+    return out
+
+
+def _every_cross_package_call() -> dict[tuple[str, str], set[str]]:
+    found: dict[tuple[str, str], set[str]] = {}
+    for name in _packages():
+        for path in _package_files(name):
+            for pair, names in cross_package_calls(path.read_text(encoding="utf-8"), name).items():
+                found.setdefault(pair, set()).update(names)
+    return found
+
+
+def test_the_calls_between_packages_are_exactly_the_written_list():
+    """包經 Game 叫別包的委派，哪一對、哪幾個名字都在 CROSS_PACKAGE_CALLS（多了少了都紅）：跨包依賴看得到、擋得住。"""
+    assert cross_package_calls("def f(ctx):\n    ctx.apply_letter(1, 2)\n", "tavern") == {("tavern", "companions"): {"apply_letter"}}
+    assert cross_package_calls("def f(ctx):\n    ctx.apply_letter(1, 2)\n", "companions") == {}
+    assert cross_package_calls("def f(ctx):\n    ctx._note_action('x')\n", "tavern") == {}  # Game 本體的不算，只看表
+    found = _every_cross_package_call()
+    more = {pair: sorted(names - CROSS_PACKAGE_CALLS.get(pair, set())) for pair, names in found.items() if names - CROSS_PACKAGE_CALLS.get(pair, set())}
+    less = {pair: sorted(names - found.get(pair, set())) for pair, names in CROSS_PACKAGE_CALLS.items() if names - found.get(pair, set())}
+    assert not more, f"新的跨包呼叫：boundary_tables.py 的 CROSS_PACKAGE_CALLS 加這幾對，名字也要列在 services_list.md：{more}"
+    assert not less, f"這幾對不再叫了：從 CROSS_PACKAGE_CALLS 拿掉：{less}"
+
+
+@functools.lru_cache(maxsize=None)
+def server_package_modules() -> tuple[tuple[str, str], ...]:
+    """server.py 最外層 import 進來、指到功能包的名字：((名字, 包), ...)（feature_target 認別名）。"""
+    out: dict[str, str] = {}
+    for node in ast.parse((ROOT / "server.py").read_text(encoding="utf-8")).body:
+        if isinstance(node, ast.Import):
+            pairs = [(a.asname or a.name.split(".")[0], a.name) for a in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            pairs = [(a.asname or a.name, f"{node.module}.{a.name}") for a in node.names]
+        else:
+            continue
+        out.update({name: target for name, mod in pairs if (target := feature_target(mod))})
+    return tuple(out.items())
+
+
+def foreign_shell_refs(source: str, package: str) -> set[tuple[str, str]]:
+    """這一包的 shell.<名字> 指到別包（名字是 server.py 最外層 import 的模組）：{(這一包, 名字)}。server 頂上賦值出來的（map_base_view = map_views.map_base_view）不算。"""
+    points = dict(server_package_modules())
+    return {(package, node.attr) for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "shell"
+            and points.get(node.attr, package) != package}
+
+
+def test_a_package_reaches_another_package_through_the_shell_only_on_the_written_list():
+    """shell.<名字> 指到別包是繞過 ctx 的跨包：只有 SHELL_FOREIGN 那幾列（過渡，不准加，第 102 批收），多了少了都紅。"""
+    source = "def f(shell):\n    return shell.battle_instance.x\n"
+    assert foreign_shell_refs(source, "tale") == {("tale", "battle_instance")}
+    assert foreign_shell_refs(source, "battle") == set()
+    assert foreign_shell_refs("def f(shell):\n    return shell.GAMES\n", "tale") == set()  # 殼自己的不算
+    found: set[tuple[str, str]] = set()
+    for name in _packages():
+        for path in _package_files(name):
+            found |= foreign_shell_refs(path.read_text(encoding="utf-8"), name)
+    assert found == SHELL_FOREIGN
+
+
+def service_list_leftovers() -> list[str]:
+    """清單上沒有包叫、或只有主人自己叫的名字：merge=union 會留該刪的舊行，PM 每波清一次（多的名字只讓放行變寬、不會紅，所以不做成紅燈）。"""
+    callers: dict[str, set[str]] = {}
+    for name in _packages():
+        for path in _package_files(name):
+            for node in _game_attrs(path.read_text(encoding="utf-8")):
+                callers.setdefault(node.attr, set()).add(name)
+    owner = game_api_names()
+    return sorted(name for name in service_list() if not callers.get(name, set()) - {owner.get(name)})
+
+
 if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python tests/core/test_feature_boundaries.py
     import io
     import sys
@@ -1045,3 +1144,7 @@ if __name__ == "__main__":  # PM 記「還剩幾處過渡」（3.11）：python 
           f"之後成包 {sum(w.startswith('之後成包：') for w in SHARED_PENDING.values())}）")
     print("\n".join(f"  {a} → {b}" for a, b in sorted(SHARED_PENDING)))
     print(f"總表寫了、先不收的（SHARED_LATER）：{len(SHARED_LATER)} 個（{'、'.join(sorted(SHARED_LATER))}）")
+    # core_api（第二輪第 74 批）
+    print(f"跨包經 Game（CROSS_PACKAGE_CALLS）：{len(CROSS_PACKAGE_CALLS)} 對、{len(set().union(*CROSS_PACKAGE_CALLS.values()))} 個名字")
+    print(f"shell 指到別包（SHELL_FOREIGN，第 102 批收）：{len(SHELL_FOREIGN)} 列")
+    print(f"服務清單上沒有包叫或只有主人叫（PM 每波清一次）：{len(service_list_leftovers())} 個（{'、'.join(service_list_leftovers())}）")

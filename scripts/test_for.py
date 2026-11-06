@@ -23,6 +23,7 @@
   邊界測試照同一份）：核心測試＋煙霧＋檔名是 test_<模組>… 的。tianxia/core/ 底下掛鉤與清單（CORE_LISTS：features、services、
   registry、__init__）以外的（event_check.py：第 16 批從 Game 搬來的事件檢定）再並上寫到改到的函式名（連模組名）、Game 委派名、
   類別與常數的測試檔，模組裡直接叫它的函式一路往上算（core_module_callers；第 16 批修正，PM 11/03 照第 11 批修正輪的做法）。
+  tianxia/core/services_list.md（服務清單，第二輪第 74 批）只有邊界測試讀，只挑 test_feature_boundaries.py。
 - 共用規則層（tianxia/core/registry.py 的 SHARED，全部拆包第 15 批登記；照語法樹讀、跟邊界測試同一份）：自己檔名的測試（同核心）
   ＋煙霧＋邊界測試 test_feature_boundaries.py，不跑核心測試、不照「誰 import 它」挑也不往上找（總表第六節第 5 條；依賴它的測試
   留給合併閘門與每日整套，要當場驗就直接給那幾個測試檔或 --all）。
@@ -1040,6 +1041,10 @@ def pick(files: list[str], base: str | None = None,
             else:
                 core_and_smoke()
                 result.why.append(f"{f}：功能包的登記 → 核心測試＋煙霧")
+            continue
+        if f == "tianxia/core/services_list.md":  # core_api（第二輪第 74 批）：只有邊界測試讀，不算改核心
+            result.files |= {t for t in tests if t.name == BOUNDARY_TEST}
+            result.why.append(f"{f}：服務清單 → 邊界測試")
             continue
         if f.startswith("tianxia/core/"):
             core_and_smoke()
