@@ -9,6 +9,7 @@
 | `__init__.py` | 登記（`CraftFeature`）：`enabled` 一直是 True（自創有沒有開看 `Config.arts.create_xinde`，由 `create.allowed` 擋）；`prefix` 是 None——**沒有選項前綴、沒有 `choose`**：煉製頁全是網頁按鈕打 `/api/menxia/<op>`、`/api/do/<op>`。掛鉤只有 `routes`、`content`（`create_forms.json`；`preset_recipes.json` 是序章、命名、引導共用的，不歸這一包）、`on_drop_stale`（`create.prune`：舊三步單子收掉）、`player_fields` |
 | `create.py` | 自創的規則（原 `tianxia/create.py`，906 行；那個名字留成 `sys.modules` 別名，同一個模組物件）。擺式的幾何（`POSE_KEYS`、`stance_of`、`pose_read`、`preset`、`icon_pose`……）抽到共用規則層 `tianxia/pose.py`（`moves.stance_of_art` 認勢要用），`create` 照名字 re-export，`create.stance_of`、`create.preset` 照舊拿得到 |
 | `actions.py` | 原本 `Game` 上的 16 個方法：開爐 `forge_request`（A）、`forge`（C）、`forge_line`、`forge_preview`、`forge_picks`；自創 `begin`、`pose`、`intent_request`（A）、`intent`（C）、`reread_request`（A）、`reread`（C）、`reroll`、`back`、`name`、`cancel`、`view`。九個動作掛核心的 `@not_while_preparing`；三個 A 段自己問 `ctx._preparing()` |
+| `web/craft.js`（檔照手冊 G9 在 `web/`，`web = ("craft.js",)`） | 煉製頁的畫法（全部拆包第 64 批從 `app.js` 逐行切出來，806 行；計畫 `2026-11-06-網頁殼化-第64批.md`）：`pageCraft`、太極火爐與開爐、挑東西的抽屜、自創五步與擺式（`figBody`）、秘方與口訣書（`bookHtml`、`secretPop`）。段裡有兩個頂層監聽跟著走：`window` 的 scroll（爐子縮成一條）、`document` 的 pointer（擺式拖曳），所以這支要排在 `admin.js` 之後（`pointerdown` 都掛在 `document` 的冒泡階段，先後照舊）。檔尾 `registerPage("craft", { render: pageCraft })`。留在 `app.js`（殼）的：點擊與 change 分派的 `case`、`renderPage` 的 `fixedKiln`、`createShort`、`cnNum`。樣子還在 `style.css`（第 67 批才切） |
 | `routes.py` | `/api/forge_line`（原本寫在 `server.py`；殼照 `FEATURES` 掛）。`forge_args` 留在殼（`MENXIA_ACTIONS["forge"]` 與 `api_menxia_do` 也叫它） |
 | `tests/` | `test_craft_smoke.py`（煙霧一條：week7 合一爐、自創一門）、`test_create_ritual.py`（原 `tests/arts/`：五步、擺式、成形、立名、招式）、`test_create_reread.py`（原 `tests/arts/`：重悟帖的重讀）、`test_create_stance_hints.py`（原 `tests/arts/`：擺式提示，連網頁的幾何讀法，要 node）。整檔搬過來，三個的 `Path(__file__).parents[2]` 改成 `[4]` |
 
@@ -28,7 +29,7 @@
 - `tests/arts/test_forge_picks.py`（3 條）：只測 `skillview.forge_picks`（不經 `Game`），歸 skillview／fusion，留原位。
 - `tests/arts/test_fusion.py`、`test_fusion_design.py`（合成與揣摩，`fusion` 不搬）、`tests/arts/test_skillview.py`、`tests/arts/test_arts_pages_two.py`（煉製頁；連網頁）。
 - 直接 `import create`、走別名的混合檔：`tests/core/test_journal.py`、`tests/figures/test_week_unlock.py`、`tests/seal/test_seal.py`、`test_seal_revamp.py`、`tianxia/features/cultivation/tests/test_ascend.py`。
-- 網頁：`tests/web/test_craft_web.py`（這一批不切網頁）。
+- 網頁：改 `web/craft.js` 時 `test_for` 照檔名挑得到 `test_arts_pages`、`test_arts_pages_two`、`test_craft_web`、`test_kiln_round`、`test_shell_web`（每支 js 獨立載入，唯一抓得到跨檔載入順序錯的）。挑不到、要另外跑的：`tests/web/test_prologue_web.py`（整支頁面會走到煉製頁）、`tests/server/test_server.py -k "page or version or scripts"`（那個檔太大，檔名刻意不寫進去）、`tests/bots/test_server_bots.py`（掃字）。
 - 一起跑：`scripts/test_for.py --base <分支> <改的包檔> tests/arts/test_fusion.py tests/arts/test_skillview.py tests/web/test_craft_web.py`。
 
 **過渡 import**（註「過渡：待搬」）：`actions.py` 2 行（`fusion`、`skillview`，共用規則層 `SHARED_LATER`）、`create.py` 1 行（`annals`，行狀第 29 批）。核心本體與共用規則層（含新的 `pose`）不算過渡。舊模組 → 包多 1 個別名（`tianxia/create.py`）與 engine 委派的兩行 import（`craft_actions`、`create`），另有 `bot.py`、`skillview.py`、`server.py`、`scripts/` 走別名（舊模組 → 包 224 → 239）。共用規則層 64 → 65 個模組（新增 `pose`）；`SHARED_PENDING` 14 → 13 條。

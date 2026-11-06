@@ -1304,7 +1304,7 @@ def test_the_allocate_buttons_say_what_each_stat_does():
     """M2：＋鈕底下那一行（五項各管什麼）跟＋鈕畫在同一個條件裡——有點可配才出現；用的是伺服器送的 stat_uses 與
     stat_uses_note，網頁不寫死屬性的用途。"""
     js = webharness.app_source()
-    # 狀態列那一排在 app.js（第 64 批起俠客頁那一排切去 cultivation.js、接起來排在 app.js 前面，所以這一行照 app.js 找）
+    # 狀態列那一排在 app.js（第 64 批起俠客頁那一排切去修練包的檔、接起來排在 app.js 前面，所以這一行照 app.js 找）
     shell = (webharness.WEB / "app.js").read_text(encoding="utf-8").replace("\r\n", "\n")
     start = shell.index('data-act="allocate" data-stat="${esc(key)}" data-glow="allocate"')  # 狀態列那一排（江湖頁頂上提示條攤開的另有一排）
     line = shell[shell.rindex("\n", 0, start):shell.index("\n", start)]

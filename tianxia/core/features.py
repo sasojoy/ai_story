@@ -22,7 +22,7 @@
 | bot_pick(ctx, option)、bot_always | bot_policy.score（假人看到這一顆的分數，None 是不按）；bot.pick 排除的前綴（永遠按得下去的） |
 | admin_tools(shell)、routes(shell) | server：/api/do/{op} 的管理者工具、掛路由（shell 是 server 模組） |
 | threads(shell) | server.main（殼開、測試停：只有 main 叫 start_threads，測試不叫；不回東西。全部拆包第 52 批，開給戰記與第 53 批的看守） |
-| check_content(content, need)、web、content | content.validate（關著的包照驗）；index.html 的檔；content.py 讀的檔。check_content **手冊 3.3 表外**（見下） |
+| check_content(content, need)、web、content | content.validate（關著的包照驗）；/ 的 script 標籤（web_scripts、with_scripts；css 的 link 還是 index.html 手寫）；content.py 讀的檔。check_content **手冊 3.3 表外**（見下） |
 
 比手冊 3.3「就這幾個，不多開」那張表多開了兩個（第 1 階開的，PM 10/31 認可，理由照下面；手冊 3.3 由 PM 補；之後再要加先過 PM）：
 - menu：現行的 _everyday_options 裡一包有兩個位置——接管整個選單（坐在席上、店開著……十幾樣都是）與接在「此地還能做」裡（options），
@@ -134,7 +134,7 @@ class FeatureHooks(Protocol):
     # 選項 id 的前綴（「feast」→ feast:join:3）；沒有選項的包是 None。一包兩三個前綴寫 tuple（第 11 批，PM 定：單挑、銀兩出口、有所感、陣營都會用到），
     # 分派照清單、照 tuple 的順序找第一個對上的（owner_of）；兩包不能宣告同一個前綴（tests/core/test_contract_features.py）
     prefix: str | tuple[str, ...] | None
-    web: tuple[str, ...]  # web/ 底下這一包的檔（index.html 照舊順序載入；第 3 階才由伺服器照它生成）
+    web: tuple[str, ...]  # web/ 底下這一包的檔：js 的 script 標籤由伺服器照它生成（web_scripts、with_scripts）；css 的 link 還是 index.html 手寫（第 67 批）
     content: tuple[str, ...]  # content/ 底下這一包的檔（第 1、2 階 content.py 照舊全部讀）
     bot_always: tuple[str, ...]  # 永遠按得下去的選項前綴：整季機器人（bot.pick）不按，不然「沒得按就推進時間」的訊號會失效
     player_fields: tuple[str, ...]  # 這一包認領的 PlayerState 欄位（3.5；README 照列）
@@ -436,7 +436,7 @@ def check_content(content: Content, need: Callable[[bool, str], None]) -> None:
 
 
 def web_files() -> list[str]:
-    """各包登記的網頁檔（web/ 底下，照 FEATURES 的順序）。第 3 階才由伺服器照它生成 index.html；在那之前 index.html 與
+    """各包登記的網頁檔（web/ 底下，照 FEATURES 的順序）。js 由伺服器照它生成 / 的 script 標籤（下面的 web_scripts、with_scripts）；css 的 link 與
     tests/kit/webharness.APP_FILES 是手寫的，tests/core/test_contract_features.py 照這一份對它們，店面的 CSS 測試照它讀包的樣式。"""
     return [name for f in registered() for name in f.web]
 
