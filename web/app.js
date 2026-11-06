@@ -2805,6 +2805,7 @@
   // 屬性頁（Joy 2026-11-06「這一定要預設展開那麼多說明？上面已經有屬性了下面還有文字版」）：屬性一份（上面那一格一欄，selfStatsHtml）、
   // 名聲一份（名望、善名、惡名一行，點「怎麼來」才攤開那一條階梯與來源）、經驗與歷練兩條細條並排、成長一行、傳承一行、兩軍態勢一行。
   // 同伴不在這裡重複（門下那一頁有）
+  // 待 joy 潤：「怎麼來」「升第 N 級」
   const meterHtml = (cls, label, have, need) => `<div class="hm-meter ${cls}"><span>${label}</span><i style="--w:${need ? Math.min(100, Math.round((have / need) * 100)) : 100}%"></i></div>`;
   function heroMoreHtml(s) {
     const exp = s.exp === undefined ? "" : !s.exp ? `<div class="hm-meter who-exp full"><span>經驗已到頂</span><i style="--w:100%"></i></div>`

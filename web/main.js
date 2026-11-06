@@ -2051,7 +2051,7 @@
   }
   // 人物簡介（Joy 11/6「不是所有玩家都那麼了解三國裡面的角色」；server.figure_intro）：身分、是誰、本性；性子隨互動變了（設計稿「人物性子會變」，
   // 另一串做）時多「如今」一格與變化紀錄，沒變之前不畫這兩格
-  const INTRO_NATURE = "本性", INTRO_NOW = "如今";
+  const INTRO_NATURE = "本性", INTRO_NOW = "如今"; // 待 joy 潤
   function figIntroHtml(i) {
     if (!i) return "";
     const row = (cls, k, v) => `<p class="${cls}"><b>${k}</b><span>${esc(v)}</span></p>`;
