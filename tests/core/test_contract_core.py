@@ -185,6 +185,15 @@ def test_admin_tools_merge_and_refuse_the_same_name_twice(monkeypatch):
         features_core.admin_tools(None)
 
 
+def test_start_threads_asks_every_registered_package_even_a_closed_one(monkeypatch):
+    """背景執行緒（全部拆包第 52 批）：殼啟動時照清單問登記的每一包、不看 enabled（那時候還沒有 ctx），參數是殼；不回東西。"""
+    one, two = Seams(open_=False), Seams()
+    monkeypatch.setattr(registry, "FEATURES", [one, two])
+    shell = object()
+    assert features_core.start_threads(shell) is None
+    assert one.calls == [("threads", shell)] and two.calls == [("threads", shell)]
+
+
 def test_owner_of_goes_by_the_prefix(fake):
     assert features_core.owner_of("fake:do") is fake
     assert features_core.owner_of("fakeish:do") is None and features_core.owner_of("act:explore") is None
@@ -238,6 +247,9 @@ class Seams(Fake):
 
     def on_season_close(self, ctx, reread):  # battle（全部拆包第 8 批）
         self._note("on_season_close", reread)
+
+    def threads(self, shell):  # tale（全部拆包第 52 批）
+        self._note("threads", shell)
 
     def shops(self):
         return (Shop(key="fakeshop", inside=lambda g: self.in_shop, here=lambda g: self.shop_here,

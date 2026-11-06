@@ -4,7 +4,7 @@
 兩種掛鉤看 enabled 的方式不一樣（手冊 3.3 寫「關著的包一個掛鉤都不叫」，指的是第一種；PM 10/31 認可，3.3 由 PM 補註）：
 - 遊戲當下的（options、menu、choose、status、on_sync、on_day、on_season_*、on_drop_stale、bot_pick）：每一次先問 enabled(ctx)，
   關著的包一個都不叫（tests/core/test_contract_core.py、test_contract_features.py 守）。
-- 殼啟動、載入內容時的（routes、admin_tools、check_content、bot_always，與宣告的 web、content）：那時候還沒有 ctx（沒有角色、
+- 殼啟動、載入內容時的（routes、admin_tools、threads、check_content、bot_always，與宣告的 web、content）：那時候還沒有 ctx（沒有角色、
   開關可能在季中被管理者切換），所以不看 enabled、登記的包全部照掛：路由與管理者工具由各自的 gate 在關著時回 404（搬包之前
   商城在 server 裡也是照掛再 404）、內容照驗（檔案寫壞了早點知道）、永遠按得下去的前綴照排除（關著的包選單上本來就沒有它們）。
 
@@ -21,6 +21,7 @@
 | on_drop_stale(ctx) | Game._drop_stale_references 最後 |
 | bot_pick(ctx, option)、bot_always | bot_policy.score（假人看到這一顆的分數，None 是不按）；bot.pick 排除的前綴（永遠按得下去的） |
 | admin_tools(shell)、routes(shell) | server：/api/do/{op} 的管理者工具、掛路由（shell 是 server 模組） |
+| threads(shell) | server.main（殼開、測試停：只有 main 叫 start_threads，測試不叫；不回東西。全部拆包第 52 批，開給戰記與第 53 批的看守） |
 | check_content(content, need)、web、content | content.validate（關著的包照驗）；index.html 的檔；content.py 讀的檔。check_content **手冊 3.3 表外**（見下） |
 
 比手冊 3.3「就這幾個，不多開」那張表多開了兩個（第 1 階開的，PM 10/31 認可，理由照下面；手冊 3.3 由 PM 補；之後再要加先過 PM）：
@@ -178,6 +179,8 @@ class FeatureHooks(Protocol):
     def bus(self) -> tuple[BusHook, ...]: ...
     # core_step（全部拆包第 36 批：「你這一步」的格，先後在 STEP_ORDER；不問 enabled）
     def steps(self) -> tuple[StepHook, ...]: ...
+    # tale（全部拆包第 52 批：殼啟動時開這一包的背景執行緒；只有 server.main 叫，測試不叫；不問 enabled，殼啟動還沒有 ctx）
+    def threads(self, shell: Any) -> None: ...
 
 
 class Feature:
@@ -231,6 +234,9 @@ class Feature:
         return {}
 
     def routes(self, shell: Any) -> Any:
+        return None
+
+    def threads(self, shell: Any) -> None:
         return None
 
     def check_content(self, content: Content, need: Callable[[bool, str], None]) -> None:
@@ -414,6 +420,13 @@ def admin_tools(shell: Any) -> dict[str, AdminTool]:
 def routers(shell: Any) -> list[Any]:
     """各包的路由（APIRouter；殼照清單的順序掛）。"""
     return [r for f in registered() if (r := f.routes(shell)) is not None]
+
+
+def start_threads(shell: Any) -> None:
+    """各包的背景執行緒（殼開、測試停）：只有 server.main 叫，測試不叫它，停靠 tests/conftest.py 收尾認殼上的名字（全部拆包第 52 批）。
+    照清單問登記的每一包、不看 enabled：殼啟動還沒有 ctx。"""
+    for f in registered():
+        f.threads(shell)
 
 
 def check_content(content: Content, need: Callable[[bool, str], None]) -> None:
