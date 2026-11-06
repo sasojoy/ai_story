@@ -13,7 +13,7 @@
 - `standing.py`（第 29 批之二，原 `tianxia/annals.py` 的查詢與行狀頁那一半）：`profile`、`standing`、`tier_text`／`tier_note`、`xingshi_notes`、`rows`；用 `import *` 加 `_gear`、`_notable` re-export 核心 `annal_base` 的名字，舊名 `tianxia/annals.py` 是指到它的 `sys.modules` 別名。
 - `biography.py`（原 `tianxia/biography.py`）、`zhuan_end.py`（原 `tianxia/zhuan_end.py`）、`zhuan_html.py`（原根目錄 `zhuan_html.py`）：舊名都留成指到同一個模組的別名。
 - `routes.py`：`/api/annals`、`/api/zhuan`、`/api/zhuan/write`、`/api/zhuan/share`、`/zhuan/{code}`；殼（`server.py`）照 `FEATURES` 掛，殼的東西一律照 `shell.<名字>` 當下讀。
-- 掛鉤：`choose_unlisted`（`zhuan:` 前綴，先看前綴再叫選單，原本在 `Game.choose` 的 `choose_unlisted` 之後、查選單之前）、`routes`、`check_content`、`enabled`（沒有任何掛鉤吃它）。沒有 `options`／`menu`：休季用票的鈕是 `Game._everyday_options` 休季那一支叫 `_zhuan_options` 一行委派。
+- 掛鉤：`choose_unlisted`（`zhuan:` 前綴，先看前綴再叫選單，原本在 `Game.choose` 的 `choose_unlisted` 之後、查選單之前）、`routes`、`check_content`、`enabled`（沒有任何掛鉤吃它）。沒有 `options`／`menu`：休季用票的鈕是 `Game._everyday_options` 休季那一支叫 `_zhuan_options`（`game_api.py` 的表）。
 - 前綴 `zhuan:`（`zhuan:pick_art`、`zhuan:seal`、`zhuan:quote:<人物 id>`）。沒有假人分數、沒有 `bots.py`：假人在休季整個不動，碰不到 `zhuan:`（`bot_policy`、`bot.py`、`bot_runner` 都沒有寫 `zhuan`）。
 - 核心要用的那一段在 `tianxia/core/services.py`（`# zhuan`）：`illustration_for`、`writers`、`Writer`、`art_problem`、`ART`、`ART_NO_SIDE`、`ART_FREE`、`AFFINITY／TIER／BOUGHT／REASONS`（行狀 `standing.py` 的 `standing` 與商城插畫票用），`zhuan_end` re-export。
 
@@ -23,10 +23,10 @@
 
 ## 還留在原位的接縫
 
-- `Game` 上 9 個一行委派：`_zhuan_past`（換季：`_reset_player_for_new_season` 最前面）、`_zhuan_profile`（第 29 批之二；換季存行狀：`save_annals` 的第四個引數）、`_zhuan_options`（`_everyday_options` 休季那一支）、`annals_view`、`biography_entry`（server `main_view`）、`biography_request`、`write_biography`、`biography_view`、`share_biography`。紀錄先後算行為，前三個不是掛鉤的位置，記在邊界測試的 `GAME_DELEGATE_CALLERS`。
+- `Game` 上的名字掛在 `game_api.py` 的表：`_zhuan_past`（換季：`_reset_player_for_new_season` 最前面）、`_zhuan_profile`（第 29 批之二；換季存行狀：`save_annals` 的第四個引數）、`_zhuan_options`（`_everyday_options` 休季那一支）、`annals_view`、`biography_entry`（server `main_view`）、`biography_request`、`write_biography`、`biography_view`、`share_biography`。紀錄先後算行為，前三個不是掛鉤的位置，記在邊界測試的 `GAME_DELEGATE_CALLERS`。
 - B 段（鎖外叫模型）第 69 批進了 `routes.py`：`write_zhuan`（殼留一行包裝）、`verdict_text`、`VERDICT_OWNER`（見最後一段）。留在 `server.py` 的：`ZHUAN_JOBS`、`ZHUAN_LOCK`、`_zhuan_key`（`zhuan_view`、測試、`same_behavior` 在讀），加上 `zhuan_view`、`zhuan_extras`、`zhuan_art_src`、`public_base`、`_season_arg`。`tests/server/test_server.py` 掃「鎖外叫模型的函式」認 `zhuan_job`、`verdict_text` 這幾個名字。
 - 根目錄 `zhuan_html.py` 是別名檔（`server.py` 舊的 import、`tests/core/test_desktop_type.py` 讀的路徑）；`tests/core/test_shop_width.py` 讀這個檔斷言「不含 zhuan-layer」，別名檔也成立，但斷言的實質變弱了（真正的內容在包裡）。
-- 行狀拆兩半（全部拆包第 29 批之二）：記一筆的那一半（`note`、`entry`、`watch`、種類常數）在核心 `tianxia/core/annal_base.py`，`biography.py`、`actions.py` 與各包記行狀都 import 它（不算過渡）；查詢與行狀頁那一半（`profile`、`standing`、`tier_*`、`xingshi_notes`、`rows`）在 `standing.py`。舊名 `tianxia/annals.py` 是指到 `standing.py` 的 `sys.modules` 別名（`standing` re-export 核心那一半，兩半的名字都拿得到、同一批物件；從這一批起舊名 `annals` 算列傳包，包要記一筆一律 `from tianxia.core import annal_base as annals`，不准再 `from tianxia import annals`）。換季存行狀時的身家 `profile` 核心不能 import 包，經 `Game._zhuan_profile` 一行委派（Game 上列傳的委派成了 10 個）。
+- 行狀拆兩半（全部拆包第 29 批之二）：記一筆的那一半（`note`、`entry`、`watch`、種類常數）在核心 `tianxia/core/annal_base.py`，`biography.py`、`actions.py` 與各包記行狀都 import 它（不算過渡）；查詢與行狀頁那一半（`profile`、`standing`、`tier_*`、`xingshi_notes`、`rows`）在 `standing.py`。舊名 `tianxia/annals.py` 是指到 `standing.py` 的 `sys.modules` 別名（`standing` re-export 核心那一半，兩半的名字都拿得到、同一批物件；從這一批起舊名 `annals` 算列傳包，包要記一筆一律 `from tianxia.core import annal_base as annals`，不准再 `from tianxia import annals`）。換季存行狀時的身家 `profile` 核心不能 import 包，經 `Game._zhuan_profile`（`game_api.py` 的表）。
 
 ## 測試
 

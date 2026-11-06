@@ -9,9 +9,9 @@
 | `__init__.py` | 登記（`StaminaPlaysFeature`）：`enabled`＝一律開著（`choose`、`bot_pick` 原位本來就不看開關）、`prefix`＝`ambush`、`works`（`choose`：標題先算，設伏「設伏・地點」「收伏」、屯糧「屯糧練兵・地點」）、`bot_pick`、`bot_always`＝`ambush:`、`works:`、`world()`（世界層 `muster` 的 `works` 那一格） |
 | `ambush_rules.py` | 設伏的純規則（原 `tianxia/ambush.py`；那個名字留成別名）。`MOVE_BLOCKED` 在核心 `core/services.py`，這裡 re-export |
 | `works_rules.py` | 屯糧的純規則（原 `tianxia/works.py`；那個名字留成別名）；`on_muster` 是世界層那一格的身體 |
-| `ambush_actions.py` | 原本 `Game` 上的 `_ambush_act`、`_ambush_expire`、`_ambush_check`、`_ambush_fight`、`_ambush_spoils`、`_ambush_record`；`Game` 留 4 個一行委派（`_ambush_expire`、`_ambush_check`、`_ambush_spoils`、`_ambush_record`） |
+| `ambush_actions.py` | 原本 `Game` 上的 `_ambush_act`、`_ambush_expire`、`_ambush_check`、`_ambush_fight`、`_ambush_spoils`、`_ambush_record`；`Game` 上的名字掛在 `game_api.py` 的表（`_ambush_expire`、`_ambush_check`、`_ambush_spoils`、`_ambush_record`） |
 | `works_actions.py` | 原本 `Game._works_act`（只有 `choose` 叫，沒有委派） |
-| `actions.py` | 原本 `Game._stamina_play_options` 的前半（設伏／收伏、屯糧兩段選項）；`Game._stamina_play_head` 留一行委派 |
+| `actions.py` | 原本 `Game._stamina_play_options` 的前半（設伏／收伏、屯糧兩段選項）；`Game._stamina_play_head` 掛在 `game_api.py` 的表 |
 | `bots.py` | 假人的分數（原 `bot_policy.score` 的 `ambush`／`works` 那一段）：一律 `None`（由 `take_turn` 的 `_stamina_play` 做） |
 | `tests/` | `test_stamina_plays.py`、`test_stamina_plays_off.py`（原 `tests/acts/`，整檔搬）、`test_stamina_plays_smoke.py` |
 

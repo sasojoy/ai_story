@@ -24,16 +24,16 @@
 
 - `player_fields = ("picking_market",)`（馬市第二層選單開著）。
 - `carried = ()`：換季全部跟著新角色重來。
-- 不認領：`held_gear`（核心的 `PlayerState` 與共用層 `treasures` 都讀）、`figure_wins`（大勢人物包的）、`shop_line`／`shop_clue`／`shop_hold`（七間店共用，屬核心）。`Game._affinity_before`（`choose` 與核心 `event_check` 的 `answer_event`、`answer_branch` 寫、`people_here` 讀的暫時旗標）列在 `core/services.py` 四、寄放，屬性留在 `Game.__init__`。
+- 不認領：`held_gear`（核心的 `PlayerState` 與共用層 `treasures` 都讀）、`figure_wins`（大勢人物包的）、`shop_line`／`shop_clue`／`shop_hold`（七間店共用，屬核心）。`Game._affinity_before`（`choose` 與核心 `event_check` 的 `answer_event`、`answer_branch` 寫、`people_here` 讀的暫時旗標）列在 `core/services_list.md` 四、寄放，屬性留在 `Game.__init__`。
 - 動身被擋（`atlas.travel_block`）：第 56 批選單收接縫起這一包登記 `MENU_ORDER["block"]` 自己那一格，讀 `picking_market` 的只剩包裡；字與先後一字不動（`atlas` 不再讀）。
 
 ## 委派與留在原位的接縫
 
-`Game` 留 11 個一行委派（`_market_options` 第 56 批換成 `take` 那一格，拿掉）：`_market`、`_people_here`（測試直接叫）、`wield_weapon`、`feed_mount`、`dismantle_weapon`、`dismantle_many`（server 的 `MENXIA_ACTIONS`、假人 `bot.feed_mount`／`bot.wear_better`）、`_general_gifts`、`_signature_arms`、`_gift_entry`（`choose` 後半與核心事件檢定叫；`_signature_arms` 還有大勢人物包的挑戰本人經 `ctx` 叫，列在 `core/services.py` 二、查詢服務）、`gear_rows`、`divine_book_view`（server）。
+`Game` 上的名字掛在 `game_api.py` 的表（`_market_options` 第 56 批換成 `take` 那一格，拿掉）：`_market`、`_people_here`（測試直接叫）、`wield_weapon`、`feed_mount`、`dismantle_weapon`、`dismantle_many`（server 的 `MENXIA_ACTIONS`、假人 `bot.feed_mount`／`bot.wear_better`）、`_general_gifts`、`_signature_arms`、`_gift_entry`（`choose` 後半與核心事件檢定叫；`_signature_arms` 還有大勢人物包的挑戰本人經 `ctx` 叫，列在 `core/services_list.md` 二、查詢服務）、`gear_rows`、`divine_book_view`（server）。
 
 **店面登記（`Shop`）不登記，走 `MENU_ORDER`**（第 56 批選單收接縫定案，計畫第四節，理由同鐵匠鋪、懸賞榜）：入口先後 懸賞榜 → 鐵匠鋪 → 馬市是行為，`_shops` 照 `FEATURES` 走、酒肆與銀兩出口會排到前面；`close_shops` 只收坐著的，出發那一行不看坐不坐著（`shop_line` 不坐在店裡也要清）。所以這一包登記 `menus()` 的格：`take`、`here`、`idle`、`open`、`depart`、`block`，先後在 `MENU_ORDER`；`shop_view` 的 market 分支、`sync.close`、`stale.mid` 的收店（第 55 批）與 `choose` 裡 FB-195 被搶的那一句（`mounts.stale_problem`，在 `choose` 掛鉤之前）不動。
 
-核心原位碰這一包的，邊界測試（`tests/core/test_feature_boundaries.py` 的 `# gear` 段）逐條記理由：
+核心原位碰這一包的，邊界名單（`tests/core/boundary_tables.py` 的 `# gear` 那一組）逐條記理由：
 - `GAME_DELEGATE_CALLERS`：`choose → _general_gifts`、`_signature_arms`、`_gift_entry`（位置固定）。
 - `CORE_DELEGATE_CALLERS`：`event_check.answer_event`、`answer_branch` 各叫 `_general_gifts`、`_signature_arms`、`_gift_entry`（事件檢定是核心本體，贈禮在效果套完之後）。
 - `GAME_DIRECT`：`_drop_stale_references` 讀 `signature_arms.refresh_names`（經舊名別名；會改 `item.name`、要讀 `owned`）。接不了 `on_drop_stale` 的原因是開關、不是位置：`core/features.py` 的 `on_drop_stale` 只問開著的包，原位的 `refresh_names` 不看開關，四欄都關著時 `GearFeature.enabled` 是 False，接進掛鉤就不跑了（第 42 批 PM 認定第 1 條）；歸第 55 批（補算與換季收接縫），照第 40 批 `smith_base` 的前例把 `refresh_names` 放進共用層或核心的 `*_base` 再收。

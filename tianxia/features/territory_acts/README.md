@@ -24,7 +24,7 @@
 
 **沒有 `PlayerState` 欄位**（`player_fields = ()`、`carried = ()`）。全服的帳 `WorldState.conquest`（時程表、進度、分紅、`letter_days`、`day_log`、`settled_key`）、`xingshi`、`xingshi_ticket`、`xingshi_mark` 留在 `state.py`。
 
-## 還留在原位的接縫（理由在 `tests/core/test_feature_boundaries.py` 的 `# territory_acts` 那一段）
+## 還留在原位的接縫（理由在 `tests/core/boundary_tables.py` 的 `# territory_acts` 那一組）
 
 - **22:00 換天不接世界層**：世界層的 `day` 格是 21 天季的曆日，不是現實 22:00 的換天；換天與分紅在 `world_tick`、`sync`、`advance` 三處（五格，第 55 批換成 `SEAM_ORDER` 的 `tick`、`sync.deliver`、`advance.turn`）排在別的結算之間，順序就是行為（`_xingshi_grace` 在「季收了、日子沒往前」之前，`late` 的存季只在那一條路上存）。`Game` 上那兩個委派留給測試，`WORLD_ORDER` 不動。
 - **〈天下形勢〉的 B 段與背景執行緒**（`write_xingshi`、`xingshi_once`、`XINGSHI_RUNNING`）：第 69 批進了 `routes.py`（同月旦評 `write_yuedan`，見最後一段），照舊用殼的佇列、預算、`TALE_THREADS`。
@@ -41,7 +41,7 @@
 ## 測試
 
 - 這一包的 `tests/`：`test_xingshi.py`（〈天下形勢〉，37 條，原 `tests/acts/`，整檔搬）、`test_marks_xingshi_once.py`（痕跡與〈天下形勢〉，6 條，原 `tests/core/`，整檔搬）、`test_territory_acts_smoke.py`（煙霧）、`territory_acts_stage.py`（契約測試擺局面）。
-- 整檔搬時改的只有 `tests/acts/test_xingshi.py` 的兩處斷言字串（路由搬進包之後 `include_router` 掛的不在 `server.app.routes` 上，改查 `app.openapi()["paths"]`；管理者工具不在 `server.ADMIN_ACTIONS`，改查 `server.FEATURE_ADMIN_ACTIONS`）。
+- 整檔搬時改的只有 `tianxia/features/territory_acts/tests/test_xingshi.py` 的兩處斷言字串（路由搬進包之後 `include_router` 掛的不在 `server.app.routes` 上，改查 `app.openapi()["paths"]`；管理者工具不在 `server.ADMIN_ACTIONS`，改查 `server.FEATURE_ADMIN_ACTIONS`）。
 - 留在原處的混合檔（`test_conquest_rules.py`、`test_conquest_siege.py`）也因為管理者五個工具搬進 `admin_tools`，把 `server.ADMIN_ACTIONS[op](game, …)` 改成 `server.FEATURE_ADMIN_ACTIONS[op].run(game, …)`，`SIEGE_STATUS` 改從 `view` import。
 - 調查點名的 `test_xingshi_fb610_order.py`、`test_xingshi_fb646_mend.py`、`test_fb883_admin_letter_ids.py` 現行程式裡沒有這三個檔（已併進 `test_xingshi.py` 或 `test_conquest_siege.py`）。
 

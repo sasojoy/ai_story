@@ -25,7 +25,7 @@
 
 ## 委派與留在原位的接縫
 
-`Game` 留 24 個一行委派（公開 14：`enlist_glow`、`guide_box`、`newbie_view`、`newbie_drifter`、`set_hints_off`、`guide_ack`、`skip_tutorial`、`view_orders`、`view_map`、`view_tab`、`prologue_view`、`onboard_view`、`prologue_recap`、`quest_text`；私有 10：`_note_gift`、`_graduate`、`_begin_enlistment`、`_greet_rejoin`、`_hint`、`_hint_triggers`、`_check_hints`、`_nearest_to`、`_newbie_go`、`_rest`），加上核心原位與出陣包叫的服務 12 個（`_note_action`、`_opening_on`、`_opening_begin`、`_opening_pending`、`_opening_deliver`、`_opening_gate`、`_tutorial_intro`、`_guide_speakers`）與酒肆的查詢服務 3 個（`_tavern_on`、`_tavern_here`、`_tavern_at`：引導包問酒肆，包不能 import 包）。
+`Game` 上的名字掛在 `game_api.py` 的表（公開 14：`enlist_glow`、`guide_box`、`newbie_view`、`newbie_drifter`、`set_hints_off`、`guide_ack`、`skip_tutorial`、`view_orders`、`view_map`、`view_tab`、`prologue_view`、`onboard_view`、`prologue_recap`、`quest_text`；私有 10：`_note_gift`、`_graduate`、`_begin_enlistment`、`_greet_rejoin`、`_hint`、`_hint_triggers`、`_check_hints`、`_nearest_to`、`_newbie_go`、`_rest`），加上核心原位與出陣包叫的服務 12 個（`_note_action`、`_opening_on`、`_opening_begin`、`_opening_pending`、`_opening_deliver`、`_opening_gate`、`_tutorial_intro`、`_guide_speakers`）與酒肆的查詢服務 3 個（`_tavern_on`、`_tavern_here`、`_tavern_at`：引導包問酒肆，包不能 import 包）。
 
 核心原位碰引導的那幾處都沒有第 11 批的掛鉤，改叫上面的服務、記進邊界測試的 `GAME_DELEGATE_CALLERS`（35 對；全部拆包第 24 批有所感的 `_sense_apply`、`sense_draw` 搬進有所感包、包裡經 ctx 叫，剩 33 對）與 `CORE_DELEGATE_CALLERS`（事件檢定 6 對），**沒有新增 `GAME_DIRECT`**（原本兩筆 `_hint_triggers`、`_newbie_go` 讀酒肆的拿掉）：
 
@@ -38,7 +38,7 @@
 **`note_action` 被測試換掉的那一層**：`tests/core/test_engine.py` 換的是 `tianxia.engine.note_action`（看 `args[3]`／`args[-1]`），所以 `Game._note_action` 的本體叫 engine 模組層那個名字（`from .guide import note_action`：別名）；包裡的 `view_orders`、`view_map`、`view_tab` 與出陣包的六處（`actions.py`、`duel_actions.py` 四處；守勢 `train_actions.duty` 兩處：原本的 `Game._duty` 第 17 批進了出陣包，這一批合進 develop 時改）都經 `ctx._note_action`。包裡互相叫直接叫函式，只有被測試換掉的 `_hint_triggers`（`test_hints` 換掉 `game._hint_triggers`）經 `ctx`。
 
 **玩法說明的掛鉤**（第 59 批；計畫 `docs/superpowers/plans/2026-11-06-玩法說明-第59批.md`）：`Feature.howto()`（`HowtoHook`、`HowtoPage`，`core/features.py` 檔尾）。那一頁的 22 格照核心寫死的 `HOWTO_ORDER` 接（順序就是行為，`test_contract_core` 逐字鎖；改表先過 PM），這一包交 `season`、`act_head`、`growth`、`stamina`、`fame`、`bag` 六格，其餘 16 包各交自己那一節；別節中間判斷在別包的句子走 `HOWTO_INSERTS`（`fame_seal`、`fame_tavern`、`land_seal`，主人玉璽、酒肆）。整包不看 `enabled`（判斷都在各節自己裡面，跟搬之前一樣）。兩包以上要用的 `section`、`tenth`、`order_pushers`、`SOME_PLACES` 在核心 `core/howto_base.py`。
-**Game 上這一批留的一行委派**：`howto_text`（路由與二十幾個測試）、`_top_up_line`（`_top_up_pills`：讀檔那一刻寫一行）、`_stamina_help`、`_war_help`（`status_data`：status 掛鉤只問開著的包、鍵的順序算行為，第 66 批才收）。
+**`Game` 上這一批留的名字（掛在 `game_api.py` 的表）**：`howto_text`（路由與二十幾個測試）、`_top_up_line`（`_top_up_pills`：讀檔那一刻寫一行）、`_stamina_help`、`_war_help`（`status_data`：status 掛鉤只問開著的包、鍵的順序算行為，第 66 批才收）。
 
 ## 過渡（手冊 3.11）
 
@@ -46,13 +46,13 @@
 - 第 45 批合完重印 **1 處**：`actions.py` → `howto`；`opening.py` 的 `issuer` 改讀核心 `core/bounty_base`。
 - 第 50 批合完重印 **2 處**：`opening.py` → `bounties`、`actions.py` → `howto`（原本 `atlas`、`figures`、`howto` 同一行，拆成兩行，`atlas`、`figures` 那一行註「共用規則層」）。`actions.py` 讀軍情包認領的 `fragments` 那一處當時不收（第 34 批認定第 9 條），第 59 批合起來之後改問查詢服務 `core/omen_base.heard_any`。
 - 第 59 批合完重印 **1 處**：`howto.py` 函式裡 → `events`（`fame_ranges` 的 `is_rare`）；`actions.py` 的 `howto` 改讀包裡那一份。舊名 `tianxia/howto.py` 留成重新匯出的殼（內容在 17 包，`sys.modules` 別名只能指一包），舊的頂層名字 110 個一個不少；沒有產品程式 import 它，二十幾個測試檔改完就拿掉（第 61 批之後）。
-- 服務清單（`tianxia/core/services.py`）這一包加的：一、共用 `_check_hints`、`_hint`、`_note_action`、`_preparing`、`_journal_guide`、`_free_text_of`、`HutReward`；二、查詢 `_at_battle`（決戰）、`_tavern_on`、`_tavern_here`、`_tavern_at`（酒肆）、`_recruit_target`、`_recruitable_here`（人物情誼；第 19 批成包，從過渡改成查詢服務）、`_create_on`、`_create_allowed`、`_create_price`、`forge`（煉製自創，第 44 批成包，從過渡改成查詢服務）；三、過渡 `slot_insight`、`switch_art`、`practice`、`allocate_stat`、`melt_art`（武學）、`_hint_triggers`（自己的委派）。
+- 服務清單（`tianxia/core/services_list.md`）這一包加的：一、共用 `_check_hints`、`_hint`、`_note_action`、`_preparing`、`_journal_guide`、`_free_text_of`、`HutReward`；二、查詢 `_at_battle`（決戰）、`_tavern_on`、`_tavern_here`、`_tavern_at`（酒肆）、`_recruit_target`、`_recruitable_here`（人物情誼；第 19 批成包，從過渡改成查詢服務）、`_create_on`、`_create_allowed`、`_create_price`、`forge`（煉製自創，第 44 批成包，從過渡改成查詢服務）；三、過渡 `slot_insight`、`switch_art`、`practice`、`allocate_stat`、`melt_art`（武學）、`_hint_triggers`（自己的委派）。
 
 ## 測試
 
 - 這一包的（整檔屬於這一包、第 22 批搬進來的）：`tests/test_guide.py`（23 條：說書人的步驟、下一步、任務卡；原 `tests/core/`）、`test_guide_box.py`（20：對話框；`parents[2]` 改 `parents[4]`）、`test_enlist.py`（53：入伍段）、`test_opening.py`（9：開局第一分鐘）、`test_guide_smoke.py`（1，smoke：week7 新角色在城門口選了一顆、託付送到、任務卡亮新手目標）；審查之後照總表與調查的歸屬再搬兩個：`test_onboard.py`（17：初入江湖的七步，原 `tests/core/`；調查 `area_core` 歸這一包）、`test_newbie_hours.py`（3：新手期照現實時數，測的是共用規則層 `roster.newbie`；總表附錄甲歸這一包）。`pytest tianxia/features/guide/tests -n 4 -m "slow or not slow"`：126 條約 14 秒。
 - 第 59 批搬進來的（玩法說明）：`test_core_loop_howto.py`、`test_econ_howto.py`（原 `tests/core/`）；新加 `test_howto_route.py`（`/api/howto` 掛得到）。
-- **改玩法說明的句子，`test_for` 只挑那一包，另外要跑的**：`tests/arts/test_explain2.py`、`tests/arts/test_stack_rule.py`、`tests/acts/test_conquest_flip.py`、`test_conquest_rules.py`、`test_conquest_siege.py`、`tests/battle/test_terrain_arts.py`、`tests/core/test_econ_divine.py`、`test_journal.py`、`test_precise_actions.py`、`test_renown_status.py`、`tianxia/features/peers/tests/test_social.py`、`tests/figures/test_day_scale.py`、`test_season21_caps.py`、`test_week7_season.py`、`test_gentry_allied.py`、`tests/gear/test_four_tiers.py`、`tests/ranger/test_season21_daily.py`、`tests/server/test_set_password.py`、`tianxia/features/guide/tests/test_explain_web.py`、`test_explain2_web.py`。
+- **改玩法說明的句子，`test_for` 只挑那一包，另外要跑的**：`tests/arts/test_stack_rule.py`、`tests/acts/test_conquest_flip.py`、`test_conquest_rules.py`、`test_conquest_siege.py`、`tests/battle/test_terrain_arts.py`、`tests/core/test_econ_divine.py`、`test_journal.py`、`test_precise_actions.py`、`test_renown_status.py`、`tianxia/features/peers/tests/test_social.py`、`tests/figures/test_day_scale.py`、`test_season21_caps.py`、`test_week7_season.py`、`test_gentry_allied.py`、`tests/gear/test_four_tiers.py`、`tests/ranger/test_season21_daily.py`、`tests/server/test_set_password.py`、`tianxia/features/guide/tests/test_explain_web.py`、`test_explain2_web.py`。
 - **`test_for` 挑不到的、另外要跑的**（這一輪不搬、不拆）：
   - 網頁：`tests/web/test_prologue_web.py`（107；內容混、57 個檔裸名拿 `run`，當共用工具，第 61 批留原處）。
   - 換掉 `tianxia.engine.note_action` 的 `tests/core/test_engine.py`；`_newbie_go` 的 `tests/acts/test_training.py`；本週卡「你這一步」的 `tests/bots/test_step.py`、`tests/map/test_weekcard.py`（第 36 批起新手目標是這一包登記的 `newbie` 那一格，先後由核心契約 `tests/core/test_contract_core.py` 的 `# core_step` 鎖住）；開局擋簽到的 `tianxia/features/checkin/tests/test_checkin.py`；入伍段與軍令的 `tests/figures/test_orders.py`、`test_promotions_high.py`、`test_gentry_allied.py`；任務卡的 `tests/core/test_world.py`、`tests/figures/test_calendar.py`、`test_finale.py`、`test_season21_frame.py`、`tests/ranger/test_season21_daily.py`；提示與玩法說明的 `tianxia/features/guide/tests/test_explain.py`；探索包的 `test_explore_one_polish.py`（`hints`）、`test_explore_one_fix.py`（`newbie_view`）；`tests/season/test_real_content.py`、`tests/server/test_server.py`。
@@ -74,7 +74,7 @@
 
 ## 第 61 批搬進來的測試（混合測試檔歸位）
 
-整檔搬進 `tests/`（只搬位置、不改斷言；模組層標 `whole_content`，內容照舊是整份）：`test_enlist_web.py`（原 `tests/web/`）、`test_explain.py`（原 `tests/core/`）、`test_explain_web.py`（原 `tests/web/`）、`test_hints.py`（原 `tests/arts/`）、`test_hints_web.py`（原 `tests/web/`）、`test_opening_web.py`（原 `tests/web/`）、`test_prologue.py`（原 `tests/core/`）。
+整檔搬進 `tests/`（只搬位置、不改斷言；模組層標 `whole_content`，內容照舊是整份）：`test_enlist_web.py`（原 `tests/web/`）、`test_explain.py`（原 `tests/core/`）、`test_explain_web.py`（原 `tests/web/`）、`test_explain2.py`（原 `tests/arts/`）、`test_explain2_web.py`（原 `tests/web/`）、`test_hints.py`（原 `tests/arts/`）、`test_hints_web.py`（原 `tests/web/`）、`test_opening_web.py`（原 `tests/web/`）、`test_prologue.py`（原 `tests/core/`）。
 
 照條拆來：`test_guide_facade.py`（6 條，從 `tests/core/test_engine.py` 拆來）、`test_guide_page_web.py`（1 條，從 `tests/web/test_jianghu_page_web.py` 拆來）、`test_guide_shell.py`（5 條，從 `tests/server/test_server.py` 拆來）；兩邊都用的小工具在 `tests/kit/`（`engine_kit`、`server_kit`、`jianghu_kit`）。
 

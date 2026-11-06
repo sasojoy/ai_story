@@ -31,13 +31,13 @@
 
 ## 委派與留在原位的接縫
 
-`Game` 留 12 個一行委派（`_season_grant` 第 55 批換成 `season.grant` 那一格，拿掉）：`_sect_options`、`_lean_options`、`_lean_anytime`、`_join_lean`、`_faction_prompt`、`_four_wins`、`ending_card`、`tier_hint`、`sides_card`，加三個新的——
+`Game` 上的名字掛在 `game_api.py` 的表（`_season_grant` 第 55 批換成 `season.grant` 那一格，拿掉）：`_sect_options`、`_lean_options`、`_lean_anytime`、`_join_lean`、`_faction_prompt`、`_four_wins`、`ending_card`、`tier_hint`、`sides_card`，加三個新的——
 `_faction_pending_options`（選單接管整個選單的待確認三段，位置固定）、`_defect_options`（選單的叛投迴圈）、`_defect_scene`（叛投確認畫面的場景）。`_ally_options`、`_left_names` 沒有原位的呼叫端，不留委派。
 其餘 `_faction_step`、`_bot_lean`、`_lean_step`、`_defect_step`、`_leave_behind`、`_tier_outlook`、`_gentry_now` 只有包裡叫，沒有委派。
 核心原位接掛鉤的：`choose` 的 `faction`／`defect`／`sect` 與 `_action_title` 的 `faction`／`defect`（`Outcome`）、`bot_policy.score` 的 `defect`／`sect`、`bot.py` 的 `defect:`／`faction:lean:` 排除（`bot_always`）、叛投兩格（`_CLEAR_CORE`、`_DEFECT_AFTER_CORE` 拿掉）。
 還留在原位的：`bot_policy.take_turn` 的選項濾掉 `faction:lean:`／`defect:`（裡面還有別包與核心的前綴，且不用 `bot_always`）、`bot_policy._toward_faction`（投靠與確認，不經 `score`）。整季機器人 `sect:` 看過才排除（條件式）第 60 批搬成這一包的 `Feature.bot_idle`。
 核心還直接碰這一包認領欄位或前綴的：`options` 的 `defect:cancel`（叛投確認畫面上的「再想想」，`pending_defect` 有值時核心原位加進戰鬥選單）、`_own_scene_text` 選邊與投靠確認的場景判斷（叛投那一段已是 `_defect_scene` 委派）、`atlas.py` 讀 `pending_faction`／`pending_defect`；這幾處沒有掛鉤可接，位置算行為，留原位。
-包裡自己叫自己的 `four_wins` 一律直接叫（沒有測試換掉它）；`Game._four_wins` 只剩決戰包經 ctx 問的那一條（`services.py` 二、查詢服務 `# faction`）。
+包裡自己叫自己的 `four_wins` 一律直接叫（沒有測試換掉它）；`Game._four_wins` 只剩決戰包經 ctx 問的那一條（`services_list.md` 二、查詢服務 `# faction`）。
 叛投確認畫面問押糧經核心的 `core/convoy_base.py`（第 35 批 PM 認定第 3 條認了，照 `omen_base` 前例；它只讀軍情包認領的 `PlayerState.convoy`、不寫，`held(state)` 一個函式）。
 
 ## 測試
@@ -72,7 +72,7 @@
 
 ## 三方卡與江湖畫面的格（全部拆包第 66 批）
 
-- `sides.py`：三方卡 `sides_card`（連 `_bar`、`_goal`、`_places`、`WIN_GIVES`、`WIN_GIVES_OLD`、`HAOQIANG_GOAL`、`HAOQIANG_NOW_PENDING`，原本在 `tianxia/weekcard.py`，字一個不改；核心不 import 包，舊名不留別名）。豪強那一格的補充問同包的 `ending_actions.sides_card`、`tier_hint`；`game._opening_pending()` 經 `ctx`（`core/services.py` 有寫）。
+- `sides.py`：三方卡 `sides_card`（連 `_bar`、`_goal`、`_places`、`WIN_GIVES`、`WIN_GIVES_OLD`、`HAOQIANG_GOAL`、`HAOQIANG_NOW_PENDING`，原本在 `tianxia/weekcard.py`，字一個不改；核心不 import 包，舊名不留別名）。豪強那一格的補充問同包的 `ending_actions.sides_card`、`tier_hint`；`game._opening_pending()` 經 `ctx`（`core/services_list.md` 有寫）。
 - 江湖畫面的格 `status_slots()`（順序在核心的 `STATUS_ORDER`；不問 `enabled`）：`main` 表 `sides_card`、`ending`。
 - 改 `sides.py` `test_for` 挑不到、另外要跑（`-n 4`）：`tests/core/test_contract_core.py tests/core/test_contract_features.py tests/core/test_feature_boundaries.py tests/map/test_weekcard.py tianxia/features/guide/tests/test_opening.py tests/bots/test_step.py tests/core/test_chapters.py tests/figures/test_week_unlock.py tianxia/features/companions/tests/test_errands_weekcard.py tests/server/test_server.py`；`tianxia/features/faction/tests/test_sides_card.py` 整檔 slow，改到它才跑。
 - 畫面：`web/faction.js`（`sidesTableHtml`、`sidesFirstHtml`，全部拆包第 67 批從 `main.js` 切出來，一個字不改；沒有網頁測試執行，靠 `facade` 軌比字與實機）；`main.js`、`app.js` 叫它們。

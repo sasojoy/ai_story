@@ -33,7 +33,7 @@
 
 ## 委派與留在原位的接縫
 
-`Game` 留 21 個一行委派（邊界測試的 `GAME_DELEGATES`）；31 個方法裡另外 10 個只有包裡叫，沒有委派。主幹合回 D 段加的 `figures_here_view` 第 66 批拿掉（`/api/main` 改走 `status_slots`）。**沒有新增 `GAME_DIRECT`**。核心原位碰這一包的，接掛鉤的兩個：
+`Game` 上 16 個名字掛在 `game_api.py` 的表（邊界測試的 `GAME_DELEGATES` 從表算）；31 個方法裡其餘的只有包裡叫，不掛。主幹合回 D 段加的 `figures_here_view` 第 66 批拿掉（`/api/main` 改走 `status_slots`）。**沒有新增 `GAME_DIRECT`**。核心原位碰這一包的，接掛鉤的兩個：
 
 - `choose` 的 `call:`、`_action_title` 的 `call:` 那一格（換成 `Outcome.title`）。
 
@@ -51,7 +51,7 @@
 ## 過渡（手冊 3.11）
 
 - 包 → 還沒搬的舊模組（全部拆包第 40 批合完重印 3 處）：`events`（`view.py`、`menus.py`、`actions.py`：候選、這個地點有沒有、抽一則）。`ranks`（階級；`view.py`、`actions.py`）第 40 批收進共用規則層，不算過渡（原本 5 處）。
-- 服務清單（`tianxia/core/services.py`）這一包加的：一、共用的字 `AUDIENCE_HALL_FIGURES`、`SNUB_NOTE`、`SOCIAL_NO_ONE`；二、查詢 `_can_meet`、`_socialize_figure`、`_count_talk`、
+- 服務清單（`tianxia/core/services_list.md`）這一包加的：一、共用的字 `AUDIENCE_HALL_FIGURES`、`SNUB_NOTE`、`SOCIAL_NO_ONE`；二、查詢 `_can_meet`、`_socialize_figure`、`_count_talk`、
   `_social_plan`、`_brush_off`（本體搬進這一包）與 `_open_dialogue`（本體在人物情誼包）；三、過渡 `_snubbed_character`（主人大勢人物 `features/figures`，第 31 批；總表附錄甲，本體留在 Game，主人成包時改成查詢服務）。
 - 測試換 `tianxia.engine.pick_event` 的那幾條（抽不到事件才走打發話），改成換 `tianxia.features.socialize.actions.pick_event`——本體搬走，換的名字跟著走。
 

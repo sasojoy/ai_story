@@ -8,7 +8,7 @@
 |---|---|
 | `__init__.py` | 登記（`FeastFeature`）：`enabled`＝宴客開著或這一季還有擺過的宴、`options`（入席）、`menu`（坐在席上）、`choose`（`feast:`，標題先算）、`on_sync`、`bot_pick`、`bot_always`＝`feast:` |
 | `rules.py` | 純規則（原 `tianxia/feasts.py`；那個名字留成別名給測試） |
-| `actions.py` | 原本 `Game` 上的 `_feast_seat`、`_feast_options`、`_feast_menu`、`_feast_act`、`feast_*`；`Game.feast_free_text_prompt`、`feast_text_request`、`feast_toast` 留一行委派 |
+| `actions.py` | 原本 `Game` 上的 `_feast_seat`、`_feast_options`、`_feast_menu`、`_feast_act`、`feast_*`；`Game.feast_free_text_prompt`、`feast_text_request`、`feast_toast` 掛在 `game_api.py` 的表 |
 | `bots.py` | 假人的分數（原 `bot_policy.score` 的 feast 那一段）：入席 8、敬酒 50、離席不按 |
 | `tests/` | `test_feast.py`（原 `tests/figures/test_figure_life_batch3.py` 的「宴客」那一段）、`feast_stage.py`（契約測試擺局面） |
 

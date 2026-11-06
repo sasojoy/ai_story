@@ -14,7 +14,7 @@
 - `routes.py`：看守一輪 `notice_round`、`_notice_keys`、開看守 `start_web_push`、`web_push_line`，加上五條 `/api/push*` 與 `/sw.js`（路由搬、`web/sw.js` 檔留在 `web/` 原位）。
 - 掛鉤只接 `routes`、`threads`。`threads` 叫殼的 `start_web_push`；`main()` 原本在 `print(web_push_line(...))` 下一行直接叫它，現在經 `start_threads`（晚幾行、在 `start_narration` 之後，都在 `uvicorn.run` 之前，沒有輸出、沒有順序依賴；退版：把那一行放回去、`threads` 改回 `None`）。`enabled` 回 `True`。
 - 選項前綴：沒有。`choose`、`bot_policy.py`、`bot.py`、`bot_runner.py` 都沒有手機通知。假人沒有帳號，進不了訂閱名單。
-- 核心要用的：`tianxia/core/services.py` 的 `# notify`：看守在行動鎖內叫 `game.morning_mail(now)`（主人人物情誼包，Game 上一行委派）。
+- 核心要用的：`tianxia/core/services_list.md` 的 `# notify`：看守在行動鎖內叫 `game.morning_mail(now)`（主人人物情誼包，名字掛在那一包的 `game_api.py`；這一包自己沒有表）。
 - SSE 那一半（`server_push.py` 的 `PushHub`、`watch_world`、`sse_stream`，`server.py` 的 `HUB`、`/api/events`）是殼，沒搬。
 
 ## 認領的欄位（手冊 3.5）
@@ -29,7 +29,7 @@
 
 ## 測試
 
-整檔搬進 `tests/`：`test_web_push.py`（加密與簽名、五種事、09:00 來信、訂閱 API 與看守；原 `tests/server/test_web_push.py`，只改說明字；有一條 `@pytest.mark.smoke`）、`test_notify_package.py`（有登記、五條路由與 `/sw.js`、舊名是同一個物件、`main()` 經掛鉤開看守）。`pytest tianxia/features/notify/tests -n 4`。
+整檔搬進 `tests/`：`test_web_push.py`（加密與簽名、五種事、09:00 來信、訂閱 API 與看守；原 `tianxia/features/notify/tests/test_web_push.py`，只改說明字；有一條 `@pytest.mark.smoke`）、`test_notify_package.py`（有登記、五條路由與 `/sw.js`、舊名是同一個物件、`main()` 經掛鉤開看守）。`pytest tianxia/features/notify/tests -n 4`。
 
 **另外要跑的混合檔**（含手機通知的測試，但檔案不屬於這一包，不拆；`test_for` 改這一包挑不到）：
 

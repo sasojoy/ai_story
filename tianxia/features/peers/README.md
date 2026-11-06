@@ -2,7 +2,7 @@
 
 此地還有誰、玩家卡與卡上的動作登記表、邀請框（打招呼、名帖、切磋、論武、結伴同行共用的 `invite:` 選項）、打招呼、贈物、名帖（定稿、遞、回帖、檢舉、管理者撤下與放回）。全部拆包第 37 批搬進來，行為一個字不變。
 第 38 批再搬進來：切磋、論武（三段式首創取名）、截殺（含策馬脫身），與假人答切磋、答論武、截殺（`spar`、`discuss`、`raid` 三個模組，舊名留別名）。
-通緝（`wanted.py`）第 45 批搬進懸賞榜包（`tianxia/features/bounties/`），卡上動作的登記表搬進核心 `core/cards.py`；結伴同行（`_join`、`join_refusal`）第 48 批搬進移動包（`tianxia/features/travel/party.py`，Game 留一行委派）。
+通緝（`wanted.py`）第 45 批搬進懸賞榜包（`tianxia/features/bounties/`），卡上動作的登記表搬進核心 `core/cards.py`；結伴同行（`_join`、`join_refusal`）第 48 批搬進移動包（`tianxia/features/travel/party.py`，`Game` 上的名字掛在 `game_api.py` 的表）。
 
 - 導覽：`docs/guide/散人與玩家互動.md`（玩家卡、切磋、論武）。
 - 設計稿：玩家互動（企劃者 2026-10-08）；名帖（Joy 2026-10-19，設計稿 https://claude.ai/artifact/YLTXjaX77DJRsCmMX57xAi）。
@@ -38,12 +38,12 @@
 
 ## 委派與留在原位的接縫
 
-`Game` 現在留 32 個一行委派（第 66 批拿掉 `_invite_status`，狀態列改走 `status_slots`）：第 38 批加了 13 個（論武 `discuss_items`、`_discuss_cost`、`discuss_problem`、`discuss_item_problem`，截殺 `raid_shown`、`raid_refusal`、`raid_odds`、`raid_targets`、`raid`、`raid_flee_odds`、`_raid_fled`、`_raid_spoils`、`_raid_record`），拿掉沒人叫的 `_pair_left`，其餘 20 個是第 37 批留的（下面括號裡第 37 批的清單，`_pair_left` 除外）（`peers_here`、`_peer`、`peer_card`、`peer_request`、`peer_act`、`calls_here`、`_invite_options`、`_invite`、`answer_invite`、`_tell_sender`、
+`Game` 上的名字掛在 `game_api.py` 的表（第 66 批拿掉 `_invite_status`，狀態列改走 `status_slots`）：第 38 批加了 13 個（論武 `discuss_items`、`_discuss_cost`、`discuss_problem`、`discuss_item_problem`，截殺 `raid_shown`、`raid_refusal`、`raid_odds`、`raid_targets`、`raid`、`raid_flee_odds`、`_raid_fled`、`_raid_spoils`、`_raid_record`），拿掉沒人叫的 `_pair_left`，其餘 20 個是第 37 批留的（下面括號裡第 37 批的清單，`_pair_left` 除外）（`peers_here`、`_peer`、`peer_card`、`peer_request`、`peer_act`、`calls_here`、`_invite_options`、`_invite`、`answer_invite`、`_tell_sender`、
 `gift_day_left`、`_spar_pair`、`_pair_left`、`_pair_tick`、`mingtie_view`、`make_mingtie`、`report_mingtie`、`admin_mingtie_reports`、`admin_mingtie_remove`、`admin_mingtie_restore`，其中管理者三個給 server 的 `admin_choices`、`ADMIN_ACTIONS`），
 另加 `_yuedan_line`（玩家卡的月旦評那一句，主人是大勢人物包，包經 `ctx` 叫）。其餘 10 個方法只有包裡叫，沒有委派。
 核心原位接掛鉤的：`choose` 與 `_action_title` 的 `invite`（`Outcome`）、換季的頭銜簿（`on_season_start`）、`bot.py` 的 `invite:` 排除（`bot_always`）。
 留委派、記進 `GAME_DELEGATE_CALLERS` 的：`_everyday_options` 叫 `_invite_options`（選單的順序是行為）；
-結伴同行（移動包 `party.join`、`join_refusal`，第 48 批；Game 留一行委派）在包裡經 `ctx` 叫 `_tell_sender`、`_peer`，不再記進 `GAME_DELEGATE_CALLERS`。第 38 批把第 37 批的 `GAME_DIRECT` 7 個（切磋、論武直接用這一包的 `social`、`invites`）與 `_PEERS_38` 的 6 筆呼叫端都拿掉；
+結伴同行（移動包 `party.join`、`join_refusal`，第 48 批；`Game` 上的名字掛在 `game_api.py` 的表）在包裡經 `ctx` 叫 `_tell_sender`、`_peer`，不再記進 `GAME_DELEGATE_CALLERS`。第 38 批把第 37 批的 `GAME_DIRECT` 7 個（切磋、論武直接用這一包的 `social`、`invites`）與 `_PEERS_38` 的 6 筆呼叫端都拿掉；
 `engine.py` 對 `invites`、`social` 的 import 也拿掉了，多 import 論武、截殺兩個動作檔（13 個委派用）與 `DISCUSS_SAME`、`_refusal` 一行（`test_discuss.py` 從 `engine` 拿的過渡；第 61 批拿掉，`test_discuss` 改讀 `discuss_actions`）。
 懸賞榜第 45 批成包，截殺讀的 `hunting`、`official_hit`、`BEATEN_OFFICIAL` 三處改讀核心 `core/bounty_base`。
 論武的 `discuss_actions` 還 import 舊模組 `fusion`（合成與揣摩，在 `SHARED_LATER`，標「過渡：待搬」），所以包到舊模組共 3 處：`mingtie.py`、`bots.py` 的 `leaderboard`，加 `fusion`。
@@ -53,9 +53,9 @@
 
 `tianxia/features/peers/tests/`（整檔屬於這一包的，原樣搬來，只改檔頭的路徑字串）：
 
-- `test_mingtie.py`（13 條，原 `tests/bots/test_mingtie.py`）：名帖（定稿的檢查、遞與回帖、檢舉與撤下放回、假人做名帖與遞名帖）與審一句話。借 `tianxia/features/peers/tests/test_social.py` 的小工具（`NOW`、`_as`、`_done`、`_player`）。
-- `test_spar.py`（18 個測試函式、參數展開 23 條，原 `tests/battle/test_spar.py`，第 38 批整檔搬）：切磋（邀請、答應、婉拒、收回、戰報與經驗、假人答切磋）；改的只有路徑字串。
-- `test_raid.py`（21 個測試函式、參數展開 26 條，原 `tests/ranger/test_raid.py`，第 38 批整檔搬）：截殺（敵對陣營、散人揭通緝、城鎮擋、新手期、冷卻與護身、混戰過的拒絕話、打贏打輸平手、假人截殺）；
+- `test_mingtie.py`（13 條，原 `tianxia/features/peers/tests/test_mingtie.py`）：名帖（定稿的檢查、遞與回帖、檢舉與撤下放回、假人做名帖與遞名帖）與審一句話。借 `tianxia/features/peers/tests/test_social.py` 的小工具（`NOW`、`_as`、`_done`、`_player`）。
+- `test_spar.py`（18 個測試函式、參數展開 23 條，原 `tianxia/features/peers/tests/test_spar.py`，第 38 批整檔搬）：切磋（邀請、答應、婉拒、收回、戰報與經驗、假人答切磋）；改的只有路徑字串。
+- `test_raid.py`（21 個測試函式、參數展開 26 條，原 `tianxia/features/peers/tests/test_raid.py`，第 38 批整檔搬）：截殺（敵對陣營、散人揭通緝、城鎮擋、新手期、冷卻與護身、混戰過的拒絕話、打贏打輸平手、假人截殺）；
   內有 5 條是混戰、設伏的呼叫端（`_melee_record`、`_ambush_record`），整檔不拆；改的只有路徑字串與假人的 patch（`monkeypatch.setattr(bots, "RAID_CHANCE", 1.0)` 改成 patch 包的 `bots`）。
 - `test_peers_smoke.py`（1 條，**新寫的煙霧**，手冊 4.1 每一包至少一條）：兩人同地點互看、打開玩家卡、挑釁、乙的選單多出 `invite:` 回禮、挑一個回（這一包的 `choose` 掛鉤接走，標題「與甲」）。
 - `test_season_book.py`（1 條，**合併時補**，第 37 批 PM 認定第 1 條）：換季的頭銜簿（`on_season_start`）——舊簿非空、其中一條跟這一季也掙到的重複，換季之後是舊的照順序、接上這一季新掙到的，重複的不再加（期望值照搬之前的行為寫，測試內容）。

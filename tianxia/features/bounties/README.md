@@ -27,7 +27,7 @@
 
 ## 委派與留在原位的接縫
 
-**`Game` 留的一行委派**：`_bounty`（`tianxia/features/gear/tests/test_shop2.py` 直接叫，同 `_smith`）、`_raid_bounty`（查詢服務，截殺與設伏）、`_bounty_stale`（`choose`）（`_bounty_status` 第 66 批拿掉：懸賞卡改走 `status_slots`）。人物情誼包回答這一包（服務清單二 `# bounties`，PM 認定乙案）：`_letter_thank`、`_parley_settle_task`、`_parley_keep`、`_parley_owed_line`、`_parley_ask_label`。`post_wanted` 沒人叫，不留。
+**`Game` 上的名字（掛在 `game_api.py` 的表）**：`_bounty`（`tianxia/features/gear/tests/test_shop2.py` 直接叫，同 `_smith`）、`_raid_bounty`（查詢服務，截殺與設伏）、`_bounty_stale`（`choose`）（`_bounty_status` 第 66 批拿掉：懸賞卡改走 `status_slots`）。人物情誼包回答這一包（服務清單二 `# bounties`，PM 認定乙案）：`_letter_thank`、`_parley_settle_task`、`_parley_keep`、`_parley_owed_line`、`_parley_ask_label`。`post_wanted` 沒人叫，不留。
 
 **三間店不排進 `Shop`，走 `MENU_ORDER`（第 56 批選單收接縫的結論，計畫第四節）**：量到四條——(1)`features_core._shops` 照 `FEATURES` 走，酒肆、銀兩出口排在鐵匠鋪、馬市前面，懸賞榜最後，要維持「懸賞榜 → 鐵匠鋪 → 馬市 → 其他店」就得挪包；(2)`drop_shops` 在 `sync.close` 也跑，懸賞榜今天只有 `stale.mid` 收，進 `Shop` 就多收一次；(3)鐵匠鋪 `here` 兩個意思（`_shop_open` 是單子沒開著且開門，收店是開門）；(4)`close_shops` 只收坐著的，出發那三行不看坐不坐著（`shop_line`、`smith_page`、`smith_rule`、`bounty_pick` 不坐在店裡也要清）。所以這一包登記 `menus()` 的格：`take`、`here`、`idle`、`open`、`depart`、`block`，先後在 `MENU_ORDER`；`shop_view` 的 `board` 那一支與 `stale.mid` 的收店不動。`SHOP_ACTS`、`LEAVE_SHOP_IDS` 不動。
 

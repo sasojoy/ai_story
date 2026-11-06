@@ -21,7 +21,7 @@
 
 ## 委派與留在原位的接縫
 
-`Game` 留 10 個一行委派（公開 4：`story_start`〔程式組的線的入口，頓悟用〕、`story_cards`〔測試在叫〕、`story_seen`、`story_card_view`〔server〕；私有 6：`_story_begin`〔探索包經 `ctx`〕、`_story_tick`〔`sync`、`choose`、`_event_progress` 與測試〕、`_mirror_squad`〔有所感測試〕、`_story_menu`、`_story_options`、`_story_close_season`）。核心原位碰一條線的幾處（計畫 1.5）接不了第 11 批掛鉤，改叫這些委派、記進邊界測試 `GAME_DELEGATE_CALLERS` 的 `# story` 那一段（6 對，各寫理由），**沒有新增 `GAME_DIRECT`**：
+`Game` 上的名字掛在 `game_api.py` 的表（公開 4：`story_start`〔程式組的線的入口，頓悟用〕、`story_cards`〔測試在叫〕、`story_seen`、`story_card_view`〔server〕；私有 6：`_story_begin`〔探索包經 `ctx`〕、`_story_tick`〔`sync`、`choose`、`_event_progress` 與測試〕、`_mirror_squad`〔有所感測試〕、`_story_menu`、`_story_options`、`_story_close_season`）。核心原位碰一條線的幾處（計畫 1.5）接不了第 11 批掛鉤，改叫這些委派、記進邊界測試 `GAME_DELEGATE_CALLERS` 的 `# story` 那一段（6 對，各寫理由），**沒有新增 `GAME_DIRECT`**：
 
 - 答題的選單（`_everyday_options`）在有所感的 `_sense_menu` 之後，`menu` 掛鉤在它之前；「未了之事」那一顆在應召之後、此地的人之前，`options` 掛鉤在最後面——`/api/main` 的選項順序算行為。
 - 換季收線（`_reset_player_for_new_season`）要在 `world.save_annals` 存上一季的行狀之前，`on_season_end` 在它之後。
@@ -33,7 +33,7 @@
 - 包 → 還沒搬的舊模組：沒有了（全部拆包第 40 批合完重印 0 處）：`actions.py` 那一行 `chapters` 第 40 批收進共用規則層，不算過渡，行尾註改寫成「共用規則層」；`storyline.py` 的 `annals` 第 29 批之二改 import 核心。共用層 `story_base` → `atlas`（`here` 的大區）第 50 批起是共用層之間（`atlas` 收進 `registry.SHARED`），不再記；`story_base` → `chapters`（`vary` 的大事結果，函式裡）第 40 批起是共用層之間，不再記。
 - 章回的開回、收回（原本 `chapters.tick`，叫這一包的 `finish`）第 40 批整段搬進這一包：`storyline.chapter_tick`（`story_tick` 叫它，先後不變）；`chapters` 讀一條線的 `active`、`current`、`here`、`doable` 改讀底座 `story_base`（`waiting`、`doable` 與新的 `mark_of` 第 40 批搬進底座，`storyline.py` 照原名 re-export 同一個物件；`rules.check_condition` 的 `story_marks`、`story_marks_max` 經 `story_base.mark_of` 讀）；`chapters` 載入時往底座的 `story_base.TASKS` 登記章回的一拍，不 import 這一包。
 - 舊模組 → 包：`engine` 1 行（`story_actions`）、別名檔 `tianxia/storyline.py`；`bot`、腳本、測試（`weekcard` 第 36 批起收進核心，`OPTION` 改讀共用規則層的 `story_base`）。
-- 服務清單（`tianxia/core/services.py`）這一包加的：二、查詢 `# story` 一段（`ctx._story_begin`：探索包叫它，原本列在三、過渡 explore 那一行）；包裡叫回 `Game` 的其餘都已在清單（`_present`、`_story_squad`、`_judged`、`_fight_with`、`_style_note`、`_terrain_note`、`_narrate`、`_play_rounds`、`_hp_facts`、`_battle_rewards`、`_file_battle`、`_outcome`、`_save_season`）。
+- 服務清單（`tianxia/core/services_list.md`）這一包加的：二、查詢 `# story` 一段（`ctx._story_begin`：探索包叫它，原本列在三、過渡 explore 那一行）；包裡叫回 `Game` 的其餘都已在清單（`_present`、`_story_squad`、`_judged`、`_fight_with`、`_style_note`、`_terrain_note`、`_narrate`、`_play_rounds`、`_hp_facts`、`_battle_rewards`、`_file_battle`、`_outcome`、`_save_season`）。
 
 ## 測試
 

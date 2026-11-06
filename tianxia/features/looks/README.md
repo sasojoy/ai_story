@@ -4,11 +4,13 @@
 - **導覽**：`docs/guide/商城.md` 的「擂台形象」那一節
 - **設計稿**：擂台動畫＋付費自建形象 v3（https://claude.ai/artifact/5NMJiMhXFPYwdnMA2TQi3U；Joy 2026-10-31「都按照建議」），第二期的基礎版
 
+`Game` 上的名字掛在 `game_api.py` 的表；`_battle_ult` 在表上留小 def，因為 `test_looks_mvp` 與 `same_behavior` 換的是 `looks.actions.battle_ult`，要晚綁定。
+
 | 檔 | 是什麼 |
 |---|---|
 | `__init__.py` | 登記（`LooksFeature`）：`enabled`＝商城開著＋這一包的 `content/looks.json` 有東西、`routes`、`check_content`（id 當資料夾名、名字過命名過濾） |
 | `rules.py` | 純規則：買到哪幾套（`owned`，照核心 `core.services.look_ids`）、穿哪一套（`worn`／`wear`，記在 `mall_entitlements` 的 `look`／`wear`）、假人挑哪一套（`bot_look`）、畫面資料（`view`） |
-| `actions.py` | `look_of`（`Game.arena_look` 的一行委派叫它）、`view`、`wear`；第二批 `order`、`admin_view`／`admin_upload`／`admin_release`／`admin_reject`、`gen_mode`（`TIANXIA_LOOK_GEN`） |
+| `actions.py` | `look_of`（`Game.arena_look` 經 `game_api.py` 的表叫它）、`view`、`wear`；第二批 `order`、`admin_view`／`admin_upload`／`admin_release`／`admin_reject`、`gen_mode`（`TIANXIA_LOOK_GEN`） |
 | `orders.py` | 自建形象的訂單（第二批）：下單、狀態、圖的檔頭驗證與存放（資料庫旁邊的 `looks/u<id>/`）、假的生圖器、上架與退回、給生圖工具的提示詞 |
 | `routes.py` | `GET /api/looks`、`POST /api/looks/wear {look}`、`POST /api/looks/order`、`GET /api/looks/img/<u數字>/<張>`、`GET /api/admin/looks`、管理者工具 `looks_upload`／`looks_release`／`looks_reject`；關著 404 |
 | `moves.py` | 招式動畫（第三批）：替自己的武功下單、招式庫、每季綁到一門武功（同打法免費）、擂台記哪一招；2026-11-01 起下單是一句話自創（`scenes.py`） |

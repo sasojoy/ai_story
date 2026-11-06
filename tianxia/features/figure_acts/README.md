@@ -25,9 +25,9 @@
 
 **世界狀態**（`WorldState`）：`figure_guards`、`aid_tally`、`guard_credits`、`plans`、`yuedan`、`yuedan_week` 屬於世界，留在原地。
 
-## 還留在核心原位的接縫（理由在 `tests/core/test_feature_boundaries.py` 的 `# figure_acts` 那一段）
+## 還留在核心原位的接縫（理由在 `tests/core/boundary_tables.py` 的 `# figure_acts` 那一組）
 
-- `act:challenge:<人物>`：第 57 批接進 `Verb` 的 `tail_run`、`tail_title`、`tail_squad`（按下去、標題、對手隊伍）；選單第 56 批是 `here/challenge` 那一格。Game 留 `_challenge_options`、`_challenge`（`scripts/measure_challenge.py` 換，格裡經 `ctx` 叫）、`_figure_squad`（`test_rise` 等直接叫，格裡經 `ctx` 叫）、`_snubbed_character`、`challenge_odds` 的一行委派。
+- `act:challenge:<人物>`：第 57 批接進 `Verb` 的 `tail_run`、`tail_title`、`tail_squad`（按下去、標題、對手隊伍）；選單第 56 批是 `here/challenge` 那一格。Game 留 `_challenge_options`、`_challenge`（`scripts/measure_challenge.py` 換，格裡經 `ctx` 叫）、`_figure_squad`（`test_rise` 等直接叫，格裡經 `ctx` 叫）、`_snubbed_character`、`challenge_odds` 掛在 `game_api.py` 的表。
 - 選單末段 `護衛 + features_core.options + 盤算`：護衛那串在包選項之前、盤算在之後，`options` 掛鉤接不了，Game 留 `_aid_options`、`_plan_options` 的委派。
 - `sync.deliver` 的 `guard` 那一格（第 55 批，委派拿掉）：夾在 `echoes` 與 `notices` 之間（接成 `deliver_notices` 掛鉤，酒肆的會跑在它前面，行狀順序會變）。
 - `figures.py` 的 `figure_aid.restore` 全部拆包第 40 批換掉：犒軍與自然回復共用一天上限的那五個函式（`on`、`_day`、`_life`、`left_today`、`restore`）搬進共用規則層 `figures`（`aid_` 開頭），`figures.recover` 直接叫自己的 `aid_restore`，`figure_aid.py` 照原名 re-export 同一個物件。`social.py` 已經不讀 `yuedan.line_for`（第 40 批合完量的：只剩 `engine` 的委派經包讀）。
@@ -47,7 +47,7 @@
 - 挑戰本人與大勢人物：`tests/figures/test_figures.py`（19／62，`challenge_odds`、`win_reward` 在這裡）、  `tests/figures/test_orders.py`（8／85）、`tests/figures/test_figure_life.py`（2／17，`rout`）、`tests/figures/test_admin_timetable.py`（`admin_fallen`、`admin_revive_figure`）、
   `tests/figures/test_figure_attrition.py`（4／9）、`tests/battle/test_rise.py`（4／10）、`tests/figures/test_gentry_allied.py`、`tests/figures/test_figure_life_batch3.py`（4／9，月旦評）
 - 打贏的一串：`tianxia/features/gear/tests/test_signature_arms.py`（7／25，換掉 `challenge.rout`）、`tianxia/features/gear/tests/test_treasures.py`（6／56）、`tests/gear/test_weapons.py`（`tier3`）、
-  `tianxia/features/sortie/tests/test_sortie_rewards.py`（`tier4`）、`tianxia/features/seal/tests/test_seal_revamp.py`（`figure_squad`）、`tianxia/features/seal/tests/test_seal_engine.py`（16／41）、`tests/seal/test_seal_duel.py`（12／27）
+  `tianxia/features/sortie/tests/test_sortie_rewards.py`（`tier4`）、`tianxia/features/seal/tests/test_seal_revamp.py`（`figure_squad`）、`tianxia/features/seal/tests/test_seal_engine.py`（16／41）、`tianxia/features/seal/tests/test_seal_duel.py`（12／27）
 - 假人：`tests/bots/test_bot_policy.py` 這一類（`aid:`、`act:challenge:` 的分數）
 - 改這一包時：`python scripts/test_for.py --base HEAD tianxia/features/figure_acts/challenge.py`
 

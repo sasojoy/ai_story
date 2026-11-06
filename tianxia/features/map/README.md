@@ -26,18 +26,18 @@
 
 ## 這一批做的設計（包→包三條，不用過渡）
 
-搬到 `core/services.py` 的純函式與字表是**寄放**：`services.py` 是 ctx 服務清單，第 50 批（`atlas` 拆兩半）把它們移到核心小模組（照 `omen_base`、`annal_base`、`convoy_base` 前例），原模組照舊 re-export（第 49 批 PM 認定第 3 條）。
-**第 50 批移了**：那一段一個字沒改搬到核心的 `tianxia/core/explore_base.py`（`services.py` 不留 re-export）：`mapdata` 改 `from tianxia.core import explore_base`（`LOSE_WORD = explore_base.LOSE_WORD` 照舊 re-export），探索包的 `explore_rules`、`explore_actions`、有所感包的 `sensing` 改從它 re-export（`explore_rules.kind_of is explore_base.kind_of`）。跟探索包的 `features/explore/explore_base.py` 同檔名、不同模組。`_fierce_line` 包裡第 50 批起直接叫同檔的 `fierce_line`（`Game._fierce_line` 一行委派留著：same_behavior 的 strip 軌直接叫）。
+搬到 `core/services.py` 的純函式與字表是**寄放**：`services.py` 那時是 ctx 服務清單，第 50 批（`atlas` 拆兩半）把它們移到核心小模組（照 `omen_base`、`annal_base`、`convoy_base` 前例），原模組照舊 re-export（第 49 批 PM 認定第 3 條）。
+**第 50 批移了**：那一段一個字沒改搬到核心的 `tianxia/core/explore_base.py`（`services.py` 不留 re-export）：`mapdata` 改 `from tianxia.core import explore_base`（`LOSE_WORD = explore_base.LOSE_WORD` 照舊 re-export），探索包的 `explore_rules`、`explore_actions`、有所感包的 `sensing` 改從它 re-export（`explore_rules.kind_of is explore_base.kind_of`）。跟探索包的 `features/explore/explore_base.py` 同檔名、不同模組。`_fierce_line` 包裡第 50 批起直接叫同檔的 `fierce_line`（`Game._fierce_line` 在 `game_api.py` 的表上留著：same_behavior 的 strip 軌直接叫）。
 
-- **探索包讀輿圖**：原本 `explore_actions` import `mapdata`（`LOSE_WORD`、`mostly_here`）與 `mapview`（`open_places`）。`LOSE_WORD` 搬到 `core/services.py`（`mapdata.LOSE_WORD` 是同一個字串）；`mostly_here`、`open_places` 改經 `Game` 的一行委派 `_map_mostly_here`、`_map_open_places` 問這一包。
+- **探索包讀輿圖**：原本 `explore_actions` import `mapdata`（`LOSE_WORD`、`mostly_here`）與 `mapview`（`open_places`）。`LOSE_WORD` 搬到 `core/services.py`（`mapdata.LOSE_WORD` 是同一個字串）；`mostly_here`、`open_places` 改經 `Game` 上的 `_map_mostly_here`、`_map_open_places`（`game_api.py` 的表）問這一包。
 - **輿圖讀探索包**：`mapdata` 讀探索表的 `kind_of`、`hint_in`、`mostly_in`。這幾個純函式（連同六種地點、四類事、「多半」兩個字的字表與算法）搬到 `core/services.py`，`explore_rules` re-export（`explore_rules.kind_of is services.kind_of`）。
 - **輿圖讀有所感包**：`sensing.terrain_tags` 搬到 `core/services.py`，`sensing` re-export。
 - **輿圖讀出陣包**：`mapview` 的 `sortie.on` 就是 `territory.on`（共用規則層）；`map_state` 的 `sortie.mode` 改問 `ctx._sortie_mode(loc)`（服務清單二、查詢服務 `# map`）。
 
-## 還留在原位的接縫（理由在 `tests/core/test_feature_boundaries.py` 的 `# map` 那一段）
+## 還留在原位的接縫（理由在 `tests/core/boundary_tables.py` 的 `# map` 那一組）
 
 - **`/api/travel` 帶的 `map`**（走不成時回 `{arrived: false, map, reason}`）：`/api/travel` 是移動包的路由（第 47 批搬進 `tianxia/features/travel/routes.py`），經 `shell.map_view` 帶 `map`；`server.map_view` 是一層薄薄的包裝（把殼的 `md` 帶進 `views.map_view`；`server.py` 直接 import 這一包的 `views`，第 49 批 PM 認定第 10 條）。
-- **`bot_policy` 的 `travel_options`**（假人的移動選項）：叫 `Game.travel_options` 的一行委派。假人不看地圖。
+- **`bot_policy` 的 `travel_options`**（假人的移動選項）：叫 `Game.travel_options`（`game_api.py` 的表）。假人不看地圖。
 - **`view_map`**（新手引導包的）、**`tab:map`**（揭曉鍵）：不是這一包的；輿圖沒有選項前綴。
 - **`app.js` 的 `loadMap`**：殼呼叫的入口，留在 `app.js`。
 - **`Game.MAP_LAYERS`**（`atlas.LAYERS`）：類別屬性，`views.map_view` 與 `test_atlas` 讀它。

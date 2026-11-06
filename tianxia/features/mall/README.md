@@ -11,7 +11,7 @@
 | `rename.py` | 易名帖換名號的規矩（`clash`；`swap` 在核心 `tianxia/core/swap.py`） |
 | `actions.py` | 原本 `Game` 上的 `mall_*`、`admin_mall_*`（全部拆包第 58 批委派全拿掉，路由與測試直接叫這裡）；`purchase` 回 `Receipt`（`lines`、`bought`、`already`，路由從回傳值拿），`buy` 只要句子 |
 | `routes.py` | `/api/mall`、`/api/mall/records`、`/api/mall/buy`、`/api/mall/claim`、`/api/mall/rename`、`/api/admin/mall`；`/api/do/mall_reissue|revoke|refund` |
-| `tests/` | 原 `tests/mall/`（`test_wallet.py` 測核心的錢包，搬到 `tests/core/`）與 `tests/web/test_mall_web.py` |
+| `tests/` | 原 `tests/mall/`（`test_wallet.py` 測核心的錢包，搬到 `tests/core/`）與 `tianxia/features/mall/tests/test_mall_web.py` |
 
 **認領的欄位**（3.5，留在原地）：`PlayerState.holding_bonus`（只這一季）、`create_rerolls`、`legend_items`（換季帶著走，核心的換季照抄）。原本寄放在 `Game` 上的 `mall_bought`、`mall_already` 第 58 批收回包（`actions.Receipt`）。資料庫第 6 版的三張表 `mall_purchases`、`mall_ledger`、`mall_entitlements`（`database.py`，核心）。
 **過渡**：沒有了（保留的名號第 58 批搬進核心 `core/name_base.py`，`actions.py` 不再 import `server_bots`；插畫票用不上不賣的 `art_problem`、`ART` 全部拆包第 29 批進核心服務 `core/services.py`，不再 import `zhuan_end`；`journal` 江湖紀錄 PM 10/31 定算核心，不再是過渡；`rules.py` import 的 `tianxia.library`〔功法庫上限〕全部拆包第 15 批登記進共用規則層，行尾改註「共用規則層」，不算過渡）；`howto.py`（玩法說明「商城」一節）、`scripts/mall_ledger.py` import 這一包。封測發放原本是 `own_turn_checks` 叫 `Game._mall_grant`，全部拆包第 11 批（核心收接縫）換成 `on_own_turn` 接縫掛鉤（`own_turn_checks` 最前面、暫停的檢查之前，不問 `enabled`），委派拿掉。`tianxia/mall.py` 舊名別名還在（`from tianxia import mall` 的測試沒改），`howto.py` 的 import 是第 59 批的事。

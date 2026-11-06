@@ -29,7 +29,7 @@
 
 ## 委派與留在原位的接縫
 
-`Game` 留 11 個一行委派（`_smith_options` 第 56 批換成 `take` 那一格，拿掉）：`_smith`（`tianxia/features/gear/tests/test_shop2.py` 直接叫）、`_smith_clue`（測試換掉它）、`smith_line`、`smith_forge`、`smith_furnace`、`smith_sell`、`smith_upgrade`（`server.py` 的 `MAIN_ACTIONS`、整季機器人與假人、測試叫）、`repair_item`、`temper_item`、`name_divine`、`bind_art`（`MENXIA_ACTIONS`、假人、測試叫）；其餘 11 個方法只有包裡叫，沒有委派。
+`Game` 上的名字掛在 `game_api.py` 的表（`_smith_options` 第 56 批換成 `take` 那一格，拿掉）：`_smith`（`tianxia/features/gear/tests/test_shop2.py` 直接叫）、`_smith_clue`（測試換掉它）、`smith_line`、`smith_forge`、`smith_furnace`、`smith_sell`、`smith_upgrade`（`server.py` 的 `MAIN_ACTIONS`、整季機器人與假人、測試叫）、`repair_item`、`temper_item`、`name_divine`、`bind_art`（`MENXIA_ACTIONS`、假人、測試叫）；其餘 11 個方法只有包裡叫，沒有委派。
 
 **店面登記（`Shop`）不登記，走 `MENU_ORDER`**（第 41 批計畫 1.9 量過，第 56 批選單收接縫定案，計畫第四節）：入口先後 懸賞榜 → 鐵匠鋪 → 馬市 → 搬成包的店是行為，`_shops` 照 `FEATURES` 走、酒肆與銀兩出口會排到前面；`here` 有兩個意思（`_shop_open` 要單子沒開著，收店要 `smith_open`），`Shop.here` 只有一個；`close_shops` 只收坐著的，出發那一行不看坐不坐著（`smith_page`、`smith_rule` 不坐在店裡也要清）。所以這一包登記 `menus()` 的格：`take`、`here`、`idle`、`open`、`depart`、`block`，先後在 `MENU_ORDER`；`shop_view` 的 smith 分支與 `sync.close`、`stale.mid` 的收店（第 55 批）不動。
 

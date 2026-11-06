@@ -14,7 +14,7 @@
 - `routes.py`：路由 `/api/tale/{battle_id}`、`/zhanji/{code}`，加上 `server.py` 原本的戰記那一段（`tale_view`、`tale_cover`、`tale_page_view`、`_tale_due`、`tale_index`、`tale_store_path`、`start_tales`、`tale_material`、`tale_round`）與決戰放手一搏補劇情（`_tales_waiting`、`narrate_battle`、`narrate_once`；它們不是戰記本體，是派工單一起點名的同一段）。第一個參數都是 `shell`（server 模組）。
 - 掛鉤只接 `routes`、`threads`（全部拆包第 52 批開的，殼開、測試停；`threads` 叫殼的 `start_tales`）。`enabled` 回 `True`（同輿圖包，這一包沒有遊戲當下的掛鉤，沒有誰問它）。
 - 選項前綴：沒有。`choose`、`bot_policy.py`、`bot.py`、`bot_runner.py` 都沒有戰記（`_tale_clue`、`outing_tale`、`Config.secrets.tale_*` 是同名別的事）。假人只會進名錄。沒有 `bots.py`、沒有 `<包名>_stage.py`。
-- 核心要用的：`tianxia/core/services.py` 的 `# tale`。`routes.py` 叫 `game.battle_tale_request()`、`game.apply_battle_tales(...)`、`game._tale_battles()` 是決戰包的委派（查詢服務，主人決戰包）。
+- 核心要用的：`tianxia/core/services_list.md` 的 `# tale`。`routes.py` 叫 `game.battle_tale_request()`、`game.apply_battle_tales(...)`、`game._tale_battles()` 是決戰包掛在 `Game` 上的名字（決戰包的 `game_api.py`；這一包自己沒有表）（查詢服務，主人決戰包）。
 
 ## 認領的欄位（手冊 3.5）
 
