@@ -237,7 +237,16 @@ def b69():
     ])
 
 
+EXTRA_LENSES_B = [
+    dict(key="order", text="**順序就是行為**。第 55、56、57 批把 `sync`、`advance`、`world_tick`、`_advance_player_local`、`own_turn_checks`、`_drop_stale_references`、`_reset_player_for_new_season`、`options`、`_everyday_options`、`action_notes`、`_idle`、`atlas.travel_block`、`departure` 收店、`_act`、`_action_title` 改成照 `SEAM_ORDER`、`MENU_ORDER`、`Verb` 問。逐段把 base 的原始碼（語句的先後、回話接的順序、亂數、世界旗標、有沒有開關判斷）跟 head 照表展開之後的先後並排比，每一格對一行。特別打：`season.carry` 開發自己承認不是一行對一行（L583-656 併成 13 格，「純欄位互不讀」是推論），請你用語法樹列每一格讀寫的欄位，證明或推翻互不干擾；`heirloom`、`naming`（讀 prune 之前算好的 owned）、`lost_place`；核心代叫的 `_SEAM_CORE` 格與包的格穿插的地方；開發列的「軌走不到」：`advance` 的 `conquest_tick` 回話有字、測試內容裡假人換季、L767、L881、`pill_line` 0 顆、`faction_lines`。"),
+    dict(key="bots", text="**假人的選擇不能變，也不能露餡**。第 60 批把 `bot_policy.score` 的 `act:` 那一段分給各包、`bot.pick` 只問宣告。逐項比 base 的 `score`、`pick`、`take_turn` 與 head 展開之後：同一個選項拿到的分數、分數相同時的先後、亂數抽幾次、落到 `ACT_SCORES.get(arg, 0.0)` 的（0.0 是隨機挑得到的，不是不按）、`bot_skip`、`bot_idle` 比相等與比前綴有沒有多排或少排；`picking_*` 六處；同值重寫的常數。另外 `web/` 與任何畫面、輸出不能出現假人那幾個字（`tests/bots/test_server_bots.py` 掃的範圍涵蓋新檔了嗎：`web/shell.js`、`state.js`、`fit.js` 與各包 js、css）。"),
+    dict(key="locks", text="**模型呼叫不進鎖、三段式不變**。第 69 批把鎖外那一段搬進各包 `routes.py`、開 `outlock`。逐個比 base 與 head：A、B、C 三段的先後、哪一段在 `action_lock` 裡、過期就丟掉、`_quick_client`、`in_lock_model_timeout`、`MODEL_BREAKER_SECONDS`、`model_call`、`within_budget`；背景六格的先後（`OUTLOCK_ORDER`）跟原本 `act` 那幾行的順序；閉包有沒有抓到舊值（迴圈變數、`shell.<名字>` 當下讀與 import 時讀）；執行緒是不是 daemon、`threads` 掛鉤開的時機與 `uvicorn.run` 的先後；`conftest` 收尾停得到每一條；第 52、53 批的 `TALES_*`、`NOTICE_*`。`server.py` 頂上那行只為了 import 先後留著的名字（玩家卡按鈕順序只靠它）：`core.cards.ACTIONS` 的登記順序在 base、head、`run_bots.py`、單獨 `import tianxia.engine` 四種入口各印一次，有沒有不一樣。"),
+    dict(key="content", text="**內容一筆都不能掉、先後不能變，主機也要開得起來**。第 62、63 批把內容檔搬進各包。用真的 `load_content` 在 base 與 head 各載一次 season21、week7、不帶設定與測試內容，`model_dump_json` 比雜湊；事件池的先後（同名蓋掉、抽籤順序）。`_locate` 認「真實的根」的判斷：另一份 clone、`C:\\Ray\\tianxia-play` 那種部署目錄（只讀路徑推演、**不要碰那個資料夾**）、`.claude/worktrees/` 底下、`TIANXIA_DB` 不同時，會不會判錯變成讀不到而靜靜變空。`scripts/` 裡直接讀 `content/<檔>` 的（`git grep -n 'content/' scripts`，含 `make_*`、`convert_*`、`measure_*`、`warm_keeper`、`monitor`）；`docs/superpowers/feedback/beta-主機端操作.md` 寫的步驟要不要多做什麼；`.gitignore`、`git archive` 的 export-ignore 會不會漏掉包裡的 `content/`；`test_real_content`、`DIFFICULTY_BANDS` 還讀得到全部事件嗎。"),
+    dict(key="web", text="**頁面不能壞，載入順序就是行為**。第 64～67 批把 `app.js`、`main.js`、`style.css` 切成包的檔，`index.html` 的 script 由伺服器生成。靜態證明：把 base 的 `app.js`、`main.js` 與 head 所有 js 照實際載入順序接起來，頂層敘述（非函式宣告）的先後逐條比；有沒有檔在載入當下就讀到還沒定義的 `const`、`let`（TDZ，函式宣告才會提升）：這是切檔最常見的炸法，用 node 的 `--check` 不夠，要把每支檔頂層讀的識別字對到它定義的檔與載入順序。CSS：`scripts/css_order_check.py` 抓不到資料表組出來的 class，你另外列 js 裡組字串產生的 class，對照它們的規則搬到哪一支、先後有沒有反轉。`/`、`/admin`、`/static/...` 與 service worker（`web/sw.js`）快取清單有沒有漏新檔；`?v=` 版本號；`web/` 新檔有沒有被 `.gitignore` 擋。`style.css` 第 2931 行多的 `}` 兩邊都一樣嗎（這一波不修）。"),
+]
+
 WAVES["B"] = dict(
+    extra_lenses=EXTRA_LENSES_B,
     lines=[
         dict(name="核心接縫", batches=[b55, b56, b57, b60]),
         dict(name="商城收尾", batches=[b58]),
@@ -287,6 +296,8 @@ def main():
         args["merge_base"] = a.merge_base
         if w.get("web_check"):
             args["web_check"] = w["web_check"]
+        if w.get("extra_lenses"):
+            args["extra_lenses"] = w["extra_lenses"]
         if a.merge_extra:
             args["merge_extra"] = Path(a.merge_extra).read_text(encoding="utf-8")
         name = f"wave-{a.wave}-finish.js"

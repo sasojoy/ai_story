@@ -177,7 +177,12 @@ ${COMMON}
 2. 對總表 ${MASTER} 第 ${l.done.map(d => d.n).join('、')} 列與附錄甲丙：有沒有漏搬、搬錯包；委派都是一行；別名是同一個模組物件；包只 import 核心、共用規則層與標過渡的舊模組；核心批的順序表跟原本的呼叫順序一樣（順序就是行為）；\`PlayerState\` 欄位認領；前綴與 \`bots.py\`；有沒有測試被改了斷言（只准改路徑與 import）；有沒有碰到派工單沒寫的 \`web/\`、資料庫結構、CLAUDE.md、手冊、總表。
 3. 這條線新加的情境真的走到了嗎（讀程式）；monkeypatch 敏感的路照舊打得到嗎。
 每一條發現寫 severity（blocker＝合了會壞、或行為變了、或違反規矩；should；nit）、在哪裡、證據。沒有就回空陣列，不要湊。`, { label: `review:${l.line}`, phase: 'Review', schema: REVIEW_SCHEMA })
-const reviewsRaw = await parallel(built.map(l => () => reviewOf(l)))
+const lensOf = (x) => agent(`你是《天下大勢》的唯讀審查員（不改檔、不提交、不推），**專門挑錯**：預設這一波在你這個鏡頭下有問題，你的工作是找出來或親手證明沒有。審第 ${WAVE} 波合好的結果 \`${WAVE_BRANCH}\` ${merged.head}，對 base ${MERGE_BASE}（明確 fetch）。
+${COMMON}
+**這一關不跑整套、不跑 same_behavior compare**：閘門同時在跑。可以跑小腳本、讀語法樹、用 \`& "${PY}" "${PM_TOOLS}/moved_report.py" ${MERGE_BASE} ${merged.head}\` 看機械報告；要跑程式就解到 ${SP}\\wave${WAVE}\\lens-${x.key}\\，用完刪。
+**你的鏡頭**：${x.text}
+每一條發現寫 severity（blocker＝合了會壞、或行為變了；should；nit）、在哪裡、證據（指令與輸出，或兩份程式並排的行）。**沒有證據不要寫**；沒有就回空陣列，summary 寫你實際驗了哪些、怎麼驗的。`, { label: `lens:${x.key}`, phase: 'Review', schema: REVIEW_SCHEMA })
+const reviewsRaw = await parallel([...built.map(l => () => reviewOf(l)), ...(A.extra_lenses || []).map(x => () => lensOf(x))])
 const reviews = reviewsRaw.filter(Boolean)
 const gate = await gatePromise
 let check = null
