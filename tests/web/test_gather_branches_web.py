@@ -47,7 +47,9 @@ def test_gather_is_a_wheel_and_folds_its_branches():
     assert 'data-act="gather-wheel"' in bar and 'aria-expanded="false"' in bar
     assert 'data-id="explore:gather:mine"' not in bar and 'data-act="choose" data-id="explore:gather"' not in bar
     assert "此地還能做" not in bar or "挖礦" not in bar  # 分支不掉進「此地還能做」
-    assert all(f'data-id="explore:{x}"' in bar for x in ("seek", "sense", "practice"))
+    assert all(f'data-id="explore:{x}"' in bar for x in ("seek", "sense"))
+    here = run(m, "return H.pageJianghu();", S={"hereAll": True}).split('class="sheet here-all"')[1]  # 介面重整：練功收在此地可為
+    assert 'data-id="explore:practice"' in here and "explore:gather:mine" not in here
 
 
 def test_opening_gather_lays_out_the_branches_and_the_say():

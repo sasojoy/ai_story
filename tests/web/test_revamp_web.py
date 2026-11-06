@@ -17,8 +17,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 
 
 def run(m, script, *, S=None, menxia=None):
-    """新版面（S.uiV2；harness 預設照原本的版面，見 tests/kit/webharness.py）。"""
-    return run_classic(m, script, S={"uiV2": True, **(S or {})}, menxia=menxia)
+    return run_classic(m, script, S=S, menxia=menxia)
 
 
 @pytest.fixture

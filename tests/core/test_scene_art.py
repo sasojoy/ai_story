@@ -141,7 +141,7 @@ def test_the_page_puts_the_picture_on_top_and_drops_the_duplicated_first_line(ga
     (tmp_path / "img" / f"{path}.webp").write_bytes(b"x")
     m = server.main_view(game)
     page = run(m, "return H.pageJianghu();")
-    card = re.search(r'<section class="card scene has-art">(.*?)</section>', page, re.S).group(1)
+    card = re.search(r'<section class="card scene(?: rv)? has-art">(.*?)</section>', page, re.S).group(1)  # 介面重整的場景卡多一個 rv
     assert card.startswith('<figure class="scene-art place"><img src="/static/img/' + path + '.webp" alt="" decoding="async">')
     assert f"<b>{m['art']['title']}</b>" in card and f'<span class="sub">{m["art"]["sub"]}</span>' in card and f'<span class="time">{m["art"]["time"]}</span>' in card
     assert m["art"]["head"].strip() not in card  # 地名那一段只疊在圖上，卡片裡不再寫一次

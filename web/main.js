@@ -1616,7 +1616,7 @@
       const sceneR = `<section class="card scene rv${m.art ? " has-art" : ""}${tierClass(m)}">${m.art ? sceneArtHtml(m.art) : ""}${now ? `<div class="rv-now">${now}</div>` : ""}${tierTag(m)}<div class="rv-scene${clamp ? " clamp" : ""}"${clamp || S.sceneRvOpen ? ' data-act="rv-scene" role="button" tabindex="0"' : ""}>${inner}</div>${social}</section>`;
       const extras = S.hereExtras || [];
       const layers = (S.dutyOpen ? dutySheetHtml(parts) : "") + (S.hereAll ? hereAllHtml(m, extras) : "") + (S.figLog ? figLogHtml() : S.fig ? figPickHtml(m) : "");
-      return `${hints}${resultCard}${peek}${letter}${sceneR}${links}${free}${dutyCardHtml(m, parts)}${menu}${senseNotes}${hereRowHtml(m, extras)}${peopleRowHtml(m)}${guideDown}${skip}${layers}`;
+      return `${hints}${resultCard}${peek}${letter}${sceneR}${links}${free}${dutyCardHtml(m, parts)}${menu}${sealCard}${senseNotes}${hereRowHtml(m, extras)}${peopleRowHtml(m)}${guideDown}${skip}${layers}`;
     }
     if (typeof uiV2 === "function" && uiV2() && m.talk && !m.card) return `${hints}${resultCard}${vnTalkHtml(m, menu)}${free}${guide}`; // 跟大勢人物說話：浮在最上層的對話框
     return `${hints}${resultCard}${peek}${letter}${now}${scene}${links}${guideUp}${free}${menu}${senseNotes}${weekCard}${planCard}${guideDown}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
@@ -1925,15 +1925,15 @@
   // 江湖頁閒著的時候：場景卡（「剛剛」疊在圖底下）、要事一張卡（點了往上拉一張清單）、四顆行動、此地可為一排圓章、此地人物一排。
   // 以前排在底下的軍令、懸賞、盤算、玉璽、本週卡低的那一半都收進要事清單；「此地還能做 N 件事」的摺疊換成圓章與「全部」。
   // 序章、初入江湖（要你按的鈕在摺疊裡）、路上、決戰出招、事件與對話都照舊（revampOn 是假）。
-  // uiV2()：新版面開著（舊的網頁測試在 harness 裡設 TIANXIA_UI_CLASSIC 照舊測原本的版面，見 tests/kit/webharness.py；
-  // 只切幾個函式出來測的舊測試沒有這一段，所以上面用到的地方寫 typeof uiV2 === "function"，切出來時照舊版面）
-  const uiV2 = () => S.uiV2 === true || typeof TIANXIA_UI_CLASSIC === "undefined" || !TIANXIA_UI_CLASSIC; // eslint-disable-line no-undef
+  // uiV2()：介面重整之後一律是新版面（2026-11-06 合進 develop、舊測試搬完）。序章、初入江湖、路上、決戰出招、事件照舊（revampOn 是假）。
+  // 只切幾個函式出來測的舊測試沒有這一段，所以用到的地方寫 typeof uiV2 === "function"，切出來時照舊版面
+  const uiV2 = () => true; // 介面重整之後只有新版面；舊版面的分支（序章、初入江湖照舊）之後一起清
   const revampOn = (m) => uiV2() && idleMenu(m) && !pro() && !onb() && !m.on_road;
   // 此地可為的圓章圖（web/img/here/，第一批圖）：選項 id 或開頭 → 圖名；沒有圖的畫一個墨圈寫第一個字
   const HERE_ART = [["act:bounties", "bounty"], ["act:arena", "arena"], ["act:dadian", "bribe"], ["act:tavern", "tavern"], ["act:heal", "clinic"],
     ["act:market", "horses"], ["act:smith", "smith"], ["feast:", "feast"], ["act:feast", "feast"], ["faction:", "faction"], ["defect:", "faction"]];
   const hereArt = (id) => (HERE_ART.find(([k]) => id === k || (k.endsWith(":") && id.startsWith(k))) || [])[1] || "";
-  const HERE_ROW = 5; // 一排最多幾個圓章（其餘在「全部」裡）
+  const HERE_ROW = 5; // 一屏放得下幾個圓章：多過這個數（或名字寫不完）時標題旁多一個「全部」列整串的全名
   const HERE_ALL = "全部"; // 待 joy 潤
   const PEOPLE_HEAD = "此地人物"; // 待 joy 潤
   const HERE_HEAD = "此地可為"; // 待 joy 潤
@@ -1949,16 +1949,17 @@
     const list = extras.filter((o) => !FIG_ACT.test(o.id) && !HIRE.test(o.id));
     if (!list.length) return "";
     const glow = guideGlow();
-    const rank = (o) => (glow.includes(o.id) ? 0 : o.enabled ? 1 : 2);
-    const row = [...list].sort((a, b) => rank(a) - rank(b)).slice(0, HERE_ROW);
+    const peers = callPeers(m); // 論武的「答應」：引擎不收那一顆，點了打開對方的玩家卡（同「全部」那一串，FB-117）
+    const rank = (o) => (glow.includes(o.id) || peers[o.id] ? 0 : o.enabled ? 1 : 2);
+    const row = [...list].sort((a, b) => rank(a) - rank(b)); // 一排橫滑（Joy 11/6「應該是要可以滑動的」）：全部畫出來，「全部」照舊列整串的全名
     const seal = (o) => {
       const [label, detail] = optParts(o);
       const art = hereArt(o.id);
       const n = /^(\d+) 張$/.exec(detail);
-      const attrs = o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : o.note || detail ? `data-act="opt-why" data-id="${esc(o.id)}" data-why="${esc(o.note || `${detail}。`)}" aria-disabled="true"` : "disabled";
-      return `<button class="here-seal${o.enabled ? "" : " off"}" ${attrs}><span class="hs-tile">${art ? `<img src="/static/img/here/${art}.webp" alt="">` : `<i>${esc(label.slice(0, 1))}</i>`}${n ? `<b class="hs-n">${n[1]}</b>` : ""}</span><span class="hs-name">${esc(label.replace(/^(.{0,5}).*$/, "$1"))}</span></button>`;
+      const attrs = peers[o.id] ? `data-act="peer-answer" data-name="${esc(peers[o.id])}"` : o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : o.note || detail ? `data-act="opt-why" data-id="${esc(o.id)}" data-why="${esc(o.note || `${detail}。`)}" aria-disabled="true"` : "disabled";
+      return `<button class="here-seal${o.enabled || peers[o.id] ? "" : " off"}" ${attrs}><span class="hs-tile${art ? "" : " ink"}">${art ? `<img src="/static/img/here/${art}.webp" alt="">` : `<i>${esc(label.slice(0, 1))}</i>`}${n ? `<b class="hs-n">${n[1]}</b>` : ""}</span><span class="hs-name">${esc(label.replace(/^(.{0,5}).*$/, "$1"))}</span></button>`;
     };
-    return `<section class="here-row"><div class="hr-head"><span>${HERE_HEAD}</span>${list.length > row.length || list.some((o) => optParts(o)[0].length > 5)
+    return `<section class="here-row"><div class="hr-head"><span>${HERE_HEAD}</span>${list.length > HERE_ROW || list.some((o) => optParts(o)[0].length > 5)
       ? `<button class="linkish" data-act="here-all">${HERE_ALL} ${list.length} ›</button>` : ""}</div><div class="hr-seals">${row.map(seal).join("")}</div></section>`;
   }
   function hereAllHtml(m, extras) {
@@ -1978,8 +1979,8 @@
     const figs = m.figures_here || [];
     const all = m.here || [];
     if (!figs.length && !all.length) return "";
-    const open = S.hereOpen || all.length <= HERE_SHOW + 1;
-    const players = open ? all : all.slice(0, HERE_SHOW);
+    const open = true; // 一排橫滑（Joy 11/6）：此地的人全部畫出來，滑著看
+    const players = all;
     const face = (src, name) => (src ? `<span class="pc-face"><img src="${esc(src)}" alt=""></span>` : `<span class="pc-face pc-ch">${esc(name.slice(0, 1))}</span>`);
     const chips = figs.map((f) => `<button class="person fig" data-act="fig-open" data-id="${esc(f.id)}">${face(f.face, f.name)}<span class="pc-t"><b>${esc(f.name)}</b><small>大勢人物・${esc(f.talk.via ? "可交談" : f.talk.why || "")}</small></span></button>`)
       .concat(players.map((p) => `<button class="person peer" data-act="peer" data-name="${esc(p.name)}">${face(null, p.name)}<span class="pc-t"><b>${esc(p.name)}</b><small>江湖人・${esc(p.side)}</small></span></button>`));
@@ -2010,7 +2011,7 @@
       { key: "bounty", name: "懸賞", seal: "賞", n: bounties || "", html: blocks.bountyCard, line: "" },
       { key: "plan", name: "盤算", seal: "謀", n: "", html: blocks.planCard, line: "" },
       { key: "week", name: "本週", seal: "週", n: "", html: blocks.weekCard, line: "" },
-      { key: "seal", name: "玉璽", seal: "璽", n: "", html: blocks.sealMine + blocks.sealCard, line: "" },
+      { key: "seal", name: "玉璽", seal: "璽", n: "", html: blocks.sealMine, line: "" }, // 正在打的奪璽（sealCard）有倒數、要你出招：不收，畫在行動列底下
     ].map((p) => ({ ...p, line: p.line || (p.html ? firstText(p.html) : "") }));
   }
 

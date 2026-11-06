@@ -32,7 +32,7 @@ const vm = require("vm");
 const app = wholeApp(["S", "pro", "shown", "prologueKey", "topHtml", "tabsHtml", "idleMenu", "actionBar", "guideHtml", "nextGuidePage",
   "guideCue", "scrollToGuideTarget", "setMain", "pageJianghu", "pagePractice", "pageCraft", "weekCardHtml", "chapterCardHtml", "trendsTopHtml", "sheetHtml", "adminHtml", "applyGlow",
   "renderTop", "render", "goTab", "renderPage", "refreshPage", "enter", "sayLine", "pick", "forge", "updateForgeLine",
-  "toggleLock", "trimForgeSel", "bookHtml", "peerHtml"]);
+  "heroMoreHtml", "toggleLock", "trimForgeSel", "bookHtml", "peerHtml"]);
 
 // fetch 的假貨：記下問了什麼；網址開頭對得上 input.responses 的鍵就回那一份（回的是 JSON），其他回空物件
 const calls = [];
@@ -229,7 +229,7 @@ def test_after_the_prologue_the_ordinary_screen_comes_back(hut, content):
     assert m["prologue"] is None
     out = run(m, "return { tabs: H.tabsHtml(), top: H.topHtml(), shown: H.shown('tab:map') && H.shown('board') && H.shown('act:move') };")
     assert re.findall(r'data-tab="(\w+)"', out["tabs"]) == ["jianghu", "practice", "map", "news"] and out["shown"] is True
-    assert "第 " in out["top"] and "toggle-more" in out["top"]  # 平常的狀態列：日期、點名號展開
+    assert "第 " in out["top"] and 'data-act="hero-attrs"' in out["top"]  # 平常的狀態列：日期、點名號去俠客頁的屬性（介面重整）
 
 
 # ── 本週卡（減法季批 1：取代態勢｜大事｜主線三塊小標） ────────────────────

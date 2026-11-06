@@ -16,20 +16,7 @@
     season: "賽季與時鐘", battle: "決戰與時刻表", trend: "大勢與事件", conquest: "領地爭奪", seal: "玉璽",
     player: "玩家與帳號", mall: "商城", looks: "形象與招式訂單", mingtie: "名帖檢舉",
   };
-  const AD_OPEN_KEY = "tianxia.adOpen"; // 哪幾塊攤開著：這台裝置記著（讀寫失敗就照預設：只攤開「賽季與時鐘」）
-  function adOpen() {
-    if (S.adOpen) return S.adOpen;
-    let saved = null;
-    try { saved = JSON.parse(localStorage.getItem(AD_OPEN_KEY) || "null"); } catch (e) { saved = null; }
-    S.adOpen = saved && typeof saved === "object" ? saved : { season: true };
-    return S.adOpen;
-  }
-  function adminSecToggled(box) {
-    const open = adOpen();
-    open[box.dataset.sec] = box.open;
-    try { localStorage.setItem(AD_OPEN_KEY, JSON.stringify(open)); } catch (e) { /* 存不了就只記在這一次 */ }
-    if (box.open && box.dataset.sec === "looks" && !S.adLooks && S.main && S.main.mall && S.main.looks_admin) looksAdminDo("load"); // 攤開才抓訂單
-  }
+
 
   // 整頁：頂上一列（回江湖、標題、重新整理）、「現在」卡、各塊、底下的結果條
   function renderAdmin() {
@@ -61,7 +48,6 @@
     const a = S.admin;
     const head = `<header class="ad-head"><a class="btn small ghost" href="/">‹ 回江湖</a><h2>管理者工具</h2><button class="btn small" data-act="ad-refresh">重新整理</button></header>`;
     if (!a) return `${head}<p class="muted ad-wait">${S.adFailed ? "管理資料沒拿到（連不上、或伺服器出錯）。按「重新整理」再試一次。" : "正在讀……"}</p>`;
-    if (!(typeof uiV2 === "function" && uiV2())) return adminClassicHtml(a, head);
     // 介面重整（2026-11-05，設計稿 Admin）：四格狀態、常用的大鈕、分頁籤（一次只看一塊）、紅框的危險區（長按才算）
     const tabs = Object.keys(AD_SECS).filter((id) => adSecBody(a, id)); // 每一塊都畫（下拉選單、欄位都在，大鈕也找得到），只露選到的那一塊
     const tab = tabs.includes(S.adTab) ? S.adTab : tabs[0];
@@ -74,28 +60,7 @@
       <p class="muted ad-hint">一般的鈕按了先問一次才送出；紅框裡的要長按一秒。做完留在這一頁，結果寫在畫面最底下那一條。</p>
       ${adResultHtml()}`;
   }
-  // 原本的版面（每一塊一個摺疊；舊的網頁測試照它測，見 uiV2）
-  function adminClassicHtml(a, head) {
-    const sec = (id, body, note = "") => body ? `<details class="ad-sec" data-sec="${id}"${adOpen()[id] ? " open" : ""}>
-        <summary><span class="ad-sec-title">${AD_SECS[id]}</span>${note ? `<span class="ad-sec-note">${esc(note)}</span>` : ""}</summary>
-        <div class="ad-body stack">${body}</div></details>` : "";
-    const now = a.now || {};
-    const fight = now.battle;
-    const looks = S.adLooks && S.adLooks.open ? S.adLooks.open.length : null;
-    return `${head}
-      ${adNowHtml(a)}
-      <p class="muted ad-hint">每一項按了都會先問一次才送出；做完留在這一頁，結果寫在畫面最底下那一條。</p>
-      ${sec("season", adSeasonHtml(a), [now.phase_text, S.main.paused != null ? "時鐘暫停中" : ""].filter(Boolean).join("・"))}
-      ${sec("battle", adBattleHtml(a), fight ? `${fight.name}・${fight.phase}` : "沒有在打的")}
-      ${sec("trend", adTrendHtml(a))}
-      ${sec("conquest", a.conquest ? conquestAdminHtml(a.conquest) : "")}
-      ${sec("seal", a.seal ? sealAdminHtml(a.seal) : "")}
-      ${sec("player", adPlayerSecHtml(a))}
-      ${sec("mall", S.main.mall ? mallAdminHtml() : "")}
-      ${sec("looks", S.main.mall && S.main.looks_admin ? looksAdminHtml() : "", looks ? `${looks} 張等著做` : "")}
-      ${sec("mingtie", a.mingtie && a.mingtie.length ? mingtieAdminHtml(a.mingtie) : "", a.mingtie && a.mingtie.length ? `${a.mingtie.length} 張` : "")}
-      ${adResultHtml()}`;
-  }
+
   function adSecBody(a, id) {
     return {
       season: adSeasonHtml(a, true), battle: adBattleHtml(a), trend: adTrendHtml(a),
@@ -113,7 +78,9 @@
       ${tile("決戰", fight ? esc(fight.phase) : "無", fight ? `${esc(fight.name)}・${fight.people | 0} 人` : "沒有在打的", !!fight)}
       ${tile("在線", `${now.online | 0} 人`, "10 分鐘內", false)}
       ${tile("模型", q ? `${q.running | 0}／${q.waiting | 0}` : "—", q ? "處理中／在排" : "佇列關著", q && q.waiting > 0)}
-    </div>${now.when ? `<p class="muted ad-when">${esc(now.when)}</p>` : ""}`;
+    </div>${now.when ? `<p class="muted ad-when">${esc(now.when)}</p>` : ""}
+    ${S.main.paused != null ? `<p class="ad-alert">賽季時鐘暫停中（已 ${S.main.paused} 分鐘）：全服不能行動，記得按「繼續」。</p>` : ""}
+    ${a.divine_out ? `<p class="muted">${esc(a.divine_out)}</p>` : ""}`;
   }
   // 常用的大鈕：快轉一小時、立刻開戰（去決戰那一頁挑）、推大勢（去大勢那一頁）、發軍令、天下形勢、跳到下一件
   function adBigHtml(a) {
@@ -138,18 +105,7 @@
       ${hold("next_season", "開下一季", off("resting"))}
     </div></section>`;
   }
-  // 「現在」卡：第幾季、在哪個階段、季曆此刻；時鐘停了寫停多久；在打的決戰（集結或開打、幾個人、第幾回合、戰局）；模型佇列；神器用完了
-  function adNowHtml(a) {
-    const now = a.now || {};
-    const fight = now.battle;
-    return `<section class="card ad-now" aria-label="現在">
-      <div class="ad-now-top"><b>${now.season ? `第 ${now.season | 0} 季` : "本季"}${now.phase_text ? `・${esc(now.phase_text)}` : ""}</b>${now.when ? `<span class="muted">${esc(now.when)}</span>` : ""}</div>
-      ${S.main.paused != null ? `<p class="ad-alert">賽季時鐘暫停中（已 ${S.main.paused} 分鐘）：全服不能行動，記得按「繼續」。</p>` : ""}
-      <p>決戰：${fight ? `<b>${esc(fight.name)}</b>・${esc(fight.phase)}・${fight.people | 0} 人${fight.round ? `・打完 ${fight.round | 0} 回合` : ""}・戰局 ${fight.trend | 0}` : '<span class="muted">沒有在集結或開打的</span>'}</p>
-      ${a.llm_queue ? `<p class="muted">模型佇列：處理中 ${a.llm_queue.running}、在排 ${a.llm_queue.waiting}</p>` : ""}
-      ${a.divine_out ? `<p class="muted">${esc(a.divine_out)}</p>` : ""}
-    </section>`;
-  }
+
 
   // 最近一件做完的事：釘在畫面底下，按「知道了」或做下一件才換掉。被拒的（括號開頭）紅字
   function adResultHtml() {
