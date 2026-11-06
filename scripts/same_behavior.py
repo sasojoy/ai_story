@@ -22678,14 +22678,14 @@ class HereScenario(SocializeScenario):
     """江湖頁「此地人物」那一排與對話框頂上那一份（--track here，自己一個資料庫）。每一下 /api/main 整份寫，另外單獨寫 figures_here、talk 兩個鍵（逛一圈只寫這兩個）。
     這一排的每一支：只有一位（名望夠直接交友、名望不夠寫還差多少）、兩位以上（照名單、名望不夠）、閉門不見（那幾位寫閉門，不是大勢人物的照常）、談滿了（每日輪數調成 0）、
     福緣到了（說得上話但鈕上不是他，寫「先按交友」；正式內容沒有可招募的同伴，這一下調一位）、每一處有人物的地點站一下（陣營、半身像、簡介、護衛與挑戰那幾顆；不是大勢人物的沒有陣營）、
-    序章中、在路上、事件中、對話中是空的、季收了是空的；一類一顆關著（只有一位直接 call:、兩位以上照舊名單）。對話框：正在談、接著談一輪情誼跟著變、告辭之後一排回來。
-    **前半停在寫到一半的事**：范疏影還在談（模型回了一輪），祝長庚、牧初心的求見名單開著；岑未央在路上，盧清商的事件卡擺著，唐曉嵐還在序章。
-    後半新程式接著：接著談、按人物、按返回、到了、了結、跳過序章，之後一排都回來。假人碰不到（只有畫面讀，bot.py、bot_policy、bot_runner 都不叫），不跑假人段。
-    測試內容沒有大勢人物（deep_interaction 全關），同一串 API 照打，一排都是空的。走不到的：pending_companion 指到不在人物表的 id（Game._drop_stale_references 先清掉）、人物的陣營不在劇本裡（正式內容沒有這種人物）、kind 是 once 或 meet 那一句（正式內容此刻沒有這種事件，同一支「先按交友」福緣走到了）。"""
+    開局事件擺著、在路上、事件中、對話中是空的、季收了是空的；一類一顆關著（只有一位直接 call:、兩位以上照舊名單）。對話框：正在談、接著談一輪情誼跟著變、告辭之後一排回來。
+    **前半停在寫到一半的事**：范疏影還在談（模型回了一輪），祝長庚、牧初心的求見名單開著；岑未央在路上，盧清商的事件卡擺著，唐曉嵐的開局事件還擺著。
+    後半新程式接著：接著談、按人物、按返回、到了、了結、跳過開局，之後一排都回來。假人碰不到（只有畫面讀，bot.py、bot_policy、bot_runner 都不叫），不跑假人段。
+    測試內容沒有大勢人物（deep_interaction 全關），同一串 API 照打，一排都是空的。走不到的：序章裡站在人物旁邊（week7、season21 的新角色走開局、不進草廬，草廬也沒有人物；測試內容沒有序章，所以 figures_here_view 的 prologue_rules.active 那一項三種設定都守不到）；pending_companion 指到不在人物表的 id（Game._drop_stale_references 先清掉）、人物的陣營不在劇本裡（正式內容沒有這種人物）、kind 是 once 或 meet 那一句（正式內容此刻沒有這種事件，同一支「先按交友」福緣走到了）。"""
 
     ONE, DIM, HALLER, HALLOW, SHUT, CAPPED, LUCKY, TOURIST = "許聽瀾", "杜晚舟", "梁硯青", "阮星垂", "紀南枝", "柯望川", "嚴拾光", "邵遠山"
     ROADER, EVENTFUL, TALKER, PICKER, BACKER = "岑未央", "盧清商", "范疏影", "祝長庚", "牧初心"
-    NEWBIE = "唐曉嵐"  # 只註冊、建角色，留在序章
+    NEWBIE = "唐曉嵐"  # 只註冊、建角色，留著開局事件沒按（測試內容沒有開局，站在起點）
     GIVEN = "liubei"  # 福緣那一支要有一位可招募的同伴：正式內容沒有 recruitable，這一下把他調成可招募（只讀 fortune_free，沒有人按）
     PLAYERS = {who: "guan" for who in (ONE, DIM, HALLER, HALLOW, SHUT, CAPPED, LUCKY, TOURIST, ROADER, EVENTFUL, TALKER, PICKER, BACKER)}
     PHASES_FIRST = ["setup", "seat", "one", "hall", "shut", "capped", "lucky", "tour", "blank", "talking", "picking", "half"]
@@ -22781,11 +22781,11 @@ class HereScenario(SocializeScenario):
             self.glance(self.TOURIST, f"逛到 {loc}")
 
     def blank(self) -> None:
-        """序章中、在路上、事件中：一排都是空的。"""
+        """開局事件擺著、在路上、事件中：一排都是空的。"""
         loc, _ = self.alone_spot()
         spot = loc or sorted(self.c.locations)[0]
         self.place(self.NEWBIE, spot)
-        self.row(self.NEWBIE, "序章中")
+        self.row(self.NEWBIE, "開局事件擺著")
         self.stand(self.ROADER, spot, 9999)
         far = next(i for i in sorted(self.c.locations) if i != spot)
         self.call(self.ROADER, "POST", "/api/travel", {"place": far, "mode": "walk"})
@@ -22854,7 +22854,7 @@ class HereScenario(SocializeScenario):
         self.do(self.NEWBIE, "skip_tutorial")
         self.settle_choices(self.NEWBIE)
         self.place(self.NEWBIE, loc or sorted(self.c.locations)[0])
-        self.row(self.NEWBIE, "序章跳過")
+        self.row(self.NEWBIE, "開局跳過")
 
     def loose(self) -> None:
         """一類一顆關著（precise_actions）：只有一位直接按 call:、兩位以上照舊打開名單。"""
