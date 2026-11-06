@@ -245,13 +245,29 @@ def test_a_closed_package_gives_nothing(feature, monkeypatch):
     assert all(features_core.act_cell(game, v.verb, loc, 0, False) is None for v in feature.verbs() if v.cell is not None)
     if feature.prefix is not None:
         assert not any(_starts(o.id, feature) for o in features_core.options(game))
-        assert not any(_starts(o.id, feature) for o in (features_core.prep(game) or []))  # 開季準備卡那一步：關著不給
     if feature.prefix is not None and feature.name not in MENU_BY_CORE:
         assert not any(_starts(o.id, feature) for o in game.options())
     for option_id in own:
         kind, _, arg = option_id.partition(":")
         assert features_core.choose(game, kind, arg) is None
         assert game.choose(option_id) == ["（此刻無法這麼做。）"]
+
+
+@pytest.mark.parametrize("feature", [f for f in FEATURES if type(f).prep is not features_core.Feature.prep], ids=lambda f: f.name)
+def test_a_closed_package_gives_nothing_on_the_prep_card(feature, monkeypatch):
+    """開季準備卡那一步（prep）：要在「它給得出東西」的那一種局面當場關才驗得到。上一條擺到最後一種局面才關，傳承的候選
+    那時已經封掉，開著也是 None。沒有一種局面給得出東西，就是局面檔沒擺到，一樣算紅。"""
+    game = _game()
+    reached = 0
+    for _ in _stages(feature, game):
+        if not feature.prep(game):
+            continue
+        reached += 1
+        assert any(_starts(o.id, feature) for o in features_core.prep(game) or [])
+        with monkeypatch.context() as closed:
+            closed.setattr(type(feature), "enabled", lambda self, ctx: False)
+            assert features_core.prep(game) is None
+    assert reached
 
 
 def _dirty(annotation, default):
