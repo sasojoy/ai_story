@@ -23,7 +23,8 @@ from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 
 from tianxia import battle_instance, battlelog, tactics  # 共用規則層（戰鬥規則核心）
 from tianxia import conquest, siege  # 共用規則層（地盤與攻城）
 from tianxia import four_tiers, materials, mounts, renown, roster  # 共用規則層（四階料、素材、坐騎、名聲、同伴；絕學的契機第 23 批改叫 ctx._seize_chance）
-from tianxia import figure_life, front_lines, seal, wins  # 過渡：待搬（戰線、玉璽、三陣營四勝利）
+from tianxia import figure_life, front_lines, wins  # 共用規則層（人物活起來、戰線、三陣營四勝利）
+from tianxia.core import seal_base  # 核心本體（玉璽「讀」的那一小半：開著沒有、天命之爭、璽動與戰功居前那一句；全部拆包第 27 批）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章；照 engine 的叫法）
 from tianxia.core.services import PAUSED_TEXT
 from tianxia.models import MOVES, BattleDef
@@ -290,7 +291,7 @@ def showdown_pay(
     share = max(pay.idle_share, min(pay.share_cap, battle_instance.merit(c.config.battle, me) / full))
     won = bool(battle.outcome_side) and me.faction == battle.outcome_side
     bonus = pay.win_bonus.get(battle.outcome_margin, 0.0) if won else 0.0
-    destiny = won and seal.on(c) and seal.is_mandate_battle(c, c.battles.get(battle.battle_id))  # 得天命的那一軍（8.3；要 PM 定的第 3 條；碎片關著時天命不定，不加給）
+    destiny = won and seal_base.on(c) and seal_base.is_mandate_battle(c, c.battles.get(battle.battle_id))  # 得天命的那一軍（8.3；要 PM 定的第 3 條；碎片關著時天命不定，不加給）
     scale = c.config.seal.mandate.pay_scale if destiny else 1
     half = c.config.conquest.pay_share if battle.siege is not None else 1.0  # 攻城戰（領地爭奪第二批）：決戰的幾成（設計 4.4）
     silver = round(pay.silver * share * (1 + bonus) * half) * scale
@@ -412,13 +413,13 @@ def battle_scene_text(ctx, battle: battle_instance.BattleInstance, definition: B
     if front := conquest.front_scene(ctx.content, definition, battle.front_note):  # 起點照哪一條戰線（開集結那一刻的快照）
         header += "\n\n" + front
     if battle.seal_shard and battle.seal_shard in ctx.content.seal:  # 璽動（4.3）：參戰的人知道打完可能有單挑
-        header += "\n\n" + seal.stir_text(ctx.content, battle.seal_holder or "", ctx.content.seal[battle.seal_shard].name, scene=True)
-    if seal.on(ctx.content) and seal.is_mandate_battle(ctx.content, definition):  # 天命之爭（8.3）：碎片在哪一軍、懷璽的人份量加重
-        shift = seal.lean_shift(battle.seal_lean, definition, ctx.content.config.seal)  # 同集結那一刻的算法（FB-186）
-        weight = seal.MANDATE_WEIGHT if seal.holders(ctx.world.seal_state().registry) else ""  # 全服沒人持有就不寫（FB-189）
-        header += "\n\n" + seal.MANDATE_SCENE.format(
-            lean=seal.lean_text(battle.seal_lean, definition), weight=weight,
-            shift=seal.shift_text(shift, battle.seal_lean, definition, extra=battle.front_note is not None),  # FB-687
+        header += "\n\n" + seal_base.stir_text(ctx.content, battle.seal_holder or "", ctx.content.seal[battle.seal_shard].name, scene=True)
+    if seal_base.on(ctx.content) and seal_base.is_mandate_battle(ctx.content, definition):  # 天命之爭（8.3）：碎片在哪一軍、懷璽的人份量加重
+        shift = seal_base.lean_shift(battle.seal_lean, definition, ctx.content.config.seal)  # 同集結那一刻的算法（FB-186）
+        weight = seal_base.MANDATE_WEIGHT if seal_base.holders(ctx.world.seal_state().registry) else ""  # 全服沒人持有就不寫（FB-189）
+        header += "\n\n" + seal_base.MANDATE_SCENE.format(
+            lean=seal_base.lean_text(battle.seal_lean, definition), weight=weight,
+            shift=seal_base.shift_text(shift, battle.seal_lean, definition, extra=battle.front_note is not None),  # FB-687
         )
     names = battle_instance.side_names(battle, definition)  # 單方攻中立地時守將那一格寫守軍（FB-540）
     if battle.phase == "muster" and battle.commanders:  # 龍頭上陣：集結時就看得到誰親自上陣（三方混戰多一格守軍）
@@ -605,9 +606,9 @@ def battle_spotlight(
     璽動那一場「戰功居前」那一句（FB-177：挑挑戰者不看倒下，畫面照同一條），其餘跟倒下無關的不寫。"""
     if battle.phase != "active":
         return []
-    merit = battle.seal_shard and p.name in seal.hint_names(battle, ctx.content, seal.holders(ctx.world.seal_state().registry))
+    merit = battle.seal_shard and p.name in seal_base.hint_names(battle, ctx.content, seal_base.holders(ctx.world.seal_state().registry))
     if p.eliminated:
-        return [seal.merit_hint(ctx.content)] if merit else []
+        return [seal_base.merit_hint(ctx.content)] if merit else []
     out = []
     hunters = battle.last_targets.get(p.name)
     if hunters:
@@ -619,7 +620,7 @@ def battle_spotlight(
     if battle.marked.get(p.name) == battle.act_index:
         out.append("你在這一幕太顯眼了，對面的強攻會往你身上招呼。")
     if merit:
-        out.append(seal.merit_hint(ctx.content))  # 璽動那一場戰功居前（4.3）：不露數字、不露名次；改版兩軍都給、字有條件
+        out.append(seal_base.merit_hint(ctx.content))  # 璽動那一場戰功居前（4.3）：不露數字、不露名次；改版兩軍都給、字有條件
     return out
 
 
@@ -776,13 +777,13 @@ def tale_battles(ctx) -> list[battle_instance.BattleInstance]:
 
 def showdown_tier4(ctx, battle: battle_instance.BattleInstance, me: battle_instance.BattleParticipant, lines: list[str]) -> list[str]:
     """時刻表決戰得勝給一個四階（正式季整合 4.5，第 4 批）：長社、宛城、廣宗這種時刻表上的決戰，得勝那一方出手滿門檻的人各一個
-    （門檻照奪璽單挑挑人那一條 seal.threshold：min(3, 實打回合)，參戰不到 small_battle 人放寬到 1）；臨時投效替得勝那一軍出手夠了也算。
+    （門檻照奪璽單挑挑人那一條 seal_base.threshold：min(3, 實打回合)，參戰不到 small_battle 人放寬到 1）；臨時投效替得勝那一軍出手夠了也算。
     保底收場（沒有贏家）、天命之爭不給。屬性隨機（名號＋那一場的 record_id）。回要寫在得失的那一樣，戰報那一句接在 lines。"""
     c, s = ctx.content, ctx.state
     definition = c.battles.get(battle.battle_id)
     if (not four_tiers.on(c) or not c.config.four_tiers.showdown or definition is None or not definition.timetable_event
-            or seal.is_mandate_battle(c, definition) or not battle.outcome_side or me.faction != battle.outcome_side
-            or me.acted_rounds < seal.threshold(battle, c.config.seal)):
+            or seal_base.is_mandate_battle(c, definition) or not battle.outcome_side or me.faction != battle.outcome_side
+            or me.acted_rounds < seal_base.threshold(battle, c.config.seal)):
         return []
     rng = random.Random(f"決戰四階|{s.player.name}|{battle.record_id}")
     pool = sorted(m.id for m in c.materials.values() if m.tier == four_tiers.TIER)

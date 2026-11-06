@@ -190,7 +190,8 @@ def test_only_the_gatekeepers_read_the_mandate_timetable():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[2]
-    allowed = {"tianxia/timetable.py", "tianxia/seal.py", "tianxia/content.py", "tianxia/models.py"}
+    allowed = {"tianxia/timetable.py", "tianxia/seal.py", "tianxia/content.py", "tianxia/models.py",
+               "tianxia/core/seal_base.py"}  # 全部拆包第 27 批：seal.py 的 mandate_event 搬進核心本體 seal_base（只改白名單，判斷不動）
     hits = [
         f"{p.relative_to(root).as_posix()}:{n}"
         for p in [*root.glob("tianxia/*.py"), *root.glob("tianxia/core/*.py"), root / "server.py"]  # 核心本體也掃（dev/core-events-1 審查）

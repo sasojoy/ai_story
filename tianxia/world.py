@@ -315,7 +315,7 @@ def evaluate_ending(state: GameState, content: Content) -> Ending:
     天命之季有一軍得天命時是那一軍的天命結局（玉璽二）。"""
     w = state.world
     if w.mandate and w.mandate_result:  # 天命之季、天命之爭有一軍得天命：結局改寫成那一軍的天命結局（玉璽碎片設計 8.3）
-        from .seal import mandate_event  # noqa: PLC0415  過渡：待搬（第 27 批：玉璽成包）
+        from .core.seal_base import mandate_event  # noqa: PLC0415  核心本體（玉璽「讀」的那一小半，全部拆包第 27 批）；照原位在函式裡 import
 
         event = mandate_event(content)
         won = event.mandate_endings.get(w.mandate_result) if event is not None else None
@@ -410,7 +410,7 @@ def end_season(
         early = w.time < season_end_time(w, content) - calendar.EPS_SECONDS
         ranks.flush_news(state, content, None)  # T5：還沒發的晉升彙整一起發掉
         if w.mandate and w.mandate_result is None:  # 天命之爭沒定下來（沒開成、管理者取消）：天命未定（8.3），江湖史只記這一次
-            from .seal import MANDATE_UNSETTLED_END  # noqa: PLC0415  過渡：待搬（第 27 批：玉璽成包）
+            from .core.seal_base import MANDATE_UNSETTLED_END  # noqa: PLC0415  同上（第 27 批）
 
             w.mandate_result = ""
             add_chronicle(state, MANDATE_UNSETTLED_END)

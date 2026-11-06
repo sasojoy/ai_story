@@ -73,6 +73,7 @@ from .sqlite_world import open_world
 from .wallet import Wallet
 from .core import annal_base as annals  # 行狀記一筆（第 29 批之二）
 from .core import features as features_core  # 核心照 FEATURES 問每一包（開發規範手冊 3.3）
+from .core import seal_base  # seal（全部拆包第 27 批）：管理者「定結果」替天命之爭定天命、江湖史七格讀玉璽「讀」的那一小半（核心本體）
 from .core.option import IDLE_MARK, Option  # 選單上的一顆（搬進核心：功能包要做選項）；閒著的選單一定有的那一顆（走一趟要認它）
 from .core.services import NO_SUCH_PLAYER, PAUSED_TEXT, WalletService, drill_share, wallet_on  # 共用的字與小函式、錢包服務（3.10）
 from .core.services import BIG_FIGHT_WAIT  # sortie（全部拆包第 17 批）：大場面按鈕上的字搬進核心的共用的字（出陣包的遊歷鈕也用）
@@ -5881,9 +5882,9 @@ class Game:
             return self._log([f"（{event.title}沒有「{key}」這個結果。）"])
         msgs = timetable.resolve(s, c, event, self.rng, key=key)
         self._save_season()
-        mandate = seal.mandate_event(c)
+        mandate = seal_base.mandate_event(c)
         if mandate is not None and event.id == mandate.id:  # 管理者替天命之爭定結果：也定天命（8.3）
-            battle = seal.mandate_battle(c)
+            battle = seal_base.mandate_battle(c)
             self._mandate_settle(key.split(":")[0], None, battle.name if battle is not None else event.title)
             self.state.world = self.world.get_season()
         self._deliver_big_events()
@@ -6781,10 +6782,10 @@ class Game:
                                  + [(n, [e.text for e in entries]) for n, entries in past])  # 歷屆擂主（跨季）
         if champs:
             parts.append(champs)
-        if seal.on(self.content):  # 七格玉璽排在江湖史最上面（第十節）；舊的碎片紀錄只當前史一行（11.5）
+        if seal_base.on(self.content):  # 七格玉璽排在江湖史最上面（第十節）；舊的碎片紀錄只當前史一行（11.5）
             old, view = self.world.get_jade_seal_fragments(), self.world.seal_state()
-            parts.insert(0, seal.chronicle_block(self.content, view.registry, self.world.jade_seal_summary() if old else "",
-                                                 mandate=seal.mandate_now(view.registry, view.season)))  # 天命之季多一句（玉璽二）
+            parts.insert(0, seal_base.chronicle_block(self.content, view.registry, self.world.jade_seal_summary() if old else "",
+                                                      mandate=seal_base.mandate_now(view.registry, view.season)))  # 天命之季多一句（玉璽二）
         else:
             parts.append(self.world.jade_seal_summary())
         return "\n\n---\n\n".join(parts)

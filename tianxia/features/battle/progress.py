@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from tianxia import allied, battle_instance, siege, territory, timetable  # 共用規則層（豪強依附、戰鬥規則核心、攻城、地盤、時刻表）
 from tianxia import prologue as prologue_rules  # 共用規則層（序章；照 engine 的叫法）
-from tianxia import seal  # 過渡：待搬（玉璽：天命之爭）
+from tianxia.core import seal_base  # 核心本體（玉璽「讀」的那一小半：天命之爭、保底收場、天命未定那一句；全部拆包第 27 批）
 from tianxia.models import BattleDef
 from tianxia.rules import recompute_trends, resolve_trends, season_one, world_trend_value
 from tianxia.state import Rumor, TimelineResult, WorldState
@@ -369,7 +369,7 @@ def settle_showdown(ctx, battle: battle_instance.BattleInstance, definition: Bat
     跟資料庫一致（每個動作開頭的 sync 剛讀過、推進戰鬥之前還沒改它），讀回來不會丟東西。"""
     event = timetable.find(ctx.content, definition.timetable_event) if definition.timetable_event else None  # 天命之爭也找得到（玉璽二）
     result: dict[str, object] = {}
-    unsettled = seal.is_mandate_battle(ctx.content, definition) and seal.deserted(battle, definition)  # 天命未定（玉璽二）
+    unsettled = seal_base.is_mandate_battle(ctx.content, definition) and seal_base.deserted(battle, definition)  # 天命未定（玉璽二）
 
     def _resolve(season: WorldState) -> None:
         lock = season.locks.get(definition.timetable_event)
@@ -385,7 +385,7 @@ def settle_showdown(ctx, battle: battle_instance.BattleInstance, definition: Bat
             return
         if unsettled:  # 天命之爭保底收場：天命未定（8.3；要 PM 定的第 4 條），時間軸記成跳過，不公告哪一軍勝、沒有勝方加給
             season.timeline[event.id] = TimelineResult(key=timetable.SKIPPED, time=season.time)
-            result.update(title=seal.MANDATE_UNSETTLED_TITLE, side="", margin="", reason="", text="", trends={})
+            result.update(title=seal_base.MANDATE_UNSETTLED_TITLE, side="", margin="", reason="", text="", trends={})
             return
         key = showdown_key(definition, winner, margin)  # 帶上實際打的那一版（審查 M-1）
         timetable.resolve(_season_vehicle(ctx.content, season), ctx.content, event, ctx.rng, key=key)

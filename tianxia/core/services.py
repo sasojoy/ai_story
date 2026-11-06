@@ -169,8 +169,7 @@
 事件（全部拆包第 26 批）
 # core_eventbus
 - `ctx.publish(event, *args)`：一包發生的事、別包跟著動——照核心的 BUS_ORDER 叫每一格（win、outing、explore、arrive、raid_win、battle_end；
-  簽名與回傳見 tianxia/core/features.py 的 # core_eventbus）。三、過渡的 `ctx._seal_find`、`ctx._seal_settle` 包裡不再叫（事件的 seal 那一格
-  由 engine._BUS_CORE 核心代叫），第 27 批玉璽成包時拿掉那兩條。
+  簽名與回傳見 tianxia/core/features.py 的 # core_eventbus）。
 
 # faction（全部拆包第 35 批「陣營」；陣營包要叫的核心服務，主人都是核心）
 - `ctx._hide(msg)`（這一下那一則江湖紀錄裡藏起一句：投靠、叛投確認畫面的話場景已經寫著這一問，紀錄只留標題，FB-046）、
@@ -393,6 +392,17 @@ explore（主動搬六包第 3＋4 批加的這一段）
 - `ctx._general_gifts()`、`ctx._gift_entry(lines)`（名將贈禮與另起的那一則江湖紀錄：核心 `event_check` 的 `answer_event`、`answer_branch` 與 `choose` 後半叫，
   位置固定在效果套完之後）
 
+# seal（全部拆包第 27 批「玉璽一」：碎片的季流程搬進 tianxia/features/seal/；主人：玉璽包，Game 留一行委派回答別的包；計畫
+# docs/superpowers/plans/2026-11-07-玉璽包-第1批.md 1.2、1.8）。這一批從別段拿掉的：三、過渡 explore 那一段的 `_seal_find`、battle 第 7 批那一段的
+# `_mandate_weight`、battle 第 8 批那一段的 `_seal_bare`、`_seal_settle`、`_deliver_seal_results`，與一、共用服務 `# core_eventbus` 那一句（第 27 批拿掉那兩條）。
+# 包要叫的核心服務 `ctx.state`、`ctx.world`、`ctx.content`、`ctx.now`、`ctx._write`、`ctx._log`、`ctx._admin_refusal`、`ctx.is_admin`、`ctx._side`、
+# `ctx._battle_power`、`ctx._battle_scores`（seal=False：不含碎片的那一份）上面都列了。核心與決戰包讀的純函式與字句在核心本體 tianxia/core/seal_base.py（不經 ctx）。
+- `ctx._mandate_weight(definition, scores)`（天命之爭手上有碎片的人份量加權：決戰包 `muster.py` 的加入、投效、補份量快照與 `progress.py` 經它叫）
+- `ctx._seal_bare()`（戴著碎片時不含碎片戰力的那一份快照：決戰包 `progress.py` 補份量快照叫；核心的 `_battle_marks` 原位也叫）
+- `ctx._deliver_seal_results()`（玉璽碎片的事補送到自己手上：決戰包 `progress.py` 收場讀回季之後叫；不併進事件 `battle_end`，第 26 批認定第 3 條）
+- `ctx._mandate_settle(winner, record, battle_name)`（天命之爭定下來：玉璽包自己的委派——`scripts/measure_seal.py` 換掉 `Game._mandate_settle`、
+  核心的管理者「定結果」也叫，包裡收場那一下經 ctx 叫，換掉的才打得到）
+
 ## 三、過渡（別的功能還沒搬的方法；括號是主人）
 
 explore（主動搬六包第 3＋4 批加的這一段）
@@ -400,7 +410,7 @@ explore（主動搬六包第 3＋4 批加的這一段）
   （`_home_gather` 本體第 13 批搬進探索包，Game 留一行委派、探索包經 ctx 叫——測試換它；`_wild_foes`、`_practice_tier` 第 18 批改成二、查詢服務 `# explore` 那一段；`_boss_face` 第 12 批改成二、查詢服務）
   （`ctx._sense_here(loc, rng)`：全部拆包第 24 批有所感成包，改列二、查詢服務 `# sense` 那一段）
 - `ctx._story_begin(strand)`（一條線；`_duel_start` 第 12 批改成二、查詢服務）
-- 收尾的掉落：`ctx._legend_find(rng)`（破境丹；第 18 批本體搬進探索包，也列在二、查詢服務 `# explore`）照原本的順序在原位叫；`ctx._seal_find(loc_id)`（玉璽碎片）過渡：第 27 批（包裡不再叫，由 `engine._BUS_CORE` 代叫）（同一串的
+- 收尾的掉落：`ctx._legend_find(rng)`（破境丹；第 18 批本體搬進探索包，也列在二、查詢服務 `# explore`）照原本的順序在原位叫（同一串的
   回體丹 `_pill_find`、殘譜 `_scrap_find` 在一、共用服務）
 - `ctx._outing_plan(loc)`、`ctx.outing_plan()`（探索包自己的委派：測試換掉 game._outing_plan 之後按探索，包裡經 ctx 叫，換掉的才打得到；
   呼叫端改完就拿掉）
@@ -423,11 +433,11 @@ explore（主動搬六包第 3＋4 批加的這一段）
 # battle（全部拆包第 7 批：集結、投效、挑同伴）
 - `ctx._battle_status(tick)`（測試換掉、數它被叫幾次〔test_engine、test_hints〕：第 8 批本體搬進 `features/battle/progress.py`，包裡照舊經 ctx 叫。
   同一行原本的 `_mutate_battle_now`、`battles_now` 第 8 批搬進 `progress.py`、包裡直接叫，從這裡拿掉）
-- `ctx._mandate_weight(definition, scores)`（天命之爭手上有碎片的人份量加權；主人：玉璽，總表裁定這一批留原位）。（同一行原本的
-  `_backfill_battle_scores` 第 8 批搬進 `progress.py`〔PM 11/03 從第 12 批挪來〕、包裡直接叫，從這裡拿掉）
+（同一行原本的 `_backfill_battle_scores` 第 8 批搬進 `progress.py`〔PM 11/03 從第 12 批挪來〕、包裡直接叫，從這裡拿掉；天命之爭的份量加權
+`_mandate_weight` 第 27 批玉璽成包，改列二、查詢服務 `# seal`）
 # battle（全部拆包第 8 批：推進與結算；主人：玉璽，總表附錄甲）
-- `ctx._seal_bare()`（補份量快照時不含碎片的那一份）、`ctx._seal_settle(battle, definition, result)`（時刻表決戰收場：先挑挑戰者、再挑現世的得主；過渡：第 27 批（包裡不再叫，由 `engine._BUS_CORE` 代叫））、
-  `ctx._deliver_seal_results()`（玉璽碎片的事補送到自己手上）
+（`_seal_bare`、`_deliver_seal_results` 第 27 批玉璽成包，改列二、查詢服務 `# seal`；`_seal_settle` 包裡不再叫——時刻表決戰收場是事件 `battle_end`，
+那一格玉璽包登記——拿掉）
 （`ctx._order_credit(...)`：全部拆包第 33 批軍情成包，改列一、共用服務 `# military` 那一段）
 （第 16 批合進 develop 時去重：這一段原本還列了出陣包用的 `_squad_encounter`（as_sortie=True：打一場隊伍，出陣攻打）、`_push_progress`
 （地盤：領地爭奪推、拉進度）、`_drill_gains`（操練）、`_spar_power`、`_spar_mirror`（切磋：本人對本人的威力、從另一邊看同一場）、
@@ -487,6 +497,10 @@ core-seams（全部拆包第 11 批「核心收接縫」：新的接縫掛鉤裡
 - `ctx._report_seat()`、`ctx._hear_after_stamina()`（走完一趟之後抄帳、抽一次耳聞；原本是 `travel` 在 Game 上直接叫的，搬成包之後位置不動）
 - `ctx.travel_refusal(loc_id, mode)`（主人移動：Game 上的一行委派；`travel` 經它叫自己的檢查，因為測試換掉 `game.travel_refusal` 來繞過檢查）
 - `ctx.travel(dest_id, mode)`（主人移動：Game 上的一行委派；`/api/travel` 的路由經它叫，測試與假人照舊叫 `Game.travel`）
+
+# seal（全部拆包第 27 批「玉璽一」：玉璽包叫的、本體還在 Game 上的第 28 批方法）
+- `ctx._seal_challenge(battle, definition, reg, tianji, winner, margin, need, held)`（主人玉璽，第 28 批搬：時刻表決戰收場時璽動那一場挑挑戰者、
+  開奪璽單挑；包的 `actions.settle` 照原本的先後叫——先挑挑戰者、再挑現世的得主、再喚回）
 
 ## 四、寄放（包放在 Game 上的屬性；包外的呼叫端與測試還在 Game 上讀寫；那一包的線再碰到時搬走）
 

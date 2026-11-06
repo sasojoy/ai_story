@@ -28,6 +28,11 @@
 - smith_base.py（core_world2：全部拆包第 40 批，第 41 批 PM 認定第 4 條）：打造單子「讀」的那一小半——GO_VERB、is_forge_step、is_step_line、
   draft_here、draft_stale（與 here、ARMOR_KIND、單子回話的八句常數）；engine 的 choose、_drop_stale_references、sync 讀它，鐵匠鋪包的 smithing
   re-export 同一批。同 event_check 不進 MODULES。
+- seal_base.py（seal：全部拆包第 27 批，PM 認定甲案）：玉璽碎片「讀」的那一小半——on、revamp_on、filled、key、holders、天命之爭（mandate_event、
+  mandate_battle、is_mandate_battle、mandate_now）、保底收場 deserted、天命未定的兩句、挑戰者門檻與「戰功居前」（threshold、challenger_ok、
+  hint_names、merit_hint）、璽動那一句 stir_text、起點偏移與那一句（lean_shift、lean_text、shift_text、MANDATE_SCENE、MANDATE_WEIGHT）、江湖史七格
+  （chronicle_block、sink_text 與 BOOK_*）；核心的 world、engine 的管理者「定結果」與江湖史、決戰包的 view、progress 讀它，玉璽包的 seal.py
+  re-export 同一批。同 event_check 不進 MODULES。
 
 第一階 ctx 就是 Game 本身，不另包一層（手冊 3.3）。
 """
