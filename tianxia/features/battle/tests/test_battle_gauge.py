@@ -171,7 +171,8 @@ def test_the_closing_report_keeps_the_final_gauge(showdown):
 
 
 @node
-def test_the_page_draws_the_gauge_under_the_battle_name(showdown):
+def test_the_page_draws_the_gauge_under_the_battle_panel(showdown):
+    """大決戰優化（Joy 2026-11-06，方案甲）起，戰局條畫在江湖頁最上面的戰場面板底下（web/battle.js），場景卡裡不再畫第二條。"""
     _, a, _ = showdown
     a.world.mutate_battle(lambda x: setattr(x, "muster_deadline_real", -1.0))
     a.options()
@@ -179,11 +180,13 @@ def test_the_page_draws_the_gauge_under_the_battle_name(showdown):
     m = server.main_view(a)
     page = run(m, "return H.pageJianghu();")
     scene = re.search(r'<section class="card scene">(.*?)</section>', page, re.S).group(1)
-    assert scene.startswith("<p><strong>宛城之戰</strong></p><div class=\"gauge\"")
+    assert 'class="gauge"' not in scene and "<p><strong>宛城之戰</strong></p>" not in scene
+    gauge = page.split('<div class="bp-gauge">', 1)[1]
+    assert page.index('<section class="bp"') < page.index('<div class="bp-gauge">') < page.index('<section class="card scene">')
     g = m["battle_gauge"]
-    assert f'class="g-flag" style="left:{100 - g["lean"]}%"' in scene
-    assert scene.count('<li class="g-r') == g["total"] and "官軍（我方）" in scene
-    assert scene.count('class="g-tick"') == 2 and 'class="g-zone' in scene
+    assert f'class="g-flag" style="left:{100 - g["lean"]}%"' in gauge
+    assert gauge.count('<li class="g-r') == g["total"] and "官軍（我方）" in gauge
+    assert gauge.count('class="g-tick"') == 2 and 'class="g-zone' in gauge
 
 
 @node
