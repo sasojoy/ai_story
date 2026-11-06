@@ -91,7 +91,7 @@ const devHead = (b) => `你是《天下大勢》的開發子代理，做${b.cust
 ${COMMON}
 ${WAVE_RULE}
 規矩：手冊 ${BOOK} 第三節（包的規矩）用 grep 看標題、只讀要用的那幾節；第十五節只 grep 這一包、相關批號的 PM 認定，不整節讀。${b.custom ? '' : `總表第 ${b.n} 列整格、第二節這一包、附錄甲丙這一包的裁定；${SURVEYDIR}/ 裡歸這一包的 \`area_*.json\`（行號是舊的，一律照現行程式重量）。`}已成包的範本看 \`tianxia/features/\`。
-共用登記檔（邊界清單、services.py、registry.py、FEATURES、same_behavior、\`aliases()\`）你加的每一筆集中在 \`# ${b.pkg}\` 那一段，不穿插在別人的行之間；同一波別條線也在加，PM 合的時候接好。
+共用登記檔（services_list.md、registry.py、FEATURES、\`aliases()\`）你加的每一筆集中在 \`# ${b.pkg}\` 那一段，不穿插在別人的行之間；同一波別條線也在加，PM 合的時候接好。邊界名單（\`tests/core/boundary_tables.py\`）不一樣：加列加在那一包的組，搬走直接刪那一行，不寫 \`del\`、\`-=\`。
 **這一批要做的（PM 定，照做）**：
 ${b.body}`
 
@@ -100,7 +100,7 @@ const P1 = (b, base) => `${devHead(b)}
 **這一批分兩段，每段一個新的子代理。你只做第一段：量與計畫，做完推上去、回報、就停。**
 分支：\`git switch -c ${b.dev} ${base}\`（先明確 fetch 拿到這一筆；同名已存在就加 -work），推 \`git push origin HEAD:${b.dev}\`。暫存 ${SP}\\wave${WAVE}\\b${b.n}\\，埠 ${b.ports}。
 1. 寫計畫 ${b.plan}，**短，不超過 120 行**，只寫下一段要用的（下一段看不到你讀過的東西，也不該再重量）：要搬的方法與模組（行號範圍）；留下的委派怎麼寫；留在原位的與理由；接哪個掛鉤；核心直接碰包的各幾處；選項前綴在 choose／bot_policy／bot.py／bot_runner 的每一處；被 patch 的名字怎麼保證打得到；順序與坑。不要寫逐行程式碼。
-2. **情境**：先查 \`scripts/same_behavior.py\` 現有的軌有沒有走到這一批搬的東西（grep 按鈕 id、路由）。**走到了就不加**，計畫寫哪一軌走到什麼。走不到的才加：原創名字、接在檔尾、三種設定、整段、半舊半新（切在這一包「寫到一半」的那一刻）、假人碰得到；跑那一軌 selftest 一次（穩、改一字抓得到）。情境的說明字寫「走到」的要在輸出看過才寫。
+2. **情境**：先查 \`scripts/sb/tracks/\` 現有的軌有沒有走到這一批搬的東西（grep 按鈕 id、路由）。**走到了就不加**，計畫寫哪一軌走到什麼。走不到的才加：原創名字、新開一檔 \`scripts/sb/tracks/<軌>.py\`，檔尾 \`register_track\`、三種設定、整段、半舊半新（切在這一包「寫到一半」的那一刻）、假人碰得到；跑那一軌 selftest 一次（穩、改一字抓得到）。情境的說明字寫「走到」的要在輸出看過才寫。
 commit、推。回報 head、計畫重點、加了哪一軌（或現有哪一軌走到）。`
 
 const P2 = (b, prev) => `${devHead(b)}
@@ -116,7 +116,7 @@ ${ROUND2 ? `一個 Task 一個 commit，照第二輪總表那一節與你的計�
 - **Task 4 測試與文件**：整檔屬於這一包的測試才搬（只改路徑與 import，不改斷言），混合檔不拆；包的 README（含「另外要跑的」）；\`docs/guide\` 那一塊補程式的位置。`}
 **交出去之前自己對一次**（以前審查最常抓到的，現在沒有逐批審查，漏了要等波末才發現）：
 - ${ROUND2 ? '第二輪總表這一節點名' : '總表附錄甲點名'}這一批的方法與測試檔有沒有漏；這一批的 \`PlayerState\` 欄位 \`player_fields\` 與 README 有沒有認領；列舉每一包的表（\`STAGE_PACKAGES\`、\`aliases()\`）；拿掉委派後 engine 頂端沒人用的 import 拿掉、在自己的段 \`GAME_IMPORTS -=\`。
-- 寫死 \`"engine.py"\` 的測試（\`git grep -n '"engine.py"' -- tests tianxia/features\`）；\`renown.gain(..., "fame", ...)\` 那張清單（\`tests/arts/test_explain2.py\`）；被 patch 的舊路徑打不打得到（\`git grep\` 測試與 \`scripts/\`）；selftest 的目標句（\`same_behavior.py\` 的 \`MUTATIONS\`、\`EXPLORE_MUTATIONS\`）搬了要補檔清單。
+- 寫死 \`"engine.py"\` 的測試（\`git grep -n '"engine.py"' -- tests tianxia/features\`）；\`renown.gain(..., "fame", ...)\` 那張清單（\`tianxia/features/guide/tests/test_explain2.py\`）；被 patch 的舊路徑打不打得到（\`git grep\` 測試與 \`scripts/\`）；selftest 的目標句（各軌檔 \`register_track\` 的第三個參數，\`sortie\`、\`duel\` 在 \`scripts/sb/base.py\` 檔尾，\`EXPLORE_MUTATIONS\` 在 \`scripts/sb/tracks/explore.py\`）搬了要補檔清單。
 **只跑這些，各一次**（跑在最後的程式上）：\`python ${TOOLS}/undef_scan.py tianxia server.py\`；\`python -m pytest -q -n 4 tianxia/features/${b.pkg}/tests\`（有這個資料夾才跑）加計畫列的幾個最直接的檔；\`python -m pytest -q -n 4 tests/core/test_feature_boundaries.py tests/core/test_contract_core.py tests/core/test_contract_features.py\`。base 上就紅的（這條分支可能還在修合併的紅）在 base 上跑同一條確認，寫進回報、不用修。
 回報 head、commits、tests、decided（你選保守做法的判斷）、leftovers（留給哪一批）${ROUND2 ? '、docs（要寫進 README、導覽的句子）' : ''}。`
 
@@ -155,7 +155,7 @@ ${COMMON}
 ${lineList}
 ${MERGE_INTO ? '**另外要合的（PM 寫）**：\n' + MERGE_INTO + '\n' : ''}
 分支：明確 fetch 上面每一條。\`git switch -c ${WAVE_BRANCH} ${MERGE_BASE}\`（同名已存在就加 -work 重開），一條一條 \`merge --no-ff\`。埠 ${MERGE_PORT}，暫存 ${SP}\\wave${WAVE}\\merge\\。
-衝突照「程式為準」：兩邊的行都留；共用登記檔（邊界清單、services.py、registry.py、FEATURES、same_behavior、\`aliases()\`、\`bot_policy\`）各包的段都留、照 FEATURES 的順序接。**git 自己合好的也逐檔看**：兩邊各自的增刪行，合好的那一筆都要在。一條線把舊模組搬走、另一條線還在改舊位置的，改動照新位置寫回去。
+衝突照「程式為準」：兩邊的行都留；共用登記檔（邊界清單、services_list.md、registry.py、FEATURES、\`aliases()\`、\`bot_policy\`）各包的段都留、照 FEATURES 的順序接。**git 自己合好的也逐檔看**：兩邊各自的增刪行，合好的那一筆都要在。一條線把舊模組搬走、另一條線還在改舊位置的，改動照新位置寫回去。
 合完**只跑**：\`python ${TOOLS}/undef_scan.py tianxia server.py\` 0 個；\`python -m pytest -q -n 4 tests/core/test_feature_boundaries.py tests/core/test_contract_core.py tests/core/test_contract_features.py\` 過。紅了修（合起來才壞的一個 commit）。**整套、比對不跑**：下一關一次跑。
 推 \`git push origin HEAD:${WAVE_BRANCH}\`。回報 head、撞了什麼怎麼解、跑的結果。解不了才寫 stopped。`, { label: `merge:wave${WAVE}`, phase: 'Merge', schema: MERGE_SCHEMA, isolation: 'worktree' })
 if (!merged || halted_word(merged.stopped)) return { wave: WAVE, built, merged, stopped: merged ? merged.stopped : '合併沒有結果' }

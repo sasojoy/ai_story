@@ -14,12 +14,13 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **開結果分支**：從派工單給的那個 commit 開，`git worktree add -b qa/<名字> .claude/worktrees/qa-<名字> <sha>`。複驗如果沿用既有的 qa/ 分支，先 `git merge --ff-only origin/<修好的分支>`，快轉到修好的版本。
 - **寫檔被擋**：如果 hook 擋你寫別的工作樹的檔，就在自己 session 的工作樹 `git switch` 到結果分支來做。
 - 工作樹沒有 `.venv`，一律用 `C:/Ray/專案/天下大勢/.venv/Scripts/python.exe`。印中文要設 `PYTHONIOENCODING=utf-8`（或把 stdout 包成 UTF-8）。
+- **比畫面先用 `scripts/webqa/gate.py`**（第二輪第 77 批；用法在 `docs/guide/量表與教訓.md`）：兩邊走同一批流程、比 DOM、樣式、截圖、`/api/main`，人工走只補工具走不到的（`report.txt` 的 not reached）。
 - **不重跑開發跑過的測試**（〈開發規範手冊〉4.2，企劃者 2026-10-30；`tianxia-flow` 同一句）：QA 只在實機上驗畫面與手感，只能靠引擎驗的照 `引擎驗收.md` 寫腳本驗；開發的回報寫了跑過哪些測試，就不再跑一次。學到的寫在回報的「學到的」一節，不改技能檔（手冊第十節，PM 收）。
 - **測試只跑派工單點名的檔**：`<python> -m pytest -q -n 4 -m "slow or not slow" tests/a.py tests/b.py`（點名的檔照字面跑，連 slow）。不跑整套、不跑 `test_for`；派工單沒點名就一條都不跑。
 - **純搬的批：兩台真伺服器逐位元組比**（全部拆包總表 5.0，PM 2026-10-31；第 5 批起）：派工單寫「純搬、`web/` 一個字沒動」的批，實機 QA 改成這樣做，不拍整套截圖：
   - BASE（這一批開出來的那一點，派工單給 SHA）與 HEAD 各 `git archive` 解一份（只要 `tianxia content web server.py server_push.py zhuan_html.py llm_queue.py console.py scripts run_bots.py`），各開一台真伺服器：各自的埠與 `<名字>.localhost`、各自的新暫存資料庫、同一個 `TIANXIA_PROFILE`、`ollama_url` 指死埠。
   - 同一串步驟用真的 HTTP 打兩台（建帳號與角色、管理者開季、這一批搬的那幾個動作；步驟照派工單與那一區調查的 `same_behavior` 清單），每個回應存下來，逐位元組比；收場後兩邊的資料庫轉成文字（每張表、每一列照 repr 排序，帳號的 salt／hash 與 `sessions.token_hash` 抹掉）逐位元組比。
-  - 兩台都要先固定亂數與時鐘，照 `scripts/same_behavior.py` 開頭那幾層的做法（包一支啟動腳本在 `import server` 前換掉；固定不了的現實時刻先換成記號再比，見下一條的兩版對照）；同一份跑兩次先確認一樣，再比 BASE 對 HEAD。這一套是第 5 批起才有的，第一次做的人把腳本留在自己的 scratchpad 子資料夾、做法寫進回報的「學到的」，PM 收進這裡。
+  - 兩台都要先固定亂數與時鐘，照 `scripts/sb/harness.py` 開頭那幾層的做法（包一支啟動腳本在 `import server` 前換掉；固定不了的現實時刻先換成記號再比，見下一條的兩版對照）；同一份跑兩次先確認一樣，再比 BASE 對 HEAD。這一套是第 5 批起才有的，第一次做的人把腳本留在自己的 scratchpad 子資料夾、做法寫進回報的「學到的」，PM 收進這裡。
   - 啟動外殼要固定的另外四樣（2026-11-04 第 17 批 QA；現成的外殼在舊 PM scratchpad 的 `b17-chk\s\serve.py`、`drive.py`）：
     - **玉璽密鹽**：`seal.ensure_salt` 用 `secrets`，每次開都不一樣，資料庫的 world 表會差 salt 和由它算出的快取。外殼裡把 `seal.secrets.token_hex` 換成回固定值。
     - **進鎖的種子帶上凍住的時刻**（固定種子＋`int(假時鐘)`）：種子每一步都一樣的話，有兩路可挑的地方永遠挑同一路，走不到另一路。

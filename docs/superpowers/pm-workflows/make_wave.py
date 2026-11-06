@@ -273,12 +273,11 @@ R2_NOTE = [
     "- **第二輪的批**：範圍照第二輪總表 `" + R2 + "` 這一批那一節整節（grep 標題找到，只讀那一節、第二節的「裁決」與第十節；第一輪總表的列與附錄甲不適用）。數字量在舊的一筆，**開工照現行程式重量，對不上以程式為準**，寫進 decided。",
     "- **各包 README、`docs/guide` 線上不動（PM 11/07 定）**：要寫的句子放回報的 `docs`（一條一句，寫明哪個檔、改哪裡），波末一位文件代理統一寫。",
 ]
-R2_NO_TRACK = "- **D 波不加軌、不碰 `scripts/same_behavior.py`**（第 70 批在搬它，PM 定）：要新情境、要改 selftest 目標句的，寫進 leftovers，波末合併時接。"
 
 
-def r2(n, title, pkg, dev, ports, body, model=None, no_track=True):
+def r2(n, title, pkg, dev, ports, body, model=None):
     plan = f"docs/superpowers/plans/2026-11-07-第二輪-第{n}批.md"
-    return batch(n, f"第二輪第 {n} 批：{title}", pkg, dev, plan, ports, body + R2_NOTE + ([R2_NO_TRACK] if no_track else []), model=model, custom=True)
+    return batch(n, f"第二輪第 {n} 批：{title}", pkg, dev, plan, ports, body + R2_NOTE, model=model, custom=True)
 
 
 QA_TOOLS = r"C:\Users\ray61\AppData\Local\Temp\claude\81800b313c89d0f8\ade93b70-b3b7-42db-a8af-21f7a7cbdb16\scratchpad"
@@ -290,7 +289,7 @@ def b70():
         "- **這一批的驗證閘門做不到，你自己跑（這一條優先於波次模式的「你不跑 compare」與下面「波次模式蓋掉」那一條）**：閘門是拿 head 的腳本比兩邊，新腳本掉了一段情境，兩邊一起掉，照樣綠。所以用舊腳本（開工那一筆的 `scripts/same_behavior.py`）與新腳本，對同一對 base、head 各跑一次 `compare` 與 `explore-compare`（186 格加假人 5 組），**每一格的雜湊逐筆相同**，不是只看「兩邊一樣」。約 50 分、不花 token：用 `Start-Process` 分離啟動、輸出導到檔，`docs/superpowers/pm-workflows/wait_file.py <完成標記> 570` 等，不要前景跑。另外每條繼承鏈挑一軌 selftest（改一字抓得到），軌數還是 62。",
         "- 坑照那一節（`_setup_child` 拿掉 scripts/ 的路徑，軌要先載入；BUF、STEP、CLOCK、MODEL 要同一物件）。另外要留意：`compare` 用 head 的腳本跑 base 的根，`scripts/sb/` 一定要從腳本自己的位置載入，不能從被比的那棵樹載入，否則 base 上沒有這個資料夾。子行程也一樣。",
         "- `_*_register_track` 收成一個、`TRACK_NAMES` 照檔名排、軌名重複載入時就擋。",
-    ], no_track=False)
+    ])
 
 
 def b71():
@@ -299,7 +298,7 @@ def b71():
         "- **PM 定，跟那一節寫的相反：快取預設關，`--cache` 才開**（那一節寫「加 `--no-cache`」）。鍵漏掉相依會假綠，預設關才不會忘；只有同一波修正後重跑閘門時 PM 才加。進 develop、上 main 的那一次不開。",
         "- **閘門 `--web` 的介面（PM 定，第 77 批在另一條線做另一半）**：`wave_gate.py --web` 叫 `scripts/webqa/gate.py --base <sha> --head <sha> --out <資料夾>`，結束碼 0 才綠、其他算紅，結果接進 `result.json` 的 `web`。那個檔不存在（第 77 批順延）時印一行、`web` 寫沒跑，不擋。",
         "- 這一批不碰 `tianxia/`、`server.py`、`web/`。比對的驗證你自己跑（這一條優先於波次模式的「你不跑 compare」與下面「波次模式蓋掉」那一條），但只跑幾軌：開快取與不開結果一致、selftest 突變全部抓到（開快取時改一個字照樣抓得到）、前半快照接 head2 的雜湊等於整段。",
-    ], no_track=False)
+    ])
 
 
 def b72():
