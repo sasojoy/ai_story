@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from tianxia.core import annal_base as annals  # 核心（行狀記一筆，第 29 批之二）
 from tianxia import ranks  # 共用規則層（階級 ranks，第 40 批收進）
-from tianxia import precise, roster
+from tianxia import figures, precise, roster
 from tianxia.core.option import Option
 from tianxia.core.services import PLAN_OPTION, ROAD_SAY, SAY_MAX, SAY_OPTION, say_text
 
@@ -245,6 +245,16 @@ def affinity_text(ctx, companion_id: str) -> str:
     玩家看得到的只叫「情誼」，程式裡照舊叫 affinity）。深交不限人數（企劃者 2026-10-28「不要限制深交名額」），不再接「已深交三位」。
     （總表附錄甲點名第 20 批；第 20 批審查補搬。）"""
     return f"情誼 {ctx.state.player.affinities.get(companion_id, 0)}"
+
+
+def talk_view(ctx) -> dict | None:
+    """正在跟誰說話（介面重整的對話框）：{id, name, side, affinity}；沒在對話是 None。（主幹合回第 2 段 D 從 Game 搬來）"""
+    s, c = ctx.state, ctx.content
+    cid = s.player.pending_companion
+    if not cid or cid not in c.characters:
+        return None
+    side = figures.side_name(c, figures.of_character(c, cid))
+    return {"id": cid, "name": c.characters[cid].name, "side": side, "affinity": s.player.affinities.get(cid, 0)}
 
 
 def talk_title(ctx) -> str:

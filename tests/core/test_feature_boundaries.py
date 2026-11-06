@@ -654,6 +654,8 @@ GAME_DELEGATE_CALLERS.update({
     # （原本這裡有 ("_socialize", "_open_dialogue")、("_precise_socialize", ...)、("_call", ...) 三筆：第 21 批交友求見搬進 socialize 包，包裡經 ctx._open_dialogue 問，拿掉）
     ("_defect_step", "_parley_forsake"): "叛投之後欠著的都算食言（NPC 智能 2.1）：接在 defection.defect 與 _leave_behind 之後，回話的先後算行為；叛投第 36 批再看",
 })
+# companions（主幹合回 D 段：此地人物那一排、對話框進包，計畫 docs/superpowers/plans/2026-11-06-develop合回-D.md）：殼在叫的兩個一行委派；figures_here_view 的本體在交友求見包，talk_view 在人物情誼包
+GAME_DELEGATES |= {"figures_here_view", "talk_view"}
 # sense（全部拆包第 24 批「有所感與頓悟」：新包 tianxia/features/sense/；計畫 docs/superpowers/plans/2026-11-01-有所感包-第1批.md 1.4、1.5）：
 # 四張名單的有所感那幾筆集中在這一段（並行的拆包線不跟別人的行穿插；拿掉的在原處）。核心原位碰有所感的那幾處，能接第 11 批掛鉤的接上
 # （choose 掛鉤接 sense:、scene 掛鉤接場景卡），接不了的改叫 Game 上一行的服務委派、記進 GAME_DELEGATE_CALLERS 寫理由（不新增 GAME_DIRECT）
@@ -2288,14 +2290,9 @@ for _pair in (("conquest", "seal_acts"), ("figures", "seal_acts"), ("figure_life
 
 # merge_back（主幹合回 develop 第 1 段，2026-11-06）：develop 新加的 9 個 Game 方法先修到能跑。暫時的三筆寫明第 2 段哪一塊收，最後的閘門要確認一條都不剩。
 # _allocate_v2 這一段就進了修練包（allocate_stat 的本體在包裡，只有它叫）；_season_prep、season_prep_view、_attr_rows、place_state_view 留核心（PM 認定第 6、7 條）；
-# _figure_side_name、talk_view 不碰包，第 2 段 D 一起搬。新手引導碰到才說的 h_chuangong 問修練包：一行委派 _chuangong_ready（前例 _recruit_target）。
+# 新手引導碰到才說的 h_chuangong 問修練包：一行委派 _chuangong_ready（前例 _recruit_target）。
 GAME_DELEGATES |= {"_chuangong_ready"}
-GAME_DIRECT.update({
-    "figures_here_view": "江湖頁「此地人物」那一排（介面重整）問交友求見包見不見得到（talkable、why_not_talk）——暫時：第 2 段 D 收（進 features/socialize/view.py，Game 留委派）",
-})
 GAME_DELEGATE_CALLERS.update({
-    ("figures_here_view", "_social_plan"): "同上：交友會做什麼——暫時：第 2 段 D 收",
-    ("figures_here_view", "_audience_options"): "同上：求見名單——暫時：第 2 段 D 收",
     ("pick_growth", "_note_action"): "五項屬性的季挑成長配比（序章配點那一步，升一級沒有點可配）；" + _NOTE_HOOK + "——暫時：第 2 段 A 收（本體進修練包，Game 自己保留擋的三步）",
 })
 
