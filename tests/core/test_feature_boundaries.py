@@ -2410,7 +2410,7 @@ GAME_DELEGATE_CALLERS.update({
 
 # core_seams（全部拆包第 56 批「選單收接縫」；計畫 docs/superpowers/plans/2026-11-06-選單收接縫-第56批.md 四、五）：這一批的增減集中在這一段（核心批，沒有新包）。
 # options、_everyday_options、action_notes、_idle、_shop_open、_stamina_play_options、atlas.travel_block、出發收店裡各包那一段換成 MENU_ORDER 的格，包登記自己那一格。
-# GAME_DIRECT 維持 1（_squad_encounter，第 57 批）。_shop_open 三間店不進 Shop 的理由在計畫第四節與各包 menus() 的說明。
+# GAME_DIRECT 維持 1（_squad_encounter，理由寫在它那一筆，這一批不碰）。三間店不進 Shop 的理由在計畫第四節與各包 menus() 的說明。
 # 只剩這幾處呼叫的委派拿掉（ast 量過：engine 這幾個方法以外、包、測試、腳本都沒有屬性或字串叫）；留著的（socialize_is_futile、_can_meet、_talks_left、_talked_out_note、_challenge_options、
 # _snubbed_character、_socialize_figure、_audience_hall、_stamina_play_options、_fs_asking_text）測試或包在叫
 GAME_DELEGATES -= {
