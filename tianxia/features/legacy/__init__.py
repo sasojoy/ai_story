@@ -15,7 +15,7 @@ class LegacyFeature(Feature):
     prefix = "legacy"  # legacy:seal:<i>、legacy:skip、legacy:open、legacy:name:<i>
     bot_always = ("legacy:skip",)  # 開季時一直按得下去：整季機器人不按
     player_fields = ("legacy",)  # PlayerState.legacy（LegacyBook）
-    web = ("legacy.css",)  # 傳承頁、識海頁的樣子（app.js 的 legacyPageHtml 畫）
+    web = ("legacy.js", "legacy.css")  # 傳承頁、識海頁的畫法（legacy.js 的 legacyPageHtml）與樣子
     carried = ("legacy",)  # 換季照帶（Game._reset_player_for_new_season，不看開關；結算在 on_season_start）
 
     def enabled(self, ctx) -> bool:

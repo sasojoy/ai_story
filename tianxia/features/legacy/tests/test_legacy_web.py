@@ -1,10 +1,10 @@
-"""傳承頁、識海頁（web/app.js 的 legacyHtml、legacyPageHtml；樣子在 web/legacy.css）：企劃者 2026-11-04「要有真的傳承、識海的感覺」。
+"""傳承頁、識海頁（web/legacy.js 的 legacyHtml、legacyPageHtml；樣子在 web/legacy.css）：企劃者 2026-11-04「要有真的傳承、識海的感覺」。
 
 - 展開屬性裡一行入口（三項的值；識海封著東西時多一行名字），按了打開傳承頁。
 - 傳承頁：三卷（墨水漲到值、到了的門蓋朱印）、每一項三片竹簡（開了的亮、沒開的寫還差多少）、按一片看那一道門的長句、入識海的入口。
 - 識海頁：封著的意境與三道封印；全破了、身上沒有神品，「破封」才按得下；被人先取了名，改列候選；
   開季還沒挑的候選（封進識海、這一季不帶），有候選時進遊戲第一個畫面自己打開識海頁一次（企劃者 2026-11-05）。
-切 app.js 裡傳承那一段（從「// 傳承（features/legacy」到名號那一塊的註解）放進 node 跑。"""
+切 web/legacy.js 裡傳承那一段（從「// 傳承（features/legacy」到檔尾）放進 node 跑。"""
 from __future__ import annotations
 
 import re
@@ -16,12 +16,12 @@ import webharness
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 
 DRIVER = r"""
-const a = src.indexOf("\n  // 傳承（features/legacy；main.legacy）");
-const b = src.indexOf("\n  // 狀態列的名號那一塊");
-if (a < 0 || b < a) throw new Error("app.js 裡找不到傳承那一段");
+const lsrc = fs.readFileSync(input.legacy_js, "utf8").replace(/\r\n/g, "\n");
+const a = lsrc.indexOf("\n  // 傳承（features/legacy；main.legacy）");
+if (a < 0) throw new Error("legacy.js 裡找不到傳承那一段");
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const S = input.S;
-eval(src.slice(a, b) + "\nglobalThis.__L = { legacyHtml, legacyPageHtml, legacyOfferOpen };");
+eval(lsrc.slice(a) + "\nglobalThis.__L = { legacyHtml, legacyPageHtml, legacyOfferOpen };");
 if (input.what === "auto") { __L.legacyOfferOpen(); const first = S.legacy; S.legacy = null; __L.legacyOfferOpen(); finish([first, S.legacy]); }
 else finish(input.what === "entry" ? __L.legacyHtml(S.main.legacy) : __L.legacyPageHtml());
 """
@@ -49,7 +49,7 @@ def _legacy(values=None, sealed=True, need_ok=(True, False, False), held=False, 
 
 def run(legacy, view=None, what="page", slip=None):
     S = {"main": {"legacy": legacy}, "legacy": view, "legacySlip": slip}
-    return webharness.run(DRIVER, {"S": S, "what": what})
+    return webharness.run(DRIVER, {"S": S, "what": what, "legacy_js": str(webharness.WEB / "legacy.js")})
 
 
 def text(html: str) -> str:
