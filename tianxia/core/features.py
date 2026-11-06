@@ -62,6 +62,8 @@
 | steps()（StepHook） | 「你這一步」的格（core_step：全部拆包第 36 批）：本週卡「眼下要事」的候選（weekcard._steps 叫 step.items）與四勝利開著時補目標
   （step.finish 照每一件 _ref 的第一個字找回那一格的 place），照檔尾寫死的順序表 STEP_ORDER 一格一格叫（包登記自己那一格；懸賞榜兩格第 45 批
   由懸賞榜包登記），不問 enabled |
+| seams()（SeamHook） | 補算與換季的格（core_seams：全部拆包第 55 批）：Game.sync、advance、world_tick、_advance_player_local、own_turn_checks、_drop_stale_references、
+  _reset_player_for_new_season 裡各包那一段，照檔尾寫死的順序表 SEAM_ORDER 一格一格叫（包與核心的段穿插），不問 enabled |
 
 ctx 第一階就是 Game；功能包只准叫 services.py 那張清單上的方法。
 """
@@ -179,6 +181,8 @@ class FeatureHooks(Protocol):
     def bus(self) -> tuple[BusHook, ...]: ...
     # core_step（全部拆包第 36 批：「你這一步」的格，先後在 STEP_ORDER；不問 enabled）
     def steps(self) -> tuple[StepHook, ...]: ...
+    # core_seams（全部拆包第 55 批：補算與換季的格，先後在 SEAM_ORDER；不問 enabled）
+    def seams(self) -> tuple[SeamHook, ...]: ...
     # tale（全部拆包第 52 批：殼啟動時開這一包的背景執行緒；只有 server.main 叫，測試不叫；不問 enabled，殼啟動還沒有 ctx）
     def threads(self, shell: Any) -> None: ...
 
@@ -294,6 +298,9 @@ class Feature:
         return ()
 
     def steps(self) -> tuple[StepHook, ...]:
+        return ()
+
+    def seams(self) -> tuple[SeamHook, ...]:
         return ()
 
     def __repr__(self) -> str:
@@ -971,3 +978,108 @@ def step_table(core: dict[str, StepHook]) -> list[StepHook]:
 def step_places(core: dict[str, StepHook]) -> dict[str, Callable[..., Any]]:
     """{ref: place}：step.finish 照每一件 _ref 的第一個字找回那一格補目標（沒有 ref 或沒有 place 的格不列）。"""
     return {h.ref: h.place for h in step_table(core) if h.ref is not None and h.place is not None}
+
+
+# core_seams（全部拆包第 55 批「補算與換季收接縫」；計畫 docs/superpowers/plans/2026-11-06-補算換季收接縫-第55批.md 一、二、六）
+
+
+@dataclass(frozen=True)
+class SeamHook:
+    """補算與換季的一格（Feature.seams() 回一串）：核心在 at 那個位置照 SEAM_ORDER[at] 一格一格叫，輪到 slot 就叫 run。照 registered() 問、
+    不看 enabled（原位那幾行本來就不看包的開關：碎片關著照樣要重抄、把抄本清掉；on_sync、on_drop_stale、on_season_* 只問開著的包，所以接不了，
+    第 42 批認定第 7 條）。run 的簽名照位置（SEAM_ORDER 底下那張）；包的 run 在叫的那一下才照模組屬性或 ctx 找（monkeypatch 照樣有效）。"""
+
+    at: str
+    slot: str
+    run: Callable[..., Any]
+
+
+# 補算與換季的順序表：位置 → 那一個位置的格，照換成掛鉤之前一行一行的呼叫順序。順序就是行為（同一下誰先誰後、江湖紀錄的先後、世界旗標、亂數抽到的順序都算；
+# test_seats 那條「抄帳排在抵達與密謀之後」就是 sync.deliver 的 seat 在 arrive、plots 之後的守門），所以寫死、連核心自己的段一起列。包登記自己那一格（Feature.seams()），
+# 其餘由核心代叫（engine._SEAM_CORE；要用區域變數的 day、on_sync 由 Game._sync_core 回 closure）。改這張表先過 PM；tests/core/test_contract_core.py 逐字鎖住。
+#
+# 位置            核心在哪裡問                                                   run 的簽名            回傳
+# local           Game._advance_player_local 最後（體力氣血回完）                 (ctx)                 接進 msgs
+# sync.heirloom   Game.sync 補算自己的時間之前（承露照整段離線時間算體力回復）      (ctx)                 不接
+# sync.close      Game.sync 補算完下線那一段之後：收店、收伏、抵達                 (ctx)                 接成 arrived（只有 arrive 回字）
+# sync.deliver    Game.sync 寫完江湖大事之後：補送到席次                           (ctx)                 接成回話（依序 plots、summons、seat；其餘回 None）
+# advance.arrive  Game.advance 跨日之後                                           (ctx)                 接成 arrived
+# advance.turn    Game.advance 抵達之後、存季之前                                 (ctx)                 接進 msgs（只有 conquest 回字）
+# advance.held    Game.advance 最後                                               (ctx)                 不接
+# tick            Game.world_tick 到時的結算（on_due）之後                         (ctx)                 接進 msgs（只有 conquest 回字）
+# own_turn        Game.own_turn_checks 暫停那一道之後                              (ctx)                 不接
+# season.carry    Game._reset_player_for_new_season 建好新存檔之後：照帶的欄位      (ctx, old, fresh)     不接（self.state 還是舊的：格裡只准讀 old、fresh、ctx.content）
+# season.grant    Game._reset_player_for_new_season 開場那一則之後                  (ctx, old)            不接
+# stale.first     Game._drop_stale_references 最前面（對齊賽季之前，換季會清掉陣營） (ctx)                 不接
+# stale.early     同上，補體丹之後、所在地之前                                     (ctx)                 不接
+# stale.mid       同上，所在地之後、路上之前                                       (ctx)                 不接
+# stale.road      同上，隊伍之前                                                   (ctx, lost_place)     不接
+# stale.late      同上，等著取名之後、主線之前                                     (ctx)                 不接
+SEAM_ORDER: dict[str, tuple[str, ...]] = {
+    "local": ("seclusion", "fortune"),
+    "sync.heirloom": ("seal",),
+    "sync.close": ("smithy", "gear", "shops", "ambush", "arrive"),
+    "sync.deliver": ("big_events", "results", "renames", "echoes", "guard", "notices", "conquest", "conquest.deliver", "arena",
+                     "marks", "stances", "zhuan", "mail", "plans", "day", "on_sync", "held_gear", "checkin", "partings", "bounties",
+                     "plots", "summons", "story", "seat", "enlist", "hints", "party"),
+    "advance.arrive": ("arrive",),
+    "advance.turn": ("conquest", "conquest.deliver", "due"),
+    "advance.held": ("held_gear",),
+    "tick": ("conquest", "battle", "seal"),
+    "own_turn": ("bounties",),
+    "season.carry": ("guide", "ties", "companions", "self", "mall", "sortie", "outlets", "battle", "seal", "rack", "peers", "story", "legacy"),
+    "season.grant": ("faction",),
+    "stale.first": ("guide",),
+    "stale.early": ("cultivation", "resting", "sense", "companions"),
+    "stale.mid": ("bounties", "smithy", "gear", "shops", "treasures", "forge", "signature", "seal"),
+    "stale.road": ("travel",),
+    "stale.late": ("figure_acts",),
+}
+
+
+def seam_hooks(at: str) -> dict[str, Callable[..., Any]]:
+    """at 那個位置包登記的格 {slot: run}：照 registered()、不看 enabled。每一次都驗登記的全部格：表上沒有的格、同一格登記兩次（兩包或同一包）
+    都丟 ValueError（同 world_hooks、bus_hooks）。"""
+    if at not in SEAM_ORDER:
+        raise ValueError(f"補算與換季沒有 {at} 這個位置")
+    own: dict[str, Callable[..., Any]] = {}
+    for f in registered():
+        for hook in f.seams():
+            if hook.slot not in SEAM_ORDER.get(hook.at, ()):
+                raise ValueError(f"{f.name} 登記了補算與換季表上沒有的格 {hook.at}/{hook.slot}")
+            if hook.at == at:
+                if hook.slot in own:
+                    raise ValueError(f"補算與換季的 {at}/{hook.slot} 登記了兩次（{f.name}）")
+                own[hook.slot] = hook.run
+    return own
+
+
+def seam_run(at: str, core: dict[str, Callable[..., Any]], *args: Any,
+             hooks: dict[str, Callable[..., Any]] | None = None) -> list[Any]:
+    """照 SEAM_ORDER[at] 走每一格：包登記了叫包的，沒有叫 core 那一份（核心代叫的格）；兩邊都沒有（那一格的包沒登記：契約測試換掉 FEATURES 時）
+    跳過。回每一格的回傳值（照順序、跳過的不算）：接不接由呼叫端照位置決定。core 寫了表上沒有的格丟 ValueError（打錯字的格不會默默不跑）。"""
+    own = seam_hooks(at) if hooks is None else hooks  # 沒有這個位置在 seam_hooks 丟
+    order = SEAM_ORDER.get(at)
+    if order is None:
+        raise ValueError(f"補算與換季沒有 {at} 這個位置")
+    if not core.keys() <= set(order):
+        raise ValueError(f"核心代叫了補算與換季 {at} 表上沒有的格 {sorted(core.keys() - set(order))}")
+    out: list[Any] = []
+    for slot in order:
+        run = own.get(slot) or core.get(slot)
+        if run is not None:
+            out.append(run(*args))
+    return out
+
+
+def seam_lines(at: str, core: dict[str, Callable[..., Any]], *args: Any) -> list[str]:
+    """同 seam_run，把每一格回的那幾句照順序接成一串。每一格只准回 list 或 None，回別的丟 TypeError（回字串會被一個字一個字接進回話、回 tuple
+    是把某個回傳值漏接：當場紅，不要默默進回話）；回傳不接的格（sync.deliver 的 conquest、partings、story……）包成回 None。"""
+    lines: list[str] = []
+    for got in seam_run(at, core, *args):
+        if got is None:
+            continue
+        if not isinstance(got, list):
+            raise TypeError(f"補算與換季 {at} 的格只准回 list 或 None，回了 {type(got).__name__}")
+        lines += got
+    return lines

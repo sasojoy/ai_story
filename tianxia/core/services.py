@@ -558,6 +558,10 @@ tavern（主動搬六包第 10 批酒肆加的這一段；擺在段尾，理由�
 # notify（全部拆包第 53 批；查詢服務，主人人物情誼包：手機通知包 routes.py 的看守一輪〔_notice_keys〕在行動鎖內經 game 叫，Game 上一行委派）
 - `ctx.morning_mail(now)`（到了送信日替他送今天的信；送了回 True）
 
+# core_seams（全部拆包第 55 批；補算與換季的格，計畫 docs/superpowers/plans/2026-11-06-補算換季收接縫-第55批.md 五）：sync 的 plots 那一格（軍情包）經 ctx 叫，
+# 測試換掉 Game 上的名字時才打得到（tests/figures/test_seats.py、features/smithy/tests/test_weapons_forge.py）
+- `ctx._settle_plots()`（不在線時收場的密謀結算；回那幾句）
+
 不在清單上的：`Game` 其餘一千多個方法都是還沒搬的功能自己的，功能包碰了就是跨包（手冊 3.4 第 1 條）。
 """
 from __future__ import annotations
